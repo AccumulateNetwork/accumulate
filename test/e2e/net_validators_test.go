@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -19,13 +18,13 @@ func send(sim *simulator.Simulator, fn func(func(*Envelope))) []*Envelope {
 	return envelopes
 }
 
-func requireHasKeyHash(t *testing.T, page *protocol.KeyPage, hash []byte) {
+func requireHasKeyHash(t *testing.T, page *KeyPage, hash []byte) {
 	t.Helper()
 	_, _, ok := page.EntryByKeyHash(hash)
 	require.Truef(t, ok, "Page %v does not contain key hash %x", page.Url, hash[:4])
 }
 
-func requireNotHasKeyHash(t *testing.T, page *protocol.KeyPage, hash []byte) {
+func requireNotHasKeyHash(t *testing.T, page *KeyPage, hash []byte) {
 	t.Helper()
 	_, _, ok := page.EntryByKeyHash(hash)
 	require.Falsef(t, ok, "Page %v does not contain key hash %x", page.Url, hash[:4])
@@ -175,7 +174,7 @@ func TestUpdateOperators(t *testing.T) {
 	// Initialize
 	sim := simulator.New(t, 3)
 	sim.InitFromGenesis()
-	dn := sim.Subnet(protocol.Directory)
+	dn := sim.Subnet(Directory)
 	bvn0 := sim.Subnet(sim.Subnets[1].ID)
 	bvn1 := sim.Subnet(sim.Subnets[2].ID)
 

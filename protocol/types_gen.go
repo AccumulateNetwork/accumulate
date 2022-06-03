@@ -247,8 +247,8 @@ type DirectoryAnchor struct {
 	fieldsSet []bool
 	SubnetAnchor
 	AcmeOraclePrice uint64 `json:"acmeOraclePrice,omitempty" form:"acmeOraclePrice" query:"acmeOraclePrice" validate:"required"`
-	// OperatorUpdates anchor-based synchronization updates from bvn.
-	OperatorUpdates []KeyPageOperation `json:"operatorUpdates,omitempty" form:"operatorUpdates" query:"operatorUpdates" validate:"required"`
+	// Updates are synchronization updates for network accounts.
+	Updates []NetworkAccountUpdate `json:"updates,omitempty" form:"updates" query:"updates" validate:"required"`
 	// Receipts are receipts for anchors from other subnets that were included in the block.
 	Receipts []Receipt `json:"receipts,omitempty" form:"receipts" query:"receipts" validate:"required"`
 	// MakeMajorBlock notifies the subnet that the DN has opened a major block.
@@ -334,6 +334,15 @@ type IndexEntry struct {
 	// RootIndexIndex is the index of the root anchor index chain entry. Only include when indexing the anchor ledger for a major block.
 	RootIndexIndex uint64 `json:"rootIndexIndex,omitempty" form:"rootIndexIndex" query:"rootIndexIndex" validate:"required"`
 	extraData      []byte
+}
+
+// InternalSignature is used for internally produced transactions.
+type InternalSignature struct {
+	fieldsSet []bool
+	// Cause is the hash of the transaction that produced the signed transaction.
+	Cause           [32]byte `json:"cause,omitempty" form:"cause" query:"cause" validate:"required"`
+	TransactionHash [32]byte `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash" validate:"required"`
+	extraData       []byte
 }
 
 type IssueTokens struct {
@@ -429,6 +438,13 @@ type MetricsRequest struct {
 
 type MetricsResponse struct {
 	Value     interface{} `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	extraData []byte
+}
+
+type NetworkAccountUpdate struct {
+	fieldsSet []bool
+	Name      string          `json:"name,omitempty" form:"name" query:"name" validate:"required"`
+	Body      TransactionBody `json:"body,omitempty" form:"body" query:"body" validate:"required"`
 	extraData []byte
 }
 
@@ -711,15 +727,15 @@ type SystemGenesis struct {
 }
 
 type SystemLedger struct {
-	fieldsSet       []bool
-	Url             *url.URL           `json:"url,omitempty" form:"url" query:"url" validate:"required"`
-	Index           uint64             `json:"index,omitempty" form:"index" query:"index" validate:"required"`
-	Timestamp       time.Time          `json:"timestamp,omitempty" form:"timestamp" query:"timestamp" validate:"required"`
-	PendingOracle   uint64             `json:"pendingOracle,omitempty" form:"pendingOracle" query:"pendingOracle" validate:"required"`
-	ActiveOracle    uint64             `json:"activeOracle,omitempty" form:"activeOracle" query:"activeOracle" validate:"required"`
-	AcmeBurnt       big.Int            `json:"acmeBurnt,omitempty" form:"acmeBurnt" query:"acmeBurnt" validate:"required"`
-	OperatorUpdates []KeyPageOperation `json:"operatorUpdates,omitempty" form:"operatorUpdates" query:"operatorUpdates" validate:"required"`
-	extraData       []byte
+	fieldsSet      []bool
+	Url            *url.URL               `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	Index          uint64                 `json:"index,omitempty" form:"index" query:"index" validate:"required"`
+	Timestamp      time.Time              `json:"timestamp,omitempty" form:"timestamp" query:"timestamp" validate:"required"`
+	PendingOracle  uint64                 `json:"pendingOracle,omitempty" form:"pendingOracle" query:"pendingOracle" validate:"required"`
+	ActiveOracle   uint64                 `json:"activeOracle,omitempty" form:"activeOracle" query:"activeOracle" validate:"required"`
+	AcmeBurnt      big.Int                `json:"acmeBurnt,omitempty" form:"acmeBurnt" query:"acmeBurnt" validate:"required"`
+	PendingUpdates []NetworkAccountUpdate `json:"pendingUpdates,omitempty" form:"pendingUpdates" query:"pendingUpdates" validate:"required"`
+	extraData      []byte
 }
 
 type SystemWriteData struct {
@@ -935,6 +951,8 @@ func (*EnableAccountAuthOperation) Type() AccountAuthOperationType {
 }
 
 func (*FactomDataEntry) Type() DataEntryType { return DataEntryTypeFactom }
+
+func (*InternalSignature) Type() SignatureType { return SignatureTypeInternal }
 
 func (*IssueTokens) Type() TransactionType { return TransactionTypeIssueTokens }
 
@@ -1446,11 +1464,9 @@ func (v *DirectoryAnchor) Copy() *DirectoryAnchor {
 
 	u.SubnetAnchor = *v.SubnetAnchor.Copy()
 	u.AcmeOraclePrice = v.AcmeOraclePrice
-	u.OperatorUpdates = make([]KeyPageOperation, len(v.OperatorUpdates))
-	for i, v := range v.OperatorUpdates {
-		if v != nil {
-			u.OperatorUpdates[i] = (v).CopyAsInterface().(KeyPageOperation)
-		}
+	u.Updates = make([]NetworkAccountUpdate, len(v.Updates))
+	for i, v := range v.Updates {
+		u.Updates[i] = *(&v).Copy()
 	}
 	u.Receipts = make([]Receipt, len(v.Receipts))
 	for i, v := range v.Receipts {
@@ -1597,6 +1613,17 @@ func (v *IndexEntry) Copy() *IndexEntry {
 }
 
 func (v *IndexEntry) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *InternalSignature) Copy() *InternalSignature {
+	u := new(InternalSignature)
+
+	u.Cause = v.Cause
+	u.TransactionHash = v.TransactionHash
+
+	return u
+}
+
+func (v *InternalSignature) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *IssueTokens) Copy() *IssueTokens {
 	u := new(IssueTokens)
@@ -1752,6 +1779,19 @@ func (v *MetricsRequest) Copy() *MetricsRequest {
 }
 
 func (v *MetricsRequest) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *NetworkAccountUpdate) Copy() *NetworkAccountUpdate {
+	u := new(NetworkAccountUpdate)
+
+	u.Name = v.Name
+	if v.Body != nil {
+		u.Body = (v.Body).CopyAsInterface().(TransactionBody)
+	}
+
+	return u
+}
+
+func (v *NetworkAccountUpdate) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *NetworkDefinition) Copy() *NetworkDefinition {
 	u := new(NetworkDefinition)
@@ -2223,11 +2263,9 @@ func (v *SystemLedger) Copy() *SystemLedger {
 	u.PendingOracle = v.PendingOracle
 	u.ActiveOracle = v.ActiveOracle
 	u.AcmeBurnt = *encoding.BigintCopy(&v.AcmeBurnt)
-	u.OperatorUpdates = make([]KeyPageOperation, len(v.OperatorUpdates))
-	for i, v := range v.OperatorUpdates {
-		if v != nil {
-			u.OperatorUpdates[i] = (v).CopyAsInterface().(KeyPageOperation)
-		}
+	u.PendingUpdates = make([]NetworkAccountUpdate, len(v.PendingUpdates))
+	for i, v := range v.PendingUpdates {
+		u.PendingUpdates[i] = *(&v).Copy()
 	}
 
 	return u
@@ -3053,11 +3091,11 @@ func (v *DirectoryAnchor) Equal(u *DirectoryAnchor) bool {
 	if !(v.AcmeOraclePrice == u.AcmeOraclePrice) {
 		return false
 	}
-	if len(v.OperatorUpdates) != len(u.OperatorUpdates) {
+	if len(v.Updates) != len(u.Updates) {
 		return false
 	}
-	for i := range v.OperatorUpdates {
-		if !(EqualKeyPageOperation(v.OperatorUpdates[i], u.OperatorUpdates[i])) {
+	for i := range v.Updates {
+		if !((&v.Updates[i]).Equal(&u.Updates[i])) {
 			return false
 		}
 	}
@@ -3244,6 +3282,17 @@ func (v *IndexEntry) Equal(u *IndexEntry) bool {
 		return false
 	}
 	if !(v.RootIndexIndex == u.RootIndexIndex) {
+		return false
+	}
+
+	return true
+}
+
+func (v *InternalSignature) Equal(u *InternalSignature) bool {
+	if !(v.Cause == u.Cause) {
+		return false
+	}
+	if !(v.TransactionHash == u.TransactionHash) {
 		return false
 	}
 
@@ -3465,6 +3514,17 @@ func (v *MetricsRequest) Equal(u *MetricsRequest) bool {
 		return false
 	}
 	if !(v.Duration == u.Duration) {
+		return false
+	}
+
+	return true
+}
+
+func (v *NetworkAccountUpdate) Equal(u *NetworkAccountUpdate) bool {
+	if !(v.Name == u.Name) {
+		return false
+	}
+	if !(EqualTransactionBody(v.Body, u.Body)) {
 		return false
 	}
 
@@ -4049,11 +4109,11 @@ func (v *SystemLedger) Equal(u *SystemLedger) bool {
 	if !((&v.AcmeBurnt).Cmp(&u.AcmeBurnt) == 0) {
 		return false
 	}
-	if len(v.OperatorUpdates) != len(u.OperatorUpdates) {
+	if len(v.PendingUpdates) != len(u.PendingUpdates) {
 		return false
 	}
-	for i := range v.OperatorUpdates {
-		if !(EqualKeyPageOperation(v.OperatorUpdates[i], u.OperatorUpdates[i])) {
+	for i := range v.PendingUpdates {
+		if !((&v.PendingUpdates[i]).Equal(&u.PendingUpdates[i])) {
 			return false
 		}
 	}
@@ -5910,7 +5970,7 @@ var fieldNames_DirectoryAnchor = []string{
 	1: "Type",
 	2: "SubnetAnchor",
 	3: "AcmeOraclePrice",
-	4: "OperatorUpdates",
+	4: "Updates",
 	5: "Receipts",
 	6: "MakeMajorBlock",
 }
@@ -5924,9 +5984,9 @@ func (v *DirectoryAnchor) MarshalBinary() ([]byte, error) {
 	if !(v.AcmeOraclePrice == 0) {
 		writer.WriteUint(3, v.AcmeOraclePrice)
 	}
-	if !(len(v.OperatorUpdates) == 0) {
-		for _, v := range v.OperatorUpdates {
-			writer.WriteValue(4, v)
+	if !(len(v.Updates) == 0) {
+		for _, v := range v.Updates {
+			writer.WriteValue(4, &v)
 		}
 	}
 	if !(len(v.Receipts) == 0) {
@@ -5961,9 +6021,9 @@ func (v *DirectoryAnchor) IsValid() error {
 		errs = append(errs, "field AcmeOraclePrice is not set")
 	}
 	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
-		errs = append(errs, "field OperatorUpdates is missing")
-	} else if len(v.OperatorUpdates) == 0 {
-		errs = append(errs, "field OperatorUpdates is not set")
+		errs = append(errs, "field Updates is missing")
+	} else if len(v.Updates) == 0 {
+		errs = append(errs, "field Updates is not set")
 	}
 	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
 		errs = append(errs, "field Receipts is missing")
@@ -6430,6 +6490,59 @@ func (v *IndexEntry) IsValid() error {
 		errs = append(errs, "field RootIndexIndex is missing")
 	} else if v.RootIndexIndex == 0 {
 		errs = append(errs, "field RootIndexIndex is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_InternalSignature = []string{
+	1: "Type",
+	2: "Cause",
+	3: "TransactionHash",
+}
+
+func (v *InternalSignature) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Cause == ([32]byte{})) {
+		writer.WriteHash(2, &v.Cause)
+	}
+	if !(v.TransactionHash == ([32]byte{})) {
+		writer.WriteHash(3, &v.TransactionHash)
+	}
+
+	_, _, err := writer.Reset(fieldNames_InternalSignature)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), err
+}
+
+func (v *InternalSignature) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Cause is missing")
+	} else if v.Cause == ([32]byte{}) {
+		errs = append(errs, "field Cause is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field TransactionHash is missing")
+	} else if v.TransactionHash == ([32]byte{}) {
+		errs = append(errs, "field TransactionHash is not set")
 	}
 
 	switch len(errs) {
@@ -7076,6 +7189,54 @@ func (v *MetricsRequest) IsValid() error {
 		errs = append(errs, "field Duration is missing")
 	} else if v.Duration == 0 {
 		errs = append(errs, "field Duration is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_NetworkAccountUpdate = []string{
+	1: "Name",
+	2: "Body",
+}
+
+func (v *NetworkAccountUpdate) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(len(v.Name) == 0) {
+		writer.WriteString(1, v.Name)
+	}
+	if !(v.Body == nil) {
+		writer.WriteValue(2, v.Body)
+	}
+
+	_, _, err := writer.Reset(fieldNames_NetworkAccountUpdate)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), err
+}
+
+func (v *NetworkAccountUpdate) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Name is missing")
+	} else if len(v.Name) == 0 {
+		errs = append(errs, "field Name is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Body is missing")
+	} else if v.Body == nil {
+		errs = append(errs, "field Body is not set")
 	}
 
 	switch len(errs) {
@@ -8873,7 +9034,7 @@ var fieldNames_SystemLedger = []string{
 	5: "PendingOracle",
 	6: "ActiveOracle",
 	7: "AcmeBurnt",
-	8: "OperatorUpdates",
+	8: "PendingUpdates",
 }
 
 func (v *SystemLedger) MarshalBinary() ([]byte, error) {
@@ -8899,9 +9060,9 @@ func (v *SystemLedger) MarshalBinary() ([]byte, error) {
 	if !((v.AcmeBurnt).Cmp(new(big.Int)) == 0) {
 		writer.WriteBigInt(7, &v.AcmeBurnt)
 	}
-	if !(len(v.OperatorUpdates) == 0) {
-		for _, v := range v.OperatorUpdates {
-			writer.WriteValue(8, v)
+	if !(len(v.PendingUpdates) == 0) {
+		for _, v := range v.PendingUpdates {
+			writer.WriteValue(8, &v)
 		}
 	}
 
@@ -8950,9 +9111,9 @@ func (v *SystemLedger) IsValid() error {
 		errs = append(errs, "field AcmeBurnt is not set")
 	}
 	if len(v.fieldsSet) > 8 && !v.fieldsSet[8] {
-		errs = append(errs, "field OperatorUpdates is missing")
-	} else if len(v.OperatorUpdates) == 0 {
-		errs = append(errs, "field OperatorUpdates is not set")
+		errs = append(errs, "field PendingUpdates is missing")
+	} else if len(v.PendingUpdates) == 0 {
+		errs = append(errs, "field PendingUpdates is not set")
 	}
 
 	switch len(errs) {
@@ -10923,14 +11084,9 @@ func (v *DirectoryAnchor) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.AcmeOraclePrice = x
 	}
 	for {
-		ok := reader.ReadValue(4, func(b []byte) error {
-			x, err := UnmarshalKeyPageOperation(b)
-			if err == nil {
-				v.OperatorUpdates = append(v.OperatorUpdates, x)
-			}
-			return err
-		})
-		if !ok {
+		if x := new(NetworkAccountUpdate); reader.ReadValue(4, x.UnmarshalBinary) {
+			v.Updates = append(v.Updates, *x)
+		} else {
 			break
 		}
 	}
@@ -11209,6 +11365,36 @@ func (v *IndexEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_IndexEntry)
+	if err != nil {
+		return err
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	return err
+}
+
+func (v *InternalSignature) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *InternalSignature) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType SignatureType
+	if x := new(SignatureType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+	if x, ok := reader.ReadHash(2); ok {
+		v.Cause = *x
+	}
+	if x, ok := reader.ReadHash(3); ok {
+		v.TransactionHash = *x
+	}
+
+	seen, err := reader.Reset(fieldNames_InternalSignature)
 	if err != nil {
 		return err
 	}
@@ -11541,6 +11727,33 @@ func (v *MetricsRequest) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_MetricsRequest)
+	if err != nil {
+		return err
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	return err
+}
+
+func (v *NetworkAccountUpdate) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *NetworkAccountUpdate) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadString(1); ok {
+		v.Name = x
+	}
+	reader.ReadValue(2, func(b []byte) error {
+		x, err := UnmarshalTransactionBody(b)
+		if err == nil {
+			v.Body = x
+		}
+		return err
+	})
+
+	seen, err := reader.Reset(fieldNames_NetworkAccountUpdate)
 	if err != nil {
 		return err
 	}
@@ -12586,14 +12799,9 @@ func (v *SystemLedger) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.AcmeBurnt = *x
 	}
 	for {
-		ok := reader.ReadValue(8, func(b []byte) error {
-			x, err := UnmarshalKeyPageOperation(b)
-			if err == nil {
-				v.OperatorUpdates = append(v.OperatorUpdates, x)
-			}
-			return err
-		})
-		if !ok {
+		if x := new(NetworkAccountUpdate); reader.ReadValue(8, x.UnmarshalBinary) {
+			v.PendingUpdates = append(v.PendingUpdates, *x)
+		} else {
 			break
 		}
 	}
@@ -13582,17 +13790,17 @@ func (v *DelegatedSignature) MarshalJSON() ([]byte, error) {
 
 func (v *DirectoryAnchor) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type            TransactionType                                  `json:"type"`
-		Source          *url.URL                                         `json:"source,omitempty"`
-		MajorBlockIndex uint64                                           `json:"majorBlockIndex,omitempty"`
-		MinorBlockIndex uint64                                           `json:"minorBlockIndex,omitempty"`
-		RootChainIndex  uint64                                           `json:"rootChainIndex,omitempty"`
-		RootChainAnchor string                                           `json:"rootChainAnchor,omitempty"`
-		StateTreeAnchor string                                           `json:"stateTreeAnchor,omitempty"`
-		AcmeOraclePrice uint64                                           `json:"acmeOraclePrice,omitempty"`
-		OperatorUpdates encoding.JsonUnmarshalListWith[KeyPageOperation] `json:"operatorUpdates,omitempty"`
-		Receipts        encoding.JsonList[Receipt]                       `json:"receipts,omitempty"`
-		MakeMajorBlock  uint64                                           `json:"makeMajorBlock,omitempty"`
+		Type            TransactionType                         `json:"type"`
+		Source          *url.URL                                `json:"source,omitempty"`
+		MajorBlockIndex uint64                                  `json:"majorBlockIndex,omitempty"`
+		MinorBlockIndex uint64                                  `json:"minorBlockIndex,omitempty"`
+		RootChainIndex  uint64                                  `json:"rootChainIndex,omitempty"`
+		RootChainAnchor string                                  `json:"rootChainAnchor,omitempty"`
+		StateTreeAnchor string                                  `json:"stateTreeAnchor,omitempty"`
+		AcmeOraclePrice uint64                                  `json:"acmeOraclePrice,omitempty"`
+		Updates         encoding.JsonList[NetworkAccountUpdate] `json:"updates,omitempty"`
+		Receipts        encoding.JsonList[Receipt]              `json:"receipts,omitempty"`
+		MakeMajorBlock  uint64                                  `json:"makeMajorBlock,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Source = v.SubnetAnchor.Source
@@ -13602,7 +13810,7 @@ func (v *DirectoryAnchor) MarshalJSON() ([]byte, error) {
 	u.RootChainAnchor = encoding.ChainToJSON(v.SubnetAnchor.RootChainAnchor)
 	u.StateTreeAnchor = encoding.ChainToJSON(v.SubnetAnchor.StateTreeAnchor)
 	u.AcmeOraclePrice = v.AcmeOraclePrice
-	u.OperatorUpdates = encoding.JsonUnmarshalListWith[KeyPageOperation]{Value: v.OperatorUpdates, Func: UnmarshalKeyPageOperationJSON}
+	u.Updates = v.Updates
 	u.Receipts = v.Receipts
 	u.MakeMajorBlock = v.MakeMajorBlock
 	return json.Marshal(&u)
@@ -13717,6 +13925,18 @@ func (v *HashSet) MarshalJSON() ([]byte, error) {
 	for i, x := range v.Hashes {
 		u.Hashes[i] = encoding.ChainToJSON(x)
 	}
+	return json.Marshal(&u)
+}
+
+func (v *InternalSignature) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type            SignatureType `json:"type"`
+		Cause           string        `json:"cause,omitempty"`
+		TransactionHash string        `json:"transactionHash,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Cause = encoding.ChainToJSON(v.Cause)
+	u.TransactionHash = encoding.ChainToJSON(v.TransactionHash)
 	return json.Marshal(&u)
 }
 
@@ -13893,6 +14113,16 @@ func (v *MetricsResponse) MarshalJSON() ([]byte, error) {
 		Value interface{} `json:"value,omitempty"`
 	}{}
 	u.Value = encoding.AnyToJSON(v.Value)
+	return json.Marshal(&u)
+}
+
+func (v *NetworkAccountUpdate) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Name string                                      `json:"name,omitempty"`
+		Body encoding.JsonUnmarshalWith[TransactionBody] `json:"body,omitempty"`
+	}{}
+	u.Name = v.Name
+	u.Body = encoding.JsonUnmarshalWith[TransactionBody]{Value: v.Body, Func: UnmarshalTransactionBodyJSON}
 	return json.Marshal(&u)
 }
 
@@ -14308,14 +14538,14 @@ func (v *SystemGenesis) MarshalJSON() ([]byte, error) {
 
 func (v *SystemLedger) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type            AccountType                                      `json:"type"`
-		Url             *url.URL                                         `json:"url,omitempty"`
-		Index           uint64                                           `json:"index,omitempty"`
-		Timestamp       time.Time                                        `json:"timestamp,omitempty"`
-		PendingOracle   uint64                                           `json:"pendingOracle,omitempty"`
-		ActiveOracle    uint64                                           `json:"activeOracle,omitempty"`
-		AcmeBurnt       *string                                          `json:"acmeBurnt,omitempty"`
-		OperatorUpdates encoding.JsonUnmarshalListWith[KeyPageOperation] `json:"operatorUpdates,omitempty"`
+		Type           AccountType                             `json:"type"`
+		Url            *url.URL                                `json:"url,omitempty"`
+		Index          uint64                                  `json:"index,omitempty"`
+		Timestamp      time.Time                               `json:"timestamp,omitempty"`
+		PendingOracle  uint64                                  `json:"pendingOracle,omitempty"`
+		ActiveOracle   uint64                                  `json:"activeOracle,omitempty"`
+		AcmeBurnt      *string                                 `json:"acmeBurnt,omitempty"`
+		PendingUpdates encoding.JsonList[NetworkAccountUpdate] `json:"pendingUpdates,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
@@ -14324,7 +14554,7 @@ func (v *SystemLedger) MarshalJSON() ([]byte, error) {
 	u.PendingOracle = v.PendingOracle
 	u.ActiveOracle = v.ActiveOracle
 	u.AcmeBurnt = encoding.BigintToJSON(&v.AcmeBurnt)
-	u.OperatorUpdates = encoding.JsonUnmarshalListWith[KeyPageOperation]{Value: v.OperatorUpdates, Func: UnmarshalKeyPageOperationJSON}
+	u.PendingUpdates = v.PendingUpdates
 	return json.Marshal(&u)
 }
 
@@ -15202,17 +15432,17 @@ func (v *DelegatedSignature) UnmarshalJSON(data []byte) error {
 
 func (v *DirectoryAnchor) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type            TransactionType                                  `json:"type"`
-		Source          *url.URL                                         `json:"source,omitempty"`
-		MajorBlockIndex uint64                                           `json:"majorBlockIndex,omitempty"`
-		MinorBlockIndex uint64                                           `json:"minorBlockIndex,omitempty"`
-		RootChainIndex  uint64                                           `json:"rootChainIndex,omitempty"`
-		RootChainAnchor string                                           `json:"rootChainAnchor,omitempty"`
-		StateTreeAnchor string                                           `json:"stateTreeAnchor,omitempty"`
-		AcmeOraclePrice uint64                                           `json:"acmeOraclePrice,omitempty"`
-		OperatorUpdates encoding.JsonUnmarshalListWith[KeyPageOperation] `json:"operatorUpdates,omitempty"`
-		Receipts        encoding.JsonList[Receipt]                       `json:"receipts,omitempty"`
-		MakeMajorBlock  uint64                                           `json:"makeMajorBlock,omitempty"`
+		Type            TransactionType                         `json:"type"`
+		Source          *url.URL                                `json:"source,omitempty"`
+		MajorBlockIndex uint64                                  `json:"majorBlockIndex,omitempty"`
+		MinorBlockIndex uint64                                  `json:"minorBlockIndex,omitempty"`
+		RootChainIndex  uint64                                  `json:"rootChainIndex,omitempty"`
+		RootChainAnchor string                                  `json:"rootChainAnchor,omitempty"`
+		StateTreeAnchor string                                  `json:"stateTreeAnchor,omitempty"`
+		AcmeOraclePrice uint64                                  `json:"acmeOraclePrice,omitempty"`
+		Updates         encoding.JsonList[NetworkAccountUpdate] `json:"updates,omitempty"`
+		Receipts        encoding.JsonList[Receipt]              `json:"receipts,omitempty"`
+		MakeMajorBlock  uint64                                  `json:"makeMajorBlock,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Source = v.SubnetAnchor.Source
@@ -15222,7 +15452,7 @@ func (v *DirectoryAnchor) UnmarshalJSON(data []byte) error {
 	u.RootChainAnchor = encoding.ChainToJSON(v.SubnetAnchor.RootChainAnchor)
 	u.StateTreeAnchor = encoding.ChainToJSON(v.SubnetAnchor.StateTreeAnchor)
 	u.AcmeOraclePrice = v.AcmeOraclePrice
-	u.OperatorUpdates = encoding.JsonUnmarshalListWith[KeyPageOperation]{Value: v.OperatorUpdates, Func: UnmarshalKeyPageOperationJSON}
+	u.Updates = v.Updates
 	u.Receipts = v.Receipts
 	u.MakeMajorBlock = v.MakeMajorBlock
 	if err := json.Unmarshal(data, &u); err != nil {
@@ -15246,10 +15476,7 @@ func (v *DirectoryAnchor) UnmarshalJSON(data []byte) error {
 		v.SubnetAnchor.StateTreeAnchor = x
 	}
 	v.AcmeOraclePrice = u.AcmeOraclePrice
-	v.OperatorUpdates = make([]KeyPageOperation, len(u.OperatorUpdates.Value))
-	for i, x := range u.OperatorUpdates.Value {
-		v.OperatorUpdates[i] = x
-	}
+	v.Updates = u.Updates
 	v.Receipts = u.Receipts
 	v.MakeMajorBlock = u.MakeMajorBlock
 	return nil
@@ -15481,6 +15708,34 @@ func (v *HashSet) UnmarshalJSON(data []byte) error {
 		} else {
 			v.Hashes[i] = x
 		}
+	}
+	return nil
+}
+
+func (v *InternalSignature) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type            SignatureType `json:"type"`
+		Cause           string        `json:"cause,omitempty"`
+		TransactionHash string        `json:"transactionHash,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Cause = encoding.ChainToJSON(v.Cause)
+	u.TransactionHash = encoding.ChainToJSON(v.TransactionHash)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	if x, err := encoding.ChainFromJSON(u.Cause); err != nil {
+		return fmt.Errorf("error decoding Cause: %w", err)
+	} else {
+		v.Cause = x
+	}
+	if x, err := encoding.ChainFromJSON(u.TransactionHash); err != nil {
+		return fmt.Errorf("error decoding TransactionHash: %w", err)
+	} else {
+		v.TransactionHash = x
 	}
 	return nil
 }
@@ -15822,6 +16077,22 @@ func (v *MetricsResponse) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Value = x
 	}
+	return nil
+}
+
+func (v *NetworkAccountUpdate) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Name string                                      `json:"name,omitempty"`
+		Body encoding.JsonUnmarshalWith[TransactionBody] `json:"body,omitempty"`
+	}{}
+	u.Name = v.Name
+	u.Body = encoding.JsonUnmarshalWith[TransactionBody]{Value: v.Body, Func: UnmarshalTransactionBodyJSON}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Name = u.Name
+	v.Body = u.Body.Value
+
 	return nil
 }
 
@@ -16601,14 +16872,14 @@ func (v *SystemGenesis) UnmarshalJSON(data []byte) error {
 
 func (v *SystemLedger) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type            AccountType                                      `json:"type"`
-		Url             *url.URL                                         `json:"url,omitempty"`
-		Index           uint64                                           `json:"index,omitempty"`
-		Timestamp       time.Time                                        `json:"timestamp,omitempty"`
-		PendingOracle   uint64                                           `json:"pendingOracle,omitempty"`
-		ActiveOracle    uint64                                           `json:"activeOracle,omitempty"`
-		AcmeBurnt       *string                                          `json:"acmeBurnt,omitempty"`
-		OperatorUpdates encoding.JsonUnmarshalListWith[KeyPageOperation] `json:"operatorUpdates,omitempty"`
+		Type           AccountType                             `json:"type"`
+		Url            *url.URL                                `json:"url,omitempty"`
+		Index          uint64                                  `json:"index,omitempty"`
+		Timestamp      time.Time                               `json:"timestamp,omitempty"`
+		PendingOracle  uint64                                  `json:"pendingOracle,omitempty"`
+		ActiveOracle   uint64                                  `json:"activeOracle,omitempty"`
+		AcmeBurnt      *string                                 `json:"acmeBurnt,omitempty"`
+		PendingUpdates encoding.JsonList[NetworkAccountUpdate] `json:"pendingUpdates,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
@@ -16617,7 +16888,7 @@ func (v *SystemLedger) UnmarshalJSON(data []byte) error {
 	u.PendingOracle = v.PendingOracle
 	u.ActiveOracle = v.ActiveOracle
 	u.AcmeBurnt = encoding.BigintToJSON(&v.AcmeBurnt)
-	u.OperatorUpdates = encoding.JsonUnmarshalListWith[KeyPageOperation]{Value: v.OperatorUpdates, Func: UnmarshalKeyPageOperationJSON}
+	u.PendingUpdates = v.PendingUpdates
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -16634,10 +16905,7 @@ func (v *SystemLedger) UnmarshalJSON(data []byte) error {
 	} else {
 		v.AcmeBurnt = *x
 	}
-	v.OperatorUpdates = make([]KeyPageOperation, len(u.OperatorUpdates.Value))
-	for i, x := range u.OperatorUpdates.Value {
-		v.OperatorUpdates[i] = x
-	}
+	v.PendingUpdates = u.PendingUpdates
 	return nil
 }
 

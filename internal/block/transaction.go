@@ -40,13 +40,15 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Del
 		return x.recordFailedTransaction(batch, delivery, err)
 	}
 
-	// Check if the transaction is ready to be executed
-	ready, err := x.TransactionIsReady(batch, delivery.Transaction, status)
-	if err != nil {
-		return x.recordFailedTransaction(batch, delivery, err)
-	}
-	if !ready {
-		return x.recordPendingTransaction(&x.Network, batch, delivery)
+	if !delivery.WasProducedInternally() {
+		// Check if the transaction is ready to be executed
+		ready, err := x.TransactionIsReady(batch, delivery.Transaction, status)
+		if err != nil {
+			return x.recordFailedTransaction(batch, delivery, err)
+		}
+		if !ready {
+			return x.recordPendingTransaction(&x.Network, batch, delivery)
+		}
 	}
 
 	if delivery.Transaction.Body.Type().IsSynthetic() {
@@ -88,6 +90,11 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Del
 	if err != nil {
 		err = fmt.Errorf("commit: %w", err)
 		return x.recordFailedTransaction(batch, delivery, err)
+	}
+
+	err = x.pushUpdatesToBVNs(batch, delivery, principal)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	return x.recordSuccessfulTransaction(batch, state, delivery, result)
@@ -346,13 +353,6 @@ func (x *Executor) recordTransaction(batch *database.Batch, delivery *chain.Deli
 	if !delivery.Transaction.Body.Type().IsSynthetic() {
 		return status, nil
 	}
-	// if delivery.Transaction.Body.Type() == protocol.TransactionTypeSegWitDataEntry && delivery.SourceNetwork == nil {
-	// 	// WriteData, WriteDataTo, and SyntheticWriteData are all rewritten to
-	// 	// SegWitDataEntry. Only the last should update the synthetic ledger. If
-	// 	// the original transaction was synthetic, `delivery.SourceNetwork` must
-	// 	// have been set.
-	// 	return status, nil
-	// }
 
 	// Update the synthetic ledger
 	var ledger *protocol.SyntheticLedger
@@ -553,4 +553,57 @@ func (x *Executor) recordFailedTransaction(batch *database.Batch, delivery *chai
 	}
 
 	return status, state, nil
+}
+
+// pushUpdatesToBVNs pushes updates from the DN to the BVNs
+func (x *Executor) pushUpdatesToBVNs(batch *database.Batch, delivery *chain.Delivery, principal protocol.Account) error {
+	// Only send updates for DN accounts
+	if principal == nil || !principal.GetUrl().RootIdentity().Equal(protocol.DnUrl()) {
+		return nil
+	}
+
+	// Prep the update
+	var update protocol.NetworkAccountUpdate
+	update.Body = delivery.Transaction.Body
+
+	switch delivery.Transaction.Body.Type() {
+	case protocol.TransactionTypeUpdateKeyPage:
+		// Synchronize updates to the operator book
+		if u, ok := principal.GetUrl().Parent(); ok && u.PathEqual(protocol.OperatorBook) {
+			update.Name = protocol.OperatorBook
+			break
+		}
+
+	case protocol.TransactionTypeWriteData:
+		// Synchronize updates to the oracle, globals, and network definition
+		switch {
+		case principal.GetUrl().PathEqual(protocol.Oracle):
+			update.Name = protocol.Oracle
+		case principal.GetUrl().PathEqual(protocol.Globals):
+			update.Name = protocol.Globals
+		case principal.GetUrl().PathEqual(protocol.Network):
+			update.Name = protocol.Network
+		}
+	}
+
+	// No update needed
+	if update.Name == "" {
+		return nil
+	}
+
+	// Write the update to the ledger
+	var ledger *protocol.SystemLedger
+	record := batch.Account(x.Network.Ledger())
+	err := record.GetStateAs(&ledger)
+	if err != nil {
+		return errors.Format(errors.StatusUnknown, "load ledger: %w", err)
+	}
+
+	ledger.PendingUpdates = append(ledger.PendingUpdates, update)
+	err = record.PutState(ledger)
+	if err != nil {
+		return errors.Format(errors.StatusUnknown, "store ledger: %w", err)
+	}
+
+	return nil
 }
