@@ -92,7 +92,7 @@ func (x *Executor) BeginBlock(block *Block) error {
 	ledgerState.AcmeBurnt = *big.NewInt(0)
 
 	// Reset global value updates
-	ledgerState.OperatorUpdates = nil
+	ledgerState.PendingUpdates = nil
 
 	err = ledger.PutState(ledgerState)
 	if err != nil {
@@ -508,7 +508,7 @@ func (x *Executor) buildDirectoryAnchor(batch *database.Batch, ledgerState *prot
 	}
 	anchor.MakeMajorBlock = openMajor
 	anchor.AcmeOraclePrice = ledgerState.ActiveOracle
-	anchor.OperatorUpdates = ledgerState.OperatorUpdates
+	anchor.Updates = ledgerState.PendingUpdates
 
 	// TODO This is pretty inefficient; we're constructing a receipt for every
 	// anchor. If we were more intelligent about it, we could send just the
