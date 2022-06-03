@@ -43,8 +43,6 @@ func bootstrap(t *testing.T, tc *testCmd) {
 	require.NoError(t, err)
 
 	//set the oracle price to $1.00
-	println(tc.jsonRpcAddr)
-	fmt.Printf("%x\n", data)
 	resp, err := tc.executeTx(t, "data write --write-state --wait 10s dn.acme/oracle dnkey %x", data)
 	require.NoError(t, err)
 	ar := new(ActionResponse)

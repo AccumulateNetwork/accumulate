@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/tendermint/tendermint/privval"
@@ -12,6 +13,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	"gitlab.com/accumulatenetwork/accumulate/networks"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -73,18 +75,24 @@ func setOracle(_ *cobra.Command, args []string) {
 }
 
 func loadConfigAndClient() (*config.Config, *client.Client) {
-	config, err := config.Load(flagMain.WorkDir)
+	cfg, err := config.Load(flagMain.WorkDir)
 	checkf(err, "--work-dir")
 
 	server := flagSet.Server
 	if server == "" {
-		server = config.Accumulate.API.ListenAddress
+		addr := cfg.Accumulate.Network.LocalAddress
+		if !strings.Contains(addr, "://") {
+			addr = "http://" + addr
+		}
+		u, err := config.OffsetPort(addr, networks.AccApiPortOffset)
+		checkf(err, "applying offset to node's local address")
+		server = u.String()
 	}
 
 	client, err := client.New(server)
 	checkf(err, "--server")
 
-	return config, client
+	return cfg, client
 }
 
 func submitTransactionWithNode(cfg *config.Config, client *client.Client, transaction *protocol.Transaction, account protocol.FullAccount) {
