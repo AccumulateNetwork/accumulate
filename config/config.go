@@ -140,9 +140,9 @@ type Config struct {
 }
 
 type Describe struct {
-	SubnetId     string      `toml:"subnet" mapstructure:"local-subnet"`
+	SubnetId     string      `toml:"subnet" mapstructure:"subnet"`
 	NetworkType  NetworkType `toml:"type" mapstructure:"type"`
-	LocalAddress string      `toml:"address" mapstructure:"local-address"`
+	LocalAddress string      `toml:"address" mapstructure:"address"`
 	Network      `toml:"network" mapstructure:"network"`
 }
 
@@ -156,7 +156,7 @@ type Accumulate struct {
 }
 
 type Network struct {
-	Name    string   `json:"name" toml:"network-name" mapstructure:"network-name"`
+	Name    string   `json:"name" toml:"name" mapstructure:"name"`
 	Subnets []Subnet `json:"subnets" toml:"subnets" mapstructure:"subnets"`
 }
 

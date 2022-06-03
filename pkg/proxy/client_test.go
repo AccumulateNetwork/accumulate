@@ -3,7 +3,6 @@ package proxy
 import (
 	"encoding/json"
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"io"
 	stdlog "log"
 	"mime"
@@ -45,30 +44,30 @@ func newMux(t *testing.T, methods *jsonrpc2.MethodMap) *http.ServeMux {
 	return mux
 }
 
-func NewJrpc(opts Options) (*JrpcMethods, error) {
-	var err error
-	m := new(JrpcMethods)
-	m.Options = opts
-	m.querier = new(queryDispatch)
-	m.querier.Options = opts
-
-	if opts.Logger != nil {
-		m.logger = opts.Logger.With("module", "jrpc")
-	}
-
-	m.validate, err = protocol.NewValidator()
-	if err != nil {
-		return nil, err
-	}
-
-	methods := make(jsonrpc2.MethodMap, 35)
-
-	methods["describe"] = m.Describe
-	methods["execute"] = m.Execute
-	methods["add-credits"] = m.ExecuteAddCredits
-	methods["add-validator"] = m.ExecuteAddValidator
-	return m, nil
-}
+//func NewJrpc(opts Options) (*JrpcMethods, error) {
+//	var err error
+//	m := new(JrpcMethods)
+//	m.Options = opts
+//	m.querier = new(queryDispatch)
+//	m.querier.Options = opts
+//
+//	if opts.Logger != nil {
+//		m.logger = opts.Logger.With("module", "jrpc")
+//	}
+//
+//	m.validate, err = protocol.NewValidator()
+//	if err != nil {
+//		return nil, err
+//	}
+//
+//	methods := make(jsonrpc2.MethodMap, 35)
+//
+//	methods["describe"] = m.Describe
+//	methods["execute"] = m.Execute
+//	methods["add-credits"] = m.ExecuteAddCredits
+//	methods["add-validator"] = m.ExecuteAddValidator
+//	return m, nil
+//}
 
 func TestAccuProxyClient(t *testing.T) {
 

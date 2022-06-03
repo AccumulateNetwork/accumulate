@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/proxy"
 	"io"
 	"io/fs"
 	"net"
@@ -39,149 +38,7 @@ import (
 var cmdInit = &cobra.Command{
 	Use:   "init",
 	Short: "Initialize a network or node",
-	Run:   initBasic,
 	Args:  cobra.NoArgs,
-}
-
-//build optimal configuration
-//specify privkey files
-
-// --network mainnet --subnet directory --seed proxy.com
-func initBasic(cmd *cobra.Command, args []string) {
-	workDir := flagMain.WorkDir
-
-	// expecting network name:
-	s := strings.Split(args[0], ".")
-	if len(s) != 2 {
-		fatalf("network must be in the form of <network-name>.<subnet-name>, e.g. mainnet.bvn0")
-	}
-	networkName := s[0]
-	subnetName := s[1]
-
-	//u, err := url.Parse(args[1])
-	//check(err)
-
-	//init mainnet.directory --seed proxy  -w ~/.nodes/mainnet/directory
-
-	seed := flagInitDualNode.SeedProxy
-	//query the seed node to obtain network configuration
-	var directoryBootstrapPeers string
-	var bvnBootstrapPeers string
-	if seed != "" {
-		seedProxy, err := proxy.New(seed)
-		check(err)
-		slr := proxy.SeedListRequest{}
-		slr.Network = networkName
-		slr.Subnet = subnetName
-		resp, err := seedProxy.GetSeedList(context.Background(), &slr)
-		if err != nil {
-			checkf(err, "proxy returned seeding error")
-		}
-		bvnBootstrapPeers = strings.Join(resp.Addresses, ",")
-
-		//now query the directory peers
-		slr.Network = networkName
-		slr.Subnet = "Directory"
-		resp, err = seedProxy.GetSeedList(context.Background(), &slr)
-		if err != nil {
-			checkf(err, "proxy returned seeding error for directory query")
-		}
-		directoryBootstrapPeers = strings.Join(resp.Addresses, ",")
-	}
-	println(directoryBootstrapPeers)
-	println(bvnBootstrapPeers)
-	nodeNr, err := strconv.ParseUint(args[0], 10, 16)
-	checkf(err, "invalid node number")
-
-	netAddr, netPort, err := resolveAddr(args[1])
-	checkf(err, "invalid network URL")
-
-	u, err := url.Parse(flagInitNode.ListenIP)
-	checkf(err, "invalid --listen %q", flagInitNode.ListenIP)
-
-	nodePort := 26656
-	if u.Port() != "" {
-		p, err := strconv.ParseInt(u.Port(), 10, 16)
-		if err != nil {
-			fatalf("invalid port number %q", u.Port())
-		}
-		nodePort = int(p)
-	}
-
-	accClient, err := client.New(fmt.Sprintf("http://%s:%d", netAddr, netPort+networks.AccApiPortOffset))
-	checkf(err, "failed to create API client for %s", args[0])
-
-	tmClient, err := rpchttp.New(fmt.Sprintf("tcp://%s:%d", netAddr, netPort+networks.TmRpcPortOffset))
-	checkf(err, "failed to create Tendermint client for %s", args[0])
-
-	version := getVersion(accClient)
-	switch {
-	case !accumulate.IsVersionKnown() && !version.VersionIsKnown:
-		warnf("The version of this executable and %s is unknown. If there is a version mismatch, the node may fail.", args[0])
-
-	case accumulate.Commit != version.Commit:
-		if flagInitNode.SkipVersionCheck {
-			warnf("This executable is version %s but %s is %s. This may cause the node to fail.", formatVersion(accumulate.Version, accumulate.IsVersionKnown()), args[0], formatVersion(version.Version, version.VersionIsKnown))
-		} else {
-			fatalf("wrong version: network is %s, we are %s", formatVersion(version.Version, version.VersionIsKnown), formatVersion(accumulate.Version, accumulate.IsVersionKnown()))
-		}
-	}
-
-	description, err := accClient.Describe(context.Background())
-	checkf(err, "failed to get description from %s", args[0])
-
-	var genDoc *types.GenesisDoc
-	if cmd.Flag("genesis-doc").Changed {
-		genDoc, err = types.GenesisDocFromFile(flagInitNode.GenesisDoc)
-		checkf(err, "failed to load genesis doc %q", flagInitNode.GenesisDoc)
-	} else {
-		warnf("You are fetching the Genesis document from %s! Only do this if you trust %[1]s and your connection to it!", args[0])
-		rgen, err := tmClient.Genesis(context.Background())
-		checkf(err, "failed to get genesis from %s", args[0])
-		genDoc = rgen.Genesis
-	}
-
-	status, err := tmClient.Status(context.Background())
-	checkf(err, "failed to get status of %s", args[0])
-
-	nodeType := cfg.Validator
-	if flagInitNode.Follower {
-		nodeType = cfg.Follower
-	}
-	config := config.Default(description.Describe.Name, description.Describe.NetworkType, nodeType, description.Describe.SubnetId)
-	config.P2P.BootstrapPeers = fmt.Sprintf("%s@%s:%d", status.NodeInfo.NodeID, netAddr, netPort+networks.TmP2pPortOffset)
-	config.Accumulate.Network = description.Describe.Network
-
-	if flagInit.LogLevels != "" {
-		_, _, err := logging.ParseLogLevel(flagInit.LogLevels, io.Discard)
-		checkf(err, "--log-level")
-		config.LogLevel = flagInit.LogLevels
-	}
-
-	if len(flagInit.Etcd) > 0 {
-		config.Accumulate.Storage.Type = cfg.EtcdStorage
-		config.Accumulate.Storage.Etcd = new(etcd.Config)
-		config.Accumulate.Storage.Etcd.Endpoints = flagInit.Etcd
-		config.Accumulate.Storage.Etcd.DialTimeout = 5 * time.Second
-	}
-
-	if flagInit.Reset {
-		nodeReset()
-	}
-
-	_, err = node.Init(node.InitOptions{
-		NodeNr:     &nodeNr,
-		Version:    2,
-		WorkDir:    flagMain.WorkDir,
-		Port:       nodePort,
-		GenesisDoc: genDoc,
-		Config:     []*cfg.Config{config},
-		RemoteIP:   []string{u.Hostname()},
-		ListenIP:   []string{u.Hostname()},
-		Logger:     newLogger(),
-	})
-	check(err)
-
 }
 
 var cmdInitDualNode = &cobra.Command{
@@ -380,9 +237,9 @@ func initNode(cmd *cobra.Command, args []string) {
 	if flagInitNode.Follower {
 		nodeType = cfg.Follower
 	}
-	config := config.Default(description.Network.Name, description.Network.Type, nodeType, description.Network.LocalSubnetID)
+	config := config.Default(description.Describe.Name, description.Describe.NetworkType, nodeType, description.Describe.SubnetId)
 	config.P2P.BootstrapPeers = fmt.Sprintf("%s@%s:%d", status.NodeInfo.NodeID, netAddr, netPort+networks.TmP2pPortOffset)
-	config.Accumulate.Network = description.Network
+	config.Accumulate.Describe = description.Describe
 
 	if flagInit.LogLevels != "" {
 		_, _, err := logging.ParseLogLevel(flagInit.LogLevels, io.Discard)
@@ -517,7 +374,7 @@ func initDNs(count int, dnConfig []*cfg.Config, dnRemote []string, dnListen []st
 			Address: fmt.Sprintf("http://%s:%d", dnRemote[i], flagInitDevnet.BasePort),
 		}
 		dnConfig[i].Accumulate.Network.Subnets = subnets
-		dnConfig[i].Accumulate.Network.LocalAddress = parseHost(dnNodes[i].Address)
+		dnConfig[i].Accumulate.LocalAddress = parseHost(dnNodes[i].Address)
 	}
 
 	subnets[0] = config.Subnet{
@@ -546,7 +403,7 @@ func initBVNs(bvnConfigs [][]*cfg.Config, count int, bvnRemotes [][]string, bvnL
 				Address: fmt.Sprintf("http://%s:%d", bvnRemotes[bvn][i], flagInitDevnet.BasePort),
 			}
 			bvnConfigs[bvn][i].Accumulate.Network.Subnets = subnets
-			bvnConfigs[bvn][i].Accumulate.Network.LocalAddress = parseHost(bvnNodes[i].Address)
+			bvnConfigs[bvn][i].Accumulate.LocalAddress = parseHost(bvnNodes[i].Address)
 		}
 		subnets[bvn+1] = config.Subnet{
 			ID:    subnetID,

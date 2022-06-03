@@ -32,7 +32,7 @@ SeedListRequest:
       type: string
     - name: Subnet
       type: string
-    - name: count
+    - name: Count
       type: int
 
 SeedListResponse:

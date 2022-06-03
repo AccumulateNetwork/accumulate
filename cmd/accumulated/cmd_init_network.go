@@ -170,10 +170,10 @@ func initNetwork(cmd *cobra.Command, args []string) {
 			c.Accumulate.Website.Enabled = false
 		}
 		dnListen[i] = "0.0.0.0"
-		c.Accumulate.Network.LocalSubnetID = directory.Name
-		c.Accumulate.Network.Type = directory.Type
+		c.Accumulate.SubnetId = directory.Name
+		c.Accumulate.NetworkType = directory.Type
 		c.Accumulate.Network.Subnets = accSub
-		c.Accumulate.Network.LocalAddress = fmt.Sprintf("%s:%d", bvns[i].Nodes[0].IP, directory.Port)
+		c.Accumulate.LocalAddress = fmt.Sprintf("%s:%d", bvns[i].Nodes[0].IP, directory.Port)
 	}
 
 	bvnConfig := make([][]*cfg.Config, len(bvnSubnet))
@@ -183,7 +183,7 @@ func initNetwork(cmd *cobra.Command, args []string) {
 		bvnListen[i] = make([]string, len(v.Nodes))
 	}
 
-	bvnRemote := make([][]string, len(bvnSubnet)) //numBvns)
+	bvnRemote := make([][]string, len(bvnSubnet))
 
 	for i, v := range bvnSubnet {
 		for j := range v.Nodes {
@@ -202,9 +202,9 @@ func initNetwork(cmd *cobra.Command, args []string) {
 			if flagInit.NoWebsite {
 				c.Accumulate.Website.Enabled = false
 			}
-			c.Accumulate.Network.Type = config.BlockValidator
-			c.Accumulate.Network.LocalSubnetID = v.Name
-			c.Accumulate.Network.LocalAddress = fmt.Sprintf("%s:%d", v.Nodes[j].IP, v.Port)
+			c.Accumulate.NetworkType = config.BlockValidator
+			c.Accumulate.SubnetId = v.Name
+			c.Accumulate.LocalAddress = fmt.Sprintf("%s:%d", v.Nodes[j].IP, v.Port)
 			c.Accumulate.Network.Subnets = accSub
 		}
 	}
@@ -225,9 +225,9 @@ func initNetwork(cmd *cobra.Command, args []string) {
 			if flagInit.NoWebsite {
 				c.Accumulate.Website.Enabled = false
 			}
-			c.Accumulate.Network.Type = config.BlockValidator
-			c.Accumulate.Network.LocalSubnetID = v.Name
-			c.Accumulate.Network.LocalAddress = fmt.Sprintf("%s:%d", v.Nodes[j].IP, v.Port)
+			c.Accumulate.NetworkType = config.BlockValidator
+			c.Accumulate.SubnetId = v.Name
+			c.Accumulate.LocalAddress = fmt.Sprintf("%s:%d", v.Nodes[j].IP, v.Port)
 			c.Accumulate.Network.Subnets = accSub
 		}
 	}

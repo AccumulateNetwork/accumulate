@@ -33,7 +33,7 @@ type SeedCountResponse struct {
 type SeedListRequest struct {
 	Network   string `json:"network,omitempty" form:"network" query:"network" validate:"required"`
 	Subnet    string `json:"subnet,omitempty" form:"subnet" query:"subnet" validate:"required"`
-	count     int64  `json:"count,omitempty" form:"count" query:"count" validate:"required"`
+	Count     int64  `json:"count,omitempty" form:"count" query:"count" validate:"required"`
 	extraData []byte
 }
 
@@ -98,7 +98,7 @@ func (v *SeedListRequest) Copy() *SeedListRequest {
 
 	u.Network = v.Network
 	u.Subnet = v.Subnet
-	u.count = v.count
+	u.Count = v.Count
 
 	return u
 }
@@ -183,7 +183,7 @@ func (v *SeedListRequest) Equal(u *SeedListRequest) bool {
 	if !(v.Subnet == u.Subnet) {
 		return false
 	}
-	if !(v.count == u.count) {
+	if !(v.Count == u.Count) {
 		return false
 	}
 

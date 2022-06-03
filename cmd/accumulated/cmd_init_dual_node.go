@@ -85,12 +85,12 @@ func initDualNode(cmd *cobra.Command, args []string) {
 	check(err)
 
 	//make sure we have a block validator type
-	if c.Accumulate.Network.Type != cfg.Directory {
-		fatalf("expecting directory but received %v", c.Accumulate.Network.Type)
+	if c.Accumulate.NetworkType != cfg.Directory {
+		fatalf("expecting directory but received %v", c.Accumulate.NetworkType)
 	}
 
 	//now find out what bvn we are on then let
-	dnSubNet := c.Accumulate.Network.LocalAddress
+	dnSubNet := c.Accumulate.LocalAddress
 	dnHost, _, err := net.SplitHostPort(dnSubNet)
 	checkf(err, "cannot resolve bvn host and port")
 
