@@ -51,7 +51,7 @@ func TestTransactionPriority(t *testing.T) {
 		WithSigner(url.MustParse("foo/book0/1"), 1).
 		WithBody(bodySys).
 		InitiateSynthetic(n.network.NodeUrl()).
-		Sign(protocol.SignatureTypeLegacyED25519, fooKey).
+		Sign(protocol.SignatureTypeLegacyED25519, n.key.Bytes()).
 		Build()
 
 	bodyNormal := &protocol.BurnTokens{
