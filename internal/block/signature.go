@@ -220,7 +220,7 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 
 	// Persist the signature
 	env := new(database.SigOrTxn)
-	env.Hash = *(*[32]byte)(delivery.Transaction.GetHash())
+	env.Txid = delivery.Transaction.ID()
 	env.Signature = sigToStore
 	sigHash := signature.Hash()
 	err = batch.Transaction(sigHash).PutState(env)

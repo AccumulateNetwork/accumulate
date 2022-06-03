@@ -3,14 +3,14 @@
 SyntheticOrigin:
   fields:
     - name: Cause
-      description: is the hash of the transaction that produced this transaction
-      type: chain
-    - name: Source
-      description: is the principal of the cause
-      type: url
+      description: is the ID of the transaction that produced this transaction
+      type: txid
       pointer: true
+    # name: Source
+    - { name: Source, type: url, pointer: true, virtual: true, non-binary: true }
     - name: Initiator
       description: is the initiator of the cause
+      field-number: 3
       type: url
       pointer: true
     - name: FeeRefund

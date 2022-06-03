@@ -302,10 +302,10 @@ func (x *Executor) requestMissingSyntheticTransactions(ledger *protocol.Syntheti
 
 		// For each pending synthetic transaction
 		var batch jsonrpc2.BatchRequest
-		for i, hash := range subnet.Pending {
-			// If we know the hash we must have a local copy (so we don't need
-			// to fetch it)
-			if hash != ([32]byte{}) {
+		for i, txid := range subnet.Pending {
+			// If we know the ID we must have a local copy (so we don't need to
+			// fetch it)
+			if txid != nil {
 				continue
 			}
 

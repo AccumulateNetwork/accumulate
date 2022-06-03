@@ -4,7 +4,12 @@ import (
 	"crypto/sha256"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding/hash"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
+
+func (t *Transaction) ID() *url.TxID {
+	return t.Header.Principal.WithTxID(*(*[32]byte)(t.GetHash()))
+}
 
 // Hash calculates the hash of the transaction as H(H(header) + H(body)).
 func (t *Transaction) GetHash() []byte {

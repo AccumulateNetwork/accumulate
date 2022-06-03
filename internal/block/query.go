@@ -16,7 +16,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
@@ -80,6 +79,13 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 		return []byte("tx"), v, err
 
 	case u.Fragment == "":
+		txid, err := u.AsTxID()
+		if err == nil {
+			h := txid.Hash()
+			v, err := m.queryByTxId(batch, h[:], prove, false, false)
+			return []byte("tx"), v, err
+		}
+
 		// Query by account URL
 		account, err := m.queryAccount(batch, batch.Account(u), prove)
 		if err != nil {
@@ -250,7 +256,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 				return nil, nil, err
 			}
 			resp := new(query.ResponsePending)
-			resp.Transactions = txIds
+			resp.Transactions = txIds.Entries
 			return []byte("pending"), resp, nil
 		case 2:
 			if strings.Contains(fragment[1], ":") {
@@ -275,8 +281,30 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 				}
 
 				height, txid, err := getTransaction(chain, fragment[1])
-				if err != nil {
+				switch {
+				case err == nil:
+					// Ok
+				case !errors.Is(err, storage.ErrNotFound):
 					return nil, nil, err
+				default:
+					// Is the hash a transaction?
+					state, e2 := batch.Transaction(txid).GetState()
+					if e2 != nil || state.Transaction == nil {
+						return nil, nil, err
+					}
+
+					// Does it belong to the account?
+					if !state.Transaction.Header.Principal.Equal(u.WithFragment("")) {
+						return nil, nil, err
+					}
+
+					// Return the transaction without height or state info
+					res, err := m.queryByTxId(batch, txid, prove, false, false)
+					if err != nil {
+						return nil, nil, err
+					}
+
+					return []byte("tx"), res, nil
 				}
 
 				state, err := chain.State(height)
@@ -453,9 +481,9 @@ func getTransaction(chain *database.Chain, s string) (int64, []byte, error) {
 	}
 
 	if valid {
-		return 0, nil, errors.NotFound("transaction %q not found", s)
+		return 0, entry, errors.NotFound("transaction %q not found", s)
 	}
-	return 0, nil, fmt.Errorf("invalid transaction: %q is not a number or a hash", s)
+	return 0, entry, fmt.Errorf("invalid transaction: %q is not a number or a hash", s)
 }
 
 func (m *Executor) queryDirectoryByChainId(batch *database.Batch, account *url.URL, start uint64, limit uint64) (*query.DirectoryQueryResult, error) {
@@ -500,7 +528,8 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove, remote
 	}
 
 	if txState.Transaction == nil {
-		tx = batch.Transaction(txState.Hash[:])
+		h := txState.Txid.Hash()
+		tx = batch.Transaction(h[:])
 		txState, err = tx.GetState()
 		if errors.Is(err, storage.ErrNotFound) {
 			return nil, errors.NotFound("transaction not found for signature %X", txid[:4])
@@ -562,19 +591,14 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove, remote
 	qr.Envelope = new(protocol.Envelope)
 	qr.Envelope.Transaction = []*protocol.Transaction{txState.Transaction}
 	qr.Status = status
-	copy(qr.TxId[:], txid)
+	qr.TxId = txState.Transaction.ID()
 	qr.Height = -1
 
 	synth, err := tx.GetSyntheticTxns()
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
 		return nil, fmt.Errorf("invalid query from GetTx in state database, %v", err)
 	}
-
-	qr.TxSynthTxIds = make(types.Bytes, 0, len(synth.Hashes)*32)
-	for _, synth := range synth.Hashes {
-		synth := synth // See docs/developer/rangevarref.md
-		qr.TxSynthTxIds = append(qr.TxSynthTxIds, synth[:]...)
-	}
+	qr.Produced = synth.Entries
 
 	for _, signer := range status.Signers {
 		// Load the signature set

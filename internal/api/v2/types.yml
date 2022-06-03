@@ -41,7 +41,9 @@ TransactionQueryResponse:
       alternative: Sponsor
     - name: TransactionHash
       type: bytes
-      alternative: Txid
+    - name: Txid
+      type: txid
+      pointer: true
     - name: Transaction
       type: protocol.Transaction
       pointer: true
@@ -53,8 +55,10 @@ TransactionQueryResponse:
     - name: Status
       type: protocol.TransactionStatus
       pointer: true
-    - name: SyntheticTxids
-      type: chain
+    - name: Produced
+      alternative: SyntheticTxids
+      type: txid
+      pointer: true
       repeatable: true
     - name: Receipts
       repeatable: true
@@ -388,7 +392,9 @@ TxResponse:
   fields:
   - name: TransactionHash
     type: bytes
-    alternative: Txid
+  - name: Txid
+    type: txid
+    pointer: true
   - name: SignatureHashes
     type: bytes
     repeatable: true
@@ -410,7 +416,7 @@ DataEntryQuery:
       type: url
       pointer: true
     - name: EntryHash
-      type: chain
+      type: hash
       optional: true
 
 DataEntrySetQuery:
@@ -424,7 +430,7 @@ DataEntrySetQuery:
 DataEntryQueryResponse:
   fields:
     - name: EntryHash
-      type: chain
+      type: hash
     - name: Entry
       type: protocol.DataEntry
       marshal-as: union
