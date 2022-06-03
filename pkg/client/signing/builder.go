@@ -321,17 +321,8 @@ func (s *Builder) InitiateSynthetic(txn *protocol.Transaction, router routing.Ro
 		initSig.SequenceNumber = subnetLedger.Produced
 	}
 
-	if s.InitMode == InitWithSimpleHash {
-		txn.Header.Initiator = *(*[32]byte)(initSig.Metadata().Hash())
-	} else {
-		initHash, err := initSig.Initiator()
-		if err != nil {
-			// This should never happen
-			panic(fmt.Errorf("failed to calculate the synthetic signature initiator hash: %v", err))
-		}
-
-		txn.Header.Initiator = *(*[32]byte)(initHash.MerkleHash())
-	}
+	// Ignore InitMode, always use a simple hash
+	txn.Header.Initiator = *(*[32]byte)(initSig.Metadata().Hash())
 
 	initSig.TransactionHash = *(*[32]byte)(txn.GetHash())
 	return initSig, nil
