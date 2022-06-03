@@ -87,6 +87,11 @@ func (tb TransactionBuilder) Sign(typ protocol.SignatureType, privateKey []byte)
 	return tb
 }
 
+func (tb TransactionBuilder) SignFunc(fn func(txn *protocol.Transaction) protocol.Signature) TransactionBuilder {
+	tb.Signatures = append(tb.Signatures, fn(tb.Transaction[0]))
+	return tb
+}
+
 func (tb TransactionBuilder) Initiate(typ protocol.SignatureType, privateKey []byte) TransactionBuilder {
 	switch {
 	case tb.Transaction[0].Body == nil:

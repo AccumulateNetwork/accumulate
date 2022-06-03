@@ -15,9 +15,10 @@ import (
 func TestTransactionPriority(t *testing.T) {
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
-	n := nodes[subnets[1]][0]
+	dn := nodes[subnets[0]][0]
+	bvn := nodes[subnets[1]][0]
 	fooKey := generateKey()
-	batch := n.db.Begin(true)
+	batch := bvn.db.Begin(true)
 	require.NoError(t, acctesting.CreateAdiWithCredits(batch, fooKey, "foo", 1e9))
 	require.NoError(t, acctesting.CreateTokenAccount(batch, "foo/tokens", protocol.AcmeUrl().String(), 1, false))
 	require.NoError(t, batch.Commit())
@@ -26,54 +27,54 @@ func TestTransactionPriority(t *testing.T) {
 		Envelope       *protocol.Envelope
 		ExpectPriority int64
 	}
-	cases := make(map[string]Case)
-	body := &protocol.SyntheticDepositTokens{
-		Token:  protocol.AcmeUrl(),
-		Amount: *big.NewInt(100),
-	}
-	env := newTxn("foo/tokens").
-		WithSigner(url.MustParse("foo/book0/1"), 1).
-		WithBody(body).
-		InitiateSynthetic(n.network.NodeUrl()).
-		Sign(protocol.SignatureTypeLegacyED25519, fooKey).Build()
-
-	rsig := new(protocol.ReceiptSignature)
-	rsig.SourceNetwork = url.MustParse("foo")
-	rsig.TransactionHash = *(*[32]byte)(env.Transaction[0].GetHash())
-	rsig.Proof.Start = env.Transaction[0].GetHash()
-	rsig.Proof.Anchor = env.Transaction[0].GetHash()
-	env.Signatures = append(env.Signatures, rsig)
-
-	bodySys := &protocol.DirectoryAnchor{
-		AcmeOraclePrice: protocol.AcmeOraclePrecision,
-	}
-	envSys := newTxn("foo/tokens").
-		WithSigner(url.MustParse("foo/book0/1"), 1).
-		WithBody(bodySys).
-		InitiateSynthetic(n.network.NodeUrl()).
-		Sign(protocol.SignatureTypeLegacyED25519, n.key.Bytes()).
-		Build()
-
-	bodyNormal := &protocol.BurnTokens{
-		Amount: *big.NewInt(100),
-	}
-	envNormal := newTxn("foo/tokens").
-		WithSigner(url.MustParse("foo/book0/1"), 1).
-		WithBody(bodyNormal).
-		Initiate(protocol.SignatureTypeLegacyED25519, fooKey).
-		Build()
-
-	cases["syntheticDepositToken"] = Case{
-		Envelope:       env,
-		ExpectPriority: 1,
-	}
-	cases["directoryAnchor"] = Case{
-		Envelope:       envSys,
-		ExpectPriority: 2,
-	}
-	cases["burnToken"] = Case{
-		Envelope:       envNormal,
-		ExpectPriority: 0,
+	cases := map[string]Case{
+		"System": {
+			Envelope: newTxn(bvn.network.AnchorPool().String()).
+				WithSigner(bvn.network.DefaultOperatorPage(), 1).
+				WithBody(&protocol.DirectoryAnchor{
+					SubnetAnchor: protocol.SubnetAnchor{
+						Source:          dn.network.NodeUrl(),
+						RootChainIndex:  1,
+						MinorBlockIndex: 1,
+					},
+					AcmeOraclePrice: 1,
+				}).
+				InitiateSynthetic(bvn.network.NodeUrl()).
+				Sign(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
+				Build(),
+			ExpectPriority: 2,
+		},
+		"Synthetic": {
+			Envelope: newTxn("foo/tokens").
+				WithSigner(url.MustParse("foo/book0/1"), 1).
+				WithBody(&protocol.SyntheticDepositTokens{
+					Token:  protocol.AcmeUrl(),
+					Amount: *big.NewInt(100),
+				}).
+				InitiateSynthetic(bvn.network.NodeUrl()).
+				Sign(protocol.SignatureTypeLegacyED25519, fooKey).
+				SignFunc(func(txn *protocol.Transaction) protocol.Signature {
+					// Add a receipt signature
+					sig := new(protocol.ReceiptSignature)
+					sig.SourceNetwork = url.MustParse("foo")
+					sig.TransactionHash = *(*[32]byte)(txn.GetHash())
+					sig.Proof.Start = txn.GetHash()
+					sig.Proof.Anchor = txn.GetHash()
+					return sig
+				}).
+				Build(),
+			ExpectPriority: 1,
+		},
+		"User": {
+			Envelope: newTxn("foo/tokens").
+				WithSigner(url.MustParse("foo/book0/1"), 1).
+				WithBody(&protocol.BurnTokens{
+					Amount: *big.NewInt(100),
+				}).
+				Initiate(protocol.SignatureTypeLegacyED25519, fooKey).
+				Build(),
+			ExpectPriority: 0,
+		},
 	}
 
 	for name, c := range cases {
@@ -81,7 +82,7 @@ func TestTransactionPriority(t *testing.T) {
 			// Submit the envelope
 			b, err := c.Envelope.MarshalBinary()
 			require.NoError(t, err)
-			resp := n.app.CheckTx(abci.RequestCheckTx{Tx: b})
+			resp := bvn.app.CheckTx(abci.RequestCheckTx{Tx: b})
 			require.Zero(t, resp.Code, resp.Log)
 
 			// Check the results
