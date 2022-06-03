@@ -33,7 +33,7 @@ func main() {
 var cmd = &cobra.Command{
 	Use: "devnet",
 	Run: func(*cobra.Command, []string) {
-		_, err := initClient("http://localhost:26660/v2")
+		err := initClient("http://localhost:26660/v2")
 		if err != nil {
 			os.Exit(1)
 		}
@@ -124,18 +124,24 @@ func stop(runCmd *exec.Cmd) {
 }
 
 // Init new client from server URL input using client.go
-func initClient(server string) (string, error) {
+func initClient(server string) error {
 	// Create new client on localhost
 	client, err := client.New("http://127.0.1.1:26660/v2")
 	checkf(err, "creating client")
 	client.DebugRequest = true
 
 	// Limit amount of goroutines
-	maxGoroutines := 10
+	maxGoroutines := 1
 	guard := make(chan struct{}, maxGoroutines)
 
+	// Start time
+	start := time.Now()
+
 	// run key generation in cycle
-	for i := 0; i < 100; i++ {
+	for i := 0; i < 10; i++ {
+		// create accounts and store them
+		acc, _ := createAccount(i)
+
 		guard <- struct{}{} // would block if guard channel is already filled
 
 		// Add timer to measure TPS
@@ -143,9 +149,6 @@ func initClient(server string) (string, error) {
 
 		// generate accounts and faucet in goroutines
 		go func(n int) {
-			// create accounts and store them
-			acc, _ := createAccount(n)
-
 			// start timer
 			timer.Reset(time.Microsecond)
 
@@ -175,12 +178,15 @@ func initClient(server string) (string, error) {
 		<-timer.C
 	}
 
+	//Stop time Tx executions
+	stop := time.Now()
+	fmt.Printf("The Tx execution took %v to run.\n", stop.Sub(start))
+
 	// wait for goroutines to finish
 	for i := 0; i < maxGoroutines; i++ {
 		guard <- struct{}{}
 	}
-
-	return "", nil
+	return nil
 }
 
 // helper function to generate key and create account and return the address
