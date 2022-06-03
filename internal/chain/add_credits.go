@@ -35,24 +35,18 @@ func (AddCredits) Validate(st *StateManager, tx *Delivery) (protocol.Transaction
 		return nil, fmt.Errorf("cannot purchase credits, transaction oracle must be greater than zero")
 	}
 
-	var ledgerState *protocol.SystemLedger
-	err := st.LoadUrlAs(st.NodeUrl(protocol.Ledger), &ledgerState)
-	if err != nil {
-		return nil, err
-	}
-
 	// need to make sure internal oracle is set.
-	if ledgerState.ActiveOracle == 0 {
+	if st.Globals.Oracle.Price == 0 {
 		return nil, fmt.Errorf("cannot purchase credits: acme oracle price has not been set")
 	}
 
 	// make sure oracle matches
-	if body.Oracle != ledgerState.ActiveOracle {
+	if body.Oracle != st.Globals.Oracle.Price {
 		return nil, fmt.Errorf("oracle doesn't match")
 	}
 
 	// If specifying amount of acme to spend
-	credits := big.NewInt(int64(protocol.CreditUnitsPerFiatUnit * ledgerState.ActiveOracle))     // credit units / dollar * oracle precision * dollar / acme
+	credits := big.NewInt(int64(protocol.CreditUnitsPerFiatUnit * st.Globals.Oracle.Price))      // credit units / dollar * oracle precision * dollar / acme
 	credits.Mul(credits, &body.Amount)                                                           // acme the user wants to spend - acme * acme precision
 	credits.Div(credits, big.NewInt(int64(protocol.AcmeOraclePrecision*protocol.AcmePrecision))) // adjust the precision of oracle to real units - oracle precision and acme to spend with acme precision
 
@@ -110,12 +104,18 @@ func (AddCredits) Validate(st *StateManager, tx *Delivery) (protocol.Transaction
 	sdc.Amount = credits.Uint64()
 	st.Submit(recipient, sdc)
 
+	var ledgerState *protocol.SystemLedger
+	err = st.LoadUrlAs(st.NodeUrl(protocol.Ledger), &ledgerState)
+	if err != nil {
+		return nil, err
+	}
+
 	// Add the burnt acme to the internal ledger and send it with the anchor
 	// transaction
 	ledgerState.AcmeBurnt.Add(&ledgerState.AcmeBurnt, &body.Amount)
 
 	res := new(protocol.AddCreditsResult)
-	res.Oracle = ledgerState.ActiveOracle
+	res.Oracle = st.Globals.Oracle.Price
 	res.Credits = credits.Uint64()
 	res.Amount = body.Amount
 
