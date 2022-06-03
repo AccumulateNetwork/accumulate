@@ -24,7 +24,7 @@ func (SyntheticCreateIdentity) Validate(st *StateManager, tx *Delivery) (protoco
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SyntheticCreateIdentity), tx.Transaction.Body)
 	}
 
-	if body.Cause == [32]byte{} {
+	if body.Cause == nil {
 		return nil, fmt.Errorf("cause is missing")
 	}
 

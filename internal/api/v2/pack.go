@@ -32,25 +32,17 @@ func packTxResponse(qrResp *query.ResponseByTxId, ms *MerkleState, envelope *pro
 	res := new(TransactionQueryResponse)
 	res.Type = envelope.Transaction[0].Body.Type().String()
 	res.Data = envelope.Transaction[0].Body
-	res.TransactionHash = qrResp.TxId[:]
+	h := qrResp.TxId.Hash()
+	res.Txid = qrResp.TxId
+	res.TransactionHash = h[:]
 	res.MainChain = ms
 	res.Transaction = envelope.Transaction[0]
-
-	if len(qrResp.TxSynthTxIds)%32 != 0 {
-		return nil, fmt.Errorf("invalid synthetic transaction information, not divisible by 32")
-	}
-
-	if qrResp.TxSynthTxIds != nil {
-		res.SyntheticTxids = make([][32]byte, len(qrResp.TxSynthTxIds)/32)
-		for i := range res.SyntheticTxids {
-			copy(res.SyntheticTxids[i][:], qrResp.TxSynthTxIds[i*32:(i+1)*32])
-		}
-	}
+	res.Produced = qrResp.Produced
 
 	switch payload := envelope.Transaction[0].Body.(type) {
 	case *protocol.SendTokens:
-		if qrResp.TxSynthTxIds != nil && len(res.SyntheticTxids) != len(payload.To) {
-			return nil, fmt.Errorf("not enough synthetic TXs: want %d, got %d", len(payload.To), len(res.SyntheticTxids))
+		if qrResp.Produced != nil && len(qrResp.Produced) != len(payload.To) {
+			return nil, fmt.Errorf("not enough synthetic TXs: want %d, got %d", len(payload.To), len(qrResp.Produced))
 		}
 
 		res.Origin = envelope.Transaction[0].Header.Principal
@@ -60,8 +52,9 @@ func packTxResponse(qrResp *query.ResponseByTxId, ms *MerkleState, envelope *pro
 		for i, to := range payload.To {
 			data.To[i].Url = to.Url
 			data.To[i].Amount = to.Amount
-			if qrResp.TxSynthTxIds != nil {
-				data.To[i].Txid = qrResp.TxSynthTxIds[i*32 : (i+1)*32]
+			if qrResp.Produced != nil {
+				h := qrResp.Produced[i].Hash()
+				data.To[i].Txid = h[:]
 			}
 		}
 

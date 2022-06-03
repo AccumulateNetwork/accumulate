@@ -23,7 +23,7 @@ TransactionHeader:
       pointer: true
       alternative: Origin
     - name: Initiator
-      type: chain
+      type: hash
     - name: Memo
       type: string
       optional: true

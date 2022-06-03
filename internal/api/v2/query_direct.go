@@ -169,7 +169,8 @@ func (q *queryDirect) QueryUrl(u *url.URL, opts QueryOptions) (interface{}, erro
 		qr.Type = "pending"
 		qr.Items = make([]interface{}, len(res.Transactions))
 		for i, txid := range res.Transactions {
-			qr.Items[i] = hex.EncodeToString(txid[:]) //nolint:rangevarref
+			txid := txid.Hash()
+			qr.Items[i] = hex.EncodeToString(txid[:])
 		}
 		return qr, nil
 

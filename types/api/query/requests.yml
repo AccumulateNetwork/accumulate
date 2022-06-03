@@ -8,12 +8,14 @@ RequestByUrl:
       type: url
       pointer: true
 
+# TODO Remove
 RequestByChainId:
   union: { name: request, type: query, value: ChainId }
   fields:
     - name: ChainId
       type: hash
 
+# TODO Remove
 RequestByTxId:
   union: { name: request, type: query, value: TxId }
   fields:
@@ -51,7 +53,7 @@ RequestDataEntry:
       type: url
       pointer: true
     - name: EntryHash
-      type: chain
+      type: hash
       optional: true
 
 RequestDataEntrySet:
