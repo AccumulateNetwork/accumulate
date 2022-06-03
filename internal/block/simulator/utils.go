@@ -28,7 +28,6 @@ func InitGenesis(t TB, exec *Executor, genesisTime time.Time, netValMap genesis.
 		GenesisTime:         genesisTime,
 		NetworkValidatorMap: netValMap,
 		Logger:              exec.Logger,
-		Router:              exec.Router,
 		Validators: []tmtypes.GenesisValidator{
 			{PubKey: ed25519.PubKey(exec.Key[32:])},
 		},

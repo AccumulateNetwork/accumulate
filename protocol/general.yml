@@ -191,3 +191,33 @@ SubnetDefinition:
     - name: ValidatorKeyHashes
       type: hash
       repeatable: true
+
+RoutingTable:
+  fields:
+    - name: Overrides
+      type: RouteOverride
+      marshal-as: reference
+      repeatable: true
+    - name: Routes
+      type: Route
+      marshal-as: reference
+      repeatable: true
+
+Route:
+  fields:
+    - name: Length
+      description: is the prefix length
+      type: uint
+    - name: Value
+      description: is the prefix value
+      type: uint
+    - name: Subnet
+      type: string
+
+RouteOverride:
+  fields:
+    - name: Account
+      type: url
+      pointer: true
+    - name: Subnet
+      type: string

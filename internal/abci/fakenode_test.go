@@ -166,10 +166,9 @@ func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Da
 }
 
 func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connections.ConnectionManager, doGenesis bool) *FakeNode {
-	n.router = &routing.RouterInstance{
-		Network:           n.network,
-		ConnectionManager: connMgr,
-	}
+	var err error
+	n.router, _, err = routing.NewSimpleRouter(n.network, connMgr)
+	require.NoError(n.t, err)
 	mgr, err := block.NewNodeExecutor(block.ExecutorOptions{
 		Logger:  n.logger,
 		Key:     n.key.Bytes(),
@@ -221,7 +220,6 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 		GenesisTime:         time.Now(),
 		NetworkValidatorMap: n.netValMap,
 		Logger:              n.logger,
-		Router:              n.router,
 		Validators: []tmtypes.GenesisValidator{
 			{PubKey: n.key.PubKey()},
 		},
