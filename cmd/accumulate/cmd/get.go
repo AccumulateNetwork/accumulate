@@ -73,6 +73,7 @@ func init() {
 
 func PrintGet() {
 	fmt.Println("  accumulate get [url] 		Get data by Accumulate URL")
+	fmt.Println("  accumulate get key [url] [key] 		Lookup a key")
 	//fmt.Println("  accumulate get [chain id] 		Get data by Accumulate chain id")
 	//fmt.Println("  accumulate get [transaction id] 		Get data by Accumulate transaction id")
 }

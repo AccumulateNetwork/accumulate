@@ -62,7 +62,7 @@ BALANCE=$(accumulate -j account get ${LITE_ID} | jq -r .data.creditBalance)
 section "Recreating an ADI fails and the synthetic transaction is recorded"
 TXID=`cli-tx adi create ${LITE_ID} test.acme test-1-0 test.acme/book` || return 1
 wait-for-tx --no-check $TXID
-SYNTH=`accumulate tx get -j ${TXID} | jq -re '.syntheticTxids[0]'`
+SYNTH=`accumulate tx get -j ${TXID} | jq -re '.produced[0]' | hash-from-txid`
 STATUS=`accumulate tx get -j ${SYNTH} | jq --indent 0 .status`
 echo $STATUS
 [ $(echo $STATUS | jq -re .delivered) = "true" ] || die "Synthetic transaction was not delivered"
@@ -202,13 +202,13 @@ success
 
 section "Query with txid and chainId (API v2, AC-602)"
 # TODO Verify query-chain
-TXID=$(accumulate -j tx history test.acme 0 1 | jq -re '.items[0].txid')
-GOT=$(api-v2 '{"jsonrpc": "2.0", "id": 0, "method": "query-tx", "params": {"txid": "'${TXID}'"}}' | jq -re .result.txid)
+TXID=$(accumulate -j tx history test.acme 0 1 | jq -re '.items[0].transactionHash')
+GOT=$(api-v2 '{"jsonrpc": "2.0", "id": 0, "method": "query-tx", "params": {"txid": "'${TXID}'"}}' | jq -re .result.transactionHash)
 [ "${TXID}" = "${GOT}" ] || die "Failed to find TX ${TXID}"
 success
 
 section "Query transaction receipt"
-TXID=$(accumulate -j tx history test.acme 0 1 | jq -re '.items[0].txid')
+TXID=$(accumulate -j tx history test.acme 0 1 | jq -re '.items[0].transactionHash')
 (accumulate -j tx get --prove $TXID | jq -e .receipts[0] -C --indent 0) && success || die "Failed to get receipt for ${TXID}"
 
 section "Create a token issuer"

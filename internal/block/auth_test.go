@@ -586,18 +586,18 @@ func TestValidateKeyForSynthTxns(t *testing.T) {
 	}
 
 	// Get the synthetic transaction ID
-	var synthHash []byte
+	var synthHash [32]byte
 	_ = sim.SubnetFor(alice).Database.View(func(batch *database.Batch) error {
 		synth, err := batch.Transaction(txnHash).GetSyntheticTxns()
 		require.NoError(t, err)
-		require.Len(t, synth.Hashes, 1)
-		synthHash = synth.Hashes[0][:]
+		require.Len(t, synth.Entries, 1)
+		synthHash = synth.Entries[0].Hash()
 		return nil
 	})
 
 	// Verify that the synthetic transaction does not get delivered. TODO Verify
 	// an error?
-	if sim.WaitForTransaction(delivered, synthHash, 50) != nil {
+	if sim.WaitForTransaction(delivered, synthHash[:], 50) != nil {
 		t.Fatal("Synthetic transaction was delivered")
 	}
 }

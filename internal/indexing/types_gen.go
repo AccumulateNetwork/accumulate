@@ -58,12 +58,6 @@ type DirectoryIndex struct {
 	extraData []byte
 }
 
-type PendingTransactionsIndex struct {
-	fieldsSet    []bool
-	Transactions [][32]byte `json:"transactions,omitempty" form:"transactions" query:"transactions" validate:"required"`
-	extraData    []byte
-}
-
 type TransactionChainEntry struct {
 	fieldsSet []bool
 	Account   *url.URL `json:"account,omitempty" form:"account" query:"account" validate:"required"`
@@ -160,19 +154,6 @@ func (v *DirectoryIndex) Copy() *DirectoryIndex {
 }
 
 func (v *DirectoryIndex) CopyAsInterface() interface{} { return v.Copy() }
-
-func (v *PendingTransactionsIndex) Copy() *PendingTransactionsIndex {
-	u := new(PendingTransactionsIndex)
-
-	u.Transactions = make([][32]byte, len(v.Transactions))
-	for i, v := range v.Transactions {
-		u.Transactions[i] = v
-	}
-
-	return u
-}
-
-func (v *PendingTransactionsIndex) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *TransactionChainEntry) Copy() *TransactionChainEntry {
 	u := new(TransactionChainEntry)
@@ -283,19 +264,6 @@ func (v *DataIndex) Equal(u *DataIndex) bool {
 func (v *DirectoryIndex) Equal(u *DirectoryIndex) bool {
 	if !(v.Count == u.Count) {
 		return false
-	}
-
-	return true
-}
-
-func (v *PendingTransactionsIndex) Equal(u *PendingTransactionsIndex) bool {
-	if len(v.Transactions) != len(u.Transactions) {
-		return false
-	}
-	for i := range v.Transactions {
-		if !(v.Transactions[i] == u.Transactions[i]) {
-			return false
-		}
 	}
 
 	return true
@@ -637,47 +605,6 @@ func (v *DirectoryIndex) IsValid() error {
 	}
 }
 
-var fieldNames_PendingTransactionsIndex = []string{
-	1: "Transactions",
-}
-
-func (v *PendingTransactionsIndex) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	if !(len(v.Transactions) == 0) {
-		for _, v := range v.Transactions {
-			writer.WriteHash(1, &v)
-		}
-	}
-
-	_, _, err := writer.Reset(fieldNames_PendingTransactionsIndex)
-	if err != nil {
-		return nil, err
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), err
-}
-
-func (v *PendingTransactionsIndex) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Transactions is missing")
-	} else if len(v.Transactions) == 0 {
-		errs = append(errs, "field Transactions is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
 var fieldNames_TransactionChainEntry = []string{
 	1: "Account",
 	2: "Chain",
@@ -934,30 +861,6 @@ func (v *DirectoryIndex) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
-func (v *PendingTransactionsIndex) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *PendingTransactionsIndex) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	for {
-		if x, ok := reader.ReadHash(1); ok {
-			v.Transactions = append(v.Transactions, *x)
-		} else {
-			break
-		}
-	}
-
-	seen, err := reader.Reset(fieldNames_PendingTransactionsIndex)
-	if err != nil {
-		return err
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	return err
-}
-
 func (v *TransactionChainEntry) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -1057,17 +960,6 @@ func (v *ChainUpdate) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
-func (v *PendingTransactionsIndex) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Transactions encoding.JsonList[string] `json:"transactions,omitempty"`
-	}{}
-	u.Transactions = make(encoding.JsonList[string], len(v.Transactions))
-	for i, x := range v.Transactions {
-		u.Transactions[i] = encoding.ChainToJSON(x)
-	}
-	return json.Marshal(&u)
-}
-
 func (v *TransactionChainIndex) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Entries encoding.JsonList[*TransactionChainEntry] `json:"entries,omitempty"`
@@ -1149,28 +1041,6 @@ func (v *ChainUpdate) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("error decoding Entry: %w", err)
 	} else {
 		v.Entry = x
-	}
-	return nil
-}
-
-func (v *PendingTransactionsIndex) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Transactions encoding.JsonList[string] `json:"transactions,omitempty"`
-	}{}
-	u.Transactions = make(encoding.JsonList[string], len(v.Transactions))
-	for i, x := range v.Transactions {
-		u.Transactions[i] = encoding.ChainToJSON(x)
-	}
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	v.Transactions = make([][32]byte, len(u.Transactions))
-	for i, x := range u.Transactions {
-		if x, err := encoding.ChainFromJSON(x); err != nil {
-			return fmt.Errorf("error decoding Transactions: %w", err)
-		} else {
-			v.Transactions[i] = x
-		}
 	}
 	return nil
 }

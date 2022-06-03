@@ -209,6 +209,7 @@ func (m *JrpcMethods) executeDirect(ctx context.Context, env *protocol.Envelope,
 	simpleHash := sha256.Sum256(txData)
 	res := new(TxResponse)
 	res.Code = uint64(resp.Code)
+	res.Txid = env.Transaction[0].ID()
 	res.TransactionHash = env.Transaction[0].GetHash()
 	res.SignatureHashes = make([][]byte, len(env.Signatures))
 	res.SimpleHash = simpleHash[:]
