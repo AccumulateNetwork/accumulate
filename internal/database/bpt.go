@@ -7,7 +7,7 @@ import (
 	"io"
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/consts"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -162,7 +162,7 @@ func ReadSnapshot(file ioutil2.SectionReader) (height uint64, format uint32, bpt
 		return 0, 0, nil, nil, errors.Wrap(errors.StatusUnknown, err)
 	}
 
-	return binary.BigEndian.Uint64(bytes[:8]), consts.SnapshotVersion1, bytes[8:], rd, nil
+	return binary.BigEndian.Uint64(bytes[:8]), core.SnapshotVersion1, bytes[8:], rd, nil
 }
 
 // RestoreSnapshot loads the full state of the partition from a file.
