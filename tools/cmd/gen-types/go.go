@@ -17,6 +17,7 @@ const (
 	Hash     = typegen.TypeCodeHash
 	Bytes    = typegen.TypeCodeBytes
 	Url      = typegen.TypeCodeUrl
+	TxID     = typegen.TypeCodeTxid
 	Time     = typegen.TypeCodeTime
 	Duration = typegen.TypeCodeDuration
 	BigInt   = typegen.TypeCodeBigInt
@@ -142,7 +143,7 @@ func goBinaryMethod(field *Field) (methodName string, wantPtr bool) {
 	switch field.Type.Code {
 	case Bool, String, Duration, Time, Bytes, Uint, Int, Float:
 		return typegen.TitleCase(field.Type.String()), false
-	case Url, Hash:
+	case Url, TxID, Hash:
 		return typegen.TitleCase(field.Type.String()), true
 	case RawJson:
 		return "Bytes", false
@@ -184,6 +185,8 @@ func GoResolveType(field *Field, forNew, ignoreRepeatable bool) string {
 		typ = "json.RawMessage"
 	case Url:
 		typ = "url.URL"
+	case TxID:
+		typ = "url.TxID"
 	case BigInt:
 		typ = "big.Int"
 	case Uint:
@@ -272,7 +275,7 @@ func GoIsZero(field *Field, varName string) (string, error) {
 		return fmt.Sprintf("%s == 0", varName), nil
 	case BigInt:
 		return fmt.Sprintf("(%s).Cmp(new(big.Int)) == 0", varName), nil
-	case Url, Hash, Time:
+	case Url, TxID, Hash, Time:
 		return fmt.Sprintf("%s == (%s{})", varName, GoResolveType(field, false, false)), nil
 	}
 
@@ -329,7 +332,7 @@ func GoAreEqual(field *Field, varName, otherName, whenNotEqual string) (string, 
 		expr, wantPtr = "bytes.Equal(%[1]s%[2]s, %[1]s%[3]s)", false
 	case BigInt:
 		expr, wantPtr = "(%[1]s%[2]s).Cmp(%[1]s%[3]s) == 0", true
-	case Url:
+	case Url, TxID:
 		expr, wantPtr = "(%[1]s%[2]s).Equal(%[1]s%[3]s)", true
 	default:
 		switch field.MarshalAs {
@@ -403,7 +406,7 @@ func goCopy(field *Field, dstName, srcName string) (string, error) {
 	case Bytes, RawJson:
 		return goCopyNonPointer(field, "%s = encoding.BytesCopy(%s)", dstName, srcName), nil
 
-	case Url:
+	case Url, TxID:
 		return goCopyPointer(field, "(%s).Copy()", dstName, srcName), nil
 
 	case BigInt:

@@ -13,7 +13,7 @@ Object:
       marshal-as: reference
     - name: Pending
       description: lists the account's pending transactions
-      type: HashSet
+      type: TxIdSet
       marshal-as: reference
 
 ChainMetadata:
@@ -118,10 +118,11 @@ ReceiptEntry:
     - name: Hash
       type: bytes
 
-HashSet:
+TxIdSet:
   fields:
-    - name: Hashes
-      type: hash
+    - name: Entries
+      type: txid
+      pointer: true
       repeatable: true
 
 TokenRecipient:

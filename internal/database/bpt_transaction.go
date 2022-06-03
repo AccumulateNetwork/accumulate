@@ -4,7 +4,6 @@ import "fmt"
 
 func (t *Transaction) state(full bool) (*transactionState, error) {
 	state := new(transactionState)
-	state.Hash = t.id
 
 	// Load main state
 	var err error

@@ -7,6 +7,7 @@ import (
 	"math"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding/hash"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
@@ -62,7 +63,8 @@ func (a *Account) state(fullTxnState, preserveChains bool) (*accountState, error
 	}
 
 	// Load transaction state
-	for i, h := range obj.Pending.Hashes {
+	for i, h := range obj.Pending.Entries {
+		h := h.Hash()
 		state, err := a.batch.Transaction(h[:]).state(fullTxnState) //nolint:rangevarref
 		if err != nil {
 			return nil, err
@@ -109,7 +111,7 @@ func (a *Account) restore(s *accountState) error {
 	metadata := new(protocol.Object)
 	metadata.Type = protocol.ObjectTypeAccount
 	metadata.Chains = make([]protocol.ChainMetadata, 0, len(s.Chains))
-	metadata.Pending.Hashes = make([][32]byte, len(s.Pending))
+	metadata.Pending.Entries = make([]*url.TxID, len(s.Pending))
 
 	for _, c := range s.Chains {
 		err := metadata.AddChain(c.Name, c.Type)
@@ -119,7 +121,7 @@ func (a *Account) restore(s *accountState) error {
 	}
 
 	for _, p := range s.Pending {
-		metadata.Pending.Add(p.Hash)
+		metadata.Pending.Add(p.Transaction.ID())
 	}
 
 	a.batch.putValue(a.key.Object(), metadata)
@@ -158,19 +160,20 @@ func (a *Account) restore(s *accountState) error {
 	txns = append(txns, s.Pending...)
 	txns = append(txns, s.Transactions...)
 	for _, p := range txns {
+		hash := p.Transaction.GetHash()
 		if len(p.State.Signers) != len(p.Signatures) {
-			return fmt.Errorf("transaction %X state is invalid: %d signers and %d signatures", p.Hash[:4], len(p.State.Signers), len(p.Signatures))
+			return fmt.Errorf("transaction %X state is invalid: %d signers and %d signatures", hash[:4], len(p.State.Signers), len(p.Signatures))
 		}
 
-		record := a.batch.Transaction(p.Hash[:])
+		record := a.batch.Transaction(hash)
 		err := record.PutState(&SigOrTxn{Transaction: p.Transaction})
 		if err != nil {
-			return fmt.Errorf("store transaction %X: %w", p.Hash[:4], err)
+			return fmt.Errorf("store transaction %X: %w", hash[:4], err)
 		}
 
 		err = record.PutStatus(p.State)
 		if err != nil {
-			return fmt.Errorf("store transaction %X status: %w", p.Hash[:4], err)
+			return fmt.Errorf("store transaction %X status: %w", hash[:4], err)
 		}
 
 		for i, set := range p.Signatures {
@@ -214,7 +217,7 @@ func (s *accountState) pendingMerkleHash() ([]byte, error) {
 	hasher := make(hash.Hasher, 0, len(s.Pending))
 	for _, p := range s.Pending {
 		state := p.State.Copy()
-		state.For = p.Hash
+		state.For = *(*[32]byte)(p.Transaction.GetHash())
 		data, err := p.State.MarshalBinary()
 		if err != nil {
 			return nil, fmt.Errorf("marshal pending transaction %X status: %w", p.State.For[:4], err)
