@@ -852,8 +852,12 @@ func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove 
 			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeChainIdError, Message: err}
 		}
 
-		// For each authority
+		// For each local authority
 		for _, entry := range auth.Authorities {
+			if !entry.Url.LocalTo(chr.Url) {
+				continue // Skip remote authorities
+			}
+
 			var authority protocol.Authority
 			err = batch.Account(entry.Url).GetStateAs(&authority)
 			if err != nil {

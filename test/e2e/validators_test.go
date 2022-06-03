@@ -42,6 +42,12 @@ func TestUpdateValidators(t *testing.T) {
 	validators := FormatKeyPageUrl(dn.Executor.Network.ValidatorBook(), 0)
 	nodeKeyAdd1, nodeKeyAdd2, nodeKeyAdd3, nodeKeyUpd := acctesting.GenerateKey(1), acctesting.GenerateKey(2), acctesting.GenerateKey(3), acctesting.GenerateKey(4)
 
+	// The validator timestamp starts out > 0
+	signer := simulator.GetAccount[*KeyPage](sim, dn.Executor.Network.DefaultValidatorPage())
+	_, entry, ok := signer.EntryByKey(dn.Executor.Key[32:])
+	require.True(t, ok)
+	timestamp = entry.GetLastUsedOn()
+
 	// Update NetworkGlobals - use 5/12 so that M = 1 for 3 validators and M = 2
 	// for 4
 	ng := new(NetworkGlobals)
@@ -101,7 +107,7 @@ func TestUpdateValidators(t *testing.T) {
 	// Verify the validator was updated
 	require.ElementsMatch(t, dn.Validators, [][]byte{dn.Executor.Key[32:], nodeKeyUpd[32:]})
 
-	// Add a third validator
+	// Add a third validator, so the page threshold will become 2
 	send(sim,
 		func(send func(*Envelope)) {
 			body := new(AddValidator)
@@ -119,9 +125,9 @@ func TestUpdateValidators(t *testing.T) {
 	require.ElementsMatch(t, dn.Validators, [][]byte{dn.Executor.Key[32:], nodeKeyUpd[32:], nodeKeyAdd2[32:]})
 
 	// Verify the Validator threshold
-	require.Equal(t, uint64(1), simulator.GetAccount[*KeyPage](sim, validators).AcceptThreshold)
+	require.Equal(t, uint64(2), simulator.GetAccount[*KeyPage](sim, validators).AcceptThreshold)
 
-	// Add a fourth validator, so the page threshold will become 2
+	// Add a fourth validator
 	send(sim,
 		func(send func(*Envelope)) {
 			body := new(AddValidator)
@@ -133,6 +139,7 @@ func TestUpdateValidators(t *testing.T) {
 				WithSigner(validators, 4).
 				WithBody(body).
 				Initiate(SignatureTypeLegacyED25519, dn.Executor.Key).
+				Sign(SignatureTypeED25519, nodeKeyAdd2).
 				Build())
 		})
 

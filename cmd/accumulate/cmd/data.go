@@ -78,19 +78,19 @@ func PrintDataGet() {
 	fmt.Println("  accumulate data get [DataAccountURL]			  Get most current data entry by URL")
 	fmt.Println("  accumulate data get [DataAccountURL] [EntryHash]  Get data entry by entryHash in hex")
 	fmt.Println("  accumulate data get [DataAccountURL] [start index] [count] expand(optional) Get a set of data entries starting from start and going to start+count, if \"expand\" is specified, data entries will also be provided")
-	//./cli data get acc://actor/dataAccount
-	//./cli data get acc://actor/dataAccount entryHash
-	//./cli data get acc://actor/dataAccount start limit
+	//./cli data get acc://actor.acme/dataAccount
+	//./cli data get acc://actor.acme/dataAccount entryHash
+	//./cli data get acc://actor.acme/dataAccount start limit
 }
 
 func PrintDataAccountCreate() {
-	//./cli data create acc://actor key idx height acc://actor/dataAccount acc://actor/keyBook (optional)
+	//./cli data create acc://actor.acme key idx height acc://actor.acme/dataAccount acc://actor.acme/keyBook (optional)
 	fmt.Println("  accumulate account create data [actor adi url] [signing key name] [key index (optional)] [key height (optional)] [adi data account url] [key book (optional)] Create new data account")
-	fmt.Println("\t\t example usage: accumulate account create data acc://actor signingKeyName acc://actor/dataAccount acc://actor/book0")
+	fmt.Println("\t\t example usage: accumulate account create data acc://actor.acme signingKeyName acc://actor.acme/dataAccount acc://actor.acme/book0")
 
 	//scratch data account
 	fmt.Println("  accumulate account create data --scratch [actor adi url] [signing key name] [key index (optional)] [key height (optional)] [adi data account url] [key book (optional)] Create new data account")
-	fmt.Println("\t\t example usage: accumulate account create data --scratch acc://actor signingKeyName acc://actor/dataAccount acc://actor/book0")
+	fmt.Println("\t\t example usage: accumulate account create data --scratch acc://actor.acme signingKeyName acc://actor.acme/dataAccount acc://actor.acme/book0")
 }
 
 func PrintDataWrite() {
@@ -106,7 +106,7 @@ func PrintDataWriteTo() {
 func PrintDataLiteAccountCreate() {
 	fmt.Println("  accumulate account create data lite [lite token account] [name_0] ... [name_n] Create new lite data account creating a chain based upon a name list")
 	fmt.Println("  accumulate account create data lite [origin url] [signing key name]  [key index (optional)] [key height (optional)] [name_0] ... [name_n] Create new lite data account creating a chain based upon a name list")
-	fmt.Println("\t\t example usage: accumulate account create data lite acc://actor signingKeyName example1 example2 ")
+	fmt.Println("\t\t example usage: accumulate account create data lite acc://actor.acme signingKeyName example1 example2 ")
 }
 
 func PrintData() {
