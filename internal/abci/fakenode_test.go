@@ -384,7 +384,12 @@ func (n *FakeNode) waitForTxns(cause []byte, ignorePending bool, ids ...[]byte) 
 		if err != nil {
 			return fmt.Errorf("Failed to query TX %X (%v)", id, err)
 		}
-		err = n.waitForTxns(id, true, convertIds32(res.SyntheticTxids...)...)
+		ids := make([][]byte, len(res.Produced))
+		for i, id := range res.Produced {
+			id := id.Hash()
+			ids[i] = id[:]
+		}
+		err = n.waitForTxns(id, true, ids...)
 		if err != nil {
 			return err
 		}

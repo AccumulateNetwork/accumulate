@@ -68,7 +68,8 @@ ResponseChainEntry:
 ResponseByTxId:
   fields:
     - name: TxId
-      type: chain
+      type: txid
+      pointer: true
     - name: Envelope
       type: protocol.Envelope
       marshal-as: reference
@@ -77,8 +78,10 @@ ResponseByTxId:
       type: protocol.TransactionStatus
       marshal-as: reference
       pointer: true
-    - name: TxSynthTxIds
-      type: bytes
+    - name: Produced
+      type: txid
+      pointer: true
+      repeatable: true
     - name: Height
       type: varint
       keep-empty: true
@@ -132,7 +135,8 @@ TxReceipt:
 ResponsePending:
   fields:
     - name: Transactions
-      type: chain
+      type: txid
+      pointer: true
       repeatable: true
 
 MultiResponse:
@@ -171,7 +175,7 @@ DirectoryQueryResult:
 ResponseDataEntry:
   fields:
     - name: EntryHash
-      type: chain
+      type: hash
     - name: Entry
       type: protocol.DataEntry
       marshal-as: union
