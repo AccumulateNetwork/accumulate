@@ -67,7 +67,7 @@ func TestTransactionPriority(t *testing.T) {
 		Envelope:       env,
 		ExpectPriority: 1,
 	}
-	cases["systemWriteData"] = Case{
+	cases["directoryAnchor"] = Case{
 		Envelope:       envSys,
 		ExpectPriority: 2,
 	}
