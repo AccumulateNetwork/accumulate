@@ -3,12 +3,14 @@ package block
 import (
 	"bytes"
 	"crypto/ed25519"
+	"fmt"
 	"io"
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
@@ -23,6 +25,7 @@ import (
 type Executor struct {
 	ExecutorOptions
 
+	globals    *Globals
 	executors  map[protocol.TransactionType]TransactionExecutor
 	dispatcher *dispatcher
 	logger     logging.OptionalLogger
@@ -127,26 +130,37 @@ func newExecutor(opts ExecutorOptions, db *database.Database, executors ...Trans
 			panic(errors.Format(errors.StatusInternalError, "duplicate executor for %d", x.Type()))
 		}
 		m.executors[x.Type()] = x
-
 	}
 
 	batch := db.Begin(false)
 	defer batch.Discard()
 
-	var height uint64
 	var ledger *protocol.SystemLedger
 	err := batch.Account(m.Network.NodeUrl(protocol.Ledger)).GetStateAs(&ledger)
 	switch {
 	case err == nil:
-		height = ledger.Index
+		// Database has been initialized
+		m.logger.Debug("Loaded", "height", ledger.Index, "hash", logging.AsHex(batch.BptRoot()).Slice(0, 4))
+
+		// Load globals
+		err = m.loadGlobals(db.View)
+		if err != nil {
+			return nil, errors.Wrap(errors.StatusUnknown, err)
+		}
+
 	case errors.Is(err, storage.ErrNotFound):
-		height = 0
+		// Database is uninitialized
+		m.logger.Debug("Loaded", "height", 0, "hash", logging.AsHex(batch.BptRoot()).Slice(0, 4))
+
 	default:
 		return nil, errors.Format(errors.StatusUnknown, "load ledger: %w", err)
 	}
 
-	m.logger.Debug("Loaded", "height", height, "hash", logging.AsHex(batch.BptRoot()).Slice(0, 4))
 	return m, nil
+}
+
+func (m *Executor) ActiveGlobals_TESTONLY() *core.GlobalValues {
+	return &m.globals.Active
 }
 
 func (m *Executor) Genesis(block *Block, exec chain.TransactionExecutor) error {
@@ -163,7 +177,7 @@ func (m *Executor) Genesis(block *Block, exec chain.TransactionExecutor) error {
 	delivery := new(chain.Delivery)
 	delivery.Transaction = txn
 
-	st := NewStateManager(&m.Network, block.Batch.Begin(true), nil, txn, m.logger.With("operation", "Genesis"))
+	st := NewStateManager(&m.Network, nil, block.Batch.Begin(true), nil, txn, m.logger.With("operation", "Genesis"))
 	defer st.Discard()
 
 	err = block.Batch.Transaction(txn.GetHash()).PutStatus(&protocol.TransactionStatus{
@@ -248,6 +262,11 @@ func (m *Executor) InitFromGenesis(batch *database.Batch, data []byte) error {
 		panic(errors.Format(errors.StatusInternalError, "Root chain anchor from state DB does not match the app state\nWant: %X\nGot:  %X", srcRoot, root))
 	}
 
+	err = m.loadGlobals(batch.View)
+	if err != nil {
+		return fmt.Errorf("failed to load globals: %v", err)
+	}
+
 	return nil
 }
 
@@ -255,6 +274,11 @@ func (m *Executor) InitFromSnapshot(batch *database.Batch, file ioutil2.SectionR
 	err := batch.RestoreSnapshot(file)
 	if err != nil {
 		return errors.Format(errors.StatusUnknown, "load state: %w", err)
+	}
+
+	err = m.loadGlobals(batch.View)
+	if err != nil {
+		return fmt.Errorf("failed to load globals: %v", err)
 	}
 
 	return nil

@@ -13,10 +13,6 @@ SystemLedger:
       type: uint
     - name: Timestamp
       type: time
-    - name: PendingOracle
-      type: uint
-    - name: ActiveOracle
-      type: uint
     - name: AcmeBurnt
       type: bigint
     - name: PendingUpdates
@@ -73,8 +69,6 @@ DirectoryAnchor:
   embeddings:
     - SubnetAnchor
   fields:
-    - name: AcmeOraclePrice
-      type: uvarint
     - name: Updates
       description: are synchronization updates for network accounts
       type: NetworkAccountUpdate
