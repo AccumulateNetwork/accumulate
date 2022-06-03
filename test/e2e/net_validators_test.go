@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -49,19 +50,19 @@ func TestUpdateValidators(t *testing.T) {
 
 	// Update NetworkGlobals - use 5/12 so that M = 1 for 3 validators and M = 2
 	// for 4
-	ng := new(NetworkGlobals)
-	ng.ValidatorThreshold.Set(5, 12)
-	wd := new(WriteData)
-	d, err := ng.MarshalBinary()
-	require.NoError(t, err)
-	wd.Entry = &AccumulateDataEntry{Data: [][]byte{d}}
+	g := new(core.GlobalValues)
+	g.Globals = new(NetworkGlobals)
+	g.Globals.ValidatorThreshold.Set(5, 12)
 	send(sim,
 		func(send func(*Envelope)) {
 			send(acctesting.NewTransaction().
 				WithPrincipal(dn.Executor.Network.NodeUrl(Globals)).
 				WithTimestampVar(&timestamp).
 				WithSigner(dn.Executor.Network.ValidatorPage(0), 1). // TODO move back to OperatorPage in or after AC-1402
-				WithBody(wd).
+				WithBody(&WriteData{
+					Entry:        g.FormatGlobals(),
+					WriteToState: true,
+				}).
 				Initiate(SignatureTypeLegacyED25519, dn.Executor.Key).
 				Build())
 		})

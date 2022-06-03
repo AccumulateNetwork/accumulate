@@ -63,15 +63,15 @@ func accountId(_ *cobra.Command, args []string) {
 	}
 
 	// Route using a routing table
-	req := new(api.DataEntryQuery)
+	req := new(api.GeneralQuery)
 	req.Url = protocol.DnUrl().JoinPath(protocol.Routing)
 	resp := new(api.ChainQueryResponse)
-	dresp := new(api.DataEntryQueryResponse)
-	resp.Data = dresp
-	err = dclient.RequestAPIv2(context.Background(), "query-data", req, resp)
+	account := new(protocol.DataAccount)
+	resp.Data = account
+	err = dclient.RequestAPIv2(context.Background(), "query", req, resp)
 	if err == nil {
 		table := new(protocol.RoutingTable)
-		check(table.UnmarshalBinary(dresp.Entry.GetData()[0]))
+		check(table.UnmarshalBinary(account.Entry.GetData()[0]))
 		router, err := routing.NewRouter(nil, table)
 		check(err)
 
