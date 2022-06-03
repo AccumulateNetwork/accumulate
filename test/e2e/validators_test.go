@@ -51,7 +51,7 @@ func TestUpdateValidators(t *testing.T) {
 	// Update NetworkGlobals - use 5/12 so that M = 1 for 3 validators and M = 2
 	// for 4
 	ng := new(NetworkGlobals)
-	ng.ValidatorThreshold.Set(5, 12)
+	ng.OperatorAcceptThreshold.Set(5, 12)
 	wd := new(WriteData)
 	d, err := ng.MarshalBinary()
 	require.NoError(t, err)
