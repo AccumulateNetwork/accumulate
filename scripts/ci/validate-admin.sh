@@ -63,7 +63,7 @@ fi
 
 section "Update oracle price to \$0.0501. Oracle price has precision of 4 decimals"
 if [ -f "$(nodePrivKey 0)" ]; then
-  TXID=$(cli-tx data write dn.acme/oracle "$(nodePrivKey 0)" '{"price":501}')
+  TXID=$(accumulated set oracle 0.0501 -w "${DN_NODES_DIR}/Node0" | grep Hash | cut -d: -f2)
   wait-for-tx $TXID
 
   # Sign the required number of times
@@ -73,8 +73,7 @@ if [ -f "$(nodePrivKey 0)" ]; then
   accumulate -j tx get $TXID | jq -re .status.pending 1>/dev/null && die "Transaction is pending"
   accumulate -j tx get $TXID | jq -re .status.delivered 1>/dev/null || die "Transaction was not delivered"
 
-  RESULT=$(accumulate -j data get dn.acme/oracle)
-  RESULT=$(echo $RESULT | jq -re .data.entry.data[0] | xxd -r -p | jq -re .price)
+  RESULT=$(accumulate --use-unencrypted-wallet -j oracle  | jq -re .price)
   [ "$RESULT" == "501" ] && success || die "cannot update price oracle"
 else
   echo -e '\033[1;31mCannot update oracle: private validator key not found\033[0m'

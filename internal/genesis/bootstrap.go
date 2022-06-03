@@ -14,7 +14,9 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
@@ -86,6 +88,7 @@ type bootstrap struct {
 	genesisExec  *block.Executor
 	router       routing.Router
 	routingTable *protocol.RoutingTable
+	globals      *core.GlobalValues
 }
 
 func (b *bootstrap) Bootstrap() error {
@@ -152,15 +155,24 @@ func (b *bootstrap) Execute(st *chain.StateManager, tx *chain.Delivery) (protoco
 func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protocol.TransactionResult, error) {
 	b.nodeUrl = b.InitOpts.Network.NodeUrl()
 	b.authorityUrl = b.nodeUrl.JoinPath(protocol.ValidatorBook)
+	b.globals = new(core.GlobalValues)
+
+	// set the initial price to 1/5 fct price * 1/4 market cap dilution = 1/20 fct price
+	// for this exercise, we'll assume that 1 FCT = $1, so initial ACME price is $0.05
+	b.globals.Oracle = new(protocol.AcmeOracle)
+	b.globals.Oracle.Price = uint64(protocol.InitialAcmeOracleValue)
+
+	b.globals.Globals = new(protocol.NetworkGlobals)
+	b.globals.Globals.ValidatorThreshold.Set(2, 3)
+
+	if b.InitOpts.NetworkValidatorMap != nil {
+		b.globals.Network = b.buildNetworkDefinition()
+	}
 
 	b.createADI()
 	b.createValidatorBook()
 
-	// set the initial price to 1/5 fct price * 1/4 market cap dilution = 1/20 fct price
-	// for this exercise, we'll assume that 1 FCT = $1, so initial ACME price is $0.05
-	oraclePrice := uint64(protocol.InitialAcmeOracleValue)
-
-	b.createMainLedger(oraclePrice)
+	b.createMainLedger()
 	b.createSyntheticLedger()
 	b.createAnchorPool()
 
@@ -171,7 +183,16 @@ func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protoc
 
 	b.createEvidenceChain()
 
-	err = b.createGlobals()
+	// Write the global data accounts
+	err = b.globals.Store(&b.Network, func(accountUrl *url.URL, target interface{}) error {
+		da := new(protocol.DataAccount)
+		da.Url = accountUrl
+		da.AddAuthority(b.authorityUrl) // TODO Lock BVN accounts so they can't be updated directly
+		return encoding.SetPtr(da, target)
+	}, func(account protocol.Account) error {
+		b.WriteRecords(account)
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -179,18 +200,6 @@ func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protoc
 	err = b.createRouting()
 	if err != nil {
 		return nil, err
-	}
-
-	err = b.createOracle(oraclePrice)
-	if err != nil {
-		return nil, err
-	}
-
-	if b.InitOpts.NetworkValidatorMap != nil {
-		err = b.generateNetworkDefinition()
-		if err != nil {
-			return nil, err
-		}
 	}
 
 	switch b.InitOpts.Network.Type {
@@ -240,12 +249,10 @@ func (b *bootstrap) createValidatorBook() {
 	b.WriteRecords(book, page)
 }
 
-func (b *bootstrap) createMainLedger(oraclePrice uint64) {
+func (b *bootstrap) createMainLedger() {
 	// Create the main ledger
 	ledger := new(protocol.SystemLedger)
 	ledger.Url = b.nodeUrl.JoinPath(protocol.Ledger)
-	ledger.ActiveOracle = oraclePrice
-	ledger.PendingOracle = oraclePrice
 	ledger.Index = protocol.GenesisBlock
 	b.WriteRecords(ledger)
 }
@@ -300,24 +307,6 @@ func (b *bootstrap) createEvidenceChain() {
 	b.urls = append(b.urls, da.Url)
 }
 
-func (b *bootstrap) createGlobals() error {
-	//create a new Globals account
-	global := new(protocol.DataAccount)
-	global.Url = b.nodeUrl.JoinPath(protocol.Globals)
-	wd := new(protocol.WriteData)
-	threshold := new(protocol.NetworkGlobals)
-	threshold.ValidatorThreshold.Numerator = 2
-	threshold.ValidatorThreshold.Denominator = 3
-	data, err := threshold.MarshalBinary()
-	if err != nil {
-		return errors.Format(errors.StatusInternalError, "marshal globals: %w", err)
-	}
-	wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
-	global.AddAuthority(b.authorityUrl)
-	b.writeDataRecord(global, global.Url, DataRecord{global.Url, wd.Entry})
-	return nil
-}
-
 func (b *bootstrap) createRouting() error {
 	// Create an account for the routing table
 	account := new(protocol.DataAccount)
@@ -329,24 +318,8 @@ func (b *bootstrap) createRouting() error {
 		return errors.Format(errors.StatusInternalError, "marshal routing table: %w", err)
 	}
 
-	entry := &protocol.AccumulateDataEntry{Data: [][]byte{data}}
-	b.writeDataRecord(account, account.Url, DataRecord{account.Url, entry})
-	return nil
-}
-
-func (b *bootstrap) createOracle(price uint64) error {
-	oracle := new(protocol.AcmeOracle)
-	oracle.Price = price
-	wd := new(protocol.WriteData)
-	data, err := json.Marshal(&oracle)
-	if err != nil {
-		return errors.Format(errors.StatusInternalError, "marshal oracle: %w", err)
-	}
-	wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
-	daOracle := new(protocol.DataAccount)
-	daOracle.Url = b.nodeUrl.JoinPath(protocol.Oracle)
-	daOracle.AddAuthority(b.authorityUrl)
-	b.writeDataRecord(daOracle, daOracle.Url, DataRecord{daOracle.Url, wd.Entry})
+	account.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
+	b.WriteRecords(account)
 	return nil
 }
 
@@ -491,22 +464,6 @@ func blacklistTxsForPage(page *protocol.KeyPage, txTypes ...protocol.Transaction
 		}
 		page.TransactionBlacklist.Set(bit)
 	}
-}
-
-func (b *bootstrap) generateNetworkDefinition() error {
-	networkDefs := b.buildNetworkDefinition()
-	wd := new(protocol.WriteData)
-	data, err := json.Marshal(&networkDefs)
-	if err != nil {
-		return errors.Format(errors.StatusInternalError, "marshal network definition: %w", err)
-	}
-	wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
-
-	da := new(protocol.DataAccount)
-	da.Url = b.nodeUrl.JoinPath(protocol.Network)
-	da.AddAuthority(b.authorityUrl) // TODO Lock BVN accounts so they can't be updated directly
-	b.writeDataRecord(da, da.Url, DataRecord{da.Url, wd.Entry})
-	return nil
 }
 
 func (b *bootstrap) WriteRecords(record ...protocol.Account) {

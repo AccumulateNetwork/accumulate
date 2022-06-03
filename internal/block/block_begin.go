@@ -242,7 +242,7 @@ func (x *Executor) captureValueAsDataEntry(batch *database.Batch, internalAccoun
 	txn.Body = &wd
 	txn.Header.Initiator = signerUrl.AccountID32()
 
-	st := chain.NewStateManager(&x.Network, batch.Begin(true), nil, txn, x.logger)
+	st := chain.NewStateManager(&x.Network, &x.globals.Active, batch.Begin(true), nil, txn, x.logger)
 	defer st.Discard()
 
 	var da *protocol.DataAccount
@@ -507,7 +507,6 @@ func (x *Executor) buildDirectoryAnchor(batch *database.Batch, ledgerState *prot
 		return nil, err
 	}
 	anchor.MakeMajorBlock = openMajor
-	anchor.AcmeOraclePrice = ledgerState.ActiveOracle
 	anchor.Updates = ledgerState.PendingUpdates
 
 	// TODO This is pretty inefficient; we're constructing a receipt for every

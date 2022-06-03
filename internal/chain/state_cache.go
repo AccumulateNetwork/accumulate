@@ -2,6 +2,7 @@ package chain
 
 import (
 	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
@@ -19,6 +20,7 @@ type stateCache struct {
 	txType protocol.TransactionType
 	txHash types.Bytes32
 
+	Globals    *core.GlobalValues
 	State      ProcessTransactionState
 	batch      *database.Batch
 	operations []stateOperation
@@ -27,9 +29,10 @@ type stateCache struct {
 	Pretend bool
 }
 
-func newStateCache(net *config.Network, txtype protocol.TransactionType, txid [32]byte, batch *database.Batch) *stateCache {
+func newStateCache(net *config.Network, globals *core.GlobalValues, txtype protocol.TransactionType, txid [32]byte, batch *database.Batch) *stateCache {
 	c := new(stateCache)
 	c.Network = net
+	c.Globals = globals
 	c.txType = txtype
 	c.txHash = txid
 	c.batch = batch
