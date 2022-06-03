@@ -17,7 +17,7 @@ func TestNodeLifecycle(t *testing.T) {
 	acctesting.SkipPlatformCI(t, "darwin", "requires setting up localhost aliases")
 
 	// Configure
-	subnets, daemons := acctesting.CreateTestNet(t, 0, 1, 0, false)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 
 	// Start
 	for _, netName := range subnets {
