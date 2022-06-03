@@ -362,7 +362,7 @@ func (x *Executor) recordTransaction(batch *database.Batch, delivery *chain.Deli
 	}
 
 	subnetLedger := ledger.Subnet(delivery.SourceNetwork)
-	if subnetLedger.Add(status.Delivered, delivery.SequenceNumber, *(*[32]byte)(delivery.Transaction.GetHash())) {
+	if subnetLedger.Add(status.Delivered, delivery.SequenceNumber, delivery.Transaction.ID()) {
 		err = batch.Account(x.Network.Synthetic()).PutState(ledger)
 		if err != nil {
 			return nil, errors.Format(errors.StatusUnknown, "store synthetic transaction ledger: %w", err)
@@ -384,7 +384,7 @@ func (x *Executor) recordPendingTransaction(net *config.Network, batch *database
 
 	// Add the user transaction to the principal's list of pending transactions
 	if delivery.Transaction.Body.Type().IsUser() {
-		err = batch.Account(delivery.Transaction.Header.Principal).AddPending(*(*[32]byte)(delivery.Transaction.GetHash()))
+		err = batch.Account(delivery.Transaction.Header.Principal).AddPending(delivery.Transaction.ID())
 		if err != nil {
 			return nil, nil, fmt.Errorf("store pending list: %w", err)
 		}
@@ -409,7 +409,7 @@ func (x *Executor) recordPendingTransaction(net *config.Network, batch *database
 		return status, new(chain.ProcessTransactionState), nil
 	}
 
-	err = batch.Account(net.Ledger()).AddSyntheticForAnchor(*(*[32]byte)(receipt.Anchor), *(*[32]byte)(delivery.Transaction.GetHash()))
+	err = batch.Account(net.Ledger()).AddSyntheticForAnchor(*(*[32]byte)(receipt.Anchor), delivery.Transaction.ID())
 	if err != nil {
 		return nil, nil, errors.Wrap(errors.StatusUnknown, err)
 	}
@@ -440,7 +440,7 @@ func (x *Executor) recordSuccessfulTransaction(batch *database.Batch, state *cha
 	}
 
 	// Remove the transaction from the principal's list of pending transactions
-	err = batch.Account(delivery.Transaction.Header.Principal).RemovePending(*(*[32]byte)(delivery.Transaction.GetHash()))
+	err = batch.Account(delivery.Transaction.Header.Principal).RemovePending(delivery.Transaction.ID())
 	if err != nil {
 		return nil, nil, fmt.Errorf("store pending list: %w", err)
 	}
@@ -464,7 +464,7 @@ func (x *Executor) recordSuccessfulTransaction(batch *database.Batch, state *cha
 
 	nextHash, ok := ledger.Subnet(delivery.SourceNetwork).Get(delivery.SequenceNumber + 1)
 	if ok {
-		state.ProcessAdditionalTransaction(delivery.NewSyntheticFromSequence(nextHash))
+		state.ProcessAdditionalTransaction(delivery.NewSyntheticFromSequence(nextHash.Hash()))
 	}
 
 	return status, state, nil
@@ -514,7 +514,7 @@ func (x *Executor) recordFailedTransaction(batch *database.Batch, delivery *chai
 	}
 
 	// Remove the transaction from the principal's list of pending transactions
-	err = batch.Account(delivery.Transaction.Header.Principal).RemovePending(*(*[32]byte)(delivery.Transaction.GetHash()))
+	err = batch.Account(delivery.Transaction.Header.Principal).RemovePending(delivery.Transaction.ID())
 	if err != nil {
 		return nil, nil, fmt.Errorf("update pending list: %w", err)
 	}

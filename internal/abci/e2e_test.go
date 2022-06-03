@@ -356,7 +356,8 @@ func TestCreateLiteDataAccount(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify the entry hash in the transaction result
-	txStatus, err := batch.Transaction(synthIds.Hashes[0][:]).GetStatus()
+	h := synthIds.Entries[0].Hash()
+	txStatus, err := batch.Transaction(h[:]).GetStatus()
 	require.NoError(t, err)
 	require.IsType(t, (*protocol.WriteDataResult)(nil), txStatus.Result)
 	txResult := txStatus.Result.(*protocol.WriteDataResult)
@@ -703,7 +704,8 @@ func TestSendTokensToBadRecipient(t *testing.T) {
 	// The synthetic transaction should fail
 	res, err := n.api.QueryTx(txnHashes[0][:], time.Second, true, api.QueryOptions{})
 	require.NoError(t, err)
-	res, err = n.api.QueryTx(res.SyntheticTxids[0][:], time.Second, true, api.QueryOptions{})
+	h := res.Produced[0].Hash()
+	res, err = n.api.QueryTx(h[:], time.Second, true, api.QueryOptions{})
 	require.NoError(t, err)
 	require.Equal(t, protocol.ErrorCodeNotFound.GetEnumValue(), res.Status.Code)
 
@@ -1354,7 +1356,7 @@ func TestInvalidDeposit(t *testing.T) {
 
 	id := n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.SyntheticDepositTokens)
-		body.Source = n.network.NodeUrl()
+		body.Cause = n.network.NodeUrl().WithTxID([32]byte{1})
 		body.Token = protocol.AccountUrl("foo2", "tokens")
 		body.Amount.SetUint64(123)
 

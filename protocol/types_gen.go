@@ -314,12 +314,6 @@ type FactomDataEntry struct {
 	extraData []byte
 }
 
-type HashSet struct {
-	fieldsSet []bool
-	Hashes    [][32]byte `json:"hashes,omitempty" form:"hashes" query:"hashes" validate:"required"`
-	extraData []byte
-}
-
 // IndexEntry represents an entry in an index chain.
 type IndexEntry struct {
 	fieldsSet []bool
@@ -468,7 +462,7 @@ type Object struct {
 	// Chains lists the account's chains.
 	Chains []ChainMetadata `json:"chains,omitempty" form:"chains" query:"chains" validate:"required"`
 	// Pending lists the account's pending transactions.
-	Pending   HashSet `json:"pending,omitempty" form:"pending" query:"pending" validate:"required"`
+	Pending   TxIdSet `json:"pending,omitempty" form:"pending" query:"pending" validate:"required"`
 	extraData []byte
 }
 
@@ -641,7 +635,7 @@ type SubnetSyntheticLedger struct {
 	// Delivered is the maximum sequence number of delivered synthetic transactions received from the subnet.
 	Delivered uint64 `json:"delivered,omitempty" form:"delivered" query:"delivered" validate:"required"`
 	// Pending is the transaction hashes of synthetic transactions received out of order.
-	Pending   [][32]byte `json:"pending,omitempty" form:"pending" query:"pending" validate:"required"`
+	Pending   []*url.TxID `json:"pending,omitempty" form:"pending" query:"pending" validate:"required"`
 	extraData []byte
 }
 
@@ -690,10 +684,8 @@ type SyntheticLedger struct {
 
 type SyntheticOrigin struct {
 	fieldsSet []bool
-	// Cause is the hash of the transaction that produced this transaction.
-	Cause [32]byte `json:"cause,omitempty" form:"cause" query:"cause" validate:"required"`
-	// Source is the principal of the cause.
-	Source *url.URL `json:"source,omitempty" form:"source" query:"source" validate:"required"`
+	// Cause is the ID of the transaction that produced this transaction.
+	Cause *url.TxID `json:"cause,omitempty" form:"cause" query:"cause" validate:"required"`
 	// Initiator is the initiator of the cause.
 	Initiator *url.URL `json:"initiator,omitempty" form:"initiator" query:"initiator" validate:"required"`
 	// FeeRefund is portion of the cause's fee that will be refunded if this transaction fails.
@@ -813,6 +805,12 @@ type TransactionStatus struct {
 	Initiator *url.URL `json:"initiator,omitempty" form:"initiator" query:"initiator" validate:"required"`
 	// Signers lists accounts that have signed the transaction.
 	Signers   []Signer `json:"signers,omitempty" form:"signers" query:"signers" validate:"required"`
+	extraData []byte
+}
+
+type TxIdSet struct {
+	fieldsSet []bool
+	Entries   []*url.TxID `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
 	extraData []byte
 }
 
@@ -1584,19 +1582,6 @@ func (v *FactomDataEntry) Copy() *FactomDataEntry {
 
 func (v *FactomDataEntry) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *HashSet) Copy() *HashSet {
-	u := new(HashSet)
-
-	u.Hashes = make([][32]byte, len(v.Hashes))
-	for i, v := range v.Hashes {
-		u.Hashes[i] = v
-	}
-
-	return u
-}
-
-func (v *HashSet) CopyAsInterface() interface{} { return v.Copy() }
-
 func (v *IndexEntry) Copy() *IndexEntry {
 	u := new(IndexEntry)
 
@@ -2101,9 +2086,11 @@ func (v *SubnetSyntheticLedger) Copy() *SubnetSyntheticLedger {
 	u.Produced = v.Produced
 	u.Received = v.Received
 	u.Delivered = v.Delivered
-	u.Pending = make([][32]byte, len(v.Pending))
+	u.Pending = make([]*url.TxID, len(v.Pending))
 	for i, v := range v.Pending {
-		u.Pending[i] = v
+		if v != nil {
+			u.Pending[i] = (v).Copy()
+		}
 	}
 
 	return u
@@ -2200,9 +2187,8 @@ func (v *SyntheticLedger) CopyAsInterface() interface{} { return v.Copy() }
 func (v *SyntheticOrigin) Copy() *SyntheticOrigin {
 	u := new(SyntheticOrigin)
 
-	u.Cause = v.Cause
-	if v.Source != nil {
-		u.Source = (v.Source).Copy()
+	if v.Cause != nil {
+		u.Cause = (v.Cause).Copy()
 	}
 	if v.Initiator != nil {
 		u.Initiator = (v.Initiator).Copy()
@@ -2410,6 +2396,21 @@ func (v *TransactionStatus) Copy() *TransactionStatus {
 }
 
 func (v *TransactionStatus) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *TxIdSet) Copy() *TxIdSet {
+	u := new(TxIdSet)
+
+	u.Entries = make([]*url.TxID, len(v.Entries))
+	for i, v := range v.Entries {
+		if v != nil {
+			u.Entries[i] = (v).Copy()
+		}
+	}
+
+	return u
+}
+
+func (v *TxIdSet) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *UnknownAccount) Copy() *UnknownAccount {
 	u := new(UnknownAccount)
@@ -3250,19 +3251,6 @@ func (v *FactomDataEntry) Equal(u *FactomDataEntry) bool {
 	return true
 }
 
-func (v *HashSet) Equal(u *HashSet) bool {
-	if len(v.Hashes) != len(u.Hashes) {
-		return false
-	}
-	for i := range v.Hashes {
-		if !(v.Hashes[i] == u.Hashes[i]) {
-			return false
-		}
-	}
-
-	return true
-}
-
 func (v *IndexEntry) Equal(u *IndexEntry) bool {
 	if !(v.Source == u.Source) {
 		return false
@@ -3908,7 +3896,7 @@ func (v *SubnetSyntheticLedger) Equal(u *SubnetSyntheticLedger) bool {
 		return false
 	}
 	for i := range v.Pending {
-		if !(v.Pending[i] == u.Pending[i]) {
+		if !((v.Pending[i]).Equal(u.Pending[i])) {
 			return false
 		}
 	}
@@ -4016,15 +4004,12 @@ func (v *SyntheticLedger) Equal(u *SyntheticLedger) bool {
 }
 
 func (v *SyntheticOrigin) Equal(u *SyntheticOrigin) bool {
-	if !(v.Cause == u.Cause) {
-		return false
-	}
 	switch {
-	case v.Source == u.Source:
+	case v.Cause == u.Cause:
 		// equal
-	case v.Source == nil || u.Source == nil:
+	case v.Cause == nil || u.Cause == nil:
 		return false
-	case !((v.Source).Equal(u.Source)):
+	case !((v.Cause).Equal(u.Cause)):
 		return false
 	}
 	switch {
@@ -4305,6 +4290,19 @@ func (v *TransactionStatus) Equal(u *TransactionStatus) bool {
 	}
 	for i := range v.Signers {
 		if !(EqualSigner(v.Signers[i], u.Signers[i])) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (v *TxIdSet) Equal(u *TxIdSet) bool {
+	if len(v.Entries) != len(u.Entries) {
+		return false
+	}
+	for i := range v.Entries {
+		if !((v.Entries[i]).Equal(u.Entries[i])) {
 			return false
 		}
 	}
@@ -6386,47 +6384,6 @@ func (v *Envelope) IsValid() error {
 	}
 }
 
-var fieldNames_HashSet = []string{
-	1: "Hashes",
-}
-
-func (v *HashSet) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	if !(len(v.Hashes) == 0) {
-		for _, v := range v.Hashes {
-			writer.WriteHash(1, &v)
-		}
-	}
-
-	_, _, err := writer.Reset(fieldNames_HashSet)
-	if err != nil {
-		return nil, err
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), err
-}
-
-func (v *HashSet) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Hashes is missing")
-	} else if len(v.Hashes) == 0 {
-		errs = append(errs, "field Hashes is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
 var fieldNames_IndexEntry = []string{
 	1: "Source",
 	2: "Anchor",
@@ -7356,7 +7313,7 @@ func (v *Object) MarshalBinary() ([]byte, error) {
 			writer.WriteValue(2, &v)
 		}
 	}
-	if !((v.Pending).Equal(new(HashSet))) {
+	if !((v.Pending).Equal(new(TxIdSet))) {
 		writer.WriteValue(3, &v.Pending)
 	}
 
@@ -7383,7 +7340,7 @@ func (v *Object) IsValid() error {
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Pending is missing")
-	} else if (v.Pending).Equal(new(HashSet)) {
+	} else if (v.Pending).Equal(new(TxIdSet)) {
 		errs = append(errs, "field Pending is not set")
 	}
 
@@ -8447,7 +8404,7 @@ func (v *SubnetSyntheticLedger) MarshalBinary() ([]byte, error) {
 	}
 	if !(len(v.Pending) == 0) {
 		for _, v := range v.Pending {
-			writer.WriteHash(5, &v)
+			writer.WriteTxid(5, v)
 		}
 	}
 
@@ -8812,7 +8769,6 @@ func (v *SyntheticLedger) IsValid() error {
 
 var fieldNames_SyntheticOrigin = []string{
 	1: "Cause",
-	2: "Source",
 	3: "Initiator",
 	4: "FeeRefund",
 }
@@ -8821,11 +8777,8 @@ func (v *SyntheticOrigin) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	if !(v.Cause == ([32]byte{})) {
-		writer.WriteHash(1, &v.Cause)
-	}
-	if !(v.Source == nil) {
-		writer.WriteUrl(2, v.Source)
+	if !(v.Cause == nil) {
+		writer.WriteTxid(1, v.Cause)
 	}
 	if !(v.Initiator == nil) {
 		writer.WriteUrl(3, v.Initiator)
@@ -8847,13 +8800,8 @@ func (v *SyntheticOrigin) IsValid() error {
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Cause is missing")
-	} else if v.Cause == ([32]byte{}) {
+	} else if v.Cause == nil {
 		errs = append(errs, "field Cause is not set")
-	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Source is missing")
-	} else if v.Source == nil {
-		errs = append(errs, "field Source is not set")
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Initiator is missing")
@@ -9628,6 +9576,47 @@ func (v *TransactionStatus) IsValid() error {
 		errs = append(errs, "field Signers is missing")
 	} else if len(v.Signers) == 0 {
 		errs = append(errs, "field Signers is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_TxIdSet = []string{
+	1: "Entries",
+}
+
+func (v *TxIdSet) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(len(v.Entries) == 0) {
+		for _, v := range v.Entries {
+			writer.WriteTxid(1, v)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_TxIdSet)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), err
+}
+
+func (v *TxIdSet) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Entries is missing")
+	} else if len(v.Entries) == 0 {
+		errs = append(errs, "field Entries is not set")
 	}
 
 	switch len(errs) {
@@ -11317,30 +11306,6 @@ func (v *Envelope) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
-func (v *HashSet) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *HashSet) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	for {
-		if x, ok := reader.ReadHash(1); ok {
-			v.Hashes = append(v.Hashes, *x)
-		} else {
-			break
-		}
-	}
-
-	seen, err := reader.Reset(fieldNames_HashSet)
-	if err != nil {
-		return err
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	return err
-}
-
 func (v *IndexEntry) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -11826,7 +11791,7 @@ func (v *Object) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
-	if x := new(HashSet); reader.ReadValue(3, x.UnmarshalBinary) {
+	if x := new(TxIdSet); reader.ReadValue(3, x.UnmarshalBinary) {
 		v.Pending = *x
 	}
 
@@ -12437,8 +12402,8 @@ func (v *SubnetSyntheticLedger) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Delivered = x
 	}
 	for {
-		if x, ok := reader.ReadHash(5); ok {
-			v.Pending = append(v.Pending, *x)
+		if x, ok := reader.ReadTxid(5); ok {
+			v.Pending = append(v.Pending, x)
 		} else {
 			break
 		}
@@ -12652,11 +12617,8 @@ func (v *SyntheticOrigin) UnmarshalBinary(data []byte) error {
 func (v *SyntheticOrigin) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	if x, ok := reader.ReadHash(1); ok {
-		v.Cause = *x
-	}
-	if x, ok := reader.ReadUrl(2); ok {
-		v.Source = x
+	if x, ok := reader.ReadTxid(1); ok {
+		v.Cause = x
 	}
 	if x, ok := reader.ReadUrl(3); ok {
 		v.Initiator = x
@@ -13081,6 +13043,30 @@ func (v *TransactionStatus) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_TransactionStatus)
+	if err != nil {
+		return err
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	return err
+}
+
+func (v *TxIdSet) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *TxIdSet) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	for {
+		if x, ok := reader.ReadTxid(1); ok {
+			v.Entries = append(v.Entries, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_TxIdSet)
 	if err != nil {
 		return err
 	}
@@ -13917,17 +13903,6 @@ func (v *FactomDataEntry) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
-func (v *HashSet) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Hashes encoding.JsonList[string] `json:"hashes,omitempty"`
-	}{}
-	u.Hashes = make(encoding.JsonList[string], len(v.Hashes))
-	for i, x := range v.Hashes {
-		u.Hashes[i] = encoding.ChainToJSON(x)
-	}
-	return json.Marshal(&u)
-}
-
 func (v *InternalSignature) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type            SignatureType `json:"type"`
@@ -14140,7 +14115,7 @@ func (v *Object) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type    ObjectType                       `json:"type,omitempty"`
 		Chains  encoding.JsonList[ChainMetadata] `json:"chains,omitempty"`
-		Pending HashSet                          `json:"pending,omitempty"`
+		Pending TxIdSet                          `json:"pending,omitempty"`
 	}{}
 	u.Type = v.Type
 	u.Chains = v.Chains
@@ -14365,35 +14340,32 @@ func (v *SubnetDefinition) MarshalJSON() ([]byte, error) {
 
 func (v *SubnetSyntheticLedger) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Url       *url.URL                  `json:"url,omitempty"`
-		Produced  uint64                    `json:"produced,omitempty"`
-		Received  uint64                    `json:"received,omitempty"`
-		Delivered uint64                    `json:"delivered,omitempty"`
-		Pending   encoding.JsonList[string] `json:"pending,omitempty"`
+		Url       *url.URL                     `json:"url,omitempty"`
+		Produced  uint64                       `json:"produced,omitempty"`
+		Received  uint64                       `json:"received,omitempty"`
+		Delivered uint64                       `json:"delivered,omitempty"`
+		Pending   encoding.JsonList[*url.TxID] `json:"pending,omitempty"`
 	}{}
 	u.Url = v.Url
 	u.Produced = v.Produced
 	u.Received = v.Received
 	u.Delivered = v.Delivered
-	u.Pending = make(encoding.JsonList[string], len(v.Pending))
-	for i, x := range v.Pending {
-		u.Pending[i] = encoding.ChainToJSON(x)
-	}
+	u.Pending = v.Pending
 	return json.Marshal(&u)
 }
 
 func (v *SyntheticBurnTokens) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type      TransactionType `json:"type"`
-		Cause     string          `json:"cause,omitempty"`
+		Cause     *url.TxID       `json:"cause,omitempty"`
 		Source    *url.URL        `json:"source,omitempty"`
 		Initiator *url.URL        `json:"initiator,omitempty"`
 		FeeRefund uint64          `json:"feeRefund,omitempty"`
 		Amount    *string         `json:"amount,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.Cause = encoding.ChainToJSON(v.SyntheticOrigin.Cause)
-	u.Source = v.SyntheticOrigin.Source
+	u.Cause = v.SyntheticOrigin.Cause
+	u.Source = v.SyntheticOrigin.Source()
 	u.Initiator = v.SyntheticOrigin.Initiator
 	u.FeeRefund = v.SyntheticOrigin.FeeRefund
 	u.Amount = encoding.BigintToJSON(&v.Amount)
@@ -14403,15 +14375,15 @@ func (v *SyntheticBurnTokens) MarshalJSON() ([]byte, error) {
 func (v *SyntheticCreateIdentity) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type      TransactionType                         `json:"type"`
-		Cause     string                                  `json:"cause,omitempty"`
+		Cause     *url.TxID                               `json:"cause,omitempty"`
 		Source    *url.URL                                `json:"source,omitempty"`
 		Initiator *url.URL                                `json:"initiator,omitempty"`
 		FeeRefund uint64                                  `json:"feeRefund,omitempty"`
 		Accounts  encoding.JsonUnmarshalListWith[Account] `json:"accounts,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.Cause = encoding.ChainToJSON(v.SyntheticOrigin.Cause)
-	u.Source = v.SyntheticOrigin.Source
+	u.Cause = v.SyntheticOrigin.Cause
+	u.Source = v.SyntheticOrigin.Source()
 	u.Initiator = v.SyntheticOrigin.Initiator
 	u.FeeRefund = v.SyntheticOrigin.FeeRefund
 	u.Accounts = encoding.JsonUnmarshalListWith[Account]{Value: v.Accounts, Func: UnmarshalAccountJSON}
@@ -14421,15 +14393,15 @@ func (v *SyntheticCreateIdentity) MarshalJSON() ([]byte, error) {
 func (v *SyntheticDepositCredits) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type      TransactionType `json:"type"`
-		Cause     string          `json:"cause,omitempty"`
+		Cause     *url.TxID       `json:"cause,omitempty"`
 		Source    *url.URL        `json:"source,omitempty"`
 		Initiator *url.URL        `json:"initiator,omitempty"`
 		FeeRefund uint64          `json:"feeRefund,omitempty"`
 		Amount    uint64          `json:"amount,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.Cause = encoding.ChainToJSON(v.SyntheticOrigin.Cause)
-	u.Source = v.SyntheticOrigin.Source
+	u.Cause = v.SyntheticOrigin.Cause
+	u.Source = v.SyntheticOrigin.Source()
 	u.Initiator = v.SyntheticOrigin.Initiator
 	u.FeeRefund = v.SyntheticOrigin.FeeRefund
 	u.Amount = v.Amount
@@ -14439,7 +14411,7 @@ func (v *SyntheticDepositCredits) MarshalJSON() ([]byte, error) {
 func (v *SyntheticDepositTokens) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type      TransactionType `json:"type"`
-		Cause     string          `json:"cause,omitempty"`
+		Cause     *url.TxID       `json:"cause,omitempty"`
 		Source    *url.URL        `json:"source,omitempty"`
 		Initiator *url.URL        `json:"initiator,omitempty"`
 		FeeRefund uint64          `json:"feeRefund,omitempty"`
@@ -14447,8 +14419,8 @@ func (v *SyntheticDepositTokens) MarshalJSON() ([]byte, error) {
 		Amount    *string         `json:"amount,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.Cause = encoding.ChainToJSON(v.SyntheticOrigin.Cause)
-	u.Source = v.SyntheticOrigin.Source
+	u.Cause = v.SyntheticOrigin.Cause
+	u.Source = v.SyntheticOrigin.Source()
 	u.Initiator = v.SyntheticOrigin.Initiator
 	u.FeeRefund = v.SyntheticOrigin.FeeRefund
 	u.Token = v.Token
@@ -14480,20 +14452,6 @@ func (v *SyntheticLedger) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
-func (v *SyntheticOrigin) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Cause     string   `json:"cause,omitempty"`
-		Source    *url.URL `json:"source,omitempty"`
-		Initiator *url.URL `json:"initiator,omitempty"`
-		FeeRefund uint64   `json:"feeRefund,omitempty"`
-	}{}
-	u.Cause = encoding.ChainToJSON(v.Cause)
-	u.Source = v.Source
-	u.Initiator = v.Initiator
-	u.FeeRefund = v.FeeRefund
-	return json.Marshal(&u)
-}
-
 func (v *SyntheticSignature) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type               SignatureType `json:"type"`
@@ -14513,15 +14471,15 @@ func (v *SyntheticSignature) MarshalJSON() ([]byte, error) {
 func (v *SyntheticWriteData) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type      TransactionType                       `json:"type"`
-		Cause     string                                `json:"cause,omitempty"`
+		Cause     *url.TxID                             `json:"cause,omitempty"`
 		Source    *url.URL                              `json:"source,omitempty"`
 		Initiator *url.URL                              `json:"initiator,omitempty"`
 		FeeRefund uint64                                `json:"feeRefund,omitempty"`
 		Entry     encoding.JsonUnmarshalWith[DataEntry] `json:"entry,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.Cause = encoding.ChainToJSON(v.SyntheticOrigin.Cause)
-	u.Source = v.SyntheticOrigin.Source
+	u.Cause = v.SyntheticOrigin.Cause
+	u.Source = v.SyntheticOrigin.Source()
 	u.Initiator = v.SyntheticOrigin.Initiator
 	u.FeeRefund = v.SyntheticOrigin.FeeRefund
 	u.Entry = encoding.JsonUnmarshalWith[DataEntry]{Value: v.Entry, Func: UnmarshalDataEntryJSON}
@@ -14683,6 +14641,14 @@ func (v *TransactionStatus) MarshalJSON() ([]byte, error) {
 	u.Result = encoding.JsonUnmarshalWith[TransactionResult]{Value: v.Result, Func: UnmarshalTransactionResultJSON}
 	u.Initiator = v.Initiator
 	u.Signers = encoding.JsonUnmarshalListWith[Signer]{Value: v.Signers, Func: UnmarshalSignerJSON}
+	return json.Marshal(&u)
+}
+
+func (v *TxIdSet) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Entries encoding.JsonList[*url.TxID] `json:"entries,omitempty"`
+	}{}
+	u.Entries = v.Entries
 	return json.Marshal(&u)
 }
 
@@ -15690,28 +15656,6 @@ func (v *FactomDataEntry) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (v *HashSet) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Hashes encoding.JsonList[string] `json:"hashes,omitempty"`
-	}{}
-	u.Hashes = make(encoding.JsonList[string], len(v.Hashes))
-	for i, x := range v.Hashes {
-		u.Hashes[i] = encoding.ChainToJSON(x)
-	}
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	v.Hashes = make([][32]byte, len(u.Hashes))
-	for i, x := range u.Hashes {
-		if x, err := encoding.ChainFromJSON(x); err != nil {
-			return fmt.Errorf("error decoding Hashes: %w", err)
-		} else {
-			v.Hashes[i] = x
-		}
-	}
-	return nil
-}
-
 func (v *InternalSignature) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type            SignatureType `json:"type"`
@@ -16115,7 +16059,7 @@ func (v *Object) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type    ObjectType                       `json:"type,omitempty"`
 		Chains  encoding.JsonList[ChainMetadata] `json:"chains,omitempty"`
-		Pending HashSet                          `json:"pending,omitempty"`
+		Pending TxIdSet                          `json:"pending,omitempty"`
 	}{}
 	u.Type = v.Type
 	u.Chains = v.Chains
@@ -16549,20 +16493,17 @@ func (v *SubnetDefinition) UnmarshalJSON(data []byte) error {
 
 func (v *SubnetSyntheticLedger) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Url       *url.URL                  `json:"url,omitempty"`
-		Produced  uint64                    `json:"produced,omitempty"`
-		Received  uint64                    `json:"received,omitempty"`
-		Delivered uint64                    `json:"delivered,omitempty"`
-		Pending   encoding.JsonList[string] `json:"pending,omitempty"`
+		Url       *url.URL                     `json:"url,omitempty"`
+		Produced  uint64                       `json:"produced,omitempty"`
+		Received  uint64                       `json:"received,omitempty"`
+		Delivered uint64                       `json:"delivered,omitempty"`
+		Pending   encoding.JsonList[*url.TxID] `json:"pending,omitempty"`
 	}{}
 	u.Url = v.Url
 	u.Produced = v.Produced
 	u.Received = v.Received
 	u.Delivered = v.Delivered
-	u.Pending = make(encoding.JsonList[string], len(v.Pending))
-	for i, x := range v.Pending {
-		u.Pending[i] = encoding.ChainToJSON(x)
-	}
+	u.Pending = v.Pending
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -16570,29 +16511,22 @@ func (v *SubnetSyntheticLedger) UnmarshalJSON(data []byte) error {
 	v.Produced = u.Produced
 	v.Received = u.Received
 	v.Delivered = u.Delivered
-	v.Pending = make([][32]byte, len(u.Pending))
-	for i, x := range u.Pending {
-		if x, err := encoding.ChainFromJSON(x); err != nil {
-			return fmt.Errorf("error decoding Pending: %w", err)
-		} else {
-			v.Pending[i] = x
-		}
-	}
+	v.Pending = u.Pending
 	return nil
 }
 
 func (v *SyntheticBurnTokens) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type      TransactionType `json:"type"`
-		Cause     string          `json:"cause,omitempty"`
+		Cause     *url.TxID       `json:"cause,omitempty"`
 		Source    *url.URL        `json:"source,omitempty"`
 		Initiator *url.URL        `json:"initiator,omitempty"`
 		FeeRefund uint64          `json:"feeRefund,omitempty"`
 		Amount    *string         `json:"amount,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.Cause = encoding.ChainToJSON(v.SyntheticOrigin.Cause)
-	u.Source = v.SyntheticOrigin.Source
+	u.Cause = v.SyntheticOrigin.Cause
+	u.Source = v.SyntheticOrigin.Source()
 	u.Initiator = v.SyntheticOrigin.Initiator
 	u.FeeRefund = v.SyntheticOrigin.FeeRefund
 	u.Amount = encoding.BigintToJSON(&v.Amount)
@@ -16602,12 +16536,7 @@ func (v *SyntheticBurnTokens) UnmarshalJSON(data []byte) error {
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
-	if x, err := encoding.ChainFromJSON(u.Cause); err != nil {
-		return fmt.Errorf("error decoding Cause: %w", err)
-	} else {
-		v.SyntheticOrigin.Cause = x
-	}
-	v.SyntheticOrigin.Source = u.Source
+	v.SyntheticOrigin.Cause = u.Cause
 	v.SyntheticOrigin.Initiator = u.Initiator
 	v.SyntheticOrigin.FeeRefund = u.FeeRefund
 	if x, err := encoding.BigintFromJSON(u.Amount); err != nil {
@@ -16621,15 +16550,15 @@ func (v *SyntheticBurnTokens) UnmarshalJSON(data []byte) error {
 func (v *SyntheticCreateIdentity) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type      TransactionType                         `json:"type"`
-		Cause     string                                  `json:"cause,omitempty"`
+		Cause     *url.TxID                               `json:"cause,omitempty"`
 		Source    *url.URL                                `json:"source,omitempty"`
 		Initiator *url.URL                                `json:"initiator,omitempty"`
 		FeeRefund uint64                                  `json:"feeRefund,omitempty"`
 		Accounts  encoding.JsonUnmarshalListWith[Account] `json:"accounts,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.Cause = encoding.ChainToJSON(v.SyntheticOrigin.Cause)
-	u.Source = v.SyntheticOrigin.Source
+	u.Cause = v.SyntheticOrigin.Cause
+	u.Source = v.SyntheticOrigin.Source()
 	u.Initiator = v.SyntheticOrigin.Initiator
 	u.FeeRefund = v.SyntheticOrigin.FeeRefund
 	u.Accounts = encoding.JsonUnmarshalListWith[Account]{Value: v.Accounts, Func: UnmarshalAccountJSON}
@@ -16639,12 +16568,7 @@ func (v *SyntheticCreateIdentity) UnmarshalJSON(data []byte) error {
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
-	if x, err := encoding.ChainFromJSON(u.Cause); err != nil {
-		return fmt.Errorf("error decoding Cause: %w", err)
-	} else {
-		v.SyntheticOrigin.Cause = x
-	}
-	v.SyntheticOrigin.Source = u.Source
+	v.SyntheticOrigin.Cause = u.Cause
 	v.SyntheticOrigin.Initiator = u.Initiator
 	v.SyntheticOrigin.FeeRefund = u.FeeRefund
 	v.Accounts = make([]Account, len(u.Accounts.Value))
@@ -16657,15 +16581,15 @@ func (v *SyntheticCreateIdentity) UnmarshalJSON(data []byte) error {
 func (v *SyntheticDepositCredits) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type      TransactionType `json:"type"`
-		Cause     string          `json:"cause,omitempty"`
+		Cause     *url.TxID       `json:"cause,omitempty"`
 		Source    *url.URL        `json:"source,omitempty"`
 		Initiator *url.URL        `json:"initiator,omitempty"`
 		FeeRefund uint64          `json:"feeRefund,omitempty"`
 		Amount    uint64          `json:"amount,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.Cause = encoding.ChainToJSON(v.SyntheticOrigin.Cause)
-	u.Source = v.SyntheticOrigin.Source
+	u.Cause = v.SyntheticOrigin.Cause
+	u.Source = v.SyntheticOrigin.Source()
 	u.Initiator = v.SyntheticOrigin.Initiator
 	u.FeeRefund = v.SyntheticOrigin.FeeRefund
 	u.Amount = v.Amount
@@ -16675,12 +16599,7 @@ func (v *SyntheticDepositCredits) UnmarshalJSON(data []byte) error {
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
-	if x, err := encoding.ChainFromJSON(u.Cause); err != nil {
-		return fmt.Errorf("error decoding Cause: %w", err)
-	} else {
-		v.SyntheticOrigin.Cause = x
-	}
-	v.SyntheticOrigin.Source = u.Source
+	v.SyntheticOrigin.Cause = u.Cause
 	v.SyntheticOrigin.Initiator = u.Initiator
 	v.SyntheticOrigin.FeeRefund = u.FeeRefund
 	v.Amount = u.Amount
@@ -16690,7 +16609,7 @@ func (v *SyntheticDepositCredits) UnmarshalJSON(data []byte) error {
 func (v *SyntheticDepositTokens) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type      TransactionType `json:"type"`
-		Cause     string          `json:"cause,omitempty"`
+		Cause     *url.TxID       `json:"cause,omitempty"`
 		Source    *url.URL        `json:"source,omitempty"`
 		Initiator *url.URL        `json:"initiator,omitempty"`
 		FeeRefund uint64          `json:"feeRefund,omitempty"`
@@ -16698,8 +16617,8 @@ func (v *SyntheticDepositTokens) UnmarshalJSON(data []byte) error {
 		Amount    *string         `json:"amount,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.Cause = encoding.ChainToJSON(v.SyntheticOrigin.Cause)
-	u.Source = v.SyntheticOrigin.Source
+	u.Cause = v.SyntheticOrigin.Cause
+	u.Source = v.SyntheticOrigin.Source()
 	u.Initiator = v.SyntheticOrigin.Initiator
 	u.FeeRefund = v.SyntheticOrigin.FeeRefund
 	u.Token = v.Token
@@ -16710,12 +16629,7 @@ func (v *SyntheticDepositTokens) UnmarshalJSON(data []byte) error {
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
-	if x, err := encoding.ChainFromJSON(u.Cause); err != nil {
-		return fmt.Errorf("error decoding Cause: %w", err)
-	} else {
-		v.SyntheticOrigin.Cause = x
-	}
-	v.SyntheticOrigin.Source = u.Source
+	v.SyntheticOrigin.Cause = u.Cause
 	v.SyntheticOrigin.Initiator = u.Initiator
 	v.SyntheticOrigin.FeeRefund = u.FeeRefund
 	v.Token = u.Token
@@ -16767,31 +16681,6 @@ func (v *SyntheticLedger) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (v *SyntheticOrigin) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Cause     string   `json:"cause,omitempty"`
-		Source    *url.URL `json:"source,omitempty"`
-		Initiator *url.URL `json:"initiator,omitempty"`
-		FeeRefund uint64   `json:"feeRefund,omitempty"`
-	}{}
-	u.Cause = encoding.ChainToJSON(v.Cause)
-	u.Source = v.Source
-	u.Initiator = v.Initiator
-	u.FeeRefund = v.FeeRefund
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	if x, err := encoding.ChainFromJSON(u.Cause); err != nil {
-		return fmt.Errorf("error decoding Cause: %w", err)
-	} else {
-		v.Cause = x
-	}
-	v.Source = u.Source
-	v.Initiator = u.Initiator
-	v.FeeRefund = u.FeeRefund
-	return nil
-}
-
 func (v *SyntheticSignature) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type               SignatureType `json:"type"`
@@ -16825,15 +16714,15 @@ func (v *SyntheticSignature) UnmarshalJSON(data []byte) error {
 func (v *SyntheticWriteData) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type      TransactionType                       `json:"type"`
-		Cause     string                                `json:"cause,omitempty"`
+		Cause     *url.TxID                             `json:"cause,omitempty"`
 		Source    *url.URL                              `json:"source,omitempty"`
 		Initiator *url.URL                              `json:"initiator,omitempty"`
 		FeeRefund uint64                                `json:"feeRefund,omitempty"`
 		Entry     encoding.JsonUnmarshalWith[DataEntry] `json:"entry,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.Cause = encoding.ChainToJSON(v.SyntheticOrigin.Cause)
-	u.Source = v.SyntheticOrigin.Source
+	u.Cause = v.SyntheticOrigin.Cause
+	u.Source = v.SyntheticOrigin.Source()
 	u.Initiator = v.SyntheticOrigin.Initiator
 	u.FeeRefund = v.SyntheticOrigin.FeeRefund
 	u.Entry = encoding.JsonUnmarshalWith[DataEntry]{Value: v.Entry, Func: UnmarshalDataEntryJSON}
@@ -16843,12 +16732,7 @@ func (v *SyntheticWriteData) UnmarshalJSON(data []byte) error {
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
-	if x, err := encoding.ChainFromJSON(u.Cause); err != nil {
-		return fmt.Errorf("error decoding Cause: %w", err)
-	} else {
-		v.SyntheticOrigin.Cause = x
-	}
-	v.SyntheticOrigin.Source = u.Source
+	v.SyntheticOrigin.Cause = u.Cause
 	v.SyntheticOrigin.Initiator = u.Initiator
 	v.SyntheticOrigin.FeeRefund = u.FeeRefund
 	v.Entry = u.Entry.Value
@@ -17133,6 +17017,18 @@ func (v *TransactionStatus) UnmarshalJSON(data []byte) error {
 	for i, x := range u.Signers.Value {
 		v.Signers[i] = x
 	}
+	return nil
+}
+
+func (v *TxIdSet) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Entries encoding.JsonList[*url.TxID] `json:"entries,omitempty"`
+	}{}
+	u.Entries = v.Entries
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Entries = u.Entries
 	return nil
 }
 
