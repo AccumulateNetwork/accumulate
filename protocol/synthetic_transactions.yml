@@ -54,6 +54,10 @@ SyntheticDepositCredits:
   fields:
     - name: Amount
       type: uvarint
+    - name: RefundableAcme
+      type: uvarint
+    - name: Oracle
+      type: uvarint
 
 SyntheticBurnTokens:
   union: { type: transaction }
