@@ -385,16 +385,16 @@ func buildEnvelope(payload protocol.TransactionBody, origin *url2.URL) (*protoco
 }
 
 type ActionResponse struct {
-	TransactionHash types.Bytes                 `json:"transactionHash"`
-	SignatureHashes []types.Bytes               `json:"signatureHashes"`
-	SimpleHash      types.Bytes                 `json:"simpleHash"`
-	Log             types.String                `json:"log"`
-	Code            types.String                `json:"code"`
-	Codespace       types.String                `json:"codespace"`
-	Error           types.String                `json:"error"`
-	Mempool         types.String                `json:"mempool"`
-	Result          *protocol.TransactionStatus `json:"result"`
-	SynthTxns       types.String                `json:"synthtxns"`
+	TransactionHash types.Bytes                     `json:"transactionHash"`
+	SignatureHashes []types.Bytes                   `json:"signatureHashes"`
+	SimpleHash      types.Bytes                     `json:"simpleHash"`
+	Log             types.String                    `json:"log"`
+	Code            types.String                    `json:"code"`
+	Codespace       types.String                    `json:"codespace"`
+	Error           types.String                    `json:"error"`
+	Mempool         types.String                    `json:"mempool"`
+	Result          *protocol.TransactionStatus     `json:"result"`
+	Flow            []*api.TransactionQueryResponse `json:"flow"`
 }
 
 type ActionDataResponse struct {
@@ -576,26 +576,12 @@ func nonceFromTimeNow() uint64 {
 }
 
 func QueryAcmeOracle() (*protocol.AcmeOracle, error) {
-	params := api.DataEntryQuery{}
-	params.Url = protocol.PriceOracle()
-
-	res := new(api.ChainQueryResponse)
-	entry := new(api.DataEntryQueryResponse)
-	res.Data = entry
-
-	err := Client.RequestAPIv2(context.Background(), "query-data", &params, &res)
+	resp, err := Client.Describe(context.Background())
 	if err != nil {
 		return nil, err
 	}
 
-	if entry.Entry.GetData() == nil {
-		return nil, fmt.Errorf("no data in oracle account")
-	}
-	acmeOracle := new(protocol.AcmeOracle)
-	if err = json.Unmarshal(entry.Entry.GetData()[0], acmeOracle); err != nil {
-		return nil, err
-	}
-	return acmeOracle, err
+	return resp.Values.Oracle, err
 }
 
 func ValidateSigType(input string) (protocol.SignatureType, error) {
@@ -658,20 +644,4 @@ func GetAccountStateProof(principal, accountToProve *url2.URL) (proof *protocol.
 
 		}
 	}
-}
-
-func GetSynthTxnsString(res *api.TxResponse, resps []*api.TransactionQueryResponse) (string, error) {
-	result := ""
-	if res.Code == 0 {
-
-		for _, response := range resps {
-			str, err := PrintTransactionQueryResponseV2(response)
-			if err != nil {
-				return PrintJsonRpcError(err)
-			}
-			result = fmt.Sprint(result, str, "\n")
-		}
-
-	}
-	return result, nil
 }

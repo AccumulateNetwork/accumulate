@@ -10,7 +10,7 @@ import (
 	"sort"
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/consts"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -42,7 +42,7 @@ func (d *Daemon) collectSnapshot(batch *database.Batch, majorBlock, minorBlock u
 		return
 	}
 
-	filename := filepath.Join(snapDir, fmt.Sprintf(consts.SnapshotMajorFormat, minorBlock))
+	filename := filepath.Join(snapDir, fmt.Sprintf(core.SnapshotMajorFormat, minorBlock))
 	file, err := os.OpenFile(filename, os.O_RDWR|os.O_EXCL|os.O_CREATE, 0666)
 	if err != nil {
 		d.Logger.Error("Failed to create snapshot", "error", err, "major-block", majorBlock, "minor-block", minorBlock, "module", "snapshot")
@@ -82,7 +82,7 @@ func (d *Daemon) collectSnapshot(batch *database.Batch, majorBlock, minorBlock u
 		if entry.IsDir() {
 			continue
 		}
-		if !consts.SnapshotMajorRegexp.MatchString(entry.Name()) {
+		if !core.SnapshotMajorRegexp.MatchString(entry.Name()) {
 			continue
 		}
 
