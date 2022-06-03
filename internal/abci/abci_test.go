@@ -44,14 +44,15 @@ func TestTransactionPriority(t *testing.T) {
 	rsig.Proof.Anchor = env.Transaction[0].GetHash()
 	env.Signatures = append(env.Signatures, rsig)
 
-	// bodySys := &protocol.SystemWriteData{
-	// 	WriteToState: true,
-	// }
-	// envSys := newTxn("foo/tokens").
-	// 	WithSigner(url.MustParse("foo/book0/1"), 1).
-	// 	WithBody(bodySys).
-	// 	Initiate(protocol.SignatureTypeLegacyED25519, fooKey).
-	// 	Build()
+	bodySys := &protocol.DirectoryAnchor{
+		AcmeOraclePrice: protocol.AcmeOraclePrecision,
+	}
+	envSys := newTxn("foo/tokens").
+		WithSigner(url.MustParse("foo/book0/1"), 1).
+		WithBody(bodySys).
+		InitiateSynthetic(n.network.NodeUrl()).
+		Sign(protocol.SignatureTypeLegacyED25519, fooKey).
+		Build()
 
 	bodyNormal := &protocol.BurnTokens{
 		Amount: *big.NewInt(100),
@@ -66,10 +67,10 @@ func TestTransactionPriority(t *testing.T) {
 		Envelope:       env,
 		ExpectPriority: 1,
 	}
-	// cases["systemWriteData"] = Case{
-	// 	Envelope:       envSys,
-	// 	ExpectPriority: 2,
-	// }
+	cases["systemWriteData"] = Case{
+		Envelope:       envSys,
+		ExpectPriority: 2,
+	}
 	cases["burnToken"] = Case{
 		Envelope:       envNormal,
 		ExpectPriority: 0,
