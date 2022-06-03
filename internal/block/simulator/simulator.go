@@ -144,7 +144,9 @@ func (s *Simulator) SetRouteFor(account *url.URL, subnet string) {
 }
 
 func (s *Simulator) Router() routing.Router {
-	return router{s}
+	r, _, err := routing.NewSimpleRouter(&config.Network{Subnets: s.Subnets}, nil)
+	require.NoError(s, err)
+	return router{s, r}
 }
 
 func (s *Simulator) Subnet(id string) *ExecEntry {

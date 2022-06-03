@@ -542,6 +542,30 @@ type RemoveValidator struct {
 	extraData []byte
 }
 
+type Route struct {
+	fieldsSet []bool
+	// Length is the prefix length.
+	Length uint64 `json:"length,omitempty" form:"length" query:"length" validate:"required"`
+	// Value is the prefix value.
+	Value     uint64 `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	Subnet    string `json:"subnet,omitempty" form:"subnet" query:"subnet" validate:"required"`
+	extraData []byte
+}
+
+type RouteOverride struct {
+	fieldsSet []bool
+	Account   *url.URL `json:"account,omitempty" form:"account" query:"account" validate:"required"`
+	Subnet    string   `json:"subnet,omitempty" form:"subnet" query:"subnet" validate:"required"`
+	extraData []byte
+}
+
+type RoutingTable struct {
+	fieldsSet []bool
+	Overrides []RouteOverride `json:"overrides,omitempty" form:"overrides" query:"overrides" validate:"required"`
+	Routes    []Route         `json:"routes,omitempty" form:"routes" query:"routes" validate:"required"`
+	extraData []byte
+}
+
 type SendTokens struct {
 	fieldsSet []bool
 	Hash      [32]byte          `json:"hash,omitempty" form:"hash" query:"hash"`
@@ -1907,6 +1931,48 @@ func (v *RemoveValidator) Copy() *RemoveValidator {
 }
 
 func (v *RemoveValidator) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *Route) Copy() *Route {
+	u := new(Route)
+
+	u.Length = v.Length
+	u.Value = v.Value
+	u.Subnet = v.Subnet
+
+	return u
+}
+
+func (v *Route) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *RouteOverride) Copy() *RouteOverride {
+	u := new(RouteOverride)
+
+	if v.Account != nil {
+		u.Account = (v.Account).Copy()
+	}
+	u.Subnet = v.Subnet
+
+	return u
+}
+
+func (v *RouteOverride) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *RoutingTable) Copy() *RoutingTable {
+	u := new(RoutingTable)
+
+	u.Overrides = make([]RouteOverride, len(v.Overrides))
+	for i, v := range v.Overrides {
+		u.Overrides[i] = *(&v).Copy()
+	}
+	u.Routes = make([]Route, len(v.Routes))
+	for i, v := range v.Routes {
+		u.Routes[i] = *(&v).Copy()
+	}
+
+	return u
+}
+
+func (v *RoutingTable) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *SendTokens) Copy() *SendTokens {
 	u := new(SendTokens)
@@ -3606,6 +3672,57 @@ func (v *RemoveValidator) Equal(u *RemoveValidator) bool {
 		return false
 	case !((v.Owner).Equal(u.Owner)):
 		return false
+	}
+
+	return true
+}
+
+func (v *Route) Equal(u *Route) bool {
+	if !(v.Length == u.Length) {
+		return false
+	}
+	if !(v.Value == u.Value) {
+		return false
+	}
+	if !(v.Subnet == u.Subnet) {
+		return false
+	}
+
+	return true
+}
+
+func (v *RouteOverride) Equal(u *RouteOverride) bool {
+	switch {
+	case v.Account == u.Account:
+		// equal
+	case v.Account == nil || u.Account == nil:
+		return false
+	case !((v.Account).Equal(u.Account)):
+		return false
+	}
+	if !(v.Subnet == u.Subnet) {
+		return false
+	}
+
+	return true
+}
+
+func (v *RoutingTable) Equal(u *RoutingTable) bool {
+	if len(v.Overrides) != len(u.Overrides) {
+		return false
+	}
+	for i := range v.Overrides {
+		if !((&v.Overrides[i]).Equal(&u.Overrides[i])) {
+			return false
+		}
+	}
+	if len(v.Routes) != len(u.Routes) {
+		return false
+	}
+	for i := range v.Routes {
+		if !((&v.Routes[i]).Equal(&u.Routes[i])) {
+			return false
+		}
 	}
 
 	return true
@@ -7691,6 +7808,163 @@ func (v *RemoveValidator) IsValid() error {
 	}
 }
 
+var fieldNames_Route = []string{
+	1: "Length",
+	2: "Value",
+	3: "Subnet",
+}
+
+func (v *Route) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Length == 0) {
+		writer.WriteUint(1, v.Length)
+	}
+	if !(v.Value == 0) {
+		writer.WriteUint(2, v.Value)
+	}
+	if !(len(v.Subnet) == 0) {
+		writer.WriteString(3, v.Subnet)
+	}
+
+	_, _, err := writer.Reset(fieldNames_Route)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), err
+}
+
+func (v *Route) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Length is missing")
+	} else if v.Length == 0 {
+		errs = append(errs, "field Length is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Value is missing")
+	} else if v.Value == 0 {
+		errs = append(errs, "field Value is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Subnet is missing")
+	} else if len(v.Subnet) == 0 {
+		errs = append(errs, "field Subnet is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_RouteOverride = []string{
+	1: "Account",
+	2: "Subnet",
+}
+
+func (v *RouteOverride) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Account == nil) {
+		writer.WriteUrl(1, v.Account)
+	}
+	if !(len(v.Subnet) == 0) {
+		writer.WriteString(2, v.Subnet)
+	}
+
+	_, _, err := writer.Reset(fieldNames_RouteOverride)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), err
+}
+
+func (v *RouteOverride) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Account is missing")
+	} else if v.Account == nil {
+		errs = append(errs, "field Account is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Subnet is missing")
+	} else if len(v.Subnet) == 0 {
+		errs = append(errs, "field Subnet is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_RoutingTable = []string{
+	1: "Overrides",
+	2: "Routes",
+}
+
+func (v *RoutingTable) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(len(v.Overrides) == 0) {
+		for _, v := range v.Overrides {
+			writer.WriteValue(1, &v)
+		}
+	}
+	if !(len(v.Routes) == 0) {
+		for _, v := range v.Routes {
+			writer.WriteValue(2, &v)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_RoutingTable)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), err
+}
+
+func (v *RoutingTable) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Overrides is missing")
+	} else if len(v.Overrides) == 0 {
+		errs = append(errs, "field Overrides is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Routes is missing")
+	} else if len(v.Routes) == 0 {
+		errs = append(errs, "field Routes is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_SendTokens = []string{
 	1: "Type",
 	2: "Hash",
@@ -11679,6 +11953,86 @@ func (v *RemoveValidator) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
+func (v *Route) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *Route) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUint(1); ok {
+		v.Length = x
+	}
+	if x, ok := reader.ReadUint(2); ok {
+		v.Value = x
+	}
+	if x, ok := reader.ReadString(3); ok {
+		v.Subnet = x
+	}
+
+	seen, err := reader.Reset(fieldNames_Route)
+	if err != nil {
+		return err
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	return err
+}
+
+func (v *RouteOverride) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *RouteOverride) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUrl(1); ok {
+		v.Account = x
+	}
+	if x, ok := reader.ReadString(2); ok {
+		v.Subnet = x
+	}
+
+	seen, err := reader.Reset(fieldNames_RouteOverride)
+	if err != nil {
+		return err
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	return err
+}
+
+func (v *RoutingTable) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *RoutingTable) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	for {
+		if x := new(RouteOverride); reader.ReadValue(1, x.UnmarshalBinary) {
+			v.Overrides = append(v.Overrides, *x)
+		} else {
+			break
+		}
+	}
+	for {
+		if x := new(Route); reader.ReadValue(2, x.UnmarshalBinary) {
+			v.Routes = append(v.Routes, *x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_RoutingTable)
+	if err != nil {
+		return err
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	return err
+}
+
 func (v *SendTokens) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -13695,6 +14049,16 @@ func (v *RemoveValidator) MarshalJSON() ([]byte, error) {
 	u.Type = v.Type()
 	u.PubKey = encoding.BytesToJSON(v.PubKey)
 	u.Owner = v.Owner
+	return json.Marshal(&u)
+}
+
+func (v *RoutingTable) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Overrides encoding.JsonList[RouteOverride] `json:"overrides,omitempty"`
+		Routes    encoding.JsonList[Route]         `json:"routes,omitempty"`
+	}{}
+	u.Overrides = v.Overrides
+	u.Routes = v.Routes
 	return json.Marshal(&u)
 }
 
@@ -15757,6 +16121,21 @@ func (v *RemoveValidator) UnmarshalJSON(data []byte) error {
 		v.PubKey = x
 	}
 	v.Owner = u.Owner
+	return nil
+}
+
+func (v *RoutingTable) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Overrides encoding.JsonList[RouteOverride] `json:"overrides,omitempty"`
+		Routes    encoding.JsonList[Route]         `json:"routes,omitempty"`
+	}{}
+	u.Overrides = v.Overrides
+	u.Routes = v.Routes
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Overrides = u.Overrides
+	v.Routes = u.Routes
 	return nil
 }
 
