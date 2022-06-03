@@ -1,0 +1,58 @@
+Describe:
+  non-binary: true
+  embeddings:
+    - Network
+  fields:
+  - name: NetworkType
+    toml: type
+    type: NetworkType
+    marshal-as: enum
+  - name: SubnetId
+    toml: local-subnet
+    type: string
+  - name: LocalAddress
+    toml: local-address
+    type: string
+
+Network:
+  non-binary: true
+  fields:
+    - name: Name
+      toml: name
+      type: string
+    - name: Subnets
+      toml: subnets
+      type: Subnet
+      marshal-as: reference
+      repeatable: true
+
+Subnet:
+  non-binary: true
+  fields:
+    - name: ID
+      toml: id
+      type: string
+    - name: Type
+      toml: type
+      type: NetworkType
+      marshal-as: enum
+    - name: BasePort
+      toml: port
+      type: int
+    - name: Nodes
+      toml: nodes
+      type: Node
+      marshal-as: reference
+      repeatable: true
+
+Node:
+  non-binary: true
+  fields:
+    - name: Address
+      toml: address
+      type: string
+    - name: Type
+      toml: type
+      type: NodeType
+      marshal-as: enum
+

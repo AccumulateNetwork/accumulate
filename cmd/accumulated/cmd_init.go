@@ -29,7 +29,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node"
-	"gitlab.com/accumulatenetwork/accumulate/networks"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	etcd "go.etcd.io/etcd/client/v3"
 	"gopkg.in/yaml.v3"
@@ -197,10 +196,10 @@ func initNode(cmd *cobra.Command, args []string) {
 		nodePort = int(p)
 	}
 
-	accClient, err := client.New(fmt.Sprintf("http://%s:%d", netAddr, netPort+networks.AccApiPortOffset))
+	accClient, err := client.New(fmt.Sprintf("http://%s:%d", netAddr, netPort+int(config.PortOffsetAccumulateApi)))
 	checkf(err, "failed to create API client for %s", args[0])
 
-	tmClient, err := rpchttp.New(fmt.Sprintf("tcp://%s:%d", netAddr, netPort+networks.TmRpcPortOffset))
+	tmClient, err := rpchttp.New(fmt.Sprintf("tcp://%s:%d", netAddr, netPort+int(config.PortOffsetTendermintRpc)))
 	checkf(err, "failed to create Tendermint client for %s", args[0])
 
 	version := getVersion(accClient)
@@ -238,7 +237,7 @@ func initNode(cmd *cobra.Command, args []string) {
 		nodeType = cfg.Follower
 	}
 	config := config.Default(description.Describe.Name, description.Describe.NetworkType, nodeType, description.Describe.SubnetId)
-	config.P2P.BootstrapPeers = fmt.Sprintf("%s@%s:%d", status.NodeInfo.NodeID, netAddr, netPort+networks.TmP2pPortOffset)
+	config.P2P.BootstrapPeers = fmt.Sprintf("%s@%s:%d", status.NodeInfo.NodeID, netAddr, netPort+int(cfg.PortOffsetTendermintP2P))
 	config.Accumulate.Describe = description.Describe
 
 	if flagInit.LogLevels != "" {
@@ -469,7 +468,7 @@ func createInLocalFS(dnConfig []*cfg.Config, dnRemote []string, dnListen []strin
 
 func createDockerCompose(cmd *cobra.Command, dnRemote []string, compose *dc.Config) {
 	var svc dc.ServiceConfig
-	api := fmt.Sprintf("http://%s:%d/v2", dnRemote[0], flagInitDevnet.BasePort+networks.AccApiPortOffset)
+	api := fmt.Sprintf("http://%s:%d/v2", dnRemote[0], flagInitDevnet.BasePort+int(cfg.PortOffsetAccumulateApi))
 	svc.Name = "tools"
 	svc.ContainerName = "devnet-init"
 	svc.Image = flagInitDevnet.DockerImage
@@ -504,7 +503,7 @@ func createDockerCompose(cmd *cobra.Command, dnRemote []string, compose *dc.Conf
 	compose.Services = append(compose.Services, svc)
 
 	dn0svc := compose.Services[0]
-	dn0svc.Ports = make([]dc.ServicePortConfig, networks.MaxPortOffset+1)
+	dn0svc.Ports = make([]dc.ServicePortConfig, int(config.PortOffsetMax)+1)
 	for i := range dn0svc.Ports {
 		port := uint32(flagInitDevnet.BasePort + i)
 		dn0svc.Ports[i] = dc.ServicePortConfig{

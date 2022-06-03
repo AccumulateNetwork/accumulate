@@ -17,7 +17,6 @@ import (
 	cfg "gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
-	"gitlab.com/accumulatenetwork/accumulate/networks"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 )
 
@@ -90,10 +89,10 @@ func initV1(opts InitOptions) (bootstrap genesis.Bootstrap, err error) {
 		nodeDir := path.Join(opts.WorkDir, nodeDirName)
 		config.SetRoot(nodeDir)
 
-		config.P2P.ListenAddress = fmt.Sprintf("tcp://%s:%d", opts.ListenIP[i], opts.Port+networks.TmP2pPortOffset)
-		config.RPC.ListenAddress = fmt.Sprintf("tcp://%s:%d", opts.ListenIP[i], opts.Port+networks.TmRpcPortOffset)
-		config.RPC.GRPCListenAddress = fmt.Sprintf("tcp://%s:%d", opts.ListenIP[i], opts.Port+networks.TmRpcGrpcPortOffset)
-		config.Instrumentation.PrometheusListenAddr = fmt.Sprintf(":%d", opts.Port+networks.TmPrometheusPortOffset)
+		config.P2P.ListenAddress = fmt.Sprintf("tcp://%s:%d", opts.ListenIP[i], opts.Port+int(cfg.PortOffsetTendermintP2P))
+		config.RPC.ListenAddress = fmt.Sprintf("tcp://%s:%d", opts.ListenIP[i], opts.Port+int(cfg.PortOffsetTendermintRpc))
+		//config.RPC.GRPCListenAddress = fmt.Sprintf("tcp://%s:%d", opts.ListenIP[i], opts.Port+networks.TmRpcGrpcPortOffset)
+		config.Instrumentation.PrometheusListenAddr = fmt.Sprintf(":%d", opts.Port+int(cfg.PortOffsetPrometheus))
 
 		err = os.MkdirAll(path.Join(nodeDir, "config"), nodeDirPerm)
 		if err != nil {
@@ -183,8 +182,8 @@ func initV1(opts InitOptions) (bootstrap genesis.Bootstrap, err error) {
 		}
 		config.Moniker = fmt.Sprintf("%s.%d", config.Accumulate.SubnetId, i)
 
-		config.Accumulate.Website.ListenAddress = fmt.Sprintf("http://%s:8080", opts.ListenIP[i])
-		config.Accumulate.API.ListenAddress = fmt.Sprintf("http://%s:%d", opts.ListenIP[i], opts.Port+networks.AccApiPortOffset)
+		config.Accumulate.Website.ListenAddress = fmt.Sprintf("http://%s:%d", opts.ListenIP[i], opts.Port+int(cfg.PortOffsetWebsite))
+		config.Accumulate.API.ListenAddress = fmt.Sprintf("http://%s:%d", opts.ListenIP[i], opts.Port+int(cfg.PortOffsetAccumulateApi))
 
 		err := cfg.Store(config)
 		if err != nil {

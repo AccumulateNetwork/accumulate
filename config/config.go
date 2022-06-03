@@ -16,7 +16,8 @@ import (
 	etcd "go.etcd.io/etcd/client/v3"
 )
 
-////go:generate go run ../tools/cmd/gen-types network.yml
+//go:generate go run ../tools/cmd/gen-enum  --package config enums.yml
+//go:generate go run ../tools/cmd/gen-types --package config types.yml
 
 const (
 	configDir     = "config"
@@ -26,18 +27,21 @@ const (
 
 const DevNet = "devnet"
 
-type NetworkType string
+type NetworkType uint64
 
 const (
-	BlockValidator NetworkType = "block-validator"
-	Directory      NetworkType = "directory"
+	BlockValidator = NetworkTypeBlockValidator
+	Directory      = NetworkTypeDirectory
 )
 
-type NodeType string
+type NodeType uint64
+type PortOffset uint64
+
+var PortOffsetMax = PortOffsetPrometheus
 
 const (
-	Validator NodeType = "validator"
-	Follower  NodeType = "follower"
+	Validator = NodeTypeValidator
+	Follower  = NodeTypeFollower
 )
 
 type StorageType string
@@ -139,12 +143,13 @@ type Config struct {
 	Accumulate Accumulate
 }
 
-type Describe struct {
-	SubnetId     string      `toml:"subnet" mapstructure:"subnet"`
-	NetworkType  NetworkType `toml:"type" mapstructure:"type"`
-	LocalAddress string      `toml:"address" mapstructure:"address"`
-	Network      `toml:"network" mapstructure:"network"`
-}
+//
+//type Describe struct {
+//	SubnetId     string      `toml:"subnet" mapstructure:"subnet"`
+//	NetworkType  NetworkType `toml:"type" mapstructure:"type"`
+//	LocalAddress string      `toml:"address" mapstructure:"address"`
+//	Network      `toml:"network" mapstructure:"network"`
+//}
 
 type Accumulate struct {
 	SentryDSN string `toml:"sentry-dsn" mapstructure:"sentry-dsn"`
@@ -155,80 +160,80 @@ type Accumulate struct {
 	Website   Website   `toml:"website" mapstructure:"website"`
 }
 
-type Network struct {
-	Name    string   `json:"name" toml:"name" mapstructure:"name"`
-	Subnets []Subnet `json:"subnets" toml:"subnets" mapstructure:"subnets"`
-}
+//type Network struct {
+//	Name    string   `json:"name" toml:"name" mapstructure:"name"`
+//	Subnets []Subnet `json:"subnets" toml:"subnets" mapstructure:"subnets"`
+//}
+//
+//func (v *Network) Equal(u *Network) bool {
+//	if len(v.Subnets) != len(u.Subnets) || v.Name != u.Name {
+//		return false
+//	}
+//	for i, s := range v.Subnets {
+//		if s.Equal(&u.Subnets[i]) {
+//			return false
+//		}
+//	}
+//	return true
+//}
+//
+//func (v *Network) Copy() *Network {
+//	r := new(Network)
+//	r.Name = v.Name
+//	for _, s := range v.Subnets {
+//		r.Subnets = append(r.Subnets, *s.Copy())
+//	}
+//	return r
+//}
+//
+//type Subnet struct {
+//	ID       string      `json:"name" toml:"name" mapstructure:"name"`
+//	Type     NetworkType `json:"type" toml:"type" mapstructure:"type"`
+//	BasePort int         `json:"port" toml:"port" mapstructure:"port"`
+//	Nodes    []Node      `json:"nodes" toml:"nodes" mapstructure:"nodes"`
+//}
+//
+//func (v *Subnet) Equal(u *Subnet) bool {
+//	if v.ID != u.ID || v.Type != u.Type || v.BasePort != u.BasePort || len(v.Nodes) != len(u.Nodes) {
+//		return false
+//	}
+//	for i, n := range v.Nodes {
+//		if n.Equal(&u.Nodes[i]) {
+//			return false
+//		}
+//	}
+//	return true
+//}
+//
+//func (v *Subnet) Copy() *Subnet {
+//	r := new(Subnet)
+//	r.Type = v.Type
+//	r.ID = v.ID
+//	r.BasePort = v.BasePort
+//	for _, n := range v.Nodes {
+//		r.Nodes = append(r.Nodes, *n.Copy())
+//	}
+//	return r
+//}
 
-func (v *Network) Equal(u *Network) bool {
-	if len(v.Subnets) != len(u.Subnets) || v.Name != u.Name {
-		return false
-	}
-	for i, s := range v.Subnets {
-		if s.Equal(&u.Subnets[i]) {
-			return false
-		}
-	}
-	return true
-}
-
-func (v *Network) Copy() *Network {
-	r := new(Network)
-	r.Name = v.Name
-	for _, s := range v.Subnets {
-		r.Subnets = append(r.Subnets, *s.Copy())
-	}
-	return r
-}
-
-type Subnet struct {
-	ID       string      `json:"name" toml:"name" mapstructure:"name"`
-	Type     NetworkType `json:"type" toml:"type" mapstructure:"type"`
-	BasePort int         `json:"port" toml:"port" mapstructure:"port"`
-	Nodes    []Node      `json:"nodes" toml:"nodes" mapstructure:"nodes"`
-}
-
-func (v *Subnet) Equal(u *Subnet) bool {
-	if v.ID != u.ID || v.Type != u.Type || v.BasePort != u.BasePort || len(v.Nodes) != len(u.Nodes) {
-		return false
-	}
-	for i, n := range v.Nodes {
-		if n.Equal(&u.Nodes[i]) {
-			return false
-		}
-	}
-	return true
-}
-
-func (v *Subnet) Copy() *Subnet {
-	r := new(Subnet)
-	r.Type = v.Type
-	r.ID = v.ID
-	r.BasePort = v.BasePort
-	for _, n := range v.Nodes {
-		r.Nodes = append(r.Nodes, *n.Copy())
-	}
-	return r
-}
-
-type Node struct {
-	Address string   `json:"ip" toml:"address" mapstructure:"address"`
-	Type    NodeType `json:"type" toml:"type" mapstructure:"type"`
-}
-
-func (v *Node) Equal(u *Node) bool {
-	if v.Address != u.Address || v.Type != u.Type {
-		return false
-	}
-	return true
-}
-
-func (v *Node) Copy() *Node {
-	r := new(Node)
-	r.Address = v.Address
-	r.Type = v.Type
-	return r
-}
+//type Node struct {
+//	Address string   `json:"ip" toml:"address" mapstructure:"address"`
+//	Type    NodeType `json:"type" toml:"type" mapstructure:"type"`
+//}
+//
+//func (v *Node) Equal(u *Node) bool {
+//	if v.Address != u.Address || v.Type != u.Type {
+//		return false
+//	}
+//	return true
+//}
+//
+//func (v *Node) Copy() *Node {
+//	r := new(Node)
+//	r.Address = v.Address
+//	r.Type = v.Type
+//	return r
+//}
 
 //
 //type Node struct {

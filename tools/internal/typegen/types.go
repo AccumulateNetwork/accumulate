@@ -192,6 +192,8 @@ type Field struct {
 	Virtual bool
 	// NonBinary specifies whether the field is binary marshallable.
 	NonBinary bool `yaml:"non-binary"`
+	// Toml specifies the name that should be used for TOML marshalling.
+	Toml string
 }
 
 // API is an API with a set of methods.

@@ -1,0 +1,24 @@
+NetworkType:
+  Directory:
+    value: 1
+  BlockValidator:
+    value: 2
+    aliases: [block-validator]
+
+NodeType:
+  Validator:
+    value: 1
+  Follower:
+    value: 2
+
+PortOffset:
+  TendermintP2P:
+    value: 0
+  TendermintRpc:
+    value: 1
+  AccumulateApi:
+    value: 4
+  Website:
+    value: 5
+  Prometheus:
+    value: 6

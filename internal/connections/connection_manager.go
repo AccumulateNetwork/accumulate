@@ -14,7 +14,6 @@ import (
 	"github.com/tendermint/tendermint/rpc/client/http"
 	"github.com/tendermint/tendermint/rpc/client/local"
 	"gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/networks"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
@@ -352,7 +351,7 @@ func (cm *connectionManager) createClient(connCtx *connectionContext) error {
 		}
 		connCtx.setClient(cm.localClient, api)
 	default:
-		abciAddr, err := config.OffsetPort(connCtx.GetAddress(), networks.TmRpcPortOffset)
+		abciAddr, err := config.OffsetPort(connCtx.GetAddress(), int(config.PortOffsetTendermintRpc))
 		if err != nil {
 			return errInvalidAddress(err)
 		}
@@ -360,7 +359,7 @@ func (cm *connectionManager) createClient(connCtx *connectionContext) error {
 		if err != nil {
 			return errCreateRPCClient(err)
 		}
-		apiAddr, err := config.OffsetPort(connCtx.GetAddress(), networks.AccApiPortOffset)
+		apiAddr, err := config.OffsetPort(connCtx.GetAddress(), int(config.PortOffsetAccumulateApi))
 		if err != nil {
 			return errInvalidAddress(err)
 		}

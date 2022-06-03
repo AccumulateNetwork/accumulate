@@ -17,7 +17,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node"
-	"gitlab.com/accumulatenetwork/accumulate/networks"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -284,7 +283,7 @@ func initNetwork(cmd *cobra.Command, args []string) {
 	}
 
 	var svc dc.ServiceConfig
-	api := fmt.Sprintf("http://%s:%d/v2", dnRemote[0], flagInitDevnet.BasePort+networks.AccApiPortOffset)
+	api := fmt.Sprintf("http://%s:%d/v2", dnRemote[0], flagInitDevnet.BasePort+int(cfg.PortOffsetAccumulateApi))
 	svc.Name = "tools"
 	svc.ContainerName = "devnet-init"
 	svc.Image = flagInitDevnet.DockerImage
@@ -317,7 +316,7 @@ func initNetwork(cmd *cobra.Command, args []string) {
 	compose.Services = append(compose.Services, svc)
 
 	dn0svc := compose.Services[0]
-	dn0svc.Ports = make([]dc.ServicePortConfig, networks.MaxPortOffset+1)
+	dn0svc.Ports = make([]dc.ServicePortConfig, int(config.PortOffsetMax)+1)
 	for i := range dn0svc.Ports {
 		port := uint32(flagInitDevnet.BasePort + i)
 		dn0svc.Ports[i] = dc.ServicePortConfig{

@@ -468,6 +468,10 @@ DescriptionResponse:
   non-binary: true
   incomparable: true
   fields:
+    - name: Network
+      alternative: Subnet
+      type: config.Network
+      marshal-as: reference
     - name: Describe
       type: config.Describe
       marshal-as: reference
