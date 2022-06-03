@@ -211,6 +211,7 @@ func (d *Daemon) Start() (err error) {
 		Router:           router,
 		PrometheusServer: d.Config.Accumulate.API.PrometheusServer,
 		TxMaxWaitTime:    d.Config.Accumulate.API.TxMaxWaitTime,
+		Database:         d.db,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to start API: %v", err)

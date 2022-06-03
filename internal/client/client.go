@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 )
 
 //go:generate go run ../../tools/cmd/gen-sdk --package client --out api_v2_sdk_gen.go ../api/v2/methods.yml
@@ -19,14 +20,26 @@ type Client struct {
 
 // New creates new API client with default config
 func New(server string) (*Client, error) {
-	c := new(Client)
-	c.Timeout = 15 * time.Second
+	switch server {
+	case "local":
+		server = "http://127.0.1.1:26660"
+	case "testnet":
+		server = "https://testnet.accumulatenetwork.io"
+	case "beta":
+		server = "https://beta.testnet.accumulatenetwork.io"
+	case "canary":
+		server = "https://canary.testnet.accumulatenetwork.io"
+	case "", "mainnet":
+		server = "https://mainnet.accumulatenetwork.io"
+	}
 
 	u, err := url.Parse(server)
 	if err != nil {
 		return nil, fmt.Errorf("invalid server: %v", err)
 	}
 
+	c := new(Client)
+	c.Timeout = 15 * time.Second
 	switch u.Path {
 	case "":
 		c.serverV2 = server + "/v2"
@@ -50,4 +63,16 @@ func (c *Client) RequestAPIv2(ctx context.Context, method string, params, result
 	}
 
 	return c.Client.Request(ctx, c.serverV2, method, params, result)
+}
+
+func (c *Client) QueryAccountAs(ctx context.Context, req *api.GeneralQuery, target interface{}) (*api.ChainQueryResponse, error) {
+	var resp api.ChainQueryResponse
+	resp.Data = target
+
+	err := c.RequestAPIv2(ctx, "query", req, &resp)
+	if err != nil {
+		return nil, err
+	}
+
+	return &resp, nil
 }
