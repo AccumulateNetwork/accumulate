@@ -60,7 +60,7 @@ func TestCreateLiteAccount(t *testing.T) {
 	totalAmountSent := initialAmount - amountSent
 	require.Equal(t, int64(totalAmountSent), currentBalance)
 	for addr, bal := range balances {
-		require.Equal(t, bal, n.GetLiteTokenAccount(addr).Balance.Int64())
+		require.Equal(t, bal, n.GetLiteTokenAccount(addr.String()).Balance.Int64())
 	}
 }
 
@@ -81,7 +81,7 @@ func TestEvilNode(t *testing.T) {
 	originAddr, balances := n.testLiteTx(count, 1, credits)
 	require.Equal(t, int64(protocol.AcmeFaucetAmount*protocol.AcmePrecision-count*1000), n.GetLiteTokenAccount(originAddr).Balance.Int64())
 	for addr, bal := range balances {
-		require.Equal(t, bal, n.GetLiteTokenAccount(addr).Balance.Int64())
+		require.Equal(t, bal, n.GetLiteTokenAccount(addr.String()).Balance.Int64())
 	}
 
 	batch := dn.db.Begin(true)
@@ -98,14 +98,14 @@ func TestEvilNode(t *testing.T) {
 
 }
 
-func (n *FakeNode) testLiteTx(N, M int, credits float64) (string, map[string]int64) {
+func (n *FakeNode) testLiteTx(N, M int, credits float64) (string, map[*url.URL]int64) {
 	sender := generateKey()
 	senderUrl := acctesting.AcmeLiteAddressTmPriv(sender)
 
-	recipients := make([]string, N)
+	recipients := make([]*url.URL, N)
 	for i := range recipients {
 		_, key, _ := ed25519.GenerateKey(nil)
-		recipients[i] = acctesting.AcmeLiteAddressStdPriv(key).String()
+		recipients[i] = acctesting.AcmeLiteAddressStdPriv(key)
 	}
 
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
@@ -125,7 +125,7 @@ func (n *FakeNode) testLiteTx(N, M int, credits float64) (string, map[string]int
 	n.Require().NoError(acctesting.AddCredits(batch, liteTokenId, credits))
 	n.require.NoError(batch.Commit())
 
-	balance := map[string]int64{}
+	balance := map[*url.URL]int64{}
 	for i := 0; i < M; i++ {
 		n.MustExecuteAndWait(func(send func(*Tx)) {
 			for i := 0; i < N; i++ {
@@ -133,7 +133,7 @@ func (n *FakeNode) testLiteTx(N, M int, credits float64) (string, map[string]int
 				balance[recipient] += 1000
 
 				exch := new(protocol.SendTokens)
-				exch.AddRecipient(n.ParseUrl(recipient), big.NewInt(int64(1000)))
+				exch.AddRecipient(recipient, big.NewInt(int64(1000)))
 				send(newTxn(senderUrl.String()).
 					WithBody(exch).
 					Initiate(protocol.SignatureTypeLegacyED25519, sender).
@@ -183,7 +183,7 @@ func TestAnchorChain(t *testing.T) {
 
 	n.MustExecuteAndWait(func(send func(*Tx)) {
 		adi := new(protocol.CreateIdentity)
-		adi.Url = n.ParseUrl("RoadRunner")
+		adi.Url = protocol.AccountUrl("RoadRunner")
 		var err error
 		adi.KeyBookUrl, err = url.Parse(fmt.Sprintf("%s/book", adi.Url))
 		require.NoError(t, err)
@@ -197,7 +197,7 @@ func TestAnchorChain(t *testing.T) {
 	})
 
 	// Sanity check
-	require.Equal(t, "acc://RoadRunner", n.GetADI("RoadRunner").Url.String())
+	require.Equal(t, "acc://RoadRunner.acme", n.GetADI("RoadRunner").Url.String())
 
 	// // Get the anchor chain manager
 	// batch = n.db.Begin(true)
@@ -249,7 +249,7 @@ func TestCreateADI(t *testing.T) {
 
 	n.MustExecuteAndWait(func(send func(*Tx)) {
 		adi := new(protocol.CreateIdentity)
-		adi.Url = n.ParseUrl("RoadRunner")
+		adi.Url = protocol.AccountUrl("RoadRunner")
 		adi.KeyHash = keyHash[:]
 		var err error
 		adi.KeyBookUrl, err = url.Parse(fmt.Sprintf("%s/foo-book", adi.Url))
@@ -263,7 +263,7 @@ func TestCreateADI(t *testing.T) {
 	})
 
 	r := n.GetADI("RoadRunner")
-	require.Equal(t, "acc://RoadRunner", r.Url.String())
+	require.Equal(t, "acc://RoadRunner.acme", r.Url.String())
 
 	kg := n.GetKeyBook("RoadRunner/foo-book")
 	require.Equal(t, uint64(1), kg.PageCount)
@@ -289,7 +289,7 @@ func TestCreateADIWithoutKeybook(t *testing.T) {
 
 	_, _, err := n.Execute(func(send func(*Tx)) {
 		adi := new(protocol.CreateIdentity)
-		adi.Url = n.ParseUrl("RoadRunner")
+		adi.Url = protocol.AccountUrl("RoadRunner")
 		adi.KeyHash = keyHash[:]
 
 		sponsorUrl := acctesting.AcmeLiteAddressTmPriv(liteAccount).String()
@@ -332,7 +332,7 @@ func TestCreateLiteDataAccount(t *testing.T) {
 		wdt.Recipient = liteDataAddress
 		wdt.Entry = &firstEntry
 		send(newTxn("FooBar").
-			WithSigner(url.MustParse("FooBar/book0/1"), 1).
+			WithSigner(protocol.AccountUrl("FooBar", "book0", "1"), 1).
 			WithBody(wdt).
 			Initiate(protocol.SignatureTypeLegacyED25519, adiKey).
 			Build())
@@ -356,7 +356,8 @@ func TestCreateLiteDataAccount(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify the entry hash in the transaction result
-	txStatus, err := batch.Transaction(synthIds.Hashes[0][:]).GetStatus()
+	h := synthIds.Entries[0].Hash()
+	txStatus, err := batch.Transaction(h[:]).GetStatus()
 	require.NoError(t, err)
 	require.IsType(t, (*protocol.WriteDataResult)(nil), txStatus.Result)
 	txResult := txStatus.Result.(*protocol.WriteDataResult)
@@ -394,18 +395,18 @@ func TestCreateAdiDataAccount(t *testing.T) {
 
 		n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 			tac := new(protocol.CreateDataAccount)
-			tac.Url = n.ParseUrl("FooBar/oof")
+			tac.Url = protocol.AccountUrl("FooBar", "oof")
 			send(newTxn("FooBar").
-				WithSigner(url.MustParse("FooBar/book0/1"), 1).
+				WithSigner(protocol.AccountUrl("FooBar", "book0", "1"), 1).
 				WithBody(tac).
 				Initiate(protocol.SignatureTypeLegacyED25519, adiKey).
 				Build())
 		})
 
 		r := n.GetDataAccount("FooBar/oof")
-		require.Equal(t, "acc://FooBar/oof", r.Url.String())
+		require.Equal(t, "acc://FooBar.acme/oof", r.Url.String())
 
-		require.Contains(t, n.GetDirectory("FooBar"), n.ParseUrl("FooBar/oof").String())
+		require.Contains(t, n.GetDirectory("FooBar"), protocol.AccountUrl("FooBar", "oof").String())
 	})
 
 	t.Run("Data Account with Custom Key Book and Manager Key Book Url", func(t *testing.T) {
@@ -420,33 +421,33 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		require.NoError(t, acctesting.CreateKeyPage(batch, "acc://FooBar/foo/book1"))
 		require.NoError(t, acctesting.CreateKeyBook(batch, "acc://FooBar/mgr/book1", nil))
 		require.NoError(t, acctesting.CreateKeyPage(batch, "acc://FooBar/mgr/book1", pageKey.PubKey().Bytes()))
-		require.NoError(t, acctesting.AddCredits(batch, url.MustParse("FooBar/foo/book1/1"), 1e9))
-		require.NoError(t, acctesting.AddCredits(batch, url.MustParse("FooBar/mgr/book1/2"), 1e9))
+		require.NoError(t, acctesting.AddCredits(batch, protocol.AccountUrl("FooBar", "foo", "book1", "1"), 1e9))
+		require.NoError(t, acctesting.AddCredits(batch, protocol.AccountUrl("FooBar", "mgr", "book1", "2"), 1e9))
 		require.NoError(t, batch.Commit())
 
 		n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 			cda := new(protocol.CreateDataAccount)
-			cda.Url = n.ParseUrl("FooBar/oof")
+			cda.Url = protocol.AccountUrl("FooBar", "oof")
 			cda.Authorities = []*url.URL{
-				n.ParseUrl("acc://FooBar/foo/book1"),
-				n.ParseUrl("acc://FooBar/mgr/book1"),
+				protocol.AccountUrl("FooBar", "foo", "book1"),
+				protocol.AccountUrl("FooBar", "mgr", "book1"),
 			}
 			send(newTxn("FooBar").
-				WithSigner(url.MustParse("FooBar/book0/1"), 1).
+				WithSigner(protocol.AccountUrl("FooBar", "book0", "1"), 1).
 				WithBody(cda).
 				Initiate(protocol.SignatureTypeLegacyED25519, adiKey).
-				WithSigner(url.MustParse("FooBar/foo/book1/1"), 1).
+				WithSigner(protocol.AccountUrl("FooBar", "foo", "book1", "1"), 1).
 				Sign(protocol.SignatureTypeED25519, pageKey).
-				WithSigner(url.MustParse("FooBar/mgr/book1/2"), 1).
+				WithSigner(protocol.AccountUrl("FooBar", "mgr", "book1", "2"), 1).
 				Sign(protocol.SignatureTypeED25519, pageKey).
 				Build())
 		})
 
-		u := n.ParseUrl("acc://FooBar/foo/book1")
+		u := protocol.AccountUrl("FooBar", "foo", "book1")
 
 		r := n.GetDataAccount("FooBar/oof")
-		require.Equal(t, "acc://FooBar/oof", r.Url.String())
-		require.Equal(t, "acc://FooBar/mgr/book1", r.ManagerKeyBook().String())
+		require.Equal(t, "acc://FooBar.acme/oof", r.Url.String())
+		require.Equal(t, "acc://FooBar.acme/mgr/book1", r.ManagerKeyBook().String())
 		require.Equal(t, u.String(), r.KeyBook().String())
 
 	})
@@ -463,17 +464,17 @@ func TestCreateAdiDataAccount(t *testing.T) {
 
 		n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 			tac := new(protocol.CreateDataAccount)
-			tac.Url = n.ParseUrl("FooBar/oof")
+			tac.Url = protocol.AccountUrl("FooBar", "oof")
 			send(newTxn("FooBar").
-				WithSigner(url.MustParse("FooBar/book0/1"), 1).
+				WithSigner(protocol.AccountUrl("FooBar", "book0", "1"), 1).
 				WithBody(tac).
 				Initiate(protocol.SignatureTypeLegacyED25519, adiKey).
 				Build())
 		})
 
 		r := n.GetDataAccount("FooBar/oof")
-		require.Equal(t, "acc://FooBar/oof", r.Url.String())
-		require.Contains(t, n.GetDirectory("FooBar"), n.ParseUrl("FooBar/oof").String())
+		require.Equal(t, "acc://FooBar.acme/oof", r.Url.String())
+		require.Contains(t, n.GetDirectory("FooBar"), protocol.AccountUrl("FooBar", "oof").String())
 
 		wd := new(protocol.WriteData)
 		n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
@@ -485,7 +486,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 			}
 
 			send(newTxn("FooBar/oof").
-				WithSigner(url.MustParse("FooBar/book0/1"), 1).
+				WithSigner(protocol.AccountUrl("FooBar", "book0", "1"), 1).
 				WithBody(wd).
 				Initiate(protocol.SignatureTypeLegacyED25519, adiKey).
 				Build())
@@ -533,23 +534,23 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 
 		n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 			tac := new(protocol.CreateTokenAccount)
-			tac.Url = n.ParseUrl("FooBar/Baz")
+			tac.Url = protocol.AccountUrl("FooBar", "Baz")
 			tac.TokenUrl = protocol.AcmeUrl()
 			send(newTxn("FooBar").
-				WithSigner(url.MustParse("FooBar/book0/1"), 1).
+				WithSigner(protocol.AccountUrl("FooBar", "book0", "1"), 1).
 				WithBody(tac).
 				Initiate(protocol.SignatureTypeLegacyED25519, adiKey).
 				Build())
 		})
 
 		r := n.GetTokenAccount("FooBar/Baz")
-		require.Equal(t, "acc://FooBar/Baz", r.Url.String())
+		require.Equal(t, "acc://FooBar.acme/Baz", r.Url.String())
 		require.Equal(t, protocol.AcmeUrl().String(), r.TokenUrl.String())
 
 		require.Equal(t, []string{
-			n.ParseUrl("FooBar/book0").String(),
-			n.ParseUrl("FooBar/book0/1").String(),
-			n.ParseUrl("FooBar/Baz").String(),
+			protocol.AccountUrl("FooBar", "book0").String(),
+			protocol.AccountUrl("FooBar", "book0", "1").String(),
+			protocol.AccountUrl("FooBar", "Baz").String(),
 		}, n.GetDirectory("FooBar"))
 	})
 
@@ -562,19 +563,19 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 		batch := n.db.Begin(true)
 		require.NoError(t, acctesting.CreateAdiWithCredits(batch, adiKey, "FooBar", 1e9))
 		require.NoError(t, acctesting.CreateKeyBook(batch, "FooBar/book1", pageKey.PubKey().Bytes()))
-		require.NoError(t, acctesting.AddCredits(batch, url.MustParse("FooBar/book1/1"), 1e9))
+		require.NoError(t, acctesting.AddCredits(batch, protocol.AccountUrl("FooBar", "book1", "1"), 1e9))
 		require.NoError(t, batch.Commit())
 
 		n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 			tac := new(protocol.CreateTokenAccount)
-			tac.Url = n.ParseUrl("FooBar/Baz")
+			tac.Url = protocol.AccountUrl("FooBar", "Baz")
 			tac.TokenUrl = protocol.AcmeUrl()
-			tac.Authorities = []*url.URL{n.ParseUrl("FooBar/book1")}
+			tac.Authorities = []*url.URL{protocol.AccountUrl("FooBar", "book1")}
 			send(newTxn("FooBar").
-				WithSigner(url.MustParse("FooBar/book0/1"), 1).
+				WithSigner(protocol.AccountUrl("FooBar", "book0", "1"), 1).
 				WithBody(tac).
 				Initiate(protocol.SignatureTypeLegacyED25519, adiKey).
-				WithSigner(url.MustParse("FooBar/book1/1"), 1).
+				WithSigner(protocol.AccountUrl("FooBar", "book1", "1"), 1).
 				Sign(protocol.SignatureTypeED25519, pageKey).
 				Build())
 		})
@@ -593,14 +594,14 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 
 		n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 			tac := new(protocol.CreateTokenAccount)
-			tac.Url = n.ParseUrl("alice/tokens")
+			tac.Url = protocol.AccountUrl("alice", "tokens")
 			tac.TokenUrl = protocol.AcmeUrl()
-			tac.Authorities = []*url.URL{n.ParseUrl("bob/book0")}
+			tac.Authorities = []*url.URL{protocol.AccountUrl("bob", "book0")}
 			send(newTxn("alice").
-				WithSigner(url.MustParse("alice/book0/1"), 1).
+				WithSigner(protocol.AccountUrl("alice", "book0", "1"), 1).
 				WithBody(tac).
 				Initiate(protocol.SignatureTypeLegacyED25519, aliceKey).
-				WithSigner(url.MustParse("bob/book0/1"), 1).
+				WithSigner(protocol.AccountUrl("bob", "book0", "1"), 1).
 				Sign(protocol.SignatureTypeED25519, bobKey).
 				Build())
 		})
@@ -609,9 +610,9 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 		time.Sleep(time.Second)
 
 		r := n.GetTokenAccount("alice/tokens")
-		require.Equal(t, "alice/tokens", r.Url.ShortString())
+		require.Equal(t, "alice.acme/tokens", r.Url.ShortString())
 		require.Equal(t, protocol.AcmeUrl().String(), r.TokenUrl.String())
-		require.Equal(t, "bob/book0", r.KeyBook().ShortString())
+		require.Equal(t, "bob.acme/book0", r.KeyBook().ShortString())
 	})
 }
 
@@ -628,13 +629,13 @@ func TestLiteAccountTx(t *testing.T) {
 	require.NoError(t, batch.Commit())
 
 	aliceUrl := acctesting.AcmeLiteAddressTmPriv(alice)
-	bobUrl := acctesting.AcmeLiteAddressTmPriv(bob).String()
-	charlieUrl := acctesting.AcmeLiteAddressTmPriv(charlie).String()
+	bobUrl := acctesting.AcmeLiteAddressTmPriv(bob)
+	charlieUrl := acctesting.AcmeLiteAddressTmPriv(charlie)
 
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		exch := new(protocol.SendTokens)
-		exch.AddRecipient(acctesting.MustParseUrl(bobUrl), big.NewInt(int64(1000)))
-		exch.AddRecipient(acctesting.MustParseUrl(charlieUrl), big.NewInt(int64(2000)))
+		exch.AddRecipient(bobUrl, big.NewInt(int64(1000)))
+		exch.AddRecipient(charlieUrl, big.NewInt(int64(2000)))
 
 		send(newTxn(aliceUrl.String()).
 			WithSigner(aliceUrl.RootIdentity(), 1).
@@ -644,8 +645,8 @@ func TestLiteAccountTx(t *testing.T) {
 	})
 
 	require.Equal(t, int64(protocol.AcmeFaucetAmount*protocol.AcmePrecision-3000), n.GetLiteTokenAccount(aliceUrl.String()).Balance.Int64())
-	require.Equal(t, int64(1000), n.GetLiteTokenAccount(bobUrl).Balance.Int64())
-	require.Equal(t, int64(2000), n.GetLiteTokenAccount(charlieUrl).Balance.Int64())
+	require.Equal(t, int64(1000), n.GetLiteTokenAccount(bobUrl.String()).Balance.Int64())
+	require.Equal(t, int64(2000), n.GetLiteTokenAccount(charlieUrl.String()).Balance.Int64())
 }
 
 func TestAdiAccountTx(t *testing.T) {
@@ -663,10 +664,10 @@ func TestAdiAccountTx(t *testing.T) {
 
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		exch := new(protocol.SendTokens)
-		exch.AddRecipient(n.ParseUrl("bar/tokens"), big.NewInt(int64(68)))
+		exch.AddRecipient(protocol.AccountUrl("bar", "tokens"), big.NewInt(int64(68)))
 
 		send(newTxn("foo/tokens").
-			WithSigner(url.MustParse("foo/book0/1"), 1).
+			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
 			WithBody(exch).
 			Initiate(protocol.SignatureTypeLegacyED25519, fooKey).
 			Build())
@@ -691,7 +692,7 @@ func TestSendTokensToBadRecipient(t *testing.T) {
 	// The send should succeed
 	txnHashes := n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		exch := new(protocol.SendTokens)
-		exch.AddRecipient(acctesting.MustParseUrl("foo"), big.NewInt(int64(1000)))
+		exch.AddRecipient(protocol.AccountUrl("foo"), big.NewInt(int64(1000)))
 
 		send(newTxn(aliceUrl.String()).
 			WithSigner(aliceUrl.RootIdentity(), 1).
@@ -703,7 +704,8 @@ func TestSendTokensToBadRecipient(t *testing.T) {
 	// The synthetic transaction should fail
 	res, err := n.api.QueryTx(txnHashes[0][:], time.Second, true, api.QueryOptions{})
 	require.NoError(t, err)
-	res, err = n.api.QueryTx(res.SyntheticTxids[0][:], time.Second, true, api.QueryOptions{})
+	h := res.Produced[0].Hash()
+	res, err = n.api.QueryTx(h[:], time.Second, true, api.QueryOptions{})
 	require.NoError(t, err)
 	require.Equal(t, protocol.ErrorCodeNotFound.GetEnumValue(), res.Status.Code)
 
@@ -742,11 +744,11 @@ func TestAddCreditsBurnAcme(t *testing.T) {
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		ac := new(protocol.AddCredits)
 		ac.Amount = *big.NewInt(acmeToSpendOnCredits)
-		ac.Recipient = n.ParseUrl("foo/book0/1")
+		ac.Recipient = protocol.AccountUrl("foo", "book0", "1")
 		ac.Oracle = 500
 
 		send(newTxn("foo/tokens").
-			WithSigner(url.MustParse("foo/book0/1"), 1).
+			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
 			WithBody(ac).
 			Initiate(protocol.SignatureTypeLegacyED25519, fooKey).
 			Build())
@@ -761,7 +763,7 @@ func TestAddCreditsBurnAcme(t *testing.T) {
 	require.NoError(t, ledger.GetStateAs(&ledgerState))
 	//Credits I should have received
 	credits := big.NewInt(protocol.CreditUnitsPerFiatUnit)                // want to obtain credits
-	credits.Mul(credits, big.NewInt(int64(ledgerState.ActiveOracle)))     // fiat units / acme
+	credits.Mul(credits, big.NewInt(int64(n.GetOraclePrice())))           // fiat units / acme
 	credits.Mul(credits, big.NewInt(acmeToSpendOnCredits))                // acme the user wants to spend
 	credits.Div(credits, big.NewInt(int64(protocol.AcmeOraclePrecision))) // adjust the precision of oracle to real units
 	credits.Div(credits, big.NewInt(int64(protocol.AcmePrecision)))       // adjust the precision of acme to spend to real units
@@ -805,7 +807,7 @@ func TestCreateKeyPage(t *testing.T) {
 		})
 
 		send(newTxn("foo/book0").
-			WithSigner(url.MustParse("foo/book0/1"), 1).
+			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
 			WithBody(cms).
 			Initiate(protocol.SignatureTypeLegacyED25519, fooKey).
 			Build())
@@ -828,16 +830,16 @@ func TestCreateKeyBook(t *testing.T) {
 	require.NoError(t, acctesting.CreateAdiWithCredits(batch, fooKey, "foo", 1e9))
 	require.NoError(t, batch.Commit())
 
-	bookUrl := n.ParseUrl("foo/book1")
-	pageUrl := n.ParseUrl("foo/book1/1")
+	bookUrl := protocol.AccountUrl("foo", "book1")
+	pageUrl := protocol.AccountUrl("foo", "book1", "1")
 
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		csg := new(protocol.CreateKeyBook)
-		csg.Url = n.ParseUrl("foo/book1")
+		csg.Url = protocol.AccountUrl("foo", "book1")
 		csg.PublicKeyHash = testKey.PubKey().Bytes()
 
 		send(newTxn("foo").
-			WithSigner(url.MustParse("foo/book0/1"), 1).
+			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
 			WithBody(csg).
 			Initiate(protocol.SignatureTypeLegacyED25519, fooKey).
 			Build())
@@ -861,7 +863,7 @@ func TestAddKeyPage(t *testing.T) {
 	batch := n.db.Begin(true)
 	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
 	require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1", testKey1.PubKey().Bytes()))
-	require.NoError(t, acctesting.AddCredits(batch, n.ParseUrl("foo/book1/1"), 1e9))
+	require.NoError(t, acctesting.AddCredits(batch, protocol.AccountUrl("foo", "book1", "1"), 1e9))
 	require.NoError(t, batch.Commit())
 
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
@@ -871,7 +873,7 @@ func TestAddKeyPage(t *testing.T) {
 		})
 
 		send(newTxn("foo/book1").
-			WithSigner(url.MustParse("foo/book1/1"), 1).
+			WithSigner(protocol.AccountUrl("foo", "book1", "1"), 1).
 			WithBody(cms).
 			Initiate(protocol.SignatureTypeLegacyED25519, testKey1).
 			Build())
@@ -894,7 +896,7 @@ func TestAddKey(t *testing.T) {
 	batch := n.db.Begin(true)
 	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
 	require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1", testKey.PubKey().Bytes()))
-	require.NoError(t, acctesting.AddCredits(batch, n.ParseUrl("foo/book1/1"), 1e9))
+	require.NoError(t, acctesting.AddCredits(batch, protocol.AccountUrl("foo", "book1", "1"), 1e9))
 	require.NoError(t, batch.Commit())
 
 	newKey := generateKey()
@@ -907,7 +909,7 @@ func TestAddKey(t *testing.T) {
 		body.Operation = append(body.Operation, op)
 
 		send(newTxn("foo/book1/1").
-			WithSigner(url.MustParse("foo/book1/1"), 1).
+			WithSigner(protocol.AccountUrl("foo", "book1", "1"), 1).
 			WithBody(body).
 			Initiate(protocol.SignatureTypeLegacyED25519, testKey).
 			Build())
@@ -928,7 +930,7 @@ func TestUpdateKeyPage(t *testing.T) {
 	batch := n.db.Begin(true)
 	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
 	require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1", testKey.PubKey().Bytes()))
-	require.NoError(t, acctesting.AddCredits(batch, n.ParseUrl("foo/book1/1"), 1e9))
+	require.NoError(t, acctesting.AddCredits(batch, protocol.AccountUrl("foo", "book1", "1"), 1e9))
 	require.NoError(t, batch.Commit())
 
 	newKey := generateKey()
@@ -943,7 +945,7 @@ func TestUpdateKeyPage(t *testing.T) {
 		body.Operation = append(body.Operation, op)
 
 		send(newTxn("foo/book1/1").
-			WithSigner(url.MustParse("foo/book1/1"), 1).
+			WithSigner(protocol.AccountUrl("foo", "book1", "1"), 1).
 			WithBody(body).
 			Initiate(protocol.SignatureTypeLegacyED25519, testKey).
 			Build())
@@ -971,8 +973,8 @@ func TestUpdateKey(t *testing.T) {
 	defer batch.Discard()
 	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
 	require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1", testKey.PubKey().Bytes()))
-	require.NoError(t, acctesting.AddCredits(batch, n.ParseUrl("foo/book1/1"), 1e9))
-	require.NoError(t, acctesting.UpdateKeyPage(batch, url.MustParse("foo/book1/1"), func(p *protocol.KeyPage) { p.AcceptThreshold = 2 }))
+	require.NoError(t, acctesting.AddCredits(batch, protocol.AccountUrl("foo", "book1", "1"), 1e9))
+	require.NoError(t, acctesting.UpdateKeyPage(batch, protocol.AccountUrl("foo", "book1", "1"), func(p *protocol.KeyPage) { p.AcceptThreshold = 2 }))
 	require.NoError(t, batch.Commit())
 
 	spec := n.GetKeyPage("foo/book1/1")
@@ -985,7 +987,7 @@ func TestUpdateKey(t *testing.T) {
 
 		send(newTxn("foo/book1/1").
 			WithBody(body).
-			WithSigner(url.MustParse("foo/book1/1"), 1).
+			WithSigner(protocol.AccountUrl("foo", "book1", "1"), 1).
 			Initiate(protocol.SignatureTypeLegacyED25519, testKey).
 			Build())
 	})
@@ -1010,7 +1012,7 @@ func TestRemoveKey(t *testing.T) {
 	batch := n.db.Begin(true)
 	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
 	require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1", testKey1.PubKey().Bytes()))
-	require.NoError(t, acctesting.AddCredits(batch, n.ParseUrl("foo/book1/1"), 1e9))
+	require.NoError(t, acctesting.AddCredits(batch, protocol.AccountUrl("foo", "book1", "1"), 1e9))
 	require.NoError(t, batch.Commit())
 	h2 := sha256.Sum256(testKey2.PubKey().Bytes())
 	// Add second key because CreateKeyBook can't do it
@@ -1022,7 +1024,7 @@ func TestRemoveKey(t *testing.T) {
 		body.Operation = append(body.Operation, op)
 
 		send(newTxn("foo/book1/1").
-			WithSigner(url.MustParse("foo/book1/1"), 1).
+			WithSigner(protocol.AccountUrl("foo", "book1", "1"), 1).
 			WithBody(body).
 			Initiate(protocol.SignatureTypeLegacyED25519, testKey1).
 			Build())
@@ -1036,7 +1038,7 @@ func TestRemoveKey(t *testing.T) {
 		body.Operation = append(body.Operation, op)
 
 		send(newTxn("foo/book1/1").
-			WithSigner(url.MustParse("foo/book1/1"), 2).
+			WithSigner(protocol.AccountUrl("foo", "book1", "1"), 2).
 			WithBody(body).
 			Initiate(protocol.SignatureTypeLegacyED25519, testKey2).
 			Build())
@@ -1056,10 +1058,8 @@ func TestSignatorHeight(t *testing.T) {
 
 	liteUrl, err := protocol.LiteTokenAddress(liteKey.PubKey().Bytes(), protocol.ACME, protocol.SignatureTypeED25519)
 	require.NoError(t, err)
-	tokenUrl, err := url.Parse("foo/tokens")
-	require.NoError(t, err)
-	keyBookUrl, err := url.Parse("foo/book")
-	require.NoError(t, err)
+	tokenUrl := protocol.AccountUrl("foo", "tokens")
+	keyBookUrl := protocol.AccountUrl("foo", "book")
 	keyPageUrl := protocol.FormatKeyPageUrl(keyBookUrl, 0)
 	require.NoError(t, err)
 
@@ -1077,7 +1077,7 @@ func TestSignatorHeight(t *testing.T) {
 
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		adi := new(protocol.CreateIdentity)
-		adi.Url = n.ParseUrl("foo")
+		adi.Url = protocol.AccountUrl("foo")
 		h := sha256.Sum256(fooKey.PubKey().Bytes())
 		adi.KeyHash = h[:]
 		adi.KeyBookUrl = keyBookUrl
@@ -1120,12 +1120,12 @@ func TestCreateToken(t *testing.T) {
 
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.CreateToken)
-		body.Url = n.ParseUrl("foo/tokens")
+		body.Url = protocol.AccountUrl("foo", "tokens")
 		body.Symbol = "FOO"
 		body.Precision = 10
 
 		send(newTxn("foo").
-			WithSigner(url.MustParse("foo/book0/1"), 1).
+			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
 			WithBody(body).
 			Initiate(protocol.SignatureTypeLegacyED25519, fooKey).
 			Build())
@@ -1145,7 +1145,7 @@ func TestIssueTokens(t *testing.T) {
 	require.NoError(t, acctesting.CreateTokenIssuer(batch, "foo/tokens", "FOO", 10, nil))
 	require.NoError(t, batch.Commit())
 
-	liteAddr, err := protocol.LiteTokenAddress(liteKey[32:], "foo/tokens", protocol.SignatureTypeED25519)
+	liteAddr, err := protocol.LiteTokenAddress(liteKey[32:], "foo.acme/tokens", protocol.SignatureTypeED25519)
 	require.NoError(t, err)
 
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
@@ -1154,14 +1154,14 @@ func TestIssueTokens(t *testing.T) {
 		body.Amount.SetUint64(123)
 
 		send(newTxn("foo/tokens").
-			WithSigner(url.MustParse("foo/book0/1"), 1).
+			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
 			WithBody(body).
 			Initiate(protocol.SignatureTypeLegacyED25519, fooKey).
 			Build())
 	})
 
 	account := n.GetLiteTokenAccount(liteAddr.String())
-	require.Equal(t, "acc://foo/tokens", account.TokenUrl.String())
+	require.Equal(t, "acc://foo.acme/tokens", account.TokenUrl.String())
 	require.Equal(t, int64(123), account.Balance.Int64())
 }
 
@@ -1204,13 +1204,13 @@ func TestIssueTokensWithSupplyLimit(t *testing.T) {
 	// issue tokens with supply limit
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.CreateToken)
-		body.Url = n.ParseUrl("foo/tokens")
+		body.Url = protocol.AccountUrl("foo", "tokens")
 		body.Symbol = "FOO"
 		body.Precision = uint64(fooDecimals)
 		body.SupplyLimit = supplyLimit
 
 		send(newTxn("foo").
-			WithSigner(url.MustParse("foo/book0/1"), 1).
+			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
 			WithBody(body).
 			Initiate(protocol.SignatureTypeLegacyED25519, fooKey).
 			Build())
@@ -1220,7 +1220,7 @@ func TestIssueTokensWithSupplyLimit(t *testing.T) {
 	issuer := n.GetTokenIssuer("foo/tokens")
 	require.Equal(t, supplyLimit.Int64(), issuer.SupplyLimit.Int64())
 
-	liteAddr, err := protocol.LiteTokenAddress(liteKey[32:], "foo/tokens", protocol.SignatureTypeED25519)
+	liteAddr, err := protocol.LiteTokenAddress(liteKey[32:], "foo.acme/tokens", protocol.SignatureTypeED25519)
 	require.NoError(t, err)
 	liteAcmeAddr, err := protocol.LiteTokenAddress(liteKey[32:], protocol.ACME, protocol.SignatureTypeED25519)
 	require.NoError(t, err)
@@ -1237,7 +1237,7 @@ func TestIssueTokensWithSupplyLimit(t *testing.T) {
 		body.Amount.SetInt64(underLimit)
 
 		send(newTxn("foo/tokens").
-			WithSigner(url.MustParse("foo/book0/1"), 1).
+			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
 			WithBody(body).
 			Initiate(protocol.SignatureTypeLegacyED25519, fooKey).
 			Build())
@@ -1259,7 +1259,7 @@ func TestIssueTokensWithSupplyLimit(t *testing.T) {
 		body.Amount.SetInt64(atLimit)
 
 		send(newTxn("foo/tokens").
-			WithSigner(url.MustParse("foo/book0/1"), 1).
+			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
 			WithBody(body).
 			Initiate(protocol.SignatureTypeLegacyED25519, fooKey).
 			Build())
@@ -1283,7 +1283,7 @@ func TestIssueTokensWithSupplyLimit(t *testing.T) {
 		body.Amount.SetInt64(overLimit)
 
 		send(newTxn("foo/tokens").
-			WithSigner(url.MustParse("foo/book0/1"), 1).
+			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
 			WithBody(body).
 			Initiate(protocol.SignatureTypeLegacyED25519, fooKey).
 			Build())
@@ -1356,8 +1356,8 @@ func TestInvalidDeposit(t *testing.T) {
 
 	id := n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.SyntheticDepositTokens)
-		body.Source = n.network.NodeUrl()
-		body.Token = n.ParseUrl("foo2/tokens")
+		body.Cause = n.network.NodeUrl().WithTxID([32]byte{1})
+		body.Token = protocol.AccountUrl("foo2", "tokens")
 		body.Amount.SetUint64(123)
 
 		send(newTxn(liteAddr.String()).
@@ -1421,7 +1421,7 @@ func TestMultisig(t *testing.T) {
 	n := nodes[subnets[1]][0]
 	batch := n.db.Begin(true)
 	require.NoError(t, acctesting.CreateADI(batch, key1, "foo"))
-	require.NoError(t, acctesting.UpdateKeyPage(batch, url.MustParse("foo/book0/1"), func(page *protocol.KeyPage) {
+	require.NoError(t, acctesting.UpdateKeyPage(batch, protocol.AccountUrl("foo", "book0", "1"), func(page *protocol.KeyPage) {
 		hash := sha256.Sum256(key2[32:])
 		page.AcceptThreshold = 2
 		page.CreditBalance = 1e8
@@ -1434,9 +1434,9 @@ func TestMultisig(t *testing.T) {
 	t.Log("Initiate the transaction")
 	ids := n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		send(newTxn("foo").
-			WithSigner(url.MustParse("foo/book0/1"), 1).
+			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
 			WithBody(&protocol.CreateTokenAccount{
-				Url:      url.MustParse("foo/tokens"),
+				Url:      protocol.AccountUrl("foo", "tokens"),
 				TokenUrl: protocol.AcmeUrl(),
 			}).
 			Initiate(protocol.SignatureTypeED25519, key1.Bytes()).
@@ -1451,7 +1451,7 @@ func TestMultisig(t *testing.T) {
 	sigHashes, _ := n.MustExecute(func(send func(*protocol.Envelope)) {
 		send(acctesting.NewTransaction().
 			WithTimestampVar(&globalNonce).
-			WithSigner(url.MustParse("foo/book0/1"), 1).
+			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
 			WithTxnHash(ids[0][:]).
 			Sign(protocol.SignatureTypeED25519, key1.Bytes()).
 			Build())
@@ -1466,7 +1466,7 @@ func TestMultisig(t *testing.T) {
 	sigHashes, _ = n.MustExecute(func(send func(*protocol.Envelope)) {
 		send(acctesting.NewTransaction().
 			WithTimestampVar(&globalNonce).
-			WithSigner(url.MustParse("foo/book0/1"), 1).
+			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
 			WithTxnHash(ids[0][:]).
 			Sign(protocol.SignatureTypeED25519, key2.Bytes()).
 			Build())
@@ -1484,7 +1484,7 @@ func TestMultisig(t *testing.T) {
 	_, _, err := n.Execute(func(send func(*protocol.Envelope)) {
 		send(acctesting.NewTransaction().
 			WithTimestampVar(&globalNonce).
-			WithSigner(url.MustParse("foo/book0/1"), 1).
+			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
 			WithTxnHash(ids[0][:]).
 			Sign(protocol.SignatureTypeED25519, key2.Bytes()).
 			Build())
@@ -1505,17 +1505,17 @@ func TestAccountAuth(t *testing.T) {
 	require.NoError(t, acctesting.CreateSubADI(batch, "foo", "foo/bar"))
 	require.NoError(t, acctesting.CreateTokenAccount(batch, "foo/bar/tokens", protocol.AcmeUrl().String(), 0, false))
 	require.NoError(t, acctesting.CreateKeyBook(batch, "foo/bar/book", barKey.PubKey().Bytes()))
-	require.NoError(t, acctesting.AddCredits(batch, url.MustParse("foo/bar/book/1"), 1e9))
+	require.NoError(t, acctesting.AddCredits(batch, protocol.AccountUrl("foo", "bar", "book", "1"), 1e9))
 	require.NoError(t, batch.Commit())
 
 	// Disable auth
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		send(newTxn("foo/tokens").
-			WithSigner(url.MustParse("foo/book0/1"), 1).
+			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
 			WithBody(&protocol.UpdateAccountAuth{
 				Operations: []protocol.AccountAuthOperation{
 					&protocol.DisableAccountAuthOperation{
-						Authority: url.MustParse("foo/book0"),
+						Authority: protocol.AccountUrl("foo", "book0"),
 					},
 				},
 			}).
@@ -1527,11 +1527,11 @@ func TestAccountAuth(t *testing.T) {
 	check.Disable = true
 	_, _, err := n.Execute(func(send func(*protocol.Envelope)) {
 		send(newTxn("foo/tokens").
-			WithSigner(url.MustParse("foo/bar/book/1"), 1).
+			WithSigner(protocol.AccountUrl("foo", "bar", "book", "1"), 1).
 			WithBody(&protocol.UpdateAccountAuth{
 				Operations: []protocol.AccountAuthOperation{
 					&protocol.EnableAccountAuthOperation{
-						Authority: url.MustParse("foo/book0"),
+						Authority: protocol.AccountUrl("foo", "book0"),
 					},
 				},
 			}).
@@ -1543,10 +1543,10 @@ func TestAccountAuth(t *testing.T) {
 	// An unauthorized signer should be able to send tokens
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		exch := new(protocol.SendTokens)
-		exch.AddRecipient(n.ParseUrl("foo/bar/tokens"), big.NewInt(int64(68)))
+		exch.AddRecipient(protocol.AccountUrl("foo", "bar", "tokens"), big.NewInt(int64(68)))
 
 		send(newTxn("foo/tokens").
-			WithSigner(url.MustParse("foo/bar/book/1"), 1).
+			WithSigner(protocol.AccountUrl("foo", "bar", "book", "1"), 1).
 			WithBody(exch).
 			Initiate(protocol.SignatureTypeLegacyED25519, barKey).
 			Build())
@@ -1558,11 +1558,11 @@ func TestAccountAuth(t *testing.T) {
 	// Enable auth
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		send(newTxn("foo/tokens").
-			WithSigner(url.MustParse("foo/book0/1"), 1).
+			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
 			WithBody(&protocol.UpdateAccountAuth{
 				Operations: []protocol.AccountAuthOperation{
 					&protocol.EnableAccountAuthOperation{
-						Authority: url.MustParse("foo/book0"),
+						Authority: protocol.AccountUrl("foo", "book0"),
 					},
 				},
 			}).
@@ -1574,10 +1574,10 @@ func TestAccountAuth(t *testing.T) {
 	check.Disable = true
 	_, _, err = n.Execute(func(send func(*protocol.Envelope)) {
 		exch := new(protocol.SendTokens)
-		exch.AddRecipient(n.ParseUrl("foo/bar/tokens"), big.NewInt(int64(68)))
+		exch.AddRecipient(protocol.AccountUrl("foo", "bar", "tokens"), big.NewInt(int64(68)))
 
 		send(newTxn("foo/tokens").
-			WithSigner(url.MustParse("foo/bar/book/1"), 1).
+			WithSigner(protocol.AccountUrl("foo", "bar", "book", "1"), 1).
 			WithBody(exch).
 			Initiate(protocol.SignatureTypeLegacyED25519, barKey).
 			Build())
@@ -1590,18 +1590,7 @@ func TestNetworkDefinition(t *testing.T) {
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	dn := nodes[subnets[0]][0]
 
-	batch := dn.db.Begin(true)
-	defer batch.Discard()
-	_, _, txnHash, err := indexing.Data(batch, protocol.DnUrl().JoinPath(protocol.Network)).GetLatest()
-	require.NoError(t, err)
-
-	entry, err := indexing.GetDataEntry(batch, txnHash)
-	require.NoError(t, err)
-
-	networkDefs := new(protocol.NetworkDefinition)
-	err = json.Unmarshal(entry.GetData()[0], &networkDefs)
-	require.NoError(t, err)
-
+	networkDefs := dn.exec.ActiveGlobals_TESTONLY().Network
 	require.NotEmpty(t, networkDefs.Subnets)
 	require.NotEmpty(t, networkDefs.Subnets[0].SubnetID)
 	require.NotEmpty(t, networkDefs.Subnets[0].ValidatorKeyHashes)

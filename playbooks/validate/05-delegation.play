@@ -23,20 +23,20 @@ Transaction(liteAddr).
 	Submit().Wait().Ok()
 Show("Create lite account ✔")
 
-ethanKey := GenerateKey("ethan")
-paulKey := GenerateKey("paul")
+ethanKey := GenerateKey("ethan.acme")
+paulKey := GenerateKey("paul.acme")
 txn1 := Transaction(liteAddr).
 	WithSigner(liteAddr).
-	CreateIdentity("ethan").
+	CreateIdentity("ethan.acme").
 		WithKey(ethanKey).
-		WithKeyBook("ethan/book").
+		WithKeyBook("ethan.acme/book").
 	Initiate(liteKey).
 	Submit()
 txn2 := Transaction(liteAddr).
 	WithSigner(liteAddr).
-	CreateIdentity("paul").
+	CreateIdentity("paul.acme").
 		WithKey(paulKey).
-		WithKeyBook("paul/book").
+		WithKeyBook("paul.acme/book").
 	Initiate(liteKey).
 	Submit()
 txn1.Wait().Ok()
@@ -45,13 +45,13 @@ Show("Create ADIs ✔")
 
 txn1 = Transaction(liteAddr).
 	WithSigner(liteAddr).
-	AddCredits("ethan/book/1", 10000).
+	AddCredits("ethan.acme/book/1", 10000).
 		Oracle(5).
 	Initiate(liteKey).
 	Submit()
 txn2 = Transaction(liteAddr).
 	WithSigner(liteAddr).
-	AddCredits("paul/book/1", 10000).
+	AddCredits("paul.acme/book/1", 10000).
 		Oracle(5).
 	Initiate(liteKey).
 	Submit()
@@ -59,19 +59,19 @@ txn1.Wait().Ok()
 txn2.Wait().Ok()
 Show("Add credits to key pages ✔")
 
-txn1 = Transaction("ethan").
-	WithSigner("ethan/book/1", 1).
-	CreateTokenAccount("ethan/tokens", "ACME").
+txn1 = Transaction("ethan.acme").
+	WithSigner("ethan.acme/book/1", 1).
+	CreateTokenAccount("ethan.acme/tokens", "ACME").
 	Initiate(ethanKey).
 	Submit()
-txn2 = Transaction("ethan/book/1").
-	WithSigner("ethan/book/1", 1).
+txn2 = Transaction("ethan.acme/book/1").
+	WithSigner("ethan.acme/book/1", 1).
 	UpdateKeyPage().
-		Add(KeyEntry().WithOwner("paul/book")).
+		Add(KeyEntry().WithOwner("paul.acme/book")).
 	Initiate(ethanKey).
 	Submit()
-txn3 := Transaction("ethan/book/1").
-	WithSigner("paul/book/1", 1).
+txn3 := Transaction("ethan.acme/book/1").
+	WithSigner("paul.acme/book/1", 1).
 	WithHash(txn2.Hash[:]).
 	Sign(paulKey).
 	Submit()
@@ -82,7 +82,7 @@ Show("Create token account and delegated key page entry ✔")
 Transaction(liteAddr).
 	WithSigner(liteAddr).
 	SendTokens().
-		To("ethan/tokens", 10).
+		To("ethan.acme/tokens", 10).
 	Initiate(liteKey).
 	Submit().Wait().Ok()
 Show("Fund token account ✔")
@@ -90,12 +90,12 @@ Show("Fund token account ✔")
 ## Send tokens using a delegated signature
 
 ```go{ id: 2 }
-Show(Transaction("ethan/tokens").
-	WithSigner("paul/book/1", 1).
-	WithDelegator("ethan/book/1").
+Show(Transaction("ethan.acme/tokens").
+	WithSigner("paul.acme/book/1", 1).
+	WithDelegator("ethan.acme/book/1").
 	SendTokens().
 		To(liteAddr, 1).
 	Initiate(paulKey).
 	Submit().Wait().Ok())
-Show(Get("ethan/tokens"))
+Show(Get("ethan.acme/tokens"))
 ```

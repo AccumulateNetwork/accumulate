@@ -313,13 +313,30 @@ func (r *Reader) ReadBigInt(n uint) (*big.Int, bool) {
 	return new(big.Int).SetBytes(v), true
 }
 
-// ReadUrl reads the value as a string.
+// ReadUrl reads the value as a URL.
 func (r *Reader) ReadUrl(n uint) (*url.URL, bool) {
 	s, ok := r.ReadString(n)
 	if !ok {
 		return nil, false
 	}
+	if s == "" {
+		return nil, true
+	}
 	v, err := url.Parse(s)
+	r.didRead(n, err, "failed to parse url")
+	return v, err == nil
+}
+
+// ReadTxid reads the value as a transaction ID.
+func (r *Reader) ReadTxid(n uint) (*url.TxID, bool) {
+	s, ok := r.ReadString(n)
+	if !ok {
+		return nil, false
+	}
+	if s == "" {
+		return nil, true
+	}
+	v, err := url.ParseTxID(s)
 	r.didRead(n, err, "failed to parse url")
 	return v, err == nil
 }

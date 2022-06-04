@@ -13,6 +13,9 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -123,5 +126,15 @@ func (m *JrpcMethods) Version(_ context.Context, params json.RawMessage) interfa
 func (m *JrpcMethods) Describe(_ context.Context, params json.RawMessage) interface{} {
 	res := new(DescriptionResponse)
 	res.Network = *m.Network
+
+	err := res.Values.Load(m.Network, func(account *url.URL, target interface{}) error {
+		return m.Database.View(func(batch *database.Batch) error {
+			return batch.Account(account).GetStateAs(target)
+		})
+	})
+	if err != nil {
+		res.Error = errors.Wrap(errors.StatusUnknown, err).(*errors.Error)
+	}
+
 	return res
 }

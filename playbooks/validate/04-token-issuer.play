@@ -22,18 +22,18 @@ Transaction(liteAcmeAddr).
 	Initiate(liteKey).
 	Submit().Wait().Ok()
 
-charlieKey := GenerateKey("charlie")
+charlieKey := GenerateKey("charlie.acme")
 Transaction(liteAcmeAddr).
 	WithSigner(liteAcmeAddr).
-	CreateIdentity("charlie").
+	CreateIdentity("charlie.acme").
 		WithKey(charlieKey).
-		WithKeyBook("charlie/book").
+		WithKeyBook("charlie.acme/book").
 	Initiate(liteKey).
 	Submit().Wait().Ok()
 
 Transaction(liteAcmeAddr).
 	WithSigner(liteAcmeAddr).
-	AddCredits("charlie/book/1", 2000).
+	AddCredits("charlie.acme/book/1", 2000).
 		Oracle(5).
 	Initiate(liteKey).
 	Submit().Wait().Ok()
@@ -53,20 +53,20 @@ Done
 ### Create token issuer
 
 ```go
-Show(Transaction("charlie").
-	WithSigner("charlie/book/1", 1).
-	CreateToken("charlie/token-issuer", "TOK", 5).
+Show(Transaction("charlie.acme").
+	WithSigner("charlie.acme/book/1", 1).
+	CreateToken("charlie.acme/token-issuer", "TOK", 5).
 	Initiate(charlieKey).
 	Submit().Wait().Ok())
-Show(Get("charlie/token-issuer"))
+Show(Get("charlie.acme/token-issuer"))
 ```
 
 ### Issue tokens
 
 ```go
-liteTokAddr := LiteAddress(liteKey, "charlie/token-issuer")
-Show(Transaction("charlie/token-issuer").
-	WithSigner("charlie/book/1", 1).
+liteTokAddr := LiteAddress(liteKey, "charlie.acme/token-issuer")
+Show(Transaction("charlie.acme/token-issuer").
+	WithSigner("charlie.acme/book/1", 1).
 	IssueTokens(liteTokAddr, "1.23").
 	Initiate(charlieKey).
 	Submit().Wait().Ok())
@@ -98,5 +98,5 @@ Show(Transaction(liteTokAddr).
 	Initiate(liteKey).
 	Submit().Wait().Ok())
 Show(Get(liteTokAddr))
-Show(Get("charlie/token-issuer"))
+Show(Get("charlie.acme/token-issuer"))
 ```

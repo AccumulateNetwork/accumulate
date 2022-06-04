@@ -6,7 +6,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/rpc/client"
 	coretypes "github.com/tendermint/tendermint/rpc/coretypes"
-	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -19,13 +18,14 @@ import (
 
 type router struct {
 	*Simulator
+	Router routing.Router
 }
 
 func (r router) RouteAccount(account *url.URL) (string, error) {
 	if subnet, ok := r.routingOverrides[account.IdentityAccountID32()]; ok {
 		return subnet, nil
 	}
-	return routing.RouteAccount(&config.Network{Subnets: r.Subnets}, account)
+	return r.Router.RouteAccount(account)
 }
 
 func (r router) Route(envs ...*protocol.Envelope) (string, error) {
