@@ -89,11 +89,6 @@ func (s *Builder) SetUrl(u *url.URL) *Builder {
 	return s
 }
 
-func (s *Builder) SetKeyPageUrl(bookUrl *url.URL, pageIndex uint64) *Builder {
-	s.Url = protocol.FormatKeyPageUrl(bookUrl, pageIndex)
-	return s
-}
-
 func (s *Builder) SetPrivateKey(privKey []byte) *Builder {
 	s.Signer = PrivateKey(privKey)
 	return s

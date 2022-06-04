@@ -154,7 +154,7 @@ func (b *bootstrap) Execute(st *chain.StateManager, tx *chain.Delivery) (protoco
 
 func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protocol.TransactionResult, error) {
 	b.nodeUrl = b.InitOpts.Network.NodeUrl()
-	b.authorityUrl = b.nodeUrl.JoinPath(protocol.ValidatorBook)
+	b.authorityUrl = b.nodeUrl.JoinPath(protocol.OperatorBook)
 	b.globals = new(core.GlobalValues)
 
 	// set the initial price to 1/5 fct price * 1/4 market cap dilution = 1/20 fct price
@@ -163,7 +163,7 @@ func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protoc
 	b.globals.Oracle.Price = uint64(protocol.InitialAcmeOracleValue)
 
 	b.globals.Globals = new(protocol.NetworkGlobals)
-	b.globals.Globals.ValidatorThreshold.Set(2, 3)
+	b.globals.Globals.OperatorAcceptThreshold.Set(2, 3)
 
 	if b.InitOpts.NetworkValidatorMap != nil {
 		b.globals.Network = b.buildNetworkDefinition()
@@ -238,15 +238,25 @@ func (b *bootstrap) createADI() {
 }
 
 func (b *bootstrap) createValidatorBook() {
-	uBook := b.authorityUrl
 	book := new(protocol.KeyBook)
-	book.Url = uBook
+	book.Url = b.nodeUrl.JoinPath(protocol.ValidatorBook)
 	book.BookType = protocol.BookTypeValidator
-	book.AddAuthority(uBook)
-	book.PageCount = 1
+	book.AddAuthority(b.authorityUrl)
+	book.PageCount = 2
 
-	page := createOperatorPage(uBook, 0, b.InitOpts.NetworkValidatorMap, true)
-	b.WriteRecords(book, page)
+	page1 := new(protocol.KeyPage)
+	page1.Url = protocol.FormatKeyPageUrl(book.Url, 0)
+	page1.AcceptThreshold = protocol.GetMOfN(len(b.InitOpts.Validators), protocol.FallbackValidatorThreshold)
+	page1.Version = 1
+	page1.Keys = make([]*protocol.KeySpec, 1)
+	spec := new(protocol.KeySpec)
+	spec.Delegate = b.authorityUrl
+	page1.Keys[0] = spec
+
+	page2 := createOperatorPage(book.Url, 1, b.InitOpts.NetworkValidatorMap, true)
+	blacklistTxsForPage(page2, protocol.TransactionTypeUpdateKeyPage, protocol.TransactionTypeUpdateAccountAuth)
+
+	b.WriteRecords(book, page1, page2)
 }
 
 func (b *bootstrap) createMainLedger() {
@@ -323,6 +333,23 @@ func (b *bootstrap) createRouting() error {
 	return nil
 }
 
+func (b *bootstrap) createGlobals() error {
+	//create a new Globals account
+	global := new(protocol.DataAccount)
+	global.Url = b.nodeUrl.JoinPath(protocol.Globals)
+	threshold := new(protocol.NetworkGlobals)
+	threshold.OperatorAcceptThreshold.Numerator = 2
+	threshold.OperatorAcceptThreshold.Denominator = 3
+	data, err := threshold.MarshalBinary()
+	if err != nil {
+		return errors.Format(errors.StatusInternalError, "marshal routing table: %w", err)
+	}
+
+	global.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
+	b.WriteRecords(global)
+	return nil
+}
+
 func (b *bootstrap) initDN() error {
 	b.createDNOperatorBook()
 
@@ -385,6 +412,7 @@ func (b *bootstrap) initBVN() error {
 func (b *bootstrap) createDNOperatorBook() {
 	book := new(protocol.KeyBook)
 	book.Url = b.nodeUrl.JoinPath(protocol.OperatorBook)
+	book.BookType = protocol.BookTypeOperator
 	book.AddAuthority(book.Url)
 	book.PageCount = 1
 
@@ -394,28 +422,29 @@ func (b *bootstrap) createDNOperatorBook() {
 
 func (b *bootstrap) createBVNOperatorBook(nodeUrl *url.URL, operators NetworkValidatorMap) {
 	book := new(protocol.KeyBook)
-	book.Url = nodeUrl.JoinPath(protocol.OperatorBook)
+	book.Url = b.nodeUrl.JoinPath(protocol.OperatorBook)
+	book.BookType = protocol.BookTypeOperator
 	book.AddAuthority(book.Url)
 	book.PageCount = 2
 
 	page1 := new(protocol.KeyPage)
 	page1.Url = protocol.FormatKeyPageUrl(book.Url, 0)
-	page1.AcceptThreshold = 1
+	page1.AcceptThreshold = protocol.GetMOfN(len(b.InitOpts.Validators), protocol.FallbackValidatorThreshold)
 	page1.Version = 1
 	page1.Keys = make([]*protocol.KeySpec, 1)
 	spec := new(protocol.KeySpec)
 	spec.Delegate = protocol.DnUrl().JoinPath(protocol.OperatorBook)
 	page1.Keys[0] = spec
 
-	page2 := createOperatorPage(book.Url, 1, operators, false)
+	page2 := createOperatorPage(book.Url, 1, b.InitOpts.NetworkValidatorMap, false)
 	blacklistTxsForPage(page2, protocol.TransactionTypeUpdateKeyPage, protocol.TransactionTypeUpdateAccountAuth)
-
 	b.WriteRecords(book, page1, page2)
 }
 
 func createOperatorPage(uBook *url.URL, pageIndex uint64, operators NetworkValidatorMap, validatorsOnly bool) *protocol.KeyPage {
 	page := new(protocol.KeyPage)
 	page.Url = protocol.FormatKeyPageUrl(uBook, pageIndex)
+	page.AcceptThreshold = protocol.GetMOfN(len(operators), protocol.FallbackValidatorThreshold)
 	page.Version = 1
 
 	if validatorsOnly {
@@ -451,7 +480,7 @@ func createOperatorPage(uBook *url.URL, pageIndex uint64, operators NetworkValid
 		}
 	}
 
-	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(page.Keys), protocol.FallbackValidatorThreshold)
+	page.AcceptThreshold = protocol.GetMOfN(len(page.Keys), protocol.FallbackValidatorThreshold)
 	return page
 }
 

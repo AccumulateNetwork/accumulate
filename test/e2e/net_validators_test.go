@@ -52,13 +52,13 @@ func TestUpdateValidators(t *testing.T) {
 	// for 4
 	g := new(core.GlobalValues)
 	g.Globals = new(NetworkGlobals)
-	g.Globals.ValidatorThreshold.Set(5, 12)
+	g.Globals.OperatorAcceptThreshold.Set(5, 12)
 	send(sim,
 		func(send func(*Envelope)) {
 			send(acctesting.NewTransaction().
 				WithPrincipal(dn.Executor.Network.NodeUrl(Globals)).
 				WithTimestampVar(&timestamp).
-				WithSigner(dn.Executor.Network.ValidatorPage(0), 1). // TODO move back to OperatorPage in or after AC-1402
+				WithSigner(dn.Executor.Network.DefaultOperatorPage(), 1).
 				WithBody(&WriteData{
 					Entry:        g.FormatGlobals(),
 					WriteToState: true,
@@ -76,9 +76,9 @@ func TestUpdateValidators(t *testing.T) {
 			body := new(AddValidator)
 			body.PubKey = nodeKeyAdd1[32:]
 			send(acctesting.NewTransaction().
-				WithPrincipal(dn.Executor.Network.NodeUrl(ValidatorBook)).
+				WithPrincipal(dn.Executor.Network.DefaultValidatorPage()).
 				WithTimestampVar(&timestamp).
-				WithSigner(validators, 1).
+				WithSigner(dn.Executor.Network.DefaultOperatorPage(), 1).
 				WithBody(body).
 				Initiate(SignatureTypeLegacyED25519, dn.Executor.Key).
 				Build())

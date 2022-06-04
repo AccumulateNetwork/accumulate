@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1408,6 +1409,259 @@ func DumpAccount(t *testing.T, batch *database.Batch, accountUrl *url.URL) {
 			seen[id32] = true
 		}
 	}
+}
+
+func TestUpdateValidators(t *testing.T) {
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
+	dn := nodes[subnets[0]][0]
+
+	network := dn.network
+	netUrl := network.NodeUrl()
+	vldKey1, vldKey2, vldKey3, vldKey4 := generateKey(), generateKey(), generateKey(), generateKey()
+	height := uint64(1)
+
+	signer := dn.GetKeyPage(dn.network.DefaultOperatorPage().String())
+	_, entry, ok := signer.EntryByKey(dn.key.PubKey().Bytes())
+	require.True(t, ok)
+	timestamp := entry.GetLastUsedOn()
+
+	// Update NetworkGlobals - use 5/12 so that M = 1 for 3 validators and M = 2 for 4
+	ng := new(protocol.NetworkGlobals)
+	ng.OperatorAcceptThreshold.Set(5, 12)
+	wd := new(protocol.WriteData)
+	d, err := ng.MarshalBinary()
+	require.NoError(t, err)
+	wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{d}}
+	dn.MustExecuteAndWait(func(send func(*Tx)) {
+		send(newTxn(netUrl.JoinPath(protocol.Globals).String()).
+			WithSigner(network.DefaultOperatorPage(), height).
+			WithBody(wd).
+			WithTimestampVar(&timestamp).
+			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
+			Build())
+	})
+
+	// Verify there is one validator (node key)
+	require.ElementsMatch(t, dn.client.Validators(), []crypto.PubKey{dn.key.PubKey()})
+
+	// Add a validator
+	addOperatorKey(t, dn, vldKey1, &timestamp, &height)
+	dn.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		body := new(protocol.AddValidator)
+		body.PubKey = vldKey1.PubKey().Bytes()
+		send(newTxn(dn.network.DefaultValidatorPage().String()).
+			WithSigner(network.DefaultOperatorPage(), height).
+			WithBody(body).
+			WithTimestampVar(&timestamp).
+			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
+			Build())
+	})
+
+	// Verify the validator was added
+	require.ElementsMatch(t, dn.client.Validators(), []crypto.PubKey{dn.key.PubKey(), vldKey1.PubKey()})
+
+	// Update a validator
+	addOperatorKey(t, dn, vldKey2, &timestamp, &height)
+	require.Equal(t, uint64(1), dn.GetKeyPage(network.DefaultOperatorPage().String()).AcceptThreshold)
+	dn.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		body := new(protocol.UpdateValidatorKey)
+
+		body.PubKey = vldKey1.PubKey().Bytes()
+		body.NewPubKey = vldKey2.PubKey().Bytes()
+
+		send(newTxn(dn.network.DefaultValidatorPage().String()).
+			WithSigner(network.DefaultOperatorPage(), height).
+			WithBody(body).
+			WithTimestampVar(&timestamp).
+			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
+			Build())
+	})
+
+	// Verify the validator was updated
+	require.ElementsMatch(t, dn.client.Validators(), []crypto.PubKey{dn.key.PubKey(), vldKey2.PubKey()})
+
+	// Add a third validator
+	addOperatorKey(t, dn, vldKey3, &timestamp, &height)
+	require.Equal(t, uint64(2), dn.GetKeyPage(network.DefaultOperatorPage().String()).AcceptThreshold)
+
+	txns := dn.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		body := new(protocol.AddValidator)
+		body.PubKey = vldKey3.PubKey().Bytes()
+		send(newTxn(dn.network.DefaultValidatorPage().String()).
+			WithSigner(network.DefaultOperatorPage(), height).
+			WithBody(body).
+			WithTimestampVar(&timestamp).
+			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
+			Build())
+	})
+	sign(dn, txns, vldKey2, height)
+
+	// Verify the validator was added
+	require.ElementsMatch(t, dn.client.Validators(), []crypto.PubKey{dn.key.PubKey(), vldKey2.PubKey(), vldKey3.PubKey()})
+
+	// Add a fourth operator, so the page threshold will become 2.
+	addOperatorKey(t, dn, vldKey4, &timestamp, &height, vldKey2)
+	require.Equal(t, uint64(2), dn.GetKeyPage(network.DefaultOperatorPage().String()).AcceptThreshold)
+
+	txns = dn.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		body := new(protocol.AddValidator)
+		body.PubKey = vldKey4.PubKey().Bytes()
+
+		send(newTxn(dn.network.DefaultValidatorPage().String()).
+			WithSigner(network.DefaultOperatorPage(), height).
+			WithBody(body).
+			WithTimestampVar(&timestamp).
+			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
+			Build())
+	})
+	sign(dn, txns, vldKey2, height)
+
+	// Verify the validator was added
+	require.ElementsMatch(t, dn.client.Validators(), []crypto.PubKey{dn.key.PubKey(), vldKey2.PubKey(), vldKey3.PubKey(), vldKey4.PubKey()})
+
+	// Remove validator
+	txns = dn.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		body := new(protocol.RemoveValidator)
+		body.PubKey = vldKey2.PubKey().Bytes()
+
+		send(newTxn(dn.network.DefaultValidatorPage().String()).
+			WithSigner(network.DefaultOperatorPage(), height).
+			WithBody(body).
+			WithTimestampVar(&timestamp).
+			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
+			Build())
+	})
+	sign(dn, txns, vldKey2, height)
+
+	// Verify the validator was removed
+	pubKeys := dn.client.Validators()
+	require.ElementsMatch(t, pubKeys, []crypto.PubKey{dn.key.PubKey(), vldKey3.PubKey(), vldKey4.PubKey()})
+
+}
+
+func addOperatorKey(t *testing.T, dn *FakeNode, oprKey tmed25519.PrivKey, timestamp *uint64, height *uint64, signKeys ...tmed25519.PrivKey) {
+	// See if we are going to need to sign and have enough keys
+	threshold := dn.GetKeyPage(dn.network.DefaultOperatorPage().String()).AcceptThreshold
+	nrKeys := uint64(len(signKeys))
+	require.Equalf(t, threshold-1, nrKeys, "we need %d extra signing keys but have %d", threshold-1, nrKeys)
+
+	txns := dn.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		op := new(protocol.AddKeyOperation)
+		keyHash := sha256.Sum256(oprKey.PubKey().Bytes())
+		op.Entry.KeyHash = keyHash[:]
+		body := new(protocol.UpdateKeyPage)
+		body.Operation = append(body.Operation, op)
+
+		oprPage := dn.network.DefaultOperatorPage()
+		send(newTxn(oprPage.String()).
+			WithSigner(oprPage, *height).
+			WithTimestampVar(timestamp).
+			WithBody(body).
+			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
+			Build())
+	})
+
+	// Execute signing
+	for _, signKey := range signKeys {
+		envHashes, _ := dn.MustExecute(func(send func(*protocol.Envelope)) {
+			send(acctesting.NewTransaction().
+				WithSigner(dn.network.DefaultOperatorPage(), *height).
+				WithTxnHash(txns[0][:]).
+				Sign(protocol.SignatureTypeED25519, signKey.Bytes()).
+				Build())
+		})
+		dn.MustWaitForTxns(convertIds32(envHashes...)...)
+	}
+
+	atomic.AddUint64(height, 1)
+}
+
+func sign(dn *FakeNode, txns [][32]byte, key tmed25519.PrivKey, height uint64) {
+	envHashes, _ := dn.MustExecute(func(send func(*protocol.Envelope)) {
+		send(acctesting.NewTransaction().
+			WithSigner(dn.network.DefaultOperatorPage(), height).
+			WithTxnHash(txns[0][:]).
+			Sign(protocol.SignatureTypeED25519, key.Bytes()).
+			Build())
+	})
+	dn.MustWaitForTxns(convertIds32(envHashes...)...)
+}
+
+func TestUpdateOperators(t *testing.T) {
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
+	dn := nodes[subnets[0]][0]
+	bvn := nodes[subnets[1]][0]
+
+	page := bvn.GetKeyPage("bvn-BVN0/operators/2")
+	require.Len(t, page.Keys, 1)
+
+	operators := protocol.FormatKeyPageUrl(dn.network.OperatorBook(), 0)
+	opKeyAdd := generateKey()
+	addKeyHash := sha256.Sum256(opKeyAdd.PubKey().Bytes())
+	dn.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		op := new(protocol.AddKeyOperation)
+		op.Entry.KeyHash = addKeyHash[:]
+		body := new(protocol.UpdateKeyPage)
+		body.Operation = append(body.Operation, op)
+
+		send(newTxn("dn/operators/1").
+			WithSigner(operators, 1).
+			WithBody(body).
+			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
+			Build())
+	})
+
+	// Give it a second for the DN to send its anchor
+	time.Sleep(time.Second * 1)
+
+	page = bvn.GetKeyPage("bvn-BVN0/operators/2")
+	require.Len(t, page.Keys, 2)
+	require.Equal(t, addKeyHash[:], page.Keys[1].PublicKeyHash)
+
+	opKeyUpd := generateKey()
+	updKeyHash := sha256.Sum256(opKeyUpd.PubKey().Bytes())
+	dn.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		op := new(protocol.UpdateKeyOperation)
+		op.OldEntry.KeyHash = addKeyHash[:]
+		op.NewEntry.KeyHash = updKeyHash[:]
+		body := new(protocol.UpdateKeyPage)
+		body.Operation = append(body.Operation, op)
+
+		send(newTxn("dn/operators/1").
+			WithSigner(operators, 2).
+			WithBody(body).
+			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
+			Build())
+	})
+
+	// Give it a second for the DN to send its anchor
+	time.Sleep(time.Second)
+
+	page = bvn.GetKeyPage("bvn-BVN0/operators/2")
+	require.Len(t, page.Keys, 2)
+	require.Equal(t, updKeyHash[:], page.Keys[1].PublicKeyHash)
+
+	dn.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		op := new(protocol.RemoveKeyOperation)
+		op.Entry.KeyHash = updKeyHash[:]
+		body := new(protocol.UpdateKeyPage)
+		body.Operation = append(body.Operation, op)
+
+		send(newTxn("dn/operators/1").
+			WithSigner(operators, 3).
+			WithBody(body).
+			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
+			Build())
+	})
+
+	// Give it a second for the DN to send its anchor
+	time.Sleep(time.Second)
+
+	page = bvn.GetKeyPage("bvn-BVN0/operators/2")
+	require.Len(t, page.Keys, 1)
+
 }
 
 func TestMultisig(t *testing.T) {

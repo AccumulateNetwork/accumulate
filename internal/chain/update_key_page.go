@@ -5,6 +5,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -119,6 +120,13 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 		if err != nil {
 			return nil, err
 		}
+	}
+
+	isDnOprBook := protocol.IsDnUrl(st.NodeUrl()) && page.KeyBook().Equal(st.Network.OperatorBook())
+	if isDnOprBook {
+		// Update the threshold
+		ratio := loadOperatorsThresholdRatio(st, st.NodeUrl(protocol.Globals))
+		page.AcceptThreshold = protocol.GetMOfN(len(page.Keys), ratio)
 	}
 
 	didUpdateKeyPage(page)
@@ -300,4 +308,21 @@ func getNewOwners(batch *database.Batch, transaction *protocol.Transaction) ([]*
 	}
 
 	return owners, nil
+}
+
+func loadOperatorsThresholdRatio(st *StateManager, url *url.URL) float64 {
+	entry, err := indexing.Data(st.batch, url).GetLatestEntry()
+	if err != nil {
+		st.logger.Error("Failed to get latest globals data entry", "error", err)
+		return protocol.FallbackValidatorThreshold
+	}
+
+	globals := new(protocol.NetworkGlobals)
+	err = globals.UnmarshalBinary(entry.GetData()[0])
+	if err != nil {
+		st.logger.Error("Failed to decode latest globals entry", "error", err)
+		return protocol.FallbackValidatorThreshold
+	}
+
+	return globals.OperatorAcceptThreshold.GetFloat()
 }

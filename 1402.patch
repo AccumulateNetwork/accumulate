@@ -1,0 +1,983 @@
+diff --git a/.idea/misc.xml b/.idea/misc.xml
+index d7c52716..28a804d8 100644
+--- a/.idea/misc.xml
++++ b/.idea/misc.xml
+@@ -3,9 +3,4 @@
+   <component name="JavaScriptSettings">
+     <option name="languageLevel" value="ES6" />
+   </component>
+-  <component name="SwUserDefinedSpecifications">
+-    <option name="specTypeByUrl">
+-      <map />
+-    </option>
+-  </component>
+ </project>
+\ No newline at end of file
+diff --git a/config/system_urls.go b/config/system_urls.go
+index 30dc620d..70d310f3 100644
+--- a/config/system_urls.go
++++ b/config/system_urls.go
+@@ -69,6 +69,11 @@ func (n *Network) ValidatorPage(index uint64) *url.URL {
+ 	return NetworkUrl{protocol.SubnetUrl(n.LocalSubnetID)}.ValidatorPage(index)
+ }
+ 
++// DefaultValidatorPage returns the URL of the default page of the subnet's validator key book.
++func (n *Network) DefaultValidatorPage() *url.URL {
++	return n.ValidatorPage(1)
++}
++
+ // OperatorBook returns the URL of the subnet's operator key book.
+ func (n *Network) OperatorBook() *url.URL {
+ 	return NetworkUrl{protocol.SubnetUrl(n.LocalSubnetID)}.OperatorBook()
+@@ -79,15 +84,15 @@ func (n *Network) OperatorPage(index uint64) *url.URL {
+ 	return NetworkUrl{protocol.SubnetUrl(n.LocalSubnetID)}.OperatorPage(index)
+ }
+ 
+-// DefaultValidatorPage returns the URL of the default page of the subnet operator key book.
+-func (n *Network) DefaultValidatorPage() *url.URL {
++// DefaultOperatorPage returns the URL of the default page of the subnet operator key book.
++func (n *Network) DefaultOperatorPage() *url.URL {
+ 	var index uint64
+ 	if n.Type == Directory {
+ 		index = 0
+ 	} else {
+-		index = 0 // 1 in AC-1402
++		index = 1
+ 	}
+-	return n.ValidatorPage(index)
++	return n.OperatorPage(index)
+ }
+ 
+ // AnchorPool returns the URL of the subnet's anchor pool.
+diff --git a/internal/abci/e2e_test.go b/internal/abci/e2e_test.go
+index 20da6ccd..528632b0 100644
+--- a/internal/abci/e2e_test.go
++++ b/internal/abci/e2e_test.go
+@@ -8,6 +8,7 @@ import (
+ 	"fmt"
+ 	"math"
+ 	"math/big"
++	"sync/atomic"
+ 	"testing"
+ 	"time"
+ 
+@@ -1414,121 +1415,178 @@ func DumpAccount(t *testing.T, batch *database.Batch, accountUrl *url.URL) {
+ func TestUpdateValidators(t *testing.T) {
+ 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+ 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
+-	n := nodes[subnets[0]][0]
++	dn := nodes[subnets[0]][0]
++
++	network := dn.network
++	netUrl := network.NodeUrl()
++	vldKey1, vldKey2, vldKey3, vldKey4 := generateKey(), generateKey(), generateKey(), generateKey()
++	height := uint64(1)
+ 
+-	netUrl := n.network.NodeUrl()
+-	validators := protocol.FormatKeyPageUrl(n.network.ValidatorBook(), 0)
+-	nodeKeyAdd1, nodeKeyAdd2, nodeKeyAdd3, nodeKeyUpd := generateKey(), generateKey(), generateKey(), generateKey()
++	signer := dn.GetKeyPage(dn.network.DefaultOperatorPage().String())
++	_, entry, ok := signer.EntryByKey(dn.key.PubKey().Bytes())
++	require.True(t, ok)
++	timestamp := entry.GetLastUsedOn()
+ 
+-	// Update NetworkGlobals - use 5/12 so that M = 1 for 3 validators and M = 2
+-	// for 4
++	// Update NetworkGlobals - use 5/12 so that M = 1 for 3 validators and M = 2 for 4
+ 	ng := new(protocol.NetworkGlobals)
+-	ng.ValidatorThreshold.Set(5, 12)
++	ng.OperatorAcceptThreshold.Set(5, 12)
+ 	wd := new(protocol.WriteData)
+ 	d, err := ng.MarshalBinary()
+ 	require.NoError(t, err)
+ 	wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{d}}
+-	n.MustExecuteAndWait(func(send func(*Tx)) {
++	dn.MustExecuteAndWait(func(send func(*Tx)) {
+ 		send(newTxn(netUrl.JoinPath(protocol.Globals).String()).
+-			WithSigner(n.network.ValidatorPage(0), 1). // TODO move back to OperatorPage in or after AC-1402
++			WithSigner(network.DefaultOperatorPage(), height).
+ 			WithBody(wd).
+-			Initiate(protocol.SignatureTypeLegacyED25519, n.key.Bytes()).
++			WithTimestampVar(&timestamp).
++			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
+ 			Build())
+ 	})
+ 
+ 	// Verify there is one validator (node key)
+-	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey()})
++	require.ElementsMatch(t, dn.client.Validators(), []crypto.PubKey{dn.key.PubKey()})
++
+ 	// Add a validator
+-	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
++	addOperatorKey(t, dn, vldKey1, &timestamp, &height)
++	dn.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+ 		body := new(protocol.AddValidator)
+-		body.PubKey = nodeKeyAdd1.PubKey().Bytes()
+-		send(newTxn(netUrl.JoinPath(protocol.ValidatorBook).String()).
+-			WithSigner(validators, 1).
++		body.PubKey = vldKey1.PubKey().Bytes()
++		send(newTxn(dn.network.DefaultValidatorPage().String()).
++			WithSigner(network.DefaultOperatorPage(), height).
+ 			WithBody(body).
+-			Initiate(protocol.SignatureTypeLegacyED25519, n.key.Bytes()).
++			WithTimestampVar(&timestamp).
++			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
+ 			Build())
+ 	})
+ 
+ 	// Verify the validator was added
+-	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey(), nodeKeyAdd1.PubKey()})
++	require.ElementsMatch(t, dn.client.Validators(), []crypto.PubKey{dn.key.PubKey(), vldKey1.PubKey()})
+ 
+ 	// Update a validator
+-	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
++	addOperatorKey(t, dn, vldKey2, &timestamp, &height)
++	require.Equal(t, uint64(1), dn.GetKeyPage(network.DefaultOperatorPage().String()).AcceptThreshold)
++	dn.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+ 		body := new(protocol.UpdateValidatorKey)
+ 
+-		body.PubKey = nodeKeyAdd1.PubKey().Bytes()
+-		body.NewPubKey = nodeKeyUpd.PubKey().Bytes()
++		body.PubKey = vldKey1.PubKey().Bytes()
++		body.NewPubKey = vldKey2.PubKey().Bytes()
+ 
+-		send(newTxn(netUrl.JoinPath(protocol.ValidatorBook).String()).
+-			WithSigner(validators, 2).
++		send(newTxn(dn.network.DefaultValidatorPage().String()).
++			WithSigner(network.DefaultOperatorPage(), height).
+ 			WithBody(body).
+-			Initiate(protocol.SignatureTypeLegacyED25519, n.key.Bytes()).
++			WithTimestampVar(&timestamp).
++			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
+ 			Build())
+ 	})
+ 
+ 	// Verify the validator was updated
+-	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey(), nodeKeyUpd.PubKey()})
++	require.ElementsMatch(t, dn.client.Validators(), []crypto.PubKey{dn.key.PubKey(), vldKey2.PubKey()})
+ 
+ 	// Add a third validator
+-	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
++	addOperatorKey(t, dn, vldKey3, &timestamp, &height)
++	require.Equal(t, uint64(2), dn.GetKeyPage(network.DefaultOperatorPage().String()).AcceptThreshold)
++
++	txns := dn.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+ 		body := new(protocol.AddValidator)
+-		body.PubKey = nodeKeyAdd2.PubKey().Bytes()
+-		send(newTxn(netUrl.JoinPath(protocol.ValidatorBook).String()).
+-			WithSigner(validators, 3).
++		body.PubKey = vldKey3.PubKey().Bytes()
++		send(newTxn(dn.network.DefaultValidatorPage().String()).
++			WithSigner(network.DefaultOperatorPage(), height).
+ 			WithBody(body).
+-			Initiate(protocol.SignatureTypeLegacyED25519, n.key.Bytes()).
++			WithTimestampVar(&timestamp).
++			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
+ 			Build())
+ 	})
++	sign(dn, txns, vldKey2, height)
+ 
+ 	// Verify the validator was added
+-	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey(), nodeKeyUpd.PubKey(), nodeKeyAdd2.PubKey()})
++	require.ElementsMatch(t, dn.client.Validators(), []crypto.PubKey{dn.key.PubKey(), vldKey2.PubKey(), vldKey3.PubKey()})
+ 
+-	// Verify the Validator threshold
+-	require.Equal(t, uint64(1), n.GetKeyPage(validators.String()).AcceptThreshold)
++	// Add a fourth operator, so the page threshold will become 2.
++	addOperatorKey(t, dn, vldKey4, &timestamp, &height, vldKey2)
++	require.Equal(t, uint64(2), dn.GetKeyPage(network.DefaultOperatorPage().String()).AcceptThreshold)
+ 
+-	// Add a fourth validator, so the page threshold will become 2
+-	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
++	txns = dn.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+ 		body := new(protocol.AddValidator)
+-		body.PubKey = nodeKeyAdd3.PubKey().Bytes()
++		body.PubKey = vldKey4.PubKey().Bytes()
+ 
+-		send(newTxn(netUrl.JoinPath(protocol.ValidatorBook).String()).
+-			WithSigner(validators, 4).
++		send(newTxn(dn.network.DefaultValidatorPage().String()).
++			WithSigner(network.DefaultOperatorPage(), height).
+ 			WithBody(body).
+-			Initiate(protocol.SignatureTypeLegacyED25519, n.key.Bytes()).
++			WithTimestampVar(&timestamp).
++			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
+ 			Build())
+ 	})
++	sign(dn, txns, vldKey2, height)
+ 
+ 	// Verify the validator was added
+-	require.ElementsMatch(t, n.client.Validators(), []crypto.PubKey{n.key.PubKey(), nodeKeyUpd.PubKey(), nodeKeyAdd2.PubKey(), nodeKeyAdd3.PubKey()})
++	require.ElementsMatch(t, dn.client.Validators(), []crypto.PubKey{dn.key.PubKey(), vldKey2.PubKey(), vldKey3.PubKey(), vldKey4.PubKey()})
+ 
+-	// Verify the Validator threshold
+-	require.Equal(t, uint64(2), n.GetKeyPage(validators.String()).AcceptThreshold)
+-
+-	// Remove a validator
+-	txns := n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
++	// Remove validator
++	txns = dn.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+ 		body := new(protocol.RemoveValidator)
+-		body.PubKey = nodeKeyUpd.PubKey().Bytes()
++		body.PubKey = vldKey2.PubKey().Bytes()
+ 
+-		send(newTxn(netUrl.JoinPath(protocol.ValidatorBook).String()).
+-			WithSigner(validators, 5).
++		send(newTxn(dn.network.DefaultValidatorPage().String()).
++			WithSigner(network.DefaultOperatorPage(), height).
+ 			WithBody(body).
+-			Initiate(protocol.SignatureTypeLegacyED25519, n.key.Bytes()).
++			WithTimestampVar(&timestamp).
++			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
+ 			Build())
+ 	})
++	sign(dn, txns, vldKey2, height)
+ 
+-	envHashes, _ := n.MustExecute(func(send func(*protocol.Envelope)) {
+-		send(acctesting.NewTransaction().
+-			WithSigner(validators, 5).
+-			WithTxnHash(txns[0][:]).
+-			Sign(protocol.SignatureTypeED25519, nodeKeyAdd2.Bytes()).
++	// Verify the validator was removed
++	pubKeys := dn.client.Validators()
++	require.ElementsMatch(t, pubKeys, []crypto.PubKey{dn.key.PubKey(), vldKey3.PubKey(), vldKey4.PubKey()})
++
++}
++
++func addOperatorKey(t *testing.T, dn *FakeNode, oprKey tmed25519.PrivKey, timestamp *uint64, height *uint64, signKeys ...tmed25519.PrivKey) {
++	// See if we are going to need to sign and have enough keys
++	threshold := dn.GetKeyPage(dn.network.DefaultOperatorPage().String()).AcceptThreshold
++	nrKeys := uint64(len(signKeys))
++	require.Equalf(t, threshold-1, nrKeys, "we need %d extra signing keys but have %d", threshold-1, nrKeys)
++
++	txns := dn.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
++		op := new(protocol.AddKeyOperation)
++		keyHash := sha256.Sum256(oprKey.PubKey().Bytes())
++		op.Entry.KeyHash = keyHash[:]
++		body := new(protocol.UpdateKeyPage)
++		body.Operation = append(body.Operation, op)
++
++		oprPage := dn.network.DefaultOperatorPage()
++		send(newTxn(oprPage.String()).
++			WithSigner(oprPage, *height).
++			WithTimestampVar(timestamp).
++			WithBody(body).
++			Initiate(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
+ 			Build())
+ 	})
+-	n.MustWaitForTxns(convertIds32(envHashes...)...)
+ 
+-	// Verify the validator was removed
+-	pubKeys := n.client.Validators()
+-	require.ElementsMatch(t, pubKeys, []crypto.PubKey{n.key.PubKey(), nodeKeyAdd2.PubKey(), nodeKeyAdd3.PubKey()})
++	// Execute signing
++	for _, signKey := range signKeys {
++		envHashes, _ := dn.MustExecute(func(send func(*protocol.Envelope)) {
++			send(acctesting.NewTransaction().
++				WithSigner(dn.network.DefaultOperatorPage(), *height).
++				WithTxnHash(txns[0][:]).
++				Sign(protocol.SignatureTypeED25519, signKey.Bytes()).
++				Build())
++		})
++		dn.MustWaitForTxns(convertIds32(envHashes...)...)
++	}
++
++	atomic.AddUint64(height, 1)
++}
+ 
++func sign(dn *FakeNode, txns [][32]byte, key tmed25519.PrivKey, height uint64) {
++	envHashes, _ := dn.MustExecute(func(send func(*protocol.Envelope)) {
++		send(acctesting.NewTransaction().
++			WithSigner(dn.network.DefaultOperatorPage(), height).
++			WithTxnHash(txns[0][:]).
++			Sign(protocol.SignatureTypeED25519, key.Bytes()).
++			Build())
++	})
++	dn.MustWaitForTxns(convertIds32(envHashes...)...)
+ }
+ 
+ func TestUpdateOperators(t *testing.T) {
+diff --git a/internal/block/block_begin.go b/internal/block/block_begin.go
+index 0330b48a..fab0f2aa 100644
+--- a/internal/block/block_begin.go
++++ b/internal/block/block_begin.go
+@@ -231,7 +231,7 @@ func (x *Executor) captureValueAsDataEntry(batch *database.Batch, internalAccoun
+ 	dataAccountUrl := x.Network.NodeUrl(internalAccountPath)
+ 
+ 	var signer protocol.Signer
+-	signerUrl := x.Network.ValidatorPage(0)
++	signerUrl := x.Network.DefaultOperatorPage()
+ 	err = batch.Account(signerUrl).GetStateAs(&signer)
+ 	if err != nil {
+ 		return err
+@@ -422,7 +422,7 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch) (bool, error
+ 		keySig, err := new(signing.Builder).
+ 			SetType(protocol.SignatureTypeED25519).
+ 			SetPrivateKey(x.Key).
+-			SetKeyPageUrl(x.Network.ValidatorBook(), 0).
++			SetUrl(x.Network.DefaultValidatorPage()).
+ 			SetVersion(1).
+ 			SetTimestamp(1).
+ 			Sign(hash)
+@@ -594,7 +594,7 @@ func (x *Executor) sendBlockAnchor(anchor protocol.TransactionBody, block uint64
+ 	keySig, err := new(signing.Builder).
+ 		SetType(protocol.SignatureTypeED25519).
+ 		SetPrivateKey(x.Key).
+-		SetKeyPageUrl(x.Network.ValidatorBook(), 0).
++		SetUrl(x.Network.DefaultValidatorPage()).
+ 		SetVersion(1).
+ 		Sign(txn.GetHash())
+ 	if err != nil {
+diff --git a/internal/block/query.go b/internal/block/query.go
+index 9191142d..07d15e24 100644
+--- a/internal/block/query.go
++++ b/internal/block/query.go
+@@ -909,7 +909,7 @@ func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove
+ 		keySig, err := new(signing.Builder).
+ 			SetType(protocol.SignatureTypeED25519).
+ 			SetPrivateKey(m.Key).
+-			SetKeyPageUrl(m.Network.ValidatorBook(), 0).
++			SetUrl(m.Network.DefaultValidatorPage()).
+ 			SetVersion(1).
+ 			SetTimestamp(1).
+ 			Sign(hash)
+diff --git a/internal/chain/_executor_test.go b/internal/chain/_executor_test.go
+index 10d62876..d59d6cc9 100644
+--- a/internal/chain/_executor_test.go
++++ b/internal/chain/_executor_test.go
+@@ -151,7 +151,7 @@ func TestSyntheticTransactionsAreAlwaysRecorded(t *testing.T) {
+ 	// Create a synthetic transaction where the origin does not exist
+ 	env := acctesting.NewTransaction().
+ 		WithPrincipal(url.MustParse("acc://account-that-does-not-exist")).
+-		WithSigner(exec.Network.ValidatorPage(0), 1).
++		WithSigner(exec.DefaultOperatorPage(), 1).
+ 		WithCurrentTimestamp().
+ 		WithBody(&protocol.SyntheticDepositCredits{
+ 			SyntheticOrigin: protocol.SyntheticOrigin{Cause: [32]byte{1}},
+diff --git a/internal/chain/update_key_page.go b/internal/chain/update_key_page.go
+index a7bf6a24..047d19b2 100644
+--- a/internal/chain/update_key_page.go
++++ b/internal/chain/update_key_page.go
+@@ -5,6 +5,7 @@ import (
+ 
+ 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+ 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
++	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
+ 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+ 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+ )
+@@ -121,6 +122,13 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *Delivery) (protocol.Transact
+ 		}
+ 	}
+ 
++	isDnOprBook := protocol.IsDnUrl(st.NodeUrl()) && page.KeyBook().Equal(st.Network.OperatorBook())
++	if isDnOprBook {
++		// Update the threshold
++		ratio := loadOperatorsThresholdRatio(st, st.NodeUrl(protocol.Globals))
++		page.AcceptThreshold = protocol.GetMOfN(len(page.Keys), ratio)
++	}
++
+ 	didUpdateKeyPage(page)
+ 	err = st.Update(page)
+ 	if err != nil {
+@@ -128,8 +136,8 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *Delivery) (protocol.Transact
+ 	}
+ 
+ 	// If we are the DN and the page is an operator book, broadcast the update to the BVNs
+-	if protocol.IsDnUrl(st.NodeUrl()) && page.KeyBook().Equal(st.NodeUrl().JoinPath(protocol.OperatorBook)) {
+-		err = operatorUpdatesToLedger(st, err, body)
++	if isDnOprBook {
++		err = operatorUpdatesToLedger(st, body.Operation)
+ 		if err != nil {
+ 			return nil, err
+ 		}
+@@ -137,14 +145,14 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *Delivery) (protocol.Transact
+ 	return nil, nil
+ }
+ 
+-func operatorUpdatesToLedger(st *StateManager, err error, body *protocol.UpdateKeyPage) error {
++func operatorUpdatesToLedger(st *StateManager, operations []protocol.KeyPageOperation) error {
+ 	var ledgerState *protocol.SystemLedger
+-	err = st.LoadUrlAs(st.NodeUrl().JoinPath(protocol.Ledger), &ledgerState)
++	err := st.LoadUrlAs(st.NodeUrl().JoinPath(protocol.Ledger), &ledgerState)
+ 	if err != nil {
+ 		return fmt.Errorf("unable to load main ledger: %w", err)
+ 	}
+ 
+-	for _, op := range body.Operation {
++	for _, op := range operations {
+ 		ledgerState.OperatorUpdates = append(ledgerState.OperatorUpdates, op)
+ 	}
+ 	err = st.Update(ledgerState)
+@@ -319,3 +327,20 @@ func getNewOwners(batch *database.Batch, transaction *protocol.Transaction) ([]*
+ 
+ 	return owners, nil
+ }
++
++func loadOperatorsThresholdRatio(st *StateManager, url *url.URL) float64 {
++	entry, err := indexing.Data(st.batch, url).GetLatestEntry()
++	if err != nil {
++		st.logger.Error("Failed to get latest globals data entry", "error", err)
++		return protocol.FallbackValidatorThreshold
++	}
++
++	globals := new(protocol.NetworkGlobals)
++	err = globals.UnmarshalBinary(entry.GetData()[0])
++	if err != nil {
++		st.logger.Error("Failed to decode latest globals entry", "error", err)
++		return protocol.FallbackValidatorThreshold
++	}
++
++	return globals.OperatorAcceptThreshold.GetFloat()
++}
+diff --git a/internal/chain/validators.go b/internal/chain/validators.go
+index 4beaaa85..73a88e18 100644
+--- a/internal/chain/validators.go
++++ b/internal/chain/validators.go
+@@ -6,8 +6,6 @@ import (
+ 
+ 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+ 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+-	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
+-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+ 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+ )
+ 
+@@ -21,14 +19,20 @@ var _ SignerValidator = (*AddValidator)(nil)
+ var _ SignerValidator = (*RemoveValidator)(nil)
+ var _ SignerValidator = (*UpdateValidatorKey)(nil)
+ 
+-func (checkValidatorSigner) SignerIsAuthorized(_ AuthDelegate, _ *database.Batch, _ *protocol.Transaction, signer protocol.Signer, _ bool) (fallback bool, err error) {
++func (checkValidatorSigner) SignerIsAuthorized(_ AuthDelegate, _ *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, _ bool) (fallback bool, err error) {
++	_, principalPageIdx, ok := protocol.ParseKeyPageUrl(transaction.Header.Principal)
++	if !ok {
++		return false, errors.Format(errors.StatusBadRequest, "principal is not a key page")
++	}
++
+ 	_, signerPageIdx, ok := protocol.ParseKeyPageUrl(signer.GetUrl())
+ 	if !ok {
+ 		return false, errors.Format(errors.StatusBadRequest, "signer is not a key page")
+ 	}
+ 
+-	if signerPageIdx > 1 {
+-		return false, fmt.Errorf("cannot modify validators with a lower priority key page")
++	// Lower indices are higher priority
++	if signerPageIdx > principalPageIdx {
++		return false, errors.Format(errors.StatusUnauthorized, "signer %v is lower priority than the principal %v", signer.GetUrl(), transaction.Header.Principal)
+ 	}
+ 
+ 	// Run the normal checks
+@@ -87,9 +91,6 @@ func addValidator(st *StateManager, env *Delivery) error {
+ 	key := &protocol.KeySpec{PublicKeyHash: keyHash[:]}
+ 	page.Keys = append(page.Keys, key)
+ 
+-	// Update the threshold
+-	ratio := loadValidatorsThresholdRatio(st, st.NodeUrl(protocol.Globals))
+-	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(page.Keys), ratio)
+ 	// Record the update
+ 	didUpdateKeyPage(page)
+ 	err = st.Update(page)
+@@ -128,10 +129,13 @@ func removeValidator(st *StateManager, env *Delivery) error {
+ 	// Remove the key hash from the key page
+ 	page.Keys = append(page.Keys[:index], page.Keys[index+1:]...)
+ 
++	/*  This no longer does anything because the signing is now governed by the operator book
++	TODO Remove when sure nothing will be governed by validtor books
+ 	// Update the threshold
+-
+ 	ratio := loadValidatorsThresholdRatio(st, st.NodeUrl(protocol.Globals))
+-	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(page.Keys), ratio)
++	page.AcceptThreshold = protocol.GetMOfN(len(page.Keys), ratio)
++	*/
++
+ 	// Record the update
+ 	didUpdateKeyPage(page)
+ 	err = st.Update(page)
+@@ -189,9 +193,14 @@ func updateValidator(st *StateManager, env *Delivery) error {
+ // checkValidatorTransaction implements common checks for validator
+ // transactions.
+ func checkValidatorTransaction(st *StateManager, env *Delivery) (*protocol.KeyPage, error) {
+-	validatorBookUrl := env.Transaction.Header.Principal
+-	if !st.NodeUrl().Equal(validatorBookUrl.RootIdentity()) {
+-		return nil, fmt.Errorf("invalid principal: must be %s, got %s", st.NodeUrl(), validatorBookUrl)
++	validatorPageUrl := env.Transaction.Header.Principal
++	if !st.NodeUrl().Equal(validatorPageUrl.RootIdentity()) {
++		return nil, fmt.Errorf("invalid principal: must be %s, got %s", st.NodeUrl(), validatorPageUrl)
++	}
++
++	validatorBookUrl, _, ok := protocol.ParseKeyPageUrl(validatorPageUrl)
++	if !ok {
++		return nil, errors.Format(errors.StatusBadRequest, "principal is not a key page")
+ 	}
+ 
+ 	var book *protocol.KeyBook
+@@ -204,29 +213,11 @@ func checkValidatorTransaction(st *StateManager, env *Delivery) (*protocol.KeyPa
+ 		return nil, fmt.Errorf("the key book is not of a validator book type")
+ 	}
+ 
+-	pageUrl := protocol.FormatKeyPageUrl(validatorBookUrl, 0)
+ 	var page *protocol.KeyPage
+-	err = st.LoadUrlAs(pageUrl, &page)
++	err = st.LoadUrlAs(validatorPageUrl, &page)
+ 	if err != nil {
+-		return nil, fmt.Errorf("unable to load %s: %v", pageUrl, err)
++		return nil, fmt.Errorf("unable to load %s: %v", validatorPageUrl, err)
+ 	}
+ 
+ 	return page, nil
+ }
+-
+-func loadValidatorsThresholdRatio(st *StateManager, url *url.URL) float64 {
+-	entry, err := indexing.Data(st.batch, url).GetLatestEntry()
+-	if err != nil {
+-		st.logger.Error("Failed to get latest globals data entry", "error", err)
+-		return protocol.FallbackValidatorThreshold
+-	}
+-
+-	globals := new(protocol.NetworkGlobals)
+-	err = globals.UnmarshalBinary(entry.GetData()[0])
+-	if err != nil {
+-		st.logger.Error("Failed to decode latest globals entry", "error", err)
+-		return protocol.FallbackValidatorThreshold
+-	}
+-
+-	return globals.ValidatorThreshold.GetFloat()
+-}
+diff --git a/internal/genesis/bootstrap.go b/internal/genesis/bootstrap.go
+index 517773bf..2ca9c6f0 100644
+--- a/internal/genesis/bootstrap.go
++++ b/internal/genesis/bootstrap.go
+@@ -142,7 +142,7 @@ func (b *bootstrap) Execute(st *chain.StateManager, tx *chain.Delivery) (protoco
+ 
+ func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protocol.TransactionResult, error) {
+ 	b.nodeUrl = b.InitOpts.Network.NodeUrl()
+-	b.authorityUrl = b.nodeUrl.JoinPath(protocol.ValidatorBook)
++	b.authorityUrl = b.nodeUrl.JoinPath(protocol.OperatorBook)
+ 
+ 	b.createADI()
+ 	b.createValidatorBook()
+@@ -197,7 +197,7 @@ func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protoc
+ 		txn := new(protocol.Transaction)
+ 		txn.Header.Principal = wd.Account
+ 		txn.Body = body
+-		sigs, err := b.sign(txn, b.Network.DefaultValidatorPage(), &timestamp)
++		sigs, err := b.sign(txn, b.Network.DefaultOperatorPage(), &timestamp)
+ 		if err != nil {
+ 			return nil, err
+ 		}
+@@ -247,15 +247,25 @@ func (b *bootstrap) createADI() {
+ }
+ 
+ func (b *bootstrap) createValidatorBook() {
+-	uBook := b.authorityUrl
+ 	book := new(protocol.KeyBook)
+-	book.Url = uBook
++	book.Url = b.nodeUrl.JoinPath(protocol.ValidatorBook)
+ 	book.BookType = protocol.BookTypeValidator
+-	book.AddAuthority(uBook)
+-	book.PageCount = 1
++	book.AddAuthority(b.authorityUrl)
++	book.PageCount = 2
+ 
+-	page := createOperatorPage(uBook, 0, b.InitOpts.Validators, true)
+-	b.WriteRecords(book, page)
++	page1 := new(protocol.KeyPage)
++	page1.Url = protocol.FormatKeyPageUrl(book.Url, 0)
++	page1.AcceptThreshold = protocol.GetMOfN(len(b.InitOpts.Validators), protocol.FallbackValidatorThreshold)
++	page1.Version = 1
++	page1.Keys = make([]*protocol.KeySpec, 1)
++	spec := new(protocol.KeySpec)
++	spec.Delegate = b.authorityUrl
++	page1.Keys[0] = spec
++
++	page2 := createOperatorPage(book.Url, 1, b.InitOpts.Validators, true)
++	blacklistTxsForPage(page2, protocol.TransactionTypeUpdateKeyPage, protocol.TransactionTypeUpdateAccountAuth)
++
++	b.WriteRecords(book, page1, page2)
+ }
+ 
+ func (b *bootstrap) createMainLedger(oraclePrice uint64) {
+@@ -324,8 +334,8 @@ func (b *bootstrap) createGlobals() error {
+ 	global.Url = b.nodeUrl.JoinPath(protocol.Globals)
+ 	wd := new(protocol.WriteData)
+ 	threshold := new(protocol.NetworkGlobals)
+-	threshold.ValidatorThreshold.Numerator = 2
+-	threshold.ValidatorThreshold.Denominator = 3
++	threshold.OperatorAcceptThreshold.Numerator = 2
++	threshold.OperatorAcceptThreshold.Denominator = 3
+ 	data, err := threshold.MarshalBinary()
+ 	if err != nil {
+ 		return err
+@@ -377,7 +387,7 @@ func (b *bootstrap) initBVN() error {
+ 		panic(fmt.Errorf("%q is not a valid subnet ID: %v", network.LocalSubnetID, err))
+ 	}
+ 
+-	b.createBVNOperatorBook(b.nodeUrl, b.InitOpts.Validators)
++	b.createBVNOperatorBook()
+ 
+ 	subnet, err := routing.RouteAccount(&network, protocol.FaucetUrl)
+ 	if err == nil && subnet == network.LocalSubnetID {
+@@ -412,6 +422,7 @@ func (b *bootstrap) initBVN() error {
+ func (b *bootstrap) createDNOperatorBook() {
+ 	book := new(protocol.KeyBook)
+ 	book.Url = b.nodeUrl.JoinPath(protocol.OperatorBook)
++	book.BookType = protocol.BookTypeOperator
+ 	book.AddAuthority(book.Url)
+ 	book.PageCount = 1
+ 
+@@ -419,31 +430,31 @@ func (b *bootstrap) createDNOperatorBook() {
+ 	b.WriteRecords(book, page)
+ }
+ 
+-func (b *bootstrap) createBVNOperatorBook(nodeUrl *url.URL, operators []tmtypes.GenesisValidator) {
++func (b *bootstrap) createBVNOperatorBook() {
+ 	book := new(protocol.KeyBook)
+-	book.Url = nodeUrl.JoinPath(protocol.OperatorBook)
++	book.Url = b.nodeUrl.JoinPath(protocol.OperatorBook)
++	book.BookType = protocol.BookTypeOperator
+ 	book.AddAuthority(book.Url)
+ 	book.PageCount = 2
+ 
+ 	page1 := new(protocol.KeyPage)
+ 	page1.Url = protocol.FormatKeyPageUrl(book.Url, 0)
+-	page1.AcceptThreshold = protocol.GetValidatorsMOfN(len(operators), protocol.FallbackValidatorThreshold)
++	page1.AcceptThreshold = protocol.GetMOfN(len(b.InitOpts.Validators), protocol.FallbackValidatorThreshold)
+ 	page1.Version = 1
+ 	page1.Keys = make([]*protocol.KeySpec, 1)
+ 	spec := new(protocol.KeySpec)
+ 	spec.Delegate = protocol.DnUrl().JoinPath(protocol.OperatorBook)
+ 	page1.Keys[0] = spec
+ 
+-	page2 := createOperatorPage(book.Url, 1, operators, false)
++	page2 := createOperatorPage(book.Url, 1, b.InitOpts.Validators, false)
+ 	blacklistTxsForPage(page2, protocol.TransactionTypeUpdateKeyPage, protocol.TransactionTypeUpdateAccountAuth)
+-
+ 	b.WriteRecords(book, page1, page2)
+ }
+ 
+ func createOperatorPage(uBook *url.URL, pageIndex uint64, operators []tmtypes.GenesisValidator, validatorsOnly bool) *protocol.KeyPage {
+ 	page := new(protocol.KeyPage)
+ 	page.Url = protocol.FormatKeyPageUrl(uBook, pageIndex)
+-	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(operators), protocol.FallbackValidatorThreshold)
++	page.AcceptThreshold = protocol.GetMOfN(len(operators), protocol.FallbackValidatorThreshold)
+ 	page.Version = 1
+ 
+ 	for _, operator := range operators {
+diff --git a/pkg/client/signing/builder.go b/pkg/client/signing/builder.go
+index 48148fee..ce64a7c1 100644
+--- a/pkg/client/signing/builder.go
++++ b/pkg/client/signing/builder.go
+@@ -48,11 +48,6 @@ func (s *Builder) SetUrl(u *url.URL) *Builder {
+ 	return s
+ }
+ 
+-func (s *Builder) SetKeyPageUrl(bookUrl *url.URL, pageIndex uint64) *Builder {
+-	s.Url = protocol.FormatKeyPageUrl(bookUrl, pageIndex)
+-	return s
+-}
+-
+ func (s *Builder) SetPrivateKey(privKey []byte) *Builder {
+ 	s.Signer = PrivateKey(privKey)
+ 	return s
+diff --git a/protocol/enums.yml b/protocol/enums.yml
+index aef916e8..a78c24e0 100644
+--- a/protocol/enums.yml
++++ b/protocol/enums.yml
+@@ -293,3 +293,6 @@ BookType:
+   Validator:
+     value: 0x01
+     description: is a validator key book
++  Operator:
++    value: 0x02
++    description: Operator key book
+diff --git a/protocol/enums_gen.go b/protocol/enums_gen.go
+index 575f6287..1fc775c7 100644
+--- a/protocol/enums_gen.go
++++ b/protocol/enums_gen.go
+@@ -77,6 +77,9 @@ const BookTypeNormal BookType = 0
+ // BookTypeValidator is a validator key book.
+ const BookTypeValidator BookType = 1
+ 
++// BookTypeOperator Operator key book.
++const BookTypeOperator BookType = 2
++
+ // ChainTypeUnknown is used when the chain type is not known.
+ const ChainTypeUnknown ChainType = 0
+ 
+@@ -635,7 +638,7 @@ func (v BookType) GetEnumValue() uint64 { return uint64(v) }
+ func (v *BookType) SetEnumValue(id uint64) bool {
+ 	u := BookType(id)
+ 	switch u {
+-	case BookTypeNormal, BookTypeValidator:
++	case BookTypeNormal, BookTypeValidator, BookTypeOperator:
+ 		*v = u
+ 		return true
+ 	default:
+@@ -650,6 +653,8 @@ func (v BookType) String() string {
+ 		return "normal"
+ 	case BookTypeValidator:
+ 		return "validator"
++	case BookTypeOperator:
++		return "operator"
+ 	default:
+ 		return fmt.Sprintf("BookType:%d", v)
+ 	}
+@@ -662,6 +667,8 @@ func BookTypeByName(name string) (BookType, bool) {
+ 		return BookTypeNormal, true
+ 	case "validator":
+ 		return BookTypeValidator, true
++	case "operator":
++		return BookTypeOperator, true
+ 	default:
+ 		return 0, false
+ 	}
+diff --git a/protocol/general.yml b/protocol/general.yml
+index 5dcbc25c..14e4c59f 100644
+--- a/protocol/general.yml
++++ b/protocol/general.yml
+@@ -164,7 +164,7 @@ KeySpec:
+ 
+ NetworkGlobals:
+   fields:
+-    - name: ValidatorThreshold
++    - name: OperatorAcceptThreshold
+       type: Rational
+       marshal-as: reference
+ 
+diff --git a/protocol/protocol.go b/protocol/protocol.go
+index 1e1b4f6c..559b1493 100644
+--- a/protocol/protocol.go
++++ b/protocol/protocol.go
+@@ -464,8 +464,8 @@ func IndexChain(name string, major bool) string {
+ 	return "minor-" + name + "-index"
+ }
+ 
+-func GetValidatorsMOfN(validatorCount int, ratio float64) uint64 {
+-	return uint64(math.Round(ratio * float64(validatorCount)))
++func GetMOfN(count int, ratio float64) uint64 {
++	return uint64(math.Round(ratio * float64(count)))
+ }
+ 
+ const rootAnchorSuffix = "-root"
+diff --git a/protocol/signature.go b/protocol/signature.go
+index 1111e8ef..136780e5 100644
+--- a/protocol/signature.go
++++ b/protocol/signature.go
+@@ -116,7 +116,7 @@ func ETHaddress(pubKey []byte) string {
+ }
+ 
+ func netVal(u *url.URL) *url.URL {
+-	return FormatKeyPageUrl(u.JoinPath(ValidatorBook), 0)
++	return FormatKeyPageUrl(u.JoinPath(ValidatorBook), 1)
+ }
+ 
+ func SignatureDidInitiate(sig Signature, txnInitHash []byte) bool {
+diff --git a/protocol/types_gen.go b/protocol/types_gen.go
+index aa7c6bb0..21e98a9e 100644
+--- a/protocol/types_gen.go
++++ b/protocol/types_gen.go
+@@ -439,9 +439,9 @@ type NetworkDefinition struct {
+ }
+ 
+ type NetworkGlobals struct {
+-	fieldsSet          []bool
+-	ValidatorThreshold Rational `json:"validatorThreshold,omitempty" form:"validatorThreshold" query:"validatorThreshold" validate:"required"`
+-	extraData          []byte
++	fieldsSet               []bool
++	OperatorAcceptThreshold Rational `json:"operatorAcceptThreshold,omitempty" form:"operatorAcceptThreshold" query:"operatorAcceptThreshold" validate:"required"`
++	extraData               []byte
+ }
+ 
+ type Object struct {
+@@ -1730,7 +1730,7 @@ func (v *NetworkDefinition) CopyAsInterface() interface{} { return v.Copy() }
+ func (v *NetworkGlobals) Copy() *NetworkGlobals {
+ 	u := new(NetworkGlobals)
+ 
+-	u.ValidatorThreshold = *(&v.ValidatorThreshold).Copy()
++	u.OperatorAcceptThreshold = *(&v.OperatorAcceptThreshold).Copy()
+ 
+ 	return u
+ }
+@@ -3389,7 +3389,7 @@ func (v *NetworkDefinition) Equal(u *NetworkDefinition) bool {
+ }
+ 
+ func (v *NetworkGlobals) Equal(u *NetworkGlobals) bool {
+-	if !((&v.ValidatorThreshold).Equal(&u.ValidatorThreshold)) {
++	if !((&v.OperatorAcceptThreshold).Equal(&u.OperatorAcceptThreshold)) {
+ 		return false
+ 	}
+ 
+@@ -6971,15 +6971,15 @@ func (v *NetworkDefinition) IsValid() error {
+ }
+ 
+ var fieldNames_NetworkGlobals = []string{
+-	1: "ValidatorThreshold",
++	1: "OperatorAcceptThreshold",
+ }
+ 
+ func (v *NetworkGlobals) MarshalBinary() ([]byte, error) {
+ 	buffer := new(bytes.Buffer)
+ 	writer := encoding.NewWriter(buffer)
+ 
+-	if !((v.ValidatorThreshold).Equal(new(Rational))) {
+-		writer.WriteValue(1, &v.ValidatorThreshold)
++	if !((v.OperatorAcceptThreshold).Equal(new(Rational))) {
++		writer.WriteValue(1, &v.OperatorAcceptThreshold)
+ 	}
+ 
+ 	_, _, err := writer.Reset(fieldNames_NetworkGlobals)
+@@ -6994,9 +6994,9 @@ func (v *NetworkGlobals) IsValid() error {
+ 	var errs []string
+ 
+ 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+-		errs = append(errs, "field ValidatorThreshold is missing")
+-	} else if (v.ValidatorThreshold).Equal(new(Rational)) {
+-		errs = append(errs, "field ValidatorThreshold is not set")
++		errs = append(errs, "field OperatorAcceptThreshold is missing")
++	} else if (v.OperatorAcceptThreshold).Equal(new(Rational)) {
++		errs = append(errs, "field OperatorAcceptThreshold is not set")
+ 	}
+ 
+ 	switch len(errs) {
+@@ -11200,7 +11200,7 @@ func (v *NetworkGlobals) UnmarshalBinaryFrom(rd io.Reader) error {
+ 	reader := encoding.NewReader(rd)
+ 
+ 	if x := new(Rational); reader.ReadValue(1, x.UnmarshalBinary) {
+-		v.ValidatorThreshold = *x
++		v.OperatorAcceptThreshold = *x
+ 	}
+ 
+ 	seen, err := reader.Reset(fieldNames_NetworkGlobals)
+diff --git a/scripts/ci/validate-admin.sh b/scripts/ci/validate-admin.sh
+index f0443f58..20412d0d 100755
+--- a/scripts/ci/validate-admin.sh
++++ b/scripts/ci/validate-admin.sh
+@@ -18,8 +18,9 @@ function nodePrivKey {
+ 
+ section "Setup"
+ if which go >/dev/null || ! which accumulate >/dev/null; then
+-  echo "Installing CLI"
++  echo "Installing CLI & daemon"
+   go install ./cmd/accumulate
++  go install ./cmd/accumulated
+   export PATH="${PATH}:$(go env GOPATH)/bin"
+ fi
+ [ -z "${MNEMONIC}" ] || accumulate key import mnemonic ${MNEMONIC} --use-unencrypted-wallet
+@@ -32,22 +33,19 @@ if [ -f "$(nodePrivKey 0)" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -ge "3" ];
+   section "Add a new DN validator"
+ 
+   # NUM_DNNS already contains the next node number (which starts counting at 0)
+-  accumulated init node "$NUM_DNNS" tcp://dn-0:26656 --listen=tcp://127.0.1.100:26656 -w "$DN_NODES_DIR" --skip-version-check --no-website
++  accumulated init node "$NUM_DNNS" tcp://dn-0:26656 --listen=tcp://127.0.1.100:26656 -w "$DN_NODES_DIR" --genesis-doc="${DN_NODES_DIR}/Node0/config/genesis.json" --skip-version-check --no-website
+ 
+   pubkey=$(jq -re .pub_key.value "$(nodePrivKey $NUM_DNNS)")
+   pubkey=$(echo $pubkey | base64 -d | od -t x1 -An)
+   declare -g hexPubKey=$(echo $pubkey | tr -d ' ')
+ 
+   # Register new validator
+-  TXID=$(cli-tx validator add dn/validators "$(nodePrivKey 0)" $hexPubKey)
++  TXID=$(cli-tx validator add dn/validators/2 "$(nodePrivKey 0)" $hexPubKey)
+   wait-for-tx $TXID
+ 
+-  echo Current keypage dn/validators/1
+-  accumulate --use-unencrypted-wallet page get acc://dn/validators/1
+-
+   # Sign the required number of times
+   for ((sigNr = 1; sigNr < $(sigCount); sigNr++)); do
+-    wait-for cli-tx-sig tx sign dn/validators "$(nodePrivKey $sigNr)" $TXID
++    wait-for cli-tx-sig tx sign dn/operators "$(nodePrivKey $sigNr)" $TXID
+   done
+ 
+   # Start the new validator and increment NUM_DMNS
+@@ -55,10 +53,29 @@ if [ -f "$(nodePrivKey 0)" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -ge "3" ];
+   declare -g ACCPID=$!
+ 
+   # Increment NUM_DNNS so sigCount returns an updated result
+-  declare -g NUM_DNNS=$((NUM_DNNS + 1))
++  #  declare -g NUM_DNNS=$((NUM_DNNS + 1))  The node is initialized from a genesis doc, the key for th new node is not in there so we won't get an additional key in the validator book
+ 
+-  echo Updated keypage dn/validators/1
+-  accumulate --use-unencrypted-wallet page get acc://dn/validators/1
++  echo Updated keypage dn/validators/2
++  accumulate --use-unencrypted-wallet page get acc://dn/validators/2
++fi
++
++section "Add a key to the operator book"
++if [ -f "$(nodePrivKey 0)" ]; then
++
++  wait-for cli-tx page key add acc://dn/operators/1 "$(nodePrivKey 0)" $hexPubKey
++  KEY_ADDED_DN=$(accumulate --use-unencrypted-wallet page get -j dn/operators/1) | jq -re .data.keys[2].publicKey
++  echo "sleeping for 5 seconds (wait for anchor)"
++  sleep 5
++  KEY_ADDED_BVN=$(accumulate --use-unencrypted-wallet page get -j bvn-BVN0/operators/2) | jq -re .data.keys[2].publicKey
++  [[ $KEY_ADDED_DN == $KEY_ADDED_BVN ]] || die "operator-2 was not sent to the BVN"
++
++  echo Current keypage dn/validators/2
++  accumulate --use-unencrypted-wallet page get acc://dn/validators/2
++  echo Current keypage dn/operators/1
++  accumulate --use-unencrypted-wallet page get acc://dn/operators/1
++else
++  echo -e '\033[1;31mCannot test the operator book: private validator key not found\033[0m'
++  echo
+ fi
+ 
+ section "Update oracle price to \$0.0501. Oracle price has precision of 4 decimals"
+@@ -68,7 +85,8 @@ if [ -f "$(nodePrivKey 0)" ]; then
+ 
+   # Sign the required number of times
+   for ((sigNr = 1; sigNr < $(sigCount); sigNr++)); do
+-    wait-for cli-tx-sig tx sign dn/validators "$(nodePrivKey $sigNr)" $TXID
++        echo sigNr: "$sigNr"
++    wait-for cli-tx-sig tx sign dn/operators "$(nodePrivKey $sigNr)" $TXID
+   done
+   accumulate --use-unencrypted-wallet -j tx get $TXID | jq -re .status.pending 1>/dev/null && die "Transaction is pending"
+   accumulate --use-unencrypted-wallet -j tx get $TXID | jq -re .status.delivered 1>/dev/null || die "Transaction was not delivered"
+@@ -81,20 +99,6 @@ else
+   echo
+ fi
+ 
+-section "Add a key to the operator book"
+-if [ -f "$(nodePrivKey 0)" ]; then
+-  ensure-key operator-2
+-
+-  wait-for cli-tx page key add acc://dn/operators/1 "$(nodePrivKey 0)" operator-2
+-  KEY_ADDED_DN=$(accumulate --use-unencrypted-wallet page get -j dn/operators/1) | jq -re .data.keys[2].publicKey
+-  echo "sleeping for 5 seconds (wait for anchor)"
+-  sleep 5
+-  KEY_ADDED_BVN=$(accumulate --use-unencrypted-wallet page get -j bvn-BVN0/operators/2) | jq -re .data.keys[2].publicKey
+-  [[ $KEY_ADDED_DN == $KEY_ADDED_BVN ]] || die "operator-2 was not sent to the BVN"
+-else
+-  echo -e '\033[1;31mCannot test the operator book: private validator key not found\033[0m'
+-  echo
+-fi
+ 
+ section "Query votes chain"
+ if [ -f "$(nodePrivKey 0)" ]; then
+@@ -117,12 +121,12 @@ fi
+ 
+ if [ ! -z "${ACCPID}" ]; then
+   section "Shutdown dynamic validator"
+-  TXID=$(cli-tx validator remove dn/validators "$(nodePrivKey 0)" "$(nodePrivKey 3)")
++  TXID=$(cli-tx validator remove dn/validators/2 "$(nodePrivKey 0)" "$(nodePrivKey 3)")
+   wait-for-tx $TXID
+ 
+   # Sign the required number of times
+   for ((sigNr = 1; sigNr < $(sigCount); sigNr++)); do
+-    wait-for cli-tx-sig tx sign dn/validators "$(nodePrivKey $sigNr)" $TXID
++    wait-for cli-tx-sig tx sign dn/operators "$(nodePrivKey $sigNr)" $TXID
+   done
+   accumulate --use-unencrypted-wallet -j tx get $TXID | jq -re .status.pending 1>/dev/null && die "Transaction is pending"
+   accumulate --use-unencrypted-wallet -j tx get $TXID | jq -re .status.delivered 1>/dev/null || die "Transaction was not delivered"
+diff --git a/test/e2e/intranet_test.go b/test/e2e/intranet_test.go
+index aee01362..415659fd 100644
+--- a/test/e2e/intranet_test.go
++++ b/test/e2e/intranet_test.go
+@@ -60,7 +60,7 @@ func TestOracleDistribution(t *testing.T) {
+ 	bvn0 := sim.Subnet(sim.Subnets[1].ID)
+ 
+ 	// TODO move back to OperatorPage in or after AC-1402
+-	signer := simulator.GetAccount[*KeyPage](sim, dn.Executor.Network.ValidatorPage(0))
++	signer := simulator.GetAccount[*KeyPage](sim, dn.Executor.Network.DefaultOperatorPage())
+ 	_, entry, ok := signer.EntryByKey(dn.Executor.Key[32:])
+ 	require.True(t, ok)
+ 	timestamp = entry.GetLastUsedOn()
