@@ -33,7 +33,7 @@ func (b *Batch) CommitBpt() error {
 	bpt := pmt.NewBPTManager(b.store)
 
 	for k, v := range b.bptEntries {
-		bpt.InsertKV(k, v)
+		bpt.InsertKV(k, k, v)
 	}
 
 	err := bpt.Bpt.Update()

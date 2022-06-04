@@ -55,8 +55,7 @@ func (b *BPT) WalkRange(found *bool, node *BptNode, count int, key [32]byte, val
 				return //                                             because we use the last key to get the
 			} //                                                      next range
 			value := new(Value)            //                       Otherwise copy the value out of the BPT
-			value.Key = v.Key              //                       and stuff it in the values list
-			value.Hash = v.Hash            //
+			value.Copy(v)
 			values = append(values, value) //
 			return                         //
 		}
