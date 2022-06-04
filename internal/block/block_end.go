@@ -2,7 +2,6 @@ package block
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -43,8 +42,10 @@ func (m *Executor) EndBlock(block *Block) error {
 		return errors.Format(errors.StatusUnknown, "load system ledger: %w", err)
 	}
 
-	// Set active oracle from pending
-	ledgerState.ActiveOracle = ledgerState.PendingOracle
+	// Update active globals
+	if !m.isGenesis && !m.globals.Active.Equal(&m.globals.Pending) {
+		m.globals.Active = *m.globals.Pending.Copy()
+	}
 
 	m.logger.Debug("Committing",
 		"height", block.Index,
@@ -68,10 +69,7 @@ func (m *Executor) EndBlock(block *Block) error {
 	txChainEntries := make([]*txChainIndexEntry, 0, len(block.State.ChainUpdates.Entries))
 
 	// Process chain updates
-	accountSeen := map[string]bool{}
 	for _, u := range block.State.ChainUpdates.Entries {
-		accountSeen[u.Account.String()] = true
-
 		// Do not create root chain or BPT entries for the ledger
 		if ledgerUrl.Equal(u.Account) {
 			continue
@@ -199,30 +197,6 @@ func (m *Executor) EndBlock(block *Block) error {
 	return nil
 }
 
-// updateOraclePrice reads the oracle from the oracle account and updates the
-// value on the ledger.
-func (m *Executor) updateOraclePrice(block *Block) (uint64, error) {
-	e, err := indexing.Data(block.Batch, protocol.PriceOracle()).GetLatestEntry()
-	if err != nil {
-		return 0, fmt.Errorf("cannot retrieve latest oracle data entry: %v", err)
-	}
-
-	o := protocol.AcmeOracle{}
-	if e.GetData() == nil {
-		return 0, fmt.Errorf("no data in oracle data account")
-	}
-	err = json.Unmarshal(e.GetData()[0], &o)
-	if err != nil {
-		return 0, fmt.Errorf("cannot unmarshal oracle data entry %x", e.GetData()[0])
-	}
-
-	if o.Price == 0 {
-		return 0, fmt.Errorf("invalid oracle price, must be > 0")
-	}
-
-	return o.Price, nil
-}
-
 func (m *Executor) createLocalDNReceipt(block *Block, rootChain *database.Chain, synthAnchorIndex uint64) error {
 	rootReceipt, err := rootChain.Receipt(int64(synthAnchorIndex), rootChain.Height()-1)
 	if err != nil {
@@ -302,10 +276,10 @@ func (x *Executor) requestMissingSyntheticTransactions(ledger *protocol.Syntheti
 
 		// For each pending synthetic transaction
 		var batch jsonrpc2.BatchRequest
-		for i, hash := range subnet.Pending {
-			// If we know the hash we must have a local copy (so we don't need
-			// to fetch it)
-			if hash != ([32]byte{}) {
+		for i, txid := range subnet.Pending {
+			// If we know the ID we must have a local copy (so we don't need to
+			// fetch it)
+			if txid != nil {
 				continue
 			}
 

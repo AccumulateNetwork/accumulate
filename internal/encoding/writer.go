@@ -218,7 +218,20 @@ func (w *Writer) WriteBigInt(n uint, v *big.Int) {
 
 // WriteUrl writes the value as a string.
 func (w *Writer) WriteUrl(n uint, v *url.URL) {
-	w.WriteString(n, v.String())
+	if v == nil {
+		w.WriteString(n, "")
+	} else {
+		w.WriteString(n, v.String())
+	}
+}
+
+// WriteTxid writes the value as a string.
+func (w *Writer) WriteTxid(n uint, v *url.TxID) {
+	if v == nil {
+		w.WriteString(n, "")
+	} else {
+		w.WriteString(n, v.String())
+	}
 }
 
 // WriteValue marshals the value and writes it as a byte slice.

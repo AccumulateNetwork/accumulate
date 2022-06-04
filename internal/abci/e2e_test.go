@@ -356,7 +356,8 @@ func TestCreateLiteDataAccount(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify the entry hash in the transaction result
-	txStatus, err := batch.Transaction(synthIds.Hashes[0][:]).GetStatus()
+	h := synthIds.Entries[0].Hash()
+	txStatus, err := batch.Transaction(h[:]).GetStatus()
 	require.NoError(t, err)
 	require.IsType(t, (*protocol.WriteDataResult)(nil), txStatus.Result)
 	txResult := txStatus.Result.(*protocol.WriteDataResult)
@@ -703,7 +704,8 @@ func TestSendTokensToBadRecipient(t *testing.T) {
 	// The synthetic transaction should fail
 	res, err := n.api.QueryTx(txnHashes[0][:], time.Second, true, api.QueryOptions{})
 	require.NoError(t, err)
-	res, err = n.api.QueryTx(res.SyntheticTxids[0][:], time.Second, true, api.QueryOptions{})
+	h := res.Produced[0].Hash()
+	res, err = n.api.QueryTx(h[:], time.Second, true, api.QueryOptions{})
 	require.NoError(t, err)
 	require.Equal(t, protocol.ErrorCodeNotFound.GetEnumValue(), res.Status.Code)
 
@@ -761,7 +763,7 @@ func TestAddCreditsBurnAcme(t *testing.T) {
 	require.NoError(t, ledger.GetStateAs(&ledgerState))
 	//Credits I should have received
 	credits := big.NewInt(protocol.CreditUnitsPerFiatUnit)                // want to obtain credits
-	credits.Mul(credits, big.NewInt(int64(ledgerState.ActiveOracle)))     // fiat units / acme
+	credits.Mul(credits, big.NewInt(int64(n.GetOraclePrice())))           // fiat units / acme
 	credits.Mul(credits, big.NewInt(acmeToSpendOnCredits))                // acme the user wants to spend
 	credits.Div(credits, big.NewInt(int64(protocol.AcmeOraclePrecision))) // adjust the precision of oracle to real units
 	credits.Div(credits, big.NewInt(int64(protocol.AcmePrecision)))       // adjust the precision of acme to spend to real units
@@ -1354,7 +1356,7 @@ func TestInvalidDeposit(t *testing.T) {
 
 	id := n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.SyntheticDepositTokens)
-		body.Source = n.network.NodeUrl()
+		body.Cause = n.network.NodeUrl().WithTxID([32]byte{1})
 		body.Token = protocol.AccountUrl("foo2", "tokens")
 		body.Amount.SetUint64(123)
 
@@ -1588,18 +1590,7 @@ func TestNetworkDefinition(t *testing.T) {
 	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
 	dn := nodes[subnets[0]][0]
 
-	batch := dn.db.Begin(true)
-	defer batch.Discard()
-	_, _, txnHash, err := indexing.Data(batch, protocol.DnUrl().JoinPath(protocol.Network)).GetLatest()
-	require.NoError(t, err)
-
-	entry, err := indexing.GetDataEntry(batch, txnHash)
-	require.NoError(t, err)
-
-	networkDefs := new(protocol.NetworkDefinition)
-	err = json.Unmarshal(entry.GetData()[0], &networkDefs)
-	require.NoError(t, err)
-
+	networkDefs := dn.exec.ActiveGlobals_TESTONLY().Network
 	require.NotEmpty(t, networkDefs.Subnets)
 	require.NotEmpty(t, networkDefs.Subnets[0].SubnetID)
 	require.NotEmpty(t, networkDefs.Subnets[0].ValidatorKeyHashes)

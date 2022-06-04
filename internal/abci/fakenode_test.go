@@ -43,6 +43,7 @@ type FakeNode struct {
 	t       testing.TB
 	db      *database.Database
 	network *config.Describe
+	exec    *block.Executor
 	app     abcitypes.Application
 	client  *acctesting.FakeTendermint
 	key     crypto.PrivKey
@@ -166,11 +167,11 @@ func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Da
 }
 
 func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connections.ConnectionManager, doGenesis bool) *FakeNode {
-	n.router = &routing.RouterInstance{
-		Network:           &n.network.Network,
-		ConnectionManager: connMgr,
-	}
-	mgr, err := block.NewNodeExecutor(block.ExecutorOptions{
+	var err error
+	n.router, _, err = routing.NewSimpleRouter(&n.network.Network, connMgr)
+	require.NoError(n.t, err)
+
+	n.exec, err = block.NewNodeExecutor(block.ExecutorOptions{
 		Logger:  n.logger,
 		Key:     n.key.Bytes(),
 		Network: *n.network,
@@ -179,7 +180,7 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 	n.Require().NoError(err)
 
 	n.app = abci.NewAccumulator(abci.AccumulatorOptions{
-		Executor: mgr,
+		Executor: n.exec,
 		EventBus: events.NewBus(nil),
 		DB:       n.db,
 		Logger:   n.logger,
@@ -221,7 +222,6 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 		GenesisTime:         time.Now(),
 		NetworkValidatorMap: n.netValMap,
 		Logger:              n.logger,
-		Router:              n.router,
 		Validators: []tmtypes.GenesisValidator{
 			{PubKey: n.key.PubKey()},
 		},
@@ -386,7 +386,12 @@ func (n *FakeNode) waitForTxns(cause []byte, ignorePending bool, ids ...[]byte) 
 		if err != nil {
 			return fmt.Errorf("Failed to query TX %X (%v)", id, err)
 		}
-		err = n.waitForTxns(id, true, convertIds32(res.SyntheticTxids...)...)
+		ids := make([][]byte, len(res.Produced))
+		for i, id := range res.Produced {
+			id := id.Hash()
+			ids[i] = id[:]
+		}
+		err = n.waitForTxns(id, true, ids...)
 		if err != nil {
 			return err
 		}
@@ -508,13 +513,7 @@ func (n *FakeNode) GetKeyPage(url string) *protocol.KeyPage {
 }
 
 func (n *FakeNode) GetOraclePrice() uint64 {
-	n.t.Helper()
-	batch := n.db.Begin(true)
-	defer batch.Discard()
-	ledger := batch.Account(n.network.NodeUrl(protocol.Ledger))
-	var ledgerState *protocol.SystemLedger
-	require.NoError(n.t, ledger.GetStateAs(&ledgerState))
-	return ledgerState.ActiveOracle
+	return n.exec.ActiveGlobals_TESTONLY().Oracle.Price
 }
 
 func (n *FakeNode) GetTokenIssuer(url string) *protocol.TokenIssuer {

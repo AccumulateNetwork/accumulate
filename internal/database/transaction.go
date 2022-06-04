@@ -169,8 +169,8 @@ func (t *Transaction) newSigSet(signer *url.URL, writable bool) (*SignatureSet, 
 
 // GetSyntheticTxns loads the IDs of synthetic transactions produced by the
 // transaction.
-func (t *Transaction) GetSyntheticTxns() (*protocol.HashSet, error) {
-	v := new(protocol.HashSet)
+func (t *Transaction) GetSyntheticTxns() (*protocol.TxIdSet, error) {
+	v := new(protocol.TxIdSet)
 	err := t.batch.getValuePtr(t.key.Synthetic(), v, &v, true)
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
 		return nil, err
@@ -180,14 +180,14 @@ func (t *Transaction) GetSyntheticTxns() (*protocol.HashSet, error) {
 
 // PutSyntheticTxns stores the IDs of synthetic transactions produced by the
 // transaction.
-func (t *Transaction) PutSyntheticTxns(v *protocol.HashSet) error {
+func (t *Transaction) PutSyntheticTxns(v *protocol.TxIdSet) error {
 	t.batch.putValue(t.key.Synthetic(), v)
 	return nil
 }
 
 // AddSyntheticTxns is a convenience method that calls GetSyntheticTxns, adds
 // the IDs, and calls PutSyntheticTxns.
-func (t *Transaction) AddSyntheticTxns(txids ...[32]byte) error {
+func (t *Transaction) AddSyntheticTxns(txids ...*url.TxID) error {
 	set, err := t.GetSyntheticTxns()
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
 		return err

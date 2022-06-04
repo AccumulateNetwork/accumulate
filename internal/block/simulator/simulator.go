@@ -144,7 +144,9 @@ func (s *Simulator) SetRouteFor(account *url.URL, subnet string) {
 }
 
 func (s *Simulator) Router() routing.Router {
-	return router{s}
+	r, _, err := routing.NewSimpleRouter(&config.Network{Subnets: s.Subnets}, nil)
+	require.NoError(s, err)
+	return router{s, r}
 }
 
 func (s *Simulator) Subnet(id string) *ExecEntry {
@@ -390,8 +392,9 @@ func (s *Simulator) WaitForTransactionFlow(statusCheck func(*protocol.Transactio
 	status.For = *(*[32]byte)(txnHash)
 	statuses := []*protocol.TransactionStatus{status}
 	transactions := []*protocol.Transaction{state.Transaction}
-	for _, id := range synth.Hashes {
+	for _, id := range synth.Entries {
 		// Wait for synthetic transactions to be delivered
+		id := id.Hash()
 		st, txn := s.WaitForTransactionFlow(func(status *protocol.TransactionStatus) bool {
 			return status.Delivered
 		}, id[:]) //nolint:rangevarref
