@@ -31,7 +31,7 @@ func TestProofADI(t *testing.T) {
 	// Create ADI
 	n.MustExecuteAndWait(func(send func(*Tx)) {
 		adi := new(protocol.CreateIdentity)
-		adi.Url = n.ParseUrl("RoadRunner")
+		adi.Url = protocol.AccountUrl("RoadRunner")
 		var err error
 		adi.KeyBookUrl, err = url.Parse(fmt.Sprintf("%s/book0", adi.Url))
 		require.NoError(t, err)
@@ -47,17 +47,17 @@ func TestProofADI(t *testing.T) {
 	require.Equal(t, keyHash[:], n.GetKeyPage("RoadRunner/book0/1").Keys[0].PublicKeyHash)
 
 	batch = n.db.Begin(true)
-	require.NoError(t, acctesting.AddCredits(batch, n.ParseUrl("RoadRunner/book0/1"), initialCredits))
+	require.NoError(t, acctesting.AddCredits(batch, protocol.AccountUrl("RoadRunner", "book0", "1"), initialCredits))
 	require.NoError(t, batch.Commit())
 
 	// Create ADI token account
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		tac := new(protocol.CreateTokenAccount)
-		tac.Url = n.ParseUrl("RoadRunner/Baz")
+		tac.Url = protocol.AccountUrl("RoadRunner", "Baz")
 		tac.TokenUrl = protocol.AcmeUrl()
 		send(newTxn("RoadRunner").
 			WithBody(tac).
-			WithSigner(url.MustParse("RoadRunner/book0/1"), 1).
+			WithSigner(protocol.AccountUrl("RoadRunner", "book0", "1"), 1).
 			Initiate(protocol.SignatureTypeLegacyED25519, adiKey).
 			Build())
 	})

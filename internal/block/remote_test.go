@@ -11,7 +11,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -35,7 +34,7 @@ func SetupForRemoteSignatures(sim *simulator.Simulator, timestamp *uint64, alice
 	aliceTm := tmed25519.PrivKey(alice)
 	aliceAcmeUrl := acctesting.AcmeLiteAddressTmPriv(aliceTm)
 	aliceUrl := aliceAcmeUrl.RootIdentity()
-	bobUrl, charlieUrl := url.MustParse("bob"), url.MustParse("charlie")
+	bobUrl, charlieUrl := protocol.AccountUrl("bob"), protocol.AccountUrl("charlie")
 
 	sim.SetRouteFor(aliceUrl, "BVN0")
 	sim.SetRouteFor(bobUrl, "BVN1")
@@ -148,7 +147,7 @@ func TestRemoteSignatures_SignPending(t *testing.T) {
 	alice := acctesting.GenerateKey(t.Name())
 	aliceAcmeUrl := acctesting.AcmeLiteAddressTmPriv(tmed25519.PrivKey(alice))
 	aliceUrl := aliceAcmeUrl.RootIdentity()
-	bobUrl, charlieUrl := url.MustParse("bob"), url.MustParse("charlie")
+	bobUrl, charlieUrl := protocol.AccountUrl("bob"), protocol.AccountUrl("charlie")
 	bobKey, charlieKey := acctesting.GenerateKey(), acctesting.GenerateKey()
 
 	// Force the accounts onto different BVNs
@@ -203,7 +202,7 @@ func TestRemoteSignatures_SameBVN(t *testing.T) {
 	alice := acctesting.GenerateKey(t.Name())
 	aliceAcmeUrl := acctesting.AcmeLiteAddressTmPriv(tmed25519.PrivKey(alice))
 	aliceUrl := aliceAcmeUrl.RootIdentity()
-	bobUrl, charlieUrl := url.MustParse("bob"), url.MustParse("charlie")
+	bobUrl, charlieUrl := protocol.AccountUrl("bob"), protocol.AccountUrl("charlie")
 	bobKey, charlieKey := acctesting.GenerateKey(), acctesting.GenerateKey()
 
 	// Force the accounts onto the same BVN
@@ -258,7 +257,7 @@ func TestRemoteSignatures_Initiate(t *testing.T) {
 	alice := acctesting.GenerateKey(t.Name())
 	aliceAcmeUrl := acctesting.AcmeLiteAddressTmPriv(tmed25519.PrivKey(alice))
 	aliceUrl := aliceAcmeUrl.RootIdentity()
-	bobUrl, charlieUrl := url.MustParse("bob"), url.MustParse("charlie")
+	bobUrl, charlieUrl := protocol.AccountUrl("bob"), protocol.AccountUrl("charlie")
 	bobKey := acctesting.GenerateKey(t.Name(), bobUrl)
 	charlieKey1 := acctesting.GenerateKey(t.Name(), charlieUrl, 1)
 	charlieKey2 := acctesting.GenerateKey(t.Name(), charlieUrl, 2)
@@ -275,9 +274,8 @@ func TestRemoteSignatures_Initiate(t *testing.T) {
 	updateAccount(sim, charlieUrl.JoinPath("book", "1"), func(p *KeyPage) {
 		hash2 := sha256.Sum256(charlieKey2[32:])
 		hash3 := sha256.Sum256(charlieKey3[32:])
-		p.Keys = append(p.Keys,
-			&KeySpec{PublicKeyHash: hash2[:]},
-			&KeySpec{PublicKeyHash: hash3[:]})
+		p.AddKeySpec(&KeySpec{PublicKeyHash: hash2[:]})
+		p.AddKeySpec(&KeySpec{PublicKeyHash: hash3[:]})
 		p.AcceptThreshold = 2
 	})
 
@@ -330,7 +328,7 @@ func TestRemoteSignatures_Singlesig(t *testing.T) {
 	alice := acctesting.GenerateKey(t.Name())
 	aliceAcmeUrl := acctesting.AcmeLiteAddressTmPriv(tmed25519.PrivKey(alice))
 	aliceUrl := aliceAcmeUrl.RootIdentity()
-	bobUrl, charlieUrl := url.MustParse("bob"), url.MustParse("charlie")
+	bobUrl, charlieUrl := protocol.AccountUrl("bob"), protocol.AccountUrl("charlie")
 	bobKey, charlieKey := acctesting.GenerateKey(), acctesting.GenerateKey()
 
 	// Force the accounts onto different BVNs

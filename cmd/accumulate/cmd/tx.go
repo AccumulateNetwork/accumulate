@@ -245,7 +245,7 @@ func GetTX(hash string) (string, error) {
 		return "", err
 	}
 
-	if TxWaitSynth == 0 || len(res.SyntheticTxids) == 0 {
+	if TxWaitSynth == 0 || len(res.Produced) == 0 {
 		return out, nil
 	}
 
@@ -254,8 +254,8 @@ func GetTX(hash string) (string, error) {
 	}
 
 	errg := new(errgroup.Group)
-	for _, txid := range res.SyntheticTxids {
-		txid := txid // See docs/developer/rangevarref.md
+	for _, txid := range res.Produced {
+		txid := txid.Hash()
 		errg.Go(func() error {
 			res, err := getTX(txid[:], TxWaitSynth, true)
 			if err != nil {
@@ -358,20 +358,24 @@ func CreateTX(sender string, args []string) (string, error) {
 	return dispatchTxAndPrintResponse(send, nil, u, signer)
 }
 
-func waitForTxn(hash []byte, wait time.Duration, ignorePending bool) (*api2.TransactionQueryResponse, error) {
+func waitForTxn(hash []byte, wait time.Duration, ignorePending bool) ([]*api2.TransactionQueryResponse, error) {
+	var queryResponses []*api2.TransactionQueryResponse
 	queryRes, err := getTX(hash, wait, ignorePending)
 	if err != nil {
 		return nil, err
 	}
-	if queryRes.SyntheticTxids != nil {
-		for _, txid := range queryRes.SyntheticTxids {
-			_, err := waitForTxn(txid[:], wait, true) //nolint:rangevarref
+	queryResponses = append(queryResponses, queryRes)
+	if queryRes.Produced != nil {
+		for _, txid := range queryRes.Produced {
+			txid := txid.Hash()
+			resp, err := waitForTxn(txid[:], wait, true)
 			if err != nil {
 				return nil, err
 			}
+			queryResponses = append(queryResponses, resp...)
 		}
 	}
-	return queryRes, nil
+	return queryResponses, nil
 }
 
 func ExecuteTX(sender string, args []string) (string, error) {

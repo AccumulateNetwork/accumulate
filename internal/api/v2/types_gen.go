@@ -13,7 +13,9 @@ import (
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	errors2 "gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
@@ -64,7 +66,9 @@ type DataEntrySetQuery struct {
 }
 
 type DescriptionResponse struct {
-	Network   config.Network `json:"network,omitempty" form:"network" query:"network" validate:"required"`
+	Network   config.Network    `json:"network,omitempty" form:"network" query:"network" validate:"required"`
+	Values    core.GlobalValues `json:"values,omitempty" form:"values" query:"values" validate:"required"`
+	Error     *errors2.Error    `json:"error,omitempty" form:"error" query:"error" validate:"required"`
 	extraData []byte
 }
 
@@ -220,10 +224,11 @@ type TransactionQueryResponse struct {
 	Data            interface{}                 `json:"data,omitempty" form:"data" query:"data" validate:"required"`
 	Origin          *url.URL                    `json:"origin,omitempty" form:"origin" query:"origin" validate:"required"`
 	TransactionHash []byte                      `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash" validate:"required"`
+	Txid            *url.TxID                   `json:"txid,omitempty" form:"txid" query:"txid" validate:"required"`
 	Transaction     *protocol.Transaction       `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
 	Signatures      []protocol.Signature        `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
 	Status          *protocol.TransactionStatus `json:"status,omitempty" form:"status" query:"status" validate:"required"`
-	SyntheticTxids  [][32]byte                  `json:"syntheticTxids,omitempty" form:"syntheticTxids" query:"syntheticTxids" validate:"required"`
+	Produced        []*url.TxID                 `json:"produced,omitempty" form:"produced" query:"produced" validate:"required"`
 	Receipts        []*query.TxReceipt          `json:"receipts,omitempty" form:"receipts" query:"receipts" validate:"required"`
 	SignatureBooks  []*SignatureBook            `json:"signatureBooks,omitempty" form:"signatureBooks" query:"signatureBooks" validate:"required"`
 	extraData       []byte
@@ -252,6 +257,7 @@ type TxRequest struct {
 
 type TxResponse struct {
 	TransactionHash []byte      `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash" validate:"required"`
+	Txid            *url.TxID   `json:"txid,omitempty" form:"txid" query:"txid" validate:"required"`
 	SignatureHashes [][]byte    `json:"signatureHashes,omitempty" form:"signatureHashes" query:"signatureHashes" validate:"required"`
 	SimpleHash      []byte      `json:"simpleHash,omitempty" form:"simpleHash" query:"simpleHash" validate:"required"`
 	Code            uint64      `json:"code,omitempty" form:"code" query:"code" validate:"required"`
@@ -562,6 +568,20 @@ func (v *DataEntrySetQuery) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *DescriptionResponse) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Network config.Network    `json:"network,omitempty"`
+		Subnet  config.Network    `json:"subnet,omitempty"`
+		Values  core.GlobalValues `json:"values,omitempty"`
+		Error   *errors2.Error    `json:"error,omitempty"`
+	}{}
+	u.Network = v.Network
+	u.Subnet = v.Network
+	u.Values = v.Values
+	u.Error = v.Error
+	return json.Marshal(&u)
+}
+
 func (v *DirectoryQuery) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Url          *url.URL `json:"url,omitempty"`
@@ -795,11 +815,12 @@ func (v *TransactionQueryResponse) MarshalJSON() ([]byte, error) {
 		Origin          *url.URL                                           `json:"origin,omitempty"`
 		Sponsor         *url.URL                                           `json:"sponsor,omitempty"`
 		TransactionHash *string                                            `json:"transactionHash,omitempty"`
-		Txid            *string                                            `json:"txid,omitempty"`
+		Txid            *url.TxID                                          `json:"txid,omitempty"`
 		Transaction     *protocol.Transaction                              `json:"transaction,omitempty"`
 		Signatures      encoding.JsonUnmarshalListWith[protocol.Signature] `json:"signatures,omitempty"`
 		Status          *protocol.TransactionStatus                        `json:"status,omitempty"`
-		SyntheticTxids  encoding.JsonList[string]                          `json:"syntheticTxids,omitempty"`
+		Produced        encoding.JsonList[*url.TxID]                       `json:"produced,omitempty"`
+		SyntheticTxids  encoding.JsonList[*url.TxID]                       `json:"syntheticTxids,omitempty"`
 		Receipts        encoding.JsonList[*query.TxReceipt]                `json:"receipts,omitempty"`
 		SignatureBooks  encoding.JsonList[*SignatureBook]                  `json:"signatureBooks,omitempty"`
 	}{}
@@ -810,14 +831,12 @@ func (v *TransactionQueryResponse) MarshalJSON() ([]byte, error) {
 	u.Origin = v.Origin
 	u.Sponsor = v.Origin
 	u.TransactionHash = encoding.BytesToJSON(v.TransactionHash)
-	u.Txid = encoding.BytesToJSON(v.TransactionHash)
+	u.Txid = v.Txid
 	u.Transaction = v.Transaction
 	u.Signatures = encoding.JsonUnmarshalListWith[protocol.Signature]{Value: v.Signatures, Func: protocol.UnmarshalSignatureJSON}
 	u.Status = v.Status
-	u.SyntheticTxids = make(encoding.JsonList[string], len(v.SyntheticTxids))
-	for i, x := range v.SyntheticTxids {
-		u.SyntheticTxids[i] = encoding.ChainToJSON(x)
-	}
+	u.Produced = v.Produced
+	u.SyntheticTxids = v.Produced
 	u.Receipts = v.Receipts
 	u.SignatureBooks = v.SignatureBooks
 	return json.Marshal(&u)
@@ -866,7 +885,7 @@ func (v *TxRequest) MarshalJSON() ([]byte, error) {
 func (v *TxResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
 		TransactionHash *string                    `json:"transactionHash,omitempty"`
-		Txid            *string                    `json:"txid,omitempty"`
+		Txid            *url.TxID                  `json:"txid,omitempty"`
 		SignatureHashes encoding.JsonList[*string] `json:"signatureHashes,omitempty"`
 		SimpleHash      *string                    `json:"simpleHash,omitempty"`
 		Hash            *string                    `json:"hash,omitempty"`
@@ -876,7 +895,7 @@ func (v *TxResponse) MarshalJSON() ([]byte, error) {
 		Result          interface{}                `json:"result,omitempty"`
 	}{}
 	u.TransactionHash = encoding.BytesToJSON(v.TransactionHash)
-	u.Txid = encoding.BytesToJSON(v.TransactionHash)
+	u.Txid = v.Txid
 	u.SignatureHashes = make(encoding.JsonList[*string], len(v.SignatureHashes))
 	for i, x := range v.SignatureHashes {
 		u.SignatureHashes[i] = encoding.BytesToJSON(x)
@@ -986,7 +1005,7 @@ func (v *ChainQueryResponse) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	v.Type = u.Type
-	if u.MainChain != nil {
+	if !(u.MainChain == nil) {
 		v.MainChain = u.MainChain
 	} else {
 		v.MainChain = u.MerkleState
@@ -1068,13 +1087,37 @@ func (v *DataEntrySetQuery) UnmarshalJSON(data []byte) error {
 	v.UrlQuery.Url = u.Url
 	v.QueryPagination.Start = u.Start
 	v.QueryPagination.Count = u.Count
-	if u.Expand != false {
+	if !(u.Expand == false) {
 		v.QueryOptions.Expand = u.Expand
 	} else {
 		v.QueryOptions.Expand = u.ExpandChains
 	}
 	v.QueryOptions.Height = u.Height
 	v.QueryOptions.Prove = u.Prove
+	return nil
+}
+
+func (v *DescriptionResponse) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Network config.Network    `json:"network,omitempty"`
+		Subnet  config.Network    `json:"subnet,omitempty"`
+		Values  core.GlobalValues `json:"values,omitempty"`
+		Error   *errors2.Error    `json:"error,omitempty"`
+	}{}
+	u.Network = v.Network
+	u.Subnet = v.Network
+	u.Values = v.Values
+	u.Error = v.Error
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(u.Network.Equal(&config.Network{})) {
+		v.Network = u.Network
+	} else {
+		v.Network = u.Subnet
+	}
+	v.Values = u.Values
+	v.Error = u.Error
 	return nil
 }
 
@@ -1101,7 +1144,7 @@ func (v *DirectoryQuery) UnmarshalJSON(data []byte) error {
 	v.UrlQuery.Url = u.Url
 	v.QueryPagination.Start = u.Start
 	v.QueryPagination.Count = u.Count
-	if u.Expand != false {
+	if !(u.Expand == false) {
 		v.QueryOptions.Expand = u.Expand
 	} else {
 		v.QueryOptions.Expand = u.ExpandChains
@@ -1128,7 +1171,7 @@ func (v *GeneralQuery) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	v.UrlQuery.Url = u.Url
-	if u.Expand != false {
+	if !(u.Expand == false) {
 		v.QueryOptions.Expand = u.Expand
 	} else {
 		v.QueryOptions.Expand = u.ExpandChains
@@ -1148,7 +1191,7 @@ func (v *KeyPage) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	if u.Version != 0 {
+	if !(u.Version == 0) {
 		v.Version = u.Version
 	} else {
 		v.Version = u.Height
@@ -1190,7 +1233,7 @@ func (v *MerkleState) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	if u.Height != 0 {
+	if !(u.Height == 0) {
 		v.Height = u.Height
 	} else {
 		v.Height = u.Count
@@ -1360,7 +1403,7 @@ func (v *QueryOptions) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	if u.Expand != false {
+	if !(u.Expand == false) {
 		v.Expand = u.Expand
 	} else {
 		v.Expand = u.ExpandChains
@@ -1428,7 +1471,7 @@ func (v *Signer) UnmarshalJSON(data []byte) error {
 	} else {
 		v.PublicKey = x
 	}
-	if u.Timestamp != 0 {
+	if !(u.Timestamp == 0) {
 		v.Timestamp = u.Timestamp
 	} else {
 		v.Timestamp = u.Nonce
@@ -1490,11 +1533,12 @@ func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 		Origin          *url.URL                                           `json:"origin,omitempty"`
 		Sponsor         *url.URL                                           `json:"sponsor,omitempty"`
 		TransactionHash *string                                            `json:"transactionHash,omitempty"`
-		Txid            *string                                            `json:"txid,omitempty"`
+		Txid            *url.TxID                                          `json:"txid,omitempty"`
 		Transaction     *protocol.Transaction                              `json:"transaction,omitempty"`
 		Signatures      encoding.JsonUnmarshalListWith[protocol.Signature] `json:"signatures,omitempty"`
 		Status          *protocol.TransactionStatus                        `json:"status,omitempty"`
-		SyntheticTxids  encoding.JsonList[string]                          `json:"syntheticTxids,omitempty"`
+		Produced        encoding.JsonList[*url.TxID]                       `json:"produced,omitempty"`
+		SyntheticTxids  encoding.JsonList[*url.TxID]                       `json:"syntheticTxids,omitempty"`
 		Receipts        encoding.JsonList[*query.TxReceipt]                `json:"receipts,omitempty"`
 		SignatureBooks  encoding.JsonList[*SignatureBook]                  `json:"signatureBooks,omitempty"`
 	}{}
@@ -1505,21 +1549,19 @@ func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 	u.Origin = v.Origin
 	u.Sponsor = v.Origin
 	u.TransactionHash = encoding.BytesToJSON(v.TransactionHash)
-	u.Txid = encoding.BytesToJSON(v.TransactionHash)
+	u.Txid = v.Txid
 	u.Transaction = v.Transaction
 	u.Signatures = encoding.JsonUnmarshalListWith[protocol.Signature]{Value: v.Signatures, Func: protocol.UnmarshalSignatureJSON}
 	u.Status = v.Status
-	u.SyntheticTxids = make(encoding.JsonList[string], len(v.SyntheticTxids))
-	for i, x := range v.SyntheticTxids {
-		u.SyntheticTxids[i] = encoding.ChainToJSON(x)
-	}
+	u.Produced = v.Produced
+	u.SyntheticTxids = v.Produced
 	u.Receipts = v.Receipts
 	u.SignatureBooks = v.SignatureBooks
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.Type = u.Type
-	if u.MainChain != nil {
+	if !(u.MainChain == nil) {
 		v.MainChain = u.MainChain
 	} else {
 		v.MainChain = u.MerkleState
@@ -1529,37 +1571,27 @@ func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Data = x
 	}
-	if u.Origin != nil {
+	if !(u.Origin == nil) {
 		v.Origin = u.Origin
 	} else {
 		v.Origin = u.Sponsor
 	}
-	if u.TransactionHash != nil {
-		if x, err := encoding.BytesFromJSON(u.TransactionHash); err != nil {
-			return fmt.Errorf("error decoding TransactionHash: %w", err)
-		} else {
-			v.TransactionHash = x
-		}
+	if x, err := encoding.BytesFromJSON(u.TransactionHash); err != nil {
+		return fmt.Errorf("error decoding TransactionHash: %w", err)
 	} else {
-		if x, err := encoding.BytesFromJSON(u.Txid); err != nil {
-			return fmt.Errorf("error decoding TransactionHash: %w", err)
-		} else {
-			v.TransactionHash = x
-		}
+		v.TransactionHash = x
 	}
+	v.Txid = u.Txid
 	v.Transaction = u.Transaction
 	v.Signatures = make([]protocol.Signature, len(u.Signatures.Value))
 	for i, x := range u.Signatures.Value {
 		v.Signatures[i] = x
 	}
 	v.Status = u.Status
-	v.SyntheticTxids = make([][32]byte, len(u.SyntheticTxids))
-	for i, x := range u.SyntheticTxids {
-		if x, err := encoding.ChainFromJSON(x); err != nil {
-			return fmt.Errorf("error decoding SyntheticTxids: %w", err)
-		} else {
-			v.SyntheticTxids[i] = x
-		}
+	if !(u.Produced == nil) {
+		v.Produced = u.Produced
+	} else {
+		v.Produced = u.SyntheticTxids
 	}
 	v.Receipts = u.Receipts
 	v.SignatureBooks = u.SignatureBooks
@@ -1614,7 +1646,7 @@ func (v *TxRequest) UnmarshalJSON(data []byte) error {
 	}
 	v.CheckOnly = u.CheckOnly
 	v.IsEnvelope = u.IsEnvelope
-	if u.Origin != nil {
+	if !(u.Origin == nil) {
 		v.Origin = u.Origin
 	} else {
 		v.Origin = u.Sponsor
@@ -1648,7 +1680,7 @@ func (v *TxRequest) UnmarshalJSON(data []byte) error {
 func (v *TxResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
 		TransactionHash *string                    `json:"transactionHash,omitempty"`
-		Txid            *string                    `json:"txid,omitempty"`
+		Txid            *url.TxID                  `json:"txid,omitempty"`
 		SignatureHashes encoding.JsonList[*string] `json:"signatureHashes,omitempty"`
 		SimpleHash      *string                    `json:"simpleHash,omitempty"`
 		Hash            *string                    `json:"hash,omitempty"`
@@ -1658,7 +1690,7 @@ func (v *TxResponse) UnmarshalJSON(data []byte) error {
 		Result          interface{}                `json:"result,omitempty"`
 	}{}
 	u.TransactionHash = encoding.BytesToJSON(v.TransactionHash)
-	u.Txid = encoding.BytesToJSON(v.TransactionHash)
+	u.Txid = v.Txid
 	u.SignatureHashes = make(encoding.JsonList[*string], len(v.SignatureHashes))
 	for i, x := range v.SignatureHashes {
 		u.SignatureHashes[i] = encoding.BytesToJSON(x)
@@ -1672,19 +1704,12 @@ func (v *TxResponse) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	if u.TransactionHash != nil {
-		if x, err := encoding.BytesFromJSON(u.TransactionHash); err != nil {
-			return fmt.Errorf("error decoding TransactionHash: %w", err)
-		} else {
-			v.TransactionHash = x
-		}
+	if x, err := encoding.BytesFromJSON(u.TransactionHash); err != nil {
+		return fmt.Errorf("error decoding TransactionHash: %w", err)
 	} else {
-		if x, err := encoding.BytesFromJSON(u.Txid); err != nil {
-			return fmt.Errorf("error decoding TransactionHash: %w", err)
-		} else {
-			v.TransactionHash = x
-		}
+		v.TransactionHash = x
 	}
+	v.Txid = u.Txid
 	v.SignatureHashes = make([][]byte, len(u.SignatureHashes))
 	for i, x := range u.SignatureHashes {
 		if x, err := encoding.BytesFromJSON(x); err != nil {
@@ -1693,7 +1718,7 @@ func (v *TxResponse) UnmarshalJSON(data []byte) error {
 			v.SignatureHashes[i] = x
 		}
 	}
-	if u.SimpleHash != nil {
+	if !(u.SimpleHash == nil) {
 		if x, err := encoding.BytesFromJSON(u.SimpleHash); err != nil {
 			return fmt.Errorf("error decoding SimpleHash: %w", err)
 		} else {
@@ -1737,7 +1762,7 @@ func (v *TxnQuery) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	if u.Expand != false {
+	if !(u.Expand == false) {
 		v.QueryOptions.Expand = u.Expand
 	} else {
 		v.QueryOptions.Expand = u.ExpandChains

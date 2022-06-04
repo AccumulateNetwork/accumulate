@@ -115,36 +115,36 @@ func (r *Account) PutState(state protocol.Account) error {
 	return r.putBpt()
 }
 
-func (r *Account) pending() (*protocol.HashSet, error) {
-	s := new(protocol.HashSet)
+func (r *Account) pending() (*protocol.TxIdSet, error) {
+	s := new(protocol.TxIdSet)
 	err := r.batch.getValuePtr(r.key.Index("Pending"), s, &s, true)
 	return s, err
 }
 
-func (r *Account) Pending() ([][32]byte, error) {
+func (r *Account) Pending() (*protocol.TxIdSet, error) {
 	s, err := r.pending()
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
 		return nil, err
 	}
-	return s.Hashes, nil
+	return s, nil
 }
 
-func (r *Account) AddPending(hash [32]byte) error {
+func (r *Account) AddPending(txid *url.TxID) error {
 	s, err := r.pending()
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
 		return err
 	}
-	s.Add(hash)
+	s.Add(txid)
 	r.batch.putValue(r.key.Index("Pending"), s)
 	return r.putBpt()
 }
 
-func (r *Account) RemovePending(hash [32]byte) error {
+func (r *Account) RemovePending(txid *url.TxID) error {
 	s, err := r.pending()
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
 		return err
 	}
-	s.Remove(hash)
+	s.Remove(txid)
 	r.batch.putValue(r.key.Index("Pending"), s)
 	return r.putBpt()
 }
@@ -182,8 +182,8 @@ func (r *Account) Index(key ...interface{}) *Value {
 	return &Value{r.batch, r.key.Index(key...)}
 }
 
-func (r *Account) getSyntheticForAnchor(anchor [32]byte) (*protocol.HashSet, error) {
-	v := new(protocol.HashSet)
+func (r *Account) getSyntheticForAnchor(anchor [32]byte) (*protocol.TxIdSet, error) {
+	v := new(protocol.TxIdSet)
 	err := r.batch.getValuePtr(r.key.SyntheticForAnchor(anchor), v, &v, true)
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
 		return nil, err
@@ -191,22 +191,22 @@ func (r *Account) getSyntheticForAnchor(anchor [32]byte) (*protocol.HashSet, err
 	return v, nil
 }
 
-func (r *Account) AddSyntheticForAnchor(anchor, hash [32]byte) error {
+func (r *Account) AddSyntheticForAnchor(anchor [32]byte, txid *url.TxID) error {
 	set, err := r.getSyntheticForAnchor(anchor)
 	if err != nil {
 		return err
 	}
 
-	set.Add(hash)
+	set.Add(txid)
 	r.batch.putValue(r.key.SyntheticForAnchor(anchor), set)
 	return nil
 }
 
-func (r *Account) SyntheticForAnchor(anchor [32]byte) ([][32]byte, error) {
+func (r *Account) SyntheticForAnchor(anchor [32]byte) ([]*url.TxID, error) {
 	set, err := r.getSyntheticForAnchor(anchor)
 	if err != nil {
 		return nil, err
 	}
 
-	return set.Hashes, nil
+	return set.Entries, nil
 }

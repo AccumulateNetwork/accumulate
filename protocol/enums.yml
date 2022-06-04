@@ -72,6 +72,9 @@ SignatureType:
   Delegated:
     value: 11
     description: represents a signature for a delegated authority
+  Internal:
+    value: 12
+    description: is used for internally produced transactions
 
 KeyPageOperationType:
   Unknown:
@@ -218,6 +221,9 @@ TransactionType:
   PartitionAnchor:
     value: 0x62
     description: system transaction for partition data
+  SystemWriteData:
+    value: 0x63
+    description: writes data to a system data account
 
 AccountType:
   Unknown:

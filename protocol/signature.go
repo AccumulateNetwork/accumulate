@@ -4,20 +4,20 @@ import (
 	"bytes"
 	"crypto/ed25519"
 	"crypto/sha256"
-	"errors"
 	"fmt"
 
 	btc "github.com/btcsuite/btcd/btcec"
 	"github.com/btcsuite/btcutil/base58"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding/hash"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 	"golang.org/x/crypto/ripemd160"
 	"golang.org/x/crypto/sha3"
 )
 
-var ErrCannotInitiate = errors.New("signature cannot initiate a transaction: values are missing")
+var ErrCannotInitiate = errors.New(errors.StatusBadRequest, "signature cannot initiate a transaction: values are missing")
 
 type Signature interface {
 	encoding.BinaryValue
@@ -47,7 +47,8 @@ type KeySignature interface {
 func (s SignatureType) IsSystem() bool {
 	switch s {
 	case SignatureTypeSynthetic,
-		SignatureTypeReceipt:
+		SignatureTypeReceipt,
+		SignatureTypeInternal:
 		return true
 	default:
 		return false
@@ -113,10 +114,6 @@ func ETHhash(pubKey []byte) []byte {
 func ETHaddress(pubKey []byte) string {
 	address := ETHhash(pubKey)
 	return fmt.Sprintf("0x%x", address[:])
-}
-
-func netVal(u *url.URL) *url.URL {
-	return FormatKeyPageUrl(u.JoinPath(ValidatorBook), 0)
 }
 
 func SignatureDidInitiate(sig Signature, txnInitHash []byte) bool {
@@ -682,11 +679,15 @@ func (e *ETHSignature) Verify(txnHash []byte) bool {
  * Receipt Signature
  */
 
-// GetSigner returns SourceNetwork.
-func (s *ReceiptSignature) GetSigner() *url.URL { return netVal(s.SourceNetwork) }
+// GetSigner panics.
+func (s *ReceiptSignature) GetSigner() *url.URL {
+	panic("a receipt signature does not have a signer")
+}
 
-// RoutingLocation returns SourceNetwork.
-func (s *ReceiptSignature) RoutingLocation() *url.URL { return netVal(s.SourceNetwork) }
+// RoutingLocation panics.
+func (s *ReceiptSignature) RoutingLocation() *url.URL {
+	panic("a receipt signature does not have a routing location")
+}
 
 // GetSignerVersion returns 1.
 func (s *ReceiptSignature) GetSignerVersion() uint64 { return 1 }
@@ -735,11 +736,13 @@ func (s *ReceiptSignature) Verify(hash []byte) bool {
  * Synthetic Signature
  */
 
-// GetSigner returns the URL of the destination network's validator key page.
-func (s *SyntheticSignature) GetSigner() *url.URL { return netVal(s.DestinationNetwork) }
+// GetSigner panics.
+func (s *SyntheticSignature) GetSigner() *url.URL {
+	panic("a synthetic signature does not have a signer")
+}
 
-// RoutingLocation returns the URL of the destination network's validator key page.
-func (s *SyntheticSignature) RoutingLocation() *url.URL { return netVal(s.DestinationNetwork) }
+// RoutingLocation returns the URL of the destination network's identity.
+func (s *SyntheticSignature) RoutingLocation() *url.URL { return s.DestinationNetwork }
 
 // GetSignerVersion returns 1.
 func (s *SyntheticSignature) GetSignerVersion() uint64 { return 1 }
@@ -766,20 +769,12 @@ func (s *SyntheticSignature) Metadata() Signature {
 	return r
 }
 
-// Initiator returns a Hasher that calculates the Merkle hash of the signature.
+// Initiator returns an error.
 func (s *SyntheticSignature) Initiator() (hash.Hasher, error) {
-	if s.SourceNetwork == nil || s.DestinationNetwork == nil || s.SequenceNumber == 0 {
-		return nil, ErrCannotInitiate
-	}
-
-	hasher := make(hash.Hasher, 0, 3)
-	hasher.AddUrl(s.SourceNetwork)
-	hasher.AddUrl(s.DestinationNetwork)
-	hasher.AddUint(s.SequenceNumber)
-	return hasher, nil
+	return nil, errors.New(errors.StatusBadRequest, "use of the initiator hash for a synthetic signature is not supported")
 }
 
-// GetVote returns how the signer votes on a particular transaction
+// GetVote returns VoteTypeAccept.
 func (s *SyntheticSignature) GetVote() VoteType {
 	return VoteTypeAccept
 }
@@ -864,4 +859,41 @@ func (s *DelegatedSignature) Initiator() (hash.Hasher, error) {
 
 	hasher.AddUrl(s.Delegator)
 	return hasher, nil
+}
+
+/*
+ * Internal Signature
+ */
+
+// GetSigner panics.
+func (s *InternalSignature) GetSigner() *url.URL {
+	panic("a receipt signature does not have a signer")
+}
+
+// RoutingLocation panics.
+func (s *InternalSignature) RoutingLocation() *url.URL {
+	panic("a receipt signature does not have a routing location")
+}
+
+// GetTransactionHash returns TransactionHash.
+func (s *InternalSignature) GetTransactionHash() [32]byte { return s.TransactionHash }
+
+// Hash returns the hash of the signature.
+func (s *InternalSignature) Hash() []byte { return signatureHash(s) }
+
+// Metadata returns the signature's metadata.
+func (s *InternalSignature) Metadata() Signature {
+	r := s.Copy()                  // Copy the struct
+	r.TransactionHash = [32]byte{} // Clear the transaction hash
+	return r
+}
+
+// InitiatorHash returns an error.
+func (s *InternalSignature) Initiator() (hash.Hasher, error) {
+	return nil, errors.New(errors.StatusBadRequest, "use of the initiator hash for an internal signature is not supported")
+}
+
+// GetVote returns VoteTypeAccept.
+func (s *InternalSignature) GetVote() VoteType {
+	return VoteTypeAccept
 }

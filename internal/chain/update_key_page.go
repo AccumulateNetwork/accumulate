@@ -127,32 +127,7 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 		return nil, fmt.Errorf("failed to update %v: %v", page.GetUrl(), err)
 	}
 
-	// If we are the DN and the page is an operator book, broadcast the update to the BVNs
-	if protocol.IsDnUrl(st.NodeUrl()) && page.KeyBook().Equal(st.NodeUrl().JoinPath(protocol.OperatorBook)) {
-		err = operatorUpdatesToLedger(st, err, body)
-		if err != nil {
-			return nil, err
-		}
-	}
 	return nil, nil
-}
-
-func operatorUpdatesToLedger(st *StateManager, err error, body *protocol.UpdateKeyPage) error {
-	var ledgerState *protocol.SystemLedger
-	err = st.LoadUrlAs(st.NodeUrl().JoinPath(protocol.Ledger), &ledgerState)
-	if err != nil {
-		return fmt.Errorf("unable to load main ledger: %w", err)
-	}
-
-	for _, op := range body.Operation {
-		ledgerState.OperatorUpdates = append(ledgerState.OperatorUpdates, op)
-	}
-	err = st.Update(ledgerState)
-	if err != nil {
-		return fmt.Errorf("unable to update main ledger: %w", err)
-	}
-
-	return nil
 }
 
 func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, op protocol.KeyPageOperation) error {
@@ -170,7 +145,7 @@ func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, op protocol.KeyPag
 		entry := new(protocol.KeySpec)
 		entry.PublicKeyHash = op.Entry.KeyHash
 		entry.Delegate = op.Entry.Delegate
-		page.Keys = append(page.Keys, entry)
+		page.AddKeySpec(entry)
 		return nil
 
 	case *protocol.RemoveKeyOperation:
@@ -179,7 +154,7 @@ func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, op protocol.KeyPag
 			return fmt.Errorf("entry to be removed not found on the key page")
 		}
 
-		page.Keys = append(page.Keys[:index], page.Keys[index+1:]...)
+		page.RemoveKeySpecAt(index)
 
 		_, pageIndex, ok := protocol.ParseKeyPageUrl(page.Url)
 		if !ok {
@@ -199,18 +174,25 @@ func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, op protocol.KeyPag
 			return fmt.Errorf("cannot add an empty entry")
 		}
 
-		_, entry, found := findKeyPageEntry(page, &op.OldEntry)
+		// Find the old entry
+		oldPos, entry, found := findKeyPageEntry(page, &op.OldEntry)
 		if !found {
 			return fmt.Errorf("entry to be updated not found on the key page")
 		}
 
+		// Check for an existing key
 		_, _, found = findKeyPageEntry(page, &op.NewEntry)
 		if found {
 			return fmt.Errorf("cannot have duplicate entries on key page")
 		}
 
+		// Update the entry
 		entry.PublicKeyHash = op.NewEntry.KeyHash
 		entry.Delegate = op.NewEntry.Delegate
+
+		// Relocate the entry
+		page.RemoveKeySpecAt(oldPos)
+		page.AddKeySpec(entry)
 		return nil
 
 	case *protocol.SetThresholdKeyPageOperation:

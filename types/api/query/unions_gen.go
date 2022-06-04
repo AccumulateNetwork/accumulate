@@ -43,6 +43,9 @@ func NewRequest(typ QueryType) (Request, error) {
 
 //EqualRequest is used to compare the values of the union
 func EqualRequest(a, b Request) bool {
+	if a == b {
+		return true
+	}
 	switch a := a.(type) {
 	case *RequestByChainId:
 		b, ok := b.(*RequestByChainId)
@@ -146,10 +149,14 @@ func UnmarshalRequestFrom(rd io.ReadSeeker) (Request, error) {
 
 // UnmarshalRequestJson unmarshals a Request.
 func UnmarshalRequestJSON(data []byte) (Request, error) {
-	var typ struct{ Type QueryType }
+	var typ *struct{ Type QueryType }
 	err := json.Unmarshal(data, &typ)
 	if err != nil {
 		return nil, err
+	}
+
+	if typ == nil {
+		return nil, nil
 	}
 
 	acnt, err := NewRequest(typ.Type)

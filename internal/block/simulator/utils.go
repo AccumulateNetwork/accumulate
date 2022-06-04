@@ -18,7 +18,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
-func InitGenesis(t TB, db *database.Database, exec *Executor, genesisTime time.Time, netValMap genesis.NetworkValidatorMap) genesis.Bootstrap {
+func InitGenesis(t TB, exec *Executor, genesisTime time.Time, netValMap genesis.NetworkValidatorMap) genesis.Bootstrap {
 	t.Helper()
 
 	// Genesis
@@ -28,7 +28,6 @@ func InitGenesis(t TB, db *database.Database, exec *Executor, genesisTime time.T
 		GenesisTime:         genesisTime,
 		NetworkValidatorMap: netValMap,
 		Logger:              exec.Logger,
-		Router:              exec.Router,
 		Validators: []tmtypes.GenesisValidator{
 			{PubKey: ed25519.PubKey(exec.Key[32:])},
 		},
