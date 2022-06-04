@@ -11,8 +11,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
-const window = uint64(1000) //                               Process this many BPT entries at a time
-const nLen = 32 + 32 + 8    //                               Each node is a key (32), hash (32), offset(8)
+const window = uint64(1000) //   Process this many BPT entries at a time
+const nLen = ValueLen + 8   //   Each entry is the length of a Value plus an 64 bit offset
 
 // SaveSnapshot
 // Saves a snapshot of the state of the BVN/DVN.
@@ -72,16 +72,15 @@ func (b *BPT) SaveSnapshot(file io.WriteSeeker, loadState func(key storage.Key, 
 		place = next //                                     We will get the next 1000 after the last 1000
 
 		for _, v := range bptVals { //                      For all the key values we got (as many as 1000)
-			_, e1 := file.Write(v.Key[:])                         // Write the key out
-			_, e2 := file.Write(v.Hash[:])                        // Write the hash out
-			_, e3 := file.Write(common.Uint64FixedBytes(vOffset)) // And the current offset to the next value
+			_, e1 := file.Write(v.Marshal())                      // Write out the value
+			_, e2 := file.Write(common.Uint64FixedBytes(vOffset)) // And the current offset to the next value
 
-			value, e4 := loadState(v.Key, v.Hash)                // Get that next value
+			value, e3 := loadState(v.Account, v.Hash)            // Get that next value
 			vLen := uint64(len(value))                           // get the value's length as uint64
-			_, e5 := values.Write(common.Uint64FixedBytes(vLen)) // Write out the length
-			_, e6 := values.Write(value)                         // write out the value
+			_, e4 := values.Write(common.Uint64FixedBytes(vLen)) // Write out the length
+			_, e5 := values.Write(value)                         // write out the value
 
-			vOffset += uint64(len(value)) + 8 // then set the offest past the end of the value
+			vOffset += uint64(len(value)) + 8 // then set the offset past the end of the value
 
 			switch { //                none of these errors are likely, but if
 			case e1 != nil: //         they occur, we should report at least
@@ -94,8 +93,6 @@ func (b *BPT) SaveSnapshot(file io.WriteSeeker, loadState func(key storage.Key, 
 				return e4
 			case e5 != nil:
 				return e5
-			case e6 != nil:
-				return e6
 			}
 		}
 	}
@@ -157,21 +154,18 @@ func (b *BPT) LoadSnapshot(file ioutil2.SectionReader, storeState func(key stora
 			return e2
 		}
 
-		for i := uint64(0); i < toRead; i++ { //                      Process the nodes we loaded
-			idx := i * nLen                                           // Each node is nLen Bytes
-			var key [32]byte                                          // Get the key,
-			var hash [32]byte                                         //   the hash, and
-			var off uint64                                            //   the value
-			copy(key[:], buff[idx:idx+32])                            // Copy over the key
-			copy(hash[:], buff[idx+32:idx+64])                        // Copy over the hash
-			off, _ = common.BytesFixedUint64(buff[idx+64 : idx+64+8]) // And convert bytes to the offset to value
+		for i := uint64(0); i < toRead; i++ { //         Process the nodes we loaded
+			idx := i * nLen                           // Each node is nLen Bytes
+			value := new(Value)                       // Allocate a value structure
+			offset := value.UnMarshal(buff[idx:])     // Unmarshal the value, get the pointer to the offset
+			off, _ := common.BytesFixedUint64(offset) // And convert bytes to the offset to value
 
 			_, e1 := file.Seek(int64(fOff+off), 0)                               // Seek to the value
 			_, e2 := io.ReadFull(file, vBuff[:8])                                // Read length of value
 			vLen, _ := common.BytesFixedUint64(vBuff)                            // Convert bytes to uint64
-			b.Insert(key, hash)                                                  // Insert the key/hash into the BPT
+			b.Insert(value.ADI, value.Account, value.Hash)                       // Insert the key/hash into the BPT
 			section := io.NewSectionReader(file, int64(fOff+off+8), int64(vLen)) // Create a section reader
-			e3 := storeState(key, hash, section)                                 // Insert the value into the DB
+			e3 := storeState(value.Account, value.Hash, section)                 // Insert the value into the DB
 
 			switch { //        errors not likely
 			case e1 != nil: // but report if found

@@ -18,7 +18,7 @@ import (
 
 func TestSaveState(t *testing.T) {
 
-	numberEntries := 5001 //               A pretty reasonable sized BPT
+	numberEntries := 3 //               A pretty reasonable sized BPT
 
 	DirName, err := ioutil.TempDir("", "AccDB")
 	require.Nil(t, err, "failed to create directory")
@@ -39,7 +39,7 @@ func TestSaveState(t *testing.T) {
 		hash := sha256.Sum256(value)
 		err := storeTx.Put(hash, value)
 		require.NoError(t, err, "fail")
-		bpt.Insert(chainID, hash) //      Insert the Key with the value into the BPT
+		bpt.Insert(chainID,chainID, hash) //      Insert the Key with the value into the BPT
 	}
 	err = bptManager.Bpt.Update()
 	require.NoError(t, err, "fail")

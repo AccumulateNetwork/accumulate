@@ -17,15 +17,15 @@ func TestSanity(t *testing.T) {
 	fakeKey := storage.MakeKey("Account", "foo")
 	fakeValue := storage.MakeKey("Value")
 
-	store := memory.NewDB()              // Create a database
-	batch := store.Begin(true)           // Start a batch
-	defer batch.Discard()                //
-	bpt := NewBPTManager(batch)          // Create a BPT manager
-	bpt.InsertKV(fakeKey, fakeValue)     // Insert a key, value pair
-	require.NoError(t, bpt.Bpt.Update()) // Push the update
-	require.NoError(t, batch.Commit())   // Commit the batch
-	rootHash1 := bpt.Bpt.RootHash        // Remember the root hash
-	nodeHash1 := bpt.Bpt.Root.Hash       //
+	store := memory.NewDB()                   // Create a database
+	batch := store.Begin(true)                // Start a batch
+	defer batch.Discard()                     //
+	bpt := NewBPTManager(batch)               // Create a BPT manager
+	bpt.InsertKV(fakeKey, fakeKey, fakeValue) // Insert a key, value pair
+	require.NoError(t, bpt.Bpt.Update())      // Push the update
+	require.NoError(t, batch.Commit())        // Commit the batch
+	rootHash1 := bpt.Bpt.RootHash             // Remember the root hash
+	nodeHash1 := bpt.Bpt.Root.Hash            //
 
 	batch = store.Begin(false)            // Start a batch
 	defer batch.Discard()                 //
@@ -138,9 +138,9 @@ func TestManager(t *testing.T) {
 	for i := 0; i < c; i++ { //             For each cycle
 
 		for j := 0; j < d; j++ { //         Stuff in our key values
-			k := keys.NextAList()     //    Key a list of the keys
-			v := values.NextA()       //
-			bptManager.InsertKV(k, v) //
+			k := keys.NextAList()        //    Key a list of the keys
+			v := values.NextA()          //
+			bptManager.InsertKV(k, k, v) //
 		}
 		require.NoError(t, bptManager.Bpt.Update())
 		Check(t, bptManager.Bpt, bptManager.Bpt.GetRoot())
@@ -211,7 +211,7 @@ func TestManagerSeries(t *testing.T) {
 						key := sha256.Sum256([]byte(fmt.Sprintf("k key %d %d %d %d", h, i, j, k)))   // use h,i,j,k to make entry unique
 						value := sha256.Sum256([]byte(fmt.Sprintf("v key %d %d %d %d", h, i, j, k))) // Same. (k,v) makes key != value
 						SetOfValues[key] = value                                                     // Set the key value
-						bptManager.InsertKV(key, value)                                              // Add to BPT
+						bptManager.InsertKV(key, key, value)                                         // Add to BPT
 					}
 				}
 				priorRoot := bptManager.GetRootHash()          //        Get the prior root (cause no update yet)
@@ -250,7 +250,7 @@ func TestManagerPersist(t *testing.T) {
 
 		for j := 0; j < i; j++ {
 			k, v := keys.NextAList(), values.NextA()
-			bptManager.Bpt.Insert(k, v)
+			bptManager.Bpt.Insert(k, k, v)
 		}
 
 		require.NoError(t, bptManager.Bpt.Update())
@@ -269,7 +269,7 @@ func TestManagerPersist(t *testing.T) {
 		}
 
 		for i := range keys.List {
-			bptManager.Bpt.Insert(keys.GetAElement(i), values.NextA())
+			bptManager.Bpt.Insert(keys.GetAElement(i), keys.GetAElement(i), values.NextA())
 		}
 
 		require.NoError(t, bptManager.Bpt.Update())
@@ -296,12 +296,12 @@ func TestBptGet(t *testing.T) {
 		k := keys.NextAList()
 		v := values.NextA()
 		//fmt.Printf("Add  k,v =%x : %x\n",k[:3],v[:3])
-		bpt.Insert(k, v)
+		bpt.Insert(k, k, v)
 	}
 
 	// Update all elements in the BPT
 	for i := 0; i < numberTests; i++ {
-		bpt.Insert(keys.GetAElement(i), values.NextAList())
+		bpt.Insert(keys.GetAElement(i), keys.GetAElement(i), values.NextAList())
 	}
 
 	require.NoError(t, bpt.Update())

@@ -45,7 +45,7 @@ func TestBPT_receipt(t *testing.T) {
 	for i := 0; i < numberEntries; i++ { // For the number of Entries specified for the BPT
 		chainID := keys.NextAList() //      Get a key, keep a list
 		value := values.NextA()     //      Get some value (don't really care what it is)
-		bpt.Insert(chainID, value)  //      Insert the Key with the value into the BPT
+		bpt.Insert(sha256.Sum256(chainID[:]),chainID, value)  //      Insert the Key with the value into the BPT
 	}
 
 	keyList := append([][]byte{}, keys.List...)                                                   // Get all the keys

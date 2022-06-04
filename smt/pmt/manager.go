@@ -80,6 +80,6 @@ func (m *Manager) FlushNode(node *BptNode) error { //   Flush a Byte Block
 
 // InsertKV
 // Insert Key Value into Bpt
-func (m *Manager) InsertKV(key, value [32]byte) {
-	m.Bpt.Insert(key, value)
+func (m *Manager) InsertKV(adi, account, value [32]byte) {
+	m.Bpt.Insert(adi,account, value)
 }

@@ -82,7 +82,7 @@ func TestBPT_Equal(t *testing.T) {
 		t.Errorf("nodes with nil Left and Right paths not allowed")
 	}
 
-	bpt1.Insert(v.Key, sha256.Sum256(v.Hash[:]))
+	bpt1.Insert(v.Key, v.Key, sha256.Sum256(v.Hash[:]))
 	rand.Seed(0)
 	var equalCnt, unequalCnt int
 	for i := int64(0); i < 100; i++ {

@@ -13,7 +13,8 @@ import (
 var _ = fmt.Print
 
 func TestGetRange(t *testing.T) {
-	for i := 0; i < 50000; i += 1017 {
+	for i := 1; i < 50000; i += 1017 {
+		fmt.Println(i)
 		GetRangeFor(t, i, 13)
 	}
 }
@@ -25,7 +26,7 @@ func GetRangeFor(t *testing.T, numberEntries, rangeNum int) {
 	for i := 0; i < numberEntries; i++ { // For the number of Entries specified for the BPT
 		chainID := keys.NextAList() //      Get a key, keep a list
 		value := values.NextA()     //      Get some value (don't really care what it is)
-		bpt.Insert(chainID, value)  //      Insert the Key with the value into the BPT
+		bpt.Insert(chainID, chainID, value)  //      Insert the Key with the value into the BPT
 	}
 
 	searchKey := [32]byte{ // Highest value for a key
@@ -46,7 +47,7 @@ func GetRangeFor(t *testing.T, numberEntries, rangeNum int) {
 		}
 		for j, v := range bptValues {
 			k := keys.List[i+j]
-			require.Truef(t, bytes.Equal(v.Key[:], k), "i,j= %d:%d %02x should be %02x", i, j, v.Key[:2], k[:2])
+			require.Truef(t, bytes.Equal(v.Key[:], k), "i,j= %d:%d %02x should be %02x", i, j, v.Key[:3], k[:3])
 		}
 		cnt += len(bptValues)
 	}

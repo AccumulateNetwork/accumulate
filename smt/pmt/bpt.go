@@ -97,13 +97,21 @@ func (b *BPT) NewNode(key [32]byte, parent *BptNode) (node *BptNode) {
 	return node //           done
 }
 
+// GetBPTKey
+// Takes the ADI and Account hashes and returns a key to be used in the BPT
+func (b *BPT) GetBPTKey(adi, account [32]byte) (BPTKey [32]byte) {
+	return account // For now, we will just use the BPT key (no change from previous behavior)
+}
+
 // NewValue
 // Allocate a new Value struct and do some bookkeeping for the user
-func (b *BPT) NewValue(parent *BptNode, key, hash [32]byte) (value *Value) {
-	value = new(Value) //              Allocate the value
-	value.Key = key    //              Set the key
-	value.Hash = hash  //              Set the ChainID (which is a hash)
-	return value       //              That's all that we have to do
+func (b *BPT) NewValue(parent *BptNode, Adi, Account, hash [32]byte) (value *Value) {
+	value = new(Value)                    // Allocate the value
+	value.ADI = Adi                       // Save the ADI
+	value.Account = Account               // Set the key
+	value.Key = b.GetBPTKey(Adi, Account) // Compute the BPT
+	value.Hash = hash                     // Set the ChainID (which is a hash)
+	return value                          // That's all that we have to do
 }
 
 // IsDirty
@@ -205,8 +213,7 @@ func (b *BPT) Get(node *BptNode, key [32]byte) (highest *BptNode, entry *Entry, 
 // node -- the node in the BPT where the value (key, hash) is being inserted
 // key  -- The key in the BPT which determines were in the BPT the hash goes
 // hash -- The current value of the key, as tracked by the BPT
-func (b *BPT) insertAtNode(node *BptNode, key, hash [32]byte) {
-
+func (b *BPT) insertAtNode(node *BptNode, adi, account, key, hash [32]byte) {
 	BIdx := byte(node.Height >> 3) // Calculate the byte index based on the height of this node in the BPT
 	bitIdx := node.Height & 7      // The bit index is given by the lower 3 bits of the height
 	bit := byte(0x80) >> bitIdx    // The mask starts at the high end bit in the byte, shifted right by the bitIdx
@@ -220,12 +227,12 @@ func (b *BPT) insertAtNode(node *BptNode, key, hash [32]byte) {
 
 	switch { //                                                      processing is done once here.
 	case *entry == nil: //                                           Sort if the Left/Right is nil.
-		v := b.NewValue(node, key, hash) //                          If it is, we can put the value here
-		*entry = v                       //
-		b.Dirty(node)                    //                          And changing the value of a node makes it dirty
-		return                           //                          we are done.
+		v := b.NewValue(node, adi, account, hash) //                 If it is, put the value here
+		*entry = v                                //
+		b.Dirty(node)                             //                 And changing the value of a node makes it dirty
+		return                                    //                 Done
 	case (*entry).T() == TNode: //                                   If the entry isn't nil, check if it is a Node
-		b.insertAtNode((*entry).(*BptNode), key, hash) //            Recurse up the tree
+		b.insertAtNode((*entry).(*BptNode), adi, account, key, hash) //            Recurse up the tree
 	default: //                                                      If not a node, not nil, it is a value.
 		v := (*entry).(*Value)             //                        A collision. Get the value that got here first
 		if bytes.Equal(key[:], v.Key[:]) { //                        If this value is the same as we are inserting
@@ -233,29 +240,30 @@ func (b *BPT) insertAtNode(node *BptNode, key, hash [32]byte) {
 				(*entry).(*Value).Hash = hash //                     the new hash is really different.  If it is
 				b.Dirty(node)                 //                     mark the node as dirty
 			}
-			return //                                                Changed or not, we are done.
+			return //                                                Changed or not, return
 		} //                                                         The idea is to create a node, to replace the value
-		nn := b.NewNode(key, node)                     //            that was here, and the old value and the new value
-		*entry = nn                                    //            and insert them at one height higher.
-		nn.NodeKey, _ = GetNodeKey(node.Height+1, key) //            Record the nn.BBKey
-		b.insertAtNode(nn, key, hash)                  //            until they diverge.
-		b.insertAtNode(nn, v.Key, v.Hash)              //            Because these are chainIDs, while they could be
+		nn := b.NewNode(key, node)                      //           that was here, and the old value and the new value
+		*entry = nn                                     //           and insert them at one height higher.
+		nn.NodeKey, _ = GetNodeKey(node.Height+1, key)  //           Record the nn.BBKey
+		b.insertAtNode(nn, adi, account, key, hash)     //           until they diverge.
+		b.insertAtNode(nn, v.ADI, v.Account, v.Key, v.Hash) //           Because these are chainIDs, while they could be
 	} //                                                             mined to attack our BPT, we don't much care; it will
 
 }
 
 // Insert
 // Starts the search of the BPT for the location of the key in the BPT
-func (b *BPT) Insert(key, hash [32]byte) { //          The location of a value is determined by the key, and the value
-	b.insertAtNode(b.GetRoot(), key, hash) //          in that location is the hash.  We start at byte 0, lowest
-} //                                                   significant bit. (which is masked with a 1)
+func (b *BPT) Insert(adi, account, hash [32]byte) { //          The location of a value is determined by the key, and the value
+	key := b.GetBPTKey(adi, account)
+	b.insertAtNode(b.GetRoot(), adi, account, key, hash) //     in that location is the hash.  We start at byte 0, lowest
+} //                                                            significant bit. (which is masked with a 1)
 
 // GetHash
 // Makes the code just a bit more simple.  Checks for nils
 func GetHash(e Entry) []byte {
 	if e == nil { //              Sort for nil, return nil if e is nil.
 		return nil
-	}
+	} 
 	return e.GetHash() //         Otherwise, call the function to return the Hash for the entry.
 }
 

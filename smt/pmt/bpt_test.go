@@ -35,9 +35,9 @@ func LoadBptCnt(seed int64, NodeCnt int64) *BPT {
 		byte(b), byte(b >> 8), byte(b >> 16), byte(b >> 24), //
 		byte(b >> 32), byte(b >> 40), byte(b >> 48), byte(b >> 56)}) //
 	for i := int64(0); i < NodeCnt; i++ { //                            Now for the specified NodeCnt,
-		bpt.Insert(key, hash)         //                                Insert our current key and hash
-		key = sha256.Sum256(key[:])   //                                Then roll them forward by hashing the
-		hash = sha256.Sum256(hash[:]) //                                current key and hash value
+		bpt.Insert(sha256.Sum256(key[:]), key, hash) //                                Insert our current key and hash
+		key = sha256.Sum256(key[:])                  //                                Then roll them forward by hashing the
+		hash = sha256.Sum256(hash[:])                //                                current key and hash value
 	} //
 	return bpt //                                                       When all done, return the *BPT
 }
@@ -59,7 +59,7 @@ func TestBPT_Marshal(t *testing.T) {
 		t.Errorf("Two test BPTs that should be equal are not")
 	}
 
-	bpt1.Insert(sha256.Sum256([]byte{1}), sha256.Sum256([]byte{2}))
+	bpt1.Insert(sha256.Sum256([]byte{1}), sha256.Sum256([]byte{1}), sha256.Sum256([]byte{2}))
 	require.NoError(t, bpt1.Update())
 	if bpt1.Equal(bpt2) {
 		t.Errorf("Two test BPTs should not be equal and they are")
@@ -76,8 +76,8 @@ func TestInsert(t *testing.T) {
 	bpt := NewBPTManager(nil).Bpt //                 Build a BPT
 	var rh common.RandHash        //                 Provides a sequence of hashes
 	for i := 0; i < 100; i++ {    //                 Process the elements some number of times
-		for j := 0; j < numElements; j++ { //     For each element
-			bpt.Insert(rh.NextA(), rh.NextA()) //   Insert the key value pair
+		for j := 0; j < numElements; j++ { //                   For each element
+			bpt.Insert(rh.NextA(), rh.NextA(), rh.NextA()) //   Insert the key value pair
 		}
 		require.NoError(t, bpt.Update()) //                             Update hashes so far
 	}
@@ -142,7 +142,7 @@ func TestInsertOrder(t *testing.T) {
 	b := NewBPTManager(nil).Bpt //               Build a BPT
 	//start := time.Now()      //                Set the clock
 	for _, v := range pair { //                  for every pair in the slice, insert them
-		b.Insert(v.key, v.value) //              into the PBT
+		b.Insert(v.key, sha256.Sum256(v.key[:]), v.value) //              into the PBT
 	}
 	require.NoError(t, b.Update()) //            update the BPT to get the correct summary hash
 	one := b.GetRoot().Hash        //
@@ -151,13 +151,13 @@ func TestInsertOrder(t *testing.T) {
 	//	fmt.Printf("First pass: %x\n", one)                                // Print the summary hash from pass one
 
 	sort.Slice(pair, func(i, j int) bool { //                             Now shuffle the pairs.  Completely different order
-		return rand.Int()&1 == 1 //                                       Randimize using the low order bit of the random number generator
+		return rand.Int()&1 == 1 //                                       Randomize using the low order bit of the random number generator
 	})
 
 	b = NewBPTManager(nil).Bpt //                                         Build a BPT
 	//start = time.Now()       //                                         Reset the clock
 	for _, v := range pair { //                                           Insert the scrambled pairs
-		b.Insert(v.key, v.value) //                                       into the BPT
+		b.Insert(v.key, sha256.Sum256(v.key[:]), v.value) //              into the BPT
 	} //
 	require.NoError(t, b.Update()) //                                     Update the summary hash
 	two := b.GetRoot().Hash        //
@@ -167,7 +167,7 @@ func TestInsertOrder(t *testing.T) {
 
 	first := pair[0]
 	sort.Slice(pair, func(i, j int) bool { //                             Now shuffle the pairs.  Completely different order
-		return rand.Int()&1 == 1 //                                       Randimize using the low order bit of the random number generator
+		return rand.Int()&1 == 1 //                                       Randomize using the low order bit of the random number generator
 	})
 	if bytes.Equal(pair[0].key[:], first.key[:]) {
 		t.Fatal("After shuffle, first entry should not be the same.")
@@ -178,7 +178,7 @@ func TestInsertOrder(t *testing.T) {
 	b = NewBPTManager(nil).Bpt //                                         Get a fresh BPT
 	//start = time.Now()       //                                         Reset the clock
 	for _, v := range pair { //                                         Insert the scrambled pairs
-		b.Insert(v.key, v.value) //                                     into the BPT
+		b.Insert(v.key, sha256.Sum256(v.key[:]), v.value) //                                     into the BPT
 		require.NoError(t, b.Update())
 		now := b.GetRoot().Hash
 		if bytes.Equal(now[:], last[:]) {
@@ -230,7 +230,7 @@ func TestUpdateValues(t *testing.T) {
 	b := NewBPTManager(nil).Bpt //                 Get a BPT
 	//	start := time.Now()      //                Set the clock
 	for _, v := range pair { //                for every pair in the slice, insert them
-		b.Insert(v.key, v.value) //  it into the PBT
+		b.Insert(v.key, v.key, v.value) //  it into the PBT
 	}
 	require.NoError(t, b.Update())
 	one := b.GetRoot().Hash // update the BPT to get the correct summary hash
@@ -238,11 +238,11 @@ func TestUpdateValues(t *testing.T) {
 	//	fmt.Printf("seconds: %8.6f\n", tm)                                 // Print my time.
 	//	fmt.Printf("First pass: %x\n", one)                                // Print the summary hash from pass one
 	if len(pair) > numElements/2 {
-		updatePair := pair[numElements/2]                   //                Pick a pair out in the middle of the list
-		updatePair.key = sha256.Sum256(updatePair.value[:]) //                  change the value,
-		b.Insert(updatePair.key, updatePair.value)          //                  then insert it into BPT
-		require.NoError(t, b.Update())                      //
-		onePrime := b.GetRoot().Hash                        //                Update and get the summary hash
+		updatePair := pair[numElements/2]                          //         Pick a pair out in the middle of the list
+		updatePair.key = sha256.Sum256(updatePair.value[:])        //           change the value,
+		b.Insert(updatePair.key, updatePair.key, updatePair.value) //           then insert it into BPT
+		require.NoError(t, b.Update())                             //
+		onePrime := b.GetRoot().Hash                               //         Update and get the summary hash
 
 		if bytes.Equal(one[:], onePrime[:]) {
 			t.Fatalf("one %x should not be the same as onePrime", one)
@@ -268,7 +268,7 @@ func TestUpdateValue(t *testing.T) {
 	}
 	newH := v.Hash
 	newH[0]++
-	bft.Insert(v.Key, newH)
+	bft.Insert(v.Key, v.Key, newH)
 	require.NoError(t, bft.Update())
 	if bytes.Equal(bft.GetRoot().Hash[:], oldHash[:]) {
 		t.Errorf("root should not be the same after modifying a value")
@@ -412,7 +412,7 @@ func LoadBptCnt1(t testing.TB, seed int64, NodeCnt int64, freq int64) *BPT {
 		if i%freq == 0 {
 			require.NoError(t, bpt.Update())
 		}
-		bpt.Insert(key, hash)         //                                Insert our current key and hash
+		bpt.Insert(key, key, hash)         //                                Insert our current key and hash
 		key = sha256.Sum256(key[:])   //                                Then roll them forward by hashing the
 		hash = sha256.Sum256(hash[:]) //                                current key and hash value
 	} //
