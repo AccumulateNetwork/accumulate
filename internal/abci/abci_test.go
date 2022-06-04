@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	abci "github.com/tendermint/tendermint/abci/types"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -18,10 +19,12 @@ func TestTransactionPriority(t *testing.T) {
 	dn := nodes[subnets[0]][0]
 	bvn := nodes[subnets[1]][0]
 	fooKey := generateKey()
-	batch := bvn.db.Begin(true)
-	require.NoError(t, acctesting.CreateAdiWithCredits(batch, fooKey, "foo", 1e9))
-	require.NoError(t, acctesting.CreateTokenAccount(batch, "foo/tokens", protocol.AcmeUrl().String(), 1, false))
-	require.NoError(t, batch.Commit())
+	_ = bvn.db.Update(func(batch *database.Batch) error {
+		require.NoError(t, acctesting.CreateAdiWithCredits(batch, fooKey, "foo", 1e9))
+		require.NoError(t, acctesting.CreateTokenAccount(batch, "foo/tokens", protocol.AcmeUrl().String(), 1, false))
+		require.NoError(t, batch.Commit())
+		return nil
+	})
 
 	type Case struct {
 		Envelope       *protocol.Envelope
@@ -37,7 +40,6 @@ func TestTransactionPriority(t *testing.T) {
 						RootChainIndex:  1,
 						MinorBlockIndex: 1,
 					},
-					AcmeOraclePrice: 1,
 				}).
 				InitiateSynthetic(bvn.network.NodeUrl()).
 				Sign(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
@@ -46,13 +48,13 @@ func TestTransactionPriority(t *testing.T) {
 		},
 		"Synthetic": {
 			Envelope: newTxn("foo/tokens").
-				WithSigner(url.MustParse("foo/book0/1"), 1).
+				WithSigner(bvn.network.DefaultOperatorPage(), 1).
 				WithBody(&protocol.SyntheticDepositTokens{
 					Token:  protocol.AcmeUrl(),
 					Amount: *big.NewInt(100),
 				}).
 				InitiateSynthetic(bvn.network.NodeUrl()).
-				Sign(protocol.SignatureTypeLegacyED25519, fooKey).
+				Sign(protocol.SignatureTypeLegacyED25519, bvn.exec.Key).
 				SignFunc(func(txn *protocol.Transaction) protocol.Signature {
 					// Add a receipt signature
 					sig := new(protocol.ReceiptSignature)
@@ -83,7 +85,7 @@ func TestTransactionPriority(t *testing.T) {
 			b, err := c.Envelope.MarshalBinary()
 			require.NoError(t, err)
 			resp := bvn.app.CheckTx(abci.RequestCheckTx{Tx: b})
-			require.Zero(t, resp.Code, resp.Log)
+			assert.Zero(t, resp.Code, resp.Log)
 
 			// Check the results
 			results := new(protocol.TransactionResultSet)
