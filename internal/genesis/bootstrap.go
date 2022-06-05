@@ -57,12 +57,12 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) (Bootstrap, error) {
 
 	// Build the routing table
 	var err error
-	b.router, b.routingTable, err = routing.NewSimpleRouter(&opts.Network, nil)
+	b.router, b.routingTable, err = routing.NewSimpleRouter(&opts.Network.Network, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	b.genesisExec, err = block.NewGenesisExecutor(b.db, opts.Logger, opts.Network, b.router)
+	b.genesisExec, err = block.NewGenesisExecutor(b.db, opts.Logger, &opts.Network, b.router)
 	if err != nil {
 		return nil, err
 	}

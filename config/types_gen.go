@@ -11,7 +11,7 @@ import (
 type Describe struct {
 	Network
 	NetworkType  NetworkType `json:"networkType,omitempty" form:"networkType" query:"networkType" validate:"required" toml:"type" mapstructure:"type"`
-	SubnetId     string      `json:"subnetId,omitempty" form:"subnetId" query:"subnetId" validate:"required" toml:"local-subnet" mapstructure:"local-subnet"`
+	SubnetId     string      `json:"subnetId,omitempty" form:"subnetId" query:"subnetId" validate:"required" toml:"subnet-id" mapstructure:"subnet-id"`
 	LocalAddress string      `json:"localAddress,omitempty" form:"localAddress" query:"localAddress" validate:"required" toml:"local-address" mapstructure:"local-address"`
 	extraData    []byte
 }

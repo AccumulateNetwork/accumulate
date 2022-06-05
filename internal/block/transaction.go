@@ -100,7 +100,7 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Del
 		}
 
 		// Only push sync updates for DN accounts
-		if x.Network.Type == config.Directory {
+		if x.Network.NetworkType == config.Directory {
 			err = x.pushNetworkAccountUpdates(batch, delivery, principal)
 			if err != nil {
 				return x.recordFailedTransaction(batch, delivery, err)

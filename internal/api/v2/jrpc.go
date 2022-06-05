@@ -125,7 +125,9 @@ func (m *JrpcMethods) Version(_ context.Context, params json.RawMessage) interfa
 
 func (m *JrpcMethods) Describe(_ context.Context, params json.RawMessage) interface{} {
 	res := new(DescriptionResponse)
-	res.Describe = *m.Network
+	res.Network = m.Network.Network
+	res.SubnetId = m.Network.SubnetId
+	res.NetworkType = m.Network.NetworkType
 
 	err := res.Values.Load(m.Network, func(account *url.URL, target interface{}) error {
 		return m.Database.View(func(batch *database.Batch) error {

@@ -47,9 +47,6 @@ func accountId(_ *cobra.Command, args []string) {
 		var err error
 		dclient, err = client.New(args[0])
 		check(err)
-		info, err = dclient.Describe(context.Background())
-		check(err)
-		bvnCount = len(info.Describe.Subnets)
 		args = args[1:]
 	}
 

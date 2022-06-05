@@ -11,7 +11,7 @@ import (
 type getStateFunc func(accountUrl *url.URL, target interface{}) error
 type putStateFunc func(account protocol.Account) error
 
-func (g *GlobalValues) Load(net *config.Network, getState getStateFunc) error {
+func (g *GlobalValues) Load(net *config.Describe, getState getStateFunc) error {
 	if err := loadAccount(net.NodeUrl(protocol.Oracle), "oracle", getState, new(protocol.AcmeOracle), &g.Oracle); err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
@@ -27,7 +27,7 @@ func (g *GlobalValues) Load(net *config.Network, getState getStateFunc) error {
 	return nil
 }
 
-func (g *GlobalValues) Store(net *config.Network, getState getStateFunc, putState putStateFunc) error {
+func (g *GlobalValues) Store(net *config.Describe, getState getStateFunc, putState putStateFunc) error {
 	if err := storeAccount(net.NodeUrl(protocol.Oracle), "oracle", getState, putState, g.Oracle); err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}

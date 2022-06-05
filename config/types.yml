@@ -8,7 +8,7 @@ Describe:
     type: NetworkType
     marshal-as: enum
   - name: SubnetId
-    toml: local-subnet
+    toml: subnet-id
     type: string
   - name: LocalAddress
     toml: local-address

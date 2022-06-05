@@ -16,7 +16,6 @@ import (
 	"github.com/tendermint/tendermint/types"
 	cfg "gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
-	"gitlab.com/accumulatenetwork/accumulate/networks"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 )
 

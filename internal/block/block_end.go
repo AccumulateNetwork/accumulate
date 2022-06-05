@@ -100,18 +100,6 @@ func (m *Executor) EndBlock(block *Block) error {
 		return errors.Format(errors.StatusUnknown, "store block chain updates index: %w", err)
 	}
 
-	// If dn/oracle was updated, update the ledger's oracle value, but only if
-	// we're on the DN - mirroring can cause dn/oracle to be updated on the BVN
-	if accountSeen[protocol.PriceOracleAuthority] && m.Network.SubnetId == protocol.Directory {
-		// If things go south here, don't return and error, instead, just log one
-		newOracleValue, err := m.updateOraclePrice(block)
-		if err != nil {
-			m.logger.Error("Failed to update oracle", "error", err)
-		} else {
-			ledgerState.PendingOracle = newOracleValue
-		}
-	}
-
 	// Add the synthetic transaction chain to the root chain
 	var synthIndexIndex uint64
 	var synthAnchorIndex uint64
