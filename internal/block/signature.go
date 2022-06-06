@@ -84,6 +84,9 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 	case *protocol.ReceiptSignature:
 		err = verifyReceiptSignature(delivery.Transaction, signature, md)
 
+	case *protocol.InternalSignature:
+		err = verifyInternalSignature(delivery, signature, md)
+
 	case *protocol.SignatureSet:
 		if !delivery.IsForwarded() {
 			return nil, errors.New(errors.StatusBadRequest, "a signature set is not allowed outside of a forwarded transaction")
@@ -153,9 +156,10 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 		return nil, err
 	}
 
-	isUserTxn := delivery.Transaction.Body.Type().IsUser()
+	isSystemSig := signature.Type().IsSystem()
+	isUserTxn := delivery.Transaction.Body.Type().IsUser() && !delivery.WasProducedInternally()
 	if !isUserTxn {
-		if signature.Type().IsSystem() {
+		if isSystemSig {
 			signer, err = loadSigner(batch, x.Network.DefaultOperatorPage())
 		} else {
 			signer, err = loadSigner(batch, signature.GetSigner())
@@ -172,7 +176,7 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 
 	// Store the transaction state (without signatures) if it is local to the
 	// signature, unless the body is just a hash
-	isLocalTxn := !signature.Type().IsSystem() && delivery.Transaction.Header.Principal.LocalTo(md.Location)
+	isLocalTxn := !isSystemSig && delivery.Transaction.Header.Principal.LocalTo(md.Location)
 	if isLocalTxn && delivery.Transaction.Body.Type() != protocol.TransactionTypeRemote {
 		err = batch.Transaction(delivery.Transaction.GetHash()).
 			PutState(&database.SigOrTxn{Transaction: delivery.Transaction})
@@ -216,7 +220,7 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 
 	// Persist the signature
 	env := new(database.SigOrTxn)
-	env.Hash = *(*[32]byte)(delivery.Transaction.GetHash())
+	env.Txid = delivery.Transaction.ID()
 	env.Signature = sigToStore
 	sigHash := signature.Hash()
 	err = batch.Transaction(sigHash).PutState(env)
@@ -258,6 +262,7 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 	switch signature := signature.(type) {
 	case *protocol.ReceiptSignature,
 		*protocol.SyntheticSignature,
+		*protocol.InternalSignature,
 		*protocol.RemoteSignature,
 		*protocol.SignatureSet:
 		index = 0
@@ -647,6 +652,22 @@ func verifyReceiptSignature(transaction *protocol.Transaction, receipt *protocol
 
 	if !receipt.Proof.Convert().Validate() {
 		return fmt.Errorf("invalid receipt")
+	}
+
+	return nil
+}
+
+func verifyInternalSignature(delivery *chain.Delivery, _ *protocol.InternalSignature, md sigExecMetadata) error {
+	if md.Nested() {
+		return errors.New(errors.StatusBadRequest, "an internal signature cannot be nested within another signature")
+	}
+
+	if !delivery.WasProducedInternally() {
+		return errors.New(errors.StatusBadRequest, "an internal signature can only be used for transactions produced by a system transaction")
+	}
+
+	if delivery.IsForwarded() {
+		return errors.New(errors.StatusBadRequest, "an internal signature cannot be forwarded")
 	}
 
 	return nil

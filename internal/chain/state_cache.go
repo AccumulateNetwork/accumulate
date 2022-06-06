@@ -1,9 +1,8 @@
 package chain
 
 import (
-	"fmt"
-
 	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
@@ -21,6 +20,7 @@ type stateCache struct {
 	txType protocol.TransactionType
 	txHash types.Bytes32
 
+	Globals    *core.GlobalValues
 	State      ProcessTransactionState
 	batch      *database.Batch
 	operations []stateOperation
@@ -29,9 +29,10 @@ type stateCache struct {
 	Pretend bool
 }
 
-func newStateCache(net *config.Network, txtype protocol.TransactionType, txid [32]byte, batch *database.Batch) *stateCache {
+func newStateCache(net *config.Network, globals *core.GlobalValues, txtype protocol.TransactionType, txid [32]byte, batch *database.Batch) *stateCache {
 	c := new(stateCache)
 	c.Network = net
+	c.Globals = globals
 	c.txType = txtype
 	c.txHash = txid
 	c.batch = batch
@@ -63,7 +64,7 @@ func (c *stateCache) LoadUrl(account *url.URL) (protocol.Account, error) {
 
 	state, err := c.batch.Account(account).GetState()
 	if err != nil {
-		return nil, fmt.Errorf("load %v: get state: %w", account, err)
+		return nil, errors.Format(errors.StatusUnknown, "load %v: %w", account, err)
 	}
 
 	c.chains[account.AccountID32()] = state
@@ -142,10 +143,10 @@ func (st *stateCache) createOrUpdate(isUpdate bool, accounts []protocol.Account)
 		_, err := rec.GetState()
 		switch {
 		case err != nil && !errors.Is(err, storage.ErrNotFound):
-			return fmt.Errorf("failed to check for an existing record: %v", err)
+			return errors.Format(errors.StatusUnknown, "failed to check for an existing record: %v", err)
 
 		case err == nil && isCreate:
-			return fmt.Errorf("account %v already exists", account.GetUrl())
+			return errors.Format(errors.StatusConflict, "account %v already exists", account.GetUrl())
 
 		case st.txType.IsSynthetic() || st.txType.IsSystem():
 			// Synthetic and internal transactions are allowed to create accounts
@@ -153,7 +154,7 @@ func (st *stateCache) createOrUpdate(isUpdate bool, accounts []protocol.Account)
 			// TODO Make synthetic transactions call Create
 
 		case err != nil && isUpdate:
-			return fmt.Errorf("account %v does not exist", account.GetUrl())
+			return errors.Format(errors.StatusConflict, "account %v does not exist", account.GetUrl())
 		}
 
 		if st.Pretend {
@@ -163,13 +164,13 @@ func (st *stateCache) createOrUpdate(isUpdate bool, accounts []protocol.Account)
 		// Update/Create the state
 		err = rec.PutState(account)
 		if err != nil {
-			return fmt.Errorf("failed to update state of %q: %v", account.GetUrl(), err)
+			return errors.Format(errors.StatusUnknown, "failed to update state of %q: %v", account.GetUrl(), err)
 		}
 
 		// Add to the account's main chain
 		err = st.State.ChainUpdates.AddChainEntry(st.batch, account.GetUrl(), protocol.MainChain, protocol.ChainTypeTransaction, st.txHash[:], 0, 0)
 		if err != nil {
-			return fmt.Errorf("failed to update main chain of %q: %v", account.GetUrl(), err)
+			return errors.Format(errors.StatusUnknown, "failed to update main chain of %q: %v", account.GetUrl(), err)
 		}
 
 		// Add it to the directory
@@ -177,7 +178,7 @@ func (st *stateCache) createOrUpdate(isUpdate bool, accounts []protocol.Account)
 			u := account.GetUrl()
 			err = st.AddDirectoryEntry(u.Identity(), u)
 			if err != nil {
-				return fmt.Errorf("failed to add a directory entry for %q: %v", u, err)
+				return errors.Format(errors.StatusUnknown, "failed to add a directory entry for %q: %v", u, err)
 			}
 		}
 

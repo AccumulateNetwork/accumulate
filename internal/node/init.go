@@ -16,7 +16,6 @@ import (
 	"github.com/tendermint/tendermint/types"
 	cfg "gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
-	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/networks"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 )
@@ -105,7 +104,7 @@ func initV1(opts InitOptions) (bootstrap genesis.Bootstrap, err error) {
 			return nil, fmt.Errorf("failed to create data dir: %v", err)
 		}
 
-		if err := initFilesWithConfig(config, &subnetID); err != nil {
+		if err := initFilesWithConfig(config, &subnetID, opts.GenesisDoc); err != nil {
 			return nil, err
 		}
 
@@ -140,7 +139,6 @@ func initV1(opts InitOptions) (bootstrap genesis.Bootstrap, err error) {
 			Keys:                genValKeys,
 			NetworkValidatorMap: opts.NetworkValidatorMap,
 			Logger:              opts.Logger,
-			Router:              &routing.RouterInstance{Network: &configs[0].Accumulate.Network},
 			FactomAddressesFile: opts.FactomAddressesFile,
 		})
 		if err != nil {
@@ -205,7 +203,7 @@ func initV1(opts InitOptions) (bootstrap genesis.Bootstrap, err error) {
 	return bootstrap, nil
 }
 
-func initFilesWithConfig(config *cfg.Config, chainid *string) error {
+func initFilesWithConfig(config *cfg.Config, chainid *string, genDoc *types.GenesisDoc) error {
 
 	logger := tmlog.NewNopLogger()
 
@@ -245,20 +243,22 @@ func initFilesWithConfig(config *cfg.Config, chainid *string) error {
 	if tmos.FileExists(genFile) {
 		logger.Info("Found genesis file", "path", genFile)
 	} else {
-		genDoc := types.GenesisDoc{
-			ChainID:         *chainid,
-			GenesisTime:     tmtime.Now(),
-			ConsensusParams: types.DefaultConsensusParams(),
+		if genDoc == nil {
+			genDoc := types.GenesisDoc{
+				ChainID:         *chainid,
+				GenesisTime:     tmtime.Now(),
+				ConsensusParams: types.DefaultConsensusParams(),
+			}
+			pubKey, err := pv.GetPubKey(context.Background())
+			if err != nil {
+				return fmt.Errorf("can't get pubkey: %v", err)
+			}
+			genDoc.Validators = []types.GenesisValidator{{
+				Address: pubKey.Address(),
+				PubKey:  pubKey,
+				Power:   10,
+			}}
 		}
-		pubKey, err := pv.GetPubKey(context.Background())
-		if err != nil {
-			return fmt.Errorf("can't get pubkey: %v", err)
-		}
-		genDoc.Validators = []types.GenesisValidator{{
-			Address: pubKey.Address(),
-			PubKey:  pubKey,
-			Power:   10,
-		}}
 
 		if err := genDoc.SaveAs(genFile); err != nil {
 			return fmt.Errorf("can't save genFile: %s: %v", genFile, err)

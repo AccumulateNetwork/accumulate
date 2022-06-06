@@ -137,16 +137,16 @@ type ResponseAccount struct {
 }
 
 type ResponseByTxId struct {
-	fieldsSet    []bool
-	TxId         [32]byte                    `json:"txId,omitempty" form:"txId" query:"txId" validate:"required"`
-	Envelope     *protocol.Envelope          `json:"envelope,omitempty" form:"envelope" query:"envelope" validate:"required"`
-	Status       *protocol.TransactionStatus `json:"status,omitempty" form:"status" query:"status" validate:"required"`
-	TxSynthTxIds []byte                      `json:"txSynthTxIds,omitempty" form:"txSynthTxIds" query:"txSynthTxIds" validate:"required"`
-	Height       int64                       `json:"height" form:"height" query:"height" validate:"required"`
-	ChainState   [][]byte                    `json:"chainState,omitempty" form:"chainState" query:"chainState" validate:"required"`
-	Receipts     []*TxReceipt                `json:"receipts,omitempty" form:"receipts" query:"receipts" validate:"required"`
-	Signers      []SignatureSet              `json:"signers,omitempty" form:"signers" query:"signers" validate:"required"`
-	extraData    []byte
+	fieldsSet  []bool
+	TxId       *url.TxID                   `json:"txId,omitempty" form:"txId" query:"txId" validate:"required"`
+	Envelope   *protocol.Envelope          `json:"envelope,omitempty" form:"envelope" query:"envelope" validate:"required"`
+	Status     *protocol.TransactionStatus `json:"status,omitempty" form:"status" query:"status" validate:"required"`
+	Produced   []*url.TxID                 `json:"produced,omitempty" form:"produced" query:"produced" validate:"required"`
+	Height     int64                       `json:"height" form:"height" query:"height" validate:"required"`
+	ChainState [][]byte                    `json:"chainState,omitempty" form:"chainState" query:"chainState" validate:"required"`
+	Receipts   []*TxReceipt                `json:"receipts,omitempty" form:"receipts" query:"receipts" validate:"required"`
+	Signers    []SignatureSet              `json:"signers,omitempty" form:"signers" query:"signers" validate:"required"`
+	extraData  []byte
 }
 
 type ResponseChainEntry struct {
@@ -214,7 +214,7 @@ type ResponseMinorEntry struct {
 
 type ResponsePending struct {
 	fieldsSet    []bool
-	Transactions [][32]byte `json:"transactions,omitempty" form:"transactions" query:"transactions" validate:"required"`
+	Transactions []*url.TxID `json:"transactions,omitempty" form:"transactions" query:"transactions" validate:"required"`
 	extraData    []byte
 }
 
@@ -474,14 +474,21 @@ func (v *ResponseAccount) CopyAsInterface() interface{} { return v.Copy() }
 func (v *ResponseByTxId) Copy() *ResponseByTxId {
 	u := new(ResponseByTxId)
 
-	u.TxId = v.TxId
+	if v.TxId != nil {
+		u.TxId = (v.TxId).Copy()
+	}
 	if v.Envelope != nil {
 		u.Envelope = (v.Envelope).Copy()
 	}
 	if v.Status != nil {
 		u.Status = (v.Status).Copy()
 	}
-	u.TxSynthTxIds = encoding.BytesCopy(v.TxSynthTxIds)
+	u.Produced = make([]*url.TxID, len(v.Produced))
+	for i, v := range v.Produced {
+		if v != nil {
+			u.Produced[i] = (v).Copy()
+		}
+	}
 	u.Height = v.Height
 	u.ChainState = make([][]byte, len(v.ChainState))
 	for i, v := range v.ChainState {
@@ -626,9 +633,11 @@ func (v *ResponseMinorEntry) CopyAsInterface() interface{} { return v.Copy() }
 func (v *ResponsePending) Copy() *ResponsePending {
 	u := new(ResponsePending)
 
-	u.Transactions = make([][32]byte, len(v.Transactions))
+	u.Transactions = make([]*url.TxID, len(v.Transactions))
 	for i, v := range v.Transactions {
-		u.Transactions[i] = v
+		if v != nil {
+			u.Transactions[i] = (v).Copy()
+		}
 	}
 
 	return u
@@ -953,7 +962,12 @@ func (v *ResponseAccount) Equal(u *ResponseAccount) bool {
 }
 
 func (v *ResponseByTxId) Equal(u *ResponseByTxId) bool {
-	if !(v.TxId == u.TxId) {
+	switch {
+	case v.TxId == u.TxId:
+		// equal
+	case v.TxId == nil || u.TxId == nil:
+		return false
+	case !((v.TxId).Equal(u.TxId)):
 		return false
 	}
 	switch {
@@ -972,8 +986,13 @@ func (v *ResponseByTxId) Equal(u *ResponseByTxId) bool {
 	case !((v.Status).Equal(u.Status)):
 		return false
 	}
-	if !(bytes.Equal(v.TxSynthTxIds, u.TxSynthTxIds)) {
+	if len(v.Produced) != len(u.Produced) {
 		return false
+	}
+	for i := range v.Produced {
+		if !((v.Produced[i]).Equal(u.Produced[i])) {
+			return false
+		}
 	}
 	if !(v.Height == u.Height) {
 		return false
@@ -1168,7 +1187,7 @@ func (v *ResponsePending) Equal(u *ResponsePending) bool {
 		return false
 	}
 	for i := range v.Transactions {
-		if !(v.Transactions[i] == u.Transactions[i]) {
+		if !((v.Transactions[i]).Equal(u.Transactions[i])) {
 			return false
 		}
 	}
@@ -2116,7 +2135,7 @@ var fieldNames_ResponseByTxId = []string{
 	1: "TxId",
 	2: "Envelope",
 	3: "Status",
-	4: "TxSynthTxIds",
+	4: "Produced",
 	5: "Height",
 	6: "ChainState",
 	7: "Receipts",
@@ -2127,8 +2146,8 @@ func (v *ResponseByTxId) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	if !(v.TxId == ([32]byte{})) {
-		writer.WriteHash(1, &v.TxId)
+	if !(v.TxId == nil) {
+		writer.WriteTxid(1, v.TxId)
 	}
 	if !(v.Envelope == nil) {
 		writer.WriteValue(2, v.Envelope)
@@ -2136,8 +2155,10 @@ func (v *ResponseByTxId) MarshalBinary() ([]byte, error) {
 	if !(v.Status == nil) {
 		writer.WriteValue(3, v.Status)
 	}
-	if !(len(v.TxSynthTxIds) == 0) {
-		writer.WriteBytes(4, v.TxSynthTxIds)
+	if !(len(v.Produced) == 0) {
+		for _, v := range v.Produced {
+			writer.WriteTxid(4, v)
+		}
 	}
 	writer.WriteInt(5, v.Height)
 	if !(len(v.ChainState) == 0) {
@@ -2169,7 +2190,7 @@ func (v *ResponseByTxId) IsValid() error {
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field TxId is missing")
-	} else if v.TxId == ([32]byte{}) {
+	} else if v.TxId == nil {
 		errs = append(errs, "field TxId is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
@@ -2183,9 +2204,9 @@ func (v *ResponseByTxId) IsValid() error {
 		errs = append(errs, "field Status is not set")
 	}
 	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
-		errs = append(errs, "field TxSynthTxIds is missing")
-	} else if len(v.TxSynthTxIds) == 0 {
-		errs = append(errs, "field TxSynthTxIds is not set")
+		errs = append(errs, "field Produced is missing")
+	} else if len(v.Produced) == 0 {
+		errs = append(errs, "field Produced is not set")
 	}
 	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
 		errs = append(errs, "field Height is missing")
@@ -2635,7 +2656,7 @@ func (v *ResponsePending) MarshalBinary() ([]byte, error) {
 
 	if !(len(v.Transactions) == 0) {
 		for _, v := range v.Transactions {
-			writer.WriteHash(1, &v)
+			writer.WriteTxid(1, v)
 		}
 	}
 
@@ -3356,8 +3377,8 @@ func (v *ResponseByTxId) UnmarshalBinary(data []byte) error {
 func (v *ResponseByTxId) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	if x, ok := reader.ReadHash(1); ok {
-		v.TxId = *x
+	if x, ok := reader.ReadTxid(1); ok {
+		v.TxId = x
 	}
 	if x := new(protocol.Envelope); reader.ReadValue(2, x.UnmarshalBinary) {
 		v.Envelope = x
@@ -3365,8 +3386,12 @@ func (v *ResponseByTxId) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x := new(protocol.TransactionStatus); reader.ReadValue(3, x.UnmarshalBinary) {
 		v.Status = x
 	}
-	if x, ok := reader.ReadBytes(4); ok {
-		v.TxSynthTxIds = x
+	for {
+		if x, ok := reader.ReadTxid(4); ok {
+			v.Produced = append(v.Produced, x)
+		} else {
+			break
+		}
 	}
 	if x, ok := reader.ReadInt(5); ok {
 		v.Height = x
@@ -3629,8 +3654,8 @@ func (v *ResponsePending) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
 	for {
-		if x, ok := reader.ReadHash(1); ok {
-			v.Transactions = append(v.Transactions, *x)
+		if x, ok := reader.ReadTxid(1); ok {
+			v.Transactions = append(v.Transactions, x)
 		} else {
 			break
 		}
@@ -3971,19 +3996,19 @@ func (v *ResponseAccount) MarshalJSON() ([]byte, error) {
 
 func (v *ResponseByTxId) MarshalJSON() ([]byte, error) {
 	u := struct {
-		TxId         string                          `json:"txId,omitempty"`
-		Envelope     *protocol.Envelope              `json:"envelope,omitempty"`
-		Status       *protocol.TransactionStatus     `json:"status,omitempty"`
-		TxSynthTxIds *string                         `json:"txSynthTxIds,omitempty"`
-		Height       int64                           `json:"height"`
-		ChainState   encoding.JsonList[*string]      `json:"chainState,omitempty"`
-		Receipts     encoding.JsonList[*TxReceipt]   `json:"receipts,omitempty"`
-		Signers      encoding.JsonList[SignatureSet] `json:"signers,omitempty"`
+		TxId       *url.TxID                       `json:"txId,omitempty"`
+		Envelope   *protocol.Envelope              `json:"envelope,omitempty"`
+		Status     *protocol.TransactionStatus     `json:"status,omitempty"`
+		Produced   encoding.JsonList[*url.TxID]    `json:"produced,omitempty"`
+		Height     int64                           `json:"height"`
+		ChainState encoding.JsonList[*string]      `json:"chainState,omitempty"`
+		Receipts   encoding.JsonList[*TxReceipt]   `json:"receipts,omitempty"`
+		Signers    encoding.JsonList[SignatureSet] `json:"signers,omitempty"`
 	}{}
-	u.TxId = encoding.ChainToJSON(v.TxId)
+	u.TxId = v.TxId
 	u.Envelope = v.Envelope
 	u.Status = v.Status
-	u.TxSynthTxIds = encoding.BytesToJSON(v.TxSynthTxIds)
+	u.Produced = v.Produced
 	u.Height = v.Height
 	u.ChainState = make(encoding.JsonList[*string], len(v.ChainState))
 	for i, x := range v.ChainState {
@@ -4099,12 +4124,9 @@ func (v *ResponseMinorEntry) MarshalJSON() ([]byte, error) {
 
 func (v *ResponsePending) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Transactions encoding.JsonList[string] `json:"transactions,omitempty"`
+		Transactions encoding.JsonList[*url.TxID] `json:"transactions,omitempty"`
 	}{}
-	u.Transactions = make(encoding.JsonList[string], len(v.Transactions))
-	for i, x := range v.Transactions {
-		u.Transactions[i] = encoding.ChainToJSON(x)
-	}
+	u.Transactions = v.Transactions
 	return json.Marshal(&u)
 }
 
@@ -4181,7 +4203,7 @@ func (v *ChainState) UnmarshalJSON(data []byte) error {
 	}
 	v.Name = u.Name
 	v.Type = u.Type
-	if u.Height != 0 {
+	if !(u.Height == 0) {
 		v.Height = u.Height
 	} else {
 		v.Height = u.Count
@@ -4236,7 +4258,7 @@ func (v *GeneralReceipt) UnmarshalJSON(data []byte) error {
 	}
 	v.LocalBlock = u.LocalBlock
 	v.DirectoryBlock = u.DirectoryBlock
-	if u.Proof.Equal(&protocol.Receipt{}) {
+	if !(u.Proof.Equal(&protocol.Receipt{})) {
 		v.Proof = u.Proof
 	} else {
 		v.Proof = u.Receipt
@@ -4524,19 +4546,19 @@ func (v *ResponseAccount) UnmarshalJSON(data []byte) error {
 
 func (v *ResponseByTxId) UnmarshalJSON(data []byte) error {
 	u := struct {
-		TxId         string                          `json:"txId,omitempty"`
-		Envelope     *protocol.Envelope              `json:"envelope,omitempty"`
-		Status       *protocol.TransactionStatus     `json:"status,omitempty"`
-		TxSynthTxIds *string                         `json:"txSynthTxIds,omitempty"`
-		Height       int64                           `json:"height"`
-		ChainState   encoding.JsonList[*string]      `json:"chainState,omitempty"`
-		Receipts     encoding.JsonList[*TxReceipt]   `json:"receipts,omitempty"`
-		Signers      encoding.JsonList[SignatureSet] `json:"signers,omitempty"`
+		TxId       *url.TxID                       `json:"txId,omitempty"`
+		Envelope   *protocol.Envelope              `json:"envelope,omitempty"`
+		Status     *protocol.TransactionStatus     `json:"status,omitempty"`
+		Produced   encoding.JsonList[*url.TxID]    `json:"produced,omitempty"`
+		Height     int64                           `json:"height"`
+		ChainState encoding.JsonList[*string]      `json:"chainState,omitempty"`
+		Receipts   encoding.JsonList[*TxReceipt]   `json:"receipts,omitempty"`
+		Signers    encoding.JsonList[SignatureSet] `json:"signers,omitempty"`
 	}{}
-	u.TxId = encoding.ChainToJSON(v.TxId)
+	u.TxId = v.TxId
 	u.Envelope = v.Envelope
 	u.Status = v.Status
-	u.TxSynthTxIds = encoding.BytesToJSON(v.TxSynthTxIds)
+	u.Produced = v.Produced
 	u.Height = v.Height
 	u.ChainState = make(encoding.JsonList[*string], len(v.ChainState))
 	for i, x := range v.ChainState {
@@ -4547,18 +4569,10 @@ func (v *ResponseByTxId) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	if x, err := encoding.ChainFromJSON(u.TxId); err != nil {
-		return fmt.Errorf("error decoding TxId: %w", err)
-	} else {
-		v.TxId = x
-	}
+	v.TxId = u.TxId
 	v.Envelope = u.Envelope
 	v.Status = u.Status
-	if x, err := encoding.BytesFromJSON(u.TxSynthTxIds); err != nil {
-		return fmt.Errorf("error decoding TxSynthTxIds: %w", err)
-	} else {
-		v.TxSynthTxIds = x
-	}
+	v.Produced = u.Produced
 	v.Height = u.Height
 	v.ChainState = make([][]byte, len(u.ChainState))
 	for i, x := range u.ChainState {
@@ -4696,12 +4710,12 @@ func (v *ResponseKeyPageIndex) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	if u.Authority != nil {
+	if !(u.Authority == nil) {
 		v.Authority = u.Authority
 	} else {
 		v.Authority = u.KeyBook
 	}
-	if u.Signer != nil {
+	if !(u.Signer == nil) {
 		v.Signer = u.Signer
 	} else {
 		v.Signer = u.KeyPage
@@ -4761,23 +4775,13 @@ func (v *ResponseMinorEntry) UnmarshalJSON(data []byte) error {
 
 func (v *ResponsePending) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Transactions encoding.JsonList[string] `json:"transactions,omitempty"`
+		Transactions encoding.JsonList[*url.TxID] `json:"transactions,omitempty"`
 	}{}
-	u.Transactions = make(encoding.JsonList[string], len(v.Transactions))
-	for i, x := range v.Transactions {
-		u.Transactions[i] = encoding.ChainToJSON(x)
-	}
+	u.Transactions = v.Transactions
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	v.Transactions = make([][32]byte, len(u.Transactions))
-	for i, x := range u.Transactions {
-		if x, err := encoding.ChainFromJSON(x); err != nil {
-			return fmt.Errorf("error decoding Transactions: %w", err)
-		} else {
-			v.Transactions[i] = x
-		}
-	}
+	v.Transactions = u.Transactions
 	return nil
 }
 
@@ -4843,7 +4847,7 @@ func (v *TxReceipt) UnmarshalJSON(data []byte) error {
 	}
 	v.GeneralReceipt.LocalBlock = u.LocalBlock
 	v.GeneralReceipt.DirectoryBlock = u.DirectoryBlock
-	if u.Proof.Equal(&protocol.Receipt{}) {
+	if !(u.Proof.Equal(&protocol.Receipt{})) {
 		v.GeneralReceipt.Proof = u.Proof
 	} else {
 		v.GeneralReceipt.Proof = u.Receipt

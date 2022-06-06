@@ -313,13 +313,30 @@ func (r *Reader) ReadBigInt(n uint) (*big.Int, bool) {
 	return new(big.Int).SetBytes(v), true
 }
 
-// ReadUrl reads the value as a string.
+// ReadUrl reads the value as a URL.
 func (r *Reader) ReadUrl(n uint) (*url.URL, bool) {
 	s, ok := r.ReadString(n)
 	if !ok {
 		return nil, false
 	}
+	if s == "" {
+		return nil, true
+	}
 	v, err := url.Parse(s)
+	r.didRead(n, err, "failed to parse url")
+	return v, err == nil
+}
+
+// ReadTxid reads the value as a transaction ID.
+func (r *Reader) ReadTxid(n uint) (*url.TxID, bool) {
+	s, ok := r.ReadString(n)
+	if !ok {
+		return nil, false
+	}
+	if s == "" {
+		return nil, true
+	}
+	v, err := url.ParseTxID(s)
 	r.didRead(n, err, "failed to parse url")
 	return v, err == nil
 }
@@ -349,6 +366,9 @@ func (r *Reader) ReadEnum(n uint, v EnumValueSetter) bool {
 
 //ReadAll reads the entire value from the current position
 func (r *Reader) ReadAll() ([]byte, error) {
+	if r.current == EmptyObject {
+		return nil, nil
+	}
 	if r.current != 0 {
 		// Return the field number
 		err := r.r.UnreadByte()

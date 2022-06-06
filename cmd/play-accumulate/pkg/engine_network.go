@@ -110,8 +110,8 @@ func (e NetEngine) waitFor(hash [32]byte, ignorePending bool) ([]*protocol.Trans
 	resp.Status.For = hash
 	statuses := []*protocol.TransactionStatus{resp.Status}
 	transactions := []*protocol.Transaction{resp.Transaction}
-	for _, hash := range resp.SyntheticTxids {
-		st, txn, err := e.waitFor(hash, true)
+	for _, hash := range resp.Produced {
+		st, txn, err := e.waitFor(hash.Hash(), true)
 		if err != nil {
 			return nil, nil, err
 		}
