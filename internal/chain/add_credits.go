@@ -53,7 +53,7 @@ func (AddCredits) Validate(st *StateManager, tx *Delivery) (protocol.Transaction
 
 	acmeFee := body.Oracle * protocol.MinimumCreditPurchase.AsUInt64()
 	if body.Amount.Uint64() < acmeFee {
-		return nil, fmt.Errorf("amount is less than fee")
+		return nil, fmt.Errorf("amount is less than minimum")
 	}
 
 	// If specifying amount of acme to spend

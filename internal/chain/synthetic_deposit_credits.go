@@ -65,6 +65,10 @@ func (SyntheticDepositCredits) Validate(st *StateManager, tx *Delivery) (protoco
 	}
 
 	ledgerState.AcmeBurnt.Add(&ledgerState.AcmeBurnt, big.NewInt(int64(body.RefundableAcme)))
+	err = st.Update(ledgerState)
+	if err != nil {
+		return nil, err
+	}
 
 	if create {
 		err = st.Create(account)
