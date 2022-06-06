@@ -22,7 +22,6 @@ func TestTransactionPriority(t *testing.T) {
 	_ = bvn.db.Update(func(batch *database.Batch) error {
 		require.NoError(t, acctesting.CreateAdiWithCredits(batch, fooKey, "foo", 1e9))
 		require.NoError(t, acctesting.CreateTokenAccount(batch, "foo/tokens", protocol.AcmeUrl().String(), 1, false))
-		require.NoError(t, batch.Commit())
 		return nil
 	})
 
@@ -58,7 +57,7 @@ func TestTransactionPriority(t *testing.T) {
 				SignFunc(func(txn *protocol.Transaction) protocol.Signature {
 					// Add a receipt signature
 					sig := new(protocol.ReceiptSignature)
-					sig.SourceNetwork = url.MustParse("foo")
+					sig.SourceNetwork = url.MustParse("foo.acme")
 					sig.TransactionHash = *(*[32]byte)(txn.GetHash())
 					sig.Proof.Start = txn.GetHash()
 					sig.Proof.Anchor = txn.GetHash()
@@ -68,8 +67,8 @@ func TestTransactionPriority(t *testing.T) {
 			ExpectPriority: 1,
 		},
 		"User": {
-			Envelope: newTxn("foo/tokens").
-				WithSigner(url.MustParse("foo/book0/1"), 1).
+			Envelope: newTxn("foo.acme/tokens").
+				WithSigner(url.MustParse("foo.acme/book0/1"), 1).
 				WithBody(&protocol.BurnTokens{
 					Amount: *big.NewInt(100),
 				}).
