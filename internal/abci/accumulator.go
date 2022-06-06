@@ -354,6 +354,11 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 
 	// If a user transaction fails, the batch fails
 	for i, result := range results {
+		if typ := envelopes[i].Transaction.Body.Type(); typ.IsSystem() && resp.Priority < 2 {
+			resp.Priority = 2
+		} else if typ.IsSynthetic() && resp.Priority < 1 {
+			resp.Priority = 1
+		}
 		if result.Code == 0 {
 			continue
 		}
