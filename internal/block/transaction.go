@@ -99,12 +99,9 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Del
 			return x.recordFailedTransaction(batch, delivery, err)
 		}
 
-		// Only push sync updates for DN accounts
-		if x.Network.Type == config.Directory {
-			err = x.pushNetworkAccountUpdates(batch, delivery, principal)
-			if err != nil {
-				return x.recordFailedTransaction(batch, delivery, err)
-			}
+		err = x.pushNetworkAccountUpdates(batch, delivery, principal)
+		if err != nil {
+			return x.recordFailedTransaction(batch, delivery, err)
 		}
 	}
 
@@ -581,20 +578,30 @@ func (x *Executor) processNetworkAccountUpdates(batch *database.Batch, delivery 
 	}
 
 	// Validate the data and update the corresponding variable
+	var err error
 	switch {
 	case principal.GetUrl().PathEqual(protocol.Oracle):
-		return x.globals.Pending.ParseOracle(body.Entry)
+		err = x.globals.Pending.ParseOracle(body.Entry)
 	case principal.GetUrl().PathEqual(protocol.Globals):
-		return x.globals.Pending.ParseGlobals(body.Entry)
+		err = x.globals.Pending.ParseGlobals(body.Entry)
 	case principal.GetUrl().PathEqual(protocol.Network):
-		return x.globals.Pending.ParseNetwork(body.Entry)
+		err = x.globals.Pending.ParseNetwork(body.Entry)
+	case principal.GetUrl().PathEqual(protocol.Routing):
+		err = x.globals.Pending.ParseRouting(body.Entry)
 	}
-
+	if err != nil {
+		return errors.Wrap(errors.StatusUnknown, err)
+	}
 	return nil
 }
 
 // pushNetworkAccountUpdates pushes updates from the DN to the BVNs.
 func (x *Executor) pushNetworkAccountUpdates(batch *database.Batch, delivery *chain.Delivery, principal protocol.Account) error {
+	// Do not push updates if this transaction is the result of a pushed update
+	if delivery.WasProducedInternally() && delivery.Parent().Transaction.Body.Type() == protocol.TransactionTypeDirectoryAnchor {
+		return nil
+	}
+
 	// Prep the update
 	var update protocol.NetworkAccountUpdate
 	update.Body = delivery.Transaction.Body
@@ -607,21 +614,40 @@ func (x *Executor) pushNetworkAccountUpdates(batch *database.Batch, delivery *ch
 			break
 		}
 
+		// No update needed
+		return nil
+
 	case protocol.TransactionTypeWriteData:
-		// Synchronize updates to the oracle, globals, and network definition
 		switch {
 		case principal.GetUrl().PathEqual(protocol.Oracle):
+			// Synchronize updates to the oracle
 			update.Name = protocol.Oracle
+
 		case principal.GetUrl().PathEqual(protocol.Globals):
+			// Synchronize updates to the globals
 			update.Name = protocol.Globals
+
 		case principal.GetUrl().PathEqual(protocol.Network):
+			// Synchronize updates to the network definition
 			update.Name = protocol.Network
+
+		case principal.GetUrl().PathEqual(protocol.Routing):
+			// Synchronize updates to the routing table
+			update.Name = protocol.Routing
+
+		default:
+			// No update needed
+			return nil
 		}
+
+	default:
+		// No update needed
+		return nil
 	}
 
-	// No update needed
-	if update.Name == "" {
-		return nil
+	// Do not allow direct updates of the BVN accounts
+	if x.Network.Type != config.Directory {
+		return errors.Format(errors.StatusBadRequest, "invalid %v update: partition network accounts cannot be updated directly", principal.GetUrl())
 	}
 
 	// Write the update to the ledger

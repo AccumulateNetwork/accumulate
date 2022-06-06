@@ -56,8 +56,18 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) (Bootstrap, error) {
 	}
 
 	// Build the routing table
+	b.routingTable = new(protocol.RoutingTable)
+	b.routingTable.Routes = routing.BuildSimpleTable(&opts.Network)
+	b.routingTable.Overrides = make([]protocol.RouteOverride, 1, len(opts.Network.Subnets)+1)
+	b.routingTable.Overrides[0] = protocol.RouteOverride{Account: protocol.AcmeUrl(), Subnet: protocol.Directory}
+	for _, subnet := range opts.Network.Subnets {
+		u := protocol.SubnetUrl(subnet.ID)
+		b.routingTable.Overrides = append(b.routingTable.Overrides, protocol.RouteOverride{Account: u, Subnet: subnet.ID})
+	}
+
+	// Create the router
 	var err error
-	b.router, b.routingTable, err = routing.NewSimpleRouter(&opts.Network, nil)
+	b.router, err = routing.NewStaticRouter(b.routingTable, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -169,6 +179,8 @@ func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protoc
 		b.globals.Network = b.buildNetworkDefinition()
 	}
 
+	b.globals.Routing = b.routingTable
+
 	b.createADI()
 	b.createValidatorBook()
 
@@ -187,17 +199,12 @@ func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protoc
 	err = b.globals.Store(&b.Network, func(accountUrl *url.URL, target interface{}) error {
 		da := new(protocol.DataAccount)
 		da.Url = accountUrl
-		da.AddAuthority(b.authorityUrl) // TODO Lock BVN accounts so they can't be updated directly
+		da.AddAuthority(b.authorityUrl) // TODO Should be governed by dn/operators
 		return encoding.SetPtr(da, target)
 	}, func(account protocol.Account) error {
 		b.WriteRecords(account)
 		return nil
 	})
-	if err != nil {
-		return nil, err
-	}
-
-	err = b.createRouting()
 	if err != nil {
 		return nil, err
 	}
@@ -305,22 +312,6 @@ func (b *bootstrap) createEvidenceChain() {
 	da.AddAuthority(b.authorityUrl)
 	b.WriteRecords(da)
 	b.urls = append(b.urls, da.Url)
-}
-
-func (b *bootstrap) createRouting() error {
-	// Create an account for the routing table
-	account := new(protocol.DataAccount)
-	account.Url = b.nodeUrl.JoinPath(protocol.Routing)
-	account.AddAuthority(b.authorityUrl)
-
-	data, err := b.routingTable.MarshalBinary()
-	if err != nil {
-		return errors.Format(errors.StatusInternalError, "marshal routing table: %w", err)
-	}
-
-	account.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
-	b.WriteRecords(account)
-	return nil
 }
 
 func (b *bootstrap) initDN() error {

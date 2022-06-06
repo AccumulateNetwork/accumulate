@@ -181,6 +181,10 @@ func (d *Delivery) NewSyntheticFromSequence(hash [32]byte) *Delivery {
 	return e
 }
 
+func (d *Delivery) Parent() *Delivery {
+	return d.parent
+}
+
 func (d *Delivery) WasProducedInternally() bool {
 	return d.parent != nil && d.internal
 }

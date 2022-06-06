@@ -18,6 +18,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/internal/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
@@ -39,6 +40,7 @@ type Simulator struct {
 
 	LogLevels string
 
+	router           routing.Router
 	routingOverrides map[[32]byte]string
 }
 
@@ -82,6 +84,9 @@ func (sim *Simulator) Setup(bvnCount int) {
 		sim.Subnets[i+1] = config.Subnet{Type: config.BlockValidator, ID: fmt.Sprintf("BVN%d", i)}
 	}
 
+	mainEventBus := events.NewBus(sim.Logger.With("subnet", protocol.Directory))
+	sim.router = routing.NewRouter(mainEventBus, nil)
+
 	// Initialize each executor
 	for i := range sim.Subnets {
 		subnet := &sim.Subnets[i]
@@ -98,11 +103,17 @@ func (sim *Simulator) Setup(bvnCount int) {
 			Subnets:       sim.Subnets,
 		}
 
+		eventBus := mainEventBus
+		if subnet.Type != config.Directory {
+			eventBus = events.NewBus(logger)
+		}
+
 		exec, err := NewNodeExecutor(ExecutorOptions{
-			Logger:  logger,
-			Key:     key,
-			Network: network,
-			Router:  sim.Router(),
+			Logger:   logger,
+			Key:      key,
+			Network:  network,
+			Router:   sim.Router(),
+			EventBus: eventBus,
 		}, db)
 		require.NoError(sim, err)
 
@@ -144,9 +155,7 @@ func (s *Simulator) SetRouteFor(account *url.URL, subnet string) {
 }
 
 func (s *Simulator) Router() routing.Router {
-	r, _, err := routing.NewSimpleRouter(&config.Network{Subnets: s.Subnets}, nil)
-	require.NoError(s, err)
-	return router{s, r}
+	return router{s, s.router}
 }
 
 func (s *Simulator) Subnet(id string) *ExecEntry {
