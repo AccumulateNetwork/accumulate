@@ -184,7 +184,7 @@ func GenerateTestData(prt bool) [10][]Hash {
 
 	// Print the first row
 	for _, v := range hashes[0] {
-		fmt.Printf("%3v ", v[:2])
+		fmt.Printf("%3v ", v[:2]) //nolint:rangevarref
 	}
 	fmt.Println()
 	for len(hashes[row]) > 1 {
@@ -207,7 +207,7 @@ func GenerateTestData(prt bool) [10][]Hash {
 	println("\n")
 
 	for _, v := range hashes[0] {
-		fmt.Printf("%x  ", v[:4])
+		fmt.Printf("%x  ", v[:4]) //nolint:rangevarref
 	}
 	fmt.Println()
 	row = 0

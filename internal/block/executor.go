@@ -73,11 +73,6 @@ func NewNodeExecutor(opts ExecutorOptions, db *database.Database) (*Executor, er
 
 		// Forwarding
 		SyntheticForwardTransaction{},
-
-		// Validator management
-		AddValidator{},
-		RemoveValidator{},
-		UpdateValidatorKey{},
 	}
 
 	switch opts.Describe.NetworkType {

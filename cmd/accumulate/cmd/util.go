@@ -19,36 +19,34 @@ import (
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
-func runCmdFunc(fn func([]string) (string, error)) func(cmd *cobra.Command, args []string) {
+func runCmdFunc(fn func(args []string) (string, error)) func(cmd *cobra.Command, args []string) {
 	return func(cmd *cobra.Command, args []string) {
 		out, err := fn(args)
 		printOutput(cmd, out, err)
 	}
 }
 
-func runTxnCmdFunc(fn func(*url2.URL, *signing.Builder, []string) (string, error)) func(cmd *cobra.Command, args []string) {
-	return func(cmd *cobra.Command, args []string) {
+func runTxnCmdFunc(fn func(principal *url2.URL, signers []*signing.Builder, args []string) (string, error)) func(cmd *cobra.Command, args []string) {
+	return runCmdFunc(func(args []string) (string, error) {
 		principal, err := url2.Parse(args[0])
 		if err != nil {
-			printOutput(cmd, "", err)
-			return
+			return "", err
 		}
 
-		args, signer, err := prepareSigner(principal, args[1:])
+		args, signers, err := prepareSigner(principal, args[1:])
 		if err != nil {
-			printOutput(cmd, "", err)
-			return
+			return "", err
 		}
 
-		out, err := fn(principal, signer, args)
-		printOutput(cmd, out, err)
-	}
+		return fn(principal, signers, args)
+	})
 }
 
 func getRecord(urlStr string, rec interface{}) (*api2.MerkleState, error) {
@@ -68,22 +66,9 @@ func getRecord(urlStr string, rec interface{}) (*api2.MerkleState, error) {
 	return res.MainChain, nil
 }
 
-func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Builder, error) {
-	ct := 0
+func prepareSigner(origin *url2.URL, args []string) ([]string, []*signing.Builder, error) {
 	if len(args) == 0 {
 		return nil, nil, fmt.Errorf("insufficent arguments on comand line")
-	}
-
-	signer := new(signing.Builder)
-	signer.Type = protocol.SignatureTypeLegacyED25519
-	signer.Timestamp = nonceFromTimeNow()
-
-	for _, del := range Delegators {
-		u, err := url2.Parse(del)
-		if err != nil {
-			return nil, nil, fmt.Errorf("invalid delegator %q: %v", del, err)
-		}
-		signer.AddDelegator(u)
 	}
 
 	var key *Key
@@ -101,14 +86,46 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Builder,
 		}
 	}
 
-	if key != nil {
-		signer.Type = key.Type
-		signer.Url = origin.RootIdentity()
-		signer.Version = 1
-		signer.SetPrivateKey(key.PrivateKey)
-		return args, signer, nil
+	firstSigner := new(signing.Builder)
+	firstSigner.Type = protocol.SignatureTypeLegacyED25519
+	firstSigner.SetTimestamp(nonceFromTimeNow())
+
+	for _, del := range Delegators {
+		u, err := url2.Parse(del)
+		if err != nil {
+			return nil, nil, fmt.Errorf("invalid delegator %q: %v", del, err)
+		}
+		firstSigner.AddDelegator(u)
 	}
 
+	if key != nil {
+		firstSigner.Type = key.Type
+		firstSigner.Url = origin.RootIdentity()
+		firstSigner.Version = 1
+		firstSigner.SetPrivateKey(key.PrivateKey)
+		return args, []*signing.Builder{firstSigner}, nil
+	}
+
+	args, err = prepareSignerPage(firstSigner, origin, args...)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	signers := []*signing.Builder{firstSigner}
+	for _, name := range AdditionalSigners {
+		signer := new(signing.Builder)
+		signer.Type = protocol.SignatureTypeLegacyED25519
+		_, err = prepareSignerPage(signer, origin, name)
+		if err != nil {
+			return nil, nil, err
+		}
+		signers = append(signers, signer)
+	}
+
+	return args, signers, nil
+}
+
+func prepareSignerPage(signer *signing.Builder, origin *url.URL, args ...string) ([]string, error) {
 	var keyName string
 	keyHolder, err := url2.Parse(args[0])
 	if err == nil && keyHolder.UserInfo != "" {
@@ -119,18 +136,18 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Builder,
 		keyName = args[0]
 	}
 
-	key, err = resolvePrivateKey(keyName)
+	key, err := resolvePrivateKey(keyName)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	signer.SetPrivateKey(key.PrivateKey)
-	ct++
+	ct := 1
 
 	signer.Type = key.Type
 
 	keyInfo, err := getKey(keyHolder.String(), key.PublicKeyHash())
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get key for %q : %v", origin, err)
+		return nil, fmt.Errorf("failed to get key for %q : %v", origin, err)
 	}
 
 	if len(args) < 2 {
@@ -145,25 +162,25 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *signing.Builder,
 	var page *protocol.KeyPage
 	_, err = getRecord(signer.Url.String(), &page)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get %q : %v", keyInfo.Signer, err)
+		return nil, fmt.Errorf("failed to get %q : %v", keyInfo.Signer, err)
 	}
 	signer.Version = page.Version
 
-	return args[ct:], signer, nil
+	return args[ct:], nil
 }
 
-func parseArgsAndPrepareSigner(args []string) ([]string, *url2.URL, *signing.Builder, error) {
+func parseArgsAndPrepareSigner(args []string) ([]string, *url2.URL, []*signing.Builder, error) {
 	principal, err := url2.Parse(args[0])
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	args, signer, err := prepareSigner(principal, args[1:])
+	args, signers, err := prepareSigner(principal, args[1:])
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	return args, principal, signer, nil
+	return args, principal, signers, nil
 }
 
 func IsLiteTokenAccount(url string) bool {
@@ -253,34 +270,39 @@ func queryAs(method string, input, output interface{}) error {
 	return fmt.Errorf("%v", ret)
 }
 
-func dispatchTxRequest(payload protocol.TransactionBody, txHash []byte, origin *url2.URL, signer *signing.Builder) (*api2.TxResponse, error) {
+func dispatchTxRequest(payload interface{}, origin *url2.URL, signers []*signing.Builder) (*api2.TxResponse, error) {
 	var env *protocol.Envelope
-	var sig protocol.Signature
-	var err error
-	switch {
-	case payload != nil && txHash == nil:
-		env, err = buildEnvelope(payload, origin)
+	switch payload := payload.(type) {
+	case *protocol.Envelope:
+		env = payload
+
+	case *protocol.Transaction:
+		env = new(protocol.Envelope)
+		env.Transaction = []*protocol.Transaction{payload}
+
+	case protocol.TransactionBody, []byte:
+		body, ok := payload.(protocol.TransactionBody)
+		if !ok {
+			body = &protocol.RemoteTransaction{
+				Hash: *(*[32]byte)(payload.([]byte)),
+			}
+		}
+		var err error
+		env, err = buildEnvelope(body, origin)
 		if err != nil {
 			return nil, err
 		}
-		sig, err = signer.Initiate(env.Transaction[0])
-	case payload == nil && txHash != nil:
-		body := new(protocol.RemoteTransaction)
-		body.Hash = *(*[32]byte)(txHash)
-		txn := new(protocol.Transaction)
-		txn.Body = body
-		txn.Header.Principal = origin
-		env = new(protocol.Envelope)
-		env.TxHash = txHash
-		env.Transaction = []*protocol.Transaction{txn}
-		sig, err = signer.Sign(txHash)
+		for _, signer := range signers {
+			sig, err := signer.Initiate(env.Transaction[0])
+			if err != nil {
+				return nil, err
+			}
+			env.Signatures = append(env.Signatures, sig)
+		}
+
 	default:
-		panic("cannot specify a transaction hash and a payload")
+		panic(fmt.Errorf("%T is not a supported payload type", payload))
 	}
-	if err != nil {
-		return nil, err
-	}
-	env.Signatures = append(env.Signatures, sig)
 
 	req := new(api2.ExecuteRequest)
 	req.Envelope = env
@@ -307,8 +329,8 @@ func dispatchTxRequest(payload protocol.TransactionBody, txHash []byte, origin *
 	return res, nil
 }
 
-func dispatchTxAndWait(payload protocol.TransactionBody, txHash []byte, origin *url2.URL, signer *signing.Builder) (*api2.TxResponse, []*api.TransactionQueryResponse, error) {
-	res, err := dispatchTxRequest(payload, txHash, origin, signer)
+func dispatchTxAndWait(payload interface{}, origin *url2.URL, signers []*signing.Builder) (*api2.TxResponse, []*api.TransactionQueryResponse, error) {
+	res, err := dispatchTxRequest(payload, origin, signers)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -325,8 +347,8 @@ func dispatchTxAndWait(payload protocol.TransactionBody, txHash []byte, origin *
 	return res, resps, nil
 }
 
-func dispatchTxAndPrintResponse(payload protocol.TransactionBody, txHash []byte, origin *url2.URL, signer *signing.Builder) (string, error) {
-	res, resps, err := dispatchTxAndWait(payload, txHash, origin, signer)
+func dispatchTxAndPrintResponse(payload interface{}, origin *url2.URL, signers []*signing.Builder) (string, error) {
+	res, resps, err := dispatchTxAndWait(payload, origin, signers)
 	if err != nil {
 		return PrintJsonRpcError(err)
 	}

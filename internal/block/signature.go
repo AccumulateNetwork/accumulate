@@ -160,7 +160,7 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 	isUserTxn := delivery.Transaction.Body.Type().IsUser() && !delivery.WasProducedInternally()
 	if !isUserTxn {
 		if isSystemSig {
-			signer, err = loadSigner(batch, x.Describe.DefaultOperatorPage())
+			signer, err = loadSigner(batch, x.Describe.OperatorsPage())
 		} else {
 			signer, err = loadSigner(batch, signature.GetSigner())
 		}

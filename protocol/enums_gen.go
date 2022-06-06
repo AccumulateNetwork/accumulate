@@ -335,15 +335,6 @@ const TransactionTypeAddCredits TransactionType = 14
 // TransactionTypeUpdateKeyPage adds, removes, or updates keys in a key page, which *does not* produce a synthetic transaction.
 const TransactionTypeUpdateKeyPage TransactionType = 15
 
-// TransactionTypeAddValidator add a validator.
-const TransactionTypeAddValidator TransactionType = 18
-
-// TransactionTypeRemoveValidator remove a validator.
-const TransactionTypeRemoveValidator TransactionType = 19
-
-// TransactionTypeUpdateValidatorKey update a validator key.
-const TransactionTypeUpdateValidatorKey TransactionType = 20
-
 // TransactionTypeUpdateAccountAuth updates authorization for an account.
 const TransactionTypeUpdateAccountAuth TransactionType = 21
 
@@ -1352,7 +1343,7 @@ func (v TransactionType) GetEnumValue() uint64 { return uint64(v) }
 func (v *TransactionType) SetEnumValue(id uint64) bool {
 	u := TransactionType(id)
 	switch u {
-	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeAddValidator, TransactionTypeRemoveValidator, TransactionTypeUpdateValidatorKey, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeRemote, TransactionTypeSyntheticCreateIdentity, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeSystemGenesis, TransactionTypeDirectoryAnchor, TransactionTypePartitionAnchor, TransactionTypeSystemWriteData:
+	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeRemote, TransactionTypeSyntheticCreateIdentity, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeSystemGenesis, TransactionTypeDirectoryAnchor, TransactionTypePartitionAnchor, TransactionTypeSystemWriteData:
 		*v = u
 		return true
 	default:
@@ -1393,12 +1384,6 @@ func (v TransactionType) String() string {
 		return "addCredits"
 	case TransactionTypeUpdateKeyPage:
 		return "updateKeyPage"
-	case TransactionTypeAddValidator:
-		return "addValidator"
-	case TransactionTypeRemoveValidator:
-		return "removeValidator"
-	case TransactionTypeUpdateValidatorKey:
-		return "updateValidatorKey"
 	case TransactionTypeUpdateAccountAuth:
 		return "updateAccountAuth"
 	case TransactionTypeUpdateKey:
@@ -1463,12 +1448,6 @@ func TransactionTypeByName(name string) (TransactionType, bool) {
 		return TransactionTypeAddCredits, true
 	case "updatekeypage":
 		return TransactionTypeUpdateKeyPage, true
-	case "addvalidator":
-		return TransactionTypeAddValidator, true
-	case "removevalidator":
-		return TransactionTypeRemoveValidator, true
-	case "updatevalidatorkey":
-		return TransactionTypeUpdateValidatorKey, true
 	case "updateaccountauth":
 		return TransactionTypeUpdateAccountAuth, true
 	case "updatekey":
