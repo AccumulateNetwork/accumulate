@@ -87,6 +87,11 @@ func (tb TransactionBuilder) Sign(typ protocol.SignatureType, privateKey []byte)
 	return tb
 }
 
+func (tb TransactionBuilder) SignFunc(fn func(txn *protocol.Transaction) protocol.Signature) TransactionBuilder {
+	tb.Signatures = append(tb.Signatures, fn(tb.Transaction[0]))
+	return tb
+}
+
 func (tb TransactionBuilder) Initiate(typ protocol.SignatureType, privateKey []byte) TransactionBuilder {
 	switch {
 	case tb.Transaction[0].Body == nil:
@@ -142,13 +147,7 @@ func (tb TransactionBuilder) InitiateSynthetic(destSubnetUrl *url.URL) Transacti
 	initSig.DestinationNetwork = destSubnetUrl
 	initSig.SequenceNumber = tb.signer.Version
 
-	initHash, err := initSig.Initiator()
-	if err != nil {
-		// This should never happen
-		panic(fmt.Errorf("failed to calculate the synthetic signature initiator hash: %v", err))
-	}
-
-	tb.Transaction[0].Header.Initiator = *(*[32]byte)(initHash.MerkleHash())
+	tb.Transaction[0].Header.Initiator = *(*[32]byte)(initSig.Metadata().Hash())
 	initSig.TransactionHash = *(*[32]byte)(tb.Transaction[0].GetHash())
 	tb.Signatures = append(tb.Signatures, initSig)
 	return tb
