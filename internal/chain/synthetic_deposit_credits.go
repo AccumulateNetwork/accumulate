@@ -2,7 +2,6 @@ package chain
 
 import (
 	"fmt"
-	"math/big"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -34,6 +33,7 @@ func (SyntheticDepositCredits) Validate(st *StateManager, tx *Delivery) (protoco
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SyntheticDepositCredits), tx.Transaction.Body)
 	}
 
+	// Update the signer
 	var account protocol.Signer
 	var create bool
 	switch origin := st.Origin.(type) {
@@ -58,18 +58,20 @@ func (SyntheticDepositCredits) Validate(st *StateManager, tx *Delivery) (protoco
 
 	account.CreditCredits(body.Amount)
 
+	// Update the ledger
 	var ledgerState *protocol.SystemLedger
 	err := st.LoadUrlAs(st.NodeUrl(protocol.Ledger), &ledgerState)
 	if err != nil {
 		return nil, err
 	}
 
-	ledgerState.AcmeBurnt.Add(&ledgerState.AcmeBurnt, big.NewInt(int64(body.RefundableAcme)))
+	ledgerState.AcmeBurnt.Add(&ledgerState.AcmeBurnt, body.AcmeRefundAmount)
 	err = st.Update(ledgerState)
 	if err != nil {
 		return nil, err
 	}
 
+	// Persist the signer
 	if create {
 		err = st.Create(account)
 	} else {
@@ -87,10 +89,10 @@ func (SyntheticDepositCredits) DidFail(state *ProcessTransactionState, transacti
 		return fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SyntheticDepositCredits), transaction.Body)
 	}
 
-	if body.RefundableAcme != 0 {
+	if body.AcmeRefundAmount != nil {
 		refund := new(protocol.SyntheticDepositTokens)
 		refund.Token = protocol.AcmeUrl()
-		refund.Amount = *big.NewInt(int64(body.RefundableAcme))
+		refund.Amount = *body.AcmeRefundAmount
 		state.DidProduceTxn(body.Source, refund)
 	}
 	return nil

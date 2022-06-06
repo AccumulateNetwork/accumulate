@@ -51,12 +51,15 @@ func (AddCredits) Validate(st *StateManager, tx *Delivery) (protocol.Transaction
 		return nil, fmt.Errorf("oracle doesn't match")
 	}
 
-	acmeFee := body.Oracle * protocol.MinimumCreditPurchase.AsUInt64()
-	if body.Amount.Uint64() < acmeFee {
+	// minimum spend (ACME) = minimum spend (credits) * dollars/credit ÷ dollars/ACME
+	minSpend := new(big.Int)
+	minSpend.SetUint64(protocol.MinimumCreditPurchase.AsUInt64() * protocol.AcmeOraclePrecision * protocol.AcmePrecision)
+	minSpend.Div(minSpend, big.NewInt(int64(protocol.CreditUnitsPerFiatUnit*ledgerState.ActiveOracle)))
+	if body.Amount.Cmp(minSpend) < 0 {
 		return nil, fmt.Errorf("amount is less than minimum")
 	}
 
-	// If specifying amount of acme to spend
+	// Calculate credits from spend (ACME)
 	credits := big.NewInt(int64(protocol.CreditUnitsPerFiatUnit * ledgerState.ActiveOracle))     // credit units / dollar * oracle precision * dollar / acme
 	credits.Mul(credits, &body.Amount)                                                           // acme the user wants to spend - acme * acme precision
 	credits.Div(credits, big.NewInt(int64(protocol.AcmeOraclePrecision*protocol.AcmePrecision))) // adjust the precision of oracle to real units - oracle precision and acme to spend with acme precision
@@ -113,12 +116,14 @@ func (AddCredits) Validate(st *StateManager, tx *Delivery) (protocol.Transaction
 	// Create the synthetic transaction
 	sdc := new(protocol.SyntheticDepositCredits)
 	sdc.Amount = credits.Uint64()
-	sdc.RefundableAcme = body.Amount.Uint64() - acmeFee
+	if body.Amount.Cmp(minSpend) > 0 {
+		sdc.AcmeRefundAmount = new(big.Int).Sub(&body.Amount, minSpend)
+	}
 	st.Submit(recipient, sdc)
 
 	// Add the burnt acme to the internal ledger and send it with the anchor
 	// transaction
-	ledgerState.AcmeBurnt.Add(&ledgerState.AcmeBurnt, big.NewInt(int64(acmeFee)))
+	ledgerState.AcmeBurnt.Add(&ledgerState.AcmeBurnt, minSpend)
 
 	res := new(protocol.AddCreditsResult)
 	res.Oracle = ledgerState.ActiveOracle
