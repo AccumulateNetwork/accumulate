@@ -93,7 +93,7 @@ func (SyntheticDepositCredits) DidFail(state *ProcessTransactionState, transacti
 		refund := new(protocol.SyntheticDepositTokens)
 		refund.Token = protocol.AcmeUrl()
 		refund.Amount = *body.AcmeRefundAmount
-		state.DidProduceTxn(body.Source, refund)
+		state.DidProduceTxn(body.Source(), refund)
 	}
 	return nil
 }
