@@ -8,19 +8,21 @@ Network:
       toml: type
       type: NetworkType
       marshal-as: enum
-    - name: LocalSubnetID
-      toml: local-subnet
+    - name: LocalPartitionID
+      alternative: LocalSubnetID
+      toml: local-partition
       type: string
     - name: LocalAddress
       toml: local-address
       type: string
-    - name: Subnets
-      toml: subnets
-      type: Subnet
+    - name: Partitions
+      alternative: Subnets
+      toml: partitions
+      type: Partition
       marshal-as: reference
       repeatable: true
 
-Subnet:
+Partition:
   non-binary: true
   fields:
     - name: ID

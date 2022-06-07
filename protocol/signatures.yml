@@ -192,7 +192,7 @@ SignatureSet:
 
 RemoteSignature:
   union: { type: signature }
-  description: is used when forwarding a signature from one subnet to another
+  description: is used when forwarding a signature from one partition to another
   fields:
     - name: Destination
       type: url
