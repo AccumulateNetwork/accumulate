@@ -1,7 +1,9 @@
 package e2e
 
 import (
+	"crypto/ed25519"
 	"crypto/sha256"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -39,12 +41,12 @@ func TestUpdateValidators(t *testing.T) {
 	sim.InitFromGenesis()
 
 	dn := sim.Subnet(Directory)
-	bvn0 := sim.Subnet("BVN0")
-	operators := FormatKeyPageUrl(dn.Executor.Network.OperatorBook(), 0)
-	nodeKeyAdd1, nodeKeyAdd2, nodeKeyAdd3, nodeKeyUpd := acctesting.GenerateKey(1), acctesting.GenerateKey(2), acctesting.GenerateKey(3), acctesting.GenerateKey(4)
+	signerUrl := dn.Executor.Network.DefaultOperatorPage()
+	vldKey1, vldKey2, vldKey3, vldKey4 := acctesting.GenerateKey(1), acctesting.GenerateKey(2), acctesting.GenerateKey(3), acctesting.GenerateKey(4)
+	height := uint64(1)
 
 	// The validator timestamp starts out > 0
-	signer := simulator.GetAccount[*KeyPage](sim, dn.Executor.Network.DefaultOperatorPage())
+	signer := simulator.GetAccount[*KeyPage](sim, signerUrl)
 	_, entry, ok := signer.EntryByKey(dn.Executor.Key[32:])
 	require.True(t, ok)
 	timestamp = entry.GetLastUsedOn()
@@ -59,13 +61,12 @@ func TestUpdateValidators(t *testing.T) {
 			send(acctesting.NewTransaction().
 				WithPrincipal(dn.Executor.Network.NodeUrl(Globals)).
 				WithTimestampVar(&timestamp).
-				WithSigner(dn.Executor.Network.DefaultOperatorPage(), 1).
+				WithSigner(signerUrl, 1).
 				WithBody(&WriteData{
 					Entry:        g.FormatGlobals(),
 					WriteToState: true,
 				}).
 				Initiate(SignatureTypeLegacyED25519, dn.Executor.Key).
-				Sign(SignatureTypeED25519, bvn0.Executor.Key).
 				Build())
 		})
 
@@ -73,102 +74,135 @@ func TestUpdateValidators(t *testing.T) {
 	require.ElementsMatch(t, dn.Validators, [][]byte{dn.Executor.Key[32:]})
 
 	// Add a validator
+	addOperatorKey(t, sim, dn, vldKey1, &timestamp, &height)
 	send(sim,
 		func(send func(*Envelope)) {
 			body := new(AddValidator)
-			body.PubKey = nodeKeyAdd1[32:]
+			body.PubKey = vldKey1[32:]
 			send(acctesting.NewTransaction().
 				WithPrincipal(dn.Executor.Network.NodeUrl(ValidatorBook)).
 				WithTimestampVar(&timestamp).
-				WithSigner(operators, 1).
+				WithSigner(signerUrl, height).
 				WithBody(body).
 				Initiate(SignatureTypeLegacyED25519, dn.Executor.Key).
 				Build())
 		})
 
 	// Verify the validator was added
-	require.ElementsMatch(t, dn.Validators, [][]byte{dn.Executor.Key[32:], nodeKeyAdd1[32:]})
+	require.ElementsMatch(t, dn.Validators, [][]byte{dn.Executor.Key[32:], vldKey1[32:]})
 
 	// Update a validator
 	send(sim,
 		func(send func(*Envelope)) {
 			body := new(UpdateValidatorKey)
 
-			body.PubKey = nodeKeyAdd1[32:]
-			body.NewPubKey = nodeKeyUpd[32:]
+			body.PubKey = vldKey1[32:]
+			body.NewPubKey = vldKey4[32:]
 
 			send(acctesting.NewTransaction().
 				WithPrincipal(dn.Executor.Network.NodeUrl(ValidatorBook)).
 				WithTimestampVar(&timestamp).
-				WithSigner(operators, 2).
+				WithSigner(signerUrl, height).
 				WithBody(body).
 				Initiate(SignatureTypeLegacyED25519, dn.Executor.Key).
 				Build())
 		})
 
 	// Verify the validator was updated
-	require.ElementsMatch(t, dn.Validators, [][]byte{dn.Executor.Key[32:], nodeKeyUpd[32:]})
+	require.ElementsMatch(t, dn.Validators, [][]byte{dn.Executor.Key[32:], vldKey4[32:]})
 
 	// Add a third validator, so the page threshold will become 2
+	addOperatorKey(t, sim, dn, vldKey2, &timestamp, &height)
 	send(sim,
 		func(send func(*Envelope)) {
 			body := new(AddValidator)
-			body.PubKey = nodeKeyAdd2[32:]
+			body.PubKey = vldKey2[32:]
 			send(acctesting.NewTransaction().
 				WithPrincipal(dn.Executor.Network.NodeUrl(ValidatorBook)).
 				WithTimestampVar(&timestamp).
-				WithSigner(operators, 3).
+				WithSigner(signerUrl, height).
 				WithBody(body).
 				Initiate(SignatureTypeLegacyED25519, dn.Executor.Key).
 				Build())
 		})
 
 	// Verify the validator was added
-	require.ElementsMatch(t, dn.Validators, [][]byte{dn.Executor.Key[32:], nodeKeyUpd[32:], nodeKeyAdd2[32:]})
+	require.ElementsMatch(t, dn.Validators, [][]byte{dn.Executor.Key[32:], vldKey4[32:], vldKey2[32:]})
 
 	// Verify the Validator threshold
-	require.Equal(t, uint64(2), simulator.GetAccount[*KeyPage](sim, operators).AcceptThreshold)
+	oprPage := simulator.GetAccount[*KeyPage](sim, signerUrl)
+	require.Equal(t, uint64(2), oprPage.AcceptThreshold)
 
 	// Add a fourth validator
+	addOperatorKey(t, sim, dn, vldKey3, &timestamp, &height, vldKey1)
 	send(sim,
 		func(send func(*Envelope)) {
 			body := new(AddValidator)
-			body.PubKey = nodeKeyAdd3[32:]
+			body.PubKey = vldKey3[32:]
 
 			send(acctesting.NewTransaction().
 				WithPrincipal(dn.Executor.Network.NodeUrl(ValidatorBook)).
 				WithTimestampVar(&timestamp).
-				WithSigner(operators, 4).
+				WithSigner(signerUrl, height).
 				WithBody(body).
 				Initiate(SignatureTypeLegacyED25519, dn.Executor.Key).
-				Sign(SignatureTypeED25519, nodeKeyAdd2).
+				Sign(SignatureTypeED25519, vldKey1).
 				Build())
 		})
 
 	// Verify the validator was added
-	require.ElementsMatch(t, dn.Validators, [][]byte{dn.Executor.Key[32:], nodeKeyUpd[32:], nodeKeyAdd2[32:], nodeKeyAdd3[32:]})
+	require.ElementsMatch(t, dn.Validators, [][]byte{dn.Executor.Key[32:], vldKey4[32:], vldKey2[32:], vldKey3[32:]})
 
 	// Verify the Validator threshold
-	require.Equal(t, uint64(2), simulator.GetAccount[*KeyPage](sim, operators).AcceptThreshold)
+	require.Equal(t, uint64(2), simulator.GetAccount[*KeyPage](sim, signerUrl).AcceptThreshold)
 
 	// Remove a validator
 	send(sim,
 		func(send func(*Envelope)) {
 			body := new(RemoveValidator)
-			body.PubKey = nodeKeyUpd[32:]
+			body.PubKey = vldKey4[32:]
 
 			send(acctesting.NewTransaction().
 				WithPrincipal(dn.Executor.Network.NodeUrl(ValidatorBook)).
 				WithTimestampVar(&timestamp).
-				WithSigner(operators, 5).
+				WithSigner(signerUrl, height).
 				WithBody(body).
 				Initiate(SignatureTypeLegacyED25519, dn.Executor.Key).
-				Sign(SignatureTypeED25519, nodeKeyAdd2).
+				Sign(SignatureTypeED25519, vldKey1).
 				Build())
 		})
 
 	// Verify the validator was removed
-	require.ElementsMatch(t, dn.Validators, [][]byte{dn.Executor.Key[32:], nodeKeyAdd2[32:], nodeKeyAdd3[32:]})
+	require.ElementsMatch(t, dn.Validators, [][]byte{dn.Executor.Key[32:], vldKey2[32:], vldKey3[32:]})
+}
+
+func addOperatorKey(t *testing.T, sim *simulator.Simulator, dn *simulator.ExecEntry, oprKey ed25519.PrivateKey, timestamp *uint64, height *uint64, signKeys ...ed25519.PrivateKey) {
+
+	// See if we are going to need to sign and have enough keys
+	oprPage := simulator.GetAccount[*KeyPage](sim, dn.Executor.Network.DefaultOperatorPage())
+	threshold := oprPage.AcceptThreshold
+	nrKeys := uint64(len(signKeys))
+	require.Equalf(t, threshold-1, nrKeys, "we need %d extra signing keys but have %d", threshold-1, nrKeys)
+
+	send(sim,
+		func(send func(*Envelope)) {
+			op := new(AddKeyOperation)
+			keyHash := sha256.Sum256(oprKey.Seed())
+			op.Entry.KeyHash = keyHash[:]
+			body := new(UpdateKeyPage)
+			body.Operation = append(body.Operation, op)
+			txb := acctesting.NewTransaction().
+				WithPrincipal(dn.Executor.Network.DefaultOperatorPage()).
+				WithTimestampVar(timestamp).
+				WithSigner(dn.Executor.Network.DefaultOperatorPage(), *height).
+				WithBody(body).
+				Initiate(SignatureTypeLegacyED25519, dn.Executor.Key)
+			for _, signKey := range signKeys {
+				txb = txb.Sign(SignatureTypeED25519, signKey.Seed())
+			}
+			send(txb.Build())
+		})
+	atomic.AddUint64(height, 1)
 }
 
 func TestUpdateOperators(t *testing.T) {

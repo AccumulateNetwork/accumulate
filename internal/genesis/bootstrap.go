@@ -399,7 +399,7 @@ func (b *bootstrap) createDNOperatorBook() {
 	book.PageCount = 1
 
 	page := createOperatorPage(book.Url, 0, b.InitOpts.NetworkValidatorMap, false)
-	page.AcceptThreshold = protocol.GetMOfN(len(b.InitOpts.NetworkValidatorMap), protocol.FallbackValidatorThreshold)
+	page.AcceptThreshold = protocol.GetMOfN(len(b.InitOpts.NetworkValidatorMap[protocol.Directory]), protocol.FallbackValidatorThreshold)
 	b.WriteRecords(book, page)
 }
 

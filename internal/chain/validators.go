@@ -19,20 +19,14 @@ var _ SignerValidator = (*AddValidator)(nil)
 var _ SignerValidator = (*RemoveValidator)(nil)
 var _ SignerValidator = (*UpdateValidatorKey)(nil)
 
-func (checkValidatorSigner) SignerIsAuthorized(_ AuthDelegate, _ *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, _ bool) (fallback bool, err error) {
-	_, principalPageIdx, ok := protocol.ParseKeyPageUrl(transaction.Header.Principal)
-	if !ok {
-		return false, errors.Format(errors.StatusBadRequest, "principal is not a key page")
-	}
-
+func (checkValidatorSigner) SignerIsAuthorized(_ AuthDelegate, _ *database.Batch, _ *protocol.Transaction, signer protocol.Signer, _ bool) (fallback bool, err error) {
 	_, signerPageIdx, ok := protocol.ParseKeyPageUrl(signer.GetUrl())
 	if !ok {
 		return false, errors.Format(errors.StatusBadRequest, "signer is not a key page")
 	}
 
-	// Lower indices are higher priority
-	if signerPageIdx > principalPageIdx {
-		return false, errors.Format(errors.StatusUnauthorized, "signer %v is lower priority than the principal %v", signer.GetUrl(), transaction.Header.Principal)
+	if signerPageIdx > 1 {
+		return false, fmt.Errorf("cannot modify validators with a lower priority key page")
 	}
 
 	// Run the normal checks
@@ -75,26 +69,38 @@ func (AddValidator) Validate(st *StateManager, env *Delivery) (protocol.Transact
 func addValidator(st *StateManager, env *Delivery) error {
 	body := env.Transaction.Body.(*protocol.AddValidator)
 
-	page, err := checkValidatorTransaction(st, env)
+	vldPage, err := checkValidatorTransaction(st, env)
 	if err != nil {
 		return err
 	}
 
+	var oprPage *protocol.KeyPage
+	err = st.LoadUrlAs(st.Network.DefaultOperatorPage(), &oprPage)
+	if err != nil {
+		return fmt.Errorf("unable to load %s: %v", st.Network.DefaultOperatorPage(), err)
+	}
+
 	// Ensure the key does not already exist
 	keyHash := sha256.Sum256(body.PubKey)
-	_, _, found := page.EntryByKeyHash(keyHash[:])
+	_, _, found := vldPage.EntryByKeyHash(keyHash[:])
 	if found {
 		return fmt.Errorf("key is already a validator")
 	}
 
+	// Ensure the key is already an operator
+	_, _, found = oprPage.EntryByKeyHash(keyHash[:])
+	if found {
+		return fmt.Errorf("key is has to be an operator first")
+	}
+
 	// Add the key hash to the key page
-	page.AddKeySpec(&protocol.KeySpec{PublicKeyHash: keyHash[:]})
+	vldPage.AddKeySpec(&protocol.KeySpec{PublicKeyHash: keyHash[:]})
 
 	// Record the update
-	didUpdateKeyPage(page)
-	err = st.Update(page)
+	didUpdateKeyPage(vldPage)
+	err = st.Update(vldPage)
 	if err != nil {
-		return fmt.Errorf("failed to update %v: %v", page.GetUrl(), err)
+		return fmt.Errorf("failed to update %v: %v", vldPage.GetUrl(), err)
 	}
 
 	// Add the validator
