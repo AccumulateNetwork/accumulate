@@ -7,7 +7,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
-	"gitlab.com/accumulatenetwork/accumulate/internal/consts"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/smt/pmt"
@@ -55,7 +55,7 @@ func listSnapshots(_ *cobra.Command, args []string) {
 		if entry.IsDir() {
 			continue
 		}
-		if !consts.SnapshotMajorRegexp.MatchString(entry.Name()) {
+		if !core.SnapshotMajorRegexp.MatchString(entry.Name()) {
 			continue
 		}
 

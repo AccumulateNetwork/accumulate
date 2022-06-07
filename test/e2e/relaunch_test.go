@@ -45,8 +45,9 @@ func TestRelaunch(t *testing.T) {
 	rpcCall(t, jrpc.Faucet, &protocol.AcmeFaucet{Url: lite}, txResp)
 	txqResp := new(api.TransactionQueryResponse)
 	rpcCall(t, jrpc.QueryTx, &api.TxnQuery{Txid: txResp.TransactionHash, Wait: 10 * time.Second, IgnorePending: true}, txqResp)
-	for _, txid := range txqResp.SyntheticTxids {
-		rpcCall(t, jrpc.QueryTx, &api.TxnQuery{Txid: txid[:], Wait: 10 * time.Second, IgnorePending: true}, nil) //nolint:rangevarref
+	for _, txid := range txqResp.Produced {
+		txid := txid.Hash()
+		rpcCall(t, jrpc.QueryTx, &api.TxnQuery{Txid: txid[:], Wait: 10 * time.Second, IgnorePending: true}, nil)
 	}
 
 	// Query the account

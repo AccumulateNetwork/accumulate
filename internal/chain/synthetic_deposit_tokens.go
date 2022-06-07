@@ -92,12 +92,13 @@ func (SyntheticDepositTokens) DidFail(state *ProcessTransactionState, transactio
 	if body.IsIssuer {
 		refund := new(protocol.SyntheticBurnTokens)
 		refund.Amount = body.Amount
-		state.DidProduceTxn(body.Source, refund)
+		state.DidProduceTxn(body.Cause.Account(), refund)
 	} else {
 		refund := new(protocol.SyntheticDepositTokens)
 		refund.Token = body.Token
 		refund.Amount = body.Amount
-		state.DidProduceTxn(body.Source, refund)
+		state.DidProduceTxn(body.Cause.Account(), refund)
 	}
+
 	return nil
 }

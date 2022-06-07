@@ -54,6 +54,9 @@ const (
 	// Network is the path to a node's network definition data account.
 	Network = "network"
 
+	// Routing is the path to a node's routing table data account.
+	Routing = "routing"
+
 	// Globals is the path to the Directory network's Mutable Protocol costants data account
 	Globals = "globals"
 

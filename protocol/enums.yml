@@ -72,6 +72,9 @@ SignatureType:
   Delegated:
     value: 11
     description: represents a signature for a delegated authority
+  Internal:
+    value: 12
+    description: is used for internally produced transactions
 
 KeyPageOperationType:
   Unknown:

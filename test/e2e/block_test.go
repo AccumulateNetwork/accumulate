@@ -76,7 +76,8 @@ func TestSendTokensToBadRecipient(t *testing.T) {
 	require.NoError(t, err)
 	batch = sim.SubnetFor(protocol.AccountUrl("foo")).Database.Begin(false)
 	defer batch.Discard()
-	status, err := batch.Transaction(synth.Hashes[0][:]).GetStatus()
+	h := synth.Entries[0].Hash()
+	status, err := batch.Transaction(h[:]).GetStatus()
 	require.NoError(t, err)
 	assert.Equal(t, ErrorCodeNotFound.GetEnumValue(), status.Code)
 }
