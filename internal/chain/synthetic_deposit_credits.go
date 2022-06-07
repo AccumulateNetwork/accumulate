@@ -65,10 +65,12 @@ func (SyntheticDepositCredits) Validate(st *StateManager, tx *Delivery) (protoco
 		return nil, err
 	}
 
-	ledgerState.AcmeBurnt.Add(&ledgerState.AcmeBurnt, body.AcmeRefundAmount)
-	err = st.Update(ledgerState)
-	if err != nil {
-		return nil, err
+	if body.AcmeRefundAmount != nil {
+		ledgerState.AcmeBurnt.Add(&ledgerState.AcmeBurnt, body.AcmeRefundAmount)
+		err = st.Update(ledgerState)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Persist the signer
