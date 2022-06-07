@@ -20,9 +20,7 @@ func TestOracleDistribution(t *testing.T) {
 	bvn0 := sim.Subnet(sim.Subnets[1].ID)
 	// bvn1 := sim.Subnet(sim.Subnets[2].ID)
 
-	// TODO move back to OperatorPage and uncomment extra signatures in or after
-	// AC-1402
-	signer := simulator.GetAccount[*KeyPage](sim, dn.Executor.Network.ValidatorPage(0))
+	signer := simulator.GetAccount[*KeyPage](sim, dn.Executor.Network.DefaultOperatorPage())
 	_, entry, ok := signer.EntryByKey(dn.Executor.Key[32:])
 	require.True(t, ok)
 	timestamp = entry.GetLastUsedOn()

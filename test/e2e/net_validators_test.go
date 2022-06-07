@@ -41,6 +41,8 @@ func TestUpdateValidators(t *testing.T) {
 	sim.InitFromGenesis()
 
 	dn := sim.Subnet(Directory)
+	bvn0 := sim.Subnet("BVN0")
+	bvn1 := sim.Subnet("BVN1")
 	signerUrl := dn.Executor.Network.DefaultOperatorPage()
 	vldKey1, vldKey2, vldKey3, vldKey4 := acctesting.GenerateKey(1), acctesting.GenerateKey(2), acctesting.GenerateKey(3), acctesting.GenerateKey(4)
 	height := uint64(1)
@@ -67,6 +69,8 @@ func TestUpdateValidators(t *testing.T) {
 					WriteToState: true,
 				}).
 				Initiate(SignatureTypeLegacyED25519, dn.Executor.Key).
+				Sign(SignatureTypeED25519, bvn0.Executor.Key).
+				Sign(SignatureTypeED25519, bvn1.Executor.Key).
 				Build())
 		})
 
@@ -74,17 +78,19 @@ func TestUpdateValidators(t *testing.T) {
 	require.ElementsMatch(t, dn.Validators, [][]byte{dn.Executor.Key[32:]})
 
 	// Add a validator
-	addOperatorKey(t, sim, dn, vldKey1, &timestamp, &height)
+	addOperatorKey(t, sim, dn, vldKey1, &timestamp, &height, bvn0.Executor.Key, bvn1.Executor.Key)
 	send(sim,
 		func(send func(*Envelope)) {
 			body := new(AddValidator)
-			body.PubKey = vldKey1[32:]
+			body.PubKey = vldKey1.Public().(ed25519.PublicKey)
 			send(acctesting.NewTransaction().
 				WithPrincipal(dn.Executor.Network.NodeUrl(ValidatorBook)).
 				WithTimestampVar(&timestamp).
 				WithSigner(signerUrl, height).
 				WithBody(body).
 				Initiate(SignatureTypeLegacyED25519, dn.Executor.Key).
+				Sign(SignatureTypeED25519, bvn0.Executor.Key).
+				Sign(SignatureTypeED25519, bvn1.Executor.Key).
 				Build())
 		})
 
@@ -105,14 +111,16 @@ func TestUpdateValidators(t *testing.T) {
 				WithSigner(signerUrl, height).
 				WithBody(body).
 				Initiate(SignatureTypeLegacyED25519, dn.Executor.Key).
+				Sign(SignatureTypeED25519, bvn0.Executor.Key).
+				Sign(SignatureTypeED25519, bvn1.Executor.Key).
 				Build())
 		})
 
 	// Verify the validator was updated
 	require.ElementsMatch(t, dn.Validators, [][]byte{dn.Executor.Key[32:], vldKey4[32:]})
 
-	// Add a third validator, so the page threshold will become 2
-	addOperatorKey(t, sim, dn, vldKey2, &timestamp, &height)
+	// Add a third validator, so the page threshold will become 3
+	addOperatorKey(t, sim, dn, vldKey2, &timestamp, &height, bvn0.Executor.Key, bvn1.Executor.Key)
 	send(sim,
 		func(send func(*Envelope)) {
 			body := new(AddValidator)
@@ -123,6 +131,8 @@ func TestUpdateValidators(t *testing.T) {
 				WithSigner(signerUrl, height).
 				WithBody(body).
 				Initiate(SignatureTypeLegacyED25519, dn.Executor.Key).
+				Sign(SignatureTypeED25519, bvn0.Executor.Key).
+				Sign(SignatureTypeED25519, bvn1.Executor.Key).
 				Build())
 		})
 
@@ -131,10 +141,10 @@ func TestUpdateValidators(t *testing.T) {
 
 	// Verify the Validator threshold
 	oprPage := simulator.GetAccount[*KeyPage](sim, signerUrl)
-	require.Equal(t, uint64(2), oprPage.AcceptThreshold)
+	require.Equal(t, uint64(3), oprPage.AcceptThreshold)
 
 	// Add a fourth validator
-	addOperatorKey(t, sim, dn, vldKey3, &timestamp, &height, vldKey1)
+	addOperatorKey(t, sim, dn, vldKey3, &timestamp, &height, bvn0.Executor.Key, bvn1.Executor.Key)
 	send(sim,
 		func(send func(*Envelope)) {
 			body := new(AddValidator)
@@ -146,7 +156,8 @@ func TestUpdateValidators(t *testing.T) {
 				WithSigner(signerUrl, height).
 				WithBody(body).
 				Initiate(SignatureTypeLegacyED25519, dn.Executor.Key).
-				Sign(SignatureTypeED25519, vldKey1).
+				Sign(SignatureTypeED25519, bvn0.Executor.Key).
+				Sign(SignatureTypeED25519, bvn1.Executor.Key).
 				Build())
 		})
 
@@ -154,7 +165,7 @@ func TestUpdateValidators(t *testing.T) {
 	require.ElementsMatch(t, dn.Validators, [][]byte{dn.Executor.Key[32:], vldKey4[32:], vldKey2[32:], vldKey3[32:]})
 
 	// Verify the Validator threshold
-	require.Equal(t, uint64(2), simulator.GetAccount[*KeyPage](sim, signerUrl).AcceptThreshold)
+	require.Equal(t, uint64(3), simulator.GetAccount[*KeyPage](sim, signerUrl).AcceptThreshold)
 
 	// Remove a validator
 	send(sim,
@@ -168,6 +179,7 @@ func TestUpdateValidators(t *testing.T) {
 				WithSigner(signerUrl, height).
 				WithBody(body).
 				Initiate(SignatureTypeLegacyED25519, dn.Executor.Key).
+				Sign(SignatureTypeED25519, bvn0.Executor.Key).
 				Sign(SignatureTypeED25519, vldKey1).
 				Build())
 		})
@@ -187,7 +199,8 @@ func addOperatorKey(t *testing.T, sim *simulator.Simulator, dn *simulator.ExecEn
 	send(sim,
 		func(send func(*Envelope)) {
 			op := new(AddKeyOperation)
-			keyHash := sha256.Sum256(oprKey.Seed())
+			pubKey := oprKey.Public().(ed25519.PublicKey)
+			keyHash := sha256.Sum256(pubKey)
 			op.Entry.KeyHash = keyHash[:]
 			body := new(UpdateKeyPage)
 			body.Operation = append(body.Operation, op)
@@ -198,7 +211,7 @@ func addOperatorKey(t *testing.T, sim *simulator.Simulator, dn *simulator.ExecEn
 				WithBody(body).
 				Initiate(SignatureTypeLegacyED25519, dn.Executor.Key)
 			for _, signKey := range signKeys {
-				txb = txb.Sign(SignatureTypeED25519, signKey.Seed())
+				txb = txb.Sign(SignatureTypeED25519, signKey)
 			}
 			send(txb.Build())
 		})
@@ -214,6 +227,7 @@ func TestUpdateOperators(t *testing.T) {
 	dn := sim.Subnet(Directory)
 	bvn0 := sim.Subnet(sim.Subnets[1].ID)
 	bvn1 := sim.Subnet(sim.Subnets[2].ID)
+	bvn2 := sim.Subnet(sim.Subnets[3].ID)
 
 	// Sanity check
 	page := simulator.GetAccount[*KeyPage](sim, bvn0.Executor.Network.DefaultOperatorPage())
@@ -221,14 +235,14 @@ func TestUpdateOperators(t *testing.T) {
 
 	// Add
 	t.Log("Add")
-	operators := dn.Executor.Network.DefaultOperatorPage()
+	signerUrl := dn.Executor.Network.DefaultOperatorPage()
 	opKeyAdd := acctesting.GenerateKey(1)
 	addKeyHash := sha256.Sum256(opKeyAdd[32:])
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
 		acctesting.NewTransaction().
-			WithPrincipal(operators).
+			WithPrincipal(signerUrl).
 			WithTimestampVar(&timestamp).
-			WithSigner(operators, 1).
+			WithSigner(signerUrl, 1).
 			WithBody(&UpdateKeyPage{Operation: []KeyPageOperation{
 				&AddKeyOperation{
 					Entry: KeySpecParams{KeyHash: addKeyHash[:]},
@@ -237,6 +251,7 @@ func TestUpdateOperators(t *testing.T) {
 			Initiate(SignatureTypeED25519, dn.Executor.Key).
 			Sign(SignatureTypeED25519, bvn0.Executor.Key).
 			Sign(SignatureTypeED25519, bvn1.Executor.Key).
+			Sign(SignatureTypeED25519, bvn2.Executor.Key).
 			Build(),
 	)...)
 
@@ -254,9 +269,9 @@ func TestUpdateOperators(t *testing.T) {
 	updKeyHash := sha256.Sum256(opKeyUpd[32:])
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
 		acctesting.NewTransaction().
-			WithPrincipal(operators).
+			WithPrincipal(signerUrl).
 			WithTimestampVar(&timestamp).
-			WithSigner(operators, 2).
+			WithSigner(signerUrl, 2).
 			WithBody(&UpdateKeyPage{Operation: []KeyPageOperation{
 				&UpdateKeyOperation{
 					OldEntry: KeySpecParams{KeyHash: addKeyHash[:]},
@@ -266,6 +281,7 @@ func TestUpdateOperators(t *testing.T) {
 			Initiate(SignatureTypeED25519, dn.Executor.Key).
 			Sign(SignatureTypeED25519, bvn0.Executor.Key).
 			Sign(SignatureTypeED25519, bvn1.Executor.Key).
+			Sign(SignatureTypeED25519, bvn2.Executor.Key).
 			Build(),
 	)...)
 
@@ -282,9 +298,9 @@ func TestUpdateOperators(t *testing.T) {
 	t.Log("Remove")
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
 		acctesting.NewTransaction().
-			WithPrincipal(operators).
+			WithPrincipal(signerUrl).
 			WithTimestampVar(&timestamp).
-			WithSigner(operators, 3).
+			WithSigner(signerUrl, 3).
 			WithBody(&UpdateKeyPage{Operation: []KeyPageOperation{
 				&RemoveKeyOperation{
 					Entry: KeySpecParams{KeyHash: updKeyHash[:]},
@@ -293,6 +309,7 @@ func TestUpdateOperators(t *testing.T) {
 			Initiate(SignatureTypeED25519, dn.Executor.Key).
 			Sign(SignatureTypeED25519, bvn0.Executor.Key).
 			Sign(SignatureTypeED25519, bvn1.Executor.Key).
+			Sign(SignatureTypeED25519, bvn2.Executor.Key).
 			Build(),
 	)...)
 
