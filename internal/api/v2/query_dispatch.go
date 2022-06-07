@@ -65,7 +65,7 @@ func (q *queryDispatch) queryAll(query func(*queryDirect) (interface{}, error), 
 					// A result or error has already been sent
 				}
 			}
-		}(subnet.ID)
+		}(subnet.Name)
 	}
 
 	// Wait for an error or a result

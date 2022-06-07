@@ -115,8 +115,8 @@ func NewSimpleRouter(net *config.Network, cm connections.ConnectionManager) (*Ro
 	table.Overrides = make([]protocol.RouteOverride, 1, len(net.Subnets)+1)
 	table.Overrides[0] = protocol.RouteOverride{Account: protocol.AcmeUrl(), Subnet: protocol.Directory}
 	for _, subnet := range net.Subnets {
-		u := protocol.SubnetUrl(subnet.ID)
-		table.Overrides = append(table.Overrides, protocol.RouteOverride{Account: u, Subnet: subnet.ID})
+		u := protocol.SubnetUrl(subnet.Name)
+		table.Overrides = append(table.Overrides, protocol.RouteOverride{Account: u, Subnet: subnet.Name})
 	}
 
 	router, err := NewRouter(cm, table)

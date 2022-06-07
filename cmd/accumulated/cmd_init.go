@@ -377,7 +377,7 @@ func initDNs(count int, dnConfig []*cfg.Config, dnRemote []string, dnListen []st
 	}
 
 	subnets[0] = config.Subnet{
-		ID:    protocol.Directory,
+		Name:  protocol.Directory,
 		Type:  config.Directory,
 		Nodes: dnNodes,
 	}
@@ -405,9 +405,10 @@ func initBVNs(bvnConfigs [][]*cfg.Config, count int, bvnRemotes [][]string, bvnL
 			bvnConfigs[bvn][i].Accumulate.LocalAddress = parseHost(bvnNodes[i].Address)
 		}
 		subnets[bvn+1] = config.Subnet{
-			ID:    subnetID,
-			Type:  config.BlockValidator,
-			Nodes: bvnNodes,
+			Name:     subnetID,
+			Type:     config.BlockValidator,
+			BasePort: int64(flagInitDevnet.BasePort),
+			Nodes:    bvnNodes,
 		}
 	}
 }

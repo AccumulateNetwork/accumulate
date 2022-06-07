@@ -510,13 +510,13 @@ func (b *bootstrap) buildNetworkDefinition() *protocol.NetworkDefinition {
 
 		// Add the validator hashes from the subnet's genesis doc
 		var vkHashes [][32]byte
-		for _, validator := range b.InitOpts.NetworkValidatorMap[subnet.ID] {
+		for _, validator := range b.InitOpts.NetworkValidatorMap[subnet.Name] {
 			pkh := sha256.Sum256(validator.PubKey.Bytes())
 			vkHashes = append(vkHashes, pkh)
 		}
 
 		subnetDef := protocol.SubnetDefinition{
-			SubnetID:           subnet.ID,
+			SubnetID:           subnet.Name,
 			ValidatorKeyHashes: vkHashes,
 		}
 		netDef.Subnets = append(netDef.Subnets, subnetDef)

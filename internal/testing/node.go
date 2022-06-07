@@ -61,7 +61,7 @@ func DefaultConfig(networkName string, net config.NetworkType, node config.NodeT
 	cfg.Instrumentation.Prometheus = false               // Disable prometheus: https://github.com/tendermint/tendermint/issues/7076
 	cfg.Accumulate.Network.Subnets = []config.Subnet{
 		{
-			ID:   "local",
+			Name: "local",
 			Type: config.BlockValidator,
 		},
 	}
@@ -111,9 +111,10 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withF
 
 		// We need to return the subnets in a specific order with directory node first because the unit tests select subnets[1]
 		subnets[i] = config.Subnet{
-			ID:    subnetId,
-			Type:  netType,
-			Nodes: nodes,
+			Name:     subnetId,
+			Type:     netType,
+			BasePort: basePort,
+			Nodes:    nodes,
 		}
 		subnetsMap[subnetId] = subnets[i]
 	}
@@ -150,7 +151,7 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withF
 	var bootstrapList []genesis.Bootstrap
 
 	for _, subnet := range subnets {
-		subnetId := subnet.ID
+		subnetId := subnet.Name
 		dir := filepath.Join(tempDir, subnetId)
 		bootstrap, err := node.Init(node.InitOptions{
 			WorkDir:             dir,
@@ -193,7 +194,7 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withF
 func getSubnetNames(subnets []cfg.Subnet) []string {
 	var res []string
 	for _, subnet := range subnets {
-		res = append(res, subnet.ID)
+		res = append(res, subnet.Name)
 	}
 	return res
 }

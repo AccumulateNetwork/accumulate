@@ -29,8 +29,8 @@ Network:
 Subnet:
   non-binary: true
   fields:
-    - name: ID
-      toml: id
+    - name: Name
+      toml: name
       type: string
     - name: Type
       toml: type

@@ -6,7 +6,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -160,99 +159,6 @@ type Accumulate struct {
 	Website   Website   `toml:"website" mapstructure:"website"`
 }
 
-//type Network struct {
-//	Name    string   `json:"name" toml:"name" mapstructure:"name"`
-//	Subnets []Subnet `json:"subnets" toml:"subnets" mapstructure:"subnets"`
-//}
-//
-//func (v *Network) Equal(u *Network) bool {
-//	if len(v.Subnets) != len(u.Subnets) || v.Name != u.Name {
-//		return false
-//	}
-//	for i, s := range v.Subnets {
-//		if s.Equal(&u.Subnets[i]) {
-//			return false
-//		}
-//	}
-//	return true
-//}
-//
-//func (v *Network) Copy() *Network {
-//	r := new(Network)
-//	r.Name = v.Name
-//	for _, s := range v.Subnets {
-//		r.Subnets = append(r.Subnets, *s.Copy())
-//	}
-//	return r
-//}
-//
-//type Subnet struct {
-//	ID       string      `json:"name" toml:"name" mapstructure:"name"`
-//	Type     NetworkType `json:"type" toml:"type" mapstructure:"type"`
-//	BasePort int         `json:"port" toml:"port" mapstructure:"port"`
-//	Nodes    []Node      `json:"nodes" toml:"nodes" mapstructure:"nodes"`
-//}
-//
-//func (v *Subnet) Equal(u *Subnet) bool {
-//	if v.ID != u.ID || v.Type != u.Type || v.BasePort != u.BasePort || len(v.Nodes) != len(u.Nodes) {
-//		return false
-//	}
-//	for i, n := range v.Nodes {
-//		if n.Equal(&u.Nodes[i]) {
-//			return false
-//		}
-//	}
-//	return true
-//}
-//
-//func (v *Subnet) Copy() *Subnet {
-//	r := new(Subnet)
-//	r.Type = v.Type
-//	r.ID = v.ID
-//	r.BasePort = v.BasePort
-//	for _, n := range v.Nodes {
-//		r.Nodes = append(r.Nodes, *n.Copy())
-//	}
-//	return r
-//}
-
-//type Node struct {
-//	Address string   `json:"ip" toml:"address" mapstructure:"address"`
-//	Type    NodeType `json:"type" toml:"type" mapstructure:"type"`
-//}
-//
-//func (v *Node) Equal(u *Node) bool {
-//	if v.Address != u.Address || v.Type != u.Type {
-//		return false
-//	}
-//	return true
-//}
-//
-//func (v *Node) Copy() *Node {
-//	r := new(Node)
-//	r.Address = v.Address
-//	r.Type = v.Type
-//	return r
-//}
-
-//
-//type Node struct {
-//	IP   string          `json:"ip"`
-//	Type NodeType `json:"type"`
-//}
-//
-//type Subnet struct {
-//	Name  string             `json:"name"`
-//	Type  NetworkType `json:"type"`
-//	Port  int                `json:"port"`
-//	Nodes []Node             `json:"nodes"`
-//}
-//
-//type Network struct {
-//	Network string   `json:"network"`
-//	Subnet  []Subnet `json:"subnet"`
-//}
-
 type Snapshots struct {
 	// Directory is the directory to store snapshots in
 	Directory string `toml:"directory" mapstructure:"directory"`
@@ -274,7 +180,7 @@ type Storage struct {
 type API struct {
 	TxMaxWaitTime      time.Duration `toml:"tx-max-wait-time" mapstructure:"tx-max-wait-time"`
 	PrometheusServer   string        `toml:"prometheus-server" mapstructure:"prometheus-server"`
-	ListenAddress      string        `toml:"listen-address" mapstructure:"listen-address"`
+	ListenAddress      string        `toml:"listen-address" mapstructure:"listen-address"` //deprecated
 	DebugJSONRPC       bool          `toml:"debug-jsonrpc" mapstructure:"debug-jsonrpc"`
 	EnableDebugMethods bool          `toml:"enable-debug-methods" mapstructure:"enable-debug-methods"`
 	ConnectionLimit    int           `toml:"connection-limit" mapstructure:"connection-limit"`
@@ -292,7 +198,7 @@ func MakeAbsolute(root, path string) string {
 	return filepath.Join(root, path)
 }
 
-func OffsetPort(addr string, offset int) (*url.URL, error) {
+func OffsetPort(addr string, basePort int, offset int) (*url.URL, error) {
 	u, err := url.Parse(addr)
 	if err != nil {
 		return nil, fmt.Errorf("invalid URL %q: %v", addr, err)
@@ -301,13 +207,7 @@ func OffsetPort(addr string, offset int) (*url.URL, error) {
 		return nil, fmt.Errorf("invalid URL %q: has no scheme, so this probably isn't a URL", addr)
 	}
 
-	port, err := strconv.ParseInt(u.Port(), 10, 17)
-	if err != nil {
-		return nil, fmt.Errorf("invalid port %q: %v", u.Port(), err)
-	}
-
-	port += int64(offset)
-	u.Host = fmt.Sprintf("%s:%d", u.Hostname(), port)
+	u.Host = fmt.Sprintf("%s:%d", u.Hostname(), basePort+offset)
 	return u, nil
 }
 
@@ -315,7 +215,7 @@ func (n *Network) GetBvnNames() []string {
 	var names []string
 	for _, subnet := range n.Subnets {
 		if subnet.Type == BlockValidator {
-			names = append(names, subnet.ID)
+			names = append(names, subnet.Name)
 		}
 	}
 	return names
@@ -323,7 +223,7 @@ func (n *Network) GetBvnNames() []string {
 
 func (n *Network) GetSubnetByID(subnetID string) Subnet {
 	for _, subnet := range n.Subnets {
-		if subnet.ID == subnetID {
+		if subnet.Name == subnetID {
 			return subnet
 		}
 	}

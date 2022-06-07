@@ -45,7 +45,7 @@ func TestExecuteCheckOnly(t *testing.T) {
 		router, _, err := routing.NewSimpleRouter(&config.Network{
 			Subnets: []config.Subnet{
 				{
-					ID:   "",
+					Name: "",
 					Type: config.BlockValidator,
 				},
 			},
@@ -76,7 +76,7 @@ func TestExecuteCheckOnly(t *testing.T) {
 		router, _, err := routing.NewSimpleRouter(&config.Network{
 			Subnets: []config.Subnet{
 				{
-					ID:   "",
+					Name: "",
 					Type: config.BlockValidator,
 				},
 			},

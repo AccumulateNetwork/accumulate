@@ -17,7 +17,7 @@ func TestOracleDistribution(t *testing.T) {
 	sim := simulator.New(t, 3)
 	sim.InitFromGenesis()
 	dn := sim.Subnet(Directory)
-	bvn0 := sim.Subnet(sim.Subnets[1].ID)
+	bvn0 := sim.Subnet(sim.Subnets[1].Name)
 	// bvn1 := sim.Subnet(sim.Subnets[2].ID)
 
 	// TODO move back to OperatorPage and uncomment extra signatures in or after

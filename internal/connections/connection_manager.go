@@ -197,8 +197,8 @@ func (cm *connectionManager) buildNodeInventory() {
 			case config.Validator:
 				switch connCtx.subnet.Type {
 				case config.BlockValidator:
-					bvnName := protocol.BvnNameFromSubnetId(subnet.ID)
-					if subnet.ID == protocol.Directory {
+					bvnName := protocol.BvnNameFromSubnetId(subnet.Name)
+					if subnet.Name == protocol.Directory {
 						panic("Directory subnet node is misconfigured as blockvalidator")
 					}
 					nodeList, ok := cm.bvnCtxMap[bvnName]
@@ -226,14 +226,14 @@ func (cm *connectionManager) buildNodeInventory() {
 }
 
 func (cm *connectionManager) buildNodeContext(node config.Node, subnet config.Subnet) (*connectionContext, error) {
-	connCtx := &connectionContext{subnetId: subnet.ID,
+	connCtx := &connectionContext{subnetId: subnet.Name,
 		subnet:     subnet,
 		nodeConfig: node,
 		connMgr:    cm,
 		metrics:    NodeMetrics{status: Unknown},
 		hasClient:  make(chan struct{}),
 	}
-	connCtx.networkGroup = cm.determineNetworkGroup(subnet.ID, node.Address)
+	connCtx.networkGroup = cm.determineNetworkGroup(subnet.Name, node.Address)
 
 	if node.Address != "local" && node.Address != "self" {
 		var err error
@@ -351,7 +351,7 @@ func (cm *connectionManager) createClient(connCtx *connectionContext) error {
 		}
 		connCtx.setClient(cm.localClient, api)
 	default:
-		abciAddr, err := config.OffsetPort(connCtx.GetAddress(), int(config.PortOffsetTendermintRpc))
+		abciAddr, err := config.OffsetPort(connCtx.GetAddress(), connCtx.GetBasePort(), int(config.PortOffsetTendermintRpc))
 		if err != nil {
 			return errInvalidAddress(err)
 		}
@@ -359,7 +359,7 @@ func (cm *connectionManager) createClient(connCtx *connectionContext) error {
 		if err != nil {
 			return errCreateRPCClient(err)
 		}
-		apiAddr, err := config.OffsetPort(connCtx.GetAddress(), int(config.PortOffsetAccumulateApi))
+		apiAddr, err := config.OffsetPort(connCtx.GetAddress(), connCtx.GetBasePort(), int(config.PortOffsetAccumulateApi))
 		if err != nil {
 			return errInvalidAddress(err)
 		}

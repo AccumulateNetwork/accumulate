@@ -29,7 +29,7 @@ type Node struct {
 }
 
 type Subnet struct {
-	ID        string      `json:"iD,omitempty" form:"iD" query:"iD" validate:"required" toml:"id" mapstructure:"id"`
+	Name      string      `json:"name,omitempty" form:"name" query:"name" validate:"required" toml:"name" mapstructure:"name"`
 	Type      NetworkType `json:"type,omitempty" form:"type" query:"type" validate:"required" toml:"type" mapstructure:"type"`
 	BasePort  int64       `json:"basePort,omitempty" form:"basePort" query:"basePort" validate:"required" toml:"port" mapstructure:"port"`
 	Nodes     []Node      `json:"nodes,omitempty" form:"nodes" query:"nodes" validate:"required" toml:"nodes" mapstructure:"nodes"`
@@ -77,7 +77,7 @@ func (v *Node) CopyAsInterface() interface{} { return v.Copy() }
 func (v *Subnet) Copy() *Subnet {
 	u := new(Subnet)
 
-	u.ID = v.ID
+	u.Name = v.Name
 	u.Type = v.Type
 	u.BasePort = v.BasePort
 	u.Nodes = make([]Node, len(v.Nodes))
@@ -135,7 +135,7 @@ func (v *Node) Equal(u *Node) bool {
 }
 
 func (v *Subnet) Equal(u *Subnet) bool {
-	if !(v.ID == u.ID) {
+	if !(v.Name == u.Name) {
 		return false
 	}
 	if !(v.Type == u.Type) {
@@ -184,12 +184,12 @@ func (v *Network) MarshalJSON() ([]byte, error) {
 
 func (v *Subnet) MarshalJSON() ([]byte, error) {
 	u := struct {
-		ID       string                  `json:"iD,omitempty"`
+		Name     string                  `json:"name,omitempty"`
 		Type     NetworkType             `json:"type,omitempty"`
 		BasePort int64                   `json:"basePort,omitempty"`
 		Nodes    encoding.JsonList[Node] `json:"nodes,omitempty"`
 	}{}
-	u.ID = v.ID
+	u.Name = v.Name
 	u.Type = v.Type
 	u.BasePort = v.BasePort
 	u.Nodes = v.Nodes
@@ -237,19 +237,19 @@ func (v *Network) UnmarshalJSON(data []byte) error {
 
 func (v *Subnet) UnmarshalJSON(data []byte) error {
 	u := struct {
-		ID       string                  `json:"iD,omitempty"`
+		Name     string                  `json:"name,omitempty"`
 		Type     NetworkType             `json:"type,omitempty"`
 		BasePort int64                   `json:"basePort,omitempty"`
 		Nodes    encoding.JsonList[Node] `json:"nodes,omitempty"`
 	}{}
-	u.ID = v.ID
+	u.Name = v.Name
 	u.Type = v.Type
 	u.BasePort = v.BasePort
 	u.Nodes = v.Nodes
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	v.ID = u.ID
+	v.Name = u.Name
 	v.Type = u.Type
 	v.BasePort = u.BasePort
 	v.Nodes = u.Nodes
