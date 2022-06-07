@@ -39,11 +39,12 @@ func TestUpdateValidators(t *testing.T) {
 	sim.InitFromGenesis()
 
 	dn := sim.Subnet(Directory)
-	validators := FormatKeyPageUrl(dn.Executor.Network.ValidatorBook(), 0)
+	bvn0 := sim.Subnet("BVN0")
+	operators := FormatKeyPageUrl(dn.Executor.Network.OperatorBook(), 0)
 	nodeKeyAdd1, nodeKeyAdd2, nodeKeyAdd3, nodeKeyUpd := acctesting.GenerateKey(1), acctesting.GenerateKey(2), acctesting.GenerateKey(3), acctesting.GenerateKey(4)
 
 	// The validator timestamp starts out > 0
-	signer := simulator.GetAccount[*KeyPage](sim, dn.Executor.Network.DefaultValidatorPage())
+	signer := simulator.GetAccount[*KeyPage](sim, dn.Executor.Network.DefaultOperatorPage())
 	_, entry, ok := signer.EntryByKey(dn.Executor.Key[32:])
 	require.True(t, ok)
 	timestamp = entry.GetLastUsedOn()
@@ -58,12 +59,13 @@ func TestUpdateValidators(t *testing.T) {
 			send(acctesting.NewTransaction().
 				WithPrincipal(dn.Executor.Network.NodeUrl(Globals)).
 				WithTimestampVar(&timestamp).
-				WithSigner(dn.Executor.Network.ValidatorPage(0), 1). // TODO move back to OperatorPage in or after AC-1402
+				WithSigner(dn.Executor.Network.DefaultOperatorPage(), 1).
 				WithBody(&WriteData{
 					Entry:        g.FormatGlobals(),
 					WriteToState: true,
 				}).
 				Initiate(SignatureTypeLegacyED25519, dn.Executor.Key).
+				Sign(SignatureTypeED25519, bvn0.Executor.Key).
 				Build())
 		})
 
@@ -78,7 +80,7 @@ func TestUpdateValidators(t *testing.T) {
 			send(acctesting.NewTransaction().
 				WithPrincipal(dn.Executor.Network.NodeUrl(ValidatorBook)).
 				WithTimestampVar(&timestamp).
-				WithSigner(validators, 1).
+				WithSigner(operators, 1).
 				WithBody(body).
 				Initiate(SignatureTypeLegacyED25519, dn.Executor.Key).
 				Build())
@@ -98,7 +100,7 @@ func TestUpdateValidators(t *testing.T) {
 			send(acctesting.NewTransaction().
 				WithPrincipal(dn.Executor.Network.NodeUrl(ValidatorBook)).
 				WithTimestampVar(&timestamp).
-				WithSigner(validators, 2).
+				WithSigner(operators, 2).
 				WithBody(body).
 				Initiate(SignatureTypeLegacyED25519, dn.Executor.Key).
 				Build())
@@ -115,7 +117,7 @@ func TestUpdateValidators(t *testing.T) {
 			send(acctesting.NewTransaction().
 				WithPrincipal(dn.Executor.Network.NodeUrl(ValidatorBook)).
 				WithTimestampVar(&timestamp).
-				WithSigner(validators, 3).
+				WithSigner(operators, 3).
 				WithBody(body).
 				Initiate(SignatureTypeLegacyED25519, dn.Executor.Key).
 				Build())
@@ -125,7 +127,7 @@ func TestUpdateValidators(t *testing.T) {
 	require.ElementsMatch(t, dn.Validators, [][]byte{dn.Executor.Key[32:], nodeKeyUpd[32:], nodeKeyAdd2[32:]})
 
 	// Verify the Validator threshold
-	require.Equal(t, uint64(2), simulator.GetAccount[*KeyPage](sim, validators).AcceptThreshold)
+	require.Equal(t, uint64(2), simulator.GetAccount[*KeyPage](sim, operators).AcceptThreshold)
 
 	// Add a fourth validator
 	send(sim,
@@ -136,7 +138,7 @@ func TestUpdateValidators(t *testing.T) {
 			send(acctesting.NewTransaction().
 				WithPrincipal(dn.Executor.Network.NodeUrl(ValidatorBook)).
 				WithTimestampVar(&timestamp).
-				WithSigner(validators, 4).
+				WithSigner(operators, 4).
 				WithBody(body).
 				Initiate(SignatureTypeLegacyED25519, dn.Executor.Key).
 				Sign(SignatureTypeED25519, nodeKeyAdd2).
@@ -147,7 +149,7 @@ func TestUpdateValidators(t *testing.T) {
 	require.ElementsMatch(t, dn.Validators, [][]byte{dn.Executor.Key[32:], nodeKeyUpd[32:], nodeKeyAdd2[32:], nodeKeyAdd3[32:]})
 
 	// Verify the Validator threshold
-	require.Equal(t, uint64(2), simulator.GetAccount[*KeyPage](sim, validators).AcceptThreshold)
+	require.Equal(t, uint64(2), simulator.GetAccount[*KeyPage](sim, operators).AcceptThreshold)
 
 	// Remove a validator
 	send(sim,
@@ -158,7 +160,7 @@ func TestUpdateValidators(t *testing.T) {
 			send(acctesting.NewTransaction().
 				WithPrincipal(dn.Executor.Network.NodeUrl(ValidatorBook)).
 				WithTimestampVar(&timestamp).
-				WithSigner(validators, 5).
+				WithSigner(operators, 5).
 				WithBody(body).
 				Initiate(SignatureTypeLegacyED25519, dn.Executor.Key).
 				Sign(SignatureTypeED25519, nodeKeyAdd2).
