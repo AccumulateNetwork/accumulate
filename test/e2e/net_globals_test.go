@@ -18,7 +18,7 @@ func TestOracleDistribution(t *testing.T) {
 	sim.InitFromGenesis()
 	dn := sim.Subnet(Directory)
 	bvn0 := sim.Subnet(sim.Subnets[1].ID)
-	// bvn1 := sim.Subnet(sim.Subnets[2].ID)
+	bvn1 := sim.Subnet(sim.Subnets[2].ID)
 
 	signer := simulator.GetAccount[*KeyPage](sim, dn.Executor.Network.DefaultOperatorPage())
 	_, entry, ok := signer.EntryByKey(dn.Executor.Key[32:])
@@ -41,8 +41,8 @@ func TestOracleDistribution(t *testing.T) {
 				WriteToState: true,
 			}).
 			Initiate(SignatureTypeED25519, dn.Executor.Key).
-			// Sign(SignatureTypeED25519, bvn0.Executor.Key).
-			// Sign(SignatureTypeED25519, bvn1.Executor.Key).
+			Sign(SignatureTypeED25519, bvn0.Executor.Key).
+			Sign(SignatureTypeED25519, bvn1.Executor.Key).
 			Build(),
 	)...)
 

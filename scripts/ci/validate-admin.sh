@@ -28,6 +28,26 @@ echo
 
 declare -r M_OF_N_FACTOR=$(bc -l <<<'2/3')
 declare -g NUM_DNNS=$(find ${DN_NODES_DIR} -mindepth 1 -maxdepth 1 -type d | wc -l)
+
+section "Add a key to the operator book"
+if [ -f "$(nodePrivKey 0)" ]; then
+
+  wait-for cli-tx page key add acc://dn.acme/operators/1 "$(nodePrivKey 0)" $hexPubKey
+  KEY_ADDED_DN=$(accumulate page get -j dn.acme/operators/1) | jq -re .data.keys[2].publicKey
+  echo "sleeping for 5 seconds (wait for anchor)"
+  sleep 5
+  KEY_ADDED_BVN=$(accumulate page get -j bvn-BVN0/operators/2) | jq -re .data.keys[2].publicKey
+  [[ $KEY_ADDED_DN == $KEY_ADDED_BVN ]] || die "operator-2 was not sent to the BVN"
+
+  echo Current keypage dn.acme/validators/2
+  accumulate page get acc://dn.acme/validators/2
+  echo Current keypage dn.acme/operators/1
+  accumulate page get acc://dn.acme/operators/1
+else
+  echo -e '\033[1;31mCannot test the operator book: private validator key not found\033[0m'
+  echo
+fi
+
 #spin up a DN validator, we cannot have 2 validators, so need >= 3 to run this test
 if [ -f "$(nodePrivKey 0)" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -ge "3" ]; then
   section "Add a new DN validator"
@@ -60,25 +80,6 @@ if [ -f "$(nodePrivKey 0)" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -ge "3" ];
 
   echo Updated keypage dn.acme/.acmevalidators/2
   accumulate page get acc://dn.acme/validators/2
-fi
-
-section "Add a key to the operator book"
-if [ -f "$(nodePrivKey 0)" ]; then
-
-  wait-for cli-tx page key add acc://dn.acme/operators/1 "$(nodePrivKey 0)" $hexPubKey
-  KEY_ADDED_DN=$(accumulate page get -j dn.acme/operators/1) | jq -re .data.keys[2].publicKey
-  echo "sleeping for 5 seconds (wait for anchor)"
-  sleep 5
-  KEY_ADDED_BVN=$(accumulate page get -j bvn-BVN0/operators/2) | jq -re .data.keys[2].publicKey
-  [[ $KEY_ADDED_DN == $KEY_ADDED_BVN ]] || die "operator-2 was not sent to the BVN"
-
-  echo Current keypage dn.acme/validators/2
-  accumulate page get acc://dn.acme/validators/2
-  echo Current keypage dn.acme/operators/1
-  accumulate page get acc://dn.acme/operators/1
-else
-  echo -e '\033[1;31mCannot test the operator book: private validator key not found\033[0m'
-  echo
 fi
 
 section "Update oracle price to \$0.0501. Oracle price has precision of 4 decimals"

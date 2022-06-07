@@ -90,7 +90,7 @@ func addValidator(st *StateManager, env *Delivery) error {
 	// Ensure the key is already an operator
 	_, _, found = oprPage.EntryByKeyHash(keyHash[:])
 	if !found {
-		return fmt.Errorf("key is has to be an operator first")
+		return fmt.Errorf("key has to be an operator first")
 	}
 
 	// Add the key hash to the key page
