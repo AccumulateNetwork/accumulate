@@ -153,6 +153,11 @@ type Config struct {
 type Accumulate struct {
 	SentryDSN string `toml:"sentry-dsn" mapstructure:"sentry-dsn"`
 	Describe
+	NetworkType  NetworkType `json:"networkType,omitempty" form:"networkType" query:"networkType" validate:"required" toml:"type" mapstructure:"type"`
+	SubnetId     string      `toml:"subnet-id" mapstructure:"subnet-id"`
+	LocalAddress string      `toml:"local-address" mapstructure:"local-address"`
+	// TODO: move network config to its own file since it will be constantly changing over time.
+	//	NetworkConfig string      `toml:"network" mapstructure:"network"`
 	Snapshots Snapshots `toml:"snapshots" mapstructure:"snapshots"`
 	Storage   Storage   `toml:"storage" mapstructure:"storage"`
 	API       API       `toml:"api" mapstructure:"api"`

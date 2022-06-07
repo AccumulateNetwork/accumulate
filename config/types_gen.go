@@ -9,10 +9,10 @@ import (
 )
 
 type Describe struct {
-	Network
 	NetworkType  NetworkType `json:"networkType,omitempty" form:"networkType" query:"networkType" validate:"required" toml:"type" mapstructure:"type"`
 	SubnetId     string      `json:"subnetId,omitempty" form:"subnetId" query:"subnetId" validate:"required" toml:"subnet-id" mapstructure:"subnet-id"`
 	LocalAddress string      `json:"localAddress,omitempty" form:"localAddress" query:"localAddress" validate:"required" toml:"local-address" mapstructure:"local-address"`
+	Network      Network     `json:"network,omitempty" form:"network" query:"network" validate:"required" toml:"network" mapstructure:"network"`
 	extraData    []byte
 }
 
@@ -39,10 +39,10 @@ type Subnet struct {
 func (v *Describe) Copy() *Describe {
 	u := new(Describe)
 
-	u.Network = *v.Network.Copy()
 	u.NetworkType = v.NetworkType
 	u.SubnetId = v.SubnetId
 	u.LocalAddress = v.LocalAddress
+	u.Network = *(&v.Network).Copy()
 
 	return u
 }
@@ -91,9 +91,6 @@ func (v *Subnet) Copy() *Subnet {
 func (v *Subnet) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *Describe) Equal(u *Describe) bool {
-	if !v.Network.Equal(&u.Network) {
-		return false
-	}
 	if !(v.NetworkType == u.NetworkType) {
 		return false
 	}
@@ -101,6 +98,9 @@ func (v *Describe) Equal(u *Describe) bool {
 		return false
 	}
 	if !(v.LocalAddress == u.LocalAddress) {
+		return false
+	}
+	if !((&v.Network).Equal(&u.Network)) {
 		return false
 	}
 
@@ -156,22 +156,6 @@ func (v *Subnet) Equal(u *Subnet) bool {
 	return true
 }
 
-func (v *Describe) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Name         string                    `json:"name,omitempty"`
-		Subnets      encoding.JsonList[Subnet] `json:"subnets,omitempty"`
-		NetworkType  NetworkType               `json:"networkType,omitempty"`
-		SubnetId     string                    `json:"subnetId,omitempty"`
-		LocalAddress string                    `json:"localAddress,omitempty"`
-	}{}
-	u.Name = v.Network.Name
-	u.Subnets = v.Network.Subnets
-	u.NetworkType = v.NetworkType
-	u.SubnetId = v.SubnetId
-	u.LocalAddress = v.LocalAddress
-	return json.Marshal(&u)
-}
-
 func (v *Network) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Name    string                    `json:"name,omitempty"`
@@ -194,30 +178,6 @@ func (v *Subnet) MarshalJSON() ([]byte, error) {
 	u.BasePort = v.BasePort
 	u.Nodes = v.Nodes
 	return json.Marshal(&u)
-}
-
-func (v *Describe) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Name         string                    `json:"name,omitempty"`
-		Subnets      encoding.JsonList[Subnet] `json:"subnets,omitempty"`
-		NetworkType  NetworkType               `json:"networkType,omitempty"`
-		SubnetId     string                    `json:"subnetId,omitempty"`
-		LocalAddress string                    `json:"localAddress,omitempty"`
-	}{}
-	u.Name = v.Network.Name
-	u.Subnets = v.Network.Subnets
-	u.NetworkType = v.NetworkType
-	u.SubnetId = v.SubnetId
-	u.LocalAddress = v.LocalAddress
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	v.Network.Name = u.Name
-	v.Network.Subnets = u.Subnets
-	v.NetworkType = u.NetworkType
-	v.SubnetId = u.SubnetId
-	v.LocalAddress = u.LocalAddress
-	return nil
 }
 
 func (v *Network) UnmarshalJSON(data []byte) error {
