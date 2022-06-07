@@ -52,3 +52,5 @@ TypeCode:
     value: 12
   Float:
     value: 13
+  Txid:
+    value: 14

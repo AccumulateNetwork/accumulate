@@ -22,6 +22,11 @@ function ensure-key {
     fi
 }
 
+# hash-from-txid - Extract the transaction hash from a transaction ID
+function hash-from-txid {
+    cut -d/ -f3 | cut -d@ -f1
+}
+
 # wait-for <cmd...> - Execute a transaction and wait for it to complete
 function wait-for {
     if [ "$1" == "--no-check" ]; then
@@ -61,7 +66,7 @@ function wait-for-tx {
         [ "$CODE" -ne 0 ] && die "$TXID failed:" $(echo $RESP | jq -C --indent 0 .status)
     fi
 
-    for TXID in $(echo $RESP | jq -re '(.syntheticTxids // [])[]'); do
+    for TXID in $(echo $RESP | jq -re '(.produced // [])[]' | hash-from-txid); do
         wait-for-tx $NO_CHECK --ignore-pending "$TXID" || return 1
     done
 }

@@ -1,4 +1,4 @@
-package consts
+package core
 
 import "regexp"
 

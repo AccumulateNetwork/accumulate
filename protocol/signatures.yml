@@ -212,3 +212,13 @@ DelegatedSignature:
       description: is the authority that delegated its authority to the signer
       type: url
       pointer: true
+
+InternalSignature:
+  union: { type: signature }
+  description: is used for internally produced transactions
+  fields:
+    - name: Cause
+      description: is the hash of the transaction that produced the signed transaction
+      type: hash
+    - name: TransactionHash
+      type: hash
