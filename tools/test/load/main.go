@@ -25,7 +25,7 @@ func main() {
 var cmd = &cobra.Command{
 	Use: "devnet",
 	Run: func(*cobra.Command, []string) {
-		err := initClient("http://127.0.1.1:26660/v2")
+		err := initClients(3)
 		if err != nil {
 			os.Exit(1)
 		}
@@ -96,6 +96,17 @@ func initClient(server string) error {
 	stop := time.Now()
 	fmt.Printf("The Txs execution took %v to run.\n", stop.Sub(start))
 
+	return nil
+}
+
+// Initiate several clients
+func initClients(c int) error {
+	for i := 0; i < c; i++ {
+		err := initClient("http://127.0.1.1:26660/v2")
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
