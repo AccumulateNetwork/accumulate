@@ -14,13 +14,14 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
 var Keyname string
+var WriteState bool
 
 func init() {
 	dataCmd.Flags().StringVar(&Keyname, "sign-data", "", "specify this to send random data as a signed & valid entry to data account")
+	dataCmd.PersistentFlags().BoolVar(&WriteState, "write-state", false, "Write to the account's state")
 }
 
 var dataCmd = &cobra.Command{
@@ -247,12 +248,8 @@ func CreateLiteDataAccount(origin string, args []string) (string, error) {
 	if err != nil {
 		return PrintJsonRpcError(err)
 	}
-	result, err := GetSynthTxnsString(res, resps)
-	if err != nil {
-		return "", err
-	}
 	ar := ActionResponseFromLiteData(res, addr.String(), accountId, entryHash)
-	ar.SynthTxns = types.String(result)
+	ar.Flow = resps
 	return ar.Print()
 }
 
@@ -317,6 +314,7 @@ func WriteData(accountUrl string, args []string) (string, error) {
 		return "", fmt.Errorf("expecting account url")
 	}
 	wd := protocol.WriteData{}
+	wd.WriteToState = WriteState
 
 	var kSigner *signing.Builder
 	if Keyname != "" {
@@ -340,12 +338,8 @@ func WriteData(accountUrl string, args []string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	result, err := GetSynthTxnsString(res, resps)
-	if err != nil {
-		return "", err
-	}
 	ar := ActionResponseFromData(res, wd.Entry.Hash())
-	ar.SynthTxns = types.String(result)
+	ar.Flow = resps
 	return ar.Print()
 }
 
@@ -480,11 +474,7 @@ func WriteDataTo(accountUrl string, args []string) (string, error) {
 		lde.ExtIds = data[1:]
 	}
 
-	result, err := GetSynthTxnsString(res, resps)
-	if err != nil {
-		return "", err
-	}
 	ar := ActionResponseFromLiteData(res, wd.Recipient.String(), lde.AccountId[:], wd.Entry.Hash())
-	ar.SynthTxns = types.String(result)
+	ar.Flow = resps
 	return ar.Print()
 }

@@ -829,6 +829,8 @@ func NewSignature(typ SignatureType) (Signature, error) {
 		return new(ED25519Signature), nil
 	case SignatureTypeETH:
 		return new(ETHSignature), nil
+	case SignatureTypeInternal:
+		return new(InternalSignature), nil
 	case SignatureTypeLegacyED25519:
 		return new(LegacyED25519Signature), nil
 	case SignatureTypeRCD1:
@@ -866,6 +868,9 @@ func EqualSignature(a, b Signature) bool {
 		return ok && a.Equal(b)
 	case *ETHSignature:
 		b, ok := b.(*ETHSignature)
+		return ok && a.Equal(b)
+	case *InternalSignature:
+		b, ok := b.(*InternalSignature)
 		return ok && a.Equal(b)
 	case *LegacyED25519Signature:
 		b, ok := b.(*LegacyED25519Signature)

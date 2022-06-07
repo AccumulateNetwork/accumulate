@@ -145,24 +145,6 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 	return nil, nil
 }
 
-func operatorUpdatesToLedger(st *StateManager, operations []protocol.KeyPageOperation) error {
-	var ledgerState *protocol.SystemLedger
-	err := st.LoadUrlAs(st.NodeUrl().JoinPath(protocol.Ledger), &ledgerState)
-	if err != nil {
-		return fmt.Errorf("unable to load main ledger: %w", err)
-	}
-
-	for _, op := range operations {
-		ledgerState.OperatorUpdates = append(ledgerState.OperatorUpdates, op)
-	}
-	err = st.Update(ledgerState)
-	if err != nil {
-		return fmt.Errorf("unable to update main ledger: %w", err)
-	}
-
-	return nil
-}
-
 func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, op protocol.KeyPageOperation) error {
 	switch op := op.(type) {
 	case *protocol.AddKeyOperation:

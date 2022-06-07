@@ -18,6 +18,7 @@ import (
 	"github.com/tendermint/tendermint/crypto"
 	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 func init() { acctesting.EnableDebugFeatures() }
@@ -36,11 +37,25 @@ func bootstrap(t *testing.T, tc *testCmd) {
 	_, err = tc.execute(t, "key import mnemonic yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow")
 	require.NoError(t, err)
 
+	oracle := new(protocol.AcmeOracle)
+	oracle.Price = 1 * protocol.AcmeOraclePrecision
+	data, err := oracle.MarshalBinary()
+	require.NoError(t, err)
+
 	//set the oracle price to $1.00
-	resp, err := tc.executeTx(t, "data write dn.acme/oracle dnkey {\"price\":10000}")
+	resp, err := tc.executeTx(t, "data write --write-state --wait 10s dn.acme/oracle dnkey %x", data)
 	require.NoError(t, err)
 	_, err = tc.executeTx(t, "tx sign dn.acme/oracle dnkey %s", getTxId(t, resp))
 	require.NoError(t, err)
+	ar := new(ActionResponse)
+	require.NoError(t, json.Unmarshal([]byte(resp), ar))
+	for _, r := range ar.Flow {
+		if r.Status.Error != nil {
+			require.NoError(t, r.Status.Error)
+		} else {
+			require.Zero(t, r.Status.Code, r.Status.Message)
+		}
+	}
 }
 
 func TestCli(t *testing.T) {

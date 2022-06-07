@@ -131,10 +131,9 @@ func removeValidator(st *StateManager, env *Delivery) error {
 	/*  This no longer does anything because the signing is now governed by the operator book
 	TODO Remove when sure nothing will be governed by validtor books
 	// Update the threshold
-	ratio := loadValidatorsThresholdRatio(st, st.NodeUrl(protocol.Globals))
+	ratio := st.Globals.Globals.ValidatorThreshold.GetFloat()
 	page.AcceptThreshold = protocol.GetMOfN(len(page.Keys), ratio)
 	*/
-
 	// Record the update
 	didUpdateKeyPage(page)
 	err = st.Update(page)
@@ -192,14 +191,9 @@ func updateValidator(st *StateManager, env *Delivery) error {
 // checkValidatorTransaction implements common checks for validator
 // transactions.
 func checkValidatorTransaction(st *StateManager, env *Delivery) (*protocol.KeyPage, error) {
-	validatorPageUrl := env.Transaction.Header.Principal
-	if !st.NodeUrl().Equal(validatorPageUrl.RootIdentity()) {
-		return nil, fmt.Errorf("invalid principal: must be %s, got %s", st.NodeUrl(), validatorPageUrl)
-	}
-
-	validatorBookUrl, _, ok := protocol.ParseKeyPageUrl(validatorPageUrl)
-	if !ok {
-		return nil, errors.Format(errors.StatusBadRequest, "principal is not a key page")
+	validatorBookUrl := env.Transaction.Header.Principal
+	if !st.NodeUrl().Equal(validatorBookUrl.RootIdentity()) {
+		return nil, fmt.Errorf("invalid principal: must be %s, got %s", st.NodeUrl(), validatorBookUrl)
 	}
 
 	var book *protocol.KeyBook
@@ -212,10 +206,11 @@ func checkValidatorTransaction(st *StateManager, env *Delivery) (*protocol.KeyPa
 		return nil, fmt.Errorf("the key book is not of a validator book type")
 	}
 
+	pageUrl := protocol.FormatKeyPageUrl(validatorBookUrl, 0)
 	var page *protocol.KeyPage
-	err = st.LoadUrlAs(validatorPageUrl, &page)
+	err = st.LoadUrlAs(pageUrl, &page)
 	if err != nil {
-		return nil, fmt.Errorf("unable to load %s: %v", validatorPageUrl, err)
+		return nil, fmt.Errorf("unable to load %s: %v", pageUrl, err)
 	}
 
 	return page, nil

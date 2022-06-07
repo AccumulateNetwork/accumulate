@@ -176,8 +176,9 @@ func txWait(t *testing.T, japi *api.JrpcMethods, txid []byte) {
 	t.Helper()
 
 	txr := queryTxn(t, japi, "query-tx", &api.TxnQuery{Txid: txid, Wait: 10 * time.Second})
-	for _, txid := range txr.SyntheticTxids {
-		queryTxn(t, japi, "query-tx", &api.TxnQuery{Txid: txid[:], Wait: 10 * time.Second}) //nolint:rangevarref
+	for _, txid := range txr.Produced {
+		txid := txid.Hash()
+		queryTxn(t, japi, "query-tx", &api.TxnQuery{Txid: txid[:], Wait: 10 * time.Second})
 	}
 }
 
@@ -243,8 +244,9 @@ func (d *e2eDUT) WaitForTxns(txids ...[]byte) {
 		r, err := d.api().Querier().QueryTx(txid, 10*time.Second, false, api.QueryOptions{})
 		d.Require().NoError(err)
 
-		for _, txid := range r.SyntheticTxids {
-			_, err := d.api().Querier().QueryTx(txid[:], 10*time.Second, false, api.QueryOptions{}) //nolint:rangevarref
+		for _, txid := range r.Produced {
+			txid := txid.Hash()
+			_, err := d.api().Querier().QueryTx(txid[:], 10*time.Second, false, api.QueryOptions{})
 			d.Require().NoError(err)
 		}
 	}

@@ -56,9 +56,11 @@ SendTokens:
   union: { type: transaction }
   fields:
     - name: Hash
-      type: chain
+      # TODO Remove
+      type: hash
       optional: true
     - name: Meta
+      # TODO Remove
       type: rawJson
       optional: true
     - name: To
@@ -268,5 +270,6 @@ RemoteTransaction:
   union: { type: transaction }
   fields:
     - name: Hash
+      # TODO Make this a transaction ID?
       type: hash
       optional: true

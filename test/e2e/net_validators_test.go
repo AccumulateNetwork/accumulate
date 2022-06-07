@@ -6,8 +6,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -19,13 +19,13 @@ func send(sim *simulator.Simulator, fn func(func(*Envelope))) []*Envelope {
 	return envelopes
 }
 
-func requireHasKeyHash(t *testing.T, page *protocol.KeyPage, hash []byte) {
+func requireHasKeyHash(t *testing.T, page *KeyPage, hash []byte) {
 	t.Helper()
 	_, _, ok := page.EntryByKeyHash(hash)
 	require.Truef(t, ok, "Page %v does not contain key hash %x", page.Url, hash[:4])
 }
 
-func requireNotHasKeyHash(t *testing.T, page *protocol.KeyPage, hash []byte) {
+func requireNotHasKeyHash(t *testing.T, page *KeyPage, hash []byte) {
 	t.Helper()
 	_, _, ok := page.EntryByKeyHash(hash)
 	require.Falsef(t, ok, "Page %v does not contain key hash %x", page.Url, hash[:4])
@@ -50,19 +50,19 @@ func TestUpdateValidators(t *testing.T) {
 
 	// Update NetworkGlobals - use 5/12 so that M = 1 for 3 validators and M = 2
 	// for 4
-	ng := new(NetworkGlobals)
-	ng.OperatorAcceptThreshold.Set(5, 12)
-	wd := new(WriteData)
-	d, err := ng.MarshalBinary()
-	require.NoError(t, err)
-	wd.Entry = &AccumulateDataEntry{Data: [][]byte{d}}
+	g := new(core.GlobalValues)
+	g.Globals = new(NetworkGlobals)
+	g.Globals.OperatorAcceptThreshold.Set(5, 12)
 	send(sim,
 		func(send func(*Envelope)) {
 			send(acctesting.NewTransaction().
 				WithPrincipal(dn.Executor.Network.NodeUrl(Globals)).
 				WithTimestampVar(&timestamp).
 				WithSigner(dn.Executor.Network.ValidatorPage(0), 1). // TODO move back to OperatorPage in or after AC-1402
-				WithBody(wd).
+				WithBody(&WriteData{
+					Entry:        g.FormatGlobals(),
+					WriteToState: true,
+				}).
 				Initiate(SignatureTypeLegacyED25519, dn.Executor.Key).
 				Build())
 		})
@@ -175,7 +175,7 @@ func TestUpdateOperators(t *testing.T) {
 	// Initialize
 	sim := simulator.New(t, 3)
 	sim.InitFromGenesis()
-	dn := sim.Subnet(protocol.Directory)
+	dn := sim.Subnet(Directory)
 	bvn0 := sim.Subnet(sim.Subnets[1].ID)
 	bvn1 := sim.Subnet(sim.Subnets[2].ID)
 
