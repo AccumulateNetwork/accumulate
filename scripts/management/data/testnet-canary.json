@@ -1,6 +1,6 @@
 {
     "network": "Canary TestNet",
-    "subnet": [
+    "subnets": [
         {
             "name": "Directory",
             "type": "directory",

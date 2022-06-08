@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/mitchellh/mapstructure"
 	"io"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -176,7 +177,7 @@ type Storage struct {
 type API struct {
 	TxMaxWaitTime      time.Duration `toml:"tx-max-wait-time" mapstructure:"tx-max-wait-time"`
 	PrometheusServer   string        `toml:"prometheus-server" mapstructure:"prometheus-server"`
-	ListenAddress      string        `toml:"listen-address" mapstructure:"listen-address"` //deprecated
+	ListenAddress      string        `toml:"listen-address" mapstructure:"listen-address"`
 	DebugJSONRPC       bool          `toml:"debug-jsonrpc" mapstructure:"debug-jsonrpc"`
 	EnableDebugMethods bool          `toml:"enable-debug-methods" mapstructure:"enable-debug-methods"`
 	ConnectionLimit    int           `toml:"connection-limit" mapstructure:"connection-limit"`
@@ -199,8 +200,17 @@ func OffsetPort(addr string, basePort int, offset int) (*url.URL, error) {
 	if err != nil {
 		return nil, fmt.Errorf("invalid URL %q: %v", addr, err)
 	}
+
 	if u.Scheme == "" {
-		return nil, fmt.Errorf("invalid URL %q: has no scheme, so this probably isn't a URL", addr)
+		ip := net.ParseIP(addr)
+		if ip == nil {
+			return nil, fmt.Errorf("invalid URL %q: has no scheme and is not an IP address, so this probably isn't a valid URL", addr)
+		}
+
+		u, err = url.Parse("tcp://" + ip.String())
+		if err != nil {
+			return nil, fmt.Errorf("invalid url from ip string")
+		}
 	}
 
 	u.Host = fmt.Sprintf("%s:%d", u.Hostname(), basePort+offset)

@@ -90,7 +90,7 @@ func initV1(opts InitOptions) (bootstrap genesis.Bootstrap, err error) {
 
 		config.P2P.ListenAddress = fmt.Sprintf("tcp://%s:%d", opts.ListenIP[i], opts.Port+int(cfg.PortOffsetTendermintP2P))
 		config.RPC.ListenAddress = fmt.Sprintf("tcp://%s:%d", opts.ListenIP[i], opts.Port+int(cfg.PortOffsetTendermintRpc))
-		//config.RPC.GRPCListenAddress = fmt.Sprintf("tcp://%s:%d", opts.ListenIP[i], opts.Port+networks.TmRpcGrpcPortOffset)
+		config.RPC.GRPCListenAddress = fmt.Sprintf("tcp://%s:%d", opts.ListenIP[i], opts.Port+int(cfg.PortOffsetTendermintGrpc))
 		config.Instrumentation.PrometheusListenAddr = fmt.Sprintf(":%d", opts.Port+int(cfg.PortOffsetPrometheus))
 
 		err = os.MkdirAll(path.Join(nodeDir, "config"), nodeDirPerm)

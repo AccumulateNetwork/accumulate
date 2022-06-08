@@ -104,7 +104,7 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withF
 			remotes[i] = getIP(hash).String()
 			nodes[i] = config.Node{
 				Type:    nodeType,
-				Address: fmt.Sprintf("http://%s:%d", remotes[i], basePort),
+				Address: remotes[i], //fmt.Sprintf("http://%s:%d", remotes[i], basePort),
 			}
 			addresses[i] = nodes[i].Address
 		}

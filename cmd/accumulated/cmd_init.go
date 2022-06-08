@@ -237,7 +237,8 @@ func initNode(cmd *cobra.Command, args []string) {
 		nodeType = cfg.Follower
 	}
 	config := config.Default(description.Network.Name, description.NetworkType, nodeType, description.SubnetId)
-	config.P2P.BootstrapPeers = fmt.Sprintf("%s@%s:%d", status.NodeInfo.NodeID, netAddr, netPort+int(cfg.PortOffsetTendermintP2P))
+	//config.P2P.BootstrapPeers = fmt.Sprintf("%s@%s:%d", status.NodeInfo.NodeID, netAddr, netPort+int(cfg.PortOffsetTendermintP2P))
+	config.P2P.PersistentPeers = fmt.Sprintf("%s@%s:%d", status.NodeInfo.NodeID, netAddr, netPort+int(cfg.PortOffsetTendermintP2P))
 	config.Accumulate.Describe = cfg.Describe{NetworkType: description.NetworkType, SubnetId: description.SubnetId, LocalAddress: ""}
 
 	if flagInit.LogLevels != "" {

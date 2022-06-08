@@ -239,7 +239,7 @@ func (cm *connectionManager) buildNodeContext(node config.Node, subnet config.Su
 		var err error
 		connCtx.resolvedIPs, err = resolveIPs(node.Address)
 		if err != nil {
-			cm.logger.Error("error resolving IPs for %q: %v", node.Address, err)
+			cm.logger.Error(fmt.Sprintf("error resolving IPs for %q: %v", node.Address, err))
 			connCtx.ReportErrorStatus(Down)
 		}
 	}
@@ -379,6 +379,11 @@ func resolveIPs(address string) ([]net.IP, error) {
 	if err == nil {
 		hostname = nodeUrl.Hostname()
 	} else {
+		hostname = address
+	}
+
+	if hostname == "" {
+		//no hostname, but url is valid? could happen if scheme is missing.
 		hostname = address
 	}
 
