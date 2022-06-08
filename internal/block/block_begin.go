@@ -22,7 +22,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
-const debugMajorBlocks = false
+const debugMajorBlocks = true
 
 // BeginBlock implements ./Chain
 func (x *Executor) BeginBlock(block *Block) error {
@@ -507,6 +507,7 @@ func (x *Executor) buildDirectoryAnchor(batch *database.Batch, ledgerState *prot
 		return nil, err
 	}
 	anchor.MakeMajorBlock = openMajor
+	anchor.MakeMajorBlockTime = time.Now()
 	anchor.Updates = ledgerState.PendingUpdates
 
 	// TODO This is pretty inefficient; we're constructing a receipt for every

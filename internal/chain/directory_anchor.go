@@ -41,6 +41,7 @@ func (x DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 	// Trigger a major block?
 	if st.Network.Type != config.Directory {
 		st.State.MakeMajorBlock = body.MakeMajorBlock
+		st.State.MakeMajorBlockTime = body.MakeMajorBlockTime
 	}
 
 	// Add the anchor to the chain - use the subnet name as the chain name

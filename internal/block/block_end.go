@@ -375,17 +375,11 @@ func (x *Executor) updateMajorIndexChains(block *Block, rootIndexIndex uint64) e
 		return errors.Format(errors.StatusUnknown, "load anchor ledger main chain: %w", err)
 	}
 
-	var anchorLedger *protocol.AnchorLedger
-	err = account.GetStateAs(&anchorLedger)
-	if err != nil {
-		return &protocol.Error{Code: protocol.ErrorCodeUnMarshallingError, Message: err}
-	}
-
 	_, err = addIndexChainEntry(account, protocol.IndexChain(protocol.MainChain, true), &protocol.IndexEntry{
 		Source:         uint64(mainChain.Height() - 1),
 		RootIndexIndex: rootIndexIndex,
 		BlockIndex:     block.State.MakeMajorBlock,
-		BlockTime:      &anchorLedger.MajorBlockTime,
+		BlockTime:      &block.State.MakeMajorBlockTime,
 	})
 	if err != nil {
 		return errors.Format(errors.StatusUnknown, "add anchor ledger index chain entry: %w", err)
