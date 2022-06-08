@@ -1141,7 +1141,6 @@ func TestIssueTokensRefund(t *testing.T) {
 	//test to make sure supply limit is set
 	issuer := n.GetTokenIssuer("foo/tokens")
 	require.Equal(t, supplyLimit.Int64(), issuer.SupplyLimit.Int64())
-	fmt.Println(issuer)
 
 	//issue tokens successfully
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
@@ -1161,7 +1160,6 @@ func TestIssueTokensRefund(t *testing.T) {
 	require.Equal(t, "acc://foo.acme/tokens", account.TokenUrl.String())
 	require.Equal(t, int64(123), account.Balance.Int64())
 
-	fmt.Println(issuer, account.Balance)
 	//issue tokens to incorrect principal
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.IssueTokens)
@@ -1176,8 +1174,7 @@ func TestIssueTokensRefund(t *testing.T) {
 			Build())
 	})
 	issuer = n.GetTokenIssuer("foo/tokens")
-	require.Equal(t, int64(123), issuer.Issued)
-
+	require.Equal(t, int64(123), issuer.Issued.Int64())
 }
 
 type CheckError struct {
