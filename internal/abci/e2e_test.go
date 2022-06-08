@@ -274,7 +274,7 @@ func TestCreateADI(t *testing.T) {
 }
 
 func TestCreateADIWithoutKeybook(t *testing.T) {
-	check := CheckError{H: NewDefaultErrorHandler(t), Disable: true}
+	check := newDefaultCheckError(t, false)
 
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, check.ErrorHandler())
@@ -678,7 +678,7 @@ func TestAdiAccountTx(t *testing.T) {
 }
 
 func TestSendTokensToBadRecipient(t *testing.T) {
-	check := CheckError{H: NewDefaultErrorHandler(t), Disable: true}
+	check := newDefaultCheckError(t, false)
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, check.ErrorHandler())
 	n := nodes[subnets[1]][0]
@@ -1100,8 +1100,7 @@ func TestIssueTokens(t *testing.T) {
 }
 
 func TestIssueTokensRefund(t *testing.T) {
-	t.Skip("to do")
-	check := CheckError{H: NewDefaultErrorHandler(t)}
+	check := newDefaultCheckError(t, true)
 
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, check.ErrorHandler())
@@ -1161,6 +1160,7 @@ func TestIssueTokensRefund(t *testing.T) {
 	require.Equal(t, int64(123), account.Balance.Int64())
 
 	//issue tokens to incorrect principal
+	check.Disable = true
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.IssueTokens)
 		liteAddr.Authority = liteAddr.Authority + "u"
@@ -1178,12 +1178,18 @@ func TestIssueTokensRefund(t *testing.T) {
 }
 
 type CheckError struct {
+	T       *testing.T
 	Disable bool
 	H       func(err error)
 }
 
+func newDefaultCheckError(t *testing.T, enable bool) *CheckError {
+	return &CheckError{T: t, H: NewDefaultErrorHandler(t), Disable: !enable}
+}
+
 func (c *CheckError) ErrorHandler() func(err error) {
 	return func(err error) {
+		c.T.Helper()
 		if !c.Disable {
 			c.H(err)
 		}
@@ -1191,7 +1197,7 @@ func (c *CheckError) ErrorHandler() func(err error) {
 }
 
 func TestIssueTokensWithSupplyLimit(t *testing.T) {
-	check := CheckError{H: NewDefaultErrorHandler(t)}
+	check := newDefaultCheckError(t, true)
 
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, check.ErrorHandler())
@@ -1423,7 +1429,7 @@ func DumpAccount(t *testing.T, batch *database.Batch, accountUrl *url.URL) {
 }
 
 func TestMultisig(t *testing.T) {
-	check := CheckError{H: NewDefaultErrorHandler(t)}
+	check := newDefaultCheckError(t, true)
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, check.ErrorHandler())
 
@@ -1505,7 +1511,7 @@ func TestMultisig(t *testing.T) {
 }
 
 func TestAccountAuth(t *testing.T) {
-	check := CheckError{H: NewDefaultErrorHandler(t)}
+	check := newDefaultCheckError(t, true)
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, check.ErrorHandler())
 	n := nodes[subnets[1]][0]
