@@ -420,6 +420,8 @@ func (x *Executor) recordPendingTransaction(net *config.Network, batch *database
 		return status, new(chain.ProcessTransactionState), nil
 	}
 
+	x.logger.Debug("Pending synthetic transaction", "hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4), "type", delivery.Transaction.Body.Type(), "anchor", logging.AsHex(receipt.Anchor).Slice(0, 4), "module", "synthetic")
+
 	err = batch.Account(net.Ledger()).AddSyntheticForAnchor(*(*[32]byte)(receipt.Anchor), delivery.Transaction.ID())
 	if err != nil {
 		return nil, nil, errors.Wrap(errors.StatusUnknown, err)

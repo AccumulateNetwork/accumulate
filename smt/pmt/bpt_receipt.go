@@ -1,8 +1,6 @@
 package pmt
 
-import (
-	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
-)
+import "gitlab.com/accumulatenetwork/accumulate/smt/managed"
 
 // CollectReceipt
 // A recursive routine that searches the BPT for the given chainID.  Once it is
@@ -16,7 +14,7 @@ import (
 func (b *BPT) CollectReceipt(BIdx, bit byte, node *BptNode, key [32]byte, receipt *managed.Receipt) (hash []byte) {
 	if node.Left != nil && node.Left.T() == TNotLoaded || // Check if either the Left or Right
 		node.Right != nil && node.Right.T() == TNotLoaded { // are pointing to not loaded.
-		b.manager.LoadNode(node)
+		b.Manager.LoadNode(node)
 
 	}
 
@@ -33,10 +31,10 @@ func (b *BPT) CollectReceipt(BIdx, bit byte, node *BptNode, key [32]byte, receip
 	value, ok := entry.(*Value)
 	if ok {
 		if value.Key == key {
-			receipt.Element = append(receipt.Element[:0], value.Hash[:]...)
+			receipt.Start = append(receipt.Start[:0], value.Hash[:]...)
 			if other != nil { // If other isn't nil, then add it to the node list of the receipt
-				receipt.Nodes = append(receipt.Nodes,
-					&managed.ReceiptNode{Hash: other.GetHash(), Right: !right})
+				receipt.Entries = append(receipt.Entries,
+					&managed.ReceiptEntry{Hash: other.GetHash(), Right: !right})
 			}
 			return append([]byte{}, node.Hash[:]...) // Note that the node.Hash is combined with other if other != nil
 		}
@@ -63,7 +61,7 @@ func (b *BPT) CollectReceipt(BIdx, bit byte, node *BptNode, key [32]byte, receip
 
 	if other != nil {
 		// Add the hash to the receipt provided by the entry, and mark it right or not right (right flag)
-		receipt.Nodes = append(receipt.Nodes, &managed.ReceiptNode{Hash: other.GetHash(), Right: !right})
+		receipt.Entries = append(receipt.Entries, &managed.ReceiptEntry{Hash: other.GetHash(), Right: !right})
 	}
 
 	return node.GetHash()
@@ -73,8 +71,8 @@ func (b *BPT) CollectReceipt(BIdx, bit byte, node *BptNode, key [32]byte, receip
 // Returns the receipt for the current state for the given chainID
 func (b *BPT) GetReceipt(chainID [32]byte) *managed.Receipt { //          The location of a value is determined by the chainID (a key)
 	receipt := new(managed.Receipt)
-	receipt.MDRoot = b.CollectReceipt(0, 0x80, b.GetRoot(), chainID, receipt) //
-	if receipt.MDRoot == nil {
+	receipt.Anchor = b.CollectReceipt(0, 0x80, b.GetRoot(), chainID, receipt) //
+	if receipt.Anchor == nil {
 		return nil
 	}
 	return receipt

@@ -19,9 +19,9 @@ type BPT struct {
 	Root      *BptNode              // The root of the Patricia Tree, holding the summary hash for the Patricia Tree
 	DirtyMap  map[[32]byte]*BptNode // Map of dirty nodes.
 	MaxHeight int                   // Highest height of any node in the BPT
-	power     int                   // Power
-	mask      int                   // Mask used to detect Byte Block boundaries
-	manager   *Manager              // Pointer to the manager for access to the database
+	Power     int                   // Power
+	Mask      int                   // Mask used to detect Byte Block boundaries
+	Manager   *Manager              // Pointer to the manager for access to the database
 }
 
 // GetRoot
@@ -30,8 +30,8 @@ func (b *BPT) GetRoot() (root *BptNode) {
 	if b.Root == nil { //                              If we have a root node, we are good
 		rootNodeKey, _ := GetNodeKey(0, [32]byte{}) // Get the root Node Key
 		b.Root = new(BptNode)                       // Allocate a Root Node
-		if b.manager != nil {                       // If we have a manager, pull from the DB
-			if data, err := b.manager.DBManager.Get(kBpt.Append(rootNodeKey)); err == nil {
+		if b.Manager != nil {                       // If we have a manager, pull from the DB
+			if data, err := b.Manager.DBManager.Get(kBpt.Append(rootNodeKey)); err == nil {
 				b.Root.UnMarshal(data) //              Unmarshal what we get from the DB
 			}
 		}
@@ -64,8 +64,8 @@ func (b *BPT) Equal(b2 *BPT) (equal bool) {
 // to the BPT
 func (b *BPT) Marshal() (data []byte) {
 	data = append(data, byte(b.MaxHeight))
-	data = append(data, byte(b.power>>8), byte(b.power))
-	data = append(data, byte(b.mask>>8), byte(b.mask))
+	data = append(data, byte(b.Power>>8), byte(b.Power))
+	data = append(data, byte(b.Mask>>8), byte(b.Mask))
 	data = append(data, b.RootHash[:]...)
 	return data
 }
@@ -76,8 +76,8 @@ func (b *BPT) Marshal() (data []byte) {
 func (b *BPT) UnMarshal(data []byte) (newData []byte) {
 	b.DirtyMap = make(map[[32]byte]*BptNode)
 	b.MaxHeight, data = int(data[0]), data[1:]
-	b.power, data = int(data[0])<<8+int(data[1]), data[2:]
-	b.mask, data = int(data[0])<<8+int(data[1]), data[2:]
+	b.Power, data = int(data[0])<<8+int(data[1]), data[2:]
+	b.Mask, data = int(data[0])<<8+int(data[1]), data[2:]
 	copy(b.RootHash[:], data[:32])
 	data = data[:32]
 	return data
@@ -158,7 +158,7 @@ func (b *BPT) GetDirtyList() (list []*BptNode) {
 func (b *BPT) LoadNext(BIdx, bit byte, node *BptNode, key [32]byte) {
 	if node.Left != nil && node.Left.T() == TNotLoaded ||
 		node.Right != nil && node.Right.T() == TNotLoaded {
-		b.manager.LoadNode(node)
+		b.Manager.LoadNode(node)
 		_, ok1 := node.Left.(*NotLoaded)
 		_, ok2 := node.Right.(*NotLoaded)
 		if ok1 || ok2 {
@@ -287,8 +287,8 @@ func (b *BPT) Update() error {
 			if n.Height != h { //                           Note when the height is done,
 				break //                                    bap out
 			} //
-			if h&b.mask == 0 && b.manager != nil { //       Sort and see if at the root node for a byte block
-				err := b.manager.FlushNode(n) //            If so, flush the byte block; it has already been updated
+			if h&b.Mask == 0 && b.Manager != nil { //       Sort and see if at the root node for a byte block
+				err := b.Manager.FlushNode(n) //            If so, flush the byte block; it has already been updated
 				if err != nil {
 					return err
 				}
@@ -298,9 +298,9 @@ func (b *BPT) Update() error {
 			b.Dirty(n.Parent) //                            The Parent is dirty cause it must consider this new state
 		}
 	}
-	if b.manager != nil { //                                Root doesn't get flushed (has no parent)
-		b.manager.Bpt.RootHash = b.manager.Bpt.Root.Hash
-		err := b.manager.FlushNode(b.GetRoot()) //          So flush it special
+	if b.Manager != nil { //                                Root doesn't get flushed (has no parent)
+		b.Manager.Bpt.RootHash = b.Manager.Bpt.Root.Hash
+		err := b.Manager.FlushNode(b.GetRoot()) //          So flush it special
 		if err != nil {
 			return err
 		}
@@ -328,9 +328,9 @@ func (b *BPT) EnsureRootHash() {
 // Binary Patricia Trees.
 func NewBPT(manager *Manager) *BPT {
 	b := new(BPT)                                 // Get a Binary Patrica Tree
-	b.manager = manager                           // Point the BPT to the manager
-	b.power = 8                                   // using 4 bits to persist BPTs to disk
-	b.mask = b.power - 1                          // Take the bits to the power of 2 -1
+	b.Manager = manager                           // Point the BPT to the manager
+	b.Power = 8                                   // using 4 bits to persist BPTs to disk
+	b.Mask = b.Power - 1                          // Take the bits to the power of 2 -1
 	b.Root = new(BptNode)                         // Allocate summary node (contributes nothing to BPT summary Hash
 	b.Root.Height = 0                             // Before the next level
 	b.Root.NodeKey, _ = GetNodeKey(0, [32]byte{}) // Set the zero height NodeKey
@@ -347,7 +347,7 @@ func NewBPT(manager *Manager) *BPT {
 // The node in block 03 that completes e7 is the board node.  The Left path
 // would begin the path to the theoretical key (a bit zero).
 func (b *BPT) MarshalByteBlock(borderNode *BptNode) (data []byte) {
-	if borderNode.Height&b.mask != 0 { //                Must be a boarder node
+	if borderNode.Height&b.Mask != 0 { //                Must be a boarder node
 		panic("cannot call MarshalByteBlock on non-boarder nodes") //     and the code should not call this routine
 	} //
 	data = b.MarshalEntry(borderNode.Left, data)  //                      Marshal the Byte Block to the Left
@@ -371,7 +371,7 @@ func (b *BPT) MarshalEntry(entry Entry, data []byte) []byte { //
 		data = append(data, entry.Marshal()...) //             And marshal the value
 		return data                             //             Done
 	case entry.T() == TNode && //                              Sort if TNode
-		entry.(*BptNode).Height&b.mask == 0: //                   See if entry is going into
+		entry.(*BptNode).Height&b.Mask == 0: //                   See if entry is going into
 		data = append(data, TNode)              //             Mark as going into a node
 		data = append(data, entry.Marshal()...) //             Put the fields into the slice
 		data = append(data, TNotLoaded)         //             Left is going into next Byte Block
@@ -391,7 +391,7 @@ func (b *BPT) MarshalEntry(entry Entry, data []byte) []byte { //
 // UnMarshalByteBlock
 //
 func (b *BPT) UnMarshalByteBlock(borderNode *BptNode, data []byte) []byte {
-	if borderNode.Height&b.mask != 0 {
+	if borderNode.Height&b.Mask != 0 {
 		panic("cannot call UnMarshalByteBlock on non-boarder nodes")
 	}
 	borderNode.Left, data = b.UnMarshalEntry(borderNode, data)
@@ -409,7 +409,7 @@ func (b *BPT) UnMarshalEntry(parent *BptNode, data []byte) (Entry, []byte) { //
 		data = v.UnMarshal(data) //
 		return v, data           //             Return the value object and updated data slice
 	case TNotLoaded: //                         If not loaded
-		if parent.Height&b.mask != 0 {
+		if parent.Height&b.Mask != 0 {
 			panic("writing a TNotLoaded node on a non-boundary node")
 		}
 		return new(NotLoaded), data //          Create the NotLoaded stub and updated pointer
