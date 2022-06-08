@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -232,13 +233,47 @@ func initNode(cmd *cobra.Command, args []string) {
 	status, err := tmClient.Status(context.Background())
 	checkf(err, "failed to get status of %s", args[0])
 
+	netInfo, err := tmClient.NetInfo(context.Background())
+	checkf(err, "failed to get network info from node")
+
 	nodeType := cfg.Validator
 	if flagInitNode.Follower {
 		nodeType = cfg.Follower
 	}
 	config := config.Default(description.Network.Name, description.NetworkType, nodeType, description.SubnetId)
-	//config.P2P.BootstrapPeers = fmt.Sprintf("%s@%s:%d", status.NodeInfo.NodeID, netAddr, netPort+int(cfg.PortOffsetTendermintP2P))
-	config.P2P.PersistentPeers = fmt.Sprintf("%s@%s:%d", status.NodeInfo.NodeID, netAddr, netPort+int(cfg.PortOffsetTendermintP2P))
+	config.P2P.BootstrapPeers = fmt.Sprintf("%s@%s:%d", status.NodeInfo.NodeID, netAddr, netPort+int(cfg.PortOffsetTendermintP2P))
+
+	for _, peer := range netInfo.Peers {
+		u, err := url.Parse(peer.URL)
+		checkf(err, "failed to parse url from network info %s", peer.URL)
+		u.Scheme = ""
+		//check the health of the peer
+		peerClient, err := rpchttp.New(fmt.Sprintf("tcp://%s:%s", u.Hostname(), u.Port()))
+		checkf(err, "failed to create Tendermint client for %s", u.String())
+
+		peerStatus, err := peerClient.Status(context.Background())
+		if err != nil {
+			warnf("ignoring peer: not healthy %s", u.String())
+			continue
+		}
+
+		statBytes, err := peerStatus.NodeInfo.NodeID.Bytes()
+		if err != nil {
+			warnf("ignoring healthy peer %s because peer id is invalid", u.String())
+			continue
+		}
+
+		peerBytes, err := peer.ID.Bytes()
+		if err != nil {
+			warnf("ignoring peer %s because node id is not valid", u.String())
+		}
+
+		if bytes.Compare(statBytes, peerBytes) == 0 {
+			//if we have a healthy node with a matching id, add it as a bootstrap peer
+			config.P2P.BootstrapPeers += "," + u.String()
+		}
+	}
+
 	config.Accumulate.Describe = cfg.Describe{NetworkType: description.NetworkType, SubnetId: description.SubnetId, LocalAddress: ""}
 
 	if flagInit.LogLevels != "" {
