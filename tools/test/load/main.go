@@ -3,33 +3,29 @@ package main
 import (
 	"context"
 	"crypto/ed25519"
+	"flag"
 	"fmt"
 	"log"
 	"os"
 	"time"
 
-	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-var extraFlags []string
+var serverUrl string
 
 func main() {
-	cmd.PersistentFlags().StringSliceVarP(&extraFlags, "flags", "X", nil, "Extra flags for init")
-	_ = cmd.Execute()
-}
+	flag.StringVar(&serverUrl, "s", "http://127.0.1.1:26660/v2", "Accumulate server URL")
+	flag.Parse()
 
-var cmd = &cobra.Command{
-	Use: "devnet",
-	Run: func(*cobra.Command, []string) {
-		err := initClients(3)
-		if err != nil {
-			os.Exit(1)
-		}
-	},
+	// Initiate clients and wait for them to finish
+	err := initClients(3)
+	if err != nil {
+		os.Exit(1)
+	}
 }
 
 // Init new client from server URL input using client.go
@@ -102,7 +98,7 @@ func initClient(server string) error {
 // Initiate several clients
 func initClients(c int) error {
 	for i := 0; i < c; i++ {
-		err := initClient("http://127.0.1.1:26660/v2")
+		err := initClient(serverUrl)
 		if err != nil {
 			return err
 		}
