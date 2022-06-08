@@ -166,7 +166,8 @@ func initV1(opts InitOptions) (bootstrap genesis.Bootstrap, err error) {
 			config.P2P.AddrBookStrict = false
 			config.P2P.AllowDuplicateIP = true
 			config.P2P.PersistentPeers = ""
-			if config.P2P.PersistentPeers == "" {
+			//if we aren't bootstrapping then we do want our persistent peers
+			if config.P2P.BootstrapPeers == "" {
 				for j, peer := range validatorPeers {
 					if j != i {
 						config.P2P.PersistentPeers += "," + peer
