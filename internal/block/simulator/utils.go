@@ -24,7 +24,7 @@ func InitGenesis(t TB, exec *Executor, genesisTime time.Time, netValMap genesis.
 	// Genesis
 	temp := memory.New(exec.Logger)
 	bootstrap, err := genesis.Init(temp, genesis.InitOpts{
-		Network:             exec.Network,
+		Describe:            exec.Describe,
 		GenesisTime:         genesisTime,
 		NetworkValidatorMap: netValMap,
 		Logger:              exec.Logger,

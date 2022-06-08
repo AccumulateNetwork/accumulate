@@ -2,10 +2,12 @@ package config
 
 import (
 	"fmt"
+	"github.com/mitchellh/mapstructure"
 	"io"
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"time"
 
@@ -142,20 +144,9 @@ type Config struct {
 	Accumulate Accumulate
 }
 
-//
-//type Describe struct {
-//	SubnetId     string      `toml:"subnet" mapstructure:"subnet"`
-//	NetworkType  NetworkType `toml:"type" mapstructure:"type"`
-//	LocalAddress string      `toml:"address" mapstructure:"address"`
-//	Network      `toml:"network" mapstructure:"network"`
-//}
-
 type Accumulate struct {
 	SentryDSN string `toml:"sentry-dsn" mapstructure:"sentry-dsn"`
-	Describe
-	NetworkType  NetworkType `json:"networkType,omitempty" form:"networkType" query:"networkType" validate:"required" toml:"type" mapstructure:"type"`
-	SubnetId     string      `toml:"subnet-id" mapstructure:"subnet-id"`
-	LocalAddress string      `toml:"local-address" mapstructure:"local-address"`
+	Describe  `toml:"describe" mapstructure:"describe"`
 	// TODO: move network config to its own file since it will be constantly changing over time.
 	//	NetworkConfig string      `toml:"network" mapstructure:"network"`
 	Snapshots Snapshots `toml:"snapshots" mapstructure:"snapshots"`
@@ -307,10 +298,43 @@ func load(dir, file string, c interface{}) error {
 		return fmt.Errorf("read: %v", err)
 	}
 
-	err = v.Unmarshal(c)
+	err = v.Unmarshal(c, viper.DecodeHook(mapstructure.ComposeDecodeHookFunc(
+		mapstructure.StringToTimeDurationHookFunc(),
+		mapstructure.StringToSliceHookFunc(","),
+		StringToEnumHookFunc())))
+
 	if err != nil {
 		return fmt.Errorf("unmarshal: %v", err)
 	}
 
 	return nil
+}
+
+// MarshalTOML marshals the Network Type to Toml as a string.
+func (v NetworkType) MarshalTOML() ([]byte, error) {
+	return []byte("\"" + v.String() + "\""), nil
+}
+
+// MarshalTOML marshals the Node Type to Toml as a string.
+func (v NodeType) MarshalTOML() ([]byte, error) {
+	return []byte("\"" + v.String() + "\""), nil
+}
+
+// StringToEnumHookFunc is a decode hook for mapstructure that will convert enums to strings
+func StringToEnumHookFunc() mapstructure.DecodeHookFuncType {
+	return func(
+		f reflect.Type,
+		t reflect.Type,
+		data interface{},
+	) (interface{}, error) {
+		switch t {
+		case reflect.TypeOf(NetworkTypeDirectory):
+			ret, _ := NetworkTypeByName(data.(string))
+			return ret, nil
+		case reflect.TypeOf(NodeTypeValidator):
+			ret, _ := NodeTypeByName(data.(string))
+			return ret, nil
+		}
+		return data, nil
+	}
 }

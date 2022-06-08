@@ -22,7 +22,7 @@ func TestOracleDistribution(t *testing.T) {
 
 	// TODO move back to OperatorPage and uncomment extra signatures in or after
 	// AC-1402
-	signer := simulator.GetAccount[*KeyPage](sim, dn.Executor.Network.ValidatorPage(0))
+	signer := simulator.GetAccount[*KeyPage](sim, dn.Executor.Describe.ValidatorPage(0))
 	_, entry, ok := signer.EntryByKey(dn.Executor.Key[32:])
 	require.True(t, ok)
 	timestamp = entry.GetLastUsedOn()
@@ -35,7 +35,7 @@ func TestOracleDistribution(t *testing.T) {
 	oracleEntry := g.FormatOracle()
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
 		acctesting.NewTransaction().
-			WithPrincipal(dn.Executor.Network.NodeUrl(Oracle)).
+			WithPrincipal(dn.Executor.Describe.NodeUrl(Oracle)).
 			WithTimestampVar(&timestamp).
 			WithSigner(signer.Url, signer.Version).
 			WithBody(&WriteData{
@@ -52,7 +52,7 @@ func TestOracleDistribution(t *testing.T) {
 	sim.ExecuteBlocks(10)
 
 	// Verify account
-	account := simulator.GetAccount[*DataAccount](sim, bvn0.Executor.Network.NodeUrl(Oracle))
+	account := simulator.GetAccount[*DataAccount](sim, bvn0.Executor.Describe.NodeUrl(Oracle))
 	require.NotNil(t, account.Entry)
 	require.Equal(t, oracleEntry.GetData(), account.Entry.GetData())
 	require.Len(t, account.Entry.GetData(), 1)

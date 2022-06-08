@@ -172,10 +172,10 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 	require.NoError(n.t, err)
 
 	n.exec, err = block.NewNodeExecutor(block.ExecutorOptions{
-		Logger:  n.logger,
-		Key:     n.key.Bytes(),
-		Network: *n.network,
-		Router:  n.router,
+		Logger:   n.logger,
+		Key:      n.key.Bytes(),
+		Describe: *n.network,
+		Router:   n.router,
 	}, n.db)
 	n.Require().NoError(err)
 
@@ -203,7 +203,7 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 
 	n.api = api2.NewQueryDispatch(api2.Options{
 		Logger:        n.logger,
-		Network:       n.network,
+		Describe:      n.network,
 		Router:        n.router,
 		TxMaxWaitTime: 10 * time.Second,
 	})
@@ -218,7 +218,7 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 
 	kv := memory.New(nil)
 	opts := genesis.InitOpts{
-		Network:             *n.network,
+		Describe:            *n.network,
 		GenesisTime:         time.Now(),
 		NetworkValidatorMap: n.netValMap,
 		Logger:              n.logger,
@@ -437,9 +437,9 @@ func (n *FakeNode) GetDirectory(adi string) []string {
 
 func (n *FakeNode) GetTx(txid []byte) *api2.TransactionQueryResponse {
 	q := api2.NewQueryDirect(n.network.SubnetId, api2.Options{
-		Logger:  n.logger,
-		Network: n.network,
-		Router:  n.router,
+		Logger:   n.logger,
+		Describe: n.network,
+		Router:   n.router,
 	})
 	resp, err := q.QueryTx(txid, 0, false, api2.QueryOptions{})
 	require.NoError(n.t, err)

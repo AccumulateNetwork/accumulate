@@ -39,11 +39,11 @@ func TestUpdateValidators(t *testing.T) {
 	sim.InitFromGenesis()
 
 	dn := sim.Subnet(Directory)
-	validators := FormatKeyPageUrl(dn.Executor.Network.ValidatorBook(), 0)
+	validators := FormatKeyPageUrl(dn.Executor.Describe.ValidatorBook(), 0)
 	nodeKeyAdd1, nodeKeyAdd2, nodeKeyAdd3, nodeKeyUpd := acctesting.GenerateKey(1), acctesting.GenerateKey(2), acctesting.GenerateKey(3), acctesting.GenerateKey(4)
 
 	// The validator timestamp starts out > 0
-	signer := simulator.GetAccount[*KeyPage](sim, dn.Executor.Network.DefaultValidatorPage())
+	signer := simulator.GetAccount[*KeyPage](sim, dn.Executor.Describe.DefaultValidatorPage())
 	_, entry, ok := signer.EntryByKey(dn.Executor.Key[32:])
 	require.True(t, ok)
 	timestamp = entry.GetLastUsedOn()
@@ -56,9 +56,9 @@ func TestUpdateValidators(t *testing.T) {
 	send(sim,
 		func(send func(*Envelope)) {
 			send(acctesting.NewTransaction().
-				WithPrincipal(dn.Executor.Network.NodeUrl(Globals)).
+				WithPrincipal(dn.Executor.Describe.NodeUrl(Globals)).
 				WithTimestampVar(&timestamp).
-				WithSigner(dn.Executor.Network.ValidatorPage(0), 1). // TODO move back to OperatorPage in or after AC-1402
+				WithSigner(dn.Executor.Describe.ValidatorPage(0), 1). // TODO move back to OperatorPage in or after AC-1402
 				WithBody(&WriteData{
 					Entry:        g.FormatGlobals(),
 					WriteToState: true,
@@ -76,7 +76,7 @@ func TestUpdateValidators(t *testing.T) {
 			body := new(AddValidator)
 			body.PubKey = nodeKeyAdd1[32:]
 			send(acctesting.NewTransaction().
-				WithPrincipal(dn.Executor.Network.NodeUrl(ValidatorBook)).
+				WithPrincipal(dn.Executor.Describe.NodeUrl(ValidatorBook)).
 				WithTimestampVar(&timestamp).
 				WithSigner(validators, 1).
 				WithBody(body).
@@ -96,7 +96,7 @@ func TestUpdateValidators(t *testing.T) {
 			body.NewPubKey = nodeKeyUpd[32:]
 
 			send(acctesting.NewTransaction().
-				WithPrincipal(dn.Executor.Network.NodeUrl(ValidatorBook)).
+				WithPrincipal(dn.Executor.Describe.NodeUrl(ValidatorBook)).
 				WithTimestampVar(&timestamp).
 				WithSigner(validators, 2).
 				WithBody(body).
@@ -113,7 +113,7 @@ func TestUpdateValidators(t *testing.T) {
 			body := new(AddValidator)
 			body.PubKey = nodeKeyAdd2[32:]
 			send(acctesting.NewTransaction().
-				WithPrincipal(dn.Executor.Network.NodeUrl(ValidatorBook)).
+				WithPrincipal(dn.Executor.Describe.NodeUrl(ValidatorBook)).
 				WithTimestampVar(&timestamp).
 				WithSigner(validators, 3).
 				WithBody(body).
@@ -134,7 +134,7 @@ func TestUpdateValidators(t *testing.T) {
 			body.PubKey = nodeKeyAdd3[32:]
 
 			send(acctesting.NewTransaction().
-				WithPrincipal(dn.Executor.Network.NodeUrl(ValidatorBook)).
+				WithPrincipal(dn.Executor.Describe.NodeUrl(ValidatorBook)).
 				WithTimestampVar(&timestamp).
 				WithSigner(validators, 4).
 				WithBody(body).
@@ -156,7 +156,7 @@ func TestUpdateValidators(t *testing.T) {
 			body.PubKey = nodeKeyUpd[32:]
 
 			send(acctesting.NewTransaction().
-				WithPrincipal(dn.Executor.Network.NodeUrl(ValidatorBook)).
+				WithPrincipal(dn.Executor.Describe.NodeUrl(ValidatorBook)).
 				WithTimestampVar(&timestamp).
 				WithSigner(validators, 5).
 				WithBody(body).
@@ -180,12 +180,12 @@ func TestUpdateOperators(t *testing.T) {
 	bvn1 := sim.Subnet(sim.Subnets[2].Name)
 
 	// Sanity check
-	page := simulator.GetAccount[*KeyPage](sim, bvn0.Executor.Network.DefaultOperatorPage())
+	page := simulator.GetAccount[*KeyPage](sim, bvn0.Executor.Describe.DefaultOperatorPage())
 	require.Len(t, page.Keys, 4)
 
 	// Add
 	t.Log("Add")
-	operators := dn.Executor.Network.DefaultOperatorPage()
+	operators := dn.Executor.Describe.DefaultOperatorPage()
 	opKeyAdd := acctesting.GenerateKey(1)
 	addKeyHash := sha256.Sum256(opKeyAdd[32:])
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
@@ -208,7 +208,7 @@ func TestUpdateOperators(t *testing.T) {
 	sim.ExecuteBlocks(10)
 
 	// Verify the update was pushed
-	page = simulator.GetAccount[*KeyPage](sim, bvn0.Executor.Network.DefaultOperatorPage())
+	page = simulator.GetAccount[*KeyPage](sim, bvn0.Executor.Describe.DefaultOperatorPage())
 	require.Len(t, page.Keys, 5)
 	requireHasKeyHash(t, page, addKeyHash[:])
 
@@ -237,7 +237,7 @@ func TestUpdateOperators(t *testing.T) {
 	sim.ExecuteBlocks(10)
 
 	// Verify the update was pushed
-	page = simulator.GetAccount[*KeyPage](sim, bvn0.Executor.Network.DefaultOperatorPage())
+	page = simulator.GetAccount[*KeyPage](sim, bvn0.Executor.Describe.DefaultOperatorPage())
 	require.Len(t, page.Keys, 5)
 	requireNotHasKeyHash(t, page, addKeyHash[:])
 	requireHasKeyHash(t, page, updKeyHash[:])
@@ -264,7 +264,7 @@ func TestUpdateOperators(t *testing.T) {
 	sim.ExecuteBlocks(10)
 
 	// Verify the update was pushed
-	page = simulator.GetAccount[*KeyPage](sim, bvn0.Executor.Network.DefaultOperatorPage())
+	page = simulator.GetAccount[*KeyPage](sim, bvn0.Executor.Describe.DefaultOperatorPage())
 	require.Len(t, page.Keys, 4)
 	requireNotHasKeyHash(t, page, updKeyHash[:])
 }

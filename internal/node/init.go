@@ -131,7 +131,7 @@ func initV1(opts InitOptions) (bootstrap genesis.Bootstrap, err error) {
 
 		db := memory.New(opts.Logger.With("module", "storage"))
 		bootstrap, err = genesis.Init(db, genesis.InitOpts{
-			Network:             configs[0].Accumulate.Describe,
+			Describe:            configs[0].Accumulate.Describe,
 			AllConfigs:          configs,
 			GenesisTime:         genTime,
 			Validators:          genVals,

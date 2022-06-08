@@ -28,7 +28,7 @@ import (
 type NetworkValidatorMap map[string][]tmtypes.GenesisValidator
 
 type InitOpts struct {
-	Network             config.Describe
+	Describe            config.Describe
 	AllConfigs          []*config.Config
 	Validators          []tmtypes.GenesisValidator
 	NetworkValidatorMap NetworkValidatorMap
@@ -51,18 +51,18 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) (Bootstrap, error) {
 	if b.InitOpts.NetworkValidatorMap == nil {
 		panic("NetworkValidatorMap is not present")
 	}
-	if _, ok := b.InitOpts.NetworkValidatorMap[b.InitOpts.Network.SubnetId]; !ok {
-		b.InitOpts.NetworkValidatorMap[b.InitOpts.Network.SubnetId] = b.InitOpts.Validators
+	if _, ok := b.InitOpts.NetworkValidatorMap[b.InitOpts.Describe.SubnetId]; !ok {
+		b.InitOpts.NetworkValidatorMap[b.InitOpts.Describe.SubnetId] = b.InitOpts.Validators
 	}
 
 	// Build the routing table
 	var err error
-	b.router, b.routingTable, err = routing.NewSimpleRouter(&opts.Network.Network, nil)
+	b.router, b.routingTable, err = routing.NewSimpleRouter(&opts.Describe.Network, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	b.genesisExec, err = block.NewGenesisExecutor(b.db, opts.Logger, &opts.Network, b.router)
+	b.genesisExec, err = block.NewGenesisExecutor(b.db, opts.Logger, &opts.Describe, b.router)
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +153,7 @@ func (b *bootstrap) Execute(st *chain.StateManager, tx *chain.Delivery) (protoco
 }
 
 func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protocol.TransactionResult, error) {
-	b.nodeUrl = b.InitOpts.Network.NodeUrl()
+	b.nodeUrl = b.InitOpts.Describe.NodeUrl()
 	b.authorityUrl = b.nodeUrl.JoinPath(protocol.ValidatorBook)
 	b.globals = new(core.GlobalValues)
 
@@ -184,7 +184,7 @@ func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protoc
 	b.createEvidenceChain()
 
 	// Write the global data accounts
-	err = b.globals.Store(&b.Network, func(accountUrl *url.URL, target interface{}) error {
+	err = b.globals.Store(&b.Describe, func(accountUrl *url.URL, target interface{}) error {
 		da := new(protocol.DataAccount)
 		da.Url = accountUrl
 		da.AddAuthority(b.authorityUrl) // TODO Lock BVN accounts so they can't be updated directly
@@ -202,7 +202,7 @@ func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protoc
 		return nil, err
 	}
 
-	switch b.InitOpts.Network.NetworkType {
+	switch b.InitOpts.Describe.NetworkType {
 	case config.Directory:
 		err = b.initDN()
 	case config.BlockValidator:
@@ -269,7 +269,7 @@ func (b *bootstrap) createAnchorPool() {
 	anchorLedger := new(protocol.AnchorLedger)
 	anchorLedger.Url = b.nodeUrl.JoinPath(protocol.AnchorPool)
 
-	if b.Network.NetworkType == config.Directory {
+	if b.Describe.NetworkType == config.Directory {
 		// Initialize the last major block time to prevent a major block from
 		// being created immediately once the network boots
 		anchorLedger.MajorBlockTime = b.InitOpts.GenesisTime
@@ -345,7 +345,7 @@ func (b *bootstrap) initDN() error {
 
 func (b *bootstrap) initBVN() error {
 	// Verify that the BVN ID will make a valid subnet URL
-	network := b.InitOpts.Network
+	network := b.InitOpts.Describe
 	if err := protocol.IsValidAdiUrl(protocol.SubnetUrl(network.SubnetId), true); err != nil {
 		panic(fmt.Errorf("%q is not a valid subnet ID: %v", network.SubnetId, err))
 	}
@@ -486,7 +486,7 @@ func (b *bootstrap) writeGenesisFile(appHash []byte) error {
 	}
 
 	genDoc := &tmtypes.GenesisDoc{
-		ChainID:         b.InitOpts.Network.SubnetId,
+		ChainID:         b.InitOpts.Describe.SubnetId,
 		GenesisTime:     b.InitOpts.GenesisTime,
 		InitialHeight:   protocol.GenesisBlock + 1,
 		Validators:      b.InitOpts.Validators,
@@ -506,7 +506,7 @@ func (b *bootstrap) writeGenesisFile(appHash []byte) error {
 func (b *bootstrap) buildNetworkDefinition() *protocol.NetworkDefinition {
 	netDef := new(protocol.NetworkDefinition)
 
-	for _, subnet := range b.InitOpts.Network.Subnets {
+	for _, subnet := range b.InitOpts.Describe.Network.Subnets {
 
 		// Add the validator hashes from the subnet's genesis doc
 		var vkHashes [][32]byte

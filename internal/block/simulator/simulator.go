@@ -99,16 +99,16 @@ func (sim *Simulator) Setup(bvnCount int) {
 		}
 
 		exec, err := NewNodeExecutor(ExecutorOptions{
-			Logger:  logger,
-			Key:     key,
-			Network: network,
-			Router:  sim.Router(),
+			Logger:   logger,
+			Key:      key,
+			Describe: network,
+			Router:   sim.Router(),
 		}, db)
 		require.NoError(sim, err)
 
 		jrpc, err := api.NewJrpc(api.Options{
 			Logger:        logger,
-			Network:       &network,
+			Describe:      &network,
 			Router:        sim.Router(),
 			TxMaxWaitTime: time.Hour,
 		})
@@ -456,7 +456,7 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 	} else {
 		_ = x.Database.View(func(batch *database.Batch) error {
 			var ledger *protocol.SystemLedger
-			err := batch.Account(x.Executor.Network.Ledger()).GetStateAs(&ledger)
+			err := batch.Account(x.Executor.Describe.Ledger()).GetStateAs(&ledger)
 			switch {
 			case err == nil:
 				x.blockIndex = ledger.Index + 1
@@ -480,7 +480,7 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 	var deliveries []*chain.Delivery
 	for _, envelope := range x.takeSubmitted() {
 		d, err := chain.NormalizeEnvelope(envelope)
-		require.NoErrorf(x, err, "Normalizing envelopes for %s", x.Executor.Network.SubnetId)
+		require.NoErrorf(x, err, "Normalizing envelopes for %s", x.Executor.Describe.SubnetId)
 		deliveries = append(deliveries, d...)
 	}
 
