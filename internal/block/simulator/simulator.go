@@ -16,6 +16,7 @@ import (
 	. "gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
@@ -180,11 +181,15 @@ func (s *Simulator) Query(url *url.URL, req query.Request, prove bool) interface
 }
 
 func (s *Simulator) InitFromGenesis() {
+	s.InitFromGenesisWith(nil)
+}
+
+func (s *Simulator) InitFromGenesisWith(values *core.GlobalValues) {
 	s.Helper()
 
 	netValMap := make(genesis.NetworkValidatorMap)
 	for _, x := range s.Executors {
-		x.bootstrap = InitGenesis(s, x.Executor, genesisTime, netValMap)
+		x.bootstrap = InitGenesis(s, x.Executor, genesisTime, values, netValMap)
 	}
 
 	// Execute bootstrap after the entire network is known

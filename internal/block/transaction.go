@@ -93,16 +93,9 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Del
 	}
 
 	// Do extra processing for special network accounts
-	if principal != nil && principal.GetUrl().RootIdentity().Equal(x.Network.NodeUrl()) {
-		err = x.processNetworkAccountUpdates(batch, delivery, principal)
-		if err != nil {
-			return x.recordFailedTransaction(batch, delivery, err)
-		}
-
-		err = x.pushNetworkAccountUpdates(batch, delivery, principal)
-		if err != nil {
-			return x.recordFailedTransaction(batch, delivery, err)
-		}
+	err = x.processNetworkAccountUpdates(batch, delivery, principal)
+	if err != nil {
+		return x.recordFailedTransaction(batch, delivery, err)
 	}
 
 	return x.recordSuccessfulTransaction(batch, state, delivery, result)
@@ -561,108 +554,4 @@ func (x *Executor) recordFailedTransaction(batch *database.Batch, delivery *chai
 	}
 
 	return status, state, nil
-}
-
-// processNetworkAccountUpdates processes updates to network data accounts,
-// updating the in-memory globals variable.
-func (x *Executor) processNetworkAccountUpdates(batch *database.Batch, delivery *chain.Delivery, principal protocol.Account) error {
-	// Only WriteData needs extra processing
-	body, ok := delivery.Transaction.Body.(*protocol.WriteData)
-	if !ok {
-		return nil
-	}
-
-	// Force WriteToState
-	if !body.WriteToState {
-		return errors.Format(errors.StatusBadRequest, "invalid %v update: network account updates must write to state", principal.GetUrl())
-	}
-
-	// Validate the data and update the corresponding variable
-	var err error
-	switch {
-	case principal.GetUrl().PathEqual(protocol.Oracle):
-		err = x.globals.Pending.ParseOracle(body.Entry)
-	case principal.GetUrl().PathEqual(protocol.Globals):
-		err = x.globals.Pending.ParseGlobals(body.Entry)
-	case principal.GetUrl().PathEqual(protocol.Network):
-		err = x.globals.Pending.ParseNetwork(body.Entry)
-	case principal.GetUrl().PathEqual(protocol.Routing):
-		err = x.globals.Pending.ParseRouting(body.Entry)
-	}
-	if err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
-	}
-	return nil
-}
-
-// pushNetworkAccountUpdates pushes updates from the DN to the BVNs.
-func (x *Executor) pushNetworkAccountUpdates(batch *database.Batch, delivery *chain.Delivery, principal protocol.Account) error {
-	// Do not push updates if this transaction is the result of a pushed update
-	if delivery.WasProducedInternally() && delivery.Parent().Transaction.Body.Type() == protocol.TransactionTypeDirectoryAnchor {
-		return nil
-	}
-
-	// Prep the update
-	var update protocol.NetworkAccountUpdate
-	update.Body = delivery.Transaction.Body
-
-	switch delivery.Transaction.Body.Type() {
-	case protocol.TransactionTypeUpdateKeyPage:
-		// Synchronize updates to the operator book
-		if u, ok := principal.GetUrl().Parent(); ok && u.PathEqual(protocol.OperatorBook) {
-			update.Name = protocol.OperatorBook
-			break
-		}
-
-		// No update needed
-		return nil
-
-	case protocol.TransactionTypeWriteData:
-		switch {
-		case principal.GetUrl().PathEqual(protocol.Oracle):
-			// Synchronize updates to the oracle
-			update.Name = protocol.Oracle
-
-		case principal.GetUrl().PathEqual(protocol.Globals):
-			// Synchronize updates to the globals
-			update.Name = protocol.Globals
-
-		case principal.GetUrl().PathEqual(protocol.Network):
-			// Synchronize updates to the network definition
-			update.Name = protocol.Network
-
-		case principal.GetUrl().PathEqual(protocol.Routing):
-			// Synchronize updates to the routing table
-			update.Name = protocol.Routing
-
-		default:
-			// No update needed
-			return nil
-		}
-
-	default:
-		// No update needed
-		return nil
-	}
-
-	// Do not allow direct updates of the BVN accounts
-	if x.Network.Type != config.Directory {
-		return errors.Format(errors.StatusBadRequest, "invalid %v update: partition network accounts cannot be updated directly", principal.GetUrl())
-	}
-
-	// Write the update to the ledger
-	var ledger *protocol.SystemLedger
-	record := batch.Account(x.Network.Ledger())
-	err := record.GetStateAs(&ledger)
-	if err != nil {
-		return errors.Format(errors.StatusUnknown, "load ledger: %w", err)
-	}
-
-	ledger.PendingUpdates = append(ledger.PendingUpdates, update)
-	err = record.PutState(ledger)
-	if err != nil {
-		return errors.Format(errors.StatusUnknown, "store ledger: %w", err)
-	}
-
-	return nil
 }
