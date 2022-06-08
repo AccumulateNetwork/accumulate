@@ -62,6 +62,9 @@ const (
 
 	// FeeCreateScratchChain $0.25
 	FeeCreateScratchChain Fee = 2500
+
+	// MinimumCreditPurchase $0.01
+	MinimumCreditPurchase Fee = 100
 )
 
 func BaseTransactionFee(typ TransactionType) (Fee, error) {
