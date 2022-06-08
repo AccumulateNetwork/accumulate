@@ -2,8 +2,6 @@ package block
 
 import (
 	"errors"
-	"time"
-
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -95,7 +93,7 @@ majorEntryLoop:
 			rspMjrEntry.MinorBlocks = append(rspMjrEntry.MinorBlocks, rspMnrEntry)
 			mnrIdx++
 		}
-		rspMjrEntry.MajorBlockTime = calcMajorBlockTime(rspMjrEntry.MinorBlocks)
+		rspMjrEntry.MajorBlockTime = curEntry.BlockTime
 		resp.Entries = append(resp.Entries, rspMjrEntry)
 		mnrStartIdx = mnrIdxEntry.BlockIndex
 		mjrEntryIdx++
@@ -111,19 +109,4 @@ func getPrevEntryRootIndex(mjrIdxChain *database.Chain, mjrEntryIdx uint64) (uin
 		return 0, &protocol.Error{Code: protocol.ErrorCodeUnMarshallingError, Message: err}
 	}
 	return prevEntry.RootIndexIndex + 1, nil
-}
-
-func calcMajorBlockTime(blocks []*query.ResponseMinorEntry) *time.Time {
-	if blocks == nil {
-		return nil
-	}
-
-	lastBlockTime := blocks[len(blocks)-1].BlockTime
-	majorBlockTime := time.Date(lastBlockTime.Year(), lastBlockTime.Month(), lastBlockTime.Day(), 0, 0, 0, 0, time.UTC)
-	if lastBlockTime.Hour() < 12 {
-		majorBlockTime.Add(time.Hour * 12)
-	} else {
-		majorBlockTime.AddDate(0, 0, 1)
-	}
-	return &majorBlockTime
 }
