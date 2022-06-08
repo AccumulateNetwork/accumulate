@@ -271,7 +271,7 @@ func (b *bootstrap) createValidatorBook() {
 	book.AddAuthority(uBook)
 	book.PageCount = 1
 
-	page := createOperatorPage(uBook, 0, b.NetworkValidatorMap, true)
+	page := b.createOperatorPage(uBook, 0, true)
 	b.WriteRecords(book, page)
 }
 
@@ -354,7 +354,7 @@ func (b *bootstrap) initDN() error {
 }
 
 func (b *bootstrap) initBVN() error {
-	b.createBVNOperatorBook(b.nodeUrl, b.NetworkValidatorMap)
+	b.createBVNOperatorBook(b.nodeUrl)
 
 	subnet, err := b.router.RouteAccount(protocol.FaucetUrl)
 	if err == nil && subnet == b.Network.LocalSubnetID {
@@ -392,11 +392,11 @@ func (b *bootstrap) createDNOperatorBook() {
 	book.AddAuthority(book.Url)
 	book.PageCount = 1
 
-	page := createOperatorPage(book.Url, 0, b.NetworkValidatorMap, false)
+	page := b.createOperatorPage(book.Url, 0, false)
 	b.WriteRecords(book, page)
 }
 
-func (b *bootstrap) createBVNOperatorBook(nodeUrl *url.URL, operators NetworkValidatorMap) {
+func (b *bootstrap) createBVNOperatorBook(nodeUrl *url.URL) {
 	book := new(protocol.KeyBook)
 	book.Url = nodeUrl.JoinPath(protocol.OperatorBook)
 	book.AddAuthority(book.Url)
@@ -411,13 +411,13 @@ func (b *bootstrap) createBVNOperatorBook(nodeUrl *url.URL, operators NetworkVal
 	spec.Delegate = protocol.DnUrl().JoinPath(protocol.OperatorBook)
 	page1.Keys[0] = spec
 
-	page2 := createOperatorPage(book.Url, 1, operators, false)
+	page2 := b.createOperatorPage(book.Url, 1, false)
 	blacklistTxsForPage(page2, protocol.TransactionTypeUpdateKeyPage, protocol.TransactionTypeUpdateAccountAuth)
 
 	b.WriteRecords(book, page1, page2)
 }
 
-func createOperatorPage(uBook *url.URL, pageIndex uint64, operators NetworkValidatorMap, validatorsOnly bool) *protocol.KeyPage {
+func (b *bootstrap) createOperatorPage(uBook *url.URL, pageIndex uint64, validatorsOnly bool) *protocol.KeyPage {
 	page := new(protocol.KeyPage)
 	page.Url = protocol.FormatKeyPageUrl(uBook, pageIndex)
 	page.Version = 1
@@ -428,7 +428,7 @@ func createOperatorPage(uBook *url.URL, pageIndex uint64, operators NetworkValid
 			panic("book URL does not belong to a subnet")
 		}
 
-		operators, ok := operators[subnet]
+		operators, ok := b.NetworkValidatorMap[subnet]
 		if !ok {
 			panic("missing operators for subnet")
 		}
@@ -445,7 +445,7 @@ func createOperatorPage(uBook *url.URL, pageIndex uint64, operators NetworkValid
 		}
 
 	} else {
-		for _, operators := range operators {
+		for _, operators := range b.NetworkValidatorMap {
 			for _, operator := range operators {
 				spec := new(protocol.KeySpec)
 				kh := sha256.Sum256(operator.PubKey.Bytes())
@@ -455,7 +455,7 @@ func createOperatorPage(uBook *url.URL, pageIndex uint64, operators NetworkValid
 		}
 	}
 
-	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(page.Keys), protocol.FallbackValidatorThreshold)
+	page.AcceptThreshold = b.globals.Globals.ValidatorThreshold.Threshold(len(page.Keys))
 	return page
 }
 
