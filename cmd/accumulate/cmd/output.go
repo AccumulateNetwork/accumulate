@@ -1,43 +1,46 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
+	"text/tabwriter"
 	"time"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	errors2 "gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 func PrintJsonRpcError(err error) (string, error) {
-	var e jsonrpc2.Error
-	switch err := err.(type) {
+	switch e := err.(type) {
 	case jsonrpc2.Error:
-		e = err
+		if WantJsonOutput {
+			out, err := json.Marshal(e)
+			if err != nil {
+				return "", err
+			}
+			return "", &JsonRpcError{Err: e, Msg: string(out)}
+		} else {
+			var out string
+			out += fmt.Sprintf("\n\tMessage\t\t:\t%v\n", e.Message)
+			out += fmt.Sprintf("\tError Code\t:\t%v\n", e.Code)
+			out += fmt.Sprintf("\tDetail\t\t:\t%s\n", e.Data)
+			return "", &JsonRpcError{Err: e, Msg: out}
+		}
+	case *errors2.Error, *protocol.Error:
+		return "", e
 	default:
 		return "", fmt.Errorf("error with request, %v", err)
-	}
-
-	if WantJsonOutput {
-		out, err := json.Marshal(e)
-		if err != nil {
-			return "", err
-		}
-		return "", &JsonRpcError{Err: e, Msg: string(out)}
-	} else {
-		var out string
-		out += fmt.Sprintf("\n\tMessage\t\t:\t%v\n", e.Message)
-		out += fmt.Sprintf("\tError Code\t:\t%v\n", e.Code)
-		out += fmt.Sprintf("\tDetail\t\t:\t%s\n", e.Data)
-		return "", &JsonRpcError{Err: e, Msg: out}
 	}
 }
 
@@ -55,10 +58,10 @@ func printOutput(cmd *cobra.Command, out string, err error) {
 
 	// Check if the error is an action response error
 	var v interface{}
-	ar, ok := err.(*ActionResponseError)
-	if ok {
-		v = ar
-	} else {
+	switch err.(type) {
+	case *ActionResponseError, *errors2.Error, *protocol.Error:
+		v = err
+	default:
 		v = err.Error()
 	}
 
@@ -136,8 +139,8 @@ func PrintTransactionQueryResponseV2(res *api2.TransactionQueryResponse) (string
 		return "", err
 	}
 
-	for i, txid := range res.SyntheticTxids {
-		out += fmt.Sprintf("  - Synthetic Transaction %d : %x\n", i, txid)
+	for i, txid := range res.Produced {
+		out += fmt.Sprintf("  - Synthetic Transaction %d : %v\n", i, txid)
 	}
 
 	for _, receipt := range res.Receipts {
@@ -411,15 +414,29 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		}
 
 		out := fmt.Sprintf("\n\tCredit Balance\t:\t%v\n", protocol.FormatAmount(ss.CreditBalance, protocol.CreditPrecisionPower))
-		out += fmt.Sprintf("\n\tIndex\tNonce\t\tPublic Key\t\t\t\t\t\t\t\tKey Name(s)\n")
+		buf := new(bytes.Buffer)
+		tw := tabwriter.NewWriter(buf, 1, 1, 2, ' ', 0)
+		fmt.Fprintf(tw, "Index\tNonce\tKey Name\tDelegate\tPublic Key Hash\n")
 		for i, k := range ss.Keys {
-			keyName := ""
+			var keyName string
 			name, err := FindLabelFromPublicKeyHash(k.PublicKeyHash)
 			if err == nil {
 				keyName = name
+			} else {
+				keyName = hex.EncodeToString(k.PublicKeyHash)
 			}
-			out += fmt.Sprintf("\t%d\t%v\t\t%x\t%s\n", i, time.Unix(0, int64(k.LastUsedOn*uint64(time.Microsecond))), k.PublicKeyHash, keyName)
+			var delegate string
+			if k.Delegate != nil {
+				delegate = k.Delegate.ShortString()
+			}
+			fmt.Fprintf(tw, "%d\t%v\t%s\t%s\t%x\n", i, time.Unix(0, int64(k.LastUsedOn*uint64(time.Microsecond))), keyName, delegate, k.PublicKeyHash)
 		}
+
+		err = tw.Flush()
+		if err != nil {
+			return "", err
+		}
+		out += "\n\t" + strings.ReplaceAll(buf.String(), "\n", "\n\t")
 		return out, nil
 	case "token", protocol.AccountTypeTokenIssuer.String():
 		ti := protocol.TokenIssuer{}
@@ -743,9 +760,6 @@ func (a *ActionResponse) Print() (string, error) {
 		if a.Codespace != "" {
 			out += fmt.Sprintf("\tCodespace\t\t: %s\n", a.Codespace)
 		}
-		if a.SynthTxns != "" {
-			out += fmt.Sprintf("\tSynthTxns\t\t: %s\n", a.SynthTxns)
-		}
 		if a.Result != nil {
 			out += "\tResult\t\t\t: "
 			d, err := json.Marshal(a.Result.Result)
@@ -759,6 +773,13 @@ func (a *ActionResponse) Print() (string, error) {
 					out += outputTransactionResultForHumans(v)
 				}
 			}
+		}
+		for _, response := range a.Flow {
+			str, err := PrintTransactionQueryResponseV2(response)
+			if err != nil {
+				return PrintJsonRpcError(err)
+			}
+			out += str
 		}
 	}
 

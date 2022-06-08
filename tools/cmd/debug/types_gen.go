@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -18,7 +19,7 @@ type SigOrTxn struct {
 	fieldsSet   []bool
 	Transaction *protocol.Transaction `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
 	Signature   protocol.Signature    `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
-	Hash        [32]byte              `json:"hash,omitempty" form:"hash" query:"hash" validate:"required"`
+	Txid        *url.TxID             `json:"txid,omitempty" form:"txid" query:"txid" validate:"required"`
 	extraData   []byte
 }
 
@@ -63,7 +64,6 @@ type sigSetData struct {
 
 type transactionState struct {
 	fieldsSet   []bool
-	Hash        [32]byte                    `json:"hash,omitempty" form:"hash" query:"hash" validate:"required"`
 	Transaction *protocol.Transaction       `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
 	State       *protocol.TransactionStatus `json:"state,omitempty" form:"state" query:"state" validate:"required"`
 	Signatures  []*sigSetData               `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
@@ -72,7 +72,7 @@ type transactionState struct {
 
 type txSyntheticTxns struct {
 	fieldsSet []bool
-	Txids     [][32]byte `json:"txids,omitempty" form:"txids" query:"txids" validate:"required"`
+	Txids     []*url.TxID `json:"txids,omitempty" form:"txids" query:"txids" validate:"required"`
 	extraData []byte
 }
 
@@ -85,7 +85,9 @@ func (v *SigOrTxn) Copy() *SigOrTxn {
 	if v.Signature != nil {
 		u.Signature = (v.Signature).CopyAsInterface().(protocol.Signature)
 	}
-	u.Hash = v.Hash
+	if v.Txid != nil {
+		u.Txid = (v.Txid).Copy()
+	}
 
 	return u
 }
@@ -172,7 +174,6 @@ func (v *sigSetData) CopyAsInterface() interface{} { return v.Copy() }
 func (v *transactionState) Copy() *transactionState {
 	u := new(transactionState)
 
-	u.Hash = v.Hash
 	if v.Transaction != nil {
 		u.Transaction = (v.Transaction).Copy()
 	}
@@ -194,9 +195,11 @@ func (v *transactionState) CopyAsInterface() interface{} { return v.Copy() }
 func (v *txSyntheticTxns) Copy() *txSyntheticTxns {
 	u := new(txSyntheticTxns)
 
-	u.Txids = make([][32]byte, len(v.Txids))
+	u.Txids = make([]*url.TxID, len(v.Txids))
 	for i, v := range v.Txids {
-		u.Txids[i] = v
+		if v != nil {
+			u.Txids[i] = (v).Copy()
+		}
 	}
 
 	return u
@@ -216,7 +219,12 @@ func (v *SigOrTxn) Equal(u *SigOrTxn) bool {
 	if !(protocol.EqualSignature(v.Signature, u.Signature)) {
 		return false
 	}
-	if !(v.Hash == u.Hash) {
+	switch {
+	case v.Txid == u.Txid:
+		// equal
+	case v.Txid == nil || u.Txid == nil:
+		return false
+	case !((v.Txid).Equal(u.Txid)):
 		return false
 	}
 
@@ -319,9 +327,6 @@ func (v *sigSetData) Equal(u *sigSetData) bool {
 }
 
 func (v *transactionState) Equal(u *transactionState) bool {
-	if !(v.Hash == u.Hash) {
-		return false
-	}
 	switch {
 	case v.Transaction == u.Transaction:
 		// equal
@@ -355,7 +360,7 @@ func (v *txSyntheticTxns) Equal(u *txSyntheticTxns) bool {
 		return false
 	}
 	for i := range v.Txids {
-		if !(v.Txids[i] == u.Txids[i]) {
+		if !((v.Txids[i]).Equal(u.Txids[i])) {
 			return false
 		}
 	}
@@ -366,7 +371,7 @@ func (v *txSyntheticTxns) Equal(u *txSyntheticTxns) bool {
 var fieldNames_SigOrTxn = []string{
 	1: "Transaction",
 	2: "Signature",
-	3: "Hash",
+	3: "Txid",
 }
 
 func (v *SigOrTxn) MarshalBinary() ([]byte, error) {
@@ -379,8 +384,8 @@ func (v *SigOrTxn) MarshalBinary() ([]byte, error) {
 	if !(v.Signature == nil) {
 		writer.WriteValue(2, v.Signature)
 	}
-	if !(v.Hash == ([32]byte{})) {
-		writer.WriteHash(3, &v.Hash)
+	if !(v.Txid == nil) {
+		writer.WriteTxid(3, v.Txid)
 	}
 
 	_, _, err := writer.Reset(fieldNames_SigOrTxn)
@@ -405,9 +410,9 @@ func (v *SigOrTxn) IsValid() error {
 		errs = append(errs, "field Signature is not set")
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field Hash is missing")
-	} else if v.Hash == ([32]byte{}) {
-		errs = append(errs, "field Hash is not set")
+		errs = append(errs, "field Txid is missing")
+	} else if v.Txid == nil {
+		errs = append(errs, "field Txid is not set")
 	}
 
 	switch len(errs) {
@@ -688,28 +693,24 @@ func (v *sigSetData) IsValid() error {
 }
 
 var fieldNames_transactionState = []string{
-	1: "Hash",
-	2: "Transaction",
-	3: "State",
-	4: "Signatures",
+	1: "Transaction",
+	2: "State",
+	3: "Signatures",
 }
 
 func (v *transactionState) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	if !(v.Hash == ([32]byte{})) {
-		writer.WriteHash(1, &v.Hash)
-	}
 	if !(v.Transaction == nil) {
-		writer.WriteValue(2, v.Transaction)
+		writer.WriteValue(1, v.Transaction)
 	}
 	if !(v.State == nil) {
-		writer.WriteValue(3, v.State)
+		writer.WriteValue(2, v.State)
 	}
 	if !(len(v.Signatures) == 0) {
 		for _, v := range v.Signatures {
-			writer.WriteValue(4, v)
+			writer.WriteValue(3, v)
 		}
 	}
 
@@ -725,21 +726,16 @@ func (v *transactionState) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Hash is missing")
-	} else if v.Hash == ([32]byte{}) {
-		errs = append(errs, "field Hash is not set")
-	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Transaction is missing")
 	} else if v.Transaction == nil {
 		errs = append(errs, "field Transaction is not set")
 	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field State is missing")
 	} else if v.State == nil {
 		errs = append(errs, "field State is not set")
 	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Signatures is missing")
 	} else if len(v.Signatures) == 0 {
 		errs = append(errs, "field Signatures is not set")
@@ -765,7 +761,7 @@ func (v *txSyntheticTxns) MarshalBinary() ([]byte, error) {
 
 	if !(len(v.Txids) == 0) {
 		for _, v := range v.Txids {
-			writer.WriteHash(1, &v)
+			writer.WriteTxid(1, v)
 		}
 	}
 
@@ -813,8 +809,8 @@ func (v *SigOrTxn) UnmarshalBinaryFrom(rd io.Reader) error {
 		}
 		return err
 	})
-	if x, ok := reader.ReadHash(3); ok {
-		v.Hash = *x
+	if x, ok := reader.ReadTxid(3); ok {
+		v.Txid = x
 	}
 
 	seen, err := reader.Reset(fieldNames_SigOrTxn)
@@ -974,17 +970,14 @@ func (v *transactionState) UnmarshalBinary(data []byte) error {
 func (v *transactionState) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	if x, ok := reader.ReadHash(1); ok {
-		v.Hash = *x
-	}
-	if x := new(protocol.Transaction); reader.ReadValue(2, x.UnmarshalBinary) {
+	if x := new(protocol.Transaction); reader.ReadValue(1, x.UnmarshalBinary) {
 		v.Transaction = x
 	}
-	if x := new(protocol.TransactionStatus); reader.ReadValue(3, x.UnmarshalBinary) {
+	if x := new(protocol.TransactionStatus); reader.ReadValue(2, x.UnmarshalBinary) {
 		v.State = x
 	}
 	for {
-		if x := new(sigSetData); reader.ReadValue(4, x.UnmarshalBinary) {
+		if x := new(sigSetData); reader.ReadValue(3, x.UnmarshalBinary) {
 			v.Signatures = append(v.Signatures, x)
 		} else {
 			break
@@ -1008,8 +1001,8 @@ func (v *txSyntheticTxns) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
 	for {
-		if x, ok := reader.ReadHash(1); ok {
-			v.Txids = append(v.Txids, *x)
+		if x, ok := reader.ReadTxid(1); ok {
+			v.Txids = append(v.Txids, x)
 		} else {
 			break
 		}
@@ -1028,11 +1021,11 @@ func (v *SigOrTxn) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Transaction *protocol.Transaction                          `json:"transaction,omitempty"`
 		Signature   encoding.JsonUnmarshalWith[protocol.Signature] `json:"signature,omitempty"`
-		Hash        string                                         `json:"hash,omitempty"`
+		Txid        *url.TxID                                      `json:"txid,omitempty"`
 	}{}
 	u.Transaction = v.Transaction
 	u.Signature = encoding.JsonUnmarshalWith[protocol.Signature]{Value: v.Signature, Func: protocol.UnmarshalSignatureJSON}
-	u.Hash = encoding.ChainToJSON(v.Hash)
+	u.Txid = v.Txid
 	return json.Marshal(&u)
 }
 
@@ -1098,12 +1091,10 @@ func (v *sigSetData) MarshalJSON() ([]byte, error) {
 
 func (v *transactionState) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Hash        string                         `json:"hash,omitempty"`
 		Transaction *protocol.Transaction          `json:"transaction,omitempty"`
 		State       *protocol.TransactionStatus    `json:"state,omitempty"`
 		Signatures  encoding.JsonList[*sigSetData] `json:"signatures,omitempty"`
 	}{}
-	u.Hash = encoding.ChainToJSON(v.Hash)
 	u.Transaction = v.Transaction
 	u.State = v.State
 	u.Signatures = v.Signatures
@@ -1112,12 +1103,9 @@ func (v *transactionState) MarshalJSON() ([]byte, error) {
 
 func (v *txSyntheticTxns) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Txids encoding.JsonList[string] `json:"txids,omitempty"`
+		Txids encoding.JsonList[*url.TxID] `json:"txids,omitempty"`
 	}{}
-	u.Txids = make(encoding.JsonList[string], len(v.Txids))
-	for i, x := range v.Txids {
-		u.Txids[i] = encoding.ChainToJSON(x)
-	}
+	u.Txids = v.Txids
 	return json.Marshal(&u)
 }
 
@@ -1125,22 +1113,18 @@ func (v *SigOrTxn) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Transaction *protocol.Transaction                          `json:"transaction,omitempty"`
 		Signature   encoding.JsonUnmarshalWith[protocol.Signature] `json:"signature,omitempty"`
-		Hash        string                                         `json:"hash,omitempty"`
+		Txid        *url.TxID                                      `json:"txid,omitempty"`
 	}{}
 	u.Transaction = v.Transaction
 	u.Signature = encoding.JsonUnmarshalWith[protocol.Signature]{Value: v.Signature, Func: protocol.UnmarshalSignatureJSON}
-	u.Hash = encoding.ChainToJSON(v.Hash)
+	u.Txid = v.Txid
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.Transaction = u.Transaction
 	v.Signature = u.Signature.Value
 
-	if x, err := encoding.ChainFromJSON(u.Hash); err != nil {
-		return fmt.Errorf("error decoding Hash: %w", err)
-	} else {
-		v.Hash = x
-	}
+	v.Txid = u.Txid
 	return nil
 }
 
@@ -1252,22 +1236,15 @@ func (v *sigSetData) UnmarshalJSON(data []byte) error {
 
 func (v *transactionState) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Hash        string                         `json:"hash,omitempty"`
 		Transaction *protocol.Transaction          `json:"transaction,omitempty"`
 		State       *protocol.TransactionStatus    `json:"state,omitempty"`
 		Signatures  encoding.JsonList[*sigSetData] `json:"signatures,omitempty"`
 	}{}
-	u.Hash = encoding.ChainToJSON(v.Hash)
 	u.Transaction = v.Transaction
 	u.State = v.State
 	u.Signatures = v.Signatures
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
-	}
-	if x, err := encoding.ChainFromJSON(u.Hash); err != nil {
-		return fmt.Errorf("error decoding Hash: %w", err)
-	} else {
-		v.Hash = x
 	}
 	v.Transaction = u.Transaction
 	v.State = u.State
@@ -1277,22 +1254,12 @@ func (v *transactionState) UnmarshalJSON(data []byte) error {
 
 func (v *txSyntheticTxns) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Txids encoding.JsonList[string] `json:"txids,omitempty"`
+		Txids encoding.JsonList[*url.TxID] `json:"txids,omitempty"`
 	}{}
-	u.Txids = make(encoding.JsonList[string], len(v.Txids))
-	for i, x := range v.Txids {
-		u.Txids[i] = encoding.ChainToJSON(x)
-	}
+	u.Txids = v.Txids
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	v.Txids = make([][32]byte, len(u.Txids))
-	for i, x := range u.Txids {
-		if x, err := encoding.ChainFromJSON(x); err != nil {
-			return fmt.Errorf("error decoding Txids: %w", err)
-		} else {
-			v.Txids[i] = x
-		}
-	}
+	v.Txids = u.Txids
 	return nil
 }

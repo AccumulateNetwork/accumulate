@@ -43,20 +43,6 @@ func (x DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 		st.State.MakeMajorBlock = body.MakeMajorBlock
 	}
 
-	// Update the oracle
-	if body.AcmeOraclePrice != 0 && st.Network.Type != config.Directory {
-		var ledgerState *protocol.SystemLedger
-		err := st.LoadUrlAs(st.NodeUrl(protocol.Ledger), &ledgerState)
-		if err != nil {
-			return nil, fmt.Errorf("unable to load main ledger: %w", err)
-		}
-		ledgerState.PendingOracle = body.AcmeOraclePrice
-		err = st.Update(ledgerState)
-		if err != nil {
-			return nil, fmt.Errorf("failed to update ledger state: %v", err)
-		}
-	}
-
 	// Add the anchor to the chain - use the subnet name as the chain name
 	err := st.AddChainEntry(st.OriginUrl, protocol.RootAnchorChain(protocol.Directory), protocol.ChainTypeAnchor, body.RootChainAnchor[:], body.RootChainIndex, body.MinorBlockIndex)
 	if err != nil {
@@ -74,11 +60,11 @@ func (x DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 		return nil, nil
 	}
 
-	// Process OperatorUpdates when present
-	if len(body.OperatorUpdates) > 0 && st.Network.Type != config.Directory {
-		result, err := executeOperatorUpdates(st, body)
+	// Process updates when present
+	if len(body.Updates) > 0 && st.Network.Type != config.Directory {
+		err := processNetworkAccountUpdates(st, tx, body.Updates)
 		if err != nil {
-			return result, err
+			return nil, err
 		}
 	}
 
@@ -96,7 +82,7 @@ func (x DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 			return nil, fmt.Errorf("failed to load pending synthetic transactions for anchor %X: %w", receipt.Start[:4], err)
 		}
 		for _, hash := range synth {
-			d := tx.NewSyntheticReceipt(hash, body.Source, &receipt)
+			d := tx.NewSyntheticReceipt(hash.Hash(), body.Source, &receipt)
 			st.State.ProcessAdditionalTransaction(d)
 		}
 	}
@@ -104,37 +90,19 @@ func (x DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 	return nil, nil
 }
 
-func executeOperatorUpdates(st *StateManager, body *protocol.DirectoryAnchor) (protocol.TransactionResult, error) {
-	for _, opUpd := range body.OperatorUpdates {
-		bookUrl := st.NodeUrl().JoinPath(protocol.OperatorBook)
+func processNetworkAccountUpdates(st *StateManager, delivery *Delivery, updates []protocol.NetworkAccountUpdate) error {
+	for _, update := range updates {
+		txn := new(protocol.Transaction)
+		txn.Body = update.Body
 
-		var page1 *protocol.KeyPage
-		err := st.LoadUrlAs(protocol.FormatKeyPageUrl(bookUrl, 0), &page1)
-		if err != nil {
-			return nil, fmt.Errorf("invalid key page: %v", err)
-		}
-
-		// Validate source
-		_, _, ok := page1.EntryByDelegate(body.Source.JoinPath(protocol.OperatorBook))
-		if !ok {
-			return nil, fmt.Errorf("source is not from DN but from %q", body.Source)
+		switch update.Name {
+		case protocol.OperatorBook:
+			txn.Header.Principal = st.DefaultOperatorPage()
+		default:
+			txn.Header.Principal = st.NodeUrl(update.Name)
 		}
 
-		var page2 *protocol.KeyPage
-		err = st.LoadUrlAs(protocol.FormatKeyPageUrl(bookUrl, 1), &page2)
-		if err != nil {
-			return nil, fmt.Errorf("invalid key page: %v", err)
-		}
-
-		updateKeyPage := &UpdateKeyPage{}
-		err = updateKeyPage.executeOperation(page2, opUpd)
-		if err != nil {
-			return nil, fmt.Errorf("updateKeyPage operation failed: %w", err)
-		}
-		err = st.Update(page2)
-		if err != nil {
-			return nil, fmt.Errorf("unable to update main ledger: %w", err)
-		}
+		st.State.ProcessAdditionalTransaction(delivery.NewInternal(txn))
 	}
-	return nil, nil
+	return nil
 }

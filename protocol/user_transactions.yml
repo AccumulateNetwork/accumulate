@@ -50,15 +50,17 @@ CreateTokenAccount:
       marshal-as: reference
       pointer: true
       optional: true
-   
+
 
 SendTokens:
   union: { type: transaction }
   fields:
     - name: Hash
-      type: chain
+      # TODO Remove
+      type: hash
       optional: true
     - name: Meta
+      # TODO Remove
       type: rawJson
       optional: true
     - name: To
@@ -93,6 +95,10 @@ WriteData:
       type: DataEntry
       marshal-as: union
     - name: Scratch
+      type: bool
+      optional: true
+    - name: WriteToState
+      description: writes the data entry to the account state
       type: bool
       optional: true
 
@@ -222,7 +228,7 @@ UpdateAccountAuth:
       type: AccountAuthOperation
       marshal-as: union
       repeatable: true
-    
+
 
 AddValidator:
   union: { type: transaction }
@@ -264,5 +270,6 @@ RemoteTransaction:
   union: { type: transaction }
   fields:
     - name: Hash
+      # TODO Make this a transaction ID?
       type: hash
       optional: true

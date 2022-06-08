@@ -1,5 +1,14 @@
 #!/bin/bash
 
+if [ -n "${DEBUG}" ] || [ -n "${DEBUG_JQ}" ]; then
+    exec 3>&2
+fi
+
+# accumulate - Run CLI with default flags
+function accumulate {
+    [ -n "${DEBUG}" ] && echo -e '\033[36m'"[debug] accumulate $@"'\033[0m' >&3
+    command accumulate --use-unencrypted-wallet --database="$HOME/.accumulate/validate" "$@"
+}
 
 # section <name> - Print a section header
 function section {
@@ -8,9 +17,14 @@ function section {
 
 # ensure-key <name> - Generate the key if it does not exist
 function ensure-key {
-    if ! accumulate --use-unencrypted-wallet key list | grep "$1"; then
-        accumulate --use-unencrypted-wallet key generate "$1"
+    if ! accumulate key list | grep "$1"; then
+        accumulate key generate "$1"
     fi
+}
+
+# hash-from-txid - Extract the transaction hash from a transaction ID
+function hash-from-txid {
+    cut -d/ -f3 | cut -d@ -f1
 }
 
 # wait-for <cmd...> - Execute a transaction and wait for it to complete
@@ -44,7 +58,7 @@ function wait-for-tx {
 
     local TXID=$1
     echo -e '\033[2mWaiting for '"$TXID"'\033[0m'
-    local RESP=$(accumulate --use-unencrypted-wallet tx get -j $IGNORE_PENDING --wait 1m $TXID)
+    local RESP=$(accumulate tx get -j $IGNORE_PENDING --wait 1m $TXID)
     echo $RESP | jq -C --indent 0
 
     if [ -z "$NO_CHECK" ]; then
@@ -52,13 +66,13 @@ function wait-for-tx {
         [ "$CODE" -ne 0 ] && die "$TXID failed:" $(echo $RESP | jq -C --indent 0 .status)
     fi
 
-    for TXID in $(echo $RESP | jq -re '(.syntheticTxids // [])[]'); do
+    for TXID in $(echo $RESP | jq -re '(.produced // [])[]' | hash-from-txid); do
         wait-for-tx $NO_CHECK --ignore-pending "$TXID" || return 1
     done
 }
 
 function cli-run {
-    if ! JSON=`accumulate --use-unencrypted-wallet -j "$@" 2>&1`; then
+    if ! JSON=`accumulate -j "$@" 2>&1`; then
         echo "$JSON" | jq -C --indent 0 >&2
         >&2 echo -e '\033[1;31m'"$@"'\033[0m'
         return 1
@@ -99,4 +113,21 @@ function die {
 function success {
     echo -e '\033[1;32m'Success'\033[0m'
     echo
+}
+
+# jq - Check for errors, then run JQ
+function jq {
+    local INPUT=$(cat)
+    local ERROR
+
+    [ -n "${DEBUG_JQ}" ] && echo -e '\033[36m'"[debug] jq $@ <<< $INPUT"'\033[0m' >&3
+
+    if ERROR=$(command jq -re .error <<< "${INPUT}") && [ -n "$ERROR" ] && [[ $(command jq -re 'keys | length') -eq 1 ]] ; then
+        [ -n "${DEBUG}" ] && echo -e '\033[36m'"[debug] error detected: $INPUT"'\033[0m' >&3
+        command jq -C --indent 0 <<< "${INPUT}" 1>&2
+        return 1
+    fi
+
+    command jq "$@" <<< "${INPUT}"
+    return $?
 }
