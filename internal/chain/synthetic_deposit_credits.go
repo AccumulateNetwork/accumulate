@@ -9,6 +9,8 @@ import (
 
 type SyntheticDepositCredits struct{}
 
+var _ TransactionExecutorCleanup = (*SyntheticDepositCredits)(nil)
+
 var _ PrincipalValidator = (*SyntheticDepositCredits)(nil)
 
 func (SyntheticDepositCredits) Type() protocol.TransactionType {
@@ -31,6 +33,7 @@ func (SyntheticDepositCredits) Validate(st *StateManager, tx *Delivery) (protoco
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SyntheticDepositCredits), tx.Transaction.Body)
 	}
 
+	// Update the signer
 	var account protocol.Signer
 	var create bool
 	switch origin := st.Origin.(type) {
@@ -55,7 +58,22 @@ func (SyntheticDepositCredits) Validate(st *StateManager, tx *Delivery) (protoco
 
 	account.CreditCredits(body.Amount)
 
-	var err error
+	// Update the ledger
+	var ledgerState *protocol.SystemLedger
+	err := st.LoadUrlAs(st.NodeUrl(protocol.Ledger), &ledgerState)
+	if err != nil {
+		return nil, err
+	}
+
+	if body.AcmeRefundAmount != nil {
+		ledgerState.AcmeBurnt.Add(&ledgerState.AcmeBurnt, body.AcmeRefundAmount)
+		err = st.Update(ledgerState)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Persist the signer
 	if create {
 		err = st.Create(account)
 	} else {
@@ -65,4 +83,19 @@ func (SyntheticDepositCredits) Validate(st *StateManager, tx *Delivery) (protoco
 		return nil, fmt.Errorf("failed to update %v: %v", account.GetUrl(), err)
 	}
 	return nil, nil
+}
+
+func (SyntheticDepositCredits) DidFail(state *ProcessTransactionState, transaction *protocol.Transaction) error {
+	body, ok := transaction.Body.(*protocol.SyntheticDepositCredits)
+	if !ok {
+		return fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SyntheticDepositCredits), transaction.Body)
+	}
+
+	if body.AcmeRefundAmount != nil {
+		refund := new(protocol.SyntheticDepositTokens)
+		refund.Token = protocol.AcmeUrl()
+		refund.Amount = *body.AcmeRefundAmount
+		state.DidProduceTxn(body.Source(), refund)
+	}
+	return nil
 }
