@@ -14,17 +14,7 @@ import (
 func (m *Executor) queryMajorBlocks(batch *database.Batch, req *query.RequestMajorBlocks) (resp *query.ResponseMajorBlocks, perr *protocol.Error) {
 
 	anchorsAcc := batch.Account(m.Network.NodeUrl(protocol.AnchorPool))
-	var anchorLedger *protocol.AnchorLedger
-	err := anchorsAcc.GetStateAs(&anchorLedger)
-	if err != nil {
-		return nil, &protocol.Error{Code: protocol.ErrorCodeUnMarshallingError, Message: err}
-	}
 	ledgerAcc := batch.Account(m.Network.NodeUrl(protocol.Ledger))
-	var systemLedger *protocol.SystemLedger
-	err = ledgerAcc.GetStateAs(&systemLedger)
-	if err != nil {
-		return nil, &protocol.Error{Code: protocol.ErrorCodeUnMarshallingError, Message: err}
-	}
 
 	mjrIdxChain, err := anchorsAcc.ReadChain(protocol.IndexChain(protocol.MainChain, true))
 	if err != nil {
@@ -124,6 +114,10 @@ func getPrevEntryRootIndex(mjrIdxChain *database.Chain, mjrEntryIdx uint64) (uin
 }
 
 func calcMajorBlockTime(blocks []*query.ResponseMinorEntry) *time.Time {
+	if blocks == nil {
+		return nil
+	}
+
 	lastBlockTime := blocks[len(blocks)-1].BlockTime
 	majorBlockTime := time.Date(lastBlockTime.Year(), lastBlockTime.Month(), lastBlockTime.Day(), 0, 0, 0, 0, time.UTC)
 	if lastBlockTime.Hour() < 12 {
