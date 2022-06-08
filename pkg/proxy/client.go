@@ -3,10 +3,11 @@ package proxy
 import (
 	"context"
 	"fmt"
-	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/AccumulateNetwork/jsonrpc2/v15"
 )
 
 //go:generate go run ../../tools/cmd/gen-types --package proxy --out types_gen.go types.yml
@@ -55,7 +56,7 @@ func (c *Client) RequestAPIv2(ctx context.Context, method string, params, result
 func (c *Client) GetNetworkConfig(ctx context.Context, req *NetworkConfigRequest) (*NetworkConfigResponse, error) {
 	var resp NetworkConfigResponse
 
-	err := c.RequestAPIv2(ctx, "get-subnet-list", req, &resp)
+	err := c.RequestAPIv2(ctx, "network", req, &resp)
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +68,7 @@ func (c *Client) GetNetworkConfig(ctx context.Context, req *NetworkConfigRequest
 func (c *Client) GetSubnetList(ctx context.Context, req *SubnetListRequest) (*SubnetListResponse, error) {
 	var resp SubnetListResponse
 
-	err := c.RequestAPIv2(ctx, "get-subnet-list", req, &resp)
+	err := c.RequestAPIv2(ctx, "subnets", req, &resp)
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +80,7 @@ func (c *Client) GetSubnetList(ctx context.Context, req *SubnetListRequest) (*Su
 func (c *Client) GetSeedList(ctx context.Context, req *SeedListRequest) (*SeedListResponse, error) {
 	var resp SeedListResponse
 
-	err := c.RequestAPIv2(ctx, "get-seed-list", req, &resp)
+	err := c.RequestAPIv2(ctx, "seed-list", req, &resp)
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +92,7 @@ func (c *Client) GetSeedList(ctx context.Context, req *SeedListRequest) (*SeedLi
 func (c *Client) GetSeedCount(ctx context.Context, req *SeedCountRequest) (*SeedCountResponse, error) {
 	var resp SeedCountResponse
 
-	err := c.RequestAPIv2(ctx, "get-seed-count", req, &resp)
+	err := c.RequestAPIv2(ctx, "seed-count", req, &resp)
 	if err != nil {
 		return nil, err
 	}

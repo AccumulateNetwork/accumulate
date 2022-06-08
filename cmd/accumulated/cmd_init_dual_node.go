@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/proxy"
 	"net"
 	"net/url"
 	"os"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/spf13/cobra"
 	cfg "gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/proxy"
 )
 
 // initDualNode accumulate init dual Mainnet.BVN0 http://ip:dnport

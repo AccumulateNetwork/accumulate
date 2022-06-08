@@ -2,7 +2,6 @@ package config
 
 import (
 	"fmt"
-	"github.com/mitchellh/mapstructure"
 	"io"
 	"net"
 	"net/url"
@@ -12,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mitchellh/mapstructure"
 	"github.com/pelletier/go-toml"
 	"github.com/spf13/viper"
 	tm "github.com/tendermint/tendermint/config"

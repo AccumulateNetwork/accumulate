@@ -114,7 +114,7 @@ func NewTestBVNN(t *testing.T) (string, crypto.PrivKey) {
 	acctesting.SkipPlatformCI(t, "darwin", "requires setting up localhost aliases")
 
 	// Start
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 2, 0, true)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, true)
 	acctesting.RunTestNet(t, subnets, daemons)
 
 	time.Sleep(time.Second)
