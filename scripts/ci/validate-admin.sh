@@ -131,7 +131,6 @@ fi
 
 section "Query votes chain"
 if [ -f "$(dnPrivKey 0)" ]; then
-  set -x
   #xxd -r -p doesn't like the .data.entry.data hex string in docker bash for some reason, so converting using sed instead
   RESULT=$(accumulate -j data get dn.acme/votes | jq -re .data.entry.data[0] | sed 's/\([0-9A-F]\{2\}\)/\\\\\\x\1/gI' | xargs printf)
   #convert the node address to search for to base64
