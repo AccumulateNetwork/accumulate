@@ -141,24 +141,21 @@ func (d *Daemon) Start() (err error) {
 		return client.New(server)
 	})
 
-	router, _, err := routing.NewSimpleRouter(&d.Config.Accumulate.Network, d.connectionManager)
-	if err != nil {
-		return fmt.Errorf("failed to create router: %v", err)
-	}
+	d.eventBus = events.NewBus(d.Logger.With("module", "events"))
+	events.SubscribeSync(d.eventBus, d.onDidCommitBlock)
 
+	router := routing.NewRouter(d.eventBus, d.connectionManager)
 	execOpts := block.ExecutorOptions{
 		Logger:   d.Logger,
 		Key:      d.Key().Bytes(),
-		Describe: d.Config.Accumulate.Describe,
+		Describe:  d.Config.Accumulate.Describe,
 		Router:   router,
+		EventBus: d.eventBus,
 	}
 	exec, err := block.NewNodeExecutor(execOpts, d.db)
 	if err != nil {
 		return fmt.Errorf("failed to initialize chain executor: %v", err)
 	}
-
-	d.eventBus = events.NewBus(d.Logger.With("module", "events"))
-	events.SubscribeSync(d.eventBus, d.onDidCommitBlock)
 
 	app := abci.NewAccumulator(abci.AccumulatorOptions{
 		DB:       d.db,

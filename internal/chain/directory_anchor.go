@@ -55,11 +55,6 @@ func (x DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 		return nil, err
 	}
 
-	if body.MajorBlockIndex > 0 {
-		// TODO Handle major blocks?
-		return nil, nil
-	}
-
 	// Process updates when present
 	if len(body.Updates) > 0 && st.NetworkType != config.Directory {
 		err := processNetworkAccountUpdates(st, tx, body.Updates)

@@ -129,6 +129,7 @@ func (m *JrpcMethods) Describe(_ context.Context, params json.RawMessage) interf
 	res.SubnetId = m.Options.Describe.SubnetId
 	res.NetworkType = m.Options.Describe.NetworkType
 
+	// Load network variable values
 	err := res.Values.Load(m.Options.Describe, func(account *url.URL, target interface{}) error {
 		return m.Database.View(func(batch *database.Batch) error {
 			return batch.Account(account).GetStateAs(target)
