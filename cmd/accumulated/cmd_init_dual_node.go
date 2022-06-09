@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"net"
 	"net/url"
@@ -12,7 +11,6 @@ import (
 
 	"github.com/spf13/cobra"
 	cfg "gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/proxy"
 )
 
 // initDualNode accumulate init dual Mainnet.BVN0 http://ip:dnport
@@ -23,36 +21,10 @@ func initDualNode(cmd *cobra.Command, args []string) {
 	}
 	networkName := s[0]
 	subnetName := s[1]
+	_ = networkName
+
 	u, err := url.Parse(args[1])
 	check(err)
-
-	seed := flagInitDualNode.SeedProxy
-	//query the seed node to obtain network configuration
-	var directoryBootstrapPeers string
-	var bvnBootstrapPeers string
-	if seed != "" {
-		seedProxy, err := proxy.New(seed)
-		check(err)
-		slr := proxy.SeedListRequest{}
-		slr.Network = networkName
-		slr.Subnet = subnetName
-		resp, err := seedProxy.GetSeedList(context.Background(), &slr)
-		if err != nil {
-			checkf(err, "proxy returned seeding error")
-		}
-		bvnBootstrapPeers = strings.Join(resp.Addresses, ",")
-
-		//now query the directory peers
-		slr.Network = networkName
-		slr.Subnet = "Directory"
-		resp, err = seedProxy.GetSeedList(context.Background(), &slr)
-		if err != nil {
-			checkf(err, "proxy returned seeding error for directory query")
-		}
-		directoryBootstrapPeers = strings.Join(resp.Addresses, ",")
-	}
-	println(directoryBootstrapPeers)
-	println(bvnBootstrapPeers)
 
 	host := u.Hostname()
 	port := u.Port()
@@ -136,7 +108,7 @@ func initDualNode(cmd *cobra.Command, args []string) {
 	}
 
 	if len(c.P2P.PersistentPeers) > 0 {
-		c.P2P.BootstrapPeers = bvnBootstrapPeers //c.P2P.PersistentPeers
+		c.P2P.BootstrapPeers = c.P2P.PersistentPeers
 		c.P2P.PersistentPeers = ""
 	}
 	dnWebHostUrl, err := url.Parse(c.Accumulate.Website.ListenAddress)

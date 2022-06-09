@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/proxy"
 	"io"
 	"io/fs"
 	"net"
@@ -139,6 +140,7 @@ func init() {
 	cmdInitNode.Flags().StringVar(&flagInitNode.GenesisDoc, "genesis-doc", "", "Genesis doc for the target network")
 	cmdInitNode.Flags().StringVarP(&flagInitNode.ListenIP, "listen", "l", "", "Address and port to listen on, e.g. tcp://1.2.3.4:5678")
 	cmdInitNode.Flags().BoolVar(&flagInitNode.SkipVersionCheck, "skip-version-check", false, "Do not enforce the version check")
+	cmdInitNode.Flags().StringVar(&flagInitNode.SeedProxy, "seed", "", "Fetch network configuration from seed proxy")
 	_ = cmdInitNode.MarkFlagRequired("listen")
 
 	cmdInitDualNode.Flags().BoolVarP(&flagInitDualNode.Follower, "follow", "f", false, "Do not participate in voting")
@@ -233,9 +235,6 @@ func initNode(cmd *cobra.Command, args []string) {
 	status, err := tmClient.Status(context.Background())
 	checkf(err, "failed to get status of %s", args[0])
 
-	netInfo, err := tmClient.NetInfo(context.Background())
-	checkf(err, "failed to get network info from node")
-
 	nodeType := cfg.Validator
 	if flagInitNode.Follower {
 		nodeType = cfg.Follower
@@ -243,34 +242,69 @@ func initNode(cmd *cobra.Command, args []string) {
 	config := config.Default(description.Network.Name, description.NetworkType, nodeType, description.SubnetId)
 	config.P2P.BootstrapPeers = fmt.Sprintf("%s@%s:%d", status.NodeInfo.NodeID, netAddr, netPort+int(cfg.PortOffsetTendermintP2P))
 
-	for _, peer := range netInfo.Peers {
-		u, err := url.Parse(peer.URL)
-		checkf(err, "failed to parse url from network info %s", peer.URL)
-		u.Scheme = ""
-		//check the health of the peer
-		peerClient, err := rpchttp.New(fmt.Sprintf("tcp://%s:%s", u.Hostname(), u.Port()))
-		checkf(err, "failed to create Tendermint client for %s", u.String())
-
-		peerStatus, err := peerClient.Status(context.Background())
+	if flagInitNode.SeedProxy != "" {
+		//go gather a more robust network description
+		seedProxy, err := proxy.New(flagInitNode.SeedProxy)
+		check(err)
+		slr := proxy.SeedListRequest{}
+		slr.Network = description.Network.Name
+		slr.Subnet = description.SubnetId
+		resp, err := seedProxy.GetSeedList(context.Background(), &slr)
 		if err != nil {
-			warnf("ignoring peer: not healthy %s", u.String())
-			continue
+			checkf(err, "proxy returned seeding error")
 		}
+		for _, addr := range resp.Addresses {
+			//go build a list of healthy nodes
+			u, err := cfg.OffsetPort(addr, netPort, int(cfg.PortOffsetTendermintP2P))
+			checkf(err, "failed to parse url from network info %s", addr)
+			u.Scheme = ""
+			//check the health of the peer
+			peerClient, err := rpchttp.New(fmt.Sprintf("tcp://%s:%s", u.Hostname(), u.Port()))
+			checkf(err, "failed to create Tendermint client for %s", u.String())
 
-		statBytes, err := peerStatus.NodeInfo.NodeID.Bytes()
-		if err != nil {
-			warnf("ignoring healthy peer %s because peer id is invalid", u.String())
-			continue
-		}
+			peerStatus, err := peerClient.Status(context.Background())
+			if err != nil {
+				warnf("ignoring peer: not healthy %s", u.String())
+				continue
+			}
 
-		peerBytes, err := peer.ID.Bytes()
-		if err != nil {
-			warnf("ignoring peer %s because node id is not valid", u.String())
-		}
-
-		if bytes.Compare(statBytes, peerBytes) == 0 {
 			//if we have a healthy node with a matching id, add it as a bootstrap peer
-			config.P2P.BootstrapPeers += "," + u.String()
+			config.P2P.BootstrapPeers += "," + peerStatus.NodeInfo.NodeID.AddressString(strconv.Itoa(netPort+int(cfg.PortOffsetTendermintP2P)))
+		}
+	} else {
+		//otherwise make the best out of what we have to establish our bootstrap peers
+		netInfo, err := tmClient.NetInfo(context.Background())
+		checkf(err, "failed to get network info from node")
+
+		for _, peer := range netInfo.Peers {
+			u, err := url.Parse(peer.URL)
+			checkf(err, "failed to parse url from network info %s", peer.URL)
+			u.Scheme = ""
+			//check the health of the peer
+			peerClient, err := rpchttp.New(fmt.Sprintf("tcp://%s:%s", u.Hostname(), u.Port()))
+			checkf(err, "failed to create Tendermint client for %s", u.String())
+
+			peerStatus, err := peerClient.Status(context.Background())
+			if err != nil {
+				warnf("ignoring peer: not healthy %s", u.String())
+				continue
+			}
+
+			statBytes, err := peerStatus.NodeInfo.NodeID.Bytes()
+			if err != nil {
+				warnf("ignoring healthy peer %s because peer id is invalid", u.String())
+				continue
+			}
+
+			peerBytes, err := peer.ID.Bytes()
+			if err != nil {
+				warnf("ignoring peer %s because node id is not valid", u.String())
+			}
+
+			if bytes.Compare(statBytes, peerBytes) == 0 {
+				//if we have a healthy node with a matching id, add it as a bootstrap peer
+				config.P2P.BootstrapPeers += "," + u.String()
+			}
 		}
 	}
 
