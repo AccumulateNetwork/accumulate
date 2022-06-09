@@ -13,6 +13,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/internal/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -34,10 +35,11 @@ type Executor struct {
 }
 
 type ExecutorOptions struct {
-	Logger  log.Logger
-	Key     ed25519.PrivateKey
-	Router  routing.Router
-	Network config.Network
+	Logger   log.Logger
+	Key      ed25519.PrivateKey
+	Router   routing.Router
+	Network  config.Network
+	EventBus *events.Bus
 
 	isGenesis bool
 }
