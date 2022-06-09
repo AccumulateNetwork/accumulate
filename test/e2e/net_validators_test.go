@@ -224,7 +224,7 @@ func TestUpdateOperators(t *testing.T) {
 	// Initialize
 	g := new(core.GlobalValues)
 	g.Globals = new(NetworkGlobals)
-	g.Globals.ValidatorThreshold.Set(1, 100) // Use a small number so M = 1
+	g.Globals.OperatorAcceptThreshold.Set(1, 100) // Use a small number so M = 1
 	sim := simulator.New(t, 3)
 	sim.InitFromGenesisWith(g)
 	dn := sim.Subnet(Directory)

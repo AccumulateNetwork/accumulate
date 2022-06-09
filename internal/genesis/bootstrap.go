@@ -190,7 +190,8 @@ func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protoc
 	// Set the initial threshold to 2/3
 	if b.globals.Globals == nil {
 		b.globals.Globals = new(protocol.NetworkGlobals)
-	b.globals.Globals.OperatorAcceptThreshold.Set(2, 3)
+		b.globals.Globals.OperatorAcceptThreshold.Set(2, 3)
+	}
 
 	if b.globals.Network == nil && b.NetworkValidatorMap != nil {
 		b.globals.Network = b.buildNetworkDefinition()
@@ -408,7 +409,7 @@ func (b *bootstrap) createDNOperatorBook() {
 	book.PageCount = 1
 
 	page := b.createOperatorPage(book.Url, 0, false)
-	page.AcceptThreshold = protocol.GetMOfN(len(page.Keys), protocol.FallbackValidatorThreshold)
+	page.AcceptThreshold = b.globals.Globals.OperatorAcceptThreshold.Threshold(len(page.Keys))
 	b.WriteRecords(book, page)
 }
 
