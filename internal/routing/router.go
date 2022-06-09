@@ -2,14 +2,12 @@ package routing
 
 import (
 	"context"
-	"errors"
-	"fmt"
-	"strings"
 
 	"github.com/tendermint/tendermint/rpc/client"
 	core "github.com/tendermint/tendermint/rpc/coretypes"
-	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/internal/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -33,31 +31,6 @@ type ResponseSubmit struct {
 	Info         string
 	Codespace    string
 	MempoolError string
-}
-
-// routeModulo routes an account using routingNumber modulo numberOfBvns to
-// select a BVN.
-func routeModulo(network *config.Network, account *url.URL) (string, error) {
-	// Is it a DN URL?
-	if protocol.BelongsToDn(account) {
-		return protocol.Directory, nil
-	}
-
-	// Is it a BVN URL?
-	bvnNames := network.GetBvnNames()
-	if bvn, ok := protocol.ParseSubnetUrl(account); ok {
-		for _, id := range bvnNames {
-			if strings.EqualFold(bvn, id) {
-				return id, nil
-			}
-		}
-
-		return "", fmt.Errorf("unknown BVN %q", bvn)
-	}
-
-	// Modulo routing
-	i := account.Routing() % uint64(len(bvnNames))
-	return bvnNames[i], nil
 }
 
 // submit calls the appropriate client method to submit a transaction.
@@ -123,25 +96,48 @@ func submitPretend(ctx context.Context, connMgr connections.ConnectionManager, s
 
 // RouterInstance sends transactions to remote nodes via RPC calls.
 type RouterInstance struct {
-	*config.Network
-	ConnectionManager connections.ConnectionManager
+	tree              *RouteTree
+	connectionManager connections.ConnectionManager
+}
+
+func NewRouter(eventBus *events.Bus, cm connections.ConnectionManager) *RouterInstance {
+	r := new(RouterInstance)
+	r.connectionManager = cm
+
+	events.SubscribeSync(eventBus, func(e events.DidChangeGlobals) error {
+		tree, err := NewRouteTree(e.Values.Routing)
+		if err != nil {
+			return errors.Wrap(errors.StatusUnknown, err)
+		}
+
+		r.tree = tree
+		return nil
+	})
+
+	return r
+}
+
+// NewStaticRouter returns a router that uses a static routing table
+func NewStaticRouter(table *protocol.RoutingTable, cm connections.ConnectionManager) (*RouterInstance, error) {
+	tree, err := NewRouteTree(table)
+	if err != nil {
+		return nil, errors.Wrap(errors.StatusUnknown, err)
+	}
+
+	return &RouterInstance{tree, cm}, nil
 }
 
 var _ Router = (*RouterInstance)(nil)
 
-func RouteAccount(net *config.Network, account *url.URL) (string, error) {
-	return routeModulo(net, account)
-}
-
 func RouteEnvelopes(routeAccount func(*url.URL) (string, error), envs ...*protocol.Envelope) (string, error) {
 	if len(envs) == 0 {
-		return "", errors.New("nothing to route")
+		return "", errors.New(errors.StatusBadRequest, "nothing to route")
 	}
 
 	var route string
 	for _, env := range envs {
 		if len(env.Signatures) == 0 {
-			return "", errors.New("cannot route envelope: no signatures")
+			return "", errors.New(errors.StatusBadRequest, "cannot route envelope: no signatures")
 		}
 		for _, sig := range env.Signatures {
 			sigRoute, err := routeAccount(sig.RoutingLocation())
@@ -155,7 +151,7 @@ func RouteEnvelopes(routeAccount func(*url.URL) (string, error), envs ...*protoc
 			}
 
 			if route != sigRoute {
-				return "", errors.New("cannot route envelope(s): conflicting routes")
+				return "", errors.New(errors.StatusBadRequest, "cannot route envelope(s): conflicting routes")
 			}
 		}
 	}
@@ -164,7 +160,10 @@ func RouteEnvelopes(routeAccount func(*url.URL) (string, error), envs ...*protoc
 }
 
 func (r *RouterInstance) RouteAccount(account *url.URL) (string, error) {
-	return RouteAccount(r.Network, account)
+	if r.tree == nil {
+		return "", errors.New(errors.StatusInternalError, "the routing table has not been initialized")
+	}
+	return r.tree.Route(account)
 }
 
 // Route routes the account using modulo routing.
@@ -178,16 +177,16 @@ func (r *RouterInstance) Route(envs ...*protocol.Envelope) (string, error) {
 func (r *RouterInstance) Query(ctx context.Context, subnetId string, query []byte, opts client.ABCIQueryOptions) (*core.ResultABCIQuery, error) {
 	errorCnt := 0
 	for {
-		connCtx, err := r.ConnectionManager.SelectConnection(subnetId, true)
+		connCtx, err := r.connectionManager.SelectConnection(subnetId, true)
 		if err != nil {
 			return nil, err
 		}
 		if connCtx == nil {
-			return nil, errors.New("connCtx is nil")
+			return nil, errors.New(errors.StatusInternalError, "connCtx is nil")
 		}
 		client := connCtx.GetABCIClient()
 		if client == nil {
-			return nil, errors.New("connCtx.client is nil")
+			return nil, errors.New(errors.StatusInternalError, "connCtx.client is nil")
 		}
 
 		result, err := client.ABCIQueryWithOptions(ctx, "", query, opts)
@@ -207,16 +206,16 @@ func (r *RouterInstance) Query(ctx context.Context, subnetId string, query []byt
 func (r *RouterInstance) RequestAPIv2(ctx context.Context, subnetId, method string, params, result interface{}) error {
 	errorCnt := 0
 	for {
-		connCtx, err := r.ConnectionManager.SelectConnection(subnetId, true)
+		connCtx, err := r.connectionManager.SelectConnection(subnetId, true)
 		if err != nil {
 			return err
 		}
 		if connCtx == nil {
-			return errors.New("connCtx is nil")
+			return errors.New(errors.StatusInternalError, "connCtx is nil")
 		}
 		client := connCtx.GetAPIClient()
 		if client == nil {
-			return errors.New("connCtx.client is nil")
+			return errors.New(errors.StatusInternalError, "connCtx.client is nil")
 		}
 
 		err = client.RequestAPIv2(ctx, method, params, result)
@@ -242,8 +241,8 @@ func (r *RouterInstance) Submit(ctx context.Context, subnetId string, tx *protoc
 		return nil, err
 	}
 	if pretend {
-		return submitPretend(ctx, r.ConnectionManager, subnetId, raw)
+		return submitPretend(ctx, r.connectionManager, subnetId, raw)
 	} else {
-		return submit(ctx, r.ConnectionManager, subnetId, raw, async)
+		return submit(ctx, r.connectionManager, subnetId, raw, async)
 	}
 }

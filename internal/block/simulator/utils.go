@@ -10,6 +10,7 @@ import (
 	tmtypes "github.com/tendermint/tendermint/types"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
@@ -18,7 +19,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
-func InitGenesis(t TB, exec *Executor, genesisTime time.Time, netValMap genesis.NetworkValidatorMap) genesis.Bootstrap {
+func InitGenesis(t TB, exec *Executor, genesisTime time.Time, genesisValues *core.GlobalValues, netValMap genesis.NetworkValidatorMap) genesis.Bootstrap {
 	t.Helper()
 
 	// Genesis
@@ -28,7 +29,7 @@ func InitGenesis(t TB, exec *Executor, genesisTime time.Time, netValMap genesis.
 		GenesisTime:         genesisTime,
 		NetworkValidatorMap: netValMap,
 		Logger:              exec.Logger,
-		Router:              exec.Router,
+		GenesisGlobals:      genesisValues,
 		Validators: []tmtypes.GenesisValidator{
 			{PubKey: ed25519.PubKey(exec.Key[32:])},
 		},

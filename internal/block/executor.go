@@ -10,8 +10,10 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/internal/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -24,6 +26,7 @@ import (
 type Executor struct {
 	ExecutorOptions
 
+	globals    *Globals
 	executors    map[protocol.TransactionType]TransactionExecutor
 	dispatcher   *dispatcher
 	logger       logging.OptionalLogger
@@ -34,10 +37,11 @@ type Executor struct {
 }
 
 type ExecutorOptions struct {
-	Logger  log.Logger
-	Key     ed25519.PrivateKey
-	Router  routing.Router
-	Network config.Network
+	Logger   log.Logger
+	Key      ed25519.PrivateKey
+	Router   routing.Router
+	Network  config.Network
+	EventBus *events.Bus
 
 	isGenesis bool
 }
@@ -91,7 +95,7 @@ func NewNodeExecutor(opts ExecutorOptions, db *database.Database) (*Executor, er
 		)
 
 	default:
-		return nil, fmt.Errorf("invalid subnet type %v", opts.Network.Type)
+		return nil, errors.Format(errors.StatusInternalError, "invalid subnet type %v", opts.Network.Type)
 	}
 
 	// This is a no-op in dev
@@ -128,29 +132,40 @@ func newExecutor(opts ExecutorOptions, db *database.Database, executors ...Trans
 
 	for _, x := range executors {
 		if _, ok := m.executors[x.Type()]; ok {
-			panic(fmt.Errorf("duplicate executor for %d", x.Type()))
+			panic(errors.Format(errors.StatusInternalError, "duplicate executor for %d", x.Type()))
 		}
 		m.executors[x.Type()] = x
-
 	}
 
 	batch := db.Begin(false)
 	defer batch.Discard()
 
-	var height uint64
 	var ledger *protocol.SystemLedger
 	err := batch.Account(m.Network.NodeUrl(protocol.Ledger)).GetStateAs(&ledger)
 	switch {
 	case err == nil:
-		height = ledger.Index
+		// Database has been initialized
+		m.logger.Debug("Loaded", "height", ledger.Index, "hash", logging.AsHex(batch.BptRoot()).Slice(0, 4))
+
+		// Load globals
+		err = m.loadGlobals(db.View)
+		if err != nil {
+			return nil, errors.Wrap(errors.StatusUnknown, err)
+		}
+
 	case errors.Is(err, storage.ErrNotFound):
-		height = 0
+		// Database is uninitialized
+		m.logger.Debug("Loaded", "height", 0, "hash", logging.AsHex(batch.BptRoot()).Slice(0, 4))
+
 	default:
-		return nil, err
+		return nil, errors.Format(errors.StatusUnknown, "load ledger: %w", err)
 	}
 
-	m.logger.Debug("Loaded", "height", height, "hash", logging.AsHex(batch.BptRoot()).Slice(0, 4))
 	return m, nil
+}
+
+func (m *Executor) ActiveGlobals_TESTONLY() *core.GlobalValues {
+	return &m.globals.Active
 }
 
 func (m *Executor) Genesis(block *Block, exec chain.TransactionExecutor) error {
@@ -167,7 +182,7 @@ func (m *Executor) Genesis(block *Block, exec chain.TransactionExecutor) error {
 	delivery := new(chain.Delivery)
 	delivery.Transaction = txn
 
-	st := NewStateManager(&m.Network, block.Batch.Begin(true), nil, txn, m.logger.With("operation", "Genesis"))
+	st := NewStateManager(&m.Network, nil, block.Batch.Begin(true), nil, txn, m.logger.With("operation", "Genesis"))
 	defer st.Discard()
 
 	err = block.Batch.Transaction(txn.GetHash()).PutStatus(&protocol.TransactionStatus{
@@ -182,14 +197,21 @@ func (m *Executor) Genesis(block *Block, exec chain.TransactionExecutor) error {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
-	_, err = m.ExecuteEnvelope(block, delivery)
+	status, err := m.ExecuteEnvelope(block, delivery)
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
+	if status.Code != 0 {
+		if status.Error != nil {
+			return errors.Wrap(errors.StatusUnknown, status.Error)
+		}
+		return errors.New(errors.StatusUnknown, status.Message)
+	}
+
 	err = m.EndBlock(block)
 	if err != nil {
-		return protocol.NewError(protocol.ErrorCodeUnknownError, err)
+		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
 	return nil
@@ -203,7 +225,7 @@ func (m *Executor) LoadStateRoot(batch *database.Batch) ([]byte, error) {
 	case errors.Is(err, storage.ErrNotFound):
 		return nil, nil
 	default:
-		return nil, err
+		return nil, errors.Format(errors.StatusUnknown, "load subnet identity: %w", err)
 	}
 }
 
@@ -216,7 +238,7 @@ func (m *Executor) InitFromGenesis(batch *database.Batch, data []byte) error {
 	src := memory.New(nil)
 	err := src.UnmarshalJSON(data)
 	if err != nil {
-		return fmt.Errorf("failed to unmarshal app state: %v", err)
+		return errors.Format(errors.StatusInternalError, "failed to unmarshal app state: %v", err)
 	}
 
 	// Load the root anchor chain so we can verify the system state
@@ -229,20 +251,25 @@ func (m *Executor) InitFromGenesis(batch *database.Batch, data []byte) error {
 	defer subbatch.Discard()
 	err = subbatch.Import(src)
 	if err != nil {
-		return fmt.Errorf("failed to import database: %v", err)
+		return errors.Format(errors.StatusInternalError, "failed to import database: %v", err)
 	}
 
 	// Commit the database batch
 	err = subbatch.Commit()
 	if err != nil {
-		return fmt.Errorf("failed to load app state into database: %v", err)
+		return errors.Format(errors.StatusInternalError, "failed to load app state into database: %v", err)
 	}
 
 	root := batch.BptRoot()
 
 	// Make sure the database BPT root hash matches what we found in the genesis state
 	if !bytes.Equal(srcRoot, root) {
-		panic(fmt.Errorf("Root chain anchor from state DB does not match the app state\nWant: %X\nGot:  %X", srcRoot, root))
+		panic(errors.Format(errors.StatusInternalError, "Root chain anchor from state DB does not match the app state\nWant: %X\nGot:  %X", srcRoot, root))
+	}
+
+	err = m.loadGlobals(batch.View)
+	if err != nil {
+		return fmt.Errorf("failed to load globals: %v", err)
 	}
 
 	return nil
@@ -251,7 +278,12 @@ func (m *Executor) InitFromGenesis(batch *database.Batch, data []byte) error {
 func (m *Executor) InitFromSnapshot(batch *database.Batch, file ioutil2.SectionReader) error {
 	err := batch.RestoreSnapshot(file)
 	if err != nil {
-		return fmt.Errorf("load state: %w", err)
+		return errors.Format(errors.StatusUnknown, "load state: %w", err)
+	}
+
+	err = m.loadGlobals(batch.View)
+	if err != nil {
+		return fmt.Errorf("failed to load globals: %v", err)
 	}
 
 	return nil

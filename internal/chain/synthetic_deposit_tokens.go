@@ -92,6 +92,6 @@ func (SyntheticDepositTokens) DidFail(state *ProcessTransactionState, transactio
 	refund := new(protocol.SyntheticDepositTokens)
 	refund.Token = body.Token
 	refund.Amount = body.Amount
-	state.DidProduceTxn(body.Source, refund)
+	state.DidProduceTxn(body.Cause.Account(), refund)
 	return nil
 }

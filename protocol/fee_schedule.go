@@ -62,6 +62,9 @@ const (
 
 	// FeeCreateScratchChain $0.25
 	FeeCreateScratchChain Fee = 2500
+
+	// MinimumCreditPurchase $0.01
+	MinimumCreditPurchase Fee = 100
 )
 
 func BaseTransactionFee(typ TransactionType) (Fee, error) {
@@ -180,5 +183,12 @@ func ComputeTransactionFee(tx *Transaction) (Fee, error) {
 	}
 
 	// Charge an extra data fee per 256 B past the initial 256 B
-	return fee + dataRate*Fee(count), nil
+	fee += dataRate * Fee(count)
+
+	// Charge double if updating the account state
+	if body, ok := tx.Body.(*WriteData); ok && body.WriteToState {
+		fee *= 2
+	}
+
+	return fee, nil
 }

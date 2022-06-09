@@ -14,7 +14,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -30,7 +29,7 @@ func TestExecuteCheckOnly(t *testing.T) {
 	require.NoError(t, err)
 
 	baseReq := TxRequest{
-		Origin:     url.MustParse("check"),
+		Origin:     protocol.AccountUrl("check"),
 		Payload:    hex.EncodeToString(data),
 		IsEnvelope: true,
 	}
@@ -43,18 +42,19 @@ func TestExecuteCheckOnly(t *testing.T) {
 		clients := map[string]connections.ABCIClient{}
 		clients[""] = local
 		connectionManager := connections.NewFakeConnectionManager(clients)
-		j, err := NewJrpc(Options{
-			Router: &routing.RouterInstance{
-				Network: &config.Network{
-					Subnets: []config.Subnet{
-						{
-							ID:   "",
-							Type: config.BlockValidator,
-						},
-					},
+		table := new(protocol.RoutingTable)
+		table.Routes = routing.BuildSimpleTable(&config.Network{
+			Subnets: []config.Subnet{
+				{
+					ID:   "",
+					Type: config.BlockValidator,
 				},
-				ConnectionManager: connectionManager,
 			},
+		})
+		router, err := routing.NewStaticRouter(table, connectionManager)
+		require.NoError(t, err)
+		j, err := NewJrpc(Options{
+			Router: router,
 		})
 		require.NoError(t, err)
 
@@ -75,18 +75,19 @@ func TestExecuteCheckOnly(t *testing.T) {
 		clients := map[string]connections.ABCIClient{}
 		clients[""] = local
 		connectionManager := connections.NewFakeConnectionManager(clients)
-		j, err := NewJrpc(Options{
-			Router: &routing.RouterInstance{
-				Network: &config.Network{
-					Subnets: []config.Subnet{
-						{
-							ID:   "",
-							Type: config.BlockValidator,
-						},
-					},
+		table := new(protocol.RoutingTable)
+		table.Routes = routing.BuildSimpleTable(&config.Network{
+			Subnets: []config.Subnet{
+				{
+					ID:   "",
+					Type: config.BlockValidator,
 				},
-				ConnectionManager: connectionManager,
 			},
+		})
+		router, err := routing.NewStaticRouter(table, connectionManager)
+		require.NoError(t, err)
+		j, err := NewJrpc(Options{
+			Router: router,
 		})
 		require.NoError(t, err)
 

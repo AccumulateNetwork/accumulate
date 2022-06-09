@@ -18,6 +18,9 @@ import (
 
 // Well known strings
 const (
+	// TLD is the top-level domain for ADIs.
+	TLD = ".acme"
+
 	// ACME is the name of the ACME token.
 	ACME = "ACME"
 
@@ -51,6 +54,9 @@ const (
 	// Network is the path to a node's network definition data account.
 	Network = "network"
 
+	// Routing is the path to a node's routing table data account.
+	Routing = "routing"
+
 	// Globals is the path to the Directory network's Mutable Protocol costants data account
 	Globals = "globals"
 
@@ -74,9 +80,6 @@ const (
 
 	// GenesisBlock is the block index of the first block.
 	GenesisBlock = 1
-
-	// FallbackValidatorThreshold is the factor of how many of the validator signatures are required respective of their total number
-	FallbackValidatorThreshold = 2.0 / 3.0
 
 	// ScratchPrunePeriodDays is the period after which data chain transactions are pruned
 	ScratchPrunePeriodDays = 14
@@ -137,6 +140,25 @@ func LiteDataAddress(chainId []byte) (*url.URL, error) {
 	return u, nil
 }
 
+// ParseLiteAddress parses the hostname as a hex string and verifies its
+// checksum.
+func ParseLiteAddress(u *url.URL) ([]byte, error) {
+	b, err := hex.DecodeString(u.Hostname())
+	if err != nil {
+		return nil, nil
+	}
+
+	i := len(b) - 4
+	byteValue, byteCheck := b[:i], b[i:]
+	hexValue := u.Authority[:len(u.Authority)-8]
+	checkSum := sha256.Sum256([]byte(hexValue))
+	if !bytes.Equal(byteCheck, checkSum[28:]) {
+		return nil, errors.New("invalid checksum")
+	}
+
+	return byteValue, nil
+}
+
 // ParseLiteDataAddress extracts the partial chain id from a lite chain URL.
 // Returns `nil, err` if the URL does not appear to be a lite token chain URL.
 // Returns an error if the checksum is invalid.
@@ -146,19 +168,19 @@ func ParseLiteDataAddress(u *url.URL) ([]byte, error) {
 		return nil, errors.New("invalid chain url")
 	}
 
-	b, err := hex.DecodeString(u.Hostname())
-	if err != nil || len(b) != 24 {
-		return nil, errors.New("hostname is not hex or is wrong length")
+	b, err := ParseLiteAddress(u)
+	if err != nil {
+		return nil, err
+	}
+	if b == nil {
+		return nil, errors.New("hostname is not hex")
 	}
 
-	v := *u
-	v.Authority = u.Authority[:40]
-	checkSum := sha256.Sum256([]byte(v.Authority))
-	if !bytes.Equal(b[20:], checkSum[28:]) {
-		return nil, errors.New("invalid checksum")
+	if len(b) != 20 {
+		return nil, errors.New("hostname is the wrong length")
 	}
 
-	return b[:20], nil
+	return b, nil
 }
 
 // LiteTokenAddress returns an lite address for the given public key and token URL as
@@ -184,7 +206,7 @@ func LiteTokenAddress(pubKey []byte, tokenUrlStr string, signatureType Signature
 	}
 
 	if !AcmeUrl().Equal(tokenUrl) {
-		if err := IsValidAdiUrl(tokenUrl.Identity()); err != nil {
+		if err := IsValidAdiUrl(tokenUrl.Identity(), false); err != nil {
 			return nil, errors.New("invalid adi in token URL")
 		}
 		if tokenUrl.Path == "" {
@@ -214,7 +236,7 @@ func LiteTokenAddressFromHash(pubKeyHash []byte, tokenUrlStr string) (*url.URL, 
 	}
 
 	if !AcmeUrl().Equal(tokenUrl) {
-		if err := IsValidAdiUrl(tokenUrl.Identity()); err != nil {
+		if err := IsValidAdiUrl(tokenUrl.Identity(), false); err != nil {
 			return nil, errors.New("invalid adi in token URL")
 		}
 		if tokenUrl.Path == "" {
@@ -277,21 +299,17 @@ func ParseLiteIdentity(u *url.URL) ([]byte, error) {
 		return nil, nil
 	}
 
-	authority := u.Authority
-	b, err := hex.DecodeString(authority)
-	if err != nil || len(b) != 24 {
+	b, err := ParseLiteAddress(u)
+	if err != nil {
+		return nil, err
+	}
+	if b == nil || len(b) != 20 {
 		// Hostname is not hex or is the wrong length, therefore the URL is not
 		// lite
 		return nil, nil
 	}
 
-	authority = authority[:40]
-	checkSum := sha256.Sum256([]byte(authority))
-	if !bytes.Equal(b[20:], checkSum[28:]) {
-		return nil, errors.New("invalid checksum")
-	}
-
-	return b[:20], nil
+	return b, nil
 }
 
 // ParseLiteTokenAddress extracts the key hash and token URL from an lite token
@@ -303,20 +321,16 @@ func ParseLiteTokenAddress(u *url.URL) ([]byte, *url.URL, error) {
 		return nil, nil, nil
 	}
 
-	b, err := hex.DecodeString(u.Hostname())
-	if err != nil || len(b) != 24 {
+	b, err := ParseLiteAddress(u)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err != nil || len(b) != 20 {
 		// Hostname is not hex or is the wrong length, therefore the URL is not lite
 		return nil, nil, nil
 	}
 
-	v := *u
-	v.Authority = u.Authority[:40]
-	checkSum := sha256.Sum256([]byte(v.Authority))
-	if !bytes.Equal(b[20:], checkSum[28:]) {
-		return nil, nil, errors.New("invalid checksum")
-	}
-
-	// Reuse V as the token URL
+	v := new(url.URL)
 	i := strings.IndexRune(u.Path[1:], '/')
 	if i >= 0 {
 		i++
@@ -324,16 +338,25 @@ func ParseLiteTokenAddress(u *url.URL) ([]byte, *url.URL, error) {
 		v.Path = u.Path[i:]
 	} else if u.Path[0] == '/' {
 		v.Authority = u.Path[1:]
-		v.Path = ""
 	} else {
 		v.Authority = u.Path
-		v.Path = ""
 	}
-	return b[:20], &v, nil
+	return b[:20], v, nil
 }
 
 var reDigits10 = regexp.MustCompile("^[0-9]+$")
-var reDigits16 = regexp.MustCompile("^[0-9a-fA-F]+$")
+
+// var reDigits16 = regexp.MustCompile("^[0-9a-fA-F]+$")
+
+// AccountUrl returns a URL with the given root identity and path. The .acme TLD
+// is appended to the identity if it is not already present. AccountUrl does not
+// check if the identity is valid.
+func AccountUrl(rootIdentity string, path ...string) *url.URL {
+	if !strings.HasSuffix(rootIdentity, TLD) {
+		rootIdentity += TLD
+	}
+	return (&url.URL{Authority: rootIdentity}).JoinPath(path...)
+}
 
 // IsValidAdiUrl returns an error if the URL is not valid for an ADI.
 //
@@ -346,7 +369,7 @@ var reDigits16 = regexp.MustCompile("^[0-9a-fA-F]+$")
 // 6) Hostname must not be 48 hexidecimal digits.
 // 7) Must not have a path, query, or fragment.
 // 8) Must not be a reserved URL, such as ACME, DN, or BVN-*
-func IsValidAdiUrl(u *url.URL) error {
+func IsValidAdiUrl(u *url.URL, allowReserved bool) error {
 	var errs []string
 
 	if !utf8.ValidString(u.RawString()) {
@@ -355,17 +378,19 @@ func IsValidAdiUrl(u *url.URL) error {
 	if u.Port() != "" {
 		errs = append(errs, "identity has a port number")
 	}
-	if u.Authority == "" {
+	a := u.Hostname()
+	if a == "" {
 		errs = append(errs, "identity is empty")
+	} else if strings.HasSuffix(a, TLD) {
+		a = a[:len(a)-len(TLD)]
+	} else {
+		errs = append(errs, "identity must end in "+TLD)
 	}
-	if strings.ContainsRune(u.Authority, '.') {
-		errs = append(errs, "identity contains dot(s)")
+	if strings.ContainsRune(a, '.') {
+		errs = append(errs, "identity contains a subdomain")
 	}
-	if reDigits10.MatchString(u.Authority) {
+	if reDigits10.MatchString(a) {
 		errs = append(errs, "identity is a number")
-	}
-	if reDigits16.MatchString(u.Authority) && len(u.Authority) == 48 {
-		errs = append(errs, "identity could be a lite token account key")
 	}
 	if u.Query != "" {
 		errs = append(errs, "query is not empty")
@@ -374,17 +399,17 @@ func IsValidAdiUrl(u *url.URL) error {
 		errs = append(errs, "fragment is not empty")
 	}
 
-	if IsReserved(u) {
+	if !allowReserved && IsReserved(u) {
 		errs = append(errs, fmt.Sprintf("%q is a reserved URL", u))
 	}
 
-	for _, r := range u.Hostname() {
+	for _, r := range a {
 		if unicode.In(r, unicode.Letter, unicode.Number) {
 			continue
 		}
 
 		if len(errs) > 0 && (r == '.' || r == 65533) {
-			// Do not report "invalid character '.'" in addition to "identity contains dot(s)"
+			// Do not report "invalid character '.'" in addition to "identity contains a subdomain"
 			// Do not report "invalid character '�'" in addition to "not valid UTF-8"
 			continue
 		}
@@ -409,17 +434,11 @@ func IsReserved(u *url.URL) bool {
 	return ok || BelongsToDn(u)
 }
 
-// DnUrl returns `acc://dn`.
-func DnUrl() *url.URL {
-	return &url.URL{Authority: "dn"}
-}
+const dnUrlBase = "dn"
 
-// SubnetUrl returns `acc://bvn-${subnet}` or `acc://dn`.
-func SubnetUrl(subnet string) *url.URL {
-	if strings.EqualFold(subnet, Directory) {
-		return DnUrl()
-	}
-	return &url.URL{Authority: "bvn-" + subnet}
+// DnUrl returns `acc://dn.acme`.
+func DnUrl() *url.URL {
+	return &url.URL{Authority: dnUrlBase + TLD}
 }
 
 // IsDnUrl checks if the URL is the DN ADI URL.
@@ -428,9 +447,24 @@ func IsDnUrl(u *url.URL) bool {
 	return DnUrl().Equal(u)
 }
 
+// BelongsToDn checks if the give account belongs to the DN.
+func BelongsToDn(u *url.URL) bool {
+	return IsDnUrl(u) || u.RootIdentity().Equal(AcmeUrl())
+}
+
+const bvnUrlPrefix = "bvn-"
+
+// SubnetUrl returns `acc://bvn-${subnet}.acme` or `acc://dn.acme`.
+func SubnetUrl(subnet string) *url.URL {
+	if strings.EqualFold(subnet, Directory) {
+		return DnUrl()
+	}
+	return &url.URL{Authority: bvnUrlPrefix + subnet + TLD}
+}
+
 // IsBvnUrl checks if the URL is the BVN ADI URL.
 func IsBvnUrl(u *url.URL) bool {
-	return strings.HasPrefix(u.Hostname(), "bvn-")
+	return strings.HasPrefix(u.Hostname(), bvnUrlPrefix)
 }
 
 // ParseSubnetUrl extracts the BVN subnet name from a BVN URL, if the URL is a
@@ -439,20 +473,19 @@ func ParseSubnetUrl(u *url.URL) (string, bool) {
 	if IsDnUrl(u) {
 		return Directory, true
 	}
-	if !strings.HasPrefix(u.Authority, "bvn-") {
+	a := u.Authority
+	if !strings.HasPrefix(a, bvnUrlPrefix) {
 		return "", false
 	}
-	return u.Authority[4:], true
-}
-
-// BelongsToDn checks if the give account belongs to the DN.
-func BelongsToDn(u *url.URL) bool {
-	return IsDnUrl(u) || u.RootIdentity().Equal(AcmeUrl())
+	if !strings.HasSuffix(a, TLD) {
+		return "", false
+	}
+	return a[len(bvnUrlPrefix) : len(a)-len(TLD)], true
 }
 
 // BvnNameFromSubnetId formats a BVN subnet name from the configuration to a valid URL hostname.
-func BvnNameFromSubnetId(subnetId string) string {
-	return "bvn-" + strings.ToLower(subnetId)
+func BvnNameFromSubnetId(subnet string) string {
+	return SubnetUrl(subnet).Authority
 }
 
 // IndexChain returns the major or minor index chain name for a given chain. Do
@@ -465,7 +498,7 @@ func IndexChain(name string, major bool) string {
 }
 
 func GetValidatorsMOfN(validatorCount int, ratio float64) uint64 {
-	return uint64(math.Round(ratio * float64(validatorCount)))
+	return uint64(math.Ceil(ratio * float64(validatorCount)))
 }
 
 const rootAnchorSuffix = "-root"

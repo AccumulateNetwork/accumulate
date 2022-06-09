@@ -164,10 +164,14 @@ func UnmarshalAccountFrom(rd io.ReadSeeker) (Account, error) {
 
 // UnmarshalAccountJson unmarshals a Account.
 func UnmarshalAccountJSON(data []byte) (Account, error) {
-	var typ struct{ Type AccountType }
+	var typ *struct{ Type AccountType }
 	err := json.Unmarshal(data, &typ)
 	if err != nil {
 		return nil, err
+	}
+
+	if typ == nil {
+		return nil, nil
 	}
 
 	acnt, err := NewAccount(typ.Type)
@@ -276,10 +280,14 @@ func UnmarshalDataEntryFrom(rd io.ReadSeeker) (DataEntry, error) {
 
 // UnmarshalDataEntryJson unmarshals a DataEntry.
 func UnmarshalDataEntryJSON(data []byte) (DataEntry, error) {
-	var typ struct{ Type DataEntryType }
+	var typ *struct{ Type DataEntryType }
 	err := json.Unmarshal(data, &typ)
 	if err != nil {
 		return nil, err
+	}
+
+	if typ == nil {
+		return nil, nil
 	}
 
 	acnt, err := NewDataEntry(typ.Type)
@@ -528,10 +536,14 @@ func UnmarshalTransactionBodyFrom(rd io.ReadSeeker) (TransactionBody, error) {
 
 // UnmarshalTransactionBodyJson unmarshals a TransactionBody.
 func UnmarshalTransactionBodyJSON(data []byte) (TransactionBody, error) {
-	var typ struct{ Type TransactionType }
+	var typ *struct{ Type TransactionType }
 	err := json.Unmarshal(data, &typ)
 	if err != nil {
 		return nil, err
+	}
+
+	if typ == nil {
+		return nil, nil
 	}
 
 	acnt, err := NewTransactionBody(typ.Type)
@@ -650,10 +662,14 @@ func UnmarshalAccountAuthOperationFrom(rd io.ReadSeeker) (AccountAuthOperation, 
 
 // UnmarshalAccountAuthOperationJson unmarshals a AccountAuthOperation.
 func UnmarshalAccountAuthOperationJSON(data []byte) (AccountAuthOperation, error) {
-	var typ struct{ Type AccountAuthOperationType }
+	var typ *struct{ Type AccountAuthOperationType }
 	err := json.Unmarshal(data, &typ)
 	if err != nil {
 		return nil, err
+	}
+
+	if typ == nil {
+		return nil, nil
 	}
 
 	acnt, err := NewAccountAuthOperation(typ.Type)
@@ -777,10 +793,14 @@ func UnmarshalKeyPageOperationFrom(rd io.ReadSeeker) (KeyPageOperation, error) {
 
 // UnmarshalKeyPageOperationJson unmarshals a KeyPageOperation.
 func UnmarshalKeyPageOperationJSON(data []byte) (KeyPageOperation, error) {
-	var typ struct{ Type KeyPageOperationType }
+	var typ *struct{ Type KeyPageOperationType }
 	err := json.Unmarshal(data, &typ)
 	if err != nil {
 		return nil, err
+	}
+
+	if typ == nil {
+		return nil, nil
 	}
 
 	acnt, err := NewKeyPageOperation(typ.Type)
@@ -809,6 +829,8 @@ func NewSignature(typ SignatureType) (Signature, error) {
 		return new(ED25519Signature), nil
 	case SignatureTypeETH:
 		return new(ETHSignature), nil
+	case SignatureTypeInternal:
+		return new(InternalSignature), nil
 	case SignatureTypeLegacyED25519:
 		return new(LegacyED25519Signature), nil
 	case SignatureTypeRCD1:
@@ -846,6 +868,9 @@ func EqualSignature(a, b Signature) bool {
 		return ok && a.Equal(b)
 	case *ETHSignature:
 		b, ok := b.(*ETHSignature)
+		return ok && a.Equal(b)
+	case *InternalSignature:
+		b, ok := b.(*InternalSignature)
 		return ok && a.Equal(b)
 	case *LegacyED25519Signature:
 		b, ok := b.(*LegacyED25519Signature)
@@ -934,10 +959,14 @@ func UnmarshalSignatureFrom(rd io.ReadSeeker) (Signature, error) {
 
 // UnmarshalSignatureJson unmarshals a Signature.
 func UnmarshalSignatureJSON(data []byte) (Signature, error) {
-	var typ struct{ Type SignatureType }
+	var typ *struct{ Type SignatureType }
 	err := json.Unmarshal(data, &typ)
 	if err != nil {
 		return nil, err
+	}
+
+	if typ == nil {
+		return nil, nil
 	}
 
 	acnt, err := NewSignature(typ.Type)

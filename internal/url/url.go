@@ -333,10 +333,23 @@ func (u *URL) Equal(v *URL) bool {
 	return strings.EqualFold(u.String(), v.String())
 }
 
+// PathEqual reports whether u.Path and v, normalized and interpreted as UTF-8,
+// are equal under Unicode case-folding.
+func (u *URL) PathEqual(v string) bool {
+	up, v := strings.Trim(u.Path, "/"), strings.Trim(v, "/")
+	return strings.EqualFold(up, v)
+}
+
 // JoinPath returns a copy of U with additional path elements.
 func (u *URL) JoinPath(s ...string) *URL {
+	if len(s) == 0 {
+		return u
+	}
 	v := u.Copy()
-	v.Path = path.Join(append([]string{u.Path}, s...)...)
+	if len(v.Path) == 0 {
+		v.Path = "/"
+	}
+	v.Path = path.Join(append([]string{v.Path}, s...)...)
 	return v
 }
 

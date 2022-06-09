@@ -85,8 +85,8 @@ func (d *e2eDUT) WaitForTxns(txids ...[]byte) {
 			d.Require().NotNil(r.Status, "Transaction status is empty")
 			d.Require().True(r.Status.Delivered, "Transaction has not been delivered")
 			d.Require().Zero(r.Status.Code, "Transaction failed")
-			for _, id := range r.SyntheticTxids {
-				id := id // See docs/developer/rangevarref.md
+			for _, id := range r.Produced {
+				id := id.Hash()
 				synth = append(synth, id[:])
 			}
 		}
@@ -157,8 +157,9 @@ func TestFaucetMultiNetwork(t *testing.T) {
 	rpcCall(t, jrpc.Faucet, &protocol.AcmeFaucet{Url: lite}, txResp)
 	txqResp := new(apiv2.TransactionQueryResponse)
 	rpcCall(t, jrpc.QueryTx, &apiv2.TxnQuery{Txid: txResp.TransactionHash, Wait: 10 * time.Second}, txqResp)
-	for _, txid := range txqResp.SyntheticTxids {
-		rpcCall(t, jrpc.QueryTx, &apiv2.TxnQuery{Txid: txid[:], Wait: 10 * time.Second}, nil) //nolint:rangevarref
+	for _, txid := range txqResp.Produced {
+		txid := txid.Hash()
+		rpcCall(t, jrpc.QueryTx, &apiv2.TxnQuery{Txid: txid[:], Wait: 10 * time.Second}, nil)
 	}
 
 	// Wait for synthetic TX to settle
