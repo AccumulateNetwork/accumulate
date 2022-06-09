@@ -112,7 +112,7 @@ func (sim *Simulator) Setup(bvnCount int) {
 		exec, err := NewNodeExecutor(ExecutorOptions{
 			Logger:   logger,
 			Key:      key,
-			Describe:  network,
+			Describe: network,
 			Router:   sim.Router(),
 			EventBus: eventBus,
 		}, db)

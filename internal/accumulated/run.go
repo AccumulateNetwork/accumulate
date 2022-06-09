@@ -148,7 +148,7 @@ func (d *Daemon) Start() (err error) {
 	execOpts := block.ExecutorOptions{
 		Logger:   d.Logger,
 		Key:      d.Key().Bytes(),
-		Describe:  d.Config.Accumulate.Describe,
+		Describe: d.Config.Accumulate.Describe,
 		Router:   router,
 		EventBus: d.eventBus,
 	}

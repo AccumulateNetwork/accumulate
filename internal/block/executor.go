@@ -38,7 +38,7 @@ type ExecutorOptions struct {
 	Logger   log.Logger
 	Key      ed25519.PrivateKey
 	Router   routing.Router
-	Describe  config.Describe
+	Describe config.Describe
 	EventBus *events.Bus
 
 	isGenesis bool
