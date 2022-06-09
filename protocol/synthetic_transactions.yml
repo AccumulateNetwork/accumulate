@@ -46,7 +46,9 @@ SyntheticDepositTokens:
       pointer: true
     - name: Amount
       type: bigint
-
+    - name: IsIssuer
+      type: boolean
+      
 SyntheticDepositCredits:
   union: { type: transaction }
   embeddings:
