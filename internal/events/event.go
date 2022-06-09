@@ -1,13 +1,18 @@
 package events
 
-import "time"
+import (
+	"time"
+
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+)
 
 type Event interface {
 	isEvent()
 }
 
-func (DidCommitBlock) isEvent()  {}
-func (DidSaveSnapshot) isEvent() {}
+func (DidCommitBlock) isEvent()   {}
+func (DidSaveSnapshot) isEvent()  {}
+func (DidChangeGlobals) isEvent() {}
 
 type DidCommitBlock struct {
 	Index uint64
@@ -17,4 +22,8 @@ type DidCommitBlock struct {
 
 type DidSaveSnapshot struct {
 	MinorIndex uint64
+}
+
+type DidChangeGlobals struct {
+	Values *core.GlobalValues
 }
