@@ -13,6 +13,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/internal/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -34,10 +35,11 @@ type Executor struct {
 }
 
 type ExecutorOptions struct {
-	Logger  log.Logger
-	Key     ed25519.PrivateKey
-	Router  routing.Router
-	Network config.Network
+	Logger   log.Logger
+	Key      ed25519.PrivateKey
+	Router   routing.Router
+	Network  config.Network
+	EventBus *events.Bus
 
 	isGenesis bool
 }
@@ -91,7 +93,7 @@ func NewNodeExecutor(opts ExecutorOptions, db *database.Database) (*Executor, er
 		)
 
 	default:
-		return nil, errors.Format(errors.StatusInternalError, "invalid subnet type %v", opts.Network.Type)
+		return nil, errors.Format(errors.StatusInternalError, "invalid partition type %v", opts.Network.Type)
 	}
 
 	// This is a no-op in dev
@@ -220,7 +222,7 @@ func (m *Executor) LoadStateRoot(batch *database.Batch) ([]byte, error) {
 	case errors.Is(err, storage.ErrNotFound):
 		return nil, nil
 	default:
-		return nil, errors.Format(errors.StatusUnknown, "load subnet identity: %w", err)
+		return nil, errors.Format(errors.StatusUnknown, "load partition identity: %w", err)
 	}
 }
 

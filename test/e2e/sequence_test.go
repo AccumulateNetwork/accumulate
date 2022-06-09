@@ -29,7 +29,7 @@ func TestOutOfSequenceSynth(t *testing.T) {
 
 	// If any envelope contains a deposit, reverse the envelopes and the
 	// transactions within each
-	sim.SubnetFor(bobUrl.RootIdentity()).SubmitHook = func(envelopes []*Envelope) []*Envelope {
+	sim.PartitionFor(bobUrl.RootIdentity()).SubmitHook = func(envelopes []*Envelope) []*Envelope {
 		var deposit bool
 		for _, env := range envelopes {
 			for _, txn := range env.Transaction {
@@ -76,7 +76,7 @@ func TestOutOfSequenceSynth(t *testing.T) {
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(txns...)...)
 
 	// Verify
-	_ = sim.SubnetFor(bobUrl).Database.View(func(batch *database.Batch) error {
+	_ = sim.PartitionFor(bobUrl).Database.View(func(batch *database.Batch) error {
 		var account *LiteTokenAccount
 		require.NoError(t, batch.Account(bobUrl).GetStateAs(&account))
 		require.Equal(t, uint64(len(txns)), account.Balance.Uint64())
@@ -100,7 +100,7 @@ func TestMissingSynthTxn(t *testing.T) {
 
 	// The first time an envelope contains a deposit, drop the first deposit
 	var didDrop bool
-	sim.SubnetFor(bobUrl.RootIdentity()).SubmitHook = func(envelopes []*Envelope) []*Envelope {
+	sim.PartitionFor(bobUrl.RootIdentity()).SubmitHook = func(envelopes []*Envelope) []*Envelope {
 		for _, env := range envelopes {
 			var deposit int = -1
 			for i, txn := range env.Transaction {
@@ -157,7 +157,7 @@ func TestMissingSynthTxn(t *testing.T) {
 	sim.WaitForTransactions(delivered, envs...)
 
 	// Verify
-	_ = sim.SubnetFor(bobUrl).Database.View(func(batch *database.Batch) error {
+	_ = sim.PartitionFor(bobUrl).Database.View(func(batch *database.Batch) error {
 		var account *LiteTokenAccount
 		require.NoError(t, batch.Account(bobUrl).GetStateAs(&account))
 		require.Equal(t, uint64(len(txns)), account.Balance.Uint64())

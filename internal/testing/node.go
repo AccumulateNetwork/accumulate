@@ -59,7 +59,7 @@ func DefaultConfig(networkName string, net config.NetworkType, node config.NodeT
 	cfg.Consensus.TimeoutCommit = time.Second / 5        // Increase block frequency
 	cfg.Accumulate.Website.Enabled = false               // No need for the website
 	cfg.Instrumentation.Prometheus = false               // Disable prometheus: https://github.com/tendermint/tendermint/issues/7076
-	cfg.Accumulate.Network.Subnets = []config.Subnet{
+	cfg.Accumulate.Network.Partitions = []config.Partition{
 		{
 			ID:   "local",
 			Type: config.BlockValidator,
@@ -75,23 +75,23 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withF
 	tempDir := t.TempDir()
 
 	count := numValidators + numFollowers
-	subnets := make([]config.Subnet, numBvns+1)
-	subnetsMap := make(map[string]config.Subnet)
+	partitions := make([]config.Partition, numBvns+1)
+	partitionsMap := make(map[string]config.Partition)
 	allAddresses := make(map[string][]string, numBvns+1)
 	allConfigs := make(map[string][]*cfg.Config, numBvns+1)
 	allRemotes := make(map[string][]string, numBvns+1)
 
 	// Create node configurations
 	for i := 0; i < numBvns+1; i++ {
-		netType, subnetId := cfg.Directory, protocol.Directory
+		netType, partitionId := cfg.Directory, protocol.Directory
 		if i > 0 {
-			netType, subnetId = cfg.BlockValidator, fmt.Sprintf("BVN%d", i-1)
+			netType, partitionId = cfg.BlockValidator, fmt.Sprintf("BVN%d", i-1)
 		}
 
 		addresses := make([]string, count)
 		configs := make([]*cfg.Config, count)
 		remotes := make([]string, count)
-		allAddresses[subnetId], allConfigs[subnetId], allRemotes[subnetId] = addresses, configs, remotes
+		allAddresses[partitionId], allConfigs[partitionId], allRemotes[partitionId] = addresses, configs, remotes
 		nodes := make([]config.Node, count)
 		for i := 0; i < count; i++ {
 			nodeType := cfg.Validator
@@ -99,8 +99,8 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withF
 				nodeType = cfg.Follower
 			}
 
-			hash := hashCaller(1, fmt.Sprintf("%s-%s-%d", t.Name(), subnetId, i))
-			configs[i] = DefaultConfig("unittest", netType, nodeType, subnetId)
+			hash := hashCaller(1, fmt.Sprintf("%s-%s-%d", t.Name(), partitionId, i))
+			configs[i] = DefaultConfig("unittest", netType, nodeType, partitionId)
 			remotes[i] = getIP(hash).String()
 			nodes[i] = config.Node{
 				Type:    nodeType,
@@ -109,20 +109,20 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withF
 			addresses[i] = nodes[i].Address
 		}
 
-		// We need to return the subnets in a specific order with directory node first because the unit tests select subnets[1]
-		subnets[i] = config.Subnet{
-			ID:    subnetId,
+		// We need to return the partitions in a specific order with directory node first because the unit tests select partitions[1]
+		partitions[i] = config.Partition{
+			ID:    partitionId,
 			Type:  netType,
 			Nodes: nodes,
 		}
-		subnetsMap[subnetId] = subnets[i]
+		partitionsMap[partitionId] = partitions[i]
 	}
 
 	// Add addresses and BVN names to node configurations
 	for _, configs := range allConfigs {
 		for i, cfg := range configs {
-			cfg.Accumulate.Network.Subnets = subnets
-			cfg.Accumulate.Network.LocalAddress = allAddresses[cfg.Accumulate.Network.LocalSubnetID][i]
+			cfg.Accumulate.Network.Partitions = partitions
+			cfg.Accumulate.Network.LocalAddress = allAddresses[cfg.Accumulate.Network.LocalPartitionID][i]
 		}
 	}
 
@@ -149,17 +149,17 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withF
 	netValMap := make(genesis.NetworkValidatorMap)
 	var bootstrapList []genesis.Bootstrap
 
-	for _, subnet := range subnets {
-		subnetId := subnet.ID
-		dir := filepath.Join(tempDir, subnetId)
+	for _, partition := range partitions {
+		partitionId := partition.ID
+		dir := filepath.Join(tempDir, partitionId)
 		bootstrap, err := node.Init(node.InitOptions{
 			WorkDir:             dir,
 			Port:                basePort,
-			Config:              allConfigs[subnetId],
-			RemoteIP:            allRemotes[subnetId],
-			ListenIP:            allRemotes[subnetId],
+			Config:              allConfigs[partitionId],
+			RemoteIP:            allRemotes[partitionId],
+			ListenIP:            allRemotes[partitionId],
 			NetworkValidatorMap: netValMap,
-			Logger:              initLogger.With("subnet", subnetId),
+			Logger:              initLogger.With("partition", partitionId),
 			FactomAddressesFile: factomAddressFilePath,
 		})
 		require.NoError(t, err)
@@ -168,14 +168,14 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withF
 		}
 
 		daemons := make([]*accumulated.Daemon, count)
-		allDaemons[subnetId] = daemons
+		allDaemons[partitionId] = daemons
 
 		for i := 0; i < count; i++ {
 			dir := filepath.Join(dir, fmt.Sprintf("Node%d", i))
 			var err error
 			daemons[i], err = accumulated.Load(dir, logWriter)
 			require.NoError(t, err)
-			daemons[i].Logger = daemons[i].Logger.With("test", t.Name(), "subnet", subnetId, "node", i)
+			daemons[i].Logger = daemons[i].Logger.With("test", t.Name(), "partition", partitionId, "node", i)
 		}
 	}
 
@@ -187,20 +187,20 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withF
 		}
 	}
 
-	return getSubnetNames(subnets), allDaemons
+	return getPartitionNames(partitions), allDaemons
 }
 
-func getSubnetNames(subnets []cfg.Subnet) []string {
+func getPartitionNames(partitions []cfg.Partition) []string {
 	var res []string
-	for _, subnet := range subnets {
-		res = append(res, subnet.ID)
+	for _, partition := range partitions {
+		res = append(res, partition.ID)
 	}
 	return res
 }
 
-func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulated.Daemon) {
+func RunTestNet(t *testing.T, partitions []string, daemons map[string][]*accumulated.Daemon) {
 	t.Helper()
-	for _, netName := range subnets {
+	for _, netName := range partitions {
 		for _, daemon := range daemons[netName] {
 			require.NoError(t, daemon.Start())
 			daemon.Node_TESTONLY().ABCI.(*abci.Accumulator).OnFatal(func(err error) {
@@ -211,7 +211,7 @@ func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulate
 	}
 	t.Cleanup(func() {
 		errg := new(errgroup.Group)
-		for _, netName := range subnets {
+		for _, netName := range partitions {
 			for _, daemon := range daemons[netName] {
 				daemon := daemon // See docs/developer/rangevarref.md
 				errg.Go(func() error {

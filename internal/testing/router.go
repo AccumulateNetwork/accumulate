@@ -23,14 +23,14 @@ func (NullRouter) Route(...*protocol.Envelope) (string, error) {
 	return "", nil
 }
 
-func (NullRouter) Query(ctx context.Context, subnet string, query []byte, opts client.ABCIQueryOptions) (*core.ResultABCIQuery, error) {
+func (NullRouter) Query(ctx context.Context, partition string, query []byte, opts client.ABCIQueryOptions) (*core.ResultABCIQuery, error) {
 	return nil, errors.StatusNotFound
 }
 
-func (NullRouter) Submit(ctx context.Context, subnet string, tx *protocol.Envelope, pretend, async bool) (*routing.ResponseSubmit, error) {
+func (NullRouter) Submit(ctx context.Context, partition string, tx *protocol.Envelope, pretend, async bool) (*routing.ResponseSubmit, error) {
 	return new(routing.ResponseSubmit), nil
 }
 
-func (NullRouter) RequestAPIv2(ctx context.Context, subnetId, method string, params, result interface{}) error {
+func (NullRouter) RequestAPIv2(ctx context.Context, partitionId, method string, params, result interface{}) error {
 	return errors.StatusNotFound
 }

@@ -22,10 +22,10 @@ import (
 
 func TestRelaunch(t *testing.T) {
 	// Create a network
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 
 	// Start it
-	for _, netName := range subnets {
+	for _, netName := range partitions {
 		for _, daemon := range daemons[netName] {
 			require.NoError(t, daemon.Start())
 			daemon.Node_TESTONLY().ABCI.(*abci.Accumulator).OnFatal(func(err error) {
@@ -58,7 +58,7 @@ func TestRelaunch(t *testing.T) {
 	require.NotZero(t, account.Balance)
 
 	// Stop the network
-	for _, netName := range subnets {
+	for _, netName := range partitions {
 		for _, daemon := range daemons[netName] {
 			assert.NoError(t, daemon.Stop())
 		}
@@ -72,18 +72,18 @@ func TestRelaunch(t *testing.T) {
 		logWriter = logging.TestLogWriter(t)
 	}
 	dir := filepath.Join(daemon.Config.RootDir, "..", "..")
-	for _, subnet := range subnets {
-		dir := filepath.Join(dir, subnet)
-		daemons := daemons[subnet]
+	for _, partition := range partitions {
+		dir := filepath.Join(dir, partition)
+		daemons := daemons[partition]
 		for i := range daemons {
 			dir := filepath.Join(dir, fmt.Sprintf("Node%d", i))
 			var err error
 			daemons[i], err = accumulated.Load(dir, logWriter)
 			require.NoError(t, err)
-			daemons[i].Logger = daemons[i].Logger.With("test", t.Name(), "subnet", subnet, "node", i)
+			daemons[i].Logger = daemons[i].Logger.With("test", t.Name(), "partition", partition, "node", i)
 		}
 	}
-	for _, netName := range subnets {
+	for _, netName := range partitions {
 		for _, daemon := range daemons[netName] {
 			require.NoError(t, daemon.Start())
 			daemon.Node_TESTONLY().ABCI.(*abci.Accumulator).OnFatal(func(err error) {

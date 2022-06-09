@@ -88,7 +88,7 @@ func initDualNode(cmd *cobra.Command, args []string) {
 	}
 
 	if bvnHost == nil {
-		fatalf("bvn host not found in %v subnet", partitionName)
+		fatalf("bvn host not found in %v partition", partitionName)
 	}
 
 	if flagInit.NoEmptyBlocks {

@@ -59,7 +59,7 @@ type FakeNode struct {
 	kv        *memory.DB
 }
 
-func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulated.Daemon, openDb func(d *accumulated.Daemon) (*database.Database, error), doGenesis bool, errorHandler func(err error)) map[string][]*FakeNode {
+func RunTestNet(t *testing.T, partitions []string, daemons map[string][]*accumulated.Daemon, openDb func(d *accumulated.Daemon) (*database.Database, error), doGenesis bool, errorHandler func(err error)) map[string][]*FakeNode {
 	t.Helper()
 
 	allNodes := map[string][]*FakeNode{}
@@ -67,7 +67,7 @@ func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulate
 	clients := map[string]connections.ABCIClient{}
 	netValMap := make(genesis.NetworkValidatorMap)
 	evilNodePrefix := "evil-"
-	for _, netName := range subnets {
+	for _, netName := range partitions {
 		isEvil := false
 		if strings.HasPrefix(netName, evilNodePrefix) {
 			isEvil = true
@@ -86,7 +86,7 @@ func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulate
 	}
 
 	connectionManager := connections.NewFakeConnectionManager(clients)
-	for _, netName := range subnets {
+	for _, netName := range partitions {
 		netName = strings.TrimPrefix(netName, evilNodePrefix)
 		nodes, chans := allNodes[netName], allChans[netName]
 		for i := range nodes {
@@ -96,7 +96,7 @@ func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulate
 
 	// Execute bootstrap after the entire network is known
 	if doGenesis {
-		for _, netName := range subnets {
+		for _, netName := range partitions {
 			netName = strings.TrimPrefix(netName, evilNodePrefix)
 			nodes := allNodes[netName]
 			for i := range nodes {
@@ -157,7 +157,7 @@ func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Da
 		require.ErrorIs(t, err, storage.ErrNotFound)
 	}
 
-	fakeTmLogger := d.Logger.With("module", "fake-tendermint", "subnet", n.network.LocalPartitionID)
+	fakeTmLogger := d.Logger.With("module", "fake-tendermint", "partition", n.network.LocalPartitionID)
 
 	appChan := make(chan abcitypes.Application)
 	t.Cleanup(func() { close(appChan) })
@@ -167,21 +167,22 @@ func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Da
 }
 
 func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connections.ConnectionManager, doGenesis bool) *FakeNode {
-	var err error
-	n.router, _, err = routing.NewSimpleRouter(n.network, connMgr)
-	require.NoError(n.t, err)
+	eventBus := events.NewBus(nil)
+	n.router = routing.NewRouter(eventBus, connMgr)
 
+	var err error
 	n.exec, err = block.NewNodeExecutor(block.ExecutorOptions{
-		Logger:  n.logger,
-		Key:     n.key.Bytes(),
-		Network: *n.network,
-		Router:  n.router,
+		Logger:   n.logger,
+		Key:      n.key.Bytes(),
+		Network:  *n.network,
+		Router:   n.router,
+		EventBus: eventBus,
 	}, n.db)
 	n.Require().NoError(err)
 
 	n.app = abci.NewAccumulator(abci.AccumulatorOptions{
 		Executor: n.exec,
-		EventBus: events.NewBus(nil),
+		EventBus: eventBus,
 		DB:       n.db,
 		Logger:   n.logger,
 		Config: &config.Config{Accumulate: config.Accumulate{

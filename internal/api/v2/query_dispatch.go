@@ -42,12 +42,12 @@ func (q *queryDispatch) queryAll(query func(*queryDirect) (interface{}, error), 
 	}()
 
 	// Create a request for each client in a separate goroutine
-	for _, subnet := range q.Network.Partitions {
-		go func(subnetId string) {
+	for _, partition := range q.Network.Partitions {
+		go func(partitionId string) {
 			// Mark complete on return
 			defer wg.Done()
 
-			res, err := query(q.direct(subnetId))
+			res, err := query(q.direct(partitionId))
 			switch {
 			case err == nil:
 				select {
@@ -64,7 +64,7 @@ func (q *queryDispatch) queryAll(query func(*queryDirect) (interface{}, error), 
 					// A result or error has already been sent
 				}
 			}
-		}(subnet.ID)
+		}(partition.ID)
 	}
 
 	// Wait for an error or a result

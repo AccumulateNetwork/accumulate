@@ -14,11 +14,11 @@ type router interface {
 }
 
 func ClientsMap[T any](clients map[string]T) func(string) (T, error) {
-	return func(subnet string) (T, error) {
+	return func(partition string) (T, error) {
 		var zero T
-		client, ok := clients[subnet]
+		client, ok := clients[partition]
 		if !ok {
-			return zero, errors.Format(errors.StatusInternalError, "no client defined for subnet %q", subnet)
+			return zero, errors.Format(errors.StatusInternalError, "no client defined for partition %q", partition)
 		}
 		return client, nil
 	}
@@ -30,12 +30,12 @@ type RoutedQueryLayer struct {
 }
 
 func (r *RoutedQueryLayer) route(account *url.URL) (QueryModule, error) {
-	subnet, err := r.Router.RouteAccount(account)
+	partition, err := r.Router.RouteAccount(account)
 	if err != nil {
 		return nil, err
 	}
 
-	client, err := r.Clients(subnet)
+	client, err := r.Clients(partition)
 	if err != nil {
 		return nil, err
 	}
@@ -73,12 +73,12 @@ type RoutedSubmitLayer struct {
 }
 
 func (r *RoutedSubmitLayer) Submit(ctx context.Context, envelope *protocol.Envelope, opts SubmitOptions) (*Submission, error) {
-	subnet, err := r.Router.Route(envelope)
+	partition, err := r.Router.Route(envelope)
 	if err != nil {
 		return nil, err
 	}
 
-	client, err := r.Clients(subnet)
+	client, err := r.Clients(partition)
 	if err != nil {
 		return nil, err
 	}

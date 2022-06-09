@@ -32,8 +32,8 @@ func (x PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 		return nil, fmt.Errorf("invalid principal: want %v, got %v", protocol.AccountTypeAnchorLedger, st.Origin.Type())
 	}
 
-	// Verify the source URL and get the subnet name
-	name, ok := protocol.ParseSubnetUrl(body.Source)
+	// Verify the source URL and get the partition name
+	name, ok := protocol.ParsePartitionUrl(body.Source)
 	if !ok {
 		return nil, fmt.Errorf("invalid source: not a BVN or the DN")
 	}
@@ -51,7 +51,7 @@ func (x PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 		return nil, fmt.Errorf("failed to update issuer state: %v", err)
 	}
 
-	// Add the anchor to the chain - use the subnet name as the chain name
+	// Add the anchor to the chain - use the partition name as the chain name
 	err = st.AddChainEntry(st.OriginUrl, protocol.RootAnchorChain(name), protocol.ChainTypeAnchor, body.RootChainAnchor[:], body.RootChainIndex, body.MinorBlockIndex)
 	if err != nil {
 		return nil, err

@@ -62,6 +62,9 @@ const (
 
 	// FeeCreateScratchChain $0.25
 	FeeCreateScratchChain Fee = 2500
+
+	// MinimumCreditPurchase $0.01
+	MinimumCreditPurchase Fee = 100
 )
 
 func BaseTransactionFee(typ TransactionType) (Fee, error) {
@@ -140,7 +143,7 @@ func ComputeTransactionFee(tx *Transaction) (Fee, error) {
 	if IsDnUrl(tx.Header.Principal) {
 		return 0, nil
 	}
-	if _, ok := ParseSubnetUrl(tx.Header.Principal); ok {
+	if _, ok := ParsePartitionUrl(tx.Header.Principal); ok {
 		return 0, nil
 	}
 

@@ -934,12 +934,12 @@ func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove 
 		}
 
 	case *query.RequestSynth:
-		subnet, ok := protocol.ParseSubnetUrl(q.Destination)
+		partition, ok := protocol.ParsePartitionUrl(q.Destination)
 		if !ok {
-			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeInvalidRequest, Message: fmt.Errorf("destination is not a subnet")}
+			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeInvalidRequest, Message: fmt.Errorf("destination is not a partition")}
 		}
 		record := batch.Account(m.Network.Synthetic())
-		chain, err := record.ReadChain(protocol.SyntheticIndexChain(subnet))
+		chain, err := record.ReadChain(protocol.SyntheticIndexChain(partition))
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeInternal, Message: fmt.Errorf("failed to load the synth index chain: %w", err)}
 		}

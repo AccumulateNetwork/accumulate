@@ -43,7 +43,7 @@ func (x DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 		st.State.MakeMajorBlock = body.MakeMajorBlock
 	}
 
-	// Add the anchor to the chain - use the subnet name as the chain name
+	// Add the anchor to the chain - use the partition name as the chain name
 	err := st.AddChainEntry(st.OriginUrl, protocol.RootAnchorChain(protocol.Directory), protocol.ChainTypeAnchor, body.RootChainAnchor[:], body.RootChainIndex, body.MinorBlockIndex)
 	if err != nil {
 		return nil, err
@@ -53,11 +53,6 @@ func (x DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 	err = st.AddChainEntry(st.OriginUrl, protocol.BPTAnchorChain(protocol.Directory), protocol.ChainTypeAnchor, body.StateTreeAnchor[:], 0, 0)
 	if err != nil {
 		return nil, err
-	}
-
-	if body.MajorBlockIndex > 0 {
-		// TODO Handle major blocks?
-		return nil, nil
 	}
 
 	// Process updates when present

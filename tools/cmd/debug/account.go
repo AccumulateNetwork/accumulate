@@ -72,13 +72,13 @@ func accountId(_ *cobra.Command, args []string) {
 	if err == nil {
 		table := new(protocol.RoutingTable)
 		check(table.UnmarshalBinary(account.Entry.GetData()[0]))
-		router, err := routing.NewRouter(nil, table)
+		router, err := routing.NewStaticRouter(table, nil)
 		check(err)
 
-		subnet, err := router.RouteAccount(u)
+		partition, err := router.RouteAccount(u)
 		check(err)
 		fmt.Printf("Method:         prefix routing table\n")
-		fmt.Printf("Routes to:      %s\n", subnet)
+		fmt.Printf("Routes to:      %s\n", partition)
 		return
 	}
 

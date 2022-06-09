@@ -18,21 +18,21 @@ var validatorCmd = &cobra.Command{
 }
 
 var validatorAddCmd = &cobra.Command{
-	Use:   "add [subnet URL] [signing key name] [key index (optional)] [key height (optional)] [key name or path]",
+	Use:   "add [partition URL] [signing key name] [key index (optional)] [key height (optional)] [key name or path]",
 	Short: "Add a validator",
 	Run:   runCmdFunc(addValidator),
 	Args:  cobra.RangeArgs(3, 5),
 }
 
 var validatorRemoveCmd = &cobra.Command{
-	Use:   "remove [subnet URL] [signing key name] [key index (optional)] [key height (optional)] [key name or path]",
+	Use:   "remove [partition URL] [signing key name] [key index (optional)] [key height (optional)] [key name or path]",
 	Short: "Remove a validator",
 	Run:   runCmdFunc(removeValidator),
 	Args:  cobra.RangeArgs(3, 5),
 }
 
 var validatorUpdateKeyCmd = &cobra.Command{
-	Use:   "update-key [subnet URL] [signing key name] [key index (optional)] [key height (optional)] [old key name or path] [new key name or path]",
+	Use:   "update-key [partition URL] [signing key name] [key index (optional)] [key height (optional)] [old key name or path] [new key name or path]",
 	Short: "Update a validator's key",
 	Run:   runCmdFunc(updateValidatorKey),
 	Args:  cobra.RangeArgs(4, 6),

@@ -82,7 +82,7 @@ func Open(cfg *config.Config, logger log.Logger) (*Database, error) {
 		return OpenBadger(config.MakeAbsolute(cfg.RootDir, cfg.Accumulate.Storage.Path), logger)
 
 	case config.EtcdStorage:
-		return OpenEtcd(cfg.Accumulate.Network.LocalSubnetID, cfg.Accumulate.Storage.Etcd, logger)
+		return OpenEtcd(cfg.Accumulate.Network.LocalPartitionID, cfg.Accumulate.Storage.Etcd, logger)
 
 	default:
 		return nil, fmt.Errorf("unknown storage format %q", cfg.Accumulate.Storage.Type)

@@ -7,8 +7,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
-func TestSubnetSyntheticLedger_Add(t *testing.T) {
-	ledger := new(SubnetSyntheticLedger)
+func TestPartitionSyntheticLedger_Add(t *testing.T) {
+	ledger := new(PartitionSyntheticLedger)
 	ledger.Received, ledger.Delivered = 3, 3
 
 	foo := AccountUrl("foo")

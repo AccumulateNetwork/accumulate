@@ -16,25 +16,25 @@ type fakeConnectionManager struct {
 	ctxMap map[string]ConnectionContext
 }
 
-func (fcm *fakeConnectionManager) SelectConnection(subnetId string, allowFollower bool) (ConnectionContext, error) {
-	context, ok := fcm.ctxMap[subnetId]
+func (fcm *fakeConnectionManager) SelectConnection(partitionId string, allowFollower bool) (ConnectionContext, error) {
+	context, ok := fcm.ctxMap[partitionId]
 	if ok {
 		return context, nil
 	} else {
-		return nil, errUnknownSubnet(subnetId)
+		return nil, errUnknownPartition(partitionId)
 	}
 }
 
 func NewFakeConnectionManager(clients map[string]ABCIClient) ConnectionManager {
 	fcm := new(fakeConnectionManager)
 	fcm.ctxMap = make(map[string]ConnectionContext)
-	for subnet, client := range clients {
+	for partition, client := range clients {
 		connCtx := &connectionContext{
-			subnetId:  subnet,
-			hasClient: make(chan struct{}),
-			metrics:   NodeMetrics{status: Up}}
+			partitionId: partition,
+			hasClient:   make(chan struct{}),
+			metrics:     NodeMetrics{status: Up}}
 		connCtx.setClient(client, nil)
-		fcm.ctxMap[subnet] = connCtx
+		fcm.ctxMap[partition] = connCtx
 	}
 	return fcm
 }

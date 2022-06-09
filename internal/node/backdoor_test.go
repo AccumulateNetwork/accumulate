@@ -13,9 +13,9 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-func TestSendDirectToWrongSubnet(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 3, 1, 0, false)
-	acctesting.RunTestNet(t, subnets, daemons)
+func TestSendDirectToWrongPartition(t *testing.T) {
+	partitions, daemons := acctesting.CreateTestNet(t, 3, 1, 0, false)
+	acctesting.RunTestNet(t, partitions, daemons)
 	dn := daemons[protocol.Directory][0]
 
 	// Create the lite addresses and one account
@@ -32,9 +32,9 @@ func TestSendDirectToWrongSubnet(t *testing.T) {
 
 	// Set route to something else
 	var badBvnId string
-	for _, subnet := range subnets[1:] {
-		if subnet != goodBvnId {
-			badBvnId = subnet
+	for _, partition := range partitions[1:] {
+		if partition != goodBvnId {
+			badBvnId = partition
 			break
 		}
 	}

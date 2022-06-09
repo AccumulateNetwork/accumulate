@@ -20,8 +20,8 @@ func buildSimpleTable(bvns []string, value, depth uint64) []protocol.Route {
 	}
 
 	return []protocol.Route{{
-		Length: depth,
-		Value:  value,
-		Subnet: bvns[0],
+		Length:    depth,
+		Value:     value,
+		Partition: bvns[0],
 	}}
 }

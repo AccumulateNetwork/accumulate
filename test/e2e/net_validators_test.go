@@ -38,7 +38,7 @@ func TestUpdateValidators(t *testing.T) {
 	sim := simulator.New(t, 3)
 	sim.InitFromGenesis()
 
-	dn := sim.Subnet(Directory)
+	dn := sim.Partition(Directory)
 	validators := FormatKeyPageUrl(dn.Executor.Network.ValidatorBook(), 0)
 	nodeKeyAdd1, nodeKeyAdd2, nodeKeyAdd3, nodeKeyUpd := acctesting.GenerateKey(1), acctesting.GenerateKey(2), acctesting.GenerateKey(3), acctesting.GenerateKey(4)
 
@@ -173,11 +173,14 @@ func TestUpdateOperators(t *testing.T) {
 	var timestamp uint64
 
 	// Initialize
+	g := new(core.GlobalValues)
+	g.Globals = new(NetworkGlobals)
+	g.Globals.ValidatorThreshold.Set(1, 100) // Use a small number so M = 1
 	sim := simulator.New(t, 3)
-	sim.InitFromGenesis()
-	dn := sim.Subnet(Directory)
-	bvn0 := sim.Subnet(sim.Subnets[1].ID)
-	bvn1 := sim.Subnet(sim.Subnets[2].ID)
+	sim.InitFromGenesisWith(g)
+	dn := sim.Partition(Directory)
+	bvn0 := sim.Partition(sim.Partitions[1].ID)
+	bvn1 := sim.Partition(sim.Partitions[2].ID)
 
 	// Sanity check
 	page := simulator.GetAccount[*KeyPage](sim, bvn0.Executor.Network.DefaultOperatorPage())

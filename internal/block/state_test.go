@@ -31,14 +31,14 @@ func TestStateSaveAndRestore(t *testing.T) {
 	// Create snapshots
 	t.Log("Save")
 	dir := t.TempDir()
-	filename := func(subnet string) string {
-		return filepath.Join(dir, fmt.Sprintf("%s.bpt", subnet))
+	filename := func(partition string) string {
+		return filepath.Join(dir, fmt.Sprintf("%s.bpt", partition))
 	}
-	for _, subnet := range sim.Partitions {
-		x := sim.Partition(subnet.ID)
+	for _, partition := range sim.Partitions {
+		x := sim.Partition(partition.ID)
 		batch := x.Database.Begin(false)
 		defer batch.Discard()
-		f, err := os.Create(filename(subnet.ID))
+		f, err := os.Create(filename(partition.ID))
 		require.NoError(t, err)
 		require.NoError(t, x.Executor.SaveSnapshot(batch, f))
 		require.NoError(t, f.Close())

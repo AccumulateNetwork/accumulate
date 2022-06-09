@@ -4,16 +4,16 @@ import (
 	"fmt"
 )
 
-func errNoHealthyNodes(subnetId string) error {
-	return fmt.Errorf("no healthy nodes available (yet) for subnet %q", subnetId)
+func errNoHealthyNodes(partitionId string) error {
+	return fmt.Errorf("no healthy nodes available (yet) for partition %q", partitionId)
 }
 
-func errUnknownSubnet(subnetId string) error {
-	return fmt.Errorf("unknown subnet %q", subnetId)
+func errUnknownPartition(partitionId string) error {
+	return fmt.Errorf("unknown partition %q", partitionId)
 }
 
-func errNoLocalClient(subnetId string) error {
-	return fmt.Errorf("local client not initialized for subnet %q", subnetId)
+func errNoLocalClient(partitionId string) error {
+	return fmt.Errorf("local client not initialized for partition %q", partitionId)
 }
 
 func errInvalidAddress(err error) error {

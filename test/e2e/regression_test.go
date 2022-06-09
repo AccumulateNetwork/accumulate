@@ -83,7 +83,7 @@ func TestQueryKeyIndexWithRemoteAuthority(t *testing.T) {
 	req := new(query.RequestKeyPageIndex)
 	req.Url = alice.JoinPath("managed-tokens")
 	req.Key = aliceKey[32:]
-	x := sim.SubnetFor(req.Url)
+	x := sim.PartitionFor(req.Url)
 	_ = x.Database.View(func(batch *database.Batch) error {
 		// The query MUST fail with "no authority of ... holds ..." NOT with
 		// "account ... not found"

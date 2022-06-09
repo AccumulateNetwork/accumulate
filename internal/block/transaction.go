@@ -93,19 +93,9 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Del
 	}
 
 	// Do extra processing for special network accounts
-	if principal != nil && principal.GetUrl().RootIdentity().Equal(x.Network.NodeUrl()) {
-		err = x.processNetworkAccountUpdates(batch, delivery, principal)
-		if err != nil {
-			return x.recordFailedTransaction(batch, delivery, err)
-		}
-
-		// Only push sync updates for DN accounts
-		if x.Network.Type == config.Directory {
-			err = x.pushNetworkAccountUpdates(batch, delivery, principal)
-			if err != nil {
-				return x.recordFailedTransaction(batch, delivery, err)
-			}
-		}
+	err = x.processNetworkAccountUpdates(batch, delivery, principal)
+	if err != nil {
+		return x.recordFailedTransaction(batch, delivery, err)
 	}
 
 	return x.recordSuccessfulTransaction(batch, state, delivery, result)
@@ -281,21 +271,21 @@ func (x *Executor) synthTransactionIsReady(batch *database.Batch, transaction *p
 	}
 
 	// Determine which anchor chain to load
-	var subnet string
+	var partition string
 	if x.Network.Type != config.Directory {
-		subnet = protocol.Directory
+		partition = protocol.Directory
 	} else {
 		var ok bool
-		subnet, ok = protocol.ParseSubnetUrl(sourceNet)
+		partition, ok = protocol.ParsePartitionUrl(sourceNet)
 		if !ok {
-			return false, errors.Format(errors.StatusUnknown, "%v is not a valid subnet URL", sourceNet)
+			return false, errors.Format(errors.StatusUnknown, "%v is not a valid partition URL", sourceNet)
 		}
 	}
 
 	// Load the anchor chain
-	anchorChain, err := batch.Account(x.Network.AnchorPool()).ReadChain(protocol.RootAnchorChain(subnet))
+	anchorChain, err := batch.Account(x.Network.AnchorPool()).ReadChain(protocol.RootAnchorChain(partition))
 	if err != nil {
-		return false, errors.Format(errors.StatusUnknown, "load %s intermediate anchor chain: %w", subnet, err)
+		return false, errors.Format(errors.StatusUnknown, "load %s intermediate anchor chain: %w", partition, err)
 	}
 
 	// Is the result a valid DN anchor?
@@ -306,7 +296,7 @@ func (x *Executor) synthTransactionIsReady(batch *database.Batch, transaction *p
 	case errors.Is(err, storage.ErrNotFound):
 		return false, nil
 	default:
-		return false, errors.Format(errors.StatusUnknown, "get height of entry %X of %s intermediate anchor chain: %w", receipt.Anchor[:4], subnet, err)
+		return false, errors.Format(errors.StatusUnknown, "get height of entry %X of %s intermediate anchor chain: %w", receipt.Anchor[:4], partition, err)
 	}
 
 	// Get the synthetic signature
@@ -323,12 +313,12 @@ func (x *Executor) synthTransactionIsReady(batch *database.Batch, transaction *p
 	}
 
 	// If the transaction is out of sequence, mark it pending
-	subnetLedger := ledger.Subnet(synthSig.SourceNetwork)
-	if subnetLedger.Delivered+1 != synthSig.SequenceNumber {
+	partitionLedger := ledger.Partition(synthSig.SourceNetwork)
+	if partitionLedger.Delivered+1 != synthSig.SequenceNumber {
 		x.logger.Info("Out of sequence synthetic transaction",
 			"hash", logging.AsHex(transaction.GetHash()).Slice(0, 4),
 			"seq-got", synthSig.SequenceNumber,
-			"seq-want", subnetLedger.Delivered+1,
+			"seq-want", partitionLedger.Delivered+1,
 			"source", synthSig.SourceNetwork,
 			"destination", synthSig.DestinationNetwork,
 			"type", transaction.Body.Type(),
@@ -372,8 +362,8 @@ func (x *Executor) recordTransaction(batch *database.Batch, delivery *chain.Deli
 		return nil, errors.Format(errors.StatusUnknown, "load synthetic transaction ledger: %w", err)
 	}
 
-	subnetLedger := ledger.Subnet(delivery.SourceNetwork)
-	if subnetLedger.Add(status.Delivered, delivery.SequenceNumber, delivery.Transaction.ID()) {
+	partitionLedger := ledger.Partition(delivery.SourceNetwork)
+	if partitionLedger.Add(status.Delivered, delivery.SequenceNumber, delivery.Transaction.ID()) {
 		err = batch.Account(x.Network.Synthetic()).PutState(ledger)
 		if err != nil {
 			return nil, errors.Format(errors.StatusUnknown, "store synthetic transaction ledger: %w", err)
@@ -473,7 +463,7 @@ func (x *Executor) recordSuccessfulTransaction(batch *database.Batch, state *cha
 		return nil, nil, errors.Format(errors.StatusUnknown, "load synthetic transaction ledger: %w", err)
 	}
 
-	nextHash, ok := ledger.Subnet(delivery.SourceNetwork).Get(delivery.SequenceNumber + 1)
+	nextHash, ok := ledger.Partition(delivery.SourceNetwork).Get(delivery.SequenceNumber + 1)
 	if ok {
 		state.ProcessAdditionalTransaction(delivery.NewSyntheticFromSequence(nextHash.Hash()))
 	}
@@ -564,79 +554,4 @@ func (x *Executor) recordFailedTransaction(batch *database.Batch, delivery *chai
 	}
 
 	return status, state, nil
-}
-
-// processNetworkAccountUpdates processes updates to network data accounts,
-// updating the in-memory globals variable.
-func (x *Executor) processNetworkAccountUpdates(batch *database.Batch, delivery *chain.Delivery, principal protocol.Account) error {
-	// Only WriteData needs extra processing
-	body, ok := delivery.Transaction.Body.(*protocol.WriteData)
-	if !ok {
-		return nil
-	}
-
-	// Force WriteToState
-	if !body.WriteToState {
-		return errors.Format(errors.StatusBadRequest, "invalid %v update: network account updates must write to state", principal.GetUrl())
-	}
-
-	// Validate the data and update the corresponding variable
-	switch {
-	case principal.GetUrl().PathEqual(protocol.Oracle):
-		return x.globals.Pending.ParseOracle(body.Entry)
-	case principal.GetUrl().PathEqual(protocol.Globals):
-		return x.globals.Pending.ParseGlobals(body.Entry)
-	case principal.GetUrl().PathEqual(protocol.Network):
-		return x.globals.Pending.ParseNetwork(body.Entry)
-	}
-
-	return nil
-}
-
-// pushNetworkAccountUpdates pushes updates from the DN to the BVNs.
-func (x *Executor) pushNetworkAccountUpdates(batch *database.Batch, delivery *chain.Delivery, principal protocol.Account) error {
-	// Prep the update
-	var update protocol.NetworkAccountUpdate
-	update.Body = delivery.Transaction.Body
-
-	switch delivery.Transaction.Body.Type() {
-	case protocol.TransactionTypeUpdateKeyPage:
-		// Synchronize updates to the operator book
-		if u, ok := principal.GetUrl().Parent(); ok && u.PathEqual(protocol.OperatorBook) {
-			update.Name = protocol.OperatorBook
-			break
-		}
-
-	case protocol.TransactionTypeWriteData:
-		// Synchronize updates to the oracle, globals, and network definition
-		switch {
-		case principal.GetUrl().PathEqual(protocol.Oracle):
-			update.Name = protocol.Oracle
-		case principal.GetUrl().PathEqual(protocol.Globals):
-			update.Name = protocol.Globals
-		case principal.GetUrl().PathEqual(protocol.Network):
-			update.Name = protocol.Network
-		}
-	}
-
-	// No update needed
-	if update.Name == "" {
-		return nil
-	}
-
-	// Write the update to the ledger
-	var ledger *protocol.SystemLedger
-	record := batch.Account(x.Network.Ledger())
-	err := record.GetStateAs(&ledger)
-	if err != nil {
-		return errors.Format(errors.StatusUnknown, "load ledger: %w", err)
-	}
-
-	ledger.PendingUpdates = append(ledger.PendingUpdates, update)
-	err = record.PutState(ledger)
-	if err != nil {
-		return errors.Format(errors.StatusUnknown, "store ledger: %w", err)
-	}
-
-	return nil
 }

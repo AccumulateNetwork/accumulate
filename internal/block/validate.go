@@ -242,19 +242,19 @@ func validateSyntheticTransactionSignatures(transaction *protocol.Transaction, s
 	return nil
 }
 
-// checkRouting verifies that the signature was routed to the correct subnet.
+// checkRouting verifies that the signature was routed to the correct partition.
 func (x *Executor) checkRouting(delivery *chain.Delivery, signature protocol.Signature) error {
 	if signature.Type().IsSystem() {
 		return nil
 	}
 
 	if delivery.Transaction.Body.Type().IsUser() {
-		subnet, err := x.Router.RouteAccount(signature.RoutingLocation())
+		partition, err := x.Router.RouteAccount(signature.RoutingLocation())
 		if err != nil {
 			return errors.Wrap(errors.StatusUnknown, err)
 		}
-		if !strings.EqualFold(subnet, x.Network.LocalPartitionID) {
-			return errors.Format(errors.StatusBadRequest, "signature submitted to %v instead of %v", x.Network.LocalPartitionID, subnet)
+		if !strings.EqualFold(partition, x.Network.LocalPartitionID) {
+			return errors.Format(errors.StatusBadRequest, "signature submitted to %v instead of %v", x.Network.LocalPartitionID, partition)
 		}
 	}
 

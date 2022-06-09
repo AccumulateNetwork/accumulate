@@ -12,6 +12,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/internal/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -45,6 +46,12 @@ func (m *Executor) EndBlock(block *Block) error {
 	// Update active globals
 	if !m.isGenesis && !m.globals.Active.Equal(&m.globals.Pending) {
 		m.globals.Active = *m.globals.Pending.Copy()
+		err = m.EventBus.Publish(events.DidChangeGlobals{
+			Values: &m.globals.Active,
+		})
+		if err != nil {
+			return errors.Format(errors.StatusUnknown, "publish globals update: %w", err)
+		}
 	}
 
 	m.logger.Debug("Committing",
@@ -247,40 +254,40 @@ func (m *Executor) anchorSynthChain(block *Block, rootChain *database.Chain) (in
 func (x *Executor) requestMissingSyntheticTransactions(ledger *protocol.SyntheticLedger) {
 	// Setup
 	wg := new(sync.WaitGroup)
-	localSubnet := x.Network.NodeUrl()
+	localPartition := x.Network.NodeUrl()
 	dispatcher := newDispatcher(x.ExecutorOptions)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// For each subnet
+	// For each partition
 	var sent bool
-	for _, subnet := range ledger.Partitions {
-		// Get the subnet ID
-		id, ok := protocol.ParseSubnetUrl(subnet.Url)
+	for _, partition := range ledger.Partitions {
+		// Get the partition ID
+		id, ok := protocol.ParsePartitionUrl(partition.Url)
 		if !ok {
 			// If this happens we're kind of screwed
-			panic(errors.Format(errors.StatusInternalError, "synthetic ledger has an invalid subnet URL: %v", subnet.Url))
+			panic(errors.Format(errors.StatusInternalError, "synthetic ledger has an invalid partition URL: %v", partition.Url))
 		}
 
 		// For each pending synthetic transaction
 		var batch jsonrpc2.BatchRequest
-		for i, txid := range subnet.Pending {
+		for i, txid := range partition.Pending {
 			// If we know the ID we must have a local copy (so we don't need to
 			// fetch it)
 			if txid != nil {
 				continue
 			}
 
-			seqNum := subnet.Delivered + uint64(i) + 1
-			x.logger.Info("Missing synthetic transaction", "seq-num", seqNum, "source", subnet.Url)
+			seqNum := partition.Delivered + uint64(i) + 1
+			x.logger.Info("Missing synthetic transaction", "seq-num", seqNum, "source", partition.Url)
 
 			// Request the transaction by sequence number
 			batch = append(batch, jsonrpc2.Request{
 				ID:     i + 1,
 				Method: "query-synth",
 				Params: &api.SyntheticTransactionRequest{
-					Source:         subnet.Url,
-					Destination:    localSubnet,
+					Source:         partition.Url,
+					Destination:    localPartition,
 					SequenceNumber: seqNum,
 				},
 			})
@@ -291,7 +298,7 @@ func (x *Executor) requestMissingSyntheticTransactions(ledger *protocol.Syntheti
 		}
 
 		sent = true
-		subnet := subnet // See docs/developer/rangevarref.md
+		partition := partition // See docs/developer/rangevarref.md
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -300,7 +307,7 @@ func (x *Executor) requestMissingSyntheticTransactions(ledger *protocol.Syntheti
 			var resp []*api.TransactionQueryResponse
 			err := x.Router.RequestAPIv2(ctx, id, "", batch, &resp)
 			if err != nil {
-				x.logger.Error("Failed to request synthetic transactions", "error", err, "from", subnet.Url)
+				x.logger.Error("Failed to request synthetic transactions", "error", err, "from", partition.Url)
 				return
 			}
 
@@ -343,7 +350,7 @@ func (x *Executor) requestMissingSyntheticTransactions(ledger *protocol.Syntheti
 					Transaction: []*protocol.Transaction{resp.Transaction},
 				})
 				if err != nil {
-					x.logger.Error("Failed to dispatch synthetic transaction", "error", err, "from", subnet.Url)
+					x.logger.Error("Failed to dispatch synthetic transaction", "error", err, "from", partition.Url)
 					continue
 				}
 			}

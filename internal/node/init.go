@@ -68,7 +68,7 @@ func initV1(opts InitOptions) (bootstrap genesis.Bootstrap, err error) {
 	}
 
 	configs := opts.Config
-	subnetID := configs[0].Accumulate.Network.LocalSubnetID
+	partitionID := configs[0].Accumulate.Network.LocalPartitionID
 	genVals := make([]types.GenesisValidator, 0, len(configs))
 	genValKeys := make([][]byte, 0, len(configs))
 
@@ -104,7 +104,7 @@ func initV1(opts InitOptions) (bootstrap genesis.Bootstrap, err error) {
 			return nil, fmt.Errorf("failed to create data dir: %v", err)
 		}
 
-		if err := initFilesWithConfig(config, &subnetID, opts.GenesisDoc); err != nil {
+		if err := initFilesWithConfig(config, &partitionID, opts.GenesisDoc); err != nil {
 			return nil, err
 		}
 
@@ -179,7 +179,7 @@ func initV1(opts InitOptions) (bootstrap genesis.Bootstrap, err error) {
 			config.P2P.AddrBookStrict = true
 			config.P2P.AllowDuplicateIP = false
 		}
-		config.Moniker = fmt.Sprintf("%s.%d", config.Accumulate.Network.LocalSubnetID, i)
+		config.Moniker = fmt.Sprintf("%s.%d", config.Accumulate.Network.LocalPartitionID, i)
 
 		config.Accumulate.Website.ListenAddress = fmt.Sprintf("http://%s:8080", opts.ListenIP[i])
 		config.Accumulate.API.ListenAddress = fmt.Sprintf("http://%s:%d", opts.ListenIP[i], opts.Port+networks.AccApiPortOffset)
