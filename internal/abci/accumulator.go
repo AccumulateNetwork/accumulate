@@ -260,10 +260,13 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 	}
 
 	// Notify the world of the committed block
-	app.EventBus.Publish(events.DidCommitBlock{
+	err = app.EventBus.Publish(events.DidCommitBlock{
 		Index: block.Index,
 		Time:  block.Time,
 	})
+	if err != nil {
+		panic(fmt.Errorf("failed to publish block notification: %v", err))
+	}
 
 	err = app.DB.View(func(batch *database.Batch) (err error) {
 		root, err = app.Executor.LoadStateRoot(batch)
@@ -468,11 +471,15 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 	}
 
 	// Notify the world of the committed block
-	app.EventBus.Publish(events.DidCommitBlock{
+	err = app.EventBus.Publish(events.DidCommitBlock{
 		Index: app.block.Index,
 		Time:  app.block.Time,
 		Major: app.block.State.MakeMajorBlock,
 	})
+	if err != nil {
+		app.fatal(err, true)
+		return abci.ResponseCommit{}
+	}
 
 	// Notify the executor that we comitted
 	var resp abci.ResponseCommit
