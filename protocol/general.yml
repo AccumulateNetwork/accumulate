@@ -165,7 +165,7 @@ KeySpec:
 
 NetworkGlobals:
   fields:
-    - name: ValidatorThreshold
+    - name: OperatorAcceptThreshold
       type: Rational
       marshal-as: reference
 
