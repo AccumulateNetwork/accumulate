@@ -642,6 +642,7 @@ type SyntheticBurnTokens struct {
 	fieldsSet []bool
 	SyntheticOrigin
 	Amount    big.Int `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	IsRefund  bool    `json:"isRefund,omitempty" form:"isRefund" query:"isRefund" validate:"required"`
 	extraData []byte
 }
 
@@ -658,6 +659,7 @@ type SyntheticDepositCredits struct {
 	Amount uint64 `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
 	// AcmeRefundAmount is the amount of ACME that will be refunded if the deposit fails.
 	AcmeRefundAmount *big.Int `json:"acmeRefundAmount,omitempty" form:"acmeRefundAmount" query:"acmeRefundAmount" validate:"required"`
+	IsRefund         bool     `json:"isRefund,omitempty" form:"isRefund" query:"isRefund" validate:"required"`
 	extraData        []byte
 }
 
@@ -667,6 +669,7 @@ type SyntheticDepositTokens struct {
 	Token     *url.URL `json:"token,omitempty" form:"token" query:"token" validate:"required"`
 	Amount    big.Int  `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
 	IsIssuer  bool     `json:"isIssuer,omitempty" form:"isIssuer" query:"isIssuer" validate:"required"`
+	IsRefund  bool     `json:"isRefund,omitempty" form:"isRefund" query:"isRefund" validate:"required"`
 	extraData []byte
 }
 
@@ -2102,6 +2105,7 @@ func (v *SyntheticBurnTokens) Copy() *SyntheticBurnTokens {
 
 	u.SyntheticOrigin = *v.SyntheticOrigin.Copy()
 	u.Amount = *encoding.BigintCopy(&v.Amount)
+	u.IsRefund = v.IsRefund
 
 	return u
 }
@@ -2132,6 +2136,7 @@ func (v *SyntheticDepositCredits) Copy() *SyntheticDepositCredits {
 	if v.AcmeRefundAmount != nil {
 		u.AcmeRefundAmount = encoding.BigintCopy(v.AcmeRefundAmount)
 	}
+	u.IsRefund = v.IsRefund
 
 	return u
 }
@@ -2147,6 +2152,7 @@ func (v *SyntheticDepositTokens) Copy() *SyntheticDepositTokens {
 	}
 	u.Amount = *encoding.BigintCopy(&v.Amount)
 	u.IsIssuer = v.IsIssuer
+	u.IsRefund = v.IsRefund
 
 	return u
 }
@@ -3909,6 +3915,9 @@ func (v *SyntheticBurnTokens) Equal(u *SyntheticBurnTokens) bool {
 	if !((&v.Amount).Cmp(&u.Amount) == 0) {
 		return false
 	}
+	if !(v.IsRefund == u.IsRefund) {
+		return false
+	}
 
 	return true
 }
@@ -3944,6 +3953,9 @@ func (v *SyntheticDepositCredits) Equal(u *SyntheticDepositCredits) bool {
 	case !((v.AcmeRefundAmount).Cmp(u.AcmeRefundAmount) == 0):
 		return false
 	}
+	if !(v.IsRefund == u.IsRefund) {
+		return false
+	}
 
 	return true
 }
@@ -3964,6 +3976,9 @@ func (v *SyntheticDepositTokens) Equal(u *SyntheticDepositTokens) bool {
 		return false
 	}
 	if !(v.IsIssuer == u.IsIssuer) {
+		return false
+	}
+	if !(v.IsRefund == u.IsRefund) {
 		return false
 	}
 
@@ -8453,6 +8468,7 @@ var fieldNames_SyntheticBurnTokens = []string{
 	1: "Type",
 	2: "SyntheticOrigin",
 	3: "Amount",
+	4: "IsRefund",
 }
 
 func (v *SyntheticBurnTokens) MarshalBinary() ([]byte, error) {
@@ -8463,6 +8479,9 @@ func (v *SyntheticBurnTokens) MarshalBinary() ([]byte, error) {
 	writer.WriteValue(2, &v.SyntheticOrigin)
 	if !((v.Amount).Cmp(new(big.Int)) == 0) {
 		writer.WriteBigInt(3, &v.Amount)
+	}
+	if !(!v.IsRefund) {
+		writer.WriteBool(4, v.IsRefund)
 	}
 
 	_, _, err := writer.Reset(fieldNames_SyntheticBurnTokens)
@@ -8486,6 +8505,11 @@ func (v *SyntheticBurnTokens) IsValid() error {
 		errs = append(errs, "field Amount is missing")
 	} else if (v.Amount).Cmp(new(big.Int)) == 0 {
 		errs = append(errs, "field Amount is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field IsRefund is missing")
+	} else if !v.IsRefund {
+		errs = append(errs, "field IsRefund is not set")
 	}
 
 	switch len(errs) {
@@ -8554,6 +8578,7 @@ var fieldNames_SyntheticDepositCredits = []string{
 	2: "SyntheticOrigin",
 	3: "Amount",
 	4: "AcmeRefundAmount",
+	5: "IsRefund",
 }
 
 func (v *SyntheticDepositCredits) MarshalBinary() ([]byte, error) {
@@ -8567,6 +8592,9 @@ func (v *SyntheticDepositCredits) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.AcmeRefundAmount == nil) {
 		writer.WriteBigInt(4, v.AcmeRefundAmount)
+	}
+	if !(!v.IsRefund) {
+		writer.WriteBool(5, v.IsRefund)
 	}
 
 	_, _, err := writer.Reset(fieldNames_SyntheticDepositCredits)
@@ -8596,6 +8624,11 @@ func (v *SyntheticDepositCredits) IsValid() error {
 	} else if v.AcmeRefundAmount == nil {
 		errs = append(errs, "field AcmeRefundAmount is not set")
 	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field IsRefund is missing")
+	} else if !v.IsRefund {
+		errs = append(errs, "field IsRefund is not set")
+	}
 
 	switch len(errs) {
 	case 0:
@@ -8613,6 +8646,7 @@ var fieldNames_SyntheticDepositTokens = []string{
 	3: "Token",
 	4: "Amount",
 	5: "IsIssuer",
+	6: "IsRefund",
 }
 
 func (v *SyntheticDepositTokens) MarshalBinary() ([]byte, error) {
@@ -8629,6 +8663,9 @@ func (v *SyntheticDepositTokens) MarshalBinary() ([]byte, error) {
 	}
 	if !(!v.IsIssuer) {
 		writer.WriteBool(5, v.IsIssuer)
+	}
+	if !(!v.IsRefund) {
+		writer.WriteBool(6, v.IsRefund)
 	}
 
 	_, _, err := writer.Reset(fieldNames_SyntheticDepositTokens)
@@ -8662,6 +8699,11 @@ func (v *SyntheticDepositTokens) IsValid() error {
 		errs = append(errs, "field IsIssuer is missing")
 	} else if !v.IsIssuer {
 		errs = append(errs, "field IsIssuer is not set")
+	}
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+		errs = append(errs, "field IsRefund is missing")
+	} else if !v.IsRefund {
+		errs = append(errs, "field IsRefund is not set")
 	}
 
 	switch len(errs) {
@@ -12427,6 +12469,9 @@ func (v *SyntheticBurnTokens) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBigInt(3); ok {
 		v.Amount = *x
 	}
+	if x, ok := reader.ReadBool(4); ok {
+		v.IsRefund = x
+	}
 
 	seen, err := reader.Reset(fieldNames_SyntheticBurnTokens)
 	if err != nil {
@@ -12495,6 +12540,9 @@ func (v *SyntheticDepositCredits) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBigInt(4); ok {
 		v.AcmeRefundAmount = x
 	}
+	if x, ok := reader.ReadBool(5); ok {
+		v.IsRefund = x
+	}
 
 	seen, err := reader.Reset(fieldNames_SyntheticDepositCredits)
 	if err != nil {
@@ -12528,6 +12576,9 @@ func (v *SyntheticDepositTokens) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	if x, ok := reader.ReadBool(5); ok {
 		v.IsIssuer = x
+	}
+	if x, ok := reader.ReadBool(6); ok {
+		v.IsRefund = x
 	}
 
 	seen, err := reader.Reset(fieldNames_SyntheticDepositTokens)
@@ -14351,6 +14402,7 @@ func (v *SyntheticBurnTokens) MarshalJSON() ([]byte, error) {
 		Initiator *url.URL        `json:"initiator,omitempty"`
 		FeeRefund uint64          `json:"feeRefund,omitempty"`
 		Amount    *string         `json:"amount,omitempty"`
+		IsRefund  bool            `json:"isRefund,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Cause = v.SyntheticOrigin.Cause
@@ -14358,6 +14410,7 @@ func (v *SyntheticBurnTokens) MarshalJSON() ([]byte, error) {
 	u.Initiator = v.SyntheticOrigin.Initiator
 	u.FeeRefund = v.SyntheticOrigin.FeeRefund
 	u.Amount = encoding.BigintToJSON(&v.Amount)
+	u.IsRefund = v.IsRefund
 	return json.Marshal(&u)
 }
 
@@ -14388,6 +14441,7 @@ func (v *SyntheticDepositCredits) MarshalJSON() ([]byte, error) {
 		FeeRefund        uint64          `json:"feeRefund,omitempty"`
 		Amount           uint64          `json:"amount,omitempty"`
 		AcmeRefundAmount *string         `json:"acmeRefundAmount,omitempty"`
+		IsRefund         bool            `json:"isRefund,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Cause = v.SyntheticOrigin.Cause
@@ -14396,6 +14450,7 @@ func (v *SyntheticDepositCredits) MarshalJSON() ([]byte, error) {
 	u.FeeRefund = v.SyntheticOrigin.FeeRefund
 	u.Amount = v.Amount
 	u.AcmeRefundAmount = encoding.BigintToJSON(v.AcmeRefundAmount)
+	u.IsRefund = v.IsRefund
 	return json.Marshal(&u)
 }
 
@@ -14409,6 +14464,7 @@ func (v *SyntheticDepositTokens) MarshalJSON() ([]byte, error) {
 		Token     *url.URL        `json:"token,omitempty"`
 		Amount    *string         `json:"amount,omitempty"`
 		IsIssuer  bool            `json:"isIssuer,omitempty"`
+		IsRefund  bool            `json:"isRefund,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Cause = v.SyntheticOrigin.Cause
@@ -14418,6 +14474,7 @@ func (v *SyntheticDepositTokens) MarshalJSON() ([]byte, error) {
 	u.Token = v.Token
 	u.Amount = encoding.BigintToJSON(&v.Amount)
 	u.IsIssuer = v.IsIssuer
+	u.IsRefund = v.IsRefund
 	return json.Marshal(&u)
 }
 
@@ -16509,6 +16566,7 @@ func (v *SyntheticBurnTokens) UnmarshalJSON(data []byte) error {
 		Initiator *url.URL        `json:"initiator,omitempty"`
 		FeeRefund uint64          `json:"feeRefund,omitempty"`
 		Amount    *string         `json:"amount,omitempty"`
+		IsRefund  bool            `json:"isRefund,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Cause = v.SyntheticOrigin.Cause
@@ -16516,6 +16574,7 @@ func (v *SyntheticBurnTokens) UnmarshalJSON(data []byte) error {
 	u.Initiator = v.SyntheticOrigin.Initiator
 	u.FeeRefund = v.SyntheticOrigin.FeeRefund
 	u.Amount = encoding.BigintToJSON(&v.Amount)
+	u.IsRefund = v.IsRefund
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -16530,6 +16589,7 @@ func (v *SyntheticBurnTokens) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Amount = *x
 	}
+	v.IsRefund = u.IsRefund
 	return nil
 }
 
@@ -16573,6 +16633,7 @@ func (v *SyntheticDepositCredits) UnmarshalJSON(data []byte) error {
 		FeeRefund        uint64          `json:"feeRefund,omitempty"`
 		Amount           uint64          `json:"amount,omitempty"`
 		AcmeRefundAmount *string         `json:"acmeRefundAmount,omitempty"`
+		IsRefund         bool            `json:"isRefund,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Cause = v.SyntheticOrigin.Cause
@@ -16581,6 +16642,7 @@ func (v *SyntheticDepositCredits) UnmarshalJSON(data []byte) error {
 	u.FeeRefund = v.SyntheticOrigin.FeeRefund
 	u.Amount = v.Amount
 	u.AcmeRefundAmount = encoding.BigintToJSON(v.AcmeRefundAmount)
+	u.IsRefund = v.IsRefund
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -16596,6 +16658,7 @@ func (v *SyntheticDepositCredits) UnmarshalJSON(data []byte) error {
 	} else {
 		v.AcmeRefundAmount = x
 	}
+	v.IsRefund = u.IsRefund
 	return nil
 }
 
@@ -16609,6 +16672,7 @@ func (v *SyntheticDepositTokens) UnmarshalJSON(data []byte) error {
 		Token     *url.URL        `json:"token,omitempty"`
 		Amount    *string         `json:"amount,omitempty"`
 		IsIssuer  bool            `json:"isIssuer,omitempty"`
+		IsRefund  bool            `json:"isRefund,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Cause = v.SyntheticOrigin.Cause
@@ -16618,6 +16682,7 @@ func (v *SyntheticDepositTokens) UnmarshalJSON(data []byte) error {
 	u.Token = v.Token
 	u.Amount = encoding.BigintToJSON(&v.Amount)
 	u.IsIssuer = v.IsIssuer
+	u.IsRefund = v.IsRefund
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -16634,6 +16699,7 @@ func (v *SyntheticDepositTokens) UnmarshalJSON(data []byte) error {
 		v.Amount = *x
 	}
 	v.IsIssuer = u.IsIssuer
+	v.IsRefund = u.IsRefund
 	return nil
 }
 
