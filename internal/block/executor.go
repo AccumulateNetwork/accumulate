@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"crypto/ed25519"
 	"fmt"
+	"io"
+	"sync"
+
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
@@ -19,8 +22,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
-	"io"
-	"sync"
 )
 
 type Executor struct {
