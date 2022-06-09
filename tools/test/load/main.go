@@ -39,6 +39,12 @@ func initClient(server string) error {
 	maxGoroutines := 25
 	guard := make(chan struct{}, maxGoroutines)
 
+	file, err := os.OpenFile("logs.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	log.SetOutput(file)
 	// Start time
 	start := time.Now()
 
@@ -46,6 +52,9 @@ func initClient(server string) error {
 	for i := 0; i < 50; i++ {
 		// create accounts and store them
 		acc, _ := createAccount(i)
+
+		// log the time when the account was created
+		log.Printf("Account %d created at %s\n", i, time.Now().Format(time.RFC3339))
 
 		guard <- struct{}{} // would block if guard channel is already filled
 
@@ -72,7 +81,6 @@ func initClient(server string) error {
 			if err != nil {
 				return
 			}
-
 			// wait for timer to fire
 			log.Printf("Execution time %s\n", time.Since(<-timer.C))
 
@@ -97,6 +105,7 @@ func initClient(server string) error {
 
 // Initiate several clients
 func initClients(c int) error {
+	// TODO run multiple clients in parallel
 	for i := 0; i < c; i++ {
 		err := initClient(serverUrl)
 		if err != nil {
