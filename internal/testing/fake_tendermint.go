@@ -320,7 +320,11 @@ func (c *FakeTendermint) checkResultSet(data []byte) {
 			continue
 		}
 
-		c.onError(fmt.Errorf("DeliverTx failed: %v (%v)", r.Message, r.Code))
+		if r.Error == nil {
+			c.onError(fmt.Errorf("DeliverTx failed: %v (%v)", r.Message, r.Code))
+		} else {
+			c.onError(fmt.Errorf("DeliverTx failed: %+v", r.Error))
+		}
 	}
 }
 
