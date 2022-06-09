@@ -22,10 +22,8 @@ func main() {
 	flag.Parse()
 
 	// Initiate clients and wait for them to finish
-	err := initClients(3)
-	if err != nil {
-		os.Exit(1)
-	}
+	go initClients(5)
+	time.Sleep(time.Second * 10)
 }
 
 // Init new client from server URL input using client.go
