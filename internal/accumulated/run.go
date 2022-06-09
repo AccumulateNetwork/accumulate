@@ -141,23 +141,21 @@ func (d *Daemon) Start() (err error) {
 		return client.New(server)
 	})
 
-	router := routing.RouterInstance{
-		ConnectionManager: d.connectionManager,
-		Network:           &d.Config.Accumulate.Network,
-	}
+	d.eventBus = events.NewBus(d.Logger.With("module", "events"))
+	events.SubscribeSync(d.eventBus, d.onDidCommitBlock)
+
+	router := routing.NewRouter(d.eventBus, d.connectionManager)
 	execOpts := block.ExecutorOptions{
-		Logger:  d.Logger,
-		Key:     d.Key().Bytes(),
-		Network: d.Config.Accumulate.Network,
-		Router:  &router,
+		Logger:   d.Logger,
+		Key:      d.Key().Bytes(),
+		Network:  d.Config.Accumulate.Network,
+		Router:   router,
+		EventBus: d.eventBus,
 	}
 	exec, err := block.NewNodeExecutor(execOpts, d.db)
 	if err != nil {
 		return fmt.Errorf("failed to initialize chain executor: %v", err)
 	}
-
-	d.eventBus = events.NewBus(d.Logger.With("module", "events"))
-	events.SubscribeSync(d.eventBus, d.onDidCommitBlock)
 
 	app := abci.NewAccumulator(abci.AccumulatorOptions{
 		DB:       d.db,
@@ -213,9 +211,10 @@ func (d *Daemon) Start() (err error) {
 	d.jrpc, err = api.NewJrpc(api.Options{
 		Logger:           d.Logger,
 		Network:          &d.Config.Accumulate.Network,
-		Router:           &router,
+		Router:           router,
 		PrometheusServer: d.Config.Accumulate.API.PrometheusServer,
 		TxMaxWaitTime:    d.Config.Accumulate.API.TxMaxWaitTime,
+		Database:         d.db,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to start API: %v", err)

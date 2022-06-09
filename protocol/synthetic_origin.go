@@ -3,8 +3,8 @@ package protocol
 import "gitlab.com/accumulatenetwork/accumulate/internal/url"
 
 type SynthTxnWithOrigin interface {
-	GetCause() (cause []byte, source *url.URL)
-	SetCause(cause []byte, source *url.URL)
+	GetCause() (cause [32]byte, source *url.URL)
+	SetCause(cause [32]byte, source *url.URL)
 	GetRefund() (initiator *url.URL, refund Fee)
 	SetRefund(initiator *url.URL, refund Fee)
 }
@@ -12,13 +12,19 @@ type SynthTxnWithOrigin interface {
 var _ SynthTxnWithOrigin = (*SyntheticOrigin)(nil)
 var _ SynthTxnWithOrigin = (*SyntheticCreateIdentity)(nil)
 
-func (so *SyntheticOrigin) GetCause() (cause []byte, source *url.URL) {
-	return so.Cause[:], so.Source
+func (so *SyntheticOrigin) Source() *url.URL {
+	if so.Cause == nil {
+		return nil
+	}
+	return so.Cause.Account()
 }
 
-func (so *SyntheticOrigin) SetCause(cause []byte, source *url.URL) {
-	so.Source = source
-	so.Cause = *(*[32]byte)(cause)
+func (so *SyntheticOrigin) GetCause() (cause [32]byte, source *url.URL) {
+	return so.Cause.Hash(), so.Cause.Account()
+}
+
+func (so *SyntheticOrigin) SetCause(cause [32]byte, source *url.URL) {
+	so.Cause = source.WithTxID(cause)
 }
 
 func (so *SyntheticOrigin) GetRefund() (initiator *url.URL, refund Fee) {

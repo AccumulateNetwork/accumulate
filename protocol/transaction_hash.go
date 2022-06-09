@@ -2,10 +2,14 @@ package protocol
 
 import (
 	"crypto/sha256"
-	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding/hash"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
+
+func (t *Transaction) ID() *url.TxID {
+	return t.Header.Principal.WithTxID(*(*[32]byte)(t.GetHash()))
+}
 
 // Hash calculates the hash of the transaction as H(H(header) + H(body)).
 func (t *Transaction) GetHash() []byte {
@@ -51,37 +55,45 @@ func (t *Transaction) getBodyHash() []byte {
 	return hash[:]
 }
 
-func (w *WriteData) GetHash() []byte {
+func hashWriteData(withoutEntry TransactionBody, entry DataEntry) []byte {
+	data, err := withoutEntry.MarshalBinary()
+	if err != nil {
+		panic(err) // This should be impossible
+	}
+
 	hasher := new(hash.Hasher)
-	if w.Entry != nil {
-		hasher.AddHash((*[32]byte)(w.Entry.Hash()))
+	hasher.AddBytes(data)
+
+	if entry == nil {
+		var zero [32]byte
+		hasher.AddHash(&zero)
+	} else {
+		hasher.AddHash((*[32]byte)(entry.Hash()))
 	}
-	if w.Scratch {
-		hasher.AddBool(w.Scratch)
-	}
+
 	return hasher.MerkleHash()
+}
+
+func (w *WriteData) GetHash() []byte {
+	x := w.Copy()
+	x.Entry = nil
+	return hashWriteData(x, w.Entry)
 }
 
 func (w *WriteDataTo) GetHash() []byte {
-	hasher := new(hash.Hasher)
-	if w.Entry != nil {
-		hasher.AddHash((*[32]byte)(w.Entry.Hash()))
-	}
-	hasher.AddUrl(w.Recipient)
-	return hasher.MerkleHash()
+	x := w.Copy()
+	x.Entry = nil
+	return hashWriteData(x, w.Entry)
 }
 
 func (w *SyntheticWriteData) GetHash() []byte {
-	header, err := w.SyntheticOrigin.MarshalBinary()
-	if err != nil {
-		// This should not happen
-		panic(fmt.Errorf("failed to marshal header: %w", err))
-	}
+	x := w.Copy()
+	x.Entry = nil
+	return hashWriteData(x, w.Entry)
+}
 
-	hasher := new(hash.Hasher)
-	hasher.AddBytes(header)
-	if w.Entry != nil {
-		hasher.AddHash((*[32]byte)(w.Entry.Hash()))
-	}
-	return hasher.MerkleHash()
+func (w *SystemWriteData) GetHash() []byte {
+	x := w.Copy()
+	x.Entry = nil
+	return hashWriteData(x, w.Entry)
 }

@@ -13,15 +13,11 @@ SystemLedger:
       type: uint
     - name: Timestamp
       type: time
-    - name: PendingOracle
-      type: uint
-    - name: ActiveOracle
-      type: uint
     - name: AcmeBurnt
       type: bigint
-    - name: OperatorUpdates
-      type: KeyPageOperation
-      marshal-as: union
+    - name: PendingUpdates
+      type: NetworkAccountUpdate
+      marshal-as: reference
       repeatable: true
 
 SyntheticLedger:
@@ -73,13 +69,11 @@ DirectoryAnchor:
   embeddings:
     - SubnetAnchor
   fields:
-    - name: AcmeOraclePrice
-      type: uvarint
-    - name: OperatorUpdates
-      description: anchor-based synchronization updates from bvn
-      type: KeyPageOperation
+    - name: Updates
+      description: are synchronization updates for network accounts
+      type: NetworkAccountUpdate
+      marshal-as: reference
       repeatable: true
-      marshal-as: union
     - name: Receipts
       description: are receipts for anchors from other subnets that were included in the block
       type: Receipt
@@ -95,9 +89,21 @@ SystemWriteData:
     - name: Entry
       type: DataEntry
       marshal-as: union
+    - name: WriteToState
+      description: writes the data entry to the account state
+      type: bool
+      optional: true
 
 
 ##### Data Types #####
+
+NetworkAccountUpdate:
+  fields:
+    - name: Name
+      type: string
+    - name: Body
+      type: TransactionBody
+      marshal-as: union
 
 SubnetAnchor:
   fields:
@@ -116,10 +122,10 @@ SubnetAnchor:
       type: uvarint
     - name: RootChainAnchor
       description: is the anchor of the root chain
-      type: chain
+      type: hash
     - name: StateTreeAnchor
       description: is the root of the source's state tree (BPT)
-      type: chain
+      type: hash
 
 SubnetSyntheticLedger:
   fields:
@@ -138,5 +144,6 @@ SubnetSyntheticLedger:
       type: uint
     - name: Pending
       description: is the transaction hashes of synthetic transactions received out of order
-      type: hash
+      type: txid
+      pointer: true
       repeatable: true

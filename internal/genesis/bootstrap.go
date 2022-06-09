@@ -14,10 +14,12 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
@@ -32,8 +34,8 @@ type InitOpts struct {
 	NetworkValidatorMap NetworkValidatorMap
 	GenesisTime         time.Time
 	Logger              log.Logger
-	Router              routing.Router
 	FactomAddressesFile string
+	GenesisGlobals      *core.GlobalValues
 	Keys                [][]byte
 }
 
@@ -45,19 +47,37 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) (Bootstrap, error) {
 		dataRecords: make([]DataRecord, 0),
 		records:     make([]protocol.Account, 0),
 	}
+
 	// Add validator keys to NetworkValidatorMap when not there
-	if b.InitOpts.NetworkValidatorMap == nil {
+	if b.NetworkValidatorMap == nil {
 		panic("NetworkValidatorMap is not present")
 	}
-	if _, ok := b.InitOpts.NetworkValidatorMap[b.InitOpts.Network.LocalSubnetID]; !ok {
-		b.InitOpts.NetworkValidatorMap[b.InitOpts.Network.LocalSubnetID] = b.InitOpts.Validators
+	if _, ok := b.NetworkValidatorMap[b.Network.LocalSubnetID]; !ok {
+		b.NetworkValidatorMap[b.Network.LocalSubnetID] = b.Validators
 	}
 
-	exec, err := block.NewGenesisExecutor(b.db, opts.Logger, opts.Network, opts.Router)
+	// Build the routing table
+	b.routingTable = new(protocol.RoutingTable)
+	b.routingTable.Routes = routing.BuildSimpleTable(&opts.Network)
+	b.routingTable.Overrides = make([]protocol.RouteOverride, 1, len(opts.Network.Subnets)+1)
+	b.routingTable.Overrides[0] = protocol.RouteOverride{Account: protocol.AcmeUrl(), Subnet: protocol.Directory}
+	for _, subnet := range opts.Network.Subnets {
+		u := protocol.SubnetUrl(subnet.ID)
+		b.routingTable.Overrides = append(b.routingTable.Overrides, protocol.RouteOverride{Account: u, Subnet: subnet.ID})
+	}
+
+	// Create the router
+	var err error
+	b.router, err = routing.NewStaticRouter(b.routingTable, nil)
 	if err != nil {
 		return nil, err
 	}
-	b.genesisExec = exec
+
+	b.genesisExec, err = block.NewGenesisExecutor(b.db, opts.Logger, opts.Network, b.router)
+	if err != nil {
+		return nil, err
+	}
+
 	return b, nil
 }
 
@@ -77,30 +97,33 @@ type bootstrap struct {
 	records      []protocol.Account
 	dataRecords  []DataRecord
 	genesisExec  *block.Executor
+	router       routing.Router
+	routingTable *protocol.RoutingTable
+	globals      *core.GlobalValues
 }
 
 func (b *bootstrap) Bootstrap() error {
 	b.block = new(block.Block)
 	b.block.Index = protocol.GenesisBlock
-	b.block.Time = b.InitOpts.GenesisTime
+	b.block.Time = b.GenesisTime
 	b.block.Batch = b.db.Begin(true)
 	defer b.block.Batch.Discard()
 
 	err := b.genesisExec.Genesis(b.block, b)
 	if err != nil {
-		return err
+		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
 	err = b.block.Batch.Commit()
 	if err != nil {
-		return err
+		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
 	batch := b.db.Begin(false)
 	defer batch.Discard()
 	err = b.writeGenesisFile(batch.BptRoot())
 	if err != nil {
-		return err
+		return errors.Wrap(errors.StatusUnknown, err)
 	}
 	return nil
 }
@@ -141,102 +164,95 @@ func (b *bootstrap) Execute(st *chain.StateManager, tx *chain.Delivery) (protoco
 }
 
 func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protocol.TransactionResult, error) {
-	b.nodeUrl = b.InitOpts.Network.NodeUrl()
+	b.nodeUrl = b.Network.NodeUrl()
 	b.authorityUrl = b.nodeUrl.JoinPath(protocol.ValidatorBook)
+	b.globals = new(core.GlobalValues)
 
-	b.createADI()
-	b.createValidatorBook()
+	// Verify that the BVN ID will make a valid subnet URL
+	if err := protocol.IsValidAdiUrl(b.nodeUrl, true); err != nil {
+		panic(fmt.Errorf("%q is not a valid subnet ID: %v", b.Network.LocalSubnetID, err))
+	}
+
+	// Setup globals and create network variable accounts
+	if b.GenesisGlobals == nil {
+		b.globals = new(core.GlobalValues)
+	} else {
+		b.globals = b.GenesisGlobals
+	}
 
 	// set the initial price to 1/5 fct price * 1/4 market cap dilution = 1/20 fct price
 	// for this exercise, we'll assume that 1 FCT = $1, so initial ACME price is $0.05
-	oraclePrice := uint64(protocol.InitialAcmeOracleValue)
+	if b.globals.Oracle == nil {
+		b.globals.Oracle = new(protocol.AcmeOracle)
+		b.globals.Oracle.Price = uint64(protocol.InitialAcmeOracleValue)
+	}
 
-	b.createMainLedger(oraclePrice)
+	// Set the initial threshold to 2/3
+	if b.globals.Globals == nil {
+		b.globals.Globals = new(protocol.NetworkGlobals)
+		b.globals.Globals.ValidatorThreshold.Set(2, 3)
+	}
+
+	if b.globals.Network == nil && b.NetworkValidatorMap != nil {
+		b.globals.Network = b.buildNetworkDefinition()
+	}
+
+	if b.globals.Routing == nil {
+		b.globals.Routing = b.routingTable
+	}
+
+	err := b.globals.Store(&b.Network, func(accountUrl *url.URL, target interface{}) error {
+		da := new(protocol.DataAccount)
+		da.Url = accountUrl
+		da.AddAuthority(b.authorityUrl)
+		return encoding.SetPtr(da, target)
+	}, func(account protocol.Account) error {
+		b.WriteRecords(account)
+		return nil
+	})
+	if err != nil {
+		return nil, errors.Wrap(errors.StatusUnknown, err)
+	}
+
+	// Create accounts
+	b.createADI()
+	b.createValidatorBook()
+	b.createMainLedger()
 	b.createSyntheticLedger()
 	b.createAnchorPool()
 
-	err := b.createVoteScratchChain()
+	err = b.createVoteScratchChain()
 	if err != nil {
 		return nil, err
 	}
 
 	b.createEvidenceChain()
 
-	err = b.createGlobals()
+	switch b.Network.Type {
+	case config.Directory:
+		err = b.initDN()
+	case config.BlockValidator:
+		err = b.initBVN()
+	}
 	if err != nil {
 		return nil, err
 	}
 
-	switch b.InitOpts.Network.Type {
-	case config.Directory:
-		err = b.initDN(oraclePrice)
-		if err != nil {
-			return nil, err
-		}
-		if b.InitOpts.NetworkValidatorMap != nil {
-			err = b.generateNetworkDefinition()
-			if err != nil {
-				return nil, err
-			}
-		}
-	case config.BlockValidator:
-		err = b.initBVN()
-		if err != nil {
-			return nil, err
-		}
-	}
 	err = st.Create(b.records...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create records: %w", err)
 	}
 
-	var timestamp uint64
 	for _, wd := range b.dataRecords {
 		body := new(protocol.SystemWriteData)
 		body.Entry = wd.Entry
 		txn := new(protocol.Transaction)
 		txn.Header.Principal = wd.Account
 		txn.Body = body
-		sigs, err := b.sign(txn, b.Network.DefaultOperatorPage(), &timestamp)
-		if err != nil {
-			return nil, err
-		}
-		st.State.ProcessAdditionalTransaction(tx.NewChild(txn, sigs))
+		st.State.ProcessAdditionalTransaction(tx.NewInternal(txn))
 	}
 
 	return nil, st.AddDirectoryEntry(b.nodeUrl, b.urls...)
-}
-
-func (b *bootstrap) sign(txn *protocol.Transaction, signer *url.URL, timestamp *uint64) ([]protocol.Signature, error) {
-	sig, err := new(signing.Builder).
-		UseSimpleHash().
-		SetUrl(signer).
-		SetVersion(1).
-		SetPrivateKey(b.Keys[0]).
-		SetType(protocol.SignatureTypeED25519).
-		SetTimestampWithVar(timestamp).
-		Initiate(txn)
-	if err != nil {
-		return nil, err
-	}
-
-	sigs := []protocol.Signature{sig}
-	for _, key := range b.Keys[1:] {
-		sig, err := new(signing.Builder).
-			UseSimpleHash().
-			SetUrl(signer).
-			SetVersion(1).
-			SetPrivateKey(key).
-			SetType(protocol.SignatureTypeED25519).
-			SetTimestampWithVar(timestamp).
-			Sign(txn.GetHash())
-		if err != nil {
-			return nil, err
-		}
-		sigs = append(sigs, sig)
-	}
-
-	return sigs, nil
 }
 
 func (b *bootstrap) createADI() {
@@ -255,16 +271,14 @@ func (b *bootstrap) createValidatorBook() {
 	book.AddAuthority(uBook)
 	book.PageCount = 1
 
-	page := createOperatorPage(uBook, 0, b.InitOpts.NetworkValidatorMap, true)
+	page := b.createOperatorPage(uBook, 0, true)
 	b.WriteRecords(book, page)
 }
 
-func (b *bootstrap) createMainLedger(oraclePrice uint64) {
+func (b *bootstrap) createMainLedger() {
 	// Create the main ledger
 	ledger := new(protocol.SystemLedger)
 	ledger.Url = b.nodeUrl.JoinPath(protocol.Ledger)
-	ledger.ActiveOracle = oraclePrice
-	ledger.PendingOracle = oraclePrice
 	ledger.Index = protocol.GenesisBlock
 	b.WriteRecords(ledger)
 }
@@ -284,7 +298,7 @@ func (b *bootstrap) createAnchorPool() {
 	if b.Network.Type == config.Directory {
 		// Initialize the last major block time to prevent a major block from
 		// being created immediately once the network boots
-		anchorLedger.MajorBlockTime = b.InitOpts.GenesisTime
+		anchorLedger.MajorBlockTime = b.GenesisTime
 	}
 
 	b.WriteRecords(anchorLedger)
@@ -297,7 +311,7 @@ func (b *bootstrap) createVoteScratchChain() error {
 	lci := types.LastCommitInfo{}
 	data, err := json.Marshal(&lci)
 	if err != nil {
-		return err
+		return errors.Format(errors.StatusInternalError, "marshal last commit info: %w", err)
 	}
 	wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
 
@@ -319,40 +333,8 @@ func (b *bootstrap) createEvidenceChain() {
 	b.urls = append(b.urls, da.Url)
 }
 
-func (b *bootstrap) createGlobals() error {
-	//create a new Globals account
-	global := new(protocol.DataAccount)
-	global.Url = b.nodeUrl.JoinPath(protocol.Globals)
-	wd := new(protocol.WriteData)
-	ng := new(protocol.NetworkGlobals)
-	ng.ValidatorThreshold.Numerator = 2
-	ng.ValidatorThreshold.Denominator = 3
-	ng.MajorBlockSchedule = protocol.DefaultMajorBlockSchedule
-	data, err := json.Marshal(&ng)
-	if err != nil {
-		return err
-	}
-	wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
-	global.AddAuthority(b.authorityUrl)
-	b.writeDataRecord(global, global.Url, DataRecord{global.Url, wd.Entry})
-	return nil
-}
-
-func (b *bootstrap) initDN(oraclePrice uint64) error {
+func (b *bootstrap) initDN() error {
 	b.createDNOperatorBook()
-
-	oracle := new(protocol.AcmeOracle)
-	oracle.Price = oraclePrice
-	wd := new(protocol.WriteData)
-	data, err := json.Marshal(&oracle)
-	if err != nil {
-		return err
-	}
-	wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
-	daOracle := new(protocol.DataAccount)
-	daOracle.Url = b.nodeUrl.JoinPath(protocol.Oracle)
-	daOracle.AddAuthority(b.authorityUrl)
-	b.writeDataRecord(daOracle, daOracle.Url, DataRecord{daOracle.Url, wd.Entry})
 
 	acme := new(protocol.TokenIssuer)
 	acme.AddAuthority(b.authorityUrl)
@@ -372,17 +354,10 @@ func (b *bootstrap) initDN(oraclePrice uint64) error {
 }
 
 func (b *bootstrap) initBVN() error {
-	// Test with `${ID}` not `bvn-${ID}` because the latter will fail
-	// with "bvn-${ID} is reserved"
-	network := b.InitOpts.Network
-	if err := protocol.IsValidAdiUrl(&url.URL{Authority: network.LocalSubnetID}); err != nil {
-		panic(fmt.Errorf("%q is not a valid subnet ID: %v", network.LocalSubnetID, err))
-	}
+	b.createBVNOperatorBook(b.nodeUrl)
 
-	b.createBVNOperatorBook(b.nodeUrl, b.InitOpts.NetworkValidatorMap)
-
-	subnet, err := routing.RouteAccount(&network, protocol.FaucetUrl)
-	if err == nil && subnet == network.LocalSubnetID {
+	subnet, err := b.router.RouteAccount(protocol.FaucetUrl)
+	if err == nil && subnet == b.Network.LocalSubnetID {
 		liteId := new(protocol.LiteIdentity)
 		liteId.Url = protocol.FaucetUrl.RootIdentity()
 
@@ -392,14 +367,14 @@ func (b *bootstrap) initBVN() error {
 		liteToken.Balance.SetString(protocol.AcmeFaucetBalance, 10)
 		b.WriteRecords(liteId, liteToken)
 	}
-	if b.InitOpts.FactomAddressesFile != "" {
-		factomAddresses, err := LoadFactomAddressesAndBalances(b.InitOpts.FactomAddressesFile)
+	if b.FactomAddressesFile != "" {
+		factomAddresses, err := LoadFactomAddressesAndBalances(b.FactomAddressesFile)
 		if err != nil {
-			return err
+			return errors.Wrap(errors.StatusUnknown, err)
 		}
 		for _, factomAddress := range factomAddresses {
-			subnet, err := routing.RouteAccount(&network, factomAddress.Address)
-			if err == nil && subnet == network.LocalSubnetID {
+			subnet, err := b.router.RouteAccount(factomAddress.Address)
+			if err == nil && subnet == b.Network.LocalSubnetID {
 				lite := new(protocol.LiteTokenAccount)
 				lite.Url = factomAddress.Address
 				lite.TokenUrl = protocol.AcmeUrl()
@@ -417,11 +392,11 @@ func (b *bootstrap) createDNOperatorBook() {
 	book.AddAuthority(book.Url)
 	book.PageCount = 1
 
-	page := createOperatorPage(book.Url, 0, b.InitOpts.NetworkValidatorMap, false)
+	page := b.createOperatorPage(book.Url, 0, false)
 	b.WriteRecords(book, page)
 }
 
-func (b *bootstrap) createBVNOperatorBook(nodeUrl *url.URL, operators NetworkValidatorMap) {
+func (b *bootstrap) createBVNOperatorBook(nodeUrl *url.URL) {
 	book := new(protocol.KeyBook)
 	book.Url = nodeUrl.JoinPath(protocol.OperatorBook)
 	book.AddAuthority(book.Url)
@@ -436,13 +411,13 @@ func (b *bootstrap) createBVNOperatorBook(nodeUrl *url.URL, operators NetworkVal
 	spec.Delegate = protocol.DnUrl().JoinPath(protocol.OperatorBook)
 	page1.Keys[0] = spec
 
-	page2 := createOperatorPage(book.Url, 1, operators, false)
+	page2 := b.createOperatorPage(book.Url, 1, false)
 	blacklistTxsForPage(page2, protocol.TransactionTypeUpdateKeyPage, protocol.TransactionTypeUpdateAccountAuth)
 
 	b.WriteRecords(book, page1, page2)
 }
 
-func createOperatorPage(uBook *url.URL, pageIndex uint64, operators NetworkValidatorMap, validatorsOnly bool) *protocol.KeyPage {
+func (b *bootstrap) createOperatorPage(uBook *url.URL, pageIndex uint64, validatorsOnly bool) *protocol.KeyPage {
 	page := new(protocol.KeyPage)
 	page.Url = protocol.FormatKeyPageUrl(uBook, pageIndex)
 	page.Version = 1
@@ -453,7 +428,7 @@ func createOperatorPage(uBook *url.URL, pageIndex uint64, operators NetworkValid
 			panic("book URL does not belong to a subnet")
 		}
 
-		operators, ok := operators[subnet]
+		operators, ok := b.NetworkValidatorMap[subnet]
 		if !ok {
 			panic("missing operators for subnet")
 		}
@@ -470,7 +445,7 @@ func createOperatorPage(uBook *url.URL, pageIndex uint64, operators NetworkValid
 		}
 
 	} else {
-		for _, operators := range operators {
+		for _, operators := range b.NetworkValidatorMap {
 			for _, operator := range operators {
 				spec := new(protocol.KeySpec)
 				kh := sha256.Sum256(operator.PubKey.Bytes())
@@ -480,7 +455,7 @@ func createOperatorPage(uBook *url.URL, pageIndex uint64, operators NetworkValid
 		}
 	}
 
-	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(page.Keys), protocol.FallbackValidatorThreshold)
+	page.AcceptThreshold = b.globals.Globals.ValidatorThreshold.Threshold(len(page.Keys))
 	return page
 }
 
@@ -493,25 +468,6 @@ func blacklistTxsForPage(page *protocol.KeyPage, txTypes ...protocol.Transaction
 		}
 		page.TransactionBlacklist.Set(bit)
 	}
-}
-
-func (b *bootstrap) generateNetworkDefinition() error {
-	if b.InitOpts.Network.Type != config.Directory {
-		return fmt.Errorf("generateNetworkDefinition is only allowed for DNs")
-	}
-	networkDefs := b.buildNetworkDefinition()
-	wd := new(protocol.WriteData)
-	data, err := json.Marshal(&networkDefs)
-	if err != nil {
-		return err
-	}
-	wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
-
-	da := new(protocol.DataAccount)
-	da.Url = b.nodeUrl.JoinPath(protocol.Network)
-	da.AddAuthority(b.authorityUrl)
-	b.writeDataRecord(da, da.Url, DataRecord{da.Url, wd.Entry})
-	return nil
 }
 
 func (b *bootstrap) WriteRecords(record ...protocol.Account) {
@@ -530,20 +486,20 @@ func (b *bootstrap) writeDataRecord(account *protocol.DataAccount, url *url.URL,
 func (b *bootstrap) writeGenesisFile(appHash []byte) error {
 	state, err := b.GetDBState()
 	if err != nil {
-		return err
+		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
 	genDoc := &tmtypes.GenesisDoc{
-		ChainID:         b.InitOpts.Network.LocalSubnetID,
-		GenesisTime:     b.InitOpts.GenesisTime,
+		ChainID:         b.Network.LocalSubnetID,
+		GenesisTime:     b.GenesisTime,
 		InitialHeight:   protocol.GenesisBlock + 1,
-		Validators:      b.InitOpts.Validators,
+		Validators:      b.Validators,
 		ConsensusParams: tmtypes.DefaultConsensusParams(),
 		AppState:        state,
 		AppHash:         appHash,
 	}
 
-	for _, config := range b.InitOpts.AllConfigs {
+	for _, config := range b.AllConfigs {
 		if err := genDoc.SaveAs(path.Join(config.RootDir, config.Genesis)); err != nil {
 			return fmt.Errorf("failed to save gen doc: %v", err)
 		}
@@ -554,11 +510,11 @@ func (b *bootstrap) writeGenesisFile(appHash []byte) error {
 func (b *bootstrap) buildNetworkDefinition() *protocol.NetworkDefinition {
 	netDef := new(protocol.NetworkDefinition)
 
-	for _, subnet := range b.InitOpts.Network.Subnets {
+	for _, subnet := range b.Network.Subnets {
 
 		// Add the validator hashes from the subnet's genesis doc
 		var vkHashes [][32]byte
-		for _, validator := range b.InitOpts.NetworkValidatorMap[subnet.ID] {
+		for _, validator := range b.NetworkValidatorMap[subnet.ID] {
 			pkh := sha256.Sum256(validator.PubKey.Bytes())
 			vkHashes = append(vkHashes, pkh)
 		}

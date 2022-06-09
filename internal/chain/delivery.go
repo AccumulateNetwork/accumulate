@@ -107,7 +107,9 @@ func NormalizeEnvelope(envelope *protocol.Envelope) ([]*Delivery, error) {
 }
 
 type Delivery struct {
-	parent      *Delivery
+	parent   *Delivery
+	internal bool
+
 	Signatures  []protocol.Signature
 	Transaction *protocol.Transaction
 	State       ProcessTransactionState
@@ -122,6 +124,25 @@ func (d *Delivery) NewChild(transaction *protocol.Transaction, signatures []prot
 	e.parent = d
 	e.Transaction = transaction
 	e.Signatures = signatures
+	return e
+}
+
+func (d *Delivery) NewInternal(transaction *protocol.Transaction) *Delivery {
+	if !d.Transaction.Body.Type().IsSystem() {
+		panic("illegal attempt to produce an internal transaction outside of a system transaction")
+	}
+
+	sig := new(protocol.InternalSignature)
+	sig.Cause = *(*[32]byte)(d.Transaction.GetHash())
+	transaction.Header.Initiator = *(*[32]byte)(sig.Metadata().Hash())
+	sig.TransactionHash = *(*[32]byte)(transaction.GetHash())
+
+	e := new(Delivery)
+	e.parent = d
+	e.internal = true
+	e.Transaction = transaction
+	e.Signatures = []protocol.Signature{sig}
+
 	return e
 }
 
@@ -158,6 +179,20 @@ func (d *Delivery) NewSyntheticFromSequence(hash [32]byte) *Delivery {
 		},
 	}
 	return e
+}
+
+func (d *Delivery) Parent() *Delivery {
+	return d.parent
+}
+
+func (d *Delivery) WasProducedInternally() bool {
+	return d.parent != nil && d.internal
+}
+
+// WasProducedByPushedUpdate returns true if the transaction was produced by an
+// update pushed via an anchor from the directory network.
+func (d *Delivery) WasProducedByPushedUpdate() bool {
+	return d.parent != nil && d.internal && d.parent.Transaction.Body.Type() == protocol.TransactionTypeDirectoryAnchor
 }
 
 // IsForwarded returns true if the transaction was delivered within a

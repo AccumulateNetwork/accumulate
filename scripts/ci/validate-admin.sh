@@ -22,7 +22,7 @@ if which go >/dev/null || ! which accumulate >/dev/null; then
   go install ./cmd/accumulate
   export PATH="${PATH}:$(go env GOPATH)/bin"
 fi
-[ -z "${MNEMONIC}" ] || accumulate key import mnemonic ${MNEMONIC} --use-unencrypted-wallet
+[ -z "${MNEMONIC}" ] || accumulate key import mnemonic ${MNEMONIC}
 echo
 
 declare -r M_OF_N_FACTOR=$(bc -l <<<'2/3')
@@ -34,20 +34,20 @@ if [ -f "$(nodePrivKey 0)" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -ge "3" ];
   # NUM_DNNS already contains the next node number (which starts counting at 0)
   accumulated init node "$NUM_DNNS" tcp://dn-0:26656 --listen=tcp://127.0.1.100:26656 -w "$DN_NODES_DIR" --skip-version-check --no-website
 
-  pubkey=$(jq -re .pub_key.value "$(nodePrivKey $NUM_DNNS)")
+  pubkey=$(jq -re .pub_key.value <"$(nodePrivKey $NUM_DNNS)")
   pubkey=$(echo $pubkey | base64 -d | od -t x1 -An)
   declare -g hexPubKey=$(echo $pubkey | tr -d ' ')
 
   # Register new validator
-  TXID=$(cli-tx validator add dn/validators "$(nodePrivKey 0)" $hexPubKey)
+  TXID=$(cli-tx validator add dn.acme/validators "$(nodePrivKey 0)" $hexPubKey)
   wait-for-tx $TXID
 
-  echo Current keypage dn/validators/1
-  accumulate --use-unencrypted-wallet page get acc://dn/validators/1
+  echo Current keypage dn.acme/validators/1
+  accumulate page get acc://dn.acme/validators/1
 
   # Sign the required number of times
   for ((sigNr = 1; sigNr < $(sigCount); sigNr++)); do
-    wait-for cli-tx-sig tx sign dn/validators "$(nodePrivKey $sigNr)" $TXID
+    wait-for cli-tx-sig tx sign dn.acme/validators "$(nodePrivKey $sigNr)" $TXID
   done
 
   # Start the new validator and increment NUM_DMNS
@@ -57,25 +57,24 @@ if [ -f "$(nodePrivKey 0)" ] && [ -f "/.dockerenv" ] && [ "$NUM_DNNS" -ge "3" ];
   # Increment NUM_DNNS so sigCount returns an updated result
   declare -g NUM_DNNS=$((NUM_DNNS + 1))
 
-  echo Updated keypage dn/validators/1
-  accumulate --use-unencrypted-wallet page get acc://dn/validators/1
+  echo Updated keypage dn.acme/validators/1
+  accumulate page get acc://dn.acme/validators/1
 fi
 
 
 section "Update oracle price to \$0.0501. Oracle price has precision of 4 decimals"
 if [ -f "$(nodePrivKey 0)" ]; then
-  TXID=$(cli-tx data write dn/oracle "$(nodePrivKey 0)" '{"price":501}')
+  TXID=$(accumulated set oracle 0.0501 -w "${DN_NODES_DIR}/Node0" | grep Hash | cut -d: -f2)
   wait-for-tx $TXID
 
   # Sign the required number of times
   for ((sigNr = 1; sigNr < $(sigCount); sigNr++)); do
-    wait-for cli-tx-sig tx sign dn/validators "$(nodePrivKey $sigNr)" $TXID
+    wait-for cli-tx-sig tx sign dn.acme/validators "$(nodePrivKey $sigNr)" $TXID
   done
-  accumulate --use-unencrypted-wallet -j tx get $TXID | jq -re .status.pending 1>/dev/null && die "Transaction is pending"
-  accumulate --use-unencrypted-wallet -j tx get $TXID | jq -re .status.delivered 1>/dev/null || die "Transaction was not delivered"
+  accumulate -j tx get $TXID | jq -re .status.pending 1>/dev/null && die "Transaction is pending"
+  accumulate -j tx get $TXID | jq -re .status.delivered 1>/dev/null || die "Transaction was not delivered"
 
-  RESULT=$(accumulate --use-unencrypted-wallet -j data get dn/oracle)
-  RESULT=$(echo $RESULT | jq -re .data.entry.data[0] | xxd -r -p | jq -re .price)
+  RESULT=$(accumulate --use-unencrypted-wallet -j oracle  | jq -re .price)
   [ "$RESULT" == "501" ] && success || die "cannot update price oracle"
 else
   echo -e '\033[1;31mCannot update oracle: private validator key not found\033[0m'
@@ -86,11 +85,11 @@ section "Add a key to the operator book"
 if [ -f "$(nodePrivKey 0)" ]; then
   ensure-key operator-2
 
-  wait-for cli-tx page key add acc://dn/operators/1 "$(nodePrivKey 0)" operator-2
-  KEY_ADDED_DN=$(accumulate --use-unencrypted-wallet page get -j dn/operators/1) | jq -re .data.keys[2].publicKey
+  wait-for cli-tx page key add acc://dn.acme/operators/1 "$(nodePrivKey 0)" operator-2
+  KEY_ADDED_DN=$(accumulate page get -j dn.acme/operators/1) | jq -re .data.keys[2].publicKey
   echo "sleeping for 5 seconds (wait for anchor)"
   sleep 5
-  KEY_ADDED_BVN=$(accumulate --use-unencrypted-wallet page get -j bvn-BVN0/operators/2) | jq -re .data.keys[2].publicKey
+  KEY_ADDED_BVN=$(accumulate page get -j bvn-BVN0.acme/operators/2) | jq -re .data.keys[2].publicKey
   [[ $KEY_ADDED_DN == $KEY_ADDED_BVN ]] || die "operator-2 was not sent to the BVN"
 else
   echo -e '\033[1;31mCannot test the operator book: private validator key not found\033[0m'
@@ -100,7 +99,7 @@ fi
 section "Query votes chain"
 if [ -f "$(nodePrivKey 0)" ]; then
   #xxd -r -p doesn't like the .data.entry.data hex string in docker bash for some reason, so converting using sed instead
-  RESULT=$(accumulate --use-unencrypted-wallet -j data get dn/votes | jq -re .data.entry.data[0] | sed 's/\([0-9A-F]\{2\}\)/\\\\\\x\1/gI' | xargs printf)
+  RESULT=$(accumulate -j data get dn.acme/votes | jq -re .data.entry.data[0] | sed 's/\([0-9A-F]\{2\}\)/\\\\\\x\1/gI' | xargs printf)
   #convert the node address to search for to base64
   NODE_ADDRESS=$(jq -re .address "$(nodePrivKey 0)" | xxd -r -p | base64)
   VOTE_COUNT=$(echo "$RESULT" | jq -re '.votes|length')
@@ -118,15 +117,15 @@ fi
 
 if [ ! -z "${ACCPID}" ]; then
   section "Shutdown dynamic validator"
-  TXID=$(cli-tx validator remove dn/validators "$(nodePrivKey 0)" "$(nodePrivKey 3)")
+  TXID=$(cli-tx validator remove dn.acme/validators "$(nodePrivKey 0)" "$(nodePrivKey 3)")
   wait-for-tx $TXID
 
   # Sign the required number of times
   for ((sigNr = 1; sigNr < $(sigCount); sigNr++)); do
-    wait-for cli-tx-sig tx sign dn/validators "$(nodePrivKey $sigNr)" $TXID
+    wait-for cli-tx-sig tx sign dn.acme/validators "$(nodePrivKey $sigNr)" $TXID
   done
-  accumulate --use-unencrypted-wallet -j tx get $TXID | jq -re .status.pending 1>/dev/null && die "Transaction is pending"
-  accumulate --use-unencrypted-wallet -j tx get $TXID | jq -re .status.delivered 1>/dev/null || die "Transaction was not delivered"
+  accumulate -j tx get $TXID | jq -re .status.pending 1>/dev/null && die "Transaction is pending"
+  accumulate -j tx get $TXID | jq -re .status.delivered 1>/dev/null || die "Transaction was not delivered"
 
   kill -9 $ACCPID || true
 fi

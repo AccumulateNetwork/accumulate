@@ -122,7 +122,7 @@ func (x *Executor) executeEnvelope(block *Block, delivery *chain.Delivery) (*pro
 		}
 	}
 
-	if shouldProcessTransaction {
+	if delivery.WasProducedInternally() || shouldProcessTransaction {
 		// Process the transaction
 		batch := block.Batch.Begin(true)
 		defer batch.Discard()

@@ -7,8 +7,6 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -88,7 +86,7 @@ func addValidator(st *StateManager, env *Delivery) error {
 	page.AddKeySpec(&protocol.KeySpec{PublicKeyHash: keyHash[:]})
 
 	// Update the threshold
-	ratio := loadValidatorsThresholdRatio(st, st.NodeUrl(protocol.Globals))
+	ratio := st.Globals.Globals.ValidatorThreshold.GetFloat()
 	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(page.Keys), ratio)
 	// Record the update
 	didUpdateKeyPage(page)
@@ -129,7 +127,7 @@ func removeValidator(st *StateManager, env *Delivery) error {
 	page.RemoveKeySpecAt(index)
 
 	// Update the threshold
-	ratio := loadValidatorsThresholdRatio(st, st.NodeUrl(protocol.Globals))
+	ratio := st.Globals.Globals.ValidatorThreshold.GetFloat()
 	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(page.Keys), ratio)
 	// Record the update
 	didUpdateKeyPage(page)
@@ -211,21 +209,4 @@ func checkValidatorTransaction(st *StateManager, env *Delivery) (*protocol.KeyPa
 	}
 
 	return page, nil
-}
-
-func loadValidatorsThresholdRatio(st *StateManager, url *url.URL) float64 {
-	entry, err := indexing.Data(st.batch, url).GetLatestEntry()
-	if err != nil {
-		st.logger.Error("Failed to get latest globals data entry", "error", err)
-		return protocol.FallbackValidatorThreshold
-	}
-
-	globals := new(protocol.NetworkGlobals)
-	err = json.Unmarshal(entry.GetData()[0], globals)
-	if err != nil {
-		st.logger.Error("Failed to decode latest globals entry", "error", err)
-		return protocol.FallbackValidatorThreshold
-	}
-
-	return globals.ValidatorThreshold.GetFloat()
 }
