@@ -274,7 +274,7 @@ func TestCreateADI(t *testing.T) {
 }
 
 func TestCreateADIWithoutKeybook(t *testing.T) {
-	check := CheckError{H: NewDefaultErrorHandler(t), Disable: true}
+	check := newDefaultCheckError(t, false)
 
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, check.ErrorHandler())
@@ -678,7 +678,7 @@ func TestAdiAccountTx(t *testing.T) {
 }
 
 func TestSendTokensToBadRecipient(t *testing.T) {
-	check := CheckError{H: NewDefaultErrorHandler(t), Disable: true}
+	check := newDefaultCheckError(t, false)
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, check.ErrorHandler())
 	n := nodes[subnets[1]][0]
@@ -714,72 +714,6 @@ func TestSendTokensToBadRecipient(t *testing.T) {
 
 	// The balance should be unchanged
 	require.Equal(t, int64(protocol.AcmeFaucetAmount*protocol.AcmePrecision), n.GetLiteTokenAccount(aliceUrl.String()).Balance.Int64())
-}
-
-func TestAddCreditsBurnAcme(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
-	n := nodes[subnets[1]][0]
-
-	fooKey := generateKey()
-	batch := n.db.Begin(true)
-	defer batch.Discard()
-	acmeAmount := 100.00
-
-	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
-	require.NoError(t, acctesting.CreateTokenAccount(batch, "foo/tokens", protocol.AcmeUrl().String(), acmeAmount, false))
-
-	require.NoError(t, batch.Commit())
-
-	require.NoError(t, nodes[subnets[0]][0].db.Update(func(batch *database.Batch) error {
-		return acctesting.UpdateAccount(batch, protocol.AcmeUrl(), func(acme *protocol.TokenIssuer) {
-			// Make it easier to read the value
-			acme.Issued.SetUint64(1e3 * protocol.AcmePrecision)
-		})
-	}))
-
-	acmeIssuer := n.GetTokenIssuer("acc://ACME")
-	acmeBeforeBurn := acmeIssuer.Issued
-	acmeToSpendOnCredits := int64(10.0 * protocol.AcmePrecision)
-	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
-		ac := new(protocol.AddCredits)
-		ac.Amount = *big.NewInt(acmeToSpendOnCredits)
-		ac.Recipient = protocol.AccountUrl("foo", "book0", "1")
-		ac.Oracle = 500
-
-		send(newTxn("foo/tokens").
-			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
-			WithBody(ac).
-			Initiate(protocol.SignatureTypeLegacyED25519, fooKey).
-			Build())
-	})
-
-	batch = n.db.Begin(false)
-	defer batch.Discard()
-	ledger := batch.Account(n.network.NodeUrl(protocol.Ledger))
-
-	// Check each anchor
-	var ledgerState *protocol.SystemLedger
-	require.NoError(t, ledger.GetStateAs(&ledgerState))
-	//Credits I should have received
-	credits := big.NewInt(protocol.CreditUnitsPerFiatUnit)                // want to obtain credits
-	credits.Mul(credits, big.NewInt(int64(n.GetOraclePrice())))           // fiat units / acme
-	credits.Mul(credits, big.NewInt(acmeToSpendOnCredits))                // acme the user wants to spend
-	credits.Div(credits, big.NewInt(int64(protocol.AcmeOraclePrecision))) // adjust the precision of oracle to real units
-	credits.Div(credits, big.NewInt(int64(protocol.AcmePrecision)))       // adjust the precision of acme to spend to real units
-
-	expectedCreditsToReceive := credits.Uint64()
-	//the balance of the account should be
-
-	ks := n.GetKeyPage("foo/book0/1")
-	acct := n.GetTokenAccount("foo/tokens")
-	acmeIssuer = n.GetTokenIssuer(protocol.AcmeUrl().String())
-	acmeAfterBurn := acmeIssuer.Issued
-	require.Equal(t, expectedCreditsToReceive, ks.CreditBalance)
-	require.Equal(t, int64(acmeAmount*protocol.AcmePrecision)-acmeToSpendOnCredits, acct.Balance.Int64())
-	require.Equal(t,
-		protocol.FormatBigAmount(acmeBeforeBurn.Sub(&acmeBeforeBurn, big.NewInt(acmeToSpendOnCredits)), protocol.AcmePrecisionPower),
-		protocol.FormatBigAmount(&acmeAfterBurn, protocol.AcmePrecisionPower))
 }
 
 func TestCreateKeyPage(t *testing.T) {
@@ -1165,13 +1099,97 @@ func TestIssueTokens(t *testing.T) {
 	require.Equal(t, int64(123), account.Balance.Int64())
 }
 
+func TestIssueTokensRefund(t *testing.T) {
+	check := newDefaultCheckError(t, true)
+
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	nodes := RunTestNet(t, subnets, daemons, nil, true, check.ErrorHandler())
+	n := nodes[subnets[1]][0]
+
+	fooKey, liteKey := generateKey(), generateKey()
+	sponsorUrl := acctesting.AcmeLiteAddressTmPriv(liteKey).RootIdentity()
+	batch := n.db.Begin(true)
+
+	fooDecimals := 10
+	fooPrecision := uint64(math.Pow(10.0, float64(fooDecimals)))
+
+	maxSupply := int64(1000000 * fooPrecision)
+	supplyLimit := big.NewInt(maxSupply)
+	require.NoError(t, acctesting.CreateAdiWithCredits(batch, fooKey, "foo", 1e9))
+	require.NoError(t, acctesting.CreateLiteIdentity(batch, sponsorUrl.String(), 3))
+	require.NoError(t, acctesting.CreateLiteTokenAccount(batch, tmed25519.PrivKey(liteKey), 1e9))
+	require.NoError(t, batch.Commit())
+	liteAddr, err := protocol.LiteTokenAddress(liteKey[32:], "foo.acme/tokens", protocol.SignatureTypeED25519)
+	require.NoError(t, err)
+
+	// issue tokens with supply limit
+	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		body := new(protocol.CreateToken)
+		body.Url = protocol.AccountUrl("foo", "tokens")
+		body.Symbol = "FOO"
+		body.Precision = uint64(fooDecimals)
+		body.SupplyLimit = supplyLimit
+
+		send(newTxn("foo").
+			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
+			WithBody(body).
+			Initiate(protocol.SignatureTypeLegacyED25519, fooKey).
+			Build())
+	})
+
+	//test to make sure supply limit is set
+	issuer := n.GetTokenIssuer("foo/tokens")
+	require.Equal(t, supplyLimit.Int64(), issuer.SupplyLimit.Int64())
+
+	//issue tokens successfully
+	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		body := new(protocol.IssueTokens)
+		body.Recipient = liteAddr
+		body.Amount.SetUint64(123)
+
+		send(newTxn("foo/tokens").
+			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
+			WithBody(body).
+			Initiate(protocol.SignatureTypeLegacyED25519, fooKey).
+			Build())
+	})
+	issuer = n.GetTokenIssuer("foo/tokens")
+
+	account := n.GetLiteTokenAccount(liteAddr.String())
+	require.Equal(t, "acc://foo.acme/tokens", account.TokenUrl.String())
+	require.Equal(t, int64(123), account.Balance.Int64())
+
+	//issue tokens to incorrect principal
+	check.Disable = true
+	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		body := new(protocol.IssueTokens)
+		liteAddr.Authority = liteAddr.Authority + "u"
+		body.Recipient = liteAddr
+		body.Amount.SetUint64(123)
+
+		send(newTxn("foo/tokens").
+			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
+			WithBody(body).
+			Initiate(protocol.SignatureTypeLegacyED25519, fooKey).
+			Build())
+	})
+	issuer = n.GetTokenIssuer("foo/tokens")
+	require.Equal(t, int64(123), issuer.Issued.Int64())
+}
+
 type CheckError struct {
+	T       *testing.T
 	Disable bool
 	H       func(err error)
 }
 
+func newDefaultCheckError(t *testing.T, enable bool) *CheckError {
+	return &CheckError{T: t, H: NewDefaultErrorHandler(t), Disable: !enable}
+}
+
 func (c *CheckError) ErrorHandler() func(err error) {
 	return func(err error) {
+		c.T.Helper()
 		if !c.Disable {
 			c.H(err)
 		}
@@ -1179,7 +1197,7 @@ func (c *CheckError) ErrorHandler() func(err error) {
 }
 
 func TestIssueTokensWithSupplyLimit(t *testing.T) {
-	check := CheckError{H: NewDefaultErrorHandler(t)}
+	check := newDefaultCheckError(t, true)
 
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, check.ErrorHandler())
@@ -1411,7 +1429,7 @@ func DumpAccount(t *testing.T, batch *database.Batch, accountUrl *url.URL) {
 }
 
 func TestMultisig(t *testing.T) {
-	check := CheckError{H: NewDefaultErrorHandler(t)}
+	check := newDefaultCheckError(t, true)
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, check.ErrorHandler())
 
@@ -1493,7 +1511,7 @@ func TestMultisig(t *testing.T) {
 }
 
 func TestAccountAuth(t *testing.T) {
-	check := CheckError{H: NewDefaultErrorHandler(t)}
+	check := newDefaultCheckError(t, true)
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, check.ErrorHandler())
 	n := nodes[subnets[1]][0]

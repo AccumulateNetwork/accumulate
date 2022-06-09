@@ -46,7 +46,9 @@ SyntheticDepositTokens:
       pointer: true
     - name: Amount
       type: bigint
-
+    - name: IsIssuer
+      type: boolean
+      
 SyntheticDepositCredits:
   union: { type: transaction }
   embeddings:
@@ -54,6 +56,10 @@ SyntheticDepositCredits:
   fields:
     - name: Amount
       type: uvarint
+    - name: AcmeRefundAmount
+      description: is the amount of ACME that will be refunded if the deposit fails
+      type: bigint
+      pointer: true
 
 SyntheticBurnTokens:
   union: { type: transaction }
