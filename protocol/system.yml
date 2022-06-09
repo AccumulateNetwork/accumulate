@@ -59,7 +59,7 @@ SystemGenesis:
 PartitionAnchor:
   union: { type: transaction }
   embeddings:
-    - PartitionAnchor
+    - SubnetAnchor
   fields:
     - name: AcmeBurnt
       description: is the amount of acme tokens burnt in the transaction
@@ -68,7 +68,7 @@ PartitionAnchor:
 DirectoryAnchor:
   union: { type: transaction }
   embeddings:
-    - PartitionAnchor
+    - SubnetAnchor
   fields:
     - name: Updates
       description: are synchronization updates for network accounts

@@ -245,7 +245,7 @@ type DelegatedSignature struct {
 
 type DirectoryAnchor struct {
 	fieldsSet []bool
-	PartitionAnchor
+	SubnetAnchor
 	// Updates are synchronization updates for network accounts.
 	Updates []NetworkAccountUpdate `json:"updates,omitempty" form:"updates" query:"updates" validate:"required"`
 	// Receipts are receipts for anchors from other partitions that were included in the block.
@@ -467,7 +467,7 @@ type Object struct {
 
 type PartitionAnchor struct {
 	fieldsSet []bool
-	PartitionAnchor
+	SubnetAnchor
 	// AcmeBurnt is the amount of acme tokens burnt in the transaction.
 	AcmeBurnt big.Int `json:"acmeBurnt,omitempty" form:"acmeBurnt" query:"acmeBurnt" validate:"required"`
 	extraData []byte
@@ -1459,7 +1459,7 @@ func (v *DelegatedSignature) CopyAsInterface() interface{} { return v.Copy() }
 func (v *DirectoryAnchor) Copy() *DirectoryAnchor {
 	u := new(DirectoryAnchor)
 
-	u.PartitionAnchor = *v.PartitionAnchor.Copy()
+	u.SubnetAnchor = *v.SubnetAnchor.Copy()
 	u.Updates = make([]NetworkAccountUpdate, len(v.Updates))
 	for i, v := range v.Updates {
 		u.Updates[i] = *(&v).Copy()
@@ -1818,7 +1818,7 @@ func (v *Object) CopyAsInterface() interface{} { return v.Copy() }
 func (v *PartitionAnchor) Copy() *PartitionAnchor {
 	u := new(PartitionAnchor)
 
-	u.PartitionAnchor = *v.PartitionAnchor.Copy()
+	u.SubnetAnchor = *v.SubnetAnchor.Copy()
 	u.AcmeBurnt = *encoding.BigintCopy(&v.AcmeBurnt)
 
 	return u
@@ -3085,7 +3085,7 @@ func (v *DelegatedSignature) Equal(u *DelegatedSignature) bool {
 }
 
 func (v *DirectoryAnchor) Equal(u *DirectoryAnchor) bool {
-	if !v.PartitionAnchor.Equal(&u.PartitionAnchor) {
+	if !v.SubnetAnchor.Equal(&u.SubnetAnchor) {
 		return false
 	}
 	if len(v.Updates) != len(u.Updates) {
@@ -3559,7 +3559,7 @@ func (v *Object) Equal(u *Object) bool {
 }
 
 func (v *PartitionAnchor) Equal(u *PartitionAnchor) bool {
-	if !v.PartitionAnchor.Equal(&u.PartitionAnchor) {
+	if !v.SubnetAnchor.Equal(&u.SubnetAnchor) {
 		return false
 	}
 	if !((&v.AcmeBurnt).Cmp(&u.AcmeBurnt) == 0) {
@@ -5964,7 +5964,7 @@ func (v *DelegatedSignature) IsValid() error {
 
 var fieldNames_DirectoryAnchor = []string{
 	1: "Type",
-	2: "PartitionAnchor",
+	2: "SubnetAnchor",
 	3: "Updates",
 	4: "Receipts",
 	5: "MakeMajorBlock",
@@ -5975,7 +5975,7 @@ func (v *DirectoryAnchor) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
-	writer.WriteValue(2, &v.PartitionAnchor)
+	writer.WriteValue(2, &v.SubnetAnchor)
 	if !(len(v.Updates) == 0) {
 		for _, v := range v.Updates {
 			writer.WriteValue(3, &v)
@@ -6004,7 +6004,7 @@ func (v *DirectoryAnchor) IsValid() error {
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Type is missing")
 	}
-	if err := v.PartitionAnchor.IsValid(); err != nil {
+	if err := v.SubnetAnchor.IsValid(); err != nil {
 		errs = append(errs, err.Error())
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
@@ -7345,7 +7345,7 @@ func (v *Object) IsValid() error {
 
 var fieldNames_PartitionAnchor = []string{
 	1: "Type",
-	2: "PartitionAnchor",
+	2: "SubnetAnchor",
 	3: "AcmeBurnt",
 }
 
@@ -7354,7 +7354,7 @@ func (v *PartitionAnchor) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
-	writer.WriteValue(2, &v.PartitionAnchor)
+	writer.WriteValue(2, &v.SubnetAnchor)
 	if !((v.AcmeBurnt).Cmp(new(big.Int)) == 0) {
 		writer.WriteBigInt(3, &v.AcmeBurnt)
 	}
@@ -7373,7 +7373,7 @@ func (v *PartitionAnchor) IsValid() error {
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Type is missing")
 	}
-	if err := v.PartitionAnchor.IsValid(); err != nil {
+	if err := v.SubnetAnchor.IsValid(); err != nil {
 		errs = append(errs, err.Error())
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
@@ -11048,7 +11048,7 @@ func (v *DirectoryAnchor) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
-	reader.ReadValue(2, v.PartitionAnchor.UnmarshalBinary)
+	reader.ReadValue(2, v.SubnetAnchor.UnmarshalBinary)
 	for {
 		if x := new(NetworkAccountUpdate); reader.ReadValue(3, x.UnmarshalBinary) {
 			v.Updates = append(v.Updates, *x)
@@ -11795,7 +11795,7 @@ func (v *PartitionAnchor) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
-	reader.ReadValue(2, v.PartitionAnchor.UnmarshalBinary)
+	reader.ReadValue(2, v.SubnetAnchor.UnmarshalBinary)
 	if x, ok := reader.ReadBigInt(3); ok {
 		v.AcmeBurnt = *x
 	}
@@ -13751,17 +13751,23 @@ func (v *DelegatedSignature) MarshalJSON() ([]byte, error) {
 func (v *DirectoryAnchor) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type            TransactionType                         `json:"type"`
-		Type            TransactionType                         `json:"type"`
-		PartitionAnchor PartitionAnchor                         `json:"partitionAnchor,omitempty"`
-		AcmeBurnt       *string                                 `json:"acmeBurnt,omitempty"`
+		Source          *url.URL                                `json:"source,omitempty"`
+		MajorBlockIndex uint64                                  `json:"majorBlockIndex,omitempty"`
+		MinorBlockIndex uint64                                  `json:"minorBlockIndex,omitempty"`
+		RootChainIndex  uint64                                  `json:"rootChainIndex,omitempty"`
+		RootChainAnchor string                                  `json:"rootChainAnchor,omitempty"`
+		StateTreeAnchor string                                  `json:"stateTreeAnchor,omitempty"`
 		Updates         encoding.JsonList[NetworkAccountUpdate] `json:"updates,omitempty"`
 		Receipts        encoding.JsonList[Receipt]              `json:"receipts,omitempty"`
 		MakeMajorBlock  uint64                                  `json:"makeMajorBlock,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.Type = v.PartitionAnchor.Type()
-	u.PartitionAnchor = v.PartitionAnchor.PartitionAnchor
-	u.AcmeBurnt = encoding.BigintToJSON(&v.PartitionAnchor.AcmeBurnt)
+	u.Source = v.SubnetAnchor.Source
+	u.MajorBlockIndex = v.SubnetAnchor.MajorBlockIndex
+	u.MinorBlockIndex = v.SubnetAnchor.MinorBlockIndex
+	u.RootChainIndex = v.SubnetAnchor.RootChainIndex
+	u.RootChainAnchor = encoding.ChainToJSON(v.SubnetAnchor.RootChainAnchor)
+	u.StateTreeAnchor = encoding.ChainToJSON(v.SubnetAnchor.StateTreeAnchor)
 	u.Updates = v.Updates
 	u.Receipts = v.Receipts
 	u.MakeMajorBlock = v.MakeMajorBlock
@@ -14094,15 +14100,21 @@ func (v *Object) MarshalJSON() ([]byte, error) {
 func (v *PartitionAnchor) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type            TransactionType `json:"type"`
-		Type            TransactionType `json:"type"`
-		PartitionAnchor PartitionAnchor `json:"partitionAnchor,omitempty"`
-		AcmeBurnt       *string         `json:"acmeBurnt,omitempty"`
+		Source          *url.URL        `json:"source,omitempty"`
+		MajorBlockIndex uint64          `json:"majorBlockIndex,omitempty"`
+		MinorBlockIndex uint64          `json:"minorBlockIndex,omitempty"`
+		RootChainIndex  uint64          `json:"rootChainIndex,omitempty"`
+		RootChainAnchor string          `json:"rootChainAnchor,omitempty"`
+		StateTreeAnchor string          `json:"stateTreeAnchor,omitempty"`
 		AcmeBurnt       *string         `json:"acmeBurnt,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.Type = v.PartitionAnchor.Type()
-	u.PartitionAnchor = v.PartitionAnchor.PartitionAnchor
-	u.AcmeBurnt = encoding.BigintToJSON(&v.PartitionAnchor.AcmeBurnt)
+	u.Source = v.SubnetAnchor.Source
+	u.MajorBlockIndex = v.SubnetAnchor.MajorBlockIndex
+	u.MinorBlockIndex = v.SubnetAnchor.MinorBlockIndex
+	u.RootChainIndex = v.SubnetAnchor.RootChainIndex
+	u.RootChainAnchor = encoding.ChainToJSON(v.SubnetAnchor.RootChainAnchor)
+	u.StateTreeAnchor = encoding.ChainToJSON(v.SubnetAnchor.StateTreeAnchor)
 	u.AcmeBurnt = encoding.BigintToJSON(&v.AcmeBurnt)
 	return json.Marshal(&u)
 }
@@ -15389,17 +15401,23 @@ func (v *DelegatedSignature) UnmarshalJSON(data []byte) error {
 func (v *DirectoryAnchor) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type            TransactionType                         `json:"type"`
-		Type            TransactionType                         `json:"type"`
-		PartitionAnchor PartitionAnchor                         `json:"partitionAnchor,omitempty"`
-		AcmeBurnt       *string                                 `json:"acmeBurnt,omitempty"`
+		Source          *url.URL                                `json:"source,omitempty"`
+		MajorBlockIndex uint64                                  `json:"majorBlockIndex,omitempty"`
+		MinorBlockIndex uint64                                  `json:"minorBlockIndex,omitempty"`
+		RootChainIndex  uint64                                  `json:"rootChainIndex,omitempty"`
+		RootChainAnchor string                                  `json:"rootChainAnchor,omitempty"`
+		StateTreeAnchor string                                  `json:"stateTreeAnchor,omitempty"`
 		Updates         encoding.JsonList[NetworkAccountUpdate] `json:"updates,omitempty"`
 		Receipts        encoding.JsonList[Receipt]              `json:"receipts,omitempty"`
 		MakeMajorBlock  uint64                                  `json:"makeMajorBlock,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.Type = v.PartitionAnchor.Type()
-	u.PartitionAnchor = v.PartitionAnchor.PartitionAnchor
-	u.AcmeBurnt = encoding.BigintToJSON(&v.PartitionAnchor.AcmeBurnt)
+	u.Source = v.SubnetAnchor.Source
+	u.MajorBlockIndex = v.SubnetAnchor.MajorBlockIndex
+	u.MinorBlockIndex = v.SubnetAnchor.MinorBlockIndex
+	u.RootChainIndex = v.SubnetAnchor.RootChainIndex
+	u.RootChainAnchor = encoding.ChainToJSON(v.SubnetAnchor.RootChainAnchor)
+	u.StateTreeAnchor = encoding.ChainToJSON(v.SubnetAnchor.StateTreeAnchor)
 	u.Updates = v.Updates
 	u.Receipts = v.Receipts
 	u.MakeMajorBlock = v.MakeMajorBlock
@@ -15409,14 +15427,19 @@ func (v *DirectoryAnchor) UnmarshalJSON(data []byte) error {
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
-	if !(v.PartitionAnchor.Type() == u.Type) {
-		return fmt.Errorf("field Type: not equal: want %v, got %v", v.PartitionAnchor.Type(), u.Type)
-	}
-	v.PartitionAnchor.PartitionAnchor = u.PartitionAnchor
-	if x, err := encoding.BigintFromJSON(u.AcmeBurnt); err != nil {
-		return fmt.Errorf("error decoding AcmeBurnt: %w", err)
+	v.SubnetAnchor.Source = u.Source
+	v.SubnetAnchor.MajorBlockIndex = u.MajorBlockIndex
+	v.SubnetAnchor.MinorBlockIndex = u.MinorBlockIndex
+	v.SubnetAnchor.RootChainIndex = u.RootChainIndex
+	if x, err := encoding.ChainFromJSON(u.RootChainAnchor); err != nil {
+		return fmt.Errorf("error decoding RootChainAnchor: %w", err)
 	} else {
-		v.PartitionAnchor.AcmeBurnt = *x
+		v.SubnetAnchor.RootChainAnchor = x
+	}
+	if x, err := encoding.ChainFromJSON(u.StateTreeAnchor); err != nil {
+		return fmt.Errorf("error decoding StateTreeAnchor: %w", err)
+	} else {
+		v.SubnetAnchor.StateTreeAnchor = x
 	}
 	v.Updates = u.Updates
 	v.Receipts = u.Receipts
@@ -16058,15 +16081,21 @@ func (v *Object) UnmarshalJSON(data []byte) error {
 func (v *PartitionAnchor) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type            TransactionType `json:"type"`
-		Type            TransactionType `json:"type"`
-		PartitionAnchor PartitionAnchor `json:"partitionAnchor,omitempty"`
-		AcmeBurnt       *string         `json:"acmeBurnt,omitempty"`
+		Source          *url.URL        `json:"source,omitempty"`
+		MajorBlockIndex uint64          `json:"majorBlockIndex,omitempty"`
+		MinorBlockIndex uint64          `json:"minorBlockIndex,omitempty"`
+		RootChainIndex  uint64          `json:"rootChainIndex,omitempty"`
+		RootChainAnchor string          `json:"rootChainAnchor,omitempty"`
+		StateTreeAnchor string          `json:"stateTreeAnchor,omitempty"`
 		AcmeBurnt       *string         `json:"acmeBurnt,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.Type = v.PartitionAnchor.Type()
-	u.PartitionAnchor = v.PartitionAnchor.PartitionAnchor
-	u.AcmeBurnt = encoding.BigintToJSON(&v.PartitionAnchor.AcmeBurnt)
+	u.Source = v.SubnetAnchor.Source
+	u.MajorBlockIndex = v.SubnetAnchor.MajorBlockIndex
+	u.MinorBlockIndex = v.SubnetAnchor.MinorBlockIndex
+	u.RootChainIndex = v.SubnetAnchor.RootChainIndex
+	u.RootChainAnchor = encoding.ChainToJSON(v.SubnetAnchor.RootChainAnchor)
+	u.StateTreeAnchor = encoding.ChainToJSON(v.SubnetAnchor.StateTreeAnchor)
 	u.AcmeBurnt = encoding.BigintToJSON(&v.AcmeBurnt)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -16074,14 +16103,19 @@ func (v *PartitionAnchor) UnmarshalJSON(data []byte) error {
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
-	if !(v.PartitionAnchor.Type() == u.Type) {
-		return fmt.Errorf("field Type: not equal: want %v, got %v", v.PartitionAnchor.Type(), u.Type)
-	}
-	v.PartitionAnchor.PartitionAnchor = u.PartitionAnchor
-	if x, err := encoding.BigintFromJSON(u.AcmeBurnt); err != nil {
-		return fmt.Errorf("error decoding AcmeBurnt: %w", err)
+	v.SubnetAnchor.Source = u.Source
+	v.SubnetAnchor.MajorBlockIndex = u.MajorBlockIndex
+	v.SubnetAnchor.MinorBlockIndex = u.MinorBlockIndex
+	v.SubnetAnchor.RootChainIndex = u.RootChainIndex
+	if x, err := encoding.ChainFromJSON(u.RootChainAnchor); err != nil {
+		return fmt.Errorf("error decoding RootChainAnchor: %w", err)
 	} else {
-		v.PartitionAnchor.AcmeBurnt = *x
+		v.SubnetAnchor.RootChainAnchor = x
+	}
+	if x, err := encoding.ChainFromJSON(u.StateTreeAnchor); err != nil {
+		return fmt.Errorf("error decoding StateTreeAnchor: %w", err)
+	} else {
+		v.SubnetAnchor.StateTreeAnchor = x
 	}
 	if x, err := encoding.BigintFromJSON(u.AcmeBurnt); err != nil {
 		return fmt.Errorf("error decoding AcmeBurnt: %w", err)
