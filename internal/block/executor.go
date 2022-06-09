@@ -303,9 +303,9 @@ func (m *Executor) startCheckTxBatchManager() {
 		m.CheckTxMutex.Lock()
 		defer m.CheckTxMutex.Unlock()
 
-		oldBatch := m.CheckTxBatch
-		newBatch := m.db.Begin(false)
-		m.CheckTxBatch = newBatch
-		oldBatch.Discard()
+		if m.CheckTxBatch != nil {
+			m.CheckTxBatch.Discard()
+		}
+		m.CheckTxBatch = m.db.Begin(false)
 	})
 }
