@@ -61,27 +61,23 @@ if [ -f "$(dnPrivKey 0)" ] && [ -f "/.dockerenv" ] && [ "$NUM_NODES" -ge "3" ]; 
   for ((sigNr = 1; sigNr <= $(signCount); sigNr++)); do
     wait-for cli-tx-sig tx sign dn.acme/operators "$(signKey $sigNr)" $TXID
   done
+  declare -g ACCEPT_THRESHOLD=$(accumulate page get -j dn.acme/operators/1 | jq -re .data.acceptThreshold)
 
   # Register new validator
   echo validator add dn.acme/validators "$(dnPrivKey 0)" $hexPubKey
   TXID=$(cli-tx validator add dn.acme/validators "$(dnPrivKey 0)" $hexPubKey)
   wait-for-tx $TXID
 
-  echo Current keypage dn.acme/validators/2
-  accumulate page get acc://dn.acme/validators/2
-
   # Sign the required number of times
+  echo Signature count $(signCount)
   for ((sigNr = 1; sigNr <= $(signCount); sigNr++)); do
+    echo Signature $sigNr
     wait-for cli-tx-sig tx sign dn.acme/operators "$(signKey $sigNr)" $TXID
   done
 
   # Start the new validator and increment NUM_DMNS
   accumulated run -n 3 -w "$NODES_DIR/dn" &
   declare -g ACCPID=$!
-  declare -g ACCEPT_THRESHOLD=$(accumulate page get -j dn.acme/operators/1 | jq -re .data.acceptThreshold)
-
-  echo Updated keypage dn.acme/.acmevalidators/2
-  accumulate page get acc://dn.acme/validators/2
 fi
 
 section "Add a key to the operator book"
@@ -93,7 +89,9 @@ echo page key add acc://dn.acme/operators/1 "$(dnPrivKey 0)" $DN_NEW_KEY
   wait-for-tx $TXID
 
   # Sign the required number of times
+  echo Signature count $(signCount)
   for ((sigNr = 1; sigNr <= $(signCount); sigNr++)); do
+    echo Signature $sigNr
     wait-for cli-tx-sig tx sign dn.acme/operators "$(signKey $sigNr)" $TXID
   done
 
@@ -115,8 +113,9 @@ if [ -f "$(dnPrivKey 0)" ]; then
   wait-for-tx $TXID
 
   # Sign the required number of times
+  echo Signature count $(signCount)
   for ((sigNr = 1; sigNr <= $(signCount); sigNr++)); do
-    echo tx sign dn.acme/operators "$(signKey $sigNr)" $TXID
+    echo Signature $sigNr
     wait-for cli-tx-sig tx sign dn.acme/operators "$(signKey $sigNr)" $TXID
   done
   accumulate -j tx get $TXID | jq -re .status.pending 1>/dev/null && die "Transaction is pending"
@@ -128,6 +127,7 @@ else
   echo -e '\033[1;31mCannot update oracle: private validator key not found\033[0m'
   echo
 fi
+
 
 section "Query votes chain"
 if [ -f "$(dnPrivKey 0)" ]; then
@@ -155,8 +155,10 @@ if [ ! -z "${ACCPID}" ]; then
   wait-for-tx $TXID
 
   # Sign the required number of times
-  for ((sigNr = 1; sigNr < $(signCount); sigNr++)); do
-    wait-for cli-tx-sig tx sign dn.acme/operators "$(dnPrivKey $sigNr)" $TXID
+  echo Signature count $(signCount)
+  for ((sigNr = 1; sigNr <= $(signCount); sigNr++)); do
+    echo Signature $sigNr
+    wait-for cli-tx-sig tx sign dn.acme/operators "$(signKey $sigNr)" $TXID
   done
   accumulate -j tx get $TXID | jq -re .status.pending 1>/dev/null && die "Transaction is pending"
   accumulate -j tx get $TXID | jq -re .status.delivered 1>/dev/null || die "Transaction was not delivered"
