@@ -136,7 +136,6 @@ func (v *Network) MarshalJSON() ([]byte, error) {
 		LocalSubnetID    string                       `json:"localSubnetID,omitempty"`
 		LocalAddress     string                       `json:"localAddress,omitempty"`
 		Partitions       encoding.JsonList[Partition] `json:"partitions,omitempty"`
-		Subnets          encoding.JsonList[Partition] `json:"subnets,omitempty"`
 	}{}
 	u.NetworkName = v.NetworkName
 	u.Type = v.Type
@@ -144,7 +143,6 @@ func (v *Network) MarshalJSON() ([]byte, error) {
 	u.LocalSubnetID = v.LocalPartitionID
 	u.LocalAddress = v.LocalAddress
 	u.Partitions = v.Partitions
-	u.Subnets = v.Partitions
 	return json.Marshal(&u)
 }
 
@@ -168,7 +166,6 @@ func (v *Network) UnmarshalJSON(data []byte) error {
 		LocalSubnetID    string                       `json:"localSubnetID,omitempty"`
 		LocalAddress     string                       `json:"localAddress,omitempty"`
 		Partitions       encoding.JsonList[Partition] `json:"partitions,omitempty"`
-		Subnets          encoding.JsonList[Partition] `json:"subnets,omitempty"`
 	}{}
 	u.NetworkName = v.NetworkName
 	u.Type = v.Type
@@ -176,7 +173,6 @@ func (v *Network) UnmarshalJSON(data []byte) error {
 	u.LocalSubnetID = v.LocalPartitionID
 	u.LocalAddress = v.LocalAddress
 	u.Partitions = v.Partitions
-	u.Subnets = v.Partitions
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -188,11 +184,7 @@ func (v *Network) UnmarshalJSON(data []byte) error {
 		v.LocalPartitionID = u.LocalSubnetID
 	}
 	v.LocalAddress = u.LocalAddress
-	if !(u.Partitions.Equal(&[]Partition{})) {
-		v.Partitions = u.Partitions
-	} else {
-		v.Partitions = u.Subnets
-	}
+	v.Partitions = u.Partitions
 	return nil
 }
 

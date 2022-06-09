@@ -27,7 +27,6 @@ SyntheticLedger:
       type: url
       pointer: true
     - name: Partitions
-      alternative: Subnets
       type: PartitionSyntheticLedger
       marshal-as: reference
       pointer: true

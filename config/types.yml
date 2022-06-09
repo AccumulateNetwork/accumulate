@@ -16,7 +16,7 @@ Network:
       toml: local-address
       type: string
     - name: Partitions
-      alternative: Subnets
+      #alternative: Subnets
       toml: partitions
       type: Partition
       marshal-as: reference

@@ -502,7 +502,7 @@ func (x *Executor) shouldSendAnchor(batch *database.Batch, ledger *protocol.Syst
 func (x *Executor) buildDirectoryAnchor(batch *database.Batch, ledgerState *protocol.SystemLedger, openMajor, majorBlockIndex uint64) (*protocol.DirectoryAnchor, error) {
 	anchor := new(protocol.DirectoryAnchor)
 	ledger := batch.Account(x.Network.Ledger())
-	rootChain, err := x.buildBlockAnchor(batch, ledgerState, ledger, &anchor.PartitionAnchor, majorBlockIndex)
+	rootChain, err := x.buildBlockAnchor(batch, ledgerState, ledger, &anchor.SubnetAnchor, majorBlockIndex)
 	if err != nil {
 		return nil, err
 	}
@@ -576,7 +576,7 @@ func (x *Executor) buildDirectoryAnchor(batch *database.Batch, ledgerState *prot
 func (x *Executor) buildPartitionAnchor(batch *database.Batch, ledgerState *protocol.SystemLedger, majorBlockIndex uint64) (*protocol.PartitionAnchor, error) {
 	anchor := new(protocol.PartitionAnchor)
 	ledger := batch.Account(x.Network.Ledger())
-	_, err := x.buildBlockAnchor(batch, ledgerState, ledger, &anchor.PartitionAnchor, majorBlockIndex)
+	_, err := x.buildBlockAnchor(batch, ledgerState, ledger, &anchor.SubnetAnchor, majorBlockIndex)
 	if err != nil {
 		return nil, err
 	}

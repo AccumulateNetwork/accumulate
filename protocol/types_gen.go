@@ -14094,11 +14094,9 @@ func (v *NetworkDefinition) MarshalJSON() ([]byte, error) {
 	u := struct {
 		NetworkName string                                 `json:"networkName,omitempty"`
 		Partitions  encoding.JsonList[PartitionDefinition] `json:"partitions,omitempty"`
-		Subnets     encoding.JsonList[PartitionDefinition] `json:"subnets,omitempty"`
 	}{}
 	u.NetworkName = v.NetworkName
 	u.Partitions = v.Partitions
-	u.Subnets = v.Partitions
 	return json.Marshal(&u)
 }
 
@@ -14468,12 +14466,10 @@ func (v *SyntheticLedger) MarshalJSON() ([]byte, error) {
 		Type       AccountType                                  `json:"type"`
 		Url        *url.URL                                     `json:"url,omitempty"`
 		Partitions encoding.JsonList[*PartitionSyntheticLedger] `json:"partitions,omitempty"`
-		Subnets    encoding.JsonList[*PartitionSyntheticLedger] `json:"subnets,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
 	u.Partitions = v.Partitions
-	u.Subnets = v.Partitions
 	return json.Marshal(&u)
 }
 
@@ -16062,20 +16058,14 @@ func (v *NetworkDefinition) UnmarshalJSON(data []byte) error {
 	u := struct {
 		NetworkName string                                 `json:"networkName,omitempty"`
 		Partitions  encoding.JsonList[PartitionDefinition] `json:"partitions,omitempty"`
-		Subnets     encoding.JsonList[PartitionDefinition] `json:"subnets,omitempty"`
 	}{}
 	u.NetworkName = v.NetworkName
 	u.Partitions = v.Partitions
-	u.Subnets = v.Partitions
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.NetworkName = u.NetworkName
-	if !(u.Partitions.Equal(&[]PartitionDefinition{})) {
-		v.Partitions = u.Partitions
-	} else {
-		v.Partitions = u.Subnets
-	}
+	v.Partitions = u.Partitions
 	return nil
 }
 
@@ -16751,12 +16741,10 @@ func (v *SyntheticLedger) UnmarshalJSON(data []byte) error {
 		Type       AccountType                                  `json:"type"`
 		Url        *url.URL                                     `json:"url,omitempty"`
 		Partitions encoding.JsonList[*PartitionSyntheticLedger] `json:"partitions,omitempty"`
-		Subnets    encoding.JsonList[*PartitionSyntheticLedger] `json:"subnets,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
 	u.Partitions = v.Partitions
-	u.Subnets = v.Partitions
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -16764,11 +16752,7 @@ func (v *SyntheticLedger) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Url = u.Url
-	if !(u.Partitions == nil) {
-		v.Partitions = u.Partitions
-	} else {
-		v.Partitions = u.Subnets
-	}
+	v.Partitions = u.Partitions
 	return nil
 }
 
