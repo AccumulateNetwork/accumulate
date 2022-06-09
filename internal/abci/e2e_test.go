@@ -1591,8 +1591,8 @@ func TestNetworkDefinition(t *testing.T) {
 	dn := nodes[subnets[0]][0]
 
 	networkDefs := dn.exec.ActiveGlobals_TESTONLY().Network
-	require.NotEmpty(t, networkDefs.Subnets)
-	require.NotEmpty(t, networkDefs.Subnets[0].SubnetID)
-	require.NotEmpty(t, networkDefs.Subnets[0].ValidatorKeyHashes)
-	require.NotEmpty(t, networkDefs.Subnets[0].ValidatorKeyHashes[0])
+	require.NotEmpty(t, networkDefs.Partitions)
+	require.NotEmpty(t, networkDefs.Partitions[0].PartitionID)
+	require.NotEmpty(t, networkDefs.Partitions[0].ValidatorKeyHashes)
+	require.NotEmpty(t, networkDefs.Partitions[0].ValidatorKeyHashes[0])
 }

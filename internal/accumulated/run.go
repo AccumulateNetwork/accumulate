@@ -285,7 +285,7 @@ func (d *Daemon) Start() (err error) {
 }
 
 func (d *Daemon) LocalClient() (connections.ABCIClient, error) {
-	ctx, err := d.connectionManager.SelectConnection(d.jrpc.Network.LocalSubnetID, false)
+	ctx, err := d.connectionManager.SelectConnection(d.jrpc.Network.LocalPartitionID, false)
 	if err != nil {
 		return nil, err
 	}

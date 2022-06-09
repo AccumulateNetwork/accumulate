@@ -253,8 +253,8 @@ func (x *Executor) checkRouting(delivery *chain.Delivery, signature protocol.Sig
 		if err != nil {
 			return errors.Wrap(errors.StatusUnknown, err)
 		}
-		if !strings.EqualFold(subnet, x.Network.LocalSubnetID) {
-			return errors.Format(errors.StatusBadRequest, "signature submitted to %v instead of %v", x.Network.LocalSubnetID, subnet)
+		if !strings.EqualFold(subnet, x.Network.LocalPartitionID) {
+			return errors.Format(errors.StatusBadRequest, "signature submitted to %v instead of %v", x.Network.LocalPartitionID, subnet)
 		}
 	}
 

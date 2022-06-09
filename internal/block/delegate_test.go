@@ -31,14 +31,14 @@ func updateAccount[T protocol.Account](sim *simulator.Simulator, accountUrl *url
 }
 
 func updateSubnetFor(sim *simulator.Simulator, account *url.URL, fn func(batch *database.Batch)) {
-	_ = sim.SubnetFor(account).Database.Update(func(batch *database.Batch) error {
+	_ = sim.PartitionFor(account).Database.Update(func(batch *database.Batch) error {
 		fn(batch)
 		return nil
 	})
 }
 
 func viewSubnetFor(sim *simulator.Simulator, account *url.URL, fn func(batch *database.Batch)) {
-	_ = sim.SubnetFor(account).Database.View(func(batch *database.Batch) error {
+	_ = sim.PartitionFor(account).Database.View(func(batch *database.Batch) error {
 		fn(batch)
 		return nil
 	})

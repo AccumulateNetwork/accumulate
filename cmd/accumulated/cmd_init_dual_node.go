@@ -14,7 +14,7 @@ import (
 
 // initDualNode accumulate init dual BVN0 http://ip:dnport
 func initDualNode(cmd *cobra.Command, args []string) {
-	subnetName := args[0]
+	partitionName := args[0]
 	u, err := url.Parse(args[1])
 	check(err)
 
@@ -53,17 +53,17 @@ func initDualNode(cmd *cobra.Command, args []string) {
 	}
 
 	//now find out what bvn we are on then let
-	dnSubNet := c.Accumulate.Network.LocalAddress
-	dnHost, _, err := net.SplitHostPort(dnSubNet)
+	dnPartition := c.Accumulate.Network.LocalAddress
+	dnHost, _, err := net.SplitHostPort(dnPartition)
 	checkf(err, "cannot resolve bvn host and port")
 
 	_ = netAddr
 
-	var bvn *cfg.Subnet
-	for i, v := range c.Accumulate.Network.Subnets {
+	var bvn *cfg.Partition
+	for i, v := range c.Accumulate.Network.Partitions {
 		//search for the directory.
-		if v.ID == subnetName {
-			bvn = &c.Accumulate.Network.Subnets[i]
+		if v.ID == partitionName {
+			bvn = &c.Accumulate.Network.Partitions[i]
 			break
 		}
 	}
@@ -88,7 +88,7 @@ func initDualNode(cmd *cobra.Command, args []string) {
 	}
 
 	if bvnHost == nil {
-		fatalf("bvn host not found in %v subnet", subnetName)
+		fatalf("bvn host not found in %v subnet", partitionName)
 	}
 
 	if flagInit.NoEmptyBlocks {

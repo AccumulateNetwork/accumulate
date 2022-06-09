@@ -145,8 +145,8 @@ func init() {
 
 	cmdInitDevnet.Flags().StringVar(&flagInitDevnet.Name, "name", "DevNet", "Network name")
 	cmdInitDevnet.Flags().IntVarP(&flagInitDevnet.NumBvns, "bvns", "b", 2, "Number of block validator networks to configure")
-	cmdInitDevnet.Flags().IntVarP(&flagInitDevnet.NumValidators, "validators", "v", 2, "Number of validator nodes per subnet to configure")
-	cmdInitDevnet.Flags().IntVarP(&flagInitDevnet.NumFollowers, "followers", "f", 1, "Number of follower nodes per subnet to configure")
+	cmdInitDevnet.Flags().IntVarP(&flagInitDevnet.NumValidators, "validators", "v", 2, "Number of validator nodes per partition to configure")
+	cmdInitDevnet.Flags().IntVarP(&flagInitDevnet.NumFollowers, "followers", "f", 1, "Number of follower nodes per partition to configure")
 	cmdInitDevnet.Flags().IntVar(&flagInitDevnet.BasePort, "port", 26656, "Base port to use for listeners")
 	cmdInitDevnet.Flags().StringSliceVar(&flagInitDevnet.IPs, "ip", []string{"127.0.1.1"}, "IP addresses to use or base IP - must not end with .0")
 	cmdInitDevnet.Flags().BoolVar(&flagInitDevnet.Docker, "docker", false, "Configure a network that will be deployed with Docker Compose")
@@ -234,7 +234,7 @@ func initNode(cmd *cobra.Command, args []string) {
 	if flagInitNode.Follower {
 		nodeType = cfg.Follower
 	}
-	config := config.Default(description.Network.NetworkName, description.Network.Type, nodeType, description.Network.LocalSubnetID)
+	config := config.Default(description.Network.NetworkName, description.Network.Type, nodeType, description.Network.LocalPartitionID)
 	config.P2P.PersistentPeers = fmt.Sprintf("%s@%s:%d", status.NodeInfo.NodeID, netAddr, netPort+networks.TmP2pPortOffset)
 	config.Accumulate.Network = description.Network
 
@@ -307,16 +307,16 @@ func initDevNet(cmd *cobra.Command, _ []string) {
 	compose.Services = make([]dc.ServiceConfig, 0, 1+count*(flagInitDevnet.NumBvns+1))
 	compose.Volumes = make(map[string]dc.VolumeConfig, 1+count*(flagInitDevnet.NumBvns+1))
 
-	subnets := make([]config.Subnet, flagInitDevnet.NumBvns+1)
+	partitions := make([]config.Partition, flagInitDevnet.NumBvns+1)
 	dnConfig := make([]*cfg.Config, count)
 	dnRemote := make([]string, count)
 	dnListen := make([]string, count)
-	initDNs(count, dnConfig, dnRemote, dnListen, compose, subnets)
+	initDNs(count, dnConfig, dnRemote, dnListen, compose, partitions)
 
 	bvnConfig := make([][]*cfg.Config, flagInitDevnet.NumBvns)
 	bvnRemote := make([][]string, flagInitDevnet.NumBvns)
 	bvnListen := make([][]string, flagInitDevnet.NumBvns)
-	initBVNs(bvnConfig, count, bvnRemote, bvnListen, compose, subnets)
+	initBVNs(bvnConfig, count, bvnRemote, bvnListen, compose, partitions)
 
 	handleDNSSuffix(dnRemote, bvnRemote)
 
@@ -358,7 +358,7 @@ func verifyInitFlags(cmd *cobra.Command, count int) {
 	}
 }
 
-func initDNs(count int, dnConfig []*cfg.Config, dnRemote []string, dnListen []string, compose *dc.Config, subnets []cfg.Subnet) {
+func initDNs(count int, dnConfig []*cfg.Config, dnRemote []string, dnListen []string, compose *dc.Config, partitions []cfg.Partition) {
 	dnNodes := make([]config.Node, count)
 	for i := 0; i < count; i++ {
 		nodeType := cfg.Validator
@@ -370,20 +370,20 @@ func initDNs(count int, dnConfig []*cfg.Config, dnRemote []string, dnListen []st
 			Type:    nodeType,
 			Address: fmt.Sprintf("http://%s:%d", dnRemote[i], flagInitDevnet.BasePort),
 		}
-		dnConfig[i].Accumulate.Network.Subnets = subnets
+		dnConfig[i].Accumulate.Network.Partitions = partitions
 		dnConfig[i].Accumulate.Network.LocalAddress = parseHost(dnNodes[i].Address)
 	}
 
-	subnets[0] = config.Subnet{
+	partitions[0] = config.Partition{
 		ID:    protocol.Directory,
 		Type:  config.Directory,
 		Nodes: dnNodes,
 	}
 }
 
-func initBVNs(bvnConfigs [][]*cfg.Config, count int, bvnRemotes [][]string, bvnListen [][]string, compose *dc.Config, subnets []cfg.Subnet) {
+func initBVNs(bvnConfigs [][]*cfg.Config, count int, bvnRemotes [][]string, bvnListen [][]string, compose *dc.Config, partitions []cfg.Partition) {
 	for bvn := range bvnConfigs {
-		subnetID := fmt.Sprintf("BVN%d", bvn)
+		partitionID := fmt.Sprintf("BVN%d", bvn)
 		bvnConfigs[bvn] = make([]*cfg.Config, count)
 		bvnRemotes[bvn] = make([]string, count)
 		bvnListen[bvn] = make([]string, count)
@@ -399,11 +399,11 @@ func initBVNs(bvnConfigs [][]*cfg.Config, count int, bvnRemotes [][]string, bvnL
 				Type:    nodeType,
 				Address: fmt.Sprintf("http://%s:%d", bvnRemotes[bvn][i], flagInitDevnet.BasePort),
 			}
-			bvnConfigs[bvn][i].Accumulate.Network.Subnets = subnets
+			bvnConfigs[bvn][i].Accumulate.Network.Partitions = partitions
 			bvnConfigs[bvn][i].Accumulate.Network.LocalAddress = parseHost(bvnNodes[i].Address)
 		}
-		subnets[bvn+1] = config.Subnet{
-			ID:    subnetID,
+		partitions[bvn+1] = config.Partition{
+			ID:    partitionID,
 			Type:  config.BlockValidator,
 			Nodes: bvnNodes,
 		}
@@ -433,7 +433,7 @@ func createInLocalFS(dnConfig []*cfg.Config, dnRemote []string, dnListen []strin
 		RemoteIP:            dnRemote,
 		ListenIP:            dnListen,
 		NetworkValidatorMap: netValMap,
-		Logger:              logger.With("subnet", protocol.Directory),
+		Logger:              logger.With("partition", protocol.Directory),
 	})
 	check(err)
 	genList := []genesis.Bootstrap{genInit}
@@ -447,7 +447,7 @@ func createInLocalFS(dnConfig []*cfg.Config, dnRemote []string, dnListen []strin
 			RemoteIP:            bvnRemote,
 			ListenIP:            bvnListen,
 			NetworkValidatorMap: netValMap,
-			Logger:              logger.With("subnet", fmt.Sprintf("BVN%d", bvn)),
+			Logger:              logger.With("partition", fmt.Sprintf("BVN%d", bvn)),
 		})
 		check(err)
 		if genesis != nil {

@@ -26,7 +26,7 @@ const AccountAuthOperationTypeRemoveAuthority AccountAuthOperationType = 4
 // AccountTypeUnknown represents an unknown account type.
 const AccountTypeUnknown AccountType = 0
 
-// AccountTypeAnchorLedger anchors the other subnets.
+// AccountTypeAnchorLedger anchors the other partitions.
 const AccountTypeAnchorLedger AccountType = 1
 
 // AccountTypeIdentity is an Identity account, aka an ADI.
@@ -260,7 +260,7 @@ const SignatureTypeSynthetic SignatureType = 5
 // SignatureTypeSet is used when forwarding multiple signatures.
 const SignatureTypeSet SignatureType = 6
 
-// SignatureTypeRemote is used when forwarding a signature from one subnet to another.
+// SignatureTypeRemote is used when forwarding a signature from one partition to another.
 const SignatureTypeRemote SignatureType = 7
 
 // SignatureTypeBTC represents an BTC signature.
@@ -365,7 +365,7 @@ const TransactionTypeSyntheticDepositCredits TransactionType = 52
 // TransactionTypeSyntheticBurnTokens returns tokens to a token issuer's pool of issuable tokens.
 const TransactionTypeSyntheticBurnTokens TransactionType = 53
 
-// TransactionTypeSyntheticForwardTransaction forwards a transaction from one subnet to another.
+// TransactionTypeSyntheticForwardTransaction forwards a transaction from one partition to another.
 const TransactionTypeSyntheticForwardTransaction TransactionType = 54
 
 // TransactionTypeSystemGenesis initializes system chains.

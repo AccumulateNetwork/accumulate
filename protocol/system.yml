@@ -106,7 +106,7 @@ NetworkAccountUpdate:
       type: TransactionBody
       marshal-as: union
 
-PartitionAnchor:
+SubnetAnchor:
   fields:
     - name: Source
       description: is the principal of the transaction that produced this transaction

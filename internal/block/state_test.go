@@ -34,8 +34,8 @@ func TestStateSaveAndRestore(t *testing.T) {
 	filename := func(subnet string) string {
 		return filepath.Join(dir, fmt.Sprintf("%s.bpt", subnet))
 	}
-	for _, subnet := range sim.Subnets {
-		x := sim.Subnet(subnet.ID)
+	for _, subnet := range sim.Partitions {
+		x := sim.Partition(subnet.ID)
 		batch := x.Database.Begin(false)
 		defer batch.Discard()
 		f, err := os.Create(filename(subnet.ID))

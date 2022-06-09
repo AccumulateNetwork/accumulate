@@ -26,7 +26,7 @@ type Node struct {
 	Type config.NodeType `json:"type"`
 }
 
-type Subnet struct {
+type Partition struct {
 	Name  string             `json:"name"`
 	Type  config.NetworkType `json:"type"`
 	Port  int                `json:"port"`
@@ -34,8 +34,8 @@ type Subnet struct {
 }
 
 type Network struct {
-	Network string   `json:"network"`
-	Subnet  []Subnet `json:"subnet"`
+	Network   string      `json:"network"`
+	Partition []Partition `json:"partition"`
 }
 
 func loadNetworkConfiguration(file string) (ret Network, err error) {
@@ -56,22 +56,22 @@ func initNetwork(cmd *cobra.Command, args []string) {
 	network, err := loadNetworkConfiguration(networkConfigFile)
 	check(err)
 
-	var directory *Subnet
-	var bvns []*Subnet
+	var directory *Partition
+	var bvns []*Partition
 
-	var bvnSubnet []*Subnet
+	var bvnPartition []*Partition
 
-	//now look for the subnet.
-	for i, v := range network.Subnet {
+	//now look for the partition.
+	for i, v := range network.Partition {
 		//while we are at it, also find the directory.
 		if v.Type == config.Directory {
 			if directory != nil {
-				fatalf("more than one directory subnet is defined, can only have 1")
+				fatalf("more than one directory partition is defined, can only have 1")
 			}
-			directory = &network.Subnet[i]
+			directory = &network.Partition[i]
 		}
 		if v.Type == config.BlockValidator {
-			bvnSubnet = append(bvnSubnet, &network.Subnet[i])
+			bvnPartition = append(bvnPartition, &network.Partition[i])
 		}
 	}
 
@@ -86,7 +86,7 @@ func initNetwork(cmd *cobra.Command, args []string) {
 	//quick validation to make sure the directory node maps to each of the BVN's defined
 	for _, dnn := range directory.Nodes {
 		found := false
-		for _, bvn := range network.Subnet {
+		for _, bvn := range network.Partition {
 			if bvn.Type == config.Directory {
 				continue
 			}
@@ -108,7 +108,7 @@ func initNetwork(cmd *cobra.Command, args []string) {
 	}
 
 	// we'll need 1 DN for each BVN.
-	numBvns := len(network.Subnet) - 1
+	numBvns := len(network.Partition) - 1
 
 	if flagInitNetwork.Compose {
 		flagInitNetwork.Docker = true
@@ -134,9 +134,9 @@ func initNetwork(cmd *cobra.Command, args []string) {
 	var dnRemote []string
 	dnListen := make([]string, len(directory.Nodes))
 
-	var accSub []config.Subnet
-	for _, sub := range network.Subnet {
-		s := config.Subnet{}
+	var accSub []config.Partition
+	for _, sub := range network.Partition {
+		s := config.Partition{}
 		s.ID = sub.Name
 		s.Type = sub.Type
 		for _, a := range sub.Nodes {
@@ -170,22 +170,22 @@ func initNetwork(cmd *cobra.Command, args []string) {
 			c.Accumulate.Website.Enabled = false
 		}
 		dnListen[i] = "0.0.0.0"
-		c.Accumulate.Network.LocalSubnetID = directory.Name
+		c.Accumulate.Network.LocalPartitionID = directory.Name
 		c.Accumulate.Network.Type = directory.Type
-		c.Accumulate.Network.Subnets = accSub
+		c.Accumulate.Network.Partitions = accSub
 		c.Accumulate.Network.LocalAddress = fmt.Sprintf("%s:%d", bvns[i].Nodes[0].IP, directory.Port)
 	}
 
-	bvnConfig := make([][]*cfg.Config, len(bvnSubnet))
-	bvnListen := make([][]string, len(bvnSubnet))
-	for i, v := range bvnSubnet {
+	bvnConfig := make([][]*cfg.Config, len(bvnPartition))
+	bvnListen := make([][]string, len(bvnPartition))
+	for i, v := range bvnPartition {
 		bvnConfig[i] = make([]*cfg.Config, len(v.Nodes))
 		bvnListen[i] = make([]string, len(v.Nodes))
 	}
 
-	bvnRemote := make([][]string, len(bvnSubnet)) //numBvns)
+	bvnRemote := make([][]string, len(bvnPartition)) //numBvns)
 
-	for i, v := range bvnSubnet {
+	for i, v := range bvnPartition {
 		for j := range v.Nodes {
 			bvnConfig[i][j], bvnRemote[i], bvnListen[i][j] = initNetworkNode(network.Network, v.Name, v.Nodes, cfg.BlockValidator,
 				cfg.Validator, i, j, compose)
@@ -203,19 +203,19 @@ func initNetwork(cmd *cobra.Command, args []string) {
 				c.Accumulate.Website.Enabled = false
 			}
 			c.Accumulate.Network.Type = config.BlockValidator
-			c.Accumulate.Network.LocalSubnetID = v.Name
+			c.Accumulate.Network.LocalPartitionID = v.Name
 			c.Accumulate.Network.LocalAddress = fmt.Sprintf("%s:%d", v.Nodes[j].IP, v.Port)
-			c.Accumulate.Network.Subnets = accSub
+			c.Accumulate.Network.Partitions = accSub
 		}
 	}
 
-	for _, sub := range bvnSubnet {
+	for _, sub := range bvnPartition {
 		for _, bvn := range sub.Nodes {
 			addresses[sub.Name] = append(addresses[sub.Name], fmt.Sprintf("http://%s:%d", bvn.IP, sub.Port))
 		}
 	}
 
-	for i, v := range bvnSubnet {
+	for i, v := range bvnPartition {
 		for j := range v.Nodes {
 			c := bvnConfig[i][j]
 			if flagInit.NoEmptyBlocks {
@@ -226,9 +226,9 @@ func initNetwork(cmd *cobra.Command, args []string) {
 				c.Accumulate.Website.Enabled = false
 			}
 			c.Accumulate.Network.Type = config.BlockValidator
-			c.Accumulate.Network.LocalSubnetID = v.Name
+			c.Accumulate.Network.LocalPartitionID = v.Name
 			c.Accumulate.Network.LocalAddress = fmt.Sprintf("%s:%d", v.Nodes[j].IP, v.Port)
-			c.Accumulate.Network.Subnets = accSub
+			c.Accumulate.Network.Partitions = accSub
 		}
 	}
 
@@ -250,13 +250,13 @@ func initNetwork(cmd *cobra.Command, args []string) {
 			RemoteIP:            dnRemote,
 			ListenIP:            dnListen,
 			NetworkValidatorMap: netValMap,
-			Logger:              logger.With("subnet", protocol.Directory),
+			Logger:              logger.With("partition", protocol.Directory),
 			FactomAddressesFile: factomAddressesFile,
 		})
 		check(err)
 		genList := []genesis.Bootstrap{genInit}
 
-		for i := range bvnSubnet {
+		for i := range bvnPartition {
 			genInit, err := node.Init(node.InitOptions{
 				WorkDir:             filepath.Join(flagMain.WorkDir, fmt.Sprintf("bvn%d", i)),
 				Port:                bvns[i].Port,
@@ -264,7 +264,7 @@ func initNetwork(cmd *cobra.Command, args []string) {
 				RemoteIP:            bvnRemote[i],
 				ListenIP:            bvnListen[i],
 				NetworkValidatorMap: netValMap,
-				Logger:              logger.With("subnet", bvns[i].Name),
+				Logger:              logger.With("partition", bvns[i].Name),
 				FactomAddressesFile: factomAddressesFile,
 			})
 			check(err)
@@ -335,7 +335,7 @@ func initNetwork(cmd *cobra.Command, args []string) {
 	//	initValidatorNode("dn", dnBasePort, cmd, args)
 }
 
-func initNetworkNode(networkName string, subnetName string, nodes []Node, netType cfg.NetworkType, nodeType cfg.NodeType,
+func initNetworkNode(networkName string, partitionName string, nodes []Node, netType cfg.NetworkType, nodeType cfg.NodeType,
 	bvn, node int, compose *dc.Config) (config *cfg.Config, remote []string, listen string) {
 
 	if netType == cfg.Directory {
@@ -369,7 +369,7 @@ func initNetworkNode(networkName string, subnetName string, nodes []Node, netTyp
 	if netType == cfg.Directory {
 		name, dir = fmt.Sprintf("dn-%d", node), fmt.Sprintf("./dn/Node%d", node)
 	} else {
-		name, dir = fmt.Sprintf("bvn%d-%d", bvn, node), fmt.Sprintf("./%s/Node%d", strings.ToLower(subnetName), node)
+		name, dir = fmt.Sprintf("bvn%d-%d", bvn, node), fmt.Sprintf("./%s/Node%d", strings.ToLower(partitionName), node)
 	}
 
 	var svc dc.ServiceConfig

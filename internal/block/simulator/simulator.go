@@ -33,9 +33,9 @@ var genesisTime = time.Date(2022, 7, 1, 0, 0, 0, 0, time.UTC)
 
 type Simulator struct {
 	tb
-	Logger    log.Logger
-	Subnets   []config.Subnet
-	Executors map[string]*ExecEntry
+	Logger     log.Logger
+	Partitions []config.Partition
+	Executors  map[string]*ExecEntry
 
 	LogLevels string
 
@@ -76,26 +76,26 @@ func (sim *Simulator) Setup(bvnCount int) {
 	sim.routingOverrides = map[[32]byte]string{}
 	sim.Logger = sim.newLogger().With("module", "simulator")
 	sim.Executors = map[string]*ExecEntry{}
-	sim.Subnets = make([]config.Subnet, bvnCount+1)
-	sim.Subnets[0] = config.Subnet{Type: config.Directory, ID: protocol.Directory}
+	sim.Partitions = make([]config.Partition, bvnCount+1)
+	sim.Partitions[0] = config.Partition{Type: config.Directory, ID: protocol.Directory}
 	for i := 0; i < bvnCount; i++ {
-		sim.Subnets[i+1] = config.Subnet{Type: config.BlockValidator, ID: fmt.Sprintf("BVN%d", i)}
+		sim.Partitions[i+1] = config.Partition{Type: config.BlockValidator, ID: fmt.Sprintf("BVN%d", i)}
 	}
 
 	// Initialize each executor
-	for i := range sim.Subnets {
-		subnet := &sim.Subnets[i]
-		subnet.Nodes = []config.Node{{Type: config.Validator, Address: subnet.ID}}
+	for i := range sim.Partitions {
+		partition := &sim.Partitions[i]
+		partition.Nodes = []config.Node{{Type: config.Validator, Address: partition.ID}}
 
-		logger := sim.newLogger().With("subnet", subnet.ID)
-		key := acctesting.GenerateKey(sim.Name(), subnet.ID)
+		logger := sim.newLogger().With("partition", partition.ID)
+		key := acctesting.GenerateKey(sim.Name(), partition.ID)
 		db := database.OpenInMemory(logger)
 
 		network := config.Network{
-			Type:          subnet.Type,
-			LocalSubnetID: subnet.ID,
-			LocalAddress:  subnet.ID,
-			Subnets:       sim.Subnets,
+			Type:             partition.Type,
+			LocalPartitionID: partition.ID,
+			LocalAddress:     partition.ID,
+			Partitions:       sim.Partitions,
 		}
 
 		exec, err := NewNodeExecutor(ExecutorOptions{
@@ -114,10 +114,10 @@ func (sim *Simulator) Setup(bvnCount int) {
 		})
 		require.NoError(sim, err)
 
-		sim.Executors[subnet.ID] = &ExecEntry{
+		sim.Executors[partition.ID] = &ExecEntry{
 			Database:   db,
 			Executor:   exec,
-			Subnet:     subnet,
+			Partition:  partition,
 			API:        acctesting.DirectJrpcClient(jrpc),
 			tb:         sim.tb,
 			blockTime:  genesisTime,
@@ -126,47 +126,47 @@ func (sim *Simulator) Setup(bvnCount int) {
 	}
 }
 
-func (s *Simulator) SetRouteFor(account *url.URL, subnet string) {
+func (s *Simulator) SetRouteFor(account *url.URL, partition string) {
 	// Make sure the account is a root identity
 	if !account.RootIdentity().Equal(account) {
 		s.Fatalf("Cannot set the route for a non-root: %v", account)
 	}
 
-	// Make sure the subnet exists
-	s.Subnet(subnet)
+	// Make sure the partition exists
+	s.Partition(partition)
 
 	// Add/remove the override
-	if subnet == "" {
+	if partition == "" {
 		delete(s.routingOverrides, account.AccountID32())
 	} else {
-		s.routingOverrides[account.AccountID32()] = subnet
+		s.routingOverrides[account.AccountID32()] = partition
 	}
 }
 
 func (s *Simulator) Router() routing.Router {
-	r, _, err := routing.NewSimpleRouter(&config.Network{Subnets: s.Subnets}, nil)
+	r, _, err := routing.NewSimpleRouter(&config.Network{Partitions: s.Partitions}, nil)
 	require.NoError(s, err)
 	return router{s, r}
 }
 
-func (s *Simulator) Subnet(id string) *ExecEntry {
+func (s *Simulator) Partition(id string) *ExecEntry {
 	e, ok := s.Executors[id]
-	require.Truef(s, ok, "Unknown subnet %q", id)
+	require.Truef(s, ok, "Unknown partition %q", id)
 	return e
 }
 
-func (s *Simulator) SubnetFor(url *url.URL) *ExecEntry {
+func (s *Simulator) PartitionFor(url *url.URL) *ExecEntry {
 	s.Helper()
 
-	subnet, err := s.Router().RouteAccount(url)
+	partition, err := s.Router().RouteAccount(url)
 	require.NoError(s, err)
-	return s.Subnet(subnet)
+	return s.Partition(partition)
 }
 
 func (s *Simulator) Query(url *url.URL, req query.Request, prove bool) interface{} {
 	s.Helper()
 
-	x := s.SubnetFor(url)
+	x := s.PartitionFor(url)
 	return Query(s, x.Database, x.Executor, req, prove)
 }
 
@@ -199,9 +199,9 @@ func (s *Simulator) InitFromGenesis() {
 func (s *Simulator) InitFromSnapshot(filename func(string) string) {
 	s.Helper()
 
-	for _, subnet := range s.Subnets {
-		x := s.Subnet(subnet.ID)
-		InitFromSnapshot(s, x.Database, x.Executor, filename(subnet.ID))
+	for _, partition := range s.Partitions {
+		x := s.Partition(partition.ID)
+		InitFromSnapshot(s, x.Database, x.Executor, filename(partition.ID))
 	}
 }
 
@@ -217,11 +217,11 @@ func (s *Simulator) ExecuteBlock(statusChan chan<- *protocol.TransactionStatus) 
 	}
 
 	errg := new(errgroup.Group)
-	for _, subnet := range s.Subnets {
-		s.Subnet(subnet.ID).executeBlock(errg, statusChan)
+	for _, partition := range s.Partitions {
+		s.Partition(partition.ID).executeBlock(errg, statusChan)
 	}
 
-	// Wait for all subnets to complete
+	// Wait for all partitions to complete
 	err := errg.Wait()
 	require.NoError(tb{s}, err)
 }
@@ -239,9 +239,9 @@ func (s *Simulator) Submit(envelopes ...*protocol.Envelope) ([]*protocol.Envelop
 
 	for _, envelope := range envelopes {
 		// Route
-		subnet, err := s.Router().Route(envelope)
+		partition, err := s.Router().Route(envelope)
 		require.NoError(s, err)
-		x := s.Subnet(subnet)
+		x := s.Partition(partition)
 
 		// Normalize - use a copy to avoid weird issues caused by modifying values
 		deliveries, err := chain.NormalizeEnvelope(envelope.Copy())
@@ -328,8 +328,8 @@ func (s *Simulator) SubmitAndExecuteBlock(envelopes ...*protocol.Envelope) ([]*p
 func (s *Simulator) findTxn(status func(*protocol.TransactionStatus) bool, hash []byte) *ExecEntry {
 	s.Helper()
 
-	for _, subnet := range s.Subnets {
-		x := s.Subnet(subnet.ID)
+	for _, partition := range s.Partitions {
+		x := s.Partition(partition.ID)
 
 		batch := x.Database.Begin(false)
 		defer batch.Discard()
@@ -412,7 +412,7 @@ type ExecEntry struct {
 	blockTime               time.Time
 	nextBlock, currentBlock []*protocol.Envelope
 
-	Subnet     *config.Subnet
+	Partition  *config.Partition
 	Database   *database.Database
 	Executor   *block.Executor
 	bootstrap  genesis.Bootstrap
@@ -420,7 +420,7 @@ type ExecEntry struct {
 	Validators [][]byte
 
 	// SubmitHook can be used to control how envelopes are submitted to the
-	// subnet. It is not safe to change SubmitHook concurrently with calls to
+	// partition. It is not safe to change SubmitHook concurrently with calls to
 	// Submit.
 	SubmitHook func([]*protocol.Envelope) []*protocol.Envelope
 }
@@ -480,7 +480,7 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 	var deliveries []*chain.Delivery
 	for _, envelope := range x.takeSubmitted() {
 		d, err := chain.NormalizeEnvelope(envelope)
-		require.NoErrorf(x, err, "Normalizing envelopes for %s", x.Executor.Network.LocalSubnetID)
+		require.NoErrorf(x, err, "Normalizing envelopes for %s", x.Executor.Network.LocalPartitionID)
 		deliveries = append(deliveries, d...)
 	}
 

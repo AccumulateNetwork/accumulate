@@ -61,7 +61,7 @@ func (d *dispatcher) BroadcastTx(ctx context.Context, u *url.URL, tx *protocol.E
 
 // BroadcastTxAsync dispatches the txn to the appropriate client.
 func (d *dispatcher) BroadcastTxLocal(ctx context.Context, tx *protocol.Envelope) error {
-	return d.push(d.Network.LocalSubnetID, tx)
+	return d.push(d.Network.LocalPartitionID, tx)
 }
 
 var errTxInCache1 = jrpc.RPCInternalError(jrpc.JSONRPCIntID(0), tm.ErrTxInCache).Error

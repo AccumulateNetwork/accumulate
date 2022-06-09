@@ -254,7 +254,7 @@ func (x *Executor) requestMissingSyntheticTransactions(ledger *protocol.Syntheti
 
 	// For each subnet
 	var sent bool
-	for _, subnet := range ledger.Subnets {
+	for _, subnet := range ledger.Partitions {
 		// Get the subnet ID
 		id, ok := protocol.ParseSubnetUrl(subnet.Url)
 		if !ok {

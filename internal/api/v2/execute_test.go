@@ -43,7 +43,7 @@ func TestExecuteCheckOnly(t *testing.T) {
 		clients[""] = local
 		connectionManager := connections.NewFakeConnectionManager(clients)
 		router, _, err := routing.NewSimpleRouter(&config.Network{
-			Subnets: []config.Subnet{
+			Partitions: []config.Partition{
 				{
 					ID:   "",
 					Type: config.BlockValidator,
@@ -74,7 +74,7 @@ func TestExecuteCheckOnly(t *testing.T) {
 		clients[""] = local
 		connectionManager := connections.NewFakeConnectionManager(clients)
 		router, _, err := routing.NewSimpleRouter(&config.Network{
-			Subnets: []config.Subnet{
+			Partitions: []config.Partition{
 				{
 					ID:   "",
 					Type: config.BlockValidator,

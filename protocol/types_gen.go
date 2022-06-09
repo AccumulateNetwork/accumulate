@@ -245,12 +245,12 @@ type DelegatedSignature struct {
 
 type DirectoryAnchor struct {
 	fieldsSet []bool
-	SubnetAnchor
+	PartitionAnchor
 	// Updates are synchronization updates for network accounts.
 	Updates []NetworkAccountUpdate `json:"updates,omitempty" form:"updates" query:"updates" validate:"required"`
-	// Receipts are receipts for anchors from other subnets that were included in the block.
+	// Receipts are receipts for anchors from other partitions that were included in the block.
 	Receipts []Receipt `json:"receipts,omitempty" form:"receipts" query:"receipts" validate:"required"`
-	// MakeMajorBlock notifies the subnet that the DN has opened a major block.
+	// MakeMajorBlock notifies the partition that the DN has opened a major block.
 	MakeMajorBlock uint64 `json:"makeMajorBlock,omitempty" form:"makeMajorBlock" query:"makeMajorBlock" validate:"required"`
 	extraData      []byte
 }
@@ -443,8 +443,8 @@ type NetworkAccountUpdate struct {
 
 type NetworkDefinition struct {
 	fieldsSet   []bool
-	NetworkName string             `json:"networkName,omitempty" form:"networkName" query:"networkName" validate:"required"`
-	Subnets     []SubnetDefinition `json:"subnets,omitempty" form:"subnets" query:"subnets" validate:"required"`
+	NetworkName string                `json:"networkName,omitempty" form:"networkName" query:"networkName" validate:"required"`
+	Partitions  []PartitionDefinition `json:"partitions,omitempty" form:"partitions" query:"partitions" validate:"required"`
 	extraData   []byte
 }
 
@@ -467,9 +467,31 @@ type Object struct {
 
 type PartitionAnchor struct {
 	fieldsSet []bool
-	SubnetAnchor
+	PartitionAnchor
 	// AcmeBurnt is the amount of acme tokens burnt in the transaction.
 	AcmeBurnt big.Int `json:"acmeBurnt,omitempty" form:"acmeBurnt" query:"acmeBurnt" validate:"required"`
+	extraData []byte
+}
+
+type PartitionDefinition struct {
+	fieldsSet          []bool
+	PartitionID        string     `json:"partitionID,omitempty" form:"partitionID" query:"partitionID" validate:"required"`
+	ValidatorKeyHashes [][32]byte `json:"validatorKeyHashes,omitempty" form:"validatorKeyHashes" query:"validatorKeyHashes" validate:"required"`
+	extraData          []byte
+}
+
+type PartitionSyntheticLedger struct {
+	fieldsSet []bool
+	// Url is the URL of the partition.
+	Url *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	// Produced is the maximum sequence number of synthetic transactions produced for the partition.
+	Produced uint64 `json:"produced,omitempty" form:"produced" query:"produced" validate:"required"`
+	// Received is the maximum sequence number of synthetic transactions received from the partition.
+	Received uint64 `json:"received,omitempty" form:"received" query:"received" validate:"required"`
+	// Delivered is the maximum sequence number of delivered synthetic transactions received from the partition.
+	Delivered uint64 `json:"delivered,omitempty" form:"delivered" query:"delivered" validate:"required"`
+	// Pending is the transaction hashes of synthetic transactions received out of order.
+	Pending   []*url.TxID `json:"pending,omitempty" form:"pending" query:"pending" validate:"required"`
 	extraData []byte
 }
 
@@ -516,7 +538,7 @@ type ReceiptSignature struct {
 	extraData       []byte
 }
 
-// RemoteSignature is used when forwarding a signature from one subnet to another.
+// RemoteSignature is used when forwarding a signature from one partition to another.
 type RemoteSignature struct {
 	fieldsSet   []bool
 	Destination *url.URL  `json:"destination,omitempty" form:"destination" query:"destination" validate:"required"`
@@ -557,14 +579,14 @@ type Route struct {
 	Length uint64 `json:"length,omitempty" form:"length" query:"length" validate:"required"`
 	// Value is the prefix value.
 	Value     uint64 `json:"value,omitempty" form:"value" query:"value" validate:"required"`
-	Subnet    string `json:"subnet,omitempty" form:"subnet" query:"subnet" validate:"required"`
+	Partition string `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
 	extraData []byte
 }
 
 type RouteOverride struct {
 	fieldsSet []bool
 	Account   *url.URL `json:"account,omitempty" form:"account" query:"account" validate:"required"`
-	Subnet    string   `json:"subnet,omitempty" form:"subnet" query:"subnet" validate:"required"`
+	Partition string   `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
 	extraData []byte
 }
 
@@ -616,28 +638,6 @@ type SubnetAnchor struct {
 	extraData       []byte
 }
 
-type SubnetDefinition struct {
-	fieldsSet          []bool
-	SubnetID           string     `json:"subnetID,omitempty" form:"subnetID" query:"subnetID" validate:"required"`
-	ValidatorKeyHashes [][32]byte `json:"validatorKeyHashes,omitempty" form:"validatorKeyHashes" query:"validatorKeyHashes" validate:"required"`
-	extraData          []byte
-}
-
-type SubnetSyntheticLedger struct {
-	fieldsSet []bool
-	// Url is the URL of the subnet.
-	Url *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
-	// Produced is the maximum sequence number of synthetic transactions produced for the subnet.
-	Produced uint64 `json:"produced,omitempty" form:"produced" query:"produced" validate:"required"`
-	// Received is the maximum sequence number of synthetic transactions received from the subnet.
-	Received uint64 `json:"received,omitempty" form:"received" query:"received" validate:"required"`
-	// Delivered is the maximum sequence number of delivered synthetic transactions received from the subnet.
-	Delivered uint64 `json:"delivered,omitempty" form:"delivered" query:"delivered" validate:"required"`
-	// Pending is the transaction hashes of synthetic transactions received out of order.
-	Pending   []*url.TxID `json:"pending,omitempty" form:"pending" query:"pending" validate:"required"`
-	extraData []byte
-}
-
 type SyntheticBurnTokens struct {
 	fieldsSet []bool
 	SyntheticOrigin
@@ -675,10 +675,10 @@ type SyntheticForwardTransaction struct {
 }
 
 type SyntheticLedger struct {
-	fieldsSet []bool
-	Url       *url.URL                 `json:"url,omitempty" form:"url" query:"url" validate:"required"`
-	Subnets   []*SubnetSyntheticLedger `json:"subnets,omitempty" form:"subnets" query:"subnets" validate:"required"`
-	extraData []byte
+	fieldsSet  []bool
+	Url        *url.URL                    `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	Partitions []*PartitionSyntheticLedger `json:"partitions,omitempty" form:"partitions" query:"partitions" validate:"required"`
+	extraData  []byte
 }
 
 type SyntheticOrigin struct {
@@ -1457,7 +1457,7 @@ func (v *DelegatedSignature) CopyAsInterface() interface{} { return v.Copy() }
 func (v *DirectoryAnchor) Copy() *DirectoryAnchor {
 	u := new(DirectoryAnchor)
 
-	u.SubnetAnchor = *v.SubnetAnchor.Copy()
+	u.PartitionAnchor = *v.PartitionAnchor.Copy()
 	u.Updates = make([]NetworkAccountUpdate, len(v.Updates))
 	for i, v := range v.Updates {
 		u.Updates[i] = *(&v).Copy()
@@ -1778,9 +1778,9 @@ func (v *NetworkDefinition) Copy() *NetworkDefinition {
 	u := new(NetworkDefinition)
 
 	u.NetworkName = v.NetworkName
-	u.Subnets = make([]SubnetDefinition, len(v.Subnets))
-	for i, v := range v.Subnets {
-		u.Subnets[i] = *(&v).Copy()
+	u.Partitions = make([]PartitionDefinition, len(v.Partitions))
+	for i, v := range v.Partitions {
+		u.Partitions[i] = *(&v).Copy()
 	}
 
 	return u
@@ -1816,13 +1816,48 @@ func (v *Object) CopyAsInterface() interface{} { return v.Copy() }
 func (v *PartitionAnchor) Copy() *PartitionAnchor {
 	u := new(PartitionAnchor)
 
-	u.SubnetAnchor = *v.SubnetAnchor.Copy()
+	u.PartitionAnchor = *v.PartitionAnchor.Copy()
 	u.AcmeBurnt = *encoding.BigintCopy(&v.AcmeBurnt)
 
 	return u
 }
 
 func (v *PartitionAnchor) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *PartitionDefinition) Copy() *PartitionDefinition {
+	u := new(PartitionDefinition)
+
+	u.PartitionID = v.PartitionID
+	u.ValidatorKeyHashes = make([][32]byte, len(v.ValidatorKeyHashes))
+	for i, v := range v.ValidatorKeyHashes {
+		u.ValidatorKeyHashes[i] = v
+	}
+
+	return u
+}
+
+func (v *PartitionDefinition) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *PartitionSyntheticLedger) Copy() *PartitionSyntheticLedger {
+	u := new(PartitionSyntheticLedger)
+
+	if v.Url != nil {
+		u.Url = (v.Url).Copy()
+	}
+	u.Produced = v.Produced
+	u.Received = v.Received
+	u.Delivered = v.Delivered
+	u.Pending = make([]*url.TxID, len(v.Pending))
+	for i, v := range v.Pending {
+		if v != nil {
+			u.Pending[i] = (v).Copy()
+		}
+	}
+
+	return u
+}
+
+func (v *PartitionSyntheticLedger) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *RCD1Signature) Copy() *RCD1Signature {
 	u := new(RCD1Signature)
@@ -1958,7 +1993,7 @@ func (v *Route) Copy() *Route {
 
 	u.Length = v.Length
 	u.Value = v.Value
-	u.Subnet = v.Subnet
+	u.Partition = v.Partition
 
 	return u
 }
@@ -1971,7 +2006,7 @@ func (v *RouteOverride) Copy() *RouteOverride {
 	if v.Account != nil {
 		u.Account = (v.Account).Copy()
 	}
-	u.Subnet = v.Subnet
+	u.Partition = v.Partition
 
 	return u
 }
@@ -2059,41 +2094,6 @@ func (v *SubnetAnchor) Copy() *SubnetAnchor {
 
 func (v *SubnetAnchor) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *SubnetDefinition) Copy() *SubnetDefinition {
-	u := new(SubnetDefinition)
-
-	u.SubnetID = v.SubnetID
-	u.ValidatorKeyHashes = make([][32]byte, len(v.ValidatorKeyHashes))
-	for i, v := range v.ValidatorKeyHashes {
-		u.ValidatorKeyHashes[i] = v
-	}
-
-	return u
-}
-
-func (v *SubnetDefinition) CopyAsInterface() interface{} { return v.Copy() }
-
-func (v *SubnetSyntheticLedger) Copy() *SubnetSyntheticLedger {
-	u := new(SubnetSyntheticLedger)
-
-	if v.Url != nil {
-		u.Url = (v.Url).Copy()
-	}
-	u.Produced = v.Produced
-	u.Received = v.Received
-	u.Delivered = v.Delivered
-	u.Pending = make([]*url.TxID, len(v.Pending))
-	for i, v := range v.Pending {
-		if v != nil {
-			u.Pending[i] = (v).Copy()
-		}
-	}
-
-	return u
-}
-
-func (v *SubnetSyntheticLedger) CopyAsInterface() interface{} { return v.Copy() }
-
 func (v *SyntheticBurnTokens) Copy() *SyntheticBurnTokens {
 	u := new(SyntheticBurnTokens)
 
@@ -2168,10 +2168,10 @@ func (v *SyntheticLedger) Copy() *SyntheticLedger {
 	if v.Url != nil {
 		u.Url = (v.Url).Copy()
 	}
-	u.Subnets = make([]*SubnetSyntheticLedger, len(v.Subnets))
-	for i, v := range v.Subnets {
+	u.Partitions = make([]*PartitionSyntheticLedger, len(v.Partitions))
+	for i, v := range v.Partitions {
 		if v != nil {
-			u.Subnets[i] = (v).Copy()
+			u.Partitions[i] = (v).Copy()
 		}
 	}
 
@@ -3080,7 +3080,7 @@ func (v *DelegatedSignature) Equal(u *DelegatedSignature) bool {
 }
 
 func (v *DirectoryAnchor) Equal(u *DirectoryAnchor) bool {
-	if !v.SubnetAnchor.Equal(&u.SubnetAnchor) {
+	if !v.PartitionAnchor.Equal(&u.PartitionAnchor) {
 		return false
 	}
 	if len(v.Updates) != len(u.Updates) {
@@ -3514,11 +3514,11 @@ func (v *NetworkDefinition) Equal(u *NetworkDefinition) bool {
 	if !(v.NetworkName == u.NetworkName) {
 		return false
 	}
-	if len(v.Subnets) != len(u.Subnets) {
+	if len(v.Partitions) != len(u.Partitions) {
 		return false
 	}
-	for i := range v.Subnets {
-		if !((&v.Subnets[i]).Equal(&u.Subnets[i])) {
+	for i := range v.Partitions {
+		if !((&v.Partitions[i]).Equal(&u.Partitions[i])) {
 			return false
 		}
 	}
@@ -3554,11 +3554,57 @@ func (v *Object) Equal(u *Object) bool {
 }
 
 func (v *PartitionAnchor) Equal(u *PartitionAnchor) bool {
-	if !v.SubnetAnchor.Equal(&u.SubnetAnchor) {
+	if !v.PartitionAnchor.Equal(&u.PartitionAnchor) {
 		return false
 	}
 	if !((&v.AcmeBurnt).Cmp(&u.AcmeBurnt) == 0) {
 		return false
+	}
+
+	return true
+}
+
+func (v *PartitionDefinition) Equal(u *PartitionDefinition) bool {
+	if !(v.PartitionID == u.PartitionID) {
+		return false
+	}
+	if len(v.ValidatorKeyHashes) != len(u.ValidatorKeyHashes) {
+		return false
+	}
+	for i := range v.ValidatorKeyHashes {
+		if !(v.ValidatorKeyHashes[i] == u.ValidatorKeyHashes[i]) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (v *PartitionSyntheticLedger) Equal(u *PartitionSyntheticLedger) bool {
+	switch {
+	case v.Url == u.Url:
+		// equal
+	case v.Url == nil || u.Url == nil:
+		return false
+	case !((v.Url).Equal(u.Url)):
+		return false
+	}
+	if !(v.Produced == u.Produced) {
+		return false
+	}
+	if !(v.Received == u.Received) {
+		return false
+	}
+	if !(v.Delivered == u.Delivered) {
+		return false
+	}
+	if len(v.Pending) != len(u.Pending) {
+		return false
+	}
+	for i := range v.Pending {
+		if !((v.Pending[i]).Equal(u.Pending[i])) {
+			return false
+		}
 	}
 
 	return true
@@ -3723,7 +3769,7 @@ func (v *Route) Equal(u *Route) bool {
 	if !(v.Value == u.Value) {
 		return false
 	}
-	if !(v.Subnet == u.Subnet) {
+	if !(v.Partition == u.Partition) {
 		return false
 	}
 
@@ -3739,7 +3785,7 @@ func (v *RouteOverride) Equal(u *RouteOverride) bool {
 	case !((v.Account).Equal(u.Account)):
 		return false
 	}
-	if !(v.Subnet == u.Subnet) {
+	if !(v.Partition == u.Partition) {
 		return false
 	}
 
@@ -3849,52 +3895,6 @@ func (v *SubnetAnchor) Equal(u *SubnetAnchor) bool {
 	return true
 }
 
-func (v *SubnetDefinition) Equal(u *SubnetDefinition) bool {
-	if !(v.SubnetID == u.SubnetID) {
-		return false
-	}
-	if len(v.ValidatorKeyHashes) != len(u.ValidatorKeyHashes) {
-		return false
-	}
-	for i := range v.ValidatorKeyHashes {
-		if !(v.ValidatorKeyHashes[i] == u.ValidatorKeyHashes[i]) {
-			return false
-		}
-	}
-
-	return true
-}
-
-func (v *SubnetSyntheticLedger) Equal(u *SubnetSyntheticLedger) bool {
-	switch {
-	case v.Url == u.Url:
-		// equal
-	case v.Url == nil || u.Url == nil:
-		return false
-	case !((v.Url).Equal(u.Url)):
-		return false
-	}
-	if !(v.Produced == u.Produced) {
-		return false
-	}
-	if !(v.Received == u.Received) {
-		return false
-	}
-	if !(v.Delivered == u.Delivered) {
-		return false
-	}
-	if len(v.Pending) != len(u.Pending) {
-		return false
-	}
-	for i := range v.Pending {
-		if !((v.Pending[i]).Equal(u.Pending[i])) {
-			return false
-		}
-	}
-
-	return true
-}
-
 func (v *SyntheticBurnTokens) Equal(u *SyntheticBurnTokens) bool {
 	if !v.SyntheticOrigin.Equal(&u.SyntheticOrigin) {
 		return false
@@ -3982,11 +3982,11 @@ func (v *SyntheticLedger) Equal(u *SyntheticLedger) bool {
 	case !((v.Url).Equal(u.Url)):
 		return false
 	}
-	if len(v.Subnets) != len(u.Subnets) {
+	if len(v.Partitions) != len(u.Partitions) {
 		return false
 	}
-	for i := range v.Subnets {
-		if !((v.Subnets[i]).Equal(u.Subnets[i])) {
+	for i := range v.Partitions {
+		if !((v.Partitions[i]).Equal(u.Partitions[i])) {
 			return false
 		}
 	}
@@ -5951,7 +5951,7 @@ func (v *DelegatedSignature) IsValid() error {
 
 var fieldNames_DirectoryAnchor = []string{
 	1: "Type",
-	2: "SubnetAnchor",
+	2: "PartitionAnchor",
 	3: "Updates",
 	4: "Receipts",
 	5: "MakeMajorBlock",
@@ -5962,7 +5962,7 @@ func (v *DirectoryAnchor) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
-	writer.WriteValue(2, &v.SubnetAnchor)
+	writer.WriteValue(2, &v.PartitionAnchor)
 	if !(len(v.Updates) == 0) {
 		for _, v := range v.Updates {
 			writer.WriteValue(3, &v)
@@ -5991,7 +5991,7 @@ func (v *DirectoryAnchor) IsValid() error {
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Type is missing")
 	}
-	if err := v.SubnetAnchor.IsValid(); err != nil {
+	if err := v.PartitionAnchor.IsValid(); err != nil {
 		errs = append(errs, err.Error())
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
@@ -7184,7 +7184,7 @@ func (v *NetworkAccountUpdate) IsValid() error {
 
 var fieldNames_NetworkDefinition = []string{
 	1: "NetworkName",
-	2: "Subnets",
+	2: "Partitions",
 }
 
 func (v *NetworkDefinition) MarshalBinary() ([]byte, error) {
@@ -7194,8 +7194,8 @@ func (v *NetworkDefinition) MarshalBinary() ([]byte, error) {
 	if !(len(v.NetworkName) == 0) {
 		writer.WriteString(1, v.NetworkName)
 	}
-	if !(len(v.Subnets) == 0) {
-		for _, v := range v.Subnets {
+	if !(len(v.Partitions) == 0) {
+		for _, v := range v.Partitions {
 			writer.WriteValue(2, &v)
 		}
 	}
@@ -7217,9 +7217,9 @@ func (v *NetworkDefinition) IsValid() error {
 		errs = append(errs, "field NetworkName is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Subnets is missing")
-	} else if len(v.Subnets) == 0 {
-		errs = append(errs, "field Subnets is not set")
+		errs = append(errs, "field Partitions is missing")
+	} else if len(v.Partitions) == 0 {
+		errs = append(errs, "field Partitions is not set")
 	}
 
 	switch len(errs) {
@@ -7332,7 +7332,7 @@ func (v *Object) IsValid() error {
 
 var fieldNames_PartitionAnchor = []string{
 	1: "Type",
-	2: "SubnetAnchor",
+	2: "PartitionAnchor",
 	3: "AcmeBurnt",
 }
 
@@ -7341,7 +7341,7 @@ func (v *PartitionAnchor) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
-	writer.WriteValue(2, &v.SubnetAnchor)
+	writer.WriteValue(2, &v.PartitionAnchor)
 	if !((v.AcmeBurnt).Cmp(new(big.Int)) == 0) {
 		writer.WriteBigInt(3, &v.AcmeBurnt)
 	}
@@ -7360,13 +7360,140 @@ func (v *PartitionAnchor) IsValid() error {
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Type is missing")
 	}
-	if err := v.SubnetAnchor.IsValid(); err != nil {
+	if err := v.PartitionAnchor.IsValid(); err != nil {
 		errs = append(errs, err.Error())
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field AcmeBurnt is missing")
 	} else if (v.AcmeBurnt).Cmp(new(big.Int)) == 0 {
 		errs = append(errs, "field AcmeBurnt is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_PartitionDefinition = []string{
+	1: "PartitionID",
+	2: "ValidatorKeyHashes",
+}
+
+func (v *PartitionDefinition) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(len(v.PartitionID) == 0) {
+		writer.WriteString(1, v.PartitionID)
+	}
+	if !(len(v.ValidatorKeyHashes) == 0) {
+		for _, v := range v.ValidatorKeyHashes {
+			writer.WriteHash(2, &v)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_PartitionDefinition)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), err
+}
+
+func (v *PartitionDefinition) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field PartitionID is missing")
+	} else if len(v.PartitionID) == 0 {
+		errs = append(errs, "field PartitionID is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field ValidatorKeyHashes is missing")
+	} else if len(v.ValidatorKeyHashes) == 0 {
+		errs = append(errs, "field ValidatorKeyHashes is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_PartitionSyntheticLedger = []string{
+	1: "Url",
+	2: "Produced",
+	3: "Received",
+	4: "Delivered",
+	5: "Pending",
+}
+
+func (v *PartitionSyntheticLedger) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Url == nil) {
+		writer.WriteUrl(1, v.Url)
+	}
+	if !(v.Produced == 0) {
+		writer.WriteUint(2, v.Produced)
+	}
+	if !(v.Received == 0) {
+		writer.WriteUint(3, v.Received)
+	}
+	if !(v.Delivered == 0) {
+		writer.WriteUint(4, v.Delivered)
+	}
+	if !(len(v.Pending) == 0) {
+		for _, v := range v.Pending {
+			writer.WriteTxid(5, v)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_PartitionSyntheticLedger)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), err
+}
+
+func (v *PartitionSyntheticLedger) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Url is missing")
+	} else if v.Url == nil {
+		errs = append(errs, "field Url is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Produced is missing")
+	} else if v.Produced == 0 {
+		errs = append(errs, "field Produced is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Received is missing")
+	} else if v.Received == 0 {
+		errs = append(errs, "field Received is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Delivered is missing")
+	} else if v.Delivered == 0 {
+		errs = append(errs, "field Delivered is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field Pending is missing")
+	} else if len(v.Pending) == 0 {
+		errs = append(errs, "field Pending is not set")
 	}
 
 	switch len(errs) {
@@ -7905,7 +8032,7 @@ func (v *RemoveValidator) IsValid() error {
 var fieldNames_Route = []string{
 	1: "Length",
 	2: "Value",
-	3: "Subnet",
+	3: "Partition",
 }
 
 func (v *Route) MarshalBinary() ([]byte, error) {
@@ -7918,8 +8045,8 @@ func (v *Route) MarshalBinary() ([]byte, error) {
 	if !(v.Value == 0) {
 		writer.WriteUint(2, v.Value)
 	}
-	if !(len(v.Subnet) == 0) {
-		writer.WriteString(3, v.Subnet)
+	if !(len(v.Partition) == 0) {
+		writer.WriteString(3, v.Partition)
 	}
 
 	_, _, err := writer.Reset(fieldNames_Route)
@@ -7944,9 +8071,9 @@ func (v *Route) IsValid() error {
 		errs = append(errs, "field Value is not set")
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field Subnet is missing")
-	} else if len(v.Subnet) == 0 {
-		errs = append(errs, "field Subnet is not set")
+		errs = append(errs, "field Partition is missing")
+	} else if len(v.Partition) == 0 {
+		errs = append(errs, "field Partition is not set")
 	}
 
 	switch len(errs) {
@@ -7961,7 +8088,7 @@ func (v *Route) IsValid() error {
 
 var fieldNames_RouteOverride = []string{
 	1: "Account",
-	2: "Subnet",
+	2: "Partition",
 }
 
 func (v *RouteOverride) MarshalBinary() ([]byte, error) {
@@ -7971,8 +8098,8 @@ func (v *RouteOverride) MarshalBinary() ([]byte, error) {
 	if !(v.Account == nil) {
 		writer.WriteUrl(1, v.Account)
 	}
-	if !(len(v.Subnet) == 0) {
-		writer.WriteString(2, v.Subnet)
+	if !(len(v.Partition) == 0) {
+		writer.WriteString(2, v.Partition)
 	}
 
 	_, _, err := writer.Reset(fieldNames_RouteOverride)
@@ -7992,9 +8119,9 @@ func (v *RouteOverride) IsValid() error {
 		errs = append(errs, "field Account is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Subnet is missing")
-	} else if len(v.Subnet) == 0 {
-		errs = append(errs, "field Subnet is not set")
+		errs = append(errs, "field Partition is missing")
+	} else if len(v.Partition) == 0 {
+		errs = append(errs, "field Partition is not set")
 	}
 
 	switch len(errs) {
@@ -8304,133 +8431,6 @@ func (v *SubnetAnchor) IsValid() error {
 	}
 }
 
-var fieldNames_SubnetDefinition = []string{
-	1: "SubnetID",
-	2: "ValidatorKeyHashes",
-}
-
-func (v *SubnetDefinition) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	if !(len(v.SubnetID) == 0) {
-		writer.WriteString(1, v.SubnetID)
-	}
-	if !(len(v.ValidatorKeyHashes) == 0) {
-		for _, v := range v.ValidatorKeyHashes {
-			writer.WriteHash(2, &v)
-		}
-	}
-
-	_, _, err := writer.Reset(fieldNames_SubnetDefinition)
-	if err != nil {
-		return nil, err
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), err
-}
-
-func (v *SubnetDefinition) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field SubnetID is missing")
-	} else if len(v.SubnetID) == 0 {
-		errs = append(errs, "field SubnetID is not set")
-	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field ValidatorKeyHashes is missing")
-	} else if len(v.ValidatorKeyHashes) == 0 {
-		errs = append(errs, "field ValidatorKeyHashes is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
-var fieldNames_SubnetSyntheticLedger = []string{
-	1: "Url",
-	2: "Produced",
-	3: "Received",
-	4: "Delivered",
-	5: "Pending",
-}
-
-func (v *SubnetSyntheticLedger) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	if !(v.Url == nil) {
-		writer.WriteUrl(1, v.Url)
-	}
-	if !(v.Produced == 0) {
-		writer.WriteUint(2, v.Produced)
-	}
-	if !(v.Received == 0) {
-		writer.WriteUint(3, v.Received)
-	}
-	if !(v.Delivered == 0) {
-		writer.WriteUint(4, v.Delivered)
-	}
-	if !(len(v.Pending) == 0) {
-		for _, v := range v.Pending {
-			writer.WriteTxid(5, v)
-		}
-	}
-
-	_, _, err := writer.Reset(fieldNames_SubnetSyntheticLedger)
-	if err != nil {
-		return nil, err
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), err
-}
-
-func (v *SubnetSyntheticLedger) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Url is missing")
-	} else if v.Url == nil {
-		errs = append(errs, "field Url is not set")
-	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Produced is missing")
-	} else if v.Produced == 0 {
-		errs = append(errs, "field Produced is not set")
-	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field Received is missing")
-	} else if v.Received == 0 {
-		errs = append(errs, "field Received is not set")
-	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
-		errs = append(errs, "field Delivered is missing")
-	} else if v.Delivered == 0 {
-		errs = append(errs, "field Delivered is not set")
-	}
-	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
-		errs = append(errs, "field Pending is missing")
-	} else if len(v.Pending) == 0 {
-		errs = append(errs, "field Pending is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
 var fieldNames_SyntheticBurnTokens = []string{
 	1: "Type",
 	2: "SyntheticOrigin",
@@ -8691,7 +8691,7 @@ func (v *SyntheticForwardTransaction) IsValid() error {
 var fieldNames_SyntheticLedger = []string{
 	1: "Type",
 	2: "Url",
-	3: "Subnets",
+	3: "Partitions",
 }
 
 func (v *SyntheticLedger) MarshalBinary() ([]byte, error) {
@@ -8702,8 +8702,8 @@ func (v *SyntheticLedger) MarshalBinary() ([]byte, error) {
 	if !(v.Url == nil) {
 		writer.WriteUrl(2, v.Url)
 	}
-	if !(len(v.Subnets) == 0) {
-		for _, v := range v.Subnets {
+	if !(len(v.Partitions) == 0) {
+		for _, v := range v.Partitions {
 			writer.WriteValue(3, v)
 		}
 	}
@@ -8728,9 +8728,9 @@ func (v *SyntheticLedger) IsValid() error {
 		errs = append(errs, "field Url is not set")
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field Subnets is missing")
-	} else if len(v.Subnets) == 0 {
-		errs = append(errs, "field Subnets is not set")
+		errs = append(errs, "field Partitions is missing")
+	} else if len(v.Partitions) == 0 {
+		errs = append(errs, "field Partitions is not set")
 	}
 
 	switch len(errs) {
@@ -11026,7 +11026,7 @@ func (v *DirectoryAnchor) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
-	reader.ReadValue(2, v.SubnetAnchor.UnmarshalBinary)
+	reader.ReadValue(2, v.PartitionAnchor.UnmarshalBinary)
 	for {
 		if x := new(NetworkAccountUpdate); reader.ReadValue(3, x.UnmarshalBinary) {
 			v.Updates = append(v.Updates, *x)
@@ -11693,8 +11693,8 @@ func (v *NetworkDefinition) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.NetworkName = x
 	}
 	for {
-		if x := new(SubnetDefinition); reader.ReadValue(2, x.UnmarshalBinary) {
-			v.Subnets = append(v.Subnets, *x)
+		if x := new(PartitionDefinition); reader.ReadValue(2, x.UnmarshalBinary) {
+			v.Partitions = append(v.Partitions, *x)
 		} else {
 			break
 		}
@@ -11773,12 +11773,75 @@ func (v *PartitionAnchor) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
-	reader.ReadValue(2, v.SubnetAnchor.UnmarshalBinary)
+	reader.ReadValue(2, v.PartitionAnchor.UnmarshalBinary)
 	if x, ok := reader.ReadBigInt(3); ok {
 		v.AcmeBurnt = *x
 	}
 
 	seen, err := reader.Reset(fieldNames_PartitionAnchor)
+	if err != nil {
+		return err
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	return err
+}
+
+func (v *PartitionDefinition) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *PartitionDefinition) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadString(1); ok {
+		v.PartitionID = x
+	}
+	for {
+		if x, ok := reader.ReadHash(2); ok {
+			v.ValidatorKeyHashes = append(v.ValidatorKeyHashes, *x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_PartitionDefinition)
+	if err != nil {
+		return err
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	return err
+}
+
+func (v *PartitionSyntheticLedger) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *PartitionSyntheticLedger) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUrl(1); ok {
+		v.Url = x
+	}
+	if x, ok := reader.ReadUint(2); ok {
+		v.Produced = x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.Received = x
+	}
+	if x, ok := reader.ReadUint(4); ok {
+		v.Delivered = x
+	}
+	for {
+		if x, ok := reader.ReadTxid(5); ok {
+			v.Pending = append(v.Pending, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_PartitionSyntheticLedger)
 	if err != nil {
 		return err
 	}
@@ -12100,7 +12163,7 @@ func (v *Route) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Value = x
 	}
 	if x, ok := reader.ReadString(3); ok {
-		v.Subnet = x
+		v.Partition = x
 	}
 
 	seen, err := reader.Reset(fieldNames_Route)
@@ -12123,7 +12186,7 @@ func (v *RouteOverride) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Account = x
 	}
 	if x, ok := reader.ReadString(2); ok {
-		v.Subnet = x
+		v.Partition = x
 	}
 
 	seen, err := reader.Reset(fieldNames_RouteOverride)
@@ -12310,69 +12373,6 @@ func (v *SubnetAnchor) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
-func (v *SubnetDefinition) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *SubnetDefinition) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	if x, ok := reader.ReadString(1); ok {
-		v.SubnetID = x
-	}
-	for {
-		if x, ok := reader.ReadHash(2); ok {
-			v.ValidatorKeyHashes = append(v.ValidatorKeyHashes, *x)
-		} else {
-			break
-		}
-	}
-
-	seen, err := reader.Reset(fieldNames_SubnetDefinition)
-	if err != nil {
-		return err
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	return err
-}
-
-func (v *SubnetSyntheticLedger) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *SubnetSyntheticLedger) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	if x, ok := reader.ReadUrl(1); ok {
-		v.Url = x
-	}
-	if x, ok := reader.ReadUint(2); ok {
-		v.Produced = x
-	}
-	if x, ok := reader.ReadUint(3); ok {
-		v.Received = x
-	}
-	if x, ok := reader.ReadUint(4); ok {
-		v.Delivered = x
-	}
-	for {
-		if x, ok := reader.ReadTxid(5); ok {
-			v.Pending = append(v.Pending, x)
-		} else {
-			break
-		}
-	}
-
-	seen, err := reader.Reset(fieldNames_SubnetSyntheticLedger)
-	if err != nil {
-		return err
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	return err
-}
-
 func (v *SyntheticBurnTokens) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -12549,8 +12549,8 @@ func (v *SyntheticLedger) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Url = x
 	}
 	for {
-		if x := new(SubnetSyntheticLedger); reader.ReadValue(3, x.UnmarshalBinary) {
-			v.Subnets = append(v.Subnets, x)
+		if x := new(PartitionSyntheticLedger); reader.ReadValue(3, x.UnmarshalBinary) {
+			v.Partitions = append(v.Partitions, x)
 		} else {
 			break
 		}
@@ -13726,23 +13726,17 @@ func (v *DelegatedSignature) MarshalJSON() ([]byte, error) {
 func (v *DirectoryAnchor) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type            TransactionType                         `json:"type"`
-		Source          *url.URL                                `json:"source,omitempty"`
-		MajorBlockIndex uint64                                  `json:"majorBlockIndex,omitempty"`
-		MinorBlockIndex uint64                                  `json:"minorBlockIndex,omitempty"`
-		RootChainIndex  uint64                                  `json:"rootChainIndex,omitempty"`
-		RootChainAnchor string                                  `json:"rootChainAnchor,omitempty"`
-		StateTreeAnchor string                                  `json:"stateTreeAnchor,omitempty"`
+		Type            TransactionType                         `json:"type"`
+		PartitionAnchor PartitionAnchor                         `json:"partitionAnchor,omitempty"`
+		AcmeBurnt       *string                                 `json:"acmeBurnt,omitempty"`
 		Updates         encoding.JsonList[NetworkAccountUpdate] `json:"updates,omitempty"`
 		Receipts        encoding.JsonList[Receipt]              `json:"receipts,omitempty"`
 		MakeMajorBlock  uint64                                  `json:"makeMajorBlock,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.Source = v.SubnetAnchor.Source
-	u.MajorBlockIndex = v.SubnetAnchor.MajorBlockIndex
-	u.MinorBlockIndex = v.SubnetAnchor.MinorBlockIndex
-	u.RootChainIndex = v.SubnetAnchor.RootChainIndex
-	u.RootChainAnchor = encoding.ChainToJSON(v.SubnetAnchor.RootChainAnchor)
-	u.StateTreeAnchor = encoding.ChainToJSON(v.SubnetAnchor.StateTreeAnchor)
+	u.Type = v.PartitionAnchor.Type()
+	u.PartitionAnchor = v.PartitionAnchor.PartitionAnchor
+	u.AcmeBurnt = encoding.BigintToJSON(&v.PartitionAnchor.AcmeBurnt)
 	u.Updates = v.Updates
 	u.Receipts = v.Receipts
 	u.MakeMajorBlock = v.MakeMajorBlock
@@ -14050,11 +14044,13 @@ func (v *NetworkAccountUpdate) MarshalJSON() ([]byte, error) {
 
 func (v *NetworkDefinition) MarshalJSON() ([]byte, error) {
 	u := struct {
-		NetworkName string                              `json:"networkName,omitempty"`
-		Subnets     encoding.JsonList[SubnetDefinition] `json:"subnets,omitempty"`
+		NetworkName string                                 `json:"networkName,omitempty"`
+		Partitions  encoding.JsonList[PartitionDefinition] `json:"partitions,omitempty"`
+		Subnets     encoding.JsonList[PartitionDefinition] `json:"subnets,omitempty"`
 	}{}
 	u.NetworkName = v.NetworkName
-	u.Subnets = v.Subnets
+	u.Partitions = v.Partitions
+	u.Subnets = v.Partitions
 	return json.Marshal(&u)
 }
 
@@ -14073,22 +14069,47 @@ func (v *Object) MarshalJSON() ([]byte, error) {
 func (v *PartitionAnchor) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type            TransactionType `json:"type"`
-		Source          *url.URL        `json:"source,omitempty"`
-		MajorBlockIndex uint64          `json:"majorBlockIndex,omitempty"`
-		MinorBlockIndex uint64          `json:"minorBlockIndex,omitempty"`
-		RootChainIndex  uint64          `json:"rootChainIndex,omitempty"`
-		RootChainAnchor string          `json:"rootChainAnchor,omitempty"`
-		StateTreeAnchor string          `json:"stateTreeAnchor,omitempty"`
+		Type            TransactionType `json:"type"`
+		PartitionAnchor PartitionAnchor `json:"partitionAnchor,omitempty"`
+		AcmeBurnt       *string         `json:"acmeBurnt,omitempty"`
 		AcmeBurnt       *string         `json:"acmeBurnt,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.Source = v.SubnetAnchor.Source
-	u.MajorBlockIndex = v.SubnetAnchor.MajorBlockIndex
-	u.MinorBlockIndex = v.SubnetAnchor.MinorBlockIndex
-	u.RootChainIndex = v.SubnetAnchor.RootChainIndex
-	u.RootChainAnchor = encoding.ChainToJSON(v.SubnetAnchor.RootChainAnchor)
-	u.StateTreeAnchor = encoding.ChainToJSON(v.SubnetAnchor.StateTreeAnchor)
+	u.Type = v.PartitionAnchor.Type()
+	u.PartitionAnchor = v.PartitionAnchor.PartitionAnchor
+	u.AcmeBurnt = encoding.BigintToJSON(&v.PartitionAnchor.AcmeBurnt)
 	u.AcmeBurnt = encoding.BigintToJSON(&v.AcmeBurnt)
+	return json.Marshal(&u)
+}
+
+func (v *PartitionDefinition) MarshalJSON() ([]byte, error) {
+	u := struct {
+		PartitionID        string                    `json:"partitionID,omitempty"`
+		SubnetID           string                    `json:"subnetID,omitempty"`
+		ValidatorKeyHashes encoding.JsonList[string] `json:"validatorKeyHashes,omitempty"`
+	}{}
+	u.PartitionID = v.PartitionID
+	u.SubnetID = v.PartitionID
+	u.ValidatorKeyHashes = make(encoding.JsonList[string], len(v.ValidatorKeyHashes))
+	for i, x := range v.ValidatorKeyHashes {
+		u.ValidatorKeyHashes[i] = encoding.ChainToJSON(x)
+	}
+	return json.Marshal(&u)
+}
+
+func (v *PartitionSyntheticLedger) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Url       *url.URL                     `json:"url,omitempty"`
+		Produced  uint64                       `json:"produced,omitempty"`
+		Received  uint64                       `json:"received,omitempty"`
+		Delivered uint64                       `json:"delivered,omitempty"`
+		Pending   encoding.JsonList[*url.TxID] `json:"pending,omitempty"`
+	}{}
+	u.Url = v.Url
+	u.Produced = v.Produced
+	u.Received = v.Received
+	u.Delivered = v.Delivered
+	u.Pending = v.Pending
 	return json.Marshal(&u)
 }
 
@@ -14204,6 +14225,32 @@ func (v *RemoveValidator) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *Route) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Length    uint64 `json:"length,omitempty"`
+		Value     uint64 `json:"value,omitempty"`
+		Partition string `json:"partition,omitempty"`
+		Subnet    string `json:"subnet,omitempty"`
+	}{}
+	u.Length = v.Length
+	u.Value = v.Value
+	u.Partition = v.Partition
+	u.Subnet = v.Partition
+	return json.Marshal(&u)
+}
+
+func (v *RouteOverride) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Account   *url.URL `json:"account,omitempty"`
+		Partition string   `json:"partition,omitempty"`
+		Subnet    string   `json:"subnet,omitempty"`
+	}{}
+	u.Account = v.Account
+	u.Partition = v.Partition
+	u.Subnet = v.Partition
+	return json.Marshal(&u)
+}
+
 func (v *RoutingTable) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Overrides encoding.JsonList[RouteOverride] `json:"overrides,omitempty"`
@@ -14269,35 +14316,6 @@ func (v *SubnetAnchor) MarshalJSON() ([]byte, error) {
 	u.RootChainIndex = v.RootChainIndex
 	u.RootChainAnchor = encoding.ChainToJSON(v.RootChainAnchor)
 	u.StateTreeAnchor = encoding.ChainToJSON(v.StateTreeAnchor)
-	return json.Marshal(&u)
-}
-
-func (v *SubnetDefinition) MarshalJSON() ([]byte, error) {
-	u := struct {
-		SubnetID           string                    `json:"subnetID,omitempty"`
-		ValidatorKeyHashes encoding.JsonList[string] `json:"validatorKeyHashes,omitempty"`
-	}{}
-	u.SubnetID = v.SubnetID
-	u.ValidatorKeyHashes = make(encoding.JsonList[string], len(v.ValidatorKeyHashes))
-	for i, x := range v.ValidatorKeyHashes {
-		u.ValidatorKeyHashes[i] = encoding.ChainToJSON(x)
-	}
-	return json.Marshal(&u)
-}
-
-func (v *SubnetSyntheticLedger) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Url       *url.URL                     `json:"url,omitempty"`
-		Produced  uint64                       `json:"produced,omitempty"`
-		Received  uint64                       `json:"received,omitempty"`
-		Delivered uint64                       `json:"delivered,omitempty"`
-		Pending   encoding.JsonList[*url.TxID] `json:"pending,omitempty"`
-	}{}
-	u.Url = v.Url
-	u.Produced = v.Produced
-	u.Received = v.Received
-	u.Delivered = v.Delivered
-	u.Pending = v.Pending
 	return json.Marshal(&u)
 }
 
@@ -14389,13 +14407,15 @@ func (v *SyntheticForwardTransaction) MarshalJSON() ([]byte, error) {
 
 func (v *SyntheticLedger) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type    AccountType                               `json:"type"`
-		Url     *url.URL                                  `json:"url,omitempty"`
-		Subnets encoding.JsonList[*SubnetSyntheticLedger] `json:"subnets,omitempty"`
+		Type       AccountType                                  `json:"type"`
+		Url        *url.URL                                     `json:"url,omitempty"`
+		Partitions encoding.JsonList[*PartitionSyntheticLedger] `json:"partitions,omitempty"`
+		Subnets    encoding.JsonList[*PartitionSyntheticLedger] `json:"subnets,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
-	u.Subnets = v.Subnets
+	u.Partitions = v.Partitions
+	u.Subnets = v.Partitions
 	return json.Marshal(&u)
 }
 
@@ -15342,23 +15362,17 @@ func (v *DelegatedSignature) UnmarshalJSON(data []byte) error {
 func (v *DirectoryAnchor) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type            TransactionType                         `json:"type"`
-		Source          *url.URL                                `json:"source,omitempty"`
-		MajorBlockIndex uint64                                  `json:"majorBlockIndex,omitempty"`
-		MinorBlockIndex uint64                                  `json:"minorBlockIndex,omitempty"`
-		RootChainIndex  uint64                                  `json:"rootChainIndex,omitempty"`
-		RootChainAnchor string                                  `json:"rootChainAnchor,omitempty"`
-		StateTreeAnchor string                                  `json:"stateTreeAnchor,omitempty"`
+		Type            TransactionType                         `json:"type"`
+		PartitionAnchor PartitionAnchor                         `json:"partitionAnchor,omitempty"`
+		AcmeBurnt       *string                                 `json:"acmeBurnt,omitempty"`
 		Updates         encoding.JsonList[NetworkAccountUpdate] `json:"updates,omitempty"`
 		Receipts        encoding.JsonList[Receipt]              `json:"receipts,omitempty"`
 		MakeMajorBlock  uint64                                  `json:"makeMajorBlock,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.Source = v.SubnetAnchor.Source
-	u.MajorBlockIndex = v.SubnetAnchor.MajorBlockIndex
-	u.MinorBlockIndex = v.SubnetAnchor.MinorBlockIndex
-	u.RootChainIndex = v.SubnetAnchor.RootChainIndex
-	u.RootChainAnchor = encoding.ChainToJSON(v.SubnetAnchor.RootChainAnchor)
-	u.StateTreeAnchor = encoding.ChainToJSON(v.SubnetAnchor.StateTreeAnchor)
+	u.Type = v.PartitionAnchor.Type()
+	u.PartitionAnchor = v.PartitionAnchor.PartitionAnchor
+	u.AcmeBurnt = encoding.BigintToJSON(&v.PartitionAnchor.AcmeBurnt)
 	u.Updates = v.Updates
 	u.Receipts = v.Receipts
 	u.MakeMajorBlock = v.MakeMajorBlock
@@ -15368,19 +15382,14 @@ func (v *DirectoryAnchor) UnmarshalJSON(data []byte) error {
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
-	v.SubnetAnchor.Source = u.Source
-	v.SubnetAnchor.MajorBlockIndex = u.MajorBlockIndex
-	v.SubnetAnchor.MinorBlockIndex = u.MinorBlockIndex
-	v.SubnetAnchor.RootChainIndex = u.RootChainIndex
-	if x, err := encoding.ChainFromJSON(u.RootChainAnchor); err != nil {
-		return fmt.Errorf("error decoding RootChainAnchor: %w", err)
-	} else {
-		v.SubnetAnchor.RootChainAnchor = x
+	if !(v.PartitionAnchor.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.PartitionAnchor.Type(), u.Type)
 	}
-	if x, err := encoding.ChainFromJSON(u.StateTreeAnchor); err != nil {
-		return fmt.Errorf("error decoding StateTreeAnchor: %w", err)
+	v.PartitionAnchor.PartitionAnchor = u.PartitionAnchor
+	if x, err := encoding.BigintFromJSON(u.AcmeBurnt); err != nil {
+		return fmt.Errorf("error decoding AcmeBurnt: %w", err)
 	} else {
-		v.SubnetAnchor.StateTreeAnchor = x
+		v.PartitionAnchor.AcmeBurnt = *x
 	}
 	v.Updates = u.Updates
 	v.Receipts = u.Receipts
@@ -15982,16 +15991,22 @@ func (v *NetworkAccountUpdate) UnmarshalJSON(data []byte) error {
 
 func (v *NetworkDefinition) UnmarshalJSON(data []byte) error {
 	u := struct {
-		NetworkName string                              `json:"networkName,omitempty"`
-		Subnets     encoding.JsonList[SubnetDefinition] `json:"subnets,omitempty"`
+		NetworkName string                                 `json:"networkName,omitempty"`
+		Partitions  encoding.JsonList[PartitionDefinition] `json:"partitions,omitempty"`
+		Subnets     encoding.JsonList[PartitionDefinition] `json:"subnets,omitempty"`
 	}{}
 	u.NetworkName = v.NetworkName
-	u.Subnets = v.Subnets
+	u.Partitions = v.Partitions
+	u.Subnets = v.Partitions
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.NetworkName = u.NetworkName
-	v.Subnets = u.Subnets
+	if !(u.Partitions.Equal(&[]PartitionDefinition{})) {
+		v.Partitions = u.Partitions
+	} else {
+		v.Partitions = u.Subnets
+	}
 	return nil
 }
 
@@ -16016,21 +16031,15 @@ func (v *Object) UnmarshalJSON(data []byte) error {
 func (v *PartitionAnchor) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type            TransactionType `json:"type"`
-		Source          *url.URL        `json:"source,omitempty"`
-		MajorBlockIndex uint64          `json:"majorBlockIndex,omitempty"`
-		MinorBlockIndex uint64          `json:"minorBlockIndex,omitempty"`
-		RootChainIndex  uint64          `json:"rootChainIndex,omitempty"`
-		RootChainAnchor string          `json:"rootChainAnchor,omitempty"`
-		StateTreeAnchor string          `json:"stateTreeAnchor,omitempty"`
+		Type            TransactionType `json:"type"`
+		PartitionAnchor PartitionAnchor `json:"partitionAnchor,omitempty"`
+		AcmeBurnt       *string         `json:"acmeBurnt,omitempty"`
 		AcmeBurnt       *string         `json:"acmeBurnt,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.Source = v.SubnetAnchor.Source
-	u.MajorBlockIndex = v.SubnetAnchor.MajorBlockIndex
-	u.MinorBlockIndex = v.SubnetAnchor.MinorBlockIndex
-	u.RootChainIndex = v.SubnetAnchor.RootChainIndex
-	u.RootChainAnchor = encoding.ChainToJSON(v.SubnetAnchor.RootChainAnchor)
-	u.StateTreeAnchor = encoding.ChainToJSON(v.SubnetAnchor.StateTreeAnchor)
+	u.Type = v.PartitionAnchor.Type()
+	u.PartitionAnchor = v.PartitionAnchor.PartitionAnchor
+	u.AcmeBurnt = encoding.BigintToJSON(&v.PartitionAnchor.AcmeBurnt)
 	u.AcmeBurnt = encoding.BigintToJSON(&v.AcmeBurnt)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -16038,25 +16047,75 @@ func (v *PartitionAnchor) UnmarshalJSON(data []byte) error {
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
-	v.SubnetAnchor.Source = u.Source
-	v.SubnetAnchor.MajorBlockIndex = u.MajorBlockIndex
-	v.SubnetAnchor.MinorBlockIndex = u.MinorBlockIndex
-	v.SubnetAnchor.RootChainIndex = u.RootChainIndex
-	if x, err := encoding.ChainFromJSON(u.RootChainAnchor); err != nil {
-		return fmt.Errorf("error decoding RootChainAnchor: %w", err)
-	} else {
-		v.SubnetAnchor.RootChainAnchor = x
+	if !(v.PartitionAnchor.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.PartitionAnchor.Type(), u.Type)
 	}
-	if x, err := encoding.ChainFromJSON(u.StateTreeAnchor); err != nil {
-		return fmt.Errorf("error decoding StateTreeAnchor: %w", err)
+	v.PartitionAnchor.PartitionAnchor = u.PartitionAnchor
+	if x, err := encoding.BigintFromJSON(u.AcmeBurnt); err != nil {
+		return fmt.Errorf("error decoding AcmeBurnt: %w", err)
 	} else {
-		v.SubnetAnchor.StateTreeAnchor = x
+		v.PartitionAnchor.AcmeBurnt = *x
 	}
 	if x, err := encoding.BigintFromJSON(u.AcmeBurnt); err != nil {
 		return fmt.Errorf("error decoding AcmeBurnt: %w", err)
 	} else {
 		v.AcmeBurnt = *x
 	}
+	return nil
+}
+
+func (v *PartitionDefinition) UnmarshalJSON(data []byte) error {
+	u := struct {
+		PartitionID        string                    `json:"partitionID,omitempty"`
+		SubnetID           string                    `json:"subnetID,omitempty"`
+		ValidatorKeyHashes encoding.JsonList[string] `json:"validatorKeyHashes,omitempty"`
+	}{}
+	u.PartitionID = v.PartitionID
+	u.SubnetID = v.PartitionID
+	u.ValidatorKeyHashes = make(encoding.JsonList[string], len(v.ValidatorKeyHashes))
+	for i, x := range v.ValidatorKeyHashes {
+		u.ValidatorKeyHashes[i] = encoding.ChainToJSON(x)
+	}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(u.PartitionID == "") {
+		v.PartitionID = u.PartitionID
+	} else {
+		v.PartitionID = u.SubnetID
+	}
+	v.ValidatorKeyHashes = make([][32]byte, len(u.ValidatorKeyHashes))
+	for i, x := range u.ValidatorKeyHashes {
+		if x, err := encoding.ChainFromJSON(x); err != nil {
+			return fmt.Errorf("error decoding ValidatorKeyHashes: %w", err)
+		} else {
+			v.ValidatorKeyHashes[i] = x
+		}
+	}
+	return nil
+}
+
+func (v *PartitionSyntheticLedger) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Url       *url.URL                     `json:"url,omitempty"`
+		Produced  uint64                       `json:"produced,omitempty"`
+		Received  uint64                       `json:"received,omitempty"`
+		Delivered uint64                       `json:"delivered,omitempty"`
+		Pending   encoding.JsonList[*url.TxID] `json:"pending,omitempty"`
+	}{}
+	u.Url = v.Url
+	u.Produced = v.Produced
+	u.Received = v.Received
+	u.Delivered = v.Delivered
+	u.Pending = v.Pending
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Url = u.Url
+	v.Produced = u.Produced
+	v.Received = u.Received
+	v.Delivered = u.Delivered
+	v.Pending = u.Pending
 	return nil
 }
 
@@ -16279,6 +16338,51 @@ func (v *RemoveValidator) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *Route) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Length    uint64 `json:"length,omitempty"`
+		Value     uint64 `json:"value,omitempty"`
+		Partition string `json:"partition,omitempty"`
+		Subnet    string `json:"subnet,omitempty"`
+	}{}
+	u.Length = v.Length
+	u.Value = v.Value
+	u.Partition = v.Partition
+	u.Subnet = v.Partition
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Length = u.Length
+	v.Value = u.Value
+	if !(u.Partition == "") {
+		v.Partition = u.Partition
+	} else {
+		v.Partition = u.Subnet
+	}
+	return nil
+}
+
+func (v *RouteOverride) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Account   *url.URL `json:"account,omitempty"`
+		Partition string   `json:"partition,omitempty"`
+		Subnet    string   `json:"subnet,omitempty"`
+	}{}
+	u.Account = v.Account
+	u.Partition = v.Partition
+	u.Subnet = v.Partition
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Account = u.Account
+	if !(u.Partition == "") {
+		v.Partition = u.Partition
+	} else {
+		v.Partition = u.Subnet
+	}
+	return nil
+}
+
 func (v *RoutingTable) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Overrides encoding.JsonList[RouteOverride] `json:"overrides,omitempty"`
@@ -16403,55 +16507,6 @@ func (v *SubnetAnchor) UnmarshalJSON(data []byte) error {
 	} else {
 		v.StateTreeAnchor = x
 	}
-	return nil
-}
-
-func (v *SubnetDefinition) UnmarshalJSON(data []byte) error {
-	u := struct {
-		SubnetID           string                    `json:"subnetID,omitempty"`
-		ValidatorKeyHashes encoding.JsonList[string] `json:"validatorKeyHashes,omitempty"`
-	}{}
-	u.SubnetID = v.SubnetID
-	u.ValidatorKeyHashes = make(encoding.JsonList[string], len(v.ValidatorKeyHashes))
-	for i, x := range v.ValidatorKeyHashes {
-		u.ValidatorKeyHashes[i] = encoding.ChainToJSON(x)
-	}
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	v.SubnetID = u.SubnetID
-	v.ValidatorKeyHashes = make([][32]byte, len(u.ValidatorKeyHashes))
-	for i, x := range u.ValidatorKeyHashes {
-		if x, err := encoding.ChainFromJSON(x); err != nil {
-			return fmt.Errorf("error decoding ValidatorKeyHashes: %w", err)
-		} else {
-			v.ValidatorKeyHashes[i] = x
-		}
-	}
-	return nil
-}
-
-func (v *SubnetSyntheticLedger) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Url       *url.URL                     `json:"url,omitempty"`
-		Produced  uint64                       `json:"produced,omitempty"`
-		Received  uint64                       `json:"received,omitempty"`
-		Delivered uint64                       `json:"delivered,omitempty"`
-		Pending   encoding.JsonList[*url.TxID] `json:"pending,omitempty"`
-	}{}
-	u.Url = v.Url
-	u.Produced = v.Produced
-	u.Received = v.Received
-	u.Delivered = v.Delivered
-	u.Pending = v.Pending
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	v.Url = u.Url
-	v.Produced = u.Produced
-	v.Received = u.Received
-	v.Delivered = u.Delivered
-	v.Pending = u.Pending
 	return nil
 }
 
@@ -16603,13 +16658,15 @@ func (v *SyntheticForwardTransaction) UnmarshalJSON(data []byte) error {
 
 func (v *SyntheticLedger) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type    AccountType                               `json:"type"`
-		Url     *url.URL                                  `json:"url,omitempty"`
-		Subnets encoding.JsonList[*SubnetSyntheticLedger] `json:"subnets,omitempty"`
+		Type       AccountType                                  `json:"type"`
+		Url        *url.URL                                     `json:"url,omitempty"`
+		Partitions encoding.JsonList[*PartitionSyntheticLedger] `json:"partitions,omitempty"`
+		Subnets    encoding.JsonList[*PartitionSyntheticLedger] `json:"subnets,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
-	u.Subnets = v.Subnets
+	u.Partitions = v.Partitions
+	u.Subnets = v.Partitions
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -16617,7 +16674,11 @@ func (v *SyntheticLedger) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Url = u.Url
-	v.Subnets = u.Subnets
+	if !(u.Partitions == nil) {
+		v.Partitions = u.Partitions
+	} else {
+		v.Partitions = u.Subnets
+	}
 	return nil
 }
 

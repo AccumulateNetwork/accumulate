@@ -36,7 +36,7 @@ func (r router) Query(ctx context.Context, subnet string, rawQuery []byte, opts 
 	qu, e := query.UnmarshalRequest(rawQuery)
 	require.NoError(r, e)
 
-	x := r.Subnet(subnet)
+	x := r.Partition(subnet)
 	batch := x.Database.Begin(false)
 	defer batch.Discard()
 	k, v, err := x.Executor.Query(batch, qu, opts.Height, opts.Prove)
@@ -65,11 +65,11 @@ func (r router) Query(ctx context.Context, subnet string, rawQuery []byte, opts 
 }
 
 func (r router) RequestAPIv2(ctx context.Context, subnetId, method string, params, result interface{}) error {
-	return r.Subnet(subnetId).API.RequestAPIv2(ctx, method, params, result)
+	return r.Partition(subnetId).API.RequestAPIv2(ctx, method, params, result)
 }
 
 func (r router) Submit(ctx context.Context, subnet string, envelope *protocol.Envelope, pretend, async bool) (*routing.ResponseSubmit, error) {
-	x := r.Subnet(subnet)
+	x := r.Partition(subnet)
 	if !pretend {
 		x.Submit(envelope)
 		if async {

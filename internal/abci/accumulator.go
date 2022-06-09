@@ -58,7 +58,7 @@ type AccumulatorOptions struct {
 func NewAccumulator(opts AccumulatorOptions) *Accumulator {
 	app := &Accumulator{
 		AccumulatorOptions: opts,
-		logger:             opts.Logger.With("module", "accumulate", "subnet", opts.Accumulate.Network.LocalSubnetID),
+		logger:             opts.Logger.With("module", "accumulate", "partition", opts.Accumulate.Network.LocalPartitionID),
 	}
 
 	events.SubscribeAsync(opts.EventBus, func(e events.DidSaveSnapshot) {

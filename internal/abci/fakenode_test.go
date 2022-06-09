@@ -157,7 +157,7 @@ func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Da
 		require.ErrorIs(t, err, storage.ErrNotFound)
 	}
 
-	fakeTmLogger := d.Logger.With("module", "fake-tendermint", "subnet", n.network.LocalSubnetID)
+	fakeTmLogger := d.Logger.With("module", "fake-tendermint", "subnet", n.network.LocalPartitionID)
 
 	appChan := make(chan abcitypes.Application)
 	t.Cleanup(func() { close(appChan) })
@@ -436,7 +436,7 @@ func (n *FakeNode) GetDirectory(adi string) []string {
 }
 
 func (n *FakeNode) GetTx(txid []byte) *api2.TransactionQueryResponse {
-	q := api2.NewQueryDirect(n.network.LocalSubnetID, api2.Options{
+	q := api2.NewQueryDirect(n.network.LocalPartitionID, api2.Options{
 		Logger:  n.logger,
 		Network: n.network,
 		Router:  n.router,
@@ -528,7 +528,7 @@ func (n *FakeNode) CreateInitChain() {
 	n.require.NoError(err)
 	n.app.InitChain(abcitypes.RequestInitChain{
 		Time:          time.Now(),
-		ChainId:       n.network.LocalSubnetID,
+		ChainId:       n.network.LocalPartitionID,
 		AppStateBytes: state,
 		InitialHeight: protocol.GenesisBlock + 1,
 	})

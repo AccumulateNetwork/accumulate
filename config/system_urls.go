@@ -9,27 +9,27 @@ type NetworkUrl struct {
 	*url.URL
 }
 
-// Ledger returns the URL of the subnet's ledger account.
+// Ledger returns the URL of the partition's ledger account.
 func (u NetworkUrl) Ledger() *url.URL {
 	return u.JoinPath(protocol.Ledger)
 }
 
-// Synthetic returns the URL of the subnet's synthetic transaction ledger account.
+// Synthetic returns the URL of the partition's synthetic transaction ledger account.
 func (u NetworkUrl) Synthetic() *url.URL {
 	return u.JoinPath(protocol.Synthetic)
 }
 
-// ValidatorBook returns the URL of the subnet's validator key book.
+// ValidatorBook returns the URL of the partition's validator key book.
 func (u NetworkUrl) ValidatorBook() *url.URL {
 	return u.JoinPath(protocol.ValidatorBook)
 }
 
-// ValidatorPage returns the URL of the page of the subnet's validator key book.
+// ValidatorPage returns the URL of the page of the partition's validator key book.
 func (u NetworkUrl) ValidatorPage(index uint64) *url.URL {
 	return protocol.FormatKeyPageUrl(u.ValidatorBook(), index)
 }
 
-// OperatorBook returns the URL of the subnet's operator key book.
+// OperatorBook returns the URL of the partition's operator key book.
 func (u NetworkUrl) OperatorBook() *url.URL {
 	return u.JoinPath(protocol.OperatorBook)
 }
@@ -39,47 +39,47 @@ func (u NetworkUrl) OperatorPage(index uint64) *url.URL {
 	return protocol.FormatKeyPageUrl(u.OperatorBook(), index)
 }
 
-// AnchorPool returns the URL of the subnet's anchor pool.
+// AnchorPool returns the URL of the partition's anchor pool.
 func (u NetworkUrl) AnchorPool() *url.URL {
 	return u.JoinPath(protocol.AnchorPool)
 }
 
-// NodeUrl returns the URL of the subnet, optionally with a path appended.
+// NodeUrl returns the URL of the partition, optionally with a path appended.
 func (n *Network) NodeUrl(path ...string) *url.URL {
-	return protocol.SubnetUrl(n.LocalSubnetID).JoinPath(path...)
+	return protocol.SubnetUrl(n.LocalPartitionID).JoinPath(path...)
 }
 
-// Ledger returns the URL of the subnet's ledger account.
+// Ledger returns the URL of the partition's ledger account.
 func (n *Network) Ledger() *url.URL {
-	return NetworkUrl{protocol.SubnetUrl(n.LocalSubnetID)}.Ledger()
+	return NetworkUrl{protocol.SubnetUrl(n.LocalPartitionID)}.Ledger()
 }
 
-// Synthetic returns the URL of the subnet's ledger account.
+// Synthetic returns the URL of the partition's ledger account.
 func (n *Network) Synthetic() *url.URL {
-	return NetworkUrl{protocol.SubnetUrl(n.LocalSubnetID)}.Synthetic()
+	return NetworkUrl{protocol.SubnetUrl(n.LocalPartitionID)}.Synthetic()
 }
 
-// ValidatorBook returns the URL of the subnet's validator key book.
+// ValidatorBook returns the URL of the partition's validator key book.
 func (n *Network) ValidatorBook() *url.URL {
-	return NetworkUrl{protocol.SubnetUrl(n.LocalSubnetID)}.ValidatorBook()
+	return NetworkUrl{protocol.SubnetUrl(n.LocalPartitionID)}.ValidatorBook()
 }
 
-// ValidatorPage returns the URL of the page of the subnet's validator key book.
+// ValidatorPage returns the URL of the page of the partition's validator key book.
 func (n *Network) ValidatorPage(index uint64) *url.URL {
-	return NetworkUrl{protocol.SubnetUrl(n.LocalSubnetID)}.ValidatorPage(index)
+	return NetworkUrl{protocol.SubnetUrl(n.LocalPartitionID)}.ValidatorPage(index)
 }
 
-// OperatorBook returns the URL of the subnet's operator key book.
+// OperatorBook returns the URL of the partition's operator key book.
 func (n *Network) OperatorBook() *url.URL {
-	return NetworkUrl{protocol.SubnetUrl(n.LocalSubnetID)}.OperatorBook()
+	return NetworkUrl{protocol.SubnetUrl(n.LocalPartitionID)}.OperatorBook()
 }
 
-// OperatorPage returns the URL of the page of the subnet's operator key book.
+// OperatorPage returns the URL of the page of the partition's operator key book.
 func (n *Network) OperatorPage(index uint64) *url.URL {
-	return NetworkUrl{protocol.SubnetUrl(n.LocalSubnetID)}.OperatorPage(index)
+	return NetworkUrl{protocol.SubnetUrl(n.LocalPartitionID)}.OperatorPage(index)
 }
 
-// DefaultValidatorPage returns the URL of the default page of the subnet operator key book.
+// DefaultValidatorPage returns the URL of the default page of the partition operator key book.
 func (n *Network) DefaultValidatorPage() *url.URL {
 	var index uint64
 	if n.Type == Directory {
@@ -90,7 +90,7 @@ func (n *Network) DefaultValidatorPage() *url.URL {
 	return n.ValidatorPage(index)
 }
 
-// DefaultOperatorPage returns the URL of the default page of the subnet operator key book.
+// DefaultOperatorPage returns the URL of the default page of the partition operator key book.
 func (n *Network) DefaultOperatorPage() *url.URL {
 	var index uint64
 	if n.Type == Directory {
@@ -101,7 +101,7 @@ func (n *Network) DefaultOperatorPage() *url.URL {
 	return n.OperatorPage(index)
 }
 
-// AnchorPool returns the URL of the subnet's anchor pool.
+// AnchorPool returns the URL of the partition's anchor pool.
 func (n *Network) AnchorPool() *url.URL {
-	return NetworkUrl{protocol.SubnetUrl(n.LocalSubnetID)}.AnchorPool()
+	return NetworkUrl{protocol.SubnetUrl(n.LocalPartitionID)}.AnchorPool()
 }
