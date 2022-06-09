@@ -173,8 +173,11 @@ func TestUpdateOperators(t *testing.T) {
 	var timestamp uint64
 
 	// Initialize
+	g := new(core.GlobalValues)
+	g.Globals = new(NetworkGlobals)
+	g.Globals.ValidatorThreshold.Set(1, 100) // Use a small number so M = 1
 	sim := simulator.New(t, 3)
-	sim.InitFromGenesis()
+	sim.InitFromGenesisWith(g)
 	dn := sim.Subnet(Directory)
 	bvn0 := sim.Subnet(sim.Subnets[1].ID)
 	bvn1 := sim.Subnet(sim.Subnets[2].ID)
