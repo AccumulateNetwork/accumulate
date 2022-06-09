@@ -205,13 +205,12 @@ func (d *Daemon) Start() (err error) {
 
 	// Create the JSON-RPC handler
 	d.jrpc, err = api.NewJrpc(api.Options{
-		Logger:            d.Logger,
-		Network:           d.Config.Accumulate.Network,
-		Router:            router,
-		PrometheusServer:  d.Config.Accumulate.API.PrometheusServer,
-		TxMaxWaitTime:     d.Config.Accumulate.API.TxMaxWaitTime,
-		Database:          d.db,
-		ConnectionManager: d.connectionManager,
+		Logger:           d.Logger,
+		Network:          d.Config.Accumulate.Network,
+		Router:           router,
+		PrometheusServer: d.Config.Accumulate.API.PrometheusServer,
+		TxMaxWaitTime:    d.Config.Accumulate.API.TxMaxWaitTime,
+		Database:         d.db,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to start API: %v", err)

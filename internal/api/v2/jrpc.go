@@ -2,8 +2,6 @@ package api
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"io"
 	stdlog "log"
@@ -14,14 +12,11 @@ import (
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/go-playground/validator/v10"
 	"github.com/tendermint/tendermint/libs/log"
-	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 	"gitlab.com/accumulatenetwork/accumulate"
-	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
-	"gitlab.com/accumulatenetwork/accumulate/networks"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -81,7 +76,6 @@ func (m *JrpcMethods) NewMux() *http.ServeMux {
 	mux.Handle("/status", m.jrpc2http(m.Status))
 	mux.Handle("/version", m.jrpc2http(m.Version))
 	mux.Handle("/describe", m.jrpc2http(m.Describe))
-	mux.Handle("/peers", m.jrpc2http(m.Peers))
 	mux.Handle("/v2", jsonrpc2.HTTPRequestHandler(m.methods, stdlog.New(os.Stdout, "", 0)))
 	return mux
 }
@@ -146,95 +140,4 @@ func (m *JrpcMethods) Describe(_ context.Context, params json.RawMessage) interf
 	}
 
 	return res
-}
-
-func (m *JrpcMethods) Peers(ctx context.Context, _ json.RawMessage) interface{} {
-	connctx, err := m.ConnectionManager.SelectConnection(protocol.Directory, true)
-	if err != nil {
-		return accumulateError(err)
-	}
-
-	u, err := config.OffsetPort(connctx.GetAddress(), networks.TmRpcPortOffset)
-	if err != nil {
-		return accumulateError(err)
-	}
-	nodes := []string{u.String()}
-
-	info, err := connctx.GetABCIClient().NetInfo(ctx)
-	if err != nil {
-		return accumulateError(err)
-	}
-	for _, peer := range info.Peers {
-		u, err := config.OffsetPort(peer.URL, networks.TmRpcPortOffset)
-		if err != nil {
-			return accumulateError(err)
-		}
-		u.Scheme = "http"
-		u.User = nil
-		nodes = append(nodes, u.String())
-	}
-
-	peers := map[[32]byte]string{}
-	for _, addr := range nodes {
-		client, err := rpchttp.New(addr)
-		if err != nil {
-			return accumulateError(err)
-		}
-
-		status, err := client.Status(ctx)
-		if err != nil {
-			return accumulateError(err)
-		}
-
-		hash := sha256.Sum256(status.ValidatorInfo.PubKey.Bytes())
-		peers[hash] = addr
-	}
-
-	globals := new(core.GlobalValues)
-	err = globals.Load(m.Network, func(account *url.URL, target interface{}) error {
-		return m.Database.View(func(batch *database.Batch) error {
-			return batch.Account(account).GetStateAs(target)
-		})
-	})
-	if err != nil {
-		return accumulateError(err)
-	}
-
-	type Validator struct {
-		KeyHash string
-		Host    string
-	}
-	type Subnet struct {
-		ID         string
-		Validators []*Validator
-	}
-
-	var subnets []*Subnet
-	for _, subnet := range globals.Network.Subnets {
-		vals := new(Subnet)
-		vals.ID = subnet.SubnetID
-		subnets = append(subnets, vals)
-
-		for _, hash := range subnet.ValidatorKeyHashes {
-			peer, ok := peers[hash]
-			if !ok {
-				continue
-			}
-
-			if subnet.SubnetID != protocol.Directory {
-				u, err := config.OffsetPort(peer, -networks.DnnPortOffset)
-				if err != nil {
-					return accumulateError(err)
-				}
-				peer = u.String()
-			}
-
-			vals.Validators = append(vals.Validators, &Validator{
-				KeyHash: hex.EncodeToString(hash[:]), //nolint:rangevarref
-				Host:    peer,
-			})
-		}
-	}
-
-	return subnets
 }

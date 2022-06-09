@@ -37,8 +37,6 @@ type ABCIClient interface {
 	CheckTx(ctx context.Context, tx tm.Tx) (*core.ResultCheckTx, error)
 	BroadcastTxAsync(context.Context, tm.Tx) (*core.ResultBroadcastTx, error)
 	BroadcastTxSync(context.Context, tm.Tx) (*core.ResultBroadcastTx, error)
-	NetInfo(ctx context.Context) (*core.ResultNetInfo, error)
-	Status(context.Context) (*core.ResultStatus, error)
 }
 
 type APIClient interface {
