@@ -37,7 +37,7 @@ func (x *Executor) processNetworkAccountUpdates(batch *database.Batch, delivery 
 			}
 
 			// Reject the transaction if the threshold is not set correctly according to the ratio
-			expectedThreshold := x.globals.Active.Globals.ValidatorThreshold.Threshold(len(page.Keys))
+			expectedThreshold := x.globals.Active.Globals.OperatorAcceptThreshold.Threshold(len(page.Keys))
 			if page.AcceptThreshold != expectedThreshold {
 				return errors.Format(errors.StatusBadRequest, "invalid %v update: incorrect accept threshold: want %d, got %d", principal.GetUrl(), expectedThreshold, page.AcceptThreshold)
 			}

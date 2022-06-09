@@ -165,7 +165,7 @@ func (b *bootstrap) Execute(st *chain.StateManager, tx *chain.Delivery) (protoco
 
 func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protocol.TransactionResult, error) {
 	b.nodeUrl = b.Network.NodeUrl()
-	b.authorityUrl = b.nodeUrl.JoinPath(protocol.ValidatorBook)
+	b.authorityUrl = b.nodeUrl.JoinPath(protocol.OperatorBook)
 	b.globals = new(core.GlobalValues)
 
 	// Verify that the BVN ID will make a valid subnet URL
@@ -190,7 +190,7 @@ func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protoc
 	// Set the initial threshold to 2/3
 	if b.globals.Globals == nil {
 		b.globals.Globals = new(protocol.NetworkGlobals)
-		b.globals.Globals.ValidatorThreshold.Set(2, 3)
+		b.globals.Globals.OperatorAcceptThreshold.Set(2, 3)
 	}
 
 	if b.globals.Network == nil && b.NetworkValidatorMap != nil {
@@ -264,15 +264,24 @@ func (b *bootstrap) createADI() {
 }
 
 func (b *bootstrap) createValidatorBook() {
-	uBook := b.authorityUrl
 	book := new(protocol.KeyBook)
-	book.Url = uBook
+	book.Url = b.nodeUrl.JoinPath(protocol.ValidatorBook)
 	book.BookType = protocol.BookTypeValidator
-	book.AddAuthority(uBook)
-	book.PageCount = 1
+	book.AddAuthority(b.authorityUrl)
+	book.PageCount = 2
 
-	page := b.createOperatorPage(uBook, 0, true)
-	b.WriteRecords(book, page)
+	page1 := new(protocol.KeyPage)
+	page1.Url = protocol.FormatKeyPageUrl(book.Url, 0)
+	page1.Version = 1
+	page1.Keys = make([]*protocol.KeySpec, 1)
+	spec := new(protocol.KeySpec)
+	spec.Delegate = b.authorityUrl
+	page1.Keys[0] = spec
+
+	page2 := b.createOperatorPage(book.Url, 1, true)
+	blacklistTxsForPage(page2, protocol.TransactionTypeUpdateKeyPage, protocol.TransactionTypeUpdateAccountAuth)
+
+	b.WriteRecords(book, page1, page2)
 }
 
 func (b *bootstrap) createMainLedger() {
@@ -354,7 +363,13 @@ func (b *bootstrap) initDN() error {
 }
 
 func (b *bootstrap) initBVN() error {
-	b.createBVNOperatorBook(b.nodeUrl)
+	// Verify that the BVN ID will make a valid subnet URL
+	network := b.InitOpts.Network
+	if err := protocol.IsValidAdiUrl(protocol.SubnetUrl(network.LocalSubnetID), true); err != nil {
+		panic(fmt.Errorf("%q is not a valid subnet ID: %v", network.LocalSubnetID, err))
+	}
+
+	b.createBVNOperatorBook()
 
 	subnet, err := b.router.RouteAccount(protocol.FaucetUrl)
 	if err == nil && subnet == b.Network.LocalSubnetID {
@@ -389,16 +404,19 @@ func (b *bootstrap) initBVN() error {
 func (b *bootstrap) createDNOperatorBook() {
 	book := new(protocol.KeyBook)
 	book.Url = b.nodeUrl.JoinPath(protocol.OperatorBook)
+	book.BookType = protocol.BookTypeOperator
 	book.AddAuthority(book.Url)
 	book.PageCount = 1
 
 	page := b.createOperatorPage(book.Url, 0, false)
+	page.AcceptThreshold = b.globals.Globals.OperatorAcceptThreshold.Threshold(len(page.Keys))
 	b.WriteRecords(book, page)
 }
 
-func (b *bootstrap) createBVNOperatorBook(nodeUrl *url.URL) {
+func (b *bootstrap) createBVNOperatorBook() {
 	book := new(protocol.KeyBook)
-	book.Url = nodeUrl.JoinPath(protocol.OperatorBook)
+	book.Url = b.nodeUrl.JoinPath(protocol.OperatorBook)
+	book.BookType = protocol.BookTypeOperator
 	book.AddAuthority(book.Url)
 	book.PageCount = 2
 
@@ -413,7 +431,6 @@ func (b *bootstrap) createBVNOperatorBook(nodeUrl *url.URL) {
 
 	page2 := b.createOperatorPage(book.Url, 1, false)
 	blacklistTxsForPage(page2, protocol.TransactionTypeUpdateKeyPage, protocol.TransactionTypeUpdateAccountAuth)
-
 	b.WriteRecords(book, page1, page2)
 }
 
@@ -455,7 +472,6 @@ func (b *bootstrap) createOperatorPage(uBook *url.URL, pageIndex uint64, validat
 		}
 	}
 
-	page.AcceptThreshold = b.globals.Globals.ValidatorThreshold.Threshold(len(page.Keys))
 	return page
 }
 
