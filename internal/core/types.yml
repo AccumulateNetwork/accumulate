@@ -13,3 +13,7 @@ GlobalValues:
       type: protocol.NetworkDefinition
       marshal-as: reference
       pointer: true
+    - name: Routing
+      type: protocol.RoutingTable
+      marshal-as: reference
+      pointer: true

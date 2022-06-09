@@ -181,8 +181,18 @@ func (d *Delivery) NewSyntheticFromSequence(hash [32]byte) *Delivery {
 	return e
 }
 
+func (d *Delivery) Parent() *Delivery {
+	return d.parent
+}
+
 func (d *Delivery) WasProducedInternally() bool {
 	return d.parent != nil && d.internal
+}
+
+// WasProducedByPushedUpdate returns true if the transaction was produced by an
+// update pushed via an anchor from the directory network.
+func (d *Delivery) WasProducedByPushedUpdate() bool {
+	return d.parent != nil && d.internal && d.parent.Transaction.Body.Type() == protocol.TransactionTypeDirectoryAnchor
 }
 
 // IsForwarded returns true if the transaction was delivered within a

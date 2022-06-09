@@ -127,6 +127,7 @@ func (m *JrpcMethods) Describe(_ context.Context, params json.RawMessage) interf
 	res := new(DescriptionResponse)
 	res.Network = *m.Network
 
+	// Load network variable values
 	err := res.Values.Load(m.Network, func(account *url.URL, target interface{}) error {
 		return m.Database.View(func(batch *database.Batch) error {
 			return batch.Account(account).GetStateAs(target)
