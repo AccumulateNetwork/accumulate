@@ -2,7 +2,6 @@ package chain
 
 import (
 	"crypto/sha256"
-	"encoding/json"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"

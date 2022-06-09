@@ -187,10 +187,11 @@ func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protoc
 		b.globals.Oracle.Price = uint64(protocol.InitialAcmeOracleValue)
 	}
 
-	// Set the initial threshold to 2/3
+	// Set the initial threshold to 2/3 & MajorBlockSchedule
 	if b.globals.Globals == nil {
 		b.globals.Globals = new(protocol.NetworkGlobals)
 		b.globals.Globals.ValidatorThreshold.Set(2, 3)
+		b.globals.Globals.MajorBlockSchedule = protocol.DefaultMajorBlockSchedule
 	}
 
 	if b.globals.Network == nil && b.NetworkValidatorMap != nil {

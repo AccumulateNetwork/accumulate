@@ -534,7 +534,6 @@ func (n *FakeNode) CreateInitChain() {
 		AppStateBytes: state,
 		InitialHeight: protocol.GenesisBlock + 1,
 	})
-	_ = n.nodeExecutor.EmitNetworkGlobalsEvent(n.db)
 }
 
 type e2eDUT struct {

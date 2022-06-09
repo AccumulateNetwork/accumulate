@@ -124,8 +124,9 @@ func newExecutor(opts ExecutorOptions, db *database.Database, executors ...Trans
 	m.ExecutorOptions = opts
 	m.executors = map[protocol.TransactionType]TransactionExecutor{}
 	m.dispatcher = newDispatcher(opts)
-	m.eventBus = events.NewBus(opts.Logger.With("module", "events"))
-	m.majorBlockScheduler = blockscheduler.Init(m.eventBus)
+	if m.ExecutorOptions.EventBus != nil {
+		m.majorBlockScheduler = blockscheduler.Init(m.ExecutorOptions.EventBus)
+	}
 
 	if opts.Logger != nil {
 		m.logger.L = opts.Logger.With("module", "executor")
@@ -292,22 +293,4 @@ func (m *Executor) InitFromSnapshot(batch *database.Batch, file ioutil2.SectionR
 
 func (m *Executor) SaveSnapshot(batch *database.Batch, file io.WriteSeeker) error {
 	return batch.SaveSnapshot(file, &m.Network)
-}
-
-func (m *Executor) EmitNetworkGlobalsEvent(db *database.Database) error {
-	if !m.isGenesis {
-		batch := db.Begin(false)
-		defer batch.Discard()
-
-		url := m.Network.NodeUrl(protocol.Globals)
-		entry, err := indexing.Data(batch, url).GetLatestEntry()
-		if err != nil {
-			return fmt.Errorf("failed to get latest globals data entry: %v", err)
-		}
-		m.eventBus.Publish(events.DidDataAccountUpdate{
-			AccountUrl: url,
-			DataEntry:  &entry,
-		})
-	}
-	return nil
 }

@@ -207,8 +207,6 @@ func (s *Simulator) InitFromGenesisWith(values *core.GlobalValues) {
 			require.NoError(tb{s}, x.Executor.InitFromGenesis(batch, state))
 			require.NoError(tb{s}, batch.Commit())
 		}()
-
-		_ = x.Executor.EmitNetworkGlobalsEvent(x.Database)
 	}
 }
 
