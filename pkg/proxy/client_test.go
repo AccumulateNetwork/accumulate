@@ -94,7 +94,7 @@ func TestAccuProxyClient(t *testing.T) {
 		}
 		jsonrpc2.DebugMethodFunc = true
 		handler := jsonrpc2.HTTPRequestHandler(methods, stdlog.New(os.Stdout, "", 0))
-		http.ListenAndServe(":18888", handler)
+		require.NoError(t, http.ListenAndServe(":18888", handler))
 	}()
 
 	client, err := New(endpoint)
