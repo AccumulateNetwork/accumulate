@@ -66,9 +66,9 @@ type DataEntrySetQuery struct {
 }
 
 type DescriptionResponse struct {
-	Network   config.Network    `json:"network,omitempty" form:"network" query:"network" validate:"required"`
-	Values    core.GlobalValues `json:"values,omitempty" form:"values" query:"values" validate:"required"`
-	Error     *errors2.Error    `json:"error,omitempty" form:"error" query:"error" validate:"required"`
+	Network   *config.Network    `json:"network,omitempty" form:"network" query:"network" validate:"required"`
+	Values    *core.GlobalValues `json:"values,omitempty" form:"values" query:"values" validate:"required"`
+	Error     *errors2.Error     `json:"error,omitempty" form:"error" query:"error" validate:"required"`
 	extraData []byte
 }
 
@@ -570,10 +570,10 @@ func (v *DataEntrySetQuery) MarshalJSON() ([]byte, error) {
 
 func (v *DescriptionResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Network config.Network    `json:"network,omitempty"`
-		Subnet  config.Network    `json:"subnet,omitempty"`
-		Values  core.GlobalValues `json:"values,omitempty"`
-		Error   *errors2.Error    `json:"error,omitempty"`
+		Network *config.Network    `json:"network,omitempty"`
+		Subnet  *config.Network    `json:"subnet,omitempty"`
+		Values  *core.GlobalValues `json:"values,omitempty"`
+		Error   *errors2.Error     `json:"error,omitempty"`
 	}{}
 	u.Network = v.Network
 	u.Subnet = v.Network
@@ -1099,10 +1099,10 @@ func (v *DataEntrySetQuery) UnmarshalJSON(data []byte) error {
 
 func (v *DescriptionResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Network config.Network    `json:"network,omitempty"`
-		Subnet  config.Network    `json:"subnet,omitempty"`
-		Values  core.GlobalValues `json:"values,omitempty"`
-		Error   *errors2.Error    `json:"error,omitempty"`
+		Network *config.Network    `json:"network,omitempty"`
+		Subnet  *config.Network    `json:"subnet,omitempty"`
+		Values  *core.GlobalValues `json:"values,omitempty"`
+		Error   *errors2.Error     `json:"error,omitempty"`
 	}{}
 	u.Network = v.Network
 	u.Subnet = v.Network
@@ -1111,7 +1111,7 @@ func (v *DescriptionResponse) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	if !(u.Network.Equal(&config.Network{})) {
+	if !(u.Network == nil) {
 		v.Network = u.Network
 	} else {
 		v.Network = u.Subnet

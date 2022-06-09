@@ -242,7 +242,7 @@ func (x *Executor) captureValueAsDataEntry(batch *database.Batch, internalAccoun
 	txn.Body = &wd
 	txn.Header.Initiator = signerUrl.AccountID32()
 
-	st := chain.NewStateManager(&x.Network, &x.globals.Active, batch.Begin(true), nil, txn, x.logger)
+	st := chain.NewStateManager(x.Network, &x.globals.Active, batch.Begin(true), nil, txn, x.logger)
 	defer st.Discard()
 
 	var da *protocol.DataAccount
@@ -478,7 +478,7 @@ func (x *Executor) shouldSendAnchor(batch *database.Batch, ledger *protocol.Syst
 	}
 
 	// Send an update if any chains were updated (except the ledger and DN anchor pool)
-	updateEntries, err := indexing.BlockChainUpdates(batch, &x.Network, uint64(ledger.Index)).Get()
+	updateEntries, err := indexing.BlockChainUpdates(batch, x.Network, uint64(ledger.Index)).Get()
 	if err != nil {
 		return false, errors.Format(errors.StatusUnknown, "load block changes: %w", err)
 	}
@@ -518,7 +518,7 @@ func (x *Executor) buildDirectoryAnchor(batch *database.Batch, ledgerState *prot
 	record := batch.Account(anchorUrl)
 
 	// Load the list of chain updates
-	updates, err := indexing.BlockChainUpdates(batch, &x.Network, uint64(ledgerState.Index)).Get()
+	updates, err := indexing.BlockChainUpdates(batch, x.Network, uint64(ledgerState.Index)).Get()
 	if err != nil {
 		return nil, errors.Format(errors.StatusUnknown, "load block chain updates index: %w", err)
 	}

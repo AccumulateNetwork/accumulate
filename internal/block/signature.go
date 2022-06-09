@@ -79,7 +79,7 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 	var err error
 	switch signature := signature.(type) {
 	case *protocol.SyntheticSignature:
-		err = verifySyntheticSignature(&x.Network, batch, delivery.Transaction, signature, md)
+		err = verifySyntheticSignature(x.Network, batch, delivery.Transaction, signature, md)
 
 	case *protocol.ReceiptSignature:
 		err = verifyReceiptSignature(delivery.Transaction, signature, md)

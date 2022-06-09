@@ -6,8 +6,11 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"strconv"
+	"strings"
 
 	tmcfg "github.com/tendermint/tendermint/config"
+	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/libs/log"
 	tmlog "github.com/tendermint/tendermint/libs/log"
 	tmos "github.com/tendermint/tendermint/libs/os"
@@ -25,12 +28,13 @@ const nodeDirPerm = 0755
 type InitOptions struct {
 	Version             int
 	WorkDir             string
+	NodeDirNames        []string
 	Port                int
-	NodeNr              *uint64
 	GenesisDoc          *types.GenesisDoc
 	Config              []*cfg.Config
 	RemoteIP            []string
 	ListenIP            []string
+	ValidatorKeys       []crypto.PrivKey
 	NetworkValidatorMap genesis.NetworkValidatorMap
 	Logger              log.Logger
 	FactomAddressesFile string
@@ -73,6 +77,7 @@ func initV1(opts InitOptions) (bootstrap genesis.Bootstrap, err error) {
 	genValKeys := make([][]byte, 0, len(configs))
 
 	var networkType cfg.NetworkType
+	var ports []int
 	for i, config := range configs {
 		if i == 0 {
 			networkType = config.Accumulate.Network.Type
@@ -81,18 +86,32 @@ func initV1(opts InitOptions) (bootstrap genesis.Bootstrap, err error) {
 		}
 
 		var nodeDirName string
-		if opts.NodeNr != nil {
-			nodeDirName = fmt.Sprintf("Node%d", *opts.NodeNr)
+		if len(opts.NodeDirNames) > 0 {
+			nodeDirName = opts.NodeDirNames[i]
 		} else {
 			nodeDirName = fmt.Sprintf("Node%d", i)
 		}
 		nodeDir := path.Join(opts.WorkDir, nodeDirName)
 		config.SetRoot(nodeDir)
 
-		config.P2P.ListenAddress = fmt.Sprintf("tcp://%s:%d", opts.ListenIP[i], opts.Port+networks.TmP2pPortOffset)
-		config.RPC.ListenAddress = fmt.Sprintf("tcp://%s:%d", opts.ListenIP[i], opts.Port+networks.TmRpcPortOffset)
-		config.RPC.GRPCListenAddress = fmt.Sprintf("tcp://%s:%d", opts.ListenIP[i], opts.Port+networks.TmRpcGrpcPortOffset)
-		config.Instrumentation.PrometheusListenAddr = fmt.Sprintf(":%d", opts.Port+networks.TmPrometheusPortOffset)
+		port := opts.Port
+		if port == 0 {
+			bits := strings.Split(config.Accumulate.Network.LocalAddress, ":")
+			if len(bits) != 2 {
+				return nil, fmt.Errorf("invalid local address %q", config.Accumulate.Network.LocalAddress)
+			}
+			i, err := strconv.ParseInt(bits[1], 10, 64)
+			if err != nil {
+				return nil, fmt.Errorf("invalid local address %q: %w", config.Accumulate.Network.LocalAddress, err)
+			}
+			port = int(i)
+		}
+		ports = append(ports, port)
+
+		config.P2P.ListenAddress = fmt.Sprintf("tcp://%s:%d", opts.ListenIP[i], port+networks.TmP2pPortOffset)
+		config.RPC.ListenAddress = fmt.Sprintf("tcp://%s:%d", opts.ListenIP[i], port+networks.TmRpcPortOffset)
+		config.RPC.GRPCListenAddress = fmt.Sprintf("tcp://%s:%d", opts.ListenIP[i], port+networks.TmRpcGrpcPortOffset)
+		config.Instrumentation.PrometheusListenAddr = fmt.Sprintf(":%d", port+networks.TmPrometheusPortOffset)
 
 		err = os.MkdirAll(path.Join(nodeDir, "config"), nodeDirPerm)
 		if err != nil {
@@ -104,7 +123,11 @@ func initV1(opts InitOptions) (bootstrap genesis.Bootstrap, err error) {
 			return nil, fmt.Errorf("failed to create data dir: %v", err)
 		}
 
-		if err := initFilesWithConfig(config, &subnetID, opts.GenesisDoc); err != nil {
+		var pk crypto.PrivKey
+		if opts.ValidatorKeys != nil {
+			pk = opts.ValidatorKeys[i]
+		}
+		if err := initFilesWithConfig(config, pk, &subnetID, opts.GenesisDoc); err != nil {
 			return nil, err
 		}
 
@@ -157,7 +180,7 @@ func initV1(opts InitOptions) (bootstrap genesis.Bootstrap, err error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to load node key: %v", err)
 		}
-		validatorPeers[i] = nodeKey.ID.AddressString(fmt.Sprintf("%s:%d", opts.RemoteIP[i], opts.Port))
+		validatorPeers[i] = nodeKey.ID.AddressString(fmt.Sprintf("%s:%d", opts.RemoteIP[i], ports[i]))
 	}
 
 	// Overwrite default config.
@@ -173,6 +196,7 @@ func initV1(opts InitOptions) (bootstrap genesis.Bootstrap, err error) {
 						config.P2P.PersistentPeers += "," + peer
 					}
 				}
+				// Remove the leading comma
 				config.P2P.PersistentPeers = config.P2P.PersistentPeers[1:]
 			}
 		} else {
@@ -182,8 +206,11 @@ func initV1(opts InitOptions) (bootstrap genesis.Bootstrap, err error) {
 		config.Moniker = fmt.Sprintf("%s.%d", config.Accumulate.Network.LocalSubnetID, i)
 
 		config.Accumulate.Website.ListenAddress = fmt.Sprintf("http://%s:8080", opts.ListenIP[i])
-		config.Accumulate.API.ListenAddress = fmt.Sprintf("http://%s:%d", opts.ListenIP[i], opts.Port+networks.AccApiPortOffset)
+		config.Accumulate.API.ListenAddress = fmt.Sprintf("http://%s:%d", opts.ListenIP[i], ports[i]+networks.AccApiPortOffset)
 
+		if strings.Contains(config.P2P.PersistentPeers, "26756") && subnetID != "Directory" {
+			print("")
+		}
 		err := cfg.Store(config)
 		if err != nil {
 			return nil, err
@@ -203,7 +230,7 @@ func initV1(opts InitOptions) (bootstrap genesis.Bootstrap, err error) {
 	return bootstrap, nil
 }
 
-func initFilesWithConfig(config *cfg.Config, chainid *string, genDoc *types.GenesisDoc) error {
+func initFilesWithConfig(config *cfg.Config, privKey crypto.PrivKey, chainid *string, genDoc *types.GenesisDoc) error {
 
 	logger := tmlog.NewNopLogger()
 
@@ -218,6 +245,11 @@ func initFilesWithConfig(config *cfg.Config, chainid *string, genDoc *types.Gene
 			return fmt.Errorf("failed to load private validator: %w", err)
 		}
 		logger.Info("Found private validator", "keyFile", privValKeyFile,
+			"stateFile", privValStateFile)
+	} else if privKey != nil {
+		pv = privval.NewFilePV(privKey, privValKeyFile, privValStateFile)
+		pv.Save()
+		logger.Info("Wrote private validator", "keyFile", privValKeyFile,
 			"stateFile", privValStateFile)
 	} else {
 		pv, err = privval.GenFilePV(privValKeyFile, privValStateFile, "")

@@ -17,6 +17,7 @@ Network:
     - name: Subnets
       toml: subnets
       type: Subnet
+      pointer: true
       marshal-as: reference
       repeatable: true
 
@@ -33,6 +34,7 @@ Subnet:
     - name: Nodes
       toml: nodes
       type: Node
+      pointer: true
       marshal-as: reference
       repeatable: true
 

@@ -417,3 +417,11 @@ func (c *FakeTendermint) logTxns(msg string, env ...*chain.Delivery) {
 		}
 	}
 }
+
+func (c *FakeTendermint) NetInfo(ctx context.Context) (*ctypes.ResultNetInfo, error) {
+	panic("NetInfo is not supported")
+}
+
+func (c *FakeTendermint) Status(context.Context) (*ctypes.ResultStatus, error) {
+	panic("Status is not supported")
+}

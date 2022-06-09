@@ -13,7 +13,7 @@ type Network struct {
 	Type          NetworkType `json:"type,omitempty" form:"type" query:"type" validate:"required" toml:"type" mapstructure:"type"`
 	LocalSubnetID string      `json:"localSubnetID,omitempty" form:"localSubnetID" query:"localSubnetID" validate:"required" toml:"local-subnet" mapstructure:"local-subnet"`
 	LocalAddress  string      `json:"localAddress,omitempty" form:"localAddress" query:"localAddress" validate:"required" toml:"local-address" mapstructure:"local-address"`
-	Subnets       []Subnet    `json:"subnets,omitempty" form:"subnets" query:"subnets" validate:"required" toml:"subnets" mapstructure:"subnets"`
+	Subnets       []*Subnet   `json:"subnets,omitempty" form:"subnets" query:"subnets" validate:"required" toml:"subnets" mapstructure:"subnets"`
 	extraData     []byte
 }
 
@@ -26,7 +26,7 @@ type Node struct {
 type Subnet struct {
 	ID        string      `json:"iD,omitempty" form:"iD" query:"iD" validate:"required" toml:"id" mapstructure:"id"`
 	Type      NetworkType `json:"type,omitempty" form:"type" query:"type" validate:"required" toml:"type" mapstructure:"type"`
-	Nodes     []Node      `json:"nodes,omitempty" form:"nodes" query:"nodes" validate:"required" toml:"nodes" mapstructure:"nodes"`
+	Nodes     []*Node     `json:"nodes,omitempty" form:"nodes" query:"nodes" validate:"required" toml:"nodes" mapstructure:"nodes"`
 	extraData []byte
 }
 
@@ -37,9 +37,11 @@ func (v *Network) Copy() *Network {
 	u.Type = v.Type
 	u.LocalSubnetID = v.LocalSubnetID
 	u.LocalAddress = v.LocalAddress
-	u.Subnets = make([]Subnet, len(v.Subnets))
+	u.Subnets = make([]*Subnet, len(v.Subnets))
 	for i, v := range v.Subnets {
-		u.Subnets[i] = *(&v).Copy()
+		if v != nil {
+			u.Subnets[i] = (v).Copy()
+		}
 	}
 
 	return u
@@ -63,9 +65,11 @@ func (v *Subnet) Copy() *Subnet {
 
 	u.ID = v.ID
 	u.Type = v.Type
-	u.Nodes = make([]Node, len(v.Nodes))
+	u.Nodes = make([]*Node, len(v.Nodes))
 	for i, v := range v.Nodes {
-		u.Nodes[i] = *(&v).Copy()
+		if v != nil {
+			u.Nodes[i] = (v).Copy()
+		}
 	}
 
 	return u
@@ -90,7 +94,7 @@ func (v *Network) Equal(u *Network) bool {
 		return false
 	}
 	for i := range v.Subnets {
-		if !((&v.Subnets[i]).Equal(&u.Subnets[i])) {
+		if !((v.Subnets[i]).Equal(u.Subnets[i])) {
 			return false
 		}
 	}
@@ -120,7 +124,7 @@ func (v *Subnet) Equal(u *Subnet) bool {
 		return false
 	}
 	for i := range v.Nodes {
-		if !((&v.Nodes[i]).Equal(&u.Nodes[i])) {
+		if !((v.Nodes[i]).Equal(u.Nodes[i])) {
 			return false
 		}
 	}
@@ -130,11 +134,11 @@ func (v *Subnet) Equal(u *Subnet) bool {
 
 func (v *Network) MarshalJSON() ([]byte, error) {
 	u := struct {
-		NetworkName   string                    `json:"networkName,omitempty"`
-		Type          NetworkType               `json:"type,omitempty"`
-		LocalSubnetID string                    `json:"localSubnetID,omitempty"`
-		LocalAddress  string                    `json:"localAddress,omitempty"`
-		Subnets       encoding.JsonList[Subnet] `json:"subnets,omitempty"`
+		NetworkName   string                     `json:"networkName,omitempty"`
+		Type          NetworkType                `json:"type,omitempty"`
+		LocalSubnetID string                     `json:"localSubnetID,omitempty"`
+		LocalAddress  string                     `json:"localAddress,omitempty"`
+		Subnets       encoding.JsonList[*Subnet] `json:"subnets,omitempty"`
 	}{}
 	u.NetworkName = v.NetworkName
 	u.Type = v.Type
@@ -146,9 +150,9 @@ func (v *Network) MarshalJSON() ([]byte, error) {
 
 func (v *Subnet) MarshalJSON() ([]byte, error) {
 	u := struct {
-		ID    string                  `json:"iD,omitempty"`
-		Type  NetworkType             `json:"type,omitempty"`
-		Nodes encoding.JsonList[Node] `json:"nodes,omitempty"`
+		ID    string                   `json:"iD,omitempty"`
+		Type  NetworkType              `json:"type,omitempty"`
+		Nodes encoding.JsonList[*Node] `json:"nodes,omitempty"`
 	}{}
 	u.ID = v.ID
 	u.Type = v.Type
@@ -158,11 +162,11 @@ func (v *Subnet) MarshalJSON() ([]byte, error) {
 
 func (v *Network) UnmarshalJSON(data []byte) error {
 	u := struct {
-		NetworkName   string                    `json:"networkName,omitempty"`
-		Type          NetworkType               `json:"type,omitempty"`
-		LocalSubnetID string                    `json:"localSubnetID,omitempty"`
-		LocalAddress  string                    `json:"localAddress,omitempty"`
-		Subnets       encoding.JsonList[Subnet] `json:"subnets,omitempty"`
+		NetworkName   string                     `json:"networkName,omitempty"`
+		Type          NetworkType                `json:"type,omitempty"`
+		LocalSubnetID string                     `json:"localSubnetID,omitempty"`
+		LocalAddress  string                     `json:"localAddress,omitempty"`
+		Subnets       encoding.JsonList[*Subnet] `json:"subnets,omitempty"`
 	}{}
 	u.NetworkName = v.NetworkName
 	u.Type = v.Type
@@ -182,9 +186,9 @@ func (v *Network) UnmarshalJSON(data []byte) error {
 
 func (v *Subnet) UnmarshalJSON(data []byte) error {
 	u := struct {
-		ID    string                  `json:"iD,omitempty"`
-		Type  NetworkType             `json:"type,omitempty"`
-		Nodes encoding.JsonList[Node] `json:"nodes,omitempty"`
+		ID    string                   `json:"iD,omitempty"`
+		Type  NetworkType              `json:"type,omitempty"`
+		Nodes encoding.JsonList[*Node] `json:"nodes,omitempty"`
 	}{}
 	u.ID = v.ID
 	u.Type = v.Type

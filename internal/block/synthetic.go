@@ -237,7 +237,7 @@ func (x *Executor) buildSynthReceipt(batch *database.Batch, produced []*protocol
 		if err != nil {
 			return errors.Format(errors.StatusUnknown, "store signature: %w", err)
 		}
-		_, err = batch.Transaction(transaction.GetHash()).AddSystemSignature(&x.Network, proofSig)
+		_, err = batch.Transaction(transaction.GetHash()).AddSystemSignature(x.Network, proofSig)
 		if err != nil {
 			return errors.Format(errors.StatusUnknown, "record receipt for %X: %w", transaction.GetHash()[:4], err)
 		}
@@ -276,7 +276,7 @@ func (x *Executor) putSyntheticTransaction(batch *database.Batch, transaction *p
 	}
 
 	// Record the signature against the transaction
-	_, err = obj.AddSystemSignature(&x.Network, signature)
+	_, err = obj.AddSystemSignature(x.Network, signature)
 	if err != nil {
 		return fmt.Errorf("add signature: %w", err)
 	}

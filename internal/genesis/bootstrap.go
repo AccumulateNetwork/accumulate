@@ -28,7 +28,7 @@ import (
 type NetworkValidatorMap map[string][]tmtypes.GenesisValidator
 
 type InitOpts struct {
-	Network             config.Network
+	Network             *config.Network
 	AllConfigs          []*config.Config
 	Validators          []tmtypes.GenesisValidator
 	NetworkValidatorMap NetworkValidatorMap
@@ -58,7 +58,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) (Bootstrap, error) {
 
 	// Build the routing table
 	b.routingTable = new(protocol.RoutingTable)
-	b.routingTable.Routes = routing.BuildSimpleTable(&opts.Network)
+	b.routingTable.Routes = routing.BuildSimpleTable(opts.Network)
 	b.routingTable.Overrides = make([]protocol.RouteOverride, 1, len(opts.Network.Subnets)+1)
 	b.routingTable.Overrides[0] = protocol.RouteOverride{Account: protocol.AcmeUrl(), Subnet: protocol.Directory}
 	for _, subnet := range opts.Network.Subnets {
@@ -201,7 +201,7 @@ func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protoc
 		b.globals.Routing = b.routingTable
 	}
 
-	err := b.globals.Store(&b.Network, func(accountUrl *url.URL, target interface{}) error {
+	err := b.globals.Store(b.Network, func(accountUrl *url.URL, target interface{}) error {
 		da := new(protocol.DataAccount)
 		da.Url = accountUrl
 		da.AddAuthority(b.authorityUrl)

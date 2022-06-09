@@ -59,7 +59,7 @@ func DefaultConfig(networkName string, net config.NetworkType, node config.NodeT
 	cfg.Consensus.TimeoutCommit = time.Second / 5        // Increase block frequency
 	cfg.Accumulate.Website.Enabled = false               // No need for the website
 	cfg.Instrumentation.Prometheus = false               // Disable prometheus: https://github.com/tendermint/tendermint/issues/7076
-	cfg.Accumulate.Network.Subnets = []config.Subnet{
+	cfg.Accumulate.Network.Subnets = []*config.Subnet{
 		{
 			ID:   "local",
 			Type: config.BlockValidator,
@@ -75,8 +75,8 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withF
 	tempDir := t.TempDir()
 
 	count := numValidators + numFollowers
-	subnets := make([]config.Subnet, numBvns+1)
-	subnetsMap := make(map[string]config.Subnet)
+	subnets := make([]*config.Subnet, numBvns+1)
+	subnetsMap := make(map[string]*config.Subnet)
 	allAddresses := make(map[string][]string, numBvns+1)
 	allConfigs := make(map[string][]*cfg.Config, numBvns+1)
 	allRemotes := make(map[string][]string, numBvns+1)
@@ -92,7 +92,7 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withF
 		configs := make([]*cfg.Config, count)
 		remotes := make([]string, count)
 		allAddresses[subnetId], allConfigs[subnetId], allRemotes[subnetId] = addresses, configs, remotes
-		nodes := make([]config.Node, count)
+		nodes := make([]*config.Node, count)
 		for i := 0; i < count; i++ {
 			nodeType := cfg.Validator
 			if i > numValidators {
@@ -102,7 +102,7 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withF
 			hash := hashCaller(1, fmt.Sprintf("%s-%s-%d", t.Name(), subnetId, i))
 			configs[i] = DefaultConfig("unittest", netType, nodeType, subnetId)
 			remotes[i] = getIP(hash).String()
-			nodes[i] = config.Node{
+			nodes[i] = &config.Node{
 				Type:    nodeType,
 				Address: fmt.Sprintf("http://%s:%d", remotes[i], basePort),
 			}
@@ -110,7 +110,7 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withF
 		}
 
 		// We need to return the subnets in a specific order with directory node first because the unit tests select subnets[1]
-		subnets[i] = config.Subnet{
+		subnets[i] = &config.Subnet{
 			ID:    subnetId,
 			Type:  netType,
 			Nodes: nodes,
@@ -173,7 +173,7 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withF
 		for i := 0; i < count; i++ {
 			dir := filepath.Join(dir, fmt.Sprintf("Node%d", i))
 			var err error
-			daemons[i], err = accumulated.Load(dir, logWriter)
+			daemons[i], err = accumulated.Load(dir, func(c *cfg.Config) (io.Writer, error) { return logWriter(c.LogFormat) })
 			require.NoError(t, err)
 			daemons[i].Logger = daemons[i].Logger.With("test", t.Name(), "subnet", subnetId, "node", i)
 		}
@@ -190,7 +190,7 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withF
 	return getSubnetNames(subnets), allDaemons
 }
 
-func getSubnetNames(subnets []cfg.Subnet) []string {
+func getSubnetNames(subnets []*cfg.Subnet) []string {
 	var res []string
 	for _, subnet := range subnets {
 		res = append(res, subnet.ID)

@@ -10,15 +10,11 @@ import (
 	"net/url"
 	"os"
 	"path"
-	"path/filepath"
 	"strconv"
-	"strings"
 	"time"
 
-	dc "github.com/docker/cli/cli/compose/types"
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 	"github.com/tendermint/tendermint/libs/log"
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 	"github.com/tendermint/tendermint/types"
@@ -26,13 +22,10 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	cfg "gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
-	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node"
 	"gitlab.com/accumulatenetwork/accumulate/networks"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	etcd "go.etcd.io/etcd/client/v3"
-	"gopkg.in/yaml.v3"
 )
 
 var cmdInit = &cobra.Command{
@@ -256,15 +249,15 @@ func initNode(cmd *cobra.Command, args []string) {
 	}
 
 	_, err = node.Init(node.InitOptions{
-		NodeNr:     &nodeNr,
-		Version:    1,
-		WorkDir:    flagMain.WorkDir,
-		Port:       nodePort,
-		GenesisDoc: genDoc,
-		Config:     []*cfg.Config{config},
-		RemoteIP:   []string{u.Hostname()},
-		ListenIP:   []string{u.Hostname()},
-		Logger:     newLogger(),
+		NodeDirNames: []string{fmt.Sprintf("Node%d", nodeNr)},
+		Version:      1,
+		WorkDir:      flagMain.WorkDir,
+		Port:         nodePort,
+		GenesisDoc:   genDoc,
+		Config:       []*cfg.Config{config},
+		RemoteIP:     []string{u.Hostname()},
+		ListenIP:     []string{u.Hostname()},
+		Logger:       newLogger(),
 	})
 	check(err)
 }
@@ -298,39 +291,6 @@ func nextIP() string {
 	return ip.String()
 }
 
-func initDevNet(cmd *cobra.Command, _ []string) {
-	count := flagInitDevnet.NumValidators + flagInitDevnet.NumFollowers
-	verifyInitFlags(cmd, count)
-
-	compose := new(dc.Config)
-	compose.Version = "3"
-	compose.Services = make([]dc.ServiceConfig, 0, 1+count*(flagInitDevnet.NumBvns+1))
-	compose.Volumes = make(map[string]dc.VolumeConfig, 1+count*(flagInitDevnet.NumBvns+1))
-
-	subnets := make([]config.Subnet, flagInitDevnet.NumBvns+1)
-	dnConfig := make([]*cfg.Config, count)
-	dnRemote := make([]string, count)
-	dnListen := make([]string, count)
-	initDNs(count, dnConfig, dnRemote, dnListen, compose, subnets)
-
-	bvnConfig := make([][]*cfg.Config, flagInitDevnet.NumBvns)
-	bvnRemote := make([][]string, flagInitDevnet.NumBvns)
-	bvnListen := make([][]string, flagInitDevnet.NumBvns)
-	initBVNs(bvnConfig, count, bvnRemote, bvnListen, compose, subnets)
-
-	handleDNSSuffix(dnRemote, bvnRemote)
-
-	if flagInit.Reset {
-		nodeReset()
-	}
-
-	if !flagInitDevnet.Compose {
-		createInLocalFS(dnConfig, dnRemote, dnListen, bvnConfig, bvnRemote, bvnListen)
-		return
-	}
-	createDockerCompose(cmd, dnRemote, compose)
-}
-
 func verifyInitFlags(cmd *cobra.Command, count int) {
 	if flagInitDevnet.Compose {
 		flagInitDevnet.Docker = true
@@ -358,58 +318,6 @@ func verifyInitFlags(cmd *cobra.Command, count int) {
 	}
 }
 
-func initDNs(count int, dnConfig []*cfg.Config, dnRemote []string, dnListen []string, compose *dc.Config, subnets []cfg.Subnet) {
-	dnNodes := make([]config.Node, count)
-	for i := 0; i < count; i++ {
-		nodeType := cfg.Validator
-		if i >= flagInitDevnet.NumValidators {
-			nodeType = cfg.Follower
-		}
-		dnConfig[i], dnRemote[i], dnListen[i] = initDevNetNode(cfg.Directory, nodeType, 0, i, compose)
-		dnNodes[i] = config.Node{
-			Type:    nodeType,
-			Address: fmt.Sprintf("http://%s:%d", dnRemote[i], flagInitDevnet.BasePort),
-		}
-		dnConfig[i].Accumulate.Network.Subnets = subnets
-		dnConfig[i].Accumulate.Network.LocalAddress = parseHost(dnNodes[i].Address)
-	}
-
-	subnets[0] = config.Subnet{
-		ID:    protocol.Directory,
-		Type:  config.Directory,
-		Nodes: dnNodes,
-	}
-}
-
-func initBVNs(bvnConfigs [][]*cfg.Config, count int, bvnRemotes [][]string, bvnListen [][]string, compose *dc.Config, subnets []cfg.Subnet) {
-	for bvn := range bvnConfigs {
-		subnetID := fmt.Sprintf("BVN%d", bvn)
-		bvnConfigs[bvn] = make([]*cfg.Config, count)
-		bvnRemotes[bvn] = make([]string, count)
-		bvnListen[bvn] = make([]string, count)
-		bvnNodes := make([]config.Node, count)
-
-		for i := 0; i < count; i++ {
-			nodeType := cfg.Validator
-			if i >= flagInitDevnet.NumValidators {
-				nodeType = cfg.Follower
-			}
-			bvnConfigs[bvn][i], bvnRemotes[bvn][i], bvnListen[bvn][i] = initDevNetNode(cfg.BlockValidator, nodeType, bvn, i, compose)
-			bvnNodes[i] = config.Node{
-				Type:    nodeType,
-				Address: fmt.Sprintf("http://%s:%d", bvnRemotes[bvn][i], flagInitDevnet.BasePort),
-			}
-			bvnConfigs[bvn][i].Accumulate.Network.Subnets = subnets
-			bvnConfigs[bvn][i].Accumulate.Network.LocalAddress = parseHost(bvnNodes[i].Address)
-		}
-		subnets[bvn+1] = config.Subnet{
-			ID:    subnetID,
-			Type:  config.BlockValidator,
-			Nodes: bvnNodes,
-		}
-	}
-}
-
 func handleDNSSuffix(dnRemote []string, bvnRemote [][]string) {
 	if flagInitDevnet.Docker && flagInitDevnet.DnsSuffix != "" {
 		for i := range dnRemote {
@@ -421,158 +329,6 @@ func handleDNSSuffix(dnRemote []string, bvnRemote [][]string) {
 			}
 		}
 	}
-}
-
-func createInLocalFS(dnConfig []*cfg.Config, dnRemote []string, dnListen []string, bvnConfig [][]*cfg.Config, bvnRemote [][]string, bvnListen [][]string) {
-	logger := newLogger()
-	netValMap := make(genesis.NetworkValidatorMap)
-	genInit, err := node.Init(node.InitOptions{
-		WorkDir:             filepath.Join(flagMain.WorkDir, "dn"),
-		Port:                flagInitDevnet.BasePort,
-		Config:              dnConfig,
-		RemoteIP:            dnRemote,
-		ListenIP:            dnListen,
-		NetworkValidatorMap: netValMap,
-		Logger:              logger.With("subnet", protocol.Directory),
-	})
-	check(err)
-	genList := []genesis.Bootstrap{genInit}
-
-	for bvn := range bvnConfig {
-		bvnConfig, bvnRemote, bvnListen := bvnConfig[bvn], bvnRemote[bvn], bvnListen[bvn]
-		genesis, err := node.Init(node.InitOptions{
-			WorkDir:             filepath.Join(flagMain.WorkDir, fmt.Sprintf("bvn%d", bvn)),
-			Port:                flagInitDevnet.BasePort,
-			Config:              bvnConfig,
-			RemoteIP:            bvnRemote,
-			ListenIP:            bvnListen,
-			NetworkValidatorMap: netValMap,
-			Logger:              logger.With("subnet", fmt.Sprintf("BVN%d", bvn)),
-		})
-		check(err)
-		if genesis != nil {
-			genList = append(genList, genesis)
-		}
-	}
-
-	// Execute bootstrap after the entire network is known
-	for _, genesis := range genList {
-		err := genesis.Bootstrap()
-		if err != nil {
-			panic(fmt.Errorf("could not execute genesis: %v", err))
-		}
-	}
-}
-
-func createDockerCompose(cmd *cobra.Command, dnRemote []string, compose *dc.Config) {
-	var svc dc.ServiceConfig
-	api := fmt.Sprintf("http://%s:%d/v2", dnRemote[0], flagInitDevnet.BasePort+networks.AccApiPortOffset)
-	svc.Name = "tools"
-	svc.ContainerName = "devnet-init"
-	svc.Image = flagInitDevnet.DockerImage
-	svc.Environment = map[string]*string{"ACC_API": &api}
-	extras := make(map[string]interface{})
-	extras["profiles"] = [...]string{"init"}
-	svc.Extras = extras
-
-	svc.Command = dc.ShellCommand{"init", "devnet", "-w", "/nodes", "--docker"}
-	cmd.Flags().Visit(func(flag *pflag.Flag) {
-		switch flag.Name {
-		case "work-dir", "docker", "compose", "reset":
-			return
-		}
-
-		s := fmt.Sprintf("--%s=%v", flag.Name, flag.Value)
-		svc.Command = append(svc.Command, s)
-	})
-
-	if flagInitDevnet.UseVolumes {
-		svc.Volumes = make([]dc.ServiceVolumeConfig, len(compose.Services))
-		for i, node := range compose.Services {
-			bits := strings.SplitN(node.Name, "-", 2)
-			svc.Volumes[i] = dc.ServiceVolumeConfig{Type: "volume", Source: node.Name, Target: path.Join("/nodes", bits[0], "Node"+bits[1])}
-		}
-	} else {
-		svc.Volumes = []dc.ServiceVolumeConfig{
-			{Type: "bind", Source: ".", Target: "/nodes"},
-		}
-	}
-
-	compose.Services = append(compose.Services, svc)
-
-	dn0svc := compose.Services[0]
-	dn0svc.Ports = make([]dc.ServicePortConfig, networks.MaxPortOffset+1)
-	for i := range dn0svc.Ports {
-		port := uint32(flagInitDevnet.BasePort + i)
-		dn0svc.Ports[i] = dc.ServicePortConfig{
-			Mode: "host", Protocol: "tcp", Target: port, Published: port,
-		}
-	}
-
-	f, err := os.Create(filepath.Join(flagMain.WorkDir, "docker-compose.yml"))
-	check(err)
-	defer f.Close()
-
-	err = yaml.NewEncoder(f).Encode(compose)
-	check(err)
-}
-
-func initDevNetNode(netType cfg.NetworkType, nodeType cfg.NodeType, bvn, node int, compose *dc.Config) (config *cfg.Config, remote, listen string) {
-	if netType == cfg.Directory {
-		config = cfg.Default(cfg.DevNet, netType, nodeType, protocol.Directory)
-	} else {
-		config = cfg.Default(cfg.DevNet, netType, nodeType, fmt.Sprintf("BVN%d", bvn))
-	}
-	if flagInit.LogLevels != "" {
-		_, _, err := logging.ParseLogLevel(flagInit.LogLevels, io.Discard)
-		checkf(err, "--log-level")
-		config.LogLevel = flagInit.LogLevels
-	}
-
-	if flagInit.NoEmptyBlocks {
-		config.Consensus.CreateEmptyBlocks = false
-	}
-	if flagInit.NoWebsite {
-		config.Accumulate.Website.Enabled = false
-	}
-
-	if len(flagInit.Etcd) > 0 {
-		config.Accumulate.Storage.Type = cfg.EtcdStorage
-		config.Accumulate.Storage.Etcd = new(etcd.Config)
-		config.Accumulate.Storage.Etcd.Endpoints = flagInit.Etcd
-		config.Accumulate.Storage.Etcd.DialTimeout = 5 * time.Second
-	}
-
-	if !flagInitDevnet.Docker {
-		ip := nextIP()
-		return config, ip, ip
-	}
-
-	var name, dir string
-	if netType == cfg.Directory {
-		name, dir = fmt.Sprintf("dn-%d", node), fmt.Sprintf("./dn/Node%d", node)
-	} else {
-		name, dir = fmt.Sprintf("bvn%d-%d", bvn, node), fmt.Sprintf("./bvn%d/Node%d", bvn, node)
-	}
-
-	var svc dc.ServiceConfig
-	svc.Name = name
-	svc.ContainerName = "devnet-" + name
-	svc.Image = flagInitDevnet.DockerImage
-
-	if flagInitDevnet.UseVolumes {
-		svc.Volumes = []dc.ServiceVolumeConfig{
-			{Type: "volume", Source: name, Target: "/node"},
-		}
-		compose.Volumes[name] = dc.VolumeConfig{}
-	} else {
-		svc.Volumes = []dc.ServiceVolumeConfig{
-			{Type: "bind", Source: dir, Target: "/node"},
-		}
-	}
-
-	compose.Services = append(compose.Services, svc)
-	return config, svc.Name, "0.0.0.0"
 }
 
 func parseHost(address string) string {

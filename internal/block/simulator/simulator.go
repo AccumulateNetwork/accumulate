@@ -36,7 +36,7 @@ var genesisTime = time.Date(2022, 7, 1, 0, 0, 0, 0, time.UTC)
 type Simulator struct {
 	tb
 	Logger    log.Logger
-	Subnets   []config.Subnet
+	Subnets   []*config.Subnet
 	Executors map[string]*ExecEntry
 
 	LogLevels string
@@ -79,10 +79,10 @@ func (sim *Simulator) Setup(bvnCount int) {
 	sim.routingOverrides = map[[32]byte]string{}
 	sim.Logger = sim.newLogger().With("module", "simulator")
 	sim.Executors = map[string]*ExecEntry{}
-	sim.Subnets = make([]config.Subnet, bvnCount+1)
-	sim.Subnets[0] = config.Subnet{Type: config.Directory, ID: protocol.Directory}
+	sim.Subnets = make([]*config.Subnet, bvnCount+1)
+	sim.Subnets[0] = &config.Subnet{Type: config.Directory, ID: protocol.Directory}
 	for i := 0; i < bvnCount; i++ {
-		sim.Subnets[i+1] = config.Subnet{Type: config.BlockValidator, ID: fmt.Sprintf("BVN%d", i)}
+		sim.Subnets[i+1] = &config.Subnet{Type: config.BlockValidator, ID: fmt.Sprintf("BVN%d", i)}
 	}
 
 	mainEventBus := events.NewBus(sim.Logger.With("subnet", protocol.Directory))
@@ -90,14 +90,14 @@ func (sim *Simulator) Setup(bvnCount int) {
 
 	// Initialize each executor
 	for i := range sim.Subnets {
-		subnet := &sim.Subnets[i]
-		subnet.Nodes = []config.Node{{Type: config.Validator, Address: subnet.ID}}
+		subnet := sim.Subnets[i]
+		subnet.Nodes = []*config.Node{{Type: config.Validator, Address: subnet.ID}}
 
 		logger := sim.newLogger().With("subnet", subnet.ID)
 		key := acctesting.GenerateKey(sim.Name(), subnet.ID)
 		db := database.OpenInMemory(logger)
 
-		network := config.Network{
+		network := &config.Network{
 			Type:          subnet.Type,
 			LocalSubnetID: subnet.ID,
 			LocalAddress:  subnet.ID,
@@ -120,7 +120,7 @@ func (sim *Simulator) Setup(bvnCount int) {
 
 		jrpc, err := api.NewJrpc(api.Options{
 			Logger:        logger,
-			Network:       &network,
+			Network:       network,
 			Router:        sim.Router(),
 			TxMaxWaitTime: time.Hour,
 		})

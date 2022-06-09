@@ -67,6 +67,8 @@ func (p *KeyPage) AddKeySpec(k *KeySpec) {
 		switch {
 		case v != 0:
 			return v
+		case l.Delegate == nil && k.Delegate == nil:
+			return 0
 		case l.Delegate == nil:
 			return -1
 		case k.Delegate == nil:

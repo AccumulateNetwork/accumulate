@@ -38,7 +38,7 @@ type ExecutorOptions struct {
 	Logger   log.Logger
 	Key      ed25519.PrivateKey
 	Router   routing.Router
-	Network  config.Network
+	Network  *config.Network
 	EventBus *events.Bus
 
 	isGenesis bool
@@ -104,7 +104,7 @@ func NewNodeExecutor(opts ExecutorOptions, db *database.Database) (*Executor, er
 
 // NewGenesisExecutor creates a transaction executor that can be used to set up
 // the genesis state.
-func NewGenesisExecutor(db *database.Database, logger log.Logger, network config.Network, router routing.Router) (*Executor, error) {
+func NewGenesisExecutor(db *database.Database, logger log.Logger, network *config.Network, router routing.Router) (*Executor, error) {
 	return newExecutor(
 		ExecutorOptions{
 			Network:   network,
@@ -179,7 +179,7 @@ func (m *Executor) Genesis(block *Block, exec chain.TransactionExecutor) error {
 	delivery := new(chain.Delivery)
 	delivery.Transaction = txn
 
-	st := NewStateManager(&m.Network, nil, block.Batch.Begin(true), nil, txn, m.logger.With("operation", "Genesis"))
+	st := NewStateManager(m.Network, nil, block.Batch.Begin(true), nil, txn, m.logger.With("operation", "Genesis"))
 	defer st.Discard()
 
 	err = block.Batch.Transaction(txn.GetHash()).PutStatus(&protocol.TransactionStatus{
@@ -287,5 +287,5 @@ func (m *Executor) InitFromSnapshot(batch *database.Batch, file ioutil2.SectionR
 }
 
 func (m *Executor) SaveSnapshot(batch *database.Batch, file io.WriteSeeker) error {
-	return batch.SaveSnapshot(file, &m.Network)
+	return batch.SaveSnapshot(file, m.Network)
 }

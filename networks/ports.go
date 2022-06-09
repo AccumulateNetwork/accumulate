@@ -7,5 +7,7 @@ const (
 	AccApiPortOffset       = 4
 	TmPrometheusPortOffset = 6
 
+	DnnPortOffset = 100
+
 	MaxPortOffset = TmPrometheusPortOffset
 )

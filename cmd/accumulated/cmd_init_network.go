@@ -134,14 +134,14 @@ func initNetwork(cmd *cobra.Command, args []string) {
 	var dnRemote []string
 	dnListen := make([]string, len(directory.Nodes))
 
-	var accSub []config.Subnet
+	var accSub []*config.Subnet
 	for _, sub := range network.Subnet {
-		s := config.Subnet{}
+		s := &config.Subnet{}
 		s.ID = sub.Name
 		s.Type = sub.Type
 		for _, a := range sub.Nodes {
 			address := fmt.Sprintf("http://%s:%d", a.IP, sub.Port)
-			n := config.Node{}
+			n := &config.Node{}
 			n.Address = address
 			n.Type = a.Type
 			s.Nodes = append(s.Nodes, n)

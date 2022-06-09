@@ -1029,7 +1029,7 @@ resultLoop:
 		minorEntry.BlockTime = curEntry.BlockTime
 
 		if req.TxFetchMode < query.TxFetchModeOmit {
-			chainUpdatesIndex, err := indexing.BlockChainUpdates(batch, &m.Network, curEntry.BlockIndex).Get()
+			chainUpdatesIndex, err := indexing.BlockChainUpdates(batch, m.Network, curEntry.BlockIndex).Get()
 			if err != nil {
 				return nil, &protocol.Error{Code: protocol.ErrorCodeChainIdError, Message: err}
 			}
@@ -1097,7 +1097,7 @@ func (m *Executor) resolveTxReceipt(batch *database.Batch, txid []byte, entry *i
 	receipt.Proof.Start = txid
 
 	account := batch.Account(entry.Account)
-	block, r, err := indexing.ReceiptForChainEntry(&m.Network, batch, account, txid, entry)
+	block, r, err := indexing.ReceiptForChainEntry(m.Network, batch, account, txid, entry)
 	if err != nil {
 		return receipt, err
 	}
@@ -1109,7 +1109,7 @@ func (m *Executor) resolveTxReceipt(batch *database.Batch, txid []byte, entry *i
 
 func (m *Executor) resolveChainReceipt(batch *database.Batch, account *url.URL, name string, index int64) (*query.GeneralReceipt, error) {
 	receipt := new(query.GeneralReceipt)
-	_, r, err := indexing.ReceiptForChainIndex(&m.Network, batch, batch.Account(account), name, index)
+	_, r, err := indexing.ReceiptForChainIndex(m.Network, batch, batch.Account(account), name, index)
 	if err != nil {
 		return receipt, err
 	}
@@ -1120,7 +1120,7 @@ func (m *Executor) resolveChainReceipt(batch *database.Batch, account *url.URL, 
 
 func (m *Executor) resolveAccountStateReceipt(batch *database.Batch, account *database.Account) (*query.GeneralReceipt, error) {
 	receipt := new(query.GeneralReceipt)
-	block, r, err := indexing.ReceiptForAccountState(&m.Network, batch, account)
+	block, r, err := indexing.ReceiptForAccountState(m.Network, batch, account)
 	if err != nil {
 		return receipt, err
 	}

@@ -134,7 +134,7 @@ func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Da
 	n := new(FakeNode)
 	n.t = t
 	n.key = pv.Key.PrivKey
-	n.network = &d.Config.Accumulate.Network
+	n.network = d.Config.Accumulate.Network
 	n.logger = d.Logger
 	n.netValMap = netValMap
 
@@ -174,7 +174,7 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 	n.exec, err = block.NewNodeExecutor(block.ExecutorOptions{
 		Logger:   n.logger,
 		Key:      n.key.Bytes(),
-		Network:  *n.network,
+		Network:  n.network,
 		Router:   n.router,
 		EventBus: eventBus,
 	}, n.db)
@@ -186,8 +186,8 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 		DB:       n.db,
 		Logger:   n.logger,
 		Config: &config.Config{Accumulate: config.Accumulate{
-			Network: *n.network,
-			Snapshots: config.Snapshots{
+			Network: n.network,
+			Snapshots: &config.Snapshots{
 				Directory: filepath.Join(n.t.TempDir(), "snapshots"),
 			},
 		}},
@@ -219,7 +219,7 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 
 	kv := memory.New(nil)
 	opts := genesis.InitOpts{
-		Network:             *n.network,
+		Network:             n.network,
 		GenesisTime:         time.Now(),
 		NetworkValidatorMap: n.netValMap,
 		Logger:              n.logger,

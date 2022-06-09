@@ -63,7 +63,7 @@ func initDualNode(cmd *cobra.Command, args []string) {
 	for i, v := range c.Accumulate.Network.Subnets {
 		//search for the directory.
 		if v.ID == subnetName {
-			bvn = &c.Accumulate.Network.Subnets[i]
+			bvn = c.Accumulate.Network.Subnets[i]
 			break
 		}
 	}
@@ -83,7 +83,7 @@ func initDualNode(cmd *cobra.Command, args []string) {
 		bvnHostIP = u.Hostname()
 		bvnBasePort = u.Port()
 		if dnHost == bvnHostIP {
-			bvnHost = &bvn.Nodes[i]
+			bvnHost = bvn.Nodes[i]
 		}
 	}
 

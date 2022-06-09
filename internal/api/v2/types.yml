@@ -478,9 +478,11 @@ DescriptionResponse:
       alternative: Subnet
       type: config.Network
       marshal-as: reference
+      pointer: true
     - name: Values
       type: core.GlobalValues
       marshal-as: reference
+      pointer: true
     - name: Error
       type: errors2.Error
       marshal-as: reference

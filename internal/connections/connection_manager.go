@@ -19,10 +19,14 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
+//go:generate go run github.com/golang/mock/mockgen -source connection_manager.go -package connections -destination ./mock_connection_manager.go
+//go:generate go run github.com/golang/mock/mockgen -source connection_context.go -package connections -destination ./mock_connection_context.go
+
 const UnhealthyNodeCheckInterval = time.Minute * 10 // TODO Configurable in toml?
 
 type ConnectionManager interface {
 	SelectConnection(subnetId string, allowFollower bool) (ConnectionContext, error)
+	GetLocalNodeContext() ConnectionContext
 }
 
 type ConnectionInitializer interface {
@@ -226,7 +230,7 @@ func (cm *connectionManager) buildNodeInventory() {
 	}
 }
 
-func (cm *connectionManager) buildNodeContext(node config.Node, subnet config.Subnet) (*connectionContext, error) {
+func (cm *connectionManager) buildNodeContext(node *config.Node, subnet *config.Subnet) (*connectionContext, error) {
 	connCtx := &connectionContext{subnetId: subnet.ID,
 		subnet:     subnet,
 		nodeConfig: node,
@@ -317,7 +321,7 @@ func (cm *connectionManager) ConnectDirectly(other ConnectionManager) error {
 	if cm2.accConfig.Network.LocalSubnetID == protocol.Directory {
 		list = cm.dnCtxList
 	} else if list, ok = cm.bvnCtxMap[protocol.BvnNameFromSubnetId(cm2.accConfig.Network.LocalSubnetID)]; !ok {
-		return fmt.Errorf("unknown subnet %q", cm2.accConfig.Network.LocalSubnetID)
+		return errUnknownSubnet(cm2.accConfig.Network.LocalSubnetID)
 	}
 
 	for _, connCtx := range list {

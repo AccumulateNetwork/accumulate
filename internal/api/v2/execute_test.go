@@ -38,13 +38,13 @@ func TestExecuteCheckOnly(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		local := connections.NewMockClient(ctrl)
+		local := connections.NewMockABCIClient(ctrl)
 		clients := map[string]connections.ABCIClient{}
 		clients[""] = local
 		connectionManager := connections.NewFakeConnectionManager(clients)
 		table := new(protocol.RoutingTable)
 		table.Routes = routing.BuildSimpleTable(&config.Network{
-			Subnets: []config.Subnet{
+			Subnets: []*config.Subnet{
 				{
 					ID:   "",
 					Type: config.BlockValidator,
@@ -71,13 +71,13 @@ func TestExecuteCheckOnly(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		local := connections.NewMockClient(ctrl)
+		local := connections.NewMockABCIClient(ctrl)
 		clients := map[string]connections.ABCIClient{}
 		clients[""] = local
 		connectionManager := connections.NewFakeConnectionManager(clients)
 		table := new(protocol.RoutingTable)
 		table.Routes = routing.BuildSimpleTable(&config.Network{
-			Subnets: []config.Subnet{
+			Subnets: []*config.Subnet{
 				{
 					ID:   "",
 					Type: config.BlockValidator,

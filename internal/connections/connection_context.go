@@ -37,6 +37,8 @@ type ABCIClient interface {
 	CheckTx(ctx context.Context, tx tm.Tx) (*core.ResultCheckTx, error)
 	BroadcastTxAsync(context.Context, tm.Tx) (*core.ResultBroadcastTx, error)
 	BroadcastTxSync(context.Context, tm.Tx) (*core.ResultBroadcastTx, error)
+	NetInfo(ctx context.Context) (*core.ResultNetInfo, error)
+	Status(context.Context) (*core.ResultStatus, error)
 }
 
 type APIClient interface {
@@ -69,8 +71,8 @@ type connectionContext struct {
 	hasClient           chan struct{}
 	connMgr             *connectionManager
 	statusChecker       StatusChecker
-	subnet              config.Subnet
-	nodeConfig          config.Node
+	subnet              *config.Subnet
+	nodeConfig          *config.Node
 	networkGroup        NetworkGroup
 	resolvedIPs         []net.IP
 	metrics             NodeMetrics

@@ -102,7 +102,7 @@ func (m *Executor) EndBlock(block *Block) error {
 	}
 
 	// Create a BlockChainUpdates Index
-	err = indexing.BlockChainUpdates(block.Batch, &m.Network, uint64(block.Index)).Set(block.State.ChainUpdates.Entries)
+	err = indexing.BlockChainUpdates(block.Batch, m.Network, uint64(block.Index)).Set(block.State.ChainUpdates.Entries)
 	if err != nil {
 		return errors.Format(errors.StatusUnknown, "store block chain updates index: %w", err)
 	}

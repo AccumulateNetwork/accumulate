@@ -109,6 +109,11 @@ var DefaultLogLevels = LogLevel{}.
 
 func Default(netName string, net NetworkType, node NodeType, subnetId string) *Config {
 	c := new(Config)
+	c.Accumulate.Network = new(Network)
+	c.Accumulate.Snapshots = new(Snapshots)
+	c.Accumulate.Storage = new(Storage)
+	c.Accumulate.API = new(API)
+	c.Accumulate.Website = new(Website)
 	c.Accumulate.Network.NetworkName = netName
 	c.Accumulate.Network.Type = net
 	c.Accumulate.Network.LocalSubnetID = subnetId
@@ -143,11 +148,11 @@ type Config struct {
 type Accumulate struct {
 	SentryDSN string `toml:"sentry-dsn" mapstructure:"sentry-dsn"`
 
-	Network   Network   `toml:"network" mapstructure:"network"`
-	Snapshots Snapshots `toml:"snapshots" mapstructure:"snapshots"`
-	Storage   Storage   `toml:"storage" mapstructure:"storage"`
-	API       API       `toml:"api" mapstructure:"api"`
-	Website   Website   `toml:"website" mapstructure:"website"`
+	Network   *Network   `toml:"network" mapstructure:"network"`
+	Snapshots *Snapshots `toml:"snapshots" mapstructure:"snapshots"`
+	Storage   *Storage   `toml:"storage" mapstructure:"storage"`
+	API       *API       `toml:"api" mapstructure:"api"`
+	Website   *Website   `toml:"website" mapstructure:"website"`
 }
 
 type Snapshots struct {
@@ -218,7 +223,7 @@ func (n *Network) GetBvnNames() []string {
 	return names
 }
 
-func (n *Network) GetSubnetByID(subnetID string) Subnet {
+func (n *Network) GetSubnetByID(subnetID string) *Subnet {
 	for _, subnet := range n.Subnets {
 		if subnet.ID == subnetID {
 			return subnet
@@ -282,6 +287,12 @@ func loadTendermint(dir, file string) (*tm.Config, error) {
 
 func loadAccumulate(dir, file string) (*Accumulate, error) {
 	config := new(Accumulate)
+	config.Network = new(Network)
+	config.Snapshots = new(Snapshots)
+	config.Storage = new(Storage)
+	config.API = new(API)
+	config.Website = new(Website)
+
 	err := load(dir, file, config)
 	if err != nil {
 		return nil, err
