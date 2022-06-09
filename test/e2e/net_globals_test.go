@@ -76,7 +76,7 @@ func TestRoutingDistribution(t *testing.T) {
 
 	// TODO move back to OperatorPage and uncomment extra signatures in or after
 	// AC-1402
-	signer := simulator.GetAccount[*KeyPage](sim, dn.Executor.Network.ValidatorPage(0))
+	signer := simulator.GetAccount[*KeyPage](sim, dn.Executor.Describe.ValidatorPage(0))
 	_, keyEntry, ok := signer.EntryByKey(dn.Executor.Key[32:])
 	require.True(t, ok)
 	timestamp = keyEntry.GetLastUsedOn()

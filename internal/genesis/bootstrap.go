@@ -63,7 +63,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) (Bootstrap, error) {
 	b.routingTable.Overrides[0] = protocol.RouteOverride{Account: protocol.AcmeUrl(), Subnet: protocol.Directory}
 	for _, subnet := range opts.Describe.Network.Subnets {
 		u := protocol.SubnetUrl(subnet.Name)
-		b.routingTable.Overrides = append(b.routingTable.Overrides, protocol.RouteOverride{Account: u, Subnet: subnet.ID})
+		b.routingTable.Overrides = append(b.routingTable.Overrides, protocol.RouteOverride{Account: u, Subnet: subnet.Name})
 	}
 
 	// Create the router
@@ -170,7 +170,7 @@ func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protoc
 
 	// Verify that the BVN ID will make a valid subnet URL
 	if err := protocol.IsValidAdiUrl(b.nodeUrl, true); err != nil {
-		panic(fmt.Errorf("%q is not a valid subnet ID: %v", b.Network.LocalSubnetID, err))
+		panic(fmt.Errorf("%q is not a valid subnet ID: %v", b.Describe.SubnetId, err))
 	}
 
 	// Setup globals and create network variable accounts
