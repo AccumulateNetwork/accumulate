@@ -22,8 +22,8 @@ func main() {
 	flag.Parse()
 
 	// Initiate clients and wait for them to finish
-	go initClients(5)
-	time.Sleep(time.Second * 10)
+	go initClients(10)
+	time.Sleep(time.Second * 100)
 }
 
 // Init new client from server URL input using client.go
@@ -52,7 +52,7 @@ func initClient(server string) error {
 		acc, _ := createAccount(i)
 
 		// log the time when the account was created
-		log.Printf("Account %d created at %s\n", i, time.Now().Format(time.RFC3339))
+		log.Printf("Account %d created at %d\n", i, time.Now().UnixNano())
 
 		guard <- struct{}{} // would block if guard channel is already filled
 
@@ -80,7 +80,7 @@ func initClient(server string) error {
 				return
 			}
 			// wait for timer to fire
-			log.Printf("Execution time %s\n", time.Since(<-timer.C))
+			fmt.Printf("Execution time %s\n", time.Since(<-timer.C))
 
 			// time to release goroutine
 			<-guard
@@ -96,7 +96,9 @@ func initClient(server string) error {
 
 	//Stop time Tx executions
 	stop := time.Now()
-	fmt.Printf("The Txs execution took %v to run.\n", stop.Sub(start))
+	log.Printf("The Txs execution took %v to run.\n", stop.Sub(start))
+
+	client.CloseIdleConnections()
 
 	return nil
 }
