@@ -852,7 +852,15 @@ func TestAddKey(t *testing.T) {
 
 	page := n.GetKeyPage("foo/book1/1")
 	require.Len(t, page.Keys, 2)
-	require.Equal(t, nkh[:], page.Keys[1].PublicKeyHash)
+	//look for the key.
+	found := false
+	for _, k := range page.Keys {
+		if bytes.Compare(nkh[:], k.PublicKeyHash) == 0 {
+			found = true
+			break
+		}
+	}
+	require.True(t, found, "key not found in page")
 }
 
 func TestUpdateKeyPage(t *testing.T) {
