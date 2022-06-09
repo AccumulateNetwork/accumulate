@@ -167,21 +167,22 @@ func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Da
 }
 
 func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connections.ConnectionManager, doGenesis bool) *FakeNode {
-	var err error
-	n.router, _, err = routing.NewSimpleRouter(n.network, connMgr)
-	require.NoError(n.t, err)
+	eventBus := events.NewBus(nil)
+	n.router = routing.NewRouter(eventBus, connMgr)
 
+	var err error
 	n.exec, err = block.NewNodeExecutor(block.ExecutorOptions{
-		Logger:  n.logger,
-		Key:     n.key.Bytes(),
-		Network: *n.network,
-		Router:  n.router,
+		Logger:   n.logger,
+		Key:      n.key.Bytes(),
+		Network:  *n.network,
+		Router:   n.router,
+		EventBus: eventBus,
 	}, n.db)
 	n.Require().NoError(err)
 
 	n.app = abci.NewAccumulator(abci.AccumulatorOptions{
 		Executor: n.exec,
-		EventBus: events.NewBus(nil),
+		EventBus: eventBus,
 		DB:       n.db,
 		Logger:   n.logger,
 		Config: &config.Config{Accumulate: config.Accumulate{
