@@ -1,6 +1,7 @@
 package abci_test
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
@@ -980,7 +981,26 @@ func TestRemoveKey(t *testing.T) {
 
 	page := n.GetKeyPage("foo/book1/1")
 	require.Len(t, page.Keys, 1)
-	require.Equal(t, h2[:], page.Keys[0].PublicKeyHash)
+
+	//look for the H1 key, which should have been removed
+	found := false
+	for _, k := range page.Keys {
+		if bytes.Compare(h1[:], k.PublicKeyHash) == 0 {
+			found = true
+			break
+		}
+	}
+	require.False(t, found, "key was found in page when it should have been removed")
+
+	//look for the H2 key which was also added before H1 was removed
+	found = false
+	for _, k := range page.Keys {
+		if bytes.Compare(h2[:], k.PublicKeyHash) == 0 {
+			found = true
+			break
+		}
+	}
+	require.True(t, found, "key was not found in page it was expected to be in")
 }
 
 func TestSignatorHeight(t *testing.T) {
