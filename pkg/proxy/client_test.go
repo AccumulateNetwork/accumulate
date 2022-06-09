@@ -114,6 +114,7 @@ func TestAccuProxyClient(t *testing.T) {
 
 	slr := SeedListRequest{}
 	slr.Network = "AccuProxyTest"
+	slr.Subnet = subnetListResp.Subnets[0]
 	slr.Count = seedCountResp.Count
 	seedListResp, err := client.GetSeedList(context.Background(), &slr)
 	require.NoError(t, err)
