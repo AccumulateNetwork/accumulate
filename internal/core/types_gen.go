@@ -10,6 +10,7 @@ type GlobalValues struct {
 	Oracle    *protocol.AcmeOracle        `json:"oracle,omitempty" form:"oracle" query:"oracle" validate:"required"`
 	Globals   *protocol.NetworkGlobals    `json:"globals,omitempty" form:"globals" query:"globals" validate:"required"`
 	Network   *protocol.NetworkDefinition `json:"network,omitempty" form:"network" query:"network" validate:"required"`
+	Routing   *protocol.RoutingTable      `json:"routing,omitempty" form:"routing" query:"routing" validate:"required"`
 	extraData []byte
 }
 
@@ -24,6 +25,9 @@ func (v *GlobalValues) Copy() *GlobalValues {
 	}
 	if v.Network != nil {
 		u.Network = (v.Network).Copy()
+	}
+	if v.Routing != nil {
+		u.Routing = (v.Routing).Copy()
 	}
 
 	return u
@@ -54,6 +58,14 @@ func (v *GlobalValues) Equal(u *GlobalValues) bool {
 	case v.Network == nil || u.Network == nil:
 		return false
 	case !((v.Network).Equal(u.Network)):
+		return false
+	}
+	switch {
+	case v.Routing == u.Routing:
+		// equal
+	case v.Routing == nil || u.Routing == nil:
+		return false
+	case !((v.Routing).Equal(u.Routing)):
 		return false
 	}
 
