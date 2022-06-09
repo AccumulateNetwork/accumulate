@@ -78,8 +78,11 @@ func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]
 
 func checkTx(exec *Executor, db *database.Database) executeFunc {
 	return func(envelope *chain.Delivery) (*protocol.TransactionStatus, error) {
+		exec.CheckTxMutex.Lock()
+		defer exec.CheckTxMutex.Unlock()
+
 		if exec.CheckTxBatch == nil { // For cases where we haven't started/ended a block yet
-			exec.CheckTxBatch = db.Begin(true)
+			exec.CheckTxBatch = db.Begin(false)
 		}
 
 		result, err := exec.ValidateEnvelope(envelope)

@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"crypto/ed25519"
 	"fmt"
-	"io"
-
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
@@ -21,17 +19,20 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
+	"io"
+	"sync"
 )
 
 type Executor struct {
 	ExecutorOptions
 
-	globals    *Globals
+	globals      *Globals
 	executors    map[protocol.TransactionType]TransactionExecutor
 	dispatcher   *dispatcher
 	logger       logging.OptionalLogger
 	db           *database.Database
 	CheckTxBatch *database.Batch
+	CheckTxMutex sync.Mutex
 
 	// oldBlockMeta blockMetadata
 }
@@ -159,6 +160,10 @@ func newExecutor(opts ExecutorOptions, db *database.Database, executors ...Trans
 
 	default:
 		return nil, errors.Format(errors.StatusUnknown, "load ledger: %w", err)
+	}
+
+	if m.ExecutorOptions.EventBus != nil {
+		m.startCheckTxBatchManager()
 	}
 
 	return m, nil
@@ -291,4 +296,16 @@ func (m *Executor) InitFromSnapshot(batch *database.Batch, file ioutil2.SectionR
 
 func (m *Executor) SaveSnapshot(batch *database.Batch, file io.WriteSeeker) error {
 	return batch.SaveSnapshot(file, &m.Network)
+}
+
+func (m *Executor) startCheckTxBatchManager() {
+	events.SubscribeAsync(m.ExecutorOptions.EventBus, func(e events.DidCommitBlock) {
+		m.CheckTxMutex.Lock()
+		defer m.CheckTxMutex.Unlock()
+
+		oldBatch := m.CheckTxBatch
+		newBatch := m.db.Begin(false)
+		m.CheckTxBatch = newBatch
+		oldBatch.Discard()
+	})
 }
