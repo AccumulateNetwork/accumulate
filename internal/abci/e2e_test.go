@@ -101,7 +101,6 @@ func TestEvilNode(t *testing.T) {
 func (n *FakeNode) testLiteTx(N, M int, credits float64) (string, map[*url.URL]int64) {
 	sender := generateKey()
 	senderUrl := acctesting.AcmeLiteAddressTmPriv(sender)
-
 	recipients := make([]*url.URL, N)
 	for i := range recipients {
 		_, key, _ := ed25519.GenerateKey(nil)
@@ -152,7 +151,6 @@ func TestFaucet(t *testing.T) {
 
 	alice := generateKey()
 	aliceUrl := acctesting.AcmeLiteAddressTmPriv(alice)
-
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.AcmeFaucet)
 		body.Url = aliceUrl
@@ -1078,10 +1076,10 @@ func TestIssueTokens(t *testing.T) {
 	require.NoError(t, acctesting.CreateAdiWithCredits(batch, fooKey, "foo", 1e9))
 	require.NoError(t, acctesting.CreateTokenIssuer(batch, "foo/tokens", "FOO", 10, nil))
 	require.NoError(t, batch.Commit())
-
+	require.NoError(t, acctesting.CreateTokenAccount(batch, "foo.acme/acmetokens", "acc://ACME", float64(10), false))
 	liteAddr, err := protocol.LiteTokenAddress(liteKey[32:], "foo.acme/tokens", protocol.SignatureTypeED25519)
-	require.NoError(t, err)
 
+	require.NoError(t, err)
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.IssueTokens)
 		body.Recipient = liteAddr
