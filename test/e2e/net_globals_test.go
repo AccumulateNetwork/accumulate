@@ -16,14 +16,14 @@ func TestOracleDistribution(t *testing.T) {
 	// Initialize
 	g := new(core.GlobalValues)
 	g.Globals = new(NetworkGlobals)
-	g.Globals.ValidatorThreshold.Set(1, 100) // Use a small number so M = 1
+	g.Globals.OperatorAcceptThreshold.Set(1, 100) // Use a small number so M = 1
 	sim := simulator.New(t, 3)
 	sim.InitFromGenesisWith(g)
 	dn := sim.Subnet(Directory)
+	bvn0 := sim.Subnet(sim.Subnets[1].Id)
+	bvn1 := sim.Subnet(sim.Subnets[2].Id)
 
-	// TODO move back to OperatorPage and uncomment extra signatures in or after
-	// AC-1402
-	signer := simulator.GetAccount[*KeyPage](sim, dn.Executor.Describe.ValidatorPage(0))
+	signer := simulator.GetAccount[*KeyPage](sim, dn.Executor.Describe.DefaultOperatorPage())
 	_, entry, ok := signer.EntryByKey(dn.Executor.Key[32:])
 	require.True(t, ok)
 	timestamp = entry.GetLastUsedOn()
@@ -44,6 +44,8 @@ func TestOracleDistribution(t *testing.T) {
 				WriteToState: true,
 			}).
 			Initiate(SignatureTypeED25519, dn.Executor.Key).
+			Sign(SignatureTypeED25519, bvn0.Executor.Key).
+			Sign(SignatureTypeED25519, bvn1.Executor.Key).
 			Build(),
 	)...)
 
@@ -69,14 +71,12 @@ func TestRoutingDistribution(t *testing.T) {
 	// Initialize
 	g := new(core.GlobalValues)
 	g.Globals = new(NetworkGlobals)
-	g.Globals.ValidatorThreshold.Set(1, 100) // Use a small number so M = 1
+	g.Globals.OperatorAcceptThreshold.Set(1, 100) // Use a small number so M = 1
 	sim := simulator.New(t, 3)
 	sim.InitFromGenesisWith(g)
 	dn := sim.Subnet(Directory)
 
-	// TODO move back to OperatorPage and uncomment extra signatures in or after
-	// AC-1402
-	signer := simulator.GetAccount[*KeyPage](sim, dn.Executor.Describe.ValidatorPage(0))
+	signer := simulator.GetAccount[*KeyPage](sim, dn.Executor.Describe.DefaultOperatorPage())
 	_, keyEntry, ok := signer.EntryByKey(dn.Executor.Key[32:])
 	require.True(t, ok)
 	timestamp = keyEntry.GetLastUsedOn()
