@@ -451,7 +451,9 @@ type NetworkDefinition struct {
 type NetworkGlobals struct {
 	fieldsSet               []bool
 	OperatorAcceptThreshold Rational `json:"operatorAcceptThreshold,omitempty" form:"operatorAcceptThreshold" query:"operatorAcceptThreshold" validate:"required"`
-	extraData               []byte
+	// MajorBlockSchedule a cron expression defining the (approximate) major blocks interval.
+	MajorBlockSchedule string `json:"majorBlockSchedule,omitempty" form:"majorBlockSchedule" query:"majorBlockSchedule" validate:"required"`
+	extraData          []byte
 }
 
 type Object struct {
@@ -859,6 +861,14 @@ type UpdateKeyPage struct {
 	extraData []byte
 }
 
+type UpdateNetworkGlobals struct {
+	fieldsSet               []bool
+	OperatorAcceptThreshold *Rational `json:"operatorAcceptThreshold,omitempty" form:"operatorAcceptThreshold" query:"operatorAcceptThreshold" validate:"required"`
+	// MajorBlockSchedule a cron expression defining the (approximate) major blocks interval.
+	MajorBlockSchedule string `json:"majorBlockSchedule,omitempty" form:"majorBlockSchedule" query:"majorBlockSchedule" validate:"required"`
+	extraData          []byte
+}
+
 type UpdateValidatorKey struct {
 	fieldsSet []bool
 	PubKey    []byte `json:"pubKey,omitempty" form:"pubKey" query:"pubKey" validate:"required"`
@@ -1035,6 +1045,8 @@ func (*UpdateKey) Type() TransactionType { return TransactionTypeUpdateKey }
 func (*UpdateKeyOperation) Type() KeyPageOperationType { return KeyPageOperationTypeUpdate }
 
 func (*UpdateKeyPage) Type() TransactionType { return TransactionTypeUpdateKeyPage }
+
+func (*UpdateNetworkGlobals) Type() TransactionType { return TransactionTypeUpdateNetworkGlobals }
 
 func (*UpdateValidatorKey) Type() TransactionType { return TransactionTypeUpdateValidatorKey }
 
@@ -1795,6 +1807,7 @@ func (v *NetworkGlobals) Copy() *NetworkGlobals {
 	u := new(NetworkGlobals)
 
 	u.OperatorAcceptThreshold = *(&v.OperatorAcceptThreshold).Copy()
+	u.MajorBlockSchedule = v.MajorBlockSchedule
 
 	return u
 }
@@ -2505,6 +2518,19 @@ func (v *UpdateKeyPage) Copy() *UpdateKeyPage {
 }
 
 func (v *UpdateKeyPage) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *UpdateNetworkGlobals) Copy() *UpdateNetworkGlobals {
+	u := new(UpdateNetworkGlobals)
+
+	if v.OperatorAcceptThreshold != nil {
+		u.OperatorAcceptThreshold = (v.OperatorAcceptThreshold).Copy()
+	}
+	u.MajorBlockSchedule = v.MajorBlockSchedule
+
+	return u
+}
+
+func (v *UpdateNetworkGlobals) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *UpdateValidatorKey) Copy() *UpdateValidatorKey {
 	u := new(UpdateValidatorKey)
@@ -3537,6 +3563,9 @@ func (v *NetworkGlobals) Equal(u *NetworkGlobals) bool {
 	if !((&v.OperatorAcceptThreshold).Equal(&u.OperatorAcceptThreshold)) {
 		return false
 	}
+	if !(v.MajorBlockSchedule == u.MajorBlockSchedule) {
+		return false
+	}
 
 	return true
 }
@@ -4403,6 +4432,22 @@ func (v *UpdateKeyPage) Equal(u *UpdateKeyPage) bool {
 		if !(EqualKeyPageOperation(v.Operation[i], u.Operation[i])) {
 			return false
 		}
+	}
+
+	return true
+}
+
+func (v *UpdateNetworkGlobals) Equal(u *UpdateNetworkGlobals) bool {
+	switch {
+	case v.OperatorAcceptThreshold == u.OperatorAcceptThreshold:
+		// equal
+	case v.OperatorAcceptThreshold == nil || u.OperatorAcceptThreshold == nil:
+		return false
+	case !((v.OperatorAcceptThreshold).Equal(u.OperatorAcceptThreshold)):
+		return false
+	}
+	if !(v.MajorBlockSchedule == u.MajorBlockSchedule) {
+		return false
 	}
 
 	return true
@@ -7252,6 +7297,7 @@ func (v *NetworkDefinition) IsValid() error {
 
 var fieldNames_NetworkGlobals = []string{
 	1: "OperatorAcceptThreshold",
+	2: "MajorBlockSchedule",
 }
 
 func (v *NetworkGlobals) MarshalBinary() ([]byte, error) {
@@ -7260,6 +7306,9 @@ func (v *NetworkGlobals) MarshalBinary() ([]byte, error) {
 
 	if !((v.OperatorAcceptThreshold).Equal(new(Rational))) {
 		writer.WriteValue(1, &v.OperatorAcceptThreshold)
+	}
+	if !(len(v.MajorBlockSchedule) == 0) {
+		writer.WriteString(2, v.MajorBlockSchedule)
 	}
 
 	_, _, err := writer.Reset(fieldNames_NetworkGlobals)
@@ -7277,6 +7326,11 @@ func (v *NetworkGlobals) IsValid() error {
 		errs = append(errs, "field OperatorAcceptThreshold is missing")
 	} else if (v.OperatorAcceptThreshold).Equal(new(Rational)) {
 		errs = append(errs, "field OperatorAcceptThreshold is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field MajorBlockSchedule is missing")
+	} else if len(v.MajorBlockSchedule) == 0 {
+		errs = append(errs, "field MajorBlockSchedule is not set")
 	}
 
 	switch len(errs) {
@@ -9956,6 +10010,59 @@ func (v *UpdateKeyPage) IsValid() error {
 	}
 }
 
+var fieldNames_UpdateNetworkGlobals = []string{
+	1: "Type",
+	2: "OperatorAcceptThreshold",
+	3: "MajorBlockSchedule",
+}
+
+func (v *UpdateNetworkGlobals) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.OperatorAcceptThreshold == nil) {
+		writer.WriteValue(2, v.OperatorAcceptThreshold)
+	}
+	if !(len(v.MajorBlockSchedule) == 0) {
+		writer.WriteString(3, v.MajorBlockSchedule)
+	}
+
+	_, _, err := writer.Reset(fieldNames_UpdateNetworkGlobals)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), err
+}
+
+func (v *UpdateNetworkGlobals) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field OperatorAcceptThreshold is missing")
+	} else if v.OperatorAcceptThreshold == nil {
+		errs = append(errs, "field OperatorAcceptThreshold is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field MajorBlockSchedule is missing")
+	} else if len(v.MajorBlockSchedule) == 0 {
+		errs = append(errs, "field MajorBlockSchedule is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_UpdateValidatorKey = []string{
 	1: "Type",
 	2: "PubKey",
@@ -11755,6 +11862,9 @@ func (v *NetworkGlobals) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x := new(Rational); reader.ReadValue(1, x.UnmarshalBinary) {
 		v.OperatorAcceptThreshold = *x
 	}
+	if x, ok := reader.ReadString(2); ok {
+		v.MajorBlockSchedule = x
+	}
 
 	seen, err := reader.Reset(fieldNames_NetworkGlobals)
 	if err != nil {
@@ -13290,6 +13400,36 @@ func (v *UpdateKeyPage) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
+func (v *UpdateNetworkGlobals) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *UpdateNetworkGlobals) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+	if x := new(Rational); reader.ReadValue(2, x.UnmarshalBinary) {
+		v.OperatorAcceptThreshold = x
+	}
+	if x, ok := reader.ReadString(3); ok {
+		v.MajorBlockSchedule = x
+	}
+
+	seen, err := reader.Reset(fieldNames_UpdateNetworkGlobals)
+	if err != nil {
+		return err
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	return err
+}
+
 func (v *UpdateValidatorKey) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -14714,6 +14854,18 @@ func (v *UpdateKeyPage) MarshalJSON() ([]byte, error) {
 	}{}
 	u.Type = v.Type()
 	u.Operation = encoding.JsonUnmarshalListWith[KeyPageOperation]{Value: v.Operation, Func: UnmarshalKeyPageOperationJSON}
+	return json.Marshal(&u)
+}
+
+func (v *UpdateNetworkGlobals) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type                    TransactionType `json:"type"`
+		OperatorAcceptThreshold *Rational       `json:"operatorAcceptThreshold,omitempty"`
+		MajorBlockSchedule      string          `json:"majorBlockSchedule,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.OperatorAcceptThreshold = v.OperatorAcceptThreshold
+	u.MajorBlockSchedule = v.MajorBlockSchedule
 	return json.Marshal(&u)
 }
 
@@ -17157,6 +17309,26 @@ func (v *UpdateKeyPage) UnmarshalJSON(data []byte) error {
 	for i, x := range u.Operation.Value {
 		v.Operation[i] = x
 	}
+	return nil
+}
+
+func (v *UpdateNetworkGlobals) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type                    TransactionType `json:"type"`
+		OperatorAcceptThreshold *Rational       `json:"operatorAcceptThreshold,omitempty"`
+		MajorBlockSchedule      string          `json:"majorBlockSchedule,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.OperatorAcceptThreshold = v.OperatorAcceptThreshold
+	u.MajorBlockSchedule = v.MajorBlockSchedule
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.OperatorAcceptThreshold = u.OperatorAcceptThreshold
+	v.MajorBlockSchedule = u.MajorBlockSchedule
 	return nil
 }
 

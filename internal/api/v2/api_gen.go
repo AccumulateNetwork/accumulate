@@ -12,7 +12,7 @@ import (
 
 func (m *JrpcMethods) populateMethodTable() jsonrpc2.MethodMap {
 	if m.methods == nil {
-		m.methods = make(jsonrpc2.MethodMap, 37)
+		m.methods = make(jsonrpc2.MethodMap, 38)
 	}
 
 	m.methods["describe"] = m.Describe
@@ -34,6 +34,7 @@ func (m *JrpcMethods) populateMethodTable() jsonrpc2.MethodMap {
 	m.methods["update-account-auth"] = m.ExecuteUpdateAccountAuth
 	m.methods["update-key"] = m.ExecuteUpdateKey
 	m.methods["update-key-page"] = m.ExecuteUpdateKeyPage
+	m.methods["set-network-globals"] = m.ExecuteUpdateNetworkGlobals
 	m.methods["update-validator-key"] = m.ExecuteUpdateValidatorKey
 	m.methods["write-data"] = m.ExecuteWriteData
 	m.methods["write-data-to"] = m.ExecuteWriteDataTo
@@ -162,6 +163,11 @@ func (m *JrpcMethods) ExecuteUpdateKey(ctx context.Context, params json.RawMessa
 // ExecuteUpdateKeyPage submits an UpdateKeyPage transaction.
 func (m *JrpcMethods) ExecuteUpdateKeyPage(ctx context.Context, params json.RawMessage) interface{} {
 	return m.executeWith(ctx, params, new(protocol.UpdateKeyPage))
+}
+
+// ExecuteUpdateNetworkGlobals submits an UpdateNetworkGlobals transaction.
+func (m *JrpcMethods) ExecuteUpdateNetworkGlobals(ctx context.Context, params json.RawMessage) interface{} {
+	return m.executeWith(ctx, params, new(protocol.UpdateNetworkGlobals))
 }
 
 // ExecuteUpdateValidatorKey submits an UpdateValidatorKey transaction.

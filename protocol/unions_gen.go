@@ -360,6 +360,8 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(UpdateKey), nil
 	case TransactionTypeUpdateKeyPage:
 		return new(UpdateKeyPage), nil
+	case TransactionTypeUpdateNetworkGlobals:
+		return new(UpdateNetworkGlobals), nil
 	case TransactionTypeUpdateValidatorKey:
 		return new(UpdateValidatorKey), nil
 	case TransactionTypeWriteData:
@@ -457,6 +459,9 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 		return ok && a.Equal(b)
 	case *UpdateKeyPage:
 		b, ok := b.(*UpdateKeyPage)
+		return ok && a.Equal(b)
+	case *UpdateNetworkGlobals:
+		b, ok := b.(*UpdateNetworkGlobals)
 		return ok && a.Equal(b)
 	case *UpdateValidatorKey:
 		b, ok := b.(*UpdateValidatorKey)

@@ -244,3 +244,9 @@ ExecuteUpdateAccountAuth:
   kind: execute
   rpc: update-account-auth
   input: UpdateAccountAuth
+
+ExecuteUpdateNetworkGlobals:
+  description: submits an UpdateNetworkGlobals transaction
+  kind: execute
+  rpc: set-network-globals
+  input: UpdateNetworkGlobals
