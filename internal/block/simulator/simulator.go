@@ -72,6 +72,15 @@ func New(t TB, bvnCount int) *Simulator {
 	return sim
 }
 
+func NewWithLogLevels(t TB, bvnCount int, logLevels config.LogLevel) *Simulator {
+	t.Helper()
+	sim := new(Simulator)
+	sim.TB = t
+	sim.LogLevels = logLevels.String()
+	sim.Setup(bvnCount)
+	return sim
+}
+
 func (sim *Simulator) Setup(bvnCount int) {
 	sim.Helper()
 

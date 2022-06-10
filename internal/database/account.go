@@ -177,11 +177,6 @@ func (r *Account) ReadIndexChain(name string, major bool) (*Chain, error) {
 	return r.chain(protocol.IndexChain(name, major), false)
 }
 
-// Index returns a value that can read or write an index value.
-func (r *Account) Index(key ...interface{}) *Value {
-	return &Value{r.batch, r.key.Index(key...)}
-}
-
 func (r *Account) getSyntheticForAnchor(anchor [32]byte) (*protocol.TxIdSet, error) {
 	v := new(protocol.TxIdSet)
 	err := r.batch.getValuePtr(r.key.SyntheticForAnchor(anchor), v, &v, true)

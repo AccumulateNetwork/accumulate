@@ -159,7 +159,7 @@ func ReceiptForChainEntry(net *config.Describe, batch *Batch, account *Account, 
 	}
 
 	// Finalize the receipt
-	r, err := managed.CombineReceipts(accountReceipt, rootReceipt)
+	r, err := accountReceipt.Combine(rootReceipt)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -206,7 +206,7 @@ func ReceiptForChainIndex(net *config.Describe, batch *Batch, account *Account, 
 	}
 
 	// Finalize the receipt
-	r, err := managed.CombineReceipts(accountReceipt, rootReceipt)
+	r, err := accountReceipt.Combine(rootReceipt)
 	if err != nil {
 		return 0, nil, err
 	}

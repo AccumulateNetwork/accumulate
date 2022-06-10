@@ -10,19 +10,19 @@ import (
 
 // BlockChainUpdatesIndexer indexes chain updates for each block.
 type BlockChainUpdatesIndexer struct {
-	value *database.Value
+	value *database.ValueAs[*BlockChainUpdatesIndex]
 }
 
 // BlockChainUpdates returns a block updates indexer.
 func BlockChainUpdates(batch *database.Batch, network *config.Describe, blockIndex uint64) *BlockChainUpdatesIndexer {
-	return &BlockChainUpdatesIndexer{batch.Account(network.NodeUrl()).Index("Block", "Minor", blockIndex)}
+	v := database.AccountIndex(batch, network.NodeUrl(), newfn[BlockChainUpdatesIndex](), "Block", "Minor", blockIndex)
+	return &BlockChainUpdatesIndexer{v}
 }
 
 // Get loads and unmarshals the index. Get returns an empty index if it has not
 // been defined.
 func (bu *BlockChainUpdatesIndexer) Get() (*BlockChainUpdatesIndex, error) {
-	v := new(BlockChainUpdatesIndex)
-	err := bu.value.GetAs(v)
+	v, err := bu.value.Get()
 	switch {
 	case err == nil:
 		return v, nil
@@ -46,5 +46,5 @@ func (bu *BlockChainUpdatesIndexer) Set(updates []ChainUpdate) error {
 		v.Entries[i] = &update
 	}
 
-	return bu.value.PutAs(v)
+	return bu.value.Put(v)
 }

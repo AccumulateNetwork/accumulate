@@ -2,6 +2,7 @@ package indexing
 
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -9,24 +10,31 @@ import (
 )
 
 type DirectoryIndexer struct {
-	account *database.Account
+	batch      *database.Batch
+	account    *url.URL
+	indexValue *database.ValueAs[*DirectoryIndex]
 }
 
 func Directory(batch *database.Batch, account *url.URL) *DirectoryIndexer {
-	return &DirectoryIndexer{batch.Account(account)}
+	v := database.AccountIndex(batch, account, newfn[DirectoryIndex](), "Directory")
+	return &DirectoryIndexer{batch, account, v}
 }
 
-func (d *DirectoryIndexer) index() (*DirectoryIndex, error) {
-	md := new(DirectoryIndex)
-	err := d.account.Index("Directory", "Metadata").GetAs(md)
-	if err != nil && !errors.Is(err, storage.ErrNotFound) {
-		return nil, err
+func loadMainIndex[T encoding.BinaryValue](x *database.ValueAs[T], notFound T) (T, error) {
+	md, err := x.Get()
+	switch {
+	case err == nil:
+		return md, nil
+	case errors.Is(err, storage.ErrNotFound):
+		return notFound, nil
+	default:
+		var zero T
+		return zero, errors.Wrap(errors.StatusUnknown, err)
 	}
-	return md, nil
 }
 
 func (d *DirectoryIndexer) Count() (uint64, error) {
-	md, err := d.index()
+	md, err := loadMainIndex(d.indexValue, new(DirectoryIndex))
 	if err != nil {
 		return 0, err
 	}
@@ -34,52 +42,41 @@ func (d *DirectoryIndexer) Count() (uint64, error) {
 }
 
 func (d *DirectoryIndexer) Get(i uint64) (*url.URL, error) {
-	b, err := d.account.Index("Directory", i).Get()
+	u, err := database.SubValue(d.indexValue, newfn[DirectoryEntry](), i).Get()
 	if err != nil {
 		return nil, err
 	}
-	u, err := url.Parse(string(b))
-	if err != nil {
-		return nil, err
-	}
-	return u, nil
+	return u.Account, nil
 }
 
 func (d *DirectoryIndexer) Put(u *url.URL) error {
-	md, err := d.index()
+	md, err := loadMainIndex(d.indexValue, new(DirectoryIndex))
 	if err != nil {
 		return err
 	}
 
-	err = d.account.Index("Directory", md.Count).Put([]byte(u.String()))
+	err = database.SubValue[*DirectoryEntry](d.indexValue, nil, md.Count).Put(&DirectoryEntry{Account: u})
 	if err != nil {
 		return err
 	}
 
 	md.Count++
-	return d.account.Index("Directory", "Metadata").PutAs(md)
+	return d.indexValue.Put(md)
 }
 
 type DataIndexer struct {
-	batch   *database.Batch
-	account *database.Account
+	batch      *database.Batch
+	account    *database.Account
+	indexValue *database.ValueAs[*DataIndex]
 }
 
 func Data(batch *database.Batch, account *url.URL) *DataIndexer {
-	return &DataIndexer{batch, batch.Account(account)}
-}
-
-func (d *DataIndexer) index() (*DataIndex, error) {
-	md := new(DataIndex)
-	err := d.account.Index("Data", "Metadata").GetAs(md)
-	if err != nil && !errors.Is(err, storage.ErrNotFound) {
-		return nil, err
-	}
-	return md, nil
+	v := database.AccountIndex(batch, account, newfn[DataIndex](), "Data", "Metadata")
+	return &DataIndexer{batch, batch.Account(account), v}
 }
 
 func (d *DataIndexer) Count() (uint64, error) {
-	md, err := d.index()
+	md, err := loadMainIndex(d.indexValue, new(DataIndex))
 	if err != nil {
 		return 0, err
 	}
@@ -141,38 +138,38 @@ func (d *DataIndexer) GetLatestEntry() (protocol.DataEntry, error) {
 
 // Entry returns the entry hash for the given index.
 func (d *DataIndexer) Entry(i uint64) ([]byte, error) {
-	entryHash, err := d.account.Index("Data", i).Get()
+	v, err := database.SubValue(d.indexValue, newfn[DataEntry](), i).Get()
 	if err != nil {
 		return nil, err
 	}
-	return entryHash, nil
+	return v.Hash[:], nil
 }
 
 // Transaction returns the transaction hash for the given entry hash.
 func (d *DataIndexer) Transaction(entryHash []byte) ([]byte, error) {
-	txnHash, err := d.account.Index("Data", entryHash).Get()
+	v, err := database.SubValue(d.indexValue, newfn[DataEntry](), entryHash).Get()
 	if err != nil {
 		return nil, err
 	}
-	return txnHash, nil
+	return v.Hash[:], nil
 }
 
 func (d *DataIndexer) Put(entryHash, txnHash []byte) error {
-	md, err := d.index()
+	md, err := loadMainIndex(d.indexValue, new(DataIndex))
 	if err != nil {
 		return err
 	}
 
-	err = d.account.Index("Data", md.Count).Put(entryHash)
+	err = database.SubValue[*DataEntry](d.indexValue, nil, md.Count).Put(&DataEntry{Hash: *(*[32]byte)(entryHash)})
 	if err != nil {
 		return err
 	}
 
-	err = d.account.Index("Data", entryHash).Put(txnHash)
+	err = database.SubValue[*DataEntry](d.indexValue, nil, entryHash).Put(&DataEntry{Hash: *(*[32]byte)(txnHash)})
 	if err != nil {
 		return err
 	}
 
 	md.Count++
-	return d.account.Index("Data", "Metadata").PutAs(md)
+	return d.indexValue.Put(md)
 }

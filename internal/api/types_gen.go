@@ -15,6 +15,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	errors2 "gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 )
 
 type AccountRecord struct {
@@ -92,10 +93,10 @@ type QueryStateOptions struct {
 
 type Receipt struct {
 	fieldsSet      []bool
-	LocalBlock     uint64           `json:"localBlock,omitempty" form:"localBlock" query:"localBlock" validate:"required"`
-	DirectoryBlock uint64           `json:"directoryBlock,omitempty" form:"directoryBlock" query:"directoryBlock" validate:"required"`
-	Proof          protocol.Receipt `json:"proof,omitempty" form:"proof" query:"proof" validate:"required"`
-	Error          *errors2.Error   `json:"error,omitempty" form:"error" query:"error" validate:"required"`
+	LocalBlock     uint64          `json:"localBlock,omitempty" form:"localBlock" query:"localBlock" validate:"required"`
+	DirectoryBlock uint64          `json:"directoryBlock,omitempty" form:"directoryBlock" query:"directoryBlock" validate:"required"`
+	Proof          managed.Receipt `json:"proof,omitempty" form:"proof" query:"proof" validate:"required"`
+	Error          *errors2.Error  `json:"error,omitempty" form:"error" query:"error" validate:"required"`
 	extraData      []byte
 }
 
@@ -888,7 +889,7 @@ func (v *Receipt) MarshalBinary() ([]byte, error) {
 	if !(v.DirectoryBlock == 0) {
 		writer.WriteUint(2, v.DirectoryBlock)
 	}
-	if !((v.Proof).Equal(new(protocol.Receipt))) {
+	if !((v.Proof).Equal(new(managed.Receipt))) {
 		writer.WriteValue(3, &v.Proof)
 	}
 	if !(v.Error == nil) {
@@ -918,7 +919,7 @@ func (v *Receipt) IsValid() error {
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Proof is missing")
-	} else if (v.Proof).Equal(new(protocol.Receipt)) {
+	} else if (v.Proof).Equal(new(managed.Receipt)) {
 		errs = append(errs, "field Proof is not set")
 	}
 	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
@@ -1309,7 +1310,7 @@ func (v *Receipt) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUint(2); ok {
 		v.DirectoryBlock = x
 	}
-	if x := new(protocol.Receipt); reader.ReadValue(3, x.UnmarshalBinary) {
+	if x := new(managed.Receipt); reader.ReadValue(3, x.UnmarshalBinary) {
 		v.Proof = *x
 	}
 	if x := new(errors2.Error); reader.ReadValue(4, x.UnmarshalBinary) {

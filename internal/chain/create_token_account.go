@@ -120,7 +120,7 @@ func verifyCreateTokenAccountProof(net *config.Describe, batch *database.Batch, 
 	if proof.Proof == nil {
 		return errors.Format(errors.StatusBadRequest, "invalid proof: missing Proof")
 	}
-	if !proof.Proof.Convert().Validate() {
+	if !proof.Proof.Validate() {
 		return errors.Format(errors.StatusBadRequest, "proof is invalid")
 	}
 
