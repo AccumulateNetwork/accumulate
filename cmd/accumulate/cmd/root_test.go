@@ -45,6 +45,8 @@ func bootstrap(t *testing.T, tc *testCmd) {
 	//set the oracle price to $1.00
 	resp, err := tc.executeTx(t, "data write --write-state --wait 10s dn.acme/oracle dnkey %x", data)
 	require.NoError(t, err)
+	_, err = tc.executeTx(t, "tx sign dn.acme/oracle dnkey %s", getTxId(t, resp))
+	require.NoError(t, err)
 	ar := new(ActionResponse)
 	require.NoError(t, json.Unmarshal([]byte(resp), ar))
 	for _, r := range ar.Flow {
@@ -201,4 +203,13 @@ func testFactomAddresses() error {
 		}
 	}
 	return nil
+}
+
+func getTxId(t *testing.T, resp string) string {
+	c := make(map[string]json.RawMessage)
+	err := json.Unmarshal([]byte(resp), &c)
+	require.NoError(t, err)
+	txid := string(c["transactionHash"])
+	txid = txid[1 : len(txid)-1]
+	return txid
 }
