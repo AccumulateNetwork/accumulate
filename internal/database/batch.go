@@ -7,6 +7,7 @@ import (
 	encoding2 "gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
@@ -81,6 +82,13 @@ func (b *Batch) Begin(writable bool) *Batch {
 	c.values = map[storage.Key]cachedValue{}
 	c.bptEntries = map[storage.Key][32]byte{}
 	return c
+}
+
+// DeleteAccountState_TESTONLY is intended for testing purposes only. It deletes an
+// account from the database.
+func (b *Batch) DeleteAccountState_TESTONLY(url *url.URL) error {
+	a := account(url)
+	return b.store.Put(a.State(), nil)
 }
 
 // View runs the function with a read-only transaction.
