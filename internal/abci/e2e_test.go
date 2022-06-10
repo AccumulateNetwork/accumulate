@@ -1085,11 +1085,13 @@ func TestIssueTokens(t *testing.T) {
 	batch := n.db.Begin(true)
 	require.NoError(t, acctesting.CreateAdiWithCredits(batch, fooKey, "foo", 1e9))
 	require.NoError(t, acctesting.CreateTokenIssuer(batch, "foo/tokens", "FOO", 10, nil))
-	require.NoError(t, batch.Commit())
 	require.NoError(t, acctesting.CreateTokenAccount(batch, "foo.acme/acmetokens", "acc://ACME", float64(10), false))
+	require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, liteKey, 1, 1e9))
 	liteAddr, err := protocol.LiteTokenAddress(liteKey[32:], "foo.acme/tokens", protocol.SignatureTypeED25519)
+	require.NoError(t, batch.Commit())
 
 	require.NoError(t, err)
+	check.Disable = true
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.IssueTokens)
 		body.Recipient = liteAddr
@@ -1102,7 +1104,6 @@ func TestIssueTokens(t *testing.T) {
 			Build())
 	})
 	//issue to incorrect token account
-	check.Disable = true
 
 	initialbalance := n.GetTokenAccount("acc://foo.acme/acmetokens").Balance
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
