@@ -22,10 +22,10 @@ func main() {
 	flag.StringVar(&serverUrl, "s", "http://127.0.1.1:26660/v2", "Accumulate server URL")
 	flag.Parse()
 
-	// Initiate clients and wait for them to finish
 	parallelization := 5
 	c := make(chan int)
 
+	// run clients in parallel
 	var wg sync.WaitGroup
 	wg.Add(parallelization)
 	for ii := 0; ii < parallelization; ii++ {
@@ -44,10 +44,13 @@ func main() {
 			}
 		}(c)
 	}
+
 	// send number of clients to be created
 	for ii := 0; ii < parallelization; ii++ {
 		c <- ii
 	}
+
+	// force close channel
 	close(c)
 	wg.Wait()
 }
@@ -93,12 +96,12 @@ func initClient(server string) error {
 			// faucet account and wait for Tx execution
 			resp, err := client.Faucet(context.Background(), &protocol.AcmeFaucet{Url: acc})
 			if err != nil {
-				fmt.Printf("Error: faucet: %v\n", err)
+				log.Printf("Error: faucet: %v\n", err)
 			}
 
 			txReq := api.TxnQuery{}
 			txReq.Txid = resp.TransactionHash
-			txReq.Wait = time.Second * 100
+			txReq.Wait = time.Second * 10
 			txReq.IgnorePending = false
 
 			_, err = client.QueryTx(context.Background(), &txReq)
@@ -106,7 +109,7 @@ func initClient(server string) error {
 				return
 			}
 			// wait for timer to fire
-			fmt.Printf("Execution time %s\n", time.Since(<-timer.C))
+			log.Printf("Execution time %s\n", time.Since(<-timer.C))
 
 			// time to release goroutine
 			<-guard
@@ -131,7 +134,7 @@ func initClient(server string) error {
 
 // Initiate several clients
 func initClients(c int) error {
-	// TODO run multiple clients in parallel
+	// Initiate clients and wait for them to finish
 	for i := 0; i < c; i++ {
 		err := initClient(serverUrl)
 		if err != nil {
