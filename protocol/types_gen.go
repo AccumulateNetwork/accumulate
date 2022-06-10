@@ -449,9 +449,9 @@ type NetworkDefinition struct {
 }
 
 type NetworkGlobals struct {
-	fieldsSet          []bool
-	ValidatorThreshold Rational `json:"validatorThreshold,omitempty" form:"validatorThreshold" query:"validatorThreshold" validate:"required"`
-	extraData          []byte
+	fieldsSet               []bool
+	OperatorAcceptThreshold Rational `json:"operatorAcceptThreshold,omitempty" form:"operatorAcceptThreshold" query:"operatorAcceptThreshold" validate:"required"`
+	extraData               []byte
 }
 
 type Object struct {
@@ -666,6 +666,7 @@ type SyntheticDepositTokens struct {
 	SyntheticOrigin
 	Token     *url.URL `json:"token,omitempty" form:"token" query:"token" validate:"required"`
 	Amount    big.Int  `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	IsIssuer  bool     `json:"isIssuer,omitempty" form:"isIssuer" query:"isIssuer" validate:"required"`
 	extraData []byte
 }
 
@@ -1793,7 +1794,7 @@ func (v *NetworkDefinition) CopyAsInterface() interface{} { return v.Copy() }
 func (v *NetworkGlobals) Copy() *NetworkGlobals {
 	u := new(NetworkGlobals)
 
-	u.ValidatorThreshold = *(&v.ValidatorThreshold).Copy()
+	u.OperatorAcceptThreshold = *(&v.OperatorAcceptThreshold).Copy()
 
 	return u
 }
@@ -2145,6 +2146,7 @@ func (v *SyntheticDepositTokens) Copy() *SyntheticDepositTokens {
 		u.Token = (v.Token).Copy()
 	}
 	u.Amount = *encoding.BigintCopy(&v.Amount)
+	u.IsIssuer = v.IsIssuer
 
 	return u
 }
@@ -3532,7 +3534,7 @@ func (v *NetworkDefinition) Equal(u *NetworkDefinition) bool {
 }
 
 func (v *NetworkGlobals) Equal(u *NetworkGlobals) bool {
-	if !((&v.ValidatorThreshold).Equal(&u.ValidatorThreshold)) {
+	if !((&v.OperatorAcceptThreshold).Equal(&u.OperatorAcceptThreshold)) {
 		return false
 	}
 
@@ -3959,6 +3961,9 @@ func (v *SyntheticDepositTokens) Equal(u *SyntheticDepositTokens) bool {
 		return false
 	}
 	if !((&v.Amount).Cmp(&u.Amount) == 0) {
+		return false
+	}
+	if !(v.IsIssuer == u.IsIssuer) {
 		return false
 	}
 
@@ -7246,15 +7251,15 @@ func (v *NetworkDefinition) IsValid() error {
 }
 
 var fieldNames_NetworkGlobals = []string{
-	1: "ValidatorThreshold",
+	1: "OperatorAcceptThreshold",
 }
 
 func (v *NetworkGlobals) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	if !((v.ValidatorThreshold).Equal(new(Rational))) {
-		writer.WriteValue(1, &v.ValidatorThreshold)
+	if !((v.OperatorAcceptThreshold).Equal(new(Rational))) {
+		writer.WriteValue(1, &v.OperatorAcceptThreshold)
 	}
 
 	_, _, err := writer.Reset(fieldNames_NetworkGlobals)
@@ -7269,9 +7274,9 @@ func (v *NetworkGlobals) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field ValidatorThreshold is missing")
-	} else if (v.ValidatorThreshold).Equal(new(Rational)) {
-		errs = append(errs, "field ValidatorThreshold is not set")
+		errs = append(errs, "field OperatorAcceptThreshold is missing")
+	} else if (v.OperatorAcceptThreshold).Equal(new(Rational)) {
+		errs = append(errs, "field OperatorAcceptThreshold is not set")
 	}
 
 	switch len(errs) {
@@ -8607,6 +8612,7 @@ var fieldNames_SyntheticDepositTokens = []string{
 	2: "SyntheticOrigin",
 	3: "Token",
 	4: "Amount",
+	5: "IsIssuer",
 }
 
 func (v *SyntheticDepositTokens) MarshalBinary() ([]byte, error) {
@@ -8620,6 +8626,9 @@ func (v *SyntheticDepositTokens) MarshalBinary() ([]byte, error) {
 	}
 	if !((v.Amount).Cmp(new(big.Int)) == 0) {
 		writer.WriteBigInt(4, &v.Amount)
+	}
+	if !(!v.IsIssuer) {
+		writer.WriteBool(5, v.IsIssuer)
 	}
 
 	_, _, err := writer.Reset(fieldNames_SyntheticDepositTokens)
@@ -8648,6 +8657,11 @@ func (v *SyntheticDepositTokens) IsValid() error {
 		errs = append(errs, "field Amount is missing")
 	} else if (v.Amount).Cmp(new(big.Int)) == 0 {
 		errs = append(errs, "field Amount is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field IsIssuer is missing")
+	} else if !v.IsIssuer {
+		errs = append(errs, "field IsIssuer is not set")
 	}
 
 	switch len(errs) {
@@ -11739,7 +11753,7 @@ func (v *NetworkGlobals) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
 	if x := new(Rational); reader.ReadValue(1, x.UnmarshalBinary) {
-		v.ValidatorThreshold = *x
+		v.OperatorAcceptThreshold = *x
 	}
 
 	seen, err := reader.Reset(fieldNames_NetworkGlobals)
@@ -12511,6 +12525,9 @@ func (v *SyntheticDepositTokens) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	if x, ok := reader.ReadBigInt(4); ok {
 		v.Amount = *x
+	}
+	if x, ok := reader.ReadBool(5); ok {
+		v.IsIssuer = x
 	}
 
 	seen, err := reader.Reset(fieldNames_SyntheticDepositTokens)
@@ -14391,6 +14408,7 @@ func (v *SyntheticDepositTokens) MarshalJSON() ([]byte, error) {
 		FeeRefund uint64          `json:"feeRefund,omitempty"`
 		Token     *url.URL        `json:"token,omitempty"`
 		Amount    *string         `json:"amount,omitempty"`
+		IsIssuer  bool            `json:"isIssuer,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Cause = v.SyntheticOrigin.Cause
@@ -14399,6 +14417,7 @@ func (v *SyntheticDepositTokens) MarshalJSON() ([]byte, error) {
 	u.FeeRefund = v.SyntheticOrigin.FeeRefund
 	u.Token = v.Token
 	u.Amount = encoding.BigintToJSON(&v.Amount)
+	u.IsIssuer = v.IsIssuer
 	return json.Marshal(&u)
 }
 
@@ -16589,6 +16608,7 @@ func (v *SyntheticDepositTokens) UnmarshalJSON(data []byte) error {
 		FeeRefund uint64          `json:"feeRefund,omitempty"`
 		Token     *url.URL        `json:"token,omitempty"`
 		Amount    *string         `json:"amount,omitempty"`
+		IsIssuer  bool            `json:"isIssuer,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Cause = v.SyntheticOrigin.Cause
@@ -16597,6 +16617,7 @@ func (v *SyntheticDepositTokens) UnmarshalJSON(data []byte) error {
 	u.FeeRefund = v.SyntheticOrigin.FeeRefund
 	u.Token = v.Token
 	u.Amount = encoding.BigintToJSON(&v.Amount)
+	u.IsIssuer = v.IsIssuer
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -16612,6 +16633,7 @@ func (v *SyntheticDepositTokens) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Amount = *x
 	}
+	v.IsIssuer = u.IsIssuer
 	return nil
 }
 
