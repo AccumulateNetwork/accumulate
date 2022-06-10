@@ -5,17 +5,16 @@ import (
 	"fmt"
 	"math"
 
-	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 type MerkleManager struct {
-	Key       storage.Key         // ChainID (some operations require this)
-	Manager   storage.KeyValueTxn // AppID based Manager
-	MS        *MerkleState        // MerkleState managed by MerkleManager
-	MarkPower int64               // log2 of the MarkFreq
-	MarkFreq  int64               // The count between Marks
-	MarkMask  int64               // The binary mask to detect Mark boundaries
+	Key       storage.Key  // ChainID (some operations require this)
+	Manager   DbManager    // AppID based Manager
+	MS        *MerkleState // MerkleState managed by MerkleManager
+	MarkPower int64        // log2 of the MarkFreq
+	MarkFreq  int64        // The count between Marks
+	MarkMask  int64        // The binary mask to detect Mark boundaries
 }
 
 // AddHash adds a Hash to the Chain controlled by the ChainManager. If unique is
@@ -24,7 +23,7 @@ func (m *MerkleManager) AddHash(hash Hash, unique bool) error {
 	hash = hash.Copy()                       // Just to make sure hash doesn't get changed
 	_, err := m.GetElementIndex(hash)        // See if this element is a duplicate
 	if errors.Is(err, storage.ErrNotFound) { // So only if the hash is not yet added to the Merkle Tree
-		err = m.Manager.Put(m.Key.Append("ElementIndex", hash), common.Int64Bytes(m.MS.Count)) // Keep its index
+		err = m.Manager.Int(m.Key.Append("ElementIndex", hash)).Put(m.MS.Count) // Keep its index
 		if err != nil {
 			return err
 		}
@@ -34,22 +33,18 @@ func (m *MerkleManager) AddHash(hash Hash, unique bool) error {
 		return nil // Don't add duplicates
 	}
 
-	err = m.Manager.Put(m.Key.Append("Element", m.MS.Count), hash)
+	err = m.Manager.Hash(m.Key.Append("Element", m.MS.Count)).Put(hash)
 	if err != nil {
 		return err
 	}
 	switch (m.MS.Count + 1) & m.MarkMask {
 	case 0: // Is this the end of the Mark set, i.e. 0, ..., m.MarkFreq-1
-		m.MS.AddToMerkleTree(hash)                      // Add the hash to the Merkle Tree
-		if MSState, err := m.MS.Marshal(); err != nil { // Get the current state
-			return fmt.Errorf("could not marshal MerkleState: %v", err)
-		} else {
-			err = m.Manager.Put(m.Key.Append("States", m.GetElementCount()-1), MSState) // Save Merkle State at n*MarkFreq-1
-			if err != nil {
-				return err
-			}
+		m.MS.AddToMerkleTree(hash)                                                     // Add the hash to the Merkle Tree
+		err = m.Manager.State(m.Key.Append("States", m.GetElementCount()-1)).Put(m.MS) // Save Merkle State at n*MarkFreq-1
+		if err != nil {
+			return err
 		}
-		if err := m.WriteChainHead(m.Key); err != nil {
+		if err := m.WriteChainHead(); err != nil {
 			return fmt.Errorf("error writing chain head: %v", err)
 		}
 	case 1: //                              After MarkFreq elements are written
@@ -57,7 +52,7 @@ func (m *MerkleManager) AddHash(hash Hash, unique bool) error {
 		fallthrough                       // then fall through as normal
 	default:
 		m.MS.AddToMerkleTree(hash) // 0 to m.MarkFeq-2, always add to the merkle tree
-		if err := m.WriteChainHead(m.Key); err != nil {
+		if err := m.WriteChainHead(); err != nil {
 			return fmt.Errorf("error writing chain head: %v", err)
 		}
 	}
@@ -68,11 +63,10 @@ func (m *MerkleManager) AddHash(hash Hash, unique bool) error {
 // GetElementIndex
 // Get an Element of a Merkle Tree from the database
 func (m *MerkleManager) GetElementIndex(hash []byte) (i int64, err error) {
-	data, err := m.Manager.Get(m.Key.Append("ElementIndex", hash))
+	i, err = m.Manager.Int(m.Key.Append("ElementIndex", hash)).Get()
 	if err != nil {
 		return 0, err
 	}
-	i, _ = common.BytesInt64(data)
 	return i, nil
 }
 
@@ -82,7 +76,7 @@ func (m *MerkleManager) GetElementIndex(hash []byte) (i int64, err error) {
 // MerkleState, the ChainID should be set
 func (m *MerkleManager) SetKey(key storage.Key) (err error) {
 	m.Key = key
-	m.MS, err = m.ReadChainHead(m.Key)
+	m.MS, err = m.ReadChainHead()
 	return err
 }
 
@@ -90,44 +84,28 @@ func (m *MerkleManager) SetKey(key storage.Key) (err error) {
 // Save the current MerkleState as the head of the chain.  This does not flush
 // the database, because all chains in an application need have their head of
 // chain updated as one atomic transaction to prevent messing up the database
-func (m *MerkleManager) WriteChainHead(key storage.Key) error {
-	state, err := m.MS.Marshal()
-	if err != nil {
-		return err
-	}
-	return m.Manager.Put(key.Append("Head"), state)
+func (m *MerkleManager) WriteChainHead() error {
+	return m.Manager.State(m.Key.Append("Head")).Put(m.MS)
 }
 
 // GetChainState
 // Reads the highest state of the chain stored to the database.  Returns nilTestCli
 // if no state has been recorded for a chain
-func (m *MerkleManager) GetChainState(key storage.Key) (merkleState *MerkleState, err error) {
-	merkleState = new(MerkleState)
-	merkleState.InitSha256()
-	state, err := m.Manager.Get(key.Append("Head"))
-	if err == nil {
-		if err := merkleState.UnMarshal(state); err != nil {
-			return nil, fmt.Errorf("database is corrupt; failed to unmarshal %v", m.Key)
-		}
-	}
-	return merkleState, nil
+func (m *MerkleManager) GetChainState() (merkleState *MerkleState, err error) {
+	return m.Manager.State(m.Key.Append("Head")).Get()
 }
 
 // ReadChainHead
 // Retrieve the current MerkleState from the given database, and set
 // that state as the MerkleState of this MerkleManager.  Note that the cache
 // will be cleared.
-func (m *MerkleManager) ReadChainHead(key storage.Key) (ms *MerkleState, err error) {
-	ms = new(MerkleState)
-	ms.HashFunction = m.MS.HashFunction
-	state, err := m.Manager.Get(key.Append("Head")) //   Get the state for the Merkle Tree
+func (m *MerkleManager) ReadChainHead() (ms *MerkleState, err error) {
+	ms, err = m.Manager.State(m.Key.Append("Head")).Get() //   Get the state for the Merkle Tree
 	switch {
-	case err == nil: //   If the State exists
-		if err := ms.UnMarshal(state); err != nil { //     Set that as our state
-			return nil, fmt.Errorf("database is corrupt; failed to unmarshal %v", key) // Blow up of the database is bad
-		}
+	case err == nil:
 		return ms, nil
 	case errors.Is(err, storage.ErrNotFound):
+		ms = new(MerkleState)
 		return ms, nil
 	default:
 		return nil, err
@@ -161,7 +139,7 @@ func (m *MerkleManager) Equal(m2 *MerkleManager) bool {
 // The MainChain.Manager handles the persistence for the Merkle Tree under management
 // The markPower is the log 2 frequency used to collect states in the Merkle Tree
 func NewMerkleManager(
-	DBManager storage.KeyValueTxn, //      database that can be shared with other MerkleManager instances
+	DBManager DbManager, //      database that can be shared with other MerkleManager instances
 	markPower int64) (*MerkleManager, error) { // log 2 of the frequency of creating marks in the Merkle Tree
 
 	mm := new(MerkleManager)
@@ -201,7 +179,7 @@ func (m *MerkleManager) GetElementCount() (elementCount int64) {
 //
 // This is an internal routine; calling init outside of constructing the first
 // reference to the MerkleManager doesn't make much sense.
-func (m *MerkleManager) init(DBManager storage.KeyValueTxn, markPower int64) (err error) {
+func (m *MerkleManager) init(DBManager DbManager, markPower int64) (err error) {
 
 	if markPower >= 20 { // 2^20 is 1,048,576 and is too big for the collection of elements in memory
 		return fmt.Errorf("A power %d is greater than 2^29, and is unreasonable", markPower)
@@ -211,7 +189,7 @@ func (m *MerkleManager) init(DBManager storage.KeyValueTxn, markPower int64) (er
 		m.MS = new(MerkleState) //
 		m.MS.InitSha256()       //
 	}
-	m.MS, err = m.ReadChainHead(m.Key) //                  Set the MerkleState
+	m.MS, err = m.ReadChainHead() //                  Set the MerkleState
 	if err != nil {
 		return err
 	}
@@ -240,14 +218,9 @@ func (m *MerkleManager) GetState(element int64) *MerkleState {
 		return ms
 	}
 
-	data, e := m.Manager.Get(m.Key.Append("States", element)) // Get the data at this height
-	if e != nil {                                             // If nil, there is no state saved
+	ms, e := m.Manager.State(m.Key.Append("States", element)).Get() // Get the data at this height
+	if e != nil {                                                   // If nil, there is no state saved
 		return nil //                                                   return nil, as no state exists
-	}
-	ms := new(MerkleState)                     //                                 Get a fresh new MerkleState
-	ms.InitSha256()                            //                                 Initialize hash function
-	if err := ms.UnMarshal(data); err != nil { //                                 set it the MerkleState
-		panic(fmt.Sprintf("corrupted database; invalid state. error: %v", err)) // panic if the database is corrupted.
 	}
 	return ms // return it
 }
@@ -277,7 +250,7 @@ func (m *MerkleManager) GetAnyState(element int64) (ms *MerkleState, err error) 
 	MINext := element&(^m.MarkMask) - 1 + m.MarkFreq //            Calculate the following mark point
 	var NMark *MerkleState                           //
 	if MINext >= m.GetElementCount() {               //             If past the end of the chain, then
-		if NMark, err = m.GetChainState(m.Key); err != nil { //        read the chain state instead
+		if NMark, err = m.GetChainState(); err != nil { //        read the chain state instead
 			return nil, err //                                        Should be in the database
 		}
 	} else {
@@ -299,12 +272,12 @@ func (m *MerkleManager) GetAnyState(element int64) (ms *MerkleState, err error) 
 
 // Get the nth leaf node
 func (m *MerkleManager) Get(element int64) (Hash, error) {
-	data, err := m.Manager.Get(m.Key.Append("Element", element))
+	data, err := m.Manager.Hash(m.Key.Append("Element", element)).Get()
 	if err != nil {
 		return nil, err
 	}
 
-	return Hash(data).Copy(), nil
+	return data.Copy(), nil
 }
 
 // GetIntermediate
@@ -320,6 +293,5 @@ func (m *MerkleManager) GetIntermediate(element, height int64) (Left, Right Hash
 	if e2 != nil {                      // If the element doesn't exist, that's a problem
 		return nil, nil, e2 //
 	} //
-	s.HashFunction = m.MS.HashFunction // Get the hash function
 	return s.GetIntermediate(hash, height)
 }

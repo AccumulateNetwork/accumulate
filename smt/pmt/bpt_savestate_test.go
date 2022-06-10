@@ -1,4 +1,4 @@
-package pmt
+package pmt_test
 
 import (
 	"crypto/sha256"
@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
+	. "gitlab.com/accumulatenetwork/accumulate/smt/pmt"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/badger"
 )
@@ -46,7 +47,7 @@ func TestSaveState(t *testing.T) {
 	err = bptManager.DBManager.Commit()
 	require.NoError(t, err, "fail")
 	storeTx = BDB.Begin(true)
-	bpt.manager.DBManager = storeTx
+	bpt.Manager.DBManager = storeTx
 
 	f, err := os.Create(filepath.Join(DirName, "SnapShot"))
 	require.NoError(t, err)

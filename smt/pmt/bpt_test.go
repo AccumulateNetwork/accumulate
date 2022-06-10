@@ -1,4 +1,4 @@
-package pmt
+package pmt_test
 
 import (
 	"bytes"
@@ -11,6 +11,7 @@ import (
 	"github.com/dustin/go-humanize"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
+	. "gitlab.com/accumulatenetwork/accumulate/smt/pmt"
 )
 
 const defaultNodeCnt = 1000
@@ -340,7 +341,7 @@ func walk(bpt *BPT, node *BptNode) {
 	size[node.Height] += len(data) + 1 // Add one for the type byte
 	count[node.Height] += 1
 
-	if node.Height&bpt.mask == 0 {
+	if node.Height&bpt.Mask == 0 {
 		data = bpt.MarshalByteBlock(node)
 		blockSize[node.Height] += len(data)
 		blockCnt[node.Height]++
