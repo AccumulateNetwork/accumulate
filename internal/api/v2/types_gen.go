@@ -22,7 +22,7 @@ import (
 )
 
 type ChainEntry struct {
-	Height    int64       `json:"height" form:"height" query:"height" validate:"required"`
+	Height    uint64      `json:"height" form:"height" query:"height" validate:"required"`
 	Entry     []byte      `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
 	State     [][]byte    `json:"state,omitempty" form:"state" query:"state" validate:"required"`
 	Value     interface{} `json:"value,omitempty" form:"value" query:"value" validate:"required"`
@@ -485,7 +485,7 @@ func (v *DataEntryQueryResponse) UnmarshalBinaryFrom(rd io.Reader) error {
 
 func (v *ChainEntry) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Height int64                      `json:"height"`
+		Height uint64                     `json:"height"`
 		Entry  *string                    `json:"entry,omitempty"`
 		State  encoding.JsonList[*string] `json:"state,omitempty"`
 		Value  interface{}                `json:"value,omitempty"`
@@ -931,7 +931,7 @@ func (v *TxnQuery) MarshalJSON() ([]byte, error) {
 
 func (v *ChainEntry) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Height int64                      `json:"height"`
+		Height uint64                     `json:"height"`
 		Entry  *string                    `json:"entry,omitempty"`
 		State  encoding.JsonList[*string] `json:"state,omitempty"`
 		Value  interface{}                `json:"value,omitempty"`

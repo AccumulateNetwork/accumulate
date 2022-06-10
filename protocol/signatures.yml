@@ -146,7 +146,7 @@ ReceiptSignature:
       type: url
       pointer: true
     - name: Proof
-      type: Receipt
+      type: managed.Receipt
       marshal-as: reference
     - name: TransactionHash
       type: hash
