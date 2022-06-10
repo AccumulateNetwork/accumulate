@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sync"
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
@@ -22,8 +23,33 @@ func main() {
 	flag.Parse()
 
 	// Initiate clients and wait for them to finish
-	go initClients(10)
-	time.Sleep(time.Second * 100)
+	parallelization := 2
+	c := make(chan int)
+
+	var wg sync.WaitGroup
+	wg.Add(parallelization)
+	for ii := 0; ii < parallelization; ii++ {
+		go func(c chan int) {
+			for {
+				v, more := <-c
+				if !more {
+					wg.Done()
+					return
+				}
+
+				err := initClients(v)
+				if err != nil {
+					fmt.Printf("Error: %v\n", err)
+				}
+			}
+		}(c)
+	}
+	// send number of clients to be created
+	for ii := 0; ii < parallelization; ii++ {
+		c <- ii
+	}
+	close(c)
+	wg.Wait()
 }
 
 // Init new client from server URL input using client.go
