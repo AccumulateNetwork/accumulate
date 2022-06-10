@@ -1,9 +1,11 @@
-package managed
+package managed_test
 
 import (
 	"bytes"
 	"crypto/sha256"
 	"testing"
+
+	. "gitlab.com/accumulatenetwork/accumulate/smt/managed"
 )
 
 func TestHash(t *testing.T) {

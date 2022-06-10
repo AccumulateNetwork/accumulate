@@ -33,11 +33,6 @@ func (t *Transaction) ensureSigner(signer protocol.Signer) error {
 	return t.PutStatus(status)
 }
 
-// Index returns a value that can read or write an index value.
-func (t *Transaction) Index(key ...interface{}) *Value {
-	return &Value{t.batch, t.key.Index(key...)}
-}
-
 // GetState loads the transaction state.
 func (t *Transaction) GetState() (*SigOrTxn, error) {
 	v := new(SigOrTxn)
