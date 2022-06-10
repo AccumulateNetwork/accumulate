@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"fmt"
+	"io"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
@@ -24,10 +25,9 @@ import (
 // Interestingly, the state of building such a Merkle Tree looks just like counting in binary.  And the
 // higher order bits set will correspond to where the binary roots must be kept in a Merkle state.
 type MerkleState struct {
-	HashFunction HashFunc       // Hash function for this Merkle State
-	Count        int64          // Count of hashes added to the Merkle tree
-	Pending      SparseHashList // Array of hashes that represent the left edge of the Merkle tree
-	HashList     HashList       // List of Hashes in the order added to the chain
+	Count    int64          // Count of hashes added to the Merkle tree
+	Pending  SparseHashList // Array of hashes that represent the left edge of the Merkle tree
+	HashList HashList       // List of Hashes in the order added to the chain
 }
 
 // String
@@ -66,6 +66,26 @@ func (m MerkleState) Copy() *MerkleState {
 	}
 	m.HashList = append([]Hash{}, m.HashList...) // copy the underlying storage under slice
 	return &m
+}
+
+func (m *MerkleState) MarshalBinary() ([]byte, error) {
+	return m.Marshal()
+}
+
+func (m *MerkleState) UnmarshalBinary(data []byte) error {
+	return m.UnMarshal(data)
+}
+
+func (m *MerkleState) UnmarshalBinaryFrom(rd io.Reader) error {
+	data, err := io.ReadAll(rd)
+	if err != nil {
+		return err
+	}
+	return m.UnMarshal(data)
+}
+
+func (m *MerkleState) CopyAsInterface() interface{} {
+	return m.Copy()
 }
 
 // PadPending
@@ -215,7 +235,6 @@ func GetSha256() func(data []byte) Hash {
 // Set the hashing function of this Merkle State to Sha256
 // TODO: Actually update the library to be able to use various hash algorithms
 func (m *MerkleState) InitSha256() {
-	m.HashFunction = GetSha256()
 }
 
 // AddToMerkleTree
@@ -231,8 +250,8 @@ func (m *MerkleState) AddToMerkleTree(hash_ []byte) {
 			m.Pending[i] = hash //               And put the Hash there if one is found
 			return              //          Mission complete, so return
 		}
-		hash = v.Combine(m.HashFunction, hash) // If this slot isn't empty, combine the hash with the slot
-		m.Pending[i] = nil                     //   and carry the result to the next (clearing this one)
+		hash = v.Combine(Sha256, hash) // If this slot isn't empty, combine the hash with the slot
+		m.Pending[i] = nil             //   and carry the result to the next (clearing this one)
 	}
 }
 
@@ -254,7 +273,7 @@ func (m *MerkleState) GetMDRoot() (MDRoot Hash) {
 		if MDRoot == nil { // Pick up the first hash in m.MerkleState no matter what.
 			MDRoot = v.Copy() // If a nil is assigned over a nil, no harm no foul.  Fewer cases to test this way.
 		} else if v != nil { // If MDRoot isn't nil and v isn't nil, combine them.
-			MDRoot = v.Combine(m.HashFunction, MDRoot) // v is on the left, MDRoot candidate is on the right, for a new MDRoot
+			MDRoot = v.Combine(Sha256, MDRoot) // v is on the left, MDRoot candidate is on the right, for a new MDRoot
 		}
 	}
 	// Drop out with a MDRoot unless m.MerkleState is zero length, in which case return a nil (correct)
@@ -293,7 +312,7 @@ func (m *MerkleState) GetIntermediate(hash Hash, height int64) (left, right Hash
 			right = hash.Copy()     //
 			return left, right, nil // return them
 		}
-		hash = v.Combine(m.HashFunction, hash) // If this slot isn't empty, combine the hash with the slot
+		hash = v.Combine(Sha256, hash) // If this slot isn't empty, combine the hash with the slot
 	}
 	return nil, nil, fmt.Errorf("no values found at height %d", height)
 }
