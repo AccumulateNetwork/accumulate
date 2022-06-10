@@ -48,6 +48,9 @@ SyntheticDepositTokens:
       type: bigint
     - name: IsIssuer
       type: boolean
+    - name: IsRefund
+      type: bool
+
       
 SyntheticDepositCredits:
   union: { type: transaction }
@@ -60,6 +63,8 @@ SyntheticDepositCredits:
       description: is the amount of ACME that will be refunded if the deposit fails
       type: bigint
       pointer: true
+    - name: IsRefund
+      type: bool
 
 SyntheticBurnTokens:
   union: { type: transaction }
@@ -68,6 +73,8 @@ SyntheticBurnTokens:
   fields:
     - name: Amount
       type: bigint
+    - name: IsRefund
+      type: bool
 
 SyntheticForwardTransaction:
   union: { type: transaction, value: SyntheticForwardTransaction }
