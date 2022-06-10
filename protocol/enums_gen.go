@@ -77,6 +77,9 @@ const BookTypeNormal BookType = 0
 // BookTypeValidator is a validator key book.
 const BookTypeValidator BookType = 1
 
+// BookTypeOperator Operator key book.
+const BookTypeOperator BookType = 2
+
 // ChainTypeUnknown is used when the chain type is not known.
 const ChainTypeUnknown ChainType = 0
 
@@ -641,7 +644,7 @@ func (v BookType) GetEnumValue() uint64 { return uint64(v) }
 func (v *BookType) SetEnumValue(id uint64) bool {
 	u := BookType(id)
 	switch u {
-	case BookTypeNormal, BookTypeValidator:
+	case BookTypeNormal, BookTypeValidator, BookTypeOperator:
 		*v = u
 		return true
 	default:
@@ -656,6 +659,8 @@ func (v BookType) String() string {
 		return "normal"
 	case BookTypeValidator:
 		return "validator"
+	case BookTypeOperator:
+		return "operator"
 	default:
 		return fmt.Sprintf("BookType:%d", v)
 	}
@@ -668,6 +673,8 @@ func BookTypeByName(name string) (BookType, bool) {
 		return BookTypeNormal, true
 	case "validator":
 		return BookTypeValidator, true
+	case "operator":
+		return BookTypeOperator, true
 	default:
 		return 0, false
 	}

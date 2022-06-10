@@ -7,6 +7,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
@@ -156,7 +157,7 @@ func (d *Delivery) NewForwarded(fwd *protocol.SyntheticForwardTransaction) *Deli
 	return d.NewChild(fwd.Transaction, signatures)
 }
 
-func (d *Delivery) NewSyntheticReceipt(hash [32]byte, source *url.URL, receipt *protocol.Receipt) *Delivery {
+func (d *Delivery) NewSyntheticReceipt(hash [32]byte, source *url.URL, receipt *managed.Receipt) *Delivery {
 	return d.NewChild(&protocol.Transaction{
 		Body: &protocol.RemoteTransaction{
 			Hash: hash,
@@ -181,8 +182,18 @@ func (d *Delivery) NewSyntheticFromSequence(hash [32]byte) *Delivery {
 	return e
 }
 
+func (d *Delivery) Parent() *Delivery {
+	return d.parent
+}
+
 func (d *Delivery) WasProducedInternally() bool {
 	return d.parent != nil && d.internal
+}
+
+// WasProducedByPushedUpdate returns true if the transaction was produced by an
+// update pushed via an anchor from the directory network.
+func (d *Delivery) WasProducedByPushedUpdate() bool {
+	return d.parent != nil && d.internal && d.parent.Transaction.Body.Type() == protocol.TransactionTypeDirectoryAnchor
 }
 
 // IsForwarded returns true if the transaction was delivered within a

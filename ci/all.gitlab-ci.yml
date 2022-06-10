@@ -56,7 +56,7 @@ validate docker:
   variables:
     # set mnemonic for predictable addresses
     MNEMONIC: yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow
-    DN_NODES_DIR: /nodes/dn
+    NODES_DIR: /nodes
   artifacts:
     paths: [ compose.log ]
     when: always

@@ -126,6 +126,11 @@ type TypedValue interface {
 	CopyAsInterface() interface{}
 }
 
+type TypedValueUnmarshaller interface {
+	TypedValue
+	encoding.BinaryUnmarshaler
+}
+
 type ValueUnmarshalFunc func([]byte) (TypedValue, error)
 
 type cachedValue struct {
@@ -252,10 +257,7 @@ func (b *Batch) getValueAs(key storage.Key, unmarshal ValueUnmarshalFunc, newVal
 	return notFound
 }
 
-func (b *Batch) getValuePtr(key storage.Key, value interface {
-	TypedValue
-	encoding.BinaryUnmarshaler
-}, valuePtr interface{}, addNew bool) error {
+func (b *Batch) getValuePtr(key storage.Key, value TypedValueUnmarshaller, valuePtr interface{}, addNew bool) error {
 	var newValue TypedValue
 	if addNew {
 		newValue = value

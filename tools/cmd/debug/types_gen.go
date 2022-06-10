@@ -45,6 +45,18 @@ type accountState struct {
 	extraData    []byte
 }
 
+type hashValue struct {
+	fieldsSet []bool
+	Value     []byte `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	extraData []byte
+}
+
+type intValue struct {
+	fieldsSet []bool
+	Value     int64 `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	extraData []byte
+}
+
 type merkleState struct {
 	fieldsSet []bool
 	Name      string             `json:"name,omitempty" form:"name" query:"name" validate:"required"`
@@ -136,6 +148,26 @@ func (v *accountState) Copy() *accountState {
 }
 
 func (v *accountState) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *hashValue) Copy() *hashValue {
+	u := new(hashValue)
+
+	u.Value = encoding.BytesCopy(v.Value)
+
+	return u
+}
+
+func (v *hashValue) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *intValue) Copy() *intValue {
+	u := new(intValue)
+
+	u.Value = v.Value
+
+	return u
+}
+
+func (v *intValue) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *merkleState) Copy() *merkleState {
 	u := new(merkleState)
@@ -275,6 +307,22 @@ func (v *accountState) Equal(u *accountState) bool {
 		if !((v.Transactions[i]).Equal(u.Transactions[i])) {
 			return false
 		}
+	}
+
+	return true
+}
+
+func (v *hashValue) Equal(u *hashValue) bool {
+	if !(bytes.Equal(v.Value, u.Value)) {
+		return false
+	}
+
+	return true
+}
+
+func (v *intValue) Equal(u *intValue) bool {
+	if !(v.Value == u.Value) {
+		return false
 	}
 
 	return true
@@ -551,6 +599,84 @@ func (v *accountState) IsValid() error {
 		errs = append(errs, "field Transactions is missing")
 	} else if len(v.Transactions) == 0 {
 		errs = append(errs, "field Transactions is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_hashValue = []string{
+	1: "Value",
+}
+
+func (v *hashValue) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(len(v.Value) == 0) {
+		writer.WriteBytes(1, v.Value)
+	}
+
+	_, _, err := writer.Reset(fieldNames_hashValue)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), err
+}
+
+func (v *hashValue) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Value is missing")
+	} else if len(v.Value) == 0 {
+		errs = append(errs, "field Value is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_intValue = []string{
+	1: "Value",
+}
+
+func (v *intValue) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Value == 0) {
+		writer.WriteInt(1, v.Value)
+	}
+
+	_, _, err := writer.Reset(fieldNames_intValue)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), err
+}
+
+func (v *intValue) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Value is missing")
+	} else if v.Value == 0 {
+		errs = append(errs, "field Value is not set")
 	}
 
 	switch len(errs) {
@@ -896,6 +1022,46 @@ func (v *accountState) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
+func (v *hashValue) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *hashValue) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadBytes(1); ok {
+		v.Value = x
+	}
+
+	seen, err := reader.Reset(fieldNames_hashValue)
+	if err != nil {
+		return err
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	return err
+}
+
+func (v *intValue) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *intValue) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadInt(1); ok {
+		v.Value = x
+	}
+
+	seen, err := reader.Reset(fieldNames_intValue)
+	if err != nil {
+		return err
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	return err
+}
+
 func (v *merkleState) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -1057,6 +1223,14 @@ func (v *accountState) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *hashValue) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Value *string `json:"value,omitempty"`
+	}{}
+	u.Value = encoding.BytesToJSON(v.Value)
+	return json.Marshal(&u)
+}
+
 func (v *merkleState) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Name    string                     `json:"name,omitempty"`
@@ -1172,6 +1346,22 @@ func (v *accountState) UnmarshalJSON(data []byte) error {
 	v.Chains = u.Chains
 	v.Pending = u.Pending
 	v.Transactions = u.Transactions
+	return nil
+}
+
+func (v *hashValue) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Value *string `json:"value,omitempty"`
+	}{}
+	u.Value = encoding.BytesToJSON(v.Value)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if x, err := encoding.BytesFromJSON(u.Value); err != nil {
+		return fmt.Errorf("error decoding Value: %w", err)
+	} else {
+		v.Value = x
+	}
 	return nil
 }
 

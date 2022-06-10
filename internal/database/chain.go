@@ -12,7 +12,6 @@ import (
 // Chain manages a Merkle tree (chain).
 type Chain struct {
 	account  *Account
-	key      storage.Key
 	writable bool
 	merkle   *managed.MerkleManager
 }
@@ -21,11 +20,10 @@ type Chain struct {
 func newChain(account *Account, key storage.Key, writable bool) (*Chain, error) {
 	m := new(Chain)
 	m.account = account
-	m.key = key
 	m.writable = writable
 
 	var err error
-	m.merkle, err = managed.NewMerkleManager(account.batch.store, markPower)
+	m.merkle, err = managed.NewMerkleManager(MerkleDbManager{Batch: account.batch}, markPower)
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +70,7 @@ func (c *Chain) Entries(start int64, end int64) ([][]byte, error) {
 	// multiple times
 	entries := make([][]byte, 0, end-start)
 	for start < end {
-		h, err := c.merkle.GetRange(c.key, start, end)
+		h, err := c.merkle.GetRange(start, end)
 		if err != nil {
 			return nil, err
 		}
@@ -158,20 +156,20 @@ func (c *Chain) Receipt(from, to int64) (*managed.Receipt, error) {
 
 	var err error
 	r := managed.NewReceipt(c.merkle)
-	r.ElementIndex = from
-	r.AnchorIndex = to
-	r.Element, err = c.Entry(from)
+	r.StartIndex = from
+	r.EndIndex = to
+	r.Start, err = c.Entry(from)
 	if err != nil {
 		return nil, err
 	}
-	r.Anchor, err = c.Entry(to)
+	r.End, err = c.Entry(to)
 	if err != nil {
 		return nil, err
 	}
 
 	// If this is the first element in the Merkle Tree, we are already done
 	if from == 0 && to == 0 {
-		r.MDRoot = r.Element
+		r.Anchor = r.Start
 		return r, nil
 	}
 

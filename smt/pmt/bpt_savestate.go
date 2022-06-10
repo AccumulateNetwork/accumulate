@@ -36,7 +36,7 @@ const nLen = 32 + 32 + 8    //                               Each node is a key 
 //   n  [length of value]byte -- the bytes of the value
 //
 func (b *BPT) SaveSnapshot(file io.WriteSeeker, loadState func(key storage.Key, hash [32]byte) ([]byte, error)) error {
-	if b.manager == nil { //                                  Snapshot cannot be taken if we have no db
+	if b.Manager == nil { //                                  Snapshot cannot be taken if we have no db
 		return fmt.Errorf("No manager found for BPT") //      return error
 	}
 

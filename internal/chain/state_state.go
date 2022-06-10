@@ -127,6 +127,11 @@ func (c *ChainUpdates) AddChainEntry(batch *database.Batch, account *url.URL, na
 		return errors.Format(errors.StatusUnknown, "add entry to %s chain: %w", name, err)
 	}
 
+	// The entry was a duplicate, do not update the ledger
+	if index == chain.Height() {
+		return nil
+	}
+
 	// Update the ledger
 	return c.DidAddChainEntry(batch, account, name, typ, entry, uint64(index), sourceIndex, sourceBlock)
 }

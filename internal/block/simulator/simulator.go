@@ -16,8 +16,10 @@ import (
 	. "gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/internal/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
@@ -39,6 +41,7 @@ type Simulator struct {
 
 	LogLevels string
 
+	router           routing.Router
 	routingOverrides map[[32]byte]string
 }
 
@@ -69,6 +72,15 @@ func New(t TB, bvnCount int) *Simulator {
 	return sim
 }
 
+func NewWithLogLevels(t TB, bvnCount int, logLevels config.LogLevel) *Simulator {
+	t.Helper()
+	sim := new(Simulator)
+	sim.TB = t
+	sim.LogLevels = logLevels.String()
+	sim.Setup(bvnCount)
+	return sim
+}
+
 func (sim *Simulator) Setup(bvnCount int) {
 	sim.Helper()
 
@@ -81,6 +93,9 @@ func (sim *Simulator) Setup(bvnCount int) {
 	for i := 0; i < bvnCount; i++ {
 		sim.Subnets[i+1] = config.Subnet{Type: config.BlockValidator, ID: fmt.Sprintf("BVN%d", i)}
 	}
+
+	mainEventBus := events.NewBus(sim.Logger.With("subnet", protocol.Directory))
+	sim.router = routing.NewRouter(mainEventBus, nil)
 
 	// Initialize each executor
 	for i := range sim.Subnets {
@@ -98,11 +113,17 @@ func (sim *Simulator) Setup(bvnCount int) {
 			Subnets:       sim.Subnets,
 		}
 
+		eventBus := mainEventBus
+		if subnet.Type != config.Directory {
+			eventBus = events.NewBus(logger)
+		}
+
 		exec, err := NewNodeExecutor(ExecutorOptions{
-			Logger:  logger,
-			Key:     key,
-			Network: network,
-			Router:  sim.Router(),
+			Logger:   logger,
+			Key:      key,
+			Network:  network,
+			Router:   sim.Router(),
+			EventBus: eventBus,
 		}, db)
 		require.NoError(sim, err)
 
@@ -144,9 +165,7 @@ func (s *Simulator) SetRouteFor(account *url.URL, subnet string) {
 }
 
 func (s *Simulator) Router() routing.Router {
-	r, _, err := routing.NewSimpleRouter(&config.Network{Subnets: s.Subnets}, nil)
-	require.NoError(s, err)
-	return router{s, r}
+	return router{s, s.router}
 }
 
 func (s *Simulator) Subnet(id string) *ExecEntry {
@@ -171,11 +190,15 @@ func (s *Simulator) Query(url *url.URL, req query.Request, prove bool) interface
 }
 
 func (s *Simulator) InitFromGenesis() {
+	s.InitFromGenesisWith(nil)
+}
+
+func (s *Simulator) InitFromGenesisWith(values *core.GlobalValues) {
 	s.Helper()
 
 	netValMap := make(genesis.NetworkValidatorMap)
 	for _, x := range s.Executors {
-		x.bootstrap = InitGenesis(s, x.Executor, genesisTime, netValMap)
+		x.bootstrap = InitGenesis(s, x.Executor, genesisTime, values, netValMap)
 	}
 
 	// Execute bootstrap after the entire network is known

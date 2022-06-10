@@ -137,7 +137,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 		}
 		res := new(query.ResponseChainEntry)
 		res.Type = protocol.ChainTypeAnchor
-		res.Height = index
+		res.Height = uint64(index)
 		res.Entry = entryHash
 
 		res.Receipt, err = m.resolveChainReceipt(batch, u, chainName, index)
@@ -194,7 +194,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 
 			res := new(query.ResponseChainEntry)
 			res.Type = obj.ChainType(fragment[1])
-			res.Height = height
+			res.Height = uint64(height)
 			res.Entry = entry
 			res.State = make([][]byte, len(state.Pending))
 			for i, h := range state.Pending {
@@ -240,7 +240,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 				return nil, nil, err
 			}
 
-			res.Height = height
+			res.Height = uint64(height)
 			res.ChainState = make([][]byte, len(state.Pending))
 			for i, h := range state.Pending {
 				res.ChainState[i] = h.Copy()
@@ -317,7 +317,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 					return nil, nil, err
 				}
 
-				res.Height = height
+				res.Height = uint64(height)
 				res.ChainState = make([][]byte, len(state.Pending))
 				for i, h := range state.Pending {
 					res.ChainState[i] = h.Copy()
@@ -592,7 +592,7 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove, remote
 	qr.Envelope.Transaction = []*protocol.Transaction{txState.Transaction}
 	qr.Status = status
 	qr.TxId = txState.Transaction.ID()
-	qr.Height = -1
+	// qr.Height = -1
 
 	synth, err := tx.GetSyntheticTxns()
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
@@ -1117,7 +1117,7 @@ func (m *Executor) resolveTxReceipt(batch *database.Batch, txid []byte, entry *i
 	}
 
 	receipt.LocalBlock = block
-	receipt.Proof = *protocol.ReceiptFromManaged(r)
+	receipt.Proof = *r
 	return receipt, nil
 }
 
@@ -1128,7 +1128,7 @@ func (m *Executor) resolveChainReceipt(batch *database.Batch, account *url.URL, 
 		return receipt, err
 	}
 
-	receipt.Proof = *protocol.ReceiptFromManaged(r)
+	receipt.Proof = *r
 	return receipt, nil
 }
 
@@ -1140,7 +1140,7 @@ func (m *Executor) resolveAccountStateReceipt(batch *database.Batch, account *da
 	}
 
 	receipt.LocalBlock = block
-	receipt.Proof = *protocol.ReceiptFromManaged(r)
+	receipt.Proof = *r
 	return receipt, nil
 }
 

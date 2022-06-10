@@ -12,6 +12,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/internal/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -45,6 +46,12 @@ func (m *Executor) EndBlock(block *Block) error {
 	// Update active globals
 	if !m.isGenesis && !m.globals.Active.Equal(&m.globals.Pending) {
 		m.globals.Active = *m.globals.Pending.Copy()
+		err = m.EventBus.Publish(events.DidChangeGlobals{
+			Values: &m.globals.Active,
+		})
+		if err != nil {
+			return errors.Format(errors.StatusUnknown, "publish globals update: %w", err)
+		}
 	}
 
 	m.logger.Debug("Committing",
@@ -218,7 +225,7 @@ func (m *Executor) createLocalDNReceipt(block *Block, rootChain *database.Chain,
 		sig := new(protocol.ReceiptSignature)
 		sig.SourceNetwork = m.Network.NodeUrl()
 		sig.TransactionHash = *(*[32]byte)(txn.GetHash())
-		sig.Proof = *protocol.ReceiptFromManaged(receipt)
+		sig.Proof = *receipt
 		_, err = block.Batch.Transaction(txn.GetHash()).AddSignature(0, sig)
 		if err != nil {
 			return errors.Format(errors.StatusUnknown, "store signature: %w", err)

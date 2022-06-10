@@ -52,7 +52,7 @@ ResponseChainEntry:
       type: protocol.ChainType
       marshal-as: enum
     - name: Height
-      type: varint
+      type: uvarint
       keep-empty: true
     - name: Entry
       type: bytes
@@ -83,7 +83,7 @@ ResponseByTxId:
       pointer: true
       repeatable: true
     - name: Height
-      type: varint
+      type: uvarint
       keep-empty: true
     - name: ChainState
       repeatable: true
@@ -115,7 +115,7 @@ GeneralReceipt:
     - name: DirectoryBlock
       type: uvarint
     - name: Proof
-      type: protocol.Receipt
+      type: managed.Receipt
       marshal-as: reference
       alternative: Receipt
     - name: Error
