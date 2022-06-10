@@ -82,7 +82,7 @@ func (sim *Simulator) Setup(bvnCount int) {
 	sim.Subnets = make([]config.Subnet, bvnCount+1)
 	sim.Subnets[0] = config.Subnet{Type: config.Directory, Id: protocol.Directory, BasePort: 30000}
 	for i := 0; i < bvnCount; i++ {
-		sim.Subnets[i+1] = config.Subnet{Type: config.BlockValidator, Id: fmt.Sprintf("BVN%d", i)}
+		sim.Subnets[i+1] = config.Subnet{Type: config.BlockValidator, Id: fmt.Sprintf("BVN%d", i), BasePort: 30000}
 	}
 
 	mainEventBus := events.NewBus(sim.Logger.With("subnet", protocol.Directory))

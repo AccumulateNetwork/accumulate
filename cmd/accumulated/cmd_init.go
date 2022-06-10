@@ -447,9 +447,10 @@ func initDNs(count int, dnConfig []*cfg.Config, dnRemote []string, dnListen []st
 	}
 
 	subnets[0] = config.Subnet{
-		Id:    protocol.Directory,
-		Type:  config.Directory,
-		Nodes: dnNodes,
+		Id:       protocol.Directory,
+		Type:     config.Directory,
+		BasePort: int64(flagInitDevnet.BasePort),
+		Nodes:    dnNodes,
 	}
 }
 
