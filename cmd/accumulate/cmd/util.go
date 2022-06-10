@@ -640,8 +640,10 @@ func GetAccountStateProof(principal, accountToProve *url2.URL) (proof *protocol.
 			if dirReceipt.Anchor != nil {
 				return proof, nil
 			}
-			proof.Proof = localReceipt.Combine(&dirReceipt)
-
+			proof.Proof, err = localReceipt.Combine(&dirReceipt)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 }

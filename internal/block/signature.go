@@ -650,7 +650,7 @@ func verifyReceiptSignature(transaction *protocol.Transaction, receipt *protocol
 		return fmt.Errorf("receipt signatures must not be the initiator")
 	}
 
-	if !receipt.Proof.Convert().Validate() {
+	if !receipt.Proof.Validate() {
 		return fmt.Errorf("invalid receipt")
 	}
 
