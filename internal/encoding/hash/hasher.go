@@ -90,7 +90,6 @@ func (h Hasher) MerkleHash() []byte {
 
 	// Initialize a merkle state
 	merkle := managed.MerkleState{}
-	merkle.InitSha256()
 
 	// Add each hash
 	for _, h := range h {
@@ -103,23 +102,22 @@ func (h Hasher) MerkleHash() []byte {
 
 // Receipt returns a receipt for the numbered element. Receipt returns nil if
 // either index is out of bounds.
-func (h Hasher) Receipt(element, anchor int) *managed.Receipt {
-	if element < 0 || element >= len(h) || anchor < 0 || anchor >= len(h) {
+func (h Hasher) Receipt(start, anchor int) *managed.Receipt {
+	if start < 0 || start >= len(h) || anchor < 0 || anchor >= len(h) {
 		return nil
 	}
 
 	// Trivial case
 	if len(h) == 1 {
 		return &managed.Receipt{
-			Element: h[0],
-			Anchor:  h[0],
-			MDRoot:  h[0],
+			Start:  h[0],
+			End:    h[0],
+			Anchor: h[0],
 		}
 	}
 
 	// Build a merkle state
 	anchorState := new(managed.MerkleState)
-	anchorState.InitSha256()
 	for _, h := range h[:anchor+1] {
 		anchorState.AddToMerkleTree(h)
 	}
@@ -127,10 +125,10 @@ func (h Hasher) Receipt(element, anchor int) *managed.Receipt {
 
 	// Initialize the receipt
 	r := new(managed.Receipt)
-	r.ElementIndex = int64(element)
-	r.AnchorIndex = int64(anchor)
-	r.Element = h[element]
-	r.MDRoot = h[element]
+	r.StartIndex = int64(start)
+	r.EndIndex = int64(anchor)
+	r.Start = h[start]
+	r.Anchor = h[start]
 
 	// Build the receipt
 	err := r.BuildReceiptWith(h.getIntermediate, managed.Sha256, anchorState)
