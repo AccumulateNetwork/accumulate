@@ -46,9 +46,21 @@ type ChainUpdate struct {
 	extraData   []byte
 }
 
+type DataEntry struct {
+	fieldsSet []bool
+	Hash      [32]byte `json:"hash,omitempty" form:"hash" query:"hash" validate:"required"`
+	extraData []byte
+}
+
 type DataIndex struct {
 	fieldsSet []bool
 	Count     uint64 `json:"count,omitempty" form:"count" query:"count" validate:"required"`
+	extraData []byte
+}
+
+type DirectoryEntry struct {
+	fieldsSet []bool
+	Account   *url.URL `json:"account,omitempty" form:"account" query:"account" validate:"required"`
 	extraData []byte
 }
 
@@ -135,6 +147,16 @@ func (v *ChainUpdate) Copy() *ChainUpdate {
 
 func (v *ChainUpdate) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *DataEntry) Copy() *DataEntry {
+	u := new(DataEntry)
+
+	u.Hash = v.Hash
+
+	return u
+}
+
+func (v *DataEntry) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *DataIndex) Copy() *DataIndex {
 	u := new(DataIndex)
 
@@ -144,6 +166,18 @@ func (v *DataIndex) Copy() *DataIndex {
 }
 
 func (v *DataIndex) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *DirectoryEntry) Copy() *DirectoryEntry {
+	u := new(DirectoryEntry)
+
+	if v.Account != nil {
+		u.Account = (v.Account).Copy()
+	}
+
+	return u
+}
+
+func (v *DirectoryEntry) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *DirectoryIndex) Copy() *DirectoryIndex {
 	u := new(DirectoryIndex)
@@ -253,8 +287,29 @@ func (v *ChainUpdate) Equal(u *ChainUpdate) bool {
 	return true
 }
 
+func (v *DataEntry) Equal(u *DataEntry) bool {
+	if !(v.Hash == u.Hash) {
+		return false
+	}
+
+	return true
+}
+
 func (v *DataIndex) Equal(u *DataIndex) bool {
 	if !(v.Count == u.Count) {
+		return false
+	}
+
+	return true
+}
+
+func (v *DirectoryEntry) Equal(u *DirectoryEntry) bool {
+	switch {
+	case v.Account == u.Account:
+		// equal
+	case v.Account == nil || u.Account == nil:
+		return false
+	case !((v.Account).Equal(u.Account)):
 		return false
 	}
 
@@ -527,6 +582,45 @@ func (v *ChainUpdate) IsValid() error {
 	}
 }
 
+var fieldNames_DataEntry = []string{
+	1: "Hash",
+}
+
+func (v *DataEntry) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Hash == ([32]byte{})) {
+		writer.WriteHash(1, &v.Hash)
+	}
+
+	_, _, err := writer.Reset(fieldNames_DataEntry)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), err
+}
+
+func (v *DataEntry) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Hash is missing")
+	} else if v.Hash == ([32]byte{}) {
+		errs = append(errs, "field Hash is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_DataIndex = []string{
 	1: "Count",
 }
@@ -554,6 +648,45 @@ func (v *DataIndex) IsValid() error {
 		errs = append(errs, "field Count is missing")
 	} else if v.Count == 0 {
 		errs = append(errs, "field Count is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_DirectoryEntry = []string{
+	1: "Account",
+}
+
+func (v *DirectoryEntry) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Account == nil) {
+		writer.WriteUrl(1, v.Account)
+	}
+
+	_, _, err := writer.Reset(fieldNames_DirectoryEntry)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), err
+}
+
+func (v *DirectoryEntry) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Account is missing")
+	} else if v.Account == nil {
+		errs = append(errs, "field Account is not set")
 	}
 
 	switch len(errs) {
@@ -821,6 +954,26 @@ func (v *ChainUpdate) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
+func (v *DataEntry) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *DataEntry) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadHash(1); ok {
+		v.Hash = *x
+	}
+
+	seen, err := reader.Reset(fieldNames_DataEntry)
+	if err != nil {
+		return err
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	return err
+}
+
 func (v *DataIndex) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -833,6 +986,26 @@ func (v *DataIndex) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_DataIndex)
+	if err != nil {
+		return err
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	return err
+}
+
+func (v *DirectoryEntry) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *DirectoryEntry) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUrl(1); ok {
+		v.Account = x
+	}
+
+	seen, err := reader.Reset(fieldNames_DirectoryEntry)
 	if err != nil {
 		return err
 	}
@@ -960,6 +1133,14 @@ func (v *ChainUpdate) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *DataEntry) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Hash string `json:"hash,omitempty"`
+	}{}
+	u.Hash = encoding.ChainToJSON(v.Hash)
+	return json.Marshal(&u)
+}
+
 func (v *TransactionChainIndex) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Entries encoding.JsonList[*TransactionChainEntry] `json:"entries,omitempty"`
@@ -1041,6 +1222,22 @@ func (v *ChainUpdate) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("error decoding Entry: %w", err)
 	} else {
 		v.Entry = x
+	}
+	return nil
+}
+
+func (v *DataEntry) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Hash string `json:"hash,omitempty"`
+	}{}
+	u.Hash = encoding.ChainToJSON(v.Hash)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if x, err := encoding.ChainFromJSON(u.Hash); err != nil {
+		return fmt.Errorf("error decoding Hash: %w", err)
+	} else {
+		v.Hash = x
 	}
 	return nil
 }

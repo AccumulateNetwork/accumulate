@@ -7,7 +7,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
@@ -51,7 +50,7 @@ func TestHasher_Receipt(t *testing.T) {
 		for j := i; j < 7; j++ {
 			r := hasher.Receipt(i, j)
 			// fmt.Println(r.String())
-			require.Equal(t, managed.Hash(hasher[i]), r.Element)
+			require.Equal(t, hasher[i], r.Start)
 			assert.Truef(t, r.Validate(), "Receipt fails for %d to %d", i, j)
 			fmt.Printf("Build receipt from %d to %d\n", i, j)
 		}

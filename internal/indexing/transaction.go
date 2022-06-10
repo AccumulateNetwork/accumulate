@@ -9,19 +9,19 @@ import (
 
 // TransactionChainIndexer indexes account chains against a transaction.
 type TransactionChainIndexer struct {
-	value *database.Value
+	value *database.ValueAs[*TransactionChainIndex]
 }
 
 // TransactionChain returns a transaction chain indexer.
 func TransactionChain(batch *database.Batch, txid []byte) *TransactionChainIndexer {
-	return &TransactionChainIndexer{batch.Transaction(txid).Index("Chains")}
+	v := database.TransactionIndex(batch, txid, newfn[TransactionChainIndex](), "Chains")
+	return &TransactionChainIndexer{v}
 }
 
 // Get loads and unmarshals the index. Get returns an empty index if it has not
 // been defined.
 func (t *TransactionChainIndexer) Get() (*TransactionChainIndex, error) {
-	v := new(TransactionChainIndex)
-	err := t.value.GetAs(v)
+	v, err := t.value.Get()
 	switch {
 	case err == nil:
 		return v, nil
@@ -40,5 +40,5 @@ func (t *TransactionChainIndexer) Add(entry *TransactionChainEntry) error {
 	}
 
 	v.Entries = append(v.Entries, entry)
-	return t.value.PutAs(v)
+	return t.value.Put(v)
 }

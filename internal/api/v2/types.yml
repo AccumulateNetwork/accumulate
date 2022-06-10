@@ -440,7 +440,7 @@ ChainEntry:
   incomparable: true
   fields:
     - name: Height
-      type: varint
+      type: uvarint
       keep-empty: true
     - name: Entry
       type: bytes

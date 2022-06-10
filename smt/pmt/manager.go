@@ -25,7 +25,7 @@ func NewBPTManager(dbManager storage.KeyValueTxn) *Manager { // Return a new BPT
 	manager := new(Manager)            //          Allocate the struct
 	manager.DBManager = dbManager      //          populate with pointer to the database manager
 	manager.Bpt = NewBPT(manager)      //          Allocate a new BPT
-	manager.Bpt.manager = manager      //          Allow the Bpt to call back to the manager for db access
+	manager.Bpt.Manager = manager      //          Allow the Bpt to call back to the manager for db access
 	data, e := dbManager.Get(kBptRoot) //          Get the BPT settings from disk
 	if e == nil {                      //          If nothing is found, well this is a fresh instance
 		manager.Bpt.UnMarshal(data)             // But if data is found, then unmarshal
@@ -46,7 +46,7 @@ func (m *Manager) GetRootHash() [32]byte {
 // LoadNode
 // Loads the nodes under the given node into the BPT
 func (m *Manager) LoadNode(node *BptNode) {
-	if node.Height&m.Bpt.mask != 0 { //                                           Throw an error if not a border node
+	if node.Height&m.Bpt.Mask != 0 { //                                           Throw an error if not a border node
 		panic("load should not be called on a node that is not a border node") // panic -- should not occur
 	}
 

@@ -1,4 +1,4 @@
-package managed
+package managed_test
 
 import (
 	"bytes"
@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
+	. "gitlab.com/accumulatenetwork/accumulate/smt/managed"
 )
 
 func TestMerkleState_Equal(t *testing.T) {
@@ -72,7 +73,7 @@ func TestUnmarshalMemorySafety(t *testing.T) {
 	MS1 := new(MerkleState)
 	MS1.InitSha256()
 	for i := 0; i < 10; i++ {
-		MS1.AddToMerkleTree(MS1.HashFunction([]byte(fmt.Sprintf("%8d", i))))
+		MS1.AddToMerkleTree(Sha256([]byte(fmt.Sprintf("%8d", i))))
 	}
 
 	// Marshal and unmarshal into a new state
@@ -85,7 +86,6 @@ func TestUnmarshalMemorySafety(t *testing.T) {
 	_, _ = rand.Read(data)
 
 	// Ensure that MS2 did not change
-	MS1.HashFunction = nil
 	require.True(t, MS1.Equal(MS2), "States do not match")
 }
 
@@ -109,7 +109,7 @@ func TestMarshal(t *testing.T) {
 		t.Error("Should be the same")
 	}
 
-	MS1.AddToMerkleTree(MS1.HashFunction([]byte{1, 2, 3, 4, 5}))
+	MS1.AddToMerkleTree(Sha256([]byte{1, 2, 3, 4, 5}))
 
 	data1, err = MS1.Marshal()
 	if err != nil {
@@ -130,7 +130,7 @@ func TestMarshal(t *testing.T) {
 	}
 
 	for i := 0; i < 10; i++ {
-		MS1.AddToMerkleTree(MS1.HashFunction([]byte(fmt.Sprintf("%8d", i))))
+		MS1.AddToMerkleTree(Sha256([]byte(fmt.Sprintf("%8d", i))))
 
 		data1, err = MS1.Marshal()
 		if err != nil {
