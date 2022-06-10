@@ -565,8 +565,7 @@ func (x *Executor) buildDirectoryAnchor(batch *database.Batch, ledgerState *prot
 				return nil, errors.Format(errors.StatusUnknown, "build receipt for intermediate anchor chain %s: %w", update.Name, err)
 			}
 
-			r := protocol.ReceiptFromManaged(receipt)
-			anchor.Receipts = append(anchor.Receipts, *r)
+			anchor.Receipts = append(anchor.Receipts, *receipt)
 		}
 	}
 

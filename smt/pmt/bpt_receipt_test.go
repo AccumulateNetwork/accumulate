@@ -1,4 +1,4 @@
-package pmt
+package pmt_test
 
 import (
 	"bytes"
@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
+	. "gitlab.com/accumulatenetwork/accumulate/smt/pmt"
 )
 
 // returns true if all the hashes in the BPT are correct

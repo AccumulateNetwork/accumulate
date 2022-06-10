@@ -1,13 +1,14 @@
-package managed
+package managed_test
 
 import (
 	"bytes"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
+	. "gitlab.com/accumulatenetwork/accumulate/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 )
 
 func b2i(b Hash) int64 {
@@ -33,10 +34,10 @@ func TestMerkleManager_GetRange(t *testing.T) {
 	for NumTests := int64(50); NumTests < 64; NumTests++ {
 
 		var rh common.RandHash
-		store := memory.NewDB()
+		store := database.OpenInMemory(nil)
 		storeTx := store.Begin(true)
 
-		mm, err := NewMerkleManager(storeTx, 2)
+		mm, err := NewMerkleManager(database.MerkleDbManager{Batch: storeTx}, 2)
 		require.NoError(t, err, "should create MerkleManager")
 		err = mm.SetKey(storage.MakeKey("try"))
 		require.NoError(t, err, "should be able to set a key")
@@ -46,7 +47,7 @@ func TestMerkleManager_GetRange(t *testing.T) {
 		for begin := int64(-1); begin < NumTests+1; begin++ {
 			for end := begin - 1; end < NumTests+2; end++ {
 
-				hashes, err := mm.GetRange(mm.Key, begin, end)
+				hashes, err := mm.GetRange(begin, end)
 
 				if begin < 0 || begin > end || begin >= NumTests {
 					require.Errorf(t, err, "should not allow range [%d,%d]", begin, end)
