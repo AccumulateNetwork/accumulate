@@ -239,7 +239,7 @@ func initNode(cmd *cobra.Command, args []string) {
 	if flagInitNode.Follower {
 		nodeType = cfg.Follower
 	}
-	config := config.Default(description.Network.Name, description.NetworkType, nodeType, description.SubnetId)
+	config := config.Default(description.Network.Id, description.NetworkType, nodeType, description.SubnetId)
 	config.P2P.BootstrapPeers = fmt.Sprintf("%s@%s:%d", status.NodeInfo.NodeID, netAddr, netPort+int(cfg.PortOffsetTendermintP2P))
 
 	if flagInitNode.SeedProxy != "" {
@@ -247,7 +247,7 @@ func initNode(cmd *cobra.Command, args []string) {
 		seedProxy, err := proxy.New(flagInitNode.SeedProxy)
 		check(err)
 		slr := proxy.SeedListRequest{}
-		slr.Network = description.Network.Name
+		slr.Network = description.Network.Id
 		slr.Subnet = description.SubnetId
 		resp, err := seedProxy.GetSeedList(context.Background(), &slr)
 		if err != nil {
@@ -447,7 +447,7 @@ func initDNs(count int, dnConfig []*cfg.Config, dnRemote []string, dnListen []st
 	}
 
 	subnets[0] = config.Subnet{
-		Name:  protocol.Directory,
+		Id:    protocol.Directory,
 		Type:  config.Directory,
 		Nodes: dnNodes,
 	}
@@ -475,7 +475,7 @@ func initBVNs(bvnConfigs [][]*cfg.Config, count int, bvnRemotes [][]string, bvnL
 			bvnConfigs[bvn][i].Accumulate.LocalAddress = parseHost(bvnNodes[i].Address)
 		}
 		subnets[bvn+1] = config.Subnet{
-			Name:     subnetID,
+			Id:       subnetID,
 			Type:     config.BlockValidator,
 			BasePort: int64(flagInitDevnet.BasePort),
 			Nodes:    bvnNodes,

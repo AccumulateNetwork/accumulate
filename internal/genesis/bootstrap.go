@@ -62,8 +62,8 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) (Bootstrap, error) {
 	b.routingTable.Overrides = make([]protocol.RouteOverride, 1, len(opts.Describe.Network.Subnets)+1)
 	b.routingTable.Overrides[0] = protocol.RouteOverride{Account: protocol.AcmeUrl(), Subnet: protocol.Directory}
 	for _, subnet := range opts.Describe.Network.Subnets {
-		u := protocol.SubnetUrl(subnet.Name)
-		b.routingTable.Overrides = append(b.routingTable.Overrides, protocol.RouteOverride{Account: u, Subnet: subnet.Name})
+		u := protocol.SubnetUrl(subnet.Id)
+		b.routingTable.Overrides = append(b.routingTable.Overrides, protocol.RouteOverride{Account: u, Subnet: subnet.Id})
 	}
 
 	// Create the router
@@ -514,13 +514,13 @@ func (b *bootstrap) buildNetworkDefinition() *protocol.NetworkDefinition {
 
 		// Add the validator hashes from the subnet's genesis doc
 		var vkHashes [][32]byte
-		for _, validator := range b.NetworkValidatorMap[subnet.Name] {
+		for _, validator := range b.NetworkValidatorMap[subnet.Id] {
 			pkh := sha256.Sum256(validator.PubKey.Bytes())
 			vkHashes = append(vkHashes, pkh)
 		}
 
 		subnetDef := protocol.SubnetDefinition{
-			SubnetID:           subnet.Name,
+			SubnetID:           subnet.Id,
 			ValidatorKeyHashes: vkHashes,
 		}
 		netDef.Subnets = append(netDef.Subnets, subnetDef)

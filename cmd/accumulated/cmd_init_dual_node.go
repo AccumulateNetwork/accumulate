@@ -71,7 +71,7 @@ func initDualNode(cmd *cobra.Command, args []string) {
 	var bvn *cfg.Subnet
 	for i, v := range c.Accumulate.Network.Subnets {
 		//search for the directory.
-		if v.Name == subnetName {
+		if v.Id == subnetName {
 			bvn = &c.Accumulate.Network.Subnets[i]
 			break
 		}

@@ -17,7 +17,7 @@ type Describe struct {
 }
 
 type Network struct {
-	Name      string   `json:"name,omitempty" form:"name" query:"name" validate:"required" toml:"name" mapstructure:"name"`
+	Id        string   `json:"id,omitempty" form:"id" query:"id" validate:"required" toml:"id" mapstructure:"id"`
 	Subnets   []Subnet `json:"subnets,omitempty" form:"subnets" query:"subnets" validate:"required" toml:"subnets" mapstructure:"subnets"`
 	extraData []byte
 }
@@ -29,7 +29,7 @@ type Node struct {
 }
 
 type Subnet struct {
-	Name      string      `json:"name,omitempty" form:"name" query:"name" validate:"required" toml:"name" mapstructure:"name"`
+	Id        string      `json:"id,omitempty" form:"id" query:"id" validate:"required" toml:"id" mapstructure:"id"`
 	Type      NetworkType `json:"type,omitempty" form:"type" query:"type" validate:"required" toml:"type" mapstructure:"type"`
 	BasePort  int64       `json:"basePort,omitempty" form:"basePort" query:"basePort" validate:"required" toml:"port" mapstructure:"port"`
 	Nodes     []Node      `json:"nodes,omitempty" form:"nodes" query:"nodes" validate:"required" toml:"nodes" mapstructure:"nodes"`
@@ -52,7 +52,7 @@ func (v *Describe) CopyAsInterface() interface{} { return v.Copy() }
 func (v *Network) Copy() *Network {
 	u := new(Network)
 
-	u.Name = v.Name
+	u.Id = v.Id
 	u.Subnets = make([]Subnet, len(v.Subnets))
 	for i, v := range v.Subnets {
 		u.Subnets[i] = *(&v).Copy()
@@ -77,7 +77,7 @@ func (v *Node) CopyAsInterface() interface{} { return v.Copy() }
 func (v *Subnet) Copy() *Subnet {
 	u := new(Subnet)
 
-	u.Name = v.Name
+	u.Id = v.Id
 	u.Type = v.Type
 	u.BasePort = v.BasePort
 	u.Nodes = make([]Node, len(v.Nodes))
@@ -108,7 +108,7 @@ func (v *Describe) Equal(u *Describe) bool {
 }
 
 func (v *Network) Equal(u *Network) bool {
-	if !(v.Name == u.Name) {
+	if !(v.Id == u.Id) {
 		return false
 	}
 	if len(v.Subnets) != len(u.Subnets) {
@@ -135,7 +135,7 @@ func (v *Node) Equal(u *Node) bool {
 }
 
 func (v *Subnet) Equal(u *Subnet) bool {
-	if !(v.Name == u.Name) {
+	if !(v.Id == u.Id) {
 		return false
 	}
 	if !(v.Type == u.Type) {
@@ -158,22 +158,22 @@ func (v *Subnet) Equal(u *Subnet) bool {
 
 func (v *Network) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Name    string                    `json:"name,omitempty"`
+		Id      string                    `json:"id,omitempty"`
 		Subnets encoding.JsonList[Subnet] `json:"subnets,omitempty"`
 	}{}
-	u.Name = v.Name
+	u.Id = v.Id
 	u.Subnets = v.Subnets
 	return json.Marshal(&u)
 }
 
 func (v *Subnet) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Name     string                  `json:"name,omitempty"`
+		Id       string                  `json:"id,omitempty"`
 		Type     NetworkType             `json:"type,omitempty"`
 		BasePort int64                   `json:"basePort,omitempty"`
 		Nodes    encoding.JsonList[Node] `json:"nodes,omitempty"`
 	}{}
-	u.Name = v.Name
+	u.Id = v.Id
 	u.Type = v.Type
 	u.BasePort = v.BasePort
 	u.Nodes = v.Nodes
@@ -182,34 +182,34 @@ func (v *Subnet) MarshalJSON() ([]byte, error) {
 
 func (v *Network) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Name    string                    `json:"name,omitempty"`
+		Id      string                    `json:"id,omitempty"`
 		Subnets encoding.JsonList[Subnet] `json:"subnets,omitempty"`
 	}{}
-	u.Name = v.Name
+	u.Id = v.Id
 	u.Subnets = v.Subnets
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	v.Name = u.Name
+	v.Id = u.Id
 	v.Subnets = u.Subnets
 	return nil
 }
 
 func (v *Subnet) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Name     string                  `json:"name,omitempty"`
+		Id       string                  `json:"id,omitempty"`
 		Type     NetworkType             `json:"type,omitempty"`
 		BasePort int64                   `json:"basePort,omitempty"`
 		Nodes    encoding.JsonList[Node] `json:"nodes,omitempty"`
 	}{}
-	u.Name = v.Name
+	u.Id = v.Id
 	u.Type = v.Type
 	u.BasePort = v.BasePort
 	u.Nodes = v.Nodes
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	v.Name = u.Name
+	v.Id = u.Id
 	v.Type = u.Type
 	v.BasePort = u.BasePort
 	v.Nodes = u.Nodes

@@ -179,8 +179,8 @@ func TestUpdateOperators(t *testing.T) {
 	sim := simulator.New(t, 3)
 	sim.InitFromGenesisWith(g)
 	dn := sim.Subnet(Directory)
-	bvn0 := sim.Subnet(sim.Subnets[1].Name)
-	bvn1 := sim.Subnet(sim.Subnets[2].Name)
+	bvn0 := sim.Subnet(sim.Subnets[1].Id)
+	bvn1 := sim.Subnet(sim.Subnets[2].Id)
 
 	// Sanity check
 	page := simulator.GetAccount[*KeyPage](sim, bvn0.Executor.Describe.DefaultOperatorPage())

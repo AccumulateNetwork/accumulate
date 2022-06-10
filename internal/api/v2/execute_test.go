@@ -46,7 +46,7 @@ func TestExecuteCheckOnly(t *testing.T) {
 		table.Routes = routing.BuildSimpleTable(&config.Network{
 			Subnets: []config.Subnet{
 				{
-					Name: "",
+					Id:   "",
 					Type: config.BlockValidator,
 				},
 			},
@@ -79,7 +79,7 @@ func TestExecuteCheckOnly(t *testing.T) {
 		table.Routes = routing.BuildSimpleTable(&config.Network{
 			Subnets: []config.Subnet{
 				{
-					Name: "",
+					Id:   "",
 					Type: config.BlockValidator,
 				},
 			},

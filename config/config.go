@@ -114,7 +114,7 @@ var DefaultLogLevels = LogLevel{}.
 
 func Default(netName string, net NetworkType, node NodeType, subnetId string) *Config {
 	c := new(Config)
-	c.Accumulate.Network.Name = netName
+	c.Accumulate.Network.Id = netName
 	c.Accumulate.NetworkType = net
 	c.Accumulate.SubnetId = subnetId
 	c.Accumulate.API.PrometheusServer = "http://18.119.26.7:9090"
@@ -221,7 +221,7 @@ func (n *Network) GetBvnNames() []string {
 	var names []string
 	for _, subnet := range n.Subnets {
 		if subnet.Type == BlockValidator {
-			names = append(names, subnet.Name)
+			names = append(names, subnet.Id)
 		}
 	}
 	return names
@@ -229,7 +229,7 @@ func (n *Network) GetBvnNames() []string {
 
 func (n *Network) GetSubnetByID(subnetID string) Subnet {
 	for _, subnet := range n.Subnets {
-		if subnet.Name == subnetID {
+		if subnet.Id == subnetID {
 			return subnet
 		}
 	}

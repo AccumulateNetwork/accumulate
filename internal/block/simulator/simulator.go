@@ -80,9 +80,9 @@ func (sim *Simulator) Setup(bvnCount int) {
 	sim.Logger = sim.newLogger().With("module", "simulator")
 	sim.Executors = map[string]*ExecEntry{}
 	sim.Subnets = make([]config.Subnet, bvnCount+1)
-	sim.Subnets[0] = config.Subnet{Type: config.Directory, Name: protocol.Directory}
+	sim.Subnets[0] = config.Subnet{Type: config.Directory, Id: protocol.Directory, BasePort: 30000}
 	for i := 0; i < bvnCount; i++ {
-		sim.Subnets[i+1] = config.Subnet{Type: config.BlockValidator, Name: fmt.Sprintf("BVN%d", i)}
+		sim.Subnets[i+1] = config.Subnet{Type: config.BlockValidator, Id: fmt.Sprintf("BVN%d", i)}
 	}
 
 	mainEventBus := events.NewBus(sim.Logger.With("subnet", protocol.Directory))
@@ -91,17 +91,17 @@ func (sim *Simulator) Setup(bvnCount int) {
 	// Initialize each executor
 	for i := range sim.Subnets {
 		subnet := &sim.Subnets[i]
-		subnet.Nodes = []config.Node{{Type: config.Validator, Address: subnet.Name}}
+		subnet.Nodes = []config.Node{{Type: config.Validator, Address: subnet.Id}}
 
-		logger := sim.newLogger().With("subnet", subnet.Name)
-		key := acctesting.GenerateKey(sim.Name(), subnet.Name)
+		logger := sim.newLogger().With("subnet", subnet.Id)
+		key := acctesting.GenerateKey(sim.Name(), subnet.Id)
 		db := database.OpenInMemory(logger)
 
 		network := config.Describe{
 			NetworkType:  subnet.Type,
-			SubnetId:     subnet.Name,
-			LocalAddress: subnet.Name,
-			Network:      config.Network{Name: "simulator", Subnets: sim.Subnets},
+			SubnetId:     subnet.Id,
+			LocalAddress: subnet.Id,
+			Network:      config.Network{Id: "simulator", Subnets: sim.Subnets},
 		}
 
 		eventBus := mainEventBus
@@ -126,7 +126,7 @@ func (sim *Simulator) Setup(bvnCount int) {
 		})
 		require.NoError(sim, err)
 
-		sim.Executors[subnet.Name] = &ExecEntry{
+		sim.Executors[subnet.Id] = &ExecEntry{
 			Database:   db,
 			Executor:   exec,
 			Subnet:     subnet,
@@ -214,8 +214,8 @@ func (s *Simulator) InitFromSnapshot(filename func(string) string) {
 	s.Helper()
 
 	for _, subnet := range s.Subnets {
-		x := s.Subnet(subnet.Name)
-		InitFromSnapshot(s, x.Database, x.Executor, filename(subnet.Name))
+		x := s.Subnet(subnet.Id)
+		InitFromSnapshot(s, x.Database, x.Executor, filename(subnet.Id))
 	}
 }
 
@@ -232,7 +232,7 @@ func (s *Simulator) ExecuteBlock(statusChan chan<- *protocol.TransactionStatus) 
 
 	errg := new(errgroup.Group)
 	for _, subnet := range s.Subnets {
-		s.Subnet(subnet.Name).executeBlock(errg, statusChan)
+		s.Subnet(subnet.Id).executeBlock(errg, statusChan)
 	}
 
 	// Wait for all subnets to complete
@@ -343,7 +343,7 @@ func (s *Simulator) findTxn(status func(*protocol.TransactionStatus) bool, hash 
 	s.Helper()
 
 	for _, subnet := range s.Subnets {
-		x := s.Subnet(subnet.Name)
+		x := s.Subnet(subnet.Id)
 
 		batch := x.Database.Begin(false)
 		defer batch.Discard()

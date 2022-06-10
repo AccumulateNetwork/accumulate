@@ -16,10 +16,10 @@ import (
 //make up a fake network configuration list
 var nodes = []config.Node{{Address: "127.0.0.1", Type: config.NodeTypeValidator}}
 var subnets = []config.Subnet{
-	{Name: "Directory", Type: config.NetworkTypeDirectory, BasePort: 30000, Nodes: nodes},
-	{Name: "Directory", Type: config.NetworkTypeBlockValidator, BasePort: 40000, Nodes: nodes},
+	{Id: "Directory", Type: config.NetworkTypeDirectory, BasePort: 30000, Nodes: nodes},
+	{Id: "BVN0", Type: config.NetworkTypeBlockValidator, BasePort: 40000, Nodes: nodes},
 }
-var network = config.Network{Name: "AccuProxyTest", Subnets: subnets}
+var network = config.Network{Id: "AccuProxyTest", Subnets: subnets}
 
 // The RPC methods called in the JSON-RPC 2.0 specification examples.
 func seedList(_ context.Context, params json.RawMessage) interface{} {

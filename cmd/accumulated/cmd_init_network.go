@@ -80,8 +80,8 @@ func initNetwork(cmd *cobra.Command, args []string) {
 		panic("not reached") // For static analysis
 	}
 
-	if directory.Name != "Directory" {
-		fatalf("directory name specified in file was %s, but accumulated requires it to be \"Directory\"", directory.Name)
+	if directory.Id != "Directory" {
+		fatalf("directory name specified in file was %s, but accumulated requires it to be \"Directory\"", directory.Id)
 	}
 	//quick validation to make sure the directory node maps to each of the BVN's defined
 	for _, dnn := range directory.Nodes {
@@ -153,7 +153,7 @@ func initNetwork(cmd *cobra.Command, args []string) {
 	//need to configure the dn for each BVN assuming 1 bvn
 	for i := range directory.Nodes {
 		var remotes []string
-		dnConfig[i], remotes, dnListen[i] = initNetworkNode(network.Name, directory.Name, directory.Nodes, cfg.Directory,
+		dnConfig[i], remotes, dnListen[i] = initNetworkNode(network.Id, directory.Id, directory.Nodes, cfg.Directory,
 			cfg.Validator, i, i, compose)
 
 		dnRemote = append(dnRemote, remotes...)
@@ -171,7 +171,7 @@ func initNetwork(cmd *cobra.Command, args []string) {
 			c.Accumulate.Website.Enabled = false
 		}
 		dnListen[i] = "0.0.0.0"
-		c.Accumulate.SubnetId = directory.Name
+		c.Accumulate.SubnetId = directory.Id
 		c.Accumulate.NetworkType = directory.Type
 		c.Accumulate.Network = network
 		c.Accumulate.LocalAddress = fmt.Sprintf("%s:%d", bvns[i].Nodes[0].Address, directory.BasePort)
@@ -188,7 +188,7 @@ func initNetwork(cmd *cobra.Command, args []string) {
 
 	for i, v := range bvnSubnet {
 		for j := range v.Nodes {
-			bvnConfig[i][j], bvnRemote[i], bvnListen[i][j] = initNetworkNode(network.Name, v.Name, v.Nodes, cfg.BlockValidator,
+			bvnConfig[i][j], bvnRemote[i], bvnListen[i][j] = initNetworkNode(network.Id, v.Id, v.Nodes, cfg.BlockValidator,
 				cfg.Validator, i, j, compose)
 			if flagInitNetwork.Docker && flagInitNetwork.DnsSuffix != "" {
 				for j := range bvnRemote[i] {
@@ -204,7 +204,7 @@ func initNetwork(cmd *cobra.Command, args []string) {
 				c.Accumulate.Website.Enabled = false
 			}
 			c.Accumulate.NetworkType = config.BlockValidator
-			c.Accumulate.SubnetId = v.Name
+			c.Accumulate.SubnetId = v.Id
 			c.Accumulate.LocalAddress = fmt.Sprintf("%s:%d", v.Nodes[j].Address, v.BasePort)
 			c.Accumulate.Network = network // Subnets = accSub
 		}
@@ -227,7 +227,7 @@ func initNetwork(cmd *cobra.Command, args []string) {
 				c.Accumulate.Website.Enabled = false
 			}
 			c.Accumulate.NetworkType = config.BlockValidator
-			c.Accumulate.SubnetId = v.Name
+			c.Accumulate.SubnetId = v.Id
 			c.Accumulate.LocalAddress = fmt.Sprintf("%s:%d", v.Nodes[j].Address, v.BasePort)
 			c.Accumulate.Network = network
 		}
@@ -265,7 +265,7 @@ func initNetwork(cmd *cobra.Command, args []string) {
 				RemoteIP:            bvnRemote[i],
 				ListenIP:            bvnListen[i],
 				NetworkValidatorMap: netValMap,
-				Logger:              logger.With("subnet", bvns[i].Name),
+				Logger:              logger.With("subnet", bvns[i].Id),
 				FactomAddressesFile: factomAddressesFile,
 			})
 			check(err)

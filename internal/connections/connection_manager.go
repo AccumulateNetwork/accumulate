@@ -197,8 +197,8 @@ func (cm *connectionManager) buildNodeInventory() {
 			case config.Validator:
 				switch connCtx.subnet.Type {
 				case config.BlockValidator:
-					bvnName := protocol.BvnNameFromSubnetId(subnet.Name)
-					if subnet.Name == protocol.Directory {
+					bvnName := protocol.BvnNameFromSubnetId(subnet.Id)
+					if subnet.Id == protocol.Directory {
 						panic("Directory subnet node is misconfigured as blockvalidator")
 					}
 					nodeList, ok := cm.bvnCtxMap[bvnName]
@@ -226,14 +226,14 @@ func (cm *connectionManager) buildNodeInventory() {
 }
 
 func (cm *connectionManager) buildNodeContext(node config.Node, subnet config.Subnet) (*connectionContext, error) {
-	connCtx := &connectionContext{subnetId: subnet.Name,
+	connCtx := &connectionContext{subnetId: subnet.Id,
 		subnet:     subnet,
 		nodeConfig: node,
 		connMgr:    cm,
 		metrics:    NodeMetrics{status: Unknown},
 		hasClient:  make(chan struct{}),
 	}
-	connCtx.networkGroup = cm.determineNetworkGroup(subnet.Name, node.Address)
+	connCtx.networkGroup = cm.determineNetworkGroup(subnet.Id, node.Address)
 
 	if node.Address != "local" && node.Address != "self" {
 		var err error

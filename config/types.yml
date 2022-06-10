@@ -19,8 +19,8 @@ Describe:
 Network:
   non-binary: true
   fields:
-    - name: Name
-      toml: name
+    - name: Id
+      toml: id
       type: string
     - name: Subnets
       toml: subnets
@@ -31,8 +31,8 @@ Network:
 Subnet:
   non-binary: true
   fields:
-    - name: Name
-      toml: name
+    - name: Id
+      toml: id 
       type: string
     - name: Type
       toml: type

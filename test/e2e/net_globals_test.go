@@ -51,7 +51,7 @@ func TestOracleDistribution(t *testing.T) {
 	sim.ExecuteBlocks(10)
 
 	// Verify account
-	bvn := sim.Subnet(sim.Subnets[1].Name)
+	bvn := sim.Subnet(sim.Subnets[1].Id)
 	account := simulator.GetAccount[*DataAccount](sim, bvn.Executor.Describe.NodeUrl(Oracle))
 	require.NotNil(t, account.Entry)
 	require.Equal(t, oracleEntry.GetData(), account.Entry.GetData())
@@ -105,7 +105,7 @@ func TestRoutingDistribution(t *testing.T) {
 	sim.ExecuteBlocks(10)
 
 	// Verify account
-	bvn := sim.Subnet(sim.Subnets[1].Name)
+	bvn := sim.Subnet(sim.Subnets[1].Id)
 	account := simulator.GetAccount[*DataAccount](sim, bvn.Executor.Describe.NodeUrl(Routing))
 	require.NotNil(t, account.Entry)
 	require.Equal(t, entry.GetData(), account.Entry.GetData())
