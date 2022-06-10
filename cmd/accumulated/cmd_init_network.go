@@ -20,23 +20,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-//
-//type Node struct {
-//	IP   string          `json:"ip"`
-//	Type config.NodeType `json:"type"`
-//}
-//
-//type Subnet struct {
-//	Name  string             `json:"name"`
-//	Type  config.NetworkType `json:"type"`
-//	Port  int                `json:"port"`
-//	Nodes []Node             `json:"nodes"`
-//}
-//
-//type Network struct {
-//	Network string   `json:"network"`
-//	Subnet  []Subnet `json:"subnet"`
-//}
 
 func loadNetworkConfiguration(file string) (ret config.Network, err error) {
 	jsonFile, err := os.Open(file)
@@ -133,22 +116,6 @@ func initNetwork(cmd *cobra.Command, args []string) {
 	dnConfig := make([]*cfg.Config, len(directory.Nodes))
 	var dnRemote []string
 	dnListen := make([]string, len(directory.Nodes))
-	//
-	//var accSub []config.Subnet
-	//for _, sub := range network.Subnets {
-	//	s := config.Subnet{}
-	//	s.Name = sub.Name
-	//	s.Type = sub.Type
-	//	for _, a := range sub.Nodes {
-	//		//address := fmt.Sprintf("http://%s:%d", a.Address, sub)
-	//		n := config.Node{}
-	//
-	//		n.Address = a.Address
-	//		n.Type = a.Type
-	//		s.Nodes = append(s.Nodes, n)
-	//	}
-	//	accSub = append(accSub, s)
-	//}
 
 	//need to configure the dn for each BVN assuming 1 bvn
 	for i := range directory.Nodes {
