@@ -23,7 +23,7 @@ func main() {
 	flag.Parse()
 
 	// Initiate clients and wait for them to finish
-	parallelization := 2
+	parallelization := 5
 	c := make(chan int)
 
 	var wg sync.WaitGroup
@@ -63,7 +63,7 @@ func initClient(server string) error {
 	maxGoroutines := 25
 	guard := make(chan struct{}, maxGoroutines)
 
-	file, err := os.OpenFile("logs.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+	file, err := os.OpenFile("load_logs.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
 	if err != nil {
 		log.Fatal(err)
 	}
