@@ -344,7 +344,25 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 		}
 	}
 
-	envelopes, results, respData, err := executeTransactions(app.logger.With("operation", "CheckTx"), checkTx(app.Executor, app.DB), req.Tx)
+	// Only use the shared batch when the check type is CheckTxType_New,
+	//   we want to avoid changes to variables version increments to and stick and therefore be done multiple times
+	var batch *database.Batch
+	switch req.Type {
+	case abci.CheckTxType_New:
+		app.Executor.CheckTxMutex.Lock()
+		defer app.Executor.CheckTxMutex.Unlock()
+		if app.Executor.CheckTxBatch == nil { // For cases where we haven't started/ended a block yet
+			app.Executor.CheckTxBatch = app.DB.Begin(false)
+		}
+		batch = app.Executor.CheckTxBatch
+	case abci.CheckTxType_Recheck:
+		batch = app.DB.Begin(false)
+		defer func() {
+			batch.Discard()
+		}()
+	}
+
+	envelopes, results, respData, err := executeTransactions(app.logger.With("operation", "CheckTx"), checkTx(app.Executor, batch), req.Tx)
 	if err != nil {
 		return abci.ResponseCheckTx{
 			Code: uint32(err.Code),

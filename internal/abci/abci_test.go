@@ -83,7 +83,7 @@ func TestTransactionPriority(t *testing.T) {
 			// Submit the envelope
 			b, err := c.Envelope.MarshalBinary()
 			require.NoError(t, err)
-			resp := bvn.app.CheckTx(abci.RequestCheckTx{Tx: b})
+			resp := bvn.app.CheckTx(abci.RequestCheckTx{Tx: b, Type: abci.CheckTxType_Recheck})
 			assert.Zero(t, resp.Code, resp.Log)
 
 			// Check the results

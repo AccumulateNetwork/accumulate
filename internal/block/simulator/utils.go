@@ -57,7 +57,7 @@ func CheckTx(t TB, db *database.Database, exec *Executor, delivery *chain.Delive
 	batch := db.Begin(false)
 	defer batch.Discard()
 
-	result, err := exec.ValidateEnvelope(delivery)
+	result, err := exec.ValidateEnvelope(batch, delivery)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknown, err)
 	}

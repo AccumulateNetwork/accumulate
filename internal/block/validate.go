@@ -18,7 +18,7 @@ import (
 //
 // ValidateEnvelope should not modify anything. Right now it updates signer
 // timestamps and credits, but that will be moved to ProcessSignature.
-func (x *Executor) ValidateEnvelope(delivery *chain.Delivery) (protocol.TransactionResult, error) {
+func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Delivery) (protocol.TransactionResult, error) {
 	// If the transaction is borked, the transaction type is probably invalid,
 	// so check that first. "Invalid transaction type" is a more useful error
 	// than "invalid signature" if the real error is the transaction got borked.
@@ -35,7 +35,7 @@ func (x *Executor) ValidateEnvelope(delivery *chain.Delivery) (protocol.Transact
 	}
 
 	// Load the transaction
-	_, err := delivery.LoadTransaction(x.CheckTxBatch)
+	_, err := delivery.LoadTransaction(batch)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknown, err)
 	}
@@ -47,7 +47,7 @@ func (x *Executor) ValidateEnvelope(delivery *chain.Delivery) (protocol.Transact
 		if !signature.Type().IsSystem() {
 			md.Location = signature.RoutingLocation()
 		}
-		_, err := x.validateSignature(x.CheckTxBatch, delivery, signature, md)
+		_, err := x.validateSignature(batch, delivery, signature, md)
 		if err != nil {
 			return nil, errors.Format(errors.StatusUnknown, "signature %d: %w", i, err)
 		}
@@ -103,7 +103,7 @@ func (x *Executor) ValidateEnvelope(delivery *chain.Delivery) (protocol.Transact
 	}
 
 	var signer protocol.Signer
-	err = x.CheckTxBatch.Account(signerUrl).GetStateAs(&signer)
+	err = batch.Account(signerUrl).GetStateAs(&signer)
 	if err != nil {
 		return nil, errors.Format(errors.StatusUnknown, "load signer: %w", err)
 	}
@@ -114,7 +114,7 @@ func (x *Executor) ValidateEnvelope(delivery *chain.Delivery) (protocol.Transact
 	}
 
 	// Load the principal
-	principal, err := x.CheckTxBatch.Account(delivery.Transaction.Header.Principal).GetState()
+	principal, err := batch.Account(delivery.Transaction.Header.Principal).GetState()
 	switch {
 	case err == nil:
 		// Ok
@@ -125,7 +125,7 @@ func (x *Executor) ValidateEnvelope(delivery *chain.Delivery) (protocol.Transact
 	}
 
 	// Set up the state manager
-	st := chain.NewStateManager(&x.Network, &x.globals.Active, x.CheckTxBatch.Begin(false), principal, delivery.Transaction, x.logger.With("operation", "ValidateEnvelope"))
+	st := chain.NewStateManager(&x.Network, &x.globals.Active, batch.Begin(false), principal, delivery.Transaction, x.logger.With("operation", "ValidateEnvelope"))
 	defer st.Discard()
 	st.Pretend = true
 

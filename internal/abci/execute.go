@@ -76,16 +76,9 @@ func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]
 	return deliveries, results, rset, nil
 }
 
-func checkTx(exec *Executor, db *database.Database) executeFunc {
+func checkTx(exec *Executor, batch *database.Batch) executeFunc {
 	return func(envelope *chain.Delivery) (*protocol.TransactionStatus, error) {
-		exec.CheckTxMutex.Lock()
-		defer exec.CheckTxMutex.Unlock()
-
-		if exec.CheckTxBatch == nil { // For cases where we haven't started/ended a block yet
-			exec.CheckTxBatch = db.Begin(false)
-		}
-
-		result, err := exec.ValidateEnvelope(envelope)
+		result, err := exec.ValidateEnvelope(batch, envelope)
 		if err != nil {
 			return nil, protocol.NewError(protocol.ErrorCodeUnknownError, err)
 		}
