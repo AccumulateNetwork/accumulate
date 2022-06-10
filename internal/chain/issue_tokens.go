@@ -47,6 +47,8 @@ func (IssueTokens) Validate(st *StateManager, tx *Delivery) (protocol.Transactio
 	deposit := new(protocol.SyntheticDepositTokens)
 	deposit.Token = issuer.GetUrl()
 	deposit.Amount = body.Amount
+	deposit.IsIssuer = true
+	st.Submit(body.Recipient, deposit)
 
 	st.Submit(body.Recipient, deposit)
 	err = st.Update(issuer)

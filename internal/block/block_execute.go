@@ -15,6 +15,14 @@ type Block struct {
 }
 
 func (x *Executor) ExecuteEnvelope(block *Block, delivery *chain.Delivery) (*protocol.TransactionStatus, error) {
+	if !delivery.Transaction.Body.Type().IsSystem() {
+		x.logger.Debug("Executing transaction",
+			"block", block.Index,
+			"type", delivery.Transaction.Body.Type(),
+			"txn-hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4),
+			"principal", delivery.Transaction.Header.Principal)
+	}
+
 	if delivery.Transaction.Body.Type() == protocol.TransactionTypeSystemWriteData {
 		return nil, errors.Format(errors.StatusBadRequest, "a %v transaction cannot be submitted directly", protocol.TransactionTypeSystemWriteData)
 	}
@@ -28,6 +36,13 @@ func (x *Executor) ExecuteEnvelope(block *Block, delivery *chain.Delivery) (*pro
 	for len(additional) > 0 {
 		var next []*chain.Delivery
 		for _, delivery := range additional {
+			if !delivery.Transaction.Body.Type().IsSystem() {
+				x.logger.Debug("Executing additional",
+					"block", block.Index,
+					"type", delivery.Transaction.Body.Type(),
+					"txn-hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4),
+					"principal", delivery.Transaction.Header.Principal)
+			}
 			status, additional, err := x.executeEnvelope(block, delivery)
 			if err != nil {
 				return nil, errors.Wrap(errors.StatusUnknown, err)
@@ -138,7 +153,7 @@ func (x *Executor) executeEnvelope(block *Block, delivery *chain.Delivery) (*pro
 
 		delivery.State.Merge(state)
 
-		if !delivery.Transaction.Body.Type().IsSystem() {
+		if typ := delivery.Transaction.Body.Type(); typ == protocol.TransactionTypeSystemGenesis || !typ.IsSystem() {
 			kv := []interface{}{
 				"block", block.Index,
 				"type", delivery.Transaction.Body.Type(),
@@ -153,9 +168,9 @@ func (x *Executor) executeEnvelope(block *Block, delivery *chain.Delivery) (*pro
 					"code", status.Code,
 					"error", status.Message,
 				)
-				x.Logger.Info("Transaction failed", kv...)
-			} else {
-				x.Logger.Debug("Transaction succeeded", kv...)
+				x.logger.Info("Transaction failed", kv...)
+			} else if !delivery.Transaction.Body.Type().IsSystem() {
+				x.logger.Debug("Transaction succeeded", kv...)
 			}
 		}
 

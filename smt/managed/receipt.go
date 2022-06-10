@@ -6,45 +6,17 @@ import (
 	"math"
 )
 
-// ReceiptNode
-// Holds the Left/Right hash combinations for Receipts
-type ReceiptNode struct {
-	Right bool
-	Hash  Hash
-}
-
-func (n *ReceiptNode) Copy() *ReceiptNode {
-	node := new(ReceiptNode)
-	node.Right = n.Right
-	node.Hash = n.Hash.Copy()
-	return n
-}
-
-// Receipt
-// Struct builds the Merkle Tree path component of a Merkle Tree Proof.
-type Receipt struct {
-	Element      Hash           // Hash for which we want a proof.
-	ElementIndex int64          //
-	Anchor       Hash           // Hash at the point where the Anchor was created.
-	AnchorIndex  int64          //
-	MDRoot       Hash           // Root expected once all nodes are applied
-	Nodes        []*ReceiptNode // Apply these hashes to create an anchor
-
-	// None of the following is persisted.
-	manager *MerkleManager // The Merkle Tree Manager from which we are building a receipt
-}
-
 // String
 // Convert the receipt to a string
 func (r *Receipt) String() string {
 	var b bytes.Buffer
-	b.WriteString(fmt.Sprintf("\nElement      %x\n", r.Element))    // Element of proof
-	b.WriteString(fmt.Sprintf("ElementIndex %d\n", r.ElementIndex)) // Element of proof
-	b.WriteString(fmt.Sprintf("Anchor       %x\n", r.Anchor))       // Anchor point in the Merkle Tree
-	b.WriteString(fmt.Sprintf("AnchorIndex  %d\n", r.AnchorIndex))  // Anchor point in the Merkle Tree
-	b.WriteString(fmt.Sprintf("MDRoot       %x\n", r.MDRoot))       // MDRoot result of evaluating the receipt path
-	working := r.Element                                            // Calculate the receipt path; for debugging print the
-	for i, v := range r.Nodes {                                     // intermediate hashes
+	b.WriteString(fmt.Sprintf("\nElement      %x\n", r.Start))    // Element of proof
+	b.WriteString(fmt.Sprintf("ElementIndex %d\n", r.StartIndex)) // Element of proof
+	b.WriteString(fmt.Sprintf("Anchor       %x\n", r.End))        // Anchor point in the Merkle Tree
+	b.WriteString(fmt.Sprintf("AnchorIndex  %d\n", r.EndIndex))   // Anchor point in the Merkle Tree
+	b.WriteString(fmt.Sprintf("MDRoot       %x\n", r.Anchor))     // MDRoot result of evaluating the receipt path
+	working := r.Start                                            // Calculate the receipt path; for debugging print the
+	for i, v := range r.Entries {                                 // intermediate hashes
 		r := "L"
 		if v.Right {
 			r = "R"
@@ -61,34 +33,21 @@ func (r *Receipt) String() string {
 // Take a receipt and validate that the element hash progresses to the
 // Merkle Dag Root hash (MDRoot) in the receipt
 func (r *Receipt) Validate() bool {
-	MDRoot := r.Element // To begin with, we start with the object as the MDRoot
+	MDRoot := r.Start // To begin with, we start with the object as the MDRoot
 	// Now apply all the path hashes to the MDRoot
-	for _, node := range r.Nodes {
+	for _, node := range r.Entries {
 		// Need a [32]byte to slice
 		hash := node.Hash
 		if node.Right {
 			// If this hash comes from the right, apply it that way
-			MDRoot = MDRoot.Combine(Sha256, hash)
+			MDRoot = Hash(MDRoot).Combine(Sha256, hash)
 			continue
 		}
 		// If this hash comes from the left, apply it that way
-		MDRoot = hash.Combine(Sha256, MDRoot)
+		MDRoot = Hash(hash).Combine(Sha256, MDRoot)
 	}
 	// In the end, MDRoot should be the same hash the receipt expects.
-	return MDRoot.Equal(r.MDRoot)
-}
-
-// Copy
-// Make a copy of this receipt
-func (r *Receipt) Copy() *Receipt {
-	nr := new(Receipt)
-	nr.Element = append([]byte{}, r.Element...)
-	nr.Anchor = append([]byte{}, r.Anchor...)
-	nr.MDRoot = append([]byte{}, r.MDRoot...)
-	for _, n := range r.Nodes {
-		nr.Nodes = append(nr.Nodes, n.Copy())
-	}
-	return nr
+	return Hash(MDRoot).Equal(r.Anchor)
 }
 
 // Combine
@@ -98,14 +57,14 @@ func (r *Receipt) Copy() *Receipt {
 // the way down to an anchor in the root receipt.
 // Note that both this receipt and the root receipt are expected to be good.
 func (r *Receipt) Combine(rm *Receipt) (*Receipt, error) {
-	if !bytes.Equal(r.MDRoot, rm.Element) {
+	if !bytes.Equal(r.Anchor, rm.Start) {
 		return nil, fmt.Errorf("receipts cannot be combined. "+
-			"anchor %x doesn't match root merkle tree %x", r.Anchor, rm.Element)
+			"anchor %x doesn't match root merkle tree %x", r.End, rm.Start)
 	}
-	nr := r.Copy()               // Make a copy of the first Receipt
-	nr.MDRoot = rm.MDRoot        // The MDRoot will be the one from the appended receipt
-	for _, n := range rm.Nodes { // Make a copy and append the Nodes of the appended receipt
-		nr.Nodes = append(nr.Nodes, n.Copy())
+	nr := r.Copy()                 // Make a copy of the first Receipt
+	nr.Anchor = rm.Anchor          // The MDRoot will be the one from the appended receipt
+	for _, n := range rm.Entries { // Make a copy and append the Nodes of the appended receipt
+		nr.Entries = append(nr.Entries, n.Copy())
 	}
 	return nr, nil
 }
@@ -136,25 +95,25 @@ func NewReceipt(manager *MerkleManager) *Receipt {
 // after the element, or even the element itself.
 func GetReceipt(manager *MerkleManager, element Hash, anchor Hash) (r *Receipt, err error) {
 	// Allocate r, the receipt we are building and record our element
-	r = new(Receipt)    // Allocate a r
-	r.Element = element // Add the element to the r
-	r.Anchor = anchor   // Add the anchor hash to the r
+	r = new(Receipt)  // Allocate a r
+	r.Start = element // Add the element to the r
+	r.End = anchor    // Add the anchor hash to the r
 	r.manager = manager
-	if r.ElementIndex, err = r.manager.GetElementIndex(element); err != nil {
+	if r.StartIndex, err = r.manager.GetElementIndex(element); err != nil {
 		return nil, err
 	}
-	if r.AnchorIndex, err = r.manager.GetElementIndex(anchor); err != nil {
+	if r.EndIndex, err = r.manager.GetElementIndex(anchor); err != nil {
 		return nil, err
 	}
 
-	if r.ElementIndex > r.AnchorIndex ||
-		r.ElementIndex < 0 ||
-		r.ElementIndex > r.manager.GetElementCount() { // The element must be at the anchorIndex or before
-		return nil, fmt.Errorf("invalid indexes for the element %d and anchor %d", r.ElementIndex, r.AnchorIndex)
+	if r.StartIndex > r.EndIndex ||
+		r.StartIndex < 0 ||
+		r.StartIndex > r.manager.GetElementCount() { // The element must be at the anchorIndex or before
+		return nil, fmt.Errorf("invalid indexes for the element %d and anchor %d", r.StartIndex, r.EndIndex)
 	}
 
-	if r.ElementIndex == 0 && r.AnchorIndex == 0 { // If this is the first element in the Merkle Tree, we are already done.
-		r.MDRoot = element // A Merkle Tree of one element has a root of the element itself.
+	if r.StartIndex == 0 && r.EndIndex == 0 { // If this is the first element in the Merkle Tree, we are already done.
+		r.Anchor = element // A Merkle Tree of one element has a root of the element itself.
 		return r, nil      // And we are done!
 	}
 
@@ -168,17 +127,17 @@ func GetReceipt(manager *MerkleManager, element Hash, anchor Hash) (r *Receipt, 
 // takes the values collected by GetReceipt and flushes out the data structures
 // in the Receipt to represent a fully populated version.
 func (r *Receipt) BuildReceipt() error {
-	state, _ := r.manager.GetAnyState(r.AnchorIndex) // Get the state at the Anchor Index
-	state.Trim()                                     // If Pending has any trailing nils, remove them.
-	return r.BuildReceiptWith(r.manager.GetIntermediate, r.manager.MS.HashFunction, state)
+	state, _ := r.manager.GetAnyState(r.EndIndex) // Get the state at the Anchor Index
+	state.Trim()                                  // If Pending has any trailing nils, remove them.
+	return r.BuildReceiptWith(r.manager.GetIntermediate, Sha256, state)
 }
 
 type GetIntermediateFunc func(element, height int64) (l, r Hash, err error)
 
 func (r *Receipt) BuildReceiptWith(getIntermediate GetIntermediateFunc, hashFunc HashFunc, anchorState *MerkleState) error {
-	height := int64(1)   // Start the height at 1, because the element isn't part
-	r.MDRoot = r.Element // of the nodes collected.  To begin with, the element is the Merkle Dag Root
-	stay := true         // stay represents the fact that the proof is already in this column
+	height := int64(1) // Start the height at 1, because the element isn't part
+	r.Anchor = r.Start // of the nodes collected.  To begin with, the element is the Merkle Dag Root
+	stay := true       // stay represents the fact that the proof is already in this column
 
 	// The path from a intermediateHash added to the merkle tree to the anchor
 	// starts at the element index and goes to the anchor index.
@@ -188,7 +147,7 @@ func (r *Receipt) BuildReceiptWith(getIntermediate GetIntermediateFunc, hashFunc
 	//
 	// This for loop adds the hashes leading up to the highest
 	// sub Merkle Tree between the element index and the anchor index
-	for idx := r.ElementIndex; idx <= r.AnchorIndex; { // Range over all the elements
+	for idx := r.StartIndex; idx <= r.EndIndex; { // Range over all the elements
 		if idx&1 == 0 { // Handle the even cases. Merkle Trees add elements at 0, and combine elements at odd numbers
 			idx++        // No point in handling the first intermediateHash, so move to the next column
 			stay = false // The proof is lagging in the previous column.
@@ -200,11 +159,11 @@ func (r *Receipt) BuildReceiptWith(getIntermediate GetIntermediateFunc, hashFunc
 				stay = false                                  //            Changing columns
 				continue
 			}
-			r.MDRoot = lHash.Combine(hashFunc, rHash) // We don't have to calculate the MDRoot, but it
+			r.Anchor = lHash.Combine(hashFunc, rHash) // We don't have to calculate the MDRoot, but it
 			if stay {                                 //   helps debugging.  Check if still in column
-				r.Nodes = append(r.Nodes, &ReceiptNode{Hash: lHash, Right: false}) // If so, combine from left
+				r.Entries = append(r.Entries, &ReceiptEntry{Hash: lHash, Right: false}) // If so, combine from left
 			} else { //                                                     Otherwise
-				r.Nodes = append(r.Nodes, &ReceiptNode{Hash: rHash, Right: true}) //  combine from right
+				r.Entries = append(r.Entries, &ReceiptEntry{Hash: rHash, Right: true}) //  combine from right
 			}
 			stay = true // By default assume a stay in the column
 			height++    // and increment the height.
@@ -216,9 +175,9 @@ func (r *Receipt) BuildReceiptWith(getIntermediate GetIntermediateFunc, hashFunc
 	// will be combined with the current state of the receipt to match
 	// the Merkle Dag Root at the Anchor Index
 
-	if r.AnchorIndex == 0 { // Special case the first entry in a Merkle Tree
-		r.MDRoot = r.Element // whose Merkle Dag Root is just the first element
-		return nil           // added to the merkle tree
+	if r.EndIndex == 0 { // Special case the first entry in a Merkle Tree
+		r.Anchor = r.Start // whose Merkle Dag Root is just the first element
+		return nil         // added to the merkle tree
 	}
 
 	stay = false // Indicate no elements for the first index have been added
@@ -243,15 +202,15 @@ func (r *Receipt) BuildReceiptWith(getIntermediate GetIntermediateFunc, hashFunc
 		}
 		if stay { //                                                     If in the same column
 			if int64(i) >= height { //                                    And the proof is at this hight or higher
-				r.Nodes = append(r.Nodes, &ReceiptNode{Hash: v, Right: false}) // Add to the receipt
+				r.Entries = append(r.Entries, &ReceiptEntry{Hash: v, Right: false}) // Add to the receipt
 			}
 			continue
 		}
-		r.Nodes = append(r.Nodes, &ReceiptNode{Hash: lastIH, Right: true}) // First time in this column, so add to receipt
-		stay = true                                                        // Indicate processing the same column now.
+		r.Entries = append(r.Entries, &ReceiptEntry{Hash: lastIH, Right: true}) // First time in this column, so add to receipt
+		stay = true                                                             // Indicate processing the same column now.
 
 	}
-	r.MDRoot = intermediateHash // The Merkle Dag Root is the last intermediate Hash produced.
+	r.Anchor = intermediateHash // The Merkle Dag Root is the last intermediate Hash produced.
 
 	return nil
 }

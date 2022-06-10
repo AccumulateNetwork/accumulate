@@ -1,30 +1,32 @@
-package managed
+package managed_test
 
 import (
 	"math/rand"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
+	. "gitlab.com/accumulatenetwork/accumulate/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 )
 
 func TestRestart(t *testing.T) {
-	store := memory.NewDB()
+	store := database.OpenInMemory(nil)
 	storeTx := store.Begin(true)
 
 	MarkPower := int64(2)
 
 	for i := 0; i < 20; i++ { //                                      Run 100 tests
-		MM1, err := NewMerkleManager(storeTx, MarkPower) //           Create a MerkleManager
-		if err != nil {                                  //           Of course, an error should be reported, but
+		MM1, err := NewMerkleManager(database.MerkleDbManager{Batch: storeTx}, MarkPower) //           Create a MerkleManager
+		if err != nil {                                                                   //           Of course, an error should be reported, but
 			t.Errorf("did not create a merkle manager: %v", err) //      won't get one unless something is really sick
 		}
 
 		for j := 0; j < 100; j++ { //                                   Add 100 hashes
 			if j == i {
-				MM2, _ := NewMerkleManager(storeTx, MarkPower) // Then get the highest state stored
-				if !MM1.Equal(MM2) {                           // MM2 should be the same as MM1
+				MM2, _ := NewMerkleManager(database.MerkleDbManager{Batch: storeTx}, MarkPower) // Then get the highest state stored
+				if !MM1.Equal(MM2) {                                                            // MM2 should be the same as MM1
 					t.Fatalf("could not restore MM1 in MM2.  index: %d", j) // are going to be messed up.
 				}
 			}
@@ -38,15 +40,16 @@ func TestRestart(t *testing.T) {
 func TestRestartCache(t *testing.T) {
 	rand.Seed(12344)
 	var rh common.RandHash
-	store := memory.NewDB()
-	storeTx := store.Begin(true)
+	store := memory.New(nil)
+	db := database.New(store, nil)
+	batch := db.Begin(true)
 
 	MarkPower := int64(2)
 
 	for i := uint(0); i < 50; i += uint(rand.Int()) % 10 { //
 
-		MM1, err := NewMerkleManager(storeTx, MarkPower) //       Create a MerkleManager
-		if err != nil {                                  //       Of course, an error should be reported, but
+		MM1, err := NewMerkleManager(database.MerkleDbManager{Batch: batch}, MarkPower) //       Create a MerkleManager
+		if err != nil {                                                                 //       Of course, an error should be reported, but
 			t.Errorf("did not create a merkle manager: %v", err) //  won't get one unless something is really sick
 		}
 
@@ -63,16 +66,17 @@ func TestRestartCache(t *testing.T) {
 
 			ended := rand.Int()%30 > 0 && len(cached) > 0 // Every so often we are going to write to disk
 			if ended {                                    //   so what is cached is going away too.
-				require.NoError(t, storeTx.Commit())
-				storeTx = store.Begin(true)
+				require.NoError(t, batch.Commit())
+				batch = db.Begin(true)
 				cached = cached[:0] //  Clear the cache
-				MM1, err = NewMerkleManager(storeTx, MarkPower)
+				MM1, err = NewMerkleManager(database.MerkleDbManager{Batch: batch}, MarkPower)
 				require.NoError(t, err)
 			}
 
 			if j == i {
-				ndb := store.Copy()                                      // This simulates opening a new database later (MM2)
-				MM2, err := NewMerkleManager(ndb.Begin(true), MarkPower) // Then get the highest state stored
+				ndb := database.New(store.Copy(), nil) // This simulates opening a new database later (MM2)
+				nbatch := ndb.Begin(true)
+				MM2, err := NewMerkleManager(database.MerkleDbManager{Batch: nbatch}, MarkPower) // Then get the highest state stored
 
 				if err != nil {
 					t.Fatalf("failed to create MM2 properly")

@@ -69,6 +69,11 @@ func (n *Network) ValidatorPage(index uint64) *url.URL {
 	return NetworkUrl{protocol.SubnetUrl(n.LocalSubnetID)}.ValidatorPage(index)
 }
 
+// DefaultValidatorPage returns the URL of the default page of the subnet's validator key book.
+func (n *Network) DefaultValidatorPage() *url.URL {
+	return n.ValidatorPage(1)
+}
+
 // OperatorBook returns the URL of the subnet's operator key book.
 func (n *Network) OperatorBook() *url.URL {
 	return NetworkUrl{protocol.SubnetUrl(n.LocalSubnetID)}.OperatorBook()
@@ -77,17 +82,6 @@ func (n *Network) OperatorBook() *url.URL {
 // OperatorPage returns the URL of the page of the subnet's operator key book.
 func (n *Network) OperatorPage(index uint64) *url.URL {
 	return NetworkUrl{protocol.SubnetUrl(n.LocalSubnetID)}.OperatorPage(index)
-}
-
-// DefaultValidatorPage returns the URL of the default page of the subnet operator key book.
-func (n *Network) DefaultValidatorPage() *url.URL {
-	var index uint64
-	if n.Type == Directory {
-		index = 0
-	} else {
-		index = 0 // 1 in AC-1402
-	}
-	return n.ValidatorPage(index)
 }
 
 // DefaultOperatorPage returns the URL of the default page of the subnet operator key book.

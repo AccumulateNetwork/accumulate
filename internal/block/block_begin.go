@@ -231,7 +231,7 @@ func (x *Executor) captureValueAsDataEntry(batch *database.Batch, internalAccoun
 	dataAccountUrl := x.Network.NodeUrl(internalAccountPath)
 
 	var signer protocol.Signer
-	signerUrl := x.Network.ValidatorPage(0)
+	signerUrl := x.Network.DefaultOperatorPage()
 	err = batch.Account(signerUrl).GetStateAs(&signer)
 	if err != nil {
 		return err
@@ -565,8 +565,7 @@ func (x *Executor) buildDirectoryAnchor(batch *database.Batch, ledgerState *prot
 				return nil, errors.Format(errors.StatusUnknown, "build receipt for intermediate anchor chain %s: %w", update.Name, err)
 			}
 
-			r := protocol.ReceiptFromManaged(receipt)
-			anchor.Receipts = append(anchor.Receipts, *r)
+			anchor.Receipts = append(anchor.Receipts, *receipt)
 		}
 	}
 
