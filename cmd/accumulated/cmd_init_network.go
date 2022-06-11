@@ -20,7 +20,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-
 func loadNetworkConfiguration(file string) (ret config.Network, err error) {
 	jsonFile, err := os.Open(file)
 	defer func() { _ = jsonFile.Close() }()
