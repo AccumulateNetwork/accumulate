@@ -1,0 +1,140 @@
+ContainerRecord:
+  non-binary: true
+  incomparable: true
+  union: { type: record }
+  fields:
+    - name: Container
+      type: ContainerRecord
+      pointer: true
+    - name: OmitAccessor
+      type: bool
+    - name: Name
+      type: string
+    - name: Fields
+      type: Field
+      pointer: true
+      marshal-as: reference
+      repeatable: true
+    - name: CustomCommit
+      type: bool
+    - name: Parameters
+      type: Field
+      pointer: true
+      marshal-as: reference
+      repeatable: true
+    - name: OmitKey
+      type: bool
+    - name: Parts
+      type: Record
+      marshal-as: union
+      repeatable: true
+
+ChainRecord:
+  non-binary: true
+  incomparable: true
+  union: { type: record }
+  fields:
+    - name: Container
+      type: ContainerRecord
+      pointer: true
+    - name: OmitAccessor
+      type: bool
+    - name: Name
+      type: string
+    - name: CustomCommit
+      type: bool
+    - name: Parameters
+      type: Field
+      pointer: true
+      marshal-as: reference
+      repeatable: true
+    - name: ChainType
+      type: string
+
+StateRecord:
+  non-binary: true
+  incomparable: true
+  union: { type: record }
+  fields:
+    - name: Container
+      type: ContainerRecord
+      pointer: true
+    - name: OmitAccessor
+      type: bool
+    - name: Name
+      type: string
+    - name: CustomCommit
+      type: bool
+    - name: Parameters
+      type: Field
+      pointer: true
+      marshal-as: reference
+      repeatable: true
+    - name: DataType
+      type: FieldType
+      marshal-as: reference
+    - name: Pointer
+      type: bool
+    - name: EmptyIfMissing
+      type: bool
+    - name: Union
+      type: bool
+    - name: Set
+      type: bool
+    - name: Counted
+      type: bool
+
+IndexRecord:
+  non-binary: true
+  incomparable: true
+  union: { type: record }
+  fields:
+    - name: Container
+      type: ContainerRecord
+      pointer: true
+    - name: OmitAccessor
+      type: bool
+    - name: Name
+      type: string
+    - name: CustomCommit
+      type: bool
+    - name: Parameters
+      type: Field
+      pointer: true
+      marshal-as: reference
+      repeatable: true
+    - name: DataType
+      type: FieldType
+      marshal-as: reference
+    - name: Pointer
+      type: bool
+    - name: EmptyIfMissing
+      type: bool
+    - name: Union
+      type: bool
+    - name: Set
+      type: bool
+    - name: Counted
+      type: bool
+
+OtherRecord:
+  non-binary: true
+  incomparable: true
+  union: { type: record }
+  fields:
+    - name: Container
+      type: ContainerRecord
+      pointer: true
+    - name: OmitAccessor
+      type: bool
+    - name: Name
+      type: string
+    - name: DataType
+      type: string
+    - name: Parameters
+      type: Field
+      pointer: true
+      marshal-as: reference
+      repeatable: true
+    - name: Pointer
+      type: bool

@@ -131,6 +131,8 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 			return nil, errors.Format(errors.StatusUnauthorized, "%v is not authorized to sign for %v", delegate.GetUrl(), signature.Delegator)
 		}
 
+		signature.Delegate = delegate.GetUrl()
+
 	case protocol.KeySignature:
 		// Basic validation
 		if signature.Type() != protocol.SignatureTypeReceipt && !signature.Verify(delivery.Transaction.GetHash()) {

@@ -212,6 +212,11 @@ DelegatedSignature:
       description: is the authority that delegated its authority to the signer
       type: url
       pointer: true
+    - name: Delegate
+      description: is the authority that was delegated to. This is only used internally
+      type: url
+      pointer: true
+      marshal-as: none
 
 InternalSignature:
   union: { type: signature }

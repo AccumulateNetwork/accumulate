@@ -169,6 +169,15 @@
       "args": ["types.yml"]
     },
     {
+      "name": "Generate Records",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/tools/cmd/gen-record",
+      "cwd": "${workspaceFolder}/internal/database/v2",
+      "args": ["--package", "database", "records.yml"]
+    },
+    {
       "name": "Generate Protocol Types",
       "type": "go",
       "request": "launch",

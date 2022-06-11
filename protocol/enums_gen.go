@@ -89,9 +89,6 @@ const ChainTypeTransaction ChainType = 1
 // ChainTypeAnchor holds chain anchors.
 const ChainTypeAnchor ChainType = 2
 
-// ChainTypeData holds data entry hashes.
-const ChainTypeData ChainType = 3
-
 // ChainTypeIndex indexes other chains.
 const ChainTypeIndex ChainType = 4
 
@@ -708,7 +705,7 @@ func (v ChainType) GetEnumValue() uint64 { return uint64(v) }
 func (v *ChainType) SetEnumValue(id uint64) bool {
 	u := ChainType(id)
 	switch u {
-	case ChainTypeUnknown, ChainTypeTransaction, ChainTypeAnchor, ChainTypeData, ChainTypeIndex:
+	case ChainTypeUnknown, ChainTypeTransaction, ChainTypeAnchor, ChainTypeIndex:
 		*v = u
 		return true
 	default:
@@ -725,8 +722,6 @@ func (v ChainType) String() string {
 		return "transaction"
 	case ChainTypeAnchor:
 		return "anchor"
-	case ChainTypeData:
-		return "data"
 	case ChainTypeIndex:
 		return "index"
 	default:
@@ -743,8 +738,6 @@ func ChainTypeByName(name string) (ChainType, bool) {
 		return ChainTypeTransaction, true
 	case "anchor":
 		return ChainTypeAnchor, true
-	case "data":
-		return ChainTypeData, true
 	case "index":
 		return ChainTypeIndex, true
 	default:

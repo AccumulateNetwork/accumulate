@@ -70,6 +70,10 @@ func (x *TxID) Copy() *TxID {
 	return &y
 }
 
+func (x *TxID) CopyAsInterface() interface{} {
+	return x.Copy()
+}
+
 // Equal checks if X and Y are the same transaction ID.
 func (x *TxID) Equal(y *TxID) bool {
 	return x.hash == y.hash &&

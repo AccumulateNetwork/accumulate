@@ -1,0 +1,243 @@
+- name: ChangeSet
+  type: container
+  omitKey: true
+  fields:
+  - name: logger
+    type: logging.OptionalLogger
+  - name: done
+    type: bool
+  - name: writable
+    type: bool
+  - name: id
+    type: uint
+  - name: nextId
+    type: uint
+  parts:
+  - name: Account
+    type: container
+    customCommit: true
+    parameters:
+    - name: Url
+      type: url
+      pointer: true
+    parts:
+    - name: State
+      type: state
+      dataType: protocol.Account
+      union: true
+    - name: Pending
+      type: state
+      dataType: txid
+      pointer: true
+      set: true
+    - name: SyntheticForAnchor
+      type: state
+      parameters:
+      - name: Anchor
+        type: hash
+      dataType: txid
+      pointer: true
+      set: true
+    - name: MainChain
+      type: chain
+      chainType: transaction
+    - name: SignatureChain
+      type: chain
+      chainType: transaction # change to signature
+    - name: RootChain
+      type: container
+      parts:
+      - name: Minor
+        type: chain
+        chainType: anchor
+      - name: Major
+        type: chain
+        chainType: anchor
+    - name: SyntheticChain
+      type: chain
+      chainType: transaction
+    - name: AnchorChain
+      type: chain
+      chainType: anchor
+      parameters:
+      - name: SubnetId
+        type: string
+    - name: MainIndexChain
+      type: other
+      dataType: MajorMinorIndexChain
+      pointer: true
+    - name: SignatureIndexChain
+      type: other
+      dataType: MajorMinorIndexChain
+      pointer: true
+    - name: SyntheticIndexChain
+      type: other
+      dataType: MajorMinorIndexChain
+      pointer: true
+    - name: RootIndexChain
+      type: other
+      dataType: MajorMinorIndexChain
+      pointer: true
+    - name: AnchorIndexChain
+      type: other
+      parameters:
+      - name: SubnetId
+        type: string
+      dataType: MajorMinorIndexChain
+      pointer: true
+    - name: Chains
+      type: index
+      dataType: protocol.ChainMetadata
+      pointer: true
+      set: true
+    - name: SyntheticAnchors
+      type: index
+      dataType: hash
+      set: true
+    - name: Directory
+      # TODO Turn this into a chain
+      type: index
+      counted: true
+      dataType: url
+      pointer: true
+    - name: Data
+      type: container
+      parts:
+      - name: Entry
+        type: index
+        counted: true
+        dataType: hash
+      - name: Transaction
+        type: index
+        parameters:
+        - name: EntryHash
+          type: hash
+        dataType: hash
+
+  # - name: Transaction
+  #   type: index
+  #   dataType: txid
+  #   pointer: true
+  #   parameters:
+  #   - name: Hash
+  #     type: hash
+  # - name: Signature
+  #   type: index
+  #   dataType: txid
+  #   pointer: true
+  #   parameters:
+  #   - name: Hash
+  #     type: hash
+
+  - name: Transaction
+    # TODO Move transactions to within an account
+    type: container
+    customCommit: true
+    parameters:
+    - name: Hash
+      type: hash
+    parts:
+    - name: Value
+      type: state
+      dataType: protocol.Transaction
+      pointer: true
+    - name: Status
+      type: state
+      dataType: protocol.TransactionStatus
+      pointer: true
+    - name: Produced
+      type: state
+      dataType: txid
+      pointer: true
+      set: true
+    - name: SystemSignatures
+      type: other
+      dataType: SystemSignatureSet
+      pointer: true
+    - name: Signatures
+      type: other
+      dataType: VersionedSignatureSet
+      omitAccessor: true
+      pointer: true
+      parameters:
+      - name: Signer
+        type: url
+        pointer: true
+    - name: Signers
+      type: index
+      dataType: url
+      pointer: true
+      set: true
+    - name: Chains
+      type: index
+      dataType: TransactionChainEntry
+      pointer: true
+      set: true
+
+  # - name: Signature
+  #   # TODO Move signatures to within an account
+  #   type: container
+  #   parameters:
+  #   - name: Hash
+  #     type: hash
+  #   parts:
+
+    # TODO Move signatures to their own type
+    - name: Signature # change to Value
+      type: state
+      dataType: protocol.Signature
+      union: true
+    - name: TxID
+      type: state
+      dataType: txid
+      pointer: true
+
+- name: Chain
+  type: container
+  fields:
+  - name: typ
+    type: protocol.ChainType
+  - name: name
+    type: string
+  - name: label
+    type: string
+  parts:
+  - name: State
+    type: state
+    emptyIfMissing: true
+    dataType: managed.MerkleState
+    pointer: true
+  - name: States
+    type: state
+    dataType: managed.MerkleState
+    pointer: true
+    parameters:
+    - name: Index
+      type: uint
+  - name: ElementIndex
+    type: index
+    dataType: uint
+    parameters:
+    - name: Hash
+      type: bytes
+  - name: Element
+    type: index
+    dataType: bytes
+    parameters:
+    - name: Index
+      type: uint
+
+- name: MajorMinorIndexChain
+  type: container
+  fields:
+  - name: name
+    type: string
+  - name: label
+    type: string
+  parts:
+  - name: Minor
+    type: chain
+    chainType: index
+  - name: Major
+    type: chain
+    chainType: index

@@ -33,3 +33,10 @@ func (l OptionalLogger) With(keyVals ...interface{}) log.Logger {
 	}
 	return OptionalLogger{l.L.With(keyVals...)}
 }
+
+func (l *OptionalLogger) Set(ll log.Logger, keyVals ...interface{}) {
+	if ll == nil {
+		return
+	}
+	l.L = ll.With(keyVals...)
+}

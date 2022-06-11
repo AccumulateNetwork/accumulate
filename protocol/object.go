@@ -47,3 +47,9 @@ func (o *Object) AddChain(name string, typ ChainType) error {
 	*ptr = ChainMetadata{Name: name, Type: typ}
 	return nil
 }
+
+func (c *ChainMetadata) Compare(d *ChainMetadata) int {
+	cn := enUsLower.String(c.Name)
+	dn := enUsLower.String(d.Name)
+	return strings.Compare(cn, dn)
+}

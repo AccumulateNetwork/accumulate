@@ -241,6 +241,8 @@ type DelegatedSignature struct {
 	Signature Signature `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
 	// Delegator is the authority that delegated its authority to the signer.
 	Delegator *url.URL `json:"delegator,omitempty" form:"delegator" query:"delegator" validate:"required"`
+	// Delegate is the authority that was delegated to. This is only used internally.
+	Delegate  *url.URL
 	extraData []byte
 }
 

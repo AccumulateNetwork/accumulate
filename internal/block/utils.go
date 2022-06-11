@@ -16,9 +16,9 @@ func shouldIndexChain(_ *url.URL, _ string, typ protocol.ChainType) (bool, error
 		// Index chains are unindexed
 		return false, nil
 
-	case protocol.ChainTypeData:
-		// Data chains are unindexed
-		return false, nil
+	// case protocol.ChainTypeSignature:
+	// 	// Signature chains are unindexed
+	// 	return true, nil
 
 	case protocol.ChainTypeTransaction:
 		// Transaction chains are indexed

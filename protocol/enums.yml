@@ -3,17 +3,16 @@ ChainType:
     value: 0
     description: is used when the chain type is not known
   Transaction:
-    value: 0x01
+    value: 1
     description: holds transaction hashes
   Anchor:
-    value: 0x02
+    value: 2
     description: holds chain anchors
-  Data:
-    # DEPRECATED
-    value: 0x03
-    description: holds data entry hashes
+  # Signature:
+  #   value: 3
+  #   description: holds signature hashes
   Index:
-    value: 0x04
+    value: 4
     description: indexes other chains
 
 DataEntryType:
@@ -29,10 +28,10 @@ ObjectType:
     value: 0
     description: is used when the object type is not known
   Account:
-    value: 0x01
+    value: 1
     description: represents an account object
   Transaction:
-    value: 0x02
+    value: 2
     description: represents a transaction object
 
 SignatureType:
