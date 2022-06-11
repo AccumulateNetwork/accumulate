@@ -42,7 +42,7 @@ import (
 type FakeNode struct {
 	t       testing.TB
 	db      *database.Database
-	network *config.Network
+	network *config.Describe
 	exec    *block.Executor
 	app     abcitypes.Application
 	client  *acctesting.FakeTendermint
@@ -134,7 +134,7 @@ func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Da
 	n := new(FakeNode)
 	n.t = t
 	n.key = pv.Key.PrivKey
-	n.network = &d.Config.Accumulate.Network
+	n.network = &d.Config.Accumulate.Describe
 	n.logger = d.Logger
 	n.netValMap = netValMap
 
@@ -157,7 +157,7 @@ func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Da
 		require.ErrorIs(t, err, storage.ErrNotFound)
 	}
 
-	fakeTmLogger := d.Logger.With("module", "fake-tendermint", "subnet", n.network.LocalSubnetID)
+	fakeTmLogger := d.Logger.With("module", "fake-tendermint", "subnet", n.network.SubnetId)
 
 	appChan := make(chan abcitypes.Application)
 	t.Cleanup(func() { close(appChan) })
@@ -174,7 +174,7 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 	n.exec, err = block.NewNodeExecutor(block.ExecutorOptions{
 		Logger:   n.logger,
 		Key:      n.key.Bytes(),
-		Network:  *n.network,
+		Describe: *n.network,
 		Router:   n.router,
 		EventBus: eventBus,
 	}, n.db)
@@ -186,7 +186,7 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 		DB:       n.db,
 		Logger:   n.logger,
 		Config: &config.Config{Accumulate: config.Accumulate{
-			Network: *n.network,
+			Describe: *n.network,
 			Snapshots: config.Snapshots{
 				Directory: filepath.Join(n.t.TempDir(), "snapshots"),
 			},
@@ -204,7 +204,7 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 
 	n.api = api2.NewQueryDispatch(api2.Options{
 		Logger:        n.logger,
-		Network:       n.network,
+		Describe:      n.network,
 		Router:        n.router,
 		TxMaxWaitTime: 10 * time.Second,
 	})
@@ -219,7 +219,7 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 
 	kv := memory.New(nil)
 	opts := genesis.InitOpts{
-		Network:             *n.network,
+		Describe:            *n.network,
 		GenesisTime:         time.Now(),
 		NetworkValidatorMap: n.netValMap,
 		Logger:              n.logger,
@@ -437,10 +437,10 @@ func (n *FakeNode) GetDirectory(adi string) []string {
 }
 
 func (n *FakeNode) GetTx(txid []byte) *api2.TransactionQueryResponse {
-	q := api2.NewQueryDirect(n.network.LocalSubnetID, api2.Options{
-		Logger:  n.logger,
-		Network: n.network,
-		Router:  n.router,
+	q := api2.NewQueryDirect(n.network.SubnetId, api2.Options{
+		Logger:   n.logger,
+		Describe: n.network,
+		Router:   n.router,
 	})
 	resp, err := q.QueryTx(txid, 0, false, api2.QueryOptions{})
 	require.NoError(n.t, err)
@@ -529,7 +529,7 @@ func (n *FakeNode) CreateInitChain() {
 	n.require.NoError(err)
 	n.app.InitChain(abcitypes.RequestInitChain{
 		Time:          time.Now(),
-		ChainId:       n.network.LocalSubnetID,
+		ChainId:       n.network.SubnetId,
 		AppStateBytes: state,
 		InitialHeight: protocol.GenesisBlock + 1,
 	})

@@ -57,7 +57,7 @@ func (d *Daemon) collectSnapshot(batch *database.Batch, majorBlock, minorBlock u
 		}
 	}()
 
-	err = batch.SaveSnapshot(file, &d.Config.Accumulate.Network)
+	err = batch.SaveSnapshot(file, &d.Config.Accumulate.Describe)
 	if err != nil {
 		d.Logger.Error("Failed to create snapshot", "error", err, "major-block", majorBlock, "minor-block", minorBlock, "module", "snapshot")
 		return
