@@ -257,7 +257,7 @@ func initNode(cmd *cobra.Command, args []string) {
 			//go build a list of healthy nodes
 			u, err := cfg.OffsetPort(addr, netPort, int(cfg.PortOffsetTendermintP2P))
 			checkf(err, "failed to parse url from network info %s", addr)
-			u.Scheme = ""
+
 			//check the health of the peer
 			peerClient, err := rpchttp.New(fmt.Sprintf("tcp://%s:%s", u.Hostname(), u.Port()))
 			checkf(err, "failed to create Tendermint client for %s", u.String())
@@ -279,7 +279,7 @@ func initNode(cmd *cobra.Command, args []string) {
 		for _, peer := range netInfo.Peers {
 			u, err := url.Parse(peer.URL)
 			checkf(err, "failed to parse url from network info %s", peer.URL)
-			u.Scheme = ""
+
 			//check the health of the peer
 			peerClient, err := rpchttp.New(fmt.Sprintf("tcp://%s:%s", u.Hostname(), u.Port()))
 			checkf(err, "failed to create Tendermint client for %s", u.String())
