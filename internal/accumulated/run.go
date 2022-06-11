@@ -148,7 +148,7 @@ func (d *Daemon) Start() (err error) {
 	execOpts := block.ExecutorOptions{
 		Logger:   d.Logger,
 		Key:      d.Key().Bytes(),
-		Network:  d.Config.Accumulate.Network,
+		Describe: d.Config.Accumulate.Describe,
 		Router:   router,
 		EventBus: d.eventBus,
 	}
@@ -204,7 +204,7 @@ func (d *Daemon) Start() (err error) {
 	// Create the JSON-RPC handler
 	d.jrpc, err = api.NewJrpc(api.Options{
 		Logger:           d.Logger,
-		Network:          &d.Config.Accumulate.Network,
+		Describe:         &d.Config.Accumulate.Describe,
 		Router:           router,
 		PrometheusServer: d.Config.Accumulate.API.PrometheusServer,
 		TxMaxWaitTime:    d.Config.Accumulate.API.TxMaxWaitTime,
@@ -282,7 +282,7 @@ func (d *Daemon) Start() (err error) {
 }
 
 func (d *Daemon) LocalClient() (connections.ABCIClient, error) {
-	ctx, err := d.connectionManager.SelectConnection(d.jrpc.Network.LocalSubnetID, false)
+	ctx, err := d.connectionManager.SelectConnection(d.jrpc.Options.Describe.SubnetId, false)
 	if err != nil {
 		return nil, err
 	}
