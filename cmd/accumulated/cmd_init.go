@@ -279,7 +279,7 @@ func initNode(cmd *cobra.Command, args []string) {
 			u, err := url.Parse(peer.URL)
 			checkf(err, "failed to parse url from network info %s", peer.URL)
 
-			clientUrl := fmt.Sprintf("tcp://%s:%s", u.Hostname(), u.Port())
+			//clientUrl := fmt.Sprintf("tcp://%s:%s", u.Hostname(), u.Port())
 
 			//check the health of the peer
 			//peerClient, err := rpchttp.New(clientUrl)
