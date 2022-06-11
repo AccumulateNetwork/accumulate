@@ -75,9 +75,9 @@ func addValidator(st *StateManager, env *Delivery) error {
 	}
 
 	var oprPage *protocol.KeyPage
-	err = st.LoadUrlAs(st.Network.DefaultOperatorPage(), &oprPage)
+	err = st.LoadUrlAs(st.Describe.DefaultOperatorPage(), &oprPage)
 	if err != nil {
-		return fmt.Errorf("unable to load %s: %v", st.Network.DefaultOperatorPage(), err)
+		return fmt.Errorf("unable to load %s: %v", st.Describe.DefaultOperatorPage(), err)
 	}
 
 	// Ensure the key does not already exist

@@ -28,7 +28,7 @@ import (
 type NetworkValidatorMap map[string][]tmtypes.GenesisValidator
 
 type InitOpts struct {
-	Network             config.Network
+	Describe            config.Describe
 	AllConfigs          []*config.Config
 	Validators          []tmtypes.GenesisValidator
 	NetworkValidatorMap NetworkValidatorMap
@@ -52,18 +52,18 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) (Bootstrap, error) {
 	if b.NetworkValidatorMap == nil {
 		panic("NetworkValidatorMap is not present")
 	}
-	if _, ok := b.NetworkValidatorMap[b.Network.LocalSubnetID]; !ok {
-		b.NetworkValidatorMap[b.Network.LocalSubnetID] = b.Validators
+	if _, ok := b.NetworkValidatorMap[b.Describe.SubnetId]; !ok {
+		b.NetworkValidatorMap[b.Describe.SubnetId] = b.Validators
 	}
 
 	// Build the routing table
 	b.routingTable = new(protocol.RoutingTable)
-	b.routingTable.Routes = routing.BuildSimpleTable(&opts.Network)
-	b.routingTable.Overrides = make([]protocol.RouteOverride, 1, len(opts.Network.Subnets)+1)
+	b.routingTable.Routes = routing.BuildSimpleTable(&opts.Describe.Network)
+	b.routingTable.Overrides = make([]protocol.RouteOverride, 1, len(opts.Describe.Network.Subnets)+1)
 	b.routingTable.Overrides[0] = protocol.RouteOverride{Account: protocol.AcmeUrl(), Subnet: protocol.Directory}
-	for _, subnet := range opts.Network.Subnets {
-		u := protocol.SubnetUrl(subnet.ID)
-		b.routingTable.Overrides = append(b.routingTable.Overrides, protocol.RouteOverride{Account: u, Subnet: subnet.ID})
+	for _, subnet := range opts.Describe.Network.Subnets {
+		u := protocol.SubnetUrl(subnet.Id)
+		b.routingTable.Overrides = append(b.routingTable.Overrides, protocol.RouteOverride{Account: u, Subnet: subnet.Id})
 	}
 
 	// Create the router
@@ -73,7 +73,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) (Bootstrap, error) {
 		return nil, err
 	}
 
-	b.genesisExec, err = block.NewGenesisExecutor(b.db, opts.Logger, opts.Network, b.router)
+	b.genesisExec, err = block.NewGenesisExecutor(b.db, opts.Logger, &opts.Describe, b.router)
 	if err != nil {
 		return nil, err
 	}
@@ -164,13 +164,13 @@ func (b *bootstrap) Execute(st *chain.StateManager, tx *chain.Delivery) (protoco
 }
 
 func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protocol.TransactionResult, error) {
-	b.nodeUrl = b.Network.NodeUrl()
+	b.nodeUrl = b.Describe.NodeUrl()
 	b.authorityUrl = b.nodeUrl.JoinPath(protocol.OperatorBook)
 	b.globals = new(core.GlobalValues)
 
 	// Verify that the BVN ID will make a valid subnet URL
 	if err := protocol.IsValidAdiUrl(b.nodeUrl, true); err != nil {
-		panic(fmt.Errorf("%q is not a valid subnet ID: %v", b.Network.LocalSubnetID, err))
+		panic(fmt.Errorf("%q is not a valid subnet ID: %v", b.Describe.SubnetId, err))
 	}
 
 	// Setup globals and create network variable accounts
@@ -201,7 +201,7 @@ func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protoc
 		b.globals.Routing = b.routingTable
 	}
 
-	err := b.globals.Store(&b.Network, func(accountUrl *url.URL, target interface{}) error {
+	err := b.globals.Store(&b.Describe, func(accountUrl *url.URL, target interface{}) error {
 		da := new(protocol.DataAccount)
 		da.Url = accountUrl
 		da.AddAuthority(b.authorityUrl)
@@ -228,7 +228,7 @@ func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protoc
 
 	b.createEvidenceChain()
 
-	switch b.Network.Type {
+	switch b.Describe.NetworkType {
 	case config.Directory:
 		err = b.initDN()
 	case config.BlockValidator:
@@ -304,7 +304,7 @@ func (b *bootstrap) createAnchorPool() {
 	anchorLedger := new(protocol.AnchorLedger)
 	anchorLedger.Url = b.nodeUrl.JoinPath(protocol.AnchorPool)
 
-	if b.Network.Type == config.Directory {
+	if b.Describe.NetworkType == config.Directory {
 		// Initialize the last major block time to prevent a major block from
 		// being created immediately once the network boots
 		anchorLedger.MajorBlockTime = b.GenesisTime
@@ -364,15 +364,15 @@ func (b *bootstrap) initDN() error {
 
 func (b *bootstrap) initBVN() error {
 	// Verify that the BVN ID will make a valid subnet URL
-	network := b.InitOpts.Network
-	if err := protocol.IsValidAdiUrl(protocol.SubnetUrl(network.LocalSubnetID), true); err != nil {
-		panic(fmt.Errorf("%q is not a valid subnet ID: %v", network.LocalSubnetID, err))
+	network := b.InitOpts.Describe
+	if err := protocol.IsValidAdiUrl(protocol.SubnetUrl(network.SubnetId), true); err != nil {
+		panic(fmt.Errorf("%q is not a valid subnet ID: %v", network.SubnetId, err))
 	}
 
 	b.createBVNOperatorBook()
 
 	subnet, err := b.router.RouteAccount(protocol.FaucetUrl)
-	if err == nil && subnet == b.Network.LocalSubnetID {
+	if err == nil && subnet == b.Describe.SubnetId {
 		liteId := new(protocol.LiteIdentity)
 		liteId.Url = protocol.FaucetUrl.RootIdentity()
 
@@ -389,7 +389,7 @@ func (b *bootstrap) initBVN() error {
 		}
 		for _, factomAddress := range factomAddresses {
 			subnet, err := b.router.RouteAccount(factomAddress.Address)
-			if err == nil && subnet == b.Network.LocalSubnetID {
+			if err == nil && subnet == b.Describe.SubnetId {
 				lite := new(protocol.LiteTokenAccount)
 				lite.Url = factomAddress.Address
 				lite.TokenUrl = protocol.AcmeUrl()
@@ -506,7 +506,7 @@ func (b *bootstrap) writeGenesisFile(appHash []byte) error {
 	}
 
 	genDoc := &tmtypes.GenesisDoc{
-		ChainID:         b.Network.LocalSubnetID,
+		ChainID:         b.Describe.SubnetId,
 		GenesisTime:     b.GenesisTime,
 		InitialHeight:   protocol.GenesisBlock + 1,
 		Validators:      b.Validators,
@@ -526,17 +526,17 @@ func (b *bootstrap) writeGenesisFile(appHash []byte) error {
 func (b *bootstrap) buildNetworkDefinition() *protocol.NetworkDefinition {
 	netDef := new(protocol.NetworkDefinition)
 
-	for _, subnet := range b.Network.Subnets {
+	for _, subnet := range b.Describe.Network.Subnets {
 
 		// Add the validator hashes from the subnet's genesis doc
 		var vkHashes [][32]byte
-		for _, validator := range b.NetworkValidatorMap[subnet.ID] {
+		for _, validator := range b.NetworkValidatorMap[subnet.Id] {
 			pkh := sha256.Sum256(validator.PubKey.Bytes())
 			vkHashes = append(vkHashes, pkh)
 		}
 
 		subnetDef := protocol.SubnetDefinition{
-			SubnetID:           subnet.ID,
+			SubnetID:           subnet.Id,
 			ValidatorKeyHashes: vkHashes,
 		}
 		netDef.Subnets = append(netDef.Subnets, subnetDef)

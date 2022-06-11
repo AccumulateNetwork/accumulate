@@ -125,7 +125,7 @@ func (t *Transaction) AddSignature(keyEntryIndex uint64, newSignature protocol.S
 
 // AddSystemSignature adds a system signature to the operator signature set.
 // AddSystemSignature panics if the signature is not a system signature.
-func (t *Transaction) AddSystemSignature(net *config.Network, newSignature protocol.Signature) (int, error) {
+func (t *Transaction) AddSystemSignature(net *config.Describe, newSignature protocol.Signature) (int, error) {
 	if !newSignature.Type().IsSystem() {
 		panic("not a system signature")
 	}
