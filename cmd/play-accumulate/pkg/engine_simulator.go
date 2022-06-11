@@ -88,7 +88,7 @@ func (s SimEngine) GetDirectory(account *URL) ([]*URL, error) {
 
 func (s SimEngine) GetTransaction(hash [32]byte) (*protocol.Transaction, error) {
 	for _, subnet := range s.Subnets {
-		batch := s.Subnet(subnet.ID).Database.Begin(false)
+		batch := s.Subnet(subnet.Id).Database.Begin(false)
 		defer batch.Discard()
 		txn, err := batch.Transaction(hash[:]).GetState()
 		switch {

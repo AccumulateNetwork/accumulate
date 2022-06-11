@@ -1,18 +1,26 @@
+Describe:
+  non-binary: true
+  fields:
+  - name: NetworkType
+    toml: type
+    type: NetworkType
+    marshal-as: enum 
+  - name: SubnetId
+    toml: subnet-id
+    type: string
+  - name: LocalAddress
+    toml: local-address
+    type: string
+  - name: Network
+    toml: network
+    type: Network
+    marshal-as: reference
+
 Network:
   non-binary: true
   fields:
-    - name: NetworkName
-      toml: network-name
-      type: string
-    - name: Type
-      toml: type
-      type: NetworkType
-      marshal-as: enum
-    - name: LocalSubnetID
-      toml: local-subnet
-      type: string
-    - name: LocalAddress
-      toml: local-address
+    - name: Id
+      toml: id
       type: string
     - name: Subnets
       toml: subnets
@@ -23,13 +31,16 @@ Network:
 Subnet:
   non-binary: true
   fields:
-    - name: ID
-      toml: id
+    - name: Id
+      toml: id 
       type: string
     - name: Type
       toml: type
       type: NetworkType
       marshal-as: enum
+    - name: BasePort
+      toml: port
+      type: int
     - name: Nodes
       toml: nodes
       type: Node
@@ -46,3 +57,4 @@ Node:
       toml: type
       type: NodeType
       marshal-as: enum
+
