@@ -280,13 +280,15 @@ func initNode(cmd *cobra.Command, args []string) {
 			u, err := url.Parse(peer.URL)
 			checkf(err, "failed to parse url from network info %s", peer.URL)
 
+			clientUrl := fmt.Sprintf("tcp://%s:%s", u.Hostname(), u.Port())
+
 			//check the health of the peer
-			peerClient, err := rpchttp.New(fmt.Sprintf("tcp://%s:%s", u.Hostname(), u.Port()))
+			peerClient, err := rpchttp.New(clientUrl)
 			checkf(err, "failed to create Tendermint client for %s", u.String())
 
 			peerStatus, err := peerClient.Status(context.Background())
 			if err != nil {
-				warnf("ignoring peer: not healthy %s", u.String())
+				warnf("ignoring peer: not healthy %s", clientUrl)
 				continue
 			}
 
