@@ -77,7 +77,7 @@ func (v *BlockFilterMode) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Block Filter Mode
+// String returns the name of the Block Filter Mode.
 func (v BlockFilterMode) String() string {
 	switch v {
 	case BlockFilterModeExcludeNone:
@@ -86,6 +86,18 @@ func (v BlockFilterMode) String() string {
 		return "excludeEmpty"
 	default:
 		return fmt.Sprintf("BlockFilterMode:%d", v)
+	}
+}
+
+// GoString returns the Go constant name.
+func (v BlockFilterMode) GoString() string {
+	switch v {
+	case BlockFilterModeExcludeNone:
+		return "BlockFilterModeExcludeNone"
+	case BlockFilterModeExcludeEmpty:
+		return "BlockFilterModeExcludeEmpty"
+	default:
+		return fmt.Sprintf("BlockFilterMode(%d)", v)
 	}
 }
 
@@ -137,7 +149,7 @@ func (v *QueryType) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Query Type
+// String returns the name of the Query Type.
 func (v QueryType) String() string {
 	switch v {
 	case QueryTypeUnknown:
@@ -166,6 +178,36 @@ func (v QueryType) String() string {
 		return "majorBlocks"
 	default:
 		return fmt.Sprintf("QueryType:%d", v)
+	}
+}
+
+// GoString returns the Go constant name.
+func (v QueryType) GoString() string {
+	switch v {
+	case QueryTypeUnknown:
+		return "QueryTypeUnknown"
+	case QueryTypeUrl:
+		return "QueryTypeUrl"
+	case QueryTypeChainId:
+		return "QueryTypeChainId"
+	case QueryTypeTxId:
+		return "QueryTypeTxId"
+	case QueryTypeTxHistory:
+		return "QueryTypeTxHistory"
+	case QueryTypeDirectoryUrl:
+		return "QueryTypeDirectoryUrl"
+	case QueryTypeData:
+		return "QueryTypeData"
+	case QueryTypeDataSet:
+		return "QueryTypeDataSet"
+	case QueryTypeKeyPageIndex:
+		return "QueryTypeKeyPageIndex"
+	case QueryTypeMinorBlocks:
+		return "QueryTypeMinorBlocks"
+	case QueryTypeSynth:
+		return "QueryTypeSynth"
+	default:
+		return fmt.Sprintf("QueryType(%d)", v)
 	}
 }
 
@@ -237,7 +279,7 @@ func (v *TxFetchMode) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Tx Fetch Mode
+// String returns the name of the Tx Fetch Mode.
 func (v TxFetchMode) String() string {
 	switch v {
 	case TxFetchModeExpand:
@@ -250,6 +292,22 @@ func (v TxFetchMode) String() string {
 		return "omit"
 	default:
 		return fmt.Sprintf("TxFetchMode:%d", v)
+	}
+}
+
+// GoString returns the Go constant name.
+func (v TxFetchMode) GoString() string {
+	switch v {
+	case TxFetchModeExpand:
+		return "TxFetchModeExpand"
+	case TxFetchModeIds:
+		return "TxFetchModeIds"
+	case TxFetchModeCountOnly:
+		return "TxFetchModeCountOnly"
+	case TxFetchModeOmit:
+		return "TxFetchModeOmit"
+	default:
+		return fmt.Sprintf("TxFetchMode(%d)", v)
 	}
 }
 

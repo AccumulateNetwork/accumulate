@@ -68,7 +68,7 @@ func (v *Status) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Status
+// String returns the name of the Status.
 func (v Status) String() string {
 	switch v {
 	case StatusUnknown:
@@ -103,6 +103,44 @@ func (v Status) String() string {
 		return "internalError"
 	default:
 		return fmt.Sprintf("Status:%d", v)
+	}
+}
+
+// GoString returns the Go constant name.
+func (v Status) GoString() string {
+	switch v {
+	case StatusUnknown:
+		return "StatusUnknown"
+	case StatusOK:
+		return "StatusOK"
+	case StatusDelivered:
+		return "StatusDelivered"
+	case StatusPending:
+		return "StatusPending"
+	case StatusRemote:
+		return "StatusRemote"
+	case StatusWrongPartition:
+		return "StatusWrongPartition"
+	case StatusBadRequest:
+		return "StatusBadRequest"
+	case StatusUnauthenticated:
+		return "StatusUnauthenticated"
+	case StatusInsufficientCredits:
+		return "StatusInsufficientCredits"
+	case StatusUnauthorized:
+		return "StatusUnauthorized"
+	case StatusNotFound:
+		return "StatusNotFound"
+	case StatusConflict:
+		return "StatusConflict"
+	case StatusBadSignerVersion:
+		return "StatusBadSignerVersion"
+	case StatusBadTimestamp:
+		return "StatusBadTimestamp"
+	case StatusInternalError:
+		return "StatusInternalError"
+	default:
+		return fmt.Sprintf("Status(%d)", v)
 	}
 }
 

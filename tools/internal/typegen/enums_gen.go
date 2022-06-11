@@ -86,7 +86,7 @@ func (v *MarshalAs) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Marshal As
+// String returns the name of the Marshal As.
 func (v MarshalAs) String() string {
 	switch v {
 	case MarshalAsBasic:
@@ -103,6 +103,26 @@ func (v MarshalAs) String() string {
 		return "union"
 	default:
 		return fmt.Sprintf("MarshalAs:%d", v)
+	}
+}
+
+// GoString returns the Go constant name.
+func (v MarshalAs) GoString() string {
+	switch v {
+	case MarshalAsBasic:
+		return "MarshalAsBasic"
+	case MarshalAsNone:
+		return "MarshalAsNone"
+	case MarshalAsEnum:
+		return "MarshalAsEnum"
+	case MarshalAsValue:
+		return "MarshalAsValue"
+	case MarshalAsReference:
+		return "MarshalAsReference"
+	case MarshalAsUnion:
+		return "MarshalAsUnion"
+	default:
+		return fmt.Sprintf("MarshalAs(%d)", v)
 	}
 }
 
@@ -162,7 +182,7 @@ func (v *TypeCode) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Type Code
+// String returns the name of the Type Code.
 func (v TypeCode) String() string {
 	switch v {
 	case TypeCodeUnknown:
@@ -197,6 +217,44 @@ func (v TypeCode) String() string {
 		return "txid"
 	default:
 		return fmt.Sprintf("TypeCode:%d", v)
+	}
+}
+
+// GoString returns the Go constant name.
+func (v TypeCode) GoString() string {
+	switch v {
+	case TypeCodeUnknown:
+		return "TypeCodeUnknown"
+	case TypeCodeInt:
+		return "TypeCodeInt"
+	case TypeCodeUint:
+		return "TypeCodeUint"
+	case TypeCodeBool:
+		return "TypeCodeBool"
+	case TypeCodeString:
+		return "TypeCodeString"
+	case TypeCodeHash:
+		return "TypeCodeHash"
+	case TypeCodeBytes:
+		return "TypeCodeBytes"
+	case TypeCodeUrl:
+		return "TypeCodeUrl"
+	case TypeCodeTime:
+		return "TypeCodeTime"
+	case TypeCodeDuration:
+		return "TypeCodeDuration"
+	case TypeCodeBigInt:
+		return "TypeCodeBigInt"
+	case TypeCodeAny:
+		return "TypeCodeAny"
+	case TypeCodeRawJson:
+		return "TypeCodeRawJson"
+	case TypeCodeFloat:
+		return "TypeCodeFloat"
+	case TypeCodeTxid:
+		return "TypeCodeTxid"
+	default:
+		return fmt.Sprintf("TypeCode(%d)", v)
 	}
 }
 

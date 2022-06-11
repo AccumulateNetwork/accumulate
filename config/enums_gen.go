@@ -53,7 +53,7 @@ func (v *NetworkType) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Network Type
+// String returns the name of the Network Type.
 func (v NetworkType) String() string {
 	switch v {
 	case NetworkTypeDirectory:
@@ -62,6 +62,18 @@ func (v NetworkType) String() string {
 		return "blockValidator"
 	default:
 		return fmt.Sprintf("NetworkType:%d", v)
+	}
+}
+
+// GoString returns the Go constant name.
+func (v NetworkType) GoString() string {
+	switch v {
+	case NetworkTypeDirectory:
+		return "NetworkTypeDirectory"
+	case NetworkTypeBlockValidator:
+		return "NetworkTypeBlockValidator"
+	default:
+		return fmt.Sprintf("NetworkType(%d)", v)
 	}
 }
 
@@ -115,7 +127,7 @@ func (v *NodeType) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Node Type
+// String returns the name of the Node Type.
 func (v NodeType) String() string {
 	switch v {
 	case NodeTypeValidator:
@@ -124,6 +136,18 @@ func (v NodeType) String() string {
 		return "follower"
 	default:
 		return fmt.Sprintf("NodeType:%d", v)
+	}
+}
+
+// GoString returns the Go constant name.
+func (v NodeType) GoString() string {
+	switch v {
+	case NodeTypeValidator:
+		return "NodeTypeValidator"
+	case NodeTypeFollower:
+		return "NodeTypeFollower"
+	default:
+		return fmt.Sprintf("NodeType(%d)", v)
 	}
 }
 

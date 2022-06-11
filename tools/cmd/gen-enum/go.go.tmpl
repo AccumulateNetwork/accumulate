@@ -33,7 +33,7 @@ func (v *{{.Name}}) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the {{natural .Name}}
+// String returns the name of the {{natural .Name}}.
 func (v {{.Name}}) String() string {
 	switch v {
 	{{- $typ := .Name}}
@@ -43,6 +43,19 @@ func (v {{.Name}}) String() string {
 	{{- end}}
 	default:
 		return fmt.Sprintf("{{.Name}}:%d", v)
+	}
+}
+
+// GoString returns the Go constant name.
+func (v {{.Name}}) GoString() string {
+	switch v {
+	{{- $typ := .Name}}
+	{{- range .Values}}
+	case {{$typ}}{{.Name}}:
+		return "{{$typ}}{{.Name}}"
+	{{- end}}
+	default:
+		return fmt.Sprintf("{{.Name}}(%d)", v)
 	}
 }
 

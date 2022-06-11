@@ -410,7 +410,7 @@ func (v *AccountAuthOperationType) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Account Auth Operation Type
+// String returns the name of the Account Auth Operation Type.
 func (v AccountAuthOperationType) String() string {
 	switch v {
 	case AccountAuthOperationTypeUnknown:
@@ -425,6 +425,24 @@ func (v AccountAuthOperationType) String() string {
 		return "removeAuthority"
 	default:
 		return fmt.Sprintf("AccountAuthOperationType:%d", v)
+	}
+}
+
+// GoString returns the Go constant name.
+func (v AccountAuthOperationType) GoString() string {
+	switch v {
+	case AccountAuthOperationTypeUnknown:
+		return "AccountAuthOperationTypeUnknown"
+	case AccountAuthOperationTypeEnable:
+		return "AccountAuthOperationTypeEnable"
+	case AccountAuthOperationTypeDisable:
+		return "AccountAuthOperationTypeDisable"
+	case AccountAuthOperationTypeAddAuthority:
+		return "AccountAuthOperationTypeAddAuthority"
+	case AccountAuthOperationTypeRemoveAuthority:
+		return "AccountAuthOperationTypeRemoveAuthority"
+	default:
+		return fmt.Sprintf("AccountAuthOperationType(%d)", v)
 	}
 }
 
@@ -482,7 +500,7 @@ func (v *AccountType) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Account Type
+// String returns the name of the Account Type.
 func (v AccountType) String() string {
 	switch v {
 	case AccountTypeUnknown:
@@ -515,6 +533,42 @@ func (v AccountType) String() string {
 		return "syntheticLedger"
 	default:
 		return fmt.Sprintf("AccountType:%d", v)
+	}
+}
+
+// GoString returns the Go constant name.
+func (v AccountType) GoString() string {
+	switch v {
+	case AccountTypeUnknown:
+		return "AccountTypeUnknown"
+	case AccountTypeAnchorLedger:
+		return "AccountTypeAnchorLedger"
+	case AccountTypeIdentity:
+		return "AccountTypeIdentity"
+	case AccountTypeTokenIssuer:
+		return "AccountTypeTokenIssuer"
+	case AccountTypeTokenAccount:
+		return "AccountTypeTokenAccount"
+	case AccountTypeLiteTokenAccount:
+		return "AccountTypeLiteTokenAccount"
+	case AccountTypeKeyPage:
+		return "AccountTypeKeyPage"
+	case AccountTypeKeyBook:
+		return "AccountTypeKeyBook"
+	case AccountTypeDataAccount:
+		return "AccountTypeDataAccount"
+	case AccountTypeLiteDataAccount:
+		return "AccountTypeLiteDataAccount"
+	case AccountTypeUnknownSigner:
+		return "AccountTypeUnknownSigner"
+	case AccountTypeSystemLedger:
+		return "AccountTypeSystemLedger"
+	case AccountTypeLiteIdentity:
+		return "AccountTypeLiteIdentity"
+	case AccountTypeSyntheticLedger:
+		return "AccountTypeSyntheticLedger"
+	default:
+		return fmt.Sprintf("AccountType(%d)", v)
 	}
 }
 
@@ -592,7 +646,7 @@ func (v *AllowedTransactionBit) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Allowed Transaction Bit
+// String returns the name of the Allowed Transaction Bit.
 func (v AllowedTransactionBit) String() string {
 	switch v {
 	case AllowedTransactionBitUpdateKeyPage:
@@ -601,6 +655,18 @@ func (v AllowedTransactionBit) String() string {
 		return "updateAccountAuth"
 	default:
 		return fmt.Sprintf("AllowedTransactionBit:%d", v)
+	}
+}
+
+// GoString returns the Go constant name.
+func (v AllowedTransactionBit) GoString() string {
+	switch v {
+	case AllowedTransactionBitUpdateKeyPage:
+		return "AllowedTransactionBitUpdateKeyPage"
+	case AllowedTransactionBitUpdateAccountAuth:
+		return "AllowedTransactionBitUpdateAccountAuth"
+	default:
+		return fmt.Sprintf("AllowedTransactionBit(%d)", v)
 	}
 }
 
@@ -652,7 +718,7 @@ func (v *BookType) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Book Type
+// String returns the name of the Book Type.
 func (v BookType) String() string {
 	switch v {
 	case BookTypeNormal:
@@ -663,6 +729,20 @@ func (v BookType) String() string {
 		return "operator"
 	default:
 		return fmt.Sprintf("BookType:%d", v)
+	}
+}
+
+// GoString returns the Go constant name.
+func (v BookType) GoString() string {
+	switch v {
+	case BookTypeNormal:
+		return "BookTypeNormal"
+	case BookTypeValidator:
+		return "BookTypeValidator"
+	case BookTypeOperator:
+		return "BookTypeOperator"
+	default:
+		return fmt.Sprintf("BookType(%d)", v)
 	}
 }
 
@@ -716,7 +796,7 @@ func (v *ChainType) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Chain Type
+// String returns the name of the Chain Type.
 func (v ChainType) String() string {
 	switch v {
 	case ChainTypeUnknown:
@@ -731,6 +811,24 @@ func (v ChainType) String() string {
 		return "index"
 	default:
 		return fmt.Sprintf("ChainType:%d", v)
+	}
+}
+
+// GoString returns the Go constant name.
+func (v ChainType) GoString() string {
+	switch v {
+	case ChainTypeUnknown:
+		return "ChainTypeUnknown"
+	case ChainTypeTransaction:
+		return "ChainTypeTransaction"
+	case ChainTypeAnchor:
+		return "ChainTypeAnchor"
+	case ChainTypeData:
+		return "ChainTypeData"
+	case ChainTypeIndex:
+		return "ChainTypeIndex"
+	default:
+		return fmt.Sprintf("ChainType(%d)", v)
 	}
 }
 
@@ -788,7 +886,7 @@ func (v *DataEntryType) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Data Entry Type
+// String returns the name of the Data Entry Type.
 func (v DataEntryType) String() string {
 	switch v {
 	case DataEntryTypeUnknown:
@@ -799,6 +897,20 @@ func (v DataEntryType) String() string {
 		return "accumulate"
 	default:
 		return fmt.Sprintf("DataEntryType:%d", v)
+	}
+}
+
+// GoString returns the Go constant name.
+func (v DataEntryType) GoString() string {
+	switch v {
+	case DataEntryTypeUnknown:
+		return "DataEntryTypeUnknown"
+	case DataEntryTypeFactom:
+		return "DataEntryTypeFactom"
+	case DataEntryTypeAccumulate:
+		return "DataEntryTypeAccumulate"
+	default:
+		return fmt.Sprintf("DataEntryType(%d)", v)
 	}
 }
 
@@ -852,7 +964,7 @@ func (v *ErrorCode) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Error Code
+// String returns the name of the Error Code.
 func (v ErrorCode) String() string {
 	switch v {
 	case ErrorCodeOK:
@@ -931,6 +1043,88 @@ func (v ErrorCode) String() string {
 		return "backdoorTxnError"
 	default:
 		return fmt.Sprintf("ErrorCode:%d", v)
+	}
+}
+
+// GoString returns the Go constant name.
+func (v ErrorCode) GoString() string {
+	switch v {
+	case ErrorCodeOK:
+		return "ErrorCodeOK"
+	case ErrorCodeEncodingError:
+		return "ErrorCodeEncodingError"
+	case ErrorCodeBadNonce:
+		return "ErrorCodeBadNonce"
+	case ErrorCodeDidPanic:
+		return "ErrorCodeDidPanic"
+	case ErrorCodeUnknownError:
+		return "ErrorCodeUnknownError"
+	case ErrorCodeNotFound:
+		return "ErrorCodeNotFound"
+	case ErrorCodeTxnRange:
+		return "ErrorCodeTxnRange"
+	case ErrorCodeTxnHistory:
+		return "ErrorCodeTxnHistory"
+	case ErrorCodeInvalidURL:
+		return "ErrorCodeInvalidURL"
+	case ErrorCodeDirectoryURL:
+		return "ErrorCodeDirectoryURL"
+	case ErrorCodeChainIdError:
+		return "ErrorCodeChainIdError"
+	case ErrorCodeRoutingChainId:
+		return "ErrorCodeRoutingChainId"
+	case ErrorCodeCheckTxError:
+		return "ErrorCodeCheckTxError"
+	case ErrorCodeDeliverTxError:
+		return "ErrorCodeDeliverTxError"
+	case ErrorCodeTxnStateError:
+		return "ErrorCodeTxnStateError"
+	case ErrorCodeRecordTxnError:
+		return "ErrorCodeRecordTxnError"
+	case ErrorCodeSyntheticTxnError:
+		return "ErrorCodeSyntheticTxnError"
+	case ErrorCodeMarshallingError:
+		return "ErrorCodeMarshallingError"
+	case ErrorCodeUnMarshallingError:
+		return "ErrorCodeUnMarshallingError"
+	case ErrorCodeInvalidQueryType:
+		return "ErrorCodeInvalidQueryType"
+	case ErrorCodeInvalidTxnType:
+		return "ErrorCodeInvalidTxnType"
+	case ErrorCodeValidateTxnError:
+		return "ErrorCodeValidateTxnError"
+	case ErrorCodeInvalidTxnError:
+		return "ErrorCodeInvalidTxnError"
+	case ErrorCodeAddTxnError:
+		return "ErrorCodeAddTxnError"
+	case ErrorCodeDataUrlError:
+		return "ErrorCodeDataUrlError"
+	case ErrorCodeDataEntryHashError:
+		return "ErrorCodeDataEntryHashError"
+	case ErrorCodeTxnQueryError:
+		return "ErrorCodeTxnQueryError"
+	case ErrorCodeInvalidRequest:
+		return "ErrorCodeInvalidRequest"
+	case ErrorCodeInvalidSignature:
+		return "ErrorCodeInvalidSignature"
+	case ErrorCodeInsufficientCredits:
+		return "ErrorCodeInsufficientCredits"
+	case ErrorCodeBadVersion:
+		return "ErrorCodeBadVersion"
+	case ErrorCodeInternal:
+		return "ErrorCodeInternal"
+	case ErrorCodeAlreadyDelivered:
+		return "ErrorCodeAlreadyDelivered"
+	case ErrorCodeUnauthorized:
+		return "ErrorCodeUnauthorized"
+	case ErrorCodeQueryChainUpdatesError:
+		return "ErrorCodeQueryChainUpdatesError"
+	case ErrorCodeQueryEntriesError:
+		return "ErrorCodeQueryEntriesError"
+	case ErrorCodeBackdoorTxnError:
+		return "ErrorCodeBackdoorTxnError"
+	default:
+		return fmt.Sprintf("ErrorCode(%d)", v)
 	}
 }
 
@@ -1052,7 +1246,7 @@ func (v *KeyPageOperationType) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Key Page Operation Type
+// String returns the name of the Key Page Operation Type.
 func (v KeyPageOperationType) String() string {
 	switch v {
 	case KeyPageOperationTypeUnknown:
@@ -1069,6 +1263,26 @@ func (v KeyPageOperationType) String() string {
 		return "updateAllowed"
 	default:
 		return fmt.Sprintf("KeyPageOperationType:%d", v)
+	}
+}
+
+// GoString returns the Go constant name.
+func (v KeyPageOperationType) GoString() string {
+	switch v {
+	case KeyPageOperationTypeUnknown:
+		return "KeyPageOperationTypeUnknown"
+	case KeyPageOperationTypeUpdate:
+		return "KeyPageOperationTypeUpdate"
+	case KeyPageOperationTypeRemove:
+		return "KeyPageOperationTypeRemove"
+	case KeyPageOperationTypeAdd:
+		return "KeyPageOperationTypeAdd"
+	case KeyPageOperationTypeSetThreshold:
+		return "KeyPageOperationTypeSetThreshold"
+	case KeyPageOperationTypeUpdateAllowed:
+		return "KeyPageOperationTypeUpdateAllowed"
+	default:
+		return fmt.Sprintf("KeyPageOperationType(%d)", v)
 	}
 }
 
@@ -1128,7 +1342,7 @@ func (v *ObjectType) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Object Type
+// String returns the name of the Object Type.
 func (v ObjectType) String() string {
 	switch v {
 	case ObjectTypeUnknown:
@@ -1139,6 +1353,20 @@ func (v ObjectType) String() string {
 		return "transaction"
 	default:
 		return fmt.Sprintf("ObjectType:%d", v)
+	}
+}
+
+// GoString returns the Go constant name.
+func (v ObjectType) GoString() string {
+	switch v {
+	case ObjectTypeUnknown:
+		return "ObjectTypeUnknown"
+	case ObjectTypeAccount:
+		return "ObjectTypeAccount"
+	case ObjectTypeTransaction:
+		return "ObjectTypeTransaction"
+	default:
+		return fmt.Sprintf("ObjectType(%d)", v)
 	}
 }
 
@@ -1192,7 +1420,7 @@ func (v *SignatureType) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Signature Type
+// String returns the name of the Signature Type.
 func (v SignatureType) String() string {
 	switch v {
 	case SignatureTypeUnknown:
@@ -1223,6 +1451,40 @@ func (v SignatureType) String() string {
 		return "internal"
 	default:
 		return fmt.Sprintf("SignatureType:%d", v)
+	}
+}
+
+// GoString returns the Go constant name.
+func (v SignatureType) GoString() string {
+	switch v {
+	case SignatureTypeUnknown:
+		return "SignatureTypeUnknown"
+	case SignatureTypeLegacyED25519:
+		return "SignatureTypeLegacyED25519"
+	case SignatureTypeED25519:
+		return "SignatureTypeED25519"
+	case SignatureTypeRCD1:
+		return "SignatureTypeRCD1"
+	case SignatureTypeReceipt:
+		return "SignatureTypeReceipt"
+	case SignatureTypeSynthetic:
+		return "SignatureTypeSynthetic"
+	case SignatureTypeSet:
+		return "SignatureTypeSet"
+	case SignatureTypeRemote:
+		return "SignatureTypeRemote"
+	case SignatureTypeBTC:
+		return "SignatureTypeBTC"
+	case SignatureTypeBTCLegacy:
+		return "SignatureTypeBTCLegacy"
+	case SignatureTypeETH:
+		return "SignatureTypeETH"
+	case SignatureTypeDelegated:
+		return "SignatureTypeDelegated"
+	case SignatureTypeInternal:
+		return "SignatureTypeInternal"
+	default:
+		return fmt.Sprintf("SignatureType(%d)", v)
 	}
 }
 
@@ -1296,7 +1558,7 @@ func (v *TransactionMax) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Transaction Max
+// String returns the name of the Transaction Max.
 func (v TransactionMax) String() string {
 	switch v {
 	case TransactionMaxUser:
@@ -1307,6 +1569,20 @@ func (v TransactionMax) String() string {
 		return "system"
 	default:
 		return fmt.Sprintf("TransactionMax:%d", v)
+	}
+}
+
+// GoString returns the Go constant name.
+func (v TransactionMax) GoString() string {
+	switch v {
+	case TransactionMaxUser:
+		return "TransactionMaxUser"
+	case TransactionMaxSynthetic:
+		return "TransactionMaxSynthetic"
+	case TransactionMaxSystem:
+		return "TransactionMaxSystem"
+	default:
+		return fmt.Sprintf("TransactionMax(%d)", v)
 	}
 }
 
@@ -1360,7 +1636,7 @@ func (v *TransactionType) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Transaction Type
+// String returns the name of the Transaction Type.
 func (v TransactionType) String() string {
 	switch v {
 	case TransactionTypeUnknown:
@@ -1427,6 +1703,76 @@ func (v TransactionType) String() string {
 		return "systemWriteData"
 	default:
 		return fmt.Sprintf("TransactionType:%d", v)
+	}
+}
+
+// GoString returns the Go constant name.
+func (v TransactionType) GoString() string {
+	switch v {
+	case TransactionTypeUnknown:
+		return "TransactionTypeUnknown"
+	case TransactionTypeCreateIdentity:
+		return "TransactionTypeCreateIdentity"
+	case TransactionTypeCreateTokenAccount:
+		return "TransactionTypeCreateTokenAccount"
+	case TransactionTypeSendTokens:
+		return "TransactionTypeSendTokens"
+	case TransactionTypeCreateDataAccount:
+		return "TransactionTypeCreateDataAccount"
+	case TransactionTypeWriteData:
+		return "TransactionTypeWriteData"
+	case TransactionTypeWriteDataTo:
+		return "TransactionTypeWriteDataTo"
+	case TransactionTypeAcmeFaucet:
+		return "TransactionTypeAcmeFaucet"
+	case TransactionTypeCreateToken:
+		return "TransactionTypeCreateToken"
+	case TransactionTypeIssueTokens:
+		return "TransactionTypeIssueTokens"
+	case TransactionTypeBurnTokens:
+		return "TransactionTypeBurnTokens"
+	case TransactionTypeCreateKeyPage:
+		return "TransactionTypeCreateKeyPage"
+	case TransactionTypeCreateKeyBook:
+		return "TransactionTypeCreateKeyBook"
+	case TransactionTypeAddCredits:
+		return "TransactionTypeAddCredits"
+	case TransactionTypeUpdateKeyPage:
+		return "TransactionTypeUpdateKeyPage"
+	case TransactionTypeAddValidator:
+		return "TransactionTypeAddValidator"
+	case TransactionTypeRemoveValidator:
+		return "TransactionTypeRemoveValidator"
+	case TransactionTypeUpdateValidatorKey:
+		return "TransactionTypeUpdateValidatorKey"
+	case TransactionTypeUpdateAccountAuth:
+		return "TransactionTypeUpdateAccountAuth"
+	case TransactionTypeUpdateKey:
+		return "TransactionTypeUpdateKey"
+	case TransactionTypeRemote:
+		return "TransactionTypeRemote"
+	case TransactionTypeSyntheticCreateIdentity:
+		return "TransactionTypeSyntheticCreateIdentity"
+	case TransactionTypeSyntheticWriteData:
+		return "TransactionTypeSyntheticWriteData"
+	case TransactionTypeSyntheticDepositTokens:
+		return "TransactionTypeSyntheticDepositTokens"
+	case TransactionTypeSyntheticDepositCredits:
+		return "TransactionTypeSyntheticDepositCredits"
+	case TransactionTypeSyntheticBurnTokens:
+		return "TransactionTypeSyntheticBurnTokens"
+	case TransactionTypeSyntheticForwardTransaction:
+		return "TransactionTypeSyntheticForwardTransaction"
+	case TransactionTypeSystemGenesis:
+		return "TransactionTypeSystemGenesis"
+	case TransactionTypeDirectoryAnchor:
+		return "TransactionTypeDirectoryAnchor"
+	case TransactionTypePartitionAnchor:
+		return "TransactionTypePartitionAnchor"
+	case TransactionTypeSystemWriteData:
+		return "TransactionTypeSystemWriteData"
+	default:
+		return fmt.Sprintf("TransactionType(%d)", v)
 	}
 }
 
@@ -1538,7 +1884,7 @@ func (v *VoteType) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Vote Type
+// String returns the name of the Vote Type.
 func (v VoteType) String() string {
 	switch v {
 	case VoteTypeAccept:
@@ -1551,6 +1897,22 @@ func (v VoteType) String() string {
 		return "suggest"
 	default:
 		return fmt.Sprintf("VoteType:%d", v)
+	}
+}
+
+// GoString returns the Go constant name.
+func (v VoteType) GoString() string {
+	switch v {
+	case VoteTypeAccept:
+		return "VoteTypeAccept"
+	case VoteTypeReject:
+		return "VoteTypeReject"
+	case VoteTypeAbstain:
+		return "VoteTypeAbstain"
+	case VoteTypeSuggest:
+		return "VoteTypeSuggest"
+	default:
+		return fmt.Sprintf("VoteType(%d)", v)
 	}
 }
 

@@ -38,7 +38,7 @@ func (v *RecordType) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Record Type
+// String returns the name of the Record Type.
 func (v RecordType) String() string {
 	switch v {
 	case RecordTypeAccount:
@@ -47,6 +47,18 @@ func (v RecordType) String() string {
 		return "transaction"
 	default:
 		return fmt.Sprintf("RecordType:%d", v)
+	}
+}
+
+// GoString returns the Go constant name.
+func (v RecordType) GoString() string {
+	switch v {
+	case RecordTypeAccount:
+		return "RecordTypeAccount"
+	case RecordTypeTransaction:
+		return "RecordTypeTransaction"
+	default:
+		return fmt.Sprintf("RecordType(%d)", v)
 	}
 }
 
@@ -98,7 +110,7 @@ func (v *SubmitMode) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Submit Mode
+// String returns the name of the Submit Mode.
 func (v SubmitMode) String() string {
 	switch v {
 	case SubmitModeSync:
@@ -109,6 +121,20 @@ func (v SubmitMode) String() string {
 		return "check"
 	default:
 		return fmt.Sprintf("SubmitMode:%d", v)
+	}
+}
+
+// GoString returns the Go constant name.
+func (v SubmitMode) GoString() string {
+	switch v {
+	case SubmitModeSync:
+		return "SubmitModeSync"
+	case SubmitModeAsync:
+		return "SubmitModeAsync"
+	case SubmitModeCheck:
+		return "SubmitModeCheck"
+	default:
+		return fmt.Sprintf("SubmitMode(%d)", v)
 	}
 }
 
