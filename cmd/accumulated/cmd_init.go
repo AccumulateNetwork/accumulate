@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -283,31 +282,31 @@ func initNode(cmd *cobra.Command, args []string) {
 			clientUrl := fmt.Sprintf("tcp://%s:%s", u.Hostname(), u.Port())
 
 			//check the health of the peer
-			peerClient, err := rpchttp.New(clientUrl)
-			checkf(err, "failed to create Tendermint client for %s", u.String())
+			//peerClient, err := rpchttp.New(clientUrl)
+			//checkf(err, "failed to create Tendermint client for %s", u.String())
 
-			peerStatus, err := peerClient.Status(context.Background())
-			if err != nil {
-				warnf("ignoring peer: not healthy %s", clientUrl)
-				continue
-			}
-
-			statBytes, err := peerStatus.NodeInfo.NodeID.Bytes()
-			if err != nil {
-				warnf("ignoring healthy peer %s because peer id is invalid", u.String())
-				continue
-			}
-
-			peerBytes, err := peer.ID.Bytes()
-			if err != nil {
-				warnf("ignoring peer %s because node id is not valid", u.String())
-				continue
-			}
-
-			if bytes.Compare(statBytes, peerBytes) != 0 {
-				warnf("ignoring stale peer %s", u.String())
-				continue
-			}
+			//peerStatus, err := peerClient.Status(context.Background())
+			//if err != nil {
+			//	warnf("ignoring peer: not healthy %s", clientUrl)
+			//	continue
+			//}
+			//
+			//statBytes, err := peerStatus.NodeInfo.NodeID.Bytes()
+			//if err != nil {
+			//	warnf("ignoring healthy peer %s because peer id is invalid", u.String())
+			//	continue
+			//}
+			//
+			//peerBytes, err := peer.ID.Bytes()
+			//if err != nil {
+			//	warnf("ignoring peer %s because node id is not valid", u.String())
+			//	continue
+			//}
+			//
+			//if bytes.Compare(statBytes, peerBytes) != 0 {
+			//	warnf("ignoring stale peer %s", u.String())
+			//	continue
+			//}
 
 			//if we have a healthy node with a matching id, add it as a bootstrap peer
 			config.P2P.BootstrapPeers += "," + u.String()

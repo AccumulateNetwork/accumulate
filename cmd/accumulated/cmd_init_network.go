@@ -110,8 +110,7 @@ func initNetwork(cmd *cobra.Command, args []string) {
 	default:
 		fatalf("not enough IPs - you must specify one base IP or one IP for each node")
 	}
-	//
-	//addresses := make(map[string][]string, len(directory.Nodes))
+
 	dnConfig := make([]*cfg.Config, len(directory.Nodes))
 	var dnRemote []string
 	dnListen := make([]string, len(directory.Nodes))
@@ -175,12 +174,6 @@ func initNetwork(cmd *cobra.Command, args []string) {
 			c.Accumulate.Network = network // Subnets = accSub
 		}
 	}
-
-	//for _, sub := range bvnSubnet {
-	//	for _, bvn := range sub.Nodes {
-	//		addresses[sub.Name] = append(addresses[sub.Name], fmt.Sprintf("http://%s:%d", bvn.IP, sub.Port))
-	//	}
-	//}
 
 	for i, v := range bvnSubnet {
 		for j := range v.Nodes {
@@ -296,10 +289,7 @@ func initNetwork(cmd *cobra.Command, args []string) {
 	check(err)
 	defer f.Close()
 
-	//err = yaml.NewEncoder(f).Encode(compose)
 	check(err)
-
-	//	initValidatorNode("dn", dnBasePort, cmd, args)
 }
 
 func initNetworkNode(networkName string, subnetName string, nodes []config.Node, netType cfg.NetworkType, nodeType cfg.NodeType,
