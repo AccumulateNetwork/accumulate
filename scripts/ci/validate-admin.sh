@@ -44,7 +44,7 @@ if [ -f "$(dnPrivKey 0)" ] && [ -f "/.dockerenv" ] && [ "$NUM_NODES" -ge "3" ]; 
   section "Add a new DN validator"
 
   # NUM_NODES already contains the next node number (which starts counting at 0)
-  accumulated init node "$NUM_NODES" tcp://dn-0:26656 --listen=tcp://127.0.1.100:26656 -w "$NODES_DIR/dn" --genesis-doc="${NODES_DIR}/dn/Node0/config/genesis.json" --skip-version-check --no-website
+  accumulated init node "$NUM_NODES" tcp://dn-0:26656 --listen=tcp://127.0.1.100:26656 -w "$NODES_DIR/dn" --genesis-doc="${NODES_DIR}/dn/Node0/config/genesis.json" --skip-version-check --no-website --skip-peer-health-check
 
   pubkey=$(jq -re .pub_key.value <"$(dnPrivKey $NUM_NODES)")
   pubkey=$(echo $pubkey | base64 -d | od -t x1 -An)

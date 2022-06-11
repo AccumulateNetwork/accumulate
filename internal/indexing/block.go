@@ -14,7 +14,7 @@ type BlockChainUpdatesIndexer struct {
 }
 
 // BlockChainUpdates returns a block updates indexer.
-func BlockChainUpdates(batch *database.Batch, network *config.Network, blockIndex uint64) *BlockChainUpdatesIndexer {
+func BlockChainUpdates(batch *database.Batch, network *config.Describe, blockIndex uint64) *BlockChainUpdatesIndexer {
 	v := database.AccountIndex(batch, network.NodeUrl(), newfn[BlockChainUpdatesIndex](), "Block", "Minor", blockIndex)
 	return &BlockChainUpdatesIndexer{v}
 }
