@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -78,11 +79,12 @@ var flagInit struct {
 }
 
 var flagInitNode struct {
-	GenesisDoc       string
-	ListenIP         string
-	Follower         bool
-	SkipVersionCheck bool
-	SeedProxy        string
+	GenesisDoc          string
+	ListenIP            string
+	Follower            bool
+	SkipVersionCheck    bool
+	SeedProxy           string
+	AllowUnhealthyPeers bool
 }
 
 var flagInitDualNode struct {
@@ -140,6 +142,7 @@ func init() {
 	cmdInitNode.Flags().StringVarP(&flagInitNode.ListenIP, "listen", "l", "", "Address and port to listen on, e.g. tcp://1.2.3.4:5678")
 	cmdInitNode.Flags().BoolVar(&flagInitNode.SkipVersionCheck, "skip-version-check", false, "Do not enforce the version check")
 	cmdInitNode.Flags().StringVar(&flagInitNode.SeedProxy, "seed", "", "Fetch network configuration from seed proxy")
+	cmdInitNode.Flags().BoolVarP(&flagInitNode.AllowUnhealthyPeers, "skip-peer-health-check", "", false, "do not check health of peers")
 	_ = cmdInitNode.MarkFlagRequired("listen")
 
 	cmdInitDualNode.Flags().BoolVarP(&flagInitDualNode.Follower, "follow", "f", false, "Do not participate in voting")
@@ -242,6 +245,9 @@ func initNode(cmd *cobra.Command, args []string) {
 	config.P2P.BootstrapPeers = fmt.Sprintf("%s@%s:%d", status.NodeInfo.NodeID, netAddr, netPort+int(cfg.PortOffsetTendermintP2P))
 
 	if flagInitNode.SeedProxy != "" {
+		if flagInitNode.AllowUnhealthyPeers {
+			warnf("peers must be checked to use for bootstrapping when using, --allow-unhealthy-peers will have no effect")
+		}
 		//go gather a more robust network description
 		seedProxy, err := proxy.New(flagInitNode.SeedProxy)
 		check(err)
@@ -279,34 +285,37 @@ func initNode(cmd *cobra.Command, args []string) {
 			u, err := url.Parse(peer.URL)
 			checkf(err, "failed to parse url from network info %s", peer.URL)
 
-			//clientUrl := fmt.Sprintf("tcp://%s:%s", u.Hostname(), u.Port())
+			clientUrl := fmt.Sprintf("tcp://%s:%s", u.Hostname(), u.Port())
 
-			//check the health of the peer
-			//peerClient, err := rpchttp.New(clientUrl)
-			//checkf(err, "failed to create Tendermint client for %s", u.String())
+			if !flagInitNode.AllowUnhealthyPeers {
+				//check the health of the peer
+				peerClient, err := rpchttp.New(clientUrl)
+				checkf(err, "failed to create Tendermint client for %s", u.String())
 
-			//peerStatus, err := peerClient.Status(context.Background())
-			//if err != nil {
-			//	warnf("ignoring peer: not healthy %s", clientUrl)
-			//	continue
-			//}
-			//
-			//statBytes, err := peerStatus.NodeInfo.NodeID.Bytes()
-			//if err != nil {
-			//	warnf("ignoring healthy peer %s because peer id is invalid", u.String())
-			//	continue
-			//}
-			//
-			//peerBytes, err := peer.ID.Bytes()
-			//if err != nil {
-			//	warnf("ignoring peer %s because node id is not valid", u.String())
-			//	continue
-			//}
-			//
-			//if bytes.Compare(statBytes, peerBytes) != 0 {
-			//	warnf("ignoring stale peer %s", u.String())
-			//	continue
-			//}
+				peerStatus, err := peerClient.Status(context.Background())
+				if err != nil {
+					warnf("ignoring peer: not healthy %s", clientUrl)
+					continue
+				}
+
+				statBytes, err := peerStatus.NodeInfo.NodeID.Bytes()
+				if err != nil {
+					warnf("ignoring healthy peer %s because peer id is invalid", u.String())
+					continue
+				}
+
+				peerBytes, err := peer.ID.Bytes()
+				if err != nil {
+					warnf("ignoring peer %s because node id is not valid", u.String())
+					continue
+				}
+
+				if bytes.Compare(statBytes, peerBytes) != 0 {
+					warnf("ignoring stale peer %s", u.String())
+					continue
+
+				}
+			}
 
 			//if we have a healthy node with a matching id, add it as a bootstrap peer
 			config.P2P.BootstrapPeers += "," + u.String()
