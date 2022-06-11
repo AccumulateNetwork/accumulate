@@ -39,7 +39,7 @@ func (x DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 	}
 
 	// Trigger a major block?
-	if st.Network.Type != config.Directory {
+	if st.NetworkType != config.Directory {
 		st.State.MakeMajorBlock = body.MakeMajorBlock
 	}
 
@@ -56,7 +56,7 @@ func (x DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 	}
 
 	// Process updates when present
-	if len(body.Updates) > 0 && st.Network.Type != config.Directory {
+	if len(body.Updates) > 0 && st.NetworkType != config.Directory {
 		err := processNetworkAccountUpdates(st, tx, body.Updates)
 		if err != nil {
 			return nil, err

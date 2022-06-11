@@ -14,7 +14,6 @@ import (
 	"github.com/tendermint/tendermint/rpc/client/http"
 	"github.com/tendermint/tendermint/rpc/client/local"
 	"gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/networks"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
@@ -88,7 +87,7 @@ func NewConnectionManager(config *config.Config, logger log.Logger, apiClientFac
 	cm := new(connectionManager)
 	cm.accConfig = &config.Accumulate
 	cm.apiClientFactory = apiClientFactory
-	cm.localHost = cm.reformatAddress(cm.accConfig.Network.LocalAddress)
+	cm.localHost = cm.reformatAddress(cm.accConfig.LocalAddress)
 	cm.logger = logger
 	cm.buildNodeInventory()
 	return cm
@@ -96,7 +95,7 @@ func NewConnectionManager(config *config.Config, logger log.Logger, apiClientFac
 
 func (cm *connectionManager) SelectConnection(subnetId string, allowFollower bool) (ConnectionContext, error) {
 	// When subnet is the same as the current node's subnet id, just return the local
-	if strings.EqualFold(subnetId, cm.accConfig.Network.LocalSubnetID) {
+	if strings.EqualFold(subnetId, cm.accConfig.SubnetId) {
 		if cm.localCtx == nil {
 			return nil, errNoLocalClient(subnetId)
 		}
@@ -198,8 +197,8 @@ func (cm *connectionManager) buildNodeInventory() {
 			case config.Validator:
 				switch connCtx.subnet.Type {
 				case config.BlockValidator:
-					bvnName := protocol.BvnNameFromSubnetId(subnet.ID)
-					if subnet.ID == protocol.Directory {
+					bvnName := protocol.BvnNameFromSubnetId(subnet.Id)
+					if subnet.Id == protocol.Directory {
 						panic("Directory subnet node is misconfigured as blockvalidator")
 					}
 					nodeList, ok := cm.bvnCtxMap[bvnName]
@@ -227,20 +226,20 @@ func (cm *connectionManager) buildNodeInventory() {
 }
 
 func (cm *connectionManager) buildNodeContext(node config.Node, subnet config.Subnet) (*connectionContext, error) {
-	connCtx := &connectionContext{subnetId: subnet.ID,
+	connCtx := &connectionContext{subnetId: subnet.Id,
 		subnet:     subnet,
 		nodeConfig: node,
 		connMgr:    cm,
 		metrics:    NodeMetrics{status: Unknown},
 		hasClient:  make(chan struct{}),
 	}
-	connCtx.networkGroup = cm.determineNetworkGroup(subnet.ID, node.Address)
+	connCtx.networkGroup = cm.determineNetworkGroup(subnet.Id, node.Address)
 
 	if node.Address != "local" && node.Address != "self" {
 		var err error
 		connCtx.resolvedIPs, err = resolveIPs(node.Address)
 		if err != nil {
-			cm.logger.Error("error resolving IPs for %q: %v", node.Address, err)
+			cm.logger.Error(fmt.Sprintf("error resolving IPs for %q: %v", node.Address, err))
 			connCtx.ReportErrorStatus(Down)
 		}
 	}
@@ -248,7 +247,7 @@ func (cm *connectionManager) buildNodeContext(node config.Node, subnet config.Su
 }
 
 func (cm *connectionManager) determineNetworkGroup(subnetId string, address string) NetworkGroup {
-	ownSubnet := cm.accConfig.Network.LocalSubnetID
+	ownSubnet := cm.accConfig.SubnetId
 	fmtAddr := cm.reformatAddress(address)
 	switch {
 	case strings.EqualFold(subnetId, ownSubnet) && strings.EqualFold(fmtAddr, cm.localHost):
@@ -314,10 +313,10 @@ func (cm *connectionManager) ConnectDirectly(other ConnectionManager) error {
 	}
 
 	var list []ConnectionContext
-	if cm2.accConfig.Network.LocalSubnetID == protocol.Directory {
+	if cm2.accConfig.SubnetId == protocol.Directory {
 		list = cm.dnCtxList
-	} else if list, ok = cm.bvnCtxMap[protocol.BvnNameFromSubnetId(cm2.accConfig.Network.LocalSubnetID)]; !ok {
-		return fmt.Errorf("unknown subnet %q", cm2.accConfig.Network.LocalSubnetID)
+	} else if list, ok = cm.bvnCtxMap[protocol.BvnNameFromSubnetId(cm2.accConfig.SubnetId)]; !ok {
+		return fmt.Errorf("unknown subnet %q", cm2.accConfig.SubnetId)
 	}
 
 	for _, connCtx := range list {
@@ -327,7 +326,7 @@ func (cm *connectionManager) ConnectDirectly(other ConnectionManager) error {
 			continue
 		}
 
-		if url.Host != cm2.accConfig.Network.LocalAddress {
+		if url.Host != cm2.accConfig.LocalAddress {
 			continue
 		}
 
@@ -339,7 +338,7 @@ func (cm *connectionManager) ConnectDirectly(other ConnectionManager) error {
 		return nil
 	}
 
-	return fmt.Errorf("cannot find %s node %s", cm2.accConfig.Network.LocalSubnetID, cm2.accConfig.Network.LocalAddress)
+	return fmt.Errorf("cannot find %s node %s", cm2.accConfig.SubnetId, cm2.accConfig.LocalAddress)
 }
 
 func (cm *connectionManager) createClient(connCtx *connectionContext) error {
@@ -352,7 +351,7 @@ func (cm *connectionManager) createClient(connCtx *connectionContext) error {
 		}
 		connCtx.setClient(cm.localClient, api)
 	default:
-		abciAddr, err := config.OffsetPort(connCtx.GetAddress(), networks.TmRpcPortOffset)
+		abciAddr, err := config.OffsetPort(connCtx.GetAddress(), connCtx.GetBasePort(), int(config.PortOffsetTendermintRpc))
 		if err != nil {
 			return errInvalidAddress(err)
 		}
@@ -360,7 +359,7 @@ func (cm *connectionManager) createClient(connCtx *connectionContext) error {
 		if err != nil {
 			return errCreateRPCClient(err)
 		}
-		apiAddr, err := config.OffsetPort(connCtx.GetAddress(), networks.AccApiPortOffset)
+		apiAddr, err := config.OffsetPort(connCtx.GetAddress(), connCtx.GetBasePort(), int(config.PortOffsetAccumulateApi))
 		if err != nil {
 			return errInvalidAddress(err)
 		}
@@ -380,6 +379,11 @@ func resolveIPs(address string) ([]net.IP, error) {
 	if err == nil {
 		hostname = nodeUrl.Hostname()
 	} else {
+		hostname = address
+	}
+
+	if hostname == "" {
+		//no hostname, but url is valid? could happen if scheme is missing.
 		hostname = address
 	}
 
