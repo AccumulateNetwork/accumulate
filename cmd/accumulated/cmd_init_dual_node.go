@@ -7,14 +7,22 @@ import (
 	"os"
 	"path"
 	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 	cfg "gitlab.com/accumulatenetwork/accumulate/config"
 )
 
-// initDualNode accumulate init dual BVN0 http://ip:dnport
+// initDualNode accumulate init dual Mainnet.BVN0 http://ip:dnport
 func initDualNode(cmd *cobra.Command, args []string) {
-	subnetName := args[0]
+	s := strings.Split(args[0], ".")
+	if len(s) != 2 {
+		fatalf("network must be in the form of <network-name>.<subnet-name>, e.g. mainnet.bvn0")
+	}
+	networkName := s[0]
+	subnetName := s[1]
+	_ = networkName
+
 	u, err := url.Parse(args[1])
 	check(err)
 
@@ -36,6 +44,7 @@ func initDualNode(cmd *cobra.Command, args []string) {
 	flagInitNode.ListenIP = fmt.Sprintf("http://0.0.0.0:%d", dnBasePort)
 	flagInitNode.SkipVersionCheck = flagInitDualNode.SkipVersionCheck
 	flagInitNode.GenesisDoc = flagInitDualNode.GenesisDoc
+	flagInitNode.SeedProxy = flagInitDualNode.SeedProxy
 	flagInitNode.Follower = false
 
 	// configure the BVN first so we know how to setup the bvn.
@@ -48,12 +57,12 @@ func initDualNode(cmd *cobra.Command, args []string) {
 	check(err)
 
 	//make sure we have a block validator type
-	if c.Accumulate.Network.Type != cfg.Directory {
-		fatalf("expecting directory but received %v", c.Accumulate.Network.Type)
+	if c.Accumulate.NetworkType != cfg.Directory {
+		fatalf("expecting directory but received %v", c.Accumulate.NetworkType)
 	}
 
 	//now find out what bvn we are on then let
-	dnSubNet := c.Accumulate.Network.LocalAddress
+	dnSubNet := c.Accumulate.LocalAddress
 	dnHost, _, err := net.SplitHostPort(dnSubNet)
 	checkf(err, "cannot resolve bvn host and port")
 
@@ -62,7 +71,7 @@ func initDualNode(cmd *cobra.Command, args []string) {
 	var bvn *cfg.Subnet
 	for i, v := range c.Accumulate.Network.Subnets {
 		//search for the directory.
-		if v.ID == subnetName {
+		if v.Id == subnetName {
 			bvn = &c.Accumulate.Network.Subnets[i]
 			break
 		}

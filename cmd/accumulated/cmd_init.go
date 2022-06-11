@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -29,7 +30,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node"
-	"gitlab.com/accumulatenetwork/accumulate/networks"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/proxy"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	etcd "go.etcd.io/etcd/client/v3"
 	"gopkg.in/yaml.v3"
@@ -78,16 +79,19 @@ var flagInit struct {
 }
 
 var flagInitNode struct {
-	GenesisDoc       string
-	ListenIP         string
-	Follower         bool
-	SkipVersionCheck bool
+	GenesisDoc          string
+	ListenIP            string
+	Follower            bool
+	SkipVersionCheck    bool
+	SeedProxy           string
+	AllowUnhealthyPeers bool
 }
 
 var flagInitDualNode struct {
 	GenesisDoc       string
 	Follower         bool
 	SkipVersionCheck bool
+	SeedProxy        string
 }
 
 var flagInitDevnet struct {
@@ -137,11 +141,14 @@ func init() {
 	cmdInitNode.Flags().StringVar(&flagInitNode.GenesisDoc, "genesis-doc", "", "Genesis doc for the target network")
 	cmdInitNode.Flags().StringVarP(&flagInitNode.ListenIP, "listen", "l", "", "Address and port to listen on, e.g. tcp://1.2.3.4:5678")
 	cmdInitNode.Flags().BoolVar(&flagInitNode.SkipVersionCheck, "skip-version-check", false, "Do not enforce the version check")
+	cmdInitNode.Flags().StringVar(&flagInitNode.SeedProxy, "seed", "", "Fetch network configuration from seed proxy")
+	cmdInitNode.Flags().BoolVarP(&flagInitNode.AllowUnhealthyPeers, "skip-peer-health-check", "", false, "do not check health of peers")
 	_ = cmdInitNode.MarkFlagRequired("listen")
 
 	cmdInitDualNode.Flags().BoolVarP(&flagInitDualNode.Follower, "follow", "f", false, "Do not participate in voting")
 	cmdInitDualNode.Flags().StringVar(&flagInitDualNode.GenesisDoc, "genesis-doc", "", "Genesis doc for the target network")
 	cmdInitDualNode.Flags().BoolVar(&flagInitDualNode.SkipVersionCheck, "skip-version-check", false, "Do not enforce the version check")
+	cmdInitDualNode.Flags().StringVar(&flagInitDualNode.SeedProxy, "seed", "", "Fetch network configuration from seed proxy")
 
 	cmdInitDevnet.Flags().StringVar(&flagInitDevnet.Name, "name", "DevNet", "Network name")
 	cmdInitDevnet.Flags().IntVarP(&flagInitDevnet.NumBvns, "bvns", "b", 2, "Number of block validator networks to configure")
@@ -194,10 +201,10 @@ func initNode(cmd *cobra.Command, args []string) {
 		nodePort = int(p)
 	}
 
-	accClient, err := client.New(fmt.Sprintf("http://%s:%d", netAddr, netPort+networks.AccApiPortOffset))
+	accClient, err := client.New(fmt.Sprintf("http://%s:%d", netAddr, netPort+int(config.PortOffsetAccumulateApi)))
 	checkf(err, "failed to create API client for %s", args[0])
 
-	tmClient, err := rpchttp.New(fmt.Sprintf("tcp://%s:%d", netAddr, netPort+networks.TmRpcPortOffset))
+	tmClient, err := rpchttp.New(fmt.Sprintf("tcp://%s:%d", netAddr, netPort+int(config.PortOffsetTendermintRpc)))
 	checkf(err, "failed to create Tendermint client for %s", args[0])
 
 	version := getVersion(accClient)
@@ -234,9 +241,88 @@ func initNode(cmd *cobra.Command, args []string) {
 	if flagInitNode.Follower {
 		nodeType = cfg.Follower
 	}
-	config := config.Default(description.Network.NetworkName, description.Network.Type, nodeType, description.Network.LocalSubnetID)
-	config.P2P.PersistentPeers = fmt.Sprintf("%s@%s:%d", status.NodeInfo.NodeID, netAddr, netPort+networks.TmP2pPortOffset)
-	config.Accumulate.Network = description.Network
+	config := config.Default(description.Network.Id, description.NetworkType, nodeType, description.SubnetId)
+	config.P2P.BootstrapPeers = fmt.Sprintf("%s@%s:%d", status.NodeInfo.NodeID, netAddr, netPort+int(cfg.PortOffsetTendermintP2P))
+
+	if flagInitNode.SeedProxy != "" {
+		if flagInitNode.AllowUnhealthyPeers {
+			warnf("peers must be checked to use for bootstrapping when using, --allow-unhealthy-peers will have no effect")
+		}
+		//go gather a more robust network description
+		seedProxy, err := proxy.New(flagInitNode.SeedProxy)
+		check(err)
+		slr := proxy.SeedListRequest{}
+		slr.Network = description.Network.Id
+		slr.Subnet = description.SubnetId
+		resp, err := seedProxy.GetSeedList(context.Background(), &slr)
+		if err != nil {
+			checkf(err, "proxy returned seeding error")
+		}
+		for _, addr := range resp.Addresses {
+			//go build a list of healthy nodes
+			u, err := cfg.OffsetPort(addr, netPort, int(cfg.PortOffsetTendermintP2P))
+			checkf(err, "failed to parse url from network info %s", addr)
+
+			//check the health of the peer
+			peerClient, err := rpchttp.New(fmt.Sprintf("tcp://%s:%s", u.Hostname(), u.Port()))
+			checkf(err, "failed to create Tendermint client for %s", u.String())
+
+			peerStatus, err := peerClient.Status(context.Background())
+			if err != nil {
+				warnf("ignoring peer: not healthy %s", u.String())
+				continue
+			}
+
+			//if we have a healthy node with a matching id, add it as a bootstrap peer
+			config.P2P.BootstrapPeers += "," + peerStatus.NodeInfo.NodeID.AddressString(strconv.Itoa(netPort+int(cfg.PortOffsetTendermintP2P)))
+		}
+	} else {
+		//otherwise make the best out of what we have to establish our bootstrap peers
+		netInfo, err := tmClient.NetInfo(context.Background())
+		checkf(err, "failed to get network info from node")
+
+		for _, peer := range netInfo.Peers {
+			u, err := url.Parse(peer.URL)
+			checkf(err, "failed to parse url from network info %s", peer.URL)
+
+			clientUrl := fmt.Sprintf("tcp://%s:%s", u.Hostname(), u.Port())
+
+			if !flagInitNode.AllowUnhealthyPeers {
+				//check the health of the peer
+				peerClient, err := rpchttp.New(clientUrl)
+				checkf(err, "failed to create Tendermint client for %s", u.String())
+
+				peerStatus, err := peerClient.Status(context.Background())
+				if err != nil {
+					warnf("ignoring peer: not healthy %s", clientUrl)
+					continue
+				}
+
+				statBytes, err := peerStatus.NodeInfo.NodeID.Bytes()
+				if err != nil {
+					warnf("ignoring healthy peer %s because peer id is invalid", u.String())
+					continue
+				}
+
+				peerBytes, err := peer.ID.Bytes()
+				if err != nil {
+					warnf("ignoring peer %s because node id is not valid", u.String())
+					continue
+				}
+
+				if bytes.Compare(statBytes, peerBytes) != 0 {
+					warnf("ignoring stale peer %s", u.String())
+					continue
+
+				}
+			}
+
+			//if we have a healthy node with a matching id, add it as a bootstrap peer
+			config.P2P.BootstrapPeers += "," + u.String()
+		}
+	}
+
+	config.Accumulate.Describe = cfg.Describe{NetworkType: description.NetworkType, SubnetId: description.SubnetId, LocalAddress: ""}
 
 	if flagInit.LogLevels != "" {
 		_, _, err := logging.ParseLogLevel(flagInit.LogLevels, io.Discard)
@@ -371,13 +457,14 @@ func initDNs(count int, dnConfig []*cfg.Config, dnRemote []string, dnListen []st
 			Address: fmt.Sprintf("http://%s:%d", dnRemote[i], flagInitDevnet.BasePort),
 		}
 		dnConfig[i].Accumulate.Network.Subnets = subnets
-		dnConfig[i].Accumulate.Network.LocalAddress = parseHost(dnNodes[i].Address)
+		dnConfig[i].Accumulate.LocalAddress = parseHost(dnNodes[i].Address)
 	}
 
 	subnets[0] = config.Subnet{
-		ID:    protocol.Directory,
-		Type:  config.Directory,
-		Nodes: dnNodes,
+		Id:       protocol.Directory,
+		Type:     config.Directory,
+		BasePort: int64(flagInitDevnet.BasePort),
+		Nodes:    dnNodes,
 	}
 }
 
@@ -400,12 +487,13 @@ func initBVNs(bvnConfigs [][]*cfg.Config, count int, bvnRemotes [][]string, bvnL
 				Address: fmt.Sprintf("http://%s:%d", bvnRemotes[bvn][i], flagInitDevnet.BasePort),
 			}
 			bvnConfigs[bvn][i].Accumulate.Network.Subnets = subnets
-			bvnConfigs[bvn][i].Accumulate.Network.LocalAddress = parseHost(bvnNodes[i].Address)
+			bvnConfigs[bvn][i].Accumulate.LocalAddress = parseHost(bvnNodes[i].Address)
 		}
 		subnets[bvn+1] = config.Subnet{
-			ID:    subnetID,
-			Type:  config.BlockValidator,
-			Nodes: bvnNodes,
+			Id:       subnetID,
+			Type:     config.BlockValidator,
+			BasePort: int64(flagInitDevnet.BasePort),
+			Nodes:    bvnNodes,
 		}
 	}
 }
@@ -466,7 +554,7 @@ func createInLocalFS(dnConfig []*cfg.Config, dnRemote []string, dnListen []strin
 
 func createDockerCompose(cmd *cobra.Command, dnRemote []string, compose *dc.Config) {
 	var svc dc.ServiceConfig
-	api := fmt.Sprintf("http://%s:%d/v2", dnRemote[0], flagInitDevnet.BasePort+networks.AccApiPortOffset)
+	api := fmt.Sprintf("http://%s:%d/v2", dnRemote[0], flagInitDevnet.BasePort+int(cfg.PortOffsetAccumulateApi))
 	svc.Name = "tools"
 	svc.ContainerName = "devnet-init"
 	svc.Image = flagInitDevnet.DockerImage
@@ -501,7 +589,7 @@ func createDockerCompose(cmd *cobra.Command, dnRemote []string, compose *dc.Conf
 	compose.Services = append(compose.Services, svc)
 
 	dn0svc := compose.Services[0]
-	dn0svc.Ports = make([]dc.ServicePortConfig, networks.MaxPortOffset+1)
+	dn0svc.Ports = make([]dc.ServicePortConfig, int(config.PortOffsetMax)+1)
 	for i := range dn0svc.Ports {
 		port := uint32(flagInitDevnet.BasePort + i)
 		dn0svc.Ports[i] = dc.ServicePortConfig{

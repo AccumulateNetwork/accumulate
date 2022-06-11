@@ -38,7 +38,7 @@ type ExecutorOptions struct {
 	Logger   log.Logger
 	Key      ed25519.PrivateKey
 	Router   routing.Router
-	Network  config.Network
+	Describe config.Describe
 	EventBus *events.Bus
 
 	isGenesis bool
@@ -80,7 +80,7 @@ func NewNodeExecutor(opts ExecutorOptions, db *database.Database) (*Executor, er
 		UpdateValidatorKey{},
 	}
 
-	switch opts.Network.Type {
+	switch opts.Describe.NetworkType {
 	case config.Directory:
 		executors = append(executors,
 			PartitionAnchor{},
@@ -93,7 +93,7 @@ func NewNodeExecutor(opts ExecutorOptions, db *database.Database) (*Executor, er
 		)
 
 	default:
-		return nil, errors.Format(errors.StatusInternalError, "invalid subnet type %v", opts.Network.Type)
+		return nil, errors.Format(errors.StatusInternalError, "invalid subnet type %v", opts.Describe.NetworkType)
 	}
 
 	// This is a no-op in dev
@@ -104,10 +104,10 @@ func NewNodeExecutor(opts ExecutorOptions, db *database.Database) (*Executor, er
 
 // NewGenesisExecutor creates a transaction executor that can be used to set up
 // the genesis state.
-func NewGenesisExecutor(db *database.Database, logger log.Logger, network config.Network, router routing.Router) (*Executor, error) {
+func NewGenesisExecutor(db *database.Database, logger log.Logger, network *config.Describe, router routing.Router) (*Executor, error) {
 	return newExecutor(
 		ExecutorOptions{
-			Network:   network,
+			Describe:  *network,
 			Logger:    logger,
 			Router:    router,
 			isGenesis: true,
@@ -138,7 +138,7 @@ func newExecutor(opts ExecutorOptions, db *database.Database, executors ...Trans
 	defer batch.Discard()
 
 	var ledger *protocol.SystemLedger
-	err := batch.Account(m.Network.NodeUrl(protocol.Ledger)).GetStateAs(&ledger)
+	err := batch.Account(m.Describe.NodeUrl(protocol.Ledger)).GetStateAs(&ledger)
 	switch {
 	case err == nil:
 		// Database has been initialized
@@ -179,7 +179,7 @@ func (m *Executor) Genesis(block *Block, exec chain.TransactionExecutor) error {
 	delivery := new(chain.Delivery)
 	delivery.Transaction = txn
 
-	st := NewStateManager(&m.Network, nil, block.Batch.Begin(true), nil, txn, m.logger.With("operation", "Genesis"))
+	st := NewStateManager(&m.Describe, nil, block.Batch.Begin(true), nil, txn, m.logger.With("operation", "Genesis"))
 	defer st.Discard()
 
 	err = block.Batch.Transaction(txn.GetHash()).PutStatus(&protocol.TransactionStatus{
@@ -189,7 +189,7 @@ func (m *Executor) Genesis(block *Block, exec chain.TransactionExecutor) error {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
-	err = indexing.BlockState(block.Batch, m.Network.NodeUrl(protocol.Ledger)).Clear()
+	err = indexing.BlockState(block.Batch, m.Describe.NodeUrl(protocol.Ledger)).Clear()
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
@@ -215,7 +215,7 @@ func (m *Executor) Genesis(block *Block, exec chain.TransactionExecutor) error {
 }
 
 func (m *Executor) LoadStateRoot(batch *database.Batch) ([]byte, error) {
-	_, err := batch.Account(m.Network.NodeUrl()).GetState()
+	_, err := batch.Account(m.Describe.NodeUrl()).GetState()
 	switch {
 	case err == nil:
 		return batch.BptRoot(), nil
@@ -287,5 +287,5 @@ func (m *Executor) InitFromSnapshot(batch *database.Batch, file ioutil2.SectionR
 }
 
 func (m *Executor) SaveSnapshot(batch *database.Batch, file io.WriteSeeker) error {
-	return batch.SaveSnapshot(file, &m.Network)
+	return batch.SaveSnapshot(file, &m.Describe)
 }

@@ -20,10 +20,10 @@ func TestOracleDistribution(t *testing.T) {
 	sim := simulator.New(t, 3)
 	sim.InitFromGenesisWith(g)
 	dn := sim.Subnet(Directory)
-	bvn0 := sim.Subnet(sim.Subnets[1].ID)
-	bvn1 := sim.Subnet(sim.Subnets[2].ID)
+	bvn0 := sim.Subnet(sim.Subnets[1].Id)
+	bvn1 := sim.Subnet(sim.Subnets[2].Id)
 
-	signer := simulator.GetAccount[*KeyPage](sim, dn.Executor.Network.DefaultOperatorPage())
+	signer := simulator.GetAccount[*KeyPage](sim, dn.Executor.Describe.DefaultOperatorPage())
 	_, entry, ok := signer.EntryByKey(dn.Executor.Key[32:])
 	require.True(t, ok)
 	timestamp = entry.GetLastUsedOn()
@@ -36,7 +36,7 @@ func TestOracleDistribution(t *testing.T) {
 	oracleEntry := g.FormatOracle()
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
 		acctesting.NewTransaction().
-			WithPrincipal(dn.Executor.Network.NodeUrl(Oracle)).
+			WithPrincipal(dn.Executor.Describe.NodeUrl(Oracle)).
 			WithTimestampVar(&timestamp).
 			WithSigner(signer.Url, signer.Version).
 			WithBody(&WriteData{
@@ -53,8 +53,8 @@ func TestOracleDistribution(t *testing.T) {
 	sim.ExecuteBlocks(10)
 
 	// Verify account
-	bvn := sim.Subnet(sim.Subnets[1].ID)
-	account := simulator.GetAccount[*DataAccount](sim, bvn.Executor.Network.NodeUrl(Oracle))
+	bvn := sim.Subnet(sim.Subnets[1].Id)
+	account := simulator.GetAccount[*DataAccount](sim, bvn.Executor.Describe.NodeUrl(Oracle))
 	require.NotNil(t, account.Entry)
 	require.Equal(t, oracleEntry.GetData(), account.Entry.GetData())
 	require.Len(t, account.Entry.GetData(), 1)
@@ -76,7 +76,7 @@ func TestRoutingDistribution(t *testing.T) {
 	sim.InitFromGenesisWith(g)
 	dn := sim.Subnet(Directory)
 
-	signer := simulator.GetAccount[*KeyPage](sim, dn.Executor.Network.DefaultOperatorPage())
+	signer := simulator.GetAccount[*KeyPage](sim, dn.Executor.Describe.DefaultOperatorPage())
 	_, keyEntry, ok := signer.EntryByKey(dn.Executor.Key[32:])
 	require.True(t, ok)
 	timestamp = keyEntry.GetLastUsedOn()
@@ -90,7 +90,7 @@ func TestRoutingDistribution(t *testing.T) {
 	entry := g.FormatRouting()
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
 		acctesting.NewTransaction().
-			WithPrincipal(dn.Executor.Network.NodeUrl(Routing)).
+			WithPrincipal(dn.Executor.Describe.NodeUrl(Routing)).
 			WithTimestampVar(&timestamp).
 			WithSigner(signer.Url, signer.Version).
 			WithBody(&WriteData{
@@ -105,8 +105,8 @@ func TestRoutingDistribution(t *testing.T) {
 	sim.ExecuteBlocks(10)
 
 	// Verify account
-	bvn := sim.Subnet(sim.Subnets[1].ID)
-	account := simulator.GetAccount[*DataAccount](sim, bvn.Executor.Network.NodeUrl(Routing))
+	bvn := sim.Subnet(sim.Subnets[1].Id)
+	account := simulator.GetAccount[*DataAccount](sim, bvn.Executor.Describe.NodeUrl(Routing))
 	require.NotNil(t, account.Entry)
 	require.Equal(t, entry.GetData(), account.Entry.GetData())
 	require.Len(t, account.Entry.GetData(), 1)
