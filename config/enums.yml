@@ -10,3 +10,17 @@ NodeType:
     value: 1
   Follower:
     value: 2
+
+PortOffset:
+  TendermintP2P:
+    value: 0
+  TendermintRpc:
+    value: 1
+  TendermintGrpc:
+    value: 2 
+  AccumulateApi:
+    value: 4
+  Website:
+    value: 5
+  Prometheus:
+    value: 6

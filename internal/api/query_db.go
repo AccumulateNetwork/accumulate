@@ -12,7 +12,7 @@ import (
 )
 
 type DatabaseQueryModule struct {
-	Network *config.Network
+	Network *config.Describe
 	DB      *database.Database
 }
 

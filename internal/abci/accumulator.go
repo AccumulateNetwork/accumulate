@@ -58,7 +58,7 @@ type AccumulatorOptions struct {
 func NewAccumulator(opts AccumulatorOptions) *Accumulator {
 	app := &Accumulator{
 		AccumulatorOptions: opts,
-		logger:             opts.Logger.With("module", "accumulate", "subnet", opts.Accumulate.Network.LocalSubnetID),
+		logger:             opts.Logger.With("module", "accumulate", "subnet", opts.Accumulate.SubnetId),
 	}
 
 	events.SubscribeAsync(opts.EventBus, func(e events.DidSaveSnapshot) {
@@ -145,7 +145,7 @@ func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
 
 	var height int64
 	var ledger *protocol.SystemLedger
-	err = batch.Account(app.Accumulate.Network.NodeUrl(protocol.Ledger)).GetStateAs(&ledger)
+	err = batch.Account(app.Accumulate.Describe.NodeUrl(protocol.Ledger)).GetStateAs(&ledger)
 	switch {
 	case err == nil:
 		height = int64(ledger.Index)

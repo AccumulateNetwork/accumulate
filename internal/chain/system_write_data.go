@@ -25,7 +25,7 @@ func (SystemWriteData) Validate(st *StateManager, tx *Delivery) (protocol.Transa
 
 	if subnet, ok := protocol.ParseSubnetUrl(st.OriginUrl); !ok {
 		return nil, errors.Format(errors.StatusBadRequest, "invalid principal: %v is not a system account", st.OriginUrl)
-	} else if subnet != st.LocalSubnetID {
+	} else if subnet != st.SubnetId {
 		return nil, errors.Format(errors.StatusBadRequest, "invalid principal: %v belongs to the wrong subnet", st.OriginUrl)
 	}
 
