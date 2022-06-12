@@ -108,7 +108,7 @@ func (sim *Simulator) Setup(bvnCount int) {
 
 		network := config.Describe{
 			NetworkType:  partition.Type,
-			PartitionId:     partition.Id,
+			PartitionId:  partition.Id,
 			LocalAddress: partition.Id,
 			Network:      config.Network{Id: "simulator", Partitions: sim.Subnets},
 		}

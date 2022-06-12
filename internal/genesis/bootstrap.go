@@ -536,7 +536,7 @@ func (b *bootstrap) buildNetworkDefinition() *protocol.NetworkDefinition {
 		}
 
 		partitionDef := protocol.PartitionDefinition{
-			PartitionID:           partition.Id,
+			PartitionID:        partition.Id,
 			ValidatorKeyHashes: vkHashes,
 		}
 		netDef.Partitions = append(netDef.Partitions, partitionDef)
