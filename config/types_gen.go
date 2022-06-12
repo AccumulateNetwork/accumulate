@@ -8,13 +8,18 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 )
 
+type Describe struct {
+	NetworkType  NetworkType `json:"networkType,omitempty" form:"networkType" query:"networkType" validate:"required" toml:"type" mapstructure:"type"`
+	SubnetId     string      `json:"subnetId,omitempty" form:"subnetId" query:"subnetId" validate:"required" toml:"subnet-id" mapstructure:"subnet-id"`
+	LocalAddress string      `json:"localAddress,omitempty" form:"localAddress" query:"localAddress" validate:"required" toml:"local-address" mapstructure:"local-address"`
+	Network      Network     `json:"network,omitempty" form:"network" query:"network" validate:"required" toml:"network" mapstructure:"network"`
+	extraData    []byte
+}
+
 type Network struct {
-	NetworkName      string      `json:"networkName,omitempty" form:"networkName" query:"networkName" validate:"required" toml:"network-name" mapstructure:"network-name"`
-	Type             NetworkType `json:"type,omitempty" form:"type" query:"type" validate:"required" toml:"type" mapstructure:"type"`
-	LocalPartitionID string      `json:"localPartitionID,omitempty" form:"localPartitionID" query:"localPartitionID" validate:"required" toml:"local-partition" mapstructure:"local-partition"`
-	LocalAddress     string      `json:"localAddress,omitempty" form:"localAddress" query:"localAddress" validate:"required" toml:"local-address" mapstructure:"local-address"`
-	Partitions       []Partition `json:"partitions,omitempty" form:"partitions" query:"partitions" validate:"required" toml:"partitions" mapstructure:"partitions"`
-	extraData        []byte
+	Id        string   `json:"id,omitempty" form:"id" query:"id" validate:"required" toml:"id" mapstructure:"id"`
+	Subnets   []Subnet `json:"subnets,omitempty" form:"subnets" query:"subnets" validate:"required" toml:"subnets" mapstructure:"subnets"`
+	extraData []byte
 }
 
 type Node struct {
@@ -23,23 +28,34 @@ type Node struct {
 	extraData []byte
 }
 
-type Partition struct {
-	ID        string      `json:"iD,omitempty" form:"iD" query:"iD" validate:"required" toml:"id" mapstructure:"id"`
+type Subnet struct {
+	Id        string      `json:"id,omitempty" form:"id" query:"id" validate:"required" toml:"id" mapstructure:"id"`
 	Type      NetworkType `json:"type,omitempty" form:"type" query:"type" validate:"required" toml:"type" mapstructure:"type"`
+	BasePort  int64       `json:"basePort,omitempty" form:"basePort" query:"basePort" validate:"required" toml:"port" mapstructure:"port"`
 	Nodes     []Node      `json:"nodes,omitempty" form:"nodes" query:"nodes" validate:"required" toml:"nodes" mapstructure:"nodes"`
 	extraData []byte
 }
 
+func (v *Describe) Copy() *Describe {
+	u := new(Describe)
+
+	u.NetworkType = v.NetworkType
+	u.SubnetId = v.SubnetId
+	u.LocalAddress = v.LocalAddress
+	u.Network = *(&v.Network).Copy()
+
+	return u
+}
+
+func (v *Describe) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *Network) Copy() *Network {
 	u := new(Network)
 
-	u.NetworkName = v.NetworkName
-	u.Type = v.Type
-	u.LocalPartitionID = v.LocalPartitionID
-	u.LocalAddress = v.LocalAddress
-	u.Partitions = make([]Partition, len(v.Partitions))
-	for i, v := range v.Partitions {
-		u.Partitions[i] = *(&v).Copy()
+	u.Id = v.Id
+	u.Subnets = make([]Subnet, len(v.Subnets))
+	for i, v := range v.Subnets {
+		u.Subnets[i] = *(&v).Copy()
 	}
 
 	return u
@@ -58,11 +74,12 @@ func (v *Node) Copy() *Node {
 
 func (v *Node) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *Partition) Copy() *Partition {
-	u := new(Partition)
+func (v *Subnet) Copy() *Subnet {
+	u := new(Subnet)
 
-	u.ID = v.ID
+	u.Id = v.Id
 	u.Type = v.Type
+	u.BasePort = v.BasePort
 	u.Nodes = make([]Node, len(v.Nodes))
 	for i, v := range v.Nodes {
 		u.Nodes[i] = *(&v).Copy()
@@ -71,26 +88,34 @@ func (v *Partition) Copy() *Partition {
 	return u
 }
 
-func (v *Partition) CopyAsInterface() interface{} { return v.Copy() }
+func (v *Subnet) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *Network) Equal(u *Network) bool {
-	if !(v.NetworkName == u.NetworkName) {
+func (v *Describe) Equal(u *Describe) bool {
+	if !(v.NetworkType == u.NetworkType) {
 		return false
 	}
-	if !(v.Type == u.Type) {
-		return false
-	}
-	if !(v.LocalPartitionID == u.LocalPartitionID) {
+	if !(v.SubnetId == u.SubnetId) {
 		return false
 	}
 	if !(v.LocalAddress == u.LocalAddress) {
 		return false
 	}
-	if len(v.Partitions) != len(u.Partitions) {
+	if !((&v.Network).Equal(&u.Network)) {
 		return false
 	}
-	for i := range v.Partitions {
-		if !((&v.Partitions[i]).Equal(&u.Partitions[i])) {
+
+	return true
+}
+
+func (v *Network) Equal(u *Network) bool {
+	if !(v.Id == u.Id) {
+		return false
+	}
+	if len(v.Subnets) != len(u.Subnets) {
+		return false
+	}
+	for i := range v.Subnets {
+		if !((&v.Subnets[i]).Equal(&u.Subnets[i])) {
 			return false
 		}
 	}
@@ -109,11 +134,14 @@ func (v *Node) Equal(u *Node) bool {
 	return true
 }
 
-func (v *Partition) Equal(u *Partition) bool {
-	if !(v.ID == u.ID) {
+func (v *Subnet) Equal(u *Subnet) bool {
+	if !(v.Id == u.Id) {
 		return false
 	}
 	if !(v.Type == u.Type) {
+		return false
+	}
+	if !(v.BasePort == u.BasePort) {
 		return false
 	}
 	if len(v.Nodes) != len(u.Nodes) {
@@ -130,78 +158,60 @@ func (v *Partition) Equal(u *Partition) bool {
 
 func (v *Network) MarshalJSON() ([]byte, error) {
 	u := struct {
-		NetworkName      string                       `json:"networkName,omitempty"`
-		Type             NetworkType                  `json:"type,omitempty"`
-		LocalPartitionID string                       `json:"localPartitionID,omitempty"`
-		LocalSubnetID    string                       `json:"localSubnetID,omitempty"`
-		LocalAddress     string                       `json:"localAddress,omitempty"`
-		Partitions       encoding.JsonList[Partition] `json:"partitions,omitempty"`
+		Id      string                    `json:"id,omitempty"`
+		Subnets encoding.JsonList[Subnet] `json:"subnets,omitempty"`
 	}{}
-	u.NetworkName = v.NetworkName
-	u.Type = v.Type
-	u.LocalPartitionID = v.LocalPartitionID
-	u.LocalSubnetID = v.LocalPartitionID
-	u.LocalAddress = v.LocalAddress
-	u.Partitions = v.Partitions
+	u.Id = v.Id
+	u.Subnets = v.Subnets
 	return json.Marshal(&u)
 }
 
-func (v *Partition) MarshalJSON() ([]byte, error) {
+func (v *Subnet) MarshalJSON() ([]byte, error) {
 	u := struct {
-		ID    string                  `json:"iD,omitempty"`
-		Type  NetworkType             `json:"type,omitempty"`
-		Nodes encoding.JsonList[Node] `json:"nodes,omitempty"`
+		Id       string                  `json:"id,omitempty"`
+		Type     NetworkType             `json:"type,omitempty"`
+		BasePort int64                   `json:"basePort,omitempty"`
+		Nodes    encoding.JsonList[Node] `json:"nodes,omitempty"`
 	}{}
-	u.ID = v.ID
+	u.Id = v.Id
 	u.Type = v.Type
+	u.BasePort = v.BasePort
 	u.Nodes = v.Nodes
 	return json.Marshal(&u)
 }
 
 func (v *Network) UnmarshalJSON(data []byte) error {
 	u := struct {
-		NetworkName      string                       `json:"networkName,omitempty"`
-		Type             NetworkType                  `json:"type,omitempty"`
-		LocalPartitionID string                       `json:"localPartitionID,omitempty"`
-		LocalSubnetID    string                       `json:"localSubnetID,omitempty"`
-		LocalAddress     string                       `json:"localAddress,omitempty"`
-		Partitions       encoding.JsonList[Partition] `json:"partitions,omitempty"`
+		Id      string                    `json:"id,omitempty"`
+		Subnets encoding.JsonList[Subnet] `json:"subnets,omitempty"`
 	}{}
-	u.NetworkName = v.NetworkName
-	u.Type = v.Type
-	u.LocalPartitionID = v.LocalPartitionID
-	u.LocalSubnetID = v.LocalPartitionID
-	u.LocalAddress = v.LocalAddress
-	u.Partitions = v.Partitions
+	u.Id = v.Id
+	u.Subnets = v.Subnets
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	v.NetworkName = u.NetworkName
-	v.Type = u.Type
-	if !(u.LocalPartitionID == "") {
-		v.LocalPartitionID = u.LocalPartitionID
-	} else {
-		v.LocalPartitionID = u.LocalSubnetID
-	}
-	v.LocalAddress = u.LocalAddress
-	v.Partitions = u.Partitions
+	v.Id = u.Id
+	v.Subnets = u.Subnets
 	return nil
 }
 
-func (v *Partition) UnmarshalJSON(data []byte) error {
+func (v *Subnet) UnmarshalJSON(data []byte) error {
 	u := struct {
-		ID    string                  `json:"iD,omitempty"`
-		Type  NetworkType             `json:"type,omitempty"`
-		Nodes encoding.JsonList[Node] `json:"nodes,omitempty"`
+		Id       string                  `json:"id,omitempty"`
+		Type     NetworkType             `json:"type,omitempty"`
+		BasePort int64                   `json:"basePort,omitempty"`
+		Nodes    encoding.JsonList[Node] `json:"nodes,omitempty"`
 	}{}
-	u.ID = v.ID
+	u.Id = v.Id
 	u.Type = v.Type
+	u.BasePort = v.BasePort
 	u.Nodes = v.Nodes
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	v.ID = u.ID
+	v.Id = u.Id
 	v.Type = u.Type
+	v.BasePort = u.BasePort
 	v.Nodes = u.Nodes
 	return nil
 }

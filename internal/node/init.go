@@ -16,7 +16,6 @@ import (
 	"github.com/tendermint/tendermint/types"
 	cfg "gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
-	"gitlab.com/accumulatenetwork/accumulate/networks"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 )
 
@@ -68,15 +67,15 @@ func initV1(opts InitOptions) (bootstrap genesis.Bootstrap, err error) {
 	}
 
 	configs := opts.Config
-	partitionID := configs[0].Accumulate.Network.LocalPartitionID
+	partitionId := configs[0].Accumulate.PartitionId
 	genVals := make([]types.GenesisValidator, 0, len(configs))
 	genValKeys := make([][]byte, 0, len(configs))
 
 	var networkType cfg.NetworkType
 	for i, config := range configs {
 		if i == 0 {
-			networkType = config.Accumulate.Network.Type
-		} else if config.Accumulate.Network.Type != networkType {
+			networkType = config.Accumulate.NetworkType
+		} else if config.Accumulate.NetworkType != networkType {
 			return nil, errors.New("Cannot initialize multiple networks at once")
 		}
 
@@ -89,10 +88,10 @@ func initV1(opts InitOptions) (bootstrap genesis.Bootstrap, err error) {
 		nodeDir := path.Join(opts.WorkDir, nodeDirName)
 		config.SetRoot(nodeDir)
 
-		config.P2P.ListenAddress = fmt.Sprintf("tcp://%s:%d", opts.ListenIP[i], opts.Port+networks.TmP2pPortOffset)
-		config.RPC.ListenAddress = fmt.Sprintf("tcp://%s:%d", opts.ListenIP[i], opts.Port+networks.TmRpcPortOffset)
-		config.RPC.GRPCListenAddress = fmt.Sprintf("tcp://%s:%d", opts.ListenIP[i], opts.Port+networks.TmRpcGrpcPortOffset)
-		config.Instrumentation.PrometheusListenAddr = fmt.Sprintf(":%d", opts.Port+networks.TmPrometheusPortOffset)
+		config.P2P.ListenAddress = fmt.Sprintf("tcp://%s:%d", opts.ListenIP[i], opts.Port+int(cfg.PortOffsetTendermintP2P))
+		config.RPC.ListenAddress = fmt.Sprintf("tcp://%s:%d", opts.ListenIP[i], opts.Port+int(cfg.PortOffsetTendermintRpc))
+		config.RPC.GRPCListenAddress = fmt.Sprintf("tcp://%s:%d", opts.ListenIP[i], opts.Port+int(cfg.PortOffsetTendermintGrpc))
+		config.Instrumentation.PrometheusListenAddr = fmt.Sprintf(":%d", opts.Port+int(cfg.PortOffsetPrometheus))
 
 		err = os.MkdirAll(path.Join(nodeDir, "config"), nodeDirPerm)
 		if err != nil {
@@ -104,7 +103,7 @@ func initV1(opts InitOptions) (bootstrap genesis.Bootstrap, err error) {
 			return nil, fmt.Errorf("failed to create data dir: %v", err)
 		}
 
-		if err := initFilesWithConfig(config, &partitionID, opts.GenesisDoc); err != nil {
+		if err := initFilesWithConfig(config, &partitionId, opts.GenesisDoc); err != nil {
 			return nil, err
 		}
 
@@ -132,7 +131,7 @@ func initV1(opts InitOptions) (bootstrap genesis.Bootstrap, err error) {
 
 		db := memory.New(opts.Logger.With("module", "storage"))
 		bootstrap, err = genesis.Init(db, genesis.InitOpts{
-			Network:             configs[0].Accumulate.Network,
+			Describe:            configs[0].Accumulate.Describe,
 			AllConfigs:          configs,
 			GenesisTime:         genTime,
 			Validators:          genVals,
@@ -167,7 +166,8 @@ func initV1(opts InitOptions) (bootstrap genesis.Bootstrap, err error) {
 			config.P2P.AddrBookStrict = false
 			config.P2P.AllowDuplicateIP = true
 			config.P2P.PersistentPeers = ""
-			if config.P2P.PersistentPeers == "" {
+			//if we aren't bootstrapping then we do want our persistent peers
+			if config.P2P.BootstrapPeers == "" {
 				for j, peer := range validatorPeers {
 					if j != i {
 						config.P2P.PersistentPeers += "," + peer
@@ -179,10 +179,10 @@ func initV1(opts InitOptions) (bootstrap genesis.Bootstrap, err error) {
 			config.P2P.AddrBookStrict = true
 			config.P2P.AllowDuplicateIP = false
 		}
-		config.Moniker = fmt.Sprintf("%s.%d", config.Accumulate.Network.LocalPartitionID, i)
+		config.Moniker = fmt.Sprintf("%s.%d", config.Accumulate.PartitionId, i)
 
-		config.Accumulate.Website.ListenAddress = fmt.Sprintf("http://%s:8080", opts.ListenIP[i])
-		config.Accumulate.API.ListenAddress = fmt.Sprintf("http://%s:%d", opts.ListenIP[i], opts.Port+networks.AccApiPortOffset)
+		config.Accumulate.Website.ListenAddress = fmt.Sprintf("http://%s:%d", opts.ListenIP[i], opts.Port+int(cfg.PortOffsetWebsite))
+		config.Accumulate.API.ListenAddress = fmt.Sprintf("http://%s:%d", opts.ListenIP[i], opts.Port+int(cfg.PortOffsetAccumulateApi))
 
 		err := cfg.Store(config)
 		if err != nil {

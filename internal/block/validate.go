@@ -94,7 +94,7 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 	// Lite token address => lite identity
 	var signerUrl *url.URL
 	if _, ok := firstSig.(*protocol.SyntheticSignature); ok {
-		signerUrl = x.Network.DefaultOperatorPage()
+		signerUrl = x.Describe.DefaultOperatorPage()
 	} else {
 		signerUrl = firstSig.GetSigner()
 		if key, _, _ := protocol.ParseLiteTokenAddress(signerUrl); key != nil {
@@ -125,7 +125,7 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 	}
 
 	// Set up the state manager
-	st := chain.NewStateManager(&x.Network, &x.globals.Active, batch.Begin(false), principal, delivery.Transaction, x.logger.With("operation", "ValidateEnvelope"))
+	st := chain.NewStateManager(&x.Describe, &x.globals.Active, batch.Begin(false), principal, delivery.Transaction, x.logger.With("operation", "ValidateEnvelope"))
 	defer st.Discard()
 	st.Pretend = true
 
@@ -159,7 +159,7 @@ func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Deli
 	var signer, delegate protocol.Signer
 	switch signature := signature.(type) {
 	case *protocol.SyntheticSignature:
-		err = verifySyntheticSignature(&x.Network, batch, delivery.Transaction, signature, md)
+		err = verifySyntheticSignature(&x.Describe, batch, delivery.Transaction, signature, md)
 
 	case *protocol.ReceiptSignature:
 		err = verifyReceiptSignature(delivery.Transaction, signature, md)
@@ -253,8 +253,8 @@ func (x *Executor) checkRouting(delivery *chain.Delivery, signature protocol.Sig
 		if err != nil {
 			return errors.Wrap(errors.StatusUnknown, err)
 		}
-		if !strings.EqualFold(partition, x.Network.LocalPartitionID) {
-			return errors.Format(errors.StatusBadRequest, "signature submitted to %v instead of %v", x.Network.LocalPartitionID, partition)
+		if !strings.EqualFold(partition, x.Describe.PartitionId) {
+			return errors.Format(errors.StatusBadRequest, "signature submitted to %v instead of %v", x.Describe.PartitionId, partition)
 		}
 	}
 

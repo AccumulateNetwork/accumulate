@@ -851,7 +851,9 @@ func TestAddKey(t *testing.T) {
 
 	page := n.GetKeyPage("foo/book1/1")
 	require.Len(t, page.Keys, 2)
-	require.Equal(t, nkh[:], page.Keys[1].PublicKeyHash)
+	//look for the key.
+	_, _, found := page.EntryByKeyHash(nkh[:])
+	require.True(t, found, "key not found in page")
 }
 
 func TestUpdateKeyPage(t *testing.T) {
@@ -980,7 +982,14 @@ func TestRemoveKey(t *testing.T) {
 
 	page := n.GetKeyPage("foo/book1/1")
 	require.Len(t, page.Keys, 1)
-	require.Equal(t, h2[:], page.Keys[0].PublicKeyHash)
+
+	//look for the H1 key, which should have been removed
+	_, _, found := page.EntryByKeyHash(h1[:])
+	require.False(t, found, "key was found in page when it should have been removed")
+
+	//look for the H2 key which was also added before H1 was removed
+	_, _, found = page.EntryByKeyHash(h2[:])
+	require.True(t, found, "key was not found in page it was expected to be in")
 }
 
 func TestSignatorHeight(t *testing.T) {

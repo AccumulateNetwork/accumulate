@@ -30,7 +30,7 @@ func NewStateManagerForTest(t *testing.T, db *database.Database, transaction *pr
 	txid := types.Bytes(transaction.GetHash()).AsBytes32()
 	m := new(StateManager)
 	m.OriginUrl = transaction.Header.Principal
-	m.stateCache = *newStateCache(&config.Network{LocalPartitionID: t.Name()}, nil, transaction.Body.Type(), txid, db.Begin(true))
+	m.stateCache = *newStateCache(&config.Describe{PartitionId: t.Name()}, nil, transaction.Body.Type(), txid, db.Begin(true))
 
 	require.NoError(t, m.LoadUrlAs(m.OriginUrl, &m.Origin))
 	return m

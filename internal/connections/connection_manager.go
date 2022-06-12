@@ -14,7 +14,6 @@ import (
 	"github.com/tendermint/tendermint/rpc/client/http"
 	"github.com/tendermint/tendermint/rpc/client/local"
 	"gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/networks"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
@@ -88,15 +87,15 @@ func NewConnectionManager(config *config.Config, logger log.Logger, apiClientFac
 	cm := new(connectionManager)
 	cm.accConfig = &config.Accumulate
 	cm.apiClientFactory = apiClientFactory
-	cm.localHost = cm.reformatAddress(cm.accConfig.Network.LocalAddress)
+	cm.localHost = cm.reformatAddress(cm.accConfig.LocalAddress)
 	cm.logger = logger
 	cm.buildNodeInventory()
 	return cm
 }
 
 func (cm *connectionManager) SelectConnection(partitionId string, allowFollower bool) (ConnectionContext, error) {
-	// When partition is the same as the current node's partition id, just return the local
-	if strings.EqualFold(partitionId, cm.accConfig.Network.LocalPartitionID) {
+	// When partitionId is the same as the current node's subnet id, just return the local
+	if strings.EqualFold(partitionId, cm.accConfig.PartitionId) {
 		if cm.localCtx == nil {
 			return nil, errNoLocalClient(partitionId)
 		}
@@ -198,8 +197,8 @@ func (cm *connectionManager) buildNodeInventory() {
 			case config.Validator:
 				switch connCtx.partition.Type {
 				case config.BlockValidator:
-					bvnName := protocol.BvnNameFromPartitionId(partition.ID)
-					if partition.ID == protocol.Directory {
+					bvnName := protocol.BvnNameFromPartitionId(partition.Id)
+					if partition.Id == protocol.Directory {
 						panic("Directory partition node is misconfigured as blockvalidator")
 					}
 					nodeList, ok := cm.bvnCtxMap[bvnName]
@@ -226,21 +225,21 @@ func (cm *connectionManager) buildNodeInventory() {
 	}
 }
 
-func (cm *connectionManager) buildNodeContext(node config.Node, partition config.Partition) (*connectionContext, error) {
-	connCtx := &connectionContext{partitionId: partition.ID,
+func (cm *connectionManager) buildNodeContext(node config.Node, subnet config.Subnet) (*connectionContext, error) {
+	connCtx := &connectionContext{partitionId: partition.Id,
 		partition:  partition,
 		nodeConfig: node,
 		connMgr:    cm,
 		metrics:    NodeMetrics{status: Unknown},
 		hasClient:  make(chan struct{}),
 	}
-	connCtx.networkGroup = cm.determineNetworkGroup(partition.ID, node.Address)
+	connCtx.networkGroup = cm.determineNetworkGroup(partition.Id, node.Address)
 
 	if node.Address != "local" && node.Address != "self" {
 		var err error
 		connCtx.resolvedIPs, err = resolveIPs(node.Address)
 		if err != nil {
-			cm.logger.Error("error resolving IPs for %q: %v", node.Address, err)
+			cm.logger.Error(fmt.Sprintf("error resolving IPs for %q: %v", node.Address, err))
 			connCtx.ReportErrorStatus(Down)
 		}
 	}
@@ -248,7 +247,7 @@ func (cm *connectionManager) buildNodeContext(node config.Node, partition config
 }
 
 func (cm *connectionManager) determineNetworkGroup(partitionId string, address string) NetworkGroup {
-	ownpartition := cm.accConfig.Network.LocalPartitionID
+	ownpartition := cm.accConfig.PartitionId
 	fmtAddr := cm.reformatAddress(address)
 	switch {
 	case strings.EqualFold(partitionId, ownpartition) && strings.EqualFold(fmtAddr, cm.localHost):
@@ -314,10 +313,10 @@ func (cm *connectionManager) ConnectDirectly(other ConnectionManager) error {
 	}
 
 	var list []ConnectionContext
-	if cm2.accConfig.Network.LocalPartitionID == protocol.Directory {
+	if cm2.accConfig.PartitionId == protocol.Directory {
 		list = cm.dnCtxList
-	} else if list, ok = cm.bvnCtxMap[protocol.BvnNameFromPartitionId(cm2.accConfig.Network.LocalPartitionID)]; !ok {
-		return fmt.Errorf("unknown partition %q", cm2.accConfig.Network.LocalPartitionID)
+	} else if list, ok = cm.bvnCtxMap[protocol.BvnNameFromPartitionId(cm2.accConfig.PartitionId)]; !ok {
+		return fmt.Errorf("unknown partition %q", cm2.accConfig.PartitionId)
 	}
 
 	for _, connCtx := range list {
@@ -327,7 +326,7 @@ func (cm *connectionManager) ConnectDirectly(other ConnectionManager) error {
 			continue
 		}
 
-		if url.Host != cm2.accConfig.Network.LocalAddress {
+		if url.Host != cm2.accConfig.LocalAddress {
 			continue
 		}
 
@@ -339,7 +338,7 @@ func (cm *connectionManager) ConnectDirectly(other ConnectionManager) error {
 		return nil
 	}
 
-	return fmt.Errorf("cannot find %s node %s", cm2.accConfig.Network.LocalPartitionID, cm2.accConfig.Network.LocalAddress)
+	return fmt.Errorf("cannot find %s node %s", cm2.accConfig.PartitionId, cm2.accConfig.LocalAddress)
 }
 
 func (cm *connectionManager) createClient(connCtx *connectionContext) error {
@@ -352,7 +351,7 @@ func (cm *connectionManager) createClient(connCtx *connectionContext) error {
 		}
 		connCtx.setClient(cm.localClient, api)
 	default:
-		abciAddr, err := config.OffsetPort(connCtx.GetAddress(), networks.TmRpcPortOffset)
+		abciAddr, err := config.OffsetPort(connCtx.GetAddress(), connCtx.GetBasePort(), int(config.PortOffsetTendermintRpc))
 		if err != nil {
 			return errInvalidAddress(err)
 		}
@@ -360,7 +359,7 @@ func (cm *connectionManager) createClient(connCtx *connectionContext) error {
 		if err != nil {
 			return errCreateRPCClient(err)
 		}
-		apiAddr, err := config.OffsetPort(connCtx.GetAddress(), networks.AccApiPortOffset)
+		apiAddr, err := config.OffsetPort(connCtx.GetAddress(), connCtx.GetBasePort(), int(config.PortOffsetAccumulateApi))
 		if err != nil {
 			return errInvalidAddress(err)
 		}
@@ -380,6 +379,11 @@ func resolveIPs(address string) ([]net.IP, error) {
 	if err == nil {
 		hostname = nodeUrl.Hostname()
 	} else {
+		hostname = address
+	}
+
+	if hostname == "" {
+		//no hostname, but url is valid? could happen if scheme is missing.
 		hostname = address
 	}
 

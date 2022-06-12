@@ -42,9 +42,9 @@ func TestState(t *testing.T) {
 	bvn := sim.PartitionFor(aliceUrl)
 	var blockHash, bptRoot []byte
 	_ = bvn.Database.View(func(b *database.Batch) error {
-		blockHash, err = b.GetMinorRootChainAnchor(&bvn.Executor.Network)
+		blockHash, err = b.GetMinorRootChainAnchor(&bvn.Executor.Describe)
 		require.NoError(t, err)
-		require.NoError(t, b.SaveSnapshot(f, &bvn.Executor.Network))
+		require.NoError(t, b.SaveSnapshot(f, &bvn.Executor.Describe))
 		bptRoot = b.BptRoot()
 		return nil
 	})
@@ -57,7 +57,7 @@ func TestState(t *testing.T) {
 	var blockHash2, bptRoot2 []byte
 	require.NoError(t, db.Update(func(b *database.Batch) error {
 		require.NoError(t, b.RestoreSnapshot(f))
-		blockHash2, err = b.GetMinorRootChainAnchor(&bvn.Executor.Network)
+		blockHash2, err = b.GetMinorRootChainAnchor(&bvn.Executor.Describe)
 		require.NoError(t, err)
 		bptRoot2 = b.BptRoot()
 		return nil

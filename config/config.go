@@ -3,13 +3,15 @@ package config
 import (
 	"fmt"
 	"io"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
-	"strconv"
+	"reflect"
 	"strings"
 	"time"
 
+	"github.com/mitchellh/mapstructure"
 	"github.com/pelletier/go-toml"
 	"github.com/spf13/viper"
 	tm "github.com/tendermint/tendermint/config"
@@ -35,6 +37,9 @@ const (
 )
 
 type NodeType uint64
+type PortOffset uint64
+
+var PortOffsetMax = PortOffsetPrometheus
 
 const (
 	Validator = NodeTypeValidator
@@ -109,9 +114,9 @@ var DefaultLogLevels = LogLevel{}.
 
 func Default(netName string, net NetworkType, node NodeType, partitionId string) *Config {
 	c := new(Config)
-	c.Accumulate.Network.NetworkName = netName
-	c.Accumulate.Network.Type = net
-	c.Accumulate.Network.LocalPartitionID = partitionId
+	c.Accumulate.Network.Id = netName
+	c.Accumulate.NetworkType = net
+	c.Accumulate.PartitionId = partitionId
 	c.Accumulate.API.PrometheusServer = "http://18.119.26.7:9090"
 	c.Accumulate.SentryDSN = "https://glet_78c3bf45d009794a4d9b0c990a1f1ed5@gitlab.com/api/v4/error_tracking/collector/29762666"
 	c.Accumulate.Website.Enabled = true
@@ -142,8 +147,9 @@ type Config struct {
 
 type Accumulate struct {
 	SentryDSN string `toml:"sentry-dsn" mapstructure:"sentry-dsn"`
-
-	Network   Network   `toml:"network" mapstructure:"network"`
+	Describe  `toml:"describe" mapstructure:"describe"`
+	// TODO: move network config to its own file since it will be constantly changing over time.
+	//	NetworkConfig string      `toml:"network" mapstructure:"network"`
 	Snapshots Snapshots `toml:"snapshots" mapstructure:"snapshots"`
 	Storage   Storage   `toml:"storage" mapstructure:"storage"`
 	API       API       `toml:"api" mapstructure:"api"`
@@ -189,22 +195,25 @@ func MakeAbsolute(root, path string) string {
 	return filepath.Join(root, path)
 }
 
-func OffsetPort(addr string, offset int) (*url.URL, error) {
+func OffsetPort(addr string, basePort int, offset int) (*url.URL, error) {
 	u, err := url.Parse(addr)
 	if err != nil {
 		return nil, fmt.Errorf("invalid URL %q: %v", addr, err)
 	}
+
 	if u.Scheme == "" {
-		return nil, fmt.Errorf("invalid URL %q: has no scheme, so this probably isn't a URL", addr)
+		ip := net.ParseIP(addr)
+		if ip == nil {
+			return nil, fmt.Errorf("invalid URL %q: has no scheme and is not an IP address, so this probably isn't a valid URL", addr)
+		}
+
+		u, err = url.Parse("tcp://" + ip.String())
+		if err != nil {
+			return nil, fmt.Errorf("invalid url from ip string")
+		}
 	}
 
-	port, err := strconv.ParseInt(u.Port(), 10, 17)
-	if err != nil {
-		return nil, fmt.Errorf("invalid port %q: %v", u.Port(), err)
-	}
-
-	port += int64(offset)
-	u.Host = fmt.Sprintf("%s:%d", u.Hostname(), port)
+	u.Host = fmt.Sprintf("%s:%d", u.Hostname(), basePort+offset)
 	return u, nil
 }
 
@@ -212,7 +221,7 @@ func (n *Network) GetBvnNames() []string {
 	var names []string
 	for _, partition := range n.Partitions {
 		if partition.Type == BlockValidator {
-			names = append(names, partition.ID)
+			names = append(names, partition.Id)
 		}
 	}
 	return names
@@ -220,7 +229,7 @@ func (n *Network) GetBvnNames() []string {
 
 func (n *Network) GetPartitionByID(partitionID string) Partition {
 	for _, partition := range n.Partitions {
-		if partition.ID == partitionID {
+		if partition.Id == partitionID {
 			return partition
 		}
 	}
@@ -299,10 +308,43 @@ func load(dir, file string, c interface{}) error {
 		return fmt.Errorf("read: %v", err)
 	}
 
-	err = v.Unmarshal(c)
+	err = v.Unmarshal(c, viper.DecodeHook(mapstructure.ComposeDecodeHookFunc(
+		mapstructure.StringToTimeDurationHookFunc(),
+		mapstructure.StringToSliceHookFunc(","),
+		StringToEnumHookFunc())))
+
 	if err != nil {
 		return fmt.Errorf("unmarshal: %v", err)
 	}
 
 	return nil
+}
+
+// MarshalTOML marshals the Network Type to Toml as a string.
+func (v NetworkType) MarshalTOML() ([]byte, error) {
+	return []byte("\"" + v.String() + "\""), nil
+}
+
+// MarshalTOML marshals the Node Type to Toml as a string.
+func (v NodeType) MarshalTOML() ([]byte, error) {
+	return []byte("\"" + v.String() + "\""), nil
+}
+
+// StringToEnumHookFunc is a decode hook for mapstructure that will convert enums to strings
+func StringToEnumHookFunc() mapstructure.DecodeHookFuncType {
+	return func(
+		f reflect.Type,
+		t reflect.Type,
+		data interface{},
+	) (interface{}, error) {
+		switch t {
+		case reflect.TypeOf(NetworkTypeDirectory):
+			ret, _ := NetworkTypeByName(data.(string))
+			return ret, nil
+		case reflect.TypeOf(NodeTypeValidator):
+			ret, _ := NodeTypeByName(data.(string))
+			return ret, nil
+		}
+		return data, nil
+	}
 }

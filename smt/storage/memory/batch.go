@@ -9,8 +9,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
-const debugLogWrites = false
-
 type GetFunc func(storage.Key) ([]byte, error)
 type CommitFunc func(map[storage.Key][]byte) error
 

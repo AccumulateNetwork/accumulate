@@ -76,7 +76,7 @@ DirectoryAnchor:
       repeatable: true
     - name: Receipts
       description: are receipts for anchors from other partitions that were included in the block
-      type: Receipt
+      type: managed.Receipt
       repeatable: true
       marshal-as: reference
     - name: MakeMajorBlock

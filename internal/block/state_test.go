@@ -35,10 +35,10 @@ func TestStateSaveAndRestore(t *testing.T) {
 		return filepath.Join(dir, fmt.Sprintf("%s.bpt", partition))
 	}
 	for _, partition := range sim.Partitions {
-		x := sim.Partition(partition.ID)
+		x := sim.Partition(partition.Id)
 		batch := x.Database.Begin(false)
 		defer batch.Discard()
-		f, err := os.Create(filename(partition.ID))
+		f, err := os.Create(filename(partition.Id))
 		require.NoError(t, err)
 		require.NoError(t, x.Executor.SaveSnapshot(batch, f))
 		require.NoError(t, f.Close())

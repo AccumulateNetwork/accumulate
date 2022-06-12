@@ -47,7 +47,7 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Del
 			return x.recordFailedTransaction(batch, delivery, err)
 		}
 		if !ready {
-			return x.recordPendingTransaction(&x.Network, batch, delivery)
+			return x.recordPendingTransaction(&x.Describe, batch, delivery)
 		}
 	}
 
@@ -62,9 +62,9 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Del
 	// Set up the state manager
 	var st *chain.StateManager
 	if x.isGenesis {
-		st = chain.NewStateManager(&x.Network, nil, batch.Begin(true), principal, delivery.Transaction, x.logger.With("operation", "ProcessTransaction"))
+		st = chain.NewStateManager(&x.Describe, nil, batch.Begin(true), principal, delivery.Transaction, x.logger.With("operation", "ProcessTransaction"))
 	} else {
-		st, err = chain.LoadStateManager(&x.Network, &x.globals.Active, batch.Begin(true), principal, delivery.Transaction, status, x.logger.With("operation", "ProcessTransaction"))
+		st, err = chain.LoadStateManager(&x.Describe, &x.globals.Active, batch.Begin(true), principal, delivery.Transaction, status, x.logger.With("operation", "ProcessTransaction"))
 		if err != nil {
 			return x.recordFailedTransaction(batch, delivery, err)
 		}
@@ -272,7 +272,7 @@ func (x *Executor) synthTransactionIsReady(batch *database.Batch, transaction *p
 
 	// Determine which anchor chain to load
 	var partition string
-	if x.Network.Type != config.Directory {
+	if x.Describe.NetworkType != config.Directory {
 		partition = protocol.Directory
 	} else {
 		var ok bool
@@ -283,7 +283,7 @@ func (x *Executor) synthTransactionIsReady(batch *database.Batch, transaction *p
 	}
 
 	// Load the anchor chain
-	anchorChain, err := batch.Account(x.Network.AnchorPool()).ReadChain(protocol.RootAnchorChain(partition))
+	anchorChain, err := batch.Account(x.Describe.AnchorPool()).ReadChain(protocol.RootAnchorChain(partition))
 	if err != nil {
 		return false, errors.Format(errors.StatusUnknown, "load %s intermediate anchor chain: %w", partition, err)
 	}
@@ -307,7 +307,7 @@ func (x *Executor) synthTransactionIsReady(batch *database.Batch, transaction *p
 
 	// Load the ledger
 	var ledger *protocol.SyntheticLedger
-	err = batch.Account(x.Network.Synthetic()).GetStateAs(&ledger)
+	err = batch.Account(x.Describe.Synthetic()).GetStateAs(&ledger)
 	if err != nil {
 		return false, errors.Format(errors.StatusUnknown, "load synthetic transaction ledger: %w", err)
 	}
@@ -357,14 +357,14 @@ func (x *Executor) recordTransaction(batch *database.Batch, delivery *chain.Deli
 
 	// Update the synthetic ledger
 	var ledger *protocol.SyntheticLedger
-	err = batch.Account(x.Network.Synthetic()).GetStateAs(&ledger)
+	err = batch.Account(x.Describe.Synthetic()).GetStateAs(&ledger)
 	if err != nil {
 		return nil, errors.Format(errors.StatusUnknown, "load synthetic transaction ledger: %w", err)
 	}
 
 	partitionLedger := ledger.Partition(delivery.SourceNetwork)
 	if partitionLedger.Add(status.Delivered, delivery.SequenceNumber, delivery.Transaction.ID()) {
-		err = batch.Account(x.Network.Synthetic()).PutState(ledger)
+		err = batch.Account(x.Describe.Synthetic()).PutState(ledger)
 		if err != nil {
 			return nil, errors.Format(errors.StatusUnknown, "store synthetic transaction ledger: %w", err)
 		}
@@ -373,7 +373,7 @@ func (x *Executor) recordTransaction(batch *database.Batch, delivery *chain.Deli
 	return status, nil
 }
 
-func (x *Executor) recordPendingTransaction(net *config.Network, batch *database.Batch, delivery *chain.Delivery) (*protocol.TransactionStatus, *chain.ProcessTransactionState, error) {
+func (x *Executor) recordPendingTransaction(net *config.Describe, batch *database.Batch, delivery *chain.Delivery) (*protocol.TransactionStatus, *chain.ProcessTransactionState, error) {
 	// Record the transaction
 	status, err := x.recordTransaction(batch, delivery, func(status *protocol.TransactionStatus) {
 		status.Remote = false
@@ -409,6 +409,8 @@ func (x *Executor) recordPendingTransaction(net *config.Network, batch *database
 		x.logger.Error("Missing receipt for pending synthetic transaction", "hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4), "type", delivery.Transaction.Body.Type())
 		return status, new(chain.ProcessTransactionState), nil
 	}
+
+	x.logger.Debug("Pending synthetic transaction", "hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4), "type", delivery.Transaction.Body.Type(), "anchor", logging.AsHex(receipt.Anchor).Slice(0, 4), "module", "synthetic")
 
 	err = batch.Account(net.Ledger()).AddSyntheticForAnchor(*(*[32]byte)(receipt.Anchor), delivery.Transaction.ID())
 	if err != nil {
@@ -458,7 +460,7 @@ func (x *Executor) recordSuccessfulTransaction(batch *database.Batch, state *cha
 
 	// Check for pending synthetic transactions
 	var ledger *protocol.SyntheticLedger
-	err = batch.Account(x.Network.Synthetic()).GetStateAs(&ledger)
+	err = batch.Account(x.Describe.Synthetic()).GetStateAs(&ledger)
 	if err != nil {
 		return nil, nil, errors.Format(errors.StatusUnknown, "load synthetic transaction ledger: %w", err)
 	}

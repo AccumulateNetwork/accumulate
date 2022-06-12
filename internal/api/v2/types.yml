@@ -440,7 +440,7 @@ ChainEntry:
   incomparable: true
   fields:
     - name: Height
-      type: varint
+      type: uvarint
       keep-empty: true
     - name: Entry
       type: bytes
@@ -474,6 +474,10 @@ DescriptionResponse:
   non-binary: true
   incomparable: true
   fields:
+    - name: SubnetId
+      type: string
+    - name: NetworkType
+      type: config.NetworkType
     - name: Network
       alternative: Subnet
       type: config.Network

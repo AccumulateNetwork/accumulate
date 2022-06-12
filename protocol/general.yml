@@ -100,24 +100,6 @@ FactomDataEntry:
       repeatable: true
       type: bytes
 
-Receipt:
-  fields:
-    - name: Start
-      type: bytes
-    - name: Anchor
-      type: bytes
-    - name: Entries
-      repeatable: true
-      type: ReceiptEntry
-      marshal-as: reference
-
-ReceiptEntry:
-  fields:
-    - name: Right
-      type: bool
-    - name: Hash
-      type: bytes
-
 TxIdSet:
   fields:
     - name: Entries
@@ -165,7 +147,7 @@ KeySpec:
 
 NetworkGlobals:
   fields:
-    - name: ValidatorThreshold
+    - name: OperatorAcceptThreshold
       type: Rational
       marshal-as: reference
 

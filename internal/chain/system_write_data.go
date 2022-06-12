@@ -25,7 +25,7 @@ func (SystemWriteData) Validate(st *StateManager, tx *Delivery) (protocol.Transa
 
 	if partition, ok := protocol.ParsePartitionUrl(st.OriginUrl); !ok {
 		return nil, errors.Format(errors.StatusBadRequest, "invalid principal: %v is not a system account", st.OriginUrl)
-	} else if partition != st.LocalPartitionID {
+	} else if partition != st.PartitionId {
 		return nil, errors.Format(errors.StatusBadRequest, "invalid principal: %v belongs to the wrong partition", st.OriginUrl)
 	}
 

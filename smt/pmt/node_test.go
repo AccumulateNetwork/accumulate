@@ -1,4 +1,4 @@
-package pmt
+package pmt_test
 
 import (
 	"crypto/sha256"
@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	. "gitlab.com/accumulatenetwork/accumulate/smt/pmt"
 )
 
 // GetLeaf

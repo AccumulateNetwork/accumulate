@@ -61,7 +61,7 @@ func DefaultConfig(networkName string, net config.NetworkType, node config.NodeT
 	cfg.Instrumentation.Prometheus = false               // Disable prometheus: https://github.com/tendermint/tendermint/issues/7076
 	cfg.Accumulate.Network.Partitions = []config.Partition{
 		{
-			ID:   "local",
+			Id:   "local",
 			Type: config.BlockValidator,
 		},
 	}
@@ -104,16 +104,17 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withF
 			remotes[i] = getIP(hash).String()
 			nodes[i] = config.Node{
 				Type:    nodeType,
-				Address: fmt.Sprintf("http://%s:%d", remotes[i], basePort),
+				Address: remotes[i], //fmt.Sprintf("http://%s:%d", remotes[i], basePort),
 			}
 			addresses[i] = nodes[i].Address
 		}
 
-		// We need to return the partitions in a specific order with directory node first because the unit tests select partitions[1]
+		// We need to return the subnets in a specific order with directory node first because the unit tests select subnets[1]
 		partitions[i] = config.Partition{
-			ID:    partitionId,
-			Type:  netType,
-			Nodes: nodes,
+			Id:       partitionId,
+			Type:     netType,
+			BasePort: basePort,
+			Nodes:    nodes,
 		}
 		partitionsMap[partitionId] = partitions[i]
 	}
@@ -122,7 +123,7 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withF
 	for _, configs := range allConfigs {
 		for i, cfg := range configs {
 			cfg.Accumulate.Network.Partitions = partitions
-			cfg.Accumulate.Network.LocalAddress = allAddresses[cfg.Accumulate.Network.LocalPartitionID][i]
+			cfg.Accumulate.LocalAddress = allAddresses[cfg.Accumulate.PartitionId][i]
 		}
 	}
 
@@ -150,7 +151,7 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withF
 	var bootstrapList []genesis.Bootstrap
 
 	for _, partition := range partitions {
-		partitionId := partition.ID
+		partitionId := partition.Id
 		dir := filepath.Join(tempDir, partitionId)
 		bootstrap, err := node.Init(node.InitOptions{
 			WorkDir:             dir,
@@ -193,7 +194,7 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withF
 func getPartitionNames(partitions []cfg.Partition) []string {
 	var res []string
 	for _, partition := range partitions {
-		res = append(res, partition.ID)
+		res = append(res, partition.Id)
 	}
 	return res
 }

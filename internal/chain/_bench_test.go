@@ -46,8 +46,9 @@ func BenchmarkExecuteSendTokens(b *testing.B) {
 				LocalAddress:     "http://0.0.bvn:12345",
 				Partitions: []config.Partition{
 					{
-						ID:   protocol.Directory,
-						Type: config.Directory,
+						ID:       protocol.Directory,
+						Type:     config.Directory,
+						BasePort: 12345,
 						Nodes: []config.Node{
 							{
 								Address: "http://0.dn:12345",
@@ -56,8 +57,9 @@ func BenchmarkExecuteSendTokens(b *testing.B) {
 						},
 					},
 					{
-						ID:   "BVN0",
-						Type: config.BlockValidator,
+						ID:       "BVN0",
+						Type:     config.BlockValidator,
+						BasePort: 12345,
 						Nodes: []config.Node{
 							{
 								Address: "http://0.0.bvn:12345",

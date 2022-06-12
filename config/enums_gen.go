@@ -20,6 +20,24 @@ const NodeTypeValidator NodeType = 1
 // NodeTypeFollower .
 const NodeTypeFollower NodeType = 2
 
+// PortOffsetTendermintP2P .
+const PortOffsetTendermintP2P PortOffset = 0
+
+// PortOffsetTendermintRpc .
+const PortOffsetTendermintRpc PortOffset = 1
+
+// PortOffsetTendermintGrpc .
+const PortOffsetTendermintGrpc PortOffset = 2
+
+// PortOffsetAccumulateApi .
+const PortOffsetAccumulateApi PortOffset = 4
+
+// PortOffsetWebsite .
+const PortOffsetWebsite PortOffset = 5
+
+// PortOffsetPrometheus .
+const PortOffsetPrometheus PortOffset = 6
+
 // GetEnumValue returns the value of the Network Type
 func (v NetworkType) GetEnumValue() uint64 { return uint64(v) }
 
@@ -138,6 +156,82 @@ func (v *NodeType) UnmarshalJSON(data []byte) error {
 	*v, ok = NodeTypeByName(s)
 	if !ok || strings.ContainsRune(v.String(), ':') {
 		return fmt.Errorf("invalid Node Type %q", s)
+	}
+	return nil
+}
+
+// GetEnumValue returns the value of the Port Offset
+func (v PortOffset) GetEnumValue() uint64 { return uint64(v) }
+
+// SetEnumValue sets the value. SetEnumValue returns false if the value is invalid.
+func (v *PortOffset) SetEnumValue(id uint64) bool {
+	u := PortOffset(id)
+	switch u {
+	case PortOffsetTendermintP2P, PortOffsetTendermintRpc, PortOffsetTendermintGrpc, PortOffsetAccumulateApi, PortOffsetWebsite, PortOffsetPrometheus:
+		*v = u
+		return true
+	default:
+		return false
+	}
+}
+
+// String returns the name of the Port Offset
+func (v PortOffset) String() string {
+	switch v {
+	case PortOffsetTendermintP2P:
+		return "tendermintP2P"
+	case PortOffsetTendermintRpc:
+		return "tendermintRpc"
+	case PortOffsetTendermintGrpc:
+		return "tendermintGrpc"
+	case PortOffsetAccumulateApi:
+		return "accumulateApi"
+	case PortOffsetWebsite:
+		return "website"
+	case PortOffsetPrometheus:
+		return "prometheus"
+	default:
+		return fmt.Sprintf("PortOffset:%d", v)
+	}
+}
+
+// PortOffsetByName returns the named Port Offset.
+func PortOffsetByName(name string) (PortOffset, bool) {
+	switch strings.ToLower(name) {
+	case "tendermintp2p":
+		return PortOffsetTendermintP2P, true
+	case "tendermintrpc":
+		return PortOffsetTendermintRpc, true
+	case "tendermintgrpc":
+		return PortOffsetTendermintGrpc, true
+	case "accumulateapi":
+		return PortOffsetAccumulateApi, true
+	case "website":
+		return PortOffsetWebsite, true
+	case "prometheus":
+		return PortOffsetPrometheus, true
+	default:
+		return 0, false
+	}
+}
+
+// MarshalJSON marshals the Port Offset to JSON as a string.
+func (v PortOffset) MarshalJSON() ([]byte, error) {
+	return json.Marshal(v.String())
+}
+
+// UnmarshalJSON unmarshals the Port Offset from JSON as a string.
+func (v *PortOffset) UnmarshalJSON(data []byte) error {
+	var s string
+	err := json.Unmarshal(data, &s)
+	if err != nil {
+		return err
+	}
+
+	var ok bool
+	*v, ok = PortOffsetByName(s)
+	if !ok || strings.ContainsRune(v.String(), ':') {
+		return fmt.Errorf("invalid Port Offset %q", s)
 	}
 	return nil
 }

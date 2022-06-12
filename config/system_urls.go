@@ -44,56 +44,50 @@ func (u NetworkUrl) AnchorPool() *url.URL {
 	return u.JoinPath(protocol.AnchorPool)
 }
 
-// NodeUrl returns the URL of the partition, optionally with a path appended.
-func (n *Network) NodeUrl(path ...string) *url.URL {
-	return protocol.PartitionUrl(n.LocalPartitionID).JoinPath(path...)
+// NodeUrl returns the URL of the subnet, optionally with a path appended.
+func (n *Describe) NodeUrl(path ...string) *url.URL {
+	return protocol.PartitionUrl(n.PartitionId).JoinPath(path...)
 }
 
-// Ledger returns the URL of the partition's ledger account.
-func (n *Network) Ledger() *url.URL {
-	return NetworkUrl{protocol.PartitionUrl(n.LocalPartitionID)}.Ledger()
+// Ledger returns the URL of the subnet's ledger account.
+func (n *Describe) Ledger() *url.URL {
+	return NetworkUrl{protocol.PartitionUrl(n.PartitionId)}.Ledger()
 }
 
-// Synthetic returns the URL of the partition's ledger account.
-func (n *Network) Synthetic() *url.URL {
-	return NetworkUrl{protocol.PartitionUrl(n.LocalPartitionID)}.Synthetic()
+// Synthetic returns the URL of the subnet's ledger account.
+func (n *Describe) Synthetic() *url.URL {
+	return NetworkUrl{protocol.PartitionUrl(n.PartitionId)}.Synthetic()
 }
 
-// ValidatorBook returns the URL of the partition's validator key book.
-func (n *Network) ValidatorBook() *url.URL {
-	return NetworkUrl{protocol.PartitionUrl(n.LocalPartitionID)}.ValidatorBook()
+// ValidatorBook returns the URL of the subnet's validator key book.
+func (n *Describe) ValidatorBook() *url.URL {
+	return NetworkUrl{protocol.PartitionUrl(n.PartitioId)}.ValidatorBook()
 }
 
-// ValidatorPage returns the URL of the page of the partition's validator key book.
-func (n *Network) ValidatorPage(index uint64) *url.URL {
-	return NetworkUrl{protocol.PartitionUrl(n.LocalPartitionID)}.ValidatorPage(index)
+// ValidatorPage returns the URL of the page of the subnet's validator key book.
+func (n *Describe) ValidatorPage(index uint64) *url.URL {
+	return NetworkUrl{protocol.PartitioUrl(n.PartitioId)}.ValidatorPage(index)
 }
 
-// OperatorBook returns the URL of the partition's operator key book.
-func (n *Network) OperatorBook() *url.URL {
-	return NetworkUrl{protocol.PartitionUrl(n.LocalPartitionID)}.OperatorBook()
+// DefaultValidatorPage returns the URL of the default page of the subnet's validator key book.
+func (n *Describe) DefaultValidatorPage() *url.URL {
+	return n.ValidatorPage(1)
 }
 
-// OperatorPage returns the URL of the page of the partition's operator key book.
-func (n *Network) OperatorPage(index uint64) *url.URL {
-	return NetworkUrl{protocol.PartitionUrl(n.LocalPartitionID)}.OperatorPage(index)
+// OperatorBook returns the URL of the subnet's operator key book.
+func (n *Describe) OperatorBook() *url.URL {
+	return NetworkUrl{protocol.PartitioUrl(n.PartitioId)}.OperatorBook()
 }
 
-// DefaultValidatorPage returns the URL of the default page of the partition operator key book.
-func (n *Network) DefaultValidatorPage() *url.URL {
+// OperatorPage returns the URL of the page of the subnet's operator key book.
+func (n *Describe) OperatorPage(index uint64) *url.URL {
+	return NetworkUrl{protocol.PartitioUrl(n.PartitioId)}.OperatorPage(index)
+}
+
+// DefaultOperatorPage returns the URL of the default page of the subnet operator key book.
+func (n *Describe) DefaultOperatorPage() *url.URL {
 	var index uint64
-	if n.Type == Directory {
-		index = 0
-	} else {
-		index = 0 // 1 in AC-1402
-	}
-	return n.ValidatorPage(index)
-}
-
-// DefaultOperatorPage returns the URL of the default page of the partition operator key book.
-func (n *Network) DefaultOperatorPage() *url.URL {
-	var index uint64
-	if n.Type == Directory {
+	if n.NetworkType == Directory {
 		index = 0
 	} else {
 		index = 1
@@ -101,7 +95,7 @@ func (n *Network) DefaultOperatorPage() *url.URL {
 	return n.OperatorPage(index)
 }
 
-// AnchorPool returns the URL of the partition's anchor pool.
-func (n *Network) AnchorPool() *url.URL {
-	return NetworkUrl{protocol.PartitionUrl(n.LocalPartitionID)}.AnchorPool()
+// AnchorPool returns the URL of the subnet's anchor pool.
+func (n *Describe) AnchorPool() *url.URL {
+	return NetworkUrl{protocol.PartitioUrl(n.PartitioId)}.AnchorPool()
 }

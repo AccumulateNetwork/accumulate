@@ -46,7 +46,7 @@ func TestExecuteCheckOnly(t *testing.T) {
 		table.Routes = routing.BuildSimpleTable(&config.Network{
 			Partitions: []config.Partition{
 				{
-					ID:   "",
+					Id:   "",
 					Type: config.BlockValidator,
 				},
 			},
@@ -79,7 +79,7 @@ func TestExecuteCheckOnly(t *testing.T) {
 		table.Routes = routing.BuildSimpleTable(&config.Network{
 			Partitions: []config.Partition{
 				{
-					ID:   "",
+					Id:   "",
 					Type: config.BlockValidator,
 				},
 			},

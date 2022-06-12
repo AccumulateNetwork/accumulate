@@ -36,7 +36,7 @@ func TestDatabaseQueryLayer_QueryState(t *testing.T) {
 
 	// Get a proof of the account state
 	x := sim.PartitionFor(aliceUrl)
-	dbql := &api.DatabaseQueryModule{Network: &x.Executor.Network, DB: x.Database}
+	dbql := &api.DatabaseQueryModule{Network: &x.Executor.Describe, DB: x.Database}
 	rec, err := dbql.QueryState(context.Background(), aliceUrl, nil, api.QueryStateOptions{Prove: true})
 	require.NoError(t, err)
 	require.IsType(t, (*api.AccountRecord)(nil), rec)
@@ -50,5 +50,5 @@ func TestDatabaseQueryLayer_QueryState(t *testing.T) {
 	require.Equal(t, uint64(protocol.AcmePrecision*protocol.AcmeFaucetAmount), lite.Balance.Uint64())
 
 	// Validate the proof
-	require.True(t, arec.Proof.Proof.Convert().Validate())
+	require.True(t, arec.Proof.Proof.Validate())
 }

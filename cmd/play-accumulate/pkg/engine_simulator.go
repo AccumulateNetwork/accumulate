@@ -88,7 +88,7 @@ func (s SimEngine) GetDirectory(account *URL) ([]*URL, error) {
 
 func (s SimEngine) GetTransaction(hash [32]byte) (*protocol.Transaction, error) {
 	for _, partition := range s.Partitions {
-		batch := s.Partition(partition.ID).Database.Begin(false)
+		batch := s.Partition(partition.Id).Database.Begin(false)
 		defer batch.Discard()
 		txn, err := batch.Transaction(hash[:]).GetState()
 		switch {

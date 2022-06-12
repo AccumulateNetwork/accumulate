@@ -72,6 +72,15 @@ func New(t TB, bvnCount int) *Simulator {
 	return sim
 }
 
+func NewWithLogLevels(t TB, bvnCount int, logLevels config.LogLevel) *Simulator {
+	t.Helper()
+	sim := new(Simulator)
+	sim.TB = t
+	sim.LogLevels = logLevels.String()
+	sim.Setup(bvnCount)
+	return sim
+}
+
 func (sim *Simulator) Setup(bvnCount int) {
 	sim.Helper()
 
@@ -80,9 +89,9 @@ func (sim *Simulator) Setup(bvnCount int) {
 	sim.Logger = sim.newLogger().With("module", "simulator")
 	sim.Executors = map[string]*ExecEntry{}
 	sim.Partitions = make([]config.Partition, bvnCount+1)
-	sim.Partitions[0] = config.Partition{Type: config.Directory, ID: protocol.Directory}
+	sim.Partitions[0] = config.Partition{Type: config.Directory, Id: protocol.Directory, BasePort: 30000}
 	for i := 0; i < bvnCount; i++ {
-		sim.Partitions[i+1] = config.Partition{Type: config.BlockValidator, ID: fmt.Sprintf("BVN%d", i)}
+		sim.Partitions[i+1] = config.Partition{Type: config.BlockValidator, Id: fmt.Sprintf("BVN%d", i), BasePort: 30000}
 	}
 
 	mainEventBus := events.NewBus(sim.Logger.With("partition", protocol.Directory))
@@ -91,17 +100,17 @@ func (sim *Simulator) Setup(bvnCount int) {
 	// Initialize each executor
 	for i := range sim.Partitions {
 		partition := &sim.Partitions[i]
-		partition.Nodes = []config.Node{{Type: config.Validator, Address: partition.ID}}
+		partition.Nodes = []config.Node{{Type: config.Validator, Address: partition.Id}}
 
-		logger := sim.newLogger().With("partition", partition.ID)
-		key := acctesting.GenerateKey(sim.Name(), partition.ID)
+		logger := sim.newLogger().With("subnet", partition.Id)
+		key := acctesting.GenerateKey(sim.Name(), partition.Id)
 		db := database.OpenInMemory(logger)
 
-		network := config.Network{
-			Type:             partition.Type,
-			LocalPartitionID: partition.ID,
-			LocalAddress:     partition.ID,
-			Partitions:       sim.Partitions,
+		network := config.Describe{
+			NetworkType:  partition.Type,
+			PartitionId:     partition.Id,
+			LocalAddress: partition.Id,
+			Network:      config.Network{Id: "simulator", Partitions: sim.Subnets},
 		}
 
 		eventBus := mainEventBus
@@ -112,7 +121,7 @@ func (sim *Simulator) Setup(bvnCount int) {
 		exec, err := NewNodeExecutor(ExecutorOptions{
 			Logger:   logger,
 			Key:      key,
-			Network:  network,
+			Describe: network,
 			Router:   sim.Router(),
 			EventBus: eventBus,
 		}, db)
@@ -120,13 +129,13 @@ func (sim *Simulator) Setup(bvnCount int) {
 
 		jrpc, err := api.NewJrpc(api.Options{
 			Logger:        logger,
-			Network:       &network,
+			Describe:      &network,
 			Router:        sim.Router(),
 			TxMaxWaitTime: time.Hour,
 		})
 		require.NoError(sim, err)
 
-		sim.Executors[partition.ID] = &ExecEntry{
+		sim.Executors[partition.Id] = &ExecEntry{
 			Database:   db,
 			Executor:   exec,
 			Partition:  partition,
@@ -214,8 +223,8 @@ func (s *Simulator) InitFromSnapshot(filename func(string) string) {
 	s.Helper()
 
 	for _, partition := range s.Partitions {
-		x := s.Partition(partition.ID)
-		InitFromSnapshot(s, x.Database, x.Executor, filename(partition.ID))
+		x := s.Partition(partition.Id)
+		InitFromSnapshot(s, x.Database, x.Executor, filename(partition.Id))
 	}
 }
 
@@ -232,7 +241,7 @@ func (s *Simulator) ExecuteBlock(statusChan chan<- *protocol.TransactionStatus) 
 
 	errg := new(errgroup.Group)
 	for _, partition := range s.Partitions {
-		s.Partition(partition.ID).executeBlock(errg, statusChan)
+		s.Partition(partition.Id).executeBlock(errg, statusChan)
 	}
 
 	// Wait for all partitions to complete
@@ -343,7 +352,7 @@ func (s *Simulator) findTxn(status func(*protocol.TransactionStatus) bool, hash 
 	s.Helper()
 
 	for _, partition := range s.Partitions {
-		x := s.Partition(partition.ID)
+		x := s.Partition(partition.Id)
 
 		batch := x.Database.Begin(false)
 		defer batch.Discard()
@@ -372,7 +381,7 @@ func (s *Simulator) WaitForTransactions(status func(*protocol.TransactionStatus)
 	return statuses, transactions
 }
 
-func (s *Simulator) WaitForTransaction(statusCheck func(*protocol.TransactionStatus) bool, txnHash []byte, n int) *ExecEntry {
+func (s *Simulator) WaitForTransaction(statusCheck func(*protocol.TransactionStatus) bool, txnHash []byte, n int) (*protocol.Transaction, *protocol.TransactionStatus, []*url.TxID) {
 	var x *ExecEntry
 	for i := 0; i < n; i++ {
 		x = s.findTxn(statusCheck, txnHash)
@@ -382,16 +391,8 @@ func (s *Simulator) WaitForTransaction(statusCheck func(*protocol.TransactionSta
 
 		s.ExecuteBlock(nil)
 	}
-	return x
-}
-
-func (s *Simulator) WaitForTransactionFlow(statusCheck func(*protocol.TransactionStatus) bool, txnHash []byte) ([]*protocol.TransactionStatus, []*protocol.Transaction) {
-	s.Helper()
-
-	x := s.WaitForTransaction(statusCheck, txnHash, 50)
 	if x == nil {
-		require.FailNow(s, fmt.Sprintf("Transaction %X has not been delivered after 50 blocks", txnHash[:4]))
-		panic("unreachable")
+		return nil, nil, nil
 	}
 
 	batch := x.Database.Begin(false)
@@ -402,11 +403,22 @@ func (s *Simulator) WaitForTransactionFlow(statusCheck func(*protocol.Transactio
 	require.NoError(s, err1)
 	require.NoError(s, err2)
 	require.NoError(s, err3)
+	return state.Transaction, status, synth.Entries
+}
+
+func (s *Simulator) WaitForTransactionFlow(statusCheck func(*protocol.TransactionStatus) bool, txnHash []byte) ([]*protocol.TransactionStatus, []*protocol.Transaction) {
+	s.Helper()
+
+	txn, status, synth := s.WaitForTransaction(statusCheck, txnHash, 50)
+	if txn == nil {
+		require.FailNow(s, fmt.Sprintf("Transaction %X has not been delivered after 50 blocks", txnHash[:4]))
+		panic("unreachable")
+	}
 
 	status.For = *(*[32]byte)(txnHash)
 	statuses := []*protocol.TransactionStatus{status}
-	transactions := []*protocol.Transaction{state.Transaction}
-	for _, id := range synth.Entries {
+	transactions := []*protocol.Transaction{txn}
+	for _, id := range synth {
 		// Wait for synthetic transactions to be delivered
 		id := id.Hash()
 		st, txn := s.WaitForTransactionFlow(func(status *protocol.TransactionStatus) bool {
@@ -470,7 +482,7 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 	} else {
 		_ = x.Database.View(func(batch *database.Batch) error {
 			var ledger *protocol.SystemLedger
-			err := batch.Account(x.Executor.Network.Ledger()).GetStateAs(&ledger)
+			err := batch.Account(x.Executor.Describe.Ledger()).GetStateAs(&ledger)
 			switch {
 			case err == nil:
 				x.blockIndex = ledger.Index + 1
@@ -494,7 +506,7 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 	var deliveries []*chain.Delivery
 	for _, envelope := range x.takeSubmitted() {
 		d, err := chain.NormalizeEnvelope(envelope)
-		require.NoErrorf(x, err, "Normalizing envelopes for %s", x.Executor.Network.LocalPartitionID)
+		require.NoErrorf(x, err, "Normalizing envelopes for %s", x.Executor.Describe.PartitionId)
 		deliveries = append(deliveries, d...)
 	}
 

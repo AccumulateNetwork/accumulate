@@ -91,10 +91,11 @@ func (SyntheticDepositCredits) DidFail(state *ProcessTransactionState, transacti
 		return fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SyntheticDepositCredits), transaction.Body)
 	}
 
-	if body.AcmeRefundAmount != nil {
+	if body.AcmeRefundAmount != nil && !body.IsRefund {
 		refund := new(protocol.SyntheticDepositTokens)
 		refund.Token = protocol.AcmeUrl()
 		refund.Amount = *body.AcmeRefundAmount
+		refund.IsRefund = true
 		state.DidProduceTxn(body.Source(), refund)
 	}
 	return nil

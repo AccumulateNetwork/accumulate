@@ -82,7 +82,7 @@ func Open(cfg *config.Config, logger log.Logger) (*Database, error) {
 		return OpenBadger(config.MakeAbsolute(cfg.RootDir, cfg.Accumulate.Storage.Path), logger)
 
 	case config.EtcdStorage:
-		return OpenEtcd(cfg.Accumulate.Network.LocalPartitionID, cfg.Accumulate.Storage.Etcd, logger)
+		return OpenEtcd(cfg.Accumulate.PartitionId, cfg.Accumulate.Storage.Etcd, logger)
 
 	default:
 		return nil, fmt.Errorf("unknown storage format %q", cfg.Accumulate.Storage.Type)
@@ -127,8 +127,8 @@ func (b *Batch) Import(db interface{ Export() map[storage.Key][]byte }) error {
 	return b.store.PutAll(db.Export())
 }
 
-func (b *Batch) GetMinorRootChainAnchor(network *config.Network) ([]byte, error) {
-	ledger := b.Account(network.NodeUrl(protocol.Ledger))
+func (b *Batch) GetMinorRootChainAnchor(describe *config.Describe) ([]byte, error) {
+	ledger := b.Account(describe.NodeUrl(protocol.Ledger))
 	chain, err := ledger.ReadChain(protocol.MinorRootChain)
 	if err != nil {
 		return nil, err

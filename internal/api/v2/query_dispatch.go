@@ -20,11 +20,12 @@ func (q *queryDispatch) direct(s string) *queryDirect {
 }
 
 func (q *queryDispatch) queryAll(query func(*queryDirect) (interface{}, error), errNotFound error) (interface{}, error) {
-	resCh := make(chan interface{})   // Result channel
-	errCh := make(chan error)         // Error channel
-	doneCh := make(chan struct{})     // Completion channel
-	wg := new(sync.WaitGroup)         // Wait for completion
-	wg.Add(len(q.Network.Partitions)) //
+	resCh := make(chan interface{}) // Result channel
+	errCh := make(chan error)       // Error channel
+	doneCh := make(chan struct{})   // Completion channel
+	wg := new(sync.WaitGroup)       // Wait for completion
+
+	wg.Add(len(q.Describe.Network.Partitions)) //
 
 	// Mark complete on return
 	defer close(doneCh)
@@ -42,7 +43,7 @@ func (q *queryDispatch) queryAll(query func(*queryDirect) (interface{}, error), 
 	}()
 
 	// Create a request for each client in a separate goroutine
-	for _, partition := range q.Network.Partitions {
+	for _, partition := range q.Describe.Network.Partitions {
 		go func(partitionId string) {
 			// Mark complete on return
 			defer wg.Done()
@@ -64,7 +65,7 @@ func (q *queryDispatch) queryAll(query func(*queryDirect) (interface{}, error), 
 					// A result or error has already been sent
 				}
 			}
-		}(partition.ID)
+		}(partition.Id)
 	}
 
 	// Wait for an error or a result

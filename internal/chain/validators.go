@@ -69,29 +69,38 @@ func (AddValidator) Validate(st *StateManager, env *Delivery) (protocol.Transact
 func addValidator(st *StateManager, env *Delivery) error {
 	body := env.Transaction.Body.(*protocol.AddValidator)
 
-	page, err := checkValidatorTransaction(st, env)
+	vldPage, err := checkValidatorTransaction(st, env)
 	if err != nil {
 		return err
 	}
 
+	var oprPage *protocol.KeyPage
+	err = st.LoadUrlAs(st.Describe.DefaultOperatorPage(), &oprPage)
+	if err != nil {
+		return fmt.Errorf("unable to load %s: %v", st.Describe.DefaultOperatorPage(), err)
+	}
+
 	// Ensure the key does not already exist
 	keyHash := sha256.Sum256(body.PubKey)
-	_, _, found := page.EntryByKeyHash(keyHash[:])
+	_, _, found := vldPage.EntryByKeyHash(keyHash[:])
 	if found {
 		return fmt.Errorf("key is already a validator")
 	}
 
-	// Add the key hash to the key page
-	page.AddKeySpec(&protocol.KeySpec{PublicKeyHash: keyHash[:]})
+	// Ensure the key is already an operator
+	_, _, found = oprPage.EntryByKeyHash(keyHash[:])
+	if !found {
+		return fmt.Errorf("key has to be an operator first")
+	}
 
-	// Update the threshold
-	ratio := st.Globals.Globals.ValidatorThreshold.GetFloat()
-	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(page.Keys), ratio)
+	// Add the key hash to the key page
+	vldPage.AddKeySpec(&protocol.KeySpec{PublicKeyHash: keyHash[:]})
+
 	// Record the update
-	didUpdateKeyPage(page)
-	err = st.Update(page)
+	didUpdateKeyPage(vldPage)
+	err = st.Update(vldPage)
 	if err != nil {
-		return fmt.Errorf("failed to update %v: %v", page.GetUrl(), err)
+		return fmt.Errorf("failed to update %v: %v", vldPage.GetUrl(), err)
 	}
 
 	// Add the validator
@@ -125,9 +134,12 @@ func removeValidator(st *StateManager, env *Delivery) error {
 	// Remove the key hash from the key page
 	page.RemoveKeySpecAt(index)
 
+	/*  This no longer does anything because the signing is now governed by the operator book
+	TODO Remove when sure nothing will be governed by validtor books
 	// Update the threshold
 	ratio := st.Globals.Globals.ValidatorThreshold.GetFloat()
-	page.AcceptThreshold = protocol.GetValidatorsMOfN(len(page.Keys), ratio)
+	page.AcceptThreshold = protocol.GetMOfN(len(page.Keys), ratio)
+	*/
 	// Record the update
 	didUpdateKeyPage(page)
 	err = st.Update(page)

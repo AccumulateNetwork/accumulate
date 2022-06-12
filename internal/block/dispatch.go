@@ -27,7 +27,7 @@ type dispatcher struct {
 func newDispatcher(opts ExecutorOptions) *dispatcher {
 	d := new(dispatcher)
 	d.ExecutorOptions = opts
-	d.isDirectory = opts.Network.Type == config.Directory
+	d.isDirectory = opts.Describe.NetworkType == config.Directory
 	d.batches = map[string][]*protocol.Envelope{}
 	return d
 }
@@ -61,7 +61,7 @@ func (d *dispatcher) BroadcastTx(ctx context.Context, u *url.URL, tx *protocol.E
 
 // BroadcastTxAsync dispatches the txn to the appropriate client.
 func (d *dispatcher) BroadcastTxLocal(ctx context.Context, tx *protocol.Envelope) error {
-	return d.push(d.Network.LocalPartitionID, tx)
+	return d.push(d.Describe.SubnetId, tx)
 }
 
 var errTxInCache1 = jrpc.RPCInternalError(jrpc.JSONRPCIntID(0), tm.ErrTxInCache).Error

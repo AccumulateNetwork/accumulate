@@ -66,7 +66,7 @@ func (b *Batch) BptReceipt(key storage.Key, value [32]byte) (*managed.Receipt, e
 }
 
 // SaveSnapshot writes the full state of the partition out to a file.
-func (b *Batch) SaveSnapshot(file io.WriteSeeker, network *config.Network) error {
+func (b *Batch) SaveSnapshot(file io.WriteSeeker, network *config.Describe) error {
 	/*synthetic := object("Account", network.Synthetic())
 	partition := network.NodeUrl()*/
 
