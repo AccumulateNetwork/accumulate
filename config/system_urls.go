@@ -61,12 +61,12 @@ func (n *Describe) Synthetic() *url.URL {
 
 // ValidatorBook returns the URL of the subnet's validator key book.
 func (n *Describe) ValidatorBook() *url.URL {
-	return NetworkUrl{protocol.PartitionUrl(n.PartitioId)}.ValidatorBook()
+	return NetworkUrl{protocol.PartitionUrl(n.PartitionId)}.ValidatorBook()
 }
 
 // ValidatorPage returns the URL of the page of the subnet's validator key book.
 func (n *Describe) ValidatorPage(index uint64) *url.URL {
-	return NetworkUrl{protocol.PartitioUrl(n.PartitioId)}.ValidatorPage(index)
+	return NetworkUrl{protocol.PartitionUrl(n.PartitionId)}.ValidatorPage(index)
 }
 
 // DefaultValidatorPage returns the URL of the default page of the subnet's validator key book.
@@ -76,12 +76,12 @@ func (n *Describe) DefaultValidatorPage() *url.URL {
 
 // OperatorBook returns the URL of the subnet's operator key book.
 func (n *Describe) OperatorBook() *url.URL {
-	return NetworkUrl{protocol.PartitioUrl(n.PartitioId)}.OperatorBook()
+	return NetworkUrl{protocol.PartitionUrl(n.PartitionId)}.OperatorBook()
 }
 
 // OperatorPage returns the URL of the page of the subnet's operator key book.
 func (n *Describe) OperatorPage(index uint64) *url.URL {
-	return NetworkUrl{protocol.PartitioUrl(n.PartitioId)}.OperatorPage(index)
+	return NetworkUrl{protocol.PartitionUrl(n.PartitionId)}.OperatorPage(index)
 }
 
 // DefaultOperatorPage returns the URL of the default page of the subnet operator key book.
@@ -97,5 +97,5 @@ func (n *Describe) DefaultOperatorPage() *url.URL {
 
 // AnchorPool returns the URL of the subnet's anchor pool.
 func (n *Describe) AnchorPool() *url.URL {
-	return NetworkUrl{protocol.PartitioUrl(n.PartitioId)}.AnchorPool()
+	return NetworkUrl{protocol.PartitionUrl(n.PartitionId)}.AnchorPool()
 }

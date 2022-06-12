@@ -53,7 +53,7 @@ func initNetwork(cmd *cobra.Command, args []string) {
 			directory = &network.Partitions[i]
 		}
 		if v.Type == config.BlockValidator {
-			bvnPartition = append(bvnPartition, &network.Partition[i])
+			bvnPartition = append(bvnPartition, &network.Partitions[i])
 		}
 	}
 
@@ -169,7 +169,7 @@ func initNetwork(cmd *cobra.Command, args []string) {
 				c.Accumulate.Website.Enabled = false
 			}
 			c.Accumulate.NetworkType = config.BlockValidator
-			c.Accumulate.SubnetId = v.Id
+			c.Accumulate.PartitionId = v.Id
 			c.Accumulate.LocalAddress = fmt.Sprintf("%s:%d", v.Nodes[j].Address, v.BasePort)
 			c.Accumulate.Network = network // Subnets = accSub
 		}
@@ -186,7 +186,7 @@ func initNetwork(cmd *cobra.Command, args []string) {
 				c.Accumulate.Website.Enabled = false
 			}
 			c.Accumulate.NetworkType = config.BlockValidator
-			c.Accumulate.SubnetId = v.Id
+			c.Accumulate.PartitionId = v.Id
 			c.Accumulate.LocalAddress = fmt.Sprintf("%s:%d", v.Nodes[j].Address, v.BasePort)
 			c.Accumulate.Network = network
 		}

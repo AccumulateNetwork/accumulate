@@ -59,8 +59,8 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) (Bootstrap, error) {
 	// Build the routing table
 	b.routingTable = new(protocol.RoutingTable)
 	b.routingTable.Routes = routing.BuildSimpleTable(&opts.Describe.Network)
-	b.routingTable.Overrides = make([]protocol.RouteOverride, 1, len(opts.Describe.Network.Subnets)+1)
-	b.routingTable.Overrides[0] = protocol.RouteOverride{Account: protocol.AcmeUrl(), Subnet: protocol.Directory}
+	b.routingTable.Overrides = make([]protocol.RouteOverride, 1, len(opts.Describe.Network.Partitions)+1)
+	b.routingTable.Overrides[0] = protocol.RouteOverride{Account: protocol.AcmeUrl(), Partition: protocol.Directory}
 	for _, partition := range opts.Describe.Network.Partitions {
 		u := protocol.PartitionUrl(partition.Id)
 		b.routingTable.Overrides = append(b.routingTable.Overrides, protocol.RouteOverride{Account: u, Partition: partition.Id})
@@ -365,8 +365,8 @@ func (b *bootstrap) initDN() error {
 func (b *bootstrap) initBVN() error {
 	// Verify that the BVN ID will make a valid subnet URL
 	network := b.InitOpts.Describe
-	if err := protocol.IsValidAdiUrl(protocol.SubnetUrl(network.SubnetId), true); err != nil {
-		panic(fmt.Errorf("%q is not a valid subnet ID: %v", network.SubnetId, err))
+	if err := protocol.IsValidAdiUrl(protocol.PartitionUrl(network.PartitionId), true); err != nil {
+		panic(fmt.Errorf("%q is not a valid subnet ID: %v", network.PartitionId, err))
 	}
 
 	b.createBVNOperatorBook()
@@ -526,7 +526,7 @@ func (b *bootstrap) writeGenesisFile(appHash []byte) error {
 func (b *bootstrap) buildNetworkDefinition() *protocol.NetworkDefinition {
 	netDef := new(protocol.NetworkDefinition)
 
-	for _, subnet := range b.Describe.Network.Partitions {
+	for _, partition := range b.Describe.Network.Partitions {
 
 		// Add the validator hashes from the partition's genesis doc
 		var vkHashes [][32]byte

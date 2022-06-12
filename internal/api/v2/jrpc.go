@@ -126,7 +126,7 @@ func (m *JrpcMethods) Version(_ context.Context, params json.RawMessage) interfa
 func (m *JrpcMethods) Describe(_ context.Context, params json.RawMessage) interface{} {
 	res := new(DescriptionResponse)
 	res.Network = m.Options.Describe.Network
-	res.SubnetId = m.Options.Describe.SubnetId
+	res.PartitionId = m.Options.Describe.PartitionId
 	res.NetworkType = m.Options.Describe.NetworkType
 
 	// Load network variable values

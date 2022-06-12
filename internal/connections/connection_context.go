@@ -79,7 +79,7 @@ type connectionContext struct {
 }
 
 func (cc *connectionContext) GetBasePort() int {
-	return int(cc.subnet.BasePort)
+	return int(cc.partition.BasePort)
 }
 
 func (cc *connectionContext) GetABCIClient() ABCIClient {

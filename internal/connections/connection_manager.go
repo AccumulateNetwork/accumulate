@@ -225,7 +225,7 @@ func (cm *connectionManager) buildNodeInventory() {
 	}
 }
 
-func (cm *connectionManager) buildNodeContext(node config.Node, subnet config.Subnet) (*connectionContext, error) {
+func (cm *connectionManager) buildNodeContext(node config.Node, partition config.Partition) (*connectionContext, error) {
 	connCtx := &connectionContext{partitionId: partition.Id,
 		partition:  partition,
 		nodeConfig: node,
