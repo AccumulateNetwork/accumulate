@@ -12,8 +12,8 @@ import (
 
 func (m *Executor) queryMajorBlocks(batch *database.Batch, req *query.RequestMajorBlocks) (resp *query.ResponseMajorBlocks, perr *protocol.Error) {
 
-	anchorsAcc := batch.Account(m.Network.NodeUrl(protocol.AnchorPool))
-	ledgerAcc := batch.Account(m.Network.NodeUrl(protocol.Ledger))
+	anchorsAcc := batch.Account(m.Describe.NodeUrl(protocol.AnchorPool))
+	ledgerAcc := batch.Account(m.Describe.NodeUrl(protocol.Ledger))
 
 	mjrIdxChain, err := anchorsAcc.ReadChain(protocol.IndexChain(protocol.MainChain, true))
 	if err != nil {

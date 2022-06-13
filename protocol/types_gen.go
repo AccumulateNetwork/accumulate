@@ -13614,7 +13614,7 @@ func (v *DirectoryAnchor) MarshalJSON() ([]byte, error) {
 		RootChainAnchor    string                                  `json:"rootChainAnchor,omitempty"`
 		StateTreeAnchor    string                                  `json:"stateTreeAnchor,omitempty"`
 		Updates            encoding.JsonList[NetworkAccountUpdate] `json:"updates,omitempty"`
-		Receipts        encoding.JsonList[managed.Receipt]      `json:"receipts,omitempty"`
+		Receipts           encoding.JsonList[managed.Receipt]      `json:"receipts,omitempty"`
 		MakeMajorBlock     uint64                                  `json:"makeMajorBlock,omitempty"`
 		MakeMajorBlockTime time.Time                               `json:"makeMajorBlockTime,omitempty"`
 	}{}
@@ -15220,7 +15220,7 @@ func (v *DirectoryAnchor) UnmarshalJSON(data []byte) error {
 		RootChainAnchor    string                                  `json:"rootChainAnchor,omitempty"`
 		StateTreeAnchor    string                                  `json:"stateTreeAnchor,omitempty"`
 		Updates            encoding.JsonList[NetworkAccountUpdate] `json:"updates,omitempty"`
-		Receipts        encoding.JsonList[managed.Receipt]      `json:"receipts,omitempty"`
+		Receipts           encoding.JsonList[managed.Receipt]      `json:"receipts,omitempty"`
 		MakeMajorBlock     uint64                                  `json:"makeMajorBlock,omitempty"`
 		MakeMajorBlockTime time.Time                               `json:"makeMajorBlockTime,omitempty"`
 	}{}
