@@ -8,28 +8,31 @@ import (
 
 // BlockStateIndexer tracks transient state for a block.
 type BlockStateIndexer struct {
-	value *database.Value
+	value *database.ValueAs[*BlockStateIndex]
 }
 
 // BlockState returns a block state indexer.
 func BlockState(batch *database.Batch, ledger *url.URL) *BlockStateIndexer {
-	return &BlockStateIndexer{batch.Account(ledger).Index("BlockState")}
+	v := database.AccountIndex(batch, ledger, newfn[BlockStateIndex](), "BlockState")
+	return &BlockStateIndexer{v}
 }
 
 // Clear resets the block state.
 func (x *BlockStateIndexer) Clear() error {
-	return x.value.PutAs(new(BlockStateIndex))
+	return x.value.Put(new(BlockStateIndex))
 }
 
 // Get loads the block state.
 func (x *BlockStateIndexer) Get() (*BlockStateIndex, error) {
-	state := new(BlockStateIndex)
-	err := x.value.GetAs(state)
-	if err != nil {
+	state, err := x.value.Get()
+	switch {
+	case err == nil:
+		return state, nil
+	case errors.Is(err, errors.StatusNotFound):
+		return new(BlockStateIndex), nil
+	default:
 		return nil, err
 	}
-
-	return state, nil
 }
 
 // DidProduceSynthTxn records a produced synthetic transaction.
@@ -45,5 +48,5 @@ func (x *BlockStateIndexer) DidProduceSynthTxn(entry *BlockStateSynthTxnEntry) e
 	}
 
 	state.ProducedSynthTxns = append(state.ProducedSynthTxns, entry)
-	return x.value.PutAs(state)
+	return x.value.Put(state)
 }

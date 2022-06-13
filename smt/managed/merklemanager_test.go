@@ -1,4 +1,4 @@
-package managed
+package managed_test
 
 import (
 	"bytes"
@@ -8,23 +8,24 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
+	. "gitlab.com/accumulatenetwork/accumulate/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 )
 
 func TestMerkleManager_GetChainState(t *testing.T) {
 	const numTests = 100
 	var randHash common.RandHash
-	store := memory.NewDB()
+	store := database.OpenInMemory(nil)
 	storeTx := store.Begin(true)
-	m, e2 := NewMerkleManager(storeTx, 8)
+	m, e2 := NewMerkleManager(database.MerkleDbManager{Batch: storeTx}, 8)
 	require.NoError(t, e2, "should be able to open a database")
 	err := m.SetKey(storage.MakeKey("try"))
 	require.NoError(t, err, "should be able to set base key")
-	err = m.WriteChainHead(m.Key)
+	err = m.WriteChainHead()
 	require.NoError(t, err, "should be able to write to the chain head")
-	head, err := m.ReadChainHead(m.Key)
+	head, err := m.ReadChainHead()
 	require.NoError(t, err, "should be able to read the chain head")
 	require.True(t, head.Equal(m.MS), "chainstate should be loadable")
 
@@ -36,7 +37,7 @@ func TestMerkleManager_GetChainState(t *testing.T) {
 		err = ms.UnMarshal(mState)
 		require.NoError(t, err, "must be able to unmarshal a MerkleState")
 		require.True(t, ms.Equal(m.MS), " should get the same state back")
-		cState, e2 := m.GetChainState(m.Key)
+		cState, e2 := m.GetChainState()
 		require.NoErrorf(t, e2, "chain should always have a chain state %d", i)
 		require.Truef(t, cState.Equal(m.MS), "should be the last state of the chain written (%d)", i)
 	}
@@ -45,14 +46,15 @@ func TestMerkleManager_GetChainState(t *testing.T) {
 func TestMerkleManager_GetAnyState(t *testing.T) {
 	const testnum = 100
 	var randHash common.RandHash
-	store := memory.NewDB()
+	store := database.OpenInMemory(nil)
 	storeTx := store.Begin(true)
-	m, e2 := NewMerkleManager(storeTx, 2)
+	m, e2 := NewMerkleManager(database.MerkleDbManager{Batch: storeTx}, 2)
 	require.NoError(t, e2, "should be able to open a database")
 	var States []*MerkleState
 	for i := 0; i < testnum; i++ {
 		require.NoError(t, m.AddHash(randHash.Next(), false))
 		States = append(States, m.MS.Copy())
+		println(States[i].String())
 	}
 	for i := int64(0); i < testnum; i++ {
 		state, err := m.GetAnyState(i)
@@ -73,14 +75,14 @@ func TestMerkleManager_GetAnyState(t *testing.T) {
 func TestIndexing2(t *testing.T) {
 	const testlen = 1024
 
-	store := memory.NewDB()
+	store := database.OpenInMemory(nil)
 	storeTx := store.Begin(true)
 
 	Chain := sha256.Sum256([]byte("RedWagon/ACME_tokens"))
 	BlkIdx := Chain
 	BlkIdx[30] += 2
 
-	MM1, err := NewMerkleManager(storeTx, 8)
+	MM1, err := NewMerkleManager(database.MerkleDbManager{Batch: storeTx}, 8)
 	if err != nil {
 		t.Fatal("didn't create a Merkle Manager")
 	}
@@ -93,15 +95,14 @@ func TestIndexing2(t *testing.T) {
 		data := []byte(fmt.Sprintf("data %d", i))
 		dataHash := sha256.Sum256(data)
 		require.NoError(t, MM1.AddHash(dataHash[:], false))
-		dataI, e := MM1.Manager.Get(storage.MakeKey(Chain, "ElementIndex", dataHash))
+		di, e := MM1.Manager.Int(storage.MakeKey(Chain, "ElementIndex", dataHash)).Get()
 		if e != nil {
 			t.Fatalf("error")
 		}
-		di, _ := common.BytesInt64(dataI)
 		if di != int64(i) {
 			t.Fatalf("didn't get the right index. got %d expected %d", di, i)
 		}
-		d, e2 := MM1.Manager.Get(storage.MakeKey(Chain, "Element", i))
+		d, e2 := MM1.Manager.Hash(storage.MakeKey(Chain, "Element", i)).Get()
 		if e2 != nil || !bytes.Equal(d, dataHash[:]) {
 			t.Fatalf("didn't get the data back. got %d expected %d", d, data)
 		}
@@ -113,7 +114,7 @@ func TestMerkleManager(t *testing.T) {
 
 	const testLen = 1024
 
-	store := memory.NewDB()
+	store := database.OpenInMemory(nil)
 	storeTx := store.Begin(true)
 
 	MarkPower := int64(2)
@@ -121,7 +122,7 @@ func TestMerkleManager(t *testing.T) {
 	MarkMask := MarkFreq - 1
 
 	// Set up a MM1 that uses a MarkPower of 2
-	MM1, err := NewMerkleManager(storeTx, MarkPower)
+	MM1, err := NewMerkleManager(database.MerkleDbManager{Batch: storeTx}, MarkPower)
 	if err != nil {
 		t.Fatal("did not create a merkle manager")
 	}
@@ -233,9 +234,9 @@ func GenerateTestData(prt bool) [10][]Hash {
 }
 
 func TestMerkleManager_GetIntermediate(t *testing.T) {
-	store := memory.NewDB()
+	store := database.OpenInMemory(nil)
 	storeTx := store.Begin(true)
-	m, _ := NewMerkleManager(storeTx, 4)
+	m, _ := NewMerkleManager(database.MerkleDbManager{Batch: storeTx}, 4)
 	m.MS.InitSha256()
 
 	hashes := GenerateTestData(true)
@@ -255,9 +256,9 @@ func TestMerkleManager_GetIntermediate(t *testing.T) {
 				factor := int64(math.Pow(2, float64(row)))
 				fmt.Printf("Row %d Col %d Left %x + Right %x == %x == Result %x\n",
 					row, col, left[:4], right[:4],
-					Hash(left).Combine(s.HashFunction, right)[:4],
+					Hash(left).Combine(Sha256, right)[:4],
 					hashes[row][col/factor][:4])
-				require.True(t, bytes.Equal(Hash(left).Combine(m.MS.HashFunction, right), hashes[row][col/factor]), "should be equal")
+				require.True(t, bytes.Equal(Hash(left).Combine(Sha256, right), hashes[row][col/factor]), "should be equal")
 			}
 		}
 	}
@@ -269,9 +270,9 @@ func TestMerkleManager_AddHash_Unique(t *testing.T) {
 	hash := r.NextList()
 
 	t.Run("true", func(t *testing.T) {
-		store := memory.NewDB()
+		store := database.OpenInMemory(nil)
 		storeTx := store.Begin(true)
-		m, _ := NewMerkleManager(storeTx, 4)
+		m, _ := NewMerkleManager(database.MerkleDbManager{Batch: storeTx}, 4)
 		m.MS.InitSha256()
 
 		require.NoError(t, m.AddHash(hash, true))
@@ -280,9 +281,9 @@ func TestMerkleManager_AddHash_Unique(t *testing.T) {
 	})
 
 	t.Run("false", func(t *testing.T) {
-		store := memory.NewDB()
+		store := database.OpenInMemory(nil)
 		storeTx := store.Begin(true)
-		m, _ := NewMerkleManager(storeTx, 4)
+		m, _ := NewMerkleManager(database.MerkleDbManager{Batch: storeTx}, 4)
 		m.MS.InitSha256()
 
 		require.NoError(t, m.AddHash(hash, false))

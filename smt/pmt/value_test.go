@@ -1,8 +1,10 @@
-package pmt
+package pmt_test
 
 import (
 	"crypto/sha256"
 	"testing"
+
+	. "gitlab.com/accumulatenetwork/accumulate/smt/pmt"
 )
 
 func TestValue_Equal(t *testing.T) {

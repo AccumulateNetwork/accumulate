@@ -56,7 +56,7 @@ validate docker:
   variables:
     # set mnemonic for predictable addresses
     MNEMONIC: yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow
-    DN_NODES_DIR: /nodes/dn
+    NODES_DIR: /nodes
   artifacts:
     paths: [ compose.log ]
     when: always
@@ -70,7 +70,7 @@ validate docker:
   - docker-compose up -d
   script:
   - docker-compose run -e MNEMONIC="${MNEMONIC}" --rm --entrypoint bash tools /scripts/ci/validate.sh
-  - docker-compose run -e MNEMONIC="${MNEMONIC}" --rm -e DN_NODES_DIR="${DN_NODES_DIR}" --entrypoint bash tools /scripts/ci/validate-admin.sh
+  - docker-compose run -e MNEMONIC="${MNEMONIC}" --rm -e NODES_DIR="${NODES_DIR}" --entrypoint bash tools /scripts/ci/validate-admin.sh
   - docker-compose run --rm --entrypoint bash tools /scripts/ci/validate-minor-blocks.sh
   after_script:
   - cd nodes

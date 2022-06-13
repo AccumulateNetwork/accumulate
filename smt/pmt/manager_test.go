@@ -1,4 +1,4 @@
-package pmt
+package pmt_test
 
 import (
 	"bytes"
@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
+	. "gitlab.com/accumulatenetwork/accumulate/smt/pmt"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 )
@@ -37,7 +38,7 @@ func TestSanity(t *testing.T) {
 	assert.Equal(t, nodeHash1, nodeHash2) //
 
 	receipt := bpt.Bpt.GetReceipt(fakeKey)      // Create a receipt
-	receiptRoot := *(*[32]byte)(receipt.MDRoot) //
+	receiptRoot := *(*[32]byte)(receipt.Anchor) //
 	assert.Equal(t, rootHash1, receiptRoot)     // The MDRoot should match the BPT root hash
 }
 

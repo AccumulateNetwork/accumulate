@@ -14,7 +14,7 @@ import (
 // updating the in-memory globals variable and pushing updates when necessary.
 func (x *Executor) processNetworkAccountUpdates(batch *database.Batch, delivery *chain.Delivery, principal protocol.Account) error {
 	// Only process updates to network accounts
-	if principal == nil || !x.Network.NodeUrl().PrefixOf(principal.GetUrl()) {
+	if principal == nil || !x.Describe.NodeUrl().PrefixOf(principal.GetUrl()) {
 		return nil
 	}
 
@@ -37,7 +37,7 @@ func (x *Executor) processNetworkAccountUpdates(batch *database.Batch, delivery 
 			}
 
 			// Reject the transaction if the threshold is not set correctly according to the ratio
-			expectedThreshold := x.globals.Active.Globals.ValidatorThreshold.Threshold(len(page.Keys))
+			expectedThreshold := x.globals.Active.Globals.OperatorAcceptThreshold.Threshold(len(page.Keys))
 			if page.AcceptThreshold != expectedThreshold {
 				return errors.Format(errors.StatusBadRequest, "invalid %v update: incorrect accept threshold: want %d, got %d", principal.GetUrl(), expectedThreshold, page.AcceptThreshold)
 			}
@@ -85,7 +85,7 @@ func (x *Executor) processNetworkAccountUpdates(batch *database.Batch, delivery 
 	}
 
 	// Only push updates from the directory network
-	if x.Network.Type != config.Directory {
+	if x.Describe.NetworkType != config.Directory {
 		// Do not allow direct updates of the BVN accounts
 		if !delivery.WasProducedByPushedUpdate() {
 			return errors.Format(errors.StatusBadRequest, "%v cannot be updated directly", principal.GetUrl())
@@ -96,7 +96,7 @@ func (x *Executor) processNetworkAccountUpdates(batch *database.Batch, delivery 
 
 	// Write the update to the ledger
 	var ledger *protocol.SystemLedger
-	record := batch.Account(x.Network.Ledger())
+	record := batch.Account(x.Describe.Ledger())
 	err := record.GetStateAs(&ledger)
 	if err != nil {
 		return errors.Format(errors.StatusUnknown, "load ledger: %w", err)

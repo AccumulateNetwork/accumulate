@@ -22,7 +22,7 @@ import (
 )
 
 type ChainEntry struct {
-	Height    int64       `json:"height" form:"height" query:"height" validate:"required"`
+	Height    uint64      `json:"height" form:"height" query:"height" validate:"required"`
 	Entry     []byte      `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
 	State     [][]byte    `json:"state,omitempty" form:"state" query:"state" validate:"required"`
 	Value     interface{} `json:"value,omitempty" form:"value" query:"value" validate:"required"`
@@ -66,10 +66,12 @@ type DataEntrySetQuery struct {
 }
 
 type DescriptionResponse struct {
-	Network   config.Network    `json:"network,omitempty" form:"network" query:"network" validate:"required"`
-	Values    core.GlobalValues `json:"values,omitempty" form:"values" query:"values" validate:"required"`
-	Error     *errors2.Error    `json:"error,omitempty" form:"error" query:"error" validate:"required"`
-	extraData []byte
+	SubnetId    string             `json:"subnetId,omitempty" form:"subnetId" query:"subnetId" validate:"required"`
+	NetworkType config.NetworkType `json:"networkType,omitempty" form:"networkType" query:"networkType" validate:"required"`
+	Network     config.Network     `json:"network,omitempty" form:"network" query:"network" validate:"required"`
+	Values      core.GlobalValues  `json:"values,omitempty" form:"values" query:"values" validate:"required"`
+	Error       *errors2.Error     `json:"error,omitempty" form:"error" query:"error" validate:"required"`
+	extraData   []byte
 }
 
 type DirectoryQuery struct {
@@ -485,7 +487,7 @@ func (v *DataEntryQueryResponse) UnmarshalBinaryFrom(rd io.Reader) error {
 
 func (v *ChainEntry) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Height int64                      `json:"height"`
+		Height uint64                     `json:"height"`
 		Entry  *string                    `json:"entry,omitempty"`
 		State  encoding.JsonList[*string] `json:"state,omitempty"`
 		Value  interface{}                `json:"value,omitempty"`
@@ -570,11 +572,15 @@ func (v *DataEntrySetQuery) MarshalJSON() ([]byte, error) {
 
 func (v *DescriptionResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Network config.Network    `json:"network,omitempty"`
-		Subnet  config.Network    `json:"subnet,omitempty"`
-		Values  core.GlobalValues `json:"values,omitempty"`
-		Error   *errors2.Error    `json:"error,omitempty"`
+		SubnetId    string             `json:"subnetId,omitempty"`
+		NetworkType config.NetworkType `json:"networkType,omitempty"`
+		Network     config.Network     `json:"network,omitempty"`
+		Subnet      config.Network     `json:"subnet,omitempty"`
+		Values      core.GlobalValues  `json:"values,omitempty"`
+		Error       *errors2.Error     `json:"error,omitempty"`
 	}{}
+	u.SubnetId = v.SubnetId
+	u.NetworkType = v.NetworkType
 	u.Network = v.Network
 	u.Subnet = v.Network
 	u.Values = v.Values
@@ -931,7 +937,7 @@ func (v *TxnQuery) MarshalJSON() ([]byte, error) {
 
 func (v *ChainEntry) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Height int64                      `json:"height"`
+		Height uint64                     `json:"height"`
 		Entry  *string                    `json:"entry,omitempty"`
 		State  encoding.JsonList[*string] `json:"state,omitempty"`
 		Value  interface{}                `json:"value,omitempty"`
@@ -1099,11 +1105,15 @@ func (v *DataEntrySetQuery) UnmarshalJSON(data []byte) error {
 
 func (v *DescriptionResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Network config.Network    `json:"network,omitempty"`
-		Subnet  config.Network    `json:"subnet,omitempty"`
-		Values  core.GlobalValues `json:"values,omitempty"`
-		Error   *errors2.Error    `json:"error,omitempty"`
+		SubnetId    string             `json:"subnetId,omitempty"`
+		NetworkType config.NetworkType `json:"networkType,omitempty"`
+		Network     config.Network     `json:"network,omitempty"`
+		Subnet      config.Network     `json:"subnet,omitempty"`
+		Values      core.GlobalValues  `json:"values,omitempty"`
+		Error       *errors2.Error     `json:"error,omitempty"`
 	}{}
+	u.SubnetId = v.SubnetId
+	u.NetworkType = v.NetworkType
 	u.Network = v.Network
 	u.Subnet = v.Network
 	u.Values = v.Values
@@ -1111,6 +1121,8 @@ func (v *DescriptionResponse) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
+	v.SubnetId = u.SubnetId
+	v.NetworkType = u.NetworkType
 	if !(u.Network.Equal(&config.Network{})) {
 		v.Network = u.Network
 	} else {
