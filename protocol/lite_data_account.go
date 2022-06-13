@@ -22,7 +22,7 @@ func ComputeLiteDataAccountId(firstEntry DataEntry) []byte {
 
 	c := hash.Sum(nil)
 	copy(chainId[:], c)
-	return chainId[:]
+	return chainId[:32]
 }
 
 func (c *LiteDataAccount) AccountId() ([]byte, error) {

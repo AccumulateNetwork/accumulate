@@ -128,13 +128,16 @@ const CreditsPerDollar = 1e2
 const CreditUnitsPerFiatUnit = CreditsPerDollar * CreditPrecision
 
 // LiteDataAddress returns a lite address for the given chain id as
-// `acc://<chain-id-hash-and-checksum>`.
+// `acc://<chain-id>`.
 //
 // The rules for generating the authority of a lite data chain are
 // the same as the address for a Lite Token Account
 func LiteDataAddress(chainId []byte) (*url.URL, error) {
 	liteUrl := new(url.URL)
-	keyStr := hex.EncodeToString(chainId)
+	if len(chainId) < 32 {
+		return nil, errors.New("chainId for LiteDataAddress must be 32 bytes in length")
+	}
+	keyStr := hex.EncodeToString(chainId[:32])
 	liteUrl.Authority = keyStr
 	return liteUrl, nil
 }
@@ -172,11 +175,11 @@ func ParseLiteDataAddress(u *url.URL) ([]byte, error) {
 		return nil, err
 	}
 	if b == nil {
-		return nil, errors.New("hostname is not hex")
+		return nil, errors.New("lite data address is not hex")
 	}
 
-	if len(b) != 64 {
-		return nil, errors.New("hostname is the wrong length")
+	if len(b) != 32 {
+		return nil, errors.New("lite data address is the wrong length")
 	}
 
 	return b, nil
