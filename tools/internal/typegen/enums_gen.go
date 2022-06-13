@@ -86,7 +86,7 @@ func (v *MarshalAs) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Marshal As
+// String returns the name of the Marshal As.
 func (v MarshalAs) String() string {
 	switch v {
 	case MarshalAsBasic:
@@ -162,7 +162,7 @@ func (v *TypeCode) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Type Code
+// String returns the name of the Type Code.
 func (v TypeCode) String() string {
 	switch v {
 	case TypeCodeUnknown:
