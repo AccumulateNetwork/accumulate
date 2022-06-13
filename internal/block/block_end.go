@@ -386,6 +386,7 @@ func (x *Executor) updateMajorIndexChains(block *Block, rootIndexIndex uint64) e
 		Source:         uint64(mainChain.Height() - 1),
 		RootIndexIndex: rootIndexIndex,
 		BlockIndex:     block.State.MakeMajorBlock,
+		BlockTime:      &block.State.MakeMajorBlockTime,
 	})
 	if err != nil {
 		return errors.Format(errors.StatusUnknown, "add anchor ledger index chain entry: %w", err)

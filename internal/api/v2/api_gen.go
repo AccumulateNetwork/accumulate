@@ -12,7 +12,7 @@ import (
 
 func (m *JrpcMethods) populateMethodTable() jsonrpc2.MethodMap {
 	if m.methods == nil {
-		m.methods = make(jsonrpc2.MethodMap, 36)
+		m.methods = make(jsonrpc2.MethodMap, 37)
 	}
 
 	m.methods["describe"] = m.Describe
@@ -45,6 +45,7 @@ func (m *JrpcMethods) populateMethodTable() jsonrpc2.MethodMap {
 	m.methods["query-data-set"] = m.QueryDataSet
 	m.methods["query-directory"] = m.QueryDirectory
 	m.methods["query-key-index"] = m.QueryKeyPageIndex
+	m.methods["query-major-blocks"] = m.QueryMajorBlocks
 	m.methods["query-minor-blocks"] = m.QueryMinorBlocks
 	m.methods["query-synth"] = m.QuerySynth
 	m.methods["query-tx"] = m.QueryTx
@@ -242,6 +243,19 @@ func (m *JrpcMethods) QueryKeyPageIndex(_ context.Context, params json.RawMessag
 	}
 
 	return jrpcFormatResponse(m.querier.QueryKeyPageIndex(req.Url, req.Key))
+}
+
+// QueryMajorBlocks queries an account's major blocks.
+//
+// WARNING: EXPERIMENTAL!
+func (m *JrpcMethods) QueryMajorBlocks(_ context.Context, params json.RawMessage) interface{} {
+	req := new(MajorBlocksQuery)
+	err := m.parse(params, req)
+	if err != nil {
+		return err
+	}
+
+	return jrpcFormatResponse(m.querier.QueryMajorBlocks(req.Url, req.QueryPagination))
 }
 
 // QueryMinorBlocks queries an account's minor blocks.
