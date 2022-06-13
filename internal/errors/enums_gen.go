@@ -68,7 +68,7 @@ func (v *Status) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Status
+// String returns the name of the Status.
 func (v Status) String() string {
 	switch v {
 	case StatusUnknown:

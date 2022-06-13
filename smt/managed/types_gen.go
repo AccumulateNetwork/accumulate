@@ -136,7 +136,7 @@ func (v *Receipt) MarshalBinary() ([]byte, error) {
 	}
 	if !(len(v.Entries) == 0) {
 		for _, v := range v.Entries {
-			writer.WriteValue(6, v)
+			writer.WriteValue(6, v.MarshalBinary)
 		}
 	}
 
