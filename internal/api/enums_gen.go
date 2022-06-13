@@ -38,7 +38,7 @@ func (v *RecordType) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Record Type
+// String returns the name of the Record Type.
 func (v RecordType) String() string {
 	switch v {
 	case RecordTypeAccount:
@@ -98,7 +98,7 @@ func (v *SubmitMode) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Submit Mode
+// String returns the name of the Submit Mode.
 func (v SubmitMode) String() string {
 	switch v {
 	case SubmitModeSync:
