@@ -122,6 +122,20 @@ func packMinorQueryResponse(entry *query.ResponseMinorEntry) (*MinorQueryRespons
 	return resp, err
 }
 
+func packMajorQueryResponse(entry *query.ResponseMajorEntry) (*MajorQueryResponse, error) {
+	var err error
+	resp := new(MajorQueryResponse)
+	resp.MajorBlockIndex = entry.MajorBlockIndex
+	resp.MajorBlockTime = entry.MajorBlockTime
+	for _, minBlk := range entry.MinorBlocks {
+		minBlkResp := &MinorBlock{}
+		minBlkResp.BlockIndex = minBlk.BlockIndex
+		minBlkResp.BlockTime = minBlk.BlockTime
+		resp.MinorBlocks = append(resp.MinorBlocks, minBlkResp)
+	}
+	return resp, err
+}
+
 func packChainValue(qr *query.ResponseChainEntry) *ChainQueryResponse {
 	resp := new(ChainQueryResponse)
 	resp.Type = "chainEntry"

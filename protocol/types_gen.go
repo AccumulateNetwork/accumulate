@@ -253,7 +253,9 @@ type DirectoryAnchor struct {
 	Receipts []managed.Receipt `json:"receipts,omitempty" form:"receipts" query:"receipts" validate:"required"`
 	// MakeMajorBlock notifies the subnet that the DN has opened a major block.
 	MakeMajorBlock uint64 `json:"makeMajorBlock,omitempty" form:"makeMajorBlock" query:"makeMajorBlock" validate:"required"`
-	extraData      []byte
+	// MakeMajorBlockTime holds the time when the major block was opened.
+	MakeMajorBlockTime time.Time `json:"makeMajorBlockTime,omitempty" form:"makeMajorBlockTime" query:"makeMajorBlockTime" validate:"required"`
+	extraData          []byte
 }
 
 type DisableAccountAuthOperation struct {
@@ -1459,6 +1461,7 @@ func (v *DirectoryAnchor) Copy() *DirectoryAnchor {
 		u.Receipts[i] = *(&v).Copy()
 	}
 	u.MakeMajorBlock = v.MakeMajorBlock
+	u.MakeMajorBlockTime = v.MakeMajorBlockTime
 
 	return u
 }
@@ -3073,6 +3076,9 @@ func (v *DirectoryAnchor) Equal(u *DirectoryAnchor) bool {
 		}
 	}
 	if !(v.MakeMajorBlock == u.MakeMajorBlock) {
+		return false
+	}
+	if !(v.MakeMajorBlockTime == u.MakeMajorBlockTime) {
 		return false
 	}
 
@@ -5918,6 +5924,7 @@ var fieldNames_DirectoryAnchor = []string{
 	3: "Updates",
 	4: "Receipts",
 	5: "MakeMajorBlock",
+	6: "MakeMajorBlockTime",
 }
 
 func (v *DirectoryAnchor) MarshalBinary() ([]byte, error) {
@@ -5938,6 +5945,9 @@ func (v *DirectoryAnchor) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.MakeMajorBlock == 0) {
 		writer.WriteUint(5, v.MakeMajorBlock)
+	}
+	if !(v.MakeMajorBlockTime == (time.Time{})) {
+		writer.WriteTime(6, v.MakeMajorBlockTime)
 	}
 
 	_, _, err := writer.Reset(fieldNames_DirectoryAnchor)
@@ -5971,6 +5981,11 @@ func (v *DirectoryAnchor) IsValid() error {
 		errs = append(errs, "field MakeMajorBlock is missing")
 	} else if v.MakeMajorBlock == 0 {
 		errs = append(errs, "field MakeMajorBlock is not set")
+	}
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+		errs = append(errs, "field MakeMajorBlockTime is missing")
+	} else if v.MakeMajorBlockTime == (time.Time{}) {
+		errs = append(errs, "field MakeMajorBlockTime is not set")
 	}
 
 	switch len(errs) {
@@ -10945,6 +10960,9 @@ func (v *DirectoryAnchor) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUint(5); ok {
 		v.MakeMajorBlock = x
 	}
+	if x, ok := reader.ReadTime(6); ok {
+		v.MakeMajorBlockTime = x
+	}
 
 	seen, err := reader.Reset(fieldNames_DirectoryAnchor)
 	if err != nil {
@@ -13588,16 +13606,17 @@ func (v *DelegatedSignature) MarshalJSON() ([]byte, error) {
 
 func (v *DirectoryAnchor) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type            TransactionType                         `json:"type"`
-		Source          *url.URL                                `json:"source,omitempty"`
-		MajorBlockIndex uint64                                  `json:"majorBlockIndex,omitempty"`
-		MinorBlockIndex uint64                                  `json:"minorBlockIndex,omitempty"`
-		RootChainIndex  uint64                                  `json:"rootChainIndex,omitempty"`
-		RootChainAnchor string                                  `json:"rootChainAnchor,omitempty"`
-		StateTreeAnchor string                                  `json:"stateTreeAnchor,omitempty"`
-		Updates         encoding.JsonList[NetworkAccountUpdate] `json:"updates,omitempty"`
-		Receipts        encoding.JsonList[managed.Receipt]      `json:"receipts,omitempty"`
-		MakeMajorBlock  uint64                                  `json:"makeMajorBlock,omitempty"`
+		Type               TransactionType                         `json:"type"`
+		Source             *url.URL                                `json:"source,omitempty"`
+		MajorBlockIndex    uint64                                  `json:"majorBlockIndex,omitempty"`
+		MinorBlockIndex    uint64                                  `json:"minorBlockIndex,omitempty"`
+		RootChainIndex     uint64                                  `json:"rootChainIndex,omitempty"`
+		RootChainAnchor    string                                  `json:"rootChainAnchor,omitempty"`
+		StateTreeAnchor    string                                  `json:"stateTreeAnchor,omitempty"`
+		Updates            encoding.JsonList[NetworkAccountUpdate] `json:"updates,omitempty"`
+		Receipts           encoding.JsonList[managed.Receipt]      `json:"receipts,omitempty"`
+		MakeMajorBlock     uint64                                  `json:"makeMajorBlock,omitempty"`
+		MakeMajorBlockTime time.Time                               `json:"makeMajorBlockTime,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Source = v.SubnetAnchor.Source
@@ -13609,6 +13628,7 @@ func (v *DirectoryAnchor) MarshalJSON() ([]byte, error) {
 	u.Updates = v.Updates
 	u.Receipts = v.Receipts
 	u.MakeMajorBlock = v.MakeMajorBlock
+	u.MakeMajorBlockTime = v.MakeMajorBlockTime
 	return json.Marshal(&u)
 }
 
@@ -15192,16 +15212,17 @@ func (v *DelegatedSignature) UnmarshalJSON(data []byte) error {
 
 func (v *DirectoryAnchor) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type            TransactionType                         `json:"type"`
-		Source          *url.URL                                `json:"source,omitempty"`
-		MajorBlockIndex uint64                                  `json:"majorBlockIndex,omitempty"`
-		MinorBlockIndex uint64                                  `json:"minorBlockIndex,omitempty"`
-		RootChainIndex  uint64                                  `json:"rootChainIndex,omitempty"`
-		RootChainAnchor string                                  `json:"rootChainAnchor,omitempty"`
-		StateTreeAnchor string                                  `json:"stateTreeAnchor,omitempty"`
-		Updates         encoding.JsonList[NetworkAccountUpdate] `json:"updates,omitempty"`
-		Receipts        encoding.JsonList[managed.Receipt]      `json:"receipts,omitempty"`
-		MakeMajorBlock  uint64                                  `json:"makeMajorBlock,omitempty"`
+		Type               TransactionType                         `json:"type"`
+		Source             *url.URL                                `json:"source,omitempty"`
+		MajorBlockIndex    uint64                                  `json:"majorBlockIndex,omitempty"`
+		MinorBlockIndex    uint64                                  `json:"minorBlockIndex,omitempty"`
+		RootChainIndex     uint64                                  `json:"rootChainIndex,omitempty"`
+		RootChainAnchor    string                                  `json:"rootChainAnchor,omitempty"`
+		StateTreeAnchor    string                                  `json:"stateTreeAnchor,omitempty"`
+		Updates            encoding.JsonList[NetworkAccountUpdate] `json:"updates,omitempty"`
+		Receipts           encoding.JsonList[managed.Receipt]      `json:"receipts,omitempty"`
+		MakeMajorBlock     uint64                                  `json:"makeMajorBlock,omitempty"`
+		MakeMajorBlockTime time.Time                               `json:"makeMajorBlockTime,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Source = v.SubnetAnchor.Source
@@ -15213,6 +15234,7 @@ func (v *DirectoryAnchor) UnmarshalJSON(data []byte) error {
 	u.Updates = v.Updates
 	u.Receipts = v.Receipts
 	u.MakeMajorBlock = v.MakeMajorBlock
+	u.MakeMajorBlockTime = v.MakeMajorBlockTime
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -15236,6 +15258,7 @@ func (v *DirectoryAnchor) UnmarshalJSON(data []byte) error {
 	v.Updates = u.Updates
 	v.Receipts = u.Receipts
 	v.MakeMajorBlock = u.MakeMajorBlock
+	v.MakeMajorBlockTime = u.MakeMajorBlockTime
 	return nil
 }
 
