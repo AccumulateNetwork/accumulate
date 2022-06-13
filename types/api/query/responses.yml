@@ -250,3 +250,30 @@ ResponseMinorEntry:
       repeatable: true
       pointer: true
       marshal-as: reference
+
+ResponseMajorBlocks:
+  fields:
+    - name: TotalBlocks
+      type: uint
+      keep-empty: true
+    - name: Entries
+      repeatable: true
+      type: ResponseMajorEntry
+      pointer: true
+      marshal-as: reference
+
+ResponseMajorEntry:
+  fields:
+    - name: MajorBlockIndex
+      description: is the index of the block. Only include when indexing the root anchor chain
+      type: uint
+    - name: MajorBlockTime
+      description: is the start time of the block.
+      type: time
+      pointer: true
+    - name: MinorBlocks
+      description: the minor blocks within this block (excluding transactions)
+      type: ResponseMinorEntry
+      repeatable: true
+      pointer: true
+      marshal-as: reference
