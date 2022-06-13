@@ -344,7 +344,7 @@ func TestCreateLiteDataAccount(t *testing.T) {
 	}
 	r := n.GetLiteDataAccount(liteDataAddress.String())
 	require.Equal(t, liteDataAddress.String(), r.Url.String())
-	require.Equal(t, append(partialChainId, r.Tail...), chainId)
+	require.Equal(t, partialChainId, chainId)
 
 	firstEntryHash, err := protocol.ComputeFactomEntryHashForAccount(chainId, firstEntry.Data)
 	require.NoError(t, err)

@@ -8,7 +8,7 @@ import (
 // the names as part of the external id's
 // https://github.com/FactomProject/FactomDocs/blob/master/factomDataStructureDetails.md#chainid
 func ComputeLiteDataAccountId(firstEntry DataEntry) []byte {
-	var chainId [32]byte
+	var chainId [64]byte
 	if firstEntry == nil {
 		return chainId[:]
 	}
@@ -32,5 +32,5 @@ func (c *LiteDataAccount) AccountId() ([]byte, error) {
 	}
 
 	//reconstruct full lite chain id
-	return append(head, c.Tail...), nil
+	return head, nil
 }
