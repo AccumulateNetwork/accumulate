@@ -58,7 +58,7 @@ SystemGenesis:
 BlockValidatorAnchor:
   union: { type: transaction }
   embeddings:
-    - SubnetAnchor
+    - PartitionAnchor
   fields:
     - name: AcmeBurnt
       description: is the amount of acme tokens burnt in the transaction
@@ -67,7 +67,7 @@ BlockValidatorAnchor:
 DirectoryAnchor:
   union: { type: transaction }
   embeddings:
-    - SubnetAnchor
+    - PartitionAnchor
   fields:
     - name: Updates
       description: are synchronization updates for network accounts
@@ -105,7 +105,7 @@ NetworkAccountUpdate:
       type: TransactionBody
       marshal-as: union
 
-SubnetAnchor:
+PartitionAnchor:
   fields:
     - name: Source
       description: is the principal of the transaction that produced this transaction

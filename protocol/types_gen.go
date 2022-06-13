@@ -150,7 +150,7 @@ type BTCSignature struct {
 
 type BlockValidatorAnchor struct {
 	fieldsSet []bool
-	SubnetAnchor
+	PartitionAnchor
 	// AcmeBurnt is the amount of acme tokens burnt in the transaction.
 	AcmeBurnt big.Int `json:"acmeBurnt,omitempty" form:"acmeBurnt" query:"acmeBurnt" validate:"required"`
 	extraData []byte
@@ -254,7 +254,7 @@ type DelegatedSignature struct {
 
 type DirectoryAnchor struct {
 	fieldsSet []bool
-	SubnetAnchor
+	PartitionAnchor
 	// Updates are synchronization updates for network accounts.
 	Updates []NetworkAccountUpdate `json:"updates,omitempty" form:"updates" query:"updates" validate:"required"`
 	// Receipts are receipts for anchors from other partitions that were included in the block.
@@ -474,6 +474,23 @@ type Object struct {
 	extraData []byte
 }
 
+type PartitionAnchor struct {
+	fieldsSet []bool
+	// Source is the principal of the transaction that produced this transaction.
+	Source *url.URL `json:"source,omitempty" form:"source" query:"source" validate:"required"`
+	// MajorBlockIndex is the major block index, or zero.
+	MajorBlockIndex uint64 `json:"majorBlockIndex,omitempty" form:"majorBlockIndex" query:"majorBlockIndex" validate:"required"`
+	// MinorBlockIndex is the minor block index.
+	MinorBlockIndex uint64 `json:"minorBlockIndex,omitempty" form:"minorBlockIndex" query:"minorBlockIndex" validate:"required"`
+	// RootChainIndex is the index of the last root chain entry.
+	RootChainIndex uint64 `json:"rootChainIndex,omitempty" form:"rootChainIndex" query:"rootChainIndex" validate:"required"`
+	// RootChainAnchor is the anchor of the root chain.
+	RootChainAnchor [32]byte `json:"rootChainAnchor,omitempty" form:"rootChainAnchor" query:"rootChainAnchor" validate:"required"`
+	// StateTreeAnchor is the root of the source's state tree (BPT).
+	StateTreeAnchor [32]byte `json:"stateTreeAnchor,omitempty" form:"stateTreeAnchor" query:"stateTreeAnchor" validate:"required"`
+	extraData       []byte
+}
+
 type PartitionDefinition struct {
 	fieldsSet          []bool
 	PartitionID        string     `json:"partitionID,omitempty" form:"partitionID" query:"partitionID" validate:"required"`
@@ -604,23 +621,6 @@ type SignatureSet struct {
 	Signer          *url.URL    `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
 	TransactionHash [32]byte    `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash"`
 	Signatures      []Signature `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
-	extraData       []byte
-}
-
-type SubnetAnchor struct {
-	fieldsSet []bool
-	// Source is the principal of the transaction that produced this transaction.
-	Source *url.URL `json:"source,omitempty" form:"source" query:"source" validate:"required"`
-	// MajorBlockIndex is the major block index, or zero.
-	MajorBlockIndex uint64 `json:"majorBlockIndex,omitempty" form:"majorBlockIndex" query:"majorBlockIndex" validate:"required"`
-	// MinorBlockIndex is the minor block index.
-	MinorBlockIndex uint64 `json:"minorBlockIndex,omitempty" form:"minorBlockIndex" query:"minorBlockIndex" validate:"required"`
-	// RootChainIndex is the index of the last root chain entry.
-	RootChainIndex uint64 `json:"rootChainIndex,omitempty" form:"rootChainIndex" query:"rootChainIndex" validate:"required"`
-	// RootChainAnchor is the anchor of the root chain.
-	RootChainAnchor [32]byte `json:"rootChainAnchor,omitempty" form:"rootChainAnchor" query:"rootChainAnchor" validate:"required"`
-	// StateTreeAnchor is the root of the source's state tree (BPT).
-	StateTreeAnchor [32]byte `json:"stateTreeAnchor,omitempty" form:"stateTreeAnchor" query:"stateTreeAnchor" validate:"required"`
 	extraData       []byte
 }
 
@@ -1259,7 +1259,7 @@ func (v *BTCSignature) CopyAsInterface() interface{} { return v.Copy() }
 func (v *BlockValidatorAnchor) Copy() *BlockValidatorAnchor {
 	u := new(BlockValidatorAnchor)
 
-	u.SubnetAnchor = *v.SubnetAnchor.Copy()
+	u.PartitionAnchor = *v.PartitionAnchor.Copy()
 	u.AcmeBurnt = *encoding.BigintCopy(&v.AcmeBurnt)
 
 	return u
@@ -1460,7 +1460,7 @@ func (v *DelegatedSignature) CopyAsInterface() interface{} { return v.Copy() }
 func (v *DirectoryAnchor) Copy() *DirectoryAnchor {
 	u := new(DirectoryAnchor)
 
-	u.SubnetAnchor = *v.SubnetAnchor.Copy()
+	u.PartitionAnchor = *v.PartitionAnchor.Copy()
 	u.Updates = make([]NetworkAccountUpdate, len(v.Updates))
 	for i, v := range v.Updates {
 		u.Updates[i] = *(&v).Copy()
@@ -1816,6 +1816,23 @@ func (v *Object) Copy() *Object {
 
 func (v *Object) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *PartitionAnchor) Copy() *PartitionAnchor {
+	u := new(PartitionAnchor)
+
+	if v.Source != nil {
+		u.Source = (v.Source).Copy()
+	}
+	u.MajorBlockIndex = v.MajorBlockIndex
+	u.MinorBlockIndex = v.MinorBlockIndex
+	u.RootChainIndex = v.RootChainIndex
+	u.RootChainAnchor = v.RootChainAnchor
+	u.StateTreeAnchor = v.StateTreeAnchor
+
+	return u
+}
+
+func (v *PartitionAnchor) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *PartitionDefinition) Copy() *PartitionDefinition {
 	u := new(PartitionDefinition)
 
@@ -2042,23 +2059,6 @@ func (v *SignatureSet) Copy() *SignatureSet {
 }
 
 func (v *SignatureSet) CopyAsInterface() interface{} { return v.Copy() }
-
-func (v *SubnetAnchor) Copy() *SubnetAnchor {
-	u := new(SubnetAnchor)
-
-	if v.Source != nil {
-		u.Source = (v.Source).Copy()
-	}
-	u.MajorBlockIndex = v.MajorBlockIndex
-	u.MinorBlockIndex = v.MinorBlockIndex
-	u.RootChainIndex = v.RootChainIndex
-	u.RootChainAnchor = v.RootChainAnchor
-	u.StateTreeAnchor = v.StateTreeAnchor
-
-	return u
-}
-
-func (v *SubnetAnchor) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *SyntheticBurnTokens) Copy() *SyntheticBurnTokens {
 	u := new(SyntheticBurnTokens)
@@ -2809,7 +2809,7 @@ func (v *BTCSignature) Equal(u *BTCSignature) bool {
 }
 
 func (v *BlockValidatorAnchor) Equal(u *BlockValidatorAnchor) bool {
-	if !v.SubnetAnchor.Equal(&u.SubnetAnchor) {
+	if !v.PartitionAnchor.Equal(&u.PartitionAnchor) {
 		return false
 	}
 	if !((&v.AcmeBurnt).Cmp(&u.AcmeBurnt) == 0) {
@@ -3064,7 +3064,7 @@ func (v *DelegatedSignature) Equal(u *DelegatedSignature) bool {
 }
 
 func (v *DirectoryAnchor) Equal(u *DirectoryAnchor) bool {
-	if !v.SubnetAnchor.Equal(&u.SubnetAnchor) {
+	if !v.PartitionAnchor.Equal(&u.PartitionAnchor) {
 		return false
 	}
 	if len(v.Updates) != len(u.Updates) {
@@ -3537,6 +3537,34 @@ func (v *Object) Equal(u *Object) bool {
 	return true
 }
 
+func (v *PartitionAnchor) Equal(u *PartitionAnchor) bool {
+	switch {
+	case v.Source == u.Source:
+		// equal
+	case v.Source == nil || u.Source == nil:
+		return false
+	case !((v.Source).Equal(u.Source)):
+		return false
+	}
+	if !(v.MajorBlockIndex == u.MajorBlockIndex) {
+		return false
+	}
+	if !(v.MinorBlockIndex == u.MinorBlockIndex) {
+		return false
+	}
+	if !(v.RootChainIndex == u.RootChainIndex) {
+		return false
+	}
+	if !(v.RootChainAnchor == u.RootChainAnchor) {
+		return false
+	}
+	if !(v.StateTreeAnchor == u.StateTreeAnchor) {
+		return false
+	}
+
+	return true
+}
+
 func (v *PartitionDefinition) Equal(u *PartitionDefinition) bool {
 	if !(v.PartitionID == u.PartitionID) {
 		return false
@@ -3805,34 +3833,6 @@ func (v *SignatureSet) Equal(u *SignatureSet) bool {
 		if !(EqualSignature(v.Signatures[i], u.Signatures[i])) {
 			return false
 		}
-	}
-
-	return true
-}
-
-func (v *SubnetAnchor) Equal(u *SubnetAnchor) bool {
-	switch {
-	case v.Source == u.Source:
-		// equal
-	case v.Source == nil || u.Source == nil:
-		return false
-	case !((v.Source).Equal(u.Source)):
-		return false
-	}
-	if !(v.MajorBlockIndex == u.MajorBlockIndex) {
-		return false
-	}
-	if !(v.MinorBlockIndex == u.MinorBlockIndex) {
-		return false
-	}
-	if !(v.RootChainIndex == u.RootChainIndex) {
-		return false
-	}
-	if !(v.RootChainAnchor == u.RootChainAnchor) {
-		return false
-	}
-	if !(v.StateTreeAnchor == u.StateTreeAnchor) {
-		return false
 	}
 
 	return true
@@ -5304,7 +5304,7 @@ func (v *BTCSignature) IsValid() error {
 
 var fieldNames_BlockValidatorAnchor = []string{
 	1: "Type",
-	2: "SubnetAnchor",
+	2: "PartitionAnchor",
 	3: "AcmeBurnt",
 }
 
@@ -5313,7 +5313,7 @@ func (v *BlockValidatorAnchor) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
-	writer.WriteValue(2, &v.SubnetAnchor)
+	writer.WriteValue(2, &v.PartitionAnchor)
 	if !((v.AcmeBurnt).Cmp(new(big.Int)) == 0) {
 		writer.WriteBigInt(3, &v.AcmeBurnt)
 	}
@@ -5332,7 +5332,7 @@ func (v *BlockValidatorAnchor) IsValid() error {
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Type is missing")
 	}
-	if err := v.SubnetAnchor.IsValid(); err != nil {
+	if err := v.PartitionAnchor.IsValid(); err != nil {
 		errs = append(errs, err.Error())
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
@@ -5963,7 +5963,7 @@ func (v *DelegatedSignature) IsValid() error {
 
 var fieldNames_DirectoryAnchor = []string{
 	1: "Type",
-	2: "SubnetAnchor",
+	2: "PartitionAnchor",
 	3: "Updates",
 	4: "Receipts",
 	5: "MakeMajorBlock",
@@ -5974,7 +5974,7 @@ func (v *DirectoryAnchor) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
-	writer.WriteValue(2, &v.SubnetAnchor)
+	writer.WriteValue(2, &v.PartitionAnchor)
 	if !(len(v.Updates) == 0) {
 		for _, v := range v.Updates {
 			writer.WriteValue(3, &v)
@@ -6003,7 +6003,7 @@ func (v *DirectoryAnchor) IsValid() error {
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Type is missing")
 	}
-	if err := v.SubnetAnchor.IsValid(); err != nil {
+	if err := v.PartitionAnchor.IsValid(); err != nil {
 		errs = append(errs, err.Error())
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
@@ -7342,6 +7342,90 @@ func (v *Object) IsValid() error {
 	}
 }
 
+var fieldNames_PartitionAnchor = []string{
+	1: "Source",
+	2: "MajorBlockIndex",
+	3: "MinorBlockIndex",
+	4: "RootChainIndex",
+	5: "RootChainAnchor",
+	6: "StateTreeAnchor",
+}
+
+func (v *PartitionAnchor) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Source == nil) {
+		writer.WriteUrl(1, v.Source)
+	}
+	if !(v.MajorBlockIndex == 0) {
+		writer.WriteUint(2, v.MajorBlockIndex)
+	}
+	if !(v.MinorBlockIndex == 0) {
+		writer.WriteUint(3, v.MinorBlockIndex)
+	}
+	if !(v.RootChainIndex == 0) {
+		writer.WriteUint(4, v.RootChainIndex)
+	}
+	if !(v.RootChainAnchor == ([32]byte{})) {
+		writer.WriteHash(5, &v.RootChainAnchor)
+	}
+	if !(v.StateTreeAnchor == ([32]byte{})) {
+		writer.WriteHash(6, &v.StateTreeAnchor)
+	}
+
+	_, _, err := writer.Reset(fieldNames_PartitionAnchor)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), err
+}
+
+func (v *PartitionAnchor) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Source is missing")
+	} else if v.Source == nil {
+		errs = append(errs, "field Source is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field MajorBlockIndex is missing")
+	} else if v.MajorBlockIndex == 0 {
+		errs = append(errs, "field MajorBlockIndex is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field MinorBlockIndex is missing")
+	} else if v.MinorBlockIndex == 0 {
+		errs = append(errs, "field MinorBlockIndex is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field RootChainIndex is missing")
+	} else if v.RootChainIndex == 0 {
+		errs = append(errs, "field RootChainIndex is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field RootChainAnchor is missing")
+	} else if v.RootChainAnchor == ([32]byte{}) {
+		errs = append(errs, "field RootChainAnchor is not set")
+	}
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+		errs = append(errs, "field StateTreeAnchor is missing")
+	} else if v.StateTreeAnchor == ([32]byte{}) {
+		errs = append(errs, "field StateTreeAnchor is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_PartitionDefinition = []string{
 	1: "PartitionID",
 	2: "ValidatorKeyHashes",
@@ -8191,90 +8275,6 @@ func (v *SignatureSet) IsValid() error {
 		errs = append(errs, "field Signatures is missing")
 	} else if len(v.Signatures) == 0 {
 		errs = append(errs, "field Signatures is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
-var fieldNames_SubnetAnchor = []string{
-	1: "Source",
-	2: "MajorBlockIndex",
-	3: "MinorBlockIndex",
-	4: "RootChainIndex",
-	5: "RootChainAnchor",
-	6: "StateTreeAnchor",
-}
-
-func (v *SubnetAnchor) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	if !(v.Source == nil) {
-		writer.WriteUrl(1, v.Source)
-	}
-	if !(v.MajorBlockIndex == 0) {
-		writer.WriteUint(2, v.MajorBlockIndex)
-	}
-	if !(v.MinorBlockIndex == 0) {
-		writer.WriteUint(3, v.MinorBlockIndex)
-	}
-	if !(v.RootChainIndex == 0) {
-		writer.WriteUint(4, v.RootChainIndex)
-	}
-	if !(v.RootChainAnchor == ([32]byte{})) {
-		writer.WriteHash(5, &v.RootChainAnchor)
-	}
-	if !(v.StateTreeAnchor == ([32]byte{})) {
-		writer.WriteHash(6, &v.StateTreeAnchor)
-	}
-
-	_, _, err := writer.Reset(fieldNames_SubnetAnchor)
-	if err != nil {
-		return nil, err
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), err
-}
-
-func (v *SubnetAnchor) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Source is missing")
-	} else if v.Source == nil {
-		errs = append(errs, "field Source is not set")
-	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field MajorBlockIndex is missing")
-	} else if v.MajorBlockIndex == 0 {
-		errs = append(errs, "field MajorBlockIndex is not set")
-	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field MinorBlockIndex is missing")
-	} else if v.MinorBlockIndex == 0 {
-		errs = append(errs, "field MinorBlockIndex is not set")
-	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
-		errs = append(errs, "field RootChainIndex is missing")
-	} else if v.RootChainIndex == 0 {
-		errs = append(errs, "field RootChainIndex is not set")
-	}
-	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
-		errs = append(errs, "field RootChainAnchor is missing")
-	} else if v.RootChainAnchor == ([32]byte{}) {
-		errs = append(errs, "field RootChainAnchor is not set")
-	}
-	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
-		errs = append(errs, "field StateTreeAnchor is missing")
-	} else if v.StateTreeAnchor == ([32]byte{}) {
-		errs = append(errs, "field StateTreeAnchor is not set")
 	}
 
 	switch len(errs) {
@@ -10548,7 +10548,7 @@ func (v *BlockValidatorAnchor) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
-	reader.ReadValue(2, v.SubnetAnchor.UnmarshalBinary)
+	reader.ReadValue(2, v.PartitionAnchor.UnmarshalBinary)
 	if x, ok := reader.ReadBigInt(3); ok {
 		v.AcmeBurnt = *x
 	}
@@ -10955,7 +10955,7 @@ func (v *DirectoryAnchor) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
-	reader.ReadValue(2, v.SubnetAnchor.UnmarshalBinary)
+	reader.ReadValue(2, v.PartitionAnchor.UnmarshalBinary)
 	for {
 		if x := new(NetworkAccountUpdate); reader.ReadValue(3, x.UnmarshalBinary) {
 			v.Updates = append(v.Updates, *x)
@@ -11688,6 +11688,41 @@ func (v *Object) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
+func (v *PartitionAnchor) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *PartitionAnchor) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUrl(1); ok {
+		v.Source = x
+	}
+	if x, ok := reader.ReadUint(2); ok {
+		v.MajorBlockIndex = x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.MinorBlockIndex = x
+	}
+	if x, ok := reader.ReadUint(4); ok {
+		v.RootChainIndex = x
+	}
+	if x, ok := reader.ReadHash(5); ok {
+		v.RootChainAnchor = *x
+	}
+	if x, ok := reader.ReadHash(6); ok {
+		v.StateTreeAnchor = *x
+	}
+
+	seen, err := reader.Reset(fieldNames_PartitionAnchor)
+	if err != nil {
+		return err
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	return err
+}
+
 func (v *PartitionDefinition) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -12178,41 +12213,6 @@ func (v *SignatureSet) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_SignatureSet)
-	if err != nil {
-		return err
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	return err
-}
-
-func (v *SubnetAnchor) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *SubnetAnchor) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	if x, ok := reader.ReadUrl(1); ok {
-		v.Source = x
-	}
-	if x, ok := reader.ReadUint(2); ok {
-		v.MajorBlockIndex = x
-	}
-	if x, ok := reader.ReadUint(3); ok {
-		v.MinorBlockIndex = x
-	}
-	if x, ok := reader.ReadUint(4); ok {
-		v.RootChainIndex = x
-	}
-	if x, ok := reader.ReadHash(5); ok {
-		v.RootChainAnchor = *x
-	}
-	if x, ok := reader.ReadHash(6); ok {
-		v.StateTreeAnchor = *x
-	}
-
-	seen, err := reader.Reset(fieldNames_SubnetAnchor)
 	if err != nil {
 		return err
 	}
@@ -13454,12 +13454,12 @@ func (v *BlockValidatorAnchor) MarshalJSON() ([]byte, error) {
 		AcmeBurnt       *string         `json:"acmeBurnt,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.Source = v.SubnetAnchor.Source
-	u.MajorBlockIndex = v.SubnetAnchor.MajorBlockIndex
-	u.MinorBlockIndex = v.SubnetAnchor.MinorBlockIndex
-	u.RootChainIndex = v.SubnetAnchor.RootChainIndex
-	u.RootChainAnchor = encoding.ChainToJSON(v.SubnetAnchor.RootChainAnchor)
-	u.StateTreeAnchor = encoding.ChainToJSON(v.SubnetAnchor.StateTreeAnchor)
+	u.Source = v.PartitionAnchor.Source
+	u.MajorBlockIndex = v.PartitionAnchor.MajorBlockIndex
+	u.MinorBlockIndex = v.PartitionAnchor.MinorBlockIndex
+	u.RootChainIndex = v.PartitionAnchor.RootChainIndex
+	u.RootChainAnchor = encoding.ChainToJSON(v.PartitionAnchor.RootChainAnchor)
+	u.StateTreeAnchor = encoding.ChainToJSON(v.PartitionAnchor.StateTreeAnchor)
 	u.AcmeBurnt = encoding.BigintToJSON(&v.AcmeBurnt)
 	return json.Marshal(&u)
 }
@@ -13622,12 +13622,12 @@ func (v *DirectoryAnchor) MarshalJSON() ([]byte, error) {
 		MakeMajorBlock  uint64                                  `json:"makeMajorBlock,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.Source = v.SubnetAnchor.Source
-	u.MajorBlockIndex = v.SubnetAnchor.MajorBlockIndex
-	u.MinorBlockIndex = v.SubnetAnchor.MinorBlockIndex
-	u.RootChainIndex = v.SubnetAnchor.RootChainIndex
-	u.RootChainAnchor = encoding.ChainToJSON(v.SubnetAnchor.RootChainAnchor)
-	u.StateTreeAnchor = encoding.ChainToJSON(v.SubnetAnchor.StateTreeAnchor)
+	u.Source = v.PartitionAnchor.Source
+	u.MajorBlockIndex = v.PartitionAnchor.MajorBlockIndex
+	u.MinorBlockIndex = v.PartitionAnchor.MinorBlockIndex
+	u.RootChainIndex = v.PartitionAnchor.RootChainIndex
+	u.RootChainAnchor = encoding.ChainToJSON(v.PartitionAnchor.RootChainAnchor)
+	u.StateTreeAnchor = encoding.ChainToJSON(v.PartitionAnchor.StateTreeAnchor)
 	u.Updates = v.Updates
 	u.Receipts = v.Receipts
 	u.MakeMajorBlock = v.MakeMajorBlock
@@ -13955,6 +13955,24 @@ func (v *Object) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *PartitionAnchor) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Source          *url.URL `json:"source,omitempty"`
+		MajorBlockIndex uint64   `json:"majorBlockIndex,omitempty"`
+		MinorBlockIndex uint64   `json:"minorBlockIndex,omitempty"`
+		RootChainIndex  uint64   `json:"rootChainIndex,omitempty"`
+		RootChainAnchor string   `json:"rootChainAnchor,omitempty"`
+		StateTreeAnchor string   `json:"stateTreeAnchor,omitempty"`
+	}{}
+	u.Source = v.Source
+	u.MajorBlockIndex = v.MajorBlockIndex
+	u.MinorBlockIndex = v.MinorBlockIndex
+	u.RootChainIndex = v.RootChainIndex
+	u.RootChainAnchor = encoding.ChainToJSON(v.RootChainAnchor)
+	u.StateTreeAnchor = encoding.ChainToJSON(v.StateTreeAnchor)
+	return json.Marshal(&u)
+}
+
 func (v *PartitionDefinition) MarshalJSON() ([]byte, error) {
 	u := struct {
 		PartitionID        string                    `json:"partitionID,omitempty"`
@@ -14149,24 +14167,6 @@ func (v *SignatureSet) MarshalJSON() ([]byte, error) {
 	u.Signer = v.Signer
 	u.TransactionHash = encoding.ChainToJSON(v.TransactionHash)
 	u.Signatures = encoding.JsonUnmarshalListWith[Signature]{Value: v.Signatures, Func: UnmarshalSignatureJSON}
-	return json.Marshal(&u)
-}
-
-func (v *SubnetAnchor) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Source          *url.URL `json:"source,omitempty"`
-		MajorBlockIndex uint64   `json:"majorBlockIndex,omitempty"`
-		MinorBlockIndex uint64   `json:"minorBlockIndex,omitempty"`
-		RootChainIndex  uint64   `json:"rootChainIndex,omitempty"`
-		RootChainAnchor string   `json:"rootChainAnchor,omitempty"`
-		StateTreeAnchor string   `json:"stateTreeAnchor,omitempty"`
-	}{}
-	u.Source = v.Source
-	u.MajorBlockIndex = v.MajorBlockIndex
-	u.MinorBlockIndex = v.MinorBlockIndex
-	u.RootChainIndex = v.RootChainIndex
-	u.RootChainAnchor = encoding.ChainToJSON(v.RootChainAnchor)
-	u.StateTreeAnchor = encoding.ChainToJSON(v.StateTreeAnchor)
 	return json.Marshal(&u)
 }
 
@@ -14976,12 +14976,12 @@ func (v *BlockValidatorAnchor) UnmarshalJSON(data []byte) error {
 		AcmeBurnt       *string         `json:"acmeBurnt,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.Source = v.SubnetAnchor.Source
-	u.MajorBlockIndex = v.SubnetAnchor.MajorBlockIndex
-	u.MinorBlockIndex = v.SubnetAnchor.MinorBlockIndex
-	u.RootChainIndex = v.SubnetAnchor.RootChainIndex
-	u.RootChainAnchor = encoding.ChainToJSON(v.SubnetAnchor.RootChainAnchor)
-	u.StateTreeAnchor = encoding.ChainToJSON(v.SubnetAnchor.StateTreeAnchor)
+	u.Source = v.PartitionAnchor.Source
+	u.MajorBlockIndex = v.PartitionAnchor.MajorBlockIndex
+	u.MinorBlockIndex = v.PartitionAnchor.MinorBlockIndex
+	u.RootChainIndex = v.PartitionAnchor.RootChainIndex
+	u.RootChainAnchor = encoding.ChainToJSON(v.PartitionAnchor.RootChainAnchor)
+	u.StateTreeAnchor = encoding.ChainToJSON(v.PartitionAnchor.StateTreeAnchor)
 	u.AcmeBurnt = encoding.BigintToJSON(&v.AcmeBurnt)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -14989,19 +14989,19 @@ func (v *BlockValidatorAnchor) UnmarshalJSON(data []byte) error {
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
-	v.SubnetAnchor.Source = u.Source
-	v.SubnetAnchor.MajorBlockIndex = u.MajorBlockIndex
-	v.SubnetAnchor.MinorBlockIndex = u.MinorBlockIndex
-	v.SubnetAnchor.RootChainIndex = u.RootChainIndex
+	v.PartitionAnchor.Source = u.Source
+	v.PartitionAnchor.MajorBlockIndex = u.MajorBlockIndex
+	v.PartitionAnchor.MinorBlockIndex = u.MinorBlockIndex
+	v.PartitionAnchor.RootChainIndex = u.RootChainIndex
 	if x, err := encoding.ChainFromJSON(u.RootChainAnchor); err != nil {
 		return fmt.Errorf("error decoding RootChainAnchor: %w", err)
 	} else {
-		v.SubnetAnchor.RootChainAnchor = x
+		v.PartitionAnchor.RootChainAnchor = x
 	}
 	if x, err := encoding.ChainFromJSON(u.StateTreeAnchor); err != nil {
 		return fmt.Errorf("error decoding StateTreeAnchor: %w", err)
 	} else {
-		v.SubnetAnchor.StateTreeAnchor = x
+		v.PartitionAnchor.StateTreeAnchor = x
 	}
 	if x, err := encoding.BigintFromJSON(u.AcmeBurnt); err != nil {
 		return fmt.Errorf("error decoding AcmeBurnt: %w", err)
@@ -15279,12 +15279,12 @@ func (v *DirectoryAnchor) UnmarshalJSON(data []byte) error {
 		MakeMajorBlock  uint64                                  `json:"makeMajorBlock,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.Source = v.SubnetAnchor.Source
-	u.MajorBlockIndex = v.SubnetAnchor.MajorBlockIndex
-	u.MinorBlockIndex = v.SubnetAnchor.MinorBlockIndex
-	u.RootChainIndex = v.SubnetAnchor.RootChainIndex
-	u.RootChainAnchor = encoding.ChainToJSON(v.SubnetAnchor.RootChainAnchor)
-	u.StateTreeAnchor = encoding.ChainToJSON(v.SubnetAnchor.StateTreeAnchor)
+	u.Source = v.PartitionAnchor.Source
+	u.MajorBlockIndex = v.PartitionAnchor.MajorBlockIndex
+	u.MinorBlockIndex = v.PartitionAnchor.MinorBlockIndex
+	u.RootChainIndex = v.PartitionAnchor.RootChainIndex
+	u.RootChainAnchor = encoding.ChainToJSON(v.PartitionAnchor.RootChainAnchor)
+	u.StateTreeAnchor = encoding.ChainToJSON(v.PartitionAnchor.StateTreeAnchor)
 	u.Updates = v.Updates
 	u.Receipts = v.Receipts
 	u.MakeMajorBlock = v.MakeMajorBlock
@@ -15294,19 +15294,19 @@ func (v *DirectoryAnchor) UnmarshalJSON(data []byte) error {
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
-	v.SubnetAnchor.Source = u.Source
-	v.SubnetAnchor.MajorBlockIndex = u.MajorBlockIndex
-	v.SubnetAnchor.MinorBlockIndex = u.MinorBlockIndex
-	v.SubnetAnchor.RootChainIndex = u.RootChainIndex
+	v.PartitionAnchor.Source = u.Source
+	v.PartitionAnchor.MajorBlockIndex = u.MajorBlockIndex
+	v.PartitionAnchor.MinorBlockIndex = u.MinorBlockIndex
+	v.PartitionAnchor.RootChainIndex = u.RootChainIndex
 	if x, err := encoding.ChainFromJSON(u.RootChainAnchor); err != nil {
 		return fmt.Errorf("error decoding RootChainAnchor: %w", err)
 	} else {
-		v.SubnetAnchor.RootChainAnchor = x
+		v.PartitionAnchor.RootChainAnchor = x
 	}
 	if x, err := encoding.ChainFromJSON(u.StateTreeAnchor); err != nil {
 		return fmt.Errorf("error decoding StateTreeAnchor: %w", err)
 	} else {
-		v.SubnetAnchor.StateTreeAnchor = x
+		v.PartitionAnchor.StateTreeAnchor = x
 	}
 	v.Updates = u.Updates
 	v.Receipts = u.Receipts
@@ -15939,6 +15939,41 @@ func (v *Object) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *PartitionAnchor) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Source          *url.URL `json:"source,omitempty"`
+		MajorBlockIndex uint64   `json:"majorBlockIndex,omitempty"`
+		MinorBlockIndex uint64   `json:"minorBlockIndex,omitempty"`
+		RootChainIndex  uint64   `json:"rootChainIndex,omitempty"`
+		RootChainAnchor string   `json:"rootChainAnchor,omitempty"`
+		StateTreeAnchor string   `json:"stateTreeAnchor,omitempty"`
+	}{}
+	u.Source = v.Source
+	u.MajorBlockIndex = v.MajorBlockIndex
+	u.MinorBlockIndex = v.MinorBlockIndex
+	u.RootChainIndex = v.RootChainIndex
+	u.RootChainAnchor = encoding.ChainToJSON(v.RootChainAnchor)
+	u.StateTreeAnchor = encoding.ChainToJSON(v.StateTreeAnchor)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Source = u.Source
+	v.MajorBlockIndex = u.MajorBlockIndex
+	v.MinorBlockIndex = u.MinorBlockIndex
+	v.RootChainIndex = u.RootChainIndex
+	if x, err := encoding.ChainFromJSON(u.RootChainAnchor); err != nil {
+		return fmt.Errorf("error decoding RootChainAnchor: %w", err)
+	} else {
+		v.RootChainAnchor = x
+	}
+	if x, err := encoding.ChainFromJSON(u.StateTreeAnchor); err != nil {
+		return fmt.Errorf("error decoding StateTreeAnchor: %w", err)
+	} else {
+		v.StateTreeAnchor = x
+	}
+	return nil
+}
+
 func (v *PartitionDefinition) UnmarshalJSON(data []byte) error {
 	u := struct {
 		PartitionID        string                    `json:"partitionID,omitempty"`
@@ -16301,41 +16336,6 @@ func (v *SignatureSet) UnmarshalJSON(data []byte) error {
 	v.Signatures = make([]Signature, len(u.Signatures.Value))
 	for i, x := range u.Signatures.Value {
 		v.Signatures[i] = x
-	}
-	return nil
-}
-
-func (v *SubnetAnchor) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Source          *url.URL `json:"source,omitempty"`
-		MajorBlockIndex uint64   `json:"majorBlockIndex,omitempty"`
-		MinorBlockIndex uint64   `json:"minorBlockIndex,omitempty"`
-		RootChainIndex  uint64   `json:"rootChainIndex,omitempty"`
-		RootChainAnchor string   `json:"rootChainAnchor,omitempty"`
-		StateTreeAnchor string   `json:"stateTreeAnchor,omitempty"`
-	}{}
-	u.Source = v.Source
-	u.MajorBlockIndex = v.MajorBlockIndex
-	u.MinorBlockIndex = v.MinorBlockIndex
-	u.RootChainIndex = v.RootChainIndex
-	u.RootChainAnchor = encoding.ChainToJSON(v.RootChainAnchor)
-	u.StateTreeAnchor = encoding.ChainToJSON(v.StateTreeAnchor)
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	v.Source = u.Source
-	v.MajorBlockIndex = u.MajorBlockIndex
-	v.MinorBlockIndex = u.MinorBlockIndex
-	v.RootChainIndex = u.RootChainIndex
-	if x, err := encoding.ChainFromJSON(u.RootChainAnchor); err != nil {
-		return fmt.Errorf("error decoding RootChainAnchor: %w", err)
-	} else {
-		v.RootChainAnchor = x
-	}
-	if x, err := encoding.ChainFromJSON(u.StateTreeAnchor); err != nil {
-		return fmt.Errorf("error decoding StateTreeAnchor: %w", err)
-	} else {
-		v.StateTreeAnchor = x
 	}
 	return nil
 }

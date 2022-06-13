@@ -34,7 +34,7 @@ func TestTransactionPriority(t *testing.T) {
 			Envelope: newTxn(bvn.network.AnchorPool().String()).
 				WithSigner(bvn.network.DefaultOperatorPage(), 1).
 				WithBody(&protocol.DirectoryAnchor{
-					SubnetAnchor: protocol.SubnetAnchor{
+					PartitionAnchor: protocol.PartitionAnchor{
 						Source:          dn.network.NodeUrl(),
 						RootChainIndex:  1,
 						MinorBlockIndex: 1,
