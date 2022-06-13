@@ -46,7 +46,7 @@ func (v {{.Name}}) String() string {
 	}
 }
 
-// GoString returns the Go constant name.
+{{/* // GoString returns the Go constant name.
 func (v {{.Name}}) GoString() string {
 	switch v {
 	{{- $typ := .Name}}
@@ -57,7 +57,7 @@ func (v {{.Name}}) GoString() string {
 	default:
 		return fmt.Sprintf("{{.Name}}(%d)", v)
 	}
-}
+} */}}
 
 // {{.Name}}ByName returns the named {{natural .Name}}.
 func {{.Name}}ByName(name string) ({{.Name}}, bool) {

@@ -106,26 +106,6 @@ func (v MarshalAs) String() string {
 	}
 }
 
-// GoString returns the Go constant name.
-func (v MarshalAs) GoString() string {
-	switch v {
-	case MarshalAsBasic:
-		return "MarshalAsBasic"
-	case MarshalAsNone:
-		return "MarshalAsNone"
-	case MarshalAsEnum:
-		return "MarshalAsEnum"
-	case MarshalAsValue:
-		return "MarshalAsValue"
-	case MarshalAsReference:
-		return "MarshalAsReference"
-	case MarshalAsUnion:
-		return "MarshalAsUnion"
-	default:
-		return fmt.Sprintf("MarshalAs(%d)", v)
-	}
-}
-
 // MarshalAsByName returns the named Marshal As.
 func MarshalAsByName(name string) (MarshalAs, bool) {
 	switch strings.ToLower(name) {
@@ -217,44 +197,6 @@ func (v TypeCode) String() string {
 		return "txid"
 	default:
 		return fmt.Sprintf("TypeCode:%d", v)
-	}
-}
-
-// GoString returns the Go constant name.
-func (v TypeCode) GoString() string {
-	switch v {
-	case TypeCodeUnknown:
-		return "TypeCodeUnknown"
-	case TypeCodeInt:
-		return "TypeCodeInt"
-	case TypeCodeUint:
-		return "TypeCodeUint"
-	case TypeCodeBool:
-		return "TypeCodeBool"
-	case TypeCodeString:
-		return "TypeCodeString"
-	case TypeCodeHash:
-		return "TypeCodeHash"
-	case TypeCodeBytes:
-		return "TypeCodeBytes"
-	case TypeCodeUrl:
-		return "TypeCodeUrl"
-	case TypeCodeTime:
-		return "TypeCodeTime"
-	case TypeCodeDuration:
-		return "TypeCodeDuration"
-	case TypeCodeBigInt:
-		return "TypeCodeBigInt"
-	case TypeCodeAny:
-		return "TypeCodeAny"
-	case TypeCodeRawJson:
-		return "TypeCodeRawJson"
-	case TypeCodeFloat:
-		return "TypeCodeFloat"
-	case TypeCodeTxid:
-		return "TypeCodeTxid"
-	default:
-		return fmt.Sprintf("TypeCode(%d)", v)
 	}
 }
 

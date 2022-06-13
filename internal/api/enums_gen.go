@@ -50,18 +50,6 @@ func (v RecordType) String() string {
 	}
 }
 
-// GoString returns the Go constant name.
-func (v RecordType) GoString() string {
-	switch v {
-	case RecordTypeAccount:
-		return "RecordTypeAccount"
-	case RecordTypeTransaction:
-		return "RecordTypeTransaction"
-	default:
-		return fmt.Sprintf("RecordType(%d)", v)
-	}
-}
-
 // RecordTypeByName returns the named Record Type.
 func RecordTypeByName(name string) (RecordType, bool) {
 	switch strings.ToLower(name) {
@@ -121,20 +109,6 @@ func (v SubmitMode) String() string {
 		return "check"
 	default:
 		return fmt.Sprintf("SubmitMode:%d", v)
-	}
-}
-
-// GoString returns the Go constant name.
-func (v SubmitMode) GoString() string {
-	switch v {
-	case SubmitModeSync:
-		return "SubmitModeSync"
-	case SubmitModeAsync:
-		return "SubmitModeAsync"
-	case SubmitModeCheck:
-		return "SubmitModeCheck"
-	default:
-		return fmt.Sprintf("SubmitMode(%d)", v)
 	}
 }
 

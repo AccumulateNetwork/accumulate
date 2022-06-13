@@ -65,18 +65,6 @@ func (v NetworkType) String() string {
 	}
 }
 
-// GoString returns the Go constant name.
-func (v NetworkType) GoString() string {
-	switch v {
-	case NetworkTypeDirectory:
-		return "NetworkTypeDirectory"
-	case NetworkTypeBlockValidator:
-		return "NetworkTypeBlockValidator"
-	default:
-		return fmt.Sprintf("NetworkType(%d)", v)
-	}
-}
-
 // NetworkTypeByName returns the named Network Type.
 func NetworkTypeByName(name string) (NetworkType, bool) {
 	switch strings.ToLower(name) {
@@ -139,18 +127,6 @@ func (v NodeType) String() string {
 	}
 }
 
-// GoString returns the Go constant name.
-func (v NodeType) GoString() string {
-	switch v {
-	case NodeTypeValidator:
-		return "NodeTypeValidator"
-	case NodeTypeFollower:
-		return "NodeTypeFollower"
-	default:
-		return fmt.Sprintf("NodeType(%d)", v)
-	}
-}
-
 // NodeTypeByName returns the named Node Type.
 func NodeTypeByName(name string) (NodeType, bool) {
 	switch strings.ToLower(name) {
@@ -199,7 +175,7 @@ func (v *PortOffset) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Port Offset
+// String returns the name of the Port Offset.
 func (v PortOffset) String() string {
 	switch v {
 	case PortOffsetTendermintP2P:

@@ -2733,7 +2733,7 @@ func (v *ResponseMajorBlocks) MarshalBinary() ([]byte, error) {
 	writer.WriteUint(1, v.TotalBlocks)
 	if !(len(v.Entries) == 0) {
 		for _, v := range v.Entries {
-			writer.WriteValue(2, v)
+			writer.WriteValue(2, v.MarshalBinary)
 		}
 	}
 
@@ -2785,7 +2785,7 @@ func (v *ResponseMajorEntry) MarshalBinary() ([]byte, error) {
 	}
 	if !(len(v.MinorBlocks) == 0) {
 		for _, v := range v.MinorBlocks {
-			writer.WriteValue(3, v)
+			writer.WriteValue(3, v.MarshalBinary)
 		}
 	}
 
