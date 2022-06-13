@@ -12,7 +12,7 @@ import (
 type PartitionAnchor struct{}
 
 func (PartitionAnchor) Type() protocol.TransactionType {
-	return protocol.TransactionTypePartitionAnchor
+	return protocol.TransactionTypeBlockValidatorAnchor
 }
 
 func (PartitionAnchor) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
@@ -21,9 +21,9 @@ func (PartitionAnchor) Execute(st *StateManager, tx *Delivery) (protocol.Transac
 
 func (x PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	// Unpack the payload
-	body, ok := tx.Transaction.Body.(*protocol.PartitionAnchor)
+	body, ok := tx.Transaction.Body.(*protocol.BlockValidatorAnchor)
 	if !ok {
-		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.PartitionAnchor), tx.Transaction.Body)
+		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.BlockValidatorAnchor), tx.Transaction.Body)
 	}
 
 	// Verify the origin

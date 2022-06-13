@@ -55,7 +55,7 @@ AnchorLedger:
 SystemGenesis:
   union: { type: transaction }
 
-PartitionAnchor:
+BlockValidatorAnchor:
   union: { type: transaction }
   embeddings:
     - SubnetAnchor

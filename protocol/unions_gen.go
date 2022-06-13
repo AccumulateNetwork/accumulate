@@ -312,6 +312,8 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(AddCredits), nil
 	case TransactionTypeAddValidator:
 		return new(AddValidator), nil
+	case TransactionTypeBlockValidatorAnchor:
+		return new(BlockValidatorAnchor), nil
 	case TransactionTypeBurnTokens:
 		return new(BurnTokens), nil
 	case TransactionTypeCreateDataAccount:
@@ -330,8 +332,6 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(DirectoryAnchor), nil
 	case TransactionTypeIssueTokens:
 		return new(IssueTokens), nil
-	case TransactionTypePartitionAnchor:
-		return new(PartitionAnchor), nil
 	case TransactionTypeRemote:
 		return new(RemoteTransaction), nil
 	case TransactionTypeRemoveValidator:
@@ -386,6 +386,9 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 	case *AddValidator:
 		b, ok := b.(*AddValidator)
 		return ok && a.Equal(b)
+	case *BlockValidatorAnchor:
+		b, ok := b.(*BlockValidatorAnchor)
+		return ok && a.Equal(b)
 	case *BurnTokens:
 		b, ok := b.(*BurnTokens)
 		return ok && a.Equal(b)
@@ -412,9 +415,6 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 		return ok && a.Equal(b)
 	case *IssueTokens:
 		b, ok := b.(*IssueTokens)
-		return ok && a.Equal(b)
-	case *PartitionAnchor:
-		b, ok := b.(*PartitionAnchor)
 		return ok && a.Equal(b)
 	case *RemoteTransaction:
 		b, ok := b.(*RemoteTransaction)

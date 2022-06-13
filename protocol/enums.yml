@@ -218,7 +218,7 @@ TransactionType:
   DirectoryAnchor:
     value: 0x61
     description: anchors one network to another
-  PartitionAnchor:
+  BlockValidatorAnchor:
     value: 0x62
     description: system transaction for partition data
   SystemWriteData:

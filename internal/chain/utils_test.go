@@ -90,7 +90,7 @@ func GetExecutor(t *testing.T, typ protocol.TransactionType) TransactionExecutor
 		return SyntheticForwardTransaction{}
 	case protocol.TransactionTypeDirectoryAnchor:
 		return DirectoryAnchor{}
-	case protocol.TransactionTypePartitionAnchor:
+	case protocol.TransactionTypeBlockValidatorAnchor:
 		return PartitionAnchor{}
 	default:
 		t.Fatalf("Invalid transaction type %v", typ)

@@ -572,8 +572,8 @@ func (x *Executor) buildDirectoryAnchor(batch *database.Batch, ledgerState *prot
 	return anchor, nil
 }
 
-func (x *Executor) buildPartitionAnchor(batch *database.Batch, ledgerState *protocol.SystemLedger, majorBlockIndex uint64) (*protocol.PartitionAnchor, error) {
-	anchor := new(protocol.PartitionAnchor)
+func (x *Executor) buildPartitionAnchor(batch *database.Batch, ledgerState *protocol.SystemLedger, majorBlockIndex uint64) (*protocol.BlockValidatorAnchor, error) {
+	anchor := new(protocol.BlockValidatorAnchor)
 	ledger := batch.Account(x.Describe.Ledger())
 	_, err := x.buildBlockAnchor(batch, ledgerState, ledger, &anchor.SubnetAnchor, majorBlockIndex)
 	if err != nil {

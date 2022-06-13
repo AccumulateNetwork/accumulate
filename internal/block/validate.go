@@ -232,7 +232,7 @@ func validateSyntheticTransactionSignatures(transaction *protocol.Transaction, s
 	if !gotED25519Sig {
 		return errors.Format(errors.StatusUnauthenticated, "missing ED25519 signature")
 	}
-	if transaction.Body.Type() == protocol.TransactionTypeDirectoryAnchor || transaction.Body.Type() == protocol.TransactionTypePartitionAnchor {
+	if transaction.Body.Type() == protocol.TransactionTypeDirectoryAnchor || transaction.Body.Type() == protocol.TransactionTypeBlockValidatorAnchor {
 		return nil
 	}
 

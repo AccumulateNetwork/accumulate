@@ -148,6 +148,14 @@ type BTCSignature struct {
 	extraData       []byte
 }
 
+type BlockValidatorAnchor struct {
+	fieldsSet []bool
+	SubnetAnchor
+	// AcmeBurnt is the amount of acme tokens burnt in the transaction.
+	AcmeBurnt big.Int `json:"acmeBurnt,omitempty" form:"acmeBurnt" query:"acmeBurnt" validate:"required"`
+	extraData []byte
+}
+
 type BurnTokens struct {
 	fieldsSet []bool
 	Amount    big.Int `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
@@ -463,14 +471,6 @@ type Object struct {
 	Chains []ChainMetadata `json:"chains,omitempty" form:"chains" query:"chains" validate:"required"`
 	// Pending lists the account's pending transactions.
 	Pending   TxIdSet `json:"pending,omitempty" form:"pending" query:"pending" validate:"required"`
-	extraData []byte
-}
-
-type PartitionAnchor struct {
-	fieldsSet []bool
-	SubnetAnchor
-	// AcmeBurnt is the amount of acme tokens burnt in the transaction.
-	AcmeBurnt big.Int `json:"acmeBurnt,omitempty" form:"acmeBurnt" query:"acmeBurnt" validate:"required"`
 	extraData []byte
 }
 
@@ -903,6 +903,8 @@ func (*BTCLegacySignature) Type() SignatureType { return SignatureTypeBTCLegacy 
 
 func (*BTCSignature) Type() SignatureType { return SignatureTypeBTC }
 
+func (*BlockValidatorAnchor) Type() TransactionType { return TransactionTypeBlockValidatorAnchor }
+
 func (*BurnTokens) Type() TransactionType { return TransactionTypeBurnTokens }
 
 func (*CreateDataAccount) Type() TransactionType { return TransactionTypeCreateDataAccount }
@@ -954,8 +956,6 @@ func (*LiteDataAccount) Type() AccountType { return AccountTypeLiteDataAccount }
 func (*LiteIdentity) Type() AccountType { return AccountTypeLiteIdentity }
 
 func (*LiteTokenAccount) Type() AccountType { return AccountTypeLiteTokenAccount }
-
-func (*PartitionAnchor) Type() TransactionType { return TransactionTypePartitionAnchor }
 
 func (*RCD1Signature) Type() SignatureType { return SignatureTypeRCD1 }
 
@@ -1255,6 +1255,17 @@ func (v *BTCSignature) Copy() *BTCSignature {
 }
 
 func (v *BTCSignature) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *BlockValidatorAnchor) Copy() *BlockValidatorAnchor {
+	u := new(BlockValidatorAnchor)
+
+	u.SubnetAnchor = *v.SubnetAnchor.Copy()
+	u.AcmeBurnt = *encoding.BigintCopy(&v.AcmeBurnt)
+
+	return u
+}
+
+func (v *BlockValidatorAnchor) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *BurnTokens) Copy() *BurnTokens {
 	u := new(BurnTokens)
@@ -1804,17 +1815,6 @@ func (v *Object) Copy() *Object {
 }
 
 func (v *Object) CopyAsInterface() interface{} { return v.Copy() }
-
-func (v *PartitionAnchor) Copy() *PartitionAnchor {
-	u := new(PartitionAnchor)
-
-	u.SubnetAnchor = *v.SubnetAnchor.Copy()
-	u.AcmeBurnt = *encoding.BigintCopy(&v.AcmeBurnt)
-
-	return u
-}
-
-func (v *PartitionAnchor) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *PartitionDefinition) Copy() *PartitionDefinition {
 	u := new(PartitionDefinition)
@@ -2808,6 +2808,17 @@ func (v *BTCSignature) Equal(u *BTCSignature) bool {
 	return true
 }
 
+func (v *BlockValidatorAnchor) Equal(u *BlockValidatorAnchor) bool {
+	if !v.SubnetAnchor.Equal(&u.SubnetAnchor) {
+		return false
+	}
+	if !((&v.AcmeBurnt).Cmp(&u.AcmeBurnt) == 0) {
+		return false
+	}
+
+	return true
+}
+
 func (v *BurnTokens) Equal(u *BurnTokens) bool {
 	if !((&v.Amount).Cmp(&u.Amount) == 0) {
 		return false
@@ -3520,17 +3531,6 @@ func (v *Object) Equal(u *Object) bool {
 		}
 	}
 	if !((&v.Pending).Equal(&u.Pending)) {
-		return false
-	}
-
-	return true
-}
-
-func (v *PartitionAnchor) Equal(u *PartitionAnchor) bool {
-	if !v.SubnetAnchor.Equal(&u.SubnetAnchor) {
-		return false
-	}
-	if !((&v.AcmeBurnt).Cmp(&u.AcmeBurnt) == 0) {
 		return false
 	}
 
@@ -5290,6 +5290,55 @@ func (v *BTCSignature) IsValid() error {
 		errs = append(errs, "field SignerVersion is missing")
 	} else if v.SignerVersion == 0 {
 		errs = append(errs, "field SignerVersion is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_BlockValidatorAnchor = []string{
+	1: "Type",
+	2: "SubnetAnchor",
+	3: "AcmeBurnt",
+}
+
+func (v *BlockValidatorAnchor) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	writer.WriteValue(2, &v.SubnetAnchor)
+	if !((v.AcmeBurnt).Cmp(new(big.Int)) == 0) {
+		writer.WriteBigInt(3, &v.AcmeBurnt)
+	}
+
+	_, _, err := writer.Reset(fieldNames_BlockValidatorAnchor)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), err
+}
+
+func (v *BlockValidatorAnchor) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
+	if err := v.SubnetAnchor.IsValid(); err != nil {
+		errs = append(errs, err.Error())
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field AcmeBurnt is missing")
+	} else if (v.AcmeBurnt).Cmp(new(big.Int)) == 0 {
+		errs = append(errs, "field AcmeBurnt is not set")
 	}
 
 	switch len(errs) {
@@ -7281,55 +7330,6 @@ func (v *Object) IsValid() error {
 		errs = append(errs, "field Pending is missing")
 	} else if (v.Pending).Equal(new(TxIdSet)) {
 		errs = append(errs, "field Pending is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
-var fieldNames_PartitionAnchor = []string{
-	1: "Type",
-	2: "SubnetAnchor",
-	3: "AcmeBurnt",
-}
-
-func (v *PartitionAnchor) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	writer.WriteEnum(1, v.Type())
-	writer.WriteValue(2, &v.SubnetAnchor)
-	if !((v.AcmeBurnt).Cmp(new(big.Int)) == 0) {
-		writer.WriteBigInt(3, &v.AcmeBurnt)
-	}
-
-	_, _, err := writer.Reset(fieldNames_PartitionAnchor)
-	if err != nil {
-		return nil, err
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), err
-}
-
-func (v *PartitionAnchor) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Type is missing")
-	}
-	if err := v.SubnetAnchor.IsValid(); err != nil {
-		errs = append(errs, err.Error())
-	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field AcmeBurnt is missing")
-	} else if (v.AcmeBurnt).Cmp(new(big.Int)) == 0 {
-		errs = append(errs, "field AcmeBurnt is not set")
 	}
 
 	switch len(errs) {
@@ -10534,6 +10534,34 @@ func (v *BTCSignature) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
+func (v *BlockValidatorAnchor) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *BlockValidatorAnchor) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+	reader.ReadValue(2, v.SubnetAnchor.UnmarshalBinary)
+	if x, ok := reader.ReadBigInt(3); ok {
+		v.AcmeBurnt = *x
+	}
+
+	seen, err := reader.Reset(fieldNames_BlockValidatorAnchor)
+	if err != nil {
+		return err
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	return err
+}
+
 func (v *BurnTokens) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -11652,34 +11680,6 @@ func (v *Object) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_Object)
-	if err != nil {
-		return err
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	return err
-}
-
-func (v *PartitionAnchor) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *PartitionAnchor) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	var vType TransactionType
-	if x := new(TransactionType); reader.ReadEnum(1, x) {
-		vType = *x
-	}
-	if !(v.Type() == vType) {
-		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
-	}
-	reader.ReadValue(2, v.SubnetAnchor.UnmarshalBinary)
-	if x, ok := reader.ReadBigInt(3); ok {
-		v.AcmeBurnt = *x
-	}
-
-	seen, err := reader.Reset(fieldNames_PartitionAnchor)
 	if err != nil {
 		return err
 	}
@@ -13442,6 +13442,28 @@ func (v *BTCSignature) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *BlockValidatorAnchor) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type            TransactionType `json:"type"`
+		Source          *url.URL        `json:"source,omitempty"`
+		MajorBlockIndex uint64          `json:"majorBlockIndex,omitempty"`
+		MinorBlockIndex uint64          `json:"minorBlockIndex,omitempty"`
+		RootChainIndex  uint64          `json:"rootChainIndex,omitempty"`
+		RootChainAnchor string          `json:"rootChainAnchor,omitempty"`
+		StateTreeAnchor string          `json:"stateTreeAnchor,omitempty"`
+		AcmeBurnt       *string         `json:"acmeBurnt,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Source = v.SubnetAnchor.Source
+	u.MajorBlockIndex = v.SubnetAnchor.MajorBlockIndex
+	u.MinorBlockIndex = v.SubnetAnchor.MinorBlockIndex
+	u.RootChainIndex = v.SubnetAnchor.RootChainIndex
+	u.RootChainAnchor = encoding.ChainToJSON(v.SubnetAnchor.RootChainAnchor)
+	u.StateTreeAnchor = encoding.ChainToJSON(v.SubnetAnchor.StateTreeAnchor)
+	u.AcmeBurnt = encoding.BigintToJSON(&v.AcmeBurnt)
+	return json.Marshal(&u)
+}
+
 func (v *BurnTokens) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type   TransactionType `json:"type"`
@@ -13930,28 +13952,6 @@ func (v *Object) MarshalJSON() ([]byte, error) {
 	u.Type = v.Type
 	u.Chains = v.Chains
 	u.Pending = v.Pending
-	return json.Marshal(&u)
-}
-
-func (v *PartitionAnchor) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Type            TransactionType `json:"type"`
-		Source          *url.URL        `json:"source,omitempty"`
-		MajorBlockIndex uint64          `json:"majorBlockIndex,omitempty"`
-		MinorBlockIndex uint64          `json:"minorBlockIndex,omitempty"`
-		RootChainIndex  uint64          `json:"rootChainIndex,omitempty"`
-		RootChainAnchor string          `json:"rootChainAnchor,omitempty"`
-		StateTreeAnchor string          `json:"stateTreeAnchor,omitempty"`
-		AcmeBurnt       *string         `json:"acmeBurnt,omitempty"`
-	}{}
-	u.Type = v.Type()
-	u.Source = v.SubnetAnchor.Source
-	u.MajorBlockIndex = v.SubnetAnchor.MajorBlockIndex
-	u.MinorBlockIndex = v.SubnetAnchor.MinorBlockIndex
-	u.RootChainIndex = v.SubnetAnchor.RootChainIndex
-	u.RootChainAnchor = encoding.ChainToJSON(v.SubnetAnchor.RootChainAnchor)
-	u.StateTreeAnchor = encoding.ChainToJSON(v.SubnetAnchor.StateTreeAnchor)
-	u.AcmeBurnt = encoding.BigintToJSON(&v.AcmeBurnt)
 	return json.Marshal(&u)
 }
 
@@ -14964,6 +14964,53 @@ func (v *BTCSignature) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *BlockValidatorAnchor) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type            TransactionType `json:"type"`
+		Source          *url.URL        `json:"source,omitempty"`
+		MajorBlockIndex uint64          `json:"majorBlockIndex,omitempty"`
+		MinorBlockIndex uint64          `json:"minorBlockIndex,omitempty"`
+		RootChainIndex  uint64          `json:"rootChainIndex,omitempty"`
+		RootChainAnchor string          `json:"rootChainAnchor,omitempty"`
+		StateTreeAnchor string          `json:"stateTreeAnchor,omitempty"`
+		AcmeBurnt       *string         `json:"acmeBurnt,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Source = v.SubnetAnchor.Source
+	u.MajorBlockIndex = v.SubnetAnchor.MajorBlockIndex
+	u.MinorBlockIndex = v.SubnetAnchor.MinorBlockIndex
+	u.RootChainIndex = v.SubnetAnchor.RootChainIndex
+	u.RootChainAnchor = encoding.ChainToJSON(v.SubnetAnchor.RootChainAnchor)
+	u.StateTreeAnchor = encoding.ChainToJSON(v.SubnetAnchor.StateTreeAnchor)
+	u.AcmeBurnt = encoding.BigintToJSON(&v.AcmeBurnt)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.SubnetAnchor.Source = u.Source
+	v.SubnetAnchor.MajorBlockIndex = u.MajorBlockIndex
+	v.SubnetAnchor.MinorBlockIndex = u.MinorBlockIndex
+	v.SubnetAnchor.RootChainIndex = u.RootChainIndex
+	if x, err := encoding.ChainFromJSON(u.RootChainAnchor); err != nil {
+		return fmt.Errorf("error decoding RootChainAnchor: %w", err)
+	} else {
+		v.SubnetAnchor.RootChainAnchor = x
+	}
+	if x, err := encoding.ChainFromJSON(u.StateTreeAnchor); err != nil {
+		return fmt.Errorf("error decoding StateTreeAnchor: %w", err)
+	} else {
+		v.SubnetAnchor.StateTreeAnchor = x
+	}
+	if x, err := encoding.BigintFromJSON(u.AcmeBurnt); err != nil {
+		return fmt.Errorf("error decoding AcmeBurnt: %w", err)
+	} else {
+		v.AcmeBurnt = *x
+	}
+	return nil
+}
+
 func (v *BurnTokens) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type   TransactionType `json:"type"`
@@ -15889,53 +15936,6 @@ func (v *Object) UnmarshalJSON(data []byte) error {
 	v.Type = u.Type
 	v.Chains = u.Chains
 	v.Pending = u.Pending
-	return nil
-}
-
-func (v *PartitionAnchor) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Type            TransactionType `json:"type"`
-		Source          *url.URL        `json:"source,omitempty"`
-		MajorBlockIndex uint64          `json:"majorBlockIndex,omitempty"`
-		MinorBlockIndex uint64          `json:"minorBlockIndex,omitempty"`
-		RootChainIndex  uint64          `json:"rootChainIndex,omitempty"`
-		RootChainAnchor string          `json:"rootChainAnchor,omitempty"`
-		StateTreeAnchor string          `json:"stateTreeAnchor,omitempty"`
-		AcmeBurnt       *string         `json:"acmeBurnt,omitempty"`
-	}{}
-	u.Type = v.Type()
-	u.Source = v.SubnetAnchor.Source
-	u.MajorBlockIndex = v.SubnetAnchor.MajorBlockIndex
-	u.MinorBlockIndex = v.SubnetAnchor.MinorBlockIndex
-	u.RootChainIndex = v.SubnetAnchor.RootChainIndex
-	u.RootChainAnchor = encoding.ChainToJSON(v.SubnetAnchor.RootChainAnchor)
-	u.StateTreeAnchor = encoding.ChainToJSON(v.SubnetAnchor.StateTreeAnchor)
-	u.AcmeBurnt = encoding.BigintToJSON(&v.AcmeBurnt)
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	if !(v.Type() == u.Type) {
-		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
-	}
-	v.SubnetAnchor.Source = u.Source
-	v.SubnetAnchor.MajorBlockIndex = u.MajorBlockIndex
-	v.SubnetAnchor.MinorBlockIndex = u.MinorBlockIndex
-	v.SubnetAnchor.RootChainIndex = u.RootChainIndex
-	if x, err := encoding.ChainFromJSON(u.RootChainAnchor); err != nil {
-		return fmt.Errorf("error decoding RootChainAnchor: %w", err)
-	} else {
-		v.SubnetAnchor.RootChainAnchor = x
-	}
-	if x, err := encoding.ChainFromJSON(u.StateTreeAnchor); err != nil {
-		return fmt.Errorf("error decoding StateTreeAnchor: %w", err)
-	} else {
-		v.SubnetAnchor.StateTreeAnchor = x
-	}
-	if x, err := encoding.BigintFromJSON(u.AcmeBurnt); err != nil {
-		return fmt.Errorf("error decoding AcmeBurnt: %w", err)
-	} else {
-		v.AcmeBurnt = *x
-	}
 	return nil
 }
 
