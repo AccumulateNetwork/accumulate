@@ -48,6 +48,7 @@ type ConnectionContext interface {
 	GetNodeType() config.NodeType
 	GetMetrics() *NodeMetrics
 	GetAddress() string
+	GetBasePort() int
 	SetNodeUrl(addr *url.URL)
 	GetABCIClient() ABCIClient
 	GetAPIClient() APIClient
@@ -75,6 +76,10 @@ type connectionContext struct {
 	resolvedIPs         []net.IP
 	metrics             NodeMetrics
 	lastErrorExpiryTime time.Time
+}
+
+func (cc *connectionContext) GetBasePort() int {
+	return int(cc.subnet.BasePort)
 }
 
 func (cc *connectionContext) GetABCIClient() ABCIClient {

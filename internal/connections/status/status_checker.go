@@ -8,7 +8,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
 	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
-	"gitlab.com/accumulatenetwork/accumulate/networks"
 )
 
 type NodeStatusChecker interface {
@@ -33,7 +32,7 @@ func NewNodeStatusChecker() NodeStatusChecker {
 }
 
 func (sc *nodeStatusChecker) createAccApiClient(connCtx connections.ConnectionContext) (*client.Client, error) {
-	address, err := config.OffsetPort(connCtx.GetAddress(), networks.AccApiPortOffset)
+	address, err := config.OffsetPort(connCtx.GetAddress(), connCtx.GetBasePort(), int(config.PortOffsetAccumulateApi))
 	if err != nil {
 		return nil, fmt.Errorf("invalid address: %v", err)
 	}

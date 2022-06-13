@@ -24,7 +24,8 @@ func (q *queryDispatch) queryAll(query func(*queryDirect) (interface{}, error), 
 	errCh := make(chan error)       // Error channel
 	doneCh := make(chan struct{})   // Completion channel
 	wg := new(sync.WaitGroup)       // Wait for completion
-	wg.Add(len(q.Network.Subnets))  //
+
+	wg.Add(len(q.Describe.Network.Subnets)) //
 
 	// Mark complete on return
 	defer close(doneCh)
@@ -42,7 +43,7 @@ func (q *queryDispatch) queryAll(query func(*queryDirect) (interface{}, error), 
 	}()
 
 	// Create a request for each client in a separate goroutine
-	for _, subnet := range q.Network.Subnets {
+	for _, subnet := range q.Describe.Network.Subnets {
 		go func(subnetId string) {
 			// Mark complete on return
 			defer wg.Done()
@@ -64,7 +65,7 @@ func (q *queryDispatch) queryAll(query func(*queryDirect) (interface{}, error), 
 					// A result or error has already been sent
 				}
 			}
-		}(subnet.ID)
+		}(subnet.Id)
 	}
 
 	// Wait for an error or a result
@@ -159,6 +160,15 @@ func (q *queryDispatch) QueryMinorBlocks(url *url.URL, pagination QueryPaginatio
 	}
 
 	return q.direct(r).QueryMinorBlocks(url, pagination, txFetchMode, blockFilter)
+}
+
+func (q *queryDispatch) QueryMajorBlocks(url *url.URL, pagination QueryPagination) (*MultiResponse, error) {
+	r, err := q.Router.RouteAccount(url)
+	if err != nil {
+		return nil, err
+	}
+
+	return q.direct(r).QueryMajorBlocks(url, pagination)
 }
 
 func (q queryDispatch) QuerySynth(source, destination *url.URL, number uint64) (*TransactionQueryResponse, error) {

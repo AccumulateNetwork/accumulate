@@ -3,6 +3,7 @@ package chain
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -23,6 +24,7 @@ type ProcessTransactionState struct {
 	AdditionalTransactions []*Delivery
 	ChainUpdates           ChainUpdates
 	MakeMajorBlock         uint64
+	MakeMajorBlockTime     time.Time
 }
 
 // DidProduceTxn records a produced transaction.
@@ -40,6 +42,7 @@ func (s *ProcessTransactionState) ProcessAdditionalTransaction(txn *Delivery) {
 func (s *ProcessTransactionState) Merge(r *ProcessTransactionState) {
 	if r.MakeMajorBlock > 0 {
 		s.MakeMajorBlock = r.MakeMajorBlock
+		s.MakeMajorBlockTime = r.MakeMajorBlockTime
 	}
 	s.ValidatorsUpdates = append(s.ValidatorsUpdates, r.ValidatorsUpdates...)
 	s.ProducedTxns = append(s.ProducedTxns, r.ProducedTxns...)
@@ -122,6 +125,11 @@ func (c *ChainUpdates) AddChainEntry(batch *database.Batch, account *url.URL, na
 	err = chain.AddEntry(entry, true)
 	if err != nil {
 		return errors.Format(errors.StatusUnknown, "add entry to %s chain: %w", name, err)
+	}
+
+	// The entry was a duplicate, do not update the ledger
+	if index == chain.Height() {
+		return nil
 	}
 
 	// Update the ledger

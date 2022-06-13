@@ -128,7 +128,7 @@ func (a *Account) restore(s *accountState) error {
 
 	// Store chain state
 	mgr := new(managed.MerkleManager)
-	mgr.Manager = a.batch.store
+	mgr.Manager = MerkleDbManager{Batch: a.batch}
 	mgr.MarkPower = markPower
 	mgr.MarkFreq = int64(math.Pow(2, float64(markPower)))
 	mgr.MarkMask = mgr.MarkFreq - 1
@@ -143,7 +143,7 @@ func (a *Account) restore(s *accountState) error {
 				mgr.MS.Pending[i] = v
 			}
 		}
-		err := mgr.WriteChainHead(mgr.Key)
+		err := mgr.WriteChainHead()
 		if err != nil {
 			return fmt.Errorf("store %s chain state: %w", c.Name, err)
 		}
@@ -187,20 +187,20 @@ func (a *Account) restore(s *accountState) error {
 
 // MerkleHash calculates the Merkle DAG root hash.
 func (s *merkleState) MerkleHash() []byte {
-	cascade := make([][]byte, len(s.Pending))
-	copy(cascade, s.Pending)
-	cascade = hash.MerkleCascade(cascade, s.Entries, -1)
-
-	var right []byte
-	for _, left := range cascade {
-		if right == nil {
-			left := left // See docs/developer/rangevarref.md
-			right = left[:]
-		} else {
-			right = hash.Combine(left[:], right)
+	ms := new(managed.MerkleState)
+	ms.InitSha256()
+	ms.Count = int64(s.Count)
+	ms.Pending = make(managed.SparseHashList, len(s.Pending))
+	for i, v := range s.Pending {
+		if len(v) > 0 {
+			ms.Pending[i] = v
 		}
 	}
-	return right
+	for _, entry := range s.Entries {
+		ms.AddToMerkleTree(entry)
+	}
+
+	return ms.GetMDRoot()
 }
 
 // chainMerkleHash returns a Merkle hash of the chain states.
@@ -290,7 +290,7 @@ func (a *Account) StateReceipt() (*managed.Receipt, error) {
 	}
 
 	rState := hasher.Receipt(0, len(hasher)-1)
-	if !bytes.Equal(rState.MDRoot, rBPT.Element) {
+	if !bytes.Equal(rState.Anchor, rBPT.Start) {
 		return nil, errors.New("bpt entry does not match account state")
 	}
 

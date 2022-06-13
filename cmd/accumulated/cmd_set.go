@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	neturl "net/url"
 	"strconv"
 	"strings"
 
@@ -13,7 +14,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/networks"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -49,13 +49,13 @@ func setOracle(_ *cobra.Command, args []string) {
 	newValue, err := strconv.ParseFloat(args[0], 64)
 	checkf(err, "oracle value")
 
-	if cfg.Accumulate.Network.Type != config.Directory {
+	if cfg.Accumulate.NetworkType != config.Directory {
 		fatalf("node is not a directory node")
 	}
 
 	oracle := new(protocol.DataAccount)
 	req := new(api.GeneralQuery)
-	req.Url = cfg.Accumulate.Network.NodeUrl(protocol.Oracle)
+	req.Url = cfg.Accumulate.Describe.NodeUrl(protocol.Oracle)
 	_, err = client.QueryAccountAs(context.Background(), req, oracle)
 	checkf(err, "get oracle")
 
@@ -65,7 +65,7 @@ func setOracle(_ *cobra.Command, args []string) {
 
 	values.Oracle.Price = uint64(newValue * protocol.AcmeOraclePrecision)
 	transaction := new(protocol.Transaction)
-	transaction.Header.Principal = cfg.Accumulate.Network.NodeUrl(protocol.Oracle)
+	transaction.Header.Principal = cfg.Accumulate.Describe.NodeUrl(protocol.Oracle)
 	transaction.Body = &protocol.WriteData{
 		Entry:        values.FormatOracle(),
 		WriteToState: true,
@@ -80,11 +80,17 @@ func loadConfigAndClient() (*config.Config, *client.Client) {
 
 	server := flagSet.Server
 	if server == "" {
-		addr := cfg.Accumulate.Network.LocalAddress
+		addr := cfg.Accumulate.LocalAddress
 		if !strings.Contains(addr, "://") {
 			addr = "http://" + addr
 		}
-		u, err := config.OffsetPort(addr, networks.AccApiPortOffset)
+		u, err := neturl.Parse(addr)
+		checkf(err, "invalid address")
+
+		port, err := strconv.ParseInt(u.Port(), 0, 16)
+		checkf(err, "invalid port number on address")
+
+		u, err = config.OffsetPort(addr, int(port), int(config.PortOffsetAccumulateApi))
 		checkf(err, "applying offset to node's local address")
 		server = u.String()
 	}

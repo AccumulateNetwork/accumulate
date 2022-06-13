@@ -216,7 +216,7 @@ AccountStateProof:
     type: Account
     marshal-as: union
   - name: Proof
-    type: Receipt
+    type: managed.Receipt
     marshal-as: reference
     pointer: true
 
