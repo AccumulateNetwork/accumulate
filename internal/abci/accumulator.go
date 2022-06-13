@@ -353,6 +353,8 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 	var batch *database.Batch
 	switch req.Type {
 	case abci.CheckTxType_New:
+		// TODO I don't think we need a mutex because I think Tendermint
+		// guarantees that ABCI calls are non-concurrent
 		app.checkTxMutex.Lock()
 		defer app.checkTxMutex.Unlock()
 		if app.checkTxBatch == nil { // For cases where we haven't started/ended a block yet
@@ -361,9 +363,7 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 		batch = app.checkTxBatch
 	case abci.CheckTxType_Recheck:
 		batch = app.DB.Begin(false)
-		defer func() {
-			batch.Discard()
-		}()
+		defer batch.Discard()
 	}
 
 	envelopes, results, respData, err := executeTransactions(app.logger.With("operation", "CheckTx"), checkTx(app.Executor, batch), req.Tx)

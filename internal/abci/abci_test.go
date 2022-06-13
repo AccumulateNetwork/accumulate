@@ -105,3 +105,45 @@ func TestTransactionPriority(t *testing.T) {
 		})
 	}
 }
+
+func TestCheckTx_SharedBatch(t *testing.T) {
+	t.Skip("https://accumulate.atlassian.net/browse/AC-1702")
+
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
+	n := nodes[subnets[1]][0]
+
+	alice, bob := generateKey(), generateKey()
+	aliceUrl := acctesting.AcmeLiteAddressTmPriv(alice)
+	bobUrl := acctesting.AcmeLiteAddressTmPriv(bob)
+	_ = n.db.Update(func(batch *database.Batch) error {
+		require.NoError(n.t, acctesting.CreateLiteTokenAccountWithCredits(batch, alice, protocol.AcmeFaucetAmount, float64(protocol.FeeSendTokens)/protocol.CreditPrecision))
+		return nil
+	})
+
+	// Check a transaction
+	resp := n.CheckTx(newTxn(aliceUrl.String()).
+		WithSigner(aliceUrl.RootIdentity(), 1).
+		WithBody(&protocol.SendTokens{To: []*protocol.TokenRecipient{{
+			Url:    bobUrl,
+			Amount: *big.NewInt(1),
+		}}}).
+		Initiate(protocol.SignatureTypeLegacyED25519, alice).
+		Build())
+
+	// The first transaction should succeed
+	require.Zero(t, resp.Code)
+
+	// Check another transaction
+	resp = n.CheckTx(newTxn(aliceUrl.String()).
+		WithSigner(aliceUrl.RootIdentity(), 1).
+		WithBody(&protocol.SendTokens{To: []*protocol.TokenRecipient{{
+			Url:    bobUrl,
+			Amount: *big.NewInt(1),
+		}}}).
+		Initiate(protocol.SignatureTypeLegacyED25519, alice).
+		Build())
+
+	// The second transaction should fail due to insufficient credits
+	require.NotZero(t, resp.Code)
+}
