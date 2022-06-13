@@ -336,7 +336,7 @@ func (x *Executor) synthTransactionIsReady(batch *database.Batch, transaction *p
 
 	// If the transaction is out of sequence, mark it pending
 	subnetLedger := ledger.Subnet(synthSig.SourceNetwork)
-	if subnetLedger.Delivered+1 != synthSig.SequenceNumber {
+	if synthSig.SequenceNumber > subnetLedger.Delivered+1 {
 		x.logger.Info("Out of sequence synthetic transaction",
 			"hash", logging.AsHex(transaction.GetHash()).Slice(0, 4),
 			"seq-got", synthSig.SequenceNumber,
