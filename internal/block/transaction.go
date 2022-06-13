@@ -27,6 +27,18 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Del
 		return nil, nil, fmt.Errorf("transaction initiator is missing")
 	}
 
+	// Workaround for AC-1704 - do an extra check to prevent out-of-sequence
+	// synthetic transactions from failing when loading the principal
+	if !delivery.WasProducedInternally() && delivery.Transaction.Body.Type().IsSynthetic() {
+		ready, err := x.synthTransactionIsReady(batch, delivery.Transaction, status)
+		if err != nil {
+			return x.recordFailedTransaction(batch, delivery, err)
+		}
+		if !ready {
+			return x.recordPendingTransaction(&x.Network, batch, delivery)
+		}
+	}
+
 	// Load the principal
 	principal, err := batch.Account(delivery.Transaction.Header.Principal).GetState()
 	switch {
@@ -373,7 +385,11 @@ func (x *Executor) recordTransaction(batch *database.Batch, delivery *chain.Deli
 	}
 
 	subnetLedger := ledger.Subnet(delivery.SourceNetwork)
-	if subnetLedger.Add(status.Delivered, delivery.SequenceNumber, delivery.Transaction.ID()) {
+	if delivery.SequenceNumber == subnetLedger.Delivered {
+		x.logger.Error("Synthetic transaction sequence number has already been delivered", "sequence", delivery.SequenceNumber, "hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4), "type", delivery.Transaction.Body.Type())
+	} else if delivery.SequenceNumber < subnetLedger.Delivered {
+		x.logger.Error("A synthetic transaction was delivered out of order", "received-seq", delivery.SequenceNumber, "delivered-seq", subnetLedger.Delivered, "received-hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4), "received-type", delivery.Transaction.Body.Type())
+	} else if subnetLedger.Add(status.Delivered, delivery.SequenceNumber, delivery.Transaction.ID()) {
 		err = batch.Account(x.Network.Synthetic()).PutState(ledger)
 		if err != nil {
 			return nil, errors.Format(errors.StatusUnknown, "store synthetic transaction ledger: %w", err)
