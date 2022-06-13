@@ -3,8 +3,11 @@ package chain
 import (
 	"bytes"
 	"fmt"
+	"sort"
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -65,6 +68,8 @@ func (x DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 	}
 
 	// Process receipts
+	var deliveries []*Delivery
+	var sequence = map[*Delivery]int{}
 	for i, receipt := range body.Receipts {
 		receipt := receipt // See docs/developer/rangevarref.md
 		if !bytes.Equal(receipt.Anchor, body.RootChainAnchor[:]) {
@@ -77,10 +82,25 @@ func (x DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 		if err != nil {
 			return nil, fmt.Errorf("failed to load pending synthetic transactions for anchor %X: %w", receipt.Start[:4], err)
 		}
-		for _, hash := range synth {
-			d := tx.NewSyntheticReceipt(hash.Hash(), body.Source, &receipt)
-			st.State.ProcessAdditionalTransaction(d)
+		for _, txid := range synth {
+			h := txid.Hash()
+			sig, err := getSyntheticSignature(st.batch, st.batch.Transaction(h[:]))
+			if err != nil {
+				return nil, err
+			}
+
+			d := tx.NewSyntheticReceipt(txid.Hash(), body.Source, &receipt)
+			sequence[d] = int(sig.SequenceNumber)
+			deliveries = append(deliveries, d)
 		}
+	}
+
+	// Submit the receipts, sorted
+	sort.Slice(deliveries, func(i, j int) bool {
+		return sequence[deliveries[i]] < sequence[deliveries[j]]
+	})
+	for _, d := range deliveries {
+		st.State.ProcessAdditionalTransaction(d)
 	}
 
 	return nil, nil
@@ -101,4 +121,31 @@ func processNetworkAccountUpdates(st *StateManager, delivery *Delivery, updates 
 		st.State.ProcessAdditionalTransaction(delivery.NewInternal(txn))
 	}
 	return nil
+}
+
+func getSyntheticSignature(batch *database.Batch, transaction *database.Transaction) (*protocol.SyntheticSignature, error) {
+	status, err := transaction.GetStatus()
+	if err != nil {
+		return nil, errors.Format(errors.StatusUnknown, "load status: %w", err)
+	}
+
+	for _, signer := range status.Signers {
+		sigset, err := transaction.ReadSignaturesForSigner(signer)
+		if err != nil {
+			return nil, errors.Format(errors.StatusUnknown, "load signature set %v: %w", signer.GetUrl(), err)
+		}
+
+		for _, entry := range sigset.Entries() {
+			state, err := batch.Transaction(entry.SignatureHash[:]).GetState()
+			if err != nil {
+				return nil, errors.Format(errors.StatusUnknown, "load signature %x: %w", entry.SignatureHash[:8], err)
+			}
+
+			sig, ok := state.Signature.(*protocol.SyntheticSignature)
+			if ok {
+				return sig, nil
+			}
+		}
+	}
+	return nil, errors.New(errors.StatusInternalError, "cannot find synthetic signature")
 }
