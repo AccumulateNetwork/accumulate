@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"runtime/debug"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -41,6 +42,8 @@ type Accumulator struct {
 	timer        time.Time
 	didPanic     bool
 	lastSnapshot uint64
+	checkTxBatch *database.Batch
+	checkTxMutex *sync.Mutex
 
 	onFatal func(error)
 }
@@ -68,6 +71,7 @@ func NewAccumulator(opts AccumulatorOptions) *Accumulator {
 	if app.Executor == nil {
 		panic("Chain Validator Node not set!")
 	}
+	app.checkTxMutex = &sync.Mutex{}
 
 	app.logger.Info("Starting ABCI application", "accumulate", accumulate.Version, "abci", Version)
 	return app
@@ -349,12 +353,12 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 	var batch *database.Batch
 	switch req.Type {
 	case abci.CheckTxType_New:
-		app.Executor.CheckTxMutex.Lock()
-		defer app.Executor.CheckTxMutex.Unlock()
-		if app.Executor.CheckTxBatch == nil { // For cases where we haven't started/ended a block yet
-			app.Executor.CheckTxBatch = app.DB.Begin(false)
+		app.checkTxMutex.Lock()
+		defer app.checkTxMutex.Unlock()
+		if app.checkTxBatch == nil { // For cases where we haven't started/ended a block yet
+			app.checkTxBatch = app.DB.Begin(false)
 		}
-		batch = app.Executor.CheckTxBatch
+		batch = app.checkTxBatch
 	case abci.CheckTxType_Recheck:
 		batch = app.DB.Begin(false)
 		defer func() {
@@ -499,7 +503,16 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 		return abci.ResponseCommit{}
 	}
 
-	// Notify the executor that we comitted
+	// Replace start a new checkTx batch
+	app.checkTxMutex.Lock()
+	defer app.checkTxMutex.Unlock()
+
+	if app.checkTxBatch != nil {
+		app.checkTxBatch.Discard()
+	}
+	app.checkTxBatch = app.DB.Begin(false)
+
+	// Notify the executor that we committed
 	var resp abci.ResponseCommit
 	batch := app.DB.Begin(false)
 	defer batch.Discard()

@@ -1,7 +1,6 @@
 package abci_test
 
 import (
-	"bytes"
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
