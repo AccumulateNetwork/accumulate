@@ -369,7 +369,7 @@ func (v *BlockChainUpdatesIndex) MarshalBinary() ([]byte, error) {
 
 	if !(len(v.Entries) == 0) {
 		for _, v := range v.Entries {
-			writer.WriteValue(1, v)
+			writer.WriteValue(1, v.MarshalBinary)
 		}
 	}
 
@@ -410,7 +410,7 @@ func (v *BlockStateIndex) MarshalBinary() ([]byte, error) {
 
 	if !(len(v.ProducedSynthTxns) == 0) {
 		for _, v := range v.ProducedSynthTxns {
-			writer.WriteValue(1, v)
+			writer.WriteValue(1, v.MarshalBinary)
 		}
 	}
 
@@ -814,7 +814,7 @@ func (v *TransactionChainIndex) MarshalBinary() ([]byte, error) {
 
 	if !(len(v.Entries) == 0) {
 		for _, v := range v.Entries {
-			writer.WriteValue(1, v)
+			writer.WriteValue(1, v.MarshalBinary)
 		}
 	}
 

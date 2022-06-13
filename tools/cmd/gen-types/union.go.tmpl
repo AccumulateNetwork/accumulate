@@ -25,6 +25,7 @@ func New{{.Interface}}(typ {{.Enumeration}}) ({{.Interface}}, error) {
 	}
 }
 
+{{if (index .Members 0).IsComparable}}
 //Equal{{.Interface}} is used to compare the values of the union
 func Equal{{.Interface}}(a, b {{.Interface}}) bool {
 	if a == b {
@@ -40,8 +41,9 @@ func Equal{{.Interface}}(a, b {{.Interface}}) bool {
 		return false
 	}
 }
+{{end}}
 
-
+{{if (index .Members 0).IsBinary}}
 // Unmarshal{{.Enumeration}} unmarshals the {{.Enumeration}} from the start of a {{.Interface}}.
 func Unmarshal{{.Enumeration}}(r io.Reader) ({{.Enumeration}}, error) {
 	var typ {{.Enumeration}}
@@ -103,6 +105,7 @@ func Unmarshal{{.Interface}}From(rd io.ReadSeeker) ({{.Interface}}, error) {
 
 	return v, nil
 }
+{{end}}
 
 // Unmarshal{{.Interface}}Json unmarshals a {{.Interface}}.
 func Unmarshal{{.Interface}}JSON(data []byte) ({{.Interface}}, error) {
