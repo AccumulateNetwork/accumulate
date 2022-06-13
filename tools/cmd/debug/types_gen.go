@@ -427,10 +427,10 @@ func (v *SigOrTxn) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.Transaction == nil) {
-		writer.WriteValue(1, v.Transaction)
+		writer.WriteValue(1, v.Transaction.MarshalBinary)
 	}
 	if !(v.Signature == nil) {
-		writer.WriteValue(2, v.Signature)
+		writer.WriteValue(2, v.Signature.MarshalBinary)
 	}
 	if !(v.Txid == nil) {
 		writer.WriteTxid(3, v.Txid)
@@ -551,21 +551,21 @@ func (v *accountState) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.Main == nil) {
-		writer.WriteValue(1, v.Main)
+		writer.WriteValue(1, v.Main.MarshalBinary)
 	}
 	if !(len(v.Chains) == 0) {
 		for _, v := range v.Chains {
-			writer.WriteValue(2, v)
+			writer.WriteValue(2, v.MarshalBinary)
 		}
 	}
 	if !(len(v.Pending) == 0) {
 		for _, v := range v.Pending {
-			writer.WriteValue(3, v)
+			writer.WriteValue(3, v.MarshalBinary)
 		}
 	}
 	if !(len(v.Transactions) == 0) {
 		for _, v := range v.Transactions {
-			writer.WriteValue(4, v)
+			writer.WriteValue(4, v.MarshalBinary)
 		}
 	}
 
@@ -782,7 +782,7 @@ func (v *sigSetData) MarshalBinary() ([]byte, error) {
 	}
 	if !(len(v.Entries) == 0) {
 		for _, v := range v.Entries {
-			writer.WriteValue(2, &v)
+			writer.WriteValue(2, v.MarshalBinary)
 		}
 	}
 
@@ -829,14 +829,14 @@ func (v *transactionState) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.Transaction == nil) {
-		writer.WriteValue(1, v.Transaction)
+		writer.WriteValue(1, v.Transaction.MarshalBinary)
 	}
 	if !(v.State == nil) {
-		writer.WriteValue(2, v.State)
+		writer.WriteValue(2, v.State.MarshalBinary)
 	}
 	if !(len(v.Signatures) == 0) {
 		for _, v := range v.Signatures {
-			writer.WriteValue(3, v)
+			writer.WriteValue(3, v.MarshalBinary)
 		}
 	}
 

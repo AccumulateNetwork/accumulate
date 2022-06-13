@@ -77,7 +77,7 @@ func (v *BlockFilterMode) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Block Filter Mode
+// String returns the name of the Block Filter Mode.
 func (v BlockFilterMode) String() string {
 	switch v {
 	case BlockFilterModeExcludeNone:
@@ -137,7 +137,7 @@ func (v *QueryType) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Query Type
+// String returns the name of the Query Type.
 func (v QueryType) String() string {
 	switch v {
 	case QueryTypeUnknown:
@@ -237,7 +237,7 @@ func (v *TxFetchMode) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Tx Fetch Mode
+// String returns the name of the Tx Fetch Mode.
 func (v TxFetchMode) String() string {
 	switch v {
 	case TxFetchModeExpand:

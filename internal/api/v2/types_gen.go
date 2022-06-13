@@ -421,7 +421,7 @@ func (v *DataEntryQueryResponse) MarshalBinary() ([]byte, error) {
 		writer.WriteHash(1, &v.EntryHash)
 	}
 	if !(v.Entry == nil) {
-		writer.WriteValue(2, v.Entry)
+		writer.WriteValue(2, v.Entry.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_DataEntryQueryResponse)
