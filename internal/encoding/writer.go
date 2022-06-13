@@ -235,8 +235,15 @@ func (w *Writer) WriteTxid(n uint, v *url.TxID) {
 }
 
 // WriteValue marshals the value and writes it as a byte slice.
-func (w *Writer) WriteValue(n uint, v encoding.BinaryMarshaler) {
+func (w *Writer) WriteValueOld(n uint, v encoding.BinaryMarshaler) {
 	b, err := v.MarshalBinary()
+	w.didMarshal(n, err)
+	w.WriteBytes(n, b)
+}
+
+// WriteValue marshals the value and writes it as a byte slice.
+func (w *Writer) WriteValue(n uint, marshal func() ([]byte, error)) {
+	b, err := marshal()
 	w.didMarshal(n, err)
 	w.WriteBytes(n, b)
 }

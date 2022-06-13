@@ -259,8 +259,8 @@ func (v *FakeAccount) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteValue(1, &v.FakeLiteAccount)
-	writer.WriteValue(2, &v.AccountAuth)
+	writer.WriteValue(1, v.FakeLiteAccount.MarshalBinary)
+	writer.WriteValue(2, v.AccountAuth.MarshalBinary)
 
 	_, _, err := writer.Reset(fieldNames_FakeAccount)
 	if err != nil {
@@ -299,7 +299,7 @@ func (v *FakeAuthority) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteValue(1, &v.FakeAccount)
+	writer.WriteValue(1, v.FakeAccount.MarshalBinary)
 	if !(v.Signers == nil) {
 		writer.WriteUrl(2, v.Signers)
 	}
@@ -473,7 +473,7 @@ func (v *FakeSigner) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteValue(1, &v.FakeLiteAccount)
+	writer.WriteValue(1, v.FakeLiteAccount.MarshalBinary)
 	if !(v.CreditBalance == 0) {
 		writer.WriteUint(2, v.CreditBalance)
 	}
@@ -485,7 +485,7 @@ func (v *FakeSigner) MarshalBinary() ([]byte, error) {
 	}
 	if !(len(v.Keys) == 0) {
 		for _, v := range v.Keys {
-			writer.WriteValue(5, v)
+			writer.WriteValue(5, v.MarshalBinary)
 		}
 	}
 
