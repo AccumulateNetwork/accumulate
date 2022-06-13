@@ -177,11 +177,11 @@ func (v *Error) MarshalBinary() ([]byte, error) {
 		writer.WriteEnum(2, v.Code)
 	}
 	if !(v.Cause == nil) {
-		writer.WriteValue(3, v.Cause)
+		writer.WriteValue(3, v.Cause.MarshalBinary)
 	}
 	if !(len(v.CallStack) == 0) {
 		for _, v := range v.CallStack {
-			writer.WriteValue(4, v)
+			writer.WriteValue(4, v.MarshalBinary)
 		}
 	}
 
