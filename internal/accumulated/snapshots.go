@@ -16,14 +16,15 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 )
 
-func (d *Daemon) onDidCommitBlock(event events.DidCommitBlock) {
+func (d *Daemon) onDidCommitBlock(event events.DidCommitBlock) error {
 	if event.Major == 0 {
-		return
+		return nil
 	}
 
 	// Begin the batch synchronously immediately after commit
 	batch := d.db.Begin(false)
 	go d.collectSnapshot(batch, event.Major, event.Index)
+	return nil
 }
 
 func (d *Daemon) collectSnapshot(batch *database.Batch, majorBlock, minorBlock uint64) {
@@ -56,15 +57,19 @@ func (d *Daemon) collectSnapshot(batch *database.Batch, majorBlock, minorBlock u
 		}
 	}()
 
-	err = batch.SaveSnapshot(file, &d.Config.Accumulate.Network)
+	err = batch.SaveSnapshot(file, &d.Config.Accumulate.Describe)
 	if err != nil {
 		d.Logger.Error("Failed to create snapshot", "error", err, "major-block", majorBlock, "minor-block", minorBlock, "module", "snapshot")
 		return
 	}
 
-	d.eventBus.Publish(events.DidSaveSnapshot{
+	err = d.eventBus.Publish(events.DidSaveSnapshot{
 		MinorIndex: minorBlock,
 	})
+	if err != nil {
+		d.Logger.Error("Failed to publish snapshot notification", "error", err, "major-block", majorBlock, "minor-block", minorBlock, "module", "snapshot")
+		return
+	}
 
 	retain := d.Config.Accumulate.Snapshots.RetainCount
 	if retain == 0 {

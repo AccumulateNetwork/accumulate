@@ -572,5 +572,5 @@ func GoValueFromJson(field *Field, tgtName, srcName, errName string, errArgs ...
 		return fmt.Sprintf("\tif x, err := encoding.%sFromJSON(%s); err != nil { return %s } else { %s = %sx }", method, srcName, err, tgtName, ptrPrefix), nil
 	}
 
-	return fmt.Sprintf("\t%s = make(%s, len(%s)); for i, x := range %[3]s { if x, err := encoding.%sFromJSON(x); err != nil { return %s } else { %[1]s[i] = x } }", tgtName, GoResolveType(field, false, false), srcName, method, err), nil
+	return fmt.Sprintf("\t%s = make(%s, len(%s)); for i, x := range %[3]s { if x, err := encoding.%sFromJSON(x); err != nil { return %s } else { %[1]s[i] = %[6]sx } }", tgtName, GoResolveType(field, false, false), srcName, method, err, ptrPrefix), nil
 }

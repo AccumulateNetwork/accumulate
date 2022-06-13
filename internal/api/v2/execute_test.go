@@ -42,14 +42,16 @@ func TestExecuteCheckOnly(t *testing.T) {
 		clients := map[string]connections.ABCIClient{}
 		clients[""] = local
 		connectionManager := connections.NewFakeConnectionManager(clients)
-		router, _, err := routing.NewSimpleRouter(&config.Network{
+		table := new(protocol.RoutingTable)
+		table.Routes = routing.BuildSimpleTable(&config.Network{
 			Subnets: []config.Subnet{
 				{
-					ID:   "",
+					Id:   "",
 					Type: config.BlockValidator,
 				},
 			},
-		}, connectionManager)
+		})
+		router, err := routing.NewStaticRouter(table, connectionManager)
 		require.NoError(t, err)
 		j, err := NewJrpc(Options{
 			Router: router,
@@ -73,14 +75,16 @@ func TestExecuteCheckOnly(t *testing.T) {
 		clients := map[string]connections.ABCIClient{}
 		clients[""] = local
 		connectionManager := connections.NewFakeConnectionManager(clients)
-		router, _, err := routing.NewSimpleRouter(&config.Network{
+		table := new(protocol.RoutingTable)
+		table.Routes = routing.BuildSimpleTable(&config.Network{
 			Subnets: []config.Subnet{
 				{
-					ID:   "",
+					Id:   "",
 					Type: config.BlockValidator,
 				},
 			},
-		}, connectionManager)
+		})
+		router, err := routing.NewStaticRouter(table, connectionManager)
 		require.NoError(t, err)
 		j, err := NewJrpc(Options{
 			Router: router,

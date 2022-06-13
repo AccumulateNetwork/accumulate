@@ -81,9 +81,6 @@ const (
 	// GenesisBlock is the block index of the first block.
 	GenesisBlock = 1
 
-	// FallbackValidatorThreshold is the factor of how many of the validator signatures are required respective of their total number
-	FallbackValidatorThreshold = 2.0 / 3.0
-
 	// ScratchPrunePeriodDays is the period after which data chain transactions are pruned
 	ScratchPrunePeriodDays = 14
 )
@@ -500,8 +497,8 @@ func IndexChain(name string, major bool) string {
 	return "minor-" + name + "-index"
 }
 
-func GetValidatorsMOfN(validatorCount int, ratio float64) uint64 {
-	return uint64(math.Ceil(ratio * float64(validatorCount)))
+func GetMOfN(count int, ratio float64) uint64 {
+	return uint64(math.Ceil(ratio * float64(count)))
 }
 
 const rootAnchorSuffix = "-root"

@@ -11,40 +11,85 @@ import (
 type getStateFunc func(accountUrl *url.URL, target interface{}) error
 type putStateFunc func(account protocol.Account) error
 
-func (g *GlobalValues) Load(net *config.Network, getState getStateFunc) error {
-	if err := loadAccount(net.NodeUrl(protocol.Oracle), "oracle", getState, new(protocol.AcmeOracle), &g.Oracle); err != nil {
+const labelOracle = "oracle"
+const labelGlobals = "network globals"
+const labelNetwork = "network definition"
+const labelRouting = "routing table"
+
+func (g *GlobalValues) Load(net *config.Describe, getState getStateFunc) error {
+	if err := loadAccount(net.NodeUrl(protocol.Oracle), labelOracle, getState, new(protocol.AcmeOracle), &g.Oracle); err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
-	if err := loadAccount(net.NodeUrl(protocol.Globals), "globals", getState, new(protocol.NetworkGlobals), &g.Globals); err != nil {
+	if err := loadAccount(net.NodeUrl(protocol.Globals), labelGlobals, getState, new(protocol.NetworkGlobals), &g.Globals); err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
-	if err := loadAccount(net.NodeUrl(protocol.Network), "network", getState, new(protocol.NetworkDefinition), &g.Network); err != nil {
+	if err := loadAccount(net.NodeUrl(protocol.Network), labelNetwork, getState, new(protocol.NetworkDefinition), &g.Network); err != nil {
+		return errors.Wrap(errors.StatusUnknown, err)
+	}
+
+	if err := loadAccount(net.NodeUrl(protocol.Routing), labelRouting, getState, new(protocol.RoutingTable), &g.Routing); err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
 	return nil
 }
 
-func (g *GlobalValues) Store(net *config.Network, getState getStateFunc, putState putStateFunc) error {
-	if err := storeAccount(net.NodeUrl(protocol.Oracle), "oracle", getState, putState, g.Oracle); err != nil {
+func (g *GlobalValues) Store(net *config.Describe, getState getStateFunc, putState putStateFunc) error {
+	if err := storeAccount(net.NodeUrl(protocol.Oracle), labelOracle, getState, putState, g.Oracle); err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
-	if err := storeAccount(net.NodeUrl(protocol.Globals), "globals", getState, putState, g.Globals); err != nil {
+	if err := storeAccount(net.NodeUrl(protocol.Globals), labelGlobals, getState, putState, g.Globals); err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
 	if g.Network != nil {
 		// TODO Make this unconditional once the corresponding part of genesis
 		// is unconditional
-		if err := storeAccount(net.NodeUrl(protocol.Network), "network", getState, putState, g.Network); err != nil {
+		if err := storeAccount(net.NodeUrl(protocol.Network), labelNetwork, getState, putState, g.Network); err != nil {
 			return errors.Wrap(errors.StatusUnknown, err)
 		}
 	}
 
+	if err := storeAccount(net.NodeUrl(protocol.Routing), labelRouting, getState, putState, g.Routing); err != nil {
+		return errors.Wrap(errors.StatusUnknown, err)
+	}
+
 	return nil
+}
+
+func (g *GlobalValues) ParseOracle(entry protocol.DataEntry) error {
+	return parseEntryAs(labelOracle, entry, new(protocol.AcmeOracle), &g.Oracle)
+}
+
+func (g *GlobalValues) FormatOracle() protocol.DataEntry {
+	return formatEntry(g.Oracle)
+}
+
+func (g *GlobalValues) ParseGlobals(entry protocol.DataEntry) error {
+	return parseEntryAs(labelGlobals, entry, new(protocol.NetworkGlobals), &g.Globals)
+}
+
+func (g *GlobalValues) FormatGlobals() protocol.DataEntry {
+	return formatEntry(g.Globals)
+}
+
+func (g *GlobalValues) ParseNetwork(entry protocol.DataEntry) error {
+	return parseEntryAs(labelNetwork, entry, new(protocol.NetworkDefinition), &g.Network)
+}
+
+func (g *GlobalValues) FormatNetwork() protocol.DataEntry {
+	return formatEntry(g.Network)
+}
+
+func (g *GlobalValues) ParseRouting(entry protocol.DataEntry) error {
+	return parseEntryAs(labelRouting, entry, new(protocol.RoutingTable), &g.Routing)
+}
+
+func (g *GlobalValues) FormatRouting() protocol.DataEntry {
+	return formatEntry(g.Routing)
 }
 
 func loadAccount[T encoding.BinaryValue](accountUrl *url.URL, name string, getState getStateFunc, value T, ptr *T) error {
@@ -99,28 +144,4 @@ func formatEntry(value encoding.BinaryValue) protocol.DataEntry {
 	}
 
 	return &protocol.AccumulateDataEntry{Data: [][]byte{data}}
-}
-
-func (g *GlobalValues) ParseOracle(entry protocol.DataEntry) error {
-	return parseEntryAs("oracle", entry, new(protocol.AcmeOracle), &g.Oracle)
-}
-
-func (g *GlobalValues) FormatOracle() protocol.DataEntry {
-	return formatEntry(g.Oracle)
-}
-
-func (g *GlobalValues) ParseGlobals(entry protocol.DataEntry) error {
-	return parseEntryAs("network globals", entry, new(protocol.NetworkGlobals), &g.Globals)
-}
-
-func (g *GlobalValues) FormatGlobals() protocol.DataEntry {
-	return formatEntry(g.Globals)
-}
-
-func (g *GlobalValues) ParseNetwork(entry protocol.DataEntry) error {
-	return parseEntryAs("network definition", entry, new(protocol.NetworkDefinition), &g.Network)
-}
-
-func (g *GlobalValues) FormatNetwork() protocol.DataEntry {
-	return formatEntry(g.Network)
 }

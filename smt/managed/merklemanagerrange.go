@@ -3,8 +3,6 @@ package managed
 import (
 	"errors"
 	"fmt"
-
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 // GetRange
@@ -12,12 +10,7 @@ import (
 // begin must be before or equal to end.  The hash with index begin upto
 // but not including end are the hashes returned.  Indexes are zero based, so the
 // first hash in the MerkleState is at 0
-func (m *MerkleManager) GetRange(key storage.Key, begin, end int64) (hashes []Hash, err error) {
-	// We return nothing for ranges that are out of range.
-	if err := m.SetKey(key); err != nil {
-		return nil, err
-	}
-
+func (m *MerkleManager) GetRange(begin, end int64) (hashes []Hash, err error) {
 	ec := m.GetElementCount()
 
 	// end++  Increment to include end in results, comment out to leave it out.
@@ -43,7 +36,7 @@ func (m *MerkleManager) GetRange(key storage.Key, begin, end int64) (hashes []Ha
 		if s = m.GetState(markPoint - 1); s != nil {
 			hl = append(hl, s.HashList...)
 		} else {
-			s, err = m.GetChainState(m.Key)
+			s, err = m.GetChainState()
 			if err != nil {
 				return nil, errors.New("a chain should always have a chain state")
 			}

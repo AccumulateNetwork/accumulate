@@ -47,7 +47,7 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Del
 			return x.recordFailedTransaction(batch, delivery, err)
 		}
 		if !ready {
-			return x.recordPendingTransaction(&x.Network, batch, delivery)
+			return x.recordPendingTransaction(&x.Describe, batch, delivery)
 		}
 	}
 
@@ -62,9 +62,9 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Del
 	// Set up the state manager
 	var st *chain.StateManager
 	if x.isGenesis {
-		st = chain.NewStateManager(&x.Network, nil, batch.Begin(true), principal, delivery.Transaction, x.logger.With("operation", "ProcessTransaction"))
+		st = chain.NewStateManager(&x.Describe, nil, batch.Begin(true), principal, delivery.Transaction, x.logger.With("operation", "ProcessTransaction"))
 	} else {
-		st, err = chain.LoadStateManager(&x.Network, &x.globals.Active, batch.Begin(true), principal, delivery.Transaction, status, x.logger.With("operation", "ProcessTransaction"))
+		st, err = chain.LoadStateManager(&x.Describe, &x.globals.Active, batch.Begin(true), principal, delivery.Transaction, status, x.logger.With("operation", "ProcessTransaction"))
 		if err != nil {
 			return x.recordFailedTransaction(batch, delivery, err)
 		}
@@ -93,19 +93,9 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Del
 	}
 
 	// Do extra processing for special network accounts
-	if principal != nil && principal.GetUrl().RootIdentity().Equal(x.Network.NodeUrl()) {
-		err = x.processNetworkAccountUpdates(batch, delivery, principal)
-		if err != nil {
-			return x.recordFailedTransaction(batch, delivery, err)
-		}
-
-		// Only push sync updates for DN accounts
-		if x.Network.Type == config.Directory {
-			err = x.pushNetworkAccountUpdates(batch, delivery, principal)
-			if err != nil {
-				return x.recordFailedTransaction(batch, delivery, err)
-			}
-		}
+	err = x.processNetworkAccountUpdates(batch, delivery, principal)
+	if err != nil {
+		return x.recordFailedTransaction(batch, delivery, err)
 	}
 
 	return x.recordSuccessfulTransaction(batch, state, delivery, result)
@@ -282,7 +272,7 @@ func (x *Executor) synthTransactionIsReady(batch *database.Batch, transaction *p
 
 	// Determine which anchor chain to load
 	var subnet string
-	if x.Network.Type != config.Directory {
+	if x.Describe.NetworkType != config.Directory {
 		subnet = protocol.Directory
 	} else {
 		var ok bool
@@ -293,7 +283,7 @@ func (x *Executor) synthTransactionIsReady(batch *database.Batch, transaction *p
 	}
 
 	// Load the anchor chain
-	anchorChain, err := batch.Account(x.Network.AnchorPool()).ReadChain(protocol.RootAnchorChain(subnet))
+	anchorChain, err := batch.Account(x.Describe.AnchorPool()).ReadChain(protocol.RootAnchorChain(subnet))
 	if err != nil {
 		return false, errors.Format(errors.StatusUnknown, "load %s intermediate anchor chain: %w", subnet, err)
 	}
@@ -317,7 +307,7 @@ func (x *Executor) synthTransactionIsReady(batch *database.Batch, transaction *p
 
 	// Load the ledger
 	var ledger *protocol.SyntheticLedger
-	err = batch.Account(x.Network.Synthetic()).GetStateAs(&ledger)
+	err = batch.Account(x.Describe.Synthetic()).GetStateAs(&ledger)
 	if err != nil {
 		return false, errors.Format(errors.StatusUnknown, "load synthetic transaction ledger: %w", err)
 	}
@@ -367,14 +357,14 @@ func (x *Executor) recordTransaction(batch *database.Batch, delivery *chain.Deli
 
 	// Update the synthetic ledger
 	var ledger *protocol.SyntheticLedger
-	err = batch.Account(x.Network.Synthetic()).GetStateAs(&ledger)
+	err = batch.Account(x.Describe.Synthetic()).GetStateAs(&ledger)
 	if err != nil {
 		return nil, errors.Format(errors.StatusUnknown, "load synthetic transaction ledger: %w", err)
 	}
 
 	subnetLedger := ledger.Subnet(delivery.SourceNetwork)
 	if subnetLedger.Add(status.Delivered, delivery.SequenceNumber, delivery.Transaction.ID()) {
-		err = batch.Account(x.Network.Synthetic()).PutState(ledger)
+		err = batch.Account(x.Describe.Synthetic()).PutState(ledger)
 		if err != nil {
 			return nil, errors.Format(errors.StatusUnknown, "store synthetic transaction ledger: %w", err)
 		}
@@ -383,7 +373,7 @@ func (x *Executor) recordTransaction(batch *database.Batch, delivery *chain.Deli
 	return status, nil
 }
 
-func (x *Executor) recordPendingTransaction(net *config.Network, batch *database.Batch, delivery *chain.Delivery) (*protocol.TransactionStatus, *chain.ProcessTransactionState, error) {
+func (x *Executor) recordPendingTransaction(net *config.Describe, batch *database.Batch, delivery *chain.Delivery) (*protocol.TransactionStatus, *chain.ProcessTransactionState, error) {
 	// Record the transaction
 	status, err := x.recordTransaction(batch, delivery, func(status *protocol.TransactionStatus) {
 		status.Remote = false
@@ -419,6 +409,8 @@ func (x *Executor) recordPendingTransaction(net *config.Network, batch *database
 		x.logger.Error("Missing receipt for pending synthetic transaction", "hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4), "type", delivery.Transaction.Body.Type())
 		return status, new(chain.ProcessTransactionState), nil
 	}
+
+	x.logger.Debug("Pending synthetic transaction", "hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4), "type", delivery.Transaction.Body.Type(), "anchor", logging.AsHex(receipt.Anchor).Slice(0, 4), "module", "synthetic")
 
 	err = batch.Account(net.Ledger()).AddSyntheticForAnchor(*(*[32]byte)(receipt.Anchor), delivery.Transaction.ID())
 	if err != nil {
@@ -468,7 +460,7 @@ func (x *Executor) recordSuccessfulTransaction(batch *database.Batch, state *cha
 
 	// Check for pending synthetic transactions
 	var ledger *protocol.SyntheticLedger
-	err = batch.Account(x.Network.Synthetic()).GetStateAs(&ledger)
+	err = batch.Account(x.Describe.Synthetic()).GetStateAs(&ledger)
 	if err != nil {
 		return nil, nil, errors.Format(errors.StatusUnknown, "load synthetic transaction ledger: %w", err)
 	}
@@ -564,79 +556,4 @@ func (x *Executor) recordFailedTransaction(batch *database.Batch, delivery *chai
 	}
 
 	return status, state, nil
-}
-
-// processNetworkAccountUpdates processes updates to network data accounts,
-// updating the in-memory globals variable.
-func (x *Executor) processNetworkAccountUpdates(batch *database.Batch, delivery *chain.Delivery, principal protocol.Account) error {
-	// Only WriteData needs extra processing
-	body, ok := delivery.Transaction.Body.(*protocol.WriteData)
-	if !ok {
-		return nil
-	}
-
-	// Force WriteToState
-	if !body.WriteToState {
-		return errors.Format(errors.StatusBadRequest, "invalid %v update: network account updates must write to state", principal.GetUrl())
-	}
-
-	// Validate the data and update the corresponding variable
-	switch {
-	case principal.GetUrl().PathEqual(protocol.Oracle):
-		return x.globals.Pending.ParseOracle(body.Entry)
-	case principal.GetUrl().PathEqual(protocol.Globals):
-		return x.globals.Pending.ParseGlobals(body.Entry)
-	case principal.GetUrl().PathEqual(protocol.Network):
-		return x.globals.Pending.ParseNetwork(body.Entry)
-	}
-
-	return nil
-}
-
-// pushNetworkAccountUpdates pushes updates from the DN to the BVNs.
-func (x *Executor) pushNetworkAccountUpdates(batch *database.Batch, delivery *chain.Delivery, principal protocol.Account) error {
-	// Prep the update
-	var update protocol.NetworkAccountUpdate
-	update.Body = delivery.Transaction.Body
-
-	switch delivery.Transaction.Body.Type() {
-	case protocol.TransactionTypeUpdateKeyPage:
-		// Synchronize updates to the operator book
-		if u, ok := principal.GetUrl().Parent(); ok && u.PathEqual(protocol.OperatorBook) {
-			update.Name = protocol.OperatorBook
-			break
-		}
-
-	case protocol.TransactionTypeWriteData:
-		// Synchronize updates to the oracle, globals, and network definition
-		switch {
-		case principal.GetUrl().PathEqual(protocol.Oracle):
-			update.Name = protocol.Oracle
-		case principal.GetUrl().PathEqual(protocol.Globals):
-			update.Name = protocol.Globals
-		case principal.GetUrl().PathEqual(protocol.Network):
-			update.Name = protocol.Network
-		}
-	}
-
-	// No update needed
-	if update.Name == "" {
-		return nil
-	}
-
-	// Write the update to the ledger
-	var ledger *protocol.SystemLedger
-	record := batch.Account(x.Network.Ledger())
-	err := record.GetStateAs(&ledger)
-	if err != nil {
-		return errors.Format(errors.StatusUnknown, "load ledger: %w", err)
-	}
-
-	ledger.PendingUpdates = append(ledger.PendingUpdates, update)
-	err = record.PutState(ledger)
-	if err != nil {
-		return errors.Format(errors.StatusUnknown, "store ledger: %w", err)
-	}
-
-	return nil
 }

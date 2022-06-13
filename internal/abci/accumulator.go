@@ -58,7 +58,7 @@ type AccumulatorOptions struct {
 func NewAccumulator(opts AccumulatorOptions) *Accumulator {
 	app := &Accumulator{
 		AccumulatorOptions: opts,
-		logger:             opts.Logger.With("module", "accumulate", "subnet", opts.Accumulate.Network.LocalSubnetID),
+		logger:             opts.Logger.With("module", "accumulate", "subnet", opts.Accumulate.SubnetId),
 	}
 
 	events.SubscribeAsync(opts.EventBus, func(e events.DidSaveSnapshot) {
@@ -145,7 +145,7 @@ func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
 
 	var height int64
 	var ledger *protocol.SystemLedger
-	err = batch.Account(app.Accumulate.Network.NodeUrl(protocol.Ledger)).GetStateAs(&ledger)
+	err = batch.Account(app.Accumulate.Describe.NodeUrl(protocol.Ledger)).GetStateAs(&ledger)
 	switch {
 	case err == nil:
 		height = int64(ledger.Index)
@@ -260,10 +260,13 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 	}
 
 	// Notify the world of the committed block
-	app.EventBus.Publish(events.DidCommitBlock{
+	err = app.EventBus.Publish(events.DidCommitBlock{
 		Index: block.Index,
 		Time:  block.Time,
 	})
+	if err != nil {
+		panic(fmt.Errorf("failed to publish block notification: %v", err))
+	}
 
 	err = app.DB.View(func(batch *database.Batch) (err error) {
 		root, err = app.Executor.LoadStateRoot(batch)
@@ -468,11 +471,15 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 	}
 
 	// Notify the world of the committed block
-	app.EventBus.Publish(events.DidCommitBlock{
+	err = app.EventBus.Publish(events.DidCommitBlock{
 		Index: app.block.Index,
 		Time:  app.block.Time,
 		Major: app.block.State.MakeMajorBlock,
 	})
+	if err != nil {
+		app.fatal(err, true)
+		return abci.ResponseCommit{}
+	}
 
 	// Notify the executor that we comitted
 	var resp abci.ResponseCommit

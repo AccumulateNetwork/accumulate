@@ -141,24 +141,21 @@ func (d *Daemon) Start() (err error) {
 		return client.New(server)
 	})
 
-	router, _, err := routing.NewSimpleRouter(&d.Config.Accumulate.Network, d.connectionManager)
-	if err != nil {
-		return fmt.Errorf("failed to create router: %v", err)
-	}
+	d.eventBus = events.NewBus(d.Logger.With("module", "events"))
+	events.SubscribeSync(d.eventBus, d.onDidCommitBlock)
 
+	router := routing.NewRouter(d.eventBus, d.connectionManager)
 	execOpts := block.ExecutorOptions{
-		Logger:  d.Logger,
-		Key:     d.Key().Bytes(),
-		Network: d.Config.Accumulate.Network,
-		Router:  router,
+		Logger:   d.Logger,
+		Key:      d.Key().Bytes(),
+		Describe: d.Config.Accumulate.Describe,
+		Router:   router,
+		EventBus: d.eventBus,
 	}
 	exec, err := block.NewNodeExecutor(execOpts, d.db)
 	if err != nil {
 		return fmt.Errorf("failed to initialize chain executor: %v", err)
 	}
-
-	d.eventBus = events.NewBus(d.Logger.With("module", "events"))
-	events.SubscribeSync(d.eventBus, d.onDidCommitBlock)
 
 	app := abci.NewAccumulator(abci.AccumulatorOptions{
 		DB:       d.db,
@@ -207,7 +204,7 @@ func (d *Daemon) Start() (err error) {
 	// Create the JSON-RPC handler
 	d.jrpc, err = api.NewJrpc(api.Options{
 		Logger:           d.Logger,
-		Network:          &d.Config.Accumulate.Network,
+		Describe:         &d.Config.Accumulate.Describe,
 		Router:           router,
 		PrometheusServer: d.Config.Accumulate.API.PrometheusServer,
 		TxMaxWaitTime:    d.Config.Accumulate.API.TxMaxWaitTime,
@@ -285,7 +282,7 @@ func (d *Daemon) Start() (err error) {
 }
 
 func (d *Daemon) LocalClient() (connections.ABCIClient, error) {
-	ctx, err := d.connectionManager.SelectConnection(d.jrpc.Network.LocalSubnetID, false)
+	ctx, err := d.connectionManager.SelectConnection(d.jrpc.Options.Describe.SubnetId, false)
 	if err != nil {
 		return nil, err
 	}

@@ -5,9 +5,9 @@ import (
 
 	"github.com/tendermint/tendermint/rpc/client"
 	core "github.com/tendermint/tendermint/rpc/coretypes"
-	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/internal/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -96,35 +96,35 @@ func submitPretend(ctx context.Context, connMgr connections.ConnectionManager, s
 
 // RouterInstance sends transactions to remote nodes via RPC calls.
 type RouterInstance struct {
-	Tree              *RouteTree
-	ConnectionManager connections.ConnectionManager
+	tree              *RouteTree
+	connectionManager connections.ConnectionManager
 }
 
-func NewRouter(cm connections.ConnectionManager, table *protocol.RoutingTable) (*RouterInstance, error) {
+func NewRouter(eventBus *events.Bus, cm connections.ConnectionManager) *RouterInstance {
+	r := new(RouterInstance)
+	r.connectionManager = cm
+
+	events.SubscribeSync(eventBus, func(e events.DidChangeGlobals) error {
+		tree, err := NewRouteTree(e.Values.Routing)
+		if err != nil {
+			return errors.Wrap(errors.StatusUnknown, err)
+		}
+
+		r.tree = tree
+		return nil
+	})
+
+	return r
+}
+
+// NewStaticRouter returns a router that uses a static routing table
+func NewStaticRouter(table *protocol.RoutingTable, cm connections.ConnectionManager) (*RouterInstance, error) {
 	tree, err := NewRouteTree(table)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknown, err)
 	}
 
 	return &RouterInstance{tree, cm}, nil
-}
-
-func NewSimpleRouter(net *config.Network, cm connections.ConnectionManager) (*RouterInstance, *protocol.RoutingTable, error) {
-	table := new(protocol.RoutingTable)
-	table.Routes = BuildSimpleTable(net)
-	table.Overrides = make([]protocol.RouteOverride, 1, len(net.Subnets)+1)
-	table.Overrides[0] = protocol.RouteOverride{Account: protocol.AcmeUrl(), Subnet: protocol.Directory}
-	for _, subnet := range net.Subnets {
-		u := protocol.SubnetUrl(subnet.ID)
-		table.Overrides = append(table.Overrides, protocol.RouteOverride{Account: u, Subnet: subnet.ID})
-	}
-
-	router, err := NewRouter(cm, table)
-	if err != nil {
-		return nil, nil, errors.Wrap(errors.StatusUnknown, err)
-	}
-
-	return router, table, nil
 }
 
 var _ Router = (*RouterInstance)(nil)
@@ -160,7 +160,10 @@ func RouteEnvelopes(routeAccount func(*url.URL) (string, error), envs ...*protoc
 }
 
 func (r *RouterInstance) RouteAccount(account *url.URL) (string, error) {
-	return r.Tree.Route(account)
+	if r.tree == nil {
+		return "", errors.New(errors.StatusInternalError, "the routing table has not been initialized")
+	}
+	return r.tree.Route(account)
 }
 
 // Route routes the account using modulo routing.
@@ -174,7 +177,7 @@ func (r *RouterInstance) Route(envs ...*protocol.Envelope) (string, error) {
 func (r *RouterInstance) Query(ctx context.Context, subnetId string, query []byte, opts client.ABCIQueryOptions) (*core.ResultABCIQuery, error) {
 	errorCnt := 0
 	for {
-		connCtx, err := r.ConnectionManager.SelectConnection(subnetId, true)
+		connCtx, err := r.connectionManager.SelectConnection(subnetId, true)
 		if err != nil {
 			return nil, err
 		}
@@ -203,7 +206,7 @@ func (r *RouterInstance) Query(ctx context.Context, subnetId string, query []byt
 func (r *RouterInstance) RequestAPIv2(ctx context.Context, subnetId, method string, params, result interface{}) error {
 	errorCnt := 0
 	for {
-		connCtx, err := r.ConnectionManager.SelectConnection(subnetId, true)
+		connCtx, err := r.connectionManager.SelectConnection(subnetId, true)
 		if err != nil {
 			return err
 		}
@@ -238,8 +241,8 @@ func (r *RouterInstance) Submit(ctx context.Context, subnetId string, tx *protoc
 		return nil, err
 	}
 	if pretend {
-		return submitPretend(ctx, r.ConnectionManager, subnetId, raw)
+		return submitPretend(ctx, r.connectionManager, subnetId, raw)
 	} else {
-		return submit(ctx, r.ConnectionManager, subnetId, raw, async)
+		return submit(ctx, r.connectionManager, subnetId, raw, async)
 	}
 }

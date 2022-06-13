@@ -274,7 +274,7 @@ func TestCreateADI(t *testing.T) {
 }
 
 func TestCreateADIWithoutKeybook(t *testing.T) {
-	check := CheckError{H: NewDefaultErrorHandler(t), Disable: true}
+	check := newDefaultCheckError(t, false)
 
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, check.ErrorHandler())
@@ -678,7 +678,7 @@ func TestAdiAccountTx(t *testing.T) {
 }
 
 func TestSendTokensToBadRecipient(t *testing.T) {
-	check := CheckError{H: NewDefaultErrorHandler(t), Disable: true}
+	check := newDefaultCheckError(t, false)
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, check.ErrorHandler())
 	n := nodes[subnets[1]][0]
@@ -851,7 +851,9 @@ func TestAddKey(t *testing.T) {
 
 	page := n.GetKeyPage("foo/book1/1")
 	require.Len(t, page.Keys, 2)
-	require.Equal(t, nkh[:], page.Keys[1].PublicKeyHash)
+	//look for the key.
+	_, _, found := page.EntryByKeyHash(nkh[:])
+	require.True(t, found, "key not found in page")
 }
 
 func TestUpdateKeyPage(t *testing.T) {
@@ -980,7 +982,14 @@ func TestRemoveKey(t *testing.T) {
 
 	page := n.GetKeyPage("foo/book1/1")
 	require.Len(t, page.Keys, 1)
-	require.Equal(t, h2[:], page.Keys[0].PublicKeyHash)
+
+	//look for the H1 key, which should have been removed
+	_, _, found := page.EntryByKeyHash(h1[:])
+	require.False(t, found, "key was found in page when it should have been removed")
+
+	//look for the H2 key which was also added before H1 was removed
+	_, _, found = page.EntryByKeyHash(h2[:])
+	require.True(t, found, "key was not found in page it was expected to be in")
 }
 
 func TestSignatorHeight(t *testing.T) {
@@ -1099,13 +1108,97 @@ func TestIssueTokens(t *testing.T) {
 	require.Equal(t, int64(123), account.Balance.Int64())
 }
 
+func TestIssueTokensRefund(t *testing.T) {
+	check := newDefaultCheckError(t, true)
+
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	nodes := RunTestNet(t, subnets, daemons, nil, true, check.ErrorHandler())
+	n := nodes[subnets[1]][0]
+
+	fooKey, liteKey := generateKey(), generateKey()
+	sponsorUrl := acctesting.AcmeLiteAddressTmPriv(liteKey).RootIdentity()
+	batch := n.db.Begin(true)
+
+	fooDecimals := 10
+	fooPrecision := uint64(math.Pow(10.0, float64(fooDecimals)))
+
+	maxSupply := int64(1000000 * fooPrecision)
+	supplyLimit := big.NewInt(maxSupply)
+	require.NoError(t, acctesting.CreateAdiWithCredits(batch, fooKey, "foo", 1e9))
+	require.NoError(t, acctesting.CreateLiteIdentity(batch, sponsorUrl.String(), 3))
+	require.NoError(t, acctesting.CreateLiteTokenAccount(batch, tmed25519.PrivKey(liteKey), 1e9))
+	require.NoError(t, batch.Commit())
+	liteAddr, err := protocol.LiteTokenAddress(liteKey[32:], "foo.acme/tokens", protocol.SignatureTypeED25519)
+	require.NoError(t, err)
+
+	// issue tokens with supply limit
+	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		body := new(protocol.CreateToken)
+		body.Url = protocol.AccountUrl("foo", "tokens")
+		body.Symbol = "FOO"
+		body.Precision = uint64(fooDecimals)
+		body.SupplyLimit = supplyLimit
+
+		send(newTxn("foo").
+			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
+			WithBody(body).
+			Initiate(protocol.SignatureTypeLegacyED25519, fooKey).
+			Build())
+	})
+
+	//test to make sure supply limit is set
+	issuer := n.GetTokenIssuer("foo/tokens")
+	require.Equal(t, supplyLimit.Int64(), issuer.SupplyLimit.Int64())
+
+	//issue tokens successfully
+	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		body := new(protocol.IssueTokens)
+		body.Recipient = liteAddr
+		body.Amount.SetUint64(123)
+
+		send(newTxn("foo/tokens").
+			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
+			WithBody(body).
+			Initiate(protocol.SignatureTypeLegacyED25519, fooKey).
+			Build())
+	})
+	issuer = n.GetTokenIssuer("foo/tokens")
+
+	account := n.GetLiteTokenAccount(liteAddr.String())
+	require.Equal(t, "acc://foo.acme/tokens", account.TokenUrl.String())
+	require.Equal(t, int64(123), account.Balance.Int64())
+
+	//issue tokens to incorrect principal
+	check.Disable = true
+	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		body := new(protocol.IssueTokens)
+		liteAddr.Authority = liteAddr.Authority + "u"
+		body.Recipient = liteAddr
+		body.Amount.SetUint64(123)
+
+		send(newTxn("foo/tokens").
+			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
+			WithBody(body).
+			Initiate(protocol.SignatureTypeLegacyED25519, fooKey).
+			Build())
+	})
+	issuer = n.GetTokenIssuer("foo/tokens")
+	require.Equal(t, int64(123), issuer.Issued.Int64())
+}
+
 type CheckError struct {
+	T       *testing.T
 	Disable bool
 	H       func(err error)
 }
 
+func newDefaultCheckError(t *testing.T, enable bool) *CheckError {
+	return &CheckError{T: t, H: NewDefaultErrorHandler(t), Disable: !enable}
+}
+
 func (c *CheckError) ErrorHandler() func(err error) {
 	return func(err error) {
+		c.T.Helper()
 		if !c.Disable {
 			c.H(err)
 		}
@@ -1113,7 +1206,7 @@ func (c *CheckError) ErrorHandler() func(err error) {
 }
 
 func TestIssueTokensWithSupplyLimit(t *testing.T) {
-	check := CheckError{H: NewDefaultErrorHandler(t)}
+	check := newDefaultCheckError(t, true)
 
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, check.ErrorHandler())
@@ -1345,7 +1438,7 @@ func DumpAccount(t *testing.T, batch *database.Batch, accountUrl *url.URL) {
 }
 
 func TestMultisig(t *testing.T) {
-	check := CheckError{H: NewDefaultErrorHandler(t)}
+	check := newDefaultCheckError(t, true)
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, check.ErrorHandler())
 
@@ -1427,7 +1520,7 @@ func TestMultisig(t *testing.T) {
 }
 
 func TestAccountAuth(t *testing.T) {
-	check := CheckError{H: NewDefaultErrorHandler(t)}
+	check := newDefaultCheckError(t, true)
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, subnets, daemons, nil, true, check.ErrorHandler())
 	n := nodes[subnets[1]][0]
