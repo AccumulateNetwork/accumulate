@@ -82,6 +82,9 @@ DirectoryAnchor:
     - name: MakeMajorBlock
       description: notifies the subnet that the DN has opened a major block
       type: uint
+    - name: MakeMajorBlockTime
+      description: holds the time when the major block was opened
+      type: time
 
 SystemWriteData:
   union: { type: transaction }
