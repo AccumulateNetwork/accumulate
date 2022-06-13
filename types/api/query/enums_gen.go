@@ -47,6 +47,9 @@ const QueryTypeMinorBlocks QueryType = 9
 // QueryTypeSynth Query by synthetic transaction sequence number.
 const QueryTypeSynth QueryType = 10
 
+// QueryTypeMajorBlocks Query major blocks.
+const QueryTypeMajorBlocks QueryType = 11
+
 // TxFetchModeExpand expand the full transactions in the result set.
 const TxFetchModeExpand TxFetchMode = 0
 
@@ -126,7 +129,7 @@ func (v QueryType) GetEnumValue() uint64 { return uint64(v) }
 func (v *QueryType) SetEnumValue(id uint64) bool {
 	u := QueryType(id)
 	switch u {
-	case QueryTypeUnknown, QueryTypeUrl, QueryTypeChainId, QueryTypeTxId, QueryTypeTxHistory, QueryTypeDirectoryUrl, QueryTypeData, QueryTypeDataSet, QueryTypeKeyPageIndex, QueryTypeMinorBlocks, QueryTypeSynth:
+	case QueryTypeUnknown, QueryTypeUrl, QueryTypeChainId, QueryTypeTxId, QueryTypeTxHistory, QueryTypeDirectoryUrl, QueryTypeData, QueryTypeDataSet, QueryTypeKeyPageIndex, QueryTypeMinorBlocks, QueryTypeSynth, QueryTypeMajorBlocks:
 		*v = u
 		return true
 	default:
@@ -159,6 +162,8 @@ func (v QueryType) String() string {
 		return "minorBlocks"
 	case QueryTypeSynth:
 		return "synth"
+	case QueryTypeMajorBlocks:
+		return "majorBlocks"
 	default:
 		return fmt.Sprintf("QueryType:%d", v)
 	}
@@ -189,6 +194,8 @@ func QueryTypeByName(name string) (QueryType, bool) {
 		return QueryTypeMinorBlocks, true
 	case "synth":
 		return QueryTypeSynth, true
+	case "majorblocks":
+		return QueryTypeMajorBlocks, true
 	default:
 		return 0, false
 	}
