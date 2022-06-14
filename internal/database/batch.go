@@ -7,6 +7,7 @@ import (
 	encoding2 "gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
@@ -83,6 +84,13 @@ func (b *Batch) Begin(writable bool) *Batch {
 	return c
 }
 
+// DeleteAccountState_TESTONLY is intended for testing purposes only. It deletes an
+// account from the database.
+func (b *Batch) DeleteAccountState_TESTONLY(url *url.URL) error {
+	a := account(url)
+	return b.store.Put(a.State(), nil)
+}
+
 // View runs the function with a read-only transaction.
 func (d *Database) View(fn func(batch *Batch) error) error {
 	batch := d.Begin(false)
@@ -124,6 +132,11 @@ func (b *Batch) Update(fn func(batch *Batch) error) error {
 type TypedValue interface {
 	encoding.BinaryMarshaler
 	CopyAsInterface() interface{}
+}
+
+type TypedValueUnmarshaller interface {
+	TypedValue
+	encoding.BinaryUnmarshaler
 }
 
 type ValueUnmarshalFunc func([]byte) (TypedValue, error)
@@ -252,10 +265,7 @@ func (b *Batch) getValueAs(key storage.Key, unmarshal ValueUnmarshalFunc, newVal
 	return notFound
 }
 
-func (b *Batch) getValuePtr(key storage.Key, value interface {
-	TypedValue
-	encoding.BinaryUnmarshaler
-}, valuePtr interface{}, addNew bool) error {
+func (b *Batch) getValuePtr(key storage.Key, value TypedValueUnmarshaller, valuePtr interface{}, addNew bool) error {
 	var newValue TypedValue
 	if addNew {
 		newValue = value

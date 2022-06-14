@@ -33,11 +33,6 @@ func (t *Transaction) ensureSigner(signer protocol.Signer) error {
 	return t.PutStatus(status)
 }
 
-// Index returns a value that can read or write an index value.
-func (t *Transaction) Index(key ...interface{}) *Value {
-	return &Value{t.batch, t.key.Index(key...)}
-}
-
 // GetState loads the transaction state.
 func (t *Transaction) GetState() (*SigOrTxn, error) {
 	v := new(SigOrTxn)
@@ -130,7 +125,7 @@ func (t *Transaction) AddSignature(keyEntryIndex uint64, newSignature protocol.S
 
 // AddSystemSignature adds a system signature to the operator signature set.
 // AddSystemSignature panics if the signature is not a system signature.
-func (t *Transaction) AddSystemSignature(net *config.Network, newSignature protocol.Signature) (int, error) {
+func (t *Transaction) AddSystemSignature(net *config.Describe, newSignature protocol.Signature) (int, error) {
 	if !newSignature.Type().IsSystem() {
 		panic("not a system signature")
 	}

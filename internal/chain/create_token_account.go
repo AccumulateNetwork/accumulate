@@ -57,7 +57,7 @@ func (CreateTokenAccount) Validate(st *StateManager, tx *Delivery) (protocol.Tra
 		return nil, errors.Format(errors.StatusBadRequest, "token URL is missing")
 	}
 
-	err = verifyCreateTokenAccountProof(st.Network, st.batch, tx.Transaction.Header.Principal, body)
+	err = verifyCreateTokenAccountProof(st.Describe, st.batch, tx.Transaction.Header.Principal, body)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknown, err)
 	}
@@ -78,7 +78,7 @@ func (CreateTokenAccount) Validate(st *StateManager, tx *Delivery) (protocol.Tra
 	return nil, nil
 }
 
-func verifyCreateTokenAccountProof(net *config.Network, batch *database.Batch, principal *url.URL, body *protocol.CreateTokenAccount) error {
+func verifyCreateTokenAccountProof(net *config.Describe, batch *database.Batch, principal *url.URL, body *protocol.CreateTokenAccount) error {
 	// If the issuer is local, check if it exists
 	local := principal.LocalTo(body.TokenUrl)
 	if local {
@@ -120,7 +120,7 @@ func verifyCreateTokenAccountProof(net *config.Network, batch *database.Batch, p
 	if proof.Proof == nil {
 		return errors.Format(errors.StatusBadRequest, "invalid proof: missing Proof")
 	}
-	if !proof.Proof.Convert().Validate() {
+	if !proof.Proof.Validate() {
 		return errors.Format(errors.StatusBadRequest, "proof is invalid")
 	}
 

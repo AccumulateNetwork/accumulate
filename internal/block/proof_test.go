@@ -45,7 +45,7 @@ func TestExecutor_Query_ProveAccount(t *testing.T) {
 	req.Url = protocol.DnUrl().JoinPath(protocol.AnchorPool).WithFragment(fmt.Sprintf("anchor/%x", localReceipt.Anchor))
 	chainResp := sim.Query(protocol.DnUrl(), req, true).(*query.ResponseChainEntry)
 	dirReceipt := chainResp.Receipt.Proof
-	fullReceipt, err := localReceipt.Convert().Combine(dirReceipt.Convert())
+	fullReceipt, err := localReceipt.Combine(&dirReceipt)
 	require.NoError(t, err)
 	t.Log(fullReceipt)
 }

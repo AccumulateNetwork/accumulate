@@ -15,6 +15,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	errors2 "gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 )
 
 type ADI struct {
@@ -32,8 +33,8 @@ type AccountAuth struct {
 
 type AccountStateProof struct {
 	fieldsSet []bool
-	State     Account  `json:"state,omitempty" form:"state" query:"state" validate:"required"`
-	Proof     *Receipt `json:"proof,omitempty" form:"proof" query:"proof" validate:"required"`
+	State     Account          `json:"state,omitempty" form:"state" query:"state" validate:"required"`
+	Proof     *managed.Receipt `json:"proof,omitempty" form:"proof" query:"proof" validate:"required"`
 	extraData []byte
 }
 
@@ -249,10 +250,12 @@ type DirectoryAnchor struct {
 	// Updates are synchronization updates for network accounts.
 	Updates []NetworkAccountUpdate `json:"updates,omitempty" form:"updates" query:"updates" validate:"required"`
 	// Receipts are receipts for anchors from other subnets that were included in the block.
-	Receipts []Receipt `json:"receipts,omitempty" form:"receipts" query:"receipts" validate:"required"`
+	Receipts []managed.Receipt `json:"receipts,omitempty" form:"receipts" query:"receipts" validate:"required"`
 	// MakeMajorBlock notifies the subnet that the DN has opened a major block.
 	MakeMajorBlock uint64 `json:"makeMajorBlock,omitempty" form:"makeMajorBlock" query:"makeMajorBlock" validate:"required"`
-	extraData      []byte
+	// MakeMajorBlockTime holds the time when the major block was opened.
+	MakeMajorBlockTime time.Time `json:"makeMajorBlockTime,omitempty" form:"makeMajorBlockTime" query:"makeMajorBlockTime" validate:"required"`
+	extraData          []byte
 }
 
 type DisableAccountAuthOperation struct {
@@ -494,27 +497,12 @@ type Rational struct {
 	extraData   []byte
 }
 
-type Receipt struct {
-	fieldsSet []bool
-	Start     []byte         `json:"start,omitempty" form:"start" query:"start" validate:"required"`
-	Anchor    []byte         `json:"anchor,omitempty" form:"anchor" query:"anchor" validate:"required"`
-	Entries   []ReceiptEntry `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
-	extraData []byte
-}
-
-type ReceiptEntry struct {
-	fieldsSet []bool
-	Right     bool   `json:"right,omitempty" form:"right" query:"right" validate:"required"`
-	Hash      []byte `json:"hash,omitempty" form:"hash" query:"hash" validate:"required"`
-	extraData []byte
-}
-
 type ReceiptSignature struct {
 	fieldsSet []bool
 	// SourceNetwork is the network that produced the transaction.
-	SourceNetwork   *url.URL `json:"sourceNetwork,omitempty" form:"sourceNetwork" query:"sourceNetwork" validate:"required"`
-	Proof           Receipt  `json:"proof,omitempty" form:"proof" query:"proof" validate:"required"`
-	TransactionHash [32]byte `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash"`
+	SourceNetwork   *url.URL        `json:"sourceNetwork,omitempty" form:"sourceNetwork" query:"sourceNetwork" validate:"required"`
+	Proof           managed.Receipt `json:"proof,omitempty" form:"proof" query:"proof" validate:"required"`
+	TransactionHash [32]byte        `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash"`
 	extraData       []byte
 }
 
@@ -644,6 +632,7 @@ type SyntheticBurnTokens struct {
 	fieldsSet []bool
 	SyntheticOrigin
 	Amount    big.Int `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	IsRefund  bool    `json:"isRefund,omitempty" form:"isRefund" query:"isRefund" validate:"required"`
 	extraData []byte
 }
 
@@ -660,6 +649,7 @@ type SyntheticDepositCredits struct {
 	Amount uint64 `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
 	// AcmeRefundAmount is the amount of ACME that will be refunded if the deposit fails.
 	AcmeRefundAmount *big.Int `json:"acmeRefundAmount,omitempty" form:"acmeRefundAmount" query:"acmeRefundAmount" validate:"required"`
+	IsRefund         bool     `json:"isRefund,omitempty" form:"isRefund" query:"isRefund" validate:"required"`
 	extraData        []byte
 }
 
@@ -669,6 +659,7 @@ type SyntheticDepositTokens struct {
 	Token     *url.URL `json:"token,omitempty" form:"token" query:"token" validate:"required"`
 	Amount    big.Int  `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
 	IsIssuer  bool     `json:"isIssuer,omitempty" form:"isIssuer" query:"isIssuer" validate:"required"`
+	IsRefund  bool     `json:"isRefund,omitempty" form:"isRefund" query:"isRefund" validate:"required"`
 	extraData []byte
 }
 
@@ -1477,11 +1468,12 @@ func (v *DirectoryAnchor) Copy() *DirectoryAnchor {
 	for i, v := range v.Updates {
 		u.Updates[i] = *(&v).Copy()
 	}
-	u.Receipts = make([]Receipt, len(v.Receipts))
+	u.Receipts = make([]managed.Receipt, len(v.Receipts))
 	for i, v := range v.Receipts {
 		u.Receipts[i] = *(&v).Copy()
 	}
 	u.MakeMajorBlock = v.MakeMajorBlock
+	u.MakeMajorBlockTime = v.MakeMajorBlockTime
 
 	return u
 }
@@ -1869,32 +1861,6 @@ func (v *Rational) Copy() *Rational {
 
 func (v *Rational) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *Receipt) Copy() *Receipt {
-	u := new(Receipt)
-
-	u.Start = encoding.BytesCopy(v.Start)
-	u.Anchor = encoding.BytesCopy(v.Anchor)
-	u.Entries = make([]ReceiptEntry, len(v.Entries))
-	for i, v := range v.Entries {
-		u.Entries[i] = *(&v).Copy()
-	}
-
-	return u
-}
-
-func (v *Receipt) CopyAsInterface() interface{} { return v.Copy() }
-
-func (v *ReceiptEntry) Copy() *ReceiptEntry {
-	u := new(ReceiptEntry)
-
-	u.Right = v.Right
-	u.Hash = encoding.BytesCopy(v.Hash)
-
-	return u
-}
-
-func (v *ReceiptEntry) CopyAsInterface() interface{} { return v.Copy() }
-
 func (v *ReceiptSignature) Copy() *ReceiptSignature {
 	u := new(ReceiptSignature)
 
@@ -2115,6 +2081,7 @@ func (v *SyntheticBurnTokens) Copy() *SyntheticBurnTokens {
 
 	u.SyntheticOrigin = *v.SyntheticOrigin.Copy()
 	u.Amount = *encoding.BigintCopy(&v.Amount)
+	u.IsRefund = v.IsRefund
 
 	return u
 }
@@ -2145,6 +2112,7 @@ func (v *SyntheticDepositCredits) Copy() *SyntheticDepositCredits {
 	if v.AcmeRefundAmount != nil {
 		u.AcmeRefundAmount = encoding.BigintCopy(v.AcmeRefundAmount)
 	}
+	u.IsRefund = v.IsRefund
 
 	return u
 }
@@ -2160,6 +2128,7 @@ func (v *SyntheticDepositTokens) Copy() *SyntheticDepositTokens {
 	}
 	u.Amount = *encoding.BigintCopy(&v.Amount)
 	u.IsIssuer = v.IsIssuer
+	u.IsRefund = v.IsRefund
 
 	return u
 }
@@ -3135,6 +3104,9 @@ func (v *DirectoryAnchor) Equal(u *DirectoryAnchor) bool {
 	if !(v.MakeMajorBlock == u.MakeMajorBlock) {
 		return false
 	}
+	if !(v.MakeMajorBlockTime == u.MakeMajorBlockTime) {
+		return false
+	}
 
 	return true
 }
@@ -3642,36 +3614,6 @@ func (v *Rational) Equal(u *Rational) bool {
 	return true
 }
 
-func (v *Receipt) Equal(u *Receipt) bool {
-	if !(bytes.Equal(v.Start, u.Start)) {
-		return false
-	}
-	if !(bytes.Equal(v.Anchor, u.Anchor)) {
-		return false
-	}
-	if len(v.Entries) != len(u.Entries) {
-		return false
-	}
-	for i := range v.Entries {
-		if !((&v.Entries[i]).Equal(&u.Entries[i])) {
-			return false
-		}
-	}
-
-	return true
-}
-
-func (v *ReceiptEntry) Equal(u *ReceiptEntry) bool {
-	if !(v.Right == u.Right) {
-		return false
-	}
-	if !(bytes.Equal(v.Hash, u.Hash)) {
-		return false
-	}
-
-	return true
-}
-
 func (v *ReceiptSignature) Equal(u *ReceiptSignature) bool {
 	switch {
 	case v.SourceNetwork == u.SourceNetwork:
@@ -3938,6 +3880,9 @@ func (v *SyntheticBurnTokens) Equal(u *SyntheticBurnTokens) bool {
 	if !((&v.Amount).Cmp(&u.Amount) == 0) {
 		return false
 	}
+	if !(v.IsRefund == u.IsRefund) {
+		return false
+	}
 
 	return true
 }
@@ -3973,6 +3918,9 @@ func (v *SyntheticDepositCredits) Equal(u *SyntheticDepositCredits) bool {
 	case !((v.AcmeRefundAmount).Cmp(u.AcmeRefundAmount) == 0):
 		return false
 	}
+	if !(v.IsRefund == u.IsRefund) {
+		return false
+	}
 
 	return true
 }
@@ -3993,6 +3941,9 @@ func (v *SyntheticDepositTokens) Equal(u *SyntheticDepositTokens) bool {
 		return false
 	}
 	if !(v.IsIssuer == u.IsIssuer) {
+		return false
+	}
+	if !(v.IsRefund == u.IsRefund) {
 		return false
 	}
 
@@ -4527,7 +4478,7 @@ func (v *ADI) MarshalBinary() ([]byte, error) {
 	if !(v.Url == nil) {
 		writer.WriteUrl(2, v.Url)
 	}
-	writer.WriteValue(3, &v.AccountAuth)
+	writer.WriteValue(3, v.AccountAuth.MarshalBinary)
 
 	_, _, err := writer.Reset(fieldNames_ADI)
 	if err != nil {
@@ -4572,7 +4523,7 @@ func (v *AccountAuth) MarshalBinary() ([]byte, error) {
 
 	if !(len(v.Authorities) == 0) {
 		for _, v := range v.Authorities {
-			writer.WriteValue(1, &v)
+			writer.WriteValue(1, v.MarshalBinary)
 		}
 	}
 
@@ -4613,10 +4564,10 @@ func (v *AccountStateProof) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.State == nil) {
-		writer.WriteValue(1, v.State)
+		writer.WriteValue(1, v.State.MarshalBinary)
 	}
 	if !(v.Proof == nil) {
-		writer.WriteValue(2, v.Proof)
+		writer.WriteValue(2, v.Proof.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_AccountStateProof)
@@ -4954,7 +4905,7 @@ func (v *AddKeyOperation) MarshalBinary() ([]byte, error) {
 
 	writer.WriteEnum(1, v.Type())
 	if !((v.Entry).Equal(new(KeySpecParams))) {
-		writer.WriteValue(2, &v.Entry)
+		writer.WriteValue(2, v.Entry.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_AddKeyOperation)
@@ -5121,7 +5072,7 @@ func (v *AnchorMetadata) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteValue(1, &v.ChainMetadata)
+	writer.WriteValue(1, v.ChainMetadata.MarshalBinary)
 	if !(v.Account == nil) {
 		writer.WriteUrl(2, v.Account)
 	}
@@ -5725,7 +5676,7 @@ func (v *CreateKeyPage) MarshalBinary() ([]byte, error) {
 	writer.WriteEnum(1, v.Type())
 	if !(len(v.Keys) == 0) {
 		for _, v := range v.Keys {
-			writer.WriteValue(2, v)
+			writer.WriteValue(2, v.MarshalBinary)
 		}
 	}
 
@@ -5864,7 +5815,7 @@ func (v *CreateTokenAccount) MarshalBinary() ([]byte, error) {
 		}
 	}
 	if !(v.TokenIssuerProof == nil) {
-		writer.WriteValue(8, v.TokenIssuerProof)
+		writer.WriteValue(8, v.TokenIssuerProof.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_CreateTokenAccount)
@@ -5918,12 +5869,12 @@ func (v *DataAccount) MarshalBinary() ([]byte, error) {
 	if !(v.Url == nil) {
 		writer.WriteUrl(2, v.Url)
 	}
-	writer.WriteValue(3, &v.AccountAuth)
+	writer.WriteValue(3, v.AccountAuth.MarshalBinary)
 	if !(!v.Scratch) {
 		writer.WriteBool(4, v.Scratch)
 	}
 	if !(v.Entry == nil) {
-		writer.WriteValue(5, v.Entry)
+		writer.WriteValue(5, v.Entry.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_DataAccount)
@@ -5971,7 +5922,7 @@ func (v *DelegatedSignature) MarshalBinary() ([]byte, error) {
 
 	writer.WriteEnum(1, v.Type())
 	if !(v.Signature == nil) {
-		writer.WriteValue(2, v.Signature)
+		writer.WriteValue(2, v.Signature.MarshalBinary)
 	}
 	if !(v.Delegator == nil) {
 		writer.WriteUrl(3, v.Delegator)
@@ -6018,6 +5969,7 @@ var fieldNames_DirectoryAnchor = []string{
 	3: "Updates",
 	4: "Receipts",
 	5: "MakeMajorBlock",
+	6: "MakeMajorBlockTime",
 }
 
 func (v *DirectoryAnchor) MarshalBinary() ([]byte, error) {
@@ -6025,19 +5977,22 @@ func (v *DirectoryAnchor) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
-	writer.WriteValue(2, &v.SubnetAnchor)
+	writer.WriteValue(2, v.SubnetAnchor.MarshalBinary)
 	if !(len(v.Updates) == 0) {
 		for _, v := range v.Updates {
-			writer.WriteValue(3, &v)
+			writer.WriteValue(3, v.MarshalBinary)
 		}
 	}
 	if !(len(v.Receipts) == 0) {
 		for _, v := range v.Receipts {
-			writer.WriteValue(4, &v)
+			writer.WriteValue(4, v.MarshalBinary)
 		}
 	}
 	if !(v.MakeMajorBlock == 0) {
 		writer.WriteUint(5, v.MakeMajorBlock)
+	}
+	if !(v.MakeMajorBlockTime == (time.Time{})) {
+		writer.WriteTime(6, v.MakeMajorBlockTime)
 	}
 
 	_, _, err := writer.Reset(fieldNames_DirectoryAnchor)
@@ -6071,6 +6026,11 @@ func (v *DirectoryAnchor) IsValid() error {
 		errs = append(errs, "field MakeMajorBlock is missing")
 	} else if v.MakeMajorBlock == 0 {
 		errs = append(errs, "field MakeMajorBlock is not set")
+	}
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+		errs = append(errs, "field MakeMajorBlockTime is missing")
+	} else if v.MakeMajorBlockTime == (time.Time{}) {
+		errs = append(errs, "field MakeMajorBlockTime is not set")
 	}
 
 	switch len(errs) {
@@ -6384,7 +6344,7 @@ func (v *Envelope) MarshalBinary() ([]byte, error) {
 
 	if !(len(v.Signatures) == 0) {
 		for _, v := range v.Signatures {
-			writer.WriteValue(1, v)
+			writer.WriteValue(1, v.MarshalBinary)
 		}
 	}
 	if !(len(v.TxHash) == 0) {
@@ -6392,7 +6352,7 @@ func (v *Envelope) MarshalBinary() ([]byte, error) {
 	}
 	if !(len(v.Transaction) == 0) {
 		for _, v := range v.Transaction {
-			writer.WriteValue(3, v)
+			writer.WriteValue(3, v.MarshalBinary)
 		}
 	}
 
@@ -6623,7 +6583,7 @@ func (v *KeyBook) MarshalBinary() ([]byte, error) {
 	if !(v.BookType == 0) {
 		writer.WriteEnum(3, v.BookType)
 	}
-	writer.WriteValue(4, &v.AccountAuth)
+	writer.WriteValue(4, v.AccountAuth.MarshalBinary)
 	if !(v.PageCount == 0) {
 		writer.WriteUint(5, v.PageCount)
 	}
@@ -6712,7 +6672,7 @@ func (v *KeyPage) MarshalBinary() ([]byte, error) {
 	}
 	if !(len(v.Keys) == 0) {
 		for _, v := range v.Keys {
-			writer.WriteValue(9, v)
+			writer.WriteValue(9, v.MarshalBinary)
 		}
 	}
 	if !(v.TransactionBlacklist == nil) {
@@ -7210,7 +7170,7 @@ func (v *NetworkAccountUpdate) MarshalBinary() ([]byte, error) {
 		writer.WriteString(1, v.Name)
 	}
 	if !(v.Body == nil) {
-		writer.WriteValue(2, v.Body)
+		writer.WriteValue(2, v.Body.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_NetworkAccountUpdate)
@@ -7259,7 +7219,7 @@ func (v *NetworkDefinition) MarshalBinary() ([]byte, error) {
 	}
 	if !(len(v.Subnets) == 0) {
 		for _, v := range v.Subnets {
-			writer.WriteValue(2, &v)
+			writer.WriteValue(2, v.MarshalBinary)
 		}
 	}
 
@@ -7305,7 +7265,7 @@ func (v *NetworkGlobals) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	if !((v.OperatorAcceptThreshold).Equal(new(Rational))) {
-		writer.WriteValue(1, &v.OperatorAcceptThreshold)
+		writer.WriteValue(1, v.OperatorAcceptThreshold.MarshalBinary)
 	}
 	if !(len(v.MajorBlockSchedule) == 0) {
 		writer.WriteString(2, v.MajorBlockSchedule)
@@ -7358,11 +7318,11 @@ func (v *Object) MarshalBinary() ([]byte, error) {
 	}
 	if !(len(v.Chains) == 0) {
 		for _, v := range v.Chains {
-			writer.WriteValue(2, &v)
+			writer.WriteValue(2, v.MarshalBinary)
 		}
 	}
 	if !((v.Pending).Equal(new(TxIdSet))) {
-		writer.WriteValue(3, &v.Pending)
+		writer.WriteValue(3, v.Pending.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_Object)
@@ -7413,7 +7373,7 @@ func (v *PartitionAnchor) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
-	writer.WriteValue(2, &v.SubnetAnchor)
+	writer.WriteValue(2, v.SubnetAnchor.MarshalBinary)
 	if !((v.AcmeBurnt).Cmp(new(big.Int)) == 0) {
 		writer.WriteBigInt(3, &v.AcmeBurnt)
 	}
@@ -7582,113 +7542,6 @@ func (v *Rational) IsValid() error {
 	}
 }
 
-var fieldNames_Receipt = []string{
-	1: "Start",
-	2: "Anchor",
-	3: "Entries",
-}
-
-func (v *Receipt) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	if !(len(v.Start) == 0) {
-		writer.WriteBytes(1, v.Start)
-	}
-	if !(len(v.Anchor) == 0) {
-		writer.WriteBytes(2, v.Anchor)
-	}
-	if !(len(v.Entries) == 0) {
-		for _, v := range v.Entries {
-			writer.WriteValue(3, &v)
-		}
-	}
-
-	_, _, err := writer.Reset(fieldNames_Receipt)
-	if err != nil {
-		return nil, err
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), err
-}
-
-func (v *Receipt) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Start is missing")
-	} else if len(v.Start) == 0 {
-		errs = append(errs, "field Start is not set")
-	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Anchor is missing")
-	} else if len(v.Anchor) == 0 {
-		errs = append(errs, "field Anchor is not set")
-	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field Entries is missing")
-	} else if len(v.Entries) == 0 {
-		errs = append(errs, "field Entries is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
-var fieldNames_ReceiptEntry = []string{
-	1: "Right",
-	2: "Hash",
-}
-
-func (v *ReceiptEntry) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	if !(!v.Right) {
-		writer.WriteBool(1, v.Right)
-	}
-	if !(len(v.Hash) == 0) {
-		writer.WriteBytes(2, v.Hash)
-	}
-
-	_, _, err := writer.Reset(fieldNames_ReceiptEntry)
-	if err != nil {
-		return nil, err
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), err
-}
-
-func (v *ReceiptEntry) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Right is missing")
-	} else if !v.Right {
-		errs = append(errs, "field Right is not set")
-	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Hash is missing")
-	} else if len(v.Hash) == 0 {
-		errs = append(errs, "field Hash is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
 var fieldNames_ReceiptSignature = []string{
 	1: "Type",
 	2: "SourceNetwork",
@@ -7704,8 +7557,8 @@ func (v *ReceiptSignature) MarshalBinary() ([]byte, error) {
 	if !(v.SourceNetwork == nil) {
 		writer.WriteUrl(2, v.SourceNetwork)
 	}
-	if !((v.Proof).Equal(new(Receipt))) {
-		writer.WriteValue(3, &v.Proof)
+	if !((v.Proof).Equal(new(managed.Receipt))) {
+		writer.WriteValue(3, v.Proof.MarshalBinary)
 	}
 	if !(v.TransactionHash == ([32]byte{})) {
 		writer.WriteHash(4, &v.TransactionHash)
@@ -7732,7 +7585,7 @@ func (v *ReceiptSignature) IsValid() error {
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Proof is missing")
-	} else if (v.Proof).Equal(new(Receipt)) {
+	} else if (v.Proof).Equal(new(managed.Receipt)) {
 		errs = append(errs, "field Proof is not set")
 	}
 
@@ -7761,7 +7614,7 @@ func (v *RemoteSignature) MarshalBinary() ([]byte, error) {
 		writer.WriteUrl(2, v.Destination)
 	}
 	if !(v.Signature == nil) {
-		writer.WriteValue(3, v.Signature)
+		writer.WriteValue(3, v.Signature.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_RemoteSignature)
@@ -7893,7 +7746,7 @@ func (v *RemoveKeyOperation) MarshalBinary() ([]byte, error) {
 
 	writer.WriteEnum(1, v.Type())
 	if !((v.Entry).Equal(new(KeySpecParams))) {
-		writer.WriteValue(2, &v.Entry)
+		writer.WriteValue(2, v.Entry.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_RemoveKeyOperation)
@@ -8090,12 +7943,12 @@ func (v *RoutingTable) MarshalBinary() ([]byte, error) {
 
 	if !(len(v.Overrides) == 0) {
 		for _, v := range v.Overrides {
-			writer.WriteValue(1, &v)
+			writer.WriteValue(1, v.MarshalBinary)
 		}
 	}
 	if !(len(v.Routes) == 0) {
 		for _, v := range v.Routes {
-			writer.WriteValue(2, &v)
+			writer.WriteValue(2, v.MarshalBinary)
 		}
 	}
 
@@ -8151,7 +8004,7 @@ func (v *SendTokens) MarshalBinary() ([]byte, error) {
 	}
 	if !(len(v.To) == 0) {
 		for _, v := range v.To {
-			writer.WriteValue(4, v)
+			writer.WriteValue(4, v.MarshalBinary)
 		}
 	}
 
@@ -8253,7 +8106,7 @@ func (v *SignatureSet) MarshalBinary() ([]byte, error) {
 	}
 	if !(len(v.Signatures) == 0) {
 		for _, v := range v.Signatures {
-			writer.WriteValue(5, v)
+			writer.WriteValue(5, v.MarshalBinary)
 		}
 	}
 
@@ -8507,6 +8360,7 @@ var fieldNames_SyntheticBurnTokens = []string{
 	1: "Type",
 	2: "SyntheticOrigin",
 	3: "Amount",
+	4: "IsRefund",
 }
 
 func (v *SyntheticBurnTokens) MarshalBinary() ([]byte, error) {
@@ -8514,9 +8368,12 @@ func (v *SyntheticBurnTokens) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
-	writer.WriteValue(2, &v.SyntheticOrigin)
+	writer.WriteValue(2, v.SyntheticOrigin.MarshalBinary)
 	if !((v.Amount).Cmp(new(big.Int)) == 0) {
 		writer.WriteBigInt(3, &v.Amount)
+	}
+	if !(!v.IsRefund) {
+		writer.WriteBool(4, v.IsRefund)
 	}
 
 	_, _, err := writer.Reset(fieldNames_SyntheticBurnTokens)
@@ -8541,6 +8398,11 @@ func (v *SyntheticBurnTokens) IsValid() error {
 	} else if (v.Amount).Cmp(new(big.Int)) == 0 {
 		errs = append(errs, "field Amount is not set")
 	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field IsRefund is missing")
+	} else if !v.IsRefund {
+		errs = append(errs, "field IsRefund is not set")
+	}
 
 	switch len(errs) {
 	case 0:
@@ -8563,10 +8425,10 @@ func (v *SyntheticCreateIdentity) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
-	writer.WriteValue(2, &v.SyntheticOrigin)
+	writer.WriteValue(2, v.SyntheticOrigin.MarshalBinary)
 	if !(len(v.Accounts) == 0) {
 		for _, v := range v.Accounts {
-			writer.WriteValue(3, v)
+			writer.WriteValue(3, v.MarshalBinary)
 		}
 	}
 
@@ -8608,6 +8470,7 @@ var fieldNames_SyntheticDepositCredits = []string{
 	2: "SyntheticOrigin",
 	3: "Amount",
 	4: "AcmeRefundAmount",
+	5: "IsRefund",
 }
 
 func (v *SyntheticDepositCredits) MarshalBinary() ([]byte, error) {
@@ -8615,12 +8478,15 @@ func (v *SyntheticDepositCredits) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
-	writer.WriteValue(2, &v.SyntheticOrigin)
+	writer.WriteValue(2, v.SyntheticOrigin.MarshalBinary)
 	if !(v.Amount == 0) {
 		writer.WriteUint(3, v.Amount)
 	}
 	if !(v.AcmeRefundAmount == nil) {
 		writer.WriteBigInt(4, v.AcmeRefundAmount)
+	}
+	if !(!v.IsRefund) {
+		writer.WriteBool(5, v.IsRefund)
 	}
 
 	_, _, err := writer.Reset(fieldNames_SyntheticDepositCredits)
@@ -8650,6 +8516,11 @@ func (v *SyntheticDepositCredits) IsValid() error {
 	} else if v.AcmeRefundAmount == nil {
 		errs = append(errs, "field AcmeRefundAmount is not set")
 	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field IsRefund is missing")
+	} else if !v.IsRefund {
+		errs = append(errs, "field IsRefund is not set")
+	}
 
 	switch len(errs) {
 	case 0:
@@ -8667,6 +8538,7 @@ var fieldNames_SyntheticDepositTokens = []string{
 	3: "Token",
 	4: "Amount",
 	5: "IsIssuer",
+	6: "IsRefund",
 }
 
 func (v *SyntheticDepositTokens) MarshalBinary() ([]byte, error) {
@@ -8674,7 +8546,7 @@ func (v *SyntheticDepositTokens) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
-	writer.WriteValue(2, &v.SyntheticOrigin)
+	writer.WriteValue(2, v.SyntheticOrigin.MarshalBinary)
 	if !(v.Token == nil) {
 		writer.WriteUrl(3, v.Token)
 	}
@@ -8683,6 +8555,9 @@ func (v *SyntheticDepositTokens) MarshalBinary() ([]byte, error) {
 	}
 	if !(!v.IsIssuer) {
 		writer.WriteBool(5, v.IsIssuer)
+	}
+	if !(!v.IsRefund) {
+		writer.WriteBool(6, v.IsRefund)
 	}
 
 	_, _, err := writer.Reset(fieldNames_SyntheticDepositTokens)
@@ -8717,6 +8592,11 @@ func (v *SyntheticDepositTokens) IsValid() error {
 	} else if !v.IsIssuer {
 		errs = append(errs, "field IsIssuer is not set")
 	}
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+		errs = append(errs, "field IsRefund is missing")
+	} else if !v.IsRefund {
+		errs = append(errs, "field IsRefund is not set")
+	}
 
 	switch len(errs) {
 	case 0:
@@ -8741,11 +8621,11 @@ func (v *SyntheticForwardTransaction) MarshalBinary() ([]byte, error) {
 	writer.WriteEnum(1, v.Type())
 	if !(len(v.Signatures) == 0) {
 		for _, v := range v.Signatures {
-			writer.WriteValue(2, &v)
+			writer.WriteValue(2, v.MarshalBinary)
 		}
 	}
 	if !(v.Transaction == nil) {
-		writer.WriteValue(3, v.Transaction)
+		writer.WriteValue(3, v.Transaction.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_SyntheticForwardTransaction)
@@ -8794,7 +8674,7 @@ func (v *SyntheticLedger) MarshalBinary() ([]byte, error) {
 	}
 	if !(len(v.Subnets) == 0) {
 		for _, v := range v.Subnets {
-			writer.WriteValue(3, v)
+			writer.WriteValue(3, v.MarshalBinary)
 		}
 	}
 
@@ -8967,9 +8847,9 @@ func (v *SyntheticWriteData) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
-	writer.WriteValue(2, &v.SyntheticOrigin)
+	writer.WriteValue(2, v.SyntheticOrigin.MarshalBinary)
 	if !(v.Entry == nil) {
-		writer.WriteValue(3, v.Entry)
+		writer.WriteValue(3, v.Entry.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_SyntheticWriteData)
@@ -9068,7 +8948,7 @@ func (v *SystemLedger) MarshalBinary() ([]byte, error) {
 	}
 	if !(len(v.PendingUpdates) == 0) {
 		for _, v := range v.PendingUpdates {
-			writer.WriteValue(6, &v)
+			writer.WriteValue(6, v.MarshalBinary)
 		}
 	}
 
@@ -9134,7 +9014,7 @@ func (v *SystemWriteData) MarshalBinary() ([]byte, error) {
 
 	writer.WriteEnum(1, v.Type())
 	if !(v.Entry == nil) {
-		writer.WriteValue(2, v.Entry)
+		writer.WriteValue(2, v.Entry.MarshalBinary)
 	}
 	if !(!v.WriteToState) {
 		writer.WriteBool(3, v.WriteToState)
@@ -9187,7 +9067,7 @@ func (v *TokenAccount) MarshalBinary() ([]byte, error) {
 	if !(v.Url == nil) {
 		writer.WriteUrl(2, v.Url)
 	}
-	writer.WriteValue(3, &v.AccountAuth)
+	writer.WriteValue(3, v.AccountAuth.MarshalBinary)
 	if !(v.TokenUrl == nil) {
 		writer.WriteUrl(4, v.TokenUrl)
 	}
@@ -9260,7 +9140,7 @@ func (v *TokenIssuer) MarshalBinary() ([]byte, error) {
 	if !(v.Url == nil) {
 		writer.WriteUrl(2, v.Url)
 	}
-	writer.WriteValue(3, &v.AccountAuth)
+	writer.WriteValue(3, v.AccountAuth.MarshalBinary)
 	if !(len(v.Symbol) == 0) {
 		writer.WriteString(4, v.Symbol)
 	}
@@ -9388,10 +9268,10 @@ func (v *Transaction) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	if !((v.Header).Equal(new(TransactionHeader))) {
-		writer.WriteValue(1, &v.Header)
+		writer.WriteValue(1, v.Header.MarshalBinary)
 	}
 	if !(v.Body == nil) {
-		writer.WriteValue(2, v.Body)
+		writer.WriteValue(2, v.Body.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_Transaction)
@@ -9492,7 +9372,7 @@ func (v *TransactionResultSet) MarshalBinary() ([]byte, error) {
 
 	if !(len(v.Results) == 0) {
 		for _, v := range v.Results {
-			writer.WriteValue(1, v)
+			writer.WriteValue(1, v.MarshalBinary)
 		}
 	}
 
@@ -9555,17 +9435,17 @@ func (v *TransactionStatus) MarshalBinary() ([]byte, error) {
 		writer.WriteString(5, v.Message)
 	}
 	if !(v.Error == nil) {
-		writer.WriteValue(6, v.Error)
+		writer.WriteValue(6, v.Error.MarshalBinary)
 	}
 	if !(v.Result == nil) {
-		writer.WriteValue(7, v.Result)
+		writer.WriteValue(7, v.Result.MarshalBinary)
 	}
 	if !(v.Initiator == nil) {
 		writer.WriteUrl(8, v.Initiator)
 	}
 	if !(len(v.Signers) == 0) {
 		for _, v := range v.Signers {
-			writer.WriteValue(9, v)
+			writer.WriteValue(9, v.MarshalBinary)
 		}
 	}
 
@@ -9786,7 +9666,7 @@ func (v *UpdateAccountAuth) MarshalBinary() ([]byte, error) {
 	writer.WriteEnum(1, v.Type())
 	if !(len(v.Operations) == 0) {
 		for _, v := range v.Operations {
-			writer.WriteValue(2, v)
+			writer.WriteValue(2, v.MarshalBinary)
 		}
 	}
 
@@ -9923,10 +9803,10 @@ func (v *UpdateKeyOperation) MarshalBinary() ([]byte, error) {
 
 	writer.WriteEnum(1, v.Type())
 	if !((v.OldEntry).Equal(new(KeySpecParams))) {
-		writer.WriteValue(2, &v.OldEntry)
+		writer.WriteValue(2, v.OldEntry.MarshalBinary)
 	}
 	if !((v.NewEntry).Equal(new(KeySpecParams))) {
-		writer.WriteValue(3, &v.NewEntry)
+		writer.WriteValue(3, v.NewEntry.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_UpdateKeyOperation)
@@ -9976,7 +9856,7 @@ func (v *UpdateKeyPage) MarshalBinary() ([]byte, error) {
 	writer.WriteEnum(1, v.Type())
 	if !(len(v.Operation) == 0) {
 		for _, v := range v.Operation {
-			writer.WriteValue(2, v)
+			writer.WriteValue(2, v.MarshalBinary)
 		}
 	}
 
@@ -10129,7 +10009,7 @@ func (v *WriteData) MarshalBinary() ([]byte, error) {
 
 	writer.WriteEnum(1, v.Type())
 	if !(v.Entry == nil) {
-		writer.WriteValue(2, v.Entry)
+		writer.WriteValue(2, v.Entry.MarshalBinary)
 	}
 	if !(!v.Scratch) {
 		writer.WriteBool(3, v.Scratch)
@@ -10245,7 +10125,7 @@ func (v *WriteDataTo) MarshalBinary() ([]byte, error) {
 		writer.WriteUrl(2, v.Recipient)
 	}
 	if !(v.Entry == nil) {
-		writer.WriteValue(3, v.Entry)
+		writer.WriteValue(3, v.Entry.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_WriteDataTo)
@@ -10349,7 +10229,7 @@ func (v *AccountStateProof) UnmarshalBinaryFrom(rd io.Reader) error {
 		}
 		return err
 	})
-	if x := new(Receipt); reader.ReadValue(2, x.UnmarshalBinary) {
+	if x := new(managed.Receipt); reader.ReadValue(2, x.UnmarshalBinary) {
 		v.Proof = x
 	}
 
@@ -11178,7 +11058,7 @@ func (v *DirectoryAnchor) UnmarshalBinaryFrom(rd io.Reader) error {
 		}
 	}
 	for {
-		if x := new(Receipt); reader.ReadValue(4, x.UnmarshalBinary) {
+		if x := new(managed.Receipt); reader.ReadValue(4, x.UnmarshalBinary) {
 			v.Receipts = append(v.Receipts, *x)
 		} else {
 			break
@@ -11186,6 +11066,9 @@ func (v *DirectoryAnchor) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	if x, ok := reader.ReadUint(5); ok {
 		v.MakeMajorBlock = x
+	}
+	if x, ok := reader.ReadTime(6); ok {
+		v.MakeMajorBlockTime = x
 	}
 
 	seen, err := reader.Reset(fieldNames_DirectoryAnchor)
@@ -12001,59 +11884,6 @@ func (v *Rational) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
-func (v *Receipt) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *Receipt) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	if x, ok := reader.ReadBytes(1); ok {
-		v.Start = x
-	}
-	if x, ok := reader.ReadBytes(2); ok {
-		v.Anchor = x
-	}
-	for {
-		if x := new(ReceiptEntry); reader.ReadValue(3, x.UnmarshalBinary) {
-			v.Entries = append(v.Entries, *x)
-		} else {
-			break
-		}
-	}
-
-	seen, err := reader.Reset(fieldNames_Receipt)
-	if err != nil {
-		return err
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	return err
-}
-
-func (v *ReceiptEntry) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *ReceiptEntry) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	if x, ok := reader.ReadBool(1); ok {
-		v.Right = x
-	}
-	if x, ok := reader.ReadBytes(2); ok {
-		v.Hash = x
-	}
-
-	seen, err := reader.Reset(fieldNames_ReceiptEntry)
-	if err != nil {
-		return err
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	return err
-}
-
 func (v *ReceiptSignature) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -12071,7 +11901,7 @@ func (v *ReceiptSignature) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.SourceNetwork = x
 	}
-	if x := new(Receipt); reader.ReadValue(3, x.UnmarshalBinary) {
+	if x := new(managed.Receipt); reader.ReadValue(3, x.UnmarshalBinary) {
 		v.Proof = *x
 	}
 	if x, ok := reader.ReadHash(4); ok {
@@ -12537,6 +12367,9 @@ func (v *SyntheticBurnTokens) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBigInt(3); ok {
 		v.Amount = *x
 	}
+	if x, ok := reader.ReadBool(4); ok {
+		v.IsRefund = x
+	}
 
 	seen, err := reader.Reset(fieldNames_SyntheticBurnTokens)
 	if err != nil {
@@ -12605,6 +12438,9 @@ func (v *SyntheticDepositCredits) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBigInt(4); ok {
 		v.AcmeRefundAmount = x
 	}
+	if x, ok := reader.ReadBool(5); ok {
+		v.IsRefund = x
+	}
 
 	seen, err := reader.Reset(fieldNames_SyntheticDepositCredits)
 	if err != nil {
@@ -12638,6 +12474,9 @@ func (v *SyntheticDepositTokens) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	if x, ok := reader.ReadBool(5); ok {
 		v.IsIssuer = x
+	}
+	if x, ok := reader.ReadBool(6); ok {
+		v.IsRefund = x
 	}
 
 	seen, err := reader.Reset(fieldNames_SyntheticDepositTokens)
@@ -13591,7 +13430,7 @@ func (v *AccountAuth) MarshalJSON() ([]byte, error) {
 func (v *AccountStateProof) MarshalJSON() ([]byte, error) {
 	u := struct {
 		State encoding.JsonUnmarshalWith[Account] `json:"state,omitempty"`
-		Proof *Receipt                            `json:"proof,omitempty"`
+		Proof *managed.Receipt                    `json:"proof,omitempty"`
 	}{}
 	u.State = encoding.JsonUnmarshalWith[Account]{Value: v.State, Func: UnmarshalAccountJSON}
 	u.Proof = v.Proof
@@ -13907,16 +13746,17 @@ func (v *DelegatedSignature) MarshalJSON() ([]byte, error) {
 
 func (v *DirectoryAnchor) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type            TransactionType                         `json:"type"`
-		Source          *url.URL                                `json:"source,omitempty"`
-		MajorBlockIndex uint64                                  `json:"majorBlockIndex,omitempty"`
-		MinorBlockIndex uint64                                  `json:"minorBlockIndex,omitempty"`
-		RootChainIndex  uint64                                  `json:"rootChainIndex,omitempty"`
-		RootChainAnchor string                                  `json:"rootChainAnchor,omitempty"`
-		StateTreeAnchor string                                  `json:"stateTreeAnchor,omitempty"`
-		Updates         encoding.JsonList[NetworkAccountUpdate] `json:"updates,omitempty"`
-		Receipts        encoding.JsonList[Receipt]              `json:"receipts,omitempty"`
-		MakeMajorBlock  uint64                                  `json:"makeMajorBlock,omitempty"`
+		Type               TransactionType                         `json:"type"`
+		Source             *url.URL                                `json:"source,omitempty"`
+		MajorBlockIndex    uint64                                  `json:"majorBlockIndex,omitempty"`
+		MinorBlockIndex    uint64                                  `json:"minorBlockIndex,omitempty"`
+		RootChainIndex     uint64                                  `json:"rootChainIndex,omitempty"`
+		RootChainAnchor    string                                  `json:"rootChainAnchor,omitempty"`
+		StateTreeAnchor    string                                  `json:"stateTreeAnchor,omitempty"`
+		Updates            encoding.JsonList[NetworkAccountUpdate] `json:"updates,omitempty"`
+		Receipts           encoding.JsonList[managed.Receipt]      `json:"receipts,omitempty"`
+		MakeMajorBlock     uint64                                  `json:"makeMajorBlock,omitempty"`
+		MakeMajorBlockTime time.Time                               `json:"makeMajorBlockTime,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Source = v.SubnetAnchor.Source
@@ -13928,6 +13768,7 @@ func (v *DirectoryAnchor) MarshalJSON() ([]byte, error) {
 	u.Updates = v.Updates
 	u.Receipts = v.Receipts
 	u.MakeMajorBlock = v.MakeMajorBlock
+	u.MakeMajorBlockTime = v.MakeMajorBlockTime
 	return json.Marshal(&u)
 }
 
@@ -14296,34 +14137,12 @@ func (v *RCD1Signature) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
-func (v *Receipt) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Start   *string                         `json:"start,omitempty"`
-		Anchor  *string                         `json:"anchor,omitempty"`
-		Entries encoding.JsonList[ReceiptEntry] `json:"entries,omitempty"`
-	}{}
-	u.Start = encoding.BytesToJSON(v.Start)
-	u.Anchor = encoding.BytesToJSON(v.Anchor)
-	u.Entries = v.Entries
-	return json.Marshal(&u)
-}
-
-func (v *ReceiptEntry) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Right bool    `json:"right,omitempty"`
-		Hash  *string `json:"hash,omitempty"`
-	}{}
-	u.Right = v.Right
-	u.Hash = encoding.BytesToJSON(v.Hash)
-	return json.Marshal(&u)
-}
-
 func (v *ReceiptSignature) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type            SignatureType `json:"type"`
-		SourceNetwork   *url.URL      `json:"sourceNetwork,omitempty"`
-		Proof           Receipt       `json:"proof,omitempty"`
-		TransactionHash string        `json:"transactionHash,omitempty"`
+		Type            SignatureType   `json:"type"`
+		SourceNetwork   *url.URL        `json:"sourceNetwork,omitempty"`
+		Proof           managed.Receipt `json:"proof,omitempty"`
+		TransactionHash string          `json:"transactionHash,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.SourceNetwork = v.SourceNetwork
@@ -14491,6 +14310,7 @@ func (v *SyntheticBurnTokens) MarshalJSON() ([]byte, error) {
 		Initiator *url.URL        `json:"initiator,omitempty"`
 		FeeRefund uint64          `json:"feeRefund,omitempty"`
 		Amount    *string         `json:"amount,omitempty"`
+		IsRefund  bool            `json:"isRefund,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Cause = v.SyntheticOrigin.Cause
@@ -14498,6 +14318,7 @@ func (v *SyntheticBurnTokens) MarshalJSON() ([]byte, error) {
 	u.Initiator = v.SyntheticOrigin.Initiator
 	u.FeeRefund = v.SyntheticOrigin.FeeRefund
 	u.Amount = encoding.BigintToJSON(&v.Amount)
+	u.IsRefund = v.IsRefund
 	return json.Marshal(&u)
 }
 
@@ -14528,6 +14349,7 @@ func (v *SyntheticDepositCredits) MarshalJSON() ([]byte, error) {
 		FeeRefund        uint64          `json:"feeRefund,omitempty"`
 		Amount           uint64          `json:"amount,omitempty"`
 		AcmeRefundAmount *string         `json:"acmeRefundAmount,omitempty"`
+		IsRefund         bool            `json:"isRefund,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Cause = v.SyntheticOrigin.Cause
@@ -14536,6 +14358,7 @@ func (v *SyntheticDepositCredits) MarshalJSON() ([]byte, error) {
 	u.FeeRefund = v.SyntheticOrigin.FeeRefund
 	u.Amount = v.Amount
 	u.AcmeRefundAmount = encoding.BigintToJSON(v.AcmeRefundAmount)
+	u.IsRefund = v.IsRefund
 	return json.Marshal(&u)
 }
 
@@ -14549,6 +14372,7 @@ func (v *SyntheticDepositTokens) MarshalJSON() ([]byte, error) {
 		Token     *url.URL        `json:"token,omitempty"`
 		Amount    *string         `json:"amount,omitempty"`
 		IsIssuer  bool            `json:"isIssuer,omitempty"`
+		IsRefund  bool            `json:"isRefund,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Cause = v.SyntheticOrigin.Cause
@@ -14558,6 +14382,7 @@ func (v *SyntheticDepositTokens) MarshalJSON() ([]byte, error) {
 	u.Token = v.Token
 	u.Amount = encoding.BigintToJSON(&v.Amount)
 	u.IsIssuer = v.IsIssuer
+	u.IsRefund = v.IsRefund
 	return json.Marshal(&u)
 }
 
@@ -14960,7 +14785,7 @@ func (v *AccountAuth) UnmarshalJSON(data []byte) error {
 func (v *AccountStateProof) UnmarshalJSON(data []byte) error {
 	u := struct {
 		State encoding.JsonUnmarshalWith[Account] `json:"state,omitempty"`
-		Proof *Receipt                            `json:"proof,omitempty"`
+		Proof *managed.Receipt                    `json:"proof,omitempty"`
 	}{}
 	u.State = encoding.JsonUnmarshalWith[Account]{Value: v.State, Func: UnmarshalAccountJSON}
 	u.Proof = v.Proof
@@ -15539,16 +15364,17 @@ func (v *DelegatedSignature) UnmarshalJSON(data []byte) error {
 
 func (v *DirectoryAnchor) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type            TransactionType                         `json:"type"`
-		Source          *url.URL                                `json:"source,omitempty"`
-		MajorBlockIndex uint64                                  `json:"majorBlockIndex,omitempty"`
-		MinorBlockIndex uint64                                  `json:"minorBlockIndex,omitempty"`
-		RootChainIndex  uint64                                  `json:"rootChainIndex,omitempty"`
-		RootChainAnchor string                                  `json:"rootChainAnchor,omitempty"`
-		StateTreeAnchor string                                  `json:"stateTreeAnchor,omitempty"`
-		Updates         encoding.JsonList[NetworkAccountUpdate] `json:"updates,omitempty"`
-		Receipts        encoding.JsonList[Receipt]              `json:"receipts,omitempty"`
-		MakeMajorBlock  uint64                                  `json:"makeMajorBlock,omitempty"`
+		Type               TransactionType                         `json:"type"`
+		Source             *url.URL                                `json:"source,omitempty"`
+		MajorBlockIndex    uint64                                  `json:"majorBlockIndex,omitempty"`
+		MinorBlockIndex    uint64                                  `json:"minorBlockIndex,omitempty"`
+		RootChainIndex     uint64                                  `json:"rootChainIndex,omitempty"`
+		RootChainAnchor    string                                  `json:"rootChainAnchor,omitempty"`
+		StateTreeAnchor    string                                  `json:"stateTreeAnchor,omitempty"`
+		Updates            encoding.JsonList[NetworkAccountUpdate] `json:"updates,omitempty"`
+		Receipts           encoding.JsonList[managed.Receipt]      `json:"receipts,omitempty"`
+		MakeMajorBlock     uint64                                  `json:"makeMajorBlock,omitempty"`
+		MakeMajorBlockTime time.Time                               `json:"makeMajorBlockTime,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Source = v.SubnetAnchor.Source
@@ -15560,6 +15386,7 @@ func (v *DirectoryAnchor) UnmarshalJSON(data []byte) error {
 	u.Updates = v.Updates
 	u.Receipts = v.Receipts
 	u.MakeMajorBlock = v.MakeMajorBlock
+	u.MakeMajorBlockTime = v.MakeMajorBlockTime
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -15583,6 +15410,7 @@ func (v *DirectoryAnchor) UnmarshalJSON(data []byte) error {
 	v.Updates = u.Updates
 	v.Receipts = u.Receipts
 	v.MakeMajorBlock = u.MakeMajorBlock
+	v.MakeMajorBlockTime = u.MakeMajorBlockTime
 	return nil
 }
 
@@ -16305,57 +16133,12 @@ func (v *RCD1Signature) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (v *Receipt) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Start   *string                         `json:"start,omitempty"`
-		Anchor  *string                         `json:"anchor,omitempty"`
-		Entries encoding.JsonList[ReceiptEntry] `json:"entries,omitempty"`
-	}{}
-	u.Start = encoding.BytesToJSON(v.Start)
-	u.Anchor = encoding.BytesToJSON(v.Anchor)
-	u.Entries = v.Entries
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	if x, err := encoding.BytesFromJSON(u.Start); err != nil {
-		return fmt.Errorf("error decoding Start: %w", err)
-	} else {
-		v.Start = x
-	}
-	if x, err := encoding.BytesFromJSON(u.Anchor); err != nil {
-		return fmt.Errorf("error decoding Anchor: %w", err)
-	} else {
-		v.Anchor = x
-	}
-	v.Entries = u.Entries
-	return nil
-}
-
-func (v *ReceiptEntry) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Right bool    `json:"right,omitempty"`
-		Hash  *string `json:"hash,omitempty"`
-	}{}
-	u.Right = v.Right
-	u.Hash = encoding.BytesToJSON(v.Hash)
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	v.Right = u.Right
-	if x, err := encoding.BytesFromJSON(u.Hash); err != nil {
-		return fmt.Errorf("error decoding Hash: %w", err)
-	} else {
-		v.Hash = x
-	}
-	return nil
-}
-
 func (v *ReceiptSignature) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type            SignatureType `json:"type"`
-		SourceNetwork   *url.URL      `json:"sourceNetwork,omitempty"`
-		Proof           Receipt       `json:"proof,omitempty"`
-		TransactionHash string        `json:"transactionHash,omitempty"`
+		Type            SignatureType   `json:"type"`
+		SourceNetwork   *url.URL        `json:"sourceNetwork,omitempty"`
+		Proof           managed.Receipt `json:"proof,omitempty"`
+		TransactionHash string          `json:"transactionHash,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.SourceNetwork = v.SourceNetwork
@@ -16661,6 +16444,7 @@ func (v *SyntheticBurnTokens) UnmarshalJSON(data []byte) error {
 		Initiator *url.URL        `json:"initiator,omitempty"`
 		FeeRefund uint64          `json:"feeRefund,omitempty"`
 		Amount    *string         `json:"amount,omitempty"`
+		IsRefund  bool            `json:"isRefund,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Cause = v.SyntheticOrigin.Cause
@@ -16668,6 +16452,7 @@ func (v *SyntheticBurnTokens) UnmarshalJSON(data []byte) error {
 	u.Initiator = v.SyntheticOrigin.Initiator
 	u.FeeRefund = v.SyntheticOrigin.FeeRefund
 	u.Amount = encoding.BigintToJSON(&v.Amount)
+	u.IsRefund = v.IsRefund
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -16682,6 +16467,7 @@ func (v *SyntheticBurnTokens) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Amount = *x
 	}
+	v.IsRefund = u.IsRefund
 	return nil
 }
 
@@ -16725,6 +16511,7 @@ func (v *SyntheticDepositCredits) UnmarshalJSON(data []byte) error {
 		FeeRefund        uint64          `json:"feeRefund,omitempty"`
 		Amount           uint64          `json:"amount,omitempty"`
 		AcmeRefundAmount *string         `json:"acmeRefundAmount,omitempty"`
+		IsRefund         bool            `json:"isRefund,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Cause = v.SyntheticOrigin.Cause
@@ -16733,6 +16520,7 @@ func (v *SyntheticDepositCredits) UnmarshalJSON(data []byte) error {
 	u.FeeRefund = v.SyntheticOrigin.FeeRefund
 	u.Amount = v.Amount
 	u.AcmeRefundAmount = encoding.BigintToJSON(v.AcmeRefundAmount)
+	u.IsRefund = v.IsRefund
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -16748,6 +16536,7 @@ func (v *SyntheticDepositCredits) UnmarshalJSON(data []byte) error {
 	} else {
 		v.AcmeRefundAmount = x
 	}
+	v.IsRefund = u.IsRefund
 	return nil
 }
 
@@ -16761,6 +16550,7 @@ func (v *SyntheticDepositTokens) UnmarshalJSON(data []byte) error {
 		Token     *url.URL        `json:"token,omitempty"`
 		Amount    *string         `json:"amount,omitempty"`
 		IsIssuer  bool            `json:"isIssuer,omitempty"`
+		IsRefund  bool            `json:"isRefund,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Cause = v.SyntheticOrigin.Cause
@@ -16770,6 +16560,7 @@ func (v *SyntheticDepositTokens) UnmarshalJSON(data []byte) error {
 	u.Token = v.Token
 	u.Amount = encoding.BigintToJSON(&v.Amount)
 	u.IsIssuer = v.IsIssuer
+	u.IsRefund = v.IsRefund
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -16786,6 +16577,7 @@ func (v *SyntheticDepositTokens) UnmarshalJSON(data []byte) error {
 		v.Amount = *x
 	}
 	v.IsIssuer = u.IsIssuer
+	v.IsRefund = u.IsRefund
 	return nil
 }
 

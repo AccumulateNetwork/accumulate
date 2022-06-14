@@ -9,11 +9,10 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 type DatabaseQueryModule struct {
-	Network *config.Network
+	Network *config.Describe
 	DB      *database.Database
 }
 
@@ -68,7 +67,8 @@ func (m *DatabaseQueryModule) queryAccount(batch *database.Batch, accountUrl *ur
 			state.Type = c.Type
 			state.Height = uint64(chain.Height())
 			for _, hash := range chain.CurrentState().Pending {
-				state.Roots = append(state.Roots, hash)
+				hash := hash // See docs/developer/rangevarref.md
+				state.Roots = append(state.Roots, hash[:])
 			}
 			rec.Chains = append(rec.Chains, state)
 		}
@@ -82,7 +82,7 @@ func (m *DatabaseQueryModule) queryAccount(batch *database.Batch, accountUrl *ur
 			receipt.Error = errors.Wrap(errors.StatusUnknown, err).(*errors.Error)
 		} else {
 			receipt.LocalBlock = block
-			receipt.Proof = *protocol.ReceiptFromManaged(mr)
+			receipt.Proof = *mr
 		}
 	}
 

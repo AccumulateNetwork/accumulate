@@ -8,3 +8,7 @@ var trackLocation = false
 func EnableLocationTracking() {
 	trackLocation = true
 }
+
+func DisableLocationTracking() {
+	trackLocation = false
+}

@@ -14,6 +14,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 )
 
 type ChainState struct {
@@ -35,10 +36,10 @@ type DirectoryQueryResult struct {
 
 type GeneralReceipt struct {
 	fieldsSet      []bool
-	LocalBlock     uint64           `json:"localBlock,omitempty" form:"localBlock" query:"localBlock" validate:"required"`
-	DirectoryBlock uint64           `json:"directoryBlock,omitempty" form:"directoryBlock" query:"directoryBlock" validate:"required"`
-	Proof          protocol.Receipt `json:"proof,omitempty" form:"proof" query:"proof" validate:"required"`
-	Error          string           `json:"error,omitempty" form:"error" query:"error" validate:"required"`
+	LocalBlock     uint64          `json:"localBlock,omitempty" form:"localBlock" query:"localBlock" validate:"required"`
+	DirectoryBlock uint64          `json:"directoryBlock,omitempty" form:"directoryBlock" query:"directoryBlock" validate:"required"`
+	Proof          managed.Receipt `json:"proof,omitempty" form:"proof" query:"proof" validate:"required"`
+	Error          string          `json:"error,omitempty" form:"error" query:"error" validate:"required"`
 	extraData      []byte
 }
 
@@ -150,7 +151,7 @@ type ResponseByTxId struct {
 	Envelope   *protocol.Envelope          `json:"envelope,omitempty" form:"envelope" query:"envelope" validate:"required"`
 	Status     *protocol.TransactionStatus `json:"status,omitempty" form:"status" query:"status" validate:"required"`
 	Produced   []*url.TxID                 `json:"produced,omitempty" form:"produced" query:"produced" validate:"required"`
-	Height     int64                       `json:"height" form:"height" query:"height" validate:"required"`
+	Height     uint64                      `json:"height" form:"height" query:"height" validate:"required"`
 	ChainState [][]byte                    `json:"chainState,omitempty" form:"chainState" query:"chainState" validate:"required"`
 	Receipts   []*TxReceipt                `json:"receipts,omitempty" form:"receipts" query:"receipts" validate:"required"`
 	Signers    []SignatureSet              `json:"signers,omitempty" form:"signers" query:"signers" validate:"required"`
@@ -160,7 +161,7 @@ type ResponseByTxId struct {
 type ResponseChainEntry struct {
 	fieldsSet []bool
 	Type      protocol.ChainType `json:"type,omitempty" form:"type" query:"type" validate:"required"`
-	Height    int64              `json:"height" form:"height" query:"height" validate:"required"`
+	Height    uint64             `json:"height" form:"height" query:"height" validate:"required"`
 	Entry     []byte             `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
 	State     [][]byte           `json:"state,omitempty" form:"state" query:"state" validate:"required"`
 	Receipt   *GeneralReceipt    `json:"receipt,omitempty" form:"receipt" query:"receipt"`
@@ -1479,7 +1480,7 @@ func (v *DirectoryQueryResult) MarshalBinary() ([]byte, error) {
 	}
 	if !(len(v.ExpandedEntries) == 0) {
 		for _, v := range v.ExpandedEntries {
-			writer.WriteValue(2, v)
+			writer.WriteValue(2, v.MarshalBinary)
 		}
 	}
 	writer.WriteUint(3, v.Total)
@@ -1526,8 +1527,8 @@ func (v *GeneralReceipt) MarshalBinary() ([]byte, error) {
 	if !(v.DirectoryBlock == 0) {
 		writer.WriteUint(2, v.DirectoryBlock)
 	}
-	if !((v.Proof).Equal(new(protocol.Receipt))) {
-		writer.WriteValue(3, &v.Proof)
+	if !((v.Proof).Equal(new(managed.Receipt))) {
+		writer.WriteValue(3, v.Proof.MarshalBinary)
 	}
 	if !(len(v.Error) == 0) {
 		writer.WriteString(4, v.Error)
@@ -1556,7 +1557,7 @@ func (v *GeneralReceipt) IsValid() error {
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Proof is missing")
-	} else if (v.Proof).Equal(new(protocol.Receipt)) {
+	} else if (v.Proof).Equal(new(managed.Receipt)) {
 		errs = append(errs, "field Proof is not set")
 	}
 	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
@@ -2287,15 +2288,15 @@ func (v *ResponseAccount) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.Account == nil) {
-		writer.WriteValue(1, v.Account)
+		writer.WriteValue(1, v.Account.MarshalBinary)
 	}
 	if !(len(v.ChainState) == 0) {
 		for _, v := range v.ChainState {
-			writer.WriteValue(2, &v)
+			writer.WriteValue(2, v.MarshalBinary)
 		}
 	}
 	if !(v.Receipt == nil) {
-		writer.WriteValue(3, v.Receipt)
+		writer.WriteValue(3, v.Receipt.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_ResponseAccount)
@@ -2349,17 +2350,17 @@ func (v *ResponseByTxId) MarshalBinary() ([]byte, error) {
 		writer.WriteTxid(1, v.TxId)
 	}
 	if !(v.Envelope == nil) {
-		writer.WriteValue(2, v.Envelope)
+		writer.WriteValue(2, v.Envelope.MarshalBinary)
 	}
 	if !(v.Status == nil) {
-		writer.WriteValue(3, v.Status)
+		writer.WriteValue(3, v.Status.MarshalBinary)
 	}
 	if !(len(v.Produced) == 0) {
 		for _, v := range v.Produced {
 			writer.WriteTxid(4, v)
 		}
 	}
-	writer.WriteInt(5, v.Height)
+	writer.WriteUint(5, v.Height)
 	if !(len(v.ChainState) == 0) {
 		for _, v := range v.ChainState {
 			writer.WriteBytes(6, v)
@@ -2367,12 +2368,12 @@ func (v *ResponseByTxId) MarshalBinary() ([]byte, error) {
 	}
 	if !(len(v.Receipts) == 0) {
 		for _, v := range v.Receipts {
-			writer.WriteValue(7, v)
+			writer.WriteValue(7, v.MarshalBinary)
 		}
 	}
 	if !(len(v.Signers) == 0) {
 		for _, v := range v.Signers {
-			writer.WriteValue(8, &v)
+			writer.WriteValue(8, v.MarshalBinary)
 		}
 	}
 
@@ -2451,7 +2452,7 @@ func (v *ResponseChainEntry) MarshalBinary() ([]byte, error) {
 	if !(v.Type == 0) {
 		writer.WriteEnum(1, v.Type)
 	}
-	writer.WriteInt(2, v.Height)
+	writer.WriteUint(2, v.Height)
 	if !(len(v.Entry) == 0) {
 		writer.WriteBytes(3, v.Entry)
 	}
@@ -2461,7 +2462,7 @@ func (v *ResponseChainEntry) MarshalBinary() ([]byte, error) {
 		}
 	}
 	if !(v.Receipt == nil) {
-		writer.WriteValue(5, v.Receipt)
+		writer.WriteValue(5, v.Receipt.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_ResponseChainEntry)
@@ -2582,7 +2583,7 @@ func (v *ResponseDataEntry) MarshalBinary() ([]byte, error) {
 		writer.WriteHash(1, &v.EntryHash)
 	}
 	if !(v.Entry == nil) {
-		writer.WriteValue(2, v.Entry)
+		writer.WriteValue(2, v.Entry.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_ResponseDataEntry)
@@ -2628,7 +2629,7 @@ func (v *ResponseDataEntrySet) MarshalBinary() ([]byte, error) {
 
 	if !(len(v.DataEntries) == 0) {
 		for _, v := range v.DataEntries {
-			writer.WriteValue(1, &v)
+			writer.WriteValue(1, v.MarshalBinary)
 		}
 	}
 	if !(v.Total == 0) {
@@ -2732,7 +2733,7 @@ func (v *ResponseMajorBlocks) MarshalBinary() ([]byte, error) {
 	writer.WriteUint(1, v.TotalBlocks)
 	if !(len(v.Entries) == 0) {
 		for _, v := range v.Entries {
-			writer.WriteValue(2, v)
+			writer.WriteValue(2, v.MarshalBinary)
 		}
 	}
 
@@ -2784,7 +2785,7 @@ func (v *ResponseMajorEntry) MarshalBinary() ([]byte, error) {
 	}
 	if !(len(v.MinorBlocks) == 0) {
 		for _, v := range v.MinorBlocks {
-			writer.WriteValue(3, v)
+			writer.WriteValue(3, v.MarshalBinary)
 		}
 	}
 
@@ -2837,7 +2838,7 @@ func (v *ResponseMinorBlocks) MarshalBinary() ([]byte, error) {
 	writer.WriteUint(1, v.TotalBlocks)
 	if !(len(v.Entries) == 0) {
 		for _, v := range v.Entries {
-			writer.WriteValue(2, v)
+			writer.WriteValue(2, v.MarshalBinary)
 		}
 	}
 
@@ -2899,7 +2900,7 @@ func (v *ResponseMinorEntry) MarshalBinary() ([]byte, error) {
 	}
 	if !(len(v.Transactions) == 0) {
 		for _, v := range v.Transactions {
-			writer.WriteValue(5, v)
+			writer.WriteValue(5, v.MarshalBinary)
 		}
 	}
 
@@ -3007,7 +3008,7 @@ func (v *ResponseTxHistory) MarshalBinary() ([]byte, error) {
 	writer.WriteUint(3, v.Total)
 	if !(len(v.Transactions) == 0) {
 		for _, v := range v.Transactions {
-			writer.WriteValue(4, &v)
+			writer.WriteValue(4, v.MarshalBinary)
 		}
 	}
 
@@ -3057,11 +3058,11 @@ func (v *SignatureSet) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.Account == nil) {
-		writer.WriteValue(1, v.Account)
+		writer.WriteValue(1, v.Account.MarshalBinary)
 	}
 	if !(len(v.Signatures) == 0) {
 		for _, v := range v.Signatures {
-			writer.WriteValue(2, v)
+			writer.WriteValue(2, v.MarshalBinary)
 		}
 	}
 
@@ -3107,7 +3108,7 @@ func (v *TxReceipt) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteValue(1, &v.GeneralReceipt)
+	writer.WriteValue(1, v.GeneralReceipt.MarshalBinary)
 	if !(v.Account == nil) {
 		writer.WriteUrl(2, v.Account)
 	}
@@ -3270,7 +3271,7 @@ func (v *GeneralReceipt) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUint(2); ok {
 		v.DirectoryBlock = x
 	}
-	if x := new(protocol.Receipt); reader.ReadValue(3, x.UnmarshalBinary) {
+	if x := new(managed.Receipt); reader.ReadValue(3, x.UnmarshalBinary) {
 		v.Proof = *x
 	}
 	if x, ok := reader.ReadString(4); ok {
@@ -3730,7 +3731,7 @@ func (v *ResponseByTxId) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
-	if x, ok := reader.ReadInt(5); ok {
+	if x, ok := reader.ReadUint(5); ok {
 		v.Height = x
 	}
 	for {
@@ -3774,7 +3775,7 @@ func (v *ResponseChainEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x := new(protocol.ChainType); reader.ReadEnum(1, x) {
 		v.Type = *x
 	}
-	if x, ok := reader.ReadInt(2); ok {
+	if x, ok := reader.ReadUint(2); ok {
 		v.Height = x
 	}
 	if x, ok := reader.ReadBytes(3); ok {
@@ -4214,11 +4215,11 @@ func (v *DirectoryQueryResult) MarshalJSON() ([]byte, error) {
 
 func (v *GeneralReceipt) MarshalJSON() ([]byte, error) {
 	u := struct {
-		LocalBlock     uint64           `json:"localBlock,omitempty"`
-		DirectoryBlock uint64           `json:"directoryBlock,omitempty"`
-		Proof          protocol.Receipt `json:"proof,omitempty"`
-		Receipt        protocol.Receipt `json:"receipt,omitempty"`
-		Error          string           `json:"error,omitempty"`
+		LocalBlock     uint64          `json:"localBlock,omitempty"`
+		DirectoryBlock uint64          `json:"directoryBlock,omitempty"`
+		Proof          managed.Receipt `json:"proof,omitempty"`
+		Receipt        managed.Receipt `json:"receipt,omitempty"`
+		Error          string          `json:"error,omitempty"`
 	}{}
 	u.LocalBlock = v.LocalBlock
 	u.DirectoryBlock = v.DirectoryBlock
@@ -4408,7 +4409,7 @@ func (v *ResponseByTxId) MarshalJSON() ([]byte, error) {
 		Envelope   *protocol.Envelope              `json:"envelope,omitempty"`
 		Status     *protocol.TransactionStatus     `json:"status,omitempty"`
 		Produced   encoding.JsonList[*url.TxID]    `json:"produced,omitempty"`
-		Height     int64                           `json:"height"`
+		Height     uint64                          `json:"height"`
 		ChainState encoding.JsonList[*string]      `json:"chainState,omitempty"`
 		Receipts   encoding.JsonList[*TxReceipt]   `json:"receipts,omitempty"`
 		Signers    encoding.JsonList[SignatureSet] `json:"signers,omitempty"`
@@ -4430,7 +4431,7 @@ func (v *ResponseByTxId) MarshalJSON() ([]byte, error) {
 func (v *ResponseChainEntry) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type    protocol.ChainType         `json:"type,omitempty"`
-		Height  int64                      `json:"height"`
+		Height  uint64                     `json:"height"`
 		Entry   *string                    `json:"entry,omitempty"`
 		State   encoding.JsonList[*string] `json:"state,omitempty"`
 		Receipt *GeneralReceipt            `json:"receipt,omitempty"`
@@ -4586,13 +4587,13 @@ func (v *SignatureSet) MarshalJSON() ([]byte, error) {
 
 func (v *TxReceipt) MarshalJSON() ([]byte, error) {
 	u := struct {
-		LocalBlock     uint64           `json:"localBlock,omitempty"`
-		DirectoryBlock uint64           `json:"directoryBlock,omitempty"`
-		Proof          protocol.Receipt `json:"proof,omitempty"`
-		Receipt        protocol.Receipt `json:"receipt,omitempty"`
-		Error          string           `json:"error,omitempty"`
-		Account        *url.URL         `json:"account,omitempty"`
-		Chain          string           `json:"chain,omitempty"`
+		LocalBlock     uint64          `json:"localBlock,omitempty"`
+		DirectoryBlock uint64          `json:"directoryBlock,omitempty"`
+		Proof          managed.Receipt `json:"proof,omitempty"`
+		Receipt        managed.Receipt `json:"receipt,omitempty"`
+		Error          string          `json:"error,omitempty"`
+		Account        *url.URL        `json:"account,omitempty"`
+		Chain          string          `json:"chain,omitempty"`
 	}{}
 	u.LocalBlock = v.GeneralReceipt.LocalBlock
 	u.DirectoryBlock = v.GeneralReceipt.DirectoryBlock
@@ -4672,11 +4673,11 @@ func (v *DirectoryQueryResult) UnmarshalJSON(data []byte) error {
 
 func (v *GeneralReceipt) UnmarshalJSON(data []byte) error {
 	u := struct {
-		LocalBlock     uint64           `json:"localBlock,omitempty"`
-		DirectoryBlock uint64           `json:"directoryBlock,omitempty"`
-		Proof          protocol.Receipt `json:"proof,omitempty"`
-		Receipt        protocol.Receipt `json:"receipt,omitempty"`
-		Error          string           `json:"error,omitempty"`
+		LocalBlock     uint64          `json:"localBlock,omitempty"`
+		DirectoryBlock uint64          `json:"directoryBlock,omitempty"`
+		Proof          managed.Receipt `json:"proof,omitempty"`
+		Receipt        managed.Receipt `json:"receipt,omitempty"`
+		Error          string          `json:"error,omitempty"`
 	}{}
 	u.LocalBlock = v.LocalBlock
 	u.DirectoryBlock = v.DirectoryBlock
@@ -4688,7 +4689,7 @@ func (v *GeneralReceipt) UnmarshalJSON(data []byte) error {
 	}
 	v.LocalBlock = u.LocalBlock
 	v.DirectoryBlock = u.DirectoryBlock
-	if !(u.Proof.Equal(&protocol.Receipt{})) {
+	if !(u.Proof.Equal(&managed.Receipt{})) {
 		v.Proof = u.Proof
 	} else {
 		v.Proof = u.Receipt
@@ -5003,7 +5004,7 @@ func (v *ResponseByTxId) UnmarshalJSON(data []byte) error {
 		Envelope   *protocol.Envelope              `json:"envelope,omitempty"`
 		Status     *protocol.TransactionStatus     `json:"status,omitempty"`
 		Produced   encoding.JsonList[*url.TxID]    `json:"produced,omitempty"`
-		Height     int64                           `json:"height"`
+		Height     uint64                          `json:"height"`
 		ChainState encoding.JsonList[*string]      `json:"chainState,omitempty"`
 		Receipts   encoding.JsonList[*TxReceipt]   `json:"receipts,omitempty"`
 		Signers    encoding.JsonList[SignatureSet] `json:"signers,omitempty"`
@@ -5043,7 +5044,7 @@ func (v *ResponseByTxId) UnmarshalJSON(data []byte) error {
 func (v *ResponseChainEntry) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type    protocol.ChainType         `json:"type,omitempty"`
-		Height  int64                      `json:"height"`
+		Height  uint64                     `json:"height"`
 		Entry   *string                    `json:"entry,omitempty"`
 		State   encoding.JsonList[*string] `json:"state,omitempty"`
 		Receipt *GeneralReceipt            `json:"receipt,omitempty"`
@@ -5313,13 +5314,13 @@ func (v *SignatureSet) UnmarshalJSON(data []byte) error {
 
 func (v *TxReceipt) UnmarshalJSON(data []byte) error {
 	u := struct {
-		LocalBlock     uint64           `json:"localBlock,omitempty"`
-		DirectoryBlock uint64           `json:"directoryBlock,omitempty"`
-		Proof          protocol.Receipt `json:"proof,omitempty"`
-		Receipt        protocol.Receipt `json:"receipt,omitempty"`
-		Error          string           `json:"error,omitempty"`
-		Account        *url.URL         `json:"account,omitempty"`
-		Chain          string           `json:"chain,omitempty"`
+		LocalBlock     uint64          `json:"localBlock,omitempty"`
+		DirectoryBlock uint64          `json:"directoryBlock,omitempty"`
+		Proof          managed.Receipt `json:"proof,omitempty"`
+		Receipt        managed.Receipt `json:"receipt,omitempty"`
+		Error          string          `json:"error,omitempty"`
+		Account        *url.URL        `json:"account,omitempty"`
+		Chain          string          `json:"chain,omitempty"`
 	}{}
 	u.LocalBlock = v.GeneralReceipt.LocalBlock
 	u.DirectoryBlock = v.GeneralReceipt.DirectoryBlock
@@ -5333,7 +5334,7 @@ func (v *TxReceipt) UnmarshalJSON(data []byte) error {
 	}
 	v.GeneralReceipt.LocalBlock = u.LocalBlock
 	v.GeneralReceipt.DirectoryBlock = u.DirectoryBlock
-	if !(u.Proof.Equal(&protocol.Receipt{})) {
+	if !(u.Proof.Equal(&managed.Receipt{})) {
 		v.GeneralReceipt.Proof = u.Proof
 	} else {
 		v.GeneralReceipt.Proof = u.Receipt

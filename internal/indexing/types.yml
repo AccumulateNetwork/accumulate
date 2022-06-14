@@ -70,7 +70,18 @@ DirectoryIndex:
     - name: Count
       type: uvarint
 
+DirectoryEntry:
+  fields:
+    - name: Account
+      type: url
+      pointer: true
+
 DataIndex:
   fields:
     - name: Count
       type: uvarint
+
+DataEntry:
+  fields:
+    - name: Hash
+      type: hash

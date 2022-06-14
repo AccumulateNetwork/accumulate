@@ -413,7 +413,7 @@ func (v *AccountAuthOperationType) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Account Auth Operation Type
+// String returns the name of the Account Auth Operation Type.
 func (v AccountAuthOperationType) String() string {
 	switch v {
 	case AccountAuthOperationTypeUnknown:
@@ -485,7 +485,7 @@ func (v *AccountType) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Account Type
+// String returns the name of the Account Type.
 func (v AccountType) String() string {
 	switch v {
 	case AccountTypeUnknown:
@@ -595,7 +595,7 @@ func (v *AllowedTransactionBit) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Allowed Transaction Bit
+// String returns the name of the Allowed Transaction Bit.
 func (v AllowedTransactionBit) String() string {
 	switch v {
 	case AllowedTransactionBitUpdateKeyPage:
@@ -655,7 +655,7 @@ func (v *BookType) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Book Type
+// String returns the name of the Book Type.
 func (v BookType) String() string {
 	switch v {
 	case BookTypeNormal:
@@ -719,7 +719,7 @@ func (v *ChainType) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Chain Type
+// String returns the name of the Chain Type.
 func (v ChainType) String() string {
 	switch v {
 	case ChainTypeUnknown:
@@ -791,7 +791,7 @@ func (v *DataEntryType) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Data Entry Type
+// String returns the name of the Data Entry Type.
 func (v DataEntryType) String() string {
 	switch v {
 	case DataEntryTypeUnknown:
@@ -855,7 +855,7 @@ func (v *ErrorCode) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Error Code
+// String returns the name of the Error Code.
 func (v ErrorCode) String() string {
 	switch v {
 	case ErrorCodeOK:
@@ -1055,7 +1055,7 @@ func (v *KeyPageOperationType) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Key Page Operation Type
+// String returns the name of the Key Page Operation Type.
 func (v KeyPageOperationType) String() string {
 	switch v {
 	case KeyPageOperationTypeUnknown:
@@ -1131,7 +1131,7 @@ func (v *ObjectType) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Object Type
+// String returns the name of the Object Type.
 func (v ObjectType) String() string {
 	switch v {
 	case ObjectTypeUnknown:
@@ -1195,7 +1195,7 @@ func (v *SignatureType) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Signature Type
+// String returns the name of the Signature Type.
 func (v SignatureType) String() string {
 	switch v {
 	case SignatureTypeUnknown:
@@ -1299,7 +1299,7 @@ func (v *TransactionMax) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Transaction Max
+// String returns the name of the Transaction Max.
 func (v TransactionMax) String() string {
 	switch v {
 	case TransactionMaxUser:
@@ -1363,7 +1363,7 @@ func (v *TransactionType) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Transaction Type
+// String returns the name of the Transaction Type.
 func (v TransactionType) String() string {
 	switch v {
 	case TransactionTypeUnknown:
@@ -1545,7 +1545,7 @@ func (v *VoteType) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Vote Type
+// String returns the name of the Vote Type.
 func (v VoteType) String() string {
 	switch v {
 	case VoteTypeAccept:
