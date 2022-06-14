@@ -59,7 +59,7 @@ fi
 section "Test major block API on DN"
 accumulate --use-unencrypted-wallet blocks major acc://dn 1 1 >/tmp/output.txt
 FILESIZE=$(stat -c%s "/tmp/output.txt")
-if [ "${FILESIZE}" -lt "400" ]; then
+if [ "${FILESIZE}" -lt "300" ]; then
   dieBlocksApi "major block result set too small: ${FILESIZE}"
 fi
 

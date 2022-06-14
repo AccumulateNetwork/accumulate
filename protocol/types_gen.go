@@ -9902,7 +9902,7 @@ func (v *UpdateNetworkGlobals) MarshalBinary() ([]byte, error) {
 
 	writer.WriteEnum(1, v.Type())
 	if !(v.OperatorAcceptThreshold == nil) {
-		writer.WriteValue(2, v.OperatorAcceptThreshold)
+		writer.WriteValue(2, v.OperatorAcceptThreshold.MarshalBinary)
 	}
 	if !(len(v.MajorBlockSchedule) == 0) {
 		writer.WriteString(3, v.MajorBlockSchedule)

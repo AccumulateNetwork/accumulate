@@ -60,13 +60,6 @@ func (g *GlobalValues) Store(net *config.Describe, getState getStateFunc, putSta
 	return nil
 }
 
-func (g *GlobalValues) StoreGlobals(net *config.Network, getState getStateFunc, putState putStateFunc) error {
-	if err := storeAccount(net.NodeUrl(protocol.Globals), labelGlobals, getState, putState, g.Globals); err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
-	}
-	return nil
-}
-
 func (g *GlobalValues) ParseOracle(entry protocol.DataEntry) error {
 	return parseEntryAs(labelOracle, entry, new(protocol.AcmeOracle), &g.Oracle)
 }

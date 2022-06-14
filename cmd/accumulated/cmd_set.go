@@ -4,11 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/gorhill/cronexpr"
 	neturl "net/url"
 	"strconv"
 	"strings"
 
+	"github.com/gorhill/cronexpr"
 	"github.com/spf13/cobra"
 	"github.com/tendermint/tendermint/privval"
 	"gitlab.com/accumulatenetwork/accumulate/config"
@@ -85,7 +85,7 @@ func setOracle(_ *cobra.Command, args []string) {
 
 func setSchedule(_ *cobra.Command, args []string) {
 	cfg, client := loadConfigAndClient()
-	if cfg.Accumulate.Network.Type != config.Directory {
+	if cfg.Accumulate.NetworkType != config.Directory {
 		fatalf("node is not a directory node")
 	}
 
@@ -94,7 +94,7 @@ func setSchedule(_ *cobra.Command, args []string) {
 
 	globals := new(protocol.DataAccount)
 	req := new(api.GeneralQuery)
-	req.Url = cfg.Accumulate.Network.NodeUrl(protocol.Globals)
+	req.Url = cfg.Accumulate.Describe.NodeUrl(protocol.Globals)
 	_, err = client.QueryAccountAs(context.Background(), req, globals)
 	checkf(err, "get globals")
 
@@ -104,7 +104,7 @@ func setSchedule(_ *cobra.Command, args []string) {
 
 	values.Globals.MajorBlockSchedule = args[0]
 	transaction := new(protocol.Transaction)
-	transaction.Header.Principal = cfg.Accumulate.Network.NodeUrl(protocol.Globals)
+	transaction.Header.Principal = cfg.Accumulate.Describe.NodeUrl(protocol.Globals)
 	transaction.Body = &protocol.WriteData{
 		Entry:        values.FormatGlobals(),
 		WriteToState: true,
@@ -145,7 +145,7 @@ func submitTransactionWithNode(cfg *config.Config, client *client.Client, transa
 	req := new(api.GeneralQuery)
 	req.Url = account.GetAuth().KeyBook().JoinPath("1")
 	_, err := client.QueryAccountAs(context.Background(), req, signer)
-	checkf(err, "get oracle signer")
+	checkf(err, "get signer")
 
 	pv, err := privval.LoadFilePV(
 		cfg.PrivValidator.KeyFile(),
