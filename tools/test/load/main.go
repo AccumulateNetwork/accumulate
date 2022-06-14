@@ -17,12 +17,14 @@ import (
 )
 
 var serverUrl string
+var parallelism int
 
 func main() {
 	flag.StringVar(&serverUrl, "s", "http://127.0.1.1:26660/v2", "Accumulate server URL")
+	flag.IntVar(&parallelism, "p", 5, "Number of parallel clients")
 	flag.Parse()
 
-	parallelization := 5
+	parallelization := parallelism
 	c := make(chan int)
 
 	// run clients in parallel
@@ -55,6 +57,10 @@ func main() {
 	wg.Wait()
 }
 
+func init() {
+
+}
+
 // Init new client from server URL input using client.go
 func initClient(server string) error {
 	// Create new client on localhost
@@ -76,7 +82,7 @@ func initClient(server string) error {
 	start := time.Now()
 
 	// run key generation in cycle
-	for i := 0; i < 50; i++ {
+	for i := 0; i < 100; i++ {
 		// create accounts and store them
 		acc, _ := createAccount(i)
 
