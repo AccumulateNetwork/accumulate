@@ -225,7 +225,7 @@ BALANCE=$(accumulate -j account get ${LITE_TOK} | jq -r .data.balance)
 section "Burn tokens"
 wait-for cli-tx token burn ${LITE_TOK} 100
 BALANCE=$(accumulate -j account get ${LITE_TOK} | jq -r .data.balance)
-[ "$BALANCE" -eq 1230123456789 ] && success || die "${LITE_TOK} should have 1230123456789 test.acme tokens but has ${BALANCE}"
+[ "$BALANCE" -eq 230123456789 ] && success || die "${LITE_TOK} should have 1230123456789 test.acme tokens but has ${BALANCE}"
 
 section "Create lite data account and write the data"
 ACCOUNT_ID=$(accumulate -j account create data --lite test.acme test-1-0 "Factom PRO" "Tutorial" | jq -r .accountUrl)
