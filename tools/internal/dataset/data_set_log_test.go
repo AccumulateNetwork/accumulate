@@ -73,7 +73,7 @@ func TestDataSetLog(t *testing.T) {
 		defer f.Close()
 		scanner := bufio.NewScanner(f)
 		t.Logf("%s\n", file)
-		// optionally, resize scanner's capacity for lines over 64K, see next example
+
 		for scanner.Scan() {
 			fmt.Println(scanner.Text())
 		}
