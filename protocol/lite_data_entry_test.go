@@ -34,7 +34,7 @@ func TestLiteDataEntry(t *testing.T) {
 	//create a chainId
 	chainId := ComputeLiteDataAccountId(&firstEntry)
 
-	var factomChainId [64]byte
+	var factomChainId [32]byte
 	_, err := hex.Decode(factomChainId[:], []byte("b36c1c4073305a41edc6353a094329c24ffa54c0a47fb56227a04477bcb78923"))
 	if err != nil {
 		t.Fatal(err)
