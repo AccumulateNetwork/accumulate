@@ -103,6 +103,14 @@ type RequestKeyPageIndex struct {
 	extraData []byte
 }
 
+type RequestMajorBlocks struct {
+	fieldsSet []bool
+	Account   *url.URL `json:"account,omitempty" form:"account" query:"account" validate:"required"`
+	Start     uint64   `json:"start,omitempty" form:"start" query:"start" validate:"required"`
+	Limit     uint64   `json:"limit,omitempty" form:"limit" query:"limit" validate:"required"`
+	extraData []byte
+}
+
 type RequestMinorBlocks struct {
 	fieldsSet       []bool
 	Account         *url.URL        `json:"account,omitempty" form:"account" query:"account" validate:"required"`
@@ -192,6 +200,24 @@ type ResponseKeyPageIndex struct {
 	extraData []byte
 }
 
+type ResponseMajorBlocks struct {
+	fieldsSet   []bool
+	TotalBlocks uint64                `json:"totalBlocks" form:"totalBlocks" query:"totalBlocks" validate:"required"`
+	Entries     []*ResponseMajorEntry `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
+	extraData   []byte
+}
+
+type ResponseMajorEntry struct {
+	fieldsSet []bool
+	// MajorBlockIndex is the index of the block. Only include when indexing the root anchor chain.
+	MajorBlockIndex uint64 `json:"majorBlockIndex,omitempty" form:"majorBlockIndex" query:"majorBlockIndex" validate:"required"`
+	// MajorBlockTime is the start time of the block..
+	MajorBlockTime *time.Time `json:"majorBlockTime,omitempty" form:"majorBlockTime" query:"majorBlockTime" validate:"required"`
+	// MinorBlocks the minor blocks within this block (excluding transactions).
+	MinorBlocks []*ResponseMinorEntry `json:"minorBlocks,omitempty" form:"minorBlocks" query:"minorBlocks" validate:"required"`
+	extraData   []byte
+}
+
 type ResponseMinorBlocks struct {
 	fieldsSet   []bool
 	TotalBlocks uint64                `json:"totalBlocks" form:"totalBlocks" query:"totalBlocks" validate:"required"`
@@ -261,6 +287,8 @@ func (*RequestDataEntrySet) Type() QueryType { return QueryTypeDataSet }
 func (*RequestDirectory) Type() QueryType { return QueryTypeDirectoryUrl }
 
 func (*RequestKeyPageIndex) Type() QueryType { return QueryTypeKeyPageIndex }
+
+func (*RequestMajorBlocks) Type() QueryType { return QueryTypeMajorBlocks }
 
 func (*RequestMinorBlocks) Type() QueryType { return QueryTypeMinorBlocks }
 
@@ -406,6 +434,20 @@ func (v *RequestKeyPageIndex) Copy() *RequestKeyPageIndex {
 }
 
 func (v *RequestKeyPageIndex) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *RequestMajorBlocks) Copy() *RequestMajorBlocks {
+	u := new(RequestMajorBlocks)
+
+	if v.Account != nil {
+		u.Account = (v.Account).Copy()
+	}
+	u.Start = v.Start
+	u.Limit = v.Limit
+
+	return u
+}
+
+func (v *RequestMajorBlocks) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *RequestMinorBlocks) Copy() *RequestMinorBlocks {
 	u := new(RequestMinorBlocks)
@@ -589,6 +631,42 @@ func (v *ResponseKeyPageIndex) Copy() *ResponseKeyPageIndex {
 }
 
 func (v *ResponseKeyPageIndex) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *ResponseMajorBlocks) Copy() *ResponseMajorBlocks {
+	u := new(ResponseMajorBlocks)
+
+	u.TotalBlocks = v.TotalBlocks
+	u.Entries = make([]*ResponseMajorEntry, len(v.Entries))
+	for i, v := range v.Entries {
+		if v != nil {
+			u.Entries[i] = (v).Copy()
+		}
+	}
+
+	return u
+}
+
+func (v *ResponseMajorBlocks) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *ResponseMajorEntry) Copy() *ResponseMajorEntry {
+	u := new(ResponseMajorEntry)
+
+	u.MajorBlockIndex = v.MajorBlockIndex
+	if v.MajorBlockTime != nil {
+		u.MajorBlockTime = new(time.Time)
+		*u.MajorBlockTime = *v.MajorBlockTime
+	}
+	u.MinorBlocks = make([]*ResponseMinorEntry, len(v.MinorBlocks))
+	for i, v := range v.MinorBlocks {
+		if v != nil {
+			u.MinorBlocks[i] = (v).Copy()
+		}
+	}
+
+	return u
+}
+
+func (v *ResponseMajorEntry) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *ResponseMinorBlocks) Copy() *ResponseMinorBlocks {
 	u := new(ResponseMinorBlocks)
@@ -870,6 +948,25 @@ func (v *RequestKeyPageIndex) Equal(u *RequestKeyPageIndex) bool {
 	return true
 }
 
+func (v *RequestMajorBlocks) Equal(u *RequestMajorBlocks) bool {
+	switch {
+	case v.Account == u.Account:
+		// equal
+	case v.Account == nil || u.Account == nil:
+		return false
+	case !((v.Account).Equal(u.Account)):
+		return false
+	}
+	if !(v.Start == u.Start) {
+		return false
+	}
+	if !(v.Limit == u.Limit) {
+		return false
+	}
+
+	return true
+}
+
 func (v *RequestMinorBlocks) Equal(u *RequestMinorBlocks) bool {
 	switch {
 	case v.Account == u.Account:
@@ -1132,6 +1229,46 @@ func (v *ResponseKeyPageIndex) Equal(u *ResponseKeyPageIndex) bool {
 	return true
 }
 
+func (v *ResponseMajorBlocks) Equal(u *ResponseMajorBlocks) bool {
+	if !(v.TotalBlocks == u.TotalBlocks) {
+		return false
+	}
+	if len(v.Entries) != len(u.Entries) {
+		return false
+	}
+	for i := range v.Entries {
+		if !((v.Entries[i]).Equal(u.Entries[i])) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (v *ResponseMajorEntry) Equal(u *ResponseMajorEntry) bool {
+	if !(v.MajorBlockIndex == u.MajorBlockIndex) {
+		return false
+	}
+	switch {
+	case v.MajorBlockTime == u.MajorBlockTime:
+		// equal
+	case v.MajorBlockTime == nil || u.MajorBlockTime == nil:
+		return false
+	case !(*v.MajorBlockTime == *u.MajorBlockTime):
+		return false
+	}
+	if len(v.MinorBlocks) != len(u.MinorBlocks) {
+		return false
+	}
+	for i := range v.MinorBlocks {
+		if !((v.MinorBlocks[i]).Equal(u.MinorBlocks[i])) {
+			return false
+		}
+	}
+
+	return true
+}
+
 func (v *ResponseMinorBlocks) Equal(u *ResponseMinorBlocks) bool {
 	if !(v.TotalBlocks == u.TotalBlocks) {
 		return false
@@ -1343,7 +1480,7 @@ func (v *DirectoryQueryResult) MarshalBinary() ([]byte, error) {
 	}
 	if !(len(v.ExpandedEntries) == 0) {
 		for _, v := range v.ExpandedEntries {
-			writer.WriteValue(2, v)
+			writer.WriteValue(2, v.MarshalBinary)
 		}
 	}
 	writer.WriteUint(3, v.Total)
@@ -1391,7 +1528,7 @@ func (v *GeneralReceipt) MarshalBinary() ([]byte, error) {
 		writer.WriteUint(2, v.DirectoryBlock)
 	}
 	if !((v.Proof).Equal(new(managed.Receipt))) {
-		writer.WriteValue(3, &v.Proof)
+		writer.WriteValue(3, v.Proof.MarshalBinary)
 	}
 	if !(len(v.Error) == 0) {
 		writer.WriteString(4, v.Error)
@@ -1874,6 +2011,68 @@ func (v *RequestKeyPageIndex) IsValid() error {
 	}
 }
 
+var fieldNames_RequestMajorBlocks = []string{
+	1: "Type",
+	2: "Account",
+	3: "Start",
+	4: "Limit",
+}
+
+func (v *RequestMajorBlocks) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Account == nil) {
+		writer.WriteUrl(2, v.Account)
+	}
+	if !(v.Start == 0) {
+		writer.WriteUint(3, v.Start)
+	}
+	if !(v.Limit == 0) {
+		writer.WriteUint(4, v.Limit)
+	}
+
+	_, _, err := writer.Reset(fieldNames_RequestMajorBlocks)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), err
+}
+
+func (v *RequestMajorBlocks) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Account is missing")
+	} else if v.Account == nil {
+		errs = append(errs, "field Account is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Start is missing")
+	} else if v.Start == 0 {
+		errs = append(errs, "field Start is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Limit is missing")
+	} else if v.Limit == 0 {
+		errs = append(errs, "field Limit is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_RequestMinorBlocks = []string{
 	1: "Type",
 	2: "Account",
@@ -2089,15 +2288,15 @@ func (v *ResponseAccount) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.Account == nil) {
-		writer.WriteValue(1, v.Account)
+		writer.WriteValue(1, v.Account.MarshalBinary)
 	}
 	if !(len(v.ChainState) == 0) {
 		for _, v := range v.ChainState {
-			writer.WriteValue(2, &v)
+			writer.WriteValue(2, v.MarshalBinary)
 		}
 	}
 	if !(v.Receipt == nil) {
-		writer.WriteValue(3, v.Receipt)
+		writer.WriteValue(3, v.Receipt.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_ResponseAccount)
@@ -2151,10 +2350,10 @@ func (v *ResponseByTxId) MarshalBinary() ([]byte, error) {
 		writer.WriteTxid(1, v.TxId)
 	}
 	if !(v.Envelope == nil) {
-		writer.WriteValue(2, v.Envelope)
+		writer.WriteValue(2, v.Envelope.MarshalBinary)
 	}
 	if !(v.Status == nil) {
-		writer.WriteValue(3, v.Status)
+		writer.WriteValue(3, v.Status.MarshalBinary)
 	}
 	if !(len(v.Produced) == 0) {
 		for _, v := range v.Produced {
@@ -2169,12 +2368,12 @@ func (v *ResponseByTxId) MarshalBinary() ([]byte, error) {
 	}
 	if !(len(v.Receipts) == 0) {
 		for _, v := range v.Receipts {
-			writer.WriteValue(7, v)
+			writer.WriteValue(7, v.MarshalBinary)
 		}
 	}
 	if !(len(v.Signers) == 0) {
 		for _, v := range v.Signers {
-			writer.WriteValue(8, &v)
+			writer.WriteValue(8, v.MarshalBinary)
 		}
 	}
 
@@ -2263,7 +2462,7 @@ func (v *ResponseChainEntry) MarshalBinary() ([]byte, error) {
 		}
 	}
 	if !(v.Receipt == nil) {
-		writer.WriteValue(5, v.Receipt)
+		writer.WriteValue(5, v.Receipt.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_ResponseChainEntry)
@@ -2384,7 +2583,7 @@ func (v *ResponseDataEntry) MarshalBinary() ([]byte, error) {
 		writer.WriteHash(1, &v.EntryHash)
 	}
 	if !(v.Entry == nil) {
-		writer.WriteValue(2, v.Entry)
+		writer.WriteValue(2, v.Entry.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_ResponseDataEntry)
@@ -2430,7 +2629,7 @@ func (v *ResponseDataEntrySet) MarshalBinary() ([]byte, error) {
 
 	if !(len(v.DataEntries) == 0) {
 		for _, v := range v.DataEntries {
-			writer.WriteValue(1, &v)
+			writer.WriteValue(1, v.MarshalBinary)
 		}
 	}
 	if !(v.Total == 0) {
@@ -2522,6 +2721,111 @@ func (v *ResponseKeyPageIndex) IsValid() error {
 	}
 }
 
+var fieldNames_ResponseMajorBlocks = []string{
+	1: "TotalBlocks",
+	2: "Entries",
+}
+
+func (v *ResponseMajorBlocks) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteUint(1, v.TotalBlocks)
+	if !(len(v.Entries) == 0) {
+		for _, v := range v.Entries {
+			writer.WriteValue(2, v.MarshalBinary)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_ResponseMajorBlocks)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), err
+}
+
+func (v *ResponseMajorBlocks) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field TotalBlocks is missing")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Entries is missing")
+	} else if len(v.Entries) == 0 {
+		errs = append(errs, "field Entries is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_ResponseMajorEntry = []string{
+	1: "MajorBlockIndex",
+	2: "MajorBlockTime",
+	3: "MinorBlocks",
+}
+
+func (v *ResponseMajorEntry) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.MajorBlockIndex == 0) {
+		writer.WriteUint(1, v.MajorBlockIndex)
+	}
+	if !(v.MajorBlockTime == nil) {
+		writer.WriteTime(2, *v.MajorBlockTime)
+	}
+	if !(len(v.MinorBlocks) == 0) {
+		for _, v := range v.MinorBlocks {
+			writer.WriteValue(3, v.MarshalBinary)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_ResponseMajorEntry)
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), err
+}
+
+func (v *ResponseMajorEntry) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field MajorBlockIndex is missing")
+	} else if v.MajorBlockIndex == 0 {
+		errs = append(errs, "field MajorBlockIndex is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field MajorBlockTime is missing")
+	} else if v.MajorBlockTime == nil {
+		errs = append(errs, "field MajorBlockTime is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field MinorBlocks is missing")
+	} else if len(v.MinorBlocks) == 0 {
+		errs = append(errs, "field MinorBlocks is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_ResponseMinorBlocks = []string{
 	1: "TotalBlocks",
 	2: "Entries",
@@ -2534,7 +2838,7 @@ func (v *ResponseMinorBlocks) MarshalBinary() ([]byte, error) {
 	writer.WriteUint(1, v.TotalBlocks)
 	if !(len(v.Entries) == 0) {
 		for _, v := range v.Entries {
-			writer.WriteValue(2, v)
+			writer.WriteValue(2, v.MarshalBinary)
 		}
 	}
 
@@ -2596,7 +2900,7 @@ func (v *ResponseMinorEntry) MarshalBinary() ([]byte, error) {
 	}
 	if !(len(v.Transactions) == 0) {
 		for _, v := range v.Transactions {
-			writer.WriteValue(5, v)
+			writer.WriteValue(5, v.MarshalBinary)
 		}
 	}
 
@@ -2704,7 +3008,7 @@ func (v *ResponseTxHistory) MarshalBinary() ([]byte, error) {
 	writer.WriteUint(3, v.Total)
 	if !(len(v.Transactions) == 0) {
 		for _, v := range v.Transactions {
-			writer.WriteValue(4, &v)
+			writer.WriteValue(4, v.MarshalBinary)
 		}
 	}
 
@@ -2754,11 +3058,11 @@ func (v *SignatureSet) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.Account == nil) {
-		writer.WriteValue(1, v.Account)
+		writer.WriteValue(1, v.Account.MarshalBinary)
 	}
 	if !(len(v.Signatures) == 0) {
 		for _, v := range v.Signatures {
-			writer.WriteValue(2, v)
+			writer.WriteValue(2, v.MarshalBinary)
 		}
 	}
 
@@ -2804,7 +3108,7 @@ func (v *TxReceipt) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	writer.WriteValue(1, &v.GeneralReceipt)
+	writer.WriteValue(1, v.GeneralReceipt.MarshalBinary)
 	if !(v.Account == nil) {
 		writer.WriteUrl(2, v.Account)
 	}
@@ -3232,6 +3536,39 @@ func (v *RequestKeyPageIndex) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
+func (v *RequestMajorBlocks) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *RequestMajorBlocks) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType QueryType
+	if x := new(QueryType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+	if x, ok := reader.ReadUrl(2); ok {
+		v.Account = x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.Start = x
+	}
+	if x, ok := reader.ReadUint(4); ok {
+		v.Limit = x
+	}
+
+	seen, err := reader.Reset(fieldNames_RequestMajorBlocks)
+	if err != nil {
+		return err
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	return err
+}
+
 func (v *RequestMinorBlocks) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -3572,6 +3909,63 @@ func (v *ResponseKeyPageIndex) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_ResponseKeyPageIndex)
+	if err != nil {
+		return err
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	return err
+}
+
+func (v *ResponseMajorBlocks) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *ResponseMajorBlocks) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUint(1); ok {
+		v.TotalBlocks = x
+	}
+	for {
+		if x := new(ResponseMajorEntry); reader.ReadValue(2, x.UnmarshalBinary) {
+			v.Entries = append(v.Entries, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_ResponseMajorBlocks)
+	if err != nil {
+		return err
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	return err
+}
+
+func (v *ResponseMajorEntry) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *ResponseMajorEntry) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUint(1); ok {
+		v.MajorBlockIndex = x
+	}
+	if x, ok := reader.ReadTime(2); ok {
+		v.MajorBlockTime = &x
+	}
+	for {
+		if x := new(ResponseMinorEntry); reader.ReadValue(3, x.UnmarshalBinary) {
+			v.MinorBlocks = append(v.MinorBlocks, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_ResponseMajorEntry)
 	if err != nil {
 		return err
 	}
@@ -3937,6 +4331,20 @@ func (v *RequestKeyPageIndex) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *RequestMajorBlocks) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type    QueryType `json:"type"`
+		Account *url.URL  `json:"account,omitempty"`
+		Start   uint64    `json:"start,omitempty"`
+		Limit   uint64    `json:"limit,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Account = v.Account
+	u.Start = v.Start
+	u.Limit = v.Limit
+	return json.Marshal(&u)
+}
+
 func (v *RequestMinorBlocks) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type            QueryType       `json:"type"`
@@ -4091,6 +4499,28 @@ func (v *ResponseKeyPageIndex) MarshalJSON() ([]byte, error) {
 	u.Signer = v.Signer
 	u.KeyPage = v.Signer
 	u.Index = v.Index
+	return json.Marshal(&u)
+}
+
+func (v *ResponseMajorBlocks) MarshalJSON() ([]byte, error) {
+	u := struct {
+		TotalBlocks uint64                                 `json:"totalBlocks"`
+		Entries     encoding.JsonList[*ResponseMajorEntry] `json:"entries,omitempty"`
+	}{}
+	u.TotalBlocks = v.TotalBlocks
+	u.Entries = v.Entries
+	return json.Marshal(&u)
+}
+
+func (v *ResponseMajorEntry) MarshalJSON() ([]byte, error) {
+	u := struct {
+		MajorBlockIndex uint64                                 `json:"majorBlockIndex,omitempty"`
+		MajorBlockTime  *time.Time                             `json:"majorBlockTime,omitempty"`
+		MinorBlocks     encoding.JsonList[*ResponseMinorEntry] `json:"minorBlocks,omitempty"`
+	}{}
+	u.MajorBlockIndex = v.MajorBlockIndex
+	u.MajorBlockTime = v.MajorBlockTime
+	u.MinorBlocks = v.MinorBlocks
 	return json.Marshal(&u)
 }
 
@@ -4451,6 +4881,29 @@ func (v *RequestKeyPageIndex) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *RequestMajorBlocks) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type    QueryType `json:"type"`
+		Account *url.URL  `json:"account,omitempty"`
+		Start   uint64    `json:"start,omitempty"`
+		Limit   uint64    `json:"limit,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Account = v.Account
+	u.Start = v.Start
+	u.Limit = v.Limit
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Account = u.Account
+	v.Start = u.Start
+	v.Limit = u.Limit
+	return nil
+}
+
 func (v *RequestMinorBlocks) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type            QueryType       `json:"type"`
@@ -4722,6 +5175,39 @@ func (v *ResponseKeyPageIndex) UnmarshalJSON(data []byte) error {
 		v.Signer = u.KeyPage
 	}
 	v.Index = u.Index
+	return nil
+}
+
+func (v *ResponseMajorBlocks) UnmarshalJSON(data []byte) error {
+	u := struct {
+		TotalBlocks uint64                                 `json:"totalBlocks"`
+		Entries     encoding.JsonList[*ResponseMajorEntry] `json:"entries,omitempty"`
+	}{}
+	u.TotalBlocks = v.TotalBlocks
+	u.Entries = v.Entries
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.TotalBlocks = u.TotalBlocks
+	v.Entries = u.Entries
+	return nil
+}
+
+func (v *ResponseMajorEntry) UnmarshalJSON(data []byte) error {
+	u := struct {
+		MajorBlockIndex uint64                                 `json:"majorBlockIndex,omitempty"`
+		MajorBlockTime  *time.Time                             `json:"majorBlockTime,omitempty"`
+		MinorBlocks     encoding.JsonList[*ResponseMinorEntry] `json:"minorBlocks,omitempty"`
+	}{}
+	u.MajorBlockIndex = v.MajorBlockIndex
+	u.MajorBlockTime = v.MajorBlockTime
+	u.MinorBlocks = v.MinorBlocks
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.MajorBlockIndex = u.MajorBlockIndex
+	v.MajorBlockTime = u.MajorBlockTime
+	v.MinorBlocks = u.MinorBlocks
 	return nil
 }
 

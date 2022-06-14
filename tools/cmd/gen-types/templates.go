@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 	"text/template"
-	"unicode"
 
 	"gitlab.com/accumulatenetwork/accumulate/tools/internal/typegen"
 )
@@ -221,55 +220,9 @@ func (f *Field) IsOptional() bool        { return f.Optional }
 func (f *Field) IsRequired() bool        { return !f.Optional }
 func (f *Field) OmitEmpty() bool         { return !f.KeepEmpty }
 
-func lcName(s string) string {
-	if s == "" {
-		return ""
-	}
-	return strings.ToLower(s[:1]) + s[1:]
-}
-
-func natural(name string) string {
-	var splits []int
-
-	var wasLower bool
-	for i, r := range name {
-		if wasLower && unicode.IsUpper(r) {
-			splits = append(splits, i)
-		}
-		wasLower = unicode.IsLower(r)
-	}
-
-	w := new(strings.Builder)
-	w.Grow(len(name) + len(splits))
-
-	var word string
-	var split int
-	var offset int
-	for len(splits) > 0 {
-		split, splits = splits[0], splits[1:]
-		split -= offset
-		offset += split
-		word, name = name[:split], name[split:]
-		w.WriteString(strings.ToLower(word))
-		w.WriteRune(' ')
-	}
-
-	w.WriteString(strings.ToLower(name))
-	return w.String()
-}
-
-func makeMap(v ...interface{}) map[string]interface{} {
-	m := make(map[string]interface{}, len(v)/2)
-	for len(v) > 1 {
-		m[fmt.Sprint(v[0])] = v[1]
-		v = v[2:]
-	}
-	return m
-}
-
 var Templates = typegen.NewTemplateLibrary(template.FuncMap{
-	"lcName":  lcName,
-	"map":     makeMap,
-	"natural": natural,
+	"lcName":  typegen.LowerFirstRune,
+	"map":     typegen.MakeMap,
+	"natural": typegen.Natural,
 	"debug":   fmt.Printf,
 })

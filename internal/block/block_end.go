@@ -23,7 +23,7 @@ func (m *Executor) EndBlock(block *Block) error {
 	// Check for missing synthetic transactions. Load the ledger synchronously,
 	// request transactions asynchronously.
 	var synthLedger *protocol.SyntheticLedger
-	err := block.Batch.Account(m.Network.Synthetic()).GetStateAs(&synthLedger)
+	err := block.Batch.Account(m.Describe.Synthetic()).GetStateAs(&synthLedger)
 	if err != nil {
 		return errors.Format(errors.StatusUnknown, "load synthetic ledger: %w", err)
 	}
@@ -35,7 +35,7 @@ func (m *Executor) EndBlock(block *Block) error {
 	}
 
 	// Load the ledger
-	ledgerUrl := m.Network.NodeUrl(protocol.Ledger)
+	ledgerUrl := m.Describe.NodeUrl(protocol.Ledger)
 	ledger := block.Batch.Account(ledgerUrl)
 	var ledgerState *protocol.SystemLedger
 	err = ledger.GetStateAs(&ledgerState)
@@ -102,7 +102,7 @@ func (m *Executor) EndBlock(block *Block) error {
 	}
 
 	// Create a BlockChainUpdates Index
-	err = indexing.BlockChainUpdates(block.Batch, &m.Network, uint64(block.Index)).Set(block.State.ChainUpdates.Entries)
+	err = indexing.BlockChainUpdates(block.Batch, &m.Describe, uint64(block.Index)).Set(block.State.ChainUpdates.Entries)
 	if err != nil {
 		return errors.Format(errors.StatusUnknown, "store block chain updates index: %w", err)
 	}
@@ -151,7 +151,7 @@ func (m *Executor) EndBlock(block *Block) error {
 
 	for _, e := range blockState.ProducedSynthTxns {
 		err = indexing.TransactionChain(block.Batch, e.Transaction).Add(&indexing.TransactionChainEntry{
-			Account:     m.Network.Synthetic(),
+			Account:     m.Describe.Synthetic(),
 			Chain:       protocol.MainChain,
 			ChainIndex:  synthIndexIndex,
 			AnchorIndex: rootIndexIndex,
@@ -163,7 +163,7 @@ func (m *Executor) EndBlock(block *Block) error {
 
 	if len(block.State.ProducedTxns) > 0 {
 		// Build synthetic receipts on Directory nodes
-		if m.Network.Type == config.Directory {
+		if m.Describe.NetworkType == config.Directory {
 			err = m.createLocalDNReceipt(block, rootChain, synthAnchorIndex)
 			if err != nil {
 				return errors.Wrap(errors.StatusUnknown, err)
@@ -198,7 +198,7 @@ func (m *Executor) createLocalDNReceipt(block *Block, rootChain *database.Chain,
 		return errors.Format(errors.StatusUnknown, "build root chain receipt: %w", err)
 	}
 
-	synthChain, err := block.Batch.Account(m.Network.Synthetic()).ReadChain(protocol.MainChain)
+	synthChain, err := block.Batch.Account(m.Describe.Synthetic()).ReadChain(protocol.MainChain)
 	if err != nil {
 		return fmt.Errorf("unable to load synthetic transaction chain: %w", err)
 	}
@@ -223,7 +223,7 @@ func (m *Executor) createLocalDNReceipt(block *Block, rootChain *database.Chain,
 
 		// This should be the second signature (SyntheticSignature should be first)
 		sig := new(protocol.ReceiptSignature)
-		sig.SourceNetwork = m.Network.NodeUrl()
+		sig.SourceNetwork = m.Describe.NodeUrl()
 		sig.TransactionHash = *(*[32]byte)(txn.GetHash())
 		sig.Proof = *receipt
 		_, err = block.Batch.Transaction(txn.GetHash()).AddSignature(0, sig)
@@ -236,7 +236,7 @@ func (m *Executor) createLocalDNReceipt(block *Block, rootChain *database.Chain,
 
 // anchorSynthChain anchors the synthetic transaction chain.
 func (m *Executor) anchorSynthChain(block *Block, rootChain *database.Chain) (indexIndex uint64, err error) {
-	url := m.Network.Synthetic()
+	url := m.Describe.Synthetic()
 	indexIndex, _, err = addChainAnchor(rootChain, block.Batch.Account(url), url, protocol.MainChain, protocol.ChainTypeTransaction)
 	if err != nil {
 		return 0, err
@@ -254,7 +254,7 @@ func (m *Executor) anchorSynthChain(block *Block, rootChain *database.Chain) (in
 func (x *Executor) requestMissingSyntheticTransactions(ledger *protocol.SyntheticLedger) {
 	// Setup
 	wg := new(sync.WaitGroup)
-	localSubnet := x.Network.NodeUrl()
+	localSubnet := x.Describe.NodeUrl()
 	dispatcher := newDispatcher(x.ExecutorOptions)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -376,7 +376,7 @@ func (x *Executor) updateMajorIndexChains(block *Block, rootIndexIndex uint64) e
 	}
 
 	// Load the chain
-	account := block.Batch.Account(x.Network.AnchorPool())
+	account := block.Batch.Account(x.Describe.AnchorPool())
 	mainChain, err := account.ReadChain(protocol.MainChain)
 	if err != nil {
 		return errors.Format(errors.StatusUnknown, "load anchor ledger main chain: %w", err)
@@ -386,6 +386,7 @@ func (x *Executor) updateMajorIndexChains(block *Block, rootIndexIndex uint64) e
 		Source:         uint64(mainChain.Height() - 1),
 		RootIndexIndex: rootIndexIndex,
 		BlockIndex:     block.State.MakeMajorBlock,
+		BlockTime:      &block.State.MakeMajorBlockTime,
 	})
 	if err != nil {
 		return errors.Format(errors.StatusUnknown, "add anchor ledger index chain entry: %w", err)

@@ -61,7 +61,7 @@ func DefaultConfig(networkName string, net config.NetworkType, node config.NodeT
 	cfg.Instrumentation.Prometheus = false               // Disable prometheus: https://github.com/tendermint/tendermint/issues/7076
 	cfg.Accumulate.Network.Subnets = []config.Subnet{
 		{
-			ID:   "local",
+			Id:   "local",
 			Type: config.BlockValidator,
 		},
 	}
@@ -104,16 +104,17 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withF
 			remotes[i] = getIP(hash).String()
 			nodes[i] = config.Node{
 				Type:    nodeType,
-				Address: fmt.Sprintf("http://%s:%d", remotes[i], basePort),
+				Address: remotes[i], //fmt.Sprintf("http://%s:%d", remotes[i], basePort),
 			}
 			addresses[i] = nodes[i].Address
 		}
 
 		// We need to return the subnets in a specific order with directory node first because the unit tests select subnets[1]
 		subnets[i] = config.Subnet{
-			ID:    subnetId,
-			Type:  netType,
-			Nodes: nodes,
+			Id:       subnetId,
+			Type:     netType,
+			BasePort: basePort,
+			Nodes:    nodes,
 		}
 		subnetsMap[subnetId] = subnets[i]
 	}
@@ -122,7 +123,7 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withF
 	for _, configs := range allConfigs {
 		for i, cfg := range configs {
 			cfg.Accumulate.Network.Subnets = subnets
-			cfg.Accumulate.Network.LocalAddress = allAddresses[cfg.Accumulate.Network.LocalSubnetID][i]
+			cfg.Accumulate.LocalAddress = allAddresses[cfg.Accumulate.SubnetId][i]
 		}
 	}
 
@@ -150,7 +151,7 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withF
 	var bootstrapList []genesis.Bootstrap
 
 	for _, subnet := range subnets {
-		subnetId := subnet.ID
+		subnetId := subnet.Id
 		dir := filepath.Join(tempDir, subnetId)
 		bootstrap, err := node.Init(node.InitOptions{
 			WorkDir:             dir,
@@ -193,7 +194,7 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withF
 func getSubnetNames(subnets []cfg.Subnet) []string {
 	var res []string
 	for _, subnet := range subnets {
-		res = append(res, subnet.ID)
+		res = append(res, subnet.Id)
 	}
 	return res
 }

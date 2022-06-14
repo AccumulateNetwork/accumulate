@@ -109,7 +109,7 @@ SignerMetadata:
     - name: AcceptThreshold
       type: uint
 
-MinorQueryResponse:
+MinorBlock:
   non-binary: true
   incomparable: true
   fields:
@@ -120,6 +120,13 @@ MinorQueryResponse:
       description: is the start time of the block.
       type: time
       pointer: true
+
+MinorQueryResponse:
+  non-binary: true
+  incomparable: true
+  embeddings:
+    - MinorBlock
+  fields:
     - name: TxCount
       description: shows how many transactions this block contains
       type: uint
@@ -128,6 +135,23 @@ MinorQueryResponse:
       type: bytes
     - name: Transactions
       type: TransactionQueryResponse
+      repeatable: true
+      pointer: true
+      marshal-as: reference
+
+MajorQueryResponse:
+  non-binary: true
+  incomparable: true
+  fields:
+    - name: MajorBlockIndex
+      description: is the index of the major block.
+      type: uint
+    - name: MajorBlockTime
+      description: is the start time of the major block.
+      type: time
+      pointer: true
+    - name: MinorBlocks
+      type: MinorBlock
       repeatable: true
       pointer: true
       marshal-as: reference
@@ -284,6 +308,13 @@ MinorBlocksQuery:
     - name: BlockFilterMode
       type: query.BlockFilterMode
       optional: true
+
+MajorBlocksQuery:
+  non-binary: true
+  incomparable: true
+  embeddings:
+    - UrlQuery
+    - QueryPagination
 
 QueryOptions:
   non-binary: true
@@ -474,6 +505,10 @@ DescriptionResponse:
   non-binary: true
   incomparable: true
   fields:
+    - name: SubnetId
+      type: string
+    - name: NetworkType
+      type: config.NetworkType
     - name: Network
       alternative: Subnet
       type: config.Network

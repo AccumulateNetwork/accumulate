@@ -19,7 +19,7 @@ func TestTransactionIsReady(tt *testing.T) {
 	// Initialize
 	sim := simulator.New(tt, 1)
 	sim.InitFromGenesis()
-	x := sim.Subnet(sim.Subnets[0].ID)
+	x := sim.Subnet(sim.Subnets[0].Id)
 	exec := x.Executor
 	t := NewBatchTest(tt, x.Database)
 	defer t.Discard()
