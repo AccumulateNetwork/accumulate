@@ -3,9 +3,11 @@ package dataset
 import (
 	"bufio"
 	"crypto/sha256"
+	"fmt"
 	"github.com/stretchr/testify/require"
 	"io/ioutil"
 	"os"
+	"strconv"
 	"testing"
 )
 
@@ -26,7 +28,6 @@ func TestDataSetLog(t *testing.T) {
 
 	dsl.Initialize("test1", DefaultOptions())
 	dsl.Initialize("test2", DefaultOptions())
-	dsl.Initialize("test3", DefaultOptions())
 
 	ds := dsl.GetDataSet("test1")
 	require.True(t, ds != nil, "data set buffer has not been initialized")
@@ -34,15 +35,15 @@ func TestDataSetLog(t *testing.T) {
 	time := float64(0.0)
 	delta := float32(0.5)
 	for i := 0; i < 10; i++ {
-		url := "acc://sometest"
+		url := "acc://test1adi" + strconv.Itoa(i+1)
 		h := sha256.Sum256([]byte(url))
 		time += float64(delta)
 		t2 := float32(i) * delta
-		ds.Save("int_test", i, 10, true).
+		ds.Lock().Save("int_test", i, 10, true).
 			Save("float64_test", time, 10, false).
 			Save("float32_test", t2, 10, false).
 			Save("string_test", url, 32, false).
-			Save("slice_test", h[:], len(h), false)
+			Save("slice_test", h[:], len(h), false).Unlock()
 	}
 
 	ds = dsl.GetDataSet("test2")
@@ -51,15 +52,15 @@ func TestDataSetLog(t *testing.T) {
 	time = float64(0.0)
 	delta = float32(0.1)
 	for i := 0; i < 100; i++ {
-		url := "acc://sometest"
+		url := "acc://test2adi" + strconv.Itoa(i+1)
 		h := sha256.Sum256([]byte(url))
 		time += float64(delta)
 		t2 := float32(i) * delta * delta
-		ds.Save("int_test2", i, 10, true).
+		ds.Lock().Save("int_test2", i, 10, true).
 			Save("float64_test2", time, 10, false).
 			Save("float32_test2", t2, 10, false).
 			Save("string_test2", url, 32, false).
-			Save("slice_test2", h[:], len(h), false)
+			Save("slice_test2", h[:], len(h), false).Unlock()
 	}
 
 	files, err := dsl.DumpDataSetToDiskFile()
@@ -73,10 +74,11 @@ func TestDataSetLog(t *testing.T) {
 		t.Logf("%s\n", file)
 		// optionally, resize scanner's capacity for lines over 64K, see next example
 		for scanner.Scan() {
-			t.Logf("%s\n", scanner.Text())
+			fmt.Println(scanner.Text())
 		}
 
-		t.Log("\n\n")
+		fmt.Println()
+		fmt.Println()
 		if err := scanner.Err(); err != nil {
 			require.NoError(t, err)
 		}

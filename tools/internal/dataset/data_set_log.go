@@ -3,6 +3,7 @@ package dataset
 import (
 	"fmt"
 	"os"
+	"sync"
 	"time"
 )
 
@@ -13,7 +14,8 @@ type DataSetLog struct {
 	processName string
 	path        string
 	fileTag     string
-	Header      string
+	header      string
+	mutex       sync.Mutex
 }
 
 type DataValue struct {
@@ -28,7 +30,8 @@ type DataSet struct {
 	array   []DataValue
 	size    uint
 	maxsize uint
-	Header  string
+	header  string
+	mutex   sync.Mutex
 }
 
 func (d *DataSetLog) SetProcessName(process string) {
@@ -39,7 +42,14 @@ func (d *DataSetLog) SetPath(path string) {
 	d.path = path
 }
 
+func (d *DataSetLog) SetHeader(header string) {
+	d.header = header
+}
+
 func (d *DataSetLog) GetDataSet(id string) *DataSet {
+	d.mutex.Lock()
+	defer d.mutex.Unlock()
+
 	v, found := d.data[id]
 	if !found {
 		return nil
@@ -92,12 +102,12 @@ func (d *DataSetLog) DumpDataSetToDiskFile() ([]string, error) {
 				}
 			}
 
-			if d.Header != "" {
-				file.WriteString(d.Header)
+			if d.header != "" {
+				file.WriteString(d.header)
 			}
 
-			if dset.Header != "" {
-				file.WriteString(dset.Header)
+			if dset.header != "" {
+				file.WriteString(dset.header)
 			}
 
 			spacer := "# "
@@ -121,8 +131,6 @@ func (d *DataSetLog) DumpDataSetToDiskFile() ([]string, error) {
 				file.WriteString(fmt.Sprintf(fmtString, label))
 				spacer = "  "
 			}
-			file.WriteString("\n")
-
 			//loop through data values
 			for ival := uint(0); ival < dset.size; ival++ {
 				val = dset.array[ival]
@@ -181,11 +189,14 @@ func DefaultOptions() Options {
 }
 
 func (d *DataSetLog) Initialize(key string, opts Options) {
+	d.mutex.Lock()
+	defer d.mutex.Unlock()
+
 	if d.data == nil {
 		d.data = make(map[string]*DataSet)
 	}
 
-	d.data[key] = &DataSet{array: make([]DataValue, opts.MaxDataSize), maxsize: opts.MaxDataSize, Header: opts.Header}
+	d.data[key] = &DataSet{array: make([]DataValue, opts.MaxDataSize), maxsize: opts.MaxDataSize, header: opts.Header}
 }
 
 func (d *DataSetLog) SetFileTag(part1 string, part2 string) {
@@ -207,4 +218,17 @@ func (d *DataSet) Save(label string, value any, precisionOrWidth int, first bool
 	}
 
 	return d
+}
+
+func (d *DataSet) Lock() *DataSet {
+	d.mutex.Lock()
+	return d
+}
+
+func (d *DataSet) Unlock() {
+	d.mutex.Unlock()
+}
+
+func (d *DataSet) SetHeader(header string) {
+	d.header = header
 }
