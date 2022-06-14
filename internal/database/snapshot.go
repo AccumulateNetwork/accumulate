@@ -279,6 +279,8 @@ func (t *Transaction) restoreState(s *fullTransactionState) error {
 	return err
 }
 
+func zero[T any]() (z T) { return z }
+
 func loadState[T any](lastErr *error, allowMissing bool, get func() (T, error)) T {
 	if *lastErr != nil {
 		return zero[T]()

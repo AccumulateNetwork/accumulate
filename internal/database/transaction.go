@@ -1,6 +1,7 @@
 package database
 
 import (
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -10,10 +11,10 @@ func (c *ChangeSet) Transaction(hash []byte) *Transaction {
 	if len(hash) != 32 {
 		panic("invalid hash: wrong length")
 	}
-	return getOrCreateMap(&c.transaction, recordKey{}.Append("Transaction", hash), func() *Transaction {
+	return getOrCreateMap(&c.transaction, record.Key{}.Append("Transaction", hash), func() *Transaction {
 		v := new(Transaction)
 		v.store = c.store
-		v.key = recordKey{}.Append("Transaction", hash)
+		v.key = record.Key{}.Append("Transaction", hash)
 		v.container = c
 		return v
 	})
@@ -64,17 +65,17 @@ func (t *Transaction) addSigners(signers []*url.URL) error {
 	return nil
 }
 
-func (t *Transaction) commit() error {
+func (t *Transaction) Commit() error {
 	// Ensure the signer index is up to date
 	var signers []*url.URL
-	if t.systemSignatures.isDirty() {
+	if t.systemSignatures.IsDirty() {
 		// ACME is the 'signer' for system signatures
 		signers = append(signers, protocol.AcmeUrl())
 	}
 
 	for _, set := range t.signatures {
-		if set.isDirty() {
-			signers = append(signers, set.set.key[3].(*url.URL))
+		if set.IsDirty() {
+			signers = append(signers, set.set.Key(3).(*url.URL))
 		}
 	}
 

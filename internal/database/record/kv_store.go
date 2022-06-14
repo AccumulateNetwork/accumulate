@@ -1,4 +1,4 @@
-package database
+package record
 
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
@@ -6,12 +6,12 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
-type kvStore struct {
-	s storage.KeyValueTxn
+type KvStore struct {
+	Store storage.KeyValueTxn
 }
 
-func (s kvStore) get(key recordKey, value encoding.BinaryValue) error {
-	b, err := s.s.Get(key.Hash())
+func (s KvStore) GetRaw(key Key, value encoding.BinaryValue) error {
+	b, err := s.Store.Get(key.Hash())
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
@@ -24,13 +24,13 @@ func (s kvStore) get(key recordKey, value encoding.BinaryValue) error {
 	return nil
 }
 
-func (s kvStore) put(key recordKey, value encoding.BinaryValue) error {
+func (s KvStore) PutRaw(key Key, value encoding.BinaryValue) error {
 	b, err := value.MarshalBinary()
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
-	err = s.s.Put(key.Hash(), b)
+	err = s.Store.Put(key.Hash(), b)
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}

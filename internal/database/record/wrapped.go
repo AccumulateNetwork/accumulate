@@ -1,4 +1,4 @@
-package database
+package record
 
 import (
 	"io"
@@ -17,9 +17,9 @@ type Wrapped[T any] struct {
 	Value[wrapperType[T]]
 }
 
-func newWrapped[T any](store recordStore, key recordKey, namefmt string, allowMissing bool, new func() wrapperType[T]) *Wrapped[T] {
+func NewWrapped[T any](store Store, key Key, namefmt string, allowMissing bool, new func() wrapperType[T]) *Wrapped[T] {
 	v := &Wrapped[T]{}
-	v.Value = *newValue(store, key, namefmt, allowMissing, new)
+	v.Value = *NewValue(store, key, namefmt, allowMissing, new)
 	return v
 }
 
@@ -38,18 +38,18 @@ func (v *Wrapped[T]) Put(u T) error {
 	return errors.Wrap(errors.StatusUnknown, err)
 }
 
-func (v *Wrapped[T]) isDirty() bool {
+func (v *Wrapped[T]) IsDirty() bool {
 	if v == nil {
 		return false
 	}
-	return v.Value.isDirty()
+	return v.Value.IsDirty()
 }
 
-func (v *Wrapped[T]) commit() error {
+func (v *Wrapped[T]) Commit() error {
 	if v == nil {
 		return nil
 	}
-	err := v.Value.commit()
+	err := v.Value.Commit()
 	return errors.Wrap(errors.StatusUnknown, err)
 }
 
@@ -58,7 +58,7 @@ type Wrapper[T any] struct {
 	*wrapperFuncs[T]
 }
 
-func newWrapper[T any](funcs *wrapperFuncs[T]) func() wrapperType[T] {
+func NewWrapper[T any](funcs *wrapperFuncs[T]) func() wrapperType[T] {
 	return func() wrapperType[T] {
 		w := &Wrapper[T]{}
 		w.wrapperFuncs = funcs

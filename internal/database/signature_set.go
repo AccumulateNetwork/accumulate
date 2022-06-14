@@ -1,13 +1,14 @@
 package database
 
 import (
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 type SignatureSet interface {
-	record
+	record.Record
 	Get() ([]*SignatureEntry, error)
 	Add(protocol.Signature) error
 	getVersion() (uint64, error)
@@ -16,14 +17,14 @@ type SignatureSet interface {
 }
 
 type SystemSignatureSet struct {
-	Set[*SignatureEntry]
+	record.Set[*SignatureEntry]
 }
 
-func newSystemSignatureSet(store recordStore, key recordKey, _, labelfmt string) *SystemSignatureSet {
+func newSystemSignatureSet(store record.Store, key record.Key, _, labelfmt string) *SystemSignatureSet {
 	s := new(SystemSignatureSet)
 	new := func() (v *SignatureEntry) { return new(SignatureEntry) }
 	cmp := func(u, v *SignatureEntry) int { return u.Compare(v) }
-	s.Set = *newSet(store, key, labelfmt, newSlice(new), cmp)
+	s.Set = *record.NewSet(store, key, labelfmt, record.NewSlice(new), cmp)
 	return s
 }
 
@@ -47,19 +48,19 @@ func (s *SystemSignatureSet) putVersion(uint64) error {
 }
 
 type VersionedSignatureSet struct {
-	set     *Set[*SignatureEntry]
-	version *Wrapped[uint64]
+	set     *record.Set[*SignatureEntry]
+	version *record.Wrapped[uint64]
 	signer  protocol.Signer
 	err     error
 }
 
-func newVersionedSignatureSet(cs *ChangeSet, store recordStore, key recordKey, signerUrl *url.URL) *VersionedSignatureSet {
+func newVersionedSignatureSet(cs *ChangeSet, store record.Store, key record.Key, signerUrl *url.URL) *VersionedSignatureSet {
 	s := new(VersionedSignatureSet)
 	key = key.Append("Signatures", signerUrl)
 	new := func() (v *SignatureEntry) { return new(SignatureEntry) }
 	cmp := func(u, v *SignatureEntry) int { return u.Compare(v) }
-	s.set = newSet(store, key, "transaction %[2]x signatures %[4]v", newSlice(new), cmp)
-	s.version = newWrapped(store, key.Append("Version"), "transaction %[2]x signatures %[4]v version", true, newWrapper(uintWrapper))
+	s.set = record.NewSet(store, key, "transaction %[2]x signatures %[4]v", record.NewSlice(new), cmp)
+	s.version = record.NewWrapped(store, key.Append("Version"), "transaction %[2]x signatures %[4]v version", true, record.NewWrapper(record.UintWrapper))
 
 	lastVersion, err := s.version.Get()
 	if err != nil {
@@ -147,26 +148,26 @@ func (s *VersionedSignatureSet) putVersion(v uint64) error {
 	return s.version.Put(v)
 }
 
-func (s *VersionedSignatureSet) resolve(key recordKey) (record, recordKey, error) {
+func (s *VersionedSignatureSet) Resolve(key record.Key) (record.Record, record.Key, error) {
 	if len(key) == 1 {
 		if k, ok := key[0].(string); ok && k == "Version" {
 			return s.version, nil, nil
 		}
 	}
 
-	return s.set.resolve(key)
+	return s.set.Resolve(key)
 }
 
-func (s *VersionedSignatureSet) isDirty() bool {
-	return s.version.isDirty() || s.set.isDirty()
+func (s *VersionedSignatureSet) IsDirty() bool {
+	return s.version.IsDirty() || s.set.IsDirty()
 }
 
-func (s *VersionedSignatureSet) commit() error {
-	err := s.version.commit()
+func (s *VersionedSignatureSet) Commit() error {
+	err := s.version.Commit()
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
-	err = s.set.commit()
+	err = s.set.Commit()
 	return errors.Wrap(errors.StatusUnknown, err)
 }

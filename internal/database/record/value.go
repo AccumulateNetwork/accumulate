@@ -1,4 +1,4 @@
-package database
+package record
 
 import (
 	"fmt"
@@ -19,8 +19,8 @@ const (
 )
 
 type Value[T encoding.BinaryValue] struct {
-	store        recordStore
-	key          recordKey
+	store        Store
+	key          Key
 	name         string
 	new          func() T
 	status       valueStatus
@@ -28,7 +28,7 @@ type Value[T encoding.BinaryValue] struct {
 	allowMissing bool
 }
 
-func newValue[T encoding.BinaryValue](store recordStore, key recordKey, namefmt string, allowMissing bool, new func() T) *Value[T] {
+func NewValue[T encoding.BinaryValue](store Store, key Key, namefmt string, allowMissing bool, new func() T) *Value[T] {
 	v := &Value[T]{}
 	v.store = store
 	v.key = key
@@ -43,7 +43,9 @@ func newValue[T encoding.BinaryValue](store recordStore, key recordKey, namefmt 
 	return v
 }
 
-func zero[T any]() (z T) { return z }
+func (v *Value[T]) Key(i int) interface{} {
+	return v.key[i]
+}
 
 func (v *Value[T]) Get() (T, error) {
 	switch v.status {
@@ -55,7 +57,7 @@ func (v *Value[T]) Get() (T, error) {
 	}
 
 	u := v.new()
-	err := v.store.get(v.key, u)
+	err := v.store.GetRaw(v.key, u)
 	switch {
 	case err == nil:
 		v.value = u
@@ -92,19 +94,19 @@ func (v *Value[T]) Put(u T) error {
 	return nil
 }
 
-func (v *Value[T]) isDirty() bool {
+func (v *Value[T]) IsDirty() bool {
 	if v == nil {
 		return false
 	}
 	return v.status == valueDirty
 }
 
-func (v *Value[T]) commit() error {
+func (v *Value[T]) Commit() error {
 	if v == nil || v.status != valueDirty {
 		return nil
 	}
 
-	err := v.store.put(v.key, v.value)
+	err := v.store.PutRaw(v.key, v.value)
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
@@ -112,11 +114,11 @@ func (v *Value[T]) commit() error {
 	return nil
 }
 
-func (v *Value[T]) resolve(key recordKey) (record, recordKey, error) {
+func (v *Value[T]) Resolve(key Key) (Record, Key, error) {
 	return nil, nil, errors.New(errors.StatusInternalError, "bad key for value")
 }
 
-func (v *Value[T]) get(value encoding.BinaryValue) error {
+func (v *Value[T]) GetRaw(value encoding.BinaryValue) error {
 	u, err := v.Get()
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
@@ -131,7 +133,7 @@ func (v *Value[T]) get(value encoding.BinaryValue) error {
 	return nil
 }
 
-func (v *Value[T]) put(value encoding.BinaryValue) error {
+func (v *Value[T]) PutRaw(value encoding.BinaryValue) error {
 	u, ok := value.(T)
 	if !ok {
 		return errors.Format(errors.StatusInternalError, "store %s: invalid value: want %T, got %T", v.name, v.new(), value)

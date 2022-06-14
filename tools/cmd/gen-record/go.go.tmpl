@@ -7,6 +7,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
@@ -31,7 +32,7 @@ c.name + "-{{natural .Name}}"
 
 {{  define "key"}}
 {{- if .GetContainer.Root -}}
-recordKey{}
+record.Key{}
 {{- else -}}
 c.key
 {{- end}}
@@ -44,35 +45,35 @@ c.key
 
 {{  define "newValue"}}
 {{- if and .Wrapped .Set}}
-return newSet(c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, newWrapperSlice({{lower .DataType.String}}Wrapper), compare{{title .DataType.String}})
+return record.NewSet(c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, record.NewWrapperSlice(record.{{title .DataType.String}}Wrapper), record.Compare{{title .DataType.String}})
 {{- else if .Wrapped}}
-return newWrapped(c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, {{.EmptyIfMissing}}, newWrapper({{lower .DataType.String}}Wrapper))
+return record.NewWrapped(c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, {{.EmptyIfMissing}}, record.NewWrapper(record.{{title .DataType.String}}Wrapper))
 {{- else if .Set}}
 new := func() (v {{stateType . false}}) { return {{if .Pointer}}new({{stateType . true}}){{else}}v{{end}} }
 cmp := func(u, v {{stateType . false}}) int { return u.Compare(v) }
-return newSet(c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, newSlice(new), cmp)
+return record.NewSet(c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, record.NewSlice(new), cmp)
 {{- else if .Union}}
-return newWrapped(c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, {{.EmptyIfMissing}}, newUnion({{unionMethod . "Unmarshal"}}))
+return record.NewWrapped(c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, {{.EmptyIfMissing}}, record.NewWrapper(record.UnionWrapper({{unionMethod . "Unmarshal"}})))
 {{- else}}
 new := func() (v {{stateType . false}}) { return {{if .Pointer}}new({{stateType . true}}){{else}}v{{end}} }
-return newValue(c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, {{.EmptyIfMissing}}, new)
+return record.NewValue(c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, {{.EmptyIfMissing}}, new)
 {{- end}}
 {{- end}}
 
 {{define "newCounted"}}
 {{- if .Wrapped}}
-return newCounted(c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, newCountableWrapped({{lower .DataType.String}}Wrapper))
+return record.NewCounted(c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, record.NewCountableWrapped(record.{{title .DataType.String}}Wrapper))
 {{- else}}
 new := func() (v {{stateType . false}}) { return {{if .Pointer}}new({{stateType . true}}){{else}}v{{end}} }
-return newCounted(c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, newCountableValue(new))
+return record.NewCounted(c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, record.NewCountableValue(new))
 {{- end}}
 {{- end}}
 
 {{define "container"}}
 type {{.FullName}} struct {
-	store recordStore
+	store record.Store
 	{{- if not .OmitKey}}
-	key recordKey
+	key record.Key
 	{{- end}}
 	{{- if not .Root}}
 	container *{{.GetContainer.FullName}}
@@ -116,7 +117,7 @@ func (c *{{$c.FullName}}) {{.Name}}({{range .GetParameters}}{{lower .Name}} {{pa
 {{end}}
 {{end}}
 
-func (c *{{.FullName}}) resolve(key recordKey) (record, recordKey, error) {
+func (c *{{.FullName}}) Resolve(key record.Key) (record.Record, record.Key, error) {
 	switch key[0] {
 	{{- range .Parts}}
 	case "{{.Name}}":
@@ -141,7 +142,7 @@ func (c *{{.FullName}}) resolve(key recordKey) (record, recordKey, error) {
 	}
 }
 
-func (c *{{.FullName}}) isDirty() bool {
+func (c *{{.FullName}}) IsDirty() bool {
 	if c == nil {
 		return false
 	}
@@ -149,12 +150,12 @@ func (c *{{.FullName}}) isDirty() bool {
 	{{  range .Parts}}
 	{{- if parameterized .}}
 	for _, v := range c.{{lower .Name}} {
-		if v.isDirty() {
+		if v.IsDirty() {
 			return true
 		}
 	}
 	{{- else}}
-	if c.{{lower .Name}}.isDirty() {
+	if c.{{lower .Name}}.IsDirty() {
 		return true
 	}
 	{{- end}}
@@ -183,7 +184,7 @@ func (c *{{.FullName}}) resolveChain(name string) (*Chain, bool) {
 		}
 
 		{{- range $i, $p := .Parameters}}
-		param{{$p.Name}}, err := parse{{title $p.Type.String}}(params[{{$i}}])
+		param{{$p.Name}}, err := record.Parse{{title $p.Type.String}}(params[{{$i}}])
 		if err != nil {
 			return nil, false
 		}
@@ -221,7 +222,7 @@ func (c *{{.FullName}}) dirtyChains() []*Chain {
 	}
 	{{- else if .Type.IsChain}}
 	for _, v := range c.{{lower .Name}} {
-		if v.isDirty() {
+		if v.IsDirty() {
 			chains = append(chains, v)
 		}
 	}
@@ -229,7 +230,7 @@ func (c *{{.FullName}}) dirtyChains() []*Chain {
 	{{- else if and .Type.IsContainer .HasChains}}
 	chains = append(chains, c.{{lower .Name}}.dirtyChains()...)
 	{{- else if .Type.IsChain}}
-	if c.{{lower .Name}}.isDirty() {
+	if c.{{lower .Name}}.IsDirty() {
 		chains = append(chains, c.{{lower .Name}})
 	}
 	{{- end}}
@@ -239,7 +240,7 @@ func (c *{{.FullName}}) dirtyChains() []*Chain {
 }
 {{end}}
 
-func (c *{{.FullName}}) {{if .CustomCommit}}baseCommit{{else}}commit{{end}}() error {
+func (c *{{.FullName}}) {{if .CustomCommit}}baseCommit{{else}}Commit{{end}}() error {
 	if c == nil {
 		return nil
 	}
@@ -247,12 +248,12 @@ func (c *{{.FullName}}) {{if .CustomCommit}}baseCommit{{else}}commit{{end}}() er
 	{{  range .Parts}}
 	{{- if parameterized .}}
 	for _, v := range c.{{lower .Name}} {
-		if err := v.commit(); err != nil {
+		if err := v.Commit(); err != nil {
 			return errors.Wrap(errors.StatusUnknown, err)
 		}
 	}
 	{{- else}}
-	if err := c.{{lower .Name}}.commit(); err != nil {
+	if err := c.{{lower .Name}}.Commit(); err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
 	{{- end}}
@@ -281,7 +282,7 @@ func getOrCreateField[T any](ptr **T, create func() *T) *T {
 	return *ptr
 }
 
-func getOrCreateMap[T any](ptr *map[storage.Key]*T, key recordKey, create func() *T) *T {
+func getOrCreateMap[T any](ptr *map[storage.Key]*T, key record.Key, create func() *T) *T {
 	if *ptr == nil {
 		*ptr = map[storage.Key]*T{}
 	}

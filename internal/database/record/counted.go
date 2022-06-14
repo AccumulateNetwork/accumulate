@@ -1,4 +1,4 @@
-package database
+package record
 
 import (
 	"fmt"
@@ -10,32 +10,32 @@ import (
 type countableValue[T any] interface {
 	Get() (T, error)
 	Put(T) error
-	record
+	Record
 }
 
 type Counted[T any] struct {
 	count  Wrapped[uint64]
-	new    func(recordStore, recordKey, string) countableValue[T]
+	new    func(Store, Key, string) countableValue[T]
 	values []countableValue[T]
 }
 
-func newCounted[T any](store recordStore, key recordKey, namefmt string, new func(recordStore, recordKey, string) countableValue[T]) *Counted[T] {
+func NewCounted[T any](store Store, key Key, namefmt string, new func(Store, Key, string) countableValue[T]) *Counted[T] {
 	c := &Counted[T]{}
-	c.count = *newWrapped(store, key, namefmt, true, newWrapper(uintWrapper))
+	c.count = *NewWrapped(store, key, namefmt, true, NewWrapper(UintWrapper))
 	c.new = new
 	return c
 }
 
-func newCountableWrapped[T any](funcs *wrapperFuncs[T]) func(recordStore, recordKey, string) countableValue[T] {
-	return func(store recordStore, key recordKey, namefmt string) countableValue[T] {
-		return newWrapped(store, key, namefmt, false, newWrapper(funcs))
+func NewCountableWrapped[T any](funcs *wrapperFuncs[T]) func(Store, Key, string) countableValue[T] {
+	return func(store Store, key Key, namefmt string) countableValue[T] {
+		return NewWrapped(store, key, namefmt, false, NewWrapper(funcs))
 	}
 }
 
 //nolint:deadcode
-func newCountableValue[T encoding.BinaryValue](new func() T) func(recordStore, recordKey, string) countableValue[T] {
-	return func(store recordStore, key recordKey, namefmt string) countableValue[T] {
-		return newValue(store, key, namefmt, false, new)
+func NewCountableValue[T encoding.BinaryValue](new func() T) func(Store, Key, string) countableValue[T] {
+	return func(store Store, key Key, namefmt string) countableValue[T] {
+		return NewValue(store, key, namefmt, false, new)
 	}
 }
 
@@ -108,32 +108,32 @@ func (c *Counted[T]) Last() (int, T, error) {
 	return count - 1, v, nil
 }
 
-func (c *Counted[T]) isDirty() bool {
+func (c *Counted[T]) IsDirty() bool {
 	if c == nil {
 		return false
 	}
-	if c.count.isDirty() {
+	if c.count.IsDirty() {
 		return true
 	}
 	for _, v := range c.values {
-		if v.isDirty() {
+		if v.IsDirty() {
 			return true
 		}
 	}
 	return true
 }
 
-func (c *Counted[T]) commit() error {
+func (c *Counted[T]) Commit() error {
 	if c == nil {
 		return nil
 	}
 
-	if err := c.count.commit(); err != nil {
+	if err := c.count.Commit(); err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
 	for _, v := range c.values {
-		if err := v.commit(); err != nil {
+		if err := v.Commit(); err != nil {
 			return errors.Wrap(errors.StatusUnknown, err)
 		}
 	}
@@ -141,7 +141,7 @@ func (c *Counted[T]) commit() error {
 	return nil
 }
 
-func (c *Counted[T]) resolve(key recordKey) (record, recordKey, error) {
+func (c *Counted[T]) Resolve(key Key) (Record, Key, error) {
 	if len(key) == 0 {
 		return &c.count, nil, nil
 	}

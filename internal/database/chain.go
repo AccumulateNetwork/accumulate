@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
@@ -13,7 +14,7 @@ const markPower = 8
 const markFreq = 1 << markPower
 const markMask = markFreq - 1
 
-func newChain(store recordStore, key recordKey, typ protocol.ChainType, namefmt, labelfmt string) *Chain {
+func newChain(store record.Store, key record.Key, typ protocol.ChainType, namefmt, labelfmt string) *Chain {
 	c := new(Chain)
 	c.store = store
 	c.key = key
@@ -27,7 +28,7 @@ func newChain(store recordStore, key recordKey, typ protocol.ChainType, namefmt,
 	return c
 }
 
-func newMajorMinorIndexChain(store recordStore, key recordKey, namefmt, labelfmt string) *MajorMinorIndexChain {
+func newMajorMinorIndexChain(store record.Store, key record.Key, namefmt, labelfmt string) *MajorMinorIndexChain {
 	c := new(MajorMinorIndexChain)
 	c.store = store
 	c.key = key

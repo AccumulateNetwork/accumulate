@@ -3,12 +3,13 @@ package database
 import (
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-func newChangeSet(id uint64, writable bool, store recordStore, logger log.Logger) *ChangeSet {
+func newChangeSet(id uint64, writable bool, store record.Store, logger log.Logger) *ChangeSet {
 	c := new(ChangeSet)
 	c.logger.L = logger
 	c.store = store
@@ -46,17 +47,17 @@ func (c *ChangeSet) Update(fn func(cs *ChangeSet) error) error {
 	return cs.Commit()
 }
 
-func (c *ChangeSet) resolveValue(key recordKey) (recordValue, error) {
-	var record record = c
+func (c *ChangeSet) resolveValue(key record.Key) (record.RawValue, error) {
+	var r record.Record = c
 	var err error
 	for len(key) > 0 {
-		record, key, err = record.resolve(key)
+		r, key, err = r.Resolve(key)
 		if err != nil {
 			return nil, errors.Wrap(errors.StatusUnknown, err)
 		}
 	}
 
-	v, ok := record.(recordValue)
+	v, ok := r.(record.RawValue)
 	if !ok {
 		return nil, errors.New(errors.StatusInternalError, "bad key: not a value")
 	}
@@ -64,7 +65,7 @@ func (c *ChangeSet) resolveValue(key recordKey) (recordValue, error) {
 	return v, nil
 }
 
-func (c *ChangeSet) get(key recordKey, value encoding.BinaryValue) error {
+func (c *ChangeSet) GetRaw(key record.Key, value encoding.BinaryValue) error {
 	if c.done {
 		panic("attempted to use a commited or discarded batch")
 	}
@@ -74,7 +75,7 @@ func (c *ChangeSet) get(key recordKey, value encoding.BinaryValue) error {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
-	err = v.get(value)
+	err = v.GetRaw(value)
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
@@ -82,7 +83,7 @@ func (c *ChangeSet) get(key recordKey, value encoding.BinaryValue) error {
 	return nil
 }
 
-func (c *ChangeSet) put(key recordKey, value encoding.BinaryValue) error {
+func (c *ChangeSet) PutRaw(key record.Key, value encoding.BinaryValue) error {
 	if c.done {
 		panic("attempted to use a commited or discarded batch")
 	}
@@ -92,7 +93,7 @@ func (c *ChangeSet) put(key recordKey, value encoding.BinaryValue) error {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
-	err = v.put(value)
+	err = v.PutRaw(value)
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
@@ -107,7 +108,7 @@ func (c *ChangeSet) Commit() error {
 	c.done = true
 
 	// Push changes into the store
-	err := c.commit()
+	err := c.baseCommit()
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}

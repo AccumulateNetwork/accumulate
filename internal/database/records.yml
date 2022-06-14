@@ -1,6 +1,7 @@
 - name: ChangeSet
   type: container
   omitKey: true
+  customCommit: true
   fields:
   - name: logger
     type: logging.OptionalLogger

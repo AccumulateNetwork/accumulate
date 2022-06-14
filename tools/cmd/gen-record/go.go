@@ -44,13 +44,13 @@ func recordType(r typegen.Record) string {
 		var typ string
 		switch {
 		case r.IsCounted():
-			typ = "Counted"
+			typ = "record.Counted"
 		case r.IsSet():
-			typ = "Set"
+			typ = "record.Set"
 		case r.Wrapped(), r.IsUnion():
-			typ = "Wrapped"
+			typ = "record.Wrapped"
 		default:
-			typ = "Value"
+			typ = "record.Value"
 		}
 		return fmt.Sprintf("%s[%s]", typ, stateType(r, false))
 	case *typegen.ChainRecord:

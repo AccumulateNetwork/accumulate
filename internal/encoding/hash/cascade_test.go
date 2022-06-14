@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding/hash"
-	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
+	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 	"gopkg.in/yaml.v3"
 )
 
@@ -15,7 +15,7 @@ func TestMerkleCascade(t *testing.T) {
 	b, err := ioutil.ReadFile("../../../testdata/merkle.yaml")
 	require.NoError(t, err)
 
-	var cases []*acctesting.MerkleTestCase
+	var cases []*managed.MerkleTestCase
 	require.NoError(t, yaml.Unmarshal(b, &cases))
 
 	for _, c := range cases {

@@ -1,4 +1,4 @@
-package testing
+package managed
 
 import (
 	"encoding/hex"

@@ -1,6 +1,7 @@
 package database
 
 import (
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -10,7 +11,7 @@ func (c *ChangeSet) accountByKey(key [32]byte) (*Account, error) {
 		return a, nil
 	}
 
-	w := newWrapped(c.store, recordKey{key}.Append("State"), "account %[2]v state", false, newUnion(protocol.UnmarshalAccount))
+	w := record.NewWrapped(c.store, record.Key{key}.Append("State"), "account %[2]v state", false, record.NewWrapper(record.UnionWrapper(protocol.UnmarshalAccount)))
 	state, err := w.Get()
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknown, err)
@@ -27,7 +28,7 @@ func (a *Account) ChainByName(name string) (*Chain, error) {
 	return nil, errors.NotFound("account %v: invalid chain name: %q", a.key[1], name)
 }
 
-func (a *Account) commit() error {
+func (a *Account) Commit() error {
 	// Ensure the chains index is up to date
 	for _, c := range a.dirtyChains() {
 		chain := &protocol.ChainMetadata{Name: c.name, Type: c.typ}
@@ -49,7 +50,7 @@ func (a *Account) commit() error {
 
 	// Ensure the synthetic anchors index is up to date
 	for anchor, set := range a.syntheticForAnchor {
-		if !set.isDirty() {
+		if !set.IsDirty() {
 			continue
 		}
 

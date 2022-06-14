@@ -1,20 +1,3 @@
-ChainType:
-  Unknown:
-    value: 0
-    description: is used when the chain type is not known
-  Transaction:
-    value: 1
-    description: holds transaction hashes
-  Anchor:
-    value: 2
-    description: holds chain anchors
-  # Signature:
-  #   value: 3
-  #   description: holds signature hashes
-  Index:
-    value: 4
-    description: indexes other chains
-
 DataEntryType:
   Unknown:
     value: 0

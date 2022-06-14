@@ -1,4 +1,4 @@
-package database
+package record
 
 import (
 	"io"
@@ -9,10 +9,10 @@ import (
 
 type Union[T encoding.BinaryValue] struct {
 	value     T
-	unmarshal valueUnmarshaller[T]
+	unmarshal ValueUnmarshaller[T]
 }
 
-func newUnion[T encoding.BinaryValue](unmarshal valueUnmarshaller[T]) func() wrapperType[T] {
+func NewUnion[T encoding.BinaryValue](unmarshal ValueUnmarshaller[T]) func() wrapperType[T] {
 	return func() wrapperType[T] {
 		u := new(Union[T])
 		u.unmarshal = unmarshal

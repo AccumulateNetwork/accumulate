@@ -1,4 +1,4 @@
-package database
+package record
 
 import (
 	"bytes"
@@ -20,9 +20,9 @@ type Set[T any] struct {
 	compare func(u, v T) int
 }
 
-func newSet[T any](store recordStore, key recordKey, namefmt string, new func() sliceableValue[T], cmp func(u, v T) int) *Set[T] {
+func NewSet[T any](store Store, key Key, namefmt string, new func() sliceableValue[T], cmp func(u, v T) int) *Set[T] {
 	s := &Set[T]{}
-	s.Value = *newValue(store, key, namefmt, true, new)
+	s.Value = *NewValue(store, key, namefmt, true, new)
 	s.compare = cmp
 	return s
 }
@@ -121,18 +121,18 @@ func (s *Set[T]) Find(v T) (T, error) {
 	return l[i], nil
 }
 
-func (s *Set[T]) isDirty() bool {
+func (s *Set[T]) IsDirty() bool {
 	if s == nil {
 		return false
 	}
-	return s.Value.isDirty()
+	return s.Value.IsDirty()
 }
 
-func (s *Set[T]) commit() error {
+func (s *Set[T]) Commit() error {
 	if s == nil {
 		return nil
 	}
-	err := s.Value.commit()
+	err := s.Value.Commit()
 	return errors.Wrap(errors.StatusUnknown, err)
 }
 
@@ -141,7 +141,7 @@ type Slice[T encoding.BinaryValue] struct {
 	new    func() T
 }
 
-func newSlice[T encoding.BinaryValue](new func() T) func() sliceableValue[T] {
+func NewSlice[T encoding.BinaryValue](new func() T) func() sliceableValue[T] {
 	return func() sliceableValue[T] {
 		s := &Slice[T]{}
 		s.new = new
@@ -200,7 +200,7 @@ type WrapperSlice[T any] struct {
 	*wrapperFuncs[T]
 }
 
-func newWrapperSlice[T any](funcs *wrapperFuncs[T]) func() sliceableValue[T] {
+func NewWrapperSlice[T any](funcs *wrapperFuncs[T]) func() sliceableValue[T] {
 	return func() sliceableValue[T] {
 		w := &WrapperSlice[T]{}
 		w.wrapperFuncs = funcs
