@@ -33,6 +33,7 @@ type InitOptions struct {
 	NetworkValidatorMap genesis.NetworkValidatorMap
 	Logger              log.Logger
 	FactomAddressesFile string
+	DataSetLog          *dataset.DataSetLog
 }
 
 // Init creates the initial configuration for a set of nodes, using
