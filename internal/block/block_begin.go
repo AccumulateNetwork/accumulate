@@ -29,7 +29,7 @@ func (x *Executor) BeginBlock(block *Block) error {
 	x.logger.Debug("Begin block", "height", block.Index, "leader", block.IsLeader, "time", block.Time)
 
 	// Check if its time for a major block
-	openMajor, err := x.shouldOpenMajorBlock(block)
+	openMajor, majorBlockTime, err := x.shouldOpenMajorBlock(block)
 	if err != nil {
 		return err
 	}
@@ -53,7 +53,7 @@ func (x *Executor) BeginBlock(block *Block) error {
 		}()
 
 		// Finalize the previous block
-		err = x.finalizeBlock(batch, uint64(block.Index), openMajor, majorBlockIndex)
+		err = x.finalizeBlock(batch, block.Index, openMajor, majorBlockIndex, majorBlockTime)
 		if err != nil {
 			return err
 		}
@@ -117,17 +117,17 @@ func (x *Executor) BeginBlock(block *Block) error {
 	return nil
 }
 
-func (x *Executor) shouldOpenMajorBlock(block *Block) (uint64, error) {
+func (x *Executor) shouldOpenMajorBlock(block *Block) (uint64, time.Time, error) {
 	// Only the directory network can open a major block
 	if x.Describe.NetworkType != config.Directory {
-		return 0, nil
+		return 0, time.Time{}, nil
 	}
 
 	var utcHour time.Time
 	if debugMajorBlocks {
 		utcHour = block.Time.UTC().Truncate(time.Second)
 		if block.Index%20 != 19 {
-			return 0, nil
+			return 0, time.Time{}, nil
 		}
 	} else {
 		utcHour = block.Time.UTC().Truncate(time.Hour)
@@ -135,7 +135,7 @@ func (x *Executor) shouldOpenMajorBlock(block *Block) (uint64, error) {
 		case 0, 12:
 			// Ok
 		default:
-			return 0, nil
+			return 0, time.Time{}, nil
 		}
 	}
 
@@ -143,11 +143,11 @@ func (x *Executor) shouldOpenMajorBlock(block *Block) (uint64, error) {
 	record := block.Batch.Account(x.Describe.AnchorPool())
 	err := record.GetStateAs(&anchor)
 	if err != nil {
-		return 0, errors.Format(errors.StatusUnknown, "load anchor ledger: %w", err)
+		return 0, time.Time{}, errors.Format(errors.StatusUnknown, "load anchor ledger: %w", err)
 	}
 
 	if !anchor.MajorBlockTime.Before(utcHour) {
-		return 0, nil
+		return 0, time.Time{}, nil
 	}
 
 	// Update the anchor ledger
@@ -161,12 +161,12 @@ func (x *Executor) shouldOpenMajorBlock(block *Block) (uint64, error) {
 
 	err = record.PutState(anchor)
 	if err != nil {
-		return 0, errors.Format(errors.StatusUnknown, "store anchor ledger: %w", err)
+		return 0, time.Time{}, errors.Format(errors.StatusUnknown, "store anchor ledger: %w", err)
 	}
 
 	x.logger.Info("Start major block", "major-index", anchor.MajorBlockIndex, "minor-index", block.Index)
 	block.State.OpenedMajorBlock = true
-	return anchor.MajorBlockIndex, nil
+	return anchor.MajorBlockIndex, anchor.MajorBlockTime, nil
 }
 
 func (x *Executor) didRecordMajorBlock(block *Block) (uint64, error) {
@@ -268,7 +268,7 @@ func (x *Executor) captureValueAsDataEntry(batch *database.Batch, internalAccoun
 
 // finalizeBlock builds the block anchor and signs and sends synthetic
 // transactions (including the block anchor) for the previously committed block.
-func (x *Executor) finalizeBlock(batch *database.Batch, currentBlockIndex uint64, openMajor, majorBlockIndex uint64) error {
+func (x *Executor) finalizeBlock(batch *database.Batch, currentBlockIndex, openMajor, majorBlockIndex uint64, majorBlockTime time.Time) error {
 	// Load the ledger state
 	var ledger *protocol.SystemLedger
 	err := batch.Account(x.Describe.Ledger()).GetStateAs(&ledger)
@@ -303,7 +303,7 @@ func (x *Executor) finalizeBlock(batch *database.Batch, currentBlockIndex uint64
 	switch x.Describe.NetworkType {
 	case config.Directory:
 		// DN -> all BVNs
-		anchor, err := x.buildDirectoryAnchor(batch, ledger, openMajor, majorBlockIndex)
+		anchor, err := x.buildDirectoryAnchor(batch, ledger, openMajor, majorBlockIndex, majorBlockTime)
 		if err != nil {
 			return errors.Format(errors.StatusUnknown, "build block anchor: %w", err)
 		}
@@ -499,7 +499,9 @@ func (x *Executor) shouldSendAnchor(batch *database.Batch, ledger *protocol.Syst
 	return false, nil
 }
 
-func (x *Executor) buildDirectoryAnchor(batch *database.Batch, ledgerState *protocol.SystemLedger, openMajor, majorBlockIndex uint64) (*protocol.DirectoryAnchor, error) {
+func (x *Executor) buildDirectoryAnchor(batch *database.Batch, ledgerState *protocol.SystemLedger, openMajor,
+	majorBlockIndex uint64, majorBlockTime time.Time) (*protocol.DirectoryAnchor, error) {
+
 	anchor := new(protocol.DirectoryAnchor)
 	ledger := batch.Account(x.Describe.Ledger())
 	rootChain, err := x.buildBlockAnchor(batch, ledgerState, ledger, &anchor.SubnetAnchor, majorBlockIndex)
@@ -507,6 +509,7 @@ func (x *Executor) buildDirectoryAnchor(batch *database.Batch, ledgerState *prot
 		return nil, err
 	}
 	anchor.MakeMajorBlock = openMajor
+	anchor.MakeMajorBlockTime = majorBlockTime
 	anchor.Updates = ledgerState.PendingUpdates
 
 	// TODO This is pretty inefficient; we're constructing a receipt for every
@@ -565,8 +568,7 @@ func (x *Executor) buildDirectoryAnchor(batch *database.Batch, ledgerState *prot
 				return nil, errors.Format(errors.StatusUnknown, "build receipt for intermediate anchor chain %s: %w", update.Name, err)
 			}
 
-			r := protocol.ReceiptFromManaged(receipt)
-			anchor.Receipts = append(anchor.Receipts, *r)
+			anchor.Receipts = append(anchor.Receipts, *receipt)
 		}
 	}
 

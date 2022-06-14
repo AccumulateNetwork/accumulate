@@ -137,7 +137,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 		}
 		res := new(query.ResponseChainEntry)
 		res.Type = protocol.ChainTypeAnchor
-		res.Height = index
+		res.Height = uint64(index)
 		res.Entry = entryHash
 
 		res.Receipt, err = m.resolveChainReceipt(batch, u, chainName, index)
@@ -194,7 +194,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 
 			res := new(query.ResponseChainEntry)
 			res.Type = obj.ChainType(fragment[1])
-			res.Height = height
+			res.Height = uint64(height)
 			res.Entry = entry
 			res.State = make([][]byte, len(state.Pending))
 			for i, h := range state.Pending {
@@ -240,7 +240,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 				return nil, nil, err
 			}
 
-			res.Height = height
+			res.Height = uint64(height)
 			res.ChainState = make([][]byte, len(state.Pending))
 			for i, h := range state.Pending {
 				res.ChainState[i] = h.Copy()
@@ -317,7 +317,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 					return nil, nil, err
 				}
 
-				res.Height = height
+				res.Height = uint64(height)
 				res.ChainState = make([][]byte, len(state.Pending))
 				for i, h := range state.Pending {
 					res.ChainState[i] = h.Copy()
@@ -592,7 +592,7 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove, remote
 	qr.Envelope.Transaction = []*protocol.Transaction{txState.Transaction}
 	qr.Status = status
 	qr.TxId = txState.Transaction.ID()
-	qr.Height = -1
+	// qr.Height = -1
 
 	synth, err := tx.GetSyntheticTxns()
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
@@ -930,9 +930,20 @@ func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove 
 		var err error
 		v, err = resp.MarshalBinary()
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeMarshallingError, Message: fmt.Errorf("error marshalling payload for transaction history")}
+			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeMarshallingError, Message: fmt.Errorf("error marshalling payload for minor blocks response")}
+		}
+	case *query.RequestMajorBlocks:
+		resp, pErr := m.queryMajorBlocks(batch, q)
+		if pErr != nil {
+			return nil, nil, pErr
 		}
 
+		k = []byte("major-block")
+		var err error
+		v, err = resp.MarshalBinary()
+		if err != nil {
+			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeMarshallingError, Message: fmt.Errorf("error marshalling payload for major blocks response")}
+		}
 	case *query.RequestSynth:
 		subnet, ok := protocol.ParseSubnetUrl(q.Destination)
 		if !ok {
@@ -987,6 +998,9 @@ func (m *Executor) queryMinorBlocks(batch *database.Batch, req *query.RequestMin
 		return nil, &protocol.Error{Code: protocol.ErrorCodeQueryChainUpdatesError, Message: err}
 	}
 
+	if req.Start == 0 { // We don't have major block 0, avoid crash
+		req.Start = 1
+	}
 	startIndex, _, err := indexing.SearchIndexChain(idxChain, uint64(idxChain.Height())-1, indexing.MatchAfter, indexing.SearchIndexChainByBlock(req.Start))
 	if err != nil {
 		return nil, &protocol.Error{Code: protocol.ErrorCodeQueryEntriesError, Message: err}
@@ -994,7 +1008,7 @@ func (m *Executor) queryMinorBlocks(batch *database.Batch, req *query.RequestMin
 
 	entryIdx := startIndex
 
-	resp := query.ResponseMinorBlocks{TotalBlocks: uint64(ledger.Index)}
+	resp := query.ResponseMinorBlocks{TotalBlocks: ledger.Index}
 	curEntry := new(protocol.IndexEntry)
 	resultCnt := uint64(0)
 
@@ -1103,7 +1117,7 @@ func (m *Executor) resolveTxReceipt(batch *database.Batch, txid []byte, entry *i
 	}
 
 	receipt.LocalBlock = block
-	receipt.Proof = *protocol.ReceiptFromManaged(r)
+	receipt.Proof = *r
 	return receipt, nil
 }
 
@@ -1114,7 +1128,7 @@ func (m *Executor) resolveChainReceipt(batch *database.Batch, account *url.URL, 
 		return receipt, err
 	}
 
-	receipt.Proof = *protocol.ReceiptFromManaged(r)
+	receipt.Proof = *r
 	return receipt, nil
 }
 
@@ -1126,7 +1140,7 @@ func (m *Executor) resolveAccountStateReceipt(batch *database.Batch, account *da
 	}
 
 	receipt.LocalBlock = block
-	receipt.Proof = *protocol.ReceiptFromManaged(r)
+	receipt.Proof = *r
 	return receipt, nil
 }
 

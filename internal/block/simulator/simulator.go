@@ -72,6 +72,15 @@ func New(t TB, bvnCount int) *Simulator {
 	return sim
 }
 
+func NewWithLogLevels(t TB, bvnCount int, logLevels config.LogLevel) *Simulator {
+	t.Helper()
+	sim := new(Simulator)
+	sim.TB = t
+	sim.LogLevels = logLevels.String()
+	sim.Setup(bvnCount)
+	return sim
+}
+
 func (sim *Simulator) Setup(bvnCount int) {
 	sim.Helper()
 
@@ -372,7 +381,7 @@ func (s *Simulator) WaitForTransactions(status func(*protocol.TransactionStatus)
 	return statuses, transactions
 }
 
-func (s *Simulator) WaitForTransaction(statusCheck func(*protocol.TransactionStatus) bool, txnHash []byte, n int) *ExecEntry {
+func (s *Simulator) WaitForTransaction(statusCheck func(*protocol.TransactionStatus) bool, txnHash []byte, n int) (*protocol.Transaction, *protocol.TransactionStatus, []*url.TxID) {
 	var x *ExecEntry
 	for i := 0; i < n; i++ {
 		x = s.findTxn(statusCheck, txnHash)
@@ -382,16 +391,8 @@ func (s *Simulator) WaitForTransaction(statusCheck func(*protocol.TransactionSta
 
 		s.ExecuteBlock(nil)
 	}
-	return x
-}
-
-func (s *Simulator) WaitForTransactionFlow(statusCheck func(*protocol.TransactionStatus) bool, txnHash []byte) ([]*protocol.TransactionStatus, []*protocol.Transaction) {
-	s.Helper()
-
-	x := s.WaitForTransaction(statusCheck, txnHash, 50)
 	if x == nil {
-		require.FailNow(s, fmt.Sprintf("Transaction %X has not been delivered after 50 blocks", txnHash[:4]))
-		panic("unreachable")
+		return nil, nil, nil
 	}
 
 	batch := x.Database.Begin(false)
@@ -402,11 +403,22 @@ func (s *Simulator) WaitForTransactionFlow(statusCheck func(*protocol.Transactio
 	require.NoError(s, err1)
 	require.NoError(s, err2)
 	require.NoError(s, err3)
+	return state.Transaction, status, synth.Entries
+}
+
+func (s *Simulator) WaitForTransactionFlow(statusCheck func(*protocol.TransactionStatus) bool, txnHash []byte) ([]*protocol.TransactionStatus, []*protocol.Transaction) {
+	s.Helper()
+
+	txn, status, synth := s.WaitForTransaction(statusCheck, txnHash, 50)
+	if txn == nil {
+		require.FailNow(s, fmt.Sprintf("Transaction %X has not been delivered after 50 blocks", txnHash[:4]))
+		panic("unreachable")
+	}
 
 	status.For = *(*[32]byte)(txnHash)
 	statuses := []*protocol.TransactionStatus{status}
-	transactions := []*protocol.Transaction{state.Transaction}
-	for _, id := range synth.Entries {
+	transactions := []*protocol.Transaction{txn}
+	for _, id := range synth {
 		// Wait for synthetic transactions to be delivered
 		id := id.Hash()
 		st, txn := s.WaitForTransactionFlow(func(status *protocol.TransactionStatus) bool {

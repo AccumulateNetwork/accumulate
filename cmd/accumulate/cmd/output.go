@@ -150,7 +150,7 @@ func PrintTransactionQueryResponseV2(res *api2.TransactionQueryResponse) (string
 		if receipt.Error != "" {
 			out += fmt.Sprintf("  Error!! %s\n", receipt.Error)
 		}
-		if !receipt.Proof.Convert().Validate() {
+		if !receipt.Proof.Validate() {
 			//nolint:gosimple
 			out += fmt.Sprintf("  Invalid!!\n")
 		}
@@ -183,6 +183,24 @@ func PrintMinorBlockQueryResponseV2(res *api2.MinorQueryResponse) (string, error
 		for i, txid := range res.TxIds {
 			str += fmt.Sprintf("    txid #%d\t\t: %s\n", i+1, hex.EncodeToString(txid))
 		}
+	}
+	return str, nil
+}
+
+func PrintMajorBlockQueryResponseV2(res *api2.MajorQueryResponse) (string, error) {
+	if WantJsonOutput {
+		return PrintJson(res)
+	}
+
+	str := fmt.Sprintf("--- major block #%d, major blocktime %v:\n", res.MajorBlockIndex, getBlockTime(res.MajorBlockTime))
+
+	if len(res.MinorBlocks) > 0 {
+		for _, mnrBlk := range res.MinorBlocks {
+			str += fmt.Sprintf("    minor block index: %d\n", mnrBlk.BlockIndex)
+			str += fmt.Sprintf("    minor block time : %s\n", getBlockTime(mnrBlk.BlockTime))
+		}
+	} else {
+		str += fmt.Sprintf("    (empty)")
 	}
 	return str, nil
 }
@@ -259,7 +277,7 @@ func PrintMultiResponse(res *api2.MultiResponse) (string, error) {
 		for i := range res.Items {
 			str += fmt.Sprintln("==========================================================================")
 
-			// Convert the item to a transaction query response
+			// Convert the item to a minor query response
 			mtr := new(api2.MinorQueryResponse)
 			err := Remarshal(res.Items[i], mtr)
 			if err != nil {
@@ -267,6 +285,26 @@ func PrintMultiResponse(res *api2.MultiResponse) (string, error) {
 			}
 
 			s, err := PrintMinorBlockQueryResponseV2(mtr)
+			if err != nil {
+				return "", err
+			}
+			str += s
+			str += fmt.Sprintln()
+		}
+		out += str
+	case "majorBlock":
+		str := fmt.Sprintf("\n\tMajor block result Start: %d\t Count: %d\t Total blocks: %d\n", res.Start, res.Count, res.Total)
+		for i := range res.Items {
+			str += fmt.Sprintln("==========================================================================")
+
+			// Convert the item to a major query response
+			mtr := new(api2.MajorQueryResponse)
+			err := Remarshal(res.Items[i], mtr)
+			if err != nil {
+				return "", err
+			}
+
+			s, err := PrintMajorBlockQueryResponseV2(mtr)
 			if err != nil {
 				return "", err
 			}

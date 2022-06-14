@@ -20,24 +20,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-//
-//type Node struct {
-//	IP   string          `json:"ip"`
-//	Type config.NodeType `json:"type"`
-//}
-//
-//type Subnet struct {
-//	Name  string             `json:"name"`
-//	Type  config.NetworkType `json:"type"`
-//	Port  int                `json:"port"`
-//	Nodes []Node             `json:"nodes"`
-//}
-//
-//type Network struct {
-//	Network string   `json:"network"`
-//	Subnet  []Subnet `json:"subnet"`
-//}
-
 func loadNetworkConfiguration(file string) (ret config.Network, err error) {
 	jsonFile, err := os.Open(file)
 	defer func() { _ = jsonFile.Close() }()
@@ -128,27 +110,10 @@ func initNetwork(cmd *cobra.Command, args []string) {
 	default:
 		fatalf("not enough IPs - you must specify one base IP or one IP for each node")
 	}
-	//
-	//addresses := make(map[string][]string, len(directory.Nodes))
+
 	dnConfig := make([]*cfg.Config, len(directory.Nodes))
 	var dnRemote []string
 	dnListen := make([]string, len(directory.Nodes))
-	//
-	//var accSub []config.Subnet
-	//for _, sub := range network.Subnets {
-	//	s := config.Subnet{}
-	//	s.Name = sub.Name
-	//	s.Type = sub.Type
-	//	for _, a := range sub.Nodes {
-	//		//address := fmt.Sprintf("http://%s:%d", a.Address, sub)
-	//		n := config.Node{}
-	//
-	//		n.Address = a.Address
-	//		n.Type = a.Type
-	//		s.Nodes = append(s.Nodes, n)
-	//	}
-	//	accSub = append(accSub, s)
-	//}
 
 	//need to configure the dn for each BVN assuming 1 bvn
 	for i := range directory.Nodes {
@@ -209,12 +174,6 @@ func initNetwork(cmd *cobra.Command, args []string) {
 			c.Accumulate.Network = network // Subnets = accSub
 		}
 	}
-
-	//for _, sub := range bvnSubnet {
-	//	for _, bvn := range sub.Nodes {
-	//		addresses[sub.Name] = append(addresses[sub.Name], fmt.Sprintf("http://%s:%d", bvn.IP, sub.Port))
-	//	}
-	//}
 
 	for i, v := range bvnSubnet {
 		for j := range v.Nodes {
@@ -330,10 +289,7 @@ func initNetwork(cmd *cobra.Command, args []string) {
 	check(err)
 	defer f.Close()
 
-	//err = yaml.NewEncoder(f).Encode(compose)
 	check(err)
-
-	//	initValidatorNode("dn", dnBasePort, cmd, args)
 }
 
 func initNetworkNode(networkName string, subnetName string, nodes []config.Node, netType cfg.NetworkType, nodeType cfg.NodeType,

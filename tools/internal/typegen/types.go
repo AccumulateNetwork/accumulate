@@ -1,6 +1,7 @@
 package typegen
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -45,6 +46,26 @@ func (f FieldType) MarshalYAML() (interface{}, error) {
 func (f *FieldType) UnmarshalYAML(value *yaml.Node) error {
 	var s string
 	err := value.Decode(&s)
+	if err != nil {
+		return err
+	}
+
+	code, ok := TypeCodeByName(s)
+	if ok {
+		f.SetKnown(code)
+	} else {
+		f.SetNamed(s)
+	}
+	return nil
+}
+
+func (f FieldType) MarshalJSON() ([]byte, error) {
+	return json.Marshal(f.String())
+}
+
+func (f *FieldType) UnmarshalJSON(data []byte) error {
+	var s string
+	err := json.Unmarshal(data, &s)
 	if err != nil {
 		return err
 	}

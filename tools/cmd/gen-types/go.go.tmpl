@@ -115,7 +115,7 @@ func (v *{{.Name}}) MarshalBinary() ([]byte, error) {
    	{{  range .Fields}}
 	{{- if and .IsBinary .IsMarshalled}}
 	{{- if .IsEmbedded}}
-	writer.WriteValue({{.Number}}, &v.{{get .}})
+	writer.WriteValue({{.Number}}, v.{{get .}}.MarshalBinary)
 	{{- else if .OmitEmpty}}
 	if !({{isZero . (print "v." (get .))}}) {
 		{{binaryMarshalValue . "writer" (print "v." (get .))}}

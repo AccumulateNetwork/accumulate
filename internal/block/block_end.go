@@ -225,7 +225,7 @@ func (m *Executor) createLocalDNReceipt(block *Block, rootChain *database.Chain,
 		sig := new(protocol.ReceiptSignature)
 		sig.SourceNetwork = m.Describe.NodeUrl()
 		sig.TransactionHash = *(*[32]byte)(txn.GetHash())
-		sig.Proof = *protocol.ReceiptFromManaged(receipt)
+		sig.Proof = *receipt
 		_, err = block.Batch.Transaction(txn.GetHash()).AddSignature(0, sig)
 		if err != nil {
 			return errors.Format(errors.StatusUnknown, "store signature: %w", err)
@@ -386,6 +386,7 @@ func (x *Executor) updateMajorIndexChains(block *Block, rootIndexIndex uint64) e
 		Source:         uint64(mainChain.Height() - 1),
 		RootIndexIndex: rootIndexIndex,
 		BlockIndex:     block.State.MakeMajorBlock,
+		BlockTime:      &block.State.MakeMajorBlockTime,
 	})
 	if err != nil {
 		return errors.Format(errors.StatusUnknown, "add anchor ledger index chain entry: %w", err)

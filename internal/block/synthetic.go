@@ -217,7 +217,7 @@ func (x *Executor) buildSynthReceipt(batch *database.Batch, produced []*protocol
 			return errors.Format(errors.StatusUnknown, "prove from %d to %d on the synthetic transaction chain: %w", i+int(synthStart), synthEnd, err)
 		}
 
-		r, err := managed.CombineReceipts(synthProof, rootProof)
+		r, err := synthProof.Combine(rootProof)
 		if err != nil {
 			return errors.Format(errors.StatusUnknown, "combine receipts: %w", err)
 		}
@@ -225,7 +225,7 @@ func (x *Executor) buildSynthReceipt(batch *database.Batch, produced []*protocol
 		proofSig := new(protocol.ReceiptSignature)
 		proofSig.SourceNetwork = x.Describe.NodeUrl()
 		proofSig.TransactionHash = *(*[32]byte)(transaction.GetHash())
-		proofSig.Proof = *protocol.ReceiptFromManaged(r)
+		proofSig.Proof = *r
 
 		// Record the proof signature but DO NOT record the key signature! Each
 		// node has a different key, so recording the key signature here would
@@ -310,7 +310,7 @@ func (x *Executor) putSyntheticTransaction(batch *database.Batch, transaction *p
 	return nil
 }
 
-func assembleSynthReceipt(transaction *protocol.Transaction, signatures []protocol.Signature) (*protocol.Receipt, *url.URL, error) {
+func assembleSynthReceipt(transaction *protocol.Transaction, signatures []protocol.Signature) (*managed.Receipt, *url.URL, error) {
 	// Collect receipts
 	receipts := map[[32]byte]*protocol.ReceiptSignature{}
 	for _, signature := range signatures {
@@ -340,8 +340,8 @@ func assembleSynthReceipt(transaction *protocol.Transaction, signatures []protoc
 			continue
 		}
 
-		r := receipt.Combine(&rsig.Proof)
-		if r != nil {
+		r, err := receipt.Combine(&rsig.Proof)
+		if err == nil {
 			receipt = r
 			sourceNet = rsig.SourceNetwork
 		}

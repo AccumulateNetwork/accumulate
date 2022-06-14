@@ -22,7 +22,7 @@ import (
 )
 
 type ChainEntry struct {
-	Height    int64       `json:"height" form:"height" query:"height" validate:"required"`
+	Height    uint64      `json:"height" form:"height" query:"height" validate:"required"`
 	Entry     []byte      `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
 	State     [][]byte    `json:"state,omitempty" form:"state" query:"state" validate:"required"`
 	Value     interface{} `json:"value,omitempty" form:"value" query:"value" validate:"required"`
@@ -104,6 +104,22 @@ type KeyPageIndexQuery struct {
 	extraData []byte
 }
 
+type MajorBlocksQuery struct {
+	UrlQuery
+	QueryPagination
+	extraData []byte
+}
+
+type MajorQueryResponse struct {
+
+	// MajorBlockIndex is the index of the major block..
+	MajorBlockIndex uint64 `json:"majorBlockIndex,omitempty" form:"majorBlockIndex" query:"majorBlockIndex" validate:"required"`
+	// MajorBlockTime is the start time of the major block..
+	MajorBlockTime *time.Time    `json:"majorBlockTime,omitempty" form:"majorBlockTime" query:"majorBlockTime" validate:"required"`
+	MinorBlocks    []*MinorBlock `json:"minorBlocks,omitempty" form:"minorBlocks" query:"minorBlocks" validate:"required"`
+	extraData      []byte
+}
+
 type MerkleState struct {
 	Height    uint64   `json:"height,omitempty" form:"height" query:"height" validate:"required"`
 	Roots     [][]byte `json:"roots,omitempty" form:"roots" query:"roots" validate:"required"`
@@ -121,6 +137,15 @@ type MetricsResponse struct {
 	extraData []byte
 }
 
+type MinorBlock struct {
+
+	// BlockIndex is the index of the block. Only include when indexing the root anchor chain.
+	BlockIndex uint64 `json:"blockIndex,omitempty" form:"blockIndex" query:"blockIndex" validate:"required"`
+	// BlockTime is the start time of the block..
+	BlockTime *time.Time `json:"blockTime,omitempty" form:"blockTime" query:"blockTime" validate:"required"`
+	extraData []byte
+}
+
 type MinorBlocksQuery struct {
 	UrlQuery
 	QueryPagination
@@ -130,11 +155,7 @@ type MinorBlocksQuery struct {
 }
 
 type MinorQueryResponse struct {
-
-	// BlockIndex is the index of the block. Only include when indexing the root anchor chain.
-	BlockIndex uint64 `json:"blockIndex,omitempty" form:"blockIndex" query:"blockIndex" validate:"required"`
-	// BlockTime is the start time of the block..
-	BlockTime *time.Time `json:"blockTime,omitempty" form:"blockTime" query:"blockTime" validate:"required"`
+	MinorBlock
 	// TxCount shows how many transactions this block contains.
 	TxCount      uint64                      `json:"txCount,omitempty" form:"txCount" query:"txCount" validate:"required"`
 	TxIds        [][]byte                    `json:"txIds,omitempty" form:"txIds" query:"txIds" validate:"required"`
@@ -400,7 +421,7 @@ func (v *DataEntryQueryResponse) MarshalBinary() ([]byte, error) {
 		writer.WriteHash(1, &v.EntryHash)
 	}
 	if !(v.Entry == nil) {
-		writer.WriteValue(2, v.Entry)
+		writer.WriteValue(2, v.Entry.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_DataEntryQueryResponse)
@@ -487,7 +508,7 @@ func (v *DataEntryQueryResponse) UnmarshalBinaryFrom(rd io.Reader) error {
 
 func (v *ChainEntry) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Height int64                      `json:"height"`
+		Height uint64                     `json:"height"`
 		Entry  *string                    `json:"entry,omitempty"`
 		State  encoding.JsonList[*string] `json:"state,omitempty"`
 		Value  interface{}                `json:"value,omitempty"`
@@ -644,6 +665,30 @@ func (v *KeyPageIndexQuery) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *MajorBlocksQuery) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Url   *url.URL `json:"url,omitempty"`
+		Start uint64   `json:"start,omitempty"`
+		Count uint64   `json:"count,omitempty"`
+	}{}
+	u.Url = v.UrlQuery.Url
+	u.Start = v.QueryPagination.Start
+	u.Count = v.QueryPagination.Count
+	return json.Marshal(&u)
+}
+
+func (v *MajorQueryResponse) MarshalJSON() ([]byte, error) {
+	u := struct {
+		MajorBlockIndex uint64                         `json:"majorBlockIndex,omitempty"`
+		MajorBlockTime  *time.Time                     `json:"majorBlockTime,omitempty"`
+		MinorBlocks     encoding.JsonList[*MinorBlock] `json:"minorBlocks,omitempty"`
+	}{}
+	u.MajorBlockIndex = v.MajorBlockIndex
+	u.MajorBlockTime = v.MajorBlockTime
+	u.MinorBlocks = v.MinorBlocks
+	return json.Marshal(&u)
+}
+
 func (v *MerkleState) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Height uint64                     `json:"height,omitempty"`
@@ -701,8 +746,8 @@ func (v *MinorQueryResponse) MarshalJSON() ([]byte, error) {
 		TxIds        encoding.JsonList[*string]                   `json:"txIds,omitempty"`
 		Transactions encoding.JsonList[*TransactionQueryResponse] `json:"transactions,omitempty"`
 	}{}
-	u.BlockIndex = v.BlockIndex
-	u.BlockTime = v.BlockTime
+	u.BlockIndex = v.MinorBlock.BlockIndex
+	u.BlockTime = v.MinorBlock.BlockTime
 	u.TxCount = v.TxCount
 	u.TxIds = make(encoding.JsonList[*string], len(v.TxIds))
 	for i, x := range v.TxIds {
@@ -937,7 +982,7 @@ func (v *TxnQuery) MarshalJSON() ([]byte, error) {
 
 func (v *ChainEntry) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Height int64                      `json:"height"`
+		Height uint64                     `json:"height"`
 		Entry  *string                    `json:"entry,omitempty"`
 		State  encoding.JsonList[*string] `json:"state,omitempty"`
 		Value  interface{}                `json:"value,omitempty"`
@@ -1230,6 +1275,42 @@ func (v *KeyPageIndexQuery) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *MajorBlocksQuery) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Url   *url.URL `json:"url,omitempty"`
+		Start uint64   `json:"start,omitempty"`
+		Count uint64   `json:"count,omitempty"`
+	}{}
+	u.Url = v.UrlQuery.Url
+	u.Start = v.QueryPagination.Start
+	u.Count = v.QueryPagination.Count
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.UrlQuery.Url = u.Url
+	v.QueryPagination.Start = u.Start
+	v.QueryPagination.Count = u.Count
+	return nil
+}
+
+func (v *MajorQueryResponse) UnmarshalJSON(data []byte) error {
+	u := struct {
+		MajorBlockIndex uint64                         `json:"majorBlockIndex,omitempty"`
+		MajorBlockTime  *time.Time                     `json:"majorBlockTime,omitempty"`
+		MinorBlocks     encoding.JsonList[*MinorBlock] `json:"minorBlocks,omitempty"`
+	}{}
+	u.MajorBlockIndex = v.MajorBlockIndex
+	u.MajorBlockTime = v.MajorBlockTime
+	u.MinorBlocks = v.MinorBlocks
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.MajorBlockIndex = u.MajorBlockIndex
+	v.MajorBlockTime = u.MajorBlockTime
+	v.MinorBlocks = u.MinorBlocks
+	return nil
+}
+
 func (v *MerkleState) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Height uint64                     `json:"height,omitempty"`
@@ -1328,8 +1409,8 @@ func (v *MinorQueryResponse) UnmarshalJSON(data []byte) error {
 		TxIds        encoding.JsonList[*string]                   `json:"txIds,omitempty"`
 		Transactions encoding.JsonList[*TransactionQueryResponse] `json:"transactions,omitempty"`
 	}{}
-	u.BlockIndex = v.BlockIndex
-	u.BlockTime = v.BlockTime
+	u.BlockIndex = v.MinorBlock.BlockIndex
+	u.BlockTime = v.MinorBlock.BlockTime
 	u.TxCount = v.TxCount
 	u.TxIds = make(encoding.JsonList[*string], len(v.TxIds))
 	for i, x := range v.TxIds {
@@ -1339,8 +1420,8 @@ func (v *MinorQueryResponse) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	v.BlockIndex = u.BlockIndex
-	v.BlockTime = u.BlockTime
+	v.MinorBlock.BlockIndex = u.BlockIndex
+	v.MinorBlock.BlockTime = u.BlockTime
 	v.TxCount = u.TxCount
 	v.TxIds = make([][]byte, len(u.TxIds))
 	for i, x := range u.TxIds {
