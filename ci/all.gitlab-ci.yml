@@ -69,7 +69,7 @@ validate docker:
   - docker-compose up tools
   - docker-compose up -d
   script:
-  - docker-compose run -e MNEMONIC="${MNEMONIC}" --rm -e NODES_DIR="${DN_NODES_DIR}" --entrypoint bash tools /scripts/ci/update-majorblock-schedule.sh
+  - docker-compose run -e MNEMONIC="${MNEMONIC}" --rm -e NODES_DIR="${NODES_DIR}" --entrypoint bash tools /scripts/ci/update-majorblock-schedule.sh
   - docker-compose run -e MNEMONIC="${MNEMONIC}" --rm --entrypoint bash tools /scripts/ci/validate.sh
   - docker-compose run -e MNEMONIC="${MNEMONIC}" --rm -e NODES_DIR="${NODES_DIR}" --entrypoint bash tools /scripts/ci/validate-admin.sh
   - docker-compose run --rm --entrypoint bash tools /scripts/ci/validate-blocks-api.sh
