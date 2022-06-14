@@ -26,6 +26,7 @@ func TestIsValidAdiUrl(t *testing.T) {
 		"Identity has dot":        {URL{Authority: "foo.bar.acme"}, "identity contains a subdomain"},
 		"Identity has underscore": {URL{Authority: "foo_bar.acme"}, "illegal character '_'"},
 		"Identity has space":      {URL{Authority: "foo bar.acme"}, "illegal character ' '"},
+		"Empty identity with TLD": {URL{Authority: ".acme"}, "identity is empty"},
 	}
 
 	for name, str := range good {
