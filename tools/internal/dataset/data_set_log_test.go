@@ -4,11 +4,12 @@ import (
 	"bufio"
 	"crypto/sha256"
 	"fmt"
-	"github.com/stretchr/testify/require"
 	"io/ioutil"
 	"os"
 	"strconv"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestDataSetLog(t *testing.T) {
@@ -72,7 +73,7 @@ func TestDataSetLog(t *testing.T) {
 		defer f.Close()
 		scanner := bufio.NewScanner(f)
 		t.Logf("%s\n", file)
-		// optionally, resize scanner's capacity for lines over 64K, see next example
+
 		for scanner.Scan() {
 			fmt.Println(scanner.Text())
 		}
