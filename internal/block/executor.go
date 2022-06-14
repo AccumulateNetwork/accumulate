@@ -124,7 +124,7 @@ func newExecutor(opts ExecutorOptions, db *database.Database, executors ...Trans
 	m.ExecutorOptions = opts
 	m.executors = map[protocol.TransactionType]TransactionExecutor{}
 	m.dispatcher = newDispatcher(opts)
-	if m.ExecutorOptions.EventBus != nil {
+	if m.Network.Type == config.Directory && m.ExecutorOptions.EventBus != nil {
 		m.majorBlockScheduler = blockscheduler.Init(m.ExecutorOptions.EventBus)
 	}
 

@@ -81,7 +81,6 @@ func (UpdateNetworkGlobals) Validate(st *StateManager, tx *Delivery) (protocol.T
 		if err != nil {
 			return nil, errors.Wrap(errors.StatusUnknown, err)
 		}
-		st.Globals
 	}
 
 	return nil, nil
