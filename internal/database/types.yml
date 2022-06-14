@@ -1,107 +1,139 @@
-sigSetData:
+SignatureEntry:
   fields:
-    - name: Version
-      type: uint
-    - name: Entries
-      type: SigSetEntry
-      marshal-as: reference
-      repeatable: true
+  - name: Type
+    type: protocol.SignatureType
+    marshal-as: enum
+  - name: KeyEntryIndex
+    type: uint
+  - name: SignatureHash
+    type: hash
 
-SigSetEntry:
+TransactionChainEntry:
   fields:
-    - name: System
-      type: bool
-    - name: Type
-      type: protocol.SignatureType
-      marshal-as: enum
-    - name: KeyEntryIndex
-      type: uint
-    - name: SignatureHash
-      type: hash
+  - name: Account
+    type: url
+    marshal-as: reference
+    pointer: true
+  - name: Chain
+    description: is the name of the chain
+    type: string
+  - name: ChainIndex
+    description: is the index of the entry in the chain's index chain
+    type: uint
+  - name: AnchorIndex
+    description: is the index of the entry in the anchor chain's index chain
+    type: uint
 
-txSyntheticTxns:
+ChainUpdate:
   fields:
-    - name: Txids
-      type: txid
+    - name: Account
+      type: url
       pointer: true
-      repeatable: true
-
-SigOrTxn:
-  fields:
-    - name: Transaction
-      type: protocol.Transaction
-      marshal-as: reference
-      pointer: true
-    - name: Signature
-      type: protocol.Signature
-      marshal-as: union
-    - name: Txid
-      type: txid
-      pointer: true
-
-merkleState:
-  fields:
     - name: Name
       type: string
     - name: Type
       type: protocol.ChainType
       marshal-as: enum
-    - name: Count
+    - name: Index
       type: uint
-    - name: Pending
+    - name: SourceIndex
+      type: uint
+    - name: SourceBlock
+      type: uint
+    - name: Entry
       type: bytes
-      repeatable: true
-    - name: Entries
-      type: bytes
-      repeatable: true
 
-accountState:
+BlockStateSynthTxnEntry:
   fields:
-    - name: Main
-      description: is the main state of the account
-      type: protocol.Account
-      marshal-as: union
-    - name: Chains
-      description: is the state of the account's chains
-      type: merkleState
-      marshal-as: reference
-      pointer: true
-      repeatable: true
-    - name: Pending
-      description: is the state of the account's pending transactions
-      type: transactionState
-      marshal-as: reference
-      pointer: true
-      repeatable: true
-    - name: Transactions
-      description: is the state of other transactions related to the account
-      type: transactionState
-      marshal-as: reference
-      pointer: true
-      repeatable: true
+  - name: Transaction
+    type: bytes
+  - name: ChainEntry
+    type: uvarint
 
-transactionState:
+fullAccountState:
   fields:
-    - name: Transaction
+  - name: State
+    description: is the main state of the account
+    type: protocol.Account
+    marshal-as: union
+  - name: Chains
+    description: is the state of the account's chains
+    type: chainState
+    marshal-as: reference
+    pointer: true
+    repeatable: true
+  - name: Pending
+    type: txid
+    pointer: true
+    repeatable: true
+  - name: SyntheticForAnchor
+    type: hashAndTxidSet
+    marshal-as: reference
+    repeatable: true
+    pointer: true
+  - name: Transactions
+    description: is the state of transactions related to the account
+    type: fullTransactionState
+    marshal-as: reference
+    pointer: true
+    repeatable: true
+
+fullTransactionState:
+  fields:
+    - name: Hash
+      type: hash
+    - name: Value
       type: protocol.Transaction
       marshal-as: reference
       pointer: true
-    - name: State
+    - name: Status
       type: protocol.TransactionStatus
       marshal-as: reference
       pointer: true
+    - name: Produced
+      type: txid
+      pointer: true
+      repeatable: true
     - name: Signatures
-      type: sigSetData
+      type: signerAndSigSet
       marshal-as: reference
       pointer: true
       repeatable: true
 
-intValue:
+chainState:
   fields:
-    - name: Value
-      type: int
+  - name: Name
+    type: string
+  - name: Type
+    type: protocol.ChainType
+    marshal-as: enum
+  - name: Count
+    type: uint
+  - name: Pending
+    type: bytes
+    repeatable: true
+  - name: Entries
+    type: bytes
+    repeatable: true
 
-hashValue:
+hashAndTxidSet:
   fields:
-    - name: Value
-      type: bytes
+  - name: Anchor
+    type: hash
+  - name: Txids
+    type: txid
+    pointer: true
+    repeatable: true
+
+signerAndSigSet:
+  fields:
+  - name: Signer
+    type: url
+    pointer: true
+  - name: Version
+    type: uint
+  - name: Signatures
+    type: SignatureEntry
+    marshal-as: reference
+    pointer: true
+    repeatable: true

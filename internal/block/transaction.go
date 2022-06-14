@@ -5,7 +5,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/v1"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
@@ -154,12 +154,12 @@ func (x *Executor) userTransactionIsReady(batch *database.Batch, transaction *pr
 			return false, fmt.Errorf("missing initiator")
 		}
 
-		initSigs, err := batch.Transaction(transaction.GetHash()).ReadSignatures(status.Initiator)
+		initSigs, err := batch.Transaction(transaction.GetHash()).Signatures(status.Initiator).Get()
 		if err != nil {
 			return false, fmt.Errorf("load initiator signatures: %w", err)
 		}
 
-		if initSigs.Count() == 0 {
+		if len(initSigs) == 0 {
 			return false, fmt.Errorf("missing initiator signature")
 		}
 
@@ -229,20 +229,20 @@ func (x *Executor) AuthorityIsSatisfied(batch *database.Batch, transaction *prot
 
 func (x *Executor) SignerIsSatisfied(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus, signer protocol.Signer) (bool, error) {
 	// Load the signature set
-	signatures, err := batch.Transaction(transaction.GetHash()).ReadSignaturesForSigner(signer)
+	signatures, err := batch.Transaction(transaction.GetHash()).Signatures(signer.GetUrl()).Get()
 	if err != nil {
 		return false, fmt.Errorf("load signatures set %v: %w", signer.GetUrl(), err)
 	}
 
 	// Check if the signature set includes a completed set
-	for _, e := range signatures.Entries() {
+	for _, e := range signatures {
 		if e.Type == protocol.SignatureTypeSet {
 			return true, nil
 		}
 	}
 
 	// Check if the threshold has been reached
-	if uint64(signatures.Count()) >= signer.GetSignatureThreshold() {
+	if uint64(len(signatures)) >= signer.GetSignatureThreshold() {
 		return true, nil
 	}
 

@@ -1,76 +1,113 @@
 package database
 
 import (
-	"encoding"
-	"errors"
 	"fmt"
+	"strings"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
-// Chain manages a Merkle tree (chain).
-type Chain struct {
-	account  *Account
-	writable bool
-	merkle   *managed.MerkleManager
-}
+const markPower = 8
+const markFreq = 1 << markPower
+const markMask = markFreq - 1
 
-// newChain creates a new Chain.
-func newChain(account *Account, key storage.Key, writable bool) (*Chain, error) {
-	m := new(Chain)
-	m.account = account
-	m.writable = writable
-
-	var err error
-	m.merkle, err = managed.NewMerkleManager(MerkleDbManager{Batch: account.batch}, markPower)
-	if err != nil {
-		return nil, err
+func newChain(store recordStore, key recordKey, typ protocol.ChainType, namefmt, labelfmt string) *Chain {
+	c := new(Chain)
+	c.store = store
+	c.key = key
+	c.typ = typ
+	if strings.ContainsRune(namefmt, '%') {
+		c.name = fmt.Sprintf(namefmt, key...)
+	} else {
+		c.name = namefmt
 	}
+	c.label = fmt.Sprintf(labelfmt, key...)
+	return c
+}
 
-	err = m.merkle.SetKey(key)
-	if err != nil {
-		return nil, err
+func newMajorMinorIndexChain(store recordStore, key recordKey, namefmt, labelfmt string) *MajorMinorIndexChain {
+	c := new(MajorMinorIndexChain)
+	c.store = store
+	c.key = key
+	if strings.ContainsRune(namefmt, '%') {
+		c.name = fmt.Sprintf(namefmt, key...)
+	} else {
+		c.name = namefmt
 	}
-
-	return m, nil
+	c.label = fmt.Sprintf(labelfmt, key...)
+	return c
 }
 
-// Height returns the height of the chain.
-func (c *Chain) Height() int64 {
-	return c.merkle.MS.Count
+func (c *Chain) AddEntry(entry []byte, unique bool) error {
+	return c.AddHash(entry, unique)
 }
 
-// Entry loads the entry in the chain at the given height.
-func (c *Chain) Entry(height int64) ([]byte, error) {
-	return c.merkle.Get(height)
-}
-
-// EntryAs loads and unmarshals the entry in the chain at the given height.
-func (c *Chain) EntryAs(height int64, value encoding.BinaryUnmarshaler) error {
-	data, err := c.Entry(height)
+func (c *Chain) AddHash(hash managed.Hash, unique bool) error {
+	state, err := c.State().Get() // Get the current state
 	if err != nil {
 		return err
 	}
 
-	return value.UnmarshalBinary(data)
+	hash = hash.Copy()                         // Just to make sure hash doesn't get changed
+	elemIdx := c.ElementIndex(hash)            //
+	_, err = elemIdx.Get()                     // See if this element is a duplicate
+	if errors.Is(err, errors.StatusNotFound) { // So only if the hash is not yet added to the Merkle Tree
+		err = elemIdx.Put(uint64(state.Count)) // Keep its index
+		if err != nil {
+			return err
+		}
+	} else if err != nil {
+		return err
+	} else if unique {
+		return nil // Don't add duplicates
+	}
+
+	err = c.Element(uint64(state.Count)).Put(hash)
+	if err != nil {
+		return err
+	}
+	switch (state.Count + 1) & markMask {
+	case 0: // Is this the end of the Mark set, i.e. 0, ..., markFreq-1
+		state.AddToMerkleTree(hash)                        // Add the hash to the Merkle Tree
+		err = c.States(uint64(state.Count - 1)).Put(state) // Save Merkle State at n*MarkFreq-1
+		if err != nil {
+			return err
+		}
+	case 1: //                              After MarkFreq elements are written
+		state.HashList = state.HashList[:0] // then clear the HashList
+		fallthrough                         // then fall through as normal
+	default:
+		state.AddToMerkleTree(hash) // 0 to markFeq-2, always add to the merkle tree
+	}
+	err = c.State().Put(state)
+	if err != nil {
+		return fmt.Errorf("error writing chain head: %v", err)
+	}
+
+	return nil
 }
 
-// Entries returns entries in the given range.
 func (c *Chain) Entries(start int64, end int64) ([][]byte, error) {
-	if end > c.Height() {
-		end = c.Height()
+	state, err := c.State().Get()
+	if err != nil {
+		return nil, errors.Wrap(errors.StatusUnknown, err)
+	}
+
+	if end > state.Count {
+		end = state.Count
 	}
 
 	if end < start {
-		return nil, errors.New("invalid range: start is greater than end")
+		return nil, errors.New(errors.StatusBadRequest, "invalid range: start is greater than end")
 	}
 
 	// GetRange will not cross mark point boundaries, so we may need to call it
 	// multiple times
 	entries := make([][]byte, 0, end-start)
 	for start < end {
-		h, err := c.merkle.GetRange(start, end)
+		h, err := c.GetRange(start, end)
 		if err != nil {
 			return nil, err
 		}
@@ -84,85 +121,140 @@ func (c *Chain) Entries(start int64, end int64) ([][]byte, error) {
 	return entries, nil
 }
 
-// State returns the state of the chain at the given height.
-func (c *Chain) State(height int64) (*managed.MerkleState, error) {
-	return c.merkle.GetAnyState(height)
+func (c *Chain) GetRange(begin, end int64) (hashes []managed.Hash, err error) {
+	state, err := c.State().Get()
+	if err != nil {
+		return nil, errors.Wrap(errors.StatusUnknown, err)
+	}
+	ec := state.Count
+
+	// end++  Increment to include end in results, comment out to leave it out.
+
+	if end < begin || begin >= ec || begin < 0 {
+		return nil, fmt.Errorf("impossible range %d,%d for chain length %d",
+			begin, end, ec) // Return zero begin and/or end are impossible
+	}
+	if end > ec { // Don't try and return more elements than are in the chain
+		end = ec
+	}
+	if end == begin { // We will return an empty string if begin == end
+		return hashes, nil
+	}
+
+	markPoint := begin & ^markMask // Get the mark point just past begin
+
+	var s *managed.MerkleState
+	var hl []managed.Hash // Collect all the hashes of the mark points covering the range of begin-end
+	marks := (end-(begin&^markMask))/markFreq + 1
+	for i := int64(0); i < marks; i++ {
+		markPoint += markFreq
+		if s, err = c.States(uint64(markPoint - 1)).Get(); err == nil {
+			hl = append(hl, s.HashList...)
+		} else {
+			s, err = c.State().Get()
+			if err != nil {
+				return nil, errors.New(errors.StatusInternalError, "a chain should always have a chain state")
+			}
+			hl = append(hl, s.HashList...)
+			break
+		}
+	}
+
+	first := (begin) & markMask // Calculate the offset to the beginning of the range
+	last := first + end - begin // and to the end of the range
+
+	// FIXME Is this supposed to be an error?
+	// if int(last) > len(hl) {
+	// 	fmt.Println("begin end", begin, " ", end)
+	// }
+	return hl[first:last], nil // Return this slice.
 }
 
-// CurrentState returns the current state of the chain.
-func (c *Chain) CurrentState() *managed.MerkleState {
-	return c.merkle.MS
+func (c *Chain) Anchor() ([]byte, error) {
+	state, err := c.State().Get()
+	if err != nil {
+		return nil, errors.Wrap(errors.StatusUnknown, err)
+	}
+	return state.GetMDRoot(), nil
 }
 
-// HeightOf returns the height of the given entry in the chain.
-func (c *Chain) HeightOf(hash []byte) (int64, error) {
-	return c.merkle.GetElementIndex(hash)
-}
-
-// Anchor calculates the anchor of the current Merkle state.
-func (c *Chain) Anchor() []byte {
-	return c.merkle.MS.GetMDRoot()
-}
-
-// AnchorAt calculates the anchor of the chain at the given height.
-func (c *Chain) AnchorAt(height uint64) ([]byte, error) {
-	ms, err := c.State(int64(height))
+// GetAnyState returns the state of the chain at the given height.
+func (m *Chain) GetAnyState(element int64) (*managed.MerkleState, error) {
+	ms, _ := m.States(uint64(element)).Get()
+	if ms != nil { //          Shoot for broke. Return a state if it is in the db
+		return ms, nil
+	}
+	head, err := m.State().Get()
 	if err != nil {
 		return nil, err
+	} else if element >= head.Count { //               Check to make sure element is not outside bounds
+		return nil, errors.New(errors.StatusBadRequest, "element out of range")
 	}
-	return ms.GetMDRoot(), nil
-}
-
-// Pending returns the pending roots of the current Merkle state.
-func (c *Chain) Pending() []managed.Hash {
-	return c.merkle.MS.Pending
-}
-
-// AddEntry adds an entry to the chain
-func (c *Chain) AddEntry(entry []byte, unique bool) error {
-	if !c.writable {
-		return fmt.Errorf("chain opened as read-only")
+	MIPrev := element&(^markMask) - 1           //               Calculate the index of the prior markpoint
+	cState, _ := m.States(uint64(MIPrev)).Get() //               Use state at the prior mark point to compute what we need
+	if MIPrev < 0 {
+		cState = new(managed.MerkleState)
+		cState.InitSha256()
 	}
-
-	if entry == nil {
-		panic("attempted to add a nil entry to a chain")
+	if cState == nil { //                                Should be in the database.
+		return nil, errors.New( //                        Report error if it isn't in the database'
+			errors.StatusInternalError, "should have a state for all elements(1)")
 	}
+	cState.HashList = cState.HashList[:0] //             element is past the previous mark, so clear the HashList
 
-	err := c.merkle.AddHash(entry, unique)
-	if err != nil {
-		return err
+	MINext := element&(^markMask) - 1 + markFreq //            Calculate the following mark point
+	var NMark *managed.MerkleState               //
+	if MINext >= head.Count {                    //             If past the end of the chain, then
+		if NMark, err = m.State().Get(); err != nil { //        read the chain state instead
+			return nil, err //                                        Should be in the database
+		}
+	} else {
+		if NMark, _ = m.States(uint64(MINext)).Get(); NMark == nil { //             Read the mark point
+			return nil, errors.NotFound("mark not found in the database")
+		}
 	}
-
-	return c.account.putBpt()
+	for _, v := range NMark.HashList { //                           Now iterate and add to the cState
+		if element+1 == cState.Count { //                              until the loop adds the element
+			break
+		}
+		cState.AddToMerkleTree(v)
+	}
+	if cState.Count&markMask == 0 { //                           If we progress out of the mark set,
+		cState.HashList = cState.HashList[:0] //                       start over collecting hashes.
+	}
+	return cState, nil
 }
 
 // Receipt builds a receipt from one index to another
 func (c *Chain) Receipt(from, to int64) (*managed.Receipt, error) {
+	state, err := c.State().Get()
+	if err != nil {
+		return nil, err
+	}
 	if from < 0 {
 		return nil, fmt.Errorf("invalid range: from (%d) < 0", from)
 	}
 	if to < 0 {
 		return nil, fmt.Errorf("invalid range: to (%d) < 0", to)
 	}
-	if from > c.Height() {
-		return nil, fmt.Errorf("invalid range: from (%d) > height (%d)", from, c.Height())
+	if from > state.Count {
+		return nil, fmt.Errorf("invalid range: from (%d) > height (%d)", from, state.Count)
 	}
-	if to > c.Height() {
-		return nil, fmt.Errorf("invalid range: to (%d) > height (%d)", to, c.Height())
+	if to > state.Count {
+		return nil, fmt.Errorf("invalid range: to (%d) > height (%d)", to, state.Count)
 	}
 	if from > to {
 		return nil, fmt.Errorf("invalid range: from (%d) > to (%d)", from, to)
 	}
 
-	var err error
-	r := managed.NewReceipt(c.merkle)
+	r := new(managed.Receipt)
 	r.StartIndex = from
 	r.EndIndex = to
-	r.Start, err = c.Entry(from)
+	r.Start, err = c.Element(uint64(from)).Get()
 	if err != nil {
 		return nil, err
 	}
-	r.End, err = c.Entry(to)
+	r.End, err = c.Element(uint64(to)).Get()
 	if err != nil {
 		return nil, err
 	}
@@ -173,10 +265,26 @@ func (c *Chain) Receipt(from, to int64) (*managed.Receipt, error) {
 		return r, nil
 	}
 
-	err = r.BuildReceipt()
+	endState, err := c.GetAnyState(r.EndIndex)
+	if err != nil {
+		return nil, err
+	}
+	err = r.BuildReceiptWith(c.GetIntermediate, managed.Sha256, endState)
 	if err != nil {
 		return nil, err
 	}
 
 	return r, nil
+}
+
+func (c *Chain) GetIntermediate(element, height int64) (Left, Right managed.Hash, err error) {
+	hash, e := c.Element(uint64(element)).Get() // Get the element at this height
+	if e != nil {                               // Error out if we can't
+		return nil, nil, e //
+	} //
+	s, e2 := c.GetAnyState(element - 1) // Get the state before the state we want
+	if e2 != nil {                      // If the element doesn't exist, that's a problem
+		return nil, nil, e2 //
+	} //
+	return s.GetIntermediate(hash, height)
 }

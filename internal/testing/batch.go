@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/v1"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -41,7 +41,7 @@ func (t *BatchTest) PutAccountCopy(account protocol.Account) protocol.Account {
 }
 
 func (t *BatchTest) AddSignature(txnHash []byte, keyEntryIndex uint64, sig protocol.Signature) {
-	_, err := t.Transaction(txnHash).AddSignature(keyEntryIndex, sig)
+	err := t.Transaction(txnHash).AddSignature(sig)
 	require.NoError(t, err)
 }
 
@@ -51,8 +51,8 @@ func (t *BatchTest) GetTxnStatus(txnHash []byte) *protocol.TransactionStatus {
 	return status
 }
 
-func (t *BatchTest) GetSignatures(txnHash []byte, signer *url.URL) *database.SignatureSet {
-	sigs, err := t.Transaction(txnHash).ReadSignatures(signer)
+func (t *BatchTest) GetSignatures(txnHash []byte, signer *url.URL) []*database.SigSetEntry {
+	sigs, err := t.Transaction(txnHash).Signatures(signer).Get()
 	require.NoError(t, err)
 	return sigs
 }

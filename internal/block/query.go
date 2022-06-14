@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/v1"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -251,12 +251,12 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 	case "pending":
 		switch len(fragment) {
 		case 1:
-			txIds, err := batch.Account(u).Pending()
+			txIds, err := batch.Account(u).Pending().Get()
 			if err != nil {
 				return nil, nil, err
 			}
 			resp := new(query.ResponsePending)
-			resp.Transactions = txIds.Entries
+			resp.Transactions = txIds
 			return []byte("pending"), resp, nil
 		case 2:
 			if strings.Contains(fragment[1], ":") {
@@ -364,23 +364,23 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 					}
 					return []byte("data-entry"), res, nil
 				} else {
-					entryHash, err := indexing.Data(batch, u).Entry(uint64(index))
+					entryHash, err := indexing.Data(batch, u).Entry().Get(index)
 					if err != nil {
 						return nil, nil, err
 					}
 
-					txnHash, err := indexing.Data(batch, u).Transaction(entryHash)
+					txnHash, err := indexing.Data(batch, u).Transaction(entryHash).Get()
 					if err != nil {
 						return nil, nil, err
 					}
 
-					entry, err := indexing.GetDataEntry(batch, txnHash)
+					entry, err := indexing.GetDataEntry(batch, txnHash[:])
 					if err != nil {
 						return nil, nil, err
 					}
 
 					res := &query.ResponseDataEntry{}
-					res.EntryHash = *(*[32]byte)(entryHash)
+					res.EntryHash = entryHash
 					res.Entry = entry
 					return []byte("data-entry"), res, nil
 				}
@@ -494,10 +494,10 @@ func (m *Executor) queryDirectoryByChainId(batch *database.Batch, account *url.U
 	}
 
 	count := limit
-	if start+count > mdCount {
-		count = mdCount - start
+	if start+count > uint64(mdCount) {
+		count = uint64(mdCount) - start
 	}
-	if count > mdCount { // when uint64 0-x is really big number
+	if count > uint64(mdCount) { // when uint64 0-x is really big number
 		count = 0
 	}
 
@@ -505,13 +505,13 @@ func (m *Executor) queryDirectoryByChainId(batch *database.Batch, account *url.U
 	resp.Entries = make([]string, count)
 
 	for i := uint64(0); i < count; i++ {
-		u, err := dir.Get(start + i)
+		u, err := dir.Get(int(start + i))
 		if err != nil {
 			return nil, fmt.Errorf("failed to get entry %d", i)
 		}
 		resp.Entries[i] = u.String()
 	}
-	resp.Total = mdCount
+	resp.Total = uint64(mdCount)
 
 	return resp, nil
 }
@@ -573,11 +573,11 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove, remote
 		if err != nil {
 			return nil, err
 		}
-		i, _, ok := page.EntryByKeyHash(keySig.(protocol.KeySignature).GetPublicKeyHash())
+		_, _, ok := page.EntryByKeyHash(keySig.(protocol.KeySignature).GetPublicKeyHash())
 		if !ok {
 			return nil, errors.Format(errors.StatusInternalError, "node key is missing from operator book")
 		}
-		_, err = tx.AddSignature(uint64(i), keySig)
+		err = tx.AddSignature(keySig)
 		if err != nil {
 			return nil, err
 		}
@@ -602,7 +602,7 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove, remote
 
 	for _, signer := range status.Signers {
 		// Load the signature set
-		sigset, err := tx.ReadSignaturesForSigner(signer)
+		entries, err := tx.Signatures(signer.GetUrl()).Get()
 		if err != nil {
 			return nil, err
 		}
@@ -610,7 +610,7 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove, remote
 		// Load all the signatures
 		var qset query.SignatureSet
 		qset.Account = signer
-		for _, e := range sigset.Entries() {
+		for _, e := range entries {
 			state, err := batch.Transaction(e.SignatureHash[:]).GetState()
 			switch {
 			case err == nil:
@@ -635,8 +635,8 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove, remote
 		return nil, fmt.Errorf("failed to load transaction chain index: %v", err)
 	}
 
-	qr.Receipts = make([]*query.TxReceipt, len(chainIndex.Entries))
-	for i, entry := range chainIndex.Entries {
+	qr.Receipts = make([]*query.TxReceipt, len(chainIndex))
+	for i, entry := range chainIndex {
 		receipt, err := m.resolveTxReceipt(batch, txid, entry)
 		if err != nil {
 			// If one receipt fails to build, do not cause the entire request to
@@ -687,12 +687,12 @@ func (m *Executor) queryDataByUrl(batch *database.Batch, u *url.URL) (*query.Res
 		return nil, err
 	}
 
-	qr.Entry, err = indexing.GetDataEntry(batch, txnHash)
+	qr.Entry, err = indexing.GetDataEntry(batch, txnHash[:])
 	if err != nil {
 		return nil, err
 	}
 
-	copy(qr.EntryHash[:], entryHash)
+	qr.EntryHash = entryHash
 	return &qr, nil
 }
 
@@ -700,12 +700,12 @@ func (m *Executor) queryDataByEntryHash(batch *database.Batch, u *url.URL, entry
 	qr := query.ResponseDataEntry{}
 	copy(qr.EntryHash[:], entryHash)
 
-	txnHash, err := indexing.Data(batch, u).Transaction(entryHash)
+	txnHash, err := indexing.Data(batch, u).Transaction(qr.EntryHash).Get()
 	if err != nil {
 		return nil, err
 	}
 
-	qr.Entry, err = indexing.GetDataEntry(batch, txnHash)
+	qr.Entry, err = indexing.GetDataEntry(batch, txnHash[:])
 	if err != nil {
 		return nil, err
 	}
@@ -715,30 +715,30 @@ func (m *Executor) queryDataByEntryHash(batch *database.Batch, u *url.URL, entry
 
 func (m *Executor) queryDataSet(batch *database.Batch, u *url.URL, start int64, limit int64, expand bool) (*query.ResponseDataEntrySet, error) {
 	data := indexing.Data(batch, u)
-	count, err := data.Count()
+	count, err := data.Entry().Count()
 	if err != nil {
 		return nil, err
 	}
 
 	qr := query.ResponseDataEntrySet{}
-	qr.Total = count
+	qr.Total = uint64(count)
 
-	for i := uint64(0); i < uint64(limit) && i+uint64(start) < count; i++ {
-		entryHash, err := data.Entry(uint64(start) + i)
+	for i := uint64(0); i < uint64(limit) && i+uint64(start) < uint64(count); i++ {
+		entryHash, err := data.Entry().Get(int(uint64(start) + i))
 		if err != nil {
 			return nil, err
 		}
 
 		er := query.ResponseDataEntry{}
-		copy(er.EntryHash[:], entryHash)
+		er.EntryHash = entryHash
 
 		if expand {
-			txnHash, err := data.Transaction(entryHash)
+			txnHash, err := data.Transaction(entryHash).Get()
 			if err != nil {
 				return nil, err
 			}
 
-			er.Entry, err = indexing.GetDataEntry(batch, txnHash)
+			er.Entry, err = indexing.GetDataEntry(batch, txnHash[:])
 			if err != nil {
 				return nil, err
 			}
@@ -812,22 +812,7 @@ func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove 
 			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeMarshallingError, Message: fmt.Errorf("%v, on Url %s", err, chr.Url)}
 		}
 	case *query.RequestByChainId:
-		chr := q
-
-		//nolint:staticcheck // Ignore the deprecation warning for AccountByID
-		record, err := batch.AccountByID(chr.ChainId[:])
-		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeChainIdError, Message: err}
-		}
-		account, err := m.queryAccount(batch, record, false)
-		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeChainIdError, Message: err}
-		}
-		k = []byte("account")
-		v, err = account.MarshalBinary()
-		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeMarshallingError, Message: fmt.Errorf("%v, on Chain %x", err, chr.ChainId)}
-		}
+		return nil, nil, &protocol.Error{Code: protocol.ErrorCodeChainIdError, Message: fmt.Errorf("query-chain is no longer supported")}
 	case *query.RequestDataEntry:
 		chr := q
 
@@ -1051,7 +1036,7 @@ resultLoop:
 			minorEntry.TxCount = uint64(0)
 			systemTxCount := uint64(0)
 			var lastTxid []byte
-			for _, updIdx := range chainUpdatesIndex.Entries {
+			for _, updIdx := range chainUpdatesIndex {
 				if bytes.Equal(updIdx.Entry, lastTxid) { // There are like 4 ChainUpdates for each tx, we don't need duplicates
 					continue
 				}
@@ -1177,7 +1162,7 @@ func (m *Executor) shouldBePruned(batch *database.Batch, txid []byte) (bool, err
 		return false, err
 	}
 
-	for _, txChainEntry := range txChain.Entries {
+	for _, txChainEntry := range txChain {
 		if txChainEntry.Chain == protocol.MainChain {
 			// Load the index entry
 			indexEntry := new(protocol.IndexEntry)

@@ -6,7 +6,7 @@ import (
 	"sort"
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/v1"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -78,7 +78,7 @@ func (x DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 
 		st.logger.Debug("Received receipt", "from", logging.AsHex(receipt.Start).Slice(0, 4), "to", logging.AsHex(body.RootChainAnchor).Slice(0, 4), "block", body.MinorBlockIndex, "source", body.Source, "module", "synthetic")
 
-		synth, err := st.batch.Account(st.Ledger()).SyntheticForAnchor(*(*[32]byte)(receipt.Start))
+		synth, err := st.batch.Account(st.Ledger()).SyntheticForAnchor(*(*[32]byte)(receipt.Start)).Get()
 		if err != nil {
 			return nil, fmt.Errorf("failed to load pending synthetic transactions for anchor %X: %w", receipt.Start[:4], err)
 		}
@@ -130,12 +130,12 @@ func getSyntheticSignature(batch *database.Batch, transaction *database.Transact
 	}
 
 	for _, signer := range status.Signers {
-		sigset, err := transaction.ReadSignaturesForSigner(signer)
+		sigset, err := transaction.Signatures(signer.GetUrl()).Get()
 		if err != nil {
 			return nil, errors.Format(errors.StatusUnknown, "load signature set %v: %w", signer.GetUrl(), err)
 		}
 
-		for _, entry := range sigset.Entries() {
+		for _, entry := range sigset {
 			state, err := batch.Transaction(entry.SignatureHash[:]).GetState()
 			if err != nil {
 				return nil, errors.Format(errors.StatusUnknown, "load signature %x: %w", entry.SignatureHash[:8], err)

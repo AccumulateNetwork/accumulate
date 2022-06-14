@@ -5,7 +5,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/v1"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -278,8 +278,9 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 	default:
 		return nil, fmt.Errorf("unknown signature type %v", signature.Type())
 	}
+	_ = index
 
-	_, err = sigSet.Add(uint64(index), signature)
+	err = sigSet.Add(signature)
 	if err != nil {
 		return nil, fmt.Errorf("store signature: %w", err)
 	}
@@ -702,14 +703,14 @@ func GetAllSignatures(batch *database.Batch, transaction *database.Transaction, 
 
 func GetSignaturesForSigner(batch *database.Batch, transaction *database.Transaction, signer protocol.Signer) ([]protocol.Signature, error) {
 	// Load the signature set
-	sigset, err := transaction.ReadSignaturesForSigner(signer)
+	sigset, err := transaction.Signatures(signer.GetUrl()).Get()
 	if err != nil {
 		return nil, fmt.Errorf("load signatures set %v: %w", signer.GetUrl(), err)
 	}
 
-	entries := sigset.Entries()
+	entries := sigset
 	signatures := make([]protocol.Signature, 0, len(entries))
-	for _, e := range sigset.Entries() {
+	for _, e := range sigset {
 		state, err := batch.Transaction(e.SignatureHash[:]).GetState()
 		if err != nil {
 			return nil, fmt.Errorf("load signature entry %X: %w", e.SignatureHash, err)

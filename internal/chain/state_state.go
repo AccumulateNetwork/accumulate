@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/tendermint/tendermint/crypto/ed25519"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/v1"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
@@ -52,12 +52,12 @@ func (s *ProcessTransactionState) Merge(r *ProcessTransactionState) {
 
 type ChainUpdates struct {
 	chains  map[string]*indexing.ChainUpdate
-	Entries []indexing.ChainUpdate
+	Entries []*indexing.ChainUpdate
 }
 
 func (c *ChainUpdates) Merge(d *ChainUpdates) {
 	for _, u := range d.Entries {
-		c.DidUpdateChain(u)
+		c.DidUpdateChain(*u)
 	}
 }
 
@@ -75,8 +75,8 @@ func (c *ChainUpdates) DidUpdateChain(update indexing.ChainUpdate) {
 	}
 
 	i := len(c.Entries)
-	c.Entries = append(c.Entries, update)
-	c.chains[str] = &c.Entries[i]
+	c.Entries = append(c.Entries, &update)
+	c.chains[str] = c.Entries[i]
 }
 
 // DidAddChainEntry records a chain update in the block state.
@@ -84,7 +84,7 @@ func (c *ChainUpdates) DidAddChainEntry(batch *database.Batch, u *url.URL, name 
 	if name == protocol.MainChain && typ == protocol.ChainTypeTransaction {
 		subnet, ok := protocol.ParseSubnetUrl(u)
 		if ok && protocol.SubnetUrl(subnet).JoinPath(protocol.Synthetic).Equal(u) {
-			err := indexing.BlockState(batch, u).DidProduceSynthTxn(&indexing.BlockStateSynthTxnEntry{
+			err := indexing.ProducedSyntheticTransactions(batch, u).Add(&indexing.BlockStateSynthTxnEntry{
 				Transaction: entry,
 				ChainEntry:  index,
 			})

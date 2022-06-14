@@ -1,0 +1,12 @@
+SigOrTxn:
+  fields:
+    - name: Transaction
+      type: protocol.Transaction
+      marshal-as: reference
+      pointer: true
+    - name: Signature
+      type: protocol.Signature
+      marshal-as: union
+    - name: Txid
+      type: txid
+      pointer: true

@@ -10,7 +10,7 @@ import (
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/v1"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
@@ -102,7 +102,7 @@ func (m *Executor) EndBlock(block *Block) error {
 	}
 
 	// Create a BlockChainUpdates Index
-	err = indexing.BlockChainUpdates(block.Batch, &m.Describe, uint64(block.Index)).Set(block.State.ChainUpdates.Entries)
+	err = indexing.BlockChainUpdates(block.Batch, &m.Describe, uint64(block.Index)).Put(block.State.ChainUpdates.Entries)
 	if err != nil {
 		return errors.Format(errors.StatusUnknown, "store block chain updates index: %w", err)
 	}
@@ -144,12 +144,12 @@ func (m *Executor) EndBlock(block *Block) error {
 	}
 
 	// Add transaction-chain index entries for synthetic transactions
-	blockState, err := indexing.BlockState(block.Batch, ledgerUrl).Get()
+	produced, err := indexing.ProducedSyntheticTransactions(block.Batch, ledgerUrl).Get()
 	if err != nil {
 		return errors.Format(errors.StatusUnknown, "load block state index: %w", err)
 	}
 
-	for _, e := range blockState.ProducedSynthTxns {
+	for _, e := range produced {
 		err = indexing.TransactionChain(block.Batch, e.Transaction).Add(&indexing.TransactionChainEntry{
 			Account:     m.Describe.Synthetic(),
 			Chain:       protocol.MainChain,
@@ -183,10 +183,10 @@ func (m *Executor) EndBlock(block *Block) error {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
-	err = block.Batch.CommitBpt()
-	if err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
-	}
+	// err = block.Batch.CommitBpt()
+	// if err != nil {
+	// 	return errors.Wrap(errors.StatusUnknown, err)
+	// }
 
 	m.logger.Debug("Committed", "height", block.Index, "duration", time.Since(t))
 	return nil
@@ -226,7 +226,7 @@ func (m *Executor) createLocalDNReceipt(block *Block, rootChain *database.Chain,
 		sig.SourceNetwork = m.Describe.NodeUrl()
 		sig.TransactionHash = *(*[32]byte)(txn.GetHash())
 		sig.Proof = *receipt
-		_, err = block.Batch.Transaction(txn.GetHash()).AddSignature(0, sig)
+		err = block.Batch.Transaction(txn.GetHash()).AddSignature(sig)
 		if err != nil {
 			return errors.Format(errors.StatusUnknown, "store signature: %w", err)
 		}

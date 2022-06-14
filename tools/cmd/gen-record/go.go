@@ -21,9 +21,10 @@ var goFuncs = template.FuncMap{
 	"recordType":      recordType,
 	"stateType":       stateType,
 	"parameterType":   parameterType,
+	"unionMethod":     unionMethod,
+	"chainName":       chainName,
 	"valueNameFormat": func(r typegen.Record) string { s, _ := valueNameFormat(r); return s },
 	"chainNameFormat": func(r typegen.Record) string { s, _ := chainNameFormat(r); return s },
-	"chainName":       chainName,
 	"parameterized":   func(r typegen.Record) bool { return len(r.GetParameters()) > 0 },
 	"parameterCount":  func(r typegen.Record) int { return len(r.GetParameters()) },
 	"add":             func(x, y int) int { return x + y },
@@ -46,7 +47,7 @@ func recordType(r typegen.Record) string {
 			typ = "Counted"
 		case r.IsSet():
 			typ = "Set"
-		case r.Wrapped():
+		case r.Wrapped(), r.IsUnion():
 			typ = "Wrapped"
 		default:
 			typ = "Value"
@@ -59,6 +60,14 @@ func recordType(r typegen.Record) string {
 	default:
 		return r.FullName()
 	}
+}
+
+func unionMethod(r typegen.ValueRecord, name string) string {
+	parts := strings.SplitN(r.GetDataType().String(), ".", 2)
+	if len(parts) == 1 {
+		return name + parts[0]
+	}
+	return fmt.Sprintf("%s.%s%s", parts[0], name, parts[1])
 }
 
 func stateType(r typegen.ValueRecord, forNew bool) string {

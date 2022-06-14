@@ -66,17 +66,11 @@ const (
 	// SignatureChain is the pending signature chain of a record.
 	SignatureChain = "signature"
 
-	// // MajorRootChain is the major anchor root chain of a subnet.
-	// MajorRootChain = "major-root"
-
 	// MinorRootChain is the minor anchor root chain of a subnet.
-	MinorRootChain = "minor-root"
-
-	// // MajorRootIndexChain is the index chain of the major anchor root chain of a subnet.
-	// MajorRootIndexChain = "major-root-index"
+	MinorRootChain = "root-minor"
 
 	// MinorRootIndexChain is the index chain of the minor anchor root chain of a subnet.
-	MinorRootIndexChain = "minor-root-index"
+	MinorRootIndexChain = "root-index-minor"
 
 	// GenesisBlock is the block index of the first block.
 	GenesisBlock = 1
@@ -491,43 +485,37 @@ func BvnNameFromSubnetId(subnet string) string {
 // IndexChain returns the major or minor index chain name for a given chain. Do
 // not use for the root anchor chain.
 func IndexChain(name string, major bool) string {
-	if major {
-		return "major-" + name + "-index"
+	if strings.HasPrefix(name, "anchor(") {
+		name = "anchor-index" + name[len("anchor"):]
+	} else {
+		name += "-index"
 	}
-	return "minor-" + name + "-index"
+	if major {
+		return name + "-major"
+	}
+	return name + "-minor"
 }
 
 func GetMOfN(count int, ratio float64) uint64 {
 	return uint64(math.Ceil(ratio * float64(count)))
 }
 
-const rootAnchorSuffix = "-root"
-const bptAnchorSuffix = "-bpt"
-
 // RootAnchorChain returns the name of the intermediate anchor chain for the given
 // subnet's root chain.
 func RootAnchorChain(name string) string {
-	return name + rootAnchorSuffix
+	return fmt.Sprintf("anchor(%s)-root", name)
 }
 
 // BPTAnchorChain returns the name of the intermediate anchor chain for the given
 // subnet's BPT.
 func BPTAnchorChain(name string) string {
-	return name + bptAnchorSuffix
-}
-
-// ParseBvnUrl extracts the subnet name from a intermediate anchor chain name.
-func ParseAnchorChain(name string) (string, bool) {
-	if !strings.HasSuffix(strings.ToLower(name), rootAnchorSuffix) {
-		return "", false
-	}
-	return name[:len(name)-len(rootAnchorSuffix)], true
+	return fmt.Sprintf("anchor(%s)-bpt", name)
 }
 
 // SyntheticIndexChain returns the name of the synthetic transaction index chain
 // for the given subnet.
 func SyntheticIndexChain(name string) string {
-	return "index-" + name
+	return fmt.Sprintf("synthetic-produced(%s)", name)
 }
 
 // FormatKeyPageUrl constructs the URL of a key page from the URL of its key

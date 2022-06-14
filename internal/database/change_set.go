@@ -2,8 +2,10 @@ package database
 
 import (
 	"github.com/tendermint/tendermint/libs/log"
+	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 func newChangeSet(id uint64, writable bool, store recordStore, logger log.Logger) *ChangeSet {
@@ -145,4 +147,8 @@ func (c *ChangeSet) Discard() {
 	}
 
 	kv.s.Discard()
+}
+
+func (c *ChangeSet) GetMinorRootChainAnchor(describe *config.Describe) ([]byte, error) {
+	return c.Account(describe.NodeUrl(protocol.Ledger)).RootChain().Minor().Anchor()
 }

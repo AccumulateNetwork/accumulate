@@ -464,7 +464,7 @@ type Object struct {
 	// Type is the object's type.
 	Type ObjectType `json:"type,omitempty" form:"type" query:"type" validate:"required"`
 	// Chains lists the account's chains.
-	Chains []ChainMetadata `json:"chains,omitempty" form:"chains" query:"chains" validate:"required"`
+	Chains []*ChainMetadata `json:"chains,omitempty" form:"chains" query:"chains" validate:"required"`
 	// Pending lists the account's pending transactions.
 	Pending   TxIdSet `json:"pending,omitempty" form:"pending" query:"pending" validate:"required"`
 	extraData []byte
@@ -1799,9 +1799,11 @@ func (v *Object) Copy() *Object {
 	u := new(Object)
 
 	u.Type = v.Type
-	u.Chains = make([]ChainMetadata, len(v.Chains))
+	u.Chains = make([]*ChainMetadata, len(v.Chains))
 	for i, v := range v.Chains {
-		u.Chains[i] = *(&v).Copy()
+		if v != nil {
+			u.Chains[i] = (v).Copy()
+		}
 	}
 	u.Pending = *(&v.Pending).Copy()
 
@@ -3523,7 +3525,7 @@ func (v *Object) Equal(u *Object) bool {
 		return false
 	}
 	for i := range v.Chains {
-		if !((&v.Chains[i]).Equal(&u.Chains[i])) {
+		if !((v.Chains[i]).Equal(u.Chains[i])) {
 			return false
 		}
 	}
@@ -11662,7 +11664,7 @@ func (v *Object) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	for {
 		if x := new(ChainMetadata); reader.ReadValue(2, x.UnmarshalBinary) {
-			v.Chains = append(v.Chains, *x)
+			v.Chains = append(v.Chains, x)
 		} else {
 			break
 		}
@@ -13945,9 +13947,9 @@ func (v *NetworkDefinition) MarshalJSON() ([]byte, error) {
 
 func (v *Object) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type    ObjectType                       `json:"type,omitempty"`
-		Chains  encoding.JsonList[ChainMetadata] `json:"chains,omitempty"`
-		Pending TxIdSet                          `json:"pending,omitempty"`
+		Type    ObjectType                        `json:"type,omitempty"`
+		Chains  encoding.JsonList[*ChainMetadata] `json:"chains,omitempty"`
+		Pending TxIdSet                           `json:"pending,omitempty"`
 	}{}
 	u.Type = v.Type
 	u.Chains = v.Chains
@@ -15873,9 +15875,9 @@ func (v *NetworkDefinition) UnmarshalJSON(data []byte) error {
 
 func (v *Object) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type    ObjectType                       `json:"type,omitempty"`
-		Chains  encoding.JsonList[ChainMetadata] `json:"chains,omitempty"`
-		Pending TxIdSet                          `json:"pending,omitempty"`
+		Type    ObjectType                        `json:"type,omitempty"`
+		Chains  encoding.JsonList[*ChainMetadata] `json:"chains,omitempty"`
+		Pending TxIdSet                           `json:"pending,omitempty"`
 	}{}
 	u.Type = v.Type
 	u.Chains = v.Chains

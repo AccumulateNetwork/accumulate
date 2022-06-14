@@ -57,11 +57,17 @@
       type: chain
       chainType: transaction
     - name: AnchorChain
-      type: chain
-      chainType: anchor
+      type: container
       parameters:
       - name: SubnetId
         type: string
+      parts:
+      - name: Root
+        type: chain
+        chainType: anchor
+      - name: BPT
+        type: chain
+        chainType: anchor
     - name: MainIndexChain
       type: other
       dataType: MajorMinorIndexChain
@@ -85,6 +91,12 @@
         type: string
       dataType: MajorMinorIndexChain
       pointer: true
+    - name: SyntheticProducedChain
+      type: chain
+      chainType: index
+      parameters:
+      - name: SubnetId
+        type: string
     - name: Chains
       type: index
       dataType: protocol.ChainMetadata
@@ -114,6 +126,18 @@
           type: hash
         dataType: hash
 
+    # TODO Remove or update these
+    - name: BlockChainUpdates
+      type: index
+      dataType: ChainUpdate
+      pointer: true
+      set: true
+    - name: ProducedSyntheticTransactions
+      type: index
+      dataType: BlockStateSynthTxnEntry
+      pointer: true
+      set: true
+
   # - name: Transaction
   #   type: index
   #   dataType: txid
@@ -133,9 +157,10 @@
     # TODO Move transactions to within an account
     type: container
     customCommit: true
+    omitAccessor: true
     parameters:
     - name: Hash
-      type: hash
+      type: bytes # change to hash
     parts:
     - name: Value
       type: state

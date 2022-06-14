@@ -1,130 +1,172 @@
 package database
 
 import (
-	"bytes"
-	"errors"
-	"fmt"
-
-	"gitlab.com/accumulatenetwork/accumulate/internal/sortutil"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
-type SignatureSet struct {
-	txn      *Transaction
-	signer   protocol.Signer
-	writable bool
-	entries  *sigSetData
+type SignatureSet interface {
+	record
+	Get() ([]*SignatureEntry, error)
+	Add(protocol.Signature) error
+	getVersion() (uint64, error)
+	putVersion(uint64) error
+	putEntries(v []*SignatureEntry) error
 }
 
-// newSigSet creates a new SignatureSet.
-func newSigSet(txn *Transaction, signer protocol.Signer, writable bool) (*SignatureSet, error) {
-	s := new(SignatureSet)
-	s.txn = txn
-	s.signer = signer
-	s.writable = writable
-	s.entries = new(sigSetData)
+type SystemSignatureSet struct {
+	Set[*SignatureEntry]
+}
 
-	err := txn.batch.getValuePtr(s.key(), s.entries, &s.entries, true)
-	if err != nil && !errors.Is(err, storage.ErrNotFound) {
-		return nil, err
+func newSystemSignatureSet(store recordStore, key recordKey, _, labelfmt string) *SystemSignatureSet {
+	s := new(SystemSignatureSet)
+	new := func() (v *SignatureEntry) { return new(SignatureEntry) }
+	cmp := func(u, v *SignatureEntry) int { return u.Compare(v) }
+	s.Set = *newSet(store, key, labelfmt, newSlice(new), cmp)
+	return s
+}
+
+func (s *SystemSignatureSet) Add(signature protocol.Signature) error {
+	v := new(SignatureEntry)
+	v.Type = signature.Type()
+	v.SignatureHash = *(*[32]byte)(signature.Hash())
+	return s.Set.Add(v)
+}
+
+func (s *SystemSignatureSet) putEntries(v []*SignatureEntry) error {
+	return s.Set.Put(v)
+}
+
+func (s *SystemSignatureSet) getVersion() (uint64, error) {
+	return 0, nil
+}
+
+func (s *SystemSignatureSet) putVersion(uint64) error {
+	return nil
+}
+
+type VersionedSignatureSet struct {
+	set     *Set[*SignatureEntry]
+	version *Wrapped[uint64]
+	signer  protocol.Signer
+	err     error
+}
+
+func newVersionedSignatureSet(cs *ChangeSet, store recordStore, key recordKey, signerUrl *url.URL) *VersionedSignatureSet {
+	s := new(VersionedSignatureSet)
+	key = key.Append("Signatures", signerUrl)
+	new := func() (v *SignatureEntry) { return new(SignatureEntry) }
+	cmp := func(u, v *SignatureEntry) int { return u.Compare(v) }
+	s.set = newSet(store, key, "transaction %[2]x signatures %[4]v", newSlice(new), cmp)
+	s.version = newWrapped(store, key.Append("Version"), "transaction %[2]x signatures %[4]v version", true, newWrapper(uintWrapper))
+
+	lastVersion, err := s.version.Get()
+	if err != nil {
+		return &VersionedSignatureSet{err: errors.Wrap(errors.StatusUnknown, err)}
 	}
 
-	// Reset if the set is writable and the version is different
-	if writable && s.entries.Version != signer.GetVersion() {
-		s.entries.Reset(signer.GetVersion())
+	err = cs.Account(signerUrl).State().GetAs(&s.signer)
+	if err != nil {
+		return &VersionedSignatureSet{err: errors.Wrap(errors.StatusUnknown, err)}
 	}
-	return s, nil
+
+	if lastVersion > s.signer.GetVersion() {
+		return &VersionedSignatureSet{err: errors.Format(errors.StatusInternalError, "last version > signer version")}
+	}
+
+	return s
 }
 
-func (s *SignatureSet) key() storage.Key {
-	return s.txn.key.Signatures(s.signer.GetUrl())
+func (s *VersionedSignatureSet) Get() ([]*SignatureEntry, error) {
+	if s.err != nil {
+		return nil, errors.Wrap(errors.StatusUnknown, s.err)
+	}
+	return s.set.Get()
 }
 
-func (s *SignatureSet) Count() int {
-	return len(s.entries.Entries)
+func (s *VersionedSignatureSet) Add(signature protocol.Signature) error {
+	if s.err != nil {
+		return errors.Wrap(errors.StatusUnknown, s.err)
+	}
+
+	v := new(SignatureEntry)
+	v.Type = signature.Type()
+	v.SignatureHash = *(*[32]byte)(signature.Hash())
+
+	switch sig := signature.(type) {
+	case protocol.KeySignature:
+		i, _, ok := s.signer.EntryByKeyHash(sig.GetPublicKeyHash())
+		if !ok {
+			return errors.Format(errors.StatusInternalError, "key hash %X does not belong to signer", sig.GetPublicKeyHash()[:8])
+		}
+		v.KeyEntryIndex = uint64(i)
+
+	case *protocol.DelegatedSignature:
+		i, _, ok := s.signer.EntryByDelegate(sig.Delegate)
+		if !ok {
+			return errors.Format(errors.StatusInternalError, "delegate %v does not belong to signer", sig.Delegate)
+		}
+		v.KeyEntryIndex = uint64(i)
+
+	default:
+		return errors.Format(errors.StatusInternalError, "invalid signature type %T", signature)
+	}
+
+	// Get the signature set version
+	lastVersion, err := s.version.Get()
+	if err != nil {
+		return errors.Wrap(errors.StatusUnknown, err)
+	}
+
+	// If the signer version matches, ok
+	if lastVersion == s.signer.GetVersion() {
+		return s.set.Add(v)
+	}
+
+	// Update the signature set version
+	err = s.version.Put(s.signer.GetVersion())
+	if err != nil {
+		return errors.Wrap(errors.StatusUnknown, err)
+	}
+
+	// Remove any previous signatures
+	err = s.set.Put([]*SignatureEntry{v})
+	return errors.Wrap(errors.StatusUnknown, err)
 }
 
-func (s *SignatureSet) Entries() []SigSetEntry {
-	entries := make([]SigSetEntry, len(s.entries.Entries))
-	copy(entries, s.entries.Entries)
-	return entries
+func (s *VersionedSignatureSet) putEntries(v []*SignatureEntry) error {
+	return s.set.Put(v)
 }
 
-func (s *sigSetData) Reset(version uint64) {
-	// Retain system signature entries
-	system := make([]SigSetEntry, 0, len(s.Entries))
-	for _, e := range s.Entries {
-		if e.System {
-			system = append(system, e)
+func (s *VersionedSignatureSet) getVersion() (uint64, error) {
+	return s.version.Get()
+}
+
+func (s *VersionedSignatureSet) putVersion(v uint64) error {
+	return s.version.Put(v)
+}
+
+func (s *VersionedSignatureSet) resolve(key recordKey) (record, recordKey, error) {
+	if len(key) == 1 {
+		if k, ok := key[0].(string); ok && k == "Version" {
+			return s.version, nil, nil
 		}
 	}
 
-	// Remove all other entries and update the version
-	s.Version = version
-	s.Entries = system
+	return s.set.resolve(key)
 }
 
-func (s *SigSetEntry) Compare(t *SigSetEntry) int {
-	switch {
-	case !s.System && !t.System:
-		return int(s.KeyEntryIndex) - int(t.KeyEntryIndex)
-	case !s.System:
-		return -1
-	case !t.System:
-		return +1
-	}
-
-	return bytes.Compare(s.SignatureHash[:], t.SignatureHash[:])
+func (s *VersionedSignatureSet) isDirty() bool {
+	return s.version.isDirty() || s.set.isDirty()
 }
 
-func (s *sigSetData) Add(newEntry SigSetEntry, newSignature protocol.Signature) bool {
-	// The signature is a system signature if it's one of the system types or if
-	// the signer is a node.
-	switch {
-	case newSignature.Type().IsSystem():
-		newEntry.System = true
-	case protocol.IsDnUrl(newSignature.GetSigner()):
-		newEntry.System = true
-	default:
-		_, ok := protocol.ParseSubnetUrl(newSignature.GetSigner())
-		newEntry.System = ok
-	}
-
-	// Check the signer version
-	if keysig, ok := newSignature.(protocol.KeySignature); ok && !newEntry.System && s.Version != keysig.GetSignerVersion() {
-		return false
-	}
-
-	// Find based on the key keyHash
-	ptr, new := sortutil.BinaryInsert(&s.Entries, func(entry SigSetEntry) int {
-		return entry.Compare(&newEntry)
-	})
-
-	*ptr = newEntry
-	return new
-}
-
-// Add adds a signature to the signature set. Add does nothing if the signature
-// set already includes the signer's public key. The entry hash must refer to a
-// signature chain entry.
-func (s *SignatureSet) Add(keyEntryIndex uint64, newSignature protocol.Signature) (int, error) {
-	if !s.writable {
-		return 0, fmt.Errorf("signature set opened as read-only")
-	}
-
-	var newEntry SigSetEntry
-	newEntry.Type = newSignature.Type()
-	newEntry.KeyEntryIndex = keyEntryIndex
-	newEntry.SignatureHash = *(*[32]byte)(newSignature.Hash())
-	if !s.entries.Add(newEntry, newSignature) {
-		return len(s.entries.Entries), nil
-	}
-
-	err := s.txn.ensureSigner(s.signer)
+func (s *VersionedSignatureSet) commit() error {
+	err := s.version.commit()
 	if err != nil {
-		return 0, err
+		return errors.Wrap(errors.StatusUnknown, err)
 	}
-	s.txn.batch.putValue(s.key(), s.entries)
-	return len(s.entries.Entries), nil
+
+	err = s.set.commit()
+	return errors.Wrap(errors.StatusUnknown, err)
 }

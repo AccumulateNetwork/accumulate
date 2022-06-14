@@ -11,6 +11,7 @@ Object:
       repeatable: true
       type: ChainMetadata
       marshal-as: reference
+      pointer: true
     - name: Pending
       description: lists the account's pending transactions
       type: TxIdSet

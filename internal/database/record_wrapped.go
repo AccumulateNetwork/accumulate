@@ -3,14 +3,21 @@ package database
 import (
 	"io"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 )
 
-type Wrapped[T any] struct {
-	Value[*Wrapper[T]]
+type wrapperType[T any] interface {
+	encoding.BinaryValue
+	getValue() T
+	setValue(T)
 }
 
-func newWrapped[T any](store recordStore, key recordKey, namefmt string, allowMissing bool, new func() *Wrapper[T]) *Wrapped[T] {
+type Wrapped[T any] struct {
+	Value[wrapperType[T]]
+}
+
+func newWrapped[T any](store recordStore, key recordKey, namefmt string, allowMissing bool, new func() wrapperType[T]) *Wrapped[T] {
 	v := &Wrapped[T]{}
 	v.Value = *newValue(store, key, namefmt, allowMissing, new)
 	return v
@@ -21,12 +28,12 @@ func (v *Wrapped[T]) Get() (T, error) {
 	if err != nil {
 		return zero[T](), errors.Wrap(errors.StatusUnknown, err)
 	}
-	return w.value, nil
+	return w.getValue(), nil
 }
 
 func (v *Wrapped[T]) Put(u T) error {
 	w := v.new()
-	w.value = u
+	w.setValue(u)
 	err := v.Value.Put(w)
 	return errors.Wrap(errors.StatusUnknown, err)
 }
@@ -51,13 +58,16 @@ type Wrapper[T any] struct {
 	*wrapperFuncs[T]
 }
 
-func newWrapper[T any](funcs *wrapperFuncs[T]) func() *Wrapper[T] {
-	return func() *Wrapper[T] {
+func newWrapper[T any](funcs *wrapperFuncs[T]) func() wrapperType[T] {
+	return func() wrapperType[T] {
 		w := &Wrapper[T]{}
 		w.wrapperFuncs = funcs
 		return w
 	}
 }
+
+func (v *Wrapper[T]) getValue() T  { return v.value }
+func (v *Wrapper[T]) setValue(u T) { v.value = u }
 
 func (v *Wrapper[T]) MarshalBinary() ([]byte, error) {
 	data, err := v.marshal(v.value)

@@ -35,16 +35,6 @@ func (c *ChangeSet) Account(url *url.URL) *Account {
 	})
 }
 
-func (c *ChangeSet) Transaction(hash [32]byte) *Transaction {
-	return getOrCreateMap(&c.transaction, recordKey{}.Append("Transaction", hash), func() *Transaction {
-		v := new(Transaction)
-		v.store = c.store
-		v.key = recordKey{}.Append("Transaction", hash)
-		v.container = c
-		return v
-	})
-}
-
 func (c *ChangeSet) resolve(key recordKey) (record, recordKey, error) {
 	switch key[0] {
 	case "Account":
@@ -61,7 +51,7 @@ func (c *ChangeSet) resolve(key recordKey) (record, recordKey, error) {
 		if len(key) < 2 {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for change set")
 		}
-		hash, okHash := key[1].([32]byte)
+		hash, okHash := key[1].([]byte)
 		if okHash {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for change set")
 		}
@@ -129,29 +119,31 @@ type Account struct {
 	key       recordKey
 	container *ChangeSet
 
-	state               *Value[protocol.Account]
-	pending             *Set[*url.TxID]
-	syntheticForAnchor  map[storage.Key]*Set[*url.TxID]
-	mainChain           *Chain
-	signatureChain      *Chain
-	rootChain           *AccountRootChain
-	syntheticChain      *Chain
-	anchorChain         map[storage.Key]*Chain
-	mainIndexChain      *MajorMinorIndexChain
-	signatureIndexChain *MajorMinorIndexChain
-	syntheticIndexChain *MajorMinorIndexChain
-	rootIndexChain      *MajorMinorIndexChain
-	anchorIndexChain    map[storage.Key]*MajorMinorIndexChain
-	chains              *Set[*protocol.ChainMetadata]
-	syntheticAnchors    *Set[[32]byte]
-	directory           *Counted[*url.URL]
-	data                *AccountData
+	state                         *Wrapped[protocol.Account]
+	pending                       *Set[*url.TxID]
+	syntheticForAnchor            map[storage.Key]*Set[*url.TxID]
+	mainChain                     *Chain
+	signatureChain                *Chain
+	rootChain                     *AccountRootChain
+	syntheticChain                *Chain
+	anchorChain                   map[storage.Key]*AccountAnchorChain
+	mainIndexChain                *MajorMinorIndexChain
+	signatureIndexChain           *MajorMinorIndexChain
+	syntheticIndexChain           *MajorMinorIndexChain
+	rootIndexChain                *MajorMinorIndexChain
+	anchorIndexChain              map[storage.Key]*MajorMinorIndexChain
+	syntheticProducedChain        map[storage.Key]*Chain
+	chains                        *Set[*protocol.ChainMetadata]
+	syntheticAnchors              *Set[[32]byte]
+	directory                     *Counted[*url.URL]
+	data                          *AccountData
+	blockChainUpdates             *Set[*ChainUpdate]
+	producedSyntheticTransactions *Set[*BlockStateSynthTxnEntry]
 }
 
-func (c *Account) State() *Value[protocol.Account] {
-	return getOrCreateField(&c.state, func() *Value[protocol.Account] {
-		new := func() (v protocol.Account) { return v }
-		return newValue(c.store, c.key.Append("State"), "account %[2]v state", false, new)
+func (c *Account) State() *Wrapped[protocol.Account] {
+	return getOrCreateField(&c.state, func() *Wrapped[protocol.Account] {
+		return newWrapped(c.store, c.key.Append("State"), "account %[2]v state", false, newUnion(protocol.UnmarshalAccount))
 	})
 }
 
@@ -195,9 +187,13 @@ func (c *Account) SyntheticChain() *Chain {
 	})
 }
 
-func (c *Account) AnchorChain(subnetId string) *Chain {
-	return getOrCreateMap(&c.anchorChain, c.key.Append("AnchorChain", subnetId), func() *Chain {
-		return newChain(c.store, c.key.Append("AnchorChain", subnetId), protocol.ChainTypeAnchor, "anchor(%[4]v)", "account %[2]v anchor chain %[4]v")
+func (c *Account) AnchorChain(subnetId string) *AccountAnchorChain {
+	return getOrCreateMap(&c.anchorChain, c.key.Append("AnchorChain", subnetId), func() *AccountAnchorChain {
+		v := new(AccountAnchorChain)
+		v.store = c.store
+		v.key = c.key.Append("AnchorChain", subnetId)
+		v.container = c
+		return v
 	})
 }
 
@@ -231,6 +227,12 @@ func (c *Account) AnchorIndexChain(subnetId string) *MajorMinorIndexChain {
 	})
 }
 
+func (c *Account) SyntheticProducedChain(subnetId string) *Chain {
+	return getOrCreateMap(&c.syntheticProducedChain, c.key.Append("SyntheticProducedChain", subnetId), func() *Chain {
+		return newChain(c.store, c.key.Append("SyntheticProducedChain", subnetId), protocol.ChainTypeIndex, "synthetic-produced(%[4]v)", "account %[2]v synthetic produced chain %[4]v")
+	})
+}
+
 func (c *Account) Chains() *Set[*protocol.ChainMetadata] {
 	return getOrCreateField(&c.chains, func() *Set[*protocol.ChainMetadata] {
 		new := func() (v *protocol.ChainMetadata) { return new(protocol.ChainMetadata) }
@@ -259,6 +261,22 @@ func (c *Account) Data() *AccountData {
 		v.key = c.key.Append("Data")
 		v.container = c
 		return v
+	})
+}
+
+func (c *Account) BlockChainUpdates() *Set[*ChainUpdate] {
+	return getOrCreateField(&c.blockChainUpdates, func() *Set[*ChainUpdate] {
+		new := func() (v *ChainUpdate) { return new(ChainUpdate) }
+		cmp := func(u, v *ChainUpdate) int { return u.Compare(v) }
+		return newSet(c.store, c.key.Append("BlockChainUpdates"), "account %[2]v block chain updates", newSlice(new), cmp)
+	})
+}
+
+func (c *Account) ProducedSyntheticTransactions() *Set[*BlockStateSynthTxnEntry] {
+	return getOrCreateField(&c.producedSyntheticTransactions, func() *Set[*BlockStateSynthTxnEntry] {
+		new := func() (v *BlockStateSynthTxnEntry) { return new(BlockStateSynthTxnEntry) }
+		cmp := func(u, v *BlockStateSynthTxnEntry) int { return u.Compare(v) }
+		return newSet(c.store, c.key.Append("ProducedSyntheticTransactions"), "account %[2]v produced synthetic transactions", newSlice(new), cmp)
 	})
 }
 
@@ -314,6 +332,16 @@ func (c *Account) resolve(key recordKey) (record, recordKey, error) {
 		}
 		v := c.AnchorIndexChain(subnetId)
 		return v, key[2:], nil
+	case "SyntheticProducedChain":
+		if len(key) < 2 {
+			return nil, nil, errors.New(errors.StatusInternalError, "bad key for account")
+		}
+		subnetId, okSubnetId := key[1].(string)
+		if okSubnetId {
+			return nil, nil, errors.New(errors.StatusInternalError, "bad key for account")
+		}
+		v := c.SyntheticProducedChain(subnetId)
+		return v, key[2:], nil
 	case "Chains":
 		return c.chains, key[1:], nil
 	case "SyntheticAnchors":
@@ -322,6 +350,10 @@ func (c *Account) resolve(key recordKey) (record, recordKey, error) {
 		return c.directory, key[1:], nil
 	case "Data":
 		return c.data, key[1:], nil
+	case "BlockChainUpdates":
+		return c.blockChainUpdates, key[1:], nil
+	case "ProducedSyntheticTransactions":
+		return c.producedSyntheticTransactions, key[1:], nil
 	default:
 		return nil, nil, errors.New(errors.StatusInternalError, "bad key for account")
 	}
@@ -377,6 +409,11 @@ func (c *Account) isDirty() bool {
 			return true
 		}
 	}
+	for _, v := range c.syntheticProducedChain {
+		if v.isDirty() {
+			return true
+		}
+	}
 	if c.chains.isDirty() {
 		return true
 	}
@@ -387,6 +424,12 @@ func (c *Account) isDirty() bool {
 		return true
 	}
 	if c.data.isDirty() {
+		return true
+	}
+	if c.blockChainUpdates.isDirty() {
+		return true
+	}
+	if c.producedSyntheticTransactions.isDirty() {
 		return true
 	}
 
@@ -424,7 +467,26 @@ func (c *Account) resolveChain(name string) (*Chain, bool) {
 			return nil, false
 		}
 
-		return c.AnchorChain(paramSubnetId), true
+		return c.AnchorChain(paramSubnetId).resolveChain(name)
+
+	case strings.HasPrefix(name, "synthetic-produced("):
+		name = name[len("synthetic-produced("):]
+		i := strings.Index(name, ")")
+		if i < 0 {
+			return nil, false
+		}
+
+		params := strings.Split(name[:i], ",")
+		name = name[i+1:]
+		if len(params) != 1 {
+			return nil, false
+		}
+		paramSubnetId, err := parseString(params[0])
+		if err != nil {
+			return nil, false
+		}
+
+		return c.SyntheticProducedChain(paramSubnetId), true
 
 	default:
 		return nil, false
@@ -449,6 +511,9 @@ func (c *Account) dirtyChains() []*Chain {
 		chains = append(chains, c.syntheticChain)
 	}
 	for _, v := range c.anchorChain {
+		chains = append(chains, v.dirtyChains()...)
+	}
+	for _, v := range c.syntheticProducedChain {
 		if v.isDirty() {
 			chains = append(chains, v)
 		}
@@ -507,6 +572,11 @@ func (c *Account) baseCommit() error {
 			return errors.Wrap(errors.StatusUnknown, err)
 		}
 	}
+	for _, v := range c.syntheticProducedChain {
+		if err := v.commit(); err != nil {
+			return errors.Wrap(errors.StatusUnknown, err)
+		}
+	}
 	if err := c.chains.commit(); err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
@@ -517,6 +587,12 @@ func (c *Account) baseCommit() error {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
 	if err := c.data.commit(); err != nil {
+		return errors.Wrap(errors.StatusUnknown, err)
+	}
+	if err := c.blockChainUpdates.commit(); err != nil {
+		return errors.Wrap(errors.StatusUnknown, err)
+	}
+	if err := c.producedSyntheticTransactions.commit(); err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
@@ -615,6 +691,98 @@ func (c *AccountRootChain) commit() error {
 	return nil
 }
 
+type AccountAnchorChain struct {
+	store     recordStore
+	key       recordKey
+	container *Account
+
+	root *Chain
+	bpt  *Chain
+}
+
+func (c *AccountAnchorChain) Root() *Chain {
+	return getOrCreateField(&c.root, func() *Chain {
+		return newChain(c.store, c.key.Append("Root"), protocol.ChainTypeAnchor, "anchor(%[4]v)-root", "account %[2]v anchor chain %[4]v root")
+	})
+}
+
+func (c *AccountAnchorChain) BPT() *Chain {
+	return getOrCreateField(&c.bpt, func() *Chain {
+		return newChain(c.store, c.key.Append("BPT"), protocol.ChainTypeAnchor, "anchor(%[4]v)-bpt", "account %[2]v anchor chain %[4]v bpt")
+	})
+}
+
+func (c *AccountAnchorChain) resolve(key recordKey) (record, recordKey, error) {
+	switch key[0] {
+	case "Root":
+		return c.root, key[1:], nil
+	case "BPT":
+		return c.bpt, key[1:], nil
+	default:
+		return nil, nil, errors.New(errors.StatusInternalError, "bad key for anchor chain")
+	}
+}
+
+func (c *AccountAnchorChain) isDirty() bool {
+	if c == nil {
+		return false
+	}
+
+	if c.root.isDirty() {
+		return true
+	}
+	if c.bpt.isDirty() {
+		return true
+	}
+
+	return false
+}
+
+func (c *AccountAnchorChain) resolveChain(name string) (*Chain, bool) {
+	switch {
+	case name == "root":
+		return c.Root(), true
+
+	case name == "bpt":
+		return c.BPT(), true
+
+	default:
+		return nil, false
+	}
+}
+
+func (c *AccountAnchorChain) dirtyChains() []*Chain {
+	if c == nil {
+		return nil
+	}
+
+	var chains []*Chain
+
+	if c.root.isDirty() {
+		chains = append(chains, c.root)
+	}
+	if c.bpt.isDirty() {
+		chains = append(chains, c.bpt)
+	}
+
+	return chains
+}
+
+func (c *AccountAnchorChain) commit() error {
+	if c == nil {
+		return nil
+	}
+
+	if err := c.root.commit(); err != nil {
+		return errors.Wrap(errors.StatusUnknown, err)
+	}
+	if err := c.bpt.commit(); err != nil {
+		return errors.Wrap(errors.StatusUnknown, err)
+	}
+
+	return nil
+}
+
 type AccountData struct {
 	store     recordStore
 	key       recordKey
@@ -702,7 +870,7 @@ type Transaction struct {
 	signatures       map[storage.Key]*VersionedSignatureSet
 	signers          *Set[*url.URL]
 	chains           *Set[*TransactionChainEntry]
-	signature        *Value[protocol.Signature]
+	signature        *Wrapped[protocol.Signature]
 	txID             *Wrapped[*url.TxID]
 }
 
@@ -746,10 +914,9 @@ func (c *Transaction) Chains() *Set[*TransactionChainEntry] {
 	})
 }
 
-func (c *Transaction) Signature() *Value[protocol.Signature] {
-	return getOrCreateField(&c.signature, func() *Value[protocol.Signature] {
-		new := func() (v protocol.Signature) { return v }
-		return newValue(c.store, c.key.Append("Signature"), "transaction %[2]x signature", false, new)
+func (c *Transaction) Signature() *Wrapped[protocol.Signature] {
+	return getOrCreateField(&c.signature, func() *Wrapped[protocol.Signature] {
+		return newWrapped(c.store, c.key.Append("Signature"), "transaction %[2]x signature", false, newUnion(protocol.UnmarshalSignature))
 	})
 }
 

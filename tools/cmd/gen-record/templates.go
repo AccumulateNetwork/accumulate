@@ -16,7 +16,7 @@ func init() {
 }
 
 var Templates = typegen.NewTemplateLibrary(template.FuncMap{
-	"lower":   typegen.LowerFirstRune,
+	"lower":   typegen.LowerFirstWord,
 	"title":   typegen.TitleCase,
 	"natural": typegen.Natural,
 	"debug":   fmt.Printf,

@@ -16,6 +16,7 @@ type ValueRecord interface {
 	IsSet() bool
 	IsCounted() bool
 	IsPointer() bool
+	IsUnion() bool
 	GetDataType() FieldType
 }
 
@@ -70,6 +71,9 @@ func (r *IndexRecord) Wrapped() bool { return r.DataType.Code != TypeCodeUnknown
 
 func (r *StateRecord) IsSet() bool { return r.Set }
 func (r *IndexRecord) IsSet() bool { return r.Set }
+
+func (r *StateRecord) IsUnion() bool { return r.Union }
+func (r *IndexRecord) IsUnion() bool { return r.Union }
 
 func (r *StateRecord) IsCounted() bool { return r.Counted }
 func (r *IndexRecord) IsCounted() bool { return r.Counted }

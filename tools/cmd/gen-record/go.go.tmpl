@@ -51,6 +51,8 @@ return newWrapped(c.store, {{template "key" .}}, {{template "valueLabelFormat" .
 new := func() (v {{stateType . false}}) { return {{if .Pointer}}new({{stateType . true}}){{else}}v{{end}} }
 cmp := func(u, v {{stateType . false}}) int { return u.Compare(v) }
 return newSet(c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, newSlice(new), cmp)
+{{- else if .Union}}
+return newWrapped(c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, {{.EmptyIfMissing}}, newUnion({{unionMethod . "Unmarshal"}}))
 {{- else}}
 new := func() (v {{stateType . false}}) { return {{if .Pointer}}new({{stateType . true}}){{else}}v{{end}} }
 return newValue(c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, {{.EmptyIfMissing}}, new)

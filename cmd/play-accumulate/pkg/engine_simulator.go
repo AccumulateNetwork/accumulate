@@ -6,7 +6,6 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
@@ -71,14 +70,14 @@ func (s SimEngine) GetDirectory(account *URL) ([]*URL, error) {
 
 	batch := s.Subnet(subnet).Database.Begin(false)
 	defer batch.Discard()
-	dir := indexing.Directory(batch, account)
+	dir := batch.Account(account).Directory()
 	n, err := dir.Count()
 	if err != nil {
 		return nil, err
 	}
 	urls := make([]*URL, n)
 	for i := range urls {
-		urls[i], err = dir.Get(uint64(i))
+		urls[i], err = dir.Get(i)
 		if err != nil {
 			return nil, err
 		}

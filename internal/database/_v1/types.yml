@@ -1,0 +1,107 @@
+sigSetData:
+  fields:
+    - name: Version
+      type: uint
+    - name: Entries
+      type: SigSetEntry
+      marshal-as: reference
+      repeatable: true
+
+SigSetEntry:
+  fields:
+    - name: System
+      type: bool
+    - name: Type
+      type: protocol.SignatureType
+      marshal-as: enum
+    - name: KeyEntryIndex
+      type: uint
+    - name: SignatureHash
+      type: hash
+
+txSyntheticTxns:
+  fields:
+    - name: Txids
+      type: txid
+      pointer: true
+      repeatable: true
+
+SigOrTxn:
+  fields:
+    - name: Transaction
+      type: protocol.Transaction
+      marshal-as: reference
+      pointer: true
+    - name: Signature
+      type: protocol.Signature
+      marshal-as: union
+    - name: Txid
+      type: txid
+      pointer: true
+
+merkleState:
+  fields:
+    - name: Name
+      type: string
+    - name: Type
+      type: protocol.ChainType
+      marshal-as: enum
+    - name: Count
+      type: uint
+    - name: Pending
+      type: bytes
+      repeatable: true
+    - name: Entries
+      type: bytes
+      repeatable: true
+
+accountState:
+  fields:
+    - name: Main
+      description: is the main state of the account
+      type: protocol.Account
+      marshal-as: union
+    - name: Chains
+      description: is the state of the account's chains
+      type: merkleState
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+    - name: Pending
+      description: is the state of the account's pending transactions
+      type: transactionState
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+    - name: Transactions
+      description: is the state of other transactions related to the account
+      type: transactionState
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+
+transactionState:
+  fields:
+    - name: Transaction
+      type: protocol.Transaction
+      marshal-as: reference
+      pointer: true
+    - name: State
+      type: protocol.TransactionStatus
+      marshal-as: reference
+      pointer: true
+    - name: Signatures
+      type: sigSetData
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+
+intValue:
+  fields:
+    - name: Value
+      type: int
+
+hashValue:
+  fields:
+    - name: Value
+      type: bytes

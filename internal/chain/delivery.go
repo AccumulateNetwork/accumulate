@@ -3,7 +3,7 @@ package chain
 import (
 	"fmt"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/v1"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -267,13 +267,13 @@ func (d *Delivery) LoadSyntheticMetadata(batch *database.Batch, status *protocol
 	}
 
 	// Load the initiator signature set
-	sigset, err := batch.Transaction(d.Transaction.GetHash()).ReadSignatures(status.Initiator)
+	sigset, err := batch.Transaction(d.Transaction.GetHash()).Signatures(status.Initiator).Get()
 	if err != nil {
 		return errors.Format(errors.StatusUnknown, "load transaction: load initiator: %w", err)
 	}
 
 	var sigHash []byte
-	for _, e := range sigset.Entries() {
+	for _, e := range sigset {
 		if e.Type == protocol.SignatureTypeSynthetic {
 			sigHash = e.SignatureHash[:]
 			break

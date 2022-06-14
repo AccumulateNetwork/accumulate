@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/v1"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
@@ -237,7 +237,7 @@ func (x *Executor) buildSynthReceipt(batch *database.Batch, produced []*protocol
 		if err != nil {
 			return errors.Format(errors.StatusUnknown, "store signature: %w", err)
 		}
-		_, err = batch.Transaction(transaction.GetHash()).AddSystemSignature(&x.Describe, proofSig)
+		err = batch.Transaction(transaction.GetHash()).AddSystemSignature(&x.Describe, proofSig)
 		if err != nil {
 			return errors.Format(errors.StatusUnknown, "record receipt for %X: %w", transaction.GetHash()[:4], err)
 		}
@@ -276,7 +276,7 @@ func (x *Executor) putSyntheticTransaction(batch *database.Batch, transaction *p
 	}
 
 	// Record the signature against the transaction
-	_, err = obj.AddSystemSignature(&x.Describe, signature)
+	err = obj.AddSystemSignature(&x.Describe, signature)
 	if err != nil {
 		return fmt.Errorf("add signature: %w", err)
 	}

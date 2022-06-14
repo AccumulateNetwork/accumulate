@@ -55,19 +55,19 @@ func (UpdateKey) Execute(st *StateManager, tx *Delivery) (protocol.TransactionRe
 		return nil, fmt.Errorf("transaction does not have an initiator")
 	}
 
-	sigs, err := txObj.ReadSignatures(status.Initiator)
+	sigs, err := txObj.Signatures(status.Initiator).Get()
 	if err != nil {
 		return nil, fmt.Errorf("load signatures for %v: %w", status.Initiator, err)
 	}
 
-	if sigs.Count() == 0 {
+	if len(sigs) == 0 {
 		// This should never happen, because this transaction is not multisig.
 		// But it's possible (maybe) for the initiator to be invalidated by the
 		// key page version changing.
 		return nil, fmt.Errorf("no valid signatures found for %v", status.Initiator)
 	}
 
-	e := sigs.Entries()[0]
+	e := sigs[0]
 	sigOrTxn, err := st.batch.Transaction(e.SignatureHash[:]).GetState()
 	if err != nil {
 		return nil, fmt.Errorf("load first signature from %v: %w", status.Initiator, err)

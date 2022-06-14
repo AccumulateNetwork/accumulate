@@ -14,7 +14,7 @@ var enUsLower = cases.Lower(language.AmericanEnglish)
 func (o *Object) ChainType(name string) ChainType {
 	// Find the matching entry
 	lcName := enUsLower.String(name)
-	i, found := sortutil.Search(o.Chains, func(entry ChainMetadata) int {
+	i, found := sortutil.Search(o.Chains, func(entry *ChainMetadata) int {
 		lcEntry := enUsLower.String(entry.Name)
 		return strings.Compare(lcEntry, lcName)
 	})
@@ -30,21 +30,21 @@ func (o *Object) ChainType(name string) ChainType {
 func (o *Object) AddChain(name string, typ ChainType) error {
 	// Find the matching entry
 	lcName := enUsLower.String(name)
-	ptr, new := sortutil.BinaryInsert(&o.Chains, func(entry ChainMetadata) int {
+	ptr, new := sortutil.BinaryInsert(&o.Chains, func(entry *ChainMetadata) int {
 		lcEntry := enUsLower.String(entry.Name)
 		return strings.Compare(lcEntry, lcName)
 	})
 
 	// A matching entry exists
 	if !new {
-		if ptr.Type != typ {
-			return fmt.Errorf("chain %s: attempted to change type from %v to %v", name, ptr.Type, typ)
+		if (*ptr).Type != typ {
+			return fmt.Errorf("chain %s: attempted to change type from %v to %v", name, (*ptr).Type, typ)
 		}
 		return nil
 	}
 
 	// Update the new entry
-	*ptr = ChainMetadata{Name: name, Type: typ}
+	*ptr = &ChainMetadata{Name: name, Type: typ}
 	return nil
 }
 

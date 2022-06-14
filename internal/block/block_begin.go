@@ -13,7 +13,7 @@ import (
 	tm "github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/v1"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
@@ -46,9 +46,9 @@ func (x *Executor) BeginBlock(block *Block) error {
 		// Use a read-only batch
 		batch := block.Batch.Begin(false)
 		defer func() {
-			if batch.Dirty() {
-				x.Logger.Error("Finalize made changes")
-			}
+			// if batch.Dirty() {
+			// 	x.Logger.Error("Finalize made changes")
+			// }
 			batch.Discard()
 		}()
 
@@ -60,7 +60,7 @@ func (x *Executor) BeginBlock(block *Block) error {
 	}
 
 	// Reset the block state
-	err = indexing.BlockState(block.Batch, x.Describe.NodeUrl(protocol.Ledger)).Clear()
+	err = indexing.ProducedSyntheticTransactions(block.Batch, x.Describe.NodeUrl(protocol.Ledger)).Put(nil)
 	if err != nil {
 		return err
 	}
@@ -483,7 +483,7 @@ func (x *Executor) shouldSendAnchor(batch *database.Batch, ledger *protocol.Syst
 		return false, errors.Format(errors.StatusUnknown, "load block changes: %w", err)
 	}
 	updates := map[[32]byte]bool{}
-	for _, c := range updateEntries.Entries {
+	for _, c := range updateEntries {
 		u := c.Account.WithFragment("chain/" + c.Name)
 		updates[u.Hash32()] = true
 	}
@@ -526,7 +526,7 @@ func (x *Executor) buildDirectoryAnchor(batch *database.Batch, ledgerState *prot
 		return nil, errors.Format(errors.StatusUnknown, "load block chain updates index: %w", err)
 	}
 
-	for _, update := range updates.Entries {
+	for _, update := range updates {
 		// Is it an anchor chain?
 		if update.Type != protocol.ChainTypeAnchor {
 			continue

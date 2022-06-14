@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/v1"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -246,7 +246,7 @@ func TestTransactionIsReady(tt *testing.T) {
 
 		// Signature @ version 1
 		t.AddSignature(txn.GetHash(), 0, sig)
-		require.Equal(t, 1, t.GetSignatures(txn.GetHash(), signer.Url).Count())
+		require.Len(t, t.GetSignatures(txn.GetHash(), signer.Url), 1)
 
 		// Update the version
 		signer.Version = 2
@@ -256,7 +256,7 @@ func TestTransactionIsReady(tt *testing.T) {
 		sig2.SignerVersion = 2
 		sig2.PublicKey = []byte{2}
 		t.AddSignature(txn.GetHash(), 1, sig2)
-		require.Equal(t, 1, t.GetSignatures(txn.GetHash(), signer.Url).Count())
+		require.Len(t, t.GetSignatures(txn.GetHash(), signer.Url), 1)
 
 		// Transaction is not ready
 		status := t.GetTxnStatus(txn.GetHash())
