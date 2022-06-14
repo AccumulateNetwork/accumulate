@@ -4,11 +4,12 @@ import (
 	"bufio"
 	"crypto/sha256"
 	"fmt"
-	"github.com/stretchr/testify/require"
 	"io/ioutil"
 	"os"
 	"strconv"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestDataSetLog(t *testing.T) {
