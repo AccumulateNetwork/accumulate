@@ -31,14 +31,14 @@ func (SyntheticDepositTokens) Validate(st *StateManager, tx *Delivery) (protocol
 		switch origin := st.Origin.(type) {
 		case *protocol.LiteTokenAccount:
 			account = origin
-			tokenurl := origin.TokenUrl
-			if tokenurl != body.Token {
+			tokenurl := origin.TokenUrl.String()
+			if tokenurl != body.Token.String() {
 				return nil, fmt.Errorf("token type mismatch want %s got %s", body.Token, tokenurl)
 			}
 		case *protocol.TokenAccount:
 			account = origin
 			tokenurl := origin.TokenUrl
-			if tokenurl != body.Token {
+			if tokenurl.String() != body.Token.String() {
 				return nil, fmt.Errorf("token type mismatch want %s got %s", body.Token, tokenurl)
 			}
 		default:
