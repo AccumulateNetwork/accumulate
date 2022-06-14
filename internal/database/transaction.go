@@ -29,7 +29,7 @@ func (t *Transaction) Signatures(signer *url.URL) SignatureSet {
 
 	key := t.key.Append("Signatures", signer)
 	return getOrCreateMap(&t.signatures, key, func() *VersionedSignatureSet {
-		return newVersionedSignatureSet(t.container, t.store, key, "transaction %[2]x signatures %[4]v")
+		return newVersionedSignatureSet(t, t.store, key, "transaction %[2]x signatures %[4]v")
 	})
 }
 
@@ -40,7 +40,7 @@ func (t *Transaction) AddSignature(signature protocol.Signature) error {
 	return t.Signatures(signature.GetSigner()).Add(signature)
 }
 
-func (t *Transaction) addSigners(signers []*url.URL) error {
+func (t *Transaction) addSigner(signer *url.URL) error {
 	s, err := t.Signers().Get()
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
@@ -53,42 +53,27 @@ func (t *Transaction) addSigners(signers []*url.URL) error {
 			return errors.Wrap(errors.StatusUnknown, err)
 		}
 
-		status.Initiator = signers[0]
+		status.Initiator = signer
 		err = t.Status().Put(status)
 		if err != nil {
 			return errors.Wrap(errors.StatusUnknown, err)
 		}
 	}
 
-	err = t.Signers().Add(signers...)
+	err = t.Signers().Add(signer)
+	if err != nil {
+		return errors.Wrap(errors.StatusUnknown, err)
+	}
+
+	// TODO Deprecated in favor of t.Signers()
+	status, err := t.Status().Get()
+	if err != nil {
+		return errors.Wrap(errors.StatusUnknown, err)
+	}
+	status.AddSigner(&protocol.UnknownSigner{Url: signer})
+	err = t.Status().Put(status)
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
 	return nil
-}
-
-func (t *Transaction) Commit() error {
-	// Ensure the signer index is up to date
-	var signers []*url.URL
-	if t.systemSignatures != nil && t.systemSignatures.IsDirty() {
-		// ACME is the 'signer' for system signatures
-		signers = append(signers, protocol.AcmeUrl())
-	}
-
-	for _, set := range t.signatures {
-		if set.IsDirty() {
-			signers = append(signers, set.set.Key(3).(*url.URL))
-		}
-	}
-
-	if len(signers) > 0 {
-		err := t.addSigners(signers)
-		if err != nil {
-			return errors.Wrap(errors.StatusUnknown, err)
-		}
-	}
-
-	// Do the normal commit stuff
-	err := t.baseCommit()
-	return errors.Wrap(errors.StatusUnknown, err)
 }

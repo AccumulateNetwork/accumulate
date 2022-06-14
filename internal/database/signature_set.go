@@ -18,11 +18,13 @@ type SignatureSet interface {
 }
 
 type SystemSignatureSet struct {
+	container *Transaction
 	record.Set[*SignatureEntry]
 }
 
-func newSystemSignatureSet(logger log.Logger, store record.Store, key record.Key, _, labelfmt string) *SystemSignatureSet {
+func newSystemSignatureSet(container *Transaction, logger log.Logger, store record.Store, key record.Key, _, labelfmt string) *SystemSignatureSet {
 	s := new(SystemSignatureSet)
+	s.container = container
 	new := func() (v *SignatureEntry) { return new(SignatureEntry) }
 	cmp := func(u, v *SignatureEntry) int { return u.Compare(v) }
 	s.Set = *record.NewSet(logger, store, key, labelfmt, record.NewSlice(new), cmp)
@@ -30,6 +32,12 @@ func newSystemSignatureSet(logger log.Logger, store record.Store, key record.Key
 }
 
 func (s *SystemSignatureSet) Add(signature protocol.Signature) error {
+	// Update the signer set
+	err := s.container.addSigner(protocol.AcmeUrl())
+	if err != nil {
+		return errors.Wrap(errors.StatusUnknown, err)
+	}
+
 	v := new(SignatureEntry)
 	v.Type = signature.Type()
 	v.SignatureHash = *(*[32]byte)(signature.Hash())
@@ -49,18 +57,20 @@ func (s *SystemSignatureSet) putVersion(uint64) error {
 }
 
 type VersionedSignatureSet struct {
-	set     *record.Set[*SignatureEntry]
-	version *record.Wrapped[uint64]
-	signer  protocol.Signer
-	err     error
+	container *Transaction
+	set       *record.Set[*SignatureEntry]
+	version   *record.Wrapped[uint64]
+	signer    protocol.Signer
+	err       error
 }
 
-func newVersionedSignatureSet(cs *ChangeSet, store record.Store, key record.Key, namefmt string) *VersionedSignatureSet {
+func newVersionedSignatureSet(container *Transaction, store record.Store, key record.Key, namefmt string) *VersionedSignatureSet {
 	s := new(VersionedSignatureSet)
+	s.container = container
 	new := func() (v *SignatureEntry) { return new(SignatureEntry) }
 	cmp := func(u, v *SignatureEntry) int { return u.Compare(v) }
-	s.set = record.NewSet(cs.logger.L, store, key, namefmt, record.NewSlice(new), cmp)
-	s.version = record.NewWrapped(cs.logger.L, store, key.Append("Version"), namefmt+" version", true, record.NewWrapper(record.UintWrapper))
+	s.set = record.NewSet(container.logger.L, store, key, namefmt, record.NewSlice(new), cmp)
+	s.version = record.NewWrapped(container.logger.L, store, key.Append("Version"), namefmt+" version", true, record.NewWrapper(record.UintWrapper))
 
 	lastVersion, err := s.version.Get()
 	if err != nil {
@@ -68,7 +78,7 @@ func newVersionedSignatureSet(cs *ChangeSet, store record.Store, key record.Key,
 	}
 
 	signerUrl := key[3].(*url.URL)
-	err = cs.Account(signerUrl).State().GetAs(&s.signer)
+	err = container.container.Account(signerUrl).State().GetAs(&s.signer)
 	if err != nil {
 		return &VersionedSignatureSet{err: errors.Wrap(errors.StatusUnknown, err)}
 	}
@@ -90,6 +100,12 @@ func (s *VersionedSignatureSet) Get() ([]*SignatureEntry, error) {
 func (s *VersionedSignatureSet) Add(signature protocol.Signature) error {
 	if s.err != nil {
 		return errors.Wrap(errors.StatusUnknown, s.err)
+	}
+
+	// Update the signer set
+	err := s.container.addSigner(protocol.AcmeUrl())
+	if err != nil {
+		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
 	v := new(SignatureEntry)

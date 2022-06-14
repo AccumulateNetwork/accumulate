@@ -11,7 +11,7 @@ import (
 
 const markPower = 8
 
-func newMajorMinorIndexChain(logger log.Logger, store record.Store, key record.Key, namefmt, labelfmt string) *MajorMinorIndexChain {
+func newMajorMinorIndexChain(_ record.Record, logger log.Logger, store record.Store, key record.Key, namefmt, labelfmt string) *MajorMinorIndexChain {
 	c := new(MajorMinorIndexChain)
 	c.logger.L = logger
 	c.store = store

@@ -130,7 +130,7 @@ type Account struct {
 	signatureIndexChain           *MajorMinorIndexChain
 	syntheticIndexChain           *MajorMinorIndexChain
 	rootIndexChain                *MajorMinorIndexChain
-	anchorIndexChain              map[storage.Key]*MajorMinorIndexChain
+	anchorIndexChain              map[storage.Key]*AccountAnchorIndexChain
 	syntheticProducedChain        map[storage.Key]*managed.Chain
 	chains                        *record.Set[*protocol.ChainMetadata]
 	syntheticAnchors              *record.Set[[32]byte]
@@ -200,31 +200,36 @@ func (c *Account) AnchorChain(subnetId string) *AccountAnchorChain {
 
 func (c *Account) MainIndexChain() *MajorMinorIndexChain {
 	return getOrCreateField(&c.mainIndexChain, func() *MajorMinorIndexChain {
-		return newMajorMinorIndexChain(c.logger.L, c.store, c.key.Append("MainIndexChain"), "main-index", "account %[2]v main index chain")
+		return newMajorMinorIndexChain(c, c.logger.L, c.store, c.key.Append("MainIndexChain"), "main-index", "account %[2]v main index chain")
 	})
 }
 
 func (c *Account) SignatureIndexChain() *MajorMinorIndexChain {
 	return getOrCreateField(&c.signatureIndexChain, func() *MajorMinorIndexChain {
-		return newMajorMinorIndexChain(c.logger.L, c.store, c.key.Append("SignatureIndexChain"), "signature-index", "account %[2]v signature index chain")
+		return newMajorMinorIndexChain(c, c.logger.L, c.store, c.key.Append("SignatureIndexChain"), "signature-index", "account %[2]v signature index chain")
 	})
 }
 
 func (c *Account) SyntheticIndexChain() *MajorMinorIndexChain {
 	return getOrCreateField(&c.syntheticIndexChain, func() *MajorMinorIndexChain {
-		return newMajorMinorIndexChain(c.logger.L, c.store, c.key.Append("SyntheticIndexChain"), "synthetic-index", "account %[2]v synthetic index chain")
+		return newMajorMinorIndexChain(c, c.logger.L, c.store, c.key.Append("SyntheticIndexChain"), "synthetic-index", "account %[2]v synthetic index chain")
 	})
 }
 
 func (c *Account) RootIndexChain() *MajorMinorIndexChain {
 	return getOrCreateField(&c.rootIndexChain, func() *MajorMinorIndexChain {
-		return newMajorMinorIndexChain(c.logger.L, c.store, c.key.Append("RootIndexChain"), "root-index", "account %[2]v root index chain")
+		return newMajorMinorIndexChain(c, c.logger.L, c.store, c.key.Append("RootIndexChain"), "root-index", "account %[2]v root index chain")
 	})
 }
 
-func (c *Account) AnchorIndexChain(subnetId string) *MajorMinorIndexChain {
-	return getOrCreateMap(&c.anchorIndexChain, c.key.Append("AnchorIndexChain", subnetId), func() *MajorMinorIndexChain {
-		return newMajorMinorIndexChain(c.logger.L, c.store, c.key.Append("AnchorIndexChain", subnetId), "anchor-index(%[4]v)", "account %[2]v anchor index chain %[4]v")
+func (c *Account) AnchorIndexChain(subnetId string) *AccountAnchorIndexChain {
+	return getOrCreateMap(&c.anchorIndexChain, c.key.Append("AnchorIndexChain", subnetId), func() *AccountAnchorIndexChain {
+		v := new(AccountAnchorIndexChain)
+		v.logger = c.logger
+		v.store = c.store
+		v.key = c.key.Append("AnchorIndexChain", subnetId)
+		v.container = c
+		return v
 	})
 }
 
@@ -731,6 +736,85 @@ func (c *AccountAnchorChain) Commit() error {
 	return nil
 }
 
+type AccountAnchorIndexChain struct {
+	logger    logging.OptionalLogger
+	store     record.Store
+	key       record.Key
+	container *Account
+
+	root *MajorMinorIndexChain
+	bpt  *MajorMinorIndexChain
+}
+
+func (c *AccountAnchorIndexChain) Root() *MajorMinorIndexChain {
+	return getOrCreateField(&c.root, func() *MajorMinorIndexChain {
+		return newMajorMinorIndexChain(c, c.logger.L, c.store, c.key.Append("Root"), "anchor-index(%[4]v)-root", "account %[2]v anchor index chain %[4]v root")
+	})
+}
+
+func (c *AccountAnchorIndexChain) BPT() *MajorMinorIndexChain {
+	return getOrCreateField(&c.bpt, func() *MajorMinorIndexChain {
+		return newMajorMinorIndexChain(c, c.logger.L, c.store, c.key.Append("BPT"), "anchor-index(%[4]v)-bpt", "account %[2]v anchor index chain %[4]v bpt")
+	})
+}
+
+func (c *AccountAnchorIndexChain) Resolve(key record.Key) (record.Record, record.Key, error) {
+	switch key[0] {
+	case "Root":
+		return c.Root(), key[1:], nil
+	case "BPT":
+		return c.BPT(), key[1:], nil
+	default:
+		return nil, nil, errors.New(errors.StatusInternalError, "bad key for anchor index chain")
+	}
+}
+
+func (c *AccountAnchorIndexChain) IsDirty() bool {
+	if c == nil {
+		return false
+	}
+
+	if fieldIsDirty(c.root) {
+		return true
+	}
+	if fieldIsDirty(c.bpt) {
+		return true
+	}
+
+	return false
+}
+
+func (c *AccountAnchorIndexChain) resolveChain(name string) (chain *managed.Chain, ok bool) {
+	tryResolveChain(&chain, &ok, name, "root-", c.Root)
+	tryResolveChain(&chain, &ok, name, "bpt-", c.BPT)
+	return
+}
+
+func (c *AccountAnchorIndexChain) dirtyChains() []*managed.Chain {
+	if c == nil {
+		return nil
+	}
+
+	var chains []*managed.Chain
+
+	chains = append(chains, c.root.dirtyChains()...)
+	chains = append(chains, c.bpt.dirtyChains()...)
+
+	return chains
+}
+
+func (c *AccountAnchorIndexChain) Commit() error {
+	if c == nil {
+		return nil
+	}
+
+	var err error
+	commitField(&err, c.root)
+	commitField(&err, c.bpt)
+
+	return nil
+}
+
 type AccountData struct {
 	logger    logging.OptionalLogger
 	store     record.Store
@@ -843,7 +927,7 @@ func (c *Transaction) Produced() *record.Set[*url.TxID] {
 
 func (c *Transaction) SystemSignatures() *SystemSignatureSet {
 	return getOrCreateField(&c.systemSignatures, func() *SystemSignatureSet {
-		return newSystemSignatureSet(c.logger.L, c.store, c.key.Append("SystemSignatures"), "transaction(%[2]x)-system-signatures", "transaction %[2]x system signatures")
+		return newSystemSignatureSet(c, c.logger.L, c.store, c.key.Append("SystemSignatures"), "transaction(%[2]x)-system-signatures", "transaction %[2]x system signatures")
 	})
 }
 
@@ -944,7 +1028,7 @@ func (c *Transaction) IsDirty() bool {
 	return false
 }
 
-func (c *Transaction) baseCommit() error {
+func (c *Transaction) Commit() error {
 	if c == nil {
 		return nil
 	}

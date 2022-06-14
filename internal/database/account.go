@@ -26,6 +26,7 @@ func (a *Account) ChainByName(name string) (*managed.Chain, error) {
 	if ok {
 		return c, nil
 	}
+	a.resolveChain(name)
 	return nil, errors.NotFound("account %v: invalid chain name: %q", a.key[1], name)
 }
 

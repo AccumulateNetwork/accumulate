@@ -108,7 +108,7 @@ func (c *{{$c.FullName}}) {{.Name}}({{range .GetParameters}}{{lower .Name}} {{pa
 		{{- else if .Type.IsChain}}
 		return managed.NewChain(c.logger.L, c.store, {{template "key" .}}, markPower, managed.ChainType{{title .ChainType}}, {{template "chainNameFormat" .}}, {{template "valueLabelFormat" .}})
 		{{- else if .Type.IsOther}}
-		return new{{.DataType}}(c.logger.L, c.store, {{template "key" .}}, {{template "chainNameFormat" .}}, {{template "valueLabelFormat" .}})
+		return new{{.DataType}}(c, c.logger.L, c.store, {{template "key" .}}, {{template "chainNameFormat" .}}, {{template "valueLabelFormat" .}})
 		{{- else if .Counted}}
 		{{template "newCounted" .}}
 		{{- else}}
