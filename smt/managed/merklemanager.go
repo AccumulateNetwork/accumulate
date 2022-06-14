@@ -5,6 +5,7 @@ import (
 	"math"
 	"strings"
 
+	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
@@ -12,8 +13,9 @@ import (
 
 type MerkleManager = Chain
 
-func NewChain(store record.Store, key record.Key, markPower int64, typ ChainType, namefmt, labelfmt string) *Chain {
+func NewChain(logger log.Logger, store record.Store, key record.Key, markPower int64, typ ChainType, namefmt, labelfmt string) *Chain {
 	c := new(Chain)
+	c.logger.L = logger
 	c.store = store
 	c.key = key
 	c.typ = typ

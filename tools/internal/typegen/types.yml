@@ -138,3 +138,5 @@ OtherRecord:
       repeatable: true
     - name: Pointer
       type: bool
+    - name: HasChains
+      type: bool

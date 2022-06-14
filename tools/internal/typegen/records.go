@@ -50,20 +50,6 @@ func (r *StateRecord) FullName() string     { return recordFullName(r) }
 func (r *IndexRecord) FullName() string     { return recordFullName(r) }
 func (r *OtherRecord) FullName() string     { return recordFullName(r) }
 
-func (r *ContainerRecord) HasChains() bool {
-	for _, p := range r.Parts {
-		switch p := p.(type) {
-		case *ContainerRecord:
-			if p.HasChains() {
-				return true
-			}
-		case *ChainRecord:
-			return true
-		}
-	}
-	return false
-}
-
 func (r *StateRecord) Wrapped() bool { return r.DataType.Code != TypeCodeUnknown }
 func (r *IndexRecord) Wrapped() bool { return r.DataType.Code != TypeCodeUnknown }
 

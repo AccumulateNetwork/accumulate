@@ -4,9 +4,31 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
+)
+
+// debug is a bit field for enabling debug log messages
+//nolint
+const debug = 0 |
+	// debugGet |
+	// debugGetValue |
+	// debugPut |
+	// debugPutValue |
+	0
+
+const (
+	// debugGet logs the key of Batch.getValue
+	debugGet = 1 << iota
+	// debugGetValue logs the value of Batch.getValue
+	debugGetValue
+	// debugPut logs the key of Batch.putValue
+	debugPut
+	// debugPutValue logs the value of Batch.putValue
+	debugPutValue
 )
 
 type valueStatus int
@@ -19,6 +41,7 @@ const (
 )
 
 type Value[T encoding.BinaryValue] struct {
+	logger       logging.OptionalLogger
 	store        Store
 	key          Key
 	name         string
@@ -30,8 +53,9 @@ type Value[T encoding.BinaryValue] struct {
 
 var _ ValueReadWriter = (*Value[*Wrapper[uint64]])(nil)
 
-func NewValue[T encoding.BinaryValue](store Store, key Key, namefmt string, allowMissing bool, new func() T) *Value[T] {
+func NewValue[T encoding.BinaryValue](logger log.Logger, store Store, key Key, namefmt string, allowMissing bool, new func() T) *Value[T] {
 	v := &Value[T]{}
+	v.logger.L = logger
 	v.store = store
 	v.key = key
 	if strings.ContainsRune(namefmt, '%') {
@@ -49,7 +73,7 @@ func (v *Value[T]) Key(i int) interface{} {
 	return v.key[i]
 }
 
-func (v *Value[T]) Get() (T, error) {
+func (v *Value[T]) Get() (u T, err error) {
 	switch v.status {
 	case valueNotFound:
 		return zero[T](), errors.NotFound("%s not found", v.name)
@@ -58,7 +82,28 @@ func (v *Value[T]) Get() (T, error) {
 		return v.value, nil
 	}
 
-	err := v.store.LoadValue(v.key, v)
+	switch debug & (debugGet | debugGetValue) {
+	case debugGet | debugGetValue:
+		defer func() {
+			if err != nil {
+				v.logger.Debug("Get", "key", v.key, "value", err)
+			} else {
+				v.logger.Debug("Get", "key", v.key, "value", u)
+			}
+		}()
+	case debugGet:
+		v.logger.Debug("Get", "key", v.key)
+	case debugGetValue:
+		defer func() {
+			if err != nil {
+				v.logger.Debug("Get", "error", err)
+			} else {
+				v.logger.Debug("Get", "value", u)
+			}
+		}()
+	}
+
+	err = v.store.LoadValue(v.key, v)
 	switch {
 	case err == nil:
 		v.status = valueClean
@@ -89,6 +134,15 @@ func (v *Value[T]) GetAs(target interface{}) error {
 }
 
 func (v *Value[T]) Put(u T) error {
+	switch debug & (debugPut | debugPutValue) {
+	case debugPut | debugPutValue:
+		v.logger.Debug("Put", "key", v.key, "value", u)
+	case debugPut:
+		v.logger.Debug("Put", "key", v.key)
+	case debugPutValue:
+		v.logger.Debug("Put", "value", u)
+	}
+
 	v.value = u
 	v.status = valueDirty
 	return nil
@@ -115,6 +169,9 @@ func (v *Value[T]) Commit() error {
 }
 
 func (v *Value[T]) Resolve(key Key) (Record, Key, error) {
+	if len(key) == 0 {
+		return v, nil, nil
+	}
 	return nil, nil, errors.New(errors.StatusInternalError, "bad key for value")
 }
 
@@ -122,7 +179,7 @@ func (v *Value[T]) GetValue() (encoding.BinaryValue, error) {
 	return v.Get()
 }
 
-func (v *Value[T]) ReadFrom(value ValueReadWriter) error {
+func (v *Value[T]) from(value ValueReadWriter, status valueStatus) error {
 	vv, err := value.GetValue()
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
@@ -133,10 +190,18 @@ func (v *Value[T]) ReadFrom(value ValueReadWriter) error {
 	}
 
 	v.value = u
+	v.status = status
 	return nil
 }
 
-func (v *Value[T]) ReadFromBytes(data []byte) error {
+func (v *Value[T]) GetFrom(value ValueReadWriter) error {
+	return v.from(value, valueClean)
+}
+func (v *Value[T]) PutFrom(value ValueReadWriter) error {
+	return v.from(value, valueDirty)
+}
+
+func (v *Value[T]) LoadFrom(data []byte) error {
 	u := v.new()
 	err := u.UnmarshalBinary(data)
 	if err != nil {

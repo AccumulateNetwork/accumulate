@@ -89,7 +89,7 @@ func (d *Database) Close() error {
 // Begin starts a new nested changeset.
 func (d *Database) Begin(writable bool) *ChangeSet {
 	d.nextId++
-	return newChangeSet(d.nextId, writable, d.store.Begin(writable), nil, d.logger.L)
+	return newChangeSet(fmt.Sprint(d.nextId), writable, d.store.Begin(writable), nil, d.logger.L)
 }
 
 // View runs the function with a read-only transaction.

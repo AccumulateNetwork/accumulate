@@ -17,7 +17,7 @@ func (s KvStore) LoadValue(key Key, value ValueReadWriter) error {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
-	err = value.ReadFromBytes(b)
+	err = value.LoadFrom(b)
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}

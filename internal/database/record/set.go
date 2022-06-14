@@ -5,6 +5,7 @@ import (
 	"io"
 	"sort"
 
+	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/sortutil"
@@ -20,9 +21,9 @@ type Set[T any] struct {
 	compare func(u, v T) int
 }
 
-func NewSet[T any](store Store, key Key, namefmt string, new func() sliceableValue[T], cmp func(u, v T) int) *Set[T] {
+func NewSet[T any](logger log.Logger, store Store, key Key, namefmt string, new func() sliceableValue[T], cmp func(u, v T) int) *Set[T] {
 	s := &Set[T]{}
-	s.Value = *NewValue(store, key, namefmt, true, new)
+	s.Value = *NewValue(logger, store, key, namefmt, true, new)
 	s.compare = cmp
 	return s
 }

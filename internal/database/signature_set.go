@@ -1,6 +1,7 @@
 package database
 
 import (
+	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
@@ -20,11 +21,11 @@ type SystemSignatureSet struct {
 	record.Set[*SignatureEntry]
 }
 
-func newSystemSignatureSet(store record.Store, key record.Key, _, labelfmt string) *SystemSignatureSet {
+func newSystemSignatureSet(logger log.Logger, store record.Store, key record.Key, _, labelfmt string) *SystemSignatureSet {
 	s := new(SystemSignatureSet)
 	new := func() (v *SignatureEntry) { return new(SignatureEntry) }
 	cmp := func(u, v *SignatureEntry) int { return u.Compare(v) }
-	s.Set = *record.NewSet(store, key, labelfmt, record.NewSlice(new), cmp)
+	s.Set = *record.NewSet(logger, store, key, labelfmt, record.NewSlice(new), cmp)
 	return s
 }
 
@@ -54,19 +55,19 @@ type VersionedSignatureSet struct {
 	err     error
 }
 
-func newVersionedSignatureSet(cs *ChangeSet, store record.Store, key record.Key, signerUrl *url.URL) *VersionedSignatureSet {
+func newVersionedSignatureSet(cs *ChangeSet, store record.Store, key record.Key, namefmt string) *VersionedSignatureSet {
 	s := new(VersionedSignatureSet)
-	key = key.Append("Signatures", signerUrl)
 	new := func() (v *SignatureEntry) { return new(SignatureEntry) }
 	cmp := func(u, v *SignatureEntry) int { return u.Compare(v) }
-	s.set = record.NewSet(store, key, "transaction %[2]x signatures %[4]v", record.NewSlice(new), cmp)
-	s.version = record.NewWrapped(store, key.Append("Version"), "transaction %[2]x signatures %[4]v version", true, record.NewWrapper(record.UintWrapper))
+	s.set = record.NewSet(cs.logger.L, store, key, namefmt, record.NewSlice(new), cmp)
+	s.version = record.NewWrapped(cs.logger.L, store, key.Append("Version"), namefmt+" version", true, record.NewWrapper(record.UintWrapper))
 
 	lastVersion, err := s.version.Get()
 	if err != nil {
 		return &VersionedSignatureSet{err: errors.Wrap(errors.StatusUnknown, err)}
 	}
 
+	signerUrl := key[3].(*url.URL)
 	err = cs.Account(signerUrl).State().GetAs(&s.signer)
 	if err != nil {
 		return &VersionedSignatureSet{err: errors.Wrap(errors.StatusUnknown, err)}
@@ -99,6 +100,7 @@ func (s *VersionedSignatureSet) Add(signature protocol.Signature) error {
 	case protocol.KeySignature:
 		i, _, ok := s.signer.EntryByKeyHash(sig.GetPublicKeyHash())
 		if !ok {
+			s.signer.EntryByKeyHash(sig.GetPublicKeyHash())
 			return errors.Format(errors.StatusInternalError, "key hash %X does not belong to signer", sig.GetPublicKeyHash()[:8])
 		}
 		v.KeyEntryIndex = uint64(i)

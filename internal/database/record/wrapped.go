@@ -3,6 +3,7 @@ package record
 import (
 	"io"
 
+	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 )
@@ -17,9 +18,9 @@ type Wrapped[T any] struct {
 	Value[wrapperType[T]]
 }
 
-func NewWrapped[T any](store Store, key Key, namefmt string, allowMissing bool, new func() wrapperType[T]) *Wrapped[T] {
+func NewWrapped[T any](logger log.Logger, store Store, key Key, namefmt string, allowMissing bool, new func() wrapperType[T]) *Wrapped[T] {
 	v := &Wrapped[T]{}
-	v.Value = *NewValue(store, key, namefmt, allowMissing, new)
+	v.Value = *NewValue(logger, store, key, namefmt, allowMissing, new)
 	return v
 }
 

@@ -1,6 +1,11 @@
 package record
 
 import (
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"strings"
+
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
@@ -29,10 +34,31 @@ func (k Key) Hash() storage.Key {
 	return storage.MakeKey(k...)
 }
 
+func (k Key) String() string {
+	s := make([]string, len(k))
+	for i, v := range k {
+		switch v := v.(type) {
+		case []byte:
+			s[i] = hex.EncodeToString(v)
+		case [32]byte:
+			s[i] = hex.EncodeToString(v[:])
+		default:
+			s[i] = fmt.Sprint(v)
+		}
+	}
+	return strings.Join(s, ".")
+}
+
+func (k Key) MarshalJSON() ([]byte, error) {
+	// This is implemented purely for logging
+	return json.Marshal(k.String())
+}
+
 type ValueReadWriter interface {
 	GetValue() (encoding.BinaryValue, error)
-	ReadFrom(value ValueReadWriter) error
-	ReadFromBytes(data []byte) error
+	GetFrom(value ValueReadWriter) error
+	PutFrom(value ValueReadWriter) error
+	LoadFrom(data []byte) error
 }
 
 type Store interface {

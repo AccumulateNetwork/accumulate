@@ -13,6 +13,7 @@ func (c *ChangeSet) Transaction(hash []byte) *Transaction {
 	}
 	return getOrCreateMap(&c.transaction, record.Key{}.Append("Transaction", hash), func() *Transaction {
 		v := new(Transaction)
+		v.logger = c.logger
 		v.store = c.store
 		v.key = record.Key{}.Append("Transaction", hash)
 		v.container = c
@@ -26,8 +27,9 @@ func (t *Transaction) Signatures(signer *url.URL) SignatureSet {
 		return t.SystemSignatures()
 	}
 
-	return getOrCreateMap(&t.signatures, t.key.Append("Signatures", signer), func() *VersionedSignatureSet {
-		return newVersionedSignatureSet(t.container, t.store, t.key, signer)
+	key := t.key.Append("Signatures", signer)
+	return getOrCreateMap(&t.signatures, key, func() *VersionedSignatureSet {
+		return newVersionedSignatureSet(t.container, t.store, key, "transaction %[2]x signatures %[4]v")
 	})
 }
 

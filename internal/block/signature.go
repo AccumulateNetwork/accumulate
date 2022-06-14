@@ -161,20 +161,17 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 	isSystemSig := signature.Type().IsSystem()
 	isUserTxn := delivery.Transaction.Body.Type().IsUser() && !delivery.WasProducedInternally()
 	if !isUserTxn {
-		var signerUrl *url.URL
 		if isSystemSig {
-			signerUrl = x.Describe.DefaultOperatorPage()
+			// signerUrl = protocol.AcmeUrl()
+			signer = &protocol.UnknownSigner{Url: protocol.AcmeUrl()}
 		} else {
-			signerUrl = signature.GetSigner()
-		}
-		signer, err = loadSigner(batch, signerUrl)
-		switch {
-		case err == nil:
-			// Ok
-		case errors.Is(err, errors.StatusNotFound):
-			signer = &protocol.UnknownSigner{Url: signerUrl}
-		default:
-			return nil, err
+			signer, err = loadSigner(batch, signature.GetSigner())
+			switch {
+			case err == nil:
+				// Ok
+			default:
+				return nil, err
+			}
 		}
 	}
 
@@ -257,34 +254,9 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 	}
 
 	// Add the signature to the transaction's signature set
-	sigSet, err := batch.Transaction(delivery.Transaction.GetHash()).SignaturesForSigner(signer)
+	err = batch.Transaction(delivery.Transaction.GetHash()).AddSignature(signature)
 	if err != nil {
-		return nil, fmt.Errorf("load signatures: %w", err)
-	}
-
-	var index int
-	switch signature := signature.(type) {
-	case *protocol.ReceiptSignature,
-		*protocol.SyntheticSignature,
-		*protocol.InternalSignature,
-		*protocol.RemoteSignature,
-		*protocol.SignatureSet:
-		index = 0
-
-	case *protocol.DelegatedSignature:
-		index, _, _ = signer.EntryByDelegate(delegate.GetUrl())
-
-	case protocol.KeySignature:
-		index, _, _ = signer.EntryByKeyHash(signature.GetPublicKeyHash())
-
-	default:
-		return nil, fmt.Errorf("unknown signature type %v", signature.Type())
-	}
-	_ = index
-
-	err = sigSet.Add(signature)
-	if err != nil {
-		return nil, fmt.Errorf("store signature: %w", err)
+		return nil, fmt.Errorf("store signatures: %w", err)
 	}
 
 	return signer, nil

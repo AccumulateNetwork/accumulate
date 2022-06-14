@@ -53,6 +53,7 @@ type OtherRecord struct {
 	DataType     string           `json:"dataType,omitempty" form:"dataType" query:"dataType" validate:"required"`
 	Parameters   []*Field         `json:"parameters,omitempty" form:"parameters" query:"parameters" validate:"required"`
 	Pointer      bool             `json:"pointer,omitempty" form:"pointer" query:"pointer" validate:"required"`
+	HasChains    bool             `json:"hasChains,omitempty" form:"hasChains" query:"hasChains" validate:"required"`
 	extraData    []byte
 }
 
@@ -164,6 +165,7 @@ func (v *OtherRecord) MarshalJSON() ([]byte, error) {
 		DataType     string                    `json:"dataType,omitempty"`
 		Parameters   encoding.JsonList[*Field] `json:"parameters,omitempty"`
 		Pointer      bool                      `json:"pointer,omitempty"`
+		HasChains    bool                      `json:"hasChains,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Container = v.Container
@@ -172,6 +174,7 @@ func (v *OtherRecord) MarshalJSON() ([]byte, error) {
 	u.DataType = v.DataType
 	u.Parameters = v.Parameters
 	u.Pointer = v.Pointer
+	u.HasChains = v.HasChains
 	return json.Marshal(&u)
 }
 
@@ -334,6 +337,7 @@ func (v *OtherRecord) UnmarshalJSON(data []byte) error {
 		DataType     string                    `json:"dataType,omitempty"`
 		Parameters   encoding.JsonList[*Field] `json:"parameters,omitempty"`
 		Pointer      bool                      `json:"pointer,omitempty"`
+		HasChains    bool                      `json:"hasChains,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Container = v.Container
@@ -342,6 +346,7 @@ func (v *OtherRecord) UnmarshalJSON(data []byte) error {
 	u.DataType = v.DataType
 	u.Parameters = v.Parameters
 	u.Pointer = v.Pointer
+	u.HasChains = v.HasChains
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -354,6 +359,7 @@ func (v *OtherRecord) UnmarshalJSON(data []byte) error {
 	v.DataType = u.DataType
 	v.Parameters = u.Parameters
 	v.Pointer = u.Pointer
+	v.HasChains = u.HasChains
 	return nil
 }
 

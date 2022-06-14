@@ -5,10 +5,12 @@ package managed
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 type Chain struct {
+	logger    logging.OptionalLogger
 	store     record.Store
 	key       record.Key
 	typ       ChainType
@@ -27,26 +29,26 @@ type Chain struct {
 func (c *Chain) Head() *record.Value[*MerkleState] {
 	return getOrCreateField(&c.head, func() *record.Value[*MerkleState] {
 		new := func() (v *MerkleState) { return new(MerkleState) }
-		return record.NewValue(c.store, c.key.Append("Head"), c.label+" head", true, new)
+		return record.NewValue(c.logger.L, c.store, c.key.Append("Head"), c.label+" head", true, new)
 	})
 }
 
 func (c *Chain) States(index uint64) *record.Value[*MerkleState] {
 	return getOrCreateMap(&c.states, c.key.Append("States", index), func() *record.Value[*MerkleState] {
 		new := func() (v *MerkleState) { return new(MerkleState) }
-		return record.NewValue(c.store, c.key.Append("States", index), c.label+" states", false, new)
+		return record.NewValue(c.logger.L, c.store, c.key.Append("States", index), c.label+" states", false, new)
 	})
 }
 
 func (c *Chain) ElementIndex(hash []byte) *record.Wrapped[uint64] {
 	return getOrCreateMap(&c.elementIndex, c.key.Append("ElementIndex", hash), func() *record.Wrapped[uint64] {
-		return record.NewWrapped(c.store, c.key.Append("ElementIndex", hash), c.label+" element index", false, record.NewWrapper(record.UintWrapper))
+		return record.NewWrapped(c.logger.L, c.store, c.key.Append("ElementIndex", hash), c.label+" element index", false, record.NewWrapper(record.UintWrapper))
 	})
 }
 
 func (c *Chain) Element(index uint64) *record.Wrapped[[]byte] {
 	return getOrCreateMap(&c.element, c.key.Append("Element", index), func() *record.Wrapped[[]byte] {
-		return record.NewWrapped(c.store, c.key.Append("Element", index), c.label+" element", false, record.NewWrapper(record.BytesWrapper))
+		return record.NewWrapped(c.logger.L, c.store, c.key.Append("Element", index), c.label+" element", false, record.NewWrapper(record.BytesWrapper))
 	})
 }
 

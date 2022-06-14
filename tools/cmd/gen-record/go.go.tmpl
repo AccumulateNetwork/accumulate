@@ -45,32 +45,33 @@ c.key
 
 {{  define "newValue"}}
 {{- if and .Wrapped .Set}}
-return record.NewSet(c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, record.NewWrapperSlice(record.{{title .DataType.String}}Wrapper), record.Compare{{title .DataType.String}})
+return record.NewSet(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, record.NewWrapperSlice(record.{{title .DataType.String}}Wrapper), record.Compare{{title .DataType.String}})
 {{- else if .Wrapped}}
-return record.NewWrapped(c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, {{.EmptyIfMissing}}, record.NewWrapper(record.{{title .DataType.String}}Wrapper))
+return record.NewWrapped(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, {{.EmptyIfMissing}}, record.NewWrapper(record.{{title .DataType.String}}Wrapper))
 {{- else if .Set}}
 new := func() (v {{stateType . false}}) { return {{if .Pointer}}new({{stateType . true}}){{else}}v{{end}} }
 cmp := func(u, v {{stateType . false}}) int { return u.Compare(v) }
-return record.NewSet(c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, record.NewSlice(new), cmp)
+return record.NewSet(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, record.NewSlice(new), cmp)
 {{- else if .Union}}
-return record.NewWrapped(c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, {{.EmptyIfMissing}}, record.NewWrapper(record.UnionWrapper({{unionMethod . "Unmarshal"}})))
+return record.NewWrapped(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, {{.EmptyIfMissing}}, record.NewWrapper(record.UnionWrapper({{unionMethod . "Unmarshal"}})))
 {{- else}}
 new := func() (v {{stateType . false}}) { return {{if .Pointer}}new({{stateType . true}}){{else}}v{{end}} }
-return record.NewValue(c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, {{.EmptyIfMissing}}, new)
+return record.NewValue(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, {{.EmptyIfMissing}}, new)
 {{- end}}
 {{- end}}
 
 {{define "newCounted"}}
 {{- if .Wrapped}}
-return record.NewCounted(c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, record.NewCountableWrapped(record.{{title .DataType.String}}Wrapper))
+return record.NewCounted(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, record.NewCountableWrapped(record.{{title .DataType.String}}Wrapper))
 {{- else}}
 new := func() (v {{stateType . false}}) { return {{if .Pointer}}new({{stateType . true}}){{else}}v{{end}} }
-return record.NewCounted(c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, record.NewCountableValue(new))
+return record.NewCounted(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, record.NewCountableValue(new))
 {{- end}}
 {{- end}}
 
 {{define "container"}}
 type {{.FullName}} struct {
+	logger logging.OptionalLogger
 	store record.Store
 	{{- if not .Root}}
 	key record.Key
@@ -99,14 +100,15 @@ func (c *{{$c.FullName}}) {{.Name}}({{range .GetParameters}}{{lower .Name}} {{pa
 	func() *{{recordType .}} {
 		{{- if .Type.IsContainer}}
 		v := new({{.FullName}})
+		v.logger = c.logger
 		v.store = c.store
 		v.key = {{template "key" .}}
 		v.container = c
 		return v
 		{{- else if .Type.IsChain}}
-		return managed.NewChain(c.store, {{template "key" .}}, markPower, managed.ChainType{{title .ChainType}}, {{template "chainNameFormat" .}}, {{template "valueLabelFormat" .}})
+		return managed.NewChain(c.logger.L, c.store, {{template "key" .}}, markPower, managed.ChainType{{title .ChainType}}, {{template "chainNameFormat" .}}, {{template "valueLabelFormat" .}})
 		{{- else if .Type.IsOther}}
-		return new{{.DataType}}(c.store, {{template "key" .}}, {{template "chainNameFormat" .}}, {{template "valueLabelFormat" .}})
+		return new{{.DataType}}(c.logger.L, c.store, {{template "key" .}}, {{template "chainNameFormat" .}}, {{template "valueLabelFormat" .}})
 		{{- else if .Counted}}
 		{{template "newCounted" .}}
 		{{- else}}
@@ -164,47 +166,35 @@ func (c *{{.FullName}}) IsDirty() bool {
 	return false
 }
 
-{{if .HasChains}}
+{{if hasChains .}}
 {{if not .Root}}
-func (c *{{.FullName}}) resolveChain(name string) (*managed.Chain, bool) {
-	switch {
+func (c *{{.FullName}}) resolveChain(name string) (chain *managed.Chain, ok bool) {
 	{{- range .Parts}}
-	{{- if and (parameterized .) (or .Type.IsChain (and .Type.IsContainer .HasChains))}}
-	case strings.HasPrefix(name, "{{chainName .}}("):
-		name = name[len("{{chainName .}}("):]
-		i := strings.Index(name, ")")
-		if i < 0 {
-			return nil, false
-		}
+	{{- if and (.Type.IsChain) (not (parameterized .))}}
+	if name == "{{chainName .}}"{
+		return c.{{.Name}}(), true
+	}
+	{{- end}}
+	{{- end}}
 
-		params := strings.Split(name[:i], ",")
-		name = name[i+1:]
-		if len(params) != {{parameterCount .}} {
-			return nil, false
-		}
-
+	{{- range .Parts}}
+	{{- if and (parameterized .) (hasChains .)}}
+	tryResolveChainParam(&chain, &ok, name, "{{chainName .}}(", {{parameterCount .}}, func(params []string, name string) (*managed.Chain, bool) {
+		ok := true
 		{{- range $i, $p := .Parameters}}
-		param{{$p.Name}}, err := record.Parse{{title $p.Type.String}}(params[{{$i}}])
-		if err != nil {
+		param{{$p.Name}} := parseChainParam(&ok, params[{{$i}}], record.Parse{{title $p.Type.String}})
+		{{- end}}
+		if !ok {
 			return nil, false
 		}
-		{{- end}}
 
 		return c.{{.Name}}({{range .Parameters}}param{{.Name}},{{end}}){{if .Type.IsChain}}, true{{else}}.resolveChain(name){{end}}
-
-	{{  else if and .Type.IsContainer .HasChains}}
-	case strings.HasPrefix(name, "{{chainName .}}-"):
-		return c.{{.Name}}().resolveChain(name[len("{{chainName .}}-"):])
-
-	{{  else if .Type.IsChain}}
-	case name == "{{chainName .}}":
-		return c.{{.Name}}(), true
-
-	{{  end}}
+	})
+	{{- else if and (not .Type.IsChain) (hasChains .)}}
+	tryResolveChain(&chain, &ok, name, "{{chainName .}}-", c.{{.Name}})
 	{{- end}}
-	default:
-		return nil, false
-	}
+	{{- end}}
+	return
 }
 {{end}}
 
@@ -216,23 +206,23 @@ func (c *{{.FullName}}) dirtyChains() []*managed.Chain {
 	var chains []*managed.Chain
 	{{  range .Parts}}
 	{{- if parameterized .}}
-	{{- if and .Type.IsContainer .HasChains}}
-	for _, v := range c.{{lower .Name}} {
-		chains = append(chains, v.dirtyChains()...)
-	}
-	{{- else if .Type.IsChain}}
+	{{- if .Type.IsChain}}
 	for _, v := range c.{{lower .Name}} {
 		if v.IsDirty() {
 			chains = append(chains, v)
 		}
 	}
+	{{- else if hasChains .}}
+	for _, v := range c.{{lower .Name}} {
+		chains = append(chains, v.dirtyChains()...)
+	}
 	{{- end}}
-	{{- else if and .Type.IsContainer .HasChains}}
-	chains = append(chains, c.{{lower .Name}}.dirtyChains()...)
 	{{- else if .Type.IsChain}}
 	if fieldIsDirty(c.{{lower .Name}}) {
 		chains = append(chains, c.{{lower .Name}})
 	}
+	{{- else if hasChains .}}
+	chains = append(chains, c.{{lower .Name}}.dirtyChains()...)
 	{{- end}}
 	{{- end}}
 

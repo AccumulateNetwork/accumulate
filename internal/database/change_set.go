@@ -1,6 +1,8 @@
 package database
 
 import (
+	"fmt"
+
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
@@ -9,9 +11,9 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
-func newChangeSet(id uint64, writable bool, kvStore storage.KeyValueTxn, store record.Store, logger log.Logger) *ChangeSet {
+func newChangeSet(id string, writable bool, kvStore storage.KeyValueTxn, store record.Store, logger log.Logger) *ChangeSet {
 	c := new(ChangeSet)
-	c.logger.L = logger
+	c.logger.Set(logger, "change-set", id)
 	c.kvStore = kvStore
 	if store == nil {
 		c.store = record.KvStore{Store: kvStore}
@@ -33,7 +35,11 @@ func (c *ChangeSet) Begin(writable bool) *ChangeSet {
 	}
 
 	c.nextId++
-	return newChangeSet(c.nextId, writable, c.kvStore.Begin(writable), c, c.logger.L)
+	id := fmt.Sprint(c.nextId)
+	if c.id != "" {
+		id = c.id + "." + id
+	}
+	return newChangeSet(id, writable, c.kvStore.Begin(writable), c, c.logger.L)
 }
 
 // View runs the function with a read-only transaction.
@@ -87,7 +93,7 @@ func (c *ChangeSet) LoadValue(key record.Key, value record.ValueReadWriter) erro
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
-	err = value.ReadFrom(v)
+	err = value.GetFrom(v)
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
@@ -105,7 +111,7 @@ func (c *ChangeSet) StoreValue(key record.Key, value record.ValueReadWriter) err
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
-	err = v.ReadFrom(value)
+	err = v.PutFrom(value)
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
@@ -118,6 +124,7 @@ func (c *ChangeSet) Commit() error {
 		panic("attempted to use a commited or discarded batch")
 	}
 	c.done = true
+	c.logger.Debug("Commit change set")
 
 	// Push changes into the store
 	err := c.baseCommit()
@@ -143,8 +150,12 @@ func (c *ChangeSet) Commit() error {
 // Discard discards pending writes. Attempting to use the Batch after calling
 // Discard will result in a panic.
 func (c *ChangeSet) Discard() {
-	if !c.done && c.writable {
-		c.logger.Debug("Discarding a writable batch")
+	if !c.done {
+		if c.writable {
+			c.logger.Debug("Discarding a writable change set")
+		} else {
+			c.logger.Debug("Discard change set")
+		}
 	}
 	c.done = true
 

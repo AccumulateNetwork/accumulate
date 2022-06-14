@@ -12,7 +12,7 @@ func (c *ChangeSet) accountByKey(key [32]byte) (*Account, error) {
 		return a, nil
 	}
 
-	w := record.NewWrapped(c.store, record.Key{key}.Append("State"), "account %[2]v state", false, record.NewWrapper(record.UnionWrapper(protocol.UnmarshalAccount)))
+	w := record.NewWrapped(c.logger.L, c.store, record.Key{key}.Append("State"), "account %[2]v state", false, record.NewWrapper(record.UnionWrapper(protocol.UnmarshalAccount)))
 	state, err := w.Get()
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknown, err)

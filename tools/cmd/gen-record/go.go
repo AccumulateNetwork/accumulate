@@ -17,6 +17,7 @@ func init() {
 }
 
 var goFuncs = template.FuncMap{
+	"hasChains":       hasChains,
 	"fieldType":       fieldType,
 	"recordType":      recordType,
 	"stateType":       stateType,
@@ -29,6 +30,22 @@ var goFuncs = template.FuncMap{
 	"parameterCount":  func(r typegen.Record) int { return len(r.GetParameters()) },
 	"add":             func(x, y int) int { return x + y },
 	"isBaseType":      func(r *typegen.ContainerRecord) bool { return r.Container == nil && !r.Root },
+}
+
+func hasChains(r typegen.Record) bool {
+	switch r := r.(type) {
+	case *typegen.ChainRecord:
+		return true
+	case *typegen.OtherRecord:
+		return r.HasChains
+	case *typegen.ContainerRecord:
+		for _, p := range r.Parts {
+			if hasChains(p) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func fieldType(r typegen.Record) string {

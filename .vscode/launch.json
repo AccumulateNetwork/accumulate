@@ -174,7 +174,7 @@
       "request": "launch",
       "mode": "debug",
       "program": "${workspaceFolder}/tools/cmd/gen-record",
-      "cwd": "${workspaceFolder}/internal/database/v2",
+      "cwd": "${workspaceFolder}/internal/database",
       "args": ["--package", "database", "records.yml"]
     },
     {

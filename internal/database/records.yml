@@ -3,14 +3,12 @@
   root: true
   customCommit: true
   fields:
-  - name: logger
-    type: logging.OptionalLogger
   - name: done
     type: bool
   - name: writable
     type: bool
   - name: id
-    type: uint
+    type: string
   - name: nextId
     type: uint
   - name: kvStore
@@ -74,18 +72,22 @@
     - name: MainIndexChain
       type: other
       dataType: MajorMinorIndexChain
+      hasChains: true
       pointer: true
     - name: SignatureIndexChain
       type: other
       dataType: MajorMinorIndexChain
+      hasChains: true
       pointer: true
     - name: SyntheticIndexChain
       type: other
       dataType: MajorMinorIndexChain
+      hasChains: true
       pointer: true
     - name: RootIndexChain
       type: other
       dataType: MajorMinorIndexChain
+      hasChains: true
       pointer: true
     - name: AnchorIndexChain
       type: other
@@ -93,6 +95,7 @@
       - name: SubnetId
         type: string
       dataType: MajorMinorIndexChain
+      hasChains: true
       pointer: true
     - name: SyntheticProducedChain
       type: chain
