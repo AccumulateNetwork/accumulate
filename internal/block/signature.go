@@ -161,16 +161,18 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 	isSystemSig := signature.Type().IsSystem()
 	isUserTxn := delivery.Transaction.Body.Type().IsUser() && !delivery.WasProducedInternally()
 	if !isUserTxn {
+		var signerUrl *url.URL
 		if isSystemSig {
-			signer, err = loadSigner(batch, x.Describe.DefaultOperatorPage())
+			signerUrl = x.Describe.DefaultOperatorPage()
 		} else {
-			signer, err = loadSigner(batch, signature.GetSigner())
+			signerUrl = signature.GetSigner()
 		}
+		signer, err = loadSigner(batch, signerUrl)
 		switch {
 		case err == nil:
 			// Ok
 		case errors.Is(err, errors.StatusNotFound):
-			signer = &protocol.UnknownSigner{Url: signature.GetSigner()}
+			signer = &protocol.UnknownSigner{Url: signerUrl}
 		default:
 			return nil, err
 		}

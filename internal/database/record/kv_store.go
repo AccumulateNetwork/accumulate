@@ -1,7 +1,6 @@
 package record
 
 import (
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
@@ -10,13 +9,15 @@ type KvStore struct {
 	Store storage.KeyValueTxn
 }
 
-func (s KvStore) GetRaw(key Key, value encoding.BinaryValue) error {
+var _ Store = KvStore{}
+
+func (s KvStore) LoadValue(key Key, value ValueReadWriter) error {
 	b, err := s.Store.Get(key.Hash())
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
-	err = value.UnmarshalBinary(b)
+	err = value.ReadFromBytes(b)
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
@@ -24,8 +25,13 @@ func (s KvStore) GetRaw(key Key, value encoding.BinaryValue) error {
 	return nil
 }
 
-func (s KvStore) PutRaw(key Key, value encoding.BinaryValue) error {
-	b, err := value.MarshalBinary()
+func (s KvStore) StoreValue(key Key, value ValueReadWriter) error {
+	v, err := value.GetValue()
+	if err != nil {
+		return errors.Wrap(errors.StatusUnknown, err)
+	}
+
+	b, err := v.MarshalBinary()
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}

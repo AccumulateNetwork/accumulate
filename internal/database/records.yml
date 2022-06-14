@@ -1,6 +1,6 @@
 - name: ChangeSet
   type: container
-  omitKey: true
+  root: true
   customCommit: true
   fields:
   - name: logger
@@ -172,6 +172,7 @@
     - name: Status
       type: state
       dataType: protocol.TransactionStatus
+      emptyIfMissing: true
       pointer: true
     - name: Produced
       type: state

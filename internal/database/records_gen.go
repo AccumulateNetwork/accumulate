@@ -44,7 +44,7 @@ func (c *ChangeSet) Resolve(key record.Key) (record.Record, record.Key, error) {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for change set")
 		}
 		url, okUrl := key[1].(*url.URL)
-		if okUrl {
+		if !okUrl {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for change set")
 		}
 		v := c.Account(url)
@@ -54,7 +54,7 @@ func (c *ChangeSet) Resolve(key record.Key) (record.Record, record.Key, error) {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for change set")
 		}
 		hash, okHash := key[1].([]byte)
-		if okHash {
+		if !okHash {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for change set")
 		}
 		v := c.Transaction(hash)
@@ -102,15 +102,12 @@ func (c *ChangeSet) baseCommit() error {
 		return nil
 	}
 
+	var err error
 	for _, v := range c.account {
-		if err := v.Commit(); err != nil {
-			return errors.Wrap(errors.StatusUnknown, err)
-		}
+		commitField(&err, v)
 	}
 	for _, v := range c.transaction {
-		if err := v.Commit(); err != nil {
-			return errors.Wrap(errors.StatusUnknown, err)
-		}
+		commitField(&err, v)
 	}
 
 	return nil
@@ -285,51 +282,51 @@ func (c *Account) ProducedSyntheticTransactions() *record.Set[*BlockStateSynthTx
 func (c *Account) Resolve(key record.Key) (record.Record, record.Key, error) {
 	switch key[0] {
 	case "State":
-		return c.state, key[1:], nil
+		return c.State(), key[1:], nil
 	case "Pending":
-		return c.pending, key[1:], nil
+		return c.Pending(), key[1:], nil
 	case "SyntheticForAnchor":
 		if len(key) < 2 {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for account")
 		}
 		anchor, okAnchor := key[1].([32]byte)
-		if okAnchor {
+		if !okAnchor {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for account")
 		}
 		v := c.SyntheticForAnchor(anchor)
 		return v, key[2:], nil
 	case "MainChain":
-		return c.mainChain, key[1:], nil
+		return c.MainChain(), key[1:], nil
 	case "SignatureChain":
-		return c.signatureChain, key[1:], nil
+		return c.SignatureChain(), key[1:], nil
 	case "RootChain":
-		return c.rootChain, key[1:], nil
+		return c.RootChain(), key[1:], nil
 	case "SyntheticChain":
-		return c.syntheticChain, key[1:], nil
+		return c.SyntheticChain(), key[1:], nil
 	case "AnchorChain":
 		if len(key) < 2 {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for account")
 		}
 		subnetId, okSubnetId := key[1].(string)
-		if okSubnetId {
+		if !okSubnetId {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for account")
 		}
 		v := c.AnchorChain(subnetId)
 		return v, key[2:], nil
 	case "MainIndexChain":
-		return c.mainIndexChain, key[1:], nil
+		return c.MainIndexChain(), key[1:], nil
 	case "SignatureIndexChain":
-		return c.signatureIndexChain, key[1:], nil
+		return c.SignatureIndexChain(), key[1:], nil
 	case "SyntheticIndexChain":
-		return c.syntheticIndexChain, key[1:], nil
+		return c.SyntheticIndexChain(), key[1:], nil
 	case "RootIndexChain":
-		return c.rootIndexChain, key[1:], nil
+		return c.RootIndexChain(), key[1:], nil
 	case "AnchorIndexChain":
 		if len(key) < 2 {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for account")
 		}
 		subnetId, okSubnetId := key[1].(string)
-		if okSubnetId {
+		if !okSubnetId {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for account")
 		}
 		v := c.AnchorIndexChain(subnetId)
@@ -339,23 +336,23 @@ func (c *Account) Resolve(key record.Key) (record.Record, record.Key, error) {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for account")
 		}
 		subnetId, okSubnetId := key[1].(string)
-		if okSubnetId {
+		if !okSubnetId {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for account")
 		}
 		v := c.SyntheticProducedChain(subnetId)
 		return v, key[2:], nil
 	case "Chains":
-		return c.chains, key[1:], nil
+		return c.Chains(), key[1:], nil
 	case "SyntheticAnchors":
-		return c.syntheticAnchors, key[1:], nil
+		return c.SyntheticAnchors(), key[1:], nil
 	case "Directory":
-		return c.directory, key[1:], nil
+		return c.Directory(), key[1:], nil
 	case "Data":
-		return c.data, key[1:], nil
+		return c.Data(), key[1:], nil
 	case "BlockChainUpdates":
-		return c.blockChainUpdates, key[1:], nil
+		return c.BlockChainUpdates(), key[1:], nil
 	case "ProducedSyntheticTransactions":
-		return c.producedSyntheticTransactions, key[1:], nil
+		return c.ProducedSyntheticTransactions(), key[1:], nil
 	default:
 		return nil, nil, errors.New(errors.StatusInternalError, "bad key for account")
 	}
@@ -366,10 +363,10 @@ func (c *Account) IsDirty() bool {
 		return false
 	}
 
-	if c.state.IsDirty() {
+	if fieldIsDirty(c.state) {
 		return true
 	}
-	if c.pending.IsDirty() {
+	if fieldIsDirty(c.pending) {
 		return true
 	}
 	for _, v := range c.syntheticForAnchor {
@@ -377,16 +374,16 @@ func (c *Account) IsDirty() bool {
 			return true
 		}
 	}
-	if c.mainChain.IsDirty() {
+	if fieldIsDirty(c.mainChain) {
 		return true
 	}
-	if c.signatureChain.IsDirty() {
+	if fieldIsDirty(c.signatureChain) {
 		return true
 	}
-	if c.rootChain.IsDirty() {
+	if fieldIsDirty(c.rootChain) {
 		return true
 	}
-	if c.syntheticChain.IsDirty() {
+	if fieldIsDirty(c.syntheticChain) {
 		return true
 	}
 	for _, v := range c.anchorChain {
@@ -394,16 +391,16 @@ func (c *Account) IsDirty() bool {
 			return true
 		}
 	}
-	if c.mainIndexChain.IsDirty() {
+	if fieldIsDirty(c.mainIndexChain) {
 		return true
 	}
-	if c.signatureIndexChain.IsDirty() {
+	if fieldIsDirty(c.signatureIndexChain) {
 		return true
 	}
-	if c.syntheticIndexChain.IsDirty() {
+	if fieldIsDirty(c.syntheticIndexChain) {
 		return true
 	}
-	if c.rootIndexChain.IsDirty() {
+	if fieldIsDirty(c.rootIndexChain) {
 		return true
 	}
 	for _, v := range c.anchorIndexChain {
@@ -416,22 +413,22 @@ func (c *Account) IsDirty() bool {
 			return true
 		}
 	}
-	if c.chains.IsDirty() {
+	if fieldIsDirty(c.chains) {
 		return true
 	}
-	if c.syntheticAnchors.IsDirty() {
+	if fieldIsDirty(c.syntheticAnchors) {
 		return true
 	}
-	if c.directory.IsDirty() {
+	if fieldIsDirty(c.directory) {
 		return true
 	}
-	if c.data.IsDirty() {
+	if fieldIsDirty(c.data) {
 		return true
 	}
-	if c.blockChainUpdates.IsDirty() {
+	if fieldIsDirty(c.blockChainUpdates) {
 		return true
 	}
-	if c.producedSyntheticTransactions.IsDirty() {
+	if fieldIsDirty(c.producedSyntheticTransactions) {
 		return true
 	}
 
@@ -502,14 +499,14 @@ func (c *Account) dirtyChains() []*managed.Chain {
 
 	var chains []*managed.Chain
 
-	if c.mainChain.IsDirty() {
+	if fieldIsDirty(c.mainChain) {
 		chains = append(chains, c.mainChain)
 	}
-	if c.signatureChain.IsDirty() {
+	if fieldIsDirty(c.signatureChain) {
 		chains = append(chains, c.signatureChain)
 	}
 	chains = append(chains, c.rootChain.dirtyChains()...)
-	if c.syntheticChain.IsDirty() {
+	if fieldIsDirty(c.syntheticChain) {
 		chains = append(chains, c.syntheticChain)
 	}
 	for _, v := range c.anchorChain {
@@ -529,74 +526,35 @@ func (c *Account) baseCommit() error {
 		return nil
 	}
 
-	if err := c.state.Commit(); err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
-	}
-	if err := c.pending.Commit(); err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
-	}
+	var err error
+	commitField(&err, c.state)
+	commitField(&err, c.pending)
 	for _, v := range c.syntheticForAnchor {
-		if err := v.Commit(); err != nil {
-			return errors.Wrap(errors.StatusUnknown, err)
-		}
+		commitField(&err, v)
 	}
-	if err := c.mainChain.Commit(); err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
-	}
-	if err := c.signatureChain.Commit(); err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
-	}
-	if err := c.rootChain.Commit(); err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
-	}
-	if err := c.syntheticChain.Commit(); err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
-	}
+	commitField(&err, c.mainChain)
+	commitField(&err, c.signatureChain)
+	commitField(&err, c.rootChain)
+	commitField(&err, c.syntheticChain)
 	for _, v := range c.anchorChain {
-		if err := v.Commit(); err != nil {
-			return errors.Wrap(errors.StatusUnknown, err)
-		}
+		commitField(&err, v)
 	}
-	if err := c.mainIndexChain.Commit(); err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
-	}
-	if err := c.signatureIndexChain.Commit(); err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
-	}
-	if err := c.syntheticIndexChain.Commit(); err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
-	}
-	if err := c.rootIndexChain.Commit(); err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
-	}
+	commitField(&err, c.mainIndexChain)
+	commitField(&err, c.signatureIndexChain)
+	commitField(&err, c.syntheticIndexChain)
+	commitField(&err, c.rootIndexChain)
 	for _, v := range c.anchorIndexChain {
-		if err := v.Commit(); err != nil {
-			return errors.Wrap(errors.StatusUnknown, err)
-		}
+		commitField(&err, v)
 	}
 	for _, v := range c.syntheticProducedChain {
-		if err := v.Commit(); err != nil {
-			return errors.Wrap(errors.StatusUnknown, err)
-		}
+		commitField(&err, v)
 	}
-	if err := c.chains.Commit(); err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
-	}
-	if err := c.syntheticAnchors.Commit(); err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
-	}
-	if err := c.directory.Commit(); err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
-	}
-	if err := c.data.Commit(); err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
-	}
-	if err := c.blockChainUpdates.Commit(); err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
-	}
-	if err := c.producedSyntheticTransactions.Commit(); err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
-	}
+	commitField(&err, c.chains)
+	commitField(&err, c.syntheticAnchors)
+	commitField(&err, c.directory)
+	commitField(&err, c.data)
+	commitField(&err, c.blockChainUpdates)
+	commitField(&err, c.producedSyntheticTransactions)
 
 	return nil
 }
@@ -625,9 +583,9 @@ func (c *AccountRootChain) Major() *managed.Chain {
 func (c *AccountRootChain) Resolve(key record.Key) (record.Record, record.Key, error) {
 	switch key[0] {
 	case "Minor":
-		return c.minor, key[1:], nil
+		return c.Minor(), key[1:], nil
 	case "Major":
-		return c.major, key[1:], nil
+		return c.Major(), key[1:], nil
 	default:
 		return nil, nil, errors.New(errors.StatusInternalError, "bad key for root chain")
 	}
@@ -638,10 +596,10 @@ func (c *AccountRootChain) IsDirty() bool {
 		return false
 	}
 
-	if c.minor.IsDirty() {
+	if fieldIsDirty(c.minor) {
 		return true
 	}
-	if c.major.IsDirty() {
+	if fieldIsDirty(c.major) {
 		return true
 	}
 
@@ -668,10 +626,10 @@ func (c *AccountRootChain) dirtyChains() []*managed.Chain {
 
 	var chains []*managed.Chain
 
-	if c.minor.IsDirty() {
+	if fieldIsDirty(c.minor) {
 		chains = append(chains, c.minor)
 	}
-	if c.major.IsDirty() {
+	if fieldIsDirty(c.major) {
 		chains = append(chains, c.major)
 	}
 
@@ -683,12 +641,9 @@ func (c *AccountRootChain) Commit() error {
 		return nil
 	}
 
-	if err := c.minor.Commit(); err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
-	}
-	if err := c.major.Commit(); err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
-	}
+	var err error
+	commitField(&err, c.minor)
+	commitField(&err, c.major)
 
 	return nil
 }
@@ -717,9 +672,9 @@ func (c *AccountAnchorChain) BPT() *managed.Chain {
 func (c *AccountAnchorChain) Resolve(key record.Key) (record.Record, record.Key, error) {
 	switch key[0] {
 	case "Root":
-		return c.root, key[1:], nil
+		return c.Root(), key[1:], nil
 	case "BPT":
-		return c.bpt, key[1:], nil
+		return c.BPT(), key[1:], nil
 	default:
 		return nil, nil, errors.New(errors.StatusInternalError, "bad key for anchor chain")
 	}
@@ -730,10 +685,10 @@ func (c *AccountAnchorChain) IsDirty() bool {
 		return false
 	}
 
-	if c.root.IsDirty() {
+	if fieldIsDirty(c.root) {
 		return true
 	}
-	if c.bpt.IsDirty() {
+	if fieldIsDirty(c.bpt) {
 		return true
 	}
 
@@ -760,10 +715,10 @@ func (c *AccountAnchorChain) dirtyChains() []*managed.Chain {
 
 	var chains []*managed.Chain
 
-	if c.root.IsDirty() {
+	if fieldIsDirty(c.root) {
 		chains = append(chains, c.root)
 	}
-	if c.bpt.IsDirty() {
+	if fieldIsDirty(c.bpt) {
 		chains = append(chains, c.bpt)
 	}
 
@@ -775,12 +730,9 @@ func (c *AccountAnchorChain) Commit() error {
 		return nil
 	}
 
-	if err := c.root.Commit(); err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
-	}
-	if err := c.bpt.Commit(); err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
-	}
+	var err error
+	commitField(&err, c.root)
+	commitField(&err, c.bpt)
 
 	return nil
 }
@@ -810,13 +762,13 @@ func (c *AccountData) Transaction(entryHash [32]byte) *record.Wrapped[[32]byte] 
 func (c *AccountData) Resolve(key record.Key) (record.Record, record.Key, error) {
 	switch key[0] {
 	case "Entry":
-		return c.entry, key[1:], nil
+		return c.Entry(), key[1:], nil
 	case "Transaction":
 		if len(key) < 2 {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for data")
 		}
 		entryHash, okEntryHash := key[1].([32]byte)
-		if okEntryHash {
+		if !okEntryHash {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for data")
 		}
 		v := c.Transaction(entryHash)
@@ -831,7 +783,7 @@ func (c *AccountData) IsDirty() bool {
 		return false
 	}
 
-	if c.entry.IsDirty() {
+	if fieldIsDirty(c.entry) {
 		return true
 	}
 	for _, v := range c.transaction {
@@ -848,13 +800,10 @@ func (c *AccountData) Commit() error {
 		return nil
 	}
 
-	if err := c.entry.Commit(); err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
-	}
+	var err error
+	commitField(&err, c.entry)
 	for _, v := range c.transaction {
-		if err := v.Commit(); err != nil {
-			return errors.Wrap(errors.StatusUnknown, err)
-		}
+		commitField(&err, v)
 	}
 
 	return nil
@@ -886,7 +835,7 @@ func (c *Transaction) Value() *record.Value[*protocol.Transaction] {
 func (c *Transaction) Status() *record.Value[*protocol.TransactionStatus] {
 	return getOrCreateField(&c.status, func() *record.Value[*protocol.TransactionStatus] {
 		new := func() (v *protocol.TransactionStatus) { return new(protocol.TransactionStatus) }
-		return record.NewValue(c.store, c.key.Append("Status"), "transaction %[2]x status", false, new)
+		return record.NewValue(c.store, c.key.Append("Status"), "transaction %[2]x status", true, new)
 	})
 }
 
@@ -931,31 +880,31 @@ func (c *Transaction) TxID() *record.Wrapped[*url.TxID] {
 func (c *Transaction) Resolve(key record.Key) (record.Record, record.Key, error) {
 	switch key[0] {
 	case "Value":
-		return c.value, key[1:], nil
+		return c.Value(), key[1:], nil
 	case "Status":
-		return c.status, key[1:], nil
+		return c.Status(), key[1:], nil
 	case "Produced":
-		return c.produced, key[1:], nil
+		return c.Produced(), key[1:], nil
 	case "SystemSignatures":
-		return c.systemSignatures, key[1:], nil
+		return c.SystemSignatures(), key[1:], nil
 	case "Signatures":
 		if len(key) < 2 {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for transaction")
 		}
 		signer, okSigner := key[1].(*url.URL)
-		if okSigner {
+		if !okSigner {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for transaction")
 		}
 		v := c.Signatures(signer)
 		return v, key[2:], nil
 	case "Signers":
-		return c.signers, key[1:], nil
+		return c.Signers(), key[1:], nil
 	case "Chains":
-		return c.chains, key[1:], nil
+		return c.Chains(), key[1:], nil
 	case "Signature":
-		return c.signature, key[1:], nil
+		return c.Signature(), key[1:], nil
 	case "TxID":
-		return c.txID, key[1:], nil
+		return c.TxID(), key[1:], nil
 	default:
 		return nil, nil, errors.New(errors.StatusInternalError, "bad key for transaction")
 	}
@@ -966,16 +915,16 @@ func (c *Transaction) IsDirty() bool {
 		return false
 	}
 
-	if c.value.IsDirty() {
+	if fieldIsDirty(c.value) {
 		return true
 	}
-	if c.status.IsDirty() {
+	if fieldIsDirty(c.status) {
 		return true
 	}
-	if c.produced.IsDirty() {
+	if fieldIsDirty(c.produced) {
 		return true
 	}
-	if c.systemSignatures.IsDirty() {
+	if fieldIsDirty(c.systemSignatures) {
 		return true
 	}
 	for _, v := range c.signatures {
@@ -983,16 +932,16 @@ func (c *Transaction) IsDirty() bool {
 			return true
 		}
 	}
-	if c.signers.IsDirty() {
+	if fieldIsDirty(c.signers) {
 		return true
 	}
-	if c.chains.IsDirty() {
+	if fieldIsDirty(c.chains) {
 		return true
 	}
-	if c.signature.IsDirty() {
+	if fieldIsDirty(c.signature) {
 		return true
 	}
-	if c.txID.IsDirty() {
+	if fieldIsDirty(c.txID) {
 		return true
 	}
 
@@ -1004,35 +953,18 @@ func (c *Transaction) baseCommit() error {
 		return nil
 	}
 
-	if err := c.value.Commit(); err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
-	}
-	if err := c.status.Commit(); err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
-	}
-	if err := c.produced.Commit(); err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
-	}
-	if err := c.systemSignatures.Commit(); err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
-	}
+	var err error
+	commitField(&err, c.value)
+	commitField(&err, c.status)
+	commitField(&err, c.produced)
+	commitField(&err, c.systemSignatures)
 	for _, v := range c.signatures {
-		if err := v.Commit(); err != nil {
-			return errors.Wrap(errors.StatusUnknown, err)
-		}
+		commitField(&err, v)
 	}
-	if err := c.signers.Commit(); err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
-	}
-	if err := c.chains.Commit(); err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
-	}
-	if err := c.signature.Commit(); err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
-	}
-	if err := c.txID.Commit(); err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
-	}
+	commitField(&err, c.signers)
+	commitField(&err, c.chains)
+	commitField(&err, c.signature)
+	commitField(&err, c.txID)
 
 	return nil
 }
@@ -1049,22 +981,22 @@ type MajorMinorIndexChain struct {
 
 func (c *MajorMinorIndexChain) Minor() *managed.Chain {
 	return getOrCreateField(&c.minor, func() *managed.Chain {
-		return managed.NewChain(c.store, record.Key{}.Append("Minor"), markPower, managed.ChainTypeIndex, c.name+"-minor", c.label+" minor")
+		return managed.NewChain(c.store, c.key.Append("Minor"), markPower, managed.ChainTypeIndex, c.name+"-minor", c.label+" minor")
 	})
 }
 
 func (c *MajorMinorIndexChain) Major() *managed.Chain {
 	return getOrCreateField(&c.major, func() *managed.Chain {
-		return managed.NewChain(c.store, record.Key{}.Append("Major"), markPower, managed.ChainTypeIndex, c.name+"-major", c.label+" major")
+		return managed.NewChain(c.store, c.key.Append("Major"), markPower, managed.ChainTypeIndex, c.name+"-major", c.label+" major")
 	})
 }
 
 func (c *MajorMinorIndexChain) Resolve(key record.Key) (record.Record, record.Key, error) {
 	switch key[0] {
 	case "Minor":
-		return c.minor, key[1:], nil
+		return c.Minor(), key[1:], nil
 	case "Major":
-		return c.major, key[1:], nil
+		return c.Major(), key[1:], nil
 	default:
 		return nil, nil, errors.New(errors.StatusInternalError, "bad key for major minor index chain")
 	}
@@ -1075,10 +1007,10 @@ func (c *MajorMinorIndexChain) IsDirty() bool {
 		return false
 	}
 
-	if c.minor.IsDirty() {
+	if fieldIsDirty(c.minor) {
 		return true
 	}
-	if c.major.IsDirty() {
+	if fieldIsDirty(c.major) {
 		return true
 	}
 
@@ -1105,10 +1037,10 @@ func (c *MajorMinorIndexChain) dirtyChains() []*managed.Chain {
 
 	var chains []*managed.Chain
 
-	if c.minor.IsDirty() {
+	if fieldIsDirty(c.minor) {
 		chains = append(chains, c.minor)
 	}
-	if c.major.IsDirty() {
+	if fieldIsDirty(c.major) {
 		chains = append(chains, c.major)
 	}
 
@@ -1120,12 +1052,9 @@ func (c *MajorMinorIndexChain) Commit() error {
 		return nil
 	}
 
-	if err := c.minor.Commit(); err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
-	}
-	if err := c.major.Commit(); err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
-	}
+	var err error
+	commitField(&err, c.minor)
+	commitField(&err, c.major)
 
 	return nil
 }
@@ -1152,4 +1081,16 @@ func getOrCreateMap[T any](ptr *map[storage.Key]*T, key record.Key, create func(
 	v := create()
 	(*ptr)[k] = v
 	return v
+}
+
+func commitField[T any, PT record.RecordPtr[T]](lastErr *error, field PT) {
+	if *lastErr != nil || field == nil {
+		return
+	}
+
+	*lastErr = field.Commit()
+}
+
+func fieldIsDirty[T any, PT record.RecordPtr[T]](field PT) bool {
+	return field != nil && field.IsDirty()
 }

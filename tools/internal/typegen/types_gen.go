@@ -26,7 +26,7 @@ type ContainerRecord struct {
 	Fields       []*Field         `json:"fields,omitempty" form:"fields" query:"fields" validate:"required"`
 	CustomCommit bool             `json:"customCommit,omitempty" form:"customCommit" query:"customCommit" validate:"required"`
 	Parameters   []*Field         `json:"parameters,omitempty" form:"parameters" query:"parameters" validate:"required"`
-	OmitKey      bool             `json:"omitKey,omitempty" form:"omitKey" query:"omitKey" validate:"required"`
+	Root         bool             `json:"root,omitempty" form:"root" query:"root" validate:"required"`
 	Parts        []Record         `json:"parts,omitempty" form:"parts" query:"parts" validate:"required"`
 	extraData    []byte
 }
@@ -110,7 +110,7 @@ func (v *ContainerRecord) MarshalJSON() ([]byte, error) {
 		Fields       encoding.JsonList[*Field]              `json:"fields,omitempty"`
 		CustomCommit bool                                   `json:"customCommit,omitempty"`
 		Parameters   encoding.JsonList[*Field]              `json:"parameters,omitempty"`
-		OmitKey      bool                                   `json:"omitKey,omitempty"`
+		Root         bool                                   `json:"root,omitempty"`
 		Parts        encoding.JsonUnmarshalListWith[Record] `json:"parts,omitempty"`
 	}{}
 	u.Type = v.Type()
@@ -120,7 +120,7 @@ func (v *ContainerRecord) MarshalJSON() ([]byte, error) {
 	u.Fields = v.Fields
 	u.CustomCommit = v.CustomCommit
 	u.Parameters = v.Parameters
-	u.OmitKey = v.OmitKey
+	u.Root = v.Root
 	u.Parts = encoding.JsonUnmarshalListWith[Record]{Value: v.Parts, Func: UnmarshalRecordJSON}
 	return json.Marshal(&u)
 }
@@ -246,7 +246,7 @@ func (v *ContainerRecord) UnmarshalJSON(data []byte) error {
 		Fields       encoding.JsonList[*Field]              `json:"fields,omitempty"`
 		CustomCommit bool                                   `json:"customCommit,omitempty"`
 		Parameters   encoding.JsonList[*Field]              `json:"parameters,omitempty"`
-		OmitKey      bool                                   `json:"omitKey,omitempty"`
+		Root         bool                                   `json:"root,omitempty"`
 		Parts        encoding.JsonUnmarshalListWith[Record] `json:"parts,omitempty"`
 	}{}
 	u.Type = v.Type()
@@ -256,7 +256,7 @@ func (v *ContainerRecord) UnmarshalJSON(data []byte) error {
 	u.Fields = v.Fields
 	u.CustomCommit = v.CustomCommit
 	u.Parameters = v.Parameters
-	u.OmitKey = v.OmitKey
+	u.Root = v.Root
 	u.Parts = encoding.JsonUnmarshalListWith[Record]{Value: v.Parts, Func: UnmarshalRecordJSON}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -270,7 +270,7 @@ func (v *ContainerRecord) UnmarshalJSON(data []byte) error {
 	v.Fields = u.Fields
 	v.CustomCommit = u.CustomCommit
 	v.Parameters = u.Parameters
-	v.OmitKey = u.OmitKey
+	v.Root = u.Root
 	v.Parts = make([]Record, len(u.Parts.Value))
 	for i, x := range u.Parts.Value {
 		v.Parts[i] = x

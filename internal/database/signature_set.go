@@ -137,18 +137,30 @@ func (s *VersionedSignatureSet) Add(signature protocol.Signature) error {
 }
 
 func (s *VersionedSignatureSet) putEntries(v []*SignatureEntry) error {
+	if s.err != nil {
+		return errors.Wrap(errors.StatusUnknown, s.err)
+	}
 	return s.set.Put(v)
 }
 
 func (s *VersionedSignatureSet) getVersion() (uint64, error) {
+	if s.err != nil {
+		return 0, errors.Wrap(errors.StatusUnknown, s.err)
+	}
 	return s.version.Get()
 }
 
 func (s *VersionedSignatureSet) putVersion(v uint64) error {
+	if s.err != nil {
+		return errors.Wrap(errors.StatusUnknown, s.err)
+	}
 	return s.version.Put(v)
 }
 
 func (s *VersionedSignatureSet) Resolve(key record.Key) (record.Record, record.Key, error) {
+	if s.err != nil {
+		return nil, nil, errors.Wrap(errors.StatusUnknown, s.err)
+	}
 	if len(key) == 1 {
 		if k, ok := key[0].(string); ok && k == "Version" {
 			return s.version, nil, nil
@@ -159,10 +171,16 @@ func (s *VersionedSignatureSet) Resolve(key record.Key) (record.Record, record.K
 }
 
 func (s *VersionedSignatureSet) IsDirty() bool {
+	if s.err != nil {
+		return false
+	}
 	return s.version.IsDirty() || s.set.IsDirty()
 }
 
 func (s *VersionedSignatureSet) Commit() error {
+	if s.err != nil {
+		return errors.Wrap(errors.StatusUnknown, s.err)
+	}
 	err := s.version.Commit()
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)

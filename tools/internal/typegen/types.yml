@@ -22,7 +22,7 @@ ContainerRecord:
       pointer: true
       marshal-as: reference
       repeatable: true
-    - name: OmitKey
+    - name: Root
       type: bool
     - name: Parts
       type: Record

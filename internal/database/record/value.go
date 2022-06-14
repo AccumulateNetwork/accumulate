@@ -28,6 +28,8 @@ type Value[T encoding.BinaryValue] struct {
 	allowMissing bool
 }
 
+var _ ValueReadWriter = (*Value[*Wrapper[uint64]])(nil)
+
 func NewValue[T encoding.BinaryValue](store Store, key Key, namefmt string, allowMissing bool, new func() T) *Value[T] {
 	v := &Value[T]{}
 	v.store = store
@@ -56,11 +58,9 @@ func (v *Value[T]) Get() (T, error) {
 		return v.value, nil
 	}
 
-	u := v.new()
-	err := v.store.GetRaw(v.key, u)
+	err := v.store.LoadValue(v.key, v)
 	switch {
 	case err == nil:
-		v.value = u
 		v.status = valueClean
 		return v.value, nil
 
@@ -68,7 +68,7 @@ func (v *Value[T]) Get() (T, error) {
 		return zero[T](), errors.Wrap(errors.StatusUnknown, err)
 
 	case v.allowMissing:
-		v.value = u
+		v.value = v.new()
 		v.status = valueClean
 		return v.value, nil
 
@@ -106,7 +106,7 @@ func (v *Value[T]) Commit() error {
 		return nil
 	}
 
-	err := v.store.PutRaw(v.key, v.value)
+	err := v.store.StoreValue(v.key, v)
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
@@ -118,25 +118,29 @@ func (v *Value[T]) Resolve(key Key) (Record, Key, error) {
 	return nil, nil, errors.New(errors.StatusInternalError, "bad key for value")
 }
 
-func (v *Value[T]) GetRaw(value encoding.BinaryValue) error {
-	u, err := v.Get()
+func (v *Value[T]) GetValue() (encoding.BinaryValue, error) {
+	return v.Get()
+}
+
+func (v *Value[T]) ReadFrom(value ValueReadWriter) error {
+	vv, err := value.GetValue()
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
-
-	w := u.CopyAsInterface()
-	err = encoding.SetPtr(w, value)
-	if err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
+	u, ok := vv.(T)
+	if !ok {
+		return errors.Format(errors.StatusInternalError, "store %s: invalid value: want %T, got %T", v.name, v.new(), value)
 	}
 
+	v.value = u
 	return nil
 }
 
-func (v *Value[T]) PutRaw(value encoding.BinaryValue) error {
-	u, ok := value.(T)
-	if !ok {
-		return errors.Format(errors.StatusInternalError, "store %s: invalid value: want %T, got %T", v.name, v.new(), value)
+func (v *Value[T]) ReadFromBytes(data []byte) error {
+	u := v.new()
+	err := u.UnmarshalBinary(data)
+	if err != nil {
+		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
 	v.value = u

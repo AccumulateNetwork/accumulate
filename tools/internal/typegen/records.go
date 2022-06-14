@@ -50,8 +50,6 @@ func (r *StateRecord) FullName() string     { return recordFullName(r) }
 func (r *IndexRecord) FullName() string     { return recordFullName(r) }
 func (r *OtherRecord) FullName() string     { return recordFullName(r) }
 
-func (r *ContainerRecord) Root() bool { return r.Container == nil }
-
 func (r *ContainerRecord) HasChains() bool {
 	for _, p := range r.Parts {
 		switch p := p.(type) {

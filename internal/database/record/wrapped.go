@@ -31,6 +31,16 @@ func (v *Wrapped[T]) Get() (T, error) {
 	return w.getValue(), nil
 }
 
+func (v *Wrapped[T]) GetAs(target interface{}) error {
+	u, err := v.Get()
+	if err != nil {
+		return errors.Wrap(errors.StatusUnknown, err)
+	}
+
+	err = encoding.SetPtr(u, target)
+	return errors.Wrap(errors.StatusUnknown, err)
+}
+
 func (v *Wrapped[T]) Put(u T) error {
 	w := v.new()
 	w.setValue(u)

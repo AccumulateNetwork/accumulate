@@ -195,24 +195,6 @@ func (v RecordType) String() string {
 	}
 }
 
-// GoString returns the Go constant name.
-func (v RecordType) GoString() string {
-	switch v {
-	case RecordTypeContainer:
-		return "RecordTypeContainer"
-	case RecordTypeState:
-		return "RecordTypeState"
-	case RecordTypeChain:
-		return "RecordTypeChain"
-	case RecordTypeIndex:
-		return "RecordTypeIndex"
-	case RecordTypeOther:
-		return "RecordTypeOther"
-	default:
-		return fmt.Sprintf("RecordType(%d)", v)
-	}
-}
-
 // RecordTypeByName returns the named Record Type.
 func RecordTypeByName(name string) (RecordType, bool) {
 	switch strings.ToLower(name) {

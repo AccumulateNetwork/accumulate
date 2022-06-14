@@ -11,6 +11,11 @@ type Record interface {
 	Commit() error
 }
 
+type RecordPtr[T any] interface {
+	*T
+	Record
+}
+
 type Key []interface{}
 
 func (k Key) Append(v ...interface{}) Key {
@@ -24,12 +29,13 @@ func (k Key) Hash() storage.Key {
 	return storage.MakeKey(k...)
 }
 
-type RawValue interface {
-	GetRaw(value encoding.BinaryValue) error
-	PutRaw(value encoding.BinaryValue) error
+type ValueReadWriter interface {
+	GetValue() (encoding.BinaryValue, error)
+	ReadFrom(value ValueReadWriter) error
+	ReadFromBytes(data []byte) error
 }
 
 type Store interface {
-	GetRaw(key Key, value encoding.BinaryValue) error
-	PutRaw(key Key, value encoding.BinaryValue) error
+	LoadValue(key Key, value ValueReadWriter) error
+	StoreValue(key Key, value ValueReadWriter) error
 }

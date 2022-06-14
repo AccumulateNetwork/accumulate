@@ -72,11 +72,11 @@ return record.NewCounted(c.store, {{template "key" .}}, {{template "valueLabelFo
 {{define "container"}}
 type {{.FullName}} struct {
 	store record.Store
-	{{- if not .OmitKey}}
-	key record.Key
-	{{- end}}
 	{{- if not .Root}}
+	key record.Key
+	{{- if .GetContainer}}
 	container *{{.GetContainer.FullName}}
+	{{- end}}
 	{{- end}}
 	{{- range .Fields}}
 	{{.Name}} {{parameterType .}}
@@ -128,13 +128,13 @@ func (c *{{.FullName}}) Resolve(key record.Key) (record.Record, record.Key, erro
 		{{- range $index, $param := .GetParameters}}
 		{{lower .Name}}, ok{{.Name}} := key[{{add 1 $index}}].({{parameterType $param}})
 		{{- end}}
-		if {{range $index, $param := .GetParameters}}{{if gt $index 0}} || {{end}}ok{{.Name}}{{end}} {
+		if {{range $index, $param := .GetParameters}}{{if gt $index 0}} || {{end}}!ok{{.Name}}{{end}} {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for {{natural $c.Name}}")
 		}
 		v := c.{{.Name}}({{range .GetParameters}}{{lower .Name}},{{end}})
 		return v, key[{{add 1 (parameterCount .)}}:], nil
 		{{- else}}
-		return c.{{lower .Name}}, key[1:], nil
+		return c.{{.Name}}(), key[1:], nil
 		{{- end}}
 	{{- end}}
 	default:
@@ -155,7 +155,7 @@ func (c *{{.FullName}}) IsDirty() bool {
 		}
 	}
 	{{- else}}
-	if c.{{lower .Name}}.IsDirty() {
+	if fieldIsDirty(c.{{lower .Name}}) {
 		return true
 	}
 	{{- end}}
@@ -165,7 +165,7 @@ func (c *{{.FullName}}) IsDirty() bool {
 }
 
 {{if .HasChains}}
-{{if not (and .Root (eq .FullName "ChangeSet"))}}
+{{if not .Root}}
 func (c *{{.FullName}}) resolveChain(name string) (*managed.Chain, bool) {
 	switch {
 	{{- range .Parts}}
@@ -230,7 +230,7 @@ func (c *{{.FullName}}) dirtyChains() []*managed.Chain {
 	{{- else if and .Type.IsContainer .HasChains}}
 	chains = append(chains, c.{{lower .Name}}.dirtyChains()...)
 	{{- else if .Type.IsChain}}
-	if c.{{lower .Name}}.IsDirty() {
+	if fieldIsDirty(c.{{lower .Name}}) {
 		chains = append(chains, c.{{lower .Name}})
 	}
 	{{- end}}
@@ -245,17 +245,14 @@ func (c *{{.FullName}}) {{if .CustomCommit}}baseCommit{{else}}Commit{{end}}() er
 		return nil
 	}
 
-	{{  range .Parts}}
+	var err error
+	{{- range .Parts}}
 	{{- if parameterized .}}
 	for _, v := range c.{{lower .Name}} {
-		if err := v.Commit(); err != nil {
-			return errors.Wrap(errors.StatusUnknown, err)
-		}
+		commitField(&err, v)
 	}
 	{{- else}}
-	if err := c.{{lower .Name}}.Commit(); err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
-	}
+	commitField(&err, c.{{lower .Name}})
 	{{- end}}
 	{{- end}}
 
@@ -295,4 +292,16 @@ func getOrCreateMap[T any](ptr *map[storage.Key]*T, key record.Key, create func(
 	v := create()
 	(*ptr)[k] = v
 	return v
+}
+
+func commitField[T any, PT record.RecordPtr[T]](lastErr *error, field PT) {
+	if *lastErr != nil || field == nil {
+		return
+	}
+
+	*lastErr = field.Commit()
+}
+
+func fieldIsDirty[T any, PT record.RecordPtr[T]](field PT) bool {
+	return field != nil && field.IsDirty()
 }

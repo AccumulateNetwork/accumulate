@@ -68,7 +68,7 @@ func (t *Transaction) addSigners(signers []*url.URL) error {
 func (t *Transaction) Commit() error {
 	// Ensure the signer index is up to date
 	var signers []*url.URL
-	if t.systemSignatures.IsDirty() {
+	if t.systemSignatures != nil && t.systemSignatures.IsDirty() {
 		// ACME is the 'signer' for system signatures
 		signers = append(signers, protocol.AcmeUrl())
 	}

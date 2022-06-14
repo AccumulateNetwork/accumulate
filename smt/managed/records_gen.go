@@ -27,39 +27,39 @@ type Chain struct {
 func (c *Chain) Head() *record.Value[*MerkleState] {
 	return getOrCreateField(&c.head, func() *record.Value[*MerkleState] {
 		new := func() (v *MerkleState) { return new(MerkleState) }
-		return record.NewValue(c.store, record.Key{}.Append("Head"), c.label+" head", true, new)
+		return record.NewValue(c.store, c.key.Append("Head"), c.label+" head", true, new)
 	})
 }
 
 func (c *Chain) States(index uint64) *record.Value[*MerkleState] {
-	return getOrCreateMap(&c.states, record.Key{}.Append("States", index), func() *record.Value[*MerkleState] {
+	return getOrCreateMap(&c.states, c.key.Append("States", index), func() *record.Value[*MerkleState] {
 		new := func() (v *MerkleState) { return new(MerkleState) }
-		return record.NewValue(c.store, record.Key{}.Append("States", index), c.label+" states", false, new)
+		return record.NewValue(c.store, c.key.Append("States", index), c.label+" states", false, new)
 	})
 }
 
 func (c *Chain) ElementIndex(hash []byte) *record.Wrapped[uint64] {
-	return getOrCreateMap(&c.elementIndex, record.Key{}.Append("ElementIndex", hash), func() *record.Wrapped[uint64] {
-		return record.NewWrapped(c.store, record.Key{}.Append("ElementIndex", hash), c.label+" element index", false, record.NewWrapper(record.UintWrapper))
+	return getOrCreateMap(&c.elementIndex, c.key.Append("ElementIndex", hash), func() *record.Wrapped[uint64] {
+		return record.NewWrapped(c.store, c.key.Append("ElementIndex", hash), c.label+" element index", false, record.NewWrapper(record.UintWrapper))
 	})
 }
 
 func (c *Chain) Element(index uint64) *record.Wrapped[[]byte] {
-	return getOrCreateMap(&c.element, record.Key{}.Append("Element", index), func() *record.Wrapped[[]byte] {
-		return record.NewWrapped(c.store, record.Key{}.Append("Element", index), c.label+" element", false, record.NewWrapper(record.BytesWrapper))
+	return getOrCreateMap(&c.element, c.key.Append("Element", index), func() *record.Wrapped[[]byte] {
+		return record.NewWrapped(c.store, c.key.Append("Element", index), c.label+" element", false, record.NewWrapper(record.BytesWrapper))
 	})
 }
 
 func (c *Chain) Resolve(key record.Key) (record.Record, record.Key, error) {
 	switch key[0] {
 	case "Head":
-		return c.head, key[1:], nil
+		return c.Head(), key[1:], nil
 	case "States":
 		if len(key) < 2 {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for chain")
 		}
 		index, okIndex := key[1].(uint64)
-		if okIndex {
+		if !okIndex {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for chain")
 		}
 		v := c.States(index)
@@ -69,7 +69,7 @@ func (c *Chain) Resolve(key record.Key) (record.Record, record.Key, error) {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for chain")
 		}
 		hash, okHash := key[1].([]byte)
-		if okHash {
+		if !okHash {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for chain")
 		}
 		v := c.ElementIndex(hash)
@@ -79,7 +79,7 @@ func (c *Chain) Resolve(key record.Key) (record.Record, record.Key, error) {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for chain")
 		}
 		index, okIndex := key[1].(uint64)
-		if okIndex {
+		if !okIndex {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for chain")
 		}
 		v := c.Element(index)
@@ -94,7 +94,7 @@ func (c *Chain) IsDirty() bool {
 		return false
 	}
 
-	if c.head.IsDirty() {
+	if fieldIsDirty(c.head) {
 		return true
 	}
 	for _, v := range c.states {
@@ -121,23 +121,16 @@ func (c *Chain) Commit() error {
 		return nil
 	}
 
-	if err := c.head.Commit(); err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
-	}
+	var err error
+	commitField(&err, c.head)
 	for _, v := range c.states {
-		if err := v.Commit(); err != nil {
-			return errors.Wrap(errors.StatusUnknown, err)
-		}
+		commitField(&err, v)
 	}
 	for _, v := range c.elementIndex {
-		if err := v.Commit(); err != nil {
-			return errors.Wrap(errors.StatusUnknown, err)
-		}
+		commitField(&err, v)
 	}
 	for _, v := range c.element {
-		if err := v.Commit(); err != nil {
-			return errors.Wrap(errors.StatusUnknown, err)
-		}
+		commitField(&err, v)
 	}
 
 	return nil
@@ -165,4 +158,16 @@ func getOrCreateMap[T any](ptr *map[storage.Key]*T, key record.Key, create func(
 	v := create()
 	(*ptr)[k] = v
 	return v
+}
+
+func commitField[T any, PT record.RecordPtr[T]](lastErr *error, field PT) {
+	if *lastErr != nil || field == nil {
+		return
+	}
+
+	*lastErr = field.Commit()
+}
+
+func fieldIsDirty[T any, PT record.RecordPtr[T]](field PT) bool {
+	return field != nil && field.IsDirty()
 }

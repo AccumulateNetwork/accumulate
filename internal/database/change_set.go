@@ -4,7 +4,6 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
@@ -56,7 +55,7 @@ func (c *ChangeSet) Update(fn func(cs *ChangeSet) error) error {
 	return cs.Commit()
 }
 
-func (c *ChangeSet) resolveValue(key record.Key) (record.RawValue, error) {
+func (c *ChangeSet) resolveValue(key record.Key) (record.ValueReadWriter, error) {
 	var r record.Record = c
 	var err error
 	for len(key) > 0 {
@@ -66,15 +65,19 @@ func (c *ChangeSet) resolveValue(key record.Key) (record.RawValue, error) {
 		}
 	}
 
-	v, ok := r.(record.RawValue)
+	if s, _, err := r.Resolve(nil); err == nil {
+		r = s
+	}
+
+	v, ok := r.(record.ValueReadWriter)
 	if !ok {
-		return nil, errors.New(errors.StatusInternalError, "bad key: not a value")
+		return nil, errors.Format(errors.StatusInternalError, "bad key: %T is not value", r)
 	}
 
 	return v, nil
 }
 
-func (c *ChangeSet) GetRaw(key record.Key, value encoding.BinaryValue) error {
+func (c *ChangeSet) LoadValue(key record.Key, value record.ValueReadWriter) error {
 	if c.done {
 		panic("attempted to use a commited or discarded batch")
 	}
@@ -84,7 +87,7 @@ func (c *ChangeSet) GetRaw(key record.Key, value encoding.BinaryValue) error {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
-	err = v.GetRaw(value)
+	err = value.ReadFrom(v)
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
@@ -92,7 +95,7 @@ func (c *ChangeSet) GetRaw(key record.Key, value encoding.BinaryValue) error {
 	return nil
 }
 
-func (c *ChangeSet) PutRaw(key record.Key, value encoding.BinaryValue) error {
+func (c *ChangeSet) StoreValue(key record.Key, value record.ValueReadWriter) error {
 	if c.done {
 		panic("attempted to use a commited or discarded batch")
 	}
@@ -102,7 +105,7 @@ func (c *ChangeSet) PutRaw(key record.Key, value encoding.BinaryValue) error {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
-	err = v.PutRaw(value)
+	err = v.ReadFrom(value)
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}

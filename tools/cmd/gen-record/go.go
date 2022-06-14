@@ -28,7 +28,7 @@ var goFuncs = template.FuncMap{
 	"parameterized":   func(r typegen.Record) bool { return len(r.GetParameters()) > 0 },
 	"parameterCount":  func(r typegen.Record) int { return len(r.GetParameters()) },
 	"add":             func(x, y int) int { return x + y },
-	"isBaseType":      func(r typegen.Record) bool { return r.GetContainer() == nil && r.GetName() != "ChangeSet" },
+	"isBaseType":      func(r *typegen.ContainerRecord) bool { return r.Container == nil && !r.Root },
 }
 
 func fieldType(r typegen.Record) string {

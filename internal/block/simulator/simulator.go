@@ -209,7 +209,7 @@ func (s *Simulator) InitFromGenesisWith(values *core.GlobalValues) {
 	for _, x := range s.Executors {
 		err := x.bootstrap.Bootstrap()
 		if err != nil {
-			panic(fmt.Errorf("could not execute bootstrap: %v", err))
+			panic(fmt.Errorf("could not execute bootstrap: %+v", err))
 		}
 		state, err := x.bootstrap.GetDBState()
 		require.NoError(tb{s}, err)
