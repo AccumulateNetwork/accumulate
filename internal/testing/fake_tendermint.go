@@ -117,7 +117,7 @@ func (c *FakeTendermint) SubmitTx(ctx context.Context, tx types.Tx, check bool) 
 	defer c.stopped.Done()
 
 	if check {
-		cr := c.App().CheckTx(abci.RequestCheckTx{Tx: tx})
+		cr := c.App().CheckTx(abci.RequestCheckTx{Tx: tx, Type: abci.CheckTxType_Recheck})
 		st.CheckResult = &cr
 		if cr.Code != 0 {
 			c.onError(fmt.Errorf("CheckTx failed: %v\n", cr.Log))
@@ -378,7 +378,7 @@ func (c *FakeTendermint) ABCIQueryWithOptions(ctx context.Context, path string, 
 }
 
 func (c *FakeTendermint) CheckTx(ctx context.Context, tx types.Tx) (*ctypes.ResultCheckTx, error) {
-	cr := c.App().CheckTx(abci.RequestCheckTx{Tx: tx})
+	cr := c.App().CheckTx(abci.RequestCheckTx{Tx: tx, Type: abci.CheckTxType_Recheck})
 	return &ctypes.ResultCheckTx{ResponseCheckTx: cr}, nil
 }
 
