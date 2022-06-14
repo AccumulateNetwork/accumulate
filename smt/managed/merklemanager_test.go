@@ -63,9 +63,6 @@ func TestMerkleManager_GetAnyState(t *testing.T) {
 		println(States[i].String())
 	}
 	for i := int64(0); i < testnum; i++ {
-		if i == 5 {
-			print("")
-		}
 		state, err := m.GetAnyState(i)
 		if err != nil {
 			state, err = m.GetAnyState(i)

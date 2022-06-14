@@ -60,9 +60,6 @@ func (m *MerkleManager) AddHash(hash Hash, unique bool) error {
 	}
 	switch (head.Count + 1) & m.markMask {
 	case 0: // Is this the end of the Mark set, i.e. 0, ..., markFreq-1
-		if head.Count == 3 {
-			print("")
-		}
 		head.AddToMerkleTree(hash)                              // Add the hash to the Merkle Tree
 		err = m.States(uint64(head.Count) - 1).Put(head.Copy()) // Save Merkle State at n*MarkFreq-1
 		if err != nil {
