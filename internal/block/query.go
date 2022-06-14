@@ -137,7 +137,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 		}
 		res := new(query.ResponseChainEntry)
 		res.Type = protocol.ChainTypeAnchor
-		res.Height = index
+		res.Height = uint64(index)
 		res.Entry = entryHash
 
 		res.Receipt, err = m.resolveChainReceipt(batch, u, chainName, index)
@@ -194,7 +194,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 
 			res := new(query.ResponseChainEntry)
 			res.Type = obj.ChainType(fragment[1])
-			res.Height = height
+			res.Height = uint64(height)
 			res.Entry = entry
 			res.State = make([][]byte, len(state.Pending))
 			for i, h := range state.Pending {
@@ -240,7 +240,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 				return nil, nil, err
 			}
 
-			res.Height = height
+			res.Height = uint64(height)
 			res.ChainState = make([][]byte, len(state.Pending))
 			for i, h := range state.Pending {
 				res.ChainState[i] = h.Copy()
@@ -317,7 +317,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 					return nil, nil, err
 				}
 
-				res.Height = height
+				res.Height = uint64(height)
 				res.ChainState = make([][]byte, len(state.Pending))
 				for i, h := range state.Pending {
 					res.ChainState[i] = h.Copy()
@@ -569,7 +569,7 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove, remote
 			return nil, errors.Format(errors.StatusInternalError, "sign synthetic transaction: %w", err)
 		}
 		var page *protocol.KeyPage
-		err = batch.Account(m.Network.DefaultOperatorPage()).GetStateAs(&page)
+		err = batch.Account(m.Describe.DefaultOperatorPage()).GetStateAs(&page)
 		if err != nil {
 			return nil, err
 		}
@@ -592,7 +592,7 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove, remote
 	qr.Envelope.Transaction = []*protocol.Transaction{txState.Transaction}
 	qr.Status = status
 	qr.TxId = txState.Transaction.ID()
-	qr.Height = -1
+	// qr.Height = -1
 
 	synth, err := tx.GetSyntheticTxns()
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
@@ -930,15 +930,26 @@ func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove 
 		var err error
 		v, err = resp.MarshalBinary()
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeMarshallingError, Message: fmt.Errorf("error marshalling payload for transaction history")}
+			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeMarshallingError, Message: fmt.Errorf("error marshalling payload for minor blocks response")}
+		}
+	case *query.RequestMajorBlocks:
+		resp, pErr := m.queryMajorBlocks(batch, q)
+		if pErr != nil {
+			return nil, nil, pErr
 		}
 
+		k = []byte("major-block")
+		var err error
+		v, err = resp.MarshalBinary()
+		if err != nil {
+			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeMarshallingError, Message: fmt.Errorf("error marshalling payload for major blocks response")}
+		}
 	case *query.RequestSynth:
 		subnet, ok := protocol.ParseSubnetUrl(q.Destination)
 		if !ok {
 			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeInvalidRequest, Message: fmt.Errorf("destination is not a subnet")}
 		}
-		record := batch.Account(m.Network.Synthetic())
+		record := batch.Account(m.Describe.Synthetic())
 		chain, err := record.ReadChain(protocol.SyntheticIndexChain(subnet))
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeInternal, Message: fmt.Errorf("failed to load the synth index chain: %w", err)}
@@ -975,7 +986,7 @@ func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove 
 }
 
 func (m *Executor) queryMinorBlocks(batch *database.Batch, req *query.RequestMinorBlocks) (*query.ResponseMinorBlocks, *protocol.Error) {
-	ledgerAcc := batch.Account(m.Network.NodeUrl(protocol.Ledger))
+	ledgerAcc := batch.Account(m.Describe.NodeUrl(protocol.Ledger))
 	var ledger *protocol.SystemLedger
 	err := ledgerAcc.GetStateAs(&ledger)
 	if err != nil {
@@ -987,6 +998,9 @@ func (m *Executor) queryMinorBlocks(batch *database.Batch, req *query.RequestMin
 		return nil, &protocol.Error{Code: protocol.ErrorCodeQueryChainUpdatesError, Message: err}
 	}
 
+	if req.Start == 0 { // We don't have major block 0, avoid crash
+		req.Start = 1
+	}
 	startIndex, _, err := indexing.SearchIndexChain(idxChain, uint64(idxChain.Height())-1, indexing.MatchAfter, indexing.SearchIndexChainByBlock(req.Start))
 	if err != nil {
 		return nil, &protocol.Error{Code: protocol.ErrorCodeQueryEntriesError, Message: err}
@@ -994,7 +1008,7 @@ func (m *Executor) queryMinorBlocks(batch *database.Batch, req *query.RequestMin
 
 	entryIdx := startIndex
 
-	resp := query.ResponseMinorBlocks{TotalBlocks: uint64(ledger.Index)}
+	resp := query.ResponseMinorBlocks{TotalBlocks: ledger.Index}
 	curEntry := new(protocol.IndexEntry)
 	resultCnt := uint64(0)
 
@@ -1029,7 +1043,7 @@ resultLoop:
 		minorEntry.BlockTime = curEntry.BlockTime
 
 		if req.TxFetchMode < query.TxFetchModeOmit {
-			chainUpdatesIndex, err := indexing.BlockChainUpdates(batch, &m.Network, curEntry.BlockIndex).Get()
+			chainUpdatesIndex, err := indexing.BlockChainUpdates(batch, &m.Describe, curEntry.BlockIndex).Get()
 			if err != nil {
 				return nil, &protocol.Error{Code: protocol.ErrorCodeChainIdError, Message: err}
 			}
@@ -1097,36 +1111,36 @@ func (m *Executor) resolveTxReceipt(batch *database.Batch, txid []byte, entry *i
 	receipt.Proof.Start = txid
 
 	account := batch.Account(entry.Account)
-	block, r, err := indexing.ReceiptForChainEntry(&m.Network, batch, account, txid, entry)
+	block, r, err := indexing.ReceiptForChainEntry(&m.Describe, batch, account, txid, entry)
 	if err != nil {
 		return receipt, err
 	}
 
 	receipt.LocalBlock = block
-	receipt.Proof = *protocol.ReceiptFromManaged(r)
+	receipt.Proof = *r
 	return receipt, nil
 }
 
 func (m *Executor) resolveChainReceipt(batch *database.Batch, account *url.URL, name string, index int64) (*query.GeneralReceipt, error) {
 	receipt := new(query.GeneralReceipt)
-	_, r, err := indexing.ReceiptForChainIndex(&m.Network, batch, batch.Account(account), name, index)
+	_, r, err := indexing.ReceiptForChainIndex(&m.Describe, batch, batch.Account(account), name, index)
 	if err != nil {
 		return receipt, err
 	}
 
-	receipt.Proof = *protocol.ReceiptFromManaged(r)
+	receipt.Proof = *r
 	return receipt, nil
 }
 
 func (m *Executor) resolveAccountStateReceipt(batch *database.Batch, account *database.Account) (*query.GeneralReceipt, error) {
 	receipt := new(query.GeneralReceipt)
-	block, r, err := indexing.ReceiptForAccountState(&m.Network, batch, account)
+	block, r, err := indexing.ReceiptForAccountState(&m.Describe, batch, account)
 	if err != nil {
 		return receipt, err
 	}
 
 	receipt.LocalBlock = block
-	receipt.Proof = *protocol.ReceiptFromManaged(r)
+	receipt.Proof = *r
 	return receipt, nil
 }
 
@@ -1157,7 +1171,7 @@ func (m *Executor) shouldBePruned(batch *database.Batch, txid []byte) (bool, err
 	pruneTime := time.Now().AddDate(0, 0, 0-protocol.ScratchPrunePeriodDays)
 
 	// preload the minor root index chain
-	ledger := batch.Account(m.Network.NodeUrl(protocol.Ledger))
+	ledger := batch.Account(m.Describe.NodeUrl(protocol.Ledger))
 	minorIndexChain, err := ledger.ReadChain(protocol.MinorRootIndexChain)
 	if err != nil {
 		return false, err

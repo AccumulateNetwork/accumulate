@@ -52,7 +52,7 @@ ResponseChainEntry:
       type: protocol.ChainType
       marshal-as: enum
     - name: Height
-      type: varint
+      type: uvarint
       keep-empty: true
     - name: Entry
       type: bytes
@@ -83,7 +83,7 @@ ResponseByTxId:
       pointer: true
       repeatable: true
     - name: Height
-      type: varint
+      type: uvarint
       keep-empty: true
     - name: ChainState
       repeatable: true
@@ -115,7 +115,7 @@ GeneralReceipt:
     - name: DirectoryBlock
       type: uvarint
     - name: Proof
-      type: protocol.Receipt
+      type: managed.Receipt
       marshal-as: reference
       alternative: Receipt
     - name: Error
@@ -247,6 +247,33 @@ ResponseMinorEntry:
     - name: Transactions
       description: the transactions within this block
       type: ResponseByTxId
+      repeatable: true
+      pointer: true
+      marshal-as: reference
+
+ResponseMajorBlocks:
+  fields:
+    - name: TotalBlocks
+      type: uint
+      keep-empty: true
+    - name: Entries
+      repeatable: true
+      type: ResponseMajorEntry
+      pointer: true
+      marshal-as: reference
+
+ResponseMajorEntry:
+  fields:
+    - name: MajorBlockIndex
+      description: is the index of the block. Only include when indexing the root anchor chain
+      type: uint
+    - name: MajorBlockTime
+      description: is the start time of the block.
+      type: time
+      pointer: true
+    - name: MinorBlocks
+      description: the minor blocks within this block (excluding transactions)
+      type: ResponseMinorEntry
       repeatable: true
       pointer: true
       marshal-as: reference

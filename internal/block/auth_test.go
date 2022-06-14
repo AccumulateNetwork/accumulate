@@ -19,7 +19,7 @@ func TestTransactionIsReady(tt *testing.T) {
 	// Initialize
 	sim := simulator.New(tt, 1)
 	sim.InitFromGenesis()
-	x := sim.Subnet(sim.Subnets[0].ID)
+	x := sim.Subnet(sim.Subnets[0].Id)
 	exec := x.Executor
 	t := NewBatchTest(tt, x.Database)
 	defer t.Discard()
@@ -581,7 +581,7 @@ func TestValidateKeyForSynthTxns(t *testing.T) {
 			Build(),
 	)
 	txnHash := envs[0].Transaction[0].GetHash()
-	if sim.WaitForTransaction(delivered, txnHash, 50) == nil {
+	if txn, _, _ := sim.WaitForTransaction(delivered, txnHash, 50); txn == nil {
 		t.Fatal("Transaction has not been delivered after 50 blocks")
 	}
 
@@ -597,7 +597,7 @@ func TestValidateKeyForSynthTxns(t *testing.T) {
 
 	// Verify that the synthetic transaction does not get delivered. TODO Verify
 	// an error?
-	if sim.WaitForTransaction(delivered, synthHash[:], 50) != nil {
+	if txn, _, _ := sim.WaitForTransaction(delivered, synthHash[:], 50); txn != nil {
 		t.Fatal("Synthetic transaction was delivered")
 	}
 }

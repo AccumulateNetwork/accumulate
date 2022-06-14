@@ -95,3 +95,13 @@ transactionState:
       marshal-as: reference
       pointer: true
       repeatable: true
+
+intValue:
+  fields:
+    - name: Value
+      type: int
+
+hashValue:
+  fields:
+    - name: Value
+      type: bytes

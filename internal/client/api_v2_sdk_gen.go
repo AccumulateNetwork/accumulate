@@ -370,6 +370,20 @@ func (c *Client) QueryKeyPageIndex(ctx context.Context, req *api.KeyPageIndexQue
 	return &resp, nil
 }
 
+// QueryMajorBlocks queries an account's major blocks.
+//
+// WARNING: EXPERIMENTAL!
+func (c *Client) QueryMajorBlocks(ctx context.Context, req *api.MajorBlocksQuery) (*api.MultiResponse, error) {
+	var resp api.MultiResponse
+
+	err := c.RequestAPIv2(ctx, "query-major-blocks", req, &resp)
+	if err != nil {
+		return nil, err
+	}
+
+	return &resp, nil
+}
+
 // QueryMinorBlocks queries an account's minor blocks.
 //
 // WARNING: EXPERIMENTAL!

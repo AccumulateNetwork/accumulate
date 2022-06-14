@@ -35,10 +35,10 @@ func TestStateSaveAndRestore(t *testing.T) {
 		return filepath.Join(dir, fmt.Sprintf("%s.bpt", subnet))
 	}
 	for _, subnet := range sim.Subnets {
-		x := sim.Subnet(subnet.ID)
+		x := sim.Subnet(subnet.Id)
 		batch := x.Database.Begin(false)
 		defer batch.Discard()
-		f, err := os.Create(filename(subnet.ID))
+		f, err := os.Create(filename(subnet.Id))
 		require.NoError(t, err)
 		require.NoError(t, x.Executor.SaveSnapshot(batch, f))
 		require.NoError(t, f.Close())

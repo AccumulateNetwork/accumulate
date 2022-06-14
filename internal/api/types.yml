@@ -19,7 +19,7 @@ Receipt:
     - name: DirectoryBlock
       type: uvarint
     - name: Proof
-      type: protocol.Receipt
+      type: managed.Receipt
       marshal-as: reference
     - name: Error
       type: errors2.Error

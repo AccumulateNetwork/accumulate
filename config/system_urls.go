@@ -45,49 +45,49 @@ func (u NetworkUrl) AnchorPool() *url.URL {
 }
 
 // NodeUrl returns the URL of the subnet, optionally with a path appended.
-func (n *Network) NodeUrl(path ...string) *url.URL {
-	return protocol.SubnetUrl(n.LocalSubnetID).JoinPath(path...)
+func (n *Describe) NodeUrl(path ...string) *url.URL {
+	return protocol.SubnetUrl(n.SubnetId).JoinPath(path...)
 }
 
 // Ledger returns the URL of the subnet's ledger account.
-func (n *Network) Ledger() *url.URL {
-	return NetworkUrl{protocol.SubnetUrl(n.LocalSubnetID)}.Ledger()
+func (n *Describe) Ledger() *url.URL {
+	return NetworkUrl{protocol.SubnetUrl(n.SubnetId)}.Ledger()
 }
 
 // Synthetic returns the URL of the subnet's ledger account.
-func (n *Network) Synthetic() *url.URL {
-	return NetworkUrl{protocol.SubnetUrl(n.LocalSubnetID)}.Synthetic()
+func (n *Describe) Synthetic() *url.URL {
+	return NetworkUrl{protocol.SubnetUrl(n.SubnetId)}.Synthetic()
 }
 
 // ValidatorBook returns the URL of the subnet's validator key book.
-func (n *Network) ValidatorBook() *url.URL {
-	return NetworkUrl{protocol.SubnetUrl(n.LocalSubnetID)}.ValidatorBook()
+func (n *Describe) ValidatorBook() *url.URL {
+	return NetworkUrl{protocol.SubnetUrl(n.SubnetId)}.ValidatorBook()
 }
 
 // ValidatorPage returns the URL of the page of the subnet's validator key book.
-func (n *Network) ValidatorPage(index uint64) *url.URL {
-	return NetworkUrl{protocol.SubnetUrl(n.LocalSubnetID)}.ValidatorPage(index)
+func (n *Describe) ValidatorPage(index uint64) *url.URL {
+	return NetworkUrl{protocol.SubnetUrl(n.SubnetId)}.ValidatorPage(index)
 }
 
 // DefaultValidatorPage returns the URL of the default page of the subnet's validator key book.
-func (n *Network) DefaultValidatorPage() *url.URL {
+func (n *Describe) DefaultValidatorPage() *url.URL {
 	return n.ValidatorPage(1)
 }
 
 // OperatorBook returns the URL of the subnet's operator key book.
-func (n *Network) OperatorBook() *url.URL {
-	return NetworkUrl{protocol.SubnetUrl(n.LocalSubnetID)}.OperatorBook()
+func (n *Describe) OperatorBook() *url.URL {
+	return NetworkUrl{protocol.SubnetUrl(n.SubnetId)}.OperatorBook()
 }
 
 // OperatorPage returns the URL of the page of the subnet's operator key book.
-func (n *Network) OperatorPage(index uint64) *url.URL {
-	return NetworkUrl{protocol.SubnetUrl(n.LocalSubnetID)}.OperatorPage(index)
+func (n *Describe) OperatorPage(index uint64) *url.URL {
+	return NetworkUrl{protocol.SubnetUrl(n.SubnetId)}.OperatorPage(index)
 }
 
 // DefaultOperatorPage returns the URL of the default page of the subnet operator key book.
-func (n *Network) DefaultOperatorPage() *url.URL {
+func (n *Describe) DefaultOperatorPage() *url.URL {
 	var index uint64
-	if n.Type == Directory {
+	if n.NetworkType == Directory {
 		index = 0
 	} else {
 		index = 1
@@ -96,6 +96,6 @@ func (n *Network) DefaultOperatorPage() *url.URL {
 }
 
 // AnchorPool returns the URL of the subnet's anchor pool.
-func (n *Network) AnchorPool() *url.URL {
-	return NetworkUrl{protocol.SubnetUrl(n.LocalSubnetID)}.AnchorPool()
+func (n *Describe) AnchorPool() *url.URL {
+	return NetworkUrl{protocol.SubnetUrl(n.SubnetId)}.AnchorPool()
 }
