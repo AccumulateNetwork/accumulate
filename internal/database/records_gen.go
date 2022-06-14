@@ -21,6 +21,7 @@ type ChangeSet struct {
 	writable bool
 	id       uint64
 	nextId   uint64
+	kvStore  storage.KeyValueTxn
 
 	account     map[storage.Key]*Account
 	transaction map[storage.Key]*Transaction
@@ -82,12 +83,12 @@ func (c *ChangeSet) IsDirty() bool {
 	return false
 }
 
-func (c *ChangeSet) dirtyChains() []*Chain {
+func (c *ChangeSet) dirtyChains() []*managed.Chain {
 	if c == nil {
 		return nil
 	}
 
-	var chains []*Chain
+	var chains []*managed.Chain
 
 	for _, v := range c.account {
 		chains = append(chains, v.dirtyChains()...)
@@ -123,17 +124,17 @@ type Account struct {
 	state                         *record.Wrapped[protocol.Account]
 	pending                       *record.Set[*url.TxID]
 	syntheticForAnchor            map[storage.Key]*record.Set[*url.TxID]
-	mainChain                     *Chain
-	signatureChain                *Chain
+	mainChain                     *managed.Chain
+	signatureChain                *managed.Chain
 	rootChain                     *AccountRootChain
-	syntheticChain                *Chain
+	syntheticChain                *managed.Chain
 	anchorChain                   map[storage.Key]*AccountAnchorChain
 	mainIndexChain                *MajorMinorIndexChain
 	signatureIndexChain           *MajorMinorIndexChain
 	syntheticIndexChain           *MajorMinorIndexChain
 	rootIndexChain                *MajorMinorIndexChain
 	anchorIndexChain              map[storage.Key]*MajorMinorIndexChain
-	syntheticProducedChain        map[storage.Key]*Chain
+	syntheticProducedChain        map[storage.Key]*managed.Chain
 	chains                        *record.Set[*protocol.ChainMetadata]
 	syntheticAnchors              *record.Set[[32]byte]
 	directory                     *record.Counted[*url.URL]
@@ -160,15 +161,15 @@ func (c *Account) SyntheticForAnchor(anchor [32]byte) *record.Set[*url.TxID] {
 	})
 }
 
-func (c *Account) MainChain() *Chain {
-	return getOrCreateField(&c.mainChain, func() *Chain {
-		return newChain(c.store, c.key.Append("MainChain"), protocol.ChainTypeTransaction, "main", "account %[2]v main chain")
+func (c *Account) MainChain() *managed.Chain {
+	return getOrCreateField(&c.mainChain, func() *managed.Chain {
+		return managed.NewChain(c.store, c.key.Append("MainChain"), markPower, managed.ChainTypeTransaction, "main", "account %[2]v main chain")
 	})
 }
 
-func (c *Account) SignatureChain() *Chain {
-	return getOrCreateField(&c.signatureChain, func() *Chain {
-		return newChain(c.store, c.key.Append("SignatureChain"), protocol.ChainTypeTransaction, "signature", "account %[2]v signature chain")
+func (c *Account) SignatureChain() *managed.Chain {
+	return getOrCreateField(&c.signatureChain, func() *managed.Chain {
+		return managed.NewChain(c.store, c.key.Append("SignatureChain"), markPower, managed.ChainTypeTransaction, "signature", "account %[2]v signature chain")
 	})
 }
 
@@ -182,9 +183,9 @@ func (c *Account) RootChain() *AccountRootChain {
 	})
 }
 
-func (c *Account) SyntheticChain() *Chain {
-	return getOrCreateField(&c.syntheticChain, func() *Chain {
-		return newChain(c.store, c.key.Append("SyntheticChain"), protocol.ChainTypeTransaction, "synthetic", "account %[2]v synthetic chain")
+func (c *Account) SyntheticChain() *managed.Chain {
+	return getOrCreateField(&c.syntheticChain, func() *managed.Chain {
+		return managed.NewChain(c.store, c.key.Append("SyntheticChain"), markPower, managed.ChainTypeTransaction, "synthetic", "account %[2]v synthetic chain")
 	})
 }
 
@@ -228,9 +229,9 @@ func (c *Account) AnchorIndexChain(subnetId string) *MajorMinorIndexChain {
 	})
 }
 
-func (c *Account) SyntheticProducedChain(subnetId string) *Chain {
-	return getOrCreateMap(&c.syntheticProducedChain, c.key.Append("SyntheticProducedChain", subnetId), func() *Chain {
-		return newChain(c.store, c.key.Append("SyntheticProducedChain", subnetId), protocol.ChainTypeIndex, "synthetic-produced(%[4]v)", "account %[2]v synthetic produced chain %[4]v")
+func (c *Account) SyntheticProducedChain(subnetId string) *managed.Chain {
+	return getOrCreateMap(&c.syntheticProducedChain, c.key.Append("SyntheticProducedChain", subnetId), func() *managed.Chain {
+		return managed.NewChain(c.store, c.key.Append("SyntheticProducedChain", subnetId), markPower, managed.ChainTypeIndex, "synthetic-produced(%[4]v)", "account %[2]v synthetic produced chain %[4]v")
 	})
 }
 
@@ -437,7 +438,7 @@ func (c *Account) IsDirty() bool {
 	return false
 }
 
-func (c *Account) resolveChain(name string) (*Chain, bool) {
+func (c *Account) resolveChain(name string) (*managed.Chain, bool) {
 	switch {
 	case name == "main":
 		return c.MainChain(), true
@@ -494,12 +495,12 @@ func (c *Account) resolveChain(name string) (*Chain, bool) {
 	}
 }
 
-func (c *Account) dirtyChains() []*Chain {
+func (c *Account) dirtyChains() []*managed.Chain {
 	if c == nil {
 		return nil
 	}
 
-	var chains []*Chain
+	var chains []*managed.Chain
 
 	if c.mainChain.IsDirty() {
 		chains = append(chains, c.mainChain)
@@ -605,19 +606,19 @@ type AccountRootChain struct {
 	key       record.Key
 	container *Account
 
-	minor *Chain
-	major *Chain
+	minor *managed.Chain
+	major *managed.Chain
 }
 
-func (c *AccountRootChain) Minor() *Chain {
-	return getOrCreateField(&c.minor, func() *Chain {
-		return newChain(c.store, c.key.Append("Minor"), protocol.ChainTypeAnchor, "root-minor", "account %[2]v root chain minor")
+func (c *AccountRootChain) Minor() *managed.Chain {
+	return getOrCreateField(&c.minor, func() *managed.Chain {
+		return managed.NewChain(c.store, c.key.Append("Minor"), markPower, managed.ChainTypeAnchor, "root-minor", "account %[2]v root chain minor")
 	})
 }
 
-func (c *AccountRootChain) Major() *Chain {
-	return getOrCreateField(&c.major, func() *Chain {
-		return newChain(c.store, c.key.Append("Major"), protocol.ChainTypeAnchor, "root-major", "account %[2]v root chain major")
+func (c *AccountRootChain) Major() *managed.Chain {
+	return getOrCreateField(&c.major, func() *managed.Chain {
+		return managed.NewChain(c.store, c.key.Append("Major"), markPower, managed.ChainTypeAnchor, "root-major", "account %[2]v root chain major")
 	})
 }
 
@@ -647,7 +648,7 @@ func (c *AccountRootChain) IsDirty() bool {
 	return false
 }
 
-func (c *AccountRootChain) resolveChain(name string) (*Chain, bool) {
+func (c *AccountRootChain) resolveChain(name string) (*managed.Chain, bool) {
 	switch {
 	case name == "minor":
 		return c.Minor(), true
@@ -660,12 +661,12 @@ func (c *AccountRootChain) resolveChain(name string) (*Chain, bool) {
 	}
 }
 
-func (c *AccountRootChain) dirtyChains() []*Chain {
+func (c *AccountRootChain) dirtyChains() []*managed.Chain {
 	if c == nil {
 		return nil
 	}
 
-	var chains []*Chain
+	var chains []*managed.Chain
 
 	if c.minor.IsDirty() {
 		chains = append(chains, c.minor)
@@ -697,19 +698,19 @@ type AccountAnchorChain struct {
 	key       record.Key
 	container *Account
 
-	root *Chain
-	bpt  *Chain
+	root *managed.Chain
+	bpt  *managed.Chain
 }
 
-func (c *AccountAnchorChain) Root() *Chain {
-	return getOrCreateField(&c.root, func() *Chain {
-		return newChain(c.store, c.key.Append("Root"), protocol.ChainTypeAnchor, "anchor(%[4]v)-root", "account %[2]v anchor chain %[4]v root")
+func (c *AccountAnchorChain) Root() *managed.Chain {
+	return getOrCreateField(&c.root, func() *managed.Chain {
+		return managed.NewChain(c.store, c.key.Append("Root"), markPower, managed.ChainTypeAnchor, "anchor(%[4]v)-root", "account %[2]v anchor chain %[4]v root")
 	})
 }
 
-func (c *AccountAnchorChain) BPT() *Chain {
-	return getOrCreateField(&c.bpt, func() *Chain {
-		return newChain(c.store, c.key.Append("BPT"), protocol.ChainTypeAnchor, "anchor(%[4]v)-bpt", "account %[2]v anchor chain %[4]v bpt")
+func (c *AccountAnchorChain) BPT() *managed.Chain {
+	return getOrCreateField(&c.bpt, func() *managed.Chain {
+		return managed.NewChain(c.store, c.key.Append("BPT"), markPower, managed.ChainTypeAnchor, "anchor(%[4]v)-bpt", "account %[2]v anchor chain %[4]v bpt")
 	})
 }
 
@@ -739,7 +740,7 @@ func (c *AccountAnchorChain) IsDirty() bool {
 	return false
 }
 
-func (c *AccountAnchorChain) resolveChain(name string) (*Chain, bool) {
+func (c *AccountAnchorChain) resolveChain(name string) (*managed.Chain, bool) {
 	switch {
 	case name == "root":
 		return c.Root(), true
@@ -752,12 +753,12 @@ func (c *AccountAnchorChain) resolveChain(name string) (*Chain, bool) {
 	}
 }
 
-func (c *AccountAnchorChain) dirtyChains() []*Chain {
+func (c *AccountAnchorChain) dirtyChains() []*managed.Chain {
 	if c == nil {
 		return nil
 	}
 
-	var chains []*Chain
+	var chains []*managed.Chain
 
 	if c.root.IsDirty() {
 		chains = append(chains, c.root)
@@ -1036,157 +1037,25 @@ func (c *Transaction) baseCommit() error {
 	return nil
 }
 
-type Chain struct {
-	store record.Store
-	key   record.Key
-	typ   protocol.ChainType
-	name  string
-	label string
-
-	state        *record.Value[*managed.MerkleState]
-	states       map[storage.Key]*record.Value[*managed.MerkleState]
-	elementIndex map[storage.Key]*record.Wrapped[uint64]
-	element      map[storage.Key]*record.Wrapped[[]byte]
-}
-
-func (c *Chain) State() *record.Value[*managed.MerkleState] {
-	return getOrCreateField(&c.state, func() *record.Value[*managed.MerkleState] {
-		new := func() (v *managed.MerkleState) { return new(managed.MerkleState) }
-		return record.NewValue(c.store, record.Key{}.Append("State"), c.label+" state", true, new)
-	})
-}
-
-func (c *Chain) States(index uint64) *record.Value[*managed.MerkleState] {
-	return getOrCreateMap(&c.states, record.Key{}.Append("States", index), func() *record.Value[*managed.MerkleState] {
-		new := func() (v *managed.MerkleState) { return new(managed.MerkleState) }
-		return record.NewValue(c.store, record.Key{}.Append("States", index), c.label+" states", false, new)
-	})
-}
-
-func (c *Chain) ElementIndex(hash []byte) *record.Wrapped[uint64] {
-	return getOrCreateMap(&c.elementIndex, record.Key{}.Append("ElementIndex", hash), func() *record.Wrapped[uint64] {
-		return record.NewWrapped(c.store, record.Key{}.Append("ElementIndex", hash), c.label+" element index", false, record.NewWrapper(record.UintWrapper))
-	})
-}
-
-func (c *Chain) Element(index uint64) *record.Wrapped[[]byte] {
-	return getOrCreateMap(&c.element, record.Key{}.Append("Element", index), func() *record.Wrapped[[]byte] {
-		return record.NewWrapped(c.store, record.Key{}.Append("Element", index), c.label+" element", false, record.NewWrapper(record.BytesWrapper))
-	})
-}
-
-func (c *Chain) Resolve(key record.Key) (record.Record, record.Key, error) {
-	switch key[0] {
-	case "State":
-		return c.state, key[1:], nil
-	case "States":
-		if len(key) < 2 {
-			return nil, nil, errors.New(errors.StatusInternalError, "bad key for chain")
-		}
-		index, okIndex := key[1].(uint64)
-		if okIndex {
-			return nil, nil, errors.New(errors.StatusInternalError, "bad key for chain")
-		}
-		v := c.States(index)
-		return v, key[2:], nil
-	case "ElementIndex":
-		if len(key) < 2 {
-			return nil, nil, errors.New(errors.StatusInternalError, "bad key for chain")
-		}
-		hash, okHash := key[1].([]byte)
-		if okHash {
-			return nil, nil, errors.New(errors.StatusInternalError, "bad key for chain")
-		}
-		v := c.ElementIndex(hash)
-		return v, key[2:], nil
-	case "Element":
-		if len(key) < 2 {
-			return nil, nil, errors.New(errors.StatusInternalError, "bad key for chain")
-		}
-		index, okIndex := key[1].(uint64)
-		if okIndex {
-			return nil, nil, errors.New(errors.StatusInternalError, "bad key for chain")
-		}
-		v := c.Element(index)
-		return v, key[2:], nil
-	default:
-		return nil, nil, errors.New(errors.StatusInternalError, "bad key for chain")
-	}
-}
-
-func (c *Chain) IsDirty() bool {
-	if c == nil {
-		return false
-	}
-
-	if c.state.IsDirty() {
-		return true
-	}
-	for _, v := range c.states {
-		if v.IsDirty() {
-			return true
-		}
-	}
-	for _, v := range c.elementIndex {
-		if v.IsDirty() {
-			return true
-		}
-	}
-	for _, v := range c.element {
-		if v.IsDirty() {
-			return true
-		}
-	}
-
-	return false
-}
-
-func (c *Chain) Commit() error {
-	if c == nil {
-		return nil
-	}
-
-	if err := c.state.Commit(); err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
-	}
-	for _, v := range c.states {
-		if err := v.Commit(); err != nil {
-			return errors.Wrap(errors.StatusUnknown, err)
-		}
-	}
-	for _, v := range c.elementIndex {
-		if err := v.Commit(); err != nil {
-			return errors.Wrap(errors.StatusUnknown, err)
-		}
-	}
-	for _, v := range c.element {
-		if err := v.Commit(); err != nil {
-			return errors.Wrap(errors.StatusUnknown, err)
-		}
-	}
-
-	return nil
-}
-
 type MajorMinorIndexChain struct {
 	store record.Store
 	key   record.Key
 	name  string
 	label string
 
-	minor *Chain
-	major *Chain
+	minor *managed.Chain
+	major *managed.Chain
 }
 
-func (c *MajorMinorIndexChain) Minor() *Chain {
-	return getOrCreateField(&c.minor, func() *Chain {
-		return newChain(c.store, record.Key{}.Append("Minor"), protocol.ChainTypeIndex, c.name+"-minor", c.label+" minor")
+func (c *MajorMinorIndexChain) Minor() *managed.Chain {
+	return getOrCreateField(&c.minor, func() *managed.Chain {
+		return managed.NewChain(c.store, record.Key{}.Append("Minor"), markPower, managed.ChainTypeIndex, c.name+"-minor", c.label+" minor")
 	})
 }
 
-func (c *MajorMinorIndexChain) Major() *Chain {
-	return getOrCreateField(&c.major, func() *Chain {
-		return newChain(c.store, record.Key{}.Append("Major"), protocol.ChainTypeIndex, c.name+"-major", c.label+" major")
+func (c *MajorMinorIndexChain) Major() *managed.Chain {
+	return getOrCreateField(&c.major, func() *managed.Chain {
+		return managed.NewChain(c.store, record.Key{}.Append("Major"), markPower, managed.ChainTypeIndex, c.name+"-major", c.label+" major")
 	})
 }
 
@@ -1216,7 +1085,7 @@ func (c *MajorMinorIndexChain) IsDirty() bool {
 	return false
 }
 
-func (c *MajorMinorIndexChain) resolveChain(name string) (*Chain, bool) {
+func (c *MajorMinorIndexChain) resolveChain(name string) (*managed.Chain, bool) {
 	switch {
 	case name == "minor":
 		return c.Minor(), true
@@ -1229,12 +1098,12 @@ func (c *MajorMinorIndexChain) resolveChain(name string) (*Chain, bool) {
 	}
 }
 
-func (c *MajorMinorIndexChain) dirtyChains() []*Chain {
+func (c *MajorMinorIndexChain) dirtyChains() []*managed.Chain {
 	if c == nil {
 		return nil
 	}
 
-	var chains []*Chain
+	var chains []*managed.Chain
 
 	if c.minor.IsDirty() {
 		chains = append(chains, c.minor)

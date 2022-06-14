@@ -4,6 +4,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 )
 
 func (c *ChangeSet) accountByKey(key [32]byte) (*Account, error) {
@@ -20,7 +21,7 @@ func (c *ChangeSet) accountByKey(key [32]byte) (*Account, error) {
 	return c.Account(state.GetUrl()), nil
 }
 
-func (a *Account) ChainByName(name string) (*Chain, error) {
+func (a *Account) ChainByName(name string) (*managed.Chain, error) {
 	c, ok := a.resolveChain(name)
 	if ok {
 		return c, nil
@@ -31,12 +32,12 @@ func (a *Account) ChainByName(name string) (*Chain, error) {
 func (a *Account) Commit() error {
 	// Ensure the chains index is up to date
 	for _, c := range a.dirtyChains() {
-		chain := &protocol.ChainMetadata{Name: c.name, Type: c.typ}
+		chain := &protocol.ChainMetadata{Name: c.Name(), Type: c.Type()}
 		other, err := a.Chains().Find(chain)
 		switch {
 		case err == nil:
-			if other.Type != c.typ {
-				return errors.Format(errors.StatusInternalError, "chain %s: attempted to change type from %v to %v", c.name, other.Type, c.typ)
+			if other.Type != c.Type() {
+				return errors.Format(errors.StatusInternalError, "chain %s: attempted to change type from %v to %v", c.Name(), other.Type, c.Type())
 			}
 		case !errors.Is(err, errors.StatusNotFound):
 			return errors.Wrap(errors.StatusUnknown, err)

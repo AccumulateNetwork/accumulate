@@ -110,7 +110,7 @@ func (t *Transaction) GetSyntheticTxns() (*protocol.TxIdSet, error) {
 }
 
 type ChainV1 struct {
-	*Chain
+	*managed.Chain
 	state *managed.MerkleState
 }
 
@@ -124,7 +124,7 @@ func (a *Account) getChainV1(name string, major *bool) (*ChainV1, error) {
 		return nil, err
 	}
 
-	s, err := c.State().Get()
+	s, err := c.Head().Get()
 	if err != nil {
 		return nil, err
 	}

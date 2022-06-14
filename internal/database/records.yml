@@ -13,6 +13,8 @@
     type: uint
   - name: nextId
     type: uint
+  - name: kvStore
+    type: storage.KeyValueTxn
   parts:
   - name: Account
     type: container
@@ -217,41 +219,6 @@
       type: state
       dataType: txid
       pointer: true
-
-- name: Chain
-  type: container
-  fields:
-  - name: typ
-    type: protocol.ChainType
-  - name: name
-    type: string
-  - name: label
-    type: string
-  parts:
-  - name: State
-    type: state
-    emptyIfMissing: true
-    dataType: managed.MerkleState
-    pointer: true
-  - name: States
-    type: state
-    dataType: managed.MerkleState
-    pointer: true
-    parameters:
-    - name: Index
-      type: uint
-  - name: ElementIndex
-    type: index
-    dataType: uint
-    parameters:
-    - name: Hash
-      type: bytes
-  - name: Element
-    type: index
-    dataType: bytes
-    parameters:
-    - name: Index
-      type: uint
 
 - name: MajorMinorIndexChain
   type: container

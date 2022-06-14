@@ -27,6 +27,8 @@ import (
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 	"golang.org/x/sync/errgroup"
 )
@@ -104,7 +106,8 @@ func (sim *Simulator) Setup(bvnCount int) {
 
 		logger := sim.newLogger().With("subnet", subnet.Id)
 		key := acctesting.GenerateKey(sim.Name(), subnet.Id)
-		db := database.OpenInMemory(logger)
+		store := memory.New(logger.With("module", "logger"))
+		db := database.New(store, logger)
 
 		network := config.Describe{
 			NetworkType:  subnet.Type,
@@ -136,6 +139,7 @@ func (sim *Simulator) Setup(bvnCount int) {
 		require.NoError(sim, err)
 
 		sim.Executors[subnet.Id] = &ExecEntry{
+			Store:      store,
 			Database:   db,
 			Executor:   exec,
 			Subnet:     subnet,
@@ -439,6 +443,7 @@ type ExecEntry struct {
 	nextBlock, currentBlock []*protocol.Envelope
 
 	Subnet     *config.Subnet
+	Store      storage.KeyValueStore
 	Database   *database.Database
 	Executor   *block.Executor
 	bootstrap  genesis.Bootstrap

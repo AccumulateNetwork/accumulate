@@ -9,24 +9,23 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/smt/pmt"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 func (c *ChangeSet) BptRoot() []byte {
-	bpt := pmt.NewBPTManager(c.store)
+	bpt := pmt.NewBPTManager(c.kvStore)
 	return bpt.Bpt.RootHash[:]
 }
 
-// BptReceipt builds a BPT receipt for the given key.
-func (c *ChangeSet) BptReceipt(key storage.Key, value [32]byte) (*managed.Receipt, error) {
-	if len(c.bptEntries) > 0 {
-		return nil, errors.New(errors.StatusInternalError, "cannot generate a BPT receipt when there are uncommitted BPT entries")
+// BptReceipt builds a BPT receipt for the account.
+func (a *Account) BptReceipt() (*managed.Receipt, error) {
+	if a.IsDirty() {
+		return nil, errors.New(errors.StatusInternalError, "cannot generate a BPT receipt when there are uncommitted changes")
 	}
 
-	bpt := pmt.NewBPTManager(c.store)
-	receipt := bpt.Bpt.GetReceipt(key)
+	bpt := pmt.NewBPTManager(a.container.kvStore)
+	receipt := bpt.Bpt.GetReceipt(a.key.Hash())
 	if receipt == nil {
-		return nil, errors.NotFound("BPT key %v not found", key)
+		return nil, errors.NotFound("BPT key %v not found", a.key.Hash())
 	}
 
 	return receipt, nil
@@ -39,7 +38,7 @@ func (a *Account) StateReceipt() (*managed.Receipt, error) {
 		return nil, err
 	}
 
-	rBPT, err := a.container.BptReceipt(a.key.Hash(), *(*[32]byte)(hasher.MerkleHash()))
+	rBPT, err := a.BptReceipt()
 	if err != nil {
 		return nil, err
 	}
@@ -57,12 +56,11 @@ func (a *Account) StateReceipt() (*managed.Receipt, error) {
 	return receipt, nil
 }
 
-func (c *ChangeSet) updateBPT(store storage.KeyValueTxn) error {
-	bpt := pmt.NewBPTManager(store)
-
+func (c *ChangeSet) updateBPT() error {
 	// For each modified account
+	var updates [][2][32]byte
 	for key, account := range c.account {
-		if !account.isDirty() {
+		if !account.IsDirty() {
 			continue
 		}
 
@@ -72,8 +70,18 @@ func (c *ChangeSet) updateBPT(store storage.KeyValueTxn) error {
 			return errors.Wrap(errors.StatusUnknown, err)
 		}
 
-		// Update the BPT entry
-		bpt.InsertKV(key, *(*[32]byte)(hash.MerkleHash()))
+		updates = append(updates, [2][32]byte{key, *(*[32]byte)(hash.MerkleHash())})
+	}
+
+	if len(updates) == 0 {
+		return nil
+	}
+
+	// Update the BPT entries
+	bpt := pmt.NewBPTManager(c.kvStore)
+	for _, u := range updates {
+		u := u // See docs/developer/rangevarref.md
+		bpt.InsertKV(u[0], u[1])
 	}
 
 	err := bpt.Bpt.Update()
@@ -102,7 +110,7 @@ func (a *Account) hashChains() (hash.Hasher, error) {
 			break
 		}
 
-		state := loadState(&err, false, chain.State().Get)
+		state := loadState(&err, false, chain.Head().Get)
 		if err != nil {
 			break
 		}

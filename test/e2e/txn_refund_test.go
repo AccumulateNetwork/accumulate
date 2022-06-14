@@ -6,12 +6,12 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/v1"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 func TestRefundCycle(t *testing.T) {
@@ -46,13 +46,13 @@ func TestRefundCycle(t *testing.T) {
 	_, _, synth := sim.WaitForTransaction(delivered, txn.GetHash(), 50)
 
 	// Erase the sender ADI
-	_ = sim.SubnetFor(alice).Database.Update(func(batch *database.Batch) error {
-		require.NoError(t, batch.DeleteAccountState_TESTONLY(alice.JoinPath("tokens")))
-		require.NoError(t, batch.DeleteAccountState_TESTONLY(alice.JoinPath("book", "1")))
-		require.NoError(t, batch.DeleteAccountState_TESTONLY(alice.JoinPath("book")))
-		require.NoError(t, batch.DeleteAccountState_TESTONLY(alice))
-		return nil
-	})
+	batch := sim.SubnetFor(alice).Store.Begin(true)
+	defer batch.Discard()
+	require.NoError(t, batch.Put(storage.MakeKey("Account", alice.JoinPath("tokens"), "State"), nil))
+	require.NoError(t, batch.Put(storage.MakeKey("Account", alice.JoinPath("book", "1"), "State"), nil))
+	require.NoError(t, batch.Put(storage.MakeKey("Account", alice.JoinPath("book"), "State"), nil))
+	require.NoError(t, batch.Put(storage.MakeKey("Account", alice, "State"), nil))
+	require.NoError(t, batch.Commit())
 
 	// Wait for the deposit
 	var allSynth []*url.TxID

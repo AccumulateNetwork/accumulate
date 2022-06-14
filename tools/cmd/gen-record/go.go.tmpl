@@ -104,7 +104,7 @@ func (c *{{$c.FullName}}) {{.Name}}({{range .GetParameters}}{{lower .Name}} {{pa
 		v.container = c
 		return v
 		{{- else if .Type.IsChain}}
-		return newChain(c.store, {{template "key" .}}, protocol.ChainType{{title .ChainType}}, {{template "chainNameFormat" .}}, {{template "valueLabelFormat" .}})
+		return managed.NewChain(c.store, {{template "key" .}}, markPower, managed.ChainType{{title .ChainType}}, {{template "chainNameFormat" .}}, {{template "valueLabelFormat" .}})
 		{{- else if .Type.IsOther}}
 		return new{{.DataType}}(c.store, {{template "key" .}}, {{template "chainNameFormat" .}}, {{template "valueLabelFormat" .}})
 		{{- else if .Counted}}
@@ -166,7 +166,7 @@ func (c *{{.FullName}}) IsDirty() bool {
 
 {{if .HasChains}}
 {{if not (and .Root (eq .FullName "ChangeSet"))}}
-func (c *{{.FullName}}) resolveChain(name string) (*Chain, bool) {
+func (c *{{.FullName}}) resolveChain(name string) (*managed.Chain, bool) {
 	switch {
 	{{- range .Parts}}
 	{{- if and (parameterized .) (or .Type.IsChain (and .Type.IsContainer .HasChains))}}
@@ -208,12 +208,12 @@ func (c *{{.FullName}}) resolveChain(name string) (*Chain, bool) {
 }
 {{end}}
 
-func (c *{{.FullName}}) dirtyChains() []*Chain {
+func (c *{{.FullName}}) dirtyChains() []*managed.Chain {
 	if c == nil {
 		return nil
 	}
 
-	var chains []*Chain
+	var chains []*managed.Chain
 	{{  range .Parts}}
 	{{- if parameterized .}}
 	{{- if and .Type.IsContainer .HasChains}}

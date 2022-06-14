@@ -33,6 +33,9 @@ func NewChain(store record.Store, key record.Key, markPower int64, typ ChainType
 	return c
 }
 
+func (c *Chain) Name() string    { return c.name }
+func (c *Chain) Type() ChainType { return c.typ }
+
 // AddHash adds a Hash to the Chain controlled by the ChainManager. If unique is
 // true, the hash will not be added if it is already in the chain.
 func (m *MerkleManager) AddHash(hash Hash, unique bool) error {

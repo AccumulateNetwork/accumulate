@@ -5,7 +5,6 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/badger"
@@ -90,8 +89,7 @@ func (d *Database) Close() error {
 // Begin starts a new nested changeset.
 func (d *Database) Begin(writable bool) *ChangeSet {
 	d.nextId++
-	store := kvStore{d.store.Begin(writable)}
-	return newChangeSet(d.nextId, writable, store, d.logger.L)
+	return newChangeSet(d.nextId, writable, d.store.Begin(writable), nil, d.logger.L)
 }
 
 // View runs the function with a read-only transaction.
@@ -111,18 +109,4 @@ func (d *Database) Update(fn func(cs *ChangeSet) error) error {
 		return err
 	}
 	return cs.Commit()
-}
-
-// Import imports values from another database.
-func (d *Database) Import(db interface{ Export() map[storage.Key][]byte }) error {
-	txn := d.store.Begin(true)
-	defer txn.Discard()
-
-	err := txn.PutAll(db.Export())
-	if err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
-	}
-
-	err = txn.Commit()
-	return errors.Wrap(errors.StatusUnknown, err)
 }

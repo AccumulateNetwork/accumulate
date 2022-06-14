@@ -7,12 +7,18 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
-func newChangeSet(id uint64, writable bool, store record.Store, logger log.Logger) *ChangeSet {
+func newChangeSet(id uint64, writable bool, kvStore storage.KeyValueTxn, store record.Store, logger log.Logger) *ChangeSet {
 	c := new(ChangeSet)
 	c.logger.L = logger
-	c.store = store
+	c.kvStore = kvStore
+	if store == nil {
+		c.store = record.KvStore{Store: kvStore}
+	} else {
+		c.store = store
+	}
 	c.writable = writable
 	c.id = id
 	return c
@@ -23,9 +29,12 @@ func (c *ChangeSet) Begin(writable bool) *ChangeSet {
 	if writable && !c.writable {
 		c.logger.Info("Attempted to create a writable batch from a read-only batch")
 	}
+	if !c.writable {
+		writable = false
+	}
 
 	c.nextId++
-	return newChangeSet(c.nextId, c.writable && writable, c, c.logger.L)
+	return newChangeSet(c.nextId, writable, c.kvStore.Begin(writable), c, c.logger.L)
 }
 
 // View runs the function with a read-only transaction.
@@ -113,20 +122,14 @@ func (c *ChangeSet) Commit() error {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
-	// If the store is a key-value transaction
-	kv, ok := c.store.(kvStore)
-	if !ok {
-		return nil
-	}
-
 	// Update the BPT
-	err = c.updateBPT(kv.s)
+	err = c.updateBPT()
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
 	// Commit the key-value transaction
-	err = kv.s.Commit()
+	err = c.kvStore.Commit()
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
@@ -142,14 +145,19 @@ func (c *ChangeSet) Discard() {
 	}
 	c.done = true
 
-	kv, ok := c.store.(*kvStore)
-	if !ok {
-		return
-	}
-
-	kv.s.Discard()
+	c.kvStore.Discard()
 }
 
 func (c *ChangeSet) GetMinorRootChainAnchor(describe *config.Describe) ([]byte, error) {
-	return c.Account(describe.NodeUrl(protocol.Ledger)).RootChain().Minor().Anchor()
+	head, err := c.Account(describe.NodeUrl(protocol.Ledger)).RootChain().Minor().Head().Get()
+	if err != nil {
+		return nil, errors.Wrap(errors.StatusUnknown, err)
+	}
+	return head.GetMDRoot(), nil
+}
+
+// Import imports values from another database.
+func (c *ChangeSet) Import(db interface{ Export() map[storage.Key][]byte }) error {
+	err := c.kvStore.PutAll(db.Export())
+	return errors.Wrap(errors.StatusUnknown, err)
 }

@@ -429,7 +429,7 @@ func (n *FakeNode) GetDirectory(adi string) []string {
 
 	chains := make([]string, count)
 	for i := range chains {
-		data, err := dir.Get(uint64(i))
+		data, err := dir.Get(i)
 		require.NoError(n.t, err)
 		chains[i] = data.String()
 	}

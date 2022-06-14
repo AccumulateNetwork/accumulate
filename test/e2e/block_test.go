@@ -271,16 +271,16 @@ func verifyLiteDataAccount(t *testing.T, batch *database.Batch, firstEntry DataE
 	require.NoError(t, err)
 	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(hashFromEntry), "Chain Entry.Hash does not match")
 	//sample verification for calculating the entryHash from lite data entry
-	entryHash, err := indexing.Data(batch, liteDataAddress).Entry(0)
+	entryHash, err := indexing.Data(batch, liteDataAddress).Entry().Get(0)
 	require.NoError(t, err)
-	txnHash, err := indexing.Data(batch, liteDataAddress).Transaction(entryHash)
+	txnHash, err := indexing.Data(batch, liteDataAddress).Transaction(entryHash).Get()
 	require.NoError(t, err)
-	ent, err := indexing.GetDataEntry(batch, txnHash)
+	ent, err := indexing.GetDataEntry(batch, txnHash[:])
 	require.NoError(t, err)
 	id := ComputeLiteDataAccountId(ent)
 	newh, err := ComputeFactomEntryHashForAccount(id, ent.GetData())
 	require.NoError(t, err)
-	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(entryHash), "Chain GetHashes does not match")
+	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(entryHash[:]), "Chain GetHashes does not match")
 	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(newh), "Chain GetHashes does not match")
 }
 

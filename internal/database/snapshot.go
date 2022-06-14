@@ -17,13 +17,13 @@ import (
 )
 
 // SaveSnapshot writes the full state of the partition out to a file.
-func (s *ChangeSet) SaveSnapshot(file io.WriteSeeker, network *config.Describe) error {
+func (c *ChangeSet) SaveSnapshot(file io.WriteSeeker, network *config.Describe) error {
 	/*synthetic := object("Account", network.Synthetic())
 	subnet := network.NodeUrl()*/
 
 	// Write the block height
 	var ledger *protocol.SystemLedger
-	err := s.Account(network.Ledger()).GetStateAs(&ledger)
+	err := c.Account(network.Ledger()).GetStateAs(&ledger)
 	if err != nil {
 		return errors.Format(errors.StatusUnknown, "load ledger: %w", err)
 	}
@@ -35,7 +35,7 @@ func (s *ChangeSet) SaveSnapshot(file io.WriteSeeker, network *config.Describe) 
 	}
 
 	// Write the BPT root hash
-	bpt := pmt.NewBPTManager(s.store)
+	bpt := pmt.NewBPTManager(c.kvStore)
 	_, err = file.Write(bpt.Bpt.RootHash[:])
 	if err != nil {
 		return errors.Format(errors.StatusUnknown, "write BPT root: %w", err)
@@ -50,7 +50,7 @@ func (s *ChangeSet) SaveSnapshot(file io.WriteSeeker, network *config.Describe) 
 	// Save the snapshot
 	return bpt.Bpt.SaveSnapshot(wr, func(key storage.Key, hash [32]byte) ([]byte, error) {
 		// Create an Account object
-		account, err := s.accountByKey(key)
+		account, err := c.accountByKey(key)
 		if err != nil {
 			return nil, err
 		}
@@ -83,12 +83,12 @@ func (s *ChangeSet) SaveSnapshot(file io.WriteSeeker, network *config.Describe) 
 			return state.MarshalBinary()
 		}*/
 
-		mainChainState, err := account.MainChain().State().Get()
+		mainChainState, err := account.MainChain().Head().Get()
 		if err != nil {
 			return nil, err
 		}
 		for _, entry := range loadState2(&err, false, account.MainChain().Entries, 0, mainChainState.Count-1) {
-			txn := loadState(&err, false, s.Transaction(entry).loadState)
+			txn := loadState(&err, false, c.Transaction(entry).loadState)
 			/*if txn.State.Delivered {
 				continue
 			}*/
@@ -118,7 +118,7 @@ func ReadSnapshot(file ioutil2.SectionReader) (height uint64, format uint32, bpt
 }
 
 // RestoreSnapshot loads the full state of the partition from a file.
-func (s *ChangeSet) RestoreSnapshot(file ioutil2.SectionReader) error {
+func (c *ChangeSet) RestoreSnapshot(file ioutil2.SectionReader) error {
 	// Read the snapshot
 	_, _, _, rd, err := ReadSnapshot(file)
 	if err != nil {
@@ -126,7 +126,7 @@ func (s *ChangeSet) RestoreSnapshot(file ioutil2.SectionReader) error {
 	}
 
 	// Load the snapshot
-	bpt := pmt.NewBPTManager(s.store)
+	bpt := pmt.NewBPTManager(c.kvStore)
 	return bpt.Bpt.LoadSnapshot(rd, func(key storage.Key, hash [32]byte, reader ioutil2.SectionReader) error {
 		state := new(fullAccountState)
 		err := state.UnmarshalBinaryFrom(reader)
@@ -134,7 +134,7 @@ func (s *ChangeSet) RestoreSnapshot(file ioutil2.SectionReader) error {
 			return err
 		}
 
-		account := s.Account(state.State.GetUrl())
+		account := c.Account(state.State.GetUrl())
 		err = account.restoreState(state)
 		if err != nil {
 			return err
@@ -181,20 +181,20 @@ func (a *Account) loadChains(includeHistory bool) ([]*chainState, error) {
 		cs.Type = c.Type
 		chains = append(chains, cs)
 
-		var chain *Chain
+		var chain *managed.Chain
 		chain, err = a.ChainByName(c.Name)
 		if err != nil {
 			break
 		}
 
 		var ms *managed.MerkleState
-		ms, err = chain.State().Get()
+		ms, err = chain.Head().Get()
 		if err != nil {
 			break
 		}
 
 		if includeHistory {
-			cs.Entries, err = chain.Entries(0, ms.Count)
+			cs.Entries = loadState2(&err, false, chain.Entries, 0, ms.Count)
 			if err != nil {
 				break
 			}
@@ -255,7 +255,7 @@ func (a *Account) restoreChains(entries []*chainState) error {
 		if err != nil {
 			break
 		}
-		saveState(&err, chain.State().Put, ms)
+		saveState(&err, chain.Head().Put, ms)
 
 		for _, entry := range entry.Entries {
 			err = chain.AddHash(entry, false)
