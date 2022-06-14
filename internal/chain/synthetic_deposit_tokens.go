@@ -31,8 +31,16 @@ func (SyntheticDepositTokens) Validate(st *StateManager, tx *Delivery) (protocol
 		switch origin := st.Origin.(type) {
 		case *protocol.LiteTokenAccount:
 			account = origin
+			tokenurl := origin.TokenUrl
+			if tokenurl != body.Token {
+				return nil, fmt.Errorf("token type mismatch want %s got %s", body.Token, tokenurl)
+			}
 		case *protocol.TokenAccount:
 			account = origin
+			tokenurl := origin.TokenUrl
+			if tokenurl != body.Token {
+				return nil, fmt.Errorf("token type mismatch want %s got %s", body.Token, tokenurl)
+			}
 		default:
 			return nil, fmt.Errorf("invalid principal: want account type %v or %v, got %v", protocol.AccountTypeLiteTokenAccount, protocol.AccountTypeTokenAccount, origin.Type())
 		}

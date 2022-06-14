@@ -30,28 +30,12 @@ func (IssueTokens) Validate(st *StateManager, tx *Delivery) (protocol.Transactio
 	if issuer.SupplyLimit != nil && issuer.Issued.Cmp(issuer.SupplyLimit) > 0 {
 		return nil, fmt.Errorf("cannot exceed supply limit")
 	}
-	var recipient *protocol.TokenAccount
-	err := st.LoadUrlAs(body.Recipient, recipient)
-	if err != nil {
-		return nil, fmt.Errorf("recipient does not exist %v", err)
-	}
-	tokenurl := recipient.TokenUrl
-	/*var tokenIssuer *protocol.TokenIssuer
-	err = st.LoadUrlAs(tokenurl, tokenIssuer)
-	if err != nil {
-		return nil, fmt.Errorf("invalid token url does not exist %v", err)
-	}*/
-	if tokenurl != issuer.GetUrl() {
-		return nil, fmt.Errorf("token type mismatch want %s got %s", issuer.GetUrl(), tokenurl)
-	}
 	deposit := new(protocol.SyntheticDepositTokens)
 	deposit.Token = issuer.GetUrl()
 	deposit.Amount = body.Amount
 	deposit.IsIssuer = true
 	st.Submit(body.Recipient, deposit)
-
-	st.Submit(body.Recipient, deposit)
-	err = st.Update(issuer)
+	err := st.Update(issuer)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update %v: %v", issuer.Url, err)
 	}

@@ -1091,7 +1091,6 @@ func TestIssueTokens(t *testing.T) {
 	require.NoError(t, batch.Commit())
 
 	require.NoError(t, err)
-	check.Disable = true
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.IssueTokens)
 		body.Recipient = liteAddr
