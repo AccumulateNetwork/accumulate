@@ -273,14 +273,3 @@ RemoteTransaction:
       # TODO Make this a transaction ID?
       type: hash
       optional: true
-
-UpdateNetworkGlobals:
-  union: { type: transaction }
-  fields:
-    - name: OperatorAcceptThreshold
-      type: Rational
-      pointer: true
-      marshal-as: reference
-    - name: MajorBlockSchedule
-      type: string
-      description: a cron expression defining the (approximate) major blocks interval

@@ -186,9 +186,6 @@ TransactionType:
   UpdateKey:
     value: 0x16
     description: update key for existing keys
-  UpdateNetworkGlobals:
-    value: 0x17
-    description: set network globals values
 
   Remote:
     value: 0x30

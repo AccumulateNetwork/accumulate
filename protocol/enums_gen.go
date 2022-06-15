@@ -350,9 +350,6 @@ const TransactionTypeUpdateAccountAuth TransactionType = 21
 // TransactionTypeUpdateKey update key for existing keys.
 const TransactionTypeUpdateKey TransactionType = 22
 
-// TransactionTypeUpdateNetworkGlobals set network globals values.
-const TransactionTypeUpdateNetworkGlobals TransactionType = 23
-
 // TransactionTypeRemote is used to sign a remote transaction.
 const TransactionTypeRemote TransactionType = 48
 
@@ -1355,7 +1352,7 @@ func (v TransactionType) GetEnumValue() uint64 { return uint64(v) }
 func (v *TransactionType) SetEnumValue(id uint64) bool {
 	u := TransactionType(id)
 	switch u {
-	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeAddValidator, TransactionTypeRemoveValidator, TransactionTypeUpdateValidatorKey, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeUpdateNetworkGlobals, TransactionTypeRemote, TransactionTypeSyntheticCreateIdentity, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeSystemGenesis, TransactionTypeDirectoryAnchor, TransactionTypePartitionAnchor, TransactionTypeSystemWriteData:
+	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeAddValidator, TransactionTypeRemoveValidator, TransactionTypeUpdateValidatorKey, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeRemote, TransactionTypeSyntheticCreateIdentity, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeSystemGenesis, TransactionTypeDirectoryAnchor, TransactionTypePartitionAnchor, TransactionTypeSystemWriteData:
 		*v = u
 		return true
 	default:
@@ -1406,8 +1403,6 @@ func (v TransactionType) String() string {
 		return "updateAccountAuth"
 	case TransactionTypeUpdateKey:
 		return "updateKey"
-	case TransactionTypeUpdateNetworkGlobals:
-		return "updateNetworkGlobals"
 	case TransactionTypeRemote:
 		return "remote"
 	case TransactionTypeSyntheticCreateIdentity:
@@ -1478,8 +1473,6 @@ func TransactionTypeByName(name string) (TransactionType, bool) {
 		return TransactionTypeUpdateAccountAuth, true
 	case "updatekey":
 		return TransactionTypeUpdateKey, true
-	case "updatenetworkglobals":
-		return TransactionTypeUpdateNetworkGlobals, true
 	case "remote":
 		return TransactionTypeRemote, true
 	case "signPending":
