@@ -186,7 +186,6 @@ TransactionType:
   UpdateKey:
     value: 0x16
     description: update key for existing keys
-
   Remote:
     value: 0x30
     aliases: [ signPending ]
