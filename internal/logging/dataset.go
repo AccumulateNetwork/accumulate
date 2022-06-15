@@ -1,10 +1,13 @@
-package dataset
+package logging
 
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
+
+	tmos "github.com/tendermint/tendermint/libs/os"
 )
 
 type multiSet map[string]*DataSet
@@ -18,7 +21,7 @@ type DataSetLog struct {
 	mutex       sync.Mutex
 }
 
-type DataValue struct {
+type dataValue struct {
 	label     string // Description of value.
 	svalue    string // Alternate value for tags
 	value     any    // holds the data, but only suports POD types and byte slices
@@ -27,7 +30,7 @@ type DataValue struct {
 }
 
 type DataSet struct {
-	array   []DataValue
+	array   []dataValue
 	size    uint
 	maxsize uint
 	header  string
@@ -70,12 +73,26 @@ func min(a, b int) int {
 	return b
 }
 
+func write(file *os.File, out string) error {
+	_, err := file.WriteString(out)
+	if err != nil {
+		file.Close()
+		return err
+	}
+	return nil
+}
+
+func GetCurrentDateTime() (ymd string, hm string) {
+	now := time.Now().UTC()
+	ymd = fmt.Sprintf("%d%02d%02d", now.Year(), now.Month(), now.Day())
+	hm = fmt.Sprintf("%02d%02d", now.Hour(), now.Minute())
+	return ymd, hm
+}
+
 func (d *DataSetLog) DumpDataSetToDiskFile() ([]string, error) {
 	fileEnd := d.fileTag + ".dat"
 	if d.fileTag == "" {
-		now := time.Now().UTC()
-		ymd := fmt.Sprintf("%d%02d%02d", now.Year(), now.Month(), now.Day())
-		hm := fmt.Sprintf("%02d%02d", now.Hour(), now.Minute())
+		ymd, hm := GetCurrentDateTime()
 		fileEnd = "_" + ymd + "_" + hm + ".dat"
 	}
 
@@ -83,95 +100,110 @@ func (d *DataSetLog) DumpDataSetToDiskFile() ([]string, error) {
 
 	var fileName string
 
-	var val DataValue
+	var val dataValue
 	for dkey, dset := range d.data {
 		//Don't try to write file if no entries saved.
 		if dset.size > 0 {
 			//Set up file and output parameters.
-			fileName = d.path + d.processName + "_" + dkey + fileEnd
+			fileName = filepath.Join(d.path, d.processName+"_"+dkey+fileEnd)
 			fileNames = append(fileNames, fileName)
 
-			file, err := os.OpenFile(fileName, os.O_RDWR|os.O_EXCL|os.O_CREATE, 0700)
+			needHeader := !tmos.FileExists(fileName)
+			file, err := os.OpenFile(fileName, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0700)
 			if err != nil {
 				//open failed, try to dump to local directory.
 				//clear with no parameter => 0 => clears all bits of ios error state.
 				fileName = d.processName + "_" + dkey + fileEnd
-				file, err = os.OpenFile(fileName, os.O_RDWR|os.O_EXCL|os.O_CREATE, 0700)
+
+				needHeader = !tmos.FileExists(fileName)
+				file, err = os.OpenFile(fileName, os.O_RDWR|os.O_EXCL|os.O_CREATE|os.O_APPEND, 0700)
 				if err != nil {
-					return []string{}, err
+					return nil, err
 				}
 			}
 
-			if d.header != "" {
-				file.WriteString(d.header)
+			if needHeader {
+				if d.header != "" {
+					err = write(file, d.header)
+					return nil, err
+				}
+
+				if dset.header != "" {
+					err = write(file, dset.header)
+					return nil, err
+				}
+
+				spacer := "# "
+				for ival := uint(0); ival < dset.size; ival++ {
+					if dset.array[ival].first && ival != 0 {
+						break
+					}
+					val = dset.array[ival]
+					width := val.precision
+					switch val.value.(type) {
+					case int, int64, int32, int16, int8, uint, uint64, uint32, uint16, uint8, []byte, string:
+						width = val.precision
+					case float64, float32:
+						width += 7
+					default:
+						width = len(val.label)
+					}
+					label := val.label[:min(len(val.label), width)]
+					fmtString := fmt.Sprintf("%s%%-%ds", spacer, width)
+					err = write(file, fmt.Sprintf(fmtString, label))
+					if err != nil {
+						return nil, err
+					}
+					spacer = "  "
+				}
 			}
 
-			if dset.header != "" {
-				file.WriteString(dset.header)
-			}
-
-			spacer := "# "
-			for ival := uint(0); ival < dset.size; ival++ {
-				if dset.array[ival].first && ival != 0 {
-					break
-				}
-				val = dset.array[ival]
-				width := val.precision
-				switch val.value.(type) {
-				case int, int64, int32, int16, int8, uint, uint64, uint32, uint16, uint8, []byte, string:
-					width = val.precision
-				case float64, float32:
-					width += 7
-				default:
-					width = len(val.label)
-				}
-				label := val.label[:min(len(val.label), width)]
-				file.WriteString(spacer)
-				fmtString := fmt.Sprintf("%%-%ds", width)
-				file.WriteString(fmt.Sprintf(fmtString, label))
-				spacer = "  "
-			}
 			//loop through data values
+			spacer := "  "
 			for ival := uint(0); ival < dset.size; ival++ {
 				val = dset.array[ival]
-				if val.first {
-					file.WriteString("\n  ")
-				}
 				var out string
-				width := val.precision
+				if val.first {
+					out = "\n  "
+				}
 				switch v := val.value.(type) {
 				case int, int64, int32, int16, int8, uint, uint64, uint32, uint16, uint8:
 					fmtString := fmt.Sprintf("%%-%dd", val.precision)
-					out = fmt.Sprintf(fmtString, v)
+					out += fmt.Sprintf(fmtString, v)
 				case float64, float32:
-					width += 7
 					fmtString := fmt.Sprintf("%%-%d.%df", val.precision+7, val.precision)
-					out = fmt.Sprintf(fmtString, v)
+					out += fmt.Sprintf(fmtString, v)
 				case string:
-					width = val.precision
-					fmtString := fmt.Sprintf("%%-%ds", width)
-					out = fmt.Sprintf(fmtString, val.value)
+					fmtString := fmt.Sprintf("%%-%ds", val.precision)
+					out += fmt.Sprintf(fmtString, val.value)
 				case []byte:
-					width = val.precision
-					fmtString := fmt.Sprintf("%%-%dx", width)
-					out = fmt.Sprintf(fmtString, val.value)
+					fmtString := fmt.Sprintf("%%-%dx", val.precision)
+					out += fmt.Sprintf(fmtString, val.value)
 				default:
-					out = fmt.Sprintf("unknown_type:%v", v)
+					out += fmt.Sprintf("unknown_type:%v", v)
 				}
 				out += spacer
-				file.WriteString(out)
+				err = write(file, out)
+				if err != nil {
+					return nil, err
+				}
 			}
-			file.WriteString("\n")
+			//err = write(file, "\n")
+			//if err != nil {
+			//	return nil, err
+			//}
 
 			if dset.size >= dset.maxsize {
-				file.WriteString("\n#Dataset may have been closed due to max memory limit.\n")
+				err = write(file, "\n#Dataset may have been closed due to max memory limit.\n")
+				return nil, err
 			}
-			//Close out file
-			file.Close()
 
 			//Reset array size to zero so it can be reused
 			//Do not de-allocate the storage
 			dset.size = 0
+
+			// all done
+			file.Close()
 		}
 
 	}
@@ -196,13 +228,13 @@ func (d *DataSetLog) Initialize(key string, opts Options) {
 		d.data = make(map[string]*DataSet)
 	}
 
-	d.data[key] = &DataSet{array: make([]DataValue, opts.MaxDataSize), maxsize: opts.MaxDataSize, header: opts.Header}
+	d.data[key] = &DataSet{array: make([]dataValue, opts.MaxDataSize), maxsize: opts.MaxDataSize, header: opts.Header}
 }
 
-func (d *DataSetLog) SetFileTag(part1 string, part2 string) {
-	d.fileTag = "_" + part1
-	if part2 != "" {
-		d.fileTag += "_" + part2
+func (d *DataSetLog) SetFileTag(parts ...string) {
+	d.fileTag = ""
+	for _, part := range parts {
+		d.fileTag += "_" + part
 	}
 }
 
