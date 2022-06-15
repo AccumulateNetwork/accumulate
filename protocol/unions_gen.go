@@ -310,8 +310,6 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(AcmeFaucet), nil
 	case TransactionTypeAddCredits:
 		return new(AddCredits), nil
-	case TransactionTypeAddValidator:
-		return new(AddValidator), nil
 	case TransactionTypeBurnTokens:
 		return new(BurnTokens), nil
 	case TransactionTypeCreateDataAccount:
@@ -334,8 +332,6 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(PartitionAnchor), nil
 	case TransactionTypeRemote:
 		return new(RemoteTransaction), nil
-	case TransactionTypeRemoveValidator:
-		return new(RemoveValidator), nil
 	case TransactionTypeSendTokens:
 		return new(SendTokens), nil
 	case TransactionTypeSyntheticBurnTokens:
@@ -360,8 +356,6 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(UpdateKey), nil
 	case TransactionTypeUpdateKeyPage:
 		return new(UpdateKeyPage), nil
-	case TransactionTypeUpdateValidatorKey:
-		return new(UpdateValidatorKey), nil
 	case TransactionTypeWriteData:
 		return new(WriteData), nil
 	case TransactionTypeWriteDataTo:
@@ -382,9 +376,6 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 		return ok && a.Equal(b)
 	case *AddCredits:
 		b, ok := b.(*AddCredits)
-		return ok && a.Equal(b)
-	case *AddValidator:
-		b, ok := b.(*AddValidator)
 		return ok && a.Equal(b)
 	case *BurnTokens:
 		b, ok := b.(*BurnTokens)
@@ -418,9 +409,6 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 		return ok && a.Equal(b)
 	case *RemoteTransaction:
 		b, ok := b.(*RemoteTransaction)
-		return ok && a.Equal(b)
-	case *RemoveValidator:
-		b, ok := b.(*RemoveValidator)
 		return ok && a.Equal(b)
 	case *SendTokens:
 		b, ok := b.(*SendTokens)
@@ -457,9 +445,6 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 		return ok && a.Equal(b)
 	case *UpdateKeyPage:
 		b, ok := b.(*UpdateKeyPage)
-		return ok && a.Equal(b)
-	case *UpdateValidatorKey:
-		b, ok := b.(*UpdateValidatorKey)
 		return ok && a.Equal(b)
 	case *WriteData:
 		b, ok := b.(*WriteData)

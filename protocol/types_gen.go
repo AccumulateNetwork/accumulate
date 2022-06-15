@@ -85,14 +85,6 @@ type AddKeyOperation struct {
 	extraData []byte
 }
 
-type AddValidator struct {
-	fieldsSet []bool
-	PubKey    []byte `json:"pubKey,omitempty" form:"pubKey" query:"pubKey" validate:"required"`
-	// Owner reserved for future use.
-	Owner     *url.URL `json:"owner,omitempty" form:"owner" query:"owner"`
-	extraData []byte
-}
-
 type AnchorLedger struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
@@ -531,14 +523,6 @@ type RemoveKeyOperation struct {
 	extraData []byte
 }
 
-type RemoveValidator struct {
-	fieldsSet []bool
-	PubKey    []byte `json:"pubKey,omitempty" form:"pubKey" query:"pubKey" validate:"required"`
-	// Owner reserved for future use.
-	Owner     *url.URL `json:"owner,omitempty" form:"owner" query:"owner"`
-	extraData []byte
-}
-
 type Route struct {
 	fieldsSet []bool
 	// Length is the prefix length.
@@ -605,10 +589,10 @@ type SubnetAnchor struct {
 }
 
 type SubnetDefinition struct {
-	fieldsSet          []bool
-	SubnetID           string     `json:"subnetID,omitempty" form:"subnetID" query:"subnetID" validate:"required"`
-	ValidatorKeyHashes [][32]byte `json:"validatorKeyHashes,omitempty" form:"validatorKeyHashes" query:"validatorKeyHashes" validate:"required"`
-	extraData          []byte
+	fieldsSet     []bool
+	SubnetID      string   `json:"subnetID,omitempty" form:"subnetID" query:"subnetID" validate:"required"`
+	ValidatorKeys [][]byte `json:"validatorKeys,omitempty" form:"validatorKeys" query:"validatorKeys" validate:"required"`
+	extraData     []byte
 }
 
 type SubnetSyntheticLedger struct {
@@ -850,13 +834,6 @@ type UpdateKeyPage struct {
 	extraData []byte
 }
 
-type UpdateValidatorKey struct {
-	fieldsSet []bool
-	PubKey    []byte `json:"pubKey,omitempty" form:"pubKey" query:"pubKey" validate:"required"`
-	NewPubKey []byte `json:"newPubKey,omitempty" form:"newPubKey" query:"newPubKey" validate:"required"`
-	extraData []byte
-}
-
 type WriteData struct {
 	fieldsSet []bool
 	Entry     DataEntry `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
@@ -896,8 +873,6 @@ func (*AddCredits) Type() TransactionType { return TransactionTypeAddCredits }
 func (*AddCreditsResult) Type() TransactionType { return TransactionTypeAddCredits }
 
 func (*AddKeyOperation) Type() KeyPageOperationType { return KeyPageOperationTypeAdd }
-
-func (*AddValidator) Type() TransactionType { return TransactionTypeAddValidator }
 
 func (*AnchorLedger) Type() AccountType { return AccountTypeAnchorLedger }
 
@@ -973,8 +948,6 @@ func (*RemoveAccountAuthorityOperation) Type() AccountAuthOperationType {
 
 func (*RemoveKeyOperation) Type() KeyPageOperationType { return KeyPageOperationTypeRemove }
 
-func (*RemoveValidator) Type() TransactionType { return TransactionTypeRemoveValidator }
-
 func (*SendTokens) Type() TransactionType { return TransactionTypeSendTokens }
 
 func (*SetThresholdKeyPageOperation) Type() KeyPageOperationType {
@@ -1026,8 +999,6 @@ func (*UpdateKey) Type() TransactionType { return TransactionTypeUpdateKey }
 func (*UpdateKeyOperation) Type() KeyPageOperationType { return KeyPageOperationTypeUpdate }
 
 func (*UpdateKeyPage) Type() TransactionType { return TransactionTypeUpdateKeyPage }
-
-func (*UpdateValidatorKey) Type() TransactionType { return TransactionTypeUpdateValidatorKey }
 
 func (*WriteData) Type() TransactionType { return TransactionTypeWriteData }
 
@@ -1158,19 +1129,6 @@ func (v *AddKeyOperation) Copy() *AddKeyOperation {
 }
 
 func (v *AddKeyOperation) CopyAsInterface() interface{} { return v.Copy() }
-
-func (v *AddValidator) Copy() *AddValidator {
-	u := new(AddValidator)
-
-	u.PubKey = encoding.BytesCopy(v.PubKey)
-	if v.Owner != nil {
-		u.Owner = (v.Owner).Copy()
-	}
-
-	return u
-}
-
-func (v *AddValidator) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *AnchorLedger) Copy() *AnchorLedger {
 	u := new(AnchorLedger)
@@ -1909,19 +1867,6 @@ func (v *RemoveKeyOperation) Copy() *RemoveKeyOperation {
 
 func (v *RemoveKeyOperation) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *RemoveValidator) Copy() *RemoveValidator {
-	u := new(RemoveValidator)
-
-	u.PubKey = encoding.BytesCopy(v.PubKey)
-	if v.Owner != nil {
-		u.Owner = (v.Owner).Copy()
-	}
-
-	return u
-}
-
-func (v *RemoveValidator) CopyAsInterface() interface{} { return v.Copy() }
-
 func (v *Route) Copy() *Route {
 	u := new(Route)
 
@@ -2032,9 +1977,9 @@ func (v *SubnetDefinition) Copy() *SubnetDefinition {
 	u := new(SubnetDefinition)
 
 	u.SubnetID = v.SubnetID
-	u.ValidatorKeyHashes = make([][32]byte, len(v.ValidatorKeyHashes))
-	for i, v := range v.ValidatorKeyHashes {
-		u.ValidatorKeyHashes[i] = v
+	u.ValidatorKeys = make([][]byte, len(v.ValidatorKeys))
+	for i, v := range v.ValidatorKeys {
+		u.ValidatorKeys[i] = encoding.BytesCopy(v)
 	}
 
 	return u
@@ -2475,17 +2420,6 @@ func (v *UpdateKeyPage) Copy() *UpdateKeyPage {
 
 func (v *UpdateKeyPage) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *UpdateValidatorKey) Copy() *UpdateValidatorKey {
-	u := new(UpdateValidatorKey)
-
-	u.PubKey = encoding.BytesCopy(v.PubKey)
-	u.NewPubKey = encoding.BytesCopy(v.NewPubKey)
-
-	return u
-}
-
-func (v *UpdateValidatorKey) CopyAsInterface() interface{} { return v.Copy() }
-
 func (v *WriteData) Copy() *WriteData {
 	u := new(WriteData)
 
@@ -2656,22 +2590,6 @@ func (v *AddCreditsResult) Equal(u *AddCreditsResult) bool {
 
 func (v *AddKeyOperation) Equal(u *AddKeyOperation) bool {
 	if !((&v.Entry).Equal(&u.Entry)) {
-		return false
-	}
-
-	return true
-}
-
-func (v *AddValidator) Equal(u *AddValidator) bool {
-	if !(bytes.Equal(v.PubKey, u.PubKey)) {
-		return false
-	}
-	switch {
-	case v.Owner == u.Owner:
-		// equal
-	case v.Owner == nil || u.Owner == nil:
-		return false
-	case !((v.Owner).Equal(u.Owner)):
 		return false
 	}
 
@@ -3649,22 +3567,6 @@ func (v *RemoveKeyOperation) Equal(u *RemoveKeyOperation) bool {
 	return true
 }
 
-func (v *RemoveValidator) Equal(u *RemoveValidator) bool {
-	if !(bytes.Equal(v.PubKey, u.PubKey)) {
-		return false
-	}
-	switch {
-	case v.Owner == u.Owner:
-		// equal
-	case v.Owner == nil || u.Owner == nil:
-		return false
-	case !((v.Owner).Equal(u.Owner)):
-		return false
-	}
-
-	return true
-}
-
 func (v *Route) Equal(u *Route) bool {
 	if !(v.Length == u.Length) {
 		return false
@@ -3802,11 +3704,11 @@ func (v *SubnetDefinition) Equal(u *SubnetDefinition) bool {
 	if !(v.SubnetID == u.SubnetID) {
 		return false
 	}
-	if len(v.ValidatorKeyHashes) != len(u.ValidatorKeyHashes) {
+	if len(v.ValidatorKeys) != len(u.ValidatorKeys) {
 		return false
 	}
-	for i := range v.ValidatorKeyHashes {
-		if !(v.ValidatorKeyHashes[i] == u.ValidatorKeyHashes[i]) {
+	for i := range v.ValidatorKeys {
+		if !(bytes.Equal(v.ValidatorKeys[i], u.ValidatorKeys[i])) {
 			return false
 		}
 	}
@@ -4359,17 +4261,6 @@ func (v *UpdateKeyPage) Equal(u *UpdateKeyPage) bool {
 	return true
 }
 
-func (v *UpdateValidatorKey) Equal(u *UpdateValidatorKey) bool {
-	if !(bytes.Equal(v.PubKey, u.PubKey)) {
-		return false
-	}
-	if !(bytes.Equal(v.NewPubKey, u.NewPubKey)) {
-		return false
-	}
-
-	return true
-}
-
 func (v *WriteData) Equal(u *WriteData) bool {
 	if !(EqualDataEntry(v.Entry, u.Entry)) {
 		return false
@@ -4881,54 +4772,6 @@ func (v *AddKeyOperation) IsValid() error {
 		errs = append(errs, "field Entry is missing")
 	} else if (v.Entry).Equal(new(KeySpecParams)) {
 		errs = append(errs, "field Entry is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
-var fieldNames_AddValidator = []string{
-	1: "Type",
-	2: "PubKey",
-	3: "Owner",
-}
-
-func (v *AddValidator) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	writer.WriteEnum(1, v.Type())
-	if !(len(v.PubKey) == 0) {
-		writer.WriteBytes(2, v.PubKey)
-	}
-	if !(v.Owner == nil) {
-		writer.WriteUrl(3, v.Owner)
-	}
-
-	_, _, err := writer.Reset(fieldNames_AddValidator)
-	if err != nil {
-		return nil, err
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), err
-}
-
-func (v *AddValidator) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Type is missing")
-	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field PubKey is missing")
-	} else if len(v.PubKey) == 0 {
-		errs = append(errs, "field PubKey is not set")
 	}
 
 	switch len(errs) {
@@ -7725,54 +7568,6 @@ func (v *RemoveKeyOperation) IsValid() error {
 	}
 }
 
-var fieldNames_RemoveValidator = []string{
-	1: "Type",
-	2: "PubKey",
-	3: "Owner",
-}
-
-func (v *RemoveValidator) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	writer.WriteEnum(1, v.Type())
-	if !(len(v.PubKey) == 0) {
-		writer.WriteBytes(2, v.PubKey)
-	}
-	if !(v.Owner == nil) {
-		writer.WriteUrl(3, v.Owner)
-	}
-
-	_, _, err := writer.Reset(fieldNames_RemoveValidator)
-	if err != nil {
-		return nil, err
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), err
-}
-
-func (v *RemoveValidator) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Type is missing")
-	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field PubKey is missing")
-	} else if len(v.PubKey) == 0 {
-		errs = append(errs, "field PubKey is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
 var fieldNames_Route = []string{
 	1: "Length",
 	2: "Value",
@@ -8177,7 +7972,7 @@ func (v *SubnetAnchor) IsValid() error {
 
 var fieldNames_SubnetDefinition = []string{
 	1: "SubnetID",
-	2: "ValidatorKeyHashes",
+	2: "ValidatorKeys",
 }
 
 func (v *SubnetDefinition) MarshalBinary() ([]byte, error) {
@@ -8187,9 +7982,9 @@ func (v *SubnetDefinition) MarshalBinary() ([]byte, error) {
 	if !(len(v.SubnetID) == 0) {
 		writer.WriteString(1, v.SubnetID)
 	}
-	if !(len(v.ValidatorKeyHashes) == 0) {
-		for _, v := range v.ValidatorKeyHashes {
-			writer.WriteHash(2, &v)
+	if !(len(v.ValidatorKeys) == 0) {
+		for _, v := range v.ValidatorKeys {
+			writer.WriteBytes(2, v)
 		}
 	}
 
@@ -8210,9 +8005,9 @@ func (v *SubnetDefinition) IsValid() error {
 		errs = append(errs, "field SubnetID is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field ValidatorKeyHashes is missing")
-	} else if len(v.ValidatorKeyHashes) == 0 {
-		errs = append(errs, "field ValidatorKeyHashes is not set")
+		errs = append(errs, "field ValidatorKeys is missing")
+	} else if len(v.ValidatorKeys) == 0 {
+		errs = append(errs, "field ValidatorKeys is not set")
 	}
 
 	switch len(errs) {
@@ -9836,59 +9631,6 @@ func (v *UpdateKeyPage) IsValid() error {
 	}
 }
 
-var fieldNames_UpdateValidatorKey = []string{
-	1: "Type",
-	2: "PubKey",
-	3: "NewPubKey",
-}
-
-func (v *UpdateValidatorKey) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	writer.WriteEnum(1, v.Type())
-	if !(len(v.PubKey) == 0) {
-		writer.WriteBytes(2, v.PubKey)
-	}
-	if !(len(v.NewPubKey) == 0) {
-		writer.WriteBytes(3, v.NewPubKey)
-	}
-
-	_, _, err := writer.Reset(fieldNames_UpdateValidatorKey)
-	if err != nil {
-		return nil, err
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), err
-}
-
-func (v *UpdateValidatorKey) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Type is missing")
-	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field PubKey is missing")
-	} else if len(v.PubKey) == 0 {
-		errs = append(errs, "field PubKey is not set")
-	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field NewPubKey is missing")
-	} else if len(v.NewPubKey) == 0 {
-		errs = append(errs, "field NewPubKey is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
 var fieldNames_WriteData = []string{
 	1: "Type",
 	2: "Entry",
@@ -10325,36 +10067,6 @@ func (v *AddKeyOperation) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_AddKeyOperation)
-	if err != nil {
-		return err
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	return err
-}
-
-func (v *AddValidator) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *AddValidator) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	var vType TransactionType
-	if x := new(TransactionType); reader.ReadEnum(1, x) {
-		vType = *x
-	}
-	if !(v.Type() == vType) {
-		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
-	}
-	if x, ok := reader.ReadBytes(2); ok {
-		v.PubKey = x
-	}
-	if x, ok := reader.ReadUrl(3); ok {
-		v.Owner = x
-	}
-
-	seen, err := reader.Reset(fieldNames_AddValidator)
 	if err != nil {
 		return err
 	}
@@ -11922,36 +11634,6 @@ func (v *RemoveKeyOperation) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
-func (v *RemoveValidator) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *RemoveValidator) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	var vType TransactionType
-	if x := new(TransactionType); reader.ReadEnum(1, x) {
-		vType = *x
-	}
-	if !(v.Type() == vType) {
-		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
-	}
-	if x, ok := reader.ReadBytes(2); ok {
-		v.PubKey = x
-	}
-	if x, ok := reader.ReadUrl(3); ok {
-		v.Owner = x
-	}
-
-	seen, err := reader.Reset(fieldNames_RemoveValidator)
-	if err != nil {
-		return err
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	return err
-}
-
 func (v *Route) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -12187,8 +11869,8 @@ func (v *SubnetDefinition) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.SubnetID = x
 	}
 	for {
-		if x, ok := reader.ReadHash(2); ok {
-			v.ValidatorKeyHashes = append(v.ValidatorKeyHashes, *x)
+		if x, ok := reader.ReadBytes(2); ok {
+			v.ValidatorKeys = append(v.ValidatorKeys, x)
 		} else {
 			break
 		}
@@ -13129,36 +12811,6 @@ func (v *UpdateKeyPage) UnmarshalBinaryFrom(rd io.Reader) error {
 	return err
 }
 
-func (v *UpdateValidatorKey) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *UpdateValidatorKey) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	var vType TransactionType
-	if x := new(TransactionType); reader.ReadEnum(1, x) {
-		vType = *x
-	}
-	if !(v.Type() == vType) {
-		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
-	}
-	if x, ok := reader.ReadBytes(2); ok {
-		v.PubKey = x
-	}
-	if x, ok := reader.ReadBytes(3); ok {
-		v.NewPubKey = x
-	}
-
-	seen, err := reader.Reset(fieldNames_UpdateValidatorKey)
-	if err != nil {
-		return err
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	return err
-}
-
 func (v *WriteData) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -13365,18 +13017,6 @@ func (v *AddKeyOperation) MarshalJSON() ([]byte, error) {
 	}{}
 	u.Type = v.Type()
 	u.Entry = v.Entry
-	return json.Marshal(&u)
-}
-
-func (v *AddValidator) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Type   TransactionType `json:"type"`
-		PubKey *string         `json:"pubKey,omitempty"`
-		Owner  *url.URL        `json:"owner,omitempty"`
-	}{}
-	u.Type = v.Type()
-	u.PubKey = encoding.BytesToJSON(v.PubKey)
-	u.Owner = v.Owner
 	return json.Marshal(&u)
 }
 
@@ -14053,18 +13693,6 @@ func (v *RemoveKeyOperation) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
-func (v *RemoveValidator) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Type   TransactionType `json:"type"`
-		PubKey *string         `json:"pubKey,omitempty"`
-		Owner  *url.URL        `json:"owner,omitempty"`
-	}{}
-	u.Type = v.Type()
-	u.PubKey = encoding.BytesToJSON(v.PubKey)
-	u.Owner = v.Owner
-	return json.Marshal(&u)
-}
-
 func (v *RoutingTable) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Overrides encoding.JsonList[RouteOverride] `json:"overrides,omitempty"`
@@ -14135,13 +13763,13 @@ func (v *SubnetAnchor) MarshalJSON() ([]byte, error) {
 
 func (v *SubnetDefinition) MarshalJSON() ([]byte, error) {
 	u := struct {
-		SubnetID           string                    `json:"subnetID,omitempty"`
-		ValidatorKeyHashes encoding.JsonList[string] `json:"validatorKeyHashes,omitempty"`
+		SubnetID      string                     `json:"subnetID,omitempty"`
+		ValidatorKeys encoding.JsonList[*string] `json:"validatorKeys,omitempty"`
 	}{}
 	u.SubnetID = v.SubnetID
-	u.ValidatorKeyHashes = make(encoding.JsonList[string], len(v.ValidatorKeyHashes))
-	for i, x := range v.ValidatorKeyHashes {
-		u.ValidatorKeyHashes[i] = encoding.ChainToJSON(x)
+	u.ValidatorKeys = make(encoding.JsonList[*string], len(v.ValidatorKeys))
+	for i, x := range v.ValidatorKeys {
+		u.ValidatorKeys[i] = encoding.BytesToJSON(x)
 	}
 	return json.Marshal(&u)
 }
@@ -14542,18 +14170,6 @@ func (v *UpdateKeyPage) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
-func (v *UpdateValidatorKey) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Type      TransactionType `json:"type"`
-		PubKey    *string         `json:"pubKey,omitempty"`
-		NewPubKey *string         `json:"newPubKey,omitempty"`
-	}{}
-	u.Type = v.Type()
-	u.PubKey = encoding.BytesToJSON(v.PubKey)
-	u.NewPubKey = encoding.BytesToJSON(v.NewPubKey)
-	return json.Marshal(&u)
-}
-
 func (v *WriteData) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type         TransactionType                       `json:"type"`
@@ -14775,30 +14391,6 @@ func (v *AddKeyOperation) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Entry = u.Entry
-	return nil
-}
-
-func (v *AddValidator) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Type   TransactionType `json:"type"`
-		PubKey *string         `json:"pubKey,omitempty"`
-		Owner  *url.URL        `json:"owner,omitempty"`
-	}{}
-	u.Type = v.Type()
-	u.PubKey = encoding.BytesToJSON(v.PubKey)
-	u.Owner = v.Owner
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	if !(v.Type() == u.Type) {
-		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
-	}
-	if x, err := encoding.BytesFromJSON(u.PubKey); err != nil {
-		return fmt.Errorf("error decoding PubKey: %w", err)
-	} else {
-		v.PubKey = x
-	}
-	v.Owner = u.Owner
 	return nil
 }
 
@@ -16084,30 +15676,6 @@ func (v *RemoveKeyOperation) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (v *RemoveValidator) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Type   TransactionType `json:"type"`
-		PubKey *string         `json:"pubKey,omitempty"`
-		Owner  *url.URL        `json:"owner,omitempty"`
-	}{}
-	u.Type = v.Type()
-	u.PubKey = encoding.BytesToJSON(v.PubKey)
-	u.Owner = v.Owner
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	if !(v.Type() == u.Type) {
-		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
-	}
-	if x, err := encoding.BytesFromJSON(u.PubKey); err != nil {
-		return fmt.Errorf("error decoding PubKey: %w", err)
-	} else {
-		v.PubKey = x
-	}
-	v.Owner = u.Owner
-	return nil
-}
-
 func (v *RoutingTable) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Overrides encoding.JsonList[RouteOverride] `json:"overrides,omitempty"`
@@ -16237,24 +15805,24 @@ func (v *SubnetAnchor) UnmarshalJSON(data []byte) error {
 
 func (v *SubnetDefinition) UnmarshalJSON(data []byte) error {
 	u := struct {
-		SubnetID           string                    `json:"subnetID,omitempty"`
-		ValidatorKeyHashes encoding.JsonList[string] `json:"validatorKeyHashes,omitempty"`
+		SubnetID      string                     `json:"subnetID,omitempty"`
+		ValidatorKeys encoding.JsonList[*string] `json:"validatorKeys,omitempty"`
 	}{}
 	u.SubnetID = v.SubnetID
-	u.ValidatorKeyHashes = make(encoding.JsonList[string], len(v.ValidatorKeyHashes))
-	for i, x := range v.ValidatorKeyHashes {
-		u.ValidatorKeyHashes[i] = encoding.ChainToJSON(x)
+	u.ValidatorKeys = make(encoding.JsonList[*string], len(v.ValidatorKeys))
+	for i, x := range v.ValidatorKeys {
+		u.ValidatorKeys[i] = encoding.BytesToJSON(x)
 	}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.SubnetID = u.SubnetID
-	v.ValidatorKeyHashes = make([][32]byte, len(u.ValidatorKeyHashes))
-	for i, x := range u.ValidatorKeyHashes {
-		if x, err := encoding.ChainFromJSON(x); err != nil {
-			return fmt.Errorf("error decoding ValidatorKeyHashes: %w", err)
+	v.ValidatorKeys = make([][]byte, len(u.ValidatorKeys))
+	for i, x := range u.ValidatorKeys {
+		if x, err := encoding.BytesFromJSON(x); err != nil {
+			return fmt.Errorf("error decoding ValidatorKeys: %w", err)
 		} else {
-			v.ValidatorKeyHashes[i] = x
+			v.ValidatorKeys[i] = x
 		}
 	}
 	return nil
@@ -16948,34 +16516,6 @@ func (v *UpdateKeyPage) UnmarshalJSON(data []byte) error {
 	v.Operation = make([]KeyPageOperation, len(u.Operation.Value))
 	for i, x := range u.Operation.Value {
 		v.Operation[i] = x
-	}
-	return nil
-}
-
-func (v *UpdateValidatorKey) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Type      TransactionType `json:"type"`
-		PubKey    *string         `json:"pubKey,omitempty"`
-		NewPubKey *string         `json:"newPubKey,omitempty"`
-	}{}
-	u.Type = v.Type()
-	u.PubKey = encoding.BytesToJSON(v.PubKey)
-	u.NewPubKey = encoding.BytesToJSON(v.NewPubKey)
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	if !(v.Type() == u.Type) {
-		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
-	}
-	if x, err := encoding.BytesFromJSON(u.PubKey); err != nil {
-		return fmt.Errorf("error decoding PubKey: %w", err)
-	} else {
-		v.PubKey = x
-	}
-	if x, err := encoding.BytesFromJSON(u.NewPubKey); err != nil {
-		return fmt.Errorf("error decoding NewPubKey: %w", err)
-	} else {
-		v.NewPubKey = x
 	}
 	return nil
 }

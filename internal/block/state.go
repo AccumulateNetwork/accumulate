@@ -25,7 +25,6 @@ type BlockState struct {
 	MakeMajorBlockTime time.Time
 	Delivered          uint64
 	Signed             uint64
-	ValidatorsUpdates  []chain.ValidatorUpdate
 	ProducedTxns       []*protocol.Transaction
 	ChainUpdates       chain.ChainUpdates
 }
@@ -35,7 +34,6 @@ func (s *BlockState) Empty() bool {
 	return !s.OpenedMajorBlock &&
 		s.Delivered == 0 &&
 		s.Signed == 0 &&
-		len(s.ValidatorsUpdates) == 0 &&
 		len(s.ProducedTxns) == 0 &&
 		len(s.ChainUpdates.Entries) == 0
 }
@@ -52,7 +50,6 @@ func (s *BlockState) MergeSignature(r *ProcessSignatureState) {
 
 func (s *BlockState) MergeTransaction(r *chain.ProcessTransactionState) {
 	s.Delivered++
-	s.ValidatorsUpdates = append(s.ValidatorsUpdates, r.ValidatorsUpdates...)
 	s.ProducedTxns = append(s.ProducedTxns, r.ProducedTxns...)
 	s.ChainUpdates.Merge(&r.ChainUpdates)
 	if r.MakeMajorBlock > 0 {

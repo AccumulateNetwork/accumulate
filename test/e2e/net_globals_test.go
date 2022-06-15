@@ -23,7 +23,7 @@ func TestOracleDistribution(t *testing.T) {
 	bvn0 := sim.Subnet(sim.Subnets[1].Id)
 	bvn1 := sim.Subnet(sim.Subnets[2].Id)
 
-	signer := simulator.GetAccount[*KeyPage](sim, dn.Executor.Describe.DefaultOperatorPage())
+	signer := simulator.GetAccount[*KeyPage](sim, dn.Executor.Describe.OperatorsPage())
 	_, entry, ok := signer.EntryByKey(dn.Executor.Key[32:])
 	require.True(t, ok)
 	timestamp = entry.GetLastUsedOn()
@@ -76,7 +76,7 @@ func TestRoutingDistribution(t *testing.T) {
 	sim.InitFromGenesisWith(g)
 	dn := sim.Subnet(Directory)
 
-	signer := simulator.GetAccount[*KeyPage](sim, dn.Executor.Describe.DefaultOperatorPage())
+	signer := simulator.GetAccount[*KeyPage](sim, dn.Executor.Describe.OperatorsPage())
 	_, keyEntry, ok := signer.EntryByKey(dn.Executor.Key[32:])
 	require.True(t, ok)
 	timestamp = keyEntry.GetLastUsedOn()
