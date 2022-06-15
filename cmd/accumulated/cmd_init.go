@@ -75,6 +75,7 @@ var flagInit struct {
 	NoWebsite     bool
 	Reset         bool
 	LogLevels     string
+	AnalysisLogs  bool
 	Etcd          []string
 }
 
@@ -134,6 +135,7 @@ func init() {
 	cmdInit.PersistentFlags().BoolVar(&flagInit.NoWebsite, "no-website", false, "Disable website")
 	cmdInit.PersistentFlags().BoolVar(&flagInit.Reset, "reset", false, "Delete any existing directories within the working directory")
 	cmdInit.PersistentFlags().StringVar(&flagInit.LogLevels, "log-levels", "", "Override the default log levels")
+	cmdInit.PersistentFlags().BoolVar(&flagInit.AnalysisLogs, "enable-analysis-logs", false, "Collect the performance metrics in analysis logs")
 	cmdInit.PersistentFlags().StringSliceVar(&flagInit.Etcd, "etcd", nil, "Use etcd endpoint(s)")
 	_ = cmdInit.MarkFlagRequired("network")
 
