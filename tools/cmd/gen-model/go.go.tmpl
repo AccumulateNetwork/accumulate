@@ -136,12 +136,12 @@ func (c *{{.FullName}}) Resolve(key record.Key) (record.Record, record.Key, erro
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for {{natural $c.Name}}")
 		}
 		{{- range $index, $param := .GetParameters}}
-		{{lower .Name}}, ok{{.Name}} := key[{{add 1 $index}}].({{parameterType $param}})
+		p{{.Name}}, ok{{.Name}} := key[{{add 1 $index}}].({{parameterType $param}})
 		{{- end}}
 		if {{range $index, $param := .GetParameters}}{{if gt $index 0}} || {{end}}!ok{{.Name}}{{end}} {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for {{natural $c.Name}}")
 		}
-		v := c.{{.Name}}({{range .GetParameters}}{{lower .Name}},{{end}})
+		v := c.{{.Name}}({{range .GetParameters}}p{{.Name}},{{end}})
 		return v, key[{{add 1 (parameterCount .)}}:], nil
 		{{- else}}
 		return c.{{.Name}}(), key[1:], nil

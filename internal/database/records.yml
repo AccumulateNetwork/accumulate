@@ -1,0 +1,22 @@
+- name: ChangeSet
+  type: container
+  root: true
+  customCommit: true
+  fields:
+  - name: done
+    type: bool
+  - name: writable
+    type: bool
+  - name: id
+    type: string
+  - name: nextId
+    type: uint
+  - name: kvStore
+    type: storage.KeyValueTxn
+  parts:
+  - name: Entry
+    type: state
+    parameters:
+    - name: Key
+      type: storage.Key
+    dataType: bytes
