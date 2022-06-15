@@ -2,10 +2,10 @@ package cmd
 
 import (
 	"fmt"
-	"math/big"
 	"strconv"
 
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -68,33 +68,31 @@ func AddCredits(origin string, args []string) (string, error) {
 		return "", err
 	}
 
-	// precision of 1 acme (Token Units / ACME)
-	estAcme := big.NewInt(protocol.AcmePrecision) // Do everything with ACME precision
+	// ACME = credits ÷ oracle ÷ credits-per-dollar
+	estAcmeRat := core.NewBigRat(int64(cred*protocol.CreditPrecision), protocol.CreditPrecision)
+	estAcmeRat = estAcmeRat.Div2(int64(acmeOracle.Price), protocol.AcmeOraclePrecision)
+	estAcmeRat = estAcmeRat.Div2(protocol.CreditsPerDollar, 1)
 
-	// credits wanted Credit Units / dollar
-	estAcme.Mul(estAcme, big.NewInt(int64(cred)))               // Credits
-	estAcme.Div(estAcme, big.NewInt(protocol.CreditsPerDollar)) // Credit / Dollar
-
-	//dollars / ACME
-	estAcme.Mul(estAcme, big.NewInt(protocol.AcmeOraclePrecision)) // Oracle Precision
-	estAcme.Div(estAcme, big.NewInt(int64(acmeOracle.Price)))      // Oracle Precision * Dollars / Acme
+	// Convert rational to an ACME balance
+	acmeSpend := estAcmeRat.Mul2(protocol.AcmePrecision, 1).Int()
 
 	//now test the cost of the credits against the max amount the user wants to spend
 	if len(args) > 2 {
-		tstAmt, err := amountToBigInt(protocol.ACME, args[2]) // amount in acme
+		maxSpend, err := amountToBigInt(protocol.ACME, args[2]) // amount in acme
 		if err != nil {
 			return "", fmt.Errorf("amount must be an integer %v", err)
 		}
 
-		if estAcme.Cmp(tstAmt) > 0 {
+		// Fail if the estimated amount is greater than the desired max
+		if acmeSpend.Cmp(maxSpend) > 0 {
 			return "", fmt.Errorf("amount of credits requested will not be satisfied by amount of acme to be spent")
 		}
 	}
 
 	credits := protocol.AddCredits{}
 	credits.Recipient = u2
-	credits.Amount = *estAcme
+	credits.Amount = *acmeSpend
 	credits.Oracle = acmeOracle.Price
 
-	return dispatchTxAndPrintResponse(&credits, nil, u, signer)
+	return dispatchTxAndPrintResponse(&credits, u, signer)
 }

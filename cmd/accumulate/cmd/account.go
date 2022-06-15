@@ -267,7 +267,7 @@ func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, er
 		tac.Authorities = append(tac.Authorities, authUrl)
 	}
 
-	return dispatchTxAndPrintResponse(&tac, nil, u, signer)
+	return dispatchTxAndPrintResponse(&tac, u, signer)
 }
 
 func GenerateAccount() (string, error) {

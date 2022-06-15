@@ -3,7 +3,6 @@ package chain
 import (
 	"fmt"
 
-	"github.com/tendermint/tendermint/crypto/ed25519"
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
@@ -90,21 +89,6 @@ func (m *StateManager) Submit(url *url.URL, body protocol.TransactionBody) {
 	}
 
 	m.State.DidProduceTxn(url, body)
-}
-
-func (m *StateManager) AddValidator(pubKey ed25519.PubKey) {
-	m.State.ValidatorsUpdates = append(m.State.ValidatorsUpdates, ValidatorUpdate{
-		PubKey:  pubKey,
-		Enabled: true,
-	})
-}
-
-func (m *StateManager) DisableValidator(pubKey ed25519.PubKey) {
-	// You can't really remove validators as far as I can see, but you can set the voting power to 0
-	m.State.ValidatorsUpdates = append(m.State.ValidatorsUpdates, ValidatorUpdate{
-		PubKey:  pubKey,
-		Enabled: false,
-	})
 }
 
 func (m *StateManager) AddAuthority(account protocol.FullAccount, authority *url.URL) error {
