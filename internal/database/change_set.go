@@ -61,13 +61,13 @@ func (c *ChangeSet) Update(fn func(cs *ChangeSet) error) error {
 	return cs.Commit()
 }
 
-func (c *ChangeSet) resolveValue(key record.Key) (record.ValueReadWriter, error) {
+func resolveValue[T any](c *ChangeSet, key record.Key) (T, error) {
 	var r record.Record = c
 	var err error
 	for len(key) > 0 {
 		r, key, err = r.Resolve(key)
 		if err != nil {
-			return nil, errors.Wrap(errors.StatusUnknown, err)
+			return zero[T](), errors.Wrap(errors.StatusUnknown, err)
 		}
 	}
 
@@ -75,25 +75,25 @@ func (c *ChangeSet) resolveValue(key record.Key) (record.ValueReadWriter, error)
 		r = s
 	}
 
-	v, ok := r.(record.ValueReadWriter)
+	v, ok := r.(T)
 	if !ok {
-		return nil, errors.Format(errors.StatusInternalError, "bad key: %T is not value", r)
+		return zero[T](), errors.Format(errors.StatusInternalError, "bad key: %T is not value", r)
 	}
 
 	return v, nil
 }
 
-func (c *ChangeSet) LoadValue(key record.Key, value record.ValueReadWriter) error {
+func (c *ChangeSet) GetValue(key record.Key, value record.ValueWriter) error {
 	if c.done {
 		panic("attempted to use a commited or discarded batch")
 	}
 
-	v, err := c.resolveValue(key)
+	v, err := resolveValue[record.ValueReader](c, key)
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
-	err = value.GetFrom(v)
+	err = value.LoadValue(v, false)
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
@@ -101,17 +101,17 @@ func (c *ChangeSet) LoadValue(key record.Key, value record.ValueReadWriter) erro
 	return nil
 }
 
-func (c *ChangeSet) StoreValue(key record.Key, value record.ValueReadWriter) error {
+func (c *ChangeSet) PutValue(key record.Key, value record.ValueReader) error {
 	if c.done {
 		panic("attempted to use a commited or discarded batch")
 	}
 
-	v, err := c.resolveValue(key)
+	v, err := resolveValue[record.ValueWriter](c, key)
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
-	err = v.PutFrom(value)
+	err = v.LoadValue(value, true)
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}

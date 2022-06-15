@@ -54,14 +54,23 @@ func (k Key) MarshalJSON() ([]byte, error) {
 	return json.Marshal(k.String())
 }
 
-type ValueReadWriter interface {
+type ValueReader interface {
 	GetValue() (encoding.BinaryValue, error)
-	GetFrom(value ValueReadWriter) error
-	PutFrom(value ValueReadWriter) error
-	LoadFrom(data []byte) error
+}
+
+type ValueWriter interface {
+	// LoadValue stores the value of the reader into the receiver.
+	LoadValue(value ValueReader, put bool) error
+	// LoadBytes unmarshals a value from bytes into the receiver.
+	LoadBytes(data []byte) error
 }
 
 type Store interface {
-	LoadValue(key Key, value ValueReadWriter) error
-	StoreValue(key Key, value ValueReadWriter) error
+	// GetValue loads the value from the underlying store and writes it. Byte
+	// stores call LoadBytes(data) and value stores call LoadValue(v, false).
+	GetValue(key Key, value ValueWriter) error
+	// PutValue gets the value from the reader and stores it. A byte store
+	// marshals the value and stores the bytes. A value store finds the
+	// appropriate value and calls LoadValue(v, true).
+	PutValue(key Key, value ValueReader) error
 }

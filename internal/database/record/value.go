@@ -51,7 +51,8 @@ type Value[T encoding.BinaryValue] struct {
 	allowMissing bool
 }
 
-var _ ValueReadWriter = (*Value[*Wrapper[uint64]])(nil)
+var _ ValueReader = (*Value[*Wrapper[uint64]])(nil)
+var _ ValueWriter = (*Value[*Wrapper[uint64]])(nil)
 
 func NewValue[T encoding.BinaryValue](logger log.Logger, store Store, key Key, namefmt string, allowMissing bool, new func() T) *Value[T] {
 	v := &Value[T]{}
@@ -103,7 +104,7 @@ func (v *Value[T]) Get() (u T, err error) {
 		}()
 	}
 
-	err = v.store.LoadValue(v.key, v)
+	err = v.store.GetValue(v.key, v)
 	switch {
 	case err == nil:
 		v.status = valueClean
@@ -160,7 +161,7 @@ func (v *Value[T]) Commit() error {
 		return nil
 	}
 
-	err := v.store.StoreValue(v.key, v)
+	err := v.store.PutValue(v.key, v)
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
@@ -179,7 +180,7 @@ func (v *Value[T]) GetValue() (encoding.BinaryValue, error) {
 	return v.Get()
 }
 
-func (v *Value[T]) from(value ValueReadWriter, read bool) error {
+func (v *Value[T]) LoadValue(value ValueReader, put bool) error {
 	vv, err := value.GetValue()
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
@@ -189,24 +190,17 @@ func (v *Value[T]) from(value ValueReadWriter, read bool) error {
 		return errors.Format(errors.StatusInternalError, "store %s: invalid value: want %T, got %T", v.name, v.new(), value)
 	}
 
-	if read {
-		v.value = u.CopyAsInterface().(T)
-		v.status = valueClean
-	} else {
+	if put {
 		v.value = u
 		v.status = valueDirty
+	} else {
+		v.value = u.CopyAsInterface().(T)
+		v.status = valueClean
 	}
 	return nil
 }
 
-func (v *Value[T]) GetFrom(value ValueReadWriter) error {
-	return v.from(value, true)
-}
-func (v *Value[T]) PutFrom(value ValueReadWriter) error {
-	return v.from(value, false)
-}
-
-func (v *Value[T]) LoadFrom(data []byte) error {
+func (v *Value[T]) LoadBytes(data []byte) error {
 	u := v.new()
 	err := u.UnmarshalBinary(data)
 	if err != nil {

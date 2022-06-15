@@ -11,13 +11,13 @@ type KvStore struct {
 
 var _ Store = KvStore{}
 
-func (s KvStore) LoadValue(key Key, value ValueReadWriter) error {
+func (s KvStore) GetValue(key Key, value ValueWriter) error {
 	b, err := s.Store.Get(key.Hash())
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
-	err = value.LoadFrom(b)
+	err = value.LoadBytes(b)
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
@@ -25,7 +25,7 @@ func (s KvStore) LoadValue(key Key, value ValueReadWriter) error {
 	return nil
 }
 
-func (s KvStore) StoreValue(key Key, value ValueReadWriter) error {
+func (s KvStore) PutValue(key Key, value ValueReader) error {
 	v, err := value.GetValue()
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
