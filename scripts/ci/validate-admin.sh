@@ -151,7 +151,7 @@ fi
 
 if [ ! -z "${ACCPID}" ]; then
   section "Shutdown dynamic validator"
-  TXID=$(cli-tx validator remove dn.acme/validators "$(dnPrivKey 0)" "$hexPubKey")
+  TXID=$(cli-tx validator remove dn "$(dnPrivKey 0)" "$hexPubKey")
   wait-for-tx $TXID
 
   # Sign the required number of times
