@@ -6,7 +6,16 @@ import (
 )
 
 func (e *SignatureEntry) Compare(f *SignatureEntry) int {
-	return bytes.Compare(e.SignatureHash[:], f.SignatureHash[:])
+	// Only use the index for comparison so that only one entry per index is
+	// allowed
+	switch {
+	case e.KeyEntryIndex < f.KeyEntryIndex:
+		return -1
+	case e.KeyEntryIndex > f.KeyEntryIndex:
+		return +1
+	default:
+		return 0
+	}
 }
 
 func (e *TransactionChainEntry) Compare(f *TransactionChainEntry) int {

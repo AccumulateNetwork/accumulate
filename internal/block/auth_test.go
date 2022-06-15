@@ -24,6 +24,16 @@ func TestTransactionIsReady(tt *testing.T) {
 	t := NewBatchTest(tt, x.Database)
 	defer t.Discard()
 
+	// Keys
+	key1 := []byte{1}
+	key2 := []byte{2}
+	key1hash := doSha256(key1)
+	key2hash := doSha256(key2)
+	keys := []*protocol.KeySpec{
+		{PublicKeyHash: key1hash},
+		{PublicKeyHash: key2hash},
+	}
+
 	// Foo's first authority and signer
 	authority := new(FakeAuthority)
 	authority.Url = protocol.AccountUrl("foo", "authority")
@@ -33,6 +43,7 @@ func TestTransactionIsReady(tt *testing.T) {
 	signer := new(FakeSigner)
 	signer.Url = authority.Url.JoinPath("signer")
 	signer.Version = 1
+	signer.Keys = keys
 	t.PutAccount(signer)
 
 	// Foo's second authority and signer
@@ -44,6 +55,7 @@ func TestTransactionIsReady(tt *testing.T) {
 	signer2 := new(FakeSigner)
 	signer2.Url = authority2.Url.JoinPath("signer")
 	signer2.Version = 1
+	signer2.Keys = keys
 	t.PutAccount(signer2)
 
 	// An authority and signer that will not be an authority of foo
@@ -55,6 +67,7 @@ func TestTransactionIsReady(tt *testing.T) {
 	unauthSigner := new(FakeSigner)
 	unauthSigner.Url = unauthAuthority.Url.JoinPath("signer")
 	unauthSigner.Version = 1
+	unauthSigner.Keys = keys
 	t.PutAccount(unauthSigner)
 
 	// An authority and signer belonging to a different root identity
@@ -66,7 +79,18 @@ func TestTransactionIsReady(tt *testing.T) {
 	remoteSigner := new(FakeSigner)
 	remoteSigner.Url = remoteAuthority.Url.JoinPath("signer")
 	remoteSigner.Version = 1
+	remoteSigner.Keys = keys
 	t.PutAccount(remoteSigner)
+
+	// An account that is not an authority
+	nonAuthority := new(FakeLiteAccount)
+	nonAuthority.Url = protocol.AccountUrl("foo", "non-authority")
+	t.PutAccount(nonAuthority)
+
+	nonSinger := new(FakeSigner)
+	nonSinger.Url = protocol.AccountUrl("foo", "non-authority", "signer")
+	nonSinger.Keys = keys
+	t.PutAccount(nonSinger)
 
 	// Foo's account
 	account := new(FakeAccount)
@@ -86,7 +110,7 @@ func TestTransactionIsReady(tt *testing.T) {
 	sig.Signer = signer.Url
 	sig.SignerVersion = signer.Version
 	sig.Timestamp = 1
-	sig.PublicKey = []byte{1}
+	sig.PublicKey = key1
 
 	// Singlesig unsigned
 	t.Run("Unsigned", func(t BatchTest) {
@@ -127,7 +151,7 @@ func TestTransactionIsReady(tt *testing.T) {
 		t.AddSignature(txn.GetHash(), 0, sig)
 
 		sig2 := sig.Copy()
-		sig2.PublicKey = []byte{2}
+		sig2.PublicKey = key2
 		t.AddSignature(txn.GetHash(), 1, sig2)
 
 		status := t.GetTxnStatus(txn.GetHash())
@@ -158,7 +182,7 @@ func TestTransactionIsReady(tt *testing.T) {
 
 		sig2 := sig.Copy()
 		sig2.Signer = signer2.Url
-		sig2.PublicKey = []byte{2}
+		sig2.PublicKey = key2
 		t.AddSignature(txn.GetHash(), 1, sig2)
 
 		status := t.GetTxnStatus(txn.GetHash())
@@ -221,12 +245,12 @@ func TestTransactionIsReady(tt *testing.T) {
 		entry.Disabled = true
 
 		sig1 := sig.Copy()
-		sig1.Signer = url.MustParse("foo/non-authority/signer")
+		sig1.Signer = nonSinger.GetUrl()
 		t.AddSignature(txn.GetHash(), 0, sig1)
 
 		sig2 := sig.Copy()
 		sig2.Signer = signer2.Url
-		sig2.PublicKey = []byte{2}
+		sig2.PublicKey = key2
 		t.AddSignature(txn.GetHash(), 1, sig2)
 
 		status := t.GetTxnStatus(txn.GetHash())
@@ -254,7 +278,7 @@ func TestTransactionIsReady(tt *testing.T) {
 		// Signature @ version 2
 		sig2 := sig.Copy()
 		sig2.SignerVersion = 2
-		sig2.PublicKey = []byte{2}
+		sig2.PublicKey = key2
 		t.AddSignature(txn.GetHash(), 1, sig2)
 		require.Len(t, t.GetSignatures(txn.GetHash(), signer.Url), 1)
 
@@ -278,21 +302,23 @@ func TestTransactionIsReady(tt *testing.T) {
 		// Two signatures for signer 1 @ version 1
 		sig1_1 := sig.Copy()
 		sig1_2 := sig.Copy()
-		sig1_2.PublicKey = []byte{2}
+		sig1_2.PublicKey = key2
 		t.AddSignature(txn.GetHash(), 0, sig1_1)
 		t.AddSignature(txn.GetHash(), 1, sig1_2)
+		require.Len(t, t.GetSignatures(txn.GetHash(), signer.Url), 2)
 
 		signer.Version++
 		signer2.Version++
 
-		// Two signatures for signer 1 @ version 1
+		// Two signatures for signer 2 @ version 2
 		sig2_1 := sig.Copy()
 		sig2_1.Signer = signer2.Url
 		sig2_1.SignerVersion = 2
 		sig2_2 := sig2_1.Copy()
-		sig2_2.PublicKey = []byte{2}
+		sig2_2.PublicKey = key2
 		t.AddSignature(txn.GetHash(), 0, sig2_1)
 		t.AddSignature(txn.GetHash(), 1, sig2_2)
+		require.Len(t, t.GetSignatures(txn.GetHash(), signer2.Url), 2)
 
 		status := t.GetTxnStatus(txn.GetHash())
 		ready, err := exec.TransactionIsReady(t.Batch, txn, status)

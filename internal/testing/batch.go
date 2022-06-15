@@ -40,7 +40,7 @@ func (t *BatchTest) PutAccountCopy(account protocol.Account) protocol.Account {
 	return copy
 }
 
-func (t *BatchTest) AddSignature(txnHash []byte, keyEntryIndex uint64, sig protocol.Signature) {
+func (t *BatchTest) AddSignature(txnHash []byte, _ uint64, sig protocol.Signature) {
 	err := t.Transaction(txnHash).AddSignature(sig)
 	require.NoError(t, err)
 }

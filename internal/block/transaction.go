@@ -215,7 +215,7 @@ func (x *Executor) userTransactionIsReady(batch *database.Batch, transaction *pr
 func (x *Executor) AuthorityIsSatisfied(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus, authUrl *url.URL) (bool, error) {
 	// Check if any signer has reached its threshold
 	for _, signer := range status.FindSigners(authUrl) {
-		ok, err := x.SignerIsSatisfied(batch, transaction, status, signer)
+		ok, err := x.SignerIsSatisfied(batch, transaction, status, signer.GetUrl())
 		if err != nil {
 			return false, errors.Wrap(errors.StatusUnknown, err)
 		}
@@ -227,11 +227,11 @@ func (x *Executor) AuthorityIsSatisfied(batch *database.Batch, transaction *prot
 	return false, nil
 }
 
-func (x *Executor) SignerIsSatisfied(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus, signer protocol.Signer) (bool, error) {
+func (x *Executor) SignerIsSatisfied(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus, signerUrl *url.URL) (bool, error) {
 	// Load the signature set
-	signatures, err := batch.Transaction(transaction.GetHash()).Signatures(signer.GetUrl()).Get()
+	signatures, err := batch.Transaction(transaction.GetHash()).Signatures(signerUrl).Get()
 	if err != nil {
-		return false, fmt.Errorf("load signatures set %v: %w", signer.GetUrl(), err)
+		return false, fmt.Errorf("load signatures set %v: %w", signerUrl, err)
 	}
 
 	// Check if the signature set includes a completed set
@@ -239,6 +239,13 @@ func (x *Executor) SignerIsSatisfied(batch *database.Batch, transaction *protoco
 		if e.Type == protocol.SignatureTypeSet {
 			return true, nil
 		}
+	}
+
+	// Load the signer
+	var signer protocol.Signer
+	err = batch.Account(signerUrl).State().GetAs(&signer)
+	if err != nil {
+		return false, fmt.Errorf("load signer %v: %w", signerUrl, err)
 	}
 
 	// Check if the threshold has been reached

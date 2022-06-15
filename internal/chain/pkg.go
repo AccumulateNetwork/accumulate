@@ -47,5 +47,5 @@ type AuthDelegate interface {
 	GetAccountAuthoritySet(*database.Batch, protocol.Account) (*protocol.AccountAuth, error)
 	SignerIsAuthorized(batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, checkAuthz bool) error
 	AuthorityIsSatisfied(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus, authUrl *url.URL) (bool, error)
-	SignerIsSatisfied(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus, signer protocol.Signer) (bool, error)
+	SignerIsSatisfied(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus, signer *url.URL) (bool, error)
 }

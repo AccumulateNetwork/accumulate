@@ -132,7 +132,6 @@ func (s *VersionedSignatureSet) Add(signature protocol.Signature) error {
 	case protocol.KeySignature:
 		i, _, ok := s.signer.EntryByKeyHash(sig.GetPublicKeyHash())
 		if !ok {
-			s.signer.EntryByKeyHash(sig.GetPublicKeyHash())
 			return errors.Format(errors.StatusInternalError, "key hash %X does not belong to signer", sig.GetPublicKeyHash()[:8])
 		}
 		v.KeyEntryIndex = uint64(i)

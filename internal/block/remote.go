@@ -106,7 +106,7 @@ func (x *Executor) shouldForwardSignature(batch *database.Batch, transaction *pr
 		return nil, nil, errors.Format(errors.StatusUnknown, "load transaction status: %w", err)
 	}
 
-	ready, err := x.SignerIsSatisfied(batch, transaction, status, signer)
+	ready, err := x.SignerIsSatisfied(batch, transaction, status, signer.GetUrl())
 	if !ready || err != nil {
 		return nil, nil, errors.Wrap(errors.StatusUnknown, err)
 	}

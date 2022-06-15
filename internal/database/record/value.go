@@ -179,7 +179,7 @@ func (v *Value[T]) GetValue() (encoding.BinaryValue, error) {
 	return v.Get()
 }
 
-func (v *Value[T]) from(value ValueReadWriter, status valueStatus) error {
+func (v *Value[T]) from(value ValueReadWriter, read bool) error {
 	vv, err := value.GetValue()
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
@@ -189,16 +189,21 @@ func (v *Value[T]) from(value ValueReadWriter, status valueStatus) error {
 		return errors.Format(errors.StatusInternalError, "store %s: invalid value: want %T, got %T", v.name, v.new(), value)
 	}
 
-	v.value = u
-	v.status = status
+	if read {
+		v.value = u.CopyAsInterface().(T)
+		v.status = valueClean
+	} else {
+		v.value = u
+		v.status = valueDirty
+	}
 	return nil
 }
 
 func (v *Value[T]) GetFrom(value ValueReadWriter) error {
-	return v.from(value, valueClean)
+	return v.from(value, true)
 }
 func (v *Value[T]) PutFrom(value ValueReadWriter) error {
-	return v.from(value, valueDirty)
+	return v.from(value, false)
 }
 
 func (v *Value[T]) LoadFrom(data []byte) error {
@@ -209,5 +214,6 @@ func (v *Value[T]) LoadFrom(data []byte) error {
 	}
 
 	v.value = u
+	v.status = valueClean
 	return nil
 }

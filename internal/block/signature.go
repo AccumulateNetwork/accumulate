@@ -195,7 +195,7 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 		if err != nil {
 			return nil, errors.Format(errors.StatusUnknown, "load transaction status: %w", err)
 		}
-		ready, err := x.SignerIsSatisfied(batch, delivery.Transaction, status, delegate)
+		ready, err := x.SignerIsSatisfied(batch, delivery.Transaction, status, delegate.GetUrl())
 		if err != nil {
 			return nil, errors.Wrap(errors.StatusUnknown, err)
 		}
