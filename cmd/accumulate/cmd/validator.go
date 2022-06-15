@@ -1,15 +1,52 @@
 package cmd
 
 import (
+	"context"
+	"errors"
+
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/internal/build"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 func init() {
+	operatorCmd.AddCommand(
+		operatorAddCmd,
+		operatorRemoveCmd,
+		operatorUpdateKeyCmd)
 	validatorCmd.AddCommand(
 		validatorAddCmd,
 		validatorRemoveCmd,
 		validatorUpdateKeyCmd)
+}
+
+var operatorCmd = &cobra.Command{
+	Use:   "operator",
+	Short: "Manage operators",
+}
+
+var operatorAddCmd = &cobra.Command{
+	Use:   "add [subnet ID] [signing key name] [key index (optional)] [key height (optional)] [key name or path]",
+	Short: "Add a operator",
+	Run:   runValCmdFunc(addOperator),
+	Args:  cobra.RangeArgs(3, 5),
+}
+
+var operatorRemoveCmd = &cobra.Command{
+	Use:   "remove [subnet ID] [signing key name] [key index (optional)] [key height (optional)] [key name or path]",
+	Short: "Remove a operator",
+	Run:   runValCmdFunc(removeOperator),
+	Args:  cobra.RangeArgs(3, 5),
+}
+
+var operatorUpdateKeyCmd = &cobra.Command{
+	Use:   "update-key [subnet ID] [signing key name] [key index (optional)] [key height (optional)] [old key name or path] [new key name or path]",
+	Short: "Update a operator's key",
+	Run:   runValCmdFunc(updateOperatorKey),
+	Args:  cobra.RangeArgs(4, 6),
 }
 
 var validatorCmd = &cobra.Command{
@@ -18,76 +55,125 @@ var validatorCmd = &cobra.Command{
 }
 
 var validatorAddCmd = &cobra.Command{
-	Use:   "add [subnet URL] [signing key name] [key index (optional)] [key height (optional)] [key name or path]",
+	Use:   "add [subnet ID] [signing key name] [key index (optional)] [key height (optional)] [key name or path]",
 	Short: "Add a validator",
-	Run:   runCmdFunc(addValidator),
+	Run:   runValCmdFunc(addValidator),
 	Args:  cobra.RangeArgs(3, 5),
 }
 
 var validatorRemoveCmd = &cobra.Command{
-	Use:   "remove [subnet URL] [signing key name] [key index (optional)] [key height (optional)] [key name or path]",
+	Use:   "remove [subnet ID] [signing key name] [key index (optional)] [key height (optional)] [key name or path]",
 	Short: "Remove a validator",
-	Run:   runCmdFunc(removeValidator),
+	Run:   runValCmdFunc(removeValidator),
 	Args:  cobra.RangeArgs(3, 5),
 }
 
 var validatorUpdateKeyCmd = &cobra.Command{
-	Use:   "update-key [subnet URL] [signing key name] [key index (optional)] [key height (optional)] [old key name or path] [new key name or path]",
+	Use:   "update-key [subnet ID] [signing key name] [key index (optional)] [key height (optional)] [old key name or path] [new key name or path]",
 	Short: "Update a validator's key",
-	Run:   runCmdFunc(updateValidatorKey),
+	Run:   runValCmdFunc(updateValidatorKey),
 	Args:  cobra.RangeArgs(4, 6),
 }
 
-func addValidator(args []string) (string, error) {
-	args, principal, signer, err := parseArgsAndPrepareSigner(args)
-	if err != nil {
-		return "", err
-	}
+func runValCmdFunc(fn func(values *core.GlobalValues, pageCount int, signer []*signing.Builder, subnet string, args []string) (*protocol.Envelope, error)) func(cmd *cobra.Command, args []string) {
+	return runCmdFunc(func(args []string) (string, error) {
+		describe, err := Client.Describe(context.Background())
+		if err != nil {
+			return PrintJsonRpcError(err)
+		}
+		if describe.Values.Globals == nil {
+			return "", errors.New("cannot determine the network's global values")
+		}
 
+		req := new(api.GeneralQuery)
+		req.Url = protocol.DnUrl().JoinPath(protocol.Operators, "1")
+		resp := new(api.ChainQueryResponse)
+		page := new(protocol.KeyPage)
+		resp.Data = page
+		err = Client.RequestAPIv2(context.Background(), "query", req, resp)
+		if err != nil {
+			return PrintJsonRpcError(err)
+		}
+
+		subnet := args[0]
+		if subnet == "dn" {
+			subnet = protocol.Directory
+		}
+		args[0] = protocol.SubnetUrl(subnet).JoinPath(protocol.Operators, "1").String()
+		args, principal, signers, err := parseArgsAndPrepareSigner(args)
+		if err != nil {
+			return "", err
+		}
+
+		env, err := fn(&describe.Values, len(page.Keys), signers, subnet, args)
+		if err != nil {
+			return "", err
+		}
+
+		return dispatchTxAndPrintResponse(env, principal, signers)
+	})
+}
+
+func addOperator(values *core.GlobalValues, pageCount int, signers []*signing.Builder, _ string, args []string) (*protocol.Envelope, error) {
 	newKey, err := resolvePublicKey(args[0])
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	txn := new(protocol.AddValidator)
-	txn.PubKey = newKey.PublicKey
-	return dispatchTxAndPrintResponse(txn, nil, principal, signer)
+	return build.AddToOperatorPage(values, pageCount, newKey.PublicKeyHash(), signers...)
 }
 
-func removeValidator(args []string) (string, error) {
-	args, principal, signer, err := parseArgsAndPrepareSigner(args)
-	if err != nil {
-		return "", err
-	}
-
+func removeOperator(values *core.GlobalValues, pageCount int, signers []*signing.Builder, _ string, args []string) (*protocol.Envelope, error) {
 	oldKey, err := resolvePublicKey(args[0])
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	txn := new(protocol.RemoveValidator)
-	txn.PubKey = oldKey.PublicKey
-	return dispatchTxAndPrintResponse(txn, nil, principal, signer)
+	return build.RemoveFromOperatorPage(values, pageCount, oldKey.PublicKeyHash(), signers...)
 }
 
-func updateValidatorKey(args []string) (string, error) {
-	args, principal, signer, err := parseArgsAndPrepareSigner(args)
-	if err != nil {
-		return "", err
-	}
-
+func updateOperatorKey(_ *core.GlobalValues, _ int, signers []*signing.Builder, _ string, args []string) (*protocol.Envelope, error) {
 	oldKey, err := resolvePublicKey(args[0])
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	newKey, err := resolvePublicKey(args[1])
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	txn := new(protocol.UpdateValidatorKey)
-	txn.PubKey = oldKey.PublicKey
-	txn.NewPubKey = newKey.PublicKey
-	return dispatchTxAndPrintResponse(txn, nil, principal, signer)
+	return build.UpdateKeyOnOperatorPage(oldKey.PublicKeyHash(), newKey.PublicKeyHash(), signers...)
+}
+
+func addValidator(values *core.GlobalValues, pageCount int, signers []*signing.Builder, subnet string, args []string) (*protocol.Envelope, error) {
+	newKey, err := resolvePublicKey(args[0])
+	if err != nil {
+		return nil, err
+	}
+
+	return build.AddValidator(values, pageCount, newKey.PublicKey, subnet, signers...)
+}
+
+func removeValidator(values *core.GlobalValues, pageCount int, signers []*signing.Builder, subnet string, args []string) (*protocol.Envelope, error) {
+	oldKey, err := resolvePublicKey(args[0])
+	if err != nil {
+		return nil, err
+	}
+
+	return build.RemoveValidator(values, pageCount, oldKey.PublicKey, subnet, signers...)
+}
+
+func updateValidatorKey(values *core.GlobalValues, _ int, signers []*signing.Builder, subnet string, args []string) (*protocol.Envelope, error) {
+	oldKey, err := resolvePublicKey(args[0])
+	if err != nil {
+		return nil, err
+	}
+
+	newKey, err := resolvePublicKey(args[1])
+	if err != nil {
+		return nil, err
+	}
+
+	return build.UpdateValidatorKey(values, oldKey.PublicKey, newKey.PublicKey, subnet, signers...)
 }

@@ -10,9 +10,9 @@ type Event interface {
 	isEvent()
 }
 
-func (DidCommitBlock) isEvent()   {}
-func (DidSaveSnapshot) isEvent()  {}
-func (DidChangeGlobals) isEvent() {}
+func (DidCommitBlock) isEvent()    {}
+func (DidSaveSnapshot) isEvent()   {}
+func (WillChangeGlobals) isEvent() {}
 
 type DidCommitBlock struct {
 	Index uint64
@@ -24,6 +24,6 @@ type DidSaveSnapshot struct {
 	MinorIndex uint64
 }
 
-type DidChangeGlobals struct {
-	Values *core.GlobalValues
+type WillChangeGlobals struct {
+	New, Old *core.GlobalValues
 }

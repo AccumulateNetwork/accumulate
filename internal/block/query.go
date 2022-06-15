@@ -569,7 +569,7 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove, remote
 			return nil, errors.Format(errors.StatusInternalError, "sign synthetic transaction: %w", err)
 		}
 		var page *protocol.KeyPage
-		err = batch.Account(m.Describe.DefaultOperatorPage()).GetStateAs(&page)
+		err = batch.Account(m.Describe.OperatorsPage()).GetStateAs(&page)
 		if err != nil {
 			return nil, err
 		}

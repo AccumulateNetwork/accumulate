@@ -78,7 +78,7 @@ func getAccountAuthority(accountUrl *url2.URL, name string) (*url2.URL, error) {
 	return auth.Authorities[i-1].Url, nil
 }
 
-func EnableAuth(account *url2.URL, signer *signing.Builder, args []string) (string, error) {
+func EnableAuth(account *url2.URL, signers []*signing.Builder, args []string) (string, error) {
 	authority, err := getAccountAuthority(account, args[0])
 	if err != nil {
 		return "", err
@@ -86,10 +86,10 @@ func EnableAuth(account *url2.URL, signer *signing.Builder, args []string) (stri
 
 	op := &protocol.EnableAccountAuthOperation{Authority: authority}
 	txn := &protocol.UpdateAccountAuth{Operations: []protocol.AccountAuthOperation{op}}
-	return dispatchTxAndPrintResponse(txn, nil, account, signer)
+	return dispatchTxAndPrintResponse(txn, account, signers)
 }
 
-func DisableAuth(account *url2.URL, signer *signing.Builder, args []string) (string, error) {
+func DisableAuth(account *url2.URL, signers []*signing.Builder, args []string) (string, error) {
 	authority, err := getAccountAuthority(account, args[0])
 	if err != nil {
 		return "", err
@@ -97,10 +97,10 @@ func DisableAuth(account *url2.URL, signer *signing.Builder, args []string) (str
 
 	op := &protocol.DisableAccountAuthOperation{Authority: authority}
 	txn := &protocol.UpdateAccountAuth{Operations: []protocol.AccountAuthOperation{op}}
-	return dispatchTxAndPrintResponse(txn, nil, account, signer)
+	return dispatchTxAndPrintResponse(txn, account, signers)
 }
 
-func AddAuth(account *url2.URL, signer *signing.Builder, args []string) (string, error) {
+func AddAuth(account *url2.URL, signers []*signing.Builder, args []string) (string, error) {
 	authority, err := getAccountAuthority(account, args[0])
 	if err != nil {
 		return "", err
@@ -108,10 +108,10 @@ func AddAuth(account *url2.URL, signer *signing.Builder, args []string) (string,
 
 	op := &protocol.AddAccountAuthorityOperation{Authority: authority}
 	txn := &protocol.UpdateAccountAuth{Operations: []protocol.AccountAuthOperation{op}}
-	return dispatchTxAndPrintResponse(txn, nil, account, signer)
+	return dispatchTxAndPrintResponse(txn, account, signers)
 }
 
-func RemoveAuth(account *url2.URL, signer *signing.Builder, args []string) (string, error) {
+func RemoveAuth(account *url2.URL, signers []*signing.Builder, args []string) (string, error) {
 	authority, err := getAccountAuthority(account, args[0])
 	if err != nil {
 		return "", err
@@ -119,5 +119,5 @@ func RemoveAuth(account *url2.URL, signer *signing.Builder, args []string) (stri
 
 	op := &protocol.RemoveAccountAuthorityOperation{Authority: authority}
 	txn := &protocol.UpdateAccountAuth{Operations: []protocol.AccountAuthOperation{op}}
-	return dispatchTxAndPrintResponse(txn, nil, account, signer)
+	return dispatchTxAndPrintResponse(txn, account, signers)
 }

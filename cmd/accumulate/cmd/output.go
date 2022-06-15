@@ -52,6 +52,9 @@ func printOutput(cmd *cobra.Command, out string, err error) {
 
 	DidError = err
 	if !WantJsonOutput {
+		if out != "" {
+			cmd.Println(out)
+		}
 		cmd.PrintErrf("Error: %v\n", err)
 		return
 	}
@@ -69,6 +72,9 @@ func printOutput(cmd *cobra.Command, out string, err error) {
 	b, _ := json.Marshal(map[string]interface{}{"error": v})
 
 	// If the caller wants JSON, they probably want it on stdout
+	if out != "" {
+		cmd.Printf("%s\n", out)
+	}
 	cmd.Printf("%s\n", b)
 }
 

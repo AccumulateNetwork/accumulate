@@ -21,6 +21,7 @@ type DataSetLog struct {
 	mutex       sync.Mutex
 }
 
+//nolint:unused
 type dataValue struct {
 	label     string // Description of value.
 	svalue    string // Alternate value for tags

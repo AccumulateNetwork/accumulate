@@ -27,9 +27,9 @@ func (x *Executor) processNetworkAccountUpdates(batch *database.Batch, delivery 
 	switch body := delivery.Transaction.Body.(type) {
 	case *protocol.UpdateKeyPage:
 		switch targetName {
-		case protocol.OperatorBook + "/1":
+		case protocol.Operators + "/1":
 			// Synchronize updates to the operator book
-			targetName = protocol.OperatorBook
+			targetName = protocol.Operators
 
 			page, ok := principal.(*protocol.KeyPage)
 			if !ok {

@@ -66,12 +66,6 @@ func GetExecutor(t *testing.T, typ protocol.TransactionType) TransactionExecutor
 		return AddCredits{}
 	case protocol.TransactionTypeUpdateKeyPage:
 		return UpdateKeyPage{}
-	case protocol.TransactionTypeAddValidator:
-		return AddValidator{}
-	case protocol.TransactionTypeRemoveValidator:
-		return RemoveValidator{}
-	case protocol.TransactionTypeUpdateValidatorKey:
-		return UpdateValidatorKey{}
 	case protocol.TransactionTypeUpdateAccountAuth:
 		return UpdateAccountAuth{}
 	case protocol.TransactionTypeUpdateKey:

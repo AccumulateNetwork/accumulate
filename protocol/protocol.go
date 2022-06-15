@@ -27,11 +27,8 @@ const (
 	// Directory is the subnet ID of the DN.
 	Directory = "Directory"
 
-	// ValidatorBook is the path to a node's validator key book.
-	ValidatorBook = "validators"
-
-	// OperatorBook is the path to a node's operator key book.
-	OperatorBook = "operators"
+	// Operators is the path to a node's operator key book.
+	Operators = "operators"
 
 	// Ledger is the path to a node's internal ledger.
 	Ledger = "ledger"
