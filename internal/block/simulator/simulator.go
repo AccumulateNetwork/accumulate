@@ -95,6 +95,7 @@ func (sim *Simulator) Setup(bvnCount int) {
 	}
 
 	mainEventBus := events.NewBus(sim.Logger.With("subnet", protocol.Directory))
+	events.SubscribeSync(mainEventBus, sim.willChangeGlobals)
 	sim.router = routing.NewRouter(mainEventBus, nil)
 
 	// Initialize each executor
@@ -145,6 +146,43 @@ func (sim *Simulator) Setup(bvnCount int) {
 			Validators: [][]byte{key[32:]},
 		}
 	}
+}
+
+// willChangeGlobals is called when global values are about to change.
+// willChangeGlobals is responsible for updating the validator list.
+func (s *Simulator) willChangeGlobals(e events.WillChangeGlobals) error {
+	for id, x := range s.Executors {
+		updates, err := e.Old.DiffValidators(e.New, id)
+		if err != nil {
+			return err
+		}
+
+		for key, typ := range updates {
+			key := key // See docs/developer/rangevarref.md
+			cmp := func(entry []byte) int {
+				return bytes.Compare(entry, key[:])
+			}
+			switch typ {
+			case core.ValidatorUpdateAdd:
+				ptr, new := sortutil.BinaryInsert(&x.Validators, cmp)
+				if !new {
+					break
+				}
+
+				*ptr = key[:]
+
+			case core.ValidatorUpdateRemove:
+				i, found := sortutil.Search(x.Validators, cmp)
+				if !found {
+					break
+				}
+
+				copy(x.Validators[i:], x.Validators[i+1:])
+				x.Validators = x.Validators[:len(x.Validators)-1]
+			}
+		}
+	}
+	return nil
 }
 
 func (s *Simulator) SetRouteFor(account *url.URL, subnet string) {
@@ -548,23 +586,6 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 			require.NoError(x, block.Batch.Commit())
 		}
 
-		// Apply validator updates
-		for _, update := range block.State.ValidatorsUpdates {
-			cmp := func(entry []byte) int {
-				return bytes.Compare(entry, update.PubKey.Bytes())
-			}
-			if update.Enabled {
-				ptr, new := sortutil.BinaryInsert(&x.Validators, cmp)
-				if new {
-					key := update.PubKey.Bytes()
-					*ptr = make([]byte, len(key))
-					copy(*ptr, key)
-				}
-			} else if i, found := sortutil.Search(x.Validators, cmp); found {
-				copy(x.Validators[i:], x.Validators[i+1:])
-				x.Validators = x.Validators[:len(x.Validators)-1]
-			}
-		}
 		return nil
 	})
 }

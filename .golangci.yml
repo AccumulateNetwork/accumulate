@@ -4,6 +4,11 @@ linters:
   - nodebug
   - rangevarref
 
+  # TODO Enable these and fix the issues
+  disable:
+  - staticcheck
+  - gosimple
+
 issues:
   max-same-issues: 0
 

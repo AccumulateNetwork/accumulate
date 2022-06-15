@@ -54,8 +54,8 @@ if [ -f "$(dnPrivKey 0)" ] && [ -f "/.dockerenv" ] && [ "$NUM_NODES" -ge "3" ]; 
   accumulate page get acc://dn.acme/operators/1 -j
 
   # Add key to operator book first
-  echo page key add dn.acme/operators/1 "$(dnPrivKey 0)" $hexPubKey
-  TXID=$(cli-tx page key add dn.acme/operators/1 "$(dnPrivKey 0)" $hexPubKey)
+  echo operator add dn "$(dnPrivKey 0)" $hexPubKey
+  TXID=$(cli-tx operator add dn "$(dnPrivKey 0)" $hexPubKey)
   wait-for-tx $TXID
   # Sign the required number of times
   for ((sigNr = 1; sigNr <= $(signCount); sigNr++)); do
@@ -64,8 +64,8 @@ if [ -f "$(dnPrivKey 0)" ] && [ -f "/.dockerenv" ] && [ "$NUM_NODES" -ge "3" ]; 
   declare -g ACCEPT_THRESHOLD=$(accumulate page get -j dn.acme/operators/1 | jq -re .data.acceptThreshold)
 
   # Register new validator
-  echo validator add dn.acme/validators "$(dnPrivKey 0)" $hexPubKey
-  TXID=$(cli-tx validator add dn.acme/validators "$(dnPrivKey 0)" $hexPubKey)
+  echo validator add dn "$(dnPrivKey 0)" $hexPubKey
+  TXID=$(cli-tx validator add dn "$(dnPrivKey 0)" $hexPubKey)
   wait-for-tx $TXID
 
   # Sign the required number of times
@@ -84,8 +84,8 @@ section "Add a key to the operator book"
 if [ -f "$(dnPrivKey 0)" ]; then
   DN_NEW_KEY="4a4557cfe5fe2c1e92f1ca91d0d78fe3c7f34a1a754a5084e7f743dbe7ac5ccd"
   DN_NEW_KEY_HASH="a8997980d7a4325b30f371d877daba11ae2a0b3ffb2edf0f3ebee5134460bac0"
-echo page key add acc://dn.acme/operators/1 "$(dnPrivKey 0)" $DN_NEW_KEY
-  TXID=$(cli-tx page key add acc://dn.acme/operators/1 "$(dnPrivKey 0)" $DN_NEW_KEY)
+echo operator add dn "$(dnPrivKey 0)" $DN_NEW_KEY
+  TXID=$(cli-tx operator add dn "$(dnPrivKey 0)" $DN_NEW_KEY)
   wait-for-tx $TXID
 
   # Sign the required number of times
@@ -95,9 +95,9 @@ echo page key add acc://dn.acme/operators/1 "$(dnPrivKey 0)" $DN_NEW_KEY
     wait-for cli-tx-sig tx sign dn.acme/operators "$(signKey $sigNr)" $TXID
   done
 
-  echo "sleeping for 10 seconds (wait for anchor)"
-  sleep 10
-  KEY_ADDED_BVN=$(accumulate page get bvn-BVN0.acme/operators/2 | grep $DN_NEW_KEY_HASH || true)
+  echo "sleeping for 5 seconds (wait for anchor)"
+  sleep 5
+  KEY_ADDED_BVN=$(accumulate page get bvn-BVN0.acme/operators/1 | grep $DN_NEW_KEY_HASH || true)
   [[ -z $KEY_ADDED_BVN ]] && die "operator-2 was not sent to the BVN"
 
   declare -g ACCEPT_THRESHOLD=$(accumulate page get -j dn.acme/operators/1 | jq -re .data.acceptThreshold)
@@ -151,7 +151,7 @@ fi
 
 if [ ! -z "${ACCPID}" ]; then
   section "Shutdown dynamic validator"
-  TXID=$(cli-tx validator remove dn.acme/validators "$(dnPrivKey 0)" "$hexPubKey")
+  TXID=$(cli-tx validator remove dn "$(dnPrivKey 0)" "$hexPubKey")
   wait-for-tx $TXID
 
   # Sign the required number of times

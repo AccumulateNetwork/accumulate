@@ -16,6 +16,7 @@ import (
 	"github.com/tendermint/tendermint/privval"
 	"github.com/tendermint/tendermint/types"
 	cfg "gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 )
@@ -33,6 +34,7 @@ type InitOptions struct {
 	ListenIP            []string
 	NetworkValidatorMap genesis.NetworkValidatorMap
 	Logger              log.Logger
+	GenesisGlobals      *core.GlobalValues
 	FactomAddressesFile string
 	DataSetLog          *logging.DataSetLog
 }
@@ -141,6 +143,7 @@ func initV1(opts InitOptions) (bootstrap genesis.Bootstrap, err error) {
 			NetworkValidatorMap: opts.NetworkValidatorMap,
 			Logger:              opts.Logger,
 			FactomAddressesFile: opts.FactomAddressesFile,
+			GenesisGlobals:      opts.GenesisGlobals,
 		})
 		if err != nil {
 			return nil, err

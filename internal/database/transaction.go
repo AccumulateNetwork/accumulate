@@ -130,7 +130,7 @@ func (t *Transaction) AddSystemSignature(net *config.Describe, newSignature prot
 		panic("not a system signature")
 	}
 
-	set, err := t.newSigSet(net.DefaultOperatorPage(), true)
+	set, err := t.newSigSet(net.OperatorsPage(), true)
 	if err != nil {
 		return 0, err
 	}

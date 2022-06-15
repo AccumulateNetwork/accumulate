@@ -191,7 +191,7 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 		idc.Authorities = append(idc.Authorities, authUrl)
 	}
 
-	out, err := dispatchTxAndPrintResponse(&idc, nil, origin, signer)
+	out, err := dispatchTxAndPrintResponse(&idc, origin, signer)
 	if err != nil {
 		return PrintJsonRpcError(err)
 	}

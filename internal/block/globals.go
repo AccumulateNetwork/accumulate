@@ -25,8 +25,8 @@ func (x *Executor) loadGlobals(view func(func(batch *database.Batch) error) erro
 	}
 
 	// Publish an update
-	err = x.EventBus.Publish(events.DidChangeGlobals{
-		Values: &x.globals.Active,
+	err = x.EventBus.Publish(events.WillChangeGlobals{
+		New: &x.globals.Active,
 	})
 	if err != nil {
 		return errors.Format(errors.StatusUnknown, "publish globals update: %w", err)

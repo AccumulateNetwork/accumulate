@@ -772,5 +772,5 @@ func UpdateKey(args []string) (string, error) {
 
 	txn := new(protocol.UpdateKey)
 	txn.NewKeyHash = k.PublicKeyHash()
-	return dispatchTxAndPrintResponse(txn, nil, principal, signer)
+	return dispatchTxAndPrintResponse(txn, principal, signer)
 }
