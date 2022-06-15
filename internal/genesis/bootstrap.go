@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/tendermint/tendermint/abci/types"
+	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/libs/log"
 	tmtypes "github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
@@ -25,18 +26,24 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 )
 
-type NetworkValidatorMap map[string][]tmtypes.GenesisValidator
+type Operator struct {
+	Name      string
+	Address   []byte
+	PubKey    crypto.PubKey
+	Validator bool
+}
+
+type NetworkOperators map[string][]*Operator
 
 type InitOpts struct {
 	Describe            config.Describe
 	AllConfigs          []*config.Config
-	Validators          []tmtypes.GenesisValidator
-	NetworkValidatorMap NetworkValidatorMap
+	Operators           []*Operator
+	NetworkOperators    NetworkOperators
 	GenesisTime         time.Time
 	Logger              log.Logger
 	FactomAddressesFile string
 	GenesisGlobals      *core.GlobalValues
-	Keys                [][]byte
 }
 
 func Init(kvdb storage.KeyValueStore, opts InitOpts) (Bootstrap, error) {
@@ -48,12 +55,12 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) (Bootstrap, error) {
 		records:     make([]protocol.Account, 0),
 	}
 
-	// Add validator keys to NetworkValidatorMap when not there
-	if b.NetworkValidatorMap == nil {
-		panic("NetworkValidatorMap is not present")
+	// Add validator keys to NetworkOperators when not there
+	if b.NetworkOperators == nil {
+		panic("NetworkOperators is not present")
 	}
-	if _, ok := b.NetworkValidatorMap[b.Describe.SubnetId]; !ok {
-		b.NetworkValidatorMap[b.Describe.SubnetId] = b.Validators
+	if _, ok := b.NetworkOperators[b.Describe.SubnetId]; !ok {
+		b.NetworkOperators[b.Describe.SubnetId] = b.Operators
 	}
 
 	// Build the routing table
@@ -193,7 +200,7 @@ func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protoc
 		b.globals.Globals.OperatorAcceptThreshold.Set(2, 3)
 	}
 
-	if b.globals.Network == nil && b.NetworkValidatorMap != nil {
+	if b.globals.Network == nil && b.NetworkOperators != nil {
 		b.globals.Network = b.buildNetworkDefinition()
 	}
 
@@ -445,16 +452,15 @@ func (b *bootstrap) createOperatorPage(uBook *url.URL, pageIndex uint64, validat
 			panic("book URL does not belong to a subnet")
 		}
 
-		operators, ok := b.NetworkValidatorMap[subnet]
+		operators, ok := b.NetworkOperators[subnet]
 		if !ok {
 			panic("missing operators for subnet")
 		}
 
 		for _, operator := range operators {
-			/* TODO
-			Determine which operators are also validators and which not. Followers should be omitted,
-			but DNs which also don't have voting power not.	(DNs need to sign Oracle updates)
-			*/
+			if !operator.Validator {
+				continue
+			}
 			spec := new(protocol.KeySpec)
 			kh := sha256.Sum256(operator.PubKey.Bytes())
 			spec.PublicKeyHash = kh[:]
@@ -462,7 +468,7 @@ func (b *bootstrap) createOperatorPage(uBook *url.URL, pageIndex uint64, validat
 		}
 
 	} else {
-		for _, operators := range b.NetworkValidatorMap {
+		for _, operators := range b.NetworkOperators {
 			for _, operator := range operators {
 				spec := new(protocol.KeySpec)
 				kh := sha256.Sum256(operator.PubKey.Bytes())
@@ -505,11 +511,25 @@ func (b *bootstrap) writeGenesisFile(appHash []byte) error {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
+	var validators []tmtypes.GenesisValidator
+	for _, op := range b.Operators {
+		if !op.Validator {
+			continue
+		}
+
+		validators = append(validators, tmtypes.GenesisValidator{
+			Address: op.Address,
+			PubKey:  op.PubKey,
+			Power:   1,
+			Name:    op.Name,
+		})
+	}
+
 	genDoc := &tmtypes.GenesisDoc{
 		ChainID:         b.Describe.SubnetId,
 		GenesisTime:     b.GenesisTime,
 		InitialHeight:   protocol.GenesisBlock + 1,
-		Validators:      b.Validators,
+		Validators:      validators,
 		ConsensusParams: tmtypes.DefaultConsensusParams(),
 		AppState:        state,
 		AppHash:         appHash,
@@ -530,7 +550,7 @@ func (b *bootstrap) buildNetworkDefinition() *protocol.NetworkDefinition {
 
 		// Add the validator hashes from the subnet's genesis doc
 		var vkHashes [][32]byte
-		for _, validator := range b.NetworkValidatorMap[subnet.Id] {
+		for _, validator := range b.NetworkOperators[subnet.Id] {
 			pkh := sha256.Sum256(validator.PubKey.Bytes())
 			vkHashes = append(vkHashes, pkh)
 		}

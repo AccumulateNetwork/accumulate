@@ -17,7 +17,6 @@ import (
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/privval"
-	tmtypes "github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
@@ -54,7 +53,7 @@ type FakeNode struct {
 
 	assert    *assert.Assertions
 	require   *require.Assertions
-	netValMap genesis.NetworkValidatorMap
+	netValMap genesis.NetworkOperators
 	Bootstrap genesis.Bootstrap
 	kv        *memory.DB
 }
@@ -65,7 +64,7 @@ func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulate
 	allNodes := map[string][]*FakeNode{}
 	allChans := map[string][]chan<- abcitypes.Application{}
 	clients := map[string]connections.ABCIClient{}
-	netValMap := make(genesis.NetworkValidatorMap)
+	netValMap := make(genesis.NetworkOperators)
 	evilNodePrefix := "evil-"
 	for _, netName := range subnets {
 		isEvil := false
@@ -120,7 +119,7 @@ func NewDefaultErrorHandler(t *testing.T) func(err error) {
 	}
 }
 
-func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Daemon) (*database.Database, error), errorHandler func(err error), isEvil bool, netValMap genesis.NetworkValidatorMap) (*FakeNode, chan<- abcitypes.Application) {
+func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Daemon) (*database.Database, error), errorHandler func(err error), isEvil bool, netValMap genesis.NetworkOperators) (*FakeNode, chan<- abcitypes.Application) {
 	if errorHandler == nil {
 		errorHandler = NewDefaultErrorHandler(t)
 	}
@@ -219,14 +218,13 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 
 	kv := memory.New(nil)
 	opts := genesis.InitOpts{
-		Describe:            *n.network,
-		GenesisTime:         time.Now(),
-		NetworkValidatorMap: n.netValMap,
-		Logger:              n.logger,
-		Validators: []tmtypes.GenesisValidator{
-			{PubKey: n.key.PubKey()},
+		Describe:         *n.network,
+		GenesisTime:      time.Now(),
+		NetworkOperators: n.netValMap,
+		Logger:           n.logger,
+		Operators: []*genesis.Operator{
+			{PubKey: n.key.PubKey(), Validator: true},
 		},
-		Keys: [][]byte{n.key.Bytes()},
 	}
 	n.Bootstrap, err = genesis.Init(kv, opts)
 	n.Require().NoError(err)

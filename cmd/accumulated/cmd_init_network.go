@@ -202,14 +202,14 @@ func initNetwork(cmd *cobra.Command, args []string) {
 
 	if !flagInitNetwork.Compose {
 		logger := newLogger()
-		netValMap := make(genesis.NetworkValidatorMap)
+		netValMap := make(genesis.NetworkOperators)
 		genInit, err := node.Init(node.InitOptions{
 			WorkDir:             filepath.Join(flagMain.WorkDir, "dn"),
 			Port:                int(directory.BasePort),
 			Config:              dnConfig,
 			RemoteIP:            dnRemote,
 			ListenIP:            dnListen,
-			NetworkValidatorMap: netValMap,
+			NetworkOperators:    netValMap,
 			Logger:              logger.With("subnet", protocol.Directory),
 			FactomAddressesFile: factomAddressesFile,
 		})
@@ -223,7 +223,7 @@ func initNetwork(cmd *cobra.Command, args []string) {
 				Config:              bvnConfig[i],
 				RemoteIP:            bvnRemote[i],
 				ListenIP:            bvnListen[i],
-				NetworkValidatorMap: netValMap,
+				NetworkOperators:    netValMap,
 				Logger:              logger.With("subnet", bvns[i].Id),
 				FactomAddressesFile: factomAddressesFile,
 			})

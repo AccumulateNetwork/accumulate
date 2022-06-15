@@ -513,15 +513,15 @@ func handleDNSSuffix(dnRemote []string, bvnRemote [][]string) {
 
 func createInLocalFS(dnConfig []*cfg.Config, dnRemote []string, dnListen []string, bvnConfig [][]*cfg.Config, bvnRemote [][]string, bvnListen [][]string) {
 	logger := newLogger()
-	netValMap := make(genesis.NetworkValidatorMap)
+	netValMap := make(genesis.NetworkOperators)
 	genInit, err := node.Init(node.InitOptions{
-		WorkDir:             filepath.Join(flagMain.WorkDir, "dn"),
-		Port:                flagInitDevnet.BasePort,
-		Config:              dnConfig,
-		RemoteIP:            dnRemote,
-		ListenIP:            dnListen,
-		NetworkValidatorMap: netValMap,
-		Logger:              logger.With("subnet", protocol.Directory),
+		WorkDir:          filepath.Join(flagMain.WorkDir, "dn"),
+		Port:             flagInitDevnet.BasePort,
+		Config:           dnConfig,
+		RemoteIP:         dnRemote,
+		ListenIP:         dnListen,
+		NetworkOperators: netValMap,
+		Logger:           logger.With("subnet", protocol.Directory),
 	})
 	check(err)
 	genList := []genesis.Bootstrap{genInit}
@@ -529,13 +529,13 @@ func createInLocalFS(dnConfig []*cfg.Config, dnRemote []string, dnListen []strin
 	for bvn := range bvnConfig {
 		bvnConfig, bvnRemote, bvnListen := bvnConfig[bvn], bvnRemote[bvn], bvnListen[bvn]
 		genesis, err := node.Init(node.InitOptions{
-			WorkDir:             filepath.Join(flagMain.WorkDir, fmt.Sprintf("bvn%d", bvn)),
-			Port:                flagInitDevnet.BasePort,
-			Config:              bvnConfig,
-			RemoteIP:            bvnRemote,
-			ListenIP:            bvnListen,
-			NetworkValidatorMap: netValMap,
-			Logger:              logger.With("subnet", fmt.Sprintf("BVN%d", bvn)),
+			WorkDir:          filepath.Join(flagMain.WorkDir, fmt.Sprintf("bvn%d", bvn)),
+			Port:             flagInitDevnet.BasePort,
+			Config:           bvnConfig,
+			RemoteIP:         bvnRemote,
+			ListenIP:         bvnListen,
+			NetworkOperators: netValMap,
+			Logger:           logger.With("subnet", fmt.Sprintf("BVN%d", bvn)),
 		})
 		check(err)
 		if genesis != nil {

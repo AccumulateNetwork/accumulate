@@ -147,7 +147,7 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withF
 	}
 
 	allDaemons := make(map[string][]*accumulated.Daemon, numBvns+1)
-	netValMap := make(genesis.NetworkValidatorMap)
+	netValMap := make(genesis.NetworkOperators)
 	var bootstrapList []genesis.Bootstrap
 
 	for _, subnet := range subnets {
@@ -159,7 +159,7 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withF
 			Config:              allConfigs[subnetId],
 			RemoteIP:            allRemotes[subnetId],
 			ListenIP:            allRemotes[subnetId],
-			NetworkValidatorMap: netValMap,
+			NetworkOperators:    netValMap,
 			Logger:              initLogger.With("subnet", subnetId),
 			FactomAddressesFile: factomAddressFilePath,
 		})

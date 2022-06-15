@@ -7,7 +7,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/crypto/ed25519"
-	tmtypes "github.com/tendermint/tendermint/types"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
@@ -19,21 +18,20 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
-func InitGenesis(t TB, exec *Executor, genesisTime time.Time, genesisValues *core.GlobalValues, netValMap genesis.NetworkValidatorMap) genesis.Bootstrap {
+func InitGenesis(t TB, exec *Executor, genesisTime time.Time, genesisValues *core.GlobalValues, netValMap genesis.NetworkOperators) genesis.Bootstrap {
 	t.Helper()
 
 	// Genesis
 	temp := memory.New(exec.Logger)
 	bootstrap, err := genesis.Init(temp, genesis.InitOpts{
-		Describe:            exec.Describe,
-		GenesisTime:         genesisTime,
-		NetworkValidatorMap: netValMap,
-		Logger:              exec.Logger,
-		GenesisGlobals:      genesisValues,
-		Validators: []tmtypes.GenesisValidator{
-			{PubKey: ed25519.PubKey(exec.Key[32:])},
+		Describe:         exec.Describe,
+		GenesisTime:      genesisTime,
+		NetworkOperators: netValMap,
+		Logger:           exec.Logger,
+		GenesisGlobals:   genesisValues,
+		Operators: []*genesis.Operator{
+			{PubKey: ed25519.PubKey(exec.Key[32:]), Validator: true},
 		},
-		Keys: [][]byte{exec.Key},
 	})
 	require.NoError(tb{t}, err)
 	return bootstrap

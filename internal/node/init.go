@@ -30,7 +30,7 @@ type InitOptions struct {
 	Config              []*cfg.Config
 	RemoteIP            []string
 	ListenIP            []string
-	NetworkValidatorMap genesis.NetworkValidatorMap
+	NetworkOperators    genesis.NetworkOperators
 	Logger              log.Logger
 	FactomAddressesFile string
 }
@@ -68,8 +68,7 @@ func initV1(opts InitOptions) (bootstrap genesis.Bootstrap, err error) {
 
 	configs := opts.Config
 	subnetID := configs[0].Accumulate.SubnetId
-	genVals := make([]types.GenesisValidator, 0, len(configs))
-	genValKeys := make([][]byte, 0, len(configs))
+	genOperators := make([]*genesis.Operator, 0, len(configs))
 
 	var networkType cfg.NetworkType
 	for i, config := range configs {
@@ -114,15 +113,12 @@ func initV1(opts InitOptions) (bootstrap genesis.Bootstrap, err error) {
 			return nil, fmt.Errorf("failed to load private validator: %v", err)
 		}
 
-		if config.Mode == tmcfg.ModeValidator {
-			genVals = append(genVals, types.GenesisValidator{
-				Address: pv.Key.Address,
-				PubKey:  pv.Key.PubKey,
-				Power:   1,
-				Name:    nodeDirName,
-			})
-			genValKeys = append(genValKeys, pv.Key.PrivKey.Bytes())
-		}
+		genOperators = append(genOperators, &*&genesis.Operator{
+			Address:   pv.Key.Address,
+			PubKey:    pv.Key.PubKey,
+			Name:      nodeDirName,
+			Validator: config.Mode == tmcfg.ModeValidator,
+		})
 	}
 
 	// Generate genesis doc from generated validators
@@ -134,9 +130,8 @@ func initV1(opts InitOptions) (bootstrap genesis.Bootstrap, err error) {
 			Describe:            configs[0].Accumulate.Describe,
 			AllConfigs:          configs,
 			GenesisTime:         genTime,
-			Validators:          genVals,
-			Keys:                genValKeys,
-			NetworkValidatorMap: opts.NetworkValidatorMap,
+			Operators:           genOperators,
+			NetworkOperators:    opts.NetworkOperators,
 			Logger:              opts.Logger,
 			FactomAddressesFile: opts.FactomAddressesFile,
 		})
@@ -191,7 +186,7 @@ func initV1(opts InitOptions) (bootstrap genesis.Bootstrap, err error) {
 	}
 
 	logMsg := []interface{}{"module", "init"}
-	switch nValidators := len(genVals); nValidators {
+	switch nValidators := len(genOperators); nValidators {
 	case 0:
 		logMsg = append(logMsg, "followers", nConfig)
 	case nConfig:

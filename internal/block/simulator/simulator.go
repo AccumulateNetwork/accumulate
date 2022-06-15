@@ -196,7 +196,7 @@ func (s *Simulator) InitFromGenesis() {
 func (s *Simulator) InitFromGenesisWith(values *core.GlobalValues) {
 	s.Helper()
 
-	netValMap := make(genesis.NetworkValidatorMap)
+	netValMap := make(genesis.NetworkOperators)
 	for _, x := range s.Executors {
 		x.bootstrap = InitGenesis(s, x.Executor, genesisTime, values, netValMap)
 	}
