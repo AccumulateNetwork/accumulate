@@ -102,7 +102,7 @@ func (s *Set[T]) Index(v T) (int, error) {
 
 	i, found := sortutil.Search(l, func(u T) int { return s.compare(u, v) })
 	if !found {
-		return 0, errors.NotFound("%s not found", s.name)
+		return 0, errors.NotFound("entry not found in %s", s.name)
 	}
 
 	return i, nil

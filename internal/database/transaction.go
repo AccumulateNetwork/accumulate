@@ -27,6 +27,11 @@ func (t *Transaction) Signatures(signer *url.URL) SignatureSet {
 		return t.SystemSignatures()
 	}
 
+	// Convert lite token address to lite identity
+	if key, _, _ := protocol.ParseLiteTokenAddress(signer); key != nil {
+		signer = signer.RootIdentity()
+	}
+
 	key := t.key.Append("Signatures", signer)
 	return getOrCreateMap(&t.signatures, key, func() *VersionedSignatureSet {
 		return newVersionedSignatureSet(t, t.store, key, "transaction %[2]x signatures %[4]v")

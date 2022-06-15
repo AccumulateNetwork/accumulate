@@ -105,20 +105,29 @@ func (s *VersionedSignatureSet) Add(signature protocol.Signature) error {
 		return errors.Wrap(errors.StatusUnknown, s.err)
 	}
 
-	if !s.getSignerUrl().Equal(signature.GetSigner()) {
-		return errors.Format(errors.StatusInternalError, "cannot add signature by %v to signature set %v", signature.GetSigner(), s.getSignerUrl())
+	// Convert lite token address to lite identity
+	signerUrl := signature.GetSigner()
+	if key, _, _ := protocol.ParseLiteTokenAddress(signerUrl); key != nil {
+		signerUrl = signerUrl.RootIdentity()
+	}
+
+	// Verify the URLs match
+	if !s.getSignerUrl().Equal(signerUrl) {
+		return errors.Format(errors.StatusInternalError, "cannot add signature by %v to signature set %v", signerUrl, s.getSignerUrl())
 	}
 
 	// Update the signer set
-	err := s.container.addSigner(signature.GetSigner())
+	err := s.container.addSigner(signerUrl)
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
+	// Construct the entry
 	v := new(SignatureEntry)
 	v.Type = signature.Type()
 	v.SignatureHash = *(*[32]byte)(signature.Hash())
 
+	// Get the index, ensuring that the key belongs to the signer
 	switch sig := signature.(type) {
 	case protocol.KeySignature:
 		i, _, ok := s.signer.EntryByKeyHash(sig.GetPublicKeyHash())
