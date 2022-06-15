@@ -171,8 +171,8 @@ SubnetDefinition:
   fields:
     - name: SubnetID
       type: string
-    - name: ValidatorKeyHashes
-      type: hash
+    - name: ValidatorKeys
+      type: bytes
       repeatable: true
 
 RoutingTable:
