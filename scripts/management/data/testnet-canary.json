@@ -2,7 +2,7 @@
     "network": "Canary TestNet",
     "subnets": [
         {
-            "name": "Directory",
+            "id": "Directory",
             "type": "directory",
             "port": 34000,
             "nodes": [
@@ -13,7 +13,7 @@
             ]
         },
         {
-            "name": "Zion",
+            "id": "Zion",
             "type": "block-validator",
             "port": 33000,
             "nodes": [
@@ -22,7 +22,7 @@
             ]
         },
         {
-            "name": "Yellowstone",
+            "id": "Yellowstone",
             "type": "block-validator",
             "port": 33000,
             "nodes": [
