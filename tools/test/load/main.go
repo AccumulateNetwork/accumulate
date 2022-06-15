@@ -20,9 +20,6 @@ var serverUrl string
 var parallelism, transactions int
 
 func main() {
-	flag.StringVar(&serverUrl, "s", "http://127.0.1.1:26660/v2", "Accumulate server URL")
-	flag.IntVar(&parallelism, "p", 5, "Number of parallel clients")
-	flag.IntVar(&transactions, "t", 100, "Number of transactions per client")
 	flag.Parse()
 
 	parallelization := parallelism
@@ -56,6 +53,12 @@ func main() {
 	// force close channel
 	close(c)
 	wg.Wait()
+}
+
+func init() {
+	flag.StringVar(&serverUrl, "s", "http://127.0.1.1:26660/v2", "Accumulate server URL")
+	flag.IntVar(&parallelism, "p", 5, "Number of parallel clients")
+	flag.IntVar(&transactions, "t", 100, "Number of transactions per client")
 }
 
 // Init new client from server URL input using client.go
