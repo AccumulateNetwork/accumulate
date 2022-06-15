@@ -2,11 +2,12 @@ package logging
 
 import (
 	"fmt"
-	tmos "github.com/tendermint/tendermint/libs/os"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
+
+	tmos "github.com/tendermint/tendermint/libs/os"
 )
 
 type multiSet map[string]*DataSet
@@ -100,7 +101,6 @@ func (d *DataSetLog) DumpDataSetToDiskFile() ([]string, error) {
 	var fileName string
 
 	var val dataValue
-	needHeader := true
 	for dkey, dset := range d.data {
 		//Don't try to write file if no entries saved.
 		if dset.size > 0 {
@@ -108,7 +108,7 @@ func (d *DataSetLog) DumpDataSetToDiskFile() ([]string, error) {
 			fileName = filepath.Join(d.path, d.processName+"_"+dkey+fileEnd)
 			fileNames = append(fileNames, fileName)
 
-			needHeader = !tmos.FileExists(fileName)
+			needHeader := !tmos.FileExists(fileName)
 			file, err := os.OpenFile(fileName, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0700)
 			if err != nil {
 				//open failed, try to dump to local directory.
