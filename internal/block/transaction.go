@@ -437,11 +437,6 @@ func (x *Executor) recordSuccessfulTransaction(batch *database.Batch, state *cha
 		return nil, nil, err
 	}
 
-	// Don't add internal transactions to chains
-	if delivery.Transaction.Body.Type().IsSystem() {
-		return status, state, nil
-	}
-
 	// Remove the transaction from the principal's list of pending transactions
 	err = batch.Account(delivery.Transaction.Header.Principal).RemovePending(delivery.Transaction.ID())
 	if err != nil {
