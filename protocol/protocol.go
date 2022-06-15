@@ -385,6 +385,9 @@ func IsValidAdiUrl(u *url.URL, allowReserved bool) error {
 		errs = append(errs, "identity is empty")
 	} else if strings.HasSuffix(a, TLD) {
 		a = a[:len(a)-len(TLD)]
+		if a == "" {
+			errs = append(errs, "identity is empty")
+		}
 	} else {
 		errs = append(errs, "identity must end in "+TLD)
 	}

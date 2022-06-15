@@ -222,15 +222,10 @@ wait-for cli-tx token issue test.acme/token-issuer test-1-0 ${LITE_TOK} 123.0123
 BALANCE=$(accumulate -j account get ${LITE_TOK} | jq -r .data.balance)
 [ "$BALANCE" -eq 1230123456789 ] && success || die "${LITE_TOK} should have 1230123456789 test.acme tokens but has ${BALANCE}"
 
-section "Send tokens to the lite account (TOK)"
-wait-for cli-tx tx create ${LITE_ACME} ${LITE_TOK} 10000 # 10000 ACME is 100 TOK
-BALANCE=$(accumulate -j account get ${LITE_TOK} | jq -r .data.balance)
-[ "$BALANCE" -ge 2230123456789 ] && success || die "${LITE_TOK} should have at least 2230123456789 tokens but only has ${BALANCE}"
-
 section "Burn tokens"
 wait-for cli-tx token burn ${LITE_TOK} 100
 BALANCE=$(accumulate -j account get ${LITE_TOK} | jq -r .data.balance)
-[ "$BALANCE" -eq 1230123456789 ] && success || die "${LITE_TOK} should have 1230123456789 test.acme tokens but has ${BALANCE}"
+[ "$BALANCE" -eq 230123456789 ] && success || die "${LITE_TOK} should have 1230123456789 test.acme tokens but has ${BALANCE}"
 
 section "Create lite data account and write the data"
 ACCOUNT_ID=$(accumulate -j account create data --lite test.acme test-1-0 "Factom PRO" "Tutorial" | jq -r .accountUrl)
