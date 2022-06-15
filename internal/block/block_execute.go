@@ -153,25 +153,24 @@ func (x *Executor) executeEnvelope(block *Block, delivery *chain.Delivery) (*pro
 
 		delivery.State.Merge(state)
 
-		if typ := delivery.Transaction.Body.Type(); typ == protocol.TransactionTypeSystemGenesis || !typ.IsSystem() {
-			kv := []interface{}{
-				"block", block.Index,
-				"type", delivery.Transaction.Body.Type(),
-				"pending", status.Pending,
-				"delivered", status.Delivered,
-				"remote", status.Remote,
-				"txn-hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4),
-				"principal", delivery.Transaction.Header.Principal,
-			}
-			if status.Code != 0 {
-				kv = append(kv,
-					"code", status.Code,
-					"error", status.Message,
-				)
-				x.logger.Info("Transaction failed", kv...)
-			} else if !delivery.Transaction.Body.Type().IsSystem() {
-				x.logger.Debug("Transaction succeeded", kv...)
-			}
+		typ := delivery.Transaction.Body.Type()
+		kv := []interface{}{
+			"block", block.Index,
+			"type", typ,
+			"pending", status.Pending,
+			"delivered", status.Delivered,
+			"remote", status.Remote,
+			"txn-hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4),
+			"principal", delivery.Transaction.Header.Principal,
+		}
+		if status.Code != 0 {
+			kv = append(kv,
+				"code", status.Code,
+				"error", status.Message,
+			)
+			x.logger.Info("Transaction failed", kv...)
+		} else if !typ.IsSystem() {
+			x.logger.Debug("Transaction succeeded", kv...)
 		}
 
 	} else {

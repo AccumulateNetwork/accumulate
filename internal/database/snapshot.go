@@ -127,7 +127,7 @@ func (c *ChangeSet) RestoreSnapshot(file ioutil2.SectionReader) error {
 
 	// Load the snapshot
 	bpt := pmt.NewBPTManager(c.kvStore)
-	return bpt.Bpt.LoadSnapshot(rd, func(key storage.Key, hash [32]byte, reader ioutil2.SectionReader) error {
+	return bpt.Bpt.LoadSnapshot(rd, func(_ storage.Key, hash [32]byte, reader ioutil2.SectionReader) error {
 		state := new(fullAccountState)
 		err := state.UnmarshalBinaryFrom(reader)
 		if err != nil {

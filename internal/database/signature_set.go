@@ -77,8 +77,7 @@ func newVersionedSignatureSet(container *Transaction, store record.Store, key re
 		return &VersionedSignatureSet{err: errors.Wrap(errors.StatusUnknown, err)}
 	}
 
-	signerUrl := key[3].(*url.URL)
-	err = container.container.Account(signerUrl).State().GetAs(&s.signer)
+	err = container.container.Account(s.getSignerUrl()).State().GetAs(&s.signer)
 	if err != nil {
 		return &VersionedSignatureSet{err: errors.Wrap(errors.StatusUnknown, err)}
 	}
@@ -88,6 +87,10 @@ func newVersionedSignatureSet(container *Transaction, store record.Store, key re
 	}
 
 	return s
+}
+
+func (s *VersionedSignatureSet) getSignerUrl() *url.URL {
+	return s.set.Key(3).(*url.URL)
 }
 
 func (s *VersionedSignatureSet) Get() ([]*SignatureEntry, error) {
@@ -102,8 +105,12 @@ func (s *VersionedSignatureSet) Add(signature protocol.Signature) error {
 		return errors.Wrap(errors.StatusUnknown, s.err)
 	}
 
+	if !s.getSignerUrl().Equal(signature.GetSigner()) {
+		return errors.Format(errors.StatusInternalError, "cannot add signature by %v to signature set %v", signature.GetSigner(), s.getSignerUrl())
+	}
+
 	// Update the signer set
-	err := s.container.addSigner(protocol.AcmeUrl())
+	err := s.container.addSigner(signature.GetSigner())
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}

@@ -23,6 +23,10 @@ type StateManager struct {
 }
 
 func LoadStateManager(net *config.Describe, globals *core.GlobalValues, batch *database.Batch, principal protocol.Account, transaction *protocol.Transaction, status *protocol.TransactionStatus, logger log.Logger) (*StateManager, error) {
+	if !transaction.Body.Type().IsUser() {
+		return NewStateManager(net, globals, batch, principal, transaction, logger), nil
+	}
+
 	var signer protocol.Signer
 	err := batch.Account(status.Initiator).GetStateAs(&signer)
 	switch {
