@@ -332,6 +332,12 @@ func (n *FakeNode) Execute(inBlock func(func(*protocol.Envelope))) (sigHashes, t
 	return sigHashes, txnHashes, nil
 }
 
+func (n *FakeNode) CheckTx(env *protocol.Envelope) abcitypes.ResponseCheckTx {
+	tx, err := env.MarshalBinary()
+	n.Require().NoError(err)
+	return n.app.CheckTx(abcitypes.RequestCheckTx{Tx: tx})
+}
+
 func (n *FakeNode) MustExecute(inBlock func(func(*protocol.Envelope))) (sigHashes, txnHashes [][32]byte) {
 	n.t.Helper()
 
