@@ -58,10 +58,6 @@ func main() {
 	wg.Wait()
 }
 
-func init() {
-
-}
-
 // Init new client from server URL input using client.go
 func initClient(server string) error {
 	// Create new client on localhost
