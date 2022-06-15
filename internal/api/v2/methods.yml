@@ -32,7 +32,7 @@ Query:
   input: GeneralQuery
   output: ChainQueryResponse|TransactionQueryResponse|MultiResponse
   call: QueryUrl
-  call-params: [Url, QueryOptions]
+  call-params: [ Url, QueryOptions ]
 
 QueryDirectory:
   description: queries the directory entries of an account
@@ -40,7 +40,7 @@ QueryDirectory:
   rpc: query-directory
   input: DirectoryQuery
   output: MultiResponse
-  call-params: [Url, QueryPagination, QueryOptions]
+  call-params: [ Url, QueryPagination, QueryOptions ]
 
 QueryChain:
   description: queries an account by ID
@@ -49,7 +49,7 @@ QueryChain:
   rpc: query-chain
   input: ChainIdQuery
   output: ChainQueryResponse
-  call-params: [ChainId]
+  call-params: [ ChainId ]
 
 QueryTx:
   description: queries a transaction by ID
@@ -57,7 +57,7 @@ QueryTx:
   rpc: query-tx
   input: TxnQuery
   output: TransactionQueryResponse
-  call-params: [Txid, Wait, IgnorePending, QueryOptions]
+  call-params: [ Txid, Wait, IgnorePending, QueryOptions ]
 
 QueryTxHistory:
   description: queries an account's transaction history
@@ -65,7 +65,7 @@ QueryTxHistory:
   rpc: query-tx-history
   input: TxHistoryQuery
   output: MultiResponse
-  call-params: [Url, QueryPagination]
+  call-params: [ Url, QueryPagination ]
 
 QueryData:
   description: queries an entry on an account's data chain
@@ -73,7 +73,7 @@ QueryData:
   rpc: query-data
   input: DataEntryQuery
   output: ChainQueryResponse
-  call-params: [Url, EntryHash]
+  call-params: [ Url, EntryHash ]
 
 QueryDataSet:
   description: queries a range of entries on an account's data chain
@@ -81,7 +81,7 @@ QueryDataSet:
   rpc: query-data-set
   input: DataEntrySetQuery
   output: MultiResponse
-  call-params: [Url, QueryPagination, QueryOptions]
+  call-params: [ Url, QueryPagination, QueryOptions ]
 
 QueryKeyPageIndex:
   description: queries the location of a key within an account's key book(s)
@@ -89,7 +89,7 @@ QueryKeyPageIndex:
   rpc: query-key-index
   input: KeyPageIndexQuery
   output: ChainQueryResponse
-  call-params: [Url, Key]
+  call-params: [ Url, Key ]
 
 QueryMinorBlocks:
   description: queries an account's minor blocks
@@ -98,7 +98,7 @@ QueryMinorBlocks:
   rpc: query-minor-blocks
   input: MinorBlocksQuery
   output: MultiResponse
-  call-params: [Url, QueryPagination, TxFetchMode, BlockFilterMode]
+  call-params: [ Url, QueryPagination, TxFetchMode, BlockFilterMode ]
 
 QueryMajorBlocks:
   description: queries an account's major blocks
@@ -107,7 +107,7 @@ QueryMajorBlocks:
   rpc: query-major-blocks
   input: MajorBlocksQuery
   output: MultiResponse
-  call-params: [Url, QueryPagination]
+  call-params: [ Url, QueryPagination ]
 
 QuerySynth:
   kind: query
@@ -115,7 +115,7 @@ QuerySynth:
   rpc: query-synth
   input: SyntheticTransactionRequest
   output: TransactionQueryResponse
-  call-params: [Source, Destination, SequenceNumber]
+  call-params: [ Source, Destination, SequenceNumber ]
 
 Execute:
   description: submits a transaction
@@ -128,7 +128,7 @@ ExecuteDirect:
   rpc: execute-direct
   input: ExecuteRequest
   output: TxResponse
-  call-params: [Envelope, CheckOnly]
+  call-params: [ Envelope, CheckOnly ]
 
 ExecuteCreateAdi:
   description: submits a CreateIdentity transaction
@@ -177,7 +177,7 @@ ExecuteSendTokens:
   kind: execute
   rpc: send-tokens
   input: SendTokens
-  validate: [From, To]
+  validate: [ From, To ]
 
 ExecuteAddCredits:
   description: submits an AddCredits transaction
@@ -244,9 +244,3 @@ ExecuteUpdateAccountAuth:
   kind: execute
   rpc: update-account-auth
   input: UpdateAccountAuth
-
-ExecuteUpdateNetworkGlobals:
-  description: submits an UpdateNetworkGlobals transaction
-  kind: execute
-  rpc: set-network-globals
-  input: UpdateNetworkGlobals

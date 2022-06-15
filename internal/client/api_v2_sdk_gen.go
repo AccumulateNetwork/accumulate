@@ -238,18 +238,6 @@ func (c *Client) ExecuteUpdateKeyPage(ctx context.Context, req *api.TxRequest) (
 	return &resp, nil
 }
 
-// ExecuteUpdateNetworkGlobals submits an UpdateNetworkGlobals transaction.
-func (c *Client) ExecuteUpdateNetworkGlobals(ctx context.Context, req *api.TxRequest) (*api.TxResponse, error) {
-	var resp api.TxResponse
-
-	err := c.RequestAPIv2(ctx, "set-network-globals", req, &resp)
-	if err != nil {
-		return nil, err
-	}
-
-	return &resp, nil
-}
-
 // ExecuteUpdateValidatorKey submits an UpdateValidatorKey transaction.
 func (c *Client) ExecuteUpdateValidatorKey(ctx context.Context, req *api.TxRequest) (*api.TxResponse, error) {
 	var resp api.TxResponse
