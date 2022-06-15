@@ -45,13 +45,14 @@ func (m *Executor) EndBlock(block *Block) error {
 
 	// Update active globals
 	if !m.isGenesis && !m.globals.Active.Equal(&m.globals.Pending) {
-		m.globals.Active = *m.globals.Pending.Copy()
-		err = m.EventBus.Publish(events.DidChangeGlobals{
-			Values: &m.globals.Active,
+		err = m.EventBus.Publish(events.WillChangeGlobals{
+			New: &m.globals.Pending,
+			Old: &m.globals.Active,
 		})
 		if err != nil {
 			return errors.Format(errors.StatusUnknown, "publish globals update: %w", err)
 		}
+		m.globals.Active = *m.globals.Pending.Copy()
 	}
 
 	m.logger.Debug("Committing",

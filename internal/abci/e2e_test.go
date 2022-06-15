@@ -1635,6 +1635,6 @@ func TestNetworkDefinition(t *testing.T) {
 	networkDefs := dn.exec.ActiveGlobals_TESTONLY().Network
 	require.NotEmpty(t, networkDefs.Subnets)
 	require.NotEmpty(t, networkDefs.Subnets[0].SubnetID)
-	require.NotEmpty(t, networkDefs.Subnets[0].ValidatorKeyHashes)
-	require.NotEmpty(t, networkDefs.Subnets[0].ValidatorKeyHashes[0])
+	require.NotEmpty(t, networkDefs.Subnets[0].ValidatorKeys)
+	require.NotEmpty(t, networkDefs.Subnets[0].ValidatorKeys[0])
 }

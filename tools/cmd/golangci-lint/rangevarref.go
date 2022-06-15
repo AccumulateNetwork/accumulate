@@ -35,36 +35,30 @@ func rangevarref(pass *analysis.Pass) (interface{}, error) {
 
 func findLoopWithValueTypeVar(pass *analysis.Pass, node ast.Node) bool {
 	stmt, ok := node.(*ast.RangeStmt)
-	if !ok || stmt.Value == nil {
+	if !ok {
 		return true
 	}
 
-	if isRefType(pass.TypesInfo.TypeOf(stmt.Value)) {
-		return true
-	}
+	inspectRangeVar(pass, stmt.Body, stmt.Key)
+	inspectRangeVar(pass, stmt.Body, stmt.Value)
 
-	loopVar := pass.TypesInfo.ObjectOf(stmt.Value.(*ast.Ident))
-	ast.Inspect(stmt.Body, func(n ast.Node) bool {
-		return findTakeRefOfLoopVar(pass, n, loopVar)
-	})
 	return true
 }
 
-func isRefType(typ types.Type) bool {
-	switch typ.(type) {
-	case *types.Pointer,
-		*types.Chan,
-		*types.Interface,
-		*types.Map,
-		*types.Slice:
-		return true
-	}
-	u := typ.Underlying()
-	if u == typ {
-		return false
+func inspectRangeVar(pass *analysis.Pass, body ast.Node, rvar ast.Expr) {
+	if rvar == nil {
+		return
 	}
 
-	return isRefType(u)
+	ident, ok := rvar.(*ast.Ident)
+	if !ok {
+		return
+	}
+
+	loopVar := pass.TypesInfo.ObjectOf(ident)
+	ast.Inspect(body, func(n ast.Node) bool {
+		return findTakeRefOfLoopVar(pass, n, loopVar)
+	})
 }
 
 func findTakeRefOfLoopVar(pass *analysis.Pass, node ast.Node, loopVar types.Object) bool {
@@ -80,11 +74,27 @@ func findTakeRefOfLoopVar(pass *analysis.Pass, node ast.Node, loopVar types.Obje
 		}
 		operand = expr.X
 
-	case *ast.IndexExpr:
-		operand = expr.X
+		// It is never safe to take the address of a range variable
+
+	// case *ast.IndexExpr:
+	// 	operand = expr.X
 
 	case *ast.SliceExpr:
 		operand = expr.X
+
+		switch typ := loopVar.Type().(type) {
+		case *types.Basic:
+			if typ.Kind() == types.String {
+				// It's safe to slice a string range variable
+				return true
+			}
+
+		case *types.Slice:
+			// It's safe to slice a slice range variable
+			return true
+		}
+
+		// It is not safe to slice array or value-type range variables
 
 	default:
 		return true
@@ -99,6 +109,23 @@ func findTakeRefOfLoopVar(pass *analysis.Pass, node ast.Node, loopVar types.Obje
 		return true
 	}
 
-	pass.Reportf(node.Pos(), "Taking the address of a value-type range variable is unsafe")
+	pass.Reportf(node.Pos(), "Taking the address of a range variable is unsafe")
 	return true
 }
+
+// func isRefType(typ types.Type) bool {
+// 	switch typ.(type) {
+// 	case *types.Pointer,
+// 		*types.Chan,
+// 		*types.Interface,
+// 		*types.Map,
+// 		*types.Slice:
+// 		return true
+// 	}
+// 	u := typ.Underlying()
+// 	if u == typ {
+// 		return false
+// 	}
+
+// 	return isRefType(u)
+// }

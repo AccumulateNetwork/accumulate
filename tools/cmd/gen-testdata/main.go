@@ -170,7 +170,7 @@ func txnTest(originUrl *url.URL, body TransactionBody) *TC {
 	signer.Url = originUrl
 	signer.SetPrivateKey(key)
 	signer.Version = 1
-	signer.Timestamp = uint64(rand.Uint32())
+	signer.SetTimestamp(uint64(rand.Uint32()))
 	env := new(Envelope)
 	txn := new(Transaction)
 	env.Transaction = []*Transaction{txn}

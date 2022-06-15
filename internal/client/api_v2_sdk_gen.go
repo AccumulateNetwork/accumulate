@@ -46,18 +46,6 @@ func (c *Client) ExecuteAddCredits(ctx context.Context, req *api.TxRequest) (*ap
 	return &resp, nil
 }
 
-// ExecuteAddValidator submits an AddValidator transaction.
-func (c *Client) ExecuteAddValidator(ctx context.Context, req *api.TxRequest) (*api.TxResponse, error) {
-	var resp api.TxResponse
-
-	err := c.RequestAPIv2(ctx, "add-validator", req, &resp)
-	if err != nil {
-		return nil, err
-	}
-
-	return &resp, nil
-}
-
 // ExecuteBurnTokens submits a BurnTokens transaction.
 func (c *Client) ExecuteBurnTokens(ctx context.Context, req *api.TxRequest) (*api.TxResponse, error) {
 	var resp api.TxResponse
@@ -178,18 +166,6 @@ func (c *Client) ExecuteIssueTokens(ctx context.Context, req *api.TxRequest) (*a
 	return &resp, nil
 }
 
-// ExecuteRemoveValidator submits a RemoveValidator transaction.
-func (c *Client) ExecuteRemoveValidator(ctx context.Context, req *api.TxRequest) (*api.TxResponse, error) {
-	var resp api.TxResponse
-
-	err := c.RequestAPIv2(ctx, "remove-validator", req, &resp)
-	if err != nil {
-		return nil, err
-	}
-
-	return &resp, nil
-}
-
 // ExecuteSendTokens submits a SendTokens transaction.
 func (c *Client) ExecuteSendTokens(ctx context.Context, req *api.TxRequest) (*api.TxResponse, error) {
 	var resp api.TxResponse
@@ -231,18 +207,6 @@ func (c *Client) ExecuteUpdateKeyPage(ctx context.Context, req *api.TxRequest) (
 	var resp api.TxResponse
 
 	err := c.RequestAPIv2(ctx, "update-key-page", req, &resp)
-	if err != nil {
-		return nil, err
-	}
-
-	return &resp, nil
-}
-
-// ExecuteUpdateValidatorKey submits an UpdateValidatorKey transaction.
-func (c *Client) ExecuteUpdateValidatorKey(ctx context.Context, req *api.TxRequest) (*api.TxResponse, error) {
-	var resp api.TxResponse
-
-	err := c.RequestAPIv2(ctx, "update-validator-key", req, &resp)
 	if err != nil {
 		return nil, err
 	}
