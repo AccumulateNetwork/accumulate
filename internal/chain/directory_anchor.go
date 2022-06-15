@@ -112,8 +112,8 @@ func processNetworkAccountUpdates(st *StateManager, delivery *Delivery, updates 
 		txn.Body = update.Body
 
 		switch update.Name {
-		case protocol.OperatorBook:
-			txn.Header.Principal = st.DefaultOperatorPage()
+		case protocol.Operators:
+			txn.Header.Principal = st.OperatorsPage()
 		default:
 			txn.Header.Principal = st.NodeUrl(update.Name)
 		}

@@ -113,5 +113,5 @@ func CreateKeyBook(args []string) (string, error) {
 
 	publicKeyHash := k.PublicKeyHash()
 	keyBook.PublicKeyHash = publicKeyHash
-	return dispatchTxAndPrintResponse(&keyBook, nil, originUrl, signer)
+	return dispatchTxAndPrintResponse(&keyBook, originUrl, signer)
 }

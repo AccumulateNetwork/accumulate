@@ -131,7 +131,7 @@ func queryDataByHash(client *client.Client, account *url.URL, hash []byte) (*api
 func WriteDataFromQueueToAccumulate(env string) {
 	for chainId, data := range factomChainData {
 		// go ExecuteQueueToWriteData(chainId, data)
-		chainUrl, err := protocol.LiteDataAddress(chainId[:])
+		chainUrl, err := protocol.LiteDataAddress(chainId[:]) //nolint:rangevarref
 		if err != nil {
 			log.Println("Error : ", err.Error())
 			break
@@ -144,7 +144,7 @@ func WriteDataFromQueueToAccumulate(env string) {
 
 func ExecuteQueueToWriteData(env string, chainUrl *url.URL, queue *Queue) {
 	for {
-		if len(*&queue.q) > 0 {
+		if len(queue.q) > 0 {
 			entry := queue.Pop().(*f2.Entry)
 			dataEntry := ConvertFactomDataEntryToLiteDataEntry(*entry)
 			err := WriteDataToAccumulate(env, dataEntry, chainUrl)

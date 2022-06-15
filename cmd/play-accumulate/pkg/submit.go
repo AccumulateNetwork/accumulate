@@ -107,7 +107,7 @@ func (b bldTxn) readyToSign(key interface{}, init bool) {
 
 func (b bldTxn) Sign(key interface{}) bldTxn {
 	b.readyToSign(key, false)
-	b.b.Timestamp = 0
+	b.b.Timestamp = nil
 	sig, err := b.b.Sign(b.transaction.GetHash())
 	if err != nil {
 		b.s.Abortf("Failed to sign: %v", err)

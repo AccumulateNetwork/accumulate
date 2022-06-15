@@ -50,6 +50,7 @@ var (
 	Password             string
 	DatabaseDir          string
 	NoWalletVersionCheck bool
+	AdditionalSigners    []string
 )
 
 var currentUser = func() *user.User {
@@ -93,6 +94,7 @@ func InitRootCmd(database db.DB) *cobra.Command {
 	flags.StringVarP(&Metadata, "metadata", "a", Metadata, "Transaction Metadata")
 	flags.StringSliceVar(&Authorities, "authority", nil, "Additional authorities to add when creating an account")
 	flags.StringSliceVar(&Delegators, "delegator", nil, "Specifies the delegator when creating a delegated signature")
+	flags.StringSliceVar(&AdditionalSigners, "sign-with", nil, "Specifies additional keys to sign the transaction with")
 
 	//add the commands
 	cmd.AddCommand(encryptCmd)
@@ -109,7 +111,7 @@ func InitRootCmd(database db.DB) *cobra.Command {
 	cmd.AddCommand(tokenCmd)
 	cmd.AddCommand(txCmd)
 	cmd.AddCommand(blocksCmd)
-	cmd.AddCommand(validatorCmd)
+	cmd.AddCommand(operatorCmd, validatorCmd)
 	cmd.AddCommand(versionCmd)
 
 	//for the testnet integration
