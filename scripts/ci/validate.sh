@@ -234,7 +234,7 @@ BALANCE=$(accumulate -j account get ${LITE_TOK} | jq -r .data.balance)
 
 section "Create lite data account and write the data"
 ACCOUNT_ID=$(accumulate -j account create data --lite test.acme test-1-0 "Factom PRO" "Tutorial" | jq -r .accountUrl)
-[ "$ACCOUNT_ID" == "acc://b36c1c4073305a41edc6353a094329c24ffa54c029a521aa" ] || die "${ACCOUNT_ID} does not match expected value"
+[ "$ACCOUNT_ID" == "acc://b36c1c4073305a41edc6353a094329c24ffa54c0a47fb56227a04477bcb78923" ] || die "${ACCOUNT_ID} does not match expected value"
 accumulate data get $ACCOUNT_ID 0 1 1> /dev/null || die "lite data entry not found"
 wait-for cli-tx data write-to test.acme test-1-0 $ACCOUNT_ID "data test"
 accumulate data get $ACCOUNT_ID 0 2 1> /dev/null || die "lite data error"
@@ -244,7 +244,7 @@ success
 
 section "Create lite data account with first entry"
 ACCOUNT_ID=$(accumulate -j account create data --lite test.acme test-1-0 "First Data Entry" "Check" --lite-data "first entry" | jq -r .accountUrl)
-[ "$ACCOUNT_ID" == "acc://4df014cc532c140066add495313e0ffaecba1eba5454cefa" ] || die "${ACCOUNT_ID} does not match expected value"
+[ "$ACCOUNT_ID" == "acc://4df014cc532c140066add495313e0ffaecba1eba2a4fb95e30d37fc3f87e9ab8" ] || die "${ACCOUNT_ID} does not match expected value"
 accumulate -j data get $ACCOUNT_ID 0 1 1> /dev/null || die "lite data entry not found"
 wait-for cli-tx data write-to test.acme test-1-0 $ACCOUNT_ID "data test"
 accumulate data get $ACCOUNT_ID 0 2 1> /dev/null || die "lite data error"
