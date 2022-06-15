@@ -31,7 +31,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-var genesisTime = time.Date(2022, 7, 1, 0, 0, 0, 0, time.UTC)
+var genesisTime = time.Now() // time.Date(2022, 7, 1, 0, 0, 0, 0, time.UTC)
 
 type Simulator struct {
 	tb

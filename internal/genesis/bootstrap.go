@@ -105,6 +105,7 @@ type bootstrap struct {
 func (b *bootstrap) Bootstrap() error {
 	b.block = new(block.Block)
 	b.block.Index = protocol.GenesisBlock
+
 	b.block.Time = b.GenesisTime
 	b.block.Batch = b.db.Begin(true)
 	defer b.block.Batch.Discard()
