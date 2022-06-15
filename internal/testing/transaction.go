@@ -22,6 +22,11 @@ func NewTransaction() TransactionBuilder {
 	return tb
 }
 
+func (tb TransactionBuilder) SetSigner(s *signing.Builder) TransactionBuilder {
+	tb.signer = *s
+	return tb
+}
+
 func (tb TransactionBuilder) WithHeader(hdr *protocol.TransactionHeader) TransactionBuilder {
 	tb.Transaction[0].Header = *hdr
 	return tb

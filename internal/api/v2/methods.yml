@@ -221,24 +221,6 @@ ExecuteBurnTokens:
   rpc: burn-tokens
   input: BurnTokens
 
-ExecuteAddValidator:
-  description: submits an AddValidator transaction
-  kind: execute
-  rpc: add-validator
-  input: AddValidator
-
-ExecuteRemoveValidator:
-  description: submits a RemoveValidator transaction
-  kind: execute
-  rpc: remove-validator
-  input: RemoveValidator
-
-ExecuteUpdateValidatorKey:
-  description: submits an UpdateValidatorKey transaction
-  kind: execute
-  rpc: update-validator-key
-  input: UpdateValidatorKey
-
 ExecuteUpdateAccountAuth:
   description: submits an UpdateAccountAuth transaction
   kind: execute

@@ -155,9 +155,6 @@ func InterpUseSession(s *Session, I interface {
 			"CreateKeyBook":      reflect.ValueOf((*protocol.CreateKeyBook)(nil)),
 			"AddCredits":         reflect.ValueOf((*protocol.AddCredits)(nil)),
 			"UpdateKeyPage":      reflect.ValueOf((*protocol.UpdateKeyPage)(nil)),
-			"AddValidator":       reflect.ValueOf((*protocol.AddValidator)(nil)),
-			"RemoveValidator":    reflect.ValueOf((*protocol.RemoveValidator)(nil)),
-			"UpdateValidatorKey": reflect.ValueOf((*protocol.UpdateValidatorKey)(nil)),
 			"UpdateAccountAuth":  reflect.ValueOf((*protocol.UpdateAccountAuth)(nil)),
 			"UpdateKey":          reflect.ValueOf((*protocol.UpdateKey)(nil)),
 

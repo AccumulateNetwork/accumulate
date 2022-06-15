@@ -51,7 +51,6 @@ CreateTokenAccount:
       pointer: true
       optional: true
 
-
 SendTokens:
   union: { type: transaction }
   fields:
@@ -220,7 +219,6 @@ AccountStateProof:
     marshal-as: reference
     pointer: true
 
-
 UpdateAccountAuth:
   union: { type: transaction }
   fields:
@@ -228,37 +226,6 @@ UpdateAccountAuth:
       type: AccountAuthOperation
       marshal-as: union
       repeatable: true
-
-
-AddValidator:
-  union: { type: transaction }
-  fields:
-    - name: PubKey
-      type: bytes
-    - name: Owner
-      description: reserved for future use
-      type: url
-      pointer: true
-      optional: true
-
-RemoveValidator:
-  union: { type: transaction }
-  fields:
-    - name: PubKey
-      type: bytes
-    - name: Owner
-      description: reserved for future use
-      type: url
-      pointer: true
-      optional: true
-
-UpdateValidatorKey:
-  union: { type: transaction }
-  fields:
-    - name: PubKey
-      type: bytes
-    - name: NewPubKey
-      type: bytes
 
 UpdateKey:
   union: { type: transaction }

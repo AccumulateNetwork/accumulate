@@ -32,7 +32,7 @@ func TestTransactionPriority(t *testing.T) {
 	cases := map[string]Case{
 		"System": {
 			Envelope: newTxn(bvn.network.AnchorPool().String()).
-				WithSigner(bvn.network.DefaultOperatorPage(), 1).
+				WithSigner(bvn.network.OperatorsPage(), 1).
 				WithBody(&protocol.DirectoryAnchor{
 					SubnetAnchor: protocol.SubnetAnchor{
 						Source:          dn.network.NodeUrl(),
@@ -47,7 +47,7 @@ func TestTransactionPriority(t *testing.T) {
 		},
 		"Synthetic": {
 			Envelope: newTxn("foo/tokens").
-				WithSigner(bvn.network.DefaultOperatorPage(), 1).
+				WithSigner(bvn.network.OperatorsPage(), 1).
 				WithBody(&protocol.SyntheticDepositTokens{
 					Token:  protocol.AcmeUrl(),
 					Amount: *big.NewInt(100),

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"runtime/debug"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -20,7 +21,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
-	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -37,13 +38,14 @@ type Accumulator struct {
 	AccumulatorOptions
 	logger log.Logger
 
-	block        *block.Block
-	txct         int64
-	timer        time.Time
-	didPanic     bool
-	lastSnapshot uint64
-	checkTxBatch *database.Batch
-	checkTxMutex *sync.Mutex
+	block          *block.Block
+	txct           int64
+	timer          time.Time
+	didPanic       bool
+	lastSnapshot   uint64
+	checkTxBatch   *database.Batch
+	checkTxMutex   *sync.Mutex
+	pendingUpdates abci.ValidatorUpdates
 
 	onFatal func(error)
 }
@@ -62,16 +64,14 @@ func NewAccumulator(opts AccumulatorOptions) *Accumulator {
 	app := &Accumulator{
 		AccumulatorOptions: opts,
 		logger:             opts.Logger.With("module", "accumulate", "subnet", opts.Accumulate.SubnetId),
+		checkTxMutex:       &sync.Mutex{},
 	}
+
+	events.SubscribeSync(opts.EventBus, app.willChangeGlobals)
 
 	events.SubscribeAsync(opts.EventBus, func(e events.DidSaveSnapshot) {
 		atomic.StoreUint64(&app.lastSnapshot, e.MinorIndex)
 	})
-
-	if app.Executor == nil {
-		panic("Chain Validator Node not set!")
-	}
-	app.checkTxMutex = &sync.Mutex{}
 
 	app.logger.Info("Starting ABCI application", "accumulate", accumulate.Version, "abci", Version)
 	return app
@@ -121,6 +121,47 @@ func (app *Accumulator) recover(code *uint32, setDidPanic bool) {
 	if code != nil {
 		*code = uint32(protocol.ErrorCodeDidPanic)
 	}
+}
+
+// willChangeGlobals is called when the global values are about to change.
+// willChangeGlobals populates the validator update list, which is passed to
+// Tendermint to update the validator set.
+func (app *Accumulator) willChangeGlobals(e events.WillChangeGlobals) error {
+	// Compare the old and new subnet definitions
+	updates, err := e.Old.DiffValidators(e.New, app.Accumulate.SubnetId)
+	if err != nil {
+		return err
+	}
+
+	// Convert the update list into Tendermint validator updates
+	for key, typ := range updates {
+		key := key // See docs/developer/rangevarref.md
+		vu := abci.ValidatorUpdate{
+			PubKey: protocrypto.PublicKey{
+				Sum: &protocrypto.PublicKey_Ed25519{
+					Ed25519: key[:],
+				},
+			},
+		}
+		switch typ {
+		case core.ValidatorUpdateAdd:
+			vu.Power = 1
+		case core.ValidatorUpdateRemove:
+			vu.Power = 0
+		default:
+			continue
+		}
+		app.pendingUpdates = append(app.pendingUpdates, vu)
+	}
+
+	// Sort the list so we're deterministic
+	sort.Slice(app.pendingUpdates, func(i, j int) bool {
+		a := app.pendingUpdates[i].PubKey.GetEd25519()
+		b := app.pendingUpdates[j].PubKey.GetEd25519()
+		return bytes.Compare(a, b) < 0
+	})
+
+	return nil
 }
 
 // Info implements github.com/tendermint/tendermint/abci/types.Application.
@@ -308,29 +349,6 @@ func (app *Accumulator) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBegi
 
 	app.txct = 0
 
-	/*
-		app.ValUpdates = make([]types.ValidatorUpdate, 0)
-
-		// Punish validators who committed equivocation.
-		for _, ev := range req.ByzantineValidators {
-			if ev.Type == types.EvidenceType_DUPLICATE_VOTE {
-				addr := string(ev.Validator.Address)
-				if pubKey, ok := app.valAddrToPubKeyMap[addr]; ok {
-					app.updateValidator(types.ValidatorUpdate{
-						PubKey: pubKey,
-						Power:  ev.Validator.Power - 1,
-					})
-					app.logger.Info("Decreased val power by 1 because of the equivocation",
-						"val", addr)
-				} else {
-					app.logger.Error("Wanted to punish val, but can't find it",
-						"val", addr)
-				}
-			}
-		}
-
-	*/
-
 	return ret
 }
 
@@ -439,29 +457,9 @@ func (app *Accumulator) EndBlock(req abci.RequestEndBlock) abci.ResponseEndBlock
 	}
 
 	var resp abci.ResponseEndBlock
-	resp.ValidatorUpdates = getValidatorUpdates(app.block.State.ValidatorsUpdates)
+	resp.ValidatorUpdates = app.pendingUpdates
+	app.pendingUpdates = nil
 	return resp
-}
-
-// getValidatorUpdates adapts the Accumulate ValidatorUpdate struct array to the Tendermint ValidatorUpdate
-func getValidatorUpdates(updates []chain.ValidatorUpdate) []abci.ValidatorUpdate {
-	validatorUpdates := make([]abci.ValidatorUpdate, len(updates))
-	for i, u := range updates {
-		var pwr int64
-		if u.Enabled {
-			pwr = 1
-		}
-
-		validatorUpdates[i] = abci.ValidatorUpdate{
-			PubKey: protocrypto.PublicKey{
-				Sum: &protocrypto.PublicKey_Ed25519{
-					Ed25519: u.PubKey,
-				},
-			},
-			Power: pwr,
-		}
-	}
-	return validatorUpdates
 }
 
 // Commit implements github.com/tendermint/tendermint/abci/types.Application.
