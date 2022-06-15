@@ -37,10 +37,6 @@ func (v *ValueAs[T]) Put(value T) error {
 	return nil
 }
 
-func newfn[T any]() func() *T {
-	return func() *T { return new(T) }
-}
-
 func NewValue[T encoding.BinaryValue](batch *Batch, new func() T, key storage.Key) *ValueAs[T] {
 	return &ValueAs[T]{batch, key, new}
 }

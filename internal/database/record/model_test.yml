@@ -1,0 +1,27 @@
+- name: ChangeSet
+  type: entity
+  root: true
+  attributes:
+  - name: Entity
+    type: entity
+    customCommit: true
+    parameters:
+    - name: Name
+      type: string
+    attributes:
+    - name: Union
+      type: state
+      dataType: protocol.Account
+      union: true
+    - name: Set
+      type: state
+      dataType: txid
+      pointer: true
+      set: true
+    - name: Chain
+      type: chain
+      chainType: transaction
+  - name: ChangeLog
+    type: state
+    dataType: string
+    counted: true
