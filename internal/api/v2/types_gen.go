@@ -1608,7 +1608,7 @@ func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 		v.Signatures[i] = x
 	}
 	v.Status = u.Status
-	if !(u.Produced == nil) {
+	if !(len(u.Produced) == 0) {
 		v.Produced = u.Produced
 	} else {
 		v.Produced = u.SyntheticTxids

@@ -228,12 +228,22 @@ func (v *{{.Name}}) UnmarshalBinaryFrom(rd io.Reader) error {
 {{- end}}
 {{- end}}
 
+{{define "jsonAltIsZero"}}
+{{- if .Field.Repeatable -}}
+len({{.Src}}.{{get .Field}}) == 0
+{{- else if and .Field.AsReference (not .Field.Pointer) -}}
+{{.Src}}.{{get .Field}}.Equal(&{{resolveType .Field false}}{})
+{{- else -}}
+{{.Src}}.{{get .Field}} == {{jsonZeroValue .Field}}
+{{- end}}
+{{- end}}
+
 {{define "valueFromJson"}}
 {{- if and .Field.IsMarshalled (not (and .Field.NonBinary .Field.Virtual))}}
 {{- if .Field.Virtual}}
 {{areEqual .Field (print .Dst "." (get .Field)) (print .Src "." .Field.Name) (errVirtualFieldNotEqual .Field (print .Dst "." (get .Field)) (print .Src "." .Field.Name))}}
 {{- else if .Field.AlternativeName}}
-if !(u.{{get .Field}}{{if and .Field.AsReference (not .Field.Pointer)}}.Equal(&{{resolveType .Field false}}{}){{else}} == {{jsonZeroValue .Field}}{{end}}) {
+if !({{template "jsonAltIsZero" .}}) {
 	{{valueFromJson .Field (print .Dst "." (get .Field)) (print .Src "." .Field.Name) (get .Field)}}
 } else {
 	{{valueFromJson .Field (print .Dst "." (get .Field)) (print .Src "." .Field.AlternativeName) (get .Field)}}

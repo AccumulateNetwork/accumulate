@@ -160,9 +160,11 @@ func (v *Network) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Id         string                       `json:"id,omitempty"`
 		Partitions encoding.JsonList[Partition] `json:"partitions,omitempty"`
+		Subnets    encoding.JsonList[Partition] `json:"subnets,omitempty"`
 	}{}
 	u.Id = v.Id
 	u.Partitions = v.Partitions
+	u.Subnets = v.Partitions
 	return json.Marshal(&u)
 }
 
@@ -184,14 +186,20 @@ func (v *Network) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Id         string                       `json:"id,omitempty"`
 		Partitions encoding.JsonList[Partition] `json:"partitions,omitempty"`
+		Subnets    encoding.JsonList[Partition] `json:"subnets,omitempty"`
 	}{}
 	u.Id = v.Id
 	u.Partitions = v.Partitions
+	u.Subnets = v.Partitions
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.Id = u.Id
-	v.Partitions = u.Partitions
+	if !(len(u.Partitions) == 0) {
+		v.Partitions = u.Partitions
+	} else {
+		v.Partitions = u.Subnets
+	}
 	return nil
 }
 
