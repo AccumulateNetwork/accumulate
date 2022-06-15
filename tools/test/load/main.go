@@ -19,16 +19,22 @@ import (
 var serverUrl string
 var parallelism, transactions int
 
+const maxGoroutines = 25
+
 func main() {
 	flag.Parse()
 
 	parallelization := parallelism
 	c := make(chan int)
 
+	// Setup routine guard and limit
+	guard := make(chan struct{}, maxGoroutines)
+
 	// run clients in parallel
 	var wg sync.WaitGroup
 	wg.Add(parallelization)
-	for ii := 0; ii < parallelization; ii++ {
+	for ii := 0; ii <= parallelization; ii++ {
+		guard <- struct{}{} // would block if guard channel is already filled
 		go func(c chan int) {
 			for {
 				v, more := <-c
@@ -41,12 +47,14 @@ func main() {
 				if err != nil {
 					fmt.Printf("Error: %v\n", err)
 				}
+				// time to release goroutine
+				<-guard
 			}
 		}(c)
 	}
 
 	// send number of clients to be created
-	for ii := 0; ii < parallelization; ii++ {
+	for ii := 0; ii <= parallelization; ii++ {
 		c <- ii
 	}
 
@@ -68,8 +76,7 @@ func initClient(server string) error {
 	checkf(err, "creating client")
 	client.DebugRequest = true
 
-	// Limit amount of goroutines
-	maxGoroutines := 25
+	// Setup routine guard and limit
 	guard := make(chan struct{}, maxGoroutines)
 
 	file, err := os.OpenFile("load_logs.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
@@ -124,11 +131,6 @@ func initClient(server string) error {
 		<-timer.C
 	}
 
-	// wait for goroutines to finish
-	for i := 0; i < maxGoroutines; i++ {
-		guard <- struct{}{}
-	}
-
 	//Stop time Tx executions
 	stop := time.Now()
 	log.Printf("The Txs execution took %v to run.\n", stop.Sub(start))
@@ -141,7 +143,7 @@ func initClient(server string) error {
 // Initiate several clients
 func initClients(c int) error {
 	// Initiate clients and wait for them to finish
-	for i := 0; i < c; i++ {
+	for i := 0; i <= c; i++ {
 		err := initClient(serverUrl)
 		if err != nil {
 			return err
