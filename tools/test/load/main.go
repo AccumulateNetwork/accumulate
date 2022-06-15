@@ -17,11 +17,12 @@ import (
 )
 
 var serverUrl string
-var parallelism int
+var parallelism, transactions int
 
 func main() {
 	flag.StringVar(&serverUrl, "s", "http://127.0.1.1:26660/v2", "Accumulate server URL")
 	flag.IntVar(&parallelism, "p", 5, "Number of parallel clients")
+	flag.IntVar(&transactions, "t", 100, "Number of transactions per client")
 	flag.Parse()
 
 	parallelization := parallelism
@@ -82,7 +83,7 @@ func initClient(server string) error {
 	start := time.Now()
 
 	// run key generation in cycle
-	for i := 0; i < 100; i++ {
+	for i := 0; i < transactions; i++ {
 		// create accounts and store them
 		acc, _ := createAccount(i)
 
