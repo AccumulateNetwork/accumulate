@@ -10,7 +10,7 @@ import (
 )
 
 // retain this for debugging purposes
-//nolint:deadcode
+//nolint:unused,deadcode
 func printNode(wr io.Writer, fset *token.FileSet, node ast.Node) {
 	var buf bytes.Buffer
 	printer.Fprint(&buf, fset, node)

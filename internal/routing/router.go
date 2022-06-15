@@ -104,8 +104,8 @@ func NewRouter(eventBus *events.Bus, cm connections.ConnectionManager) *RouterIn
 	r := new(RouterInstance)
 	r.connectionManager = cm
 
-	events.SubscribeSync(eventBus, func(e events.DidChangeGlobals) error {
-		tree, err := NewRouteTree(e.Values.Routing)
+	events.SubscribeSync(eventBus, func(e events.WillChangeGlobals) error {
+		tree, err := NewRouteTree(e.New.Routing)
 		if err != nil {
 			return errors.Wrap(errors.StatusUnknown, err)
 		}

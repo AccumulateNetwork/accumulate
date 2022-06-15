@@ -173,7 +173,7 @@ func CreateKeyPage(bookUrlStr string, args []string) (string, error) {
 		ckp.Keys[i] = &ksp
 	}
 
-	return dispatchTxAndPrintResponse(&ckp, nil, bookUrl, signer)
+	return dispatchTxAndPrintResponse(&ckp, bookUrl, signer)
 }
 
 func KeyPageUpdate(origin string, op protocol.KeyPageOperationType, args []string) (string, error) {
@@ -232,7 +232,7 @@ func KeyPageUpdate(origin string, op protocol.KeyPageOperationType, args []strin
 		})
 	}
 
-	return dispatchTxAndPrintResponse(&ukp, nil, u, signer)
+	return dispatchTxAndPrintResponse(&ukp, u, signer)
 }
 
 func setKeyPageThreshold(args []string) (string, error) {
@@ -253,7 +253,7 @@ func setKeyPageThreshold(args []string) (string, error) {
 	txn := new(protocol.UpdateKeyPage)
 	txn.Operation = append(txn.Operation, op)
 
-	return dispatchTxAndPrintResponse(txn, nil, principal, signer)
+	return dispatchTxAndPrintResponse(txn, principal, signer)
 }
 
 func lockKeyPage(args []string) (string, error) {
@@ -267,7 +267,7 @@ func lockKeyPage(args []string) (string, error) {
 	txn := new(protocol.UpdateKeyPage)
 	txn.Operation = append(txn.Operation, op)
 
-	return dispatchTxAndPrintResponse(txn, nil, principal, signer)
+	return dispatchTxAndPrintResponse(txn, principal, signer)
 }
 
 func unlockKeyPage(args []string) (string, error) {
@@ -281,5 +281,5 @@ func unlockKeyPage(args []string) (string, error) {
 	txn := new(protocol.UpdateKeyPage)
 	txn.Operation = append(txn.Operation, op)
 
-	return dispatchTxAndPrintResponse(txn, nil, principal, signer)
+	return dispatchTxAndPrintResponse(txn, principal, signer)
 }

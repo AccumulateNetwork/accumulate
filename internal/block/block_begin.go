@@ -231,7 +231,7 @@ func (x *Executor) captureValueAsDataEntry(batch *database.Batch, internalAccoun
 	dataAccountUrl := x.Describe.NodeUrl(internalAccountPath)
 
 	var signer protocol.Signer
-	signerUrl := x.Describe.DefaultOperatorPage()
+	signerUrl := x.Describe.OperatorsPage()
 	err = batch.Account(signerUrl).GetStateAs(&signer)
 	if err != nil {
 		return err
@@ -444,7 +444,7 @@ func (x *Executor) signTransaction(batch *database.Batch, txn *protocol.Transact
 	}
 
 	var page *protocol.KeyPage
-	err := batch.Account(x.Describe.DefaultOperatorPage()).GetStateAs(&page)
+	err := batch.Account(x.Describe.OperatorsPage()).GetStateAs(&page)
 	if err != nil {
 		return nil, errors.Format(errors.StatusUnknown, "load operator key page: %w", err)
 	}
@@ -453,15 +453,9 @@ func (x *Executor) signTransaction(batch *database.Batch, txn *protocol.Transact
 	bld := new(signing.Builder).
 		SetType(protocol.SignatureTypeED25519).
 		SetPrivateKey(x.Key).
+		SetUrl(config.NetworkUrl{URL: synthSig.DestinationNetwork}.OperatorsPage()).
 		SetVersion(1).
 		SetTimestamp(1)
-
-	book := synthSig.DestinationNetwork.JoinPath(protocol.OperatorBook)
-	if synthSig.DestinationNetwork.Equal(protocol.DnUrl()) {
-		bld.SetKeyPageUrl(book, 0)
-	} else {
-		bld.SetKeyPageUrl(book, 1)
-	}
 
 	keySig, err := bld.Sign(txn.GetHash())
 	if err != nil {
