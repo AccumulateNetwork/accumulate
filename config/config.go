@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"io"
 	"net"
 	"net/url"
@@ -127,6 +128,8 @@ func Default(netName string, net NetworkType, node NodeType, subnetId string) *C
 	c.Accumulate.Storage.Path = filepath.Join("data", "accumulate.db")
 	c.Accumulate.Snapshots.Directory = "snapshots"
 	c.Accumulate.Snapshots.RetainCount = 10
+	c.Accumulate.AnalysisLog.Directory = "analysis"
+	c.Accumulate.AnalysisLog.Enabled = false
 	// c.Accumulate.Snapshots.Frequency = 2
 	switch node {
 	case Validator:
@@ -150,10 +153,11 @@ type Accumulate struct {
 	Describe  `toml:"describe" mapstructure:"describe"`
 	// TODO: move network config to its own file since it will be constantly changing over time.
 	//	NetworkConfig string      `toml:"network" mapstructure:"network"`
-	Snapshots Snapshots `toml:"snapshots" mapstructure:"snapshots"`
-	Storage   Storage   `toml:"storage" mapstructure:"storage"`
-	API       API       `toml:"api" mapstructure:"api"`
-	Website   Website   `toml:"website" mapstructure:"website"`
+	Snapshots   Snapshots   `toml:"snapshots" mapstructure:"snapshots"`
+	Storage     Storage     `toml:"storage" mapstructure:"storage"`
+	API         API         `toml:"api" mapstructure:"api"`
+	Website     Website     `toml:"website" mapstructure:"website"`
+	AnalysisLog AnalysisLog `toml:"analysis" mapstructure:"analysis"`
 }
 
 type Snapshots struct {
@@ -166,6 +170,50 @@ type Snapshots struct {
 	// // Frequency is how many major blocks should occur before another snapshot
 	// // is taken
 	// Frequency int `toml:"frequency" mapstructure:"frequency"`
+}
+
+type AnalysisLog struct {
+	Directory  string `toml:"directory" mapstructure:"directory"`
+	Enabled    bool   `toml:"enabled" mapstructure:"enabled"`
+	dataSetLog *logging.DataSetLog
+}
+
+func (a *AnalysisLog) Init(workingDir string, partitionId string) {
+	if !a.Enabled {
+		return
+	}
+	a.dataSetLog = new(logging.DataSetLog)
+
+	a.dataSetLog.SetProcessName(partitionId)
+	if a.Enabled && a.Directory == "" {
+		a.Directory = "analysis"
+	}
+	analysisDir := MakeAbsolute(workingDir, a.Directory)
+	a.dataSetLog.SetPath(analysisDir)
+
+	_ = os.MkdirAll(analysisDir, 0700)
+
+	ymd, hm := logging.GetCurrentDateTime()
+	a.dataSetLog.SetFileTag(ymd, hm)
+}
+
+func (a *AnalysisLog) InitDataSet(dataSetName string, opts logging.Options) {
+	if a.dataSetLog != nil {
+		a.dataSetLog.Initialize(dataSetName, opts)
+	}
+}
+
+func (a *AnalysisLog) GetDataSet(dataSetName string) *logging.DataSet {
+	if a.dataSetLog != nil {
+		return a.dataSetLog.GetDataSet(dataSetName)
+	}
+	return nil
+}
+
+func (a *AnalysisLog) Flush() {
+	if a.dataSetLog != nil {
+		go a.dataSetLog.DumpDataSetToDiskFile()
+	}
 }
 
 type Storage struct {

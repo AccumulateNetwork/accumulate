@@ -40,6 +40,7 @@ type Accumulator struct {
 	block        *block.Block
 	txct         int64
 	timer        time.Time
+	startTime    time.Time
 	didPanic     bool
 	lastSnapshot uint64
 	checkTxBatch *database.Batch
@@ -63,6 +64,8 @@ func NewAccumulator(opts AccumulatorOptions) *Accumulator {
 		AccumulatorOptions: opts,
 		logger:             opts.Logger.With("module", "accumulate", "subnet", opts.Accumulate.SubnetId),
 	}
+
+	app.Accumulate.AnalysisLog.Init(app.RootDir, app.Accumulate.SubnetId)
 
 	events.SubscribeAsync(opts.EventBus, func(e events.DidSaveSnapshot) {
 		atomic.StoreUint64(&app.lastSnapshot, e.MinorIndex)
@@ -126,6 +129,10 @@ func (app *Accumulator) recover(code *uint32, setDidPanic bool) {
 // Info implements github.com/tendermint/tendermint/abci/types.Application.
 func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
 	defer app.recover(nil, false)
+
+	app.Accumulate.AnalysisLog.InitDataSet("accumulator", logging.DefaultOptions())
+
+	app.startTime = time.Now()
 
 	//todo: load up the merkle databases to the same state we're at...  We will need to rewind.
 
@@ -304,10 +311,8 @@ func (app *Accumulator) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBegi
 		return ret
 	}
 
-	app.timer = time.Now()
-
 	app.txct = 0
-
+	app.timer = time.Now()
 	/*
 		app.ValUpdates = make([]types.ValidatorUpdate, 0)
 
@@ -471,6 +476,7 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 	defer app.recover(nil, true)
 	defer func() { app.block = nil }()
 
+	tick := time.Now()
 	// Is the block empty?
 	if app.block.State.Empty() {
 		// Discard changes
@@ -487,6 +493,10 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 
 	// Commit the batch
 	err := app.block.Batch.Commit()
+
+	commitTime := time.Since(tick).Seconds()
+	tick = time.Now()
+
 	if err != nil {
 		app.fatal(err, true)
 		return abci.ResponseCommit{}
@@ -502,6 +512,8 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 		app.fatal(err, true)
 		return abci.ResponseCommit{}
 	}
+
+	publishEventTime := time.Since(tick).Seconds()
 
 	// Replace start a new checkTx batch
 	app.checkTxMutex.Lock()
@@ -524,6 +536,26 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 		resp.RetainHeight = int64(app.lastSnapshot)
 	}
 
+	ds := app.Accumulate.AnalysisLog.GetDataSet("accumulator")
+	if ds != nil {
+		blockTime := time.Since(app.timer).Seconds()
+		aveBlockTime := 0.0
+		estTps := 0.0
+		if app.txct != 0 {
+			aveBlockTime = blockTime / float64(app.txct)
+			estTps = 1.0 / aveBlockTime
+		}
+		ds.Save("height", app.block.Index, 10, true)
+		ds.Save("time", time.Since(app.startTime).Seconds(), 6, false)
+		ds.Save("block_time", blockTime, 6, false)
+		ds.Save("commit_time", commitTime, 6, false)
+		ds.Save("event_time", publishEventTime, 6, false)
+		ds.Save("ave_block_time", aveBlockTime, 10, false)
+		ds.Save("est_tps", estTps, 10, false)
+		ds.Save("txct", app.txct, 10, false)
+	}
+
+	app.Accumulate.AnalysisLog.Flush()
 	app.logger.Debug("Committed", "minor", app.block.Index, "hash", logging.AsHex(batch.BptRoot()).Slice(0, 4), "major", app.block.State.MakeMajorBlock)
 	return resp
 }

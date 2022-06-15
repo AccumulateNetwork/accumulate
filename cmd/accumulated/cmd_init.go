@@ -536,6 +536,7 @@ func createInLocalFS(dnConfig []*cfg.Config, dnRemote []string, dnListen []strin
 			ListenIP:            bvnListen,
 			NetworkValidatorMap: netValMap,
 			Logger:              logger.With("subnet", fmt.Sprintf("BVN%d", bvn)),
+			DataSetLog:          nil,
 		})
 		check(err)
 		if genesis != nil {
