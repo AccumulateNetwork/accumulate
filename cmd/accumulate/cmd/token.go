@@ -166,7 +166,7 @@ func CreateToken(origin string, args []string) (string, error) {
 		params.Authorities = append(params.Authorities, authUrl)
 	}
 
-	return dispatchTxAndPrintResponse(&params, nil, originUrl, signer)
+	return dispatchTxAndPrintResponse(&params, originUrl, signer)
 }
 
 func IssueTokenToRecipient(origin string, args []string) (string, error) {
@@ -198,7 +198,7 @@ func IssueTokenToRecipient(origin string, args []string) (string, error) {
 	params.Recipient = recipient
 	params.Amount.Set(amt)
 
-	return dispatchTxAndPrintResponse(&params, nil, originUrl, signer)
+	return dispatchTxAndPrintResponse(&params, originUrl, signer)
 }
 
 func BurnTokens(origin string, args []string) (string, error) {
@@ -230,5 +230,5 @@ func BurnTokens(origin string, args []string) (string, error) {
 	params := protocol.BurnTokens{}
 	params.Amount.Set(amt)
 
-	return dispatchTxAndPrintResponse(&params, nil, originUrl, signer)
+	return dispatchTxAndPrintResponse(&params, originUrl, signer)
 }

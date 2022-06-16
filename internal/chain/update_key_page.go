@@ -121,13 +121,6 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 		}
 	}
 
-	isDnOprBook := protocol.IsDnUrl(st.NodeUrl()) && page.KeyBook().Equal(st.Describe.OperatorBook())
-	if isDnOprBook {
-		// Update the threshold for operator book updates
-		ratio := st.Globals.Globals.OperatorAcceptThreshold.GetFloat()
-		page.AcceptThreshold = protocol.GetMOfN(len(page.Keys), ratio)
-	}
-
 	didUpdateKeyPage(page)
 	err = st.Update(page)
 	if err != nil {
