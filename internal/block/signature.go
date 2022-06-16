@@ -633,7 +633,10 @@ func verifySyntheticSignature(net *config.Describe, _ *database.Batch, transacti
 	if !net.NodeUrl().Equal(signature.DestinationNetwork) {
 		return fmt.Errorf("wrong destination network: %v is not this network", signature.DestinationNetwork)
 	}
+	if !signature.RoutingLocation().LocalTo(net.NodeUrl()) {
+		return fmt.Errorf("key used to sign does not belong to the subnet")
 
+	}
 	return nil
 }
 
@@ -653,11 +656,15 @@ func verifyReceiptSignature(transaction *protocol.Transaction, receipt *protocol
 	if !receipt.Proof.Validate() {
 		return fmt.Errorf("invalid receipt")
 	}
+	if !receipt.RoutingLocation().LocalTo(md.Location) {
+		return fmt.Errorf("key used to sign does not belong to the subnet")
+
+	}
 
 	return nil
 }
 
-func verifyInternalSignature(delivery *chain.Delivery, _ *protocol.InternalSignature, md sigExecMetadata) error {
+func verifyInternalSignature(delivery *chain.Delivery, internalSig *protocol.InternalSignature, md sigExecMetadata) error {
 	if md.Nested() {
 		return errors.New(errors.StatusBadRequest, "an internal signature cannot be nested within another signature")
 	}
@@ -669,10 +676,13 @@ func verifyInternalSignature(delivery *chain.Delivery, _ *protocol.InternalSigna
 	if delivery.IsForwarded() {
 		return errors.New(errors.StatusBadRequest, "an internal signature cannot be forwarded")
 	}
+	if !internalSig.RoutingLocation().LocalTo(md.Location) {
+		return fmt.Errorf("key used to sign does not belong to the subnet")
+
+	}
 
 	return nil
 }
-
 func GetAllSignatures(batch *database.Batch, transaction *database.Transaction, status *protocol.TransactionStatus, txnInitHash []byte) ([]protocol.Signature, error) {
 	signatures := make([]protocol.Signature, 1)
 
