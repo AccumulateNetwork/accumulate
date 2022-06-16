@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
 	"sync"
@@ -12,6 +13,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -87,6 +89,20 @@ func initClient(server string) error {
 	log.SetOutput(file)
 	// Start time
 	start := time.Now()
+
+	// Start logging with dataset log
+	dsl := logging.DataSetLog{}
+	path, err := ioutil.TempDir("", "DataSetTest")
+	if err != nil {
+		fatalf("Error: creating temp dir: %v", err)
+	}
+
+	err = os.MkdirAll(path, 0600)
+	if err != nil {
+		fatalf("Error: creating dir: %v", err)
+	}
+	defer os.RemoveAll(path)
+	dsl.SetPath(path)
 
 	// run key generation in cycle
 	for i := 0; i < transactions; i++ {
