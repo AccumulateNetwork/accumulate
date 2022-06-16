@@ -102,6 +102,7 @@ func (d *DataSetLog) DumpDataSetToDiskFile() ([]string, error) {
 	var fileName string
 
 	var val dataValue
+	//var keys []string
 	for dkey, dset := range d.data {
 		//Don't try to write file if no entries saved.
 		if dset.size > 0 {

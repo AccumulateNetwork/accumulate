@@ -70,7 +70,7 @@ func DefaultConfig(networkName string, net config.NetworkType, node config.NodeT
 	return cfg
 }
 
-func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withFactomAddress bool) ([]string, map[string][]*accumulated.Daemon) {
+func CreateTestNet(t testing.TB, numBvns, numValidators, numFollowers int, withFactomAddress bool) ([]string, map[string][]*accumulated.Daemon) {
 	const basePort = 30000
 	tempDir := t.TempDir()
 
@@ -199,7 +199,7 @@ func getSubnetNames(subnets []cfg.Subnet) []string {
 	return res
 }
 
-func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulated.Daemon) {
+func RunTestNet(t testing.TB, subnets []string, daemons map[string][]*accumulated.Daemon) {
 	t.Helper()
 	for _, netName := range subnets {
 		for _, daemon := range daemons[netName] {

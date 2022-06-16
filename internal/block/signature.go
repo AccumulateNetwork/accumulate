@@ -2,6 +2,8 @@ package block
 
 import (
 	"fmt"
+	"runtime"
+	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
@@ -10,6 +12,52 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
+
+type TimerRecord struct {
+	timer   time.Time
+	elapsed float64
+	txct    int
+}
+
+type TimerSet struct {
+	enable  bool
+	timeRec map[string]*TimerRecord
+}
+
+func (t *TimerSet) Reset() {
+	if t.enable {
+		t.timeRec = make(map[string]*TimerRecord)
+	}
+}
+
+func (t *TimerSet) Tick() {
+	if t.enable {
+		pc := make([]uintptr, 15)
+		n := runtime.Callers(2, pc)
+		frames := runtime.CallersFrames(pc[:n])
+		frame, _ := frames.Next()
+		r, ok := t.timeRec[frame.Function]
+		if !ok {
+			r = &TimerRecord{}
+			t.timeRec[frame.Function] = r
+		}
+		r.txct++
+		r.timer = time.Now()
+	}
+}
+
+func (t *TimerSet) Mark() {
+	if t.enable {
+		pc := make([]uintptr, 15)
+		n := runtime.Callers(2, pc)
+		frames := runtime.CallersFrames(pc[:n])
+		frame, _ := frames.Next()
+		r := t.timeRec[frame.Function]
+		if r != nil {
+			r.elapsed = time.Since(r.timer).Seconds()
+		}
+	}
+}
 
 func (x *Executor) ProcessSignature(batch *database.Batch, delivery *chain.Delivery, signature protocol.Signature) (*ProcessSignatureState, error) {
 	err := x.checkRouting(delivery, signature)
