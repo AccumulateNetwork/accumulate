@@ -174,11 +174,23 @@ func nodeReset() {
 		if !ent.IsDir() {
 			continue
 		}
-
-		dir := path.Join(flagMain.WorkDir, ent.Name())
-		fmt.Fprintf(os.Stderr, "Deleting %s\n", dir)
-		err = os.RemoveAll(dir)
-		check(err)
+		isDelete := false
+		if strings.Contains(ent.Name(), "bvn") {
+			isDelete = true
+		} else if strings.Contains(ent.Name(), "dn") {
+			isDelete = true
+		} else if strings.Contains(ent.Name(), ".db") {
+			isDelete = true
+		}
+		if isDelete {
+			dir := path.Join(flagMain.WorkDir, ent.Name())
+			fmt.Fprintf(os.Stderr, "Deleting %s\n", dir)
+			err = os.RemoveAll(dir)
+			check(err)
+		} else {
+			dir := path.Join(flagMain.WorkDir, ent.Name())
+			fmt.Fprintf(os.Stderr, "Skipping %s\n", dir)
+		}
 	}
 }
 
