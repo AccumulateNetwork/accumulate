@@ -140,7 +140,7 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 			err = x.validatePartitionSignature(md.Location, signature)
 		}
 		if err != nil {
-			return nil, fmt.Errorf("key used does not belong to the originating subnet")
+			return nil, fmt.Errorf("key used does not belong to the originating subnet %x", err)
 		}
 		signer, err = x.processKeySignature(batch, delivery, signature, md.Location, !md.Initiated, !md.Delegated && delivery.Transaction.Header.Principal.LocalTo(md.Location))
 
