@@ -5,13 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
-	"path"
 	"strings"
 	"time"
 
 	"github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/libs/log"
-	tmtypes "github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
@@ -26,18 +24,14 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 )
 
-type NetworkValidatorMap map[string][]tmtypes.GenesisValidator
-
 type InitOpts struct {
-	Describe            config.Describe
-	AllConfigs          []*config.Config
-	Validators          []tmtypes.GenesisValidator
-	NetworkValidatorMap NetworkValidatorMap
+	SubnetId            string
+	NetworkType         config.NetworkType
 	GenesisTime         time.Time
 	Logger              log.Logger
 	FactomAddressesFile string
 	GenesisGlobals      *core.GlobalValues
-	Keys                [][]byte
+	OperatorKeys        [][]byte
 }
 
 func Init(kvdb storage.KeyValueStore, opts InitOpts) (Bootstrap, error) {
@@ -49,22 +43,20 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) (Bootstrap, error) {
 		records:     make([]protocol.Account, 0),
 	}
 
-	// Add validator keys to NetworkValidatorMap when not there
-	if b.NetworkValidatorMap == nil {
-		panic("NetworkValidatorMap is not present")
-	}
-	if _, ok := b.NetworkValidatorMap[b.Describe.SubnetId]; !ok {
-		b.NetworkValidatorMap[b.Describe.SubnetId] = b.Validators
-	}
-
 	// Build the routing table
+	var bvns []string
+	for _, subnet := range opts.GenesisGlobals.Network.Subnets {
+		if subnet.SubnetID != protocol.Directory {
+			bvns = append(bvns, subnet.SubnetID)
+		}
+	}
 	b.routingTable = new(protocol.RoutingTable)
-	b.routingTable.Routes = routing.BuildSimpleTable(&opts.Describe.Network)
-	b.routingTable.Overrides = make([]protocol.RouteOverride, 1, len(opts.Describe.Network.Subnets)+1)
+	b.routingTable.Routes = routing.BuildSimpleTable(bvns)
+	b.routingTable.Overrides = make([]protocol.RouteOverride, 1, len(opts.GenesisGlobals.Network.Subnets)+1)
 	b.routingTable.Overrides[0] = protocol.RouteOverride{Account: protocol.AcmeUrl(), Subnet: protocol.Directory}
-	for _, subnet := range opts.Describe.Network.Subnets {
-		u := protocol.SubnetUrl(subnet.Id)
-		b.routingTable.Overrides = append(b.routingTable.Overrides, protocol.RouteOverride{Account: u, Subnet: subnet.Id})
+	for _, subnet := range opts.GenesisGlobals.Network.Subnets {
+		u := protocol.SubnetUrl(subnet.SubnetID)
+		b.routingTable.Overrides = append(b.routingTable.Overrides, protocol.RouteOverride{Account: u, Subnet: subnet.SubnetID})
 	}
 
 	// Create the router
@@ -74,7 +66,10 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) (Bootstrap, error) {
 		return nil, errors.Wrap(errors.StatusUnknown, err)
 	}
 
-	b.genesisExec, err = block.NewGenesisExecutor(b.db, opts.Logger, &opts.Describe, b.router)
+	b.genesisExec, err = block.NewGenesisExecutor(b.db, opts.Logger, &config.Describe{
+		NetworkType: opts.NetworkType,
+		SubnetId:    opts.SubnetId,
+	}, b.router)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknown, err)
 	}
@@ -122,12 +117,6 @@ func (b *bootstrap) Bootstrap() error {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
-	batch := b.db.Begin(false)
-	defer batch.Discard()
-	err = b.writeGenesisFile(batch.BptRoot())
-	if err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
-	}
 	return nil
 }
 
@@ -168,12 +157,12 @@ func (b *bootstrap) Execute(st *chain.StateManager, tx *chain.Delivery) (protoco
 
 func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protocol.TransactionResult, error) {
 	b.networkAuthority = protocol.DnUrl().JoinPath(protocol.Operators)
-	b.partition = b.Describe.PartitionUrl()
+	b.partition = config.NetworkUrl{URL: protocol.SubnetUrl(b.SubnetId)}
 	b.localAuthority = b.partition.Operators()
 
 	// Verify that the BVN ID will make a valid subnet URL
-	if err := protocol.IsValidAdiUrl(protocol.SubnetUrl(b.Describe.SubnetId), true); err != nil {
-		panic(fmt.Errorf("%q is not a valid subnet ID: %v", b.Describe.SubnetId, err))
+	if err := protocol.IsValidAdiUrl(protocol.SubnetUrl(b.SubnetId), true); err != nil {
+		panic(fmt.Errorf("%q is not a valid subnet ID: %v", b.SubnetId, err))
 	}
 
 	// Setup globals and create network variable accounts
@@ -196,15 +185,11 @@ func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protoc
 		b.globals.Globals.OperatorAcceptThreshold.Set(2, 3)
 	}
 
-	if b.globals.Network == nil && b.NetworkValidatorMap != nil {
-		b.globals.Network = b.buildNetworkDefinition()
-	}
-
 	if b.globals.Routing == nil {
 		b.globals.Routing = b.routingTable
 	}
 
-	err := b.globals.Store(&b.Describe, func(accountUrl *url.URL, target interface{}) error {
+	err := b.globals.Store(b.partition, func(accountUrl *url.URL, target interface{}) error {
 		da := new(protocol.DataAccount)
 		da.Url = accountUrl
 		da.AddAuthority(b.networkAuthority)
@@ -290,7 +275,7 @@ func (b *bootstrap) createAnchorPool() {
 	anchorLedger := new(protocol.AnchorLedger)
 	anchorLedger.Url = b.partition.AnchorPool()
 
-	if b.Describe.NetworkType == config.Directory {
+	if b.NetworkType == config.Directory {
 		// Initialize the last major block time to prevent a major block from
 		// being created immediately once the network boots
 		anchorLedger.MajorBlockTime = b.GenesisTime
@@ -394,7 +379,7 @@ func (b *bootstrap) shouldCreate(url *url.URL) bool {
 		panic(err) // An account should never be unroutable
 	}
 
-	return strings.EqualFold(b.Describe.SubnetId, subnet)
+	return strings.EqualFold(b.SubnetId, subnet)
 }
 
 func (b *bootstrap) createOperatorBook() {
@@ -407,13 +392,11 @@ func (b *bootstrap) createOperatorBook() {
 	page.Url = book.Url.JoinPath("1")
 	page.Version = 1
 
-	for _, operators := range b.NetworkValidatorMap {
-		for _, operator := range operators {
-			spec := new(protocol.KeySpec)
-			kh := sha256.Sum256(operator.PubKey.Bytes())
-			spec.PublicKeyHash = kh[:]
-			page.AddKeySpec(spec)
-		}
+	for _, operator := range b.OperatorKeys {
+		spec := new(protocol.KeySpec)
+		kh := sha256.Sum256(operator)
+		spec.PublicKeyHash = kh[:]
+		page.AddKeySpec(spec)
 	}
 
 	page.AcceptThreshold = b.globals.Globals.OperatorAcceptThreshold.Threshold(len(page.Keys))
@@ -431,48 +414,4 @@ func (b *bootstrap) writeDataRecord(account *protocol.DataAccount, url *url.URL,
 	b.records = append(b.records, account)
 	b.urls = append(b.urls, url)
 	b.dataRecords = append(b.dataRecords, dataRecord)
-}
-
-func (b *bootstrap) writeGenesisFile(appHash []byte) error {
-	state, err := b.GetDBState()
-	if err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
-	}
-
-	genDoc := &tmtypes.GenesisDoc{
-		ChainID:         b.Describe.SubnetId,
-		GenesisTime:     b.GenesisTime,
-		InitialHeight:   protocol.GenesisBlock + 1,
-		Validators:      b.Validators,
-		ConsensusParams: tmtypes.DefaultConsensusParams(),
-		AppState:        state,
-		AppHash:         appHash,
-	}
-
-	for _, config := range b.AllConfigs {
-		if err := genDoc.SaveAs(path.Join(config.RootDir, config.Genesis)); err != nil {
-			return fmt.Errorf("failed to save gen doc: %v", err)
-		}
-	}
-	return nil
-}
-
-func (b *bootstrap) buildNetworkDefinition() *protocol.NetworkDefinition {
-	netDef := new(protocol.NetworkDefinition)
-
-	for _, subnet := range b.Describe.Network.Subnets {
-		// Add the validator hashes from the subnet's genesis doc
-		validators := b.NetworkValidatorMap[subnet.Id]
-		keys := make([][]byte, len(validators))
-		for i, validator := range validators {
-			keys[i] = validator.PubKey.Bytes()
-		}
-
-		subnetDef := protocol.SubnetDefinition{
-			SubnetID:      subnet.Id,
-			ValidatorKeys: keys,
-		}
-		netDef.Subnets = append(netDef.Subnets, subnetDef)
-	}
-	return netDef
 }
