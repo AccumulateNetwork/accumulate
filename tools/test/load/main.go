@@ -103,6 +103,7 @@ func initClient(server string) error {
 	}
 	defer os.RemoveAll(path)
 	dsl.SetPath(path)
+	dsl.Initialize("creating client", logging.DefaultOptions())
 
 	// run key generation in cycle
 	for i := 0; i < transactions; i++ {
@@ -154,6 +155,10 @@ func initClient(server string) error {
 	client.CloseIdleConnections()
 
 	return nil
+}
+
+func DefaultOptions() {
+	panic("unimplemented")
 }
 
 // Initiate several clients
