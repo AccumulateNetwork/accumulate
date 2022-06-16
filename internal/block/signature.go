@@ -136,7 +136,12 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 		if signature.Type() != protocol.SignatureTypeReceipt && !signature.Verify(delivery.Transaction.GetHash()) {
 			return nil, errors.Format(errors.StatusBadRequest, "invalid signature")
 		}
-
+		if !delivery.Transaction.Body.Type().IsUser() {
+			err = x.validatePartitionSignature(md.Location, signature)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("key used does not belong to the originating subnet")
+		}
 		signer, err = x.processKeySignature(batch, delivery, signature, md.Location, !md.Initiated, !md.Delegated && delivery.Transaction.Header.Principal.LocalTo(md.Location))
 
 		// Do not store anything if the set is within a forwarded delegated transaction
@@ -633,10 +638,7 @@ func verifySyntheticSignature(net *config.Describe, _ *database.Batch, transacti
 	if !net.NodeUrl().Equal(signature.DestinationNetwork) {
 		return fmt.Errorf("wrong destination network: %v is not this network", signature.DestinationNetwork)
 	}
-	if !signature.RoutingLocation().LocalTo(net.NodeUrl()) {
-		return fmt.Errorf("key used to sign does not belong to the subnet")
 
-	}
 	return nil
 }
 
@@ -656,11 +658,6 @@ func verifyReceiptSignature(transaction *protocol.Transaction, receipt *protocol
 	if !receipt.Proof.Validate() {
 		return fmt.Errorf("invalid receipt")
 	}
-	net := receipt.SourceNetwork
-	if !net.LocalTo(md.Location) {
-		return fmt.Errorf("key used to sign does not belong to the subnet")
-
-	}
 
 	return nil
 }
@@ -676,10 +673,6 @@ func verifyInternalSignature(delivery *chain.Delivery, internalSig *protocol.Int
 
 	if delivery.IsForwarded() {
 		return errors.New(errors.StatusBadRequest, "an internal signature cannot be forwarded")
-	}
-	if !internalSig.RoutingLocation().LocalTo(md.Location) {
-		return fmt.Errorf("key used to sign does not belong to the subnet")
-
 	}
 
 	return nil
@@ -732,4 +725,22 @@ func GetSignaturesForSigner(batch *database.Batch, transaction *database.Transac
 		signatures = append(signatures, state.Signature)
 	}
 	return signatures, nil
+}
+
+//validationPartitionSignature checks if the key used to sign the synthetic or system transaction belongs to the same subnet
+func (x *Executor) validatePartitionSignature(location *url.URL, sig protocol.KeySignature) error {
+	//origin, err := x.Router.RouteAccount(sig.GetSigner())
+	//originurl := url.MustParse(origin)
+	sigurl, err := x.Router.RouteAccount(sig.RoutingLocation())
+	if err != nil {
+		return err
+	}
+	sourceurl, err := x.Router.RouteAccount(location)
+	if err != nil {
+		return err
+	}
+	if sigurl != sourceurl {
+		return fmt.Errorf("expected %s got %s", location.String(), sig.RoutingLocation().String())
+	}
+	return nil
 }
