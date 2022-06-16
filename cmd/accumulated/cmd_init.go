@@ -175,11 +175,11 @@ func nodeReset() {
 			continue
 		}
 		isDelete := false
-		if strings.Contains(ent.Name(), "bvn") {
+		if strings.HasPrefix(ent.Name(), "bvn") {
 			isDelete = true
-		} else if strings.Contains(ent.Name(), "dn") {
+		} else if ent.Name() == "dn" {
 			isDelete = true
-		} else if strings.Contains(ent.Name(), ".db") {
+		} else if strings.HasSuffix(ent.Name(), ".db") {
 			isDelete = true
 		}
 		if isDelete {
