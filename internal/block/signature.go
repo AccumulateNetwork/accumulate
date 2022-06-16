@@ -656,7 +656,8 @@ func verifyReceiptSignature(transaction *protocol.Transaction, receipt *protocol
 	if !receipt.Proof.Validate() {
 		return fmt.Errorf("invalid receipt")
 	}
-	if !receipt.RoutingLocation().LocalTo(md.Location) {
+	net := receipt.SourceNetwork
+	if !net.LocalTo(md.Location) {
 		return fmt.Errorf("key used to sign does not belong to the subnet")
 
 	}
