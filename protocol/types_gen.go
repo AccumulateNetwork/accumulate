@@ -405,7 +405,6 @@ type LegacyED25519Signature struct {
 type LiteDataAccount struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
-	Tail      []byte   `json:"tail,omitempty" form:"tail" query:"tail" validate:"required"`
 	extraData []byte
 }
 
@@ -1708,7 +1707,6 @@ func (v *LiteDataAccount) Copy() *LiteDataAccount {
 	if v.Url != nil {
 		u.Url = (v.Url).Copy()
 	}
-	u.Tail = encoding.BytesCopy(v.Tail)
 
 	return u
 }
@@ -3415,9 +3413,6 @@ func (v *LiteDataAccount) Equal(u *LiteDataAccount) bool {
 	case v.Url == nil || u.Url == nil:
 		return false
 	case !((v.Url).Equal(u.Url)):
-		return false
-	}
-	if !(bytes.Equal(v.Tail, u.Tail)) {
 		return false
 	}
 
@@ -6890,7 +6885,6 @@ func (v *LegacyED25519Signature) IsValid() error {
 var fieldNames_LiteDataAccount = []string{
 	1: "Type",
 	2: "Url",
-	3: "Tail",
 }
 
 func (v *LiteDataAccount) MarshalBinary() ([]byte, error) {
@@ -6900,9 +6894,6 @@ func (v *LiteDataAccount) MarshalBinary() ([]byte, error) {
 	writer.WriteEnum(1, v.Type())
 	if !(v.Url == nil) {
 		writer.WriteUrl(2, v.Url)
-	}
-	if !(len(v.Tail) == 0) {
-		writer.WriteBytes(3, v.Tail)
 	}
 
 	_, _, err := writer.Reset(fieldNames_LiteDataAccount)
@@ -6923,11 +6914,6 @@ func (v *LiteDataAccount) IsValid() error {
 		errs = append(errs, "field Url is missing")
 	} else if v.Url == nil {
 		errs = append(errs, "field Url is not set")
-	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field Tail is missing")
-	} else if len(v.Tail) == 0 {
-		errs = append(errs, "field Tail is not set")
 	}
 
 	switch len(errs) {
@@ -11472,9 +11458,6 @@ func (v *LiteDataAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Url = x
 	}
-	if x, ok := reader.ReadBytes(3); ok {
-		v.Tail = x
-	}
 
 	seen, err := reader.Reset(fieldNames_LiteDataAccount)
 	if err != nil {
@@ -13865,11 +13848,9 @@ func (v *LiteDataAccount) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type AccountType `json:"type"`
 		Url  *url.URL    `json:"url,omitempty"`
-		Tail *string     `json:"tail,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
-	u.Tail = encoding.BytesToJSON(v.Tail)
 	return json.Marshal(&u)
 }
 
@@ -15727,11 +15708,9 @@ func (v *LiteDataAccount) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type AccountType `json:"type"`
 		Url  *url.URL    `json:"url,omitempty"`
-		Tail *string     `json:"tail,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
-	u.Tail = encoding.BytesToJSON(v.Tail)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -15739,11 +15718,6 @@ func (v *LiteDataAccount) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Url = u.Url
-	if x, err := encoding.BytesFromJSON(u.Tail); err != nil {
-		return fmt.Errorf("error decoding Tail: %w", err)
-	} else {
-		v.Tail = x
-	}
 	return nil
 }
 

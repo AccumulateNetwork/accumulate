@@ -159,7 +159,7 @@ var acntTests = []*TCG{
 		testdata.NewAcntTest(&DataAccount{Url: AccountUrl("adi", "data"), AccountAuth: *simpleAuth}),
 	}},
 	{Name: "LiteDataAccount", Cases: []*TC{
-		testdata.NewAcntTest(&LiteDataAccount{Url: AccountUrl("lite-data-account"), Tail: []byte("asdf")}),
+		testdata.NewAcntTest(&LiteDataAccount{Url: AccountUrl("lite-data-account")}),
 	}},
 }
 
