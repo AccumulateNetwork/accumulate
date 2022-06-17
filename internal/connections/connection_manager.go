@@ -233,7 +233,7 @@ func (cm *connectionManager) buildNodeInventory() {
 	}
 
 	// TODO temporary error tracing code. Remove when AC-1758 is resolved
-	if cm.localCtx != nil {
+	if cm.localCtx == nil {
 		for _, subnet := range cm.accConfig.Network.Subnets {
 			if subnet.Id == cm.accConfig.SubnetId {
 				var dump strings.Builder
