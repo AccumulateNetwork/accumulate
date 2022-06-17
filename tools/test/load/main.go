@@ -5,10 +5,8 @@ import (
 	"crypto/ed25519"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
-	"strconv"
 	"sync"
 	"time"
 
@@ -23,6 +21,10 @@ var serverUrl string
 var parallelism, transactions int
 
 const maxGoroutines = 25
+
+// Start logging with dataset log
+var dsl = logging.DataSetLog{}
+var start time.Time
 
 func main() {
 	flag.Parse()
@@ -64,6 +66,7 @@ func main() {
 	// force close channel
 	close(c)
 	wg.Wait()
+	dsl.DumpDataSetToDiskFile()
 }
 
 func init() {
@@ -73,18 +76,13 @@ func init() {
 }
 
 // Init new client from server URL input using client.go
-func initClient(server string) error {
-	// Create new client on localhost
-	client, err := client.New(server)
-	checkf(err, "creating client")
-	client.DebugRequest = false
-
+func initClient(ds *logging.DataSet, client *client.Client) error {
 	// Setup routine guard and limit
 	guard := make(chan struct{}, maxGoroutines)
 
-	// Start time
-	start := time.Now()
-
+	var m sync.Mutex
+	deltas := make(map[int]float64)
+	times := make(map[int]float64)
 	// run key generation in cycle
 	for i := 0; i < transactions; i++ {
 		// create accounts and store them
@@ -98,6 +96,7 @@ func initClient(server string) error {
 		// generate accounts and faucet in goroutines
 		go func(n int) {
 			// start timer
+			t := time.Now()
 			timer.Reset(time.Microsecond)
 
 			// faucet account and wait for Tx execution
@@ -116,16 +115,26 @@ func initClient(server string) error {
 				return
 			}
 
+			m.Lock()
+			deltas[i] = time.Since(t).Seconds()
+			m.Unlock()
+
 			// time to release goroutine
 			<-guard
 		}(i)
 		// stop timer
 		<-timer.C
+		times[i] = time.Since(start).Seconds()
+	}
+
+	for i := 0; i < transactions; i++ {
+		ds.Save("tx_index", i, 10, true)
+		ds.Save("time_since_start", times[i], 10, false)
+		ds.Save("tx_time", deltas[i], 10, false)
 	}
 
 	//Stop time Tx executions
-	stop := time.Now()
-	log.Printf("The Txs execution took %v to run.\n", stop.Sub(start))
+	log.Printf("The Txs execution took %v to run.\n", time.Since(start).Seconds())
 
 	client.CloseIdleConnections()
 
@@ -138,38 +147,44 @@ func DefaultOptions() {
 
 // Initiate several clients
 func initClients(c int) error {
-	// Initiate clients and wait for them to finish
+
+	path := "load_tester"
+
+	err := os.MkdirAll(path, 0600)
+	if err != nil {
+		fatalf("Error: creating dir: %v", err)
+	}
+	//don't remove the log after creating one.
+	//defer os.RemoveAll(path)
+	dsl.SetPath(path)
+	dsl.SetProcessName("load")
+
+	dataSets := []*logging.DataSet{}
+	clients := []*client.Client{}
+
+	//initialize the datasets and clients
 	for i := 0; i <= c; i++ {
-		err := initClient(serverUrl)
+		dsName := fmt.Sprintf("client_%d", i)
+		dsl.Initialize(dsName, logging.DefaultOptions())
+		dataSets = append(dataSets, dsl.GetDataSet(dsName))
+
+		client, err := client.New(serverUrl)
+		checkf(err, "creating client")
+		client.DebugRequest = false
+		clients = append(clients, client)
+	}
+
+	// Initiate clients and wait for them to finish
+
+	// Start the global clock
+	start = time.Now()
+	for i := 0; i <= c; i++ { // Create new client on localhost
+		err = initClient(dataSets[i], clients[i])
 		if err != nil {
 			return err
 		}
 	}
 
-	// Start logging with dataset log
-	dsl := logging.DataSetLog{}
-	path, err := ioutil.TempDir("", "DataSetTest")
-	if err != nil {
-		fatalf("Error: creating temp dir: %v", err)
-	}
-
-	err = os.MkdirAll(path, 0600)
-	if err != nil {
-		fatalf("Error: creating dir: %v", err)
-	}
-	defer os.RemoveAll(path)
-	dsl.SetPath(path)
-	dsl.SetProcessName("main")
-
-	dsl.Initialize("creating client", logging.DefaultOptions())
-
-	ds := dsl.GetDataSet("creating client")
-
-	for ii := 0; ii < parallelism; ii++ {
-		clients := "client" + strconv.Itoa(ii+1)
-		ds.Lock().Save("int_client", ii, 32, true).
-			Save("client", clients, 32, false).Unlock()
-	}
 	return nil
 }
 
