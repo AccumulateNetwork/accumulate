@@ -184,7 +184,15 @@ func (cm *connectionManager) ResetErrors() {
 func (cm *connectionManager) buildNodeInventory() {
 	cm.bvnCtxMap = make(map[string][]ConnectionContext)
 
+	if len(cm.accConfig.Network.Subnets) == 0 {
+		panic("No subnets are configured in the network configuration")
+	}
+
 	for _, subnet := range cm.accConfig.Network.Subnets {
+		if len(subnet.Nodes) == 0 {
+			panic(fmt.Sprintf("Subnet %s does not contain any nodes", subnet.Id))
+		}
+
 		for _, node := range subnet.Nodes {
 			connCtx, err := cm.buildNodeContext(node, subnet)
 			if err != nil {
@@ -220,6 +228,24 @@ func (cm *connectionManager) buildNodeInventory() {
 			}
 			if connCtx.networkGroup == Local {
 				cm.localCtx = connCtx
+			}
+		}
+	}
+
+	// TODO temporary error tracing code. Remove when AC-1758 is resolved
+	if cm.localCtx != nil {
+		for _, subnet := range cm.accConfig.Network.Subnets {
+			if subnet.Id == cm.accConfig.SubnetId {
+				var dump strings.Builder
+				for _, node := range subnet.Nodes {
+					fmtAddr := cm.reformatAddress(node.Address)
+					selected := ""
+					if strings.EqualFold(fmtAddr, cm.localHost) {
+						selected = "<- selected"
+					}
+					fmt.Fprintf(&dump, "Node endpoint %s, formatted address %s -> localhost %s %s\n", node.Address, fmtAddr, cm.localHost, selected)
+				}
+				panic(fmt.Sprintf("None of the nodes in own subnet %s could be mapped as local. Nodes: \n%s", subnet.Id, dump.String()))
 			}
 		}
 	}
