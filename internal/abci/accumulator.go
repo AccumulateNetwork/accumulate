@@ -171,7 +171,10 @@ func (app *Accumulator) willChangeGlobals(e events.WillChangeGlobals) error {
 func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
 	defer app.recover(nil, false)
 
-	app.Accumulate.AnalysisLog.InitDataSet("accumulator", logging.DefaultOptions())
+	if app.Accumulate.AnalysisLog.Enabled {
+		app.Accumulate.AnalysisLog.InitDataSet("accumulator", logging.DefaultOptions())
+		app.Executor.EnableTimers()
+	}
 
 	app.startTime = time.Now()
 

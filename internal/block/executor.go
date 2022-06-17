@@ -133,8 +133,6 @@ func newExecutor(opts ExecutorOptions, db *database.Database, executors ...Trans
 		m.executors[x.Type()] = x
 	}
 
-	m.BlockTimers.Initialize(executors)
-
 	batch := db.Begin(false)
 	defer batch.Discard()
 
@@ -160,6 +158,10 @@ func newExecutor(opts ExecutorOptions, db *database.Database, executors ...Trans
 	}
 
 	return m, nil
+}
+
+func (m *Executor) EnableTimers() {
+	m.BlockTimers.Initialize(&m.executors)
 }
 
 func (m *Executor) ActiveGlobals_TESTONLY() *core.GlobalValues {

@@ -10,10 +10,10 @@ import (
 
 type BlockTimerType uint64
 
-func trackBlockTimers(executors []chain.TransactionExecutor) (timerList []uint64) {
+func trackBlockTimers(executors *map[protocol.TransactionType]chain.TransactionExecutor) (timerList []uint64) {
 	//register the executor timers
-	for _, x := range executors {
-		timerList = append(timerList, x.Type().GetEnumValue()+BlockTimerTypeTransactionOffset.GetEnumValue())
+	for k, _ := range *executors {
+		timerList = append(timerList, k.GetEnumValue()+BlockTimerTypeTransactionOffset.GetEnumValue())
 	}
 
 	timerList = append(timerList, []uint64{
@@ -73,12 +73,11 @@ func (t *TimerSet) Store(ds *logging.DataSet) {
 	}
 }
 
-func (t *TimerSet) Initialize(executors []chain.TransactionExecutor) {
-	if t.enable {
-		t.timeRec = make(map[uint64]*TimerRecord)
-		for _, r := range trackBlockTimers(executors) {
-			t.timeRec[r] = new(TimerRecord)
-		}
+func (t *TimerSet) Initialize(executors *map[protocol.TransactionType]chain.TransactionExecutor) {
+	t.enable = true
+	t.timeRec = make(map[uint64]*TimerRecord)
+	for _, r := range trackBlockTimers(executors) {
+		t.timeRec[r] = new(TimerRecord)
 	}
 }
 
