@@ -46,8 +46,6 @@ LiteDataAccount:
     - name: Url
       type: url
       pointer: true
-    - name: Tail
-      type: bytes
 
 ADI:
   union: { type: account, value: Identity }
