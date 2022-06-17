@@ -467,7 +467,7 @@ func WriteDataTo(accountUrl string, args []string) (string, error) {
 	}
 
 	lde := protocol.FactomDataEntry{}
-	copy(lde.AccountId[:], append(accountId, lda.Tail...))
+	copy(lde.AccountId[:], accountId)
 	data := wd.Entry.GetData()
 	if len(data) > 0 {
 		lde.Data = data[0]
