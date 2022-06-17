@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -76,42 +77,18 @@ func initClient(server string) error {
 	// Create new client on localhost
 	client, err := client.New(server)
 	checkf(err, "creating client")
-	client.DebugRequest = true
+	client.DebugRequest = false
 
 	// Setup routine guard and limit
 	guard := make(chan struct{}, maxGoroutines)
 
-	file, err := os.OpenFile("load_logs.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	log.SetOutput(file)
 	// Start time
 	start := time.Now()
-
-	// Start logging with dataset log
-	dsl := logging.DataSetLog{}
-	path, err := ioutil.TempDir("", "DataSetTest")
-	if err != nil {
-		fatalf("Error: creating temp dir: %v", err)
-	}
-
-	err = os.MkdirAll(path, 0600)
-	if err != nil {
-		fatalf("Error: creating dir: %v", err)
-	}
-	defer os.RemoveAll(path)
-	dsl.SetPath(path)
-	dsl.Initialize("creating client", logging.DefaultOptions())
 
 	// run key generation in cycle
 	for i := 0; i < transactions; i++ {
 		// create accounts and store them
 		acc, _ := createAccount(i)
-
-		// log the time when the account was created
-		log.Printf("Account %d created at %d\n", i, time.Now().UnixNano())
 
 		guard <- struct{}{} // would block if guard channel is already filled
 
@@ -126,7 +103,7 @@ func initClient(server string) error {
 			// faucet account and wait for Tx execution
 			resp, err := client.Faucet(context.Background(), &protocol.AcmeFaucet{Url: acc})
 			if err != nil {
-				log.Printf("Error: faucet: %v\n", err)
+				log.Printf("Error: fauceting account: %v\n", err)
 			}
 
 			txReq := api.TxnQuery{}
@@ -138,8 +115,6 @@ func initClient(server string) error {
 			if err != nil {
 				return
 			}
-			// wait for timer to fire
-			log.Printf("Execution time %s\n", time.Since(<-timer.C))
 
 			// time to release goroutine
 			<-guard
@@ -169,6 +144,31 @@ func initClients(c int) error {
 		if err != nil {
 			return err
 		}
+	}
+
+	// Start logging with dataset log
+	dsl := logging.DataSetLog{}
+	path, err := ioutil.TempDir("", "DataSetTest")
+	if err != nil {
+		fatalf("Error: creating temp dir: %v", err)
+	}
+
+	err = os.MkdirAll(path, 0600)
+	if err != nil {
+		fatalf("Error: creating dir: %v", err)
+	}
+	defer os.RemoveAll(path)
+	dsl.SetPath(path)
+	dsl.SetProcessName("main")
+
+	dsl.Initialize("creating client", logging.DefaultOptions())
+
+	ds := dsl.GetDataSet("creating client")
+
+	for ii := 0; ii < parallelism; ii++ {
+		clients := "client" + strconv.Itoa(ii+1)
+		ds.Lock().Save("int_client", ii, 32, true).
+			Save("client", clients, 32, false).Unlock()
 	}
 	return nil
 }
