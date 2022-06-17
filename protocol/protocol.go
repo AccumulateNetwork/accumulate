@@ -128,16 +128,18 @@ const CreditsPerDollar = 1e2
 const CreditUnitsPerFiatUnit = CreditsPerDollar * CreditPrecision
 
 // LiteDataAddress returns a lite address for the given chain id as
-// `acc://<chain-id-hash-and-checksum>`.
+// `acc://<chain-id>`.
 //
 // The rules for generating the authority of a lite data chain are
 // the same as the address for a Lite Token Account
 func LiteDataAddress(chainId []byte) (*url.URL, error) {
-	u := LiteAuthorityForHash(chainId)
-	if u == nil {
-		return nil, fmt.Errorf("cannot create lite authority")
+	liteUrl := new(url.URL)
+	if len(chainId) < 32 {
+		return nil, errors.New("chainId for LiteDataAddress must be 32 bytes in length")
 	}
-	return u, nil
+	keyStr := hex.EncodeToString(chainId[:32])
+	liteUrl.Authority = keyStr
+	return liteUrl, nil
 }
 
 // ParseLiteAddress parses the hostname as a hex string and verifies its
@@ -145,7 +147,7 @@ func LiteDataAddress(chainId []byte) (*url.URL, error) {
 func ParseLiteAddress(u *url.URL) ([]byte, error) {
 	b, err := hex.DecodeString(u.Hostname())
 	if err != nil {
-		return nil, nil
+		return nil, err
 	}
 
 	i := len(b) - 4
@@ -168,16 +170,16 @@ func ParseLiteDataAddress(u *url.URL) ([]byte, error) {
 		return nil, errors.New("invalid chain url")
 	}
 
-	b, err := ParseLiteAddress(u)
+	b, err := hex.DecodeString(u.Hostname())
 	if err != nil {
 		return nil, err
 	}
 	if b == nil {
-		return nil, errors.New("hostname is not hex")
+		return nil, errors.New("lite data address is not hex")
 	}
 
-	if len(b) != 20 {
-		return nil, errors.New("hostname is the wrong length")
+	if len(b) != 32 {
+		return nil, errors.New("lite data address is the wrong length")
 	}
 
 	return b, nil
