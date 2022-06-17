@@ -17,6 +17,8 @@ import (
 // the transaction fails - in that case the status code will be non zero. It
 // only returns an error in cases like a database failure.
 func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Delivery) (*protocol.TransactionStatus, *chain.ProcessTransactionState, error) {
+	r := x.BlockTimers.Start(BlockTimerTypeProcessTransaction)
+	defer x.BlockTimers.Stop(r)
 	// Load the status
 	status, err := batch.Transaction(delivery.Transaction.GetHash()).GetStatus()
 	if err != nil {
@@ -79,7 +81,9 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Del
 		return x.recordFailedTransaction(batch, delivery, err)
 	}
 
+	r2 := x.BlockTimers.Start(executor.Type())
 	result, err := executor.Execute(st, &chain.Delivery{Transaction: delivery.Transaction})
+	x.BlockTimers.Stop(r2)
 	if err != nil {
 		err = errors.Wrap(0, err)
 		return x.recordFailedTransaction(batch, delivery, err)

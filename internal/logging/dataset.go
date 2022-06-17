@@ -98,7 +98,6 @@ func (d *DataSetLog) DumpDataSetToDiskFile() ([]string, error) {
 	}
 
 	var fileNames []string
-
 	var fileName string
 
 	var val dataValue

@@ -46,7 +46,7 @@ type Accumulator struct {
 	checkTxBatch   *database.Batch
 	checkTxMutex   *sync.Mutex
 	pendingUpdates abci.ValidatorUpdates
-	startTime    time.Time
+	startTime      time.Time
 
 	onFatal func(error)
 }
@@ -553,6 +553,7 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 		ds.Save("ave_block_time", aveBlockTime, 10, false)
 		ds.Save("est_tps", estTps, 10, false)
 		ds.Save("txct", app.txct, 10, false)
+		app.Executor.BlockTimers.Store(ds)
 	}
 
 	app.Accumulate.AnalysisLog.Flush()

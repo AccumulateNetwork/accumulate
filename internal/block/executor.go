@@ -23,6 +23,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 )
 
+//go:generate go run ../../tools/cmd/gen-enum  --package block enums.yml
+
 type Executor struct {
 	ExecutorOptions
 
@@ -42,6 +44,8 @@ type ExecutorOptions struct {
 	EventBus *events.Bus
 
 	isGenesis bool
+
+	BlockTimers TimerSet
 }
 
 // NewNodeExecutor creates a new Executor for a node.
@@ -128,6 +132,8 @@ func newExecutor(opts ExecutorOptions, db *database.Database, executors ...Trans
 		}
 		m.executors[x.Type()] = x
 	}
+
+	m.BlockTimers.Initialize(executors)
 
 	batch := db.Begin(false)
 	defer batch.Discard()
