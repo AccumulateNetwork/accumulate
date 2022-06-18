@@ -68,6 +68,10 @@ func (p *Program) Start(s service.Service) (err error) {
 		return err
 	}
 
+	if flagRun.EnableTimingLogs {
+		p.primary.Config.Accumulate.AnalysisLog.Enabled = true
+	}
+
 	if p.secondaryDir == nil {
 		return p.primary.Start()
 	}
@@ -82,6 +86,10 @@ func (p *Program) Start(s service.Service) (err error) {
 	// Only one node can run Prometheus
 	p.secondary.Config.Instrumentation.Prometheus = false
 
+	if flagRun.EnableTimingLogs {
+		p.secondary.Config.Accumulate.AnalysisLog.Enabled = true
+	}
+	
 	var didStartPrimary, didStartSecondary bool
 	errg := new(errgroup.Group)
 	errg.Go(func() error {

@@ -25,11 +25,12 @@ var cmdRun = &cobra.Command{
 }
 
 var flagRun = struct {
-	Node        int
-	Truncate    bool
-	CiStopAfter time.Duration
-	LogFile     string
-	JsonLogFile string
+	Node             int
+	Truncate         bool
+	CiStopAfter      time.Duration
+	LogFile          string
+	JsonLogFile      string
+	EnableTimingLogs bool
 }{}
 
 func init() {
@@ -43,6 +44,7 @@ func initRunFlags(cmd *cobra.Command, forService bool) {
 	cmd.PersistentFlags().BoolVar(&flagRun.Truncate, "truncate", false, "Truncate Badger if necessary")
 	cmd.PersistentFlags().StringVar(&flagRun.LogFile, "log-file", "", "Write logs to a file as plain text")
 	cmd.PersistentFlags().StringVar(&flagRun.JsonLogFile, "json-log-file", "", "Write logs to a file as JSON")
+	cmdInit.PersistentFlags().BoolVar(&flagRun.EnableTimingLogs, "enable-timing-logs", false, "Enable core timing analysis logging")
 
 	if !forService {
 		cmd.Flags().DurationVar(&flagRun.CiStopAfter, "ci-stop-after", 0, "FOR CI ONLY - stop the node after some time")

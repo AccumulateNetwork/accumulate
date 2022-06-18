@@ -71,11 +71,12 @@ var cmdInitDevnet = &cobra.Command{
 }
 
 var flagInit struct {
-	NoEmptyBlocks bool
-	NoWebsite     bool
-	Reset         bool
-	LogLevels     string
-	Etcd          []string
+	NoEmptyBlocks    bool
+	NoWebsite        bool
+	Reset            bool
+	LogLevels        string
+	Etcd             []string
+	EnableTimingLogs bool
 }
 
 var flagInitNode struct {
@@ -135,6 +136,7 @@ func init() {
 	cmdInit.PersistentFlags().BoolVar(&flagInit.Reset, "reset", false, "Delete any existing directories within the working directory")
 	cmdInit.PersistentFlags().StringVar(&flagInit.LogLevels, "log-levels", "", "Override the default log levels")
 	cmdInit.PersistentFlags().StringSliceVar(&flagInit.Etcd, "etcd", nil, "Use etcd endpoint(s)")
+	cmdInit.PersistentFlags().BoolVar(&flagInit.EnableTimingLogs, "enable-timing-logs", false, "Enable core timing analysis logging")
 	_ = cmdInit.MarkFlagRequired("network")
 
 	cmdInitNode.Flags().BoolVarP(&flagInitNode.Follower, "follow", "f", false, "Do not participate in voting")
@@ -323,6 +325,7 @@ func initNode(cmd *cobra.Command, args []string) {
 	}
 
 	config.Accumulate.Describe = cfg.Describe{NetworkType: description.NetworkType, SubnetId: description.SubnetId, LocalAddress: ""}
+	config.Accumulate.AnalysisLog.Enabled = flagInit.EnableTimingLogs
 
 	if flagInit.LogLevels != "" {
 		_, _, err := logging.ParseLogLevel(flagInit.LogLevels, io.Discard)
