@@ -132,7 +132,9 @@ func (s *Simulator) CreateKeyPage(bookUrl *url.URL, pubKey ...[]byte) {
 }
 
 func (s *Simulator) UpdateAccount(accountUrl *url.URL, fn func(account protocol.Account)) {
+	s.Helper()
 	_ = s.SubnetFor(accountUrl).Database.Update(func(batch *database.Batch) error {
+		s.Helper()
 		account, err := batch.Account(accountUrl).GetState()
 		require.NoError(tb{s}, err)
 		fn(account)
@@ -142,8 +144,10 @@ func (s *Simulator) UpdateAccount(accountUrl *url.URL, fn func(account protocol.
 }
 
 func GetAccount[T protocol.Account](sim *Simulator, accountUrl *url.URL) T {
+	sim.Helper()
 	var account T
 	_ = sim.SubnetFor(accountUrl).Database.View(func(batch *database.Batch) error {
+		sim.Helper()
 		require.NoError(tb{sim}, batch.Account(accountUrl).GetStateAs(&account))
 		return nil
 	})
