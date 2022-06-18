@@ -198,10 +198,11 @@ func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Deli
 		}
 		if !delivery.Transaction.Body.Type().IsUser() {
 			err = x.validatePartitionSignature(md.Location, signature)
+			if err != nil {
+				return nil, errors.Format(errors.StatusUnauthorized, "key used does not belong to the originating subnet %x", err)
+			}
 		}
-		if err != nil {
-			return nil, errors.Format(errors.StatusUnauthorized, "key used does not belong to the originating subnet %x", err)
-		}
+
 		signer, err = x.validateKeySignature(batch, delivery, signature, !md.Initiated, !md.Delegated && delivery.Transaction.Header.Principal.LocalTo(md.Location))
 
 	default:

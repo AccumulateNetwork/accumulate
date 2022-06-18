@@ -279,8 +279,6 @@ func (s *Builder) Sign(message []byte) (protocol.Signature, error) {
 			Signature: sig,
 		}
 	}
-	if sig.Type() == protocol.SignatureTypeSynthetic {
-	}
 	return sig, s.sign(sig, message)
 }
 
