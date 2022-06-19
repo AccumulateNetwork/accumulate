@@ -38,11 +38,6 @@ const (
 	debugCacheValue
 )
 
-type writeLogEntry struct {
-	key   string
-	value TypedValue
-}
-
 // Batch batches database writes.
 type Batch struct {
 	done        bool
@@ -54,7 +49,6 @@ type Batch struct {
 	logger      logging.OptionalLogger
 	store       storage.KeyValueTxn
 	values      map[storage.Key]cachedValue
-	values2     []writeLogEntry
 	bptEntries  map[storage.Key][32]byte
 }
 
@@ -176,7 +170,6 @@ func (b *Batch) cacheValue(key storage.Key, value TypedValue, dirty bool) {
 		cv.dirty = true
 	}
 	b.values[key] = cv
-	b.values2 = append(b.values2, writeLogEntry{key.String(), cv.value})
 }
 
 func (b *Batch) getValue(key storage.Key, unmarshal ValueUnmarshalFunc) (v TypedValue, err error) {
