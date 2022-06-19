@@ -64,8 +64,6 @@ func recordType(r typegen.Record) string {
 			typ = "record.Counted"
 		case r.IsSet():
 			typ = "record.Set"
-		case r.Wrapped(), r.IsUnion():
-			typ = "record.Wrapped"
 		default:
 			typ = "record.Value"
 		}

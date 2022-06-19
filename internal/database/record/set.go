@@ -12,54 +12,28 @@ import (
 )
 
 type sliceableValue[T any] interface {
-	encoding.BinaryValue
-	getValues() *[]T
+	encodableValue[[]T]
 }
 
 type Set[T any] struct {
-	Value[sliceableValue[T]]
+	Value[[]T]
 	compare func(u, v T) int
 }
 
-func NewSet[T any](logger log.Logger, store Store, key Key, namefmt string, new func() sliceableValue[T], cmp func(u, v T) int) *Set[T] {
+func NewSet[T any](logger log.Logger, store Store, key Key, namefmt string, value sliceableValue[T], cmp func(u, v T) int) *Set[T] {
 	s := &Set[T]{}
-	s.Value = *NewValue(logger, store, key, namefmt, true, new)
+	s.Value = *NewValue[[]T](logger, store, key, namefmt, true, value)
 	s.compare = cmp
 	return s
 }
 
-func (s *Set[T]) Get() ([]T, error) {
-	l, err := s.Value.Get()
-	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknown, err)
-	}
-
-	return *l.getValues(), nil
-}
-
-func (s *Set[T]) GetAs(target interface{}) error {
-	l, err := s.Value.Get()
-	if err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
-	}
-
-	err = encoding.SetPtr(*l.getValues(), target)
-	return errors.Wrap(errors.StatusUnknown, err)
-}
-
 func (s *Set[T]) Put(u []T) error {
-	l, err := s.Value.Get()
-	if err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
-	}
-
 	// Sort it
 	sort.Slice(u, func(i, j int) bool {
 		return s.compare(u[i], u[j]) < 0
 	})
 
-	*l.getValues() = u
-	err = s.Value.Put(l)
+	err := s.Value.Put(u)
 	return errors.Wrap(errors.StatusUnknown, err)
 }
 
@@ -74,7 +48,7 @@ func (s *Set[T]) Add(v ...T) error {
 		*ptr = v
 	}
 
-	err = s.Put(l)
+	err = s.Value.Put(l)
 	return errors.Wrap(errors.StatusUnknown, err)
 }
 
@@ -90,7 +64,7 @@ func (s *Set[T]) Remove(v T) error {
 	}
 	l = append(l[:i], l[i+1:]...)
 
-	err = s.Put(l)
+	err = s.Value.Put(l)
 	return errors.Wrap(errors.StatusUnknown, err)
 }
 
@@ -137,28 +111,33 @@ func (s *Set[T]) Commit() error {
 	return errors.Wrap(errors.StatusUnknown, err)
 }
 
-type Slice[T encoding.BinaryValue] struct {
-	values []T
-	new    func() T
+type slice[T encoding.BinaryValue] struct {
+	value []T
+	new   func() T
 }
 
-func NewSlice[T encoding.BinaryValue](new func() T) func() sliceableValue[T] {
-	return func() sliceableValue[T] {
-		s := &Slice[T]{}
-		s.new = new
-		return s
+func NewSlice[T encoding.BinaryValue](new func() T) sliceableValue[T] {
+	return &slice[T]{new: new}
+}
+
+func (v *slice[T]) getValue() []T  { return v.value }
+func (v *slice[T]) setValue(u []T) { v.value = u }
+func (v *slice[T]) setNew()        { v.value = nil }
+
+func (v *slice[T]) copyValue() []T {
+	if v.value == nil {
+		return nil
 	}
+	u := make([]T, len(v.value))
+	copy(u, v.value)
+	return u
 }
 
-func (s *Slice[T]) getValues() *[]T {
-	return &s.values
-}
-
-func (s *Slice[T]) MarshalBinary() ([]byte, error) {
+func (s *slice[T]) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	for _, v := range s.values {
+	for _, v := range s.value {
 		writer.WriteValue(1, v.MarshalBinary)
 	}
 
@@ -166,17 +145,17 @@ func (s *Slice[T]) MarshalBinary() ([]byte, error) {
 	return buffer.Bytes(), errors.Wrap(errors.StatusUnknown, err)
 }
 
-func (s *Slice[T]) UnmarshalBinary(data []byte) error {
+func (s *slice[T]) UnmarshalBinary(data []byte) error {
 	return s.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
 
-func (s *Slice[T]) UnmarshalBinaryFrom(rd io.Reader) error {
+func (s *slice[T]) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
 	for {
 		v := s.new()
 		if reader.ReadValue(1, v.UnmarshalBinary) {
-			s.values = append(s.values, v)
+			s.value = append(s.value, v)
 		} else {
 			break
 		}
@@ -186,38 +165,40 @@ func (s *Slice[T]) UnmarshalBinaryFrom(rd io.Reader) error {
 	return errors.Wrap(errors.StatusUnknown, err)
 }
 
-func (s *Slice[T]) CopyAsInterface() interface{} {
-	t := new(Slice[T])
+func (s *slice[T]) CopyAsInterface() interface{} {
+	t := new(slice[T])
 	t.new = s.new
-	t.values = make([]T, len(s.values))
-	for i, v := range s.values {
-		t.values[i] = v.CopyAsInterface().(T)
-	}
+	t.value = s.copyValue()
 	return t
 }
 
-type WrapperSlice[T any] struct {
-	values []T
+type wrapperSlice[T any] struct {
+	value []T
 	*wrapperFuncs[T]
 }
 
-func NewWrapperSlice[T any](funcs *wrapperFuncs[T]) func() sliceableValue[T] {
-	return func() sliceableValue[T] {
-		w := &WrapperSlice[T]{}
-		w.wrapperFuncs = funcs
-		return w
+func NewWrapperSlice[T any](funcs *wrapperFuncs[T]) sliceableValue[T] {
+	return &wrapperSlice[T]{wrapperFuncs: funcs}
+}
+
+func (v *wrapperSlice[T]) getValue() []T  { return v.value }
+func (v *wrapperSlice[T]) setValue(u []T) { v.value = u }
+func (v *wrapperSlice[T]) setNew()        { v.value = nil }
+
+func (v *wrapperSlice[T]) copyValue() []T {
+	if v.value == nil {
+		return nil
 	}
+	u := make([]T, len(v.value))
+	copy(u, v.value)
+	return u
 }
 
-func (s *WrapperSlice[T]) getValues() *[]T {
-	return &s.values
-}
-
-func (v *WrapperSlice[T]) MarshalBinary() ([]byte, error) {
+func (v *wrapperSlice[T]) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	for _, u := range v.values {
+	for _, u := range v.value {
 		writer.WriteValue(1, func() ([]byte, error) { return v.marshal(u) })
 	}
 
@@ -225,11 +206,11 @@ func (v *WrapperSlice[T]) MarshalBinary() ([]byte, error) {
 	return buffer.Bytes(), errors.Wrap(errors.StatusUnknown, err)
 }
 
-func (v *WrapperSlice[T]) UnmarshalBinary(data []byte) error {
+func (v *wrapperSlice[T]) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
 
-func (v *WrapperSlice[T]) UnmarshalBinaryFrom(rd io.Reader) error {
+func (v *wrapperSlice[T]) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
 	for {
@@ -238,7 +219,7 @@ func (v *WrapperSlice[T]) UnmarshalBinaryFrom(rd io.Reader) error {
 			if err != nil {
 				return err
 			}
-			v.values = append(v.values, u)
+			v.value = append(v.value, u)
 			return nil
 		})
 		if !ok {
@@ -250,11 +231,8 @@ func (v *WrapperSlice[T]) UnmarshalBinaryFrom(rd io.Reader) error {
 	return errors.Wrap(errors.StatusUnknown, err)
 }
 
-func (v *WrapperSlice[T]) CopyAsInterface() interface{} {
+func (v *wrapperSlice[T]) CopyAsInterface() interface{} {
 	w := *v
-	w.values = make([]T, len(v.values))
-	for i, u := range v.values {
-		w.values[i] = v.copy(u)
-	}
+	w.value = v.copyValue()
 	return &w
 }

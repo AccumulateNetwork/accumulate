@@ -33,8 +33,7 @@ func (c *ChangeSet) Entity(name string) *Entity {
 
 func (c *ChangeSet) ChangeLog() *record.Counted[string] {
 	return getOrCreateField(&c.changeLog, func() *record.Counted[string] {
-
-		return record.NewCounted(c.logger.L, c.store, record.Key{}.Append("ChangeLog"), "change log", record.NewCountableWrapped(record.StringWrapper))
+		return record.NewCounted(c.logger.L, c.store, record.Key{}.Append("ChangeLog"), "change log", record.WrappedFactory(record.StringWrapper))
 	})
 }
 
@@ -108,14 +107,16 @@ type Entity struct {
 	key    record.Key
 	parent *ChangeSet
 
-	union *record.Wrapped[protocol.Account]
-	set   *record.Set[*url.TxID]
-	chain *managed.Chain
+	union            *record.Value[protocol.Account]
+	set              *record.Set[*url.TxID]
+	chain            *managed.Chain
+	countableRefType *record.Counted[*protocol.Transaction]
+	countableUnion   *record.Counted[protocol.Account]
 }
 
-func (c *Entity) Union() *record.Wrapped[protocol.Account] {
-	return getOrCreateField(&c.union, func() *record.Wrapped[protocol.Account] {
-		return record.NewWrapped(c.logger.L, c.store, c.key.Append("Union"), "entity %[2]v union", false, record.NewWrapper(record.UnionWrapper(protocol.UnmarshalAccount)))
+func (c *Entity) Union() *record.Value[protocol.Account] {
+	return getOrCreateField(&c.union, func() *record.Value[protocol.Account] {
+		return record.NewValue(c.logger.L, c.store, c.key.Append("Union"), "entity %[2]v union", false, record.Union(protocol.UnmarshalAccount))
 	})
 }
 
@@ -131,6 +132,18 @@ func (c *Entity) Chain() *managed.Chain {
 	})
 }
 
+func (c *Entity) CountableRefType() *record.Counted[*protocol.Transaction] {
+	return getOrCreateField(&c.countableRefType, func() *record.Counted[*protocol.Transaction] {
+		return record.NewCounted(c.logger.L, c.store, c.key.Append("CountableRefType"), "entity %[2]v countable ref type", record.Struct[protocol.Transaction])
+	})
+}
+
+func (c *Entity) CountableUnion() *record.Counted[protocol.Account] {
+	return getOrCreateField(&c.countableUnion, func() *record.Counted[protocol.Account] {
+		return record.NewCounted(c.logger.L, c.store, c.key.Append("CountableUnion"), "entity %[2]v countable union", record.UnionFactory(protocol.UnmarshalAccount))
+	})
+}
+
 func (c *Entity) Resolve(key record.Key) (record.Record, record.Key, error) {
 	switch key[0] {
 	case "Union":
@@ -139,6 +152,10 @@ func (c *Entity) Resolve(key record.Key) (record.Record, record.Key, error) {
 		return c.Set(), key[1:], nil
 	case "Chain":
 		return c.Chain(), key[1:], nil
+	case "CountableRefType":
+		return c.CountableRefType(), key[1:], nil
+	case "CountableUnion":
+		return c.CountableUnion(), key[1:], nil
 	default:
 		return nil, nil, errors.New(errors.StatusInternalError, "bad key for entity")
 	}
@@ -156,6 +173,12 @@ func (c *Entity) IsDirty() bool {
 		return true
 	}
 	if fieldIsDirty(c.chain) {
+		return true
+	}
+	if fieldIsDirty(c.countableRefType) {
+		return true
+	}
+	if fieldIsDirty(c.countableUnion) {
 		return true
 	}
 
@@ -192,6 +215,163 @@ func (c *Entity) baseCommit() error {
 	commitField(&err, c.union)
 	commitField(&err, c.set)
 	commitField(&err, c.chain)
+	commitField(&err, c.countableRefType)
+	commitField(&err, c.countableUnion)
+
+	return nil
+}
+
+type TemplateTest struct {
+	logger logging.OptionalLogger
+	store  record.Store
+	key    record.Key
+	label  string
+
+	wrapped     *record.Value[string]
+	structPtr   *record.Value[*StructType]
+	union       *record.Value[UnionType]
+	wrappedSet  *record.Set[*url.URL]
+	structSet   *record.Set[*StructType]
+	unionSet    *record.Set[UnionType]
+	wrappedList *record.Counted[string]
+	structList  *record.Counted[*StructType]
+	unionList   *record.Counted[UnionType]
+}
+
+func (c *TemplateTest) Wrapped() *record.Value[string] {
+	return getOrCreateField(&c.wrapped, func() *record.Value[string] {
+		return record.NewValue(c.logger.L, c.store, c.key.Append("Wrapped"), c.label+" wrapped", false, record.Wrapped(record.StringWrapper))
+	})
+}
+
+func (c *TemplateTest) StructPtr() *record.Value[*StructType] {
+	return getOrCreateField(&c.structPtr, func() *record.Value[*StructType] {
+		return record.NewValue(c.logger.L, c.store, c.key.Append("StructPtr"), c.label+" struct ptr", false, record.Struct[StructType]())
+	})
+}
+
+func (c *TemplateTest) Union() *record.Value[UnionType] {
+	return getOrCreateField(&c.union, func() *record.Value[UnionType] {
+		return record.NewValue(c.logger.L, c.store, c.key.Append("Union"), c.label+" union", false, record.Union(UnmarshalUnionType))
+	})
+}
+
+func (c *TemplateTest) WrappedSet() *record.Set[*url.URL] {
+	return getOrCreateField(&c.wrappedSet, func() *record.Set[*url.URL] {
+		return record.NewSet(c.logger.L, c.store, c.key.Append("WrappedSet"), c.label+" wrapped set", record.NewWrapperSlice(record.UrlWrapper), record.CompareUrl)
+	})
+}
+
+func (c *TemplateTest) StructSet() *record.Set[*StructType] {
+	return getOrCreateField(&c.structSet, func() *record.Set[*StructType] {
+		new := func() (v *StructType) { return new(StructType) }
+		cmp := func(u, v *StructType) int { return u.Compare(v) }
+		return record.NewSet(c.logger.L, c.store, c.key.Append("StructSet"), c.label+" struct set", record.NewSlice(new), cmp)
+	})
+}
+
+func (c *TemplateTest) UnionSet() *record.Set[UnionType] {
+	return getOrCreateField(&c.unionSet, func() *record.Set[UnionType] {
+		new := func() (v UnionType) { return v }
+		cmp := func(u, v UnionType) int { return u.Compare(v) }
+		return record.NewSet(c.logger.L, c.store, c.key.Append("UnionSet"), c.label+" union set", record.NewSlice(new), cmp)
+	})
+}
+
+func (c *TemplateTest) WrappedList() *record.Counted[string] {
+	return getOrCreateField(&c.wrappedList, func() *record.Counted[string] {
+		return record.NewCounted(c.logger.L, c.store, c.key.Append("WrappedList"), c.label+" wrapped list", record.WrappedFactory(record.StringWrapper))
+	})
+}
+
+func (c *TemplateTest) StructList() *record.Counted[*StructType] {
+	return getOrCreateField(&c.structList, func() *record.Counted[*StructType] {
+		return record.NewCounted(c.logger.L, c.store, c.key.Append("StructList"), c.label+" struct list", record.Struct[StructType])
+	})
+}
+
+func (c *TemplateTest) UnionList() *record.Counted[UnionType] {
+	return getOrCreateField(&c.unionList, func() *record.Counted[UnionType] {
+		return record.NewCounted(c.logger.L, c.store, c.key.Append("UnionList"), c.label+" union list", record.UnionFactory(UnmarshalUnionType))
+	})
+}
+
+func (c *TemplateTest) Resolve(key record.Key) (record.Record, record.Key, error) {
+	switch key[0] {
+	case "Wrapped":
+		return c.Wrapped(), key[1:], nil
+	case "StructPtr":
+		return c.StructPtr(), key[1:], nil
+	case "Union":
+		return c.Union(), key[1:], nil
+	case "WrappedSet":
+		return c.WrappedSet(), key[1:], nil
+	case "StructSet":
+		return c.StructSet(), key[1:], nil
+	case "UnionSet":
+		return c.UnionSet(), key[1:], nil
+	case "WrappedList":
+		return c.WrappedList(), key[1:], nil
+	case "StructList":
+		return c.StructList(), key[1:], nil
+	case "UnionList":
+		return c.UnionList(), key[1:], nil
+	default:
+		return nil, nil, errors.New(errors.StatusInternalError, "bad key for template test")
+	}
+}
+
+func (c *TemplateTest) IsDirty() bool {
+	if c == nil {
+		return false
+	}
+
+	if fieldIsDirty(c.wrapped) {
+		return true
+	}
+	if fieldIsDirty(c.structPtr) {
+		return true
+	}
+	if fieldIsDirty(c.union) {
+		return true
+	}
+	if fieldIsDirty(c.wrappedSet) {
+		return true
+	}
+	if fieldIsDirty(c.structSet) {
+		return true
+	}
+	if fieldIsDirty(c.unionSet) {
+		return true
+	}
+	if fieldIsDirty(c.wrappedList) {
+		return true
+	}
+	if fieldIsDirty(c.structList) {
+		return true
+	}
+	if fieldIsDirty(c.unionList) {
+		return true
+	}
+
+	return false
+}
+
+func (c *TemplateTest) Commit() error {
+	if c == nil {
+		return nil
+	}
+
+	var err error
+	commitField(&err, c.wrapped)
+	commitField(&err, c.structPtr)
+	commitField(&err, c.union)
+	commitField(&err, c.wrappedSet)
+	commitField(&err, c.structSet)
+	commitField(&err, c.unionSet)
+	commitField(&err, c.wrappedList)
+	commitField(&err, c.structList)
+	commitField(&err, c.unionList)
 
 	return nil
 }

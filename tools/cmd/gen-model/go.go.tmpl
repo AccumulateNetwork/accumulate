@@ -47,25 +47,25 @@ c.key
 {{- if and .Wrapped .Set}}
 return record.NewSet(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, record.NewWrapperSlice(record.{{title .DataType.String}}Wrapper), record.Compare{{title .DataType.String}})
 {{- else if .Wrapped}}
-return record.NewWrapped(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, {{.EmptyIfMissing}}, record.NewWrapper(record.{{title .DataType.String}}Wrapper))
+return record.NewValue(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, {{.EmptyIfMissing}}, record.Wrapped(record.{{title .DataType.String}}Wrapper))
 {{- else if .Set}}
 new := func() (v {{stateType . false}}) { return {{if .Pointer}}new({{stateType . true}}){{else}}v{{end}} }
 cmp := func(u, v {{stateType . false}}) int { return u.Compare(v) }
 return record.NewSet(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, record.NewSlice(new), cmp)
 {{- else if .Union}}
-return record.NewWrapped(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, {{.EmptyIfMissing}}, record.NewWrapper(record.UnionWrapper({{unionMethod . "Unmarshal"}})))
+return record.NewValue(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, {{.EmptyIfMissing}}, record.Union({{unionMethod . "Unmarshal"}}))
 {{- else}}
-new := func() (v {{stateType . false}}) { return {{if .Pointer}}new({{stateType . true}}){{else}}v{{end}} }
-return record.NewValue(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, {{.EmptyIfMissing}}, new)
+return record.NewValue(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, {{.EmptyIfMissing}}, record.Struct[{{stateType . true}}]())
 {{- end}}
 {{- end}}
 
 {{define "newCounted"}}
 {{- if .Wrapped}}
-return record.NewCounted(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, record.NewCountableWrapped(record.{{title .DataType.String}}Wrapper))
+return record.NewCounted(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, record.WrappedFactory(record.{{title .DataType.String}}Wrapper))
+{{- else if .Union}}
+return record.NewCounted(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, record.UnionFactory({{unionMethod . "Unmarshal"}}))
 {{- else}}
-new := func() (v {{stateType . false}}) { return {{if .Pointer}}new({{stateType . true}}){{else}}v{{end}} }
-return record.NewCounted(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, record.NewCountableValue(new))
+return record.NewCounted(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, record.Struct[{{stateType . true}}])
 {{- end}}
 {{- end}}
 
@@ -110,7 +110,7 @@ func (c *{{$c.FullName}}) {{.Name}}({{range .GetParameters}}{{lower .Name}} {{pa
 		{{- else if .Type.IsOther}}
 		return new{{.DataType}}(c, c.logger.L, c.store, {{template "key" .}}, {{template "chainNameFormat" .}}, {{template "valueLabelFormat" .}})
 		{{- else if .Counted}}
-		{{template "newCounted" .}}
+		{{- template "newCounted" .}}
 		{{- else}}
 		{{- template "newValue" .}}
 		{{- end}}

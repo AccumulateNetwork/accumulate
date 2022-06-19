@@ -1,10 +1,12 @@
 package record_test
 
 import (
+	"io"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
+	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
@@ -75,3 +77,18 @@ func (e *Entity) Commit() error {
 	// Do the normal commit thing
 	return e.baseCommit()
 }
+
+type StructType struct{}
+
+func (*StructType) Compare(*StructType) int             { return 0 }
+func (*StructType) CopyAsInterface() interface{}        { return nil }
+func (*StructType) MarshalBinary() ([]byte, error)      { return nil, nil }
+func (*StructType) UnmarshalBinary(data []byte) error   { return nil }
+func (*StructType) UnmarshalBinaryFrom(io.Reader) error { return nil }
+
+type UnionType interface {
+	encoding.BinaryValue
+	Compare(UnionType) int
+}
+
+func UnmarshalUnionType([]byte) (UnionType, error) { return nil, nil }

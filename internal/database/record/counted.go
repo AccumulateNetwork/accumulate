@@ -4,40 +4,20 @@ import (
 	"fmt"
 
 	"github.com/tendermint/tendermint/libs/log"
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 )
 
-type countableValue[T any] interface {
-	Get() (T, error)
-	Put(T) error
-	Record
-}
-
 type Counted[T any] struct {
-	count  Wrapped[uint64]
-	new    func(log.Logger, Store, Key, string) countableValue[T]
-	values []countableValue[T]
+	count  *Value[uint64]
+	new    func() encodableValue[T]
+	values []*Value[T]
 }
 
-func NewCounted[T any](logger log.Logger, store Store, key Key, namefmt string, new func(log.Logger, Store, Key, string) countableValue[T]) *Counted[T] {
+func NewCounted[T any](logger log.Logger, store Store, key Key, namefmt string, new func() encodableValue[T]) *Counted[T] {
 	c := &Counted[T]{}
-	c.count = *NewWrapped(logger, store, key, namefmt, true, NewWrapper(UintWrapper))
+	c.count = NewValue(logger, store, key, namefmt, true, Wrapped(UintWrapper))
 	c.new = new
 	return c
-}
-
-func NewCountableWrapped[T any](funcs *wrapperFuncs[T]) func(log.Logger, Store, Key, string) countableValue[T] {
-	return func(logger log.Logger, store Store, key Key, namefmt string) countableValue[T] {
-		return NewWrapped(logger, store, key, namefmt, false, NewWrapper(funcs))
-	}
-}
-
-//nolint:deadcode
-func NewCountableValue[T encoding.BinaryValue](new func() T) func(log.Logger, Store, Key, string) countableValue[T] {
-	return func(logger log.Logger, store Store, key Key, namefmt string) countableValue[T] {
-		return NewValue(logger, store, key, namefmt, false, new)
-	}
 }
 
 func (c *Counted[T]) Count() (int, error) {
@@ -48,9 +28,9 @@ func (c *Counted[T]) Count() (int, error) {
 	return int(v), nil
 }
 
-func (c *Counted[T]) value(i int) countableValue[T] {
+func (c *Counted[T]) value(i int) *Value[T] {
 	if len(c.values) < i+1 {
-		c.values = append(c.values, make([]countableValue[T], i+1-len(c.values))...)
+		c.values = append(c.values, make([]*Value[T], i+1-len(c.values))...)
 	}
 	if c.values[i] != nil {
 		return c.values[i]
@@ -58,7 +38,7 @@ func (c *Counted[T]) value(i int) countableValue[T] {
 
 	key := c.count.key.Append(i)
 	name := fmt.Sprintf("%s %d", c.count.name, i)
-	v := c.new(c.count.logger.L, c.count.store, key, name)
+	v := NewValue(c.count.logger.L, c.count.store, key, name, false, c.new())
 	c.values[i] = v
 	return v
 }
@@ -167,7 +147,7 @@ func (c *Counted[T]) Commit() error {
 
 func (c *Counted[T]) Resolve(key Key) (Record, Key, error) {
 	if len(key) == 0 {
-		return &c.count, nil, nil
+		return c.count, nil, nil
 	}
 
 	if len(key) > 1 {
