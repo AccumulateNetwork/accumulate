@@ -43,19 +43,27 @@ c.key
 {{- end}}
 {{- end}}
 
-{{  define "newValue"}}
-{{- if and .Wrapped .Set}}
-return record.NewSet(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, record.NewWrapperSlice(record.{{title .DataType.String}}Wrapper), record.Compare{{title .DataType.String}})
-{{- else if .Wrapped}}
-return record.NewValue(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, {{.EmptyIfMissing}}, record.Wrapped(record.{{title .DataType.String}}Wrapper))
-{{- else if .Set}}
-new := func() (v {{stateType . false}}) { return {{if .Pointer}}new({{stateType . true}}){{else}}v{{end}} }
-cmp := func(u, v {{stateType . false}}) int { return u.Compare(v) }
-return record.NewSet(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, record.NewSlice(new), cmp)
+{{  define "encoder" -}}
+{{- if .Wrapped}}
+record.Wrapped(record.{{title .DataType.String}}Wrapper)
 {{- else if .Union}}
-return record.NewValue(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, {{.EmptyIfMissing}}, record.Union({{unionMethod . "Unmarshal"}}))
+record.Union({{unionMethod . "Unmarshal"}})
 {{- else}}
-return record.NewValue(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, {{.EmptyIfMissing}}, record.Struct[{{stateType . true}}]())
+record.Struct[{{stateType . true}}]()
+{{- end}}
+{{- end}}
+
+{{  define "newValue"}}
+{{- if .Set}}
+return record.NewSet(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, {{template "encoder" .}},
+	{{- if .Wrapped -}}
+	record.Compare{{title .DataType.String}}
+	{{- else -}}
+	func(u, v {{stateType . false}}) int { return u.Compare(v) }
+	{{- end -}}
+)
+{{- else}}
+return record.NewValue(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, {{.EmptyIfMissing}}, {{template "encoder" .}})
 {{- end}}
 {{- end}}
 

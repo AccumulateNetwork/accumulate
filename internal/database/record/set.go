@@ -16,9 +16,9 @@ type Set[T any] struct {
 	compare func(u, v T) int
 }
 
-func NewSet[T any](logger log.Logger, store Store, key Key, namefmt string, value encodableValue[[]T], cmp func(u, v T) int) *Set[T] {
+func NewSet[T any](logger log.Logger, store Store, key Key, namefmt string, encoder encodableValue[T], cmp func(u, v T) int) *Set[T] {
 	s := &Set[T]{}
-	s.Value = *NewValue(logger, store, key, namefmt, true, value)
+	s.Value = *NewValue[[]T](logger, store, key, namefmt, true, &sliceValue[T]{encoder: encoder})
 	s.compare = cmp
 	return s
 }
@@ -107,128 +107,75 @@ func (s *Set[T]) Commit() error {
 	return errors.Wrap(errors.StatusUnknown, err)
 }
 
-type slice[T encoding.BinaryValue] struct {
-	value []T
-	new   func() T
+type sliceValue[T any] struct {
+	value   []T
+	encoder encodableValue[T]
 }
 
-func NewSlice[T encoding.BinaryValue](new func() T) encodableValue[[]T] {
-	return &slice[T]{new: new}
-}
+var _ encodableValue[[]string] = (*sliceValue[string])(nil)
 
-func (v *slice[T]) getValue() []T  { return v.value }
-func (v *slice[T]) setValue(u []T) { v.value = u }
-func (v *slice[T]) setNew()        { v.value = nil }
+func (v *sliceValue[T]) getValue() []T  { return v.value }
+func (v *sliceValue[T]) setValue(u []T) { v.value = u }
+func (v *sliceValue[T]) setNew()        { v.value = nil }
 
-func (v *slice[T]) copyValue() []T {
+func (v *sliceValue[T]) copyValue() []T {
 	if v.value == nil {
 		return nil
 	}
 	u := make([]T, len(v.value))
-	copy(u, v.value)
+	for i, w := range v.value {
+		v.encoder.setValue(w)
+		u[i] = v.encoder.copyValue()
+	}
 	return u
 }
 
-func (s *slice[T]) MarshalBinary() ([]byte, error) {
+func (v *sliceValue[T]) CopyAsInterface() interface{} {
+	u := new(sliceValue[T])
+	u.value = v.copyValue()
+	return u
+}
+
+func (v *sliceValue[T]) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
-
-	for _, v := range s.value {
-		writer.WriteValue(1, v.MarshalBinary)
-	}
-
+	marshalSlice(writer, v.encoder, v.value)
 	_, _, err := writer.Reset(nil)
 	return buffer.Bytes(), errors.Wrap(errors.StatusUnknown, err)
 }
 
-func (s *slice[T]) UnmarshalBinary(data []byte) error {
-	return s.UnmarshalBinaryFrom(bytes.NewReader(data))
+func (v *sliceValue[T]) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
 
-func (s *slice[T]) UnmarshalBinaryFrom(rd io.Reader) error {
+func (v *sliceValue[T]) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
+	v.value = unmarshalSlice(reader, v.encoder)
+	_, err := reader.Reset(nil)
+	return errors.Wrap(errors.StatusUnknown, err)
+}
 
+// marshalSlice uses an encodable value to marshal a slice. If this
+// implementation were embedded in sliceValue.MarshalBinary, it would be easy to
+// accidentally use the sliceValue instead of the encoder.
+func marshalSlice[T any](wr *encoding.Writer, e encodableValue[T], v []T) {
+	for _, u := range v {
+		e.setValue(u)
+		wr.WriteValue(1, e.MarshalBinary)
+	}
+}
+
+// unmarshalSlice uses an encodable value to unmarshal a slice. See marshalSlice
+// for why this is a separate function.
+func unmarshalSlice[T any](rd *encoding.Reader, e encodableValue[T]) []T {
+	var v []T
 	for {
-		v := s.new()
-		if reader.ReadValue(1, v.UnmarshalBinary) {
-			s.value = append(s.value, v)
+		e.setNew()
+		if rd.ReadValue(1, e.UnmarshalBinary) {
+			v = append(v, e.getValue())
 		} else {
 			break
 		}
 	}
-
-	_, err := reader.Reset(nil)
-	return errors.Wrap(errors.StatusUnknown, err)
-}
-
-func (s *slice[T]) CopyAsInterface() interface{} {
-	t := new(slice[T])
-	t.new = s.new
-	t.value = s.copyValue()
-	return t
-}
-
-type wrapperSlice[T any] struct {
-	value []T
-	*wrapperFuncs[T]
-}
-
-func NewWrapperSlice[T any](funcs *wrapperFuncs[T]) encodableValue[[]T] {
-	return &wrapperSlice[T]{wrapperFuncs: funcs}
-}
-
-func (v *wrapperSlice[T]) getValue() []T  { return v.value }
-func (v *wrapperSlice[T]) setValue(u []T) { v.value = u }
-func (v *wrapperSlice[T]) setNew()        { v.value = nil }
-
-func (v *wrapperSlice[T]) copyValue() []T {
-	if v.value == nil {
-		return nil
-	}
-	u := make([]T, len(v.value))
-	copy(u, v.value)
-	return u
-}
-
-func (v *wrapperSlice[T]) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	for _, u := range v.value {
-		writer.WriteValue(1, func() ([]byte, error) { return v.marshal(u) })
-	}
-
-	_, _, err := writer.Reset(nil)
-	return buffer.Bytes(), errors.Wrap(errors.StatusUnknown, err)
-}
-
-func (v *wrapperSlice[T]) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *wrapperSlice[T]) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	for {
-		ok := reader.ReadValue(1, func(data []byte) error {
-			u, err := v.unmarshal(data)
-			if err != nil {
-				return err
-			}
-			v.value = append(v.value, u)
-			return nil
-		})
-		if !ok {
-			break
-		}
-	}
-
-	_, err := reader.Reset(nil)
-	return errors.Wrap(errors.StatusUnknown, err)
-}
-
-func (v *wrapperSlice[T]) CopyAsInterface() interface{} {
-	w := *v
-	w.value = v.copyValue()
-	return &w
+	return v
 }
