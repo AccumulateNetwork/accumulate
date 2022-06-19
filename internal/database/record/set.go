@@ -11,18 +11,14 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/sortutil"
 )
 
-type sliceableValue[T any] interface {
-	encodableValue[[]T]
-}
-
 type Set[T any] struct {
 	Value[[]T]
 	compare func(u, v T) int
 }
 
-func NewSet[T any](logger log.Logger, store Store, key Key, namefmt string, value sliceableValue[T], cmp func(u, v T) int) *Set[T] {
+func NewSet[T any](logger log.Logger, store Store, key Key, namefmt string, value encodableValue[[]T], cmp func(u, v T) int) *Set[T] {
 	s := &Set[T]{}
-	s.Value = *NewValue[[]T](logger, store, key, namefmt, true, value)
+	s.Value = *NewValue(logger, store, key, namefmt, true, value)
 	s.compare = cmp
 	return s
 }
@@ -116,7 +112,7 @@ type slice[T encoding.BinaryValue] struct {
 	new   func() T
 }
 
-func NewSlice[T encoding.BinaryValue](new func() T) sliceableValue[T] {
+func NewSlice[T encoding.BinaryValue](new func() T) encodableValue[[]T] {
 	return &slice[T]{new: new}
 }
 
@@ -177,7 +173,7 @@ type wrapperSlice[T any] struct {
 	*wrapperFuncs[T]
 }
 
-func NewWrapperSlice[T any](funcs *wrapperFuncs[T]) sliceableValue[T] {
+func NewWrapperSlice[T any](funcs *wrapperFuncs[T]) encodableValue[[]T] {
 	return &wrapperSlice[T]{wrapperFuncs: funcs}
 }
 
