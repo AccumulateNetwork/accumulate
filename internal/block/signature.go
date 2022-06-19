@@ -731,6 +731,7 @@ func GetSignaturesForSigner(batch *database.Batch, transaction *database.Transac
 
 //validationPartitionSignature checks if the key used to sign the synthetic or system transaction belongs to the same subnet
 func (x *Executor) validatePartitionSignature(location *url.URL, sig protocol.KeySignature, tx *protocol.Transaction) error {
+	// TODO AC-1702 Use GetAllSignatures to determine the source
 	var sigurl string
 	var source *url.URL
 	var err error
