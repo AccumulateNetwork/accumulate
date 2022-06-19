@@ -1,6 +1,7 @@
 package block
 
 import (
+	"bytes"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
@@ -137,7 +138,7 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 			return nil, errors.Format(errors.StatusBadRequest, "invalid signature")
 		}
 		if !delivery.Transaction.Body.Type().IsUser() {
-			err = x.validatePartitionSignature(md.Location, signature)
+			err = x.validatePartitionSignature(md.Location, signature, delivery.Transaction)
 			if err != nil {
 				return nil, fmt.Errorf("key used does not belong to the originating subnet %x", err)
 			}
@@ -729,19 +730,55 @@ func GetSignaturesForSigner(batch *database.Batch, transaction *database.Transac
 }
 
 //validationPartitionSignature checks if the key used to sign the synthetic or system transaction belongs to the same subnet
-func (x *Executor) validatePartitionSignature(location *url.URL, sig protocol.KeySignature) error {
-	//origin, err := x.Router.RouteAccount(sig.GetSigner())
-	//originurl := url.MustParse(origin)
-	sigurl, err := x.Router.RouteAccount(sig.RoutingLocation())
-	if err != nil {
-		return err
+func (x *Executor) validatePartitionSignature(location *url.URL, sig protocol.KeySignature, tx *protocol.Transaction) error {
+	var sigurl string
+	var source *url.URL
+	var err error
+	skey := sig.GetPublicKey()
+	switch tx.Body.Type() {
+	case protocol.TransactionTypeSyntheticBurnTokens, protocol.TransactionTypeSyntheticCreateIdentity, protocol.TransactionTypeSyntheticDepositCredits, protocol.TransactionTypeSyntheticDepositTokens, protocol.TransactionTypeSyntheticWriteData:
+		txn := tx.Body.CopyAsInterface().(protocol.SynthTxnWithOrigin)
+		_, source = txn.GetCause()
+		sigurl, err = x.Router.RouteAccount(source)
+		if err != nil {
+			return fmt.Errorf("switch case err %w", err)
+		}
+		break
+	case protocol.TransactionTypeDirectoryAnchor:
+		txn := tx.Body.CopyAsInterface().(*protocol.DirectoryAnchor)
+		source = txn.Source
+		sigurl, err = x.Router.RouteAccount(source)
+		if err != nil {
+			return fmt.Errorf("switch case err %w", err)
+		}
+		break
+	case protocol.TransactionTypePartitionAnchor:
+		txn := tx.Body.CopyAsInterface().(*protocol.PartitionAnchor)
+		source = txn.Source
+		sigurl, err = x.Router.RouteAccount(source)
+		if err != nil {
+			return fmt.Errorf("switch case err %w", err)
+		}
+		break
+
 	}
 	sourceurl, err := x.Router.RouteAccount(location)
 	if err != nil {
-		return err
+		return fmt.Errorf("routing err %w", err)
 	}
 	if sigurl != sourceurl {
-		return fmt.Errorf("expected %s got %s", location.String(), sig.RoutingLocation().String())
+		return fmt.Errorf("expected %s got %s", location.String(), source.String())
+	} else {
+
+		subnet := x.globals.Active.Network.Subnet(sigurl)
+
+		if subnet.SubnetID == sigurl {
+			for _, vkey := range subnet.ValidatorKeys {
+				if bytes.Equal(vkey, skey) {
+					return nil
+				}
+			}
+		}
+		return fmt.Errorf("Key does not exist %s ;;; %s ;;; %s ;;; %s ;;;; %s", sigurl, sourceurl, skey, subnet.SubnetID, subnet.ValidatorKeys)
 	}
-	return nil
 }
