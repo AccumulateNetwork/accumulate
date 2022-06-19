@@ -11,10 +11,13 @@ type wrappedValue[T any] struct {
 	*wrapperFuncs[T]
 }
 
+// Wrapped returns an encodable value for the given type using the given wrapper
+// functions.
 func Wrapped[T any](funcs *wrapperFuncs[T]) encodableValue[T] {
 	return &wrappedValue[T]{wrapperFuncs: funcs}
 }
 
+// WrappedFactory curries Wrapped.
 func WrappedFactory[T any](funcs *wrapperFuncs[T]) func() encodableValue[T] {
 	return func() encodableValue[T] { return &wrappedValue[T]{wrapperFuncs: funcs} }
 }

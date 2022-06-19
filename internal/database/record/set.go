@@ -11,11 +11,13 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/sortutil"
 )
 
+// Set records an ordered list of values as a single record.
 type Set[T any] struct {
 	Value[[]T]
 	compare func(u, v T) int
 }
 
+// NewSet returns a new Set using the given encoder and comparison.
 func NewSet[T any](logger log.Logger, store Store, key Key, namefmt string, encoder encodableValue[T], cmp func(u, v T) int) *Set[T] {
 	s := &Set[T]{}
 	s.Value = *NewValue[[]T](logger, store, key, namefmt, true, &sliceValue[T]{encoder: encoder})
@@ -23,6 +25,7 @@ func NewSet[T any](logger log.Logger, store Store, key Key, namefmt string, enco
 	return s
 }
 
+// Put stores the value, sorted.
 func (s *Set[T]) Put(u []T) error {
 	// Sort it
 	sort.Slice(u, func(i, j int) bool {
@@ -33,6 +36,7 @@ func (s *Set[T]) Put(u []T) error {
 	return errors.Wrap(errors.StatusUnknown, err)
 }
 
+// Add inserts values into the set, sorted.
 func (s *Set[T]) Add(v ...T) error {
 	l, err := s.Get()
 	if err != nil {
@@ -48,6 +52,7 @@ func (s *Set[T]) Add(v ...T) error {
 	return errors.Wrap(errors.StatusUnknown, err)
 }
 
+// Remove removes a value from the set.
 func (s *Set[T]) Remove(v T) error {
 	l, err := s.Get()
 	if err != nil {
@@ -64,6 +69,7 @@ func (s *Set[T]) Remove(v T) error {
 	return errors.Wrap(errors.StatusUnknown, err)
 }
 
+// Index returns the index of the value.
 func (s *Set[T]) Index(v T) (int, error) {
 	l, err := s.Get()
 	if err != nil {
@@ -78,6 +84,7 @@ func (s *Set[T]) Index(v T) (int, error) {
 	return i, nil
 }
 
+// Find returns the matching value.
 func (s *Set[T]) Find(v T) (T, error) {
 	l, err := s.Get()
 	if err != nil {
@@ -92,6 +99,7 @@ func (s *Set[T]) Find(v T) (T, error) {
 	return l[i], nil
 }
 
+// IsDirty implements Record.IsDirty.
 func (s *Set[T]) IsDirty() bool {
 	if s == nil {
 		return false
@@ -99,6 +107,7 @@ func (s *Set[T]) IsDirty() bool {
 	return s.Value.IsDirty()
 }
 
+// Commit implements Record.Commit.
 func (s *Set[T]) Commit() error {
 	if s == nil {
 		return nil
@@ -107,6 +116,7 @@ func (s *Set[T]) Commit() error {
 	return errors.Wrap(errors.StatusUnknown, err)
 }
 
+// sliceValue uses an encoder to manage a slice.
 type sliceValue[T any] struct {
 	value   []T
 	encoder encodableValue[T]

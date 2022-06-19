@@ -5,12 +5,14 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
+// KvStore is a Store that reads/writes from/to a key-value store.
 type KvStore struct {
 	Store storage.KeyValueTxn
 }
 
 var _ Store = KvStore{}
 
+// GetValue loads the raw value and calls value.LoadBytes.
 func (s KvStore) GetValue(key Key, value ValueWriter) error {
 	b, err := s.Store.Get(key.Hash())
 	if err != nil {
@@ -25,6 +27,7 @@ func (s KvStore) GetValue(key Key, value ValueWriter) error {
 	return nil
 }
 
+// PutValue marshals the value and stores it.
 func (s KvStore) PutValue(key Key, value ValueReader) error {
 	v, err := value.GetValue()
 	if err != nil {

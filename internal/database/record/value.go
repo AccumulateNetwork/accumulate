@@ -49,6 +49,7 @@ const (
 	valueDirty
 )
 
+// Value records a value.
 type Value[T any] struct {
 	logger       logging.OptionalLogger
 	store        Store
@@ -62,6 +63,7 @@ type Value[T any] struct {
 var _ ValueReader = (*Value[*wrappedValue[uint64]])(nil)
 var _ ValueWriter = (*Value[*wrappedValue[uint64]])(nil)
 
+// NewValue returns a new Value using the given encodable value.
 func NewValue[T any](logger log.Logger, store Store, key Key, namefmt string, allowMissing bool, value encodableValue[T]) *Value[T] {
 	v := &Value[T]{}
 	v.logger.L = logger
@@ -78,11 +80,14 @@ func NewValue[T any](logger log.Logger, store Store, key Key, namefmt string, al
 	return v
 }
 
+// Key returns the I'th component of the value's key.
 func (v *Value[T]) Key(i int) interface{} {
 	return v.key[i]
 }
 
+// Get loads the value, unmarshalling it if necessary.
 func (v *Value[T]) Get() (u T, err error) {
+	// Do we already have the value?
 	switch v.status {
 	case valueNotFound:
 		return zero[T](), errors.NotFound("%s not found", v.name)
@@ -91,6 +96,7 @@ func (v *Value[T]) Get() (u T, err error) {
 		return v.value.getValue(), nil
 	}
 
+	// Logging
 	switch debug & (debugGet | debugGetValue) {
 	case debugGet | debugGetValue:
 		defer func() {
@@ -112,26 +118,33 @@ func (v *Value[T]) Get() (u T, err error) {
 		}()
 	}
 
+	// Get the value
 	err = v.store.GetValue(v.key, v)
 	switch {
 	case err == nil:
+		// Found it
 		v.status = valueClean
 		return v.value.getValue(), nil
 
 	case !errors.Is(err, storage.ErrNotFound):
+		// Unknown error
 		return zero[T](), errors.Wrap(errors.StatusUnknown, err)
 
 	case v.allowMissing:
+		// Initialize to an empty value
 		v.value.setNew()
 		v.status = valueClean
 		return v.value.getValue(), nil
 
 	default:
+		// Not found
 		v.status = valueNotFound
 		return zero[T](), errors.NotFound("%s not found", v.name)
 	}
 }
 
+// GetAs loads the value, coerces it to the target type, and assigns it to the
+// target. The target must be a non-nil pointer to T.
 func (v *Value[T]) GetAs(target interface{}) error {
 	u, err := v.Get()
 	if err != nil {
@@ -142,6 +155,7 @@ func (v *Value[T]) GetAs(target interface{}) error {
 	return errors.Wrap(errors.StatusUnknown, err)
 }
 
+// Put stores the value.
 func (v *Value[T]) Put(u T) error {
 	switch debug & (debugPut | debugPutValue) {
 	case debugPut | debugPutValue:
@@ -159,6 +173,7 @@ func (v *Value[T]) Put(u T) error {
 	return v.Commit()
 }
 
+// IsDirty implements Record.IsDirty.
 func (v *Value[T]) IsDirty() bool {
 	if v == nil {
 		return false
@@ -166,6 +181,7 @@ func (v *Value[T]) IsDirty() bool {
 	return v.status == valueDirty
 }
 
+// Commit implements Record.Commit.
 func (v *Value[T]) Commit() error {
 	if v == nil || v.status != valueDirty {
 		return nil
@@ -179,6 +195,7 @@ func (v *Value[T]) Commit() error {
 	return nil
 }
 
+// Resolve implements Record.Resolve.
 func (v *Value[T]) Resolve(key Key) (Record, Key, error) {
 	if len(key) == 0 {
 		return v, nil, nil
@@ -186,6 +203,7 @@ func (v *Value[T]) Resolve(key Key) (Record, Key, error) {
 	return nil, nil, errors.New(errors.StatusInternalError, "bad key for value")
 }
 
+// GetValue loads the value.
 func (v *Value[T]) GetValue() (encoding.BinaryValue, error) {
 	_, err := v.Get()
 	if err != nil {
@@ -194,6 +212,8 @@ func (v *Value[T]) GetValue() (encoding.BinaryValue, error) {
 	return v.value, nil
 }
 
+// LoadValue sets the value from the reader. If put is false, the value will be
+// copied. If put is true, the value will be marked dirty.
 func (v *Value[T]) LoadValue(value ValueReader, put bool) error {
 	uv, err := value.GetValue()
 	if err != nil {
@@ -215,6 +235,7 @@ func (v *Value[T]) LoadValue(value ValueReader, put bool) error {
 	return nil
 }
 
+// LoadBytes unmarshals the value from bytes.
 func (v *Value[T]) LoadBytes(data []byte) error {
 	err := v.value.UnmarshalBinary(data)
 	if err != nil {
@@ -234,6 +255,7 @@ type structValue[T any, PT ptrBinaryValue[T]] struct {
 	value PT
 }
 
+// Struct returns an encodable value for the given encodable struct-type.
 func Struct[T any, PT ptrBinaryValue[T]]() encodableValue[PT] {
 	return new(structValue[T, PT])
 }
@@ -277,10 +299,12 @@ type unionValue[T encoding.BinaryValue] struct {
 	unmarshal func([]byte) (T, error)
 }
 
+// Union returns an encodable value for the given encodable union type.
 func Union[T encoding.BinaryValue](unmarshal func([]byte) (T, error)) encodableValue[T] {
 	return &unionValue[T]{unmarshal: unmarshal}
 }
 
+// UnionFactory curries Union.
 func UnionFactory[T encoding.BinaryValue](unmarshal func([]byte) (T, error)) func() encodableValue[T] {
 	return func() encodableValue[T] { return &unionValue[T]{unmarshal: unmarshal} }
 }

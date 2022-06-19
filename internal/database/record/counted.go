@@ -7,12 +7,15 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 )
 
+// Counted records an insertion-ordered list of values as separate records plus
+// a record for the count.
 type Counted[T any] struct {
 	count  *Value[uint64]
 	new    func() encodableValue[T]
 	values []*Value[T]
 }
 
+// NewCounted returns a new Counted using the given encodable value type.
 func NewCounted[T any](logger log.Logger, store Store, key Key, namefmt string, new func() encodableValue[T]) *Counted[T] {
 	c := &Counted[T]{}
 	c.count = NewValue(logger, store, key, namefmt, true, Wrapped(UintWrapper))
@@ -20,6 +23,7 @@ func NewCounted[T any](logger log.Logger, store Store, key Key, namefmt string, 
 	return c
 }
 
+// Count loads the size of the list.
 func (c *Counted[T]) Count() (int, error) {
 	v, err := c.count.Get()
 	if err != nil {
@@ -43,6 +47,7 @@ func (c *Counted[T]) value(i int) *Value[T] {
 	return v
 }
 
+// Get loads the I'th element of the list.
 func (c *Counted[T]) Get(i int) (T, error) {
 	v, err := c.value(i).Get()
 	if err != nil {
@@ -52,6 +57,7 @@ func (c *Counted[T]) Get(i int) (T, error) {
 	return v, nil
 }
 
+// GetAll loads all the elements of the list.
 func (c *Counted[T]) GetAll() ([]T, error) {
 	count, err := c.Count()
 	if err != nil {
@@ -69,6 +75,7 @@ func (c *Counted[T]) GetAll() ([]T, error) {
 	return values, nil
 }
 
+// Put adds an element to the list.
 func (c *Counted[T]) Put(v T) error {
 	count, err := c.Count()
 	if err != nil {
@@ -88,6 +95,7 @@ func (c *Counted[T]) Put(v T) error {
 	return nil
 }
 
+// Last loads the value of the last element.
 func (c *Counted[T]) Last() (int, T, error) {
 	count, err := c.Count()
 	if err != nil {
@@ -106,6 +114,7 @@ func (c *Counted[T]) Last() (int, T, error) {
 	return count - 1, v, nil
 }
 
+// IsDirty implements Record.IsDirty.
 func (c *Counted[T]) IsDirty() bool {
 	if c == nil {
 		return false
@@ -124,6 +133,7 @@ func (c *Counted[T]) IsDirty() bool {
 	return true
 }
 
+// Commit implements Record.Commit.
 func (c *Counted[T]) Commit() error {
 	if c == nil {
 		return nil
@@ -145,6 +155,7 @@ func (c *Counted[T]) Commit() error {
 	return nil
 }
 
+// Resolve implements Record.Resolve.
 func (c *Counted[T]) Resolve(key Key) (Record, Key, error) {
 	if len(key) == 0 {
 		return c.count, nil, nil

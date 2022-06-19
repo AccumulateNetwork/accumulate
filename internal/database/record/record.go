@@ -10,19 +10,26 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
+// A Record is a component of a data model.
 type Record interface {
+	// Resolve resolves the record or a child record.
 	Resolve(key Key) (Record, Key, error)
+	// IsDirty returns true if the record has been modified.
 	IsDirty() bool
+	// Commit writes any modifications to the store.
 	Commit() error
 }
 
+// RecordPtr is satisfied by a type T where *T implements Record.
 type RecordPtr[T any] interface {
 	*T
 	Record
 }
 
+// A Key is the key for a record.
 type Key []interface{}
 
+// Append creates a child key of this key.
 func (k Key) Append(v ...interface{}) Key {
 	l := make(Key, len(k)+len(v))
 	n := copy(l, k)
@@ -30,10 +37,12 @@ func (k Key) Append(v ...interface{}) Key {
 	return l
 }
 
+// Hash converts the record key to a storage key.
 func (k Key) Hash() storage.Key {
 	return storage.MakeKey(k...)
 }
 
+// String returns a human-readable string for the key.
 func (k Key) String() string {
 	s := make([]string, len(k))
 	for i, v := range k {
@@ -49,15 +58,18 @@ func (k Key) String() string {
 	return strings.Join(s, ".")
 }
 
+// MarshalJSON is implemented so keys are formatted nicely by zerolog.
 func (k Key) MarshalJSON() ([]byte, error) {
-	// This is implemented purely for logging
 	return json.Marshal(k.String())
 }
 
+// A ValueReader holds a readable value.
 type ValueReader interface {
+	// GetValue returns the value.
 	GetValue() (encoding.BinaryValue, error)
 }
 
+// A ValueWriter holds a writable value.
 type ValueWriter interface {
 	ValueReader // TODO AC-1761 remove
 
@@ -67,6 +79,7 @@ type ValueWriter interface {
 	LoadBytes(data []byte) error
 }
 
+// A Store loads and stores values.
 type Store interface {
 	// GetValue loads the value from the underlying store and writes it. Byte
 	// stores call LoadBytes(data) and value stores call LoadValue(v, false).
