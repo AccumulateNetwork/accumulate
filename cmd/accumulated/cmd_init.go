@@ -129,7 +129,7 @@ func init() {
 	cmdInitDevnet.Flags().StringVar(&flagInitDevnet.DnsSuffix, "dns-suffix", "", "DNS suffix to add to hostnames used when initializing dockerized nodes")
 }
 
-func nodeReset() {
+func networkReset() {
 	ent, err := os.ReadDir(flagMain.WorkDir)
 	if errors.Is(err, fs.ErrNotExist) {
 		return
@@ -140,24 +140,50 @@ func nodeReset() {
 		if !ent.IsDir() {
 			continue
 		}
+
+		dir := path.Join(flagMain.WorkDir, ent.Name())
+		if !strings.HasPrefix(ent.Name(), "node-") {
+			fmt.Fprintf(os.Stderr, "Skipping %s\n", dir)
+			continue
+		}
+
+		if !nodeReset(filepath.Join(dir)) {
+			continue
+		}
+
+		err = os.Remove(dir)
+		check(err)
+	}
+}
+
+func nodeReset(dir string) bool {
+	ent, err := os.ReadDir(dir)
+	check(err)
+
+	var skipped bool
+	for _, ent := range ent {
+		if !ent.IsDir() {
+			skipped = true
+			continue
+		}
 		isDelete := false
-		if strings.HasPrefix(ent.Name(), "bvn") {
+		if ent.Name() == "bvnn" {
 			isDelete = true
-		} else if ent.Name() == "dn" {
-			isDelete = true
-		} else if strings.HasSuffix(ent.Name(), ".db") {
+		} else if ent.Name() == "dnn" {
 			isDelete = true
 		}
 		if isDelete {
-			dir := path.Join(flagMain.WorkDir, ent.Name())
+			dir := path.Join(dir, ent.Name())
 			fmt.Fprintf(os.Stderr, "Deleting %s\n", dir)
 			err = os.RemoveAll(dir)
 			check(err)
 		} else {
-			dir := path.Join(flagMain.WorkDir, ent.Name())
+			dir := path.Join(dir, ent.Name())
 			fmt.Fprintf(os.Stderr, "Skipping %s\n", dir)
+			skipped = true
 		}
 	}
+	return !skipped
 }
 
 func initNode(cmd *cobra.Command, args []string) {
@@ -320,7 +346,7 @@ func initNode(cmd *cobra.Command, args []string) {
 	}
 
 	if flagInit.Reset {
-		nodeReset()
+		networkReset()
 	}
 
 	config.SetRoot(filepath.Join(flagMain.WorkDir, nodeDir))
