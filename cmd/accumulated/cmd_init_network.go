@@ -46,7 +46,7 @@ func initNetwork(cmd *cobra.Command, args []string) {
 	verifyInitFlags(cmd, len(network.Bvns))
 
 	if flagInit.Reset {
-		nodeReset()
+		networkReset()
 	}
 
 	for _, bvn := range network.Bvns {
