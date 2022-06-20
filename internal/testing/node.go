@@ -40,12 +40,12 @@ func NewTestLogger(t testing.TB) log.Logger {
 
 var DefaultLogLevels = config.LogLevel{}.
 	Parse(config.DefaultLogLevels).
-	// SetModule("accumulate", "debug").
-	SetModule("executor", "info").
-	// SetModule("governor", "debug").
-	// SetModule("synthetic", "debug").
-	// SetModule("storage", "debug").
-	// SetModule("database", "debug").
+	SetModule("accumulate", "debug").
+	SetModule("executor", "debug").
+	SetModule("governor", "debug").
+	SetModule("synthetic", "debug").
+	SetModule("storage", "debug").
+	SetModule("database", "debug").
 	// SetModule("fake-node", "debug").
 	// SetModule("fake-tendermint", "info").
 	String()
