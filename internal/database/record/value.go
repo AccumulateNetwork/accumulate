@@ -263,7 +263,7 @@ func Struct[T any, PT ptrBinaryValue[T]]() encodableValue[PT] {
 func (v *structValue[T, PT]) getValue() PT  { return v.value }
 func (v *structValue[T, PT]) setValue(u PT) { v.value = u }
 func (v *structValue[T, PT]) setNew()       { v.value = new(T) }
-func (v *structValue[T, PT]) copyValue() PT { return v.CopyAsInterface().(PT) }
+func (v *structValue[T, PT]) copyValue() PT { return v.value.CopyAsInterface().(PT) }
 
 func (v *structValue[T, PT]) CopyAsInterface() interface{} {
 	u := new(structValue[T, PT])
