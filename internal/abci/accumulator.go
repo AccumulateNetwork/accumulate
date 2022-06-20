@@ -4,7 +4,6 @@ import (
 	"bytes"
 	_ "crypto/sha256"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"runtime/debug"
 	"sort"
@@ -23,6 +22,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -248,21 +248,11 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 	batch := app.DB.Begin(false)
 	defer batch.Discard()
 
-	k, v, customErr := app.Executor.Query(batch, qu, reqQuery.Height, reqQuery.Prove)
-	switch {
-	case customErr == nil:
-		//Ok
-
-	case errors.Is(customErr, storage.ErrNotFound):
-		resQuery.Info = customErr.Error()
-		resQuery.Code = uint32(protocol.ErrorCodeNotFound)
-		return resQuery
-
-	default:
-		sentry.CaptureException(customErr)
-		app.logger.Debug("Query failed", "type", qu.Type().String(), "error", customErr)
-		resQuery.Info = customErr.Error()
-		resQuery.Code = uint32(customErr.Code)
+	k, v, err := app.Executor.Query(batch, qu, reqQuery.Height, reqQuery.Prove)
+	if err != nil {
+		b, _ := errors.Wrap(errors.StatusUnknown, err).(*errors.Error).MarshalJSON()
+		resQuery.Info = string(b)
+		resQuery.Code = uint32(protocol.ErrorCodeFailed)
 		return resQuery
 	}
 
@@ -397,10 +387,11 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 
 	envelopes, results, respData, err := executeTransactions(app.logger.With("operation", "CheckTx"), checkTx(app.Executor, batch), req.Tx)
 	if err != nil {
-		return abci.ResponseCheckTx{
-			Code: uint32(err.Code),
-			Log:  err.Error(),
-		}
+		b, _ := errors.Wrap(errors.StatusUnknown, err).(*errors.Error).MarshalJSON()
+		var res abci.ResponseCheckTx
+		res.Info = string(b)
+		res.Code = uint32(protocol.ErrorCodeFailed)
+		return res
 	}
 
 	var resp abci.ResponseCheckTx
@@ -442,10 +433,11 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 
 	envelopes, _, respData, err := executeTransactions(app.logger.With("operation", "DeliverTx"), deliverTx(app.Executor, app.block), req.Tx)
 	if err != nil {
-		return abci.ResponseDeliverTx{
-			Code: uint32(err.Code),
-			Log:  err.Error(),
-		}
+		b, _ := errors.Wrap(errors.StatusUnknown, err).(*errors.Error).MarshalJSON()
+		var res abci.ResponseDeliverTx
+		res.Info = string(b)
+		res.Code = uint32(protocol.ErrorCodeFailed)
+		return res
 	}
 
 	// Deliver never fails, unless the batch cannot be decoded

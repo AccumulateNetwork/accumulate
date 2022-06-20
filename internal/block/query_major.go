@@ -1,23 +1,22 @@
 package block
 
 import (
-	"errors"
-
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
-func (m *Executor) queryMajorBlocks(batch *database.Batch, req *query.RequestMajorBlocks) (resp *query.ResponseMajorBlocks, perr *protocol.Error) {
+func (m *Executor) queryMajorBlocks(batch *database.Batch, req *query.RequestMajorBlocks) (resp *query.ResponseMajorBlocks, _ error) {
 
 	anchorsAcc := batch.Account(m.Describe.NodeUrl(protocol.AnchorPool))
 	ledgerAcc := batch.Account(m.Describe.NodeUrl(protocol.Ledger))
 
 	mjrIdxChain, err := anchorsAcc.ReadChain(protocol.IndexChain(protocol.MainChain, true))
 	if err != nil {
-		return nil, &protocol.Error{Code: protocol.ErrorCodeQueryChainUpdatesError, Message: err}
+		return nil, errors.Wrap(errors.StatusUnknown, err)
 	}
 
 	if req.Start == 0 { // We don't have major block 0, avoid crash
@@ -25,7 +24,7 @@ func (m *Executor) queryMajorBlocks(batch *database.Batch, req *query.RequestMaj
 	}
 	mjrStartIdx, _, err := indexing.SearchIndexChain(mjrIdxChain, uint64(mjrIdxChain.Height())-1, indexing.MatchAfter, indexing.SearchIndexChainByBlock(req.Start))
 	if err != nil {
-		return nil, &protocol.Error{Code: protocol.ErrorCodeQueryEntriesError, Message: err}
+		return nil, errors.Wrap(errors.StatusUnknown, err)
 	}
 
 	resp = &query.ResponseMajorBlocks{TotalBlocks: uint64(mjrIdxChain.Height())}
@@ -35,9 +34,9 @@ func (m *Executor) queryMajorBlocks(batch *database.Batch, req *query.RequestMaj
 	mnrStartIdx := uint64(1)
 
 	if mjrEntryIdx > 0 {
-		mnrStartIdx, perr = getPrevEntryRootIndex(mjrIdxChain, mjrEntryIdx)
+		mnrStartIdx, err = getPrevEntryRootIndex(mjrIdxChain, mjrEntryIdx)
 		if err != nil {
-			return nil, perr
+			return nil, errors.Wrap(errors.StatusUnknown, err)
 		}
 	}
 
@@ -49,7 +48,7 @@ majorEntryLoop:
 		case errors.Is(err, storage.ErrNotFound):
 			break majorEntryLoop
 		default:
-			return nil, &protocol.Error{Code: protocol.ErrorCodeUnMarshallingError, Message: err}
+			return nil, errors.Wrap(errors.StatusUnknown, err)
 		}
 
 		rspMjrEntry := new(query.ResponseMajorEntry)
@@ -67,12 +66,12 @@ majorEntryLoop:
 
 		mnrIdxChain, err := ledgerAcc.ReadChain(protocol.MinorRootIndexChain)
 		if err != nil {
-			return nil, &protocol.Error{Code: protocol.ErrorCodeQueryChainUpdatesError, Message: err}
+			return nil, errors.Wrap(errors.StatusUnknown, err)
 		}
 
 		mnrIdx, mnrIdxEntry, err := indexing.SearchIndexChain(mnrIdxChain, uint64(mnrIdxChain.Height())-1, indexing.MatchAfter, indexing.SearchIndexChainByBlock(mnrStartIdx))
 		if err != nil {
-			return nil, &protocol.Error{Code: protocol.ErrorCodeQueryEntriesError, Message: err}
+			return nil, errors.Wrap(errors.StatusUnknown, err)
 		}
 
 	minorEntryLoop:
@@ -84,7 +83,7 @@ majorEntryLoop:
 			case errors.Is(err, storage.ErrNotFound):
 				break minorEntryLoop
 			default:
-				return nil, &protocol.Error{Code: protocol.ErrorCodeUnMarshallingError, Message: err}
+				return nil, errors.Wrap(errors.StatusUnknown, err)
 			}
 			if mnrIdxEntry.BlockIndex > curEntry.RootIndexIndex {
 				break minorEntryLoop
@@ -103,11 +102,11 @@ majorEntryLoop:
 	return resp, nil
 }
 
-func getPrevEntryRootIndex(mjrIdxChain *database.Chain, mjrEntryIdx uint64) (uint64, *protocol.Error) {
+func getPrevEntryRootIndex(mjrIdxChain *database.Chain, mjrEntryIdx uint64) (uint64, error) {
 	prevEntry := new(protocol.IndexEntry)
 	err := mjrIdxChain.EntryAs(int64(mjrEntryIdx)-1, prevEntry)
 	if err != nil {
-		return 0, &protocol.Error{Code: protocol.ErrorCodeUnMarshallingError, Message: err}
+		return 0, errors.Wrap(errors.StatusUnknown, err)
 	}
 	return prevEntry.RootIndexIndex + 1, nil
 }

@@ -72,7 +72,7 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Del
 	executor, ok := x.executors[delivery.Transaction.Body.Type()]
 	if !ok {
 		// An invalid transaction should not make it to this point
-		err = protocol.Errorf(protocol.ErrorCodeInternal, "missing executor for %v", delivery.Transaction.Body.Type())
+		err = errors.Format(errors.StatusInternalError, "missing executor for %v", delivery.Transaction.Body.Type())
 		return x.recordFailedTransaction(batch, delivery, err)
 	}
 

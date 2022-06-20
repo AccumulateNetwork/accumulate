@@ -12,7 +12,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
@@ -40,21 +39,11 @@ func (r router) Query(ctx context.Context, partition string, rawQuery []byte, op
 	batch := x.Database.Begin(false)
 	defer batch.Discard()
 	k, v, err := x.Executor.Query(batch, qu, opts.Height, opts.Prove)
-	switch {
-	case err == nil:
-		//Ok
-
-	case errors.Is(err, storage.ErrNotFound):
+	if err != nil {
+		b, _ := errors.Wrap(errors.StatusUnknown, err).(*errors.Error).MarshalJSON()
 		res := new(coretypes.ResultABCIQuery)
-		res.Response.Info = err.Error()
-		res.Response.Code = uint32(protocol.ErrorCodeNotFound)
-		return res, nil
-
-	default:
-		r.Logf("Query failed: %v", err)
-		res := new(coretypes.ResultABCIQuery)
-		res.Response.Info = err.Error()
-		res.Response.Code = uint32(err.Code)
+		res.Response.Info = string(b)
+		res.Response.Code = uint32(protocol.ErrorCodeFailed)
 		return res, nil
 	}
 

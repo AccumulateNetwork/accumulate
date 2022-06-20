@@ -318,7 +318,7 @@ func dispatchTxRequest(payload interface{}, origin *url2.URL, signers []*signing
 	if res.Code != 0 {
 		result := new(protocol.TransactionStatus)
 		if Remarshal(res.Result, result) != nil {
-			return nil, protocol.NewError(protocol.ErrorCode(res.Code), errors.New(res.Message))
+			return nil, errors.New(res.Message)
 		}
 		return nil, result.Error
 	}

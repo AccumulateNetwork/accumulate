@@ -100,7 +100,7 @@ func NormalizeEnvelope(envelope *protocol.Envelope) ([]*Delivery, error) {
 	for _, delivery := range txnList {
 		// A transaction with no signatures is invalid
 		if len(delivery.Signatures) == 0 {
-			return nil, protocol.Errorf(protocol.ErrorCodeInvalidRequest, "the envelope does not contain any signatures matching transaction %X (%v)", delivery.Transaction.GetHash()[:8], delivery.Transaction.Body.Type())
+			return nil, errors.Format(errors.StatusBadRequest, "the envelope does not contain any signatures matching transaction %X (%v)", delivery.Transaction.GetHash()[:8], delivery.Transaction.Body.Type())
 		}
 	}
 

@@ -123,7 +123,7 @@ func (x *Executor) executeEnvelope(block *Block, delivery *chain.Delivery) (*pro
 
 		err = batch.Commit()
 		if err != nil {
-			return nil, nil, protocol.Errorf(protocol.ErrorCodeUnknownError, "commit batch: %w", err)
+			return nil, nil, errors.Format(errors.StatusUnknown, "commit batch: %w", err)
 		}
 	}
 
@@ -140,7 +140,7 @@ func (x *Executor) executeEnvelope(block *Block, delivery *chain.Delivery) (*pro
 
 		err = batch.Commit()
 		if err != nil {
-			return nil, nil, protocol.Errorf(protocol.ErrorCodeUnknownError, "commit batch: %w", err)
+			return nil, nil, errors.Format(errors.StatusUnknown, "commit batch: %w", err)
 		}
 
 		delivery.State.Merge(state)
@@ -179,12 +179,12 @@ func (x *Executor) executeEnvelope(block *Block, delivery *chain.Delivery) (*pro
 
 		err = x.ProduceSynthetic(batch, delivery.Transaction, delivery.State.ProducedTxns)
 		if err != nil {
-			return nil, nil, protocol.NewError(protocol.ErrorCodeUnknownError, err)
+			return nil, nil, errors.Wrap(errors.StatusUnknown, err)
 		}
 
 		err = batch.Commit()
 		if err != nil {
-			return nil, nil, protocol.Errorf(protocol.ErrorCodeUnknownError, "commit batch: %w", err)
+			return nil, nil, errors.Format(errors.StatusUnknown, "commit batch: %w", err)
 		}
 	}
 

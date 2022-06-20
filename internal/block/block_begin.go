@@ -432,7 +432,7 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch) (bool, error
 
 func (x *Executor) signTransaction(batch *database.Batch, txn *protocol.Transaction, sigs []protocol.Signature) (protocol.Signature, error) {
 	if len(sigs) == 0 {
-		return nil, protocol.Errorf(protocol.ErrorCodeInternal, "synthetic transaction has no signatures")
+		return nil, errors.Format(errors.StatusInternalError, "synthetic transaction has no signatures")
 	}
 
 	synthSig, ok := sigs[0].(*protocol.SyntheticSignature)
@@ -652,14 +652,6 @@ func (x *Executor) checkDispatchError(err error, fn func(error)) {
 	var rpcErr2 jsonrpc2.Error
 	if errors.As(err, &rpcErr2) && rpcErr2 == errTxInCache2 {
 		return
-	}
-
-	var protoErr *protocol.Error
-	if errors.As(err, &protoErr) {
-		// Without this, the simulator generates tons of errors. Why?
-		if protoErr.Code == protocol.ErrorCodeAlreadyDelivered {
-			return
-		}
 	}
 
 	var errorsErr *errors.Error

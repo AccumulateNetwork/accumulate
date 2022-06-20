@@ -299,7 +299,7 @@ func validateInitialSignature(transaction *protocol.Transaction, signature proto
 
 	// Verify the initiator hash matches
 	if !protocol.SignatureDidInitiate(signature, transaction.Header.Initiator[:]) {
-		return protocol.Errorf(protocol.ErrorCodeInvalidSignature, "initiator signature does not match initiator hash")
+		return errors.Format(errors.StatusUnauthenticated, "initiator signature does not match initiator hash")
 	}
 
 	// Timestamps are not used for system signatures
@@ -310,7 +310,7 @@ func validateInitialSignature(transaction *protocol.Transaction, signature proto
 
 	// Require a timestamp for the initiator
 	if keysig.GetTimestamp() == 0 {
-		return protocol.Errorf(protocol.ErrorCodeInvalidRequest, "initial signature does not have a timestamp")
+		return errors.Format(errors.StatusBadTimestamp, "initial signature does not have a timestamp")
 	}
 
 	return nil
@@ -476,7 +476,7 @@ func (x *Executor) verifyPageIsAuthorized(batch *database.Batch, transaction *pr
 	default:
 		// Authorization is enabled => unauthorized
 		// Transaction type forces authorization => unauthorized
-		return protocol.Errorf(protocol.ErrorCodeUnauthorized, "%v is not authorized to sign transactions for %v", signer.GetUrl(), principal.GetUrl())
+		return errors.Format(errors.StatusUnauthorized, "%v is not authorized to sign transactions for %v", signer.GetUrl(), principal.GetUrl())
 	}
 }
 

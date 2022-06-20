@@ -47,11 +47,14 @@ const StatusBadSignerVersion Status = 411
 // StatusBadTimestamp means the timestamp is invalid.
 const StatusBadTimestamp Status = 412
 
-// StatusUnknown means an unknown error occured.
-const StatusUnknown Status = 499
-
 // StatusInternalError means an internal error occured.
 const StatusInternalError Status = 500
+
+// StatusUnknown means an unknown error occured.
+const StatusUnknown Status = 501
+
+// StatusEncodingError means encoding or decoding failed.
+const StatusEncodingError Status = 502
 
 // GetEnumValue returns the value of the Status
 func (v Status) GetEnumValue() uint64 { return uint64(v) }
@@ -60,7 +63,7 @@ func (v Status) GetEnumValue() uint64 { return uint64(v) }
 func (v *Status) SetEnumValue(id uint64) bool {
 	u := Status(id)
 	switch u {
-	case StatusOK, StatusDelivered, StatusPending, StatusRemote, StatusWrongPartition, StatusBadRequest, StatusUnauthenticated, StatusInsufficientCredits, StatusUnauthorized, StatusNotFound, StatusConflict, StatusBadSignerVersion, StatusBadTimestamp, StatusUnknown, StatusInternalError:
+	case StatusOK, StatusDelivered, StatusPending, StatusRemote, StatusWrongPartition, StatusBadRequest, StatusUnauthenticated, StatusInsufficientCredits, StatusUnauthorized, StatusNotFound, StatusConflict, StatusBadSignerVersion, StatusBadTimestamp, StatusInternalError, StatusUnknown, StatusEncodingError:
 		*v = u
 		return true
 	default:
@@ -97,10 +100,12 @@ func (v Status) String() string {
 		return "badSignerVersion"
 	case StatusBadTimestamp:
 		return "badTimestamp"
-	case StatusUnknown:
-		return "unknown"
 	case StatusInternalError:
 		return "internalError"
+	case StatusUnknown:
+		return "unknown"
+	case StatusEncodingError:
+		return "encodingError"
 	default:
 		return fmt.Sprintf("Status:%d", v)
 	}
@@ -135,10 +140,12 @@ func StatusByName(name string) (Status, bool) {
 		return StatusBadSignerVersion, true
 	case "badtimestamp":
 		return StatusBadTimestamp, true
-	case "unknown":
-		return StatusUnknown, true
 	case "internalerror":
 		return StatusInternalError, true
+	case "unknown":
+		return StatusUnknown, true
+	case "encodingerror":
+		return StatusEncodingError, true
 	default:
 		return 0, false
 	}

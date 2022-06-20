@@ -46,11 +46,13 @@ Status:
     value: 412
     description: means the timestamp is invalid
 
-  Unknown:
-    value: 499
-    description: means an unknown error occured
-
-  # Server errors
+  # Server/system errors
   InternalError:
     value: 500
     description: means an internal error occured
+  Unknown:
+    value: 501
+    description: means an unknown error occured
+  EncodingError:
+    value: 502
+    description: means encoding or decoding failed

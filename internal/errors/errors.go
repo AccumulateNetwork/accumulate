@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"runtime"
+
+	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 )
 
 // Success returns true if the status represents success.
@@ -45,6 +47,12 @@ func convert(err error) *Error {
 	e := &Error{
 		Code:    StatusUnknown,
 		Message: err.Error(),
+	}
+
+	var encErr encoding.Error
+	if errors.As(err, &encErr) {
+		e.Code = StatusEncodingError
+		err = encErr.E
 	}
 
 	u, ok := err.(interface{ Unwrap() error })
