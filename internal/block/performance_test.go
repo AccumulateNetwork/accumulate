@@ -136,7 +136,7 @@ func BenchmarkBlockTimes(b *testing.B) {
 	require.NoError(b, x.Executor.BeginBlock(block))
 
 	// Pre-populate the block with 500 transactions
-	for i := 0; i < 5000; i++ {
+	for i := 0; i < 500; i++ {
 		env, err := chain.NormalizeEnvelope(acctesting.NewTransaction().
 			WithPrincipal(protocol.FaucetUrl).
 			WithBody(&protocol.AcmeFaucet{Url: aliceUrl}).
