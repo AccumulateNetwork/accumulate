@@ -23,8 +23,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 )
 
-//go:generate go run ../../tools/cmd/gen-enum  --package block enums.yml
-
 type Executor struct {
 	ExecutorOptions
 

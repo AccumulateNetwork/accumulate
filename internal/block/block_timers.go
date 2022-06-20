@@ -8,6 +8,8 @@ import (
 	"time"
 )
 
+//go:generate go run ../../tools/cmd/gen-enum  --package block enums.yml
+
 type BlockTimerType uint64
 
 func trackTransactionTimers(executors *map[protocol.TransactionType]chain.TransactionExecutor) (timerList []uint64) {
