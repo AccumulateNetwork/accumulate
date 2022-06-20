@@ -57,64 +57,6 @@ func BenchmarkPerformance(b *testing.B) {
 	}
 }
 
-func setupBlockTimeBenchmarks(b *testing.B) (*simulator.Simulator, []*chain.Delivery, *logging.DataSetLog, error) {
-
-	// Initialize the siulator, genesis
-	sim := simulator.New(b, 1)
-	sim.InitFromGenesis()
-
-	// Create a lite address
-	alice := acctesting.GenerateTmKey(b.Name(), "Alice")
-	aliceUrl := acctesting.AcmeLiteAddressTmPriv(alice)
-
-	// Start a block
-	x := sim.Subnet(sim.Subnets[1].Id)
-	x.Executor.EnableTimers()
-	block := new(block.Block)
-	block.IsLeader = true
-	block.Index = 3
-	block.Time = time.Now()
-	block.Batch = x.Database.Begin(true)
-	defer block.Batch.Discard()
-	require.NoError(b, x.Executor.BeginBlock(block))
-
-	// Pre-populate the block with 500 transactions
-	for i := 0; i < 500; i++ {
-		env, err := chain.NormalizeEnvelope(acctesting.NewTransaction().
-			WithPrincipal(protocol.FaucetUrl).
-			WithBody(&protocol.AcmeFaucet{Url: aliceUrl}).
-			Faucet())
-		require.NoError(b, err)
-		_, err = env[0].LoadTransaction(block.Batch)
-		require.NoError(b, err)
-		_, err = x.Executor.ExecuteEnvelope(block, env[0])
-		require.NoError(b, err)
-	}
-	// Construct a new transaction
-	env, err := chain.NormalizeEnvelope(acctesting.NewTransaction().
-		WithPrincipal(protocol.FaucetUrl).
-		WithBody(&protocol.AcmeFaucet{Url: aliceUrl}).
-		Faucet())
-	require.NoError(b, err)
-	_, err = env[0].LoadTransaction(block.Batch)
-	require.NoError(b, err)
-
-	dataSetLog := new(logging.DataSetLog)
-
-	dataSetLog.SetProcessName(x.Subnet.Id)
-
-	analysisDir := config.MakeAbsolute(b.TempDir(), "analysis")
-	defer os.RemoveAll(analysisDir)
-	dataSetLog.SetPath(analysisDir)
-
-	_ = os.MkdirAll(analysisDir, 0700)
-
-	ymd, hm := logging.GetCurrentDateTime()
-	dataSetLog.SetFileTag(ymd, hm)
-
-	return sim, env, dataSetLog, nil
-}
-
 func BenchmarkBlockTimes(b *testing.B) {
 	// Initialize the siulator, genesis
 	sim := simulator.New(b, 1)
