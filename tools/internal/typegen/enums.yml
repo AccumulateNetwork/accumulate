@@ -54,3 +54,15 @@ TypeCode:
     value: 13
   Txid:
     value: 14
+
+RecordType:
+  Entity:
+    value: 1
+  State:
+    value: 2
+  Chain:
+    value: 3
+  Index:
+    value: 4
+  Other:
+    value: 5
