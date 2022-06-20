@@ -39,6 +39,9 @@ func ParseUrl(s string) (*url.URL, error) {
 	if key, _ := protocol.ParseLiteAddress(u); key != nil {
 		return u, nil
 	}
+	if _, err := protocol.ParseLiteDataAddress(u); err == nil {
+		return u, nil
+	}
 	// Fixup URL
 	if !strings.HasSuffix(u.Authority, protocol.TLD) {
 		u.Authority += protocol.TLD
