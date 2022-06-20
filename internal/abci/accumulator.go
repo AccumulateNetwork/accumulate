@@ -295,7 +295,7 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 	// Initialize the chain
 	err = app.Executor.InitFromGenesis(block.Batch, req.AppStateBytes)
 	if err != nil {
-		panic(fmt.Errorf("failed to init chain: %v", err))
+		panic(fmt.Errorf("failed to init chain: %+v", err))
 	}
 
 	// Commit the batch

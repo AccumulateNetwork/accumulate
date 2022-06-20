@@ -2,6 +2,7 @@ package simulator
 
 import (
 	"crypto/sha256"
+	"math/big"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -49,6 +50,14 @@ func (s *Simulator) CreateAccount(account protocol.Account) {
 		writeAccountState(s, batch, account)
 		return nil
 	})
+}
+
+func (s *Simulator) CreateLiteTokenAccount(key []byte, token *url.URL, credits, tokens uint64) *url.URL {
+	lid := protocol.LiteAuthorityForKey(key[32:], protocol.SignatureTypeED25519)
+	lta := lid.JoinPath(token.ShortString())
+	s.CreateAccount(&protocol.LiteIdentity{Url: lid, CreditBalance: credits})
+	s.CreateAccount(&protocol.LiteTokenAccount{Url: lta, TokenUrl: token, Balance: *big.NewInt(int64(tokens))})
+	return lta
 }
 
 func (s *Simulator) CreateIdentity(identityUrl *url.URL, pubKey ...[]byte) {
