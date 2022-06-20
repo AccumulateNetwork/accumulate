@@ -62,6 +62,7 @@ func (d *Database) Begin(writable bool) *Batch {
 	b.logger.L = d.logger
 	b.store = d.store.Begin(writable)
 	b.values = map[storage.Key]cachedValue{}
+	// b.values2 = map[string]TypedValue{}
 	b.bptEntries = map[storage.Key][32]byte{}
 	return b
 }
@@ -80,6 +81,7 @@ func (b *Batch) Begin(writable bool) *Batch {
 	c.logger = b.logger
 	c.store = b.store.Begin(c.writable)
 	c.values = map[storage.Key]cachedValue{}
+	// c.values2 = map[string]TypedValue{}
 	c.bptEntries = map[storage.Key][32]byte{}
 	return c
 }

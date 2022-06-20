@@ -106,9 +106,14 @@ func GetReceipt(manager *MerkleManager, element Hash, anchor Hash) (r *Receipt, 
 		return nil, err
 	}
 
+	head, err := manager.Head().Get()
+	if err != nil {
+		return nil, err
+	}
+
 	if r.StartIndex > r.EndIndex ||
 		r.StartIndex < 0 ||
-		r.StartIndex > r.manager.GetElementCount() { // The element must be at the anchorIndex or before
+		r.StartIndex > head.Count { // The element must be at the anchorIndex or before
 		return nil, fmt.Errorf("invalid indexes for the element %d and anchor %d", r.StartIndex, r.EndIndex)
 	}
 

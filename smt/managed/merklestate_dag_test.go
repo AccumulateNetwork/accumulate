@@ -1,4 +1,4 @@
-package managed_test
+package managed
 
 import (
 	"fmt"
@@ -6,8 +6,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
-	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 	"gopkg.in/yaml.v3"
 )
 
@@ -15,16 +13,16 @@ func TestDAGRoot(t *testing.T) {
 	b, err := ioutil.ReadFile("../../testdata/merkle.yaml")
 	require.NoError(t, err)
 
-	var cases []*acctesting.MerkleTestCase
+	var cases []*MerkleTestCase
 	require.NoError(t, yaml.Unmarshal(b, &cases))
 
 	for _, c := range cases {
-		var result managed.SparseHashList
+		var result SparseHashList
 		for _, e := range c.Cascade {
-			result = append(result, managed.Hash(e))
+			result = append(result, Hash(e))
 		}
 		t.Run(fmt.Sprintf("%X", c.Root[:4]), func(t *testing.T) {
-			ms := new(managed.MerkleState)
+			ms := new(MerkleState)
 			ms.InitSha256()
 			for _, e := range c.Entries {
 				ms.AddToMerkleTree(e)
@@ -34,7 +32,7 @@ func TestDAGRoot(t *testing.T) {
 				result = append(result, nil)
 			}
 			require.Equal(t, result, ms.Pending)
-			require.Equal(t, managed.Hash(c.Root), ms.GetMDRoot())
+			require.Equal(t, Hash(c.Root), ms.GetMDRoot())
 		})
 	}
 }
