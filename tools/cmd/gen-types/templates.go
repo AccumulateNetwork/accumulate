@@ -221,7 +221,7 @@ func (f *Field) IsRequired() bool        { return !f.Optional }
 func (f *Field) OmitEmpty() bool         { return !f.KeepEmpty }
 
 var Templates = typegen.NewTemplateLibrary(template.FuncMap{
-	"lcName":  typegen.LowerFirstRune,
+	"lcName":  typegen.LowerFirstWord,
 	"map":     typegen.MakeMap,
 	"natural": typegen.Natural,
 	"debug":   fmt.Printf,
