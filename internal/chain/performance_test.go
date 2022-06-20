@@ -122,10 +122,11 @@ func BenchmarkXxx(b *testing.B) {
 		require.NoError(b, err)
 		if ds != nil {
 			ds.Save("height", i, 10, true)
-			ds.Save("time_since_app_start", time.Since(block.Time).Seconds(), 6, false)
+			ds.Save("time_since_start", time.Since(block.Time).Seconds(), 6, false)
 			x.Executor.BlockTimers.Store(ds)
 		}
 	}
+	b.StopTimer()
 
 	_, _ = dataSetLog.DumpDataSetToDiskFile()
 
