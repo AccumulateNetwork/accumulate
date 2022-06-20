@@ -1,14 +1,11 @@
-package managed_test
+package managed
 
 import (
 	"bytes"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
-	. "gitlab.com/accumulatenetwork/accumulate/smt/managed"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 func b2i(b Hash) int64 {
@@ -34,13 +31,8 @@ func TestMerkleManager_GetRange(t *testing.T) {
 	for NumTests := int64(50); NumTests < 64; NumTests++ {
 
 		var rh common.RandHash
-		store := database.OpenInMemory(nil)
-		storeTx := store.Begin(true)
-
-		mm, err := NewMerkleManager(database.MerkleDbManager{Batch: storeTx}, 2)
-		require.NoError(t, err, "should create MerkleManager")
-		err = mm.SetKey(storage.MakeKey("try"))
-		require.NoError(t, err, "should be able to set a key")
+		store := begin()
+		mm := newChain(store, 2, "try")
 		for i := int64(0); i < NumTests; i++ {
 			require.NoError(t, mm.AddHash(rh.NextList(), false))
 		}

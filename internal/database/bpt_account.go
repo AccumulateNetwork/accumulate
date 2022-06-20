@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"math"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding/hash"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
@@ -127,28 +126,25 @@ func (a *Account) restore(s *accountState) error {
 	a.batch.putValue(a.key.Object(), metadata)
 
 	// Store chain state
-	mgr := new(managed.MerkleManager)
-	mgr.Manager = MerkleDbManager{Batch: a.batch}
-	mgr.MarkPower = markPower
-	mgr.MarkFreq = int64(math.Pow(2, float64(markPower)))
-	mgr.MarkMask = mgr.MarkFreq - 1
 	for _, c := range s.Chains {
-		mgr.Key = a.key.Chain(c.Name)
-		mgr.MS = new(managed.MerkleState)
-		mgr.MS.InitSha256()
-		mgr.MS.Count = int64(c.Count)
-		mgr.MS.Pending = make(managed.SparseHashList, len(c.Pending))
+		head := new(managed.MerkleState)
+		head.Count = int64(c.Count)
+		head.Pending = make(managed.SparseHashList, len(c.Pending))
 		for i, v := range c.Pending {
 			if len(v) > 0 {
-				mgr.MS.Pending[i] = v
+				head.Pending[i] = v
 			}
 		}
-		err := mgr.WriteChainHead()
+		mgr, err := a.Chain(c.Name, c.Type)
 		if err != nil {
-			return fmt.Errorf("store %s chain state: %w", c.Name, err)
+			return fmt.Errorf("store %s chain head: %w", c.Name, err)
+		}
+		err = mgr.merkle.Head().Put(head)
+		if err != nil {
+			return fmt.Errorf("store %s chain head: %w", c.Name, err)
 		}
 		for i, entry := range c.Entries {
-			err := mgr.AddHash(entry, false)
+			err := mgr.AddEntry(entry, false)
 			if err != nil {
 				return fmt.Errorf("store %s chain entry %d: %w", c.Name, c.Count+uint64(i), err)
 			}
@@ -257,6 +253,7 @@ func (s *accountState) Hasher() (hash.Hasher, error) {
 
 // PutBpt writes the record's BPT entry.
 func (a *Account) putBpt() error {
+
 	state, err := a.state(false, false)
 	if err != nil {
 		return err
