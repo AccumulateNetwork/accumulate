@@ -519,7 +519,7 @@ type ExecEntry struct {
 	mu                      sync.Mutex
 	blockIndex              uint64
 	blockTime               time.Time
-	nextBlock, currentBlock []*protocol.Envelope
+	nextBlock, currentBlock []*chain.Delivery
 
 	Subnet     *config.Subnet
 	Database   *database.Database
@@ -530,7 +530,7 @@ type ExecEntry struct {
 	// SubmitHook can be used to control how envelopes are submitted to the
 	// subnet. It is not safe to change SubmitHook concurrently with calls to
 	// Submit.
-	SubmitHook func([]*protocol.Envelope) []*protocol.Envelope
+	SubmitHook func([]*chain.Delivery) ([]*chain.Delivery, bool)
 }
 
 // Submit adds the envelopes to the next block's queue.
@@ -538,18 +538,30 @@ type ExecEntry struct {
 // By adding transactions to the next block and swaping queues when a block is
 // executed, we roughly simulate the process Tendermint uses to build blocks.
 func (x *ExecEntry) Submit(envelopes ...*protocol.Envelope) {
+	var deliveries []*chain.Delivery
+	for _, env := range envelopes {
+		normalized, err := chain.NormalizeEnvelope(env)
+		require.NoErrorf(x, err, "Normalizing envelopes for %s", x.Executor.Describe.SubnetId)
+		deliveries = append(deliveries, normalized...)
+	}
+
 	// Capturing the field in a variable is more concurrency safe than using the
 	// field directly
-	if h := x.SubmitHook; h != nil {
-		envelopes = h(envelopes)
+	if hook := x.SubmitHook; hook != nil {
+		var keep bool
+		deliveries, keep = hook(deliveries)
+		if !keep {
+			x.SubmitHook = nil
+		}
 	}
+
 	x.mu.Lock()
 	defer x.mu.Unlock()
-	x.nextBlock = append(x.nextBlock, envelopes...)
+	x.nextBlock = append(x.nextBlock, deliveries...)
 }
 
 // takeSubmitted returns the envelopes for the current block.
-func (x *ExecEntry) takeSubmitted() []*protocol.Envelope {
+func (x *ExecEntry) takeSubmitted() []*chain.Delivery {
 	x.mu.Lock()
 	defer x.mu.Unlock()
 	submitted := x.currentBlock
@@ -583,15 +595,7 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 	block.IsLeader = true
 	block.Batch = x.Database.Begin(true)
 
-	// fmt.Printf("Executing %d\n", x.blockIndex)
-
-	var deliveries []*chain.Delivery
-	for _, envelope := range x.takeSubmitted() {
-		d, err := chain.NormalizeEnvelope(envelope)
-		require.NoErrorf(x, err, "Normalizing envelopes for %s", x.Executor.Describe.SubnetId)
-		deliveries = append(deliveries, d...)
-	}
-
+	deliveries := x.takeSubmitted()
 	errg.Go(func() error {
 		defer block.Batch.Discard()
 

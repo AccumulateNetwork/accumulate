@@ -67,26 +67,37 @@ func (x DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 		}
 	}
 
+	if st.NetworkType != config.Directory {
+		err = processReceiptsFromDirectory(st, tx, body)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return nil, nil
+}
+
+func processReceiptsFromDirectory(st *StateManager, tx *Delivery, body *protocol.DirectoryAnchor) error {
 	// Process receipts
 	var deliveries []*Delivery
 	var sequence = map[*Delivery]int{}
 	for i, receipt := range body.Receipts {
 		receipt := receipt // See docs/developer/rangevarref.md
 		if !bytes.Equal(receipt.Anchor, body.RootChainAnchor[:]) {
-			return nil, fmt.Errorf("receipt %d is invalid: result does not match the anchor", i)
+			return fmt.Errorf("receipt %d is invalid: result does not match the anchor", i)
 		}
 
 		st.logger.Debug("Received receipt", "from", logging.AsHex(receipt.Start).Slice(0, 4), "to", logging.AsHex(body.RootChainAnchor).Slice(0, 4), "block", body.MinorBlockIndex, "source", body.Source, "module", "synthetic")
 
 		synth, err := st.batch.Account(st.Ledger()).SyntheticForAnchor(*(*[32]byte)(receipt.Start))
 		if err != nil {
-			return nil, fmt.Errorf("failed to load pending synthetic transactions for anchor %X: %w", receipt.Start[:4], err)
+			return fmt.Errorf("failed to load pending synthetic transactions for anchor %X: %w", receipt.Start[:4], err)
 		}
 		for _, txid := range synth {
 			h := txid.Hash()
 			sig, err := getSyntheticSignature(st.batch, st.batch.Transaction(h[:]))
 			if err != nil {
-				return nil, err
+				return err
 			}
 
 			d := tx.NewSyntheticReceipt(txid.Hash(), body.Source, &receipt)
@@ -102,8 +113,7 @@ func (x DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 	for _, d := range deliveries {
 		st.State.ProcessAdditionalTransaction(d)
 	}
-
-	return nil, nil
+	return nil
 }
 
 func processNetworkAccountUpdates(st *StateManager, delivery *Delivery, updates []protocol.NetworkAccountUpdate) error {

@@ -29,6 +29,7 @@ type Executor struct {
 	executors  map[protocol.TransactionType]TransactionExecutor
 	dispatcher *dispatcher
 	logger     logging.OptionalLogger
+	db         *database.Database
 
 	// oldBlockMeta blockMetadata
 }
@@ -116,6 +117,7 @@ func newExecutor(opts ExecutorOptions, db *database.Database, executors ...Trans
 	m.ExecutorOptions = opts
 	m.executors = map[protocol.TransactionType]TransactionExecutor{}
 	m.dispatcher = newDispatcher(opts)
+	m.db = db
 
 	if opts.Logger != nil {
 		m.logger.L = opts.Logger.With("module", "executor")
