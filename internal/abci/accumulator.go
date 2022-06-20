@@ -173,6 +173,7 @@ func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
 
 	if app.Accumulate.AnalysisLog.Enabled {
 		app.Accumulate.AnalysisLog.InitDataSet("accumulator", logging.DefaultOptions())
+		app.Accumulate.AnalysisLog.InitDataSet("executor", logging.DefaultOptions())
 		app.Executor.EnableTimers()
 	}
 
@@ -539,6 +540,7 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 		resp.RetainHeight = int64(app.lastSnapshot)
 	}
 
+	timeSinceAppStart := time.Since(app.startTime).Seconds()
 	ds := app.Accumulate.AnalysisLog.GetDataSet("accumulator")
 	if ds != nil {
 		blockTime := time.Since(app.timer).Seconds()
@@ -549,13 +551,20 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 			estTps = 1.0 / aveBlockTime
 		}
 		ds.Save("height", app.block.Index, 10, true)
-		ds.Save("time", time.Since(app.startTime).Seconds(), 6, false)
+		ds.Save("time_since_app_start", timeSinceAppStart, 6, false)
 		ds.Save("block_time", blockTime, 6, false)
 		ds.Save("commit_time", commitTime, 6, false)
 		ds.Save("event_time", publishEventTime, 6, false)
 		ds.Save("ave_block_time", aveBlockTime, 10, false)
 		ds.Save("est_tps", estTps, 10, false)
 		ds.Save("txct", app.txct, 10, false)
+
+	}
+
+	ds = app.Accumulate.AnalysisLog.GetDataSet("executor")
+	if ds != nil {
+		ds.Save("height", app.block.Index, 10, true)
+		ds.Save("time_since_app_start", timeSinceAppStart, 6, false)
 		app.Executor.BlockTimers.Store(ds)
 	}
 

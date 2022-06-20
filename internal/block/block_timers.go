@@ -41,6 +41,7 @@ type TimerRecord struct {
 type TimerSet struct {
 	enable  bool
 	timeRec map[uint64]*TimerRecord
+	order   []uint64
 }
 
 func resolveLabel(v uint64) string {
@@ -64,12 +65,15 @@ func resolveLabel(v uint64) string {
 }
 
 func (t *TimerSet) Store(ds *logging.DataSet) {
-	for k, v := range t.timeRec {
-		label := resolveLabel(k)
-		call_count := fmt.Sprintf("%s_call_count", label)
-		ds.Save(call_count, v.txct, len(call_count), false)
-		elapsed := fmt.Sprintf("%s_elapsed", label)
-		ds.Save(elapsed, v.elapsed, len(elapsed), false)
+	for _, k := range t.order {
+		v, ok := t.timeRec[k]
+		if ok {
+			label := resolveLabel(k)
+			call_count := fmt.Sprintf("%s_call_count", label)
+			ds.Save(call_count, v.txct, 10, false)
+			elapsed := fmt.Sprintf("%s_elapsed", label)
+			ds.Save(elapsed, v.elapsed, 10, false)
+		}
 	}
 }
 
@@ -78,6 +82,7 @@ func (t *TimerSet) Initialize(executors *map[protocol.TransactionType]chain.Tran
 	t.timeRec = make(map[uint64]*TimerRecord)
 	for _, r := range trackBlockTimers(executors) {
 		t.timeRec[r] = new(TimerRecord)
+		t.order = append(t.order, r)
 	}
 }
 
