@@ -34,7 +34,7 @@ func New(filepath string, logger storage.Logger) (*DB, error) {
 	// Make sure all directories exist
 	err := os.MkdirAll(filepath, 0700)
 	if err != nil {
-		return nil, errors.New("failed to create home directory")
+		return nil, fmt.Errorf("open badger: create %q: %w", filepath, err)
 	}
 
 	opts := badger.DefaultOptions(filepath)
