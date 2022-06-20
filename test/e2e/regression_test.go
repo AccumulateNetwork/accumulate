@@ -11,6 +11,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
@@ -135,6 +136,43 @@ func TestAddCreditsToLiteIdentityOnOtherBVN(t *testing.T) {
 	// Verify
 	recvId := simulator.GetAccount[*LiteIdentity](sim, receiver.RootIdentity())
 	require.Equal(t, int(creditAmount*CreditPrecision), int(recvId.CreditBalance))
+}
+
+func TestSynthTxnWithMissingPrincipal(t *testing.T) {
+	// Tests AC-1704
+	var timestamp uint64
+
+	// Initialize
+	sim := simulator.New(t, 3)
+	sim.InitFromGenesis()
+
+	// Setup a lite token account for a token type that does not exist
+	liteKey := acctesting.GenerateKey("Lite")
+	lite := sim.CreateLiteTokenAccount(liteKey, url.MustParse("fake.acme/tokens"), 1e9, 1)
+
+	// Burn credits
+	txn := sim.MustSubmitAndExecuteBlock(
+		acctesting.NewTransaction().
+			WithPrincipal(lite).
+			WithSigner(lite, 1).
+			WithTimestampVar(&timestamp).
+			WithBody(&BurnTokens{
+				Amount: *big.NewInt(1),
+			}).
+			Initiate(SignatureTypeED25519, liteKey).
+			Build(),
+	)
+	_, _, synth := sim.WaitForTransaction(delivered, txn[0].Transaction[0].GetHash(), 50)
+
+	// The synthetic transaction should be received and marked as pending
+	require.Len(t, synth, 1)
+	hash := synth[0].Hash()
+	_, status, _ := sim.WaitForTransaction(received, hash[:], 50)
+	require.True(t, status.Pending, "The transaction was delivered prematurely")
+
+	// The synthetic transaction must fail, but only after the anchor is received
+	_, status, _ = sim.WaitForTransaction(delivered, hash[:], 50)
+	require.NotZero(t, status.Code, "The transaction did not fail")
 }
 
 func TestFaucetMultiNetwork(t *testing.T) {
