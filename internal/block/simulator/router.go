@@ -85,22 +85,13 @@ func (r router) Submit(ctx context.Context, partition string, envelope *protocol
 
 		result, err := CheckTx(r.TB, x.Database, x.Executor, envelope)
 		if err != nil {
-			if err1, ok := err.(*protocol.Error); ok {
-				status.Code = err1.Code.GetEnumValue()
-			} else if err2, ok := err.(*errors.Error); ok {
-				status.Code = err2.Code.GetEnumValue()
-				status.Error = err2
-			} else {
-				status.Code = protocol.ErrorCodeUnknownError.GetEnumValue()
-			}
-			status.Message = err.Error()
-			if status.Code != protocol.ErrorCodeAlreadyDelivered.GetEnumValue() {
+			status.Set(err)
+			if status.Failed() {
 				r.Logger.Info("Transaction failed to check",
 					"err", err,
 					"type", envelope.Transaction.Body.Type(),
 					"txn-hash", logging.AsHex(envelope.Transaction.GetHash()).Slice(0, 4),
 					"code", status.Code,
-					"message", status.Message,
 					"principal", envelope.Transaction.Header.Principal)
 			}
 		}
@@ -115,7 +106,7 @@ func (r router) Submit(ctx context.Context, partition string, envelope *protocol
 
 	// If a user transaction fails, the batch fails
 	for i, result := range results {
-		if result.Code == 0 {
+		if result.Code.Success() {
 			continue
 		}
 		if deliveries[i].Transaction.Body.Type().IsUser() {

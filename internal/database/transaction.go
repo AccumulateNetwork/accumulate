@@ -70,7 +70,8 @@ func (t *Transaction) PutStatus(v *protocol.TransactionStatus) error {
 
 	t.batch.putValue(t.key.Status(), v)
 
-	if !v.Pending {
+	// TODO Why?
+	if !v.Pending() {
 		return nil
 	}
 

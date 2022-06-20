@@ -80,7 +80,7 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Del
 	result, err := executor.Execute(st, &chain.Delivery{Transaction: delivery.Transaction})
 	x.BlockTimers.Stop(r2)
 	if err != nil {
-		err = errors.Wrap(0, err)
+		err = errors.Wrap(errors.StatusUnknown, err)
 		return x.recordFailedTransaction(batch, delivery, err)
 	}
 
@@ -342,6 +342,7 @@ func (x *Executor) recordTransaction(batch *database.Batch, delivery *chain.Deli
 		return nil, fmt.Errorf("load transaction status: %w", err)
 	}
 
+	status.TxID = delivery.Transaction.ID()
 	updateStatus(status)
 	err = db.PutStatus(status)
 	if err != nil {
@@ -361,7 +362,7 @@ func (x *Executor) recordTransaction(batch *database.Batch, delivery *chain.Deli
 	}
 
 	partitionLedger := ledger.Partition(delivery.SourceNetwork)
-	if partitionLedger.Add(status.Delivered, delivery.SequenceNumber, delivery.Transaction.ID()) {
+	if partitionLedger.Add(status.Delivered(), delivery.SequenceNumber, delivery.Transaction.ID()) {
 		err = batch.Account(x.Describe.Synthetic()).PutState(ledger)
 		if err != nil {
 			return nil, errors.Format(errors.StatusUnknown, "store synthetic transaction ledger: %w", err)
@@ -374,8 +375,7 @@ func (x *Executor) recordTransaction(batch *database.Batch, delivery *chain.Deli
 func (x *Executor) recordPendingTransaction(net *config.Describe, batch *database.Batch, delivery *chain.Delivery) (*protocol.TransactionStatus, *chain.ProcessTransactionState, error) {
 	// Record the transaction
 	status, err := x.recordTransaction(batch, delivery, func(status *protocol.TransactionStatus) {
-		status.Remote = false
-		status.Pending = true
+		status.Code = errors.StatusPending
 	})
 	if err != nil {
 		return nil, nil, err
@@ -421,10 +421,7 @@ func (x *Executor) recordPendingTransaction(net *config.Describe, batch *databas
 func (x *Executor) recordSuccessfulTransaction(batch *database.Batch, state *chain.ProcessTransactionState, delivery *chain.Delivery, result protocol.TransactionResult) (*protocol.TransactionStatus, *chain.ProcessTransactionState, error) {
 	// Record the transaction
 	status, err := x.recordTransaction(batch, delivery, func(status *protocol.TransactionStatus) {
-		status.Remote = false
-		status.Pending = false
-		status.Delivered = true
-		status.Code = 0
+		status.Code = errors.StatusDelivered
 		if result == nil {
 			status.Result = new(protocol.EmptyResult)
 		} else {
@@ -469,22 +466,7 @@ func (x *Executor) recordSuccessfulTransaction(batch *database.Batch, state *cha
 func (x *Executor) recordFailedTransaction(batch *database.Batch, delivery *chain.Delivery, failure error) (*protocol.TransactionStatus, *chain.ProcessTransactionState, error) {
 	// Record the transaction
 	status, err := x.recordTransaction(batch, delivery, func(status *protocol.TransactionStatus) {
-		status.Remote = false
-		status.Pending = false
-		status.Delivered = true
-		status.Message = failure.Error()
-
-		var err1 *protocol.Error
-		var err2 *errors.Error
-		switch {
-		case errors.As(failure, &err1):
-			status.Code = err1.Code.GetEnumValue()
-		case errors.As(failure, &err2):
-			status.Error = err2
-			status.Code = protocol.ConvertErrorStatus(err2.Code).GetEnumValue()
-		default:
-			status.Code = protocol.ErrorCodeUnknownError.GetEnumValue()
-		}
+		status.Set(failure)
 	})
 	if err != nil {
 		return nil, nil, err

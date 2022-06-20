@@ -768,13 +768,8 @@ type TransactionResultSet struct {
 
 type TransactionStatus struct {
 	fieldsSet []bool
-	// For is the transaction this status is for.
-	For       [32]byte
-	Remote    bool              `json:"remote,omitempty" form:"remote" query:"remote" validate:"required"`
-	Delivered bool              `json:"delivered,omitempty" form:"delivered" query:"delivered" validate:"required"`
-	Pending   bool              `json:"pending,omitempty" form:"pending" query:"pending" validate:"required"`
-	Code      uint64            `json:"code,omitempty" form:"code" query:"code" validate:"required"`
-	Message   string            `json:"message,omitempty" form:"message" query:"message" validate:"required"`
+	TxID      *url.TxID         `json:"txID,omitempty" form:"txID" query:"txID" validate:"required"`
+	Code      errors2.Status    `json:"code,omitempty" form:"code" query:"code" validate:"required"`
 	Error     *errors2.Error    `json:"error,omitempty" form:"error" query:"error" validate:"required"`
 	Result    TransactionResult `json:"result,omitempty" form:"result" query:"result" validate:"required"`
 	// Initiator is the signer that initiated the transaction.
@@ -2287,11 +2282,10 @@ func (v *TransactionResultSet) CopyAsInterface() interface{} { return v.Copy() }
 func (v *TransactionStatus) Copy() *TransactionStatus {
 	u := new(TransactionStatus)
 
-	u.Remote = v.Remote
-	u.Delivered = v.Delivered
-	u.Pending = v.Pending
+	if v.TxID != nil {
+		u.TxID = (v.TxID).Copy()
+	}
 	u.Code = v.Code
-	u.Message = v.Message
 	if v.Error != nil {
 		u.Error = (v.Error).Copy()
 	}
@@ -4108,19 +4102,15 @@ func (v *TransactionResultSet) Equal(u *TransactionResultSet) bool {
 }
 
 func (v *TransactionStatus) Equal(u *TransactionStatus) bool {
-	if !(v.Remote == u.Remote) {
+	switch {
+	case v.TxID == u.TxID:
+		// equal
+	case v.TxID == nil || u.TxID == nil:
 		return false
-	}
-	if !(v.Delivered == u.Delivered) {
-		return false
-	}
-	if !(v.Pending == u.Pending) {
+	case !((v.TxID).Equal(u.TxID)):
 		return false
 	}
 	if !(v.Code == u.Code) {
-		return false
-	}
-	if !(v.Message == u.Message) {
 		return false
 	}
 	switch {
@@ -9146,48 +9136,36 @@ func (v *TransactionResultSet) IsValid() error {
 }
 
 var fieldNames_TransactionStatus = []string{
-	1: "Remote",
-	2: "Delivered",
-	3: "Pending",
-	4: "Code",
-	5: "Message",
-	6: "Error",
-	7: "Result",
-	8: "Initiator",
-	9: "Signers",
+	1: "TxID",
+	2: "Code",
+	3: "Error",
+	4: "Result",
+	5: "Initiator",
+	6: "Signers",
 }
 
 func (v *TransactionStatus) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	if !(!v.Remote) {
-		writer.WriteBool(1, v.Remote)
-	}
-	if !(!v.Delivered) {
-		writer.WriteBool(2, v.Delivered)
-	}
-	if !(!v.Pending) {
-		writer.WriteBool(3, v.Pending)
+	if !(v.TxID == nil) {
+		writer.WriteTxid(1, v.TxID)
 	}
 	if !(v.Code == 0) {
-		writer.WriteUint(4, v.Code)
-	}
-	if !(len(v.Message) == 0) {
-		writer.WriteString(5, v.Message)
+		writer.WriteEnum(2, v.Code)
 	}
 	if !(v.Error == nil) {
-		writer.WriteValue(6, v.Error.MarshalBinary)
+		writer.WriteValue(3, v.Error.MarshalBinary)
 	}
 	if !(v.Result == nil) {
-		writer.WriteValue(7, v.Result.MarshalBinary)
+		writer.WriteValue(4, v.Result.MarshalBinary)
 	}
 	if !(v.Initiator == nil) {
-		writer.WriteUrl(8, v.Initiator)
+		writer.WriteUrl(5, v.Initiator)
 	}
 	if !(len(v.Signers) == 0) {
 		for _, v := range v.Signers {
-			writer.WriteValue(9, v.MarshalBinary)
+			writer.WriteValue(6, v.MarshalBinary)
 		}
 	}
 
@@ -9203,46 +9181,31 @@ func (v *TransactionStatus) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Remote is missing")
-	} else if !v.Remote {
-		errs = append(errs, "field Remote is not set")
+		errs = append(errs, "field TxID is missing")
+	} else if v.TxID == nil {
+		errs = append(errs, "field TxID is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Delivered is missing")
-	} else if !v.Delivered {
-		errs = append(errs, "field Delivered is not set")
-	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field Pending is missing")
-	} else if !v.Pending {
-		errs = append(errs, "field Pending is not set")
-	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field Code is missing")
 	} else if v.Code == 0 {
 		errs = append(errs, "field Code is not set")
 	}
-	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
-		errs = append(errs, "field Message is missing")
-	} else if len(v.Message) == 0 {
-		errs = append(errs, "field Message is not set")
-	}
-	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Error is missing")
 	} else if v.Error == nil {
 		errs = append(errs, "field Error is not set")
 	}
-	if len(v.fieldsSet) > 7 && !v.fieldsSet[7] {
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field Result is missing")
 	} else if v.Result == nil {
 		errs = append(errs, "field Result is not set")
 	}
-	if len(v.fieldsSet) > 8 && !v.fieldsSet[8] {
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
 		errs = append(errs, "field Initiator is missing")
 	} else if v.Initiator == nil {
 		errs = append(errs, "field Initiator is not set")
 	}
-	if len(v.fieldsSet) > 9 && !v.fieldsSet[9] {
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
 		errs = append(errs, "field Signers is missing")
 	} else if len(v.Signers) == 0 {
 		errs = append(errs, "field Signers is not set")
@@ -12514,36 +12477,27 @@ func (v *TransactionStatus) UnmarshalBinary(data []byte) error {
 func (v *TransactionStatus) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	if x, ok := reader.ReadBool(1); ok {
-		v.Remote = x
+	if x, ok := reader.ReadTxid(1); ok {
+		v.TxID = x
 	}
-	if x, ok := reader.ReadBool(2); ok {
-		v.Delivered = x
+	if x := new(errors2.Status); reader.ReadEnum(2, x) {
+		v.Code = *x
 	}
-	if x, ok := reader.ReadBool(3); ok {
-		v.Pending = x
-	}
-	if x, ok := reader.ReadUint(4); ok {
-		v.Code = x
-	}
-	if x, ok := reader.ReadString(5); ok {
-		v.Message = x
-	}
-	if x := new(errors2.Error); reader.ReadValue(6, x.UnmarshalBinary) {
+	if x := new(errors2.Error); reader.ReadValue(3, x.UnmarshalBinary) {
 		v.Error = x
 	}
-	reader.ReadValue(7, func(b []byte) error {
+	reader.ReadValue(4, func(b []byte) error {
 		x, err := UnmarshalTransactionResult(b)
 		if err == nil {
 			v.Result = x
 		}
 		return err
 	})
-	if x, ok := reader.ReadUrl(8); ok {
+	if x, ok := reader.ReadUrl(5); ok {
 		v.Initiator = x
 	}
 	for {
-		ok := reader.ReadValue(9, func(b []byte) error {
+		ok := reader.ReadValue(6, func(b []byte) error {
 			x, err := UnmarshalSigner(b)
 			if err == nil {
 				v.Signers = append(v.Signers, x)
@@ -14093,21 +14047,23 @@ func (v *TransactionResultSet) MarshalJSON() ([]byte, error) {
 
 func (v *TransactionStatus) MarshalJSON() ([]byte, error) {
 	u := struct {
+		TxID      *url.TxID                                     `json:"txID,omitempty"`
+		Code      errors2.Status                                `json:"code,omitempty"`
 		Remote    bool                                          `json:"remote,omitempty"`
 		Delivered bool                                          `json:"delivered,omitempty"`
 		Pending   bool                                          `json:"pending,omitempty"`
-		Code      uint64                                        `json:"code,omitempty"`
-		Message   string                                        `json:"message,omitempty"`
+		Failed    bool                                          `json:"failed,omitempty"`
 		Error     *errors2.Error                                `json:"error,omitempty"`
 		Result    encoding.JsonUnmarshalWith[TransactionResult] `json:"result,omitempty"`
 		Initiator *url.URL                                      `json:"initiator,omitempty"`
 		Signers   encoding.JsonUnmarshalListWith[Signer]        `json:"signers,omitempty"`
 	}{}
-	u.Remote = v.Remote
-	u.Delivered = v.Delivered
-	u.Pending = v.Pending
+	u.TxID = v.TxID
 	u.Code = v.Code
-	u.Message = v.Message
+	u.Remote = v.Remote()
+	u.Delivered = v.Delivered()
+	u.Pending = v.Pending()
+	u.Failed = v.Failed()
 	u.Error = v.Error
 	u.Result = encoding.JsonUnmarshalWith[TransactionResult]{Value: v.Result, Func: UnmarshalTransactionResultJSON}
 	u.Initiator = v.Initiator
@@ -16411,21 +16367,23 @@ func (v *TransactionResultSet) UnmarshalJSON(data []byte) error {
 
 func (v *TransactionStatus) UnmarshalJSON(data []byte) error {
 	u := struct {
+		TxID      *url.TxID                                     `json:"txID,omitempty"`
+		Code      errors2.Status                                `json:"code,omitempty"`
 		Remote    bool                                          `json:"remote,omitempty"`
 		Delivered bool                                          `json:"delivered,omitempty"`
 		Pending   bool                                          `json:"pending,omitempty"`
-		Code      uint64                                        `json:"code,omitempty"`
-		Message   string                                        `json:"message,omitempty"`
+		Failed    bool                                          `json:"failed,omitempty"`
 		Error     *errors2.Error                                `json:"error,omitempty"`
 		Result    encoding.JsonUnmarshalWith[TransactionResult] `json:"result,omitempty"`
 		Initiator *url.URL                                      `json:"initiator,omitempty"`
 		Signers   encoding.JsonUnmarshalListWith[Signer]        `json:"signers,omitempty"`
 	}{}
-	u.Remote = v.Remote
-	u.Delivered = v.Delivered
-	u.Pending = v.Pending
+	u.TxID = v.TxID
 	u.Code = v.Code
-	u.Message = v.Message
+	u.Remote = v.Remote()
+	u.Delivered = v.Delivered()
+	u.Pending = v.Pending()
+	u.Failed = v.Failed()
 	u.Error = v.Error
 	u.Result = encoding.JsonUnmarshalWith[TransactionResult]{Value: v.Result, Func: UnmarshalTransactionResultJSON}
 	u.Initiator = v.Initiator
@@ -16433,11 +16391,8 @@ func (v *TransactionStatus) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	v.Remote = u.Remote
-	v.Delivered = u.Delivered
-	v.Pending = u.Pending
+	v.TxID = u.TxID
 	v.Code = u.Code
-	v.Message = u.Message
 	v.Error = u.Error
 	v.Result = u.Result.Value
 

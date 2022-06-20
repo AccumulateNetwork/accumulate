@@ -45,22 +45,7 @@ func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]
 		}
 
 		sentry.CaptureException(err)
-		status.Message = err.Error()
-
-		var err1 *protocol.Error
-		if status.Code == 0 && errors.As(err, &err1) {
-			status.Code = err1.Code.GetEnumValue()
-		}
-
-		var err2 *errors.Error
-		if status.Error == nil && errors.As(err, &err2) {
-			status.Error = err2
-		}
-
-		if status.Code == 0 {
-			status.Code = protocol.ErrorCodeUnknownError.GetEnumValue()
-		}
-
+		status.Set(err)
 		results[i] = status
 	}
 

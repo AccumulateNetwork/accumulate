@@ -253,7 +253,7 @@ func (x *Executor) captureValueAsDataEntry(batch *database.Batch, internalAccoun
 
 	err = x.putSyntheticTransaction(
 		batch, txn,
-		&protocol.TransactionStatus{Delivered: true},
+		&protocol.TransactionStatus{Code: errors.StatusDelivered},
 		nil)
 	if err != nil {
 		return err

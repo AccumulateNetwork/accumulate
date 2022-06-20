@@ -53,23 +53,14 @@ func (x *Executor) ExecuteEnvelope(block *Block, delivery *chain.Delivery) (*pro
 				return nil, err
 			}
 
-			if status.Code != 0 && status.Code != protocol.ErrorCodeAlreadyDelivered.GetEnumValue() {
-				var statusErr error
-				if status.Error != nil {
-					statusErr = status.Error
-				} else {
-					statusErr = protocol.Errorf(protocol.ErrorCode(status.Code), "%s", status.Message)
-				}
+			if status.Failed() {
 				x.logger.Error("Additional transaction failed",
 					"block", block.Index,
 					"type", delivery.Transaction.Body.Type(),
-					"pending", status.Pending,
-					"delivered", status.Delivered,
-					"remote", status.Remote,
 					"txn-hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4),
 					"principal", delivery.Transaction.Header.Principal,
-					"code", status.Code,
-					"error", statusErr,
+					"status", status.Code,
+					"error", status.Error,
 				)
 			}
 		}
@@ -95,7 +86,7 @@ func (x *Executor) executeEnvelope(block *Block, delivery *chain.Delivery) (*pro
 	default:
 		// Transaction has already been delivered
 		status := status.Copy()
-		status.Code = protocol.ErrorCodeAlreadyDelivered.GetEnumValue()
+		status.Code = errors.StatusDelivered
 		return status, nil, nil
 	}
 
@@ -120,9 +111,7 @@ func (x *Executor) executeEnvelope(block *Block, delivery *chain.Delivery) (*pro
 			s, err := x.ProcessSignature(batch, delivery, signature)
 			if err, ok := err.(*errors.Error); ok {
 				status := new(protocol.TransactionStatus)
-				status.Code = protocol.ErrorCodeInvalidSignature.GetEnumValue()
-				status.Message = err.Message
-				status.Error = err
+				status.Set(err)
 				status.Result = new(protocol.EmptyResult)
 				return status, nil, nil
 			}
@@ -160,17 +149,12 @@ func (x *Executor) executeEnvelope(block *Block, delivery *chain.Delivery) (*pro
 			kv := []interface{}{
 				"block", block.Index,
 				"type", delivery.Transaction.Body.Type(),
-				"pending", status.Pending,
-				"delivered", status.Delivered,
-				"remote", status.Remote,
+				"code", status.Code,
 				"txn-hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4),
 				"principal", delivery.Transaction.Header.Principal,
 			}
-			if status.Code != 0 {
-				kv = append(kv,
-					"code", status.Code,
-					"error", status.Message,
-				)
+			if status.Error != nil {
+				kv = append(kv, "error", status.Error)
 				x.logger.Info("Transaction failed", kv...)
 			} else if !delivery.Transaction.Body.Type().IsSystem() {
 				x.logger.Debug("Transaction succeeded", kv...)
@@ -178,7 +162,7 @@ func (x *Executor) executeEnvelope(block *Block, delivery *chain.Delivery) (*pro
 		}
 
 	} else {
-		status = &protocol.TransactionStatus{Remote: true}
+		status = &protocol.TransactionStatus{Code: errors.StatusRemote}
 	}
 
 	err = x.ProcessRemoteSignatures(block, delivery)

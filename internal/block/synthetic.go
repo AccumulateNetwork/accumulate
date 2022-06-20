@@ -129,7 +129,7 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 	// Store the transaction, its status, and the initiator
 	err = m.putSyntheticTransaction(
 		batch, txn,
-		&protocol.TransactionStatus{Remote: true},
+		&protocol.TransactionStatus{Code: errors.StatusRemote},
 		initSig)
 	if err != nil {
 		return nil, err

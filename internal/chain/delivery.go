@@ -212,13 +212,13 @@ func (d *Delivery) LoadTransaction(batch *database.Batch) (*protocol.Transaction
 		// Unknown error
 		return nil, errors.Format(errors.StatusUnknown, "load transaction status: %w", err)
 
-	case status.Delivered:
+	case status.Delivered():
 		// Transaction has already been delivered
 		return status, errors.Format(errors.StatusDelivered, "transaction %X has been delivered", d.Transaction.GetHash()[:4])
 	}
 
 	// Ignore produced synthetic transactions
-	if status.Remote && !status.Pending {
+	if status.Remote() {
 		return status, nil
 	}
 

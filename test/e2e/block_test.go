@@ -22,9 +22,7 @@ import (
 
 func init() { acctesting.EnableDebugFeatures() }
 
-func delivered(status *TransactionStatus) bool {
-	return status.Delivered
-}
+var delivered = (*TransactionStatus).Delivered
 
 func received(status *TransactionStatus) bool {
 	return status.Pending || status.Delivered

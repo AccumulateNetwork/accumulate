@@ -202,12 +202,8 @@ func (m *Executor) Genesis(block *Block, exec chain.TransactionExecutor) error {
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
-
-	if status.Code != 0 {
-		if status.Error != nil {
-			return errors.Wrap(errors.StatusUnknown, status.Error)
-		}
-		return errors.New(errors.StatusUnknown, status.Message)
+	if status.Error != nil {
+		return errors.Wrap(errors.StatusUnknown, status.Error)
 	}
 
 	err = m.EndBlock(block)

@@ -45,20 +45,16 @@ Transaction:
 
 TransactionStatus:
   fields:
-    - name: For
-      type: hash
-      description: is the transaction this status is for
-      marshal-as: none
-    - name: Remote
-      type: bool
-    - name: Delivered
-      type: bool
-    - name: Pending
-      type: bool
+    - name: TxID
+      type: txid
+      pointer: true
     - name: Code
-      type: uvarint
-    - name: Message
-      type: string
+      type: errors2.Status
+      marshal-as: enum
+    - { name: Remote, type: bool, virtual: true, non-binary: true }
+    - { name: Delivered, type: bool, virtual: true, non-binary: true }
+    - { name: Pending, type: bool, virtual: true, non-binary: true }
+    - { name: Failed, type: bool, virtual: true, non-binary: true }
     - name: Error
       type: errors2.Error
       marshal-as: reference

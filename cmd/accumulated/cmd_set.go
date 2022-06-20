@@ -181,11 +181,5 @@ func submitTransactionWithNode(cfg *config.Config, client *client.Client, transa
 	result := new(protocol.TransactionStatus)
 	err = json.Unmarshal(data, result)
 	checkf(err, "unmarshal result")
-
-	if result.Error != nil {
-		fmt.Printf("Transaction failed\nHash: %x\nSignature: %x\n%+v\n", resp.TransactionHash, resp.SignatureHashes[0], result.Error)
-		return
-	}
-
-	fmt.Printf("Transaction failed\nHash: %x\nSignature: %x\nCode: %d\n%s\n", resp.TransactionHash, resp.SignatureHashes[0], result.Code, result.Message)
+	fmt.Printf("Transaction failed\nHash: %x\nSignature: %x\n%+v\n", resp.TransactionHash, resp.SignatureHashes[0], result.Error)
 }

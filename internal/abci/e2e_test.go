@@ -17,6 +17,7 @@ import (
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/testing/e2e"
@@ -705,7 +706,7 @@ func TestSendTokensToBadRecipient(t *testing.T) {
 	h := res.Produced[0].Hash()
 	res, err = n.api.QueryTx(h[:], time.Second, true, api.QueryOptions{})
 	require.NoError(t, err)
-	require.Equal(t, protocol.ErrorCodeNotFound.GetEnumValue(), res.Status.Code)
+	require.Equal(t, errors.StatusNotFound, res.Status.Code)
 
 	// Give the synthetic receipt a second to resolve - workaround AC-1238
 	time.Sleep(time.Second)
@@ -929,7 +930,7 @@ func TestUpdateKey(t *testing.T) {
 	defer batch.Discard()
 	status, err := batch.Transaction(txnHashes[0][:]).GetStatus()
 	require.NoError(t, err)
-	require.False(t, status.Pending, "Transaction is still pending")
+	require.False(t, status.Pending(), "Transaction is still pending")
 
 	spec = n.GetKeyPage("foo/book1/1")
 	require.Len(t, spec.Keys, 1)
@@ -1486,8 +1487,8 @@ func TestMultisig(t *testing.T) {
 	})
 
 	txnResp := n.QueryTransaction(fmt.Sprintf("foo?txid=%X", ids[0]))
-	require.False(t, txnResp.Status.Delivered, "Transaction is was delivered")
-	require.True(t, txnResp.Status.Pending, "Transaction is not pending")
+	require.False(t, txnResp.Status.Delivered(), "Transaction is was delivered")
+	require.True(t, txnResp.Status.Pending(), "Transaction is not pending")
 
 	t.Log("Double signing with key 1 should not complete the transaction")
 	sigHashes, _ := n.MustExecute(func(send func(*protocol.Envelope)) {
@@ -1501,8 +1502,8 @@ func TestMultisig(t *testing.T) {
 	n.MustWaitForTxns(convertIds32(sigHashes...)...)
 
 	txnResp = n.QueryTransaction(fmt.Sprintf("foo?txid=%X", ids[0]))
-	require.False(t, txnResp.Status.Delivered, "Transaction is was delivered")
-	require.True(t, txnResp.Status.Pending, "Transaction is not pending")
+	require.False(t, txnResp.Status.Delivered(), "Transaction is was delivered")
+	require.True(t, txnResp.Status.Pending(), "Transaction is not pending")
 
 	t.Log("Signing with key 2 should complete the transaction")
 	sigHashes, _ = n.MustExecute(func(send func(*protocol.Envelope)) {
@@ -1516,22 +1517,25 @@ func TestMultisig(t *testing.T) {
 	n.MustWaitForTxns(convertIds32(sigHashes...)...)
 
 	txnResp = n.QueryTransaction(fmt.Sprintf("foo?txid=%X", ids[0]))
-	require.True(t, txnResp.Status.Delivered, "Transaction is was not delivered")
-	require.False(t, txnResp.Status.Pending, "Transaction is still pending")
+	require.True(t, txnResp.Status.Delivered(), "Transaction is was not delivered")
+	require.False(t, txnResp.Status.Pending(), "Transaction is still pending")
 
 	// this should fail, so tell fake tendermint not to give up
 	// an error will be displayed on the console, but this is exactly what we expect so don't panic
 	check.Disable = true
-	t.Log("Signing a complete transaction should fail")
-	_, _, err := n.Execute(func(send func(*protocol.Envelope)) {
-		send(acctesting.NewTransaction().
-			WithTimestampVar(&globalNonce).
-			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
-			WithTxnHash(ids[0][:]).
-			Sign(protocol.SignatureTypeED25519, key2.Bytes()).
-			Build())
+	t.Run("Signing a complete transaction should fail", func(t *testing.T) {
+		t.Skip("No longer an error")
+
+		_, _, err := n.Execute(func(send func(*protocol.Envelope)) {
+			send(acctesting.NewTransaction().
+				WithTimestampVar(&globalNonce).
+				WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
+				WithTxnHash(ids[0][:]).
+				Sign(protocol.SignatureTypeED25519, key2.Bytes()).
+				Build())
+		})
+		require.Error(t, err)
 	})
-	require.Error(t, err)
 }
 
 func TestAccountAuth(t *testing.T) {

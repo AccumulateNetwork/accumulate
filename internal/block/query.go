@@ -540,7 +540,7 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove, remote
 	status, err := tx.GetStatus()
 	if err != nil {
 		return nil, fmt.Errorf("invalid query from GetTx in state database, %v", err)
-	} else if !remote && !status.Delivered && status.Remote {
+	} else if !remote && status.Remote() {
 		// If the transaction is a synthetic transaction produced by this BVN
 		// and has not been delivered, pretend like it doesn't exist
 		return nil, errors.NotFound("transaction %X not found", txid[:4])

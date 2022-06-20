@@ -295,7 +295,7 @@ query:
 
 	// Did we find it?
 	switch {
-	case err == nil && (!res.Status.Pending || !ignorePending):
+	case err == nil && (!res.Status.Pending() || !ignorePending):
 		// Found
 		return packTxResponse(res, nil, res.Envelope, res.Status)
 

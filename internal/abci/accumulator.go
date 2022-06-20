@@ -413,7 +413,7 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 		} else if typ.IsSynthetic() && resp.Priority < 1 {
 			resp.Priority = 1
 		}
-		if result.Code == 0 {
+		if result.Code.Success() {
 			continue
 		}
 		if !envelopes[i].Transaction.Body.Type().IsUser() {

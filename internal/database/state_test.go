@@ -15,9 +15,7 @@ import (
 
 func init() { acctesting.EnableDebugFeatures() }
 
-func delivered(status *protocol.TransactionStatus) bool {
-	return status.Delivered
-}
+var delivered = (*protocol.TransactionStatus).Delivered
 
 func TestState(t *testing.T) {
 	// Create some state

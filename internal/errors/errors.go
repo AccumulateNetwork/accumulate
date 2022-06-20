@@ -6,6 +6,9 @@ import (
 	"runtime"
 )
 
+// Success returns true if the status represents success.
+func (s Status) Success() bool { return s < 300 }
+
 // As calls stdlib errors.As.
 func As(err error, target interface{}) bool { return errors.As(err, target) }
 
@@ -39,7 +42,10 @@ func convert(err error) *Error {
 		return &Error{Code: err, Message: err.Error()}
 	}
 
-	e := &Error{Message: err.Error()}
+	e := &Error{
+		Code:    StatusUnknown,
+		Message: err.Error(),
+	}
 
 	u, ok := err.(interface{ Unwrap() error })
 	if ok {
