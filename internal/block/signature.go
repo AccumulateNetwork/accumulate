@@ -385,6 +385,7 @@ func validateSignature(transaction *protocol.Transaction, signer protocol.Signer
 	// Find the key entry
 	_, entry, ok := signer.EntryByKeyHash(signature.GetPublicKeyHash())
 	if !ok {
+		signer.EntryByKeyHash(signature.GetPublicKeyHash())
 		return nil, errors.New(errors.StatusUnauthorized, "key does not belong to signer")
 	}
 

@@ -2,6 +2,7 @@ package simulator
 
 import (
 	"crypto/sha256"
+	"math/big"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -49,6 +50,14 @@ func (s *Simulator) CreateAccount(account protocol.Account) {
 		writeAccountState(s, batch, account)
 		return nil
 	})
+}
+
+func (s *Simulator) CreateLiteTokenAccount(key []byte, token *url.URL, credits, tokens uint64) *url.URL {
+	lid := protocol.LiteAuthorityForKey(key[32:], protocol.SignatureTypeED25519)
+	lta := lid.JoinPath(token.ShortString())
+	s.CreateAccount(&protocol.LiteIdentity{Url: lid, CreditBalance: credits})
+	s.CreateAccount(&protocol.LiteTokenAccount{Url: lta, TokenUrl: token, Balance: *big.NewInt(int64(tokens))})
+	return lta
 }
 
 func (s *Simulator) CreateIdentity(identityUrl *url.URL, pubKey ...[]byte) {
@@ -132,7 +141,9 @@ func (s *Simulator) CreateKeyPage(bookUrl *url.URL, pubKey ...[]byte) {
 }
 
 func (s *Simulator) UpdateAccount(accountUrl *url.URL, fn func(account protocol.Account)) {
+	s.Helper()
 	_ = s.SubnetFor(accountUrl).Database.Update(func(batch *database.Batch) error {
+		s.Helper()
 		account, err := batch.Account(accountUrl).GetState()
 		require.NoError(tb{s}, err)
 		fn(account)
@@ -142,8 +153,10 @@ func (s *Simulator) UpdateAccount(accountUrl *url.URL, fn func(account protocol.
 }
 
 func GetAccount[T protocol.Account](sim *Simulator, accountUrl *url.URL) T {
+	sim.Helper()
 	var account T
 	_ = sim.SubnetFor(accountUrl).Database.View(func(batch *database.Batch) error {
+		sim.Helper()
 		require.NoError(tb{sim}, batch.Account(accountUrl).GetStateAs(&account))
 		return nil
 	})

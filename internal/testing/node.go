@@ -10,14 +10,14 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tendermint/tendermint/crypto/ed25519"
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	cfg "gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
-	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"golang.org/x/sync/errgroup"
 )
@@ -71,61 +71,21 @@ func DefaultConfig(networkName string, net config.NetworkType, node config.NodeT
 }
 
 func CreateTestNet(t testing.TB, numBvns, numValidators, numFollowers int, withFactomAddress bool) ([]string, map[string][]*accumulated.Daemon) {
-	const basePort = 30000
 	tempDir := t.TempDir()
 
-	count := numValidators + numFollowers
-	subnets := make([]config.Subnet, numBvns+1)
-	subnetsMap := make(map[string]config.Subnet)
-	allAddresses := make(map[string][]string, numBvns+1)
-	allConfigs := make(map[string][]*cfg.Config, numBvns+1)
-	allRemotes := make(map[string][]string, numBvns+1)
-
-	// Create node configurations
-	for i := 0; i < numBvns+1; i++ {
-		netType, subnetId := cfg.Directory, protocol.Directory
-		if i > 0 {
-			netType, subnetId = cfg.BlockValidator, fmt.Sprintf("BVN%d", i-1)
-		}
-
-		addresses := make([]string, count)
-		configs := make([]*cfg.Config, count)
-		remotes := make([]string, count)
-		allAddresses[subnetId], allConfigs[subnetId], allRemotes[subnetId] = addresses, configs, remotes
-		nodes := make([]config.Node, count)
-		for i := 0; i < count; i++ {
-			nodeType := cfg.Validator
-			if i > numValidators {
-				nodeType = cfg.Follower
-			}
-
-			hash := hashCaller(1, fmt.Sprintf("%s-%s-%d", t.Name(), subnetId, i))
-			configs[i] = DefaultConfig("unittest", netType, nodeType, subnetId)
-			remotes[i] = getIP(hash).String()
-			nodes[i] = config.Node{
-				Type:    nodeType,
-				Address: remotes[i], //fmt.Sprintf("http://%s:%d", remotes[i], basePort),
-			}
-			addresses[i] = nodes[i].Address
-		}
-
-		// We need to return the subnets in a specific order with directory node first because the unit tests select subnets[1]
-		subnets[i] = config.Subnet{
-			Id:       subnetId,
-			Type:     netType,
-			BasePort: basePort,
-			Nodes:    nodes,
-		}
-		subnetsMap[subnetId] = subnets[i]
-	}
-
-	// Add addresses and BVN names to node configurations
-	for _, configs := range allConfigs {
-		for i, cfg := range configs {
-			cfg.Accumulate.Network.Subnets = subnets
-			cfg.Accumulate.LocalAddress = allAddresses[cfg.Accumulate.SubnetId][i]
-		}
-	}
+	netInit := accumulated.NewDevnet(accumulated.DevnetOptions{
+		BvnCount:       numBvns,
+		ValidatorCount: numValidators,
+		FollowerCount:  numFollowers,
+		BasePort:       30000,
+		GenerateKeys: func() (privVal []byte, node []byte) {
+			return ed25519.GenPrivKey(), ed25519.GenPrivKey()
+		},
+		HostName: func(bvnNum, nodeNum int) (host string, listen string) {
+			hash := hashCaller(1, fmt.Sprintf("%s-%s-%d", t.Name(), fmt.Sprintf("BVN%d", bvnNum+1), nodeNum))
+			return getIP(hash).String(), ""
+		},
+	})
 
 	var initLogger log.Logger
 	var logWriter func(format string) (io.Writer, error)
@@ -141,62 +101,50 @@ func CreateTestNet(t testing.TB, numBvns, numValidators, numFollowers int, withF
 		logWriter = logging.TestLogWriter(t)
 		initLogger = logging.NewTestLogger(t, "plain", DefaultLogLevels, false)
 	}
+
 	var factomAddressFilePath string
 	if withFactomAddress {
 		factomAddressFilePath = "test_factom_addresses"
 	}
+	genDocs, err := accumulated.BuildGenesisDocs(netInit, new(core.GlobalValues), time.Now(), initLogger, factomAddressFilePath)
+	require.NoError(t, err)
 
-	allDaemons := make(map[string][]*accumulated.Daemon, numBvns+1)
-	netValMap := make(genesis.NetworkValidatorMap)
-	var bootstrapList []genesis.Bootstrap
+	configs := accumulated.BuildNodesConfig(netInit, DefaultConfig)
+	var count int
+	dnGenDoc := genDocs[protocol.Directory]
+	for i, bvn := range netInit.Bvns {
+		bvnGenDoc := genDocs[bvn.Id]
+		for j, node := range bvn.Nodes {
+			count++
+			configs[i][j][0].SetRoot(filepath.Join(tempDir, fmt.Sprintf("node-%d", count), "dnn"))
+			configs[i][j][1].SetRoot(filepath.Join(tempDir, fmt.Sprintf("node-%d", count), "bvnn"))
 
-	for _, subnet := range subnets {
-		subnetId := subnet.Id
-		dir := filepath.Join(tempDir, subnetId)
-		bootstrap, err := node.Init(node.InitOptions{
-			WorkDir:             dir,
-			Port:                basePort,
-			Config:              allConfigs[subnetId],
-			RemoteIP:            allRemotes[subnetId],
-			ListenIP:            allRemotes[subnetId],
-			NetworkValidatorMap: netValMap,
-			Logger:              initLogger.With("subnet", subnetId),
-			FactomAddressesFile: factomAddressFilePath,
-		})
-		require.NoError(t, err)
-		if bootstrap != nil {
-			bootstrapList = append(bootstrapList, bootstrap)
-		}
-
-		daemons := make([]*accumulated.Daemon, count)
-		allDaemons[subnetId] = daemons
-
-		for i := 0; i < count; i++ {
-			dir := filepath.Join(dir, fmt.Sprintf("Node%d", i))
-			var err error
-			daemons[i], err = accumulated.Load(dir, logWriter)
+			err = accumulated.WriteNodeFiles(configs[i][j][0], node.PrivValKey, node.NodeKey, dnGenDoc)
 			require.NoError(t, err)
-			daemons[i].Logger = daemons[i].Logger.With("test", t.Name(), "subnet", subnetId, "node", i)
+			err = accumulated.WriteNodeFiles(configs[i][j][1], node.PrivValKey, node.NodeKey, bvnGenDoc)
+			require.NoError(t, err)
 		}
 	}
 
-	// Execute bootstrap after the entire network is known
-	for _, bootstrap := range bootstrapList {
-		err := bootstrap.Bootstrap()
-		if err != nil {
-			panic(fmt.Errorf("could not execute genesis: %v", err))
+	daemons := make(map[string][]*accumulated.Daemon, numBvns+1)
+	for _, configs := range configs {
+		for _, configs := range configs {
+			for _, config := range configs {
+				daemon, err := accumulated.Load(config.RootDir, func(c *cfg.Config) (io.Writer, error) { return logWriter(c.LogFormat) })
+				require.NoError(t, err)
+				subnet := config.Accumulate.SubnetId
+				daemon.Logger = daemon.Logger.With("test", t.Name(), "subnet", subnet, "node", config.Moniker)
+				daemons[subnet] = append(daemons[subnet], daemon)
+			}
 		}
 	}
 
-	return getSubnetNames(subnets), allDaemons
-}
-
-func getSubnetNames(subnets []cfg.Subnet) []string {
-	var res []string
-	for _, subnet := range subnets {
-		res = append(res, subnet.Id)
+	subnetNames := []string{protocol.Directory}
+	for _, bvn := range netInit.Bvns {
+		subnetNames = append(subnetNames, bvn.Id)
 	}
-	return res
+
+	return subnetNames, daemons
 }
 
 func RunTestNet(t testing.TB, subnets []string, daemons map[string][]*accumulated.Daemon) {

@@ -8,6 +8,7 @@ import (
 
 	"github.com/kardianos/service"
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
 	"golang.org/x/sync/errgroup"
 )
@@ -61,8 +62,8 @@ func (p *Program) Start(s service.Service) (err error) {
 		}
 	}
 
-	p.primary, err = accumulated.Load(primaryDir, func(format string) (io.Writer, error) {
-		return logWriter(format, nil)
+	p.primary, err = accumulated.Load(primaryDir, func(c *config.Config) (io.Writer, error) {
+		return logWriter(c.LogFormat, nil)
 	})
 	if err != nil {
 		return err
@@ -76,8 +77,8 @@ func (p *Program) Start(s service.Service) (err error) {
 		return p.primary.Start()
 	}
 
-	p.secondary, err = accumulated.Load(secondaryDir, func(format string) (io.Writer, error) {
-		return logWriter(format, nil)
+	p.secondary, err = accumulated.Load(secondaryDir, func(c *config.Config) (io.Writer, error) {
+		return logWriter(c.LogFormat, nil)
 	})
 	if err != nil {
 		return err
@@ -90,17 +91,29 @@ func (p *Program) Start(s service.Service) (err error) {
 		p.secondary.Config.Accumulate.AnalysisLog.Enabled = true
 	}
 
+	return startDual(p.primary, p.secondary)
+}
+
+func (p *Program) Stop(service.Service) error {
+	if p.secondary == nil {
+		return p.primary.Stop()
+	}
+
+	return stopDual(p.primary, p.secondary)
+}
+
+func startDual(primary, secondary *accumulated.Daemon) (err error) {
 	var didStartPrimary, didStartSecondary bool
 	errg := new(errgroup.Group)
 	errg.Go(func() error {
-		err := p.primary.Start()
+		err := primary.Start()
 		if err == nil {
 			didStartPrimary = true
 		}
 		return err
 	})
 	errg.Go(func() error {
-		err := p.secondary.Start()
+		err := secondary.Start()
 		if err == nil {
 			didStartSecondary = true
 		}
@@ -111,10 +124,10 @@ func (p *Program) Start(s service.Service) (err error) {
 		if err != nil {
 			errg = new(errgroup.Group)
 			if didStartPrimary {
-				errg.Go(p.primary.Stop)
+				errg.Go(primary.Stop)
 			}
 			if didStartSecondary {
-				errg.Go(p.secondary.Stop)
+				errg.Go(secondary.Stop)
 			}
 			_ = errg.Wait()
 		}
@@ -125,16 +138,12 @@ func (p *Program) Start(s service.Service) (err error) {
 		return err
 	}
 
-	return p.primary.ConnectDirectly(p.secondary)
+	return primary.ConnectDirectly(secondary)
 }
 
-func (p *Program) Stop(service.Service) error {
-	if p.secondary == nil {
-		return p.primary.Stop()
-	}
-
+func stopDual(primary, secondary *accumulated.Daemon) error {
 	errg := new(errgroup.Group)
-	errg.Go(p.primary.Stop)
-	errg.Go(p.secondary.Stop)
+	errg.Go(primary.Stop)
+	errg.Go(secondary.Stop)
 	return errg.Wait()
 }

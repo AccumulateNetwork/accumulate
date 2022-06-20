@@ -3,7 +3,6 @@ package block
 import (
 	"bytes"
 	"crypto/ed25519"
-	"fmt"
 	"io"
 
 	"github.com/tendermint/tendermint/libs/log"
@@ -236,7 +235,7 @@ func (m *Executor) InitFromGenesis(batch *database.Batch, data []byte) error {
 	src := memory.New(nil)
 	err := src.UnmarshalJSON(data)
 	if err != nil {
-		return errors.Format(errors.StatusInternalError, "failed to unmarshal app state: %v", err)
+		return errors.Format(errors.StatusInternalError, "failed to unmarshal app state: %w", err)
 	}
 
 	// Load the root anchor chain so we can verify the system state
@@ -249,13 +248,13 @@ func (m *Executor) InitFromGenesis(batch *database.Batch, data []byte) error {
 	defer subbatch.Discard()
 	err = subbatch.Import(src)
 	if err != nil {
-		return errors.Format(errors.StatusInternalError, "failed to import database: %v", err)
+		return errors.Format(errors.StatusInternalError, "failed to import database: %w", err)
 	}
 
 	// Commit the database batch
 	err = subbatch.Commit()
 	if err != nil {
-		return errors.Format(errors.StatusInternalError, "failed to load app state into database: %v", err)
+		return errors.Format(errors.StatusInternalError, "failed to load app state into database: %w", err)
 	}
 
 	root := batch.BptRoot()
@@ -267,7 +266,7 @@ func (m *Executor) InitFromGenesis(batch *database.Batch, data []byte) error {
 
 	err = m.loadGlobals(batch.View)
 	if err != nil {
-		return fmt.Errorf("failed to load globals: %v", err)
+		return errors.Format(errors.StatusInternalError, "failed to load globals: %w", err)
 	}
 
 	return nil
@@ -281,7 +280,7 @@ func (m *Executor) InitFromSnapshot(batch *database.Batch, file ioutil2.SectionR
 
 	err = m.loadGlobals(batch.View)
 	if err != nil {
-		return fmt.Errorf("failed to load globals: %v", err)
+		return errors.Format(errors.StatusInternalError, "failed to load globals: %w", err)
 	}
 
 	return nil
