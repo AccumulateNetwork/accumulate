@@ -2,6 +2,7 @@ package chain
 
 import (
 	"fmt"
+	"sort"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -88,6 +89,37 @@ func (x PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 			st.State.MakeMajorBlock = ledger.MajorBlockIndex
 		}
 		return nil, nil
+	}
+
+	// Process pending synthetic transactions sent to the DN
+	var deliveries []*Delivery
+	var sequence = map[*Delivery]int{}
+	synth, err := st.batch.Account(st.Ledger()).SyntheticForAnchor(body.RootChainAnchor)
+	if err != nil {
+		return nil, errors.Format(errors.StatusUnknown, "load synth txns for anchor %x: %w", body.RootChainAnchor[:8], err)
+	}
+	for _, txid := range synth {
+		h := txid.Hash()
+		sig, err := getSyntheticSignature(st.batch, st.batch.Transaction(h[:]))
+		if err != nil {
+			return nil, err
+		}
+
+		d := tx.NewChild(&protocol.Transaction{
+			Body: &protocol.RemoteTransaction{
+				Hash: txid.Hash(),
+			},
+		}, nil)
+		sequence[d] = int(sig.SequenceNumber)
+		deliveries = append(deliveries, d)
+	}
+
+	// Submit the transactions, sorted
+	sort.Slice(deliveries, func(i, j int) bool {
+		return sequence[deliveries[i]] < sequence[deliveries[j]]
+	})
+	for _, d := range deliveries {
+		st.State.ProcessAdditionalTransaction(d)
 	}
 
 	return nil, nil
