@@ -1,12 +1,10 @@
 package chain
 
 import (
-	"errors"
 	"fmt"
 	"math/big"
 
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 var bigZeroAmount = big.NewInt(0)
@@ -63,31 +61,6 @@ func (AddCredits) Validate(st *StateManager, tx *Delivery) (protocol.Transaction
 		return nil, fmt.Errorf("no credits can be purchased with specified ACME amount %v", body.Amount)
 	}
 
-	recipient := body.Recipient
-	recv, err := st.LoadUrl(recipient)
-	if err == nil {
-		// If the recipient happens to be on the same BVC, ensure it is a valid
-		// recipient. Most credit transfers will be within the same ADI, so this
-		// should catch most mistakes early.
-		switch recv := recv.(type) {
-		case *protocol.LiteIdentity, *protocol.KeyPage:
-			// OK
-		case *protocol.LiteTokenAccount:
-			recipient = recv.Url.RootIdentity()
-		default:
-			return nil, fmt.Errorf("invalid recipient: want account type %v or %v, got %v", protocol.AccountTypeLiteIdentity, protocol.AccountTypeKeyPage, recv.Type())
-		}
-	} else if errors.Is(err, storage.ErrNotFound) {
-		if recipient.Routing() == tx.Transaction.Header.Principal.Routing() {
-			// If the recipient and the origin have the same routing number,
-			// they must be on the same BVC. Thus in that case, failing to
-			// locate the recipient chain means it doesn't exist.
-			return nil, fmt.Errorf("invalid recipient: not found")
-		}
-	} else {
-		return nil, fmt.Errorf("failed to load recipient: %v", err)
-	}
-
 	var account protocol.AccountWithTokens
 	switch origin := st.Origin.(type) {
 	case *protocol.LiteTokenAccount:
@@ -95,7 +68,7 @@ func (AddCredits) Validate(st *StateManager, tx *Delivery) (protocol.Transaction
 	case *protocol.TokenAccount:
 		account = origin
 	default:
-		return nil, fmt.Errorf("not an account: %q", tx.Transaction.Header.Principal)
+		return nil, fmt.Errorf("not a token account: %q", tx.Transaction.Header.Principal)
 	}
 
 	// Only ACME tokens can be converted into credits
@@ -107,6 +80,13 @@ func (AddCredits) Validate(st *StateManager, tx *Delivery) (protocol.Transaction
 		return nil, fmt.Errorf("insufficient balance: have %v, want %v", account.TokenBalance(), &body.Amount)
 	}
 
+	// Convert a lite token account recipient into a lite identity. Do not check
+	// if the account exists, that will be done by the deposit.
+	recipient := body.Recipient
+	if key, _, _ := protocol.ParseLiteTokenAddress(recipient); key != nil {
+		recipient = recipient.RootIdentity()
+	}
+
 	// Create the synthetic transaction
 	sdc := new(protocol.SyntheticDepositCredits)
 	sdc.Amount = credits.Uint64()
@@ -116,7 +96,7 @@ func (AddCredits) Validate(st *StateManager, tx *Delivery) (protocol.Transaction
 	st.Submit(recipient, sdc)
 
 	var ledgerState *protocol.SystemLedger
-	err = st.LoadUrlAs(st.NodeUrl(protocol.Ledger), &ledgerState)
+	err := st.LoadUrlAs(st.NodeUrl(protocol.Ledger), &ledgerState)
 	if err != nil {
 		return nil, err
 	}
