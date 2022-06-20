@@ -56,8 +56,8 @@ func BenchmarkPerformance(b *testing.B) {
 	}
 }
 
-func BenchmarkXxx(b *testing.B) {
-	// Initialize the simulator, genesis
+func BenchmarkBlockTimes(b *testing.B) {
+	// Initialize the siulator, genesis
 	sim := simulator.New(b, 1)
 	sim.InitFromGenesis()
 
