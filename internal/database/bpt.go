@@ -16,15 +16,15 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
-func (b *Batch) putBpt(key storage.Key, hash [32]byte) {
+func (b *Batch) putBpt(adi [32]byte, key storage.Key, hash [32]byte) {
 	if b.done {
-		panic("attempted to use a commited or discarded batch")
+		panic("attempted to use a committed or discarded batch")
 	}
 	if b.bptEntries == nil {
 		panic("attempted to update the BPT after committing the BPT")
 	}
 
-	b.bptEntries[key] = hash
+	b.bptEntries[key] = BptEntry{adi,hash}
 }
 
 // CommitBpt updates the Patricia Tree hashes with the values from the updates
@@ -33,7 +33,7 @@ func (b *Batch) CommitBpt() error {
 	bpt := pmt.NewBPTManager(b.store)
 
 	for k, v := range b.bptEntries {
-		bpt.InsertKV(k, k, v)
+		bpt.InsertKV(v.Adi, k, v.Hash)
 	}
 
 	err := bpt.Bpt.Update()
@@ -101,14 +101,12 @@ func (b *Batch) SaveSnapshot(file io.WriteSeeker, network *config.Network) error
 		// Create an Account object
 		account := &Account{b, accountBucket{objectBucket(key)}, nil}
 
-		/*// Load the main state so we can get the URL
+		// Load the main state so we can get the URL
 		a, err := account.GetState()
 		if err != nil {
 			return nil, err
 		}
-
-		// Load the full state - preserve chains if the account is a subnet account
-		state, err := account.state(true, subnet.PrefixOf(a.GetUrl()))*/
+		account.url = a.GetUrl()
 
 		// Load the full state - always preserve chains for now
 		state, err := account.state(true, true)
@@ -182,7 +180,7 @@ func (b *Batch) RestoreSnapshot(file ioutil2.SectionReader) error {
 			return err
 		}
 
-		account := &Account{b, accountBucket{objectBucket(key)}, nil}
+		account := &Account{b, accountBucket{objectBucket(key)}, state.Main.GetUrl()}
 		err = account.restore(state)
 		if err != nil {
 			return err

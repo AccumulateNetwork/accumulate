@@ -37,6 +37,11 @@ const (
 	debugCacheValue
 )
 
+type BptEntry struct {
+	Adi     [32]byte // The ADI for a given account
+	Hash    [32]byte // hash for the account state
+}
+
 // Batch batches database writes.
 type Batch struct {
 	done        bool
@@ -48,7 +53,7 @@ type Batch struct {
 	logger      logging.OptionalLogger
 	store       storage.KeyValueTxn
 	values      map[storage.Key]cachedValue
-	bptEntries  map[storage.Key][32]byte
+	bptEntries  map[storage.Key]BptEntry
 }
 
 // Begin starts a new batch.
@@ -61,7 +66,7 @@ func (d *Database) Begin(writable bool) *Batch {
 	b.logger.L = d.logger
 	b.store = d.store.Begin(writable)
 	b.values = map[storage.Key]cachedValue{}
-	b.bptEntries = map[storage.Key][32]byte{}
+	b.bptEntries = map[storage.Key]BptEntry{}
 	return b
 }
 
@@ -79,7 +84,7 @@ func (b *Batch) Begin(writable bool) *Batch {
 	c.logger = b.logger
 	c.store = b.store.Begin(c.writable)
 	c.values = map[storage.Key]cachedValue{}
-	c.bptEntries = map[storage.Key][32]byte{}
+	c.bptEntries = map[storage.Key]BptEntry{}
 	return c
 }
 

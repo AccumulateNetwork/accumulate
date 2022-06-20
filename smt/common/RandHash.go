@@ -25,7 +25,7 @@ func (n *RandHash) GetRandInt64() int64 {
 		int64(next[3])<<8) +
 		int64(next[2])<<8) +
 		int64(next[1])<<8) +
-		int64(next[7])
+		int64(next[0])
 }
 
 // GetRandBuff

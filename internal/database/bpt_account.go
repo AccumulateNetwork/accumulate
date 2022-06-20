@@ -2,6 +2,7 @@ package database
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"math"
@@ -267,8 +268,10 @@ func (a *Account) putBpt() error {
 		return err
 	}
 
+	adi := sha256.Sum256([]byte(a.url.Authority))
+
 	hash := *(*[32]byte)(hasher.MerkleHash())
-	a.batch.putBpt(a.key.Object(), hash)
+	a.batch.putBpt(adi, a.key.Object(), hash)
 	return nil
 }
 
