@@ -49,7 +49,7 @@ type Daemon struct {
 	UseMemDB bool
 }
 
-func Load(dir string, newWriter func(string) (io.Writer, error)) (*Daemon, error) {
+func Load(dir string, newWriter func(*config.Config) (io.Writer, error)) (*Daemon, error) {
 	var daemon Daemon
 
 	var err error
@@ -59,10 +59,12 @@ func Load(dir string, newWriter func(string) (io.Writer, error)) (*Daemon, error
 	}
 
 	if newWriter == nil {
-		newWriter = logging.NewConsoleWriter
+		newWriter = func(c *config.Config) (io.Writer, error) {
+			return logging.NewConsoleWriter(c.LogFormat)
+		}
 	}
 
-	logWriter, err := newWriter(daemon.Config.LogFormat)
+	logWriter, err := newWriter(daemon.Config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize log writer: %v", err)
 	}

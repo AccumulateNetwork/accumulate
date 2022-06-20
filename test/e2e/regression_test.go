@@ -1,6 +1,7 @@
 package e2e
 
 import (
+	"context"
 	"fmt"
 	"math/big"
 	"testing"
@@ -133,4 +134,32 @@ func TestAddCreditsToLiteIdentityOnOtherBVN(t *testing.T) {
 	// Verify
 	recvId := simulator.GetAccount[*LiteIdentity](sim, receiver.RootIdentity())
 	require.Equal(t, int(creditAmount*CreditPrecision), int(recvId.CreditBalance))
+}
+
+func TestFaucetMultiNetwork(t *testing.T) {
+	// Initialize
+	sim := simulator.New(t, 3)
+	sim.InitFromGenesis()
+
+	// Setup
+	liteKey := acctesting.GenerateKey("Lite")
+	lite := sim.CreateLiteTokenAccount(liteKey, AcmeUrl(), 1e9, 1e12)
+
+	// Set the lite account routing to a different BVN from the faucet
+	faucetBvn := sim.SubnetFor(FaucetUrl)
+	for _, subnet := range sim.Subnets[1:] {
+		if faucetBvn.Subnet.Id != subnet.Id {
+			sim.SetRouteFor(lite.RootIdentity(), subnet.Id)
+			break
+		}
+	}
+
+	// Execute
+	resp, err := sim.Executors[Directory].API.Faucet(context.Background(), &AcmeFaucet{Url: lite})
+	require.NoError(t, err)
+	sim.WaitForTransactionFlow(delivered, resp.TransactionHash)
+
+	// Verify
+	lta := simulator.GetAccount[*LiteTokenAccount](sim, lite)
+	require.NotZero(t, lta.Balance.Int64())
 }

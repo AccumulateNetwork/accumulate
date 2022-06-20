@@ -3,14 +3,13 @@ package e2e
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
-	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
@@ -71,14 +70,12 @@ func TestRelaunch(t *testing.T) {
 	} else {
 		logWriter = logging.TestLogWriter(t)
 	}
-	dir := filepath.Join(daemon.Config.RootDir, "..", "..")
 	for _, subnet := range subnets {
-		dir := filepath.Join(dir, subnet)
 		daemons := daemons[subnet]
 		for i := range daemons {
-			dir := filepath.Join(dir, fmt.Sprintf("Node%d", i))
+			dir := daemons[i].Config.RootDir
 			var err error
-			daemons[i], err = accumulated.Load(dir, logWriter)
+			daemons[i], err = accumulated.Load(dir, func(c *config.Config) (io.Writer, error) { return logWriter(c.LogFormat) })
 			require.NoError(t, err)
 			daemons[i].Logger = daemons[i].Logger.With("test", t.Name(), "subnet", subnet, "node", i)
 		}
