@@ -11,13 +11,17 @@ import (
 // but not including end are the hashes returned.  Indexes are zero based, so the
 // first hash in the MerkleState is at 0
 func (m *MerkleManager) GetRange(begin, end int64) (hashes []Hash, err error) {
-	ec := m.GetElementCount()
+	head, err := m.Head().Get() // Get the current state
+	if err != nil {
+		return nil, err
+	}
+	ec := head.Count
 
 	// end++  Increment to include end in results, comment out to leave it out.
 
 	if end < begin || begin >= ec || begin < 0 {
 		return nil, fmt.Errorf("impossible range %d,%d for chain length %d",
-			begin, end, m.GetElementCount()) // Return zero begin and/or end are impossible
+			begin, end, head.Count) // Return zero begin and/or end are impossible
 	}
 	if end > ec { // Don't try and return more elements than are in the chain
 		end = ec
@@ -26,17 +30,17 @@ func (m *MerkleManager) GetRange(begin, end int64) (hashes []Hash, err error) {
 		return hashes, nil
 	}
 
-	markPoint := begin & ^m.MarkMask // Get the mark point just past begin
+	markPoint := begin & ^m.markMask // Get the mark point just past begin
 
 	var s *MerkleState
 	var hl []Hash // Collect all the hashes of the mark points covering the range of begin-end
-	marks := (end-(begin&^m.MarkMask))/m.MarkFreq + 1
+	marks := (end-(begin&^m.markMask))/m.markFreq + 1
 	for i := int64(0); i < marks; i++ {
-		markPoint += m.MarkFreq
+		markPoint += m.markFreq
 		if s = m.GetState(markPoint - 1); s != nil {
 			hl = append(hl, s.HashList...)
 		} else {
-			s, err = m.GetChainState()
+			s, err = m.Head().Get()
 			if err != nil {
 				return nil, errors.New("a chain should always have a chain state")
 			}
@@ -45,7 +49,7 @@ func (m *MerkleManager) GetRange(begin, end int64) (hashes []Hash, err error) {
 		}
 	}
 
-	first := (begin) & m.MarkMask // Calculate the offset to the beginning of the range
+	first := (begin) & m.markMask // Calculate the offset to the beginning of the range
 	last := first + end - begin   // and to the end of the range
 
 	// FIXME Is this supposed to be an error?
