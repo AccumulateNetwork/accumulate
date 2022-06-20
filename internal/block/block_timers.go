@@ -10,25 +10,11 @@ import (
 
 type BlockTimerType uint64
 
-func trackBlockTimers(executors *map[protocol.TransactionType]chain.TransactionExecutor) (timerList []uint64) {
-	//register the executor timers
+func trackTransactionTimers(executors *map[protocol.TransactionType]chain.TransactionExecutor) (timerList []uint64) {
+	//register the executor transaction timers
 	for k, _ := range *executors {
 		timerList = append(timerList, k.GetEnumValue()+BlockTimerTypeTransactionOffset.GetEnumValue())
 	}
-
-	timerList = append(timerList, []uint64{
-		BlockTimerTypeProcessSignature.GetEnumValue(),
-		BlockTimerTypeBeginBlock.GetEnumValue(),
-		BlockTimerTypeCheckTx.GetEnumValue(),
-		BlockTimerTypeDeliverTx.GetEnumValue(),
-		BlockTimerTypeEndBlock.GetEnumValue(),
-		BlockTimerTypeCommit.GetEnumValue(),
-		BlockTimerTypeSigning.GetEnumValue(),
-		BlockTimerTypeNetworkAccountUpdates.GetEnumValue(),
-		BlockTimerTypeProcessRemoteSignatures.GetEnumValue(),
-		BlockTimerTypeProcessTransaction.GetEnumValue(),
-	}...)
-
 	return timerList
 }
 
@@ -80,7 +66,22 @@ func (t *TimerSet) Store(ds *logging.DataSet) {
 func (t *TimerSet) Initialize(executors *map[protocol.TransactionType]chain.TransactionExecutor) {
 	t.enable = true
 	t.timeRec = make(map[uint64]*TimerRecord)
-	for _, r := range trackBlockTimers(executors) {
+
+	trackTimers := trackTransactionTimers(executors)
+	trackTimers = append(trackTimers, []uint64{
+		BlockTimerTypeProcessSignature.GetEnumValue(),
+		BlockTimerTypeBeginBlock.GetEnumValue(),
+		BlockTimerTypeCheckTx.GetEnumValue(),
+		BlockTimerTypeDeliverTx.GetEnumValue(),
+		BlockTimerTypeEndBlock.GetEnumValue(),
+		BlockTimerTypeCommit.GetEnumValue(),
+		BlockTimerTypeSigning.GetEnumValue(),
+		BlockTimerTypeNetworkAccountUpdates.GetEnumValue(),
+		BlockTimerTypeProcessRemoteSignatures.GetEnumValue(),
+		BlockTimerTypeProcessTransaction.GetEnumValue(),
+	}...)
+
+	for _, r := range trackTimers {
 		t.timeRec[r] = new(TimerRecord)
 		t.order = append(t.order, r)
 	}
@@ -111,7 +112,6 @@ func (t *TimerSet) Start(record any) *TimerRecord {
 			r = &TimerRecord{}
 			t.timeRec[key] = r
 		}
-		r.txct++
 		r.timer = time.Now()
 		return r
 	}
@@ -120,6 +120,7 @@ func (t *TimerSet) Start(record any) *TimerRecord {
 
 func (t *TimerSet) Stop(r *TimerRecord) {
 	if r != nil {
-		r.elapsed = time.Since(r.timer).Seconds()
+		r.txct++
+		r.elapsed += time.Since(r.timer).Seconds()
 	}
 }
