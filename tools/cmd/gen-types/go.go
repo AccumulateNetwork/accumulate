@@ -420,9 +420,6 @@ func goCopyPointer(field *Field, expr, dstName, srcName string) string {
 }
 
 func GoBinaryMarshalValue(field *Field, writerName, varName string) (string, error) {
-	if field.Name == "CallStack" {
-		print("")
-	}
 	method, wantPtr := goBinaryMethod(field)
 	if method == "" {
 		return "", fmt.Errorf("field %q: cannot determine how to marshal %s", field.Name, GoResolveType(field, false, false))
