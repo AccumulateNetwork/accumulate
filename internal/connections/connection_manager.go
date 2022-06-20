@@ -312,14 +312,7 @@ func (cm *connectionManager) ConnectDirectly(other ConnectionManager) error {
 		return fmt.Errorf("incompatible connection managers: want %T, got %T", cm, cm2)
 	}
 
-	var list []ConnectionContext
-	if cm2.accConfig.SubnetId == protocol.Directory {
-		list = cm.dnCtxList
-	} else if list, ok = cm.bvnCtxMap[protocol.BvnNameFromSubnetId(cm2.accConfig.SubnetId)]; !ok {
-		return fmt.Errorf("unknown subnet %q", cm2.accConfig.SubnetId)
-	}
-
-	for _, connCtx := range list {
+	for _, connCtx := range cm.all {
 		cc := connCtx.(*connectionContext)
 		url, err := url.Parse(cc.nodeConfig.Address)
 		if err != nil {
