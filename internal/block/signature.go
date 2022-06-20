@@ -725,24 +725,24 @@ func GetSignaturesForSigner(batch *database.Batch, transaction *database.Transac
 	return signatures, nil
 }
 
-func GetSyntheticTransactionReceipt(batch *database.Batch, hash [32]byte) (*managed.Receipt, error) {
+func GetSyntheticTransactionReceipt(batch *database.Batch, hash [32]byte) (*managed.Receipt, *url.URL, error) {
 	transaction := batch.Transaction(hash[:])
 	status, err := transaction.GetStatus()
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknown, "load status: %w", err)
+		return nil, nil, errors.Format(errors.StatusUnknown, "load status: %w", err)
 	}
 
 	var signatures []protocol.Signature
 	for _, signer := range status.Signers {
 		sigset, err := transaction.ReadSignaturesForSigner(signer)
 		if err != nil {
-			return nil, errors.Format(errors.StatusUnknown, "load %v signatures: %w", signer.GetUrl(), err)
+			return nil, nil, errors.Format(errors.StatusUnknown, "load %v signatures: %w", signer.GetUrl(), err)
 		}
 
 		for _, e := range sigset.Entries() {
 			state, err := batch.Transaction(e.SignatureHash[:]).GetState()
 			if err != nil {
-				return nil, errors.Format(errors.StatusUnknown, "load signature %X: %w", e.SignatureHash[:8], err)
+				return nil, nil, errors.Format(errors.StatusUnknown, "load signature %X: %w", e.SignatureHash[:8], err)
 			}
 
 			if state.Signature == nil {
@@ -756,13 +756,13 @@ func GetSyntheticTransactionReceipt(batch *database.Batch, hash [32]byte) (*mana
 		}
 	}
 	if len(signatures) == 0 {
-		return nil, nil // How does this happen?
+		return nil, nil, nil // How does this happen?
 	}
 
-	receipt, _, err := assembleSynthReceipt(hash, signatures)
+	receipt, sourceUrl, err := assembleSynthReceipt(hash, signatures)
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknown, "construct receipt: %w", err)
+		return nil, nil, errors.Format(errors.StatusUnknown, "construct receipt: %w", err)
 	}
 
-	return receipt, nil
+	return receipt, sourceUrl, nil
 }

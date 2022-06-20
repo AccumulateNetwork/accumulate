@@ -385,8 +385,9 @@ func (x *Executor) requestMissingAnchors(ctx context.Context, batch *database.Ba
 	// transaction has been pending for a while?
 
 	anchors := map[[32]byte][]*url.TxID{}
+	source := map[*url.TxID]*url.URL{}
 	for _, txid := range pending {
-		receipt, err := GetSyntheticTransactionReceipt(batch, txid.Hash())
+		receipt, sourceUrl, err := GetSyntheticTransactionReceipt(batch, txid.Hash())
 		if err != nil {
 			x.logger.Error("Error loading synthetic transaction receipt", "error", err, "hash", logging.AsHex(txid.Hash()).Slice(0, 4))
 			continue
@@ -396,6 +397,7 @@ func (x *Executor) requestMissingAnchors(ctx context.Context, batch *database.Ba
 		}
 		a := *(*[32]byte)(receipt.Anchor)
 		anchors[a] = append(anchors[a], txid)
+		source[txid] = sourceUrl
 	}
 	if len(anchors) == 0 {
 		return
@@ -430,6 +432,7 @@ func (x *Executor) requestMissingAnchors(ctx context.Context, batch *database.Ba
 
 		for _, txid := range anchors[*(*[32]byte)(resp.Receipt.Proof.Start)] {
 			sig := new(protocol.ReceiptSignature)
+			sig.SourceNetwork = source[txid]
 			sig.Proof = resp.Receipt.Proof
 			sig.TransactionHash = txid.Hash()
 			sigs = append(sigs, sig)
