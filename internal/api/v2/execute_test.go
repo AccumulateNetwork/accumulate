@@ -9,7 +9,6 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	core "github.com/tendermint/tendermint/rpc/coretypes"
-	"gitlab.com/accumulatenetwork/accumulate/config"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
@@ -43,14 +42,7 @@ func TestExecuteCheckOnly(t *testing.T) {
 		clients[""] = local
 		connectionManager := connections.NewFakeConnectionManager(clients)
 		table := new(protocol.RoutingTable)
-		table.Routes = routing.BuildSimpleTable(&config.Network{
-			Subnets: []config.Subnet{
-				{
-					Id:   "",
-					Type: config.BlockValidator,
-				},
-			},
-		})
+		table.Routes = routing.BuildSimpleTable([]string{""})
 		router, err := routing.NewStaticRouter(table, connectionManager)
 		require.NoError(t, err)
 		j, err := NewJrpc(Options{
@@ -76,14 +68,7 @@ func TestExecuteCheckOnly(t *testing.T) {
 		clients[""] = local
 		connectionManager := connections.NewFakeConnectionManager(clients)
 		table := new(protocol.RoutingTable)
-		table.Routes = routing.BuildSimpleTable(&config.Network{
-			Subnets: []config.Subnet{
-				{
-					Id:   "",
-					Type: config.BlockValidator,
-				},
-			},
-		})
+		table.Routes = routing.BuildSimpleTable([]string{""})
 		router, err := routing.NewStaticRouter(table, connectionManager)
 		require.NoError(t, err)
 		j, err := NewJrpc(Options{

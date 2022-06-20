@@ -36,6 +36,8 @@ func TestUpdateValidators(t *testing.T) {
 	sim.InitFromGenesisWith(g)
 
 	dn := sim.Subnet(Directory)
+	initVal := make([][]byte, len(dn.Validators))
+	copy(initVal, dn.Validators)
 	operators := dn.Executor.Describe.OperatorsPage()
 	vldKey1, vldKey2, vldKey3, vldKey4 := acctesting.GenerateKey(1), acctesting.GenerateKey(2), acctesting.GenerateKey(3), acctesting.GenerateKey(4)
 	vldKey1Hash, vldKey2Hash, vldKey3Hash, vldKey4Hash := sha256.Sum256(vldKey1[32:]), sha256.Sum256(vldKey2[32:]), sha256.Sum256(vldKey3[32:]), sha256.Sum256(vldKey4[32:])
@@ -67,8 +69,8 @@ func TestUpdateValidators(t *testing.T) {
 		SetUrl(operators).
 		SetVersion(page.Version)
 
-	// Verify there is one validator (node key)
-	require.ElementsMatch(t, dn.Validators, [][]byte{dn.Executor.Key[32:]})
+	// Verify the threshold starts at 1
+	require.Equal(t, 1, int(page.AcceptThreshold))
 
 	// Add a validator
 	values := dn.Executor.ActiveGlobals_TESTONLY()
@@ -79,10 +81,13 @@ func TestUpdateValidators(t *testing.T) {
 	}
 
 	// Verify the validator was added
-	require.ElementsMatch(t, dn.Validators, [][]byte{dn.Executor.Key[32:], vldKey1[32:]})
+	require.ElementsMatch(t, dn.Validators, append(initVal, vldKey1[32:]))
+
+	// Verify the threshold increased to 2
+	page = simulator.GetAccount[*KeyPage](sim, operators)
+	require.Equal(t, 2, int(page.AcceptThreshold))
 
 	// Update a validator
-	page = simulator.GetAccount[*KeyPage](sim, operators)
 	signer1.SetVersion(page.Version)
 
 	values = dn.Executor.ActiveGlobals_TESTONLY()
@@ -93,7 +98,7 @@ func TestUpdateValidators(t *testing.T) {
 	}
 
 	// Verify the validator was updated
-	require.ElementsMatch(t, dn.Validators, [][]byte{dn.Executor.Key[32:], vldKey4[32:]})
+	require.ElementsMatch(t, dn.Validators, append(initVal, vldKey4[32:]))
 
 	// Add a third validator, so the page threshold will become 2
 	page = simulator.GetAccount[*KeyPage](sim, operators)
@@ -107,13 +112,10 @@ func TestUpdateValidators(t *testing.T) {
 	}
 
 	// Verify the validator was added
-	require.ElementsMatch(t, dn.Validators, [][]byte{dn.Executor.Key[32:], vldKey4[32:], vldKey2[32:]})
-
-	// Verify the Validator threshold
-	page = simulator.GetAccount[*KeyPage](sim, operators)
-	require.Equal(t, uint64(2), page.AcceptThreshold)
+	require.ElementsMatch(t, dn.Validators, append(initVal, vldKey4[32:], vldKey2[32:]))
 
 	// Add a fourth validator
+	page = simulator.GetAccount[*KeyPage](sim, operators)
 	signer1.SetVersion(page.Version)
 	signerA2 := signer1.Copy().SetPrivateKey(vldKey2).ClearTimestamp()
 
@@ -125,13 +127,10 @@ func TestUpdateValidators(t *testing.T) {
 	}
 
 	// Verify the validator was added
-	require.ElementsMatch(t, dn.Validators, [][]byte{dn.Executor.Key[32:], vldKey4[32:], vldKey2[32:], vldKey3[32:]})
-
-	// Verify the Validator threshold
-	page = simulator.GetAccount[*KeyPage](sim, operators)
-	require.Equal(t, uint64(3), page.AcceptThreshold)
+	require.ElementsMatch(t, dn.Validators, append(initVal, vldKey4[32:], vldKey2[32:], vldKey3[32:]))
 
 	// Remove a validator
+	page = simulator.GetAccount[*KeyPage](sim, operators)
 	signer1.SetVersion(page.Version)
 
 	values = dn.Executor.ActiveGlobals_TESTONLY()
@@ -142,7 +141,7 @@ func TestUpdateValidators(t *testing.T) {
 	}
 
 	// Verify the validator was removed
-	require.ElementsMatch(t, dn.Validators, [][]byte{dn.Executor.Key[32:], vldKey2[32:], vldKey3[32:]})
+	require.ElementsMatch(t, dn.Validators, append(initVal, vldKey2[32:], vldKey3[32:]))
 }
 
 func TestUpdateOperators(t *testing.T) {
@@ -157,9 +156,8 @@ func TestUpdateOperators(t *testing.T) {
 	dn := sim.Subnet(Directory)
 	bvn0 := sim.Subnet(sim.Subnets[1].Id)
 
-	// Sanity check
 	page := simulator.GetAccount[*KeyPage](sim, bvn0.Executor.Describe.OperatorsPage())
-	require.Len(t, page.Keys, 4)
+	initValCount := len(page.Keys)
 
 	// Add
 	t.Log("Add")
@@ -185,7 +183,7 @@ func TestUpdateOperators(t *testing.T) {
 
 	// Verify the update was pushed
 	page = simulator.GetAccount[*KeyPage](sim, bvn0.Executor.Describe.OperatorsPage())
-	require.Len(t, page.Keys, 5)
+	require.Len(t, page.Keys, initValCount+1)
 	requireHasKeyHash(t, page, addKeyHash[:])
 
 	// Update
@@ -212,7 +210,7 @@ func TestUpdateOperators(t *testing.T) {
 
 	// Verify the update was pushed
 	page = simulator.GetAccount[*KeyPage](sim, bvn0.Executor.Describe.OperatorsPage())
-	require.Len(t, page.Keys, 5)
+	require.Len(t, page.Keys, initValCount+1)
 	requireNotHasKeyHash(t, page, addKeyHash[:])
 	requireHasKeyHash(t, page, updKeyHash[:])
 
@@ -237,6 +235,6 @@ func TestUpdateOperators(t *testing.T) {
 
 	// Verify the update was pushed
 	page = simulator.GetAccount[*KeyPage](sim, bvn0.Executor.Describe.OperatorsPage())
-	require.Len(t, page.Keys, 4)
+	require.Len(t, page.Keys, initValCount)
 	requireNotHasKeyHash(t, page, updKeyHash[:])
 }
