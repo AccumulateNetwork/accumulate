@@ -215,7 +215,7 @@ func (a *AnalysisLog) GetDataSet(dataSetName string) *logging.DataSet {
 
 func (a *AnalysisLog) Flush() {
 	if a.dataSetLog != nil {
-		go a.dataSetLog.DumpDataSetToDiskFile()
+		_, _ = a.dataSetLog.DumpDataSetToDiskFile()
 	}
 }
 
