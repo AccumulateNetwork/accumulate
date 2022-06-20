@@ -2,10 +2,11 @@ package block
 
 import (
 	"fmt"
+	"time"
+
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"time"
 )
 
 //go:generate go run ../../tools/cmd/gen-enum  --package block enums.yml

@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"gopkg.in/yaml.v2"
 	"io"
 	"io/fs"
 	"net"
@@ -34,6 +33,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/proxy"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	etcd "go.etcd.io/etcd/client/v3"
+	"gopkg.in/yaml.v2"
 )
 
 var cmdInit = &cobra.Command{

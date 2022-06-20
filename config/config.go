@@ -2,7 +2,6 @@ package config
 
 import (
 	"fmt"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"io"
 	"net"
 	"net/url"
@@ -16,6 +15,7 @@ import (
 	"github.com/pelletier/go-toml"
 	"github.com/spf13/viper"
 	tm "github.com/tendermint/tendermint/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	etcd "go.etcd.io/etcd/client/v3"
 )
 

@@ -1,13 +1,14 @@
 package chain_test
 
 import (
+	"math/big"
+	"testing"
+
 	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"math/big"
-	"testing"
 )
 
 func BenchmarkPerformance(b *testing.B) {

@@ -89,7 +89,7 @@ func (p *Program) Start(s service.Service) (err error) {
 	if flagRun.EnableTimingLogs {
 		p.secondary.Config.Accumulate.AnalysisLog.Enabled = true
 	}
-	
+
 	var didStartPrimary, didStartSecondary bool
 	errg := new(errgroup.Group)
 	errg.Go(func() error {
