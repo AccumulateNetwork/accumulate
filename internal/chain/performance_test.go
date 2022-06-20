@@ -1,6 +1,7 @@
 package chain_test
 
 import (
+	"bufio"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
@@ -102,6 +103,7 @@ func BenchmarkBlockTimes(b *testing.B) {
 	dataSetLog.SetProcessName(x.Subnet.Id)
 
 	analysisDir := config.MakeAbsolute(b.TempDir(), "analysis")
+	defer os.RemoveAll(analysisDir)
 	dataSetLog.SetPath(analysisDir)
 
 	_ = os.MkdirAll(analysisDir, 0700)
@@ -128,6 +130,24 @@ func BenchmarkBlockTimes(b *testing.B) {
 	}
 	b.StopTimer()
 
-	_, _ = dataSetLog.DumpDataSetToDiskFile()
+	files, err := dataSetLog.DumpDataSetToDiskFile()
+	require.NoError(b, err)
 
+	//dump results
+	for _, file := range files {
+		f, err := os.Open(file)
+		require.NoError(b, err)
+		defer f.Close()
+		scanner := bufio.NewScanner(f)
+		b.Logf("%s\n", file)
+
+		for scanner.Scan() {
+			b.Log(scanner.Text())
+		}
+
+		b.Log("\n")
+		if err := scanner.Err(); err != nil {
+			require.NoError(b, err)
+		}
+	}
 }
