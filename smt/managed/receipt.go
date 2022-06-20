@@ -10,13 +10,13 @@ import (
 // Convert the receipt to a string
 func (r *Receipt) String() string {
 	var b bytes.Buffer
-	b.WriteString(fmt.Sprintf("\nElement      %x\n", r.Start))    // Element of proof
-	b.WriteString(fmt.Sprintf("ElementIndex %d\n", r.StartIndex)) // Element of proof
-	b.WriteString(fmt.Sprintf("Anchor       %x\n", r.End))        // Anchor point in the Merkle Tree
-	b.WriteString(fmt.Sprintf("AnchorIndex  %d\n", r.EndIndex))   // Anchor point in the Merkle Tree
-	b.WriteString(fmt.Sprintf("MDRoot       %x\n", r.Anchor))     // MDRoot result of evaluating the receipt path
-	working := r.Start                                            // Calculate the receipt path; for debugging print the
-	for i, v := range r.Entries {                                 // intermediate hashes
+	b.WriteString(fmt.Sprintf("\nStart      %x\n", r.Start))    // Start of proof
+	b.WriteString(fmt.Sprintf("StartIndex %d\n", r.StartIndex)) // Start of proof
+	b.WriteString(fmt.Sprintf("End        %x\n", r.End))        // End point in the Merkle Tree
+	b.WriteString(fmt.Sprintf("EndIndex   %d\n", r.EndIndex))   // End point in the Merkle Tree
+	b.WriteString(fmt.Sprintf("Anchor     %x\n", r.Anchor))     // Anchor result of evaluating the receipt path
+	working := r.Start                                          // Calculate the receipt path; for debugging print the
+	for i, v := range r.Entries {                               // intermediate hashes
 		r := "L"
 		if v.Right {
 			r = "R"

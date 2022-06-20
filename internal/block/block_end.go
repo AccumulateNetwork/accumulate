@@ -364,7 +364,7 @@ func (x *Executor) requestMissingSyntheticTransactions(ledger *protocol.Syntheti
 
 	// See if we can get the anchors we need for pending synthetic transactions.
 	// https://accumulate.atlassian.net/browse/AC-1860
-	if len(pending) > 0 {
+	if x.Describe.NetworkType != config.Directory && len(pending) > 0 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -420,13 +420,17 @@ func (x *Executor) requestMissingAnchors(ctx context.Context, batch *database.Ba
 	var resp []*api.ChainQueryResponse
 	err := x.Router.RequestAPIv2(ctx, protocol.Directory, "", jbatch, &resp)
 	if err != nil {
-		x.logger.Error("Failed to request anchors", "error", err)
-		return
+		// If an individual request failed, ignore it
+		var berr jsonrpc2.BatchError
+		if !errors.As(err, &berr) {
+			x.logger.Error("Failed to request anchors", "error", err)
+			return
+		}
 	}
 
 	var sigs []protocol.Signature
 	for _, resp := range resp {
-		if resp.Receipt == nil || resp.Receipt.Error != "" {
+		if resp == nil || resp.Receipt == nil || resp.Receipt.Error != "" {
 			continue
 		}
 
