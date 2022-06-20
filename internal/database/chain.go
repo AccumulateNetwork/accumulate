@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
@@ -14,6 +15,7 @@ type Chain struct {
 	account  *Account
 	writable bool
 	merkle   *managed.MerkleManager
+	head     *managed.MerkleState
 }
 
 // newChain creates a new Chain.
@@ -21,14 +23,10 @@ func newChain(account *Account, key storage.Key, writable bool) (*Chain, error) 
 	m := new(Chain)
 	m.account = account
 	m.writable = writable
+	m.merkle = managed.NewChain(account.batch.logger.L, &RecordStore{account.batch}, record.Key{key}, markPower, "chain %s")
 
 	var err error
-	m.merkle, err = managed.NewMerkleManager(MerkleDbManager{Batch: account.batch}, markPower)
-	if err != nil {
-		return nil, err
-	}
-
-	err = m.merkle.SetKey(key)
+	m.head, err = m.merkle.Head().Get()
 	if err != nil {
 		return nil, err
 	}
@@ -38,7 +36,7 @@ func newChain(account *Account, key storage.Key, writable bool) (*Chain, error) 
 
 // Height returns the height of the chain.
 func (c *Chain) Height() int64 {
-	return c.merkle.MS.Count
+	return c.head.Count
 }
 
 // Entry loads the entry in the chain at the given height.
@@ -91,7 +89,7 @@ func (c *Chain) State(height int64) (*managed.MerkleState, error) {
 
 // CurrentState returns the current state of the chain.
 func (c *Chain) CurrentState() *managed.MerkleState {
-	return c.merkle.MS
+	return c.head
 }
 
 // HeightOf returns the height of the given entry in the chain.
@@ -101,7 +99,7 @@ func (c *Chain) HeightOf(hash []byte) (int64, error) {
 
 // Anchor calculates the anchor of the current Merkle state.
 func (c *Chain) Anchor() []byte {
-	return c.merkle.MS.GetMDRoot()
+	return c.head.GetMDRoot()
 }
 
 // AnchorAt calculates the anchor of the chain at the given height.
@@ -115,7 +113,7 @@ func (c *Chain) AnchorAt(height uint64) ([]byte, error) {
 
 // Pending returns the pending roots of the current Merkle state.
 func (c *Chain) Pending() []managed.Hash {
-	return c.merkle.MS.Pending
+	return c.head.Pending
 }
 
 // AddEntry adds an entry to the chain

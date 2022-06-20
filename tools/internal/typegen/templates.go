@@ -16,24 +16,23 @@ import (
 )
 
 var enUsTitle = cases.Title(language.AmericanEnglish)
-var reLowerUpper = regexp.MustCompile(`\p{Ll}\p{Lu}+`)
+var reUpper = regexp.MustCompile(`^\p{Lu}+`)
+var reLowerUpper = regexp.MustCompile(`\p{Ll}?\p{Lu}+`)
 
 func DashCase(s string) string {
-	s = LowerFirstRune(s)
-	return reLowerUpper.ReplaceAllStringFunc(s, func(s string) string {
+	s = LowerFirstWord(s)
+	s = reLowerUpper.ReplaceAllStringFunc(s, func(s string) string {
 		return s[:1] + "-" + strings.ToLower(s[1:])
 	})
+	return s
 }
 
 func TitleCase(s string) string {
 	return enUsTitle.String(s[:1]) + s[1:]
 }
 
-func LowerFirstRune(s string) string {
-	if s == "" {
-		return ""
-	}
-	return strings.ToLower(s[:1]) + s[1:]
+func LowerFirstWord(s string) string {
+	return reUpper.ReplaceAllStringFunc(s, strings.ToLower)
 }
 
 func Natural(name string) string {

@@ -37,7 +37,7 @@ type ChainState struct {
 
 type NetworkMetrics struct {
 	fieldsSet []bool
-	TPS       float64 `json:"tPS,omitempty" form:"tPS" query:"tPS" validate:"required"`
+	TPS       float64 `json:"tps,omitempty" form:"tps" query:"tps" validate:"required"`
 	extraData []byte
 }
 
@@ -48,7 +48,7 @@ type NodeDescription struct {
 
 type NodeMetrics struct {
 	fieldsSet []bool
-	TPS       float64 `json:"tPS,omitempty" form:"tPS" query:"tPS" validate:"required"`
+	TPS       float64 `json:"tps,omitempty" form:"tps" query:"tps" validate:"required"`
 	extraData []byte
 }
 

@@ -4,10 +4,13 @@ linters:
   - nodebug
   - rangevarref
 
-  # TODO Enable these and fix the issues
   disable:
+  # TODO Enable these and fix the issues
   - staticcheck
   - gosimple
+
+  # TODO Disabled due to http://github.com/golangci/golangci-lint/issues/2859
+  - unused
 
 issues:
   max-same-issues: 0
