@@ -1,0 +1,50 @@
+{{- define "container"}}
+{{- if not (excluded .) -}}
+full{{.FullName}}State:
+  fields:
+  {{- range .Attributes}}
+  {{- if not (excluded .)}}
+  {{- if or .Type.IsEntity}}
+  - name: {{.Name}}
+    type: full{{.FullName}}State
+    marshal-as: reference
+    pointer: true
+  {{- else if .Type.IsChain}}
+  - name: {{.Name}}
+    type: managed.MerkleState
+    marshal-as: reference
+    pointer: true
+  {{- else if .Type.IsOther}}
+  - name: {{.Name}}
+    type: full{{.DataType}}State
+    marshal-as: reference
+    pointer: true
+  {{- else if .Type.IsState}}
+  - name: {{.Name}}
+    type: {{.DataType}}
+    {{- if .Union}}
+    marshal-as: union
+    {{- else}}
+    marshal-as: reference
+    {{- end}}
+    {{- if or .Set .Counted}}
+    repeatable: true
+    {{- end}}
+    {{- if .Pointer}}
+    pointer: true
+    {{- end}}
+  {{- end}}
+  {{- end}}
+  {{- end}}
+
+{{  end}}
+{{- range .Attributes}}
+{{- if .Type.IsEntity}}
+{{- template "container" .}}
+{{- end}}
+{{- end}}
+{{- end}}
+
+{{- range .Records}}
+{{- template "container" .}}
+{{- end}}
