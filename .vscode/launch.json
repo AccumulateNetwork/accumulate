@@ -17,7 +17,7 @@
         "${workspaceFolder}/.nodes",
         "--reset",
         "-b",
-        "1",
+        "2",
         "-v",
         "1",
         "-f",
@@ -51,7 +51,7 @@
         "${workspaceFolder}/.nodes",
         "--truncate",
         "--debug",
-        "-x=bvn0.101"
+        "-x=101"
       ]
     },
     {

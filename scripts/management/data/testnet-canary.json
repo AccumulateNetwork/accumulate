@@ -1,33 +1,18 @@
 {
-    "network": "Canary TestNet",
-    "subnets": [
-        {
-            "id": "Directory",
-            "type": "directory",
-            "port": 34000,
-            "nodes": [
-                {"ip": "172.31.4.106",  "type": "validator", "belongs-to": "Zion 0"},
-                {"ip": "172.31.11.185", "type": "follower",  "belongs-to": "Zion 1"},
-                {"ip": "172.31.11.104", "type": "validator", "belongs-to": "Yellowstone 0"},
-                {"ip": "172.31.13.8",   "type": "follower",  "belongs-to": "Yellowstone 1"}
-            ]
-        },
+    "id": "Canary TestNet",
+    "bvns": [
         {
             "id": "Zion",
-            "type": "block-validator",
-            "port": 33000,
             "nodes": [
-                {"ip": "172.31.4.106",  "type": "validator"},
-                {"ip": "172.31.11.185", "type": "validator"}
+                {"hostName": "172.31.4.106",  "basePort": 33000, "dnnType": "validator", "bvnnType": "validator"},
+                {"hostName": "172.31.11.185", "basePort": 33000, "dnnType": "follower",  "bvnnType": "validator"}
             ]
         },
         {
             "id": "Yellowstone",
-            "type": "block-validator",
-            "port": 33000,
             "nodes": [
-                {"ip": "172.31.11.104", "type": "validator"},
-                {"ip": "172.31.13.8",   "type": "validator"}
+                {"hostName": "172.31.11.104", "basePort": 33000, "dnnType": "validator", "bvnnType": "validator"},
+                {"hostName": "172.31.13.8",   "basePort": 33000, "dnnType": "follower",  "bvnnType": "validator"}
             ]
         }
     ]
