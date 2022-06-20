@@ -310,7 +310,7 @@ func (x *Executor) putSyntheticTransaction(batch *database.Batch, transaction *p
 	return nil
 }
 
-func assembleSynthReceipt(transaction *protocol.Transaction, signatures []protocol.Signature) (*managed.Receipt, *url.URL, error) {
+func assembleSynthReceipt(hash [32]byte, signatures []protocol.Signature) (*managed.Receipt, *url.URL, error) {
 	// Collect receipts
 	receipts := map[[32]byte]*protocol.ReceiptSignature{}
 	for _, signature := range signatures {
@@ -322,11 +322,10 @@ func assembleSynthReceipt(transaction *protocol.Transaction, signatures []protoc
 	}
 
 	// Get the first
-	hash := *(*[32]byte)(transaction.GetHash())
 	rsig, ok := receipts[hash]
 	delete(receipts, hash)
 	if !ok {
-		return nil, nil, nil
+		return nil, nil, errors.Format(errors.StatusInternalError, "missing initial receipt")
 	}
 	sourceNet := rsig.SourceNetwork
 

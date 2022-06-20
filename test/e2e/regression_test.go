@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
+	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -91,6 +92,75 @@ func TestQueryKeyIndexWithRemoteAuthority(t *testing.T) {
 		require.EqualError(t, err, fmt.Sprintf("no authority of %s holds %X", req.Url, req.Key))
 		return nil
 	})
+}
+
+func TestSendSynthTxnAfterAnchor(t *testing.T) {
+	// Tests AC-1860
+	var timestamp uint64
+
+	// Initialize
+	sim := simulator.New(t, 3)
+	sim.InitFromGenesis()
+
+	alice := acctesting.GenerateKey("Alice")
+	aliceUrl := acctesting.AcmeLiteAddressStdPriv(alice)
+	bob := acctesting.GenerateKey("Bob")
+	bobUrl := acctesting.AcmeLiteAddressStdPriv(bob)
+	sim.CreateAccount(&LiteIdentity{Url: aliceUrl.RootIdentity(), CreditBalance: 1e9})
+	sim.CreateAccount(&LiteTokenAccount{Url: aliceUrl, TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e9)})
+
+	// Capture the first deposit
+	var deposit *chain.Delivery
+	sim.SubnetFor(bobUrl.RootIdentity()).SubmitHook = func(envelopes []*chain.Delivery) ([]*chain.Delivery, bool) {
+		for i, env := range envelopes {
+			if env.Transaction.Body.Type() == TransactionTypeSyntheticDepositTokens {
+				fmt.Printf("Dropping %X\n", env.Transaction.GetHash()[:4])
+				deposit = env
+				return append(envelopes[:i], envelopes[i+1:]...), false
+			}
+		}
+		return envelopes, true
+	}
+
+	// Execute
+	envs := sim.MustSubmitAndExecuteBlock(
+		acctesting.NewTransaction().
+			WithPrincipal(aliceUrl).
+			WithTimestampVar(&timestamp).
+			WithSigner(aliceUrl, 1).
+			WithBody(&SendTokens{
+				To: []*TokenRecipient{{
+					Url:    bobUrl,
+					Amount: *big.NewInt(1),
+				}},
+			}).
+			Initiate(SignatureTypeED25519, alice).
+			Build())
+	sim.WaitForTransaction(delivered, envs[0].Transaction[0].GetHash(), 50)
+
+	// Wait for the synthetic transaction to be sent and the block to be
+	// anchored
+	sim.ExecuteBlocks(10)
+	require.NotNil(t, deposit, "synthetic transactions have not been sent")
+
+	// Verify the block has been anchored
+	var receipt *ReceiptSignature
+	for _, sig := range deposit.Signatures {
+		if sig, ok := sig.(*ReceiptSignature); ok {
+			receipt = sig
+		}
+	}
+	require.NotNil(t, receipt)
+	req := new(query.RequestByUrl)
+	req.Url = DnUrl().JoinPath(AnchorPool).WithFragment(fmt.Sprintf("anchor/%x", receipt.Proof.Anchor))
+	sim.Query(DnUrl(), req, true)
+
+	// Submit the synthetic transaction
+	sim.SubnetFor(bobUrl).Submit(&Envelope{
+		Transaction: []*Transaction{deposit.Transaction},
+		Signatures:  deposit.Signatures,
+	})
+	sim.WaitForTransactionFlow(delivered, deposit.Transaction.GetHash())
 }
 
 func TestAddCreditsToLiteIdentityOnOtherBVN(t *testing.T) {
