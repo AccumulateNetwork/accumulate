@@ -22,4 +22,4 @@ COPY --from=build /root/accumulate /root/accumulated /bin/
 HEALTHCHECK CMD curl --fail --silent http://localhost:26660/status || exit 1
 
 ENTRYPOINT ["accumulated"]
-CMD ["run", "--work-dir", "/node"]
+CMD ["run-dual", "/node/dnn", "/node/bvnn"]
