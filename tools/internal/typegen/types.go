@@ -10,6 +10,8 @@ import (
 )
 
 //go:generate go run ../../cmd/gen-enum --package typegen --out enums_gen.go enums.yml
+//go:generate go run ../../cmd/gen-types --package typegen --out types_gen.go types.yml
+//go:generate go run ../../cmd/gen-types --package typegen --language go-union --out unions_gen.go types.yml
 
 type MarshalAs int
 

@@ -1,4 +1,4 @@
-package managed_test
+package managed
 
 import (
 	"bytes"
@@ -12,10 +12,9 @@ import (
 
 	"github.com/dustin/go-humanize"
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
-	. "gitlab.com/accumulatenetwork/accumulate/smt/managed"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage/badger"
 )
 
 func GetHash(i int) Hash {
@@ -25,14 +24,10 @@ func GetHash(i int) Hash {
 func TestReceipt(t *testing.T) {
 	const testMerkleTreeSize = 7
 	// Create a memory based database
-	store := database.OpenInMemory(nil)
-	storeTx := store.Begin(true)
+	store := begin()
 
 	// Create a MerkleManager for the memory database
-	manager, err := NewMerkleManager(database.MerkleDbManager{Batch: storeTx}, 2)
-	if err != nil {
-		t.Fatalf("did not create a merkle manager: %v", err)
-	}
+	manager := newChain(store, 2)
 	// populate the database
 	for i := 0; i < testMerkleTreeSize; i++ {
 		v := GetHash(i)
@@ -81,13 +76,10 @@ func TestReceiptAll(t *testing.T) {
 	cnt := 0
 	const testMerkleTreeSize = 150
 
-	store := database.OpenInMemory(nil)
-	storeTx := store.Begin(true)
-	manager, _ := NewMerkleManager(database.MerkleDbManager{Batch: storeTx}, 2) // MerkleManager
-
-	_ = manager.SetKey(storage.MakeKey("one")) // Populate a database
-	var rh common.RandHash                     // A source of random hashes
-	for i := 0; i < testMerkleTreeSize; i++ {  // Then for all the hashes for our test
+	store := begin()
+	manager := newChain(store, 2, "one")      // Populate a database
+	var rh common.RandHash                    // A source of random hashes
+	for i := 0; i < testMerkleTreeSize; i++ { // Then for all the hashes for our test
 		require.NoError(t, manager.AddHash(rh.NextList(), false)) // Add a hash
 	}
 
@@ -130,7 +122,9 @@ func TestReceiptAll(t *testing.T) {
 
 func PopulateDatabase(t *testing.T, manager *MerkleManager, treeSize int64) {
 	// populate the database
-	startCount := manager.MS.Count
+	head, err := manager.Head().Get()
+	require.NoError(t, err)
+	startCount := head.Count
 	for i := startCount; i < treeSize; i++ {
 		v := GetHash(int(i))
 		require.NoError(t, manager.AddHash(v, false))
@@ -144,15 +138,17 @@ func GenerateReceipts(manager *MerkleManager, receiptCount int64, t *testing.T) 
 	running := new(int64)
 	printed := new(int64)
 
-	for i := 0; i < int(manager.MS.Count); i++ {
+	head, err := manager.Head().Get()
+	require.NoError(t, err)
+	for i := 0; i < int(head.Count); i++ {
 		atomic.AddInt64(running, 1)
-		for j := i; j < int(manager.MS.Count); j++ {
+		for j := i; j < int(head.Count); j++ {
 			element := GetHash(i)
 			anchor := GetHash(j)
 
 			r, _ := GetReceipt(manager, element, anchor)
-			if i < 0 || i >= int(manager.MS.Count) || //       If (i) is out of range
-				j < 0 || j >= int(manager.MS.Count) || //        Or j is out of range
+			if i < 0 || i >= int(head.Count) || //       If (i) is out of range
+				j < 0 || j >= int(head.Count) || //        Or j is out of range
 				j < i { //                                    Or if the anchor is before the element
 				if r != nil { //                            then you should not be able to generate a receipt
 					t.Error("Should not be able to generate a receipt")
@@ -200,15 +196,14 @@ func TestBadgerReceipts(t *testing.T) {
 		t.Skip("Skipping test: running CI: flaky")
 	}
 
-	badger, err := database.OpenBadger(filepath.Join(t.TempDir(), "badger.db"), nil)
+	badger, err := badger.New(filepath.Join(t.TempDir(), "badger.db"), nil)
 	require.NoError(t, err)
 	defer badger.Close()
 
 	batch := badger.Begin(true)
 	defer batch.Discard()
 
-	manager, err := NewMerkleManager(database.MerkleDbManager{Batch: batch}, 2)
-	require.NoError(t, err)
+	manager := newChain(record.KvStore{Store: batch}, 2)
 
 	PopulateDatabase(t, manager, 700)
 
@@ -219,21 +214,15 @@ func TestBadgerReceipts(t *testing.T) {
 func TestReceipt_Combine(t *testing.T) {
 	testCnt := int64(50)
 	var rh common.RandHash
-	var m1, m2 *MerkleManager
-	store := database.OpenInMemory(nil)
-	storeTx := store.Begin(true)
-	m1, err := NewMerkleManager(database.MerkleDbManager{Batch: storeTx}, 2)
-	require.NoError(t, err, "should be able to create a new merkle tree manager")
-	err = m1.SetKey(storage.MakeKey("m1"))
-	require.NoError(t, err, "should be able to set a key")
-	m2, err = NewMerkleManager(database.MerkleDbManager{Batch: storeTx}, 2)
-	require.NoError(t, err, "should be able to create a new merkle tree manager")
-	err = m2.SetKey(storage.MakeKey("m2"))
-	require.NoError(t, err, "should be able to set a key")
+	store := begin()
+	m1 := newChain(store, 2, "m1")
+	m2 := newChain(store, 2, "m2")
 
 	for i := int64(0); i < testCnt; i++ {
 		require.NoError(t, m1.AddHash(rh.NextList(), false))
-		root1 := m1.MS.GetMDRoot()
+		head, err := m1.Head().Get()
+		require.NoError(t, err)
+		root1 := head.GetMDRoot()
 		require.NoError(t, m2.AddHash(root1, false))
 	}
 	for i := int64(0); i < testCnt; i++ {
@@ -287,10 +276,8 @@ func TestReceiptSimple(t *testing.T) {
 		list = append(list, rh.Next()) //
 	}
 
-	store := database.OpenInMemory(nil)                                     //  Set up a memory db
-	storeTx := store.Begin(true)                                            //
-	m, err := NewMerkleManager(database.MerkleDbManager{Batch: storeTx}, 2) //
-	require.Nil(t, err, "fail NewMerkleManager")
+	store := begin()        //  Set up a memory db
+	m := newChain(store, 2) //
 
 	for _, v := range list { //                Put all the values into the SMT
 		require.NoError(t, m.AddHash(v, false), "Error") //
