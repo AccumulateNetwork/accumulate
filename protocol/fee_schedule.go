@@ -18,8 +18,8 @@ const (
 	// FeeFailedMaximum $0.01
 	FeeFailedMaximum Fee = 100
 
-	// FeeSignature $0.001
-	FeeSignature Fee = 10
+	// FeeSignature $0.0001
+	FeeSignature Fee = 1
 
 	// FeeData $0.001 / 256 bytes
 	FeeData Fee = 10
