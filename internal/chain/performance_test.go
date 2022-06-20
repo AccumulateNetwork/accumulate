@@ -2,10 +2,6 @@ package chain_test
 
 import (
 	"bufio"
-	"gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/block"
-	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"math/big"
 	"os"
 	"testing"
@@ -13,7 +9,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/crypto/ed25519"
+	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
+	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
