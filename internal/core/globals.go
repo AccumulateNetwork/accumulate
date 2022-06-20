@@ -16,44 +16,44 @@ const labelGlobals = "network globals"
 const labelNetwork = "network definition"
 const labelRouting = "routing table"
 
-func (g *GlobalValues) Load(net *config.Describe, getState getStateFunc) error {
-	if err := loadAccount(net.NodeUrl(protocol.Oracle), labelOracle, getState, new(protocol.AcmeOracle), &g.Oracle); err != nil {
+func (g *GlobalValues) Load(net config.NetworkUrl, getState getStateFunc) error {
+	if err := loadAccount(net.JoinPath(protocol.Oracle), labelOracle, getState, new(protocol.AcmeOracle), &g.Oracle); err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
-	if err := loadAccount(net.NodeUrl(protocol.Globals), labelGlobals, getState, new(protocol.NetworkGlobals), &g.Globals); err != nil {
+	if err := loadAccount(net.JoinPath(protocol.Globals), labelGlobals, getState, new(protocol.NetworkGlobals), &g.Globals); err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
-	if err := loadAccount(net.NodeUrl(protocol.Network), labelNetwork, getState, new(protocol.NetworkDefinition), &g.Network); err != nil {
+	if err := loadAccount(net.JoinPath(protocol.Network), labelNetwork, getState, new(protocol.NetworkDefinition), &g.Network); err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
-	if err := loadAccount(net.NodeUrl(protocol.Routing), labelRouting, getState, new(protocol.RoutingTable), &g.Routing); err != nil {
+	if err := loadAccount(net.JoinPath(protocol.Routing), labelRouting, getState, new(protocol.RoutingTable), &g.Routing); err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
 	return nil
 }
 
-func (g *GlobalValues) Store(net *config.Describe, getState getStateFunc, putState putStateFunc) error {
-	if err := storeAccount(net.NodeUrl(protocol.Oracle), labelOracle, getState, putState, g.Oracle); err != nil {
+func (g *GlobalValues) Store(net config.NetworkUrl, getState getStateFunc, putState putStateFunc) error {
+	if err := storeAccount(net.JoinPath(protocol.Oracle), labelOracle, getState, putState, g.Oracle); err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
-	if err := storeAccount(net.NodeUrl(protocol.Globals), labelGlobals, getState, putState, g.Globals); err != nil {
+	if err := storeAccount(net.JoinPath(protocol.Globals), labelGlobals, getState, putState, g.Globals); err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
 
 	if g.Network != nil {
 		// TODO Make this unconditional once the corresponding part of genesis
 		// is unconditional
-		if err := storeAccount(net.NodeUrl(protocol.Network), labelNetwork, getState, putState, g.Network); err != nil {
+		if err := storeAccount(net.JoinPath(protocol.Network), labelNetwork, getState, putState, g.Network); err != nil {
 			return errors.Wrap(errors.StatusUnknown, err)
 		}
 	}
 
-	if err := storeAccount(net.NodeUrl(protocol.Routing), labelRouting, getState, putState, g.Routing); err != nil {
+	if err := storeAccount(net.JoinPath(protocol.Routing), labelRouting, getState, putState, g.Routing); err != nil {
 		return errors.Wrap(errors.StatusUnknown, err)
 	}
 

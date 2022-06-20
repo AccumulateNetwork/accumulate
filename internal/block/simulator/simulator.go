@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/block"
@@ -20,7 +21,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
-	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/sortutil"
@@ -41,6 +41,7 @@ type Simulator struct {
 
 	LogLevels string
 
+	netInit          *accumulated.NetworkInit
 	router           routing.Router
 	routingOverrides map[[32]byte]string
 }
@@ -88,10 +89,25 @@ func (sim *Simulator) Setup(bvnCount int) {
 	sim.routingOverrides = map[[32]byte]string{}
 	sim.Logger = sim.newLogger().With("module", "simulator")
 	sim.Executors = map[string]*ExecEntry{}
-	sim.Subnets = make([]config.Subnet, bvnCount+1)
-	sim.Subnets[0] = config.Subnet{Type: config.Directory, Id: protocol.Directory, BasePort: 30000}
+
+	sim.netInit = new(accumulated.NetworkInit)
+	sim.netInit.Id = sim.Name()
 	for i := 0; i < bvnCount; i++ {
-		sim.Subnets[i+1] = config.Subnet{Type: config.BlockValidator, Id: fmt.Sprintf("BVN%d", i), BasePort: 30000}
+		bvnInit := new(accumulated.BvnInit)
+		bvnInit.Id = fmt.Sprintf("BVN%d", i)
+		bvnInit.Nodes = []*accumulated.NodeInit{{
+			DnnType:    config.Validator,
+			BvnnType:   config.Validator,
+			PrivValKey: acctesting.GenerateKey(sim.Name(), bvnInit.Id),
+		}}
+		sim.netInit.Bvns = append(sim.netInit.Bvns, bvnInit)
+	}
+
+	sim.Subnets = make([]config.Subnet, 1)
+	sim.Subnets[0] = config.Subnet{Type: config.Directory, Id: protocol.Directory, BasePort: 30000}
+	for _, bvn := range sim.netInit.Bvns {
+		subnet := config.Subnet{Type: config.BlockValidator, Id: bvn.Id, BasePort: 30000}
+		sim.Subnets = append(sim.Subnets, subnet)
 	}
 
 	mainEventBus := events.NewBus(sim.Logger.With("subnet", protocol.Directory))
@@ -99,32 +115,27 @@ func (sim *Simulator) Setup(bvnCount int) {
 	sim.router = routing.NewRouter(mainEventBus, nil)
 
 	// Initialize each executor
-	for i := range sim.Subnets {
-		subnet := &sim.Subnets[i]
-		subnet.Nodes = []config.Node{{Type: config.Validator, Address: subnet.Id}}
+	for _, bvn := range sim.netInit.Bvns[:1] {
+		// TODO Initialize multiple executors for the DN
+		dn := &sim.Subnets[0]
+		dn.Nodes = append(dn.Nodes, config.Node{Type: config.Validator, Address: protocol.Directory})
 
-		logger := sim.newLogger().With("subnet", subnet.Id)
-		key := acctesting.GenerateKey(sim.Name(), subnet.Id)
+		logger := sim.newLogger().With("subnet", protocol.Directory)
 		db := database.OpenInMemory(logger)
 
 		network := config.Describe{
-			NetworkType:  subnet.Type,
-			SubnetId:     subnet.Id,
-			LocalAddress: subnet.Id,
+			NetworkType:  config.Directory,
+			SubnetId:     protocol.Directory,
+			LocalAddress: protocol.Directory,
 			Network:      config.Network{Id: "simulator", Subnets: sim.Subnets},
-		}
-
-		eventBus := mainEventBus
-		if subnet.Type != config.Directory {
-			eventBus = events.NewBus(logger)
 		}
 
 		exec, err := NewNodeExecutor(ExecutorOptions{
 			Logger:   logger,
-			Key:      key,
+			Key:      bvn.Nodes[0].PrivValKey,
 			Describe: network,
 			Router:   sim.Router(),
-			EventBus: eventBus,
+			EventBus: mainEventBus,
 		}, db)
 		require.NoError(sim, err)
 
@@ -136,14 +147,56 @@ func (sim *Simulator) Setup(bvnCount int) {
 		})
 		require.NoError(sim, err)
 
-		sim.Executors[subnet.Id] = &ExecEntry{
+		sim.Executors[protocol.Directory] = &ExecEntry{
 			Database:   db,
 			Executor:   exec,
-			Subnet:     subnet,
+			Subnet:     dn,
 			API:        acctesting.DirectJrpcClient(jrpc),
 			tb:         sim.tb,
 			blockTime:  genesisTime,
-			Validators: [][]byte{key[32:]},
+			Validators: [][]byte{exec.Key[32:]},
+		}
+	}
+
+	for i, bvnInit := range sim.netInit.Bvns {
+		bvn := &sim.Subnets[i+1]
+		bvn.Nodes = []config.Node{{Type: config.Validator, Address: bvn.Id}}
+
+		logger := sim.newLogger().With("subnet", bvn.Id)
+		db := database.OpenInMemory(logger)
+
+		network := config.Describe{
+			NetworkType:  bvn.Type,
+			SubnetId:     bvn.Id,
+			LocalAddress: bvn.Id,
+			Network:      config.Network{Id: "simulator", Subnets: sim.Subnets},
+		}
+
+		exec, err := NewNodeExecutor(ExecutorOptions{
+			Logger:   logger,
+			Key:      bvnInit.Nodes[0].PrivValKey,
+			Describe: network,
+			Router:   sim.Router(),
+			EventBus: events.NewBus(logger),
+		}, db)
+		require.NoError(sim, err)
+
+		jrpc, err := api.NewJrpc(api.Options{
+			Logger:        logger,
+			Describe:      &network,
+			Router:        sim.Router(),
+			TxMaxWaitTime: time.Hour,
+		})
+		require.NoError(sim, err)
+
+		sim.Executors[bvn.Id] = &ExecEntry{
+			Database:   db,
+			Executor:   exec,
+			Subnet:     bvn,
+			API:        acctesting.DirectJrpcClient(jrpc),
+			tb:         sim.tb,
+			blockTime:  genesisTime,
+			Validators: [][]byte{exec.Key[32:]},
 		}
 	}
 }
@@ -234,26 +287,18 @@ func (s *Simulator) InitFromGenesis() {
 func (s *Simulator) InitFromGenesisWith(values *core.GlobalValues) {
 	s.Helper()
 
-	netValMap := make(genesis.NetworkValidatorMap)
-	for _, x := range s.Executors {
-		x.bootstrap = InitGenesis(s, x.Executor, genesisTime, values, netValMap)
+	if values == nil {
+		values = new(core.GlobalValues)
 	}
+	genDocs, err := accumulated.BuildGenesisDocs(s.netInit, values, genesisTime, s.Logger, "")
+	require.NoError(s, err)
 
 	// Execute bootstrap after the entire network is known
 	for _, x := range s.Executors {
-		err := x.bootstrap.Bootstrap()
-		if err != nil {
-			panic(fmt.Errorf("could not execute bootstrap: %v", err))
-		}
-		state, err := x.bootstrap.GetDBState()
-		require.NoError(tb{s}, err)
-
-		func() {
-			batch := x.Database.Begin(true)
-			defer batch.Discard()
-			require.NoError(tb{s}, x.Executor.InitFromGenesis(batch, state))
-			require.NoError(tb{s}, batch.Commit())
-		}()
+		batch := x.Database.Begin(true)
+		defer batch.Discard()
+		require.NoError(tb{s}, x.Executor.InitFromGenesis(batch, genDocs[x.Subnet.Id].AppState))
+		require.NoError(tb{s}, batch.Commit())
 	}
 }
 
@@ -479,7 +524,6 @@ type ExecEntry struct {
 	Subnet     *config.Subnet
 	Database   *database.Database
 	Executor   *block.Executor
-	bootstrap  genesis.Bootstrap
 	API        *client.Client
 	Validators [][]byte
 

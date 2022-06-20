@@ -21,6 +21,9 @@ import (
 //go:generate go run ../tools/cmd/gen-enum  --package config enums.yml
 //go:generate go run ../tools/cmd/gen-types --package config types.yml
 
+const PortOffsetDirectory = 0
+const PortOffsetBlockValidator = 100
+
 const (
 	configDir     = "config"
 	tmConfigFile  = "tendermint.toml"
