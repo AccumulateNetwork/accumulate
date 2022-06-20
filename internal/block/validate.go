@@ -199,7 +199,7 @@ func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Deli
 		if !delivery.Transaction.Body.Type().IsUser() {
 			err = x.validatePartitionSignature(md.Location, signature, delivery.Transaction)
 			if err != nil {
-				return nil, errors.Format(errors.StatusUnauthorized, "key used does not belong to the originating subnet %s", err)
+				return nil, errors.Wrap(errors.StatusUnknown, err)
 			}
 		}
 

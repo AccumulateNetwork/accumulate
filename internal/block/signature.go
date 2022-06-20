@@ -140,7 +140,7 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 		if !delivery.Transaction.Body.Type().IsUser() {
 			err = x.validatePartitionSignature(md.Location, signature, delivery.Transaction)
 			if err != nil {
-				return nil, fmt.Errorf("key used does not belong to the originating subnet %x", err)
+				return nil, errors.Wrap(errors.StatusUnknown, err)
 			}
 		}
 
@@ -732,6 +732,7 @@ func GetSignaturesForSigner(batch *database.Batch, transaction *database.Transac
 
 //validationPartitionSignature checks if the key used to sign the synthetic or system transaction belongs to the same subnet
 func (x *Executor) validatePartitionSignature(location *url.URL, sig protocol.KeySignature, tx *protocol.Transaction) error {
+	// TODO AC-1702 Use GetAllSignatures to determine the source
 	var sigurl string
 	var source *url.URL
 	var err error
@@ -742,44 +743,37 @@ func (x *Executor) validatePartitionSignature(location *url.URL, sig protocol.Ke
 		_, source = txn.GetCause()
 		sigurl, err = x.Router.RouteAccount(source)
 		if err != nil {
-			return fmt.Errorf("switch case err %w", err)
+			return errors.Format(errors.StatusNotFound, " :%w", err)
 		}
-		break
+
 	case protocol.TransactionTypeDirectoryAnchor:
 		txn := tx.Body.CopyAsInterface().(*protocol.DirectoryAnchor)
 		source = txn.Source
 		sigurl, err = x.Router.RouteAccount(source)
 		if err != nil {
-			return fmt.Errorf("switch case err %w", err)
+			return errors.Format(errors.StatusNotFound, " :%w", err)
 		}
-		break
+
 	case protocol.TransactionTypePartitionAnchor:
 		txn := tx.Body.CopyAsInterface().(*protocol.PartitionAnchor)
 		source = txn.Source
 		sigurl, err = x.Router.RouteAccount(source)
 		if err != nil {
-			return fmt.Errorf("switch case err %w", err)
+			return errors.Format(errors.StatusNotFound, " :%w", err)
 		}
-		break
+
+	default:
+		return nil
 
 	}
-	sourceurl, err := x.Router.RouteAccount(location)
-	if err != nil {
-		return fmt.Errorf("routing err %w", err)
-	}
-	if sigurl != sourceurl {
-		return fmt.Errorf("expected %s got %s", location.String(), source.String())
-	} else {
 
-		subnet := x.globals.Active.Network.Subnet(sigurl)
+	subnet := x.globals.Active.Network.Subnet(sigurl)
 
-		if subnet.SubnetID == sigurl {
-			for _, vkey := range subnet.ValidatorKeys {
-				if bytes.Equal(vkey, skey) {
-					return nil
-				}
-			}
+	for _, vkey := range subnet.ValidatorKeys {
+		if bytes.Equal(vkey, skey) {
+			return nil
 		}
-		return fmt.Errorf("Key does not exist %s ;;; %s ;;; %s ;;; %s ;;;; %s", sigurl, sourceurl, skey, subnet.SubnetID, subnet.ValidatorKeys)
 	}
+
+	return fmt.Errorf("key does not exist %s ;;; %s ;;; %s ;;; %s", sigurl, skey, subnet.SubnetID, subnet.ValidatorKeys)
 }
