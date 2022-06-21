@@ -279,6 +279,7 @@ func (s *Builder) Sign(message []byte) (protocol.Signature, error) {
 			Signature: sig,
 		}
 	}
+
 	return sig, s.sign(sig, message)
 }
 

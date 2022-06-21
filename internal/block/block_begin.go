@@ -448,6 +448,7 @@ func (x *Executor) signTransaction(batch *database.Batch, txn *protocol.Transact
 	if err != nil {
 		return nil, errors.Format(errors.StatusUnknown, "load operator key page: %w", err)
 	}
+
 	// Sign it
 	bld := new(signing.Builder).
 		SetType(protocol.SignatureTypeED25519).
