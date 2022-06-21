@@ -6,17 +6,72 @@ import (
 	"io"
 	"io/fs"
 	"io/ioutil"
+	"regexp"
 	"strings"
 	"text/template"
+	"unicode"
 
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
 
 var enUsTitle = cases.Title(language.AmericanEnglish)
+var reUpper = regexp.MustCompile(`^\p{Lu}+`)
+var reLowerUpper = regexp.MustCompile(`\p{Ll}?\p{Lu}+`)
+
+func DashCase(s string) string {
+	s = LowerFirstWord(s)
+	s = reLowerUpper.ReplaceAllStringFunc(s, func(s string) string {
+		return s[:1] + "-" + strings.ToLower(s[1:])
+	})
+	return s
+}
 
 func TitleCase(s string) string {
 	return enUsTitle.String(s[:1]) + s[1:]
+}
+
+func LowerFirstWord(s string) string {
+	return reUpper.ReplaceAllStringFunc(s, strings.ToLower)
+}
+
+func Natural(name string) string {
+	var splits []int
+
+	var wasLower bool
+	for i, r := range name {
+		if wasLower && unicode.IsUpper(r) {
+			splits = append(splits, i)
+		}
+		wasLower = unicode.IsLower(r)
+	}
+
+	w := new(strings.Builder)
+	w.Grow(len(name) + len(splits))
+
+	var word string
+	var split int
+	var offset int
+	for len(splits) > 0 {
+		split, splits = splits[0], splits[1:]
+		split -= offset
+		offset += split
+		word, name = name[:split], name[split:]
+		w.WriteString(strings.ToLower(word))
+		w.WriteRune(' ')
+	}
+
+	w.WriteString(strings.ToLower(name))
+	return w.String()
+}
+
+func MakeMap(v ...interface{}) map[string]interface{} {
+	m := make(map[string]interface{}, len(v)/2)
+	for len(v) > 1 {
+		m[fmt.Sprint(v[0])] = v[1]
+		v = v[2:]
+	}
+	return m
 }
 
 type TemplateLibrary struct {

@@ -30,14 +30,14 @@ func updateAccount[T protocol.Account](sim *simulator.Simulator, accountUrl *url
 	})
 }
 
-func updateSubnetFor(sim *simulator.Simulator, account *url.URL, fn func(batch *database.Batch)) {
+func updatePartitionFor(sim *simulator.Simulator, account *url.URL, fn func(batch *database.Batch)) {
 	_ = sim.PartitionFor(account).Database.Update(func(batch *database.Batch) error {
 		fn(batch)
 		return nil
 	})
 }
 
-func viewSubnetFor(sim *simulator.Simulator, account *url.URL, fn func(batch *database.Batch)) {
+func viewPartitionFor(sim *simulator.Simulator, account *url.URL, fn func(batch *database.Batch)) {
 	_ = sim.PartitionFor(account).Database.View(func(batch *database.Batch) error {
 		fn(batch)
 		return nil
@@ -81,7 +81,7 @@ func TestDelegatedSignature_Local(t *testing.T) {
 	sim.WaitForTransactions(delivered, envs...)
 
 	// Validate
-	viewSubnetFor(sim, alice, func(batch *database.Batch) {
+	viewPartitionFor(sim, alice, func(batch *database.Batch) {
 		de, err := indexing.Data(batch, alice.JoinPath("data")).GetLatestEntry()
 		require.NoError(t, err)
 		require.Equal(t, "foo", string(de.GetData()[0]))
@@ -127,7 +127,7 @@ func TestDelegatedSignature_LocalMultisig(t *testing.T) {
 	sim.WaitForTransactions(delivered, envs...)
 
 	// Validate
-	viewSubnetFor(sim, alice, func(batch *database.Batch) {
+	viewPartitionFor(sim, alice, func(batch *database.Batch) {
 		de, err := indexing.Data(batch, alice.JoinPath("data")).GetLatestEntry()
 		require.NoError(t, err)
 		require.Equal(t, "foo", string(de.GetData()[0]))
@@ -144,7 +144,7 @@ func TestDelegatedSignature_Double(t *testing.T) {
 	// Setup
 	alice := protocol.AccountUrl("alice")
 	key1, key2, key3 := acctesting.GenerateKey(), acctesting.GenerateKey(), acctesting.GenerateKey()
-	updateSubnetFor(sim, alice, func(batch *database.Batch) {
+	updatePartitionFor(sim, alice, func(batch *database.Batch) {
 		require.NoError(t, acctesting.CreateAdiWithCredits(batch, tmed25519.PrivKey(key1), types.String(alice.String()), 1e9))
 		require.NoError(t, acctesting.CreateKeyBook(batch, types.String(alice.JoinPath("book1").String()), tmed25519.PubKey(key2[32:])))
 		require.NoError(t, acctesting.AddCredits(batch, alice.JoinPath("book1", "1"), 1e9))
@@ -178,7 +178,7 @@ func TestDelegatedSignature_Double(t *testing.T) {
 	sim.WaitForTransactions(delivered, envs...)
 
 	// Validate
-	viewSubnetFor(sim, alice, func(batch *database.Batch) {
+	viewPartitionFor(sim, alice, func(batch *database.Batch) {
 		de, err := indexing.Data(batch, alice.JoinPath("data")).GetLatestEntry()
 		require.NoError(t, err)
 		require.Equal(t, "foo", string(de.GetData()[0]))
@@ -198,14 +198,14 @@ func TestDelegatedSignature_RemoteDelegate(t *testing.T) {
 
 	// Setup
 	key1, key2 := acctesting.GenerateKey(), acctesting.GenerateKey()
-	updateSubnetFor(sim, alice, func(batch *database.Batch) {
+	updatePartitionFor(sim, alice, func(batch *database.Batch) {
 		require.NoError(t, acctesting.CreateAdiWithCredits(batch, tmed25519.PrivKey(key1), types.String(alice.String()), 1e9))
 		require.NoError(t, acctesting.CreateAccount(batch, &DataAccount{Url: alice.JoinPath("data")}))
 		require.NoError(t, acctesting.UpdateKeyPage(batch, alice.JoinPath("book0", "1"), func(page *KeyPage) {
 			page.AddKeySpec(&KeySpec{Delegate: bob.JoinPath("book0")})
 		}))
 	})
-	updateSubnetFor(sim, bob, func(batch *database.Batch) {
+	updatePartitionFor(sim, bob, func(batch *database.Batch) {
 		require.NoError(t, acctesting.CreateAdiWithCredits(batch, tmed25519.PrivKey(key2), types.String(bob.String()), 1e9))
 	})
 
@@ -227,7 +227,7 @@ func TestDelegatedSignature_RemoteDelegate(t *testing.T) {
 	sim.WaitForTransactions(delivered, envs...)
 
 	// Validate
-	viewSubnetFor(sim, alice, func(batch *database.Batch) {
+	viewPartitionFor(sim, alice, func(batch *database.Batch) {
 		de, err := indexing.Data(batch, alice.JoinPath("data")).GetLatestEntry()
 		require.NoError(t, err)
 		require.Equal(t, "foo", string(de.GetData()[0]))
@@ -247,11 +247,11 @@ func TestDelegatedSignature_RemoteDelegator(t *testing.T) {
 
 	// Setup
 	key1, key2, key3 := acctesting.GenerateKey(), acctesting.GenerateKey(), acctesting.GenerateKey()
-	updateSubnetFor(sim, alice, func(batch *database.Batch) {
+	updatePartitionFor(sim, alice, func(batch *database.Batch) {
 		require.NoError(t, acctesting.CreateAdiWithCredits(batch, tmed25519.PrivKey(key1), types.String(alice.String()), 1e9))
 		require.NoError(t, acctesting.CreateAccount(batch, &DataAccount{Url: alice.JoinPath("data"), AccountAuth: AccountAuth{Authorities: []AuthorityEntry{{Url: bob.JoinPath("book0")}}}}))
 	})
-	updateSubnetFor(sim, bob, func(batch *database.Batch) {
+	updatePartitionFor(sim, bob, func(batch *database.Batch) {
 		require.NoError(t, acctesting.CreateAdiWithCredits(batch, tmed25519.PrivKey(key2), types.String(bob.String()), 1e9))
 		require.NoError(t, acctesting.CreateKeyBook(batch, types.String(bob.JoinPath("book1").String()), tmed25519.PubKey(key3[32:])))
 		require.NoError(t, acctesting.AddCredits(batch, bob.JoinPath("book1", "1"), 1e9))
@@ -278,7 +278,7 @@ func TestDelegatedSignature_RemoteDelegator(t *testing.T) {
 	sim.WaitForTransactions(delivered, envs...)
 
 	// Validate
-	viewSubnetFor(sim, alice, func(batch *database.Batch) {
+	viewPartitionFor(sim, alice, func(batch *database.Batch) {
 		de, err := indexing.Data(batch, alice.JoinPath("data")).GetLatestEntry()
 		require.NoError(t, err)
 		require.Equal(t, "foo", string(de.GetData()[0]))
@@ -299,17 +299,17 @@ func TestDelegatedSignature_RemoteDelegateAndAuthority(t *testing.T) {
 
 	// Setup
 	key1, key2, key3 := acctesting.GenerateKey(), acctesting.GenerateKey(), acctesting.GenerateKey()
-	updateSubnetFor(sim, alice, func(batch *database.Batch) {
+	updatePartitionFor(sim, alice, func(batch *database.Batch) {
 		require.NoError(t, acctesting.CreateAdiWithCredits(batch, tmed25519.PrivKey(key1), types.String(alice.String()), 1e9))
 		require.NoError(t, acctesting.CreateAccount(batch, &DataAccount{Url: alice.JoinPath("data"), AccountAuth: AccountAuth{Authorities: []AuthorityEntry{{Url: bob.JoinPath("book0")}}}}))
 	})
-	updateSubnetFor(sim, bob, func(batch *database.Batch) {
+	updatePartitionFor(sim, bob, func(batch *database.Batch) {
 		require.NoError(t, acctesting.CreateAdiWithCredits(batch, tmed25519.PrivKey(key2), types.String(bob.String()), 1e9))
 		require.NoError(t, acctesting.UpdateAccount(batch, bob.JoinPath("book0", "1"), func(page *KeyPage) {
 			page.AddKeySpec(&KeySpec{Delegate: charlie.JoinPath("book0")})
 		}))
 	})
-	updateSubnetFor(sim, charlie, func(batch *database.Batch) {
+	updatePartitionFor(sim, charlie, func(batch *database.Batch) {
 		require.NoError(t, acctesting.CreateAdiWithCredits(batch, tmed25519.PrivKey(key3), types.String(charlie.String()), 1e9))
 	})
 
@@ -331,7 +331,7 @@ func TestDelegatedSignature_RemoteDelegateAndAuthority(t *testing.T) {
 	sim.WaitForTransactions(delivered, envs...)
 
 	// Validate
-	viewSubnetFor(sim, alice, func(batch *database.Batch) {
+	viewPartitionFor(sim, alice, func(batch *database.Batch) {
 		de, err := indexing.Data(batch, alice.JoinPath("data")).GetLatestEntry()
 		require.NoError(t, err)
 		require.Equal(t, "foo", string(de.GetData()[0]))
@@ -352,20 +352,20 @@ func TestDelegatedSignature_DobuleRemote(t *testing.T) {
 
 	// Setup
 	key1, key2, key3 := acctesting.GenerateKey(), acctesting.GenerateKey(), acctesting.GenerateKey()
-	updateSubnetFor(sim, alice, func(batch *database.Batch) {
+	updatePartitionFor(sim, alice, func(batch *database.Batch) {
 		require.NoError(t, acctesting.CreateAdiWithCredits(batch, tmed25519.PrivKey(key1), types.String(alice.String()), 1e9))
 		require.NoError(t, acctesting.CreateAccount(batch, &DataAccount{Url: alice.JoinPath("data")}))
 		require.NoError(t, acctesting.UpdateAccount(batch, alice.JoinPath("book0", "1"), func(page *KeyPage) {
 			page.AddKeySpec(&KeySpec{Delegate: bob.JoinPath("book0")})
 		}))
 	})
-	updateSubnetFor(sim, bob, func(batch *database.Batch) {
+	updatePartitionFor(sim, bob, func(batch *database.Batch) {
 		require.NoError(t, acctesting.CreateAdiWithCredits(batch, tmed25519.PrivKey(key2), types.String(bob.String()), 1e9))
 		require.NoError(t, acctesting.UpdateAccount(batch, bob.JoinPath("book0", "1"), func(page *KeyPage) {
 			page.AddKeySpec(&KeySpec{Delegate: charlie.JoinPath("book0")})
 		}))
 	})
-	updateSubnetFor(sim, charlie, func(batch *database.Batch) {
+	updatePartitionFor(sim, charlie, func(batch *database.Batch) {
 		require.NoError(t, acctesting.CreateAdiWithCredits(batch, tmed25519.PrivKey(key3), types.String(charlie.String()), 1e9))
 	})
 
@@ -388,7 +388,7 @@ func TestDelegatedSignature_DobuleRemote(t *testing.T) {
 	sim.WaitForTransactions(delivered, envs...)
 
 	// Validate
-	viewSubnetFor(sim, alice, func(batch *database.Batch) {
+	viewPartitionFor(sim, alice, func(batch *database.Batch) {
 		de, err := indexing.Data(batch, alice.JoinPath("data")).GetLatestEntry()
 		require.NoError(t, err)
 		require.Equal(t, "foo", string(de.GetData()[0]))
@@ -485,7 +485,7 @@ func TestDelegatedSignature_Multisig(t *testing.T) {
 	)...)
 
 	// Validate
-	viewSubnetFor(sim, alice, func(batch *database.Batch) {
+	viewPartitionFor(sim, alice, func(batch *database.Batch) {
 		de, err := indexing.Data(batch, alice.JoinPath("data")).GetLatestEntry()
 		require.NoError(t, err)
 		require.Equal(t, "foo", string(de.GetData()[0]))

@@ -159,7 +159,7 @@ var acntTests = []*TCG{
 		testdata.NewAcntTest(&DataAccount{Url: AccountUrl("adi", "data"), AccountAuth: *simpleAuth}),
 	}},
 	{Name: "LiteDataAccount", Cases: []*TC{
-		testdata.NewAcntTest(&LiteDataAccount{Url: AccountUrl("lite-data-account"), Tail: []byte("asdf")}),
+		testdata.NewAcntTest(&LiteDataAccount{Url: AccountUrl("lite-data-account")}),
 	}},
 }
 
@@ -170,7 +170,7 @@ func txnTest(originUrl *url.URL, body TransactionBody) *TC {
 	signer.Url = originUrl
 	signer.SetPrivateKey(key)
 	signer.Version = 1
-	signer.Timestamp = uint64(rand.Uint32())
+	signer.SetTimestamp(uint64(rand.Uint32()))
 	env := new(Envelope)
 	txn := new(Transaction)
 	env.Transaction = []*Transaction{txn}

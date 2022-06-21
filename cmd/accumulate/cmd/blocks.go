@@ -13,6 +13,7 @@ import (
 )
 
 const minorBlockApiTimeout = 2 * time.Minute
+const majorBlockApiTimeout = 30 * time.Second
 
 var blocksCmd = &cobra.Command{
 	Use:   "blocks",
@@ -44,6 +45,17 @@ var blocksCmd = &cobra.Command{
 				} else {
 					fmt.Println("Usage:")
 					PrintGetMinorBlocks()
+				}
+			case "major":
+				if len(args) > 3 {
+					err = GetMajorBlocks(cmd, args[1], args[2], args[3])
+					if err != nil {
+						printError(cmd, err)
+						return
+					}
+				} else {
+					fmt.Println("Usage:")
+					PrintGetMajorBlocks()
 				}
 			default:
 				fmt.Println("Usage:")
@@ -95,8 +107,13 @@ func PrintGetMinorBlocks() {
 	fmt.Println("  accumulate blocks minor [partition-url] [start index] [count] [tx fetch mode expand|ids|countOnly|omit (optional)] [block filter mode excludenone|excludeempty (optional)] Get minor blocks")
 }
 
+func PrintGetMajorBlocks() {
+	fmt.Println("  accumulate blocks major [partition-url] [start index] [count] Get major blocks")
+}
+
 func PrintBlocks() {
 	PrintGetMinorBlocks()
+	PrintGetMajorBlocks()
 }
 
 func GetMinorBlocks(cmd *cobra.Command, accountUrl string, s string, e string, txFetchMode query.TxFetchMode, blockFilterMode query.BlockFilterMode) error {
@@ -129,6 +146,49 @@ func GetMinorBlocks(cmd *cobra.Command, accountUrl string, s string, e string, t
 	}()
 
 	res, err := Client.QueryMinorBlocks(context.Background(), params)
+	if err != nil {
+		rpcError, err := PrintJsonRpcError(err)
+		cmd.Println(rpcError)
+		return err
+	}
+
+	out, err := PrintMultiResponse(res)
+	if err != nil {
+		return err
+	}
+
+	printOutput(cmd, out, nil)
+	return nil
+}
+
+func GetMajorBlocks(cmd *cobra.Command, accountUrl string, s string, e string) error {
+	start, err := strconv.Atoi(s)
+	if err != nil {
+		return err
+	}
+	end, err := strconv.Atoi(e)
+	if err != nil {
+		return err
+	}
+
+	u, err := url.Parse(accountUrl)
+	if err != nil {
+		return err
+	}
+
+	params := new(api2.MajorBlocksQuery)
+	params.UrlQuery.Url = u
+	params.QueryPagination.Start = uint64(start)
+	params.QueryPagination.Count = uint64(end)
+
+	// Temporary increase timeout, we may get a large result set which takes a while to construct
+	globalTimeout := Client.Timeout
+	Client.Timeout = majorBlockApiTimeout
+	defer func() {
+		Client.Timeout = globalTimeout
+	}()
+
+	res, err := Client.QueryMajorBlocks(context.Background(), params)
 	if err != nil {
 		rpcError, err := PrintJsonRpcError(err)
 		cmd.Println(rpcError)

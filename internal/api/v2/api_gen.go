@@ -12,13 +12,12 @@ import (
 
 func (m *JrpcMethods) populateMethodTable() jsonrpc2.MethodMap {
 	if m.methods == nil {
-		m.methods = make(jsonrpc2.MethodMap, 36)
+		m.methods = make(jsonrpc2.MethodMap, 34)
 	}
 
 	m.methods["describe"] = m.Describe
 	m.methods["execute"] = m.Execute
 	m.methods["add-credits"] = m.ExecuteAddCredits
-	m.methods["add-validator"] = m.ExecuteAddValidator
 	m.methods["burn-tokens"] = m.ExecuteBurnTokens
 	m.methods["create-adi"] = m.ExecuteCreateAdi
 	m.methods["create-data-account"] = m.ExecuteCreateDataAccount
@@ -29,12 +28,10 @@ func (m *JrpcMethods) populateMethodTable() jsonrpc2.MethodMap {
 	m.methods["create-token-account"] = m.ExecuteCreateTokenAccount
 	m.methods["execute-direct"] = m.ExecuteDirect
 	m.methods["issue-tokens"] = m.ExecuteIssueTokens
-	m.methods["remove-validator"] = m.ExecuteRemoveValidator
 	m.methods["send-tokens"] = m.ExecuteSendTokens
 	m.methods["update-account-auth"] = m.ExecuteUpdateAccountAuth
 	m.methods["update-key"] = m.ExecuteUpdateKey
 	m.methods["update-key-page"] = m.ExecuteUpdateKeyPage
-	m.methods["update-validator-key"] = m.ExecuteUpdateValidatorKey
 	m.methods["write-data"] = m.ExecuteWriteData
 	m.methods["write-data-to"] = m.ExecuteWriteDataTo
 	m.methods["faucet"] = m.Faucet
@@ -45,6 +42,7 @@ func (m *JrpcMethods) populateMethodTable() jsonrpc2.MethodMap {
 	m.methods["query-data-set"] = m.QueryDataSet
 	m.methods["query-directory"] = m.QueryDirectory
 	m.methods["query-key-index"] = m.QueryKeyPageIndex
+	m.methods["query-major-blocks"] = m.QueryMajorBlocks
 	m.methods["query-minor-blocks"] = m.QueryMinorBlocks
 	m.methods["query-synth"] = m.QuerySynth
 	m.methods["query-tx"] = m.QueryTx
@@ -86,11 +84,6 @@ func jrpcFormatResponse(res interface{}, err error) interface{} {
 // ExecuteAddCredits submits an AddCredits transaction.
 func (m *JrpcMethods) ExecuteAddCredits(ctx context.Context, params json.RawMessage) interface{} {
 	return m.executeWith(ctx, params, new(protocol.AddCredits))
-}
-
-// ExecuteAddValidator submits an AddValidator transaction.
-func (m *JrpcMethods) ExecuteAddValidator(ctx context.Context, params json.RawMessage) interface{} {
-	return m.executeWith(ctx, params, new(protocol.AddValidator))
 }
 
 // ExecuteBurnTokens submits a BurnTokens transaction.
@@ -138,11 +131,6 @@ func (m *JrpcMethods) ExecuteIssueTokens(ctx context.Context, params json.RawMes
 	return m.executeWith(ctx, params, new(protocol.IssueTokens))
 }
 
-// ExecuteRemoveValidator submits a RemoveValidator transaction.
-func (m *JrpcMethods) ExecuteRemoveValidator(ctx context.Context, params json.RawMessage) interface{} {
-	return m.executeWith(ctx, params, new(protocol.RemoveValidator))
-}
-
 // ExecuteSendTokens submits a SendTokens transaction.
 func (m *JrpcMethods) ExecuteSendTokens(ctx context.Context, params json.RawMessage) interface{} {
 	return m.executeWith(ctx, params, new(protocol.SendTokens), "From", "To")
@@ -161,11 +149,6 @@ func (m *JrpcMethods) ExecuteUpdateKey(ctx context.Context, params json.RawMessa
 // ExecuteUpdateKeyPage submits an UpdateKeyPage transaction.
 func (m *JrpcMethods) ExecuteUpdateKeyPage(ctx context.Context, params json.RawMessage) interface{} {
 	return m.executeWith(ctx, params, new(protocol.UpdateKeyPage))
-}
-
-// ExecuteUpdateValidatorKey submits an UpdateValidatorKey transaction.
-func (m *JrpcMethods) ExecuteUpdateValidatorKey(ctx context.Context, params json.RawMessage) interface{} {
-	return m.executeWith(ctx, params, new(protocol.UpdateValidatorKey))
 }
 
 // ExecuteWriteData submits a WriteData transaction.
@@ -242,6 +225,19 @@ func (m *JrpcMethods) QueryKeyPageIndex(_ context.Context, params json.RawMessag
 	}
 
 	return jrpcFormatResponse(m.querier.QueryKeyPageIndex(req.Url, req.Key))
+}
+
+// QueryMajorBlocks queries an account's major blocks.
+//
+// WARNING: EXPERIMENTAL!
+func (m *JrpcMethods) QueryMajorBlocks(_ context.Context, params json.RawMessage) interface{} {
+	req := new(MajorBlocksQuery)
+	err := m.parse(params, req)
+	if err != nil {
+		return err
+	}
+
+	return jrpcFormatResponse(m.querier.QueryMajorBlocks(req.Url, req.QueryPagination))
 }
 
 // QueryMinorBlocks queries an account's minor blocks.

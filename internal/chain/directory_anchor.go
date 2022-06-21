@@ -3,8 +3,11 @@ package chain
 import (
 	"bytes"
 	"fmt"
+	"sort"
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -41,6 +44,7 @@ func (x DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 	// Trigger a major block?
 	if st.NetworkType != config.Directory {
 		st.State.MakeMajorBlock = body.MakeMajorBlock
+		st.State.MakeMajorBlockTime = body.MakeMajorBlockTime
 	}
 
 	// Add the anchor to the chain - use the partition name as the chain name
@@ -63,26 +67,53 @@ func (x DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 		}
 	}
 
+	if st.NetworkType != config.Directory {
+		err = processReceiptsFromDirectory(st, tx, body)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return nil, nil
+}
+
+func processReceiptsFromDirectory(st *StateManager, tx *Delivery, body *protocol.DirectoryAnchor) error {
 	// Process receipts
+	var deliveries []*Delivery
+	var sequence = map[*Delivery]int{}
 	for i, receipt := range body.Receipts {
 		receipt := receipt // See docs/developer/rangevarref.md
 		if !bytes.Equal(receipt.Anchor, body.RootChainAnchor[:]) {
-			return nil, fmt.Errorf("receipt %d is invalid: result does not match the anchor", i)
+			return fmt.Errorf("receipt %d is invalid: result does not match the anchor", i)
 		}
 
 		st.logger.Debug("Received receipt", "from", logging.AsHex(receipt.Start).Slice(0, 4), "to", logging.AsHex(body.RootChainAnchor).Slice(0, 4), "block", body.MinorBlockIndex, "source", body.Source, "module", "synthetic")
 
 		synth, err := st.batch.Account(st.Ledger()).SyntheticForAnchor(*(*[32]byte)(receipt.Start))
 		if err != nil {
-			return nil, fmt.Errorf("failed to load pending synthetic transactions for anchor %X: %w", receipt.Start[:4], err)
+			return fmt.Errorf("failed to load pending synthetic transactions for anchor %X: %w", receipt.Start[:4], err)
 		}
-		for _, hash := range synth {
-			d := tx.NewSyntheticReceipt(hash.Hash(), body.Source, &receipt)
-			st.State.ProcessAdditionalTransaction(d)
+		for _, txid := range synth {
+			h := txid.Hash()
+			sig, err := getSyntheticSignature(st.batch, st.batch.Transaction(h[:]))
+			if err != nil {
+				return err
+			}
+
+			d := tx.NewSyntheticReceipt(txid.Hash(), body.Source, &receipt)
+			sequence[d] = int(sig.SequenceNumber)
+			deliveries = append(deliveries, d)
 		}
 	}
 
-	return nil, nil
+	// Submit the receipts, sorted
+	sort.Slice(deliveries, func(i, j int) bool {
+		return sequence[deliveries[i]] < sequence[deliveries[j]]
+	})
+	for _, d := range deliveries {
+		st.State.ProcessAdditionalTransaction(d)
+	}
+	return nil
 }
 
 func processNetworkAccountUpdates(st *StateManager, delivery *Delivery, updates []protocol.NetworkAccountUpdate) error {
@@ -91,8 +122,8 @@ func processNetworkAccountUpdates(st *StateManager, delivery *Delivery, updates 
 		txn.Body = update.Body
 
 		switch update.Name {
-		case protocol.OperatorBook:
-			txn.Header.Principal = st.DefaultOperatorPage()
+		case protocol.Operators:
+			txn.Header.Principal = st.OperatorsPage()
 		default:
 			txn.Header.Principal = st.NodeUrl(update.Name)
 		}
@@ -100,4 +131,31 @@ func processNetworkAccountUpdates(st *StateManager, delivery *Delivery, updates 
 		st.State.ProcessAdditionalTransaction(delivery.NewInternal(txn))
 	}
 	return nil
+}
+
+func getSyntheticSignature(batch *database.Batch, transaction *database.Transaction) (*protocol.SyntheticSignature, error) {
+	status, err := transaction.GetStatus()
+	if err != nil {
+		return nil, errors.Format(errors.StatusUnknown, "load status: %w", err)
+	}
+
+	for _, signer := range status.Signers {
+		sigset, err := transaction.ReadSignaturesForSigner(signer)
+		if err != nil {
+			return nil, errors.Format(errors.StatusUnknown, "load signature set %v: %w", signer.GetUrl(), err)
+		}
+
+		for _, entry := range sigset.Entries() {
+			state, err := batch.Transaction(entry.SignatureHash[:]).GetState()
+			if err != nil {
+				return nil, errors.Format(errors.StatusUnknown, "load signature %x: %w", entry.SignatureHash[:8], err)
+			}
+
+			sig, ok := state.Signature.(*protocol.SyntheticSignature)
+			if ok {
+				return sig, nil
+			}
+		}
+	}
+	return nil, errors.New(errors.StatusInternalError, "cannot find synthetic signature")
 }

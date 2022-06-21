@@ -101,7 +101,6 @@ func TestEvilNode(t *testing.T) {
 func (n *FakeNode) testLiteTx(N, M int, credits float64) (string, map[*url.URL]int64) {
 	sender := generateKey()
 	senderUrl := acctesting.AcmeLiteAddressTmPriv(sender)
-
 	recipients := make([]*url.URL, N)
 	for i := range recipients {
 		_, key, _ := ed25519.GenerateKey(nil)
@@ -152,7 +151,6 @@ func TestFaucet(t *testing.T) {
 
 	alice := generateKey()
 	aliceUrl := acctesting.AcmeLiteAddressTmPriv(alice)
-
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.AcmeFaucet)
 		body.Url = aliceUrl
@@ -344,7 +342,7 @@ func TestCreateLiteDataAccount(t *testing.T) {
 	}
 	r := n.GetLiteDataAccount(liteDataAddress.String())
 	require.Equal(t, liteDataAddress.String(), r.Url.String())
-	require.Equal(t, append(partialChainId, r.Tail...), chainId)
+	require.Equal(t, partialChainId, chainId)
 
 	firstEntryHash, err := protocol.ComputeFactomEntryHashForAccount(chainId, firstEntry.Data)
 	require.NoError(t, err)
@@ -1078,19 +1076,21 @@ func TestCreateToken(t *testing.T) {
 }
 
 func TestIssueTokens(t *testing.T) {
+	check := newDefaultCheckError(t, true)
 	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
+	nodes := RunTestNet(t, partitions, daemons, nil, true, check.ErrorHandler())
 	n := nodes[partitions[1]][0]
 
 	fooKey, liteKey := generateKey(), generateKey()
 	batch := n.db.Begin(true)
 	require.NoError(t, acctesting.CreateAdiWithCredits(batch, fooKey, "foo", 1e9))
 	require.NoError(t, acctesting.CreateTokenIssuer(batch, "foo/tokens", "FOO", 10, nil))
+	require.NoError(t, acctesting.CreateTokenAccount(batch, "foo.acme/acmetokens", "acc://ACME", float64(10), false))
+	require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, liteKey, 1, 1e9))
+	liteAddr, err := protocol.LiteTokenAddress(liteKey[32:], "foo.acme/tokens", protocol.SignatureTypeED25519)
 	require.NoError(t, batch.Commit())
 
-	liteAddr, err := protocol.LiteTokenAddress(liteKey[32:], "foo.acme/tokens", protocol.SignatureTypeED25519)
 	require.NoError(t, err)
-
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.IssueTokens)
 		body.Recipient = liteAddr
@@ -1102,10 +1102,25 @@ func TestIssueTokens(t *testing.T) {
 			Initiate(protocol.SignatureTypeLegacyED25519, fooKey).
 			Build())
 	})
+	//issue to incorrect token account
 
+	initialbalance := n.GetTokenAccount("acc://foo.acme/acmetokens").Balance
+	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		body := new(protocol.IssueTokens)
+		body.Recipient = n.GetTokenAccount("acc://foo.acme/acmetokens").Url
+		body.Amount.SetUint64(123)
+
+		send(newTxn("foo/tokens").
+			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
+			WithBody(body).
+			Initiate(protocol.SignatureTypeLegacyED25519, fooKey).
+			Build())
+	})
+	finalbalance := n.GetTokenAccount("acc://foo.acme/acmetokens").Balance
 	account := n.GetLiteTokenAccount(liteAddr.String())
 	require.Equal(t, "acc://foo.acme/tokens", account.TokenUrl.String())
 	require.Equal(t, int64(123), account.Balance.Int64())
+	require.Equal(t, initialbalance, finalbalance)
 }
 
 func TestIssueTokensRefund(t *testing.T) {
@@ -1620,6 +1635,6 @@ func TestNetworkDefinition(t *testing.T) {
 	networkDefs := dn.exec.ActiveGlobals_TESTONLY().Network
 	require.NotEmpty(t, networkDefs.Partitions)
 	require.NotEmpty(t, networkDefs.Partitions[0].PartitionID)
-	require.NotEmpty(t, networkDefs.Partitions[0].ValidatorKeyHashes)
-	require.NotEmpty(t, networkDefs.Partitions[0].ValidatorKeyHashes[0])
+	require.NotEmpty(t, networkDefs.Partitions[0].ValidatorKeys)
+	require.NotEmpty(t, networkDefs.Partitions[0].ValidatorKeys[0])
 }

@@ -26,6 +26,21 @@ const MarshalAsReference MarshalAs = 4
 // MarshalAsUnion marshals the field as a union type.
 const MarshalAsUnion MarshalAs = 5
 
+// RecordTypeEntity .
+const RecordTypeEntity RecordType = 1
+
+// RecordTypeState .
+const RecordTypeState RecordType = 2
+
+// RecordTypeChain .
+const RecordTypeChain RecordType = 3
+
+// RecordTypeIndex .
+const RecordTypeIndex RecordType = 4
+
+// RecordTypeOther .
+const RecordTypeOther RecordType = 5
+
 // TypeCodeUnknown .
 const TypeCodeUnknown TypeCode = 0
 
@@ -86,7 +101,7 @@ func (v *MarshalAs) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Marshal As
+// String returns the name of the Marshal As.
 func (v MarshalAs) String() string {
 	switch v {
 	case MarshalAsBasic:
@@ -147,6 +162,78 @@ func (v *MarshalAs) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// GetEnumValue returns the value of the Record Type
+func (v RecordType) GetEnumValue() uint64 { return uint64(v) }
+
+// SetEnumValue sets the value. SetEnumValue returns false if the value is invalid.
+func (v *RecordType) SetEnumValue(id uint64) bool {
+	u := RecordType(id)
+	switch u {
+	case RecordTypeEntity, RecordTypeState, RecordTypeChain, RecordTypeIndex, RecordTypeOther:
+		*v = u
+		return true
+	default:
+		return false
+	}
+}
+
+// String returns the name of the Record Type.
+func (v RecordType) String() string {
+	switch v {
+	case RecordTypeEntity:
+		return "entity"
+	case RecordTypeState:
+		return "state"
+	case RecordTypeChain:
+		return "chain"
+	case RecordTypeIndex:
+		return "index"
+	case RecordTypeOther:
+		return "other"
+	default:
+		return fmt.Sprintf("RecordType:%d", v)
+	}
+}
+
+// RecordTypeByName returns the named Record Type.
+func RecordTypeByName(name string) (RecordType, bool) {
+	switch strings.ToLower(name) {
+	case "entity":
+		return RecordTypeEntity, true
+	case "state":
+		return RecordTypeState, true
+	case "chain":
+		return RecordTypeChain, true
+	case "index":
+		return RecordTypeIndex, true
+	case "other":
+		return RecordTypeOther, true
+	default:
+		return 0, false
+	}
+}
+
+// MarshalJSON marshals the Record Type to JSON as a string.
+func (v RecordType) MarshalJSON() ([]byte, error) {
+	return json.Marshal(v.String())
+}
+
+// UnmarshalJSON unmarshals the Record Type from JSON as a string.
+func (v *RecordType) UnmarshalJSON(data []byte) error {
+	var s string
+	err := json.Unmarshal(data, &s)
+	if err != nil {
+		return err
+	}
+
+	var ok bool
+	*v, ok = RecordTypeByName(s)
+	if !ok || strings.ContainsRune(v.String(), ':') {
+		return fmt.Errorf("invalid Record Type %q", s)
+	}
+	return nil
+}
+
 // GetEnumValue returns the value of the Type Code
 func (v TypeCode) GetEnumValue() uint64 { return uint64(v) }
 
@@ -162,7 +249,7 @@ func (v *TypeCode) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Type Code
+// String returns the name of the Type Code.
 func (v TypeCode) String() string {
 	switch v {
 	case TypeCodeUnknown:

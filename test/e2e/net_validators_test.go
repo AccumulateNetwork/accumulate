@@ -1,25 +1,17 @@
 package e2e
 
 import (
-	"crypto/ed25519"
 	"crypto/sha256"
-	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
+	"gitlab.com/accumulatenetwork/accumulate/internal/build"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 )
-
-func send(sim *simulator.Simulator, fn func(func(*Envelope))) []*Envelope {
-	sim.Helper()
-	var envelopes []*Envelope
-	fn(func(tx *Envelope) { envelopes = append(envelopes, tx) })
-	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(envelopes...)...)
-	return envelopes
-}
 
 func requireHasKeyHash(t *testing.T, page *KeyPage, hash []byte) {
 	t.Helper()
@@ -37,185 +29,119 @@ func TestUpdateValidators(t *testing.T) {
 	var timestamp uint64
 
 	// Initialize
-	sim := simulator.New(t, 3)
-	sim.InitFromGenesis()
-
-	dn := sim.Partition(Directory)
-	bvn0 := sim.Partition("BVN0")
-	bvn1 := sim.Partition("BVN1")
-	signerUrl := dn.Executor.Describe.DefaultOperatorPage()
-	vldKey1, vldKey2, vldKey3, vldKey4 := acctesting.GenerateKey(1), acctesting.GenerateKey(2), acctesting.GenerateKey(3), acctesting.GenerateKey(4)
-	height := uint64(1)
-
-	// The validator timestamp starts out > 0
-	signer := simulator.GetAccount[*KeyPage](sim, signerUrl)
-	_, entry, ok := signer.EntryByKey(dn.Executor.Key[32:])
-	require.True(t, ok)
-	timestamp = entry.GetLastUsedOn()
-
-	// Update NetworkGlobals - use 5/12 so that M = 1 for 3 validators and M = 2
-	// for 4
 	g := new(core.GlobalValues)
 	g.Globals = new(NetworkGlobals)
-	g.Globals.OperatorAcceptThreshold.Set(5, 12)
-	send(sim,
-		func(send func(*Envelope)) {
-			send(acctesting.NewTransaction().
-				WithPrincipal(dn.Executor.Describe.NodeUrl(Globals)).
-				WithTimestampVar(&timestamp).
-				WithSigner(signerUrl, 1).
-				WithBody(&WriteData{
-					Entry:        g.FormatGlobals(),
-					WriteToState: true,
-				}).
-				Initiate(SignatureTypeLegacyED25519, dn.Executor.Key).
-				Sign(SignatureTypeED25519, bvn0.Executor.Key).
-				Sign(SignatureTypeED25519, bvn1.Executor.Key).
-				Build())
-		})
+	g.Globals.OperatorAcceptThreshold.Set(1, 3) // Use 1/3 so that M = 1 for 3 validators and M = 2 for 4
+	sim := simulator.New(t, 3)
+	sim.InitFromGenesisWith(g)
 
-	// Verify there is one validator (node key)
-	require.ElementsMatch(t, dn.Validators, [][]byte{dn.Executor.Key[32:]})
+	dn := sim.Partition(Directory)
+	initVal := make([][]byte, len(dn.Validators))
+	copy(initVal, dn.Validators)
+	operators := dn.Executor.Describe.OperatorsPage()
+	vldKey1, vldKey2, vldKey3, vldKey4 := acctesting.GenerateKey(1), acctesting.GenerateKey(2), acctesting.GenerateKey(3), acctesting.GenerateKey(4)
+	vldKey1Hash, vldKey2Hash, vldKey3Hash, vldKey4Hash := sha256.Sum256(vldKey1[32:]), sha256.Sum256(vldKey2[32:]), sha256.Sum256(vldKey3[32:]), sha256.Sum256(vldKey4[32:])
+
+	// The validator timestamp starts out > 0
+	page := simulator.GetAccount[*KeyPage](sim, operators)
+	_, entry, ok := page.EntryByKey(dn.Executor.Key[32:])
+	require.True(t, ok)
+	timestamp = entry.GetLastUsedOn()
+	signer1 := new(signing.Builder).
+		SetType(SignatureTypeED25519).
+		UseSimpleHash().
+		SetPrivateKey(dn.Executor.Key).
+		SetUrl(operators).
+		SetVersion(page.Version).
+		SetTimestampWithVar(&timestamp)
+
+	// Additional signers
+	signer2 := new(signing.Builder).
+		SetType(SignatureTypeED25519).
+		UseSimpleHash().
+		SetPrivateKey(sim.Partition(sim.Partitions[1].Id).Executor.Key).
+		SetUrl(operators).
+		SetVersion(page.Version)
+	signer3 := new(signing.Builder).
+		SetType(SignatureTypeED25519).
+		UseSimpleHash().
+		SetPrivateKey(sim.Partition(sim.Partitions[2].Id).Executor.Key).
+		SetUrl(operators).
+		SetVersion(page.Version)
+
+	// Verify the threshold starts at 1
+	require.Equal(t, 1, int(page.AcceptThreshold))
 
 	// Add a validator
-	addOperatorKey(t, sim, dn, vldKey1, &timestamp, &height, bvn0.Executor.Key, bvn1.Executor.Key)
-	send(sim,
-		func(send func(*Envelope)) {
-			body := new(AddValidator)
-			body.PubKey = vldKey1.Public().(ed25519.PublicKey)
-			send(acctesting.NewTransaction().
-				WithPrincipal(dn.Executor.Describe.NodeUrl(ValidatorBook)).
-				WithTimestampVar(&timestamp).
-				WithSigner(signerUrl, height).
-				WithBody(body).
-				Initiate(SignatureTypeLegacyED25519, dn.Executor.Key).
-				Sign(SignatureTypeED25519, bvn0.Executor.Key).
-				Sign(SignatureTypeED25519, bvn1.Executor.Key).
-				Build())
-		})
+	values := dn.Executor.ActiveGlobals_TESTONLY()
+	envs, err := build.AddOperator(values, len(page.Keys), vldKey1[32:], vldKey1Hash[:], Directory, signer1, signer2, signer3)
+	require.NoError(t, err)
+	for _, env := range envs {
+		sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(env)...)
+	}
 
 	// Verify the validator was added
-	require.ElementsMatch(t, dn.Validators, [][]byte{dn.Executor.Key[32:], vldKey1[32:]})
+	require.ElementsMatch(t, dn.Validators, append(initVal, vldKey1[32:]))
+
+	// Verify the threshold increased to 2
+	page = simulator.GetAccount[*KeyPage](sim, operators)
+	require.Equal(t, 2, int(page.AcceptThreshold))
 
 	// Update a validator
-	send(sim,
-		func(send func(*Envelope)) {
-			body := new(UpdateValidatorKey)
+	signer1.SetVersion(page.Version)
 
-			body.PubKey = vldKey1[32:]
-			body.NewPubKey = vldKey4[32:]
-
-			send(acctesting.NewTransaction().
-				WithPrincipal(dn.Executor.Describe.NodeUrl(ValidatorBook)).
-				WithTimestampVar(&timestamp).
-				WithSigner(signerUrl, height).
-				WithBody(body).
-				Initiate(SignatureTypeLegacyED25519, dn.Executor.Key).
-				Sign(SignatureTypeED25519, bvn0.Executor.Key).
-				Sign(SignatureTypeED25519, bvn1.Executor.Key).
-				Build())
-		})
+	values = dn.Executor.ActiveGlobals_TESTONLY()
+	envs, err = build.UpdateOperatorKey(values, vldKey1[32:], vldKey1Hash[:], vldKey4[32:], vldKey4Hash[:], Directory, signer1, signer2, signer3)
+	require.NoError(t, err)
+	for _, env := range envs {
+		sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(env)...)
+	}
 
 	// Verify the validator was updated
-	require.ElementsMatch(t, dn.Validators, [][]byte{dn.Executor.Key[32:], vldKey4[32:]})
+	require.ElementsMatch(t, dn.Validators, append(initVal, vldKey4[32:]))
 
-	// Add a third validator, so the page threshold will become 3
-	addOperatorKey(t, sim, dn, vldKey2, &timestamp, &height, bvn0.Executor.Key, bvn1.Executor.Key)
-	send(sim,
-		func(send func(*Envelope)) {
-			body := new(AddValidator)
-			body.PubKey = vldKey2[32:]
-			send(acctesting.NewTransaction().
-				WithPrincipal(dn.Executor.Describe.NodeUrl(ValidatorBook)).
-				WithTimestampVar(&timestamp).
-				WithSigner(signerUrl, height).
-				WithBody(body).
-				Initiate(SignatureTypeLegacyED25519, dn.Executor.Key).
-				Sign(SignatureTypeED25519, bvn0.Executor.Key).
-				Sign(SignatureTypeED25519, bvn1.Executor.Key).
-				Build())
-		})
+	// Add a third validator, so the page threshold will become 2
+	page = simulator.GetAccount[*KeyPage](sim, operators)
+	signer1.SetVersion(page.Version)
+
+	values = dn.Executor.ActiveGlobals_TESTONLY()
+	envs, err = build.AddOperator(values, len(page.Keys), vldKey2[32:], vldKey2Hash[:], Directory, signer1, signer2, signer3)
+	require.NoError(t, err)
+	for _, env := range envs {
+		sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(env)...)
+	}
 
 	// Verify the validator was added
-	require.ElementsMatch(t, dn.Validators, [][]byte{dn.Executor.Key[32:], vldKey4[32:], vldKey2[32:]})
-
-	// Verify the Validator threshold
-	oprPage := simulator.GetAccount[*KeyPage](sim, signerUrl)
-	require.Equal(t, uint64(3), oprPage.AcceptThreshold)
+	require.ElementsMatch(t, dn.Validators, append(initVal, vldKey4[32:], vldKey2[32:]))
 
 	// Add a fourth validator
-	addOperatorKey(t, sim, dn, vldKey3, &timestamp, &height, bvn0.Executor.Key, bvn1.Executor.Key)
-	send(sim,
-		func(send func(*Envelope)) {
-			body := new(AddValidator)
-			body.PubKey = vldKey3[32:]
+	page = simulator.GetAccount[*KeyPage](sim, operators)
+	signer1.SetVersion(page.Version)
+	signerA2 := signer1.Copy().SetPrivateKey(vldKey2).ClearTimestamp()
 
-			send(acctesting.NewTransaction().
-				WithPrincipal(dn.Executor.Describe.NodeUrl(ValidatorBook)).
-				WithTimestampVar(&timestamp).
-				WithSigner(signerUrl, height).
-				WithBody(body).
-				Initiate(SignatureTypeLegacyED25519, dn.Executor.Key).
-				Sign(SignatureTypeED25519, bvn0.Executor.Key).
-				Sign(SignatureTypeED25519, bvn1.Executor.Key).
-				Build())
-		})
+	values = dn.Executor.ActiveGlobals_TESTONLY()
+	envs, err = build.AddOperator(values, len(page.Keys), vldKey3[32:], vldKey3Hash[:], Directory, signer1, signer2, signer3, signerA2)
+	require.NoError(t, err)
+	for _, env := range envs {
+		sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(env)...)
+	}
 
 	// Verify the validator was added
-	require.ElementsMatch(t, dn.Validators, [][]byte{dn.Executor.Key[32:], vldKey4[32:], vldKey2[32:], vldKey3[32:]})
-
-	// Verify the Validator threshold
-	require.Equal(t, uint64(3), simulator.GetAccount[*KeyPage](sim, signerUrl).AcceptThreshold)
+	require.ElementsMatch(t, dn.Validators, append(initVal, vldKey4[32:], vldKey2[32:], vldKey3[32:]))
 
 	// Remove a validator
-	send(sim,
-		func(send func(*Envelope)) {
-			body := new(RemoveValidator)
-			body.PubKey = vldKey4[32:]
+	page = simulator.GetAccount[*KeyPage](sim, operators)
+	signer1.SetVersion(page.Version)
 
-			send(acctesting.NewTransaction().
-				WithPrincipal(dn.Executor.Describe.NodeUrl(ValidatorBook)).
-				WithTimestampVar(&timestamp).
-				WithSigner(signerUrl, height).
-				WithBody(body).
-				Initiate(SignatureTypeLegacyED25519, dn.Executor.Key).
-				Sign(SignatureTypeED25519, bvn0.Executor.Key).
-				Sign(SignatureTypeED25519, vldKey1).
-				Build())
-		})
+	values = dn.Executor.ActiveGlobals_TESTONLY()
+	envs, err = build.RemoveOperator(values, len(page.Keys), vldKey4[32:], vldKey4Hash[:], Directory, signer1, signer2, signer3, signerA2)
+	require.NoError(t, err)
+	for _, env := range envs {
+		sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(env)...)
+	}
 
 	// Verify the validator was removed
-	require.ElementsMatch(t, dn.Validators, [][]byte{dn.Executor.Key[32:], vldKey2[32:], vldKey3[32:]})
-}
-
-func addOperatorKey(t *testing.T, sim *simulator.Simulator, dn *simulator.ExecEntry, oprKey ed25519.PrivateKey, timestamp *uint64, height *uint64, signKeys ...ed25519.PrivateKey) {
-
-	// See if we are going to need to sign and have enough keys
-	oprPage := simulator.GetAccount[*KeyPage](sim, dn.Executor.Describe.DefaultOperatorPage())
-	threshold := oprPage.AcceptThreshold
-	nrKeys := uint64(len(signKeys))
-	require.Equalf(t, threshold-1, nrKeys, "we need %d extra signing keys but have %d", threshold-1, nrKeys)
-
-	send(sim,
-		func(send func(*Envelope)) {
-			op := new(AddKeyOperation)
-			pubKey := oprKey.Public().(ed25519.PublicKey)
-			keyHash := sha256.Sum256(pubKey)
-			op.Entry.KeyHash = keyHash[:]
-			body := new(UpdateKeyPage)
-			body.Operation = append(body.Operation, op)
-			txb := acctesting.NewTransaction().
-				WithPrincipal(dn.Executor.Describe.DefaultOperatorPage()).
-				WithTimestampVar(timestamp).
-				WithSigner(dn.Executor.Describe.DefaultOperatorPage(), *height).
-				WithBody(body).
-				Initiate(SignatureTypeLegacyED25519, dn.Executor.Key)
-			for _, signKey := range signKeys {
-				txb = txb.Sign(SignatureTypeED25519, signKey)
-			}
-			send(txb.Build())
-		})
-	atomic.AddUint64(height, 1)
+	require.ElementsMatch(t, dn.Validators, append(initVal, vldKey2[32:], vldKey3[32:]))
 }
 
 func TestUpdateOperators(t *testing.T) {
@@ -229,16 +155,13 @@ func TestUpdateOperators(t *testing.T) {
 	sim.InitFromGenesisWith(g)
 	dn := sim.Partition(Directory)
 	bvn0 := sim.Partition(sim.Partitions[1].Id)
-	bvn1 := sim.Partition(sim.Partitions[2].Id)
-	bvn2 := sim.Partition(sim.Partitions[3].Id)
 
-	// Sanity check
-	page := simulator.GetAccount[*KeyPage](sim, bvn0.Executor.Describe.DefaultOperatorPage())
-	require.Len(t, page.Keys, 4)
+	page := simulator.GetAccount[*KeyPage](sim, bvn0.Executor.Describe.OperatorsPage())
+	initValCount := len(page.Keys)
 
 	// Add
 	t.Log("Add")
-	signerUrl := dn.Executor.Describe.DefaultOperatorPage()
+	signerUrl := dn.Executor.Describe.OperatorsPage()
 	opKeyAdd := acctesting.GenerateKey(1)
 	addKeyHash := sha256.Sum256(opKeyAdd[32:])
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
@@ -252,9 +175,6 @@ func TestUpdateOperators(t *testing.T) {
 				},
 			}}).
 			Initiate(SignatureTypeED25519, dn.Executor.Key).
-			Sign(SignatureTypeED25519, bvn0.Executor.Key).
-			Sign(SignatureTypeED25519, bvn1.Executor.Key).
-			Sign(SignatureTypeED25519, bvn2.Executor.Key).
 			Build(),
 	)...)
 
@@ -262,8 +182,8 @@ func TestUpdateOperators(t *testing.T) {
 	sim.ExecuteBlocks(10)
 
 	// Verify the update was pushed
-	page = simulator.GetAccount[*KeyPage](sim, bvn0.Executor.Describe.DefaultOperatorPage())
-	require.Len(t, page.Keys, 5)
+	page = simulator.GetAccount[*KeyPage](sim, bvn0.Executor.Describe.OperatorsPage())
+	require.Len(t, page.Keys, initValCount+1)
 	requireHasKeyHash(t, page, addKeyHash[:])
 
 	// Update
@@ -282,9 +202,6 @@ func TestUpdateOperators(t *testing.T) {
 				},
 			}}).
 			Initiate(SignatureTypeED25519, dn.Executor.Key).
-			Sign(SignatureTypeED25519, bvn0.Executor.Key).
-			Sign(SignatureTypeED25519, bvn1.Executor.Key).
-			Sign(SignatureTypeED25519, bvn2.Executor.Key).
 			Build(),
 	)...)
 
@@ -292,8 +209,8 @@ func TestUpdateOperators(t *testing.T) {
 	sim.ExecuteBlocks(10)
 
 	// Verify the update was pushed
-	page = simulator.GetAccount[*KeyPage](sim, bvn0.Executor.Describe.DefaultOperatorPage())
-	require.Len(t, page.Keys, 5)
+	page = simulator.GetAccount[*KeyPage](sim, bvn0.Executor.Describe.OperatorsPage())
+	require.Len(t, page.Keys, initValCount+1)
 	requireNotHasKeyHash(t, page, addKeyHash[:])
 	requireHasKeyHash(t, page, updKeyHash[:])
 
@@ -310,9 +227,6 @@ func TestUpdateOperators(t *testing.T) {
 				},
 			}}).
 			Initiate(SignatureTypeED25519, dn.Executor.Key).
-			Sign(SignatureTypeED25519, bvn0.Executor.Key).
-			Sign(SignatureTypeED25519, bvn1.Executor.Key).
-			Sign(SignatureTypeED25519, bvn2.Executor.Key).
 			Build(),
 	)...)
 
@@ -320,7 +234,7 @@ func TestUpdateOperators(t *testing.T) {
 	sim.ExecuteBlocks(10)
 
 	// Verify the update was pushed
-	page = simulator.GetAccount[*KeyPage](sim, bvn0.Executor.Describe.DefaultOperatorPage())
-	require.Len(t, page.Keys, 4)
+	page = simulator.GetAccount[*KeyPage](sim, bvn0.Executor.Describe.OperatorsPage())
+	require.Len(t, page.Keys, initValCount)
 	requireNotHasKeyHash(t, page, updKeyHash[:])
 }

@@ -37,7 +37,7 @@ type ChainState struct {
 
 type NetworkMetrics struct {
 	fieldsSet []bool
-	TPS       float64 `json:"tPS,omitempty" form:"tPS" query:"tPS" validate:"required"`
+	TPS       float64 `json:"tps,omitempty" form:"tps" query:"tps" validate:"required"`
 	extraData []byte
 }
 
@@ -48,7 +48,7 @@ type NodeDescription struct {
 
 type NodeMetrics struct {
 	fieldsSet []bool
-	TPS       float64 `json:"tPS,omitempty" form:"tPS" query:"tPS" validate:"required"`
+	TPS       float64 `json:"tps,omitempty" form:"tps" query:"tps" validate:"required"`
 	extraData []byte
 }
 
@@ -484,15 +484,15 @@ func (v *AccountRecord) MarshalBinary() ([]byte, error) {
 
 	writer.WriteEnum(1, v.Type())
 	if !(v.Account == nil) {
-		writer.WriteValue(2, v.Account)
+		writer.WriteValue(2, v.Account.MarshalBinary)
 	}
 	if !(len(v.Chains) == 0) {
 		for _, v := range v.Chains {
-			writer.WriteValue(3, v)
+			writer.WriteValue(3, v.MarshalBinary)
 		}
 	}
 	if !(v.Proof == nil) {
-		writer.WriteValue(4, v.Proof)
+		writer.WriteValue(4, v.Proof.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_AccountRecord)
@@ -890,10 +890,10 @@ func (v *Receipt) MarshalBinary() ([]byte, error) {
 		writer.WriteUint(2, v.DirectoryBlock)
 	}
 	if !((v.Proof).Equal(new(managed.Receipt))) {
-		writer.WriteValue(3, &v.Proof)
+		writer.WriteValue(3, v.Proof.MarshalBinary)
 	}
 	if !(v.Error == nil) {
-		writer.WriteValue(4, v.Error)
+		writer.WriteValue(4, v.Error.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_Receipt)
@@ -999,7 +999,7 @@ func (v *Submission) MarshalBinary() ([]byte, error) {
 	}
 	if !(len(v.Status) == 0) {
 		for _, v := range v.Status {
-			writer.WriteValue(3, v)
+			writer.WriteValue(3, v.MarshalBinary)
 		}
 	}
 

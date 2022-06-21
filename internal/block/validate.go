@@ -94,7 +94,7 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 	// Lite token address => lite identity
 	var signerUrl *url.URL
 	if _, ok := firstSig.(*protocol.SyntheticSignature); ok {
-		signerUrl = x.Describe.DefaultOperatorPage()
+		signerUrl = x.Describe.OperatorsPage()
 	} else {
 		signerUrl = firstSig.GetSigner()
 		if key, _, _ := protocol.ParseLiteTokenAddress(signerUrl); key != nil {

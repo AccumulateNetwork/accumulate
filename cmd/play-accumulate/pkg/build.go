@@ -125,21 +125,6 @@ type (
 		body *protocol.UpdateKeyPage
 	}
 
-	bldAddValidator struct {
-		bldTxn
-		body *protocol.AddValidator
-	}
-
-	bldRemoveValidator struct {
-		bldTxn
-		body *protocol.RemoveValidator
-	}
-
-	bldUpdateValidatorKey struct {
-		bldTxn
-		body *protocol.UpdateValidatorKey
-	}
-
 	bldUpdateAccountAuth struct {
 		bldTxn
 		body *protocol.UpdateAccountAuth
@@ -403,31 +388,6 @@ func (b bldUpdateAllowedKeyPageOperation) Allow(typ protocol.TransactionType) bl
 func (b bldUpdateAllowedKeyPageOperation) Deny(typ protocol.TransactionType) bldUpdateAllowedKeyPageOperation {
 	b.UpdateAllowedKeyPageOperation.Deny = append(b.UpdateAllowedKeyPageOperation.Deny, typ)
 	return b
-}
-
-func (b bldTxn) AddValidator(key Keyish) bldAddValidator {
-	var c bldAddValidator
-	c.body = new(protocol.AddValidator)
-	c.bldTxn = b.WithBody(c.body)
-	c.body.PubKey = b.s.pubkey(key)
-	return c
-}
-
-func (b bldTxn) RemoveValidator(key Keyish) bldRemoveValidator {
-	var c bldRemoveValidator
-	c.body = new(protocol.RemoveValidator)
-	c.bldTxn = b.WithBody(c.body)
-	c.body.PubKey = b.s.pubkey(key)
-	return c
-}
-
-func (b bldTxn) UpdateValidatorKey(oldKey, newKey Keyish) bldUpdateValidatorKey {
-	var c bldUpdateValidatorKey
-	c.body = new(protocol.UpdateValidatorKey)
-	c.bldTxn = b.WithBody(c.body)
-	c.body.PubKey = b.s.pubkey(oldKey)
-	c.body.NewPubKey = b.s.pubkey(newKey)
-	return c
 }
 
 func (b bldTxn) UpdateAccountAuth() bldUpdateAccountAuth {

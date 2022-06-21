@@ -13,11 +13,18 @@ import (
 	cfg "gitlab.com/accumulatenetwork/accumulate/config"
 )
 
+var cmdInitDualNode = &cobra.Command{
+	Use:   "dual <url|ip> <dn base port> <bvn base port>",
+	Short: "Initialize a dual run from seed IP, DN base port, and BVN base port",
+	Run:   initDualNode,
+	Args:  cobra.ExactArgs(2),
+}
+
 // initDualNode accumulate init dual Mainnet.BVN0 http://ip:dnport
 func initDualNode(cmd *cobra.Command, args []string) {
 	s := strings.Split(args[0], ".")
 	if len(s) != 2 {
-		fatalf("network must be in the form of <network-name>.<subnet-name>, e.g. mainnet.bvn0")
+		fatalf("network must be in the form of <network-name>.<partition-name>, e.g. mainnet.bvn0")
 	}
 	networkName := s[0]
 	partitionName := s[1]

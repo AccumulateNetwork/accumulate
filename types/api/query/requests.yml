@@ -96,6 +96,17 @@ RequestMinorBlocks:
       type: BlockFilterMode
       marshal-as: enum
 
+RequestMajorBlocks:
+  union: { name: request, type: query, value: MajorBlocks }
+  fields:
+    - name: Account
+      type: url
+      pointer: true
+    - name: Start
+      type: uint
+    - name: Limit
+      type: uint
+
 RequestSynth:
   union: { name: request, type: query, value: Synth }
   fields:

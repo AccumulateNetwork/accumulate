@@ -94,7 +94,7 @@ func NewConnectionManager(config *config.Config, logger log.Logger, apiClientFac
 }
 
 func (cm *connectionManager) SelectConnection(partitionId string, allowFollower bool) (ConnectionContext, error) {
-	// When partitionId is the same as the current node's subnet id, just return the local
+	// When partitionId is the same as the current node's partition id, just return the local
 	if strings.EqualFold(partitionId, cm.accConfig.PartitionId) {
 		if cm.localCtx == nil {
 			return nil, errNoLocalClient(partitionId)
@@ -312,14 +312,7 @@ func (cm *connectionManager) ConnectDirectly(other ConnectionManager) error {
 		return fmt.Errorf("incompatible connection managers: want %T, got %T", cm, cm2)
 	}
 
-	var list []ConnectionContext
-	if cm2.accConfig.PartitionId == protocol.Directory {
-		list = cm.dnCtxList
-	} else if list, ok = cm.bvnCtxMap[protocol.BvnNameFromPartitionId(cm2.accConfig.PartitionId)]; !ok {
-		return fmt.Errorf("unknown partition %q", cm2.accConfig.PartitionId)
-	}
-
-	for _, connCtx := range list {
+	for _, connCtx := range cm.all {
 		cc := connCtx.(*connectionContext)
 		url, err := url.Parse(cc.nodeConfig.Address)
 		if err != nil {

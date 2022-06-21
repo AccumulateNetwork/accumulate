@@ -262,7 +262,7 @@ func (x *Executor) synthTransactionIsReady(batch *database.Batch, transaction *p
 	}
 
 	// Build a receipt from the signatures
-	receipt, sourceNet, err := assembleSynthReceipt(transaction, signatures)
+	receipt, sourceNet, err := assembleSynthReceipt(*(*[32]byte)(transaction.GetHash()), signatures)
 	if err != nil {
 		return false, errors.Wrap(errors.StatusUnknown, err)
 	}
@@ -400,7 +400,7 @@ func (x *Executor) recordPendingTransaction(net *config.Describe, batch *databas
 	}
 
 	// Add the synthetic transaction to the anchor's list of pending transactions
-	receipt, _, err := assembleSynthReceipt(delivery.Transaction, signatures)
+	receipt, _, err := assembleSynthReceipt(*(*[32]byte)(delivery.Transaction.GetHash()), signatures)
 	if err != nil {
 		return nil, nil, errors.Wrap(errors.StatusUnknown, err)
 	}
@@ -435,11 +435,6 @@ func (x *Executor) recordSuccessfulTransaction(batch *database.Batch, state *cha
 	})
 	if err != nil {
 		return nil, nil, err
-	}
-
-	// Don't add internal transactions to chains
-	if delivery.Transaction.Body.Type().IsSystem() {
-		return status, state, nil
 	}
 
 	// Remove the transaction from the principal's list of pending transactions

@@ -335,15 +335,6 @@ const TransactionTypeAddCredits TransactionType = 14
 // TransactionTypeUpdateKeyPage adds, removes, or updates keys in a key page, which *does not* produce a synthetic transaction.
 const TransactionTypeUpdateKeyPage TransactionType = 15
 
-// TransactionTypeAddValidator add a validator.
-const TransactionTypeAddValidator TransactionType = 18
-
-// TransactionTypeRemoveValidator remove a validator.
-const TransactionTypeRemoveValidator TransactionType = 19
-
-// TransactionTypeUpdateValidatorKey update a validator key.
-const TransactionTypeUpdateValidatorKey TransactionType = 20
-
 // TransactionTypeUpdateAccountAuth updates authorization for an account.
 const TransactionTypeUpdateAccountAuth TransactionType = 21
 
@@ -410,7 +401,7 @@ func (v *AccountAuthOperationType) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Account Auth Operation Type
+// String returns the name of the Account Auth Operation Type.
 func (v AccountAuthOperationType) String() string {
 	switch v {
 	case AccountAuthOperationTypeUnknown:
@@ -482,7 +473,7 @@ func (v *AccountType) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Account Type
+// String returns the name of the Account Type.
 func (v AccountType) String() string {
 	switch v {
 	case AccountTypeUnknown:
@@ -592,7 +583,7 @@ func (v *AllowedTransactionBit) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Allowed Transaction Bit
+// String returns the name of the Allowed Transaction Bit.
 func (v AllowedTransactionBit) String() string {
 	switch v {
 	case AllowedTransactionBitUpdateKeyPage:
@@ -652,7 +643,7 @@ func (v *BookType) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Book Type
+// String returns the name of the Book Type.
 func (v BookType) String() string {
 	switch v {
 	case BookTypeNormal:
@@ -716,7 +707,7 @@ func (v *ChainType) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Chain Type
+// String returns the name of the Chain Type.
 func (v ChainType) String() string {
 	switch v {
 	case ChainTypeUnknown:
@@ -788,7 +779,7 @@ func (v *DataEntryType) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Data Entry Type
+// String returns the name of the Data Entry Type.
 func (v DataEntryType) String() string {
 	switch v {
 	case DataEntryTypeUnknown:
@@ -852,7 +843,7 @@ func (v *ErrorCode) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Error Code
+// String returns the name of the Error Code.
 func (v ErrorCode) String() string {
 	switch v {
 	case ErrorCodeOK:
@@ -1052,7 +1043,7 @@ func (v *KeyPageOperationType) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Key Page Operation Type
+// String returns the name of the Key Page Operation Type.
 func (v KeyPageOperationType) String() string {
 	switch v {
 	case KeyPageOperationTypeUnknown:
@@ -1128,7 +1119,7 @@ func (v *ObjectType) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Object Type
+// String returns the name of the Object Type.
 func (v ObjectType) String() string {
 	switch v {
 	case ObjectTypeUnknown:
@@ -1192,7 +1183,7 @@ func (v *SignatureType) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Signature Type
+// String returns the name of the Signature Type.
 func (v SignatureType) String() string {
 	switch v {
 	case SignatureTypeUnknown:
@@ -1296,7 +1287,7 @@ func (v *TransactionMax) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Transaction Max
+// String returns the name of the Transaction Max.
 func (v TransactionMax) String() string {
 	switch v {
 	case TransactionMaxUser:
@@ -1352,7 +1343,7 @@ func (v TransactionType) GetEnumValue() uint64 { return uint64(v) }
 func (v *TransactionType) SetEnumValue(id uint64) bool {
 	u := TransactionType(id)
 	switch u {
-	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeAddValidator, TransactionTypeRemoveValidator, TransactionTypeUpdateValidatorKey, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeRemote, TransactionTypeSyntheticCreateIdentity, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeSystemGenesis, TransactionTypeDirectoryAnchor, TransactionTypeBlockValidatorAnchor, TransactionTypeSystemWriteData:
+	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeRemote, TransactionTypeSyntheticCreateIdentity, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeSystemGenesis, TransactionTypeDirectoryAnchor, TransactionTypeBlockValidatorAnchor, TransactionTypeSystemWriteData:
 		*v = u
 		return true
 	default:
@@ -1360,7 +1351,7 @@ func (v *TransactionType) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Transaction Type
+// String returns the name of the Transaction Type.
 func (v TransactionType) String() string {
 	switch v {
 	case TransactionTypeUnknown:
@@ -1393,12 +1384,6 @@ func (v TransactionType) String() string {
 		return "addCredits"
 	case TransactionTypeUpdateKeyPage:
 		return "updateKeyPage"
-	case TransactionTypeAddValidator:
-		return "addValidator"
-	case TransactionTypeRemoveValidator:
-		return "removeValidator"
-	case TransactionTypeUpdateValidatorKey:
-		return "updateValidatorKey"
 	case TransactionTypeUpdateAccountAuth:
 		return "updateAccountAuth"
 	case TransactionTypeUpdateKey:
@@ -1463,12 +1448,6 @@ func TransactionTypeByName(name string) (TransactionType, bool) {
 		return TransactionTypeAddCredits, true
 	case "updatekeypage":
 		return TransactionTypeUpdateKeyPage, true
-	case "addvalidator":
-		return TransactionTypeAddValidator, true
-	case "removevalidator":
-		return TransactionTypeRemoveValidator, true
-	case "updatevalidatorkey":
-		return TransactionTypeUpdateValidatorKey, true
 	case "updateaccountauth":
 		return TransactionTypeUpdateAccountAuth, true
 	case "updatekey":
@@ -1538,7 +1517,7 @@ func (v *VoteType) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Vote Type
+// String returns the name of the Vote Type.
 func (v VoteType) String() string {
 	switch v {
 	case VoteTypeAccept:

@@ -1,7 +1,6 @@
 package block
 
 import (
-	"bytes"
 	"encoding"
 	"encoding/hex"
 	"fmt"
@@ -569,7 +568,7 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove, remote
 			return nil, errors.Format(errors.StatusInternalError, "sign synthetic transaction: %w", err)
 		}
 		var page *protocol.KeyPage
-		err = batch.Account(m.Describe.DefaultOperatorPage()).GetStateAs(&page)
+		err = batch.Account(m.Describe.OperatorsPage()).GetStateAs(&page)
 		if err != nil {
 			return nil, err
 		}
@@ -930,9 +929,20 @@ func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove 
 		var err error
 		v, err = resp.MarshalBinary()
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeMarshallingError, Message: fmt.Errorf("error marshalling payload for transaction history")}
+			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeMarshallingError, Message: fmt.Errorf("error marshalling payload for minor blocks response")}
+		}
+	case *query.RequestMajorBlocks:
+		resp, pErr := m.queryMajorBlocks(batch, q)
+		if pErr != nil {
+			return nil, nil, pErr
 		}
 
+		k = []byte("major-block")
+		var err error
+		v, err = resp.MarshalBinary()
+		if err != nil {
+			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeMarshallingError, Message: fmt.Errorf("error marshalling payload for major blocks response")}
+		}
 	case *query.RequestSynth:
 		partition, ok := protocol.ParsePartitionUrl(q.Destination)
 		if !ok {
@@ -987,6 +997,9 @@ func (m *Executor) queryMinorBlocks(batch *database.Batch, req *query.RequestMin
 		return nil, &protocol.Error{Code: protocol.ErrorCodeQueryChainUpdatesError, Message: err}
 	}
 
+	if req.Start == 0 { // We don't have major block 0, avoid crash
+		req.Start = 1
+	}
 	startIndex, _, err := indexing.SearchIndexChain(idxChain, uint64(idxChain.Height())-1, indexing.MatchAfter, indexing.SearchIndexChainByBlock(req.Start))
 	if err != nil {
 		return nil, &protocol.Error{Code: protocol.ErrorCodeQueryEntriesError, Message: err}
@@ -994,7 +1007,7 @@ func (m *Executor) queryMinorBlocks(batch *database.Batch, req *query.RequestMin
 
 	entryIdx := startIndex
 
-	resp := query.ResponseMinorBlocks{TotalBlocks: uint64(ledger.Index)}
+	resp := query.ResponseMinorBlocks{TotalBlocks: ledger.Index}
 	curEntry := new(protocol.IndexEntry)
 	resultCnt := uint64(0)
 
@@ -1035,11 +1048,19 @@ resultLoop:
 			}
 
 			minorEntry.TxCount = uint64(0)
-			systemTxCount := uint64(0)
-			var lastTxid []byte
+			seen := map[[32]byte]bool{}
 			for _, updIdx := range chainUpdatesIndex.Entries {
-				if bytes.Equal(updIdx.Entry, lastTxid) { // There are like 4 ChainUpdates for each tx, we don't need duplicates
+				// Only care about the main chain
+				if updIdx.Type != protocol.ChainTypeTransaction || updIdx.Name != "main" {
 					continue
+				}
+
+				// Only include each transaction once
+				entry := *(*[32]byte)(updIdx.Entry)
+				if seen[entry] {
+					continue
+				} else {
+					seen[entry] = true
 				}
 
 				if req.TxFetchMode <= query.TxFetchModeIds {
@@ -1049,22 +1070,16 @@ resultLoop:
 					qr, err := m.queryByTxId(batch, updIdx.Entry, false, false, false)
 					if err == nil {
 						minorEntry.TxCount++
-						txt := qr.Envelope.Transaction[0].Body.Type()
-						if txt.IsSystem() {
-							systemTxCount++
-						} else if req.TxFetchMode == query.TxFetchModeExpand {
-							minorEntry.Transactions = append(minorEntry.Transactions, qr)
-						}
+						minorEntry.Transactions = append(minorEntry.Transactions, qr)
 					}
 				} else {
 					minorEntry.TxCount++
 				}
-				lastTxid = updIdx.Entry
 			}
-			if minorEntry.TxCount <= systemTxCount && req.BlockFilterMode == query.BlockFilterModeExcludeEmpty {
-				entryIdx++
-				continue
-			}
+		}
+		if minorEntry.TxCount == 0 && req.BlockFilterMode == query.BlockFilterModeExcludeEmpty {
+			entryIdx++
+			continue
 		}
 		resp.Entries = append(resp.Entries, minorEntry)
 		entryIdx++

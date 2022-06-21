@@ -1,0 +1,85 @@
+- name: ChangeSet
+  type: entity
+  root: true
+  attributes:
+  - name: Entity
+    type: entity
+    customCommit: true
+    parameters:
+    - name: Name
+      type: string
+    attributes:
+    - name: Union
+      type: state
+      dataType: protocol.Account
+      union: true
+    - name: Set
+      type: state
+      dataType: txid
+      pointer: true
+      set: true
+    - name: Chain
+      type: chain
+      chainType: transaction
+    - name: CountableRefType
+      type: state
+      dataType: protocol.Transaction
+      pointer: true
+      counted: true
+    - name: CountableUnion
+      type: state
+      dataType: protocol.Account
+      union: true
+      counted: true
+  - name: ChangeLog
+    type: state
+    dataType: string
+    counted: true
+
+- name: TemplateTest
+  # Test all the supported simple attribute types
+  type: entity
+  fields:
+  - name: label
+    type: string
+  attributes:
+  - name: Wrapped
+    type: state
+    dataType: string
+  - name: StructPtr
+    type: state
+    dataType: StructType
+    pointer: true
+  - name: Union
+    type: state
+    dataType: UnionType
+    union: true
+  - name: WrappedSet
+    set: true
+    type: state
+    dataType: url
+    pointer: true
+  - name: StructSet
+    set: true
+    type: state
+    dataType: StructType
+    pointer: true
+  - name: UnionSet
+    set: true
+    type: state
+    dataType: UnionType
+    union: true
+  - name: WrappedList
+    counted: true
+    type: state
+    dataType: string
+  - name: StructList
+    counted: true
+    type: state
+    dataType: StructType
+    pointer: true
+  - name: UnionList
+    counted: true
+    type: state
+    dataType: UnionType
+    union: true

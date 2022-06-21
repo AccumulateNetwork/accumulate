@@ -32,7 +32,7 @@ func TestTransactionPriority(t *testing.T) {
 	cases := map[string]Case{
 		"System": {
 			Envelope: newTxn(bvn.network.AnchorPool().String()).
-				WithSigner(bvn.network.DefaultOperatorPage(), 1).
+				WithSigner(bvn.network.OperatorsPage(), 1).
 				WithBody(&protocol.DirectoryAnchor{
 					PartitionAnchor: protocol.PartitionAnchor{
 						Source:          dn.network.NodeUrl(),
@@ -47,7 +47,7 @@ func TestTransactionPriority(t *testing.T) {
 		},
 		"Synthetic": {
 			Envelope: newTxn("foo/tokens").
-				WithSigner(bvn.network.DefaultOperatorPage(), 1).
+				WithSigner(bvn.network.OperatorsPage(), 1).
 				WithBody(&protocol.SyntheticDepositTokens{
 					Token:  protocol.AcmeUrl(),
 					Amount: *big.NewInt(100),
@@ -83,7 +83,7 @@ func TestTransactionPriority(t *testing.T) {
 			// Submit the envelope
 			b, err := c.Envelope.MarshalBinary()
 			require.NoError(t, err)
-			resp := bvn.app.CheckTx(abci.RequestCheckTx{Tx: b})
+			resp := bvn.app.CheckTx(abci.RequestCheckTx{Tx: b, Type: abci.CheckTxType_Recheck})
 			assert.Zero(t, resp.Code, resp.Log)
 
 			// Check the results
@@ -104,4 +104,46 @@ func TestTransactionPriority(t *testing.T) {
 			require.Equal(t, c.ExpectPriority, resp.Priority)
 		})
 	}
+}
+
+func TestCheckTx_SharedBatch(t *testing.T) {
+	t.Skip("https://accumulate.atlassian.net/browse/AC-1702")
+
+	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
+	n := nodes[partitions[1]][0]
+
+	alice, bob := generateKey(), generateKey()
+	aliceUrl := acctesting.AcmeLiteAddressTmPriv(alice)
+	bobUrl := acctesting.AcmeLiteAddressTmPriv(bob)
+	_ = n.db.Update(func(batch *database.Batch) error {
+		require.NoError(n.t, acctesting.CreateLiteTokenAccountWithCredits(batch, alice, protocol.AcmeFaucetAmount, float64(protocol.FeeSendTokens)/protocol.CreditPrecision))
+		return nil
+	})
+
+	// Check a transaction
+	resp := n.CheckTx(newTxn(aliceUrl.String()).
+		WithSigner(aliceUrl.RootIdentity(), 1).
+		WithBody(&protocol.SendTokens{To: []*protocol.TokenRecipient{{
+			Url:    bobUrl,
+			Amount: *big.NewInt(1),
+		}}}).
+		Initiate(protocol.SignatureTypeLegacyED25519, alice).
+		Build())
+
+	// The first transaction should succeed
+	require.Zero(t, resp.Code)
+
+	// Check another transaction
+	resp = n.CheckTx(newTxn(aliceUrl.String()).
+		WithSigner(aliceUrl.RootIdentity(), 1).
+		WithBody(&protocol.SendTokens{To: []*protocol.TokenRecipient{{
+			Url:    bobUrl,
+			Amount: *big.NewInt(1),
+		}}}).
+		Initiate(protocol.SignatureTypeLegacyED25519, alice).
+		Build())
+
+	// The second transaction should fail due to insufficient credits
+	require.NotZero(t, resp.Code)
 }

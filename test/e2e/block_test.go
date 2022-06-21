@@ -254,7 +254,7 @@ func verifyLiteDataAccount(t *testing.T, batch *database.Batch, firstEntry DataE
 	var account *LiteDataAccount
 	require.NoError(t, batch.Account(liteDataAddress).GetStateAs(&account))
 	require.Equal(t, liteDataAddress.String(), account.Url.String())
-	require.Equal(t, append(partialChainId, account.Tail...), chainId)
+	require.Equal(t, partialChainId, chainId)
 
 	firstEntryHash, err := ComputeFactomEntryHashForAccount(chainId, firstEntry.GetData())
 	require.NoError(t, err)

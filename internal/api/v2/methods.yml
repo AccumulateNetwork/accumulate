@@ -100,6 +100,15 @@ QueryMinorBlocks:
   output: MultiResponse
   call-params: [Url, QueryPagination, TxFetchMode, BlockFilterMode]
 
+QueryMajorBlocks:
+  description: queries an account's major blocks
+  kind: query
+  experimental: true
+  rpc: query-major-blocks
+  input: MajorBlocksQuery
+  output: MultiResponse
+  call-params: [Url, QueryPagination]
+
 QuerySynth:
   kind: query
   experimental: true
@@ -211,24 +220,6 @@ ExecuteBurnTokens:
   kind: execute
   rpc: burn-tokens
   input: BurnTokens
-
-ExecuteAddValidator:
-  description: submits an AddValidator transaction
-  kind: execute
-  rpc: add-validator
-  input: AddValidator
-
-ExecuteRemoveValidator:
-  description: submits a RemoveValidator transaction
-  kind: execute
-  rpc: remove-validator
-  input: RemoveValidator
-
-ExecuteUpdateValidatorKey:
-  description: submits an UpdateValidatorKey transaction
-  kind: execute
-  rpc: update-validator-key
-  input: UpdateValidatorKey
 
 ExecuteUpdateAccountAuth:
   description: submits an UpdateAccountAuth transaction

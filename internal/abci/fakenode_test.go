@@ -27,7 +27,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
-	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
@@ -36,7 +35,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 )
 
 type FakeNode struct {
@@ -52,11 +50,8 @@ type FakeNode struct {
 	logger  log.Logger
 	router  routing.Router
 
-	assert    *assert.Assertions
-	require   *require.Assertions
-	netValMap genesis.NetworkValidatorMap
-	Bootstrap genesis.Bootstrap
-	kv        *memory.DB
+	assert  *assert.Assertions
+	require *require.Assertions
 }
 
 func RunTestNet(t *testing.T, partitions []string, daemons map[string][]*accumulated.Daemon, openDb func(d *accumulated.Daemon) (*database.Database, error), doGenesis bool, errorHandler func(err error)) map[string][]*FakeNode {
@@ -65,7 +60,6 @@ func RunTestNet(t *testing.T, partitions []string, daemons map[string][]*accumul
 	allNodes := map[string][]*FakeNode{}
 	allChans := map[string][]chan<- abcitypes.Application{}
 	clients := map[string]connections.ABCIClient{}
-	netValMap := make(genesis.NetworkValidatorMap)
 	evilNodePrefix := "evil-"
 	for _, netName := range partitions {
 		isEvil := false
@@ -79,10 +73,19 @@ func RunTestNet(t *testing.T, partitions []string, daemons map[string][]*accumul
 		chans := make([]chan<- abcitypes.Application, len(daemons))
 		allNodes[netName], allChans[netName] = nodes, chans
 		for i, daemon := range daemons {
-			nodes[i], chans[i] = InitFake(t, daemon, openDb, errorHandler, isEvil, netValMap)
+			nodes[i], chans[i] = InitFake(t, daemon, openDb, errorHandler, isEvil)
 		}
 		// TODO It _should_ be one or the other - why doesn't that work?
 		clients[netName] = nodes[0].client
+	}
+
+	genesis := map[string]*tmtypes.GenesisDoc{}
+	if doGenesis {
+		for id, daemons := range daemons {
+			var err error
+			genesis[id], err = tmtypes.GenesisDocFromFile(daemons[0].Config.GenesisFile())
+			require.NoError(t, err)
+		}
 	}
 
 	connectionManager := connections.NewFakeConnectionManager(clients)
@@ -90,23 +93,7 @@ func RunTestNet(t *testing.T, partitions []string, daemons map[string][]*accumul
 		netName = strings.TrimPrefix(netName, evilNodePrefix)
 		nodes, chans := allNodes[netName], allChans[netName]
 		for i := range nodes {
-			nodes[i].Start(chans[i], connectionManager, doGenesis)
-		}
-	}
-
-	// Execute bootstrap after the entire network is known
-	if doGenesis {
-		for _, netName := range partitions {
-			netName = strings.TrimPrefix(netName, evilNodePrefix)
-			nodes := allNodes[netName]
-			for i := range nodes {
-				genesis := nodes[i].Bootstrap
-				err := genesis.Bootstrap()
-				if err != nil {
-					panic(fmt.Errorf("could not execute genesis: %v", err))
-				}
-				nodes[i].CreateInitChain()
-			}
+			nodes[i].Start(chans[i], connectionManager, genesis[netName])
 		}
 	}
 
@@ -120,7 +107,7 @@ func NewDefaultErrorHandler(t *testing.T) func(err error) {
 	}
 }
 
-func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Daemon) (*database.Database, error), errorHandler func(err error), isEvil bool, netValMap genesis.NetworkValidatorMap) (*FakeNode, chan<- abcitypes.Application) {
+func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Daemon) (*database.Database, error), errorHandler func(err error), isEvil bool) (*FakeNode, chan<- abcitypes.Application) {
 	if errorHandler == nil {
 		errorHandler = NewDefaultErrorHandler(t)
 	}
@@ -136,7 +123,6 @@ func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Da
 	n.key = pv.Key.PrivKey
 	n.network = &d.Config.Accumulate.Describe
 	n.logger = d.Logger
-	n.netValMap = netValMap
 
 	if openDb == nil {
 		openDb = func(d *accumulated.Daemon) (*database.Database, error) {
@@ -166,7 +152,7 @@ func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Da
 	return n, appChan
 }
 
-func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connections.ConnectionManager, doGenesis bool) *FakeNode {
+func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connections.ConnectionManager, genesis *tmtypes.GenesisDoc) *FakeNode {
 	eventBus := events.NewBus(nil)
 	n.router = routing.NewRouter(eventBus, connMgr)
 
@@ -211,26 +197,18 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 
 	n.T().Cleanup(func() { n.client.Shutdown() })
 
-	if !doGenesis {
+	if genesis == nil {
 		return n
 	}
 
 	n.height++
 
-	kv := memory.New(nil)
-	opts := genesis.InitOpts{
-		Describe:            *n.network,
-		GenesisTime:         time.Now(),
-		NetworkValidatorMap: n.netValMap,
-		Logger:              n.logger,
-		Validators: []tmtypes.GenesisValidator{
-			{PubKey: n.key.PubKey()},
-		},
-		Keys: [][]byte{n.key.Bytes()},
-	}
-	n.Bootstrap, err = genesis.Init(kv, opts)
-	n.Require().NoError(err)
-	n.kv = kv
+	n.app.InitChain(abcitypes.RequestInitChain{
+		Time:          genesis.GenesisTime,
+		ChainId:       n.network.PartitionId,
+		AppStateBytes: genesis.AppState,
+		InitialHeight: genesis.InitialHeight + 1,
+	})
 
 	return n
 }
@@ -329,6 +307,12 @@ func (n *FakeNode) Execute(inBlock func(func(*protocol.Envelope))) (sigHashes, t
 	}
 
 	return sigHashes, txnHashes, nil
+}
+
+func (n *FakeNode) CheckTx(env *protocol.Envelope) abcitypes.ResponseCheckTx {
+	tx, err := env.MarshalBinary()
+	n.Require().NoError(err)
+	return n.app.CheckTx(abcitypes.RequestCheckTx{Tx: tx})
 }
 
 func (n *FakeNode) MustExecute(inBlock func(func(*protocol.Envelope))) (sigHashes, txnHashes [][32]byte) {
@@ -522,17 +506,6 @@ func (n *FakeNode) GetTokenIssuer(url string) *protocol.TokenIssuer {
 	mss := new(protocol.TokenIssuer)
 	n.QueryAccountAs(url, mss)
 	return mss
-}
-
-func (n *FakeNode) CreateInitChain() {
-	state, err := n.kv.MarshalJSON()
-	n.require.NoError(err)
-	n.app.InitChain(abcitypes.RequestInitChain{
-		Time:          time.Now(),
-		ChainId:       n.network.PartitionId,
-		AppStateBytes: state,
-		InitialHeight: protocol.GenesisBlock + 1,
-	})
 }
 
 type e2eDUT struct {

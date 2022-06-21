@@ -53,7 +53,7 @@ func (v *NetworkType) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Network Type
+// String returns the name of the Network Type.
 func (v NetworkType) String() string {
 	switch v {
 	case NetworkTypeDirectory:
@@ -115,7 +115,7 @@ func (v *NodeType) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Node Type
+// String returns the name of the Node Type.
 func (v NodeType) String() string {
 	switch v {
 	case NodeTypeValidator:
@@ -175,7 +175,7 @@ func (v *PortOffset) SetEnumValue(id uint64) bool {
 	}
 }
 
-// String returns the name of the Port Offset
+// String returns the name of the Port Offset.
 func (v PortOffset) String() string {
 	switch v {
 	case PortOffsetTendermintP2P:

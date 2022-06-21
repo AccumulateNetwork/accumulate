@@ -177,34 +177,7 @@ func goJsonMethod(field *Field) (methodName string, wantPtr bool) {
 }
 
 func GoResolveType(field *Field, forNew, ignoreRepeatable bool) string {
-	typ := field.Type.String()
-	switch field.Type.Code {
-	case Bytes:
-		typ = "[]byte"
-	case RawJson:
-		typ = "json.RawMessage"
-	case Url:
-		typ = "url.URL"
-	case TxID:
-		typ = "url.TxID"
-	case BigInt:
-		typ = "big.Int"
-	case Uint:
-		typ = "uint64"
-	case Int:
-		typ = "int64"
-	case Hash:
-		typ = "[32]byte"
-	case Duration:
-		typ = "time.Duration"
-	case Time:
-		typ = "time.Time"
-	case Any:
-		typ = "interface{}"
-	case Float:
-		typ = "float64"
-	}
-
+	typ := field.Type.GoType()
 	if field.Pointer && !forNew {
 		typ = "*" + typ
 	}
@@ -460,11 +433,17 @@ func GoBinaryMarshalValue(field *Field, writerName, varName string) (string, err
 		ptrPrefix = "*"
 	}
 
-	if !field.Repeatable {
-		return fmt.Sprintf("\t%s.Write%s(%d, %s%s)", writerName, method, field.Number, ptrPrefix, varName), nil
+	var suffix string
+	if method == "Value" {
+		ptrPrefix = ""
+		suffix = ".MarshalBinary"
 	}
 
-	return fmt.Sprintf("\tfor _, v := range %s { %s.Write%s(%d, %sv) }", varName, writerName, method, field.Number, ptrPrefix), nil
+	if !field.Repeatable {
+		return fmt.Sprintf("\t%s.Write%s(%d, %s%s%s)", writerName, method, field.Number, ptrPrefix, varName, suffix), nil
+	}
+
+	return fmt.Sprintf("\tfor _, v := range %s { %s.Write%s(%d, %sv%s) }", varName, writerName, method, field.Number, ptrPrefix, suffix), nil
 }
 
 func GoBinaryUnmarshalValue(field *Field, readerName, varName string) (string, error) {
