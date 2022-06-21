@@ -66,14 +66,12 @@ func (d *DataSetLog) GetDataSet(id string) *DataSet {
 	return nil
 }
 
-func min(a, b int) int {
-	if a < b {
+func max(a, b int) int {
+	if a > b {
 		return a
-
 	}
 	return b
 }
-
 func write(file *os.File, out string) error {
 	_, err := file.WriteString(out)
 	if err != nil {
@@ -98,7 +96,6 @@ func (d *DataSetLog) DumpDataSetToDiskFile() ([]string, error) {
 	}
 
 	var fileNames []string
-
 	var fileName string
 
 	var val dataValue
@@ -146,12 +143,13 @@ func (d *DataSetLog) DumpDataSetToDiskFile() ([]string, error) {
 						width = val.precision
 					case float64, float32:
 						width += 7
+
 					default:
 						width = len(val.label)
 					}
-					label := val.label[:min(len(val.label), width)]
+					width = max(len(val.label), width)
 					fmtString := fmt.Sprintf("%s%%-%ds", spacer, width)
-					err = write(file, fmt.Sprintf(fmtString, label))
+					err = write(file, fmt.Sprintf(fmtString, val.label))
 					if err != nil {
 						return nil, err
 					}
@@ -169,16 +167,16 @@ func (d *DataSetLog) DumpDataSetToDiskFile() ([]string, error) {
 				}
 				switch v := val.value.(type) {
 				case int, int64, int32, int16, int8, uint, uint64, uint32, uint16, uint8:
-					fmtString := fmt.Sprintf("%%-%dd", val.precision)
+					fmtString := fmt.Sprintf("%%-%dd", max(len(val.label), val.precision))
 					out += fmt.Sprintf(fmtString, v)
 				case float64, float32:
-					fmtString := fmt.Sprintf("%%-%d.%df", val.precision+7, val.precision)
+					fmtString := fmt.Sprintf("%%-%d.%df", max(len(val.label), val.precision+7), val.precision)
 					out += fmt.Sprintf(fmtString, v)
 				case string:
-					fmtString := fmt.Sprintf("%%-%ds", val.precision)
+					fmtString := fmt.Sprintf("%%-%ds", max(len(val.label), val.precision))
 					out += fmt.Sprintf(fmtString, val.value)
 				case []byte:
-					fmtString := fmt.Sprintf("%%-%dx", val.precision)
+					fmtString := fmt.Sprintf("%%-%dx", max(len(val.label), val.precision))
 					out += fmt.Sprintf(fmtString, val.value)
 				default:
 					out += fmt.Sprintf("unknown_type:%v", v)
@@ -189,10 +187,6 @@ func (d *DataSetLog) DumpDataSetToDiskFile() ([]string, error) {
 					return nil, err
 				}
 			}
-			//err = write(file, "\n")
-			//if err != nil {
-			//	return nil, err
-			//}
 
 			if dset.size >= dset.maxsize {
 				err = write(file, "\n#Dataset may have been closed due to max memory limit.\n")

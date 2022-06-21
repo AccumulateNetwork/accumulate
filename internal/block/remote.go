@@ -9,6 +9,9 @@ import (
 )
 
 func (x *Executor) ProcessRemoteSignatures(block *Block, delivery *chain.Delivery) error {
+	r := x.BlockTimers.Start(BlockTimerTypeNetworkAccountUpdates)
+	defer x.BlockTimers.Stop(r)
+
 	// Synthetic and internally produced transactions are never remote
 	if !delivery.Transaction.Body.Type().IsUser() || delivery.WasProducedInternally() {
 		return nil
