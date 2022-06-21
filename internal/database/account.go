@@ -56,7 +56,7 @@ func (r *Account) GetObject() (*protocol.Object, error) {
 	meta := new(protocol.Object)
 	err := r.batch.getValuePtr(r.key.Object(), meta, &meta, true)
 	if err != nil {
-		err = errors.Wrap(errors.StatusUnknown, err)
+		err = errors.Wrap(errors.StatusUnknownError, err)
 	}
 	return meta, err
 }
@@ -68,7 +68,7 @@ func (r *Account) GetState() (protocol.Account, error) {
 		return state, nil
 	}
 	if r.url == nil && !errors.Is(err, errors.StatusNotFound) {
-		return nil, errors.Wrap(errors.StatusUnknown, err)
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 	return nil, errors.FormatWithCause(errors.StatusNotFound, err, "account %v not found", r.url)
 }
@@ -81,7 +81,7 @@ func (r *Account) GetStateAs(state interface{}) error {
 		return nil
 	}
 	if r.url == nil && !errors.Is(err, errors.StatusNotFound) {
-		return errors.Wrap(errors.StatusUnknown, err)
+		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 	return errors.FormatWithCause(errors.StatusNotFound, err, "account %v not found", r.url)
 }

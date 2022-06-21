@@ -22,14 +22,14 @@ func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]
 	if err != nil {
 		sentry.CaptureException(err)
 		logger.Info("Failed to unmarshal", "tx", logging.AsHex(hash), "error", err)
-		return nil, nil, nil, errors.Format(errors.StatusUnknown, "decoding envelopes: %w", err)
+		return nil, nil, nil, errors.Format(errors.StatusUnknownError, "decoding envelopes: %w", err)
 	}
 
 	deliveries, err := chain.NormalizeEnvelope(envelope)
 	if err != nil {
 		sentry.CaptureException(err)
 		logger.Info("Failed to normalize envelope", "tx", logging.AsHex(hash), "error", err)
-		return nil, nil, nil, errors.Wrap(errors.StatusUnknown, err)
+		return nil, nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	results := make([]*protocol.TransactionStatus, len(deliveries))
@@ -65,7 +65,7 @@ func checkTx(exec *Executor, batch *database.Batch) executeFunc {
 	return func(envelope *chain.Delivery) (*protocol.TransactionStatus, error) {
 		result, err := exec.ValidateEnvelope(batch, envelope)
 		if err != nil {
-			return nil, errors.Wrap(errors.StatusUnknown, err)
+			return nil, errors.Wrap(errors.StatusUnknownError, err)
 		}
 		if result == nil {
 			result = new(protocol.EmptyResult)

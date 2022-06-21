@@ -40,7 +40,7 @@ func (r router) Query(ctx context.Context, partition string, rawQuery []byte, op
 	defer batch.Discard()
 	k, v, err := x.Executor.Query(batch, qu, opts.Height, opts.Prove)
 	if err != nil {
-		b, _ := errors.Wrap(errors.StatusUnknown, err).(*errors.Error).MarshalJSON()
+		b, _ := errors.Wrap(errors.StatusUnknownError, err).(*errors.Error).MarshalJSON()
 		res := new(coretypes.ResultABCIQuery)
 		res.Response.Info = string(b)
 		res.Response.Code = uint32(protocol.ErrorCodeFailed)

@@ -459,7 +459,9 @@ func ActionResponseFrom(r *api2.TxResponse) *ActionResponse {
 		return ar
 	}
 
-	ar.Code = types.String(fmt.Sprint(result.Code))
+	if result.Failed() {
+		ar.Code = types.String(fmt.Sprint(result.CodeNum()))
+	}
 	if result.Error != nil {
 		ar.Error = types.String(result.Error.Message)
 	}

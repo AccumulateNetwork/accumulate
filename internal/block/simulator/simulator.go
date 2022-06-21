@@ -407,7 +407,7 @@ func (s *Simulator) SubmitAndExecuteBlock(envelopes ...*protocol.Envelope) ([]*p
 
 	_, err := s.Submit(envelopes...)
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknown, err)
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	ids := map[[32]byte]bool{}
@@ -618,12 +618,12 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 				continue
 			}
 			if err != nil {
-				return errors.Wrap(errors.StatusUnknown, err)
+				return errors.Wrap(errors.StatusUnknownError, err)
 			}
 
 			status, err = x.Executor.ExecuteEnvelope(block, delivery)
 			if err != nil {
-				return errors.Wrap(errors.StatusUnknown, err)
+				return errors.Wrap(errors.StatusUnknownError, err)
 			}
 
 			if statusChan != nil {

@@ -50,7 +50,7 @@ Status:
   InternalError:
     value: 500
     description: means an internal error occured
-  Unknown:
+  UnknownError:
     value: 501
     description: means an unknown error occured
   EncodingError:

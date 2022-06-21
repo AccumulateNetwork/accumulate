@@ -89,7 +89,7 @@ func (e NetEngine) Submit(envelope *protocol.Envelope) (*protocol.TransactionSta
 	}
 
 	status = new(protocol.TransactionStatus)
-	status.Set(errors.New(errors.StatusUnknown, "unknown"))
+	status.Set(errors.New(errors.StatusUnknownError, "unknown"))
 	return status, nil
 }
 

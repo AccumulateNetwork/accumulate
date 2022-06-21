@@ -39,14 +39,14 @@ func (q *queryDirect) query(req query.Request, opts QueryOptions) (string, []byt
 		return string(res.Response.Key), res.Response.Value, nil
 	}
 	if res.Response.Code != uint32(protocol.ErrorCodeFailed) {
-		return "", nil, errors.New(errors.StatusUnknown, res.Response.Info)
+		return "", nil, errors.New(errors.StatusUnknownError, res.Response.Info)
 	}
 
 	var err2 *errors.Error
 	if json.Unmarshal([]byte(res.Response.Info), &err2) == nil {
 		return "", nil, err2
 	}
-	return "", nil, errors.New(errors.StatusUnknown, res.Response.Info)
+	return "", nil, errors.New(errors.StatusUnknownError, res.Response.Info)
 }
 
 func (q *queryDirect) QueryUrl(u *url.URL, opts QueryOptions) (interface{}, error) {
@@ -295,7 +295,7 @@ query:
 		if err == nil {
 			err = errors.NotFound("transaction %X still pending", id)
 		} else {
-			err = errors.Wrap(errors.StatusUnknown, err)
+			err = errors.Wrap(errors.StatusUnknownError, err)
 		}
 		return nil, err
 

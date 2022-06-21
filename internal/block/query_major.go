@@ -16,7 +16,7 @@ func (m *Executor) queryMajorBlocks(batch *database.Batch, req *query.RequestMaj
 
 	mjrIdxChain, err := anchorsAcc.ReadChain(protocol.IndexChain(protocol.MainChain, true))
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknown, err)
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	if req.Start == 0 { // We don't have major block 0, avoid crash
@@ -24,7 +24,7 @@ func (m *Executor) queryMajorBlocks(batch *database.Batch, req *query.RequestMaj
 	}
 	mjrStartIdx, _, err := indexing.SearchIndexChain(mjrIdxChain, uint64(mjrIdxChain.Height())-1, indexing.MatchAfter, indexing.SearchIndexChainByBlock(req.Start))
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknown, err)
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	resp = &query.ResponseMajorBlocks{TotalBlocks: uint64(mjrIdxChain.Height())}
@@ -36,7 +36,7 @@ func (m *Executor) queryMajorBlocks(batch *database.Batch, req *query.RequestMaj
 	if mjrEntryIdx > 0 {
 		mnrStartIdx, err = getPrevEntryRootIndex(mjrIdxChain, mjrEntryIdx)
 		if err != nil {
-			return nil, errors.Wrap(errors.StatusUnknown, err)
+			return nil, errors.Wrap(errors.StatusUnknownError, err)
 		}
 	}
 
@@ -48,7 +48,7 @@ majorEntryLoop:
 		case errors.Is(err, storage.ErrNotFound):
 			break majorEntryLoop
 		default:
-			return nil, errors.Wrap(errors.StatusUnknown, err)
+			return nil, errors.Wrap(errors.StatusUnknownError, err)
 		}
 
 		rspMjrEntry := new(query.ResponseMajorEntry)
@@ -66,12 +66,12 @@ majorEntryLoop:
 
 		mnrIdxChain, err := ledgerAcc.ReadChain(protocol.MinorRootIndexChain)
 		if err != nil {
-			return nil, errors.Wrap(errors.StatusUnknown, err)
+			return nil, errors.Wrap(errors.StatusUnknownError, err)
 		}
 
 		mnrIdx, mnrIdxEntry, err := indexing.SearchIndexChain(mnrIdxChain, uint64(mnrIdxChain.Height())-1, indexing.MatchAfter, indexing.SearchIndexChainByBlock(mnrStartIdx))
 		if err != nil {
-			return nil, errors.Wrap(errors.StatusUnknown, err)
+			return nil, errors.Wrap(errors.StatusUnknownError, err)
 		}
 
 	minorEntryLoop:
@@ -83,7 +83,7 @@ majorEntryLoop:
 			case errors.Is(err, storage.ErrNotFound):
 				break minorEntryLoop
 			default:
-				return nil, errors.Wrap(errors.StatusUnknown, err)
+				return nil, errors.Wrap(errors.StatusUnknownError, err)
 			}
 			if mnrIdxEntry.BlockIndex > curEntry.RootIndexIndex {
 				break minorEntryLoop
@@ -106,7 +106,7 @@ func getPrevEntryRootIndex(mjrIdxChain *database.Chain, mjrEntryIdx uint64) (uin
 	prevEntry := new(protocol.IndexEntry)
 	err := mjrIdxChain.EntryAs(int64(mjrEntryIdx)-1, prevEntry)
 	if err != nil {
-		return 0, errors.Wrap(errors.StatusUnknown, err)
+		return 0, errors.Wrap(errors.StatusUnknownError, err)
 	}
 	return prevEntry.RootIndexIndex + 1, nil
 }

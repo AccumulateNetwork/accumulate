@@ -50,8 +50,8 @@ const StatusBadTimestamp Status = 412
 // StatusInternalError means an internal error occured.
 const StatusInternalError Status = 500
 
-// StatusUnknown means an unknown error occured.
-const StatusUnknown Status = 501
+// StatusUnknownError means an unknown error occured.
+const StatusUnknownError Status = 501
 
 // StatusEncodingError means encoding or decoding failed.
 const StatusEncodingError Status = 502
@@ -63,7 +63,7 @@ func (v Status) GetEnumValue() uint64 { return uint64(v) }
 func (v *Status) SetEnumValue(id uint64) bool {
 	u := Status(id)
 	switch u {
-	case StatusOK, StatusDelivered, StatusPending, StatusRemote, StatusWrongPartition, StatusBadRequest, StatusUnauthenticated, StatusInsufficientCredits, StatusUnauthorized, StatusNotFound, StatusConflict, StatusBadSignerVersion, StatusBadTimestamp, StatusInternalError, StatusUnknown, StatusEncodingError:
+	case StatusOK, StatusDelivered, StatusPending, StatusRemote, StatusWrongPartition, StatusBadRequest, StatusUnauthenticated, StatusInsufficientCredits, StatusUnauthorized, StatusNotFound, StatusConflict, StatusBadSignerVersion, StatusBadTimestamp, StatusInternalError, StatusUnknownError, StatusEncodingError:
 		*v = u
 		return true
 	default:
@@ -102,8 +102,8 @@ func (v Status) String() string {
 		return "badTimestamp"
 	case StatusInternalError:
 		return "internalError"
-	case StatusUnknown:
-		return "unknown"
+	case StatusUnknownError:
+		return "unknownError"
 	case StatusEncodingError:
 		return "encodingError"
 	default:
@@ -142,8 +142,8 @@ func StatusByName(name string) (Status, bool) {
 		return StatusBadTimestamp, true
 	case "internalerror":
 		return StatusInternalError, true
-	case "unknown":
-		return StatusUnknown, true
+	case "unknownerror":
+		return StatusUnknownError, true
 	case "encodingerror":
 		return StatusEncodingError, true
 	default:

@@ -33,7 +33,7 @@ func CheckTx(t TB, db *database.Database, exec *Executor, delivery *chain.Delive
 
 	result, err := exec.ValidateEnvelope(batch, delivery)
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknown, err)
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 	if result == nil {
 		return new(protocol.EmptyResult), nil

@@ -30,7 +30,7 @@ func (v *wrappedValue[T]) copyValue() T { return v.copy(v.value) }
 func (v *wrappedValue[T]) MarshalBinary() ([]byte, error) {
 	data, err := v.marshal(v.value)
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknown, err)
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	return data, nil
@@ -39,7 +39,7 @@ func (v *wrappedValue[T]) MarshalBinary() ([]byte, error) {
 func (v *wrappedValue[T]) UnmarshalBinary(data []byte) error {
 	u, err := v.unmarshal(data)
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
+		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	v.value = u
@@ -55,9 +55,9 @@ func (v *wrappedValue[T]) CopyAsInterface() interface{} {
 func (v *wrappedValue[T]) UnmarshalBinaryFrom(rd io.Reader) error {
 	data, err := io.ReadAll(rd)
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
+		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	err = v.UnmarshalBinary(data)
-	return errors.Wrap(errors.StatusUnknown, err)
+	return errors.Wrap(errors.StatusUnknownError, err)
 }

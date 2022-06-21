@@ -45,7 +45,7 @@ func convert(err error) *Error {
 	}
 
 	e := &Error{
-		Code:    StatusUnknown,
+		Code:    StatusUnknownError,
 		Message: err.Error(),
 	}
 
@@ -69,7 +69,7 @@ func (e *Error) setCause(f *Error) {
 		return
 	}
 
-	if e.Code != StatusUnknown {
+	if e.Code != StatusUnknownError {
 		return
 	}
 
