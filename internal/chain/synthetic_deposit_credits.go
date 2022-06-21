@@ -17,10 +17,10 @@ func (SyntheticDepositCredits) Type() protocol.TransactionType {
 	return protocol.TransactionTypeSyntheticDepositCredits
 }
 
-func (SyntheticDepositCredits) AllowMissingPrincipal(transaction *protocol.Transaction) (allow, fallback bool) {
+func (SyntheticDepositCredits) AllowMissingPrincipal(transaction *protocol.Transaction) bool {
 	// The principal can be missing if it is a lite identity
 	key, _ := protocol.ParseLiteIdentity(transaction.Header.Principal)
-	return key != nil, false
+	return key != nil
 }
 
 func (SyntheticDepositCredits) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {

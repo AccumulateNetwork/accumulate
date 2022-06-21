@@ -10,8 +10,15 @@ import (
 
 type SyntheticCreateIdentity struct{}
 
+var _ PrincipalValidator = (*SyntheticCreateIdentity)(nil)
+
 func (SyntheticCreateIdentity) Type() protocol.TransactionType {
 	return protocol.TransactionTypeSyntheticCreateIdentity
+}
+
+func (SyntheticCreateIdentity) AllowMissingPrincipal(transaction *protocol.Transaction) bool {
+	// SyntheticCreateChain can create accounts
+	return true
 }
 
 func (SyntheticCreateIdentity) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
