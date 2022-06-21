@@ -26,6 +26,12 @@ const debugMajorBlocks = false
 
 // BeginBlock implements ./Chain
 func (x *Executor) BeginBlock(block *Block) error {
+	//clear the timers
+	x.BlockTimers.Reset()
+
+	r := x.BlockTimers.Start(BlockTimerTypeBeginBlock)
+	defer x.BlockTimers.Stop(r)
+
 	x.logger.Debug("Begin block", "height", block.Index, "leader", block.IsLeader, "time", block.Time)
 
 	// Check if its time for a major block
