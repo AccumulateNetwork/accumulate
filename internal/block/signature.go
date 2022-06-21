@@ -10,6 +10,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 )
 
 func (x *Executor) ProcessSignature(batch *database.Batch, delivery *chain.Delivery, signature protocol.Signature) (*ProcessSignatureState, error) {
@@ -715,7 +716,7 @@ func GetSignaturesForSigner(batch *database.Batch, transaction *database.Transac
 
 	entries := sigset.Entries()
 	signatures := make([]protocol.Signature, 0, len(entries))
-	for _, e := range sigset.Entries() {
+	for _, e := range entries {
 		state, err := batch.Transaction(e.SignatureHash[:]).GetState()
 		if err != nil {
 			return nil, fmt.Errorf("load signature entry %X: %w", e.SignatureHash, err)
@@ -762,4 +763,46 @@ func (x *Executor) validatePartitionSignature(location *url.URL, sig protocol.Ke
 		}
 	}
 	return errors.Format(errors.StatusUnauthorized, "the key used to sign does not belong to the originating subnet")
+}
+
+func GetSyntheticTransactionReceipt(batch *database.Batch, hash [32]byte) (*managed.Receipt, *url.URL, error) {
+	transaction := batch.Transaction(hash[:])
+	status, err := transaction.GetStatus()
+	if err != nil {
+		return nil, nil, errors.Format(errors.StatusUnknown, "load status: %w", err)
+	}
+
+	var signatures []protocol.Signature
+	for _, signer := range status.Signers {
+		sigset, err := transaction.ReadSignaturesForSigner(signer)
+		if err != nil {
+			return nil, nil, errors.Format(errors.StatusUnknown, "load %v signatures: %w", signer.GetUrl(), err)
+		}
+
+		for _, e := range sigset.Entries() {
+			state, err := batch.Transaction(e.SignatureHash[:]).GetState()
+			if err != nil {
+				return nil, nil, errors.Format(errors.StatusUnknown, "load signature %X: %w", e.SignatureHash[:8], err)
+			}
+
+			if state.Signature == nil {
+				// This should not happen
+				continue
+			}
+
+			if sig, ok := state.Signature.(*protocol.ReceiptSignature); ok {
+				signatures = append(signatures, sig)
+			}
+		}
+	}
+	if len(signatures) == 0 {
+		return nil, nil, nil // How does this happen?
+	}
+
+	receipt, sourceUrl, err := assembleSynthReceipt(hash, signatures)
+	if err != nil {
+		return nil, nil, errors.Format(errors.StatusUnknown, "construct receipt: %w", err)
+	}
+
+	return receipt, sourceUrl, nil
 }

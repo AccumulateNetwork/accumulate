@@ -32,7 +32,7 @@ func initDevNet(cmd *cobra.Command, _ []string) {
 	verifyInitFlags(cmd, count)
 
 	if flagInit.Reset {
-		nodeReset()
+		networkReset()
 	}
 
 	initOpts := accumulated.DevnetOptions{
