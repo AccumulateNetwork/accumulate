@@ -42,6 +42,8 @@ type ExecutorOptions struct {
 	EventBus *events.Bus
 
 	isGenesis bool
+
+	BlockTimers TimerSet
 }
 
 // NewNodeExecutor creates a new Executor for a node.
@@ -155,6 +157,10 @@ func newExecutor(opts ExecutorOptions, db *database.Database, executors ...Trans
 	}
 
 	return m, nil
+}
+
+func (m *Executor) EnableTimers() {
+	m.BlockTimers.Initialize(&m.executors)
 }
 
 func (m *Executor) ActiveGlobals_TESTONLY() *core.GlobalValues {

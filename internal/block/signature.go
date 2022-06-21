@@ -13,6 +13,9 @@ import (
 )
 
 func (x *Executor) ProcessSignature(batch *database.Batch, delivery *chain.Delivery, signature protocol.Signature) (*ProcessSignatureState, error) {
+	r := x.BlockTimers.Start(BlockTimerTypeProcessSignature)
+	defer x.BlockTimers.Stop(r)
+
 	err := x.checkRouting(delivery, signature)
 	if err != nil {
 		return nil, err

@@ -21,6 +21,9 @@ import (
 
 // EndBlock implements ./Chain
 func (m *Executor) EndBlock(block *Block) error {
+	r := m.BlockTimers.Start(BlockTimerTypeEndBlock)
+	defer m.BlockTimers.Stop(r)
+
 	// Check for missing synthetic transactions. Load the ledger synchronously,
 	// request transactions asynchronously.
 	var synthLedger *protocol.SyntheticLedger
