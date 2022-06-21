@@ -54,14 +54,14 @@ type FakeNode struct {
 	require *require.Assertions
 }
 
-func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulated.Daemon, openDb func(d *accumulated.Daemon) (*database.Database, error), doGenesis bool, errorHandler func(err error)) map[string][]*FakeNode {
+func RunTestNet(t *testing.T, partitions []string, daemons map[string][]*accumulated.Daemon, openDb func(d *accumulated.Daemon) (*database.Database, error), doGenesis bool, errorHandler func(err error)) map[string][]*FakeNode {
 	t.Helper()
 
 	allNodes := map[string][]*FakeNode{}
 	allChans := map[string][]chan<- abcitypes.Application{}
 	clients := map[string]connections.ABCIClient{}
 	evilNodePrefix := "evil-"
-	for _, netName := range subnets {
+	for _, netName := range partitions {
 		isEvil := false
 		if strings.HasPrefix(netName, evilNodePrefix) {
 			isEvil = true
@@ -89,7 +89,7 @@ func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulate
 	}
 
 	connectionManager := connections.NewFakeConnectionManager(clients)
-	for _, netName := range subnets {
+	for _, netName := range partitions {
 		netName = strings.TrimPrefix(netName, evilNodePrefix)
 		nodes, chans := allNodes[netName], allChans[netName]
 		for i := range nodes {
@@ -143,7 +143,7 @@ func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Da
 		require.ErrorIs(t, err, storage.ErrNotFound)
 	}
 
-	fakeTmLogger := d.Logger.With("module", "fake-tendermint", "subnet", n.network.SubnetId)
+	fakeTmLogger := d.Logger.With("module", "fake-tendermint", "partition", n.network.PartitionId)
 
 	appChan := make(chan abcitypes.Application)
 	t.Cleanup(func() { close(appChan) })
@@ -205,7 +205,7 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 
 	n.app.InitChain(abcitypes.RequestInitChain{
 		Time:          genesis.GenesisTime,
-		ChainId:       n.network.SubnetId,
+		ChainId:       n.network.PartitionId,
 		AppStateBytes: genesis.AppState,
 		InitialHeight: genesis.InitialHeight + 1,
 	})
@@ -421,7 +421,7 @@ func (n *FakeNode) GetDirectory(adi string) []string {
 }
 
 func (n *FakeNode) GetTx(txid []byte) *api2.TransactionQueryResponse {
-	q := api2.NewQueryDirect(n.network.SubnetId, api2.Options{
+	q := api2.NewQueryDirect(n.network.PartitionId, api2.Options{
 		Logger:   n.logger,
 		Describe: n.network,
 		Router:   n.router,

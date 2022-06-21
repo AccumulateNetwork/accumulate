@@ -32,36 +32,36 @@ func newDispatcher(opts ExecutorOptions) *dispatcher {
 	return d
 }
 
-func (d *dispatcher) push(subnet string, env *protocol.Envelope) error {
+func (d *dispatcher) push(partition string, env *protocol.Envelope) error {
 	deliveries, err := chain.NormalizeEnvelope(env)
 	if err != nil {
 		return err
 	}
 
-	batch := d.batches[subnet]
+	batch := d.batches[partition]
 	for _, delivery := range deliveries {
 		env := new(protocol.Envelope)
 		env.Signatures = append(env.Signatures, delivery.Signatures...)
 		env.Transaction = append(env.Transaction, delivery.Transaction)
 		batch = append(batch, env)
 	}
-	d.batches[subnet] = batch
+	d.batches[partition] = batch
 	return nil
 }
 
 // BroadcastTx dispatches the txn to the appropriate client.
 func (d *dispatcher) BroadcastTx(ctx context.Context, u *url.URL, tx *protocol.Envelope) error {
-	subnet, err := d.Router.RouteAccount(u)
+	partition, err := d.Router.RouteAccount(u)
 	if err != nil {
 		return err
 	}
 
-	return d.push(subnet, tx)
+	return d.push(partition, tx)
 }
 
 // BroadcastTxAsync dispatches the txn to the appropriate client.
 func (d *dispatcher) BroadcastTxLocal(ctx context.Context, tx *protocol.Envelope) error {
-	return d.push(d.Describe.SubnetId, tx)
+	return d.push(d.Describe.PartitionId, tx)
 }
 
 var errTxInCache1 = jrpc.RPCInternalError(jrpc.JSONRPCIntID(0), tm.ErrTxInCache).Error
@@ -73,18 +73,18 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 	wg := new(sync.WaitGroup)
 
 	// Send transactions to each destination in parallel
-	for subnet, batch := range d.batches {
+	for partition, batch := range d.batches {
 		if len(batch) == 0 {
 			continue
 		}
 
 		wg.Add(1)
-		subnet, batch := subnet, batch // Don't capture loop variables
+		partition, batch := partition, batch // Don't capture loop variables
 		go func() {
 			defer wg.Done()
 			for _, tx := range batch {
 
-				resp, err := d.Router.Submit(ctx, subnet, tx, false, false)
+				resp, err := d.Router.Submit(ctx, partition, tx, false, false)
 				if err != nil {
 					errs <- err
 					return
@@ -122,8 +122,8 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 	}()
 
 	// Reset the batches, optimized by the compiler
-	for subnet := range d.batches {
-		delete(d.batches, subnet)
+	for partition := range d.batches {
+		delete(d.batches, partition)
 	}
 
 	// Let the caller wait for errors

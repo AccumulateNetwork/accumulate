@@ -188,7 +188,7 @@ func (m *JrpcMethods) ExecuteDirect(ctx context.Context, params json.RawMessage)
 
 func (m *JrpcMethods) executeDirect(ctx context.Context, env *protocol.Envelope, checkOnly bool) interface{} {
 	// Route the request
-	subnet, err := m.Router.Route(env)
+	partition, err := m.Router.Route(env)
 	if err != nil {
 		return validatorError(err)
 	}
@@ -200,7 +200,7 @@ func (m *JrpcMethods) executeDirect(ctx context.Context, env *protocol.Envelope,
 	}
 
 	// Submit the envelope(s)
-	resp, err := m.Router.Submit(ctx, subnet, env, checkOnly, false)
+	resp, err := m.Router.Submit(ctx, partition, env, checkOnly, false)
 	if err != nil {
 		return accumulateError(err)
 	}

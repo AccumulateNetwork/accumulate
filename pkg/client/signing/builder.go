@@ -323,22 +323,22 @@ func (s *Builder) InitiateSynthetic(txn *protocol.Transaction, router routing.Ro
 		return nil, fmt.Errorf("cannot prepare signature: %s", strings.Join(errs, ", "))
 	}
 
-	destSubnet, err := router.RouteAccount(txn.Header.Principal)
+	destPartition, err := router.RouteAccount(txn.Header.Principal)
 	if err != nil {
 		return nil, fmt.Errorf("routing %v: %v", txn.Header.Principal, err)
 	}
-	subnetUrl := protocol.SubnetUrl(destSubnet)
+	partitionUrl := protocol.PartitionUrl(destPartition)
 
 	initSig := new(protocol.SyntheticSignature)
 	initSig.SourceNetwork = s.Url
-	initSig.DestinationNetwork = subnetUrl
+	initSig.DestinationNetwork = partitionUrl
 
 	if ledger == nil {
 		initSig.SequenceNumber = s.Version
 	} else {
-		subnetLedger := ledger.Subnet(subnetUrl)
-		subnetLedger.Produced++
-		initSig.SequenceNumber = subnetLedger.Produced
+		partitionLedger := ledger.Partition(partitionUrl)
+		partitionLedger.Produced++
+		initSig.SequenceNumber = partitionLedger.Produced
 	}
 
 	// Ignore InitMode, always use a simple hash
