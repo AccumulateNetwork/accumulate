@@ -88,7 +88,7 @@ func NewNodeExecutor(opts ExecutorOptions, db *database.Database) (*Executor, er
 		)
 
 	default:
-		return nil, errors.Format(errors.StatusInternalError, "invalid subnet type %v", opts.Describe.NetworkType)
+		return nil, errors.Format(errors.StatusInternalError, "invalid partition type %v", opts.Describe.NetworkType)
 	}
 
 	// This is a no-op in dev
@@ -218,7 +218,7 @@ func (m *Executor) LoadStateRoot(batch *database.Batch) ([]byte, error) {
 	case errors.Is(err, storage.ErrNotFound):
 		return nil, nil
 	default:
-		return nil, errors.Format(errors.StatusUnknown, "load subnet identity: %w", err)
+		return nil, errors.Format(errors.StatusUnknown, "load partition identity: %w", err)
 	}
 }
 

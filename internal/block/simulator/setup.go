@@ -27,7 +27,7 @@ func writeAccountState(t TB, batch *database.Batch, account protocol.Account) {
 }
 
 func (s *Simulator) CreateAccount(account protocol.Account) {
-	_ = s.SubnetFor(account.GetUrl()).Database.Update(func(batch *database.Batch) error {
+	_ = s.PartitionFor(account.GetUrl()).Database.Update(func(batch *database.Batch) error {
 		full, ok := account.(protocol.FullAccount)
 		if !ok {
 			writeAccountState(s, batch, account)
@@ -61,7 +61,7 @@ func (s *Simulator) CreateLiteTokenAccount(key []byte, token *url.URL, credits, 
 }
 
 func (s *Simulator) CreateIdentity(identityUrl *url.URL, pubKey ...[]byte) {
-	_ = s.SubnetFor(identityUrl).Database.Update(func(batch *database.Batch) error {
+	_ = s.PartitionFor(identityUrl).Database.Update(func(batch *database.Batch) error {
 		identity := new(protocol.ADI)
 		identity.Url = identityUrl
 		identity.AddAuthority(identityUrl.JoinPath("book"))
@@ -91,7 +91,7 @@ func (s *Simulator) CreateIdentity(identityUrl *url.URL, pubKey ...[]byte) {
 }
 
 func (s *Simulator) CreateKeyBook(bookUrl *url.URL, pubKey ...[]byte) {
-	_ = s.SubnetFor(bookUrl).Database.Update(func(batch *database.Batch) error {
+	_ = s.PartitionFor(bookUrl).Database.Update(func(batch *database.Batch) error {
 		book := new(protocol.KeyBook)
 		book.Url = bookUrl
 		book.AddAuthority(bookUrl)
@@ -116,7 +116,7 @@ func (s *Simulator) CreateKeyBook(bookUrl *url.URL, pubKey ...[]byte) {
 }
 
 func (s *Simulator) CreateKeyPage(bookUrl *url.URL, pubKey ...[]byte) {
-	_ = s.SubnetFor(bookUrl).Database.Update(func(batch *database.Batch) error {
+	_ = s.PartitionFor(bookUrl).Database.Update(func(batch *database.Batch) error {
 		var book *protocol.KeyBook
 		require.NoError(tb{s}, batch.Account(bookUrl).GetStateAs(&book))
 		pageUrl := protocol.FormatKeyPageUrl(bookUrl, book.PageCount)
@@ -142,7 +142,7 @@ func (s *Simulator) CreateKeyPage(bookUrl *url.URL, pubKey ...[]byte) {
 
 func (s *Simulator) UpdateAccount(accountUrl *url.URL, fn func(account protocol.Account)) {
 	s.Helper()
-	_ = s.SubnetFor(accountUrl).Database.Update(func(batch *database.Batch) error {
+	_ = s.PartitionFor(accountUrl).Database.Update(func(batch *database.Batch) error {
 		s.Helper()
 		account, err := batch.Account(accountUrl).GetState()
 		require.NoError(tb{s}, err)
@@ -155,7 +155,7 @@ func (s *Simulator) UpdateAccount(accountUrl *url.URL, fn func(account protocol.
 func GetAccount[T protocol.Account](sim *Simulator, accountUrl *url.URL) T {
 	sim.Helper()
 	var account T
-	_ = sim.SubnetFor(accountUrl).Database.View(func(batch *database.Batch) error {
+	_ = sim.PartitionFor(accountUrl).Database.View(func(batch *database.Batch) error {
 		sim.Helper()
 		require.NoError(tb{sim}, batch.Account(accountUrl).GetStateAs(&account))
 		return nil

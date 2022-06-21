@@ -63,7 +63,7 @@ type AccumulatorOptions struct {
 func NewAccumulator(opts AccumulatorOptions) *Accumulator {
 	app := &Accumulator{
 		AccumulatorOptions: opts,
-		logger:             opts.Logger.With("module", "accumulate", "subnet", opts.Accumulate.SubnetId),
+		logger:             opts.Logger.With("module", "accumulate", "partition", opts.Accumulate.PartitionId),
 		checkTxMutex:       &sync.Mutex{},
 	}
 
@@ -127,8 +127,8 @@ func (app *Accumulator) recover(code *uint32, setDidPanic bool) {
 // willChangeGlobals populates the validator update list, which is passed to
 // Tendermint to update the validator set.
 func (app *Accumulator) willChangeGlobals(e events.WillChangeGlobals) error {
-	// Compare the old and new subnet definitions
-	updates, err := e.Old.DiffValidators(e.New, app.Accumulate.SubnetId)
+	// Compare the old and new partition definitions
+	updates, err := e.Old.DiffValidators(e.New, app.Accumulate.PartitionId)
 	if err != nil {
 		return err
 	}

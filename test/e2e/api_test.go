@@ -25,7 +25,7 @@ func TestMinorBlock_Expand(t *testing.T) {
 
 	lite := acctesting.GenerateKey(t.Name(), "Lite")
 	liteUrl := acctesting.AcmeLiteAddressStdPriv(lite)
-	batch := sim.SubnetFor(liteUrl).Database.Begin(true)
+	batch := sim.PartitionFor(liteUrl).Database.Begin(true)
 	require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, tmed25519.PrivKey(lite), AcmeFaucetAmount, 1e9))
 	require.NoError(t, batch.Commit())
 
@@ -54,7 +54,7 @@ func TestMinorBlock_Expand(t *testing.T) {
 	req.TxFetchMode = query.TxFetchModeExpand
 	req.Start = 1
 	req.Count = 10
-	res, err := sim.Subnet(Directory).API.QueryMinorBlocks(context.Background(), req)
+	res, err := sim.Partition(Directory).API.QueryMinorBlocks(context.Background(), req)
 	require.NoError(t, err)
 	require.NotEmpty(t, res.Items)
 
@@ -70,7 +70,7 @@ func TestMinorBlock_Expand(t *testing.T) {
 		}
 
 		for _, txn := range block.Transactions {
-			if txn.Transaction.Body.Type() == TransactionTypePartitionAnchor {
+			if txn.Transaction.Body.Type() == TransactionTypeBlockValidatorAnchor {
 				anchors = append(anchors, txn.Transaction)
 			}
 		}
