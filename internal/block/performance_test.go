@@ -33,7 +33,7 @@ func BenchmarkPerformance(b *testing.B) {
 	bobUrl := acctesting.AcmeLiteAddressStdPriv(bob)
 	charlieUrl := acctesting.AcmeLiteAddressStdPriv(charlie)
 
-	batch := sim.SubnetFor(aliceUrl).Database.Begin(true)
+	batch := sim.PartitionFor(aliceUrl).Database.Begin(true)
 	require.NoError(b, acctesting.CreateLiteTokenAccountWithCredits(batch, ed25519.PrivKey(alice), protocol.AcmeFaucetAmount, 1e9))
 	require.NoError(b, batch.Commit())
 
@@ -50,9 +50,9 @@ func BenchmarkPerformance(b *testing.B) {
 		}).Initiate(protocol.SignatureTypeED25519, alice).BuildDelivery()
 
 	for i := 0; i < b.N; i++ {
-		batch := sim.SubnetFor(aliceUrl).Database.Begin(true)
+		batch := sim.PartitionFor(aliceUrl).Database.Begin(true)
 		defer batch.Discard()
-		_, err := sim.SubnetFor(aliceUrl).Executor.ProcessSignature(batch, delivery, delivery.Signatures[0])
+		_, err := sim.PartitionFor(aliceUrl).Executor.ProcessSignature(batch, delivery, delivery.Signatures[0])
 		require.NoError(b, err)
 	}
 }
@@ -67,7 +67,7 @@ func BenchmarkBlockTimes(b *testing.B) {
 	aliceUrl := acctesting.AcmeLiteAddressTmPriv(alice)
 
 	// Start a block
-	x := sim.Subnet(sim.Subnets[1].Id)
+	x := sim.Partition(sim.Partitions[1].Id)
 	x.Executor.EnableTimers()
 	block := new(block.Block)
 	block.IsLeader = true
@@ -100,7 +100,7 @@ func BenchmarkBlockTimes(b *testing.B) {
 
 	dataSetLog := new(logging.DataSetLog)
 
-	dataSetLog.SetProcessName(x.Subnet.Id)
+	dataSetLog.SetProcessName(x.Partition.Id)
 
 	analysisDir := config.MakeAbsolute(b.TempDir(), "analysis")
 	defer os.RemoveAll(analysisDir)
