@@ -77,8 +77,8 @@ func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][2]*config
 		mkcfg = config.Default
 	}
 
-	netConfig := config.Network{Id: network.Id, Subnets: make([]config.Subnet, 1)}
-	dnConfig := config.Subnet{
+	netConfig := config.Network{Id: network.Id, Partitions: make([]config.Partition, 1)}
+	dnConfig := config.Partition{
 		Id:       protocol.Directory,
 		Type:     config.Directory,
 		BasePort: int64(network.Bvns[0].Nodes[0].BasePort), // TODO This is not great
@@ -87,7 +87,7 @@ func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][2]*config
 	var i int
 	for _, bvn := range network.Bvns {
 		var bvnConfigs [][2]*config.Config
-		bvnConfig := config.Subnet{
+		bvnConfig := config.Partition{
 			Id:       bvn.Id,
 			Type:     config.BlockValidator,
 			BasePort: int64(bvn.Nodes[0].BasePort) + int64(config.PortOffsetBlockValidator), // TODO This is not great
@@ -131,9 +131,9 @@ func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][2]*config
 			bvnConfigs = append(bvnConfigs, [2]*config.Config{dnn, bvnn})
 		}
 		allConfigs = append(allConfigs, bvnConfigs)
-		netConfig.Subnets = append(netConfig.Subnets, bvnConfig)
+		netConfig.Partitions = append(netConfig.Partitions, bvnConfig)
 	}
-	netConfig.Subnets[0] = dnConfig
+	netConfig.Partitions[0] = dnConfig
 
 	for _, configs := range allConfigs {
 		for _, configs := range configs {
@@ -159,9 +159,9 @@ func ConfigureNodePorts(node *NodeInit, cfg *config.Config, offset config.PortOf
 func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time time.Time, logger log.Logger, factomAddressesFile string) (map[string]*tmtypes.GenesisDoc, error) {
 	docs := map[string]*tmtypes.GenesisDoc{}
 	var operators [][]byte
-	var subnets []protocol.SubnetDefinition
-	subnets = append(subnets, protocol.SubnetDefinition{
-		SubnetID: protocol.Directory,
+	var partitions []protocol.PartitionDefinition
+	partitions = append(partitions, protocol.PartitionDefinition{
+		PartitionID: protocol.Directory,
 	})
 
 	var dnValidators [][]byte
@@ -197,8 +197,8 @@ func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time tim
 			}
 		}
 
-		subnets = append(subnets, protocol.SubnetDefinition{
-			SubnetID:      bvn.Id,
+		partitions = append(partitions, protocol.PartitionDefinition{
+			PartitionID:   bvn.Id,
 			ValidatorKeys: bvnValidators,
 		})
 		docs[bvn.Id] = &tmtypes.GenesisDoc{
@@ -210,7 +210,7 @@ func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time tim
 		}
 	}
 
-	subnets[0].ValidatorKeys = dnValidators
+	partitions[0].ValidatorKeys = dnValidators
 	docs[protocol.Directory] = &tmtypes.GenesisDoc{
 		ChainID:         protocol.Directory,
 		GenesisTime:     time,
@@ -221,7 +221,7 @@ func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time tim
 
 	globals.Network = &protocol.NetworkDefinition{
 		NetworkName: network.Id,
-		Subnets:     subnets,
+		Partitions:  partitions,
 	}
 
 	for id := range docs {
@@ -231,10 +231,10 @@ func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time tim
 		}
 		store := memory.New(logger.With("module", "storage"))
 		bs, err := genesis.Init(store, genesis.InitOpts{
-			SubnetId:            id,
+			PartitionId:         id,
 			NetworkType:         netType,
 			GenesisTime:         time,
-			Logger:              logger.With("subnet", id),
+			Logger:              logger.With("partition", id),
 			GenesisGlobals:      globals,
 			OperatorKeys:        operators,
 			FactomAddressesFile: factomAddressesFile,

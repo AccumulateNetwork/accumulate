@@ -12,16 +12,16 @@ NetworkConfigResponse:
       type: config.Network
       marshal-as: reference
 
-SubnetListRequest:
+PartitionListRequest:
   non-binary: true
   fields:
     - name: Network
       type: string
 
-SubnetListResponse:
+PartitionListResponse:
   non-binary: true
   fields:
-    - name: Subnets
+    - name: Partitions
       type: string
       repeatable: true
 
@@ -30,7 +30,7 @@ SeedListRequest:
   fields:
     - name: Network
       type: string
-    - name: Subnet
+    - name: Partition
       type: string
     - name: Count
       type: int
@@ -47,7 +47,7 @@ SeedCountRequest:
   fields:
     - name: Network
       type: string
-    - name: Subnet
+    - name: Partition
       type: string
 
 SeedCountResponse:

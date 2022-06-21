@@ -114,13 +114,13 @@ func NewTestBVNN(t *testing.T) (string, crypto.PrivKey) {
 	acctesting.SkipPlatformCI(t, "darwin", "requires setting up localhost aliases")
 
 	// Start
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, true)
-	acctesting.RunTestNet(t, subnets, daemons)
+	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, true)
+	acctesting.RunTestNet(t, partitions, daemons)
 
 	time.Sleep(time.Second)
-	c := daemons[subnets[1]][0].Config
+	c := daemons[partitions[1]][0].Config
 
-	return c.Accumulate.API.ListenAddress, daemons[subnets[0]][0].Key()
+	return c.Accumulate.API.ListenAddress, daemons[partitions[0]][0].Key()
 }
 
 func (c *testCmd) initalize(t *testing.T) {

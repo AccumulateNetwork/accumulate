@@ -47,7 +47,7 @@ func (x DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 		st.State.MakeMajorBlockTime = body.MakeMajorBlockTime
 	}
 
-	// Add the anchor to the chain - use the subnet name as the chain name
+	// Add the anchor to the chain - use the partition name as the chain name
 	err := st.AddChainEntry(st.OriginUrl, protocol.RootAnchorChain(protocol.Directory), protocol.ChainTypeAnchor, body.RootChainAnchor[:], body.RootChainIndex, body.MinorBlockIndex)
 	if err != nil {
 		return nil, err

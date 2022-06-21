@@ -4,9 +4,10 @@ Describe:
   - name: NetworkType
     toml: type
     type: NetworkType
-    marshal-as: enum 
-  - name: SubnetId
-    toml: subnet-id
+    marshal-as: enum
+  - name: PartitionId
+    alternative: SubnetId
+    toml: partition-id
     type: string
   - name: LocalAddress
     toml: local-address
@@ -22,17 +23,18 @@ Network:
     - name: Id
       toml: id
       type: string
-    - name: Subnets
-      toml: subnets
-      type: Subnet
+    - name: Partitions
+      alternative: Subnets
+      toml: partitions
+      type: Partition
       marshal-as: reference
       repeatable: true
 
-Subnet:
+Partition:
   non-binary: true
   fields:
     - name: Id
-      toml: id 
+      toml: id
       type: string
     - name: Type
       toml: type
