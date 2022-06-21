@@ -9,14 +9,14 @@ type ValidatorUpdate int
 const ValidatorUpdateAdd = 1
 const ValidatorUpdateRemove = 2
 
-func (g *GlobalValues) DiffValidators(h *GlobalValues, subnetID string) (map[[32]byte]ValidatorUpdate, error) {
+func (g *GlobalValues) DiffValidators(h *GlobalValues, partitionID string) (map[[32]byte]ValidatorUpdate, error) {
 	updates := map[[32]byte]ValidatorUpdate{}
 
 	// Mark the old keys for deletion
 	if g != nil {
-		old := g.Network.Subnet(subnetID)
+		old := g.Network.Partition(partitionID)
 		if old == nil {
-			return nil, fmt.Errorf("subnet %s is missing from network definition", subnetID)
+			return nil, fmt.Errorf("partition %s is missing from network definition", partitionID)
 		}
 
 		for _, key := range old.ValidatorKeys {
@@ -29,9 +29,9 @@ func (g *GlobalValues) DiffValidators(h *GlobalValues, subnetID string) (map[[32
 	}
 
 	// Process the new keys
-	new := h.Network.Subnet(subnetID)
+	new := h.Network.Partition(partitionID)
 	if new == nil {
-		return nil, fmt.Errorf("subnet %s is missing from network definition", subnetID)
+		return nil, fmt.Errorf("partition %s is missing from network definition", partitionID)
 	}
 
 	for _, key := range new.ValidatorKeys {

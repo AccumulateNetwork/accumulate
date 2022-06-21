@@ -15,26 +15,26 @@ func TestBuildRoutingTable(t *testing.T) {
 		Expect []protocol.Route
 	}{
 		{2, []protocol.Route{
-			{Length: 1, Value: 0b0, Subnet: "A"},
-			{Length: 1, Value: 0b1, Subnet: "B"},
+			{Length: 1, Value: 0b0, Partition: "A"},
+			{Length: 1, Value: 0b1, Partition: "B"},
 		}},
 		{3, []protocol.Route{
-			{Length: 1, Value: 0b0, Subnet: "A"},
-			{Length: 2, Value: 0b10, Subnet: "B"},
-			{Length: 2, Value: 0b11, Subnet: "C"},
+			{Length: 1, Value: 0b0, Partition: "A"},
+			{Length: 2, Value: 0b10, Partition: "B"},
+			{Length: 2, Value: 0b11, Partition: "C"},
 		}},
 		{4, []protocol.Route{
-			{Length: 2, Value: 0b00, Subnet: "A"},
-			{Length: 2, Value: 0b01, Subnet: "B"},
-			{Length: 2, Value: 0b10, Subnet: "C"},
-			{Length: 2, Value: 0b11, Subnet: "D"},
+			{Length: 2, Value: 0b00, Partition: "A"},
+			{Length: 2, Value: 0b01, Partition: "B"},
+			{Length: 2, Value: 0b10, Partition: "C"},
+			{Length: 2, Value: 0b11, Partition: "D"},
 		}},
 		{5, []protocol.Route{
-			{Length: 2, Value: 0b00, Subnet: "A"},
-			{Length: 2, Value: 0b01, Subnet: "B"},
-			{Length: 2, Value: 0b10, Subnet: "C"},
-			{Length: 3, Value: 0b110, Subnet: "D"},
-			{Length: 3, Value: 0b111, Subnet: "E"},
+			{Length: 2, Value: 0b00, Partition: "A"},
+			{Length: 2, Value: 0b01, Partition: "B"},
+			{Length: 2, Value: 0b10, Partition: "C"},
+			{Length: 3, Value: 0b110, Partition: "D"},
+			{Length: 3, Value: 0b111, Partition: "E"},
 		}},
 	}
 

@@ -35,7 +35,7 @@ func TestDatabaseQueryLayer_QueryState(t *testing.T) {
 	sim.WaitForTransactionFlow(delivered, env.Transaction[0].GetHash())
 
 	// Get a proof of the account state
-	x := sim.SubnetFor(aliceUrl)
+	x := sim.PartitionFor(aliceUrl)
 	dbql := &api.DatabaseQueryModule{Network: &x.Executor.Describe, DB: x.Database}
 	rec, err := dbql.QueryState(context.Background(), aliceUrl, nil, api.QueryStateOptions{Prove: true})
 	require.NoError(t, err)

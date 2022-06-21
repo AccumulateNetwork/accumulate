@@ -35,7 +35,7 @@ func TestUpdateValidators(t *testing.T) {
 	sim := simulator.New(t, 3)
 	sim.InitFromGenesisWith(g)
 
-	dn := sim.Subnet(Directory)
+	dn := sim.Partition(Directory)
 	initVal := make([][]byte, len(dn.Validators))
 	copy(initVal, dn.Validators)
 	operators := dn.Executor.Describe.OperatorsPage()
@@ -59,13 +59,13 @@ func TestUpdateValidators(t *testing.T) {
 	signer2 := new(signing.Builder).
 		SetType(SignatureTypeED25519).
 		UseSimpleHash().
-		SetPrivateKey(sim.Subnet(sim.Subnets[1].Id).Executor.Key).
+		SetPrivateKey(sim.Partition(sim.Partitions[1].Id).Executor.Key).
 		SetUrl(operators).
 		SetVersion(page.Version)
 	signer3 := new(signing.Builder).
 		SetType(SignatureTypeED25519).
 		UseSimpleHash().
-		SetPrivateKey(sim.Subnet(sim.Subnets[2].Id).Executor.Key).
+		SetPrivateKey(sim.Partition(sim.Partitions[2].Id).Executor.Key).
 		SetUrl(operators).
 		SetVersion(page.Version)
 
@@ -153,8 +153,8 @@ func TestUpdateOperators(t *testing.T) {
 	g.Globals.OperatorAcceptThreshold.Set(1, 100) // Use a small number so M = 1
 	sim := simulator.New(t, 3)
 	sim.InitFromGenesisWith(g)
-	dn := sim.Subnet(Directory)
-	bvn0 := sim.Subnet(sim.Subnets[1].Id)
+	dn := sim.Partition(Directory)
+	bvn0 := sim.Partition(sim.Partitions[1].Id)
 
 	page := simulator.GetAccount[*KeyPage](sim, bvn0.Executor.Describe.OperatorsPage())
 	initValCount := len(page.Keys)

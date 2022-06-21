@@ -74,8 +74,8 @@ func (c *ChainUpdates) DidUpdateChain(update indexing.ChainUpdate) {
 // DidAddChainEntry records a chain update in the block state.
 func (c *ChainUpdates) DidAddChainEntry(batch *database.Batch, u *url.URL, name string, typ protocol.ChainType, entry []byte, index, sourceIndex, sourceBlock uint64) error {
 	if name == protocol.MainChain && typ == protocol.ChainTypeTransaction {
-		subnet, ok := protocol.ParseSubnetUrl(u)
-		if ok && protocol.SubnetUrl(subnet).JoinPath(protocol.Synthetic).Equal(u) {
+		partition, ok := protocol.ParsePartitionUrl(u)
+		if ok && protocol.PartitionUrl(partition).JoinPath(protocol.Synthetic).Equal(u) {
 			err := indexing.BlockState(batch, u).DidProduceSynthTxn(&indexing.BlockStateSynthTxnEntry{
 				Transaction: entry,
 				ChainEntry:  index,

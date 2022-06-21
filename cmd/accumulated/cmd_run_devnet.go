@@ -98,7 +98,7 @@ func runDevNet(*cobra.Command, []string) {
 			filepath.Join(flagMain.WorkDir, name, "bvnn"),
 			func(c *config.Config) (io.Writer, error) {
 				return logWriter(c.LogFormat, func(w io.Writer, format string, color bool) io.Writer {
-					return newNodeWriter(w, format, strings.ToLower(c.Accumulate.SubnetId), node, color)
+					return newNodeWriter(w, format, strings.ToLower(c.Accumulate.PartitionId), node, color)
 				})
 			},
 		)
@@ -185,32 +185,32 @@ func getNodeDirs(dir string) []int {
 
 var nodeIdLen int
 
-var subnetColor = map[string]*color.Color{}
+var partitionColor = map[string]*color.Color{}
 
-func newNodeWriter(w io.Writer, format, subnet string, node int, color bool) io.Writer {
+func newNodeWriter(w io.Writer, format, partition string, node int, color bool) io.Writer {
 	switch format {
 	case log.LogFormatPlain, log.LogFormatText:
-		id := fmt.Sprintf("%s.%d", subnet, node)
+		id := fmt.Sprintf("%s.%d", partition, node)
 		s := fmt.Sprintf("[%s]", id) + strings.Repeat(" ", nodeIdLen+len("bvnxx")-len(id)+1)
 		if !color {
 			return &plainNodeWriter{s, w}
 		}
 
-		c, ok := subnetColor[subnet]
+		c, ok := partitionColor[partition]
 		if !ok {
 			c = fallbackColor
 			if len(colors) > 0 {
 				c = colors[0]
 				colors = colors[1:]
 			}
-			subnetColor[subnet] = c
+			partitionColor[partition] = c
 		}
 
 		s = c.Sprint(s)
 		return &plainNodeWriter{s, w}
 
 	case log.LogFormatJSON:
-		s := fmt.Sprintf(`"subnet":"%s","node":%d`, subnet, node)
+		s := fmt.Sprintf(`"partition":"%s","node":%d`, partition, node)
 		return &jsonNodeWriter{s, w}
 
 	default:
