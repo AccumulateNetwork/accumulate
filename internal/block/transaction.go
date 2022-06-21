@@ -30,25 +30,20 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Del
 	// Load the principal
 	principal, err := batch.Account(delivery.Transaction.Header.Principal).GetState()
 	switch {
-	case err == nil:
+	case err == nil, errors.Is(err, storage.ErrNotFound):
 		// Ok
-	case !errors.Is(err, storage.ErrNotFound):
-		err = errors.Format(errors.StatusUnknown, "load principal: %w", err)
-		return x.recordFailedTransaction(batch, delivery, err)
-	case !x.transactionAllowsMissingPrincipal(delivery.Transaction):
+	default:
 		err = errors.Format(errors.StatusUnknown, "load principal: %w", err)
 		return x.recordFailedTransaction(batch, delivery, err)
 	}
 
-	if !delivery.WasProducedInternally() {
-		// Check if the transaction is ready to be executed
-		ready, err := x.TransactionIsReady(batch, delivery.Transaction, status)
-		if err != nil {
-			return x.recordFailedTransaction(batch, delivery, err)
-		}
-		if !ready {
-			return x.recordPendingTransaction(&x.Describe, batch, delivery)
-		}
+	// Check if the transaction is ready to be executed
+	ready, err := x.TransactionIsReady(batch, delivery, status, principal)
+	if err != nil {
+		return x.recordFailedTransaction(batch, delivery, err)
+	}
+	if !ready {
+		return x.recordPendingTransaction(&x.Describe, batch, delivery)
 	}
 
 	if delivery.Transaction.Body.Type().IsSynthetic() {
@@ -101,60 +96,49 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Del
 	return x.recordSuccessfulTransaction(batch, state, delivery, result)
 }
 
-func (x *Executor) transactionAllowsMissingPrincipal(transaction *protocol.Transaction) bool {
-	val, ok := getValidator[chain.PrincipalValidator](x, transaction.Body.Type())
-	if ok {
-		allow, fallback := val.AllowMissingPrincipal(transaction)
-		if !fallback {
-			return allow
+func (x *Executor) TransactionIsReady(batch *database.Batch, delivery *chain.Delivery, status *protocol.TransactionStatus, principal protocol.Account) (bool, error) {
+	var ready bool
+	var err error
+	typ := delivery.Transaction.Body.Type()
+	switch {
+	case typ.IsUser():
+		ready, err = x.userTransactionIsReady(batch, delivery, status, principal)
+	case typ.IsSynthetic():
+		ready, err = x.synthTransactionIsReady(batch, delivery, status, principal)
+	default:
+		if principal == nil {
+			val, ok := getValidator[chain.PrincipalValidator](x, delivery.Transaction.Body.Type())
+			if !ok || !val.AllowMissingPrincipal(delivery.Transaction) {
+				return false, errors.NotFound("missing principal: %v not found", delivery.Transaction.Header.Principal)
+			}
+		}
+		return true, nil
+	}
+	return ready, errors.Wrap(errors.StatusUnknown, err)
+}
+
+func (x *Executor) userTransactionIsReady(batch *database.Batch, delivery *chain.Delivery, status *protocol.TransactionStatus, principal protocol.Account) (bool, error) {
+	// If the principal is missing, check if that's ok
+	if principal == nil {
+		val, ok := getValidator[chain.PrincipalValidator](x, delivery.Transaction.Body.Type())
+		if !ok || !val.AllowMissingPrincipal(delivery.Transaction) {
+			return false, errors.NotFound("missing principal: %v not found", delivery.Transaction.Header.Principal)
 		}
 	}
 
-	// TODO Replace with AllowMissingPrincipal
-	switch body := transaction.Body.(type) {
-	case *protocol.WriteData,
-		*protocol.SyntheticWriteData:
-		// WriteData and SyntheticWriteData can create a lite data account
-		_, err := protocol.ParseLiteDataAddress(transaction.Header.Principal)
-		return err == nil
-
-	case *protocol.SyntheticDepositTokens:
-		// SyntheticDepositTokens can create a lite token account
-		key, _, _ := protocol.ParseLiteTokenAddress(transaction.Header.Principal)
-		return key != nil
-
-	case *protocol.SyntheticCreateIdentity:
-		// SyntheticCreateChain can create accounts
-		return true
-
-	case *protocol.SyntheticForwardTransaction:
-		return x.transactionAllowsMissingPrincipal(body.Transaction)
-
-	default:
-		return false
-	}
-}
-
-func (x *Executor) TransactionIsReady(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (bool, error) {
-	switch {
-	case transaction.Body.Type().IsUser():
-		return x.userTransactionIsReady(batch, transaction, status)
-	case transaction.Body.Type().IsSynthetic():
-		return x.synthTransactionIsReady(batch, transaction, status)
-	default:
+	// Internally produced transactions are always executed immediately
+	if delivery.WasProducedInternally() {
 		return true, nil
 	}
-}
 
-func (x *Executor) userTransactionIsReady(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (bool, error) {
 	// UpdateKey transactions are always M=1 and always require a signature from
 	// the initiator
-	if transaction.Body.Type() == protocol.TransactionTypeUpdateKey {
+	if delivery.Transaction.Body.Type() == protocol.TransactionTypeUpdateKey {
 		if status.Initiator == nil {
 			return false, fmt.Errorf("missing initiator")
 		}
 
-		initSigs, err := batch.Transaction(transaction.GetHash()).ReadSignatures(status.Initiator)
+		initSigs, err := batch.Transaction(delivery.Transaction.GetHash()).ReadSignatures(status.Initiator)
 		if err != nil {
 			return false, fmt.Errorf("load initiator signatures: %w", err)
 		}
@@ -167,9 +151,9 @@ func (x *Executor) userTransactionIsReady(batch *database.Batch, transaction *pr
 	}
 
 	// Delegate to the transaction executor?
-	val, ok := getValidator[chain.SignerValidator](x, transaction.Body.Type())
+	val, ok := getValidator[chain.SignerValidator](x, delivery.Transaction.Body.Type())
 	if ok {
-		ready, fallback, err := val.TransactionIsReady(x, batch, transaction, status)
+		ready, fallback, err := val.TransactionIsReady(x, batch, delivery.Transaction, status)
 		if err != nil {
 			return false, errors.Wrap(errors.StatusUnknown, err)
 		}
@@ -178,20 +162,19 @@ func (x *Executor) userTransactionIsReady(batch *database.Batch, transaction *pr
 		}
 	}
 
-	// Load the principal
-	principal, err := batch.Account(transaction.Header.Principal).GetState()
-	if err != nil {
-		return false, errors.Format(errors.StatusUnknown, "load principal: %w", err)
+	// At this point we cannot continue without the principal
+	if principal == nil {
+		return false, errors.NotFound("missing principal: %v not found", delivery.Transaction.Header.Principal)
 	}
 
 	// Get the principal's account auth
 	auth, err := x.GetAccountAuthoritySet(batch, principal)
 	if err != nil {
-		return false, fmt.Errorf("unable to load authority of %v: %w", transaction.Header.Principal, err)
+		return false, fmt.Errorf("unable to load authority of %v: %w", delivery.Transaction.Header.Principal, err)
 	}
 
 	// For each authority
-	authRequired := transaction.Body.Type().RequireAuthorization()
+	authRequired := delivery.Transaction.Body.Type().RequireAuthorization()
 	for _, entry := range auth.Authorities {
 		// Do not check signers for disabled authorities
 		if entry.Disabled && !authRequired {
@@ -199,7 +182,7 @@ func (x *Executor) userTransactionIsReady(batch *database.Batch, transaction *pr
 		}
 
 		// Check if any signer has reached its threshold
-		ok, err := x.AuthorityIsSatisfied(batch, transaction, status, entry.Url)
+		ok, err := x.AuthorityIsSatisfied(batch, delivery.Transaction, status, entry.Url)
 		if err != nil {
 			return false, errors.Wrap(errors.StatusUnknown, err)
 		}
@@ -249,20 +232,19 @@ func (x *Executor) SignerIsSatisfied(batch *database.Batch, transaction *protoco
 	return false, nil
 }
 
-func (x *Executor) synthTransactionIsReady(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (bool, error) {
-	// Anchors cannot be pending
-	if transaction.Body.Type() == protocol.TransactionTypeDirectoryAnchor || transaction.Body.Type() == protocol.TransactionTypeBlockValidatorAnchor {
-		return true, nil
-	}
+func (x *Executor) synthTransactionIsReady(batch *database.Batch, delivery *chain.Delivery, status *protocol.TransactionStatus, principal protocol.Account) (bool, error) {
+	// Do not check the principal until the transaction is ready (see below). Do
+	// not delegate "is ready?" to the transaction executor - synthetic
+	// transactions _must_ be proven before being executed.
 
 	// Load all of the signatures
-	signatures, err := GetAllSignatures(batch, batch.Transaction(transaction.GetHash()), status, transaction.Header.Initiator[:])
+	signatures, err := GetAllSignatures(batch, batch.Transaction(delivery.Transaction.GetHash()), status, delivery.Transaction.Header.Initiator[:])
 	if err != nil {
 		return false, errors.Wrap(errors.StatusUnknown, err)
 	}
 
 	// Build a receipt from the signatures
-	receipt, sourceNet, err := assembleSynthReceipt(*(*[32]byte)(transaction.GetHash()), signatures)
+	receipt, sourceNet, err := assembleSynthReceipt(*(*[32]byte)(delivery.Transaction.GetHash()), signatures)
 	if err != nil {
 		return false, errors.Wrap(errors.StatusUnknown, err)
 	}
@@ -316,15 +298,27 @@ func (x *Executor) synthTransactionIsReady(batch *database.Batch, transaction *p
 	partitionLedger := ledger.Partition(synthSig.SourceNetwork)
 	if partitionLedger.Delivered+1 != synthSig.SequenceNumber {
 		x.logger.Info("Out of sequence synthetic transaction",
-			"hash", logging.AsHex(transaction.GetHash()).Slice(0, 4),
+			"hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4),
 			"seq-got", synthSig.SequenceNumber,
 			"seq-want", partitionLedger.Delivered+1,
 			"source", synthSig.SourceNetwork,
 			"destination", synthSig.DestinationNetwork,
-			"type", transaction.Body.Type(),
-			"hash", logging.AsHex(transaction.GetHash()).Slice(0, 4),
+			"type", delivery.Transaction.Body.Type(),
+			"hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4),
 		)
 		return false, nil
+	}
+
+	if principal != nil {
+		return true, nil
+	}
+
+	// If the principal is required but missing, do not return an error unless
+	// the transaction is ready to execute.
+	// https://accumulate.atlassian.net/browse/AC-1704
+	val, ok := getValidator[chain.PrincipalValidator](x, delivery.Transaction.Body.Type())
+	if !ok || !val.AllowMissingPrincipal(delivery.Transaction) {
+		return false, errors.NotFound("missing principal: %v not found", delivery.Transaction.Header.Principal)
 	}
 
 	return true, nil

@@ -10,10 +10,17 @@ import (
 
 type SyntheticDepositTokens struct{}
 
+var _ PrincipalValidator = (*SyntheticDepositTokens)(nil)
 var _ TransactionExecutorCleanup = (*SyntheticDepositTokens)(nil)
 
 func (SyntheticDepositTokens) Type() protocol.TransactionType {
 	return protocol.TransactionTypeSyntheticDepositTokens
+}
+
+func (SyntheticDepositTokens) AllowMissingPrincipal(transaction *protocol.Transaction) bool {
+	// SyntheticDepositTokens can create a lite token account
+	key, _, _ := protocol.ParseLiteTokenAddress(transaction.Header.Principal)
+	return key != nil
 }
 
 func (SyntheticDepositTokens) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {

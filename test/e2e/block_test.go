@@ -26,6 +26,10 @@ func delivered(status *TransactionStatus) bool {
 	return status.Delivered
 }
 
+func received(status *TransactionStatus) bool {
+	return status.Pending || status.Delivered
+}
+
 func updateAccount[T Account](sim *simulator.Simulator, accountUrl *url.URL, fn func(account T)) {
 	sim.UpdateAccount(accountUrl, func(account Account) {
 		var typed T
@@ -149,7 +153,7 @@ func TestCreateRootIdentity(t *testing.T) {
 
 	_, txn := sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
 		acctesting.NewTransaction().
-			WithPrincipal(liteUrl.RootIdentity()).
+			WithPrincipal(alice).
 			WithTimestampVar(&timestamp).
 			WithSigner(liteUrl.RootIdentity(), 1).
 			WithBody(&CreateIdentity{
@@ -161,9 +165,8 @@ func TestCreateRootIdentity(t *testing.T) {
 			Build(),
 	)...)
 
-	// There should be a synthetic transaction
-	require.Len(t, txn, 2)
-	require.IsType(t, (*SyntheticCreateIdentity)(nil), txn[1].Body)
+	// There should not be a synthetic transaction
+	require.Len(t, txn, 1)
 
 	// Verify the account is created
 	_ = sim.PartitionFor(alice).Database.View(func(batch *database.Batch) error {
