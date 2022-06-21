@@ -156,6 +156,22 @@ func (v *Partition) Equal(u *Partition) bool {
 	return true
 }
 
+func (v *Describe) MarshalJSON() ([]byte, error) {
+	u := struct {
+		NetworkType  NetworkType `json:"networkType,omitempty"`
+		PartitionId  string      `json:"partitionId,omitempty"`
+		SubnetId     string      `json:"subnetId,omitempty"`
+		LocalAddress string      `json:"localAddress,omitempty"`
+		Network      Network     `json:"network,omitempty"`
+	}{}
+	u.NetworkType = v.NetworkType
+	u.PartitionId = v.PartitionId
+	u.SubnetId = v.PartitionId
+	u.LocalAddress = v.LocalAddress
+	u.Network = v.Network
+	return json.Marshal(&u)
+}
+
 func (v *Network) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Id         string                       `json:"id,omitempty"`
@@ -180,6 +196,33 @@ func (v *Partition) MarshalJSON() ([]byte, error) {
 	u.BasePort = v.BasePort
 	u.Nodes = v.Nodes
 	return json.Marshal(&u)
+}
+
+func (v *Describe) UnmarshalJSON(data []byte) error {
+	u := struct {
+		NetworkType  NetworkType `json:"networkType,omitempty"`
+		PartitionId  string      `json:"partitionId,omitempty"`
+		SubnetId     string      `json:"subnetId,omitempty"`
+		LocalAddress string      `json:"localAddress,omitempty"`
+		Network      Network     `json:"network,omitempty"`
+	}{}
+	u.NetworkType = v.NetworkType
+	u.PartitionId = v.PartitionId
+	u.SubnetId = v.PartitionId
+	u.LocalAddress = v.LocalAddress
+	u.Network = v.Network
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.NetworkType = u.NetworkType
+	if !(u.PartitionId == "") {
+		v.PartitionId = u.PartitionId
+	} else {
+		v.PartitionId = u.SubnetId
+	}
+	v.LocalAddress = u.LocalAddress
+	v.Network = u.Network
+	return nil
 }
 
 func (v *Network) UnmarshalJSON(data []byte) error {

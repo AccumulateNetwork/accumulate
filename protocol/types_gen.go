@@ -13578,9 +13578,11 @@ func (v *NetworkDefinition) MarshalJSON() ([]byte, error) {
 	u := struct {
 		NetworkName string                                 `json:"networkName,omitempty"`
 		Partitions  encoding.JsonList[PartitionDefinition] `json:"partitions,omitempty"`
+		Subnets     encoding.JsonList[PartitionDefinition] `json:"subnets,omitempty"`
 	}{}
 	u.NetworkName = v.NetworkName
 	u.Partitions = v.Partitions
+	u.Subnets = v.Partitions
 	return json.Marshal(&u)
 }
 
@@ -15499,14 +15501,20 @@ func (v *NetworkDefinition) UnmarshalJSON(data []byte) error {
 	u := struct {
 		NetworkName string                                 `json:"networkName,omitempty"`
 		Partitions  encoding.JsonList[PartitionDefinition] `json:"partitions,omitempty"`
+		Subnets     encoding.JsonList[PartitionDefinition] `json:"subnets,omitempty"`
 	}{}
 	u.NetworkName = v.NetworkName
 	u.Partitions = v.Partitions
+	u.Subnets = v.Partitions
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.NetworkName = u.NetworkName
-	v.Partitions = u.Partitions
+	if !(len(u.Partitions) == 0) {
+		v.Partitions = u.Partitions
+	} else {
+		v.Partitions = u.Subnets
+	}
 	return nil
 }
 

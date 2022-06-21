@@ -163,6 +163,7 @@ NetworkDefinition:
     - name: NetworkName
       type: string
     - name: Partitions
+      alternative: Subnets
       type: PartitionDefinition
       repeatable: true
       marshal-as: reference

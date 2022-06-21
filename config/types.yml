@@ -6,6 +6,7 @@ Describe:
     type: NetworkType
     marshal-as: enum
   - name: PartitionId
+    alternative: SubnetId
     toml: partition-id
     type: string
   - name: LocalAddress
