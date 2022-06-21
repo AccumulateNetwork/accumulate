@@ -70,7 +70,7 @@ func DefaultConfig(networkName string, net config.NetworkType, node config.NodeT
 	return cfg
 }
 
-func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withFactomAddress bool) ([]string, map[string][]*accumulated.Daemon) {
+func CreateTestNet(t testing.TB, numBvns, numValidators, numFollowers int, withFactomAddress bool) ([]string, map[string][]*accumulated.Daemon) {
 	tempDir := t.TempDir()
 
 	netInit := accumulated.NewDevnet(accumulated.DevnetOptions{
@@ -147,7 +147,7 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withF
 	return partitionNames, daemons
 }
 
-func RunTestNet(t *testing.T, partitions []string, daemons map[string][]*accumulated.Daemon) {
+func RunTestNet(t testing.TB, partitions []string, daemons map[string][]*accumulated.Daemon) {
 	t.Helper()
 	for _, netName := range partitions {
 		for _, daemon := range daemons[netName] {
