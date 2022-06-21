@@ -55,6 +55,7 @@ TransactionStatus:
     - { name: Delivered, type: bool, virtual: true, non-binary: true }
     - { name: Pending, type: bool, virtual: true, non-binary: true }
     - { name: Failed, type: bool, virtual: true, non-binary: true }
+    - { name: CodeNum, type: uint, virtual: true, non-binary: true }
     - name: Error
       type: errors2.Error
       marshal-as: reference

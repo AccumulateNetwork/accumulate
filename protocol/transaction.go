@@ -13,6 +13,7 @@ func (s *TransactionStatus) Delivered() bool { return s.Code == errors.StatusDel
 func (s *TransactionStatus) Remote() bool    { return s.Code == errors.StatusRemote }
 func (s *TransactionStatus) Pending() bool   { return s.Code == errors.StatusPending }
 func (s *TransactionStatus) Failed() bool    { return !s.Code.Success() }
+func (s *TransactionStatus) CodeNum() uint64 { return uint64(s.Code) }
 
 // Set sets the status code and the error.
 func (s *TransactionStatus) Set(err error) {

@@ -14341,6 +14341,7 @@ func (v *TransactionStatus) MarshalJSON() ([]byte, error) {
 		Delivered bool                                          `json:"delivered,omitempty"`
 		Pending   bool                                          `json:"pending,omitempty"`
 		Failed    bool                                          `json:"failed,omitempty"`
+		CodeNum   uint64                                        `json:"codeNum,omitempty"`
 		Error     *errors2.Error                                `json:"error,omitempty"`
 		Result    encoding.JsonUnmarshalWith[TransactionResult] `json:"result,omitempty"`
 		Initiator *url.URL                                      `json:"initiator,omitempty"`
@@ -14352,6 +14353,7 @@ func (v *TransactionStatus) MarshalJSON() ([]byte, error) {
 	u.Delivered = v.Delivered()
 	u.Pending = v.Pending()
 	u.Failed = v.Failed()
+	u.CodeNum = v.CodeNum()
 	u.Error = v.Error
 	u.Result = encoding.JsonUnmarshalWith[TransactionResult]{Value: v.Result, Func: UnmarshalTransactionResultJSON}
 	u.Initiator = v.Initiator
@@ -16661,6 +16663,7 @@ func (v *TransactionStatus) UnmarshalJSON(data []byte) error {
 		Delivered bool                                          `json:"delivered,omitempty"`
 		Pending   bool                                          `json:"pending,omitempty"`
 		Failed    bool                                          `json:"failed,omitempty"`
+		CodeNum   uint64                                        `json:"codeNum,omitempty"`
 		Error     *errors2.Error                                `json:"error,omitempty"`
 		Result    encoding.JsonUnmarshalWith[TransactionResult] `json:"result,omitempty"`
 		Initiator *url.URL                                      `json:"initiator,omitempty"`
@@ -16672,6 +16675,7 @@ func (v *TransactionStatus) UnmarshalJSON(data []byte) error {
 	u.Delivered = v.Delivered()
 	u.Pending = v.Pending()
 	u.Failed = v.Failed()
+	u.CodeNum = v.CodeNum()
 	u.Error = v.Error
 	u.Result = encoding.JsonUnmarshalWith[TransactionResult]{Value: v.Result, Func: UnmarshalTransactionResultJSON}
 	u.Initiator = v.Initiator
