@@ -14,13 +14,15 @@ var cmdRunDual = &cobra.Command{
 }
 
 var flagRunDual = struct {
-	Truncate bool
+	Truncate         bool
+	EnableTimingLogs bool
 }{}
 
 func init() {
 	cmdMain.AddCommand(cmdRunDual)
 
 	cmdRunDual.PersistentFlags().BoolVar(&flagRunDual.Truncate, "truncate", false, "Truncate Badger if necessary")
+	cmdRunDual.PersistentFlags().BoolVar(&flagRunDual.EnableTimingLogs, "enable-timing-logs", false, "Enable core timing analysis logging")
 
 	cmdRunDual.PersistentPreRun = func(*cobra.Command, []string) {
 		badger.TruncateBadger = flagRunDual.Truncate
@@ -33,6 +35,7 @@ func runDualNode(cmd *cobra.Command, args []string) {
 	}, func(cmd *cobra.Command) (string, error) {
 		return args[1], nil
 	})
+	flagRun.EnableTimingLogs = flagRunDual.EnableTimingLogs
 	svc, err := service.New(prog, serviceConfig)
 	check(err)
 
