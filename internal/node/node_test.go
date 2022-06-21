@@ -17,17 +17,17 @@ func TestNodeLifecycle(t *testing.T) {
 	acctesting.SkipPlatformCI(t, "darwin", "requires setting up localhost aliases")
 
 	// Configure
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 
 	// Start
-	for _, netName := range subnets {
+	for _, netName := range partitions {
 		for _, daemon := range daemons[netName] {
 			require.NoError(t, daemon.Start())
 		}
 	}
 
 	// Stop
-	for _, netName := range subnets {
+	for _, netName := range partitions {
 		for _, daemon := range daemons[netName] {
 			assert.NoError(t, daemon.Stop())
 		}
@@ -51,7 +51,7 @@ func TestNodeLifecycle(t *testing.T) {
 			continue
 		}
 
-		rel, err := filepath.Rel(daemons[subnets[0]][0].Config.RootDir, file)
+		rel, err := filepath.Rel(daemons[partitions[0]][0].Config.RootDir, file)
 		require.NoError(t, err)
 
 		if strings.HasPrefix(rel, "../") {

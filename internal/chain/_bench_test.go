@@ -41,10 +41,10 @@ func BenchmarkExecuteSendTokens(b *testing.B) {
 			db := database.New(store, logger)
 
 			network := config.Network{
-				Type:          config.BlockValidator,
-				LocalSubnetID: "BVN0",
-				LocalAddress:  "http://0.0.bvn:12345",
-				Subnets: []config.Subnet{
+				Type:             config.BlockValidator,
+				LocalPartitionID: "BVN0",
+				LocalAddress:     "http://0.0.bvn:12345",
+				Partitions: []config.Partition{
 					{
 						ID:       protocol.Directory,
 						Type:     config.Directory,

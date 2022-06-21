@@ -25,7 +25,7 @@ func (q *queryDispatch) queryAll(query func(*queryDirect) (interface{}, error), 
 	doneCh := make(chan struct{})   // Completion channel
 	wg := new(sync.WaitGroup)       // Wait for completion
 
-	wg.Add(len(q.Describe.Network.Subnets)) //
+	wg.Add(len(q.Describe.Network.Partitions)) //
 
 	// Mark complete on return
 	defer close(doneCh)
@@ -43,12 +43,12 @@ func (q *queryDispatch) queryAll(query func(*queryDirect) (interface{}, error), 
 	}()
 
 	// Create a request for each client in a separate goroutine
-	for _, subnet := range q.Describe.Network.Subnets {
-		go func(subnetId string) {
+	for _, partition := range q.Describe.Network.Partitions {
+		go func(partitionId string) {
 			// Mark complete on return
 			defer wg.Done()
 
-			res, err := query(q.direct(subnetId))
+			res, err := query(q.direct(partitionId))
 			switch {
 			case err == nil:
 				select {
@@ -65,7 +65,7 @@ func (q *queryDispatch) queryAll(query func(*queryDirect) (interface{}, error), 
 					// A result or error has already been sent
 				}
 			}
-		}(subnet.Id)
+		}(partition.Id)
 	}
 
 	// Wait for an error or a result

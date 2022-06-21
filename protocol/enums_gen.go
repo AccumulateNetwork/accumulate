@@ -26,7 +26,7 @@ const AccountAuthOperationTypeRemoveAuthority AccountAuthOperationType = 4
 // AccountTypeUnknown represents an unknown account type.
 const AccountTypeUnknown AccountType = 0
 
-// AccountTypeAnchorLedger anchors the other subnets.
+// AccountTypeAnchorLedger anchors the other partitions.
 const AccountTypeAnchorLedger AccountType = 1
 
 // AccountTypeIdentity is an Identity account, aka an ADI.
@@ -263,7 +263,7 @@ const SignatureTypeSynthetic SignatureType = 5
 // SignatureTypeSet is used when forwarding multiple signatures.
 const SignatureTypeSet SignatureType = 6
 
-// SignatureTypeRemote is used when forwarding a signature from one subnet to another.
+// SignatureTypeRemote is used when forwarding a signature from one partition to another.
 const SignatureTypeRemote SignatureType = 7
 
 // SignatureTypeBTC represents an BTC signature.
@@ -359,7 +359,7 @@ const TransactionTypeSyntheticDepositCredits TransactionType = 52
 // TransactionTypeSyntheticBurnTokens returns tokens to a token issuer's pool of issuable tokens.
 const TransactionTypeSyntheticBurnTokens TransactionType = 53
 
-// TransactionTypeSyntheticForwardTransaction forwards a transaction from one subnet to another.
+// TransactionTypeSyntheticForwardTransaction forwards a transaction from one partition to another.
 const TransactionTypeSyntheticForwardTransaction TransactionType = 54
 
 // TransactionTypeSystemGenesis initializes system chains.
@@ -368,8 +368,8 @@ const TransactionTypeSystemGenesis TransactionType = 96
 // TransactionTypeDirectoryAnchor anchors one network to another.
 const TransactionTypeDirectoryAnchor TransactionType = 97
 
-// TransactionTypePartitionAnchor system transaction for partition data.
-const TransactionTypePartitionAnchor TransactionType = 98
+// TransactionTypeBlockValidatorAnchor system transaction for partition data.
+const TransactionTypeBlockValidatorAnchor TransactionType = 98
 
 // TransactionTypeSystemWriteData writes data to a system data account.
 const TransactionTypeSystemWriteData TransactionType = 99
@@ -1343,7 +1343,7 @@ func (v TransactionType) GetEnumValue() uint64 { return uint64(v) }
 func (v *TransactionType) SetEnumValue(id uint64) bool {
 	u := TransactionType(id)
 	switch u {
-	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeRemote, TransactionTypeSyntheticCreateIdentity, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeSystemGenesis, TransactionTypeDirectoryAnchor, TransactionTypePartitionAnchor, TransactionTypeSystemWriteData:
+	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeRemote, TransactionTypeSyntheticCreateIdentity, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeSystemGenesis, TransactionTypeDirectoryAnchor, TransactionTypeBlockValidatorAnchor, TransactionTypeSystemWriteData:
 		*v = u
 		return true
 	default:
@@ -1406,8 +1406,8 @@ func (v TransactionType) String() string {
 		return "systemGenesis"
 	case TransactionTypeDirectoryAnchor:
 		return "directoryAnchor"
-	case TransactionTypePartitionAnchor:
-		return "partitionAnchor"
+	case TransactionTypeBlockValidatorAnchor:
+		return "blockValidatorAnchor"
 	case TransactionTypeSystemWriteData:
 		return "systemWriteData"
 	default:
@@ -1472,8 +1472,8 @@ func TransactionTypeByName(name string) (TransactionType, bool) {
 		return TransactionTypeSystemGenesis, true
 	case "directoryanchor":
 		return TransactionTypeDirectoryAnchor, true
-	case "partitionanchor":
-		return TransactionTypePartitionAnchor, true
+	case "blockvalidatoranchor":
+		return TransactionTypeBlockValidatorAnchor, true
 	case "systemwritedata":
 		return TransactionTypeSystemWriteData, true
 	default:

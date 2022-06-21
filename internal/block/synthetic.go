@@ -152,12 +152,12 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 		return nil, err
 	}
 
-	subnet, ok := protocol.ParseSubnetUrl(initSig.DestinationNetwork)
+	partition, ok := protocol.ParsePartitionUrl(initSig.DestinationNetwork)
 	if !ok {
-		return nil, errors.Format(errors.StatusInternalError, "destination URL is not a valid subnet")
+		return nil, errors.Format(errors.StatusInternalError, "destination URL is not a valid partition")
 	}
 
-	indexIndex, err := addIndexChainEntry(record, protocol.SyntheticIndexChain(subnet), &protocol.IndexEntry{
+	indexIndex, err := addIndexChainEntry(record, protocol.SyntheticIndexChain(partition), &protocol.IndexEntry{
 		Source: uint64(index),
 	})
 	if err != nil {
