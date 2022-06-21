@@ -1,6 +1,7 @@
 package block_test
 
 import (
+	"fmt"
 	"math/big"
 	"testing"
 
@@ -558,7 +559,6 @@ func TestValidateKeyForSynthTxns(t *testing.T) {
 	// Initialize
 	sim := simulator.New(t, 3)
 	sim.InitFromGenesis()
-
 	// Setup
 	aliceKey, bobKey := GenerateKey("alice"), GenerateKey("bob")
 	alice, bob := AcmeLiteAddressStdPriv(aliceKey), AcmeLiteAddressStdPriv(bobKey)
@@ -604,4 +604,44 @@ func TestValidateKeyForSynthTxns(t *testing.T) {
 	if txn, _, _ := sim.WaitForTransaction(delivered, synthHash[:], 50); txn != nil {
 		t.Fatal("Synthetic transaction was delivered")
 	}
+}
+
+//Checks if the key used to sign the synthetic transaction belongs to the same subnet
+func TestKeySignaturePartition(t *testing.T) {
+	var KeySigError error
+	var timestamp uint64
+
+	// Initialize
+	sim := simulator.New(t, 3)
+	sim.InitFromGenesis()
+	// Setup
+	aliceKey, bobKey := GenerateKey("alice"), GenerateKey("bob")
+	alice, bob := AcmeLiteAddressStdPriv(aliceKey), AcmeLiteAddressStdPriv(bobKey)
+	sim.SetRouteFor(alice.RootIdentity(), "BVN0")
+	sim.SetRouteFor(bob.RootIdentity(), "BVN1")
+	sim.CreateAccount(&protocol.LiteIdentity{Url: alice.RootIdentity(), CreditBalance: 1e9})
+	sim.CreateAccount(&protocol.LiteTokenAccount{Url: alice, TokenUrl: protocol.AcmeUrl(), Balance: *big.NewInt(1e12)})
+
+	// Change the node's key
+	sim.SubnetFor(alice).Executor.Key = GenerateKey("New")
+	x := sim.SubnetFor(alice)
+	tt := NewBatchTest(t, sim.SubnetFor(alice).Database)
+	defer tt.Discard()
+
+	tt.Run("get this done", func(t BatchTest) {
+		tx := NewTransaction().
+			WithPrincipal(alice).
+			WithSigner(alice, 1).
+			WithTimestampVar(&timestamp).
+			WithBody(&protocol.SendTokens{
+				To: []*protocol.TokenRecipient{
+					{Url: bob, Amount: *big.NewInt(68)},
+				},
+			}).
+			Initiate(protocol.SignatureTypeED25519, aliceKey).
+			BuildDelivery()
+		_, KeySigError = x.Executor.ProcessSignature(tt.Batch, tx, tx.Signatures[0])
+		fmt.Println(KeySigError)
+	})
+	require.Equal(t, KeySigError.Error(), "the key used to sign does not belong to the originating subnet")
 }

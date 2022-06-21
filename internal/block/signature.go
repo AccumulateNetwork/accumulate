@@ -756,7 +756,9 @@ func (x *Executor) validatePartitionSignature(location *url.URL, sig protocol.Ke
 		return errors.Format(errors.StatusInternalError, "unable to resolve source of transaction %w", err)
 	}
 	subnet := x.globals.Active.Network.Subnet(sigurl)
-
+	if subnet == nil {
+		return errors.Format(errors.StatusUnknown, "unable to resolve originating subnet of the signature")
+	}
 	for _, vkey := range subnet.ValidatorKeys {
 		if bytes.Equal(vkey, skey) {
 			return nil
