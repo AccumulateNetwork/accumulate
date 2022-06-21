@@ -20,7 +20,7 @@ const QueryBlocksMaxCount = 1000 // Hardcoded ceiling for now
 
 type queryDirect struct {
 	Options
-	Subnet string
+	Partition string
 }
 
 func (q *queryDirect) query(req query.Request, opts QueryOptions) (string, []byte, error) {
@@ -30,7 +30,7 @@ func (q *queryDirect) query(req query.Request, opts QueryOptions) (string, []byt
 		return "", nil, fmt.Errorf("failed to marshal request: %v", err)
 	}
 
-	res, err := q.Router.Query(context.Background(), q.Subnet, b, client.ABCIQueryOptions{Height: int64(opts.Height), Prove: opts.Prove})
+	res, err := q.Router.Query(context.Background(), q.Partition, b, client.ABCIQueryOptions{Height: int64(opts.Height), Prove: opts.Prove})
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to send request: %v", err)
 	}

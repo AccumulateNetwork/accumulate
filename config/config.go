@@ -116,11 +116,11 @@ var DefaultLogLevels = LogLevel{}.
 	// SetModule("init", "info").
 	String()
 
-func Default(netName string, net NetworkType, node NodeType, subnetId string) *Config {
+func Default(netName string, net NetworkType, node NodeType, partitionId string) *Config {
 	c := new(Config)
 	c.Accumulate.Network.Id = netName
 	c.Accumulate.NetworkType = net
-	c.Accumulate.SubnetId = subnetId
+	c.Accumulate.PartitionId = partitionId
 	c.Accumulate.API.PrometheusServer = "http://18.119.26.7:9090"
 	c.Accumulate.SentryDSN = "https://glet_78c3bf45d009794a4d9b0c990a1f1ed5@gitlab.com/api/v4/error_tracking/collector/29762666"
 	c.Accumulate.Website.Enabled = true
@@ -270,21 +270,21 @@ func OffsetPort(addr string, basePort int, offset int) (*url.URL, error) {
 
 func (n *Network) GetBvnNames() []string {
 	var names []string
-	for _, subnet := range n.Subnets {
-		if subnet.Type == BlockValidator {
-			names = append(names, subnet.Id)
+	for _, partition := range n.Partitions {
+		if partition.Type == BlockValidator {
+			names = append(names, partition.Id)
 		}
 	}
 	return names
 }
 
-func (n *Network) GetSubnetByID(subnetID string) Subnet {
-	for _, subnet := range n.Subnets {
-		if subnet.Id == subnetID {
-			return subnet
+func (n *Network) GetPartitionByID(partitionID string) Partition {
+	for _, partition := range n.Partitions {
+		if partition.Id == partitionID {
+			return partition
 		}
 	}
-	panic(fmt.Sprintf("Subnet ID %s does not exist", subnetID))
+	panic(fmt.Sprintf("Partition ID %s does not exist", partitionID))
 }
 
 func Load(dir string) (*Config, error) {

@@ -25,7 +25,7 @@ import (
 )
 
 type InitOpts struct {
-	SubnetId            string
+	PartitionId         string
 	NetworkType         config.NetworkType
 	GenesisTime         time.Time
 	Logger              log.Logger
@@ -45,18 +45,18 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) (Bootstrap, error) {
 
 	// Build the routing table
 	var bvns []string
-	for _, subnet := range opts.GenesisGlobals.Network.Subnets {
-		if subnet.SubnetID != protocol.Directory {
-			bvns = append(bvns, subnet.SubnetID)
+	for _, partition := range opts.GenesisGlobals.Network.Partitions {
+		if partition.PartitionID != protocol.Directory {
+			bvns = append(bvns, partition.PartitionID)
 		}
 	}
 	b.routingTable = new(protocol.RoutingTable)
 	b.routingTable.Routes = routing.BuildSimpleTable(bvns)
-	b.routingTable.Overrides = make([]protocol.RouteOverride, 1, len(opts.GenesisGlobals.Network.Subnets)+1)
-	b.routingTable.Overrides[0] = protocol.RouteOverride{Account: protocol.AcmeUrl(), Subnet: protocol.Directory}
-	for _, subnet := range opts.GenesisGlobals.Network.Subnets {
-		u := protocol.SubnetUrl(subnet.SubnetID)
-		b.routingTable.Overrides = append(b.routingTable.Overrides, protocol.RouteOverride{Account: u, Subnet: subnet.SubnetID})
+	b.routingTable.Overrides = make([]protocol.RouteOverride, 1, len(opts.GenesisGlobals.Network.Partitions)+1)
+	b.routingTable.Overrides[0] = protocol.RouteOverride{Account: protocol.AcmeUrl(), Partition: protocol.Directory}
+	for _, partition := range opts.GenesisGlobals.Network.Partitions {
+		u := protocol.PartitionUrl(partition.PartitionID)
+		b.routingTable.Overrides = append(b.routingTable.Overrides, protocol.RouteOverride{Account: u, Partition: partition.PartitionID})
 	}
 
 	// Create the router
@@ -68,7 +68,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) (Bootstrap, error) {
 
 	b.genesisExec, err = block.NewGenesisExecutor(b.db, opts.Logger, &config.Describe{
 		NetworkType: opts.NetworkType,
-		SubnetId:    opts.SubnetId,
+		PartitionId: opts.PartitionId,
 	}, b.router)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknown, err)
@@ -147,8 +147,8 @@ func (bootstrap) Type() protocol.TransactionType {
 	return protocol.TransactionTypeSyntheticDepositTokens
 }
 
-func (b *bootstrap) AllowMissingPrincipal(*protocol.Transaction) (allow, fallback bool) {
-	return true, false
+func (b *bootstrap) AllowMissingPrincipal(*protocol.Transaction) bool {
+	return true
 }
 
 func (b *bootstrap) Execute(st *chain.StateManager, tx *chain.Delivery) (protocol.TransactionResult, error) {
@@ -157,12 +157,12 @@ func (b *bootstrap) Execute(st *chain.StateManager, tx *chain.Delivery) (protoco
 
 func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protocol.TransactionResult, error) {
 	b.networkAuthority = protocol.DnUrl().JoinPath(protocol.Operators)
-	b.partition = config.NetworkUrl{URL: protocol.SubnetUrl(b.SubnetId)}
+	b.partition = config.NetworkUrl{URL: protocol.PartitionUrl(b.PartitionId)}
 	b.localAuthority = b.partition.Operators()
 
-	// Verify that the BVN ID will make a valid subnet URL
-	if err := protocol.IsValidAdiUrl(protocol.SubnetUrl(b.SubnetId), true); err != nil {
-		panic(fmt.Errorf("%q is not a valid subnet ID: %v", b.SubnetId, err))
+	// Verify that the BVN ID will make a valid partition URL
+	if err := protocol.IsValidAdiUrl(protocol.PartitionUrl(b.PartitionId), true); err != nil {
+		panic(fmt.Errorf("%q is not a valid partition ID: %v", b.PartitionId, err))
 	}
 
 	// Setup globals and create network variable accounts
@@ -374,12 +374,12 @@ func (b *bootstrap) maybeCreateFactomAccounts() error {
 }
 
 func (b *bootstrap) shouldCreate(url *url.URL) bool {
-	subnet, err := b.router.RouteAccount(url)
+	partition, err := b.router.RouteAccount(url)
 	if err != nil {
 		panic(err) // An account should never be unroutable
 	}
 
-	return strings.EqualFold(b.SubnetId, subnet)
+	return strings.EqualFold(b.PartitionId, partition)
 }
 
 func (b *bootstrap) createOperatorBook() {

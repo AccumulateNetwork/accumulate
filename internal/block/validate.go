@@ -120,8 +120,11 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 		// Ok
 	case !errors.Is(err, storage.ErrNotFound):
 		return nil, errors.Format(errors.StatusUnknown, "load principal: %w", err)
-	case !x.transactionAllowsMissingPrincipal(delivery.Transaction):
-		return nil, errors.Format(errors.StatusUnknown, "load principal: %w", err)
+	case delivery.Transaction.Body.Type().IsUser():
+		val, ok := getValidator[chain.PrincipalValidator](x, delivery.Transaction.Body.Type())
+		if !ok || !val.AllowMissingPrincipal(delivery.Transaction) {
+			return nil, errors.NotFound("missing principal: %v not found", delivery.Transaction.Header.Principal)
+		}
 	}
 
 	// Set up the state manager
@@ -232,7 +235,7 @@ func validateSyntheticTransactionSignatures(transaction *protocol.Transaction, s
 	if !gotED25519Sig {
 		return errors.Format(errors.StatusUnauthenticated, "missing ED25519 signature")
 	}
-	if transaction.Body.Type() == protocol.TransactionTypeDirectoryAnchor || transaction.Body.Type() == protocol.TransactionTypePartitionAnchor {
+	if transaction.Body.Type() == protocol.TransactionTypeDirectoryAnchor || transaction.Body.Type() == protocol.TransactionTypeBlockValidatorAnchor {
 		return nil
 	}
 
@@ -242,19 +245,19 @@ func validateSyntheticTransactionSignatures(transaction *protocol.Transaction, s
 	return nil
 }
 
-// checkRouting verifies that the signature was routed to the correct subnet.
+// checkRouting verifies that the signature was routed to the correct partition.
 func (x *Executor) checkRouting(delivery *chain.Delivery, signature protocol.Signature) error {
 	if signature.Type().IsSystem() {
 		return nil
 	}
 
 	if delivery.Transaction.Body.Type().IsUser() {
-		subnet, err := x.Router.RouteAccount(signature.RoutingLocation())
+		partition, err := x.Router.RouteAccount(signature.RoutingLocation())
 		if err != nil {
 			return errors.Wrap(errors.StatusUnknown, err)
 		}
-		if !strings.EqualFold(subnet, x.Describe.SubnetId) {
-			return errors.Format(errors.StatusBadRequest, "signature submitted to %v instead of %v", x.Describe.SubnetId, subnet)
+		if !strings.EqualFold(partition, x.Describe.PartitionId) {
+			return errors.Format(errors.StatusBadRequest, "signature submitted to %v instead of %v", x.Describe.PartitionId, partition)
 		}
 	}
 

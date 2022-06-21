@@ -87,7 +87,7 @@ func (s *sigSetData) Add(newEntry SigSetEntry, newSignature protocol.Signature) 
 	case protocol.IsDnUrl(newSignature.GetSigner()):
 		newEntry.System = true
 	default:
-		_, ok := protocol.ParseSubnetUrl(newSignature.GetSigner())
+		_, ok := protocol.ParsePartitionUrl(newSignature.GetSigner())
 		newEntry.System = ok
 	}
 

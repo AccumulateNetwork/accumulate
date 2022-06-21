@@ -29,6 +29,7 @@ type Executor struct {
 	executors  map[protocol.TransactionType]TransactionExecutor
 	dispatcher *dispatcher
 	logger     logging.OptionalLogger
+	db         *database.Database
 
 	// oldBlockMeta blockMetadata
 }
@@ -89,7 +90,7 @@ func NewNodeExecutor(opts ExecutorOptions, db *database.Database) (*Executor, er
 		)
 
 	default:
-		return nil, errors.Format(errors.StatusInternalError, "invalid subnet type %v", opts.Describe.NetworkType)
+		return nil, errors.Format(errors.StatusInternalError, "invalid partition type %v", opts.Describe.NetworkType)
 	}
 
 	// This is a no-op in dev
@@ -118,6 +119,7 @@ func newExecutor(opts ExecutorOptions, db *database.Database, executors ...Trans
 	m.ExecutorOptions = opts
 	m.executors = map[protocol.TransactionType]TransactionExecutor{}
 	m.dispatcher = newDispatcher(opts)
+	m.db = db
 
 	if opts.Logger != nil {
 		m.logger.L = opts.Logger.With("module", "executor")
@@ -222,7 +224,7 @@ func (m *Executor) LoadStateRoot(batch *database.Batch) ([]byte, error) {
 	case errors.Is(err, storage.ErrNotFound):
 		return nil, nil
 	default:
-		return nil, errors.Format(errors.StatusUnknown, "load subnet identity: %w", err)
+		return nil, errors.Format(errors.StatusUnknown, "load partition identity: %w", err)
 	}
 }
 

@@ -15,11 +15,11 @@ import (
 
 //make up a fake network configuration list
 var nodes = []config.Node{{Address: "127.0.0.1", Type: config.NodeTypeValidator}}
-var subnets = []config.Subnet{
+var partitions = []config.Partition{
 	{Id: "Directory", Type: config.NetworkTypeDirectory, BasePort: 30000, Nodes: nodes},
 	{Id: "BVN0", Type: config.NetworkTypeBlockValidator, BasePort: 40000, Nodes: nodes},
 }
-var network = config.Network{Id: "AccuProxyTest", Subnets: subnets}
+var network = config.Network{Id: "AccuProxyTest", Partitions: partitions}
 
 // The RPC methods called in the JSON-RPC 2.0 specification examples.
 func seedList(_ context.Context, params json.RawMessage) interface{} {
@@ -31,7 +31,7 @@ func seedList(_ context.Context, params json.RawMessage) interface{} {
 	}
 
 	resp := SeedListResponse{}
-	snl := network.GetSubnetByID(slr.Subnet)
+	snl := network.GetPartitionByID(slr.Partition)
 	for _, n := range snl.Nodes {
 		resp.Addresses = append(resp.Addresses, n.Address)
 	}
@@ -48,22 +48,22 @@ func seedCount(_ context.Context, params json.RawMessage) interface{} {
 	}
 
 	resp := SeedCountResponse{}
-	snl := network.GetSubnetByID(scr.Subnet)
+	snl := network.GetPartitionByID(scr.Partition)
 	resp.Count = int64(len(snl.Nodes))
 
 	return resp
 }
 
-func getSubnets(_ context.Context, params json.RawMessage) interface{} {
+func getPartitions(_ context.Context, params json.RawMessage) interface{} {
 	// Parse either a params array of numbers or named numbers params.
-	scr := SubnetListRequest{}
+	scr := PartitionListRequest{}
 	err := json.Unmarshal(params, &scr)
 	if err != nil {
 		return jsonrpc2.ErrorInvalidParams("Invalid SeedListRequest parameters")
 	}
 
-	resp := SubnetListResponse{}
-	resp.Subnets = network.GetBvnNames()
+	resp := PartitionListResponse{}
+	resp.Partitions = network.GetBvnNames()
 	return resp
 }
 
@@ -89,7 +89,7 @@ func TestAccuProxyClient(t *testing.T) {
 		methods := jsonrpc2.MethodMap{
 			"seed-list":  seedList,
 			"seed-count": seedCount,
-			"subnets":    getSubnets,
+			"Partitions": getPartitions,
 			"network":    getNetwork,
 		}
 		jsonrpc2.DebugMethodFunc = true
@@ -100,21 +100,21 @@ func TestAccuProxyClient(t *testing.T) {
 	client, err := New(endpoint)
 	require.NoError(t, err)
 
-	ssr := SubnetListRequest{}
+	ssr := PartitionListRequest{}
 	ssr.Network = "AccuProxyTest"
-	subnetListResp, err := client.GetSubnetList(context.Background(), &ssr)
+	PartitionListResp, err := client.GetPartitionList(context.Background(), &ssr)
 	require.NoError(t, err)
-	require.GreaterOrEqual(t, len(subnetListResp.Subnets), 1)
+	require.GreaterOrEqual(t, len(PartitionListResp.Partitions), 1)
 
 	scr := SeedCountRequest{}
 	scr.Network = "AccuProxyTest"
-	scr.Subnet = subnetListResp.Subnets[0]
+	scr.Partition = PartitionListResp.Partitions[0]
 	seedCountResp, err := client.GetSeedCount(context.Background(), &scr)
 	require.NoError(t, err)
 
 	slr := SeedListRequest{}
 	slr.Network = "AccuProxyTest"
-	slr.Subnet = subnetListResp.Subnets[0]
+	slr.Partition = PartitionListResp.Partitions[0]
 	slr.Count = seedCountResp.Count
 	seedListResp, err := client.GetSeedList(context.Background(), &slr)
 	require.NoError(t, err)

@@ -46,7 +46,7 @@ func TestMajorBlock(t *testing.T) {
 	sim.ExecuteBlocks(10)
 
 	// Verify
-	dn := sim.Subnet(protocol.Directory)
+	dn := sim.Partition(protocol.Directory)
 	_ = dn.Database.View(func(batch *database.Batch) error {
 		chain, err := batch.Account(dn.Executor.Describe.AnchorPool()).ReadIndexChain(protocol.MainChain, true)
 		require.NoError(t, err, "Failed to read anchor major index chain")
