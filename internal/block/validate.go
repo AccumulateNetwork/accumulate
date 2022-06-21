@@ -120,8 +120,11 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 		// Ok
 	case !errors.Is(err, storage.ErrNotFound):
 		return nil, errors.Format(errors.StatusUnknown, "load principal: %w", err)
-	case !x.transactionAllowsMissingPrincipal(delivery.Transaction):
-		return nil, errors.Format(errors.StatusUnknown, "load principal: %w", err)
+	case delivery.Transaction.Body.Type().IsUser():
+		val, ok := getValidator[chain.PrincipalValidator](x, delivery.Transaction.Body.Type())
+		if !ok || !val.AllowMissingPrincipal(delivery.Transaction) {
+			return nil, errors.NotFound("missing principal: %v not found", delivery.Transaction.Header.Principal)
+		}
 	}
 
 	// Set up the state manager
