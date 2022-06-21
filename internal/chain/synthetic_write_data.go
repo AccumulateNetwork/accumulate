@@ -8,8 +8,16 @@ import (
 
 type SyntheticWriteData struct{}
 
+var _ PrincipalValidator = (*SyntheticWriteData)(nil)
+
 func (SyntheticWriteData) Type() protocol.TransactionType {
 	return protocol.TransactionTypeSyntheticWriteData
+}
+
+func (SyntheticWriteData) AllowMissingPrincipal(transaction *protocol.Transaction) bool {
+	// SyntheticWriteData can create a lite data account
+	_, err := protocol.ParseLiteDataAddress(transaction.Header.Principal)
+	return err == nil
 }
 
 func (SyntheticWriteData) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
