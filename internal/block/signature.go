@@ -680,6 +680,7 @@ func verifyInternalSignature(delivery *chain.Delivery, _ *protocol.InternalSigna
 
 	return nil
 }
+
 func GetAllSignatures(batch *database.Batch, transaction *database.Transaction, status *protocol.TransactionStatus, txnInitHash []byte) ([]protocol.Signature, error) {
 	signatures := make([]protocol.Signature, 1)
 
@@ -737,36 +738,22 @@ func (x *Executor) validatePartitionSignature(location *url.URL, sig protocol.Ke
 	var source *url.URL
 	var err error
 	skey := sig.GetPublicKey()
-	switch tx.Body.Type() {
-	case protocol.TransactionTypeSyntheticBurnTokens, protocol.TransactionTypeSyntheticCreateIdentity, protocol.TransactionTypeSyntheticDepositCredits, protocol.TransactionTypeSyntheticDepositTokens, protocol.TransactionTypeSyntheticWriteData:
-		txn := tx.Body.CopyAsInterface().(protocol.SynthTxnWithOrigin)
+
+	switch txn := tx.Body.(type) {
+	case protocol.SynthTxnWithOrigin:
 		_, source = txn.GetCause()
-		sigurl, err = x.Router.RouteAccount(source)
-		if err != nil {
-			return errors.Format(errors.StatusNotFound, " :%w", err)
-		}
-
-	case protocol.TransactionTypeDirectoryAnchor:
-		txn := tx.Body.CopyAsInterface().(*protocol.DirectoryAnchor)
+	case *protocol.DirectoryAnchor:
 		source = txn.Source
-		sigurl, err = x.Router.RouteAccount(source)
-		if err != nil {
-			return errors.Format(errors.StatusNotFound, " :%w", err)
-		}
-
-	case protocol.TransactionTypePartitionAnchor:
-		txn := tx.Body.CopyAsInterface().(*protocol.PartitionAnchor)
+	case *protocol.PartitionAnchor:
 		source = txn.Source
-		sigurl, err = x.Router.RouteAccount(source)
-		if err != nil {
-			return errors.Format(errors.StatusNotFound, " :%w", err)
-		}
-
 	default:
 		return nil
-
 	}
+	sigurl, err = x.Router.RouteAccount(source)
 
+	if err != nil {
+		return errors.Format(errors.StatusInternalError, "unable to resolve source of transaction %w", err)
+	}
 	subnet := x.globals.Active.Network.Subnet(sigurl)
 
 	for _, vkey := range subnet.ValidatorKeys {
@@ -774,6 +761,5 @@ func (x *Executor) validatePartitionSignature(location *url.URL, sig protocol.Ke
 			return nil
 		}
 	}
-
-	return fmt.Errorf("key does not exist %s ;;; %s ;;; %s ;;; %s", sigurl, skey, subnet.SubnetID, subnet.ValidatorKeys)
+	return errors.Format(errors.StatusUnauthorized, "the key used to sign does not belong to the originating subnet")
 }
