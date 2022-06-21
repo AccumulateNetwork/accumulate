@@ -320,13 +320,13 @@ func (x *Executor) requestMissingSyntheticTransactions(ledger *protocol.Syntheti
 			for _, resp := range resp {
 				// Put the synthetic signature first
 				var gotSynth, gotReceipt, gotKey bool
+				var seqNum uint64
 				for i, signature := range resp.Signatures {
-					if _, ok := signature.(*protocol.SyntheticSignature); ok && i > 0 {
-					}
-					switch signature.(type) {
+					switch s := signature.(type) {
 					case *protocol.SyntheticSignature:
 						gotSynth = true
 						resp.Signatures[0], resp.Signatures[i] = resp.Signatures[i], resp.Signatures[0]
+						seqNum = s.SequenceNumber
 					case *protocol.ReceiptSignature:
 						gotReceipt = true
 					case *protocol.ED25519Signature:
@@ -350,6 +350,7 @@ func (x *Executor) requestMissingSyntheticTransactions(ledger *protocol.Syntheti
 					continue
 				}
 
+				x.logger.Debug("Resubmitting synthetic transaction", "seq-num", seqNum, "source", partition.Url, "hash", logging.AsHex(resp.Transaction.GetHash()).Slice(0, 4), "type", resp.Transaction.Body.Type())
 				err = dispatcher.BroadcastTxLocal(ctx, &protocol.Envelope{
 					Signatures:  resp.Signatures,
 					Transaction: []*protocol.Transaction{resp.Transaction},

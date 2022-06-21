@@ -276,6 +276,7 @@ func (x *Executor) synthTransactionIsReady(batch *database.Batch, delivery *chai
 	case err == nil:
 		// Ready
 	case errors.Is(err, storage.ErrNotFound):
+		x.logger.Debug("Unanchored synthetic transaction", "hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4), "type", delivery.Transaction.Body.Type(), "anchor", logging.AsHex(receipt.Anchor).Slice(0, 4), "module", "synthetic")
 		return false, nil
 	default:
 		return false, errors.Format(errors.StatusUnknown, "get height of entry %X of %s intermediate anchor chain: %w", receipt.Anchor[:4], partition, err)

@@ -71,6 +71,7 @@ func TestOutOfSequenceSynth(t *testing.T) {
 
 func TestMissingSynthTxn(t *testing.T) {
 	var timestamp uint64
+	fmt.Println("\n\n\n\n\nSTARTING TEST")
 
 	// Initialize
 	sim := simulator.New(t, 3)
