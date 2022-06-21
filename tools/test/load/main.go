@@ -36,10 +36,11 @@ func main() {
 	guard := make(chan struct{}, maxGoroutines)
 
 	// run clients in parallel
-	var wg sync.WaitGroup
-	wg.Add(parallelization)
+	wg := &sync.WaitGroup{}
+
 	for ii := 0; ii <= parallelization; ii++ {
 		guard <- struct{}{} // would block if guard channel is already filled
+		wg.Add(parallelization)
 		go func(c chan int) {
 			for {
 				v, more := <-c
@@ -48,7 +49,7 @@ func main() {
 					return
 				}
 
-				err := initClients(v)
+				err := initClients(v, wg)
 				if err != nil {
 					fmt.Printf("Error: %v\n", err)
 				}
@@ -75,8 +76,9 @@ func init() {
 	flag.IntVar(&transactions, "t", 100, "Number of transactions per client")
 }
 
-// Init new client from server URL input using client.go
-func initClient(ds *logging.DataSet, client *client.Client) error {
+// Init account creation and transaction sending
+func initTxs(wg *sync.WaitGroup, ds *logging.DataSet, client *client.Client) error {
+	defer wg.Done()
 	// Setup routine guard and limit
 	guard := make(chan struct{}, maxGoroutines)
 
@@ -146,8 +148,8 @@ func DefaultOptions() {
 }
 
 // Initiate several clients
-func initClients(c int) error {
-
+func initClients(c int, wg *sync.WaitGroup) error {
+	defer wg.Done()
 	path := "load_tester"
 
 	err := os.MkdirAll(path, 0600)
@@ -179,7 +181,7 @@ func initClients(c int) error {
 	// Start the global clock
 	start = time.Now()
 	for i := 0; i <= c; i++ { // Create new client on localhost
-		err = initClient(dataSets[i], clients[i])
+		err = initTxs(wg, dataSets[i], clients[i])
 		if err != nil {
 			return err
 		}
