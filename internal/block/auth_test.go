@@ -80,6 +80,8 @@ func TestTransactionIsReady(tt *testing.T) {
 	txn := new(protocol.Transaction)
 	txn.Header.Principal = account.Url
 	txn.Body = body
+	delivery := new(chain.Delivery)
+	delivery.Transaction = txn
 
 	// The first signature
 	sig := new(FakeSignature)
@@ -91,7 +93,7 @@ func TestTransactionIsReady(tt *testing.T) {
 	// Singlesig unsigned
 	t.Run("Unsigned", func(t BatchTest) {
 		status := t.GetTxnStatus(txn.GetHash())
-		ready, err := exec.TransactionIsReady(t.Batch, txn, status)
+		ready, err := exec.TransactionIsReady(t.Batch, delivery, status, account)
 		require.NoError(t, err)
 		require.False(t, ready, "Expected the transaction to be not ready")
 	})
@@ -101,7 +103,7 @@ func TestTransactionIsReady(tt *testing.T) {
 		t.AddSignature(txn.GetHash(), 0, sig)
 
 		status := t.GetTxnStatus(txn.GetHash())
-		ready, err := exec.TransactionIsReady(t.Batch, txn, status)
+		ready, err := exec.TransactionIsReady(t.Batch, delivery, status, account)
 		require.NoError(t, err)
 		require.True(t, ready, "Expected the transaction to be ready")
 	})
@@ -114,7 +116,7 @@ func TestTransactionIsReady(tt *testing.T) {
 		t.AddSignature(txn.GetHash(), 0, sig)
 
 		status := t.GetTxnStatus(txn.GetHash())
-		ready, err := exec.TransactionIsReady(t.Batch, txn, status)
+		ready, err := exec.TransactionIsReady(t.Batch, delivery, status, account)
 		require.NoError(t, err)
 		require.False(t, ready, "Expected the transaction to be not ready")
 	})
@@ -131,7 +133,7 @@ func TestTransactionIsReady(tt *testing.T) {
 		t.AddSignature(txn.GetHash(), 1, sig2)
 
 		status := t.GetTxnStatus(txn.GetHash())
-		ready, err := exec.TransactionIsReady(t.Batch, txn, status)
+		ready, err := exec.TransactionIsReady(t.Batch, delivery, status, account)
 		require.NoError(t, err)
 		require.True(t, ready, "Expected the transaction to be ready")
 	})
@@ -144,7 +146,7 @@ func TestTransactionIsReady(tt *testing.T) {
 		t.AddSignature(txn.GetHash(), 0, sig)
 
 		status := t.GetTxnStatus(txn.GetHash())
-		ready, err := exec.TransactionIsReady(t.Batch, txn, status)
+		ready, err := exec.TransactionIsReady(t.Batch, delivery, status, account)
 		require.NoError(t, err)
 		require.False(t, ready, "Expected the transaction to be not ready")
 	})
@@ -162,7 +164,7 @@ func TestTransactionIsReady(tt *testing.T) {
 		t.AddSignature(txn.GetHash(), 1, sig2)
 
 		status := t.GetTxnStatus(txn.GetHash())
-		ready, err := exec.TransactionIsReady(t.Batch, txn, status)
+		ready, err := exec.TransactionIsReady(t.Batch, delivery, status, account)
 		require.NoError(t, err)
 		require.True(t, ready, "Expected the transaction to be ready")
 	})
@@ -174,7 +176,7 @@ func TestTransactionIsReady(tt *testing.T) {
 		entry.Disabled = true
 
 		status := t.GetTxnStatus(txn.GetHash())
-		ready, err := exec.TransactionIsReady(t.Batch, txn, status)
+		ready, err := exec.TransactionIsReady(t.Batch, delivery, status, account)
 		require.NoError(t, err)
 		require.False(t, ready, "Expected the transaction to be not ready")
 	})
@@ -190,7 +192,7 @@ func TestTransactionIsReady(tt *testing.T) {
 		t.AddSignature(txn.GetHash(), 0, sig)
 
 		status := t.GetTxnStatus(txn.GetHash())
-		ready, err := exec.TransactionIsReady(t.Batch, txn, status)
+		ready, err := exec.TransactionIsReady(t.Batch, delivery, status, account)
 		require.NoError(t, err)
 		require.True(t, ready, "Expected the transaction to be ready")
 	})
@@ -206,7 +208,7 @@ func TestTransactionIsReady(tt *testing.T) {
 		t.AddSignature(txn.GetHash(), 0, sig)
 
 		status := t.GetTxnStatus(txn.GetHash())
-		ready, err := exec.TransactionIsReady(t.Batch, txn, status)
+		ready, err := exec.TransactionIsReady(t.Batch, delivery, status, account)
 		require.NoError(t, err)
 		require.False(t, ready, "Expected the transaction to be not ready")
 	})
@@ -230,7 +232,7 @@ func TestTransactionIsReady(tt *testing.T) {
 		t.AddSignature(txn.GetHash(), 1, sig2)
 
 		status := t.GetTxnStatus(txn.GetHash())
-		ready, err := exec.TransactionIsReady(t.Batch, txn, status)
+		ready, err := exec.TransactionIsReady(t.Batch, delivery, status, account)
 		require.NoError(t, err)
 		require.True(t, ready, "Expected the transaction to be ready")
 	})
@@ -238,7 +240,7 @@ func TestTransactionIsReady(tt *testing.T) {
 	// Multisig with an invalidated signature and a new signature
 	t.Run("Invalidated", func(t BatchTest) {
 		// This is not a unit test, because it's verifying AddSigner,
-		// AddSignature, and TransactionIsReady in combination not in isolation.
+		// AddSignature, and TransactionIsReady in combination not in isolation, account.
 		// But that's ok.
 
 		signer := t.PutAccountCopy(signer).(*FakeSigner)
@@ -260,7 +262,7 @@ func TestTransactionIsReady(tt *testing.T) {
 
 		// Transaction is not ready
 		status := t.GetTxnStatus(txn.GetHash())
-		ready, err := exec.TransactionIsReady(t.Batch, txn, status)
+		ready, err := exec.TransactionIsReady(t.Batch, delivery, status, account)
 		require.NoError(t, err)
 		require.False(t, ready, "Expected the transaction to be not ready")
 	})
@@ -295,7 +297,7 @@ func TestTransactionIsReady(tt *testing.T) {
 		t.AddSignature(txn.GetHash(), 1, sig2_2)
 
 		status := t.GetTxnStatus(txn.GetHash())
-		ready, err := exec.TransactionIsReady(t.Batch, txn, status)
+		ready, err := exec.TransactionIsReady(t.Batch, delivery, status, account)
 		require.NoError(t, err)
 		require.True(t, ready, "Expected the transaction to be ready")
 	})
@@ -345,7 +347,7 @@ func TestAddAuthority(tt *testing.T) {
 		// Transaction is not ready
 		status, err := t.Batch.Transaction(tx.Transaction.GetHash()).GetStatus()
 		require.NoError(t, err)
-		ready, err := execAlice.TransactionIsReady(t.Batch, tx.Transaction, status)
+		ready, err := execAlice.TransactionIsReady(t.Batch, tx, status, simulator.GetAccount[protocol.Account](sim, tx.Transaction.Header.Principal))
 		require.NoError(t, err)
 		require.False(t, ready)
 
@@ -359,7 +361,7 @@ func TestAddAuthority(tt *testing.T) {
 		// Transaction is now ready
 		status, err = t.Batch.Transaction(tx.Transaction.GetHash()).GetStatus()
 		require.NoError(t, err)
-		ready, err = execAlice.TransactionIsReady(t.Batch, tx.Transaction, status)
+		ready, err = execAlice.TransactionIsReady(t.Batch, tx, status, simulator.GetAccount[protocol.Account](sim, tx.Transaction.Header.Principal))
 		require.NoError(t, err)
 		require.True(t, ready)
 	})
@@ -384,7 +386,7 @@ func TestAddAuthority(tt *testing.T) {
 		// Transaction is not ready
 		status, err := t.Batch.Transaction(tx.Transaction.GetHash()).GetStatus()
 		require.NoError(t, err)
-		ready, err := execAlice.TransactionIsReady(t.Batch, tx.Transaction, status)
+		ready, err := execAlice.TransactionIsReady(t.Batch, tx, status, simulator.GetAccount[protocol.Account](sim, tx.Transaction.Header.Principal))
 		require.NoError(t, err)
 		require.False(t, ready)
 
@@ -398,7 +400,7 @@ func TestAddAuthority(tt *testing.T) {
 		// Transaction is now ready
 		status, err = t.Batch.Transaction(tx.Transaction.GetHash()).GetStatus()
 		require.NoError(t, err)
-		ready, err = execAlice.TransactionIsReady(t.Batch, tx.Transaction, status)
+		ready, err = execAlice.TransactionIsReady(t.Batch, tx, status, simulator.GetAccount[protocol.Account](sim, tx.Transaction.Header.Principal))
 		require.NoError(t, err)
 		require.True(t, ready)
 	})
@@ -424,7 +426,7 @@ func TestAddAuthority(tt *testing.T) {
 		// Transaction is not ready
 		status, err := t.Batch.Transaction(tx.Transaction.GetHash()).GetStatus()
 		require.NoError(t, err)
-		ready, err := execAlice.TransactionIsReady(t.Batch, tx.Transaction, status)
+		ready, err := execAlice.TransactionIsReady(t.Batch, tx, status, simulator.GetAccount[protocol.Account](sim, tx.Transaction.Header.Principal))
 		require.NoError(t, err)
 		require.False(t, ready)
 
@@ -438,7 +440,7 @@ func TestAddAuthority(tt *testing.T) {
 		// Transaction is now ready
 		status, err = t.Batch.Transaction(tx.Transaction.GetHash()).GetStatus()
 		require.NoError(t, err)
-		ready, err = execAlice.TransactionIsReady(t.Batch, tx.Transaction, status)
+		ready, err = execAlice.TransactionIsReady(t.Batch, tx, status, simulator.GetAccount[protocol.Account](sim, tx.Transaction.Header.Principal))
 		require.NoError(t, err)
 		require.True(t, ready)
 	})
@@ -515,6 +517,8 @@ func TestCannotDisableAuthForAuthTxns(t *testing.T) {
 		txn := new(protocol.Transaction)
 		txn.Header.Principal = account.Url
 		txn.Body = new(protocol.UpdateAccountAuth)
+		delivery := new(chain.Delivery)
+		delivery.Transaction = txn
 
 		// The signature
 		sig := new(FakeSignature)
@@ -525,7 +529,7 @@ func TestCannotDisableAuthForAuthTxns(t *testing.T) {
 		t.AddSignature(txn.GetHash(), 0, sig)
 
 		status := t.GetTxnStatus(txn.GetHash())
-		ready, err := x.Executor.TransactionIsReady(t.Batch, txn, status)
+		ready, err := x.Executor.TransactionIsReady(t.Batch, delivery, status, account)
 		require.NoError(t, err)
 		require.False(t, ready, "Expected the transaction to be pending")
 	})

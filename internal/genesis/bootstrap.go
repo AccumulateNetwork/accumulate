@@ -147,8 +147,8 @@ func (bootstrap) Type() protocol.TransactionType {
 	return protocol.TransactionTypeSyntheticDepositTokens
 }
 
-func (b *bootstrap) AllowMissingPrincipal(*protocol.Transaction) (allow, fallback bool) {
-	return true, false
+func (b *bootstrap) AllowMissingPrincipal(*protocol.Transaction) bool {
+	return true
 }
 
 func (b *bootstrap) Execute(st *chain.StateManager, tx *chain.Delivery) (protocol.TransactionResult, error) {
