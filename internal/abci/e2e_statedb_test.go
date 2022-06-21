@@ -18,9 +18,9 @@ func init() { acctesting.EnableDebugFeatures() }
 func TestStateDBConsistency(t *testing.T) {
 	acctesting.SkipPlatformCI(t, "darwin", "flaky")
 
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	stores := map[*accumulated.Daemon]storage.KeyValueStore{}
-	for _, netName := range subnets {
+	for _, netName := range partitions {
 		for _, daemon := range daemons[netName] {
 			// store, err := badger.New(filepath.Join(daemon.Config.RootDir, "badger.db"), nil)
 			// require.NoError(t, err)
@@ -35,8 +35,8 @@ func TestStateDBConsistency(t *testing.T) {
 	}
 
 	getDb := func(d *accumulated.Daemon) (*database.Database, error) { return database.New(stores[d], d.Logger), nil }
-	nodes := RunTestNet(t, subnets, daemons, getDb, true, nil)
-	n := nodes[subnets[1]][0]
+	nodes := RunTestNet(t, partitions, daemons, getDb, true, nil)
+	n := nodes[partitions[1]][0]
 
 	credits := 40.0
 	n.testLiteTx(10, 1, credits)
@@ -59,7 +59,7 @@ func TestStateDBConsistency(t *testing.T) {
 	batch.Discard()
 
 	// Reopen the database
-	db := database.New(stores[daemons[subnets[1]][0]], nil)
+	db := database.New(stores[daemons[partitions[1]][0]], nil)
 
 	// Block 6 does not make changes so is not saved
 	batch = db.Begin(false)
@@ -72,8 +72,8 @@ func TestStateDBConsistency(t *testing.T) {
 	batch.Discard()
 
 	// Recreate the app and try to do more transactions
-	nodes = RunTestNet(t, subnets, daemons, getDb, false, nil)
-	n = nodes[subnets[1]][0]
+	nodes = RunTestNet(t, partitions, daemons, getDb, false, nil)
+	n = nodes[partitions[1]][0]
 
 	n.testLiteTx(10, 1, credits)
 }

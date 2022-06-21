@@ -85,7 +85,7 @@ func TestQueryKeyIndexWithRemoteAuthority(t *testing.T) {
 	req := new(query.RequestKeyPageIndex)
 	req.Url = alice.JoinPath("managed-tokens")
 	req.Key = aliceKey[32:]
-	x := sim.SubnetFor(req.Url)
+	x := sim.PartitionFor(req.Url)
 	_ = x.Database.View(func(batch *database.Batch) error {
 		// The query MUST fail with "no authority of ... holds ..." NOT with
 		// "account ... not found"
@@ -185,10 +185,10 @@ func TestFaucetMultiNetwork(t *testing.T) {
 	lite := sim.CreateLiteTokenAccount(liteKey, AcmeUrl(), 1e9, 1e12)
 
 	// Set the lite account routing to a different BVN from the faucet
-	faucetBvn := sim.SubnetFor(FaucetUrl)
-	for _, subnet := range sim.Subnets[1:] {
-		if faucetBvn.Subnet.Id != subnet.Id {
-			sim.SetRouteFor(lite.RootIdentity(), subnet.Id)
+	faucetBvn := sim.PartitionFor(FaucetUrl)
+	for _, partition := range sim.Partitions[1:] {
+		if faucetBvn.Partition.Id != partition.Id {
+			sim.SetRouteFor(lite.RootIdentity(), partition.Id)
 			break
 		}
 	}
@@ -220,7 +220,7 @@ func TestSendSynthTxnAfterAnchor(t *testing.T) {
 
 	// Capture the first deposit
 	var deposit *chain.Delivery
-	sim.SubnetFor(bobUrl.RootIdentity()).SubmitHook = func(envelopes []*chain.Delivery) ([]*chain.Delivery, bool) {
+	sim.PartitionFor(bobUrl.RootIdentity()).SubmitHook = func(envelopes []*chain.Delivery) ([]*chain.Delivery, bool) {
 		for i, env := range envelopes {
 			if env.Transaction.Body.Type() == TransactionTypeSyntheticDepositTokens {
 				fmt.Printf("Dropping %X\n", env.Transaction.GetHash()[:4])
@@ -265,7 +265,7 @@ func TestSendSynthTxnAfterAnchor(t *testing.T) {
 	sim.Query(DnUrl(), req, true)
 
 	// Submit the synthetic transaction
-	sim.SubnetFor(bobUrl).Submit(&Envelope{
+	sim.PartitionFor(bobUrl).Submit(&Envelope{
 		Transaction: []*Transaction{deposit.Transaction},
 		Signatures:  deposit.Signatures,
 	})
