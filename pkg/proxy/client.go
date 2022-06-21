@@ -64,11 +64,11 @@ func (c *Client) GetNetworkConfig(ctx context.Context, req *NetworkConfigRequest
 	return &resp, nil
 }
 
-// GetSubnetList get list of subnets on a given network
-func (c *Client) GetSubnetList(ctx context.Context, req *SubnetListRequest) (*SubnetListResponse, error) {
-	var resp SubnetListResponse
+// GetPartitionList get list of Partitions on a given network
+func (c *Client) GetPartitionList(ctx context.Context, req *PartitionListRequest) (*PartitionListResponse, error) {
+	var resp PartitionListResponse
 
-	err := c.RequestAPIv2(ctx, "subnets", req, &resp)
+	err := c.RequestAPIv2(ctx, "Partitions", req, &resp)
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +76,7 @@ func (c *Client) GetSubnetList(ctx context.Context, req *SubnetListRequest) (*Su
 	return &resp, nil
 }
 
-// GetSeedList get list of seed ip's for a particular subnet
+// GetSeedList get list of seed ip's for a particular Partition
 func (c *Client) GetSeedList(ctx context.Context, req *SeedListRequest) (*SeedListResponse, error) {
 	var resp SeedListResponse
 

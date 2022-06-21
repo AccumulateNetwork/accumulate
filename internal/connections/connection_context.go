@@ -27,8 +27,8 @@ type NetworkGroup int
 
 const (
 	Local NetworkGroup = iota
-	SameSubnet
-	OtherSubnet
+	SamePartition
+	OtherPartition
 )
 
 // ABCIClient is a subset of from TM/rpc/client.ABCIClient.
@@ -63,14 +63,14 @@ type StatusChecker interface {
 }
 
 type connectionContext struct {
-	subnetId            string
+	partitionId         string
 	nodeUrl             *url.URL
 	abciClient          ABCIClient
 	apiClient           APIClient
 	hasClient           chan struct{}
 	connMgr             *connectionManager
 	statusChecker       StatusChecker
-	subnet              config.Subnet
+	partition           config.Partition
 	nodeConfig          config.Node
 	networkGroup        NetworkGroup
 	resolvedIPs         []net.IP
@@ -79,7 +79,7 @@ type connectionContext struct {
 }
 
 func (cc *connectionContext) GetBasePort() int {
-	return int(cc.subnet.BasePort)
+	return int(cc.partition.BasePort)
 }
 
 func (cc *connectionContext) GetABCIClient() ABCIClient {

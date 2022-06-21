@@ -104,11 +104,11 @@ func init() {
 }
 
 func PrintGetMinorBlocks() {
-	fmt.Println("  accumulate blocks minor [subnet-url] [start index] [count] [tx fetch mode expand|ids|countOnly|omit (optional)] [block filter mode excludenone|excludeempty (optional)] Get minor blocks")
+	fmt.Println("  accumulate blocks minor [partition-url] [start index] [count] [tx fetch mode expand|ids|countOnly|omit (optional)] [block filter mode excludenone|excludeempty (optional)] Get minor blocks")
 }
 
 func PrintGetMajorBlocks() {
-	fmt.Println("  accumulate blocks major [subnet-url] [start index] [count] Get major blocks")
+	fmt.Println("  accumulate blocks major [partition-url] [start index] [count] Get major blocks")
 }
 
 func PrintBlocks() {
