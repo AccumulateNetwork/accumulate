@@ -70,7 +70,7 @@ func NewAccumulator(opts AccumulatorOptions) *Accumulator {
 
 	events.SubscribeSync(opts.EventBus, app.willChangeGlobals)
 
-	app.Accumulate.AnalysisLog.Init(app.RootDir, app.Accumulate.SubnetId)
+	app.Accumulate.AnalysisLog.Init(app.RootDir, app.Accumulate.PartitionId)
 
 	events.SubscribeAsync(opts.EventBus, func(e events.DidSaveSnapshot) {
 		atomic.StoreUint64(&app.lastSnapshot, e.MinorIndex)
