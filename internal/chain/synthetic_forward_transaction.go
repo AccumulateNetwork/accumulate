@@ -8,8 +8,15 @@ import (
 
 type SyntheticForwardTransaction struct{}
 
+var _ PrincipalValidator = (*SyntheticForwardTransaction)(nil)
+
 func (SyntheticForwardTransaction) Type() protocol.TransactionType {
 	return protocol.TransactionTypeSyntheticForwardTransaction
+}
+
+func (SyntheticForwardTransaction) AllowMissingPrincipal(transaction *protocol.Transaction) bool {
+	// This will be checked again when the additional transaction is executed.
+	return true
 }
 
 func (SyntheticForwardTransaction) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {

@@ -34,7 +34,7 @@ type SignerValidator interface {
 type PrincipalValidator interface {
 	TransactionExecutor
 
-	AllowMissingPrincipal(*protocol.Transaction) (allow, fallback bool)
+	AllowMissingPrincipal(*protocol.Transaction) bool
 }
 
 // TransactionExecutorCleanup cleans up after a failed transaction.
