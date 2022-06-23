@@ -38,10 +38,10 @@ var cmdInit = &cobra.Command{
 }
 
 var cmdInitNode = &cobra.Command{
-	Use:   "node <node nr> <network-name|url>",
+	Use:   "node <network-name|url>",
 	Short: "Initialize a node",
 	Run:   initNode,
-	Args:  cobra.ExactArgs(2),
+	Args:  cobra.ExactArgs(1),
 }
 
 var flagInit struct {
@@ -185,13 +185,8 @@ func nodeReset(dir string) bool {
 }
 
 func initNode(cmd *cobra.Command, args []string) {
-	nodeDir := args[0]
-	nodeNr, err := strconv.ParseUint(nodeDir, 10, 16)
-	if err == nil {
-		nodeDir = fmt.Sprintf("node-%d", nodeNr)
-	}
 
-	netAddr, netPort, err := resolveAddr(args[1])
+	netAddr, netPort, err := resolveAddr(args[0])
 	checkf(err, "invalid network URL")
 
 	u, err := url.Parse(flagInitNode.ListenIP)
@@ -346,7 +341,7 @@ func initNode(cmd *cobra.Command, args []string) {
 		networkReset()
 	}
 
-	config.SetRoot(filepath.Join(flagMain.WorkDir, nodeDir))
+	config.SetRoot(flagMain.WorkDir)
 	accumulated.ConfigureNodePorts(&accumulated.NodeInit{
 		HostName: u.Hostname(),
 		ListenIP: u.Hostname(),
@@ -355,7 +350,7 @@ func initNode(cmd *cobra.Command, args []string) {
 
 	// TODO Check for existing?
 	privValKey, nodeKey := ed25519.GenPrivKey(), ed25519.GenPrivKey()
-
+	config.PrivValidator.Key = "priv_validator_key.json"
 	err = accumulated.WriteNodeFiles(config, privValKey, nodeKey, genDoc)
 	checkf(err, "write node files")
 }

@@ -59,7 +59,7 @@ func initDualNode(cmd *cobra.Command, args []string) {
 	args = []string{"0", u.String()}
 	//flagInit.Net = args[0]
 	initNode(cmd, args)
-	dnNodePath := path.Join(flagMain.WorkDir, "Node0")
+	dnNodePath := flagMain.WorkDir
 	c, err := cfg.Load(dnNodePath)
 	check(err)
 
@@ -129,7 +129,7 @@ func initDualNode(cmd *cobra.Command, args []string) {
 	args = []string{"0", bvnHost.Address}
 	initNode(cmd, args)
 
-	bvnNodePath := path.Join(flagMain.WorkDir, "Node0")
+	bvnNodePath := flagMain.WorkDir
 
 	c, err = cfg.Load(bvnNodePath)
 
@@ -148,9 +148,9 @@ func initDualNode(cmd *cobra.Command, args []string) {
 	//in dual mode, the key between bvn and dn is shared.
 	//This will be cleaned up when init system is overhauled with AC-1263
 	if c.PrivValidator != nil {
-		c.PrivValidator.Key = path.Join(dnNodePath, "/config/priv_validator_key.json")
+		c.PrivValidator.Key = "priv_validator_key.json"
 	}
-	os.Remove(path.Join(bvnNodePath, "/config/priv_validator_key.json"))
+	os.Remove("priv_validator_key.json")
 	if len(c.P2P.PersistentPeers) > 0 {
 		c.P2P.BootstrapPeers = c.P2P.PersistentPeers
 		c.P2P.PersistentPeers = ""

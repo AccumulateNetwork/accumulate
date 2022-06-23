@@ -258,6 +258,7 @@ func loadFile(dir, tmFile, accFile string) (*Config, error) {
 }
 
 func Store(config *Config) error {
+	config.PrivValidator.Key = "priv_validator_key.json"
 	err := config.Config.WriteToTemplate(filepath.Join(config.RootDir, configDir, tmConfigFile))
 	if err != nil {
 		return err
@@ -279,12 +280,15 @@ func Store(config *Config) error {
 
 func loadTendermint(dir, file string) (*tm.Config, error) {
 	config := tm.DefaultConfig()
+	config.PrivValidator.Key = "priv_validator_key.json"
+
 	err := load(dir, file, config)
 	if err != nil {
 		return nil, err
 	}
 
 	config.SetRoot(dir)
+
 	tm.EnsureRoot(config.RootDir)
 	if err := config.ValidateBasic(); err != nil {
 		return nil, fmt.Errorf("validate: %v", err)
