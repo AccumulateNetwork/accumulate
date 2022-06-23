@@ -54,7 +54,8 @@ var tokenCmdIssue = &cobra.Command{
 }
 
 var tokenCmdBurn = &cobra.Command{
-	Use:   "burn [adi or lite token account] [adi signer key name (if applicable)] [amount]",
+	Use: "burn [lite token account] [amount]\n" +
+		"burn [adi token account] [adi signer key name] [amount]",
 	Short: "burn tokens",
 	Args:  cobra.MinimumNArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
@@ -157,6 +158,7 @@ func CreateToken(origin string, args []string) (string, error) {
 	params.Precision = uint64(prcsn)
 	params.Properties = properties
 	params.SupplyLimit = supplyLimit
+
 	for _, authUrlStr := range Authorities {
 		authUrl, err := url2.Parse(authUrlStr)
 		if err != nil {
