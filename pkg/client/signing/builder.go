@@ -3,7 +3,6 @@ package signing
 import (
 	"fmt"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
@@ -25,7 +24,7 @@ type Builder struct {
 	Delegators []*url.URL
 	Signer     Signer
 	Version    uint64
-	Timestamp  uint64
+	Timestamp  Timestamp
 }
 
 func (s *Builder) Import(sig protocol.Signature) (*Builder, error) {
@@ -35,27 +34,27 @@ func (s *Builder) Import(sig protocol.Signature) (*Builder, error) {
 	case *protocol.LegacyED25519Signature:
 		s.Url = sig.Signer
 		s.Version = sig.SignerVersion
-		s.Timestamp = sig.Timestamp
+		s.Timestamp = TimestampFromValue(sig.Timestamp)
 	case *protocol.ED25519Signature:
 		s.Url = sig.Signer
 		s.Version = sig.SignerVersion
-		s.Timestamp = sig.Timestamp
+		s.Timestamp = TimestampFromValue(sig.Timestamp)
 	case *protocol.RCD1Signature:
 		s.Url = sig.Signer
 		s.Version = sig.SignerVersion
-		s.Timestamp = sig.Timestamp
+		s.Timestamp = TimestampFromValue(sig.Timestamp)
 	case *protocol.BTCSignature:
 		s.Url = sig.Signer
 		s.Version = sig.SignerVersion
-		s.Timestamp = sig.Timestamp
+		s.Timestamp = TimestampFromValue(sig.Timestamp)
 	case *protocol.BTCLegacySignature:
 		s.Url = sig.Signer
 		s.Version = sig.SignerVersion
-		s.Timestamp = sig.Timestamp
+		s.Timestamp = TimestampFromValue(sig.Timestamp)
 	case *protocol.ETHSignature:
 		s.Url = sig.Signer
 		s.Version = sig.SignerVersion
-		s.Timestamp = sig.Timestamp
+		s.Timestamp = TimestampFromValue(sig.Timestamp)
 	case *protocol.DelegatedSignature:
 		_, err := s.Import(sig.Signature)
 		if err != nil {
@@ -67,6 +66,13 @@ func (s *Builder) Import(sig protocol.Signature) (*Builder, error) {
 	}
 
 	return s, nil
+}
+
+func (s *Builder) Copy() *Builder {
+	t := *s
+	t.Delegators = make([]*url.URL, len(s.Delegators))
+	copy(t.Delegators, s.Delegators)
+	return &t
 }
 
 func (s *Builder) UseSimpleHash() *Builder {
@@ -114,18 +120,23 @@ func (s *Builder) SetVersion(version uint64) *Builder {
 	return s
 }
 
+func (s *Builder) ClearTimestamp() *Builder {
+	s.Timestamp = nil
+	return s
+}
+
 func (s *Builder) SetTimestamp(timestamp uint64) *Builder {
-	s.Timestamp = timestamp
+	s.Timestamp = TimestampFromValue(timestamp)
 	return s
 }
 
 func (s *Builder) SetTimestampWithVar(timestamp *uint64) *Builder {
-	s.Timestamp = atomic.AddUint64(timestamp, 1)
+	s.Timestamp = (*TimestampFromVariable)(timestamp)
 	return s
 }
 
 func (s *Builder) SetTimestampToNow() *Builder {
-	s.Timestamp = uint64(time.Now().UTC().UnixMilli())
+	s.Timestamp = TimestampFromValue(time.Now().UTC().UnixMilli())
 	return s
 }
 
@@ -133,7 +144,7 @@ func (s *Builder) UseFaucet() *Builder {
 	f := protocol.Faucet.Signer()
 	s.Signer = f
 	s.Url = protocol.FaucetUrl.RootIdentity()
-	s.Timestamp = f.Timestamp()
+	s.Timestamp = TimestampFromValue(f.Timestamp())
 	s.Version = f.Version()
 	return s
 }
@@ -149,7 +160,7 @@ func (s *Builder) prepare(init bool) (protocol.KeySignature, error) {
 	if init && s.Version == 0 {
 		errs = append(errs, "missing version")
 	}
-	if init && s.Timestamp == 0 {
+	if init && s.Timestamp == nil {
 		errs = append(errs, "missing timestamp")
 	}
 	if len(errs) > 0 {
@@ -175,47 +186,56 @@ func (s *Builder) prepare(init bool) (protocol.KeySignature, error) {
 		return nil, fmt.Errorf("unknown signature type %v", s.Type)
 	}
 
+	var timestamp uint64
+	var err error
+	if s.Timestamp != nil {
+		timestamp, err = s.Timestamp.Get()
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	switch s.Type {
 	case protocol.SignatureTypeLegacyED25519:
 		sig := new(protocol.LegacyED25519Signature)
 		sig.Signer = s.Url
 		sig.SignerVersion = s.Version
-		sig.Timestamp = s.Timestamp
+		sig.Timestamp = timestamp
 		return sig, s.Signer.SetPublicKey(sig)
 
 	case protocol.SignatureTypeUnknown, protocol.SignatureTypeED25519:
 		sig := new(protocol.ED25519Signature)
 		sig.Signer = s.Url
 		sig.SignerVersion = s.Version
-		sig.Timestamp = s.Timestamp
+		sig.Timestamp = timestamp
 		return sig, s.Signer.SetPublicKey(sig)
 
 	case protocol.SignatureTypeRCD1:
 		sig := new(protocol.RCD1Signature)
 		sig.Signer = s.Url
 		sig.SignerVersion = s.Version
-		sig.Timestamp = s.Timestamp
+		sig.Timestamp = timestamp
 		return sig, s.Signer.SetPublicKey(sig)
 
 	case protocol.SignatureTypeBTC:
 		sig := new(protocol.BTCSignature)
 		sig.Signer = s.Url
 		sig.SignerVersion = s.Version
-		sig.Timestamp = s.Timestamp
+		sig.Timestamp = timestamp
 		return sig, s.Signer.SetPublicKey(sig)
 
 	case protocol.SignatureTypeBTCLegacy:
 		sig := new(protocol.BTCLegacySignature)
 		sig.Signer = s.Url
 		sig.SignerVersion = s.Version
-		sig.Timestamp = s.Timestamp
+		sig.Timestamp = timestamp
 		return sig, s.Signer.SetPublicKey(sig)
 
 	case protocol.SignatureTypeETH:
 		sig := new(protocol.ETHSignature)
 		sig.Signer = s.Url
 		sig.SignerVersion = s.Version
-		sig.Timestamp = s.Timestamp
+		sig.Timestamp = timestamp
 		return sig, s.Signer.SetPublicKey(sig)
 
 	default:
@@ -303,22 +323,22 @@ func (s *Builder) InitiateSynthetic(txn *protocol.Transaction, router routing.Ro
 		return nil, fmt.Errorf("cannot prepare signature: %s", strings.Join(errs, ", "))
 	}
 
-	destSubnet, err := router.RouteAccount(txn.Header.Principal)
+	destPartition, err := router.RouteAccount(txn.Header.Principal)
 	if err != nil {
 		return nil, fmt.Errorf("routing %v: %v", txn.Header.Principal, err)
 	}
-	subnetUrl := protocol.SubnetUrl(destSubnet)
+	partitionUrl := protocol.PartitionUrl(destPartition)
 
 	initSig := new(protocol.SyntheticSignature)
 	initSig.SourceNetwork = s.Url
-	initSig.DestinationNetwork = subnetUrl
+	initSig.DestinationNetwork = partitionUrl
 
 	if ledger == nil {
 		initSig.SequenceNumber = s.Version
 	} else {
-		subnetLedger := ledger.Subnet(subnetUrl)
-		subnetLedger.Produced++
-		initSig.SequenceNumber = subnetLedger.Produced
+		partitionLedger := ledger.Partition(partitionUrl)
+		partitionLedger.Produced++
+		initSig.SequenceNumber = partitionLedger.Produced
 	}
 
 	// Ignore InitMode, always use a simple hash

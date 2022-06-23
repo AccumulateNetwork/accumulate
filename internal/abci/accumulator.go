@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"runtime/debug"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -20,7 +21,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
-	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -37,13 +38,15 @@ type Accumulator struct {
 	AccumulatorOptions
 	logger log.Logger
 
-	block        *block.Block
-	txct         int64
-	timer        time.Time
-	didPanic     bool
-	lastSnapshot uint64
-	checkTxBatch *database.Batch
-	checkTxMutex *sync.Mutex
+	block          *block.Block
+	txct           int64
+	timer          time.Time
+	didPanic       bool
+	lastSnapshot   uint64
+	checkTxBatch   *database.Batch
+	checkTxMutex   *sync.Mutex
+	pendingUpdates abci.ValidatorUpdates
+	startTime      time.Time
 
 	onFatal func(error)
 }
@@ -61,17 +64,17 @@ type AccumulatorOptions struct {
 func NewAccumulator(opts AccumulatorOptions) *Accumulator {
 	app := &Accumulator{
 		AccumulatorOptions: opts,
-		logger:             opts.Logger.With("module", "accumulate", "subnet", opts.Accumulate.SubnetId),
+		logger:             opts.Logger.With("module", "accumulate", "partition", opts.Accumulate.PartitionId),
+		checkTxMutex:       &sync.Mutex{},
 	}
+
+	events.SubscribeSync(opts.EventBus, app.willChangeGlobals)
+
+	app.Accumulate.AnalysisLog.Init(app.RootDir, app.Accumulate.PartitionId)
 
 	events.SubscribeAsync(opts.EventBus, func(e events.DidSaveSnapshot) {
 		atomic.StoreUint64(&app.lastSnapshot, e.MinorIndex)
 	})
-
-	if app.Executor == nil {
-		panic("Chain Validator Node not set!")
-	}
-	app.checkTxMutex = &sync.Mutex{}
 
 	app.logger.Info("Starting ABCI application", "accumulate", accumulate.Version, "abci", Version)
 	return app
@@ -123,9 +126,58 @@ func (app *Accumulator) recover(code *uint32, setDidPanic bool) {
 	}
 }
 
+// willChangeGlobals is called when the global values are about to change.
+// willChangeGlobals populates the validator update list, which is passed to
+// Tendermint to update the validator set.
+func (app *Accumulator) willChangeGlobals(e events.WillChangeGlobals) error {
+	// Compare the old and new partition definitions
+	updates, err := e.Old.DiffValidators(e.New, app.Accumulate.PartitionId)
+	if err != nil {
+		return err
+	}
+
+	// Convert the update list into Tendermint validator updates
+	for key, typ := range updates {
+		key := key // See docs/developer/rangevarref.md
+		vu := abci.ValidatorUpdate{
+			PubKey: protocrypto.PublicKey{
+				Sum: &protocrypto.PublicKey_Ed25519{
+					Ed25519: key[:],
+				},
+			},
+		}
+		switch typ {
+		case core.ValidatorUpdateAdd:
+			vu.Power = 1
+		case core.ValidatorUpdateRemove:
+			vu.Power = 0
+		default:
+			continue
+		}
+		app.pendingUpdates = append(app.pendingUpdates, vu)
+	}
+
+	// Sort the list so we're deterministic
+	sort.Slice(app.pendingUpdates, func(i, j int) bool {
+		a := app.pendingUpdates[i].PubKey.GetEd25519()
+		b := app.pendingUpdates[j].PubKey.GetEd25519()
+		return bytes.Compare(a, b) < 0
+	})
+
+	return nil
+}
+
 // Info implements github.com/tendermint/tendermint/abci/types.Application.
 func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
 	defer app.recover(nil, false)
+
+	if app.Accumulate.AnalysisLog.Enabled {
+		app.Accumulate.AnalysisLog.InitDataSet("accumulator", logging.DefaultOptions())
+		app.Accumulate.AnalysisLog.InitDataSet("executor", logging.DefaultOptions())
+		app.Executor.EnableTimers()
+	}
+
+	app.startTime = time.Now()
 
 	//todo: load up the merkle databases to the same state we're at...  We will need to rewind.
 
@@ -254,7 +306,7 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 	// Initialize the chain
 	err = app.Executor.InitFromGenesis(block.Batch, req.AppStateBytes)
 	if err != nil {
-		panic(fmt.Errorf("failed to init chain: %v", err))
+		panic(fmt.Errorf("failed to init chain: %+v", err))
 	}
 
 	// Commit the batch
@@ -307,29 +359,6 @@ func (app *Accumulator) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBegi
 	app.timer = time.Now()
 
 	app.txct = 0
-
-	/*
-		app.ValUpdates = make([]types.ValidatorUpdate, 0)
-
-		// Punish validators who committed equivocation.
-		for _, ev := range req.ByzantineValidators {
-			if ev.Type == types.EvidenceType_DUPLICATE_VOTE {
-				addr := string(ev.Validator.Address)
-				if pubKey, ok := app.valAddrToPubKeyMap[addr]; ok {
-					app.updateValidator(types.ValidatorUpdate{
-						PubKey: pubKey,
-						Power:  ev.Validator.Power - 1,
-					})
-					app.logger.Info("Decreased val power by 1 because of the equivocation",
-						"val", addr)
-				} else {
-					app.logger.Error("Wanted to punish val, but can't find it",
-						"val", addr)
-				}
-			}
-		}
-
-	*/
 
 	return ret
 }
@@ -439,29 +468,9 @@ func (app *Accumulator) EndBlock(req abci.RequestEndBlock) abci.ResponseEndBlock
 	}
 
 	var resp abci.ResponseEndBlock
-	resp.ValidatorUpdates = getValidatorUpdates(app.block.State.ValidatorsUpdates)
+	resp.ValidatorUpdates = app.pendingUpdates
+	app.pendingUpdates = nil
 	return resp
-}
-
-// getValidatorUpdates adapts the Accumulate ValidatorUpdate struct array to the Tendermint ValidatorUpdate
-func getValidatorUpdates(updates []chain.ValidatorUpdate) []abci.ValidatorUpdate {
-	validatorUpdates := make([]abci.ValidatorUpdate, len(updates))
-	for i, u := range updates {
-		var pwr int64
-		if u.Enabled {
-			pwr = 1
-		}
-
-		validatorUpdates[i] = abci.ValidatorUpdate{
-			PubKey: protocrypto.PublicKey{
-				Sum: &protocrypto.PublicKey_Ed25519{
-					Ed25519: u.PubKey,
-				},
-			},
-			Power: pwr,
-		}
-	}
-	return validatorUpdates
 }
 
 // Commit implements github.com/tendermint/tendermint/abci/types.Application.
@@ -471,6 +480,7 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 	defer app.recover(nil, true)
 	defer func() { app.block = nil }()
 
+	tick := time.Now()
 	// Is the block empty?
 	if app.block.State.Empty() {
 		// Discard changes
@@ -487,6 +497,10 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 
 	// Commit the batch
 	err := app.block.Batch.Commit()
+
+	commitTime := time.Since(tick).Seconds()
+	tick = time.Now()
+
 	if err != nil {
 		app.fatal(err, true)
 		return abci.ResponseCommit{}
@@ -502,6 +516,8 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 		app.fatal(err, true)
 		return abci.ResponseCommit{}
 	}
+
+	publishEventTime := time.Since(tick).Seconds()
 
 	// Replace start a new checkTx batch
 	app.checkTxMutex.Lock()
@@ -524,6 +540,35 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 		resp.RetainHeight = int64(app.lastSnapshot)
 	}
 
+	timeSinceAppStart := time.Since(app.startTime).Seconds()
+	ds := app.Accumulate.AnalysisLog.GetDataSet("accumulator")
+	if ds != nil {
+		blockTime := time.Since(app.timer).Seconds()
+		aveBlockTime := 0.0
+		estTps := 0.0
+		if app.txct != 0 {
+			aveBlockTime = blockTime / float64(app.txct)
+			estTps = 1.0 / aveBlockTime
+		}
+		ds.Save("height", app.block.Index, 10, true)
+		ds.Save("time_since_app_start", timeSinceAppStart, 6, false)
+		ds.Save("block_time", blockTime, 6, false)
+		ds.Save("commit_time", commitTime, 6, false)
+		ds.Save("event_time", publishEventTime, 6, false)
+		ds.Save("ave_block_time", aveBlockTime, 10, false)
+		ds.Save("est_tps", estTps, 10, false)
+		ds.Save("txct", app.txct, 10, false)
+
+	}
+
+	ds = app.Accumulate.AnalysisLog.GetDataSet("executor")
+	if ds != nil {
+		ds.Save("height", app.block.Index, 10, true)
+		ds.Save("time_since_app_start", timeSinceAppStart, 6, false)
+		app.Executor.BlockTimers.Store(ds)
+	}
+
+	go app.Accumulate.AnalysisLog.Flush()
 	app.logger.Debug("Committed", "minor", app.block.Index, "hash", logging.AsHex(batch.BptRoot()).Slice(0, 4), "major", app.block.State.MakeMajorBlock)
 	return resp
 }

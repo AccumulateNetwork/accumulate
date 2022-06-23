@@ -68,7 +68,7 @@ func (b *Batch) BptReceipt(key storage.Key, value [32]byte) (*managed.Receipt, e
 // SaveSnapshot writes the full state of the partition out to a file.
 func (b *Batch) SaveSnapshot(file io.WriteSeeker, network *config.Describe) error {
 	/*synthetic := object("Account", network.Synthetic())
-	subnet := network.NodeUrl()*/
+	partition := network.NodeUrl()*/
 
 	// Write the block height
 	var ledger *protocol.SystemLedger
@@ -107,8 +107,8 @@ func (b *Batch) SaveSnapshot(file io.WriteSeeker, network *config.Describe) erro
 			return nil, err
 		}
 
-		// Load the full state - preserve chains if the account is a subnet account
-		state, err := account.state(true, subnet.PrefixOf(a.GetUrl()))*/
+		// Load the full state - preserve chains if the account is a partition account
+		state, err := account.state(true, partition.PrefixOf(a.GetUrl()))*/
 
 		// Load the full state - always preserve chains for now
 		state, err := account.state(true, true)

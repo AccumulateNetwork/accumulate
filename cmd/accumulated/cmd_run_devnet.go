@@ -13,6 +13,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 	"github.com/tendermint/tendermint/libs/log"
+	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
 	"gitlab.com/accumulatenetwork/accumulate/internal/testing"
 )
@@ -25,14 +26,14 @@ var cmdRunDevnet = &cobra.Command{
 }
 
 var flagRunDevnet = struct {
-	Except []string
+	Except []int
 	Debug  bool
 }{}
 
 func init() {
 	cmdRun.AddCommand(cmdRunDevnet)
 
-	cmdRunDevnet.Flags().StringArrayVarP(&flagRunDevnet.Except, "except", "x", nil, "Nodes that should not be launched, e.g. bvn0.0")
+	cmdRunDevnet.Flags().IntSliceVarP(&flagRunDevnet.Except, "except", "x", nil, "Numbers of nodes that should not be launched")
 	cmdRunDevnet.Flags().BoolVar(&flagRunDevnet.Debug, "debug", false, "Enable debugging features")
 
 	if os.Getenv("FORCE_COLOR") != "" {
@@ -56,41 +57,16 @@ func runDevNet(*cobra.Command, []string) {
 		testing.EnableDebugFeatures()
 	}
 
-	skip := map[string]bool{}
+	skip := map[int]bool{}
 	for _, id := range flagRunDevnet.Except {
 		skip[id] = true
 	}
 
-	type Node struct {
-		Subnet string
-		Number int
-	}
-	var nodes []Node
-
-	dir := flagMain.WorkDir
-	for _, node := range getNodesFromSubnetDir(filepath.Join(dir, "dn")) {
-		nodes = append(nodes, Node{"dn", node})
-		id := fmt.Sprintf("dn.%d", node)
+	nodes := getNodeDirs(flagMain.WorkDir)
+	for _, node := range nodes {
+		id := fmt.Sprint(node)
 		if len(id) > nodeIdLen {
 			nodeIdLen = len(id)
-		}
-	}
-
-	ent, err := os.ReadDir(dir)
-	checkf(err, "failed to read %q", dir)
-
-	for _, ent := range ent {
-		if !ent.IsDir() || ent.Name() == "dn" {
-			continue
-		}
-
-		subnet := ent.Name()
-		for _, node := range getNodesFromSubnetDir(filepath.Join(dir, subnet)) {
-			nodes = append(nodes, Node{subnet, node})
-			id := fmt.Sprintf("%s.%d", subnet, node)
-			if len(id) > nodeIdLen {
-				nodeIdLen = len(id)
-			}
 		}
 	}
 
@@ -99,35 +75,47 @@ func runDevNet(*cobra.Command, []string) {
 
 	logWriter := newLogWriter(nil)
 
+	started := new(sync.WaitGroup)
 	for _, node := range nodes {
-		if skip[fmt.Sprintf("%s.%d", node.Subnet, node.Number)] {
+		if skip[node] {
 			continue
 		}
 
-		// Load the node
-		dir := filepath.Join(dir, node.Subnet, fmt.Sprintf("Node%d", node.Number))
-		daemon, err := accumulated.Load(dir, func(format string) (io.Writer, error) {
-			return logWriter(format, func(w io.Writer, format string, color bool) io.Writer {
-				return newNodeWriter(w, format, node.Subnet, node.Number, color)
-			})
-		})
+		name := fmt.Sprintf("node-%d", node)
+
+		// Load the DNN
+		dnn, err := accumulated.Load(
+			filepath.Join(flagMain.WorkDir, name, "dnn"),
+			func(c *config.Config) (io.Writer, error) {
+				return logWriter(c.LogFormat, func(w io.Writer, format string, color bool) io.Writer {
+					return newNodeWriter(w, format, "dn", node, color)
+				})
+			},
+		)
 		check(err)
 
-		// Prometheus cannot be enabled when running multiple nodes in one process
-		daemon.Config.Instrumentation.Prometheus = false
+		bvnn, err := accumulated.Load(
+			filepath.Join(flagMain.WorkDir, name, "bvnn"),
+			func(c *config.Config) (io.Writer, error) {
+				return logWriter(c.LogFormat, func(w io.Writer, format string, color bool) io.Writer {
+					return newNodeWriter(w, format, strings.ToLower(c.Accumulate.PartitionId), node, color)
+				})
+			},
+		)
+		check(err)
 
-		// Start it
-		check(daemon.Start())
+		startDevNetNode(dnn, started, done, stop)
+		startDevNetNode(bvnn, started, done, stop)
 
-		// On signal, stop the node
-		done.Add(1)
+		// Connect once everything is setup
 		go func() {
-			defer done.Done()
-			<-stop
-			check(daemon.Stop())
+			started.Wait()
+			check(dnn.ConnectDirectly(bvnn))
 		}()
+
 	}
 
+	started.Wait()
 	color.HiBlack("----- Started -----")
 
 	// Wait for SIGINT
@@ -149,20 +137,42 @@ func runDevNet(*cobra.Command, []string) {
 	done.Wait()
 }
 
-func getNodesFromSubnetDir(dir string) []int {
+func startDevNetNode(daemon *accumulated.Daemon, started, done *sync.WaitGroup, stop chan struct{}) {
+	// Disable features not compatible with multi-node, single-process
+	daemon.Config.Instrumentation.Prometheus = false
+	daemon.Config.Accumulate.Website.Enabled = false
+
+	started.Add(1)
+	go func() {
+		defer started.Done()
+
+		// Start it
+		check(daemon.Start())
+
+		// On signal, stop the node
+		done.Add(1)
+		go func() {
+			defer done.Done()
+			<-stop
+			check(daemon.Stop())
+		}()
+	}()
+}
+
+func getNodeDirs(dir string) []int {
 	var nodes []int
 
 	ent, err := os.ReadDir(dir)
 	checkf(err, "failed to read %q", dir)
 
 	for _, ent := range ent {
-		// We only want directories starting with Node
-		if !ent.IsDir() || !strings.HasPrefix(ent.Name(), "Node") {
+		// We only want directories starting with node-
+		if !ent.IsDir() || !strings.HasPrefix(ent.Name(), "node-") {
 			continue
 		}
 
-		// We only want directories named Node#, e.g. Node0
-		node, err := strconv.ParseInt(ent.Name()[4:], 10, 16)
+		// We only want directories named node-#, e.g. node-1
+		node, err := strconv.ParseInt(ent.Name()[5:], 10, 16)
 		if err != nil {
 			continue
 		}
@@ -175,32 +185,32 @@ func getNodesFromSubnetDir(dir string) []int {
 
 var nodeIdLen int
 
-var subnetColor = map[string]*color.Color{}
+var partitionColor = map[string]*color.Color{}
 
-func newNodeWriter(w io.Writer, format, subnet string, node int, color bool) io.Writer {
+func newNodeWriter(w io.Writer, format, partition string, node int, color bool) io.Writer {
 	switch format {
 	case log.LogFormatPlain, log.LogFormatText:
-		id := fmt.Sprintf("%s.%d", subnet, node)
-		s := fmt.Sprintf("[%s]", id) + strings.Repeat(" ", nodeIdLen-len(id)+1)
+		id := fmt.Sprintf("%s.%d", partition, node)
+		s := fmt.Sprintf("[%s]", id) + strings.Repeat(" ", nodeIdLen+len("bvnxx")-len(id)+1)
 		if !color {
 			return &plainNodeWriter{s, w}
 		}
 
-		c, ok := subnetColor[subnet]
+		c, ok := partitionColor[partition]
 		if !ok {
 			c = fallbackColor
 			if len(colors) > 0 {
 				c = colors[0]
 				colors = colors[1:]
 			}
-			subnetColor[subnet] = c
+			partitionColor[partition] = c
 		}
 
 		s = c.Sprint(s)
 		return &plainNodeWriter{s, w}
 
 	case log.LogFormatJSON:
-		s := fmt.Sprintf(`"subnet":"%s","node":%d`, subnet, node)
+		s := fmt.Sprintf(`"partition":"%s","node":%d`, partition, node)
 		return &jsonNodeWriter{s, w}
 
 	default:

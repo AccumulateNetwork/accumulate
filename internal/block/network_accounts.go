@@ -13,6 +13,8 @@ import (
 // processNetworkAccountUpdates processes updates to network data accounts,
 // updating the in-memory globals variable and pushing updates when necessary.
 func (x *Executor) processNetworkAccountUpdates(batch *database.Batch, delivery *chain.Delivery, principal protocol.Account) error {
+	r := x.BlockTimers.Start(BlockTimerTypeNetworkAccountUpdates)
+	defer x.BlockTimers.Stop(r)
 	// Only process updates to network accounts
 	if principal == nil || !x.Describe.NodeUrl().PrefixOf(principal.GetUrl()) {
 		return nil
@@ -27,9 +29,9 @@ func (x *Executor) processNetworkAccountUpdates(batch *database.Batch, delivery 
 	switch body := delivery.Transaction.Body.(type) {
 	case *protocol.UpdateKeyPage:
 		switch targetName {
-		case protocol.OperatorBook + "/1":
+		case protocol.Operators + "/1":
 			// Synchronize updates to the operator book
-			targetName = protocol.OperatorBook
+			targetName = protocol.Operators
 
 			page, ok := principal.(*protocol.KeyPage)
 			if !ok {

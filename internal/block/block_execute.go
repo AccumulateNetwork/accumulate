@@ -80,6 +80,9 @@ func (x *Executor) ExecuteEnvelope(block *Block, delivery *chain.Delivery) (*pro
 }
 
 func (x *Executor) executeEnvelope(block *Block, delivery *chain.Delivery) (*protocol.TransactionStatus, []*chain.Delivery, error) {
+	r := x.BlockTimers.Start(BlockTimerTypeExecuteEnvelope)
+	defer x.BlockTimers.Stop(r)
+
 	status, err := delivery.LoadTransaction(block.Batch)
 	switch {
 	case err == nil:

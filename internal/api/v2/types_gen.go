@@ -66,7 +66,7 @@ type DataEntrySetQuery struct {
 }
 
 type DescriptionResponse struct {
-	SubnetId    string             `json:"subnetId,omitempty" form:"subnetId" query:"subnetId" validate:"required"`
+	PartitionId string             `json:"partitionId,omitempty" form:"partitionId" query:"partitionId" validate:"required"`
 	NetworkType config.NetworkType `json:"networkType,omitempty" form:"networkType" query:"networkType" validate:"required"`
 	Network     config.Network     `json:"network,omitempty" form:"network" query:"network" validate:"required"`
 	Values      core.GlobalValues  `json:"values,omitempty" form:"values" query:"values" validate:"required"`
@@ -593,6 +593,7 @@ func (v *DataEntrySetQuery) MarshalJSON() ([]byte, error) {
 
 func (v *DescriptionResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
+		PartitionId string             `json:"partitionId,omitempty"`
 		SubnetId    string             `json:"subnetId,omitempty"`
 		NetworkType config.NetworkType `json:"networkType,omitempty"`
 		Network     config.Network     `json:"network,omitempty"`
@@ -600,7 +601,8 @@ func (v *DescriptionResponse) MarshalJSON() ([]byte, error) {
 		Values      core.GlobalValues  `json:"values,omitempty"`
 		Error       *errors2.Error     `json:"error,omitempty"`
 	}{}
-	u.SubnetId = v.SubnetId
+	u.PartitionId = v.PartitionId
+	u.SubnetId = v.PartitionId
 	u.NetworkType = v.NetworkType
 	u.Network = v.Network
 	u.Subnet = v.Network
@@ -1150,6 +1152,7 @@ func (v *DataEntrySetQuery) UnmarshalJSON(data []byte) error {
 
 func (v *DescriptionResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
+		PartitionId string             `json:"partitionId,omitempty"`
 		SubnetId    string             `json:"subnetId,omitempty"`
 		NetworkType config.NetworkType `json:"networkType,omitempty"`
 		Network     config.Network     `json:"network,omitempty"`
@@ -1157,7 +1160,8 @@ func (v *DescriptionResponse) UnmarshalJSON(data []byte) error {
 		Values      core.GlobalValues  `json:"values,omitempty"`
 		Error       *errors2.Error     `json:"error,omitempty"`
 	}{}
-	u.SubnetId = v.SubnetId
+	u.PartitionId = v.PartitionId
+	u.SubnetId = v.PartitionId
 	u.NetworkType = v.NetworkType
 	u.Network = v.Network
 	u.Subnet = v.Network
@@ -1166,7 +1170,11 @@ func (v *DescriptionResponse) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	v.SubnetId = u.SubnetId
+	if !(u.PartitionId == "") {
+		v.PartitionId = u.PartitionId
+	} else {
+		v.PartitionId = u.SubnetId
+	}
 	v.NetworkType = u.NetworkType
 	if !(u.Network.Equal(&config.Network{})) {
 		v.Network = u.Network
@@ -1681,7 +1689,7 @@ func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 		v.Signatures[i] = x
 	}
 	v.Status = u.Status
-	if !(u.Produced == nil) {
+	if !(len(u.Produced) == 0) {
 		v.Produced = u.Produced
 	} else {
 		v.Produced = u.SyntheticTxids

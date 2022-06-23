@@ -109,22 +109,22 @@ var txnTests = []*TCG{
 		txnTest(AccountUrl("adi"), &RemoteTransaction{}),
 	}},
 	{Name: "SyntheticCreateIdentity", Cases: []*TC{
-		txnTest(AccountUrl("adi"), &SyntheticCreateIdentity{SyntheticOrigin: SyntheticOrigin{Cause: SubnetUrl("X").WithTxID([32]byte{1})},
+		txnTest(AccountUrl("adi"), &SyntheticCreateIdentity{SyntheticOrigin: SyntheticOrigin{Cause: PartitionUrl("X").WithTxID([32]byte{1})},
 			Accounts: []Account{&UnknownAccount{Url: AccountUrl("foo")}}}),
 	}},
 	{Name: "SyntheticWriteData", Cases: []*TC{
-		txnTest(AccountUrl("adi"), &SyntheticWriteData{SyntheticOrigin: SyntheticOrigin{Cause: SubnetUrl("X").WithTxID([32]byte{1})},
+		txnTest(AccountUrl("adi"), &SyntheticWriteData{SyntheticOrigin: SyntheticOrigin{Cause: PartitionUrl("X").WithTxID([32]byte{1})},
 			Entry: &AccumulateDataEntry{Data: [][]byte{[]byte("foo"), []byte("bar"), []byte("baz")}}}),
 	}},
 	{Name: "SyntheticDepositTokens", Cases: []*TC{
-		txnTest(AccountUrl("adi"), &SyntheticDepositTokens{SyntheticOrigin: SyntheticOrigin{Cause: SubnetUrl("X").WithTxID([32]byte{1})},
+		txnTest(AccountUrl("adi"), &SyntheticDepositTokens{SyntheticOrigin: SyntheticOrigin{Cause: PartitionUrl("X").WithTxID([32]byte{1})},
 			Token: AccountUrl("ACME"), Amount: *new(big.Int).SetInt64(10000)}),
 	}},
 	{Name: "SyntheticDepositCredits", Cases: []*TC{
-		txnTest(AccountUrl("adi"), &SyntheticDepositCredits{SyntheticOrigin: SyntheticOrigin{Cause: SubnetUrl("X").WithTxID([32]byte{1})}, Amount: 1234}),
+		txnTest(AccountUrl("adi"), &SyntheticDepositCredits{SyntheticOrigin: SyntheticOrigin{Cause: PartitionUrl("X").WithTxID([32]byte{1})}, Amount: 1234}),
 	}},
 	{Name: "SyntheticBurnTokens", Cases: []*TC{
-		txnTest(AccountUrl("adi"), &SyntheticBurnTokens{SyntheticOrigin: SyntheticOrigin{Cause: SubnetUrl("X").WithTxID([32]byte{1})},
+		txnTest(AccountUrl("adi"), &SyntheticBurnTokens{SyntheticOrigin: SyntheticOrigin{Cause: PartitionUrl("X").WithTxID([32]byte{1})},
 			Amount: *big.NewInt(123456789)}),
 	}},
 }
@@ -159,7 +159,7 @@ var acntTests = []*TCG{
 		testdata.NewAcntTest(&DataAccount{Url: AccountUrl("adi", "data"), AccountAuth: *simpleAuth}),
 	}},
 	{Name: "LiteDataAccount", Cases: []*TC{
-		testdata.NewAcntTest(&LiteDataAccount{Url: AccountUrl("lite-data-account"), Tail: []byte("asdf")}),
+		testdata.NewAcntTest(&LiteDataAccount{Url: AccountUrl("lite-data-account")}),
 	}},
 }
 
@@ -170,7 +170,7 @@ func txnTest(originUrl *url.URL, body TransactionBody) *TC {
 	signer.Url = originUrl
 	signer.SetPrivateKey(key)
 	signer.Version = 1
-	signer.Timestamp = uint64(rand.Uint32())
+	signer.SetTimestamp(uint64(rand.Uint32()))
 	env := new(Envelope)
 	txn := new(Transaction)
 	env.Transaction = []*Transaction{txn}

@@ -15,11 +15,15 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // EndBlock implements ./Chain
 func (m *Executor) EndBlock(block *Block) error {
+	r := m.BlockTimers.Start(BlockTimerTypeEndBlock)
+	defer m.BlockTimers.Stop(r)
+
 	// Check for missing synthetic transactions. Load the ledger synchronously,
 	// request transactions asynchronously.
 	var synthLedger *protocol.SyntheticLedger
@@ -45,13 +49,14 @@ func (m *Executor) EndBlock(block *Block) error {
 
 	// Update active globals
 	if !m.isGenesis && !m.globals.Active.Equal(&m.globals.Pending) {
-		m.globals.Active = *m.globals.Pending.Copy()
-		err = m.EventBus.Publish(events.DidChangeGlobals{
-			Values: &m.globals.Active,
+		err = m.EventBus.Publish(events.WillChangeGlobals{
+			New: &m.globals.Pending,
+			Old: &m.globals.Active,
 		})
 		if err != nil {
 			return errors.Format(errors.StatusUnknown, "publish globals update: %w", err)
 		}
+		m.globals.Active = *m.globals.Pending.Copy()
 	}
 
 	m.logger.Debug("Committing",
@@ -252,42 +257,46 @@ func (m *Executor) anchorSynthChain(block *Block, rootChain *database.Chain) (in
 }
 
 func (x *Executor) requestMissingSyntheticTransactions(ledger *protocol.SyntheticLedger) {
+	batch := x.db.Begin(false)
+	defer batch.Discard()
+
 	// Setup
 	wg := new(sync.WaitGroup)
-	localSubnet := x.Describe.NodeUrl()
+	localPartition := x.Describe.NodeUrl()
 	dispatcher := newDispatcher(x.ExecutorOptions)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// For each subnet
-	var sent bool
-	for _, subnet := range ledger.Subnets {
-		// Get the subnet ID
-		id, ok := protocol.ParseSubnetUrl(subnet.Url)
+	// For each partition
+	var pending []*url.TxID
+	for _, partition := range ledger.Partitions {
+		// Get the partition ID
+		id, ok := protocol.ParsePartitionUrl(partition.Url)
 		if !ok {
 			// If this happens we're kind of screwed
-			panic(errors.Format(errors.StatusInternalError, "synthetic ledger has an invalid subnet URL: %v", subnet.Url))
+			panic(errors.Format(errors.StatusInternalError, "synthetic ledger has an invalid partition URL: %v", partition.Url))
 		}
 
 		// For each pending synthetic transaction
 		var batch jsonrpc2.BatchRequest
-		for i, txid := range subnet.Pending {
+		for i, txid := range partition.Pending {
 			// If we know the ID we must have a local copy (so we don't need to
 			// fetch it)
 			if txid != nil {
+				pending = append(pending, txid)
 				continue
 			}
 
-			seqNum := subnet.Delivered + uint64(i) + 1
-			x.logger.Info("Missing synthetic transaction", "seq-num", seqNum, "source", subnet.Url)
+			seqNum := partition.Delivered + uint64(i) + 1
+			x.logger.Info("Missing synthetic transaction", "seq-num", seqNum, "source", partition.Url)
 
 			// Request the transaction by sequence number
 			batch = append(batch, jsonrpc2.Request{
 				ID:     i + 1,
 				Method: "query-synth",
 				Params: &api.SyntheticTransactionRequest{
-					Source:         subnet.Url,
-					Destination:    localSubnet,
+					Source:         partition.Url,
+					Destination:    localPartition,
 					SequenceNumber: seqNum,
 				},
 			})
@@ -297,8 +306,7 @@ func (x *Executor) requestMissingSyntheticTransactions(ledger *protocol.Syntheti
 			continue
 		}
 
-		sent = true
-		subnet := subnet // See docs/developer/rangevarref.md
+		partition := partition // See docs/developer/rangevarref.md
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -307,7 +315,7 @@ func (x *Executor) requestMissingSyntheticTransactions(ledger *protocol.Syntheti
 			var resp []*api.TransactionQueryResponse
 			err := x.Router.RequestAPIv2(ctx, id, "", batch, &resp)
 			if err != nil {
-				x.logger.Error("Failed to request synthetic transactions", "error", err, "from", subnet.Url)
+				x.logger.Error("Failed to request synthetic transactions", "error", err, "from", partition.Url)
 				return
 			}
 
@@ -350,15 +358,21 @@ func (x *Executor) requestMissingSyntheticTransactions(ledger *protocol.Syntheti
 					Transaction: []*protocol.Transaction{resp.Transaction},
 				})
 				if err != nil {
-					x.logger.Error("Failed to dispatch synthetic transaction", "error", err, "from", subnet.Url)
+					x.logger.Error("Failed to dispatch synthetic transaction", "error", err, "from", partition.Url)
 					continue
 				}
 			}
 		}()
 	}
 
-	if !sent {
-		return
+	// See if we can get the anchors we need for pending synthetic transactions.
+	// https://accumulate.atlassian.net/browse/AC-1860
+	if x.Describe.NetworkType != config.Directory && len(pending) > 0 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			x.requestMissingAnchors(ctx, batch, dispatcher, pending)
+		}()
 	}
 
 	wg.Wait()
@@ -366,6 +380,79 @@ func (x *Executor) requestMissingSyntheticTransactions(ledger *protocol.Syntheti
 		x.checkDispatchError(err, func(err error) {
 			x.logger.Error("Failed to dispatch missing synthetic transactions", "error", err)
 		})
+	}
+}
+
+func (x *Executor) requestMissingAnchors(ctx context.Context, batch *database.Batch, dispatcher *dispatcher, pending []*url.TxID) {
+	// TODO Can we be smarter about this and only send the request if the
+	// transaction has been pending for a while?
+
+	anchors := map[[32]byte][]*url.TxID{}
+	source := map[*url.TxID]*url.URL{}
+	for _, txid := range pending {
+		receipt, sourceUrl, err := GetSyntheticTransactionReceipt(batch, txid.Hash())
+		if err != nil {
+			x.logger.Error("Error loading synthetic transaction receipt", "error", err, "hash", logging.AsHex(txid.Hash()).Slice(0, 4))
+			continue
+		}
+		if receipt == nil {
+			continue
+		}
+		a := *(*[32]byte)(receipt.Anchor)
+		anchors[a] = append(anchors[a], txid)
+		source[txid] = sourceUrl
+	}
+	if len(anchors) == 0 {
+		return
+	}
+
+	var jbatch jsonrpc2.BatchRequest
+	for anchor := range anchors {
+		jbatch = append(jbatch, jsonrpc2.Request{
+			ID:     1,
+			Method: "query",
+			Params: &api.GeneralQuery{
+				UrlQuery: api.UrlQuery{
+					Url: protocol.DnUrl().JoinPath(protocol.AnchorPool).WithFragment(fmt.Sprintf("anchor/%x", anchor)),
+				},
+			},
+		})
+	}
+
+	// Send the requests
+	var resp []*api.ChainQueryResponse
+	err := x.Router.RequestAPIv2(ctx, protocol.Directory, "", jbatch, &resp)
+	if err != nil {
+		// If an individual request failed, ignore it
+		var berr jsonrpc2.BatchError
+		if !errors.As(err, &berr) {
+			x.logger.Error("Failed to request anchors", "error", err)
+			return
+		}
+	}
+
+	var sigs []protocol.Signature
+	for _, resp := range resp {
+		if resp == nil || resp.Receipt == nil || resp.Receipt.Error != "" {
+			continue
+		}
+
+		for _, txid := range anchors[*(*[32]byte)(resp.Receipt.Proof.Start)] {
+			sig := new(protocol.ReceiptSignature)
+			sig.SourceNetwork = source[txid]
+			sig.Proof = resp.Receipt.Proof
+			sig.TransactionHash = txid.Hash()
+			sigs = append(sigs, sig)
+		}
+	}
+
+	if len(sigs) == 0 {
+		return
+	}
+
+	err = dispatcher.BroadcastTxLocal(ctx, &protocol.Envelope{Signatures: sigs})
+	if err != nil {
+		x.logger.Error("Failed to dispatch receipts", "error", err)
 	}
 }
 

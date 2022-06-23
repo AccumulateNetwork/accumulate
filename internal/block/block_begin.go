@@ -24,6 +24,12 @@ import (
 
 // BeginBlock implements ./Chain
 func (x *Executor) BeginBlock(block *Block) error {
+	//clear the timers
+	x.BlockTimers.Reset()
+
+	r := x.BlockTimers.Start(BlockTimerTypeBeginBlock)
+	defer x.BlockTimers.Stop(r)
+
 	x.logger.Debug("Begin block", "height", block.Index, "leader", block.IsLeader, "time", block.Time)
 
 	// Check if it's time for a major block
@@ -150,7 +156,7 @@ func (x *Executor) shouldOpenMajorBlock(block *Block) (uint64, time.Time, error)
 	anchor.MajorBlockTime = block.Time.UTC()
 	anchor.PendingMajorBlockAnchors = make([]*url.URL, len(bvns))
 	for i, bvn := range bvns {
-		anchor.PendingMajorBlockAnchors[i] = protocol.SubnetUrl(bvn)
+		anchor.PendingMajorBlockAnchors[i] = protocol.PartitionUrl(bvn)
 	}
 
 	err = record.PutState(anchor)
@@ -226,7 +232,7 @@ func (x *Executor) captureValueAsDataEntry(batch *database.Batch, internalAccoun
 	dataAccountUrl := x.Describe.NodeUrl(internalAccountPath)
 
 	var signer protocol.Signer
-	signerUrl := x.Describe.DefaultOperatorPage()
+	signerUrl := x.Describe.OperatorsPage()
 	err = batch.Account(signerUrl).GetStateAs(&signer)
 	if err != nil {
 		return err
@@ -396,7 +402,7 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch) (bool, error
 		}
 		txn := state.Transaction
 		if txn.Body.Type() == protocol.TransactionTypeSystemGenesis {
-			continue // Genesis is added to subnet/synthetic#chain/main, but it's not a real synthetic transaction
+			continue // Genesis is added to partition/synthetic#chain/main, but it's not a real synthetic transaction
 		}
 
 		if !bytes.Equal(hash, txn.GetHash()) {
@@ -439,7 +445,7 @@ func (x *Executor) signTransaction(batch *database.Batch, txn *protocol.Transact
 	}
 
 	var page *protocol.KeyPage
-	err := batch.Account(x.Describe.DefaultOperatorPage()).GetStateAs(&page)
+	err := batch.Account(x.Describe.OperatorsPage()).GetStateAs(&page)
 	if err != nil {
 		return nil, errors.Format(errors.StatusUnknown, "load operator key page: %w", err)
 	}
@@ -448,15 +454,9 @@ func (x *Executor) signTransaction(batch *database.Batch, txn *protocol.Transact
 	bld := new(signing.Builder).
 		SetType(protocol.SignatureTypeED25519).
 		SetPrivateKey(x.Key).
+		SetUrl(config.NetworkUrl{URL: synthSig.DestinationNetwork}.OperatorsPage()).
 		SetVersion(1).
 		SetTimestamp(1)
-
-	book := synthSig.DestinationNetwork.JoinPath(protocol.OperatorBook)
-	if synthSig.DestinationNetwork.Equal(protocol.DnUrl()) {
-		bld.SetKeyPageUrl(book, 0)
-	} else {
-		bld.SetKeyPageUrl(book, 1)
-	}
 
 	keySig, err := bld.Sign(txn.GetHash())
 	if err != nil {
@@ -499,7 +499,7 @@ func (x *Executor) buildDirectoryAnchor(batch *database.Batch, ledgerState *prot
 
 	anchor := new(protocol.DirectoryAnchor)
 	ledger := batch.Account(x.Describe.Ledger())
-	rootChain, err := x.buildBlockAnchor(batch, ledgerState, ledger, &anchor.SubnetAnchor, majorBlockIndex)
+	rootChain, err := x.buildBlockAnchor(batch, ledgerState, ledger, &anchor.PartitionAnchor, majorBlockIndex)
 	if err != nil {
 		return nil, err
 	}
@@ -570,10 +570,10 @@ func (x *Executor) buildDirectoryAnchor(batch *database.Batch, ledgerState *prot
 	return anchor, nil
 }
 
-func (x *Executor) buildPartitionAnchor(batch *database.Batch, ledgerState *protocol.SystemLedger, majorBlockIndex uint64) (*protocol.PartitionAnchor, error) {
-	anchor := new(protocol.PartitionAnchor)
+func (x *Executor) buildPartitionAnchor(batch *database.Batch, ledgerState *protocol.SystemLedger, majorBlockIndex uint64) (*protocol.BlockValidatorAnchor, error) {
+	anchor := new(protocol.BlockValidatorAnchor)
 	ledger := batch.Account(x.Describe.Ledger())
-	_, err := x.buildBlockAnchor(batch, ledgerState, ledger, &anchor.SubnetAnchor, majorBlockIndex)
+	_, err := x.buildBlockAnchor(batch, ledgerState, ledger, &anchor.PartitionAnchor, majorBlockIndex)
 	if err != nil {
 		return nil, err
 	}
@@ -581,7 +581,7 @@ func (x *Executor) buildPartitionAnchor(batch *database.Batch, ledgerState *prot
 	return anchor, nil
 }
 
-func (x *Executor) buildBlockAnchor(batch *database.Batch, ledgerState *protocol.SystemLedger, ledger *database.Account, anchor *protocol.SubnetAnchor, majorBlockIndex uint64) (*database.Chain, error) {
+func (x *Executor) buildBlockAnchor(batch *database.Batch, ledgerState *protocol.SystemLedger, ledger *database.Account, anchor *protocol.PartitionAnchor, majorBlockIndex uint64) (*database.Chain, error) {
 	// Load the root chain
 	rootChain, err := ledger.ReadChain(protocol.MinorRootChain)
 	if err != nil {
@@ -603,9 +603,9 @@ func (x *Executor) buildBlockAnchor(batch *database.Batch, ledgerState *protocol
 	return rootChain, nil
 }
 
-func (x *Executor) sendBlockAnchor(batch *database.Batch, anchor protocol.TransactionBody, block uint64, subnet string) error {
+func (x *Executor) sendBlockAnchor(batch *database.Batch, anchor protocol.TransactionBody, block uint64, partition string) error {
 	txn := new(protocol.Transaction)
-	txn.Header.Principal = protocol.SubnetUrl(subnet).JoinPath(protocol.AnchorPool)
+	txn.Header.Principal = protocol.PartitionUrl(partition).JoinPath(protocol.AnchorPool)
 	txn.Body = anchor
 
 	// Create a synthetic origin signature

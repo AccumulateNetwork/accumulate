@@ -2,6 +2,7 @@ package chain
 
 import (
 	"fmt"
+	"sort"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -12,7 +13,7 @@ import (
 type PartitionAnchor struct{}
 
 func (PartitionAnchor) Type() protocol.TransactionType {
-	return protocol.TransactionTypePartitionAnchor
+	return protocol.TransactionTypeBlockValidatorAnchor
 }
 
 func (PartitionAnchor) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
@@ -21,9 +22,9 @@ func (PartitionAnchor) Execute(st *StateManager, tx *Delivery) (protocol.Transac
 
 func (x PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	// Unpack the payload
-	body, ok := tx.Transaction.Body.(*protocol.PartitionAnchor)
+	body, ok := tx.Transaction.Body.(*protocol.BlockValidatorAnchor)
 	if !ok {
-		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.PartitionAnchor), tx.Transaction.Body)
+		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.BlockValidatorAnchor), tx.Transaction.Body)
 	}
 
 	// Verify the origin
@@ -32,8 +33,8 @@ func (x PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 		return nil, fmt.Errorf("invalid principal: want %v, got %v", protocol.AccountTypeAnchorLedger, st.Origin.Type())
 	}
 
-	// Verify the source URL and get the subnet name
-	name, ok := protocol.ParseSubnetUrl(body.Source)
+	// Verify the source URL and get the partition name
+	name, ok := protocol.ParsePartitionUrl(body.Source)
 	if !ok {
 		return nil, fmt.Errorf("invalid source: not a BVN or the DN")
 	}
@@ -51,7 +52,7 @@ func (x PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 		return nil, fmt.Errorf("failed to update issuer state: %v", err)
 	}
 
-	// Add the anchor to the chain - use the subnet name as the chain name
+	// Add the anchor to the chain - use the partition name as the chain name
 	err = st.AddChainEntry(st.OriginUrl, protocol.RootAnchorChain(name), protocol.ChainTypeAnchor, body.RootChainAnchor[:], body.RootChainIndex, body.MinorBlockIndex)
 	if err != nil {
 		return nil, err
@@ -88,6 +89,37 @@ func (x PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 			st.State.MakeMajorBlock = ledger.MajorBlockIndex
 		}
 		return nil, nil
+	}
+
+	// Process pending synthetic transactions sent to the DN
+	var deliveries []*Delivery
+	var sequence = map[*Delivery]int{}
+	synth, err := st.batch.Account(st.Ledger()).SyntheticForAnchor(body.RootChainAnchor)
+	if err != nil {
+		return nil, errors.Format(errors.StatusUnknown, "load synth txns for anchor %x: %w", body.RootChainAnchor[:8], err)
+	}
+	for _, txid := range synth {
+		h := txid.Hash()
+		sig, err := getSyntheticSignature(st.batch, st.batch.Transaction(h[:]))
+		if err != nil {
+			return nil, err
+		}
+
+		d := tx.NewChild(&protocol.Transaction{
+			Body: &protocol.RemoteTransaction{
+				Hash: txid.Hash(),
+			},
+		}, nil)
+		sequence[d] = int(sig.SequenceNumber)
+		deliveries = append(deliveries, d)
+	}
+
+	// Submit the transactions, sorted
+	sort.Slice(deliveries, func(i, j int) bool {
+		return sequence[deliveries[i]] < sequence[deliveries[j]]
+	})
+	for _, d := range deliveries {
+		st.State.ProcessAdditionalTransaction(d)
 	}
 
 	return nil, nil

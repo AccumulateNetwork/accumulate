@@ -5,7 +5,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tendermint/tendermint/crypto/ed25519"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
@@ -13,13 +12,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-type ValidatorUpdate struct {
-	PubKey  ed25519.PubKey
-	Enabled bool
-}
-
 type ProcessTransactionState struct {
-	ValidatorsUpdates      []ValidatorUpdate
 	ProducedTxns           []*protocol.Transaction
 	AdditionalTransactions []*Delivery
 	ChainUpdates           ChainUpdates
@@ -44,7 +37,6 @@ func (s *ProcessTransactionState) Merge(r *ProcessTransactionState) {
 		s.MakeMajorBlock = r.MakeMajorBlock
 		s.MakeMajorBlockTime = r.MakeMajorBlockTime
 	}
-	s.ValidatorsUpdates = append(s.ValidatorsUpdates, r.ValidatorsUpdates...)
 	s.ProducedTxns = append(s.ProducedTxns, r.ProducedTxns...)
 	s.AdditionalTransactions = append(s.AdditionalTransactions, r.AdditionalTransactions...)
 	s.ChainUpdates.Merge(&r.ChainUpdates)
@@ -82,8 +74,8 @@ func (c *ChainUpdates) DidUpdateChain(update indexing.ChainUpdate) {
 // DidAddChainEntry records a chain update in the block state.
 func (c *ChainUpdates) DidAddChainEntry(batch *database.Batch, u *url.URL, name string, typ protocol.ChainType, entry []byte, index, sourceIndex, sourceBlock uint64) error {
 	if name == protocol.MainChain && typ == protocol.ChainTypeTransaction {
-		subnet, ok := protocol.ParseSubnetUrl(u)
-		if ok && protocol.SubnetUrl(subnet).JoinPath(protocol.Synthetic).Equal(u) {
+		partition, ok := protocol.ParsePartitionUrl(u)
+		if ok && protocol.PartitionUrl(partition).JoinPath(protocol.Synthetic).Equal(u) {
 			err := indexing.BlockState(batch, u).DidProduceSynthTxn(&indexing.BlockStateSynthTxnEntry{
 				Transaction: entry,
 				ChainEntry:  index,

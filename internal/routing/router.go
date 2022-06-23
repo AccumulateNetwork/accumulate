@@ -18,9 +18,9 @@ import (
 type Router interface {
 	RouteAccount(*url.URL) (string, error)
 	Route(...*protocol.Envelope) (string, error)
-	Query(ctx context.Context, subnet string, query []byte, opts client.ABCIQueryOptions) (*core.ResultABCIQuery, error)
-	RequestAPIv2(ctx context.Context, subnetId, method string, params, result interface{}) error
-	Submit(ctx context.Context, subnet string, tx *protocol.Envelope, pretend, async bool) (*ResponseSubmit, error)
+	Query(ctx context.Context, partition string, query []byte, opts client.ABCIQueryOptions) (*core.ResultABCIQuery, error)
+	RequestAPIv2(ctx context.Context, partitionId, method string, params, result interface{}) error
+	Submit(ctx context.Context, partition string, tx *protocol.Envelope, pretend, async bool) (*ResponseSubmit, error)
 }
 
 // ResponseSubmit is the response from a call to Submit.
@@ -34,11 +34,11 @@ type ResponseSubmit struct {
 }
 
 // submit calls the appropriate client method to submit a transaction.
-func submit(ctx context.Context, connMgr connections.ConnectionManager, subnetId string, tx []byte, async bool) (*ResponseSubmit, error) {
+func submit(ctx context.Context, connMgr connections.ConnectionManager, partitionId string, tx []byte, async bool) (*ResponseSubmit, error) {
 	var r1 *core.ResultBroadcastTx
 	errorCnt := 0
 	for {
-		connCtx, err := connMgr.SelectConnection(subnetId, false)
+		connCtx, err := connMgr.SelectConnection(partitionId, false)
 		if err != nil {
 			return nil, err
 		}
@@ -57,7 +57,7 @@ func submit(ctx context.Context, connMgr connections.ConnectionManager, subnetId
 			return r2, nil
 		}
 
-		// The API call failed, let's report that and try again, we get a client to another node within the subnet when available
+		// The API call failed, let's report that and try again, we get a client to another node within the partition when available
 		connCtx.ReportError(err)
 		errorCnt++
 		if errorCnt > 1 {
@@ -66,11 +66,11 @@ func submit(ctx context.Context, connMgr connections.ConnectionManager, subnetId
 	}
 }
 
-func submitPretend(ctx context.Context, connMgr connections.ConnectionManager, subnet string, tx []byte) (*ResponseSubmit, error) {
+func submitPretend(ctx context.Context, connMgr connections.ConnectionManager, partition string, tx []byte) (*ResponseSubmit, error) {
 	var r1 *core.ResultCheckTx
 	errorCnt := 0
 	for {
-		connCtx, err := connMgr.SelectConnection(subnet, false)
+		connCtx, err := connMgr.SelectConnection(partition, false)
 		if err != nil {
 			return nil, err
 		}
@@ -85,7 +85,7 @@ func submitPretend(ctx context.Context, connMgr connections.ConnectionManager, s
 			return r2, nil
 		}
 
-		// The API call failed, let's report that and try again, we get a client to another node within the subnet when available
+		// The API call failed, let's report that and try again, we get a client to another node within the partition when available
 		connCtx.ReportError(err)
 		errorCnt++
 		if errorCnt > 1 {
@@ -104,8 +104,8 @@ func NewRouter(eventBus *events.Bus, cm connections.ConnectionManager) *RouterIn
 	r := new(RouterInstance)
 	r.connectionManager = cm
 
-	events.SubscribeSync(eventBus, func(e events.DidChangeGlobals) error {
-		tree, err := NewRouteTree(e.Values.Routing)
+	events.SubscribeSync(eventBus, func(e events.WillChangeGlobals) error {
+		tree, err := NewRouteTree(e.New.Routing)
 		if err != nil {
 			return errors.Wrap(errors.StatusUnknown, err)
 		}
@@ -171,13 +171,13 @@ func (r *RouterInstance) Route(envs ...*protocol.Envelope) (string, error) {
 	return RouteEnvelopes(r.RouteAccount, envs...)
 }
 
-// Query queries the specified subnet. If the subnet matches this
+// Query queries the specified partition. If the partition matches this
 // network's ID, the transaction is broadcasted via the local client. Otherwise
 // the transaction is broadcasted via an RPC client.
-func (r *RouterInstance) Query(ctx context.Context, subnetId string, query []byte, opts client.ABCIQueryOptions) (*core.ResultABCIQuery, error) {
+func (r *RouterInstance) Query(ctx context.Context, partitionId string, query []byte, opts client.ABCIQueryOptions) (*core.ResultABCIQuery, error) {
 	errorCnt := 0
 	for {
-		connCtx, err := r.connectionManager.SelectConnection(subnetId, true)
+		connCtx, err := r.connectionManager.SelectConnection(partitionId, true)
 		if err != nil {
 			return nil, err
 		}
@@ -194,7 +194,7 @@ func (r *RouterInstance) Query(ctx context.Context, subnetId string, query []byt
 			return result, err
 		}
 
-		// The API call failed, let's report that and try again, we get a client to another node within the subnet if available
+		// The API call failed, let's report that and try again, we get a client to another node within the partition if available
 		connCtx.ReportError(err)
 		errorCnt++
 		if errorCnt > 1 {
@@ -203,10 +203,10 @@ func (r *RouterInstance) Query(ctx context.Context, subnetId string, query []byt
 	}
 }
 
-func (r *RouterInstance) RequestAPIv2(ctx context.Context, subnetId, method string, params, result interface{}) error {
+func (r *RouterInstance) RequestAPIv2(ctx context.Context, partitionId, method string, params, result interface{}) error {
 	errorCnt := 0
 	for {
-		connCtx, err := r.connectionManager.SelectConnection(subnetId, true)
+		connCtx, err := r.connectionManager.SelectConnection(partitionId, true)
 		if err != nil {
 			return err
 		}
@@ -223,7 +223,7 @@ func (r *RouterInstance) RequestAPIv2(ctx context.Context, subnetId, method stri
 			return err
 		}
 
-		// The API call failed, let's report that and try again, we get a client to another node within the subnet if available
+		// The API call failed, let's report that and try again, we get a client to another node within the partition if available
 		connCtx.ReportError(err)
 		errorCnt++
 		if errorCnt > 1 {
@@ -232,17 +232,17 @@ func (r *RouterInstance) RequestAPIv2(ctx context.Context, subnetId, method stri
 	}
 }
 
-// Submit submits the transaction to the specified subnet. If the subnet matches
+// Submit submits the transaction to the specified partition. If the partition matches
 // this network's ID, the transaction is broadcasted via the local client.
 // Otherwise the transaction is broadcasted via an RPC client.
-func (r *RouterInstance) Submit(ctx context.Context, subnetId string, tx *protocol.Envelope, pretend, async bool) (*ResponseSubmit, error) {
+func (r *RouterInstance) Submit(ctx context.Context, partitionId string, tx *protocol.Envelope, pretend, async bool) (*ResponseSubmit, error) {
 	raw, err := tx.MarshalBinary()
 	if err != nil {
 		return nil, err
 	}
 	if pretend {
-		return submitPretend(ctx, r.connectionManager, subnetId, raw)
+		return submitPretend(ctx, r.connectionManager, partitionId, raw)
 	} else {
-		return submit(ctx, r.connectionManager, subnetId, raw, async)
+		return submit(ctx, r.connectionManager, partitionId, raw, async)
 	}
 }

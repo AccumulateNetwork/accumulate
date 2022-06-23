@@ -165,17 +165,19 @@ NetworkDefinition:
   fields:
     - name: NetworkName
       type: string
-    - name: Subnets
-      type: SubnetDefinition
+    - name: Partitions
+      alternative: Subnets
+      type: PartitionDefinition
       repeatable: true
       marshal-as: reference
 
-SubnetDefinition:
+PartitionDefinition:
   fields:
-    - name: SubnetID
+    - name: PartitionID
+      alternative: SubnetID
       type: string
-    - name: ValidatorKeyHashes
-      type: hash
+    - name: ValidatorKeys
+      type: bytes
       repeatable: true
 
 RoutingTable:
@@ -197,7 +199,8 @@ Route:
     - name: Value
       description: is the prefix value
       type: uint
-    - name: Subnet
+    - name: Partition
+      alternative: Subnet
       type: string
 
 RouteOverride:
@@ -205,5 +208,6 @@ RouteOverride:
     - name: Account
       type: url
       pointer: true
-    - name: Subnet
+    - name: Partition
+      alternative: Subnet
       type: string

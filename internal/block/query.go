@@ -1,7 +1,6 @@
 package block
 
 import (
-	"bytes"
 	"encoding"
 	"encoding/hex"
 	"fmt"
@@ -569,7 +568,7 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove, remote
 			return nil, errors.Format(errors.StatusInternalError, "sign synthetic transaction: %w", err)
 		}
 		var page *protocol.KeyPage
-		err = batch.Account(m.Describe.DefaultOperatorPage()).GetStateAs(&page)
+		err = batch.Account(m.Describe.OperatorsPage()).GetStateAs(&page)
 		if err != nil {
 			return nil, err
 		}
@@ -945,12 +944,12 @@ func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove 
 			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeMarshallingError, Message: fmt.Errorf("error marshalling payload for major blocks response")}
 		}
 	case *query.RequestSynth:
-		subnet, ok := protocol.ParseSubnetUrl(q.Destination)
+		partition, ok := protocol.ParsePartitionUrl(q.Destination)
 		if !ok {
-			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeInvalidRequest, Message: fmt.Errorf("destination is not a subnet")}
+			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeInvalidRequest, Message: fmt.Errorf("destination is not a partition")}
 		}
 		record := batch.Account(m.Describe.Synthetic())
-		chain, err := record.ReadChain(protocol.SyntheticIndexChain(subnet))
+		chain, err := record.ReadChain(protocol.SyntheticIndexChain(partition))
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeInternal, Message: fmt.Errorf("failed to load the synth index chain: %w", err)}
 		}
@@ -1049,11 +1048,19 @@ resultLoop:
 			}
 
 			minorEntry.TxCount = uint64(0)
-			systemTxCount := uint64(0)
-			var lastTxid []byte
+			seen := map[[32]byte]bool{}
 			for _, updIdx := range chainUpdatesIndex.Entries {
-				if bytes.Equal(updIdx.Entry, lastTxid) { // There are like 4 ChainUpdates for each tx, we don't need duplicates
+				// Only care about the main chain
+				if updIdx.Type != protocol.ChainTypeTransaction || updIdx.Name != "main" {
 					continue
+				}
+
+				// Only include each transaction once
+				entry := *(*[32]byte)(updIdx.Entry)
+				if seen[entry] {
+					continue
+				} else {
+					seen[entry] = true
 				}
 
 				if req.TxFetchMode <= query.TxFetchModeIds {
@@ -1063,22 +1070,16 @@ resultLoop:
 					qr, err := m.queryByTxId(batch, updIdx.Entry, false, false, false)
 					if err == nil {
 						minorEntry.TxCount++
-						txt := qr.Envelope.Transaction[0].Body.Type()
-						if txt.IsSystem() {
-							systemTxCount++
-						} else if req.TxFetchMode == query.TxFetchModeExpand {
-							minorEntry.Transactions = append(minorEntry.Transactions, qr)
-						}
+						minorEntry.Transactions = append(minorEntry.Transactions, qr)
 					}
 				} else {
 					minorEntry.TxCount++
 				}
-				lastTxid = updIdx.Entry
 			}
-			if minorEntry.TxCount <= systemTxCount && req.BlockFilterMode == query.BlockFilterModeExcludeEmpty {
-				entryIdx++
-				continue
-			}
+		}
+		if minorEntry.TxCount == 0 && req.BlockFilterMode == query.BlockFilterModeExcludeEmpty {
+			entryIdx++
+			continue
 		}
 		resp.Entries = append(resp.Entries, minorEntry)
 		entryIdx++

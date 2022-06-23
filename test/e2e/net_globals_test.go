@@ -19,11 +19,11 @@ func TestOracleDistribution(t *testing.T) {
 	g.Globals.OperatorAcceptThreshold.Set(1, 100) // Use a small number so M = 1
 	sim := simulator.New(t, 3)
 	sim.InitFromGenesisWith(g)
-	dn := sim.Subnet(Directory)
-	bvn0 := sim.Subnet(sim.Subnets[1].Id)
-	bvn1 := sim.Subnet(sim.Subnets[2].Id)
+	dn := sim.Partition(Directory)
+	bvn0 := sim.Partition(sim.Partitions[1].Id)
+	bvn1 := sim.Partition(sim.Partitions[2].Id)
 
-	signer := simulator.GetAccount[*KeyPage](sim, dn.Executor.Describe.DefaultOperatorPage())
+	signer := simulator.GetAccount[*KeyPage](sim, dn.Executor.Describe.OperatorsPage())
 	_, entry, ok := signer.EntryByKey(dn.Executor.Key[32:])
 	require.True(t, ok)
 	timestamp = entry.GetLastUsedOn()
@@ -53,7 +53,7 @@ func TestOracleDistribution(t *testing.T) {
 	sim.ExecuteBlocks(10)
 
 	// Verify account
-	bvn := sim.Subnet(sim.Subnets[1].Id)
+	bvn := sim.Partition(sim.Partitions[1].Id)
 	account := simulator.GetAccount[*DataAccount](sim, bvn.Executor.Describe.NodeUrl(Oracle))
 	require.NotNil(t, account.Entry)
 	require.Equal(t, oracleEntry.GetData(), account.Entry.GetData())
@@ -74,9 +74,9 @@ func TestRoutingDistribution(t *testing.T) {
 	g.Globals.OperatorAcceptThreshold.Set(1, 100) // Use a small number so M = 1
 	sim := simulator.New(t, 3)
 	sim.InitFromGenesisWith(g)
-	dn := sim.Subnet(Directory)
+	dn := sim.Partition(Directory)
 
-	signer := simulator.GetAccount[*KeyPage](sim, dn.Executor.Describe.DefaultOperatorPage())
+	signer := simulator.GetAccount[*KeyPage](sim, dn.Executor.Describe.OperatorsPage())
 	_, keyEntry, ok := signer.EntryByKey(dn.Executor.Key[32:])
 	require.True(t, ok)
 	timestamp = keyEntry.GetLastUsedOn()
@@ -84,8 +84,8 @@ func TestRoutingDistribution(t *testing.T) {
 	// Update
 	g = dn.Executor.ActiveGlobals_TESTONLY().Copy()
 	g.Routing.Overrides = append(g.Routing.Overrides, RouteOverride{
-		Account: AccountUrl("staking"),
-		Subnet:  Directory,
+		Account:   AccountUrl("staking"),
+		Partition: Directory,
 	})
 	entry := g.FormatRouting()
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
@@ -105,7 +105,7 @@ func TestRoutingDistribution(t *testing.T) {
 	sim.ExecuteBlocks(10)
 
 	// Verify account
-	bvn := sim.Subnet(sim.Subnets[1].Id)
+	bvn := sim.Partition(sim.Partitions[1].Id)
 	account := simulator.GetAccount[*DataAccount](sim, bvn.Executor.Describe.NodeUrl(Routing))
 	require.NotNil(t, account.Entry)
 	require.Equal(t, entry.GetData(), account.Entry.GetData())

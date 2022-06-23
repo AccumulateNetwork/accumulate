@@ -1,4 +1,4 @@
-package managed_test
+package managed
 
 import (
 	"bytes"
@@ -8,52 +8,58 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
-	. "gitlab.com/accumulatenetwork/accumulate/smt/managed"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 )
+
+func begin() record.KvStore {
+	store := memory.New(nil)
+	txn := store.Begin(true)
+	return record.KvStore{Store: txn}
+}
+
+func newChain(store record.KvStore, markPower int64, key ...interface{}) *Chain {
+	return NewChain(nil, store, record.Key(key), markPower, "chain")
+}
 
 func TestMerkleManager_GetChainState(t *testing.T) {
 	const numTests = 100
 	var randHash common.RandHash
-	store := database.OpenInMemory(nil)
-	storeTx := store.Begin(true)
-	m, e2 := NewMerkleManager(database.MerkleDbManager{Batch: storeTx}, 8)
-	require.NoError(t, e2, "should be able to open a database")
-	err := m.SetKey(storage.MakeKey("try"))
-	require.NoError(t, err, "should be able to set base key")
-	err = m.WriteChainHead()
+	store := begin()
+	m := newChain(store, 8, "try")
+	err := m.Head().Put(new(MerkleState))
 	require.NoError(t, err, "should be able to write to the chain head")
-	head, err := m.ReadChainHead()
+	_, err = m.Head().Get()
 	require.NoError(t, err, "should be able to read the chain head")
-	require.True(t, head.Equal(m.MS), "chainstate should be loadable")
 
 	for i := 0; i < numTests; i++ {
 		require.NoError(t, m.AddHash(randHash.Next(), false))
-		mState, err := m.MS.Marshal()
+		head, err := m.Head().Get()
+		require.NoError(t, err)
+		mState, err := head.Marshal()
 		require.NoError(t, err, "must be able to marshal a MerkleState")
 		ms := new(MerkleState)
 		err = ms.UnMarshal(mState)
 		require.NoError(t, err, "must be able to unmarshal a MerkleState")
-		require.True(t, ms.Equal(m.MS), " should get the same state back")
-		cState, e2 := m.GetChainState()
+		require.True(t, ms.Equal(head), " should get the same state back")
+		cState, e2 := m.Head().Get()
 		require.NoErrorf(t, e2, "chain should always have a chain state %d", i)
-		require.Truef(t, cState.Equal(m.MS), "should be the last state of the chain written (%d)", i)
+		require.Truef(t, cState.Equal(head), "should be the last state of the chain written (%d)", i)
 	}
 }
 
 func TestMerkleManager_GetAnyState(t *testing.T) {
 	const testnum = 100
 	var randHash common.RandHash
-	store := database.OpenInMemory(nil)
-	storeTx := store.Begin(true)
-	m, e2 := NewMerkleManager(database.MerkleDbManager{Batch: storeTx}, 2)
-	require.NoError(t, e2, "should be able to open a database")
+	store := begin()
+	m := newChain(store, 2, "try")
 	var States []*MerkleState
 	for i := 0; i < testnum; i++ {
 		require.NoError(t, m.AddHash(randHash.Next(), false))
-		States = append(States, m.MS.Copy())
+		head, err := m.Head().Get()
+		require.NoError(t, err)
+		States = append(States, head.Copy())
 		println(States[i].String())
 	}
 	for i := int64(0); i < testnum; i++ {
@@ -75,34 +81,25 @@ func TestMerkleManager_GetAnyState(t *testing.T) {
 func TestIndexing2(t *testing.T) {
 	const testlen = 1024
 
-	store := database.OpenInMemory(nil)
-	storeTx := store.Begin(true)
+	store := begin()
 
 	Chain := sha256.Sum256([]byte("RedWagon/ACME_tokens"))
 	BlkIdx := Chain
 	BlkIdx[30] += 2
 
-	MM1, err := NewMerkleManager(database.MerkleDbManager{Batch: storeTx}, 8)
-	if err != nil {
-		t.Fatal("didn't create a Merkle Manager")
-	}
-
-	if err := MM1.SetKey(storage.MakeKey(Chain[:])); err != nil {
-		t.Fatal(err)
-	}
-
+	MM1 := newChain(store, 8, Chain[:])
 	for i := 0; i < testlen; i++ {
 		data := []byte(fmt.Sprintf("data %d", i))
 		dataHash := sha256.Sum256(data)
 		require.NoError(t, MM1.AddHash(dataHash[:], false))
-		di, e := MM1.Manager.Int(storage.MakeKey(Chain, "ElementIndex", dataHash)).Get()
+		di, e := MM1.ElementIndex(dataHash[:]).Get()
 		if e != nil {
 			t.Fatalf("error")
 		}
-		if di != int64(i) {
+		if di != uint64(i) {
 			t.Fatalf("didn't get the right index. got %d expected %d", di, i)
 		}
-		d, e2 := MM1.Manager.Hash(storage.MakeKey(Chain, "Element", i)).Get()
+		d, e2 := MM1.Element(uint64(i)).Get()
 		if e2 != nil || !bytes.Equal(d, dataHash[:]) {
 			t.Fatalf("didn't get the data back. got %d expected %d", d, data)
 		}
@@ -114,23 +111,19 @@ func TestMerkleManager(t *testing.T) {
 
 	const testLen = 1024
 
-	store := database.OpenInMemory(nil)
-	storeTx := store.Begin(true)
+	store := begin()
 
 	MarkPower := int64(2)
 	MarkFreq := int64(math.Pow(2, float64(MarkPower)))
 	MarkMask := MarkFreq - 1
 
 	// Set up a MM1 that uses a MarkPower of 2
-	MM1, err := NewMerkleManager(database.MerkleDbManager{Batch: storeTx}, MarkPower)
-	if err != nil {
-		t.Fatal("did not create a merkle manager")
-	}
-	if MarkPower != MM1.MarkPower ||
-		MarkFreq != MM1.MarkFreq ||
-		MarkMask != MM1.MarkMask {
-		t.Fatal("Marks were not correctly computed")
-	}
+	MM1 := newChain(store, MarkPower, "try")
+	// if MarkPower != MM1.MarkPower ||
+	// 	MarkFreq != MM1.MarkFreq ||
+	// 	MarkMask != MM1.MarkMask {
+	// 	t.Fatal("Marks were not correctly computed")
+	// }
 
 	// Fill the Merkle Tree with a few hashes
 	hash := sha256.Sum256([]byte("start"))
@@ -139,7 +132,9 @@ func TestMerkleManager(t *testing.T) {
 		hash = sha256.Sum256(hash[:])
 	}
 
-	if MM1.GetElementCount() != testLen {
+	head, err := MM1.Head().Get()
+	require.NoError(t, err)
+	if head.Count != testLen {
 		t.Fatal("added elements in merkle tree don't match the number we added")
 	}
 
@@ -184,7 +179,7 @@ func GenerateTestData(prt bool) [10][]Hash {
 
 	// Print the first row
 	for _, v := range hashes[0] {
-		fmt.Printf("%3v ", v[:2])
+		fmt.Printf("%3v ", v[:2]) //nolint:rangevarref
 	}
 	fmt.Println()
 	for len(hashes[row]) > 1 {
@@ -207,7 +202,7 @@ func GenerateTestData(prt bool) [10][]Hash {
 	println("\n")
 
 	for _, v := range hashes[0] {
-		fmt.Printf("%x  ", v[:4])
+		fmt.Printf("%x  ", v[:4]) //nolint:rangevarref
 	}
 	fmt.Println()
 	row = 0
@@ -234,10 +229,8 @@ func GenerateTestData(prt bool) [10][]Hash {
 }
 
 func TestMerkleManager_GetIntermediate(t *testing.T) {
-	store := database.OpenInMemory(nil)
-	storeTx := store.Begin(true)
-	m, _ := NewMerkleManager(database.MerkleDbManager{Batch: storeTx}, 4)
-	m.MS.InitSha256()
+	store := begin()
+	m := newChain(store, 4)
 
 	hashes := GenerateTestData(true)
 
@@ -245,7 +238,9 @@ func TestMerkleManager_GetIntermediate(t *testing.T) {
 
 	for col := int64(0); col < 20; col++ {
 		require.NoError(t, m.AddHash(r.NextList(), false))
-		m.MS.PadPending()
+		head, err := m.Head().Get()
+		require.NoError(t, err)
+		head.PadPending()
 		if col&1 == 1 {
 			s, _ := m.GetAnyState(col - 1)
 			s.PadPending()
@@ -270,24 +265,24 @@ func TestMerkleManager_AddHash_Unique(t *testing.T) {
 	hash := r.NextList()
 
 	t.Run("true", func(t *testing.T) {
-		store := database.OpenInMemory(nil)
-		storeTx := store.Begin(true)
-		m, _ := NewMerkleManager(database.MerkleDbManager{Batch: storeTx}, 4)
-		m.MS.InitSha256()
+		store := begin()
+		m := newChain(store, 4)
+		head, err := m.Head().Get()
+		require.NoError(t, err)
 
 		require.NoError(t, m.AddHash(hash, true))
 		require.NoError(t, m.AddHash(hash, true))
-		require.Equal(t, int64(1), m.MS.Count)
+		require.Equal(t, int64(1), head.Count)
 	})
 
 	t.Run("false", func(t *testing.T) {
-		store := database.OpenInMemory(nil)
-		storeTx := store.Begin(true)
-		m, _ := NewMerkleManager(database.MerkleDbManager{Batch: storeTx}, 4)
-		m.MS.InitSha256()
+		store := begin()
+		m := newChain(store, 4)
+		head, err := m.Head().Get()
+		require.NoError(t, err)
 
 		require.NoError(t, m.AddHash(hash, false))
 		require.NoError(t, m.AddHash(hash, false))
-		require.Equal(t, int64(2), m.MS.Count)
+		require.Equal(t, int64(2), head.Count)
 	})
 }

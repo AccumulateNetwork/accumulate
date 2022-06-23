@@ -13,14 +13,21 @@ import (
 	cfg "gitlab.com/accumulatenetwork/accumulate/config"
 )
 
+var cmdInitDualNode = &cobra.Command{
+	Use:   "dual <url|ip> <dn base port> <bvn base port>",
+	Short: "Initialize a dual run from seed IP, DN base port, and BVN base port",
+	Run:   initDualNode,
+	Args:  cobra.ExactArgs(2),
+}
+
 // initDualNode accumulate init dual Mainnet.BVN0 http://ip:dnport
 func initDualNode(cmd *cobra.Command, args []string) {
 	s := strings.Split(args[0], ".")
 	if len(s) != 2 {
-		fatalf("network must be in the form of <network-name>.<subnet-name>, e.g. mainnet.bvn0")
+		fatalf("network must be in the form of <network-name>.<partition-name>, e.g. mainnet.bvn0")
 	}
 	networkName := s[0]
-	subnetName := s[1]
+	partitionName := s[1]
 	_ = networkName
 
 	u, err := url.Parse(args[1])
@@ -62,17 +69,17 @@ func initDualNode(cmd *cobra.Command, args []string) {
 	}
 
 	//now find out what bvn we are on then let
-	dnSubNet := c.Accumulate.LocalAddress
-	dnHost, _, err := net.SplitHostPort(dnSubNet)
+	dnPartition := c.Accumulate.LocalAddress
+	dnHost, _, err := net.SplitHostPort(dnPartition)
 	checkf(err, "cannot resolve bvn host and port")
 
 	_ = netAddr
 
-	var bvn *cfg.Subnet
-	for i, v := range c.Accumulate.Network.Subnets {
+	var bvn *cfg.Partition
+	for i, v := range c.Accumulate.Network.Partitions {
 		//search for the directory.
-		if v.Id == subnetName {
-			bvn = &c.Accumulate.Network.Subnets[i]
+		if v.Id == partitionName {
+			bvn = &c.Accumulate.Network.Partitions[i]
 			break
 		}
 	}
@@ -97,7 +104,7 @@ func initDualNode(cmd *cobra.Command, args []string) {
 	}
 
 	if bvnHost == nil {
-		fatalf("bvn host not found in %v subnet", subnetName)
+		fatalf("bvn host not found in %v partition", partitionName)
 	}
 
 	if flagInit.NoEmptyBlocks {

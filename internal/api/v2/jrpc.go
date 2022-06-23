@@ -58,7 +58,7 @@ func (m *JrpcMethods) logError(msg string, keyVals ...interface{}) {
 }
 
 func (m *JrpcMethods) EnableDebug() {
-	q := m.querier.direct(m.Options.Describe.SubnetId)
+	q := m.querier.direct(m.Options.Describe.PartitionId)
 	m.methods["debug-query-direct"] = func(_ context.Context, params json.RawMessage) interface{} {
 		req := new(GeneralQuery)
 		err := m.parse(params, req)
@@ -126,11 +126,11 @@ func (m *JrpcMethods) Version(_ context.Context, params json.RawMessage) interfa
 func (m *JrpcMethods) Describe(_ context.Context, params json.RawMessage) interface{} {
 	res := new(DescriptionResponse)
 	res.Network = m.Options.Describe.Network
-	res.SubnetId = m.Options.Describe.SubnetId
+	res.PartitionId = m.Options.Describe.PartitionId
 	res.NetworkType = m.Options.Describe.NetworkType
 
 	// Load network variable values
-	err := res.Values.Load(m.Options.Describe, func(account *url.URL, target interface{}) error {
+	err := res.Values.Load(m.Options.Describe.PartitionUrl(), func(account *url.URL, target interface{}) error {
 		return m.Database.View(func(batch *database.Batch) error {
 			return batch.Account(account).GetStateAs(target)
 		})

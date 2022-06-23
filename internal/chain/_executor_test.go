@@ -32,8 +32,8 @@ func BenchmarkHighTps(b *testing.B) {
 	db := database.New(store, nil)
 
 	network := config.Network{
-		Type:          config.BlockValidator,
-		LocalSubnetID: b.Name(),
+		Type:             config.BlockValidator,
+		LocalPartitionID: b.Name(),
 	}
 
 	nodeKey := acctesting.GenerateKey(b.Name(), "Node")
@@ -157,7 +157,7 @@ func TestSyntheticTransactionsAreAlwaysRecorded(t *testing.T) {
 			SyntheticOrigin: protocol.SyntheticOrigin{Cause: [32]byte{1}},
 			Amount:          1,
 		}).
-		InitiateSynthetic(protocol.SubnetUrl(exec.Network.LocalSubnetID)).
+		InitiateSynthetic(protocol.PartitionUrl(exec.Network.LocalPartitionID)).
 		Sign(protocol.SignatureTypeED25519, exec.Key)
 
 	// Check passes

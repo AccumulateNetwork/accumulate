@@ -21,7 +21,7 @@ import (
 const UnhealthyNodeCheckInterval = time.Minute * 10 // TODO Configurable in toml?
 
 type ConnectionManager interface {
-	SelectConnection(subnetId string, allowFollower bool) (ConnectionContext, error)
+	SelectConnection(partitionId string, allowFollower bool) (ConnectionContext, error)
 }
 
 type ConnectionInitializer interface {
@@ -93,31 +93,31 @@ func NewConnectionManager(config *config.Config, logger log.Logger, apiClientFac
 	return cm
 }
 
-func (cm *connectionManager) SelectConnection(subnetId string, allowFollower bool) (ConnectionContext, error) {
-	// When subnet is the same as the current node's subnet id, just return the local
-	if strings.EqualFold(subnetId, cm.accConfig.SubnetId) {
+func (cm *connectionManager) SelectConnection(partitionId string, allowFollower bool) (ConnectionContext, error) {
+	// When partitionId is the same as the current node's partition id, just return the local
+	if strings.EqualFold(partitionId, cm.accConfig.PartitionId) {
 		if cm.localCtx == nil {
-			return nil, errNoLocalClient(subnetId)
+			return nil, errNoLocalClient(partitionId)
 		}
 		return cm.localCtx, nil
 	}
 
-	bvnName := protocol.BvnNameFromSubnetId(subnetId)
+	bvnName := protocol.BvnNameFromPartitionId(partitionId)
 	nodeList, ok := cm.bvnCtxMap[bvnName]
 	if !ok {
-		if strings.EqualFold(subnetId, "directory") {
+		if strings.EqualFold(partitionId, "directory") {
 			nodeList = cm.dnCtxList
 		} else {
-			return nil, errUnknownSubnet(subnetId)
+			return nil, errUnknownPartition(partitionId)
 		}
 	}
 
 	healthyNodes := cm.getHealthyNodes(nodeList, allowFollower)
 	if len(healthyNodes) == 0 {
-		return nil, errNoHealthyNodes(subnetId) // None of the nodes in the subnet could be reached
+		return nil, errNoHealthyNodes(partitionId) // None of the nodes in the partition could be reached
 	}
 
-	// Apply simple round-robin balancing to nodes in non-local subnets
+	// Apply simple round-robin balancing to nodes in non-local partitions
 	var selCtx ConnectionContext
 	selCtxCnt := ^uint64(0)
 	for _, connCtx := range healthyNodes {
@@ -139,7 +139,7 @@ func (cm *connectionManager) getHealthyNodes(nodeList []ConnectionContext, allow
 		}
 	}
 
-	if len(healthyNodes) == 0 { // When there is no alternative node available in the subnet, do another health check & try again
+	if len(healthyNodes) == 0 { // When there is no alternative node available in the partition, do another health check & try again
 		cm.ResetErrors()
 		for _, connCtx := range nodeList {
 			if connCtx.GetNodeType() != config.Follower && connCtx.IsHealthy() {
@@ -184,22 +184,22 @@ func (cm *connectionManager) ResetErrors() {
 func (cm *connectionManager) buildNodeInventory() {
 	cm.bvnCtxMap = make(map[string][]ConnectionContext)
 
-	for _, subnet := range cm.accConfig.Network.Subnets {
-		for _, node := range subnet.Nodes {
-			connCtx, err := cm.buildNodeContext(node, subnet)
+	for _, partition := range cm.accConfig.Network.Partitions {
+		for _, node := range partition.Nodes {
+			connCtx, err := cm.buildNodeContext(node, partition)
 			if err != nil {
 				cm.logger.Error("error building node context for node %s on net %s with type %s: %w, ignoring node...",
-					connCtx.GetAddress(), connCtx.subnetId, connCtx.nodeConfig.Type, err)
+					connCtx.GetAddress(), connCtx.partitionId, connCtx.nodeConfig.Type, err)
 				continue
 			}
 
 			switch connCtx.nodeConfig.Type {
 			case config.Validator:
-				switch connCtx.subnet.Type {
+				switch connCtx.partition.Type {
 				case config.BlockValidator:
-					bvnName := protocol.BvnNameFromSubnetId(subnet.Id)
-					if subnet.Id == protocol.Directory {
-						panic("Directory subnet node is misconfigured as blockvalidator")
+					bvnName := protocol.BvnNameFromPartitionId(partition.Id)
+					if partition.Id == protocol.Directory {
+						panic("Directory partition node is misconfigured as blockvalidator")
 					}
 					nodeList, ok := cm.bvnCtxMap[bvnName]
 					if ok {
@@ -225,15 +225,15 @@ func (cm *connectionManager) buildNodeInventory() {
 	}
 }
 
-func (cm *connectionManager) buildNodeContext(node config.Node, subnet config.Subnet) (*connectionContext, error) {
-	connCtx := &connectionContext{subnetId: subnet.Id,
-		subnet:     subnet,
+func (cm *connectionManager) buildNodeContext(node config.Node, partition config.Partition) (*connectionContext, error) {
+	connCtx := &connectionContext{partitionId: partition.Id,
+		partition:  partition,
 		nodeConfig: node,
 		connMgr:    cm,
 		metrics:    NodeMetrics{status: Unknown},
 		hasClient:  make(chan struct{}),
 	}
-	connCtx.networkGroup = cm.determineNetworkGroup(subnet.Id, node.Address)
+	connCtx.networkGroup = cm.determineNetworkGroup(partition.Id, node.Address)
 
 	if node.Address != "local" && node.Address != "self" {
 		var err error
@@ -246,16 +246,16 @@ func (cm *connectionManager) buildNodeContext(node config.Node, subnet config.Su
 	return connCtx, nil
 }
 
-func (cm *connectionManager) determineNetworkGroup(subnetId string, address string) NetworkGroup {
-	ownSubnet := cm.accConfig.SubnetId
+func (cm *connectionManager) determineNetworkGroup(partitionId string, address string) NetworkGroup {
+	ownpartition := cm.accConfig.PartitionId
 	fmtAddr := cm.reformatAddress(address)
 	switch {
-	case strings.EqualFold(subnetId, ownSubnet) && strings.EqualFold(fmtAddr, cm.localHost):
+	case strings.EqualFold(partitionId, ownpartition) && strings.EqualFold(fmtAddr, cm.localHost):
 		return Local
-	case strings.EqualFold(subnetId, ownSubnet):
-		return SameSubnet
+	case strings.EqualFold(partitionId, ownpartition):
+		return SamePartition
 	default:
-		return OtherSubnet
+		return OtherPartition
 	}
 }
 
@@ -312,14 +312,7 @@ func (cm *connectionManager) ConnectDirectly(other ConnectionManager) error {
 		return fmt.Errorf("incompatible connection managers: want %T, got %T", cm, cm2)
 	}
 
-	var list []ConnectionContext
-	if cm2.accConfig.SubnetId == protocol.Directory {
-		list = cm.dnCtxList
-	} else if list, ok = cm.bvnCtxMap[protocol.BvnNameFromSubnetId(cm2.accConfig.SubnetId)]; !ok {
-		return fmt.Errorf("unknown subnet %q", cm2.accConfig.SubnetId)
-	}
-
-	for _, connCtx := range list {
+	for _, connCtx := range cm.all {
 		cc := connCtx.(*connectionContext)
 		url, err := url.Parse(cc.nodeConfig.Address)
 		if err != nil {
@@ -338,7 +331,7 @@ func (cm *connectionManager) ConnectDirectly(other ConnectionManager) error {
 		return nil
 	}
 
-	return fmt.Errorf("cannot find %s node %s", cm2.accConfig.SubnetId, cm2.accConfig.LocalAddress)
+	return fmt.Errorf("cannot find %s node %s", cm2.accConfig.PartitionId, cm2.accConfig.LocalAddress)
 }
 
 func (cm *connectionManager) createClient(connCtx *connectionContext) error {

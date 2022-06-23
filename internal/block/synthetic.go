@@ -152,12 +152,12 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 		return nil, err
 	}
 
-	subnet, ok := protocol.ParseSubnetUrl(initSig.DestinationNetwork)
+	partition, ok := protocol.ParsePartitionUrl(initSig.DestinationNetwork)
 	if !ok {
-		return nil, errors.Format(errors.StatusInternalError, "destination URL is not a valid subnet")
+		return nil, errors.Format(errors.StatusInternalError, "destination URL is not a valid partition")
 	}
 
-	indexIndex, err := addIndexChainEntry(record, protocol.SyntheticIndexChain(subnet), &protocol.IndexEntry{
+	indexIndex, err := addIndexChainEntry(record, protocol.SyntheticIndexChain(partition), &protocol.IndexEntry{
 		Source: uint64(index),
 	})
 	if err != nil {
@@ -310,41 +310,44 @@ func (x *Executor) putSyntheticTransaction(batch *database.Batch, transaction *p
 	return nil
 }
 
-func assembleSynthReceipt(transaction *protocol.Transaction, signatures []protocol.Signature) (*managed.Receipt, *url.URL, error) {
+func assembleSynthReceipt(hash [32]byte, signatures []protocol.Signature) (*managed.Receipt, *url.URL, error) {
 	// Collect receipts
-	receipts := map[[32]byte]*protocol.ReceiptSignature{}
+	receipts := map[[32]byte]*managed.Receipt{}
+	var sourceNet *url.URL
 	for _, signature := range signatures {
 		receipt, ok := signature.(*protocol.ReceiptSignature)
 		if !ok {
 			continue
 		}
-		receipts[*(*[32]byte)(receipt.Proof.Start)] = receipt
+		sourceNet = receipt.SourceNetwork
+		receipts[*(*[32]byte)(receipt.Proof.Start)] = &receipt.Proof
 	}
 
 	// Get the first
-	hash := *(*[32]byte)(transaction.GetHash())
-	rsig, ok := receipts[hash]
+	receipt, ok := receipts[hash]
 	delete(receipts, hash)
 	if !ok {
-		return nil, nil, nil
+		return nil, nil, errors.Format(errors.StatusInternalError, "missing initial receipt")
 	}
-	sourceNet := rsig.SourceNetwork
 
 	// Join the remaining receipts
-	receipt := &rsig.Proof
 	for len(receipts) > 0 {
-		hash = *(*[32]byte)(rsig.Proof.Anchor)
-		rsig, ok := receipts[hash]
-		delete(receipts, hash)
+		// Find the next receipt
+		hash = *(*[32]byte)(receipt.Anchor)
+		next, ok := receipts[hash]
 		if !ok {
-			continue
+			// TODO Reject receipts that do not match up. We should probably
+			// just store all of this in the transaction status or something.
+			break
+			// return nil, nil, errors.Format(errors.StatusInternalError, "extra receipts")
 		}
+		delete(receipts, hash)
 
-		r, err := receipt.Combine(&rsig.Proof)
-		if err == nil {
-			receipt = r
-			sourceNet = rsig.SourceNetwork
+		r, err := receipt.Combine(next)
+		if err != nil {
+			return nil, nil, errors.Format(errors.StatusInternalError, "combine receipts: %w", err)
 		}
+		receipt = r
 	}
 
 	return receipt, sourceNet, nil
