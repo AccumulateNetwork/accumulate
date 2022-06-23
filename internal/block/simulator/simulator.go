@@ -31,7 +31,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-var genesisTime = time.Now() // time.Date(2022, 7, 1, 0, 0, 0, 0, time.UTC)
+var genesisTime = time.Date(2022, 7, 1, 0, 0, 0, 0, time.UTC)
 
 type Simulator struct {
 	tb
@@ -118,13 +118,17 @@ func (sim *Simulator) Setup(bvnCount int) {
 			eventBus = events.NewBus(logger)
 		}
 
-		exec, err := NewNodeExecutor(ExecutorOptions{
+		execOpts := ExecutorOptions{
 			Logger:   logger,
 			Key:      key,
 			Describe: network,
 			Router:   sim.Router(),
 			EventBus: eventBus,
-		}, db)
+		}
+		if execOpts.Describe.NetworkType == config.Directory {
+			execOpts.MajorBlockScheduler = InitFakeMajorBlockScheduler(genesisTime)
+		}
+		exec, err := NewNodeExecutor(execOpts, db)
 		require.NoError(sim, err)
 
 		jrpc, err := api.NewJrpc(api.Options{

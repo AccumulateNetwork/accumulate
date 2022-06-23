@@ -122,12 +122,14 @@ func (x *Executor) shouldOpenMajorBlock(block *Block) (uint64, time.Time, error)
 	}
 
 	// Only when majorBlockSchedule is initialized we can open a major block. (not when doing replayBlocks)
-	if !x.majorBlockScheduler.IsInitialized() {
+	if !x.ExecutorOptions.MajorBlockScheduler.IsInitialized() {
 		return 0, time.Time{}, nil
 	}
 
 	blockTimeUTC := block.Time.UTC()
-	if blockTimeUTC.Before(x.majorBlockScheduler.GetNextMajorBlockTime()) {
+	nextBlockTime := x.ExecutorOptions.MajorBlockScheduler.GetNextMajorBlockTime(block.Time)
+
+	if blockTimeUTC.Before(nextBlockTime) {
 		return 0, time.Time{}, nil
 	}
 
@@ -158,7 +160,7 @@ func (x *Executor) shouldOpenMajorBlock(block *Block) (uint64, time.Time, error)
 
 	x.logger.Info("Start major block", "major-index", anchor.MajorBlockIndex, "minor-index", block.Index)
 	block.State.OpenedMajorBlock = true
-	x.majorBlockScheduler.UpdateNextMajorBlockTime()
+	x.ExecutorOptions.MajorBlockScheduler.UpdateNextMajorBlockTime(block.Time)
 	return anchor.MajorBlockIndex, anchor.MajorBlockTime, nil
 }
 

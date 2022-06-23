@@ -27,21 +27,21 @@ import (
 type Executor struct {
 	ExecutorOptions
 
-	globals             *Globals
-	executors           map[protocol.TransactionType]TransactionExecutor
-	dispatcher          *dispatcher
-	logger              logging.OptionalLogger
-	majorBlockScheduler blockscheduler.MajorBlockScheduler
+	globals    *Globals
+	executors  map[protocol.TransactionType]TransactionExecutor
+	dispatcher *dispatcher
+	logger     logging.OptionalLogger
 
 	// oldBlockMeta blockMetadata
 }
 
 type ExecutorOptions struct {
-	Logger   log.Logger
-	Key      ed25519.PrivateKey
-	Router   routing.Router
-	Describe config.Describe
-	EventBus *events.Bus
+	Logger              log.Logger
+	Key                 ed25519.PrivateKey
+	Router              routing.Router
+	Describe            config.Describe
+	EventBus            *events.Bus
+	MajorBlockScheduler blockscheduler.MajorBlockScheduler
 
 	isGenesis bool
 }
@@ -124,9 +124,6 @@ func newExecutor(opts ExecutorOptions, db *database.Database, executors ...Trans
 	m.ExecutorOptions = opts
 	m.executors = map[protocol.TransactionType]TransactionExecutor{}
 	m.dispatcher = newDispatcher(opts)
-	if m.Describe.NetworkType == config.Directory && m.ExecutorOptions.EventBus != nil {
-		m.majorBlockScheduler = blockscheduler.Init(m.ExecutorOptions.EventBus, m.Describe)
-	}
 
 	if opts.Logger != nil {
 		m.logger.L = opts.Logger.With("module", "executor")

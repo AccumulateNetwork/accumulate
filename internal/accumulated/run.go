@@ -3,6 +3,7 @@ package accumulated
 import (
 	"context"
 	"fmt"
+	"gitlab.com/accumulatenetwork/accumulate/internal/block/blockscheduler"
 	"io"
 	"net"
 	"net/http"
@@ -152,6 +153,12 @@ func (d *Daemon) Start() (err error) {
 		Router:   router,
 		EventBus: d.eventBus,
 	}
+
+	// On DNs initialize the major block scheduler
+	if execOpts.Describe.NetworkType == config.Directory {
+		execOpts.MajorBlockScheduler = blockscheduler.Init(execOpts.EventBus)
+	}
+
 	exec, err := block.NewNodeExecutor(execOpts, d.db)
 	if err != nil {
 		return fmt.Errorf("failed to initialize chain executor: %v", err)

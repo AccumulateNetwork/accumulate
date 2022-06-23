@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/gorhill/cronexpr"
-	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
 )
 
@@ -13,38 +12,38 @@ const debugMajorBlocks = false
 type majorBlockScheduler struct {
 	majorBlockSchedule *cronexpr.Expression
 	nextMajorBlockTime time.Time
-	isSimulator        bool
 }
 type MajorBlockScheduler interface {
-	GetNextMajorBlockTime() time.Time
-	UpdateNextMajorBlockTime()
+	GetNextMajorBlockTime(time.Time) time.Time
+	UpdateNextMajorBlockTime(time.Time)
 	IsInitialized() bool
 }
 
-func (s *majorBlockScheduler) GetNextMajorBlockTime() time.Time {
+func (s *majorBlockScheduler) GetNextMajorBlockTime(blockTime time.Time) time.Time {
+	if s.nextMajorBlockTime.IsZero() {
+		s.UpdateNextMajorBlockTime(blockTime)
+	}
 	return s.nextMajorBlockTime
 }
 
-func (s *majorBlockScheduler) UpdateNextMajorBlockTime() {
+func (s *majorBlockScheduler) UpdateNextMajorBlockTime(blockTime time.Time) {
 	if debugMajorBlocks {
-		s.nextMajorBlockTime = time.Now().UTC().Truncate(time.Second).Add(20 * time.Second)
-	} else if s.isSimulator {
-		s.handleSimulatorWorkaround()
+		s.nextMajorBlockTime = blockTime.UTC().Truncate(time.Second).Add(20 * time.Second)
 	} else {
-		s.nextMajorBlockTime = s.majorBlockSchedule.Next(time.Now().UTC())
+		s.nextMajorBlockTime = s.majorBlockSchedule.Next(blockTime.UTC())
 	}
 }
 
-func Init(eventBus *events.Bus, describe config.Describe) *majorBlockScheduler {
+func Init(eventBus *events.Bus) *majorBlockScheduler {
 	scheduler := &majorBlockScheduler{}
-	events.SubscribeAsync(eventBus, scheduler.onDidChangeGlobals)
-	scheduler.isSimulator = describe.Network.Id == "simulator"
+	events.SubscribeSync(eventBus, scheduler.onDidChangeGlobals)
 	return scheduler
 }
 
-func (s *majorBlockScheduler) onDidChangeGlobals(event events.DidChangeGlobals) {
-	s.majorBlockSchedule = cronexpr.MustParse(event.Values.Globals.MajorBlockSchedule)
+func (s *majorBlockScheduler) onDidChangeGlobals(event events.DidChangeGlobals) (err error) {
+	s.majorBlockSchedule, err = cronexpr.Parse(event.Values.Globals.MajorBlockSchedule)
 	s.nextMajorBlockTime = time.Time{}
+	return err
 }
 
 func (s *majorBlockScheduler) IsInitialized() bool {
@@ -54,17 +53,5 @@ func (s *majorBlockScheduler) IsInitialized() bool {
 	if s.majorBlockSchedule == nil {
 		return false
 	}
-
-	if s.nextMajorBlockTime.IsZero() {
-		s.UpdateNextMajorBlockTime()
-	}
 	return true
-}
-
-func (s *majorBlockScheduler) handleSimulatorWorkaround() {
-	if (s.nextMajorBlockTime.Equal(time.Time{})) {
-		s.nextMajorBlockTime = s.majorBlockSchedule.Next(time.Now().UTC())
-	} else {
-		s.nextMajorBlockTime = s.majorBlockSchedule.Next(time.Now().Add(72 * time.Hour).UTC())
-	}
 }

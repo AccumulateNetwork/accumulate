@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"gitlab.com/accumulatenetwork/accumulate/internal/block/blockscheduler"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -172,13 +173,19 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 	n.router = routing.NewRouter(eventBus, connMgr)
 
 	var err error
-	n.exec, err = block.NewNodeExecutor(block.ExecutorOptions{
+	execOpts := block.ExecutorOptions{
 		Logger:   n.logger,
 		Key:      n.key.Bytes(),
 		Describe: *n.network,
 		Router:   n.router,
 		EventBus: eventBus,
-	}, n.db)
+	}
+	// On DNs initialize the major block scheduler
+	if execOpts.Describe.NetworkType == config.Directory {
+		execOpts.MajorBlockScheduler = blockscheduler.Init(execOpts.EventBus)
+	}
+
+	n.exec, err = block.NewNodeExecutor(execOpts, n.db)
 	n.Require().NoError(err)
 
 	n.app = abci.NewAccumulator(abci.AccumulatorOptions{
