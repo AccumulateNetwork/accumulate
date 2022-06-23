@@ -8,21 +8,19 @@ source "${SCRIPT_DIR}"/validate-commons.sh
 
 # Format the path to priv_validator_key.json
 function dnPrivKey {
-  echo $NODES_DIR/dn/Node$1/config/priv_validator_key.json
+  echo $NODES_DIR/node-$1/dnn/config/priv_validator_key.json
 }
 
 function signKey {
       if [ "$1" -lt "$NUM_NODES" ]; then
-        echo "$NODES_DIR/dn/Node$1/config/priv_validator_key.json"
+        echo "$NODES_DIR/node-$1/dnn/config/priv_validator_key.json"
       else
-        declare -r SK_BVN_NR=$(bc -l <<<"scale=0;($1/$NUM_NODES)-1")
-        declare -r SK_BVN_NODE_NR=$(bc -l <<<"$1-(($SK_BVN_NR+1) * ($NUM_SUBNETS-1))")
-        echo "$NODES_DIR/bvn$SK_BVN_NR/Node$SK_BVN_NODE_NR/config/priv_validator_key.json"
+        echo "$NODES_DIR/node-$1/bvnn/config/priv_validator_key.json"
       fi
 }
 
 function signCount {
-   echo "$(bc -l <<<"$ACCEPT_THRESHOLD-1")"
+   echo "$(bc -l <<<"$ACCEPT_THRESHOLD")"
 }
 
 section "Setup"
@@ -35,16 +33,15 @@ fi
 [ -z "${MNEMONIC}" ] || accumulate key import mnemonic ${MNEMONIC}
 echo
 
-declare -g NUM_SUBNETS=$(find ${NODES_DIR} -mindepth 1 -maxdepth 1 -type d | wc -l)
-declare -g NUM_NODES=$(find ${NODES_DIR}/dn -mindepth 1 -maxdepth 1 -type d | wc -l)
+declare -g NUM_NODES=$(find ${NODES_DIR} -mindepth 1 -maxdepth 1 -type d | wc -l)
 declare -g ACCEPT_THRESHOLD=$(accumulate page get -j dn.acme/operators/1 | jq -re .data.acceptThreshold)
 
 #spin up a DN validator, we cannot have 2 validators, so need >= 3 to run this test
-if [ -f "$(dnPrivKey 0)" ] && [ -f "/.dockerenv" ] && [ "$NUM_NODES" -ge "3" ]; then
+if [ -f "$(dnPrivKey 1)" ] && [ -f "/.dockerenv" ] && [ "$NUM_NODES" -ge "3" ]; then
   section "Add a new DN validator"
 
   # NUM_NODES already contains the next node number (which starts counting at 0)
-  accumulated init node "$NUM_NODES" tcp://dn-0:26656 --listen=tcp://127.0.1.100:26656 -w "$NODES_DIR/dn" --genesis-doc="${NODES_DIR}/dn/Node0/config/genesis.json" --skip-version-check --no-website --skip-peer-health-check
+  accumulated init node "$NUM_NODES" tcp://dn-0:26656 --listen=tcp://127.0.1.100:26656 -w "$NODES_DIR" --genesis-doc="${NODES_DIR}/node-1/dnn/config/genesis.json" --skip-version-check --no-website --skip-peer-health-check
 
   pubkey=$(jq -re .pub_key.value <"$(dnPrivKey $NUM_NODES)")
   pubkey=$(echo $pubkey | base64 -d | od -t x1 -An)
@@ -54,43 +51,43 @@ if [ -f "$(dnPrivKey 0)" ] && [ -f "/.dockerenv" ] && [ "$NUM_NODES" -ge "3" ]; 
   accumulate page get acc://dn.acme/operators/1 -j
 
   # Add key to operator book first
-  echo operator add dn "$(dnPrivKey 0)" $hexPubKey
-  TXID=$(cli-tx operator add dn "$(dnPrivKey 0)" $hexPubKey)
+  echo operator add dn "$(dnPrivKey 1)" $hexPubKey
+  TXID=$(cli-tx operator add dn "$(dnPrivKey 1)" $hexPubKey)
   wait-for-tx $TXID
   # Sign the required number of times
-  for ((sigNr = 1; sigNr <= $(signCount); sigNr++)); do
+  for ((sigNr = 2; sigNr <= $(signCount); sigNr++)); do
     wait-for cli-tx-sig tx sign dn.acme/operators "$(signKey $sigNr)" $TXID
   done
   declare -g ACCEPT_THRESHOLD=$(accumulate page get -j dn.acme/operators/1 | jq -re .data.acceptThreshold)
 
   # Register new validator
-  echo validator add dn "$(dnPrivKey 0)" $hexPubKey
-  TXID=$(cli-tx validator add dn "$(dnPrivKey 0)" $hexPubKey)
+  echo validator add dn "$(dnPrivKey 1)" $hexPubKey
+  TXID=$(cli-tx validator add dn "$(dnPrivKey 1)" $hexPubKey)
   wait-for-tx $TXID
 
   # Sign the required number of times
   echo Signature count $(signCount)
-  for ((sigNr = 1; sigNr <= $(signCount); sigNr++)); do
+  for ((sigNr = 2; sigNr <= $(signCount); sigNr++)); do
     echo Signature $sigNr
     wait-for cli-tx-sig tx sign dn.acme/operators "$(signKey $sigNr)" $TXID
   done
 
   # Start the new validator and increment NUM_DMNS
-  accumulated run -n 3 -w "$NODES_DIR/dn" &
+  accumulated run -n 3 -w "$NODES_DIR/nodes-1/ndn" &
   declare -g ACCPID=$!
 fi
 
 section "Add a key to the operator book"
-if [ -f "$(dnPrivKey 0)" ]; then
+if [ -f "$(dnPrivKey 1)" ]; then
   DN_NEW_KEY="4a4557cfe5fe2c1e92f1ca91d0d78fe3c7f34a1a754a5084e7f743dbe7ac5ccd"
   DN_NEW_KEY_HASH="a8997980d7a4325b30f371d877daba11ae2a0b3ffb2edf0f3ebee5134460bac0"
-echo operator add dn "$(dnPrivKey 0)" $DN_NEW_KEY
-  TXID=$(cli-tx operator add dn "$(dnPrivKey 0)" $DN_NEW_KEY)
+echo operator add dn "$(dnPrivKey 1)" $DN_NEW_KEY
+  TXID=$(cli-tx operator add dn "$(dnPrivKey 1)" $DN_NEW_KEY)
   wait-for-tx $TXID
 
   # Sign the required number of times
   echo Signature count $(signCount)
-  for ((sigNr = 1; sigNr <= $(signCount); sigNr++)); do
+  for ((sigNr = 2; sigNr <= $(signCount); sigNr++)); do
     echo Signature $sigNr
     wait-for cli-tx-sig tx sign dn.acme/operators "$(signKey $sigNr)" $TXID
   done
@@ -108,8 +105,8 @@ fi
 
 
 section "Update oracle price to \$0.0501. Oracle price has precision of 4 decimals"
-if [ -f "$(dnPrivKey 0)" ]; then
-  TXID=$(accumulated set oracle 0.0501 -w "${NODES_DIR}/dn/Node0" | grep Hash | cut -d: -f2)
+if [ -f "$(dnPrivKey 1)" ]; then
+  TXID=$(accumulated set oracle 0.0501 -w "${NODES_DIR}/node-1/dnn" | grep Hash | cut -d: -f2)
   wait-for-tx $TXID
 
   # Sign the required number of times
@@ -130,11 +127,11 @@ fi
 
 
 section "Query votes chain"
-if [ -f "$(dnPrivKey 0)" ]; then
+if [ -f "$(dnPrivKey 1)" ]; then
   #xxd -r -p doesn't like the .data.entry.data hex string in docker bash for some reason, so converting using sed instead
   RESULT=$(accumulate -j data get dn.acme/votes | jq -re .data.entry.data[0] | sed 's/\([0-9A-F]\{2\}\)/\\\\\\x\1/gI' | xargs printf)
   #convert the node address to search for to base64
-  NODE_ADDRESS=$(jq -re .address "$(dnPrivKey 0)" | xxd -r -p | base64)
+  NODE_ADDRESS=$(jq -re .address "$(dnPrivKey 1)" | xxd -r -p | base64)
   VOTE_COUNT=$(echo "$RESULT" | jq -re '.votes|length')
   FOUND=0
   for ((i = 0; i < $VOTE_COUNT; i++)); do
@@ -151,7 +148,7 @@ fi
 
 if [ ! -z "${ACCPID}" ]; then
   section "Shutdown dynamic validator"
-  TXID=$(cli-tx validator remove dn "$(dnPrivKey 0)" "$hexPubKey")
+  TXID=$(cli-tx validator remove dn "$(dnPrivKey 1)" "$hexPubKey")
   wait-for-tx $TXID
 
   # Sign the required number of times
