@@ -67,7 +67,7 @@ var adiCreateCmd = &cobra.Command{
 
 func PrintADICreate() {
 	fmt.Println("  accumulate adi create [origin-lite-account] [adi url to create] [public-key or key name] [key-book-name (optional)] Create new ADI from lite token account. If key book name is not specified, the adi key book is used.")
-	fmt.Println("  accumulate adi create [origin-adi-url] [wallet signing key name] [adi url to create] [public key or wallet key name] [key book url (optional)]  Create new ADI for another ADI")
+	fmt.Println("  accumulate adi create [adi account url with credits] [wallet signing key name] [adi url to create] [public key or wallet key name] [key book url (optional)]  Create new ADI for another ADI")
 }
 
 func GetAdiDirectory(origin string, start string, count string) (string, error) {
