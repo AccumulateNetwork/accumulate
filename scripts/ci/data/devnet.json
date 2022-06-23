@@ -14,20 +14,5 @@
                 }
             ]
         }
-    ],
-    "dns": [
-        {
-            "id": "DN1",
-            "nodes": [
-                {
-                    "dnnType": "validator",
-                    "bvnnType": "validator",
-                    "basePort": 26656,
-                    "hostName": "127.0.1.5",
-                    "privValKey": "8136feaab2aeef2a61a8c484f5fbec7e44f416e4ca0ee3b865d03dcc526b605ea008ae2dfe0021b6abbed88691de90bb7ebee69a276956838c3dec300bcfcc85",
-                    "nodeKey": "ac202c1f9f251135c3dfbc483a3fc094a9290514f40fe88251ce8a7aac3fa93f3c84e099ca999ed81e10509fefef3d9eb781005a1cfa74f50244a74a325d1393"
-                }
-            ]
-        }
     ]
 }
