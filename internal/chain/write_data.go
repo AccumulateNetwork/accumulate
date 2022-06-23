@@ -124,13 +124,9 @@ func executeWriteFullDataAccount(st *StateManager, entry protocol.DataEntry, scr
 			protocol.AccountTypeDataAccount, st.Origin.Type())
 	}
 
-	if scratch && !account.Scratch {
-		return nil, errors.Format(errors.StatusBadRequest, "cannot write scratch data to a non-scratch account")
-	}
-
 	if writeToState {
-		if account.Scratch {
-			return nil, errors.Format(errors.StatusBadRequest, "cannot write data to the state of a scratch data account")
+		if scratch {
+			return nil, errors.Format(errors.StatusBadRequest, "cannot write data to the state of a scratch chain")
 		}
 
 		account.Entry = entry
@@ -144,6 +140,7 @@ func executeWriteFullDataAccount(st *StateManager, entry protocol.DataEntry, scr
 	result.EntryHash = *(*[32]byte)(entry.Hash())
 	result.AccountID = st.OriginUrl.AccountID()
 	result.AccountUrl = st.OriginUrl
+
 	st.UpdateData(st.Origin, result.EntryHash[:], entry)
 	return result, nil
 }

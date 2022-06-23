@@ -475,6 +475,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		require.Contains(t, n.GetDirectory("FooBar"), protocol.AccountUrl("FooBar", "oof").String())
 
 		wd := new(protocol.WriteData)
+		wd.Scratch = true // TODO revert
 		n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 			entry := new(protocol.AccumulateDataEntry)
 			wd.Entry = entry

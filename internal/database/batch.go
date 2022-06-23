@@ -174,7 +174,7 @@ func (b *Batch) cacheValue(key storage.Key, value TypedValue, dirty bool) {
 
 func (b *Batch) getValue(key storage.Key, unmarshal ValueUnmarshalFunc) (v TypedValue, err error) {
 	if b.done {
-		panic("attempted to use a commited or discarded batch")
+		panic("attempted to use a committed or discarded batch")
 	}
 
 	switch debug & (debugGet | debugGetValue) {
@@ -240,7 +240,7 @@ func (b *Batch) getValue(key storage.Key, unmarshal ValueUnmarshalFunc) (v Typed
 
 func (b *Batch) getValueAs(key storage.Key, unmarshal ValueUnmarshalFunc, newValue TypedValue, target interface{}) (err error) {
 	if b.done {
-		panic("attempted to use a commited or discarded batch")
+		panic("attempted to use a committed or discarded batch")
 	}
 
 	// Load the value

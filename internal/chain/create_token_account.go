@@ -65,7 +65,6 @@ func (CreateTokenAccount) Validate(st *StateManager, tx *Delivery) (protocol.Tra
 	account := new(protocol.TokenAccount)
 	account.Url = body.Url
 	account.TokenUrl = body.TokenUrl
-	account.Scratch = body.Scratch
 	err = st.SetAuth(account, body.Authorities)
 	if err != nil {
 		return nil, errors.Format(errors.StatusUnknown, "set auth: %w", err)
