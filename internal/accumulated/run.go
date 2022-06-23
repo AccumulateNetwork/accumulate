@@ -3,7 +3,6 @@ package accumulated
 import (
 	"context"
 	"fmt"
-	"gitlab.com/accumulatenetwork/accumulate/internal/block/blockscheduler"
 	"io"
 	"net"
 	"net/http"
@@ -22,6 +21,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
+	"gitlab.com/accumulatenetwork/accumulate/internal/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
 	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
 	statuschk "gitlab.com/accumulatenetwork/accumulate/internal/connections/status"

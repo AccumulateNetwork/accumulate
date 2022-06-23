@@ -53,9 +53,6 @@ type FakeNode struct {
 
 	assert       *assert.Assertions
 	require      *require.Assertions
-	netValMap    genesis.NetworkValidatorMap
-	Bootstrap    genesis.Bootstrap
-	kv           *memory.DB
 	nodeExecutor *block.Executor
 }
 

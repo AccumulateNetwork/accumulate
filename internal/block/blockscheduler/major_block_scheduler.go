@@ -36,12 +36,12 @@ func (s *majorBlockScheduler) UpdateNextMajorBlockTime(blockTime time.Time) {
 
 func Init(eventBus *events.Bus) *majorBlockScheduler {
 	scheduler := &majorBlockScheduler{}
-	events.SubscribeSync(eventBus, scheduler.onDidChangeGlobals)
+	events.SubscribeSync(eventBus, scheduler.onWillChangeGlobals)
 	return scheduler
 }
 
-func (s *majorBlockScheduler) onDidChangeGlobals(event events.DidChangeGlobals) (err error) {
-	s.majorBlockSchedule, err = cronexpr.Parse(event.Values.Globals.MajorBlockSchedule)
+func (s *majorBlockScheduler) onWillChangeGlobals(event events.WillChangeGlobals) (err error) {
+	s.majorBlockSchedule, err = cronexpr.Parse(event.New.Globals.MajorBlockSchedule)
 	s.nextMajorBlockTime = time.Time{}
 	return err
 }
