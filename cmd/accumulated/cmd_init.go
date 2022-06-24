@@ -343,19 +343,26 @@ func initNode(cmd *cobra.Command, args []string) {
 	if flagInit.Reset {
 		networkReset()
 	}
-
-	config.SetRoot(flagMain.WorkDir)
+	if config.Accumulate.Describe.NetworkType == cfg.Directory {
+		config.SetRoot(path.Join(flagMain.WorkDir, "dnn"))
+	} else if config.Accumulate.Describe.NetworkType == cfg.BlockValidator {
+		config.SetRoot(path.Join(flagMain.WorkDir, "bvnn"))
+	}
 	accumulated.ConfigureNodePorts(&accumulated.NodeInit{
 		HostName: u.Hostname(),
 		ListenIP: u.Hostname(),
 		BasePort: uint64(nodePort),
 	}, config, 0)
 
-	// TODO Check for existing?
-	privValKey, nodeKey := ed25519.GenPrivKey(), ed25519.GenPrivKey()
-	config.PrivValidator.Key = "priv_validator_key.json"
-	err = accumulated.WriteNodeFiles(config, privValKey, nodeKey, genDoc)
-	checkf(err, "write node files")
+	if _, err := os.Stat(path.Join(config.RootDir, "priv_validator_key.json")); err != nil {
+		privValKey, nodeKey := ed25519.GenPrivKey(), ed25519.GenPrivKey()
+		config.PrivValidator.Key = "priv_validator_key.json"
+		err = accumulated.WriteNodeFiles(config, privValKey, nodeKey, genDoc)
+		checkf(err, "write node files")
+	} else {
+		config.PrivValidator.Key = "priv_validator_key.json"
+	}
+
 }
 
 func newLogger() log.Logger {
