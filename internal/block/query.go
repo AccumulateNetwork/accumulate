@@ -1174,7 +1174,7 @@ func (m *Executor) shouldBePruned(batch *database.Batch, txid []byte, txBody pro
 			if err != nil {
 				return false, err
 			}
-			if indexEntry.BlockTime.Before(pruneTime) {
+			if !indexEntry.BlockTime.IsZero() && indexEntry.BlockTime.Before(pruneTime) {
 				return true, nil
 			}
 			return false, nil

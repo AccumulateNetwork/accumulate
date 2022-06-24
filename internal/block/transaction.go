@@ -443,10 +443,6 @@ func (x *Executor) recordSuccessfulTransaction(batch *database.Batch, state *cha
 
 	// Add the transaction to the principal's main or scratch chain
 	targetChain := selectTargetChain(delivery.Transaction.Body)
-	if targetChain == protocol.ScratchChain { // TDO DELETE ME
-		txid := delivery.Transaction.GetHash()
-		fmt.Println(errors.NotFound("Scratch transaction: %X", txid[:4]))
-	}
 
 	err = state.ChainUpdates.AddChainEntry(batch, delivery.Transaction.Header.Principal, targetChain, protocol.ChainTypeTransaction, delivery.Transaction.GetHash(), 0, 0)
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
