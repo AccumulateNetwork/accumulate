@@ -7,6 +7,7 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
@@ -35,11 +36,12 @@ type Executor struct {
 }
 
 type ExecutorOptions struct {
-	Logger   log.Logger
-	Key      ed25519.PrivateKey
-	Router   routing.Router
-	Describe config.Describe
-	EventBus *events.Bus
+	Logger              log.Logger
+	Key                 ed25519.PrivateKey
+	Router              routing.Router
+	Describe            config.Describe
+	EventBus            *events.Bus
+	MajorBlockScheduler blockscheduler.MajorBlockScheduler
 
 	isGenesis bool
 
