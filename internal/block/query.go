@@ -218,8 +218,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 			return []byte("tx-history"), txns, nil
 
 		case 2:
-			chainName := chainNameFor(fragment[0])
-			chain, err := batch.Account(u).ReadChain(chainName)
+			chain, err := batch.Account(u).ReadChain(chainNameFor(fragment[0]))
 			if err != nil {
 				return nil, nil, fmt.Errorf("failed to load main chain of %q: %v", u, err)
 			}

@@ -142,7 +142,6 @@ func (m *Executor) EndBlock(block *Block) error {
 	// Update the transaction-chain index
 	for _, e := range txChainEntries {
 		e.AnchorIndex = rootIndexIndex
-
 		err = indexing.TransactionChain(block.Batch, e.Txid).Add(&e.TransactionChainEntry)
 		if err != nil {
 			return errors.Format(errors.StatusUnknown, "store transaction chain index: %w", err)

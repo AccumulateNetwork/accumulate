@@ -2,6 +2,7 @@ package chain
 
 import (
 	"bytes"
+	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
@@ -107,13 +108,16 @@ func (WriteData) Validate(st *StateManager, tx *Delivery) (protocol.TransactionR
 		if body.WriteToState {
 			return nil, errors.Format(errors.StatusBadRequest, "cannot write data to the state of a lite data account")
 		}
-		return executeWriteLiteDataAccount(st, body.Entry, body.Scratch)
+		if body.Scratch {
+			return nil, fmt.Errorf("cannot write scratch data to a lite data account")
+		}
+		return executeWriteLiteDataAccount(st, body.Entry)
 	}
 
 	return executeWriteFullDataAccount(st, body.Entry, body.Scratch, body.WriteToState)
 }
 
-func executeWriteFullDataAccount(st *StateManager, entry protocol.DataEntry, scratch, writeToState bool) (protocol.TransactionResult, error) {
+func executeWriteFullDataAccount(st *StateManager, entry protocol.DataEntry, scratch bool, writeToState bool) (protocol.TransactionResult, error) {
 	if st.Origin == nil {
 		return nil, errors.NotFound("%v not found", st.OriginUrl)
 	}
