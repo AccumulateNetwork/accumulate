@@ -22,8 +22,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
-const debugMajorBlocks = false
-
 // BeginBlock implements ./Chain
 func (x *Executor) BeginBlock(block *Block) error {
 	//clear the timers
@@ -34,7 +32,7 @@ func (x *Executor) BeginBlock(block *Block) error {
 
 	x.logger.Debug("Begin block", "height", block.Index, "leader", block.IsLeader, "time", block.Time)
 
-	// Check if its time for a major block
+	// Check if it's time for a major block
 	openMajor, majorBlockTime, err := x.shouldOpenMajorBlock(block)
 	if err != nil {
 		return err
@@ -129,20 +127,16 @@ func (x *Executor) shouldOpenMajorBlock(block *Block) (uint64, time.Time, error)
 		return 0, time.Time{}, nil
 	}
 
-	var utcHour time.Time
-	if debugMajorBlocks {
-		utcHour = block.Time.UTC().Truncate(time.Second)
-		if block.Index%20 != 19 {
-			return 0, time.Time{}, nil
-		}
-	} else {
-		utcHour = block.Time.UTC().Truncate(time.Hour)
-		switch utcHour.Hour() {
-		case 0, 12:
-			// Ok
-		default:
-			return 0, time.Time{}, nil
-		}
+	// Only when majorBlockSchedule is initialized we can open a major block. (not when doing replayBlocks)
+	if !x.ExecutorOptions.MajorBlockScheduler.IsInitialized() {
+		return 0, time.Time{}, nil
+	}
+
+	blockTimeUTC := block.Time.UTC()
+	nextBlockTime := x.ExecutorOptions.MajorBlockScheduler.GetNextMajorBlockTime(block.Time)
+
+	if blockTimeUTC.IsZero() || blockTimeUTC.Before(nextBlockTime) {
+		return 0, time.Time{}, nil
 	}
 
 	var anchor *protocol.AnchorLedger
@@ -150,10 +144,6 @@ func (x *Executor) shouldOpenMajorBlock(block *Block) (uint64, time.Time, error)
 	err := record.GetStateAs(&anchor)
 	if err != nil {
 		return 0, time.Time{}, errors.Format(errors.StatusUnknown, "load anchor ledger: %w", err)
-	}
-
-	if !anchor.MajorBlockTime.Before(utcHour) {
-		return 0, time.Time{}, nil
 	}
 
 	// Update the anchor ledger
@@ -172,6 +162,7 @@ func (x *Executor) shouldOpenMajorBlock(block *Block) (uint64, time.Time, error)
 
 	x.logger.Info("Start major block", "major-index", anchor.MajorBlockIndex, "minor-index", block.Index)
 	block.State.OpenedMajorBlock = true
+	x.ExecutorOptions.MajorBlockScheduler.UpdateNextMajorBlockTime(block.Time)
 	return anchor.MajorBlockIndex, anchor.MajorBlockTime, nil
 }
 

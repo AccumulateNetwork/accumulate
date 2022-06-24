@@ -365,6 +365,17 @@ func initNode(cmd *cobra.Command, args []string) {
 
 }
 
+func netDir(networkType cfg.NetworkType) string {
+	switch networkType {
+	case cfg.Directory:
+		return "dnn"
+	case cfg.BlockValidator:
+		return "bvnn"
+	}
+	fatalf("Unsupported network type %v", networkType)
+	return ""
+}
+
 func newLogger() log.Logger {
 	levels := config.DefaultLogLevels
 	if flagInit.LogLevels != "" {
