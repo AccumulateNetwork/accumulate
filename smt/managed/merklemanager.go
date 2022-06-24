@@ -3,6 +3,7 @@ package managed
 import (
 	"fmt"
 	"math"
+	"strings"
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
@@ -12,11 +13,12 @@ import (
 
 type MerkleManager = Chain
 
-func NewChain(logger log.Logger, store record.Store, key record.Key, markPower int64, labelfmt string) *Chain {
+func NewChain(logger log.Logger, store record.Store, key record.Key, markPower int64 /*, typ ChainType*/, namefmt, labelfmt string) *Chain {
 	c := new(Chain)
 	c.logger.L = logger
 	c.store = store
 	c.key = key
+	// c.typ = typ
 
 	// TODO markFreq = 1 << markPower?
 
@@ -24,9 +26,19 @@ func NewChain(logger log.Logger, store record.Store, key record.Key, markPower i
 	c.markFreq = int64(math.Pow(2, float64(markPower))) // The number of elements between indexes
 	c.markMask = c.markFreq - 1                         // Mask to index of next mark (0 if at a mark)
 
+	if strings.ContainsRune(namefmt, '%') {
+		c.name = fmt.Sprintf(namefmt, key...)
+	} else {
+		c.name = namefmt
+	}
+
 	c.label = fmt.Sprintf(labelfmt, key...)
 	return c
 }
+
+func (c *Chain) Name() string { return c.name }
+
+// func (c *Chain) Type() ChainType { return c.typ }
 
 // AddHash adds a Hash to the Chain controlled by the ChainManager. If unique is
 // true, the hash will not be added if it is already in the chain.

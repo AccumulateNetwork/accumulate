@@ -15,7 +15,7 @@ type BlockTimerType uint64
 
 func trackTransactionTimers(executors *map[protocol.TransactionType]chain.TransactionExecutor) (timerList []uint64) {
 	//register the executor transaction timers
-	for k, _ := range *executors {
+	for k := range *executors {
 		timerList = append(timerList, k.GetEnumValue()+BlockTimerTypeTransactionOffset.GetEnumValue())
 	}
 	return timerList
