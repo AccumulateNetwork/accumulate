@@ -11,14 +11,6 @@ function dnPrivKey {
   echo "$NODES_DIR/node-$1/dnn/config/priv_validator_key.json"
 }
 
-function signKey {
-      if [ "$1" -lt "$NUM_NODES" ]; then
-        echo "$NODES_DIR/node-$1/dnn/config/priv_validator_key.json"
-      else
-        echo "$NODES_DIR/node-$1/bvnn/config/priv_validator_key.json"
-      fi
-}
-
 function signCount {
    echo "$(bc -l <<<"$ACCEPT_THRESHOLD")"
 }
@@ -62,7 +54,7 @@ wait-for-tx $TXID
 echo Signature count $(signCount)
 for ((sigNr = 1; sigNr < $(signCount); sigNr++)); do
   echo Signature $sigNr
-  wait-for cli-tx-sig tx sign dn.acme/operators "$(signKey $sigNr)" $TXID
+  wait-for cli-tx-sig tx sign dn.acme/operators "$(dnPrivKey $sigNr)" $TXID
 done
 accumulate -j tx get $TXID | jq -re .status.pending 1>/dev/null && die "Transaction is pending"
 accumulate -j tx get $TXID | jq -re .status.delivered 1>/dev/null || die "Transaction was not delivered"

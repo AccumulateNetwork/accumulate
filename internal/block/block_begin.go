@@ -146,10 +146,6 @@ func (x *Executor) shouldOpenMajorBlock(block *Block) (uint64, time.Time, error)
 		return 0, time.Time{}, errors.Format(errors.StatusUnknown, "load anchor ledger: %w", err)
 	}
 
-	if !anchor.MajorBlockTime.Before(blockTimeUTC) {
-		return 0, time.Time{}, nil
-	}
-
 	// Update the anchor ledger
 	bvns := x.Describe.Network.GetBvnNames()
 	anchor.MajorBlockIndex++

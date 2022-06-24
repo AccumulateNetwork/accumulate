@@ -8,19 +8,11 @@ source "${SCRIPT_DIR}"/validate-commons.sh
 
 # Format the path to priv_validator_key.json
 function dnPrivKey {
-  echo $NODES_DIR/node-$1/dnn/config/priv_validator_key.json
-}
-
-function signKey {
-      if [ "$1" -lt "$NUM_NODES" ]; then
-        echo "$NODES_DIR/node-$1/dnn/config/priv_validator_key.json"
-      else
-        echo "$NODES_DIR/node-$1/bvnn/config/priv_validator_key.json"
-      fi
+  echo "$NODES_DIR/node-$1/dnn/config/priv_validator_key.json"
 }
 
 function signCount {
-   echo "$(bc -l <<<"$ACCEPT_THRESHOLD")"
+  echo "$(bc -l <<<"$ACCEPT_THRESHOLD")"
 }
 
 section "Setup"
@@ -40,8 +32,8 @@ declare -g ACCEPT_THRESHOLD=$(accumulate page get -j dn.acme/operators/1 | jq -r
 if [ -f "$(dnPrivKey 1)" ] && [ -f "/.dockerenv" ] && [ "$NUM_NODES" -ge "3" ]; then
   section "Add a new DN validator"
 
-  # NUM_NODES already contains the next node number (which starts counting at 0)
-  accumulated init node "$NUM_NODES" tcp://dn-0:26656 --listen=tcp://127.0.1.100:26656 -w "$NODES_DIR" --genesis-doc="${NODES_DIR}/node-1/dnn/config/genesis.json" --skip-version-check --no-website --skip-peer-health-check
+  ((NUM_NODES++))
+  accumulated init node "$NUM_NODES" tcp://node-1:26656 --listen=tcp://127.0.1.100:26656 -w "$NODES_DIR" --genesis-doc="${NODES_DIR}/node-1/dnn/config/genesis.json" --skip-version-check --no-website --skip-peer-health-check
 
   pubkey=$(jq -re .pub_key.value <"$(dnPrivKey $NUM_NODES)")
   pubkey=$(echo $pubkey | base64 -d | od -t x1 -An)
@@ -56,7 +48,7 @@ if [ -f "$(dnPrivKey 1)" ] && [ -f "/.dockerenv" ] && [ "$NUM_NODES" -ge "3" ]; 
   wait-for-tx $TXID
   # Sign the required number of times
   for ((sigNr = 2; sigNr <= $(signCount); sigNr++)); do
-    wait-for cli-tx-sig tx sign dn.acme/operators "$(signKey $sigNr)" $TXID
+    wait-for cli-tx-sig tx sign dn.acme/operators "$(dnPrivKey $sigNr)" $TXID
   done
   declare -g ACCEPT_THRESHOLD=$(accumulate page get -j dn.acme/operators/1 | jq -re .data.acceptThreshold)
 
@@ -69,7 +61,7 @@ if [ -f "$(dnPrivKey 1)" ] && [ -f "/.dockerenv" ] && [ "$NUM_NODES" -ge "3" ]; 
   echo Signature count $(signCount)
   for ((sigNr = 2; sigNr <= $(signCount); sigNr++)); do
     echo Signature $sigNr
-    wait-for cli-tx-sig tx sign dn.acme/operators "$(signKey $sigNr)" $TXID
+    wait-for cli-tx-sig tx sign dn.acme/operators "$(dnPrivKey $sigNr)" $TXID
   done
 
   # Start the new validator and increment NUM_DMNS
@@ -81,7 +73,7 @@ section "Add a key to the operator book"
 if [ -f "$(dnPrivKey 1)" ]; then
   DN_NEW_KEY="4a4557cfe5fe2c1e92f1ca91d0d78fe3c7f34a1a754a5084e7f743dbe7ac5ccd"
   DN_NEW_KEY_HASH="a8997980d7a4325b30f371d877daba11ae2a0b3ffb2edf0f3ebee5134460bac0"
-echo operator add dn "$(dnPrivKey 1)" $DN_NEW_KEY
+  echo operator add dn "$(dnPrivKey 1)" $DN_NEW_KEY
   TXID=$(cli-tx operator add dn "$(dnPrivKey 1)" $DN_NEW_KEY)
   wait-for-tx $TXID
 
@@ -89,12 +81,12 @@ echo operator add dn "$(dnPrivKey 1)" $DN_NEW_KEY
   echo Signature count $(signCount)
   for ((sigNr = 2; sigNr <= $(signCount); sigNr++)); do
     echo Signature $sigNr
-    wait-for cli-tx-sig tx sign dn.acme/operators "$(signKey $sigNr)" $TXID
+    wait-for cli-tx-sig tx sign dn.acme/operators "$(dnPrivKey $sigNr)" $TXID
   done
 
   echo "sleeping for 5 seconds (wait for anchor)"
   sleep 5
-  KEY_ADDED_BVN=$(accumulate page get bvn-BVN0.acme/operators/1 | grep $DN_NEW_KEY_HASH || true)
+  KEY_ADDED_BVN=$(accumulate page get bvn-BVN1.acme/operators/1 | grep $DN_NEW_KEY_HASH || true)
   [[ -z $KEY_ADDED_BVN ]] && die "operator-2 was not sent to the BVN"
 
   declare -g ACCEPT_THRESHOLD=$(accumulate page get -j dn.acme/operators/1 | jq -re .data.acceptThreshold)
@@ -103,7 +95,6 @@ else
   echo
 fi
 
-
 section "Update oracle price to \$0.0501. Oracle price has precision of 4 decimals"
 if [ -f "$(dnPrivKey 1)" ]; then
   TXID=$(accumulated set oracle 0.0501 -w "${NODES_DIR}/node-1/dnn" | grep Hash | cut -d: -f2)
@@ -111,14 +102,14 @@ if [ -f "$(dnPrivKey 1)" ]; then
 
   # Sign the required number of times
   echo Signature count $(signCount)
-  for ((sigNr = 1; sigNr <= $(signCount); sigNr++)); do
+  for ((sigNr = 2; sigNr <= $(signCount); sigNr++)); do
     echo Signature $sigNr
-    wait-for cli-tx-sig tx sign dn.acme/operators "$(signKey $sigNr)" $TXID
+    wait-for cli-tx-sig tx sign dn.acme/operators "$(dnPrivKey $sigNr)" $TXID
   done
   accumulate -j tx get $TXID | jq -re .status.pending 1>/dev/null && die "Transaction is pending"
   accumulate -j tx get $TXID | jq -re .status.delivered 1>/dev/null || die "Transaction was not delivered"
 
-  RESULT=$(accumulate --use-unencrypted-wallet -j oracle  | jq -re .price)
+  RESULT=$(accumulate --use-unencrypted-wallet -j oracle | jq -re .price)
   [ "$RESULT" == "501" ] && success || die "cannot update price oracle"
 else
   echo -e '\033[1;31mCannot update oracle: private validator key not found\033[0m'
@@ -153,9 +144,9 @@ if [ ! -z "${ACCPID}" ]; then
 
   # Sign the required number of times
   echo Signature count $(signCount)
-  for ((sigNr = 1; sigNr <= $(signCount); sigNr++)); do
+  for ((sigNr = 2; sigNr <= $(signCount); sigNr++)); do
     echo Signature $sigNr
-    wait-for cli-tx-sig tx sign dn.acme/operators "$(signKey $sigNr)" $TXID
+    wait-for cli-tx-sig tx sign dn.acme/operators "$(dnPrivKey $sigNr)" $TXID
   done
   accumulate -j tx get $TXID | jq -re .status.pending 1>/dev/null && die "Transaction is pending"
   accumulate -j tx get $TXID | jq -re .status.delivered 1>/dev/null || die "Transaction was not delivered"
