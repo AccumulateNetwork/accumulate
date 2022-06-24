@@ -349,7 +349,7 @@ func initNode(cmd *cobra.Command, args []string) {
 		networkReset()
 	}
 
-	config.SetRoot(filepath.Join(flagMain.WorkDir, nodeDir))
+	config.SetRoot(filepath.Join(flagMain.WorkDir, nodeDir, netDir(description.NetworkType)))
 	accumulated.ConfigureNodePorts(&accumulated.NodeInit{
 		HostName: u.Hostname(),
 		ListenIP: u.Hostname(),
@@ -361,6 +361,17 @@ func initNode(cmd *cobra.Command, args []string) {
 
 	err = accumulated.WriteNodeFiles(config, privValKey, nodeKey, genDoc)
 	checkf(err, "write node files")
+}
+
+func netDir(networkType cfg.NetworkType) string {
+	switch networkType {
+	case cfg.Directory:
+		return "dnn"
+	case cfg.BlockValidator:
+		return "bvnn"
+	}
+	fatalf("Unsupported network type %v", networkType)
+	return ""
 }
 
 func newLogger() log.Logger {

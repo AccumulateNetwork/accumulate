@@ -453,7 +453,9 @@ type NetworkDefinition struct {
 type NetworkGlobals struct {
 	fieldsSet               []bool
 	OperatorAcceptThreshold Rational `json:"operatorAcceptThreshold,omitempty" form:"operatorAcceptThreshold" query:"operatorAcceptThreshold" validate:"required"`
-	extraData               []byte
+	// MajorBlockSchedule a cron expression defining the (approximate) major blocks interval.
+	MajorBlockSchedule string `json:"majorBlockSchedule,omitempty" form:"majorBlockSchedule" query:"majorBlockSchedule" validate:"required"`
+	extraData          []byte
 }
 
 type Object struct {
@@ -1754,6 +1756,7 @@ func (v *NetworkGlobals) Copy() *NetworkGlobals {
 	u := new(NetworkGlobals)
 
 	u.OperatorAcceptThreshold = *(&v.OperatorAcceptThreshold).Copy()
+	u.MajorBlockSchedule = v.MajorBlockSchedule
 
 	return u
 }
@@ -3431,6 +3434,9 @@ func (v *NetworkDefinition) Equal(u *NetworkDefinition) bool {
 
 func (v *NetworkGlobals) Equal(u *NetworkGlobals) bool {
 	if !((&v.OperatorAcceptThreshold).Equal(&u.OperatorAcceptThreshold)) {
+		return false
+	}
+	if !(v.MajorBlockSchedule == u.MajorBlockSchedule) {
 		return false
 	}
 
@@ -7090,6 +7096,7 @@ func (v *NetworkDefinition) IsValid() error {
 
 var fieldNames_NetworkGlobals = []string{
 	1: "OperatorAcceptThreshold",
+	2: "MajorBlockSchedule",
 }
 
 func (v *NetworkGlobals) MarshalBinary() ([]byte, error) {
@@ -7098,6 +7105,9 @@ func (v *NetworkGlobals) MarshalBinary() ([]byte, error) {
 
 	if !((v.OperatorAcceptThreshold).Equal(new(Rational))) {
 		writer.WriteValue(1, v.OperatorAcceptThreshold.MarshalBinary)
+	}
+	if !(len(v.MajorBlockSchedule) == 0) {
+		writer.WriteString(2, v.MajorBlockSchedule)
 	}
 
 	_, _, err := writer.Reset(fieldNames_NetworkGlobals)
@@ -7115,6 +7125,11 @@ func (v *NetworkGlobals) IsValid() error {
 		errs = append(errs, "field OperatorAcceptThreshold is missing")
 	} else if (v.OperatorAcceptThreshold).Equal(new(Rational)) {
 		errs = append(errs, "field OperatorAcceptThreshold is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field MajorBlockSchedule is missing")
+	} else if len(v.MajorBlockSchedule) == 0 {
+		errs = append(errs, "field MajorBlockSchedule is not set")
 	}
 
 	switch len(errs) {
@@ -11360,6 +11375,9 @@ func (v *NetworkGlobals) UnmarshalBinaryFrom(rd io.Reader) error {
 
 	if x := new(Rational); reader.ReadValue(1, x.UnmarshalBinary) {
 		v.OperatorAcceptThreshold = *x
+	}
+	if x, ok := reader.ReadString(2); ok {
+		v.MajorBlockSchedule = x
 	}
 
 	seen, err := reader.Reset(fieldNames_NetworkGlobals)
