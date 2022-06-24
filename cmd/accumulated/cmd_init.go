@@ -350,6 +350,7 @@ func initNode(cmd *cobra.Command, args []string) {
 
 	// TODO Check for existing?
 	privValKey, nodeKey := ed25519.GenPrivKey(), ed25519.GenPrivKey()
+	config.SetRoot(path.Join(config.RootDir, "Node"))
 	config.PrivValidator.Key = "priv_validator_key.json"
 	err = accumulated.WriteNodeFiles(config, privValKey, nodeKey, genDoc)
 	checkf(err, "write node files")
@@ -375,7 +376,6 @@ func resolveAddr(addr string) (string, int, error) {
 	if err != nil {
 		return "", 0, fmt.Errorf("%q is not a URL", addr)
 	}
-
 	if ip.Path != "" && ip.Path != "/" {
 		return "", 0, fmt.Errorf("address cannot have a path")
 	}

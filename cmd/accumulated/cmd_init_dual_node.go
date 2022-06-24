@@ -46,8 +46,6 @@ func initDualNode(cmd *cobra.Command, args []string) {
 	dnBasePort, err := strconv.ParseUint(port, 10, 16)
 	checkf(err, "invalid DN port number")
 
-	workDir := flagMain.WorkDir
-
 	flagInitNode.ListenIP = fmt.Sprintf("http://0.0.0.0:%d", dnBasePort)
 	flagInitNode.SkipVersionCheck = flagInitDualNode.SkipVersionCheck
 	flagInitNode.GenesisDoc = flagInitDualNode.GenesisDoc
@@ -55,11 +53,10 @@ func initDualNode(cmd *cobra.Command, args []string) {
 	flagInitNode.Follower = false
 
 	// configure the BVN first so we know how to setup the bvn.
-	flagMain.WorkDir = path.Join(workDir, "dn")
-	args = []string{"0", u.String()}
+	args = []string{u.String()}
 	//flagInit.Net = args[0]
 	initNode(cmd, args)
-	dnNodePath := flagMain.WorkDir
+	dnNodePath := path.Join(flagMain.WorkDir, "Node")
 	c, err := cfg.Load(dnNodePath)
 	check(err)
 
@@ -125,11 +122,10 @@ func initDualNode(cmd *cobra.Command, args []string) {
 	checkf(err, "cannot store configuration file for node")
 
 	flagInitNode.ListenIP = fmt.Sprintf("http://0.0.0.0:%v", bvnBasePort)
-	flagMain.WorkDir = path.Join(workDir, "bvn")
-	args = []string{"0", bvnHost.Address}
+	args = []string{bvnHost.Address}
+	fmt.Println(dnWebHostUrl)
 	initNode(cmd, args)
-
-	bvnNodePath := flagMain.WorkDir
+	bvnNodePath := path.Join(flagMain.WorkDir, "Node")
 
 	c, err = cfg.Load(bvnNodePath)
 
@@ -148,9 +144,10 @@ func initDualNode(cmd *cobra.Command, args []string) {
 	//in dual mode, the key between bvn and dn is shared.
 	//This will be cleaned up when init system is overhauled with AC-1263
 	if c.PrivValidator != nil {
-		c.PrivValidator.Key = "priv_validator_key.json"
+		//c.PrivValidator.Key = path.Join(dnNodePath, "/config/priv_validator_key.json")
+		c.PrivValidator.Key = "../priv_validator_key.json"
 	}
-	os.Remove("priv_validator_key.json")
+	os.Remove(path.Join(bvnNodePath, "/config/priv_validator_key.json"))
 	if len(c.P2P.PersistentPeers) > 0 {
 		c.P2P.BootstrapPeers = c.P2P.PersistentPeers
 		c.P2P.PersistentPeers = ""
