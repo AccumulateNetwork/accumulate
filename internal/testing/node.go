@@ -59,7 +59,7 @@ func DefaultConfig(networkName string, net config.NetworkType, node config.NodeT
 	cfg.Consensus.TimeoutCommit = time.Second / 5        // Increase block frequency
 	cfg.Accumulate.Website.Enabled = false               // No need for the website
 	cfg.Instrumentation.Prometheus = false               // Disable prometheus: https://github.com/tendermint/tendermint/issues/7076
-	cfg.Accumulate.Network.Subnets = []config.Subnet{
+	cfg.Accumulate.Network.Partitions = []config.Partition{
 		{
 			Id:   "local",
 			Type: config.BlockValidator,
@@ -70,7 +70,7 @@ func DefaultConfig(networkName string, net config.NetworkType, node config.NodeT
 	return cfg
 }
 
-func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withFactomAddress bool) ([]string, map[string][]*accumulated.Daemon) {
+func CreateTestNet(t testing.TB, numBvns, numValidators, numFollowers int, withFactomAddress bool) ([]string, map[string][]*accumulated.Daemon) {
 	tempDir := t.TempDir()
 
 	netInit := accumulated.NewDevnet(accumulated.DevnetOptions{
@@ -132,24 +132,24 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int, withF
 			for _, config := range configs {
 				daemon, err := accumulated.Load(config.RootDir, func(c *cfg.Config) (io.Writer, error) { return logWriter(c.LogFormat) })
 				require.NoError(t, err)
-				subnet := config.Accumulate.SubnetId
-				daemon.Logger = daemon.Logger.With("test", t.Name(), "subnet", subnet, "node", config.Moniker)
-				daemons[subnet] = append(daemons[subnet], daemon)
+				partition := config.Accumulate.PartitionId
+				daemon.Logger = daemon.Logger.With("test", t.Name(), "partition", partition, "node", config.Moniker)
+				daemons[partition] = append(daemons[partition], daemon)
 			}
 		}
 	}
 
-	subnetNames := []string{protocol.Directory}
+	partitionNames := []string{protocol.Directory}
 	for _, bvn := range netInit.Bvns {
-		subnetNames = append(subnetNames, bvn.Id)
+		partitionNames = append(partitionNames, bvn.Id)
 	}
 
-	return subnetNames, daemons
+	return partitionNames, daemons
 }
 
-func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulated.Daemon) {
+func RunTestNet(t testing.TB, partitions []string, daemons map[string][]*accumulated.Daemon) {
 	t.Helper()
-	for _, netName := range subnets {
+	for _, netName := range partitions {
 		for _, daemon := range daemons[netName] {
 			require.NoError(t, daemon.Start())
 			daemon.Node_TESTONLY().ABCI.(*abci.Accumulator).OnFatal(func(err error) {
@@ -160,7 +160,7 @@ func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulate
 	}
 	t.Cleanup(func() {
 		errg := new(errgroup.Group)
-		for _, netName := range subnets {
+		for _, netName := range partitions {
 			for _, daemon := range daemons[netName] {
 				daemon := daemon // See docs/developer/rangevarref.md
 				errg.Go(func() error {

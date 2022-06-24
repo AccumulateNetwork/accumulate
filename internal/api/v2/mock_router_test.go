@@ -40,32 +40,32 @@ func (m *MockRouter) EXPECT() *MockRouterMockRecorder {
 }
 
 // Query mocks base method.
-func (m *MockRouter) Query(ctx context.Context, subnet string, query []byte, opts client.ABCIQueryOptions) (*coretypes.ResultABCIQuery, error) {
+func (m *MockRouter) Query(ctx context.Context, partition string, query []byte, opts client.ABCIQueryOptions) (*coretypes.ResultABCIQuery, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Query", ctx, subnet, query, opts)
+	ret := m.ctrl.Call(m, "Query", ctx, partition, query, opts)
 	ret0, _ := ret[0].(*coretypes.ResultABCIQuery)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Query indicates an expected call of Query.
-func (mr *MockRouterMockRecorder) Query(ctx, subnet, query, opts interface{}) *gomock.Call {
+func (mr *MockRouterMockRecorder) Query(ctx, partition, query, opts interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Query", reflect.TypeOf((*MockRouter)(nil).Query), ctx, subnet, query, opts)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Query", reflect.TypeOf((*MockRouter)(nil).Query), ctx, partition, query, opts)
 }
 
 // RequestAPIv2 mocks base method.
-func (m *MockRouter) RequestAPIv2(ctx context.Context, subnetId, method string, params, result interface{}) error {
+func (m *MockRouter) RequestAPIv2(ctx context.Context, partitionId, method string, params, result interface{}) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RequestAPIv2", ctx, subnetId, method, params, result)
+	ret := m.ctrl.Call(m, "RequestAPIv2", ctx, partitionId, method, params, result)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // RequestAPIv2 indicates an expected call of RequestAPIv2.
-func (mr *MockRouterMockRecorder) RequestAPIv2(ctx, subnetId, method, params, result interface{}) *gomock.Call {
+func (mr *MockRouterMockRecorder) RequestAPIv2(ctx, partitionId, method, params, result interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RequestAPIv2", reflect.TypeOf((*MockRouter)(nil).RequestAPIv2), ctx, subnetId, method, params, result)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RequestAPIv2", reflect.TypeOf((*MockRouter)(nil).RequestAPIv2), ctx, partitionId, method, params, result)
 }
 
 // Route mocks base method.
@@ -103,16 +103,16 @@ func (mr *MockRouterMockRecorder) RouteAccount(arg0 interface{}) *gomock.Call {
 }
 
 // Submit mocks base method.
-func (m *MockRouter) Submit(ctx context.Context, subnet string, tx *protocol.Envelope, pretend, async bool) (*routing.ResponseSubmit, error) {
+func (m *MockRouter) Submit(ctx context.Context, partition string, tx *protocol.Envelope, pretend, async bool) (*routing.ResponseSubmit, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Submit", ctx, subnet, tx, pretend, async)
+	ret := m.ctrl.Call(m, "Submit", ctx, partition, tx, pretend, async)
 	ret0, _ := ret[0].(*routing.ResponseSubmit)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Submit indicates an expected call of Submit.
-func (mr *MockRouterMockRecorder) Submit(ctx, subnet, tx, pretend, async interface{}) *gomock.Call {
+func (mr *MockRouterMockRecorder) Submit(ctx, partition, tx, pretend, async interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Submit", reflect.TypeOf((*MockRouter)(nil).Submit), ctx, subnet, tx, pretend, async)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Submit", reflect.TypeOf((*MockRouter)(nil).Submit), ctx, partition, tx, pretend, async)
 }

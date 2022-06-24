@@ -13,6 +13,9 @@ import (
 )
 
 func (x *Executor) ProcessSignature(batch *database.Batch, delivery *chain.Delivery, signature protocol.Signature) (*ProcessSignatureState, error) {
+	r := x.BlockTimers.Start(BlockTimerTypeProcessSignature)
+	defer x.BlockTimers.Stop(r)
+
 	err := x.checkRouting(delivery, signature)
 	if err != nil {
 		return nil, err
@@ -486,7 +489,7 @@ func (x *Executor) verifyPageIsAuthorized(batch *database.Batch, transaction *pr
 func computeSignerFee(transaction *protocol.Transaction, signature protocol.Signature, isInitiator bool) (protocol.Fee, error) {
 	// Don't charge fees for internal administrative functions
 	signer := signature.GetSigner()
-	_, isBvn := protocol.ParseSubnetUrl(signer)
+	_, isBvn := protocol.ParsePartitionUrl(signer)
 	if isBvn || protocol.IsDnUrl(signer) {
 		return 0, nil
 	}

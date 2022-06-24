@@ -19,7 +19,7 @@ func TestTransactionIsReady(tt *testing.T) {
 	// Initialize
 	sim := simulator.New(tt, 1)
 	sim.InitFromGenesis()
-	x := sim.Subnet(sim.Subnets[0].Id)
+	x := sim.Partition(sim.Partitions[0].Id)
 	exec := x.Executor
 	t := NewBatchTest(tt, x.Database)
 	defer t.Discard()
@@ -322,9 +322,9 @@ func TestAddAuthority(tt *testing.T) {
 	updateAccount(sim, bob.JoinPath("book", "1"), func(p *protocol.KeyPage) { p.CreditBalance = 1e9 })
 
 	// Test setup
-	execAlice := sim.SubnetFor(alice).Executor
-	execBob := sim.SubnetFor(bob).Executor
-	t := NewBatchTest(tt, sim.SubnetFor(alice).Database)
+	execAlice := sim.PartitionFor(alice).Executor
+	execBob := sim.PartitionFor(bob).Executor
+	t := NewBatchTest(tt, sim.PartitionFor(alice).Database)
 	defer t.Discard()
 
 	t.Run("UpdateAccountAuthority.Add", func(t BatchTest) {
@@ -504,7 +504,7 @@ func TestCannotDisableAuthForAuthTxns(t *testing.T) {
 	// A signature for updating auth is still required from all key books, even
 	// disabled ones
 	t.Run("Ready", func(tt *testing.T) {
-		x := sim.SubnetFor(alice)
+		x := sim.PartitionFor(alice)
 		t := NewBatchTest(tt, x.Database)
 		defer t.Discard()
 
@@ -568,7 +568,7 @@ func TestValidateKeyForSynthTxns(t *testing.T) {
 	sim.CreateAccount(&protocol.LiteTokenAccount{Url: alice, TokenUrl: protocol.AcmeUrl(), Balance: *big.NewInt(1e12)})
 
 	// Change the node's key
-	sim.SubnetFor(alice).Executor.Key = GenerateKey("New")
+	sim.PartitionFor(alice).Executor.Key = GenerateKey("New")
 
 	// Execute a transaction
 	envs := sim.MustSubmitAndExecuteBlock(
@@ -591,7 +591,7 @@ func TestValidateKeyForSynthTxns(t *testing.T) {
 
 	// Get the synthetic transaction ID
 	var synthHash [32]byte
-	_ = sim.SubnetFor(alice).Database.View(func(batch *database.Batch) error {
+	_ = sim.PartitionFor(alice).Database.View(func(batch *database.Batch) error {
 		synth, err := batch.Transaction(txnHash).GetSyntheticTxns()
 		require.NoError(t, err)
 		require.Len(t, synth.Entries, 1)
