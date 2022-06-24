@@ -130,7 +130,6 @@ success
 section "Create an ADI Token Account"
 wait-for cli-tx account create token test.acme test-1-0 0 test.acme/tokens ACME test.acme/book
 accumulate account get test.acme/tokens 1> /dev/null || die "Cannot find test.acme/tokens"
-accumulate -j account get test.acme/tokens | jq -re .data.scratch 1> /dev/null || die "test.acme/tokens is not a scratch account"
 success
 
 section "Send tokens from the lite token account to the ADI token account"
@@ -250,7 +249,6 @@ success
 section "Create ADI Data Account"
 wait-for cli-tx account create data test.acme test-1-0 test.acme/data
 accumulate account get test.acme/data 1> /dev/null || die "Cannot find test.acme/data"
-accumulate -j account get test.acme/data | jq -re .data.scratch 1> /dev/null || die "test.acme/data is not a scratch account"
 success
 
 section "Write data to ADI Data Account"
@@ -274,7 +272,6 @@ BALANCE=$(accumulate -j page get test.acme/sub1/book/1 | jq -r .data.creditBalan
 section "Create Data Account for sub ADI"
 wait-for cli-tx account create data test.acme/sub1 test-2-0 test.acme/sub1/data
 accumulate account get test.acme/sub1/data 1> /dev/null || die "Cannot find test.acme/sub1/data"
-accumulate -j account get test.acme/sub1/data | jq -re .data.scratch 1> /dev/null || die "test.acme/sub1/data is not a scratch account"
 success
 
 section "Write data to sub ADI Data Account"
