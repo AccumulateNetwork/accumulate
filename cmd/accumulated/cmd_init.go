@@ -343,11 +343,9 @@ func initNode(cmd *cobra.Command, args []string) {
 	if flagInit.Reset {
 		networkReset()
 	}
-	if config.Accumulate.Describe.NetworkType == cfg.Directory {
-		config.SetRoot(path.Join(flagMain.WorkDir, "dnn"))
-	} else if config.Accumulate.Describe.NetworkType == cfg.BlockValidator {
-		config.SetRoot(path.Join(flagMain.WorkDir, "bvnn"))
-	}
+
+	netDir := netDir(config.Accumulate.Describe.NetworkType)
+	config.SetRoot(path.Join(flagMain.WorkDir, netDir))
 	accumulated.ConfigureNodePorts(&accumulated.NodeInit{
 		HostName: u.Hostname(),
 		ListenIP: u.Hostname(),
