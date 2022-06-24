@@ -22,8 +22,8 @@ type router struct {
 }
 
 func (r router) RouteAccount(account *url.URL) (string, error) {
-	if subnet, ok := r.routingOverrides[account.IdentityAccountID32()]; ok {
-		return subnet, nil
+	if partition, ok := r.routingOverrides[account.IdentityAccountID32()]; ok {
+		return partition, nil
 	}
 	return r.Router.RouteAccount(account)
 }
@@ -32,11 +32,11 @@ func (r router) Route(envs ...*protocol.Envelope) (string, error) {
 	return routing.RouteEnvelopes(r.RouteAccount, envs...)
 }
 
-func (r router) Query(ctx context.Context, subnet string, rawQuery []byte, opts client.ABCIQueryOptions) (*coretypes.ResultABCIQuery, error) {
+func (r router) Query(ctx context.Context, partition string, rawQuery []byte, opts client.ABCIQueryOptions) (*coretypes.ResultABCIQuery, error) {
 	qu, e := query.UnmarshalRequest(rawQuery)
 	require.NoError(r, e)
 
-	x := r.Subnet(subnet)
+	x := r.Partition(partition)
 	batch := x.Database.Begin(false)
 	defer batch.Discard()
 	k, v, err := x.Executor.Query(batch, qu, opts.Height, opts.Prove)
@@ -64,12 +64,12 @@ func (r router) Query(ctx context.Context, subnet string, rawQuery []byte, opts 
 	return res, nil
 }
 
-func (r router) RequestAPIv2(ctx context.Context, subnetId, method string, params, result interface{}) error {
-	return r.Subnet(subnetId).API.RequestAPIv2(ctx, method, params, result)
+func (r router) RequestAPIv2(ctx context.Context, partitionId, method string, params, result interface{}) error {
+	return r.Partition(partitionId).API.RequestAPIv2(ctx, method, params, result)
 }
 
-func (r router) Submit(ctx context.Context, subnet string, envelope *protocol.Envelope, pretend, async bool) (*routing.ResponseSubmit, error) {
-	x := r.Subnet(subnet)
+func (r router) Submit(ctx context.Context, partition string, envelope *protocol.Envelope, pretend, async bool) (*routing.ResponseSubmit, error) {
+	x := r.Partition(partition)
 	if !pretend {
 		x.Submit(envelope)
 		if async {
@@ -78,7 +78,7 @@ func (r router) Submit(ctx context.Context, subnet string, envelope *protocol.En
 	}
 
 	deliveries, err := chain.NormalizeEnvelope(envelope)
-	require.NoErrorf(r, err, "Normalizing envelopes for %s", subnet)
+	require.NoErrorf(r, err, "Normalizing envelopes for %s", partition)
 	results := make([]*protocol.TransactionStatus, len(deliveries))
 	for i, envelope := range deliveries {
 		status := new(protocol.TransactionStatus)

@@ -133,7 +133,7 @@ func (tb TransactionBuilder) BuildDelivery() *chain.Delivery {
 	return delivery[0]
 }
 
-func (tb TransactionBuilder) InitiateSynthetic(destSubnetUrl *url.URL) TransactionBuilder {
+func (tb TransactionBuilder) InitiateSynthetic(destPartitionUrl *url.URL) TransactionBuilder {
 	if tb.TxHash != nil {
 		panic("cannot initiate transaction: have hash instead of body")
 	}
@@ -149,7 +149,7 @@ func (tb TransactionBuilder) InitiateSynthetic(destSubnetUrl *url.URL) Transacti
 
 	initSig := new(protocol.SyntheticSignature)
 	initSig.SourceNetwork = tb.signer.Url
-	initSig.DestinationNetwork = destSubnetUrl
+	initSig.DestinationNetwork = destPartitionUrl
 	initSig.SequenceNumber = tb.signer.Version
 
 	tb.Transaction[0].Header.Initiator = *(*[32]byte)(initSig.Metadata().Hash())

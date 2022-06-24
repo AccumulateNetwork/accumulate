@@ -94,7 +94,7 @@ func tendermintSubmitRetry(conn connections.ConnectionContext, call clientFunc, 
 			return data, nil
 		}
 
-		// The API call failed, let's report that and try again, we get a client to another node within the subnet when available
+		// The API call failed, let's report that and try again, we get a client to another node within the partition when available
 		conn.ReportError(err)
 	}
 	return nil, err

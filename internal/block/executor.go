@@ -7,6 +7,7 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
@@ -29,18 +30,22 @@ type Executor struct {
 	executors  map[protocol.TransactionType]TransactionExecutor
 	dispatcher *dispatcher
 	logger     logging.OptionalLogger
+	db         *database.Database
 
 	// oldBlockMeta blockMetadata
 }
 
 type ExecutorOptions struct {
-	Logger   log.Logger
-	Key      ed25519.PrivateKey
-	Router   routing.Router
-	Describe config.Describe
-	EventBus *events.Bus
+	Logger              log.Logger
+	Key                 ed25519.PrivateKey
+	Router              routing.Router
+	Describe            config.Describe
+	EventBus            *events.Bus
+	MajorBlockScheduler blockscheduler.MajorBlockScheduler
 
 	isGenesis bool
+
+	BlockTimers TimerSet
 }
 
 // NewNodeExecutor creates a new Executor for a node.
@@ -87,7 +92,7 @@ func NewNodeExecutor(opts ExecutorOptions, db *database.Database) (*Executor, er
 		)
 
 	default:
-		return nil, errors.Format(errors.StatusInternalError, "invalid subnet type %v", opts.Describe.NetworkType)
+		return nil, errors.Format(errors.StatusInternalError, "invalid partition type %v", opts.Describe.NetworkType)
 	}
 
 	// This is a no-op in dev
@@ -116,6 +121,7 @@ func newExecutor(opts ExecutorOptions, db *database.Database, executors ...Trans
 	m.ExecutorOptions = opts
 	m.executors = map[protocol.TransactionType]TransactionExecutor{}
 	m.dispatcher = newDispatcher(opts)
+	m.db = db
 
 	if opts.Logger != nil {
 		m.logger.L = opts.Logger.With("module", "executor")
@@ -153,6 +159,10 @@ func newExecutor(opts ExecutorOptions, db *database.Database, executors ...Trans
 	}
 
 	return m, nil
+}
+
+func (m *Executor) EnableTimers() {
+	m.BlockTimers.Initialize(&m.executors)
 }
 
 func (m *Executor) ActiveGlobals_TESTONLY() *core.GlobalValues {
@@ -216,7 +226,7 @@ func (m *Executor) LoadStateRoot(batch *database.Batch) ([]byte, error) {
 	case errors.Is(err, storage.ErrNotFound):
 		return nil, nil
 	default:
-		return nil, errors.Format(errors.StatusUnknown, "load subnet identity: %w", err)
+		return nil, errors.Format(errors.StatusUnknown, "load partition identity: %w", err)
 	}
 }
 

@@ -50,9 +50,9 @@ func (CreateIdentity) TransactionIsReady(delegate AuthDelegate, batch *database.
 	return false, true, nil
 }
 
-func (CreateIdentity) AllowMissingPrincipal(transaction *protocol.Transaction) (allow, fallback bool) {
+func (CreateIdentity) AllowMissingPrincipal(transaction *protocol.Transaction) bool {
 	// The principal can be missing if it is a root identity
-	return transaction.Header.Principal.IsRootIdentity(), false
+	return transaction.Header.Principal.IsRootIdentity()
 }
 
 func (CreateIdentity) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {

@@ -18,8 +18,8 @@ const (
 	// FeeFailedMaximum $0.01
 	FeeFailedMaximum Fee = 100
 
-	// FeeSignature $0.001
-	FeeSignature Fee = 10
+	// FeeSignature $0.0001
+	FeeSignature Fee = 1
 
 	// FeeData $0.001 / 256 bytes
 	FeeData Fee = 10
@@ -143,7 +143,7 @@ func ComputeTransactionFee(tx *Transaction) (Fee, error) {
 	if IsDnUrl(tx.Header.Principal) {
 		return 0, nil
 	}
-	if _, ok := ParseSubnetUrl(tx.Header.Principal); ok {
+	if _, ok := ParsePartitionUrl(tx.Header.Principal); ok {
 		return 0, nil
 	}
 

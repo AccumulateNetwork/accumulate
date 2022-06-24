@@ -24,7 +24,7 @@ const (
 	// ACME is the name of the ACME token.
 	ACME = "ACME"
 
-	// Directory is the subnet ID of the DN.
+	// Directory is the partition ID of the DN.
 	Directory = "Directory"
 
 	// Operators is the path to a node's operator key book.
@@ -39,10 +39,10 @@ const (
 	// AnchorPool is the path to a node's anchor chain account.
 	AnchorPool = "anchors"
 
-	// Votes is the path to the scratch data account for subnet voting records
+	// Votes is the path to the scratch data account for partition voting records
 	Votes = "votes"
 
-	// Evidence is the path to the scratch data account for subnet voting records
+	// Evidence is the path to the scratch data account for partition voting records
 	Evidence = "evidence"
 
 	// Oracle is the path to a node's anchor chain account.
@@ -63,16 +63,16 @@ const (
 	// SignatureChain is the pending signature chain of a record.
 	SignatureChain = "signature"
 
-	// // MajorRootChain is the major anchor root chain of a subnet.
+	// // MajorRootChain is the major anchor root chain of a partition.
 	// MajorRootChain = "major-root"
 
-	// MinorRootChain is the minor anchor root chain of a subnet.
+	// MinorRootChain is the minor anchor root chain of a partition.
 	MinorRootChain = "minor-root"
 
-	// // MajorRootIndexChain is the index chain of the major anchor root chain of a subnet.
+	// // MajorRootIndexChain is the index chain of the major anchor root chain of a partition.
 	// MajorRootIndexChain = "major-root-index"
 
-	// MinorRootIndexChain is the index chain of the minor anchor root chain of a subnet.
+	// MinorRootIndexChain is the index chain of the minor anchor root chain of a partition.
 	MinorRootIndexChain = "minor-root-index"
 
 	// GenesisBlock is the block index of the first block.
@@ -80,6 +80,9 @@ const (
 
 	// ScratchPrunePeriodDays is the period after which data chain transactions are pruned
 	ScratchPrunePeriodDays = 14
+
+	// DefaultMajorBlockSchedule is the default cron schedule of when new major blocks are created
+	DefaultMajorBlockSchedule = "0 */12 * * *"
 )
 
 //AcmeSupplyLimit set at 500,000,000.00000000 million acme (external units)
@@ -432,7 +435,7 @@ func IsValidAdiUrl(u *url.URL, allowReserved bool) error {
 
 // IsReserved checks if the given URL is reserved.
 func IsReserved(u *url.URL) bool {
-	_, ok := ParseSubnetUrl(u)
+	_, ok := ParsePartitionUrl(u)
 	return ok || BelongsToDn(u)
 }
 
@@ -456,12 +459,12 @@ func BelongsToDn(u *url.URL) bool {
 
 const bvnUrlPrefix = "bvn-"
 
-// SubnetUrl returns `acc://bvn-${subnet}.acme` or `acc://dn.acme`.
-func SubnetUrl(subnet string) *url.URL {
-	if strings.EqualFold(subnet, Directory) {
+// PartitionUrl returns `acc://bvn-${partition}.acme` or `acc://dn.acme`.
+func PartitionUrl(partition string) *url.URL {
+	if strings.EqualFold(partition, Directory) {
 		return DnUrl()
 	}
-	return &url.URL{Authority: bvnUrlPrefix + subnet + TLD}
+	return &url.URL{Authority: bvnUrlPrefix + partition + TLD}
 }
 
 // IsBvnUrl checks if the URL is the BVN ADI URL.
@@ -469,9 +472,9 @@ func IsBvnUrl(u *url.URL) bool {
 	return strings.HasPrefix(u.Hostname(), bvnUrlPrefix)
 }
 
-// ParseSubnetUrl extracts the BVN subnet name from a BVN URL, if the URL is a
+// ParsePartitionUrl extracts the BVN partition name from a BVN URL, if the URL is a
 // valid BVN ADI URL.
-func ParseSubnetUrl(u *url.URL) (string, bool) {
+func ParsePartitionUrl(u *url.URL) (string, bool) {
 	if IsDnUrl(u) {
 		return Directory, true
 	}
@@ -485,9 +488,9 @@ func ParseSubnetUrl(u *url.URL) (string, bool) {
 	return a[len(bvnUrlPrefix) : len(a)-len(TLD)], true
 }
 
-// BvnNameFromSubnetId formats a BVN subnet name from the configuration to a valid URL hostname.
-func BvnNameFromSubnetId(subnet string) string {
-	return SubnetUrl(subnet).Authority
+// BvnNameFromPartitionId formats a BVN partition name from the configuration to a valid URL hostname.
+func BvnNameFromPartitionId(partition string) string {
+	return PartitionUrl(partition).Authority
 }
 
 // IndexChain returns the major or minor index chain name for a given chain. Do
@@ -507,18 +510,18 @@ const rootAnchorSuffix = "-root"
 const bptAnchorSuffix = "-bpt"
 
 // RootAnchorChain returns the name of the intermediate anchor chain for the given
-// subnet's root chain.
+// partition's root chain.
 func RootAnchorChain(name string) string {
 	return name + rootAnchorSuffix
 }
 
 // BPTAnchorChain returns the name of the intermediate anchor chain for the given
-// subnet's BPT.
+// partition's BPT.
 func BPTAnchorChain(name string) string {
 	return name + bptAnchorSuffix
 }
 
-// ParseBvnUrl extracts the subnet name from a intermediate anchor chain name.
+// ParseBvnUrl extracts the partition name from a intermediate anchor chain name.
 func ParseAnchorChain(name string) (string, bool) {
 	if !strings.HasSuffix(strings.ToLower(name), rootAnchorSuffix) {
 		return "", false
@@ -527,7 +530,7 @@ func ParseAnchorChain(name string) (string, bool) {
 }
 
 // SyntheticIndexChain returns the name of the synthetic transaction index chain
-// for the given subnet.
+// for the given partition.
 func SyntheticIndexChain(name string) string {
 	return "index-" + name
 }

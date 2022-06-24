@@ -45,11 +45,12 @@ var cmdInitNode = &cobra.Command{
 }
 
 var flagInit struct {
-	NoEmptyBlocks bool
-	NoWebsite     bool
-	Reset         bool
-	LogLevels     string
-	Etcd          []string
+	NoEmptyBlocks    bool
+	NoWebsite        bool
+	Reset            bool
+	LogLevels        string
+	Etcd             []string
+	EnableTimingLogs bool
 }
 
 var flagInitNode struct {
@@ -99,6 +100,7 @@ func init() {
 	cmdInit.PersistentFlags().BoolVar(&flagInit.Reset, "reset", false, "Delete any existing directories within the working directory")
 	cmdInit.PersistentFlags().StringVar(&flagInit.LogLevels, "log-levels", "", "Override the default log levels")
 	cmdInit.PersistentFlags().StringSliceVar(&flagInit.Etcd, "etcd", nil, "Use etcd endpoint(s)")
+	cmdInit.PersistentFlags().BoolVar(&flagInit.EnableTimingLogs, "enable-timing-logs", false, "Enable core timing analysis logging")
 	_ = cmdInit.MarkFlagRequired("network")
 
 	cmdInitNode.Flags().BoolVarP(&flagInitNode.Follower, "follow", "f", false, "Do not participate in voting")
@@ -116,8 +118,8 @@ func init() {
 
 	cmdInitDevnet.Flags().StringVar(&flagInitDevnet.Name, "name", "DevNet", "Network name")
 	cmdInitDevnet.Flags().IntVarP(&flagInitDevnet.NumBvns, "bvns", "b", 2, "Number of block validator networks to configure")
-	cmdInitDevnet.Flags().IntVarP(&flagInitDevnet.NumValidators, "validators", "v", 2, "Number of validator nodes per subnet to configure")
-	cmdInitDevnet.Flags().IntVarP(&flagInitDevnet.NumFollowers, "followers", "f", 1, "Number of follower nodes per subnet to configure")
+	cmdInitDevnet.Flags().IntVarP(&flagInitDevnet.NumValidators, "validators", "v", 2, "Number of validator nodes per partition to configure")
+	cmdInitDevnet.Flags().IntVarP(&flagInitDevnet.NumFollowers, "followers", "f", 1, "Number of follower nodes per partition to configure")
 	cmdInitDevnet.Flags().IntVar(&flagInitDevnet.BasePort, "port", 26656, "Base port to use for listeners")
 	cmdInitDevnet.Flags().StringSliceVar(&flagInitDevnet.IPs, "ip", []string{"127.0.1.1"}, "IP addresses to use or base IP - must not end with .0")
 	cmdInitDevnet.Flags().BoolVar(&flagInitDevnet.Docker, "docker", false, "Configure a network that will be deployed with Docker Compose")
@@ -246,7 +248,7 @@ func initNode(cmd *cobra.Command, args []string) {
 	if flagInitNode.Follower {
 		nodeType = cfg.Follower
 	}
-	config := config.Default(description.Network.Id, description.NetworkType, nodeType, description.SubnetId)
+	config := config.Default(description.Network.Id, description.NetworkType, nodeType, description.PartitionId)
 	config.P2P.BootstrapPeers = fmt.Sprintf("%s@%s:%d", status.NodeInfo.NodeID, netAddr, netPort+int(cfg.PortOffsetTendermintP2P))
 
 	if flagInitNode.SeedProxy != "" {
@@ -258,7 +260,7 @@ func initNode(cmd *cobra.Command, args []string) {
 		check(err)
 		slr := proxy.SeedListRequest{}
 		slr.Network = description.Network.Id
-		slr.Subnet = description.SubnetId
+		slr.Partition = description.PartitionId
 		resp, err := seedProxy.GetSeedList(context.Background(), &slr)
 		if err != nil {
 			checkf(err, "proxy returned seeding error")
@@ -327,7 +329,8 @@ func initNode(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	config.Accumulate.Describe = cfg.Describe{NetworkType: description.NetworkType, SubnetId: description.SubnetId, LocalAddress: ""}
+	config.Accumulate.Describe = cfg.Describe{NetworkType: description.NetworkType, PartitionId: description.PartitionId, LocalAddress: ""}
+	config.Accumulate.AnalysisLog.Enabled = flagInit.EnableTimingLogs
 
 	if flagInit.LogLevels != "" {
 		_, _, err := logging.ParseLogLevel(flagInit.LogLevels, io.Discard)
@@ -346,7 +349,7 @@ func initNode(cmd *cobra.Command, args []string) {
 		networkReset()
 	}
 
-	config.SetRoot(filepath.Join(flagMain.WorkDir, nodeDir))
+	config.SetRoot(filepath.Join(flagMain.WorkDir, nodeDir, netDir(description.NetworkType)))
 	accumulated.ConfigureNodePorts(&accumulated.NodeInit{
 		HostName: u.Hostname(),
 		ListenIP: u.Hostname(),
@@ -358,6 +361,17 @@ func initNode(cmd *cobra.Command, args []string) {
 
 	err = accumulated.WriteNodeFiles(config, privValKey, nodeKey, genDoc)
 	checkf(err, "write node files")
+}
+
+func netDir(networkType cfg.NetworkType) string {
+	switch networkType {
+	case cfg.Directory:
+		return "dnn"
+	case cfg.BlockValidator:
+		return "bvnn"
+	}
+	fatalf("Unsupported network type %v", networkType)
+	return ""
 }
 
 func newLogger() log.Logger {

@@ -23,6 +23,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
 	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
+	"gitlab.com/accumulatenetwork/accumulate/internal/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -50,18 +51,19 @@ type FakeNode struct {
 	logger  log.Logger
 	router  routing.Router
 
-	assert  *assert.Assertions
-	require *require.Assertions
+	assert       *assert.Assertions
+	require      *require.Assertions
+	nodeExecutor *block.Executor
 }
 
-func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulated.Daemon, openDb func(d *accumulated.Daemon) (*database.Database, error), doGenesis bool, errorHandler func(err error)) map[string][]*FakeNode {
+func RunTestNet(t *testing.T, partitions []string, daemons map[string][]*accumulated.Daemon, openDb func(d *accumulated.Daemon) (*database.Database, error), doGenesis bool, errorHandler func(err error)) map[string][]*FakeNode {
 	t.Helper()
 
 	allNodes := map[string][]*FakeNode{}
 	allChans := map[string][]chan<- abcitypes.Application{}
 	clients := map[string]connections.ABCIClient{}
 	evilNodePrefix := "evil-"
-	for _, netName := range subnets {
+	for _, netName := range partitions {
 		isEvil := false
 		if strings.HasPrefix(netName, evilNodePrefix) {
 			isEvil = true
@@ -89,7 +91,7 @@ func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulate
 	}
 
 	connectionManager := connections.NewFakeConnectionManager(clients)
-	for _, netName := range subnets {
+	for _, netName := range partitions {
 		netName = strings.TrimPrefix(netName, evilNodePrefix)
 		nodes, chans := allNodes[netName], allChans[netName]
 		for i := range nodes {
@@ -143,7 +145,7 @@ func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Da
 		require.ErrorIs(t, err, storage.ErrNotFound)
 	}
 
-	fakeTmLogger := d.Logger.With("module", "fake-tendermint", "subnet", n.network.SubnetId)
+	fakeTmLogger := d.Logger.With("module", "fake-tendermint", "partition", n.network.PartitionId)
 
 	appChan := make(chan abcitypes.Application)
 	t.Cleanup(func() { close(appChan) })
@@ -157,13 +159,19 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 	n.router = routing.NewRouter(eventBus, connMgr)
 
 	var err error
-	n.exec, err = block.NewNodeExecutor(block.ExecutorOptions{
+	execOpts := block.ExecutorOptions{
 		Logger:   n.logger,
 		Key:      n.key.Bytes(),
 		Describe: *n.network,
 		Router:   n.router,
 		EventBus: eventBus,
-	}, n.db)
+	}
+	// On DNs initialize the major block scheduler
+	if execOpts.Describe.NetworkType == config.Directory {
+		execOpts.MajorBlockScheduler = blockscheduler.Init(execOpts.EventBus)
+	}
+
+	n.exec, err = block.NewNodeExecutor(execOpts, n.db)
 	n.Require().NoError(err)
 
 	n.app = abci.NewAccumulator(abci.AccumulatorOptions{
@@ -205,7 +213,7 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 
 	n.app.InitChain(abcitypes.RequestInitChain{
 		Time:          genesis.GenesisTime,
-		ChainId:       n.network.SubnetId,
+		ChainId:       n.network.PartitionId,
 		AppStateBytes: genesis.AppState,
 		InitialHeight: genesis.InitialHeight + 1,
 	})
@@ -421,7 +429,7 @@ func (n *FakeNode) GetDirectory(adi string) []string {
 }
 
 func (n *FakeNode) GetTx(txid []byte) *api2.TransactionQueryResponse {
-	q := api2.NewQueryDirect(n.network.SubnetId, api2.Options{
+	q := api2.NewQueryDirect(n.network.PartitionId, api2.Options{
 		Logger:   n.logger,
 		Describe: n.network,
 		Router:   n.router,

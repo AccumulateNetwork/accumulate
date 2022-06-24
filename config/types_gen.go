@@ -4,13 +4,11 @@ package config
 
 import (
 	"encoding/json"
-	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 )
 
 type Describe struct {
-	Genesis      [32]byte    `json:"genesis,omitempty" form:"genesis" query:"genesis" toml:"genesis" mapstructure:"genesis"`
 	NetworkType  NetworkType `json:"networkType,omitempty" form:"networkType" query:"networkType" validate:"required" toml:"type" mapstructure:"type"`
 	SubnetId     string      `json:"subnetId,omitempty" form:"subnetId" query:"subnetId" validate:"required" toml:"subnet-id" mapstructure:"subnet-id"`
 	LocalAddress string      `json:"localAddress,omitempty" form:"localAddress" query:"localAddress" validate:"required" toml:"local-address" mapstructure:"local-address"`
@@ -41,7 +39,6 @@ type Subnet struct {
 func (v *Describe) Copy() *Describe {
 	u := new(Describe)
 
-	u.Genesis = v.Genesis
 	u.NetworkType = v.NetworkType
 	u.SubnetId = v.SubnetId
 	u.LocalAddress = v.LocalAddress
@@ -94,9 +91,6 @@ func (v *Subnet) Copy() *Subnet {
 func (v *Subnet) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *Describe) Equal(u *Describe) bool {
-	if !(v.Genesis == u.Genesis) {
-		return false
-	}
 	if !(v.NetworkType == u.NetworkType) {
 		return false
 	}
@@ -162,22 +156,6 @@ func (v *Subnet) Equal(u *Subnet) bool {
 	return true
 }
 
-func (v *Describe) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Genesis      string      `json:"genesis,omitempty"`
-		NetworkType  NetworkType `json:"networkType,omitempty"`
-		SubnetId     string      `json:"subnetId,omitempty"`
-		LocalAddress string      `json:"localAddress,omitempty"`
-		Network      Network     `json:"network,omitempty"`
-	}{}
-	u.Genesis = encoding.ChainToJSON(v.Genesis)
-	u.NetworkType = v.NetworkType
-	u.SubnetId = v.SubnetId
-	u.LocalAddress = v.LocalAddress
-	u.Network = v.Network
-	return json.Marshal(&u)
-}
-
 func (v *Network) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Id      string                    `json:"id,omitempty"`
@@ -200,34 +178,6 @@ func (v *Subnet) MarshalJSON() ([]byte, error) {
 	u.BasePort = v.BasePort
 	u.Nodes = v.Nodes
 	return json.Marshal(&u)
-}
-
-func (v *Describe) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Genesis      string      `json:"genesis,omitempty"`
-		NetworkType  NetworkType `json:"networkType,omitempty"`
-		SubnetId     string      `json:"subnetId,omitempty"`
-		LocalAddress string      `json:"localAddress,omitempty"`
-		Network      Network     `json:"network,omitempty"`
-	}{}
-	u.Genesis = encoding.ChainToJSON(v.Genesis)
-	u.NetworkType = v.NetworkType
-	u.SubnetId = v.SubnetId
-	u.LocalAddress = v.LocalAddress
-	u.Network = v.Network
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	if x, err := encoding.ChainFromJSON(u.Genesis); err != nil {
-		return fmt.Errorf("error decoding Genesis: %w", err)
-	} else {
-		v.Genesis = x
-	}
-	v.NetworkType = u.NetworkType
-	v.SubnetId = u.SubnetId
-	v.LocalAddress = u.LocalAddress
-	v.Network = u.Network
-	return nil
 }
 
 func (v *Network) UnmarshalJSON(data []byte) error {
