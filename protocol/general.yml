@@ -150,6 +150,9 @@ NetworkGlobals:
     - name: OperatorAcceptThreshold
       type: Rational
       marshal-as: reference
+    - name: MajorBlockSchedule
+      type: string
+      description: a cron expression defining the (approximate) major blocks interval
 
 Rational:
   fields:

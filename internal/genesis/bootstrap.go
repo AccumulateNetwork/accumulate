@@ -103,6 +103,7 @@ type bootstrap struct {
 func (b *bootstrap) Bootstrap() error {
 	b.block = new(block.Block)
 	b.block.Index = protocol.GenesisBlock
+
 	b.block.Time = b.GenesisTime
 	b.block.Batch = b.db.Begin(true)
 	defer b.block.Batch.Discard()
@@ -179,10 +180,11 @@ func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protoc
 		b.globals.Oracle.Price = uint64(protocol.InitialAcmeOracleValue)
 	}
 
-	// Set the initial threshold to 2/3
+	// Set the initial threshold to 2/3 & MajorBlockSchedule
 	if b.globals.Globals == nil {
 		b.globals.Globals = new(protocol.NetworkGlobals)
 		b.globals.Globals.OperatorAcceptThreshold.Set(2, 3)
+		b.globals.Globals.MajorBlockSchedule = protocol.DefaultMajorBlockSchedule
 	}
 
 	if b.globals.Routing == nil {
