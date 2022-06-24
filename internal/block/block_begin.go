@@ -135,7 +135,7 @@ func (x *Executor) shouldOpenMajorBlock(block *Block) (uint64, time.Time, error)
 	blockTimeUTC := block.Time.UTC()
 	nextBlockTime := x.ExecutorOptions.MajorBlockScheduler.GetNextMajorBlockTime(block.Time)
 
-	if blockTimeUTC.Before(nextBlockTime) {
+	if blockTimeUTC.IsZero() || blockTimeUTC.Before(nextBlockTime) {
 		return 0, time.Time{}, nil
 	}
 

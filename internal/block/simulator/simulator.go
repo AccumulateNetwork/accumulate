@@ -130,13 +130,17 @@ func (sim *Simulator) Setup(bvnCount int) {
 			Network:      config.Network{Id: "simulator", Partitions: sim.Partitions},
 		}
 
-		exec, err := NewNodeExecutor(ExecutorOptions{
+		execOpts := ExecutorOptions{
 			Logger:   logger,
 			Key:      bvn.Nodes[0].PrivValKey,
 			Describe: network,
 			Router:   sim.Router(),
 			EventBus: mainEventBus,
-		}, db)
+		}
+		if execOpts.Describe.NetworkType == config.Directory {
+			execOpts.MajorBlockScheduler = InitFakeMajorBlockScheduler(genesisTime)
+		}
+		exec, err := NewNodeExecutor(execOpts, db)
 		require.NoError(sim, err)
 
 		jrpc, err := api.NewJrpc(api.Options{
