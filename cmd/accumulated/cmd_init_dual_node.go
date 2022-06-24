@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"net"
 	"net/url"
-	"os"
-	"path"
 	"strconv"
 	"strings"
 
@@ -56,8 +54,8 @@ func initDualNode(cmd *cobra.Command, args []string) {
 	args = []string{u.String()}
 	//flagInit.Net = args[0]
 	initNode(cmd, args)
-	dnNodePath := path.Join(flagMain.WorkDir, "Node")
-	c, err := cfg.Load(dnNodePath)
+
+	c, err := cfg.Load(flagMain.WorkDir)
 	check(err)
 
 	//make sure we have a block validator type
@@ -125,9 +123,8 @@ func initDualNode(cmd *cobra.Command, args []string) {
 	args = []string{bvnHost.Address}
 	fmt.Println(dnWebHostUrl)
 	initNode(cmd, args)
-	bvnNodePath := path.Join(flagMain.WorkDir, "Node")
 
-	c, err = cfg.Load(bvnNodePath)
+	c, err = cfg.Load(flagMain.WorkDir)
 
 	checkf(err, "cannot load configuration file for node")
 
@@ -143,11 +140,7 @@ func initDualNode(cmd *cobra.Command, args []string) {
 
 	//in dual mode, the key between bvn and dn is shared.
 	//This will be cleaned up when init system is overhauled with AC-1263
-	if c.PrivValidator != nil {
-		//c.PrivValidator.Key = path.Join(dnNodePath, "/config/priv_validator_key.json")
-		c.PrivValidator.Key = "../priv_validator_key.json"
-	}
-	os.Remove(path.Join(bvnNodePath, "/config/priv_validator_key.json"))
+
 	if len(c.P2P.PersistentPeers) > 0 {
 		c.P2P.BootstrapPeers = c.P2P.PersistentPeers
 		c.P2P.PersistentPeers = ""
