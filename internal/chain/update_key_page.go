@@ -180,11 +180,7 @@ func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, op protocol.KeyPag
 			return fmt.Errorf("entry to be updated not found on the key page")
 		}
 
-		// Check for an existing key
-		_, _, found = findKeyPageEntry(page, &op.NewEntry)
-		if found {
-			return fmt.Errorf("cannot have duplicate entries on key page")
-		}
+		// Check for an existing key --redundant as we are removing the oldKeySpec
 
 		// Update the entry
 		entry.PublicKeyHash = op.NewEntry.KeyHash
