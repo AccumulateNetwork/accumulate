@@ -80,6 +80,9 @@ const (
 
 	// ScratchPrunePeriodDays is the period after which data chain transactions are pruned
 	ScratchPrunePeriodDays = 14
+
+	// DefaultMajorBlockSchedule is the default cron schedule of when new major blocks are created
+	DefaultMajorBlockSchedule = "0 */12 * * *"
 )
 
 //AcmeSupplyLimit set at 500,000,000.00000000 million acme (external units)
