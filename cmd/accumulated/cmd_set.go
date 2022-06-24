@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gorhill/cronexpr"
 	"github.com/spf13/cobra"
 	"github.com/tendermint/tendermint/privval"
 	"gitlab.com/accumulatenetwork/accumulate/config"
@@ -22,6 +23,7 @@ func init() {
 	cmdMain.AddCommand(cmdSet)
 	cmdSet.AddCommand(
 		cmdSetOracle,
+		cmdSetSchedule,
 	)
 
 	cmdSet.PersistentFlags().StringVarP(&flagSet.Server, "server", "s", "", "Override the API URL")
@@ -41,6 +43,13 @@ var cmdSetOracle = &cobra.Command{
 	Short: "Set the oracle",
 	Args:  cobra.ExactArgs(1),
 	Run:   setOracle,
+}
+
+var cmdSetSchedule = &cobra.Command{
+	Use:   "schedule [CRON expression]",
+	Short: "Set the major block schedule",
+	Args:  cobra.ExactArgs(1),
+	Run:   setSchedule,
 }
 
 func setOracle(_ *cobra.Command, args []string) {
@@ -72,6 +81,36 @@ func setOracle(_ *cobra.Command, args []string) {
 	}
 
 	submitTransactionWithNode(cfg, client, transaction, oracle)
+}
+
+func setSchedule(_ *cobra.Command, args []string) {
+	cfg, client := loadConfigAndClient()
+	if cfg.Accumulate.NetworkType != config.Directory {
+		fatalf("node is not a directory node")
+	}
+
+	_, err := cronexpr.Parse(args[0])
+	checkf(err, "CRON expression is invalid")
+
+	globals := new(protocol.DataAccount)
+	req := new(api.GeneralQuery)
+	req.Url = cfg.Accumulate.Describe.NodeUrl(protocol.Globals)
+	_, err = client.QueryAccountAs(context.Background(), req, globals)
+	checkf(err, "get globals")
+
+	values := new(core.GlobalValues)
+	err = values.ParseGlobals(globals.Entry)
+	checkf(err, "parse globals")
+
+	values.Globals.MajorBlockSchedule = args[0]
+	transaction := new(protocol.Transaction)
+	transaction.Header.Principal = cfg.Accumulate.Describe.NodeUrl(protocol.Globals)
+	transaction.Body = &protocol.WriteData{
+		Entry:        values.FormatGlobals(),
+		WriteToState: true,
+	}
+
+	submitTransactionWithNode(cfg, client, transaction, globals)
 }
 
 func loadConfigAndClient() (*config.Config, *client.Client) {
@@ -106,7 +145,7 @@ func submitTransactionWithNode(cfg *config.Config, client *client.Client, transa
 	req := new(api.GeneralQuery)
 	req.Url = account.GetAuth().KeyBook().JoinPath("1")
 	_, err := client.QueryAccountAs(context.Background(), req, signer)
-	checkf(err, "get oracle signer")
+	checkf(err, "get signer")
 
 	pv, err := privval.LoadFilePV(
 		cfg.PrivValidator.KeyFile(),
