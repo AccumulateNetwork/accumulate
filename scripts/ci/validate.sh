@@ -95,14 +95,8 @@ section "Lock key page 2 using page 1"
 wait-for cli-tx page lock test.acme/book/2 test-1-0
 success
 
-section "Update key page entry with same keyhash different delegate"
-accumulate book create test.acme test-1-0 acc://test.acme/book2 test-2-0
-wait-for cli-tx credits ${LITE_ACME} test.acme/book2/1 1000
-keyhash1=$(accumulate page get acc://testadi1.acme/testbook2/1 -j | jq -re .data.keys[0].publicKeyHash)
 
-txHash=$(cli-tx tx execute acc://test.acme/testbook2/1 test-2-0 `{"type": "updateKeyPage", "operation": [{ "type": "update", "oldEntry": {"keyHash": "${keyHash1}"}, "newEntry": {"delegate": "acc://test.acme/book", "keyHash": `${keyHash1}`}}]} ` -j | jq -r .transactionHash )
-wait-for cli-tx tx sign acc://test.acme/book/1 test-1-0 ${txHash}  && success
-success
+
 
 section "Attempting to update key page 3 using page 2 fails"
 cli-tx page key add test.acme/book/3 test-2-0 1 test-3-1 && die "Executed disallowed operation" || success
@@ -125,6 +119,25 @@ wait-for cli-tx page key add test.acme/book/2 test-2-0 1 test-2-1
 wait-for cli-tx page key add test.acme/book/2 test-2-0 1 test-2-2
 wait-for cli-tx page key add test.acme/book/2 test-2-0 1 test-2-3-orig
 success
+
+section "Update key page entry with same keyhash different delegate"
+wait-for cli-tx book create test.acme test-1-0 acc://test.acme/book2 test-2-0
+wait-for cli-tx credits ${LITE_ACME} test.acme/book2/1 1000
+accumulate page get acc://test.acme/book2/1 -j | jq -re .data.keys[0].publicKeyHash
+keyhash=$(accumulate page get acc://test.acme/book2/1 -j | jq -re .data.keys[0].publicKeyHash)
+txHash=$(cli-tx tx execute test.acme/book2/1 test-2-0 '{"type": "updateKeyPage", "operation": [{ "type": "update", "oldEntry": {"keyHash": "'"$keyhash"'"}, "newEntry": {"delegate": "acc://test.acme/book","keyHash": "'"$keyhash"'"}}]}')
+wait-for-tx $txHash
+echo $txHash
+wait-for cli-tx-sig tx sign  test.acme/book test-1-0 $txHash
+accumulate page get acc://test.acme/book2/1
+delegate=$(accumulate page get acc://test.acme/book2/1 -j | jq -r .data.keys[0].delegate )
+target=acc://test.acme/book
+if [ "$target" = "$delegate" ]; then
+success
+  else 
+  die `want acc://test.acme/book got ${delegate}`
+fi
+
 
 section "Set threshold to 2 of 2"
 wait-for cli-tx tx execute test.acme/book/2 test-2-0 '{"type": "updateKeyPage", "operation": [{ "type": "setThreshold", "threshold": 2 }]}'
