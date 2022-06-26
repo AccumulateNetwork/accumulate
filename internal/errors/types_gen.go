@@ -124,10 +124,10 @@ func (v *CallSite) MarshalBinary() ([]byte, error) {
 
 	_, _, err := writer.Reset(fieldNames_CallSite)
 	if err != nil {
-		return nil, err
+		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), err
+	return buffer.Bytes(), nil
 }
 
 func (v *CallSite) IsValid() error {
@@ -187,10 +187,10 @@ func (v *Error) MarshalBinary() ([]byte, error) {
 
 	_, _, err := writer.Reset(fieldNames_Error)
 	if err != nil {
-		return nil, err
+		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), err
+	return buffer.Bytes(), nil
 }
 
 func (v *Error) IsValid() error {
@@ -246,11 +246,14 @@ func (v *CallSite) UnmarshalBinaryFrom(rd io.Reader) error {
 
 	seen, err := reader.Reset(fieldNames_CallSite)
 	if err != nil {
-		return err
+		return encoding.Error{E: err}
 	}
 	v.fieldsSet = seen
 	v.extraData, err = reader.ReadAll()
-	return err
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
 }
 
 func (v *Error) UnmarshalBinary(data []byte) error {
@@ -279,11 +282,14 @@ func (v *Error) UnmarshalBinaryFrom(rd io.Reader) error {
 
 	seen, err := reader.Reset(fieldNames_Error)
 	if err != nil {
-		return err
+		return encoding.Error{E: err}
 	}
 	v.fieldsSet = seen
 	v.extraData, err = reader.ReadAll()
-	return err
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
 }
 
 func (v *Error) MarshalJSON() ([]byte, error) {

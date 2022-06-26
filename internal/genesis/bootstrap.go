@@ -63,7 +63,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) (Bootstrap, error) {
 	var err error
 	b.router, err = routing.NewStaticRouter(b.routingTable, nil)
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknown, err)
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	b.genesisExec, err = block.NewGenesisExecutor(b.db, opts.Logger, &config.Describe{
@@ -71,7 +71,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) (Bootstrap, error) {
 		PartitionId: opts.PartitionId,
 	}, b.router)
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknown, err)
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	return b, nil
@@ -110,12 +110,12 @@ func (b *bootstrap) Bootstrap() error {
 
 	err := b.genesisExec.Genesis(b.block, b)
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
+		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	err = b.block.Batch.Commit()
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
+		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	return nil
@@ -201,7 +201,7 @@ func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protoc
 		return nil
 	})
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknown, err)
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	// Create accounts
@@ -216,24 +216,24 @@ func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protoc
 
 	err = b.createVoteScratchChain()
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknown, err)
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	err = b.maybeCreateFactomAccounts()
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknown, err)
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	// Persist accounts
 	err = st.Create(b.records...)
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknown, "store records: %w", err)
+		return nil, errors.Format(errors.StatusUnknownError, "store records: %w", err)
 	}
 
 	// Update the directory index
 	err = st.AddDirectoryEntry(b.partition.Identity(), b.urls...)
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknown, err)
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	// Write data entries
@@ -358,7 +358,7 @@ func (b *bootstrap) maybeCreateFactomAccounts() error {
 
 	factomAddresses, err := LoadFactomAddressesAndBalances(b.FactomAddressesFile)
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
+		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	for _, fa := range factomAddresses {

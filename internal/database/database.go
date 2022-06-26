@@ -116,7 +116,7 @@ func (b *Batch) AccountByID(id []byte) (*Account, error) {
 	a := &Account{b, accountByID(id), nil}
 	state, err := a.GetState()
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknown, err)
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 	a.url = state.GetUrl()
 	return a, nil

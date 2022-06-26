@@ -1,12 +1,10 @@
 Status:
-  Unknown:
-    value: 0
-    description: means the status is unknown
-
-  # Transaction statuses and query responses
+  # Query responses
   OK:
     value: 200
     description: means the request completed successfully
+
+  # Transaction statuses
   Delivered:
     value: 201
     description: means the transaction has been delivered
@@ -48,7 +46,13 @@ Status:
     value: 412
     description: means the timestamp is invalid
 
-  # Server errors
+  # Server/system errors
   InternalError:
     value: 500
     description: means an internal error occured
+  UnknownError:
+    value: 501
+    description: means an unknown error occured
+  EncodingError:
+    value: 502
+    description: means encoding or decoding failed

@@ -83,8 +83,8 @@ func (d *e2eDUT) WaitForTxns(txids ...[]byte) {
 			r, err := q.QueryTx(txid, 10*time.Second, false, apiv2.QueryOptions{})
 			d.Require().NoError(err)
 			d.Require().NotNil(r.Status, "Transaction status is empty")
-			d.Require().True(r.Status.Delivered, "Transaction has not been delivered")
-			d.Require().Zero(r.Status.Code, "Transaction failed")
+			d.Require().True(r.Status.Delivered(), "Transaction has not been delivered")
+			d.Require().Nil(r.Status.Error, "Transaction failed")
 			for _, id := range r.Produced {
 				id := id.Hash()
 				synth = append(synth, id[:])

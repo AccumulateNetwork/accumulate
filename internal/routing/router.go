@@ -107,7 +107,7 @@ func NewRouter(eventBus *events.Bus, cm connections.ConnectionManager) *RouterIn
 	events.SubscribeSync(eventBus, func(e events.WillChangeGlobals) error {
 		tree, err := NewRouteTree(e.New.Routing)
 		if err != nil {
-			return errors.Wrap(errors.StatusUnknown, err)
+			return errors.Wrap(errors.StatusUnknownError, err)
 		}
 
 		r.tree = tree
@@ -121,7 +121,7 @@ func NewRouter(eventBus *events.Bus, cm connections.ConnectionManager) *RouterIn
 func NewStaticRouter(table *protocol.RoutingTable, cm connections.ConnectionManager) (*RouterInstance, error) {
 	tree, err := NewRouteTree(table)
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknown, err)
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	return &RouterInstance{tree, cm}, nil
