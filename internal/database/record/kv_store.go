@@ -16,12 +16,12 @@ var _ Store = KvStore{}
 func (s KvStore) GetValue(key Key, value ValueWriter) error {
 	b, err := s.Store.Get(key.Hash())
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
+		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	err = value.LoadBytes(b)
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
+		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	return nil
@@ -31,17 +31,17 @@ func (s KvStore) GetValue(key Key, value ValueWriter) error {
 func (s KvStore) PutValue(key Key, value ValueReader) error {
 	v, err := value.GetValue()
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
+		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	b, err := v.MarshalBinary()
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
+		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	err = s.Store.Put(key.Hash(), b)
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
+		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	return nil

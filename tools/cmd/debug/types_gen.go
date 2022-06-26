@@ -390,10 +390,10 @@ func (v *SigOrTxn) MarshalBinary() ([]byte, error) {
 
 	_, _, err := writer.Reset(fieldNames_SigOrTxn)
 	if err != nil {
-		return nil, err
+		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), err
+	return buffer.Bytes(), nil
 }
 
 func (v *SigOrTxn) IsValid() error {
@@ -451,10 +451,10 @@ func (v *SigSetEntry) MarshalBinary() ([]byte, error) {
 
 	_, _, err := writer.Reset(fieldNames_SigSetEntry)
 	if err != nil {
-		return nil, err
+		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), err
+	return buffer.Bytes(), nil
 }
 
 func (v *SigSetEntry) IsValid() error {
@@ -523,10 +523,10 @@ func (v *accountState) MarshalBinary() ([]byte, error) {
 
 	_, _, err := writer.Reset(fieldNames_accountState)
 	if err != nil {
-		return nil, err
+		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), err
+	return buffer.Bytes(), nil
 }
 
 func (v *accountState) IsValid() error {
@@ -597,10 +597,10 @@ func (v *merkleState) MarshalBinary() ([]byte, error) {
 
 	_, _, err := writer.Reset(fieldNames_merkleState)
 	if err != nil {
-		return nil, err
+		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), err
+	return buffer.Bytes(), nil
 }
 
 func (v *merkleState) IsValid() error {
@@ -662,10 +662,10 @@ func (v *sigSetData) MarshalBinary() ([]byte, error) {
 
 	_, _, err := writer.Reset(fieldNames_sigSetData)
 	if err != nil {
-		return nil, err
+		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), err
+	return buffer.Bytes(), nil
 }
 
 func (v *sigSetData) IsValid() error {
@@ -716,10 +716,10 @@ func (v *transactionState) MarshalBinary() ([]byte, error) {
 
 	_, _, err := writer.Reset(fieldNames_transactionState)
 	if err != nil {
-		return nil, err
+		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), err
+	return buffer.Bytes(), nil
 }
 
 func (v *transactionState) IsValid() error {
@@ -767,10 +767,10 @@ func (v *txSyntheticTxns) MarshalBinary() ([]byte, error) {
 
 	_, _, err := writer.Reset(fieldNames_txSyntheticTxns)
 	if err != nil {
-		return nil, err
+		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), err
+	return buffer.Bytes(), nil
 }
 
 func (v *txSyntheticTxns) IsValid() error {
@@ -815,11 +815,14 @@ func (v *SigOrTxn) UnmarshalBinaryFrom(rd io.Reader) error {
 
 	seen, err := reader.Reset(fieldNames_SigOrTxn)
 	if err != nil {
-		return err
+		return encoding.Error{E: err}
 	}
 	v.fieldsSet = seen
 	v.extraData, err = reader.ReadAll()
-	return err
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
 }
 
 func (v *SigSetEntry) UnmarshalBinary(data []byte) error {
@@ -844,11 +847,14 @@ func (v *SigSetEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 
 	seen, err := reader.Reset(fieldNames_SigSetEntry)
 	if err != nil {
-		return err
+		return encoding.Error{E: err}
 	}
 	v.fieldsSet = seen
 	v.extraData, err = reader.ReadAll()
-	return err
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
 }
 
 func (v *accountState) UnmarshalBinary(data []byte) error {
@@ -889,11 +895,14 @@ func (v *accountState) UnmarshalBinaryFrom(rd io.Reader) error {
 
 	seen, err := reader.Reset(fieldNames_accountState)
 	if err != nil {
-		return err
+		return encoding.Error{E: err}
 	}
 	v.fieldsSet = seen
 	v.extraData, err = reader.ReadAll()
-	return err
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
 }
 
 func (v *merkleState) UnmarshalBinary(data []byte) error {
@@ -929,11 +938,14 @@ func (v *merkleState) UnmarshalBinaryFrom(rd io.Reader) error {
 
 	seen, err := reader.Reset(fieldNames_merkleState)
 	if err != nil {
-		return err
+		return encoding.Error{E: err}
 	}
 	v.fieldsSet = seen
 	v.extraData, err = reader.ReadAll()
-	return err
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
 }
 
 func (v *sigSetData) UnmarshalBinary(data []byte) error {
@@ -956,11 +968,14 @@ func (v *sigSetData) UnmarshalBinaryFrom(rd io.Reader) error {
 
 	seen, err := reader.Reset(fieldNames_sigSetData)
 	if err != nil {
-		return err
+		return encoding.Error{E: err}
 	}
 	v.fieldsSet = seen
 	v.extraData, err = reader.ReadAll()
-	return err
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
 }
 
 func (v *transactionState) UnmarshalBinary(data []byte) error {
@@ -986,11 +1001,14 @@ func (v *transactionState) UnmarshalBinaryFrom(rd io.Reader) error {
 
 	seen, err := reader.Reset(fieldNames_transactionState)
 	if err != nil {
-		return err
+		return encoding.Error{E: err}
 	}
 	v.fieldsSet = seen
 	v.extraData, err = reader.ReadAll()
-	return err
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
 }
 
 func (v *txSyntheticTxns) UnmarshalBinary(data []byte) error {
@@ -1010,11 +1028,14 @@ func (v *txSyntheticTxns) UnmarshalBinaryFrom(rd io.Reader) error {
 
 	seen, err := reader.Reset(fieldNames_txSyntheticTxns)
 	if err != nil {
-		return err
+		return encoding.Error{E: err}
 	}
 	v.fieldsSet = seen
 	v.extraData, err = reader.ReadAll()
-	return err
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
 }
 
 func (v *SigOrTxn) MarshalJSON() ([]byte, error) {

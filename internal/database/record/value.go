@@ -128,7 +128,7 @@ func (v *Value[T]) Get() (u T, err error) {
 
 	case !errors.Is(err, storage.ErrNotFound):
 		// Unknown error
-		return zero[T](), errors.Wrap(errors.StatusUnknown, err)
+		return zero[T](), errors.Wrap(errors.StatusUnknownError, err)
 
 	case v.allowMissing:
 		// Initialize to an empty value
@@ -148,11 +148,11 @@ func (v *Value[T]) Get() (u T, err error) {
 func (v *Value[T]) GetAs(target interface{}) error {
 	u, err := v.Get()
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
+		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	err = encoding.SetPtr(u, target)
-	return errors.Wrap(errors.StatusUnknown, err)
+	return errors.Wrap(errors.StatusUnknownError, err)
 }
 
 // Put stores the value.
@@ -189,7 +189,7 @@ func (v *Value[T]) Commit() error {
 
 	err := v.store.PutValue(v.key, v)
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
+		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	return nil
@@ -207,7 +207,7 @@ func (v *Value[T]) Resolve(key Key) (Record, Key, error) {
 func (v *Value[T]) GetValue() (encoding.BinaryValue, error) {
 	_, err := v.Get()
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknown, err)
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 	return v.value, nil
 }
@@ -217,7 +217,7 @@ func (v *Value[T]) GetValue() (encoding.BinaryValue, error) {
 func (v *Value[T]) LoadValue(value ValueReader, put bool) error {
 	uv, err := value.GetValue()
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
+		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	u, ok := uv.(encodableValue[T])
@@ -239,7 +239,7 @@ func (v *Value[T]) LoadValue(value ValueReader, put bool) error {
 func (v *Value[T]) LoadBytes(data []byte) error {
 	err := v.value.UnmarshalBinary(data)
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
+		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	v.status = valueClean
@@ -273,7 +273,7 @@ func (v *structValue[T, PT]) CopyAsInterface() interface{} {
 
 func (v *structValue[T, PT]) MarshalBinary() (data []byte, err error) {
 	data, err = v.value.MarshalBinary()
-	return data, errors.Wrap(errors.StatusUnknown, err)
+	return data, errors.Wrap(errors.StatusUnknownError, err)
 }
 
 func (v *structValue[T, PT]) UnmarshalBinary(data []byte) error {
@@ -282,7 +282,7 @@ func (v *structValue[T, PT]) UnmarshalBinary(data []byte) error {
 	if err == nil {
 		v.value = u
 	}
-	return errors.Wrap(errors.StatusUnknown, err)
+	return errors.Wrap(errors.StatusUnknownError, err)
 }
 
 func (v *structValue[T, PT]) UnmarshalBinaryFrom(rd io.Reader) error {
@@ -291,7 +291,7 @@ func (v *structValue[T, PT]) UnmarshalBinaryFrom(rd io.Reader) error {
 	if err == nil {
 		v.value = u
 	}
-	return errors.Wrap(errors.StatusUnknown, err)
+	return errors.Wrap(errors.StatusUnknownError, err)
 }
 
 type unionValue[T encoding.BinaryValue] struct {
@@ -322,7 +322,7 @@ func (v *unionValue[T]) CopyAsInterface() interface{} {
 
 func (v *unionValue[T]) MarshalBinary() (data []byte, err error) {
 	data, err = v.value.MarshalBinary()
-	return data, errors.Wrap(errors.StatusUnknown, err)
+	return data, errors.Wrap(errors.StatusUnknownError, err)
 }
 
 func (v *unionValue[T]) UnmarshalBinary(data []byte) error {
@@ -330,14 +330,14 @@ func (v *unionValue[T]) UnmarshalBinary(data []byte) error {
 	if err == nil {
 		v.value = u
 	}
-	return errors.Wrap(errors.StatusUnknown, err)
+	return errors.Wrap(errors.StatusUnknownError, err)
 }
 
 func (v *unionValue[T]) UnmarshalBinaryFrom(rd io.Reader) error {
 	data, err := io.ReadAll(rd)
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
+		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 	err = v.UnmarshalBinary(data)
-	return errors.Wrap(errors.StatusUnknown, err)
+	return errors.Wrap(errors.StatusUnknownError, err)
 }

@@ -45,7 +45,7 @@ func NewRouteTree(table *protocol.RoutingTable) (*RouteTree, error) {
 	var err error
 	tree.root, err = buildPrefixTree(routes, 0)
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknown, err)
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	return tree, nil
@@ -84,7 +84,7 @@ func buildPrefixTree(routes []protocol.Route, depth uint64) (prefixTreeNode, err
 		}
 		tree.children[i], err = buildPrefixTree(routes[:n], offset)
 		if err != nil {
-			return nil, errors.Wrap(errors.StatusUnknown, err)
+			return nil, errors.Wrap(errors.StatusUnknownError, err)
 		}
 		routes = routes[n:]
 	}

@@ -29,7 +29,7 @@ func loadMainIndex[T encoding.BinaryValue](x *database.ValueAs[T], notFound T) (
 		return notFound, nil
 	default:
 		var zero T
-		return zero, errors.Wrap(errors.StatusUnknown, err)
+		return zero, errors.Wrap(errors.StatusUnknownError, err)
 	}
 }
 

@@ -47,19 +47,19 @@ func (m *DatabaseQueryModule) queryAccount(batch *database.Batch, accountUrl *ur
 	var err error
 	rec.Account, err = account.GetState()
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknown, "get account %v main state: %w", accountUrl, err)
+		return nil, errors.Format(errors.StatusUnknownError, "get account %v main state: %w", accountUrl, err)
 	}
 
 	if opts.Expand {
 		obj, err := account.GetObject()
 		if err != nil {
-			return nil, errors.Format(errors.StatusUnknown, "get account %v state: %w", accountUrl, err)
+			return nil, errors.Format(errors.StatusUnknownError, "get account %v state: %w", accountUrl, err)
 		}
 
 		for _, c := range obj.Chains {
 			chain, err := account.ReadChain(c.Name)
 			if err != nil {
-				return nil, errors.Format(errors.StatusUnknown, "read account %v chain %s: %w", accountUrl, c.Name, err)
+				return nil, errors.Format(errors.StatusUnknownError, "read account %v chain %s: %w", accountUrl, c.Name, err)
 			}
 
 			state := new(ChainState)
@@ -79,7 +79,7 @@ func (m *DatabaseQueryModule) queryAccount(batch *database.Batch, accountUrl *ur
 		rec.Proof = receipt
 		block, mr, err := indexing.ReceiptForAccountState(m.Network, batch, account)
 		if err != nil {
-			receipt.Error = errors.Wrap(errors.StatusUnknown, err).(*errors.Error)
+			receipt.Error = errors.Wrap(errors.StatusUnknownError, err).(*errors.Error)
 		} else {
 			receipt.LocalBlock = block
 			receipt.Proof = *mr

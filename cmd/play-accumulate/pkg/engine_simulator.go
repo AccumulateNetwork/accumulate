@@ -125,7 +125,7 @@ func (s SimEngine) Submit(envelope *protocol.Envelope) (*protocol.TransactionSta
 
 func (s SimEngine) WaitFor(hash [32]byte) ([]*protocol.TransactionStatus, []*protocol.Transaction, error) {
 	status, txn := s.WaitForTransactionFlow(func(status *protocol.TransactionStatus) bool {
-		return status.Delivered || status.Pending
+		return status.Code != 0
 	}, hash[:])
 	return status, txn, nil
 }

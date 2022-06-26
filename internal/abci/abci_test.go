@@ -92,8 +92,6 @@ func TestTransactionPriority(t *testing.T) {
 			for _, status := range results.Results {
 				if status.Error != nil {
 					assert.NoError(t, status.Error)
-				} else {
-					assert.Zero(t, status.Code, status.Message)
 				}
 			}
 			if t.Failed() {

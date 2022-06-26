@@ -318,12 +318,9 @@ func dispatchTxRequest(payload interface{}, origin *url2.URL, signers []*signing
 	if res.Code != 0 {
 		result := new(protocol.TransactionStatus)
 		if Remarshal(res.Result, result) != nil {
-			return nil, protocol.NewError(protocol.ErrorCode(res.Code), errors.New(res.Message))
+			return nil, errors.New(res.Message)
 		}
-		if result.Error != nil {
-			return nil, result.Error
-		}
-		return nil, protocol.NewError(protocol.ErrorCode(result.Code), errors.New(result.Message))
+		return nil, result.Error
 	}
 
 	return res, nil
@@ -462,8 +459,12 @@ func ActionResponseFrom(r *api2.TxResponse) *ActionResponse {
 		return ar
 	}
 
-	ar.Code = types.String(fmt.Sprint(result.Code))
-	ar.Error = types.String(result.Message)
+	if result.Failed() {
+		ar.Code = types.String(fmt.Sprint(result.CodeNum()))
+	}
+	if result.Error != nil {
+		ar.Error = types.String(result.Error.Message)
+	}
 	ar.Result = result
 	return ar
 }

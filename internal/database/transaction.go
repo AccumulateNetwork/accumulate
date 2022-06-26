@@ -41,7 +41,7 @@ func (t *Transaction) GetState() (*SigOrTxn, error) {
 		return v, nil
 	}
 	if !errors.Is(err, errors.StatusNotFound) {
-		return nil, errors.Wrap(errors.StatusUnknown, err)
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 	return nil, errors.FormatWithCause(errors.StatusNotFound, err, "transaction %X not found", t.id)
 }
@@ -70,7 +70,8 @@ func (t *Transaction) PutStatus(v *protocol.TransactionStatus) error {
 
 	t.batch.putValue(t.key.Status(), v)
 
-	if !v.Pending {
+	// TODO Why?
+	if !v.Pending() {
 		return nil
 	}
 
