@@ -342,7 +342,9 @@ func (n *FakeNode) MustExecute(inBlock func(func(*protocol.Envelope))) (sigHashe
 	}
 
 	for _, result := range results.Results {
-		assert.Zero(n.t, result.Code, result.Message)
+		if result.Error != nil {
+			assert.NoError(n.t, result.Error)
+		}
 	}
 	n.t.FailNow()
 	panic("unreachable")

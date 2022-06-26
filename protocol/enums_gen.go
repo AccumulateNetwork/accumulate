@@ -110,110 +110,14 @@ const ErrorCodeOK ErrorCode = 0
 // ErrorCodeEncodingError indicates something could not be decoded or encoded.
 const ErrorCodeEncodingError ErrorCode = 1
 
-// ErrorCodeBadNonce indicates the transaction nonce was rejected.
-const ErrorCodeBadNonce ErrorCode = 2
+// ErrorCodeFailed indicates the request failed.
+const ErrorCodeFailed ErrorCode = 2
 
 // ErrorCodeDidPanic indicates the request failed due to a fatal error.
 const ErrorCodeDidPanic ErrorCode = 3
 
 // ErrorCodeUnknownError indicates the request failed due to an unknown error.
 const ErrorCodeUnknownError ErrorCode = 4
-
-// ErrorCodeNotFound indicates the request specified a record that does not exist.
-const ErrorCodeNotFound ErrorCode = 5
-
-// ErrorCodeTxnRange is returned when txn range query fails.
-const ErrorCodeTxnRange ErrorCode = 6
-
-// ErrorCodeTxnHistory is returned when txn history query fails.
-const ErrorCodeTxnHistory ErrorCode = 7
-
-// ErrorCodeInvalidURL is returned when invalid URL is passed in query.
-const ErrorCodeInvalidURL ErrorCode = 8
-
-// ErrorCodeDirectoryURL is returned when invalid directory URL is passed in query.
-const ErrorCodeDirectoryURL ErrorCode = 9
-
-// ErrorCodeChainIdError is returned when query by in id fails.
-const ErrorCodeChainIdError ErrorCode = 10
-
-// ErrorCodeRoutingChainId is returned when setting routing chain id fails.
-const ErrorCodeRoutingChainId ErrorCode = 11
-
-// ErrorCodeCheckTxError is returned when txn validation check fails.
-const ErrorCodeCheckTxError ErrorCode = 12
-
-// ErrorCodeDeliverTxError is returned when txn deliver method fails.
-const ErrorCodeDeliverTxError ErrorCode = 13
-
-// ErrorCodeTxnStateError is returned when adding txn to state fails.
-const ErrorCodeTxnStateError ErrorCode = 14
-
-// ErrorCodeRecordTxnError is returned when storing pending state updates fail.
-const ErrorCodeRecordTxnError ErrorCode = 15
-
-// ErrorCodeSyntheticTxnError is returned when submit synthetic txn fails.
-const ErrorCodeSyntheticTxnError ErrorCode = 16
-
-// ErrorCodeMarshallingError is returned when marshaling  object or binary fails.
-const ErrorCodeMarshallingError ErrorCode = 17
-
-// ErrorCodeUnMarshallingError is returned when unmarshaling  object or binary fails.
-const ErrorCodeUnMarshallingError ErrorCode = 18
-
-// ErrorCodeInvalidQueryType is returned when query type in request is not matched with the available ones.
-const ErrorCodeInvalidQueryType ErrorCode = 19
-
-// ErrorCodeInvalidTxnType is returned when txn type passed is not available.
-const ErrorCodeInvalidTxnType ErrorCode = 20
-
-// ErrorCodeValidateTxnError is returned when execution validation of txn fails.
-const ErrorCodeValidateTxnError ErrorCode = 21
-
-// ErrorCodeInvalidTxnError is returned when txn doesn't contains proper data.
-const ErrorCodeInvalidTxnError ErrorCode = 22
-
-// ErrorCodeAddTxnError is returned when adding txn to state db fails.
-const ErrorCodeAddTxnError ErrorCode = 23
-
-// ErrorCodeDataUrlError is returned when a url passed to a data query fails.
-const ErrorCodeDataUrlError ErrorCode = 24
-
-// ErrorCodeDataEntryHashError is returned when an entry hash query fails on a data chain.
-const ErrorCodeDataEntryHashError ErrorCode = 25
-
-// ErrorCodeTxnQueryError is returned when txn is not found.
-const ErrorCodeTxnQueryError ErrorCode = 26
-
-// ErrorCodeInvalidRequest indicates the request was invalid.
-const ErrorCodeInvalidRequest ErrorCode = 27
-
-// ErrorCodeInvalidSignature indicates an envelope signature was invalid.
-const ErrorCodeInvalidSignature ErrorCode = 28
-
-// ErrorCodeInsufficientCredits indicates the signer does not have sufficient credits to execute the transaction.
-const ErrorCodeInsufficientCredits ErrorCode = 29
-
-// ErrorCodeBadVersion indicates the signature refers to an out of date version of the signer.
-const ErrorCodeBadVersion ErrorCode = 30
-
-// ErrorCodeInternal indicates an internal error.
-const ErrorCodeInternal ErrorCode = 31
-
-// ErrorCodeAlreadyDelivered indicates the transaction has already been delivered.
-const ErrorCodeAlreadyDelivered ErrorCode = 32
-
-// ErrorCodeUnauthorized indicates the signer is not authorized to sign a transaction.
-const ErrorCodeUnauthorized ErrorCode = 33
-
-// ErrorCodeQueryChainUpdatesError is returned when chain-updates query fails.
-const ErrorCodeQueryChainUpdatesError ErrorCode = 34
-
-// ErrorCodeQueryEntriesError is returned when entries query fails.
-const ErrorCodeQueryEntriesError ErrorCode = 35
-
-// ErrorCodeBackdoorTxnError is returned when a txn is submitted from an incorrect bvn.
-const ErrorCodeBackdoorTxnError ErrorCode = 36
 
 // KeyPageOperationTypeUnknown is used when the key page operation is not known.
 const KeyPageOperationTypeUnknown KeyPageOperationType = 0
@@ -835,7 +739,7 @@ func (v ErrorCode) GetEnumValue() uint64 { return uint64(v) }
 func (v *ErrorCode) SetEnumValue(id uint64) bool {
 	u := ErrorCode(id)
 	switch u {
-	case ErrorCodeOK, ErrorCodeEncodingError, ErrorCodeBadNonce, ErrorCodeDidPanic, ErrorCodeUnknownError, ErrorCodeNotFound, ErrorCodeTxnRange, ErrorCodeTxnHistory, ErrorCodeInvalidURL, ErrorCodeDirectoryURL, ErrorCodeChainIdError, ErrorCodeRoutingChainId, ErrorCodeCheckTxError, ErrorCodeDeliverTxError, ErrorCodeTxnStateError, ErrorCodeRecordTxnError, ErrorCodeSyntheticTxnError, ErrorCodeMarshallingError, ErrorCodeUnMarshallingError, ErrorCodeInvalidQueryType, ErrorCodeInvalidTxnType, ErrorCodeValidateTxnError, ErrorCodeInvalidTxnError, ErrorCodeAddTxnError, ErrorCodeDataUrlError, ErrorCodeDataEntryHashError, ErrorCodeTxnQueryError, ErrorCodeInvalidRequest, ErrorCodeInvalidSignature, ErrorCodeInsufficientCredits, ErrorCodeBadVersion, ErrorCodeInternal, ErrorCodeAlreadyDelivered, ErrorCodeUnauthorized, ErrorCodeQueryChainUpdatesError, ErrorCodeQueryEntriesError, ErrorCodeBackdoorTxnError:
+	case ErrorCodeOK, ErrorCodeEncodingError, ErrorCodeFailed, ErrorCodeDidPanic, ErrorCodeUnknownError:
 		*v = u
 		return true
 	default:
@@ -850,76 +754,12 @@ func (v ErrorCode) String() string {
 		return "ok"
 	case ErrorCodeEncodingError:
 		return "encodingError"
-	case ErrorCodeBadNonce:
-		return "badNonce"
+	case ErrorCodeFailed:
+		return "failed"
 	case ErrorCodeDidPanic:
 		return "didPanic"
 	case ErrorCodeUnknownError:
 		return "unknownError"
-	case ErrorCodeNotFound:
-		return "notFound"
-	case ErrorCodeTxnRange:
-		return "txnRange"
-	case ErrorCodeTxnHistory:
-		return "txnHistory"
-	case ErrorCodeInvalidURL:
-		return "invalidURL"
-	case ErrorCodeDirectoryURL:
-		return "directoryURL"
-	case ErrorCodeChainIdError:
-		return "chainIdError"
-	case ErrorCodeRoutingChainId:
-		return "routingChainId"
-	case ErrorCodeCheckTxError:
-		return "checkTxError"
-	case ErrorCodeDeliverTxError:
-		return "deliverTxError"
-	case ErrorCodeTxnStateError:
-		return "txnStateError"
-	case ErrorCodeRecordTxnError:
-		return "recordTxnError"
-	case ErrorCodeSyntheticTxnError:
-		return "syntheticTxnError"
-	case ErrorCodeMarshallingError:
-		return "marshallingError"
-	case ErrorCodeUnMarshallingError:
-		return "unMarshallingError"
-	case ErrorCodeInvalidQueryType:
-		return "invalidQueryType"
-	case ErrorCodeInvalidTxnType:
-		return "invalidTxnType"
-	case ErrorCodeValidateTxnError:
-		return "validateTxnError"
-	case ErrorCodeInvalidTxnError:
-		return "invalidTxnError"
-	case ErrorCodeAddTxnError:
-		return "addTxnError"
-	case ErrorCodeDataUrlError:
-		return "dataUrlError"
-	case ErrorCodeDataEntryHashError:
-		return "dataEntryHashError"
-	case ErrorCodeTxnQueryError:
-		return "txnQueryError"
-	case ErrorCodeInvalidRequest:
-		return "invalidRequest"
-	case ErrorCodeInvalidSignature:
-		return "invalidSignature"
-	case ErrorCodeInsufficientCredits:
-		return "insufficientCredits"
-	case ErrorCodeBadVersion:
-		return "badVersion"
-	case ErrorCodeInternal:
-		return "internal"
-	case ErrorCodeAlreadyDelivered:
-		return "alreadyDelivered"
-	case ErrorCodeUnauthorized:
-		return "unauthorized"
-	case ErrorCodeQueryChainUpdatesError:
-		return "queryChainUpdatesError"
-	case ErrorCodeQueryEntriesError:
-		return "queryEntriesError"
-	case ErrorCodeBackdoorTxnError:
-		return "backdoorTxnError"
 	default:
 		return fmt.Sprintf("ErrorCode:%d", v)
 	}
@@ -932,76 +772,12 @@ func ErrorCodeByName(name string) (ErrorCode, bool) {
 		return ErrorCodeOK, true
 	case "encodingerror":
 		return ErrorCodeEncodingError, true
-	case "badnonce":
-		return ErrorCodeBadNonce, true
+	case "failed":
+		return ErrorCodeFailed, true
 	case "didpanic":
 		return ErrorCodeDidPanic, true
 	case "unknownerror":
 		return ErrorCodeUnknownError, true
-	case "notfound":
-		return ErrorCodeNotFound, true
-	case "txnrange":
-		return ErrorCodeTxnRange, true
-	case "txnhistory":
-		return ErrorCodeTxnHistory, true
-	case "invalidurl":
-		return ErrorCodeInvalidURL, true
-	case "directoryurl":
-		return ErrorCodeDirectoryURL, true
-	case "chainiderror":
-		return ErrorCodeChainIdError, true
-	case "routingchainid":
-		return ErrorCodeRoutingChainId, true
-	case "checktxerror":
-		return ErrorCodeCheckTxError, true
-	case "delivertxerror":
-		return ErrorCodeDeliverTxError, true
-	case "txnstateerror":
-		return ErrorCodeTxnStateError, true
-	case "recordtxnerror":
-		return ErrorCodeRecordTxnError, true
-	case "synthetictxnerror":
-		return ErrorCodeSyntheticTxnError, true
-	case "marshallingerror":
-		return ErrorCodeMarshallingError, true
-	case "unmarshallingerror":
-		return ErrorCodeUnMarshallingError, true
-	case "invalidquerytype":
-		return ErrorCodeInvalidQueryType, true
-	case "invalidtxntype":
-		return ErrorCodeInvalidTxnType, true
-	case "validatetxnerror":
-		return ErrorCodeValidateTxnError, true
-	case "invalidtxnerror":
-		return ErrorCodeInvalidTxnError, true
-	case "addtxnerror":
-		return ErrorCodeAddTxnError, true
-	case "dataurlerror":
-		return ErrorCodeDataUrlError, true
-	case "dataentryhasherror":
-		return ErrorCodeDataEntryHashError, true
-	case "txnqueryerror":
-		return ErrorCodeTxnQueryError, true
-	case "invalidrequest":
-		return ErrorCodeInvalidRequest, true
-	case "invalidsignature":
-		return ErrorCodeInvalidSignature, true
-	case "insufficientcredits":
-		return ErrorCodeInsufficientCredits, true
-	case "badversion":
-		return ErrorCodeBadVersion, true
-	case "internal":
-		return ErrorCodeInternal, true
-	case "alreadydelivered":
-		return ErrorCodeAlreadyDelivered, true
-	case "unauthorized":
-		return ErrorCodeUnauthorized, true
-	case "querychainupdateserror":
-		return ErrorCodeQueryChainUpdatesError, true
-	case "queryentrieserror":
-		return ErrorCodeQueryEntriesError, true
-	case "backdoortxnerror":
-		return ErrorCodeBackdoorTxnError, true
 	default:
 		return 0, false
 	}

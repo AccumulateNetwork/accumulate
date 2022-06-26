@@ -168,7 +168,7 @@ func TestSynthTxnWithMissingPrincipal(t *testing.T) {
 	require.Len(t, synth, 1)
 	hash := synth[0].Hash()
 	_, status, _ := sim.WaitForTransaction(received, hash[:], 50)
-	require.True(t, status.Pending, "The transaction was delivered prematurely")
+	require.True(t, status.Pending(), "The transaction was delivered prematurely")
 
 	// The synthetic transaction must fail, but only after the anchor is received
 	_, status, _ = sim.WaitForTransaction(delivered, hash[:], 50)
@@ -270,4 +270,54 @@ func TestSendSynthTxnAfterAnchor(t *testing.T) {
 		Signatures:  deposit.Signatures,
 	})
 	sim.WaitForTransactionFlow(delivered, deposit.Transaction.GetHash())
+}
+
+func TestSigningDeliveredTxnDoesNothing(t *testing.T) {
+	var timestamp uint64
+
+	// Initialize
+	sim := simulator.New(t, 3)
+	sim.InitFromGenesis()
+
+	// Setup
+	aliceKey, bobKey := acctesting.GenerateKey("Alice"), acctesting.GenerateKey("Bob")
+	alice := sim.CreateLiteTokenAccount(aliceKey, AcmeUrl(), 1e9, 2)
+	bob := acctesting.AcmeLiteAddressStdPriv(bobKey)
+
+	// Execute
+	_, txns := sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
+		acctesting.NewTransaction().
+			WithPrincipal(alice).
+			WithTimestampVar(&timestamp).
+			WithSigner(alice, 1).
+			WithBody(&SendTokens{
+				To: []*TokenRecipient{{
+					Url:    bob,
+					Amount: *big.NewInt(1),
+				}},
+			}).
+			Initiate(SignatureTypeED25519, aliceKey).
+			Build(),
+	)...)
+
+	// Verify
+	require.Equal(t, 1, int(simulator.GetAccount[*LiteTokenAccount](sim, alice).Balance.Int64()))
+	require.Equal(t, 1, int(simulator.GetAccount[*LiteTokenAccount](sim, bob).Balance.Int64()))
+
+	// Send another signature
+	_, err := sim.SubmitAndExecuteBlock(
+		acctesting.NewTransaction().
+			WithPrincipal(alice).
+			WithSigner(alice, 1).
+			WithTxnHash(txns[0].GetHash()).
+			Sign(SignatureTypeED25519, aliceKey).
+			Build(),
+	)
+
+	// It should fail
+	require.Error(t, err)
+
+	// Verify no double-spend
+	require.Equal(t, 1, int(simulator.GetAccount[*LiteTokenAccount](sim, alice).Balance.Int64()))
+	require.Equal(t, 1, int(simulator.GetAccount[*LiteTokenAccount](sim, bob).Balance.Int64()))
 }

@@ -213,10 +213,10 @@ func (s *accountState) pendingMerkleHash() ([]byte, error) {
 	hasher := make(hash.Hasher, 0, len(s.Pending))
 	for _, p := range s.Pending {
 		state := p.State.Copy()
-		state.For = *(*[32]byte)(p.Transaction.GetHash())
+		state.TxID = p.Transaction.ID()
 		data, err := p.State.MarshalBinary()
 		if err != nil {
-			return nil, fmt.Errorf("marshal pending transaction %X status: %w", p.State.For[:4], err)
+			return nil, fmt.Errorf("marshal pending transaction %X status: %w", p.Transaction.GetHash()[:8], err)
 		}
 		hasher.AddBytes(data)
 	}

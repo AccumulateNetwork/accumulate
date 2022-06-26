@@ -13,7 +13,7 @@ type RecordStore struct {
 func (m RecordStore) PutValue(key record.Key, value record.ValueReader) error {
 	v, err := value.GetValue()
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
+		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 	m.Batch.putValue(key.Hash(), v)
 	return nil
@@ -25,12 +25,12 @@ func (m *RecordStore) GetValue(key record.Key, value record.ValueWriter) error {
 		didUnmarshal = true
 		err := value.LoadBytes(data)
 		if err != nil {
-			return nil, errors.Wrap(errors.StatusUnknown, err)
+			return nil, errors.Wrap(errors.StatusUnknownError, err)
 		}
 		return value.GetValue()
 	})
 	if didUnmarshal || err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
+		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	return value.LoadValue(recordValueReader{v}, false)
