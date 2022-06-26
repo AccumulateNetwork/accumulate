@@ -2,18 +2,19 @@ package indexing
 
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
 // BlockStateIndexer tracks transient state for a block.
 type BlockStateIndexer struct {
-	value *database.ValueAs[*BlockStateIndex]
+	value database.Value[*BlockStateIndex]
 }
 
 // BlockState returns a block state indexer.
 func BlockState(batch *database.Batch, ledger *url.URL) *BlockStateIndexer {
-	v := database.AccountIndex(batch, ledger, newfn[BlockStateIndex](), "BlockState")
+	v := database.AccountIndex(batch, ledger, true, record.Struct[BlockStateIndex](), "BlockState")
 	return &BlockStateIndexer{v}
 }
 
