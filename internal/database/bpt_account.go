@@ -123,7 +123,10 @@ func (a *Account) restore(s *accountState) error {
 		metadata.Pending.Add(p.Transaction.ID())
 	}
 
-	a.batch.putValue(a.key.Object(), metadata)
+	err := a.object().Put(metadata)
+	if err != nil {
+		return fmt.Errorf("store account metadata: %w", err)
+	}
 
 	// Store chain state
 	for _, c := range s.Chains {
@@ -174,7 +177,10 @@ func (a *Account) restore(s *accountState) error {
 
 		for i, set := range p.Signatures {
 			signer := p.State.Signers[i].GetUrl()
-			a.batch.putValue(record.key.Signatures(signer), set)
+			err = record.signatures(signer).Put(set)
+			if err != nil {
+				return fmt.Errorf("store transaction %X signers %v: %w", hash[:4], signer, err)
+			}
 		}
 	}
 
