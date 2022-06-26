@@ -2,6 +2,7 @@ package indexing
 
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
@@ -12,15 +13,15 @@ import (
 type DirectoryIndexer struct {
 	batch      *database.Batch
 	account    *url.URL
-	indexValue *database.ValueAs[*DirectoryIndex]
+	indexValue database.Value[*DirectoryIndex]
 }
 
 func Directory(batch *database.Batch, account *url.URL) *DirectoryIndexer {
-	v := database.AccountIndex(batch, account, newfn[DirectoryIndex](), "Directory")
+	v := database.AccountIndex(batch, account, true, record.Struct[DirectoryIndex](), "Directory")
 	return &DirectoryIndexer{batch, account, v}
 }
 
-func loadMainIndex[T encoding.BinaryValue](x *database.ValueAs[T], notFound T) (T, error) {
+func loadMainIndex[T encoding.BinaryValue](x database.Value[T], notFound T) (T, error) {
 	md, err := x.Get()
 	switch {
 	case err == nil:
@@ -42,7 +43,7 @@ func (d *DirectoryIndexer) Count() (uint64, error) {
 }
 
 func (d *DirectoryIndexer) Get(i uint64) (*url.URL, error) {
-	u, err := database.SubValue(d.indexValue, newfn[DirectoryEntry](), i).Get()
+	u, err := database.AccountIndex(d.batch, d.account, false, record.Struct[DirectoryEntry](), "Directory", i).Get()
 	if err != nil {
 		return nil, err
 	}
@@ -55,7 +56,7 @@ func (d *DirectoryIndexer) Put(u *url.URL) error {
 		return err
 	}
 
-	err = database.SubValue[*DirectoryEntry](d.indexValue, nil, md.Count).Put(&DirectoryEntry{Account: u})
+	err = database.AccountIndex(d.batch, d.account, false, record.Struct[DirectoryEntry](), "Directory", md.Count).Put(&DirectoryEntry{Account: u})
 	if err != nil {
 		return err
 	}
@@ -66,13 +67,13 @@ func (d *DirectoryIndexer) Put(u *url.URL) error {
 
 type DataIndexer struct {
 	batch      *database.Batch
-	account    *database.Account
-	indexValue *database.ValueAs[*DataIndex]
+	account    *url.URL
+	indexValue database.Value[*DataIndex]
 }
 
 func Data(batch *database.Batch, account *url.URL) *DataIndexer {
-	v := database.AccountIndex(batch, account, newfn[DataIndex](), "Data", "Metadata")
-	return &DataIndexer{batch, batch.Account(account), v}
+	v := database.AccountIndex(batch, account, true, record.Struct[DataIndex](), "Data", "Metadata")
+	return &DataIndexer{batch, account, v}
 }
 
 func (d *DataIndexer) Count() (uint64, error) {
@@ -138,7 +139,7 @@ func (d *DataIndexer) GetLatestEntry() (protocol.DataEntry, error) {
 
 // Entry returns the entry hash for the given index.
 func (d *DataIndexer) Entry(i uint64) ([]byte, error) {
-	v, err := database.SubValue(d.indexValue, newfn[DataEntry](), i).Get()
+	v, err := database.AccountIndex(d.batch, d.account, false, record.Struct[DataEntry](), "Data", i).Get()
 	if err != nil {
 		return nil, err
 	}
@@ -147,7 +148,7 @@ func (d *DataIndexer) Entry(i uint64) ([]byte, error) {
 
 // Transaction returns the transaction hash for the given entry hash.
 func (d *DataIndexer) Transaction(entryHash []byte) ([]byte, error) {
-	v, err := database.SubValue(d.indexValue, newfn[DataEntry](), entryHash).Get()
+	v, err := database.AccountIndex(d.batch, d.account, false, record.Struct[DataEntry](), "Data", entryHash).Get()
 	if err != nil {
 		return nil, err
 	}
@@ -160,12 +161,12 @@ func (d *DataIndexer) Put(entryHash, txnHash []byte) error {
 		return err
 	}
 
-	err = database.SubValue[*DataEntry](d.indexValue, nil, md.Count).Put(&DataEntry{Hash: *(*[32]byte)(entryHash)})
+	err = database.AccountIndex(d.batch, d.account, false, record.Struct[DataEntry](), "Data", md.Count).Put(&DataEntry{Hash: *(*[32]byte)(entryHash)})
 	if err != nil {
 		return err
 	}
 
-	err = database.SubValue[*DataEntry](d.indexValue, nil, entryHash).Put(&DataEntry{Hash: *(*[32]byte)(txnHash)})
+	err = database.AccountIndex(d.batch, d.account, false, record.Struct[DataEntry](), "Data", entryHash).Put(&DataEntry{Hash: *(*[32]byte)(txnHash)})
 	if err != nil {
 		return err
 	}
