@@ -15,21 +15,21 @@ import (
 
 type executeFunc func(*chain.Delivery) (*protocol.TransactionStatus, error)
 
-func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]*chain.Delivery, []*protocol.TransactionStatus, []byte, *protocol.Error) {
+func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]*chain.Delivery, []*protocol.TransactionStatus, []byte, error) {
 	hash := sha256.Sum256(raw)
 	envelope := new(protocol.Envelope)
 	err := envelope.UnmarshalBinary(raw)
 	if err != nil {
 		sentry.CaptureException(err)
 		logger.Info("Failed to unmarshal", "tx", logging.AsHex(hash), "error", err)
-		return nil, nil, nil, &protocol.Error{Code: protocol.ErrorCodeEncodingError, Message: errors.New(errors.StatusBadRequest, "Unable to decode transaction(s)")}
+		return nil, nil, nil, errors.Format(errors.StatusUnknownError, "decoding envelopes: %w", err)
 	}
 
 	deliveries, err := chain.NormalizeEnvelope(envelope)
 	if err != nil {
 		sentry.CaptureException(err)
 		logger.Info("Failed to normalize envelope", "tx", logging.AsHex(hash), "error", err)
-		return nil, nil, nil, protocol.NewError(protocol.ErrorCodeUnknownError, err)
+		return nil, nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	results := make([]*protocol.TransactionStatus, len(deliveries))
@@ -45,22 +45,7 @@ func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]
 		}
 
 		sentry.CaptureException(err)
-		status.Message = err.Error()
-
-		var err1 *protocol.Error
-		if status.Code == 0 && errors.As(err, &err1) {
-			status.Code = err1.Code.GetEnumValue()
-		}
-
-		var err2 *errors.Error
-		if status.Error == nil && errors.As(err, &err2) {
-			status.Error = err2
-		}
-
-		if status.Code == 0 {
-			status.Code = protocol.ErrorCodeUnknownError.GetEnumValue()
-		}
-
+		status.Set(err)
 		results[i] = status
 	}
 
@@ -80,7 +65,7 @@ func checkTx(exec *Executor, batch *database.Batch) executeFunc {
 	return func(envelope *chain.Delivery) (*protocol.TransactionStatus, error) {
 		result, err := exec.ValidateEnvelope(batch, envelope)
 		if err != nil {
-			return nil, protocol.NewError(protocol.ErrorCodeUnknownError, err)
+			return nil, errors.Wrap(errors.StatusUnknownError, err)
 		}
 		if result == nil {
 			result = new(protocol.EmptyResult)

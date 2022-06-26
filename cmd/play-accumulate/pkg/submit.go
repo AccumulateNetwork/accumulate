@@ -1,7 +1,6 @@
 package pkg
 
 import (
-	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -173,23 +172,19 @@ func (s *submittedTxn) info() (*URL, [32]byte) {
 }
 
 func (s *submittedTxn) Ok() {
-	if s.Status.Code == 0 {
+	if s.Status.Code.Success() {
 		return
 	}
 
-	str := fmt.Sprintf("Transaction %X failed with code %d: %s\n", s.Hash, s.Status.Code, s.Status.Message)
-	if s.Status.Error != nil {
-		str += s.Status.Error.Print()
-	}
-	s.s.Abort(str)
+	s.s.Abortf("Transaction %X failed:\n%+v\n", s.Hash, s.Status.Error)
 }
 
 func (s *submittedTxn) NotOk(message string) *submittedTxn {
-	if s.Status.Code != 0 {
+	if s.Status.Failed() {
 		return s
 	}
 
-	s.s.Abortf("Transaction %X succeeded, %s", s.Status.For, message)
+	s.s.Abortf("Transaction %X succeeded, %s", s.Status.TxID.Hash(), message)
 	panic("unreachable")
 }
 
@@ -231,23 +226,19 @@ type completedTxn struct {
 }
 
 func (c *completedTxn) Ok() *completedTxn {
-	if c.Status.Code == 0 {
+	if c.Status.Code.Success() {
 		return c
 	}
 
-	str := fmt.Sprintf("Transaction %X failed with code %d: %s\n", c.Status.For, c.Status.Code, c.Status.Message)
-	if c.Status.Error != nil {
-		str += c.Status.Error.Print()
-	}
-	c.s.Abort(str)
+	c.s.Abortf("Transaction %X failed:\n%+v\n", c.Status.TxID.Hash(), c.Status.Error)
 	panic("unreachable")
 }
 
 func (c *completedTxn) NotOk(message string) *completedTxn {
-	if c.Status.Code != 0 {
+	if c.Status.Failed() {
 		return c
 	}
 
-	c.s.Abortf("Transaction %X succeeded, %s", c.Status.For, message)
+	c.s.Abortf("Transaction %X succeeded, %s", c.Status.TxID.Hash(), message)
 	panic("unreachable")
 }

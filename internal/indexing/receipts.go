@@ -44,7 +44,7 @@ func LoadIndexEntryFromEnd(account *Account, indexChain string, offset uint64) (
 func LoadLastTwoIndexEntries(account *Account, indexChain string) (last, nextLast *protocol.IndexEntry, err error) {
 	last, err = LoadIndexEntryFromEnd(account, indexChain, 1)
 	if err != nil {
-		return nil, nil, errors.Wrap(errors.StatusUnknown, err)
+		return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 	if last == nil {
 		return
@@ -52,7 +52,7 @@ func LoadLastTwoIndexEntries(account *Account, indexChain string) (last, nextLas
 
 	nextLast, err = LoadIndexEntryFromEnd(account, indexChain, 2)
 	if err != nil {
-		return nil, nil, errors.Wrap(errors.StatusUnknown, err)
+		return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 	return
 }
@@ -126,7 +126,7 @@ func ReceiptForAccountState(net *config.Describe, batch *Batch, account *Account
 	ledger := batch.Account(net.Ledger())
 	rootEntry, err := LoadIndexEntryFromEnd(ledger, protocol.MinorRootIndexChain, 1)
 	if err != nil {
-		return 0, nil, errors.Wrap(errors.StatusUnknown, err)
+		return 0, nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	return rootEntry.BlockIndex, r, nil

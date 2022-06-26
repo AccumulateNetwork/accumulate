@@ -96,7 +96,7 @@ func (x PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 	var sequence = map[*Delivery]int{}
 	synth, err := st.batch.Account(st.Ledger()).SyntheticForAnchor(body.RootChainAnchor)
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknown, "load synth txns for anchor %x: %w", body.RootChainAnchor[:8], err)
+		return nil, errors.Format(errors.StatusUnknownError, "load synth txns for anchor %x: %w", body.RootChainAnchor[:8], err)
 	}
 	for _, txid := range synth {
 		h := txid.Hash()

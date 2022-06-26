@@ -136,19 +136,19 @@ func processNetworkAccountUpdates(st *StateManager, delivery *Delivery, updates 
 func getSyntheticSignature(batch *database.Batch, transaction *database.Transaction) (*protocol.SyntheticSignature, error) {
 	status, err := transaction.GetStatus()
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknown, "load status: %w", err)
+		return nil, errors.Format(errors.StatusUnknownError, "load status: %w", err)
 	}
 
 	for _, signer := range status.Signers {
 		sigset, err := transaction.ReadSignaturesForSigner(signer)
 		if err != nil {
-			return nil, errors.Format(errors.StatusUnknown, "load signature set %v: %w", signer.GetUrl(), err)
+			return nil, errors.Format(errors.StatusUnknownError, "load signature set %v: %w", signer.GetUrl(), err)
 		}
 
 		for _, entry := range sigset.Entries() {
 			state, err := batch.Transaction(entry.SignatureHash[:]).GetState()
 			if err != nil {
-				return nil, errors.Format(errors.StatusUnknown, "load signature %x: %w", entry.SignatureHash[:8], err)
+				return nil, errors.Format(errors.StatusUnknownError, "load signature %x: %w", entry.SignatureHash[:8], err)
 			}
 
 			sig, ok := state.Signature.(*protocol.SyntheticSignature)

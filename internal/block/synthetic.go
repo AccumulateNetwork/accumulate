@@ -20,7 +20,7 @@ func (x *Executor) ProduceSynthetic(batch *database.Batch, from *protocol.Transa
 
 	err := setSyntheticOrigin(batch, from, produced)
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
+		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	state := new(chain.ChainUpdates)
@@ -85,7 +85,7 @@ func setSyntheticOrigin(batch *database.Batch, from *protocol.Transaction, produ
 
 	status, err := batch.Transaction(from.GetHash()).GetStatus()
 	if err != nil {
-		return errors.Format(errors.StatusUnknown, "load status: %w", err)
+		return errors.Format(errors.StatusUnknownError, "load status: %w", err)
 	}
 
 	// Set the refund amount
@@ -129,7 +129,7 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 	// Store the transaction, its status, and the initiator
 	err = m.putSyntheticTransaction(
 		batch, txn,
-		&protocol.TransactionStatus{Remote: true},
+		&protocol.TransactionStatus{Code: errors.StatusRemote},
 		initSig)
 	if err != nil {
 		return nil, err
@@ -174,19 +174,19 @@ func (x *Executor) buildSynthReceipt(batch *database.Batch, produced []*protocol
 	// Load the root chain
 	chain, err := batch.Account(x.Describe.Ledger()).ReadChain(protocol.MinorRootChain)
 	if err != nil {
-		return errors.Format(errors.StatusUnknown, "load root chain: %w", err)
+		return errors.Format(errors.StatusUnknownError, "load root chain: %w", err)
 	}
 
 	// Prove the synthetic transaction chain anchor
 	rootProof, err := chain.Receipt(int64(synthAnchor), int64(rootAnchor))
 	if err != nil {
-		return errors.Format(errors.StatusUnknown, "prove from %d to %d on the root chain: %w", synthAnchor, rootAnchor, err)
+		return errors.Format(errors.StatusUnknownError, "prove from %d to %d on the root chain: %w", synthAnchor, rootAnchor, err)
 	}
 
 	// Load the synthetic transaction chain
 	chain, err = batch.Account(x.Describe.Synthetic()).ReadChain(protocol.MainChain)
 	if err != nil {
-		return errors.Format(errors.StatusUnknown, "load root chain: %w", err)
+		return errors.Format(errors.StatusUnknownError, "load root chain: %w", err)
 	}
 
 	synthStart := chain.Height() - int64(len(produced))
@@ -198,11 +198,11 @@ func (x *Executor) buildSynthReceipt(batch *database.Batch, produced []*protocol
 		record := batch.Transaction(transaction.GetHash())
 		status, err := record.GetStatus()
 		if err != nil {
-			return errors.Format(errors.StatusUnknown, "load synthetic transaction status: %w", err)
+			return errors.Format(errors.StatusUnknownError, "load synthetic transaction status: %w", err)
 		}
 		sigs, err := GetAllSignatures(batch, record, status, transaction.Header.Initiator[:])
 		if err != nil {
-			return errors.Format(errors.StatusUnknown, "load synthetic transaction signatures: %w", err)
+			return errors.Format(errors.StatusUnknownError, "load synthetic transaction signatures: %w", err)
 		}
 		if len(sigs) == 0 {
 			return errors.Format(errors.StatusInternalError, "synthetic transaction %X does not have a synthetic origin signature", transaction.GetHash()[:4])
@@ -214,12 +214,12 @@ func (x *Executor) buildSynthReceipt(batch *database.Batch, produced []*protocol
 		// Prove it
 		synthProof, err := chain.Receipt(int64(i+int(synthStart)), int64(synthEnd))
 		if err != nil {
-			return errors.Format(errors.StatusUnknown, "prove from %d to %d on the synthetic transaction chain: %w", i+int(synthStart), synthEnd, err)
+			return errors.Format(errors.StatusUnknownError, "prove from %d to %d on the synthetic transaction chain: %w", i+int(synthStart), synthEnd, err)
 		}
 
 		r, err := synthProof.Combine(rootProof)
 		if err != nil {
-			return errors.Format(errors.StatusUnknown, "combine receipts: %w", err)
+			return errors.Format(errors.StatusUnknownError, "combine receipts: %w", err)
 		}
 
 		proofSig := new(protocol.ReceiptSignature)
@@ -235,11 +235,11 @@ func (x *Executor) buildSynthReceipt(batch *database.Batch, produced []*protocol
 			Signature: proofSig,
 		})
 		if err != nil {
-			return errors.Format(errors.StatusUnknown, "store signature: %w", err)
+			return errors.Format(errors.StatusUnknownError, "store signature: %w", err)
 		}
 		_, err = batch.Transaction(transaction.GetHash()).AddSystemSignature(&x.Describe, proofSig)
 		if err != nil {
-			return errors.Format(errors.StatusUnknown, "record receipt for %X: %w", transaction.GetHash()[:4], err)
+			return errors.Format(errors.StatusUnknownError, "record receipt for %X: %w", transaction.GetHash()[:4], err)
 		}
 	}
 
