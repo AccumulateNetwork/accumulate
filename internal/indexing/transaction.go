@@ -4,17 +4,18 @@ import (
 	"errors"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 // TransactionChainIndexer indexes account chains against a transaction.
 type TransactionChainIndexer struct {
-	value *database.ValueAs[*TransactionChainIndex]
+	value database.Value[*TransactionChainIndex]
 }
 
 // TransactionChain returns a transaction chain indexer.
 func TransactionChain(batch *database.Batch, txid []byte) *TransactionChainIndexer {
-	v := database.TransactionIndex(batch, txid, newfn[TransactionChainIndex](), "Chains")
+	v := database.TransactionIndex(batch, txid, true, record.Struct[TransactionChainIndex](), "Chains")
 	return &TransactionChainIndexer{v}
 }
 

@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -22,6 +23,22 @@ func (b *Batch) Transaction(id []byte) *Transaction {
 	return &Transaction{b, transaction(id), *(*[32]byte)(id)}
 }
 
+func (t *Transaction) main() Value[*SigOrTxn] {
+	return getOrCreateValue(t.batch, t.key.State(), false, record.Struct[SigOrTxn]())
+}
+
+func (t *Transaction) status() Value[*protocol.TransactionStatus] {
+	return getOrCreateValue(t.batch, t.key.Status(), true, record.Struct[protocol.TransactionStatus]())
+}
+
+func (t *Transaction) signatures(signer *url.URL) Value[*sigSetData] {
+	return getOrCreateValue(t.batch, t.key.Signatures(signer), true, record.Struct[sigSetData]())
+}
+
+func (t *Transaction) synthTxns() Value[*protocol.TxIdSet] {
+	return getOrCreateValue(t.batch, t.key.Synthetic(), true, record.Struct[protocol.TxIdSet]())
+}
+
 // ensureSigner ensures that the transaction's status includes the given signer.
 func (t *Transaction) ensureSigner(signer protocol.Signer) error {
 	status, err := t.GetStatus()
@@ -35,8 +52,7 @@ func (t *Transaction) ensureSigner(signer protocol.Signer) error {
 
 // GetState loads the transaction state.
 func (t *Transaction) GetState() (*SigOrTxn, error) {
-	v := new(SigOrTxn)
-	err := t.batch.getValuePtr(t.key.State(), v, &v, false)
+	v, err := t.main().Get()
 	if err == nil {
 		return v, nil
 	}
@@ -48,18 +64,12 @@ func (t *Transaction) GetState() (*SigOrTxn, error) {
 
 // PutState stores the transaction state.
 func (t *Transaction) PutState(v *SigOrTxn) error {
-	t.batch.putValue(t.key.State(), v)
-	return nil
+	return t.main().Put(v)
 }
 
 // GetStatus loads the transaction status.
 func (t *Transaction) GetStatus() (*protocol.TransactionStatus, error) {
-	v := new(protocol.TransactionStatus)
-	err := t.batch.getValuePtr(t.key.Status(), v, &v, true)
-	if err != nil && !errors.Is(err, storage.ErrNotFound) {
-		return nil, err
-	}
-	return v, nil
+	return t.status().Get()
 }
 
 // PutStatus stores the transaction status.
@@ -68,7 +78,10 @@ func (t *Transaction) PutStatus(v *protocol.TransactionStatus) error {
 		v.Result = new(protocol.EmptyResult)
 	}
 
-	t.batch.putValue(t.key.Status(), v)
+	err := t.status().Put(v)
+	if err != nil {
+		return err
+	}
 
 	// TODO Why?
 	if !v.Pending() {
@@ -166,19 +179,13 @@ func (t *Transaction) newSigSet(signer *url.URL, writable bool) (*SignatureSet, 
 // GetSyntheticTxns loads the IDs of synthetic transactions produced by the
 // transaction.
 func (t *Transaction) GetSyntheticTxns() (*protocol.TxIdSet, error) {
-	v := new(protocol.TxIdSet)
-	err := t.batch.getValuePtr(t.key.Synthetic(), v, &v, true)
-	if err != nil && !errors.Is(err, storage.ErrNotFound) {
-		return nil, err
-	}
-	return v, nil
+	return t.synthTxns().Get()
 }
 
 // PutSyntheticTxns stores the IDs of synthetic transactions produced by the
 // transaction.
 func (t *Transaction) PutSyntheticTxns(v *protocol.TxIdSet) error {
-	t.batch.putValue(t.key.Synthetic(), v)
-	return nil
+	return t.synthTxns().Put(v)
 }
 
 // AddSyntheticTxns is a convenience method that calls GetSyntheticTxns, adds
