@@ -90,11 +90,11 @@ func unmarshalFromString[T any](fn func(string) (T, error)) ValueUnmarshaller[T]
 	return func(data []byte) (T, error) {
 		s, err := encoding.StringUnmarshalBinary(data)
 		if err != nil {
-			return zero[T](), errors.Wrap(errors.StatusUnknown, err)
+			return zero[T](), errors.Wrap(errors.StatusUnknownError, err)
 		}
 		v, err := fn(s)
 		if err != nil {
-			return zero[T](), errors.Wrap(errors.StatusUnknown, err)
+			return zero[T](), errors.Wrap(errors.StatusUnknownError, err)
 		}
 		return v, nil
 	}

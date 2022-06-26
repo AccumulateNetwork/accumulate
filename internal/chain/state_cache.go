@@ -64,7 +64,7 @@ func (c *stateCache) LoadUrl(account *url.URL) (protocol.Account, error) {
 
 	state, err := c.batch.Account(account).GetState()
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknown, "load %v: %w", account, err)
+		return nil, errors.Format(errors.StatusUnknownError, "load %v: %w", account, err)
 	}
 
 	c.chains[account.AccountID32()] = state
@@ -143,7 +143,7 @@ func (st *stateCache) createOrUpdate(isUpdate bool, accounts []protocol.Account)
 		_, err := rec.GetState()
 		switch {
 		case err != nil && !errors.Is(err, storage.ErrNotFound):
-			return errors.Format(errors.StatusUnknown, "failed to check for an existing record: %v", err)
+			return errors.Format(errors.StatusUnknownError, "failed to check for an existing record: %v", err)
 
 		case err == nil && isCreate:
 			return errors.Format(errors.StatusConflict, "account %v already exists", account.GetUrl())
@@ -164,13 +164,13 @@ func (st *stateCache) createOrUpdate(isUpdate bool, accounts []protocol.Account)
 		// Update/Create the state
 		err = rec.PutState(account)
 		if err != nil {
-			return errors.Format(errors.StatusUnknown, "failed to update state of %q: %v", account.GetUrl(), err)
+			return errors.Format(errors.StatusUnknownError, "failed to update state of %q: %v", account.GetUrl(), err)
 		}
 
 		// Add to the account's main chain
 		err = st.State.ChainUpdates.AddChainEntry(st.batch, account.GetUrl(), protocol.MainChain, protocol.ChainTypeTransaction, st.txHash[:], 0, 0)
 		if err != nil {
-			return errors.Format(errors.StatusUnknown, "failed to update main chain of %q: %v", account.GetUrl(), err)
+			return errors.Format(errors.StatusUnknownError, "failed to update main chain of %q: %v", account.GetUrl(), err)
 		}
 
 		// Add it to the directory
@@ -178,7 +178,7 @@ func (st *stateCache) createOrUpdate(isUpdate bool, accounts []protocol.Account)
 			u := account.GetUrl()
 			err = st.AddDirectoryEntry(u.Identity(), u)
 			if err != nil {
-				return errors.Format(errors.StatusUnknown, "failed to add a directory entry for %q: %v", u, err)
+				return errors.Format(errors.StatusUnknownError, "failed to add a directory entry for %q: %v", u, err)
 			}
 		}
 

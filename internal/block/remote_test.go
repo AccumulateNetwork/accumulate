@@ -22,13 +22,8 @@ func doSha256(data []byte) []byte {
 	return hash[:]
 }
 
-func delivered(status *protocol.TransactionStatus) bool {
-	return status.Delivered
-}
-
-func pending(status *protocol.TransactionStatus) bool {
-	return status.Pending
-}
+var delivered = (*protocol.TransactionStatus).Delivered
+var pending = (*protocol.TransactionStatus).Pending
 
 func SetupForRemoteSignatures(sim *simulator.Simulator, timestamp *uint64, alice, bob, charlie ed25519.PrivateKey) {
 	aliceTm := tmed25519.PrivKey(alice)

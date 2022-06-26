@@ -388,11 +388,11 @@ func (s *Simulator) MustSubmitAndExecuteBlock(envelopes ...*protocol.Envelope) [
 
 	var didFail bool
 	for _, status := range status {
-		if status.Code == 0 {
+		if status.Code.Success() {
 			continue
 		}
 
-		assert.Zero(s, status.Code, status.Message)
+		assert.False(s, status.Failed())
 		didFail = true
 	}
 	if didFail {
@@ -407,7 +407,7 @@ func (s *Simulator) SubmitAndExecuteBlock(envelopes ...*protocol.Envelope) ([]*p
 
 	_, err := s.Submit(envelopes...)
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknown, err)
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	ids := map[[32]byte]bool{}
@@ -426,12 +426,12 @@ func (s *Simulator) SubmitAndExecuteBlock(envelopes ...*protocol.Envelope) ([]*p
 
 	status := make([]*protocol.TransactionStatus, 0, len(envelopes))
 	for s := range ch1 {
-		if ids[s.For] {
+		if ids[s.TxID.Hash()] {
 			status = append(status, s)
 		}
 	}
 	for s := range ch2 {
-		if ids[s.For] {
+		if ids[s.TxID.Hash()] {
 			status = append(status, s)
 		}
 	}
@@ -506,15 +506,13 @@ func (s *Simulator) WaitForTransactionFlow(statusCheck func(*protocol.Transactio
 		panic("unreachable")
 	}
 
-	status.For = *(*[32]byte)(txnHash)
+	status.TxID = txn.ID()
 	statuses := []*protocol.TransactionStatus{status}
 	transactions := []*protocol.Transaction{txn}
 	for _, id := range synth {
 		// Wait for synthetic transactions to be delivered
 		id := id.Hash()
-		st, txn := s.WaitForTransactionFlow(func(status *protocol.TransactionStatus) bool {
-			return status.Delivered
-		}, id[:]) //nolint:rangevarref
+		st, txn := s.WaitForTransactionFlow((*protocol.TransactionStatus).Delivered, id[:]) //nolint:rangevarref
 		statuses = append(statuses, st...)
 		transactions = append(transactions, txn...)
 	}
@@ -614,22 +612,22 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 			status, err := delivery.LoadTransaction(block.Batch)
 			if errors.Is(err, errors.StatusDelivered) {
 				if statusChan != nil {
-					status.For = *(*[32]byte)(delivery.Transaction.GetHash())
+					status.TxID = delivery.Transaction.ID()
 					statusChan <- status
 				}
 				continue
 			}
 			if err != nil {
-				return errors.Wrap(errors.StatusUnknown, err)
+				return errors.Wrap(errors.StatusUnknownError, err)
 			}
 
 			status, err = x.Executor.ExecuteEnvelope(block, delivery)
 			if err != nil {
-				return errors.Wrap(errors.StatusUnknown, err)
+				return errors.Wrap(errors.StatusUnknownError, err)
 			}
 
 			if statusChan != nil {
-				status.For = *(*[32]byte)(delivery.Transaction.GetHash())
+				status.TxID = delivery.Transaction.ID()
 				statusChan <- status
 			}
 		}

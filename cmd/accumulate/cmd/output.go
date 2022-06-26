@@ -37,7 +37,7 @@ func PrintJsonRpcError(err error) (string, error) {
 			out += fmt.Sprintf("\tDetail\t\t:\t%s\n", e.Data)
 			return "", &JsonRpcError{Err: e, Msg: out}
 		}
-	case *errors2.Error, *protocol.Error:
+	case *errors2.Error:
 		return "", e
 	default:
 		return "", fmt.Errorf("error with request, %v", err)
@@ -62,7 +62,7 @@ func printOutput(cmd *cobra.Command, out string, err error) {
 	// Check if the error is an action response error
 	var v interface{}
 	switch err.(type) {
-	case *ActionResponseError, *errors2.Error, *protocol.Error:
+	case *ActionResponseError, *errors2.Error:
 		v = err
 	default:
 		v = err.Error()

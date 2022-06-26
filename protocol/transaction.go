@@ -4,9 +4,26 @@ import (
 	"math/big"
 	"sort"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/sortutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
+
+func (s *TransactionStatus) Delivered() bool { return s.Code == errors.StatusDelivered || s.Failed() }
+func (s *TransactionStatus) Remote() bool    { return s.Code == errors.StatusRemote }
+func (s *TransactionStatus) Pending() bool   { return s.Code == errors.StatusPending }
+func (s *TransactionStatus) Failed() bool    { return !s.Code.Success() }
+func (s *TransactionStatus) CodeNum() uint64 { return uint64(s.Code) }
+
+// Set sets the status code and the error.
+func (s *TransactionStatus) Set(err error) {
+	s.Error = errors.Wrap(errors.StatusUnknownError, err).(*errors.Error)
+	if s.Error.Code == 0 {
+		s.Code = errors.StatusUnknownError
+	} else {
+		s.Code = s.Error.Code
+	}
+}
 
 // AddSigner adds a signer to the object's list of signer using a binary search
 // to ensure ordering.

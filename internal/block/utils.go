@@ -149,7 +149,7 @@ func (*Executor) GetAccountAuthoritySet(batch *database.Batch, account protocol.
 		var book *protocol.KeyBook
 		err := batch.Account(bookUrl).GetStateAs(&book)
 		if err != nil {
-			return nil, errors.Wrap(errors.StatusUnknown, err)
+			return nil, errors.Wrap(errors.StatusUnknownError, err)
 		}
 		return book.GetAuth(), nil
 

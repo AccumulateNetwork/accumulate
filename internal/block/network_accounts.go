@@ -77,7 +77,7 @@ func (x *Executor) processNetworkAccountUpdates(batch *database.Batch, delivery 
 			return nil
 		}
 		if err != nil {
-			return errors.Wrap(errors.StatusUnknown, err)
+			return errors.Wrap(errors.StatusUnknownError, err)
 		}
 
 		// Force WriteToState for variable accounts
@@ -101,7 +101,7 @@ func (x *Executor) processNetworkAccountUpdates(batch *database.Batch, delivery 
 	record := batch.Account(x.Describe.Ledger())
 	err := record.GetStateAs(&ledger)
 	if err != nil {
-		return errors.Format(errors.StatusUnknown, "load ledger: %w", err)
+		return errors.Format(errors.StatusUnknownError, "load ledger: %w", err)
 	}
 
 	var update protocol.NetworkAccountUpdate
@@ -111,7 +111,7 @@ func (x *Executor) processNetworkAccountUpdates(batch *database.Batch, delivery 
 
 	err = record.PutState(ledger)
 	if err != nil {
-		return errors.Format(errors.StatusUnknown, "store ledger: %w", err)
+		return errors.Format(errors.StatusUnknownError, "store ledger: %w", err)
 	}
 
 	return nil

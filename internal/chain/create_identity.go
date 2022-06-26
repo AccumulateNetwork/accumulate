@@ -138,7 +138,7 @@ func (CreateIdentity) Validate(st *StateManager, tx *Delivery) (protocol.Transac
 	// If the ADI is local, create it directly
 	err = st.Create(accounts...)
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknown, "failed to create %v: %v", body.Url, err)
+		return nil, errors.Format(errors.StatusUnknownError, "failed to create %v: %v", body.Url, err)
 	}
 
 	return nil, nil
