@@ -66,8 +66,7 @@ SYNTH=`accumulate tx get -j ${TXID} | jq -re '.produced[0]' | hash-from-txid`
 STATUS=`accumulate tx get -j ${SYNTH} | jq --indent 0 .status`
 echo $STATUS
 [ $(echo $STATUS | jq -re .delivered) = "true" ] || die "Synthetic transaction was not delivered"
-[ $(echo $STATUS | jq -re '.code // 0') -ne 0 ] || die "Synthetic transaction did not fail"
-echo $STATUS | jq -re .message 1> /dev/null || die "Synthetic transaction does not have a message"
+[ $(echo $STATUS | jq -re '.failed // "false"') = "true" ] || die "Synthetic transaction did not fail"
 success
 
 section "Add credits to the ADI's key page 1"
@@ -182,7 +181,8 @@ wait-for-tx $TXID
 success
 
 section "Signing the transaction after it has been delivered fails"
-cli-tx-sig tx sign test.acme/tokens test-2-2 $TXID && die "Signed the transaction after it was delivered" || success
+JSON=$(cli-run tx sign test.acme/tokens test-2-2 $TXID) || die "Failed to sign transaction"
+jq -e .result.error <<< "${JSON}" && success || die "Signed the transaction after it was delivered"
 
 section "API v2 faucet (AC-570)"
 BEFORE=$(accumulate -j account get ${LITE_ACME} | jq -r .data.balance)

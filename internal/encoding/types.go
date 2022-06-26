@@ -8,6 +8,13 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 )
 
+type Error struct {
+	E error
+}
+
+func (e Error) Error() string { return e.E.Error() }
+func (e Error) Unwrap() error { return e.E }
+
 type EnumValueGetter interface {
 	GetEnumValue() uint64
 }

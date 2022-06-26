@@ -7,6 +7,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -88,8 +89,7 @@ func (e NetEngine) Submit(envelope *protocol.Envelope) (*protocol.TransactionSta
 	}
 
 	status = new(protocol.TransactionStatus)
-	status.Code = resp.Code
-	status.Message = resp.Message
+	status.Set(errors.New(errors.StatusUnknownError, "unknown"))
 	return status, nil
 }
 
@@ -107,7 +107,7 @@ func (e NetEngine) waitFor(hash [32]byte, ignorePending bool) ([]*protocol.Trans
 		return nil, nil, err
 	}
 
-	resp.Status.For = hash
+	resp.Status.TxID = resp.Transaction.ID()
 	statuses := []*protocol.TransactionStatus{resp.Status}
 	transactions := []*protocol.Transaction{resp.Transaction}
 	for _, hash := range resp.Produced {
