@@ -11,9 +11,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-func delivered(status *protocol.TransactionStatus) bool {
-	return status.Delivered
-}
+var delivered = (*protocol.TransactionStatus).Delivered
 
 func TestDatabaseQueryLayer_QueryState(t *testing.T) {
 	// Initialize

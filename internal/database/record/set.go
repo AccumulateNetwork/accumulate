@@ -33,14 +33,14 @@ func (s *Set[T]) Put(u []T) error {
 	})
 
 	err := s.Value.Put(u)
-	return errors.Wrap(errors.StatusUnknown, err)
+	return errors.Wrap(errors.StatusUnknownError, err)
 }
 
 // Add inserts values into the set, sorted.
 func (s *Set[T]) Add(v ...T) error {
 	l, err := s.Get()
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
+		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	for _, v := range v {
@@ -49,14 +49,14 @@ func (s *Set[T]) Add(v ...T) error {
 	}
 
 	err = s.Value.Put(l)
-	return errors.Wrap(errors.StatusUnknown, err)
+	return errors.Wrap(errors.StatusUnknownError, err)
 }
 
 // Remove removes a value from the set.
 func (s *Set[T]) Remove(v T) error {
 	l, err := s.Get()
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
+		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	i, found := sortutil.Search(l, func(u T) int { return s.compare(u, v) })
@@ -66,14 +66,14 @@ func (s *Set[T]) Remove(v T) error {
 	l = append(l[:i], l[i+1:]...)
 
 	err = s.Value.Put(l)
-	return errors.Wrap(errors.StatusUnknown, err)
+	return errors.Wrap(errors.StatusUnknownError, err)
 }
 
 // Index returns the index of the value.
 func (s *Set[T]) Index(v T) (int, error) {
 	l, err := s.Get()
 	if err != nil {
-		return 0, errors.Wrap(errors.StatusUnknown, err)
+		return 0, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	i, found := sortutil.Search(l, func(u T) int { return s.compare(u, v) })
@@ -88,7 +88,7 @@ func (s *Set[T]) Index(v T) (int, error) {
 func (s *Set[T]) Find(v T) (T, error) {
 	l, err := s.Get()
 	if err != nil {
-		return zero[T](), errors.Wrap(errors.StatusUnknown, err)
+		return zero[T](), errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	i, found := sortutil.Search(l, func(u T) int { return s.compare(u, v) })
@@ -113,7 +113,7 @@ func (s *Set[T]) Commit() error {
 		return nil
 	}
 	err := s.Value.Commit()
-	return errors.Wrap(errors.StatusUnknown, err)
+	return errors.Wrap(errors.StatusUnknownError, err)
 }
 
 // sliceValue uses an encoder to manage a slice.
@@ -151,7 +151,7 @@ func (v *sliceValue[T]) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 	marshalSlice(writer, v.encoder, v.value)
 	_, _, err := writer.Reset(nil)
-	return buffer.Bytes(), errors.Wrap(errors.StatusUnknown, err)
+	return buffer.Bytes(), errors.Wrap(errors.StatusUnknownError, err)
 }
 
 func (v *sliceValue[T]) UnmarshalBinary(data []byte) error {
@@ -162,7 +162,7 @@ func (v *sliceValue[T]) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 	v.value = unmarshalSlice(reader, v.encoder)
 	_, err := reader.Reset(nil)
-	return errors.Wrap(errors.StatusUnknown, err)
+	return errors.Wrap(errors.StatusUnknownError, err)
 }
 
 // marshalSlice uses an encodable value to marshal a slice. If this

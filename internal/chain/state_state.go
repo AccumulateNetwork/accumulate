@@ -81,7 +81,7 @@ func (c *ChainUpdates) DidAddChainEntry(batch *database.Batch, u *url.URL, name 
 				ChainEntry:  index,
 			})
 			if err != nil {
-				return errors.Format(errors.StatusUnknown, "load block state: %w", err)
+				return errors.Format(errors.StatusUnknownError, "load block state: %w", err)
 			}
 		}
 	}
@@ -104,19 +104,19 @@ func (c *ChainUpdates) AddChainEntry(batch *database.Batch, account *url.URL, na
 	// Check if the account exists
 	_, err := batch.Account(account).GetState()
 	if err != nil {
-		return errors.Format(errors.StatusUnknown, "load account state: %w", err)
+		return errors.Format(errors.StatusUnknownError, "load account state: %w", err)
 	}
 
 	// Add an entry to the chain
 	chain, err := batch.Account(account).Chain(name, typ)
 	if err != nil {
-		return errors.Format(errors.StatusUnknown, "load %s chain: %w", name, err)
+		return errors.Format(errors.StatusUnknownError, "load %s chain: %w", name, err)
 	}
 
 	index := chain.Height()
 	err = chain.AddEntry(entry, true)
 	if err != nil {
-		return errors.Format(errors.StatusUnknown, "add entry to %s chain: %w", name, err)
+		return errors.Format(errors.StatusUnknownError, "add entry to %s chain: %w", name, err)
 	}
 
 	// The entry was a duplicate, do not update the ledger

@@ -136,7 +136,7 @@ func (m *JrpcMethods) Describe(_ context.Context, params json.RawMessage) interf
 		})
 	})
 	if err != nil {
-		res.Error = errors.Wrap(errors.StatusUnknown, err).(*errors.Error)
+		res.Error = errors.Wrap(errors.StatusUnknownError, err).(*errors.Error)
 	}
 
 	return res

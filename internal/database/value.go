@@ -25,7 +25,7 @@ func (v *ValueAs[T]) Get() (T, error) {
 	value := v.new()
 	err := v.batch.getValuePtr(v.key, value, &value, false)
 	if err != nil {
-		return zero, errors.Wrap(errors.StatusUnknown, err)
+		return zero, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	return value, nil
