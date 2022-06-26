@@ -100,7 +100,7 @@ func NormalizeEnvelope(envelope *protocol.Envelope) ([]*Delivery, error) {
 	for _, delivery := range txnList {
 		// A transaction with no signatures is invalid
 		if len(delivery.Signatures) == 0 {
-			return nil, protocol.Errorf(protocol.ErrorCodeInvalidRequest, "the envelope does not contain any signatures matching transaction %X (%v)", delivery.Transaction.GetHash()[:8], delivery.Transaction.Body.Type())
+			return nil, errors.Format(errors.StatusBadRequest, "the envelope does not contain any signatures matching transaction %X (%v)", delivery.Transaction.GetHash()[:8], delivery.Transaction.Body.Type())
 		}
 	}
 
@@ -210,15 +210,15 @@ func (d *Delivery) LoadTransaction(batch *database.Batch) (*protocol.Transaction
 	switch {
 	case err != nil:
 		// Unknown error
-		return nil, errors.Format(errors.StatusUnknown, "load transaction status: %w", err)
+		return nil, errors.Format(errors.StatusUnknownError, "load transaction status: %w", err)
 
-	case status.Delivered:
+	case status.Delivered():
 		// Transaction has already been delivered
 		return status, errors.Format(errors.StatusDelivered, "transaction %X has been delivered", d.Transaction.GetHash()[:4])
 	}
 
 	// Ignore produced synthetic transactions
-	if status.Remote && !status.Pending {
+	if status.Remote() {
 		return status, nil
 	}
 
@@ -230,7 +230,7 @@ func (d *Delivery) LoadTransaction(batch *database.Batch) (*protocol.Transaction
 		return status, nil
 	} else if !errors.Is(err, storage.ErrNotFound) {
 		// Unknown error
-		return nil, errors.Format(errors.StatusUnknown, "load transaction: %w", err)
+		return nil, errors.Format(errors.StatusUnknownError, "load transaction: %w", err)
 	}
 
 	// Did the envelope include the full body?
@@ -269,7 +269,7 @@ func (d *Delivery) LoadSyntheticMetadata(batch *database.Batch, status *protocol
 	// Load the initiator signature set
 	sigset, err := batch.Transaction(d.Transaction.GetHash()).ReadSignatures(status.Initiator)
 	if err != nil {
-		return errors.Format(errors.StatusUnknown, "load transaction: load initiator: %w", err)
+		return errors.Format(errors.StatusUnknownError, "load transaction: load initiator: %w", err)
 	}
 
 	var sigHash []byte
@@ -285,7 +285,7 @@ func (d *Delivery) LoadSyntheticMetadata(batch *database.Batch, status *protocol
 
 	state, err := batch.Transaction(sigHash).GetState()
 	if err != nil {
-		return errors.Format(errors.StatusUnknown, "load transaction: load synthetic origin signature: %w", err)
+		return errors.Format(errors.StatusUnknownError, "load transaction: load synthetic origin signature: %w", err)
 	}
 
 	signature, ok := state.Signature.(*protocol.SyntheticSignature)

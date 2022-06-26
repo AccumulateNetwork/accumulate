@@ -8,9 +8,6 @@ import (
 	"strings"
 )
 
-// StatusUnknown means the status is unknown.
-const StatusUnknown Status = 0
-
 // StatusOK means the request completed successfully.
 const StatusOK Status = 200
 
@@ -53,6 +50,12 @@ const StatusBadTimestamp Status = 412
 // StatusInternalError means an internal error occured.
 const StatusInternalError Status = 500
 
+// StatusUnknownError means an unknown error occured.
+const StatusUnknownError Status = 501
+
+// StatusEncodingError means encoding or decoding failed.
+const StatusEncodingError Status = 502
+
 // GetEnumValue returns the value of the Status
 func (v Status) GetEnumValue() uint64 { return uint64(v) }
 
@@ -60,7 +63,7 @@ func (v Status) GetEnumValue() uint64 { return uint64(v) }
 func (v *Status) SetEnumValue(id uint64) bool {
 	u := Status(id)
 	switch u {
-	case StatusUnknown, StatusOK, StatusDelivered, StatusPending, StatusRemote, StatusWrongPartition, StatusBadRequest, StatusUnauthenticated, StatusInsufficientCredits, StatusUnauthorized, StatusNotFound, StatusConflict, StatusBadSignerVersion, StatusBadTimestamp, StatusInternalError:
+	case StatusOK, StatusDelivered, StatusPending, StatusRemote, StatusWrongPartition, StatusBadRequest, StatusUnauthenticated, StatusInsufficientCredits, StatusUnauthorized, StatusNotFound, StatusConflict, StatusBadSignerVersion, StatusBadTimestamp, StatusInternalError, StatusUnknownError, StatusEncodingError:
 		*v = u
 		return true
 	default:
@@ -71,8 +74,6 @@ func (v *Status) SetEnumValue(id uint64) bool {
 // String returns the name of the Status.
 func (v Status) String() string {
 	switch v {
-	case StatusUnknown:
-		return "unknown"
 	case StatusOK:
 		return "ok"
 	case StatusDelivered:
@@ -101,6 +102,10 @@ func (v Status) String() string {
 		return "badTimestamp"
 	case StatusInternalError:
 		return "internalError"
+	case StatusUnknownError:
+		return "unknownError"
+	case StatusEncodingError:
+		return "encodingError"
 	default:
 		return fmt.Sprintf("Status:%d", v)
 	}
@@ -109,8 +114,6 @@ func (v Status) String() string {
 // StatusByName returns the named Status.
 func StatusByName(name string) (Status, bool) {
 	switch strings.ToLower(name) {
-	case "unknown":
-		return StatusUnknown, true
 	case "ok":
 		return StatusOK, true
 	case "delivered":
@@ -139,6 +142,10 @@ func StatusByName(name string) (Status, bool) {
 		return StatusBadTimestamp, true
 	case "internalerror":
 		return StatusInternalError, true
+	case "unknownerror":
+		return StatusUnknownError, true
+	case "encodingerror":
+		return StatusEncodingError, true
 	default:
 		return 0, false
 	}

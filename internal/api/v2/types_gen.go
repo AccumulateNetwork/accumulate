@@ -383,10 +383,10 @@ func (v *DataEntryQuery) MarshalBinary() ([]byte, error) {
 
 	_, _, err := writer.Reset(fieldNames_DataEntryQuery)
 	if err != nil {
-		return nil, err
+		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), err
+	return buffer.Bytes(), nil
 }
 
 func (v *DataEntryQuery) IsValid() error {
@@ -426,10 +426,10 @@ func (v *DataEntryQueryResponse) MarshalBinary() ([]byte, error) {
 
 	_, _, err := writer.Reset(fieldNames_DataEntryQueryResponse)
 	if err != nil {
-		return nil, err
+		return nil, encoding.Error{E: err}
 	}
 	buffer.Write(v.extraData)
-	return buffer.Bytes(), err
+	return buffer.Bytes(), nil
 }
 
 func (v *DataEntryQueryResponse) IsValid() error {
@@ -472,11 +472,14 @@ func (v *DataEntryQuery) UnmarshalBinaryFrom(rd io.Reader) error {
 
 	seen, err := reader.Reset(fieldNames_DataEntryQuery)
 	if err != nil {
-		return err
+		return encoding.Error{E: err}
 	}
 	v.fieldsSet = seen
 	v.extraData, err = reader.ReadAll()
-	return err
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
 }
 
 func (v *DataEntryQueryResponse) UnmarshalBinary(data []byte) error {
@@ -499,11 +502,14 @@ func (v *DataEntryQueryResponse) UnmarshalBinaryFrom(rd io.Reader) error {
 
 	seen, err := reader.Reset(fieldNames_DataEntryQueryResponse)
 	if err != nil {
-		return err
+		return encoding.Error{E: err}
 	}
 	v.fieldsSet = seen
 	v.extraData, err = reader.ReadAll()
-	return err
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
 }
 
 func (v *ChainEntry) MarshalJSON() ([]byte, error) {

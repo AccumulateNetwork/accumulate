@@ -5,110 +5,12 @@ ErrorCode:
   EncodingError:
     value: 1
     description: indicates something could not be decoded or encoded
-  BadNonce:
+  Failed:
     value: 2
-    description: indicates the transaction nonce was rejected
+    description: indicates the request failed
   DidPanic:
     value: 3
     description: indicates the request failed due to a fatal error
   UnknownError:
     value: 4
     description: indicates the request failed due to an unknown error
-  NotFound:
-    value: 5
-    description: indicates the request specified a record that does not exist
-
-  InvalidRequest:
-    value: 27
-    description: indicates the request was invalid
-  InvalidSignature:
-    value: 28
-    description: indicates an envelope signature was invalid
-  InsufficientCredits:
-    value: 29
-    description: indicates the signer does not have sufficient credits to execute the transaction
-  BadVersion:
-    value: 30
-    description: indicates the signature refers to an out of date version of the signer
-  Internal:
-    value: 31
-    description: indicates an internal error
-  AlreadyDelivered:
-    value: 32
-    description: indicates the transaction has already been delivered
-  Unauthorized:
-    value: 33
-    description: indicates the signer is not authorized to sign a transaction
-  QueryChainUpdatesError:
-    value: 34
-    description: is returned when chain-updates query fails
-  QueryEntriesError:
-    value: 35
-    description: is returned when entries query fails
-  BackdoorTxnError:
-    value: 36
-    description: is returned when a txn is submitted from an incorrect bvn
-
-  TxnRange:
-    value: 6
-    description: is returned when txn range query fails
-  TxnHistory:
-    value: 7
-    description: is returned when txn history query fails
-  InvalidURL:
-    value: 8
-    description: is returned when invalid URL is passed in query
-  DirectoryURL:
-    value: 9
-    description: is returned when invalid directory URL is passed in query
-  ChainIdError:
-    value: 10
-    description: is returned when query by in id fails
-  RoutingChainId:
-    value: 11
-    description: is returned when setting routing chain id fails
-  CheckTxError:
-    value: 12
-    description: is returned when txn validation check fails
-  DeliverTxError:
-    value: 13
-    description: is returned when txn deliver method fails
-  TxnStateError:
-    value: 14
-    description: is returned when adding txn to state fails
-  RecordTxnError:
-    value: 15
-    description: is returned when storing pending state updates fail
-  SyntheticTxnError:
-    value: 16
-    description: is returned when submit synthetic txn fails
-  MarshallingError:
-    value: 17
-    description: is returned when marshaling  object or binary fails
-  UnMarshallingError:
-    value: 18
-    description: is returned when unmarshaling  object or binary fails
-  InvalidQueryType:
-    value: 19
-    description: is returned when query type in request is not matched with the available ones
-  InvalidTxnType:
-    value: 20
-    description: is returned when txn type passed is not available
-  ValidateTxnError:
-    value: 21
-    description: is returned when execution validation of txn fails
-  InvalidTxnError:
-    value: 22
-    description: is returned when txn doesn't contains proper data
-  AddTxnError:
-    value: 23
-    description: is returned when adding txn to state db fails
-  DataUrlError:
-    value: 24
-    description: is returned when a url passed to a data query fails
-  DataEntryHashError:
-    value: 25
-    description: is returned when an entry hash query fails on a data chain
-  TxnQueryError:
-    value: 26
-    description: is returned when txn is not found
