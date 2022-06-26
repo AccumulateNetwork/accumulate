@@ -27,8 +27,7 @@ func (t *Transaction) state(full bool) (*transactionState, error) {
 	// Load signature sets
 	state.Signatures = make([]*sigSetData, len(state.State.Signers))
 	for i, signer := range state.State.Signers {
-		state.Signatures[i] = new(sigSetData)
-		err = t.batch.getValuePtr(t.key.Signatures(signer.GetUrl()), state.Signatures[i], &state.Signatures[i], false)
+		state.Signatures[i], err = t.signatures(signer.GetUrl()).Get()
 		if err != nil {
 			return nil, fmt.Errorf("load transaction %X signers %s: %w", t.id[:4], signer.GetUrl(), err)
 		}
