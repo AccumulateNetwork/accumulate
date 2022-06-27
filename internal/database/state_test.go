@@ -13,9 +13,9 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-func delivered(status *protocol.TransactionStatus) bool {
-	return status.Delivered
-}
+func init() { acctesting.EnableDebugFeatures() }
+
+var delivered = (*protocol.TransactionStatus).Delivered
 
 func TestState(t *testing.T) {
 	// Create some state
@@ -39,7 +39,7 @@ func TestState(t *testing.T) {
 	require.NoError(t, err)
 	defer f.Close()
 
-	bvn := sim.SubnetFor(aliceUrl)
+	bvn := sim.PartitionFor(aliceUrl)
 	var blockHash, bptRoot []byte
 	_ = bvn.Database.View(func(b *database.Batch) error {
 		blockHash, err = b.GetMinorRootChainAnchor(&bvn.Executor.Describe)

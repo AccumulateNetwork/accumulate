@@ -15,11 +15,15 @@ import (
 	"github.com/pelletier/go-toml"
 	"github.com/spf13/viper"
 	tm "github.com/tendermint/tendermint/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	etcd "go.etcd.io/etcd/client/v3"
 )
 
 //go:generate go run ../tools/cmd/gen-enum  --package config enums.yml
 //go:generate go run ../tools/cmd/gen-types --package config types.yml
+
+const PortOffsetDirectory = 0
+const PortOffsetBlockValidator = 100
 
 const (
 	configDir     = "config"
@@ -112,11 +116,11 @@ var DefaultLogLevels = LogLevel{}.
 	// SetModule("init", "info").
 	String()
 
-func Default(netName string, net NetworkType, node NodeType, subnetId string) *Config {
+func Default(netName string, net NetworkType, node NodeType, partitionId string) *Config {
 	c := new(Config)
 	c.Accumulate.Network.Id = netName
 	c.Accumulate.NetworkType = net
-	c.Accumulate.SubnetId = subnetId
+	c.Accumulate.PartitionId = partitionId
 	c.Accumulate.API.PrometheusServer = "http://18.119.26.7:9090"
 	c.Accumulate.SentryDSN = "https://glet_78c3bf45d009794a4d9b0c990a1f1ed5@gitlab.com/api/v4/error_tracking/collector/29762666"
 	c.Accumulate.Website.Enabled = true
@@ -127,6 +131,8 @@ func Default(netName string, net NetworkType, node NodeType, subnetId string) *C
 	c.Accumulate.Storage.Path = filepath.Join("data", "accumulate.db")
 	c.Accumulate.Snapshots.Directory = "snapshots"
 	c.Accumulate.Snapshots.RetainCount = 10
+	c.Accumulate.AnalysisLog.Directory = "analysis"
+	c.Accumulate.AnalysisLog.Enabled = false
 	// c.Accumulate.Snapshots.Frequency = 2
 	switch node {
 	case Validator:
@@ -150,10 +156,11 @@ type Accumulate struct {
 	Describe  `toml:"describe" mapstructure:"describe"`
 	// TODO: move network config to its own file since it will be constantly changing over time.
 	//	NetworkConfig string      `toml:"network" mapstructure:"network"`
-	Snapshots Snapshots `toml:"snapshots" mapstructure:"snapshots"`
-	Storage   Storage   `toml:"storage" mapstructure:"storage"`
-	API       API       `toml:"api" mapstructure:"api"`
-	Website   Website   `toml:"website" mapstructure:"website"`
+	Snapshots   Snapshots   `toml:"snapshots" mapstructure:"snapshots"`
+	Storage     Storage     `toml:"storage" mapstructure:"storage"`
+	API         API         `toml:"api" mapstructure:"api"`
+	Website     Website     `toml:"website" mapstructure:"website"`
+	AnalysisLog AnalysisLog `toml:"analysis" mapstructure:"analysis"`
 }
 
 type Snapshots struct {
@@ -166,6 +173,50 @@ type Snapshots struct {
 	// // Frequency is how many major blocks should occur before another snapshot
 	// // is taken
 	// Frequency int `toml:"frequency" mapstructure:"frequency"`
+}
+
+type AnalysisLog struct {
+	Directory  string `toml:"directory" mapstructure:"directory"`
+	Enabled    bool   `toml:"enabled" mapstructure:"enabled"`
+	dataSetLog *logging.DataSetLog
+}
+
+func (a *AnalysisLog) Init(workingDir string, partitionId string) {
+	if !a.Enabled {
+		return
+	}
+	a.dataSetLog = new(logging.DataSetLog)
+
+	a.dataSetLog.SetProcessName(partitionId)
+	if a.Enabled && a.Directory == "" {
+		a.Directory = "analysis"
+	}
+	analysisDir := MakeAbsolute(workingDir, a.Directory)
+	a.dataSetLog.SetPath(analysisDir)
+
+	_ = os.MkdirAll(analysisDir, 0700)
+
+	ymd, hm := logging.GetCurrentDateTime()
+	a.dataSetLog.SetFileTag(ymd, hm)
+}
+
+func (a *AnalysisLog) InitDataSet(dataSetName string, opts logging.Options) {
+	if a.dataSetLog != nil {
+		a.dataSetLog.Initialize(dataSetName, opts)
+	}
+}
+
+func (a *AnalysisLog) GetDataSet(dataSetName string) *logging.DataSet {
+	if a.dataSetLog != nil {
+		return a.dataSetLog.GetDataSet(dataSetName)
+	}
+	return nil
+}
+
+func (a *AnalysisLog) Flush() {
+	if a.dataSetLog != nil {
+		_, _ = a.dataSetLog.DumpDataSetToDiskFile()
+	}
 }
 
 type Storage struct {
@@ -219,21 +270,21 @@ func OffsetPort(addr string, basePort int, offset int) (*url.URL, error) {
 
 func (n *Network) GetBvnNames() []string {
 	var names []string
-	for _, subnet := range n.Subnets {
-		if subnet.Type == BlockValidator {
-			names = append(names, subnet.Id)
+	for _, partition := range n.Partitions {
+		if partition.Type == BlockValidator {
+			names = append(names, partition.Id)
 		}
 	}
 	return names
 }
 
-func (n *Network) GetSubnetByID(subnetID string) Subnet {
-	for _, subnet := range n.Subnets {
-		if subnet.Id == subnetID {
-			return subnet
+func (n *Network) GetPartitionByID(partitionID string) Partition {
+	for _, partition := range n.Partitions {
+		if partition.Id == partitionID {
+			return partition
 		}
 	}
-	panic(fmt.Sprintf("Subnet ID %s does not exist", subnetID))
+	panic(fmt.Sprintf("Partition ID %s does not exist", partitionID))
 }
 
 func Load(dir string) (*Config, error) {

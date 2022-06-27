@@ -3,41 +3,15 @@ package simulator
 import (
 	"encoding"
 	"os"
-	"time"
 
 	"github.com/stretchr/testify/require"
-	"github.com/tendermint/tendermint/crypto/ed25519"
-	tmtypes "github.com/tendermint/tendermint/types"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
-
-func InitGenesis(t TB, exec *Executor, genesisTime time.Time, genesisValues *core.GlobalValues, netValMap genesis.NetworkValidatorMap) genesis.Bootstrap {
-	t.Helper()
-
-	// Genesis
-	temp := memory.New(exec.Logger)
-	bootstrap, err := genesis.Init(temp, genesis.InitOpts{
-		Describe:            exec.Describe,
-		GenesisTime:         genesisTime,
-		NetworkValidatorMap: netValMap,
-		Logger:              exec.Logger,
-		GenesisGlobals:      genesisValues,
-		Validators: []tmtypes.GenesisValidator{
-			{PubKey: ed25519.PubKey(exec.Key[32:])},
-		},
-		Keys: [][]byte{exec.Key},
-	})
-	require.NoError(tb{t}, err)
-	return bootstrap
-}
 
 func InitFromSnapshot(t TB, db *database.Database, exec *Executor, filename string) {
 	t.Helper()
@@ -59,7 +33,7 @@ func CheckTx(t TB, db *database.Database, exec *Executor, delivery *chain.Delive
 
 	result, err := exec.ValidateEnvelope(batch, delivery)
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknown, err)
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 	if result == nil {
 		return new(protocol.EmptyResult), nil

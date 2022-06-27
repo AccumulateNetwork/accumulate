@@ -23,11 +23,11 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
 	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
+	"gitlab.com/accumulatenetwork/accumulate/internal/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
-	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
@@ -36,7 +36,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 )
 
 type FakeNode struct {
@@ -52,22 +51,19 @@ type FakeNode struct {
 	logger  log.Logger
 	router  routing.Router
 
-	assert    *assert.Assertions
-	require   *require.Assertions
-	netValMap genesis.NetworkValidatorMap
-	Bootstrap genesis.Bootstrap
-	kv        *memory.DB
+	assert       *assert.Assertions
+	require      *require.Assertions
+	nodeExecutor *block.Executor
 }
 
-func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulated.Daemon, openDb func(d *accumulated.Daemon) (*database.Database, error), doGenesis bool, errorHandler func(err error)) map[string][]*FakeNode {
+func RunTestNet(t *testing.T, partitions []string, daemons map[string][]*accumulated.Daemon, openDb func(d *accumulated.Daemon) (*database.Database, error), doGenesis bool, errorHandler func(err error)) map[string][]*FakeNode {
 	t.Helper()
 
 	allNodes := map[string][]*FakeNode{}
 	allChans := map[string][]chan<- abcitypes.Application{}
 	clients := map[string]connections.ABCIClient{}
-	netValMap := make(genesis.NetworkValidatorMap)
 	evilNodePrefix := "evil-"
-	for _, netName := range subnets {
+	for _, netName := range partitions {
 		isEvil := false
 		if strings.HasPrefix(netName, evilNodePrefix) {
 			isEvil = true
@@ -79,34 +75,27 @@ func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulate
 		chans := make([]chan<- abcitypes.Application, len(daemons))
 		allNodes[netName], allChans[netName] = nodes, chans
 		for i, daemon := range daemons {
-			nodes[i], chans[i] = InitFake(t, daemon, openDb, errorHandler, isEvil, netValMap)
+			nodes[i], chans[i] = InitFake(t, daemon, openDb, errorHandler, isEvil)
 		}
 		// TODO It _should_ be one or the other - why doesn't that work?
 		clients[netName] = nodes[0].client
 	}
 
-	connectionManager := connections.NewFakeConnectionManager(clients)
-	for _, netName := range subnets {
-		netName = strings.TrimPrefix(netName, evilNodePrefix)
-		nodes, chans := allNodes[netName], allChans[netName]
-		for i := range nodes {
-			nodes[i].Start(chans[i], connectionManager, doGenesis)
+	genesis := map[string]*tmtypes.GenesisDoc{}
+	if doGenesis {
+		for id, daemons := range daemons {
+			var err error
+			genesis[id], err = tmtypes.GenesisDocFromFile(daemons[0].Config.GenesisFile())
+			require.NoError(t, err)
 		}
 	}
 
-	// Execute bootstrap after the entire network is known
-	if doGenesis {
-		for _, netName := range subnets {
-			netName = strings.TrimPrefix(netName, evilNodePrefix)
-			nodes := allNodes[netName]
-			for i := range nodes {
-				genesis := nodes[i].Bootstrap
-				err := genesis.Bootstrap()
-				if err != nil {
-					panic(fmt.Errorf("could not execute genesis: %v", err))
-				}
-				nodes[i].CreateInitChain()
-			}
+	connectionManager := connections.NewFakeConnectionManager(clients)
+	for _, netName := range partitions {
+		netName = strings.TrimPrefix(netName, evilNodePrefix)
+		nodes, chans := allNodes[netName], allChans[netName]
+		for i := range nodes {
+			nodes[i].Start(chans[i], connectionManager, genesis[netName])
 		}
 	}
 
@@ -120,7 +109,7 @@ func NewDefaultErrorHandler(t *testing.T) func(err error) {
 	}
 }
 
-func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Daemon) (*database.Database, error), errorHandler func(err error), isEvil bool, netValMap genesis.NetworkValidatorMap) (*FakeNode, chan<- abcitypes.Application) {
+func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Daemon) (*database.Database, error), errorHandler func(err error), isEvil bool) (*FakeNode, chan<- abcitypes.Application) {
 	if errorHandler == nil {
 		errorHandler = NewDefaultErrorHandler(t)
 	}
@@ -136,7 +125,6 @@ func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Da
 	n.key = pv.Key.PrivKey
 	n.network = &d.Config.Accumulate.Describe
 	n.logger = d.Logger
-	n.netValMap = netValMap
 
 	if openDb == nil {
 		openDb = func(d *accumulated.Daemon) (*database.Database, error) {
@@ -157,7 +145,7 @@ func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Da
 		require.ErrorIs(t, err, storage.ErrNotFound)
 	}
 
-	fakeTmLogger := d.Logger.With("module", "fake-tendermint", "subnet", n.network.SubnetId)
+	fakeTmLogger := d.Logger.With("module", "fake-tendermint", "partition", n.network.PartitionId)
 
 	appChan := make(chan abcitypes.Application)
 	t.Cleanup(func() { close(appChan) })
@@ -166,18 +154,24 @@ func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Da
 	return n, appChan
 }
 
-func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connections.ConnectionManager, doGenesis bool) *FakeNode {
+func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connections.ConnectionManager, genesis *tmtypes.GenesisDoc) *FakeNode {
 	eventBus := events.NewBus(nil)
 	n.router = routing.NewRouter(eventBus, connMgr)
 
 	var err error
-	n.exec, err = block.NewNodeExecutor(block.ExecutorOptions{
+	execOpts := block.ExecutorOptions{
 		Logger:   n.logger,
 		Key:      n.key.Bytes(),
 		Describe: *n.network,
 		Router:   n.router,
 		EventBus: eventBus,
-	}, n.db)
+	}
+	// On DNs initialize the major block scheduler
+	if execOpts.Describe.NetworkType == config.Directory {
+		execOpts.MajorBlockScheduler = blockscheduler.Init(execOpts.EventBus)
+	}
+
+	n.exec, err = block.NewNodeExecutor(execOpts, n.db)
 	n.Require().NoError(err)
 
 	n.app = abci.NewAccumulator(abci.AccumulatorOptions{
@@ -211,26 +205,18 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 
 	n.T().Cleanup(func() { n.client.Shutdown() })
 
-	if !doGenesis {
+	if genesis == nil {
 		return n
 	}
 
 	n.height++
 
-	kv := memory.New(nil)
-	opts := genesis.InitOpts{
-		Describe:            *n.network,
-		GenesisTime:         time.Now(),
-		NetworkValidatorMap: n.netValMap,
-		Logger:              n.logger,
-		Validators: []tmtypes.GenesisValidator{
-			{PubKey: n.key.PubKey()},
-		},
-		Keys: [][]byte{n.key.Bytes()},
-	}
-	n.Bootstrap, err = genesis.Init(kv, opts)
-	n.Require().NoError(err)
-	n.kv = kv
+	n.app.InitChain(abcitypes.RequestInitChain{
+		Time:          genesis.GenesisTime,
+		ChainId:       n.network.PartitionId,
+		AppStateBytes: genesis.AppState,
+		InitialHeight: genesis.InitialHeight + 1,
+	})
 
 	return n
 }
@@ -356,7 +342,9 @@ func (n *FakeNode) MustExecute(inBlock func(func(*protocol.Envelope))) (sigHashe
 	}
 
 	for _, result := range results.Results {
-		assert.Zero(n.t, result.Code, result.Message)
+		if result.Error != nil {
+			assert.NoError(n.t, result.Error)
+		}
 	}
 	n.t.FailNow()
 	panic("unreachable")
@@ -443,7 +431,7 @@ func (n *FakeNode) GetDirectory(adi string) []string {
 }
 
 func (n *FakeNode) GetTx(txid []byte) *api2.TransactionQueryResponse {
-	q := api2.NewQueryDirect(n.network.SubnetId, api2.Options{
+	q := api2.NewQueryDirect(n.network.PartitionId, api2.Options{
 		Logger:   n.logger,
 		Describe: n.network,
 		Router:   n.router,
@@ -528,17 +516,6 @@ func (n *FakeNode) GetTokenIssuer(url string) *protocol.TokenIssuer {
 	mss := new(protocol.TokenIssuer)
 	n.QueryAccountAs(url, mss)
 	return mss
-}
-
-func (n *FakeNode) CreateInitChain() {
-	state, err := n.kv.MarshalJSON()
-	n.require.NoError(err)
-	n.app.InitChain(abcitypes.RequestInitChain{
-		Time:          time.Now(),
-		ChainId:       n.network.SubnetId,
-		AppStateBytes: state,
-		InitialHeight: protocol.GenesisBlock + 1,
-	})
 }
 
 type e2eDUT struct {

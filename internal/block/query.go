@@ -540,7 +540,7 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove, remote
 	status, err := tx.GetStatus()
 	if err != nil {
 		return nil, fmt.Errorf("invalid query from GetTx in state database, %v", err)
-	} else if !remote && !status.Delivered && status.Remote {
+	} else if !remote && status.Remote() {
 		// If the transaction is a synthetic transaction produced by this BVN
 		// and has not been delivered, pretend like it doesn't exist
 		return nil, errors.NotFound("transaction %X not found", txid[:4])
@@ -648,10 +648,10 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove, remote
 	return &qr, nil
 }
 
-func (m *Executor) queryTxHistory(batch *database.Batch, account *url.URL, start, end uint64, chainName string) (*query.ResponseTxHistory, *protocol.Error) {
+func (m *Executor) queryTxHistory(batch *database.Batch, account *url.URL, start, end uint64, chainName string) (*query.ResponseTxHistory, error) {
 	chain, err := batch.Account(account).ReadChain(chainName)
 	if err != nil {
-		return nil, &protocol.Error{Code: protocol.ErrorCodeTxnHistory, Message: fmt.Errorf("error obtaining txid range %v", err)}
+		return nil, errors.Format(errors.StatusUnknownError, "error obtaining txid range %v", err)
 	}
 
 	thr := query.ResponseTxHistory{}
@@ -661,7 +661,7 @@ func (m *Executor) queryTxHistory(batch *database.Batch, account *url.URL, start
 
 	txids, err := chain.Entries(int64(start), int64(end))
 	if err != nil {
-		return nil, &protocol.Error{Code: protocol.ErrorCodeTxnHistory, Message: fmt.Errorf("error obtaining txid range %v", err)}
+		return nil, errors.Format(errors.StatusUnknownError, "error obtaining txid range %v", err)
 	}
 
 	for _, txid := range txids {
@@ -670,7 +670,7 @@ func (m *Executor) queryTxHistory(batch *database.Batch, account *url.URL, start
 			if errors.Is(err, storage.ErrNotFound) {
 				continue // txs can be filtered out for scratch accounts
 			}
-			return nil, &protocol.Error{Code: protocol.ErrorCodeTxnQueryError, Message: err}
+			return nil, errors.Wrap(errors.StatusUnknownError, err)
 		}
 		thr.Transactions = append(thr.Transactions, *qr)
 	}
@@ -749,19 +749,19 @@ func (m *Executor) queryDataSet(batch *database.Batch, u *url.URL, start int64, 
 	return &qr, nil
 }
 
-func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove bool) (k, v []byte, _ *protocol.Error) {
+func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove bool) (k, v []byte, _ error) {
 	switch q := q.(type) {
 	case *query.RequestByTxId:
 		txr := q
 		qr, err := m.queryByTxId(batch, txr.TxId[:], prove, false, false)
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeTxnQueryError, Message: err}
+			return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 		}
 
 		k = []byte("tx")
 		v, err = qr.MarshalBinary()
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeMarshallingError, Message: fmt.Errorf("%v, on Chain %x", err, txr.TxId[:])}
+			return nil, nil, errors.Format(errors.StatusUnknownError, "%v, on Chain %x", err, txr.TxId[:])
 		}
 	case *query.RequestTxHistory:
 		txh := q
@@ -775,7 +775,7 @@ func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove 
 		k = []byte("tx-history")
 		v, err = thr.MarshalBinary()
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeMarshallingError, Message: fmt.Errorf("error marshalling payload for transaction history")}
+			return nil, nil, errors.Format(errors.StatusUnknownError, "error marshalling payload for transaction history")
 		}
 	case *query.RequestByUrl:
 		chr := q
@@ -784,23 +784,23 @@ func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove 
 		var obj encoding.BinaryMarshaler
 		k, obj, err = m.queryByUrl(batch, chr.Url, prove)
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeTxnQueryError, Message: err}
+			return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 		}
 		v, err = obj.MarshalBinary()
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeMarshallingError, Message: fmt.Errorf("%v, on Url %s", err, chr.Url)}
+			return nil, nil, errors.Format(errors.StatusUnknownError, "%v, on Url %s", err, chr.Url)
 		}
 	case *query.RequestDirectory:
 		chr := q
 		dir, err := m.queryDirectoryByChainId(batch, chr.Url, chr.Start, chr.Limit)
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeDirectoryURL, Message: err}
+			return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 		}
 
 		if chr.ExpandChains {
 			entries, err := m.expandChainEntries(batch, dir.Entries)
 			if err != nil {
-				return nil, nil, &protocol.Error{Code: protocol.ErrorCodeDirectoryURL, Message: err}
+				return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 			}
 			dir.ExpandedEntries = entries
 		}
@@ -808,7 +808,7 @@ func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove 
 		k = []byte("directory")
 		v, err = dir.MarshalBinary()
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeMarshallingError, Message: fmt.Errorf("%v, on Url %s", err, chr.Url)}
+			return nil, nil, errors.Format(errors.StatusUnknownError, "%v, on Url %s", err, chr.Url)
 		}
 	case *query.RequestByChainId:
 		chr := q
@@ -816,16 +816,16 @@ func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove 
 		//nolint:staticcheck // Ignore the deprecation warning for AccountByID
 		record, err := batch.AccountByID(chr.ChainId[:])
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeChainIdError, Message: err}
+			return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 		}
 		account, err := m.queryAccount(batch, record, false)
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeChainIdError, Message: err}
+			return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 		}
 		k = []byte("account")
 		v, err = account.MarshalBinary()
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeMarshallingError, Message: fmt.Errorf("%v, on Chain %x", err, chr.ChainId)}
+			return nil, nil, errors.Format(errors.StatusUnknownError, "%v, on Chain %x", err, chr.ChainId)
 		}
 	case *query.RequestDataEntry:
 		chr := q
@@ -836,43 +836,43 @@ func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove 
 		if chr.EntryHash != [32]byte{} {
 			ret, err = m.queryDataByEntryHash(batch, u, chr.EntryHash[:])
 			if err != nil {
-				return nil, nil, &protocol.Error{Code: protocol.ErrorCodeDataEntryHashError, Message: err}
+				return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 			}
 		} else {
 			ret, err = m.queryDataByUrl(batch, u)
 			if err != nil {
-				return nil, nil, &protocol.Error{Code: protocol.ErrorCodeDataUrlError, Message: err}
+				return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 			}
 		}
 
 		k = []byte("data")
 		v, err = ret.MarshalBinary()
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeMarshallingError, Message: err}
+			return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 		}
 	case *query.RequestDataEntrySet:
 		chr := q
 		u := chr.Url
 		ret, err := m.queryDataSet(batch, u, int64(chr.Start), int64(chr.Count), chr.ExpandChains)
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeDataEntryHashError, Message: err}
+			return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 		}
 
 		k = []byte("dataSet")
 		v, err = ret.MarshalBinary()
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeMarshallingError, Message: err}
+			return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 		}
 	case *query.RequestKeyPageIndex:
 		chr := q
 		account, err := batch.Account(chr.Url).GetState()
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeChainIdError, Message: err}
+			return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 		}
 
 		auth, err := m.GetAccountAuthoritySet(batch, account)
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeChainIdError, Message: err}
+			return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 		}
 
 		// For each local authority
@@ -884,7 +884,7 @@ func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove 
 			var authority protocol.Authority
 			err = batch.Account(entry.Url).GetStateAs(&authority)
 			if err != nil {
-				return nil, nil, protocol.NewError(protocol.ErrorCodeUnknownError, err)
+				return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 			}
 
 			// For each signer
@@ -892,7 +892,7 @@ func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove 
 				var signer protocol.Signer
 				err = batch.Account(signerUrl).GetStateAs(&signer)
 				if err != nil {
-					return nil, nil, protocol.NewError(protocol.ErrorCodeUnknownError, err)
+					return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 				}
 
 				// Check for a matching entry
@@ -913,12 +913,12 @@ func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove 
 				k = []byte("key-page-index")
 				v, err = response.MarshalBinary()
 				if err != nil {
-					return nil, nil, &protocol.Error{Code: protocol.ErrorCodeMarshallingError, Message: err}
+					return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 				}
 				return k, v, nil
 			}
 		}
-		return nil, nil, &protocol.Error{Code: protocol.ErrorCodeNotFound, Message: fmt.Errorf("no authority of %s holds %X", chr.Url, chr.Key)}
+		return nil, nil, errors.Format(errors.StatusUnknownError, "no authority of %s holds %X", chr.Url, chr.Key)
 	case *query.RequestMinorBlocks:
 		resp, pErr := m.queryMinorBlocks(batch, q)
 		if pErr != nil {
@@ -929,7 +929,7 @@ func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove 
 		var err error
 		v, err = resp.MarshalBinary()
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeMarshallingError, Message: fmt.Errorf("error marshalling payload for minor blocks response")}
+			return nil, nil, errors.Format(errors.StatusUnknownError, "error marshalling payload for minor blocks response")
 		}
 	case *query.RequestMajorBlocks:
 		resp, pErr := m.queryMajorBlocks(batch, q)
@@ -941,60 +941,60 @@ func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove 
 		var err error
 		v, err = resp.MarshalBinary()
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeMarshallingError, Message: fmt.Errorf("error marshalling payload for major blocks response")}
+			return nil, nil, errors.Format(errors.StatusUnknownError, "error marshalling payload for major blocks response")
 		}
 	case *query.RequestSynth:
-		subnet, ok := protocol.ParseSubnetUrl(q.Destination)
+		partition, ok := protocol.ParsePartitionUrl(q.Destination)
 		if !ok {
-			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeInvalidRequest, Message: fmt.Errorf("destination is not a subnet")}
+			return nil, nil, errors.Format(errors.StatusUnknownError, "destination is not a partition")
 		}
 		record := batch.Account(m.Describe.Synthetic())
-		chain, err := record.ReadChain(protocol.SyntheticIndexChain(subnet))
+		chain, err := record.ReadChain(protocol.SyntheticIndexChain(partition))
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeInternal, Message: fmt.Errorf("failed to load the synth index chain: %w", err)}
+			return nil, nil, errors.Format(errors.StatusUnknownError, "failed to load the synth index chain: %w", err)
 		}
 		entry := new(protocol.IndexEntry)
 		err = chain.EntryAs(int64(q.SequenceNumber)-1, entry)
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeInternal, Message: fmt.Errorf("failed to unmarshal the index entry: %w", err)}
+			return nil, nil, errors.Format(errors.StatusUnknownError, "failed to unmarshal the index entry: %w", err)
 		}
 		chain, err = record.ReadChain(protocol.MainChain)
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeInternal, Message: fmt.Errorf("failed to load the synth main chain: %w", err)}
+			return nil, nil, errors.Format(errors.StatusUnknownError, "failed to load the synth main chain: %w", err)
 		}
 		hash, err := chain.Entry(int64(entry.Source))
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeInternal, Message: fmt.Errorf("failed to load the main entry: %w", err)}
+			return nil, nil, errors.Format(errors.StatusUnknownError, "failed to load the main entry: %w", err)
 		}
 
 		qr, err := m.queryByTxId(batch, hash, prove, true, true)
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeTxnQueryError, Message: err}
+			return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 		}
 
 		k = []byte("tx")
 		v, err = qr.MarshalBinary()
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.ErrorCodeMarshallingError, Message: fmt.Errorf("%v, on Chain %x", err, hash)}
+			return nil, nil, errors.Format(errors.StatusUnknownError, "%v, on Chain %x", err, hash)
 		}
 
 	default:
-		return nil, nil, &protocol.Error{Code: protocol.ErrorCodeInvalidQueryType, Message: fmt.Errorf("unable to query for type, %s (%d)", q.Type().String(), q.Type().GetEnumValue())}
+		return nil, nil, errors.Format(errors.StatusUnknownError, "unable to query for type, %s (%d)", q.Type().String(), q.Type().GetEnumValue())
 	}
 	return k, v, nil
 }
 
-func (m *Executor) queryMinorBlocks(batch *database.Batch, req *query.RequestMinorBlocks) (*query.ResponseMinorBlocks, *protocol.Error) {
+func (m *Executor) queryMinorBlocks(batch *database.Batch, req *query.RequestMinorBlocks) (*query.ResponseMinorBlocks, error) {
 	ledgerAcc := batch.Account(m.Describe.NodeUrl(protocol.Ledger))
 	var ledger *protocol.SystemLedger
 	err := ledgerAcc.GetStateAs(&ledger)
 	if err != nil {
-		return nil, &protocol.Error{Code: protocol.ErrorCodeUnMarshallingError, Message: err}
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	idxChain, err := ledgerAcc.ReadChain(protocol.MinorRootIndexChain)
 	if err != nil {
-		return nil, &protocol.Error{Code: protocol.ErrorCodeQueryChainUpdatesError, Message: err}
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	if req.Start == 0 { // We don't have major block 0, avoid crash
@@ -1002,7 +1002,7 @@ func (m *Executor) queryMinorBlocks(batch *database.Batch, req *query.RequestMin
 	}
 	startIndex, _, err := indexing.SearchIndexChain(idxChain, uint64(idxChain.Height())-1, indexing.MatchAfter, indexing.SearchIndexChainByBlock(req.Start))
 	if err != nil {
-		return nil, &protocol.Error{Code: protocol.ErrorCodeQueryEntriesError, Message: err}
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	entryIdx := startIndex
@@ -1019,7 +1019,7 @@ resultLoop:
 		case errors.Is(err, storage.ErrNotFound):
 			break resultLoop
 		default:
-			return nil, &protocol.Error{Code: protocol.ErrorCodeUnMarshallingError, Message: err}
+			return nil, errors.Wrap(errors.StatusUnknownError, err)
 		}
 
 		minorEntry := new(query.ResponseMinorEntry)
@@ -1044,7 +1044,7 @@ resultLoop:
 		if req.TxFetchMode < query.TxFetchModeOmit {
 			chainUpdatesIndex, err := indexing.BlockChainUpdates(batch, &m.Describe, curEntry.BlockIndex).Get()
 			if err != nil {
-				return nil, &protocol.Error{Code: protocol.ErrorCodeChainIdError, Message: err}
+				return nil, errors.Wrap(errors.StatusUnknownError, err)
 			}
 
 			minorEntry.TxCount = uint64(0)

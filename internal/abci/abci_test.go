@@ -14,10 +14,10 @@ import (
 )
 
 func TestTransactionPriority(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
-	dn := nodes[subnets[0]][0]
-	bvn := nodes[subnets[1]][0]
+	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
+	dn := nodes[partitions[0]][0]
+	bvn := nodes[partitions[1]][0]
 	fooKey := generateKey()
 	_ = bvn.db.Update(func(batch *database.Batch) error {
 		require.NoError(t, acctesting.CreateAdiWithCredits(batch, fooKey, "foo", 1e9))
@@ -34,7 +34,7 @@ func TestTransactionPriority(t *testing.T) {
 			Envelope: newTxn(bvn.network.AnchorPool().String()).
 				WithSigner(bvn.network.OperatorsPage(), 1).
 				WithBody(&protocol.DirectoryAnchor{
-					SubnetAnchor: protocol.SubnetAnchor{
+					PartitionAnchor: protocol.PartitionAnchor{
 						Source:          dn.network.NodeUrl(),
 						RootChainIndex:  1,
 						MinorBlockIndex: 1,
@@ -92,8 +92,6 @@ func TestTransactionPriority(t *testing.T) {
 			for _, status := range results.Results {
 				if status.Error != nil {
 					assert.NoError(t, status.Error)
-				} else {
-					assert.Zero(t, status.Code, status.Message)
 				}
 			}
 			if t.Failed() {
@@ -109,9 +107,9 @@ func TestTransactionPriority(t *testing.T) {
 func TestCheckTx_SharedBatch(t *testing.T) {
 	t.Skip("https://accumulate.atlassian.net/browse/AC-1702")
 
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
-	n := nodes[subnets[1]][0]
+	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
+	n := nodes[partitions[1]][0]
 
 	alice, bob := generateKey(), generateKey()
 	aliceUrl := acctesting.AcmeLiteAddressTmPriv(alice)

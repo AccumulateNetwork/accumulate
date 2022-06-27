@@ -1,13 +1,13 @@
 package e2e
 
 import (
-	"bytes"
 	"fmt"
 	"math/big"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
+	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -29,32 +29,17 @@ func TestOutOfSequenceSynth(t *testing.T) {
 
 	// If any envelope contains a deposit, reverse the envelopes and the
 	// transactions within each
-	sim.SubnetFor(bobUrl.RootIdentity()).SubmitHook = func(envelopes []*Envelope) []*Envelope {
-		var deposit bool
+	sim.PartitionFor(bobUrl.RootIdentity()).SubmitHook = func(envelopes []*chain.Delivery) ([]*chain.Delivery, bool) {
 		for _, env := range envelopes {
-			for _, txn := range env.Transaction {
-				if txn.Body.Type() == TransactionTypeSyntheticDepositTokens {
-					deposit = true
+			if env.Transaction.Body.Type() == TransactionTypeSyntheticDepositTokens {
+				for i, n := 0, len(envelopes); i < n/2; i++ {
+					j := n - i - 1
+					envelopes[i], envelopes[j] = envelopes[j], envelopes[i]
 				}
+				break
 			}
 		}
-		if !deposit {
-			return envelopes
-		}
-
-		for i, n := 0, len(envelopes); i < n/2; i++ {
-			j := n - i - 1
-			envelopes[i], envelopes[j] = envelopes[j], envelopes[i]
-		}
-
-		for _, env := range envelopes {
-			for i, n := 0, len(env.Transaction); i < n/2; i++ {
-				j := n - i - 1
-				env.Transaction[i], env.Transaction[j] = env.Transaction[j], env.Transaction[i]
-			}
-		}
-
-		return envelopes
+		return envelopes, true
 	}
 
 	// Execute
@@ -76,7 +61,7 @@ func TestOutOfSequenceSynth(t *testing.T) {
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(txns...)...)
 
 	// Verify
-	_ = sim.SubnetFor(bobUrl).Database.View(func(batch *database.Batch) error {
+	_ = sim.PartitionFor(bobUrl).Database.View(func(batch *database.Batch) error {
 		var account *LiteTokenAccount
 		require.NoError(t, batch.Account(bobUrl).GetStateAs(&account))
 		require.Equal(t, uint64(len(txns)), account.Balance.Uint64())
@@ -100,39 +85,15 @@ func TestMissingSynthTxn(t *testing.T) {
 
 	// The first time an envelope contains a deposit, drop the first deposit
 	var didDrop bool
-	sim.SubnetFor(bobUrl.RootIdentity()).SubmitHook = func(envelopes []*Envelope) []*Envelope {
-		for _, env := range envelopes {
-			var deposit int = -1
-			for i, txn := range env.Transaction {
-				if txn.Body.Type() == TransactionTypeSyntheticDepositTokens {
-					deposit = i
-					break
-				}
-			}
-
-			if deposit < 0 {
-				continue
-			}
-
-			if didDrop {
-				return envelopes
-			} else {
+	sim.PartitionFor(bobUrl.RootIdentity()).SubmitHook = func(envelopes []*chain.Delivery) ([]*chain.Delivery, bool) {
+		for i, env := range envelopes {
+			if env.Transaction.Body.Type() == TransactionTypeSyntheticDepositTokens {
+				fmt.Printf("Dropping %X\n", env.Transaction.GetHash()[:4])
 				didDrop = true
-				fmt.Printf("Dropping %X\n", env.Transaction[deposit].GetHash()[:4])
-			}
-
-			txn := env.Transaction[deposit]
-			env.Transaction = append(env.Transaction[:deposit], env.Transaction[deposit+1:]...)
-			for i := 0; i < len(env.Signatures); i++ {
-				sig := env.Signatures[i]
-				txnHash := sig.GetTransactionHash()
-				if bytes.Equal(txnHash[:], txn.GetHash()) {
-					env.Signatures = append(env.Signatures[:i], env.Signatures[i+1:]...)
-					i--
-				}
+				return append(envelopes[:i], envelopes[i+1:]...), false
 			}
 		}
-		return envelopes
+		return envelopes, true
 	}
 
 	// Execute
@@ -157,7 +118,7 @@ func TestMissingSynthTxn(t *testing.T) {
 	sim.WaitForTransactions(delivered, envs...)
 
 	// Verify
-	_ = sim.SubnetFor(bobUrl).Database.View(func(batch *database.Batch) error {
+	_ = sim.PartitionFor(bobUrl).Database.View(func(batch *database.Batch) error {
 		var account *LiteTokenAccount
 		require.NoError(t, batch.Account(bobUrl).GetStateAs(&account))
 		require.Equal(t, uint64(len(txns)), account.Balance.Uint64())

@@ -20,7 +20,7 @@ func (x *Executor) ProduceSynthetic(batch *database.Batch, from *protocol.Transa
 
 	err := setSyntheticOrigin(batch, from, produced)
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
+		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	state := new(chain.ChainUpdates)
@@ -85,7 +85,7 @@ func setSyntheticOrigin(batch *database.Batch, from *protocol.Transaction, produ
 
 	status, err := batch.Transaction(from.GetHash()).GetStatus()
 	if err != nil {
-		return errors.Format(errors.StatusUnknown, "load status: %w", err)
+		return errors.Format(errors.StatusUnknownError, "load status: %w", err)
 	}
 
 	// Set the refund amount
@@ -129,7 +129,7 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 	// Store the transaction, its status, and the initiator
 	err = m.putSyntheticTransaction(
 		batch, txn,
-		&protocol.TransactionStatus{Remote: true},
+		&protocol.TransactionStatus{Code: errors.StatusRemote},
 		initSig)
 	if err != nil {
 		return nil, err
@@ -152,12 +152,12 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 		return nil, err
 	}
 
-	subnet, ok := protocol.ParseSubnetUrl(initSig.DestinationNetwork)
+	partition, ok := protocol.ParsePartitionUrl(initSig.DestinationNetwork)
 	if !ok {
-		return nil, errors.Format(errors.StatusInternalError, "destination URL is not a valid subnet")
+		return nil, errors.Format(errors.StatusInternalError, "destination URL is not a valid partition")
 	}
 
-	indexIndex, err := addIndexChainEntry(record, protocol.SyntheticIndexChain(subnet), &protocol.IndexEntry{
+	indexIndex, err := addIndexChainEntry(record, protocol.SyntheticIndexChain(partition), &protocol.IndexEntry{
 		Source: uint64(index),
 	})
 	if err != nil {
@@ -174,19 +174,19 @@ func (x *Executor) buildSynthReceipt(batch *database.Batch, produced []*protocol
 	// Load the root chain
 	chain, err := batch.Account(x.Describe.Ledger()).ReadChain(protocol.MinorRootChain)
 	if err != nil {
-		return errors.Format(errors.StatusUnknown, "load root chain: %w", err)
+		return errors.Format(errors.StatusUnknownError, "load root chain: %w", err)
 	}
 
 	// Prove the synthetic transaction chain anchor
 	rootProof, err := chain.Receipt(int64(synthAnchor), int64(rootAnchor))
 	if err != nil {
-		return errors.Format(errors.StatusUnknown, "prove from %d to %d on the root chain: %w", synthAnchor, rootAnchor, err)
+		return errors.Format(errors.StatusUnknownError, "prove from %d to %d on the root chain: %w", synthAnchor, rootAnchor, err)
 	}
 
 	// Load the synthetic transaction chain
 	chain, err = batch.Account(x.Describe.Synthetic()).ReadChain(protocol.MainChain)
 	if err != nil {
-		return errors.Format(errors.StatusUnknown, "load root chain: %w", err)
+		return errors.Format(errors.StatusUnknownError, "load root chain: %w", err)
 	}
 
 	synthStart := chain.Height() - int64(len(produced))
@@ -198,11 +198,11 @@ func (x *Executor) buildSynthReceipt(batch *database.Batch, produced []*protocol
 		record := batch.Transaction(transaction.GetHash())
 		status, err := record.GetStatus()
 		if err != nil {
-			return errors.Format(errors.StatusUnknown, "load synthetic transaction status: %w", err)
+			return errors.Format(errors.StatusUnknownError, "load synthetic transaction status: %w", err)
 		}
 		sigs, err := GetAllSignatures(batch, record, status, transaction.Header.Initiator[:])
 		if err != nil {
-			return errors.Format(errors.StatusUnknown, "load synthetic transaction signatures: %w", err)
+			return errors.Format(errors.StatusUnknownError, "load synthetic transaction signatures: %w", err)
 		}
 		if len(sigs) == 0 {
 			return errors.Format(errors.StatusInternalError, "synthetic transaction %X does not have a synthetic origin signature", transaction.GetHash()[:4])
@@ -214,12 +214,12 @@ func (x *Executor) buildSynthReceipt(batch *database.Batch, produced []*protocol
 		// Prove it
 		synthProof, err := chain.Receipt(int64(i+int(synthStart)), int64(synthEnd))
 		if err != nil {
-			return errors.Format(errors.StatusUnknown, "prove from %d to %d on the synthetic transaction chain: %w", i+int(synthStart), synthEnd, err)
+			return errors.Format(errors.StatusUnknownError, "prove from %d to %d on the synthetic transaction chain: %w", i+int(synthStart), synthEnd, err)
 		}
 
 		r, err := synthProof.Combine(rootProof)
 		if err != nil {
-			return errors.Format(errors.StatusUnknown, "combine receipts: %w", err)
+			return errors.Format(errors.StatusUnknownError, "combine receipts: %w", err)
 		}
 
 		proofSig := new(protocol.ReceiptSignature)
@@ -235,11 +235,11 @@ func (x *Executor) buildSynthReceipt(batch *database.Batch, produced []*protocol
 			Signature: proofSig,
 		})
 		if err != nil {
-			return errors.Format(errors.StatusUnknown, "store signature: %w", err)
+			return errors.Format(errors.StatusUnknownError, "store signature: %w", err)
 		}
 		_, err = batch.Transaction(transaction.GetHash()).AddSystemSignature(&x.Describe, proofSig)
 		if err != nil {
-			return errors.Format(errors.StatusUnknown, "record receipt for %X: %w", transaction.GetHash()[:4], err)
+			return errors.Format(errors.StatusUnknownError, "record receipt for %X: %w", transaction.GetHash()[:4], err)
 		}
 	}
 
@@ -310,41 +310,44 @@ func (x *Executor) putSyntheticTransaction(batch *database.Batch, transaction *p
 	return nil
 }
 
-func assembleSynthReceipt(transaction *protocol.Transaction, signatures []protocol.Signature) (*managed.Receipt, *url.URL, error) {
+func assembleSynthReceipt(hash [32]byte, signatures []protocol.Signature) (*managed.Receipt, *url.URL, error) {
 	// Collect receipts
-	receipts := map[[32]byte]*protocol.ReceiptSignature{}
+	receipts := map[[32]byte]*managed.Receipt{}
+	var sourceNet *url.URL
 	for _, signature := range signatures {
 		receipt, ok := signature.(*protocol.ReceiptSignature)
 		if !ok {
 			continue
 		}
-		receipts[*(*[32]byte)(receipt.Proof.Start)] = receipt
+		sourceNet = receipt.SourceNetwork
+		receipts[*(*[32]byte)(receipt.Proof.Start)] = &receipt.Proof
 	}
 
 	// Get the first
-	hash := *(*[32]byte)(transaction.GetHash())
-	rsig, ok := receipts[hash]
+	receipt, ok := receipts[hash]
 	delete(receipts, hash)
 	if !ok {
-		return nil, nil, nil
+		return nil, nil, errors.Format(errors.StatusInternalError, "missing initial receipt")
 	}
-	sourceNet := rsig.SourceNetwork
 
 	// Join the remaining receipts
-	receipt := &rsig.Proof
 	for len(receipts) > 0 {
-		hash = *(*[32]byte)(rsig.Proof.Anchor)
-		rsig, ok := receipts[hash]
-		delete(receipts, hash)
+		// Find the next receipt
+		hash = *(*[32]byte)(receipt.Anchor)
+		next, ok := receipts[hash]
 		if !ok {
-			continue
+			// TODO Reject receipts that do not match up. We should probably
+			// just store all of this in the transaction status or something.
+			break
+			// return nil, nil, errors.Format(errors.StatusInternalError, "extra receipts")
 		}
+		delete(receipts, hash)
 
-		r, err := receipt.Combine(&rsig.Proof)
-		if err == nil {
-			receipt = r
-			sourceNet = rsig.SourceNetwork
+		r, err := receipt.Combine(next)
+		if err != nil {
+			return nil, nil, errors.Format(errors.StatusInternalError, "combine receipts: %w", err)
 		}
+		receipt = r
 	}
 
 	return receipt, sourceNet, nil

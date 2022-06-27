@@ -82,7 +82,7 @@ func Open(cfg *config.Config, logger log.Logger) (*Database, error) {
 		return OpenBadger(config.MakeAbsolute(cfg.RootDir, cfg.Accumulate.Storage.Path), logger)
 
 	case config.EtcdStorage:
-		return OpenEtcd(cfg.Accumulate.SubnetId, cfg.Accumulate.Storage.Etcd, logger)
+		return OpenEtcd(cfg.Accumulate.PartitionId, cfg.Accumulate.Storage.Etcd, logger)
 
 	default:
 		return nil, fmt.Errorf("unknown storage format %q", cfg.Accumulate.Storage.Type)
@@ -116,7 +116,7 @@ func (b *Batch) AccountByID(id []byte) (*Account, error) {
 	a := &Account{b, accountByID(id), nil}
 	state, err := a.GetState()
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknown, err)
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 	a.url = state.GetUrl()
 	return a, nil

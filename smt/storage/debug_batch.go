@@ -87,7 +87,7 @@ func (b *DebugBatch) Get(key Key) (v []byte, err error) {
 
 	v, err = b.Batch.Get(key)
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknown, err)
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 	return v, nil
 }

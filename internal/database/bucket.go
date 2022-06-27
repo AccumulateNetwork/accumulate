@@ -3,6 +3,7 @@ package database
 import (
 	"strings"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
@@ -53,10 +54,10 @@ func (b *accountBucket) SyntheticForAnchor(anchor [32]byte) storage.Key {
 }
 
 // Chain returns the storage key for the given chain of the record.
-func (b *accountBucket) Chain(name string) storage.Key {
+func (b *accountBucket) Chain(name string) record.Key {
 	// Ensure chain names are case insensitive
 	name = strings.ToLower(name)
-	return b.Object().Append("Chain", name)
+	return record.Key{b.Object()}.Append("Chain", name)
 }
 
 // transactionBucket is a database bucket for a transaction.

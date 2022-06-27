@@ -8,8 +8,16 @@ import (
 
 type SyntheticWriteData struct{}
 
+var _ PrincipalValidator = (*SyntheticWriteData)(nil)
+
 func (SyntheticWriteData) Type() protocol.TransactionType {
 	return protocol.TransactionTypeSyntheticWriteData
+}
+
+func (SyntheticWriteData) AllowMissingPrincipal(transaction *protocol.Transaction) bool {
+	// SyntheticWriteData can create a lite data account
+	_, err := protocol.ParseLiteDataAddress(transaction.Header.Principal)
+	return err == nil
 }
 
 func (SyntheticWriteData) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
@@ -40,8 +48,6 @@ func executeWriteLiteDataAccount(st *StateManager, entry protocol.DataEntry, scr
 			if err != nil {
 				return nil, err
 			}
-			//reconstruct full lite chain id
-			liteDataAccountId = append(liteDataAccountId, origin.Tail...)
 
 			//compute the hash for this entry
 			entryHash, err := protocol.ComputeFactomEntryHashForAccount(liteDataAccountId, entry.GetData())
@@ -74,13 +80,6 @@ func executeWriteLiteDataAccount(st *StateManager, entry protocol.DataEntry, scr
 
 		lite := new(protocol.LiteDataAccount)
 		lite.Url = u
-		//we store the tail of the lite data account id in the state. The first part
-		//of the lite data account can be obtained from the LiteDataAddress. When
-		//we want to reference the chain, we have all the info we need at the cost
-		//of 12 bytes.  The advantage is we avoid a lookup of entry 0, and
-		//computation of the chain id. The disadvantage is we have to store
-		//12 additional bytes.
-		lite.Tail = liteDataAccountId[20:32]
 
 		entryHash, err := protocol.ComputeFactomEntryHashForAccount(liteDataAccountId, entry.GetData())
 		if err != nil {

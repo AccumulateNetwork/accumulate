@@ -10,6 +10,7 @@ import (
 
 type WriteData struct{}
 
+var _ PrincipalValidator = (*WriteData)(nil)
 var _ SignerValidator = (*WriteData)(nil)
 
 func (WriteData) Type() protocol.TransactionType { return protocol.TransactionTypeWriteData }
@@ -39,8 +40,14 @@ func isWriteToLiteDataAccount(batch *database.Batch, transaction *protocol.Trans
 
 	default:
 		// Unknown error
-		return false, errors.Wrap(errors.StatusUnknown, err)
+		return false, errors.Wrap(errors.StatusUnknownError, err)
 	}
+}
+
+func (WriteData) AllowMissingPrincipal(transaction *protocol.Transaction) bool {
+	// WriteData can create a lite data account
+	_, err := protocol.ParseLiteDataAddress(transaction.Header.Principal)
+	return err == nil
 }
 
 // SignerIsAuthorized returns nil if the transaction is writing to a lite data
@@ -48,7 +55,7 @@ func isWriteToLiteDataAccount(batch *database.Batch, transaction *protocol.Trans
 func (WriteData) SignerIsAuthorized(_ AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, _ protocol.Signer, _ bool) (fallback bool, err error) {
 	lite, err := isWriteToLiteDataAccount(batch, transaction)
 	if err != nil {
-		return false, errors.Wrap(errors.StatusUnknown, err)
+		return false, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	return !lite, nil
@@ -59,7 +66,7 @@ func (WriteData) SignerIsAuthorized(_ AuthDelegate, batch *database.Batch, trans
 func (WriteData) TransactionIsReady(_ AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (ready, fallback bool, err error) {
 	lite, err := isWriteToLiteDataAccount(batch, transaction)
 	if err != nil {
-		return false, false, errors.Wrap(errors.StatusUnknown, err)
+		return false, false, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	// Writing to a lite data account only requires one signature
@@ -129,7 +136,7 @@ func executeWriteFullDataAccount(st *StateManager, entry protocol.DataEntry, scr
 		account.Entry = entry
 		err := st.Update(account)
 		if err != nil {
-			return nil, errors.Format(errors.StatusUnknown, "store account: %w", err)
+			return nil, errors.Format(errors.StatusUnknownError, "store account: %w", err)
 		}
 	}
 

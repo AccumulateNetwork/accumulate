@@ -45,15 +45,11 @@ func bootstrap(t *testing.T, tc *testCmd) {
 	//set the oracle price to $1.00
 	resp, err := tc.executeTx(t, "data write --write-state --wait 10s dn.acme/oracle dnkey %x", data)
 	require.NoError(t, err)
-	_, err = tc.executeTx(t, "tx sign dn.acme/oracle dnkey %s", getTxId(t, resp))
-	require.NoError(t, err)
 	ar := new(ActionResponse)
 	require.NoError(t, json.Unmarshal([]byte(resp), ar))
 	for _, r := range ar.Flow {
 		if r.Status.Error != nil {
 			require.NoError(t, r.Status.Error)
-		} else {
-			require.Zero(t, r.Status.Code, r.Status.Message)
 		}
 	}
 }
@@ -116,13 +112,13 @@ func NewTestBVNN(t *testing.T) (string, crypto.PrivKey) {
 	acctesting.SkipPlatformCI(t, "darwin", "requires setting up localhost aliases")
 
 	// Start
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, true)
-	acctesting.RunTestNet(t, subnets, daemons)
+	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, true)
+	acctesting.RunTestNet(t, partitions, daemons)
 
 	time.Sleep(time.Second)
-	c := daemons[subnets[1]][0].Config
+	c := daemons[partitions[1]][0].Config
 
-	return c.Accumulate.API.ListenAddress, daemons[subnets[0]][0].Key()
+	return c.Accumulate.API.ListenAddress, daemons[partitions[0]][0].Key()
 }
 
 func (c *testCmd) initalize(t *testing.T) {
@@ -203,13 +199,4 @@ func testFactomAddresses() error {
 		}
 	}
 	return nil
-}
-
-func getTxId(t *testing.T, resp string) string {
-	c := make(map[string]json.RawMessage)
-	err := json.Unmarshal([]byte(resp), &c)
-	require.NoError(t, err)
-	txid := string(c["transactionHash"])
-	txid = txid[1 : len(txid)-1]
-	return txid
 }

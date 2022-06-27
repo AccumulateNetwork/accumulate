@@ -30,7 +30,7 @@ func NewRouteTree(table *protocol.RoutingTable) (*RouteTree, error) {
 	// Build the override map
 	tree.overrides = make(map[[32]byte]string, len(table.Overrides))
 	for _, o := range table.Overrides {
-		tree.overrides[o.Account.IdentityAccountID32()] = o.Subnet
+		tree.overrides[o.Account.IdentityAccountID32()] = o.Partition
 	}
 
 	// Sort routes by mask then by value
@@ -45,7 +45,7 @@ func NewRouteTree(table *protocol.RoutingTable) (*RouteTree, error) {
 	var err error
 	tree.root, err = buildPrefixTree(routes, 0)
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknown, err)
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	return tree, nil
@@ -57,7 +57,7 @@ func buildPrefixTree(routes []protocol.Route, depth uint64) (prefixTreeNode, err
 		if r.Length != depth {
 			return nil, errors.Format(errors.StatusInternalError, "expected offset %d, got %d", depth, r.Length)
 		}
-		return prefixTreeLeaf(r.Subnet), nil
+		return prefixTreeLeaf(r.Partition), nil
 	}
 
 	// Get the minimum offset
@@ -84,7 +84,7 @@ func buildPrefixTree(routes []protocol.Route, depth uint64) (prefixTreeNode, err
 		}
 		tree.children[i], err = buildPrefixTree(routes[:n], offset)
 		if err != nil {
-			return nil, errors.Wrap(errors.StatusUnknown, err)
+			return nil, errors.Wrap(errors.StatusUnknownError, err)
 		}
 		routes = routes[n:]
 	}

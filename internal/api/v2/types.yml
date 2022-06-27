@@ -505,7 +505,8 @@ DescriptionResponse:
   non-binary: true
   incomparable: true
   fields:
-    - name: SubnetId
+    - name: PartitionId
+      alternative: SubnetId
       type: string
     - name: NetworkType
       type: config.NetworkType

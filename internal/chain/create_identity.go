@@ -50,9 +50,9 @@ func (CreateIdentity) TransactionIsReady(delegate AuthDelegate, batch *database.
 	return false, true, nil
 }
 
-func (CreateIdentity) AllowMissingPrincipal(transaction *protocol.Transaction) (allow, fallback bool) {
+func (CreateIdentity) AllowMissingPrincipal(transaction *protocol.Transaction) bool {
 	// The principal can be missing if it is a root identity
-	return transaction.Header.Principal.IsRootIdentity(), false
+	return transaction.Header.Principal.IsRootIdentity()
 }
 
 func (CreateIdentity) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
@@ -138,7 +138,7 @@ func (CreateIdentity) Validate(st *StateManager, tx *Delivery) (protocol.Transac
 	// If the ADI is local, create it directly
 	err = st.Create(accounts...)
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknown, "failed to create %v: %v", body.Url, err)
+		return nil, errors.Format(errors.StatusUnknownError, "failed to create %v: %v", body.Url, err)
 	}
 
 	return nil, nil

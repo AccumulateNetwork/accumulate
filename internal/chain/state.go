@@ -96,7 +96,7 @@ func (m *StateManager) AddAuthority(account protocol.FullAccount, authority *url
 		var book *protocol.KeyBook
 		err := m.LoadUrlAs(authority, &book)
 		if err != nil {
-			return errors.Format(errors.StatusUnknown, "load %q: %w", authority, err)
+			return errors.Format(errors.StatusUnknownError, "load %q: %w", authority, err)
 		}
 	}
 
@@ -135,14 +135,14 @@ func (m *StateManager) SetAuth(account protocol.FullAccount, authorities []*url.
 		// Otherwise, inherit
 		err := m.InheritAuth(account)
 		if err != nil {
-			return errors.Wrap(errors.StatusUnknown, err)
+			return errors.Wrap(errors.StatusUnknownError, err)
 		}
 	}
 
 	for _, authority := range authorities {
 		err := m.AddAuthority(account, authority)
 		if err != nil {
-			return errors.Wrap(errors.StatusUnknown, err)
+			return errors.Wrap(errors.StatusUnknownError, err)
 		}
 	}
 

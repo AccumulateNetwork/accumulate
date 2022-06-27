@@ -19,9 +19,19 @@ type NetworkConfigResponse struct {
 	extraData []byte
 }
 
+type PartitionListRequest struct {
+	Network   string `json:"network,omitempty" form:"network" query:"network" validate:"required"`
+	extraData []byte
+}
+
+type PartitionListResponse struct {
+	Partitions []string `json:"partitions,omitempty" form:"partitions" query:"partitions" validate:"required"`
+	extraData  []byte
+}
+
 type SeedCountRequest struct {
 	Network   string `json:"network,omitempty" form:"network" query:"network" validate:"required"`
-	Subnet    string `json:"subnet,omitempty" form:"subnet" query:"subnet" validate:"required"`
+	Partition string `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
 	extraData []byte
 }
 
@@ -32,23 +42,13 @@ type SeedCountResponse struct {
 
 type SeedListRequest struct {
 	Network   string `json:"network,omitempty" form:"network" query:"network" validate:"required"`
-	Subnet    string `json:"subnet,omitempty" form:"subnet" query:"subnet" validate:"required"`
+	Partition string `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
 	Count     int64  `json:"count,omitempty" form:"count" query:"count" validate:"required"`
 	extraData []byte
 }
 
 type SeedListResponse struct {
 	Addresses []string `json:"addresses,omitempty" form:"addresses" query:"addresses" validate:"required"`
-	extraData []byte
-}
-
-type SubnetListRequest struct {
-	Network   string `json:"network,omitempty" form:"network" query:"network" validate:"required"`
-	extraData []byte
-}
-
-type SubnetListResponse struct {
-	Subnets   []string `json:"subnets,omitempty" form:"subnets" query:"subnets" validate:"required"`
 	extraData []byte
 }
 
@@ -72,11 +72,34 @@ func (v *NetworkConfigResponse) Copy() *NetworkConfigResponse {
 
 func (v *NetworkConfigResponse) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *PartitionListRequest) Copy() *PartitionListRequest {
+	u := new(PartitionListRequest)
+
+	u.Network = v.Network
+
+	return u
+}
+
+func (v *PartitionListRequest) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *PartitionListResponse) Copy() *PartitionListResponse {
+	u := new(PartitionListResponse)
+
+	u.Partitions = make([]string, len(v.Partitions))
+	for i, v := range v.Partitions {
+		u.Partitions[i] = v
+	}
+
+	return u
+}
+
+func (v *PartitionListResponse) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *SeedCountRequest) Copy() *SeedCountRequest {
 	u := new(SeedCountRequest)
 
 	u.Network = v.Network
-	u.Subnet = v.Subnet
+	u.Partition = v.Partition
 
 	return u
 }
@@ -97,7 +120,7 @@ func (v *SeedListRequest) Copy() *SeedListRequest {
 	u := new(SeedListRequest)
 
 	u.Network = v.Network
-	u.Subnet = v.Subnet
+	u.Partition = v.Partition
 	u.Count = v.Count
 
 	return u
@@ -118,29 +141,6 @@ func (v *SeedListResponse) Copy() *SeedListResponse {
 
 func (v *SeedListResponse) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *SubnetListRequest) Copy() *SubnetListRequest {
-	u := new(SubnetListRequest)
-
-	u.Network = v.Network
-
-	return u
-}
-
-func (v *SubnetListRequest) CopyAsInterface() interface{} { return v.Copy() }
-
-func (v *SubnetListResponse) Copy() *SubnetListResponse {
-	u := new(SubnetListResponse)
-
-	u.Subnets = make([]string, len(v.Subnets))
-	for i, v := range v.Subnets {
-		u.Subnets[i] = v
-	}
-
-	return u
-}
-
-func (v *SubnetListResponse) CopyAsInterface() interface{} { return v.Copy() }
-
 func (v *NetworkConfigRequest) Equal(u *NetworkConfigRequest) bool {
 	if !(v.Network == u.Network) {
 		return false
@@ -157,11 +157,32 @@ func (v *NetworkConfigResponse) Equal(u *NetworkConfigResponse) bool {
 	return true
 }
 
+func (v *PartitionListRequest) Equal(u *PartitionListRequest) bool {
+	if !(v.Network == u.Network) {
+		return false
+	}
+
+	return true
+}
+
+func (v *PartitionListResponse) Equal(u *PartitionListResponse) bool {
+	if len(v.Partitions) != len(u.Partitions) {
+		return false
+	}
+	for i := range v.Partitions {
+		if !(v.Partitions[i] == u.Partitions[i]) {
+			return false
+		}
+	}
+
+	return true
+}
+
 func (v *SeedCountRequest) Equal(u *SeedCountRequest) bool {
 	if !(v.Network == u.Network) {
 		return false
 	}
-	if !(v.Subnet == u.Subnet) {
+	if !(v.Partition == u.Partition) {
 		return false
 	}
 
@@ -180,7 +201,7 @@ func (v *SeedListRequest) Equal(u *SeedListRequest) bool {
 	if !(v.Network == u.Network) {
 		return false
 	}
-	if !(v.Subnet == u.Subnet) {
+	if !(v.Partition == u.Partition) {
 		return false
 	}
 	if !(v.Count == u.Count) {
@@ -203,25 +224,12 @@ func (v *SeedListResponse) Equal(u *SeedListResponse) bool {
 	return true
 }
 
-func (v *SubnetListRequest) Equal(u *SubnetListRequest) bool {
-	if !(v.Network == u.Network) {
-		return false
-	}
-
-	return true
-}
-
-func (v *SubnetListResponse) Equal(u *SubnetListResponse) bool {
-	if len(v.Subnets) != len(u.Subnets) {
-		return false
-	}
-	for i := range v.Subnets {
-		if !(v.Subnets[i] == u.Subnets[i]) {
-			return false
-		}
-	}
-
-	return true
+func (v *PartitionListResponse) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Partitions encoding.JsonList[string] `json:"partitions,omitempty"`
+	}{}
+	u.Partitions = v.Partitions
+	return json.Marshal(&u)
 }
 
 func (v *SeedListResponse) MarshalJSON() ([]byte, error) {
@@ -232,12 +240,16 @@ func (v *SeedListResponse) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
-func (v *SubnetListResponse) MarshalJSON() ([]byte, error) {
+func (v *PartitionListResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Subnets encoding.JsonList[string] `json:"subnets,omitempty"`
+		Partitions encoding.JsonList[string] `json:"partitions,omitempty"`
 	}{}
-	u.Subnets = v.Subnets
-	return json.Marshal(&u)
+	u.Partitions = v.Partitions
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Partitions = u.Partitions
+	return nil
 }
 
 func (v *SeedListResponse) UnmarshalJSON(data []byte) error {
@@ -249,17 +261,5 @@ func (v *SeedListResponse) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	v.Addresses = u.Addresses
-	return nil
-}
-
-func (v *SubnetListResponse) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Subnets encoding.JsonList[string] `json:"subnets,omitempty"`
-	}{}
-	u.Subnets = v.Subnets
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	v.Subnets = u.Subnets
 	return nil
 }

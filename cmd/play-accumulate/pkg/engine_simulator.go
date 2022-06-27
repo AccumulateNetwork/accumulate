@@ -53,23 +53,23 @@ func (s *Session) UseSimulator(bvnCount int) {
 }
 
 func (s SimEngine) GetAccount(url *URL) (protocol.Account, error) {
-	subnet, err := s.Router().RouteAccount(url)
+	partition, err := s.Router().RouteAccount(url)
 	if err != nil {
 		return nil, err
 	}
 
-	batch := s.Subnet(subnet).Database.Begin(false)
+	batch := s.Partition(partition).Database.Begin(false)
 	defer batch.Discard()
 	return batch.Account(url).GetState()
 }
 
 func (s SimEngine) GetDirectory(account *URL) ([]*URL, error) {
-	subnet, err := s.Router().RouteAccount(account)
+	partition, err := s.Router().RouteAccount(account)
 	if err != nil {
 		return nil, err
 	}
 
-	batch := s.Subnet(subnet).Database.Begin(false)
+	batch := s.Partition(partition).Database.Begin(false)
 	defer batch.Discard()
 	dir := indexing.Directory(batch, account)
 	n, err := dir.Count()
@@ -87,8 +87,8 @@ func (s SimEngine) GetDirectory(account *URL) ([]*URL, error) {
 }
 
 func (s SimEngine) GetTransaction(hash [32]byte) (*protocol.Transaction, error) {
-	for _, subnet := range s.Subnets {
-		batch := s.Subnet(subnet.Id).Database.Begin(false)
+	for _, partition := range s.Partitions {
+		batch := s.Partition(partition.Id).Database.Begin(false)
 		defer batch.Discard()
 		txn, err := batch.Transaction(hash[:]).GetState()
 		switch {
@@ -104,12 +104,12 @@ func (s SimEngine) GetTransaction(hash [32]byte) (*protocol.Transaction, error) 
 
 func (s SimEngine) Submit(envelope *protocol.Envelope) (*protocol.TransactionStatus, error) {
 	envelope = envelope.Copy()
-	subnet, err := s.Router().Route(envelope)
+	partition, err := s.Router().Route(envelope)
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := s.Router().Submit(context.Background(), subnet, envelope, false, false)
+	resp, err := s.Router().Submit(context.Background(), partition, envelope, false, false)
 	if err != nil {
 		return nil, err
 	}
@@ -125,7 +125,7 @@ func (s SimEngine) Submit(envelope *protocol.Envelope) (*protocol.TransactionSta
 
 func (s SimEngine) WaitFor(hash [32]byte) ([]*protocol.TransactionStatus, []*protocol.Transaction, error) {
 	status, txn := s.WaitForTransactionFlow(func(status *protocol.TransactionStatus) bool {
-		return status.Delivered || status.Pending
+		return status.Code != 0
 	}, hash[:])
 	return status, txn, nil
 }

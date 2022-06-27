@@ -2,11 +2,11 @@ package database
 
 import (
 	"encoding"
-	"errors"
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 // Chain manages a Merkle tree (chain).
@@ -14,23 +14,26 @@ type Chain struct {
 	account  *Account
 	writable bool
 	merkle   *managed.MerkleManager
+	head     *managed.MerkleState
 }
 
 // newChain creates a new Chain.
-func newChain(account *Account, key storage.Key, writable bool) (*Chain, error) {
+func newChain(account *Account, key record.Key, writable bool) (*Chain, error) {
 	m := new(Chain)
 	m.account = account
 	m.writable = writable
 
 	var err error
-	m.merkle, err = managed.NewMerkleManager(MerkleDbManager{Batch: account.batch}, markPower)
+	m.merkle, err = getOrCreateRecord(account.batch, key.Hash(), func() *managed.Chain {
+		return managed.NewChain(account.batch.logger.L, account.batch.recordStore, key, markPower, "chain %s")
+	})
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
-	err = m.merkle.SetKey(key)
+	m.head, err = m.merkle.Head().Get()
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	return m, nil
@@ -38,7 +41,7 @@ func newChain(account *Account, key storage.Key, writable bool) (*Chain, error) 
 
 // Height returns the height of the chain.
 func (c *Chain) Height() int64 {
-	return c.merkle.MS.Count
+	return c.head.Count
 }
 
 // Entry loads the entry in the chain at the given height.
@@ -63,7 +66,7 @@ func (c *Chain) Entries(start int64, end int64) ([][]byte, error) {
 	}
 
 	if end < start {
-		return nil, errors.New("invalid range: start is greater than end")
+		return nil, errors.New(errors.StatusBadRequest, "invalid range: start is greater than end")
 	}
 
 	// GetRange will not cross mark point boundaries, so we may need to call it
@@ -91,7 +94,7 @@ func (c *Chain) State(height int64) (*managed.MerkleState, error) {
 
 // CurrentState returns the current state of the chain.
 func (c *Chain) CurrentState() *managed.MerkleState {
-	return c.merkle.MS
+	return c.head
 }
 
 // HeightOf returns the height of the given entry in the chain.
@@ -101,7 +104,7 @@ func (c *Chain) HeightOf(hash []byte) (int64, error) {
 
 // Anchor calculates the anchor of the current Merkle state.
 func (c *Chain) Anchor() []byte {
-	return c.merkle.MS.GetMDRoot()
+	return c.head.GetMDRoot()
 }
 
 // AnchorAt calculates the anchor of the chain at the given height.
@@ -115,7 +118,7 @@ func (c *Chain) AnchorAt(height uint64) ([]byte, error) {
 
 // Pending returns the pending roots of the current Merkle state.
 func (c *Chain) Pending() []managed.Hash {
-	return c.merkle.MS.Pending
+	return c.head.Pending
 }
 
 // AddEntry adds an entry to the chain

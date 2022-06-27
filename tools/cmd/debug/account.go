@@ -75,10 +75,10 @@ func accountId(_ *cobra.Command, args []string) {
 		router, err := routing.NewStaticRouter(table, nil)
 		check(err)
 
-		subnet, err := router.RouteAccount(u)
+		partition, err := router.RouteAccount(u)
 		check(err)
 		fmt.Printf("Method:         prefix routing table\n")
-		fmt.Printf("Routes to:      %s\n", subnet)
+		fmt.Printf("Routes to:      %s\n", partition)
 		return
 	}
 

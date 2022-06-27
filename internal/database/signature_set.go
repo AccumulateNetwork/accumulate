@@ -2,7 +2,6 @@ package database
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/sortutil"
@@ -14,6 +13,7 @@ type SignatureSet struct {
 	txn      *Transaction
 	signer   protocol.Signer
 	writable bool
+	value    Value[*sigSetData]
 	entries  *sigSetData
 }
 
@@ -23,10 +23,11 @@ func newSigSet(txn *Transaction, signer protocol.Signer, writable bool) (*Signat
 	s.txn = txn
 	s.signer = signer
 	s.writable = writable
-	s.entries = new(sigSetData)
+	s.value = txn.signatures(signer.GetUrl())
 
-	err := txn.batch.getValuePtr(s.key(), s.entries, &s.entries, true)
-	if err != nil && !errors.Is(err, storage.ErrNotFound) {
+	var err error
+	s.entries, err = s.value.Get()
+	if err != nil {
 		return nil, err
 	}
 
@@ -87,7 +88,7 @@ func (s *sigSetData) Add(newEntry SigSetEntry, newSignature protocol.Signature) 
 	case protocol.IsDnUrl(newSignature.GetSigner()):
 		newEntry.System = true
 	default:
-		_, ok := protocol.ParseSubnetUrl(newSignature.GetSigner())
+		_, ok := protocol.ParsePartitionUrl(newSignature.GetSigner())
 		newEntry.System = ok
 	}
 
@@ -125,6 +126,5 @@ func (s *SignatureSet) Add(keyEntryIndex uint64, newSignature protocol.Signature
 	if err != nil {
 		return 0, err
 	}
-	s.txn.batch.putValue(s.key(), s.entries)
-	return len(s.entries.Entries), nil
+	return len(s.entries.Entries), s.value.Put(s.entries)
 }

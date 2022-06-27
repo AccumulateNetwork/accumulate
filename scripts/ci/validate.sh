@@ -66,8 +66,7 @@ SYNTH=`accumulate tx get -j ${TXID} | jq -re '.produced[0]' | hash-from-txid`
 STATUS=`accumulate tx get -j ${SYNTH} | jq --indent 0 .status`
 echo $STATUS
 [ $(echo $STATUS | jq -re .delivered) = "true" ] || die "Synthetic transaction was not delivered"
-[ $(echo $STATUS | jq -re '.code // 0') -ne 0 ] || die "Synthetic transaction did not fail"
-echo $STATUS | jq -re .message 1> /dev/null || die "Synthetic transaction does not have a message"
+[ $(echo $STATUS | jq -re '.failed // "false"') = "true" ] || die "Synthetic transaction did not fail"
 success
 
 section "Add credits to the ADI's key page 1"
@@ -82,6 +81,7 @@ accumulate page get test.acme/book/2 1> /dev/null || die "Cannot find page test.
 accumulate page get test.acme/book/3 1> /dev/null || die "Cannot find page test.acme/book/3"
 success
 
+
 section "Add credits to the ADI's key page 2"
 wait-for cli-tx credits ${LITE_ACME} test.acme/book/2 1000
 BALANCE=$(accumulate -j page get test.acme/book/2 | jq -r .data.creditBalance)
@@ -93,6 +93,9 @@ wait-for cli-tx page lock test.acme/book/2 test-2-0 && die "Key page 2 locked it
 section "Lock key page 2 using page 1"
 wait-for cli-tx page lock test.acme/book/2 test-1-0
 success
+
+
+
 
 section "Attempting to update key page 3 using page 2 fails"
 cli-tx page key add test.acme/book/3 test-2-0 1 test-3-1 && die "Executed disallowed operation" || success
@@ -115,6 +118,25 @@ wait-for cli-tx page key add test.acme/book/2 test-2-0 1 test-2-1
 wait-for cli-tx page key add test.acme/book/2 test-2-0 1 test-2-2
 wait-for cli-tx page key add test.acme/book/2 test-2-0 1 test-2-3-orig
 success
+
+section "Update key page entry with same keyhash different delegate"
+wait-for cli-tx book create test.acme test-1-0 acc://test.acme/book2 test-2-0
+wait-for cli-tx credits ${LITE_ACME} test.acme/book2/1 1000
+accumulate page get acc://test.acme/book2/1 -j | jq -re .data.keys[0].publicKeyHash
+keyhash=$(accumulate page get acc://test.acme/book2/1 -j | jq -re .data.keys[0].publicKeyHash)
+txHash=$(cli-tx tx execute test.acme/book2/1 test-2-0 '{"type": "updateKeyPage", "operation": [{ "type": "update", "oldEntry": {"keyHash": "'"$keyhash"'"}, "newEntry": {"delegate": "acc://test.acme/book","keyHash": "'"$keyhash"'"}}]}')
+wait-for-tx $txHash
+echo $txHash
+wait-for cli-tx-sig tx sign  test.acme/book test-1-0 $txHash
+accumulate page get acc://test.acme/book2/1
+delegate=$(accumulate page get acc://test.acme/book2/1 -j | jq -r .data.keys[0].delegate )
+target=acc://test.acme/book
+if [ "$target" = "$delegate" ]; then
+success
+  else 
+  die `want acc://test.acme/book got ${delegate}`
+fi
+
 
 section "Set threshold to 2 of 2"
 wait-for cli-tx tx execute test.acme/book/2 test-2-0 '{"type": "updateKeyPage", "operation": [{ "type": "setThreshold", "threshold": 2 }]}'
@@ -182,7 +204,8 @@ wait-for-tx $TXID
 success
 
 section "Signing the transaction after it has been delivered fails"
-cli-tx-sig tx sign test.acme/tokens test-2-2 $TXID && die "Signed the transaction after it was delivered" || success
+JSON=$(cli-run tx sign test.acme/tokens test-2-2 $TXID) || die "Failed to sign transaction"
+jq -e .result.error <<< "${JSON}" && success || die "Signed the transaction after it was delivered"
 
 section "API v2 faucet (AC-570)"
 BEFORE=$(accumulate -j account get ${LITE_ACME} | jq -r .data.balance)
@@ -229,7 +252,7 @@ BALANCE=$(accumulate -j account get ${LITE_TOK} | jq -r .data.balance)
 
 section "Create lite data account and write the data"
 ACCOUNT_ID=$(accumulate -j account create data --lite test.acme test-1-0 "Factom PRO" "Tutorial" | jq -r .accountUrl)
-[ "$ACCOUNT_ID" == "acc://b36c1c4073305a41edc6353a094329c24ffa54c029a521aa" ] || die "${ACCOUNT_ID} does not match expected value"
+[ "$ACCOUNT_ID" == "acc://b36c1c4073305a41edc6353a094329c24ffa54c0a47fb56227a04477bcb78923" ] || die "${ACCOUNT_ID} does not match expected value"
 accumulate data get $ACCOUNT_ID 0 1 1> /dev/null || die "lite data entry not found"
 wait-for cli-tx data write-to test.acme test-1-0 $ACCOUNT_ID "data test"
 accumulate data get $ACCOUNT_ID 0 2 1> /dev/null || die "lite data error"
@@ -239,7 +262,7 @@ success
 
 section "Create lite data account with first entry"
 ACCOUNT_ID=$(accumulate -j account create data --lite test.acme test-1-0 "First Data Entry" "Check" --lite-data "first entry" | jq -r .accountUrl)
-[ "$ACCOUNT_ID" == "acc://4df014cc532c140066add495313e0ffaecba1eba5454cefa" ] || die "${ACCOUNT_ID} does not match expected value"
+[ "$ACCOUNT_ID" == "acc://4df014cc532c140066add495313e0ffaecba1eba2a4fb95e30d37fc3f87e9ab8" ] || die "${ACCOUNT_ID} does not match expected value"
 accumulate -j data get $ACCOUNT_ID 0 1 1> /dev/null || die "lite data entry not found"
 wait-for cli-tx data write-to test.acme test-1-0 $ACCOUNT_ID "data test"
 accumulate data get $ACCOUNT_ID 0 2 1> /dev/null || die "lite data error"

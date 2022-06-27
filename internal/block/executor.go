@@ -3,11 +3,11 @@ package block
 import (
 	"bytes"
 	"crypto/ed25519"
-	"fmt"
 	"io"
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
@@ -30,18 +30,22 @@ type Executor struct {
 	executors  map[protocol.TransactionType]TransactionExecutor
 	dispatcher *dispatcher
 	logger     logging.OptionalLogger
+	db         *database.Database
 
 	// oldBlockMeta blockMetadata
 }
 
 type ExecutorOptions struct {
-	Logger   log.Logger
-	Key      ed25519.PrivateKey
-	Router   routing.Router
-	Describe config.Describe
-	EventBus *events.Bus
+	Logger              log.Logger
+	Key                 ed25519.PrivateKey
+	Router              routing.Router
+	Describe            config.Describe
+	EventBus            *events.Bus
+	MajorBlockScheduler blockscheduler.MajorBlockScheduler
 
 	isGenesis bool
+
+	BlockTimers TimerSet
 }
 
 // NewNodeExecutor creates a new Executor for a node.
@@ -88,7 +92,7 @@ func NewNodeExecutor(opts ExecutorOptions, db *database.Database) (*Executor, er
 		)
 
 	default:
-		return nil, errors.Format(errors.StatusInternalError, "invalid subnet type %v", opts.Describe.NetworkType)
+		return nil, errors.Format(errors.StatusInternalError, "invalid partition type %v", opts.Describe.NetworkType)
 	}
 
 	// This is a no-op in dev
@@ -117,6 +121,7 @@ func newExecutor(opts ExecutorOptions, db *database.Database, executors ...Trans
 	m.ExecutorOptions = opts
 	m.executors = map[protocol.TransactionType]TransactionExecutor{}
 	m.dispatcher = newDispatcher(opts)
+	m.db = db
 
 	if opts.Logger != nil {
 		m.logger.L = opts.Logger.With("module", "executor")
@@ -142,7 +147,7 @@ func newExecutor(opts ExecutorOptions, db *database.Database, executors ...Trans
 		// Load globals
 		err = m.loadGlobals(db.View)
 		if err != nil {
-			return nil, errors.Wrap(errors.StatusUnknown, err)
+			return nil, errors.Wrap(errors.StatusUnknownError, err)
 		}
 
 	case errors.Is(err, storage.ErrNotFound):
@@ -150,10 +155,14 @@ func newExecutor(opts ExecutorOptions, db *database.Database, executors ...Trans
 		m.logger.Debug("Loaded", "height", 0, "hash", logging.AsHex(batch.BptRoot()).Slice(0, 4))
 
 	default:
-		return nil, errors.Format(errors.StatusUnknown, "load ledger: %w", err)
+		return nil, errors.Format(errors.StatusUnknownError, "load ledger: %w", err)
 	}
 
 	return m, nil
+}
+
+func (m *Executor) EnableTimers() {
+	m.BlockTimers.Initialize(&m.executors)
 }
 
 func (m *Executor) ActiveGlobals_TESTONLY() *core.GlobalValues {
@@ -181,29 +190,25 @@ func (m *Executor) Genesis(block *Block, exec chain.TransactionExecutor) error {
 		Initiator: txn.Header.Principal,
 	})
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
+		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	err = indexing.BlockState(block.Batch, m.Describe.NodeUrl(protocol.Ledger)).Clear()
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
+		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	status, err := m.ExecuteEnvelope(block, delivery)
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
+		return errors.Wrap(errors.StatusUnknownError, err)
 	}
-
-	if status.Code != 0 {
-		if status.Error != nil {
-			return errors.Wrap(errors.StatusUnknown, status.Error)
-		}
-		return errors.New(errors.StatusUnknown, status.Message)
+	if status.Error != nil {
+		return errors.Wrap(errors.StatusUnknownError, status.Error)
 	}
 
 	err = m.EndBlock(block)
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
+		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	return nil
@@ -217,7 +222,7 @@ func (m *Executor) LoadStateRoot(batch *database.Batch) ([]byte, error) {
 	case errors.Is(err, storage.ErrNotFound):
 		return nil, nil
 	default:
-		return nil, errors.Format(errors.StatusUnknown, "load subnet identity: %w", err)
+		return nil, errors.Format(errors.StatusUnknownError, "load partition identity: %w", err)
 	}
 }
 
@@ -230,7 +235,7 @@ func (m *Executor) InitFromGenesis(batch *database.Batch, data []byte) error {
 	src := memory.New(nil)
 	err := src.UnmarshalJSON(data)
 	if err != nil {
-		return errors.Format(errors.StatusInternalError, "failed to unmarshal app state: %v", err)
+		return errors.Format(errors.StatusInternalError, "failed to unmarshal app state: %w", err)
 	}
 
 	// Load the root anchor chain so we can verify the system state
@@ -243,13 +248,13 @@ func (m *Executor) InitFromGenesis(batch *database.Batch, data []byte) error {
 	defer subbatch.Discard()
 	err = subbatch.Import(src)
 	if err != nil {
-		return errors.Format(errors.StatusInternalError, "failed to import database: %v", err)
+		return errors.Format(errors.StatusInternalError, "failed to import database: %w", err)
 	}
 
 	// Commit the database batch
 	err = subbatch.Commit()
 	if err != nil {
-		return errors.Format(errors.StatusInternalError, "failed to load app state into database: %v", err)
+		return errors.Format(errors.StatusInternalError, "failed to load app state into database: %w", err)
 	}
 
 	root := batch.BptRoot()
@@ -261,7 +266,7 @@ func (m *Executor) InitFromGenesis(batch *database.Batch, data []byte) error {
 
 	err = m.loadGlobals(batch.View)
 	if err != nil {
-		return fmt.Errorf("failed to load globals: %v", err)
+		return errors.Format(errors.StatusInternalError, "failed to load globals: %w", err)
 	}
 
 	return nil
@@ -270,12 +275,12 @@ func (m *Executor) InitFromGenesis(batch *database.Batch, data []byte) error {
 func (m *Executor) InitFromSnapshot(batch *database.Batch, file ioutil2.SectionReader) error {
 	err := batch.RestoreSnapshot(file)
 	if err != nil {
-		return errors.Format(errors.StatusUnknown, "load state: %w", err)
+		return errors.Format(errors.StatusUnknownError, "load state: %w", err)
 	}
 
 	err = m.loadGlobals(batch.View)
 	if err != nil {
-		return fmt.Errorf("failed to load globals: %v", err)
+		return errors.Format(errors.StatusInternalError, "failed to load globals: %w", err)
 	}
 
 	return nil

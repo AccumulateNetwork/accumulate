@@ -18,8 +18,8 @@ const (
 	// FeeFailedMaximum $0.01
 	FeeFailedMaximum Fee = 100
 
-	// FeeSignature $0.001
-	FeeSignature Fee = 10
+	// FeeSignature $0.0001
+	FeeSignature Fee = 1
 
 	// FeeData $0.001 / 256 bytes
 	FeeData Fee = 10
@@ -128,7 +128,7 @@ func ComputeSignatureFee(sig Signature) (Fee, error) {
 	// Check the transaction size
 	count, size, err := dataCount(sig)
 	if err != nil {
-		return 0, errors.Wrap(errors.StatusUnknown, err)
+		return 0, errors.Wrap(errors.StatusUnknownError, err)
 	}
 	if size > SignatureSizeMax {
 		return 0, errors.Format(errors.StatusBadRequest, "signature size exceeds %v byte entry limit", SignatureSizeMax)
@@ -143,7 +143,7 @@ func ComputeTransactionFee(tx *Transaction) (Fee, error) {
 	if IsDnUrl(tx.Header.Principal) {
 		return 0, nil
 	}
-	if _, ok := ParseSubnetUrl(tx.Header.Principal); ok {
+	if _, ok := ParsePartitionUrl(tx.Header.Principal); ok {
 		return 0, nil
 	}
 
@@ -154,13 +154,13 @@ func ComputeTransactionFee(tx *Transaction) (Fee, error) {
 
 	fee, err := BaseTransactionFee(tx.Body.Type())
 	if err != nil {
-		return 0, errors.Wrap(errors.StatusUnknown, err)
+		return 0, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	// Check the transaction size
 	count, size, err := dataCount(tx)
 	if err != nil {
-		return 0, errors.Wrap(errors.StatusUnknown, err)
+		return 0, errors.Wrap(errors.StatusUnknownError, err)
 	}
 	if size > TransactionSizeMax {
 		return 0, errors.Format(errors.StatusBadRequest, "transaction size exceeds %v byte entry limit", TransactionSizeMax)

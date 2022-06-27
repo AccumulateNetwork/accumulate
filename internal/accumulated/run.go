@@ -21,6 +21,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
+	"gitlab.com/accumulatenetwork/accumulate/internal/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
 	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
 	statuschk "gitlab.com/accumulatenetwork/accumulate/internal/connections/status"
@@ -49,7 +50,7 @@ type Daemon struct {
 	UseMemDB bool
 }
 
-func Load(dir string, newWriter func(string) (io.Writer, error)) (*Daemon, error) {
+func Load(dir string, newWriter func(*config.Config) (io.Writer, error)) (*Daemon, error) {
 	var daemon Daemon
 
 	var err error
@@ -59,10 +60,12 @@ func Load(dir string, newWriter func(string) (io.Writer, error)) (*Daemon, error
 	}
 
 	if newWriter == nil {
-		newWriter = logging.NewConsoleWriter
+		newWriter = func(c *config.Config) (io.Writer, error) {
+			return logging.NewConsoleWriter(c.LogFormat)
+		}
 	}
 
-	logWriter, err := newWriter(daemon.Config.LogFormat)
+	logWriter, err := newWriter(daemon.Config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize log writer: %v", err)
 	}
@@ -152,6 +155,12 @@ func (d *Daemon) Start() (err error) {
 		Router:   router,
 		EventBus: d.eventBus,
 	}
+
+	// On DNs initialize the major block scheduler
+	if execOpts.Describe.NetworkType == config.Directory {
+		execOpts.MajorBlockScheduler = blockscheduler.Init(execOpts.EventBus)
+	}
+
 	exec, err := block.NewNodeExecutor(execOpts, d.db)
 	if err != nil {
 		return fmt.Errorf("failed to initialize chain executor: %v", err)
@@ -282,7 +291,7 @@ func (d *Daemon) Start() (err error) {
 }
 
 func (d *Daemon) LocalClient() (connections.ABCIClient, error) {
-	ctx, err := d.connectionManager.SelectConnection(d.jrpc.Options.Describe.SubnetId, false)
+	ctx, err := d.connectionManager.SelectConnection(d.jrpc.Options.Describe.PartitionId, false)
 	if err != nil {
 		return nil, err
 	}
