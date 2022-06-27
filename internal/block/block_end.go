@@ -188,11 +188,6 @@ func (m *Executor) EndBlock(block *Block) error {
 		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
-	err = block.Batch.CommitBpt()
-	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
-	}
-
 	m.logger.Debug("Committed", "height", block.Index, "duration", time.Since(t))
 	return nil
 }

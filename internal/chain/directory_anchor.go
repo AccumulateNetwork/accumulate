@@ -89,7 +89,7 @@ func processReceiptsFromDirectory(st *StateManager, tx *Delivery, body *protocol
 
 		st.logger.Debug("Received receipt", "from", logging.AsHex(receipt.Start).Slice(0, 4), "to", logging.AsHex(body.RootChainAnchor).Slice(0, 4), "block", body.MinorBlockIndex, "source", body.Source, "module", "synthetic")
 
-		synth, err := st.batch.Account(st.Ledger()).SyntheticForAnchor(*(*[32]byte)(receipt.Start))
+		synth, err := st.batch.Account(st.Ledger()).GetSyntheticForAnchor(*(*[32]byte)(receipt.Start))
 		if err != nil {
 			return fmt.Errorf("failed to load pending synthetic transactions for anchor %X: %w", receipt.Start[:4], err)
 		}
