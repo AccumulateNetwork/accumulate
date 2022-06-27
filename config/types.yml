@@ -1,9 +1,6 @@
 Describe:
   non-binary: true
   fields:
-  - name: Genesis
-    toml: genesis
-    type: hash
     optional: true
   - name: NetworkType
     toml: type

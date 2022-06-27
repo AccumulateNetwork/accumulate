@@ -66,12 +66,13 @@ type DataEntrySetQuery struct {
 }
 
 type DescriptionResponse struct {
-	PartitionId string             `json:"partitionId,omitempty" form:"partitionId" query:"partitionId" validate:"required"`
-	NetworkType config.NetworkType `json:"networkType,omitempty" form:"networkType" query:"networkType" validate:"required"`
-	Network     config.Network     `json:"network,omitempty" form:"network" query:"network" validate:"required"`
-	Values      core.GlobalValues  `json:"values,omitempty" form:"values" query:"values" validate:"required"`
-	Error       *errors2.Error     `json:"error,omitempty" form:"error" query:"error" validate:"required"`
-	extraData   []byte
+	PartitionId   string             `json:"partitionId,omitempty" form:"partitionId" query:"partitionId" validate:"required"`
+	NetworkType   config.NetworkType `json:"networkType,omitempty" form:"networkType" query:"networkType" validate:"required"`
+	Network       config.Network     `json:"network,omitempty" form:"network" query:"network" validate:"required"`
+	NetworkAnchor [32]byte           `json:"networkAnchor,omitempty" form:"networkAnchor" query:"networkAnchor" validate:"required"`
+	Values        core.GlobalValues  `json:"values,omitempty" form:"values" query:"values" validate:"required"`
+	Error         *errors2.Error     `json:"error,omitempty" form:"error" query:"error" validate:"required"`
+	extraData     []byte
 }
 
 type DirectoryQuery struct {
@@ -593,19 +594,21 @@ func (v *DataEntrySetQuery) MarshalJSON() ([]byte, error) {
 
 func (v *DescriptionResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		PartitionId string             `json:"partitionId,omitempty"`
-		SubnetId    string             `json:"subnetId,omitempty"`
-		NetworkType config.NetworkType `json:"networkType,omitempty"`
-		Network     config.Network     `json:"network,omitempty"`
-		Subnet      config.Network     `json:"subnet,omitempty"`
-		Values      core.GlobalValues  `json:"values,omitempty"`
-		Error       *errors2.Error     `json:"error,omitempty"`
+		PartitionId   string             `json:"partitionId,omitempty"`
+		SubnetId      string             `json:"subnetId,omitempty"`
+		NetworkType   config.NetworkType `json:"networkType,omitempty"`
+		Network       config.Network     `json:"network,omitempty"`
+		Subnet        config.Network     `json:"subnet,omitempty"`
+		NetworkAnchor string             `json:"networkAnchor,omitempty"`
+		Values        core.GlobalValues  `json:"values,omitempty"`
+		Error         *errors2.Error     `json:"error,omitempty"`
 	}{}
 	u.PartitionId = v.PartitionId
 	u.SubnetId = v.PartitionId
 	u.NetworkType = v.NetworkType
 	u.Network = v.Network
 	u.Subnet = v.Network
+	u.NetworkAnchor = encoding.ChainToJSON(v.NetworkAnchor)
 	u.Values = v.Values
 	u.Error = v.Error
 	return json.Marshal(&u)
@@ -1152,19 +1155,21 @@ func (v *DataEntrySetQuery) UnmarshalJSON(data []byte) error {
 
 func (v *DescriptionResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		PartitionId string             `json:"partitionId,omitempty"`
-		SubnetId    string             `json:"subnetId,omitempty"`
-		NetworkType config.NetworkType `json:"networkType,omitempty"`
-		Network     config.Network     `json:"network,omitempty"`
-		Subnet      config.Network     `json:"subnet,omitempty"`
-		Values      core.GlobalValues  `json:"values,omitempty"`
-		Error       *errors2.Error     `json:"error,omitempty"`
+		PartitionId   string             `json:"partitionId,omitempty"`
+		SubnetId      string             `json:"subnetId,omitempty"`
+		NetworkType   config.NetworkType `json:"networkType,omitempty"`
+		Network       config.Network     `json:"network,omitempty"`
+		Subnet        config.Network     `json:"subnet,omitempty"`
+		NetworkAnchor string             `json:"networkAnchor,omitempty"`
+		Values        core.GlobalValues  `json:"values,omitempty"`
+		Error         *errors2.Error     `json:"error,omitempty"`
 	}{}
 	u.PartitionId = v.PartitionId
 	u.SubnetId = v.PartitionId
 	u.NetworkType = v.NetworkType
 	u.Network = v.Network
 	u.Subnet = v.Network
+	u.NetworkAnchor = encoding.ChainToJSON(v.NetworkAnchor)
 	u.Values = v.Values
 	u.Error = v.Error
 	if err := json.Unmarshal(data, &u); err != nil {
@@ -1180,6 +1185,11 @@ func (v *DescriptionResponse) UnmarshalJSON(data []byte) error {
 		v.Network = u.Network
 	} else {
 		v.Network = u.Subnet
+	}
+	if x, err := encoding.ChainFromJSON(u.NetworkAnchor); err != nil {
+		return fmt.Errorf("error decoding NetworkAnchor: %w", err)
+	} else {
+		v.NetworkAnchor = x
 	}
 	v.Values = u.Values
 	v.Error = u.Error
