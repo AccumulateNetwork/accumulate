@@ -130,7 +130,7 @@ func (c *Entity) Set() *record.Set[*url.TxID] {
 
 func (c *Entity) Chain() *managed.Chain {
 	return getOrCreateField(&c.chain, func() *managed.Chain {
-		return managed.NewChain(c.logger.L, c.store, c.key.Append("Chain"), markPower, "entity %[2]v chain")
+		return managed.NewChain(c.logger.L, c.store, c.key.Append("Chain"), markPower, "entity(%[2]v)-", "entity %[2]v chain")
 	})
 }
 
@@ -389,9 +389,9 @@ func getOrCreateField[T any](ptr **T, create func() *T) *T {
 	return *ptr
 }
 
-func getOrCreateMap[T any](ptr *map[storage.Key]*T, key record.Key, create func() *T) *T {
+func getOrCreateMap[T any](ptr *map[storage.Key]T, key record.Key, create func() T) T {
 	if *ptr == nil {
-		*ptr = map[storage.Key]*T{}
+		*ptr = map[storage.Key]T{}
 	}
 
 	k := key.Hash()

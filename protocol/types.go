@@ -6,10 +6,16 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 )
 
 // ChainType is the type of a chain belonging to an account.
-type ChainType uint64
+type ChainType = managed.ChainType
+
+const ChainTypeUnknown = managed.ChainTypeUnknown
+const ChainTypeTransaction = managed.ChainTypeTransaction
+const ChainTypeAnchor = managed.ChainTypeAnchor
+const ChainTypeIndex = managed.ChainTypeIndex
 
 // BookType is the type of a key book.
 type BookType uint64
