@@ -34,7 +34,7 @@ if [ -f "$(dnPrivKey 1)" ] && [ -f "/.dockerenv" ] && [ "$NUM_NODES" -ge "3" ]; 
   ((NUM_NODES++))
   accumulated init node tcp://node-1:26656 --listen=tcp://127.0.1.100:26656 -w "$NODES_DIR" --genesis-doc="${NODES_DIR}/node-1/dnn/config/genesis.json" --skip-version-check --no-website --skip-peer-health-check
 
-  pubkey=$(jq -re .pub_key.value <"$(dnPrivKey $NUM_NODES)")
+  pubkey=$(jq -re .pub_key.value <"$(dnPrivKey 1)")
   pubkey=$(echo $pubkey | base64 -d | od -t x1 -An)
   declare -g hexPubKey=$(echo $pubkey | tr -d ' ')
 
