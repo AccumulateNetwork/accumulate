@@ -20,7 +20,7 @@ func begin() record.KvStore {
 }
 
 func newChain(store record.KvStore, markPower int64, key ...interface{}) *Chain {
-	return NewChain(nil, store, record.Key(key), markPower, "chain")
+	return NewChain(nil, store, record.Key(key), markPower, "chain", "chain")
 }
 
 func TestMerkleManager_GetChainState(t *testing.T) {
