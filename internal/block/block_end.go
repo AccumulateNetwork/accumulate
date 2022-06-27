@@ -29,7 +29,7 @@ func (m *Executor) EndBlock(block *Block) error {
 	var synthLedger *protocol.SyntheticLedger
 	err := block.Batch.Account(m.Describe.Synthetic()).GetStateAs(&synthLedger)
 	if err != nil {
-		return errors.Format(errors.StatusUnknown, "load synthetic ledger: %w", err)
+		return errors.Format(errors.StatusUnknownError, "load synthetic ledger: %w", err)
 	}
 	go m.requestMissingSyntheticTransactions(synthLedger)
 
@@ -44,7 +44,7 @@ func (m *Executor) EndBlock(block *Block) error {
 	var ledgerState *protocol.SystemLedger
 	err = ledger.GetStateAs(&ledgerState)
 	if err != nil {
-		return errors.Format(errors.StatusUnknown, "load system ledger: %w", err)
+		return errors.Format(errors.StatusUnknownError, "load system ledger: %w", err)
 	}
 
 	// Update active globals
@@ -54,7 +54,7 @@ func (m *Executor) EndBlock(block *Block) error {
 			Old: &m.globals.Active,
 		})
 		if err != nil {
-			return errors.Format(errors.StatusUnknown, "publish globals update: %w", err)
+			return errors.Format(errors.StatusUnknownError, "publish globals update: %w", err)
 		}
 		m.globals.Active = *m.globals.Pending.Copy()
 	}
@@ -70,7 +70,7 @@ func (m *Executor) EndBlock(block *Block) error {
 	// Load the main chain of the minor root
 	rootChain, err := ledger.Chain(protocol.MinorRootChain, protocol.ChainTypeAnchor)
 	if err != nil {
-		return errors.Format(errors.StatusUnknown, "load root chain: %w", err)
+		return errors.Format(errors.StatusUnknownError, "load root chain: %w", err)
 	}
 
 	// Pending transaction-chain index entries
@@ -92,7 +92,7 @@ func (m *Executor) EndBlock(block *Block) error {
 		account := block.Batch.Account(u.Account)
 		indexIndex, didIndex, err := addChainAnchor(rootChain, account, u.Account, u.Name, u.Type)
 		if err != nil {
-			return errors.Format(errors.StatusUnknown, "add anchor to root chain: %w", err)
+			return errors.Format(errors.StatusUnknownError, "add anchor to root chain: %w", err)
 		}
 
 		// Add a pending transaction-chain index update
@@ -109,7 +109,7 @@ func (m *Executor) EndBlock(block *Block) error {
 	// Create a BlockChainUpdates Index
 	err = indexing.BlockChainUpdates(block.Batch, &m.Describe, uint64(block.Index)).Set(block.State.ChainUpdates.Entries)
 	if err != nil {
-		return errors.Format(errors.StatusUnknown, "store block chain updates index: %w", err)
+		return errors.Format(errors.StatusUnknownError, "store block chain updates index: %w", err)
 	}
 
 	// Add the synthetic transaction chain to the root chain
@@ -119,14 +119,14 @@ func (m *Executor) EndBlock(block *Block) error {
 		synthAnchorIndex = uint64(rootChain.Height())
 		synthIndexIndex, err = m.anchorSynthChain(block, rootChain)
 		if err != nil {
-			return errors.Wrap(errors.StatusUnknown, err)
+			return errors.Wrap(errors.StatusUnknownError, err)
 		}
 	}
 
 	// Write the updated ledger
 	err = ledger.PutState(ledgerState)
 	if err != nil {
-		return errors.Format(errors.StatusUnknown, "store system ledger: %w", err)
+		return errors.Format(errors.StatusUnknownError, "store system ledger: %w", err)
 	}
 
 	// Index the root chain
@@ -136,7 +136,7 @@ func (m *Executor) EndBlock(block *Block) error {
 		BlockTime:  &block.Time,
 	})
 	if err != nil {
-		return errors.Format(errors.StatusUnknown, "add root index chain entry: %w", err)
+		return errors.Format(errors.StatusUnknownError, "add root index chain entry: %w", err)
 	}
 
 	// Update the transaction-chain index
@@ -144,14 +144,14 @@ func (m *Executor) EndBlock(block *Block) error {
 		e.AnchorIndex = rootIndexIndex
 		err = indexing.TransactionChain(block.Batch, e.Txid).Add(&e.TransactionChainEntry)
 		if err != nil {
-			return errors.Format(errors.StatusUnknown, "store transaction chain index: %w", err)
+			return errors.Format(errors.StatusUnknownError, "store transaction chain index: %w", err)
 		}
 	}
 
 	// Add transaction-chain index entries for synthetic transactions
 	blockState, err := indexing.BlockState(block.Batch, ledgerUrl).Get()
 	if err != nil {
-		return errors.Format(errors.StatusUnknown, "load block state index: %w", err)
+		return errors.Format(errors.StatusUnknownError, "load block state index: %w", err)
 	}
 
 	for _, e := range blockState.ProducedSynthTxns {
@@ -162,7 +162,7 @@ func (m *Executor) EndBlock(block *Block) error {
 			AnchorIndex: rootIndexIndex,
 		})
 		if err != nil {
-			return errors.Format(errors.StatusUnknown, "store transaction chain index: %w", err)
+			return errors.Format(errors.StatusUnknownError, "store transaction chain index: %w", err)
 		}
 	}
 
@@ -171,26 +171,26 @@ func (m *Executor) EndBlock(block *Block) error {
 		if m.Describe.NetworkType == config.Directory {
 			err = m.createLocalDNReceipt(block, rootChain, synthAnchorIndex)
 			if err != nil {
-				return errors.Wrap(errors.StatusUnknown, err)
+				return errors.Wrap(errors.StatusUnknownError, err)
 			}
 		}
 
 		// Build synthetic receipts
 		err = m.buildSynthReceipt(block.Batch, block.State.ProducedTxns, rootChain.Height()-1, int64(synthAnchorIndex))
 		if err != nil {
-			return errors.Wrap(errors.StatusUnknown, err)
+			return errors.Wrap(errors.StatusUnknownError, err)
 		}
 	}
 
 	// Update major index chains if it's a major block
 	err = m.updateMajorIndexChains(block, rootIndexIndex)
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
+		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	err = block.Batch.CommitBpt()
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
+		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	m.logger.Debug("Committed", "height", block.Index, "duration", time.Since(t))
@@ -200,7 +200,7 @@ func (m *Executor) EndBlock(block *Block) error {
 func (m *Executor) createLocalDNReceipt(block *Block, rootChain *database.Chain, synthAnchorIndex uint64) error {
 	rootReceipt, err := rootChain.Receipt(int64(synthAnchorIndex), rootChain.Height()-1)
 	if err != nil {
-		return errors.Format(errors.StatusUnknown, "build root chain receipt: %w", err)
+		return errors.Format(errors.StatusUnknownError, "build root chain receipt: %w", err)
 	}
 
 	synthChain, err := block.Batch.Account(m.Describe.Synthetic()).ReadChain(protocol.MainChain)
@@ -218,12 +218,12 @@ func (m *Executor) createLocalDNReceipt(block *Block, rootChain *database.Chain,
 
 		synthReceipt, err := synthChain.Receipt(offset+int64(i), height-1)
 		if err != nil {
-			return errors.Format(errors.StatusUnknown, "build synth chain receipt: %w", err)
+			return errors.Format(errors.StatusUnknownError, "build synth chain receipt: %w", err)
 		}
 
 		receipt, err := synthReceipt.Combine(rootReceipt)
 		if err != nil {
-			return errors.Format(errors.StatusUnknown, "combine receipts: %w", err)
+			return errors.Format(errors.StatusUnknownError, "combine receipts: %w", err)
 		}
 
 		// This should be the second signature (SyntheticSignature should be first)
@@ -233,7 +233,7 @@ func (m *Executor) createLocalDNReceipt(block *Block, rootChain *database.Chain,
 		sig.Proof = *receipt
 		_, err = block.Batch.Transaction(txn.GetHash()).AddSignature(0, sig)
 		if err != nil {
-			return errors.Format(errors.StatusUnknown, "store signature: %w", err)
+			return errors.Format(errors.StatusUnknownError, "store signature: %w", err)
 		}
 	}
 	return nil
@@ -466,7 +466,7 @@ func (x *Executor) updateMajorIndexChains(block *Block, rootIndexIndex uint64) e
 	account := block.Batch.Account(x.Describe.AnchorPool())
 	mainChain, err := account.ReadChain(protocol.MainChain)
 	if err != nil {
-		return errors.Format(errors.StatusUnknown, "load anchor ledger main chain: %w", err)
+		return errors.Format(errors.StatusUnknownError, "load anchor ledger main chain: %w", err)
 	}
 
 	_, err = addIndexChainEntry(account, protocol.IndexChain(protocol.MainChain, true), &protocol.IndexEntry{
@@ -476,7 +476,7 @@ func (x *Executor) updateMajorIndexChains(block *Block, rootIndexIndex uint64) e
 		BlockTime:      &block.State.MakeMajorBlockTime,
 	})
 	if err != nil {
-		return errors.Format(errors.StatusUnknown, "add anchor ledger index chain entry: %w", err)
+		return errors.Format(errors.StatusUnknownError, "add anchor ledger index chain entry: %w", err)
 	}
 
 	return nil

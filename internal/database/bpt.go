@@ -74,26 +74,26 @@ func (b *Batch) SaveSnapshot(file io.WriteSeeker, network *config.Describe) erro
 	var ledger *protocol.SystemLedger
 	err := b.Account(network.Ledger()).GetStateAs(&ledger)
 	if err != nil {
-		return errors.Format(errors.StatusUnknown, "load ledger: %w", err)
+		return errors.Format(errors.StatusUnknownError, "load ledger: %w", err)
 	}
 	var v [8]byte
 	binary.BigEndian.PutUint64(v[:], ledger.Index)
 	_, err = file.Write(v[:])
 	if err != nil {
-		return errors.Format(errors.StatusUnknown, "write height: %w", err)
+		return errors.Format(errors.StatusUnknownError, "write height: %w", err)
 	}
 
 	// Write the BPT root hash
 	bpt := pmt.NewBPTManager(b.store)
 	_, err = file.Write(bpt.Bpt.RootHash[:])
 	if err != nil {
-		return errors.Format(errors.StatusUnknown, "write BPT root: %w", err)
+		return errors.Format(errors.StatusUnknownError, "write BPT root: %w", err)
 	}
 
 	// Create a section writer starting after the header
 	wr, err := ioutil2.NewSectionWriter(file, -1, -1)
 	if err != nil {
-		return errors.Format(errors.StatusUnknown, "create section writer: %w", err)
+		return errors.Format(errors.StatusUnknownError, "create section writer: %w", err)
 	}
 
 	// Save the snapshot
@@ -153,13 +153,13 @@ func ReadSnapshot(file ioutil2.SectionReader) (height uint64, format uint32, bpt
 	var bytes [40]byte
 	_, err = io.ReadFull(file, bytes[:])
 	if err != nil {
-		return 0, 0, nil, nil, errors.Wrap(errors.StatusUnknown, err)
+		return 0, 0, nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	// Make a new section reader starting after the header
 	rd, err = ioutil2.NewSectionReader(file, -1, -1)
 	if err != nil {
-		return 0, 0, nil, nil, errors.Wrap(errors.StatusUnknown, err)
+		return 0, 0, nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	return binary.BigEndian.Uint64(bytes[:8]), core.SnapshotVersion1, bytes[8:], rd, nil
@@ -170,7 +170,7 @@ func (b *Batch) RestoreSnapshot(file ioutil2.SectionReader) error {
 	// Read the snapshot
 	_, _, _, rd, err := ReadSnapshot(file)
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
+		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	// Load the snapshot

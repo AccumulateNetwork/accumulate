@@ -65,6 +65,6 @@ func TestSendDirectToWrongPartition(t *testing.T) {
 	require.NoError(t, rset.UnmarshalBinary(result.Data))
 	require.Len(t, rset.Results, 1)
 	status := rset.Results[0]
-	require.NotZero(t, status.Code)
-	require.Equal(t, fmt.Sprintf("signature 0: signature submitted to %s instead of %s", badBvnId, goodBvnId), status.Message)
+	require.NotNil(t, status.Error)
+	require.Equal(t, fmt.Sprintf("signature 0: signature submitted to %s instead of %s", badBvnId, goodBvnId), status.Error.Message)
 }

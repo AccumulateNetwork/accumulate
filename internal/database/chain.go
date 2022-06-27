@@ -2,12 +2,11 @@ package database
 
 import (
 	"encoding"
-	"errors"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 // Chain manages a Merkle tree (chain).
@@ -19,16 +18,22 @@ type Chain struct {
 }
 
 // newChain creates a new Chain.
-func newChain(account *Account, key storage.Key, writable bool) (*Chain, error) {
+func newChain(account *Account, key record.Key, writable bool) (*Chain, error) {
 	m := new(Chain)
 	m.account = account
 	m.writable = writable
-	m.merkle = managed.NewChain(account.batch.logger.L, &RecordStore{account.batch}, record.Key{key}, markPower, "chain %s")
 
 	var err error
+	m.merkle, err = getOrCreateRecord(account.batch, key.Hash(), func() *managed.Chain {
+		return managed.NewChain(account.batch.logger.L, account.batch.recordStore, key, markPower, "chain %s")
+	})
+	if err != nil {
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
+	}
+
 	m.head, err = m.merkle.Head().Get()
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	return m, nil
@@ -61,7 +66,7 @@ func (c *Chain) Entries(start int64, end int64) ([][]byte, error) {
 	}
 
 	if end < start {
-		return nil, errors.New("invalid range: start is greater than end")
+		return nil, errors.New(errors.StatusBadRequest, "invalid range: start is greater than end")
 	}
 
 	// GetRange will not cross mark point boundaries, so we may need to call it

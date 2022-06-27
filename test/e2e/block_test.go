@@ -22,12 +22,10 @@ import (
 
 func init() { acctesting.EnableDebugFeatures() }
 
-func delivered(status *TransactionStatus) bool {
-	return status.Delivered
-}
+var delivered = (*TransactionStatus).Delivered
 
 func received(status *TransactionStatus) bool {
-	return status.Pending || status.Delivered
+	return status.Code > 0 && status.Code != errors.StatusRemote
 }
 
 func updateAccount[T Account](sim *simulator.Simulator, accountUrl *url.URL, fn func(account T)) {
@@ -83,7 +81,7 @@ func TestSendTokensToBadRecipient(t *testing.T) {
 	h := synth.Entries[0].Hash()
 	status, err := batch.Transaction(h[:]).GetStatus()
 	require.NoError(t, err)
-	assert.Equal(t, ErrorCodeNotFound.GetEnumValue(), status.Code)
+	assert.Equal(t, errors.StatusNotFound, status.Code)
 }
 
 func TestSendTokensToBadRecipient2(t *testing.T) {

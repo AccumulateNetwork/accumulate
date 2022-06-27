@@ -62,8 +62,8 @@ function wait-for-tx {
     echo $RESP | jq -C --indent 0
 
     if [ -z "$NO_CHECK" ]; then
-        CODE=$(echo $RESP | jq -re '.status.code // 0') || return 1
-        [ "$CODE" -ne 0 ] && die "$TXID failed:" $(echo $RESP | jq -C --indent 0 .status)
+        FAILED=$(echo $RESP | jq -re '.status.failed // "false"') || return 1
+        [ "$FAILED" != "false" ] && die "$TXID failed:" $(echo $RESP | jq -C --indent 0 .status)
     fi
 
     for TXID in $(echo $RESP | jq -re '(.produced // [])[]' | hash-from-txid); do

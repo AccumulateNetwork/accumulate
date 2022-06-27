@@ -1,15 +1,13 @@
 package api
 
 import (
-	"errors"
-
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/getsentry/sentry-go"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
-var ErrInvalidUrl = errors.New("invalid URL")
+var ErrInvalidUrl = errors.New(errors.StatusBadRequest, "invalid URL")
 
 // General Errors
 const (
@@ -56,9 +54,9 @@ func accumulateError(err error) jsonrpc2.Error {
 		return jsonrpc2.NewError(ErrCodeNotFound, "Accumulate Error", "Not Found")
 	}
 
-	var perr *protocol.Error
+	var perr *errors.Error
 	if errors.As(err, &perr) {
-		return jsonrpc2.NewError(jsonrpc2.ErrorCode(ErrCodeProtocolBase+perr.Code), "Accumulate Error", perr.Message)
+		return jsonrpc2.NewError(ErrCodeProtocolBase-jsonrpc2.ErrorCode(perr.Code), "Accumulate Error", perr.Message)
 	}
 
 	var jerr jsonrpc2.Error

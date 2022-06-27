@@ -71,8 +71,6 @@ type ValueReader interface {
 
 // A ValueWriter holds a writable value.
 type ValueWriter interface {
-	ValueReader // TODO AC-1761 remove
-
 	// LoadValue stores the value of the reader into the receiver.
 	LoadValue(value ValueReader, put bool) error
 	// LoadBytes unmarshals a value from bytes into the receiver.

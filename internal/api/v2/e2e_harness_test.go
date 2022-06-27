@@ -144,34 +144,6 @@ func executeTx(t *testing.T, japi *api.JrpcMethods, method string, wait bool, pa
 	return resp
 }
 
-func executeTxFail(t *testing.T, japi *api.JrpcMethods, method string, keyPageUrl *url.URL, keyPageHeight uint64, params execParams) *api.TxResponse {
-	t.Helper()
-
-	u, err := url.Parse(params.Origin)
-	require.NoError(t, err)
-
-	env := acctesting.NewTransaction().
-		WithPrincipal(u).
-		WithSigner(keyPageUrl, keyPageHeight).
-		WithCurrentTimestamp().
-		WithBody(params.Payload).
-		Initiate(protocol.SignatureTypeLegacyED25519, params.Key)
-	sig := env.Signatures[0].(protocol.KeySignature)
-
-	req := new(api.TxRequest)
-	req.Origin = env.Transaction[0].Header.Principal
-	req.Signer.Timestamp = sig.GetTimestamp()
-	req.Signer.Url = sig.GetSigner()
-	req.Signer.PublicKey = sig.(protocol.KeySignature).GetPublicKey()
-	req.Signature = sig.GetSignature()
-	req.KeyPage.Version = sig.GetSignerVersion()
-	req.Payload = env.Transaction[0].Body
-
-	resp := new(api.TxResponse)
-	callApi(t, japi, method, req, resp)
-	return resp
-}
-
 func txWait(t *testing.T, japi *api.JrpcMethods, txid []byte) {
 	t.Helper()
 

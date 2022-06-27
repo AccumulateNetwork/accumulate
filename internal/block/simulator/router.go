@@ -12,7 +12,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
@@ -40,21 +39,11 @@ func (r router) Query(ctx context.Context, partition string, rawQuery []byte, op
 	batch := x.Database.Begin(false)
 	defer batch.Discard()
 	k, v, err := x.Executor.Query(batch, qu, opts.Height, opts.Prove)
-	switch {
-	case err == nil:
-		//Ok
-
-	case errors.Is(err, storage.ErrNotFound):
+	if err != nil {
+		b, _ := errors.Wrap(errors.StatusUnknownError, err).(*errors.Error).MarshalJSON()
 		res := new(coretypes.ResultABCIQuery)
-		res.Response.Info = err.Error()
-		res.Response.Code = uint32(protocol.ErrorCodeNotFound)
-		return res, nil
-
-	default:
-		r.Logf("Query failed: %v", err)
-		res := new(coretypes.ResultABCIQuery)
-		res.Response.Info = err.Error()
-		res.Response.Code = uint32(err.Code)
+		res.Response.Info = string(b)
+		res.Response.Code = uint32(protocol.ErrorCodeFailed)
 		return res, nil
 	}
 
@@ -85,22 +74,13 @@ func (r router) Submit(ctx context.Context, partition string, envelope *protocol
 
 		result, err := CheckTx(r.TB, x.Database, x.Executor, envelope)
 		if err != nil {
-			if err1, ok := err.(*protocol.Error); ok {
-				status.Code = err1.Code.GetEnumValue()
-			} else if err2, ok := err.(*errors.Error); ok {
-				status.Code = err2.Code.GetEnumValue()
-				status.Error = err2
-			} else {
-				status.Code = protocol.ErrorCodeUnknownError.GetEnumValue()
-			}
-			status.Message = err.Error()
-			if status.Code != protocol.ErrorCodeAlreadyDelivered.GetEnumValue() {
+			status.Set(err)
+			if status.Failed() {
 				r.Logger.Info("Transaction failed to check",
 					"err", err,
 					"type", envelope.Transaction.Body.Type(),
 					"txn-hash", logging.AsHex(envelope.Transaction.GetHash()).Slice(0, 4),
 					"code", status.Code,
-					"message", status.Message,
 					"principal", envelope.Transaction.Header.Principal)
 			}
 		}
@@ -115,7 +95,7 @@ func (r router) Submit(ctx context.Context, partition string, envelope *protocol
 
 	// If a user transaction fails, the batch fails
 	for i, result := range results {
-		if result.Code == 0 {
+		if result.Code.Success() {
 			continue
 		}
 		if deliveries[i].Transaction.Body.Type().IsUser() {
