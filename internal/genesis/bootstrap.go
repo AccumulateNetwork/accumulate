@@ -293,7 +293,7 @@ func (b *bootstrap) createVoteScratchChain() error {
 		return errors.Format(errors.StatusInternalError, "marshal last commit info: %w", err)
 	}
 	wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
-	wd.Scratch = true // TODO does this dummy AccumulateDataEntry also need to go on the scratch chain?
+	wd.Scratch = true
 
 	da := new(protocol.DataAccount)
 	da.Url = b.partition.URL.JoinPath(protocol.Votes)
