@@ -8,7 +8,7 @@ source "${SCRIPT_DIR}"/validate-commons.sh
 
 # Format the path to priv_validator_key.json
 function dnPrivKey {
-  echo "$NODES_DIR/node-$1/dnn/config/priv_validator_key.json"
+  echo "$NODES_DIR/node-$1/priv_validator_key.json"
 }
 
 function signCount {
