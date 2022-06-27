@@ -3,9 +3,9 @@ package api
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"math"
-	"strings"
 	"time"
 
 	"github.com/tendermint/tendermint/rpc/client"
@@ -38,24 +38,15 @@ func (q *queryDirect) query(req query.Request, opts QueryOptions) (string, []byt
 	if res.Response.Code == 0 {
 		return string(res.Response.Key), res.Response.Value, nil
 	}
-	if res.Response.Code == uint32(protocol.ErrorCodeNotFound) {
-		// If possible, preserve the error message while still being
-		// errors.Is(err, storage.ErrNotFound)
-		if strings.HasSuffix(res.Response.Info, storage.ErrNotFound.Error()) {
-			s := res.Response.Info[:len(res.Response.Info)-len(storage.ErrNotFound.Error())]
-			return "", nil, errors.NotFound("%s not found", s)
-		}
-		return "", nil, errors.NotFound("not found")
+	if res.Response.Code != uint32(protocol.ErrorCodeFailed) {
+		return "", nil, errors.New(errors.StatusUnknownError, res.Response.Info)
 	}
 
-	perr := new(protocol.Error)
-	perr.Code = protocol.ErrorCode(res.Response.Code)
-	if res.Response.Info != "" {
-		perr.Message = errors.New(errors.StatusUnknown, res.Response.Info)
-	} else {
-		perr.Message = errors.New(errors.StatusUnknown, res.Response.Log)
+	var err2 *errors.Error
+	if json.Unmarshal([]byte(res.Response.Info), &err2) == nil {
+		return "", nil, err2
 	}
-	return "", nil, perr
+	return "", nil, errors.New(errors.StatusUnknownError, res.Response.Info)
 }
 
 func (q *queryDirect) QueryUrl(u *url.URL, opts QueryOptions) (interface{}, error) {
@@ -295,7 +286,7 @@ query:
 
 	// Did we find it?
 	switch {
-	case err == nil && (!res.Status.Pending || !ignorePending):
+	case err == nil && (!res.Status.Pending() || !ignorePending):
 		// Found
 		return packTxResponse(res, nil, res.Envelope, res.Status)
 
@@ -304,7 +295,7 @@ query:
 		if err == nil {
 			err = errors.NotFound("transaction %X still pending", id)
 		} else {
-			err = errors.Wrap(errors.StatusUnknown, err)
+			err = errors.Wrap(errors.StatusUnknownError, err)
 		}
 		return nil, err
 

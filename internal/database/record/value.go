@@ -32,7 +32,8 @@ const (
 	debugPutValue
 )
 
-type encodableValue[T any] interface {
+// TODO Unexport once AC-1598 is done.
+type EncodableValue[T any] interface {
 	encoding.BinaryValue
 	getValue() T
 	setValue(T)
@@ -56,7 +57,7 @@ type Value[T any] struct {
 	key          Key
 	name         string
 	status       valueStatus
-	value        encodableValue[T]
+	value        EncodableValue[T]
 	allowMissing bool
 }
 
@@ -64,7 +65,7 @@ var _ ValueReader = (*Value[*wrappedValue[uint64]])(nil)
 var _ ValueWriter = (*Value[*wrappedValue[uint64]])(nil)
 
 // NewValue returns a new Value using the given encodable value.
-func NewValue[T any](logger log.Logger, store Store, key Key, namefmt string, allowMissing bool, value encodableValue[T]) *Value[T] {
+func NewValue[T any](logger log.Logger, store Store, key Key, namefmt string, allowMissing bool, value EncodableValue[T]) *Value[T] {
 	v := &Value[T]{}
 	v.logger.L = logger
 	v.store = store
@@ -128,7 +129,7 @@ func (v *Value[T]) Get() (u T, err error) {
 
 	case !errors.Is(err, storage.ErrNotFound):
 		// Unknown error
-		return zero[T](), errors.Wrap(errors.StatusUnknown, err)
+		return zero[T](), errors.Wrap(errors.StatusUnknownError, err)
 
 	case v.allowMissing:
 		// Initialize to an empty value
@@ -148,11 +149,11 @@ func (v *Value[T]) Get() (u T, err error) {
 func (v *Value[T]) GetAs(target interface{}) error {
 	u, err := v.Get()
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
+		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	err = encoding.SetPtr(u, target)
-	return errors.Wrap(errors.StatusUnknown, err)
+	return errors.Wrap(errors.StatusUnknownError, err)
 }
 
 // Put stores the value.
@@ -168,9 +169,7 @@ func (v *Value[T]) Put(u T) error {
 
 	v.value.setValue(u)
 	v.status = valueDirty
-
-	// TODO AC-1761 remove commit
-	return v.Commit()
+	return nil
 }
 
 // IsDirty implements Record.IsDirty.
@@ -189,7 +188,7 @@ func (v *Value[T]) Commit() error {
 
 	err := v.store.PutValue(v.key, v)
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
+		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	return nil
@@ -207,7 +206,7 @@ func (v *Value[T]) Resolve(key Key) (Record, Key, error) {
 func (v *Value[T]) GetValue() (encoding.BinaryValue, error) {
 	_, err := v.Get()
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknown, err)
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 	return v.value, nil
 }
@@ -217,12 +216,12 @@ func (v *Value[T]) GetValue() (encoding.BinaryValue, error) {
 func (v *Value[T]) LoadValue(value ValueReader, put bool) error {
 	uv, err := value.GetValue()
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
+		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
-	u, ok := uv.(encodableValue[T])
+	u, ok := uv.(EncodableValue[T])
 	if !ok {
-		return errors.Format(errors.StatusInternalError, "store %s: invalid value: want %T, got %T", v.name, (encodableValue[T])(nil), uv)
+		return errors.Format(errors.StatusInternalError, "store %s: invalid value: want %T, got %T", v.name, (EncodableValue[T])(nil), uv)
 	}
 
 	if put {
@@ -239,7 +238,7 @@ func (v *Value[T]) LoadValue(value ValueReader, put bool) error {
 func (v *Value[T]) LoadBytes(data []byte) error {
 	err := v.value.UnmarshalBinary(data)
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
+		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	v.status = valueClean
@@ -256,14 +255,20 @@ type structValue[T any, PT ptrBinaryValue[T]] struct {
 }
 
 // Struct returns an encodable value for the given encodable struct-type.
-func Struct[T any, PT ptrBinaryValue[T]]() encodableValue[PT] {
+func Struct[T any, PT ptrBinaryValue[T]]() EncodableValue[PT] {
 	return new(structValue[T, PT])
 }
 
 func (v *structValue[T, PT]) getValue() PT  { return v.value }
 func (v *structValue[T, PT]) setValue(u PT) { v.value = u }
 func (v *structValue[T, PT]) setNew()       { v.value = new(T) }
-func (v *structValue[T, PT]) copyValue() PT { return v.value.CopyAsInterface().(PT) }
+
+func (v *structValue[T, PT]) copyValue() PT {
+	if v.value == nil {
+		return nil
+	}
+	return v.value.CopyAsInterface().(PT)
+}
 
 func (v *structValue[T, PT]) CopyAsInterface() interface{} {
 	u := new(structValue[T, PT])
@@ -273,7 +278,7 @@ func (v *structValue[T, PT]) CopyAsInterface() interface{} {
 
 func (v *structValue[T, PT]) MarshalBinary() (data []byte, err error) {
 	data, err = v.value.MarshalBinary()
-	return data, errors.Wrap(errors.StatusUnknown, err)
+	return data, errors.Wrap(errors.StatusUnknownError, err)
 }
 
 func (v *structValue[T, PT]) UnmarshalBinary(data []byte) error {
@@ -282,7 +287,7 @@ func (v *structValue[T, PT]) UnmarshalBinary(data []byte) error {
 	if err == nil {
 		v.value = u
 	}
-	return errors.Wrap(errors.StatusUnknown, err)
+	return errors.Wrap(errors.StatusUnknownError, err)
 }
 
 func (v *structValue[T, PT]) UnmarshalBinaryFrom(rd io.Reader) error {
@@ -291,7 +296,7 @@ func (v *structValue[T, PT]) UnmarshalBinaryFrom(rd io.Reader) error {
 	if err == nil {
 		v.value = u
 	}
-	return errors.Wrap(errors.StatusUnknown, err)
+	return errors.Wrap(errors.StatusUnknownError, err)
 }
 
 type unionValue[T encoding.BinaryValue] struct {
@@ -300,29 +305,36 @@ type unionValue[T encoding.BinaryValue] struct {
 }
 
 // Union returns an encodable value for the given encodable union type.
-func Union[T encoding.BinaryValue](unmarshal func([]byte) (T, error)) encodableValue[T] {
+func Union[T encoding.BinaryValue](unmarshal func([]byte) (T, error)) EncodableValue[T] {
 	return &unionValue[T]{unmarshal: unmarshal}
 }
 
 // UnionFactory curries Union.
-func UnionFactory[T encoding.BinaryValue](unmarshal func([]byte) (T, error)) func() encodableValue[T] {
-	return func() encodableValue[T] { return &unionValue[T]{unmarshal: unmarshal} }
+func UnionFactory[T encoding.BinaryValue](unmarshal func([]byte) (T, error)) func() EncodableValue[T] {
+	return func() EncodableValue[T] { return &unionValue[T]{unmarshal: unmarshal} }
 }
 
 func (v *unionValue[T]) getValue() T  { return v.value }
 func (v *unionValue[T]) setValue(u T) { v.value = u }
 func (v *unionValue[T]) setNew()      { v.value = zero[T]() }
-func (v *unionValue[T]) copyValue() T { return v.CopyAsInterface().(T) }
+
+func (v *unionValue[T]) copyValue() T {
+	if interface{}(v.value) == nil {
+		return zero[T]()
+	}
+	return v.value.CopyAsInterface().(T)
+}
 
 func (v *unionValue[T]) CopyAsInterface() interface{} {
 	u := new(unionValue[T])
-	u.value = v.value.CopyAsInterface().(T)
+	u.unmarshal = v.unmarshal
+	u.value = v.copyValue()
 	return u
 }
 
 func (v *unionValue[T]) MarshalBinary() (data []byte, err error) {
 	data, err = v.value.MarshalBinary()
-	return data, errors.Wrap(errors.StatusUnknown, err)
+	return data, errors.Wrap(errors.StatusUnknownError, err)
 }
 
 func (v *unionValue[T]) UnmarshalBinary(data []byte) error {
@@ -330,14 +342,14 @@ func (v *unionValue[T]) UnmarshalBinary(data []byte) error {
 	if err == nil {
 		v.value = u
 	}
-	return errors.Wrap(errors.StatusUnknown, err)
+	return errors.Wrap(errors.StatusUnknownError, err)
 }
 
 func (v *unionValue[T]) UnmarshalBinaryFrom(rd io.Reader) error {
 	data, err := io.ReadAll(rd)
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
+		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 	err = v.UnmarshalBinary(data)
-	return errors.Wrap(errors.StatusUnknown, err)
+	return errors.Wrap(errors.StatusUnknownError, err)
 }

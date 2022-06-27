@@ -3,6 +3,7 @@ package database
 import (
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -14,6 +15,22 @@ type Account struct {
 	batch *Batch
 	key   accountBucket
 	url   *url.URL
+}
+
+func (a *Account) object() Value[*protocol.Object] {
+	return getOrCreateValue(a.batch, a.key.Object(), true, record.Struct[protocol.Object]())
+}
+
+func (a *Account) main() Value[protocol.Account] {
+	return getOrCreateValue(a.batch, a.key.State(), false, record.Union(protocol.UnmarshalAccount))
+}
+
+func (a *Account) pending() Value[*protocol.TxIdSet] {
+	return getOrCreateValue(a.batch, a.key.Index("Pending"), true, record.Struct[protocol.TxIdSet]())
+}
+
+func (a *Account) syntheticForAnchor(anchor [32]byte) Value[*protocol.TxIdSet] {
+	return getOrCreateValue(a.batch, a.key.SyntheticForAnchor(anchor), true, record.Struct[protocol.TxIdSet]())
 }
 
 // ensureMetadata ensures that the account's metadata is up to date.
@@ -40,8 +57,7 @@ func (r *Account) ensureMetadata(cb func(obj *protocol.Object) error) error {
 		return nil
 	}
 
-	r.batch.putValue(r.key.Object(), meta)
-	return nil
+	return r.object().Put(meta)
 }
 
 // ensureChain ensures that the account's metadata includes the given chain.
@@ -53,22 +69,17 @@ func (r *Account) ensureChain(newChain protocol.ChainMetadata) error {
 
 // GetObject loads the object metadata.
 func (r *Account) GetObject() (*protocol.Object, error) {
-	meta := new(protocol.Object)
-	err := r.batch.getValuePtr(r.key.Object(), meta, &meta, true)
-	if err != nil {
-		err = errors.Wrap(errors.StatusUnknown, err)
-	}
-	return meta, err
+	return r.object().Get()
 }
 
 // GetState loads the record state.
 func (r *Account) GetState() (protocol.Account, error) {
-	state, err := r.batch.getAccountState(r.key.State(), nil)
+	state, err := r.main().Get()
 	if err == nil {
 		return state, nil
 	}
 	if r.url == nil && !errors.Is(err, errors.StatusNotFound) {
-		return nil, errors.Wrap(errors.StatusUnknown, err)
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 	return nil, errors.FormatWithCause(errors.StatusNotFound, err, "account %v not found", r.url)
 }
@@ -76,12 +87,12 @@ func (r *Account) GetState() (protocol.Account, error) {
 // GetStateAs loads the record state and unmarshals into the given value. In
 // most cases `state` should be a double pointer.
 func (r *Account) GetStateAs(state interface{}) error {
-	err := r.batch.getAccountStateAs(r.key.State(), nil, state)
+	err := r.main().GetAs(state)
 	if err == nil {
 		return nil
 	}
 	if r.url == nil && !errors.Is(err, errors.StatusNotFound) {
-		return errors.Wrap(errors.StatusUnknown, err)
+		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 	return errors.FormatWithCause(errors.StatusNotFound, err, "account %v not found", r.url)
 }
@@ -111,18 +122,16 @@ func (r *Account) PutState(state protocol.Account) error {
 	}
 
 	// Store the state
-	r.batch.putValue(r.key.State(), state)
+	err = r.main().Put(state)
+	if err != nil {
+		return err
+	}
+
 	return r.putBpt()
 }
 
-func (r *Account) pending() (*protocol.TxIdSet, error) {
-	s := new(protocol.TxIdSet)
-	err := r.batch.getValuePtr(r.key.Index("Pending"), s, &s, true)
-	return s, err
-}
-
 func (r *Account) Pending() (*protocol.TxIdSet, error) {
-	s, err := r.pending()
+	s, err := r.pending().Get()
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
 		return nil, err
 	}
@@ -130,22 +139,28 @@ func (r *Account) Pending() (*protocol.TxIdSet, error) {
 }
 
 func (r *Account) AddPending(txid *url.TxID) error {
-	s, err := r.pending()
+	s, err := r.pending().Get()
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
 		return err
 	}
 	s.Add(txid)
-	r.batch.putValue(r.key.Index("Pending"), s)
+	err = r.pending().Put(s)
+	if err != nil {
+		return err
+	}
 	return r.putBpt()
 }
 
 func (r *Account) RemovePending(txid *url.TxID) error {
-	s, err := r.pending()
+	s, err := r.pending().Get()
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
 		return err
 	}
 	s.Remove(txid)
-	r.batch.putValue(r.key.Index("Pending"), s)
+	err = r.pending().Put(s)
+	if err != nil {
+		return err
+	}
 	return r.putBpt()
 }
 
@@ -178,8 +193,7 @@ func (r *Account) ReadIndexChain(name string, major bool) (*Chain, error) {
 }
 
 func (r *Account) getSyntheticForAnchor(anchor [32]byte) (*protocol.TxIdSet, error) {
-	v := new(protocol.TxIdSet)
-	err := r.batch.getValuePtr(r.key.SyntheticForAnchor(anchor), v, &v, true)
+	v, err := r.syntheticForAnchor(anchor).Get()
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
 		return nil, err
 	}
@@ -193,8 +207,7 @@ func (r *Account) AddSyntheticForAnchor(anchor [32]byte, txid *url.TxID) error {
 	}
 
 	set.Add(txid)
-	r.batch.putValue(r.key.SyntheticForAnchor(anchor), set)
-	return nil
+	return r.syntheticForAnchor(anchor).Put(set)
 }
 
 func (r *Account) SyntheticForAnchor(anchor [32]byte) ([]*url.TxID, error) {

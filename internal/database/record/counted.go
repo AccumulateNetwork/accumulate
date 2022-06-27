@@ -11,12 +11,12 @@ import (
 // a record for the count.
 type Counted[T any] struct {
 	count  *Value[uint64]
-	new    func() encodableValue[T]
+	new    func() EncodableValue[T]
 	values []*Value[T]
 }
 
 // NewCounted returns a new Counted using the given encodable value type.
-func NewCounted[T any](logger log.Logger, store Store, key Key, namefmt string, new func() encodableValue[T]) *Counted[T] {
+func NewCounted[T any](logger log.Logger, store Store, key Key, namefmt string, new func() EncodableValue[T]) *Counted[T] {
 	c := &Counted[T]{}
 	c.count = NewValue(logger, store, key, namefmt, true, Wrapped(UintWrapper))
 	c.new = new
@@ -27,7 +27,7 @@ func NewCounted[T any](logger log.Logger, store Store, key Key, namefmt string, 
 func (c *Counted[T]) Count() (int, error) {
 	v, err := c.count.Get()
 	if err != nil {
-		return 0, errors.Wrap(errors.StatusUnknown, err)
+		return 0, errors.Wrap(errors.StatusUnknownError, err)
 	}
 	return int(v), nil
 }
@@ -51,7 +51,7 @@ func (c *Counted[T]) value(i int) *Value[T] {
 func (c *Counted[T]) Get(i int) (T, error) {
 	v, err := c.value(i).Get()
 	if err != nil {
-		return v, errors.Wrap(errors.StatusUnknown, err)
+		return v, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	return v, nil
@@ -61,14 +61,14 @@ func (c *Counted[T]) Get(i int) (T, error) {
 func (c *Counted[T]) GetAll() ([]T, error) {
 	count, err := c.Count()
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknown, err)
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	values := make([]T, count)
 	for i := range values {
 		values[i], err = c.Get(i)
 		if err != nil {
-			return nil, errors.Wrap(errors.StatusUnknown, err)
+			return nil, errors.Wrap(errors.StatusUnknownError, err)
 		}
 	}
 
@@ -79,17 +79,17 @@ func (c *Counted[T]) GetAll() ([]T, error) {
 func (c *Counted[T]) Put(v T) error {
 	count, err := c.Count()
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
+		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	err = c.count.Put(uint64(count + 1))
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
+		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	err = c.value(count).Put(v)
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
+		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	return nil
@@ -99,7 +99,7 @@ func (c *Counted[T]) Put(v T) error {
 func (c *Counted[T]) Last() (int, T, error) {
 	count, err := c.Count()
 	if err != nil {
-		return 0, zero[T](), errors.Wrap(errors.StatusUnknown, err)
+		return 0, zero[T](), errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	if count == 0 {
@@ -140,7 +140,7 @@ func (c *Counted[T]) Commit() error {
 	}
 
 	if err := c.count.Commit(); err != nil {
-		return errors.Wrap(errors.StatusUnknown, err)
+		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	for _, v := range c.values {
@@ -148,7 +148,7 @@ func (c *Counted[T]) Commit() error {
 			continue
 		}
 		if err := v.Commit(); err != nil {
-			return errors.Wrap(errors.StatusUnknown, err)
+			return errors.Wrap(errors.StatusUnknownError, err)
 		}
 	}
 

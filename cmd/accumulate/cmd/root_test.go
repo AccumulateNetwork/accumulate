@@ -50,8 +50,6 @@ func bootstrap(t *testing.T, tc *testCmd) {
 	for _, r := range ar.Flow {
 		if r.Status.Error != nil {
 			require.NoError(t, r.Status.Error)
-		} else {
-			require.Zero(t, r.Status.Code, r.Status.Message)
 		}
 	}
 }

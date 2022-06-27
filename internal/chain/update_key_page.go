@@ -53,7 +53,7 @@ func (UpdateKeyPage) SignerIsAuthorized(delegate AuthDelegate, batch *database.B
 	// Signers belonging to new delegates are authorized to sign the transaction
 	newOwners, err := getNewOwners(batch, transaction)
 	if err != nil {
-		return false, errors.Wrap(errors.StatusUnknown, err)
+		return false, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	for _, owner := range newOwners {
@@ -70,7 +70,7 @@ func (UpdateKeyPage) TransactionIsReady(delegate AuthDelegate, batch *database.B
 	// All new delegates must sign the transaction
 	newOwners, err := getNewOwners(batch, transaction)
 	if err != nil {
-		return false, false, errors.Wrap(errors.StatusUnknown, err)
+		return false, false, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	for _, owner := range newOwners {
@@ -267,7 +267,7 @@ func getNewOwners(batch *database.Batch, transaction *protocol.Transaction) ([]*
 	var page *protocol.KeyPage
 	err := batch.Account(transaction.Header.Principal).GetStateAs(&page)
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknown, "load principal: %w", err)
+		return nil, errors.Format(errors.StatusUnknownError, "load principal: %w", err)
 	}
 
 	var owners []*url.URL

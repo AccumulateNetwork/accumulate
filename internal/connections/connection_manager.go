@@ -54,7 +54,7 @@ func (cm *connectionManager) doHealthCheckOnNode(connCtx *connectionContext) {
 	qu := new(query.UnknownRequest)
 	qd, _ := qu.MarshalBinary()
 	qryRes, err := connCtx.GetABCIClient().ABCIQueryWithOptions(context.Background(), "/abci_query", qd, rpc.DefaultABCIQueryOptions)
-	if err != nil || protocol.ErrorCode(qryRes.Response.Code) != protocol.ErrorCodeInvalidQueryType {
+	if err != nil || protocol.ErrorCode(qryRes.Response.Code) != protocol.ErrorCodeFailed {
 		// FIXME code ErrorCodeInvalidQueryType will emit an error in the log, maybe there is a nicer option to probe the abci API
 		connCtx.ReportError(err)
 		if qryRes != nil {

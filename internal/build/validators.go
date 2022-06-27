@@ -140,7 +140,7 @@ func updateNetworkDefinition(values *core.GlobalValues, signers []*signing.Build
 	writeData.Entry = values.FormatNetwork()
 	env, err := initiateTransaction(signers, protocol.DnUrl().JoinPath(protocol.Network), writeData)
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknown, err)
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	return env, nil
@@ -162,7 +162,7 @@ func initiateTransaction(signers []*signing.Builder, principal *url.URL, body pr
 			sig, err = signer.Sign(txn.GetHash())
 		}
 		if err != nil {
-			return nil, errors.Format(errors.StatusUnknown, "sign: %w", err)
+			return nil, errors.Format(errors.StatusUnknownError, "sign: %w", err)
 		}
 		env.Signatures = append(env.Signatures, sig)
 	}

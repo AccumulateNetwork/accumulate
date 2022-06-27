@@ -5,17 +5,18 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 // BlockChainUpdatesIndexer indexes chain updates for each block.
 type BlockChainUpdatesIndexer struct {
-	value *database.ValueAs[*BlockChainUpdatesIndex]
+	value database.Value[*BlockChainUpdatesIndex]
 }
 
 // BlockChainUpdates returns a block updates indexer.
 func BlockChainUpdates(batch *database.Batch, network *config.Describe, blockIndex uint64) *BlockChainUpdatesIndexer {
-	v := database.AccountIndex(batch, network.NodeUrl(), newfn[BlockChainUpdatesIndex](), "Block", "Minor", blockIndex)
+	v := database.AccountIndex(batch, network.NodeUrl(), true, record.Struct[BlockChainUpdatesIndex](), "Block", "Minor", blockIndex)
 	return &BlockChainUpdatesIndexer{v}
 }
 

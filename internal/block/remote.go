@@ -27,7 +27,7 @@ func (x *Executor) ProcessRemoteSignatures(block *Block, delivery *chain.Deliver
 	for _, signature := range delivery.Signatures {
 		_, fwd, err := x.shouldForwardSignature(batch, delivery.Transaction, signature, delivery.Transaction.Header.Principal, signerSeen)
 		if err != nil {
-			return errors.Wrap(errors.StatusUnknown, err)
+			return errors.Wrap(errors.StatusUnknownError, err)
 		}
 		if fwd == nil {
 			continue
@@ -60,7 +60,7 @@ func (x *Executor) shouldForwardSignature(batch *database.Batch, transaction *pr
 		// Check inner signature
 		s, fwd, err := x.shouldForwardSignature(batch, transaction, signature.Signature, signature.Delegator, seen)
 		if err != nil {
-			return nil, nil, errors.Wrap(errors.StatusUnknown, err)
+			return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 		}
 		if fwd != nil {
 			delegated := signature.Copy()
@@ -99,25 +99,25 @@ func (x *Executor) shouldForwardSignature(batch *database.Batch, transaction *pr
 
 	signer, err := loadSigner(batch, signerUrl)
 	if err != nil {
-		return nil, nil, errors.Format(errors.StatusUnknown, "load signer: %w", err)
+		return nil, nil, errors.Format(errors.StatusUnknownError, "load signer: %w", err)
 	}
 
 	// Signer is satisfied?
 	record := batch.Transaction(transaction.GetHash())
 	status, err := record.GetStatus()
 	if err != nil {
-		return nil, nil, errors.Format(errors.StatusUnknown, "load transaction status: %w", err)
+		return nil, nil, errors.Format(errors.StatusUnknownError, "load transaction status: %w", err)
 	}
 
 	ready, err := x.SignerIsSatisfied(batch, transaction, status, signer)
 	if !ready || err != nil {
-		return nil, nil, errors.Wrap(errors.StatusUnknown, err)
+		return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	// Load all of the signatures
 	sigset, err := GetSignaturesForSigner(batch, batch.Transaction(transaction.GetHash()), signer)
 	if err != nil {
-		return nil, nil, errors.Wrap(errors.StatusUnknown, err)
+		return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	set := new(protocol.SignatureSet)
