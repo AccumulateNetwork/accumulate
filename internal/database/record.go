@@ -4,7 +4,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
-	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
@@ -13,24 +12,26 @@ func (b *Batch) resolve(key record.Key, requester record.ShimValue) (record.Reco
 		return nil, nil, errors.New(errors.StatusInternalError, "bad key for batch: empty")
 	}
 
-	skey, ok := key[0].(storage.Key)
-	if !ok {
-		return nil, nil, errors.Format(errors.StatusInternalError, "bad key for value: expected %T, got %T", storage.Key{}, key[0])
+	if key[0] == "Account" {
+		if len(key) < 2 {
+			return nil, nil, errors.New(errors.StatusInternalError, "bad key for batch")
+		}
+		u, ok := key[1].(*url.URL)
+		if !ok {
+			return nil, nil, errors.New(errors.StatusInternalError, "bad key for batch")
+		}
+		return b.Account(u), key[2:], nil
 	}
 
-	if len(key) == 1 {
+	if skey, ok := key[0].(storage.Key); ok {
+		if len(key) != 1 {
+			return nil, nil, errors.New(errors.StatusInternalError, "bad key for batch")
+		}
 		if requester == nil {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for batch: expected value but requester is nil")
 		}
 		v, err := getOrCreateRecord(b, skey, func() record.Record { return requester.NewCopy(b.recordStore) })
 		return v, nil, err
-	}
-
-	if len(key) >= 3 {
-		v, err := getOrCreateRecord(b, key[:3].Hash(), func() *managed.Chain {
-			return managed.NewChain(b.logger.L, b.recordStore, key[:3], markPower, "account %[1]s chain %[3]s")
-		})
-		return v, key[3:], err
 	}
 
 	return nil, nil, errors.New(errors.StatusInternalError, "bad key for batch")
@@ -95,17 +96,12 @@ func (b batchStore) resolveValue(key record.Key, requester interface{}) (record.
 }
 
 func getOrCreateRecord[T record.Record](batch *Batch, key storage.Key, create func() T) (T, error) {
-	if v, ok := batch.values[key]; ok {
-		u, ok := v.(T)
-		if ok {
-			return u, nil
-		}
-		return u, errors.Format(errors.StatusInternalError, "expected %T, got %T", u, v)
+	v := getOrCreateMap(&batch.values, record.Key{key}, func() record.Record { return create() })
+	u, ok := v.(T)
+	if ok {
+		return u, nil
 	}
-
-	v := create()
-	batch.values[key] = v
-	return v, nil
+	return u, errors.Format(errors.StatusInternalError, "expected %T, got %T", u, v)
 }
 
 func getOrCreateValue[T any](batch *Batch, key storage.Key, allowMissing bool, value record.EncodableValue[T]) Value[T] {
@@ -125,8 +121,7 @@ type Value[T any] interface {
 }
 
 func AccountIndex[T any](b *Batch, u *url.URL, allowMissing bool, value record.EncodableValue[T], key ...interface{}) Value[T] {
-	a := account(u)
-	return getOrCreateValue(b, a.Index(key...), allowMissing, value)
+	return getOrCreateValue(b, record.Key{"Account", u, "Index"}.Append(key...).Hash(), allowMissing, value)
 }
 
 func TransactionIndex[T any](b *Batch, hash []byte, allowMissing bool, value record.EncodableValue[T], key ...interface{}) Value[T] {

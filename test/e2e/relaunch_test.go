@@ -20,6 +20,8 @@ import (
 )
 
 func TestRelaunch(t *testing.T) {
+	acctesting.SkipPlatform(t, "darwin", "Localhost IP addresses")
+
 	// Create a network
 	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 
