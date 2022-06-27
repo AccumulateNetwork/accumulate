@@ -20,6 +20,8 @@ type Batch struct {
 	values      map[storage.Key]record.Record
 	bptEntries  map[storage.Key][32]byte
 	recordStore record.Store
+
+	accounts map[storage.Key]*Account
 }
 
 // Begin starts a new batch.
@@ -59,8 +61,8 @@ func (b *Batch) Begin(writable bool) *Batch {
 // DeleteAccountState_TESTONLY is intended for testing purposes only. It deletes an
 // account from the database.
 func (b *Batch) DeleteAccountState_TESTONLY(url *url.URL) error {
-	a := account(url)
-	return b.store.Put(a.State(), nil)
+	a := record.Key{"Account", url, "Main"}
+	return b.store.Put(a.Hash(), nil)
 }
 
 // View runs the function with a read-only transaction.
@@ -108,9 +110,13 @@ func (b *Batch) Commit() error {
 	if b.done {
 		panic("attempted to use a commited or discarded batch")
 	}
+	defer func() { b.done = true }()
 
-	b.done = true
-
+	for _, v := range b.accounts {
+		if err := v.Commit(); err != nil {
+			return errors.Wrap(errors.StatusUnknownError, err)
+		}
+	}
 	for _, v := range b.values {
 		if err := v.Commit(); err != nil {
 			return errors.Wrap(errors.StatusUnknownError, err)
@@ -123,6 +129,11 @@ func (b *Batch) Commit() error {
 		}
 		if db, ok := b.store.(*storage.DebugBatch); ok {
 			db.PretendWrite()
+		}
+	} else {
+		err := b.commitBpt()
+		if err != nil {
+			return errors.Wrap(errors.StatusUnknownError, err)
 		}
 	}
 
@@ -141,6 +152,11 @@ func (b *Batch) Discard() {
 
 // Dirty returns true if anything has been changed.
 func (b *Batch) Dirty() bool {
+	for _, v := range b.accounts {
+		if v.IsDirty() {
+			return true
+		}
+	}
 	for _, v := range b.values {
 		if v.IsDirty() {
 			return true
