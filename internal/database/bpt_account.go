@@ -123,7 +123,7 @@ func (a *Account) restore(s *accountState) error {
 		metadata.Pending.Add(p.Transaction.ID())
 	}
 
-	err := a.object().Put(metadata)
+	err := a.Object().Put(metadata)
 	if err != nil {
 		return fmt.Errorf("store account metadata: %w", err)
 	}
@@ -259,7 +259,6 @@ func (s *accountState) Hasher() (hash.Hasher, error) {
 
 // PutBpt writes the record's BPT entry.
 func (a *Account) putBpt() error {
-
 	state, err := a.state(false, false)
 	if err != nil {
 		return err
@@ -271,7 +270,7 @@ func (a *Account) putBpt() error {
 	}
 
 	hash := *(*[32]byte)(hasher.MerkleHash())
-	a.batch.putBpt(a.key.Object(), hash)
+	a.batch.putBpt(a.key.Hash(), hash)
 	return nil
 }
 
@@ -287,7 +286,7 @@ func (a *Account) StateReceipt() (*managed.Receipt, error) {
 		return nil, err
 	}
 
-	rBPT, err := a.batch.BptReceipt(a.key.Object(), *(*[32]byte)(hasher.MerkleHash()))
+	rBPT, err := a.batch.BptReceipt(a.key.Hash(), *(*[32]byte)(hasher.MerkleHash()))
 	if err != nil {
 		return nil, err
 	}
