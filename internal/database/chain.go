@@ -4,7 +4,6 @@ import (
 	"encoding"
 	"fmt"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 )
@@ -17,20 +16,13 @@ type Chain struct {
 	head     *managed.MerkleState
 }
 
-// newChain creates a new Chain.
-func newChain(account *Account, key record.Key, writable bool) (*Chain, error) {
+func newChain(account *Account, merkle *managed.Chain, writable bool) (*Chain, error) {
 	m := new(Chain)
 	m.account = account
 	m.writable = writable
+	m.merkle = merkle
 
 	var err error
-	m.merkle, err = getOrCreateRecord(account.batch, key.Hash(), func() *managed.Chain {
-		return managed.NewChain(account.batch.logger.L, account.batch.recordStore, key, markPower, "chain %s")
-	})
-	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
-	}
-
 	m.head, err = m.merkle.Head().Get()
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
@@ -132,11 +124,7 @@ func (c *Chain) AddEntry(entry []byte, unique bool) error {
 	}
 
 	err := c.merkle.AddHash(entry, unique)
-	if err != nil {
-		return err
-	}
-
-	return c.account.putBpt()
+	return errors.Wrap(errors.StatusUnknownError, err)
 }
 
 // Receipt builds a receipt from one index to another
