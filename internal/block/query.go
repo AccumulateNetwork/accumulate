@@ -250,7 +250,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 	case "pending":
 		switch len(fragment) {
 		case 1:
-			txIds, err := batch.Account(u).Pending()
+			txIds, err := batch.Account(u).GetPending()
 			if err != nil {
 				return nil, nil, err
 			}
