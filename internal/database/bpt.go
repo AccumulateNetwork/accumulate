@@ -8,6 +8,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -27,9 +28,7 @@ func (b *Batch) putBpt(key storage.Key, hash [32]byte) {
 	b.bptEntries[key] = hash
 }
 
-// CommitBpt updates the Patricia Tree hashes with the values from the updates
-// since the last update.
-func (b *Batch) CommitBpt() error {
+func (b *Batch) commitBpt() error {
 	bpt := pmt.NewBPTManager(b.store)
 
 	for k, v := range b.bptEntries {
@@ -46,6 +45,9 @@ func (b *Batch) CommitBpt() error {
 }
 
 func (b *Batch) BptRoot() []byte {
+	if len(b.bptEntries) > 0 {
+		panic("attempted to get BPT root with uncommitted changes")
+	}
 	bpt := pmt.NewBPTManager(b.store)
 	return bpt.Bpt.RootHash[:]
 }
@@ -99,15 +101,13 @@ func (b *Batch) SaveSnapshot(file io.WriteSeeker, network *config.Describe) erro
 	// Save the snapshot
 	return bpt.Bpt.SaveSnapshot(wr, func(key storage.Key, hash [32]byte) ([]byte, error) {
 		// Create an Account object
-		account := &Account{b, accountBucket{objectBucket(key)}, nil}
-
-		/*// Load the main state so we can get the URL
-		a, err := account.GetState()
+		u, err := b.getAccountUrl(record.Key{key})
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(errors.StatusUnknownError, err)
 		}
+		account := b.Account(u)
 
-		// Load the full state - preserve chains if the account is a partition account
+		/*// Load the full state - preserve chains if the account is a partition account
 		state, err := account.state(true, partition.PrefixOf(a.GetUrl()))*/
 
 		// Load the full state - always preserve chains for now
@@ -182,7 +182,11 @@ func (b *Batch) RestoreSnapshot(file ioutil2.SectionReader) error {
 			return err
 		}
 
-		account := &Account{b, accountBucket{objectBucket(key)}, nil}
+		account := b.Account(state.Main.GetUrl())
+		if account.key.Hash() != key {
+			return errors.Format(errors.StatusInternalError, "hash key %x does not match URL %v", key, state.Main.GetUrl())
+		}
+
 		err = account.restore(state)
 		if err != nil {
 			return err

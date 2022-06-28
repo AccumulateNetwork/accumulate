@@ -13,6 +13,7 @@ type Chain struct {
 	logger    logging.OptionalLogger
 	store     record.Store
 	key       record.Key
+	name      string
 	label     string
 	markPower int64
 	markFreq  int64
@@ -147,9 +148,9 @@ func getOrCreateField[T any](ptr **T, create func() *T) *T {
 	return *ptr
 }
 
-func getOrCreateMap[T any](ptr *map[storage.Key]*T, key record.Key, create func() *T) *T {
+func getOrCreateMap[T any](ptr *map[storage.Key]T, key record.Key, create func() T) T {
 	if *ptr == nil {
-		*ptr = map[storage.Key]*T{}
+		*ptr = map[storage.Key]T{}
 	}
 
 	k := key.Hash()
