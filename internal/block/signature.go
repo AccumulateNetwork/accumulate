@@ -1,6 +1,7 @@
 package block
 
 import (
+	"bytes"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
@@ -139,6 +140,12 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 		// Basic validation
 		if signature.Type() != protocol.SignatureTypeReceipt && !signature.Verify(delivery.Transaction.GetHash()) {
 			return nil, errors.Format(errors.StatusBadRequest, "invalid signature")
+		}
+		if !delivery.Transaction.Body.Type().IsUser() {
+			err = x.validatePartitionSignature(md.Location, signature, delivery.Transaction)
+			if err != nil {
+				return nil, errors.Wrap(errors.StatusUnknownError, err)
+			}
 		}
 
 		signer, err = x.processKeySignature(batch, delivery, signature, md.Location, !md.Initiated, !md.Delegated && delivery.Transaction.Header.Principal.LocalTo(md.Location))
@@ -726,6 +733,41 @@ func GetSignaturesForSigner(batch *database.Batch, transaction *database.Transac
 		signatures = append(signatures, state.Signature)
 	}
 	return signatures, nil
+}
+
+//validationPartitionSignature checks if the key used to sign the synthetic or system transaction belongs to the same subnet
+func (x *Executor) validatePartitionSignature(location *url.URL, sig protocol.KeySignature, tx *protocol.Transaction) error {
+	// TODO AC-1702 Use GetAllSignatures to determine the source
+	var sigurl string
+	var source *url.URL
+	var err error
+	skey := sig.GetPublicKey()
+
+	switch txn := tx.Body.(type) {
+	case protocol.SynthTxnWithOrigin:
+		_, source = txn.GetCause()
+	case *protocol.DirectoryAnchor:
+		source = txn.Source
+	case *protocol.BlockValidatorAnchor:
+		source = txn.Source
+	default:
+		return nil
+	}
+	sigurl, err = x.Router.RouteAccount(source)
+
+	if err != nil {
+		return errors.Format(errors.StatusInternalError, "unable to resolve source of transaction %w", err)
+	}
+	subnet := x.globals.Active.Network.Partition(sigurl)
+	if subnet == nil {
+		return errors.Format(errors.StatusUnknownError, "unable to resolve originating subnet of the signature")
+	}
+	for _, vkey := range subnet.ValidatorKeys {
+		if bytes.Equal(vkey, skey) {
+			return nil
+		}
+	}
+	return errors.Format(errors.StatusUnauthorized, "the key used to sign does not belong to the originating subnet")
 }
 
 func GetSyntheticTransactionReceipt(batch *database.Batch, hash [32]byte) (*managed.Receipt, *url.URL, error) {
