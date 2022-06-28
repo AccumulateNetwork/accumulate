@@ -284,7 +284,6 @@ func WriteNodeFiles(cfg *config.Config, privValKey, nodeKey []byte, genDoc *tmty
 	if err != nil {
 		return fmt.Errorf("failed to write config files: %w", err)
 	}
-
 	err = loadOrCreatePrivVal(cfg, privValKey)
 	if err != nil {
 		return fmt.Errorf("failed to write private validator: %w", err)
@@ -311,7 +310,6 @@ func loadOrCreatePrivVal(config *config.Config, key []byte) error {
 		pv.Save()
 		return nil
 	}
-
 	pv, err := privval.LoadFilePV(keyFile, stateFile)
 	if err != nil {
 		return err

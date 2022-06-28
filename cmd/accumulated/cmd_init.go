@@ -135,13 +135,17 @@ func networkReset() {
 		return
 	}
 	check(err)
-
 	for _, ent := range ent {
+		/*	if ent.Name() == "network.json" {
+			err := os.Remove(path.Join(flagMain.WorkDir, ent.Name()))
+			check(err)
+		}*/
 		if !ent.IsDir() {
 			continue
 		}
 
 		dir := path.Join(flagMain.WorkDir, ent.Name())
+
 		if !strings.HasPrefix(ent.Name(), "node-") {
 			fmt.Fprintf(os.Stderr, "Skipping %s\n", dir)
 			continue
@@ -162,10 +166,16 @@ func nodeReset(dir string) bool {
 
 	var skipped bool
 	for _, ent := range ent {
+
+		if ent.Name() == "priv_validator_key.json" {
+			err := os.Remove(path.Join(dir, ent.Name()))
+			check(err)
+		}
 		if !ent.IsDir() {
 			skipped = true
 			continue
 		}
+
 		isDelete := false
 		if ent.Name() == "bvnn" {
 			isDelete = true
