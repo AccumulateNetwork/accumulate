@@ -539,7 +539,7 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove, remote
 	status, err := tx.GetStatus()
 	if err != nil {
 		return nil, fmt.Errorf("invalid query from GetTx in state database, %v", err)
-	} else if !remote && !status.Delivered && status.Remote() {
+	} else if !remote && !status.Delivered() && status.Remote() {
 		// If the transaction is a synthetic transaction produced by this BVN
 		// and has not been delivered, pretend like it doesn't exist
 		return nil, errors.NotFound("transaction %X not found", txid[:4])
@@ -653,7 +653,6 @@ func (m *Executor) queryTxHistory(batch *database.Batch, account *url.URL, start
 	for _, targetChain := range targetChains {
 		chain, err := batch.Account(account).ReadChain(targetChain)
 		if err != nil {
-			return nil, &protocol.Error{Code: protocol.ErrorCodeTxnHistory, Message: fmt.Errorf("error obtaining txid range %v", err)}
 			return nil, errors.Format(errors.StatusUnknownError, "error obtaining txid range %v", err)
 		}
 
@@ -661,7 +660,7 @@ func (m *Executor) queryTxHistory(batch *database.Batch, account *url.URL, start
 
 		txids, err := chain.Entries(int64(start), int64(end))
 		if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "error obtaining txid range %v", err)
+			return nil, errors.Format(errors.StatusUnknownError, "error obtaining txid range %v", err)
 		}
 
 		for _, txid := range txids {
@@ -670,7 +669,7 @@ func (m *Executor) queryTxHistory(batch *database.Batch, account *url.URL, start
 				if errors.Is(err, storage.ErrNotFound) {
 					continue // txs can be filtered out for scratch accounts
 				}
-			return nil, errors.Wrap(errors.StatusUnknownError, err)
+				return nil, errors.Wrap(errors.StatusUnknownError, err)
 			}
 			thr.Transactions = append(thr.Transactions, *qr)
 		}
