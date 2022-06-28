@@ -144,7 +144,7 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 		if !delivery.Transaction.Body.Type().IsUser() {
 			err = x.validatePartitionSignature(md.Location, signature, delivery.Transaction)
 			if err != nil {
-				return nil, errors.Wrap(errors.StatusUnknown, err)
+				return nil, errors.Wrap(errors.StatusUnknownError, err)
 			}
 		}
 
@@ -748,7 +748,7 @@ func (x *Executor) validatePartitionSignature(location *url.URL, sig protocol.Ke
 		_, source = txn.GetCause()
 	case *protocol.DirectoryAnchor:
 		source = txn.Source
-	case *protocol.PartitionAnchor:
+	case *protocol.BlockValidatorAnchor:
 		source = txn.Source
 	default:
 		return nil
@@ -758,9 +758,9 @@ func (x *Executor) validatePartitionSignature(location *url.URL, sig protocol.Ke
 	if err != nil {
 		return errors.Format(errors.StatusInternalError, "unable to resolve source of transaction %w", err)
 	}
-	subnet := x.globals.Active.Network.Subnet(sigurl)
+	subnet := x.globals.Active.Network.Partition(sigurl)
 	if subnet == nil {
-		return errors.Format(errors.StatusUnknown, "unable to resolve originating subnet of the signature")
+		return errors.Format(errors.StatusUnknownError, "unable to resolve originating subnet of the signature")
 	}
 	for _, vkey := range subnet.ValidatorKeys {
 		if bytes.Equal(vkey, skey) {
