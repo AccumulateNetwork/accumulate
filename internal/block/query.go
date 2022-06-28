@@ -559,6 +559,38 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove, remote
 	}
 
 	if signSynth {
+		// TODO This is pretty hacky
+
+		// Add the partition signature
+		partSig := new(protocol.PartitionSignature)
+		partSig.SourceNetwork = status.SourceNetwork
+		partSig.DestinationNetwork = status.DestinationNetwork
+		partSig.SequenceNumber = status.SequenceNumber
+		partSig.TransactionHash = *(*[32]byte)(txid)
+		_, err = tx.AddSystemSignature(&m.Describe, partSig)
+		if err != nil {
+			return nil, err
+		}
+		err = batch.Transaction(partSig.Hash()).PutState(&database.SigOrTxn{Signature: partSig})
+		if err != nil {
+			return nil, err
+		}
+
+		// Add the receipt signature
+		receiptSig := new(protocol.ReceiptSignature)
+		receiptSig.SourceNetwork = status.SourceNetwork
+		receiptSig.Proof = *status.Proof
+		receiptSig.TransactionHash = *(*[32]byte)(txid)
+		_, err = tx.AddSystemSignature(&m.Describe, receiptSig)
+		if err != nil {
+			return nil, err
+		}
+		err = batch.Transaction(receiptSig.Hash()).PutState(&database.SigOrTxn{Signature: receiptSig})
+		if err != nil {
+			return nil, err
+		}
+
+		// Add the key signature
 		keySig, err := m.signTransaction(batch, txState.Transaction, status.DestinationNetwork)
 		if err != nil {
 			return nil, errors.Format(errors.StatusInternalError, "sign synthetic transaction: %w", err)

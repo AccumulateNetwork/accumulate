@@ -251,10 +251,9 @@ func (x *Executor) captureValueAsDataEntry(batch *database.Batch, internalAccoun
 
 	st.UpdateData(da, wd.Entry.Hash(), wd.Entry)
 
-	err = x.putSyntheticTransaction(
+	err = putSyntheticTransaction(
 		batch, txn,
-		&protocol.TransactionStatus{Code: errors.StatusDelivered},
-		nil)
+		&protocol.TransactionStatus{Code: errors.StatusDelivered})
 	if err != nil {
 		return err
 	}
@@ -413,18 +412,23 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch) (bool, error
 			return false, errors.Format(errors.StatusInternalError, "synthetic transaction destination is not set")
 		}
 
-		// TODO Can we make this less hacky?
-		sigs, err := GetAllSignatures(batch, record, status, txn.Header.Initiator[:])
-		if err != nil {
-			return false, errors.Format(errors.StatusUnknownError, "load synthetic transaction signatures: %w", err)
-		}
+		partSig := new(protocol.PartitionSignature)
+		partSig.SourceNetwork = status.SourceNetwork
+		partSig.DestinationNetwork = status.DestinationNetwork
+		partSig.SequenceNumber = status.SequenceNumber
+		partSig.TransactionHash = *(*[32]byte)(txn.GetHash())
+
+		receiptSig := new(protocol.ReceiptSignature)
+		receiptSig.SourceNetwork = status.SourceNetwork
+		receiptSig.Proof = *status.Proof
+		receiptSig.TransactionHash = *(*[32]byte)(txn.GetHash())
 
 		keySig, err := x.signTransaction(batch, txn, status.DestinationNetwork)
 		if err != nil {
 			return false, errors.Wrap(errors.StatusUnknownError, err)
 		}
 
-		env := &protocol.Envelope{Transaction: []*protocol.Transaction{txn}, Signatures: append(sigs, keySig)}
+		env := &protocol.Envelope{Transaction: []*protocol.Transaction{txn}, Signatures: []protocol.Signature{partSig, receiptSig, keySig}}
 		err = x.dispatcher.BroadcastTx(context.Background(), txn.Header.Principal, env)
 		if err != nil {
 			return false, errors.Format(errors.StatusUnknownError, "send synthetic transaction %X: %w", hash[:4], err)

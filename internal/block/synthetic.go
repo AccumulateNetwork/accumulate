@@ -1,7 +1,6 @@
 package block
 
 import (
-	"crypto/sha256"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
@@ -126,15 +125,14 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 	}
 
 	// Store the transaction, its status, and the initiator
-	err = m.putSyntheticTransaction(
+	err = putSyntheticTransaction(
 		batch, txn,
 		&protocol.TransactionStatus{
 			Code:               errors.StatusRemote,
 			SourceNetwork:      initSig.SourceNetwork,
 			DestinationNetwork: initSig.DestinationNetwork,
 			SequenceNumber:     initSig.SequenceNumber,
-		},
-		initSig)
+		})
 	if err != nil {
 		return nil, err
 	}
@@ -204,15 +202,8 @@ func (x *Executor) buildSynthReceipt(batch *database.Batch, produced []*protocol
 		if err != nil {
 			return errors.Format(errors.StatusUnknownError, "load synthetic transaction status: %w", err)
 		}
-		sigs, err := GetAllSignatures(batch, record, status, transaction.Header.Initiator[:])
-		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "load synthetic transaction signatures: %w", err)
-		}
-		if len(sigs) == 0 {
-			return errors.Format(errors.StatusInternalError, "synthetic transaction %X does not have a synthetic origin signature", transaction.GetHash()[:4])
-		}
-		if len(sigs) > 1 {
-			return errors.Format(errors.StatusInternalError, "synthetic transaction %X has more than one signature", transaction.GetHash()[:4])
+		if status.SourceNetwork == nil || status.DestinationNetwork == nil || status.SequenceNumber == 0 {
+			return errors.Format(errors.StatusInternalError, "synthetic transaction %X status is not correctly initialized", transaction.GetHash()[:4])
 		}
 
 		// Prove it
@@ -230,26 +221,6 @@ func (x *Executor) buildSynthReceipt(batch *database.Batch, produced []*protocol
 		err = record.PutStatus(status)
 		if err != nil {
 			return errors.Format(errors.StatusUnknownError, "store synthetic transaction status: %w", err)
-		}
-
-		proofSig := new(protocol.ReceiptSignature)
-		proofSig.SourceNetwork = x.Describe.NodeUrl()
-		proofSig.TransactionHash = *(*[32]byte)(transaction.GetHash())
-		proofSig.Proof = *r
-
-		// Record the proof signature but DO NOT record the key signature! Each
-		// node has a different key, so recording the key signature here would
-		// cause a consensus failure!
-		err = batch.Transaction(proofSig.Hash()).PutState(&database.SigOrTxn{
-			Txid:      transaction.ID(),
-			Signature: proofSig,
-		})
-		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "store signature: %w", err)
-		}
-		_, err = batch.Transaction(transaction.GetHash()).AddSystemSignature(&x.Describe, proofSig)
-		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "record receipt for %X: %w", transaction.GetHash()[:4], err)
 		}
 	}
 
@@ -283,7 +254,7 @@ func processSyntheticTransaction(batch *database.Batch, transaction *protocol.Tr
 	return nil
 }
 
-func (x *Executor) putSyntheticTransaction(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus, signature *protocol.PartitionSignature) error {
+func putSyntheticTransaction(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) error {
 	// Store the transaction
 	obj := batch.Transaction(transaction.GetHash())
 	err := obj.PutState(&database.SigOrTxn{Transaction: transaction})
@@ -296,42 +267,6 @@ func (x *Executor) putSyntheticTransaction(batch *database.Batch, transaction *p
 	if err != nil {
 		return fmt.Errorf("store status: %w", err)
 	}
-
-	if signature == nil {
-		return nil
-	}
-
-	// Record the signature against the transaction
-	_, err = obj.AddSystemSignature(&x.Describe, signature)
-	if err != nil {
-		return fmt.Errorf("add signature: %w", err)
-	}
-
-	// Hash the signature
-	sigData, err := signature.MarshalBinary()
-	if err != nil {
-		return fmt.Errorf("marshal signature: %w", err)
-	}
-	sigHash := sha256.Sum256(sigData)
-
-	// Store the signature
-	err = batch.Transaction(sigHash[:]).PutState(&database.SigOrTxn{
-		Txid:      transaction.ID(),
-		Signature: signature,
-	})
-	if err != nil {
-		return fmt.Errorf("store signature: %w", err)
-	}
-
-	// // Add the signature to the principal's chain
-	// chain, err := batch.Account(transaction.Header.Principal).Chain(protocol.SignatureChain, protocol.ChainTypeTransaction)
-	// if err != nil {
-	// 	return fmt.Errorf("load chain: %w", err)
-	// }
-	// err = chain.AddEntry(sigHash[:], true)
-	// if err != nil {
-	// 	return fmt.Errorf("store chain: %w", err)
-	// }
 
 	return nil
 }

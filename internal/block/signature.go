@@ -738,31 +738,6 @@ func verifyInternalSignature(delivery *chain.Delivery, _ *protocol.InternalSigna
 	return nil
 }
 
-func GetAllSignatures(batch *database.Batch, transaction *database.Transaction, status *protocol.TransactionStatus, txnInitHash []byte) ([]protocol.Signature, error) {
-	signatures := make([]protocol.Signature, 1)
-
-	for _, signer := range status.Signers {
-		sigset, err := GetSignaturesForSigner(batch, transaction, signer)
-		if err != nil {
-			return nil, errors.Wrap(errors.StatusUnknownError, err)
-		}
-
-		for _, sig := range sigset {
-			if protocol.SignatureDidInitiate(sig, txnInitHash) {
-				signatures[0] = sig
-			} else {
-				signatures = append(signatures, sig)
-			}
-		}
-	}
-
-	if signatures[0] == nil {
-		signatures = signatures[1:]
-	}
-
-	return signatures, nil
-}
-
 func GetSignaturesForSigner(batch *database.Batch, transaction *database.Transaction, signer protocol.Signer) ([]protocol.Signature, error) {
 	// Load the signature set
 	sigset, err := transaction.ReadSignaturesForSigner(signer)
