@@ -257,7 +257,7 @@ func processSyntheticTransaction(batch *database.Batch, transaction *protocol.Tr
 	return validateSyntheticTransactionSignatures(transaction, signatures)
 }
 
-func (x *Executor) putSyntheticTransaction(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus, signature *protocol.SyntheticSignature) error {
+func (x *Executor) putSyntheticTransaction(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus, signature *protocol.PartitionSignature) error {
 	// Store the transaction
 	obj := batch.Transaction(transaction.GetHash())
 	err := obj.PutState(&database.SigOrTxn{Transaction: transaction})

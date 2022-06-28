@@ -319,10 +319,10 @@ func (x *Executor) requestMissingSyntheticTransactions(ledger *protocol.Syntheti
 				// Put the synthetic signature first
 				var gotSynth, gotReceipt, gotKey bool
 				for i, signature := range resp.Signatures {
-					if _, ok := signature.(*protocol.SyntheticSignature); ok && i > 0 {
+					if _, ok := signature.(*protocol.PartitionSignature); ok && i > 0 {
 					}
 					switch signature.(type) {
-					case *protocol.SyntheticSignature:
+					case *protocol.PartitionSignature:
 						gotSynth = true
 						resp.Signatures[0], resp.Signatures[i] = resp.Signatures[i], resp.Signatures[0]
 					case *protocol.ReceiptSignature:

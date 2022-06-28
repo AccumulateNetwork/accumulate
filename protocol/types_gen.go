@@ -493,6 +493,19 @@ type PartitionDefinition struct {
 	extraData     []byte
 }
 
+// PartitionSignature is used to initiate transactions between BVNs.
+type PartitionSignature struct {
+	fieldsSet []bool
+	// SourceNetwork is the network that produced the transaction.
+	SourceNetwork *url.URL `json:"sourceNetwork,omitempty" form:"sourceNetwork" query:"sourceNetwork" validate:"required"`
+	// DestinationNetwork is the network that the transaction is sent to.
+	DestinationNetwork *url.URL `json:"destinationNetwork,omitempty" form:"destinationNetwork" query:"destinationNetwork" validate:"required"`
+	// SequenceNumber is the sequence number of the transaction.
+	SequenceNumber  uint64   `json:"sequenceNumber,omitempty" form:"sequenceNumber" query:"sequenceNumber" validate:"required"`
+	TransactionHash [32]byte `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash"`
+	extraData       []byte
+}
+
 type PartitionSyntheticLedger struct {
 	fieldsSet []bool
 	// Url is the URL of the partition.
@@ -669,19 +682,6 @@ type SyntheticOrigin struct {
 	// FeeRefund is portion of the cause's fee that will be refunded if this transaction fails.
 	FeeRefund uint64 `json:"feeRefund,omitempty" form:"feeRefund" query:"feeRefund" validate:"required"`
 	extraData []byte
-}
-
-// SyntheticSignature is used to initiate transactions between BVNs.
-type SyntheticSignature struct {
-	fieldsSet []bool
-	// SourceNetwork is the network that produced the transaction.
-	SourceNetwork *url.URL `json:"sourceNetwork,omitempty" form:"sourceNetwork" query:"sourceNetwork" validate:"required"`
-	// DestinationNetwork is the network that the transaction is sent to.
-	DestinationNetwork *url.URL `json:"destinationNetwork,omitempty" form:"destinationNetwork" query:"destinationNetwork" validate:"required"`
-	// SequenceNumber is the sequence number of the transaction.
-	SequenceNumber  uint64   `json:"sequenceNumber,omitempty" form:"sequenceNumber" query:"sequenceNumber" validate:"required"`
-	TransactionHash [32]byte `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash"`
-	extraData       []byte
 }
 
 type SyntheticWriteData struct {
@@ -930,6 +930,8 @@ func (*LiteIdentity) Type() AccountType { return AccountTypeLiteIdentity }
 
 func (*LiteTokenAccount) Type() AccountType { return AccountTypeLiteTokenAccount }
 
+func (*PartitionSignature) Type() SignatureType { return SignatureTypePartition }
+
 func (*RCD1Signature) Type() SignatureType { return SignatureTypeRCD1 }
 
 func (*ReceiptSignature) Type() SignatureType { return SignatureTypeReceipt }
@@ -965,8 +967,6 @@ func (*SyntheticForwardTransaction) Type() TransactionType {
 }
 
 func (*SyntheticLedger) Type() AccountType { return AccountTypeSyntheticLedger }
-
-func (*SyntheticSignature) Type() SignatureType { return SignatureTypeSynthetic }
 
 func (*SyntheticWriteData) Type() TransactionType { return TransactionTypeSyntheticWriteData }
 
@@ -1804,6 +1804,23 @@ func (v *PartitionDefinition) Copy() *PartitionDefinition {
 
 func (v *PartitionDefinition) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *PartitionSignature) Copy() *PartitionSignature {
+	u := new(PartitionSignature)
+
+	if v.SourceNetwork != nil {
+		u.SourceNetwork = (v.SourceNetwork).Copy()
+	}
+	if v.DestinationNetwork != nil {
+		u.DestinationNetwork = (v.DestinationNetwork).Copy()
+	}
+	u.SequenceNumber = v.SequenceNumber
+	u.TransactionHash = v.TransactionHash
+
+	return u
+}
+
+func (v *PartitionSignature) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *PartitionSyntheticLedger) Copy() *PartitionSyntheticLedger {
 	u := new(PartitionSyntheticLedger)
 
@@ -2112,23 +2129,6 @@ func (v *SyntheticOrigin) Copy() *SyntheticOrigin {
 }
 
 func (v *SyntheticOrigin) CopyAsInterface() interface{} { return v.Copy() }
-
-func (v *SyntheticSignature) Copy() *SyntheticSignature {
-	u := new(SyntheticSignature)
-
-	if v.SourceNetwork != nil {
-		u.SourceNetwork = (v.SourceNetwork).Copy()
-	}
-	if v.DestinationNetwork != nil {
-		u.DestinationNetwork = (v.DestinationNetwork).Copy()
-	}
-	u.SequenceNumber = v.SequenceNumber
-	u.TransactionHash = v.TransactionHash
-
-	return u
-}
-
-func (v *SyntheticSignature) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *SyntheticWriteData) Copy() *SyntheticWriteData {
 	u := new(SyntheticWriteData)
@@ -3500,6 +3500,33 @@ func (v *PartitionDefinition) Equal(u *PartitionDefinition) bool {
 	return true
 }
 
+func (v *PartitionSignature) Equal(u *PartitionSignature) bool {
+	switch {
+	case v.SourceNetwork == u.SourceNetwork:
+		// equal
+	case v.SourceNetwork == nil || u.SourceNetwork == nil:
+		return false
+	case !((v.SourceNetwork).Equal(u.SourceNetwork)):
+		return false
+	}
+	switch {
+	case v.DestinationNetwork == u.DestinationNetwork:
+		// equal
+	case v.DestinationNetwork == nil || u.DestinationNetwork == nil:
+		return false
+	case !((v.DestinationNetwork).Equal(u.DestinationNetwork)):
+		return false
+	}
+	if !(v.SequenceNumber == u.SequenceNumber) {
+		return false
+	}
+	if !(v.TransactionHash == u.TransactionHash) {
+		return false
+	}
+
+	return true
+}
+
 func (v *PartitionSyntheticLedger) Equal(u *PartitionSyntheticLedger) bool {
 	switch {
 	case v.Url == u.Url:
@@ -3878,33 +3905,6 @@ func (v *SyntheticOrigin) Equal(u *SyntheticOrigin) bool {
 		return false
 	}
 	if !(v.FeeRefund == u.FeeRefund) {
-		return false
-	}
-
-	return true
-}
-
-func (v *SyntheticSignature) Equal(u *SyntheticSignature) bool {
-	switch {
-	case v.SourceNetwork == u.SourceNetwork:
-		// equal
-	case v.SourceNetwork == nil || u.SourceNetwork == nil:
-		return false
-	case !((v.SourceNetwork).Equal(u.SourceNetwork)):
-		return false
-	}
-	switch {
-	case v.DestinationNetwork == u.DestinationNetwork:
-		// equal
-	case v.DestinationNetwork == nil || u.DestinationNetwork == nil:
-		return false
-	case !((v.DestinationNetwork).Equal(u.DestinationNetwork)):
-		return false
-	}
-	if !(v.SequenceNumber == u.SequenceNumber) {
-		return false
-	}
-	if !(v.TransactionHash == u.TransactionHash) {
 		return false
 	}
 
@@ -7325,6 +7325,72 @@ func (v *PartitionDefinition) IsValid() error {
 	}
 }
 
+var fieldNames_PartitionSignature = []string{
+	1: "Type",
+	2: "SourceNetwork",
+	3: "DestinationNetwork",
+	4: "SequenceNumber",
+	5: "TransactionHash",
+}
+
+func (v *PartitionSignature) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.SourceNetwork == nil) {
+		writer.WriteUrl(2, v.SourceNetwork)
+	}
+	if !(v.DestinationNetwork == nil) {
+		writer.WriteUrl(3, v.DestinationNetwork)
+	}
+	if !(v.SequenceNumber == 0) {
+		writer.WriteUint(4, v.SequenceNumber)
+	}
+	if !(v.TransactionHash == ([32]byte{})) {
+		writer.WriteHash(5, &v.TransactionHash)
+	}
+
+	_, _, err := writer.Reset(fieldNames_PartitionSignature)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *PartitionSignature) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field SourceNetwork is missing")
+	} else if v.SourceNetwork == nil {
+		errs = append(errs, "field SourceNetwork is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field DestinationNetwork is missing")
+	} else if v.DestinationNetwork == nil {
+		errs = append(errs, "field DestinationNetwork is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field SequenceNumber is missing")
+	} else if v.SequenceNumber == 0 {
+		errs = append(errs, "field SequenceNumber is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_PartitionSyntheticLedger = []string{
 	1: "Url",
 	2: "Produced",
@@ -8490,72 +8556,6 @@ func (v *SyntheticOrigin) IsValid() error {
 		errs = append(errs, "field FeeRefund is missing")
 	} else if v.FeeRefund == 0 {
 		errs = append(errs, "field FeeRefund is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
-var fieldNames_SyntheticSignature = []string{
-	1: "Type",
-	2: "SourceNetwork",
-	3: "DestinationNetwork",
-	4: "SequenceNumber",
-	5: "TransactionHash",
-}
-
-func (v *SyntheticSignature) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	writer.WriteEnum(1, v.Type())
-	if !(v.SourceNetwork == nil) {
-		writer.WriteUrl(2, v.SourceNetwork)
-	}
-	if !(v.DestinationNetwork == nil) {
-		writer.WriteUrl(3, v.DestinationNetwork)
-	}
-	if !(v.SequenceNumber == 0) {
-		writer.WriteUint(4, v.SequenceNumber)
-	}
-	if !(v.TransactionHash == ([32]byte{})) {
-		writer.WriteHash(5, &v.TransactionHash)
-	}
-
-	_, _, err := writer.Reset(fieldNames_SyntheticSignature)
-	if err != nil {
-		return nil, encoding.Error{E: err}
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
-}
-
-func (v *SyntheticSignature) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Type is missing")
-	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field SourceNetwork is missing")
-	} else if v.SourceNetwork == nil {
-		errs = append(errs, "field SourceNetwork is not set")
-	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field DestinationNetwork is missing")
-	} else if v.DestinationNetwork == nil {
-		errs = append(errs, "field DestinationNetwork is not set")
-	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
-		errs = append(errs, "field SequenceNumber is missing")
-	} else if v.SequenceNumber == 0 {
-		errs = append(errs, "field SequenceNumber is not set")
 	}
 
 	switch len(errs) {
@@ -11600,6 +11600,45 @@ func (v *PartitionDefinition) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *PartitionSignature) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *PartitionSignature) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType SignatureType
+	if x := new(SignatureType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+	if x, ok := reader.ReadUrl(2); ok {
+		v.SourceNetwork = x
+	}
+	if x, ok := reader.ReadUrl(3); ok {
+		v.DestinationNetwork = x
+	}
+	if x, ok := reader.ReadUint(4); ok {
+		v.SequenceNumber = x
+	}
+	if x, ok := reader.ReadHash(5); ok {
+		v.TransactionHash = *x
+	}
+
+	seen, err := reader.Reset(fieldNames_PartitionSignature)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *PartitionSyntheticLedger) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -12326,45 +12365,6 @@ func (v *SyntheticOrigin) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_SyntheticOrigin)
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	return nil
-}
-
-func (v *SyntheticSignature) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *SyntheticSignature) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	var vType SignatureType
-	if x := new(SignatureType); reader.ReadEnum(1, x) {
-		vType = *x
-	}
-	if !(v.Type() == vType) {
-		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
-	}
-	if x, ok := reader.ReadUrl(2); ok {
-		v.SourceNetwork = x
-	}
-	if x, ok := reader.ReadUrl(3); ok {
-		v.DestinationNetwork = x
-	}
-	if x, ok := reader.ReadUint(4); ok {
-		v.SequenceNumber = x
-	}
-	if x, ok := reader.ReadHash(5); ok {
-		v.TransactionHash = *x
-	}
-
-	seen, err := reader.Reset(fieldNames_SyntheticSignature)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -13891,6 +13891,22 @@ func (v *PartitionDefinition) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *PartitionSignature) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type               SignatureType `json:"type"`
+		SourceNetwork      *url.URL      `json:"sourceNetwork,omitempty"`
+		DestinationNetwork *url.URL      `json:"destinationNetwork,omitempty"`
+		SequenceNumber     uint64        `json:"sequenceNumber,omitempty"`
+		TransactionHash    string        `json:"transactionHash,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.SourceNetwork = v.SourceNetwork
+	u.DestinationNetwork = v.DestinationNetwork
+	u.SequenceNumber = v.SequenceNumber
+	u.TransactionHash = encoding.ChainToJSON(v.TransactionHash)
+	return json.Marshal(&u)
+}
+
 func (v *PartitionSyntheticLedger) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Url       *url.URL                     `json:"url,omitempty"`
@@ -14166,22 +14182,6 @@ func (v *SyntheticLedger) MarshalJSON() ([]byte, error) {
 	u.Type = v.Type()
 	u.Url = v.Url
 	u.Partitions = v.Partitions
-	return json.Marshal(&u)
-}
-
-func (v *SyntheticSignature) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Type               SignatureType `json:"type"`
-		SourceNetwork      *url.URL      `json:"sourceNetwork,omitempty"`
-		DestinationNetwork *url.URL      `json:"destinationNetwork,omitempty"`
-		SequenceNumber     uint64        `json:"sequenceNumber,omitempty"`
-		TransactionHash    string        `json:"transactionHash,omitempty"`
-	}{}
-	u.Type = v.Type()
-	u.SourceNetwork = v.SourceNetwork
-	u.DestinationNetwork = v.DestinationNetwork
-	u.SequenceNumber = v.SequenceNumber
-	u.TransactionHash = encoding.ChainToJSON(v.TransactionHash)
 	return json.Marshal(&u)
 }
 
@@ -15866,6 +15866,36 @@ func (v *PartitionDefinition) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *PartitionSignature) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type               SignatureType `json:"type"`
+		SourceNetwork      *url.URL      `json:"sourceNetwork,omitempty"`
+		DestinationNetwork *url.URL      `json:"destinationNetwork,omitempty"`
+		SequenceNumber     uint64        `json:"sequenceNumber,omitempty"`
+		TransactionHash    string        `json:"transactionHash,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.SourceNetwork = v.SourceNetwork
+	u.DestinationNetwork = v.DestinationNetwork
+	u.SequenceNumber = v.SequenceNumber
+	u.TransactionHash = encoding.ChainToJSON(v.TransactionHash)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.SourceNetwork = u.SourceNetwork
+	v.DestinationNetwork = u.DestinationNetwork
+	v.SequenceNumber = u.SequenceNumber
+	if x, err := encoding.ChainFromJSON(u.TransactionHash); err != nil {
+		return fmt.Errorf("error decoding TransactionHash: %w", err)
+	} else {
+		v.TransactionHash = x
+	}
+	return nil
+}
+
 func (v *PartitionSyntheticLedger) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Url       *url.URL                     `json:"url,omitempty"`
@@ -16359,36 +16389,6 @@ func (v *SyntheticLedger) UnmarshalJSON(data []byte) error {
 	}
 	v.Url = u.Url
 	v.Partitions = u.Partitions
-	return nil
-}
-
-func (v *SyntheticSignature) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Type               SignatureType `json:"type"`
-		SourceNetwork      *url.URL      `json:"sourceNetwork,omitempty"`
-		DestinationNetwork *url.URL      `json:"destinationNetwork,omitempty"`
-		SequenceNumber     uint64        `json:"sequenceNumber,omitempty"`
-		TransactionHash    string        `json:"transactionHash,omitempty"`
-	}{}
-	u.Type = v.Type()
-	u.SourceNetwork = v.SourceNetwork
-	u.DestinationNetwork = v.DestinationNetwork
-	u.SequenceNumber = v.SequenceNumber
-	u.TransactionHash = encoding.ChainToJSON(v.TransactionHash)
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	if !(v.Type() == u.Type) {
-		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
-	}
-	v.SourceNetwork = u.SourceNetwork
-	v.DestinationNetwork = u.DestinationNetwork
-	v.SequenceNumber = u.SequenceNumber
-	if x, err := encoding.ChainFromJSON(u.TransactionHash); err != nil {
-		return fmt.Errorf("error decoding TransactionHash: %w", err)
-	} else {
-		v.TransactionHash = x
-	}
 	return nil
 }
 

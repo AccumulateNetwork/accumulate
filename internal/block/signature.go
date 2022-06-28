@@ -83,7 +83,7 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 	var signer, delegate protocol.Signer
 	var err error
 	switch signature := signature.(type) {
-	case *protocol.SyntheticSignature:
+	case *protocol.PartitionSignature:
 		err = verifySyntheticSignature(&x.Describe, batch, delivery.Transaction, signature, md)
 
 	case *protocol.ReceiptSignature:
@@ -272,7 +272,7 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 	var index int
 	switch signature := signature.(type) {
 	case *protocol.ReceiptSignature,
-		*protocol.SyntheticSignature,
+		*protocol.PartitionSignature,
 		*protocol.InternalSignature,
 		*protocol.RemoteSignature,
 		*protocol.SignatureSet:
@@ -630,7 +630,7 @@ func (x *Executor) processKeySignature(batch *database.Batch, delivery *chain.De
 	return signer, nil
 }
 
-func verifySyntheticSignature(net *config.Describe, _ *database.Batch, transaction *protocol.Transaction, signature *protocol.SyntheticSignature, md sigExecMetadata) error {
+func verifySyntheticSignature(net *config.Describe, _ *database.Batch, transaction *protocol.Transaction, signature *protocol.PartitionSignature, md sigExecMetadata) error {
 	if md.Nested() {
 		return errors.New(errors.StatusBadRequest, "a synthetic signature cannot be nested within another signature")
 	}

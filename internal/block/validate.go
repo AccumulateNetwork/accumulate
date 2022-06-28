@@ -93,7 +93,7 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 
 	// Lite token address => lite identity
 	var signerUrl *url.URL
-	if _, ok := firstSig.(*protocol.SyntheticSignature); ok {
+	if _, ok := firstSig.(*protocol.PartitionSignature); ok {
 		signerUrl = x.Describe.OperatorsPage()
 	} else {
 		signerUrl = firstSig.GetSigner()
@@ -161,7 +161,7 @@ func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Deli
 	// Stateful validation (mostly for synthetic transactions)
 	var signer, delegate protocol.Signer
 	switch signature := signature.(type) {
-	case *protocol.SyntheticSignature:
+	case *protocol.PartitionSignature:
 		err = verifySyntheticSignature(&x.Describe, batch, delivery.Transaction, signature, md)
 
 	case *protocol.ReceiptSignature:
@@ -222,7 +222,7 @@ func validateSyntheticTransactionSignatures(transaction *protocol.Transaction, s
 	var gotSynthSig, gotReceiptSig, gotED25519Sig bool
 	for _, sig := range signatures {
 		switch sig.(type) {
-		case *protocol.SyntheticSignature:
+		case *protocol.PartitionSignature:
 			gotSynthSig = true
 
 		case *protocol.ReceiptSignature:

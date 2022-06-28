@@ -178,7 +178,7 @@ func (s *Builder) prepare(init bool) (protocol.KeySignature, error) {
 		protocol.SignatureTypeETH,
 		protocol.SignatureTypeBTCLegacy:
 
-	case protocol.SignatureTypeReceipt, protocol.SignatureTypeSynthetic:
+	case protocol.SignatureTypeReceipt, protocol.SignatureTypePartition:
 		// Calling Sign for SignatureTypeReceipt or SignatureTypeSynthetic makes zero sense
 		panic(fmt.Errorf("invalid attempt to generate signature of type %v!", s.Type))
 
@@ -311,7 +311,7 @@ func (s *Builder) Initiate(txn *protocol.Transaction) (protocol.Signature, error
 	return sig, s.sign(sig, txn.GetHash())
 }
 
-func (s *Builder) InitiateSynthetic(txn *protocol.Transaction, router routing.Router, ledger *protocol.SyntheticLedger) (*protocol.SyntheticSignature, error) {
+func (s *Builder) InitiateSynthetic(txn *protocol.Transaction, router routing.Router, ledger *protocol.SyntheticLedger) (*protocol.PartitionSignature, error) {
 	var errs []string
 	if s.Url == nil {
 		errs = append(errs, "missing signer")
@@ -329,7 +329,7 @@ func (s *Builder) InitiateSynthetic(txn *protocol.Transaction, router routing.Ro
 	}
 	partitionUrl := protocol.PartitionUrl(destPartition)
 
-	initSig := new(protocol.SyntheticSignature)
+	initSig := new(protocol.PartitionSignature)
 	initSig.SourceNetwork = s.Url
 	initSig.DestinationNetwork = partitionUrl
 

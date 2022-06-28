@@ -286,7 +286,7 @@ func (x *Executor) synthTransactionIsReady(batch *database.Batch, delivery *chai
 	}
 
 	// Get the synthetic signature
-	synthSig, ok := signatures[0].(*protocol.SyntheticSignature)
+	synthSig, ok := signatures[0].(*protocol.PartitionSignature)
 	if !ok {
 		return false, errors.Format(errors.StatusInternalError, "missing synthetic signature")
 	}

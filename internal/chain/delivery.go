@@ -259,7 +259,7 @@ func (d *Delivery) LoadTransaction(batch *database.Batch) (*protocol.Transaction
 func (d *Delivery) LoadSyntheticMetadata(batch *database.Batch, status *protocol.TransactionStatus) error {
 	// Get the sequence number from the first signature?
 	if len(d.Signatures) > 0 {
-		if signature, ok := d.Signatures[0].(*protocol.SyntheticSignature); ok {
+		if signature, ok := d.Signatures[0].(*protocol.PartitionSignature); ok {
 			d.SequenceNumber = signature.SequenceNumber
 			d.SourceNetwork = signature.SourceNetwork
 			return nil
@@ -274,7 +274,7 @@ func (d *Delivery) LoadSyntheticMetadata(batch *database.Batch, status *protocol
 
 	var sigHash []byte
 	for _, e := range sigset.Entries() {
-		if e.Type == protocol.SignatureTypeSynthetic {
+		if e.Type == protocol.SignatureTypePartition {
 			sigHash = e.SignatureHash[:]
 			break
 		}
@@ -288,7 +288,7 @@ func (d *Delivery) LoadSyntheticMetadata(batch *database.Batch, status *protocol
 		return errors.Format(errors.StatusUnknownError, "load transaction: load synthetic origin signature: %w", err)
 	}
 
-	signature, ok := state.Signature.(*protocol.SyntheticSignature)
+	signature, ok := state.Signature.(*protocol.PartitionSignature)
 	if !ok {
 		return errors.Format(errors.StatusInternalError, "load transaction: synthetic origin signature record is invalid")
 	}
