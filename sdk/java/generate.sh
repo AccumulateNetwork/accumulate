@@ -16,4 +16,5 @@ generate enum $P/enums.yml \
     -i TransactionType,SignatureType,DataEntryType,KeyPageOperationType,AccountAuthOperationType,VoteType
 generate types $P/general.yml \
     -i AccumulateDataEntry,FactomDataEntry,TokenRecipient,KeySpecParams
-generate types $P/account_auth_operations.yml $P/general.yml $P/key_page_operations.yml $P/signatures.yml $P/transaction_results.yml $P/transaction.yml $P/user_transactions.yml
+generate types $P/account_auth_operations.yml $P/key_page_operations.yml $P/signatures.yml $P/transaction_results.yml $P/transaction.yml $P/user_transactions.yml \
+    -x TransactionStatus
