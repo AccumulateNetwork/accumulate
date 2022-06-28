@@ -17,6 +17,11 @@ type Types struct {
 	Types   []*Type
 }
 
+type SingleTypeFile struct {
+	Package string
+	*Type
+}
+
 type Type struct {
 	Name   string
 	Values []*TypeValue

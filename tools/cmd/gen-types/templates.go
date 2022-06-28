@@ -138,6 +138,20 @@ type Types struct {
 	Unions  []*UnionSpec
 }
 
+type SingleTypeFile struct {
+	Package string
+	*Type
+}
+
+func (f *SingleTypeFile) IsUnion() bool { return false }
+
+type SingleUnionFile struct {
+	Package string
+	*UnionSpec
+}
+
+func (f *SingleUnionFile) IsUnion() bool { return true }
+
 type UnionSpec struct {
 	Name    string
 	Type    string
@@ -222,6 +236,7 @@ func (f *Field) OmitEmpty() bool         { return !f.KeepEmpty }
 
 var Templates = typegen.NewTemplateLibrary(template.FuncMap{
 	"lcName":  typegen.LowerFirstWord,
+	"title":   typegen.TitleCase,
 	"map":     typegen.MakeMap,
 	"natural": typegen.Natural,
 	"debug":   fmt.Printf,

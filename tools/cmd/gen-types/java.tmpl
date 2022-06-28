@@ -1,0 +1,38 @@
+package {{.Package}};
+
+{{- if .IsUnion}}{{skip}}{{end}}
+
+public class {{.Name}} {
+	{{- range .Fields}}
+	{{-   if and (not .Virtual)}}
+	public {{resolveType .}} {{lcName .Name}};
+	{{-   end}}
+	{{- end}}
+
+    public byte[] marshalBinary() {
+        byte[] data;
+        {{- range .Fields}}
+        {{-   if and .IsBinary .IsMarshalled}}
+        {{-     if .OmitEmpty}}
+        if (!({{isZero . (print "this." (lcName .Name))}})) {
+        {{-       if .Type.IsKnown}}
+            data = Marshaller.write{{.Type.Title}}(data, {{.Number}}, this.{{lcName .Name}});
+        {{-       else }}
+            data = Marshaller.writeValue(data, {{.Number}}, v.{{lcName .Name}});
+        {{-       end}}
+        }
+        {{-     else }}
+        {{-       if .Type.IsKnown}}
+        data = Marshaller.write{{.Type.Title}}(data, {{.Number}}, this.{{lcName .Name}});
+        {{-       else }}
+        data = Marshaller.writeValue(data, {{.Number}}, v.{{lcName .Name}});
+        {{-       end}}
+        {{-     end}}
+        {{-   end}}
+        {{- end}}
+        if (data == null || data.length == 0) {
+            return { 0x80 };
+        }
+        return data;
+    }
+}
