@@ -11,6 +11,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -608,12 +609,12 @@ func TestValidateKeyForSynthTxns(t *testing.T) {
 
 //Checks if the key used to sign the synthetic transaction belongs to the same subnet
 func TestKeySignaturePartition(t *testing.T) {
-	var KeySigError error
 	var timestamp uint64
 
 	// Initialize
 	sim := simulator.New(t, 3)
 	sim.InitFromGenesis()
+
 	// Setup
 	aliceKey, bobKey := GenerateKey("alice"), GenerateKey("bob")
 	alice, bob := AcmeLiteAddressStdPriv(aliceKey), AcmeLiteAddressStdPriv(bobKey)
@@ -622,27 +623,57 @@ func TestKeySignaturePartition(t *testing.T) {
 	sim.CreateAccount(&protocol.LiteIdentity{Url: alice.RootIdentity(), CreditBalance: 1e9})
 	sim.CreateAccount(&protocol.LiteTokenAccount{Url: alice, TokenUrl: protocol.AcmeUrl(), Balance: *big.NewInt(1e12)})
 
-	// Change the node's key
-	sim.PartitionFor(alice).Executor.Key = GenerateKey("New")
-	x := sim.PartitionFor(alice)
+	// Grab the deposit
+	var deposit *chain.Delivery
+	sim.Executors["BVN1"].SubmitHook = func(envelopes []*chain.Delivery) ([]*chain.Delivery, bool) {
+		for i, env := range envelopes {
+			if env.Transaction.Body.Type() == protocol.TransactionTypeSyntheticDepositTokens {
+				fmt.Printf("Dropping %X\n", env.Transaction.GetHash()[:4])
+				deposit = env
+				return append(envelopes[:i], envelopes[i+1:]...), false
+			}
+		}
+		return envelopes, true
+	}
 
-	tt := NewBatchTest(t, sim.PartitionFor(alice).Database)
-	defer tt.Discard()
+	// Generate a deposit
+	envs := sim.MustSubmitAndExecuteBlock(NewTransaction().
+		WithPrincipal(alice).
+		WithSigner(alice, 1).
+		WithTimestampVar(&timestamp).
+		WithBody(&protocol.SendTokens{
+			To: []*protocol.TokenRecipient{
+				{Url: bob, Amount: *big.NewInt(68)},
+			},
+		}).
+		Initiate(protocol.SignatureTypeED25519, aliceKey).
+		Build())
+	sim.WaitForTransaction(delivered, envs[0].Transaction[0].GetHash(), 50)
 
-	tt.Run("get this done", func(t BatchTest) {
-		tx := NewTransaction().
-			WithPrincipal(alice).
-			WithSigner(alice, 1).
-			WithTimestampVar(&timestamp).
-			WithBody(&protocol.SendTokens{
-				To: []*protocol.TokenRecipient{
-					{Url: bob, Amount: *big.NewInt(68)},
-				},
-			}).
-			Initiate(protocol.SignatureTypeED25519, aliceKey).
-			BuildDelivery()
-		_, KeySigError = x.Executor.ProcessSignature(tt.Batch, tx, tx.Signatures[0])
-		fmt.Println(KeySigError)
-	})
-	//	require.Equal(t, KeySigError.Error(), "the key used to sign does not belong to the originating subnet")
+	for i := 0; i < 50 && deposit == nil; i++ {
+		sim.ExecuteBlock(nil)
+	}
+	require.NotNil(t, deposit, "Did not intercept deposit within 50 blocks")
+
+	// Replace the signature
+	index := -1
+	for i, sig := range deposit.Signatures {
+		sig, ok := sig.(*protocol.ED25519Signature)
+		if !ok {
+			continue
+		}
+
+		index = i
+		signer, err := new(signing.Builder).Import(sig)
+		require.NoError(t, err)
+		signer.SetPrivateKey(sim.Executors["BVN2"].Executor.Key)
+		sig2, err := signer.Sign(sig.TransactionHash[:])
+		require.NoError(t, err)
+		deposit.Signatures[i] = sig2
+	}
+	require.True(t, index >= 0, "Failed to replace the key signature")
+
+	x := sim.Executors["BVN1"]
+	_, err := simulator.CheckTx(t, x.Database, x.Executor, deposit)
+	require.EqualError(t, err, fmt.Sprintf("signature %d: the key used to sign does not belong to the originating subnet", index))
 }

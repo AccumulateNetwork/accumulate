@@ -6,7 +6,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/rpc/client"
 	coretypes "github.com/tendermint/tendermint/rpc/coretypes"
-	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
@@ -59,15 +58,12 @@ func (r router) RequestAPIv2(ctx context.Context, partitionId, method string, pa
 
 func (r router) Submit(ctx context.Context, partition string, envelope *protocol.Envelope, pretend, async bool) (*routing.ResponseSubmit, error) {
 	x := r.Partition(partition)
-	if !pretend {
-		x.Submit(envelope)
-		if async {
-			return new(routing.ResponseSubmit), nil
-		}
+	deliveries := x.Submit(pretend, envelope)
+
+	if !pretend && async {
+		return new(routing.ResponseSubmit), nil
 	}
 
-	deliveries, err := chain.NormalizeEnvelope(envelope)
-	require.NoErrorf(r, err, "Normalizing envelopes for %s", partition)
 	results := make([]*protocol.TransactionStatus, len(deliveries))
 	for i, envelope := range deliveries {
 		status := new(protocol.TransactionStatus)
@@ -89,6 +85,7 @@ func (r router) Submit(ctx context.Context, partition string, envelope *protocol
 		results[i] = status
 	}
 
+	var err error
 	resp := new(routing.ResponseSubmit)
 	resp.Data, err = (&protocol.TransactionResultSet{Results: results}).MarshalBinary()
 	require.NoError(r, err)
