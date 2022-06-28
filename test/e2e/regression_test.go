@@ -265,7 +265,7 @@ func TestSendSynthTxnAfterAnchor(t *testing.T) {
 	sim.Query(DnUrl(), req, true)
 
 	// Submit the synthetic transaction
-	sim.PartitionFor(bobUrl).Submit(&Envelope{
+	sim.PartitionFor(bobUrl).Submit(false, &Envelope{
 		Transaction: []*Transaction{deposit.Transaction},
 		Signatures:  deposit.Signatures,
 	})

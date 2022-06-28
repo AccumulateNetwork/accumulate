@@ -372,7 +372,7 @@ func (s *Simulator) Submit(envelopes ...*protocol.Envelope) ([]*protocol.Envelop
 		}
 
 		// Enqueue
-		x.Submit(envelope)
+		x.Submit(false, envelope)
 	}
 
 	return envelopes, nil
@@ -543,7 +543,7 @@ type ExecEntry struct {
 //
 // By adding transactions to the next block and swaping queues when a block is
 // executed, we roughly simulate the process Tendermint uses to build blocks.
-func (x *ExecEntry) Submit(envelopes ...*protocol.Envelope) {
+func (x *ExecEntry) Submit(pretend bool, envelopes ...*protocol.Envelope) []*chain.Delivery {
 	var deliveries []*chain.Delivery
 	for _, env := range envelopes {
 		normalized, err := chain.NormalizeEnvelope(env)
@@ -561,9 +561,14 @@ func (x *ExecEntry) Submit(envelopes ...*protocol.Envelope) {
 		}
 	}
 
+	if pretend {
+		return deliveries
+	}
+
 	x.mu.Lock()
 	defer x.mu.Unlock()
 	x.nextBlock = append(x.nextBlock, deliveries...)
+	return deliveries
 }
 
 // takeSubmitted returns the envelopes for the current block.
