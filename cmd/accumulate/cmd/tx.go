@@ -101,11 +101,13 @@ func PrintTXPendingGet() {
 }
 
 func PrintTXCreate() {
-	fmt.Println("  accumulate tx create [origin url] [signing key name] [key index (optional)] [key height (optional)] [to] [amount]	Create new token tx")
+	fmt.Println("  accumulate tx create [adi token account url] [signing key name] [to] [amount]	Create new token tx")
+	fmt.Println("  accumulate tx create [lite token account url] [to] [amount]	Create new token tx")
 }
 
 func PrintTXExecute() {
-	fmt.Println("  accumulate tx execute [origin url] [signing key name] [key index (optional)] [key height (optional)] [payload]	Execute an arbitrary transaction")
+	fmt.Println("  accumulate tx execute [origin url] [signing key name] [payload]	Execute an arbitrary transaction")
+	fmt.Println("  accumulate tx execute [lite account url] [payload]	Execute an arbitrary transaction")
 }
 
 func PrintTxSign() {
