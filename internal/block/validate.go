@@ -199,6 +199,13 @@ func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Deli
 		if !signature.Verify(delivery.Transaction.GetHash()) {
 			return nil, errors.New(errors.StatusBadRequest, "invalid")
 		}
+		if !delivery.Transaction.Body.Type().IsUser() {
+			err = x.validatePartitionSignature(md.Location, signature, delivery.Transaction)
+			if err != nil {
+				return nil, errors.Wrap(errors.StatusUnknownError, err)
+			}
+		}
+
 		signer, err = x.validateKeySignature(batch, delivery, signature, !md.Initiated, !md.Delegated && delivery.Transaction.Header.Principal.LocalTo(md.Location))
 
 	default:
