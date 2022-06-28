@@ -136,13 +136,19 @@ func networkReset() {
 	}
 	check(err)
 	for _, ent := range ent {
-
+		if ent.Name() == "priv_validator_key.json" {
+			err := os.Remove(path.Join(flagMain.WorkDir, ent.Name()))
+			check(err)
+		}
 		if !ent.IsDir() {
 			continue
 		}
 
 		dir := path.Join(flagMain.WorkDir, ent.Name())
-
+		if strings.HasPrefix(ent.Name(), "dnn") || strings.HasPrefix(ent.Name(), "bvnn") {
+			os.RemoveAll(path.Join(flagMain.WorkDir, ent.Name()))
+			continue
+		}
 		if !strings.HasPrefix(ent.Name(), "node-") {
 			fmt.Fprintf(os.Stderr, "Skipping %s\n", dir)
 			continue
@@ -160,7 +166,6 @@ func networkReset() {
 func nodeReset(dir string) bool {
 	ent, err := os.ReadDir(dir)
 	check(err)
-
 	var skipped bool
 	for _, ent := range ent {
 
@@ -350,7 +355,6 @@ func initNode(cmd *cobra.Command, args []string) {
 	if flagInit.Reset {
 		networkReset()
 	}
-
 	netDir := netDir(config.Accumulate.Describe.NetworkType)
 	config.SetRoot(path.Join(flagMain.WorkDir, netDir))
 	accumulated.ConfigureNodePorts(&accumulated.NodeInit{
@@ -361,11 +365,11 @@ func initNode(cmd *cobra.Command, args []string) {
 
 	if _, err := os.Stat(path.Join(config.RootDir, "priv_validator_key.json")); err != nil {
 		privValKey, nodeKey := ed25519.GenPrivKey(), ed25519.GenPrivKey()
-		config.PrivValidator.Key = "priv_validator_key.json"
+		config.PrivValidator.Key = "../priv_validator_key.json"
 		err = accumulated.WriteNodeFiles(config, privValKey, nodeKey, genDoc)
 		checkf(err, "write node files")
 	} else {
-		config.PrivValidator.Key = "priv_validator_key.json"
+		config.PrivValidator.Key = "../priv_validator_key.json"
 	}
 
 }
