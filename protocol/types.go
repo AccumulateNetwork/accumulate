@@ -6,10 +6,16 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 )
 
 // ChainType is the type of a chain belonging to an account.
-type ChainType uint64
+type ChainType = managed.ChainType
+
+const ChainTypeUnknown = managed.ChainTypeUnknown
+const ChainTypeTransaction = managed.ChainTypeTransaction
+const ChainTypeAnchor = managed.ChainTypeAnchor
+const ChainTypeIndex = managed.ChainTypeIndex
 
 // BookType is the type of a key book.
 type BookType uint64
@@ -22,6 +28,8 @@ type KeyPageOperationType uint8
 
 // AccountAuthOperationType is the operation type of an UpdateAccountAuth operation.
 type AccountAuthOperationType uint8
+
+type ErrorCode int
 
 //go:generate go run ../tools/cmd/gen-types account_auth_operations.yml accounts.yml general.yml system.yml key_page_operations.yml query.yml signatures.yml synthetic_transactions.yml transaction.yml transaction_results.yml user_transactions.yml
 //go:generate go run ../tools/cmd/gen-enum --out enums_gen.go enums.yml errors.yml

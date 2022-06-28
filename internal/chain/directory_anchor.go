@@ -89,7 +89,7 @@ func processReceiptsFromDirectory(st *StateManager, tx *Delivery, body *protocol
 
 		st.logger.Debug("Received receipt", "from", logging.AsHex(receipt.Start).Slice(0, 4), "to", logging.AsHex(body.RootChainAnchor).Slice(0, 4), "block", body.MinorBlockIndex, "source", body.Source, "module", "synthetic")
 
-		synth, err := st.batch.Account(st.Ledger()).SyntheticForAnchor(*(*[32]byte)(receipt.Start))
+		synth, err := st.batch.Account(st.Ledger()).GetSyntheticForAnchor(*(*[32]byte)(receipt.Start))
 		if err != nil {
 			return fmt.Errorf("failed to load pending synthetic transactions for anchor %X: %w", receipt.Start[:4], err)
 		}
@@ -136,19 +136,19 @@ func processNetworkAccountUpdates(st *StateManager, delivery *Delivery, updates 
 func getSyntheticSignature(batch *database.Batch, transaction *database.Transaction) (*protocol.SyntheticSignature, error) {
 	status, err := transaction.GetStatus()
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknown, "load status: %w", err)
+		return nil, errors.Format(errors.StatusUnknownError, "load status: %w", err)
 	}
 
 	for _, signer := range status.Signers {
 		sigset, err := transaction.ReadSignaturesForSigner(signer)
 		if err != nil {
-			return nil, errors.Format(errors.StatusUnknown, "load signature set %v: %w", signer.GetUrl(), err)
+			return nil, errors.Format(errors.StatusUnknownError, "load signature set %v: %w", signer.GetUrl(), err)
 		}
 
 		for _, entry := range sigset.Entries() {
 			state, err := batch.Transaction(entry.SignatureHash[:]).GetState()
 			if err != nil {
-				return nil, errors.Format(errors.StatusUnknown, "load signature %x: %w", entry.SignatureHash[:8], err)
+				return nil, errors.Format(errors.StatusUnknownError, "load signature %x: %w", entry.SignatureHash[:8], err)
 			}
 
 			sig, ok := state.Signature.(*protocol.SyntheticSignature)

@@ -2,88 +2,78 @@ package database
 
 import (
 	"fmt"
+	"strings"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 )
 
-// Account manages a record.
-type Account struct {
-	batch *Batch
-	key   accountBucket
-	url   *url.URL
+func (r *Account) url() *url.URL {
+	return r.key[1].(*url.URL)
 }
 
-// ensureMetadata ensures that the account's metadata is up to date.
-func (r *Account) ensureMetadata(cb func(obj *protocol.Object) error) error {
-	// Load the current metadata, if any
-	meta, err := r.GetObject()
-	var found bool
-	switch {
-	case err == nil:
-		found = true
-	case errors.Is(err, storage.ErrNotFound):
-		meta.Type = protocol.ObjectTypeAccount
-	default:
-		return err
-	}
-
-	if cb != nil {
-		err = cb(meta)
-		if err != nil {
-			return err
-		}
-	} else if found {
-		// Already exists, nothing to do
+func (a *Account) Commit() error {
+	if !a.IsDirty() {
 		return nil
 	}
 
-	r.batch.putValue(r.key.Object(), meta)
-	return nil
+	meta, err := a.Object().Get()
+	if err != nil {
+		return errors.Wrap(errors.StatusUnknownError, err)
+	}
+	if meta.Type == protocol.ObjectTypeUnknown {
+		meta.Type = protocol.ObjectTypeAccount
+	}
+
+	for _, c := range a.chains {
+		if !c.IsDirty() {
+			continue
+		}
+
+		err = c.Commit()
+		if err != nil {
+			return errors.Wrap(errors.StatusUnknownError, err)
+		}
+	}
+
+	err = a.putBpt()
+	if err != nil {
+		return errors.Wrap(errors.StatusUnknownError, err)
+	}
+
+	// Do the normal commit stuff
+	err = a.baseCommit()
+	return errors.Wrap(errors.StatusUnknownError, err)
 }
 
-// ensureChain ensures that the account's metadata includes the given chain.
-func (r *Account) ensureChain(newChain protocol.ChainMetadata) error {
-	return r.ensureMetadata(func(obj *protocol.Object) error {
-		return obj.AddChain(newChain.Name, newChain.Type)
-	})
+func (a *Account) Resolve(key record.Key) (record.Record, record.Key, error) {
+	if len(key) >= 2 && key[0] == "Chain" {
+		name, ok := key[1].(string)
+		if ok {
+			return a.chain(name), key[2:], nil
+		}
+	}
+
+	return a.baseResolve(key)
 }
 
 // GetObject loads the object metadata.
 func (r *Account) GetObject() (*protocol.Object, error) {
-	meta := new(protocol.Object)
-	err := r.batch.getValuePtr(r.key.Object(), meta, &meta, true)
-	if err != nil {
-		err = errors.Wrap(errors.StatusUnknown, err)
-	}
-	return meta, err
+	return r.Object().Get()
 }
 
 // GetState loads the record state.
 func (r *Account) GetState() (protocol.Account, error) {
-	state, err := r.batch.getAccountState(r.key.State(), nil)
-	if err == nil {
-		return state, nil
-	}
-	if r.url == nil && !errors.Is(err, errors.StatusNotFound) {
-		return nil, errors.Wrap(errors.StatusUnknown, err)
-	}
-	return nil, errors.FormatWithCause(errors.StatusNotFound, err, "account %v not found", r.url)
+	return r.Main().Get()
 }
 
 // GetStateAs loads the record state and unmarshals into the given value. In
 // most cases `state` should be a double pointer.
 func (r *Account) GetStateAs(state interface{}) error {
-	err := r.batch.getAccountStateAs(r.key.State(), nil, state)
-	if err == nil {
-		return nil
-	}
-	if r.url == nil && !errors.Is(err, errors.StatusNotFound) {
-		return errors.Wrap(errors.StatusUnknown, err)
-	}
-	return errors.FormatWithCause(errors.StatusNotFound, err, "account %v not found", r.url)
+	return r.Main().GetAs(state)
 }
 
 // PutState stores the record state.
@@ -94,8 +84,8 @@ func (r *Account) PutState(state protocol.Account) error {
 	}
 
 	// Is this the right URL - does it match the record's key?
-	if account(state.GetUrl()) != r.key {
-		return fmt.Errorf("mismatched url: key is %X, URL is %v", r.key.objectBucket, state.GetUrl())
+	if !r.url().Equal(state.GetUrl()) {
+		return fmt.Errorf("mismatched url: key is %v, URL is %v", r.url(), state.GetUrl())
 	}
 
 	// Make sure the key book is set
@@ -104,62 +94,48 @@ func (r *Account) PutState(state protocol.Account) error {
 		return fmt.Errorf("missing key book")
 	}
 
-	// Ensure metadata exists
-	err := r.ensureMetadata(nil)
-	if err != nil {
-		return err
-	}
-
 	// Store the state
-	r.batch.putValue(r.key.State(), state)
-	return r.putBpt()
+	err := r.Main().Put(state)
+	return errors.Wrap(errors.StatusUnknownError, err)
 }
 
-func (r *Account) pending() (*protocol.TxIdSet, error) {
-	s := new(protocol.TxIdSet)
-	err := r.batch.getValuePtr(r.key.Index("Pending"), s, &s, true)
-	return s, err
-}
-
-func (r *Account) Pending() (*protocol.TxIdSet, error) {
-	s, err := r.pending()
-	if err != nil && !errors.Is(err, storage.ErrNotFound) {
+func (r *Account) GetPending() (*protocol.TxIdSet, error) {
+	v, err := r.Pending().Get()
+	if err != nil {
 		return nil, err
 	}
-	return s, nil
+	return &protocol.TxIdSet{Entries: v}, nil
 }
 
 func (r *Account) AddPending(txid *url.TxID) error {
-	s, err := r.pending()
-	if err != nil && !errors.Is(err, storage.ErrNotFound) {
-		return err
-	}
-	s.Add(txid)
-	r.batch.putValue(r.key.Index("Pending"), s)
-	return r.putBpt()
+	return r.Pending().Add(txid)
 }
 
 func (r *Account) RemovePending(txid *url.TxID) error {
-	s, err := r.pending()
-	if err != nil && !errors.Is(err, storage.ErrNotFound) {
-		return err
-	}
-	s.Remove(txid)
-	r.batch.putValue(r.key.Index("Pending"), s)
-	return r.putBpt()
+	return r.Pending().Remove(txid)
 }
 
-func (r *Account) chain(name string, writable bool) (*Chain, error) {
-	return newChain(r, r.key.Chain(name), writable)
+func (a *Account) ensureChain(name string, typ managed.ChainType) error {
+	meta, err := a.Object().Get()
+	if err != nil {
+		return errors.Wrap(errors.StatusUnknownError, err)
+	}
+
+	err = meta.AddChain(name, typ)
+	if err != nil {
+		return errors.Wrap(errors.StatusUnknownError, err)
+	}
+
+	return a.Object().Put(meta)
 }
 
 // Chain returns a chain manager for the given chain.
 func (r *Account) Chain(name string, typ protocol.ChainType) (*Chain, error) {
-	err := r.ensureChain(protocol.ChainMetadata{Name: name, Type: typ})
+	err := r.ensureChain(name, typ)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
-	return r.chain(name, true)
+	return newChain(r, r.chain(name), true)
 }
 
 // IndexChain returns a chain manager for the index chain of the given chain.
@@ -167,41 +143,28 @@ func (r *Account) IndexChain(name string, major bool) (*Chain, error) {
 	return r.Chain(protocol.IndexChain(name, major), protocol.ChainTypeIndex)
 }
 
+func (r *Account) chain(name string) *managed.Chain {
+	name = strings.ToLower(name)
+	key := r.key.Append("Chain", name)
+	return getOrCreateMap(&r.chains, key, func() *managed.Chain {
+		return managed.NewChain(r.batch.logger.L, r.batch.recordStore, key, markPower, name, "account %[2]s chain %[4]s")
+	})
+}
+
 // ReadChain returns a read-only chain manager for the given chain.
 func (r *Account) ReadChain(name string) (*Chain, error) {
-	return r.chain(name, false)
+	return newChain(r, r.chain(name), false)
 }
 
 // ReadIndexChain returns a read-only chain manager for the index chain of the given chain.
 func (r *Account) ReadIndexChain(name string, major bool) (*Chain, error) {
-	return r.chain(protocol.IndexChain(name, major), false)
-}
-
-func (r *Account) getSyntheticForAnchor(anchor [32]byte) (*protocol.TxIdSet, error) {
-	v := new(protocol.TxIdSet)
-	err := r.batch.getValuePtr(r.key.SyntheticForAnchor(anchor), v, &v, true)
-	if err != nil && !errors.Is(err, storage.ErrNotFound) {
-		return nil, err
-	}
-	return v, nil
+	return r.ReadChain(protocol.IndexChain(name, major))
 }
 
 func (r *Account) AddSyntheticForAnchor(anchor [32]byte, txid *url.TxID) error {
-	set, err := r.getSyntheticForAnchor(anchor)
-	if err != nil {
-		return err
-	}
-
-	set.Add(txid)
-	r.batch.putValue(r.key.SyntheticForAnchor(anchor), set)
-	return nil
+	return r.SyntheticForAnchor(anchor).Add(txid)
 }
 
-func (r *Account) SyntheticForAnchor(anchor [32]byte) ([]*url.TxID, error) {
-	set, err := r.getSyntheticForAnchor(anchor)
-	if err != nil {
-		return nil, err
-	}
-
-	return set.Entries, nil
+func (r *Account) GetSyntheticForAnchor(anchor [32]byte) ([]*url.TxID, error) {
+	return r.SyntheticForAnchor(anchor).Get()
 }

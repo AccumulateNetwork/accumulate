@@ -53,7 +53,7 @@ func (UpdateKeyPage) SignerIsAuthorized(delegate AuthDelegate, batch *database.B
 	// Signers belonging to new delegates are authorized to sign the transaction
 	newOwners, err := getNewOwners(batch, transaction)
 	if err != nil {
-		return false, errors.Wrap(errors.StatusUnknown, err)
+		return false, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	for _, owner := range newOwners {
@@ -70,7 +70,7 @@ func (UpdateKeyPage) TransactionIsReady(delegate AuthDelegate, batch *database.B
 	// All new delegates must sign the transaction
 	newOwners, err := getNewOwners(batch, transaction)
 	if err != nil {
-		return false, false, errors.Wrap(errors.StatusUnknown, err)
+		return false, false, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	for _, owner := range newOwners {
@@ -180,13 +180,11 @@ func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, op protocol.KeyPag
 			return fmt.Errorf("entry to be updated not found on the key page")
 		}
 
-		// Check for an existing key
-		_, _, found = findKeyPageEntry(page, &op.NewEntry)
-		if found {
+		// Check for an existing key with same delegate
+		_, newEntry, foundNew := findKeyPageEntry(page, &op.NewEntry)
+		if foundNew && op.NewEntry.Delegate == newEntry.Delegate {
 			return fmt.Errorf("cannot have duplicate entries on key page")
-		}
-
-		// Update the entry
+		} // Update the entry
 		entry.PublicKeyHash = op.NewEntry.KeyHash
 		entry.Delegate = op.NewEntry.Delegate
 
@@ -267,7 +265,7 @@ func getNewOwners(batch *database.Batch, transaction *protocol.Transaction) ([]*
 	var page *protocol.KeyPage
 	err := batch.Account(transaction.Header.Principal).GetStateAs(&page)
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknown, "load principal: %w", err)
+		return nil, errors.Format(errors.StatusUnknownError, "load principal: %w", err)
 	}
 
 	var owners []*url.URL

@@ -17,6 +17,8 @@ EntityRecord:
       repeatable: true
     - name: CustomCommit
       type: bool
+    - name: CustomResolve
+      type: bool
     - name: Parameters
       type: Field
       pointer: true

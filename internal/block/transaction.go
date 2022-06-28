@@ -35,7 +35,7 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Del
 	case err == nil, errors.Is(err, storage.ErrNotFound):
 		// Ok
 	default:
-		err = errors.Format(errors.StatusUnknown, "load principal: %w", err)
+		err = errors.Format(errors.StatusUnknownError, "load principal: %w", err)
 		return x.recordFailedTransaction(batch, delivery, err)
 	}
 
@@ -72,7 +72,7 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Del
 	executor, ok := x.executors[delivery.Transaction.Body.Type()]
 	if !ok {
 		// An invalid transaction should not make it to this point
-		err = protocol.Errorf(protocol.ErrorCodeInternal, "missing executor for %v", delivery.Transaction.Body.Type())
+		err = errors.Format(errors.StatusInternalError, "missing executor for %v", delivery.Transaction.Body.Type())
 		return x.recordFailedTransaction(batch, delivery, err)
 	}
 
@@ -80,7 +80,7 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Del
 	result, err := executor.Execute(st, &chain.Delivery{Transaction: delivery.Transaction})
 	x.BlockTimers.Stop(r2)
 	if err != nil {
-		err = errors.Wrap(0, err)
+		err = errors.Wrap(errors.StatusUnknownError, err)
 		return x.recordFailedTransaction(batch, delivery, err)
 	}
 
@@ -118,7 +118,7 @@ func (x *Executor) TransactionIsReady(batch *database.Batch, delivery *chain.Del
 		}
 		return true, nil
 	}
-	return ready, errors.Wrap(errors.StatusUnknown, err)
+	return ready, errors.Wrap(errors.StatusUnknownError, err)
 }
 
 func (x *Executor) userTransactionIsReady(batch *database.Batch, delivery *chain.Delivery, status *protocol.TransactionStatus, principal protocol.Account) (bool, error) {
@@ -159,7 +159,7 @@ func (x *Executor) userTransactionIsReady(batch *database.Batch, delivery *chain
 	if ok {
 		ready, fallback, err := val.TransactionIsReady(x, batch, delivery.Transaction, status)
 		if err != nil {
-			return false, errors.Wrap(errors.StatusUnknown, err)
+			return false, errors.Wrap(errors.StatusUnknownError, err)
 		}
 		if !fallback {
 			return ready, nil
@@ -188,7 +188,7 @@ func (x *Executor) userTransactionIsReady(batch *database.Batch, delivery *chain
 		// Check if any signer has reached its threshold
 		ok, err := x.AuthorityIsSatisfied(batch, delivery.Transaction, status, entry.Url)
 		if err != nil {
-			return false, errors.Wrap(errors.StatusUnknown, err)
+			return false, errors.Wrap(errors.StatusUnknownError, err)
 		}
 		if !ok {
 			return false, nil
@@ -204,7 +204,7 @@ func (x *Executor) AuthorityIsSatisfied(batch *database.Batch, transaction *prot
 	for _, signer := range status.FindSigners(authUrl) {
 		ok, err := x.SignerIsSatisfied(batch, transaction, status, signer)
 		if err != nil {
-			return false, errors.Wrap(errors.StatusUnknown, err)
+			return false, errors.Wrap(errors.StatusUnknownError, err)
 		}
 		if ok {
 			return true, nil
@@ -244,13 +244,13 @@ func (x *Executor) synthTransactionIsReady(batch *database.Batch, delivery *chai
 	// Load all of the signatures
 	signatures, err := GetAllSignatures(batch, batch.Transaction(delivery.Transaction.GetHash()), status, delivery.Transaction.Header.Initiator[:])
 	if err != nil {
-		return false, errors.Wrap(errors.StatusUnknown, err)
+		return false, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	// Build a receipt from the signatures
 	receipt, sourceNet, err := assembleSynthReceipt(*(*[32]byte)(delivery.Transaction.GetHash()), signatures)
 	if err != nil {
-		return false, errors.Wrap(errors.StatusUnknown, err)
+		return false, errors.Wrap(errors.StatusUnknownError, err)
 	}
 	if receipt == nil {
 		return false, nil
@@ -264,14 +264,14 @@ func (x *Executor) synthTransactionIsReady(batch *database.Batch, delivery *chai
 		var ok bool
 		partition, ok = protocol.ParsePartitionUrl(sourceNet)
 		if !ok {
-			return false, errors.Format(errors.StatusUnknown, "%v is not a valid partition URL", sourceNet)
+			return false, errors.Format(errors.StatusUnknownError, "%v is not a valid partition URL", sourceNet)
 		}
 	}
 
 	// Load the anchor chain
 	anchorChain, err := batch.Account(x.Describe.AnchorPool()).ReadChain(protocol.RootAnchorChain(partition))
 	if err != nil {
-		return false, errors.Format(errors.StatusUnknown, "load %s intermediate anchor chain: %w", partition, err)
+		return false, errors.Format(errors.StatusUnknownError, "load %s intermediate anchor chain: %w", partition, err)
 	}
 
 	// Is the result a valid DN anchor?
@@ -282,7 +282,7 @@ func (x *Executor) synthTransactionIsReady(batch *database.Batch, delivery *chai
 	case errors.Is(err, storage.ErrNotFound):
 		return false, nil
 	default:
-		return false, errors.Format(errors.StatusUnknown, "get height of entry %X of %s intermediate anchor chain: %w", receipt.Anchor[:4], partition, err)
+		return false, errors.Format(errors.StatusUnknownError, "get height of entry %X of %s intermediate anchor chain: %w", receipt.Anchor[:4], partition, err)
 	}
 
 	// Get the synthetic signature
@@ -295,7 +295,7 @@ func (x *Executor) synthTransactionIsReady(batch *database.Batch, delivery *chai
 	var ledger *protocol.SyntheticLedger
 	err = batch.Account(x.Describe.Synthetic()).GetStateAs(&ledger)
 	if err != nil {
-		return false, errors.Format(errors.StatusUnknown, "load synthetic transaction ledger: %w", err)
+		return false, errors.Format(errors.StatusUnknownError, "load synthetic transaction ledger: %w", err)
 	}
 
 	// If the transaction is out of sequence, mark it pending
@@ -342,6 +342,7 @@ func (x *Executor) recordTransaction(batch *database.Batch, delivery *chain.Deli
 		return nil, fmt.Errorf("load transaction status: %w", err)
 	}
 
+	status.TxID = delivery.Transaction.ID()
 	updateStatus(status)
 	err = db.PutStatus(status)
 	if err != nil {
@@ -357,14 +358,14 @@ func (x *Executor) recordTransaction(batch *database.Batch, delivery *chain.Deli
 	var ledger *protocol.SyntheticLedger
 	err = batch.Account(x.Describe.Synthetic()).GetStateAs(&ledger)
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknown, "load synthetic transaction ledger: %w", err)
+		return nil, errors.Format(errors.StatusUnknownError, "load synthetic transaction ledger: %w", err)
 	}
 
 	partitionLedger := ledger.Partition(delivery.SourceNetwork)
-	if partitionLedger.Add(status.Delivered, delivery.SequenceNumber, delivery.Transaction.ID()) {
+	if partitionLedger.Add(status.Delivered(), delivery.SequenceNumber, delivery.Transaction.ID()) {
 		err = batch.Account(x.Describe.Synthetic()).PutState(ledger)
 		if err != nil {
-			return nil, errors.Format(errors.StatusUnknown, "store synthetic transaction ledger: %w", err)
+			return nil, errors.Format(errors.StatusUnknownError, "store synthetic transaction ledger: %w", err)
 		}
 	}
 
@@ -374,8 +375,7 @@ func (x *Executor) recordTransaction(batch *database.Batch, delivery *chain.Deli
 func (x *Executor) recordPendingTransaction(net *config.Describe, batch *database.Batch, delivery *chain.Delivery) (*protocol.TransactionStatus, *chain.ProcessTransactionState, error) {
 	// Record the transaction
 	status, err := x.recordTransaction(batch, delivery, func(status *protocol.TransactionStatus) {
-		status.Remote = false
-		status.Pending = true
+		status.Code = errors.StatusPending
 	})
 	if err != nil {
 		return nil, nil, err
@@ -394,13 +394,13 @@ func (x *Executor) recordPendingTransaction(net *config.Describe, batch *databas
 	// Load all of the signatures
 	signatures, err := GetAllSignatures(batch, batch.Transaction(delivery.Transaction.GetHash()), status, delivery.Transaction.Header.Initiator[:])
 	if err != nil {
-		return nil, nil, errors.Wrap(errors.StatusUnknown, err)
+		return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	// Add the synthetic transaction to the anchor's list of pending transactions
 	receipt, _, err := assembleSynthReceipt(*(*[32]byte)(delivery.Transaction.GetHash()), signatures)
 	if err != nil {
-		return nil, nil, errors.Wrap(errors.StatusUnknown, err)
+		return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	if receipt == nil {
@@ -412,7 +412,7 @@ func (x *Executor) recordPendingTransaction(net *config.Describe, batch *databas
 
 	err = batch.Account(net.Ledger()).AddSyntheticForAnchor(*(*[32]byte)(receipt.Anchor), delivery.Transaction.ID())
 	if err != nil {
-		return nil, nil, errors.Wrap(errors.StatusUnknown, err)
+		return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	return status, new(chain.ProcessTransactionState), nil
@@ -421,10 +421,7 @@ func (x *Executor) recordPendingTransaction(net *config.Describe, batch *databas
 func (x *Executor) recordSuccessfulTransaction(batch *database.Batch, state *chain.ProcessTransactionState, delivery *chain.Delivery, result protocol.TransactionResult) (*protocol.TransactionStatus, *chain.ProcessTransactionState, error) {
 	// Record the transaction
 	status, err := x.recordTransaction(batch, delivery, func(status *protocol.TransactionStatus) {
-		status.Remote = false
-		status.Pending = false
-		status.Delivered = true
-		status.Code = 0
+		status.Code = errors.StatusDelivered
 		if result == nil {
 			status.Result = new(protocol.EmptyResult)
 		} else {
@@ -457,7 +454,7 @@ func (x *Executor) recordSuccessfulTransaction(batch *database.Batch, state *cha
 	var ledger *protocol.SyntheticLedger
 	err = batch.Account(x.Describe.Synthetic()).GetStateAs(&ledger)
 	if err != nil {
-		return nil, nil, errors.Format(errors.StatusUnknown, "load synthetic transaction ledger: %w", err)
+		return nil, nil, errors.Format(errors.StatusUnknownError, "load synthetic transaction ledger: %w", err)
 	}
 
 	nextHash, ok := ledger.Partition(delivery.SourceNetwork).Get(delivery.SequenceNumber + 1)
@@ -480,22 +477,7 @@ func selectTargetChain(body protocol.TransactionBody) string {
 func (x *Executor) recordFailedTransaction(batch *database.Batch, delivery *chain.Delivery, failure error) (*protocol.TransactionStatus, *chain.ProcessTransactionState, error) {
 	// Record the transaction
 	status, err := x.recordTransaction(batch, delivery, func(status *protocol.TransactionStatus) {
-		status.Remote = false
-		status.Pending = false
-		status.Delivered = true
-		status.Message = failure.Error()
-
-		var err1 *protocol.Error
-		var err2 *errors.Error
-		switch {
-		case errors.As(failure, &err1):
-			status.Code = err1.Code.GetEnumValue()
-		case errors.As(failure, &err2):
-			status.Error = err2
-			status.Code = protocol.ConvertErrorStatus(err2.Code).GetEnumValue()
-		default:
-			status.Code = protocol.ErrorCodeUnknownError.GetEnumValue()
-		}
+		status.Set(failure)
 	})
 	if err != nil {
 		return nil, nil, err

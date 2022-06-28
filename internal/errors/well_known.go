@@ -12,7 +12,7 @@ func NotFound(format string, args ...interface{}) error {
 }
 
 func Unknown(format string, args ...interface{}) error {
-	e := makeError(StatusUnknown)
+	e := makeError(StatusUnknownError)
 	e.errorf(format, args...)
 	return e
 }

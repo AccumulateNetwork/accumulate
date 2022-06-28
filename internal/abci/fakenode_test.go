@@ -23,6 +23,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
 	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
+	"gitlab.com/accumulatenetwork/accumulate/internal/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -50,8 +51,9 @@ type FakeNode struct {
 	logger  log.Logger
 	router  routing.Router
 
-	assert  *assert.Assertions
-	require *require.Assertions
+	assert       *assert.Assertions
+	require      *require.Assertions
+	nodeExecutor *block.Executor
 }
 
 func RunTestNet(t *testing.T, partitions []string, daemons map[string][]*accumulated.Daemon, openDb func(d *accumulated.Daemon) (*database.Database, error), doGenesis bool, errorHandler func(err error)) map[string][]*FakeNode {
@@ -157,13 +159,19 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 	n.router = routing.NewRouter(eventBus, connMgr)
 
 	var err error
-	n.exec, err = block.NewNodeExecutor(block.ExecutorOptions{
+	execOpts := block.ExecutorOptions{
 		Logger:   n.logger,
 		Key:      n.key.Bytes(),
 		Describe: *n.network,
 		Router:   n.router,
 		EventBus: eventBus,
-	}, n.db)
+	}
+	// On DNs initialize the major block scheduler
+	if execOpts.Describe.NetworkType == config.Directory {
+		execOpts.MajorBlockScheduler = blockscheduler.Init(execOpts.EventBus)
+	}
+
+	n.exec, err = block.NewNodeExecutor(execOpts, n.db)
 	n.Require().NoError(err)
 
 	n.app = abci.NewAccumulator(abci.AccumulatorOptions{
@@ -334,7 +342,9 @@ func (n *FakeNode) MustExecute(inBlock func(func(*protocol.Envelope))) (sigHashe
 	}
 
 	for _, result := range results.Results {
-		assert.Zero(n.t, result.Code, result.Message)
+		if result.Error != nil {
+			assert.NoError(n.t, result.Error)
+		}
 	}
 	n.t.FailNow()
 	panic("unreachable")

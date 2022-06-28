@@ -5,6 +5,7 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -103,7 +104,30 @@ func (d *Database) Close() error {
 
 // Account returns an Account for the given URL.
 func (b *Batch) Account(u *url.URL) *Account {
-	return &Account{b, account(u), u}
+	return getOrCreateMap(&b.accounts, record.Key{"Account", u}, func() *Account {
+		v := new(Account)
+		v.logger = b.logger
+		v.store = b.recordStore
+		v.key = record.Key{}.Append("Account", u)
+		v.batch = b
+		return v
+	})
+}
+
+func (b *Batch) getAccountUrl(key record.Key) (*url.URL, error) {
+	v, err := record.NewValue(
+		b.logger.L,
+		b.recordStore,
+		// This must match the key used for the account's main state
+		key.Append("Main"),
+		"account %[1]v",
+		false,
+		record.Union(protocol.UnmarshalAccount),
+	).Get()
+	if err != nil {
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
+	}
+	return v.GetUrl(), nil
 }
 
 // AccountByID returns an Account for the given ID.
@@ -113,13 +137,11 @@ func (b *Batch) Account(u *url.URL) *Account {
 //
 // Deprecated: Use Account.
 func (b *Batch) AccountByID(id []byte) (*Account, error) {
-	a := &Account{b, accountByID(id), nil}
-	state, err := a.GetState()
+	u, err := b.getAccountUrl(record.Key{"Account", id})
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknown, err)
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
-	a.url = state.GetUrl()
-	return a, nil
+	return b.Account(u), nil
 }
 
 // Import imports values from another database.
