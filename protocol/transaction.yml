@@ -63,6 +63,9 @@ TransactionStatus:
     - name: Result
       type: TransactionResult
       marshal-as: union
+    - name: Received
+      description: is the block when the transaction was first received
+      type: uint
     - name: Initiator
       description: is the signer that initiated the transaction
       type: url

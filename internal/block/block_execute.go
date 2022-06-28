@@ -32,6 +32,15 @@ func (x *Executor) ExecuteEnvelope(block *Block, delivery *chain.Delivery) (*pro
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
+	// Record when the transaction is received
+	if status.Received == 0 {
+		status.Received = block.Index
+		err = block.Batch.Transaction(delivery.Transaction.GetHash()).PutStatus(status)
+		if err != nil {
+			return nil, errors.Wrap(errors.StatusUnknownError, err)
+		}
+	}
+
 	// Process additional transactions. This is intentionally non-recursive.
 	for len(additional) > 0 {
 		var next []*chain.Delivery
@@ -90,11 +99,9 @@ func (x *Executor) executeEnvelope(block *Block, delivery *chain.Delivery) (*pro
 		return status, nil, nil
 	}
 
-	if delivery.Transaction.Body.Type().IsSynthetic() {
-		err = delivery.LoadSyntheticMetadata(block.Batch, status)
-		if err != nil {
-			return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
-		}
+	err = delivery.LoadSyntheticMetadata(block.Batch, delivery.Transaction.Body.Type(), status)
+	if err != nil {
+		return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	// Process signatures

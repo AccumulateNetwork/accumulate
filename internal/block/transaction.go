@@ -109,14 +109,10 @@ func (x *Executor) TransactionIsReady(batch *database.Batch, delivery *chain.Del
 		ready, err = x.userTransactionIsReady(batch, delivery, status, principal)
 	case typ.IsSynthetic():
 		ready, err = x.synthTransactionIsReady(batch, delivery, status, principal)
+	case typ.IsSystem():
+		ready, err = x.systemTransactionIsReady(batch, delivery, status, principal)
 	default:
-		if principal == nil {
-			val, ok := getValidator[chain.PrincipalValidator](x, delivery.Transaction.Body.Type())
-			if !ok || !val.AllowMissingPrincipal(delivery.Transaction) {
-				return false, errors.NotFound("missing principal: %v not found", delivery.Transaction.Header.Principal)
-			}
-		}
-		return true, nil
+		return false, errors.Format(errors.StatusInternalError, "unknown transaction type %v", typ)
 	}
 	return ready, errors.Wrap(errors.StatusUnknownError, err)
 }
@@ -239,7 +235,7 @@ func (x *Executor) SignerIsSatisfied(batch *database.Batch, transaction *protoco
 func (x *Executor) synthTransactionIsReady(batch *database.Batch, delivery *chain.Delivery, status *protocol.TransactionStatus, principal protocol.Account) (bool, error) {
 	// Do not check the principal until the transaction is ready (see below). Do
 	// not delegate "is ready?" to the transaction executor - synthetic
-	// transactions _must_ be proven before being executed.
+	// transactions _must_ be sequenced and proven before being executed.
 
 	if status.Proof == nil {
 		return false, nil
@@ -311,6 +307,57 @@ func (x *Executor) synthTransactionIsReady(batch *database.Batch, delivery *chai
 	return true, nil
 }
 
+func (x *Executor) systemTransactionIsReady(batch *database.Batch, delivery *chain.Delivery, status *protocol.TransactionStatus, principal protocol.Account) (bool, error) {
+	// Do not check the principal until the transaction is ready (see below). Do
+	// not delegate "is ready?" to the transaction executor - anchors _must_ be
+	// sequenced.
+
+	switch delivery.Transaction.Body.Type() {
+	case protocol.TransactionTypeSystemGenesis, protocol.TransactionTypeSystemWriteData:
+		// Do not check these
+		return true, nil
+
+	default:
+		// Anchors must be sequenced
+	}
+
+	// Load the ledger
+	var ledger *protocol.SyntheticLedger
+	err := batch.Account(x.Describe.Synthetic()).GetStateAs(&ledger)
+	if err != nil {
+		return false, errors.Format(errors.StatusUnknownError, "load synthetic transaction ledger: %w", err)
+	}
+
+	// If the transaction is out of sequence, mark it pending
+	partLedger := ledger.Anchor(delivery.SourceNetwork)
+	if partLedger.Delivered+1 != status.SequenceNumber {
+		x.logger.Info("Out of sequence synthetic transaction",
+			"hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4),
+			"seq-got", status.SequenceNumber,
+			"seq-want", partLedger.Delivered+1,
+			"source", status.SourceNetwork,
+			"destination", status.DestinationNetwork,
+			"type", delivery.Transaction.Body.Type(),
+			"hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4),
+		)
+		return false, nil
+	}
+
+	if principal != nil {
+		return true, nil
+	}
+
+	// If the principal is required but missing, do not return an error unless
+	// the transaction is ready to execute.
+	// https://accumulate.atlassian.net/browse/AC-1704
+	val, ok := getValidator[chain.PrincipalValidator](x, delivery.Transaction.Body.Type())
+	if !ok || !val.AllowMissingPrincipal(delivery.Transaction) {
+		return false, errors.NotFound("missing principal: %v not found", delivery.Transaction.Header.Principal)
+	}
+
+	return true, nil
+}
+
 func (x *Executor) recordTransaction(batch *database.Batch, delivery *chain.Delivery, updateStatus func(*protocol.TransactionStatus)) (*protocol.TransactionStatus, error) {
 	// Store the transaction state (without signatures)
 	db := batch.Transaction(delivery.Transaction.GetHash())
@@ -333,7 +380,11 @@ func (x *Executor) recordTransaction(batch *database.Batch, delivery *chain.Deli
 	}
 
 	// If the transaction is synthetic, update the synthetic ledger
-	if !delivery.Transaction.Body.Type().IsSynthetic() {
+	if delivery.Transaction.Body.Type().IsUser() {
+		return status, nil
+	}
+	switch delivery.Transaction.Body.Type() {
+	case protocol.TransactionTypeSystemGenesis, protocol.TransactionTypeSystemWriteData:
 		return status, nil
 	}
 
@@ -344,8 +395,17 @@ func (x *Executor) recordTransaction(batch *database.Batch, delivery *chain.Deli
 		return nil, errors.Format(errors.StatusUnknownError, "load synthetic transaction ledger: %w", err)
 	}
 
-	partitionLedger := ledger.Partition(delivery.SourceNetwork)
-	if partitionLedger.Add(status.Delivered(), delivery.SequenceNumber, delivery.Transaction.ID()) {
+	var partLedger *protocol.PartitionSyntheticLedger
+	if delivery.Transaction.Body.Type().IsSystem() {
+		partLedger = ledger.Anchor(delivery.SourceNetwork)
+	} else {
+		partLedger = ledger.Partition(delivery.SourceNetwork)
+	}
+	if status.Code != errors.StatusDelivered && delivery.SequenceNumber <= partLedger.Delivered {
+		return nil, errors.Format(errors.StatusFatalError, "synthetic transactions executed out of order: delivered %d, executed %d", partLedger.Delivered, delivery.SequenceNumber)
+	}
+
+	if partLedger.Add(status.Code == errors.StatusDelivered, delivery.SequenceNumber, delivery.Transaction.ID()) {
 		err = batch.Account(x.Describe.Synthetic()).PutState(ledger)
 		if err != nil {
 			return nil, errors.Format(errors.StatusUnknownError, "store synthetic transaction ledger: %w", err)
@@ -362,6 +422,10 @@ func (x *Executor) recordPendingTransaction(net *config.Describe, batch *databas
 	})
 	if err != nil {
 		return nil, nil, err
+	}
+
+	if delivery.Transaction.Body.Type().IsSystem() {
+		return status, new(chain.ProcessTransactionState), nil
 	}
 
 	// Add the user transaction to the principal's list of pending transactions

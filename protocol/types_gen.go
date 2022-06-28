@@ -88,6 +88,8 @@ type AddKeyOperation struct {
 type AnchorLedger struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	// MinorBlockSequenceNumber is the sequence number of the last minor block.
+	MinorBlockSequenceNumber uint64 `json:"minorBlockSequenceNumber,omitempty" form:"minorBlockSequenceNumber" query:"minorBlockSequenceNumber" validate:"required"`
 	// MajorBlockIndex is the block index of the last major block.
 	MajorBlockIndex uint64 `json:"majorBlockIndex,omitempty" form:"majorBlockIndex" query:"majorBlockIndex" validate:"required"`
 	// MajorBlockTime is the timestamp of the last major block.
@@ -667,10 +669,13 @@ type SyntheticForwardTransaction struct {
 }
 
 type SyntheticLedger struct {
-	fieldsSet  []bool
-	Url        *url.URL                    `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	fieldsSet []bool
+	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	// Partitions tracks sent and received synthetic transactions.
 	Partitions []*PartitionSyntheticLedger `json:"partitions,omitempty" form:"partitions" query:"partitions" validate:"required"`
-	extraData  []byte
+	// Anchors tracks sent and received anchors.
+	Anchors   []*PartitionSyntheticLedger `json:"anchors,omitempty" form:"anchors" query:"anchors" validate:"required"`
+	extraData []byte
 }
 
 type SyntheticOrigin struct {
@@ -703,7 +708,13 @@ type SystemLedger struct {
 	Timestamp      time.Time              `json:"timestamp,omitempty" form:"timestamp" query:"timestamp" validate:"required"`
 	AcmeBurnt      big.Int                `json:"acmeBurnt,omitempty" form:"acmeBurnt" query:"acmeBurnt" validate:"required"`
 	PendingUpdates []NetworkAccountUpdate `json:"pendingUpdates,omitempty" form:"pendingUpdates" query:"pendingUpdates" validate:"required"`
-	extraData      []byte
+	// SendAnchor indicates that a block anchor should be sent for the last block.
+	SendAnchor bool `json:"sendAnchor,omitempty" form:"sendAnchor" query:"sendAnchor" validate:"required"`
+	// OpenMajorBlock indicates that a major block should be opened next block.
+	OpenMajorBlock bool `json:"openMajorBlock,omitempty" form:"openMajorBlock" query:"openMajorBlock" validate:"required"`
+	// ClosedMajorBlock indicates that a major block was completed last block.
+	ClosedMajorBlock uint64 `json:"closedMajorBlock,omitempty" form:"closedMajorBlock" query:"closedMajorBlock" validate:"required"`
+	extraData        []byte
 }
 
 type SystemWriteData struct {
@@ -772,6 +783,8 @@ type TransactionStatus struct {
 	Code      errors2.Status    `json:"code,omitempty" form:"code" query:"code" validate:"required"`
 	Error     *errors2.Error    `json:"error,omitempty" form:"error" query:"error" validate:"required"`
 	Result    TransactionResult `json:"result,omitempty" form:"result" query:"result" validate:"required"`
+	// Received is the block when the transaction was first received.
+	Received uint64 `json:"received,omitempty" form:"received" query:"received" validate:"required"`
 	// Initiator is the signer that initiated the transaction.
 	Initiator *url.URL `json:"initiator,omitempty" form:"initiator" query:"initiator" validate:"required"`
 	// Signers lists accounts that have signed the transaction.
@@ -1140,6 +1153,7 @@ func (v *AnchorLedger) Copy() *AnchorLedger {
 	if v.Url != nil {
 		u.Url = (v.Url).Copy()
 	}
+	u.MinorBlockSequenceNumber = v.MinorBlockSequenceNumber
 	u.MajorBlockIndex = v.MajorBlockIndex
 	u.MajorBlockTime = v.MajorBlockTime
 	u.PendingMajorBlockAnchors = make([]*url.URL, len(v.PendingMajorBlockAnchors))
@@ -2116,6 +2130,12 @@ func (v *SyntheticLedger) Copy() *SyntheticLedger {
 			u.Partitions[i] = (v).Copy()
 		}
 	}
+	u.Anchors = make([]*PartitionSyntheticLedger, len(v.Anchors))
+	for i, v := range v.Anchors {
+		if v != nil {
+			u.Anchors[i] = (v).Copy()
+		}
+	}
 
 	return u
 }
@@ -2172,6 +2192,9 @@ func (v *SystemLedger) Copy() *SystemLedger {
 	for i, v := range v.PendingUpdates {
 		u.PendingUpdates[i] = *(&v).Copy()
 	}
+	u.SendAnchor = v.SendAnchor
+	u.OpenMajorBlock = v.OpenMajorBlock
+	u.ClosedMajorBlock = v.ClosedMajorBlock
 
 	return u
 }
@@ -2300,6 +2323,7 @@ func (v *TransactionStatus) Copy() *TransactionStatus {
 	if v.Result != nil {
 		u.Result = (v.Result).CopyAsInterface().(TransactionResult)
 	}
+	u.Received = v.Received
 	if v.Initiator != nil {
 		u.Initiator = (v.Initiator).Copy()
 	}
@@ -2616,6 +2640,9 @@ func (v *AnchorLedger) Equal(u *AnchorLedger) bool {
 	case v.Url == nil || u.Url == nil:
 		return false
 	case !((v.Url).Equal(u.Url)):
+		return false
+	}
+	if !(v.MinorBlockSequenceNumber == u.MinorBlockSequenceNumber) {
 		return false
 	}
 	if !(v.MajorBlockIndex == u.MajorBlockIndex) {
@@ -3901,6 +3928,14 @@ func (v *SyntheticLedger) Equal(u *SyntheticLedger) bool {
 			return false
 		}
 	}
+	if len(v.Anchors) != len(u.Anchors) {
+		return false
+	}
+	for i := range v.Anchors {
+		if !((v.Anchors[i]).Equal(u.Anchors[i])) {
+			return false
+		}
+	}
 
 	return true
 }
@@ -3970,6 +4005,15 @@ func (v *SystemLedger) Equal(u *SystemLedger) bool {
 		if !((&v.PendingUpdates[i]).Equal(&u.PendingUpdates[i])) {
 			return false
 		}
+	}
+	if !(v.SendAnchor == u.SendAnchor) {
+		return false
+	}
+	if !(v.OpenMajorBlock == u.OpenMajorBlock) {
+		return false
+	}
+	if !(v.ClosedMajorBlock == u.ClosedMajorBlock) {
+		return false
 	}
 
 	return true
@@ -4140,6 +4184,9 @@ func (v *TransactionStatus) Equal(u *TransactionStatus) bool {
 		return false
 	}
 	if !(EqualTransactionResult(v.Result, u.Result)) {
+		return false
+	}
+	if !(v.Received == u.Received) {
 		return false
 	}
 	switch {
@@ -4823,9 +4870,10 @@ func (v *AddKeyOperation) IsValid() error {
 var fieldNames_AnchorLedger = []string{
 	1: "Type",
 	2: "Url",
-	3: "MajorBlockIndex",
-	4: "MajorBlockTime",
-	5: "PendingMajorBlockAnchors",
+	3: "MinorBlockSequenceNumber",
+	4: "MajorBlockIndex",
+	5: "MajorBlockTime",
+	6: "PendingMajorBlockAnchors",
 }
 
 func (v *AnchorLedger) MarshalBinary() ([]byte, error) {
@@ -4836,15 +4884,18 @@ func (v *AnchorLedger) MarshalBinary() ([]byte, error) {
 	if !(v.Url == nil) {
 		writer.WriteUrl(2, v.Url)
 	}
+	if !(v.MinorBlockSequenceNumber == 0) {
+		writer.WriteUint(3, v.MinorBlockSequenceNumber)
+	}
 	if !(v.MajorBlockIndex == 0) {
-		writer.WriteUint(3, v.MajorBlockIndex)
+		writer.WriteUint(4, v.MajorBlockIndex)
 	}
 	if !(v.MajorBlockTime == (time.Time{})) {
-		writer.WriteTime(4, v.MajorBlockTime)
+		writer.WriteTime(5, v.MajorBlockTime)
 	}
 	if !(len(v.PendingMajorBlockAnchors) == 0) {
 		for _, v := range v.PendingMajorBlockAnchors {
-			writer.WriteUrl(5, v)
+			writer.WriteUrl(6, v)
 		}
 	}
 
@@ -4868,16 +4919,21 @@ func (v *AnchorLedger) IsValid() error {
 		errs = append(errs, "field Url is not set")
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field MinorBlockSequenceNumber is missing")
+	} else if v.MinorBlockSequenceNumber == 0 {
+		errs = append(errs, "field MinorBlockSequenceNumber is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field MajorBlockIndex is missing")
 	} else if v.MajorBlockIndex == 0 {
 		errs = append(errs, "field MajorBlockIndex is not set")
 	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
 		errs = append(errs, "field MajorBlockTime is missing")
 	} else if v.MajorBlockTime == (time.Time{}) {
 		errs = append(errs, "field MajorBlockTime is not set")
 	}
-	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
 		errs = append(errs, "field PendingMajorBlockAnchors is missing")
 	} else if len(v.PendingMajorBlockAnchors) == 0 {
 		errs = append(errs, "field PendingMajorBlockAnchors is not set")
@@ -8505,6 +8561,7 @@ var fieldNames_SyntheticLedger = []string{
 	1: "Type",
 	2: "Url",
 	3: "Partitions",
+	4: "Anchors",
 }
 
 func (v *SyntheticLedger) MarshalBinary() ([]byte, error) {
@@ -8518,6 +8575,11 @@ func (v *SyntheticLedger) MarshalBinary() ([]byte, error) {
 	if !(len(v.Partitions) == 0) {
 		for _, v := range v.Partitions {
 			writer.WriteValue(3, v.MarshalBinary)
+		}
+	}
+	if !(len(v.Anchors) == 0) {
+		for _, v := range v.Anchors {
+			writer.WriteValue(4, v.MarshalBinary)
 		}
 	}
 
@@ -8544,6 +8606,11 @@ func (v *SyntheticLedger) IsValid() error {
 		errs = append(errs, "field Partitions is missing")
 	} else if len(v.Partitions) == 0 {
 		errs = append(errs, "field Partitions is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Anchors is missing")
+	} else if len(v.Anchors) == 0 {
+		errs = append(errs, "field Anchors is not set")
 	}
 
 	switch len(errs) {
@@ -8704,6 +8771,9 @@ var fieldNames_SystemLedger = []string{
 	4: "Timestamp",
 	5: "AcmeBurnt",
 	6: "PendingUpdates",
+	7: "SendAnchor",
+	8: "OpenMajorBlock",
+	9: "ClosedMajorBlock",
 }
 
 func (v *SystemLedger) MarshalBinary() ([]byte, error) {
@@ -8727,6 +8797,15 @@ func (v *SystemLedger) MarshalBinary() ([]byte, error) {
 		for _, v := range v.PendingUpdates {
 			writer.WriteValue(6, v.MarshalBinary)
 		}
+	}
+	if !(!v.SendAnchor) {
+		writer.WriteBool(7, v.SendAnchor)
+	}
+	if !(!v.OpenMajorBlock) {
+		writer.WriteBool(8, v.OpenMajorBlock)
+	}
+	if !(v.ClosedMajorBlock == 0) {
+		writer.WriteUint(9, v.ClosedMajorBlock)
 	}
 
 	_, _, err := writer.Reset(fieldNames_SystemLedger)
@@ -8767,6 +8846,21 @@ func (v *SystemLedger) IsValid() error {
 		errs = append(errs, "field PendingUpdates is missing")
 	} else if len(v.PendingUpdates) == 0 {
 		errs = append(errs, "field PendingUpdates is not set")
+	}
+	if len(v.fieldsSet) > 7 && !v.fieldsSet[7] {
+		errs = append(errs, "field SendAnchor is missing")
+	} else if !v.SendAnchor {
+		errs = append(errs, "field SendAnchor is not set")
+	}
+	if len(v.fieldsSet) > 8 && !v.fieldsSet[8] {
+		errs = append(errs, "field OpenMajorBlock is missing")
+	} else if !v.OpenMajorBlock {
+		errs = append(errs, "field OpenMajorBlock is not set")
+	}
+	if len(v.fieldsSet) > 9 && !v.fieldsSet[9] {
+		errs = append(errs, "field ClosedMajorBlock is missing")
+	} else if v.ClosedMajorBlock == 0 {
+		errs = append(errs, "field ClosedMajorBlock is not set")
 	}
 
 	switch len(errs) {
@@ -9185,12 +9279,13 @@ var fieldNames_TransactionStatus = []string{
 	2:  "Code",
 	3:  "Error",
 	4:  "Result",
-	5:  "Initiator",
-	6:  "Signers",
-	7:  "SourceNetwork",
-	8:  "DestinationNetwork",
-	9:  "SequenceNumber",
-	10: "Proof",
+	5:  "Received",
+	6:  "Initiator",
+	7:  "Signers",
+	8:  "SourceNetwork",
+	9:  "DestinationNetwork",
+	10: "SequenceNumber",
+	11: "Proof",
 }
 
 func (v *TransactionStatus) MarshalBinary() ([]byte, error) {
@@ -9209,25 +9304,28 @@ func (v *TransactionStatus) MarshalBinary() ([]byte, error) {
 	if !(v.Result == nil) {
 		writer.WriteValue(4, v.Result.MarshalBinary)
 	}
+	if !(v.Received == 0) {
+		writer.WriteUint(5, v.Received)
+	}
 	if !(v.Initiator == nil) {
-		writer.WriteUrl(5, v.Initiator)
+		writer.WriteUrl(6, v.Initiator)
 	}
 	if !(len(v.Signers) == 0) {
 		for _, v := range v.Signers {
-			writer.WriteValue(6, v.MarshalBinary)
+			writer.WriteValue(7, v.MarshalBinary)
 		}
 	}
 	if !(v.SourceNetwork == nil) {
-		writer.WriteUrl(7, v.SourceNetwork)
+		writer.WriteUrl(8, v.SourceNetwork)
 	}
 	if !(v.DestinationNetwork == nil) {
-		writer.WriteUrl(8, v.DestinationNetwork)
+		writer.WriteUrl(9, v.DestinationNetwork)
 	}
 	if !(v.SequenceNumber == 0) {
-		writer.WriteUint(9, v.SequenceNumber)
+		writer.WriteUint(10, v.SequenceNumber)
 	}
 	if !(v.Proof == nil) {
-		writer.WriteValue(10, v.Proof.MarshalBinary)
+		writer.WriteValue(11, v.Proof.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_TransactionStatus)
@@ -9262,31 +9360,36 @@ func (v *TransactionStatus) IsValid() error {
 		errs = append(errs, "field Result is not set")
 	}
 	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field Received is missing")
+	} else if v.Received == 0 {
+		errs = append(errs, "field Received is not set")
+	}
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
 		errs = append(errs, "field Initiator is missing")
 	} else if v.Initiator == nil {
 		errs = append(errs, "field Initiator is not set")
 	}
-	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+	if len(v.fieldsSet) > 7 && !v.fieldsSet[7] {
 		errs = append(errs, "field Signers is missing")
 	} else if len(v.Signers) == 0 {
 		errs = append(errs, "field Signers is not set")
 	}
-	if len(v.fieldsSet) > 7 && !v.fieldsSet[7] {
+	if len(v.fieldsSet) > 8 && !v.fieldsSet[8] {
 		errs = append(errs, "field SourceNetwork is missing")
 	} else if v.SourceNetwork == nil {
 		errs = append(errs, "field SourceNetwork is not set")
 	}
-	if len(v.fieldsSet) > 8 && !v.fieldsSet[8] {
+	if len(v.fieldsSet) > 9 && !v.fieldsSet[9] {
 		errs = append(errs, "field DestinationNetwork is missing")
 	} else if v.DestinationNetwork == nil {
 		errs = append(errs, "field DestinationNetwork is not set")
 	}
-	if len(v.fieldsSet) > 9 && !v.fieldsSet[9] {
+	if len(v.fieldsSet) > 10 && !v.fieldsSet[10] {
 		errs = append(errs, "field SequenceNumber is missing")
 	} else if v.SequenceNumber == 0 {
 		errs = append(errs, "field SequenceNumber is not set")
 	}
-	if len(v.fieldsSet) > 10 && !v.fieldsSet[10] {
+	if len(v.fieldsSet) > 11 && !v.fieldsSet[11] {
 		errs = append(errs, "field Proof is missing")
 	} else if v.Proof == nil {
 		errs = append(errs, "field Proof is not set")
@@ -10168,13 +10271,16 @@ func (v *AnchorLedger) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Url = x
 	}
 	if x, ok := reader.ReadUint(3); ok {
+		v.MinorBlockSequenceNumber = x
+	}
+	if x, ok := reader.ReadUint(4); ok {
 		v.MajorBlockIndex = x
 	}
-	if x, ok := reader.ReadTime(4); ok {
+	if x, ok := reader.ReadTime(5); ok {
 		v.MajorBlockTime = x
 	}
 	for {
-		if x, ok := reader.ReadUrl(5); ok {
+		if x, ok := reader.ReadUrl(6); ok {
 			v.PendingMajorBlockAnchors = append(v.PendingMajorBlockAnchors, x)
 		} else {
 			break
@@ -12415,6 +12521,13 @@ func (v *SyntheticLedger) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
+	for {
+		if x := new(PartitionSyntheticLedger); reader.ReadValue(4, x.UnmarshalBinary) {
+			v.Anchors = append(v.Anchors, x)
+		} else {
+			break
+		}
+	}
 
 	seen, err := reader.Reset(fieldNames_SyntheticLedger)
 	if err != nil {
@@ -12551,6 +12664,15 @@ func (v *SystemLedger) UnmarshalBinaryFrom(rd io.Reader) error {
 		} else {
 			break
 		}
+	}
+	if x, ok := reader.ReadBool(7); ok {
+		v.SendAnchor = x
+	}
+	if x, ok := reader.ReadBool(8); ok {
+		v.OpenMajorBlock = x
+	}
+	if x, ok := reader.ReadUint(9); ok {
+		v.ClosedMajorBlock = x
 	}
 
 	seen, err := reader.Reset(fieldNames_SystemLedger)
@@ -12826,11 +12948,14 @@ func (v *TransactionStatus) UnmarshalBinaryFrom(rd io.Reader) error {
 		}
 		return err
 	})
-	if x, ok := reader.ReadUrl(5); ok {
+	if x, ok := reader.ReadUint(5); ok {
+		v.Received = x
+	}
+	if x, ok := reader.ReadUrl(6); ok {
 		v.Initiator = x
 	}
 	for {
-		ok := reader.ReadValue(6, func(b []byte) error {
+		ok := reader.ReadValue(7, func(b []byte) error {
 			x, err := UnmarshalSigner(b)
 			if err == nil {
 				v.Signers = append(v.Signers, x)
@@ -12841,16 +12966,16 @@ func (v *TransactionStatus) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
-	if x, ok := reader.ReadUrl(7); ok {
+	if x, ok := reader.ReadUrl(8); ok {
 		v.SourceNetwork = x
 	}
-	if x, ok := reader.ReadUrl(8); ok {
+	if x, ok := reader.ReadUrl(9); ok {
 		v.DestinationNetwork = x
 	}
-	if x, ok := reader.ReadUint(9); ok {
+	if x, ok := reader.ReadUint(10); ok {
 		v.SequenceNumber = x
 	}
-	if x := new(managed.Receipt); reader.ReadValue(10, x.UnmarshalBinary) {
+	if x := new(managed.Receipt); reader.ReadValue(11, x.UnmarshalBinary) {
 		v.Proof = x
 	}
 
@@ -13360,12 +13485,14 @@ func (v *AnchorLedger) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type                     AccountType                 `json:"type"`
 		Url                      *url.URL                    `json:"url,omitempty"`
+		MinorBlockSequenceNumber uint64                      `json:"minorBlockSequenceNumber,omitempty"`
 		MajorBlockIndex          uint64                      `json:"majorBlockIndex,omitempty"`
 		MajorBlockTime           time.Time                   `json:"majorBlockTime,omitempty"`
 		PendingMajorBlockAnchors encoding.JsonList[*url.URL] `json:"pendingMajorBlockAnchors,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
+	u.MinorBlockSequenceNumber = v.MinorBlockSequenceNumber
 	u.MajorBlockIndex = v.MajorBlockIndex
 	u.MajorBlockTime = v.MajorBlockTime
 	u.PendingMajorBlockAnchors = v.PendingMajorBlockAnchors
@@ -14271,10 +14398,12 @@ func (v *SyntheticLedger) MarshalJSON() ([]byte, error) {
 		Type       AccountType                                  `json:"type"`
 		Url        *url.URL                                     `json:"url,omitempty"`
 		Partitions encoding.JsonList[*PartitionSyntheticLedger] `json:"partitions,omitempty"`
+		Anchors    encoding.JsonList[*PartitionSyntheticLedger] `json:"anchors,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
 	u.Partitions = v.Partitions
+	u.Anchors = v.Anchors
 	return json.Marshal(&u)
 }
 
@@ -14306,12 +14435,15 @@ func (v *SystemGenesis) MarshalJSON() ([]byte, error) {
 
 func (v *SystemLedger) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type           AccountType                             `json:"type"`
-		Url            *url.URL                                `json:"url,omitempty"`
-		Index          uint64                                  `json:"index,omitempty"`
-		Timestamp      time.Time                               `json:"timestamp,omitempty"`
-		AcmeBurnt      *string                                 `json:"acmeBurnt,omitempty"`
-		PendingUpdates encoding.JsonList[NetworkAccountUpdate] `json:"pendingUpdates,omitempty"`
+		Type             AccountType                             `json:"type"`
+		Url              *url.URL                                `json:"url,omitempty"`
+		Index            uint64                                  `json:"index,omitempty"`
+		Timestamp        time.Time                               `json:"timestamp,omitempty"`
+		AcmeBurnt        *string                                 `json:"acmeBurnt,omitempty"`
+		PendingUpdates   encoding.JsonList[NetworkAccountUpdate] `json:"pendingUpdates,omitempty"`
+		SendAnchor       bool                                    `json:"sendAnchor,omitempty"`
+		OpenMajorBlock   bool                                    `json:"openMajorBlock,omitempty"`
+		ClosedMajorBlock uint64                                  `json:"closedMajorBlock,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
@@ -14319,6 +14451,9 @@ func (v *SystemLedger) MarshalJSON() ([]byte, error) {
 	u.Timestamp = v.Timestamp
 	u.AcmeBurnt = encoding.BigintToJSON(&v.AcmeBurnt)
 	u.PendingUpdates = v.PendingUpdates
+	u.SendAnchor = v.SendAnchor
+	u.OpenMajorBlock = v.OpenMajorBlock
+	u.ClosedMajorBlock = v.ClosedMajorBlock
 	return json.Marshal(&u)
 }
 
@@ -14437,6 +14572,7 @@ func (v *TransactionStatus) MarshalJSON() ([]byte, error) {
 		CodeNum            uint64                                        `json:"codeNum,omitempty"`
 		Error              *errors2.Error                                `json:"error,omitempty"`
 		Result             encoding.JsonUnmarshalWith[TransactionResult] `json:"result,omitempty"`
+		Received           uint64                                        `json:"received,omitempty"`
 		Initiator          *url.URL                                      `json:"initiator,omitempty"`
 		Signers            encoding.JsonUnmarshalListWith[Signer]        `json:"signers,omitempty"`
 		SourceNetwork      *url.URL                                      `json:"sourceNetwork,omitempty"`
@@ -14453,6 +14589,7 @@ func (v *TransactionStatus) MarshalJSON() ([]byte, error) {
 	u.CodeNum = v.CodeNum()
 	u.Error = v.Error
 	u.Result = encoding.JsonUnmarshalWith[TransactionResult]{Value: v.Result, Func: UnmarshalTransactionResultJSON}
+	u.Received = v.Received
 	u.Initiator = v.Initiator
 	u.Signers = encoding.JsonUnmarshalListWith[Signer]{Value: v.Signers, Func: UnmarshalSignerJSON}
 	u.SourceNetwork = v.SourceNetwork
@@ -14774,12 +14911,14 @@ func (v *AnchorLedger) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type                     AccountType                 `json:"type"`
 		Url                      *url.URL                    `json:"url,omitempty"`
+		MinorBlockSequenceNumber uint64                      `json:"minorBlockSequenceNumber,omitempty"`
 		MajorBlockIndex          uint64                      `json:"majorBlockIndex,omitempty"`
 		MajorBlockTime           time.Time                   `json:"majorBlockTime,omitempty"`
 		PendingMajorBlockAnchors encoding.JsonList[*url.URL] `json:"pendingMajorBlockAnchors,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
+	u.MinorBlockSequenceNumber = v.MinorBlockSequenceNumber
 	u.MajorBlockIndex = v.MajorBlockIndex
 	u.MajorBlockTime = v.MajorBlockTime
 	u.PendingMajorBlockAnchors = v.PendingMajorBlockAnchors
@@ -14790,6 +14929,7 @@ func (v *AnchorLedger) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Url = u.Url
+	v.MinorBlockSequenceNumber = u.MinorBlockSequenceNumber
 	v.MajorBlockIndex = u.MajorBlockIndex
 	v.MajorBlockTime = u.MajorBlockTime
 	v.PendingMajorBlockAnchors = u.PendingMajorBlockAnchors
@@ -16478,10 +16618,12 @@ func (v *SyntheticLedger) UnmarshalJSON(data []byte) error {
 		Type       AccountType                                  `json:"type"`
 		Url        *url.URL                                     `json:"url,omitempty"`
 		Partitions encoding.JsonList[*PartitionSyntheticLedger] `json:"partitions,omitempty"`
+		Anchors    encoding.JsonList[*PartitionSyntheticLedger] `json:"anchors,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
 	u.Partitions = v.Partitions
+	u.Anchors = v.Anchors
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -16490,6 +16632,7 @@ func (v *SyntheticLedger) UnmarshalJSON(data []byte) error {
 	}
 	v.Url = u.Url
 	v.Partitions = u.Partitions
+	v.Anchors = u.Anchors
 	return nil
 }
 
@@ -16538,12 +16681,15 @@ func (v *SystemGenesis) UnmarshalJSON(data []byte) error {
 
 func (v *SystemLedger) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type           AccountType                             `json:"type"`
-		Url            *url.URL                                `json:"url,omitempty"`
-		Index          uint64                                  `json:"index,omitempty"`
-		Timestamp      time.Time                               `json:"timestamp,omitempty"`
-		AcmeBurnt      *string                                 `json:"acmeBurnt,omitempty"`
-		PendingUpdates encoding.JsonList[NetworkAccountUpdate] `json:"pendingUpdates,omitempty"`
+		Type             AccountType                             `json:"type"`
+		Url              *url.URL                                `json:"url,omitempty"`
+		Index            uint64                                  `json:"index,omitempty"`
+		Timestamp        time.Time                               `json:"timestamp,omitempty"`
+		AcmeBurnt        *string                                 `json:"acmeBurnt,omitempty"`
+		PendingUpdates   encoding.JsonList[NetworkAccountUpdate] `json:"pendingUpdates,omitempty"`
+		SendAnchor       bool                                    `json:"sendAnchor,omitempty"`
+		OpenMajorBlock   bool                                    `json:"openMajorBlock,omitempty"`
+		ClosedMajorBlock uint64                                  `json:"closedMajorBlock,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
@@ -16551,6 +16697,9 @@ func (v *SystemLedger) UnmarshalJSON(data []byte) error {
 	u.Timestamp = v.Timestamp
 	u.AcmeBurnt = encoding.BigintToJSON(&v.AcmeBurnt)
 	u.PendingUpdates = v.PendingUpdates
+	u.SendAnchor = v.SendAnchor
+	u.OpenMajorBlock = v.OpenMajorBlock
+	u.ClosedMajorBlock = v.ClosedMajorBlock
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -16566,6 +16715,9 @@ func (v *SystemLedger) UnmarshalJSON(data []byte) error {
 		v.AcmeBurnt = *x
 	}
 	v.PendingUpdates = u.PendingUpdates
+	v.SendAnchor = u.SendAnchor
+	v.OpenMajorBlock = u.OpenMajorBlock
+	v.ClosedMajorBlock = u.ClosedMajorBlock
 	return nil
 }
 
@@ -16767,6 +16919,7 @@ func (v *TransactionStatus) UnmarshalJSON(data []byte) error {
 		CodeNum            uint64                                        `json:"codeNum,omitempty"`
 		Error              *errors2.Error                                `json:"error,omitempty"`
 		Result             encoding.JsonUnmarshalWith[TransactionResult] `json:"result,omitempty"`
+		Received           uint64                                        `json:"received,omitempty"`
 		Initiator          *url.URL                                      `json:"initiator,omitempty"`
 		Signers            encoding.JsonUnmarshalListWith[Signer]        `json:"signers,omitempty"`
 		SourceNetwork      *url.URL                                      `json:"sourceNetwork,omitempty"`
@@ -16783,6 +16936,7 @@ func (v *TransactionStatus) UnmarshalJSON(data []byte) error {
 	u.CodeNum = v.CodeNum()
 	u.Error = v.Error
 	u.Result = encoding.JsonUnmarshalWith[TransactionResult]{Value: v.Result, Func: UnmarshalTransactionResultJSON}
+	u.Received = v.Received
 	u.Initiator = v.Initiator
 	u.Signers = encoding.JsonUnmarshalListWith[Signer]{Value: v.Signers, Func: UnmarshalSignerJSON}
 	u.SourceNetwork = v.SourceNetwork
@@ -16797,6 +16951,7 @@ func (v *TransactionStatus) UnmarshalJSON(data []byte) error {
 	v.Error = u.Error
 	v.Result = u.Result.Value
 
+	v.Received = u.Received
 	v.Initiator = u.Initiator
 	v.Signers = make([]Signer, len(u.Signers.Value))
 	for i, x := range u.Signers.Value {

@@ -171,11 +171,11 @@ func (q *queryDispatch) QueryMajorBlocks(url *url.URL, pagination QueryPaginatio
 	return q.direct(r).QueryMajorBlocks(url, pagination)
 }
 
-func (q queryDispatch) QuerySynth(source, destination *url.URL, number uint64) (*TransactionQueryResponse, error) {
+func (q queryDispatch) QuerySynth(source, destination *url.URL, number uint64, anchor bool) (*TransactionQueryResponse, error) {
 	r, err := q.Router.RouteAccount(source)
 	if err != nil {
 		return nil, err
 	}
 
-	return q.direct(r).QuerySynth(source, destination, number)
+	return q.direct(r).QuerySynth(source, destination, number, anchor)
 }

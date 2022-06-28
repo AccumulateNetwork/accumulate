@@ -118,3 +118,5 @@ RequestSynth:
       pointer: true
     - name: SequenceNumber
       type: uint
+    - name: Anchor
+      type: bool

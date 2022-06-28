@@ -188,6 +188,12 @@ func (m *Executor) EndBlock(block *Block) error {
 		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
+	// Check if an anchor needs to be sent
+	err = m.prepareAnchor(block)
+	if err != nil {
+		return errors.Wrap(errors.StatusUnknownError, err)
+	}
+
 	m.logger.Debug("Committed", "height", block.Index, "duration", time.Since(t))
 	return nil
 }
@@ -257,7 +263,6 @@ func (x *Executor) requestMissingSyntheticTransactions(ledger *protocol.Syntheti
 
 	// Setup
 	wg := new(sync.WaitGroup)
-	localPartition := x.Describe.NodeUrl()
 	dispatcher := newDispatcher(x.ExecutorOptions)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -265,99 +270,10 @@ func (x *Executor) requestMissingSyntheticTransactions(ledger *protocol.Syntheti
 	// For each partition
 	var pending []*url.TxID
 	for _, partition := range ledger.Partitions {
-		// Get the partition ID
-		id, ok := protocol.ParsePartitionUrl(partition.Url)
-		if !ok {
-			// If this happens we're kind of screwed
-			panic(errors.Format(errors.StatusInternalError, "synthetic ledger has an invalid partition URL: %v", partition.Url))
-		}
-
-		// For each pending synthetic transaction
-		var batch jsonrpc2.BatchRequest
-		for i, txid := range partition.Pending {
-			// If we know the ID we must have a local copy (so we don't need to
-			// fetch it)
-			if txid != nil {
-				pending = append(pending, txid)
-				continue
-			}
-
-			seqNum := partition.Delivered + uint64(i) + 1
-			x.logger.Info("Missing synthetic transaction", "seq-num", seqNum, "source", partition.Url)
-
-			// Request the transaction by sequence number
-			batch = append(batch, jsonrpc2.Request{
-				ID:     i + 1,
-				Method: "query-synth",
-				Params: &api.SyntheticTransactionRequest{
-					Source:         partition.Url,
-					Destination:    localPartition,
-					SequenceNumber: seqNum,
-				},
-			})
-		}
-
-		if len(batch) == 0 {
-			continue
-		}
-
-		partition := partition // See docs/developer/rangevarref.md
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
-			// Send the requests
-			var resp []*api.TransactionQueryResponse
-			err := x.Router.RequestAPIv2(ctx, id, "", batch, &resp)
-			if err != nil {
-				x.logger.Error("Failed to request synthetic transactions", "error", err, "from", partition.Url)
-				return
-			}
-
-			// Broadcast each transaction locally
-			for _, resp := range resp {
-				// Put the synthetic signature first
-				var gotSynth, gotReceipt, gotKey bool
-				for i, signature := range resp.Signatures {
-					if _, ok := signature.(*protocol.PartitionSignature); ok && i > 0 {
-					}
-					switch signature.(type) {
-					case *protocol.PartitionSignature:
-						gotSynth = true
-						resp.Signatures[0], resp.Signatures[i] = resp.Signatures[i], resp.Signatures[0]
-					case *protocol.ReceiptSignature:
-						gotReceipt = true
-					case *protocol.ED25519Signature:
-						gotKey = true
-					}
-				}
-
-				var missing []string
-				if !gotSynth {
-					missing = append(missing, "synthetic")
-				}
-				if !gotReceipt {
-					missing = append(missing, "receipt")
-				}
-				if !gotKey {
-					missing = append(missing, "key")
-				}
-				if len(missing) > 0 {
-					err := fmt.Errorf("missing %s signature(s)", strings.Join(missing, ", "))
-					x.logger.Error("Invalid synthetic transaction", "error", err, "hash", logging.AsHex(resp.Transaction.GetHash()).Slice(0, 4), "type", resp.Transaction.Body.Type())
-					continue
-				}
-
-				err = dispatcher.BroadcastTxLocal(ctx, &protocol.Envelope{
-					Signatures:  resp.Signatures,
-					Transaction: []*protocol.Transaction{resp.Transaction},
-				})
-				if err != nil {
-					x.logger.Error("Failed to dispatch synthetic transaction", "error", err, "from", partition.Url)
-					continue
-				}
-			}
-		}()
+		pending = append(pending, x.requestMissingTransactionsFromPartition(ctx, wg, dispatcher, partition, false)...)
+	}
+	for _, partition := range ledger.Anchors {
+		pending = append(pending, x.requestMissingTransactionsFromPartition(ctx, wg, dispatcher, partition, true)...)
 	}
 
 	// See if we can get the anchors we need for pending synthetic transactions.
@@ -376,6 +292,105 @@ func (x *Executor) requestMissingSyntheticTransactions(ledger *protocol.Syntheti
 			x.logger.Error("Failed to dispatch missing synthetic transactions", "error", err)
 		})
 	}
+}
+
+func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, wg *sync.WaitGroup, dispatcher *dispatcher, partition *protocol.PartitionSyntheticLedger, anchor bool) []*url.TxID {
+	var pending []*url.TxID
+	// Get the partition ID
+	id, ok := protocol.ParsePartitionUrl(partition.Url)
+	if !ok {
+		// If this happens we're kind of screwed
+		panic(errors.Format(errors.StatusInternalError, "synthetic ledger has an invalid partition URL: %v", partition.Url))
+	}
+
+	// For each pending synthetic transaction
+	var batch jsonrpc2.BatchRequest
+	for i, txid := range partition.Pending {
+		// If we know the ID we must have a local copy (so we don't need to
+		// fetch it)
+		if txid != nil {
+			pending = append(pending, txid)
+			continue
+		}
+
+		seqNum := partition.Delivered + uint64(i) + 1
+		x.logger.Info("Missing synthetic transaction", "seq-num", seqNum, "source", partition.Url)
+
+		// Request the transaction by sequence number
+		batch = append(batch, jsonrpc2.Request{
+			ID:     i + 1,
+			Method: "query-synth",
+			Params: &api.SyntheticTransactionRequest{
+				Source:         partition.Url,
+				Destination:    x.Describe.NodeUrl(),
+				SequenceNumber: seqNum,
+				Anchor:         anchor,
+			},
+		})
+	}
+
+	if len(batch) == 0 {
+		return nil
+	}
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		// Send the requests
+		var resp []*api.TransactionQueryResponse
+		err := x.Router.RequestAPIv2(ctx, id, "", batch, &resp)
+		if err != nil {
+			x.logger.Error("Failed to request synthetic transactions", "error", err, "from", partition.Url)
+			return
+		}
+
+		// Broadcast each transaction locally
+		for _, resp := range resp {
+			// Put the synthetic signature first
+			var gotSynth, gotReceipt, gotKey bool
+			for i, signature := range resp.Signatures {
+				if _, ok := signature.(*protocol.PartitionSignature); ok && i > 0 {
+				}
+				switch signature.(type) {
+				case *protocol.PartitionSignature:
+					gotSynth = true
+					resp.Signatures[0], resp.Signatures[i] = resp.Signatures[i], resp.Signatures[0]
+				case *protocol.ReceiptSignature:
+					gotReceipt = true
+				case *protocol.ED25519Signature:
+					gotKey = true
+				}
+			}
+
+			var missing []string
+			if !gotSynth {
+				missing = append(missing, "synthetic")
+			}
+			if !gotReceipt {
+				missing = append(missing, "receipt")
+			}
+			if !gotKey {
+				missing = append(missing, "key")
+			}
+			if len(missing) > 0 {
+				err := fmt.Errorf("missing %s signature(s)", strings.Join(missing, ", "))
+				x.logger.Error("Invalid synthetic transaction", "error", err, "hash", logging.AsHex(resp.Transaction.GetHash()).Slice(0, 4), "type", resp.Transaction.Body.Type())
+				continue
+			}
+
+			err = dispatcher.BroadcastTxLocal(ctx, &protocol.Envelope{
+				Signatures:  resp.Signatures,
+				Transaction: []*protocol.Transaction{resp.Transaction},
+			})
+			if err != nil {
+				x.logger.Error("Failed to dispatch synthetic transaction", "error", err, "from", partition.Url)
+				continue
+			}
+		}
+	}()
+
+	return pending
 }
 
 func (x *Executor) requestMissingAnchors(ctx context.Context, batch *database.Batch, dispatcher *dispatcher, pending []*url.TxID) {
@@ -476,4 +491,91 @@ func (x *Executor) updateMajorIndexChains(block *Block, rootIndexIndex uint64) e
 	}
 
 	return nil
+}
+
+func (x *Executor) prepareAnchor(block *Block) error {
+	openMajorBlock, majorBlockTime := x.shouldOpenMajorBlock(block.Batch, block.Time.Add(time.Second))
+	sendAnchor := openMajorBlock || x.shouldSendAnchor(block)
+	if !sendAnchor {
+		return nil
+	}
+
+	block.State.ShouldSendAnchor = true
+
+	// Update the system ledger
+	err := database.UpdateAccount(block.Batch, x.Describe.Ledger(), func(ledger *protocol.SystemLedger) error {
+		ledger.OpenMajorBlock = openMajorBlock
+		ledger.SendAnchor = sendAnchor
+		ledger.ClosedMajorBlock = block.State.MakeMajorBlock
+		return nil
+	})
+	if err != nil {
+		return errors.Wrap(errors.StatusUnknownError, err)
+	}
+
+	// Increment the anchor sequence number
+	err = database.UpdateAccount(block.Batch, x.Describe.AnchorPool(), func(ledger *protocol.AnchorLedger) error {
+		ledger.MinorBlockSequenceNumber++
+		if !openMajorBlock {
+			return nil
+		}
+
+		bvns := x.Describe.Network.GetBvnNames()
+		ledger.MajorBlockIndex++
+		ledger.MajorBlockTime = majorBlockTime
+		ledger.PendingMajorBlockAnchors = make([]*url.URL, len(bvns))
+		for i, bvn := range bvns {
+			ledger.PendingMajorBlockAnchors[i] = protocol.PartitionUrl(bvn)
+		}
+		return nil
+	})
+	return errors.Wrap(errors.StatusUnknownError, err)
+}
+
+func (x *Executor) shouldOpenMajorBlock(batch *database.Batch, blockTime time.Time) (bool, time.Time) {
+	// Only the directory network can open a major block
+	if x.Describe.NetworkType != config.Directory {
+		return false, time.Time{}
+	}
+
+	// Only when majorBlockSchedule is initialized we can open a major block. (not when doing replayBlocks)
+	if x.ExecutorOptions.MajorBlockScheduler == nil || !x.ExecutorOptions.MajorBlockScheduler.IsInitialized() {
+		return false, time.Time{}
+	}
+
+	blockTimeUTC := blockTime.UTC()
+	nextBlockTime := x.ExecutorOptions.MajorBlockScheduler.GetNextMajorBlockTime(blockTime)
+	if blockTimeUTC.IsZero() || blockTimeUTC.Before(nextBlockTime) {
+		return false, time.Time{}
+	}
+
+	return true, blockTimeUTC
+}
+
+func (x *Executor) shouldSendAnchor(block *Block) bool {
+	// Did we make a major block?
+	if block.State.MakeMajorBlock > 0 {
+		return true
+	}
+
+	// Did we produce synthetic transactions?
+	if len(block.State.ProducedTxns) > 0 {
+		return true
+	}
+
+	// Did we update anything? Excluding the ledger and anchor pool.
+	updates := map[[32]byte]bool{}
+	for _, c := range block.State.ChainUpdates.Entries {
+		u := c.Account.WithFragment("chain/" + c.Name)
+		updates[u.Hash32()] = true
+	}
+	delete(updates, x.Describe.Ledger().WithFragment("chain/"+protocol.MainChain).Hash32())
+	delete(updates, x.Describe.AnchorPool().WithFragment("chain/"+protocol.MainChain).Hash32())
+	delete(updates, x.Describe.AnchorPool().WithFragment("chain/"+protocol.RootAnchorChain(protocol.Directory)).Hash32())
+	delete(updates, x.Describe.AnchorPool().WithFragment("chain/"+protocol.BPTAnchorChain(protocol.Directory)).Hash32())
+	if len(updates) > 0 {
+		return true
+	}
+
+	return false
 }

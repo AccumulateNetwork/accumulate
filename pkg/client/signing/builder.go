@@ -5,7 +5,6 @@ import (
 	"strings"
 	"time"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -311,35 +310,22 @@ func (s *Builder) Initiate(txn *protocol.Transaction) (protocol.Signature, error
 	return sig, s.sign(sig, txn.GetHash())
 }
 
-func (s *Builder) InitiateSynthetic(txn *protocol.Transaction, router routing.Router, ledger *protocol.SyntheticLedger) (*protocol.PartitionSignature, error) {
+func (s *Builder) InitiateSynthetic(txn *protocol.Transaction, dest *url.URL) (*protocol.PartitionSignature, error) {
 	var errs []string
 	if s.Url == nil {
 		errs = append(errs, "missing signer")
 	}
-	if s.Version == 0 && ledger == nil {
-		errs = append(errs, "missing version or ledger")
+	if s.Version == 0 {
+		errs = append(errs, "missing sequence number")
 	}
 	if len(errs) > 0 {
 		return nil, fmt.Errorf("cannot prepare signature: %s", strings.Join(errs, ", "))
 	}
 
-	destPartition, err := router.RouteAccount(txn.Header.Principal)
-	if err != nil {
-		return nil, fmt.Errorf("routing %v: %v", txn.Header.Principal, err)
-	}
-	partitionUrl := protocol.PartitionUrl(destPartition)
-
 	initSig := new(protocol.PartitionSignature)
 	initSig.SourceNetwork = s.Url
-	initSig.DestinationNetwork = partitionUrl
-
-	if ledger == nil {
-		initSig.SequenceNumber = s.Version
-	} else {
-		partitionLedger := ledger.Partition(partitionUrl)
-		partitionLedger.Produced++
-		initSig.SequenceNumber = partitionLedger.Produced
-	}
+	initSig.DestinationNetwork = dest
+	initSig.SequenceNumber = s.Version
 
 	// Ignore InitMode, always use a simple hash
 	txn.Header.Initiator = *(*[32]byte)(initSig.Metadata().Hash())

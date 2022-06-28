@@ -549,11 +549,12 @@ func (q *queryDirect) QueryMajorBlocks(u *url.URL, pagination QueryPagination) (
 	return mres, nil
 }
 
-func (q *queryDirect) QuerySynth(source, destination *url.URL, number uint64) (*TransactionQueryResponse, error) {
+func (q *queryDirect) QuerySynth(source, destination *url.URL, number uint64, anchor bool) (*TransactionQueryResponse, error) {
 	req := new(query.RequestSynth)
 	req.Source = source
 	req.Destination = destination
 	req.SequenceNumber = number
+	req.Anchor = anchor
 	_, v, err := q.query(req, QueryOptions{})
 	if err != nil {
 		return nil, err

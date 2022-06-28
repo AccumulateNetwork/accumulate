@@ -19,6 +19,15 @@ SystemLedger:
       type: NetworkAccountUpdate
       marshal-as: reference
       repeatable: true
+    - name: SendAnchor
+      description: indicates that a block anchor should be sent for the last block
+      type: bool
+    - name: OpenMajorBlock
+      description: indicates that a major block should be opened next block
+      type: bool
+    - name: ClosedMajorBlock
+      description: indicates that a major block was completed last block
+      type: uint
 
 SyntheticLedger:
   union: { type: account }
@@ -27,6 +36,13 @@ SyntheticLedger:
       type: url
       pointer: true
     - name: Partitions
+      description: tracks sent and received synthetic transactions
+      type: PartitionSyntheticLedger
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+    - name: Anchors
+      description: tracks sent and received anchors
       type: PartitionSyntheticLedger
       marshal-as: reference
       pointer: true
@@ -38,6 +54,9 @@ AnchorLedger:
     - name: Url
       type: url
       pointer: true
+    - name: MinorBlockSequenceNumber
+      description: is the sequence number of the last minor block
+      type: uint
     - name: MajorBlockIndex
       description: is the block index of the last major block
       type: uint

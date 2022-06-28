@@ -115,7 +115,7 @@ QuerySynth:
   rpc: query-synth
   input: SyntheticTransactionRequest
   output: TransactionQueryResponse
-  call-params: [Source, Destination, SequenceNumber]
+  call-params: [Source, Destination, SequenceNumber, Anchor]
 
 Execute:
   description: submits a transaction

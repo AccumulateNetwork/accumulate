@@ -21,6 +21,7 @@ type BlockMeta struct {
 // executed.
 type BlockState struct {
 	OpenedMajorBlock   bool
+	ShouldSendAnchor   bool
 	MakeMajorBlock     uint64
 	MakeMajorBlockTime time.Time
 	Delivered          uint64
@@ -32,6 +33,7 @@ type BlockState struct {
 // Empty returns true if nothing happened during the block.
 func (s *BlockState) Empty() bool {
 	return !s.OpenedMajorBlock &&
+		!s.ShouldSendAnchor &&
 		s.Delivered == 0 &&
 		s.Signed == 0 &&
 		len(s.ProducedTxns) == 0 &&

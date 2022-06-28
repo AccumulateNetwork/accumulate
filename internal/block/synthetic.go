@@ -108,12 +108,21 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 		panic(fmt.Errorf("failed to load the ledger: %v", err))
 	}
 
+	destPart, err := m.Router.RouteAccount(dest)
+	if err != nil {
+		return nil, err
+	}
+	destPartUrl := protocol.PartitionUrl(destPart)
+	destLedger := ledger.Partition(destPartUrl)
+	destLedger.Produced++
+
 	txn := new(protocol.Transaction)
 	txn.Header.Principal = dest
 	txn.Body = body
 	initSig, err := new(signing.Builder).
 		SetUrl(m.Describe.NodeUrl()).
-		InitiateSynthetic(txn, m.Router, ledger)
+		SetVersion(destLedger.Produced).
+		InitiateSynthetic(txn, destPartUrl)
 	if err != nil {
 		return nil, err
 	}
