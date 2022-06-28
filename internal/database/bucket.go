@@ -1,8 +1,6 @@
 package database
 
 import (
-	"strings"
-
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
@@ -33,30 +31,6 @@ func (b *objectBucket) Index(key ...interface{}) storage.Key {
 // Data returns the storage key for the given data entry of the object.
 func (b *objectBucket) Data(key ...interface{}) storage.Key {
 	return b.Object().Append("Data").Append(key...)
-}
-
-// accountBucket is a database bucket for a account.
-type accountBucket struct{ objectBucket }
-
-// account returns a accountBucket for the account with the given URL.
-func account(u *url.URL) accountBucket {
-	return accountBucket{object("Account", u)}
-}
-
-// accountByID returns a accountBucket for the account with the given ID.
-func accountByID(id []byte) accountBucket {
-	return accountBucket{object("Account", id)}
-}
-
-func (b *accountBucket) SyntheticForAnchor(anchor [32]byte) storage.Key {
-	return b.Object().Append("State", "Synthetic", anchor)
-}
-
-// Chain returns the storage key for the given chain of the record.
-func (b *accountBucket) Chain(name string) storage.Key {
-	// Ensure chain names are case insensitive
-	name = strings.ToLower(name)
-	return b.Object().Append("Chain", name)
 }
 
 // transactionBucket is a database bucket for a transaction.

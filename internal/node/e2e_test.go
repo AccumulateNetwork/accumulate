@@ -24,9 +24,9 @@ func TestEndToEnd(t *testing.T) {
 
 	suite.Run(t, e2e.NewSuite(func(s *e2e.Suite) e2e.DUT {
 		// Restart the nodes for every test
-		subnets, daemons := acctesting.CreateTestNet(s.T(), 3, 1, 0, false)
-		acctesting.RunTestNet(s.T(), subnets, daemons)
-		daemon := daemons[subnets[1]][0]
+		partitions, daemons := acctesting.CreateTestNet(s.T(), 3, 1, 0, false)
+		acctesting.RunTestNet(s.T(), partitions, daemons)
+		daemon := daemons[partitions[1]][0]
 		client, err := local.New(daemon.Node_TESTONLY().Service.(local.NodeService))
 		require.NoError(s.T(), err)
 		return &e2eDUT{s, daemon.DB_TESTONLY(), daemon.Jrpc_TESTONLY(), client}
@@ -83,8 +83,8 @@ func (d *e2eDUT) WaitForTxns(txids ...[]byte) {
 			r, err := q.QueryTx(txid, 10*time.Second, false, apiv2.QueryOptions{})
 			d.Require().NoError(err)
 			d.Require().NotNil(r.Status, "Transaction status is empty")
-			d.Require().True(r.Status.Delivered, "Transaction has not been delivered")
-			d.Require().Zero(r.Status.Code, "Transaction failed")
+			d.Require().True(r.Status.Delivered(), "Transaction has not been delivered")
+			d.Require().Nil(r.Status.Error, "Transaction failed")
 			for _, id := range r.Produced {
 				id := id.Hash()
 				synth = append(synth, id[:])
@@ -99,13 +99,13 @@ func TestSubscribeAfterClose(t *testing.T) {
 	acctesting.SkipPlatform(t, "darwin", "flaky")
 	acctesting.SkipPlatformCI(t, "darwin", "requires setting up localhost aliases")
 
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	for _, netName := range subnets {
+	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	for _, netName := range partitions {
 		for _, daemon := range daemons[netName] {
 			require.NoError(t, daemon.Start())
 		}
 	}
-	for _, netName := range subnets {
+	for _, netName := range partitions {
 		for _, daemon := range daemons[netName] {
 			assert.NoError(t, daemon.Stop())
 		}

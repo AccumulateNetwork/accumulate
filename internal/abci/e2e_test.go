@@ -17,6 +17,7 @@ import (
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/testing/e2e"
@@ -37,18 +38,18 @@ func TestEndToEndSuite(t *testing.T) {
 
 	suite.Run(t, e2e.NewSuite(func(s *e2e.Suite) e2e.DUT {
 		// Recreate the app for each test
-		subnets, daemons := acctesting.CreateTestNet(s.T(), 1, 1, 0, false)
-		nodes := RunTestNet(s.T(), subnets, daemons, nil, true, nil)
-		n := nodes[subnets[1]][0]
+		partitions, daemons := acctesting.CreateTestNet(s.T(), 1, 1, 0, false)
+		nodes := RunTestNet(s.T(), partitions, daemons, nil, true, nil)
+		n := nodes[partitions[1]][0]
 
 		return &e2eDUT{s, n}
 	}))
 }
 
 func TestCreateLiteAccount(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
-	n := nodes[subnets[1]][0]
+	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
+	n := nodes[partitions[1]][0]
 
 	const N, M = 11, 1
 	const count = N * M
@@ -66,12 +67,12 @@ func TestCreateLiteAccount(t *testing.T) {
 
 func TestEvilNode(t *testing.T) {
 
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	//tell the TestNet that we have an evil node in the midst
-	dns := subnets[0]
-	bvn := subnets[1]
-	subnets[0] = "evil-" + subnets[0]
-	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
+	dns := partitions[0]
+	bvn := partitions[1]
+	partitions[0] = "evil-" + partitions[0]
+	nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
 
 	dn := nodes[dns][0]
 	n := nodes[bvn][0]
@@ -145,9 +146,9 @@ func (n *FakeNode) testLiteTx(N, M int, credits float64) (string, map[*url.URL]i
 }
 
 func TestFaucet(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
-	n := nodes[subnets[1]][0]
+	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
+	n := nodes[partitions[1]][0]
 
 	alice := generateKey()
 	aliceUrl := acctesting.AcmeLiteAddressTmPriv(alice)
@@ -167,9 +168,9 @@ func TestFaucet(t *testing.T) {
 }
 
 func TestAnchorChain(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
-	n := nodes[subnets[1]][0]
+	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
+	n := nodes[partitions[1]][0]
 
 	liteAccount := generateKey()
 	newAdi := generateKey()
@@ -234,9 +235,9 @@ func TestAnchorChain(t *testing.T) {
 }
 
 func TestCreateADI(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
-	n := nodes[subnets[1]][0]
+	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
+	n := nodes[partitions[1]][0]
 
 	liteAccount := generateKey()
 	newAdi := generateKey()
@@ -274,9 +275,9 @@ func TestCreateADI(t *testing.T) {
 func TestCreateADIWithoutKeybook(t *testing.T) {
 	check := newDefaultCheckError(t, false)
 
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, subnets, daemons, nil, true, check.ErrorHandler())
-	n := nodes[subnets[1]][0]
+	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	nodes := RunTestNet(t, partitions, daemons, nil, true, check.ErrorHandler())
+	n := nodes[partitions[1]][0]
 
 	liteAccount := generateKey()
 	newAdi := generateKey()
@@ -317,9 +318,9 @@ func TestCreateLiteDataAccount(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
-	n := nodes[subnets[1]][0]
+	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
+	n := nodes[partitions[1]][0]
 
 	adiKey := generateKey()
 	batch := n.db.Begin(true)
@@ -382,9 +383,9 @@ func TestCreateLiteDataAccount(t *testing.T) {
 
 func TestCreateAdiDataAccount(t *testing.T) {
 	t.Run("Data Account with Default Key Book and no Manager Key Book", func(t *testing.T) {
-		subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-		nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
-		n := nodes[subnets[1]][0]
+		partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+		nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
+		n := nodes[partitions[1]][0]
 
 		adiKey := generateKey()
 		batch := n.db.Begin(true)
@@ -408,9 +409,9 @@ func TestCreateAdiDataAccount(t *testing.T) {
 	})
 
 	t.Run("Data Account with Custom Key Book and Manager Key Book Url", func(t *testing.T) {
-		subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-		nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
-		n := nodes[subnets[1]][0]
+		partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+		nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
+		n := nodes[partitions[1]][0]
 
 		adiKey, pageKey := generateKey(), generateKey()
 		batch := n.db.Begin(true)
@@ -451,9 +452,9 @@ func TestCreateAdiDataAccount(t *testing.T) {
 	})
 
 	t.Run("Data Account data entry", func(t *testing.T) {
-		subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-		nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
-		n := nodes[subnets[1]][0]
+		partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+		nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
+		n := nodes[partitions[1]][0]
 
 		adiKey := generateKey()
 		batch := n.db.Begin(true)
@@ -521,9 +522,9 @@ func TestCreateAdiDataAccount(t *testing.T) {
 
 func TestCreateAdiTokenAccount(t *testing.T) {
 	t.Run("Default Key Book", func(t *testing.T) {
-		subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-		nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
-		n := nodes[subnets[1]][0]
+		partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+		nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
+		n := nodes[partitions[1]][0]
 
 		adiKey := generateKey()
 		batch := n.db.Begin(true)
@@ -553,9 +554,9 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 	})
 
 	t.Run("Custom Key Book", func(t *testing.T) {
-		subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-		nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
-		n := nodes[subnets[1]][0]
+		partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+		nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
+		n := nodes[partitions[1]][0]
 
 		adiKey, pageKey := generateKey(), generateKey()
 		batch := n.db.Begin(true)
@@ -580,9 +581,9 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 	})
 
 	t.Run("Remote Key Book", func(t *testing.T) {
-		subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-		nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
-		n := nodes[subnets[1]][0]
+		partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+		nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
+		n := nodes[partitions[1]][0]
 
 		aliceKey, bobKey := generateKey(), generateKey()
 		batch := n.db.Begin(true)
@@ -615,9 +616,9 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 }
 
 func TestLiteAccountTx(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
-	n := nodes[subnets[1]][0]
+	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
+	n := nodes[partitions[1]][0]
 
 	alice, bob, charlie := generateKey(), generateKey(), generateKey()
 	batch := n.db.Begin(true)
@@ -648,9 +649,9 @@ func TestLiteAccountTx(t *testing.T) {
 }
 
 func TestAdiAccountTx(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
-	n := nodes[subnets[1]][0]
+	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
+	n := nodes[partitions[1]][0]
 
 	fooKey, barKey := generateKey(), generateKey()
 	batch := n.db.Begin(true)
@@ -677,9 +678,9 @@ func TestAdiAccountTx(t *testing.T) {
 
 func TestSendTokensToBadRecipient(t *testing.T) {
 	check := newDefaultCheckError(t, false)
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, subnets, daemons, nil, true, check.ErrorHandler())
-	n := nodes[subnets[1]][0]
+	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	nodes := RunTestNet(t, partitions, daemons, nil, true, check.ErrorHandler())
+	n := nodes[partitions[1]][0]
 
 	alice := generateKey()
 	aliceUrl := acctesting.AcmeLiteAddressTmPriv(alice)
@@ -705,7 +706,7 @@ func TestSendTokensToBadRecipient(t *testing.T) {
 	h := res.Produced[0].Hash()
 	res, err = n.api.QueryTx(h[:], time.Second, true, api.QueryOptions{})
 	require.NoError(t, err)
-	require.Equal(t, protocol.ErrorCodeNotFound.GetEnumValue(), res.Status.Code)
+	require.Equal(t, errors.StatusNotFound, res.Status.Code)
 
 	// Give the synthetic receipt a second to resolve - workaround AC-1238
 	time.Sleep(time.Second)
@@ -715,9 +716,9 @@ func TestSendTokensToBadRecipient(t *testing.T) {
 }
 
 func TestCreateKeyPage(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
-	n := nodes[subnets[1]][0]
+	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
+	n := nodes[partitions[1]][0]
 
 	fooKey, testKey := generateKey(), generateKey()
 	fkh := sha256.Sum256(fooKey.PubKey().Bytes())
@@ -753,9 +754,9 @@ func TestCreateKeyPage(t *testing.T) {
 }
 
 func TestCreateKeyBook(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
-	n := nodes[subnets[1]][0]
+	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
+	n := nodes[partitions[1]][0]
 
 	fooKey, testKey := generateKey(), generateKey()
 	batch := n.db.Begin(true)
@@ -786,9 +787,9 @@ func TestCreateKeyBook(t *testing.T) {
 }
 
 func TestAddKeyPage(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
-	n := nodes[subnets[1]][0]
+	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
+	n := nodes[partitions[1]][0]
 
 	fooKey, testKey1, testKey2 := generateKey(), generateKey(), generateKey()
 
@@ -819,9 +820,9 @@ func TestAddKeyPage(t *testing.T) {
 }
 
 func TestAddKey(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
-	n := nodes[subnets[1]][0]
+	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
+	n := nodes[partitions[1]][0]
 
 	fooKey, testKey := generateKey(), generateKey()
 
@@ -855,9 +856,9 @@ func TestAddKey(t *testing.T) {
 }
 
 func TestUpdateKeyPage(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
-	n := nodes[subnets[1]][0]
+	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
+	n := nodes[partitions[1]][0]
 
 	fooKey, testKey := generateKey(), generateKey()
 
@@ -891,9 +892,9 @@ func TestUpdateKeyPage(t *testing.T) {
 }
 
 func TestUpdateKey(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
-	n := nodes[subnets[1]][0]
+	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
+	n := nodes[partitions[1]][0]
 
 	fooKey, testKey, newKey := generateKey(), generateKey(), generateKey()
 	newKeyHash := sha256.Sum256(newKey.PubKey().Bytes())
@@ -929,7 +930,7 @@ func TestUpdateKey(t *testing.T) {
 	defer batch.Discard()
 	status, err := batch.Transaction(txnHashes[0][:]).GetStatus()
 	require.NoError(t, err)
-	require.False(t, status.Pending, "Transaction is still pending")
+	require.False(t, status.Pending(), "Transaction is still pending")
 
 	spec = n.GetKeyPage("foo/book1/1")
 	require.Len(t, spec.Keys, 1)
@@ -937,9 +938,9 @@ func TestUpdateKey(t *testing.T) {
 }
 
 func TestRemoveKey(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
-	n := nodes[subnets[1]][0]
+	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
+	n := nodes[partitions[1]][0]
 
 	fooKey, testKey1, testKey2 := generateKey(), generateKey(), generateKey()
 
@@ -991,9 +992,9 @@ func TestRemoveKey(t *testing.T) {
 }
 
 func TestSignatorHeight(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
-	n := nodes[subnets[1]][0]
+	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
+	n := nodes[partitions[1]][0]
 
 	liteKey, fooKey := generateKey(), generateKey()
 
@@ -1050,9 +1051,9 @@ func TestSignatorHeight(t *testing.T) {
 }
 
 func TestCreateToken(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
-	n := nodes[subnets[1]][0]
+	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
+	n := nodes[partitions[1]][0]
 
 	fooKey := generateKey()
 	batch := n.db.Begin(true)
@@ -1077,9 +1078,9 @@ func TestCreateToken(t *testing.T) {
 
 func TestIssueTokens(t *testing.T) {
 	check := newDefaultCheckError(t, true)
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, subnets, daemons, nil, true, check.ErrorHandler())
-	n := nodes[subnets[1]][0]
+	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	nodes := RunTestNet(t, partitions, daemons, nil, true, check.ErrorHandler())
+	n := nodes[partitions[1]][0]
 
 	fooKey, liteKey := generateKey(), generateKey()
 	batch := n.db.Begin(true)
@@ -1126,9 +1127,9 @@ func TestIssueTokens(t *testing.T) {
 func TestIssueTokensRefund(t *testing.T) {
 	check := newDefaultCheckError(t, true)
 
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, subnets, daemons, nil, true, check.ErrorHandler())
-	n := nodes[subnets[1]][0]
+	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	nodes := RunTestNet(t, partitions, daemons, nil, true, check.ErrorHandler())
+	n := nodes[partitions[1]][0]
 
 	fooKey, liteKey := generateKey(), generateKey()
 	sponsorUrl := acctesting.AcmeLiteAddressTmPriv(liteKey).RootIdentity()
@@ -1223,9 +1224,9 @@ func (c *CheckError) ErrorHandler() func(err error) {
 func TestIssueTokensWithSupplyLimit(t *testing.T) {
 	check := newDefaultCheckError(t, true)
 
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, subnets, daemons, nil, true, check.ErrorHandler())
-	n := nodes[subnets[1]][0]
+	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	nodes := RunTestNet(t, partitions, daemons, nil, true, check.ErrorHandler())
+	n := nodes[partitions[1]][0]
 
 	fooKey, liteKey := generateKey(), generateKey()
 	sponsorUrl := acctesting.AcmeLiteAddressTmPriv(liteKey).RootIdentity()
@@ -1388,9 +1389,9 @@ func TestInvalidDeposit(t *testing.T) {
 
 	t.Skip("TODO Fix - generate a receipt")
 
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
-	n := nodes[subnets[1]][0]
+	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
+	n := nodes[partitions[1]][0]
 
 	liteKey := generateKey()
 	liteAddr, err := protocol.LiteTokenAddress(liteKey[32:], "foo/tokens", protocol.SignatureTypeED25519)
@@ -1454,13 +1455,13 @@ func DumpAccount(t *testing.T, batch *database.Batch, accountUrl *url.URL) {
 
 func TestMultisig(t *testing.T) {
 	check := newDefaultCheckError(t, true)
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, subnets, daemons, nil, true, check.ErrorHandler())
+	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	nodes := RunTestNet(t, partitions, daemons, nil, true, check.ErrorHandler())
 
 	key1, key2 := acctesting.GenerateTmKey(t.Name(), 1), acctesting.GenerateTmKey(t.Name(), 2)
 
 	t.Log("Setup")
-	n := nodes[subnets[1]][0]
+	n := nodes[partitions[1]][0]
 	batch := n.db.Begin(true)
 	require.NoError(t, acctesting.CreateADI(batch, key1, "foo"))
 	require.NoError(t, acctesting.UpdateKeyPage(batch, protocol.AccountUrl("foo", "book0", "1"), func(page *protocol.KeyPage) {
@@ -1486,8 +1487,8 @@ func TestMultisig(t *testing.T) {
 	})
 
 	txnResp := n.QueryTransaction(fmt.Sprintf("foo?txid=%X", ids[0]))
-	require.False(t, txnResp.Status.Delivered, "Transaction is was delivered")
-	require.True(t, txnResp.Status.Pending, "Transaction is not pending")
+	require.False(t, txnResp.Status.Delivered(), "Transaction is was delivered")
+	require.True(t, txnResp.Status.Pending(), "Transaction is not pending")
 
 	t.Log("Double signing with key 1 should not complete the transaction")
 	sigHashes, _ := n.MustExecute(func(send func(*protocol.Envelope)) {
@@ -1501,8 +1502,8 @@ func TestMultisig(t *testing.T) {
 	n.MustWaitForTxns(convertIds32(sigHashes...)...)
 
 	txnResp = n.QueryTransaction(fmt.Sprintf("foo?txid=%X", ids[0]))
-	require.False(t, txnResp.Status.Delivered, "Transaction is was delivered")
-	require.True(t, txnResp.Status.Pending, "Transaction is not pending")
+	require.False(t, txnResp.Status.Delivered(), "Transaction is was delivered")
+	require.True(t, txnResp.Status.Pending(), "Transaction is not pending")
 
 	t.Log("Signing with key 2 should complete the transaction")
 	sigHashes, _ = n.MustExecute(func(send func(*protocol.Envelope)) {
@@ -1516,29 +1517,32 @@ func TestMultisig(t *testing.T) {
 	n.MustWaitForTxns(convertIds32(sigHashes...)...)
 
 	txnResp = n.QueryTransaction(fmt.Sprintf("foo?txid=%X", ids[0]))
-	require.True(t, txnResp.Status.Delivered, "Transaction is was not delivered")
-	require.False(t, txnResp.Status.Pending, "Transaction is still pending")
+	require.True(t, txnResp.Status.Delivered(), "Transaction is was not delivered")
+	require.False(t, txnResp.Status.Pending(), "Transaction is still pending")
 
 	// this should fail, so tell fake tendermint not to give up
 	// an error will be displayed on the console, but this is exactly what we expect so don't panic
 	check.Disable = true
-	t.Log("Signing a complete transaction should fail")
-	_, _, err := n.Execute(func(send func(*protocol.Envelope)) {
-		send(acctesting.NewTransaction().
-			WithTimestampVar(&globalNonce).
-			WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
-			WithTxnHash(ids[0][:]).
-			Sign(protocol.SignatureTypeED25519, key2.Bytes()).
-			Build())
+	t.Run("Signing a complete transaction should fail", func(t *testing.T) {
+		t.Skip("No longer an error")
+
+		_, _, err := n.Execute(func(send func(*protocol.Envelope)) {
+			send(acctesting.NewTransaction().
+				WithTimestampVar(&globalNonce).
+				WithSigner(protocol.AccountUrl("foo", "book0", "1"), 1).
+				WithTxnHash(ids[0][:]).
+				Sign(protocol.SignatureTypeED25519, key2.Bytes()).
+				Build())
+		})
+		require.Error(t, err)
 	})
-	require.Error(t, err)
 }
 
 func TestAccountAuth(t *testing.T) {
 	check := newDefaultCheckError(t, true)
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, subnets, daemons, nil, true, check.ErrorHandler())
-	n := nodes[subnets[1]][0]
+	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	nodes := RunTestNet(t, partitions, daemons, nil, true, check.ErrorHandler())
+	n := nodes[partitions[1]][0]
 
 	fooKey, barKey := generateKey(), generateKey()
 	batch := n.db.Begin(true)
@@ -1628,13 +1632,13 @@ func TestAccountAuth(t *testing.T) {
 }
 
 func TestNetworkDefinition(t *testing.T) {
-	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, subnets, daemons, nil, true, nil)
-	dn := nodes[subnets[0]][0]
+	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
+	dn := nodes[partitions[0]][0]
 
 	networkDefs := dn.exec.ActiveGlobals_TESTONLY().Network
-	require.NotEmpty(t, networkDefs.Subnets)
-	require.NotEmpty(t, networkDefs.Subnets[0].SubnetID)
-	require.NotEmpty(t, networkDefs.Subnets[0].ValidatorKeys)
-	require.NotEmpty(t, networkDefs.Subnets[0].ValidatorKeys[0])
+	require.NotEmpty(t, networkDefs.Partitions)
+	require.NotEmpty(t, networkDefs.Partitions[0].PartitionID)
+	require.NotEmpty(t, networkDefs.Partitions[0].ValidatorKeys)
+	require.NotEmpty(t, networkDefs.Partitions[0].ValidatorKeys[0])
 }

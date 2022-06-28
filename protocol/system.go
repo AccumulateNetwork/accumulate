@@ -5,13 +5,13 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
-// Subnet finds or creates a ledger entry for the given subnet.
-func (s *SyntheticLedger) Subnet(url *url.URL) *SubnetSyntheticLedger {
-	ptr, create := sortutil.BinaryInsert(&s.Subnets, func(entry *SubnetSyntheticLedger) int {
+// Partition finds or creates a ledger entry for the given partition.
+func (s *SyntheticLedger) Partition(url *url.URL) *PartitionSyntheticLedger {
+	ptr, create := sortutil.BinaryInsert(&s.Partitions, func(entry *PartitionSyntheticLedger) int {
 		return entry.Url.Compare(url)
 	})
 	if create {
-		*ptr = &SubnetSyntheticLedger{Url: url}
+		*ptr = &PartitionSyntheticLedger{Url: url}
 	}
 	return *ptr
 }

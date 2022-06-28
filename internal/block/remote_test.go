@@ -22,13 +22,8 @@ func doSha256(data []byte) []byte {
 	return hash[:]
 }
 
-func delivered(status *protocol.TransactionStatus) bool {
-	return status.Delivered
-}
-
-func pending(status *protocol.TransactionStatus) bool {
-	return status.Pending
-}
+var delivered = (*protocol.TransactionStatus).Delivered
+var pending = (*protocol.TransactionStatus).Pending
 
 func SetupForRemoteSignatures(sim *simulator.Simulator, timestamp *uint64, alice, bob, charlie ed25519.PrivateKey) {
 	aliceTm := tmed25519.PrivKey(alice)
@@ -41,7 +36,7 @@ func SetupForRemoteSignatures(sim *simulator.Simulator, timestamp *uint64, alice
 	sim.SetRouteFor(charlieUrl, "BVN2")
 
 	// Create and fund a lite address
-	batch := sim.SubnetFor(aliceUrl).Database.Begin(true)
+	batch := sim.PartitionFor(aliceUrl).Database.Begin(true)
 	defer batch.Discard()
 	require.NoError(sim, acctesting.CreateLiteTokenAccountWithCredits(batch, aliceTm, 1e9, 1e9))
 	require.NoError(sim, batch.Commit())
@@ -185,7 +180,7 @@ func TestRemoteSignatures_SignPending(t *testing.T) {
 	sim.WaitForTransactions(delivered, envs...)
 
 	// Validate
-	batch := sim.SubnetFor(bobUrl).Database.Begin(true)
+	batch := sim.PartitionFor(bobUrl).Database.Begin(true)
 	defer batch.Discard()
 	de, err := indexing.Data(batch, bobUrl.JoinPath("account")).GetLatestEntry()
 	require.NoError(t, err)
@@ -240,7 +235,7 @@ func TestRemoteSignatures_SameBVN(t *testing.T) {
 	sim.WaitForTransactions(delivered, envs...)
 
 	// Validate
-	batch := sim.SubnetFor(bobUrl).Database.Begin(true)
+	batch := sim.PartitionFor(bobUrl).Database.Begin(true)
 	defer batch.Discard()
 	de, err := indexing.Data(batch, bobUrl.JoinPath("account")).GetLatestEntry()
 	require.NoError(t, err)
@@ -311,7 +306,7 @@ func TestRemoteSignatures_Initiate(t *testing.T) {
 	sim.WaitForTransactions(delivered, envs...)
 
 	// Validate
-	batch := sim.SubnetFor(bobUrl).Database.Begin(true)
+	batch := sim.PartitionFor(bobUrl).Database.Begin(true)
 	defer batch.Discard()
 	de, err := indexing.Data(batch, bobUrl.JoinPath("account")).GetLatestEntry()
 	require.NoError(t, err)
@@ -341,7 +336,7 @@ func TestRemoteSignatures_Singlesig(t *testing.T) {
 
 	// Remove the second authority directly
 	var account *protocol.DataAccount
-	batch := sim.SubnetFor(bobUrl).Database.Begin(true)
+	batch := sim.PartitionFor(bobUrl).Database.Begin(true)
 	defer batch.Discard()
 	require.NoError(t, batch.Account(bobUrl.JoinPath("account")).GetStateAs(&account))
 	require.True(t, account.RemoveAuthority(bobUrl.JoinPath("book")))
@@ -366,7 +361,7 @@ func TestRemoteSignatures_Singlesig(t *testing.T) {
 	sim.WaitForTransactions(delivered, envs...)
 
 	// Validate
-	batch = sim.SubnetFor(bobUrl).Database.Begin(true)
+	batch = sim.PartitionFor(bobUrl).Database.Begin(true)
 	defer batch.Discard()
 	de, err := indexing.Data(batch, bobUrl.JoinPath("account")).GetLatestEntry()
 	require.NoError(t, err)

@@ -46,7 +46,7 @@ func TestRefundCycle(t *testing.T) {
 	_, _, synth := sim.WaitForTransaction(delivered, txn.GetHash(), 50)
 
 	// Erase the sender ADI
-	_ = sim.SubnetFor(alice).Database.Update(func(batch *database.Batch) error {
+	_ = sim.PartitionFor(alice).Database.Update(func(batch *database.Batch) error {
 		require.NoError(t, batch.DeleteAccountState_TESTONLY(alice.JoinPath("tokens")))
 		require.NoError(t, batch.DeleteAccountState_TESTONLY(alice.JoinPath("book", "1")))
 		require.NoError(t, batch.DeleteAccountState_TESTONLY(alice.JoinPath("book")))

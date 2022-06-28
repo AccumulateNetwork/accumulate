@@ -30,8 +30,8 @@ func TestEndToEnd(t *testing.T) {
 	acctesting.SkipPlatformCI(t, "darwin", "requires setting up localhost aliases")
 	t.Skip("flaky")
 	suite.Run(t, e2e.NewSuite(func(s *e2e.Suite) e2e.DUT {
-		subnets, daemons := acctesting.CreateTestNet(s.T(), 1, 2, 0, false)
-		acctesting.RunTestNet(s.T(), subnets, daemons)
+		partitions, daemons := acctesting.CreateTestNet(s.T(), 1, 2, 0, false)
+		acctesting.RunTestNet(s.T(), partitions, daemons)
 		return &e2eDUT{s, daemons[protocol.Directory][0]}
 	}))
 }
@@ -42,8 +42,8 @@ func TestValidate(t *testing.T) {
 	acctesting.SkipPlatform(t, "darwin", "flaky")
 	acctesting.SkipPlatformCI(t, "darwin", "requires setting up localhost aliases")
 	t.Skip("flaky")
-	subnets, daemons := acctesting.CreateTestNet(t, 2, 2, 0, false)
-	acctesting.RunTestNet(t, subnets, daemons)
+	partitions, daemons := acctesting.CreateTestNet(t, 2, 2, 0, false)
+	acctesting.RunTestNet(t, partitions, daemons)
 	japi := daemons[protocol.Directory][0].Jrpc_TESTONLY()
 
 	t.Run("Not found", func(t *testing.T) {
@@ -261,53 +261,4 @@ func TestValidate(t *testing.T) {
 		}, keyIndex)
 		assert.Equal(t, keyPageUrl, keyIndex.Signer)
 	})
-}
-
-func TestTokenTransfer(t *testing.T) {
-	t.Skip("Broken")
-	acctesting.SkipPlatform(t, "windows", "flaky")
-	acctesting.SkipPlatform(t, "darwin", "flaky")
-	acctesting.SkipPlatformCI(t, "darwin", "requires setting up localhost aliases")
-
-	subnets, daemons := acctesting.CreateTestNet(t, 2, 2, 0, false)
-	acctesting.RunTestNet(t, subnets, daemons)
-
-	var aliceKey ed25519.PrivateKey
-	var aliceUrl *url.URL
-	var bobKey ed25519.PrivateKey
-	var bobUrl *url.URL
-	t.Run("Send Token", func(t *testing.T) {
-		bobKey = newKey([]byte(t.Name()))
-		bobUrl = makeLiteUrl(t, bobKey, ACME)
-		aliceKey = newKey([]byte(t.Name()))
-		aliceUrl = makeLiteUrl(t, aliceKey, ACME)
-
-		var to []*protocol.TokenRecipient
-		to = append(to, &protocol.TokenRecipient{
-			Url:    aliceUrl,
-			Amount: *big.NewInt(100),
-		})
-		txParams := execParams{
-			Origin: bobUrl.String(),
-			Key:    bobKey,
-			Payload: &protocol.SendTokens{
-				To: to,
-			},
-		}
-
-		// Ensure we see the not found error code regardless of which
-		// node on which BVN the transaction is sent to
-		for netName, daemons := range daemons {
-			if netName == protocol.Directory {
-				continue
-			}
-			for i, daemon := range daemons {
-				japi := daemon.Jrpc_TESTONLY()
-				res := executeTxFail(t, japi, "send-tokens", bobUrl, 1, txParams)
-				code := res.Result.(map[string]interface{})["code"].(float64)
-				assert.Equal(t, protocol.ErrorCodeNotFound, protocol.ErrorCode(code), "Node %d (%s) returned the wrong error code", i, netName)
-			}
-		}
-	})
-
 }

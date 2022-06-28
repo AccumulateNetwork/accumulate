@@ -59,7 +59,7 @@ func (CreateTokenAccount) Validate(st *StateManager, tx *Delivery) (protocol.Tra
 
 	err = verifyCreateTokenAccountProof(st.Describe, st.batch, tx.Transaction.Header.Principal, body)
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknown, err)
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	account := new(protocol.TokenAccount)
@@ -68,12 +68,12 @@ func (CreateTokenAccount) Validate(st *StateManager, tx *Delivery) (protocol.Tra
 	account.Scratch = body.Scratch
 	err = st.SetAuth(account, body.Authorities)
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknown, "set auth: %w", err)
+		return nil, errors.Format(errors.StatusUnknownError, "set auth: %w", err)
 	}
 
 	err = st.Create(account)
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknown, "create account: %w", err)
+		return nil, errors.Format(errors.StatusUnknownError, "create account: %w", err)
 	}
 	return nil, nil
 }
@@ -89,7 +89,7 @@ func verifyCreateTokenAccountProof(net *config.Describe, batch *database.Batch, 
 		case errors.Is(err, errors.StatusNotFound):
 			return errors.Format(errors.StatusBadRequest, "invalid token url %v: %w", body.TokenUrl, err)
 		default:
-			return errors.Format(errors.StatusUnknown, "load %v: %w", body.TokenUrl, err)
+			return errors.Format(errors.StatusUnknownError, "load %v: %w", body.TokenUrl, err)
 		}
 
 		if account.Type() != protocol.AccountTypeTokenIssuer {
@@ -151,7 +151,7 @@ func verifyCreateTokenAccountProof(net *config.Describe, batch *database.Batch, 
 	}
 	_, err = chain.HeightOf(proof.Proof.Anchor)
 	if err != nil {
-		code := errors.StatusUnknown
+		code := errors.StatusUnknownError
 		if errors.Is(err, errors.StatusNotFound) {
 			code = errors.StatusBadRequest
 		}

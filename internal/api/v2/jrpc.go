@@ -58,7 +58,7 @@ func (m *JrpcMethods) logError(msg string, keyVals ...interface{}) {
 }
 
 func (m *JrpcMethods) EnableDebug() {
-	q := m.querier.direct(m.Options.Describe.SubnetId)
+	q := m.querier.direct(m.Options.Describe.PartitionId)
 	m.methods["debug-query-direct"] = func(_ context.Context, params json.RawMessage) interface{} {
 		req := new(GeneralQuery)
 		err := m.parse(params, req)
@@ -126,7 +126,7 @@ func (m *JrpcMethods) Version(_ context.Context, params json.RawMessage) interfa
 func (m *JrpcMethods) Describe(_ context.Context, params json.RawMessage) interface{} {
 	res := new(DescriptionResponse)
 	res.Network = m.Options.Describe.Network
-	res.SubnetId = m.Options.Describe.SubnetId
+	res.PartitionId = m.Options.Describe.PartitionId
 	res.NetworkType = m.Options.Describe.NetworkType
 
 	// Load network variable values
@@ -136,7 +136,7 @@ func (m *JrpcMethods) Describe(_ context.Context, params json.RawMessage) interf
 		})
 	})
 	if err != nil {
-		res.Error = errors.Wrap(errors.StatusUnknown, err).(*errors.Error)
+		res.Error = errors.Wrap(errors.StatusUnknownError, err).(*errors.Error)
 	}
 
 	return res

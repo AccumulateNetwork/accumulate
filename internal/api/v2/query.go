@@ -18,8 +18,8 @@ type Querier interface {
 	QuerySynth(source, destination *url.URL, number uint64) (*TransactionQueryResponse, error)
 }
 
-func NewQueryDirect(subnet string, opts Options) Querier {
-	return &queryDirect{opts, subnet}
+func NewQueryDirect(partition string, opts Options) Querier {
+	return &queryDirect{opts, partition}
 }
 
 func NewQueryDispatch(opts Options) Querier {

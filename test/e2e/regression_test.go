@@ -85,7 +85,7 @@ func TestQueryKeyIndexWithRemoteAuthority(t *testing.T) {
 	req := new(query.RequestKeyPageIndex)
 	req.Url = alice.JoinPath("managed-tokens")
 	req.Key = aliceKey[32:]
-	x := sim.SubnetFor(req.Url)
+	x := sim.PartitionFor(req.Url)
 	_ = x.Database.View(func(batch *database.Batch) error {
 		// The query MUST fail with "no authority of ... holds ..." NOT with
 		// "account ... not found"
@@ -168,7 +168,7 @@ func TestSynthTxnWithMissingPrincipal(t *testing.T) {
 	require.Len(t, synth, 1)
 	hash := synth[0].Hash()
 	_, status, _ := sim.WaitForTransaction(received, hash[:], 50)
-	require.True(t, status.Pending, "The transaction was delivered prematurely")
+	require.True(t, status.Pending(), "The transaction was delivered prematurely")
 
 	// The synthetic transaction must fail, but only after the anchor is received
 	_, status, _ = sim.WaitForTransaction(delivered, hash[:], 50)
@@ -185,10 +185,10 @@ func TestFaucetMultiNetwork(t *testing.T) {
 	lite := sim.CreateLiteTokenAccount(liteKey, AcmeUrl(), 1e9, 1e12)
 
 	// Set the lite account routing to a different BVN from the faucet
-	faucetBvn := sim.SubnetFor(FaucetUrl)
-	for _, subnet := range sim.Subnets[1:] {
-		if faucetBvn.Subnet.Id != subnet.Id {
-			sim.SetRouteFor(lite.RootIdentity(), subnet.Id)
+	faucetBvn := sim.PartitionFor(FaucetUrl)
+	for _, partition := range sim.Partitions[1:] {
+		if faucetBvn.Partition.Id != partition.Id {
+			sim.SetRouteFor(lite.RootIdentity(), partition.Id)
 			break
 		}
 	}
@@ -220,7 +220,7 @@ func TestSendSynthTxnAfterAnchor(t *testing.T) {
 
 	// Capture the first deposit
 	var deposit *chain.Delivery
-	sim.SubnetFor(bobUrl.RootIdentity()).SubmitHook = func(envelopes []*chain.Delivery) ([]*chain.Delivery, bool) {
+	sim.PartitionFor(bobUrl.RootIdentity()).SubmitHook = func(envelopes []*chain.Delivery) ([]*chain.Delivery, bool) {
 		for i, env := range envelopes {
 			if env.Transaction.Body.Type() == TransactionTypeSyntheticDepositTokens {
 				fmt.Printf("Dropping %X\n", env.Transaction.GetHash()[:4])
@@ -265,9 +265,59 @@ func TestSendSynthTxnAfterAnchor(t *testing.T) {
 	sim.Query(DnUrl(), req, true)
 
 	// Submit the synthetic transaction
-	sim.SubnetFor(bobUrl).Submit(&Envelope{
+	sim.PartitionFor(bobUrl).Submit(&Envelope{
 		Transaction: []*Transaction{deposit.Transaction},
 		Signatures:  deposit.Signatures,
 	})
 	sim.WaitForTransactionFlow(delivered, deposit.Transaction.GetHash())
+}
+
+func TestSigningDeliveredTxnDoesNothing(t *testing.T) {
+	var timestamp uint64
+
+	// Initialize
+	sim := simulator.New(t, 3)
+	sim.InitFromGenesis()
+
+	// Setup
+	aliceKey, bobKey := acctesting.GenerateKey("Alice"), acctesting.GenerateKey("Bob")
+	alice := sim.CreateLiteTokenAccount(aliceKey, AcmeUrl(), 1e9, 2)
+	bob := acctesting.AcmeLiteAddressStdPriv(bobKey)
+
+	// Execute
+	_, txns := sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
+		acctesting.NewTransaction().
+			WithPrincipal(alice).
+			WithTimestampVar(&timestamp).
+			WithSigner(alice, 1).
+			WithBody(&SendTokens{
+				To: []*TokenRecipient{{
+					Url:    bob,
+					Amount: *big.NewInt(1),
+				}},
+			}).
+			Initiate(SignatureTypeED25519, aliceKey).
+			Build(),
+	)...)
+
+	// Verify
+	require.Equal(t, 1, int(simulator.GetAccount[*LiteTokenAccount](sim, alice).Balance.Int64()))
+	require.Equal(t, 1, int(simulator.GetAccount[*LiteTokenAccount](sim, bob).Balance.Int64()))
+
+	// Send another signature
+	_, err := sim.SubmitAndExecuteBlock(
+		acctesting.NewTransaction().
+			WithPrincipal(alice).
+			WithSigner(alice, 1).
+			WithTxnHash(txns[0].GetHash()).
+			Sign(SignatureTypeED25519, aliceKey).
+			Build(),
+	)
+
+	// It should fail
+	require.Error(t, err)
+
+	// Verify no double-spend
+	require.Equal(t, 1, int(simulator.GetAccount[*LiteTokenAccount](sim, alice).Balance.Int64()))
+	require.Equal(t, 1, int(simulator.GetAccount[*LiteTokenAccount](sim, bob).Balance.Int64()))
 }

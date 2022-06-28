@@ -22,12 +22,10 @@ import (
 
 func init() { acctesting.EnableDebugFeatures() }
 
-func delivered(status *TransactionStatus) bool {
-	return status.Delivered
-}
+var delivered = (*TransactionStatus).Delivered
 
 func received(status *TransactionStatus) bool {
-	return status.Pending || status.Delivered
+	return status.Code > 0 && status.Code != errors.StatusRemote
 }
 
 func updateAccount[T Account](sim *simulator.Simulator, accountUrl *url.URL, fn func(account T)) {
@@ -52,7 +50,7 @@ func TestSendTokensToBadRecipient(t *testing.T) {
 
 	alice := acctesting.GenerateKey("Alice")
 	aliceUrl := acctesting.AcmeLiteAddressStdPriv(alice)
-	batch := sim.SubnetFor(aliceUrl).Database.Begin(true)
+	batch := sim.PartitionFor(aliceUrl).Database.Begin(true)
 	require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, tmed25519.PrivKey(alice), AcmeFaucetAmount, 1e9))
 	require.NoError(t, batch.Commit())
 
@@ -69,7 +67,7 @@ func TestSendTokensToBadRecipient(t *testing.T) {
 	sim.WaitForTransactionFlow(delivered, env.Transaction[0].GetHash())
 
 	// The balance should be unchanged
-	batch = sim.SubnetFor(aliceUrl).Database.Begin(false)
+	batch = sim.PartitionFor(aliceUrl).Database.Begin(false)
 	defer batch.Discard()
 	var account *LiteTokenAccount
 	require.NoError(t, batch.Account(aliceUrl).GetStateAs(&account))
@@ -78,12 +76,12 @@ func TestSendTokensToBadRecipient(t *testing.T) {
 	// The synthetic transaction should fail
 	synth, err := batch.Transaction(env.Transaction[0].GetHash()).GetSyntheticTxns()
 	require.NoError(t, err)
-	batch = sim.SubnetFor(protocol.AccountUrl("foo")).Database.Begin(false)
+	batch = sim.PartitionFor(protocol.AccountUrl("foo")).Database.Begin(false)
 	defer batch.Discard()
 	h := synth.Entries[0].Hash()
 	status, err := batch.Transaction(h[:]).GetStatus()
 	require.NoError(t, err)
-	assert.Equal(t, ErrorCodeNotFound.GetEnumValue(), status.Code)
+	assert.Equal(t, errors.StatusNotFound, status.Code)
 }
 
 func TestSendTokensToBadRecipient2(t *testing.T) {
@@ -97,12 +95,12 @@ func TestSendTokensToBadRecipient2(t *testing.T) {
 	aliceUrl := acctesting.AcmeLiteAddressStdPriv(alice)
 	bob := acctesting.GenerateKey("Bob")
 	bobUrl := acctesting.AcmeLiteAddressStdPriv(bob)
-	batch := sim.SubnetFor(aliceUrl).Database.Begin(true)
+	batch := sim.PartitionFor(aliceUrl).Database.Begin(true)
 	require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, tmed25519.PrivKey(alice), AcmeFaucetAmount, 1e9))
 	require.NoError(t, batch.Commit())
 
 	var creditsBefore uint64
-	_ = sim.SubnetFor(aliceUrl).Database.View(func(batch *database.Batch) error {
+	_ = sim.PartitionFor(aliceUrl).Database.View(func(batch *database.Batch) error {
 		var account *LiteIdentity
 		require.NoError(t, batch.Account(aliceUrl.RootIdentity()).GetStateAs(&account))
 		creditsBefore = account.CreditBalance
@@ -123,7 +121,7 @@ func TestSendTokensToBadRecipient2(t *testing.T) {
 	sim.WaitForTransactionFlow(delivered, env.Transaction[0].GetHash())
 
 	var creditsAfter uint64
-	_ = sim.SubnetFor(aliceUrl).Database.View(func(batch *database.Batch) error {
+	_ = sim.PartitionFor(aliceUrl).Database.View(func(batch *database.Batch) error {
 		var account *LiteIdentity
 		require.NoError(t, batch.Account(aliceUrl.RootIdentity()).GetStateAs(&account))
 		creditsAfter = account.CreditBalance
@@ -143,7 +141,7 @@ func TestCreateRootIdentity(t *testing.T) {
 
 	lite := acctesting.GenerateKey(t.Name(), "Lite")
 	liteUrl := acctesting.AcmeLiteAddressStdPriv(lite)
-	batch := sim.SubnetFor(liteUrl).Database.Begin(true)
+	batch := sim.PartitionFor(liteUrl).Database.Begin(true)
 	require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, tmed25519.PrivKey(lite), AcmeFaucetAmount, 1e9))
 	require.NoError(t, batch.Commit())
 
@@ -169,7 +167,7 @@ func TestCreateRootIdentity(t *testing.T) {
 	require.Len(t, txn, 1)
 
 	// Verify the account is created
-	_ = sim.SubnetFor(alice).Database.View(func(batch *database.Batch) error {
+	_ = sim.PartitionFor(alice).Database.View(func(batch *database.Batch) error {
 		var identity *ADI
 		require.NoError(t, batch.Account(alice).GetStateAs(&identity))
 		return nil
@@ -196,7 +194,7 @@ func TestWriteToLiteDataAccount(t *testing.T) {
 		sim := simulator.New(t, 3)
 		sim.InitFromGenesis()
 
-		batch := sim.SubnetFor(aliceUrl).Database.Begin(true)
+		batch := sim.PartitionFor(aliceUrl).Database.Begin(true)
 		defer batch.Discard()
 		require.NoError(sim, acctesting.CreateLiteTokenAccountWithCredits(batch, tmed25519.PrivKey(alice), 1e9, 1e9))
 		require.NoError(sim, batch.Commit())
@@ -213,7 +211,7 @@ func TestWriteToLiteDataAccount(t *testing.T) {
 		status, _ := sim.WaitForTransactionFlow(delivered, env.Transaction[0].GetHash())
 
 		// Verify
-		batch = sim.SubnetFor(liteDataAddress).Database.Begin(false)
+		batch = sim.PartitionFor(liteDataAddress).Database.Begin(false)
 		defer batch.Discard()
 		verifyLiteDataAccount(t, batch, &firstEntry, status[0])
 	})
@@ -224,7 +222,7 @@ func TestWriteToLiteDataAccount(t *testing.T) {
 		sim := simulator.New(t, 3)
 		sim.InitFromGenesis()
 
-		batch := sim.SubnetFor(aliceAdi).Database.Begin(true)
+		batch := sim.PartitionFor(aliceAdi).Database.Begin(true)
 		defer batch.Discard()
 		require.NoError(sim, acctesting.CreateAdiWithCredits(batch, tmed25519.PrivKey(alice), "alice", 1e9))
 		require.NoError(sim, batch.Commit())
@@ -241,7 +239,7 @@ func TestWriteToLiteDataAccount(t *testing.T) {
 		status, _ := sim.WaitForTransactionFlow(delivered, env.Transaction[0].GetHash())
 
 		// Verify
-		batch = sim.SubnetFor(liteDataAddress).Database.Begin(false)
+		batch = sim.PartitionFor(liteDataAddress).Database.Begin(false)
 		defer batch.Discard()
 		verifyLiteDataAccount(t, batch, &firstEntry, status[0])
 	})
@@ -355,7 +353,7 @@ func TestCreateIdentityWithRemoteLite(t *testing.T) {
 	require.Len(t, txn, 1)
 
 	// Verify the account is created
-	_ = sim.SubnetFor(alice).Database.View(func(batch *database.Batch) error {
+	_ = sim.PartitionFor(alice).Database.View(func(batch *database.Batch) error {
 		var identity *ADI
 		require.NoError(t, batch.Account(alice).GetStateAs(&identity))
 		return nil
@@ -392,7 +390,7 @@ func TestAddCreditsToNewLiteIdentity(t *testing.T) {
 	)...)
 
 	// Verify
-	_ = sim.SubnetFor(bobUrl).Database.View(func(batch *database.Batch) error {
+	_ = sim.PartitionFor(bobUrl).Database.View(func(batch *database.Batch) error {
 		var account *LiteIdentity
 		require.NoError(t, batch.Account(bobUrl).GetStateAs(&account))
 		require.Equal(t,
@@ -432,7 +430,7 @@ func TestSubAdi(t *testing.T) {
 	)...)
 
 	// Verify
-	_ = sim.SubnetFor(alice).Database.View(func(batch *database.Batch) error {
+	_ = sim.PartitionFor(alice).Database.View(func(batch *database.Batch) error {
 		var identity *ADI
 		require.NoError(t, batch.Account(alice.JoinPath("sub")).GetStateAs(&identity))
 		require.Len(t, identity.Authorities, 1)
