@@ -136,10 +136,7 @@ func networkReset() {
 	}
 	check(err)
 	for _, ent := range ent {
-		/*	if ent.Name() == "network.json" {
-			err := os.Remove(path.Join(flagMain.WorkDir, ent.Name()))
-			check(err)
-		}*/
+
 		if !ent.IsDir() {
 			continue
 		}
