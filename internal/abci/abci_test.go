@@ -1,6 +1,7 @@
 package abci_test
 
 import (
+	"fmt"
 	"math/big"
 	"testing"
 
@@ -14,7 +15,7 @@ import (
 )
 
 func TestTransactionPriority(t *testing.T) {
-	t.Skip("ToDo update the synthetic origin")
+	//t.Skip("ToDo update the synthetic origin")
 	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
 	dn := nodes[partitions[0]][0]
@@ -29,8 +30,6 @@ func TestTransactionPriority(t *testing.T) {
 		Envelope       *protocol.Envelope
 		ExpectPriority int64
 	}
-	Cause, err := url.MustParse("foo/tokens").AsTxID()
-	require.NoError(t, err)
 	cases := map[string]Case{
 		"System": {
 			Envelope: newTxn(bvn.network.AnchorPool().String()).
@@ -51,11 +50,9 @@ func TestTransactionPriority(t *testing.T) {
 			Envelope: newTxn("foo/tokens").
 				WithSigner(bvn.network.OperatorsPage(), 1).
 				WithBody(&protocol.SyntheticDepositTokens{
-					Token:           protocol.AcmeUrl(),
-					Amount:          *big.NewInt(100),
-					SyntheticOrigin: protocol.SyntheticOrigin{Cause: Cause},
-				}).
-				InitiateSynthetic(bvn.network.NodeUrl()).
+					Token:  protocol.AcmeUrl(),
+					Amount: *big.NewInt(100),
+				}).InitiateSynthetic(bvn.network.NodeUrl()).
 				Sign(protocol.SignatureTypeLegacyED25519, bvn.exec.Key).
 				SignFunc(func(txn *protocol.Transaction) protocol.Signature {
 					// Add a receipt signature
@@ -80,7 +77,10 @@ func TestTransactionPriority(t *testing.T) {
 			ExpectPriority: 0,
 		},
 	}
-
+	tx := cases["Synthetic"].Envelope.Transaction[0]
+	witoriginTx := cases["Synthetic"].Envelope.Transaction[0].Body.(protocol.SynthTxnWithOrigin)
+	witoriginTx.SetCause(*(*[32]byte)(tx.GetHash()), tx.Header.Principal)
+	fmt.Println(tx)
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
 			// Submit the envelope

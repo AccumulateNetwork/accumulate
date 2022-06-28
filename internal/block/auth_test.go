@@ -625,6 +625,7 @@ func TestKeySignaturePartition(t *testing.T) {
 	// Change the node's key
 	sim.PartitionFor(alice).Executor.Key = GenerateKey("New")
 	x := sim.PartitionFor(alice)
+
 	tt := NewBatchTest(t, sim.PartitionFor(alice).Database)
 	defer tt.Discard()
 
