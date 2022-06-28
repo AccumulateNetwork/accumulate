@@ -14,6 +14,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
@@ -27,12 +28,12 @@ func (m *Executor) queryAccount(batch *database.Batch, account *database.Account
 	}
 	resp.Account = state
 
-	obj, err := account.GetObject()
+	chains, err := account.Chains().Get()
 	if err != nil {
-		return nil, fmt.Errorf("get object: %w", err)
+		return nil, fmt.Errorf("get chains index: %w", err)
 	}
 
-	for _, c := range obj.Chains {
+	for _, c := range chains {
 		chain, err := account.ReadChain(c.Name)
 		if err != nil {
 			return nil, fmt.Errorf("get chain %s: %w", c.Name, err)
@@ -105,14 +106,14 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 			return nil, nil, fmt.Errorf("invalid entry: %q is not a hash", fragment[1])
 		}
 
-		obj, err := batch.Account(u).GetObject()
+		chains, err := batch.Account(u).Chains().Get()
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to load metadata of %q: %v", u, err)
+			return nil, nil, fmt.Errorf("get chains index: %w", err)
 		}
 
 		var chainName string
 		var index int64
-		for _, chainMeta := range obj.Chains {
+		for _, chainMeta := range chains {
 			if chainMeta.Type != protocol.ChainTypeAnchor {
 				continue
 			}
@@ -151,11 +152,6 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 			return nil, nil, fmt.Errorf("invalid fragment")
 		}
 
-		obj, err := batch.Account(u).GetObject()
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to load metadata of %q: %v", u, err)
-		}
-
 		chain, err := batch.Account(u).ReadChain(fragment[1])
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to load chain %q of %q: %v", strings.Join(fragment[1:], "."), u, err)
@@ -169,13 +165,19 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 			}
 
 			res := new(query.ResponseChainRange)
-			res.Type = obj.ChainType(fragment[1])
 			res.Start = start
 			res.End = start + count
 			res.Total = chain.Height()
 			res.Entries, err = chain.Entries(start, start+count)
 			if err != nil {
 				return nil, nil, fmt.Errorf("failed to load entries: %v", err)
+			}
+
+			md, err := batch.Account(u).Chains().Find(&protocol.ChainMetadata{Name: fragment[1]})
+			if err == nil {
+				res.Type = md.Type
+			} else {
+				res.Type = managed.ChainTypeUnknown
 			}
 
 			return []byte("chain-range"), res, nil
@@ -192,13 +194,20 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 			}
 
 			res := new(query.ResponseChainEntry)
-			res.Type = obj.ChainType(fragment[1])
 			res.Height = uint64(height)
 			res.Entry = entry
 			res.State = make([][]byte, len(state.Pending))
 			for i, h := range state.Pending {
 				res.State[i] = h.Copy()
 			}
+
+			md, err := batch.Account(u).Chains().Find(&protocol.ChainMetadata{Name: fragment[1]})
+			if err == nil {
+				res.Type = md.Type
+			} else {
+				res.Type = managed.ChainTypeUnknown
+			}
+
 			return []byte("chain-entry"), res, nil
 		}
 

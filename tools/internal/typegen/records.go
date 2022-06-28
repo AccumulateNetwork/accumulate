@@ -69,7 +69,10 @@ func (r *StateRecord) GetDataType() FieldType { return r.DataType }
 func (r *IndexRecord) GetDataType() FieldType { return r.DataType }
 
 func recordFullName(r Record) string {
-	if r.GetParent() == nil || r.GetParent().Parent == nil {
+	if entity, ok := r.(*EntityRecord); ok && entity.Root {
+		return ""
+	}
+	if r.GetParent() == nil {
 		return r.GetName()
 	}
 	return recordFullName(r.GetParent()) + r.GetName()
