@@ -405,17 +405,21 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch) (bool, error
 			return false, errors.Format(errors.StatusInternalError, "%v stored as %X hashes to %X", txn.Body.Type(), hash[:4], txn.GetHash()[:4])
 		}
 
-		// TODO Can we make this less hacky?
 		status, err := record.GetStatus()
 		if err != nil {
 			return false, errors.Format(errors.StatusUnknownError, "load synthetic transaction status: %w", err)
 		}
+		if status.DestinationNetwork == nil {
+			return false, errors.Format(errors.StatusInternalError, "synthetic transaction destination is not set")
+		}
+
+		// TODO Can we make this less hacky?
 		sigs, err := GetAllSignatures(batch, record, status, txn.Header.Initiator[:])
 		if err != nil {
 			return false, errors.Format(errors.StatusUnknownError, "load synthetic transaction signatures: %w", err)
 		}
 
-		keySig, err := x.signTransaction(batch, txn, sigs)
+		keySig, err := x.signTransaction(batch, txn, status.DestinationNetwork)
 		if err != nil {
 			return false, errors.Wrap(errors.StatusUnknownError, err)
 		}
@@ -430,16 +434,7 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch) (bool, error
 	return true, nil
 }
 
-func (x *Executor) signTransaction(batch *database.Batch, txn *protocol.Transaction, sigs []protocol.Signature) (protocol.Signature, error) {
-	if len(sigs) == 0 {
-		return nil, errors.Format(errors.StatusInternalError, "synthetic transaction has no signatures")
-	}
-
-	synthSig, ok := sigs[0].(*protocol.PartitionSignature)
-	if !ok {
-		return nil, errors.Format(errors.StatusUnknownError, "invalid first synthetic transaction signature: want type %v, got %v", protocol.SignatureTypePartition, sigs[0].Type())
-	}
-
+func (x *Executor) signTransaction(batch *database.Batch, txn *protocol.Transaction, destination *url.URL) (protocol.Signature, error) {
 	var page *protocol.KeyPage
 	err := batch.Account(x.Describe.OperatorsPage()).GetStateAs(&page)
 	if err != nil {
@@ -450,7 +445,7 @@ func (x *Executor) signTransaction(batch *database.Batch, txn *protocol.Transact
 	bld := new(signing.Builder).
 		SetType(protocol.SignatureTypeED25519).
 		SetPrivateKey(x.Key).
-		SetUrl(config.NetworkUrl{URL: synthSig.DestinationNetwork}.OperatorsPage()).
+		SetUrl(config.NetworkUrl{URL: destination}.OperatorsPage()).
 		SetVersion(1).
 		SetTimestamp(1)
 
@@ -614,7 +609,7 @@ func (x *Executor) sendBlockAnchor(batch *database.Batch, anchor protocol.Transa
 	}
 
 	// Create a key signature
-	keySig, err := x.signTransaction(batch, txn, []protocol.Signature{initSig})
+	keySig, err := x.signTransaction(batch, txn, initSig.DestinationNetwork)
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknownError, err)
 	}

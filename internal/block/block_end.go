@@ -385,17 +385,18 @@ func (x *Executor) requestMissingAnchors(ctx context.Context, batch *database.Ba
 	anchors := map[[32]byte][]*url.TxID{}
 	source := map[*url.TxID]*url.URL{}
 	for _, txid := range pending {
-		receipt, sourceUrl, err := GetSyntheticTransactionReceipt(batch, txid.Hash())
+		h := txid.Hash()
+		status, err := batch.Transaction(h[:]).GetStatus()
 		if err != nil {
-			x.logger.Error("Error loading synthetic transaction receipt", "error", err, "hash", logging.AsHex(txid.Hash()).Slice(0, 4))
+			x.logger.Error("Error loading synthetic transaction status", "error", err, "hash", logging.AsHex(txid.Hash()).Slice(0, 4))
 			continue
 		}
-		if receipt == nil {
+		if status.Proof == nil || status.SourceNetwork == nil {
 			continue
 		}
-		a := *(*[32]byte)(receipt.Anchor)
+		a := *(*[32]byte)(status.Proof.Anchor)
 		anchors[a] = append(anchors[a], txid)
-		source[txid] = sourceUrl
+		source[txid] = status.SourceNetwork
 	}
 	if len(anchors) == 0 {
 		return

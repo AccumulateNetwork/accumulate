@@ -10,7 +10,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 )
 
 func (x *Executor) ProduceSynthetic(batch *database.Batch, from *protocol.Transaction, produced []*protocol.Transaction) error {
@@ -129,7 +128,12 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 	// Store the transaction, its status, and the initiator
 	err = m.putSyntheticTransaction(
 		batch, txn,
-		&protocol.TransactionStatus{Code: errors.StatusRemote},
+		&protocol.TransactionStatus{
+			Code:               errors.StatusRemote,
+			SourceNetwork:      initSig.SourceNetwork,
+			DestinationNetwork: initSig.DestinationNetwork,
+			SequenceNumber:     initSig.SequenceNumber,
+		},
 		initSig)
 	if err != nil {
 		return nil, err
@@ -222,6 +226,12 @@ func (x *Executor) buildSynthReceipt(batch *database.Batch, produced []*protocol
 			return errors.Format(errors.StatusUnknownError, "combine receipts: %w", err)
 		}
 
+		status.Proof = r
+		err = record.PutStatus(status)
+		if err != nil {
+			return errors.Format(errors.StatusUnknownError, "store synthetic transaction status: %w", err)
+		}
+
 		proofSig := new(protocol.ReceiptSignature)
 		proofSig.SourceNetwork = x.Describe.NodeUrl()
 		proofSig.TransactionHash = *(*[32]byte)(transaction.GetHash())
@@ -247,14 +257,30 @@ func (x *Executor) buildSynthReceipt(batch *database.Batch, produced []*protocol
 }
 
 func processSyntheticTransaction(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) error {
-	// Load all of the signatures
-	signatures, err := GetAllSignatures(batch, batch.Transaction(transaction.GetHash()), status, transaction.Header.Initiator[:])
+	// Check that the partition signature has been received
+	if status.SourceNetwork == nil {
+		return errors.Format(errors.StatusUnauthenticated, "missing partition signature")
+	}
+
+	// Check for a key signature
+	hasKeySig, err := hasKeySignature(batch, status)
 	if err != nil {
 		return err
 	}
+	if !hasKeySig {
+		return errors.Format(errors.StatusUnauthenticated, "missing key signature")
+	}
 
-	// Validate signatures
-	return validateSyntheticTransactionSignatures(transaction, signatures)
+	if transaction.Body.Type() == protocol.TransactionTypeDirectoryAnchor || transaction.Body.Type() == protocol.TransactionTypeBlockValidatorAnchor {
+		return nil
+	}
+
+	// Check that the receipt signature has been received
+	if status.Proof == nil {
+		return errors.Format(errors.StatusUnauthenticated, "missing synthetic transaction receipt")
+	}
+
+	return nil
 }
 
 func (x *Executor) putSyntheticTransaction(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus, signature *protocol.PartitionSignature) error {
@@ -308,47 +334,4 @@ func (x *Executor) putSyntheticTransaction(batch *database.Batch, transaction *p
 	// }
 
 	return nil
-}
-
-func assembleSynthReceipt(hash [32]byte, signatures []protocol.Signature) (*managed.Receipt, *url.URL, error) {
-	// Collect receipts
-	receipts := map[[32]byte]*managed.Receipt{}
-	var sourceNet *url.URL
-	for _, signature := range signatures {
-		receipt, ok := signature.(*protocol.ReceiptSignature)
-		if !ok {
-			continue
-		}
-		sourceNet = receipt.SourceNetwork
-		receipts[*(*[32]byte)(receipt.Proof.Start)] = &receipt.Proof
-	}
-
-	// Get the first
-	receipt, ok := receipts[hash]
-	delete(receipts, hash)
-	if !ok {
-		return nil, nil, errors.Format(errors.StatusInternalError, "missing initial receipt")
-	}
-
-	// Join the remaining receipts
-	for len(receipts) > 0 {
-		// Find the next receipt
-		hash = *(*[32]byte)(receipt.Anchor)
-		next, ok := receipts[hash]
-		if !ok {
-			// TODO Reject receipts that do not match up. We should probably
-			// just store all of this in the transaction status or something.
-			break
-			// return nil, nil, errors.Format(errors.StatusInternalError, "extra receipts")
-		}
-		delete(receipts, hash)
-
-		r, err := receipt.Combine(next)
-		if err != nil {
-			return nil, nil, errors.Format(errors.StatusInternalError, "combine receipts: %w", err)
-		}
-		receipt = r
-	}
-
-	return receipt, sourceNet, nil
 }

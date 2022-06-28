@@ -157,7 +157,11 @@ func (x *Executor) executeEnvelope(block *Block, delivery *chain.Delivery) (*pro
 				kv = append(kv, "error", status.Error)
 				x.logger.Info("Transaction failed", kv...)
 			} else if !delivery.Transaction.Body.Type().IsSystem() {
-				x.logger.Debug("Transaction succeeded", kv...)
+				if status.Pending() {
+					x.logger.Debug("Transaction pending", kv...)
+				} else {
+					x.logger.Debug("Transaction succeeded", kv...)
+				}
 			}
 		}
 

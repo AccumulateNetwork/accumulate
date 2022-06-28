@@ -266,34 +266,8 @@ func (d *Delivery) LoadSyntheticMetadata(batch *database.Batch, status *protocol
 		}
 	}
 
-	// Load the initiator signature set
-	sigset, err := batch.Transaction(d.Transaction.GetHash()).ReadSignatures(status.Initiator)
-	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "load transaction: load initiator: %w", err)
-	}
-
-	var sigHash []byte
-	for _, e := range sigset.Entries() {
-		if e.Type == protocol.SignatureTypePartition {
-			sigHash = e.SignatureHash[:]
-			break
-		}
-	}
-	if sigHash == nil {
-		return errors.NotFound("load transaction: missing synthetic origin signature")
-	}
-
-	state, err := batch.Transaction(sigHash).GetState()
-	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "load transaction: load synthetic origin signature: %w", err)
-	}
-
-	signature, ok := state.Signature.(*protocol.PartitionSignature)
-	if !ok {
-		return errors.Format(errors.StatusInternalError, "load transaction: synthetic origin signature record is invalid")
-	}
-
-	d.SequenceNumber = signature.SequenceNumber
-	d.SourceNetwork = signature.SourceNetwork
+	// Get the sequence number from the status
+	d.SequenceNumber = status.SequenceNumber
+	d.SourceNetwork = status.SourceNetwork
 	return nil
 }

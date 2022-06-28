@@ -10,7 +10,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 )
 
 func (x *Executor) ProcessSignature(batch *database.Batch, delivery *chain.Delivery, signature protocol.Signature) (*ProcessSignatureState, error) {
@@ -85,12 +84,21 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 	switch signature := signature.(type) {
 	case *protocol.PartitionSignature:
 		err = verifySyntheticSignature(&x.Describe, batch, delivery.Transaction, signature, md)
+		if err != nil {
+			return nil, err
+		}
 
 	case *protocol.ReceiptSignature:
 		err = verifyReceiptSignature(delivery.Transaction, signature, md)
+		if err != nil {
+			return nil, err
+		}
 
 	case *protocol.InternalSignature:
 		err = verifyInternalSignature(delivery, signature, md)
+		if err != nil {
+			return nil, err
+		}
 
 	case *protocol.SignatureSet:
 		if !delivery.IsForwarded() {
@@ -100,6 +108,9 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 			return nil, errors.New(errors.StatusBadRequest, "a signature set must be nested within another signature")
 		}
 		signer, err = x.processSigner(batch, delivery.Transaction, signature, md.Location, false)
+		if err != nil {
+			return nil, err
+		}
 
 		// Do not store anything if the set is within a delegated transaction
 		if md.Delegated {
@@ -149,6 +160,9 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 		}
 
 		signer, err = x.processKeySignature(batch, delivery, signature, md.Location, !md.Initiated, !md.Delegated && delivery.Transaction.Header.Principal.LocalTo(md.Location))
+		if err != nil {
+			return nil, err
+		}
 
 		// Do not store anything if the set is within a forwarded delegated transaction
 		if md.Forwarded && md.Delegated {
@@ -157,9 +171,6 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 
 	default:
 		return nil, fmt.Errorf("unknown signature type %v", signature.Type())
-	}
-	if err != nil {
-		return nil, err
 	}
 
 	err = validateInitialSignature(delivery.Transaction, signature, md)
@@ -196,15 +207,51 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 		}
 	}
 
-	// If the signature is a local delegated signature, check that the delegate
-	// is satisfied, and store the full signature set
+	var statusDirty bool
+	status, err := batch.Transaction(delivery.Transaction.GetHash()).GetStatus()
+	if err != nil {
+		return nil, errors.Format(errors.StatusUnknownError, "load transaction status: %w", err)
+	}
+
 	sigToStore := signature
-	if delegated, ok := signature.(*protocol.DelegatedSignature); ok && delegate.GetUrl().LocalTo(md.Location) {
-		// Check if the signer is ready
-		status, err := batch.Transaction(delivery.Transaction.GetHash()).GetStatus()
-		if err != nil {
-			return nil, errors.Format(errors.StatusUnknownError, "load transaction status: %w", err)
+	switch signature := signature.(type) {
+	case *protocol.PartitionSignature:
+		// Capture the source, destination, and sequence number in the status
+		statusDirty = true
+		status.SourceNetwork = signature.SourceNetwork
+		status.DestinationNetwork = signature.DestinationNetwork
+		status.SequenceNumber = signature.SequenceNumber
+
+	case *protocol.ReceiptSignature:
+		// Capture the receipt in the status
+		if status.Proof == nil {
+			if !bytes.Equal(delivery.Transaction.GetHash(), signature.Proof.Start) {
+				return nil, errors.Format(errors.StatusUnauthorized, "receipt does not match transaction")
+			}
+			statusDirty = true
+			status.Proof = &signature.Proof
+			break
 		}
+
+		if status.Proof.Contains(&signature.Proof) {
+			// We already have the proof, nothing to do
+			break
+		}
+
+		statusDirty = true
+		status.Proof, err = status.Proof.Combine(&signature.Proof)
+		if err != nil {
+			return nil, errors.Format(errors.StatusUnauthorized, "combine receipts: %w", err)
+		}
+
+	case *protocol.DelegatedSignature:
+		// If the signature is a local delegated signature, check that the delegate
+		// is satisfied, and store the full signature set
+		if !delegate.GetUrl().LocalTo(md.Location) {
+			break
+		}
+
+		// Check if the signer is ready
 		ready, err := x.SignerIsSatisfied(batch, delivery.Transaction, status, delegate)
 		if err != nil {
 			return nil, errors.Wrap(errors.StatusUnknownError, err)
@@ -224,9 +271,15 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 		set.Signer = signer.GetUrl()
 		set.TransactionHash = *(*[32]byte)(delivery.Transaction.GetHash())
 		set.Signatures = sigset
-		signature := delegated.Copy()
+		signature = signature.Copy()
 		signature.Signature = set
 		sigToStore = signature
+	}
+	if statusDirty {
+		err = batch.Transaction(delivery.Transaction.GetHash()).PutStatus(status)
+		if err != nil {
+			return nil, errors.Wrap(errors.StatusUnknownError, err)
+		}
 	}
 
 	// Persist the signature
@@ -770,24 +823,20 @@ func (x *Executor) validatePartitionSignature(location *url.URL, sig protocol.Ke
 	return errors.Format(errors.StatusUnauthorized, "the key used to sign does not belong to the originating subnet")
 }
 
-func GetSyntheticTransactionReceipt(batch *database.Batch, hash [32]byte) (*managed.Receipt, *url.URL, error) {
-	transaction := batch.Transaction(hash[:])
-	status, err := transaction.GetStatus()
-	if err != nil {
-		return nil, nil, errors.Format(errors.StatusUnknownError, "load status: %w", err)
-	}
-
-	var signatures []protocol.Signature
+func hasKeySignature(batch *database.Batch, status *protocol.TransactionStatus) (bool, error) {
+	h := status.TxID.Hash()
+	transaction := batch.Transaction(h[:])
 	for _, signer := range status.Signers {
+		// Load the signature set
 		sigset, err := transaction.ReadSignaturesForSigner(signer)
 		if err != nil {
-			return nil, nil, errors.Format(errors.StatusUnknownError, "load %v signatures: %w", signer.GetUrl(), err)
+			return false, fmt.Errorf("load signatures set %v: %w", signer.GetUrl(), err)
 		}
 
 		for _, e := range sigset.Entries() {
 			state, err := batch.Transaction(e.SignatureHash[:]).GetState()
 			if err != nil {
-				return nil, nil, errors.Format(errors.StatusUnknownError, "load signature %X: %w", e.SignatureHash[:8], err)
+				return false, fmt.Errorf("load signature entry %X: %w", e.SignatureHash, err)
 			}
 
 			if state.Signature == nil {
@@ -795,19 +844,11 @@ func GetSyntheticTransactionReceipt(batch *database.Batch, hash [32]byte) (*mana
 				continue
 			}
 
-			if sig, ok := state.Signature.(*protocol.ReceiptSignature); ok {
-				signatures = append(signatures, sig)
+			if _, ok := state.Signature.(protocol.KeySignature); ok {
+				return true, nil
 			}
 		}
 	}
-	if len(signatures) == 0 {
-		return nil, nil, nil // How does this happen?
-	}
 
-	receipt, sourceUrl, err := assembleSynthReceipt(hash, signatures)
-	if err != nil {
-		return nil, nil, errors.Format(errors.StatusUnknownError, "construct receipt: %w", err)
-	}
-
-	return receipt, sourceUrl, nil
+	return false, nil
 }

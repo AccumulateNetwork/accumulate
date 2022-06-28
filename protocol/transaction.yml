@@ -72,3 +72,21 @@ TransactionStatus:
       type: Signer
       marshal-as: union
       repeatable: true
+
+    # For synthetic and system transactions
+    - name: SourceNetwork
+      description: is the network that produced the transaction
+      type: url
+      pointer: true
+    - name: DestinationNetwork
+      description: is the network that the transaction is sent to
+      type: url
+      pointer: true
+    - name: SequenceNumber
+      description: is the sequence number of the transaction
+      type: uint
+    - name: Proof
+      description: is the proof of the transaction
+      type: managed.Receipt
+      marshal-as: reference
+      pointer: true

@@ -559,11 +559,7 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove, remote
 	}
 
 	if signSynth {
-		sigs, err := GetAllSignatures(batch, tx, status, txState.Transaction.Header.Initiator[:])
-		if err != nil {
-			return nil, err
-		}
-		keySig, err := m.signTransaction(batch, txState.Transaction, sigs)
+		keySig, err := m.signTransaction(batch, txState.Transaction, status.DestinationNetwork)
 		if err != nil {
 			return nil, errors.Format(errors.StatusInternalError, "sign synthetic transaction: %w", err)
 		}
