@@ -280,8 +280,8 @@ func CreateDataAccount(origin string, args []string) (string, error) {
 	cda.Url = accountUrl
 	cda.Scratch = flagAccount.Scratch
 
-	if len(args) > 2 {
-		keybook, err := url.Parse(args[2])
+	if len(args) > 1 {
+		keybook, err := url.Parse(args[1])
 		if err != nil {
 			return "", fmt.Errorf("invalid key book url")
 		}
