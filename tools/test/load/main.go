@@ -153,10 +153,6 @@ func initTxs(simTime float64, transactionsPerClient int, c *Client) error {
 	return nil
 }
 
-func DefaultOptions() {
-	panic("unimplemented")
-}
-
 //Client
 type Client struct {
 	DataSet *logging.DataSet
