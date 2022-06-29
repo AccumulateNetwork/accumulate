@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"sort"
 	"sync"
 	"time"
 
@@ -19,8 +18,8 @@ import (
 )
 
 var serverUrl string
-var parallelism, transactions int
-
+var transactions int
+var duration int
 var maxGoroutines = 25
 
 // Start logging with dataset log
@@ -34,95 +33,91 @@ func main() {
 	transactionsPerClient := maxGoroutines
 	numClientsPerBurst := transactions / transactionsPerClient
 
-	duration := 10
+	maxNumClients := numClientsPerBurst * duration
+
+	totalTransactions := maxNumClients * transactionsPerClient
 	// run clients in parallel
 	wg := &sync.WaitGroup{}
 
-	clients, err := initializeClients(numClientsPerBurst * duration)
-	checkf(err, "failed to initialize client %d", numClientsPerBurst*duration)
+	clients, err := initializeClients(maxNumClients)
+	checkf(err, "failed to initialize client %d", maxNumClients)
 
 	// Start the global clock
 	start = time.Now()
 
-	for t := 0; t < duration; t++ {
+	for simTime := 0; simTime < duration; simTime++ {
 		tick := time.Now()
-		for ii := 0; ii <= numClientsPerBurst; ii++ {
+		for ii := 0; ii < numClientsPerBurst; ii++ {
 			//	guard <- struct{}{} // would block if guard channel is already filled
 			wg.Add(1)
-			go func(v int) {
-				err := initTxs(clients[v])
+			go func(simTime float64, v int) {
+				defer wg.Done()
+				err := initTxs(simTime, transactionsPerClient, clients[v])
 				if err != nil {
 					fmt.Printf("Error: %v\n", err)
 				}
-
-				wg.Done()
-			}(t*numClientsPerBurst + ii)
+			}(float64(simTime), simTime*numClientsPerBurst+ii)
 		}
-
-		fmt.Printf("burst duration: %f\n", time.Since(tick).Seconds())
-		time.Sleep(time.Second)
+		time.Sleep(time.Second - time.Since(tick))
 	}
 
 	// force close channel
 	wg.Wait()
+	txCount := 0
+	for j := 0; j < maxNumClients; j++ {
+		txCount += clients[j].TxCount
+	}
+	txPassed := txCount
+	txFailed := totalTransactions - txPassed
+
+	header := fmt.Sprintf("## Runtime %d seconds with transaction load per second: %d\n", duration, transactions)
+	header += fmt.Sprintf("## Total Tx : %d, Tx Passed : %d, Tx Failed : %d\n", txCount, txPassed, txFailed)
+	dsl.SetHeader(header)
+
 	dsl.DumpDataSetToDiskFile()
 }
 
 func init() {
 	flag.StringVar(&serverUrl, "s", "http://127.0.1.1:26660/v2", "Accumulate server URL")
-	flag.IntVar(&parallelism, "p", 5, "Number of parallel clients")
-	flag.IntVar(&transactions, "t", 100, "Number of transactions per client")
-	flag.IntVar(&maxGoroutines, "r", 25, "Throttle go routines per client")
-}
-
-type Times struct {
-	float64
+	flag.IntVar(&transactions, "t", 100, "Number of transactions per second")
+	flag.IntVar(&maxGoroutines, "r", 25, "Number of transactions per client (i.e. go routines)")
+	flag.IntVar(&duration, "d", 5, "Throttle go routines per client")
 }
 
 // Init account creation and transaction sending
-func initTxs(c *Client) error {
-	// Setup routine guard and limit
-	//guard := make(chan struct{}, maxGoroutines)
-
+func initTxs(simTime float64, transactionsPerClient int, c *Client) error {
 	var m sync.Mutex
 	deltas := make([]float64, transactions)
 	times := make([]float64, transactions)
-	fmt.Println("starting ... ")
 
 	txWaitGroup := sync.WaitGroup{}
 	// run key generation in cycle
-	for i := 0; i < maxGoroutines; i++ {
+	for i := 0; i < transactionsPerClient; i++ {
 		// create accounts and store them
 		acc, _ := createAccount(i)
 
 		txWaitGroup.Add(1)
-		// Add timer to measure TPS
-		timer := time.NewTimer(time.Microsecond)
 
 		// generate accounts and faucet in goroutines
 		go func(n int) {
 			defer txWaitGroup.Done()
-			// time to release goroutine
-			//		<-guard
 			// start timer
 			t := time.Now()
 
-			timer.Reset(time.Microsecond)
-			//fmt.Println("faucet")
 			// faucet account and wait for Tx execution
 			resp, err := c.Client.Faucet(context.Background(), &protocol.AcmeFaucet{Url: acc})
 			if err != nil {
 				log.Printf("Error: fauceting account with error: %v, on client %d, tx %d\n", err, c.Id, c.TxCount+1)
 				return
 			}
-			//fmt.Printf("faucet done")
 			txReq := api.TxnQuery{}
 			txReq.Txid = resp.TransactionHash
-			txReq.Wait = time.Second * 10
+			txReq.Wait = time.Second * 100
 			txReq.IgnorePending = false
 
 			_, err = c.Client.QueryTx(context.Background(), &txReq)
 			if err != nil {
+				log.Printf("Error: waiting for transaction to complete account with error: %v, on client %d, tx %d\n", err, c.Id, c.TxCount+1)
 				return
 			}
 
@@ -132,8 +127,6 @@ func initTxs(c *Client) error {
 			m.Unlock()
 		}(i)
 
-		<-timer.C
-
 		//capture the timestamp of when the transaction started
 		times[i] = time.Since(start).Seconds()
 	}
@@ -142,20 +135,12 @@ func initTxs(c *Client) error {
 
 	c.Client.CloseIdleConnections()
 
-	//sort by times
-	sort.Slice(deltas, func(i, j int) bool {
-		return times[i] < times[j]
-	})
-	sort.Slice(times, func(i, j int) bool {
-		return times[i] < times[j]
-	})
-
-	for i := 0; i < transactions; i++ {
+	for i := 0; i < transactionsPerClient; i++ {
 		c.DataSet.Lock()
-		c.DataSet.Save("index", i, 10, true)
+		c.DataSet.Save("index", (transactionsPerClient*c.Id)+i, 10, true)
+		c.DataSet.Save("simTime", simTime, 10, false)
 		c.DataSet.Save("clientId", c.Id, 10, false)
-		c.DataSet.Save("time_since_start", times[i], 10, false)
-		c.DataSet.Save("tx_time", deltas[i], 10, false)
+		c.DataSet.Save("settlementTime", deltas[i], 10, false)
 		c.DataSet.Unlock()
 	}
 
@@ -186,19 +171,18 @@ func initializeClients(c int) ([]*Client, error) {
 	}
 	dsl.SetPath(path)
 	dsl.SetProcessName("load")
+	dsName := fmt.Sprintf("settlemint_time")
+	dsl.Initialize(dsName, logging.DefaultOptions())
+	ds := dsl.GetDataSet(dsName)
 
 	clients := []*Client{}
 
 	//initialize the datasets and clients
 	for i := 0; i <= c; i++ {
-		dsName := fmt.Sprintf("client_%d", i)
-		dsl.Initialize(dsName, logging.DefaultOptions())
-		ds := dsl.GetDataSet(dsName)
-
 		client, err := client.New(serverUrl)
 		checkf(err, "creating client")
 		client.DebugRequest = false
-		clients = append(clients, &Client{ds, client, i + 1, 0})
+		clients = append(clients, &Client{ds, client, i, 0})
 	}
 
 	return clients, nil
