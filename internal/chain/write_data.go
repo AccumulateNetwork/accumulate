@@ -130,7 +130,7 @@ func executeWriteFullDataAccount(st *StateManager, entry protocol.DataEntry, scr
 
 	if writeToState {
 		if scratch {
-			return nil, errors.Format(errors.StatusBadRequest, "cannot write data to the state of a scratch chain")
+			return nil, errors.Format(errors.StatusBadRequest, "writing scratch data to the account state is not permitted")
 		}
 
 		account.Entry = entry
