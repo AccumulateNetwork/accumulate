@@ -40,11 +40,7 @@ var txCmd = &cobra.Command{
 				}
 			case "history":
 				if len(args) > 3 {
-					var scratchArg string
-					if len(args) > 4 {
-						scratchArg = args[4]
-					}
-					out, err = GetTXHistory(args[1], args[2], args[3], scratchArg)
+					out, err = GetTXHistory(args[1], args[2], args[3])
 				} else {
 					fmt.Println("Usage:")
 					PrintTXHistoryGet()
@@ -92,6 +88,7 @@ var (
 func init() {
 	txCmd.Flags().DurationVarP(&TxWait, "wait", "w", 0, "Wait for the transaction to complete")
 	txCmd.Flags().DurationVar(&TxWaitSynth, "wait-synth", 0, "Wait for synthetic transactions to complete")
+	txCmd.Flags().BoolVar(&Scratch, "scratch", false, "Read from the scratch chain")
 }
 
 func PrintTXGet() {
@@ -119,7 +116,7 @@ func PrintTxSign() {
 }
 
 func PrintTXHistoryGet() {
-	fmt.Println("  accumulate tx history [url] [starting transaction number] [ending transaction number] [scratch (optional)]	Get transaction history")
+	fmt.Println("  accumulate tx history [url] [starting transaction number] [ending transaction number] --scratch (optional)	Get transaction history")
 }
 
 func PrintTX() {
@@ -292,7 +289,7 @@ func GetTX(hash string) (string, error) {
 	return out, nil
 }
 
-func GetTXHistory(accountUrl string, startArg string, endArg string, scratchArg string) (string, error) {
+func GetTXHistory(accountUrl string, startArg string, endArg string) (string, error) {
 	var res api2.MultiResponse
 	start, err := strconv.Atoi(startArg)
 	if err != nil {
@@ -302,11 +299,6 @@ func GetTXHistory(accountUrl string, startArg string, endArg string, scratchArg 
 	if err != nil {
 		return "", err
 	}
-	scratch, err := strconv.ParseBool(scratchArg)
-	if err != nil {
-		return "", err
-	}
-
 	u, err := url.Parse(accountUrl)
 	if err != nil {
 		return "", err
@@ -316,7 +308,7 @@ func GetTXHistory(accountUrl string, startArg string, endArg string, scratchArg 
 	params.UrlQuery.Url = u
 	params.QueryPagination.Start = uint64(start)
 	params.QueryPagination.Count = uint64(end)
-	params.Scratch = scratch
+	params.Scratch = Scratch
 
 	data, err := json.Marshal(params)
 	if err != nil {
