@@ -1,10 +1,10 @@
 package main
 
 import (
-	"encoding/hex"
 	"log"
 
 	f2 "github.com/FactomProject/factom"
+
 	"gitlab.com/accumulatenetwork/accumulate/tools/internal/factom-genesis"
 )
 
@@ -15,11 +15,23 @@ const (
 var faucet = true
 
 func main() {
-	pk, err := hex.DecodeString(Key_Private_Key)
+	// bytes, err := ioutil.ReadFile("priv_validator_key.json")
+	// if err != nil {
+	// 	log.Fatalf("Error : ", err.Error())
+	// }
+	// m := make(map[string]interface{})
+	// if err := json.Unmarshal(bytes, &m); err != nil {
+	// 	log.Fatalf("Error : ", err.Error())
+	// }
+	// Key_Private_Key := m["priv_key"].(map[string]interface{})["value"].(string)
+	// pk, err := base64.RawStdEncoding.DecodeString(Key_Private_Key)
+	// if err != nil {
+	// 	log.Fatalf("invalid private key %v", err)
+	// }
+	url, err := factom.AccountFromPrivateKey("priv_validator_key.json")
 	if err != nil {
-		log.Fatalf("invalid private key %v", err)
+		log.Fatalf("Error : ", err.Error())
 	}
-	url, _ := factom.AccountFromPrivateKey(pk)
 	log.Println("URL : ", url)
 	if faucet {
 		err := factom.FaucetWithCredits(factom.LOCAL_URL)

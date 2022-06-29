@@ -2,13 +2,15 @@ package factom
 
 import (
 	"context"
-	"crypto/ed25519"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"time"
 
 	f2 "github.com/FactomProject/factom"
+	"github.com/tendermint/tendermint/privval"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/cmd"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
@@ -26,16 +28,30 @@ const (
 	LOCAL_URL = "http://127.0.1.1:26660"
 )
 
-func AccountFromPrivateKey(privateKey []byte) (*url.URL, error) {
-	var pk ed25519.PrivateKey
-	if len(privateKey) == 32 || len(privateKey) == 64 {
-		pk = ed25519.NewKeyFromSeed(privateKey)
-	} else {
-		return nil, fmt.Errorf("invalid private key, cannot create account")
+func AccountFromPrivateKey(privateKey string) (*url.URL, error) {
+	b, err := ioutil.ReadFile(privateKey)
+	if err != nil {
+		return nil, err
 	}
+	var pvkey privval.FilePVKey
+	var pub, priv []byte
+	if json.Unmarshal(b, &pvkey) == nil {
+		if pvkey.PubKey != nil {
+			pub = pvkey.PubKey.Bytes()
+		}
+		if pvkey.PrivKey != nil {
+			priv = pvkey.PrivKey.Bytes()
+		}
+	}
+	// var pk ed25519.PrivateKey
+	// if len(priv) == 32 || len(priv) == 64 {
+	// 	pk = ed25519.NewKeyFromSeed(priv)
+	// } else {
+	// 	return nil, fmt.Errorf("invalid private key, cannot create account")
+	// }
 
-	url, _ := protocol.LiteTokenAddress(pk[32:], protocol.ACME, protocol.SignatureTypeED25519)
-	key = &cmd.Key{PrivateKey: pk, PublicKey: pk[32:], Type: protocol.SignatureTypeED25519}
+	url, _ := protocol.LiteTokenAddress(pub, protocol.ACME, protocol.SignatureTypeED25519)
+	key = &cmd.Key{PrivateKey: priv, PublicKey: pub, Type: protocol.SignatureTypeED25519}
 	origin = url
 	return url, nil
 }
