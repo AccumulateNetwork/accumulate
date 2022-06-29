@@ -1,0 +1,37 @@
+- name: Account
+  type: entity
+  customCommit: true
+  customResolve: true
+  fields:
+  - name: batch
+    type: Batch
+    pointer: true
+  - name: label
+    type: string
+  - name: chains
+    type: map[storage.Key]*managed.Chain
+  attributes:
+  - name: Object
+    type: state
+    dataType: protocol.Object
+    emptyIfMissing: true
+    pointer: true
+  - name: Main
+    type: state
+    dataType: protocol.Account
+    union: true
+  - name: Pending
+    type: state
+    dataType: txid
+    emptyIfMissing: true
+    pointer: true
+    set: true
+  - name: SyntheticForAnchor
+    type: state
+    parameters:
+    - name: Anchor
+      type: hash
+    dataType: txid
+    emptyIfMissing: true
+    pointer: true
+    set: true
