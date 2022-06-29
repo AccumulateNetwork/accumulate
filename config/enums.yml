@@ -16,11 +16,9 @@ PortOffset:
     value: 0
   TendermintRpc:
     value: 1
-  TendermintGrpc:
-    value: 2
   AccumulateApi:
-    value: 4
+    value: 2
   Website:
-    value: 5
+    value: 3
   Prometheus:
-    value: 6
+    value: 4
