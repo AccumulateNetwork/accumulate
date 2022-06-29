@@ -74,7 +74,10 @@ func main() {
 	header += fmt.Sprintf("## Total Tx : %d, Tx Passed : %d, Tx Failed : %d\n", txCount, txPassed, txFailed)
 	dsl.SetHeader(header)
 
-	dsl.DumpDataSetToDiskFile()
+	_, err = dsl.DumpDataSetToDiskFile()
+	if err != nil {
+		checkf(err, "cannot dump data set to disk")
+	}
 }
 
 func init() {
