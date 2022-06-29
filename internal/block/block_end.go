@@ -593,6 +593,9 @@ func (x *Executor) shouldSendAnchor(block *Block) bool {
 }
 
 func (x *Executor) buildDirectoryAnchor(block *Block, openMajor bool, systemLedger *protocol.SystemLedger, anchorLedger *protocol.AnchorLedger) (*protocol.DirectoryAnchor, error) {
+	// Do not populate the root chain index, root chain anchor, or state tree
+	// anchor. Those cannot be populated until the block is complete, thus they
+	// cannot be populated until the next block starts.
 	anchor := new(protocol.DirectoryAnchor)
 	anchor.Source = x.Describe.NodeUrl()
 	anchor.MinorBlockIndex = uint64(block.Index)
@@ -667,6 +670,9 @@ func (x *Executor) buildDirectoryAnchor(block *Block, openMajor bool, systemLedg
 }
 
 func (x *Executor) buildPartitionAnchor(block *Block, ledger *protocol.SystemLedger) (*protocol.BlockValidatorAnchor, error) {
+	// Do not populate the root chain index, root chain anchor, or state tree
+	// anchor. Those cannot be populated until the block is complete, thus they
+	// cannot be populated until the next block starts.
 	anchor := new(protocol.BlockValidatorAnchor)
 	anchor.Source = x.Describe.NodeUrl()
 	anchor.MinorBlockIndex = uint64(block.Index)
