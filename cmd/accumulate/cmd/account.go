@@ -76,7 +76,7 @@ var accountCreateCmd = &cobra.Command{
 }
 
 var accountCreateTokenCmd = &cobra.Command{
-	Use:   "token [actor adi] [signing key name] [key index (optional)] [key height (optional)] [new token account url] [tokenUrl] [keyBook (optional)]",
+	Use:   "token [actor adi] [signing key name] [key index (optional)] [key height (optional)] [new token account url] [tokenUrl] --authority keyBook (optional)",
 	Short: "Create an ADI token account",
 	Args:  cobra.MinimumNArgs(4),
 	Run: func(cmd *cobra.Command, args []string) {
