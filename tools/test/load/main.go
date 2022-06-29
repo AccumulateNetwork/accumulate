@@ -40,7 +40,9 @@ func main() {
 	wg := &sync.WaitGroup{}
 
 	clients, err := initializeClients(maxNumClients)
-	checkf(err, "failed to initialize client %d", maxNumClients)
+	if err != nil {
+		log.Fatalf("%v, failed to initialize client %d", err, maxNumClients)
+	}
 
 	// Start the global clock
 	start = time.Now()
@@ -76,7 +78,7 @@ func main() {
 
 	_, err = dsl.DumpDataSetToDiskFile()
 	if err != nil {
-		checkf(err, "cannot dump data set to disk")
+		log.Fatalf("cannot dump data set to disk, %v", err)
 	}
 }
 
@@ -97,7 +99,7 @@ func initTxs(simTime float64, transactionsPerClient int, c *Client) error {
 	// run key generation in cycle
 	for i := 0; i < transactionsPerClient; i++ {
 		// create accounts and store them
-		acc, _ := createAccount(i)
+		acc, _ := createAccount()
 
 		txWaitGroup.Add(1)
 
@@ -153,7 +155,7 @@ func initTxs(simTime float64, transactionsPerClient int, c *Client) error {
 	return nil
 }
 
-//Client
+//Client structure for client info
 type Client struct {
 	DataSet *logging.DataSet
 	Client  *client.Client
@@ -161,53 +163,44 @@ type Client struct {
 	TxCount int
 }
 
-// initializeClients the clinet
+// initializeClients the client
 func initializeClients(c int) ([]*Client, error) {
 	path := "load_tester"
 	err := os.MkdirAll(path, 0755)
 	if err != nil {
-		fatalf("Error: creating dir: %v", err)
+		return nil, fmt.Errorf("error creating directory %v", err)
 	}
 	dsl.SetPath(path)
 	dsl.SetProcessName("load")
-	dsName := fmt.Sprintf("settlemint_time")
+	dsName := fmt.Sprintf("settlement")
 	dsl.Initialize(dsName, logging.DefaultOptions())
 	ds := dsl.GetDataSet(dsName)
 
-	clients := []*Client{}
+	clients := make([]*Client, c)
 
 	//initialize the datasets and clients
-	for i := 0; i <= c; i++ {
-		client, err := client.New(serverUrl)
-		checkf(err, "creating client")
-		client.DebugRequest = false
-		clients = append(clients, &Client{ds, client, i, 0})
+	for i := 0; i < c; i++ {
+		cl, err := client.New(serverUrl)
+		if err != nil {
+			return nil, err
+		}
+		cl.DebugRequest = false
+		clients[i] = &Client{ds, cl, i, 0}
 	}
 
 	return clients, nil
 }
 
 // helper function to generate key and create account and return the address
-func createAccount(i int) (*url.URL, error) {
+func createAccount() (*url.URL, error) {
 	pub, _, err := ed25519.GenerateKey(nil)
 	if err != nil {
-		fmt.Printf("Error: generating keys: %v\n", err)
+		return nil, fmt.Errorf("Error: generating keys: %v\n", err)
 	}
 
 	acc, err := protocol.LiteTokenAddress(pub, protocol.ACME, protocol.SignatureTypeED25519)
 	if err != nil {
-		fmt.Printf("Error: creating Lite Token account: %v\n", err)
+		return nil, fmt.Errorf("Error: creating Lite Token account: %v\n", err)
 	}
 	return acc, nil
-}
-
-func fatalf(format string, args ...interface{}) {
-	fmt.Fprintf(os.Stderr, "Error: "+format+"\n", args...)
-	os.Exit(1)
-}
-
-func checkf(err error, format string, otherArgs ...interface{}) {
-	if err != nil {
-		fatalf(format+": %v", append(otherArgs, err)...)
-	}
 }
