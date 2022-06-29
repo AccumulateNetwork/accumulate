@@ -63,7 +63,7 @@ func (m *Executor) queryAccount(batch *database.Batch, account *database.Account
 	return resp, nil
 }
 
-func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]byte, encoding.BinaryMarshaler, error) {
+func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool, scratch bool) ([]byte, encoding.BinaryMarshaler, error) {
 	qv := u.QueryValues()
 
 	switch {
@@ -210,7 +210,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 				return nil, nil, err
 			}
 
-			txns, perr := m.queryTxHistory(batch, u, uint64(start), uint64(start+count), protocol.MainChain, protocol.ScratchChain)
+			txns, perr := m.queryTxHistory(batch, u, uint64(start), uint64(start+count), selectChain(scratch))
 			if perr != nil {
 				return nil, nil, perr
 			}
@@ -390,10 +390,20 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 
 func chainNameFor(entity string) string {
 	switch entity {
+	case "scratch":
+		return protocol.ScratchChain
 	case "signature":
 		return protocol.SignatureChain
 	}
 	return protocol.MainChain
+}
+
+func selectChain(scratch bool) string {
+	if scratch {
+		return protocol.ScratchChain
+	} else {
+		return protocol.MainChain
+	}
 }
 
 func parseRange(qv url.Values) (start, count int64, err error) {
@@ -539,7 +549,7 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove, remote
 	status, err := tx.GetStatus()
 	if err != nil {
 		return nil, fmt.Errorf("invalid query from GetTx in state database, %v", err)
-	} else if !remote && !status.Delivered() && status.Remote() {
+	} else if !remote && status.Remote() {
 		// If the transaction is a synthetic transaction produced by this BVN
 		// and has not been delivered, pretend like it doesn't exist
 		return nil, errors.NotFound("transaction %X not found", txid[:4])
@@ -644,36 +654,33 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove, remote
 	return &qr, nil
 }
 
-func (m *Executor) queryTxHistory(batch *database.Batch, account *url.URL, start, end uint64, targetChains ...string) (*query.ResponseTxHistory, error) {
+func (m *Executor) queryTxHistory(batch *database.Batch, account *url.URL, start, end uint64, chainName string) (*query.ResponseTxHistory, error) {
+	chain, err := batch.Account(account).ReadChain(chainName)
+	if err != nil {
+		return nil, errors.Format(errors.StatusUnknownError, "error obtaining txid range %v", err)
+	}
 
 	thr := query.ResponseTxHistory{}
 	thr.Start = start
 	thr.End = end
+	thr.Total = uint64(chain.Height())
 
-	for _, targetChain := range targetChains {
-		chain, err := batch.Account(account).ReadChain(targetChain)
-		if err != nil {
-			return nil, errors.Format(errors.StatusUnknownError, "error obtaining txid range %v", err)
-		}
-
-		thr.Total += uint64(chain.Height())
-
-		txids, err := chain.Entries(int64(start), int64(end))
-		if err != nil {
-			return nil, errors.Format(errors.StatusUnknownError, "error obtaining txid range %v", err)
-		}
-
-		for _, txid := range txids {
-			qr, err := m.queryByTxId(batch, txid, false, false, false)
-			if err != nil {
-				if errors.Is(err, storage.ErrNotFound) {
-					continue // txs can be filtered out for scratch accounts
-				}
-				return nil, errors.Wrap(errors.StatusUnknownError, err)
-			}
-			thr.Transactions = append(thr.Transactions, *qr)
-		}
+	txids, err := chain.Entries(int64(start), int64(end))
+	if err != nil {
+		return nil, errors.Format(errors.StatusUnknownError, "error obtaining txid range %v", err)
 	}
+
+	for _, txid := range txids {
+		qr, err := m.queryByTxId(batch, txid, false, false, false)
+		if err != nil {
+			if errors.Is(err, storage.ErrNotFound) {
+				continue // txs can be filtered out for scratch accounts
+			}
+			return nil, errors.Wrap(errors.StatusUnknownError, err)
+		}
+		thr.Transactions = append(thr.Transactions, *qr)
+	}
+
 	return &thr, nil
 }
 
@@ -764,8 +771,7 @@ func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove 
 		}
 	case *query.RequestTxHistory:
 		txh := q
-
-		thr, perr := m.queryTxHistory(batch, txh.Account, txh.Start, txh.Start+txh.Limit, protocol.MainChain, protocol.ScratchChain)
+		thr, perr := m.queryTxHistory(batch, txh.Account, txh.Start, txh.Start+txh.Limit, selectChain(txh.Scratch))
 		if perr != nil {
 			return nil, nil, perr
 		}
@@ -781,7 +787,7 @@ func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove 
 
 		var err error
 		var obj encoding.BinaryMarshaler
-		k, obj, err = m.queryByUrl(batch, chr.Url, prove)
+		k, obj, err = m.queryByUrl(batch, chr.Url, prove, chr.Scratch)
 		if err != nil {
 			return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 		}

@@ -2,8 +2,6 @@ package chain
 
 import (
 	"bytes"
-	"fmt"
-
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -107,9 +105,6 @@ func (WriteData) Validate(st *StateManager, tx *Delivery) (protocol.TransactionR
 	if err == nil {
 		if body.WriteToState {
 			return nil, errors.Format(errors.StatusBadRequest, "cannot write data to the state of a lite data account")
-		}
-		if body.Scratch {
-			return nil, fmt.Errorf("cannot write scratch data to a lite data account")
 		}
 		return executeWriteLiteDataAccount(st, body.Entry)
 	}

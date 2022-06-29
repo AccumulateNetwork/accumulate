@@ -40,7 +40,11 @@ var txCmd = &cobra.Command{
 				}
 			case "history":
 				if len(args) > 3 {
-					out, err = GetTXHistory(args[1], args[2], args[3])
+					var scratchArg string
+					if len(args) > 4 {
+						scratchArg = args[4]
+					}
+					out, err = GetTXHistory(args[1], args[2], args[3], scratchArg)
 				} else {
 					fmt.Println("Usage:")
 					PrintTXHistoryGet()
@@ -113,7 +117,7 @@ func PrintTxSign() {
 }
 
 func PrintTXHistoryGet() {
-	fmt.Println("  accumulate tx history [url] [starting transaction number] [ending transaction number]	Get transaction history")
+	fmt.Println("  accumulate tx history [url] [starting transaction number] [ending transaction number] [scratch (optional)]	Get transaction history")
 }
 
 func PrintTX() {
@@ -286,13 +290,17 @@ func GetTX(hash string) (string, error) {
 	return out, nil
 }
 
-func GetTXHistory(accountUrl string, s string, e string) (string, error) {
+func GetTXHistory(accountUrl string, startArg string, endArg string, scratchArg string) (string, error) {
 	var res api2.MultiResponse
-	start, err := strconv.Atoi(s)
+	start, err := strconv.Atoi(startArg)
 	if err != nil {
 		return "", err
 	}
-	end, err := strconv.Atoi(e)
+	end, err := strconv.Atoi(endArg)
+	if err != nil {
+		return "", err
+	}
+	scratch, err := strconv.ParseBool(scratchArg)
 	if err != nil {
 		return "", err
 	}
@@ -306,6 +314,7 @@ func GetTXHistory(accountUrl string, s string, e string) (string, error) {
 	params.UrlQuery.Url = u
 	params.QueryPagination.Start = uint64(start)
 	params.QueryPagination.Count = uint64(end)
+	params.Scratch = scratch
 
 	data, err := json.Marshal(params)
 	if err != nil {
