@@ -19,15 +19,10 @@ SystemLedger:
       type: NetworkAccountUpdate
       marshal-as: reference
       repeatable: true
-    - name: SendAnchor
-      description: indicates that a block anchor should be sent for the last block
-      type: bool
-    - name: OpenMajorBlock
-      description: indicates that a major block should be opened next block
-      type: bool
-    - name: ClosedMajorBlock
-      description: indicates that a major block was completed last block
-      type: uint
+    - name: Anchor
+      description: is the block anchor that should be sent for the last block
+      type: AnchorBody
+      marshal-as: union
 
 SyntheticLedger:
   union: { type: account }

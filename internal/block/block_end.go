@@ -314,7 +314,11 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 		}
 
 		seqNum := partition.Delivered + uint64(i) + 1
-		x.logger.Info("Missing synthetic transaction", "seq-num", seqNum, "source", partition.Url)
+		var message = "Missing synthetic transaction"
+		if anchor {
+			message = "Missing anchor transaction"
+		}
+		x.logger.Info(message, "seq-num", seqNum, "source", partition.Url)
 
 		// Request the transaction by sequence number
 		batch = append(batch, jsonrpc2.Request{
@@ -494,7 +498,8 @@ func (x *Executor) updateMajorIndexChains(block *Block, rootIndexIndex uint64) e
 }
 
 func (x *Executor) prepareAnchor(block *Block) error {
-	openMajorBlock, majorBlockTime := x.shouldOpenMajorBlock(block.Batch, block.Time.Add(time.Second))
+	// Determine if an anchor should be sent
+	openMajorBlock, openMajorBlockTime := x.shouldOpenMajorBlock(block.Batch, block.Time.Add(time.Second))
 	sendAnchor := openMajorBlock || x.shouldSendAnchor(block)
 	if !sendAnchor {
 		return nil
@@ -502,19 +507,8 @@ func (x *Executor) prepareAnchor(block *Block) error {
 
 	block.State.ShouldSendAnchor = true
 
-	// Update the system ledger
-	err := database.UpdateAccount(block.Batch, x.Describe.Ledger(), func(ledger *protocol.SystemLedger) error {
-		ledger.OpenMajorBlock = openMajorBlock
-		ledger.SendAnchor = sendAnchor
-		ledger.ClosedMajorBlock = block.State.MakeMajorBlock
-		return nil
-	})
-	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
-	}
-
-	// Increment the anchor sequence number
-	err = database.UpdateAccount(block.Batch, x.Describe.AnchorPool(), func(ledger *protocol.AnchorLedger) error {
+	// Update the anchor ledger
+	anchorLedger, err := database.UpdateAccount(block.Batch, x.Describe.AnchorPool(), func(ledger *protocol.AnchorLedger) error {
 		ledger.MinorBlockSequenceNumber++
 		if !openMajorBlock {
 			return nil
@@ -522,13 +516,30 @@ func (x *Executor) prepareAnchor(block *Block) error {
 
 		bvns := x.Describe.Network.GetBvnNames()
 		ledger.MajorBlockIndex++
-		ledger.MajorBlockTime = majorBlockTime
+		ledger.MajorBlockTime = openMajorBlockTime
 		ledger.PendingMajorBlockAnchors = make([]*url.URL, len(bvns))
 		for i, bvn := range bvns {
 			ledger.PendingMajorBlockAnchors[i] = protocol.PartitionUrl(bvn)
 		}
 		return nil
 	})
+	if err != nil {
+		return errors.Wrap(errors.StatusUnknownError, err)
+	}
+
+	// Update the system ledger
+	_, err = database.UpdateAccount(block.Batch, x.Describe.Ledger(), func(ledger *protocol.SystemLedger) error {
+		if x.Describe.NetworkType == config.Directory {
+			ledger.Anchor, err = x.buildDirectoryAnchor(block, openMajorBlock, ledger, anchorLedger)
+		} else {
+			ledger.Anchor, err = x.buildPartitionAnchor(block, ledger)
+		}
+		return errors.Wrap(errors.StatusUnknownError, err)
+	})
+	if err != nil {
+		return errors.Wrap(errors.StatusUnknownError, err)
+	}
+
 	return errors.Wrap(errors.StatusUnknownError, err)
 }
 
@@ -571,6 +582,7 @@ func (x *Executor) shouldSendAnchor(block *Block) bool {
 	}
 	delete(updates, x.Describe.Ledger().WithFragment("chain/"+protocol.MainChain).Hash32())
 	delete(updates, x.Describe.AnchorPool().WithFragment("chain/"+protocol.MainChain).Hash32())
+	delete(updates, x.Describe.AnchorPool().WithFragment("chain/"+protocol.AnchorSequenceChain).Hash32())
 	delete(updates, x.Describe.AnchorPool().WithFragment("chain/"+protocol.RootAnchorChain(protocol.Directory)).Hash32())
 	delete(updates, x.Describe.AnchorPool().WithFragment("chain/"+protocol.BPTAnchorChain(protocol.Directory)).Hash32())
 	if len(updates) > 0 {
@@ -578,4 +590,87 @@ func (x *Executor) shouldSendAnchor(block *Block) bool {
 	}
 
 	return false
+}
+
+func (x *Executor) buildDirectoryAnchor(block *Block, openMajor bool, systemLedger *protocol.SystemLedger, anchorLedger *protocol.AnchorLedger) (*protocol.DirectoryAnchor, error) {
+	anchor := new(protocol.DirectoryAnchor)
+	anchor.Source = x.Describe.NodeUrl()
+	anchor.MinorBlockIndex = uint64(block.Index)
+	anchor.MajorBlockIndex = block.State.MakeMajorBlock
+	anchor.Updates = systemLedger.PendingUpdates
+	if openMajor {
+		anchor.MakeMajorBlock = anchorLedger.MajorBlockIndex
+		anchor.MakeMajorBlockTime = anchorLedger.MajorBlockTime
+	}
+
+	// Load the root chain
+	rootChain, err := block.Batch.Account(x.Describe.Ledger()).ReadChain(protocol.MinorRootChain)
+	if err != nil {
+		return nil, errors.Format(errors.StatusUnknownError, "load root chain: %w", err)
+	}
+
+	// TODO This is pretty inefficient; we're constructing a receipt for every
+	// anchor. If we were more intelligent about it, we could send just the
+	// Merkle state and a list of transactions, though we would need that for
+	// the root chain and each anchor chain.
+
+	anchorUrl := x.Describe.NodeUrl(protocol.AnchorPool)
+	record := block.Batch.Account(anchorUrl)
+
+	for _, update := range block.State.ChainUpdates.Entries {
+		// Is it an anchor chain?
+		if update.Type != protocol.ChainTypeAnchor {
+			continue
+		}
+
+		// Does it belong to our anchor pool?
+		if !update.Account.Equal(anchorUrl) {
+			continue
+		}
+
+		indexChain, err := record.ReadIndexChain(update.Name, false)
+		if err != nil {
+			return nil, errors.Format(errors.StatusUnknownError, "load minor index chain of intermediate anchor chain %s: %w", update.Name, err)
+		}
+
+		from, to, anchorIndex, err := getRangeFromIndexEntry(indexChain, uint64(indexChain.Height())-1)
+		if err != nil {
+			return nil, errors.Format(errors.StatusUnknownError, "load range from minor index chain of intermediate anchor chain %s: %w", update.Name, err)
+		}
+
+		rootReceipt, err := rootChain.Receipt(int64(anchorIndex), rootChain.Height()-1)
+		if err != nil {
+			return nil, errors.Format(errors.StatusUnknownError, "build receipt for the root chain: %w", err)
+		}
+
+		anchorChain, err := record.ReadChain(update.Name)
+		if err != nil {
+			return nil, errors.Format(errors.StatusUnknownError, "load intermediate anchor chain %s: %w", update.Name, err)
+		}
+
+		for i := from; i <= to; i++ {
+			anchorReceipt, err := anchorChain.Receipt(int64(i), int64(to))
+			if err != nil {
+				return nil, errors.Format(errors.StatusUnknownError, "build receipt for intermediate anchor chain %s: %w", update.Name, err)
+			}
+
+			receipt, err := anchorReceipt.Combine(rootReceipt)
+			if err != nil {
+				return nil, errors.Format(errors.StatusUnknownError, "build receipt for intermediate anchor chain %s: %w", update.Name, err)
+			}
+
+			anchor.Receipts = append(anchor.Receipts, *receipt)
+		}
+	}
+
+	return anchor, nil
+}
+
+func (x *Executor) buildPartitionAnchor(block *Block, ledger *protocol.SystemLedger) (*protocol.BlockValidatorAnchor, error) {
+	anchor := new(protocol.BlockValidatorAnchor)
+	anchor.Source = x.Describe.NodeUrl()
+	anchor.MinorBlockIndex = uint64(block.Index)
+	anchor.MajorBlockIndex = block.State.MakeMajorBlock
+	anchor.AcmeBurnt = ledger.AcmeBurnt
+	return anchor, nil
 }

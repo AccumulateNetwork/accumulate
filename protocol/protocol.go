@@ -75,6 +75,9 @@ const (
 	// MinorRootIndexChain is the index chain of the minor anchor root chain of a partition.
 	MinorRootIndexChain = "minor-root-index"
 
+	// AnchorSequenceChain is the chain of anchors produced by a partition.
+	AnchorSequenceChain = "anchor-sequence"
+
 	// GenesisBlock is the block index of the first block.
 	GenesisBlock = 1
 
@@ -529,10 +532,10 @@ func ParseAnchorChain(name string) (string, bool) {
 	return name[:len(name)-len(rootAnchorSuffix)], true
 }
 
-// SyntheticIndexChain returns the name of the synthetic transaction index chain
+// SyntheticSequenceChain returns the name of the synthetic transaction index chain
 // for the given partition.
-func SyntheticIndexChain(name string) string {
-	return "index-" + name
+func SyntheticSequenceChain(name string) string {
+	return "synthetic-sequence-" + name
 }
 
 // FormatKeyPageUrl constructs the URL of a key page from the URL of its key

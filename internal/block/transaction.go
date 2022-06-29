@@ -331,7 +331,7 @@ func (x *Executor) systemTransactionIsReady(batch *database.Batch, delivery *cha
 	// If the transaction is out of sequence, mark it pending
 	partLedger := ledger.Anchor(delivery.SourceNetwork)
 	if partLedger.Delivered+1 != status.SequenceNumber {
-		x.logger.Info("Out of sequence synthetic transaction",
+		x.logger.Info("Out of sequence anchor transaction",
 			"hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4),
 			"seq-got", status.SequenceNumber,
 			"seq-want", partLedger.Delivered+1,

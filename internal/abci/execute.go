@@ -35,18 +35,17 @@ func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]
 	results := make([]*protocol.TransactionStatus, len(deliveries))
 	for i, env := range deliveries {
 		status, err := execute(env)
-		if err == nil {
-			results[i] = status
-			continue
-		}
-
 		if status == nil {
 			status = new(protocol.TransactionStatus)
+		}
+		status.TxID = env.Transaction.ID()
+		results[i] = status
+		if err == nil {
+			continue
 		}
 
 		sentry.CaptureException(err)
 		status.Set(err)
-		results[i] = status
 	}
 
 	// If the results can't be marshaled, provide no results but do not fail the

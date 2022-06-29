@@ -74,14 +74,14 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 			return nil, nil, fmt.Errorf("invalid txid %q: %v", qv.Get("txid"), err)
 		}
 
-		v, err := m.queryByTxId(batch, txid, prove, false, false)
+		v, err := m.queryByTxId(batch, txid, prove, false, false, nil)
 		return []byte("tx"), v, err
 
 	case u.Fragment == "":
 		txid, err := u.AsTxID()
 		if err == nil {
 			h := txid.Hash()
-			v, err := m.queryByTxId(batch, h[:], prove, false, false)
+			v, err := m.queryByTxId(batch, h[:], prove, false, false, nil)
 			return []byte("tx"), v, err
 		}
 
@@ -234,7 +234,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 				return nil, nil, fmt.Errorf("failed to load chain state: %v", err)
 			}
 
-			res, err := m.queryByTxId(batch, txid, prove, false, false)
+			res, err := m.queryByTxId(batch, txid, prove, false, false, nil)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -298,7 +298,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 					}
 
 					// Return the transaction without height or state info
-					res, err := m.queryByTxId(batch, txid, prove, false, false)
+					res, err := m.queryByTxId(batch, txid, prove, false, false, nil)
 					if err != nil {
 						return nil, nil, err
 					}
@@ -311,7 +311,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 					return nil, nil, fmt.Errorf("failed to load chain state: %v", err)
 				}
 
-				res, err := m.queryByTxId(batch, txid, prove, false, false)
+				res, err := m.queryByTxId(batch, txid, prove, false, false, nil)
 				if err != nil {
 					return nil, nil, err
 				}
@@ -515,7 +515,7 @@ func (m *Executor) queryDirectoryByChainId(batch *database.Batch, account *url.U
 	return resp, nil
 }
 
-func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove, remote, signSynth bool) (*query.ResponseByTxId, error) {
+func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove, remote, signSynth bool, anchorDest *url.URL) (*query.ResponseByTxId, error) {
 	var err error
 
 	tx := batch.Transaction(txid)
@@ -558,8 +558,23 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove, remote
 		}
 	}
 
-	if signSynth {
-		// TODO This is pretty hacky
+	qr := query.ResponseByTxId{}
+	qr.Envelope = new(protocol.Envelope)
+	qr.Envelope.Transaction = []*protocol.Transaction{txState.Transaction}
+	qr.Status = status
+	qr.TxId = txState.Transaction.ID()
+	// qr.Height = -1
+
+	if anchorDest != nil {
+		// Build a block anchor for the requester
+		qr.Envelope, err = m.prepareBlockAnchor(batch, txState.Transaction.Body, status.SequenceNumber, anchorDest)
+		if err != nil {
+			return nil, err
+		}
+		qr.TxId = qr.Envelope.Transaction[0].ID()
+
+	} else if signSynth {
+		// Build signatures for the synthetic transaction
 
 		// Add the partition signature
 		partSig := new(protocol.PartitionSignature)
@@ -567,59 +582,59 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove, remote
 		partSig.DestinationNetwork = status.DestinationNetwork
 		partSig.SequenceNumber = status.SequenceNumber
 		partSig.TransactionHash = *(*[32]byte)(txid)
-		_, err = tx.AddSystemSignature(&m.Describe, partSig)
-		if err != nil {
-			return nil, err
-		}
-		err = batch.Transaction(partSig.Hash()).PutState(&database.SigOrTxn{Signature: partSig})
-		if err != nil {
-			return nil, err
-		}
+		qr.Envelope.Signatures = append(qr.Envelope.Signatures, partSig)
 
 		// Add the receipt signature
 		receiptSig := new(protocol.ReceiptSignature)
 		receiptSig.SourceNetwork = status.SourceNetwork
-		receiptSig.Proof = *status.Proof
+		if status.Proof != nil {
+			receiptSig.Proof = *status.Proof
+		}
 		receiptSig.TransactionHash = *(*[32]byte)(txid)
-		_, err = tx.AddSystemSignature(&m.Describe, receiptSig)
-		if err != nil {
-			return nil, err
-		}
-		err = batch.Transaction(receiptSig.Hash()).PutState(&database.SigOrTxn{Signature: receiptSig})
-		if err != nil {
-			return nil, err
-		}
+		qr.Envelope.Signatures = append(qr.Envelope.Signatures, receiptSig)
 
 		// Add the key signature
 		keySig, err := m.signTransaction(batch, txState.Transaction, status.DestinationNetwork)
 		if err != nil {
 			return nil, errors.Format(errors.StatusInternalError, "sign synthetic transaction: %w", err)
 		}
+		qr.Envelope.Signatures = append(qr.Envelope.Signatures, keySig)
+	}
+
+	if signSynth || anchorDest != nil {
+		// TODO This is pretty hacky
 		var page *protocol.KeyPage
 		err = batch.Account(m.Describe.OperatorsPage()).GetStateAs(&page)
 		if err != nil {
 			return nil, err
 		}
-		i, _, ok := page.EntryByKeyHash(keySig.(protocol.KeySignature).GetPublicKeyHash())
-		if !ok {
-			return nil, errors.Format(errors.StatusInternalError, "node key is missing from operator book")
-		}
-		_, err = tx.AddSignature(uint64(i), keySig)
-		if err != nil {
-			return nil, err
-		}
-		err = batch.Transaction(keySig.Hash()).PutState(&database.SigOrTxn{Signature: keySig})
-		if err != nil {
-			return nil, err
+
+		for _, sig := range qr.Envelope.Signatures {
+			err = batch.Transaction(sig.Hash()).PutState(&database.SigOrTxn{Signature: sig})
+			if err != nil {
+				return nil, err
+			}
+
+			switch sig := sig.(type) {
+			case *protocol.PartitionSignature,
+				*protocol.ReceiptSignature:
+				_, err = tx.AddSystemSignature(&m.Describe, sig)
+				if err != nil {
+					return nil, err
+				}
+
+			case protocol.KeySignature:
+				i, _, ok := page.EntryByKeyHash(sig.GetPublicKeyHash())
+				if !ok {
+					return nil, errors.Format(errors.StatusInternalError, "node key is missing from operator book")
+				}
+				_, err = tx.AddSignature(uint64(i), sig)
+				if err != nil {
+					return nil, err
+				}
+			}
 		}
 	}
-
-	qr := query.ResponseByTxId{}
-	qr.Envelope = new(protocol.Envelope)
-	qr.Envelope.Transaction = []*protocol.Transaction{txState.Transaction}
-	qr.Status = status
-	qr.TxId = txState.Transaction.ID()
-	// qr.Height = -1
 
 	synth, err := tx.GetSyntheticTxns()
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
@@ -693,7 +708,7 @@ func (m *Executor) queryTxHistory(batch *database.Batch, account *url.URL, start
 	}
 
 	for _, txid := range txids {
-		qr, err := m.queryByTxId(batch, txid, false, false, false)
+		qr, err := m.queryByTxId(batch, txid, false, false, false, nil)
 		if err != nil {
 			if errors.Is(err, storage.ErrNotFound) {
 				continue // txs can be filtered out for scratch accounts
@@ -781,7 +796,7 @@ func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove 
 	switch q := q.(type) {
 	case *query.RequestByTxId:
 		txr := q
-		qr, err := m.queryByTxId(batch, txr.TxId[:], prove, false, false)
+		qr, err := m.queryByTxId(batch, txr.TxId[:], prove, false, false, nil)
 		if err != nil {
 			return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 		}
@@ -972,30 +987,44 @@ func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove 
 			return nil, nil, errors.Format(errors.StatusUnknownError, "error marshalling payload for major blocks response")
 		}
 	case *query.RequestSynth:
-		partition, ok := protocol.ParsePartitionUrl(q.Destination)
-		if !ok {
-			return nil, nil, errors.Format(errors.StatusUnknownError, "destination is not a partition")
-		}
-		record := batch.Account(m.Describe.Synthetic())
-		chain, err := record.ReadChain(protocol.SyntheticIndexChain(partition))
-		if err != nil {
-			return nil, nil, errors.Format(errors.StatusUnknownError, "failed to load the synth index chain: %w", err)
-		}
-		entry := new(protocol.IndexEntry)
-		err = chain.EntryAs(int64(q.SequenceNumber)-1, entry)
-		if err != nil {
-			return nil, nil, errors.Format(errors.StatusUnknownError, "failed to unmarshal the index entry: %w", err)
-		}
-		chain, err = record.ReadChain(protocol.MainChain)
-		if err != nil {
-			return nil, nil, errors.Format(errors.StatusUnknownError, "failed to load the synth main chain: %w", err)
-		}
-		hash, err := chain.Entry(int64(entry.Source))
-		if err != nil {
-			return nil, nil, errors.Format(errors.StatusUnknownError, "failed to load the main entry: %w", err)
+		var hash []byte
+		var anchorDest *url.URL
+		if q.Anchor {
+			chain, err := batch.Account(m.Describe.AnchorPool()).ReadChain(protocol.AnchorSequenceChain)
+			if err != nil {
+				return nil, nil, errors.Format(errors.StatusUnknownError, "failed to load the anchor sequence chain: %w", err)
+			}
+			hash, err = chain.Entry(int64(q.SequenceNumber))
+			if err != nil {
+				return nil, nil, errors.Format(errors.StatusUnknownError, "failed to load the main entry: %w", err)
+			}
+			anchorDest = q.Destination
+		} else {
+			partition, ok := protocol.ParsePartitionUrl(q.Destination)
+			if !ok {
+				return nil, nil, errors.Format(errors.StatusUnknownError, "destination is not a partition")
+			}
+			record := batch.Account(m.Describe.Synthetic())
+			chain, err := record.ReadChain(protocol.SyntheticSequenceChain(partition))
+			if err != nil {
+				return nil, nil, errors.Format(errors.StatusUnknownError, "failed to load the synth sequence chain: %w", err)
+			}
+			entry := new(protocol.IndexEntry)
+			err = chain.EntryAs(int64(q.SequenceNumber)-1, entry)
+			if err != nil {
+				return nil, nil, errors.Format(errors.StatusUnknownError, "failed to unmarshal the index entry: %w", err)
+			}
+			chain, err = record.ReadChain(protocol.MainChain)
+			if err != nil {
+				return nil, nil, errors.Format(errors.StatusUnknownError, "failed to load the synth main chain: %w", err)
+			}
+			hash, err = chain.Entry(int64(entry.Source))
+			if err != nil {
+				return nil, nil, errors.Format(errors.StatusUnknownError, "failed to load the main entry: %w", err)
+			}
 		}
 
-		qr, err := m.queryByTxId(batch, hash, prove, true, true)
+		qr, err := m.queryByTxId(batch, hash, prove, true, true, anchorDest)
 		if err != nil {
 			return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 		}
@@ -1095,7 +1124,7 @@ resultLoop:
 					minorEntry.TxIds = append(minorEntry.TxIds, updIdx.Entry)
 				}
 				if req.TxFetchMode == query.TxFetchModeExpand {
-					qr, err := m.queryByTxId(batch, updIdx.Entry, false, false, false)
+					qr, err := m.queryByTxId(batch, updIdx.Entry, false, false, false, nil)
 					if err == nil {
 						minorEntry.TxCount++
 						minorEntry.Transactions = append(minorEntry.Transactions, qr)

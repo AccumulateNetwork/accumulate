@@ -708,13 +708,9 @@ type SystemLedger struct {
 	Timestamp      time.Time              `json:"timestamp,omitempty" form:"timestamp" query:"timestamp" validate:"required"`
 	AcmeBurnt      big.Int                `json:"acmeBurnt,omitempty" form:"acmeBurnt" query:"acmeBurnt" validate:"required"`
 	PendingUpdates []NetworkAccountUpdate `json:"pendingUpdates,omitempty" form:"pendingUpdates" query:"pendingUpdates" validate:"required"`
-	// SendAnchor indicates that a block anchor should be sent for the last block.
-	SendAnchor bool `json:"sendAnchor,omitempty" form:"sendAnchor" query:"sendAnchor" validate:"required"`
-	// OpenMajorBlock indicates that a major block should be opened next block.
-	OpenMajorBlock bool `json:"openMajorBlock,omitempty" form:"openMajorBlock" query:"openMajorBlock" validate:"required"`
-	// ClosedMajorBlock indicates that a major block was completed last block.
-	ClosedMajorBlock uint64 `json:"closedMajorBlock,omitempty" form:"closedMajorBlock" query:"closedMajorBlock" validate:"required"`
-	extraData        []byte
+	// Anchor is the block anchor that should be sent for the last block.
+	Anchor    AnchorBody `json:"anchor,omitempty" form:"anchor" query:"anchor" validate:"required"`
+	extraData []byte
 }
 
 type SystemWriteData struct {
@@ -2192,9 +2188,9 @@ func (v *SystemLedger) Copy() *SystemLedger {
 	for i, v := range v.PendingUpdates {
 		u.PendingUpdates[i] = *(&v).Copy()
 	}
-	u.SendAnchor = v.SendAnchor
-	u.OpenMajorBlock = v.OpenMajorBlock
-	u.ClosedMajorBlock = v.ClosedMajorBlock
+	if v.Anchor != nil {
+		u.Anchor = (v.Anchor).CopyAsInterface().(AnchorBody)
+	}
 
 	return u
 }
@@ -4006,13 +4002,7 @@ func (v *SystemLedger) Equal(u *SystemLedger) bool {
 			return false
 		}
 	}
-	if !(v.SendAnchor == u.SendAnchor) {
-		return false
-	}
-	if !(v.OpenMajorBlock == u.OpenMajorBlock) {
-		return false
-	}
-	if !(v.ClosedMajorBlock == u.ClosedMajorBlock) {
+	if !(EqualAnchorBody(v.Anchor, u.Anchor)) {
 		return false
 	}
 
@@ -8771,9 +8761,7 @@ var fieldNames_SystemLedger = []string{
 	4: "Timestamp",
 	5: "AcmeBurnt",
 	6: "PendingUpdates",
-	7: "SendAnchor",
-	8: "OpenMajorBlock",
-	9: "ClosedMajorBlock",
+	7: "Anchor",
 }
 
 func (v *SystemLedger) MarshalBinary() ([]byte, error) {
@@ -8798,14 +8786,8 @@ func (v *SystemLedger) MarshalBinary() ([]byte, error) {
 			writer.WriteValue(6, v.MarshalBinary)
 		}
 	}
-	if !(!v.SendAnchor) {
-		writer.WriteBool(7, v.SendAnchor)
-	}
-	if !(!v.OpenMajorBlock) {
-		writer.WriteBool(8, v.OpenMajorBlock)
-	}
-	if !(v.ClosedMajorBlock == 0) {
-		writer.WriteUint(9, v.ClosedMajorBlock)
+	if !(v.Anchor == nil) {
+		writer.WriteValue(7, v.Anchor.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_SystemLedger)
@@ -8848,19 +8830,9 @@ func (v *SystemLedger) IsValid() error {
 		errs = append(errs, "field PendingUpdates is not set")
 	}
 	if len(v.fieldsSet) > 7 && !v.fieldsSet[7] {
-		errs = append(errs, "field SendAnchor is missing")
-	} else if !v.SendAnchor {
-		errs = append(errs, "field SendAnchor is not set")
-	}
-	if len(v.fieldsSet) > 8 && !v.fieldsSet[8] {
-		errs = append(errs, "field OpenMajorBlock is missing")
-	} else if !v.OpenMajorBlock {
-		errs = append(errs, "field OpenMajorBlock is not set")
-	}
-	if len(v.fieldsSet) > 9 && !v.fieldsSet[9] {
-		errs = append(errs, "field ClosedMajorBlock is missing")
-	} else if v.ClosedMajorBlock == 0 {
-		errs = append(errs, "field ClosedMajorBlock is not set")
+		errs = append(errs, "field Anchor is missing")
+	} else if v.Anchor == nil {
+		errs = append(errs, "field Anchor is not set")
 	}
 
 	switch len(errs) {
@@ -12665,15 +12637,13 @@ func (v *SystemLedger) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
-	if x, ok := reader.ReadBool(7); ok {
-		v.SendAnchor = x
-	}
-	if x, ok := reader.ReadBool(8); ok {
-		v.OpenMajorBlock = x
-	}
-	if x, ok := reader.ReadUint(9); ok {
-		v.ClosedMajorBlock = x
-	}
+	reader.ReadValue(7, func(b []byte) error {
+		x, err := UnmarshalAnchorBody(b)
+		if err == nil {
+			v.Anchor = x
+		}
+		return err
+	})
 
 	seen, err := reader.Reset(fieldNames_SystemLedger)
 	if err != nil {
@@ -14435,15 +14405,13 @@ func (v *SystemGenesis) MarshalJSON() ([]byte, error) {
 
 func (v *SystemLedger) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type             AccountType                             `json:"type"`
-		Url              *url.URL                                `json:"url,omitempty"`
-		Index            uint64                                  `json:"index,omitempty"`
-		Timestamp        time.Time                               `json:"timestamp,omitempty"`
-		AcmeBurnt        *string                                 `json:"acmeBurnt,omitempty"`
-		PendingUpdates   encoding.JsonList[NetworkAccountUpdate] `json:"pendingUpdates,omitempty"`
-		SendAnchor       bool                                    `json:"sendAnchor,omitempty"`
-		OpenMajorBlock   bool                                    `json:"openMajorBlock,omitempty"`
-		ClosedMajorBlock uint64                                  `json:"closedMajorBlock,omitempty"`
+		Type           AccountType                             `json:"type"`
+		Url            *url.URL                                `json:"url,omitempty"`
+		Index          uint64                                  `json:"index,omitempty"`
+		Timestamp      time.Time                               `json:"timestamp,omitempty"`
+		AcmeBurnt      *string                                 `json:"acmeBurnt,omitempty"`
+		PendingUpdates encoding.JsonList[NetworkAccountUpdate] `json:"pendingUpdates,omitempty"`
+		Anchor         encoding.JsonUnmarshalWith[AnchorBody]  `json:"anchor,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
@@ -14451,9 +14419,7 @@ func (v *SystemLedger) MarshalJSON() ([]byte, error) {
 	u.Timestamp = v.Timestamp
 	u.AcmeBurnt = encoding.BigintToJSON(&v.AcmeBurnt)
 	u.PendingUpdates = v.PendingUpdates
-	u.SendAnchor = v.SendAnchor
-	u.OpenMajorBlock = v.OpenMajorBlock
-	u.ClosedMajorBlock = v.ClosedMajorBlock
+	u.Anchor = encoding.JsonUnmarshalWith[AnchorBody]{Value: v.Anchor, Func: UnmarshalAnchorBodyJSON}
 	return json.Marshal(&u)
 }
 
@@ -16681,15 +16647,13 @@ func (v *SystemGenesis) UnmarshalJSON(data []byte) error {
 
 func (v *SystemLedger) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type             AccountType                             `json:"type"`
-		Url              *url.URL                                `json:"url,omitempty"`
-		Index            uint64                                  `json:"index,omitempty"`
-		Timestamp        time.Time                               `json:"timestamp,omitempty"`
-		AcmeBurnt        *string                                 `json:"acmeBurnt,omitempty"`
-		PendingUpdates   encoding.JsonList[NetworkAccountUpdate] `json:"pendingUpdates,omitempty"`
-		SendAnchor       bool                                    `json:"sendAnchor,omitempty"`
-		OpenMajorBlock   bool                                    `json:"openMajorBlock,omitempty"`
-		ClosedMajorBlock uint64                                  `json:"closedMajorBlock,omitempty"`
+		Type           AccountType                             `json:"type"`
+		Url            *url.URL                                `json:"url,omitempty"`
+		Index          uint64                                  `json:"index,omitempty"`
+		Timestamp      time.Time                               `json:"timestamp,omitempty"`
+		AcmeBurnt      *string                                 `json:"acmeBurnt,omitempty"`
+		PendingUpdates encoding.JsonList[NetworkAccountUpdate] `json:"pendingUpdates,omitempty"`
+		Anchor         encoding.JsonUnmarshalWith[AnchorBody]  `json:"anchor,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
@@ -16697,9 +16661,7 @@ func (v *SystemLedger) UnmarshalJSON(data []byte) error {
 	u.Timestamp = v.Timestamp
 	u.AcmeBurnt = encoding.BigintToJSON(&v.AcmeBurnt)
 	u.PendingUpdates = v.PendingUpdates
-	u.SendAnchor = v.SendAnchor
-	u.OpenMajorBlock = v.OpenMajorBlock
-	u.ClosedMajorBlock = v.ClosedMajorBlock
+	u.Anchor = encoding.JsonUnmarshalWith[AnchorBody]{Value: v.Anchor, Func: UnmarshalAnchorBodyJSON}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -16715,9 +16677,8 @@ func (v *SystemLedger) UnmarshalJSON(data []byte) error {
 		v.AcmeBurnt = *x
 	}
 	v.PendingUpdates = u.PendingUpdates
-	v.SendAnchor = u.SendAnchor
-	v.OpenMajorBlock = u.OpenMajorBlock
-	v.ClosedMajorBlock = u.ClosedMajorBlock
+	v.Anchor = u.Anchor.Value
+
 	return nil
 }
 

@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
-	"time"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	jrpc "github.com/tendermint/tendermint/rpc/jsonrpc/types"
@@ -16,6 +15,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -68,9 +68,7 @@ func (x *Executor) BeginBlock(block *Block) error {
 	ledgerState.Timestamp = block.Time
 	ledgerState.PendingUpdates = nil
 	ledgerState.AcmeBurnt = *big.NewInt(0)
-	ledgerState.SendAnchor = false
-	ledgerState.OpenMajorBlock = false
-	ledgerState.ClosedMajorBlock = 0
+	ledgerState.Anchor = nil
 
 	err = ledger.PutState(ledgerState)
 	if err != nil {
@@ -151,29 +149,12 @@ func (x *Executor) finalizeBlock(block *Block) error {
 	var ledger *protocol.SystemLedger
 	err := block.Batch.Account(x.Describe.Ledger()).GetStateAs(&ledger)
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "load ledger: %w", err)
+		return errors.Format(errors.StatusUnknownError, "load system ledger: %w", err)
 	}
 
-	var anchor *protocol.AnchorLedger
-	record := block.Batch.Account(x.Describe.AnchorPool())
-	err = record.GetStateAs(&anchor)
-	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "load anchor ledger: %w", err)
-	}
-
-	var openMajor uint64
-	var majorBlockTime time.Time
-	if ledger.OpenMajorBlock {
-		x.logger.Info("Start major block", "major-index", anchor.MajorBlockIndex, "minor-index", block.Index)
-		openMajor, majorBlockTime = anchor.MajorBlockIndex, anchor.MajorBlockTime
-		block.State.OpenedMajorBlock = true
-		x.ExecutorOptions.MajorBlockScheduler.UpdateNextMajorBlockTime(block.Time)
-	}
-
-	majorBlockIndex := ledger.ClosedMajorBlock
-
-	// If the last block is more than one block old, it has already been finalized
-	if uint64(ledger.Index) < block.Index-1 && openMajor == 0 && majorBlockIndex == 0 {
+	// Nothing to do
+	if uint64(ledger.Index) < block.Index-1 || ledger.Anchor == nil {
+		x.logger.Debug("Skipping anchor", "index", ledger.Index)
 		return nil
 	}
 
@@ -183,29 +164,82 @@ func (x *Executor) finalizeBlock(block *Block) error {
 		return errors.Format(errors.StatusUnknownError, "build synthetic transaction receipts: %w", err)
 	}
 
-	// Don't send an anchor if nothing happened beyond receiving an anchor
-	if !ledger.SendAnchor {
-		x.logger.Debug("Skipping anchor", "index", ledger.Index)
-		return nil
+	// Load the anchor ledger state
+	var anchorLedger *protocol.AnchorLedger
+	err = block.Batch.Account(x.Describe.AnchorPool()).GetStateAs(&anchorLedger)
+	if err != nil {
+		return errors.Format(errors.StatusUnknownError, "load anchor ledger: %w", err)
 	}
 
 	// Send the block anchor
-	sequenceNumber := anchor.MinorBlockSequenceNumber
+	sequenceNumber := anchorLedger.MinorBlockSequenceNumber
 	x.logger.Debug("Anchor block", "index", ledger.Index, "seq-num", sequenceNumber)
+
+	// Load the root chain
+	rootChain, err := block.Batch.Account(x.Describe.Ledger()).ReadChain(protocol.MinorRootChain)
+	if err != nil {
+		return errors.Format(errors.StatusUnknownError, "load root chain: %w", err)
+	}
+
+	stateRoot, err := x.LoadStateRoot(block.Batch)
+	if err != nil {
+		return errors.Format(errors.StatusUnknownError, "load state hash: %w", err)
+	}
+
+	anchor := ledger.Anchor.CopyAsInterface().(protocol.AnchorBody)
+	partAnchor := anchor.GetPartitionAnchor()
+	partAnchor.RootChainIndex = uint64(rootChain.Height()) - 1
+	partAnchor.RootChainAnchor = *(*[32]byte)(rootChain.Anchor())
+	partAnchor.StateTreeAnchor = *(*[32]byte)(stateRoot)
+	anchorTxn := new(protocol.Transaction)
+	anchorTxn.Body = anchor
+
+	// Record the anchor
+	err = putSyntheticTransaction(block.Batch, anchorTxn, &protocol.TransactionStatus{
+		Code:           errors.StatusRemote,
+		SourceNetwork:  x.Describe.PartitionUrl().URL,
+		SequenceNumber: sequenceNumber,
+	})
+	if err != nil {
+		return errors.Wrap(errors.StatusUnknownError, err)
+	}
+
+	// Add the transaction to the anchor sequence chain
+	record := block.Batch.Account(x.Describe.AnchorPool())
+	chain, err := record.Chain(protocol.AnchorSequenceChain, protocol.ChainTypeTransaction)
+	if err != nil {
+		return errors.Wrap(errors.StatusUnknownError, err)
+	}
+
+	index := chain.Height()
+	err = chain.AddEntry(anchorTxn.GetHash(), false)
+	if err != nil {
+		return errors.Wrap(errors.StatusUnknownError, err)
+	}
+	if index+1 != int64(sequenceNumber) {
+		x.logger.Error("Sequence number does not match index chain index", "seq-num", sequenceNumber, "index", index)
+	}
+
+	err = block.State.ChainUpdates.DidAddChainEntry(block.Batch, x.Describe.AnchorPool(), protocol.AnchorSequenceChain, protocol.ChainTypeTransaction, anchorTxn.GetHash(), uint64(index), 0, 0)
+	if err != nil {
+		return errors.Wrap(errors.StatusUnknownError, err)
+	}
+
+	// Only send anchors from the leader
+	if !block.IsLeader {
+		return nil
+	}
 
 	switch x.Describe.NetworkType {
 	case config.Directory:
-		// DN -> all BVNs
-		anchor, err := x.buildDirectoryAnchor(block.Batch, ledger, openMajor, majorBlockIndex, majorBlockTime)
-		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "build block anchor: %w", err)
+		anchor := anchor.(*protocol.DirectoryAnchor)
+		if anchor.MakeMajorBlock > 0 {
+			x.logger.Info("Start major block", "major-index", anchor.MajorBlockIndex, "minor-index", block.Index)
+			block.State.OpenedMajorBlock = true
+			x.ExecutorOptions.MajorBlockScheduler.UpdateNextMajorBlockTime(anchor.MakeMajorBlockTime)
 		}
 
-		// Only send anchors from the leader
-		if !block.IsLeader {
-			break
-		}
-
+		// DN -> BVN
 		for _, bvn := range x.Describe.Network.GetBvnNames() {
 			err = x.sendBlockAnchor(block.Batch, anchor, sequenceNumber, bvn)
 			if err != nil {
@@ -223,16 +257,6 @@ func (x *Executor) finalizeBlock(block *Block) error {
 
 	case config.BlockValidator:
 		// BVN -> DN
-		anchor, err := x.buildPartitionAnchor(block.Batch, ledger, majorBlockIndex)
-		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "build block anchor: %w", err)
-		}
-
-		// Only send anchors from the leader
-		if !block.IsLeader {
-			break
-		}
-
 		err = x.sendBlockAnchor(block.Batch, anchor, sequenceNumber, protocol.Directory)
 		if err != nil {
 			return errors.Format(errors.StatusUnknownError, "send anchor for block %d: %w", block.Index, err)
@@ -243,7 +267,12 @@ func (x *Executor) finalizeBlock(block *Block) error {
 	go func() {
 		for err := range errs {
 			x.checkDispatchError(err, func(err error) {
-				x.logger.Error("Failed to dispatch transactions", "error", fmt.Sprintf("%+v\n", err))
+				switch err := err.(type) {
+				case *txnDispatchError:
+					x.logger.Error("Failed to dispatch transactions", "error", err.status.Error, "stack", err.status.Error.PrintCallstack(), "type", err.typ, "hash", logging.AsHex(err.status.TxID.Hash()).Slice(0, 4))
+				default:
+					x.logger.Error("Failed to dispatch transactions", "error", fmt.Sprintf("%+v\n", err))
+				}
 			})
 		}
 	}()
@@ -373,117 +402,7 @@ func (x *Executor) signTransaction(batch *database.Batch, txn *protocol.Transact
 	return keySig, nil
 }
 
-func (x *Executor) buildDirectoryAnchor(batch *database.Batch, ledgerState *protocol.SystemLedger, openMajor,
-	majorBlockIndex uint64, majorBlockTime time.Time) (*protocol.DirectoryAnchor, error) {
-
-	anchor := new(protocol.DirectoryAnchor)
-	ledger := batch.Account(x.Describe.Ledger())
-	rootChain, err := x.buildBlockAnchor(batch, ledgerState, ledger, &anchor.PartitionAnchor, majorBlockIndex)
-	if err != nil {
-		return nil, err
-	}
-	anchor.MakeMajorBlock = openMajor
-	anchor.MakeMajorBlockTime = majorBlockTime
-	anchor.Updates = ledgerState.PendingUpdates
-
-	// TODO This is pretty inefficient; we're constructing a receipt for every
-	// anchor. If we were more intelligent about it, we could send just the
-	// Merkle state and a list of transactions, though we would need that for
-	// the root chain and each anchor chain.
-
-	anchorUrl := x.Describe.NodeUrl(protocol.AnchorPool)
-	record := batch.Account(anchorUrl)
-
-	// Load the list of chain updates
-	updates, err := indexing.BlockChainUpdates(batch, &x.Describe, uint64(ledgerState.Index)).Get()
-	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "load block chain updates index: %w", err)
-	}
-
-	for _, update := range updates.Entries {
-		// Is it an anchor chain?
-		if update.Type != protocol.ChainTypeAnchor {
-			continue
-		}
-
-		// Does it belong to our anchor pool?
-		if !update.Account.Equal(anchorUrl) {
-			continue
-		}
-
-		indexChain, err := record.ReadIndexChain(update.Name, false)
-		if err != nil {
-			return nil, errors.Format(errors.StatusUnknownError, "load minor index chain of intermediate anchor chain %s: %w", update.Name, err)
-		}
-
-		from, to, anchorIndex, err := getRangeFromIndexEntry(indexChain, uint64(indexChain.Height())-1)
-		if err != nil {
-			return nil, errors.Format(errors.StatusUnknownError, "load range from minor index chain of intermediate anchor chain %s: %w", update.Name, err)
-		}
-
-		rootReceipt, err := rootChain.Receipt(int64(anchorIndex), rootChain.Height()-1)
-		if err != nil {
-			return nil, errors.Format(errors.StatusUnknownError, "build receipt for the root chain: %w", err)
-		}
-
-		anchorChain, err := record.ReadChain(update.Name)
-		if err != nil {
-			return nil, errors.Format(errors.StatusUnknownError, "load intermediate anchor chain %s: %w", update.Name, err)
-		}
-
-		for i := from; i <= to; i++ {
-			anchorReceipt, err := anchorChain.Receipt(int64(i), int64(to))
-			if err != nil {
-				return nil, errors.Format(errors.StatusUnknownError, "build receipt for intermediate anchor chain %s: %w", update.Name, err)
-			}
-
-			receipt, err := anchorReceipt.Combine(rootReceipt)
-			if err != nil {
-				return nil, errors.Format(errors.StatusUnknownError, "build receipt for intermediate anchor chain %s: %w", update.Name, err)
-			}
-
-			anchor.Receipts = append(anchor.Receipts, *receipt)
-		}
-	}
-
-	return anchor, nil
-}
-
-func (x *Executor) buildPartitionAnchor(batch *database.Batch, ledgerState *protocol.SystemLedger, majorBlockIndex uint64) (*protocol.BlockValidatorAnchor, error) {
-	anchor := new(protocol.BlockValidatorAnchor)
-	ledger := batch.Account(x.Describe.Ledger())
-	_, err := x.buildBlockAnchor(batch, ledgerState, ledger, &anchor.PartitionAnchor, majorBlockIndex)
-	if err != nil {
-		return nil, err
-	}
-	anchor.AcmeBurnt = ledgerState.AcmeBurnt
-	return anchor, nil
-}
-
-func (x *Executor) buildBlockAnchor(batch *database.Batch, ledgerState *protocol.SystemLedger, ledger *database.Account, anchor *protocol.PartitionAnchor, majorBlockIndex uint64) (*database.Chain, error) {
-	// Load the root chain
-	rootChain, err := ledger.ReadChain(protocol.MinorRootChain)
-	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "load root chain: %w", err)
-	}
-
-	stateRoot, err := x.LoadStateRoot(batch)
-	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "load state hash: %w", err)
-	}
-
-	anchor.Source = x.Describe.NodeUrl()
-	anchor.RootChainIndex = uint64(rootChain.Height()) - 1
-	anchor.RootChainAnchor = *(*[32]byte)(rootChain.Anchor())
-	anchor.StateTreeAnchor = *(*[32]byte)(stateRoot)
-	anchor.MinorBlockIndex = uint64(ledgerState.Index)
-	anchor.MajorBlockIndex = majorBlockIndex
-
-	return rootChain, nil
-}
-
-func (x *Executor) sendBlockAnchor(batch *database.Batch, anchor protocol.TransactionBody, sequenceNumber uint64, destPart string) error {
-	destPartUrl := protocol.PartitionUrl(destPart)
+func (x *Executor) prepareBlockAnchor(batch *database.Batch, anchor protocol.TransactionBody, sequenceNumber uint64, destPartUrl *url.URL) (*protocol.Envelope, error) {
 	txn := new(protocol.Transaction)
 	txn.Header.Principal = destPartUrl.JoinPath(protocol.AnchorPool)
 	txn.Body = anchor
@@ -494,18 +413,27 @@ func (x *Executor) sendBlockAnchor(batch *database.Batch, anchor protocol.Transa
 		SetVersion(sequenceNumber).
 		InitiateSynthetic(txn, destPartUrl)
 	if err != nil {
-		return errors.Wrap(errors.StatusInternalError, err)
+		return nil, errors.Wrap(errors.StatusInternalError, err)
 	}
 
 	// Create a key signature
 	keySig, err := x.signTransaction(batch, txn, initSig.DestinationNetwork)
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
+	}
+
+	return &protocol.Envelope{Transaction: []*protocol.Transaction{txn}, Signatures: []protocol.Signature{initSig, keySig}}, nil
+}
+
+func (x *Executor) sendBlockAnchor(batch *database.Batch, anchor protocol.TransactionBody, sequenceNumber uint64, destPart string) error {
+	destPartUrl := protocol.PartitionUrl(destPart)
+	env, err := x.prepareBlockAnchor(batch, anchor, sequenceNumber, destPartUrl)
+	if err != nil {
+		return errors.Wrap(errors.StatusInternalError, err)
 	}
 
 	// Send
-	env := &protocol.Envelope{Transaction: []*protocol.Transaction{txn}, Signatures: []protocol.Signature{initSig, keySig}}
-	err = x.dispatcher.BroadcastTx(context.Background(), txn.Header.Principal, env)
+	err = x.dispatcher.BroadcastTx(context.Background(), destPartUrl, env)
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknownError, err)
 	}

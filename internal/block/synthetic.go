@@ -168,7 +168,7 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 		return nil, errors.Format(errors.StatusInternalError, "destination URL is not a valid partition")
 	}
 
-	indexIndex, err := addIndexChainEntry(record, protocol.SyntheticIndexChain(partition), &protocol.IndexEntry{
+	indexIndex, err := addIndexChainEntry(record, protocol.SyntheticSequenceChain(partition), &protocol.IndexEntry{
 		Source: uint64(index),
 	})
 	if err != nil {
