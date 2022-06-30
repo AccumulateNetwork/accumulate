@@ -125,8 +125,8 @@ type RequestSynth struct {
 	fieldsSet      []bool
 	Source         *url.URL `json:"source,omitempty" form:"source" query:"source" validate:"required"`
 	Destination    *url.URL `json:"destination,omitempty" form:"destination" query:"destination" validate:"required"`
-	SequenceNumber uint64   `json:"sequenceNumber,omitempty" form:"sequenceNumber" query:"sequenceNumber" validate:"required"`
-	Anchor         bool     `json:"anchor,omitempty" form:"anchor" query:"anchor" validate:"required"`
+	SequenceNumber uint64   `json:"sequenceNumber,omitempty" form:"sequenceNumber" query:"sequenceNumber"`
+	Anchor         bool     `json:"anchor,omitempty" form:"anchor" query:"anchor"`
 	extraData      []byte
 }
 
@@ -2207,16 +2207,6 @@ func (v *RequestSynth) IsValid() error {
 		errs = append(errs, "field Destination is missing")
 	} else if v.Destination == nil {
 		errs = append(errs, "field Destination is not set")
-	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
-		errs = append(errs, "field SequenceNumber is missing")
-	} else if v.SequenceNumber == 0 {
-		errs = append(errs, "field SequenceNumber is not set")
-	}
-	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
-		errs = append(errs, "field Anchor is missing")
-	} else if !v.Anchor {
-		errs = append(errs, "field Anchor is not set")
 	}
 
 	switch len(errs) {
