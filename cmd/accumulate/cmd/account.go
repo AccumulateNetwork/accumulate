@@ -76,7 +76,7 @@ var accountCreateCmd = &cobra.Command{
 }
 
 var accountCreateTokenCmd = &cobra.Command{
-	Use:   "token [actor adi] [signing key name] [key index (optional)] [key height (optional)] [new token account url] [tokenUrl] [keyBook (optional)]",
+	Use:   "token [actor adi] [signing key name] [key index (optional)] [key height (optional)] [new token account url] [tokenUrl] --authority keyBook (optional)",
 	Short: "Create an ADI token account",
 	Args:  cobra.MinimumNArgs(4),
 	Run: func(cmd *cobra.Command, args []string) {
@@ -250,14 +250,6 @@ func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, er
 	tac.Url = accountUrl
 	tac.TokenUrl = tok
 	tac.Scratch = flagAccount.Scratch
-
-	if len(args) > 2 {
-		keybook, err := url2.Parse(args[2])
-		if err != nil {
-			return "", fmt.Errorf("invalid key book url")
-		}
-		tac.Authorities = append(tac.Authorities, keybook)
-	}
 
 	for _, authUrlStr := range Authorities {
 		authUrl, err := url2.Parse(authUrlStr)
