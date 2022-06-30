@@ -31,7 +31,7 @@ func (m *Executor) EndBlock(block *Block) error {
 	if err != nil {
 		return errors.Format(errors.StatusUnknownError, "load synthetic ledger: %w", err)
 	}
-	go m.requestMissingSyntheticTransactions(synthLedger)
+	go m.requestMissingSyntheticTransactions(block.Index, synthLedger)
 
 	// Update active globals
 	if !m.isGenesis && !m.globals.Active.Equal(&m.globals.Pending) {
@@ -260,7 +260,7 @@ func (m *Executor) anchorSynthChain(block *Block, rootChain *database.Chain) (in
 	return indexIndex, nil
 }
 
-func (x *Executor) requestMissingSyntheticTransactions(ledger *protocol.SyntheticLedger) {
+func (x *Executor) requestMissingSyntheticTransactions(blockIndex uint64, ledger *protocol.SyntheticLedger) {
 	batch := x.db.Begin(false)
 	defer batch.Discard()
 
@@ -285,7 +285,7 @@ func (x *Executor) requestMissingSyntheticTransactions(ledger *protocol.Syntheti
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			x.requestMissingAnchors(ctx, batch, dispatcher, pending)
+			x.requestMissingAnchors(ctx, batch, dispatcher, blockIndex, pending)
 		}()
 	}
 
@@ -400,10 +400,7 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 	return pending
 }
 
-func (x *Executor) requestMissingAnchors(ctx context.Context, batch *database.Batch, dispatcher *dispatcher, pending []*url.TxID) {
-	// TODO Can we be smarter about this and only send the request if the
-	// transaction has been pending for a while?
-
+func (x *Executor) requestMissingAnchors(ctx context.Context, batch *database.Batch, dispatcher *dispatcher, blockIndex uint64, pending []*url.TxID) {
 	anchors := map[[32]byte][]*url.TxID{}
 	source := map[*url.TxID]*url.URL{}
 	for _, txid := range pending {
@@ -413,7 +410,12 @@ func (x *Executor) requestMissingAnchors(ctx context.Context, batch *database.Ba
 			x.logger.Error("Error loading synthetic transaction status", "error", err, "hash", logging.AsHex(txid.Hash()).Slice(0, 4))
 			continue
 		}
-		if status.GotDirectoryReceipt || status.Proof == nil || status.SourceNetwork == nil {
+		// Skip if...
+		if status.GotDirectoryReceipt || //       We have a full receipt
+			status.Code == 0 || //                We haven't received the transaction (synthetic transaction from a BVN to itself)
+			status.Proof == nil || //             It doesn't have a proof (because it's an anchor)
+			status.Received+10 < blockIndex || // It was received less than 10 blocks ago
+			false {
 			continue
 		}
 		a := *(*[32]byte)(status.Proof.Anchor)

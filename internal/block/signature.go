@@ -83,7 +83,7 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 	var err error
 	switch signature := signature.(type) {
 	case *protocol.PartitionSignature:
-		err = verifySyntheticSignature(&x.Describe, batch, delivery.Transaction, signature, md)
+		err = verifyPartitionSignature(&x.Describe, batch, delivery.Transaction, signature, md)
 		if err != nil {
 			return nil, err
 		}
@@ -686,12 +686,12 @@ func (x *Executor) processKeySignature(batch *database.Batch, delivery *chain.De
 	return signer, nil
 }
 
-func verifySyntheticSignature(net *config.Describe, _ *database.Batch, transaction *protocol.Transaction, signature *protocol.PartitionSignature, md sigExecMetadata) error {
+func verifyPartitionSignature(net *config.Describe, _ *database.Batch, transaction *protocol.Transaction, signature *protocol.PartitionSignature, md sigExecMetadata) error {
 	if md.Nested() {
-		return errors.New(errors.StatusBadRequest, "a synthetic signature cannot be nested within another signature")
+		return errors.New(errors.StatusBadRequest, "partition signatures cannot be nested within another signature")
 	}
 	if !transaction.Body.Type().IsSynthetic() && !transaction.Body.Type().IsSystem() {
-		return fmt.Errorf("synthetic or system signatures are not allowed for non-synthetic or non-system transactions")
+		return fmt.Errorf("partition signatures are not valid for %v transactions", transaction.Body.Type())
 	}
 
 	// if !isInitiator {
@@ -711,7 +711,7 @@ func verifyReceiptSignature(transaction *protocol.Transaction, receipt *protocol
 	}
 
 	if !transaction.Body.Type().IsSynthetic() && !transaction.Body.Type().IsSystem() {
-		return fmt.Errorf("receipt signatures are not allowed for non-synthetic or non-system transactions")
+		return fmt.Errorf("receipt signatures are not valid for %v transactions", transaction.Body.Type())
 	}
 
 	if !md.Initiated {
@@ -727,15 +727,15 @@ func verifyReceiptSignature(transaction *protocol.Transaction, receipt *protocol
 
 func verifyInternalSignature(delivery *chain.Delivery, _ *protocol.InternalSignature, md sigExecMetadata) error {
 	if md.Nested() {
-		return errors.New(errors.StatusBadRequest, "an internal signature cannot be nested within another signature")
+		return errors.New(errors.StatusBadRequest, "internal signatures cannot be nested within another signature")
 	}
 
 	if !delivery.WasProducedInternally() {
-		return errors.New(errors.StatusBadRequest, "an internal signature can only be used for transactions produced by a system transaction")
+		return errors.New(errors.StatusBadRequest, "internal signatures can only be used for transactions produced by a system transaction")
 	}
 
 	if delivery.IsForwarded() {
-		return errors.New(errors.StatusBadRequest, "an internal signature cannot be forwarded")
+		return errors.New(errors.StatusBadRequest, "internal signatures cannot be forwarded")
 	}
 
 	return nil

@@ -186,7 +186,7 @@ func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Deli
 	var signer, delegate protocol.Signer
 	switch signature := signature.(type) {
 	case *protocol.PartitionSignature:
-		err = verifySyntheticSignature(&x.Describe, batch, delivery.Transaction, signature, md)
+		err = verifyPartitionSignature(&x.Describe, batch, delivery.Transaction, signature, md)
 
 	case *protocol.ReceiptSignature:
 		err = verifyReceiptSignature(delivery.Transaction, signature, md)

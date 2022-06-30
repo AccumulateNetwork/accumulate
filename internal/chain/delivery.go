@@ -217,11 +217,6 @@ func (d *Delivery) LoadTransaction(batch *database.Batch) (*protocol.Transaction
 		return status, errors.Format(errors.StatusDelivered, "transaction %X has been delivered", d.Transaction.GetHash()[:4])
 	}
 
-	// Ignore produced synthetic transactions
-	if status.Remote() {
-		return status, nil
-	}
-
 	// Load previous transaction state
 	txState, err := record.GetState()
 	if err == nil {
