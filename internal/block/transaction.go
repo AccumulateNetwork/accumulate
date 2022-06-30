@@ -483,18 +483,26 @@ func (x *Executor) recordSuccessfulTransaction(batch *database.Batch, state *cha
 		return nil, nil, fmt.Errorf("add to chain: %v", err)
 	}
 
-	if !delivery.Transaction.Body.Type().IsSynthetic() /*|| delivery.Transaction.Body.Type() == protocol.TransactionTypeSegWitDataEntry*/ {
+	typ := delivery.Transaction.Body.Type()
+	if typ.IsUser() || typ.IsSystem() && !typ.IsAnchor() {
 		return status, state, nil
 	}
 
-	// Check for pending synthetic transactions
+	// Check for pending synthetic/system transactions
 	var ledger *protocol.SyntheticLedger
 	err = batch.Account(x.Describe.Synthetic()).GetStateAs(&ledger)
 	if err != nil {
 		return nil, nil, errors.Format(errors.StatusUnknownError, "load synthetic transaction ledger: %w", err)
 	}
 
-	nextHash, ok := ledger.Partition(delivery.SourceNetwork).Get(delivery.SequenceNumber + 1)
+	var partLedger *protocol.PartitionSyntheticLedger
+	if typ.IsSynthetic() {
+		partLedger = ledger.Partition(delivery.SourceNetwork)
+	} else {
+		partLedger = ledger.Anchor(delivery.SourceNetwork)
+	}
+
+	nextHash, ok := partLedger.Get(delivery.SequenceNumber + 1)
 	if ok {
 		state.ProcessAdditionalTransaction(delivery.NewSyntheticFromSequence(nextHash.Hash()))
 	}

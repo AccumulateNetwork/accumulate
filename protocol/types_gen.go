@@ -791,6 +791,8 @@ type TransactionStatus struct {
 	DestinationNetwork *url.URL `json:"destinationNetwork,omitempty" form:"destinationNetwork" query:"destinationNetwork" validate:"required"`
 	// SequenceNumber is the sequence number of the transaction.
 	SequenceNumber uint64 `json:"sequenceNumber,omitempty" form:"sequenceNumber" query:"sequenceNumber" validate:"required"`
+	// GotDirectoryReceipt indicates if a receipt has been received from the DN.
+	GotDirectoryReceipt bool `json:"gotDirectoryReceipt,omitempty" form:"gotDirectoryReceipt" query:"gotDirectoryReceipt" validate:"required"`
 	// Proof is the proof of the transaction.
 	Proof     *managed.Receipt `json:"proof,omitempty" form:"proof" query:"proof" validate:"required"`
 	extraData []byte
@@ -2336,6 +2338,7 @@ func (v *TransactionStatus) Copy() *TransactionStatus {
 		u.DestinationNetwork = (v.DestinationNetwork).Copy()
 	}
 	u.SequenceNumber = v.SequenceNumber
+	u.GotDirectoryReceipt = v.GotDirectoryReceipt
 	if v.Proof != nil {
 		u.Proof = (v.Proof).Copy()
 	}
@@ -4212,6 +4215,9 @@ func (v *TransactionStatus) Equal(u *TransactionStatus) bool {
 		return false
 	}
 	if !(v.SequenceNumber == u.SequenceNumber) {
+		return false
+	}
+	if !(v.GotDirectoryReceipt == u.GotDirectoryReceipt) {
 		return false
 	}
 	switch {
@@ -9257,7 +9263,8 @@ var fieldNames_TransactionStatus = []string{
 	8:  "SourceNetwork",
 	9:  "DestinationNetwork",
 	10: "SequenceNumber",
-	11: "Proof",
+	11: "GotDirectoryReceipt",
+	12: "Proof",
 }
 
 func (v *TransactionStatus) MarshalBinary() ([]byte, error) {
@@ -9296,8 +9303,11 @@ func (v *TransactionStatus) MarshalBinary() ([]byte, error) {
 	if !(v.SequenceNumber == 0) {
 		writer.WriteUint(10, v.SequenceNumber)
 	}
+	if !(!v.GotDirectoryReceipt) {
+		writer.WriteBool(11, v.GotDirectoryReceipt)
+	}
 	if !(v.Proof == nil) {
-		writer.WriteValue(11, v.Proof.MarshalBinary)
+		writer.WriteValue(12, v.Proof.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_TransactionStatus)
@@ -9362,6 +9372,11 @@ func (v *TransactionStatus) IsValid() error {
 		errs = append(errs, "field SequenceNumber is not set")
 	}
 	if len(v.fieldsSet) > 11 && !v.fieldsSet[11] {
+		errs = append(errs, "field GotDirectoryReceipt is missing")
+	} else if !v.GotDirectoryReceipt {
+		errs = append(errs, "field GotDirectoryReceipt is not set")
+	}
+	if len(v.fieldsSet) > 12 && !v.fieldsSet[12] {
 		errs = append(errs, "field Proof is missing")
 	} else if v.Proof == nil {
 		errs = append(errs, "field Proof is not set")
@@ -12945,7 +12960,10 @@ func (v *TransactionStatus) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUint(10); ok {
 		v.SequenceNumber = x
 	}
-	if x := new(managed.Receipt); reader.ReadValue(11, x.UnmarshalBinary) {
+	if x, ok := reader.ReadBool(11); ok {
+		v.GotDirectoryReceipt = x
+	}
+	if x := new(managed.Receipt); reader.ReadValue(12, x.UnmarshalBinary) {
 		v.Proof = x
 	}
 
@@ -14529,22 +14547,23 @@ func (v *TransactionResultSet) MarshalJSON() ([]byte, error) {
 
 func (v *TransactionStatus) MarshalJSON() ([]byte, error) {
 	u := struct {
-		TxID               *url.TxID                                     `json:"txID,omitempty"`
-		Code               errors2.Status                                `json:"code,omitempty"`
-		Remote             bool                                          `json:"remote,omitempty"`
-		Delivered          bool                                          `json:"delivered,omitempty"`
-		Pending            bool                                          `json:"pending,omitempty"`
-		Failed             bool                                          `json:"failed,omitempty"`
-		CodeNum            uint64                                        `json:"codeNum,omitempty"`
-		Error              *errors2.Error                                `json:"error,omitempty"`
-		Result             encoding.JsonUnmarshalWith[TransactionResult] `json:"result,omitempty"`
-		Received           uint64                                        `json:"received,omitempty"`
-		Initiator          *url.URL                                      `json:"initiator,omitempty"`
-		Signers            encoding.JsonUnmarshalListWith[Signer]        `json:"signers,omitempty"`
-		SourceNetwork      *url.URL                                      `json:"sourceNetwork,omitempty"`
-		DestinationNetwork *url.URL                                      `json:"destinationNetwork,omitempty"`
-		SequenceNumber     uint64                                        `json:"sequenceNumber,omitempty"`
-		Proof              *managed.Receipt                              `json:"proof,omitempty"`
+		TxID                *url.TxID                                     `json:"txID,omitempty"`
+		Code                errors2.Status                                `json:"code,omitempty"`
+		Remote              bool                                          `json:"remote,omitempty"`
+		Delivered           bool                                          `json:"delivered,omitempty"`
+		Pending             bool                                          `json:"pending,omitempty"`
+		Failed              bool                                          `json:"failed,omitempty"`
+		CodeNum             uint64                                        `json:"codeNum,omitempty"`
+		Error               *errors2.Error                                `json:"error,omitempty"`
+		Result              encoding.JsonUnmarshalWith[TransactionResult] `json:"result,omitempty"`
+		Received            uint64                                        `json:"received,omitempty"`
+		Initiator           *url.URL                                      `json:"initiator,omitempty"`
+		Signers             encoding.JsonUnmarshalListWith[Signer]        `json:"signers,omitempty"`
+		SourceNetwork       *url.URL                                      `json:"sourceNetwork,omitempty"`
+		DestinationNetwork  *url.URL                                      `json:"destinationNetwork,omitempty"`
+		SequenceNumber      uint64                                        `json:"sequenceNumber,omitempty"`
+		GotDirectoryReceipt bool                                          `json:"gotDirectoryReceipt,omitempty"`
+		Proof               *managed.Receipt                              `json:"proof,omitempty"`
 	}{}
 	u.TxID = v.TxID
 	u.Code = v.Code
@@ -14561,6 +14580,7 @@ func (v *TransactionStatus) MarshalJSON() ([]byte, error) {
 	u.SourceNetwork = v.SourceNetwork
 	u.DestinationNetwork = v.DestinationNetwork
 	u.SequenceNumber = v.SequenceNumber
+	u.GotDirectoryReceipt = v.GotDirectoryReceipt
 	u.Proof = v.Proof
 	return json.Marshal(&u)
 }
@@ -16871,22 +16891,23 @@ func (v *TransactionResultSet) UnmarshalJSON(data []byte) error {
 
 func (v *TransactionStatus) UnmarshalJSON(data []byte) error {
 	u := struct {
-		TxID               *url.TxID                                     `json:"txID,omitempty"`
-		Code               errors2.Status                                `json:"code,omitempty"`
-		Remote             bool                                          `json:"remote,omitempty"`
-		Delivered          bool                                          `json:"delivered,omitempty"`
-		Pending            bool                                          `json:"pending,omitempty"`
-		Failed             bool                                          `json:"failed,omitempty"`
-		CodeNum            uint64                                        `json:"codeNum,omitempty"`
-		Error              *errors2.Error                                `json:"error,omitempty"`
-		Result             encoding.JsonUnmarshalWith[TransactionResult] `json:"result,omitempty"`
-		Received           uint64                                        `json:"received,omitempty"`
-		Initiator          *url.URL                                      `json:"initiator,omitempty"`
-		Signers            encoding.JsonUnmarshalListWith[Signer]        `json:"signers,omitempty"`
-		SourceNetwork      *url.URL                                      `json:"sourceNetwork,omitempty"`
-		DestinationNetwork *url.URL                                      `json:"destinationNetwork,omitempty"`
-		SequenceNumber     uint64                                        `json:"sequenceNumber,omitempty"`
-		Proof              *managed.Receipt                              `json:"proof,omitempty"`
+		TxID                *url.TxID                                     `json:"txID,omitempty"`
+		Code                errors2.Status                                `json:"code,omitempty"`
+		Remote              bool                                          `json:"remote,omitempty"`
+		Delivered           bool                                          `json:"delivered,omitempty"`
+		Pending             bool                                          `json:"pending,omitempty"`
+		Failed              bool                                          `json:"failed,omitempty"`
+		CodeNum             uint64                                        `json:"codeNum,omitempty"`
+		Error               *errors2.Error                                `json:"error,omitempty"`
+		Result              encoding.JsonUnmarshalWith[TransactionResult] `json:"result,omitempty"`
+		Received            uint64                                        `json:"received,omitempty"`
+		Initiator           *url.URL                                      `json:"initiator,omitempty"`
+		Signers             encoding.JsonUnmarshalListWith[Signer]        `json:"signers,omitempty"`
+		SourceNetwork       *url.URL                                      `json:"sourceNetwork,omitempty"`
+		DestinationNetwork  *url.URL                                      `json:"destinationNetwork,omitempty"`
+		SequenceNumber      uint64                                        `json:"sequenceNumber,omitempty"`
+		GotDirectoryReceipt bool                                          `json:"gotDirectoryReceipt,omitempty"`
+		Proof               *managed.Receipt                              `json:"proof,omitempty"`
 	}{}
 	u.TxID = v.TxID
 	u.Code = v.Code
@@ -16903,6 +16924,7 @@ func (v *TransactionStatus) UnmarshalJSON(data []byte) error {
 	u.SourceNetwork = v.SourceNetwork
 	u.DestinationNetwork = v.DestinationNetwork
 	u.SequenceNumber = v.SequenceNumber
+	u.GotDirectoryReceipt = v.GotDirectoryReceipt
 	u.Proof = v.Proof
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -16921,6 +16943,7 @@ func (v *TransactionStatus) UnmarshalJSON(data []byte) error {
 	v.SourceNetwork = u.SourceNetwork
 	v.DestinationNetwork = u.DestinationNetwork
 	v.SequenceNumber = u.SequenceNumber
+	v.GotDirectoryReceipt = u.GotDirectoryReceipt
 	v.Proof = u.Proof
 	return nil
 }

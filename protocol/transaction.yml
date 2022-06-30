@@ -88,6 +88,9 @@ TransactionStatus:
     - name: SequenceNumber
       description: is the sequence number of the transaction
       type: uint
+    - name: GotDirectoryReceipt
+      description: indicates if a receipt has been received from the DN
+      type: bool
     - name: Proof
       description: is the proof of the transaction
       type: managed.Receipt

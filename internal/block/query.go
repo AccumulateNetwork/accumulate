@@ -994,7 +994,7 @@ func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove 
 			if err != nil {
 				return nil, nil, errors.Format(errors.StatusUnknownError, "failed to load the anchor sequence chain: %w", err)
 			}
-			hash, err = chain.Entry(int64(q.SequenceNumber))
+			hash, err = chain.Entry(int64(q.SequenceNumber) - 1)
 			if err != nil {
 				return nil, nil, errors.Format(errors.StatusUnknownError, "failed to load the main entry: %w", err)
 			}

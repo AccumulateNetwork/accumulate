@@ -374,7 +374,7 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 			if !gotSynth {
 				missing = append(missing, "synthetic")
 			}
-			if !gotReceipt {
+			if !gotReceipt && !anchor {
 				missing = append(missing, "receipt")
 			}
 			if !gotKey {
@@ -413,7 +413,7 @@ func (x *Executor) requestMissingAnchors(ctx context.Context, batch *database.Ba
 			x.logger.Error("Error loading synthetic transaction status", "error", err, "hash", logging.AsHex(txid.Hash()).Slice(0, 4))
 			continue
 		}
-		if status.Proof == nil || status.SourceNetwork == nil {
+		if status.GotDirectoryReceipt || status.Proof == nil || status.SourceNetwork == nil {
 			continue
 		}
 		a := *(*[32]byte)(status.Proof.Anchor)
@@ -457,7 +457,7 @@ func (x *Executor) requestMissingAnchors(ctx context.Context, batch *database.Ba
 
 		for _, txid := range anchors[*(*[32]byte)(resp.Receipt.Proof.Start)] {
 			sig := new(protocol.ReceiptSignature)
-			sig.SourceNetwork = source[txid]
+			sig.SourceNetwork = protocol.DnUrl()
 			sig.Proof = resp.Receipt.Proof
 			sig.TransactionHash = txid.Hash()
 			sigs = append(sigs, sig)

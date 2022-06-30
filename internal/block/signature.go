@@ -223,12 +223,16 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 		status.SequenceNumber = signature.SequenceNumber
 
 	case *protocol.ReceiptSignature:
-		// Capture the receipt in the status
+		statusDirty = true
+		if signature.SourceNetwork.Equal(protocol.DnUrl()) {
+			status.GotDirectoryReceipt = true
+		}
+
+		// Capture the initial receipt
 		if status.Proof == nil {
 			if !bytes.Equal(delivery.Transaction.GetHash(), signature.Proof.Start) {
 				return nil, errors.Format(errors.StatusUnauthorized, "receipt does not match transaction")
 			}
-			statusDirty = true
 			status.Proof = &signature.Proof
 			break
 		}
@@ -238,7 +242,7 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 			break
 		}
 
-		statusDirty = true
+		// Capture subsequent receipts
 		status.Proof, err = status.Proof.Combine(&signature.Proof)
 		if err != nil {
 			return nil, errors.Format(errors.StatusUnauthorized, "combine receipts: %w", err)
