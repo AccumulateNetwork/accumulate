@@ -8,6 +8,9 @@ import (
 )
 
 func (t *Transaction) ID() *url.TxID {
+	if t.Header.Principal == nil {
+		return (&url.URL{Authority: Unknown}).WithTxID(*(*[32]byte)(t.GetHash()))
+	}
 	return t.Header.Principal.WithTxID(*(*[32]byte)(t.GetHash()))
 }
 

@@ -622,7 +622,9 @@ func TestValidateKeyForSynthTxns(t *testing.T) {
 	require.True(t, index >= 0, "Failed to replace the key signature")
 
 	x := sim.Executors["BVN1"]
-	_, err := simulator.CheckTx(t, x.Database, x.Executor, deposit)
+	batch := x.Database.Begin(false)
+	defer batch.Discard()
+	_, err := x.Executor.ValidateEnvelope(batch, deposit)
 	require.EqualError(t, err, fmt.Sprintf("signature %d: the key used to sign does not belong to the originating subnet", index))
 }
 
@@ -694,6 +696,8 @@ func TestKeySignaturePartition(t *testing.T) {
 	require.True(t, index >= 0, "Failed to replace the key signature")
 
 	x := sim.Executors["BVN1"]
-	_, err := simulator.CheckTx(t, x.Database, x.Executor, deposit)
+	batch := x.Database.Begin(false)
+	defer batch.Discard()
+	_, err := x.Executor.ValidateEnvelope(batch, deposit)
 	require.EqualError(t, err, fmt.Sprintf("signature %d: the key used to sign does not belong to the originating subnet", index))
 }

@@ -24,6 +24,9 @@ const (
 	// ACME is the name of the ACME token.
 	ACME = "ACME"
 
+	// Unknown is used to indicate that the principal of a transaction is unknown
+	Unknown = "unknown"
+
 	// Directory is the partition ID of the DN.
 	Directory = "Directory"
 
@@ -408,7 +411,7 @@ func IsValidAdiUrl(u *url.URL, allowReserved bool) error {
 	}
 
 	if !allowReserved && IsReserved(u) {
-		errs = append(errs, fmt.Sprintf("%q is a reserved URL", u))
+		errs = append(errs, fmt.Sprintf("%v is a reserved URL", u))
 	}
 
 	for _, r := range a {
@@ -436,8 +439,17 @@ func IsValidAdiUrl(u *url.URL, allowReserved bool) error {
 	return errors.New(strings.Join(errs, ", "))
 }
 
+// IsUnknown checks if the authority is 'unknown' or 'unknown.acme'.
+func IsUnknown(u *url.URL) bool {
+	return strings.EqualFold(u.Authority, Unknown) ||
+		strings.EqualFold(u.Authority, Unknown+TLD)
+}
+
 // IsReserved checks if the given URL is reserved.
 func IsReserved(u *url.URL) bool {
+	if IsUnknown(u) {
+		return true
+	}
 	_, ok := ParsePartitionUrl(u)
 	return ok || BelongsToDn(u)
 }

@@ -33,6 +33,21 @@ func (m *Executor) EndBlock(block *Block) error {
 	}
 	go m.requestMissingSyntheticTransactions(synthLedger)
 
+	// Update active globals
+	if !m.isGenesis && !m.globals.Active.Equal(&m.globals.Pending) {
+		err = m.EventBus.Publish(events.WillChangeGlobals{
+			New: &m.globals.Pending,
+			Old: &m.globals.Active,
+		})
+		if err != nil {
+			return errors.Format(errors.StatusUnknownError, "publish globals update: %w", err)
+		}
+		m.globals.Active = *m.globals.Pending.Copy()
+	}
+
+	// Determine if an anchor should be sent
+	m.shouldPrepareAnchor(block)
+
 	// Do nothing if the block is empty
 	if block.State.Empty() {
 		return nil
@@ -45,18 +60,6 @@ func (m *Executor) EndBlock(block *Block) error {
 	err = ledger.GetStateAs(&ledgerState)
 	if err != nil {
 		return errors.Format(errors.StatusUnknownError, "load system ledger: %w", err)
-	}
-
-	// Update active globals
-	if !m.isGenesis && !m.globals.Active.Equal(&m.globals.Pending) {
-		err = m.EventBus.Publish(events.WillChangeGlobals{
-			New: &m.globals.Pending,
-			Old: &m.globals.Active,
-		})
-		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "publish globals update: %w", err)
-		}
-		m.globals.Active = *m.globals.Pending.Copy()
 	}
 
 	m.logger.Debug("Committing",
@@ -334,7 +337,7 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 	}
 
 	if len(batch) == 0 {
-		return nil
+		return pending
 	}
 
 	wg.Add(1)
@@ -497,50 +500,15 @@ func (x *Executor) updateMajorIndexChains(block *Block, rootIndexIndex uint64) e
 	return nil
 }
 
-func (x *Executor) prepareAnchor(block *Block) error {
-	// Determine if an anchor should be sent
+func (x *Executor) shouldPrepareAnchor(block *Block) {
 	openMajorBlock, openMajorBlockTime := x.shouldOpenMajorBlock(block.Batch, block.Time.Add(time.Second))
 	sendAnchor := openMajorBlock || x.shouldSendAnchor(block)
-	if !sendAnchor {
-		return nil
-	}
-
-	block.State.ShouldSendAnchor = true
-
-	// Update the anchor ledger
-	anchorLedger, err := database.UpdateAccount(block.Batch, x.Describe.AnchorPool(), func(ledger *protocol.AnchorLedger) error {
-		ledger.MinorBlockSequenceNumber++
-		if !openMajorBlock {
-			return nil
+	if sendAnchor {
+		block.State.Anchor = &BlockAnchorState{
+			ShouldOpenMajorBlock: openMajorBlock,
+			OpenMajorBlockTime:   openMajorBlockTime,
 		}
-
-		bvns := x.Describe.Network.GetBvnNames()
-		ledger.MajorBlockIndex++
-		ledger.MajorBlockTime = openMajorBlockTime
-		ledger.PendingMajorBlockAnchors = make([]*url.URL, len(bvns))
-		for i, bvn := range bvns {
-			ledger.PendingMajorBlockAnchors[i] = protocol.PartitionUrl(bvn)
-		}
-		return nil
-	})
-	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
 	}
-
-	// Update the system ledger
-	_, err = database.UpdateAccount(block.Batch, x.Describe.Ledger(), func(ledger *protocol.SystemLedger) error {
-		if x.Describe.NetworkType == config.Directory {
-			ledger.Anchor, err = x.buildDirectoryAnchor(block, openMajorBlock, ledger, anchorLedger)
-		} else {
-			ledger.Anchor, err = x.buildPartitionAnchor(block, ledger)
-		}
-		return errors.Wrap(errors.StatusUnknownError, err)
-	})
-	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
-	}
-
-	return errors.Wrap(errors.StatusUnknownError, err)
 }
 
 func (x *Executor) shouldOpenMajorBlock(batch *database.Batch, blockTime time.Time) (bool, time.Time) {
@@ -592,7 +560,49 @@ func (x *Executor) shouldSendAnchor(block *Block) bool {
 	return false
 }
 
-func (x *Executor) buildDirectoryAnchor(block *Block, openMajor bool, systemLedger *protocol.SystemLedger, anchorLedger *protocol.AnchorLedger) (*protocol.DirectoryAnchor, error) {
+func (x *Executor) prepareAnchor(block *Block) error {
+	// Determine if an anchor should be sent
+	if block.State.Anchor == nil {
+		return nil
+	}
+
+	// Update the anchor ledger
+	anchorLedger, err := database.UpdateAccount(block.Batch, x.Describe.AnchorPool(), func(ledger *protocol.AnchorLedger) error {
+		ledger.MinorBlockSequenceNumber++
+		if !block.State.Anchor.ShouldOpenMajorBlock {
+			return nil
+		}
+
+		bvns := x.Describe.Network.GetBvnNames()
+		ledger.MajorBlockIndex++
+		ledger.MajorBlockTime = block.State.Anchor.OpenMajorBlockTime
+		ledger.PendingMajorBlockAnchors = make([]*url.URL, len(bvns))
+		for i, bvn := range bvns {
+			ledger.PendingMajorBlockAnchors[i] = protocol.PartitionUrl(bvn)
+		}
+		return nil
+	})
+	if err != nil {
+		return errors.Wrap(errors.StatusUnknownError, err)
+	}
+
+	// Update the system ledger
+	_, err = database.UpdateAccount(block.Batch, x.Describe.Ledger(), func(ledger *protocol.SystemLedger) error {
+		if x.Describe.NetworkType == config.Directory {
+			ledger.Anchor, err = x.buildDirectoryAnchor(block, ledger, anchorLedger)
+		} else {
+			ledger.Anchor, err = x.buildPartitionAnchor(block, ledger)
+		}
+		return errors.Wrap(errors.StatusUnknownError, err)
+	})
+	if err != nil {
+		return errors.Wrap(errors.StatusUnknownError, err)
+	}
+
+	return errors.Wrap(errors.StatusUnknownError, err)
+}
+
+func (x *Executor) buildDirectoryAnchor(block *Block, systemLedger *protocol.SystemLedger, anchorLedger *protocol.AnchorLedger) (*protocol.DirectoryAnchor, error) {
 	// Do not populate the root chain index, root chain anchor, or state tree
 	// anchor. Those cannot be populated until the block is complete, thus they
 	// cannot be populated until the next block starts.
@@ -601,7 +611,7 @@ func (x *Executor) buildDirectoryAnchor(block *Block, openMajor bool, systemLedg
 	anchor.MinorBlockIndex = uint64(block.Index)
 	anchor.MajorBlockIndex = block.State.MakeMajorBlock
 	anchor.Updates = systemLedger.PendingUpdates
-	if openMajor {
+	if block.State.Anchor.ShouldOpenMajorBlock {
 		anchor.MakeMajorBlock = anchorLedger.MajorBlockIndex
 		anchor.MakeMajorBlockTime = anchorLedger.MajorBlockTime
 	}

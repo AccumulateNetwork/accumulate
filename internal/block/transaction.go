@@ -401,11 +401,15 @@ func (x *Executor) recordTransaction(batch *database.Batch, delivery *chain.Deli
 	} else {
 		partLedger = ledger.Partition(delivery.SourceNetwork)
 	}
-	if status.Code != errors.StatusDelivered && delivery.SequenceNumber <= partLedger.Delivered {
+
+	// This should never happen, but if it does Add will panic
+	if status.Pending() && delivery.SequenceNumber <= partLedger.Delivered {
 		return nil, errors.Format(errors.StatusFatalError, "synthetic transactions executed out of order: delivered %d, executed %d", partLedger.Delivered, delivery.SequenceNumber)
 	}
 
-	if partLedger.Add(status.Code == errors.StatusDelivered, delivery.SequenceNumber, delivery.Transaction.ID()) {
+	// The ledger's Delivered number needs to be updated if the transaction
+	// succeeds or fails
+	if partLedger.Add(!status.Pending(), delivery.SequenceNumber, delivery.Transaction.ID()) {
 		err = batch.Account(x.Describe.Synthetic()).PutState(ledger)
 		if err != nil {
 			return nil, errors.Format(errors.StatusUnknownError, "store synthetic transaction ledger: %w", err)

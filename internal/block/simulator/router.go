@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/rpc/client"
 	coretypes "github.com/tendermint/tendermint/rpc/coretypes"
+	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
@@ -65,27 +66,20 @@ func (r router) Submit(ctx context.Context, partition string, envelope *protocol
 		return new(routing.ResponseSubmit), nil
 	}
 
-	results := make([]*protocol.TransactionStatus, len(deliveries))
-	for i, envelope := range deliveries {
-		status := new(protocol.TransactionStatus)
-
-		result, err := CheckTx(r.TB, x.Database, x.Executor, envelope)
-		if err != nil {
-			status.Set(err)
-			if status.Failed() {
-				r.Logger.Info("Transaction failed to check",
-					"err", err,
-					"type", envelope.Transaction.Body.Type(),
-					"txn-hash", logging.AsHex(envelope.Transaction.GetHash()).Slice(0, 4),
-					"code", status.Code,
-					"principal", envelope.Transaction.Header.Principal)
-			}
+	batch := x.Database.Begin(false)
+	defer batch.Discard()
+	results := x.Executor.ValidateEnvelopeSet(batch, deliveries, func(err error, d *chain.Delivery, s *protocol.TransactionStatus) {
+		if !s.Failed() {
+			return
 		}
 
-		status.TxID = envelope.Transaction.ID()
-		status.Result = result
-		results[i] = status
-	}
+		r.Logger.Info("Transaction failed to check",
+			"err", err,
+			"type", d.Transaction.Body.Type(),
+			"txn-hash", logging.AsHex(d.Transaction.GetHash()).Slice(0, 4),
+			"code", s.Code,
+			"principal", d.Transaction.Header.Principal)
+	})
 
 	var err error
 	resp := new(routing.ResponseSubmit)

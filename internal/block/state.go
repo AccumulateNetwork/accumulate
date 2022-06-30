@@ -21,19 +21,26 @@ type BlockMeta struct {
 // executed.
 type BlockState struct {
 	OpenedMajorBlock   bool
-	ShouldSendAnchor   bool
 	MakeMajorBlock     uint64
 	MakeMajorBlockTime time.Time
 	Delivered          uint64
 	Signed             uint64
 	ProducedTxns       []*protocol.Transaction
 	ChainUpdates       chain.ChainUpdates
+
+	Anchor *BlockAnchorState
+}
+
+// BlockAnchorState is used to construc the anchor for the block.
+type BlockAnchorState struct {
+	ShouldOpenMajorBlock bool
+	OpenMajorBlockTime   time.Time
 }
 
 // Empty returns true if nothing happened during the block.
 func (s *BlockState) Empty() bool {
 	return !s.OpenedMajorBlock &&
-		!s.ShouldSendAnchor &&
+		s.Anchor == nil &&
 		s.Delivered == 0 &&
 		s.Signed == 0 &&
 		len(s.ProducedTxns) == 0 &&

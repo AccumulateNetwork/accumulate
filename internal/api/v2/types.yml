@@ -534,5 +534,7 @@ SyntheticTransactionRequest:
       pointer: true
     - name: SequenceNumber
       type: uint
+      optional: true
     - name: Anchor
       type: bool
+      optional: true
