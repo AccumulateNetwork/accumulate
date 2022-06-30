@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"path"
 	"strconv"
 	"strings"
 
@@ -55,7 +56,7 @@ func initDualNode(cmd *cobra.Command, args []string) {
 	//flagInit.Net = args[0]
 	initNode(cmd, args)
 
-	c, err := cfg.Load(flagMain.WorkDir)
+	c, err := cfg.Load(path.Join(flagMain.WorkDir, "dnn"))
 	check(err)
 
 	//make sure we have a block validator type
@@ -124,7 +125,7 @@ func initDualNode(cmd *cobra.Command, args []string) {
 	fmt.Println(dnWebHostUrl)
 	initNode(cmd, args)
 
-	c, err = cfg.Load(flagMain.WorkDir)
+	c, err = cfg.Load(path.Join(flagMain.WorkDir, "bvnn"))
 
 	checkf(err, "cannot load configuration file for node")
 
