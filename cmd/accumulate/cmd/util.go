@@ -149,16 +149,18 @@ func prepareSignerPage(signer *signing.Builder, origin *url.URL, args ...string)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get key for %q : %v", origin, err)
 	}
-
 	if len(args) < 2 {
 		signer.Url = keyInfo.Signer
-	} else if v, err := strconv.ParseUint(args[1], 10, 64); err == nil {
+	} else if len(args) > 2 {
+		v, err := strconv.ParseUint(args[1], 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("unable to parse key index %q : %v", args[1], err)
+		}
 		signer.Url = protocol.FormatKeyPageUrl(keyInfo.Authority, v)
 		ct++
 	} else {
 		signer.Url = keyInfo.Signer
 	}
-
 	var page *protocol.KeyPage
 	_, err = getRecord(signer.Url.String(), &page)
 	if err != nil {

@@ -250,7 +250,6 @@ func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, er
 	tac.Url = accountUrl
 	tac.TokenUrl = tok
 	tac.Scratch = flagAccount.Scratch
-
 	for _, authUrlStr := range Authorities {
 		authUrl, err := url2.Parse(authUrlStr)
 		if err != nil {
