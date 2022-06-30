@@ -5,6 +5,7 @@ import (
 	"math"
 	"math/big"
 	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
@@ -206,7 +207,7 @@ func BurnTokens(origin string, args []string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-
+	args[len(args)-1] = fmt.Sprint(args[len(args)-1], "tokens")
 	args, signer, err := prepareSigner(originUrl, args)
 	if err != nil {
 		return "", err
@@ -220,7 +221,7 @@ func BurnTokens(origin string, args []string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("invalid token url was obtained from %s, %v", originUrl.String(), err)
 	}
-
+	args[0] = strings.TrimSuffix(args[0], "tokens")
 	//query the token precision and reformat amount argument into a bigInt.
 	amt, err := amountToBigInt(tokenUrl.String(), args[0])
 	if err != nil {
