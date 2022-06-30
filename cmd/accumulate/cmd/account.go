@@ -251,14 +251,6 @@ func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, er
 	tac.TokenUrl = tok
 	tac.Scratch = flagAccount.Scratch
 
-	if len(args) > 2 {
-		keybook, err := url2.Parse(args[2])
-		if err != nil {
-			return "", fmt.Errorf("invalid key book url")
-		}
-		tac.Authorities = append(tac.Authorities, keybook)
-	}
-
 	for _, authUrlStr := range Authorities {
 		authUrl, err := url2.Parse(authUrlStr)
 		if err != nil {

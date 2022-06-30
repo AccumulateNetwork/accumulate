@@ -279,15 +279,6 @@ func CreateDataAccount(origin string, args []string) (string, error) {
 	cda := protocol.CreateDataAccount{}
 	cda.Url = accountUrl
 	cda.Scratch = flagAccount.Scratch
-
-	if len(args) > 2 {
-		keybook, err := url.Parse(args[2])
-		if err != nil {
-			return "", fmt.Errorf("invalid key book url")
-		}
-		cda.Authorities = append(cda.Authorities, keybook)
-	}
-
 	for _, authUrlStr := range Authorities {
 		authUrl, err := url.Parse(authUrlStr)
 		if err != nil {
