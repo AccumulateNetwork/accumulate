@@ -68,6 +68,7 @@ type RequestByTxId struct {
 type RequestByUrl struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	Scratch   bool     `json:"scratch,omitempty" form:"scratch" query:"scratch"`
 	extraData []byte
 }
 
@@ -134,6 +135,7 @@ type RequestTxHistory struct {
 	Account   *url.URL `json:"account,omitempty" form:"account" query:"account" validate:"required"`
 	Start     uint64   `json:"start,omitempty" form:"start" query:"start" validate:"required"`
 	Limit     uint64   `json:"limit,omitempty" form:"limit" query:"limit" validate:"required"`
+	Scratch   bool     `json:"scratch,omitempty" form:"scratch" query:"scratch" validate:"required"`
 	extraData []byte
 }
 
@@ -373,6 +375,7 @@ func (v *RequestByUrl) Copy() *RequestByUrl {
 	if v.Url != nil {
 		u.Url = (v.Url).Copy()
 	}
+	u.Scratch = v.Scratch
 
 	return u
 }
@@ -489,6 +492,7 @@ func (v *RequestTxHistory) Copy() *RequestTxHistory {
 	}
 	u.Start = v.Start
 	u.Limit = v.Limit
+	u.Scratch = v.Scratch
 
 	return u
 }
@@ -868,6 +872,9 @@ func (v *RequestByUrl) Equal(u *RequestByUrl) bool {
 	case !((v.Url).Equal(u.Url)):
 		return false
 	}
+	if !(v.Scratch == u.Scratch) {
+		return false
+	}
 
 	return true
 }
@@ -1029,6 +1036,9 @@ func (v *RequestTxHistory) Equal(u *RequestTxHistory) bool {
 		return false
 	}
 	if !(v.Limit == u.Limit) {
+		return false
+	}
+	if !(v.Scratch == u.Scratch) {
 		return false
 	}
 
@@ -1732,6 +1742,7 @@ func (v *RequestByTxId) IsValid() error {
 var fieldNames_RequestByUrl = []string{
 	1: "Type",
 	2: "Url",
+	3: "Scratch",
 }
 
 func (v *RequestByUrl) MarshalBinary() ([]byte, error) {
@@ -1741,6 +1752,9 @@ func (v *RequestByUrl) MarshalBinary() ([]byte, error) {
 	writer.WriteEnum(1, v.Type())
 	if !(v.Url == nil) {
 		writer.WriteUrl(2, v.Url)
+	}
+	if !(!v.Scratch) {
+		writer.WriteBool(3, v.Scratch)
 	}
 
 	_, _, err := writer.Reset(fieldNames_RequestByUrl)
@@ -2220,6 +2234,7 @@ var fieldNames_RequestTxHistory = []string{
 	2: "Account",
 	3: "Start",
 	4: "Limit",
+	5: "Scratch",
 }
 
 func (v *RequestTxHistory) MarshalBinary() ([]byte, error) {
@@ -2235,6 +2250,9 @@ func (v *RequestTxHistory) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.Limit == 0) {
 		writer.WriteUint(4, v.Limit)
+	}
+	if !(!v.Scratch) {
+		writer.WriteBool(5, v.Scratch)
 	}
 
 	_, _, err := writer.Reset(fieldNames_RequestTxHistory)
@@ -2265,6 +2283,11 @@ func (v *RequestTxHistory) IsValid() error {
 		errs = append(errs, "field Limit is missing")
 	} else if v.Limit == 0 {
 		errs = append(errs, "field Limit is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field Scratch is missing")
+	} else if !v.Scratch {
+		errs = append(errs, "field Scratch is not set")
 	}
 
 	switch len(errs) {
@@ -3412,6 +3435,9 @@ func (v *RequestByUrl) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Url = x
 	}
+	if x, ok := reader.ReadBool(3); ok {
+		v.Scratch = x
+	}
 
 	seen, err := reader.Reset(fieldNames_RequestByUrl)
 	if err != nil {
@@ -3705,6 +3731,9 @@ func (v *RequestTxHistory) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	if x, ok := reader.ReadUint(4); ok {
 		v.Limit = x
+	}
+	if x, ok := reader.ReadBool(5); ok {
+		v.Scratch = x
 	}
 
 	seen, err := reader.Reset(fieldNames_RequestTxHistory)
@@ -4360,11 +4389,13 @@ func (v *RequestByTxId) MarshalJSON() ([]byte, error) {
 
 func (v *RequestByUrl) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type QueryType `json:"type"`
-		Url  *url.URL  `json:"url,omitempty"`
+		Type    QueryType `json:"type"`
+		Url     *url.URL  `json:"url,omitempty"`
+		Scratch bool      `json:"scratch,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
+	u.Scratch = v.Scratch
 	return json.Marshal(&u)
 }
 
@@ -4476,11 +4507,13 @@ func (v *RequestTxHistory) MarshalJSON() ([]byte, error) {
 		Account *url.URL  `json:"account,omitempty"`
 		Start   uint64    `json:"start,omitempty"`
 		Limit   uint64    `json:"limit,omitempty"`
+		Scratch bool      `json:"scratch,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Account = v.Account
 	u.Start = v.Start
 	u.Limit = v.Limit
+	u.Scratch = v.Scratch
 	return json.Marshal(&u)
 }
 
@@ -4859,11 +4892,13 @@ func (v *RequestByTxId) UnmarshalJSON(data []byte) error {
 
 func (v *RequestByUrl) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type QueryType `json:"type"`
-		Url  *url.URL  `json:"url,omitempty"`
+		Type    QueryType `json:"type"`
+		Url     *url.URL  `json:"url,omitempty"`
+		Scratch bool      `json:"scratch,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
+	u.Scratch = v.Scratch
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -4871,6 +4906,7 @@ func (v *RequestByUrl) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Url = u.Url
+	v.Scratch = u.Scratch
 	return nil
 }
 
@@ -5055,11 +5091,13 @@ func (v *RequestTxHistory) UnmarshalJSON(data []byte) error {
 		Account *url.URL  `json:"account,omitempty"`
 		Start   uint64    `json:"start,omitempty"`
 		Limit   uint64    `json:"limit,omitempty"`
+		Scratch bool      `json:"scratch,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Account = v.Account
 	u.Start = v.Start
 	u.Limit = v.Limit
+	u.Scratch = v.Scratch
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -5069,6 +5107,7 @@ func (v *RequestTxHistory) UnmarshalJSON(data []byte) error {
 	v.Account = u.Account
 	v.Start = u.Start
 	v.Limit = u.Limit
+	v.Scratch = u.Scratch
 	return nil
 }
 

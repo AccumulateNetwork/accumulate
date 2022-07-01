@@ -171,7 +171,6 @@ type ChainParams struct {
 type CreateDataAccount struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
-	Scratch   bool     `json:"scratch,omitempty" form:"scratch" query:"scratch"`
 	// Authorities is a list of authorities to add to the authority set.
 	Authorities []*url.URL `json:"authorities,omitempty" form:"authorities" query:"authorities"`
 	extraData   []byte
@@ -219,7 +218,6 @@ type CreateTokenAccount struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	TokenUrl  *url.URL `json:"tokenUrl,omitempty" form:"tokenUrl" query:"tokenUrl" validate:"required"`
-	Scratch   bool     `json:"scratch,omitempty" form:"scratch" query:"scratch"`
 	// Authorities is a list of authorities to add to the authority set.
 	Authorities      []*url.URL         `json:"authorities,omitempty" form:"authorities" query:"authorities"`
 	TokenIssuerProof *AccountStateProof `json:"tokenIssuerProof,omitempty" form:"tokenIssuerProof" query:"tokenIssuerProof"`
@@ -230,7 +228,6 @@ type DataAccount struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	AccountAuth
-	Scratch   bool      `json:"scratch,omitempty" form:"scratch" query:"scratch"`
 	Entry     DataEntry `json:"entry,omitempty" form:"entry" query:"entry"`
 	extraData []byte
 }
@@ -720,7 +717,6 @@ type TokenAccount struct {
 	AccountAuth
 	TokenUrl  *url.URL `json:"tokenUrl,omitempty" form:"tokenUrl" query:"tokenUrl" validate:"required"`
 	Balance   big.Int  `json:"balance,omitempty" form:"balance" query:"balance" validate:"required"`
-	Scratch   bool     `json:"scratch,omitempty" form:"scratch" query:"scratch"`
 	extraData []byte
 }
 
@@ -1261,7 +1257,6 @@ func (v *CreateDataAccount) Copy() *CreateDataAccount {
 	if v.Url != nil {
 		u.Url = (v.Url).Copy()
 	}
-	u.Scratch = v.Scratch
 	u.Authorities = make([]*url.URL, len(v.Authorities))
 	for i, v := range v.Authorities {
 		if v != nil {
@@ -1365,7 +1360,6 @@ func (v *CreateTokenAccount) Copy() *CreateTokenAccount {
 	if v.TokenUrl != nil {
 		u.TokenUrl = (v.TokenUrl).Copy()
 	}
-	u.Scratch = v.Scratch
 	u.Authorities = make([]*url.URL, len(v.Authorities))
 	for i, v := range v.Authorities {
 		if v != nil {
@@ -1388,7 +1382,6 @@ func (v *DataAccount) Copy() *DataAccount {
 		u.Url = (v.Url).Copy()
 	}
 	u.AccountAuth = *v.AccountAuth.Copy()
-	u.Scratch = v.Scratch
 	if v.Entry != nil {
 		u.Entry = (v.Entry).CopyAsInterface().(DataEntry)
 	}
@@ -2194,7 +2187,6 @@ func (v *TokenAccount) Copy() *TokenAccount {
 		u.TokenUrl = (v.TokenUrl).Copy()
 	}
 	u.Balance = *encoding.BigintCopy(&v.Balance)
-	u.Scratch = v.Scratch
 
 	return u
 }
@@ -2774,9 +2766,6 @@ func (v *CreateDataAccount) Equal(u *CreateDataAccount) bool {
 	case !((v.Url).Equal(u.Url)):
 		return false
 	}
-	if !(v.Scratch == u.Scratch) {
-		return false
-	}
 	if len(v.Authorities) != len(u.Authorities) {
 		return false
 	}
@@ -2918,9 +2907,6 @@ func (v *CreateTokenAccount) Equal(u *CreateTokenAccount) bool {
 	case !((v.TokenUrl).Equal(u.TokenUrl)):
 		return false
 	}
-	if !(v.Scratch == u.Scratch) {
-		return false
-	}
 	if len(v.Authorities) != len(u.Authorities) {
 		return false
 	}
@@ -2951,9 +2937,6 @@ func (v *DataAccount) Equal(u *DataAccount) bool {
 		return false
 	}
 	if !v.AccountAuth.Equal(&u.AccountAuth) {
-		return false
-	}
-	if !(v.Scratch == u.Scratch) {
 		return false
 	}
 	if !(EqualDataEntry(v.Entry, u.Entry)) {
@@ -3989,9 +3972,6 @@ func (v *TokenAccount) Equal(u *TokenAccount) bool {
 		return false
 	}
 	if !((&v.Balance).Cmp(&u.Balance) == 0) {
-		return false
-	}
-	if !(v.Scratch == u.Scratch) {
 		return false
 	}
 
@@ -5334,8 +5314,7 @@ func (v *ChainParams) IsValid() error {
 var fieldNames_CreateDataAccount = []string{
 	1: "Type",
 	2: "Url",
-	5: "Scratch",
-	6: "Authorities",
+	3: "Authorities",
 }
 
 func (v *CreateDataAccount) MarshalBinary() ([]byte, error) {
@@ -5346,12 +5325,9 @@ func (v *CreateDataAccount) MarshalBinary() ([]byte, error) {
 	if !(v.Url == nil) {
 		writer.WriteUrl(2, v.Url)
 	}
-	if !(!v.Scratch) {
-		writer.WriteBool(5, v.Scratch)
-	}
 	if !(len(v.Authorities) == 0) {
 		for _, v := range v.Authorities {
-			writer.WriteUrl(6, v)
+			writer.WriteUrl(3, v)
 		}
 	}
 
@@ -5628,7 +5604,6 @@ var fieldNames_CreateTokenAccount = []string{
 	1: "Type",
 	2: "Url",
 	3: "TokenUrl",
-	5: "Scratch",
 	7: "Authorities",
 	8: "TokenIssuerProof",
 }
@@ -5643,9 +5618,6 @@ func (v *CreateTokenAccount) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.TokenUrl == nil) {
 		writer.WriteUrl(3, v.TokenUrl)
-	}
-	if !(!v.Scratch) {
-		writer.WriteBool(5, v.Scratch)
 	}
 	if !(len(v.Authorities) == 0) {
 		for _, v := range v.Authorities {
@@ -5695,8 +5667,7 @@ var fieldNames_DataAccount = []string{
 	1: "Type",
 	2: "Url",
 	3: "AccountAuth",
-	4: "Scratch",
-	5: "Entry",
+	4: "Entry",
 }
 
 func (v *DataAccount) MarshalBinary() ([]byte, error) {
@@ -5708,11 +5679,8 @@ func (v *DataAccount) MarshalBinary() ([]byte, error) {
 		writer.WriteUrl(2, v.Url)
 	}
 	writer.WriteValue(3, v.AccountAuth.MarshalBinary)
-	if !(!v.Scratch) {
-		writer.WriteBool(4, v.Scratch)
-	}
 	if !(v.Entry == nil) {
-		writer.WriteValue(5, v.Entry.MarshalBinary)
+		writer.WriteValue(4, v.Entry.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_DataAccount)
@@ -8788,7 +8756,6 @@ var fieldNames_TokenAccount = []string{
 	3: "AccountAuth",
 	4: "TokenUrl",
 	5: "Balance",
-	6: "Scratch",
 }
 
 func (v *TokenAccount) MarshalBinary() ([]byte, error) {
@@ -8805,9 +8772,6 @@ func (v *TokenAccount) MarshalBinary() ([]byte, error) {
 	}
 	if !((v.Balance).Cmp(new(big.Int)) == 0) {
 		writer.WriteBigInt(5, &v.Balance)
-	}
-	if !(!v.Scratch) {
-		writer.WriteBool(6, v.Scratch)
 	}
 
 	_, _, err := writer.Reset(fieldNames_TokenAccount)
@@ -10400,11 +10364,8 @@ func (v *CreateDataAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Url = x
 	}
-	if x, ok := reader.ReadBool(5); ok {
-		v.Scratch = x
-	}
 	for {
-		if x, ok := reader.ReadUrl(6); ok {
+		if x, ok := reader.ReadUrl(3); ok {
 			v.Authorities = append(v.Authorities, x)
 		} else {
 			break
@@ -10609,9 +10570,6 @@ func (v *CreateTokenAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUrl(3); ok {
 		v.TokenUrl = x
 	}
-	if x, ok := reader.ReadBool(5); ok {
-		v.Scratch = x
-	}
 	for {
 		if x, ok := reader.ReadUrl(7); ok {
 			v.Authorities = append(v.Authorities, x)
@@ -10653,10 +10611,7 @@ func (v *DataAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Url = x
 	}
 	reader.ReadValue(3, v.AccountAuth.UnmarshalBinary)
-	if x, ok := reader.ReadBool(4); ok {
-		v.Scratch = x
-	}
-	reader.ReadValue(5, func(b []byte) error {
+	reader.ReadValue(4, func(b []byte) error {
 		x, err := UnmarshalDataEntry(b)
 		if err == nil {
 			v.Entry = x
@@ -12545,9 +12500,6 @@ func (v *TokenAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBigInt(5); ok {
 		v.Balance = *x
 	}
-	if x, ok := reader.ReadBool(6); ok {
-		v.Scratch = x
-	}
 
 	seen, err := reader.Reset(fieldNames_TokenAccount)
 	if err != nil {
@@ -13389,12 +13341,10 @@ func (v *CreateDataAccount) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type        TransactionType             `json:"type"`
 		Url         *url.URL                    `json:"url,omitempty"`
-		Scratch     bool                        `json:"scratch,omitempty"`
 		Authorities encoding.JsonList[*url.URL] `json:"authorities,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
-	u.Scratch = v.Scratch
 	u.Authorities = v.Authorities
 	return json.Marshal(&u)
 }
@@ -13464,14 +13414,12 @@ func (v *CreateTokenAccount) MarshalJSON() ([]byte, error) {
 		Type             TransactionType             `json:"type"`
 		Url              *url.URL                    `json:"url,omitempty"`
 		TokenUrl         *url.URL                    `json:"tokenUrl,omitempty"`
-		Scratch          bool                        `json:"scratch,omitempty"`
 		Authorities      encoding.JsonList[*url.URL] `json:"authorities,omitempty"`
 		TokenIssuerProof *AccountStateProof          `json:"tokenIssuerProof,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
 	u.TokenUrl = v.TokenUrl
-	u.Scratch = v.Scratch
 	u.Authorities = v.Authorities
 	u.TokenIssuerProof = v.TokenIssuerProof
 	return json.Marshal(&u)
@@ -13484,7 +13432,6 @@ func (v *DataAccount) MarshalJSON() ([]byte, error) {
 		ManagerKeyBook *url.URL                              `json:"managerKeyBook,omitempty"`
 		Url            *url.URL                              `json:"url,omitempty"`
 		Authorities    encoding.JsonList[AuthorityEntry]     `json:"authorities,omitempty"`
-		Scratch        bool                                  `json:"scratch,omitempty"`
 		Entry          encoding.JsonUnmarshalWith[DataEntry] `json:"entry,omitempty"`
 	}{}
 	u.Type = v.Type()
@@ -13492,7 +13439,6 @@ func (v *DataAccount) MarshalJSON() ([]byte, error) {
 	u.ManagerKeyBook = v.ManagerKeyBook()
 	u.Url = v.Url
 	u.Authorities = v.AccountAuth.Authorities
-	u.Scratch = v.Scratch
 	u.Entry = encoding.JsonUnmarshalWith[DataEntry]{Value: v.Entry, Func: UnmarshalDataEntryJSON}
 	return json.Marshal(&u)
 }
@@ -14250,7 +14196,6 @@ func (v *TokenAccount) MarshalJSON() ([]byte, error) {
 		Authorities    encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
 		TokenUrl       *url.URL                          `json:"tokenUrl,omitempty"`
 		Balance        *string                           `json:"balance,omitempty"`
-		Scratch        bool                              `json:"scratch,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.KeyBook = v.KeyBook()
@@ -14259,7 +14204,6 @@ func (v *TokenAccount) MarshalJSON() ([]byte, error) {
 	u.Authorities = v.AccountAuth.Authorities
 	u.TokenUrl = v.TokenUrl
 	u.Balance = encoding.BigintToJSON(&v.Balance)
-	u.Scratch = v.Scratch
 	return json.Marshal(&u)
 }
 
@@ -14914,12 +14858,10 @@ func (v *CreateDataAccount) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type        TransactionType             `json:"type"`
 		Url         *url.URL                    `json:"url,omitempty"`
-		Scratch     bool                        `json:"scratch,omitempty"`
 		Authorities encoding.JsonList[*url.URL] `json:"authorities,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
-	u.Scratch = v.Scratch
 	u.Authorities = v.Authorities
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -14928,7 +14870,6 @@ func (v *CreateDataAccount) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Url = u.Url
-	v.Scratch = u.Scratch
 	v.Authorities = u.Authorities
 	return nil
 }
@@ -15048,14 +14989,12 @@ func (v *CreateTokenAccount) UnmarshalJSON(data []byte) error {
 		Type             TransactionType             `json:"type"`
 		Url              *url.URL                    `json:"url,omitempty"`
 		TokenUrl         *url.URL                    `json:"tokenUrl,omitempty"`
-		Scratch          bool                        `json:"scratch,omitempty"`
 		Authorities      encoding.JsonList[*url.URL] `json:"authorities,omitempty"`
 		TokenIssuerProof *AccountStateProof          `json:"tokenIssuerProof,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
 	u.TokenUrl = v.TokenUrl
-	u.Scratch = v.Scratch
 	u.Authorities = v.Authorities
 	u.TokenIssuerProof = v.TokenIssuerProof
 	if err := json.Unmarshal(data, &u); err != nil {
@@ -15066,7 +15005,6 @@ func (v *CreateTokenAccount) UnmarshalJSON(data []byte) error {
 	}
 	v.Url = u.Url
 	v.TokenUrl = u.TokenUrl
-	v.Scratch = u.Scratch
 	v.Authorities = u.Authorities
 	v.TokenIssuerProof = u.TokenIssuerProof
 	return nil
@@ -15079,7 +15017,6 @@ func (v *DataAccount) UnmarshalJSON(data []byte) error {
 		ManagerKeyBook *url.URL                              `json:"managerKeyBook,omitempty"`
 		Url            *url.URL                              `json:"url,omitempty"`
 		Authorities    encoding.JsonList[AuthorityEntry]     `json:"authorities,omitempty"`
-		Scratch        bool                                  `json:"scratch,omitempty"`
 		Entry          encoding.JsonUnmarshalWith[DataEntry] `json:"entry,omitempty"`
 	}{}
 	u.Type = v.Type()
@@ -15087,7 +15024,6 @@ func (v *DataAccount) UnmarshalJSON(data []byte) error {
 	u.ManagerKeyBook = v.ManagerKeyBook()
 	u.Url = v.Url
 	u.Authorities = v.AccountAuth.Authorities
-	u.Scratch = v.Scratch
 	u.Entry = encoding.JsonUnmarshalWith[DataEntry]{Value: v.Entry, Func: UnmarshalDataEntryJSON}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -15097,7 +15033,6 @@ func (v *DataAccount) UnmarshalJSON(data []byte) error {
 	}
 	v.Url = u.Url
 	v.AccountAuth.Authorities = u.Authorities
-	v.Scratch = u.Scratch
 	v.Entry = u.Entry.Value
 
 	return nil
@@ -16498,7 +16433,6 @@ func (v *TokenAccount) UnmarshalJSON(data []byte) error {
 		Authorities    encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
 		TokenUrl       *url.URL                          `json:"tokenUrl,omitempty"`
 		Balance        *string                           `json:"balance,omitempty"`
-		Scratch        bool                              `json:"scratch,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.KeyBook = v.KeyBook()
@@ -16507,7 +16441,6 @@ func (v *TokenAccount) UnmarshalJSON(data []byte) error {
 	u.Authorities = v.AccountAuth.Authorities
 	u.TokenUrl = v.TokenUrl
 	u.Balance = encoding.BigintToJSON(&v.Balance)
-	u.Scratch = v.Scratch
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -16522,7 +16455,6 @@ func (v *TokenAccount) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Balance = *x
 	}
-	v.Scratch = u.Scratch
 	return nil
 }
 

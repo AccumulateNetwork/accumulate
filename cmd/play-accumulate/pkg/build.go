@@ -172,11 +172,6 @@ func (b bldTxn) CreateTokenAccount(url, token Urlish) bldCreateTokenAccount {
 	return c
 }
 
-func (b bldCreateTokenAccount) AsScratch() bldCreateTokenAccount {
-	b.body.Scratch = true
-	return b
-}
-
 func (b bldCreateTokenAccount) WithAuthority(book Urlish) bldCreateTokenAccount {
 	b.body.Authorities = append(b.body.Authorities, b.s.url(book))
 	return b
@@ -206,11 +201,6 @@ func (b bldTxn) CreateDataAccount() bldCreateDataAccount {
 	c.body = new(protocol.CreateDataAccount)
 	c.bldTxn = b.WithBody(c.body)
 	return c
-}
-
-func (b bldCreateDataAccount) AsScratch() bldCreateDataAccount {
-	b.body.Scratch = true
-	return b
 }
 
 func (b bldCreateDataAccount) WithAuthority(book Urlish) bldCreateDataAccount {

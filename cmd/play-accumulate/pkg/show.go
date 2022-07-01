@@ -108,12 +108,10 @@ func (s *Session) Show(v interface{}) {
 			"Token Account\n"+
 				"    Url:        %v\n"+
 				"    Issuer:     %v\n"+
-				"    Balance:    %v\n"+
-				"    Scratch:    %v\n",
+				"    Balance:    %v\n",
 			v.Url,
 			v.TokenUrl.ShortString(),
 			s.formatBalanceForIssuer(v.TokenUrl, &v.Balance),
-			v.Scratch,
 		)
 	case *protocol.KeyBook:
 		str = fmt.Sprintf(
