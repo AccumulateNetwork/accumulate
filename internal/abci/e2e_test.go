@@ -518,6 +518,75 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		}
 
 	})
+
+	t.Run("Data Account data entry to scratch chain", func(t *testing.T) {
+		partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+		nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
+		n := nodes[partitions[1]][0]
+
+		adiKey := generateKey()
+		batch := n.db.Begin(true)
+		require.NoError(t, acctesting.CreateAdiWithCredits(batch, adiKey, "FooBar", 1e9))
+		require.NoError(t, batch.Commit())
+
+		n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+			tac := new(protocol.CreateDataAccount)
+			tac.Url = protocol.AccountUrl("FooBar", "scr")
+			send(newTxn("FooBar").
+				WithSigner(protocol.AccountUrl("FooBar", "book0", "1"), 1).
+				WithBody(tac).
+				Initiate(protocol.SignatureTypeLegacyED25519, adiKey).
+				Build())
+		})
+
+		r := n.GetDataAccount("FooBar/scr")
+		require.Equal(t, "acc://FooBar.acme/scr", r.Url.String())
+		require.Contains(t, n.GetDirectory("FooBar"), protocol.AccountUrl("FooBar", "scr").String())
+
+		wd := new(protocol.WriteData)
+		wd.Scratch = true
+		n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+			entry := new(protocol.AccumulateDataEntry)
+			wd.Entry = entry
+			entry.Data = append(entry.Data, []byte("thequickbrownfoxjumpsoverthelazydog"))
+			for i := 0; i < 10; i++ {
+				entry.Data = append(entry.Data, []byte(fmt.Sprintf("test id %d", i)))
+			}
+
+			send(newTxn("FooBar/scr").
+				WithSigner(protocol.AccountUrl("FooBar", "book0", "1"), 1).
+				WithBody(wd).
+				Initiate(protocol.SignatureTypeLegacyED25519, adiKey).
+				Build())
+		})
+
+		// Without the sleep, this test fails on Windows and macOS
+		time.Sleep(3 * time.Second)
+
+		// Test getting the data by URL
+		rde := new(query.ResponseDataEntry)
+		n.QueryAccountAs("FooBar/scr#data", rde)
+
+		if !protocol.EqualDataEntry(rde.Entry, wd.Entry) {
+			t.Fatalf("data query does not match what was entered")
+		}
+
+		//now test query by entry hash.
+		rde2 := new(query.ResponseDataEntry)
+		n.QueryAccountAs(fmt.Sprintf("FooBar/scr#data/%X", wd.Entry.Hash()), rde2)
+
+		if !protocol.EqualDataEntry(rde.Entry, rde2.Entry) {
+			t.Fatalf("data query does not match what was entered")
+		}
+
+		//now test query by entry set
+		rde3 := new(query.ResponseDataEntrySet)
+		n.QueryAccountAs("FooBar/scr#data/0:1", rde3)
+		if !protocol.EqualDataEntry(rde.Entry, rde3.DataEntries[0].Entry) {
+			t.Fatalf("data query does not match what was entered")
+		}
+
+	})
 }
 
 func TestCreateAdiTokenAccount(t *testing.T) {
