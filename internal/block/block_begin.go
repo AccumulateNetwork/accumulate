@@ -225,11 +225,6 @@ func (x *Executor) finalizeBlock(block *Block) error {
 		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
-	// Only send anchors from the leader
-	if !block.IsLeader {
-		return nil
-	}
-
 	switch x.Describe.NetworkType {
 	case config.Directory:
 		anchor := anchor.(*protocol.DirectoryAnchor)
@@ -237,6 +232,11 @@ func (x *Executor) finalizeBlock(block *Block) error {
 			x.logger.Info("Start major block", "major-index", anchor.MajorBlockIndex, "minor-index", block.Index)
 			block.State.OpenedMajorBlock = true
 			x.ExecutorOptions.MajorBlockScheduler.UpdateNextMajorBlockTime(anchor.MakeMajorBlockTime)
+		}
+
+		// Only send anchors from the leader
+		if !block.IsLeader {
+			return nil
 		}
 
 		// DN -> BVN
@@ -256,6 +256,11 @@ func (x *Executor) finalizeBlock(block *Block) error {
 		}
 
 	case config.BlockValidator:
+		// Only send anchors from the leader
+		if !block.IsLeader {
+			return nil
+		}
+
 		// BVN -> DN
 		err = x.sendBlockAnchor(block.Batch, anchor, sequenceNumber, protocol.Directory)
 		if err != nil {
@@ -425,7 +430,7 @@ func (x *Executor) prepareBlockAnchor(batch *database.Batch, anchor protocol.Tra
 	return &protocol.Envelope{Transaction: []*protocol.Transaction{txn}, Signatures: []protocol.Signature{initSig, keySig}}, nil
 }
 
-func (x *Executor) sendBlockAnchor(batch *database.Batch, anchor protocol.TransactionBody, sequenceNumber uint64, destPart string) error {
+func (x *Executor) sendBlockAnchor(batch *database.Batch, anchor protocol.AnchorBody, sequenceNumber uint64, destPart string) error {
 	destPartUrl := protocol.PartitionUrl(destPart)
 	env, err := x.prepareBlockAnchor(batch, anchor, sequenceNumber, destPartUrl)
 	if err != nil {
