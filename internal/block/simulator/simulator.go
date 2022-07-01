@@ -47,18 +47,13 @@ type Simulator struct {
 }
 
 func (s *Simulator) newLogger() log.Logger {
-	levels := s.LogLevels
-	if levels == "" {
-		levels = acctesting.DefaultLogLevels
-	}
-
 	if !acctesting.LogConsole {
-		return logging.NewTestLogger(s, "plain", levels, false)
+		return logging.NewTestLogger(s, "plain", s.LogLevels, false)
 	}
 
 	w, err := logging.NewConsoleWriter("plain")
 	require.NoError(s, err)
-	level, writer, err := logging.ParseLogLevel(levels, w)
+	level, writer, err := logging.ParseLogLevel(s.LogLevels, w)
 	require.NoError(s, err)
 	logger, err := logging.NewTendermintLogger(zerolog.New(writer), level, false)
 	require.NoError(s, err)
@@ -68,21 +63,21 @@ func (s *Simulator) newLogger() log.Logger {
 func New(t TB, bvnCount int) *Simulator {
 	t.Helper()
 	sim := new(Simulator)
-	sim.TB = t
-	sim.Setup(bvnCount)
+	sim.LogLevels = acctesting.DefaultLogLevels
+	sim.Setup(t, bvnCount)
 	return sim
 }
 
 func NewWithLogLevels(t TB, bvnCount int, logLevels config.LogLevel) *Simulator {
 	t.Helper()
 	sim := new(Simulator)
-	sim.TB = t
 	sim.LogLevels = logLevels.String()
-	sim.Setup(bvnCount)
+	sim.Setup(t, bvnCount)
 	return sim
 }
 
-func (sim *Simulator) Setup(bvnCount int) {
+func (sim *Simulator) Setup(t TB, bvnCount int) {
+	sim.TB = t
 	sim.Helper()
 
 	// Initialize the simulartor and network

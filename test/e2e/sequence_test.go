@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -17,7 +18,12 @@ func TestOutOfSequenceSynth(t *testing.T) {
 	var timestamp uint64
 
 	// Initialize
-	sim := simulator.New(t, 3)
+	sim := simulator.NewWithLogLevels(t, 3,
+		config.LogLevel{}.
+			Parse(acctesting.DefaultLogLevels).
+			SetModule("executor", "debug").
+			SetModule("synthetic", "debug"),
+	)
 	sim.InitFromGenesis()
 
 	alice := acctesting.GenerateKey("Alice")

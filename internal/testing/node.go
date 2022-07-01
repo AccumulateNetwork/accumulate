@@ -42,7 +42,6 @@ var DefaultLogLevels = config.LogLevel{}.
 	Parse(config.DefaultLogLevels).
 	// SetModule("accumulate", "debug").
 	SetModule("executor", "info").
-	// SetModule("governor", "debug").
 	// SetModule("synthetic", "debug").
 	// SetModule("storage", "debug").
 	// SetModule("database", "debug").
