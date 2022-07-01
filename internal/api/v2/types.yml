@@ -275,6 +275,10 @@ TxHistoryQuery:
   embeddings:
   - UrlQuery
   - QueryPagination
+  fields:
+  - name: Scratch
+    type: bool
+    optional: true
 
 QueryPagination:
   non-binary: true
@@ -326,6 +330,9 @@ QueryOptions:
       alternative: ExpandChains
     - name: Height
       type: uvarint
+      optional: true
+    - name: Scratch
+      type: bool
       optional: true
     - name: Prove
       type: bool
