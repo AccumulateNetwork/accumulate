@@ -3,12 +3,13 @@ package accumulated
 import (
 	"bytes"
 	"fmt"
-	tmjson "github.com/tendermint/tendermint/libs/json"
 	"io/ioutil"
 	"os"
 	"path"
 	"strings"
 	"time"
+
+	tmjson "github.com/tendermint/tendermint/libs/json"
 
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	"github.com/tendermint/tendermint/libs/log"
@@ -355,7 +356,7 @@ func loadOrCreateNodeKey(config *config.Config, key []byte) error {
 func LoadOrGenerateTmPrivKey(privFileName string) ed25519.PrivKey {
 	//attempt to load the priv validator key, create otherwise.
 	b, err := ioutil.ReadFile(privFileName)
-	privValKey := ed25519.PrivKey{}
+	var privValKey ed25519.PrivKey
 	if err != nil {
 		//do not overwrite a private validator key.
 		privValKey = ed25519.GenPrivKey()

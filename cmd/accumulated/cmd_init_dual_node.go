@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
-	"gitlab.com/accumulatenetwork/accumulate/internal/client"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -13,6 +11,9 @@ import (
 	"path"
 	"strconv"
 	"strings"
+
+	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
+	"gitlab.com/accumulatenetwork/accumulate/internal/client"
 
 	"github.com/spf13/cobra"
 	cfg "gitlab.com/accumulatenetwork/accumulate/config"
@@ -149,7 +150,10 @@ func resolvePublicIp() (string, error) {
 	ip := struct {
 		Query string
 	}{}
-	json.Unmarshal(body, &ip)
+	err = json.Unmarshal(body, &ip)
+	if err != nil {
+		return "", err
+	}
 	return ip.Query, nil
 }
 
