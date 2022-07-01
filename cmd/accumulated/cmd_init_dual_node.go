@@ -101,6 +101,9 @@ func initDualNode(cmd *cobra.Command, args []string) {
 	partition, _, err := findInDescribe("", partitionName, &c.Accumulate.Network)
 	checkf(err, "cannot find partition %s in network configuration", partitionName)
 
+	if partition.Type == cfg.NetworkTypeDirectory {
+		fatalf("network partition of second node configuration must be a block validator. Please specify {network-name}.{bvn-partition-id} first parameter to init dual")
+	}
 	bvnHost, err := findHealthyNodeOnPartition(partition)
 	checkf(err, "cannot find a healthy node on partition %s", partitionName)
 
