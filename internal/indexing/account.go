@@ -3,85 +3,40 @@ package indexing
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 type DirectoryIndexer struct {
-	batch      *database.Batch
-	account    *url.URL
-	indexValue database.Value[*DirectoryIndex]
+	*record.Counted[*url.URL]
 }
 
 func Directory(batch *database.Batch, account *url.URL) *DirectoryIndexer {
-	v := database.AccountIndex(batch, account, true, record.Struct[DirectoryIndex](), "Directory")
-	return &DirectoryIndexer{batch, account, v}
-}
-
-func loadMainIndex[T encoding.BinaryValue](x database.Value[T], notFound T) (T, error) {
-	md, err := x.Get()
-	switch {
-	case err == nil:
-		return md, nil
-	case errors.Is(err, storage.ErrNotFound):
-		return notFound, nil
-	default:
-		var zero T
-		return zero, errors.Wrap(errors.StatusUnknownError, err)
-	}
+	return &DirectoryIndexer{batch.Account(account).Directory()}
 }
 
 func (d *DirectoryIndexer) Count() (uint64, error) {
-	md, err := loadMainIndex(d.indexValue, new(DirectoryIndex))
-	if err != nil {
-		return 0, err
-	}
-	return md.Count, nil
+	v, err := d.Counted.Count()
+	return uint64(v), err
 }
 
 func (d *DirectoryIndexer) Get(i uint64) (*url.URL, error) {
-	u, err := database.AccountIndex(d.batch, d.account, false, record.Struct[DirectoryEntry](), "Directory", i).Get()
-	if err != nil {
-		return nil, err
-	}
-	return u.Account, nil
-}
-
-func (d *DirectoryIndexer) Put(u *url.URL) error {
-	md, err := loadMainIndex(d.indexValue, new(DirectoryIndex))
-	if err != nil {
-		return err
-	}
-
-	err = database.AccountIndex(d.batch, d.account, false, record.Struct[DirectoryEntry](), "Directory", md.Count).Put(&DirectoryEntry{Account: u})
-	if err != nil {
-		return err
-	}
-
-	md.Count++
-	return d.indexValue.Put(md)
+	return d.Counted.Get(int(i))
 }
 
 type DataIndexer struct {
-	batch      *database.Batch
-	account    *url.URL
-	indexValue database.Value[*DataIndex]
+	batch *database.Batch
+	*database.AccountData
 }
 
 func Data(batch *database.Batch, account *url.URL) *DataIndexer {
-	v := database.AccountIndex(batch, account, true, record.Struct[DataIndex](), "Data", "Metadata")
-	return &DataIndexer{batch, account, v}
+	return &DataIndexer{batch, batch.Account(account).Data()}
 }
 
 func (d *DataIndexer) Count() (uint64, error) {
-	md, err := loadMainIndex(d.indexValue, new(DataIndex))
-	if err != nil {
-		return 0, err
-	}
-	return md.Count, nil
+	v, err := d.AccountData.Entry().Count()
+	return uint64(v), err
 }
 
 // GetLatest returns the last entry.
@@ -139,38 +94,28 @@ func (d *DataIndexer) GetLatestEntry() (protocol.DataEntry, error) {
 
 // Entry returns the entry hash for the given index.
 func (d *DataIndexer) Entry(i uint64) ([]byte, error) {
-	v, err := database.AccountIndex(d.batch, d.account, false, record.Struct[DataEntry](), "Data", i).Get()
+	v, err := d.AccountData.Entry().Get(int(i))
 	if err != nil {
 		return nil, err
 	}
-	return v.Hash[:], nil
+	return v[:], nil
 }
 
 // Transaction returns the transaction hash for the given entry hash.
 func (d *DataIndexer) Transaction(entryHash []byte) ([]byte, error) {
-	v, err := database.AccountIndex(d.batch, d.account, false, record.Struct[DataEntry](), "Data", entryHash).Get()
+	v, err := d.AccountData.Transaction(*(*[32]byte)(entryHash)).Get()
 	if err != nil {
 		return nil, err
 	}
-	return v.Hash[:], nil
+	return v[:], nil
 }
 
 func (d *DataIndexer) Put(entryHash, txnHash []byte) error {
-	md, err := loadMainIndex(d.indexValue, new(DataIndex))
+	err := d.AccountData.Entry().Put(*(*[32]byte)(entryHash))
 	if err != nil {
-		return err
+		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
-	err = database.AccountIndex(d.batch, d.account, false, record.Struct[DataEntry](), "Data", md.Count).Put(&DataEntry{Hash: *(*[32]byte)(entryHash)})
-	if err != nil {
-		return err
-	}
-
-	err = database.AccountIndex(d.batch, d.account, false, record.Struct[DataEntry](), "Data", entryHash).Put(&DataEntry{Hash: *(*[32]byte)(txnHash)})
-	if err != nil {
-		return err
-	}
-
-	md.Count++
-	return d.indexValue.Put(md)
+	err = d.AccountData.Transaction(*(*[32]byte)(entryHash)).Put(*(*[32]byte)(txnHash))
+	return errors.Wrap(errors.StatusUnknownError, err)
 }

@@ -20,26 +20,32 @@ func (a *Account) Commit() error {
 		return nil
 	}
 
-	meta, err := a.Object().Get()
-	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
-	}
-	if meta.Type == protocol.ObjectTypeUnknown {
-		meta.Type = protocol.ObjectTypeAccount
-	}
-
-	for _, c := range a.chains {
-		if !c.IsDirty() {
+	// Ensure the synthetic anchors index is up to date
+	for anchor, set := range a.syntheticForAnchor {
+		if !set.IsDirty() {
 			continue
 		}
 
-		err = c.Commit()
+		err := a.SyntheticAnchors().Add(anchor)
 		if err != nil {
 			return errors.Wrap(errors.StatusUnknownError, err)
 		}
 	}
 
-	err = a.putBpt()
+	// Chains are not part of the model (yet) so they must be handled separately
+	for _, c := range a.chains2 {
+		if !c.IsDirty() {
+			continue
+		}
+
+		err := c.Commit()
+		if err != nil {
+			return errors.Wrap(errors.StatusUnknownError, err)
+		}
+	}
+
+	// If anything has changed, update the BPT entry
+	err := a.putBpt()
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknownError, err)
 	}
@@ -58,11 +64,6 @@ func (a *Account) Resolve(key record.Key) (record.Record, record.Key, error) {
 	}
 
 	return a.baseResolve(key)
-}
-
-// GetObject loads the object metadata.
-func (r *Account) GetObject() (*protocol.Object, error) {
-	return r.Object().Get()
 }
 
 // GetState loads the record state.
@@ -115,23 +116,9 @@ func (r *Account) RemovePending(txid *url.TxID) error {
 	return r.Pending().Remove(txid)
 }
 
-func (a *Account) ensureChain(name string, typ managed.ChainType) error {
-	meta, err := a.Object().Get()
-	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
-	}
-
-	err = meta.AddChain(name, typ)
-	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
-	}
-
-	return a.Object().Put(meta)
-}
-
 // Chain returns a chain manager for the given chain.
 func (r *Account) Chain(name string, typ protocol.ChainType) (*Chain, error) {
-	err := r.ensureChain(name, typ)
+	err := r.Chains().Add(&protocol.ChainMetadata{Name: name, Type: typ})
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
@@ -146,7 +133,7 @@ func (r *Account) IndexChain(name string, major bool) (*Chain, error) {
 func (r *Account) chain(name string) *managed.Chain {
 	name = strings.ToLower(name)
 	key := r.key.Append("Chain", name)
-	return getOrCreateMap(&r.chains, key, func() *managed.Chain {
+	return getOrCreateMap(&r.chains2, key, func() *managed.Chain {
 		return managed.NewChain(r.batch.logger.L, r.batch.recordStore, key, markPower, name, "account %[2]s chain %[4]s")
 	})
 }
