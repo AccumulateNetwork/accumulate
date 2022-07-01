@@ -79,6 +79,12 @@ func (e *txnDispatchError) Unwrap() error {
 	return e.status.Error
 }
 
+func (d *dispatcher) Reset() {
+	for key := range d.batches {
+		d.batches[key] = d.batches[key][:0]
+	}
+}
+
 // Send sends all of the batches asynchronously.
 func (d *dispatcher) Send(ctx context.Context) <-chan error {
 	errs := make(chan error)

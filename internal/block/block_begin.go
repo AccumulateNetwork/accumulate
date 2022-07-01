@@ -234,11 +234,6 @@ func (x *Executor) finalizeBlock(block *Block) error {
 			x.ExecutorOptions.MajorBlockScheduler.UpdateNextMajorBlockTime(anchor.MakeMajorBlockTime)
 		}
 
-		// Only send anchors from the leader
-		if !block.IsLeader {
-			return nil
-		}
-
 		// DN -> BVN
 		for _, bvn := range x.Describe.Network.GetBvnNames() {
 			err = x.sendBlockAnchor(block.Batch, anchor, sequenceNumber, bvn)
@@ -256,16 +251,17 @@ func (x *Executor) finalizeBlock(block *Block) error {
 		}
 
 	case config.BlockValidator:
-		// Only send anchors from the leader
-		if !block.IsLeader {
-			return nil
-		}
-
 		// BVN -> DN
 		err = x.sendBlockAnchor(block.Batch, anchor, sequenceNumber, protocol.Directory)
 		if err != nil {
 			return errors.Format(errors.StatusUnknownError, "send anchor for block %d: %w", block.Index, err)
 		}
+	}
+
+	// Only send anchors from the leader
+	if !block.IsLeader {
+		x.dispatcher.Reset()
+		return nil
 	}
 
 	errs := x.dispatcher.Send(context.Background())
@@ -351,11 +347,6 @@ func (x *Executor) sendSyntheticTransactions(block *Block) error {
 		}
 		if status.DestinationNetwork == nil {
 			return errors.Format(errors.StatusInternalError, "synthetic transaction destination is not set")
-		}
-
-		// Only send synthetic transactions from the leader
-		if !block.IsLeader {
-			continue
 		}
 
 		partSig := new(protocol.PartitionSignature)
