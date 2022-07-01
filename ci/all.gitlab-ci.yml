@@ -68,6 +68,7 @@ validate docker:
   - cd nodes
   - docker-compose up tools
   - docker-compose up -d
+  - docker-compose run --rm --entrypoint bash tools /scripts/ci/validate-init-network.sh
   script:
   - docker-compose run -e MNEMONIC="${MNEMONIC}" --rm --entrypoint bash tools /scripts/ci/validate.sh
   - docker-compose run -e MNEMONIC="${MNEMONIC}" --rm -e NODES_DIR="${NODES_DIR}" --entrypoint bash tools /scripts/ci/validate-admin.sh
