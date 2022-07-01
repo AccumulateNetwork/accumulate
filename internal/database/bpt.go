@@ -17,6 +17,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
+// putBpt adds an entry to the list of pending BPT updates.
 func (b *Batch) putBpt(key storage.Key, hash [32]byte) {
 	if b.done {
 		panic("attempted to use a commited or discarded batch")
@@ -28,6 +29,7 @@ func (b *Batch) putBpt(key storage.Key, hash [32]byte) {
 	b.bptEntries[key] = hash
 }
 
+// commitBpt commits pending BPT updates.
 func (b *Batch) commitBpt() error {
 	bpt := pmt.NewBPTManager(b.store)
 
@@ -44,6 +46,8 @@ func (b *Batch) commitBpt() error {
 	return nil
 }
 
+// BptRoot returns the root of the BPT. BptRoot panics if there are any
+// uncommitted BPT changes.
 func (b *Batch) BptRoot() []byte {
 	if len(b.bptEntries) > 0 {
 		panic("attempted to get BPT root with uncommitted changes")
@@ -107,22 +111,23 @@ func (b *Batch) SaveSnapshot(file io.WriteSeeker, network *config.Describe) erro
 		}
 		account := b.Account(u)
 
-		/*// Load the full state - preserve chains if the account is a partition account
-		state, err := account.state(true, partition.PrefixOf(a.GetUrl()))*/
-
-		// Load the full state - always preserve chains for now
-		state, err := account.state(true, true)
-		if err != nil {
-			return nil, err
-		}
-
-		hasher, err := state.Hasher()
+		// Check the hash
+		hasher, err := account.hashState()
 		if err != nil {
 			return nil, err
 		}
 
 		if !bytes.Equal(hash[:], hasher.MerkleHash()) {
-			return nil, fmt.Errorf("hash does not match for %v\n", state.Main.GetUrl())
+			return nil, fmt.Errorf("hash does not match for %v\n", u)
+		}
+
+		/*// Load the full state - preserve chains if the account is a partition account
+		state, err := account.state(true, partition.PrefixOf(a.GetUrl()))*/
+
+		// Load the full state - always preserve chains for now
+		state, err := account.loadState(true)
+		if err != nil {
+			return nil, err
 		}
 
 		/*if objectBucket(key) != synthetic {
@@ -187,12 +192,13 @@ func (b *Batch) RestoreSnapshot(file ioutil2.SectionReader) error {
 			return errors.Format(errors.StatusInternalError, "hash key %x does not match URL %v", key, state.Main.GetUrl())
 		}
 
-		err = account.restore(state)
+		err = account.restoreState(state)
 		if err != nil {
 			return err
 		}
 
-		hasher, err := state.Hasher()
+		// Check the hash
+		hasher, err := account.hashState()
 		if err != nil {
 			return err
 		}
