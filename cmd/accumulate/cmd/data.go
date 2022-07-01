@@ -18,10 +18,12 @@ import (
 
 var Keyname string
 var WriteState bool
+var Scratch bool
 
 func init() {
 	dataCmd.Flags().StringVar(&Keyname, "sign-data", "", "specify this to send random data as a signed & valid entry to data account")
 	dataCmd.PersistentFlags().BoolVar(&WriteState, "write-state", false, "Write to the account's state")
+	dataCmd.Flags().BoolVar(&Scratch, "scratch", false, "Write to the scratch chain")
 }
 
 var dataCmd = &cobra.Command{
@@ -95,8 +97,8 @@ func PrintDataAccountCreate() {
 }
 
 func PrintDataWrite() {
-	fmt.Println("accumulate data write [data account url] [signingKey] [extid_0 (optional)] ... [extid_n (optional)] [data] Write entry to your data account. Note: extid's and data needs to be a quoted string or hex")
-	fmt.Println("accumulate data write [data account url] [signingKey] --sign-data [keyname] [extid_0 (optional)] ... [extid_n (optional)] [data] Write entry to your data account. Note: extid's and data needs to be a quoted string or hex")
+	fmt.Println("accumulate data write [data account url] [signingKey] --scratch (optional) [extid_0 (optional)] ... [extid_n (optional)] [data] Write entry to your data account. Note: extid's and data needs to be a quoted string or hex")
+	fmt.Println("accumulate data write [data account url] [signingKey] --scratch (optional) --sign-data [keyname] [extid_0 (optional)] ... [extid_n (optional)] [data] Write entry to your data account. Note: extid's and data needs to be a quoted string or hex")
 
 }
 
@@ -197,10 +199,6 @@ func GetDataEntrySet(accountUrl string, args []string) (string, error) {
 }
 
 func CreateLiteDataAccount(origin string, args []string) (string, error) {
-	if flagAccount.Scratch {
-		return "", fmt.Errorf("lite scratch data accounts are not supported")
-	}
-
 	u, err := url.Parse(origin)
 	if err != nil {
 		return "", err
@@ -278,7 +276,7 @@ func CreateDataAccount(origin string, args []string) (string, error) {
 
 	cda := protocol.CreateDataAccount{}
 	cda.Url = accountUrl
-	cda.Scratch = flagAccount.Scratch
+
 	for _, authUrlStr := range Authorities {
 		authUrl, err := url.Parse(authUrlStr)
 		if err != nil {
@@ -306,6 +304,7 @@ func WriteData(accountUrl string, args []string) (string, error) {
 	}
 	wd := protocol.WriteData{}
 	wd.WriteToState = WriteState
+	wd.Scratch = Scratch
 
 	var kSigners []*signing.Builder
 	if Keyname != "" {

@@ -63,7 +63,7 @@ func (m *Executor) queryAccount(batch *database.Batch, account *database.Account
 	return resp, nil
 }
 
-func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]byte, encoding.BinaryMarshaler, error) {
+func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool, scratch bool) ([]byte, encoding.BinaryMarshaler, error) {
 	qv := u.QueryValues()
 
 	switch {
@@ -203,7 +203,6 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 		}
 
 	case "tx", "txn", "transaction", "signature":
-		chainName := chainNameFor(fragment[0])
 		switch len(fragment) {
 		case 1:
 			start, count, err := parseRange(qv)
@@ -211,7 +210,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 				return nil, nil, err
 			}
 
-			txns, perr := m.queryTxHistory(batch, u, uint64(start), uint64(start+count), protocol.MainChain)
+			txns, perr := m.queryTxHistory(batch, u, uint64(start), uint64(start+count), selectChain(scratch))
 			if perr != nil {
 				return nil, nil, perr
 			}
@@ -219,7 +218,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 			return []byte("tx-history"), txns, nil
 
 		case 2:
-			chain, err := batch.Account(u).ReadChain(chainName)
+			chain, err := batch.Account(u).ReadChain(chainNameFor(fragment[0], scratch))
 			if err != nil {
 				return nil, nil, fmt.Errorf("failed to load main chain of %q: %v", u, err)
 			}
@@ -389,12 +388,23 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 	return nil, nil, fmt.Errorf("invalid fragment")
 }
 
-func chainNameFor(entity string) string {
+func chainNameFor(entity string, scratch bool) string {
 	switch entity {
 	case "signature":
 		return protocol.SignatureChain
 	}
+	if scratch {
+		return protocol.ScratchChain
+	}
 	return protocol.MainChain
+}
+
+func selectChain(scratch bool) string {
+	if scratch {
+		return protocol.ScratchChain
+	} else {
+		return protocol.MainChain
+	}
 }
 
 func parseRange(qv url.Values) (start, count int64, err error) {
@@ -546,16 +556,13 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove, remote
 		return nil, errors.NotFound("transaction %X not found", txid[:4])
 	}
 
-	// If we have an account, lookup if it's a scratch chain. If so, filter out records that should have been pruned
-	account := txState.Transaction.Header.Principal
-	if account != nil && isScratchAccount(batch, account) {
-		shouldBePruned, err := m.shouldBePruned(batch, txid)
-		if err != nil {
-			return nil, err
-		}
-		if shouldBePruned {
-			return nil, errors.NotFound("transaction %X not found", txid[:4])
-		}
+	// Filter out scratch txs that should have been pruned
+	shouldBePruned, err := m.shouldBePruned(batch, txid, txState.Transaction.Body)
+	if err != nil {
+		return nil, err
+	}
+	if shouldBePruned {
+		return nil, errors.NotFound("transaction %X not found", txid[:4])
 	}
 
 	if signSynth {
@@ -765,8 +772,7 @@ func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove 
 		}
 	case *query.RequestTxHistory:
 		txh := q
-
-		thr, perr := m.queryTxHistory(batch, txh.Account, txh.Start, txh.Start+txh.Limit, protocol.MainChain)
+		thr, perr := m.queryTxHistory(batch, txh.Account, txh.Start, txh.Start+txh.Limit, selectChain(txh.Scratch))
 		if perr != nil {
 			return nil, nil, perr
 		}
@@ -782,7 +788,7 @@ func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove 
 
 		var err error
 		var obj encoding.BinaryMarshaler
-		k, obj, err = m.queryByUrl(batch, chr.Url, prove)
+		k, obj, err = m.queryByUrl(batch, chr.Url, prove, chr.Scratch)
 		if err != nil {
 			return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 		}
@@ -1145,23 +1151,11 @@ func (m *Executor) resolveAccountStateReceipt(batch *database.Batch, account *da
 	return receipt, nil
 }
 
-func isScratchAccount(batch *database.Batch, account *url.URL) bool {
-	acc := batch.Account(account)
-	state, err := acc.GetState()
-	if err != nil {
-		return false // Account may not exist, don't emit an error because waitForTxns will not get back the tx for this BVN and fail
-	}
+func (m *Executor) shouldBePruned(batch *database.Batch, txid []byte, txBody protocol.TransactionBody) (bool, error) {
 
-	switch v := state.(type) {
-	case *protocol.DataAccount:
-		return v.Scratch
-	case *protocol.TokenAccount:
-		return v.Scratch
+	if body, ok := txBody.(*protocol.WriteData); !ok || !body.Scratch {
+		return false, nil
 	}
-	return false
-}
-
-func (m *Executor) shouldBePruned(batch *database.Batch, txid []byte) (bool, error) {
 
 	// Load the tx chain
 	txChain, err := indexing.TransactionChain(batch, txid).Get()
@@ -1186,7 +1180,7 @@ func (m *Executor) shouldBePruned(batch *database.Batch, txid []byte) (bool, err
 			if err != nil {
 				return false, err
 			}
-			if indexEntry.BlockTime.Before(pruneTime) {
+			if !indexEntry.BlockTime.IsZero() && indexEntry.BlockTime.Before(pruneTime) {
 				return true, nil
 			}
 			return false, nil

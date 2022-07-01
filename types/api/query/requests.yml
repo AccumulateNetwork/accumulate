@@ -7,6 +7,9 @@ RequestByUrl:
     - name: Url
       type: url
       pointer: true
+    - name: Scratch
+      type: bool
+      optional: true
 
 # TODO Remove
 RequestByChainId:
@@ -32,6 +35,8 @@ RequestTxHistory:
       type: uint
     - name: Limit
       type: uint
+    - name: Scratch
+      type: bool
 
 RequestDirectory:
   union: { name: request, type: query, value: DirectoryUrl }
