@@ -121,7 +121,7 @@ success
 
 section "Update key page entry with same keyhash different delegate"
 wait-for cli-tx book create test.acme test-1-0 acc://test.acme/book2 test-2-0
-wait-for cli-tx credits ${LITE_ACME} test.acme/book2/1 1000
+wait-for cli-tx credits ${LITE_ACME} test.acme/book2/1 10000
 accumulate page get acc://test.acme/book2/1 -j | jq -re .data.keys[0].publicKeyHash
 keyhash=$(accumulate page get acc://test.acme/book2/1 -j | jq -re .data.keys[0].publicKeyHash)
 txHash=$(cli-tx tx execute test.acme/book2/1 test-2-0 '{"type": "updateKeyPage", "operation": [{ "type": "update", "oldEntry": {"keyHash": "'"$keyhash"'"}, "newEntry": {"delegate": "acc://test.acme/book","keyHash": "'"$keyhash"'"}}]}')
@@ -137,6 +137,29 @@ success
   die `want acc://test.acme/book got ${delegate}`
 fi
 
+section "Set KeyBook2 as authority for adi token account"
+keybook2=acc://test.acme/book2
+tokenTxHash=$(cli-tx account create token test.acme test-1-0 test.acme/acmetokens acc://ACME --authority acc://test.acme/book2)
+wait-for-tx $tokenTxHash
+wait-for cli-tx-sig tx sign  test.acme/book2 test-2-0 $tokenTxHash
+tokenAuthority=$(accumulate get test.acme/acmetokens -j | jq -re .data.keyBook)
+if [ "$keybook2" = "$tokenAuthority" ]; then
+success
+else
+die `want $keybook2 got $tokenAuthority`
+fi
+
+
+section "Set KeyBook2 as authority for adi data account"
+dataTxHash=$(cli-tx account create data test.acme test-1-0 test.acme/testdata1 --authority acc://test.acme/book2)
+wait-for-tx $dataTxHash
+wait-for cli-tx-sig tx sign  test.acme/book2 test-2-0 $dataTxHash
+dataAuthority=$(accumulate account get test.acme/testdata1 -j | jq -re .data.keyBook)
+if [ "$dataAuthority" = "$keybook2" ]; then
+success
+else
+die `want $keybook2 got $dataAuthority`
+fi
 
 section "Set threshold to 2 of 2"
 wait-for cli-tx tx execute test.acme/book/2 test-2-0 '{"type": "updateKeyPage", "operation": [{ "type": "setThreshold", "threshold": 2 }]}'
