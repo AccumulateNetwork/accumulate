@@ -177,6 +177,7 @@ type MultiResponse struct {
 type QueryOptions struct {
 	Expand    bool   `json:"expand,omitempty" form:"expand" query:"expand"`
 	Height    uint64 `json:"height,omitempty" form:"height" query:"height"`
+	Scratch   bool   `json:"scratch,omitempty" form:"scratch" query:"scratch"`
 	Prove     bool   `json:"prove,omitempty" form:"prove" query:"prove"`
 	extraData []byte
 }
@@ -261,6 +262,7 @@ type TransactionQueryResponse struct {
 type TxHistoryQuery struct {
 	UrlQuery
 	QueryPagination
+	Scratch   bool `json:"scratch,omitempty" form:"scratch" query:"scratch"`
 	extraData []byte
 }
 
@@ -586,6 +588,7 @@ func (v *DataEntrySetQuery) MarshalJSON() ([]byte, error) {
 		Expand       bool     `json:"expand,omitempty"`
 		ExpandChains bool     `json:"expandChains,omitempty"`
 		Height       uint64   `json:"height,omitempty"`
+		Scratch      bool     `json:"scratch,omitempty"`
 		Prove        bool     `json:"prove,omitempty"`
 	}{}
 	u.Url = v.UrlQuery.Url
@@ -594,6 +597,7 @@ func (v *DataEntrySetQuery) MarshalJSON() ([]byte, error) {
 	u.Expand = v.QueryOptions.Expand
 	u.ExpandChains = v.QueryOptions.Expand
 	u.Height = v.QueryOptions.Height
+	u.Scratch = v.QueryOptions.Scratch
 	u.Prove = v.QueryOptions.Prove
 	return json.Marshal(&u)
 }
@@ -628,6 +632,7 @@ func (v *DirectoryQuery) MarshalJSON() ([]byte, error) {
 		Expand       bool     `json:"expand,omitempty"`
 		ExpandChains bool     `json:"expandChains,omitempty"`
 		Height       uint64   `json:"height,omitempty"`
+		Scratch      bool     `json:"scratch,omitempty"`
 		Prove        bool     `json:"prove,omitempty"`
 	}{}
 	u.Url = v.UrlQuery.Url
@@ -636,6 +641,7 @@ func (v *DirectoryQuery) MarshalJSON() ([]byte, error) {
 	u.Expand = v.QueryOptions.Expand
 	u.ExpandChains = v.QueryOptions.Expand
 	u.Height = v.QueryOptions.Height
+	u.Scratch = v.QueryOptions.Scratch
 	u.Prove = v.QueryOptions.Prove
 	return json.Marshal(&u)
 }
@@ -646,12 +652,14 @@ func (v *GeneralQuery) MarshalJSON() ([]byte, error) {
 		Expand       bool     `json:"expand,omitempty"`
 		ExpandChains bool     `json:"expandChains,omitempty"`
 		Height       uint64   `json:"height,omitempty"`
+		Scratch      bool     `json:"scratch,omitempty"`
 		Prove        bool     `json:"prove,omitempty"`
 	}{}
 	u.Url = v.UrlQuery.Url
 	u.Expand = v.QueryOptions.Expand
 	u.ExpandChains = v.QueryOptions.Expand
 	u.Height = v.QueryOptions.Height
+	u.Scratch = v.QueryOptions.Scratch
 	u.Prove = v.QueryOptions.Prove
 	return json.Marshal(&u)
 }
@@ -797,11 +805,13 @@ func (v *QueryOptions) MarshalJSON() ([]byte, error) {
 		Expand       bool   `json:"expand,omitempty"`
 		ExpandChains bool   `json:"expandChains,omitempty"`
 		Height       uint64 `json:"height,omitempty"`
+		Scratch      bool   `json:"scratch,omitempty"`
 		Prove        bool   `json:"prove,omitempty"`
 	}{}
 	u.Expand = v.Expand
 	u.ExpandChains = v.Expand
 	u.Height = v.Height
+	u.Scratch = v.Scratch
 	u.Prove = v.Prove
 	return json.Marshal(&u)
 }
@@ -906,13 +916,15 @@ func (v *TransactionQueryResponse) MarshalJSON() ([]byte, error) {
 
 func (v *TxHistoryQuery) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Url   *url.URL `json:"url,omitempty"`
-		Start uint64   `json:"start,omitempty"`
-		Count uint64   `json:"count,omitempty"`
+		Url     *url.URL `json:"url,omitempty"`
+		Start   uint64   `json:"start,omitempty"`
+		Count   uint64   `json:"count,omitempty"`
+		Scratch bool     `json:"scratch,omitempty"`
 	}{}
 	u.Url = v.UrlQuery.Url
 	u.Start = v.QueryPagination.Start
 	u.Count = v.QueryPagination.Count
+	u.Scratch = v.Scratch
 	return json.Marshal(&u)
 }
 
@@ -976,6 +988,7 @@ func (v *TxnQuery) MarshalJSON() ([]byte, error) {
 		Expand        bool        `json:"expand,omitempty"`
 		ExpandChains  bool        `json:"expandChains,omitempty"`
 		Height        uint64      `json:"height,omitempty"`
+		Scratch       bool        `json:"scratch,omitempty"`
 		Prove         bool        `json:"prove,omitempty"`
 		Txid          *string     `json:"txid,omitempty"`
 		Wait          interface{} `json:"wait,omitempty"`
@@ -984,6 +997,7 @@ func (v *TxnQuery) MarshalJSON() ([]byte, error) {
 	u.Expand = v.QueryOptions.Expand
 	u.ExpandChains = v.QueryOptions.Expand
 	u.Height = v.QueryOptions.Height
+	u.Scratch = v.QueryOptions.Scratch
 	u.Prove = v.QueryOptions.Prove
 	u.Txid = encoding.BytesToJSON(v.Txid)
 	u.Wait = encoding.DurationToJSON(v.Wait)
@@ -1134,6 +1148,7 @@ func (v *DataEntrySetQuery) UnmarshalJSON(data []byte) error {
 		Expand       bool     `json:"expand,omitempty"`
 		ExpandChains bool     `json:"expandChains,omitempty"`
 		Height       uint64   `json:"height,omitempty"`
+		Scratch      bool     `json:"scratch,omitempty"`
 		Prove        bool     `json:"prove,omitempty"`
 	}{}
 	u.Url = v.UrlQuery.Url
@@ -1142,6 +1157,7 @@ func (v *DataEntrySetQuery) UnmarshalJSON(data []byte) error {
 	u.Expand = v.QueryOptions.Expand
 	u.ExpandChains = v.QueryOptions.Expand
 	u.Height = v.QueryOptions.Height
+	u.Scratch = v.QueryOptions.Scratch
 	u.Prove = v.QueryOptions.Prove
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -1155,6 +1171,7 @@ func (v *DataEntrySetQuery) UnmarshalJSON(data []byte) error {
 		v.QueryOptions.Expand = u.ExpandChains
 	}
 	v.QueryOptions.Height = u.Height
+	v.QueryOptions.Scratch = u.Scratch
 	v.QueryOptions.Prove = u.Prove
 	return nil
 }
@@ -1210,6 +1227,7 @@ func (v *DirectoryQuery) UnmarshalJSON(data []byte) error {
 		Expand       bool     `json:"expand,omitempty"`
 		ExpandChains bool     `json:"expandChains,omitempty"`
 		Height       uint64   `json:"height,omitempty"`
+		Scratch      bool     `json:"scratch,omitempty"`
 		Prove        bool     `json:"prove,omitempty"`
 	}{}
 	u.Url = v.UrlQuery.Url
@@ -1218,6 +1236,7 @@ func (v *DirectoryQuery) UnmarshalJSON(data []byte) error {
 	u.Expand = v.QueryOptions.Expand
 	u.ExpandChains = v.QueryOptions.Expand
 	u.Height = v.QueryOptions.Height
+	u.Scratch = v.QueryOptions.Scratch
 	u.Prove = v.QueryOptions.Prove
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -1231,6 +1250,7 @@ func (v *DirectoryQuery) UnmarshalJSON(data []byte) error {
 		v.QueryOptions.Expand = u.ExpandChains
 	}
 	v.QueryOptions.Height = u.Height
+	v.QueryOptions.Scratch = u.Scratch
 	v.QueryOptions.Prove = u.Prove
 	return nil
 }
@@ -1241,12 +1261,14 @@ func (v *GeneralQuery) UnmarshalJSON(data []byte) error {
 		Expand       bool     `json:"expand,omitempty"`
 		ExpandChains bool     `json:"expandChains,omitempty"`
 		Height       uint64   `json:"height,omitempty"`
+		Scratch      bool     `json:"scratch,omitempty"`
 		Prove        bool     `json:"prove,omitempty"`
 	}{}
 	u.Url = v.UrlQuery.Url
 	u.Expand = v.QueryOptions.Expand
 	u.ExpandChains = v.QueryOptions.Expand
 	u.Height = v.QueryOptions.Height
+	u.Scratch = v.QueryOptions.Scratch
 	u.Prove = v.QueryOptions.Prove
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -1258,6 +1280,7 @@ func (v *GeneralQuery) UnmarshalJSON(data []byte) error {
 		v.QueryOptions.Expand = u.ExpandChains
 	}
 	v.QueryOptions.Height = u.Height
+	v.QueryOptions.Scratch = u.Scratch
 	v.QueryOptions.Prove = u.Prove
 	return nil
 }
@@ -1511,11 +1534,13 @@ func (v *QueryOptions) UnmarshalJSON(data []byte) error {
 		Expand       bool   `json:"expand,omitempty"`
 		ExpandChains bool   `json:"expandChains,omitempty"`
 		Height       uint64 `json:"height,omitempty"`
+		Scratch      bool   `json:"scratch,omitempty"`
 		Prove        bool   `json:"prove,omitempty"`
 	}{}
 	u.Expand = v.Expand
 	u.ExpandChains = v.Expand
 	u.Height = v.Height
+	u.Scratch = v.Scratch
 	u.Prove = v.Prove
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -1526,6 +1551,7 @@ func (v *QueryOptions) UnmarshalJSON(data []byte) error {
 		v.Expand = u.ExpandChains
 	}
 	v.Height = u.Height
+	v.Scratch = u.Scratch
 	v.Prove = u.Prove
 	return nil
 }
@@ -1717,19 +1743,22 @@ func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 
 func (v *TxHistoryQuery) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Url   *url.URL `json:"url,omitempty"`
-		Start uint64   `json:"start,omitempty"`
-		Count uint64   `json:"count,omitempty"`
+		Url     *url.URL `json:"url,omitempty"`
+		Start   uint64   `json:"start,omitempty"`
+		Count   uint64   `json:"count,omitempty"`
+		Scratch bool     `json:"scratch,omitempty"`
 	}{}
 	u.Url = v.UrlQuery.Url
 	u.Start = v.QueryPagination.Start
 	u.Count = v.QueryPagination.Count
+	u.Scratch = v.Scratch
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.UrlQuery.Url = u.Url
 	v.QueryPagination.Start = u.Start
 	v.QueryPagination.Count = u.Count
+	v.Scratch = u.Scratch
 	return nil
 }
 
@@ -1864,6 +1893,7 @@ func (v *TxnQuery) UnmarshalJSON(data []byte) error {
 		Expand        bool        `json:"expand,omitempty"`
 		ExpandChains  bool        `json:"expandChains,omitempty"`
 		Height        uint64      `json:"height,omitempty"`
+		Scratch       bool        `json:"scratch,omitempty"`
 		Prove         bool        `json:"prove,omitempty"`
 		Txid          *string     `json:"txid,omitempty"`
 		Wait          interface{} `json:"wait,omitempty"`
@@ -1872,6 +1902,7 @@ func (v *TxnQuery) UnmarshalJSON(data []byte) error {
 	u.Expand = v.QueryOptions.Expand
 	u.ExpandChains = v.QueryOptions.Expand
 	u.Height = v.QueryOptions.Height
+	u.Scratch = v.QueryOptions.Scratch
 	u.Prove = v.QueryOptions.Prove
 	u.Txid = encoding.BytesToJSON(v.Txid)
 	u.Wait = encoding.DurationToJSON(v.Wait)
@@ -1885,6 +1916,7 @@ func (v *TxnQuery) UnmarshalJSON(data []byte) error {
 		v.QueryOptions.Expand = u.ExpandChains
 	}
 	v.QueryOptions.Height = u.Height
+	v.QueryOptions.Scratch = u.Scratch
 	v.QueryOptions.Prove = u.Prove
 	if x, err := encoding.BytesFromJSON(u.Txid); err != nil {
 		return fmt.Errorf("error decoding Txid: %w", err)

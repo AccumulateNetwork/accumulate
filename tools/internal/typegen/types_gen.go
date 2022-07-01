@@ -20,15 +20,16 @@ type ChainRecord struct {
 }
 
 type EntityRecord struct {
-	Parent       *EntityRecord `json:"parent,omitempty" form:"parent" query:"parent" validate:"required"`
-	OmitAccessor bool          `json:"omitAccessor,omitempty" form:"omitAccessor" query:"omitAccessor" validate:"required"`
-	Name         string        `json:"name,omitempty" form:"name" query:"name" validate:"required"`
-	Fields       []*Field      `json:"fields,omitempty" form:"fields" query:"fields" validate:"required"`
-	CustomCommit bool          `json:"customCommit,omitempty" form:"customCommit" query:"customCommit" validate:"required"`
-	Parameters   []*Field      `json:"parameters,omitempty" form:"parameters" query:"parameters" validate:"required"`
-	Root         bool          `json:"root,omitempty" form:"root" query:"root" validate:"required"`
-	Attributes   []Record      `json:"attributes,omitempty" form:"attributes" query:"attributes" validate:"required"`
-	extraData    []byte
+	Parent        *EntityRecord `json:"parent,omitempty" form:"parent" query:"parent" validate:"required"`
+	OmitAccessor  bool          `json:"omitAccessor,omitempty" form:"omitAccessor" query:"omitAccessor" validate:"required"`
+	Name          string        `json:"name,omitempty" form:"name" query:"name" validate:"required"`
+	Fields        []*Field      `json:"fields,omitempty" form:"fields" query:"fields" validate:"required"`
+	CustomCommit  bool          `json:"customCommit,omitempty" form:"customCommit" query:"customCommit" validate:"required"`
+	CustomResolve bool          `json:"customResolve,omitempty" form:"customResolve" query:"customResolve" validate:"required"`
+	Parameters    []*Field      `json:"parameters,omitempty" form:"parameters" query:"parameters" validate:"required"`
+	Root          bool          `json:"root,omitempty" form:"root" query:"root" validate:"required"`
+	Attributes    []Record      `json:"attributes,omitempty" form:"attributes" query:"attributes" validate:"required"`
+	extraData     []byte
 }
 
 type IndexRecord struct {
@@ -104,15 +105,16 @@ func (v *ChainRecord) MarshalJSON() ([]byte, error) {
 
 func (v *EntityRecord) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type         RecordType                             `json:"type"`
-		Parent       *EntityRecord                          `json:"parent,omitempty"`
-		OmitAccessor bool                                   `json:"omitAccessor,omitempty"`
-		Name         string                                 `json:"name,omitempty"`
-		Fields       encoding.JsonList[*Field]              `json:"fields,omitempty"`
-		CustomCommit bool                                   `json:"customCommit,omitempty"`
-		Parameters   encoding.JsonList[*Field]              `json:"parameters,omitempty"`
-		Root         bool                                   `json:"root,omitempty"`
-		Attributes   encoding.JsonUnmarshalListWith[Record] `json:"attributes,omitempty"`
+		Type          RecordType                             `json:"type"`
+		Parent        *EntityRecord                          `json:"parent,omitempty"`
+		OmitAccessor  bool                                   `json:"omitAccessor,omitempty"`
+		Name          string                                 `json:"name,omitempty"`
+		Fields        encoding.JsonList[*Field]              `json:"fields,omitempty"`
+		CustomCommit  bool                                   `json:"customCommit,omitempty"`
+		CustomResolve bool                                   `json:"customResolve,omitempty"`
+		Parameters    encoding.JsonList[*Field]              `json:"parameters,omitempty"`
+		Root          bool                                   `json:"root,omitempty"`
+		Attributes    encoding.JsonUnmarshalListWith[Record] `json:"attributes,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Parent = v.Parent
@@ -120,6 +122,7 @@ func (v *EntityRecord) MarshalJSON() ([]byte, error) {
 	u.Name = v.Name
 	u.Fields = v.Fields
 	u.CustomCommit = v.CustomCommit
+	u.CustomResolve = v.CustomResolve
 	u.Parameters = v.Parameters
 	u.Root = v.Root
 	u.Attributes = encoding.JsonUnmarshalListWith[Record]{Value: v.Attributes, Func: UnmarshalRecordJSON}
@@ -242,15 +245,16 @@ func (v *ChainRecord) UnmarshalJSON(data []byte) error {
 
 func (v *EntityRecord) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type         RecordType                             `json:"type"`
-		Parent       *EntityRecord                          `json:"parent,omitempty"`
-		OmitAccessor bool                                   `json:"omitAccessor,omitempty"`
-		Name         string                                 `json:"name,omitempty"`
-		Fields       encoding.JsonList[*Field]              `json:"fields,omitempty"`
-		CustomCommit bool                                   `json:"customCommit,omitempty"`
-		Parameters   encoding.JsonList[*Field]              `json:"parameters,omitempty"`
-		Root         bool                                   `json:"root,omitempty"`
-		Attributes   encoding.JsonUnmarshalListWith[Record] `json:"attributes,omitempty"`
+		Type          RecordType                             `json:"type"`
+		Parent        *EntityRecord                          `json:"parent,omitempty"`
+		OmitAccessor  bool                                   `json:"omitAccessor,omitempty"`
+		Name          string                                 `json:"name,omitempty"`
+		Fields        encoding.JsonList[*Field]              `json:"fields,omitempty"`
+		CustomCommit  bool                                   `json:"customCommit,omitempty"`
+		CustomResolve bool                                   `json:"customResolve,omitempty"`
+		Parameters    encoding.JsonList[*Field]              `json:"parameters,omitempty"`
+		Root          bool                                   `json:"root,omitempty"`
+		Attributes    encoding.JsonUnmarshalListWith[Record] `json:"attributes,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Parent = v.Parent
@@ -258,6 +262,7 @@ func (v *EntityRecord) UnmarshalJSON(data []byte) error {
 	u.Name = v.Name
 	u.Fields = v.Fields
 	u.CustomCommit = v.CustomCommit
+	u.CustomResolve = v.CustomResolve
 	u.Parameters = v.Parameters
 	u.Root = v.Root
 	u.Attributes = encoding.JsonUnmarshalListWith[Record]{Value: v.Attributes, Func: UnmarshalRecordJSON}
@@ -272,6 +277,7 @@ func (v *EntityRecord) UnmarshalJSON(data []byte) error {
 	v.Name = u.Name
 	v.Fields = u.Fields
 	v.CustomCommit = u.CustomCommit
+	v.CustomResolve = u.CustomResolve
 	v.Parameters = u.Parameters
 	v.Root = u.Root
 	v.Attributes = make([]Record, len(u.Attributes.Value))

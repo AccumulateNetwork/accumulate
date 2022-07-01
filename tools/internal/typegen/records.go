@@ -44,11 +44,17 @@ func (r *StateRecord) GetParent() *EntityRecord  { return r.Parent }
 func (r *IndexRecord) GetParent() *EntityRecord  { return r.Parent }
 func (r *OtherRecord) GetParent() *EntityRecord  { return r.Parent }
 
-func (r *EntityRecord) FullName() string { return recordFullName(r) }
-func (r *ChainRecord) FullName() string  { return recordFullName(r) }
-func (r *StateRecord) FullName() string  { return recordFullName(r) }
-func (r *IndexRecord) FullName() string  { return recordFullName(r) }
-func (r *OtherRecord) FullName() string  { return recordFullName(r) }
+func (r *EntityRecord) FullName() string {
+	if r.Root {
+		return r.Name
+	}
+	return recordFullName(r)
+}
+
+func (r *ChainRecord) FullName() string { return recordFullName(r) }
+func (r *StateRecord) FullName() string { return recordFullName(r) }
+func (r *IndexRecord) FullName() string { return recordFullName(r) }
+func (r *OtherRecord) FullName() string { return recordFullName(r) }
 
 func (r *StateRecord) Wrapped() bool { return r.DataType.Code != TypeCodeUnknown }
 func (r *IndexRecord) Wrapped() bool { return r.DataType.Code != TypeCodeUnknown }
@@ -69,7 +75,10 @@ func (r *StateRecord) GetDataType() FieldType { return r.DataType }
 func (r *IndexRecord) GetDataType() FieldType { return r.DataType }
 
 func recordFullName(r Record) string {
-	if r.GetParent() == nil || r.GetParent().Parent == nil {
+	if entity, ok := r.(*EntityRecord); ok && entity.Root {
+		return ""
+	}
+	if r.GetParent() == nil {
 		return r.GetName()
 	}
 	return recordFullName(r.GetParent()) + r.GetName()

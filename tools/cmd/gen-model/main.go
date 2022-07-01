@@ -53,7 +53,9 @@ func run(_ *cobra.Command, args []string) {
 	data, err = json.Marshal(raw)
 	check(err)
 	var records []*typegen.EntityRecord
-	check(json.Unmarshal(data, &records))
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	check(dec.Decode(&records))
 	for _, r := range records {
 		containerize(r.Attributes, r)
 	}

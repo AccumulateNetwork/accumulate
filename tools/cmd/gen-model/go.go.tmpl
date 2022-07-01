@@ -114,7 +114,7 @@ func (c *{{$c.FullName}}) {{.Name}}({{range .GetParameters}}{{lower .Name}} {{pa
 		v.parent = c
 		return v
 		{{- else if .Type.IsChain}}
-		return managed.NewChain(c.logger.L, c.store, {{template "key" .}}, markPower, {{/*managed.ChainType{{title .ChainType}}, {{template "chainNameFormat" .}},*/}} {{template "valueLabelFormat" .}})
+		return managed.NewChain(c.logger.L, c.store, {{template "key" .}}, markPower, {{/*managed.ChainType{{title .ChainType}},*/}} {{template "chainNameFormat" .}}, {{template "valueLabelFormat" .}})
 		{{- else if .Type.IsOther}}
 		return new{{.DataType}}(c, c.logger.L, c.store, {{template "key" .}}, {{template "chainNameFormat" .}}, {{template "valueLabelFormat" .}})
 		{{- else if .Counted}}
@@ -127,7 +127,7 @@ func (c *{{$c.FullName}}) {{.Name}}({{range .GetParameters}}{{lower .Name}} {{pa
 {{end}}
 {{end}}
 
-func (c *{{.FullName}}) Resolve(key record.Key) (record.Record, record.Key, error) {
+func (c *{{.FullName}}) {{if .CustomResolve}}base{{end}}Resolve(key record.Key) (record.Record, record.Key, error) {
 	switch key[0] {
 	{{- range .Attributes}}
 	case "{{.Name}}":
@@ -277,9 +277,9 @@ func getOrCreateField[T any](ptr **T, create func() *T) *T {
 	return *ptr
 }
 
-func getOrCreateMap[T any](ptr *map[storage.Key]*T, key record.Key, create func() *T) *T {
+func getOrCreateMap[T any](ptr *map[storage.Key]T, key record.Key, create func() T) T {
 	if *ptr == nil {
-		*ptr = map[storage.Key]*T{}
+		*ptr = map[storage.Key]T{}
 	}
 
 	k := key.Hash()

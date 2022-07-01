@@ -438,8 +438,10 @@ func (x *Executor) recordSuccessfulTransaction(batch *database.Batch, state *cha
 		return nil, nil, fmt.Errorf("store pending list: %w", err)
 	}
 
-	// Add the transaction to the principal's main chain
-	err = state.ChainUpdates.AddChainEntry(batch, delivery.Transaction.Header.Principal, protocol.MainChain, protocol.ChainTypeTransaction, delivery.Transaction.GetHash(), 0, 0)
+	// Add the transaction to the principal's main or scratch chain
+	targetChain := selectTargetChain(delivery.Transaction.Body)
+
+	err = state.ChainUpdates.AddChainEntry(batch, delivery.Transaction.Header.Principal, targetChain, protocol.ChainTypeTransaction, delivery.Transaction.GetHash(), 0, 0)
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
 		return nil, nil, fmt.Errorf("add to chain: %v", err)
 	}
@@ -461,6 +463,15 @@ func (x *Executor) recordSuccessfulTransaction(batch *database.Batch, state *cha
 	}
 
 	return status, state, nil
+}
+
+func selectTargetChain(body protocol.TransactionBody) string {
+	if writeData, ok := body.(*protocol.WriteData); ok {
+		if writeData.Scratch {
+			return protocol.ScratchChain
+		}
+	}
+	return protocol.MainChain
 }
 
 func (x *Executor) recordFailedTransaction(batch *database.Batch, delivery *chain.Delivery, failure error) (*protocol.TransactionStatus, *chain.ProcessTransactionState, error) {

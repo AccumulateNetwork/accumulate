@@ -81,6 +81,7 @@ accumulate page get test.acme/book/2 1> /dev/null || die "Cannot find page test.
 accumulate page get test.acme/book/3 1> /dev/null || die "Cannot find page test.acme/book/3"
 success
 
+
 section "Add credits to the ADI's key page 2"
 wait-for cli-tx credits ${LITE_ACME} test.acme/book/2 1000
 BALANCE=$(accumulate -j page get test.acme/book/2 | jq -r .data.creditBalance)
@@ -92,6 +93,9 @@ wait-for cli-tx page lock test.acme/book/2 test-2-0 && die "Key page 2 locked it
 section "Lock key page 2 using page 1"
 wait-for cli-tx page lock test.acme/book/2 test-1-0
 success
+
+
+
 
 section "Attempting to update key page 3 using page 2 fails"
 cli-tx page key add test.acme/book/3 test-2-0 1 test-3-1 && die "Executed disallowed operation" || success
@@ -115,6 +119,48 @@ wait-for cli-tx page key add test.acme/book/2 test-2-0 1 test-2-2
 wait-for cli-tx page key add test.acme/book/2 test-2-0 1 test-2-3-orig
 success
 
+section "Update key page entry with same keyhash different delegate"
+wait-for cli-tx book create test.acme test-1-0 acc://test.acme/book2 test-2-0
+wait-for cli-tx credits ${LITE_ACME} test.acme/book2/1 10000
+accumulate page get acc://test.acme/book2/1 -j | jq -re .data.keys[0].publicKeyHash
+keyhash=$(accumulate page get acc://test.acme/book2/1 -j | jq -re .data.keys[0].publicKeyHash)
+txHash=$(cli-tx tx execute test.acme/book2/1 test-2-0 '{"type": "updateKeyPage", "operation": [{ "type": "update", "oldEntry": {"keyHash": "'"$keyhash"'"}, "newEntry": {"delegate": "acc://test.acme/book","keyHash": "'"$keyhash"'"}}]}')
+wait-for-tx $txHash
+echo $txHash
+wait-for cli-tx-sig tx sign  test.acme/book test-1-0 $txHash
+accumulate page get acc://test.acme/book2/1
+delegate=$(accumulate page get acc://test.acme/book2/1 -j | jq -r .data.keys[0].delegate )
+target=acc://test.acme/book
+if [ "$target" = "$delegate" ]; then
+success
+  else 
+  die `want acc://test.acme/book got ${delegate}`
+fi
+
+section "Set KeyBook2 as authority for adi token account"
+keybook2=acc://test.acme/book2
+tokenTxHash=$(cli-tx account create token test.acme test-1-0 test.acme/acmetokens acc://ACME --authority acc://test.acme/book2)
+wait-for-tx $tokenTxHash
+wait-for cli-tx-sig tx sign  test.acme/book2 test-2-0 $tokenTxHash
+tokenAuthority=$(accumulate get test.acme/acmetokens -j | jq -re .data.keyBook)
+if [ "$keybook2" = "$tokenAuthority" ]; then
+success
+else
+die `want $keybook2 got $tokenAuthority`
+fi
+
+
+section "Set KeyBook2 as authority for adi data account"
+dataTxHash=$(cli-tx account create data test.acme test-1-0 test.acme/testdata1 --authority acc://test.acme/book2)
+wait-for-tx $dataTxHash
+wait-for cli-tx-sig tx sign  test.acme/book2 test-2-0 $dataTxHash
+dataAuthority=$(accumulate account get test.acme/testdata1 -j | jq -re .data.keyBook)
+if [ "$dataAuthority" = "$keybook2" ]; then
+success
+else
+die `want $keybook2 got $dataAuthority`
+fi
+
 section "Set threshold to 2 of 2"
 wait-for cli-tx tx execute test.acme/book/2 test-2-0 '{"type": "updateKeyPage", "operation": [{ "type": "setThreshold", "threshold": 2 }]}'
 THRESHOLD=$(accumulate -j get test.acme/book/2 | jq -re .data.threshold)
@@ -127,9 +173,8 @@ accumulate -j get key test.acme test-2-3-new | jq -C --indent 0 || die "Could no
 success
 
 section "Create an ADI Token Account"
-wait-for cli-tx account create token --scratch test.acme test-1-0 0 test.acme/tokens ACME test.acme/book
+wait-for cli-tx account create token test.acme test-1-0 0 test.acme/tokens ACME test.acme/book
 accumulate account get test.acme/tokens 1> /dev/null || die "Cannot find test.acme/tokens"
-accumulate -j account get test.acme/tokens | jq -re .data.scratch 1> /dev/null || die "test.acme/tokens is not a scratch account"
 success
 
 section "Send tokens from the lite token account to the ADI token account"
@@ -248,13 +293,12 @@ accumulate -j get "${ACCOUNT_ID}#txn/0" | jq -re .status.result.accountID &> /de
 success
 
 section "Create ADI Data Account"
-wait-for cli-tx account create data --scratch test.acme test-1-0 test.acme/data
+wait-for cli-tx account create data test.acme test-1-0 test.acme/data
 accumulate account get test.acme/data 1> /dev/null || die "Cannot find test.acme/data"
-accumulate -j account get test.acme/data | jq -re .data.scratch 1> /dev/null || die "test.acme/data is not a scratch account"
 success
 
 section "Write data to ADI Data Account"
-JSON=$(accumulate -j data write test.acme/data test-1-0 foo bar)
+JSON=$(accumulate -j data write --scratch test.acme/data test-1-0 foo bar)
 TXID=$(echo $JSON | jq -re .transactionHash)
 echo $JSON | jq -C --indent 0
 wait-for-tx $TXID
@@ -272,13 +316,12 @@ BALANCE=$(accumulate -j page get test.acme/sub1/book/1 | jq -r .data.creditBalan
 [ "$BALANCE" -ge 60000 ] && success || die "test.acme/sub1/book/1 should have 60000 credits but has ${BALANCE}"
 
 section "Create Data Account for sub ADI"
-wait-for cli-tx account create data --scratch test.acme/sub1 test-2-0 test.acme/sub1/data
+wait-for cli-tx account create data test.acme/sub1 test-2-0 test.acme/sub1/data
 accumulate account get test.acme/sub1/data 1> /dev/null || die "Cannot find test.acme/sub1/data"
-accumulate -j account get test.acme/sub1/data | jq -re .data.scratch 1> /dev/null || die "test.acme/sub1/data is not a scratch account"
 success
 
 section "Write data to sub ADI Data Account"
-JSON=$(accumulate -j data write test.acme/sub1/data test-2-0 "foo" "bar")
+JSON=$(accumulate -j data write --scratch test.acme/sub1/data test-2-0 "foo" "bar")
 TXID=$(echo $JSON | jq -re .transactionHash)
 echo $JSON | jq -C --indent 0
 wait-for-tx $TXID
