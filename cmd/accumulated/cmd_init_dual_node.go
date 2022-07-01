@@ -12,11 +12,10 @@ import (
 	"strconv"
 	"strings"
 
-	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
-	"gitlab.com/accumulatenetwork/accumulate/internal/client"
-
 	"github.com/spf13/cobra"
+	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 	cfg "gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/client"
 )
 
 var cmdInitDualNode = &cobra.Command{

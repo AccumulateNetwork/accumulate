@@ -9,9 +9,8 @@ import (
 	"strings"
 	"time"
 
-	tmjson "github.com/tendermint/tendermint/libs/json"
-
 	"github.com/tendermint/tendermint/crypto/ed25519"
+	tmjson "github.com/tendermint/tendermint/libs/json"
 	"github.com/tendermint/tendermint/libs/log"
 	tmos "github.com/tendermint/tendermint/libs/os"
 	"github.com/tendermint/tendermint/privval"
