@@ -921,6 +921,8 @@ func SignatureTypeByName(name string) (SignatureType, bool) {
 		return SignatureTypeReceipt, true
 	case "partition":
 		return SignatureTypePartition, true
+	case "synthetic":
+		return SignatureTypePartition, true
 	case "set":
 		return SignatureTypeSet, true
 	case "remote":

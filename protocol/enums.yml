@@ -35,6 +35,7 @@ SignatureType:
     description: represents a Merkle tree receipt
   Partition:
     value: 5
+    aliases: [ synthetic ]
     description: is used when sending synthetic and system transactions
   Set:
     value: 6
