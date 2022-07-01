@@ -2,7 +2,7 @@ package database
 
 import "fmt"
 
-func (t *Transaction) state(full bool) (*transactionState, error) {
+func (t *Transaction) loadState() (*transactionState, error) {
 	state := new(transactionState)
 
 	// Load main state
@@ -10,11 +10,6 @@ func (t *Transaction) state(full bool) (*transactionState, error) {
 	state.State, err = t.GetStatus()
 	if err != nil {
 		return nil, fmt.Errorf("load transaction %X state: %w", t.id[:4], err)
-	}
-
-	// Do we need the full transaction state?
-	if !full {
-		return state, nil
 	}
 
 	// Load the transaction

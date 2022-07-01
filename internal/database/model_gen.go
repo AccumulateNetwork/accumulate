@@ -13,24 +13,20 @@ import (
 )
 
 type Account struct {
-	logger logging.OptionalLogger
-	store  record.Store
-	key    record.Key
-	batch  *Batch
-	label  string
-	chains map[storage.Key]*managed.Chain
+	logger  logging.OptionalLogger
+	store   record.Store
+	key     record.Key
+	batch   *Batch
+	label   string
+	chains2 map[storage.Key]*managed.Chain
 
-	object             *record.Value[*protocol.Object]
 	main               *record.Value[protocol.Account]
 	pending            *record.Set[*url.TxID]
 	syntheticForAnchor map[storage.Key]*record.Set[*url.TxID]
-}
-
-func (c *Account) Object() *record.Value[*protocol.Object] {
-	return getOrCreateField(&c.object, func() *record.Value[*protocol.Object] {
-		return record.NewValue(c.logger.L, c.store, c.key.Append("Object"), c.label+" object", true,
-			record.Struct[protocol.Object]())
-	})
+	chains             *record.Set[*protocol.ChainMetadata]
+	syntheticAnchors   *record.Set[[32]byte]
+	directory          *record.Counted[*url.URL]
+	data               *AccountData
 }
 
 func (c *Account) Main() *record.Value[protocol.Account] {
@@ -54,10 +50,39 @@ func (c *Account) SyntheticForAnchor(anchor [32]byte) *record.Set[*url.TxID] {
 	})
 }
 
+func (c *Account) Chains() *record.Set[*protocol.ChainMetadata] {
+	return getOrCreateField(&c.chains, func() *record.Set[*protocol.ChainMetadata] {
+		return record.NewSet(c.logger.L, c.store, c.key.Append("Chains"), c.label+" chains",
+			record.Struct[protocol.ChainMetadata](), func(u, v *protocol.ChainMetadata) int { return u.Compare(v) })
+	})
+}
+
+func (c *Account) SyntheticAnchors() *record.Set[[32]byte] {
+	return getOrCreateField(&c.syntheticAnchors, func() *record.Set[[32]byte] {
+		return record.NewSet(c.logger.L, c.store, c.key.Append("SyntheticAnchors"), c.label+" synthetic anchors",
+			record.Wrapped(record.HashWrapper), record.CompareHash)
+	})
+}
+
+func (c *Account) Directory() *record.Counted[*url.URL] {
+	return getOrCreateField(&c.directory, func() *record.Counted[*url.URL] {
+		return record.NewCounted(c.logger.L, c.store, c.key.Append("Directory"), c.label+" directory", record.WrappedFactory(record.UrlWrapper))
+	})
+}
+
+func (c *Account) Data() *AccountData {
+	return getOrCreateField(&c.data, func() *AccountData {
+		v := new(AccountData)
+		v.logger = c.logger
+		v.store = c.store
+		v.key = c.key.Append("Data")
+		v.parent = c
+		return v
+	})
+}
+
 func (c *Account) baseResolve(key record.Key) (record.Record, record.Key, error) {
 	switch key[0] {
-	case "Object":
-		return c.Object(), key[1:], nil
 	case "Main":
 		return c.Main(), key[1:], nil
 	case "Pending":
@@ -72,6 +97,14 @@ func (c *Account) baseResolve(key record.Key) (record.Record, record.Key, error)
 		}
 		v := c.SyntheticForAnchor(anchor)
 		return v, key[2:], nil
+	case "Chains":
+		return c.Chains(), key[1:], nil
+	case "SyntheticAnchors":
+		return c.SyntheticAnchors(), key[1:], nil
+	case "Directory":
+		return c.Directory(), key[1:], nil
+	case "Data":
+		return c.Data(), key[1:], nil
 	default:
 		return nil, nil, errors.New(errors.StatusInternalError, "bad key for account")
 	}
@@ -82,9 +115,6 @@ func (c *Account) IsDirty() bool {
 		return false
 	}
 
-	if fieldIsDirty(c.object) {
-		return true
-	}
 	if fieldIsDirty(c.main) {
 		return true
 	}
@@ -96,6 +126,18 @@ func (c *Account) IsDirty() bool {
 			return true
 		}
 	}
+	if fieldIsDirty(c.chains) {
+		return true
+	}
+	if fieldIsDirty(c.syntheticAnchors) {
+		return true
+	}
+	if fieldIsDirty(c.directory) {
+		return true
+	}
+	if fieldIsDirty(c.data) {
+		return true
+	}
 
 	return false
 }
@@ -106,10 +148,86 @@ func (c *Account) baseCommit() error {
 	}
 
 	var err error
-	commitField(&err, c.object)
 	commitField(&err, c.main)
 	commitField(&err, c.pending)
 	for _, v := range c.syntheticForAnchor {
+		commitField(&err, v)
+	}
+	commitField(&err, c.chains)
+	commitField(&err, c.syntheticAnchors)
+	commitField(&err, c.directory)
+	commitField(&err, c.data)
+
+	return nil
+}
+
+type AccountData struct {
+	logger logging.OptionalLogger
+	store  record.Store
+	key    record.Key
+	parent *Account
+
+	entry       *record.Counted[[32]byte]
+	transaction map[storage.Key]*record.Value[[32]byte]
+}
+
+func (c *AccountData) Entry() *record.Counted[[32]byte] {
+	return getOrCreateField(&c.entry, func() *record.Counted[[32]byte] {
+		return record.NewCounted(c.logger.L, c.store, c.key.Append("Entry"), "data entry", record.WrappedFactory(record.HashWrapper))
+	})
+}
+
+func (c *AccountData) Transaction(entryHash [32]byte) *record.Value[[32]byte] {
+	return getOrCreateMap(&c.transaction, c.key.Append("Transaction", entryHash), func() *record.Value[[32]byte] {
+		return record.NewValue(c.logger.L, c.store, c.key.Append("Transaction", entryHash), "data transaction %[3]x", false,
+			record.Wrapped(record.HashWrapper))
+	})
+}
+
+func (c *AccountData) Resolve(key record.Key) (record.Record, record.Key, error) {
+	switch key[0] {
+	case "Entry":
+		return c.Entry(), key[1:], nil
+	case "Transaction":
+		if len(key) < 2 {
+			return nil, nil, errors.New(errors.StatusInternalError, "bad key for data")
+		}
+		entryHash, okEntryHash := key[1].([32]byte)
+		if !okEntryHash {
+			return nil, nil, errors.New(errors.StatusInternalError, "bad key for data")
+		}
+		v := c.Transaction(entryHash)
+		return v, key[2:], nil
+	default:
+		return nil, nil, errors.New(errors.StatusInternalError, "bad key for data")
+	}
+}
+
+func (c *AccountData) IsDirty() bool {
+	if c == nil {
+		return false
+	}
+
+	if fieldIsDirty(c.entry) {
+		return true
+	}
+	for _, v := range c.transaction {
+		if v.IsDirty() {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (c *AccountData) Commit() error {
+	if c == nil {
+		return nil
+	}
+
+	var err error
+	commitField(&err, c.entry)
+	for _, v := range c.transaction {
 		commitField(&err, v)
 	}
 

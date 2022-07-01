@@ -1419,10 +1419,10 @@ func DumpAccount(t *testing.T, batch *database.Batch, accountUrl *url.URL) {
 	state, err := account.GetState()
 	require.NoError(t, err)
 	fmt.Println("Dump", accountUrl, state.Type())
-	meta, err := account.GetObject()
+	chains, err := account.Chains().Get()
 	require.NoError(t, err)
 	seen := map[[32]byte]bool{}
-	for _, cmeta := range meta.Chains {
+	for _, cmeta := range chains {
 		chain, err := account.ReadChain(cmeta.Name)
 		require.NoError(t, err)
 		fmt.Printf("  Chain: %s (%v)\n", cmeta.Name, cmeta.Type)
