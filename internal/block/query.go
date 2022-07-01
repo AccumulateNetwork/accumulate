@@ -218,7 +218,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool, scr
 			return []byte("tx-history"), txns, nil
 
 		case 2:
-			chain, err := batch.Account(u).ReadChain(chainNameFor(fragment[0]))
+			chain, err := batch.Account(u).ReadChain(chainNameFor(fragment[0], scratch))
 			if err != nil {
 				return nil, nil, fmt.Errorf("failed to load main chain of %q: %v", u, err)
 			}
@@ -388,12 +388,13 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool, scr
 	return nil, nil, fmt.Errorf("invalid fragment")
 }
 
-func chainNameFor(entity string) string {
+func chainNameFor(entity string, scratch bool) string {
 	switch entity {
-	case "scratch":
-		return protocol.ScratchChain
 	case "signature":
 		return protocol.SignatureChain
+	}
+	if scratch {
+		return protocol.ScratchChain
 	}
 	return protocol.MainChain
 }
