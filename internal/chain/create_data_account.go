@@ -51,7 +51,6 @@ func (CreateDataAccount) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 	//create the data account
 	account := new(protocol.DataAccount)
 	account.Url = body.Url
-	account.Scratch = body.Scratch
 
 	err = st.SetAuth(account, body.Authorities)
 	if err != nil {
