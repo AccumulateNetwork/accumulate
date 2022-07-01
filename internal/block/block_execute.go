@@ -196,8 +196,8 @@ func (x *Executor) executeEnvelope(block *Block, delivery *chain.Delivery) (*pro
 			}
 		}
 
-	} else {
-		status = &protocol.TransactionStatus{Code: errors.StatusRemote}
+	} else if status.Code == 0 {
+		status.Code = errors.StatusRemote
 	}
 
 	err = x.ProcessRemoteSignatures(block, delivery)
