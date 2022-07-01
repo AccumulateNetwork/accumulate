@@ -1,8 +1,11 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net"
+	"net/http"
 	"net/url"
 	"path"
 	"strconv"
@@ -46,6 +49,12 @@ func initDualNode(cmd *cobra.Command, args []string) {
 	checkf(err, "invalid DN port number")
 
 	flagInitNode.ListenIP = fmt.Sprintf("http://0.0.0.0:%d", dnBasePort)
+	if flagInitDualNode.PublicIP == "" {
+		flagInitNode.PublicIP, err = resolvePublicIp()
+		checkf(err, "cannot resolve public ip address")
+	} else {
+		flagInitNode.PublicIP = flagInitDualNode.PublicIP
+	}
 	flagInitNode.SkipVersionCheck = flagInitDualNode.SkipVersionCheck
 	flagInitNode.GenesisDoc = flagInitDualNode.GenesisDoc
 	flagInitNode.SeedProxy = flagInitDualNode.SeedProxy
@@ -53,7 +62,7 @@ func initDualNode(cmd *cobra.Command, args []string) {
 
 	// configure the BVN first so we know how to setup the bvn.
 	args = []string{u.String()}
-	//flagInit.Net = args[0]
+
 	initNode(cmd, args)
 
 	c, err := cfg.Load(path.Join(flagMain.WorkDir, "dnn"))
@@ -65,42 +74,13 @@ func initDualNode(cmd *cobra.Command, args []string) {
 	}
 
 	//now find out what bvn we are on then let
-	dnPartition := c.Accumulate.LocalAddress
-	dnHost, _, err := net.SplitHostPort(dnPartition)
-	checkf(err, "cannot resolve bvn host and port")
-
 	_ = netAddr
 
-	var bvn *cfg.Partition
-	for i, v := range c.Accumulate.Network.Partitions {
-		//search for the directory.
-		if v.Id == partitionName {
-			bvn = &c.Accumulate.Network.Partitions[i]
-			break
-		}
-	}
+	bvn, _, err := findInDescribe("", partitionName, &c.Accumulate.Network)
+	checkf(err, "partition %s not found in bvn configuration", partitionName)
 
-	if bvn == nil {
-		fatalf("directory not found in bvn configuration")
-	}
-
-	// now search for the dn associated with the local address
-	var bvnHost *cfg.Node
-	var bvnBasePort string
-	var bvnHostIP string
-	for i, v := range bvn.Nodes {
-		//loop through the nodes searching for this bvn.
-		u, err := url.Parse(v.Address)
-		checkf(err, "cannot resolve dn host and port")
-		bvnHostIP = u.Hostname()
-		bvnBasePort = u.Port()
-		if dnHost == bvnHostIP {
-			bvnHost = &bvn.Nodes[i]
-		}
-	}
-
-	if bvnHost == nil {
-		fatalf("bvn host not found in %v partition", partitionName)
+	if len(bvn.Nodes) == 0 {
+		fatalf("no bvn nodes defined in network partition %s", partitionName)
 	}
 
 	if flagInit.NoEmptyBlocks {
@@ -120,8 +100,8 @@ func initDualNode(cmd *cobra.Command, args []string) {
 	err = cfg.Store(c)
 	checkf(err, "cannot store configuration file for node")
 
-	flagInitNode.ListenIP = fmt.Sprintf("http://0.0.0.0:%v", bvnBasePort)
-	args = []string{bvnHost.Address}
+	flagInitNode.ListenIP = fmt.Sprintf("http://0.0.0.0:%v", bvn.BasePort)
+	args = []string{bvn.Nodes[0].Address}
 	fmt.Println(dnWebHostUrl)
 	initNode(cmd, args)
 
@@ -149,4 +129,23 @@ func initDualNode(cmd *cobra.Command, args []string) {
 
 	err = cfg.Store(c)
 	checkf(err, "cannot store configuration file for node")
+}
+
+func resolvePublicIp() (string, error) {
+	req, err := http.Get("http://ip-api.com/json/")
+	if err != nil {
+		return "", err
+	}
+	defer req.Body.Close()
+
+	body, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		return "", err
+	}
+
+	ip := struct {
+		Query string
+	}{}
+	json.Unmarshal(body, &ip)
+	return ip.Query, nil
 }

@@ -3,6 +3,8 @@ package accumulated
 import (
 	"bytes"
 	"fmt"
+	tmjson "github.com/tendermint/tendermint/libs/json"
+	"io/ioutil"
 	"os"
 	"path"
 	"strings"
@@ -284,6 +286,7 @@ func WriteNodeFiles(cfg *config.Config, privValKey, nodeKey []byte, genDoc *tmty
 	if err != nil {
 		return fmt.Errorf("failed to write config files: %w", err)
 	}
+
 	err = loadOrCreatePrivVal(cfg, privValKey)
 	if err != nil {
 		return fmt.Errorf("failed to write private validator: %w", err)
@@ -309,6 +312,11 @@ func loadOrCreatePrivVal(config *config.Config, key []byte) error {
 		pv := privval.NewFilePV(ed25519.PrivKey(key), keyFile, stateFile)
 		pv.Save()
 		return nil
+	}
+	if !tmos.FileExists(stateFile) {
+		//this case occurs when we init in dual mode
+		pv := privval.NewFilePV(ed25519.PrivKey(key), keyFile, stateFile)
+		pv.LastSignState.Save()
 	}
 	pv, err := privval.LoadFilePV(keyFile, stateFile)
 	if err != nil {
@@ -342,4 +350,23 @@ func loadOrCreateNodeKey(config *config.Config, key []byte) error {
 	}
 
 	return nil
+}
+
+func LoadOrGenerateTmPrivKey(privFileName string) ed25519.PrivKey {
+	//attempt to load the priv validator key, create otherwise.
+	b, err := ioutil.ReadFile(privFileName)
+	privValKey := ed25519.PrivKey{}
+	if err != nil {
+		//do not overwrite a private validator key.
+		privValKey = ed25519.GenPrivKey()
+	} else {
+		var pvkey privval.FilePVKey
+		err = tmjson.Unmarshal(b, &pvkey)
+		if err != nil {
+			privValKey = ed25519.GenPrivKey()
+		} else {
+			privValKey = pvkey.PrivKey.(ed25519.PrivKey)
+		}
+	}
+	return privValKey
 }
