@@ -55,7 +55,6 @@ func AccountFromPrivateKey(privateKey string) (*url.URL, error) {
 	origin = url
 	return url, nil
 }
-
 func buildEnvelope(payload protocol.TransactionBody) (*protocol.Envelope, error) {
 	txn := new(protocol.Transaction)
 	txn.Body = payload

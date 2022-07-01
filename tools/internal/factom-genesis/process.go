@@ -1,17 +1,19 @@
-package code
+package factom
 
 import (
+	"encoding/hex"
 	"fmt"
+	"log"
 	"os"
 	"os/user"
 	"path/filepath"
 
+	f2 "github.com/FactomProject/factom"
 	"github.com/FactomProject/factomd/common/adminBlock"
 	"github.com/FactomProject/factomd/common/directoryBlock"
 	"github.com/FactomProject/factomd/common/entryBlock"
 	"github.com/FactomProject/factomd/common/entryCreditBlock"
 	"github.com/FactomProject/factomd/common/factoid"
-	ecode "github.com/accumulatenetwork/accumulate/tools/internal/factom-genesis/extract_all/code"
 )
 
 const FileIncrement = 2000
@@ -46,7 +48,7 @@ func Open() bool {
 
 func Process() {
 
-	header := new(ecode.Header)
+	header := new(Header)
 	dBlock := directoryBlock.NewDirectoryBlock(nil)
 	aBlock := adminBlock.NewAdminBlock(nil)
 	fBlock := new(factoid.FBlock)
@@ -61,32 +63,47 @@ func Process() {
 		for len(buff) > 0 {
 			buff = header.UnmarshalBinary(buff)
 			switch header.Tag {
-			case ecode.TagDBlock:
+			case TagDBlock:
 				if err := dBlock.UnmarshalBinary(buff[:header.Size]); err != nil {
 					panic("Bad Directory block")
 				}
-			case ecode.TagABlock:
+			case TagABlock:
 				if err := aBlock.UnmarshalBinary(buff[:header.Size]); err != nil {
 					fmt.Printf("Ht %d Admin size %d %v \n",
 						dBlock.GetHeader().GetDBHeight(), header.Size, err)
 				}
-			case ecode.TagFBlock:
+			case TagFBlock:
 				if err := fBlock.UnmarshalBinary(buff[:header.Size]); err != nil {
 					panic("Bad Factoid block")
 				}
-			case ecode.TagECBlock:
+			case TagECBlock:
 				if err := ecBlock.UnmarshalBinary(buff[:header.Size]); err != nil {
 					panic("Bad Entry Credit block")
 				}
-			case ecode.TagEBlock:
+			case TagEBlock:
 				if _, err := eBlock.UnmarshalBinaryData(buff[:header.Size]); err != nil {
 					panic("Bad Entry Block block")
 				}
-			case ecode.TagEntry:
+			case TagEntry:
 				if err := entry.UnmarshalBinary(buff[:header.Size]); err != nil {
 					panic("Bad Entry")
 				}
-			case ecode.TagTX:
+				qEntry := &f2.Entry{
+					ChainID: entry.ChainID.String(),
+					ExtIDs:  entry.ExternalIDs(),
+					Content: entry.GetContent(),
+				}
+				factomChainData = make(map[[32]byte]*Queue)
+				accountId, err := hex.DecodeString(qEntry.ChainID)
+				if err != nil {
+					log.Fatalf("cannot decode account id")
+				}
+				_, ok := factomChainData[*(*[32]byte)(accountId)]
+				if !ok {
+					factomChainData[*(*[32]byte)(accountId)] = NewQueue()
+				}
+				factomChainData[*(*[32]byte)(accountId)].Push(qEntry)
+			case TagTX:
 				if err := tx.UnmarshalBinary(buff[:header.Size]); err != nil {
 					panic("Bad Transaction")
 				}

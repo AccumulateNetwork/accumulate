@@ -1,4 +1,4 @@
-package code
+package factom
 
 import "encoding/binary"
 
