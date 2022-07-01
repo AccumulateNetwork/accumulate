@@ -1,8 +1,11 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
+	"gitlab.com/accumulatenetwork/accumulate/internal/client"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -76,13 +79,6 @@ func initDualNode(cmd *cobra.Command, args []string) {
 	//now find out what bvn we are on then let
 	_ = netAddr
 
-	bvn, _, err := findInDescribe("", partitionName, &c.Accumulate.Network)
-	checkf(err, "partition %s not found in bvn configuration", partitionName)
-
-	if len(bvn.Nodes) == 0 {
-		fatalf("no bvn nodes defined in network partition %s", partitionName)
-	}
-
 	if flagInit.NoEmptyBlocks {
 		c.Consensus.CreateEmptyBlocks = false
 	}
@@ -100,9 +96,16 @@ func initDualNode(cmd *cobra.Command, args []string) {
 	err = cfg.Store(c)
 	checkf(err, "cannot store configuration file for node")
 
-	flagInitNode.ListenIP = fmt.Sprintf("http://0.0.0.0:%v", bvn.BasePort)
-	args = []string{bvn.Nodes[0].Address}
-	fmt.Println(dnWebHostUrl)
+	flagInitNode.ListenIP = fmt.Sprintf("http://0.0.0.0:%v", dnBasePort+cfg.PortOffsetBlockValidator)
+
+	partition, _, err := findInDescribe("", partitionName, &c.Accumulate.Network)
+	checkf(err, "cannot find partition %s in network configuration", partitionName)
+
+	bvnHost, err := findHealthyNodeOnPartition(partition)
+	checkf(err, "cannot find a healthy node on partition %s", partitionName)
+
+	args = []string{fmt.Sprintf("tcp://%s:%d", bvnHost, dnBasePort+cfg.PortOffsetBlockValidator)}
+
 	initNode(cmd, args)
 
 	c, err = cfg.Load(path.Join(flagMain.WorkDir, "bvnn"))
@@ -148,4 +151,35 @@ func resolvePublicIp() (string, error) {
 	}{}
 	json.Unmarshal(body, &ip)
 	return ip.Query, nil
+}
+
+func findHealthyNodeOnPartition(partition *cfg.Partition) (string, error) {
+	for _, p := range partition.Nodes {
+		addr, _, err := resolveAddr(p.Address)
+		if err != nil {
+			continue
+		}
+
+		accClient, err := client.New(fmt.Sprintf("http://%s:%d", addr, partition.BasePort+int64(cfg.PortOffsetAccumulateApi)))
+		if err != nil {
+			continue
+		}
+		tmClient, err := rpchttp.New(fmt.Sprintf("tcp://%s:%d", addr, partition.BasePort+int64(cfg.PortOffsetTendermintRpc)))
+		if err != nil {
+			continue
+		}
+
+		_, err = accClient.Describe(context.Background())
+		if err != nil {
+			continue
+		}
+
+		_, err = tmClient.Status(context.Background())
+		if err != nil {
+			continue
+		}
+		//if we get here, assume we have a viable node
+		return addr, nil
+	}
+	return "", fmt.Errorf("no viable node found on partition %s", partition.Id)
 }
