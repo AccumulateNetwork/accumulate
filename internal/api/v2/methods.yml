@@ -65,7 +65,7 @@ QueryTxHistory:
   rpc: query-tx-history
   input: TxHistoryQuery
   output: MultiResponse
-  call-params: [Url, QueryPagination]
+  call-params: [Url, QueryPagination, Scratch]
 
 QueryData:
   description: queries an entry on an account's data chain
