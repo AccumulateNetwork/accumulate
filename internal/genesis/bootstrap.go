@@ -295,9 +295,9 @@ func (b *bootstrap) createVoteScratchChain() error {
 		return errors.Format(errors.StatusInternalError, "marshal last commit info: %w", err)
 	}
 	wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
+	wd.Scratch = true
 
 	da := new(protocol.DataAccount)
-	da.Scratch = true
 	da.Url = b.partition.URL.JoinPath(protocol.Votes)
 	da.AddAuthority(b.localAuthority)
 	b.writeDataRecord(da, da.Url, DataRecord{da.Url, wd.Entry})
@@ -305,9 +305,8 @@ func (b *bootstrap) createVoteScratchChain() error {
 }
 
 func (b *bootstrap) createEvidenceChain() {
-	//create an evidence scratch chain
+	//create an evidence chain
 	da := new(protocol.DataAccount)
-	da.Scratch = true
 	da.Url = b.partition.JoinPath(protocol.Evidence)
 	da.AddAuthority(b.localAuthority)
 	b.WriteRecords(da)
