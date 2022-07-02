@@ -16,7 +16,7 @@ func writeAccountState(t TB, batch *database.Batch, account protocol.Account) {
 	require.NoError(tb{t}, record.PutState(account))
 
 	txid := sha256.Sum256([]byte("fake txid"))
-	mainChain, err := record.Chain(protocol.MainChain, protocol.ChainTypeTransaction)
+	mainChain, err := database.WrapChain(record.MainChain())
 	require.NoError(tb{t}, err)
 	require.NoError(tb{t}, mainChain.AddEntry(txid[:], true))
 

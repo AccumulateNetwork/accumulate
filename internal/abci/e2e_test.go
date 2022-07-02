@@ -1488,19 +1488,19 @@ func DumpAccount(t *testing.T, batch *database.Batch, accountUrl *url.URL) {
 	state, err := account.GetState()
 	require.NoError(t, err)
 	fmt.Println("Dump", accountUrl, state.Type())
-	chains, err := account.Chains().Get()
+	chains, err := account.AllChains()
 	require.NoError(t, err)
 	seen := map[[32]byte]bool{}
-	for _, cmeta := range chains {
-		chain, err := account.ReadChain(cmeta.Name)
+	for _, c := range chains {
+		chain, err := database.WrapChain(c)
 		require.NoError(t, err)
-		fmt.Printf("  Chain: %s (%v)\n", cmeta.Name, cmeta.Type)
+		fmt.Printf("  Chain: %s (%v)\n", c.Name(), c.Type())
 		height := chain.Height()
 		entries, err := chain.Entries(0, height)
 		require.NoError(t, err)
 		for idx, id := range entries {
 			fmt.Printf("    Entry %d: %X\n", idx, id)
-			if cmeta.Type != protocol.ChainTypeTransaction {
+			if c.Type() != protocol.ChainTypeTransaction {
 				continue
 			}
 			var id32 [32]byte

@@ -117,7 +117,7 @@ func WriteStates(db DB, chains ...protocol.Account) error {
 			return err
 		}
 
-		chain, err := r.Chain(protocol.MainChain, protocol.ChainTypeTransaction)
+		chain, err := database.WrapChain(r.MainChain())
 		if err != nil {
 			return err
 		}

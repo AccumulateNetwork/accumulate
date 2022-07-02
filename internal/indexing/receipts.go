@@ -133,8 +133,13 @@ func ReceiptForAccountState(net *config.Describe, batch *Batch, account *Account
 }
 
 func ReceiptForChainEntry(net *config.Describe, batch *Batch, account *Account, hash []byte, entry *TransactionChainEntry) (uint64, *managed.Receipt, error) {
+	chain, err := account.IndexChain(entry.Chain)
+	if err != nil {
+		return 0, nil, err
+	}
+
 	// Load the index entry
-	accountIndex, err := loadIndexEntry(account, entry.Chain, protocol.IndexChain(entry.Chain, false), entry.ChainIndex)
+	accountIndex, err := loadIndexEntry(account, entry.Chain, chain.Name(), entry.ChainIndex)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -168,7 +173,7 @@ func ReceiptForChainEntry(net *config.Describe, batch *Batch, account *Account, 
 }
 
 func ReceiptForChainIndex(net *config.Describe, batch *Batch, account *Account, name string, index int64) (uint64, *managed.Receipt, error) {
-	indexChain, err := account.ReadIndexChain(name, false)
+	indexChain, err := account.IndexChain(name)
 	if err != nil {
 		return 0, nil, fmt.Errorf("unable to load %s index chain of %v: %w", name, account, err)
 	}

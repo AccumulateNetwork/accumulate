@@ -7,6 +7,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 )
 
 // shouldIndexChain returns true if the given chain should be indexed.
@@ -31,9 +32,9 @@ func shouldIndexChain(_ *url.URL, _ string, typ protocol.ChainType) (bool, error
 }
 
 // addIndexChainEntry adds an entry to an index chain.
-func addIndexChainEntry(account *database.Account, name string, entry *protocol.IndexEntry) (uint64, error) {
+func addIndexChainEntry(chain *managed.Chain, entry *protocol.IndexEntry) (uint64, error) {
 	// Load the index chain
-	indexChain, err := account.Chain(name, protocol.ChainTypeIndex)
+	wChain, err := database.WrapChain(chain)
 	if err != nil {
 		return 0, err
 	}
@@ -57,13 +58,13 @@ func addIndexChainEntry(account *database.Account, name string, entry *protocol.
 	}
 
 	// Add the entry
-	err = indexChain.AddEntry(data, false)
+	err = wChain.AddEntry(data, false)
 	if err != nil {
 		return 0, err
 	}
 
 	// Return the index of the entry
-	return uint64(indexChain.Height() - 1), nil
+	return uint64(wChain.Height() - 1), nil
 }
 
 // addChainAnchor anchors the target chain into the root chain, adding an index
@@ -71,6 +72,10 @@ func addIndexChainEntry(account *database.Account, name string, entry *protocol.
 func addChainAnchor(rootChain *database.Chain, account *database.Account, accountUrl *url.URL, name string, typ protocol.ChainType) (indexIndex uint64, didIndex bool, err error) {
 	// Load the chain
 	accountChain, err := account.ReadChain(name)
+	if err != nil {
+		return 0, false, err
+	}
+	indexChain, err := account.IndexChain(name)
 	if err != nil {
 		return 0, false, err
 	}
@@ -88,7 +93,7 @@ func addChainAnchor(rootChain *database.Chain, account *database.Account, accoun
 	}
 
 	// Add the index chain entry
-	indexIndex, err = addIndexChainEntry(account, protocol.IndexChain(name, false), &protocol.IndexEntry{
+	indexIndex, err = addIndexChainEntry(indexChain.Unwrap(), &protocol.IndexEntry{
 		Source: uint64(accountChain.Height() - 1),
 		Anchor: uint64(rootChain.Height() - 1),
 	})

@@ -68,7 +68,7 @@ func (m *Executor) EndBlock(block *Block) error {
 	t := time.Now()
 
 	// Load the main chain of the minor root
-	rootChain, err := ledger.Chain(protocol.MinorRootChain, protocol.ChainTypeAnchor)
+	rootChain, err := database.WrapChain(ledger.RootChain())
 	if err != nil {
 		return errors.Format(errors.StatusUnknownError, "load root chain: %w", err)
 	}
@@ -130,7 +130,7 @@ func (m *Executor) EndBlock(block *Block) error {
 	}
 
 	// Index the root chain
-	rootIndexIndex, err := addIndexChainEntry(ledger, protocol.MinorRootIndexChain, &protocol.IndexEntry{
+	rootIndexIndex, err := addIndexChainEntry(ledger.RootIndexChain(), &protocol.IndexEntry{
 		Source:     uint64(rootChain.Height() - 1),
 		BlockIndex: uint64(block.Index),
 		BlockTime:  &block.Time,
@@ -464,7 +464,7 @@ func (x *Executor) updateMajorIndexChains(block *Block, rootIndexIndex uint64) e
 		return errors.Format(errors.StatusUnknownError, "load anchor ledger main chain: %w", err)
 	}
 
-	_, err = addIndexChainEntry(account, protocol.IndexChain(protocol.MainChain, true), &protocol.IndexEntry{
+	_, err = addIndexChainEntry(account.MainMajorIndexChain(), &protocol.IndexEntry{
 		Source:         uint64(mainChain.Height() - 1),
 		RootIndexIndex: rootIndexIndex,
 		BlockIndex:     block.State.MakeMajorBlock,

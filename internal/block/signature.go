@@ -241,7 +241,7 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 
 	// Add the signature to the signer's chain
 	if isUserTxn && signer.GetUrl().LocalTo(md.Location) {
-		chain, err := batch.Account(signer.GetUrl()).Chain(protocol.SignatureChain, protocol.ChainTypeTransaction)
+		chain, err := database.WrapChain(batch.Account(signer.GetUrl()).SignatureChain())
 		if err != nil {
 			return nil, fmt.Errorf("load chain: %w", err)
 		}
@@ -253,7 +253,7 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 
 	// Add the signature to the principal's chain
 	if isUserTxn && isLocalTxn {
-		chain, err := batch.Account(delivery.Transaction.Header.Principal).Chain(protocol.SignatureChain, protocol.ChainTypeTransaction)
+		chain, err := database.WrapChain(batch.Account(delivery.Transaction.Header.Principal).SignatureChain())
 		if err != nil {
 			return nil, fmt.Errorf("load chain: %w", err)
 		}

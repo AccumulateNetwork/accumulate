@@ -13,6 +13,7 @@ type Chain struct {
 	logger    logging.OptionalLogger
 	store     record.Store
 	key       record.Key
+	typ       ChainType
 	name      string
 	label     string
 	markPower int64

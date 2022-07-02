@@ -2,9 +2,9 @@ package database
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -32,13 +32,13 @@ func (a *Account) Commit() error {
 		}
 	}
 
-	// Chains are not part of the model (yet) so they must be handled separately
+	// Ensure the chains index is up to date
 	for _, c := range a.chains2 {
 		if !c.IsDirty() {
 			continue
 		}
 
-		err := c.Commit()
+		err := a.Chains().Add(c.Name())
 		if err != nil {
 			return errors.Wrap(errors.StatusUnknownError, err)
 		}
@@ -53,17 +53,6 @@ func (a *Account) Commit() error {
 	// Do the normal commit stuff
 	err = a.baseCommit()
 	return errors.Wrap(errors.StatusUnknownError, err)
-}
-
-func (a *Account) Resolve(key record.Key) (record.Record, record.Key, error) {
-	if len(key) >= 2 && key[0] == "Chain" {
-		name, ok := key[1].(string)
-		if ok {
-			return a.chain(name), key[2:], nil
-		}
-	}
-
-	return a.baseResolve(key)
 }
 
 // GetState loads the record state.
@@ -116,36 +105,64 @@ func (r *Account) RemovePending(txid *url.TxID) error {
 	return r.Pending().Remove(txid)
 }
 
-// Chain returns a chain manager for the given chain.
-func (r *Account) Chain(name string, typ protocol.ChainType) (*Chain, error) {
-	err := r.Chains().Add(&protocol.ChainMetadata{Name: name, Type: typ})
+func (r *Account) AllChains() ([]*managed.Chain, error) {
+	chains := r.dirtyChains()
+	names := map[string]bool{}
+	for _, c := range chains {
+		names[c.Name()] = true
+	}
+
+	index, err := r.Chains().Get()
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
-	return newChain(r, r.chain(name), true)
-}
+	for _, name := range index {
+		if names[name] {
+			continue
+		}
+		names[name] = true
+		chain, err := r.ChainByName(name)
+		if err != nil {
+			return nil, errors.Wrap(errors.StatusInternalError, err)
+		}
+		chains = append(chains, chain)
+	}
 
-// IndexChain returns a chain manager for the index chain of the given chain.
-func (r *Account) IndexChain(name string, major bool) (*Chain, error) {
-	return r.Chain(protocol.IndexChain(name, major), protocol.ChainTypeIndex)
-}
-
-func (r *Account) chain(name string) *managed.Chain {
-	name = strings.ToLower(name)
-	key := r.key.Append("Chain", name)
-	return getOrCreateMap(&r.chains2, key, func() *managed.Chain {
-		return managed.NewChain(r.batch.logger.L, r.batch.recordStore, key, markPower, name, "account %[2]s chain %[4]s")
+	sort.Slice(chains, func(i, j int) bool {
+		return strings.Compare(chains[i].Name(), chains[j].Name()) < 0
 	})
+	return chains, nil
+}
+
+// Chain returns a chain manager for the given chain.
+func (r *Account) Chain(name string) (*Chain, error) {
+	return r.wrappedChain(name)
+}
+
+// Chain returns a chain manager for the given chain.
+func (r *Account) IndexChain(name string) (*Chain, error) {
+	return r.wrappedChain(name + "-index")
 }
 
 // ReadChain returns a read-only chain manager for the given chain.
 func (r *Account) ReadChain(name string) (*Chain, error) {
-	return newChain(r, r.chain(name), false)
+	return r.wrappedChain(name)
 }
 
-// ReadIndexChain returns a read-only chain manager for the index chain of the given chain.
-func (r *Account) ReadIndexChain(name string, major bool) (*Chain, error) {
-	return r.ReadChain(protocol.IndexChain(name, major))
+func (r *Account) wrappedChain(name string) (*Chain, error) {
+	c, err := r.ChainByName(name)
+	if err != nil {
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
+	}
+	return WrapChain(c)
+}
+
+func (a *Account) ChainByName(name string) (*managed.Chain, error) {
+	c, ok := a.resolveChain(name)
+	if ok {
+		return c, nil
+	}
+	return nil, errors.NotFound("account %v: invalid chain name: %q", a.key[1], name)
 }
 
 func (r *Account) AddSyntheticForAnchor(anchor [32]byte, txid *url.TxID) error {
@@ -154,4 +171,44 @@ func (r *Account) AddSyntheticForAnchor(anchor [32]byte, txid *url.TxID) error {
 
 func (r *Account) GetSyntheticForAnchor(anchor [32]byte) ([]*url.TxID, error) {
 	return r.SyntheticForAnchor(anchor).Get()
+}
+
+func tryResolveChainParam(chainPtr **managed.Chain, okPtr *bool, name, prefix string, expectLen int, resolve func([]string, string) (*managed.Chain, bool)) {
+	if *okPtr || !strings.HasPrefix(name, prefix) {
+		return
+	}
+
+	name = name[len(prefix):]
+	i := strings.Index(name, ")")
+	if i < 0 {
+		return
+	}
+
+	params := strings.Split(name[:i], ",")
+	name = name[i+1:]
+	if len(params) != expectLen {
+		return
+	}
+
+	if strings.HasPrefix(name, "-") {
+		name = name[1:]
+	}
+	chain, ok := resolve(params, name)
+	if ok {
+		*chainPtr, *okPtr = chain, true
+	}
+}
+
+func parseChainParam[T any](ok *bool, s string, parse func(string) (T, error)) T {
+	if !*ok {
+		return zero[T]()
+	}
+
+	v, err := parse(s)
+	if err == nil {
+		return v
+	}
+
+	*ok = false
+	return zero[T]()
 }

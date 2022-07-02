@@ -130,7 +130,8 @@ func (c *Entity) Set() *record.Set[*url.TxID] {
 
 func (c *Entity) Chain() *managed.Chain {
 	return getOrCreateField(&c.chain, func() *managed.Chain {
-		return managed.NewChain(c.logger.L, c.store, c.key.Append("Chain"), markPower, "entity(%[2]v)-", "entity %[2]v chain")
+		return managed.NewChain(c.logger.L, c.store, c.key.Append("Chain"), markPower, managed.ChainTypeTransaction,
+			"entity(%[2]v)-", "entity %[2]v chain")
 	})
 }
 

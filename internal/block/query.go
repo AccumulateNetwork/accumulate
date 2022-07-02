@@ -34,15 +34,15 @@ func (m *Executor) queryAccount(batch *database.Batch, account *database.Account
 	}
 
 	for _, c := range chains {
-		chain, err := account.ReadChain(c.Name)
+		chain, err := account.ReadChain(c)
 		if err != nil {
-			return nil, fmt.Errorf("get chain %s: %w", c.Name, err)
+			return nil, fmt.Errorf("get chain %s: %w", c, err)
 		}
 
 		ms := chain.CurrentState()
 		var state query.ChainState
-		state.Name = c.Name
-		state.Type = c.Type
+		state.Name = chain.Name()
+		state.Type = chain.Type()
 		state.Height = uint64(ms.Count)
 		state.Roots = make([][]byte, len(ms.Pending))
 		for i, h := range ms.Pending {
@@ -106,26 +106,26 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool, scr
 			return nil, nil, fmt.Errorf("invalid entry: %q is not a hash", fragment[1])
 		}
 
-		chains, err := batch.Account(u).Chains().Get()
+		chains, err := batch.Account(u).AllChains()
 		if err != nil {
-			return nil, nil, fmt.Errorf("get chains index: %w", err)
+			return nil, nil, fmt.Errorf("get chains: %w", err)
 		}
 
 		var chainName string
 		var index int64
-		for _, chainMeta := range chains {
-			if chainMeta.Type != protocol.ChainTypeAnchor {
+		for _, c := range chains {
+			if c.Type() != protocol.ChainTypeAnchor {
 				continue
 			}
 
-			chain, err := batch.Account(u).ReadChain(chainMeta.Name)
+			chain, err := database.WrapChain(c)
 			if err != nil {
-				return nil, nil, fmt.Errorf("failed to load chain %s of %q: %v", chainMeta.Name, u, err)
+				return nil, nil, fmt.Errorf("failed to load chain %s of %q: %v", c.Name(), u, err)
 			}
 
 			index, err = chain.HeightOf(entryHash)
 			if err == nil {
-				chainName = chainMeta.Name
+				chainName = c.Name()
 				break
 			}
 			if !errors.Is(err, storage.ErrNotFound) {
@@ -173,9 +173,9 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool, scr
 				return nil, nil, fmt.Errorf("failed to load entries: %v", err)
 			}
 
-			md, err := batch.Account(u).Chains().Find(&protocol.ChainMetadata{Name: fragment[1]})
+			c, err := batch.Account(u).ChainByName(fragment[1])
 			if err == nil {
-				res.Type = md.Type
+				res.Type = c.Type()
 			} else {
 				res.Type = managed.ChainTypeUnknown
 			}
@@ -201,9 +201,9 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool, scr
 				res.State[i] = h.Copy()
 			}
 
-			md, err := batch.Account(u).Chains().Find(&protocol.ChainMetadata{Name: fragment[1]})
+			c, err := batch.Account(u).ChainByName(fragment[1])
 			if err == nil {
-				res.Type = md.Type
+				res.Type = c.Type()
 			} else {
 				res.Type = managed.ChainTypeUnknown
 			}
@@ -964,7 +964,7 @@ func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove 
 			return nil, nil, errors.Format(errors.StatusUnknownError, "destination is not a partition")
 		}
 		record := batch.Account(m.Describe.Synthetic())
-		chain, err := record.ReadChain(protocol.SyntheticIndexChain(partition))
+		chain, err := database.WrapChain(record.SyntheticSequenceChain(partition))
 		if err != nil {
 			return nil, nil, errors.Format(errors.StatusUnknownError, "failed to load the synth index chain: %w", err)
 		}

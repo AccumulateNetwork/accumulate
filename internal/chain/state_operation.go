@@ -77,7 +77,7 @@ func (m *stateCache) AddChainEntry(u *url.URL, name string, typ protocol.ChainTy
 	}
 
 	// Check if the chain is valid
-	_, err := m.batch.Account(u).Chain(name, typ)
+	_, err := m.batch.Account(u).Chain(name)
 	if err != nil {
 		return fmt.Errorf("failed to load %s#chain/%s: %v", u, name, err)
 	}

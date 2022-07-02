@@ -108,7 +108,7 @@ func (c *ChainUpdates) AddChainEntry(batch *database.Batch, account *url.URL, na
 	}
 
 	// Add an entry to the chain
-	chain, err := batch.Account(account).Chain(name, typ)
+	chain, err := batch.Account(account).Chain(name)
 	if err != nil {
 		return errors.Format(errors.StatusUnknownError, "load %s chain: %w", name, err)
 	}

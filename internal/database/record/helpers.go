@@ -3,6 +3,7 @@ package record
 import (
 	"bytes"
 	"fmt"
+	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
@@ -14,6 +15,7 @@ func copyValue[T any](v T) T                 { return v }
 func copyRef[T interface{ Copy() T }](v T) T { return v.Copy() }
 
 func CompareHash(u, v [32]byte) int  { return bytes.Compare(u[:], v[:]) }
+func CompareString(u, v string) int  { return strings.Compare(u, v) }
 func CompareTxid(u, v *url.TxID) int { return u.Compare(v) }
 func CompareUrl(u, v *url.URL) int   { return u.Compare(v) }
 

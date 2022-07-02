@@ -10,16 +10,12 @@ import (
 
 // Chain manages a Merkle tree (chain).
 type Chain struct {
-	account  *Account
-	writable bool
-	merkle   *managed.MerkleManager
-	head     *managed.MerkleState
+	merkle *managed.MerkleManager
+	head   *managed.MerkleState
 }
 
-func newChain(account *Account, merkle *managed.Chain, writable bool) (*Chain, error) {
+func WrapChain(merkle *managed.Chain) (*Chain, error) {
 	m := new(Chain)
-	m.account = account
-	m.writable = writable
 	m.merkle = merkle
 
 	var err error
@@ -30,6 +26,10 @@ func newChain(account *Account, merkle *managed.Chain, writable bool) (*Chain, e
 
 	return m, nil
 }
+
+func (c *Chain) Name() string            { return c.merkle.Name() }
+func (c *Chain) Type() managed.ChainType { return c.merkle.Type() }
+func (c *Chain) Unwrap() *managed.Chain  { return c.merkle }
 
 // Height returns the height of the chain.
 func (c *Chain) Height() int64 {
@@ -115,10 +115,6 @@ func (c *Chain) Pending() []managed.Hash {
 
 // AddEntry adds an entry to the chain
 func (c *Chain) AddEntry(entry []byte, unique bool) error {
-	if !c.writable {
-		return fmt.Errorf("chain opened as read-only")
-	}
-
 	if entry == nil {
 		panic("attempted to add a nil entry to a chain")
 	}

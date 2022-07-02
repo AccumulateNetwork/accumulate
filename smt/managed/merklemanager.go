@@ -13,12 +13,12 @@ import (
 
 type MerkleManager = Chain
 
-func NewChain(logger log.Logger, store record.Store, key record.Key, markPower int64 /*, typ ChainType*/, namefmt, labelfmt string) *Chain {
+func NewChain(logger log.Logger, store record.Store, key record.Key, markPower int64, typ ChainType, namefmt, labelfmt string) *Chain {
 	c := new(Chain)
 	c.logger.L = logger
 	c.store = store
 	c.key = key
-	// c.typ = typ
+	c.typ = typ
 
 	// TODO markFreq = 1 << markPower?
 
@@ -36,9 +36,8 @@ func NewChain(logger log.Logger, store record.Store, key record.Key, markPower i
 	return c
 }
 
-func (c *Chain) Name() string { return c.name }
-
-// func (c *Chain) Type() ChainType { return c.typ }
+func (c *Chain) Name() string    { return c.name }
+func (c *Chain) Type() ChainType { return c.typ }
 
 // AddHash adds a Hash to the Chain controlled by the ChainManager. If unique is
 // true, the hash will not be added if it is already in the chain.

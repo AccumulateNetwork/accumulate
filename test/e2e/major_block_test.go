@@ -48,7 +48,7 @@ func TestMajorBlock(t *testing.T) {
 	// Verify
 	dn := sim.Partition(protocol.Directory)
 	_ = dn.Database.View(func(batch *database.Batch) error {
-		chain, err := batch.Account(dn.Executor.Describe.AnchorPool()).ReadIndexChain(protocol.MainChain, true)
+		chain, err := database.WrapChain(batch.Account(dn.Executor.Describe.AnchorPool()).MainMajorIndexChain())
 		require.NoError(t, err, "Failed to read anchor major index chain")
 		require.Equal(t, int64(1), chain.Height(), "Expected anchor major index chain to have height 1")
 

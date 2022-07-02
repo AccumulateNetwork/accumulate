@@ -168,7 +168,7 @@ func (x *Executor) shouldOpenMajorBlock(block *Block) (uint64, time.Time, error)
 
 func (x *Executor) didRecordMajorBlock(block *Block) (uint64, error) {
 	// Load the latest anchor main chain major index entry
-	chain, err := block.Batch.Account(x.Describe.AnchorPool()).ReadIndexChain(protocol.MainChain, true)
+	chain, err := database.WrapChain(block.Batch.Account(x.Describe.AnchorPool()).MainMajorIndexChain())
 	if err != nil {
 		return 0, errors.Format(errors.StatusUnknownError, "load anchor major index chain: %w", err)
 	}
@@ -360,7 +360,8 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch) (bool, error
 	}
 
 	// Load the synthetic transaction chain's index chain's last two entries
-	last, nextLast, err = indexing.LoadLastTwoIndexEntries(batch.Account(x.Describe.Synthetic()), protocol.IndexChain(protocol.MainChain, false))
+	record := batch.Account(x.Describe.Synthetic())
+	last, nextLast, err = indexing.LoadLastTwoIndexEntries(record, record.MainIndexChain().Name())
 	if err != nil {
 		return false, errors.Format(errors.StatusUnknownError, "load synthetic transaction index chain's last two entries: %w", err)
 	}
@@ -377,7 +378,7 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch) (bool, error
 	}
 
 	// Load the synthetic transaction chain
-	chain, err := batch.Account(x.Describe.Synthetic()).ReadChain(protocol.MainChain)
+	chain, err := record.ReadChain(protocol.MainChain)
 	if err != nil {
 		return false, errors.Format(errors.StatusUnknownError, "load root chain: %w", err)
 	}
@@ -528,7 +529,7 @@ func (x *Executor) buildDirectoryAnchor(batch *database.Batch, ledgerState *prot
 			continue
 		}
 
-		indexChain, err := record.ReadIndexChain(update.Name, false)
+		indexChain, err := record.IndexChain(update.Name)
 		if err != nil {
 			return nil, errors.Format(errors.StatusUnknownError, "load minor index chain of intermediate anchor chain %s: %w", update.Name, err)
 		}

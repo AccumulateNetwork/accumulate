@@ -14,7 +14,7 @@ func (m *Executor) queryMajorBlocks(batch *database.Batch, req *query.RequestMaj
 	anchorsAcc := batch.Account(m.Describe.NodeUrl(protocol.AnchorPool))
 	ledgerAcc := batch.Account(m.Describe.NodeUrl(protocol.Ledger))
 
-	mjrIdxChain, err := anchorsAcc.ReadChain(protocol.IndexChain(protocol.MainChain, true))
+	mjrIdxChain, err := database.WrapChain(anchorsAcc.MainMajorIndexChain())
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}

@@ -1,8 +1,8 @@
 - name: Chain
   type: entity
   fields:
-  # - name: typ
-  #   type: ChainType
+  - name: typ
+    type: ChainType
   - name: name
     type: string
   - name: label

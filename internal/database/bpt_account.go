@@ -20,22 +20,22 @@ func (a *Account) loadState(preserveChains bool) (*accountState, error) {
 	s.Main = loadState(&err, true, a.Main().Get)
 
 	// Load chain state
-	for _, c := range loadState(&err, false, a.Chains().Get) {
-		chain, err := a.ReadChain(c.Name)
+	for _, c := range loadState(&err, false, a.AllChains) {
+		chain, err := WrapChain(c)
 		if err != nil {
-			return nil, fmt.Errorf("load %s chain state: %w", c.Name, err)
+			return nil, fmt.Errorf("load %s chain state: %w", c.Name(), err)
 		}
 
 		ms1 := chain.CurrentState()
 		ms2 := new(merkleState)
-		ms2.Name = c.Name
-		ms2.Type = c.Type
+		ms2.Name = c.Name()
+		ms2.Type = c.Type()
 		s.Chains = append(s.Chains, ms2)
 
 		if preserveChains {
 			ms2.Entries, err = chain.Entries(0, ms1.Count)
 			if err != nil {
-				return nil, fmt.Errorf("load %s chain entries: %w", c.Name, err)
+				return nil, fmt.Errorf("load %s chain entries: %w", c.Name(), err)
 			}
 		} else {
 			ms2.Count = uint64(ms1.Count)
@@ -105,7 +105,7 @@ func (a *Account) restoreState(s *accountState) error {
 				head.Pending[i] = v
 			}
 		}
-		mgr, err := a.Chain(c.Name, c.Type)
+		mgr, err := a.Chain(c.Name)
 		if err != nil {
 			return fmt.Errorf("store %s chain head: %w", c.Name, err)
 		}
@@ -240,8 +240,8 @@ func (a *Account) hashState() (hash.Hasher, error) {
 func (a *Account) hashChains() (hash.Hasher, error) {
 	var err error
 	var hasher hash.Hasher
-	for _, chainMeta := range loadState(&err, false, a.Chains().Get) {
-		chain := loadState1(&err, false, a.ReadChain, chainMeta.Name)
+	for _, c := range loadState(&err, false, a.AllChains) {
+		chain := loadState1(&err, false, WrapChain, c)
 		if err != nil {
 			break
 		}

@@ -1,7 +1,6 @@
 - name: Account
   type: entity
   customCommit: true
-  customResolve: true
   fields:
   - name: batch
     type: Batch
@@ -31,11 +30,62 @@
     pointer: true
     set: true
 
+  # Account Chains
+  - name: MainChain
+    type: chain
+    chainType: transaction
+  - name: ScratchChain
+    type: chain
+    chainType: transaction
+  - name: SignatureChain
+    type: chain
+    chainType: transaction # change to signature
+
+  - name: MainIndexChain
+    type: chain
+    chainType: index
+  - name: ScratchIndexChain
+    type: chain
+    chainType: index
+  - name: SignatureIndexChain
+    type: chain
+    chainType: index
+
+  # System Chains
+  - name: RootChain
+    type: chain
+    chainType: transaction
+  - name: AnchorChain
+    type: entity
+    parameters:
+    - name: SubnetId
+      type: string
+    attributes:
+    - name: Root
+      type: chain
+      chainType: anchor
+    - name: BPT
+      type: chain
+      chainType: anchor
+  - name: SyntheticSequenceChain
+    type: chain
+    chainType: transaction
+    parameters:
+    - name: SubnetId
+      type: string
+
+  - name: RootIndexChain
+    type: chain
+    chainType: index
+
+  - name: MainMajorIndexChain
+    type: chain
+    chainType: index
+
   # Indices
   - name: Chains
     type: index
-    dataType: protocol.ChainMetadata
-    pointer: true
+    dataType: string
     set: true
   - name: SyntheticAnchors
     type: index
