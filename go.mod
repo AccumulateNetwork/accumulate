@@ -44,6 +44,8 @@ require (
 	gotest.tools/gotestsum v1.7.0
 )
 
+require github.com/ghodss/yaml v1.0.0
+
 require (
 	github.com/FactomProject/btcutil v0.0.0-20160826074221-43986820ccd5 // indirect
 	github.com/FactomProject/ed25519 v0.0.0-20150814230546-38002c4fe7b6 // indirect

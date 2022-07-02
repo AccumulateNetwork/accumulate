@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
+	"github.com/ghodss/yaml"
 	"github.com/spf13/cobra"
 	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
@@ -393,7 +394,7 @@ func ExecuteTX(sender string, args []string) (string, error) {
 	var typ struct {
 		Type protocol.TransactionType
 	}
-	err = json.Unmarshal([]byte(args[0]), &typ)
+	err = yaml.Unmarshal([]byte(args[0]), &typ)
 	if err != nil {
 		return "", fmt.Errorf("invalid payload 1: %v", err)
 	}
@@ -403,7 +404,7 @@ func ExecuteTX(sender string, args []string) (string, error) {
 		return "", fmt.Errorf("invalid payload 2: %v", err)
 	}
 
-	err = json.Unmarshal([]byte(args[0]), txn)
+	err = yaml.Unmarshal([]byte(args[0]), txn)
 	if err != nil {
 		return "", fmt.Errorf("invalid payload 3: %v", err)
 	}
