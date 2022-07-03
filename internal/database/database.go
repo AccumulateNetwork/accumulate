@@ -95,20 +95,14 @@ func (d *Database) Close() error {
 	return d.store.Close()
 }
 
-// // BptRootHash returns the root hash of the BPT.
-// func (b *Batch) BptRootHash() []byte {
-// 	// Make a copy
-// 	h := b.bpt.Bpt.RootHash
-// 	return h[:]
-// }
-
 // Account returns an Account for the given URL.
 func (b *Batch) Account(u *url.URL) *Account {
-	return getOrCreateMap(&b.accounts, record.Key{"Account", u}, func() *Account {
+	key := record.Key{"Account", u}
+	return getOrCreateMap(&b.accounts, key, func() *Account {
 		v := new(Account)
 		v.logger = b.logger
 		v.store = b.recordStore
-		v.key = record.Key{}.Append("Account", u)
+		v.key = key
 		v.batch = b
 		return v
 	})

@@ -69,7 +69,7 @@ personnel.
         - name: Dependents
           type: state
           dataType: string
-          counted: true
+          collection: set
 ```
 
 ```go
