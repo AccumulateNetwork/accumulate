@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"os"
-	"reflect"
 
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/tools/internal/typegen"
@@ -45,9 +44,9 @@ func check(err error) {
 }
 
 func run(_ *cobra.Command, args []string) {
-	types, err := flags.files.ReadMap(args, reflect.TypeOf((map[string]typegen.Enum)(nil)))
+	types, err := typegen.ReadMap[typegen.Enum](&flags.files, args, nil)
 	check(err)
-	ttypes := convert(types.(map[string]typegen.Enum), flags.Package)
+	ttypes := convert(types, flags.Package)
 
 	w := new(bytes.Buffer)
 	check(Templates.Execute(w, flags.Language, ttypes))
