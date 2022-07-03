@@ -11,17 +11,8 @@ import (
 	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
-
-type SigOrTxn struct {
-	fieldsSet   []bool
-	Transaction *protocol.Transaction `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
-	Signature   protocol.Signature    `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
-	Txid        *url.TxID             `json:"txid,omitempty" form:"txid" query:"txid" validate:"required"`
-	extraData   []byte
-}
 
 type SigSetEntry struct {
 	fieldsSet     []bool
@@ -30,18 +21,6 @@ type SigSetEntry struct {
 	KeyEntryIndex uint64                 `json:"keyEntryIndex,omitempty" form:"keyEntryIndex" query:"keyEntryIndex" validate:"required"`
 	SignatureHash [32]byte               `json:"signatureHash,omitempty" form:"signatureHash" query:"signatureHash" validate:"required"`
 	extraData     []byte
-}
-
-type TransactionChainEntry struct {
-	fieldsSet []bool
-	Account   *url.URL `json:"account,omitempty" form:"account" query:"account" validate:"required"`
-	// Chain is the name of the chain.
-	Chain string `json:"chain,omitempty" form:"chain" query:"chain" validate:"required"`
-	// ChainIndex is the index of the entry in the chain's index chain.
-	ChainIndex uint64 `json:"chainIndex,omitempty" form:"chainIndex" query:"chainIndex" validate:"required"`
-	// AnchorIndex is the index of the entry in the anchor chain's index chain.
-	AnchorIndex uint64 `json:"anchorIndex,omitempty" form:"anchorIndex" query:"anchorIndex" validate:"required"`
-	extraData   []byte
 }
 
 type accountState struct {
@@ -82,24 +61,6 @@ type transactionState struct {
 	extraData   []byte
 }
 
-func (v *SigOrTxn) Copy() *SigOrTxn {
-	u := new(SigOrTxn)
-
-	if v.Transaction != nil {
-		u.Transaction = (v.Transaction).Copy()
-	}
-	if v.Signature != nil {
-		u.Signature = (v.Signature).CopyAsInterface().(protocol.Signature)
-	}
-	if v.Txid != nil {
-		u.Txid = (v.Txid).Copy()
-	}
-
-	return u
-}
-
-func (v *SigOrTxn) CopyAsInterface() interface{} { return v.Copy() }
-
 func (v *SigSetEntry) Copy() *SigSetEntry {
 	u := new(SigSetEntry)
 
@@ -112,21 +73,6 @@ func (v *SigSetEntry) Copy() *SigSetEntry {
 }
 
 func (v *SigSetEntry) CopyAsInterface() interface{} { return v.Copy() }
-
-func (v *TransactionChainEntry) Copy() *TransactionChainEntry {
-	u := new(TransactionChainEntry)
-
-	if v.Account != nil {
-		u.Account = (v.Account).Copy()
-	}
-	u.Chain = v.Chain
-	u.ChainIndex = v.ChainIndex
-	u.AnchorIndex = v.AnchorIndex
-
-	return u
-}
-
-func (v *TransactionChainEntry) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *accountState) Copy() *accountState {
 	u := new(accountState)
@@ -213,30 +159,6 @@ func (v *transactionState) Copy() *transactionState {
 
 func (v *transactionState) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *SigOrTxn) Equal(u *SigOrTxn) bool {
-	switch {
-	case v.Transaction == u.Transaction:
-		// equal
-	case v.Transaction == nil || u.Transaction == nil:
-		return false
-	case !((v.Transaction).Equal(u.Transaction)):
-		return false
-	}
-	if !(protocol.EqualSignature(v.Signature, u.Signature)) {
-		return false
-	}
-	switch {
-	case v.Txid == u.Txid:
-		// equal
-	case v.Txid == nil || u.Txid == nil:
-		return false
-	case !((v.Txid).Equal(u.Txid)):
-		return false
-	}
-
-	return true
-}
-
 func (v *SigSetEntry) Equal(u *SigSetEntry) bool {
 	if !(v.System == u.System) {
 		return false
@@ -248,28 +170,6 @@ func (v *SigSetEntry) Equal(u *SigSetEntry) bool {
 		return false
 	}
 	if !(v.SignatureHash == u.SignatureHash) {
-		return false
-	}
-
-	return true
-}
-
-func (v *TransactionChainEntry) Equal(u *TransactionChainEntry) bool {
-	switch {
-	case v.Account == u.Account:
-		// equal
-	case v.Account == nil || u.Account == nil:
-		return false
-	case !((v.Account).Equal(u.Account)):
-		return false
-	}
-	if !(v.Chain == u.Chain) {
-		return false
-	}
-	if !(v.ChainIndex == u.ChainIndex) {
-		return false
-	}
-	if !(v.AnchorIndex == u.AnchorIndex) {
 		return false
 	}
 
@@ -383,63 +283,6 @@ func (v *transactionState) Equal(u *transactionState) bool {
 	return true
 }
 
-var fieldNames_SigOrTxn = []string{
-	1: "Transaction",
-	2: "Signature",
-	3: "Txid",
-}
-
-func (v *SigOrTxn) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	if !(v.Transaction == nil) {
-		writer.WriteValue(1, v.Transaction.MarshalBinary)
-	}
-	if !(v.Signature == nil) {
-		writer.WriteValue(2, v.Signature.MarshalBinary)
-	}
-	if !(v.Txid == nil) {
-		writer.WriteTxid(3, v.Txid)
-	}
-
-	_, _, err := writer.Reset(fieldNames_SigOrTxn)
-	if err != nil {
-		return nil, encoding.Error{E: err}
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
-}
-
-func (v *SigOrTxn) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Transaction is missing")
-	} else if v.Transaction == nil {
-		errs = append(errs, "field Transaction is not set")
-	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Signature is missing")
-	} else if v.Signature == nil {
-		errs = append(errs, "field Signature is not set")
-	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field Txid is missing")
-	} else if v.Txid == nil {
-		errs = append(errs, "field Txid is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
 var fieldNames_SigSetEntry = []string{
 	1: "System",
 	2: "Type",
@@ -494,72 +337,6 @@ func (v *SigSetEntry) IsValid() error {
 		errs = append(errs, "field SignatureHash is missing")
 	} else if v.SignatureHash == ([32]byte{}) {
 		errs = append(errs, "field SignatureHash is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
-var fieldNames_TransactionChainEntry = []string{
-	1: "Account",
-	2: "Chain",
-	3: "ChainIndex",
-	4: "AnchorIndex",
-}
-
-func (v *TransactionChainEntry) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	if !(v.Account == nil) {
-		writer.WriteUrl(1, v.Account)
-	}
-	if !(len(v.Chain) == 0) {
-		writer.WriteString(2, v.Chain)
-	}
-	if !(v.ChainIndex == 0) {
-		writer.WriteUint(3, v.ChainIndex)
-	}
-	if !(v.AnchorIndex == 0) {
-		writer.WriteUint(4, v.AnchorIndex)
-	}
-
-	_, _, err := writer.Reset(fieldNames_TransactionChainEntry)
-	if err != nil {
-		return nil, encoding.Error{E: err}
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
-}
-
-func (v *TransactionChainEntry) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Account is missing")
-	} else if v.Account == nil {
-		errs = append(errs, "field Account is not set")
-	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Chain is missing")
-	} else if len(v.Chain) == 0 {
-		errs = append(errs, "field Chain is not set")
-	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field ChainIndex is missing")
-	} else if v.ChainIndex == 0 {
-		errs = append(errs, "field ChainIndex is not set")
-	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
-		errs = append(errs, "field AnchorIndex is missing")
-	} else if v.AnchorIndex == 0 {
-		errs = append(errs, "field AnchorIndex is not set")
 	}
 
 	switch len(errs) {
@@ -832,39 +609,6 @@ func (v *transactionState) IsValid() error {
 	}
 }
 
-func (v *SigOrTxn) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *SigOrTxn) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	if x := new(protocol.Transaction); reader.ReadValue(1, x.UnmarshalBinary) {
-		v.Transaction = x
-	}
-	reader.ReadValue(2, func(b []byte) error {
-		x, err := protocol.UnmarshalSignature(b)
-		if err == nil {
-			v.Signature = x
-		}
-		return err
-	})
-	if x, ok := reader.ReadTxid(3); ok {
-		v.Txid = x
-	}
-
-	seen, err := reader.Reset(fieldNames_SigOrTxn)
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	return nil
-}
-
 func (v *SigSetEntry) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -886,38 +630,6 @@ func (v *SigSetEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_SigSetEntry)
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	return nil
-}
-
-func (v *TransactionChainEntry) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *TransactionChainEntry) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	if x, ok := reader.ReadUrl(1); ok {
-		v.Account = x
-	}
-	if x, ok := reader.ReadString(2); ok {
-		v.Chain = x
-	}
-	if x, ok := reader.ReadUint(3); ok {
-		v.ChainIndex = x
-	}
-	if x, ok := reader.ReadUint(4); ok {
-		v.AnchorIndex = x
-	}
-
-	seen, err := reader.Reset(fieldNames_TransactionChainEntry)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -1083,18 +795,6 @@ func (v *transactionState) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
-func (v *SigOrTxn) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Transaction *protocol.Transaction                          `json:"transaction,omitempty"`
-		Signature   encoding.JsonUnmarshalWith[protocol.Signature] `json:"signature,omitempty"`
-		Txid        *url.TxID                                      `json:"txid,omitempty"`
-	}{}
-	u.Transaction = v.Transaction
-	u.Signature = encoding.JsonUnmarshalWith[protocol.Signature]{Value: v.Signature, Func: protocol.UnmarshalSignatureJSON}
-	u.Txid = v.Txid
-	return json.Marshal(&u)
-}
-
 func (v *SigSetEntry) MarshalJSON() ([]byte, error) {
 	u := struct {
 		System        bool                   `json:"system,omitempty"`
@@ -1165,25 +865,6 @@ func (v *transactionState) MarshalJSON() ([]byte, error) {
 	u.State = v.State
 	u.Signatures = v.Signatures
 	return json.Marshal(&u)
-}
-
-func (v *SigOrTxn) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Transaction *protocol.Transaction                          `json:"transaction,omitempty"`
-		Signature   encoding.JsonUnmarshalWith[protocol.Signature] `json:"signature,omitempty"`
-		Txid        *url.TxID                                      `json:"txid,omitempty"`
-	}{}
-	u.Transaction = v.Transaction
-	u.Signature = encoding.JsonUnmarshalWith[protocol.Signature]{Value: v.Signature, Func: protocol.UnmarshalSignatureJSON}
-	u.Txid = v.Txid
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	v.Transaction = u.Transaction
-	v.Signature = u.Signature.Value
-
-	v.Txid = u.Txid
-	return nil
 }
 
 func (v *SigSetEntry) UnmarshalJSON(data []byte) error {
