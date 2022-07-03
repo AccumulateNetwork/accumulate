@@ -27,7 +27,7 @@ func TestReceipt(t *testing.T) {
 	store := begin()
 
 	// Create a MerkleManager for the memory database
-	manager := newChain(store, 2)
+	manager := newTestChain(store, 2)
 	// populate the database
 	for i := 0; i < testMerkleTreeSize; i++ {
 		v := GetHash(i)
@@ -77,7 +77,7 @@ func TestReceiptAll(t *testing.T) {
 	const testMerkleTreeSize = 150
 
 	store := begin()
-	manager := newChain(store, 2, "one")      // Populate a database
+	manager := newTestChain(store, 2, "one")  // Populate a database
 	var rh common.RandHash                    // A source of random hashes
 	for i := 0; i < testMerkleTreeSize; i++ { // Then for all the hashes for our test
 		require.NoError(t, manager.AddHash(rh.NextList(), false)) // Add a hash
@@ -203,7 +203,7 @@ func TestBadgerReceipts(t *testing.T) {
 	batch := badger.Begin(true)
 	defer batch.Discard()
 
-	manager := newChain(record.KvStore{Store: batch}, 2)
+	manager := newTestChain(record.KvStore{Store: batch}, 2)
 
 	PopulateDatabase(t, manager, 700)
 
@@ -215,8 +215,8 @@ func TestReceipt_Combine(t *testing.T) {
 	testCnt := int64(50)
 	var rh common.RandHash
 	store := begin()
-	m1 := newChain(store, 2, "m1")
-	m2 := newChain(store, 2, "m2")
+	m1 := newTestChain(store, 2, "m1")
+	m2 := newTestChain(store, 2, "m2")
 
 	for i := int64(0); i < testCnt; i++ {
 		require.NoError(t, m1.AddHash(rh.NextList(), false))
@@ -276,8 +276,8 @@ func TestReceiptSimple(t *testing.T) {
 		list = append(list, rh.Next()) //
 	}
 
-	store := begin()        //  Set up a memory db
-	m := newChain(store, 2) //
+	store := begin()            //  Set up a memory db
+	m := newTestChain(store, 2) //
 
 	for _, v := range list { //                Put all the values into the SMT
 		require.NoError(t, m.AddHash(v, false), "Error") //

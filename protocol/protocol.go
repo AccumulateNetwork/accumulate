@@ -63,14 +63,8 @@ const (
 	// SignatureChain is the pending signature chain of a record.
 	SignatureChain = "signature"
 
-	// MinorRootChain is the root anchor chain of a partition.
-	MinorRootChain = "root"
-
 	// ScratchChain is the scratch transaction chain of a record.
 	ScratchChain = "scratch"
-
-	// MinorRootIndexChain is the index chain of the root anchor chain of a partition.
-	MinorRootIndexChain = "root-index"
 
 	// GenesisBlock is the block index of the first block.
 	GenesisBlock = 1

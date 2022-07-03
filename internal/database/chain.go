@@ -27,9 +27,7 @@ func WrapChain(merkle *managed.Chain) (*Chain, error) {
 	return m, nil
 }
 
-func (c *Chain) Name() string            { return c.merkle.Name() }
-func (c *Chain) Type() managed.ChainType { return c.merkle.Type() }
-func (c *Chain) Unwrap() *managed.Chain  { return c.merkle }
+func (c *Chain) Unwrap() *managed.Chain { return c.merkle }
 
 // Height returns the height of the chain.
 func (c *Chain) Height() int64 {

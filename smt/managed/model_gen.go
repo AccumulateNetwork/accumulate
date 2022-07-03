@@ -13,8 +13,9 @@ type Chain struct {
 	logger    logging.OptionalLogger
 	store     record.Store
 	key       record.Key
-	typ       ChainType
+	parent    *MerkleManager
 	name      string
+	typ       ChainType
 	label     string
 	markPower int64
 	markFreq  int64
@@ -24,6 +25,7 @@ type Chain struct {
 	states       map[storage.Key]*record.Value[*MerkleState]
 	elementIndex map[storage.Key]*record.Value[uint64]
 	element      map[storage.Key]*record.Value[[]byte]
+	index        *Chain
 }
 
 func (c *Chain) Head() *record.Value[*MerkleState] {
@@ -51,6 +53,13 @@ func (c *Chain) Element(index uint64) *record.Value[[]byte] {
 	return getOrCreateMap(&c.element, c.key.Append("Element", index), func() *record.Value[[]byte] {
 		return record.NewValue(c.logger.L, c.store, c.key.Append("Element", index), c.label+" element", false,
 			record.Wrapped(record.BytesWrapper))
+	})
+}
+
+func (c *Chain) Index() *Chain {
+	return getOrCreateField(&c.index, func() *Chain {
+		return newIndexChain(c, c.logger.L, c.store, c.key.Append("Index"),
+			"index", c.label+" index")
 	})
 }
 
@@ -88,6 +97,8 @@ func (c *Chain) Resolve(key record.Key) (record.Record, record.Key, error) {
 		}
 		v := c.Element(index)
 		return v, key[2:], nil
+	case "Index":
+		return c.Index(), key[1:], nil
 	default:
 		return nil, nil, errors.New(errors.StatusInternalError, "bad key for chain")
 	}
@@ -116,6 +127,9 @@ func (c *Chain) IsDirty() bool {
 			return true
 		}
 	}
+	if fieldIsDirty(c.index) {
+		return true
+	}
 
 	return false
 }
@@ -136,6 +150,7 @@ func (c *Chain) Commit() error {
 	for _, v := range c.element {
 		commitField(&err, v)
 	}
+	commitField(&err, c.index)
 
 	return nil
 }

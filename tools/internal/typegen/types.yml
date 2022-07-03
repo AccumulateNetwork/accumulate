@@ -138,6 +138,8 @@ OtherRecord:
       pointer: true
       marshal-as: reference
       repeatable: true
+    - name: NewFunc
+      type: string
     - name: Pointer
       type: bool
     - name: HasChains

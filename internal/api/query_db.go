@@ -59,12 +59,12 @@ func (m *DatabaseQueryModule) queryAccount(batch *database.Batch, accountUrl *ur
 		for _, c := range chains {
 			chain, err := account.ReadChain(c)
 			if err != nil {
-				return nil, errors.Format(errors.StatusUnknownError, "read account %v chain %s: %w", accountUrl, chain.Name(), err)
+				return nil, errors.Format(errors.StatusUnknownError, "read account %v chain %s: %w", accountUrl, chain.Unwrap().Name(), err)
 			}
 
 			state := new(ChainState)
-			state.Name = chain.Name()
-			state.Type = chain.Type()
+			state.Name = chain.Unwrap().Name()
+			state.Type = chain.Unwrap().Type()
 			state.Height = uint64(chain.Height())
 			for _, hash := range chain.CurrentState().Pending {
 				hash := hash // See docs/developer/rangevarref.md

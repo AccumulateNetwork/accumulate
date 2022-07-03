@@ -128,6 +128,17 @@ func (r *Account) AllChains() ([]*managed.Chain, error) {
 		chains = append(chains, chain)
 	}
 
+	for i, n := 0, len(chains); i < n; i++ {
+		chain := chains[i].Index()
+		head, err := chain.Head().Get()
+		if err != nil {
+			return nil, errors.Wrap(errors.StatusUnknownError, err)
+		}
+		if head.Count > 0 {
+			chains = append(chains, chain)
+		}
+	}
+
 	sort.Slice(chains, func(i, j int) bool {
 		return strings.Compare(chains[i].Name(), chains[j].Name()) < 0
 	})
@@ -137,11 +148,6 @@ func (r *Account) AllChains() ([]*managed.Chain, error) {
 // Chain returns a chain manager for the given chain.
 func (r *Account) Chain(name string) (*Chain, error) {
 	return r.wrappedChain(name)
-}
-
-// Chain returns a chain manager for the given chain.
-func (r *Account) IndexChain(name string) (*Chain, error) {
-	return r.wrappedChain(name + "-index")
 }
 
 // ReadChain returns a read-only chain manager for the given chain.
@@ -157,12 +163,33 @@ func (r *Account) wrappedChain(name string) (*Chain, error) {
 	return WrapChain(c)
 }
 
-func (a *Account) ChainByName(name string) (*managed.Chain, error) {
-	c, ok := a.resolveChain(name)
-	if ok {
-		return c, nil
+// Chain returns a chain manager for the given chain.
+func (r *Account) IndexChain(name string) (*Chain, error) {
+	// Prevent double-indexing
+	if strings.HasSuffix(name, "-index") {
+		name = name[:len(name)-len("-index")]
 	}
-	return nil, errors.NotFound("account %v: invalid chain name: %q", a.key[1], name)
+
+	c, err := r.ChainByName(name)
+	if err != nil {
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
+	}
+	return WrapChain(c.Index())
+}
+
+func (a *Account) ChainByName(name string) (*managed.Chain, error) {
+	index := strings.HasSuffix(name, "-index")
+	if index {
+		name = name[:len(name)-len("-index")]
+	}
+	c, ok := a.resolveChain(name)
+	if !ok {
+		return nil, errors.NotFound("account %v: invalid chain name: %q", a.key[1], name)
+	}
+	if index {
+		return c.Index(), nil
+	}
+	return c, nil
 }
 
 func (r *Account) AddSyntheticForAnchor(anchor [32]byte, txid *url.TxID) error {

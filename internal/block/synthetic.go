@@ -172,7 +172,7 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 
 func (x *Executor) buildSynthReceipt(batch *database.Batch, produced []*protocol.Transaction, rootAnchor, synthAnchor int64) error {
 	// Load the root chain
-	chain, err := batch.Account(x.Describe.Ledger()).ReadChain(protocol.MinorRootChain)
+	chain, err := database.WrapChain(batch.Account(x.Describe.Ledger()).RootChain())
 	if err != nil {
 		return errors.Format(errors.StatusUnknownError, "load root chain: %w", err)
 	}

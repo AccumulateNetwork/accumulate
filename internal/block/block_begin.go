@@ -183,7 +183,7 @@ func (x *Executor) didRecordMajorBlock(block *Block) (uint64, error) {
 	}
 
 	// Load the root index chain
-	chain, err = block.Batch.Account(x.Describe.Ledger()).ReadChain(protocol.MinorRootIndexChain)
+	chain, err = database.WrapChain(block.Batch.Account(x.Describe.Ledger()).RootChain().Index())
 	if err != nil {
 		return 0, errors.Format(errors.StatusUnknownError, "load root index chain: %w", err)
 	}
@@ -347,7 +347,7 @@ func (x *Executor) finalizeBlock(batch *database.Batch, currentBlockIndex, openM
 
 func (x *Executor) sendSyntheticTransactions(batch *database.Batch) (bool, error) {
 	// Load the root chain's index chain's last two entries
-	last, nextLast, err := indexing.LoadLastTwoIndexEntries(batch.Account(x.Describe.Ledger()), protocol.MinorRootIndexChain)
+	last, nextLast, err := indexing.LoadLastTwoIndexEntries(batch.Account(x.Describe.Ledger()).RootChain().Index())
 	if err != nil {
 		return false, errors.Format(errors.StatusUnknownError, "load root index chain's last two entries: %w", err)
 	}
@@ -361,7 +361,7 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch) (bool, error
 
 	// Load the synthetic transaction chain's index chain's last two entries
 	record := batch.Account(x.Describe.Synthetic())
-	last, nextLast, err = indexing.LoadLastTwoIndexEntries(record, record.MainIndexChain().Name())
+	last, nextLast, err = indexing.LoadLastTwoIndexEntries(record.MainChain().Index())
 	if err != nil {
 		return false, errors.Format(errors.StatusUnknownError, "load synthetic transaction index chain's last two entries: %w", err)
 	}
@@ -580,7 +580,7 @@ func (x *Executor) buildPartitionAnchor(batch *database.Batch, ledgerState *prot
 
 func (x *Executor) buildBlockAnchor(batch *database.Batch, ledgerState *protocol.SystemLedger, ledger *database.Account, anchor *protocol.PartitionAnchor, majorBlockIndex uint64) (*database.Chain, error) {
 	// Load the root chain
-	rootChain, err := ledger.ReadChain(protocol.MinorRootChain)
+	rootChain, err := database.WrapChain(ledger.RootChain())
 	if err != nil {
 		return nil, errors.Format(errors.StatusUnknownError, "load root chain: %w", err)
 	}

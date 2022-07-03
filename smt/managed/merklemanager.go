@@ -36,6 +36,19 @@ func NewChain(logger log.Logger, store record.Store, key record.Key, markPower i
 	return c
 }
 
+func newIndexChain(c *Chain, logger log.Logger, store record.Store, key record.Key, _, _ string) *Chain {
+	var label string
+	if strings.HasSuffix(c.label, " chain") {
+		label = c.label[:len(c.label)-len("chain")] + "index chain"
+	} else {
+		label = c.label + " index"
+	}
+	d := NewChain(logger, store, key, c.markPower, ChainTypeIndex, c.name+"-index", label)
+	d.parent = c
+	return d
+}
+
+func (c *Chain) Parent() *Chain  { return c.parent }
 func (c *Chain) Name() string    { return c.name }
 func (c *Chain) Type() ChainType { return c.typ }
 

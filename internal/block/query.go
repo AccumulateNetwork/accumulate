@@ -41,8 +41,8 @@ func (m *Executor) queryAccount(batch *database.Batch, account *database.Account
 
 		ms := chain.CurrentState()
 		var state query.ChainState
-		state.Name = chain.Name()
-		state.Type = chain.Type()
+		state.Name = chain.Unwrap().Name()
+		state.Type = chain.Unwrap().Type()
 		state.Height = uint64(ms.Count)
 		state.Roots = make([][]byte, len(ms.Pending))
 		for i, h := range ms.Pending {
@@ -1007,7 +1007,7 @@ func (m *Executor) queryMinorBlocks(batch *database.Batch, req *query.RequestMin
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
-	idxChain, err := ledgerAcc.ReadChain(protocol.MinorRootIndexChain)
+	idxChain, err := database.WrapChain(ledgerAcc.RootChain().Index())
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
@@ -1176,7 +1176,7 @@ func (m *Executor) shouldBePruned(batch *database.Batch, txid []byte, txBody pro
 
 	// preload the minor root index chain
 	ledger := batch.Account(m.Describe.NodeUrl(protocol.Ledger))
-	minorIndexChain, err := ledger.ReadChain(protocol.MinorRootIndexChain)
+	minorIndexChain, err := database.WrapChain(ledger.RootChain().Index())
 	if err != nil {
 		return false, err
 	}

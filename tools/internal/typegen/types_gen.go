@@ -53,6 +53,7 @@ type OtherRecord struct {
 	Name         string        `json:"name,omitempty" form:"name" query:"name" validate:"required"`
 	DataType     string        `json:"dataType,omitempty" form:"dataType" query:"dataType" validate:"required"`
 	Parameters   []*Field      `json:"parameters,omitempty" form:"parameters" query:"parameters" validate:"required"`
+	NewFunc      string        `json:"newFunc,omitempty" form:"newFunc" query:"newFunc" validate:"required"`
 	Pointer      bool          `json:"pointer,omitempty" form:"pointer" query:"pointer" validate:"required"`
 	HasChains    bool          `json:"hasChains,omitempty" form:"hasChains" query:"hasChains" validate:"required"`
 	extraData    []byte
@@ -167,6 +168,7 @@ func (v *OtherRecord) MarshalJSON() ([]byte, error) {
 		Name         string                    `json:"name,omitempty"`
 		DataType     string                    `json:"dataType,omitempty"`
 		Parameters   encoding.JsonList[*Field] `json:"parameters,omitempty"`
+		NewFunc      string                    `json:"newFunc,omitempty"`
 		Pointer      bool                      `json:"pointer,omitempty"`
 		HasChains    bool                      `json:"hasChains,omitempty"`
 	}{}
@@ -176,6 +178,7 @@ func (v *OtherRecord) MarshalJSON() ([]byte, error) {
 	u.Name = v.Name
 	u.DataType = v.DataType
 	u.Parameters = v.Parameters
+	u.NewFunc = v.NewFunc
 	u.Pointer = v.Pointer
 	u.HasChains = v.HasChains
 	return json.Marshal(&u)
@@ -342,6 +345,7 @@ func (v *OtherRecord) UnmarshalJSON(data []byte) error {
 		Name         string                    `json:"name,omitempty"`
 		DataType     string                    `json:"dataType,omitempty"`
 		Parameters   encoding.JsonList[*Field] `json:"parameters,omitempty"`
+		NewFunc      string                    `json:"newFunc,omitempty"`
 		Pointer      bool                      `json:"pointer,omitempty"`
 		HasChains    bool                      `json:"hasChains,omitempty"`
 	}{}
@@ -351,6 +355,7 @@ func (v *OtherRecord) UnmarshalJSON(data []byte) error {
 	u.Name = v.Name
 	u.DataType = v.DataType
 	u.Parameters = v.Parameters
+	u.NewFunc = v.NewFunc
 	u.Pointer = v.Pointer
 	u.HasChains = v.HasChains
 	if err := json.Unmarshal(data, &u); err != nil {
@@ -364,6 +369,7 @@ func (v *OtherRecord) UnmarshalJSON(data []byte) error {
 	v.Name = u.Name
 	v.DataType = u.DataType
 	v.Parameters = u.Parameters
+	v.NewFunc = u.NewFunc
 	v.Pointer = u.Pointer
 	v.HasChains = u.HasChains
 	return nil

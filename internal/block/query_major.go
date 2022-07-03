@@ -64,7 +64,7 @@ majorEntryLoop:
 			rspMjrEntry = new(query.ResponseMajorEntry)
 		}
 
-		mnrIdxChain, err := ledgerAcc.ReadChain(protocol.MinorRootIndexChain)
+		mnrIdxChain, err := database.WrapChain(ledgerAcc.RootChain().Index())
 		if err != nil {
 			return nil, errors.Wrap(errors.StatusUnknownError, err)
 		}

@@ -26,13 +26,9 @@ type Account struct {
 	mainChain              *managed.Chain
 	scratchChain           *managed.Chain
 	signatureChain         *managed.Chain
-	mainIndexChain         *managed.Chain
-	scratchIndexChain      *managed.Chain
-	signatureIndexChain    *managed.Chain
 	rootChain              *managed.Chain
 	anchorChain            map[storage.Key]*AccountAnchorChain
 	syntheticSequenceChain map[storage.Key]*managed.Chain
-	rootIndexChain         *managed.Chain
 	mainMajorIndexChain    *managed.Chain
 	chains                 *record.Set[string]
 	syntheticAnchors       *record.Set[[32]byte]
@@ -82,27 +78,6 @@ func (c *Account) SignatureChain() *managed.Chain {
 	})
 }
 
-func (c *Account) MainIndexChain() *managed.Chain {
-	return getOrCreateField(&c.mainIndexChain, func() *managed.Chain {
-		return managed.NewChain(c.logger.L, c.store, c.key.Append("MainIndexChain"), markPower, managed.ChainTypeIndex,
-			"main-index", c.label+" main index chain")
-	})
-}
-
-func (c *Account) ScratchIndexChain() *managed.Chain {
-	return getOrCreateField(&c.scratchIndexChain, func() *managed.Chain {
-		return managed.NewChain(c.logger.L, c.store, c.key.Append("ScratchIndexChain"), markPower, managed.ChainTypeIndex,
-			"scratch-index", c.label+" scratch index chain")
-	})
-}
-
-func (c *Account) SignatureIndexChain() *managed.Chain {
-	return getOrCreateField(&c.signatureIndexChain, func() *managed.Chain {
-		return managed.NewChain(c.logger.L, c.store, c.key.Append("SignatureIndexChain"), markPower, managed.ChainTypeIndex,
-			"signature-index", c.label+" signature index chain")
-	})
-}
-
 func (c *Account) RootChain() *managed.Chain {
 	return getOrCreateField(&c.rootChain, func() *managed.Chain {
 		return managed.NewChain(c.logger.L, c.store, c.key.Append("RootChain"), markPower, managed.ChainTypeTransaction,
@@ -125,13 +100,6 @@ func (c *Account) SyntheticSequenceChain(subnetId string) *managed.Chain {
 	return getOrCreateMap(&c.syntheticSequenceChain, c.key.Append("SyntheticSequenceChain", subnetId), func() *managed.Chain {
 		return managed.NewChain(c.logger.L, c.store, c.key.Append("SyntheticSequenceChain", subnetId), markPower, managed.ChainTypeTransaction,
 			"synthetic-sequence(%[2]v)", c.label+" synthetic sequence chain")
-	})
-}
-
-func (c *Account) RootIndexChain() *managed.Chain {
-	return getOrCreateField(&c.rootIndexChain, func() *managed.Chain {
-		return managed.NewChain(c.logger.L, c.store, c.key.Append("RootIndexChain"), markPower, managed.ChainTypeIndex,
-			"root-index", c.label+" root index chain")
 	})
 }
 
@@ -195,12 +163,6 @@ func (c *Account) Resolve(key record.Key) (record.Record, record.Key, error) {
 		return c.ScratchChain(), key[1:], nil
 	case "SignatureChain":
 		return c.SignatureChain(), key[1:], nil
-	case "MainIndexChain":
-		return c.MainIndexChain(), key[1:], nil
-	case "ScratchIndexChain":
-		return c.ScratchIndexChain(), key[1:], nil
-	case "SignatureIndexChain":
-		return c.SignatureIndexChain(), key[1:], nil
 	case "RootChain":
 		return c.RootChain(), key[1:], nil
 	case "AnchorChain":
@@ -223,8 +185,6 @@ func (c *Account) Resolve(key record.Key) (record.Record, record.Key, error) {
 		}
 		v := c.SyntheticSequenceChain(subnetId)
 		return v, key[2:], nil
-	case "RootIndexChain":
-		return c.RootIndexChain(), key[1:], nil
 	case "MainMajorIndexChain":
 		return c.MainMajorIndexChain(), key[1:], nil
 	case "Chains":
@@ -265,15 +225,6 @@ func (c *Account) IsDirty() bool {
 	if fieldIsDirty(c.signatureChain) {
 		return true
 	}
-	if fieldIsDirty(c.mainIndexChain) {
-		return true
-	}
-	if fieldIsDirty(c.scratchIndexChain) {
-		return true
-	}
-	if fieldIsDirty(c.signatureIndexChain) {
-		return true
-	}
 	if fieldIsDirty(c.rootChain) {
 		return true
 	}
@@ -286,9 +237,6 @@ func (c *Account) IsDirty() bool {
 		if v.IsDirty() {
 			return true
 		}
-	}
-	if fieldIsDirty(c.rootIndexChain) {
-		return true
 	}
 	if fieldIsDirty(c.mainMajorIndexChain) {
 		return true
@@ -319,20 +267,8 @@ func (c *Account) resolveChain(name string) (chain *managed.Chain, ok bool) {
 	if name == "signature" {
 		return c.SignatureChain(), true
 	}
-	if name == "main-index" {
-		return c.MainIndexChain(), true
-	}
-	if name == "scratch-index" {
-		return c.ScratchIndexChain(), true
-	}
-	if name == "signature-index" {
-		return c.SignatureIndexChain(), true
-	}
 	if name == "root" {
 		return c.RootChain(), true
-	}
-	if name == "root-index" {
-		return c.RootIndexChain(), true
 	}
 	if name == "main-major-index" {
 		return c.MainMajorIndexChain(), true
@@ -374,15 +310,6 @@ func (c *Account) dirtyChains() []*managed.Chain {
 	if fieldIsDirty(c.signatureChain) {
 		chains = append(chains, c.signatureChain)
 	}
-	if fieldIsDirty(c.mainIndexChain) {
-		chains = append(chains, c.mainIndexChain)
-	}
-	if fieldIsDirty(c.scratchIndexChain) {
-		chains = append(chains, c.scratchIndexChain)
-	}
-	if fieldIsDirty(c.signatureIndexChain) {
-		chains = append(chains, c.signatureIndexChain)
-	}
 	if fieldIsDirty(c.rootChain) {
 		chains = append(chains, c.rootChain)
 	}
@@ -393,9 +320,6 @@ func (c *Account) dirtyChains() []*managed.Chain {
 		if v.IsDirty() {
 			chains = append(chains, v)
 		}
-	}
-	if fieldIsDirty(c.rootIndexChain) {
-		chains = append(chains, c.rootIndexChain)
 	}
 	if fieldIsDirty(c.mainMajorIndexChain) {
 		chains = append(chains, c.mainMajorIndexChain)
@@ -418,9 +342,6 @@ func (c *Account) baseCommit() error {
 	commitField(&err, c.mainChain)
 	commitField(&err, c.scratchChain)
 	commitField(&err, c.signatureChain)
-	commitField(&err, c.mainIndexChain)
-	commitField(&err, c.scratchIndexChain)
-	commitField(&err, c.signatureIndexChain)
 	commitField(&err, c.rootChain)
 	for _, v := range c.anchorChain {
 		commitField(&err, v)
@@ -428,7 +349,6 @@ func (c *Account) baseCommit() error {
 	for _, v := range c.syntheticSequenceChain {
 		commitField(&err, v)
 	}
-	commitField(&err, c.rootIndexChain)
 	commitField(&err, c.mainMajorIndexChain)
 	commitField(&err, c.chains)
 	commitField(&err, c.syntheticAnchors)

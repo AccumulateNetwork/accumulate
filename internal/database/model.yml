@@ -41,16 +41,6 @@
     type: chain
     chainType: transaction # change to signature
 
-  - name: MainIndexChain
-    type: chain
-    chainType: index
-  - name: ScratchIndexChain
-    type: chain
-    chainType: index
-  - name: SignatureIndexChain
-    type: chain
-    chainType: index
-
   # System Chains
   - name: RootChain
     type: chain
@@ -74,10 +64,7 @@
     - name: SubnetId
       type: string
 
-  - name: RootIndexChain
-    type: chain
-    chainType: index
-
+  # Major Block Chains
   - name: MainMajorIndexChain
     type: chain
     chainType: index

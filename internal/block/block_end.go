@@ -130,7 +130,7 @@ func (m *Executor) EndBlock(block *Block) error {
 	}
 
 	// Index the root chain
-	rootIndexIndex, err := addIndexChainEntry(ledger.RootIndexChain(), &protocol.IndexEntry{
+	rootIndexIndex, err := addIndexChainEntry(ledger.RootChain().Index(), &protocol.IndexEntry{
 		Source:     uint64(rootChain.Height() - 1),
 		BlockIndex: uint64(block.Index),
 		BlockTime:  &block.Time,

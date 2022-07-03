@@ -151,7 +151,7 @@ func (b *Batch) Import(db interface{ Export() map[storage.Key][]byte }) error {
 
 func (b *Batch) GetMinorRootChainAnchor(describe *config.Describe) ([]byte, error) {
 	ledger := b.Account(describe.NodeUrl(protocol.Ledger))
-	chain, err := ledger.ReadChain(protocol.MinorRootChain)
+	chain, err := WrapChain(ledger.RootChain())
 	if err != nil {
 		return nil, err
 	}

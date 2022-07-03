@@ -1,10 +1,13 @@
 - name: Chain
   type: entity
   fields:
-  - name: typ
-    type: ChainType
+  - name: parent
+    type: MerkleManager
+    pointer: true
   - name: name
     type: string
+  - name: typ
+    type: ChainType
   - name: label
     type: string
   - name: markPower
@@ -38,3 +41,9 @@
     parameters:
     - name: Index
       type: uint
+
+  - name: Index
+    type: other
+    dataType: Chain
+    newFunc: newIndexChain
+    pointer: true

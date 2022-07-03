@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -13,15 +14,15 @@ import (
 // LoadIndexEntryFromEnd loads the Nth-to-last entry from an index chain.
 // LoadIndexEntryFromEnd will panic if the offset is zero. If the offset is
 // greater than the chain height, LoadIndexEntryFromEnd returns nil, nil.
-func LoadIndexEntryFromEnd(account *Account, indexChain string, offset uint64) (*protocol.IndexEntry, error) {
+func LoadIndexEntryFromEnd(indexChain *managed.Chain, offset uint64) (*protocol.IndexEntry, error) {
 	if offset == 0 {
 		panic("offset must be > 0")
 	}
 
 	// Load the chain
-	chain, err := account.ReadChain(indexChain)
+	chain, err := database.WrapChain(indexChain)
 	if err != nil {
-		return nil, errors.Unknown("get account chain %s: %w", indexChain, err)
+		return nil, errors.Unknown("get account chain %s: %w", indexChain.Name(), err)
 	}
 
 	if chain.Height() < int64(offset) {
@@ -33,7 +34,7 @@ func LoadIndexEntryFromEnd(account *Account, indexChain string, offset uint64) (
 	entry := new(protocol.IndexEntry)
 	err = chain.EntryAs(int64(index), entry)
 	if err != nil {
-		return nil, errors.Unknown("get account chain %s entry %d: %w", indexChain, index, err)
+		return nil, errors.Unknown("get account chain %s entry %d: %w", indexChain.Name(), index, err)
 	}
 
 	return entry, nil
@@ -41,8 +42,8 @@ func LoadIndexEntryFromEnd(account *Account, indexChain string, offset uint64) (
 
 // LoadLastTwoIndexEntries loads the last and next to last entries of the index
 // chain.
-func LoadLastTwoIndexEntries(account *Account, indexChain string) (last, nextLast *protocol.IndexEntry, err error) {
-	last, err = LoadIndexEntryFromEnd(account, indexChain, 1)
+func LoadLastTwoIndexEntries(indexChain *managed.Chain) (last, nextLast *protocol.IndexEntry, err error) {
+	last, err = LoadIndexEntryFromEnd(indexChain, 1)
 	if err != nil {
 		return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
@@ -50,7 +51,7 @@ func LoadLastTwoIndexEntries(account *Account, indexChain string) (last, nextLas
 		return
 	}
 
-	nextLast, err = LoadIndexEntryFromEnd(account, indexChain, 2)
+	nextLast, err = LoadIndexEntryFromEnd(indexChain, 2)
 	if err != nil {
 		return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
@@ -58,7 +59,7 @@ func LoadLastTwoIndexEntries(account *Account, indexChain string) (last, nextLas
 }
 
 func getRootReceipt(net *config.Describe, batch *Batch, from, to int64) (*managed.Receipt, error) {
-	localChain, err := batch.Account(net.Ledger()).ReadChain(protocol.MinorRootChain)
+	localChain, err := database.WrapChain(batch.Account(net.Ledger()).RootChain())
 	if err != nil {
 		return nil, errors.Unknown("get minor root chain: %w", err)
 	}
@@ -74,18 +75,18 @@ func getRootReceipt(net *config.Describe, batch *Batch, from, to int64) (*manage
 }
 
 // loadIndexEntry loads an entry from an index chain.
-func loadIndexEntry(account *Account, chainName, indexChain string, index uint64) (*protocol.IndexEntry, error) {
+func loadIndexEntry(chain *managed.Chain, index uint64) (*protocol.IndexEntry, error) {
 	// Load the chain
-	chain, err := account.ReadChain(indexChain)
+	indexChain, err := database.WrapChain(chain.Index())
 	if err != nil {
-		return nil, fmt.Errorf("unable to load the index chain of the %s chain: %w", chainName, err)
+		return nil, fmt.Errorf("unable to load the index chain of the %s chain: %w", chain.Name(), err)
 	}
 
 	// Load the entry
 	entry := new(protocol.IndexEntry)
-	err = chain.EntryAs(int64(index), entry)
+	err = indexChain.EntryAs(int64(index), entry)
 	if err != nil {
-		return nil, fmt.Errorf("unable to load index entry %d for the index chain of the %s chain: %w", index, chainName, err)
+		return nil, fmt.Errorf("unable to load index entry %d for the index chain of the %s chain: %w", index, chain.Name(), err)
 	}
 
 	return entry, nil
@@ -124,7 +125,7 @@ func ReceiptForAccountState(net *config.Describe, batch *Batch, account *Account
 
 	// Load the latest root index entry (just for the block index)
 	ledger := batch.Account(net.Ledger())
-	rootEntry, err := LoadIndexEntryFromEnd(ledger, protocol.MinorRootIndexChain, 1)
+	rootEntry, err := LoadIndexEntryFromEnd(ledger.RootChain().Index(), 1)
 	if err != nil {
 		return 0, nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
@@ -133,20 +134,20 @@ func ReceiptForAccountState(net *config.Describe, batch *Batch, account *Account
 }
 
 func ReceiptForChainEntry(net *config.Describe, batch *Batch, account *Account, hash []byte, entry *TransactionChainEntry) (uint64, *managed.Receipt, error) {
-	chain, err := account.IndexChain(entry.Chain)
+	chain, err := account.ChainByName(entry.Chain)
 	if err != nil {
 		return 0, nil, err
 	}
 
 	// Load the index entry
-	accountIndex, err := loadIndexEntry(account, entry.Chain, chain.Name(), entry.ChainIndex)
+	accountIndex, err := loadIndexEntry(chain, entry.ChainIndex)
 	if err != nil {
 		return 0, nil, err
 	}
 
 	// Load the root index entry
 	ledger := batch.Account(net.Ledger())
-	rootIndex, err := loadIndexEntry(ledger, protocol.MinorRootChain, protocol.MinorRootIndexChain, entry.AnchorIndex)
+	rootIndex, err := loadIndexEntry(ledger.RootChain().Index(), entry.AnchorIndex)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -188,7 +189,7 @@ func ReceiptForChainIndex(net *config.Describe, batch *Batch, account *Account, 
 		return 0, nil, fmt.Errorf("unable to load %s chain of %v: %w", name, account, err)
 	}
 
-	rootIndexChain, err := batch.Account(net.Ledger()).ReadChain(protocol.MinorRootIndexChain)
+	rootIndexChain, err := database.WrapChain(batch.Account(net.Ledger()).RootChain().Index())
 	if err != nil {
 		return 0, nil, fmt.Errorf("unable to load minor root index chain: %w", err)
 	}
