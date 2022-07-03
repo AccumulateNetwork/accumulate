@@ -52,7 +52,7 @@ func (a *Account) loadState(preserveChains bool) (*accountState, error) {
 	// Load transaction state
 	for _, h := range loadState(&err, false, a.Pending().Get) {
 		h := h.Hash()
-		state, err := a.batch.Transaction(h[:]).loadState() //nolint:rangevarref
+		state, err := a.parent.Transaction(h[:]).loadState() //nolint:rangevarref
 		if err != nil {
 			return nil, err
 		}
@@ -76,7 +76,7 @@ func (a *Account) stateOfTransactionsOnChain(name string) ([]*transactionState, 
 			return nil, fmt.Errorf("load %s chain entry %d: %w", name, i, err)
 		}
 
-		state[i], err = a.batch.Transaction(hash).loadState()
+		state[i], err = a.parent.Transaction(hash).loadState()
 		if err != nil {
 			return nil, err
 		}
@@ -131,7 +131,7 @@ func (a *Account) restoreState(s *accountState) error {
 			return fmt.Errorf("transaction %X state is invalid: %d signers and %d signatures", hash[:4], len(p.State.Signers), len(p.Signatures))
 		}
 
-		record := a.batch.Transaction(hash)
+		record := a.parent.Transaction(hash)
 		err := record.PutState(&SigOrTxn{Transaction: p.Transaction})
 		if err != nil {
 			return fmt.Errorf("store transaction %X: %w", hash[:4], err)
@@ -180,7 +180,7 @@ func (a *Account) putBpt() error {
 	}
 
 	hash := *(*[32]byte)(hasher.MerkleHash())
-	a.batch.putBpt(a.key.Hash(), hash)
+	a.parent.putBpt(a.key.Hash(), hash)
 	return nil
 }
 
@@ -190,7 +190,7 @@ func (a *Account) BptReceipt() (*managed.Receipt, error) {
 		return nil, errors.New(errors.StatusInternalError, "cannot generate a BPT receipt when there are uncommitted changes")
 	}
 
-	bpt := pmt.NewBPTManager(a.batch.store)
+	bpt := pmt.NewBPTManager(a.parent.kvstore)
 	receipt := bpt.Bpt.GetReceipt(a.key.Hash())
 	if receipt == nil {
 		return nil, errors.NotFound("BPT key %v not found", a.key.Hash())
@@ -264,8 +264,8 @@ func (a *Account) hashTransactions() (hash.Hasher, error) {
 	var hasher hash.Hasher
 	for _, txid := range loadState(&err, false, a.Pending().Get) {
 		h := txid.Hash()
-		hashState(&err, &hasher, false, a.batch.Transaction(h[:]).GetState)
-		hashState(&err, &hasher, false, a.batch.Transaction(h[:]).GetStatus)
+		hashState(&err, &hasher, false, a.parent.Transaction(h[:]).GetState)
+		hashState(&err, &hasher, false, a.parent.Transaction(h[:]).GetStatus)
 	}
 
 	// // TODO Include this

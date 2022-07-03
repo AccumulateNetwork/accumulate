@@ -31,7 +31,7 @@ func (b *Batch) putBpt(key storage.Key, hash [32]byte) {
 
 // commitBpt commits pending BPT updates.
 func (b *Batch) commitBpt() error {
-	bpt := pmt.NewBPTManager(b.store)
+	bpt := pmt.NewBPTManager(b.kvstore)
 
 	for k, v := range b.bptEntries {
 		bpt.InsertKV(k, v)
@@ -52,7 +52,7 @@ func (b *Batch) BptRoot() []byte {
 	if len(b.bptEntries) > 0 {
 		panic("attempted to get BPT root with uncommitted changes")
 	}
-	bpt := pmt.NewBPTManager(b.store)
+	bpt := pmt.NewBPTManager(b.kvstore)
 	return bpt.Bpt.RootHash[:]
 }
 
@@ -62,7 +62,7 @@ func (b *Batch) BptReceipt(key storage.Key, value [32]byte) (*managed.Receipt, e
 		return nil, errors.New(errors.StatusInternalError, "cannot generate a BPT receipt when there are uncommitted BPT entries")
 	}
 
-	bpt := pmt.NewBPTManager(b.store)
+	bpt := pmt.NewBPTManager(b.kvstore)
 	receipt := bpt.Bpt.GetReceipt(key)
 	if receipt == nil {
 		return nil, errors.NotFound("BPT key %v not found", key)
@@ -90,7 +90,7 @@ func (b *Batch) SaveSnapshot(file io.WriteSeeker, network *config.Describe) erro
 	}
 
 	// Write the BPT root hash
-	bpt := pmt.NewBPTManager(b.store)
+	bpt := pmt.NewBPTManager(b.kvstore)
 	_, err = file.Write(bpt.Bpt.RootHash[:])
 	if err != nil {
 		return errors.Format(errors.StatusUnknownError, "write BPT root: %w", err)
@@ -179,7 +179,7 @@ func (b *Batch) RestoreSnapshot(file ioutil2.SectionReader) error {
 	}
 
 	// Load the snapshot
-	bpt := pmt.NewBPTManager(b.store)
+	bpt := pmt.NewBPTManager(b.kvstore)
 	return bpt.Bpt.LoadSnapshot(rd, func(key storage.Key, hash [32]byte, reader ioutil2.SectionReader) error {
 		state := new(accountState)
 		err := state.UnmarshalBinaryFrom(reader)

@@ -152,12 +152,12 @@ func (m *Executor) EndBlock(block *Block) error {
 	}
 
 	// Add transaction-chain index entries for synthetic transactions
-	blockState, err := indexing.BlockState(block.Batch, ledgerUrl).Get()
+	producedSynthTxns, err := indexing.BlockState(block.Batch, ledgerUrl).Get()
 	if err != nil {
 		return errors.Format(errors.StatusUnknownError, "load block state index: %w", err)
 	}
 
-	for _, e := range blockState.ProducedSynthTxns {
+	for _, e := range producedSynthTxns {
 		err = indexing.TransactionChain(block.Batch, e.Transaction).Add(&indexing.TransactionChainEntry{
 			Account:     m.Describe.Synthetic(),
 			Chain:       protocol.MainChain,
