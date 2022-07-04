@@ -37,8 +37,8 @@ func main() {
 
 	// f2.SetFactomdServer("https://api.factomd.net")
 	// f2.SetFactomdServer("http://localhost:8088")
-
-	// entries := factom.EntriesFromFactom()
-	// factom.GetDataAndPopulateQueue(entries)
+	//
+	//entries := factom.EntriesFromFactom()
+	//factom.GetDataAndPopulateQueue(entries)
 	factom.WriteDataFromQueueToAccumulate(factom.LOCAL_URL)
 }

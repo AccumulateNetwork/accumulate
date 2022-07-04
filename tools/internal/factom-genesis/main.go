@@ -3,8 +3,8 @@ package factom
 import (
 	"context"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
+	tmjson "github.com/tendermint/tendermint/libs/json"
 	"io/ioutil"
 	"log"
 	"time"
@@ -35,14 +35,17 @@ func SetPrivateKeyAndOrigin(privateKey string, url *url.URL) error {
 	}
 	var pvkey privval.FilePVKey
 	var pub, priv []byte
-	if json.Unmarshal(b, &pvkey) == nil {
-		if pvkey.PubKey != nil {
-			pub = pvkey.PubKey.Bytes()
-		}
-		if pvkey.PrivKey != nil {
-			priv = pvkey.PrivKey.Bytes()
-		}
+	err = tmjson.Unmarshal(b, &pvkey)
+	if err != nil {
+		return err
 	}
+	if pvkey.PubKey != nil {
+		pub = pvkey.PubKey.Bytes()
+	}
+	if pvkey.PrivKey != nil {
+		priv = pvkey.PrivKey.Bytes()
+	}
+
 	key = &cmd.Key{PrivateKey: priv, PublicKey: pub, Type: protocol.SignatureTypeED25519}
 	origin = url
 	return nil
