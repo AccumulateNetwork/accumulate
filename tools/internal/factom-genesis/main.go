@@ -28,10 +28,10 @@ const (
 	LOCAL_URL = "http://127.0.1.1:26660"
 )
 
-func AccountFromPrivateKey(privateKey string) (*url.URL, error) {
+func SetPrivateKeyAndOrigin(privateKey string, url *url.URL) error {
 	b, err := ioutil.ReadFile(privateKey)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	var pvkey privval.FilePVKey
 	var pub, priv []byte
@@ -50,10 +50,9 @@ func AccountFromPrivateKey(privateKey string) (*url.URL, error) {
 	// 	return nil, fmt.Errorf("invalid private key, cannot create account")
 	// }
 
-	url, _ := protocol.LiteTokenAddress(pub, protocol.ACME, protocol.SignatureTypeED25519)
 	key = &cmd.Key{PrivateKey: priv, PublicKey: pub, Type: protocol.SignatureTypeED25519}
 	origin = url
-	return url, nil
+	return nil
 }
 func buildEnvelope(payload protocol.TransactionBody) (*protocol.Envelope, error) {
 	txn := new(protocol.Transaction)

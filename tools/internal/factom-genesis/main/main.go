@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/tools/internal/factom-genesis"
 )
 
@@ -18,17 +19,21 @@ func main() {
 	// if err != nil {
 	// 	log.Fatalf("invalid private key %v", err)
 	// }
-	url, err := factom.AccountFromPrivateKey("priv_validator_key.json")
+	url, err := url.Parse("acc://bvn-BVN1.acme")
 	if err != nil {
 		log.Fatalf("Error : ", err.Error())
 	}
 	log.Println("URL : ", url)
-	if faucet {
-		err := factom.FaucetWithCredits(factom.LOCAL_URL)
-		if err != nil {
-			log.Fatalf("cannot faucet account %v", err)
-		}
+	err = factom.SetPrivateKeyAndOrigin("priv_validator_key.json", url)
+	if err != nil {
+		log.Fatalf("Error : ", err.Error())
 	}
+	// if faucet {
+	// 	err := factom.FaucetWithCredits(factom.LOCAL_URL)
+	// 	if err != nil {
+	// 		log.Fatalf("cannot faucet account %v", err)
+	// 	}
+	// }
 
 	// f2.SetFactomdServer("https://api.factomd.net")
 	// f2.SetFactomdServer("http://localhost:8088")
