@@ -69,6 +69,9 @@ const (
 	// MinorRootChain is the minor anchor root chain of a partition.
 	MinorRootChain = "minor-root"
 
+	// ScratchChain is the scratch transaction chain of a record.
+	ScratchChain = "scratch"
+
 	// // MajorRootIndexChain is the index chain of the major anchor root chain of a partition.
 	// MajorRootIndexChain = "major-root-index"
 
