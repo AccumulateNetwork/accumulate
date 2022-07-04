@@ -4,13 +4,11 @@ package config
 
 import (
 	"encoding/json"
-	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 )
 
 type Describe struct {
-	Genesis      [32]byte    `json:"genesis,omitempty" form:"genesis" query:"genesis" toml:"genesis" mapstructure:"genesis"`
 	NetworkType  NetworkType `json:"networkType,omitempty" form:"networkType" query:"networkType" validate:"required" toml:"type" mapstructure:"type"`
 	PartitionId  string      `json:"partitionId,omitempty" form:"partitionId" query:"partitionId" validate:"required" toml:"partition-id" mapstructure:"partition-id"`
 	LocalAddress string      `json:"localAddress,omitempty" form:"localAddress" query:"localAddress" validate:"required" toml:"local-address" mapstructure:"local-address"`
@@ -41,7 +39,6 @@ type Partition struct {
 func (v *Describe) Copy() *Describe {
 	u := new(Describe)
 
-	u.Genesis = v.Genesis
 	u.NetworkType = v.NetworkType
 	u.PartitionId = v.PartitionId
 	u.LocalAddress = v.LocalAddress
@@ -94,9 +91,6 @@ func (v *Partition) Copy() *Partition {
 func (v *Partition) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *Describe) Equal(u *Describe) bool {
-	if !(v.Genesis == u.Genesis) {
-		return false
-	}
 	if !(v.NetworkType == u.NetworkType) {
 		return false
 	}
@@ -164,14 +158,12 @@ func (v *Partition) Equal(u *Partition) bool {
 
 func (v *Describe) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Genesis      string      `json:"genesis,omitempty"`
 		NetworkType  NetworkType `json:"networkType,omitempty"`
 		PartitionId  string      `json:"partitionId,omitempty"`
 		SubnetId     string      `json:"subnetId,omitempty"`
 		LocalAddress string      `json:"localAddress,omitempty"`
 		Network      Network     `json:"network,omitempty"`
 	}{}
-	u.Genesis = encoding.ChainToJSON(v.Genesis)
 	u.NetworkType = v.NetworkType
 	u.PartitionId = v.PartitionId
 	u.SubnetId = v.PartitionId
@@ -208,14 +200,12 @@ func (v *Partition) MarshalJSON() ([]byte, error) {
 
 func (v *Describe) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Genesis      string      `json:"genesis,omitempty"`
 		NetworkType  NetworkType `json:"networkType,omitempty"`
 		PartitionId  string      `json:"partitionId,omitempty"`
 		SubnetId     string      `json:"subnetId,omitempty"`
 		LocalAddress string      `json:"localAddress,omitempty"`
 		Network      Network     `json:"network,omitempty"`
 	}{}
-	u.Genesis = encoding.ChainToJSON(v.Genesis)
 	u.NetworkType = v.NetworkType
 	u.PartitionId = v.PartitionId
 	u.SubnetId = v.PartitionId
@@ -223,11 +213,6 @@ func (v *Describe) UnmarshalJSON(data []byte) error {
 	u.Network = v.Network
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
-	}
-	if x, err := encoding.ChainFromJSON(u.Genesis); err != nil {
-		return fmt.Errorf("error decoding Genesis: %w", err)
-	} else {
-		v.Genesis = x
 	}
 	v.NetworkType = u.NetworkType
 	if !(u.PartitionId == "") {

@@ -1,4 +1,3 @@
-
 NetworkConfigRequest:
   non-binary: true
   fields:
@@ -11,6 +10,10 @@ NetworkConfigResponse:
     - name: Network
       type: config.Network
       marshal-as: reference
+    - name: Signature
+      type: protocol.ED25519Signature
+      marshal-as: reference
+      optional: true
 
 PartitionListRequest:
   non-binary: true
@@ -24,6 +27,10 @@ PartitionListResponse:
     - name: Partitions
       type: string
       repeatable: true
+    - name: Signature
+      type: protocol.ED25519Signature
+      marshal-as: reference
+      optional: true
 
 SeedListRequest:
   non-binary: true
@@ -41,6 +48,10 @@ SeedListResponse:
     - name: Addresses
       type: string
       repeatable: true
+    - name: Signature
+      type: protocol.ED25519Signature
+      marshal-as: reference
+      optional: true
 
 SeedCountRequest:
   non-binary: true
@@ -55,4 +66,8 @@ SeedCountResponse:
   fields:
     - name: Count
       type: int
+    - name: Signature
+      type: protocol.ED25519Signature
+      marshal-as: reference
+      optional: true
 

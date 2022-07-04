@@ -7,6 +7,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 type NetworkConfigRequest struct {
@@ -15,7 +16,8 @@ type NetworkConfigRequest struct {
 }
 
 type NetworkConfigResponse struct {
-	Network   config.Network `json:"network,omitempty" form:"network" query:"network" validate:"required"`
+	Network   config.Network            `json:"network,omitempty" form:"network" query:"network" validate:"required"`
+	Signature protocol.ED25519Signature `json:"signature,omitempty" form:"signature" query:"signature"`
 	extraData []byte
 }
 
@@ -25,7 +27,8 @@ type PartitionListRequest struct {
 }
 
 type PartitionListResponse struct {
-	Partitions []string `json:"partitions,omitempty" form:"partitions" query:"partitions" validate:"required"`
+	Partitions []string                  `json:"partitions,omitempty" form:"partitions" query:"partitions" validate:"required"`
+	Signature  protocol.ED25519Signature `json:"signature,omitempty" form:"signature" query:"signature"`
 	extraData  []byte
 }
 
@@ -36,7 +39,8 @@ type SeedCountRequest struct {
 }
 
 type SeedCountResponse struct {
-	Count     int64 `json:"count,omitempty" form:"count" query:"count" validate:"required"`
+	Count     int64                     `json:"count,omitempty" form:"count" query:"count" validate:"required"`
+	Signature protocol.ED25519Signature `json:"signature,omitempty" form:"signature" query:"signature"`
 	extraData []byte
 }
 
@@ -48,7 +52,8 @@ type SeedListRequest struct {
 }
 
 type SeedListResponse struct {
-	Addresses []string `json:"addresses,omitempty" form:"addresses" query:"addresses" validate:"required"`
+	Addresses []string                  `json:"addresses,omitempty" form:"addresses" query:"addresses" validate:"required"`
+	Signature protocol.ED25519Signature `json:"signature,omitempty" form:"signature" query:"signature"`
 	extraData []byte
 }
 
@@ -66,6 +71,7 @@ func (v *NetworkConfigResponse) Copy() *NetworkConfigResponse {
 	u := new(NetworkConfigResponse)
 
 	u.Network = *(&v.Network).Copy()
+	u.Signature = *(&v.Signature).Copy()
 
 	return u
 }
@@ -89,6 +95,7 @@ func (v *PartitionListResponse) Copy() *PartitionListResponse {
 	for i, v := range v.Partitions {
 		u.Partitions[i] = v
 	}
+	u.Signature = *(&v.Signature).Copy()
 
 	return u
 }
@@ -110,6 +117,7 @@ func (v *SeedCountResponse) Copy() *SeedCountResponse {
 	u := new(SeedCountResponse)
 
 	u.Count = v.Count
+	u.Signature = *(&v.Signature).Copy()
 
 	return u
 }
@@ -135,6 +143,7 @@ func (v *SeedListResponse) Copy() *SeedListResponse {
 	for i, v := range v.Addresses {
 		u.Addresses[i] = v
 	}
+	u.Signature = *(&v.Signature).Copy()
 
 	return u
 }
@@ -151,6 +160,9 @@ func (v *NetworkConfigRequest) Equal(u *NetworkConfigRequest) bool {
 
 func (v *NetworkConfigResponse) Equal(u *NetworkConfigResponse) bool {
 	if !((&v.Network).Equal(&u.Network)) {
+		return false
+	}
+	if !((&v.Signature).Equal(&u.Signature)) {
 		return false
 	}
 
@@ -174,6 +186,9 @@ func (v *PartitionListResponse) Equal(u *PartitionListResponse) bool {
 			return false
 		}
 	}
+	if !((&v.Signature).Equal(&u.Signature)) {
+		return false
+	}
 
 	return true
 }
@@ -191,6 +206,9 @@ func (v *SeedCountRequest) Equal(u *SeedCountRequest) bool {
 
 func (v *SeedCountResponse) Equal(u *SeedCountResponse) bool {
 	if !(v.Count == u.Count) {
+		return false
+	}
+	if !((&v.Signature).Equal(&u.Signature)) {
 		return false
 	}
 
@@ -220,6 +238,9 @@ func (v *SeedListResponse) Equal(u *SeedListResponse) bool {
 			return false
 		}
 	}
+	if !((&v.Signature).Equal(&u.Signature)) {
+		return false
+	}
 
 	return true
 }
@@ -227,39 +248,49 @@ func (v *SeedListResponse) Equal(u *SeedListResponse) bool {
 func (v *PartitionListResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Partitions encoding.JsonList[string] `json:"partitions,omitempty"`
+		Signature  protocol.ED25519Signature `json:"signature,omitempty"`
 	}{}
 	u.Partitions = v.Partitions
+	u.Signature = v.Signature
 	return json.Marshal(&u)
 }
 
 func (v *SeedListResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Addresses encoding.JsonList[string] `json:"addresses,omitempty"`
+		Signature protocol.ED25519Signature `json:"signature,omitempty"`
 	}{}
 	u.Addresses = v.Addresses
+	u.Signature = v.Signature
 	return json.Marshal(&u)
 }
 
 func (v *PartitionListResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Partitions encoding.JsonList[string] `json:"partitions,omitempty"`
+		Signature  protocol.ED25519Signature `json:"signature,omitempty"`
 	}{}
 	u.Partitions = v.Partitions
+	u.Signature = v.Signature
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.Partitions = u.Partitions
+	v.Signature = u.Signature
 	return nil
 }
 
 func (v *SeedListResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Addresses encoding.JsonList[string] `json:"addresses,omitempty"`
+		Signature protocol.ED25519Signature `json:"signature,omitempty"`
 	}{}
 	u.Addresses = v.Addresses
+	u.Signature = v.Signature
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.Addresses = u.Addresses
+	v.Signature = u.Signature
 	return nil
 }

@@ -1,7 +1,7 @@
+
 Describe:
   non-binary: true
   fields:
-    optional: true
   - name: NetworkType
     toml: type
     type: NetworkType
