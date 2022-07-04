@@ -83,8 +83,8 @@ if [ -f "$(dnPrivKey 1)" ]; then
     wait-for cli-tx-sig tx sign dn.acme/operators "$(dnPrivKey $sigNr)" $TXID
   done
 
-  echo "sleeping for 5 seconds (wait for anchor)"
-  sleep 5
+  echo "sleeping for 10 seconds (wait for anchor)"
+  sleep 10
   KEY_ADDED_BVN=$(accumulate page get bvn-BVN1.acme/operators/1 | grep $DN_NEW_KEY_HASH || true)
   [[ -z $KEY_ADDED_BVN ]] && die "operator-2 was not sent to the BVN"
 

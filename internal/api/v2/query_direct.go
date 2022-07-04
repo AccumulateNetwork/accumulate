@@ -52,6 +52,7 @@ func (q *queryDirect) query(req query.Request, opts QueryOptions) (string, []byt
 func (q *queryDirect) QueryUrl(u *url.URL, opts QueryOptions) (interface{}, error) {
 	req := new(query.RequestByUrl)
 	req.Url = u
+	req.Scratch = opts.Scratch
 	k, v, err := q.query(req, opts)
 	if err != nil {
 		return nil, err
@@ -307,7 +308,7 @@ query:
 	}
 }
 
-func (q *queryDirect) QueryTxHistory(u *url.URL, pagination QueryPagination) (*MultiResponse, error) {
+func (q *queryDirect) QueryTxHistory(u *url.URL, pagination QueryPagination, scratch bool) (*MultiResponse, error) {
 	if pagination.Count == 0 {
 		// TODO Return an empty array plus the total count?
 		return nil, validatorError(errors.New(errors.StatusBadRequest, "count must be greater than 0"))
@@ -323,6 +324,7 @@ func (q *queryDirect) QueryTxHistory(u *url.URL, pagination QueryPagination) (*M
 
 	req := new(query.RequestTxHistory)
 	req.Account = u
+	req.Scratch = scratch
 	req.Start = pagination.Start
 	req.Limit = pagination.Count
 	k, v, err := q.query(req, QueryOptions{})

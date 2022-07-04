@@ -123,12 +123,16 @@ func (d *DataSetLog) DumpDataSetToDiskFile() ([]string, error) {
 			if needHeader {
 				if d.header != "" {
 					err = write(file, d.header)
-					return nil, err
+					if err != nil {
+						return nil, err
+					}
 				}
 
 				if dset.header != "" {
 					err = write(file, dset.header)
-					return nil, err
+					if err != nil {
+						return nil, err
+					}
 				}
 
 				spacer := "# "

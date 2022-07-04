@@ -33,10 +33,6 @@ CreateTokenAccount:
       type: url
       pointer: true
     # name: KeyBookUrl
-    - name: Scratch
-      field-number: 5
-      type: bool
-      optional: true
     # name: Manager
     - name: Authorities
       description: is a list of authorities to add to the authority set
@@ -76,10 +72,6 @@ CreateDataAccount:
       pointer: true
     # name: KeyBookUrl
     # name: ManagerKeyBookUrl
-    - name: Scratch
-      field-number: 5
-      type: bool
-      optional: true
     - name: Authorities
       description: is a list of authorities to add to the authority set
       type: url

@@ -73,9 +73,6 @@ TokenAccount:
       pointer: true
     - name: Balance
       type: bigint
-    - name: Scratch
-      type: bool
-      optional: true
 
 KeyBook:
   union: { type: account }
@@ -140,9 +137,6 @@ DataAccount:
       pointer: true
     - type: AccountAuth
       marshal-as: reference
-    - name: Scratch
-      type: bool
-      optional: true
     - name: Entry
       type: DataEntry
       marshal-as: union
