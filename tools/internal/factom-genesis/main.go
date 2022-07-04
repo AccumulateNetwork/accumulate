@@ -43,13 +43,6 @@ func SetPrivateKeyAndOrigin(privateKey string, url *url.URL) error {
 			priv = pvkey.PrivKey.Bytes()
 		}
 	}
-	// var pk ed25519.PrivateKey
-	// if len(priv) == 32 || len(priv) == 64 {
-	// 	pk = ed25519.NewKeyFromSeed(priv)
-	// } else {
-	// 	return nil, fmt.Errorf("invalid private key, cannot create account")
-	// }
-
 	key = &cmd.Key{PrivateKey: priv, PublicKey: pub, Type: protocol.SignatureTypeED25519}
 	origin = url
 	return nil
