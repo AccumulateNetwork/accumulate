@@ -66,15 +66,9 @@ func (e NetEngine) GetTransaction(txid [32]byte) (*protocol.Transaction, error) 
 
 func (e NetEngine) Submit(envelope *protocol.Envelope) (*protocol.TransactionStatus, error) {
 	var err error
-	req := new(api.TxRequest)
-	req.IsEnvelope = true
-	req.Origin = envelope.Transaction[0].Header.Principal
-	req.Payload, err = envelope.MarshalBinary()
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := e.Execute(context.Background(), req)
+	req := new(api.ExecuteRequest)
+	req.Envelope = envelope
+	resp, err := e.ExecuteDirect(context.Background(), req)
 	if err != nil {
 		return nil, err
 	}
@@ -93,15 +87,11 @@ func (e NetEngine) Submit(envelope *protocol.Envelope) (*protocol.TransactionSta
 	return status, nil
 }
 
-func (e NetEngine) WaitFor(hash [32]byte) ([]*protocol.TransactionStatus, []*protocol.Transaction, error) {
-	return e.waitFor(hash, false)
-}
-
-func (e NetEngine) waitFor(hash [32]byte, ignorePending bool) ([]*protocol.TransactionStatus, []*protocol.Transaction, error) {
+func (e NetEngine) WaitFor(hash [32]byte, delivered bool) ([]*protocol.TransactionStatus, []*protocol.Transaction, error) {
 	req := new(api.TxnQuery)
 	req.Txid = hash[:]
 	req.Wait = 10 * time.Second
-	req.IgnorePending = ignorePending
+	req.IgnorePending = delivered
 	resp, err := e.QueryTx(context.Background(), req)
 	if err != nil {
 		return nil, nil, err
@@ -111,7 +101,7 @@ func (e NetEngine) waitFor(hash [32]byte, ignorePending bool) ([]*protocol.Trans
 	statuses := []*protocol.TransactionStatus{resp.Status}
 	transactions := []*protocol.Transaction{resp.Transaction}
 	for _, hash := range resp.Produced {
-		st, txn, err := e.waitFor(hash.Hash(), true)
+		st, txn, err := e.WaitFor(hash.Hash(), true)
 		if err != nil {
 			return nil, nil, err
 		}

@@ -146,8 +146,8 @@ const SignatureTypeRCD1 SignatureType = 3
 // SignatureTypeReceipt represents a Merkle tree receipt.
 const SignatureTypeReceipt SignatureType = 4
 
-// SignatureTypeSynthetic is used when sending synthetic transactions.
-const SignatureTypeSynthetic SignatureType = 5
+// SignatureTypePartition is used when sending synthetic and system transactions.
+const SignatureTypePartition SignatureType = 5
 
 // SignatureTypeSet is used when forwarding multiple signatures.
 const SignatureTypeSet SignatureType = 6
@@ -864,7 +864,7 @@ func (v SignatureType) GetEnumValue() uint64 { return uint64(v) }
 func (v *SignatureType) SetEnumValue(id uint64) bool {
 	u := SignatureType(id)
 	switch u {
-	case SignatureTypeUnknown, SignatureTypeLegacyED25519, SignatureTypeED25519, SignatureTypeRCD1, SignatureTypeReceipt, SignatureTypeSynthetic, SignatureTypeSet, SignatureTypeRemote, SignatureTypeBTC, SignatureTypeBTCLegacy, SignatureTypeETH, SignatureTypeDelegated, SignatureTypeInternal:
+	case SignatureTypeUnknown, SignatureTypeLegacyED25519, SignatureTypeED25519, SignatureTypeRCD1, SignatureTypeReceipt, SignatureTypePartition, SignatureTypeSet, SignatureTypeRemote, SignatureTypeBTC, SignatureTypeBTCLegacy, SignatureTypeETH, SignatureTypeDelegated, SignatureTypeInternal:
 		*v = u
 		return true
 	default:
@@ -885,8 +885,8 @@ func (v SignatureType) String() string {
 		return "rcd1"
 	case SignatureTypeReceipt:
 		return "receipt"
-	case SignatureTypeSynthetic:
-		return "synthetic"
+	case SignatureTypePartition:
+		return "partition"
 	case SignatureTypeSet:
 		return "set"
 	case SignatureTypeRemote:
@@ -919,8 +919,10 @@ func SignatureTypeByName(name string) (SignatureType, bool) {
 		return SignatureTypeRCD1, true
 	case "receipt":
 		return SignatureTypeReceipt, true
+	case "partition":
+		return SignatureTypePartition, true
 	case "synthetic":
-		return SignatureTypeSynthetic, true
+		return SignatureTypePartition, true
 	case "set":
 		return SignatureTypeSet, true
 	case "remote":
