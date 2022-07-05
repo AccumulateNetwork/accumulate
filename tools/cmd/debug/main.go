@@ -7,7 +7,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-//go:generate go run ../gen-types --package main ../../../internal/database/types.yml
+//go:generate go run ../gen-types --package main ../../../internal/database/types.yml -i accountState,merkleState,transactionState,sigSetData,SigSetEntry
 
 var cmd = &cobra.Command{
 	Use:   "debug",
