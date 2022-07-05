@@ -1,0 +1,62 @@
+- name: Account
+  type: entity
+  customCommit: true
+  customResolve: true
+  fields:
+  - name: batch
+    type: Batch
+    pointer: true
+  - name: label
+    type: string
+  - name: chains2
+    type: map[storage.Key]*managed.Chain
+  attributes:
+  - name: Main
+    type: state
+    dataType: protocol.Account
+    union: true
+  - name: Pending
+    type: state
+    dataType: txid
+    emptyIfMissing: true
+    pointer: true
+    set: true
+  - name: SyntheticForAnchor
+    type: state
+    parameters:
+    - name: Anchor
+      type: hash
+    dataType: txid
+    emptyIfMissing: true
+    pointer: true
+    set: true
+
+  # Indices
+  - name: Chains
+    type: index
+    dataType: protocol.ChainMetadata
+    pointer: true
+    set: true
+  - name: SyntheticAnchors
+    type: index
+    dataType: hash
+    set: true
+  - name: Directory
+    # TODO Turn this into a chain
+    type: index
+    counted: true
+    dataType: url
+    pointer: true
+  - name: Data
+    type: entity
+    attributes:
+    - name: Entry
+      type: index
+      counted: true
+      dataType: hash
+    - name: Transaction
+      type: index
+      parameters:
+      - name: EntryHash
+        type: hash
+      dataType: hash

@@ -19,6 +19,11 @@ func (s KvStore) GetValue(key Key, value ValueWriter) error {
 		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
+	// Tests may 'delete' an account by setting its value to nil
+	if len(b) == 0 {
+		return errors.NotFound("%v not found", key)
+	}
+
 	err = value.LoadBytes(b)
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknownError, err)

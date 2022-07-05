@@ -1,21 +1,3 @@
-ChainType:
-  Unknown:
-    value: 0
-    description: is used when the chain type is not known
-  Transaction:
-    value: 0x01
-    description: holds transaction hashes
-  Anchor:
-    value: 0x02
-    description: holds chain anchors
-  Data:
-    # DEPRECATED
-    value: 0x03
-    description: holds data entry hashes
-  Index:
-    value: 0x04
-    description: indexes other chains
-
 DataEntryType:
   Unknown:
     value: 0
@@ -51,9 +33,10 @@ SignatureType:
   Receipt:
     value: 4
     description: represents a Merkle tree receipt
-  Synthetic:
+  Partition:
     value: 5
-    description: is used when sending synthetic transactions
+    aliases: [ synthetic ]
+    description: is used when sending synthetic and system transactions
   Set:
     value: 6
     description: is used when forwarding multiple signatures

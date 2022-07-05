@@ -8,7 +8,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -87,9 +86,9 @@ func processReceiptsFromDirectory(st *StateManager, tx *Delivery, body *protocol
 			return fmt.Errorf("receipt %d is invalid: result does not match the anchor", i)
 		}
 
-		st.logger.Debug("Received receipt", "from", logging.AsHex(receipt.Start).Slice(0, 4), "to", logging.AsHex(body.RootChainAnchor).Slice(0, 4), "block", body.MinorBlockIndex, "source", body.Source, "module", "synthetic")
+		// st.logger.Debug("Received receipt", "from", logging.AsHex(receipt.Start).Slice(0, 4), "to", logging.AsHex(body.RootChainAnchor).Slice(0, 4), "block", body.MinorBlockIndex, "source", body.Source, "module", "synthetic")
 
-		synth, err := st.batch.Account(st.Ledger()).SyntheticForAnchor(*(*[32]byte)(receipt.Start))
+		synth, err := st.batch.Account(st.Ledger()).GetSyntheticForAnchor(*(*[32]byte)(receipt.Start))
 		if err != nil {
 			return fmt.Errorf("failed to load pending synthetic transactions for anchor %X: %w", receipt.Start[:4], err)
 		}
@@ -133,7 +132,7 @@ func processNetworkAccountUpdates(st *StateManager, delivery *Delivery, updates 
 	return nil
 }
 
-func getSyntheticSignature(batch *database.Batch, transaction *database.Transaction) (*protocol.SyntheticSignature, error) {
+func getSyntheticSignature(batch *database.Batch, transaction *database.Transaction) (*protocol.PartitionSignature, error) {
 	status, err := transaction.GetStatus()
 	if err != nil {
 		return nil, errors.Format(errors.StatusUnknownError, "load status: %w", err)
@@ -151,7 +150,7 @@ func getSyntheticSignature(batch *database.Batch, transaction *database.Transact
 				return nil, errors.Format(errors.StatusUnknownError, "load signature %x: %w", entry.SignatureHash[:8], err)
 			}
 
-			sig, ok := state.Signature.(*protocol.SyntheticSignature)
+			sig, ok := state.Signature.(*protocol.PartitionSignature)
 			if ok {
 				return sig, nil
 			}

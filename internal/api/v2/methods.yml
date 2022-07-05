@@ -65,7 +65,7 @@ QueryTxHistory:
   rpc: query-tx-history
   input: TxHistoryQuery
   output: MultiResponse
-  call-params: [Url, QueryPagination]
+  call-params: [Url, QueryPagination, Scratch]
 
 QueryData:
   description: queries an entry on an account's data chain
@@ -115,7 +115,7 @@ QuerySynth:
   rpc: query-synth
   input: SyntheticTransactionRequest
   output: TransactionQueryResponse
-  call-params: [Source, Destination, SequenceNumber]
+  call-params: [Source, Destination, SequenceNumber, Anchor]
 
 Execute:
   description: submits a transaction

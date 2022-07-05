@@ -80,21 +80,6 @@ const BookTypeValidator BookType = 1
 // BookTypeOperator Operator key book.
 const BookTypeOperator BookType = 2
 
-// ChainTypeUnknown is used when the chain type is not known.
-const ChainTypeUnknown ChainType = 0
-
-// ChainTypeTransaction holds transaction hashes.
-const ChainTypeTransaction ChainType = 1
-
-// ChainTypeAnchor holds chain anchors.
-const ChainTypeAnchor ChainType = 2
-
-// ChainTypeData holds data entry hashes.
-const ChainTypeData ChainType = 3
-
-// ChainTypeIndex indexes other chains.
-const ChainTypeIndex ChainType = 4
-
 // DataEntryTypeUnknown .
 const DataEntryTypeUnknown DataEntryType = 0
 
@@ -161,8 +146,8 @@ const SignatureTypeRCD1 SignatureType = 3
 // SignatureTypeReceipt represents a Merkle tree receipt.
 const SignatureTypeReceipt SignatureType = 4
 
-// SignatureTypeSynthetic is used when sending synthetic transactions.
-const SignatureTypeSynthetic SignatureType = 5
+// SignatureTypePartition is used when sending synthetic and system transactions.
+const SignatureTypePartition SignatureType = 5
 
 // SignatureTypeSet is used when forwarding multiple signatures.
 const SignatureTypeSet SignatureType = 6
@@ -596,78 +581,6 @@ func (v *BookType) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// GetEnumValue returns the value of the Chain Type
-func (v ChainType) GetEnumValue() uint64 { return uint64(v) }
-
-// SetEnumValue sets the value. SetEnumValue returns false if the value is invalid.
-func (v *ChainType) SetEnumValue(id uint64) bool {
-	u := ChainType(id)
-	switch u {
-	case ChainTypeUnknown, ChainTypeTransaction, ChainTypeAnchor, ChainTypeData, ChainTypeIndex:
-		*v = u
-		return true
-	default:
-		return false
-	}
-}
-
-// String returns the name of the Chain Type.
-func (v ChainType) String() string {
-	switch v {
-	case ChainTypeUnknown:
-		return "unknown"
-	case ChainTypeTransaction:
-		return "transaction"
-	case ChainTypeAnchor:
-		return "anchor"
-	case ChainTypeData:
-		return "data"
-	case ChainTypeIndex:
-		return "index"
-	default:
-		return fmt.Sprintf("ChainType:%d", v)
-	}
-}
-
-// ChainTypeByName returns the named Chain Type.
-func ChainTypeByName(name string) (ChainType, bool) {
-	switch strings.ToLower(name) {
-	case "unknown":
-		return ChainTypeUnknown, true
-	case "transaction":
-		return ChainTypeTransaction, true
-	case "anchor":
-		return ChainTypeAnchor, true
-	case "data":
-		return ChainTypeData, true
-	case "index":
-		return ChainTypeIndex, true
-	default:
-		return 0, false
-	}
-}
-
-// MarshalJSON marshals the Chain Type to JSON as a string.
-func (v ChainType) MarshalJSON() ([]byte, error) {
-	return json.Marshal(v.String())
-}
-
-// UnmarshalJSON unmarshals the Chain Type from JSON as a string.
-func (v *ChainType) UnmarshalJSON(data []byte) error {
-	var s string
-	err := json.Unmarshal(data, &s)
-	if err != nil {
-		return err
-	}
-
-	var ok bool
-	*v, ok = ChainTypeByName(s)
-	if !ok || strings.ContainsRune(v.String(), ':') {
-		return fmt.Errorf("invalid Chain Type %q", s)
-	}
-	return nil
-}
-
 // GetEnumValue returns the value of the Data Entry Type
 func (v DataEntryType) GetEnumValue() uint64 { return uint64(v) }
 
@@ -951,7 +864,7 @@ func (v SignatureType) GetEnumValue() uint64 { return uint64(v) }
 func (v *SignatureType) SetEnumValue(id uint64) bool {
 	u := SignatureType(id)
 	switch u {
-	case SignatureTypeUnknown, SignatureTypeLegacyED25519, SignatureTypeED25519, SignatureTypeRCD1, SignatureTypeReceipt, SignatureTypeSynthetic, SignatureTypeSet, SignatureTypeRemote, SignatureTypeBTC, SignatureTypeBTCLegacy, SignatureTypeETH, SignatureTypeDelegated, SignatureTypeInternal:
+	case SignatureTypeUnknown, SignatureTypeLegacyED25519, SignatureTypeED25519, SignatureTypeRCD1, SignatureTypeReceipt, SignatureTypePartition, SignatureTypeSet, SignatureTypeRemote, SignatureTypeBTC, SignatureTypeBTCLegacy, SignatureTypeETH, SignatureTypeDelegated, SignatureTypeInternal:
 		*v = u
 		return true
 	default:
@@ -972,8 +885,8 @@ func (v SignatureType) String() string {
 		return "rcd1"
 	case SignatureTypeReceipt:
 		return "receipt"
-	case SignatureTypeSynthetic:
-		return "synthetic"
+	case SignatureTypePartition:
+		return "partition"
 	case SignatureTypeSet:
 		return "set"
 	case SignatureTypeRemote:
@@ -1006,8 +919,10 @@ func SignatureTypeByName(name string) (SignatureType, bool) {
 		return SignatureTypeRCD1, true
 	case "receipt":
 		return SignatureTypeReceipt, true
+	case "partition":
+		return SignatureTypePartition, true
 	case "synthetic":
-		return SignatureTypeSynthetic, true
+		return SignatureTypePartition, true
 	case "set":
 		return SignatureTypeSet, true
 	case "remote":

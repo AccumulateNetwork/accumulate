@@ -24,6 +24,9 @@ const (
 	// ACME is the name of the ACME token.
 	ACME = "ACME"
 
+	// Unknown is used to indicate that the principal of a transaction is unknown
+	Unknown = "unknown"
+
 	// Directory is the partition ID of the DN.
 	Directory = "Directory"
 
@@ -69,11 +72,17 @@ const (
 	// MinorRootChain is the minor anchor root chain of a partition.
 	MinorRootChain = "minor-root"
 
+	// ScratchChain is the scratch transaction chain of a record.
+	ScratchChain = "scratch"
+
 	// // MajorRootIndexChain is the index chain of the major anchor root chain of a partition.
 	// MajorRootIndexChain = "major-root-index"
 
 	// MinorRootIndexChain is the index chain of the minor anchor root chain of a partition.
 	MinorRootIndexChain = "minor-root-index"
+
+	// AnchorSequenceChain is the chain of anchors produced by a partition.
+	AnchorSequenceChain = "anchor-sequence"
 
 	// GenesisBlock is the block index of the first block.
 	GenesisBlock = 1
@@ -405,7 +414,7 @@ func IsValidAdiUrl(u *url.URL, allowReserved bool) error {
 	}
 
 	if !allowReserved && IsReserved(u) {
-		errs = append(errs, fmt.Sprintf("%q is a reserved URL", u))
+		errs = append(errs, fmt.Sprintf("%v is a reserved URL", u))
 	}
 
 	for _, r := range a {
@@ -433,8 +442,17 @@ func IsValidAdiUrl(u *url.URL, allowReserved bool) error {
 	return errors.New(strings.Join(errs, ", "))
 }
 
+// IsUnknown checks if the authority is 'unknown' or 'unknown.acme'.
+func IsUnknown(u *url.URL) bool {
+	return strings.EqualFold(u.Authority, Unknown) ||
+		strings.EqualFold(u.Authority, Unknown+TLD)
+}
+
 // IsReserved checks if the given URL is reserved.
 func IsReserved(u *url.URL) bool {
+	if IsUnknown(u) {
+		return true
+	}
 	_, ok := ParsePartitionUrl(u)
 	return ok || BelongsToDn(u)
 }
@@ -529,10 +547,10 @@ func ParseAnchorChain(name string) (string, bool) {
 	return name[:len(name)-len(rootAnchorSuffix)], true
 }
 
-// SyntheticIndexChain returns the name of the synthetic transaction index chain
+// SyntheticSequenceChain returns the name of the synthetic transaction index chain
 // for the given partition.
-func SyntheticIndexChain(name string) string {
-	return "index-" + name
+func SyntheticSequenceChain(name string) string {
+	return "synthetic-sequence-" + name
 }
 
 // FormatKeyPageUrl constructs the URL of a key page from the URL of its key

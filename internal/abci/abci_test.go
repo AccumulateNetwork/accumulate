@@ -24,11 +24,16 @@ func TestTransactionPriority(t *testing.T) {
 		require.NoError(t, acctesting.CreateTokenAccount(batch, "foo/tokens", protocol.AcmeUrl().String(), 1, false))
 		return nil
 	})
-
 	type Case struct {
 		Envelope       *protocol.Envelope
 		ExpectPriority int64
 	}
+	cause := [32]byte{1}
+	bodytosend := new(protocol.SyntheticDepositTokens)
+	bodytosend.Amount = *big.NewInt(100)
+	bodytosend.Token = protocol.AcmeUrl()
+	bodytosend.SetCause(cause, bvn.network.NodeUrl())
+
 	cases := map[string]Case{
 		"System": {
 			Envelope: newTxn(bvn.network.AnchorPool().String()).
@@ -48,11 +53,7 @@ func TestTransactionPriority(t *testing.T) {
 		"Synthetic": {
 			Envelope: newTxn("foo/tokens").
 				WithSigner(bvn.network.OperatorsPage(), 1).
-				WithBody(&protocol.SyntheticDepositTokens{
-					Token:  protocol.AcmeUrl(),
-					Amount: *big.NewInt(100),
-				}).
-				InitiateSynthetic(bvn.network.NodeUrl()).
+				WithBody(bodytosend).InitiateSynthetic(bvn.network.NodeUrl()).
 				Sign(protocol.SignatureTypeLegacyED25519, bvn.exec.Key).
 				SignFunc(func(txn *protocol.Transaction) protocol.Signature {
 					// Add a receipt signature
@@ -77,7 +78,6 @@ func TestTransactionPriority(t *testing.T) {
 			ExpectPriority: 0,
 		},
 	}
-
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
 			// Submit the envelope

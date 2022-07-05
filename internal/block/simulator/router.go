@@ -40,6 +40,7 @@ func (r router) Query(ctx context.Context, partition string, rawQuery []byte, op
 	defer batch.Discard()
 	k, v, err := x.Executor.Query(batch, qu, opts.Height, opts.Prove)
 	if err != nil {
+		r.Logger.Error("Query failed", "error", err)
 		b, _ := errors.Wrap(errors.StatusUnknownError, err).(*errors.Error).MarshalJSON()
 		res := new(coretypes.ResultABCIQuery)
 		res.Response.Info = string(b)
@@ -59,36 +60,28 @@ func (r router) RequestAPIv2(ctx context.Context, partitionId, method string, pa
 
 func (r router) Submit(ctx context.Context, partition string, envelope *protocol.Envelope, pretend, async bool) (*routing.ResponseSubmit, error) {
 	x := r.Partition(partition)
-	if !pretend {
-		x.Submit(envelope)
-		if async {
-			return new(routing.ResponseSubmit), nil
-		}
+	deliveries := x.Submit(pretend, envelope)
+
+	if !pretend && async {
+		return new(routing.ResponseSubmit), nil
 	}
 
-	deliveries, err := chain.NormalizeEnvelope(envelope)
-	require.NoErrorf(r, err, "Normalizing envelopes for %s", partition)
-	results := make([]*protocol.TransactionStatus, len(deliveries))
-	for i, envelope := range deliveries {
-		status := new(protocol.TransactionStatus)
-
-		result, err := CheckTx(r.TB, x.Database, x.Executor, envelope)
-		if err != nil {
-			status.Set(err)
-			if status.Failed() {
-				r.Logger.Info("Transaction failed to check",
-					"err", err,
-					"type", envelope.Transaction.Body.Type(),
-					"txn-hash", logging.AsHex(envelope.Transaction.GetHash()).Slice(0, 4),
-					"code", status.Code,
-					"principal", envelope.Transaction.Header.Principal)
-			}
+	batch := x.Database.Begin(false)
+	defer batch.Discard()
+	results := x.Executor.ValidateEnvelopeSet(batch, deliveries, func(err error, d *chain.Delivery, s *protocol.TransactionStatus) {
+		if !s.Failed() {
+			return
 		}
 
-		status.Result = result
-		results[i] = status
-	}
+		r.Logger.Info("Transaction failed to check",
+			"err", err,
+			"type", d.Transaction.Body.Type(),
+			"txn-hash", logging.AsHex(d.Transaction.GetHash()).Slice(0, 4),
+			"code", s.Code,
+			"principal", d.Transaction.Header.Principal)
+	})
 
+	var err error
 	resp := new(routing.ResponseSubmit)
 	resp.Data, err = (&protocol.TransactionResultSet{Results: results}).MarshalBinary()
 	require.NoError(r, err)

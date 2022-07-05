@@ -183,7 +183,11 @@ func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protoc
 	// Set the initial threshold to 2/3 & MajorBlockSchedule
 	if b.globals.Globals == nil {
 		b.globals.Globals = new(protocol.NetworkGlobals)
+	}
+	if b.globals.Globals.OperatorAcceptThreshold.Numerator == 0 {
 		b.globals.Globals.OperatorAcceptThreshold.Set(2, 3)
+	}
+	if b.globals.Globals.MajorBlockSchedule == "" {
 		b.globals.Globals.MajorBlockSchedule = protocol.DefaultMajorBlockSchedule
 	}
 
@@ -295,9 +299,9 @@ func (b *bootstrap) createVoteScratchChain() error {
 		return errors.Format(errors.StatusInternalError, "marshal last commit info: %w", err)
 	}
 	wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
+	wd.Scratch = true
 
 	da := new(protocol.DataAccount)
-	da.Scratch = true
 	da.Url = b.partition.URL.JoinPath(protocol.Votes)
 	da.AddAuthority(b.localAuthority)
 	b.writeDataRecord(da, da.Url, DataRecord{da.Url, wd.Entry})
@@ -305,9 +309,8 @@ func (b *bootstrap) createVoteScratchChain() error {
 }
 
 func (b *bootstrap) createEvidenceChain() {
-	//create an evidence scratch chain
+	//create an evidence chain
 	da := new(protocol.DataAccount)
-	da.Scratch = true
 	da.Url = b.partition.JoinPath(protocol.Evidence)
 	da.AddAuthority(b.localAuthority)
 	b.WriteRecords(da)

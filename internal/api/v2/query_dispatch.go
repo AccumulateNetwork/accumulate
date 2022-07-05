@@ -126,13 +126,13 @@ func (q *queryDispatch) QueryTx(id []byte, wait time.Duration, ignorePending boo
 	return res.(*TransactionQueryResponse), nil
 }
 
-func (q *queryDispatch) QueryTxHistory(url *url.URL, pagination QueryPagination) (*MultiResponse, error) {
+func (q *queryDispatch) QueryTxHistory(url *url.URL, pagination QueryPagination, scratch bool) (*MultiResponse, error) {
 	r, err := q.Router.RouteAccount(url)
 	if err != nil {
 		return nil, err
 	}
 
-	return q.direct(r).QueryTxHistory(url, pagination)
+	return q.direct(r).QueryTxHistory(url, pagination, scratch)
 }
 
 func (q *queryDispatch) QueryData(url *url.URL, entryHash [32]byte) (*ChainQueryResponse, error) {
@@ -171,11 +171,11 @@ func (q *queryDispatch) QueryMajorBlocks(url *url.URL, pagination QueryPaginatio
 	return q.direct(r).QueryMajorBlocks(url, pagination)
 }
 
-func (q queryDispatch) QuerySynth(source, destination *url.URL, number uint64) (*TransactionQueryResponse, error) {
+func (q queryDispatch) QuerySynth(source, destination *url.URL, number uint64, anchor bool) (*TransactionQueryResponse, error) {
 	r, err := q.Router.RouteAccount(source)
 	if err != nil {
 		return nil, err
 	}
 
-	return q.direct(r).QuerySynth(source, destination, number)
+	return q.direct(r).QuerySynth(source, destination, number, anchor)
 }
