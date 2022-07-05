@@ -126,7 +126,8 @@ type RequestSynth struct {
 	fieldsSet      []bool
 	Source         *url.URL `json:"source,omitempty" form:"source" query:"source" validate:"required"`
 	Destination    *url.URL `json:"destination,omitempty" form:"destination" query:"destination" validate:"required"`
-	SequenceNumber uint64   `json:"sequenceNumber,omitempty" form:"sequenceNumber" query:"sequenceNumber" validate:"required"`
+	SequenceNumber uint64   `json:"sequenceNumber,omitempty" form:"sequenceNumber" query:"sequenceNumber"`
+	Anchor         bool     `json:"anchor,omitempty" form:"anchor" query:"anchor"`
 	extraData      []byte
 }
 
@@ -478,6 +479,7 @@ func (v *RequestSynth) Copy() *RequestSynth {
 		u.Destination = (v.Destination).Copy()
 	}
 	u.SequenceNumber = v.SequenceNumber
+	u.Anchor = v.Anchor
 
 	return u
 }
@@ -1017,6 +1019,9 @@ func (v *RequestSynth) Equal(u *RequestSynth) bool {
 		return false
 	}
 	if !(v.SequenceNumber == u.SequenceNumber) {
+		return false
+	}
+	if !(v.Anchor == u.Anchor) {
 		return false
 	}
 
@@ -2172,6 +2177,7 @@ var fieldNames_RequestSynth = []string{
 	2: "Source",
 	3: "Destination",
 	4: "SequenceNumber",
+	5: "Anchor",
 }
 
 func (v *RequestSynth) MarshalBinary() ([]byte, error) {
@@ -2187,6 +2193,9 @@ func (v *RequestSynth) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.SequenceNumber == 0) {
 		writer.WriteUint(4, v.SequenceNumber)
+	}
+	if !(!v.Anchor) {
+		writer.WriteBool(5, v.Anchor)
 	}
 
 	_, _, err := writer.Reset(fieldNames_RequestSynth)
@@ -2212,11 +2221,6 @@ func (v *RequestSynth) IsValid() error {
 		errs = append(errs, "field Destination is missing")
 	} else if v.Destination == nil {
 		errs = append(errs, "field Destination is not set")
-	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
-		errs = append(errs, "field SequenceNumber is missing")
-	} else if v.SequenceNumber == 0 {
-		errs = append(errs, "field SequenceNumber is not set")
 	}
 
 	switch len(errs) {
@@ -3696,6 +3700,9 @@ func (v *RequestSynth) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUint(4); ok {
 		v.SequenceNumber = x
 	}
+	if x, ok := reader.ReadBool(5); ok {
+		v.Anchor = x
+	}
 
 	seen, err := reader.Reset(fieldNames_RequestSynth)
 	if err != nil {
@@ -4493,11 +4500,13 @@ func (v *RequestSynth) MarshalJSON() ([]byte, error) {
 		Source         *url.URL  `json:"source,omitempty"`
 		Destination    *url.URL  `json:"destination,omitempty"`
 		SequenceNumber uint64    `json:"sequenceNumber,omitempty"`
+		Anchor         bool      `json:"anchor,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Source = v.Source
 	u.Destination = v.Destination
 	u.SequenceNumber = v.SequenceNumber
+	u.Anchor = v.Anchor
 	return json.Marshal(&u)
 }
 
@@ -5068,11 +5077,13 @@ func (v *RequestSynth) UnmarshalJSON(data []byte) error {
 		Source         *url.URL  `json:"source,omitempty"`
 		Destination    *url.URL  `json:"destination,omitempty"`
 		SequenceNumber uint64    `json:"sequenceNumber,omitempty"`
+		Anchor         bool      `json:"anchor,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Source = v.Source
 	u.Destination = v.Destination
 	u.SequenceNumber = v.SequenceNumber
+	u.Anchor = v.Anchor
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -5082,6 +5093,7 @@ func (v *RequestSynth) UnmarshalJSON(data []byte) error {
 	v.Source = u.Source
 	v.Destination = u.Destination
 	v.SequenceNumber = u.SequenceNumber
+	v.Anchor = u.Anchor
 	return nil
 }
 

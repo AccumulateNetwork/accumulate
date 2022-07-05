@@ -163,6 +163,9 @@ func (r *RouterInstance) RouteAccount(account *url.URL) (string, error) {
 	if r.tree == nil {
 		return "", errors.New(errors.StatusInternalError, "the routing table has not been initialized")
 	}
+	if protocol.IsUnknown(account) {
+		return "", errors.New(errors.StatusBadRequest, "URL is unknown, cannot route")
+	}
 	return r.tree.Route(account)
 }
 
