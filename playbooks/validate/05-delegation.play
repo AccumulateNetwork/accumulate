@@ -76,7 +76,7 @@ txn3 := Transaction("ethan.acme/book/1").
 	Sign(paulKey).
 	Submit()
 txn1.Wait().Ok()
-txn2.Wait().Ok()
+txn2.Delivered().Ok()
 Show("Create token account and delegated key page entry ✔")
 
 Transaction(liteAddr).

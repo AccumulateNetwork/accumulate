@@ -48,7 +48,8 @@ func noprint(pass *analysis.Pass) (interface{}, error) {
 			"println",
 			"fmt.Print",
 			"fmt.Printf",
-			"fmt.Println":
+			"fmt.Println",
+			"spew.Dump":
 			pass.Reportf(node.Pos(), "Use a logger instead of printing")
 		}
 
