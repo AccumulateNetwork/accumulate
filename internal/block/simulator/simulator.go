@@ -15,6 +15,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/block"
+	"gitlab.com/accumulatenetwork/accumulate/internal/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
@@ -31,7 +32,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-var genesisTime = time.Date(2022, 7, 1, 0, 0, 0, 0, time.UTC)
+var GenesisTime = time.Date(2022, 7, 1, 0, 0, 0, 0, time.UTC)
 
 type Simulator struct {
 	tb
@@ -138,7 +139,7 @@ func (sim *Simulator) Setup(bvnCount int) {
 			EventBus: mainEventBus,
 		}
 		if execOpts.Describe.NetworkType == config.Directory {
-			execOpts.MajorBlockScheduler = InitFakeMajorBlockScheduler(genesisTime)
+			execOpts.MajorBlockScheduler = blockscheduler.Init(mainEventBus)
 		}
 		exec, err := NewNodeExecutor(execOpts, db)
 		require.NoError(sim, err)
@@ -157,7 +158,7 @@ func (sim *Simulator) Setup(bvnCount int) {
 			Partition:  dn,
 			API:        acctesting.DirectJrpcClient(jrpc),
 			tb:         sim.tb,
-			blockTime:  genesisTime,
+			blockTime:  GenesisTime,
 			Validators: [][]byte{exec.Key[32:]},
 		}
 	}
@@ -183,9 +184,6 @@ func (sim *Simulator) Setup(bvnCount int) {
 			Router:   sim.Router(),
 			EventBus: events.NewBus(logger),
 		}
-		if execOpts.Describe.NetworkType == config.Directory {
-			execOpts.MajorBlockScheduler = InitFakeMajorBlockScheduler(genesisTime)
-		}
 		exec, err := NewNodeExecutor(execOpts, db)
 		require.NoError(sim, err)
 
@@ -203,7 +201,7 @@ func (sim *Simulator) Setup(bvnCount int) {
 			Partition:  bvn,
 			API:        acctesting.DirectJrpcClient(jrpc),
 			tb:         sim.tb,
-			blockTime:  genesisTime,
+			blockTime:  GenesisTime,
 			Validators: [][]byte{exec.Key[32:]},
 		}
 	}
@@ -298,7 +296,7 @@ func (s *Simulator) InitFromGenesisWith(values *core.GlobalValues) {
 	if values == nil {
 		values = new(core.GlobalValues)
 	}
-	genDocs, err := accumulated.BuildGenesisDocs(s.netInit, values, genesisTime, s.Logger, "")
+	genDocs, err := accumulated.BuildGenesisDocs(s.netInit, values, GenesisTime, s.Logger, "")
 	require.NoError(s, err)
 
 	// Execute bootstrap after the entire network is known
@@ -364,11 +362,13 @@ func (s *Simulator) Submit(envelopes ...*protocol.Envelope) ([]*protocol.Envelop
 		}
 
 		// Check
-		for _, delivery := range deliveries {
-			_, err = CheckTx(s, x.Database, x.Executor, delivery)
-			if err != nil {
-				return nil, err
-			}
+		batch := x.Database.Begin(false)
+		defer batch.Discard()
+		x.Executor.ValidateEnvelopeSet(batch, deliveries, func(e error, _ *chain.Delivery, _ *protocol.TransactionStatus) {
+			err = e
+		})
+		if err != nil {
+			return nil, err
 		}
 
 		// Enqueue
@@ -523,7 +523,7 @@ func (s *Simulator) WaitForTransactionFlow(statusCheck func(*protocol.Transactio
 type ExecEntry struct {
 	tb
 	mu                      sync.Mutex
-	blockIndex              uint64
+	BlockIndex              uint64
 	blockTime               time.Time
 	nextBlock, currentBlock []*chain.Delivery
 
@@ -582,17 +582,17 @@ func (x *ExecEntry) takeSubmitted() []*chain.Delivery {
 }
 
 func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protocol.TransactionStatus) {
-	if x.blockIndex > 0 {
-		x.blockIndex++
+	if x.BlockIndex > 0 {
+		x.BlockIndex++
 	} else {
 		_ = x.Database.View(func(batch *database.Batch) error {
 			var ledger *protocol.SystemLedger
 			err := batch.Account(x.Executor.Describe.Ledger()).GetStateAs(&ledger)
 			switch {
 			case err == nil:
-				x.blockIndex = ledger.Index + 1
+				x.BlockIndex = ledger.Index + 1
 			case errors.Is(err, errors.StatusNotFound):
-				x.blockIndex = protocol.GenesisBlock + 1
+				x.BlockIndex = protocol.GenesisBlock + 1
 			default:
 				require.NoError(tb{x.tb}, err)
 			}
@@ -601,7 +601,7 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 	}
 	x.blockTime = x.blockTime.Add(time.Second)
 	block := new(Block)
-	block.Index = x.blockIndex
+	block.Index = x.BlockIndex
 	block.Time = x.blockTime
 	block.IsLeader = true
 	block.Batch = x.Database.Begin(true)
@@ -613,27 +613,31 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 		err := x.Executor.BeginBlock(block)
 		require.NoError(x, err)
 
-		for _, delivery := range deliveries {
-			status, err := delivery.LoadTransaction(block.Batch)
-			if errors.Is(err, errors.StatusDelivered) {
-				if statusChan != nil {
-					status.TxID = delivery.Transaction.ID()
-					statusChan <- status
-				}
+		for i := 0; i < len(deliveries); i++ {
+			status, err := deliveries[i].LoadTransaction(block.Batch)
+			if err == nil {
 				continue
 			}
-			if err != nil {
+			if !errors.Is(err, errors.StatusDelivered) {
 				return errors.Wrap(errors.StatusUnknownError, err)
 			}
-
-			status, err = x.Executor.ExecuteEnvelope(block, delivery)
-			if err != nil {
-				return errors.Wrap(errors.StatusUnknownError, err)
-			}
-
 			if statusChan != nil {
-				status.TxID = delivery.Transaction.ID()
+				status.TxID = deliveries[i].Transaction.ID()
 				statusChan <- status
+			}
+			deliveries = append(deliveries[:i], deliveries[i+1:]...)
+			i--
+		}
+
+		results := x.Executor.ExecuteEnvelopeSet(block, deliveries, func(e error, _ *chain.Delivery, _ *protocol.TransactionStatus) {
+			err = e
+		})
+		if err != nil {
+			return errors.Wrap(errors.StatusUnknownError, err)
+		}
+		if statusChan != nil {
+			for _, result := range results {
+				statusChan <- result
 			}
 		}
 

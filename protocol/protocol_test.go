@@ -27,6 +27,9 @@ func TestIsValidAdiUrl(t *testing.T) {
 		"Identity has underscore": {URL{Authority: "foo_bar.acme"}, "illegal character '_'"},
 		"Identity has space":      {URL{Authority: "foo bar.acme"}, "illegal character ' '"},
 		"Empty identity with TLD": {URL{Authority: ".acme"}, "identity is empty"},
+		"Reserved DN":             {URL{Authority: "dn.acme", Path: "foo"}, "acc://dn.acme/foo is a reserved URL"},
+		"Reserved BVN":            {URL{Authority: "bvn-x.acme", Path: "foo"}, "acc://bvn-x.acme/foo is a reserved URL"},
+		"Reserved unknown":        {URL{Authority: "unknown.acme", Path: "foo"}, "acc://unknown.acme/foo is a reserved URL"},
 	}
 
 	for name, str := range good {
