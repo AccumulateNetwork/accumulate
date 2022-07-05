@@ -9,6 +9,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
@@ -495,7 +496,7 @@ func TestDelegatedSignature_Multisig(t *testing.T) {
 		record := batch.Transaction(txnHash)
 		status, err := record.GetStatus()
 		require.NoError(t, err)
-		sigs, err := block.GetAllSignatures(batch, record, status, nil)
+		sigs, err := GetAllSignatures(batch, record, status, nil)
 		require.NoError(t, err)
 		require.Len(t, sigs, 2)
 		require.IsType(t, (*DelegatedSignature)(nil), sigs[0])
@@ -505,4 +506,29 @@ func TestDelegatedSignature_Multisig(t *testing.T) {
 		sig = sigs[1].(*DelegatedSignature)
 		require.Equal(t, "charlie.acme/book/1", sig.GetSigner().ShortString())
 	})
+}
+
+func GetAllSignatures(batch *database.Batch, transaction *database.Transaction, status *protocol.TransactionStatus, txnInitHash []byte) ([]protocol.Signature, error) {
+	signatures := make([]protocol.Signature, 1)
+
+	for _, signer := range status.Signers {
+		sigset, err := block.GetSignaturesForSigner(batch, transaction, signer)
+		if err != nil {
+			return nil, errors.Wrap(errors.StatusUnknownError, err)
+		}
+
+		for _, sig := range sigset {
+			if protocol.SignatureDidInitiate(sig, txnInitHash) {
+				signatures[0] = sig
+			} else {
+				signatures = append(signatures, sig)
+			}
+		}
+	}
+
+	if signatures[0] == nil {
+		signatures = signatures[1:]
+	}
+
+	return signatures, nil
 }

@@ -219,7 +219,7 @@ func runPlaybooks(filenames []string) bool {
 
 	ok := true
 	for _, filename := range filenames {
-		err := pkg.ExecuteFile(ctx, filename, client)
+		err := pkg.ExecuteFile(ctx, filename, 3, client)
 		if err != nil {
 			ok = false
 		}

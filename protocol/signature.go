@@ -46,7 +46,7 @@ type KeySignature interface {
 // IsSystem returns true if the signature type is a system signature type.
 func (s SignatureType) IsSystem() bool {
 	switch s {
-	case SignatureTypeSynthetic,
+	case SignatureTypePartition,
 		SignatureTypeReceipt,
 		SignatureTypeInternal:
 		return true
@@ -737,45 +737,45 @@ func (s *ReceiptSignature) Verify(hash []byte) bool {
  */
 
 // GetSigner panics.
-func (s *SyntheticSignature) GetSigner() *url.URL {
+func (s *PartitionSignature) GetSigner() *url.URL {
 	panic("a synthetic signature does not have a signer")
 }
 
 // RoutingLocation returns the URL of the destination network's identity.
-func (s *SyntheticSignature) RoutingLocation() *url.URL { return s.DestinationNetwork }
+func (s *PartitionSignature) RoutingLocation() *url.URL { return s.DestinationNetwork }
 
 // GetSignerVersion returns 1.
-func (s *SyntheticSignature) GetSignerVersion() uint64 { return 1 }
+func (s *PartitionSignature) GetSignerVersion() uint64 { return 1 }
 
 // GetTimestamp returns 1.
-func (s *SyntheticSignature) GetTimestamp() uint64 { return 1 }
+func (s *PartitionSignature) GetTimestamp() uint64 { return 1 }
 
 // GetPublicKey returns nil.
-func (s *SyntheticSignature) GetPublicKeyHash() []byte { return nil }
+func (s *PartitionSignature) GetPublicKeyHash() []byte { return nil }
 
 // GetSignature returns nil.
-func (s *SyntheticSignature) GetSignature() []byte { return nil }
+func (s *PartitionSignature) GetSignature() []byte { return nil }
 
 // GetTransactionHash returns TransactionHash.
-func (s *SyntheticSignature) GetTransactionHash() [32]byte { return s.TransactionHash }
+func (s *PartitionSignature) GetTransactionHash() [32]byte { return s.TransactionHash }
 
 // Hash returns the hash of the signature.
-func (s *SyntheticSignature) Hash() []byte { return signatureHash(s) }
+func (s *PartitionSignature) Hash() []byte { return signatureHash(s) }
 
 // Metadata returns the signature's metadata.
-func (s *SyntheticSignature) Metadata() Signature {
+func (s *PartitionSignature) Metadata() Signature {
 	r := s.Copy()                  // Copy the struct
 	r.TransactionHash = [32]byte{} // Clear the transaction hash
 	return r
 }
 
 // Initiator returns an error.
-func (s *SyntheticSignature) Initiator() (hash.Hasher, error) {
+func (s *PartitionSignature) Initiator() (hash.Hasher, error) {
 	return nil, errors.New(errors.StatusBadRequest, "use of the initiator hash for a synthetic signature is not supported")
 }
 
 // GetVote returns VoteTypeAccept.
-func (s *SyntheticSignature) GetVote() VoteType {
+func (s *PartitionSignature) GetVote() VoteType {
 	return VoteTypeAccept
 }
 
