@@ -26,7 +26,7 @@ import (
 func init() {
 	keyCmd.AddCommand(keyUpdateCmd)
 	keyCmd.Flags().StringVar(&SigType, "sigtype", "ed25519", "Specify the signature type use rcd1 for RCD1 type ; ed25519 for ED25519 ; legacyed25519 for LegacyED25519 ; btc for Bitcoin ; btclegacy for Legacy Bitcoin  ; eth for Ethereum ")
-	keyUpdateCmd.Flags().IntVar(&KeyHeight, "key height", 0, "Specify the key height")
+	keyUpdateCmd.Flags().IntVar(&KeyHeight, "keyHeight", 0, "Specify the keyHeight")
 
 }
 
@@ -112,7 +112,7 @@ var keyCmd = &cobra.Command{
 }
 
 var keyUpdateCmd = &cobra.Command{
-	Use:   "update [key page url] [original key name] [key index (optional)] [new key name]",
+	Use:   "update [key page url] [<keyname>@<keypage>] [new key name]",
 	Short: "Self-update a key",
 	Args:  cobra.RangeArgs(3, 5),
 	Run:   runCmdFunc(UpdateKey),

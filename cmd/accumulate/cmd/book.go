@@ -16,7 +16,7 @@ func init() {
 
 	// Add auth cmd for backwards compatability
 	bookCmd.AddCommand(authCmd)
-	bookCreateCmd.Flags().IntVar(&KeyHeight, "key height", 0, "Specify the key height")
+	bookCreateCmd.Flags().IntVar(&KeyHeight, "keyHeight", 0, "Specify the keyHeight")
 
 }
 

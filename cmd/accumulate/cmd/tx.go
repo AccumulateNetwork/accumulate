@@ -89,7 +89,7 @@ func init() {
 	txCmd.Flags().DurationVarP(&TxWait, "wait", "w", 0, "Wait for the transaction to complete")
 	txCmd.Flags().DurationVar(&TxWaitSynth, "wait-synth", 0, "Wait for synthetic transactions to complete")
 	txCmd.Flags().BoolVar(&Scratch, "scratch", false, "Read from the scratch chain")
-	txCmd.Flags().IntVar(&KeyHeight, "key height", 0, "Specify the key height")
+	txCmd.Flags().IntVar(&KeyHeight, "keyHeight", 0, "Specify the keyHeight")
 
 }
 

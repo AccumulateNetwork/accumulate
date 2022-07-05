@@ -21,12 +21,12 @@ func init() {
 		validatorAddCmd,
 		validatorRemoveCmd,
 		validatorUpdateKeyCmd)
-	operatorAddCmd.Flags().IntVar(&KeyHeight, "key height", 0, "Specify the key height")
-	operatorUpdateKeyCmd.Flags().IntVar(&KeyHeight, "key height", 0, "Specify the key height")
-	operatorRemoveCmd.Flags().IntVar(&KeyHeight, "key height", 0, "Specify the key height")
-	validatorAddCmd.Flags().IntVar(&KeyHeight, "key height", 0, "Specify the key height")
-	validatorUpdateKeyCmd.Flags().IntVar(&KeyHeight, "key height", 0, "Specify the key height")
-	validatorRemoveCmd.Flags().IntVar(&KeyHeight, "key height", 0, "Specify the key height")
+	operatorAddCmd.Flags().IntVar(&KeyHeight, "keyHeight", 0, "Specify the keyHeight")
+	operatorUpdateKeyCmd.Flags().IntVar(&KeyHeight, "keyHeight", 0, "Specify the keyHeight")
+	operatorRemoveCmd.Flags().IntVar(&KeyHeight, "keyHeight", 0, "Specify the keyHeight")
+	validatorAddCmd.Flags().IntVar(&KeyHeight, "keyHeight", 0, "Specify the keyHeight")
+	validatorUpdateKeyCmd.Flags().IntVar(&KeyHeight, "keyHeight", 0, "Specify the keyHeight")
+	validatorRemoveCmd.Flags().IntVar(&KeyHeight, "keyHeight", 0, "Specify the keyHeight")
 
 }
 

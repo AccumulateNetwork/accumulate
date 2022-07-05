@@ -11,7 +11,7 @@ import (
 )
 
 func init() {
-	creditsCmd.Flags().IntVar(&KeyHeight, "key height", 0, "Specify the key height")
+	creditsCmd.Flags().IntVar(&KeyHeight, "keyHeight", 0, "Specify the keyHeight")
 }
 
 // creditsCmd represents the faucet command

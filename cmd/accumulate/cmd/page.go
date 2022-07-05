@@ -23,13 +23,13 @@ func init() {
 		pageKeyUpdateCmd,
 		pageKeyRemoveCmd)
 
-	pageCreateCmd.Flags().IntVar(&KeyHeight, "key height", 0, "Specify the key height")
-	pageKeyCmd.Flags().IntVar(&KeyHeight, "key height", 0, "Specify the key height")
-	pageLockCmd.Flags().IntVar(&KeyHeight, "key height", 0, "Specify the key height")
-	pageUnlockCmd.Flags().IntVar(&KeyHeight, "key height", 0, "Specify the key height")
-	pageKeyAddCmd.Flags().IntVar(&KeyHeight, "key height", 0, "Specify the key height")
-	pageKeyUpdateCmd.Flags().IntVar(&KeyHeight, "key height", 0, "Specify the key height")
-	pageKeyRemoveCmd.Flags().IntVar(&KeyHeight, "key height", 0, "Specify the key height")
+	pageCreateCmd.Flags().IntVar(&KeyHeight, "keyHeight", 0, "Specify the keyHeight")
+	pageKeyCmd.Flags().IntVar(&KeyHeight, "keyHeight", 0, "Specify the keyHeight")
+	pageLockCmd.Flags().IntVar(&KeyHeight, "keyHeight", 0, "Specify the keyHeight")
+	pageUnlockCmd.Flags().IntVar(&KeyHeight, "keyHeight", 0, "Specify the keyHeight")
+	pageKeyAddCmd.Flags().IntVar(&KeyHeight, "keyHeight", 0, "Specify the keyHeight")
+	pageKeyUpdateCmd.Flags().IntVar(&KeyHeight, "keyHeight", 0, "Specify the keyHeight")
+	pageKeyRemoveCmd.Flags().IntVar(&KeyHeight, "keyHeight", 0, "Specify the keyHeight")
 
 }
 
