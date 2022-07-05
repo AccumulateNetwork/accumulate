@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"strings"
 
 	"github.com/mdp/qrterminal"
 	"github.com/spf13/cobra"
@@ -206,24 +205,6 @@ func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, er
 		_ = cmd.Usage()
 		return "", err
 	}
-	var argcopy []string
-	for _, arg := range args {
-		if strings.Contains(arg, "@") {
-			arr := strings.Split(arg, "@")
-			argcopy = append(argcopy, arr[0])
-
-			if arr[1] == "" {
-				argcopy = append(argcopy, "0")
-				continue
-			} else {
-				argcopy = append(argcopy, arr[1])
-				continue
-			}
-		}
-		argcopy = append(argcopy, arg)
-	}
-	fmt.Println(args, argcopy)
-	args = argcopy
 
 	args, signer, err := prepareSigner(u, args)
 	if err != nil {
