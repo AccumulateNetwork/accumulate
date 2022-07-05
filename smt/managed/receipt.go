@@ -29,6 +29,15 @@ func (r *Receipt) String() string {
 	return b.String()
 }
 
+func (n *ReceiptEntry) Apply(hash Hash) Hash {
+	if n.Right {
+		// If this hash comes from the right, apply it that way
+		return hash.Combine(Sha256, n.Hash)
+	}
+	// If this hash comes from the left, apply it that way
+	return Hash(n.Hash).Combine(Sha256, hash)
+}
+
 // Validate
 // Take a receipt and validate that the element hash progresses to the
 // Merkle Dag Root hash (MDRoot) in the receipt
@@ -36,18 +45,39 @@ func (r *Receipt) Validate() bool {
 	MDRoot := r.Start // To begin with, we start with the object as the MDRoot
 	// Now apply all the path hashes to the MDRoot
 	for _, node := range r.Entries {
-		// Need a [32]byte to slice
-		hash := node.Hash
-		if node.Right {
-			// If this hash comes from the right, apply it that way
-			MDRoot = Hash(MDRoot).Combine(Sha256, hash)
-			continue
-		}
-		// If this hash comes from the left, apply it that way
-		MDRoot = Hash(hash).Combine(Sha256, MDRoot)
+		MDRoot = node.Apply(MDRoot)
 	}
 	// In the end, MDRoot should be the same hash the receipt expects.
 	return Hash(MDRoot).Equal(r.Anchor)
+}
+
+// Contains returns true if the 2nd receipt is equal to or contained within the
+// first.
+func (r *Receipt) Contains(other *Receipt) bool {
+	hashSelf, hashOther := r.Start, other.Start
+	var posSelf int
+	for !bytes.Equal(hashSelf, hashOther) {
+		if posSelf >= len(r.Entries) {
+			return false
+		}
+		hashSelf = r.Entries[posSelf].Apply(hashSelf)
+		posSelf++
+	}
+
+	for _, entry := range other.Entries {
+		if posSelf >= len(r.Entries) {
+			return false
+		}
+
+		hashSelf = r.Entries[posSelf].Apply(hashSelf)
+		hashOther = entry.Apply(hashOther)
+		posSelf++
+		if !bytes.Equal(hashSelf, hashOther) {
+			return false
+		}
+	}
+
+	return true
 }
 
 // Combine

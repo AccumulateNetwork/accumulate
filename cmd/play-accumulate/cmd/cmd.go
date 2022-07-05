@@ -12,7 +12,8 @@ import (
 )
 
 var Flag = struct {
-	Network string
+	Network  string
+	BvnCount int
 }{}
 
 var Command = &cobra.Command{
@@ -23,9 +24,15 @@ var Command = &cobra.Command{
 
 func init() {
 	Command.Flags().StringVarP(&Flag.Network, "network", "n", "", "Run the test against a network")
+	Command.Flags().IntVarP(&Flag.BvnCount, "bvns", "b", 3, "Number of BVNs to simulate")
 }
 
-func run(_ *cobra.Command, filenames []string) {
+func run(cmd *cobra.Command, filenames []string) {
+	if cmd.Flag("network").Changed && cmd.Flag("bvns").Changed {
+		fmt.Fprintf(os.Stderr, "Error: --network and --bvns are mutually exclusive\n")
+		os.Exit(1)
+	}
+
 	testing.EnableDebugFeatures()
 
 	var c *client.Client
@@ -40,7 +47,7 @@ func run(_ *cobra.Command, filenames []string) {
 
 	var didFail bool
 	for _, filename := range filenames {
-		err := pkg.ExecuteFile(context.Background(), filename, c)
+		err := pkg.ExecuteFile(context.Background(), filename, Flag.BvnCount, c)
 		if err != nil {
 			didFail = true
 		}

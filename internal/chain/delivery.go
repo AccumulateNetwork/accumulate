@@ -217,11 +217,6 @@ func (d *Delivery) LoadTransaction(batch *database.Batch) (*protocol.Transaction
 		return status, errors.Format(errors.StatusDelivered, "transaction %X has been delivered", d.Transaction.GetHash()[:4])
 	}
 
-	// Ignore produced synthetic transactions
-	if status.Remote() {
-		return status, nil
-	}
-
 	// Load previous transaction state
 	txState, err := record.GetState()
 	if err == nil {
@@ -256,44 +251,30 @@ func (d *Delivery) LoadTransaction(batch *database.Batch) (*protocol.Transaction
 	return status, nil
 }
 
-func (d *Delivery) LoadSyntheticMetadata(batch *database.Batch, status *protocol.TransactionStatus) error {
+func (d *Delivery) LoadSyntheticMetadata(batch *database.Batch, typ protocol.TransactionType, status *protocol.TransactionStatus) error {
+	if typ.IsUser() {
+		return nil
+	}
+	switch typ {
+	case protocol.TransactionTypeSystemGenesis, protocol.TransactionTypeSystemWriteData:
+		return nil
+	}
+
 	// Get the sequence number from the first signature?
 	if len(d.Signatures) > 0 {
-		if signature, ok := d.Signatures[0].(*protocol.SyntheticSignature); ok {
+		if signature, ok := d.Signatures[0].(*protocol.PartitionSignature); ok {
 			d.SequenceNumber = signature.SequenceNumber
 			d.SourceNetwork = signature.SourceNetwork
 			return nil
 		}
 	}
 
-	// Load the initiator signature set
-	sigset, err := batch.Transaction(d.Transaction.GetHash()).ReadSignatures(status.Initiator)
-	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "load transaction: load initiator: %w", err)
+	if status.SequenceNumber == 0 {
+		return errors.Format(errors.StatusInternalError, "synthetic transaction sequence number is missing")
 	}
 
-	var sigHash []byte
-	for _, e := range sigset.Entries() {
-		if e.Type == protocol.SignatureTypeSynthetic {
-			sigHash = e.SignatureHash[:]
-			break
-		}
-	}
-	if sigHash == nil {
-		return errors.NotFound("load transaction: missing synthetic origin signature")
-	}
-
-	state, err := batch.Transaction(sigHash).GetState()
-	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "load transaction: load synthetic origin signature: %w", err)
-	}
-
-	signature, ok := state.Signature.(*protocol.SyntheticSignature)
-	if !ok {
-		return errors.Format(errors.StatusInternalError, "load transaction: synthetic origin signature record is invalid")
-	}
-
-	d.SequenceNumber = signature.SequenceNumber
-	d.SourceNetwork = signature.SourceNetwork
+	// Get the sequence number from the status
+	d.SequenceNumber = status.SequenceNumber
+	d.SourceNetwork = status.SourceNetwork
 	return nil
 }
