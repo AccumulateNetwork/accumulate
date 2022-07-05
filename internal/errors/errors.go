@@ -180,7 +180,11 @@ func (e *Error) Format(f fmt.State, verb rune) {
 }
 
 func (e *Error) Print() string {
-	str := e.Message + "\n"
+	return e.Message + "\n" + e.PrintCallstack()
+}
+
+func (e *Error) PrintCallstack() string {
+	var str string
 	for e != nil {
 		for _, cs := range e.CallStack {
 			str += fmt.Sprintf("%s\n    %s:%d\n", cs.FuncName, cs.File, cs.Line)

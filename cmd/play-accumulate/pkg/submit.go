@@ -191,10 +191,31 @@ func (s *submittedTxn) NotOk(message string) *submittedTxn {
 func (s *submittedTxn) Wait() completedFlow {
 	s.Ok()
 
-	status, txn, err := s.s.Engine.WaitFor(s.Hash)
+	status, txn, err := s.s.Engine.WaitFor(s.Hash, false)
 	if err != nil {
 		s.s.Abortf("Failed to get transaction %X: %v\n", s.Hash, err)
 	}
+	return s.asCompleted(status, txn)
+}
+
+func (s *submittedTxn) Delivered() completedFlow {
+	s.Ok()
+
+	status, txn, err := s.s.Engine.WaitFor(s.Hash, true)
+	if err == nil {
+		return s.asCompleted(status, txn)
+	}
+
+	c := s.Wait()
+	for _, c := range c {
+		if c.Status.Pending() {
+			s.s.Abortf("Transaction %v is pending\n", c.Status.TxID)
+		}
+	}
+	return c
+}
+
+func (s *submittedTxn) asCompleted(status []*protocol.TransactionStatus, txn []*protocol.Transaction) completedFlow {
 	if len(status) != len(txn) {
 		panic("wrong number of statuses")
 	}

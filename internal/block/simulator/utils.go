@@ -8,7 +8,6 @@ import (
 	. "gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
@@ -23,22 +22,6 @@ func InitFromSnapshot(t TB, db *database.Database, exec *Executor, filename stri
 	defer batch.Discard()
 	require.NoError(tb{t}, exec.InitFromSnapshot(batch, f))
 	require.NoError(tb{t}, batch.Commit())
-}
-
-func CheckTx(t TB, db *database.Database, exec *Executor, delivery *chain.Delivery) (protocol.TransactionResult, error) {
-	t.Helper()
-
-	batch := db.Begin(false)
-	defer batch.Discard()
-
-	result, err := exec.ValidateEnvelope(batch, delivery)
-	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
-	}
-	if result == nil {
-		return new(protocol.EmptyResult), nil
-	}
-	return result, nil
 }
 
 func NormalizeEnvelope(t TB, envelope *protocol.Envelope) []*chain.Delivery {
