@@ -10,6 +10,10 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+func init() {
+	creditsCmd.Flags().IntVar(&KeyHeight, "key height", 0, "Specify the key height")
+}
+
 // creditsCmd represents the faucet command
 var creditsCmd = &cobra.Command{
 	Use:   "credits [origin token account] [key page or lite identity url] [number of credits wanted] [max acme to spend] [percent slippage (optional)]",
@@ -30,7 +34,7 @@ var creditsCmd = &cobra.Command{
 
 func PrintCredits() {
 	fmt.Println("  accumulate credits [origin lite token account] [lite identity url or key page url] [credits desired] [max amount in acme (optional)] 		Purchase credits using a lite token account or adi key page to another lite token account or adi key page")
-	fmt.Println("  accumulate credits [origin url] [origin key name] [key index (optional)] [key height (optional)] [key page or lite identity url] [credits desired] [max amount in acme (optional)]		Purchase credits to send to another lite identity or adi key page")
+	fmt.Println("  accumulate credits [origin url] [origin key name] [key index (optional)] [key page or lite identity url] [credits desired] [max amount in acme (optional)]		Purchase credits to send to another lite identity or adi key page")
 	fmt.Println("\tnote: If the max amount in ACME parameter is provided and the oracle price falls below what\n" +
 		"\tthat value can cover, the transaction will fail. The minimum of the computed credit purchase and the maximum\n" +
 		"\tvalue to spend will be used to satisfy the purchase.")

@@ -22,6 +22,15 @@ func init() {
 		pageKeyAddCmd,
 		pageKeyUpdateCmd,
 		pageKeyRemoveCmd)
+
+	pageCreateCmd.Flags().IntVar(&KeyHeight, "key height", 0, "Specify the key height")
+	pageKeyCmd.Flags().IntVar(&KeyHeight, "key height", 0, "Specify the key height")
+	pageLockCmd.Flags().IntVar(&KeyHeight, "key height", 0, "Specify the key height")
+	pageUnlockCmd.Flags().IntVar(&KeyHeight, "key height", 0, "Specify the key height")
+	pageKeyAddCmd.Flags().IntVar(&KeyHeight, "key height", 0, "Specify the key height")
+	pageKeyUpdateCmd.Flags().IntVar(&KeyHeight, "key height", 0, "Specify the key height")
+	pageKeyRemoveCmd.Flags().IntVar(&KeyHeight, "key height", 0, "Specify the key height")
+
 }
 
 var pageCmd = &cobra.Command{
@@ -39,7 +48,7 @@ var pageGetCmd = &cobra.Command{
 }
 
 var pageCreateCmd = &cobra.Command{
-	Use:   "create [origin key book url] [signing key name] [key index (optional)] [key height (optional)] [public key 1] ... [public key hex or name n + 1]",
+	Use:   "create [origin key book url] [<keyname>@<keypage>] [public key 1] ... [public key hex or name n + 1]",
 	Short: "Create a key page",
 	Args:  cobra.MinimumNArgs(3),
 	Run: runCmdFunc(func(args []string) (string, error) {
@@ -53,7 +62,7 @@ var pageKeyCmd = &cobra.Command{
 }
 
 var pageKeyAddCmd = &cobra.Command{
-	Use:   "add [key page url] [signing key name] [key index (optional)] [key height (optional)] [new key name]",
+	Use:   "add [key page url] [<keyname>@<keypage>] [new key name]",
 	Short: "Add a key to a key page",
 	Args:  cobra.RangeArgs(3, 5),
 	Run: runCmdFunc(func(args []string) (string, error) {
@@ -62,7 +71,7 @@ var pageKeyAddCmd = &cobra.Command{
 }
 
 var pageKeyRemoveCmd = &cobra.Command{
-	Use:   "remove [key page url] [signing key name] [key index (optional)] [key height (optional)] [old key name]",
+	Use:   "remove [key page url] [<keyname>@<keypage>]  [old key name]",
 	Short: "Remove a key from a key page",
 	Args:  cobra.RangeArgs(3, 5),
 	Run: runCmdFunc(func(args []string) (string, error) {
@@ -71,7 +80,7 @@ var pageKeyRemoveCmd = &cobra.Command{
 }
 
 var pageKeyUpdateCmd = &cobra.Command{
-	Use:   "update [key page url] [signing key name] [key index (optional)] [key height (optional)] [old key name] [new public key or name]",
+	Use:   "update [key page url] [<keyname>@<keypage>] [old key name] [new public key or name]",
 	Short: "Update a key on a key page",
 	Args:  cobra.RangeArgs(4, 6),
 	Run: runCmdFunc(func(args []string) (string, error) {
@@ -81,7 +90,7 @@ var pageKeyUpdateCmd = &cobra.Command{
 
 ////nolint
 var pageSetThresholdCmd = &cobra.Command{
-	Use:   "set-threshold [key page url] [signing key name] [key index (optional)] [key height (optional)] [threshold]",
+	Use:   "set-threshold [key page url] [<keyname>@<keypage>] [threshold]",
 	Short: "Set the M-of-N signature threshold for a key page",
 	Args:  cobra.RangeArgs(3, 5),
 	Run:   runCmdFunc(setKeyPageThreshold),
@@ -89,14 +98,14 @@ var pageSetThresholdCmd = &cobra.Command{
 var _ = pageSetThresholdCmd // remove dead code removal
 
 var pageLockCmd = &cobra.Command{
-	Use:   "lock [key page url] [signing key name] [key index (optional)] [key height (optional)]",
+	Use:   "lock [key page url] [<keyname>@<keypage>] ",
 	Short: "Lock a key page",
 	Args:  cobra.RangeArgs(2, 4),
 	Run:   runCmdFunc(lockKeyPage),
 }
 
 var pageUnlockCmd = &cobra.Command{
-	Use:   "unlock [key page url] [signing key name] [key index (optional)] [key height (optional)]",
+	Use:   "unlock [key page url] [<keyname>@<keypage>]",
 	Short: "Unlock a key page",
 	Args:  cobra.RangeArgs(2, 4),
 	Run:   runCmdFunc(unlockKeyPage),

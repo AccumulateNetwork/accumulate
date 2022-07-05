@@ -51,6 +51,7 @@ var (
 	DatabaseDir          string
 	NoWalletVersionCheck bool
 	AdditionalSigners    []string
+	KeyHeight            int
 )
 
 var currentUser = func() *user.User {

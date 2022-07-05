@@ -17,6 +17,10 @@ func init() {
 		authAddCmd,
 		authRemoveCmd,
 	)
+	authEnableCmd.Flags().IntVar(&KeyHeight, "key height", 0, "Specify the key height")
+	authDisableCmd.Flags().IntVar(&KeyHeight, "key height", 0, "Specify the key height")
+	authAddCmd.Flags().IntVar(&KeyHeight, "key height", 0, "Specify the key height")
+	authRemoveCmd.Flags().IntVar(&KeyHeight, "key height", 0, "Specify the key height")
 }
 
 var authCmd = &cobra.Command{
@@ -26,21 +30,21 @@ var authCmd = &cobra.Command{
 }
 
 var authEnableCmd = &cobra.Command{
-	Use:   "enable [account url] [signing key name] [key index (optional)] [key height (optional)] [authority url or index (1-based)]",
+	Use:   "enable [account url] [<keyname>@<keypage>] [authority url or index (1-based)]",
 	Short: "Enable authorization checks for an authority of an account",
 	Args:  cobra.RangeArgs(3, 5),
 	Run:   runTxnCmdFunc(EnableAuth),
 }
 
 var authDisableCmd = &cobra.Command{
-	Use:   "disable [account url] [signing key name] [key index (optional)] [key height (optional)] [authority url or index (1-based)]",
+	Use:   "disable [account url] [<keyname>@<keypage>]  [authority url or index (1-based)]",
 	Short: "Disable authorization checks for an authority of an account",
 	Args:  cobra.RangeArgs(3, 5),
 	Run:   runTxnCmdFunc(DisableAuth),
 }
 
 var authAddCmd = &cobra.Command{
-	Use:     "add [account url] [signing key name] [key index (optional)] [key height (optional)] [authority url]",
+	Use:     "add [account url] [<keyname>@<keypage>]  [authority url]",
 	Short:   "Add an authority to an account",
 	Aliases: []string{"set"},
 	Args:    cobra.RangeArgs(3, 5),
@@ -48,7 +52,7 @@ var authAddCmd = &cobra.Command{
 }
 
 var authRemoveCmd = &cobra.Command{
-	Use:   "remove [account url] [signing key name] [key index (optional)] [key height (optional)] [authority url or index (1-based)]",
+	Use:   "remove [account url] [<keyname>@<keypage>] [authority url or index (1-based)]",
 	Short: "Remove an authority from an account",
 	Args:  cobra.RangeArgs(3, 5),
 	Run:   runTxnCmdFunc(RemoveAuth),

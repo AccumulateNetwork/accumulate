@@ -24,6 +24,8 @@ func init() {
 	dataCmd.Flags().StringVar(&Keyname, "sign-data", "", "specify this to send random data as a signed & valid entry to data account")
 	dataCmd.PersistentFlags().BoolVar(&WriteState, "write-state", false, "Write to the account's state")
 	dataCmd.Flags().BoolVar(&Scratch, "scratch", false, "Write to the scratch chain")
+	dataCmd.Flags().IntVar(&KeyHeight, "key height", 0, "Specify the key height")
+
 }
 
 var dataCmd = &cobra.Command{
@@ -88,11 +90,11 @@ func PrintDataGet() {
 
 func PrintDataAccountCreate() {
 	//./cli data create acc://actor.acme key idx height acc://actor.acme/dataAccount acc://actor.acme/keyBook (optional)
-	fmt.Println("  accumulate account create data [actor adi url] [signing key name] [key index (optional)] [key height (optional)] [adi data account url] --authority key book (optional) Create new data account")
+	fmt.Println("  accumulate account create data [actor adi url] [<keyname>@<keypage>]  [adi data account url] --authority key book (optional) Create new data account")
 	fmt.Println("\t\t example usage: accumulate account create data acc://actor.acme signingKeyName acc://actor.acme/dataAccount --authority acc://actor.acme/book0")
 
 	//scratch data account
-	fmt.Println("  accumulate account create data --scratch [actor adi url] [signing key name] [key index (optional)] [key height (optional)] [adi data account url] --authority key book (optional) Create new data account")
+	fmt.Println("  accumulate account create data --scratch [actor adi url] [<keyname>@<keypage>]  [adi data account url] --authority key book (optional) Create new data account")
 	fmt.Println("\t\t example usage: accumulate account create data --scratch acc://actor.acme signingKeyName acc://actor.acme/dataAccount --authority acc://actor.acme/book0")
 }
 
@@ -108,7 +110,7 @@ func PrintDataWriteTo() {
 
 func PrintDataLiteAccountCreate() {
 	fmt.Println("  accumulate account create data lite [lite token account] [name_0] ... [name_n] Create new lite data account creating a chain based upon a name list")
-	fmt.Println("  accumulate account create data lite [origin url] [signing key name]  [key index (optional)] [key height (optional)] [name_0] ... [name_n] Create new lite data account creating a chain based upon a name list")
+	fmt.Println("  accumulate account create data lite [origin url] [signing key name]  [key index (optional)] [name_0] ... [name_n] Create new lite data account creating a chain based upon a name list")
 	fmt.Println("\t\t example usage: accumulate account create data lite acc://actor.acme signingKeyName example1 example2 ")
 }
 
