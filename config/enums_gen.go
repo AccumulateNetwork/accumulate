@@ -26,17 +26,14 @@ const PortOffsetTendermintP2P PortOffset = 0
 // PortOffsetTendermintRpc .
 const PortOffsetTendermintRpc PortOffset = 1
 
-// PortOffsetTendermintGrpc .
-const PortOffsetTendermintGrpc PortOffset = 2
+// PortOffsetWebsite .
+const PortOffsetWebsite PortOffset = 2
+
+// PortOffsetPrometheus .
+const PortOffsetPrometheus PortOffset = 3
 
 // PortOffsetAccumulateApi .
 const PortOffsetAccumulateApi PortOffset = 4
-
-// PortOffsetWebsite .
-const PortOffsetWebsite PortOffset = 5
-
-// PortOffsetPrometheus .
-const PortOffsetPrometheus PortOffset = 6
 
 // GetEnumValue returns the value of the Network Type
 func (v NetworkType) GetEnumValue() uint64 { return uint64(v) }
@@ -167,7 +164,7 @@ func (v PortOffset) GetEnumValue() uint64 { return uint64(v) }
 func (v *PortOffset) SetEnumValue(id uint64) bool {
 	u := PortOffset(id)
 	switch u {
-	case PortOffsetTendermintP2P, PortOffsetTendermintRpc, PortOffsetTendermintGrpc, PortOffsetAccumulateApi, PortOffsetWebsite, PortOffsetPrometheus:
+	case PortOffsetTendermintP2P, PortOffsetTendermintRpc, PortOffsetWebsite, PortOffsetPrometheus, PortOffsetAccumulateApi:
 		*v = u
 		return true
 	default:
@@ -182,14 +179,12 @@ func (v PortOffset) String() string {
 		return "tendermintP2P"
 	case PortOffsetTendermintRpc:
 		return "tendermintRpc"
-	case PortOffsetTendermintGrpc:
-		return "tendermintGrpc"
-	case PortOffsetAccumulateApi:
-		return "accumulateApi"
 	case PortOffsetWebsite:
 		return "website"
 	case PortOffsetPrometheus:
 		return "prometheus"
+	case PortOffsetAccumulateApi:
+		return "accumulateApi"
 	default:
 		return fmt.Sprintf("PortOffset:%d", v)
 	}
@@ -202,14 +197,12 @@ func PortOffsetByName(name string) (PortOffset, bool) {
 		return PortOffsetTendermintP2P, true
 	case "tendermintrpc":
 		return PortOffsetTendermintRpc, true
-	case "tendermintgrpc":
-		return PortOffsetTendermintGrpc, true
-	case "accumulateapi":
-		return PortOffsetAccumulateApi, true
 	case "website":
 		return PortOffsetWebsite, true
 	case "prometheus":
 		return PortOffsetPrometheus, true
+	case "accumulateapi":
+		return PortOffsetAccumulateApi, true
 	default:
 		return 0, false
 	}
