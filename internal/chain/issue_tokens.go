@@ -27,16 +27,20 @@ func (IssueTokens) Validate(st *StateManager, tx *Delivery) (protocol.Transactio
 	}
 
 	// Normalize
+	recipients := body.To
 	if body.Recipient != nil {
-		body.To = append(body.To, &protocol.TokenRecipient{
+		// Make a copy so we don't change the original transaction
+		recipients = make([]*protocol.TokenRecipient, len(recipients)+1)
+		recipients[0] = &protocol.TokenRecipient{
 			Url:    body.Recipient,
 			Amount: body.Amount,
-		})
+		}
+		copy(recipients[1:], body.To)
 	}
 
 	// Calculate the total and update Issued
 	total := new(big.Int)
-	for _, to := range body.To {
+	for _, to := range recipients {
 		total.Add(total, &to.Amount)
 	}
 	if !issuer.Issue(total) {
@@ -48,7 +52,7 @@ func (IssueTokens) Validate(st *StateManager, tx *Delivery) (protocol.Transactio
 	}
 
 	m := make(map[[32]byte]bool)
-	for _, to := range body.To {
+	for _, to := range recipients {
 		id := to.Url.AccountID32()
 		_, ok := m[id]
 		if !ok {
