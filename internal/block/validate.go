@@ -11,6 +11,30 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
+func (x *Executor) ValidateEnvelopeSet(batch *database.Batch, deliveries []*chain.Delivery, captureError func(error, *chain.Delivery, *protocol.TransactionStatus)) []*protocol.TransactionStatus {
+	results := make([]*protocol.TransactionStatus, len(deliveries))
+	for i, delivery := range deliveries {
+		status := new(protocol.TransactionStatus)
+		results[i] = status
+
+		var err error
+		status.Result, err = x.ValidateEnvelope(batch, delivery)
+
+		// Wait until after ValidateEnvelope, because the transaction may get
+		// loaded by LoadTransaction
+		status.TxID = delivery.Transaction.ID()
+
+		if err != nil {
+			status.Set(err)
+			if captureError != nil {
+				captureError(err, delivery, status)
+			}
+		}
+	}
+
+	return results
+}
+
 // ValidateEnvelope verifies that the envelope is valid. It checks the basics,
 // like the envelope has signatures and a hash and/or a transaction. It
 // validates signatures, ensuring they match the transaction hash, reference a
@@ -93,7 +117,7 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 
 	// Lite token address => lite identity
 	var signerUrl *url.URL
-	if _, ok := firstSig.(*protocol.SyntheticSignature); ok {
+	if _, ok := firstSig.(*protocol.PartitionSignature); ok {
 		signerUrl = x.Describe.OperatorsPage()
 	} else {
 		signerUrl = firstSig.GetSigner()
@@ -161,8 +185,8 @@ func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Deli
 	// Stateful validation (mostly for synthetic transactions)
 	var signer, delegate protocol.Signer
 	switch signature := signature.(type) {
-	case *protocol.SyntheticSignature:
-		err = verifySyntheticSignature(&x.Describe, batch, delivery.Transaction, signature, md)
+	case *protocol.PartitionSignature:
+		err = verifyPartitionSignature(&x.Describe, batch, delivery.Transaction, signature, md)
 
 	case *protocol.ReceiptSignature:
 		err = verifyReceiptSignature(delivery.Transaction, signature, md)
@@ -222,7 +246,7 @@ func validateSyntheticTransactionSignatures(transaction *protocol.Transaction, s
 	var gotSynthSig, gotReceiptSig, gotED25519Sig bool
 	for _, sig := range signatures {
 		switch sig.(type) {
-		case *protocol.SyntheticSignature:
+		case *protocol.PartitionSignature:
 			gotSynthSig = true
 
 		case *protocol.ReceiptSignature:

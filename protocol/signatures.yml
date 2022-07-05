@@ -152,8 +152,8 @@ ReceiptSignature:
       type: hash
       optional: true
 
-SyntheticSignature:
-  union: { type: signature }
+PartitionSignature:
+  union: { type: signature, value: Partition }
   description: is used to initiate transactions between BVNs
   fields:
     - name: SourceNetwork

@@ -104,9 +104,20 @@ func (t TransactionType) IsSynthetic() bool {
 	return TransactionMaxUser.GetEnumValue() < t.GetEnumValue() && t.GetEnumValue() <= TransactionMaxSynthetic.GetEnumValue()
 }
 
-// IsSystem returns true if the transaction type is internal.
+// IsSystem returns true if the transaction type is system.
 func (t TransactionType) IsSystem() bool {
 	return TransactionMaxSynthetic.GetEnumValue() < t.GetEnumValue() && t.GetEnumValue() <= TransactionMaxSystem.GetEnumValue()
+}
+
+// IsAnchor returns true if the transaction type is directory or block validator
+// anchor.
+func (t TransactionType) IsAnchor() bool {
+	switch t {
+	case TransactionTypeDirectoryAnchor,
+		TransactionTypeBlockValidatorAnchor:
+		return true
+	}
+	return false
 }
 
 type SyntheticTransaction interface {

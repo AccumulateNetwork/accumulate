@@ -14,6 +14,30 @@ type Block struct {
 	Batch *database.Batch
 }
 
+func (x *Executor) ExecuteEnvelopeSet(block *Block, deliveries []*chain.Delivery, captureError func(error, *chain.Delivery, *protocol.TransactionStatus)) []*protocol.TransactionStatus {
+	results := make([]*protocol.TransactionStatus, len(deliveries))
+	for i, delivery := range deliveries {
+		status, err := x.ExecuteEnvelope(block, delivery)
+		if status == nil {
+			status = new(protocol.TransactionStatus)
+		}
+		results[i] = status
+
+		// Wait until after ExecuteEnvelope, because the transaction may get
+		// loaded by LoadTransaction
+		status.TxID = delivery.Transaction.ID()
+
+		if err != nil {
+			status.Set(err)
+			if captureError != nil {
+				captureError(err, delivery, status)
+			}
+		}
+	}
+
+	return results
+}
+
 func (x *Executor) ExecuteEnvelope(block *Block, delivery *chain.Delivery) (*protocol.TransactionStatus, error) {
 	if !delivery.Transaction.Body.Type().IsSystem() {
 		x.logger.Debug("Executing transaction",
@@ -30,6 +54,15 @@ func (x *Executor) ExecuteEnvelope(block *Block, delivery *chain.Delivery) (*pro
 	status, additional, err := x.executeEnvelope(block, delivery)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
+	}
+
+	// Record when the transaction is received
+	if status.Received == 0 {
+		status.Received = block.Index
+		err = block.Batch.Transaction(delivery.Transaction.GetHash()).PutStatus(status)
+		if err != nil {
+			return nil, errors.Wrap(errors.StatusUnknownError, err)
+		}
 	}
 
 	// Process additional transactions. This is intentionally non-recursive.
@@ -90,11 +123,9 @@ func (x *Executor) executeEnvelope(block *Block, delivery *chain.Delivery) (*pro
 		return status, nil, nil
 	}
 
-	if delivery.Transaction.Body.Type().IsSynthetic() {
-		err = delivery.LoadSyntheticMetadata(block.Batch, status)
-		if err != nil {
-			return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
-		}
+	err = delivery.LoadSyntheticMetadata(block.Batch, delivery.Transaction.Body.Type(), status)
+	if err != nil {
+		return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	// Process signatures
@@ -157,12 +188,16 @@ func (x *Executor) executeEnvelope(block *Block, delivery *chain.Delivery) (*pro
 				kv = append(kv, "error", status.Error)
 				x.logger.Info("Transaction failed", kv...)
 			} else if !delivery.Transaction.Body.Type().IsSystem() {
-				x.logger.Debug("Transaction succeeded", kv...)
+				if status.Pending() {
+					x.logger.Debug("Transaction pending", kv...)
+				} else {
+					x.logger.Debug("Transaction succeeded", kv...)
+				}
 			}
 		}
 
-	} else {
-		status = &protocol.TransactionStatus{Code: errors.StatusRemote}
+	} else if status.Code == 0 {
+		status.Code = errors.StatusRemote
 	}
 
 	err = x.ProcessRemoteSignatures(block, delivery)
