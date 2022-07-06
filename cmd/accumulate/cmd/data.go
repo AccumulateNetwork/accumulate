@@ -24,7 +24,6 @@ func init() {
 	dataCmd.Flags().StringVar(&Keyname, "sign-data", "", "specify this to send random data as a signed & valid entry to data account")
 	dataCmd.PersistentFlags().BoolVar(&WriteState, "write-state", false, "Write to the account's state")
 	dataCmd.Flags().BoolVar(&Scratch, "scratch", false, "Write to the scratch chain")
-	dataCmd.Flags().IntVar(&KeyHeight, "keyHeight", 0, "Specify the keyHeight")
 
 }
 

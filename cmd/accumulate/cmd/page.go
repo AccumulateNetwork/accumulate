@@ -23,14 +23,6 @@ func init() {
 		pageKeyUpdateCmd,
 		pageKeyRemoveCmd)
 
-	pageCreateCmd.Flags().IntVar(&KeyHeight, "keyHeight", 0, "Specify the keyHeight")
-	pageKeyCmd.Flags().IntVar(&KeyHeight, "keyHeight", 0, "Specify the keyHeight")
-	pageLockCmd.Flags().IntVar(&KeyHeight, "keyHeight", 0, "Specify the keyHeight")
-	pageUnlockCmd.Flags().IntVar(&KeyHeight, "keyHeight", 0, "Specify the keyHeight")
-	pageKeyAddCmd.Flags().IntVar(&KeyHeight, "keyHeight", 0, "Specify the keyHeight")
-	pageKeyUpdateCmd.Flags().IntVar(&KeyHeight, "keyHeight", 0, "Specify the keyHeight")
-	pageKeyRemoveCmd.Flags().IntVar(&KeyHeight, "keyHeight", 0, "Specify the keyHeight")
-
 }
 
 var pageCmd = &cobra.Command{

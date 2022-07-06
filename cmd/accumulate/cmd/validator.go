@@ -21,13 +21,6 @@ func init() {
 		validatorAddCmd,
 		validatorRemoveCmd,
 		validatorUpdateKeyCmd)
-	operatorAddCmd.Flags().IntVar(&KeyHeight, "keyHeight", 0, "Specify the keyHeight")
-	operatorUpdateKeyCmd.Flags().IntVar(&KeyHeight, "keyHeight", 0, "Specify the keyHeight")
-	operatorRemoveCmd.Flags().IntVar(&KeyHeight, "keyHeight", 0, "Specify the keyHeight")
-	validatorAddCmd.Flags().IntVar(&KeyHeight, "keyHeight", 0, "Specify the keyHeight")
-	validatorUpdateKeyCmd.Flags().IntVar(&KeyHeight, "keyHeight", 0, "Specify the keyHeight")
-	validatorRemoveCmd.Flags().IntVar(&KeyHeight, "keyHeight", 0, "Specify the keyHeight")
-
 }
 
 var operatorCmd = &cobra.Command{

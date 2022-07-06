@@ -10,10 +10,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-func init() {
-	creditsCmd.Flags().IntVar(&KeyHeight, "keyHeight", 0, "Specify the keyHeight")
-}
-
 // creditsCmd represents the faucet command
 var creditsCmd = &cobra.Command{
 	Use:   "credits [origin token account] [key page or lite identity url] [number of credits wanted] [max acme to spend] [percent slippage (optional)]",

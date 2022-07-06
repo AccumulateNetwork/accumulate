@@ -17,10 +17,6 @@ func init() {
 		authAddCmd,
 		authRemoveCmd,
 	)
-	authEnableCmd.Flags().IntVar(&KeyHeight, "keyHeight", 0, "Specify the keyHeight")
-	authDisableCmd.Flags().IntVar(&KeyHeight, "keyHeight", 0, "Specify the keyHeight")
-	authAddCmd.Flags().IntVar(&KeyHeight, "keyHeight", 0, "Specify the keyHeight")
-	authRemoveCmd.Flags().IntVar(&KeyHeight, "keyHeight", 0, "Specify the keyHeight")
 }
 
 var authCmd = &cobra.Command{

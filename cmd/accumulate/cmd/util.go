@@ -118,6 +118,7 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, []*signing.Builde
 			}
 			continue
 		}
+
 		argcopy = append(argcopy, arg)
 	}
 	fmt.Println(args, argcopy)
@@ -180,7 +181,11 @@ func prepareSignerPage(signer *signing.Builder, origin *url.URL, args ...string)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get %q : %v", keyInfo.Signer, err)
 	}
-	signer.Version = page.Version
+	if SignerVersion != 0 {
+		signer.Version = uint64(SignerVersion)
+	} else {
+		signer.Version = page.Version
+	}
 
 	return args[ct:], nil
 }
