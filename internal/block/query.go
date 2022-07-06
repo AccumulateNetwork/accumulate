@@ -693,8 +693,8 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove, remote
 		return nil, fmt.Errorf("failed to load transaction chain index: %v", err)
 	}
 
-	qr.Receipts = make([]*query.TxReceipt, len(chainIndex.Entries))
-	for i, entry := range chainIndex.Entries {
+	qr.Receipts = make([]*query.TxReceipt, len(chainIndex))
+	for i, entry := range chainIndex {
 		receipt, err := m.resolveTxReceipt(batch, txid, entry)
 		if err != nil {
 			// If one receipt fails to build, do not cause the entire request to
@@ -1238,7 +1238,7 @@ func (m *Executor) shouldBePruned(batch *database.Batch, txid []byte, txBody pro
 		return false, err
 	}
 
-	for _, txChainEntry := range txChain.Entries {
+	for _, txChainEntry := range txChain {
 		if txChainEntry.Chain == protocol.MainChain {
 			// Load the index entry
 			indexEntry := new(protocol.IndexEntry)
