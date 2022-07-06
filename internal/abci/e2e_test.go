@@ -207,7 +207,7 @@ func TestAnchorChain(t *testing.T) {
 	// // TODO FIX This is broken because the ledger no longer has a list of updates
 	// var ledgerState *protocol.InternalLedger
 	// require.NoError(t, ledger.GetStateAs(&ledgerState))
-	// rootChain, err := ledger.ReadChain(protocol.MinorRootChain)
+	// rootChain, err := ledger.MinorRootChain().Get()
 	// require.NoError(t, err)
 	// first := rootChain.Height() - int64(len(ledgerState.Updates))
 	// for i, meta := range ledgerState.Updates {
@@ -1081,7 +1081,7 @@ func TestSignatorHeight(t *testing.T) {
 	getHeight := func(u *url.URL) uint64 {
 		batch := n.db.Begin(true)
 		defer batch.Discard()
-		chain, err := batch.Account(u).ReadChain(protocol.MainChain)
+		chain, err := batch.Account(u).MainChain().Get()
 		require.NoError(t, err)
 		return uint64(chain.Height())
 	}
@@ -1492,7 +1492,7 @@ func DumpAccount(t *testing.T, batch *database.Batch, accountUrl *url.URL) {
 	require.NoError(t, err)
 	seen := map[[32]byte]bool{}
 	for _, cmeta := range chains {
-		chain, err := account.ReadChain(cmeta.Name)
+		chain, err := account.GetChainByName(cmeta.Name)
 		require.NoError(t, err)
 		fmt.Printf("  Chain: %s (%v)\n", cmeta.Name, cmeta.Type)
 		height := chain.Height()

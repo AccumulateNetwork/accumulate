@@ -36,12 +36,13 @@ type Executor struct {
 }
 
 type ExecutorOptions struct {
-	Logger              log.Logger
-	Key                 ed25519.PrivateKey
-	Router              routing.Router
-	Describe            config.Describe
-	EventBus            *events.Bus
-	MajorBlockScheduler blockscheduler.MajorBlockScheduler
+	Logger              log.Logger                         //
+	Key                 ed25519.PrivateKey                 // Private validator key
+	Router              routing.Router                     //
+	Describe            config.Describe                    // Network description
+	EventBus            *events.Bus                        //
+	MajorBlockScheduler blockscheduler.MajorBlockScheduler //
+	Background          func(func())                       // Background task launcher
 
 	isGenesis bool
 
@@ -117,6 +118,10 @@ func NewGenesisExecutor(db *database.Database, logger log.Logger, network *confi
 }
 
 func newExecutor(opts ExecutorOptions, db *database.Database, executors ...TransactionExecutor) (*Executor, error) {
+	if opts.Background == nil {
+		opts.Background = func(f func()) { go f() }
+	}
+
 	m := new(Executor)
 	m.ExecutorOptions = opts
 	m.executors = map[protocol.TransactionType]TransactionExecutor{}
