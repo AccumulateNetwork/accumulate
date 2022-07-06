@@ -35,19 +35,13 @@ var keyCmd = &cobra.Command{
 		var out string
 		var err error
 
-		//set the default signature type
-		sigType := protocol.SignatureTypeED25519
-		if SigType != "" {
-			sigType, err = ValidateSigType(SigType)
-		}
-
 		if len(args) > 0 && err == nil {
 			switch arg := args[0]; arg {
 			case "import":
 				if len(args) == 3 {
 					if args[1] == "lite" {
 
-						out, err = ImportKey(args[2], "", sigType)
+						out, err = ImportKey(args[2], "")
 					} else if args[1] == "factoid" {
 						out, err = ImportFactoidKey(args[2])
 					} else {
@@ -58,7 +52,7 @@ var keyCmd = &cobra.Command{
 					case "mnemonic":
 						out, err = ImportMnemonic(args[2:])
 					case "private":
-						out, err = ImportKey(args[2], args[3], sigType)
+						out, err = ImportKey(args[2], args[3])
 					case "public":
 						//reserved for future use.
 						fallthrough
@@ -466,27 +460,32 @@ func FindLabelFromPubKey(pubKey []byte) (lab string, err error) {
 }
 
 // ImportKey will import the private key and assign it to the label
-func ImportKey(pkAscii string, label string, signatureType protocol.SignatureType) (out string, err error) {
+func ImportKey(pkAscii string, label string) (out string, err error) {
 
 	var liteLabel string
 	// var pk ed25519.PrivateKey
 	pk := new(Key)
-	if err := pk.LoadByLabel(label); err != nil {
+
+	token, err := hex.DecodeString(pkAscii)
+	if err != nil {
 		return "", err
 	}
 
-	// token, err := hex.DecodeString(pkAscii)
-	// if err != nil {
-	// 	return "", err
-	// }
+	if err := pk.LoadByPublicKey(token[32:]); err != nil {
+		return "", err
+	}
 
-	// if len(token) == 32 {
-	// 	pk = ed25519.NewKeyFromSeed(token)
-	// } else {
-	// 	pk = token
-	// }
+	if len(token) == 32 {
+		if err := pk.LoadByPublicKey(token); err != nil {
+			return "", err
+		}
+	} else {
+		if err := pk.LoadByPublicKey(token[32:]); err != nil {
+			return "", err
+		}
+	}
 
-	lt, err := protocol.LiteTokenAddress(pk.PublicKey[32:], protocol.ACME, signatureType)
+	lt, err := protocol.LiteTokenAddress(pk.PublicKey[32:], protocol.ACME, pk.Type)
 	if err != nil {
 		return "", fmt.Errorf("no label specified and cannot import as lite token account")
 	}
@@ -535,7 +534,7 @@ func ImportKey(pkAscii string, label string, signatureType protocol.SignatureTyp
 		return "", err
 	}
 
-	err = GetWallet().Put(BucketSigType, publicKey, common.Uint64Bytes(signatureType.GetEnumValue()))
+	err = GetWallet().Put(BucketSigType, publicKey, common.Uint64Bytes(pk.Type.GetEnumValue()))
 	if err != nil {
 		return "", err
 	}
@@ -545,14 +544,14 @@ func ImportKey(pkAscii string, label string, signatureType protocol.SignatureTyp
 		a.Label = types.String(label)
 		a.PublicKey = types.Bytes(pk.PublicKey[32:])
 		a.LiteAccount = lt
-		a.KeyType = signatureType
+		a.KeyType = pk.Type
 		dump, err := json.Marshal(&a)
 		if err != nil {
 			return "", err
 		}
 		out = fmt.Sprintf("%s\n", string(dump))
 	} else {
-		out = fmt.Sprintf("\tname\t\t:\t%s\n\tlite account\t:\t%s\n\tpublic key\t:\t%x\n\tkey type\t:\t%s\n", label, lt, pk.PublicKey[32:], signatureType)
+		out = fmt.Sprintf("\tname\t\t:\t%s\n\tlite account\t:\t%s\n\tpublic key\t:\t%x\n\tkey type\t:\t%s\n", label, lt, pk.PublicKey[32:], pk.Type)
 	}
 	return out, nil
 }
@@ -755,7 +754,7 @@ func ImportFactoidKey(factoidkey string) (out string, err error) {
 	if err != nil {
 		return "", err
 	}
-	return ImportKey(hex.EncodeToString(privatekey), label, protocol.SignatureTypeRCD1)
+	return ImportKey(hex.EncodeToString(privatekey), label)
 }
 
 func UpdateKey(args []string) (string, error) {
