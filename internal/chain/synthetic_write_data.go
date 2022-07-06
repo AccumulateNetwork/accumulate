@@ -71,7 +71,7 @@ func executeWriteLiteDataAccount(st *StateManager, entry protocol.DataEntry) (pr
 
 		//the computed data account chain id must match the origin url.
 		if !st.OriginUrl.Equal(u) {
-			return nil, fmt.Errorf("first entry doesnt match chain id")
+			return nil, fmt.Errorf("first entry doesnt match chain id (%s != %s)", st.OriginUrl.String(), u.String())
 		}
 
 		lite := new(protocol.LiteDataAccount)

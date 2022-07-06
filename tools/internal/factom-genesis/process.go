@@ -46,8 +46,8 @@ func Open() bool {
 	return true
 }
 
-func Process() {
-
+func Process(server string) {
+	var cg ChainGang
 	header := new(Header)
 	dBlock := directoryBlock.NewDirectoryBlock(nil)
 	aBlock := adminBlock.NewAdminBlock(nil)
@@ -56,10 +56,7 @@ func Process() {
 	eBlock := entryBlock.NewEBlock()
 
 	for Open() {
-
-		entry := new(entryBlock.Entry)
-		tx := new(factoid.Transaction)
-		_, _, _, _, _, _, _ = dBlock, aBlock, fBlock, ecBlock, eBlock, entry, tx
+		_, _, _, _, _ = dBlock, aBlock, fBlock, ecBlock, eBlock
 		for len(buff) > 0 {
 			buff = header.UnmarshalBinary(buff)
 			switch header.Tag {
@@ -85,6 +82,7 @@ func Process() {
 					panic("Bad Entry Block block")
 				}
 			case TagEntry:
+				entry := new(entryBlock.Entry)
 				if err := entry.UnmarshalBinary(buff[:header.Size]); err != nil {
 					panic("Bad Entry")
 				}
@@ -98,12 +96,11 @@ func Process() {
 				if err != nil {
 					log.Fatalf("cannot decode account id")
 				}
-				_, ok := factomChainData[*(*[32]byte)(accountId)]
-				if !ok {
-					factomChainData[*(*[32]byte)(accountId)] = NewQueue()
-				}
-				factomChainData[*(*[32]byte)(accountId)].Push(qEntry)
+				dataEntry := ConvertFactomDataEntryToLiteDataEntry(*qEntry)
+				ch := cg.GetOrCreateChainWorker(server, (*[32]byte)(accountId), 3)
+				ch <- dataEntry
 			case TagTX:
+				tx := new(factoid.Transaction)
 				if err := tx.UnmarshalBinary(buff[:header.Size]); err != nil {
 					panic("Bad Transaction")
 				}
@@ -112,5 +109,6 @@ func Process() {
 			}
 			buff = buff[header.Size:]
 		}
+		cg.Close()
 	}
 }

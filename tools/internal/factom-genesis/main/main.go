@@ -3,7 +3,6 @@ package main
 import (
 	"log"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/tools/internal/factom-genesis"
 )
 
@@ -14,20 +13,21 @@ const (
 var faucet = true
 
 func main() {
-	factom.Process()
 	// pk, err := hex.DecodeString(Key_Private_Key)
 	// if err != nil {
 	// 	log.Fatalf("invalid private key %v", err)
 	// }
-	url, err := url.Parse("acc://bvn-BVN1.acme")
+	err := factom.SetPrivateKeyAndOrigin("priv_validator_key.json")
 	if err != nil {
 		log.Fatalf("Error : ", err.Error())
 	}
-	log.Println("URL : ", url)
-	err = factom.SetPrivateKeyAndOrigin("priv_validator_key.json", url)
+
+	err = factom.FaucetWithCredits(factom.LOCAL_URL)
 	if err != nil {
-		log.Fatalf("Error : ", err.Error())
+		log.Fatalf("failed to faucet account %v", err)
 	}
+
+	factom.Process(factom.LOCAL_URL)
 	// if faucet {
 	// 	err := factom.FaucetWithCredits(factom.LOCAL_URL)
 	// 	if err != nil {
@@ -40,5 +40,5 @@ func main() {
 	//
 	//entries := factom.EntriesFromFactom()
 	//factom.GetDataAndPopulateQueue(entries)
-	factom.WriteDataFromQueueToAccumulate(factom.LOCAL_URL)
+	//factom.WriteDataFromQueueToAccumulate(factom.LOCAL_URL)
 }

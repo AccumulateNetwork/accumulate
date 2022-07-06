@@ -7,6 +7,7 @@ import (
 	tmjson "github.com/tendermint/tendermint/libs/json"
 	"io/ioutil"
 	"log"
+	"sync"
 	"time"
 
 	f2 "github.com/FactomProject/factom"
@@ -28,7 +29,7 @@ const (
 	LOCAL_URL = "http://127.0.1.1:26660"
 )
 
-func SetPrivateKeyAndOrigin(privateKey string, url *url.URL) error {
+func SetPrivateKeyAndOrigin(privateKey string) error {
 	b, err := ioutil.ReadFile(privateKey)
 	if err != nil {
 		return err
@@ -47,19 +48,30 @@ func SetPrivateKeyAndOrigin(privateKey string, url *url.URL) error {
 	}
 
 	key = &cmd.Key{PrivateKey: priv, PublicKey: pub, Type: protocol.SignatureTypeED25519}
+	//url, err := url.Parse("acc://bvn-BVN1.acme")
+	//if err != nil {
+	//	log.Fatalf("Error : ", err.Error())
+	//}
+	url, err := protocol.LiteTokenAddress(key.PublicKey, protocol.ACME, protocol.SignatureTypeED25519)
+	if err != nil {
+		log.Fatalf("cannot create lite token account %v", err)
+	}
+	log.Println("URL : ", url)
+
 	origin = url
 	return nil
 }
-func buildEnvelope(payload protocol.TransactionBody) (*protocol.Envelope, error) {
+
+func buildEnvelope(payload protocol.TransactionBody, originUrl *url.URL) (*protocol.Envelope, error) {
 	txn := new(protocol.Transaction)
 	txn.Body = payload
-	txn.Header.Principal = origin
+	txn.Header.Principal = originUrl
 	signer := new(signing.Builder)
 	signer.SetPrivateKey(key.PrivateKey)
 	signer.SetTimestampToNow()
 	signer.SetVersion(1)
 	signer.SetType(protocol.SignatureTypeED25519)
-	signer.SetUrl(origin)
+	signer.SetUrl(originUrl)
 
 	sig, err := signer.Initiate(txn)
 	if err != nil {
@@ -75,15 +87,18 @@ func buildEnvelope(payload protocol.TransactionBody) (*protocol.Envelope, error)
 	return envelope, nil
 }
 
+var mutex sync.Mutex
+
 func WriteDataToAccumulate(env string, data protocol.DataEntry, dataAccount *url.URL) error {
 	client, err := client.New(env)
+	defer client.CloseIdleConnections()
 	if err != nil {
 		log.Println("Error : ", err.Error())
 		return err
 	}
 	queryRes, err := queryDataByHash(client, dataAccount, data.Hash())
 	if err == nil && queryRes.Data != nil {
-		log.Println("======", queryRes)
+		log.Printf("====== %x, %x", queryRes.ChainId, data.Hash())
 		err := fmt.Errorf("record for data entry hash is already available")
 		return err
 	}
@@ -93,8 +108,11 @@ func WriteDataToAccumulate(env string, data protocol.DataEntry, dataAccount *url
 		Recipient: dataAccount,
 	}
 
-	envelope, err := buildEnvelope(wd)
+	//need to have a mutex here to keep timestamps sequential for nonce check since we are using same principal.
+	mutex.Lock()
+	envelope, err := buildEnvelope(wd, origin)
 	if err != nil {
+		mutex.Unlock()
 		return err
 	}
 
@@ -102,12 +120,13 @@ func WriteDataToAccumulate(env string, data protocol.DataEntry, dataAccount *url
 	req.Envelope = envelope
 
 	res, err := client.ExecuteDirect(context.Background(), req)
+	mutex.Unlock()
 	if err != nil {
-		log.Println("Error : ", err.Error())
+		log.Printf("%v", err)
 		return err
 	}
 	if res.Code != 0 {
-		log.Println("Response Error : ", res.Message)
+		log.Printf("Response Error : %v txid: %x code: %d", res.Message, res.TransactionHash, res.Code)
 		return fmt.Errorf(res.Message)
 	}
 
@@ -116,17 +135,26 @@ func WriteDataToAccumulate(env string, data protocol.DataEntry, dataAccount *url
 	txReq.Wait = time.Second * 10
 	txReq.IgnorePending = false
 
-	_, err = client.QueryTx(context.Background(), &txReq)
+	queryResTx, err := client.QueryTx(context.Background(), &txReq)
 	if err != nil {
 		return err
 	}
-
-	queryRes, err = queryDataByHash(client, dataAccount, data.Hash())
-	if err != nil {
-		log.Printf("Error (%x): %v\n", data, err)
-		return err
-	}
-	log.Println("Response : ", queryRes.Data)
+	//
+	//retries := 10
+	//success := false
+	//for i := 0; i < retries; i++ {
+	//	queryRes, err = queryDataByHash(client, dataAccount, data.Hash())
+	//	if err != nil {
+	//		log.Printf("attempt %d error (%x): %v\n", i, data.Hash(), err)
+	//		continue
+	//	}
+	//	success = true
+	//	break
+	//}
+	//if !success {
+	//	return fmt.Errorf("read back failed %v", err)
+	//}
+	log.Println("Success : ", queryResTx.Txid.Account(), data.Hash())
 	return nil
 }
 
@@ -150,6 +178,43 @@ func WriteDataFromQueueToAccumulate(env string) {
 		log.Printf("Writing data to %s", chainUrl.String())
 		ExecuteQueueToWriteData(env, chainUrl, data)
 	}
+}
+
+type ChainGang struct {
+	mapChannels map[[32]byte]chan *protocol.FactomDataEntry
+	Wait        sync.WaitGroup
+}
+
+func (w *ChainGang) Close() {
+	w.Wait.Wait()
+	for _, v := range w.mapChannels {
+		close(v)
+	}
+}
+
+func (w *ChainGang) GetOrCreateChainWorker(s string, chainId *[32]byte, maxEntries int) chan *protocol.FactomDataEntry {
+	v, ok := w.mapChannels[*chainId]
+	if !ok {
+		v = make(chan *protocol.FactomDataEntry, maxEntries)
+		u, err := protocol.LiteDataAddress((*chainId)[:])
+		if err != nil {
+			log.Fatalf("error creating lite address %x, %v", *chainId, err)
+		}
+		go w.WriteDataWorker(s, u, v)
+	}
+	return v
+}
+
+func (w *ChainGang) WriteDataWorker(env string, chainUrl *url.URL, queue chan *protocol.FactomDataEntry) {
+	w.Wait.Add(1)
+	defer w.Wait.Done()
+	for entry := range queue {
+		err := WriteDataToAccumulate(env, entry, chainUrl)
+		if err != nil {
+			log.Printf("error writing data to accumulate : %v", err)
+		}
+	}
+
 }
 
 func ExecuteQueueToWriteData(env string, chainUrl *url.URL, queue *Queue) {
@@ -212,6 +277,8 @@ func FaucetWithCredits(env string) error {
 	if err != nil {
 		return err
 	}
+
+	fmt.Printf("fauceting %s\n", origin.String())
 	faucet := protocol.AcmeFaucet{}
 	faucet.Url = origin
 	resp, err := client.Faucet(context.Background(), &faucet)
@@ -229,13 +296,14 @@ func FaucetWithCredits(env string) error {
 		return err
 	}
 
+	time.Sleep(time.Second * 3)
 	//now buy a bunch of credits.
 	cred := protocol.AddCredits{}
 	cred.Recipient = origin
 	cred.Oracle = 500
 	cred.Amount.SetInt64(200000000000000)
 
-	envelope, err := buildEnvelope(&cred)
+	envelope, err := buildEnvelope(&cred, origin)
 	if err != nil {
 		return err
 	}
@@ -245,6 +313,7 @@ func FaucetWithCredits(env string) error {
 		return err
 	}
 
+	time.Sleep(time.Second * 2)
 	txReq = api.TxnQuery{}
 	txReq.Txid = resp.TransactionHash
 	txReq.Wait = time.Second * 10
@@ -252,8 +321,12 @@ func FaucetWithCredits(env string) error {
 
 	_, err = client.QueryTx(context.Background(), &txReq)
 	if err != nil {
-		return err
+		if err != nil {
+			return err
+		}
 	}
 
+	time.Sleep(time.Second * 2)
+	client.CloseIdleConnections()
 	return nil
 }
