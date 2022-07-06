@@ -1,27 +1,3 @@
-TransactionChainIndex:
-  fields:
-  - name: Entries
-    repeatable: true
-    type: TransactionChainEntry
-    pointer: true
-    marshal-as: reference
-
-TransactionChainEntry:
-  fields:
-  - name: Account
-    type: url
-    marshal-as: reference
-    pointer: true
-  - name: Chain
-    description: is the name of the chain
-    type: string
-  - name: ChainIndex
-    description: is the index of the entry in the chain's index chain
-    type: uint
-  - name: AnchorIndex
-    description: is the index of the entry in the anchor chain's index chain
-    type: uint
-
 BlockStateIndex:
   fields:
   - name: ProducedSynthTxns
@@ -56,7 +32,6 @@ ChainUpdate:
     - name: Entry
       type: bytes
 
-
 BlockChainUpdatesIndex:
   fields:
     - name: Entries
@@ -64,24 +39,3 @@ BlockChainUpdatesIndex:
       type: ChainUpdate
       pointer: true
       marshal-as: reference
-
-DirectoryIndex:
-  fields:
-    - name: Count
-      type: uvarint
-
-DirectoryEntry:
-  fields:
-    - name: Account
-      type: url
-      pointer: true
-
-DataIndex:
-  fields:
-    - name: Count
-      type: uvarint
-
-DataEntry:
-  fields:
-    - name: Hash
-      type: hash

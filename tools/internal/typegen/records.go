@@ -2,6 +2,8 @@ package typegen
 
 type RecordType int
 
+type CollectionType int
+
 type Record interface {
 	Type() RecordType
 	GetParent() *EntityRecord
@@ -13,7 +15,9 @@ type Record interface {
 type ValueRecord interface {
 	Record
 	Wrapped() bool
+	CollectionType() CollectionType
 	IsSet() bool
+	IsList() bool
 	IsCounted() bool
 	IsPointer() bool
 	IsUnion() bool
@@ -59,14 +63,20 @@ func (r *OtherRecord) FullName() string { return recordFullName(r) }
 func (r *StateRecord) Wrapped() bool { return r.DataType.Code != TypeCodeUnknown }
 func (r *IndexRecord) Wrapped() bool { return r.DataType.Code != TypeCodeUnknown }
 
-func (r *StateRecord) IsSet() bool { return r.Set }
-func (r *IndexRecord) IsSet() bool { return r.Set }
+func (r *StateRecord) CollectionType() CollectionType { return r.Collection }
+func (r *IndexRecord) CollectionType() CollectionType { return r.Collection }
+
+func (r *StateRecord) IsSet() bool { return r.Collection == CollectionTypeSet }
+func (r *IndexRecord) IsSet() bool { return r.Collection == CollectionTypeSet }
+
+func (r *StateRecord) IsList() bool { return r.Collection == CollectionTypeList }
+func (r *IndexRecord) IsList() bool { return r.Collection == CollectionTypeList }
+
+func (r *StateRecord) IsCounted() bool { return r.Collection == CollectionTypeCounted }
+func (r *IndexRecord) IsCounted() bool { return r.Collection == CollectionTypeCounted }
 
 func (r *StateRecord) IsUnion() bool { return r.Union }
 func (r *IndexRecord) IsUnion() bool { return r.Union }
-
-func (r *StateRecord) IsCounted() bool { return r.Counted }
-func (r *IndexRecord) IsCounted() bool { return r.Counted }
 
 func (r *StateRecord) IsPointer() bool { return r.Pointer }
 func (r *IndexRecord) IsPointer() bool { return r.Pointer }

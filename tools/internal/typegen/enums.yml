@@ -66,3 +66,13 @@ RecordType:
     value: 4
   Other:
     value: 5
+
+CollectionType:
+  None:
+    value: 0
+  Set:
+    value: 1
+  List:
+    value: 2
+  Counted:
+    value: 3
