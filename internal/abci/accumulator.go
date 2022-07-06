@@ -411,7 +411,7 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 			continue
 		}
 		resp.Code = uint32(protocol.ErrorCodeUnknownError)
-		resp.Log = "One or more user transactions failed"
+		resp.Log += fmt.Sprintf("envelope(%d/%s) %v;", i, result.Code.String(), result.Error)
 	}
 
 	return resp

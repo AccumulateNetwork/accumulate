@@ -319,12 +319,13 @@ func FaucetWithCredits(env string) error {
 	txReq.Wait = time.Second * 10
 	txReq.IgnorePending = false
 
-	_, err = client.QueryTx(context.Background(), &txReq)
+	qtx, err := client.QueryTx(context.Background(), &txReq)
 	if err != nil {
 		if err != nil {
 			return err
 		}
 	}
+	qtx.Produced
 
 	time.Sleep(time.Second * 2)
 	client.CloseIdleConnections()
