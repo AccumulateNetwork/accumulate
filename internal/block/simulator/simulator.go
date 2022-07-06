@@ -34,32 +34,31 @@ import (
 
 var GenesisTime = time.Date(2022, 7, 1, 0, 0, 0, 0, time.UTC)
 
+type SimulatorOptions struct {
+	BvnCount  int
+	LogLevels string
+	OpenDB    func(partition string, nodeIndex int, logger log.Logger) *database.Database
+}
+
 type Simulator struct {
 	tb
 	Logger     log.Logger
 	Partitions []config.Partition
 	Executors  map[string]*ExecEntry
 
-	LogLevels string
-
 	netInit          *accumulated.NetworkInit
 	router           routing.Router
 	routingOverrides map[[32]byte]string
 }
 
-func (s *Simulator) newLogger() log.Logger {
-	levels := s.LogLevels
-	if levels == "" {
-		levels = acctesting.DefaultLogLevels
-	}
-
+func (s *Simulator) newLogger(opts SimulatorOptions) log.Logger {
 	if !acctesting.LogConsole {
-		return logging.NewTestLogger(s, "plain", levels, false)
+		return logging.NewTestLogger(s, "plain", opts.LogLevels, false)
 	}
 
 	w, err := logging.NewConsoleWriter("plain")
 	require.NoError(s, err)
-	level, writer, err := logging.ParseLogLevel(levels, w)
+	level, writer, err := logging.ParseLogLevel(opts.LogLevels, w)
 	require.NoError(s, err)
 	logger, err := logging.NewTendermintLogger(zerolog.New(writer), level, false)
 	require.NoError(s, err)
@@ -70,30 +69,41 @@ func New(t TB, bvnCount int) *Simulator {
 	t.Helper()
 	sim := new(Simulator)
 	sim.TB = t
-	sim.Setup(bvnCount)
+	sim.Setup(SimulatorOptions{BvnCount: bvnCount})
 	return sim
 }
 
-func NewWithLogLevels(t TB, bvnCount int, logLevels config.LogLevel) *Simulator {
+func NewWith(t TB, opts SimulatorOptions) *Simulator {
 	t.Helper()
 	sim := new(Simulator)
 	sim.TB = t
-	sim.LogLevels = logLevels.String()
-	sim.Setup(bvnCount)
+	sim.Setup(opts)
 	return sim
 }
 
-func (sim *Simulator) Setup(bvnCount int) {
+func (sim *Simulator) Setup(opts SimulatorOptions) {
 	sim.Helper()
+
+	if opts.BvnCount == 0 {
+		opts.BvnCount = 3
+	}
+	if opts.LogLevels == "" {
+		opts.LogLevels = acctesting.DefaultLogLevels
+	}
+	if opts.OpenDB == nil {
+		opts.OpenDB = func(_ string, _ int, logger log.Logger) *database.Database {
+			return database.OpenInMemory(logger)
+		}
+	}
 
 	// Initialize the simulartor and network
 	sim.routingOverrides = map[[32]byte]string{}
-	sim.Logger = sim.newLogger().With("module", "simulator")
+	sim.Logger = sim.newLogger(opts).With("module", "simulator")
 	sim.Executors = map[string]*ExecEntry{}
 
 	sim.netInit = new(accumulated.NetworkInit)
 	sim.netInit.Id = sim.Name()
-	for i := 0; i < bvnCount; i++ {
+	for i := 0; i < opts.BvnCount; i++ {
 		bvnInit := new(accumulated.BvnInit)
 		bvnInit.Id = fmt.Sprintf("BVN%d", i)
 		bvnInit.Nodes = []*accumulated.NodeInit{{
@@ -116,13 +126,13 @@ func (sim *Simulator) Setup(bvnCount int) {
 	sim.router = routing.NewRouter(mainEventBus, nil)
 
 	// Initialize each executor
-	for _, bvn := range sim.netInit.Bvns[:1] {
+	for i, bvn := range sim.netInit.Bvns[:1] {
 		// TODO Initialize multiple executors for the DN
 		dn := &sim.Partitions[0]
 		dn.Nodes = append(dn.Nodes, config.Node{Type: config.Validator, Address: protocol.Directory})
 
-		logger := sim.newLogger().With("partition", protocol.Directory)
-		db := database.OpenInMemory(logger)
+		logger := sim.newLogger(opts).With("partition", protocol.Directory)
+		db := opts.OpenDB(protocol.Directory, i, logger)
 
 		network := config.Describe{
 			NetworkType:  config.Directory,
@@ -167,8 +177,8 @@ func (sim *Simulator) Setup(bvnCount int) {
 		bvn := &sim.Partitions[i+1]
 		bvn.Nodes = []config.Node{{Type: config.Validator, Address: bvn.Id}}
 
-		logger := sim.newLogger().With("partition", bvn.Id)
-		db := database.OpenInMemory(logger)
+		logger := sim.newLogger(opts).With("partition", bvn.Id)
+		db := opts.OpenDB(bvn.Id, 0, logger)
 
 		network := config.Describe{
 			NetworkType:  bvn.Type,

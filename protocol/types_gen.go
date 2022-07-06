@@ -335,8 +335,9 @@ type InternalSignature struct {
 
 type IssueTokens struct {
 	fieldsSet []bool
-	Recipient *url.URL `json:"recipient,omitempty" form:"recipient" query:"recipient" validate:"required"`
-	Amount    big.Int  `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	Recipient *url.URL          `json:"recipient,omitempty" form:"recipient" query:"recipient" validate:"required"`
+	Amount    big.Int           `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	To        []*TokenRecipient `json:"to,omitempty" form:"to" query:"to" validate:"required"`
 	extraData []byte
 }
 
@@ -1573,6 +1574,12 @@ func (v *IssueTokens) Copy() *IssueTokens {
 		u.Recipient = (v.Recipient).Copy()
 	}
 	u.Amount = *encoding.BigintCopy(&v.Amount)
+	u.To = make([]*TokenRecipient, len(v.To))
+	for i, v := range v.To {
+		if v != nil {
+			u.To[i] = (v).Copy()
+		}
+	}
 
 	return u
 }
@@ -3206,6 +3213,14 @@ func (v *IssueTokens) Equal(u *IssueTokens) bool {
 	}
 	if !((&v.Amount).Cmp(&u.Amount) == 0) {
 		return false
+	}
+	if len(v.To) != len(u.To) {
+		return false
+	}
+	for i := range v.To {
+		if !((v.To[i]).Equal(u.To[i])) {
+			return false
+		}
 	}
 
 	return true
@@ -6381,6 +6396,7 @@ var fieldNames_IssueTokens = []string{
 	1: "Type",
 	2: "Recipient",
 	3: "Amount",
+	4: "To",
 }
 
 func (v *IssueTokens) MarshalBinary() ([]byte, error) {
@@ -6393,6 +6409,11 @@ func (v *IssueTokens) MarshalBinary() ([]byte, error) {
 	}
 	if !((v.Amount).Cmp(new(big.Int)) == 0) {
 		writer.WriteBigInt(3, &v.Amount)
+	}
+	if !(len(v.To) == 0) {
+		for _, v := range v.To {
+			writer.WriteValue(4, v.MarshalBinary)
+		}
 	}
 
 	_, _, err := writer.Reset(fieldNames_IssueTokens)
@@ -6418,6 +6439,11 @@ func (v *IssueTokens) IsValid() error {
 		errs = append(errs, "field Amount is missing")
 	} else if (v.Amount).Cmp(new(big.Int)) == 0 {
 		errs = append(errs, "field Amount is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field To is missing")
+	} else if len(v.To) == 0 {
+		errs = append(errs, "field To is not set")
 	}
 
 	switch len(errs) {
@@ -11193,6 +11219,13 @@ func (v *IssueTokens) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBigInt(3); ok {
 		v.Amount = *x
 	}
+	for {
+		if x := new(TokenRecipient); reader.ReadValue(4, x.UnmarshalBinary) {
+			v.To = append(v.To, x)
+		} else {
+			break
+		}
+	}
 
 	seen, err := reader.Reset(fieldNames_IssueTokens)
 	if err != nil {
@@ -13815,13 +13848,15 @@ func (v *InternalSignature) MarshalJSON() ([]byte, error) {
 
 func (v *IssueTokens) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type      TransactionType `json:"type"`
-		Recipient *url.URL        `json:"recipient,omitempty"`
-		Amount    *string         `json:"amount,omitempty"`
+		Type      TransactionType                    `json:"type"`
+		Recipient *url.URL                           `json:"recipient,omitempty"`
+		Amount    *string                            `json:"amount,omitempty"`
+		To        encoding.JsonList[*TokenRecipient] `json:"to,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Recipient = v.Recipient
 	u.Amount = encoding.BigintToJSON(&v.Amount)
+	u.To = v.To
 	return json.Marshal(&u)
 }
 
@@ -15569,13 +15604,15 @@ func (v *InternalSignature) UnmarshalJSON(data []byte) error {
 
 func (v *IssueTokens) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type      TransactionType `json:"type"`
-		Recipient *url.URL        `json:"recipient,omitempty"`
-		Amount    *string         `json:"amount,omitempty"`
+		Type      TransactionType                    `json:"type"`
+		Recipient *url.URL                           `json:"recipient,omitempty"`
+		Amount    *string                            `json:"amount,omitempty"`
+		To        encoding.JsonList[*TokenRecipient] `json:"to,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Recipient = v.Recipient
 	u.Amount = encoding.BigintToJSON(&v.Amount)
+	u.To = v.To
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -15588,6 +15625,7 @@ func (v *IssueTokens) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Amount = *x
 	}
+	v.To = u.To
 	return nil
 }
 

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"math/big"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -20,11 +19,6 @@ func (SendTokens) Validate(st *StateManager, tx *Delivery) (protocol.Transaction
 	body, ok := tx.Transaction.Body.(*protocol.SendTokens)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SendTokens), tx.Transaction.Body)
-	}
-
-	recipients := make([]*url.URL, len(body.To))
-	for i, to := range body.To {
-		recipients[i] = to.Url
 	}
 
 	var account protocol.AccountWithTokens
@@ -54,8 +48,8 @@ func (SendTokens) Validate(st *StateManager, tx *Delivery) (protocol.Transaction
 	}
 
 	m := make(map[[32]byte]bool)
-	for i, u := range recipients {
-		id := u.AccountID32()
+	for _, to := range body.To {
+		id := to.Url.AccountID32()
 		_, ok := m[id]
 		if !ok {
 			m[id] = true
@@ -64,8 +58,8 @@ func (SendTokens) Validate(st *StateManager, tx *Delivery) (protocol.Transaction
 		}
 		deposit := new(protocol.SyntheticDepositTokens)
 		deposit.Token = account.GetTokenUrl()
-		deposit.Amount = body.To[i].Amount
-		st.Submit(u, deposit)
+		deposit.Amount = to.Amount
+		st.Submit(to.Url, deposit)
 	}
 
 	return nil, nil
