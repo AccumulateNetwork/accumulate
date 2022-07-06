@@ -11,17 +11,8 @@ import (
 	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
-
-type SigOrTxn struct {
-	fieldsSet   []bool
-	Transaction *protocol.Transaction `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
-	Signature   protocol.Signature    `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
-	Txid        *url.TxID             `json:"txid,omitempty" form:"txid" query:"txid" validate:"required"`
-	extraData   []byte
-}
 
 type SigSetEntry struct {
 	fieldsSet     []bool
@@ -69,30 +60,6 @@ type transactionState struct {
 	Signatures  []*sigSetData               `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
 	extraData   []byte
 }
-
-type txSyntheticTxns struct {
-	fieldsSet []bool
-	Txids     []*url.TxID `json:"txids,omitempty" form:"txids" query:"txids" validate:"required"`
-	extraData []byte
-}
-
-func (v *SigOrTxn) Copy() *SigOrTxn {
-	u := new(SigOrTxn)
-
-	if v.Transaction != nil {
-		u.Transaction = (v.Transaction).Copy()
-	}
-	if v.Signature != nil {
-		u.Signature = (v.Signature).CopyAsInterface().(protocol.Signature)
-	}
-	if v.Txid != nil {
-		u.Txid = (v.Txid).Copy()
-	}
-
-	return u
-}
-
-func (v *SigOrTxn) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *SigSetEntry) Copy() *SigSetEntry {
 	u := new(SigSetEntry)
@@ -191,45 +158,6 @@ func (v *transactionState) Copy() *transactionState {
 }
 
 func (v *transactionState) CopyAsInterface() interface{} { return v.Copy() }
-
-func (v *txSyntheticTxns) Copy() *txSyntheticTxns {
-	u := new(txSyntheticTxns)
-
-	u.Txids = make([]*url.TxID, len(v.Txids))
-	for i, v := range v.Txids {
-		if v != nil {
-			u.Txids[i] = (v).Copy()
-		}
-	}
-
-	return u
-}
-
-func (v *txSyntheticTxns) CopyAsInterface() interface{} { return v.Copy() }
-
-func (v *SigOrTxn) Equal(u *SigOrTxn) bool {
-	switch {
-	case v.Transaction == u.Transaction:
-		// equal
-	case v.Transaction == nil || u.Transaction == nil:
-		return false
-	case !((v.Transaction).Equal(u.Transaction)):
-		return false
-	}
-	if !(protocol.EqualSignature(v.Signature, u.Signature)) {
-		return false
-	}
-	switch {
-	case v.Txid == u.Txid:
-		// equal
-	case v.Txid == nil || u.Txid == nil:
-		return false
-	case !((v.Txid).Equal(u.Txid)):
-		return false
-	}
-
-	return true
-}
 
 func (v *SigSetEntry) Equal(u *SigSetEntry) bool {
 	if !(v.System == u.System) {
@@ -353,76 +281,6 @@ func (v *transactionState) Equal(u *transactionState) bool {
 	}
 
 	return true
-}
-
-func (v *txSyntheticTxns) Equal(u *txSyntheticTxns) bool {
-	if len(v.Txids) != len(u.Txids) {
-		return false
-	}
-	for i := range v.Txids {
-		if !((v.Txids[i]).Equal(u.Txids[i])) {
-			return false
-		}
-	}
-
-	return true
-}
-
-var fieldNames_SigOrTxn = []string{
-	1: "Transaction",
-	2: "Signature",
-	3: "Txid",
-}
-
-func (v *SigOrTxn) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	if !(v.Transaction == nil) {
-		writer.WriteValue(1, v.Transaction.MarshalBinary)
-	}
-	if !(v.Signature == nil) {
-		writer.WriteValue(2, v.Signature.MarshalBinary)
-	}
-	if !(v.Txid == nil) {
-		writer.WriteTxid(3, v.Txid)
-	}
-
-	_, _, err := writer.Reset(fieldNames_SigOrTxn)
-	if err != nil {
-		return nil, encoding.Error{E: err}
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
-}
-
-func (v *SigOrTxn) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Transaction is missing")
-	} else if v.Transaction == nil {
-		errs = append(errs, "field Transaction is not set")
-	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Signature is missing")
-	} else if v.Signature == nil {
-		errs = append(errs, "field Signature is not set")
-	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field Txid is missing")
-	} else if v.Txid == nil {
-		errs = append(errs, "field Txid is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
 }
 
 var fieldNames_SigSetEntry = []string{
@@ -751,80 +609,6 @@ func (v *transactionState) IsValid() error {
 	}
 }
 
-var fieldNames_txSyntheticTxns = []string{
-	1: "Txids",
-}
-
-func (v *txSyntheticTxns) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	if !(len(v.Txids) == 0) {
-		for _, v := range v.Txids {
-			writer.WriteTxid(1, v)
-		}
-	}
-
-	_, _, err := writer.Reset(fieldNames_txSyntheticTxns)
-	if err != nil {
-		return nil, encoding.Error{E: err}
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
-}
-
-func (v *txSyntheticTxns) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Txids is missing")
-	} else if len(v.Txids) == 0 {
-		errs = append(errs, "field Txids is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
-func (v *SigOrTxn) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *SigOrTxn) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	if x := new(protocol.Transaction); reader.ReadValue(1, x.UnmarshalBinary) {
-		v.Transaction = x
-	}
-	reader.ReadValue(2, func(b []byte) error {
-		x, err := protocol.UnmarshalSignature(b)
-		if err == nil {
-			v.Signature = x
-		}
-		return err
-	})
-	if x, ok := reader.ReadTxid(3); ok {
-		v.Txid = x
-	}
-
-	seen, err := reader.Reset(fieldNames_SigOrTxn)
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	return nil
-}
-
 func (v *SigSetEntry) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -1011,45 +795,6 @@ func (v *transactionState) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
-func (v *txSyntheticTxns) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *txSyntheticTxns) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	for {
-		if x, ok := reader.ReadTxid(1); ok {
-			v.Txids = append(v.Txids, x)
-		} else {
-			break
-		}
-	}
-
-	seen, err := reader.Reset(fieldNames_txSyntheticTxns)
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	return nil
-}
-
-func (v *SigOrTxn) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Transaction *protocol.Transaction                          `json:"transaction,omitempty"`
-		Signature   encoding.JsonUnmarshalWith[protocol.Signature] `json:"signature,omitempty"`
-		Txid        *url.TxID                                      `json:"txid,omitempty"`
-	}{}
-	u.Transaction = v.Transaction
-	u.Signature = encoding.JsonUnmarshalWith[protocol.Signature]{Value: v.Signature, Func: protocol.UnmarshalSignatureJSON}
-	u.Txid = v.Txid
-	return json.Marshal(&u)
-}
-
 func (v *SigSetEntry) MarshalJSON() ([]byte, error) {
 	u := struct {
 		System        bool                   `json:"system,omitempty"`
@@ -1120,33 +865,6 @@ func (v *transactionState) MarshalJSON() ([]byte, error) {
 	u.State = v.State
 	u.Signatures = v.Signatures
 	return json.Marshal(&u)
-}
-
-func (v *txSyntheticTxns) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Txids encoding.JsonList[*url.TxID] `json:"txids,omitempty"`
-	}{}
-	u.Txids = v.Txids
-	return json.Marshal(&u)
-}
-
-func (v *SigOrTxn) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Transaction *protocol.Transaction                          `json:"transaction,omitempty"`
-		Signature   encoding.JsonUnmarshalWith[protocol.Signature] `json:"signature,omitempty"`
-		Txid        *url.TxID                                      `json:"txid,omitempty"`
-	}{}
-	u.Transaction = v.Transaction
-	u.Signature = encoding.JsonUnmarshalWith[protocol.Signature]{Value: v.Signature, Func: protocol.UnmarshalSignatureJSON}
-	u.Txid = v.Txid
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	v.Transaction = u.Transaction
-	v.Signature = u.Signature.Value
-
-	v.Txid = u.Txid
-	return nil
 }
 
 func (v *SigSetEntry) UnmarshalJSON(data []byte) error {
@@ -1270,17 +988,5 @@ func (v *transactionState) UnmarshalJSON(data []byte) error {
 	v.Transaction = u.Transaction
 	v.State = u.State
 	v.Signatures = u.Signatures
-	return nil
-}
-
-func (v *txSyntheticTxns) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Txids encoding.JsonList[*url.TxID] `json:"txids,omitempty"`
-	}{}
-	u.Txids = v.Txids
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	v.Txids = u.Txids
 	return nil
 }

@@ -449,13 +449,13 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 func (app *Accumulator) EndBlock(req abci.RequestEndBlock) abci.ResponseEndBlock {
 	defer app.recover(nil, true)
 
-	if app.block.State.Empty() {
-		return abci.ResponseEndBlock{}
-	}
-
 	err := app.Executor.EndBlock(app.block)
 	if err != nil {
 		app.fatal(err, true)
+		return abci.ResponseEndBlock{}
+	}
+
+	if app.block.State.Empty() {
 		return abci.ResponseEndBlock{}
 	}
 

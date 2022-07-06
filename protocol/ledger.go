@@ -25,6 +25,10 @@ func (s *PartitionSyntheticLedger) Add(delivered bool, sequenceNumber uint64, tx
 		s.Pending, dirty = append(s.Pending, make([]*url.TxID, n)...), true
 	}
 
+	if sequenceNumber <= s.Delivered {
+		panic("already delivered")
+	}
+
 	// Insert the hash
 	i := sequenceNumber - s.Delivered - 1
 	if s.Pending[i] == nil {

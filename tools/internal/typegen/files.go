@@ -3,7 +3,6 @@ package typegen
 import (
 	"fmt"
 	"os"
-	"reflect"
 	"strings"
 
 	"github.com/spf13/pflag"
@@ -22,15 +21,8 @@ func (f *FileReader) SetFlags(flags *pflag.FlagSet, label string) {
 	flags.StringSliceVar(&f.Rename, "rename", nil, "Rename "+label+", e.g. 'Foo:Bar'")
 }
 
-func (f *FileReader) ReadMap(files []string, typ reflect.Type) (interface{}, error) {
-	if typ.Kind() != reflect.Map {
-		panic("typ must be a map type")
-	}
-	if typ.Key().Kind() != reflect.String {
-		panic("typ key must be string")
-	}
-
-	all := reflect.MakeMap(typ)
+func ReadRaw[V any](files []string, recordFile func(string, V)) (map[string]V, error) {
+	all := map[string]V{}
 	for _, file := range files {
 		f, err := os.Open(file)
 		if err != nil {
@@ -38,101 +30,86 @@ func (f *FileReader) ReadMap(files []string, typ reflect.Type) (interface{}, err
 		}
 		defer f.Close()
 
-		values := reflect.New(typ)
+		var values map[string]V
 		dec := yaml.NewDecoder(f)
 		dec.KnownFields(true)
-		err = dec.Decode(values.Interface())
+		err = dec.Decode(&values)
 		if err != nil {
 			return nil, fmt.Errorf("decoding %q: %v", file, err)
 		}
 
-		for it := values.Elem().MapRange(); it.Next(); {
-			if all.MapIndex(it.Key()) != (reflect.Value{}) {
-				return nil, fmt.Errorf("duplicate entries for %q", it.Key())
+		for k, v := range values {
+			if _, ok := all[k]; ok {
+				return nil, fmt.Errorf("duplicate entries for %s", k)
 			}
-			all.SetMapIndex(it.Key(), it.Value())
+			all[k] = v
+			if recordFile != nil {
+				recordFile(file, v)
+			}
 		}
 	}
+	return all, nil
+}
 
-	all, err := f.include(all)
+func ReadMap[V any](f *FileReader, files []string, recordFile func(string, V)) (map[string]V, error) {
+	all, err := ReadRaw(files, recordFile)
 	if err != nil {
 		return nil, err
 	}
 
-	err = f.exclude(all)
+	all, err = mapInclude(f, all)
 	if err != nil {
 		return nil, err
 	}
 
-	err = f.rename(all)
+	err = mapExclude(f, all)
 	if err != nil {
 		return nil, err
 	}
 
-	return all.Interface(), nil
-}
-
-type Decoder interface {
-	Decode(interface{}) error
-}
-
-type Decodable interface {
-	DecodeFromFile(file string, dec Decoder) error
-}
-
-func (f *FileReader) ReadAll(files []string, value Decodable) error {
-	for _, file := range files {
-		f, err := os.Open(file)
-		if err != nil {
-			return fmt.Errorf("opening %q: %v", file, err)
-		}
-		defer f.Close()
-
-		dec := yaml.NewDecoder(f)
-		dec.KnownFields(true)
-		err = value.DecodeFromFile(file, dec)
-		if err != nil {
-			return fmt.Errorf("decoding %q: %v", file, err)
-		}
+	err = mapRename(f, all)
+	if err != nil {
+		return nil, err
 	}
-	return nil
+
+	return all, nil
 }
 
-func (f *FileReader) include(all reflect.Value) (reflect.Value, error) {
+func mapInclude[V any](f *FileReader, all map[string]V) (map[string]V, error) {
 	if f.Include == nil {
 		return all, nil
 	}
 
-	included := reflect.MakeMap(all.Type())
-	for _, name := range f.Include {
-		if name = strings.TrimSpace(name); name == "" {
+	included := map[string]V{}
+	for _, k := range f.Include {
+		if k = strings.TrimSpace(k); k == "" {
 			continue
 		}
-		typ := all.MapIndex(reflect.ValueOf(name))
-		if typ == (reflect.Value{}) {
-			return all, fmt.Errorf("%q is not a type", name)
+		v, ok := all[k]
+		if !ok {
+			return all, fmt.Errorf("%s is not an entry", k)
 		}
-		included.SetMapIndex(reflect.ValueOf(name), typ)
+		included[k] = v
 	}
 
 	return included, nil
 }
 
-func (f *FileReader) exclude(all reflect.Value) error {
-	for _, name := range f.Exclude {
-		if name = strings.TrimSpace(name); name == "" {
+func mapExclude[V any](f *FileReader, all map[string]V) error {
+	for _, k := range f.Exclude {
+		if k = strings.TrimSpace(k); k == "" {
 			continue
 		}
-		typ := all.MapIndex(reflect.ValueOf(name))
-		if typ == (reflect.Value{}) {
-			return fmt.Errorf("%q is not a type", name)
+		_, ok := all[k]
+		if !ok {
+			return fmt.Errorf("%s is not an entry", k)
 		}
-		all.SetMapIndex(reflect.ValueOf(name), reflect.Value{})
+		delete(all, k)
 	}
 	return nil
 }
 
-func (f *FileReader) rename(all reflect.Value) error {
+func mapRename[V any](f *FileReader, all map[string]V) error {
 	for _, spec := range f.Rename {
 		bits := strings.Split(spec, ":")
 		if len(bits) != 2 {
@@ -140,13 +117,12 @@ func (f *FileReader) rename(all reflect.Value) error {
 		}
 
 		from, to := bits[0], bits[1]
-		typ := all.MapIndex(reflect.ValueOf(from))
-		if typ == (reflect.Value{}) {
-			return fmt.Errorf("%q is not a type", from)
+		v, ok := all[from]
+		if !ok {
+			return fmt.Errorf("%s is not an entry", from)
 		}
-
-		all.SetMapIndex(reflect.ValueOf(from), reflect.Value{})
-		all.SetMapIndex(reflect.ValueOf(to), typ)
+		delete(all, from)
+		all[to] = v
 	}
 	return nil
 }

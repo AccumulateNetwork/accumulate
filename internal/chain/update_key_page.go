@@ -181,10 +181,12 @@ func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, op protocol.KeyPag
 		}
 
 		// Check for an existing key with same delegate
-		_, newEntry, foundNew := findKeyPageEntry(page, &op.NewEntry)
-		if foundNew && op.NewEntry.Delegate == newEntry.Delegate {
+		newPos, _, found := findKeyPageEntry(page, &op.NewEntry)
+		if found && oldPos != newPos {
 			return fmt.Errorf("cannot have duplicate entries on key page")
-		} // Update the entry
+		}
+
+		// Update the entry
 		entry.PublicKeyHash = op.NewEntry.KeyHash
 		entry.Delegate = op.NewEntry.Delegate
 
@@ -242,9 +244,11 @@ func findKeyPageEntry(page *protocol.KeyPage, search *protocol.KeySpecParams) (i
 	var ok bool
 	if len(search.KeyHash) > 0 {
 		i, entry, ok = page.EntryByKeyHash(search.KeyHash)
-	} else if search.Delegate != nil {
+	}
+	if !ok && search.Delegate != nil {
 		i, entry, ok = page.EntryByDelegate(search.Delegate)
-	} else {
+	}
+	if !ok {
 		return -1, nil, false
 	}
 

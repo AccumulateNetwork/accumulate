@@ -225,7 +225,8 @@ type StatusResponse struct {
 type SyntheticTransactionRequest struct {
 	Source         *url.URL `json:"source,omitempty" form:"source" query:"source" validate:"required"`
 	Destination    *url.URL `json:"destination,omitempty" form:"destination" query:"destination" validate:"required"`
-	SequenceNumber uint64   `json:"sequenceNumber,omitempty" form:"sequenceNumber" query:"sequenceNumber" validate:"required"`
+	SequenceNumber uint64   `json:"sequenceNumber,omitempty" form:"sequenceNumber" query:"sequenceNumber"`
+	Anchor         bool     `json:"anchor,omitempty" form:"anchor" query:"anchor"`
 	extraData      []byte
 }
 
