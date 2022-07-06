@@ -44,7 +44,10 @@ require (
 	gotest.tools/gotestsum v1.7.0
 )
 
-require github.com/gorhill/cronexpr v0.0.0-20180427100037-88b0669f7d75
+require (
+	github.com/ghodss/yaml v1.0.0
+	github.com/gorhill/cronexpr v0.0.0-20180427100037-88b0669f7d75
+)
 
 require (
 	github.com/FactomProject/btcutil v0.0.0-20160826074221-43986820ccd5 // indirect
