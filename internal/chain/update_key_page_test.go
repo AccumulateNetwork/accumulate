@@ -8,9 +8,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
+	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"golang.org/x/exp/rand"
 )
@@ -22,6 +24,14 @@ var rng = rand.New(rand.NewSource(0))
 func generateKey() tmed25519.PrivKey {
 	_, key, _ := ed25519.GenerateKey(rng)
 	return tmed25519.PrivKey(key)
+}
+
+func doHash(b []byte) []byte {
+	if b == nil {
+		return nil
+	}
+	h := sha256.Sum256(b)
+	return h[:]
 }
 
 func TestUpdateKeyPage_Priority(t *testing.T) {
@@ -69,6 +79,214 @@ func TestUpdateKeyPage_Priority(t *testing.T) {
 			}
 
 			// Do not store state changes
+		})
+	}
+}
+
+func TestUpdateKeyPage_Duplicate(t *testing.T) {
+	alice := protocol.AccountUrl("alice")
+	aliceKey := acctesting.GenerateKey(alice)
+	sim := simulator.New(t, 1)
+	sim.InitFromGenesis()
+	bvn := sim.PartitionFor(alice)
+	sim.CreateIdentity(alice, aliceKey[32:])
+
+	key := acctesting.GenerateKey("key")
+	bob := protocol.AccountUrl("bob")
+
+	cases := []struct {
+		OldPublicKey []byte
+		OldDelegate  *url.URL
+		NewPublicKey []byte
+		NewDelegate  *url.URL
+	}{
+		{key, nil, key, nil},
+		{nil, bob, nil, bob},
+		{key, bob, key, nil},
+		{key, bob, nil, bob},
+		{key, nil, key, bob},
+		{nil, bob, key, bob},
+		{key, bob, key, bob},
+	}
+
+	pageUrl := alice.JoinPath("book", "1")
+	for _, c := range cases {
+		var oldStr, newStr string
+		switch {
+		case c.OldPublicKey == nil:
+			oldStr = "an existing delegate"
+		case c.OldDelegate == nil:
+			oldStr = "an existing hash"
+		default:
+			oldStr = "an existing delegate and hash"
+		}
+		switch {
+		case c.NewPublicKey == nil:
+			newStr = "a delegate"
+		case c.NewDelegate == nil:
+			newStr = "a hash"
+		default:
+			newStr = "both"
+		}
+
+		t.Run(fmt.Sprintf("Add %s with %s fails", newStr, oldStr), func(t *testing.T) {
+			batch := bvn.Database.Begin(true)
+			defer batch.Discard()
+
+			var page *protocol.KeyPage
+			require.NoError(t, batch.Account(pageUrl).Main().GetAs(&page))
+			page.AddKeySpec(&protocol.KeySpec{PublicKeyHash: doHash(c.OldPublicKey), Delegate: c.OldDelegate})
+
+			env := acctesting.NewTransaction().
+				WithPrincipal(pageUrl).
+				WithSigner(pageUrl, 1).
+				WithTimestamp(1).
+				WithBody(&protocol.UpdateKeyPage{
+					Operation: []protocol.KeyPageOperation{
+						&protocol.AddKeyOperation{
+							Entry: protocol.KeySpecParams{
+								KeyHash:  doHash(c.NewPublicKey),
+								Delegate: c.NewDelegate,
+							},
+						},
+					},
+				}).
+				Initiate(protocol.SignatureTypeED25519, aliceKey).
+				Build()
+
+			st, delivery := LoadStateManagerForTest(t, batch, env)
+			defer st.Discard()
+
+			_, err := UpdateKeyPage{}.Execute(st, delivery)
+			require.Errorf(t, err, "Adding an entry with %v when another entry with %v exists should fail", newStr, oldStr)
+		})
+
+		t.Run(fmt.Sprintf("Update to %s with %s fails", newStr, oldStr), func(t *testing.T) {
+			batch := bvn.Database.Begin(true)
+			defer batch.Discard()
+
+			var page *protocol.KeyPage
+			require.NoError(t, batch.Account(pageUrl).Main().GetAs(&page))
+			page.AddKeySpec(&protocol.KeySpec{PublicKeyHash: doHash(c.OldPublicKey), Delegate: c.OldDelegate})
+
+			env := acctesting.NewTransaction().
+				WithPrincipal(pageUrl).
+				WithSigner(pageUrl, 1).
+				WithTimestamp(1).
+				WithBody(&protocol.UpdateKeyPage{
+					Operation: []protocol.KeyPageOperation{
+						&protocol.UpdateKeyOperation{
+							OldEntry: protocol.KeySpecParams{
+								KeyHash: doHash(aliceKey[32:]),
+							},
+							NewEntry: protocol.KeySpecParams{
+								KeyHash:  doHash(c.NewPublicKey),
+								Delegate: c.NewDelegate,
+							},
+						},
+					},
+				}).
+				Initiate(protocol.SignatureTypeED25519, aliceKey).
+				Build()
+
+			st, delivery := LoadStateManagerForTest(t, batch, env)
+			defer st.Discard()
+
+			_, err := UpdateKeyPage{}.Execute(st, delivery)
+			require.Errorf(t, err, "Updating an entry to %v when another entry with %v exists should fail", newStr, oldStr)
+		})
+	}
+}
+
+func TestUpdateKeyPage_Update(t *testing.T) {
+	alice := protocol.AccountUrl("alice")
+	aliceKey := acctesting.GenerateKey(alice)
+	sim := simulator.New(t, 1)
+	sim.InitFromGenesis()
+	bvn := sim.PartitionFor(alice)
+	sim.CreateIdentity(alice, aliceKey[32:])
+
+	key := acctesting.GenerateKey("key")
+	bob := protocol.AccountUrl("bob")
+	charlie := protocol.AccountUrl("charlie")
+
+	cases := []struct {
+		OldPublicKey []byte
+		OldDelegate  *url.URL
+		NewPublicKey []byte
+		NewDelegate  *url.URL
+	}{
+		{key, nil, key, nil},
+		{nil, bob, nil, bob},
+		{key, bob, key, nil},
+		{key, bob, nil, bob},
+		{key, nil, key, bob},
+		{nil, bob, key, bob},
+		{key, bob, key, bob},
+
+		{key, nil, key, nil},
+		{nil, bob, nil, charlie},
+		{key, bob, key, nil},
+		{key, bob, nil, charlie},
+		{key, nil, key, charlie},
+		{nil, bob, key, charlie},
+		{key, bob, key, charlie},
+	}
+
+	pageUrl := alice.JoinPath("book", "1")
+	for _, c := range cases {
+		var oldStr, newStr string
+		switch {
+		case c.OldPublicKey == nil:
+			oldStr = "an existing delegate (" + c.OldDelegate.ShortString() + ")"
+		case c.OldDelegate == nil:
+			oldStr = "an existing hash"
+		default:
+			oldStr = "an existing delegate (" + c.OldDelegate.ShortString() + ") and hash"
+		}
+		switch {
+		case c.NewPublicKey == nil:
+			newStr = "a delegate (" + c.NewDelegate.ShortString() + ")"
+		case c.NewDelegate == nil:
+			newStr = "a hash"
+		default:
+			newStr = "both (" + c.NewDelegate.ShortString() + ")"
+		}
+
+		t.Run(fmt.Sprintf("Update %s to %s succeeds", oldStr, newStr), func(t *testing.T) {
+			batch := bvn.Database.Begin(true)
+			defer batch.Discard()
+
+			var page *protocol.KeyPage
+			require.NoError(t, batch.Account(pageUrl).Main().GetAs(&page))
+			page.AddKeySpec(&protocol.KeySpec{PublicKeyHash: doHash(c.OldPublicKey), Delegate: c.OldDelegate})
+
+			env := acctesting.NewTransaction().
+				WithPrincipal(pageUrl).
+				WithSigner(pageUrl, 1).
+				WithTimestamp(1).
+				WithBody(&protocol.UpdateKeyPage{
+					Operation: []protocol.KeyPageOperation{
+						&protocol.UpdateKeyOperation{
+							OldEntry: protocol.KeySpecParams{
+								KeyHash:  doHash(c.OldPublicKey),
+								Delegate: c.OldDelegate,
+							},
+							NewEntry: protocol.KeySpecParams{
+								KeyHash:  doHash(c.NewPublicKey),
+								Delegate: c.NewDelegate,
+							},
+						},
+					},
+				}).
+				Initiate(protocol.SignatureTypeED25519, aliceKey).
+				Build()
+
+			st, delivery := LoadStateManagerForTest(t, batch, env)
+			defer st.Discard()
+
+			_, err := UpdateKeyPage{}.Execute(st, delivery)
+			require.NoErrorf(t, err, "Updating an entry with %v to %v should succeed", oldStr, newStr)
 		})
 	}
 }

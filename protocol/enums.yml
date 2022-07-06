@@ -33,9 +33,10 @@ SignatureType:
   Receipt:
     value: 4
     description: represents a Merkle tree receipt
-  Synthetic:
+  Partition:
     value: 5
-    description: is used when sending synthetic transactions
+    aliases: [ synthetic ]
+    description: is used when sending synthetic and system transactions
   Set:
     value: 6
     description: is used when forwarding multiple signatures

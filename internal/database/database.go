@@ -114,6 +114,28 @@ func (b *Batch) Account(u *url.URL) *Account {
 	})
 }
 
+func UpdateAccount[T protocol.Account](batch *Batch, url *url.URL, fn func(T) error) (T, error) {
+	record := batch.Account(url).Main()
+
+	var account T
+	err := record.GetAs(&account)
+	if err != nil {
+		return account, errors.Format(errors.StatusUnknownError, "load %v: %w", url, err)
+	}
+
+	err = fn(account)
+	if err != nil {
+		return account, errors.Wrap(errors.StatusUnknownError, err)
+	}
+
+	err = record.Put(account)
+	if err != nil {
+		return account, errors.Format(errors.StatusUnknownError, "store %v: %w", url, err)
+	}
+
+	return account, nil
+}
+
 func (b *Batch) getAccountUrl(key record.Key) (*url.URL, error) {
 	v, err := record.NewValue(
 		b.logger.L,

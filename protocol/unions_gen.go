@@ -818,6 +818,8 @@ func NewSignature(typ SignatureType) (Signature, error) {
 		return new(InternalSignature), nil
 	case SignatureTypeLegacyED25519:
 		return new(LegacyED25519Signature), nil
+	case SignatureTypePartition:
+		return new(PartitionSignature), nil
 	case SignatureTypeRCD1:
 		return new(RCD1Signature), nil
 	case SignatureTypeReceipt:
@@ -826,8 +828,6 @@ func NewSignature(typ SignatureType) (Signature, error) {
 		return new(RemoteSignature), nil
 	case SignatureTypeSet:
 		return new(SignatureSet), nil
-	case SignatureTypeSynthetic:
-		return new(SyntheticSignature), nil
 	default:
 		return nil, fmt.Errorf("unknown signature %v", typ)
 	}
@@ -860,6 +860,9 @@ func EqualSignature(a, b Signature) bool {
 	case *LegacyED25519Signature:
 		b, ok := b.(*LegacyED25519Signature)
 		return ok && a.Equal(b)
+	case *PartitionSignature:
+		b, ok := b.(*PartitionSignature)
+		return ok && a.Equal(b)
 	case *RCD1Signature:
 		b, ok := b.(*RCD1Signature)
 		return ok && a.Equal(b)
@@ -871,9 +874,6 @@ func EqualSignature(a, b Signature) bool {
 		return ok && a.Equal(b)
 	case *SignatureSet:
 		b, ok := b.(*SignatureSet)
-		return ok && a.Equal(b)
-	case *SyntheticSignature:
-		b, ok := b.(*SyntheticSignature)
 		return ok && a.Equal(b)
 	default:
 		return false
