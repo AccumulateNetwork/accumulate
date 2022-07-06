@@ -183,7 +183,11 @@ func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protoc
 	// Set the initial threshold to 2/3 & MajorBlockSchedule
 	if b.globals.Globals == nil {
 		b.globals.Globals = new(protocol.NetworkGlobals)
+	}
+	if b.globals.Globals.OperatorAcceptThreshold.Numerator == 0 {
 		b.globals.Globals.OperatorAcceptThreshold.Set(2, 3)
+	}
+	if b.globals.Globals.MajorBlockSchedule == "" {
 		b.globals.Globals.MajorBlockSchedule = protocol.DefaultMajorBlockSchedule
 	}
 

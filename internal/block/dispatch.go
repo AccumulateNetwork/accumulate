@@ -66,6 +66,25 @@ func (d *dispatcher) BroadcastTxLocal(ctx context.Context, tx *protocol.Envelope
 var errTxInCache1 = jrpc.RPCInternalError(jrpc.JSONRPCIntID(0), tm.ErrTxInCache).Error
 var errTxInCache2 = jsonrpc2.NewError(jsonrpc2.ErrorCode(errTxInCache1.Code), errTxInCache1.Message, errTxInCache1.Data)
 
+type txnDispatchError struct {
+	typ    protocol.TransactionType
+	status *protocol.TransactionStatus
+}
+
+func (e *txnDispatchError) Error() string {
+	return e.status.Error.Error()
+}
+
+func (e *txnDispatchError) Unwrap() error {
+	return e.status.Error
+}
+
+func (d *dispatcher) Reset() {
+	for key := range d.batches {
+		d.batches[key] = d.batches[key][:0]
+	}
+}
+
 // Send sends all of the batches asynchronously.
 func (d *dispatcher) Send(ctx context.Context) <-chan error {
 	errs := make(chan error)
@@ -82,6 +101,10 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 		go func() {
 			defer wg.Done()
 			for _, tx := range batch {
+				types := map[[32]byte]protocol.TransactionType{}
+				for _, tx := range tx.Transaction {
+					types[tx.ID().Hash()] = tx.Body.Type()
+				}
 
 				resp, err := d.Router.Submit(ctx, partition, tx, false, false)
 				if err != nil {
@@ -105,7 +128,7 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 
 				for _, r := range rset.Results {
 					if r.Error != nil {
-						errs <- r.Error
+						errs <- &txnDispatchError{types[r.TxID.Hash()], r}
 					}
 				}
 			}

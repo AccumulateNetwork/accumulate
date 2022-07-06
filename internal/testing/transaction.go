@@ -147,7 +147,7 @@ func (tb TransactionBuilder) InitiateSynthetic(destPartitionUrl *url.URL) Transa
 		panic("missing version")
 	}
 
-	initSig := new(protocol.SyntheticSignature)
+	initSig := new(protocol.PartitionSignature)
 	initSig.SourceNetwork = tb.signer.Url
 	initSig.DestinationNetwork = destPartitionUrl
 	initSig.SequenceNumber = tb.signer.Version
