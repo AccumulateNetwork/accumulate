@@ -144,7 +144,7 @@ func (a *Account) restoreState(s *accountState) error {
 
 		for i, set := range p.Signatures {
 			signer := p.State.Signers[i].GetUrl()
-			err = record.signatures(signer).Put(set)
+			err = record.getSignatures(signer).Put(set)
 			if err != nil {
 				return fmt.Errorf("store transaction %X signers %v: %w", hash[:4], signer, err)
 			}
