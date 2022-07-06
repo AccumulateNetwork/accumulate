@@ -81,3 +81,8 @@ func (acct *LiteTokenAccount) DebitTokens(amount *big.Int) bool {
 func (acct *LiteTokenAccount) GetTokenUrl() *url.URL {
 	return acct.TokenUrl
 }
+
+func (i *TokenIssuer) Issue(amount *big.Int) bool {
+	i.Issued.Add(&i.Issued, amount)
+	return i.SupplyLimit == nil || i.Issued.Cmp(i.SupplyLimit) <= 0
+}
