@@ -19,7 +19,7 @@ func main() {
 	// }
 	err := factom.SetPrivateKeyAndOrigin("priv_validator_key.json")
 	if err != nil {
-		log.Fatalf("Error : ", err.Error())
+		log.Fatalf("Error : %v", err)
 	}
 
 	err = factom.FaucetWithCredits(factom.LOCAL_URL)

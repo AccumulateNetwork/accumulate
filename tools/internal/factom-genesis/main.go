@@ -325,7 +325,7 @@ func FaucetWithCredits(env string) error {
 			return err
 		}
 	}
-	qtx.Produced
+	_ = qtx
 
 	time.Sleep(time.Second * 2)
 	client.CloseIdleConnections()
