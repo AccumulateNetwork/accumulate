@@ -17,7 +17,7 @@
       type: state
       dataType: txid
       pointer: true
-      set: true
+      collection: set
     - name: Chain
       type: chain
       chainType: transaction
@@ -25,16 +25,16 @@
       type: state
       dataType: protocol.Transaction
       pointer: true
-      counted: true
+      collection: counted
     - name: CountableUnion
       type: state
       dataType: protocol.Account
       union: true
-      counted: true
+      collection: counted
   - name: ChangeLog
     type: state
     dataType: string
-    counted: true
+    collection: counted
 
 - name: TemplateTest
   # Test all the supported simple attribute types
@@ -55,31 +55,31 @@
     dataType: UnionType
     union: true
   - name: WrappedSet
-    set: true
+    collection: set
     type: state
     dataType: url
     pointer: true
   - name: StructSet
-    set: true
+    collection: set
     type: state
     dataType: StructType
     pointer: true
   - name: UnionSet
-    set: true
+    collection: set
     type: state
     dataType: UnionType
     union: true
   - name: WrappedList
-    counted: true
+    collection: counted
     type: state
     dataType: string
   - name: StructList
-    counted: true
+    collection: counted
     type: state
     dataType: StructType
     pointer: true
   - name: UnionList
-    counted: true
+    collection: counted
     type: state
     dataType: UnionType
     union: true
