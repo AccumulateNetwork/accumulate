@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path"
 	"path/filepath"
 	"time"
 
@@ -144,7 +143,7 @@ func initNetworkLocalFS(netInit *accumulated.NetworkInit) {
 			configs[i][j][1].Config.PrivValidator.Key = "../priv_validator_key.json"
 			err = accumulated.WriteNodeFiles(configs[i][j][1], node.PrivValKey, node.NodeKey, bvnGenDoc)
 			checkf(err, "write BVNN files")
-			os.Remove(path.Join(configs[i][j][1].RootDir, "config/priv_validator_key.json"))
+			os.Remove(filepath.Join(configs[i][j][1].RootDir, "config/priv_validator_key.json"))
 		}
 	}
 }

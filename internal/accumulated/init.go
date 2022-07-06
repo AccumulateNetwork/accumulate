@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"path"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -270,12 +270,12 @@ func WriteNodeFiles(cfg *config.Config, privValKey, nodeKey []byte, genDoc *tmty
 	}()
 
 	// Create directories
-	err = os.MkdirAll(path.Join(cfg.RootDir, "config"), nodeDirPerm)
+	err = os.MkdirAll(filepath.Join(cfg.RootDir, "config"), nodeDirPerm)
 	if err != nil {
 		return fmt.Errorf("failed to create config dir: %v", err)
 	}
 
-	err = os.MkdirAll(path.Join(cfg.RootDir, "data"), nodeDirPerm)
+	err = os.MkdirAll(filepath.Join(cfg.RootDir, "data"), nodeDirPerm)
 	if err != nil {
 		return fmt.Errorf("failed to create data dir: %v", err)
 	}
@@ -312,14 +312,17 @@ func loadOrCreatePrivVal(config *config.Config, key []byte) error {
 		pv.Save()
 		return nil
 	}
+	var pv *privval.FilePV
+	var err error
 	if !tmos.FileExists(stateFile) {
 		//this case occurs when we init in dual mode
-		pv := privval.NewFilePV(ed25519.PrivKey(key), keyFile, stateFile)
+		pv = privval.NewFilePV(ed25519.PrivKey(key), keyFile, stateFile)
 		pv.LastSignState.Save()
-	}
-	pv, err := privval.LoadFilePV(keyFile, stateFile)
-	if err != nil {
-		return err
+	} else { // if file exists then we need to load it
+		pv, err = privval.LoadFilePV(keyFile, stateFile)
+		if err != nil {
+			return err
+		}
 	}
 
 	if !bytes.Equal(pv.Key.PrivKey.Bytes(), key) {
@@ -351,13 +354,17 @@ func loadOrCreateNodeKey(config *config.Config, key []byte) error {
 	return nil
 }
 
-func LoadOrGenerateTmPrivKey(privFileName string) ed25519.PrivKey {
+func LoadOrGenerateTmPrivKey(privFileName string) (ed25519.PrivKey, error) {
 	//attempt to load the priv validator key, create otherwise.
 	b, err := ioutil.ReadFile(privFileName)
 	var privValKey ed25519.PrivKey
 	if err != nil {
-		//do not overwrite a private validator key.
-		privValKey = ed25519.GenPrivKey()
+		if err == os.ErrNotExist {
+			//do not overwrite a private validator key.
+			return ed25519.GenPrivKey(), nil
+		} else {
+			return nil, err
+		}
 	} else {
 		var pvkey privval.FilePVKey
 		err = tmjson.Unmarshal(b, &pvkey)
@@ -367,5 +374,5 @@ func LoadOrGenerateTmPrivKey(privFileName string) ed25519.PrivKey {
 			privValKey = pvkey.PrivKey.(ed25519.PrivKey)
 		}
 	}
-	return privValKey
+	return privValKey, nil
 }

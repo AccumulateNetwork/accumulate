@@ -117,7 +117,7 @@ func init() {
 	cmdInitDualNode.Flags().BoolVarP(&flagInitDualNode.Follower, "follow", "f", false, "Do not participate in voting")
 	cmdInitDualNode.Flags().StringVar(&flagInitDualNode.GenesisDoc, "genesis-doc", "", "Genesis doc for the target network")
 	cmdInitDualNode.Flags().BoolVar(&flagInitDualNode.SkipVersionCheck, "skip-version-check", false, "Do not enforce the version check")
-	cmdInitDualNode.Flags().StringVarP(&flagInitNode.PublicIP, "public", "p", "", "public IP or URL")
+	cmdInitDualNode.Flags().StringVarP(&flagInitDualNode.PublicIP, "public", "p", "", "public IP or URL")
 	cmdInitDualNode.Flags().StringVar(&flagInitDualNode.SeedProxy, "seed", "", "Fetch network configuration from seed proxy")
 
 	cmdInitDevnet.Flags().StringVar(&flagInitDevnet.Name, "name", "DevNet", "Network name")
@@ -141,7 +141,7 @@ func networkReset() {
 	check(err)
 	for _, ent := range ent {
 		if ent.Name() == "priv_validator_key.json" {
-			err := os.Remove(path.Join(flagMain.WorkDir, ent.Name()))
+			err := os.Remove(filepath.Join(flagMain.WorkDir, ent.Name()))
 			check(err)
 		}
 		if !ent.IsDir() {
@@ -150,7 +150,7 @@ func networkReset() {
 
 		dir := path.Join(flagMain.WorkDir, ent.Name())
 		if strings.HasPrefix(ent.Name(), "dnn") || strings.HasPrefix(ent.Name(), "bvnn") {
-			os.RemoveAll(path.Join(flagMain.WorkDir, ent.Name()))
+			os.RemoveAll(filepath.Join(flagMain.WorkDir, ent.Name()))
 			continue
 		}
 		if !strings.HasPrefix(ent.Name(), "node-") {
@@ -174,7 +174,7 @@ func nodeReset(dir string) bool {
 	for _, ent := range ent {
 
 		if ent.Name() == "priv_validator_key.json" {
-			err := os.Remove(path.Join(dir, ent.Name()))
+			err := os.Remove(filepath.Join(dir, ent.Name()))
 			check(err)
 		}
 		if !ent.IsDir() {
@@ -392,7 +392,7 @@ func initNode(cmd *cobra.Command, args []string) {
 		networkReset()
 	}
 	netDir := netDir(config.Accumulate.Describe.NetworkType)
-	config.SetRoot(path.Join(flagMain.WorkDir, netDir))
+	config.SetRoot(filepath.Join(flagMain.WorkDir, netDir))
 	accumulated.ConfigureNodePorts(&accumulated.NodeInit{
 		HostName: u.Hostname(),
 		ListenIP: u.Hostname(),
@@ -401,9 +401,10 @@ func initNode(cmd *cobra.Command, args []string) {
 
 	config.PrivValidator.Key = "../priv_validator_key.json"
 
-	privValKey := accumulated.LoadOrGenerateTmPrivKey(config.PrivValidator.KeyFile())
-	nodeKey := accumulated.LoadOrGenerateTmPrivKey(config.NodeKeyFile())
-
+	privValKey, err := accumulated.LoadOrGenerateTmPrivKey(config.PrivValidator.KeyFile())
+	checkf(err, "load/generate private key files")
+	nodeKey, err := accumulated.LoadOrGenerateTmPrivKey(config.NodeKeyFile())
+	checkf(err, "load/generate node key files")
 	err = accumulated.WriteNodeFiles(config, privValKey, nodeKey, genDoc)
 	checkf(err, "write node files")
 }
