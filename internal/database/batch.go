@@ -21,7 +21,8 @@ type Batch struct {
 	bptEntries  map[storage.Key][32]byte
 	recordStore record.Store
 
-	accounts map[storage.Key]*Account
+	accounts     map[storage.Key]*Account
+	transactions map[storage.Key]*Transaction
 }
 
 // Begin starts a new batch.
@@ -117,6 +118,11 @@ func (b *Batch) Commit() error {
 			return errors.Wrap(errors.StatusUnknownError, err)
 		}
 	}
+	for _, v := range b.transactions {
+		if err := v.Commit(); err != nil {
+			return errors.Wrap(errors.StatusUnknownError, err)
+		}
+	}
 	for _, v := range b.values {
 		if err := v.Commit(); err != nil {
 			return errors.Wrap(errors.StatusUnknownError, err)
@@ -157,10 +163,28 @@ func (b *Batch) Dirty() bool {
 			return true
 		}
 	}
+	for _, v := range b.transactions {
+		if v.IsDirty() {
+			return true
+		}
+	}
 	for _, v := range b.values {
 		if v.IsDirty() {
 			return true
 		}
 	}
 	return false
+}
+
+// Transaction returns an Transaction for the given hash.
+func (b *Batch) Transaction(id []byte) *Transaction {
+	key := record.Key{"Transaction", *(*[32]byte)(id)}
+	return getOrCreateMap(&b.transactions, key, func() *Transaction {
+		v := new(Transaction)
+		v.logger = b.logger
+		v.store = b.recordStore
+		v.key = key
+		v.batch = b
+		return v
+	})
 }

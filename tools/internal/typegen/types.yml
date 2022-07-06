@@ -8,6 +8,8 @@ EntityRecord:
       pointer: true
     - name: OmitAccessor
       type: bool
+    - name: Private
+      type: bool
     - name: Name
       type: string
     - name: Fields
@@ -41,6 +43,8 @@ ChainRecord:
       pointer: true
     - name: OmitAccessor
       type: bool
+    - name: Private
+      type: bool
     - name: Name
       type: string
     - name: CustomCommit
@@ -63,6 +67,8 @@ StateRecord:
       pointer: true
     - name: OmitAccessor
       type: bool
+    - name: Private
+      type: bool
     - name: Name
       type: string
     - name: CustomCommit
@@ -81,10 +87,9 @@ StateRecord:
       type: bool
     - name: Union
       type: bool
-    - name: Set
-      type: bool
-    - name: Counted
-      type: bool
+    - name: Collection
+      type: CollectionType
+      marshal-as: enum
 
 IndexRecord:
   non-binary: true
@@ -96,6 +101,8 @@ IndexRecord:
       pointer: true
     - name: OmitAccessor
       type: bool
+    - name: Private
+      type: bool
     - name: Name
       type: string
     - name: CustomCommit
@@ -114,10 +121,9 @@ IndexRecord:
       type: bool
     - name: Union
       type: bool
-    - name: Set
-      type: bool
-    - name: Counted
-      type: bool
+    - name: Collection
+      type: CollectionType
+      marshal-as: enum
 
 OtherRecord:
   non-binary: true
@@ -128,6 +134,8 @@ OtherRecord:
       type: EntityRecord
       pointer: true
     - name: OmitAccessor
+      type: bool
+    - name: Private
       type: bool
     - name: Name
       type: string
