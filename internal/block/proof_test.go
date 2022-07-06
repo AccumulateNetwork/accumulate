@@ -37,6 +37,7 @@ func TestExecutor_Query_ProveAccount(t *testing.T) {
 	req.Url = aliceUrl
 	acctResp := sim.Query(aliceUrl, req, true).(*query.ResponseAccount)
 	localReceipt := acctResp.Receipt.Proof
+
 	// Execute enough blocks to ensure the block is anchored
 	sim.ExecuteBlocks(10)
 
