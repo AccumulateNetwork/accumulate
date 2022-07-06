@@ -142,11 +142,16 @@ CreateToken:
 IssueTokens:
   union: { type: transaction }
   fields:
-    - name: Recipient
+    - name: Recipient # Deprecated
       type: url
       pointer: true
-    - name: Amount
+    - name: Amount # Deprecated
       type: bigint
+    - name: To
+      repeatable: true
+      type: TokenRecipient
+      marshal-as: reference
+      pointer: true
 
 BurnTokens:
   union: { type: transaction }
@@ -200,16 +205,6 @@ UpdateKeyPage:
       type: KeyPageOperation
       marshal-as: union
       repeatable: true
-
-AccountStateProof:
-  fields:
-  - name: State
-    type: Account
-    marshal-as: union
-  - name: Proof
-    type: managed.Receipt
-    marshal-as: reference
-    pointer: true
 
 UpdateAccountAuth:
   union: { type: transaction }
