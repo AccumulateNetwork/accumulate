@@ -14,6 +14,10 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
+{{  define "accessor"}}
+{{- if .Private}}get{{end}}{{.Name}}
+{{- end}}
+
 {{  define "valueLabelFormat"}}
 {{- if isBaseType .GetParent -}}
 c.label + " {{natural .Name}}"
@@ -54,7 +58,7 @@ record.Struct[{{stateType . true}}]()
 {{- end}}
 
 {{  define "newValue"}}
-{{- if .Set}}
+{{- if .IsSet}}
 return record.NewSet(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, {{template "encoder" .}},
 	{{- if .Wrapped -}}
 	record.Compare{{title .DataType.String}}
@@ -62,6 +66,8 @@ return record.NewSet(c.logger.L, c.store, {{template "key" .}}, {{template "valu
 	func(u, v {{stateType . false}}) int { return u.Compare(v) }
 	{{- end -}}
 )
+{{- else if .IsList}}
+return record.NewList(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, {{template "encoder" .}})
 {{- else}}
 return record.NewValue(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, {{.EmptyIfMissing}}, {{template "encoder" .}})
 {{- end}}
@@ -98,7 +104,7 @@ type {{.FullName}} struct {
 {{$c := .}}
 {{range .Attributes}}
 {{if not .OmitAccessor}}
-func (c *{{$c.FullName}}) {{.Name}}({{range .GetParameters}}{{lower .Name}} {{parameterType .}},{{end}}) *{{recordType .}} {
+func (c *{{$c.FullName}}) {{template "accessor" .}}({{range .GetParameters}}{{lower .Name}} {{parameterType .}},{{end}}) *{{recordType .}} {
 	{{- if parameterized .}}
 	return getOrCreateMap(&c.{{lower .Name}}, {{template "key" .}},
 	{{- else}}
@@ -117,7 +123,7 @@ func (c *{{$c.FullName}}) {{.Name}}({{range .GetParameters}}{{lower .Name}} {{pa
 		return managed.NewChain(c.logger.L, c.store, {{template "key" .}}, markPower, {{/*managed.ChainType{{title .ChainType}},*/}} {{template "chainNameFormat" .}}, {{template "valueLabelFormat" .}})
 		{{- else if .Type.IsOther}}
 		return new{{.DataType}}(c, c.logger.L, c.store, {{template "key" .}}, {{template "chainNameFormat" .}}, {{template "valueLabelFormat" .}})
-		{{- else if .Counted}}
+		{{- else if .IsCounted}}
 		{{- template "newCounted" .}}
 		{{- else}}
 		{{- template "newValue" .}}
@@ -141,10 +147,10 @@ func (c *{{.FullName}}) {{if .CustomResolve}}base{{end}}Resolve(key record.Key) 
 		if {{range $index, $param := .GetParameters}}{{if gt $index 0}} || {{end}}!ok{{.Name}}{{end}} {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for {{natural $c.Name}}")
 		}
-		v := c.{{.Name}}({{range .GetParameters}}{{lower .Name}},{{end}})
+		v := c.{{template "accessor" .}}({{range .GetParameters}}{{lower .Name}},{{end}})
 		return v, key[{{add 1 (parameterCount .)}}:], nil
 		{{- else}}
-		return c.{{.Name}}(), key[1:], nil
+		return c.{{template "accessor" .}}(), key[1:], nil
 		{{- end}}
 	{{- end}}
 	default:
@@ -180,7 +186,7 @@ func (c *{{.FullName}}) resolveChain(name string) (chain *managed.Chain, ok bool
 	{{- range .Attributes}}
 	{{- if and (.Type.IsChain) (not (parameterized .))}}
 	if name == "{{chainName .}}"{
-		return c.{{.Name}}(), true
+		return c.{{template "accessor" .}}(), true
 	}
 	{{- end}}
 	{{- end}}
@@ -196,10 +202,10 @@ func (c *{{.FullName}}) resolveChain(name string) (chain *managed.Chain, ok bool
 			return nil, false
 		}
 
-		return c.{{.Name}}({{range .Parameters}}param{{.Name}},{{end}}){{if .Type.IsChain}}, true{{else}}.resolveChain(name){{end}}
+		return c.{{template "accessor" .}}({{range .Parameters}}param{{.Name}},{{end}}){{if .Type.IsChain}}, true{{else}}.resolveChain(name){{end}}
 	})
 	{{- else if and (not .Type.IsChain) (hasChains .)}}
-	tryResolveChain(&chain, &ok, name, "{{chainName .}}-", c.{{.Name}})
+	tryResolveChain(&chain, &ok, name, "{{chainName .}}-", c.{{template "accessor" .}})
 	{{- end}}
 	{{- end}}
 	return
