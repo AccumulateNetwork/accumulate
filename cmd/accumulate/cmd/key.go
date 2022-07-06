@@ -469,20 +469,24 @@ func FindLabelFromPubKey(pubKey []byte) (lab string, err error) {
 func ImportKey(pkAscii string, label string, signatureType protocol.SignatureType) (out string, err error) {
 
 	var liteLabel string
-	var pk ed25519.PrivateKey
-
-	token, err := hex.DecodeString(pkAscii)
-	if err != nil {
+	// var pk ed25519.PrivateKey
+	pk := new(Key)
+	if err := pk.LoadByLabel(label); err != nil {
 		return "", err
 	}
 
-	if len(token) == 32 {
-		pk = ed25519.NewKeyFromSeed(token)
-	} else {
-		pk = token
-	}
+	// token, err := hex.DecodeString(pkAscii)
+	// if err != nil {
+	// 	return "", err
+	// }
 
-	lt, err := protocol.LiteTokenAddress(pk[32:], protocol.ACME, signatureType)
+	// if len(token) == 32 {
+	// 	pk = ed25519.NewKeyFromSeed(token)
+	// } else {
+	// 	pk = token
+	// }
+
+	lt, err := protocol.LiteTokenAddress(pk.PublicKey[32:], protocol.ACME, signatureType)
 	if err != nil {
 		return "", fmt.Errorf("no label specified and cannot import as lite token account")
 	}
@@ -500,13 +504,13 @@ func ImportKey(pkAscii string, label string, signatureType protocol.SignatureTyp
 		return "", fmt.Errorf("key name is already being used")
 	}
 
-	_, err = LookupByPubKey(pk[32:])
+	_, err = LookupByPubKey(pk.PublicKey[32:])
 	lab := "not found"
 	if err == nil {
 		b, _ := GetWallet().GetBucket(BucketLabel)
 		if b != nil {
 			for _, v := range b.KeyValueList {
-				if bytes.Equal(v.Value, pk[32:]) {
+				if bytes.Equal(v.Value, pk.PublicKey[32:]) {
 					lab = string(v.Key)
 					break
 				}
@@ -515,13 +519,13 @@ func ImportKey(pkAscii string, label string, signatureType protocol.SignatureTyp
 		}
 	}
 
-	publicKey := pk[32:]
-	err = GetWallet().Put(BucketKeys, publicKey, pk)
+	publicKey := pk.PublicKey[32:]
+	err = GetWallet().Put(BucketKeys, publicKey, pk.PublicKey)
 	if err != nil {
 		return "", err
 	}
 
-	err = GetWallet().Put(BucketLabel, []byte(label), pk[32:])
+	err = GetWallet().Put(BucketLabel, []byte(label), pk.PublicKey[32:])
 	if err != nil {
 		return "", err
 	}
@@ -539,7 +543,7 @@ func ImportKey(pkAscii string, label string, signatureType protocol.SignatureTyp
 	if WantJsonOutput {
 		a := KeyResponse{}
 		a.Label = types.String(label)
-		a.PublicKey = types.Bytes(pk[32:])
+		a.PublicKey = types.Bytes(pk.PublicKey[32:])
 		a.LiteAccount = lt
 		a.KeyType = signatureType
 		dump, err := json.Marshal(&a)
@@ -548,7 +552,7 @@ func ImportKey(pkAscii string, label string, signatureType protocol.SignatureTyp
 		}
 		out = fmt.Sprintf("%s\n", string(dump))
 	} else {
-		out = fmt.Sprintf("\tname\t\t:\t%s\n\tlite account\t:\t%s\n\tpublic key\t:\t%x\n\tkey type\t:\t%s\n", label, lt, pk[32:], signatureType)
+		out = fmt.Sprintf("\tname\t\t:\t%s\n\tlite account\t:\t%s\n\tpublic key\t:\t%x\n\tkey type\t:\t%s\n", label, lt, pk.PublicKey[32:], signatureType)
 	}
 	return out, nil
 }
