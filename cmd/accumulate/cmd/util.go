@@ -113,20 +113,19 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, []*signing.Builde
 				argcopy = append(argcopy, arr[0])
 
 				if arr[1] == "" {
-					argcopy = append(argcopy, "0")
+					argcopy = append(argcopy, fmt.Sprint("0"))
 				} else {
-					argcopy = append(argcopy, arr[1])
+					argcopy = append(argcopy, fmt.Sprint(arr[1]))
 				}
 				continue
 			} else {
 				argcopy = append(argcopy, arg)
-				argcopy = append(argcopy, "0")
 				continue
 			}
 		}
 		argcopy = append(argcopy, arg)
 	}
-	args, err = prepareSignerPage(firstSigner, origin, args...)
+	args, err = prepareSignerPage(firstSigner, origin, argcopy...)
 	if err != nil {
 		return nil, nil, err
 	}
