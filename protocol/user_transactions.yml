@@ -142,11 +142,16 @@ CreateToken:
 IssueTokens:
   union: { type: transaction }
   fields:
-    - name: Recipient
+    - name: Recipient # Deprecated
       type: url
       pointer: true
-    - name: Amount
+    - name: Amount # Deprecated
       type: bigint
+    - name: To
+      repeatable: true
+      type: TokenRecipient
+      marshal-as: reference
+      pointer: true
 
 BurnTokens:
   union: { type: transaction }
