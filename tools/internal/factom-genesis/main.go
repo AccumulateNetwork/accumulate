@@ -4,11 +4,12 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	tmjson "github.com/tendermint/tendermint/libs/json"
 	"io/ioutil"
 	"log"
 	"sync"
 	"time"
+
+	tmjson "github.com/tendermint/tendermint/libs/json"
 
 	f2 "github.com/FactomProject/factom"
 	"github.com/tendermint/tendermint/privval"
@@ -139,6 +140,15 @@ func WriteDataToAccumulate(env string, data protocol.DataEntry, dataAccount *url
 	if err != nil {
 		return err
 	}
+
+	for _, txid := range queryResTx.Produced {
+		txReq.Txid = txid.Account().Hash()
+		_, err = client.QueryTx(context.Background(), &txReq)
+		if err != nil {
+			return err
+		}
+	}
+
 	//
 	//retries := 10
 	//success := false
