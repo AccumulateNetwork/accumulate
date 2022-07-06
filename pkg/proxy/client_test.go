@@ -2,8 +2,18 @@ package proxy
 
 import (
 	"context"
+	"crypto/ed25519"
 	"encoding/json"
+	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 	stdlog "log"
+	"math/big"
 	"net/http"
 	"os"
 	"testing"
@@ -82,7 +92,29 @@ func getNetwork(_ context.Context, params json.RawMessage) interface{} {
 
 var endpoint = "http://localhost:18888"
 
+func createProxyAccounts(node, nodeKey ed25519.PrivateKey) ed25519.PrivateKey {
+
+	return ed25519.NewKeyFromSeed(nil)
+}
+
 func TestAccuProxyClient(t *testing.T) {
+	// Create the lite addresses and one account
+	sim := simulator.New(t, 1)
+	sim.InitFromGenesis()
+
+	// Main identity
+	accuProxy := protocol.AccountUrl("accuproxy.acme")
+	accuProxyKey := acctesting.GenerateKey(nil)
+
+	sim.CreateIdentity(accuProxy, accuProxyKey[32:])
+	sim.CreateAccount(&protocol.TokenAccount{Url: accuProxy.JoinPath("tokens"), TokenUrl: protocol.AcmeUrl(), Balance: *big.NewInt(1e9)})
+
+	dnNetwork := protocol.DnUrl().JoinPath(protocol.Network)
+	q := query.RequestByUrl{Url:dnNetwork}
+	sim.Query(protocol.DnUrl(),&q, true) //don't really need to prove, but the converse is true, need to prove the dn.acme/network account
+
+
+	createProxyAccounts(d.,key)
 
 	go func() {
 		// Register RPC methods.
