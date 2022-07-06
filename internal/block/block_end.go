@@ -544,22 +544,43 @@ func (x *Executor) shouldSendAnchor(block *Block) bool {
 		return true
 	}
 
-	// Did we update anything? Excluding the ledger and anchor pool.
-	updates := map[[32]byte]bool{}
+	var didUpdateOther, didAnchorPartition, didAnchorDirectory bool
 	for _, c := range block.State.ChainUpdates.Entries {
-		u := c.Account.WithFragment("chain/" + c.Name)
-		updates[u.Hash32()] = true
+		// The system ledger is always updated
+		if c.Account.Equal(x.Describe.Ledger()) {
+			continue
+		}
+
+		// Was some other account updated?
+		if !c.Account.Equal(x.Describe.AnchorPool()) {
+			didUpdateOther = true
+			continue
+		}
+
+		// Check if a partition anchor was received
+		name := c.Name
+		if strings.HasSuffix(name, protocol.RootAnchorSuffix) {
+			name = name[:len(name)-len(protocol.RootAnchorSuffix)]
+		} else if strings.HasSuffix(name, protocol.BptAnchorSuffix) {
+			name = name[:len(name)-len(protocol.BptAnchorSuffix)]
+		} else {
+			continue
+		}
+		if strings.EqualFold(name, protocol.Directory) {
+			didAnchorDirectory = true
+		} else {
+			didAnchorPartition = true
+		}
 	}
-	delete(updates, x.Describe.Ledger().WithFragment("chain/"+protocol.MainChain).Hash32())
-	delete(updates, x.Describe.AnchorPool().WithFragment("chain/"+protocol.MainChain).Hash32())
-	delete(updates, x.Describe.AnchorPool().WithFragment("chain/"+protocol.AnchorSequenceChain).Hash32())
-	delete(updates, x.Describe.AnchorPool().WithFragment("chain/"+protocol.RootAnchorChain(protocol.Directory)).Hash32())
-	delete(updates, x.Describe.AnchorPool().WithFragment("chain/"+protocol.BPTAnchorChain(protocol.Directory)).Hash32())
-	if len(updates) > 0 {
+
+	// Send an anchor if any account was updated (other than the system and
+	// anchor ledgers) or a partition anchor was received
+	if didUpdateOther || didAnchorPartition {
 		return true
 	}
 
-	return false
+	// Send an anchor if a directory anchor was received and the flag is set
+	return didAnchorDirectory && x.globals.Active.Globals.AnchorEmptyBlocks
 }
 
 func (x *Executor) prepareAnchor(block *Block) error {
