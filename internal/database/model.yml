@@ -20,7 +20,7 @@
     dataType: txid
     emptyIfMissing: true
     pointer: true
-    set: true
+    collection: set
   - name: SyntheticForAnchor
     type: state
     parameters:
@@ -29,22 +29,22 @@
     dataType: txid
     emptyIfMissing: true
     pointer: true
-    set: true
+    collection: set
 
   # Indices
   - name: Chains
     type: index
     dataType: protocol.ChainMetadata
     pointer: true
-    set: true
+    collection: set
   - name: SyntheticAnchors
     type: index
     dataType: hash
-    set: true
+    collection: set
   - name: Directory
     # TODO Turn this into a chain
     type: index
-    counted: true
+    collection: counted
     dataType: url
     pointer: true
   - name: Data
@@ -52,7 +52,7 @@
     attributes:
     - name: Entry
       type: index
-      counted: true
+      collection: counted
       dataType: hash
     - name: Transaction
       type: index
@@ -60,3 +60,45 @@
       - name: EntryHash
         type: hash
       dataType: hash
+
+- name: Transaction
+  type: entity
+  fields:
+  - name: batch
+    type: Batch
+    pointer: true
+  - name: label
+    type: string
+  attributes:
+  - name: Main
+    type: state
+    dataType: SigOrTxn # TODO split apart
+    pointer: true
+  - name: Status
+    type: state
+    dataType: protocol.TransactionStatus
+    emptyIfMissing: true
+    pointer: true
+  - name: Produced
+    type: state
+    dataType: txid
+    pointer: true
+    collection: set
+  - name: Signatures
+    type: state
+    dataType: sigSetData
+    pointer: true
+    private: true
+    emptyIfMissing: true
+    parameters:
+    - name: Signer
+      type: url
+      pointer: true
+
+  # Indices
+  - name: Chains
+    type: index
+    dataType: TransactionChainEntry
+    pointer: true
+    collection: set
+    emptyIfMissing: true
