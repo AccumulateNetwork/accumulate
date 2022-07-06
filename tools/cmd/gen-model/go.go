@@ -59,11 +59,13 @@ func recordType(r typegen.Record) string {
 	switch r := r.(type) {
 	case typegen.ValueRecord:
 		var typ string
-		switch {
-		case r.IsCounted():
-			typ = "record.Counted"
-		case r.IsSet():
+		switch r.CollectionType() {
+		case typegen.CollectionTypeSet:
 			typ = "record.Set"
+		case typegen.CollectionTypeList:
+			typ = "record.List"
+		case typegen.CollectionTypeCounted:
+			typ = "record.Counted"
 		default:
 			typ = "record.Value"
 		}
