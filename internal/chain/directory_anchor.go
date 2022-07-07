@@ -83,13 +83,11 @@ func processReceiptsFromDirectory(st *StateManager, tx *Delivery, body *protocol
 	var sequence = map[*Delivery]int{}
 
 	// Process pending transactions from the DN
-	if st.NetworkType == config.Directory {
-		d, err := loadSynthTxns(st, tx, body.RootChainAnchor[:], body.Source, nil, sequence)
-		if err != nil {
-			return err
-		}
-		deliveries = append(deliveries, d...)
+	d, err := loadSynthTxns(st, tx, body.RootChainAnchor[:], body.Source, nil, sequence)
+	if err != nil {
+		return err
 	}
+	deliveries = append(deliveries, d...)
 
 	// Process receipts
 	for i, receipt := range body.Receipts {
