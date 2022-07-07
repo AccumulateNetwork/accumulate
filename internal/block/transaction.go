@@ -29,6 +29,15 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Del
 		return nil, nil, fmt.Errorf("transaction initiator is missing")
 	}
 
+	// The status txid should not be nil, but fix it if it is *shrug*
+	if status.TxID == nil && delivery.Transaction.Header.Principal != nil {
+		status.TxID = delivery.Transaction.ID()
+		err = batch.Transaction(delivery.Transaction.GetHash()).PutStatus(status)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+
 	// Load the principal
 	principal, err := batch.Account(delivery.Transaction.Header.Principal).GetState()
 	switch {
