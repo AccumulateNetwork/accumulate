@@ -32,6 +32,18 @@ type SigSetEntry struct {
 	extraData     []byte
 }
 
+type TransactionChainEntry struct {
+	fieldsSet []bool
+	Account   *url.URL `json:"account,omitempty" form:"account" query:"account" validate:"required"`
+	// Chain is the name of the chain.
+	Chain string `json:"chain,omitempty" form:"chain" query:"chain" validate:"required"`
+	// ChainIndex is the index of the entry in the chain's index chain.
+	ChainIndex uint64 `json:"chainIndex,omitempty" form:"chainIndex" query:"chainIndex" validate:"required"`
+	// AnchorIndex is the index of the entry in the anchor chain's index chain.
+	AnchorIndex uint64 `json:"anchorIndex,omitempty" form:"anchorIndex" query:"anchorIndex" validate:"required"`
+	extraData   []byte
+}
+
 type accountState struct {
 	fieldsSet []bool
 	// Main is the main state of the account.
@@ -70,12 +82,6 @@ type transactionState struct {
 	extraData   []byte
 }
 
-type txSyntheticTxns struct {
-	fieldsSet []bool
-	Txids     []*url.TxID `json:"txids,omitempty" form:"txids" query:"txids" validate:"required"`
-	extraData []byte
-}
-
 func (v *SigOrTxn) Copy() *SigOrTxn {
 	u := new(SigOrTxn)
 
@@ -106,6 +112,21 @@ func (v *SigSetEntry) Copy() *SigSetEntry {
 }
 
 func (v *SigSetEntry) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *TransactionChainEntry) Copy() *TransactionChainEntry {
+	u := new(TransactionChainEntry)
+
+	if v.Account != nil {
+		u.Account = (v.Account).Copy()
+	}
+	u.Chain = v.Chain
+	u.ChainIndex = v.ChainIndex
+	u.AnchorIndex = v.AnchorIndex
+
+	return u
+}
+
+func (v *TransactionChainEntry) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *accountState) Copy() *accountState {
 	u := new(accountState)
@@ -192,21 +213,6 @@ func (v *transactionState) Copy() *transactionState {
 
 func (v *transactionState) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *txSyntheticTxns) Copy() *txSyntheticTxns {
-	u := new(txSyntheticTxns)
-
-	u.Txids = make([]*url.TxID, len(v.Txids))
-	for i, v := range v.Txids {
-		if v != nil {
-			u.Txids[i] = (v).Copy()
-		}
-	}
-
-	return u
-}
-
-func (v *txSyntheticTxns) CopyAsInterface() interface{} { return v.Copy() }
-
 func (v *SigOrTxn) Equal(u *SigOrTxn) bool {
 	switch {
 	case v.Transaction == u.Transaction:
@@ -242,6 +248,28 @@ func (v *SigSetEntry) Equal(u *SigSetEntry) bool {
 		return false
 	}
 	if !(v.SignatureHash == u.SignatureHash) {
+		return false
+	}
+
+	return true
+}
+
+func (v *TransactionChainEntry) Equal(u *TransactionChainEntry) bool {
+	switch {
+	case v.Account == u.Account:
+		// equal
+	case v.Account == nil || u.Account == nil:
+		return false
+	case !((v.Account).Equal(u.Account)):
+		return false
+	}
+	if !(v.Chain == u.Chain) {
+		return false
+	}
+	if !(v.ChainIndex == u.ChainIndex) {
+		return false
+	}
+	if !(v.AnchorIndex == u.AnchorIndex) {
 		return false
 	}
 
@@ -348,19 +376,6 @@ func (v *transactionState) Equal(u *transactionState) bool {
 	}
 	for i := range v.Signatures {
 		if !((v.Signatures[i]).Equal(u.Signatures[i])) {
-			return false
-		}
-	}
-
-	return true
-}
-
-func (v *txSyntheticTxns) Equal(u *txSyntheticTxns) bool {
-	if len(v.Txids) != len(u.Txids) {
-		return false
-	}
-	for i := range v.Txids {
-		if !((v.Txids[i]).Equal(u.Txids[i])) {
 			return false
 		}
 	}
@@ -479,6 +494,72 @@ func (v *SigSetEntry) IsValid() error {
 		errs = append(errs, "field SignatureHash is missing")
 	} else if v.SignatureHash == ([32]byte{}) {
 		errs = append(errs, "field SignatureHash is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_TransactionChainEntry = []string{
+	1: "Account",
+	2: "Chain",
+	3: "ChainIndex",
+	4: "AnchorIndex",
+}
+
+func (v *TransactionChainEntry) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Account == nil) {
+		writer.WriteUrl(1, v.Account)
+	}
+	if !(len(v.Chain) == 0) {
+		writer.WriteString(2, v.Chain)
+	}
+	if !(v.ChainIndex == 0) {
+		writer.WriteUint(3, v.ChainIndex)
+	}
+	if !(v.AnchorIndex == 0) {
+		writer.WriteUint(4, v.AnchorIndex)
+	}
+
+	_, _, err := writer.Reset(fieldNames_TransactionChainEntry)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *TransactionChainEntry) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Account is missing")
+	} else if v.Account == nil {
+		errs = append(errs, "field Account is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Chain is missing")
+	} else if len(v.Chain) == 0 {
+		errs = append(errs, "field Chain is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field ChainIndex is missing")
+	} else if v.ChainIndex == 0 {
+		errs = append(errs, "field ChainIndex is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field AnchorIndex is missing")
+	} else if v.AnchorIndex == 0 {
+		errs = append(errs, "field AnchorIndex is not set")
 	}
 
 	switch len(errs) {
@@ -751,47 +832,6 @@ func (v *transactionState) IsValid() error {
 	}
 }
 
-var fieldNames_txSyntheticTxns = []string{
-	1: "Txids",
-}
-
-func (v *txSyntheticTxns) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	if !(len(v.Txids) == 0) {
-		for _, v := range v.Txids {
-			writer.WriteTxid(1, v)
-		}
-	}
-
-	_, _, err := writer.Reset(fieldNames_txSyntheticTxns)
-	if err != nil {
-		return nil, encoding.Error{E: err}
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
-}
-
-func (v *txSyntheticTxns) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Txids is missing")
-	} else if len(v.Txids) == 0 {
-		errs = append(errs, "field Txids is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
 func (v *SigOrTxn) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -846,6 +886,38 @@ func (v *SigSetEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_SigSetEntry)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *TransactionChainEntry) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *TransactionChainEntry) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUrl(1); ok {
+		v.Account = x
+	}
+	if x, ok := reader.ReadString(2); ok {
+		v.Chain = x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.ChainIndex = x
+	}
+	if x, ok := reader.ReadUint(4); ok {
+		v.AnchorIndex = x
+	}
+
+	seen, err := reader.Reset(fieldNames_TransactionChainEntry)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -1011,33 +1083,6 @@ func (v *transactionState) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
-func (v *txSyntheticTxns) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *txSyntheticTxns) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	for {
-		if x, ok := reader.ReadTxid(1); ok {
-			v.Txids = append(v.Txids, x)
-		} else {
-			break
-		}
-	}
-
-	seen, err := reader.Reset(fieldNames_txSyntheticTxns)
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	return nil
-}
-
 func (v *SigOrTxn) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Transaction *protocol.Transaction                          `json:"transaction,omitempty"`
@@ -1119,14 +1164,6 @@ func (v *transactionState) MarshalJSON() ([]byte, error) {
 	u.Transaction = v.Transaction
 	u.State = v.State
 	u.Signatures = v.Signatures
-	return json.Marshal(&u)
-}
-
-func (v *txSyntheticTxns) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Txids encoding.JsonList[*url.TxID] `json:"txids,omitempty"`
-	}{}
-	u.Txids = v.Txids
 	return json.Marshal(&u)
 }
 
@@ -1270,17 +1307,5 @@ func (v *transactionState) UnmarshalJSON(data []byte) error {
 	v.Transaction = u.Transaction
 	v.State = u.State
 	v.Signatures = u.Signatures
-	return nil
-}
-
-func (v *txSyntheticTxns) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Txids encoding.JsonList[*url.TxID] `json:"txids,omitempty"`
-	}{}
-	u.Txids = v.Txids
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	v.Txids = u.Txids
 	return nil
 }
