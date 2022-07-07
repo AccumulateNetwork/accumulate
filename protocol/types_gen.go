@@ -31,13 +31,6 @@ type AccountAuth struct {
 	extraData   []byte
 }
 
-type AccountStateProof struct {
-	fieldsSet []bool
-	State     Account          `json:"state,omitempty" form:"state" query:"state" validate:"required"`
-	Proof     *managed.Receipt `json:"proof,omitempty" form:"proof" query:"proof" validate:"required"`
-	extraData []byte
-}
-
 type AccumulateDataEntry struct {
 	fieldsSet []bool
 	Data      [][]byte `json:"data,omitempty" form:"data" query:"data" validate:"required"`
@@ -221,9 +214,9 @@ type CreateTokenAccount struct {
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	TokenUrl  *url.URL `json:"tokenUrl,omitempty" form:"tokenUrl" query:"tokenUrl" validate:"required"`
 	// Authorities is a list of authorities to add to the authority set.
-	Authorities      []*url.URL         `json:"authorities,omitempty" form:"authorities" query:"authorities"`
-	TokenIssuerProof *AccountStateProof `json:"tokenIssuerProof,omitempty" form:"tokenIssuerProof" query:"tokenIssuerProof"`
-	extraData        []byte
+	Authorities []*url.URL        `json:"authorities,omitempty" form:"authorities" query:"authorities"`
+	Proof       *TokenIssuerProof `json:"proof,omitempty" form:"proof" query:"proof"`
+	extraData   []byte
 }
 
 type DataAccount struct {
@@ -342,8 +335,9 @@ type InternalSignature struct {
 
 type IssueTokens struct {
 	fieldsSet []bool
-	Recipient *url.URL `json:"recipient,omitempty" form:"recipient" query:"recipient" validate:"required"`
-	Amount    big.Int  `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	Recipient *url.URL          `json:"recipient,omitempty" form:"recipient" query:"recipient" validate:"required"`
+	Amount    big.Int           `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	To        []*TokenRecipient `json:"to,omitempty" form:"to" query:"to" validate:"required"`
 	extraData []byte
 }
 
@@ -454,7 +448,9 @@ type NetworkGlobals struct {
 	OperatorAcceptThreshold Rational `json:"operatorAcceptThreshold,omitempty" form:"operatorAcceptThreshold" query:"operatorAcceptThreshold" validate:"required"`
 	// MajorBlockSchedule a cron expression defining the (approximate) major blocks interval.
 	MajorBlockSchedule string `json:"majorBlockSchedule,omitempty" form:"majorBlockSchedule" query:"majorBlockSchedule" validate:"required"`
-	extraData          []byte
+	// AnchorEmptyBlocks controls whether an anchor is sent for a block if the block contains no transactions other than a directory anchor.
+	AnchorEmptyBlocks bool `json:"anchorEmptyBlocks,omitempty" form:"anchorEmptyBlocks" query:"anchorEmptyBlocks" validate:"required"`
+	extraData         []byte
 }
 
 type Object struct {
@@ -736,6 +732,13 @@ type TokenIssuer struct {
 	Properties  *url.URL `json:"properties,omitempty" form:"properties" query:"properties" validate:"required"`
 	Issued      big.Int  `json:"issued,omitempty" form:"issued" query:"issued" validate:"required"`
 	SupplyLimit *big.Int `json:"supplyLimit,omitempty" form:"supplyLimit" query:"supplyLimit"`
+	extraData   []byte
+}
+
+type TokenIssuerProof struct {
+	fieldsSet   []bool
+	Transaction *CreateToken     `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
+	Receipt     *managed.Receipt `json:"receipt,omitempty" form:"receipt" query:"receipt" validate:"required"`
 	extraData   []byte
 }
 
@@ -1042,21 +1045,6 @@ func (v *AccountAuth) Copy() *AccountAuth {
 }
 
 func (v *AccountAuth) CopyAsInterface() interface{} { return v.Copy() }
-
-func (v *AccountStateProof) Copy() *AccountStateProof {
-	u := new(AccountStateProof)
-
-	if v.State != nil {
-		u.State = (v.State).CopyAsInterface().(Account)
-	}
-	if v.Proof != nil {
-		u.Proof = (v.Proof).Copy()
-	}
-
-	return u
-}
-
-func (v *AccountStateProof) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *AccumulateDataEntry) Copy() *AccumulateDataEntry {
 	u := new(AccumulateDataEntry)
@@ -1386,8 +1374,8 @@ func (v *CreateTokenAccount) Copy() *CreateTokenAccount {
 			u.Authorities[i] = (v).Copy()
 		}
 	}
-	if v.TokenIssuerProof != nil {
-		u.TokenIssuerProof = (v.TokenIssuerProof).Copy()
+	if v.Proof != nil {
+		u.Proof = (v.Proof).Copy()
 	}
 
 	return u
@@ -1586,6 +1574,12 @@ func (v *IssueTokens) Copy() *IssueTokens {
 		u.Recipient = (v.Recipient).Copy()
 	}
 	u.Amount = *encoding.BigintCopy(&v.Amount)
+	u.To = make([]*TokenRecipient, len(v.To))
+	for i, v := range v.To {
+		if v != nil {
+			u.To[i] = (v).Copy()
+		}
+	}
 
 	return u
 }
@@ -1765,6 +1759,7 @@ func (v *NetworkGlobals) Copy() *NetworkGlobals {
 
 	u.OperatorAcceptThreshold = *(&v.OperatorAcceptThreshold).Copy()
 	u.MajorBlockSchedule = v.MajorBlockSchedule
+	u.AnchorEmptyBlocks = v.AnchorEmptyBlocks
 
 	return u
 }
@@ -2244,6 +2239,21 @@ func (v *TokenIssuer) Copy() *TokenIssuer {
 
 func (v *TokenIssuer) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *TokenIssuerProof) Copy() *TokenIssuerProof {
+	u := new(TokenIssuerProof)
+
+	if v.Transaction != nil {
+		u.Transaction = (v.Transaction).Copy()
+	}
+	if v.Receipt != nil {
+		u.Receipt = (v.Receipt).Copy()
+	}
+
+	return u
+}
+
+func (v *TokenIssuerProof) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *TokenRecipient) Copy() *TokenRecipient {
 	u := new(TokenRecipient)
 
@@ -2515,22 +2525,6 @@ func (v *AccountAuth) Equal(u *AccountAuth) bool {
 		if !((&v.Authorities[i]).Equal(&u.Authorities[i])) {
 			return false
 		}
-	}
-
-	return true
-}
-
-func (v *AccountStateProof) Equal(u *AccountStateProof) bool {
-	if !(EqualAccount(v.State, u.State)) {
-		return false
-	}
-	switch {
-	case v.Proof == u.Proof:
-		// equal
-	case v.Proof == nil || u.Proof == nil:
-		return false
-	case !((v.Proof).Equal(u.Proof)):
-		return false
 	}
 
 	return true
@@ -2960,11 +2954,11 @@ func (v *CreateTokenAccount) Equal(u *CreateTokenAccount) bool {
 		}
 	}
 	switch {
-	case v.TokenIssuerProof == u.TokenIssuerProof:
+	case v.Proof == u.Proof:
 		// equal
-	case v.TokenIssuerProof == nil || u.TokenIssuerProof == nil:
+	case v.Proof == nil || u.Proof == nil:
 		return false
-	case !((v.TokenIssuerProof).Equal(u.TokenIssuerProof)):
+	case !((v.Proof).Equal(u.Proof)):
 		return false
 	}
 
@@ -3220,6 +3214,14 @@ func (v *IssueTokens) Equal(u *IssueTokens) bool {
 	if !((&v.Amount).Cmp(&u.Amount) == 0) {
 		return false
 	}
+	if len(v.To) != len(u.To) {
+		return false
+	}
+	for i := range v.To {
+		if !((v.To[i]).Equal(u.To[i])) {
+			return false
+		}
+	}
 
 	return true
 }
@@ -3458,6 +3460,9 @@ func (v *NetworkGlobals) Equal(u *NetworkGlobals) bool {
 		return false
 	}
 	if !(v.MajorBlockSchedule == u.MajorBlockSchedule) {
+		return false
+	}
+	if !(v.AnchorEmptyBlocks == u.AnchorEmptyBlocks) {
 		return false
 	}
 
@@ -4074,6 +4079,27 @@ func (v *TokenIssuer) Equal(u *TokenIssuer) bool {
 	return true
 }
 
+func (v *TokenIssuerProof) Equal(u *TokenIssuerProof) bool {
+	switch {
+	case v.Transaction == u.Transaction:
+		// equal
+	case v.Transaction == nil || u.Transaction == nil:
+		return false
+	case !((v.Transaction).Equal(u.Transaction)):
+		return false
+	}
+	switch {
+	case v.Receipt == u.Receipt:
+		// equal
+	case v.Receipt == nil || u.Receipt == nil:
+		return false
+	case !((v.Receipt).Equal(u.Receipt)):
+		return false
+	}
+
+	return true
+}
+
 func (v *TokenRecipient) Equal(u *TokenRecipient) bool {
 	switch {
 	case v.Url == u.Url:
@@ -4447,54 +4473,6 @@ func (v *AccountAuth) IsValid() error {
 		errs = append(errs, "field Authorities is missing")
 	} else if len(v.Authorities) == 0 {
 		errs = append(errs, "field Authorities is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
-var fieldNames_AccountStateProof = []string{
-	1: "State",
-	2: "Proof",
-}
-
-func (v *AccountStateProof) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	if !(v.State == nil) {
-		writer.WriteValue(1, v.State.MarshalBinary)
-	}
-	if !(v.Proof == nil) {
-		writer.WriteValue(2, v.Proof.MarshalBinary)
-	}
-
-	_, _, err := writer.Reset(fieldNames_AccountStateProof)
-	if err != nil {
-		return nil, encoding.Error{E: err}
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
-}
-
-func (v *AccountStateProof) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field State is missing")
-	} else if v.State == nil {
-		errs = append(errs, "field State is not set")
-	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Proof is missing")
-	} else if v.Proof == nil {
-		errs = append(errs, "field Proof is not set")
 	}
 
 	switch len(errs) {
@@ -5702,7 +5680,7 @@ var fieldNames_CreateTokenAccount = []string{
 	2: "Url",
 	3: "TokenUrl",
 	7: "Authorities",
-	8: "TokenIssuerProof",
+	8: "Proof",
 }
 
 func (v *CreateTokenAccount) MarshalBinary() ([]byte, error) {
@@ -5721,8 +5699,8 @@ func (v *CreateTokenAccount) MarshalBinary() ([]byte, error) {
 			writer.WriteUrl(7, v)
 		}
 	}
-	if !(v.TokenIssuerProof == nil) {
-		writer.WriteValue(8, v.TokenIssuerProof.MarshalBinary)
+	if !(v.Proof == nil) {
+		writer.WriteValue(8, v.Proof.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_CreateTokenAccount)
@@ -6418,6 +6396,7 @@ var fieldNames_IssueTokens = []string{
 	1: "Type",
 	2: "Recipient",
 	3: "Amount",
+	4: "To",
 }
 
 func (v *IssueTokens) MarshalBinary() ([]byte, error) {
@@ -6430,6 +6409,11 @@ func (v *IssueTokens) MarshalBinary() ([]byte, error) {
 	}
 	if !((v.Amount).Cmp(new(big.Int)) == 0) {
 		writer.WriteBigInt(3, &v.Amount)
+	}
+	if !(len(v.To) == 0) {
+		for _, v := range v.To {
+			writer.WriteValue(4, v.MarshalBinary)
+		}
 	}
 
 	_, _, err := writer.Reset(fieldNames_IssueTokens)
@@ -6455,6 +6439,11 @@ func (v *IssueTokens) IsValid() error {
 		errs = append(errs, "field Amount is missing")
 	} else if (v.Amount).Cmp(new(big.Int)) == 0 {
 		errs = append(errs, "field Amount is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field To is missing")
+	} else if len(v.To) == 0 {
+		errs = append(errs, "field To is not set")
 	}
 
 	switch len(errs) {
@@ -7152,6 +7141,7 @@ func (v *NetworkDefinition) IsValid() error {
 var fieldNames_NetworkGlobals = []string{
 	1: "OperatorAcceptThreshold",
 	2: "MajorBlockSchedule",
+	3: "AnchorEmptyBlocks",
 }
 
 func (v *NetworkGlobals) MarshalBinary() ([]byte, error) {
@@ -7163,6 +7153,9 @@ func (v *NetworkGlobals) MarshalBinary() ([]byte, error) {
 	}
 	if !(len(v.MajorBlockSchedule) == 0) {
 		writer.WriteString(2, v.MajorBlockSchedule)
+	}
+	if !(!v.AnchorEmptyBlocks) {
+		writer.WriteBool(3, v.AnchorEmptyBlocks)
 	}
 
 	_, _, err := writer.Reset(fieldNames_NetworkGlobals)
@@ -7185,6 +7178,11 @@ func (v *NetworkGlobals) IsValid() error {
 		errs = append(errs, "field MajorBlockSchedule is missing")
 	} else if len(v.MajorBlockSchedule) == 0 {
 		errs = append(errs, "field MajorBlockSchedule is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field AnchorEmptyBlocks is missing")
+	} else if !v.AnchorEmptyBlocks {
+		errs = append(errs, "field AnchorEmptyBlocks is not set")
 	}
 
 	switch len(errs) {
@@ -9023,6 +9021,54 @@ func (v *TokenIssuer) IsValid() error {
 	}
 }
 
+var fieldNames_TokenIssuerProof = []string{
+	1: "Transaction",
+	2: "Receipt",
+}
+
+func (v *TokenIssuerProof) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Transaction == nil) {
+		writer.WriteValue(1, v.Transaction.MarshalBinary)
+	}
+	if !(v.Receipt == nil) {
+		writer.WriteValue(2, v.Receipt.MarshalBinary)
+	}
+
+	_, _, err := writer.Reset(fieldNames_TokenIssuerProof)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *TokenIssuerProof) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Transaction is missing")
+	} else if v.Transaction == nil {
+		errs = append(errs, "field Transaction is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Receipt is missing")
+	} else if v.Receipt == nil {
+		errs = append(errs, "field Receipt is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_TokenRecipient = []string{
 	1: "Url",
 	2: "Amount",
@@ -9955,36 +10001,6 @@ func (v *AccountAuth) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
-func (v *AccountStateProof) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *AccountStateProof) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	reader.ReadValue(1, func(b []byte) error {
-		x, err := UnmarshalAccount(b)
-		if err == nil {
-			v.State = x
-		}
-		return err
-	})
-	if x := new(managed.Receipt); reader.ReadValue(2, x.UnmarshalBinary) {
-		v.Proof = x
-	}
-
-	seen, err := reader.Reset(fieldNames_AccountStateProof)
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	return nil
-}
-
 func (v *AccumulateDataEntry) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -10751,8 +10767,8 @@ func (v *CreateTokenAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
-	if x := new(AccountStateProof); reader.ReadValue(8, x.UnmarshalBinary) {
-		v.TokenIssuerProof = x
+	if x := new(TokenIssuerProof); reader.ReadValue(8, x.UnmarshalBinary) {
+		v.Proof = x
 	}
 
 	seen, err := reader.Reset(fieldNames_CreateTokenAccount)
@@ -11203,6 +11219,13 @@ func (v *IssueTokens) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBigInt(3); ok {
 		v.Amount = *x
 	}
+	for {
+		if x := new(TokenRecipient); reader.ReadValue(4, x.UnmarshalBinary) {
+			v.To = append(v.To, x)
+		} else {
+			break
+		}
+	}
 
 	seen, err := reader.Reset(fieldNames_IssueTokens)
 	if err != nil {
@@ -11614,6 +11637,9 @@ func (v *NetworkGlobals) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	if x, ok := reader.ReadString(2); ok {
 		v.MajorBlockSchedule = x
+	}
+	if x, ok := reader.ReadBool(3); ok {
+		v.AnchorEmptyBlocks = x
 	}
 
 	seen, err := reader.Reset(fieldNames_NetworkGlobals)
@@ -12747,6 +12773,32 @@ func (v *TokenIssuer) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *TokenIssuerProof) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *TokenIssuerProof) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x := new(CreateToken); reader.ReadValue(1, x.UnmarshalBinary) {
+		v.Transaction = x
+	}
+	if x := new(managed.Receipt); reader.ReadValue(2, x.UnmarshalBinary) {
+		v.Receipt = x
+	}
+
+	seen, err := reader.Reset(fieldNames_TokenIssuerProof)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *TokenRecipient) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -13340,16 +13392,6 @@ func (v *AccountAuth) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
-func (v *AccountStateProof) MarshalJSON() ([]byte, error) {
-	u := struct {
-		State encoding.JsonUnmarshalWith[Account] `json:"state,omitempty"`
-		Proof *managed.Receipt                    `json:"proof,omitempty"`
-	}{}
-	u.State = encoding.JsonUnmarshalWith[Account]{Value: v.State, Func: UnmarshalAccountJSON}
-	u.Proof = v.Proof
-	return json.Marshal(&u)
-}
-
 func (v *AccumulateDataEntry) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type DataEntryType              `json:"type"`
@@ -13619,17 +13661,17 @@ func (v *CreateToken) MarshalJSON() ([]byte, error) {
 
 func (v *CreateTokenAccount) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type             TransactionType             `json:"type"`
-		Url              *url.URL                    `json:"url,omitempty"`
-		TokenUrl         *url.URL                    `json:"tokenUrl,omitempty"`
-		Authorities      encoding.JsonList[*url.URL] `json:"authorities,omitempty"`
-		TokenIssuerProof *AccountStateProof          `json:"tokenIssuerProof,omitempty"`
+		Type        TransactionType             `json:"type"`
+		Url         *url.URL                    `json:"url,omitempty"`
+		TokenUrl    *url.URL                    `json:"tokenUrl,omitempty"`
+		Authorities encoding.JsonList[*url.URL] `json:"authorities,omitempty"`
+		Proof       *TokenIssuerProof           `json:"proof,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
 	u.TokenUrl = v.TokenUrl
 	u.Authorities = v.Authorities
-	u.TokenIssuerProof = v.TokenIssuerProof
+	u.Proof = v.Proof
 	return json.Marshal(&u)
 }
 
@@ -13806,13 +13848,15 @@ func (v *InternalSignature) MarshalJSON() ([]byte, error) {
 
 func (v *IssueTokens) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type      TransactionType `json:"type"`
-		Recipient *url.URL        `json:"recipient,omitempty"`
-		Amount    *string         `json:"amount,omitempty"`
+		Type      TransactionType                    `json:"type"`
+		Recipient *url.URL                           `json:"recipient,omitempty"`
+		Amount    *string                            `json:"amount,omitempty"`
+		To        encoding.JsonList[*TokenRecipient] `json:"to,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Recipient = v.Recipient
 	u.Amount = encoding.BigintToJSON(&v.Amount)
+	u.To = v.To
 	return json.Marshal(&u)
 }
 
@@ -14689,22 +14733,6 @@ func (v *AccountAuth) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (v *AccountStateProof) UnmarshalJSON(data []byte) error {
-	u := struct {
-		State encoding.JsonUnmarshalWith[Account] `json:"state,omitempty"`
-		Proof *managed.Receipt                    `json:"proof,omitempty"`
-	}{}
-	u.State = encoding.JsonUnmarshalWith[Account]{Value: v.State, Func: UnmarshalAccountJSON}
-	u.Proof = v.Proof
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	v.State = u.State.Value
-
-	v.Proof = u.Proof
-	return nil
-}
-
 func (v *AccumulateDataEntry) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type DataEntryType              `json:"type"`
@@ -15213,17 +15241,17 @@ func (v *CreateToken) UnmarshalJSON(data []byte) error {
 
 func (v *CreateTokenAccount) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type             TransactionType             `json:"type"`
-		Url              *url.URL                    `json:"url,omitempty"`
-		TokenUrl         *url.URL                    `json:"tokenUrl,omitempty"`
-		Authorities      encoding.JsonList[*url.URL] `json:"authorities,omitempty"`
-		TokenIssuerProof *AccountStateProof          `json:"tokenIssuerProof,omitempty"`
+		Type        TransactionType             `json:"type"`
+		Url         *url.URL                    `json:"url,omitempty"`
+		TokenUrl    *url.URL                    `json:"tokenUrl,omitempty"`
+		Authorities encoding.JsonList[*url.URL] `json:"authorities,omitempty"`
+		Proof       *TokenIssuerProof           `json:"proof,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
 	u.TokenUrl = v.TokenUrl
 	u.Authorities = v.Authorities
-	u.TokenIssuerProof = v.TokenIssuerProof
+	u.Proof = v.Proof
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -15233,7 +15261,7 @@ func (v *CreateTokenAccount) UnmarshalJSON(data []byte) error {
 	v.Url = u.Url
 	v.TokenUrl = u.TokenUrl
 	v.Authorities = u.Authorities
-	v.TokenIssuerProof = u.TokenIssuerProof
+	v.Proof = u.Proof
 	return nil
 }
 
@@ -15576,13 +15604,15 @@ func (v *InternalSignature) UnmarshalJSON(data []byte) error {
 
 func (v *IssueTokens) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type      TransactionType `json:"type"`
-		Recipient *url.URL        `json:"recipient,omitempty"`
-		Amount    *string         `json:"amount,omitempty"`
+		Type      TransactionType                    `json:"type"`
+		Recipient *url.URL                           `json:"recipient,omitempty"`
+		Amount    *string                            `json:"amount,omitempty"`
+		To        encoding.JsonList[*TokenRecipient] `json:"to,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Recipient = v.Recipient
 	u.Amount = encoding.BigintToJSON(&v.Amount)
+	u.To = v.To
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -15595,6 +15625,7 @@ func (v *IssueTokens) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Amount = *x
 	}
+	v.To = u.To
 	return nil
 }
 

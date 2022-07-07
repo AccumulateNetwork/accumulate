@@ -4,16 +4,16 @@ import (
 	"bytes"
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/sortutil"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 type SignatureSet struct {
 	txn      *Transaction
 	signer   protocol.Signer
 	writable bool
-	value    Value[*sigSetData]
+	value    *record.Value[*sigSetData]
 	entries  *sigSetData
 }
 
@@ -23,7 +23,7 @@ func newSigSet(txn *Transaction, signer protocol.Signer, writable bool) (*Signat
 	s.txn = txn
 	s.signer = signer
 	s.writable = writable
-	s.value = txn.signatures(signer.GetUrl())
+	s.value = txn.getSignatures(signer.GetUrl())
 
 	var err error
 	s.entries, err = s.value.Get()
@@ -36,10 +36,6 @@ func newSigSet(txn *Transaction, signer protocol.Signer, writable bool) (*Signat
 		s.entries.Reset(signer.GetVersion())
 	}
 	return s, nil
-}
-
-func (s *SignatureSet) key() storage.Key {
-	return s.txn.key.Signatures(s.signer.GetUrl())
 }
 
 func (s *SignatureSet) Count() int {

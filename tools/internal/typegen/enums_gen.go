@@ -8,6 +8,18 @@ import (
 	"strings"
 )
 
+// CollectionTypeNone .
+const CollectionTypeNone CollectionType = 0
+
+// CollectionTypeSet .
+const CollectionTypeSet CollectionType = 1
+
+// CollectionTypeList .
+const CollectionTypeList CollectionType = 2
+
+// CollectionTypeCounted .
+const CollectionTypeCounted CollectionType = 3
+
 // MarshalAsBasic marshals the field as a basic type.
 const MarshalAsBasic MarshalAs = 0
 
@@ -85,6 +97,74 @@ const TypeCodeFloat TypeCode = 13
 
 // TypeCodeTxid .
 const TypeCodeTxid TypeCode = 14
+
+// GetEnumValue returns the value of the Collection Type
+func (v CollectionType) GetEnumValue() uint64 { return uint64(v) }
+
+// SetEnumValue sets the value. SetEnumValue returns false if the value is invalid.
+func (v *CollectionType) SetEnumValue(id uint64) bool {
+	u := CollectionType(id)
+	switch u {
+	case CollectionTypeNone, CollectionTypeSet, CollectionTypeList, CollectionTypeCounted:
+		*v = u
+		return true
+	default:
+		return false
+	}
+}
+
+// String returns the name of the Collection Type.
+func (v CollectionType) String() string {
+	switch v {
+	case CollectionTypeNone:
+		return "none"
+	case CollectionTypeSet:
+		return "set"
+	case CollectionTypeList:
+		return "list"
+	case CollectionTypeCounted:
+		return "counted"
+	default:
+		return fmt.Sprintf("CollectionType:%d", v)
+	}
+}
+
+// CollectionTypeByName returns the named Collection Type.
+func CollectionTypeByName(name string) (CollectionType, bool) {
+	switch strings.ToLower(name) {
+	case "none":
+		return CollectionTypeNone, true
+	case "set":
+		return CollectionTypeSet, true
+	case "list":
+		return CollectionTypeList, true
+	case "counted":
+		return CollectionTypeCounted, true
+	default:
+		return 0, false
+	}
+}
+
+// MarshalJSON marshals the Collection Type to JSON as a string.
+func (v CollectionType) MarshalJSON() ([]byte, error) {
+	return json.Marshal(v.String())
+}
+
+// UnmarshalJSON unmarshals the Collection Type from JSON as a string.
+func (v *CollectionType) UnmarshalJSON(data []byte) error {
+	var s string
+	err := json.Unmarshal(data, &s)
+	if err != nil {
+		return err
+	}
+
+	var ok bool
+	*v, ok = CollectionTypeByName(s)
+	if !ok || strings.ContainsRune(v.String(), ':') {
+		return fmt.Errorf("invalid Collection Type %q", s)
+	}
+	return nil
+}
 
 // GetEnumValue returns the value of the Marshal As
 func (v MarshalAs) GetEnumValue() uint64 { return uint64(v) }
