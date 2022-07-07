@@ -115,16 +115,6 @@ TokenRecipient:
     - name: Amount
       type: bigint
 
-AccountStateProof:
-  fields:
-  - name: State
-    type: Account
-    marshal-as: union
-  - name: Proof
-    type: managed.Receipt
-    marshal-as: reference
-    pointer: true
-
 ChainParams:
   fields:
     - name: Data
