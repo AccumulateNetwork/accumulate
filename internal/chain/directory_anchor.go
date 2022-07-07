@@ -79,11 +79,16 @@ func (x DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 }
 
 func processReceiptsFromDirectory(st *StateManager, tx *Delivery, body *protocol.DirectoryAnchor) error {
-	// Process pending transactions from the DN
+	var deliveries []*Delivery
 	var sequence = map[*Delivery]int{}
-	deliveries, err := loadSynthTxns(st, tx, body.RootChainAnchor[:], body.Source, nil, sequence)
-	if err != nil {
-		return err
+
+	// Process pending transactions from the DN
+	if st.NetworkType == config.Directory {
+		d, err := loadSynthTxns(st, tx, body.RootChainAnchor[:], body.Source, nil, sequence)
+		if err != nil {
+			return err
+		}
+		deliveries = append(deliveries, d...)
 	}
 
 	// Process receipts
@@ -95,7 +100,7 @@ func processReceiptsFromDirectory(st *StateManager, tx *Delivery, body *protocol
 
 		// st.logger.Debug("Received receipt", "from", logging.AsHex(receipt.Start).Slice(0, 4), "to", logging.AsHex(body.RootChainAnchor).Slice(0, 4), "block", body.MinorBlockIndex, "source", body.Source, "module", "synthetic")
 
-		d, err := loadSynthTxns(st, tx, receipt.Anchor, body.Source, &receipt, sequence)
+		d, err := loadSynthTxns(st, tx, receipt.Start, body.Source, &receipt, sequence)
 		if err != nil {
 			return err
 		}
