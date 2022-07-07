@@ -98,6 +98,10 @@ func createProxyAccounts(node, nodeKey ed25519.PrivateKey) ed25519.PrivateKey {
 }
 
 func TestAccuProxyClient(t *testing.T) {
+
+	// Provided as an example for accuproxy:
+	// Steps to secure the proxy.
+
 	// Create the lite addresses and one account
 	sim := simulator.New(t, 1)
 	sim.InitFromGenesis()
@@ -112,7 +116,6 @@ func TestAccuProxyClient(t *testing.T) {
 	dnNetwork := protocol.DnUrl().JoinPath(protocol.Network)
 	q := query.RequestByUrl{Url:dnNetwork}
 	sim.Query(protocol.DnUrl(),&q, true) //don't really need to prove, but the converse is true, need to prove the dn.acme/network account
-
 
 	createProxyAccounts(d.,key)
 
