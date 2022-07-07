@@ -150,20 +150,21 @@ func WriteDataToAccumulate(env string, data protocol.DataEntry, dataAccount *url
 	}
 
 	//
-	//retries := 10
-	//success := false
-	//for i := 0; i < retries; i++ {
-	//	queryRes, err = queryDataByHash(client, dataAccount, data.Hash())
-	//	if err != nil {
-	//		log.Printf("attempt %d error (%x): %v\n", i, data.Hash(), err)
-	//		continue
-	//	}
-	//	success = true
-	//	break
-	//}
-	//if !success {
-	//	return fmt.Errorf("read back failed %v", err)
-	//}
+	retries := 10
+	success := false
+	for i := 0; i < retries; i++ {
+		log.Println("Retry : ", i)
+		queryRes, err = queryDataByHash(client, dataAccount, data.Hash())
+		if err != nil {
+			log.Printf("attempt %d error (%x): %v\n", i, data.Hash(), err)
+			continue
+		}
+		success = true
+		break
+	}
+	if !success {
+		return fmt.Errorf("read back failed %v", err)
+	}
 	log.Println("Success : ", queryResTx.Txid.Account(), data.Hash())
 	return nil
 }
@@ -336,6 +337,14 @@ func FaucetWithCredits(env string) error {
 		}
 	}
 	_ = qtx
+
+	// for _, txid := range qtx.Produced {
+	// 	txReq.Txid = txid.Account().Hash()
+	// 	_, err = client.QueryTx(context.Background(), &txReq)
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// }
 
 	time.Sleep(time.Second * 2)
 	client.CloseIdleConnections()

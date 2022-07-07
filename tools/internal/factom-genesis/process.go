@@ -97,7 +97,7 @@ func Process(server string) {
 					log.Fatalf("cannot decode account id")
 				}
 				dataEntry := ConvertFactomDataEntryToLiteDataEntry(*qEntry)
-				ch := cg.GetOrCreateChainWorker(server, (*[32]byte)(accountId), 3)
+				ch := cg.GetOrCreateChainWorker(server, (*[32]byte)(accountId), 1)
 				ch <- dataEntry
 			case TagTX:
 				tx := new(factoid.Transaction)
