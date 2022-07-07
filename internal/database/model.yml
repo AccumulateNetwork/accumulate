@@ -43,8 +43,8 @@
     set: true
   - name: Directory
     # TODO Turn this into a chain
-    type: index
-    counted: true
+    type: state
+    set: true
     dataType: url
     pointer: true
   - name: Data
