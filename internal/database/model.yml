@@ -43,13 +43,8 @@
     collection: set
   - name: Directory
     # TODO Turn this into a chain
-<<<<<<< HEAD
     type: state
     set: true
-=======
-    type: index
-    collection: counted
->>>>>>> 4736a99e4ded776347ad5d437369b38c238d0bf0
     dataType: url
     pointer: true
   - name: Data
