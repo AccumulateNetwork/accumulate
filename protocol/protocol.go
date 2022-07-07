@@ -524,27 +524,19 @@ func GetMOfN(count int, ratio float64) uint64 {
 	return uint64(math.Ceil(ratio * float64(count)))
 }
 
-const rootAnchorSuffix = "-root"
-const bptAnchorSuffix = "-bpt"
+const RootAnchorSuffix = "-root"
+const BptAnchorSuffix = "-bpt"
 
 // RootAnchorChain returns the name of the intermediate anchor chain for the given
 // partition's root chain.
 func RootAnchorChain(name string) string {
-	return name + rootAnchorSuffix
+	return name + RootAnchorSuffix
 }
 
 // BPTAnchorChain returns the name of the intermediate anchor chain for the given
 // partition's BPT.
 func BPTAnchorChain(name string) string {
-	return name + bptAnchorSuffix
-}
-
-// ParseBvnUrl extracts the partition name from a intermediate anchor chain name.
-func ParseAnchorChain(name string) (string, bool) {
-	if !strings.HasSuffix(strings.ToLower(name), rootAnchorSuffix) {
-		return "", false
-	}
-	return name[:len(name)-len(rootAnchorSuffix)], true
+	return name + BptAnchorSuffix
 }
 
 // SyntheticSequenceChain returns the name of the synthetic transaction index chain

@@ -235,6 +235,123 @@ func (c *AccountData) Commit() error {
 	return nil
 }
 
+type Transaction struct {
+	logger logging.OptionalLogger
+	store  record.Store
+	key    record.Key
+	batch  *Batch
+	label  string
+
+	main       *record.Value[*SigOrTxn]
+	status     *record.Value[*protocol.TransactionStatus]
+	produced   *record.Set[*url.TxID]
+	signatures map[storage.Key]*record.Value[*sigSetData]
+	chains     *record.Set[*TransactionChainEntry]
+}
+
+func (c *Transaction) Main() *record.Value[*SigOrTxn] {
+	return getOrCreateField(&c.main, func() *record.Value[*SigOrTxn] {
+		return record.NewValue(c.logger.L, c.store, c.key.Append("Main"), c.label+" main", false,
+			record.Struct[SigOrTxn]())
+	})
+}
+
+func (c *Transaction) Status() *record.Value[*protocol.TransactionStatus] {
+	return getOrCreateField(&c.status, func() *record.Value[*protocol.TransactionStatus] {
+		return record.NewValue(c.logger.L, c.store, c.key.Append("Status"), c.label+" status", true,
+			record.Struct[protocol.TransactionStatus]())
+	})
+}
+
+func (c *Transaction) Produced() *record.Set[*url.TxID] {
+	return getOrCreateField(&c.produced, func() *record.Set[*url.TxID] {
+		return record.NewSet(c.logger.L, c.store, c.key.Append("Produced"), c.label+" produced",
+			record.Wrapped(record.TxidWrapper), record.CompareTxid)
+	})
+}
+
+func (c *Transaction) getSignatures(signer *url.URL) *record.Value[*sigSetData] {
+	return getOrCreateMap(&c.signatures, c.key.Append("Signatures", signer), func() *record.Value[*sigSetData] {
+		return record.NewValue(c.logger.L, c.store, c.key.Append("Signatures", signer), c.label+" signatures", true,
+			record.Struct[sigSetData]())
+	})
+}
+
+func (c *Transaction) Chains() *record.Set[*TransactionChainEntry] {
+	return getOrCreateField(&c.chains, func() *record.Set[*TransactionChainEntry] {
+		return record.NewSet(c.logger.L, c.store, c.key.Append("Chains"), c.label+" chains",
+			record.Struct[TransactionChainEntry](), func(u, v *TransactionChainEntry) int { return u.Compare(v) })
+	})
+}
+
+func (c *Transaction) Resolve(key record.Key) (record.Record, record.Key, error) {
+	switch key[0] {
+	case "Main":
+		return c.Main(), key[1:], nil
+	case "Status":
+		return c.Status(), key[1:], nil
+	case "Produced":
+		return c.Produced(), key[1:], nil
+	case "Signatures":
+		if len(key) < 2 {
+			return nil, nil, errors.New(errors.StatusInternalError, "bad key for transaction")
+		}
+		signer, okSigner := key[1].(*url.URL)
+		if !okSigner {
+			return nil, nil, errors.New(errors.StatusInternalError, "bad key for transaction")
+		}
+		v := c.getSignatures(signer)
+		return v, key[2:], nil
+	case "Chains":
+		return c.Chains(), key[1:], nil
+	default:
+		return nil, nil, errors.New(errors.StatusInternalError, "bad key for transaction")
+	}
+}
+
+func (c *Transaction) IsDirty() bool {
+	if c == nil {
+		return false
+	}
+
+	if fieldIsDirty(c.main) {
+		return true
+	}
+	if fieldIsDirty(c.status) {
+		return true
+	}
+	if fieldIsDirty(c.produced) {
+		return true
+	}
+	for _, v := range c.signatures {
+		if v.IsDirty() {
+			return true
+		}
+	}
+	if fieldIsDirty(c.chains) {
+		return true
+	}
+
+	return false
+}
+
+func (c *Transaction) Commit() error {
+	if c == nil {
+		return nil
+	}
+
+	var err error
+	commitField(&err, c.main)
+	commitField(&err, c.status)
+	commitField(&err, c.produced)
+	for _, v := range c.signatures {
+		commitField(&err, v)
+	}
+	commitField(&err, c.chains)
+
+	return nil
+}
+
 func getOrCreateField[T any](ptr **T, create func() *T) *T {
 	if *ptr != nil {
 		return *ptr

@@ -12,15 +12,25 @@ func (b *Batch) resolve(key record.Key, requester record.ShimValue) (record.Reco
 		return nil, nil, errors.New(errors.StatusInternalError, "bad key for batch: empty")
 	}
 
-	if key[0] == "Account" {
+	switch key[0] {
+	case "Account":
 		if len(key) < 2 {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for batch")
 		}
-		u, ok := key[1].(*url.URL)
+		pUrl, ok := key[1].(*url.URL)
 		if !ok {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for batch")
 		}
-		return b.Account(u), key[2:], nil
+		return b.Account(pUrl), key[2:], nil
+	case "Transaction":
+		if len(key) < 2 {
+			return nil, nil, errors.New(errors.StatusInternalError, "bad key for batch")
+		}
+		pHash, ok := key[1].([32]byte)
+		if !ok {
+			return nil, nil, errors.New(errors.StatusInternalError, "bad key for batch")
+		}
+		return b.Transaction(pHash[:]), key[2:], nil
 	}
 
 	if skey, ok := key[0].(storage.Key); ok {
@@ -122,11 +132,6 @@ type Value[T any] interface {
 
 func AccountIndex[T any](b *Batch, u *url.URL, allowMissing bool, value record.EncodableValue[T], key ...interface{}) Value[T] {
 	return getOrCreateValue(b, record.Key{"Account", u, "Index"}.Append(key...).Hash(), allowMissing, value)
-}
-
-func TransactionIndex[T any](b *Batch, hash []byte, allowMissing bool, value record.EncodableValue[T], key ...interface{}) Value[T] {
-	t := transaction(hash)
-	return getOrCreateValue(b, t.Index(key...), allowMissing, value)
 }
 
 type errorValue[T any] struct {
