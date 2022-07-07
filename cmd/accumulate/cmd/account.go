@@ -131,11 +131,12 @@ var accountQrCmd = &cobra.Command{
 }
 
 var accountGenerateCmd = &cobra.Command{
-	Use:   "generate [key name (optional)]",
+	Use:   "generate",
 	Short: "Generate a random lite token account or a lite account derived previously imported/created key",
-	Args:  cobra.MinimumNArgs(0),
-	Run: func(cmd *cobra.Command, _ []string) {
-		out, err := GenerateAccount()
+	// validate the arguments passed to the command
+	Args: cobra.OnlyValidArgs,
+	Run: func(cmd *cobra.Command, args []string) {
+		out, err := GenerateAccount(cmd, args[0:])
 		printOutput(cmd, out, err)
 	},
 }
@@ -258,7 +259,11 @@ func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, er
 	return dispatchTxAndPrintResponse(&tac, u, signer)
 }
 
-func GenerateAccount() (string, error) {
+func GenerateAccount(cmd *cobra.Command, args []string) (string, error) {
+	// validate the amount arguments passed to the command
+	if len(args) > 1 {
+		return "", fmt.Errorf("too many arguments")
+	}
 	return GenerateKey("")
 }
 
