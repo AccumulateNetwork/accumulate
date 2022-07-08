@@ -2,6 +2,7 @@ package simulator
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
@@ -22,6 +23,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
+	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/sortutil"
@@ -313,7 +315,9 @@ func (s *Simulator) InitFromGenesisWith(values *core.GlobalValues) {
 	for _, x := range s.Executors {
 		batch := x.Database.Begin(true)
 		defer batch.Discard()
-		require.NoError(tb{s}, x.Executor.InitFromGenesis(batch, genDocs[x.Partition.Id].AppState))
+		var snapshot []byte
+		require.NoError(s, json.Unmarshal(genDocs[x.Partition.Id].AppState, &snapshot))
+		require.NoError(tb{s}, x.Executor.RestoreSnapshot(batch, ioutil2.NewBuffer(snapshot)))
 		require.NoError(tb{s}, batch.Commit())
 	}
 }

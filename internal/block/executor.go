@@ -1,7 +1,6 @@
 package block
 
 import (
-	"bytes"
 	"crypto/ed25519"
 	"io"
 
@@ -20,7 +19,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 )
 
 type Executor struct {
@@ -231,53 +229,7 @@ func (m *Executor) LoadStateRoot(batch *database.Batch) ([]byte, error) {
 	}
 }
 
-func (m *Executor) InitFromGenesis(batch *database.Batch, data []byte) error {
-	if m.isGenesis {
-		panic("Cannot call InitChain on a genesis txn executor")
-	}
-
-	// Load the genesis state (JSON) into an in-memory key-value store
-	src := memory.New(nil)
-	err := src.UnmarshalJSON(data)
-	if err != nil {
-		return errors.Format(errors.StatusInternalError, "failed to unmarshal app state: %w", err)
-	}
-
-	// Load the root anchor chain so we can verify the system state
-	srcBatch := database.New(src, nil).Begin(false)
-	defer srcBatch.Discard()
-	srcRoot := srcBatch.BptRoot()
-
-	// Dump the genesis state into the key-value store
-	subbatch := batch.Begin(true)
-	defer subbatch.Discard()
-	err = subbatch.Import(src)
-	if err != nil {
-		return errors.Format(errors.StatusInternalError, "failed to import database: %w", err)
-	}
-
-	// Commit the database batch
-	err = subbatch.Commit()
-	if err != nil {
-		return errors.Format(errors.StatusInternalError, "failed to load app state into database: %w", err)
-	}
-
-	root := batch.BptRoot()
-
-	// Make sure the database BPT root hash matches what we found in the genesis state
-	if !bytes.Equal(srcRoot, root) {
-		panic(errors.Format(errors.StatusInternalError, "Root chain anchor from state DB does not match the app state\nWant: %X\nGot:  %X", srcRoot, root))
-	}
-
-	err = m.loadGlobals(batch.View)
-	if err != nil {
-		return errors.Format(errors.StatusInternalError, "failed to load globals: %w", err)
-	}
-
-	return nil
-}
-
-func (m *Executor) InitFromSnapshot(batch *database.Batch, file ioutil2.SectionReader) error {
+func (m *Executor) RestoreSnapshot(batch *database.Batch, file ioutil2.SectionReader) error {
 	err := batch.RestoreSnapshot(file)
 	if err != nil {
 		return errors.Format(errors.StatusUnknownError, "load state: %w", err)

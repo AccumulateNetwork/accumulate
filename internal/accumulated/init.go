@@ -2,6 +2,7 @@ package accumulated
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -18,10 +19,9 @@ import (
 	tmtypes "github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
+	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 )
 
 const nodeDirPerm = 0755
@@ -231,8 +231,8 @@ func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time tim
 		if id == protocol.Directory {
 			netType = config.Directory
 		}
-		store := memory.New(logger.With("module", "storage"))
-		bs, err := genesis.Init(store, genesis.InitOpts{
+		snapshot := new(ioutil2.Buffer)
+		root, err := genesis.Init(snapshot, genesis.InitOpts{
 			PartitionId:         id,
 			NetworkType:         netType,
 			GenesisTime:         time,
@@ -245,16 +245,8 @@ func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time tim
 			return nil, err
 		}
 
-		err = bs.Bootstrap()
-		if err != nil {
-			return nil, err
-		}
-
-		batch := database.New(store, logger).Begin(false)
-		defer batch.Discard()
-		docs[id].AppHash = batch.BptRoot()
-
-		docs[id].AppState, err = store.MarshalJSON()
+		docs[id].AppHash = root
+		docs[id].AppState, err = json.Marshal(snapshot.Bytes())
 		if err != nil {
 			return nil, err
 		}

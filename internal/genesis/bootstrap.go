@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math/big"
 	"strings"
 	"time"
@@ -34,11 +35,12 @@ type InitOpts struct {
 	OperatorKeys        [][]byte
 }
 
-func Init(kvdb storage.KeyValueStore, opts InitOpts) (Bootstrap, error) {
+func Init(snapshot io.WriteSeeker, opts InitOpts) ([]byte, error) {
+	store := memory.New(opts.Logger.With("module", "storage"))
 	b := &bootstrap{
 		InitOpts:    opts,
-		kvdb:        kvdb,
-		db:          database.New(kvdb, opts.Logger.With("module", "database")),
+		kvdb:        store,
+		db:          database.New(store, opts.Logger.With("module", "database")),
 		dataRecords: make([]DataRecord, 0),
 		records:     make([]protocol.Account, 0),
 	}
@@ -66,7 +68,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) (Bootstrap, error) {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
-	b.genesisExec, err = block.NewGenesisExecutor(b.db, opts.Logger, &config.Describe{
+	exec, err := block.NewGenesisExecutor(b.db, opts.Logger, &config.Describe{
 		NetworkType: opts.NetworkType,
 		PartitionId: opts.PartitionId,
 	}, b.router)
@@ -74,12 +76,31 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) (Bootstrap, error) {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
-	return b, nil
-}
+	b.block = new(block.Block)
+	b.block.Index = protocol.GenesisBlock
 
-type Bootstrap interface {
-	Bootstrap() error
-	GetDBState() ([]byte, error)
+	b.block.Time = b.GenesisTime
+	b.block.Batch = b.db.Begin(true)
+	defer b.block.Batch.Discard()
+
+	err = exec.Genesis(b.block, b)
+	if err != nil {
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
+	}
+
+	err = b.block.Batch.Commit()
+	if err != nil {
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
+	}
+
+	batch := b.db.Begin(false)
+	defer batch.Discard()
+	err = exec.SaveSnapshot(batch, snapshot)
+	if err != nil {
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
+	}
+
+	return batch.BptRoot(), nil
 }
 
 type bootstrap struct {
@@ -94,46 +115,9 @@ type bootstrap struct {
 	urls         []*url.URL
 	records      []protocol.Account
 	dataRecords  []DataRecord
-	genesisExec  *block.Executor
 	router       routing.Router
 	routingTable *protocol.RoutingTable
 	globals      *core.GlobalValues
-}
-
-func (b *bootstrap) Bootstrap() error {
-	b.block = new(block.Block)
-	b.block.Index = protocol.GenesisBlock
-
-	b.block.Time = b.GenesisTime
-	b.block.Batch = b.db.Begin(true)
-	defer b.block.Batch.Discard()
-
-	err := b.genesisExec.Genesis(b.block, b)
-	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
-	}
-
-	err = b.block.Batch.Commit()
-	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
-	}
-
-	return nil
-}
-
-func (b *bootstrap) GetDBState() ([]byte, error) {
-	memDb, ok := b.kvdb.(*memory.DB)
-
-	var state []byte
-	var err error
-	if ok {
-		state, err = memDb.MarshalJSON()
-		if err != nil {
-			return nil, nil
-		}
-	}
-
-	return state, err
 }
 
 type DataRecord struct {
