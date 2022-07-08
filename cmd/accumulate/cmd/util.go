@@ -10,7 +10,6 @@ import (
 	"log"
 	"math"
 	"math/big"
-	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -105,27 +104,16 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, []*signing.Builde
 		firstSigner.SetPrivateKey(key.PrivateKey)
 		return args, []*signing.Builder{firstSigner}, nil
 	}
-	var argcopy []string
-	for i, arg := range args {
-		if i == 0 {
-			if strings.Contains(arg, "@") {
-				arr := strings.Split(arg, "@")
-				argcopy = append(argcopy, arr[0])
+	var signingKey string
 
-				if arr[1] == "" {
-					argcopy = append(argcopy, fmt.Sprint("0"))
-				} else {
-					argcopy = append(argcopy, fmt.Sprint(arr[1]))
-				}
-				continue
-			} else {
-				argcopy = append(argcopy, arg)
-				continue
-			}
-		}
-		argcopy = append(argcopy, arg)
+	if strings.Contains(args[0], "@") {
+		arr := strings.Split(args[0], "@")
+		signingKey = arr[0]
+	} else {
+		signingKey = args[0]
+
 	}
-	args, err = prepareSignerPage(firstSigner, origin, argcopy...)
+	err = prepareSignerPage(firstSigner, origin, signingKey)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -134,7 +122,7 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, []*signing.Builde
 	for _, name := range AdditionalSigners {
 		signer := new(signing.Builder)
 		signer.Type = protocol.SignatureTypeLegacyED25519
-		_, err = prepareSignerPage(signer, origin, name)
+		err = prepareSignerPage(signer, origin, name)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -144,44 +132,36 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, []*signing.Builde
 	return args, signers, nil
 }
 
-func prepareSignerPage(signer *signing.Builder, origin *url.URL, args ...string) ([]string, error) {
+func prepareSignerPage(signer *signing.Builder, origin *url.URL, signingKey string) error {
 	var keyName string
-	keyHolder, err := url2.Parse(args[0])
+	keyHolder, err := url2.Parse(signingKey)
 	if err == nil && keyHolder.UserInfo != "" {
 		keyName = keyHolder.UserInfo
 		keyHolder.UserInfo = ""
 	} else {
 		keyHolder = origin
-		keyName = args[0]
+		keyName = signingKey
 	}
 
 	key, err := resolvePrivateKey(keyName)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	signer.SetPrivateKey(key.PrivateKey)
-	ct := 1
 
 	signer.Type = key.Type
 
 	keyInfo, err := getKey(keyHolder.String(), key.PublicKeyHash())
 	if err != nil {
-		return nil, fmt.Errorf("failed to get key for %q : %v", origin, err)
+		return fmt.Errorf("failed to get key for %q : %v", origin, err)
 	}
 
-	if len(args) < 2 {
-		signer.Url = keyInfo.Signer
-	} else if v, err := strconv.ParseUint(args[1], 10, 64); err == nil {
-		signer.Url = protocol.FormatKeyPageUrl(keyInfo.Authority, v)
-		ct++
-	} else {
-		signer.Url = keyInfo.Signer
-	}
+	signer.Url = keyInfo.Signer
 
 	var page *protocol.KeyPage
 	_, err = getRecord(signer.Url.String(), &page)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get %q : %v", keyInfo.Signer, err)
+		return fmt.Errorf("failed to get %q : %v", keyInfo.Signer, err)
 	}
 	if SignerVersion != 0 {
 		signer.Version = uint64(SignerVersion)
@@ -189,7 +169,7 @@ func prepareSignerPage(signer *signing.Builder, origin *url.URL, args ...string)
 		signer.Version = page.Version
 	}
 
-	return args[ct:], nil
+	return nil
 }
 
 func parseArgsAndPrepareSigner(args []string) ([]string, *url2.URL, []*signing.Builder, error) {
