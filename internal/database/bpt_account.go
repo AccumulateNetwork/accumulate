@@ -230,8 +230,8 @@ func (a *Account) hashState() (hash.Hasher, error) {
 	var err error
 	var hasher hash.Hasher
 	hashState(&err, &hasher, true, a.Main().Get)          // Add a simple hash of the main state
-	hashState(&err, &hasher, false, a.hashChains)         // Add a merkle hash of chains
 	hashState(&err, &hasher, false, a.hashSecondaryState) // Add a merkle hash of the Secondary State which is a list of accounts contained by the adi
+	hashState(&err, &hasher, false, a.hashChains)         // Add a merkle hash of chains
 	hashState(&err, &hasher, false, a.hashTransactions)   // Add a merkle hash of transactions
 	return hasher, err
 }
@@ -376,17 +376,9 @@ func saveStateN[T any](lastErr *error, put func(...T) error, v ...T) {
 func (a *Account) hashSecondaryState() (hash.Hasher, error) {
 	var err error
 	var hasher hash.Hasher
-	for _, chainMeta := range loadState(&err, false, a.directory.Get) {
-		chain := loadState1(&err, false, a.ReadChain, chainMeta.URL().String())
-		if err != nil {
-			break
-		}
-
-		if chain.head.Count == 0 {
-			hasher.AddHash(new([32]byte))
-		} else {
-			hasher.AddHash((*[32]byte)(chain.head.GetMDRoot()))
-		}
+	for _, u := range loadState(&err, false, a.Directory().Get) {
+		hash := u.Hash32()
+		hasher.AddHash(&hash)
 	}
 	return hasher, err
 }

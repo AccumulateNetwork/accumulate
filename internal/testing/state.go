@@ -136,7 +136,7 @@ func WriteStates(db DB, chains ...protocol.Account) error {
 		}
 		uarr = append(uarr, u)
 	}
-	err := dir.Put(uarr)
+	err := dir.Add(uarr...)
 	if err != nil {
 		return err
 	}

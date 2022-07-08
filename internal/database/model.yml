@@ -45,6 +45,7 @@
     # TODO Turn this into a chain
     type: state
     set: true
+    emptyIfMissing: true  
     dataType: url
     pointer: true
   - name: Data
