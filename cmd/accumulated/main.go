@@ -34,8 +34,10 @@ var flagMain struct {
 
 func init() {
 	cmdMain.PersistentFlags().StringVarP(&flagMain.WorkDir, "work-dir", "w", defaultWorkDir, "Working directory for configuration and data")
-	cmdMain.MarkPersistentFlagRequired("work-dir")
-
+	err := cmdMain.MarkPersistentFlagRequired("work-dir")
+	if err != nil {
+		fmt.Printf("flag not specified %v", err)
+	}
 }
 
 func main() {

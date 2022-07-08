@@ -319,6 +319,7 @@ func loadOrCreatePrivVal(config *config.Config, key []byte) error {
 		// When initializing the other node, the key file has already been created
 		pv = privval.NewFilePV(ed25519.PrivKey(key), keyFile, stateFile)
 		pv.LastSignState.Save()
+		// Don't return here - we still need to check that the key on disk matches what we expect
 	} else { // if file exists then we need to load it
 		pv, err = privval.LoadFilePV(keyFile, stateFile)
 		if err != nil {
