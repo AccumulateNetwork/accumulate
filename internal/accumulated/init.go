@@ -328,7 +328,7 @@ func loadOrCreatePrivVal(config *config.Config, key []byte) error {
 	}
 
 	if !bytes.Equal(pv.Key.PrivKey.Bytes(), key) {
-		return fmt.Errorf("existing private key does not match")
+		return fmt.Errorf("existing private key does not match try using --reset flag")
 	}
 
 	return nil
@@ -350,7 +350,7 @@ func loadOrCreateNodeKey(config *config.Config, key []byte) error {
 	}
 
 	if !bytes.Equal(nodeKey.PrivKey.Bytes(), key) {
-		return fmt.Errorf("existing private key does not match")
+		return fmt.Errorf("existing private key does not match try using --reset flag")
 	}
 
 	return nil
