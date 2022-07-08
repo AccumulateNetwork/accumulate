@@ -133,8 +133,8 @@ var accountQrCmd = &cobra.Command{
 }
 
 var accountGenerateCmd = &cobra.Command{
-	Use:   "generate",
-	Short: "Generate a random lite token account or a lite account derived previously imported/created key",
+	Use:   "generate --sigtype (optional)",
+	Short: "Generate a random lite token account or a lite account with previously specified signature type use",
 	// validate the arguments passed to the command
 	Args: cobra.OnlyValidArgs,
 	Run: func(cmd *cobra.Command, args []string) {
