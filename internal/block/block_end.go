@@ -235,7 +235,7 @@ func (m *Executor) createLocalDNReceipt(block *Block, rootChain *database.Chain,
 		sig.SourceNetwork = m.Describe.NodeUrl()
 		sig.TransactionHash = *(*[32]byte)(txn.GetHash())
 		sig.Proof = *receipt
-		_, err = block.Batch.Transaction(txn.GetHash()).AddSignature(0, sig)
+		_, err = block.Batch.Transaction(txn.GetHash()).AddSystemSignature(&m.Describe, sig)
 		if err != nil {
 			return errors.Format(errors.StatusUnknownError, "store signature: %w", err)
 		}
