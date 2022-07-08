@@ -2,6 +2,7 @@ package accumulated
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -315,7 +316,7 @@ func loadOrCreatePrivVal(config *config.Config, key []byte) error {
 	var pv *privval.FilePV
 	var err error
 	if !tmos.FileExists(stateFile) {
-		//this case occurs when we init in dual mode
+		// When initializing the other node, the key file has already been created
 		pv = privval.NewFilePV(ed25519.PrivKey(key), keyFile, stateFile)
 		pv.LastSignState.Save()
 	} else { // if file exists then we need to load it
@@ -359,12 +360,12 @@ func LoadOrGenerateTmPrivKey(privFileName string) (ed25519.PrivKey, error) {
 	b, err := ioutil.ReadFile(privFileName)
 	var privValKey ed25519.PrivKey
 	if err != nil {
-		if err == os.ErrNotExist {
+		if errors.Is(err, os.ErrNotExist) {
 			//do not overwrite a private validator key.
 			return ed25519.GenPrivKey(), nil
-		} else {
-			return nil, err
 		}
+		return nil, err
+
 	} else {
 		var pvkey privval.FilePVKey
 		err = tmjson.Unmarshal(b, &pvkey)

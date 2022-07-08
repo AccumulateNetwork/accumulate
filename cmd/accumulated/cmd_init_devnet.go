@@ -27,6 +27,10 @@ var cmdInitDevnet = &cobra.Command{
 var baseIP net.IP
 var ipCount byte
 
+func init() {
+	cmdMain.MarkFlagRequired("work-dir")
+}
+
 func initDevNet(cmd *cobra.Command, _ []string) {
 	count := flagInitDevnet.NumValidators + flagInitDevnet.NumFollowers
 	verifyInitFlags(cmd, count)
