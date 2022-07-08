@@ -34,7 +34,11 @@ var keyCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		var out string
 		var err error
-		var sigType protocol.SignatureType
+		sigType, found := protocol.SignatureTypeByName(SigType)
+		if !found {
+			fmt.Println("Usage:")
+			PrintKey()
+		}
 		if SigType != "" {
 			switch SigType {
 			case "rcd1":
@@ -494,7 +498,7 @@ func ImportKey(pkAscii string, label string, signatureType protocol.SignatureTyp
 		return "", err
 	}
 
-	lt, err := protocol.LiteTokenAddress(pk.PublicKey[32:], protocol.ACME, pk.Type)
+	lt, err := protocol.LiteTokenAddress(pk.PublicKey, protocol.ACME, pk.Type)
 	if err != nil {
 		return "", fmt.Errorf("no label specified and cannot import as lite token account")
 	}
@@ -762,7 +766,7 @@ func ImportFactoidKey(factoidkey string) (out string, err error) {
 	if err != nil {
 		return "", err
 	}
-	return ImportKey(hex.EncodeToString(privatekey), label, protocol.SignatureTypeLegacyED25519)
+	return ImportKey(hex.EncodeToString(privatekey), label, protocol.SignatureTypeRCD1)
 }
 
 func UpdateKey(args []string) (string, error) {

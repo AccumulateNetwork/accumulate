@@ -30,7 +30,7 @@ var testMatrix testMatrixTests
 
 func bootstrap(t *testing.T, tc *testCmd) {
 	//add the DN private key to our key list.
-	_, err := tc.execute(t, fmt.Sprintf("key import private %x dnkey", tc.privKey.Bytes()))
+	_, err := tc.execute(t, fmt.Sprintf("key import private %x dnkey --sigtype ed25519", tc.privKey.Bytes()))
 	require.NoError(t, err)
 
 	//set mnemonic for predictable addresses
