@@ -27,6 +27,7 @@ import (
 	statuschk "gitlab.com/accumulatenetwork/accumulate/internal/connections/status"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
+	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
@@ -368,5 +369,59 @@ func (d *Daemon) Stop() error {
 	}
 
 	<-d.done
+	return nil
+}
+
+func (d *Daemon) LoadSnapshot(file ioutil2.SectionReader) error {
+	db, err := database.Open(d.Config, d.Logger)
+	if err != nil {
+		return fmt.Errorf("failed to open database: %v", err)
+	}
+
+	defer func() {
+		_ = db.Close()
+	}()
+
+	// read private validator
+	pv, err := privval.LoadFilePV(
+		d.Config.PrivValidator.KeyFile(),
+		d.Config.PrivValidator.StateFile(),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to load private validator: %v", err)
+	}
+
+	eventBus := events.NewBus(d.Logger.With("module", "events"))
+	router := routing.NewRouter(eventBus, nil)
+	execOpts := block.ExecutorOptions{
+		Logger:   d.Logger,
+		Key:      pv.Key.PrivKey.Bytes(),
+		Describe: d.Config.Accumulate.Describe,
+		Router:   router,
+		EventBus: eventBus,
+	}
+
+	// On DNs initialize the major block scheduler
+	if execOpts.Describe.NetworkType == config.Directory {
+		execOpts.MajorBlockScheduler = blockscheduler.Init(execOpts.EventBus)
+	}
+
+	exec, err := block.NewNodeExecutor(execOpts, db)
+	if err != nil {
+		return fmt.Errorf("failed to initialize chain executor: %v", err)
+	}
+
+	batch := db.Begin(true)
+	defer batch.Discard()
+	err = exec.InitFromSnapshot(batch, file)
+	if err != nil {
+		return fmt.Errorf("failed to restore snapshot: %v", err)
+	}
+
+	err = batch.Commit()
+	if err != nil {
+		return fmt.Errorf("failed to commit changes: %v", err)
+	}
+
 	return nil
 }

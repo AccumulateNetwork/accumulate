@@ -4,15 +4,19 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"io"
+	"os"
 	"strconv"
 
 	"github.com/spf13/cobra"
 	"github.com/tendermint/tendermint/rpc/client/http"
 	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 )
 
 func init() {
-	cmdMain.AddCommand(cmdSync)
+	cmdMain.AddCommand(cmdSync, cmdApplySnapshot)
 	cmdSync.AddCommand(cmdSyncSnapshot)
 }
 
@@ -26,6 +30,13 @@ var cmdSyncSnapshot = &cobra.Command{
 	Short: "Configures state sync to pull a snapshot",
 	Args:  cobra.ExactArgs(3),
 	Run:   syncToSnapshot,
+}
+
+var cmdApplySnapshot = &cobra.Command{
+	Use:   "apply-snapshot [file]",
+	Short: "Rebuild the accumulate database from a snapshot",
+	Args:  cobra.ExactArgs(1),
+	Run:   applySnapshot,
 }
 
 func syncToSnapshot(_ *cobra.Command, args []string) {
@@ -69,4 +80,18 @@ func syncToSnapshot(_ *cobra.Command, args []string) {
 
 	err = config.Store(c)
 	checkf(err, "store configuration")
+}
+
+func applySnapshot(_ *cobra.Command, args []string) {
+	f, err := os.Open(args[0])
+	checkf(err, "snapshot file")
+	defer f.Close()
+
+	daemon, err := accumulated.Load(flagMain.WorkDir, func(c *config.Config) (io.Writer, error) {
+		return logging.NewConsoleWriter(c.LogFormat)
+	})
+	checkf(err, "load daemon")
+
+	err = daemon.LoadSnapshot(f)
+	checkf(err, "load snapshot")
 }

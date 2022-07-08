@@ -329,7 +329,10 @@ func initNode(cmd *cobra.Command, args []string) {
 			u, err := url.Parse(peer.URL)
 			checkf(err, "failed to parse url from network info %s", peer.URL)
 
-			clientUrl := fmt.Sprintf("tcp://%s:%s", u.Hostname(), u.Port())
+			port, err := strconv.ParseInt(u.Port(), 10, 64)
+			checkf(err, "failed to parse port for peer: %q", u.Port())
+
+			clientUrl := fmt.Sprintf("tcp://%s:%d", u.Hostname(), port+int64(cfg.PortOffsetTendermintRpc))
 
 			if !flagInitNode.AllowUnhealthyPeers {
 				//check the health of the peer

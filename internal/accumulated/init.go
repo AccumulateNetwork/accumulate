@@ -2,7 +2,9 @@ package accumulated
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
+	"io/fs"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -359,7 +361,7 @@ func LoadOrGenerateTmPrivKey(privFileName string) (ed25519.PrivKey, error) {
 	b, err := ioutil.ReadFile(privFileName)
 	var privValKey ed25519.PrivKey
 	if err != nil {
-		if err == os.ErrNotExist {
+		if errors.Is(err, fs.ErrNotExist) {
 			//do not overwrite a private validator key.
 			return ed25519.GenPrivKey(), nil
 		} else {

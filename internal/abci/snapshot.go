@@ -105,7 +105,7 @@ func (app *Accumulator) ApplySnapshotChunk(req abci.RequestApplySnapshotChunk) a
 	rd := bytes.NewReader(req.Chunk)
 	batch := app.DB.Begin(true)
 	defer batch.Discard()
-	err := batch.RestoreSnapshot(rd)
+	err := app.Executor.InitFromSnapshot(batch, rd)
 	if err != nil {
 		app.logger.Error("Failed to restore snapshot", "error", err)
 		return abci.ResponseApplySnapshotChunk{Result: abci.ResponseApplySnapshotChunk_ABORT}
