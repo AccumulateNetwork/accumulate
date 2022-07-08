@@ -58,7 +58,7 @@ func (a *Account) loadState(preserveChains bool) (*accountState, error) {
 		}
 		s.Pending = append(s.Pending, state)
 	}
-
+	s.Directory = loadState(&err, true, a.Directory().Get)
 	return s, nil
 }
 
@@ -89,7 +89,7 @@ func (a *Account) restoreState(s *accountState) error {
 	// Store main state
 	var err error
 	saveState(&err, a.Main().Put, s.Main)
-
+	saveState(&err, a.Directory().Put, s.Directory)
 	// Store pending transaction list
 	for _, p := range s.Pending {
 		saveStateN(&err, a.Pending().Add, p.Transaction.ID())
