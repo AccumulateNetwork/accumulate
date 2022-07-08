@@ -45,9 +45,11 @@
     # TODO Turn this into a chain
     type: state
     set: true
-    emptyIfMissing: true  
+    collection: set
     dataType: url
     pointer: true
+    emptyIfMissing: true  
+
   - name: Data
     type: entity
     attributes:

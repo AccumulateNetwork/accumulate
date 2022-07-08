@@ -115,7 +115,7 @@ func (c *stateCache) AddDirectoryEntry(directory *url.URL, u ...*url.URL) error 
 	for _, u := range u {
 		uarr = append(uarr, u)
 	}
-	err := dir.Put(u)
+	err := dir.Add(uarr...)
 	if err != nil {
 		return err
 	}
