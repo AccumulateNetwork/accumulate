@@ -153,6 +153,9 @@ NetworkGlobals:
     - name: MajorBlockSchedule
       type: string
       description: a cron expression defining the (approximate) major blocks interval
+    - name: AnchorEmptyBlocks
+      description: controls whether an anchor is sent for a block if the block contains no transactions other than a directory anchor
+      type: bool
 
 Rational:
   fields:
@@ -211,3 +214,14 @@ RouteOverride:
     - name: Partition
       alternative: Subnet
       type: string
+
+TokenIssuerProof:
+  fields:
+    - name: Transaction
+      type: CreateToken
+      marshal-as: reference
+      pointer: true
+    - name: Receipt
+      type: managed.Receipt
+      marshal-as: reference
+      pointer: true

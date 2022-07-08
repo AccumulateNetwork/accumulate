@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,6 +17,7 @@ import (
 	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
+	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 )
 
 func init() {
@@ -238,14 +240,13 @@ func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, er
 	}
 
 	tac := protocol.CreateTokenAccount{}
-	var accstate *protocol.AccountStateProof
-	accstate, err = GetAccountStateProof(u, accountUrl)
+	tac.Url = accountUrl
+	tac.TokenUrl = tok
+
+	err = proveTokenIssuerExistence(&tac)
 	if err != nil {
 		return "", fmt.Errorf("unable to prove account state: %x", err)
 	}
-	tac.TokenIssuerProof = accstate
-	tac.Url = accountUrl
-	tac.TokenUrl = tok
 
 	for _, authUrlStr := range Authorities {
 		authUrl, err := url2.Parse(authUrlStr)
@@ -256,6 +257,88 @@ func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, er
 	}
 
 	return dispatchTxAndPrintResponse(&tac, u, signer)
+}
+
+func proveTokenIssuerExistence(body *protocol.CreateTokenAccount) error {
+	if body.Url.LocalTo(body.TokenUrl) {
+		return nil // Don't need a proof if the issuer is local
+	}
+
+	if protocol.AcmeUrl().Equal(body.TokenUrl) {
+		return nil // Don't need a proof for ACME
+	}
+
+	// Get a proof of the create transaction
+	req := new(api.GeneralQuery)
+	req.Url = body.TokenUrl.WithFragment("transaction/0")
+	req.Prove = true
+	resp1 := new(api.TransactionQueryResponse)
+	err := Client.RequestAPIv2(context.Background(), "query", req, resp1)
+	if err != nil {
+		return err
+	}
+	create, ok := resp1.Transaction.Body.(*protocol.CreateToken)
+	if !ok {
+		return fmt.Errorf("first transaction of %v is %v, expected %v", body.TokenUrl, resp1.Transaction.Body.Type(), protocol.TransactionTypeCreateToken)
+	}
+
+	// Start with a proof from the body hash to the transaction hash
+	receipt := new(managed.Receipt)
+
+	b, err := resp1.Transaction.Body.MarshalBinary()
+	if err != nil {
+		return fmt.Errorf("marshal transaction header: %w", err)
+	}
+	headerHash := sha256.Sum256(b)
+	receipt.Start = headerHash[:]
+
+	b, err = resp1.Transaction.Header.MarshalBinary()
+	if err != nil {
+		return fmt.Errorf("marshal transaction header: %w", err)
+	}
+	bodyHash := sha256.Sum256(b)
+	receipt.Entries = []*managed.ReceiptEntry{{Hash: bodyHash[:]}}
+	receipt.Anchor = resp1.Transaction.GetHash()
+
+	// Add the proof from the issuer's main chain
+	var gotProof bool
+	for _, r := range resp1.Receipts {
+		if !r.Account.Equal(body.TokenUrl) {
+			continue
+		}
+		if r.Error != "" {
+			return fmt.Errorf("get proof of %x: %s", resp1.TransactionHash[:4], r.Error)
+		}
+		gotProof = true
+		receipt, err = receipt.Combine(&r.Proof)
+		if err != nil {
+			return err
+		}
+	}
+	if !gotProof {
+		return fmt.Errorf("missing proof for first transaction of %v", body.TokenUrl)
+	}
+
+	// Get a proof of the BVN anchor
+	req = new(api.GeneralQuery)
+	req.Url = protocol.DnUrl().JoinPath(protocol.AnchorPool).WithFragment(fmt.Sprintf("anchor/%x", receipt.Anchor))
+	resp2 := new(api.ChainQueryResponse)
+	err = Client.RequestAPIv2(context.Background(), "query", req, resp2)
+	if err != nil {
+		return err
+	}
+	if resp2.Receipt.Error != "" {
+		return fmt.Errorf("failed to get proof of anchor: %s", resp2.Receipt.Error)
+	}
+	receipt, err = receipt.Combine(&resp2.Receipt.Proof)
+	if err != nil {
+		return err
+	}
+
+	body.Proof = new(protocol.TokenIssuerProof)
+	body.Proof.Transaction = create
+	body.Proof.Receipt = receipt
+	return nil
 }
 
 func GenerateAccount() (string, error) {

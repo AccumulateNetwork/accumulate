@@ -19,13 +19,6 @@ SigSetEntry:
     - name: SignatureHash
       type: hash
 
-txSyntheticTxns:
-  fields:
-    - name: Txids
-      type: txid
-      pointer: true
-      repeatable: true
-
 SigOrTxn:
   fields:
     - name: Transaction
@@ -95,3 +88,19 @@ transactionState:
       marshal-as: reference
       pointer: true
       repeatable: true
+
+TransactionChainEntry:
+  fields:
+  - name: Account
+    type: url
+    marshal-as: reference
+    pointer: true
+  - name: Chain
+    description: is the name of the chain
+    type: string
+  - name: ChainIndex
+    description: is the index of the entry in the chain's index chain
+    type: uint
+  - name: AnchorIndex
+    description: is the index of the entry in the anchor chain's index chain
+    type: uint

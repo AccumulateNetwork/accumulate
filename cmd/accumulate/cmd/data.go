@@ -54,10 +54,6 @@ var dataCmd = &cobra.Command{
 		case "write":
 			if len(args) > 2 {
 				out, err = WriteData(args[1], args[2:])
-				if err != nil {
-					fmt.Println("Usage:")
-					PrintDataWrite()
-				}
 			} else {
 				PrintDataWrite()
 			}
