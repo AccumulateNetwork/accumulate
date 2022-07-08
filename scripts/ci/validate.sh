@@ -98,7 +98,7 @@ success
 
 
 section "Attempting to update key page 3 using page 2 fails"
-cli-tx page key add test.acme/book/3 test-2-0 1 test-3-1 && die "Executed disallowed operation" || success
+cli-tx page key add test.acme/book/3 test-2-0  test-3-1 && die "Executed disallowed operation" || success
 
 section "Unlock key page 2 using page 1"
 wait-for cli-tx page unlock test.acme/book/2 test-1-0
@@ -114,9 +114,9 @@ BALANCE=$(accumulate -j page get test.acme/book/2 | jq -r .data.creditBalance)
 [ "$BALANCE" -ge 100 ] && success || die "test.acme/book/2 should have 100 credits but has ${BALANCE}"
 
 section "Add a key to page 2 using a key from page 3"
-wait-for cli-tx page key add test.acme/book/2 test-2-0 1 test-2-1
-wait-for cli-tx page key add test.acme/book/2 test-2-0 1 test-2-2
-wait-for cli-tx page key add test.acme/book/2 test-2-0 1 test-2-3-orig
+wait-for cli-tx page key add test.acme/book/2 test-2-0 test-2-1
+wait-for cli-tx page key add test.acme/book/2 test-2-0 test-2-2
+wait-for cli-tx page key add test.acme/book/2 test-2-0 test-2-3-orig
 success
 
 section "Update key page entry with same keyhash different delegate"
