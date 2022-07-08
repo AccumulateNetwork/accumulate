@@ -1,10 +1,12 @@
 package cmd
 
 import (
+	"crypto/ed25519"
 	"crypto/sha256"
 	"errors"
 	"fmt"
 
+	btc "github.com/btcsuite/btcd/btcec"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/db"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -98,6 +100,35 @@ func (k *Key) LoadByPublicKey(publicKey []byte) error {
 
 	default:
 		return err
+	}
+
+	return nil
+}
+
+func (k *Key) Initialize(seed []byte, signatureType protocol.SignatureType) error {
+	k.Type = signatureType
+	switch k.Type {
+	case protocol.SignatureTypeLegacyED25519, protocol.SignatureTypeED25519, protocol.SignatureTypeRCD1:
+		var pk ed25519.PrivateKey
+		if len(seed) == 32 {
+			pk = ed25519.NewKeyFromSeed(seed)
+		} else {
+			pk = seed
+		}
+		k.PrivateKey = pk.Seed()
+		k.PublicKey = k.PrivateKey[32:]
+	case protocol.SignatureTypeBTC:
+		//TODO: do sanity check on seed and assemble secp256k1 pub/priv key pair (protocol/signature.go SignBTC)
+		pvkey, pubKey := btc.PrivKeyFromBytes(btc.S256(), seed)
+		k.PrivateKey = pvkey.Serialize()
+		k.PublicKey = pubKey.SerializeCompressed()
+	case protocol.SignatureTypeBTCLegacy, protocol.SignatureTypeETH:
+		//TODO: do santity check on seed and use protocol/signature.go SignBTCLegacy for pub / priv pair (eth and btc legacy use same key type)
+		pvkey, pubKey := btc.PrivKeyFromBytes(btc.S256(), seed)
+		k.PrivateKey = pvkey.Serialize()
+		k.PublicKey = pubKey.SerializeCompressed()
+	default:
+		return fmt.Errorf("unsupported signature type %v", k.Type)
 	}
 
 	return nil

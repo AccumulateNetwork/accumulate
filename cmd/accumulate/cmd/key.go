@@ -34,6 +34,25 @@ var keyCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		var out string
 		var err error
+		var sigType protocol.SignatureType
+		if SigType != "" {
+			switch SigType {
+			case "rcd1":
+				sigType = protocol.SignatureTypeRCD1
+			case "ed25519":
+				sigType = protocol.SignatureTypeED25519
+			case "legacyed25519":
+				sigType = protocol.SignatureTypeLegacyED25519
+			case "btc":
+				sigType = protocol.SignatureTypeBTC
+			case "btclegacy":
+				sigType = protocol.SignatureTypeBTCLegacy
+			case "eth":
+				sigType = protocol.SignatureTypeETH
+			default:
+				sigType = protocol.SignatureTypeED25519
+			}
+		}
 
 		if len(args) > 0 && err == nil {
 			switch arg := args[0]; arg {
@@ -41,7 +60,7 @@ var keyCmd = &cobra.Command{
 				if len(args) == 3 {
 					if args[1] == "lite" {
 
-						out, err = ImportKey(args[2], "")
+						out, err = ImportKey(args[2], "", sigType)
 					} else if args[1] == "factoid" {
 						out, err = ImportFactoidKey(args[2])
 					} else {
@@ -52,7 +71,7 @@ var keyCmd = &cobra.Command{
 					case "mnemonic":
 						out, err = ImportMnemonic(args[2:])
 					case "private":
-						out, err = ImportKey(args[2], args[3])
+						out, err = ImportKey(args[2], args[3], sigType)
 					case "public":
 						//reserved for future use.
 						fallthrough
@@ -460,7 +479,7 @@ func FindLabelFromPubKey(pubKey []byte) (lab string, err error) {
 }
 
 // ImportKey will import the private key and assign it to the label
-func ImportKey(pkAscii string, label string) (out string, err error) {
+func ImportKey(pkAscii string, label string, signatureType protocol.SignatureType) (out string, err error) {
 
 	var liteLabel string
 	// var pk ed25519.PrivateKey
@@ -471,18 +490,8 @@ func ImportKey(pkAscii string, label string) (out string, err error) {
 		return "", err
 	}
 
-	if err := pk.LoadByPublicKey(token[32:]); err != nil {
+	if err := pk.Initialize(token, signatureType); err != nil {
 		return "", err
-	}
-
-	if len(token) == 32 {
-		if err := pk.LoadByPublicKey(token); err != nil {
-			return "", err
-		}
-	} else {
-		if err := pk.LoadByPublicKey(token[32:]); err != nil {
-			return "", err
-		}
 	}
 
 	lt, err := protocol.LiteTokenAddress(pk.PublicKey[32:], protocol.ACME, pk.Type)
@@ -503,13 +512,13 @@ func ImportKey(pkAscii string, label string) (out string, err error) {
 		return "", fmt.Errorf("key name is already being used")
 	}
 
-	_, err = LookupByPubKey(pk.PublicKey[32:])
+	_, err = LookupByPubKey(pk.PublicKey)
 	lab := "not found"
 	if err == nil {
 		b, _ := GetWallet().GetBucket(BucketLabel)
 		if b != nil {
 			for _, v := range b.KeyValueList {
-				if bytes.Equal(v.Value, pk.PublicKey[32:]) {
+				if bytes.Equal(v.Value, pk.PublicKey) {
 					lab = string(v.Key)
 					break
 				}
@@ -518,13 +527,12 @@ func ImportKey(pkAscii string, label string) (out string, err error) {
 		}
 	}
 
-	publicKey := pk.PublicKey[32:]
-	err = GetWallet().Put(BucketKeys, publicKey, pk.PublicKey)
+	err = GetWallet().Put(BucketKeys, pk.PublicKey, pk.PublicKey)
 	if err != nil {
 		return "", err
 	}
 
-	err = GetWallet().Put(BucketLabel, []byte(label), pk.PublicKey[32:])
+	err = GetWallet().Put(BucketLabel, []byte(label), pk.PublicKey)
 	if err != nil {
 		return "", err
 	}
@@ -534,7 +542,7 @@ func ImportKey(pkAscii string, label string) (out string, err error) {
 		return "", err
 	}
 
-	err = GetWallet().Put(BucketSigType, publicKey, common.Uint64Bytes(pk.Type.GetEnumValue()))
+	err = GetWallet().Put(BucketSigType, pk.PublicKey, common.Uint64Bytes(pk.Type.GetEnumValue()))
 	if err != nil {
 		return "", err
 	}
@@ -542,7 +550,7 @@ func ImportKey(pkAscii string, label string) (out string, err error) {
 	if WantJsonOutput {
 		a := KeyResponse{}
 		a.Label = types.String(label)
-		a.PublicKey = types.Bytes(pk.PublicKey[32:])
+		a.PublicKey = types.Bytes(pk.PublicKey)
 		a.LiteAccount = lt
 		a.KeyType = pk.Type
 		dump, err := json.Marshal(&a)
@@ -551,7 +559,7 @@ func ImportKey(pkAscii string, label string) (out string, err error) {
 		}
 		out = fmt.Sprintf("%s\n", string(dump))
 	} else {
-		out = fmt.Sprintf("\tname\t\t:\t%s\n\tlite account\t:\t%s\n\tpublic key\t:\t%x\n\tkey type\t:\t%s\n", label, lt, pk.PublicKey[32:], pk.Type)
+		out = fmt.Sprintf("\tname\t\t:\t%s\n\tlite account\t:\t%s\n\tpublic key\t:\t%x\n\tkey type\t:\t%s\n", label, lt, pk.PublicKey, pk.Type)
 	}
 	return out, nil
 }
@@ -754,7 +762,7 @@ func ImportFactoidKey(factoidkey string) (out string, err error) {
 	if err != nil {
 		return "", err
 	}
-	return ImportKey(hex.EncodeToString(privatekey), label)
+	return ImportKey(hex.EncodeToString(privatekey), label, protocol.SignatureTypeLegacyED25519)
 }
 
 func UpdateKey(args []string) (string, error) {
