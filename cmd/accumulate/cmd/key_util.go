@@ -113,6 +113,7 @@ func (k *Key) Initialize(seed []byte, signatureType protocol.SignatureType) erro
 		if len(seed) != 32 || len(seed) != 64 {
 			return fmt.Errorf("invalid private key length, expected 32 or 64 bytes")
 		}
+		pk = ed25519.NewKeyFromSeed(seed[:32])
 		k.PrivateKey = pk.Seed()
 		k.PublicKey = k.PrivateKey[32:]
 	case protocol.SignatureTypeBTC:
