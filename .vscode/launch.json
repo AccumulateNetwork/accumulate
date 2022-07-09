@@ -199,6 +199,18 @@
       "args": ["run"]
     },
     {
+      "name": "Run walletd",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/cmd/accumulate",
+      "env": {
+        "ACC_API": "local"
+      },
+      "cwd": "${workspaceFolder}",
+      "args": ["walletd"]
+    },
+    {
       "name": "Run CLI",
       "type": "go",
       "request": "launch",
