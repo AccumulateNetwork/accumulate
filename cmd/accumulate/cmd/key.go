@@ -36,26 +36,7 @@ var keyCmd = &cobra.Command{
 		var err error
 		sigType, found := protocol.SignatureTypeByName(SigType)
 		if !found {
-			fmt.Println("Usage:")
-			PrintKey()
-		}
-		if SigType != "" {
-			switch SigType {
-			case "rcd1":
-				sigType = protocol.SignatureTypeRCD1
-			case "ed25519":
-				sigType = protocol.SignatureTypeED25519
-			case "legacyed25519":
-				sigType = protocol.SignatureTypeLegacyED25519
-			case "btc":
-				sigType = protocol.SignatureTypeBTC
-			case "btclegacy":
-				sigType = protocol.SignatureTypeBTCLegacy
-			case "eth":
-				sigType = protocol.SignatureTypeETH
-			default:
-				sigType = protocol.SignatureTypeED25519
-			}
+			err = fmt.Errorf("unknown signature type %s", SigType)
 		}
 
 		if len(args) > 0 && err == nil {
@@ -486,7 +467,6 @@ func FindLabelFromPubKey(pubKey []byte) (lab string, err error) {
 func ImportKey(pkAscii string, label string, signatureType protocol.SignatureType) (out string, err error) {
 
 	var liteLabel string
-	// var pk ed25519.PrivateKey
 	pk := new(Key)
 
 	token, err := hex.DecodeString(pkAscii)
