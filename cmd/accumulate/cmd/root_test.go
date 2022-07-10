@@ -29,8 +29,16 @@ type testMatrixTests []testCase
 var testMatrix testMatrixTests
 
 func bootstrap(t *testing.T, tc *testCmd) {
+
+	// import eth private key.
+	res, err := tc.execute(t, "key import private 26b9b10aec1e75e68709689b446196a5235b26bb9d4c0fc91eaccc7d8b66ec16 ethKey --sigtype eth")
+	require.NoError(t, err)
+	var keyResponse KeyResponse
+	err = json.Unmarshal([]byte(res), &keyResponse)
+	require.NoError(t, err)
+
 	//add the DN private key to our key list.
-	_, err := tc.execute(t, fmt.Sprintf("key import private %x dnkey --sigtype ed25519", tc.privKey.Bytes()))
+	_, err = tc.execute(t, fmt.Sprintf("key import private %x dnkey --sigtype ed25519", tc.privKey.Bytes()))
 	require.NoError(t, err)
 
 	//set mnemonic for predictable addresses
