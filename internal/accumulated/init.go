@@ -366,15 +366,14 @@ func LoadOrGenerateTmPrivKey(privFileName string) (ed25519.PrivKey, error) {
 			return ed25519.GenPrivKey(), nil
 		}
 		return nil, err
-
-	} else {
-		var pvkey privval.FilePVKey
-		err = tmjson.Unmarshal(b, &pvkey)
-		if err != nil {
-			return nil, fmt.Errorf("failed to unmarshal existing private validator from %s: %v try using --reset flag", privFileName, err)
-		} else {
-			privValKey = pvkey.PrivKey.(ed25519.PrivKey)
-		}
 	}
+	var pvkey privval.FilePVKey
+	err = tmjson.Unmarshal(b, &pvkey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal existing private validator from %s: %v try using --reset flag", privFileName, err)
+	} else {
+		privValKey = pvkey.PrivKey.(ed25519.PrivKey)
+	}
+
 	return privValKey, nil
 }

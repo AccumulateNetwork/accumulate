@@ -2,8 +2,8 @@
 #!/bin/bash
 
 tmpNodeDir=$(mktemp -d -t accumulated-ci-XXXXXXXX)
-accumulated init network /root/.accumulate/network.json --no-website -w ${tmpNodeDir} --no-empty-blocks
-accumulated run-dual "$tmpNodeDir/node-1/dnn" "$tmpNodeDir/node-1/bvnn" -w ${tmpNodeDir} &
+accumulated init network data/devnet.json --no-website -w ${tmpNodeDir} --no-empty-blocks
+accumulated run-dual "$tmpNodeDir/node-1/dnn" "$tmpNodeDir/node-1/bvnn" &
 declare -g ACCPID=$!
 
 section "Generate a Lite Token Account"
