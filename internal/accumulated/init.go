@@ -2,13 +2,16 @@ package accumulated
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
+	"io/ioutil"
 	"os"
-	"path"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/tendermint/tendermint/crypto/ed25519"
+	tmjson "github.com/tendermint/tendermint/libs/json"
 	"github.com/tendermint/tendermint/libs/log"
 	tmos "github.com/tendermint/tendermint/libs/os"
 	"github.com/tendermint/tendermint/privval"
@@ -268,12 +271,12 @@ func WriteNodeFiles(cfg *config.Config, privValKey, nodeKey []byte, genDoc *tmty
 	}()
 
 	// Create directories
-	err = os.MkdirAll(path.Join(cfg.RootDir, "config"), nodeDirPerm)
+	err = os.MkdirAll(filepath.Join(cfg.RootDir, "config"), nodeDirPerm)
 	if err != nil {
 		return fmt.Errorf("failed to create config dir: %v", err)
 	}
 
-	err = os.MkdirAll(path.Join(cfg.RootDir, "data"), nodeDirPerm)
+	err = os.MkdirAll(filepath.Join(cfg.RootDir, "data"), nodeDirPerm)
 	if err != nil {
 		return fmt.Errorf("failed to create data dir: %v", err)
 	}
@@ -310,14 +313,22 @@ func loadOrCreatePrivVal(config *config.Config, key []byte) error {
 		pv.Save()
 		return nil
 	}
-
-	pv, err := privval.LoadFilePV(keyFile, stateFile)
-	if err != nil {
-		return err
+	var pv *privval.FilePV
+	var err error
+	if !tmos.FileExists(stateFile) {
+		// When initializing the other node, the key file has already been created
+		pv = privval.NewFilePV(ed25519.PrivKey(key), keyFile, stateFile)
+		pv.LastSignState.Save()
+		// Don't return here - we still need to check that the key on disk matches what we expect
+	} else { // if file exists then we need to load it
+		pv, err = privval.LoadFilePV(keyFile, stateFile)
+		if err != nil {
+			return err
+		}
 	}
 
 	if !bytes.Equal(pv.Key.PrivKey.Bytes(), key) {
-		return fmt.Errorf("existing private key does not match")
+		return fmt.Errorf("existing private key does not match try using --reset flag")
 	}
 
 	return nil
@@ -339,8 +350,30 @@ func loadOrCreateNodeKey(config *config.Config, key []byte) error {
 	}
 
 	if !bytes.Equal(nodeKey.PrivKey.Bytes(), key) {
-		return fmt.Errorf("existing private key does not match")
+		return fmt.Errorf("existing private key does not match try using --reset flag")
 	}
 
 	return nil
+}
+
+func LoadOrGenerateTmPrivKey(privFileName string) (ed25519.PrivKey, error) {
+	//attempt to load the priv validator key, create otherwise.
+	b, err := ioutil.ReadFile(privFileName)
+	var privValKey ed25519.PrivKey
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			//do not overwrite a private validator key.
+			return ed25519.GenPrivKey(), nil
+		}
+		return nil, err
+	}
+	var pvkey privval.FilePVKey
+	err = tmjson.Unmarshal(b, &pvkey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal existing private validator from %s: %v try using --reset flag", privFileName, err)
+	} else {
+		privValKey = pvkey.PrivKey.(ed25519.PrivKey)
+	}
+
+	return privValKey, nil
 }
