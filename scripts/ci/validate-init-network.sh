@@ -5,7 +5,7 @@ tmpNodeDir=$(mktemp -d -t /tmp/accumulated-ci-XXXXXXXX)
 
 accumulated init network data/devnet.json --no-website -w ${tmpNodeDir} --no-empty-blocks
 
-accumulated run-dual "$tmpNodeDir/dn/Node0" "$tmpNodeDir/bvn0/Node0" &
+accumulated run-dual "$tmpNodeDir/dn/Node0" "$tmpNodeDir/bvn0/Node0" -w ${tmpNodeDir} &
 declare -g ACCPID=$!
 
 section "Generate a Lite Token Account"
