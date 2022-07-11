@@ -50,9 +50,9 @@ var keyCmd = &cobra.Command{
 				if len(args) == 3 {
 					if args[1] == "lite" {
 
-						out, err = ImportKey(args[2], "", sigType)
+						out, err = ImportKeyPrompt("", sigType)
 					} else if args[1] == "factoid" {
-						out, err = ImportFactoidKey(args[2])
+						out, err = ImportFactoidKey()
 					} else {
 						PrintKeyImport()
 					}
@@ -61,7 +61,7 @@ var keyCmd = &cobra.Command{
 					case "mnemonic":
 						out, err = ImportMnemonic(args[2:])
 					case "private":
-						out, err = ImportKey(args[2], args[3], sigType)
+						out, err = ImportKeyPrompt(args[3], sigType)
 					case "public":
 						//reserved for future use.
 						fallthrough
@@ -468,13 +468,16 @@ func FindLabelFromPubKey(pubKey []byte) (lab string, err error) {
 	return lab, err
 }
 
-// ImportKey will import the private key and assign it to the label
-func ImportKey(pkAscii string, label string, signatureType protocol.SignatureType) (out string, err error) {
-
-	token, err := gopass.GetPasswdPrompt("Private Key : ", false, os.Stdin, os.Stderr) //term.ReadPassword(int(syscall.Stdin))
+func ImportKeyPrompt(label string, signatureType protocol.SignatureType) (out string, err error) {
+	token, err := gopass.GetPasswdPrompt("Private Key : ", false, os.Stdin, os.Stderr)
 	if err != nil {
 		return "", db.ErrInvalidPassword
 	}
+	return ImportKey(token, label, signatureType)
+}
+
+// ImportKey will import the private key and assign it to the label
+func ImportKey(token []byte, label string, signatureType protocol.SignatureType) (out string, err error) {
 
 	var liteLabel string
 	var pk ed25519.PrivateKey
@@ -751,15 +754,19 @@ func ExportMnemonic() (string, error) {
 	}
 }
 
-func ImportFactoidKey(factoidkey string) (out string, err error) {
-	if !strings.Contains(factoidkey, "Fs") {
+func ImportFactoidKey() (out string, err error) {
+	token, err := gopass.GetPasswdPrompt("Factom Private Key : ", false, os.Stdin, os.Stderr)
+	if err != nil {
+		return "", db.ErrInvalidPassword
+	}
+	if !strings.Contains(hex.EncodeToString(token), "Fs") {
 		return "", fmt.Errorf("key to import is not a factoid address")
 	}
-	label, _, privatekey, err := protocol.GetFactoidAddressRcdHashPkeyFromPrivateFs(factoidkey)
+	label, _, privatekey, err := protocol.GetFactoidAddressRcdHashPkeyFromPrivateFs(string(token))
 	if err != nil {
 		return "", err
 	}
-	return ImportKey(hex.EncodeToString(privatekey), label, protocol.SignatureTypeRCD1)
+	return ImportKey(privatekey, label, protocol.SignatureTypeRCD1)
 }
 
 func UpdateKey(args []string) (string, error) {
