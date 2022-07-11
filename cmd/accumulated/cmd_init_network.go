@@ -134,11 +134,13 @@ func initNetworkLocalFS(netInit *accumulated.NetworkInit) {
 					config.Accumulate.Storage.Etcd.DialTimeout = 5 * time.Second
 				}
 			}
-
+			configs[i][j][0].Config.PrivValidator.Key = "../priv_validator_key.json"
 			err = accumulated.WriteNodeFiles(configs[i][j][0], node.PrivValKey, node.NodeKey, dnGenDoc)
 			checkf(err, "write DNN files")
+			configs[i][j][1].Config.PrivValidator.Key = "../priv_validator_key.json"
 			err = accumulated.WriteNodeFiles(configs[i][j][1], node.PrivValKey, node.NodeKey, bvnGenDoc)
 			checkf(err, "write BVNN files")
+
 		}
 	}
 }
