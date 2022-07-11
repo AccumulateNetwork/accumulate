@@ -224,6 +224,12 @@ func findInDescribe(addr string, partitionId string, d *config.Network) (partiti
 }
 
 func initNode(cmd *cobra.Command, args []string) {
+	if !cmd.Flag("work-dir").Changed {
+		fmt.Fprintf(os.Stderr, "Error: --work-dir flag is required\n\n")
+		_ = cmd.Usage()
+		os.Exit(1)
+	}
+
 	netAddr, netPort, err := resolveAddr(args[0])
 	checkf(err, "invalid network URL")
 
