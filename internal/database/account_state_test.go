@@ -16,13 +16,13 @@ func TestAccountState(t *testing.T) {
 	bookurl := url.MustParse("acc://testadi1.acme/testbook1")
 	testurl := url.MustParse("acc://testurl")
 	a := batch.Account(adiurl)
-	acc := new(protocol.ADI)
-	acc = &protocol.ADI{Url: adiurl, AccountAuth: protocol.AccountAuth{Authorities: []protocol.AuthorityEntry{protocol.AuthorityEntry{Url: bookurl}}}}
+	acc := &protocol.ADI{Url: adiurl, AccountAuth: protocol.AccountAuth{Authorities: []protocol.AuthorityEntry{protocol.AuthorityEntry{Url: bookurl}}}}
 	err := a.PutState(acc)
 	require.NoError(t, err)
 	h1, err := a.hashState()
 	require.NoError(t, err)
-	a.Directory().Add(testurl)
+	err = a.Directory().Add(testurl)
+	require.NoError(t, err)
 	h2, err := a.hashState()
 	require.NoError(t, err)
 	require.NotEqual(t, h1.MerkleHash(), h2.MerkleHash())
