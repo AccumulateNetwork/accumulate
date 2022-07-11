@@ -43,10 +43,12 @@
     collection: set
   - name: Directory
     # TODO Turn this into a chain
-    type: index
-    collection: counted
+    type: state
+    collection: set
     dataType: url
     pointer: true
+    emptyIfMissing: true  
+
   - name: Data
     type: entity
     attributes:

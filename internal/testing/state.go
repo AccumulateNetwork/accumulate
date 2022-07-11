@@ -129,14 +129,16 @@ func WriteStates(db DB, chains ...protocol.Account) error {
 	}
 
 	dir := indexing.Directory(db, urls[0].Identity())
+	var uarr []*url.URL
 	for _, u := range urls {
 		if u.IsRootIdentity() {
 			continue
 		}
-		err := dir.Put(u)
-		if err != nil {
-			return err
-		}
+		uarr = append(uarr, u)
+	}
+	err := dir.Add(uarr...)
+	if err != nil {
+		return err
 	}
 	return nil
 }

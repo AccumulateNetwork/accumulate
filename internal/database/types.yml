@@ -72,6 +72,11 @@ accountState:
       marshal-as: reference
       pointer: true
       repeatable: true
+    - name: Directory
+      description: lists the account's sub-accounts
+      type: url
+      pointer: true
+      repeatable: true
 
 transactionState:
   fields:

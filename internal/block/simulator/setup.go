@@ -22,7 +22,7 @@ func writeAccountState(t TB, batch *database.Batch, account protocol.Account) {
 
 	identity, ok := account.GetUrl().Parent()
 	if ok {
-		require.NoError(tb{t}, indexing.Directory(batch, identity).Put(account.GetUrl()))
+		require.NoError(tb{t}, indexing.Directory(batch, identity).Add(account.GetUrl()))
 	}
 }
 
