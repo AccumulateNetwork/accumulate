@@ -25,7 +25,7 @@ type Account struct {
 	syntheticForAnchor map[storage.Key]*record.Set[*url.TxID]
 	chains             *record.Set[*protocol.ChainMetadata]
 	syntheticAnchors   *record.Set[[32]byte]
-	directory          *record.Counted[*url.URL]
+	directory          *record.Set[*url.URL]
 	data               *AccountData
 }
 
@@ -64,9 +64,10 @@ func (c *Account) SyntheticAnchors() *record.Set[[32]byte] {
 	})
 }
 
-func (c *Account) Directory() *record.Counted[*url.URL] {
-	return getOrCreateField(&c.directory, func() *record.Counted[*url.URL] {
-		return record.NewCounted(c.logger.L, c.store, c.key.Append("Directory"), c.label+" directory", record.WrappedFactory(record.UrlWrapper))
+func (c *Account) Directory() *record.Set[*url.URL] {
+	return getOrCreateField(&c.directory, func() *record.Set[*url.URL] {
+		return record.NewSet(c.logger.L, c.store, c.key.Append("Directory"), c.label+" directory",
+			record.Wrapped(record.UrlWrapper), record.CompareUrl)
 	})
 }
 
