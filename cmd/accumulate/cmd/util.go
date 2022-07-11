@@ -64,6 +64,17 @@ func getRecord(urlStr string, rec interface{}) (*api.MerkleState, error) {
 }
 
 func prepareSigner(origin *url.URL, args []string) ([]string, []*signing.Builder, error) {
+	var signers []*signing.Builder
+	for _, name := range AdditionalSigners {
+		signer := new(signing.Builder)
+		signer.Type = protocol.SignatureTypeLegacyED25519
+		err := prepareSignerPage(signer, origin, name)
+		if err != nil {
+			return nil, nil, err
+		}
+		signers = append(signers, signer)
+	}
+
 	var key *Key
 	var err error
 	if IsLiteTokenAccount(origin.String()) {
@@ -96,29 +107,19 @@ func prepareSigner(origin *url.URL, args []string) ([]string, []*signing.Builder
 		firstSigner.Url = origin.RootIdentity()
 		firstSigner.Version = 1
 		firstSigner.SetPrivateKey(key.PrivateKey)
-		return args, []*signing.Builder{firstSigner}, nil
-	}
-
-	if len(args) == 0 {
-		return nil, nil, fmt.Errorf("key name argument is missing")
-	}
-
-	err = prepareSignerPage(firstSigner, origin, args[0])
-	if err != nil {
-		return nil, nil, err
-	}
-
-	signers := []*signing.Builder{firstSigner}
-	for _, name := range AdditionalSigners {
-		signer := new(signing.Builder)
-		signer.Type = protocol.SignatureTypeLegacyED25519
-		err = prepareSignerPage(signer, origin, name)
+	} else if len(args) > 0 {
+		err = prepareSignerPage(firstSigner, origin, args[0])
 		if err != nil {
 			return nil, nil, err
 		}
-		signers = append(signers, signer)
+	} else {
+		return nil, nil, fmt.Errorf("key name argument is missing")
 	}
 
+	// Put the first signer first
+	signers = append(signers, nil)
+	copy(signers[1:], signers)
+	signers[0] = firstSigner
 	return args[1:], signers, nil
 }
 
