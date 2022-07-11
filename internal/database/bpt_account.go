@@ -58,7 +58,7 @@ func (a *Account) loadState(preserveChains bool) (*accountState, error) {
 		}
 		s.Pending = append(s.Pending, state)
 	}
-
+	s.Directory = loadState(&err, true, a.Directory().Get)
 	return s, nil
 }
 
@@ -89,7 +89,7 @@ func (a *Account) restoreState(s *accountState) error {
 	// Store main state
 	var err error
 	saveState(&err, a.Main().Put, s.Main)
-
+	saveState(&err, a.Directory().Put, s.Directory)
 	// Store pending transaction list
 	for _, p := range s.Pending {
 		saveStateN(&err, a.Pending().Add, p.Transaction.ID())
@@ -229,9 +229,10 @@ func (a *Account) StateReceipt() (*managed.Receipt, error) {
 func (a *Account) hashState() (hash.Hasher, error) {
 	var err error
 	var hasher hash.Hasher
-	hashState(&err, &hasher, true, a.Main().Get)        // Add a simple hash of the main state
-	hashState(&err, &hasher, false, a.hashChains)       // Add a merkle hash of chains
-	hashState(&err, &hasher, false, a.hashTransactions) // Add a merkle hash of transactions
+	hashState(&err, &hasher, true, a.Main().Get)          // Add a simple hash of the main state
+	hashState(&err, &hasher, false, a.hashSecondaryState) // Add a merkle hash of the Secondary State which is a list of accounts contained by the adi
+	hashState(&err, &hasher, false, a.hashChains)         // Add a merkle hash of chains
+	hashState(&err, &hasher, false, a.hashTransactions)   // Add a merkle hash of transactions
 	return hasher, err
 }
 
@@ -370,4 +371,15 @@ func saveStateN[T any](lastErr *error, put func(...T) error, v ...T) {
 	if err != nil {
 		*lastErr = err
 	}
+}
+
+func (a *Account) hashSecondaryState() (hash.Hasher, error) {
+	var err error
+	var hasher hash.Hasher
+	for _, u := range loadState(&err, false, a.Directory().Get) {
+		hasher.AddUrl(u)
+	}
+	// Hash the hash to allow for future expansion
+	dirHash := hasher.MerkleHash()
+	return hash.Hasher{dirHash}, err
 }
