@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
@@ -22,12 +23,14 @@ import (
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 	"github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate"
+	cmd2 "gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/cmd"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	cfg "gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/proxy"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	etcd "go.etcd.io/etcd/client/v3"
 )
 
@@ -261,10 +264,29 @@ func initNode(cmd *cobra.Command, args []string) {
 		slr := proxy.SeedListRequest{}
 		slr.Network = description.Network.Id
 		slr.Partition = description.PartitionId
+		slr.Sign = true
 		resp, err := seedProxy.GetSeedList(context.Background(), &slr)
 		if err != nil {
 			checkf(err, "proxy returned seeding error")
 		}
+		//check to make sure the signature checks out.
+		b, err := resp.SeedList.MarshalBinary()
+		checkf(err, "invalid seed list")
+		txHash := sha256.Sum256(b)
+		if !resp.Signature.Verify(txHash[:]) {
+			fatalf("invalid signature from proxy")
+		}
+		//now check the resigtry keybook to make sure the proxy is a registered proxy
+		res, err := cmd2.GetUrl("accuproxy.acme/registry/1")
+		checkf(err, "cannot query the accuproxy registry")
+		kp := protocol.KeyPage{}
+		err = cmd2.Remarshal(res.Data, &kp)
+		checkf(err, "cannot remarshal key page")
+		_, _, found := kp.EntryByKeyHash(resp.Signature.GetPublicKeyHash())
+		if !found {
+			fatalf("seed proxy is not registered")
+		}
+
 		for _, addr := range resp.Addresses {
 			//go build a list of healthy nodes
 			u, err := cfg.OffsetPort(addr, netPort, int(cfg.PortOffsetTendermintP2P))

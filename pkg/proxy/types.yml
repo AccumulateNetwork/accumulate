@@ -3,6 +3,9 @@ NetworkConfigRequest:
   fields:
     - name: Network
       type: string
+    - name: Sign
+      type: bool
+      optional: true
 
 NetworkConfigResponse:
   non-binary: true
@@ -11,8 +14,8 @@ NetworkConfigResponse:
       type: config.Network
       marshal-as: reference
     - name: Signature
-      type: protocol.ED25519Signature
-      marshal-as: reference
+      type: protocol.KeySignature
+      marshal-as: union
       optional: true
 
 PartitionListRequest:
@@ -20,16 +23,24 @@ PartitionListRequest:
   fields:
     - name: Network
       type: string
+    - name: Sign
+      type: bool
+      optional: true
 
-PartitionListResponse:
-  non-binary: true
+PartitionList:
   fields:
     - name: Partitions
       type: string
       repeatable: true
+
+PartitionListResponse:
+  non-binary: true
+  embeddings:
+    - PartitionList
+  fields:
     - name: Signature
-      type: protocol.ED25519Signature
-      marshal-as: reference
+      type: protocol.KeySignature
+      marshal-as: union
       optional: true
 
 SeedListRequest:
@@ -41,16 +52,24 @@ SeedListRequest:
       type: string
     - name: Count
       type: int
+    - name: Sign
+      type: bool
+      optional: true
 
-SeedListResponse:
-  non-binary: true
+SeedList:
   fields:
     - name: Addresses
       type: string
       repeatable: true
+
+SeedListResponse:
+  non-binary: true
+  embeddings:
+    - SeedList
+  fields:
     - name: Signature
-      type: protocol.ED25519Signature
-      marshal-as: reference
+      type: protocol.KeySignature
+      marshal-as: union
       optional: true
 
 SeedCountRequest:
@@ -60,14 +79,22 @@ SeedCountRequest:
       type: string
     - name: Partition
       type: string
+    - name: Sign
+      type: bool
+      optional: true
 
-SeedCountResponse:
-  non-binary: true
+SeedCount:
   fields:
     - name: Count
       type: int
+
+SeedCountResponse:
+  non-binary: true
+  embeddings:
+    - SeedCount
+  fields:
     - name: Signature
-      type: protocol.ED25519Signature
-      marshal-as: reference
+      type: protocol.KeySignature
+      marshal-as: union
       optional: true
 
