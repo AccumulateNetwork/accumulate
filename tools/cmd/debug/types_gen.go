@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -33,7 +34,9 @@ type accountState struct {
 	Pending []*transactionState `json:"pending,omitempty" form:"pending" query:"pending" validate:"required"`
 	// Transactions is the state of other transactions related to the account.
 	Transactions []*transactionState `json:"transactions,omitempty" form:"transactions" query:"transactions" validate:"required"`
-	extraData    []byte
+	// Directory lists the account's sub-accounts.
+	Directory []*url.URL `json:"directory,omitempty" form:"directory" query:"directory" validate:"required"`
+	extraData []byte
 }
 
 type merkleState struct {
@@ -96,6 +99,12 @@ func (v *accountState) Copy() *accountState {
 	for i, v := range v.Transactions {
 		if v != nil {
 			u.Transactions[i] = (v).Copy()
+		}
+	}
+	u.Directory = make([]*url.URL, len(v.Directory))
+	for i, v := range v.Directory {
+		if v != nil {
+			u.Directory[i] = (v).Copy()
 		}
 	}
 
@@ -201,6 +210,14 @@ func (v *accountState) Equal(u *accountState) bool {
 	}
 	for i := range v.Transactions {
 		if !((v.Transactions[i]).Equal(u.Transactions[i])) {
+			return false
+		}
+	}
+	if len(v.Directory) != len(u.Directory) {
+		return false
+	}
+	for i := range v.Directory {
+		if !((v.Directory[i]).Equal(u.Directory[i])) {
 			return false
 		}
 	}
@@ -354,6 +371,7 @@ var fieldNames_accountState = []string{
 	2: "Chains",
 	3: "Pending",
 	4: "Transactions",
+	5: "Directory",
 }
 
 func (v *accountState) MarshalBinary() ([]byte, error) {
@@ -376,6 +394,11 @@ func (v *accountState) MarshalBinary() ([]byte, error) {
 	if !(len(v.Transactions) == 0) {
 		for _, v := range v.Transactions {
 			writer.WriteValue(4, v.MarshalBinary)
+		}
+	}
+	if !(len(v.Directory) == 0) {
+		for _, v := range v.Directory {
+			writer.WriteUrl(5, v)
 		}
 	}
 
@@ -409,6 +432,11 @@ func (v *accountState) IsValid() error {
 		errs = append(errs, "field Transactions is missing")
 	} else if len(v.Transactions) == 0 {
 		errs = append(errs, "field Transactions is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field Directory is missing")
+	} else if len(v.Directory) == 0 {
+		errs = append(errs, "field Directory is not set")
 	}
 
 	switch len(errs) {
@@ -676,6 +704,13 @@ func (v *accountState) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
+	for {
+		if x, ok := reader.ReadUrl(5); ok {
+			v.Directory = append(v.Directory, x)
+		} else {
+			break
+		}
+	}
 
 	seen, err := reader.Reset(fieldNames_accountState)
 	if err != nil {
@@ -815,11 +850,13 @@ func (v *accountState) MarshalJSON() ([]byte, error) {
 		Chains       encoding.JsonList[*merkleState]              `json:"chains,omitempty"`
 		Pending      encoding.JsonList[*transactionState]         `json:"pending,omitempty"`
 		Transactions encoding.JsonList[*transactionState]         `json:"transactions,omitempty"`
+		Directory    encoding.JsonList[*url.URL]                  `json:"directory,omitempty"`
 	}{}
 	u.Main = encoding.JsonUnmarshalWith[protocol.Account]{Value: v.Main, Func: protocol.UnmarshalAccountJSON}
 	u.Chains = v.Chains
 	u.Pending = v.Pending
 	u.Transactions = v.Transactions
+	u.Directory = v.Directory
 	return json.Marshal(&u)
 }
 
@@ -898,11 +935,13 @@ func (v *accountState) UnmarshalJSON(data []byte) error {
 		Chains       encoding.JsonList[*merkleState]              `json:"chains,omitempty"`
 		Pending      encoding.JsonList[*transactionState]         `json:"pending,omitempty"`
 		Transactions encoding.JsonList[*transactionState]         `json:"transactions,omitempty"`
+		Directory    encoding.JsonList[*url.URL]                  `json:"directory,omitempty"`
 	}{}
 	u.Main = encoding.JsonUnmarshalWith[protocol.Account]{Value: v.Main, Func: protocol.UnmarshalAccountJSON}
 	u.Chains = v.Chains
 	u.Pending = v.Pending
 	u.Transactions = v.Transactions
+	u.Directory = v.Directory
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -911,6 +950,7 @@ func (v *accountState) UnmarshalJSON(data []byte) error {
 	v.Chains = u.Chains
 	v.Pending = u.Pending
 	v.Transactions = u.Transactions
+	v.Directory = u.Directory
 	return nil
 }
 
