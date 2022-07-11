@@ -112,8 +112,7 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, []*signing.Builde
 	} else {
 		signingKey = args[0]
 	}
-	fmt.Println(signingKey)
-	err = prepareSignerPage(firstSigner, origin, args[0])
+	err = prepareSignerPage(firstSigner, origin, signingKey)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -129,7 +128,7 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, []*signing.Builde
 		signers = append(signers, signer)
 	}
 
-	return args, signers, nil
+	return args[1:], signers, nil
 }
 
 func prepareSignerPage(signer *signing.Builder, origin *url.URL, signingKey string) error {

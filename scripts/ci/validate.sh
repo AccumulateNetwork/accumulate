@@ -149,6 +149,11 @@ else
 die `want $keybook2 got $tokenAuthority`
 fi
 
+section "Burn Tokens for adi token account"
+wait-for cli-tx tx create ${LITE_ACME} test.acme/acmetokens 10 
+wait-for cli-tx token burn acc://test.acme/acmetokens test-2-0 5
+BALANCE1=$(accumulate account get acc://test.acme/acmetokens -j | jq -re .data.balance)                        
+[ "$BALANCE1" -eq 500000000 ] && success || die "test.acme/acmetokens should have 5 tokens but has $(expr ${BALANCE1} / 100000000)"
 
 section "Set KeyBook2 as authority for adi data account"
 dataTxHash=$(cli-tx account create data test.acme test-1-0 test.acme/testdata1 --authority acc://test.acme/book2)
