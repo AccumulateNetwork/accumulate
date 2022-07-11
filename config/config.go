@@ -328,12 +328,14 @@ func Store(config *Config) error {
 
 func loadTendermint(dir, file string) (*tm.Config, error) {
 	config := tm.DefaultConfig()
+
 	err := load(dir, file, config)
 	if err != nil {
 		return nil, err
 	}
 
 	config.SetRoot(dir)
+
 	tm.EnsureRoot(config.RootDir)
 	if err := config.ValidateBasic(); err != nil {
 		return nil, fmt.Errorf("validate: %v", err)
