@@ -9,14 +9,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"os"
 	"strconv"
 	"strings"
 
+	"github.com/howeyc/gopass"
 	"github.com/spf13/cobra"
 	tmjson "github.com/tendermint/tendermint/libs/json"
 	"github.com/tendermint/tendermint/privval"
 	"github.com/tyler-smith/go-bip32"
 	"github.com/tyler-smith/go-bip39"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/db"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
@@ -468,13 +471,18 @@ func FindLabelFromPubKey(pubKey []byte) (lab string, err error) {
 // ImportKey will import the private key and assign it to the label
 func ImportKey(pkAscii string, label string, signatureType protocol.SignatureType) (out string, err error) {
 
+	token, err := gopass.GetPasswdPrompt("Private Key : ", false, os.Stdin, os.Stderr) //term.ReadPassword(int(syscall.Stdin))
+	if err != nil {
+		return "", db.ErrInvalidPassword
+	}
+
 	var liteLabel string
 	var pk ed25519.PrivateKey
 
-	token, err := hex.DecodeString(pkAscii)
-	if err != nil {
-		return "", err
-	}
+	// token, err := hex.DecodeString(pkAscii)
+	// if err != nil {
+	// 	return "", err
+	// }
 
 	if len(token) == 32 {
 		pk = ed25519.NewKeyFromSeed(token)
