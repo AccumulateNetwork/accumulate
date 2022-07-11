@@ -5,7 +5,6 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/json"
-	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api"
 	stdlog "log"
 	"net/http"
 	"os"
@@ -230,12 +229,21 @@ func ProveNetworkToFakeProxy(t *testing.T, client *client.Client) {
 	require.NoError(t, err)
 	out, err := json.Marshal(res)
 	require.NoError(t, err)
-	qr := new(api2.AccountRecord)
+
+	qr := new(api.ChainQueryResponse)
 	require.NoError(t, json.Unmarshal(out, qr))
 
-	localRecipt := qr.Proof
+	localRecipt := qr.Receipt.Proof
 	_ = localRecipt
-	err = networkDefinition.UnmarshalJSON([]byte(str))
+	out, err = json.Marshal(qr.Data)
+
+	da := protocol.DataAccount{}
+	require.NoError(t, err)
+	err = da.UnmarshalJSON(out)
+	require.NoError(t, err)
+
+	require.Greater(t, len(da.Entry.GetData()), 0)
+	err = networkDefinition.UnmarshalJSON(da.Entry.GetData()[0])
 	require.NoError(t, err)
 
 	//TODO: what is needed is the operator registration will contain an ADI in that adi we need a data account that will contain
