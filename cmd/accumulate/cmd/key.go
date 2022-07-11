@@ -146,10 +146,10 @@ func PrintKeyGenerate() {
 
 func PrintKeyImport() {
 	fmt.Println("  accumulate key import mnemonic [mnemonic phrase...]     Import the mneumonic phrase used to generate keys in the wallet")
-	fmt.Println("  accumulate key import private [private key hex] [key name]      Import a key and give it a name in the wallet")
-	fmt.Println("  accumulate key import factoid [factoid private address]  Import a factoid private address")
+	fmt.Println("  accumulate key import private [key name]      Import a key and give it a name in the wallet, prompt for key")
+	fmt.Println("  accumulate key import factoid   Import a factoid private address, prompt for key")
 
-	fmt.Println("  accumulate key import lite [private key hex]       Import a key as a lite address")
+	fmt.Println("  accumulate key import lite        Import a key as a lite address, prompt for key")
 }
 
 func PrintKey() {
