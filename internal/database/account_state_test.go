@@ -8,6 +8,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+// TestAccountState verifies that adding an entry to an ADI's directory listing changes the account's BPT entry.
 func TestAccountState(t *testing.T) {
 	db := OpenInMemory(nil)
 	batch := db.Begin(true)

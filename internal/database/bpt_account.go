@@ -379,5 +379,7 @@ func (a *Account) hashSecondaryState() (hash.Hasher, error) {
 	for _, u := range loadState(&err, false, a.Directory().Get) {
 		hasher.AddUrl(u)
 	}
-	return hasher, err
+	// Hash the hash to allow for future expansion
+	dirHash := hasher.MerkleHash()
+	return hash.Hasher{dirHash}, err
 }

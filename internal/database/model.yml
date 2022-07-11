@@ -44,7 +44,6 @@
   - name: Directory
     # TODO Turn this into a chain
     type: state
-    set: true
     collection: set
     dataType: url
     pointer: true
