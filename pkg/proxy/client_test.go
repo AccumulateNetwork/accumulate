@@ -33,7 +33,7 @@ func TestAccuProxyClient(t *testing.T) {
 
 	//createProxyAccounts(d.,key)
 
-	client := testing2.LaunchFakeProxy(t)
+	client, _ := testing2.LaunchFakeProxy(t)
 
 	ssr := proxy.PartitionListRequest{}
 	ssr.Network = "AccuProxyTest"

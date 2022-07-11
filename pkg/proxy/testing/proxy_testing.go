@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/json"
+	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api"
 	stdlog "log"
 	"net/http"
 	"os"
@@ -20,7 +21,6 @@ import (
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/proxy"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
 var AccuProxyAuthorityKey = acctesting.GenerateKey(nil)
@@ -41,14 +41,16 @@ func LaunchAccuProxyDevNet(t *testing.T) *client.Client {
 
 	//shortcut to create the account, add the key
 	batch := n.DB_TESTONLY().Begin(true)
-	require.NoError(t, acctesting.CreateADI(batch, AccuProxyAuthorityKey.Seed(), "accuproxy.acme"))
-	require.NoError(t, acctesting.CreateKeyBook(batch, "accuproxy.acme/registry", AccuProxyKey.Public().(tmed25519.PubKey)))
+	tmAuthorityKey := tmed25519.GenPrivKeyFromSecret(AccuProxyAuthorityKey.Seed())
+	tmKey := tmed25519.GenPrivKeyFromSecret(AccuProxyKey.Seed())
+	require.NoError(t, acctesting.CreateADI(batch, tmAuthorityKey, "accuproxy.acme"))
+	require.NoError(t, acctesting.CreateKeyBook(batch, "accuproxy.acme/registry", tmKey.PubKey().(tmed25519.PubKey)))
 	require.NoError(t, batch.Commit())
 
 	return client
 }
 
-//make up a fake network configuration list
+//make up a fake default network configuration list
 var Nodes = []config.Node{{Address: "127.0.0.1", Type: config.NodeTypeValidator}}
 var Partitions = []config.Partition{
 	{Id: "Directory", Type: config.NetworkTypeDirectory, BasePort: 30000, Nodes: Nodes},
@@ -174,9 +176,9 @@ func getNetwork(_ context.Context, params json.RawMessage) interface{} {
 	return resp
 }
 
-var endpoint = "http://localhost:18888"
+var Endpoint = "http://localhost:18888"
 
-func LaunchFakeProxy(t *testing.T) *proxy.Client {
+func LaunchFakeProxy(t *testing.T) (*proxy.Client, *client.Client) {
 	t.Helper()
 
 	go func() {
@@ -192,13 +194,17 @@ func LaunchFakeProxy(t *testing.T) *proxy.Client {
 		require.NoError(t, http.ListenAndServe(":18888", handler))
 	}()
 
-	client, err := proxy.New(endpoint)
+	proxyClient, err := proxy.New(Endpoint)
 	require.NoError(t, err)
 
-	return client
+	//now spawn our little testnet and populate the fake proxy with the network info
+	accClient := LaunchAccuProxyDevNet(t)
+	ProveNetworkToFakeProxy(t, accClient)
+
+	return proxyClient, accClient
 }
 
-func ProveNetworkFromFakeProxy(t *testing.T, client *client.Client) {
+func ProveNetworkToFakeProxy(t *testing.T, client *client.Client) {
 	//this is provided as an example for the proxy to prove the contents of the "Describe" api call.
 	var res interface{}
 
@@ -219,15 +225,16 @@ func ProveNetworkFromFakeProxy(t *testing.T, client *client.Client) {
 	gq.Prove = true
 	gq.Url = networkUrl
 	gq.Expand = true
+	networkDefinition := protocol.NetworkDefinition{}
 	res, err = client.Query(context.Background(), &gq)
 	require.NoError(t, err)
-	networkAccount := res.(*query.ResponseAccount)
+	out, err := json.Marshal(res)
+	require.NoError(t, err)
+	qr := new(api2.AccountRecord)
+	require.NoError(t, json.Unmarshal(out, qr))
 
-	str, err = json.Marshal(networkAccount)
-
-	localRecipt := networkAccount.Receipt.Proof
+	localRecipt := qr.Proof
 	_ = localRecipt
-	networkDefinition := protocol.NetworkDefinition{}
 	err = networkDefinition.UnmarshalJSON([]byte(str))
 	require.NoError(t, err)
 
@@ -240,8 +247,8 @@ func ProveNetworkFromFakeProxy(t *testing.T, client *client.Client) {
 	//example to show what we have queried is how the network partitions are defined
 	require.True(t, ensurePartitions(&networkDefinition, &d.Network))
 
-	//example of how to prove the network is real via the anchor test
-
+	//override the network defaults with our queries network config
+	Network = d.Network
 }
 
 func remove(s []config.Partition, i int) []config.Partition {
@@ -260,11 +267,4 @@ func ensurePartitions(networkDefinition *protocol.NetworkDefinition, describe *c
 		}
 	}
 	return len(parts) == 0
-}
-
-func LaunchBasicDevnet(t *testing.T, basePort int) *client.Client {
-	// Create our accuProxy Main identity
-	//accuProxy := protocol.AccountUrl("accuproxy.acme")
-	//accuProxyKey := acctesting.GenerateKey(nil)
-	return nil
 }
