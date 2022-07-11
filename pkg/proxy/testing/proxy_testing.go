@@ -259,7 +259,7 @@ func remove(s []config.Partition, i int) []config.Partition {
 func ensurePartitions(networkDefinition *protocol.NetworkDefinition, describe *config.Network) bool {
 	parts := describe.Partitions
 	for _, p := range networkDefinition.Partitions {
-		for i, v := range describe.Partitions {
+		for i, v := range parts {
 			if v.Id == p.PartitionID {
 				parts = remove(parts, i)
 				break
