@@ -3,27 +3,10 @@ package database
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
-
-// Batch batches database writes.
-type Batch struct {
-	done        bool
-	writable    bool
-	id          int
-	nextChildId int
-	parent      *Batch
-	logger      logging.OptionalLogger
-	store       storage.KeyValueTxn
-	values      map[storage.Key]record.Record
-	bptEntries  map[storage.Key][32]byte
-	recordStore record.Store
-
-	accounts     map[storage.Key]*Account
-	transactions map[storage.Key]*Transaction
-}
 
 // Begin starts a new batch.
 func (d *Database) Begin(writable bool) *Batch {
@@ -33,9 +16,8 @@ func (d *Database) Begin(writable bool) *Batch {
 	b.id = d.nextBatchId
 	b.writable = writable
 	b.logger.L = d.logger
-	b.store = d.store.Begin(writable)
-	b.recordStore = record.KvStore{Store: b.store}
-	b.values = map[storage.Key]record.Record{}
+	b.kvstore = d.store.Begin(writable)
+	b.store = record.KvStore{Store: b.kvstore}
 	b.bptEntries = map[storage.Key][32]byte{}
 	return b
 }
@@ -52,9 +34,8 @@ func (b *Batch) Begin(writable bool) *Batch {
 	c.writable = b.writable && writable
 	c.parent = b
 	c.logger = b.logger
-	c.recordStore = batchStore{b}
-	c.store = b.store.Begin(c.writable)
-	c.values = map[storage.Key]record.Record{}
+	c.store = b
+	c.kvstore = b.kvstore.Begin(c.writable)
 	c.bptEntries = map[storage.Key][32]byte{}
 	return c
 }
@@ -63,7 +44,7 @@ func (b *Batch) Begin(writable bool) *Batch {
 // account from the database.
 func (b *Batch) DeleteAccountState_TESTONLY(url *url.URL) error {
 	a := record.Key{"Account", url, "Main"}
-	return b.store.Put(a.Hash(), nil)
+	return b.kvstore.Put(a.Hash(), nil)
 }
 
 // View runs the function with a read-only transaction.
@@ -113,27 +94,16 @@ func (b *Batch) Commit() error {
 	}
 	defer func() { b.done = true }()
 
-	for _, v := range b.accounts {
-		if err := v.Commit(); err != nil {
-			return errors.Wrap(errors.StatusUnknownError, err)
-		}
-	}
-	for _, v := range b.transactions {
-		if err := v.Commit(); err != nil {
-			return errors.Wrap(errors.StatusUnknownError, err)
-		}
-	}
-	for _, v := range b.values {
-		if err := v.Commit(); err != nil {
-			return errors.Wrap(errors.StatusUnknownError, err)
-		}
+	err := b.baseCommit()
+	if err != nil {
+		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	if b.parent != nil {
 		for k, v := range b.bptEntries {
 			b.parent.bptEntries[k] = v
 		}
-		if db, ok := b.store.(*storage.DebugBatch); ok {
+		if db, ok := b.kvstore.(*storage.DebugBatch); ok {
 			db.PretendWrite()
 		}
 	} else {
@@ -143,7 +113,7 @@ func (b *Batch) Commit() error {
 		}
 	}
 
-	return b.store.Commit()
+	return b.kvstore.Commit()
 }
 
 // Discard discards pending writes. Attempting to use the Batch after calling
@@ -153,38 +123,93 @@ func (b *Batch) Discard() {
 		b.logger.Debug("Discarding a writable batch")
 	}
 	b.done = true
-	b.store.Discard()
-}
-
-// Dirty returns true if anything has been changed.
-func (b *Batch) Dirty() bool {
-	for _, v := range b.accounts {
-		if v.IsDirty() {
-			return true
-		}
-	}
-	for _, v := range b.transactions {
-		if v.IsDirty() {
-			return true
-		}
-	}
-	for _, v := range b.values {
-		if v.IsDirty() {
-			return true
-		}
-	}
-	return false
+	b.kvstore.Discard()
 }
 
 // Transaction returns an Transaction for the given hash.
 func (b *Batch) Transaction(id []byte) *Transaction {
-	key := record.Key{"Transaction", *(*[32]byte)(id)}
-	return getOrCreateMap(&b.transactions, key, func() *Transaction {
-		v := new(Transaction)
-		v.logger = b.logger
-		v.store = b.recordStore
-		v.key = key
-		v.batch = b
-		return v
-	})
+	return b.getTransaction(*(*[32]byte)(id))
+}
+
+func (b *Batch) getAccountUrl(key record.Key) (*url.URL, error) {
+	v, err := record.NewValue(
+		b.logger.L,
+		b.store,
+		// This must match the key used for the account's main state
+		key.Append("Main"),
+		"account %[1]v",
+		false,
+		record.Union(protocol.UnmarshalAccount),
+	).Get()
+	if err != nil {
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
+	}
+	return v.GetUrl(), nil
+}
+
+// AccountByID returns an Account for the given ID.
+//
+// This is still needed in one place, so the deprecation warning is disabled in
+// order to pass static analysis.
+//
+// Deprecated: Use Account.
+func (b *Batch) AccountByID(id []byte) (*Account, error) {
+	u, err := b.getAccountUrl(record.Key{"Account", id})
+	if err != nil {
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
+	}
+	return b.Account(u), nil
+}
+
+// GetValue implements record.Store.
+func (b *Batch) GetValue(key record.Key, value record.ValueWriter) error {
+	if b.done {
+		panic("attempted to use a commited or discarded batch")
+	}
+
+	v, err := resolveValue[record.ValueReader](b, key)
+	if err != nil {
+		return errors.Wrap(errors.StatusUnknownError, err)
+	}
+
+	err = value.LoadValue(v, false)
+	return errors.Wrap(errors.StatusUnknownError, err)
+}
+
+// PutValue implements record.Store.
+func (b *Batch) PutValue(key record.Key, value record.ValueReader) error {
+	if b.done {
+		panic("attempted to use a commited or discarded batch")
+	}
+
+	v, err := resolveValue[record.ValueWriter](b, key)
+	if err != nil {
+		return errors.Wrap(errors.StatusUnknownError, err)
+	}
+
+	err = v.LoadValue(value, true)
+	return errors.Wrap(errors.StatusUnknownError, err)
+}
+
+// resolveValue resolves the value for the given key.
+func resolveValue[T any](c *Batch, key record.Key) (T, error) {
+	var r record.Record = c
+	var err error
+	for len(key) > 0 {
+		r, key, err = r.Resolve(key)
+		if err != nil {
+			return zero[T](), errors.Wrap(errors.StatusUnknownError, err)
+		}
+	}
+
+	if s, _, err := r.Resolve(nil); err == nil {
+		r = s
+	}
+
+	v, ok := r.(T)
+	if !ok {
+		return zero[T](), errors.Format(errors.StatusInternalError, "bad key: %T is not value", r)
+	}
+
+	return v, nil
 }

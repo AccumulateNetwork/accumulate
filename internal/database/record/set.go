@@ -18,7 +18,7 @@ type Set[T any] struct {
 }
 
 // NewSet returns a new Set using the given encoder and comparison.
-func NewSet[T any](logger log.Logger, store Store, key Key, namefmt string, encoder EncodableValue[T], cmp func(u, v T) int) *Set[T] {
+func NewSet[T any](logger log.Logger, store Store, key Key, namefmt string, encoder encodableValue[T], cmp func(u, v T) int) *Set[T] {
 	s := &Set[T]{}
 	s.Value = *NewValue[[]T](logger, store, key, namefmt, true, &sliceValue[T]{encoder: encoder})
 	s.compare = cmp
@@ -119,10 +119,10 @@ func (s *Set[T]) Commit() error {
 // sliceValue uses an encoder to manage a slice.
 type sliceValue[T any] struct {
 	value   []T
-	encoder EncodableValue[T]
+	encoder encodableValue[T]
 }
 
-var _ EncodableValue[[]string] = (*sliceValue[string])(nil)
+var _ encodableValue[[]string] = (*sliceValue[string])(nil)
 
 func (v *sliceValue[T]) getValue() []T  { return v.value }
 func (v *sliceValue[T]) setValue(u []T) { v.value = u }
@@ -168,7 +168,7 @@ func (v *sliceValue[T]) UnmarshalBinaryFrom(rd io.Reader) error {
 // marshalSlice uses an encodable value to marshal a slice. If this
 // implementation were embedded in sliceValue.MarshalBinary, it would be easy to
 // accidentally use the sliceValue instead of the encoder.
-func marshalSlice[T any](wr *encoding.Writer, e EncodableValue[T], v []T) {
+func marshalSlice[T any](wr *encoding.Writer, e encodableValue[T], v []T) {
 	for _, u := range v {
 		e.setValue(u)
 		wr.WriteValue(1, e.MarshalBinary)
@@ -177,7 +177,7 @@ func marshalSlice[T any](wr *encoding.Writer, e EncodableValue[T], v []T) {
 
 // unmarshalSlice uses an encodable value to unmarshal a slice. See marshalSlice
 // for why this is a separate function.
-func unmarshalSlice[T any](rd *encoding.Reader, e EncodableValue[T]) []T {
+func unmarshalSlice[T any](rd *encoding.Reader, e encodableValue[T]) []T {
 	var v []T
 	for {
 		e.setNew()
