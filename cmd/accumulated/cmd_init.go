@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net"
 	"net/url"
 	"os"
 	"path"
@@ -18,7 +19,6 @@ import (
 
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
-	"github.com/tendermint/tendermint/crypto/ed25519"
 	"github.com/tendermint/tendermint/libs/log"
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 	"github.com/tendermint/tendermint/types"
@@ -41,10 +41,10 @@ var cmdInit = &cobra.Command{
 }
 
 var cmdInitNode = &cobra.Command{
-	Use:   "node <node nr> <network-name|url>",
+	Use:   "node <network-name|url>",
 	Short: "Initialize a node",
 	Run:   initNode,
-	Args:  cobra.ExactArgs(2),
+	Args:  cobra.ExactArgs(1),
 }
 
 var flagInit struct {
@@ -59,6 +59,7 @@ var flagInit struct {
 var flagInitNode struct {
 	GenesisDoc          string
 	ListenIP            string
+	PublicIP            string
 	Follower            bool
 	SkipVersionCheck    bool
 	SeedProxy           string
@@ -70,6 +71,7 @@ var flagInitDualNode struct {
 	Follower         bool
 	SkipVersionCheck bool
 	SeedProxy        string
+	PublicIP         string
 }
 
 var flagInitDevnet struct {
@@ -109,6 +111,7 @@ func init() {
 	cmdInitNode.Flags().BoolVarP(&flagInitNode.Follower, "follow", "f", false, "Do not participate in voting")
 	cmdInitNode.Flags().StringVar(&flagInitNode.GenesisDoc, "genesis-doc", "", "Genesis doc for the target network")
 	cmdInitNode.Flags().StringVarP(&flagInitNode.ListenIP, "listen", "l", "", "Address and port to listen on, e.g. tcp://1.2.3.4:5678")
+	cmdInitNode.Flags().StringVarP(&flagInitNode.PublicIP, "public", "p", "", "public IP or URL")
 	cmdInitNode.Flags().BoolVar(&flagInitNode.SkipVersionCheck, "skip-version-check", false, "Do not enforce the version check")
 	cmdInitNode.Flags().StringVar(&flagInitNode.SeedProxy, "seed", "", "Fetch network configuration from seed proxy")
 	cmdInitNode.Flags().BoolVarP(&flagInitNode.AllowUnhealthyPeers, "skip-peer-health-check", "", false, "do not check health of peers")
@@ -117,6 +120,7 @@ func init() {
 	cmdInitDualNode.Flags().BoolVarP(&flagInitDualNode.Follower, "follow", "f", false, "Do not participate in voting")
 	cmdInitDualNode.Flags().StringVar(&flagInitDualNode.GenesisDoc, "genesis-doc", "", "Genesis doc for the target network")
 	cmdInitDualNode.Flags().BoolVar(&flagInitDualNode.SkipVersionCheck, "skip-version-check", false, "Do not enforce the version check")
+	cmdInitDualNode.Flags().StringVarP(&flagInitDualNode.PublicIP, "public", "p", "", "public IP or URL")
 	cmdInitDualNode.Flags().StringVar(&flagInitDualNode.SeedProxy, "seed", "", "Fetch network configuration from seed proxy")
 
 	cmdInitDevnet.Flags().StringVar(&flagInitDevnet.Name, "name", "DevNet", "Network name")
@@ -138,13 +142,20 @@ func networkReset() {
 		return
 	}
 	check(err)
-
 	for _, ent := range ent {
+		if ent.Name() == "priv_validator_key.json" {
+			err := os.Remove(filepath.Join(flagMain.WorkDir, ent.Name()))
+			check(err)
+		}
 		if !ent.IsDir() {
 			continue
 		}
 
 		dir := path.Join(flagMain.WorkDir, ent.Name())
+		if strings.HasPrefix(ent.Name(), "dnn") || strings.HasPrefix(ent.Name(), "bvnn") {
+			os.RemoveAll(filepath.Join(flagMain.WorkDir, ent.Name()))
+			continue
+		}
 		if !strings.HasPrefix(ent.Name(), "node-") {
 			fmt.Fprintf(os.Stderr, "Skipping %s\n", dir)
 			continue
@@ -162,13 +173,18 @@ func networkReset() {
 func nodeReset(dir string) bool {
 	ent, err := os.ReadDir(dir)
 	check(err)
-
 	var skipped bool
 	for _, ent := range ent {
+
+		if ent.Name() == "priv_validator_key.json" {
+			err := os.Remove(filepath.Join(dir, ent.Name()))
+			check(err)
+		}
 		if !ent.IsDir() {
 			skipped = true
 			continue
 		}
+
 		isDelete := false
 		if ent.Name() == "bvnn" {
 			isDelete = true
@@ -189,15 +205,42 @@ func nodeReset(dir string) bool {
 	return !skipped
 }
 
+func findInDescribe(addr string, partitionId string, d *config.Network) (partition *config.Partition, node *config.Node, err error) {
+	for i, v := range d.Partitions {
+		//search for the address.
+		partition = &d.Partitions[i]
+		if strings.EqualFold(partition.Id, partitionId) {
+			for j, n := range v.Nodes {
+				nodeAddr, _, err := resolveAddr(n.Address)
+				if err != nil {
+					return nil, nil, fmt.Errorf("cannot resolve node address in network describe")
+				}
+				if nodeAddr == addr {
+					node = &v.Nodes[j]
+					return partition, node, nil
+				}
+			}
+			return partition, nil, nil
+		}
+	}
+	return nil, nil, fmt.Errorf("cannot locate %s in network description", addr)
+}
+
 func initNode(cmd *cobra.Command, args []string) {
-	nodeDir := args[0]
-	nodeNr, err := strconv.ParseUint(nodeDir, 10, 16)
-	if err == nil {
-		nodeDir = fmt.Sprintf("node-%d", nodeNr)
+	if !cmd.Flag("work-dir").Changed {
+		fmt.Fprintf(os.Stderr, "Error: --work-dir flag is required\n\n")
+		_ = cmd.Usage()
+		os.Exit(1)
 	}
 
-	netAddr, netPort, err := resolveAddr(args[1])
+	netAddr, netPort, err := resolveAddr(args[0])
 	checkf(err, "invalid network URL")
+
+	publicAddr := ""
+	if flagInitNode.PublicIP != "" {
+		publicAddr, err = resolveIp(flagInitNode.PublicIP)
+		checkf(err, "invalid public address")
+	}
 
 	u, err := url.Parse(flagInitNode.ListenIP)
 	checkf(err, "invalid --listen %q", flagInitNode.ListenIP)
@@ -351,7 +394,13 @@ func initNode(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	config.Accumulate.Describe = cfg.Describe{NetworkType: description.NetworkType, PartitionId: description.PartitionId, LocalAddress: ""}
+	if publicAddr != "" {
+		partition, _, err := findInDescribe(publicAddr, description.PartitionId, &description.Network)
+		checkf(err, "cannot resolve public address in description")
+		//the address wasn't found in the network description, so add it
+		partition.Nodes = append(partition.Nodes, cfg.Node{Address: "http://" + publicAddr, Type: nodeType})
+	}
+	config.Accumulate.Describe = cfg.Describe{NetworkType: description.NetworkType, PartitionId: description.PartitionId, LocalAddress: "", Network: description.Network}
 	config.Accumulate.AnalysisLog.Enabled = flagInit.EnableTimingLogs
 
 	if flagInit.LogLevels != "" {
@@ -370,17 +419,20 @@ func initNode(cmd *cobra.Command, args []string) {
 	if flagInit.Reset {
 		networkReset()
 	}
-
-	config.SetRoot(filepath.Join(flagMain.WorkDir, nodeDir, netDir(description.NetworkType)))
+	netDir := netDir(config.Accumulate.Describe.NetworkType)
+	config.SetRoot(filepath.Join(flagMain.WorkDir, netDir))
 	accumulated.ConfigureNodePorts(&accumulated.NodeInit{
 		HostName: u.Hostname(),
 		ListenIP: u.Hostname(),
 		BasePort: uint64(nodePort),
 	}, config, 0)
 
-	// TODO Check for existing?
-	privValKey, nodeKey := ed25519.GenPrivKey(), ed25519.GenPrivKey()
+	config.PrivValidator.Key = "../priv_validator_key.json"
 
+	privValKey, err := accumulated.LoadOrGenerateTmPrivKey(config.PrivValidator.KeyFile())
+	checkf(err, "load/generate private key files")
+	nodeKey, err := accumulated.LoadOrGenerateTmPrivKey(config.NodeKeyFile())
+	checkf(err, "load/generate node key files")
 	err = accumulated.WriteNodeFiles(config, privValKey, nodeKey, genDoc)
 	checkf(err, "write node files")
 }
@@ -411,12 +463,25 @@ func newLogger() log.Logger {
 	return logger
 }
 
+func resolveIp(addr string) (string, error) {
+	host, _, err := resolveAddr(addr)
+	if err == nil {
+		return host, nil
+	}
+
+	ip := net.ParseIP(addr)
+	if ip == nil {
+		return "", fmt.Errorf("address in not an IP or url")
+	}
+
+	return ip.String(), nil
+}
+
 func resolveAddr(addr string) (string, int, error) {
 	ip, err := url.Parse(addr)
 	if err != nil {
 		return "", 0, fmt.Errorf("%q is not a URL", addr)
 	}
-
 	if ip.Path != "" && ip.Path != "/" {
 		return "", 0, fmt.Errorf("address cannot have a path")
 	}
