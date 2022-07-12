@@ -243,7 +243,7 @@ func ProveNetworkToFakeProxy(t *testing.T, client *client.Client) {
 	require.NoError(t, err)
 
 	require.Greater(t, len(da.Entry.GetData()), 0)
-	err = networkDefinition.UnmarshalJSON(da.Entry.GetData()[0])
+	err = networkDefinition.UnmarshalBinary(da.Entry.GetData()[0])
 	require.NoError(t, err)
 
 	//TODO: what is needed is the operator registration will contain an ADI in that adi we need a data account that will contain
