@@ -12,62 +12,214 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
+type Batch struct {
+	logger      logging.OptionalLogger
+	store       record.Store
+	done        bool
+	writable    bool
+	id          int64
+	nextChildId int64
+	parent      *Batch
+	kvstore     storage.KeyValueTxn
+	bptEntries  map[storage.Key][32]byte
+
+	account           map[storage.Key]*Account
+	transaction       map[storage.Key]*Transaction
+	blockChainUpdates map[storage.Key]*record.List[*ChainUpdate]
+	blockState        map[storage.Key]*record.Set[*BlockStateSynthTxnEntry]
+}
+
+func (c *Batch) Account(url *url.URL) *Account {
+	return getOrCreateMap(&c.account, record.Key{}.Append("Account", url), func() *Account {
+		v := new(Account)
+		v.logger = c.logger
+		v.store = c.store
+		v.key = record.Key{}.Append("Account", url)
+		v.parent = c
+		return v
+	})
+}
+
+func (c *Batch) getTransaction(hash [32]byte) *Transaction {
+	return getOrCreateMap(&c.transaction, record.Key{}.Append("Transaction", hash), func() *Transaction {
+		v := new(Transaction)
+		v.logger = c.logger
+		v.store = c.store
+		v.key = record.Key{}.Append("Transaction", hash)
+		v.parent = c
+		return v
+	})
+}
+
+func (c *Batch) BlockChainUpdates(partition *url.URL, index uint64) *record.List[*ChainUpdate] {
+	return getOrCreateMap(&c.blockChainUpdates, record.Key{}.Append("BlockChainUpdates", partition, index), func() *record.List[*ChainUpdate] {
+		return record.NewList(c.logger.L, c.store, record.Key{}.Append("BlockChainUpdates", partition, index), "block chain updates %[2]v %[3]v",
+			record.Struct[ChainUpdate]())
+	})
+}
+
+func (c *Batch) BlockState(partition *url.URL) *record.Set[*BlockStateSynthTxnEntry] {
+	return getOrCreateMap(&c.blockState, record.Key{}.Append("BlockState", partition), func() *record.Set[*BlockStateSynthTxnEntry] {
+		return record.NewSet(c.logger.L, c.store, record.Key{}.Append("BlockState", partition), "block state %[2]v",
+			record.Struct[BlockStateSynthTxnEntry](), func(u, v *BlockStateSynthTxnEntry) int { return u.Compare(v) })
+	})
+}
+
+func (c *Batch) Resolve(key record.Key) (record.Record, record.Key, error) {
+	switch key[0] {
+	case "Account":
+		if len(key) < 2 {
+			return nil, nil, errors.New(errors.StatusInternalError, "bad key for batch")
+		}
+		url, okUrl := key[1].(*url.URL)
+		if !okUrl {
+			return nil, nil, errors.New(errors.StatusInternalError, "bad key for batch")
+		}
+		v := c.Account(url)
+		return v, key[2:], nil
+	case "Transaction":
+		if len(key) < 2 {
+			return nil, nil, errors.New(errors.StatusInternalError, "bad key for batch")
+		}
+		hash, okHash := key[1].([32]byte)
+		if !okHash {
+			return nil, nil, errors.New(errors.StatusInternalError, "bad key for batch")
+		}
+		v := c.getTransaction(hash)
+		return v, key[2:], nil
+	case "BlockChainUpdates":
+		if len(key) < 3 {
+			return nil, nil, errors.New(errors.StatusInternalError, "bad key for batch")
+		}
+		partition, okPartition := key[1].(*url.URL)
+		index, okIndex := key[2].(uint64)
+		if !okPartition || !okIndex {
+			return nil, nil, errors.New(errors.StatusInternalError, "bad key for batch")
+		}
+		v := c.BlockChainUpdates(partition, index)
+		return v, key[3:], nil
+	case "BlockState":
+		if len(key) < 2 {
+			return nil, nil, errors.New(errors.StatusInternalError, "bad key for batch")
+		}
+		partition, okPartition := key[1].(*url.URL)
+		if !okPartition {
+			return nil, nil, errors.New(errors.StatusInternalError, "bad key for batch")
+		}
+		v := c.BlockState(partition)
+		return v, key[2:], nil
+	default:
+		return nil, nil, errors.New(errors.StatusInternalError, "bad key for batch")
+	}
+}
+
+func (c *Batch) IsDirty() bool {
+	if c == nil {
+		return false
+	}
+
+	for _, v := range c.account {
+		if v.IsDirty() {
+			return true
+		}
+	}
+	for _, v := range c.transaction {
+		if v.IsDirty() {
+			return true
+		}
+	}
+	for _, v := range c.blockChainUpdates {
+		if v.IsDirty() {
+			return true
+		}
+	}
+	for _, v := range c.blockState {
+		if v.IsDirty() {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (c *Batch) baseCommit() error {
+	if c == nil {
+		return nil
+	}
+
+	var err error
+	for _, v := range c.account {
+		commitField(&err, v)
+	}
+	for _, v := range c.transaction {
+		commitField(&err, v)
+	}
+	for _, v := range c.blockChainUpdates {
+		commitField(&err, v)
+	}
+	for _, v := range c.blockState {
+		commitField(&err, v)
+	}
+
+	return nil
+}
+
 type Account struct {
 	logger  logging.OptionalLogger
 	store   record.Store
 	key     record.Key
-	batch   *Batch
+	parent  *Batch
 	label   string
 	chains2 map[storage.Key]*managed.Chain
 
 	main               *record.Value[protocol.Account]
 	pending            *record.Set[*url.TxID]
 	syntheticForAnchor map[storage.Key]*record.Set[*url.TxID]
+	directory          *record.Set[*url.URL]
 	chains             *record.Set[*protocol.ChainMetadata]
 	syntheticAnchors   *record.Set[[32]byte]
-	directory          *record.Set[*url.URL]
 	data               *AccountData
 }
 
 func (c *Account) Main() *record.Value[protocol.Account] {
 	return getOrCreateField(&c.main, func() *record.Value[protocol.Account] {
-		return record.NewValue(c.logger.L, c.store, c.key.Append("Main"), c.label+" main", false,
+		return record.NewValue(c.logger.L, c.store, c.key.Append("Main"), "account %[2]v main", false,
 			record.Union(protocol.UnmarshalAccount))
 	})
 }
 
 func (c *Account) Pending() *record.Set[*url.TxID] {
 	return getOrCreateField(&c.pending, func() *record.Set[*url.TxID] {
-		return record.NewSet(c.logger.L, c.store, c.key.Append("Pending"), c.label+" pending",
+		return record.NewSet(c.logger.L, c.store, c.key.Append("Pending"), "account %[2]v pending",
 			record.Wrapped(record.TxidWrapper), record.CompareTxid)
 	})
 }
 
 func (c *Account) SyntheticForAnchor(anchor [32]byte) *record.Set[*url.TxID] {
 	return getOrCreateMap(&c.syntheticForAnchor, c.key.Append("SyntheticForAnchor", anchor), func() *record.Set[*url.TxID] {
-		return record.NewSet(c.logger.L, c.store, c.key.Append("SyntheticForAnchor", anchor), c.label+" synthetic for anchor",
+		return record.NewSet(c.logger.L, c.store, c.key.Append("SyntheticForAnchor", anchor), "account %[2]v synthetic for anchor %[4]x",
 			record.Wrapped(record.TxidWrapper), record.CompareTxid)
+	})
+}
+
+func (c *Account) Directory() *record.Set[*url.URL] {
+	return getOrCreateField(&c.directory, func() *record.Set[*url.URL] {
+		return record.NewSet(c.logger.L, c.store, c.key.Append("Directory"), "account %[2]v directory",
+			record.Wrapped(record.UrlWrapper), record.CompareUrl)
 	})
 }
 
 func (c *Account) Chains() *record.Set[*protocol.ChainMetadata] {
 	return getOrCreateField(&c.chains, func() *record.Set[*protocol.ChainMetadata] {
-		return record.NewSet(c.logger.L, c.store, c.key.Append("Chains"), c.label+" chains",
+		return record.NewSet(c.logger.L, c.store, c.key.Append("Chains"), "account %[2]v chains",
 			record.Struct[protocol.ChainMetadata](), func(u, v *protocol.ChainMetadata) int { return u.Compare(v) })
 	})
 }
 
 func (c *Account) SyntheticAnchors() *record.Set[[32]byte] {
 	return getOrCreateField(&c.syntheticAnchors, func() *record.Set[[32]byte] {
-		return record.NewSet(c.logger.L, c.store, c.key.Append("SyntheticAnchors"), c.label+" synthetic anchors",
+		return record.NewSet(c.logger.L, c.store, c.key.Append("SyntheticAnchors"), "account %[2]v synthetic anchors",
 			record.Wrapped(record.HashWrapper), record.CompareHash)
-	})
-}
-
-func (c *Account) Directory() *record.Set[*url.URL] {
-	return getOrCreateField(&c.directory, func() *record.Set[*url.URL] {
-		return record.NewSet(c.logger.L, c.store, c.key.Append("Directory"), c.label+" directory",
-			record.Wrapped(record.UrlWrapper), record.CompareUrl)
 	})
 }
 
@@ -98,12 +250,12 @@ func (c *Account) baseResolve(key record.Key) (record.Record, record.Key, error)
 		}
 		v := c.SyntheticForAnchor(anchor)
 		return v, key[2:], nil
+	case "Directory":
+		return c.Directory(), key[1:], nil
 	case "Chains":
 		return c.Chains(), key[1:], nil
 	case "SyntheticAnchors":
 		return c.SyntheticAnchors(), key[1:], nil
-	case "Directory":
-		return c.Directory(), key[1:], nil
 	case "Data":
 		return c.Data(), key[1:], nil
 	default:
@@ -127,13 +279,13 @@ func (c *Account) IsDirty() bool {
 			return true
 		}
 	}
+	if fieldIsDirty(c.directory) {
+		return true
+	}
 	if fieldIsDirty(c.chains) {
 		return true
 	}
 	if fieldIsDirty(c.syntheticAnchors) {
-		return true
-	}
-	if fieldIsDirty(c.directory) {
 		return true
 	}
 	if fieldIsDirty(c.data) {
@@ -154,9 +306,9 @@ func (c *Account) baseCommit() error {
 	for _, v := range c.syntheticForAnchor {
 		commitField(&err, v)
 	}
+	commitField(&err, c.directory)
 	commitField(&err, c.chains)
 	commitField(&err, c.syntheticAnchors)
-	commitField(&err, c.directory)
 	commitField(&err, c.data)
 
 	return nil
@@ -174,13 +326,13 @@ type AccountData struct {
 
 func (c *AccountData) Entry() *record.Counted[[32]byte] {
 	return getOrCreateField(&c.entry, func() *record.Counted[[32]byte] {
-		return record.NewCounted(c.logger.L, c.store, c.key.Append("Entry"), "data entry", record.WrappedFactory(record.HashWrapper))
+		return record.NewCounted(c.logger.L, c.store, c.key.Append("Entry"), "account %[2]v data entry", record.WrappedFactory(record.HashWrapper))
 	})
 }
 
 func (c *AccountData) Transaction(entryHash [32]byte) *record.Value[[32]byte] {
 	return getOrCreateMap(&c.transaction, c.key.Append("Transaction", entryHash), func() *record.Value[[32]byte] {
-		return record.NewValue(c.logger.L, c.store, c.key.Append("Transaction", entryHash), "data transaction %[3]x", false,
+		return record.NewValue(c.logger.L, c.store, c.key.Append("Transaction", entryHash), "account %[2]v data transaction %[5]x", false,
 			record.Wrapped(record.HashWrapper))
 	})
 }
@@ -239,7 +391,7 @@ type Transaction struct {
 	logger logging.OptionalLogger
 	store  record.Store
 	key    record.Key
-	batch  *Batch
+	parent *Batch
 	label  string
 
 	main       *record.Value[*SigOrTxn]
@@ -251,35 +403,35 @@ type Transaction struct {
 
 func (c *Transaction) Main() *record.Value[*SigOrTxn] {
 	return getOrCreateField(&c.main, func() *record.Value[*SigOrTxn] {
-		return record.NewValue(c.logger.L, c.store, c.key.Append("Main"), c.label+" main", false,
+		return record.NewValue(c.logger.L, c.store, c.key.Append("Main"), "transaction %[2]x main", false,
 			record.Struct[SigOrTxn]())
 	})
 }
 
 func (c *Transaction) Status() *record.Value[*protocol.TransactionStatus] {
 	return getOrCreateField(&c.status, func() *record.Value[*protocol.TransactionStatus] {
-		return record.NewValue(c.logger.L, c.store, c.key.Append("Status"), c.label+" status", true,
+		return record.NewValue(c.logger.L, c.store, c.key.Append("Status"), "transaction %[2]x status", true,
 			record.Struct[protocol.TransactionStatus]())
 	})
 }
 
 func (c *Transaction) Produced() *record.Set[*url.TxID] {
 	return getOrCreateField(&c.produced, func() *record.Set[*url.TxID] {
-		return record.NewSet(c.logger.L, c.store, c.key.Append("Produced"), c.label+" produced",
+		return record.NewSet(c.logger.L, c.store, c.key.Append("Produced"), "transaction %[2]x produced",
 			record.Wrapped(record.TxidWrapper), record.CompareTxid)
 	})
 }
 
 func (c *Transaction) getSignatures(signer *url.URL) *record.Value[*sigSetData] {
 	return getOrCreateMap(&c.signatures, c.key.Append("Signatures", signer), func() *record.Value[*sigSetData] {
-		return record.NewValue(c.logger.L, c.store, c.key.Append("Signatures", signer), c.label+" signatures", true,
+		return record.NewValue(c.logger.L, c.store, c.key.Append("Signatures", signer), "transaction %[2]x signatures %[4]v", true,
 			record.Struct[sigSetData]())
 	})
 }
 
 func (c *Transaction) Chains() *record.Set[*TransactionChainEntry] {
 	return getOrCreateField(&c.chains, func() *record.Set[*TransactionChainEntry] {
-		return record.NewSet(c.logger.L, c.store, c.key.Append("Chains"), c.label+" chains",
+		return record.NewSet(c.logger.L, c.store, c.key.Append("Chains"), "transaction %[2]x chains",
 			record.Struct[TransactionChainEntry](), func(u, v *TransactionChainEntry) int { return u.Compare(v) })
 	})
 }
