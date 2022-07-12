@@ -515,7 +515,7 @@ func ImportKey(pkAscii string, label string, signatureType protocol.SignatureTyp
 		}
 	}
 
-	err = GetWallet().Put(BucketKeys, pk.PublicKey, pk.PublicKey)
+	err = GetWallet().Put(BucketKeys, pk.PublicKey, pk.PrivateKey)
 	if err != nil {
 		return "", err
 	}
