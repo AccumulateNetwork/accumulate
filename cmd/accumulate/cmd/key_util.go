@@ -109,24 +109,22 @@ func (k *Key) Initialize(seed []byte, signatureType protocol.SignatureType) erro
 	k.Type = signatureType
 	switch k.Type {
 	case protocol.SignatureTypeLegacyED25519, protocol.SignatureTypeED25519, protocol.SignatureTypeRCD1:
-		var pk ed25519.PrivateKey
-		if len(seed) == 32 || len(seed) == 64 {
-			pk = ed25519.NewKeyFromSeed(seed[:32])
-			k.PrivateKey = pk
-			k.PublicKey = pk[32:]
-		} else {
-			return fmt.Errorf("invalid private key length, expected 32 or 64 bytes")
+		if len(seed) != ed25519.SeedSize && len(seed) != ed25519.PrivateKeySize {
+			return fmt.Errorf("invalid private key length, expected %d or %d bytes", ed25519.SeedSize, ed25519.PrivateKeySize)
 		}
+		pk := ed25519.NewKeyFromSeed(seed[:ed25519.SeedSize])
+		k.PrivateKey = pk
+		k.PublicKey = pk[ed25519.SeedSize:]
 	case protocol.SignatureTypeBTC:
 		if len(seed) != btc.PrivKeyBytesLen {
-			return fmt.Errorf("invalid private key length, expected %d", btc.PrivKeyBytesLen)
+			return fmt.Errorf("invalid private key length, expected %d bytes", btc.PrivKeyBytesLen)
 		}
 		pvkey, pubKey := btc.PrivKeyFromBytes(btc.S256(), seed)
 		k.PrivateKey = pvkey.Serialize()
 		k.PublicKey = pubKey.SerializeCompressed()
 	case protocol.SignatureTypeBTCLegacy, protocol.SignatureTypeETH:
 		if len(seed) != btc.PrivKeyBytesLen {
-			return fmt.Errorf("invalid private key length, expected %d", btc.PrivKeyBytesLen)
+			return fmt.Errorf("invalid private key length, expected %d bytes", btc.PrivKeyBytesLen)
 		}
 		pvkey, pubKey := btc.PrivKeyFromBytes(btc.S256(), seed)
 		k.PrivateKey = pvkey.Serialize()
