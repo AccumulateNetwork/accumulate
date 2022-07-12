@@ -19,15 +19,15 @@ func begin() record.KvStore {
 	return record.KvStore{Store: txn}
 }
 
-func newChain(store record.KvStore, markPower int64, key ...interface{}) *Chain {
-	return NewChain(nil, store, record.Key(key), markPower, "chain", "chain")
+func testChain(store record.KvStore, markPower int64, key ...interface{}) *Chain {
+	return NewChain(nil, store, record.Key(key), markPower, ChainTypeUnknown, "chain", "chain")
 }
 
 func TestMerkleManager_GetChainState(t *testing.T) {
 	const numTests = 100
 	var randHash common.RandHash
 	store := begin()
-	m := newChain(store, 8, "try")
+	m := testChain(store, 8, "try")
 	err := m.Head().Put(new(MerkleState))
 	require.NoError(t, err, "should be able to write to the chain head")
 	_, err = m.Head().Get()
@@ -53,7 +53,7 @@ func TestMerkleManager_GetAnyState(t *testing.T) {
 	const testnum = 100
 	var randHash common.RandHash
 	store := begin()
-	m := newChain(store, 2, "try")
+	m := testChain(store, 2, "try")
 	var States []*MerkleState
 	for i := 0; i < testnum; i++ {
 		require.NoError(t, m.AddHash(randHash.Next(), false))
@@ -87,7 +87,7 @@ func TestIndexing2(t *testing.T) {
 	BlkIdx := Chain
 	BlkIdx[30] += 2
 
-	MM1 := newChain(store, 8, Chain[:])
+	MM1 := testChain(store, 8, Chain[:])
 	for i := 0; i < testlen; i++ {
 		data := []byte(fmt.Sprintf("data %d", i))
 		dataHash := sha256.Sum256(data)
@@ -118,7 +118,7 @@ func TestMerkleManager(t *testing.T) {
 	MarkMask := MarkFreq - 1
 
 	// Set up a MM1 that uses a MarkPower of 2
-	MM1 := newChain(store, MarkPower, "try")
+	MM1 := testChain(store, MarkPower, "try")
 	// if MarkPower != MM1.MarkPower ||
 	// 	MarkFreq != MM1.MarkFreq ||
 	// 	MarkMask != MM1.MarkMask {
@@ -230,7 +230,7 @@ func GenerateTestData(prt bool) [10][]Hash {
 
 func TestMerkleManager_GetIntermediate(t *testing.T) {
 	store := begin()
-	m := newChain(store, 4)
+	m := testChain(store, 4)
 
 	hashes := GenerateTestData(true)
 
@@ -266,7 +266,7 @@ func TestMerkleManager_AddHash_Unique(t *testing.T) {
 
 	t.Run("true", func(t *testing.T) {
 		store := begin()
-		m := newChain(store, 4)
+		m := testChain(store, 4)
 		head, err := m.Head().Get()
 		require.NoError(t, err)
 
@@ -277,7 +277,7 @@ func TestMerkleManager_AddHash_Unique(t *testing.T) {
 
 	t.Run("false", func(t *testing.T) {
 		store := begin()
-		m := newChain(store, 4)
+		m := testChain(store, 4)
 		head, err := m.Head().Get()
 		require.NoError(t, err)
 

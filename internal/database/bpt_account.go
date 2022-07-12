@@ -21,7 +21,7 @@ func (a *Account) loadState(preserveChains bool) (*accountState, error) {
 
 	// Load chain state
 	for _, c := range loadState(&err, false, a.Chains().Get) {
-		chain, err := a.ReadChain(c.Name)
+		chain, err := a.GetChainByName(c.Name)
 		if err != nil {
 			return nil, fmt.Errorf("load %s chain state: %w", c.Name, err)
 		}
@@ -62,21 +62,21 @@ func (a *Account) loadState(preserveChains bool) (*accountState, error) {
 	return s, nil
 }
 
-func (a *Account) stateOfTransactionsOnChain(name string) ([]*transactionState, error) {
-	chain, err := a.ReadChain(name)
+func (c *Chain2) stateOfTransactionsOnChain() ([]*transactionState, error) {
+	head, err := c.inner.Head().Get()
 	if err != nil {
-		return nil, fmt.Errorf("load main chain: %w", err)
+		return nil, errors.Format(errors.StatusUnknownError, "load chain head: %w", err)
 	}
 
 	// TODO We need to be more selective than this
-	state := make([]*transactionState, chain.Height())
+	state := make([]*transactionState, head.Count)
 	for i := range state {
-		hash, err := chain.Entry(int64(i))
+		hash, err := c.inner.Get(int64(i))
 		if err != nil {
-			return nil, fmt.Errorf("load %s chain entry %d: %w", name, i, err)
+			return nil, fmt.Errorf("load %s chain entry %d: %w", c.inner.Name(), i, err)
 		}
 
-		state[i], err = a.parent.Transaction(hash).loadState()
+		state[i], err = c.account.parent.Transaction(hash).loadState()
 		if err != nil {
 			return nil, err
 		}
@@ -105,7 +105,7 @@ func (a *Account) restoreState(s *accountState) error {
 				head.Pending[i] = v
 			}
 		}
-		mgr, err := a.Chain(c.Name, c.Type)
+		mgr, err := a.GetChainByName(c.Name)
 		if err != nil {
 			return fmt.Errorf("store %s chain head: %w", c.Name, err)
 		}
@@ -242,7 +242,7 @@ func (a *Account) hashChains() (hash.Hasher, error) {
 	var err error
 	var hasher hash.Hasher
 	for _, chainMeta := range loadState(&err, false, a.Chains().Get) {
-		chain := loadState1(&err, false, a.ReadChain, chainMeta.Name)
+		chain := loadState1(&err, false, a.GetChainByName, chainMeta.Name)
 		if err != nil {
 			break
 		}
