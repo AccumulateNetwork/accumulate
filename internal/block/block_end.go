@@ -31,7 +31,7 @@ func (m *Executor) EndBlock(block *Block) error {
 	if err != nil {
 		return errors.Format(errors.StatusUnknownError, "load synthetic ledger: %w", err)
 	}
-	go m.requestMissingSyntheticTransactions(block.Index, synthLedger)
+	m.Background(func() { m.requestMissingSyntheticTransactions(block.Index, synthLedger) })
 
 	// Update active globals
 	if !m.isGenesis && !m.globals.Active.Equal(&m.globals.Pending) {
@@ -71,14 +71,14 @@ func (m *Executor) EndBlock(block *Block) error {
 	t := time.Now()
 
 	// Load the main chain of the minor root
-	rootChain, err := ledger.Chain(protocol.MinorRootChain, protocol.ChainTypeAnchor)
+	rootChain, err := ledger.RootChain().Get()
 	if err != nil {
 		return errors.Format(errors.StatusUnknownError, "load root chain: %w", err)
 	}
 
 	// Pending transaction-chain index entries
 	type txChainIndexEntry struct {
-		indexing.TransactionChainEntry
+		database.TransactionChainEntry
 		Txid []byte
 	}
 	txChainEntries := make([]*txChainIndexEntry, 0, len(block.State.ChainUpdates.Entries))
@@ -93,7 +93,11 @@ func (m *Executor) EndBlock(block *Block) error {
 		// Anchor and index the chain
 		m.logger.Debug("Updated a chain", "url", fmt.Sprintf("%s#chain/%s", u.Account, u.Name))
 		account := block.Batch.Account(u.Account)
-		indexIndex, didIndex, err := addChainAnchor(rootChain, account, u.Account, u.Name, u.Type)
+		chain, err := account.ChainByName(u.Name)
+		if err != nil {
+			return errors.Format(errors.StatusUnknownError, "resolve chain %v of %v: %w", u.Name, u.Account, err)
+		}
+		indexIndex, didIndex, err := addChainAnchor(rootChain, chain)
 		if err != nil {
 			return errors.Format(errors.StatusUnknownError, "add anchor to root chain: %w", err)
 		}
@@ -133,7 +137,7 @@ func (m *Executor) EndBlock(block *Block) error {
 	}
 
 	// Index the root chain
-	rootIndexIndex, err := addIndexChainEntry(ledger, protocol.MinorRootIndexChain, &protocol.IndexEntry{
+	rootIndexIndex, err := addIndexChainEntry(ledger.RootChain().Index(), &protocol.IndexEntry{
 		Source:     uint64(rootChain.Height() - 1),
 		BlockIndex: uint64(block.Index),
 		BlockTime:  &block.Time,
@@ -158,7 +162,7 @@ func (m *Executor) EndBlock(block *Block) error {
 	}
 
 	for _, e := range producedSynthTxns {
-		err = indexing.TransactionChain(block.Batch, e.Transaction).Add(&indexing.TransactionChainEntry{
+		err = indexing.TransactionChain(block.Batch, e.Transaction).Add(&database.TransactionChainEntry{
 			Account:     m.Describe.Synthetic(),
 			Chain:       protocol.MainChain,
 			ChainIndex:  synthIndexIndex,
@@ -207,7 +211,7 @@ func (m *Executor) createLocalDNReceipt(block *Block, rootChain *database.Chain,
 		return errors.Format(errors.StatusUnknownError, "build root chain receipt: %w", err)
 	}
 
-	synthChain, err := block.Batch.Account(m.Describe.Synthetic()).ReadChain(protocol.MainChain)
+	synthChain, err := block.Batch.Account(m.Describe.Synthetic()).MainChain().Get()
 	if err != nil {
 		return fmt.Errorf("unable to load synthetic transaction chain: %w", err)
 	}
@@ -246,12 +250,12 @@ func (m *Executor) createLocalDNReceipt(block *Block, rootChain *database.Chain,
 // anchorSynthChain anchors the synthetic transaction chain.
 func (m *Executor) anchorSynthChain(block *Block, rootChain *database.Chain) (indexIndex uint64, err error) {
 	url := m.Describe.Synthetic()
-	indexIndex, _, err = addChainAnchor(rootChain, block.Batch.Account(url), url, protocol.MainChain, protocol.ChainTypeTransaction)
+	indexIndex, _, err = addChainAnchor(rootChain, block.Batch.Account(url).MainChain())
 	if err != nil {
 		return 0, err
 	}
 
-	block.State.ChainUpdates.DidUpdateChain(indexing.ChainUpdate{
+	block.State.ChainUpdates.DidUpdateChain(database.ChainUpdate{
 		Name:    protocol.MainChain,
 		Type:    protocol.ChainTypeTransaction,
 		Account: url,
@@ -484,12 +488,12 @@ func (x *Executor) updateMajorIndexChains(block *Block, rootIndexIndex uint64) e
 
 	// Load the chain
 	account := block.Batch.Account(x.Describe.AnchorPool())
-	mainChain, err := account.ReadChain(protocol.MainChain)
+	mainChain, err := account.MainChain().Get()
 	if err != nil {
 		return errors.Format(errors.StatusUnknownError, "load anchor ledger main chain: %w", err)
 	}
 
-	_, err = addIndexChainEntry(account, protocol.IndexChain(protocol.MainChain, true), &protocol.IndexEntry{
+	_, err = addIndexChainEntry(account.MajorBlockChain(), &protocol.IndexEntry{
 		Source:         uint64(mainChain.Height() - 1),
 		RootIndexIndex: rootIndexIndex,
 		BlockIndex:     block.State.MakeMajorBlock,
@@ -545,6 +549,7 @@ func (x *Executor) shouldSendAnchor(block *Block) bool {
 	}
 
 	var didUpdateOther, didAnchorPartition, didAnchorDirectory bool
+	anchor := block.Batch.Account(x.Describe.AnchorPool())
 	for _, c := range block.State.ChainUpdates.Entries {
 		// The system ledger is always updated
 		if c.Account.Equal(x.Describe.Ledger()) {
@@ -558,15 +563,18 @@ func (x *Executor) shouldSendAnchor(block *Block) bool {
 		}
 
 		// Check if a partition anchor was received
-		name := c.Name
-		if strings.HasSuffix(name, protocol.RootAnchorSuffix) {
-			name = name[:len(name)-len(protocol.RootAnchorSuffix)]
-		} else if strings.HasSuffix(name, protocol.BptAnchorSuffix) {
-			name = name[:len(name)-len(protocol.BptAnchorSuffix)]
-		} else {
+		chain, err := anchor.ChainByName(c.Name)
+		if err != nil {
+			x.logger.Error("Failed to get chain by name", "error", err, "name", c.Name)
 			continue
 		}
-		if strings.EqualFold(name, protocol.Directory) {
+
+		partition, ok := chain.Key(3).(string)
+		if chain.Key(2) != "AnchorChain" || !ok {
+			continue
+		}
+
+		if strings.EqualFold(partition, protocol.Directory) {
 			didAnchorDirectory = true
 		} else {
 			didAnchorPartition = true
@@ -640,7 +648,7 @@ func (x *Executor) buildDirectoryAnchor(block *Block, systemLedger *protocol.Sys
 	}
 
 	// Load the root chain
-	rootChain, err := block.Batch.Account(x.Describe.Ledger()).ReadChain(protocol.MinorRootChain)
+	rootChain, err := block.Batch.Account(x.Describe.Ledger()).RootChain().Get()
 	if err != nil {
 		return nil, errors.Format(errors.StatusUnknownError, "load root chain: %w", err)
 	}
@@ -664,7 +672,7 @@ func (x *Executor) buildDirectoryAnchor(block *Block, systemLedger *protocol.Sys
 			continue
 		}
 
-		indexChain, err := record.ReadIndexChain(update.Name, false)
+		indexChain, err := record.GetIndexChainByName(update.Name)
 		if err != nil {
 			return nil, errors.Format(errors.StatusUnknownError, "load minor index chain of intermediate anchor chain %s: %w", update.Name, err)
 		}
@@ -679,7 +687,7 @@ func (x *Executor) buildDirectoryAnchor(block *Block, systemLedger *protocol.Sys
 			return nil, errors.Format(errors.StatusUnknownError, "build receipt for the root chain: %w", err)
 		}
 
-		anchorChain, err := record.ReadChain(update.Name)
+		anchorChain, err := record.GetChainByName(update.Name)
 		if err != nil {
 			return nil, errors.Format(errors.StatusUnknownError, "load intermediate anchor chain %s: %w", update.Name, err)
 		}

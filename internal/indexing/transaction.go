@@ -1,11 +1,9 @@
 package indexing
 
 import (
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	. "gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 )
-
-type TransactionChainEntry = database.TransactionChainEntry
 
 // TransactionChainIndexer indexes account chains against a transaction.
 type TransactionChainIndexer struct {
@@ -13,6 +11,6 @@ type TransactionChainIndexer struct {
 }
 
 // TransactionChain returns a transaction chain indexer.
-func TransactionChain(batch *database.Batch, txid []byte) *TransactionChainIndexer {
+func TransactionChain(batch *Batch, txid []byte) *TransactionChainIndexer {
 	return &TransactionChainIndexer{batch.Transaction(txid).Chains()}
 }

@@ -6,8 +6,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 )
 
-type ChainUpdate = database.ChainUpdate
-
 // BlockChainUpdatesIndexer indexes chain updates for each block.
 type BlockChainUpdatesIndexer struct {
 	*record.List[*database.ChainUpdate]
@@ -18,8 +16,8 @@ func BlockChainUpdates(batch *database.Batch, network *config.Describe, blockInd
 	return &BlockChainUpdatesIndexer{batch.BlockChainUpdates(network.NodeUrl(), blockIndex)}
 }
 
-func (x *BlockChainUpdatesIndexer) Set(entries []ChainUpdate) error {
-	var ptrs []*ChainUpdate
+func (x *BlockChainUpdatesIndexer) Set(entries []database.ChainUpdate) error {
+	var ptrs []*database.ChainUpdate
 	for _, v := range entries {
 		v := v // See docs/developer/rangevarref.md
 		ptrs = append(ptrs, &v)

@@ -81,14 +81,9 @@ func (c *stateCache) LoadUrlAs(account *url.URL, target interface{}) error {
 	return encoding.SetPtr(state, target)
 }
 
-// ReadChain loads an account's chain by URL and name.
-func (c *stateCache) ReadChain(u *url.URL, name string) (*database.Chain, error) {
-	return c.batch.Account(u).ReadChain(name)
-}
-
 //GetHeight loads the height of the chain
 func (c *stateCache) GetHeight(u *url.URL) (uint64, error) {
-	chain, err := c.batch.Account(u).ReadChain(protocol.MainChain)
+	chain, err := c.batch.Account(u).MainChain().Get()
 	if err != nil {
 		return 0, err
 	}
@@ -166,13 +161,13 @@ func (st *stateCache) createOrUpdate(isUpdate bool, accounts []protocol.Account)
 		// Update/Create the state
 		err = rec.PutState(account)
 		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "failed to update state of %q: %v", account.GetUrl(), err)
+			return errors.Format(errors.StatusUnknownError, "failed to update state of %q: %w", account.GetUrl(), err)
 		}
 
 		// Add to the account's main chain
-		err = st.State.ChainUpdates.AddChainEntry(st.batch, account.GetUrl(), protocol.MainChain, protocol.ChainTypeTransaction, st.txHash[:], 0, 0)
+		err = st.State.ChainUpdates.AddChainEntry(st.batch, rec.MainChain(), st.txHash[:], 0, 0)
 		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "failed to update main chain of %q: %v", account.GetUrl(), err)
+			return errors.Format(errors.StatusUnknownError, "failed to update main chain of %q: %w", account.GetUrl(), err)
 		}
 
 		// Add it to the directory
@@ -180,7 +175,7 @@ func (st *stateCache) createOrUpdate(isUpdate bool, accounts []protocol.Account)
 			u := account.GetUrl()
 			err = st.AddDirectoryEntry(u.Identity(), u)
 			if err != nil {
-				return errors.Format(errors.StatusUnknownError, "failed to add a directory entry for %q: %v", u, err)
+				return errors.Format(errors.StatusUnknownError, "failed to add a directory entry for %q: %w", u, err)
 			}
 		}
 
