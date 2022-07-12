@@ -57,7 +57,7 @@ func (m *DatabaseQueryModule) queryAccount(batch *database.Batch, accountUrl *ur
 		}
 
 		for _, c := range chains {
-			chain, err := account.ReadChain(c.Name)
+			chain, err := account.GetChainByName(c.Name)
 			if err != nil {
 				return nil, errors.Format(errors.StatusUnknownError, "read account %v chain %s: %w", accountUrl, c.Name, err)
 			}
