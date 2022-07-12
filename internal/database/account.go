@@ -11,6 +11,28 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 )
 
+func UpdateAccount[T protocol.Account](batch *Batch, url *url.URL, fn func(T) error) (T, error) {
+	record := batch.Account(url).Main()
+
+	var account T
+	err := record.GetAs(&account)
+	if err != nil {
+		return account, errors.Format(errors.StatusUnknownError, "load %v: %w", url, err)
+	}
+
+	err = fn(account)
+	if err != nil {
+		return account, errors.Wrap(errors.StatusUnknownError, err)
+	}
+
+	err = record.Put(account)
+	if err != nil {
+		return account, errors.Format(errors.StatusUnknownError, "store %v: %w", url, err)
+	}
+
+	return account, nil
+}
+
 func (r *Account) url() *url.URL {
 	return r.key[1].(*url.URL)
 }
@@ -134,7 +156,7 @@ func (r *Account) chain(name string) *managed.Chain {
 	name = strings.ToLower(name)
 	key := r.key.Append("Chain", name)
 	return getOrCreateMap(&r.chains2, key, func() *managed.Chain {
-		return managed.NewChain(r.batch.logger.L, r.batch.recordStore, key, markPower, name, "account %[2]s chain %[4]s")
+		return managed.NewChain(r.parent.logger.L, r.parent.store, key, markPower, name, "account %[2]s chain %[4]s")
 	})
 }
 
