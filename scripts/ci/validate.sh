@@ -5,7 +5,6 @@ set -e
 
 SCRIPT_DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
 source ${SCRIPT_DIR}/validate-commons.sh
-
 section "Setup"
 if which go > /dev/null || ! which accumulate > /dev/null ; then
     echo "Installing CLI"
@@ -178,7 +177,7 @@ accumulate -j get key test.acme test-2-3-new | jq -C --indent 0 || die "Could no
 success
 
 section "Create an ADI Token Account"
-wait-for cli-tx account create token test.acme test-1-0 0 test.acme/tokens ACME test.acme/book
+wait-for cli-tx account create token test.acme test-1-0 test.acme/tokens ACME test.acme/book
 accumulate account get test.acme/tokens 1> /dev/null || die "Cannot find test.acme/tokens"
 success
 

@@ -104,15 +104,7 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, []*signing.Builde
 		firstSigner.SetPrivateKey(key.PrivateKey)
 		return args, []*signing.Builder{firstSigner}, nil
 	}
-	var signingKey string
-
-	if strings.Contains(args[0], "@") {
-		arr := strings.Split(args[0], "@")
-		signingKey = arr[0]
-	} else {
-		signingKey = args[0]
-	}
-	err = prepareSignerPage(firstSigner, origin, signingKey)
+	err = prepareSignerPage(firstSigner, origin, args[0])
 	if err != nil {
 		return nil, nil, err
 	}
