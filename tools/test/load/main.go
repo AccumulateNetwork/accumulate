@@ -172,7 +172,7 @@ func initializeClients(c int) ([]*Client, error) {
 	}
 	dsl.SetPath(path)
 	dsl.SetProcessName("load")
-	dsName := fmt.Sprintf("settlement")
+	dsName := "settlement"
 	dsl.Initialize(dsName, logging.DefaultOptions())
 	ds := dsl.GetDataSet(dsName)
 
@@ -195,12 +195,12 @@ func initializeClients(c int) ([]*Client, error) {
 func createAccount() (*url.URL, error) {
 	pub, _, err := ed25519.GenerateKey(nil)
 	if err != nil {
-		return nil, fmt.Errorf("Error: generating keys: %v\n", err)
+		return nil, fmt.Errorf("generating keys: %v", err)
 	}
 
 	acc, err := protocol.LiteTokenAddress(pub, protocol.ACME, protocol.SignatureTypeED25519)
 	if err != nil {
-		return nil, fmt.Errorf("Error: creating Lite Token account: %v\n", err)
+		return nil, fmt.Errorf("creating Lite Token account: %v", err)
 	}
 	return acc, nil
 }

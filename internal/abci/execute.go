@@ -1,5 +1,7 @@
 package abci
 
+//lint:file-ignore ST1001 Don't care
+
 import (
 	"crypto/sha256"
 

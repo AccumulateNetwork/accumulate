@@ -62,7 +62,7 @@ func (b *BoltDB) loadAndVerify(password string) error {
 	}
 
 	//test to see if the magic is in the clear, if so then return the not encrypted error
-	if bytes.Compare(magic[:], magicData) == 0 {
+	if bytes.Equal(magic[:], magicData) {
 		return ErrDatabaseNotEncrypted
 	}
 
@@ -84,7 +84,7 @@ func (b *BoltDB) loadAndVerify(password string) error {
 	}
 
 	//now do a simple comparison of the decrypted data to what we expect to see
-	if bytes.Compare(data, magic[:]) != 0 {
+	if !bytes.Equal(data, magic[:]) {
 		return ErrMalformedEncryptedDatabase
 	}
 
