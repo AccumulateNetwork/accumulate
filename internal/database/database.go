@@ -5,9 +5,6 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/badger"
@@ -22,7 +19,7 @@ const markPower = 8
 type Database struct {
 	store       storage.KeyValueStore
 	logger      log.Logger
-	nextBatchId int
+	nextBatchId int64
 }
 
 // New creates a new database using the given key-value store.
@@ -95,74 +92,9 @@ func (d *Database) Close() error {
 	return d.store.Close()
 }
 
-// Account returns an Account for the given URL.
-func (b *Batch) Account(u *url.URL) *Account {
-	key := record.Key{"Account", u}
-	return getOrCreateMap(&b.accounts, key, func() *Account {
-		v := new(Account)
-		v.logger = b.logger
-		v.store = b.recordStore
-		v.key = key
-		v.batch = b
-		return v
-	})
-}
-
-func UpdateAccount[T protocol.Account](batch *Batch, url *url.URL, fn func(T) error) (T, error) {
-	record := batch.Account(url).Main()
-
-	var account T
-	err := record.GetAs(&account)
-	if err != nil {
-		return account, errors.Format(errors.StatusUnknownError, "load %v: %w", url, err)
-	}
-
-	err = fn(account)
-	if err != nil {
-		return account, errors.Wrap(errors.StatusUnknownError, err)
-	}
-
-	err = record.Put(account)
-	if err != nil {
-		return account, errors.Format(errors.StatusUnknownError, "store %v: %w", url, err)
-	}
-
-	return account, nil
-}
-
-func (b *Batch) getAccountUrl(key record.Key) (*url.URL, error) {
-	v, err := record.NewValue(
-		b.logger.L,
-		b.recordStore,
-		// This must match the key used for the account's main state
-		key.Append("Main"),
-		"account %[1]v",
-		false,
-		record.Union(protocol.UnmarshalAccount),
-	).Get()
-	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
-	}
-	return v.GetUrl(), nil
-}
-
-// AccountByID returns an Account for the given ID.
-//
-// This is still needed in one place, so the deprecation warning is disabled in
-// order to pass static analysis.
-//
-// Deprecated: Use Account.
-func (b *Batch) AccountByID(id []byte) (*Account, error) {
-	u, err := b.getAccountUrl(record.Key{"Account", id})
-	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
-	}
-	return b.Account(u), nil
-}
-
 // Import imports values from another database.
 func (b *Batch) Import(db interface{ Export() map[storage.Key][]byte }) error {
-	return b.store.PutAll(db.Export())
+	return b.kvstore.PutAll(db.Export())
 }
 
 func (b *Batch) GetMinorRootChainAnchor(describe *config.Describe) ([]byte, error) {
