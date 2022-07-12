@@ -34,9 +34,13 @@ var keyCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		var out string
 		var err error
-		sigType, found := protocol.SignatureTypeByName(SigType)
-		if !found {
-			err = fmt.Errorf("unknown signature type %s", SigType)
+		var sigType protocol.SignatureType
+		var found bool
+		if SigType != "" {
+			sigType, found = protocol.SignatureTypeByName(SigType)
+			if !found {
+				err = fmt.Errorf("unknown signature type %s", SigType)
+			}
 		}
 
 		if len(args) > 0 && err == nil {
