@@ -134,7 +134,7 @@ func (b *Batch) SaveSnapshot(file io.WriteSeeker, network *config.Describe) erro
 			return state.MarshalBinary()
 		}*/
 
-		txns, err := account.stateOfTransactionsOnChain(protocol.MainChain)
+		txns, err := account.MainChain().stateOfTransactionsOnChain()
 		if err != nil {
 			return nil, err
 		}

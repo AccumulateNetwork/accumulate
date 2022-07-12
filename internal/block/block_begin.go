@@ -176,7 +176,7 @@ func (x *Executor) finalizeBlock(block *Block) error {
 	x.logger.Debug("Anchor block", "index", ledger.Index, "seq-num", sequenceNumber)
 
 	// Load the root chain
-	rootChain, err := block.Batch.Account(x.Describe.Ledger()).ReadChain(protocol.MinorRootChain)
+	rootChain, err := block.Batch.Account(x.Describe.Ledger()).RootChain().Get()
 	if err != nil {
 		return errors.Format(errors.StatusUnknownError, "load root chain: %w", err)
 	}
@@ -205,8 +205,8 @@ func (x *Executor) finalizeBlock(block *Block) error {
 	}
 
 	// Add the transaction to the anchor sequence chain
-	record := block.Batch.Account(x.Describe.AnchorPool())
-	chain, err := record.Chain(protocol.AnchorSequenceChain, protocol.ChainTypeTransaction)
+	record := block.Batch.Account(x.Describe.AnchorPool()).AnchorSequenceChain()
+	chain, err := record.Get()
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknownError, err)
 	}
@@ -220,7 +220,7 @@ func (x *Executor) finalizeBlock(block *Block) error {
 		x.logger.Error("Sequence number does not match index chain index", "seq-num", sequenceNumber, "index", index)
 	}
 
-	err = block.State.ChainUpdates.DidAddChainEntry(block.Batch, x.Describe.AnchorPool(), protocol.AnchorSequenceChain, protocol.ChainTypeTransaction, anchorTxn.GetHash(), uint64(index), 0, 0)
+	err = block.State.ChainUpdates.DidAddChainEntry(block.Batch, x.Describe.AnchorPool(), record.Name(), record.Type(), anchorTxn.GetHash(), uint64(index), 0, 0)
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknownError, err)
 	}
@@ -265,25 +265,25 @@ func (x *Executor) finalizeBlock(block *Block) error {
 	}
 
 	errs := x.dispatcher.Send(context.Background())
-	go func() {
+	x.Background(func() {
 		for err := range errs {
 			x.checkDispatchError(err, func(err error) {
 				switch err := err.(type) {
 				case *txnDispatchError:
-					x.logger.Error("Failed to dispatch transactions", "error", err.status.Error, "stack", err.status.Error.PrintCallstack(), "type", err.typ, "hash", logging.AsHex(err.status.TxID.Hash()).Slice(0, 4))
+					x.logger.Error("Failed to dispatch transactions", "error", err.status.Error, "stack", err.status.Error.PrintFullCallstack(), "type", err.typ, "hash", logging.AsHex(err.status.TxID.Hash()).Slice(0, 4))
 				default:
 					x.logger.Error("Failed to dispatch transactions", "error", fmt.Sprintf("%+v\n", err))
 				}
 			})
 		}
-	}()
+	})
 
 	return nil
 }
 
 func (x *Executor) sendSyntheticTransactions(block *Block) error {
 	// Load the root chain's index chain's last two entries
-	last, nextLast, err := indexing.LoadLastTwoIndexEntries(block.Batch.Account(x.Describe.Ledger()), protocol.MinorRootIndexChain)
+	last, nextLast, err := indexing.LoadLastTwoIndexEntries(block.Batch.Account(x.Describe.Ledger()).RootChain().Index())
 	if err != nil {
 		return errors.Format(errors.StatusUnknownError, "load root index chain's last two entries: %w", err)
 	}
@@ -296,7 +296,7 @@ func (x *Executor) sendSyntheticTransactions(block *Block) error {
 	}
 
 	// Load the synthetic transaction chain's index chain's last two entries
-	last, nextLast, err = indexing.LoadLastTwoIndexEntries(block.Batch.Account(x.Describe.Synthetic()), protocol.IndexChain(protocol.MainChain, false))
+	last, nextLast, err = indexing.LoadLastTwoIndexEntries(block.Batch.Account(x.Describe.Synthetic()).MainChain().Index())
 	if err != nil {
 		return errors.Format(errors.StatusUnknownError, "load synthetic transaction index chain's last two entries: %w", err)
 	}
@@ -313,7 +313,7 @@ func (x *Executor) sendSyntheticTransactions(block *Block) error {
 	}
 
 	// Load the synthetic transaction chain
-	chain, err := block.Batch.Account(x.Describe.Synthetic()).ReadChain(protocol.MainChain)
+	chain, err := block.Batch.Account(x.Describe.Synthetic()).MainChain().Get()
 	if err != nil {
 		return errors.Format(errors.StatusUnknownError, "load root chain: %w", err)
 	}
