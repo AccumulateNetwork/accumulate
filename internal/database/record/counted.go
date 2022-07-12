@@ -11,12 +11,12 @@ import (
 // a record for the count.
 type Counted[T any] struct {
 	count  *Value[uint64]
-	new    func() EncodableValue[T]
+	new    func() encodableValue[T]
 	values []*Value[T]
 }
 
 // NewCounted returns a new Counted using the given encodable value type.
-func NewCounted[T any](logger log.Logger, store Store, key Key, namefmt string, new func() EncodableValue[T]) *Counted[T] {
+func NewCounted[T any](logger log.Logger, store Store, key Key, namefmt string, new func() encodableValue[T]) *Counted[T] {
 	c := &Counted[T]{}
 	c.count = NewValue(logger, store, key, namefmt, true, Wrapped(UintWrapper))
 	c.new = new
