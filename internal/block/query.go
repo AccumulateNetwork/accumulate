@@ -1121,7 +1121,7 @@ resultLoop:
 
 			minorEntry.TxCount = uint64(0)
 			seen := map[[32]byte]bool{}
-			for _, updIdx := range chainUpdatesIndex.Entries {
+			for _, updIdx := range chainUpdatesIndex {
 				// Only care about the main chain
 				if updIdx.Type != protocol.ChainTypeTransaction || updIdx.Name != "main" {
 					continue

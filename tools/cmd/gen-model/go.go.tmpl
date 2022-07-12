@@ -41,7 +41,7 @@ record.Key{}
 c.key
 {{- end}}
 {{- if parameterized . -}}
-.Append("{{.Name}}", {{range .GetParameters}}{{lower .Name}}{{end}})
+.Append("{{.Name}}", {{range .GetParameters}}{{lower .Name}}, {{end}})
 {{- else -}}
 .Append("{{.Name}}")
 {{- end}}
