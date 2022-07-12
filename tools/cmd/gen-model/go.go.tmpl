@@ -19,18 +19,10 @@ import (
 {{- end}}
 
 {{  define "valueLabelFormat"}}
-{{- if isBaseType .GetParent -}}
-c.label + " {{natural .Name}}"
-{{- else -}}
+{{- if and .GetParent.Type.IsEntity .GetParent.Root -}}
 "{{valueNameFormat .}}"
-{{- end}}
-{{- end}}
-
-{{  define "chainNameFormat"}}
-{{- if isBaseType .GetParent -}}
-c.name + "-{{natural .Name}}"
 {{- else -}}
-"{{chainNameFormat .}}"
+c.label + " {{valueNameFormat .}}"
 {{- end}}
 {{- end}}
 
@@ -41,18 +33,18 @@ record.Key{}
 c.key
 {{- end}}
 {{- if parameterized . -}}
-.Append("{{.Name}}", {{range .GetParameters}}{{lower .Name}}{{end}})
+.Append("{{.Name}}", {{range .GetParameters}}{{lower .Name}}, {{end}})
 {{- else -}}
 .Append("{{.Name}}")
 {{- end}}
 {{- end}}
 
 {{  define "encoder" -}}
-{{- if .Wrapped}}
+{{- if .Wrapped -}}
 record.Wrapped(record.{{title .DataType.String}}Wrapper)
-{{- else if .Union}}
+{{- else if .Union -}}
 record.Union({{unionMethod . "Unmarshal"}})
-{{- else}}
+{{- else -}}
 record.Struct[{{stateType . true}}]()
 {{- end}}
 {{- end}}
@@ -89,6 +81,7 @@ type {{.FullName}} struct {
 	store record.Store
 	{{- if not .Root}}
 	key record.Key
+	label string
 	{{- if .GetParent}}
 	parent *{{.GetParent.FullName}}
 	{{- end}}
@@ -118,11 +111,12 @@ func (c *{{$c.FullName}}) {{template "accessor" .}}({{range .GetParameters}}{{lo
 		v.store = c.store
 		v.key = {{template "key" .}}
 		v.parent = c
+		v.label = {{template "valueLabelFormat" .}}
 		return v
 		{{- else if .Type.IsChain}}
-		return managed.NewChain(c.logger.L, c.store, {{template "key" .}}, markPower, {{/*managed.ChainType{{title .ChainType}},*/}} {{template "chainNameFormat" .}}, {{template "valueLabelFormat" .}})
+		return managed.NewChain(c.logger.L, c.store, {{template "key" .}}, markPower, managed.ChainType{{title .ChainType}}, "{{chainNameFormat .}}", {{template "valueLabelFormat" .}})
 		{{- else if .Type.IsOther}}
-		return new{{.DataType}}(c, c.logger.L, c.store, {{template "key" .}}, {{template "chainNameFormat" .}}, {{template "valueLabelFormat" .}})
+		return new{{.DataType}}(c, c.logger.L, c.store, {{template "key" .}}, "{{chainNameFormat .}}", {{template "valueLabelFormat" .}})
 		{{- else if .IsCounted}}
 		{{- template "newCounted" .}}
 		{{- else}}
@@ -158,7 +152,7 @@ func (c *{{.FullName}}) {{if .CustomResolve}}base{{end}}Resolve(key record.Key) 
 	}
 }
 
-func (c *{{.FullName}}) IsDirty() bool {
+func (c *{{.FullName}}) {{if .CustomIsDirty}}base{{end}}IsDirty() bool {
 	if c == nil {
 		return false
 	}
@@ -244,7 +238,7 @@ func (c *{{.FullName}}) dirtyChains() []*managed.Chain {
 }
 {{end}}
 
-func (c *{{.FullName}}) {{if .CustomCommit}}baseCommit{{else}}Commit{{end}}() error {
+func (c *{{.FullName}}) {{if .CustomCommit}}base{{end}}Commit() error {
 	if c == nil {
 		return nil
 	}

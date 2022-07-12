@@ -34,7 +34,7 @@ func (m *Executor) queryAccount(batch *database.Batch, account *database.Account
 	}
 
 	for _, c := range chains {
-		chain, err := account.ReadChain(c.Name)
+		chain, err := account.GetChainByName(c.Name)
 		if err != nil {
 			return nil, fmt.Errorf("get chain %s: %w", c.Name, err)
 		}
@@ -118,7 +118,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool, scr
 				continue
 			}
 
-			chain, err := batch.Account(u).ReadChain(chainMeta.Name)
+			chain, err := batch.Account(u).GetChainByName(chainMeta.Name)
 			if err != nil {
 				return nil, nil, fmt.Errorf("failed to load chain %s of %q: %v", chainMeta.Name, u, err)
 			}
@@ -152,7 +152,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool, scr
 			return nil, nil, fmt.Errorf("invalid fragment")
 		}
 
-		chain, err := batch.Account(u).ReadChain(fragment[1])
+		chain, err := batch.Account(u).GetChainByName(fragment[1])
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to load chain %q of %q: %v", strings.Join(fragment[1:], "."), u, err)
 		}
@@ -219,7 +219,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool, scr
 				return nil, nil, err
 			}
 
-			txns, perr := m.queryTxHistory(batch, u, uint64(start), uint64(start+count), selectChain(scratch))
+			txns, perr := m.queryTxHistory(batch, chainFor(batch.Account(u), "", scratch), uint64(start), uint64(start+count))
 			if perr != nil {
 				return nil, nil, perr
 			}
@@ -227,7 +227,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool, scr
 			return []byte("tx-history"), txns, nil
 
 		case 2:
-			chain, err := batch.Account(u).ReadChain(chainNameFor(fragment[0], scratch))
+			chain, err := chainFor(batch.Account(u), fragment[0], scratch).Get()
 			if err != nil {
 				return nil, nil, fmt.Errorf("failed to load main chain of %q: %v", u, err)
 			}
@@ -276,13 +276,13 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool, scr
 				if err != nil {
 					return nil, nil, err
 				}
-				txns, perr := m.queryTxHistory(batch, u, uint64(start), uint64(end), protocol.SignatureChain)
+				txns, perr := m.queryTxHistory(batch, batch.Account(u).SignatureChain(), uint64(start), uint64(end))
 				if perr != nil {
 					return nil, nil, perr
 				}
 				return []byte("tx-history"), txns, nil
 			} else {
-				chain, err := batch.Account(u).ReadChain(protocol.SignatureChain)
+				chain, err := batch.Account(u).SignatureChain().Get()
 				if err != nil {
 					return nil, nil, fmt.Errorf("failed to load main chain of %q: %v", u, err)
 				}
@@ -397,23 +397,15 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool, scr
 	return nil, nil, fmt.Errorf("invalid fragment")
 }
 
-func chainNameFor(entity string, scratch bool) string {
+func chainFor(account *database.Account, entity string, scratch bool) *database.Chain2 {
 	switch entity {
 	case "signature":
-		return protocol.SignatureChain
+		return account.SignatureChain()
 	}
 	if scratch {
-		return protocol.ScratchChain
+		return account.ScratchChain()
 	}
-	return protocol.MainChain
-}
-
-func selectChain(scratch bool) string {
-	if scratch {
-		return protocol.ScratchChain
-	} else {
-		return protocol.MainChain
-	}
+	return account.MainChain()
 }
 
 func parseRange(qv url.Values) (start, count int64, err error) {
@@ -707,8 +699,8 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove, remote
 	return &qr, nil
 }
 
-func (m *Executor) queryTxHistory(batch *database.Batch, account *url.URL, start, end uint64, chainName string) (*query.ResponseTxHistory, error) {
-	chain, err := batch.Account(account).ReadChain(chainName)
+func (m *Executor) queryTxHistory(batch *database.Batch, chain_ *database.Chain2, start, end uint64) (*query.ResponseTxHistory, error) {
+	chain, err := chain_.Get()
 	if err != nil {
 		return nil, errors.Format(errors.StatusUnknownError, "error obtaining txid range %v", err)
 	}
@@ -824,7 +816,7 @@ func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove 
 		}
 	case *query.RequestTxHistory:
 		txh := q
-		thr, perr := m.queryTxHistory(batch, txh.Account, txh.Start, txh.Start+txh.Limit, selectChain(txh.Scratch))
+		thr, perr := m.queryTxHistory(batch, chainFor(batch.Account(txh.Account), "", txh.Scratch), txh.Start, txh.Start+txh.Limit)
 		if perr != nil {
 			return nil, nil, perr
 		}
@@ -1005,7 +997,7 @@ func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove 
 		var hash []byte
 		var anchorDest *url.URL
 		if q.Anchor {
-			chain, err := batch.Account(m.Describe.AnchorPool()).ReadChain(protocol.AnchorSequenceChain)
+			chain, err := batch.Account(m.Describe.AnchorPool()).AnchorSequenceChain().Get()
 			if err != nil {
 				return nil, nil, errors.Format(errors.StatusUnknownError, "failed to load the anchor sequence chain: %w", err)
 			}
@@ -1020,7 +1012,7 @@ func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove 
 				return nil, nil, errors.Format(errors.StatusUnknownError, "destination is not a partition")
 			}
 			record := batch.Account(m.Describe.Synthetic())
-			chain, err := record.ReadChain(protocol.SyntheticSequenceChain(partition))
+			chain, err := record.SyntheticSequenceChain(partition).Get()
 			if err != nil {
 				return nil, nil, errors.Format(errors.StatusUnknownError, "failed to load the synth sequence chain: %w", err)
 			}
@@ -1029,7 +1021,7 @@ func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove 
 			if err != nil {
 				return nil, nil, errors.Format(errors.StatusUnknownError, "failed to unmarshal the index entry: %w", err)
 			}
-			chain, err = record.ReadChain(protocol.MainChain)
+			chain, err = record.MainChain().Get()
 			if err != nil {
 				return nil, nil, errors.Format(errors.StatusUnknownError, "failed to load the synth main chain: %w", err)
 			}
@@ -1064,7 +1056,7 @@ func (m *Executor) queryMinorBlocks(batch *database.Batch, req *query.RequestMin
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
-	idxChain, err := ledgerAcc.ReadChain(protocol.MinorRootIndexChain)
+	idxChain, err := ledgerAcc.RootChain().Index().Get()
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
@@ -1121,7 +1113,7 @@ resultLoop:
 
 			minorEntry.TxCount = uint64(0)
 			seen := map[[32]byte]bool{}
-			for _, updIdx := range chainUpdatesIndex.Entries {
+			for _, updIdx := range chainUpdatesIndex {
 				// Only care about the main chain
 				if updIdx.Type != protocol.ChainTypeTransaction || updIdx.Name != "main" {
 					continue
@@ -1177,7 +1169,7 @@ func (m *Executor) expandChainEntries(batch *database.Batch, entries []string) (
 	return expEntries, nil
 }
 
-func (m *Executor) resolveTxReceipt(batch *database.Batch, txid []byte, entry *indexing.TransactionChainEntry) (*query.TxReceipt, error) {
+func (m *Executor) resolveTxReceipt(batch *database.Batch, txid []byte, entry *database.TransactionChainEntry) (*query.TxReceipt, error) {
 	receipt := new(query.TxReceipt)
 	receipt.Account = entry.Account
 	receipt.Chain = entry.Chain
@@ -1196,7 +1188,12 @@ func (m *Executor) resolveTxReceipt(batch *database.Batch, txid []byte, entry *i
 
 func (m *Executor) resolveChainReceipt(batch *database.Batch, account *url.URL, name string, index int64) (*query.GeneralReceipt, error) {
 	receipt := new(query.GeneralReceipt)
-	_, r, err := indexing.ReceiptForChainIndex(&m.Describe, batch, batch.Account(account), name, index)
+	chain, err := batch.Account(account).ChainByName(name)
+	if err != nil {
+		return receipt, err
+	}
+
+	_, r, err := indexing.ReceiptForChainIndex(&m.Describe, batch, chain, index)
 	if err != nil {
 		return receipt, err
 	}
@@ -1233,7 +1230,7 @@ func (m *Executor) shouldBePruned(batch *database.Batch, txid []byte, txBody pro
 
 	// preload the minor root index chain
 	ledger := batch.Account(m.Describe.NodeUrl(protocol.Ledger))
-	minorIndexChain, err := ledger.ReadChain(protocol.MinorRootIndexChain)
+	minorIndexChain, err := ledger.RootChain().Index().Get()
 	if err != nil {
 		return false, err
 	}
