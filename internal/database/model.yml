@@ -23,16 +23,10 @@
   - name: Account
     type: entity
     customCommit: true
-    customResolve: true
     parameters:
     - name: Url
       type: url
       pointer: true
-    fields:
-    - name: label
-      type: string
-    - name: chains2
-      type: map[storage.Key]*managed.Chain
     attributes:
     - name: Main
       type: state
@@ -59,6 +53,55 @@
       dataType: url
       pointer: true
       emptyIfMissing: true
+
+    # Chains
+    - name: MainChain
+      type: other
+      dataType: Chain2
+      pointer: true
+    - name: ScratchChain
+      type: other
+      dataType: Chain2
+      pointer: true
+    - name: SignatureChain
+      type: other
+      dataType: Chain2
+      pointer: true
+    - name: RootChain
+      type: other
+      dataType: Chain2
+      pointer: true
+    - name: AnchorSequenceChain
+      type: other
+      dataType: Chain2
+      pointer: true
+    - name: MajorBlockChain
+      type: other
+      dataType: Chain2
+      pointer: true
+    - name: SyntheticSequenceChain
+      type: other
+      dataType: Chain2
+      pointer: true
+      private: true
+      parameters:
+      - name: Partition
+        type: string
+    - name: AnchorChain
+      type: entity
+      private: true
+      parameters:
+      - name: Partition
+        type: string
+      attributes:
+      - name: Root
+        type: other
+        dataType: Chain2
+        pointer: true
+      - name: BPT
+        type: other
+        dataType: Chain2
+        pointer: true
 
     # Indices
     - name: Chains
@@ -90,9 +133,6 @@
     parameters:
     - name: Hash
       type: hash
-    fields:
-    - name: label
-      type: string
     attributes:
     - name: Main
       type: state
@@ -126,7 +166,6 @@
       pointer: true
       collection: set
       emptyIfMissing: true
-
 
   # System Indices - TODO Remove or update these
   - name: BlockChainUpdates

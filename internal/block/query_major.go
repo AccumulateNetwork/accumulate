@@ -14,7 +14,7 @@ func (m *Executor) queryMajorBlocks(batch *database.Batch, req *query.RequestMaj
 	anchorsAcc := batch.Account(m.Describe.NodeUrl(protocol.AnchorPool))
 	ledgerAcc := batch.Account(m.Describe.NodeUrl(protocol.Ledger))
 
-	mjrIdxChain, err := anchorsAcc.ReadChain(protocol.IndexChain(protocol.MainChain, true))
+	mjrIdxChain, err := anchorsAcc.MajorBlockChain().Get()
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
@@ -64,7 +64,7 @@ majorEntryLoop:
 			rspMjrEntry = new(query.ResponseMajorEntry)
 		}
 
-		mnrIdxChain, err := ledgerAcc.ReadChain(protocol.MinorRootIndexChain)
+		mnrIdxChain, err := ledgerAcc.RootChain().Index().Get()
 		if err != nil {
 			return nil, errors.Wrap(errors.StatusUnknownError, err)
 		}
