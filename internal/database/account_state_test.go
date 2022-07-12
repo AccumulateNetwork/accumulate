@@ -17,7 +17,7 @@ func TestAccountState(t *testing.T) {
 	bookurl := url.MustParse("acc://testadi1.acme/testbook1")
 	testurl := url.MustParse("acc://testurl")
 	a := batch.Account(adiurl)
-	acc := &protocol.ADI{Url: adiurl, AccountAuth: protocol.AccountAuth{Authorities: []protocol.AuthorityEntry{protocol.AuthorityEntry{Url: bookurl}}}}
+	acc := &protocol.ADI{Url: adiurl, AccountAuth: protocol.AccountAuth{Authorities: []protocol.AuthorityEntry{{Url: bookurl}}}}
 	err := a.PutState(acc)
 	require.NoError(t, err)
 	h1, err := a.hashState()
