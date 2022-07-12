@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
 	"math"
@@ -18,6 +17,7 @@ import (
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
@@ -312,7 +312,7 @@ func dispatchTxRequest(payload interface{}, origin *url2.URL, signers []*signing
 	if res.Code != 0 {
 		result := new(protocol.TransactionStatus)
 		if Remarshal(res.Result, result) != nil {
-			return nil, errors.New(res.Message)
+			return nil, errors.New(errors.StatusEncodingError, res.Message)
 		}
 		return nil, result.Error
 	}
