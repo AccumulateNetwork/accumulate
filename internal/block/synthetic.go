@@ -147,7 +147,7 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 	}
 
 	// Add the transaction to the synthetic transaction chain
-	chain, err := record.Chain(protocol.MainChain, protocol.ChainTypeTransaction)
+	chain, err := record.MainChain().Get()
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +168,7 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 		return nil, errors.Format(errors.StatusInternalError, "destination URL is not a valid partition")
 	}
 
-	indexIndex, err := addIndexChainEntry(record, protocol.SyntheticSequenceChain(partition), &protocol.IndexEntry{
+	indexIndex, err := addIndexChainEntry(record.SyntheticSequenceChain(partition), &protocol.IndexEntry{
 		Source: uint64(index),
 	})
 	if err != nil {
@@ -183,7 +183,7 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 
 func (x *Executor) buildSynthReceipt(batch *database.Batch, produced []*protocol.Transaction, rootAnchor, synthAnchor int64) error {
 	// Load the root chain
-	chain, err := batch.Account(x.Describe.Ledger()).ReadChain(protocol.MinorRootChain)
+	chain, err := batch.Account(x.Describe.Ledger()).RootChain().Get()
 	if err != nil {
 		return errors.Format(errors.StatusUnknownError, "load root chain: %w", err)
 	}
@@ -195,7 +195,7 @@ func (x *Executor) buildSynthReceipt(batch *database.Batch, produced []*protocol
 	}
 
 	// Load the synthetic transaction chain
-	chain, err = batch.Account(x.Describe.Synthetic()).ReadChain(protocol.MainChain)
+	chain, err = batch.Account(x.Describe.Synthetic()).MainChain().Get()
 	if err != nil {
 		return errors.Format(errors.StatusUnknownError, "load root chain: %w", err)
 	}

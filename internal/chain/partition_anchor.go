@@ -53,13 +53,14 @@ func (x PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 	}
 
 	// Add the anchor to the chain - use the partition name as the chain name
-	err = st.AddChainEntry(st.OriginUrl, protocol.RootAnchorChain(name), protocol.ChainTypeAnchor, body.RootChainAnchor[:], body.RootChainIndex, body.MinorBlockIndex)
+	record := st.batch.Account(st.OriginUrl).AnchorChain(name)
+	err = st.AddChainEntry(record.Root(), body.RootChainAnchor[:], body.RootChainIndex, body.MinorBlockIndex)
 	if err != nil {
 		return nil, err
 	}
 
 	// And the BPT root
-	err = st.AddChainEntry(st.OriginUrl, protocol.BPTAnchorChain(name), protocol.ChainTypeAnchor, body.StateTreeAnchor[:], 0, 0)
+	err = st.AddChainEntry(record.BPT(), body.StateTreeAnchor[:], 0, 0)
 	if err != nil {
 		return nil, err
 	}

@@ -39,9 +39,6 @@
 - name: TemplateTest
   # Test all the supported simple attribute types
   type: entity
-  fields:
-  - name: label
-    type: string
   attributes:
   - name: Wrapped
     type: state

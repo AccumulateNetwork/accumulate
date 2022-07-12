@@ -16,16 +16,16 @@ func TestRestart(t *testing.T) {
 	MarkPower := int64(2)
 
 	for i := 0; i < 20; i++ { //                                      Run 100 tests
-		MM1 := newChain(store, MarkPower) //                  Create a MerkleManager
+		MM1 := testChain(store, MarkPower) //                  Create a MerkleManager
 
 		for j := 0; j < 100; j++ { //                                   Add 100 hashes
 			if j == i {
-				MM2 := newChain(store, MarkPower) // Then get the highest state stored
-				h1, err := MM1.Head().Get()       //
-				require.NoError(t, err)           //
-				h2, err := MM2.Head().Get()       //
-				require.NoError(t, err)           //
-				if !h1.Equal(h2) {                // MM2 should be the same as MM1
+				MM2 := testChain(store, MarkPower) // Then get the highest state stored
+				h1, err := MM1.Head().Get()        //
+				require.NoError(t, err)            //
+				h2, err := MM2.Head().Get()        //
+				require.NoError(t, err)            //
+				if !h1.Equal(h2) {                 // MM2 should be the same as MM1
 					t.Fatalf("could not restore MM1 in MM2.  index: %d", j) // are going to be messed up.
 				}
 			}
@@ -46,7 +46,7 @@ func TestRestartCache(t *testing.T) {
 	MarkPower := int64(2)
 
 	for i := uint(0); i < 50; i += uint(rand.Int()) % 10 { //
-		MM1 := newChain(record.KvStore{Store: txn}, MarkPower) //                  Create a MerkleManager
+		MM1 := testChain(record.KvStore{Store: txn}, MarkPower) //                  Create a MerkleManager
 
 		var cached [][]byte // Using this slice to track the hashes that have been written to MM1
 		//                       but not yet written to disk by MM1.  Calling EndBatch on MM1 will need to
@@ -64,17 +64,17 @@ func TestRestartCache(t *testing.T) {
 				require.NoError(t, txn.Commit())
 				txn = store.Begin(true)
 				cached = cached[:0] //  Clear the cache
-				MM1 = newChain(record.KvStore{Store: txn}, MarkPower)
+				MM1 = testChain(record.KvStore{Store: txn}, MarkPower)
 			}
 
 			if j == i {
 				ndb := store.Copy() // This simulates opening a new database later (MM2)
 				nbatch := ndb.Begin(true)
-				MM2 := newChain(record.KvStore{Store: nbatch}, MarkPower) // Then get the highest state stored
-				h1, err := MM1.Head().Get()                               //
-				require.NoError(t, err)                                   //
-				h2, err := MM2.Head().Get()                               //
-				require.NoError(t, err)                                   //
+				MM2 := testChain(record.KvStore{Store: nbatch}, MarkPower) // Then get the highest state stored
+				h1, err := MM1.Head().Get()                                //
+				require.NoError(t, err)                                    //
+				h2, err := MM2.Head().Get()                                //
+				require.NoError(t, err)                                    //
 
 				if h1.Equal(h2) && len(cached) > 0 {
 					t.Error("MM2 should not be the same as MM1 if some hashes are in the cache still")
