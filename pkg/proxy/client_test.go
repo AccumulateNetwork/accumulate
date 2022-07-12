@@ -33,7 +33,7 @@ func TestAccuProxyClient(t *testing.T) {
 
 	//createProxyAccounts(d.,key)
 
-	client, _ := testing2.LaunchFakeProxy(t)
+	client, _, _, _ := testing2.LaunchFakeProxy(t)
 
 	ssr := proxy.PartitionListRequest{}
 	ssr.Network = "AccuProxyTest"
@@ -78,8 +78,8 @@ func TestAccuProxyClient(t *testing.T) {
 	ncr.Network = "AccuProxyTest"
 	ncResp, err := client.GetNetworkConfig(context.Background(), &ncr)
 	require.NoError(t, err)
-	require.True(t, ncResp.Network.Equal(&testing2.Network))
-	d, err = ncResp.Network.MarshalBinary()
+	require.True(t, ncResp.NetworkState.Network.Equal(&testing2.Network))
+	d, err = ncResp.NetworkState.Network.MarshalBinary()
 	require.NoError(t, err)
 	hash = sha256.Sum256(d)
 	require.True(t, ncResp.Signature.Verify(hash[:]))

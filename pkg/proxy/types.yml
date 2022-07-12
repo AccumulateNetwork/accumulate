@@ -1,3 +1,18 @@
+
+NetworkState:
+  fields:
+    - name: Network
+      type: config.Network
+      marshal-as: reference
+    - name: Version
+      type: string
+    - name: Commit
+      type: string
+    - name: VersionIsKnown
+      type: bool
+    - name: IsTestNet
+      type: bool
+
 NetworkConfigRequest:
   non-binary: true
   fields:
@@ -10,8 +25,8 @@ NetworkConfigRequest:
 NetworkConfigResponse:
   non-binary: true
   fields:
-    - name: Network
-      type: config.Network
+    - name: NetworkState
+      type: NetworkState
       marshal-as: reference
     - name: Signature
       type: protocol.KeySignature
@@ -58,6 +73,11 @@ SeedListRequest:
 
 SeedList:
   fields:
+    - name: BasePort
+      type: uvarint
+    - name: Type
+      type: config.NetworkType
+      marshal-as: enum
     - name: Addresses
       type: string
       repeatable: true

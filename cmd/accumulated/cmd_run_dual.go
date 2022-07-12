@@ -45,5 +45,6 @@ func runDualNode(cmd *cobra.Command, args []string) {
 	err = svc.Run()
 	if err != nil {
 		_ = logger.Error(err)
+		checkf(err, "cannot start dual node service")
 	}
 }

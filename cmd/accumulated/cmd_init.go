@@ -24,9 +24,9 @@ import (
 	"github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate"
 	cmd2 "gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/cmd"
-	"gitlab.com/accumulatenetwork/accumulate/config"
 	cfg "gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/proxy"
@@ -41,8 +41,8 @@ var cmdInit = &cobra.Command{
 }
 
 var cmdInitNode = &cobra.Command{
-	Use:   "node <network-name|url>",
-	Short: "Initialize a node",
+	Use:   "node <partition.network name> or <peer url>",
+	Short: "Initialize a node using the partition.network name and --seed or via a peer URL",
 	Run:   initNode,
 	Args:  cobra.ExactArgs(1),
 }
@@ -110,12 +110,11 @@ func init() {
 
 	cmdInitNode.Flags().BoolVarP(&flagInitNode.Follower, "follow", "f", false, "Do not participate in voting")
 	cmdInitNode.Flags().StringVar(&flagInitNode.GenesisDoc, "genesis-doc", "", "Genesis doc for the target network")
-	cmdInitNode.Flags().StringVarP(&flagInitNode.ListenIP, "listen", "l", "", "Address and port to listen on, e.g. tcp://1.2.3.4:5678")
+	cmdInitNode.Flags().StringVarP(&flagInitNode.ListenIP, "listen", "l", "", "Address and port to listen on, e.g. tcp://1.2.3.4:5678, default will be http://0.0.0.0:basePort where base port is determined by seed or peer")
 	cmdInitNode.Flags().StringVarP(&flagInitNode.PublicIP, "public", "p", "", "public IP or URL")
 	cmdInitNode.Flags().BoolVar(&flagInitNode.SkipVersionCheck, "skip-version-check", false, "Do not enforce the version check")
 	cmdInitNode.Flags().StringVar(&flagInitNode.SeedProxy, "seed", "", "Fetch network configuration from seed proxy")
 	cmdInitNode.Flags().BoolVarP(&flagInitNode.AllowUnhealthyPeers, "skip-peer-health-check", "", false, "do not check health of peers")
-	_ = cmdInitNode.MarkFlagRequired("listen")
 
 	cmdInitDualNode.Flags().BoolVarP(&flagInitDualNode.Follower, "follow", "f", false, "Do not participate in voting")
 	cmdInitDualNode.Flags().StringVar(&flagInitDualNode.GenesisDoc, "genesis-doc", "", "Genesis doc for the target network")
@@ -205,7 +204,10 @@ func nodeReset(dir string) bool {
 	return !skipped
 }
 
-func findInDescribe(addr string, partitionId string, d *config.Network) (partition *config.Partition, node *config.Node, err error) {
+func findInDescribe(addr string, partitionId string, d *cfg.Network) (partition *cfg.Partition, node *cfg.Node, err error) {
+	if partitionId == "" {
+		partitionId = d.Id
+	}
 	for i, v := range d.Partitions {
 		//search for the address.
 		partition = &d.Partitions[i]
@@ -226,52 +228,168 @@ func findInDescribe(addr string, partitionId string, d *config.Network) (partiti
 	return nil, nil, fmt.Errorf("cannot locate %s in network description", addr)
 }
 
-func initNode(cmd *cobra.Command, args []string) {
-	if !cmd.Flag("work-dir").Changed {
-		fmt.Fprintf(os.Stderr, "Error: --work-dir flag is required\n\n")
-		_ = cmd.Usage()
-		os.Exit(1)
+func initNodeFromSeedProxy(cmd *cobra.Command, args []string) (int, *cfg.Config, *types.GenesisDoc, error) {
+	s := strings.Split(args[0], ".")
+	if len(s) != 2 {
+		fatalf("network must be in the form of <partition-name>.<network-name>, e.g. mainnet.bvn0")
+	}
+	partitionName := s[0]
+	networkName := s[1]
+
+	if flagInitNode.AllowUnhealthyPeers {
+		warnf("peers must be checked to use for bootstrapping when using, --allow-unhealthy-peers will have no effect")
 	}
 
-	netAddr, netPort, err := resolveAddr(args[0])
-	checkf(err, "invalid network URL")
+	//go gather a more robust network description
+	seedProxy, err := proxy.New(flagInitNode.SeedProxy)
+	check(err)
 
-	publicAddr := ""
-	if flagInitNode.PublicIP != "" {
-		publicAddr, err = resolveIp(flagInitNode.PublicIP)
-		checkf(err, "invalid public address")
+	slr := proxy.SeedListRequest{}
+	slr.Network = networkName
+	slr.Partition = partitionName
+	slr.Sign = true
+	resp, err := seedProxy.GetSeedList(context.Background(), &slr)
+	if err != nil {
+		return 0, nil, nil, fmt.Errorf("proxy returned seeding error, %v", err)
 	}
 
-	u, err := url.Parse(flagInitNode.ListenIP)
-	checkf(err, "invalid --listen %q", flagInitNode.ListenIP)
+	//check to make sure the signature checks out.
+	b, err := resp.SeedList.MarshalBinary()
+	if err != nil {
+		return 0, nil, nil, fmt.Errorf("invalid seed list, %v", err)
+	}
 
-	nodePort := 26656
-	if u.Port() != "" {
-		p, err := strconv.ParseInt(u.Port(), 10, 16)
+	txHash := sha256.Sum256(b)
+	if !resp.Signature.Verify(txHash[:]) {
+		return 0, nil, nil, fmt.Errorf("invalid signature from proxy")
+	}
+
+	config := cfg.Default(networkName, resp.Type, getNodeTypeFromFlag(), partitionName)
+
+	var lastHealthyTmPeer *rpchttp.HTTP
+	var lastHealthyAccPeer *client.Client
+	for _, addr := range resp.Addresses {
+		//go build a list of healthy nodes
+		u, err := cfg.OffsetPort(addr, int(resp.BasePort), int(cfg.PortOffsetTendermintRpc))
 		if err != nil {
-			fatalf("invalid port number %q", u.Port())
+			return 0, nil, nil, fmt.Errorf("failed to parse url from network info %s, %v", addr, err)
 		}
-		nodePort = int(p)
+		//check the health of the peer
+		peerClient, err := rpchttp.New(fmt.Sprintf("tcp://%s:%s", u.Hostname(), u.Port()))
+		if err != nil {
+			return 0, nil, nil, fmt.Errorf("failed to create Tendermint client for %s, %v", u.String(), err)
+		}
+
+		peerStatus, err := peerClient.Status(context.Background())
+		if err != nil {
+			warnf("ignoring peer: not healthy %s", u.String())
+			continue
+		}
+
+		lastHealthyTmPeer = peerClient
+
+		//need a healthy accumulate node to further verify the proxy
+		u, err = cfg.OffsetPort(addr, int(resp.BasePort), int(cfg.PortOffsetAccumulateApi))
+		lastHealthyAccPeer, err = client.New(fmt.Sprintf("http://%s:%s", u.Hostname(), u.Port()))
+		if err != nil {
+			return 0, nil, nil, fmt.Errorf("failed to create accumulate client for %s, %v", u.String(), err)
+		}
+
+		//if we have a healthy node with a matching id, add it as a bootstrap peer
+		config.P2P.BootstrapPeers += "," + peerStatus.NodeInfo.NodeID.AddressString(strconv.Itoa(int(resp.BasePort)+int(cfg.PortOffsetTendermintP2P)))
+	}
+	if lastHealthyAccPeer == nil || lastHealthyTmPeer == nil {
+		return 0, nil, nil, fmt.Errorf("no healthy peers, cannot continue")
+	}
+	genDoc := &types.GenesisDoc{}
+	if cmd.Flag("genesis-doc").Changed {
+		genDoc, err = types.GenesisDocFromFile(flagInitNode.GenesisDoc)
+		if err != nil {
+			return 0, nil, nil, fmt.Errorf("failed to load genesis doc %q, %v", flagInitNode.GenesisDoc, err)
+		}
+	} else {
+		if lastHealthyTmPeer == nil {
+			return 0, nil, nil, fmt.Errorf("no healthy tendermint peers, cannot fetch genesis document")
+		}
+		warnf("You are fetching the Genesis document from %s! Only do this if you trust %[1]s and your connection to it!", args[0])
+		rgen, err := lastHealthyTmPeer.Genesis(context.Background())
+		if err != nil {
+			return 0, nil, nil, fmt.Errorf("failed to get genesis from %s, %v", args[0], err)
+		}
+		genDoc = rgen.Genesis
 	}
 
-	accClient, err := client.New(fmt.Sprintf("http://%s:%d", netAddr, netPort+int(config.PortOffsetAccumulateApi)))
-	checkf(err, "failed to create API client for %s", args[0])
+	cmd2.Client = lastHealthyAccPeer
+	//now check the resigtry keybook to make sure the proxy is a registered proxy
+	res, err := cmd2.GetUrl("accuproxy.acme/registry/1")
+	if err != nil {
+		return 0, nil, nil, fmt.Errorf("cannot query the accuproxy registry, %v", err)
+	}
 
-	tmClient, err := rpchttp.New(fmt.Sprintf("tcp://%s:%d", netAddr, netPort+int(config.PortOffsetTendermintRpc)))
-	checkf(err, "failed to create Tendermint client for %s", args[0])
+	kp := protocol.KeyPage{}
+	err = cmd2.Remarshal(res.Data, &kp)
+	if err != nil {
+		return 0, nil, nil, fmt.Errorf("cannot remarshal key page, %v", err)
+	}
+
+	_, _, found := kp.EntryByKeyHash(resp.Signature.GetPublicKeyHash())
+	if !found {
+		return 0, nil, nil, fmt.Errorf("seed proxy is not registered")
+	}
+
+	//now query the whole network configuration from the proxy.
+	ncr := proxy.NetworkConfigRequest{}
+	ncr.Sign = true
+	ncr.Network = networkName
+	nc, err := seedProxy.GetNetworkConfig(context.Background(), &ncr)
+	if err != nil {
+		return 0, nil, nil, err
+	}
+
+	d, err := nc.NetworkState.MarshalBinary()
+	h := sha256.Sum256(d)
+	if !nc.Signature.Verify(h[:]) {
+		return 0, nil, nil, fmt.Errorf("cannot verify network configuration from proxy")
+	}
+	_, _, found = kp.EntryByKeyHash(nc.Signature.GetPublicKeyHash())
+	if !found {
+		return 0, nil, nil, fmt.Errorf("seed proxy is not registered")
+	}
+
+	version := &api.VersionResponse{
+		Version:        nc.NetworkState.Version,
+		Commit:         nc.NetworkState.Commit,
+		VersionIsKnown: nc.NetworkState.VersionIsKnown,
+		IsTestNet:      nc.NetworkState.IsTestNet,
+	}
+	err = versionCheck(version, "proxy")
+	if err != nil {
+		return 0, nil, nil, err
+	}
+
+	config.Accumulate.Describe = cfg.Describe{NetworkType: resp.Type, PartitionId: partitionName, LocalAddress: "", Network: nc.NetworkState.Network}
+
+	return int(resp.BasePort), config, genDoc, nil
+}
+
+func initNodeFromPeer(cmd *cobra.Command, args []string) (int, *cfg.Config, *types.GenesisDoc, error) {
+	netAddr, netPort, err := resolveAddr(args[0])
+	if err != nil {
+		return 0, nil, nil, fmt.Errorf("invalid peer url %v", err)
+	}
+
+	accClient, err := client.New(fmt.Sprintf("http://%s:%d", netAddr, netPort+int(cfg.PortOffsetAccumulateApi)))
+	if err != nil {
+		return 0, nil, nil, fmt.Errorf("failed to create API client for %s, %v", args[0], err)
+	}
+
+	tmClient, err := rpchttp.New(fmt.Sprintf("tcp://%s:%d", netAddr, netPort+int(cfg.PortOffsetTendermintRpc)))
+	if err != nil {
+		return 0, nil, nil, fmt.Errorf("failed to create Tendermint client for %s, %v", args[0], err)
+	}
 
 	version := getVersion(accClient)
-	switch {
-	case !accumulate.IsVersionKnown() && !version.VersionIsKnown:
-		warnf("The version of this executable and %s is unknown. If there is a version mismatch, the node may fail.", args[0])
-
-	case accumulate.Commit != version.Commit:
-		if flagInitNode.SkipVersionCheck {
-			warnf("This executable is version %s but %s is %s. This may cause the node to fail.", formatVersion(accumulate.Version, accumulate.IsVersionKnown()), args[0], formatVersion(version.Version, version.VersionIsKnown))
-		} else {
-			fatalf("wrong version: network is %s, we are %s", formatVersion(version.Version, version.VersionIsKnown), formatVersion(accumulate.Version, accumulate.IsVersionKnown()))
-		}
-	}
+	versionCheck(version, args[0])
 
 	description, err := accClient.Describe(context.Background())
 	checkf(err, "failed to get description from %s", args[0])
@@ -290,117 +408,88 @@ func initNode(cmd *cobra.Command, args []string) {
 	status, err := tmClient.Status(context.Background())
 	checkf(err, "failed to get status of %s", args[0])
 
-	nodeType := cfg.Validator
-	if flagInitNode.Follower {
-		nodeType = cfg.Follower
-	}
-	config := config.Default(description.Network.Id, description.NetworkType, nodeType, description.PartitionId)
+	config := cfg.Default(description.Network.Id, description.NetworkType, getNodeTypeFromFlag(), description.PartitionId)
 	config.P2P.BootstrapPeers = fmt.Sprintf("%s@%s:%d", status.NodeInfo.NodeID, netAddr, netPort+int(cfg.PortOffsetTendermintP2P))
 
-	if flagInitNode.SeedProxy != "" {
-		if flagInitNode.AllowUnhealthyPeers {
-			warnf("peers must be checked to use for bootstrapping when using, --allow-unhealthy-peers will have no effect")
-		}
-		//go gather a more robust network description
-		seedProxy, err := proxy.New(flagInitNode.SeedProxy)
-		check(err)
-		slr := proxy.SeedListRequest{}
-		slr.Network = description.Network.Id
-		slr.Partition = description.PartitionId
-		slr.Sign = true
-		resp, err := seedProxy.GetSeedList(context.Background(), &slr)
-		if err != nil {
-			checkf(err, "proxy returned seeding error")
-		}
-		//check to make sure the signature checks out.
-		b, err := resp.SeedList.MarshalBinary()
-		checkf(err, "invalid seed list")
-		txHash := sha256.Sum256(b)
-		if !resp.Signature.Verify(txHash[:]) {
-			fatalf("invalid signature from proxy")
-		}
-		//now check the resigtry keybook to make sure the proxy is a registered proxy
-		res, err := cmd2.GetUrl("accuproxy.acme/registry/1")
-		checkf(err, "cannot query the accuproxy registry")
-		kp := protocol.KeyPage{}
-		err = cmd2.Remarshal(res.Data, &kp)
-		checkf(err, "cannot remarshal key page")
-		_, _, found := kp.EntryByKeyHash(resp.Signature.GetPublicKeyHash())
-		if !found {
-			fatalf("seed proxy is not registered")
-		}
+	//otherwise make the best out of what we have to establish our bootstrap peers
+	netInfo, err := tmClient.NetInfo(context.Background())
+	checkf(err, "failed to get network info from node")
 
-		for _, addr := range resp.Addresses {
-			//go build a list of healthy nodes
-			u, err := cfg.OffsetPort(addr, netPort, int(cfg.PortOffsetTendermintP2P))
-			checkf(err, "failed to parse url from network info %s", addr)
+	for _, peer := range netInfo.Peers {
+		u, err := url.Parse(peer.URL)
+		checkf(err, "failed to parse url from network info %s", peer.URL)
 
+		clientUrl := fmt.Sprintf("tcp://%s:%s", u.Hostname(), u.Port())
+
+		if !flagInitNode.AllowUnhealthyPeers {
 			//check the health of the peer
-			peerClient, err := rpchttp.New(fmt.Sprintf("tcp://%s:%s", u.Hostname(), u.Port()))
+			peerClient, err := rpchttp.New(clientUrl)
 			checkf(err, "failed to create Tendermint client for %s", u.String())
 
 			peerStatus, err := peerClient.Status(context.Background())
 			if err != nil {
-				warnf("ignoring peer: not healthy %s", u.String())
+				warnf("ignoring peer: not healthy %s", clientUrl)
 				continue
 			}
 
-			//if we have a healthy node with a matching id, add it as a bootstrap peer
-			config.P2P.BootstrapPeers += "," + peerStatus.NodeInfo.NodeID.AddressString(strconv.Itoa(netPort+int(cfg.PortOffsetTendermintP2P)))
-		}
-	} else {
-		//otherwise make the best out of what we have to establish our bootstrap peers
-		netInfo, err := tmClient.NetInfo(context.Background())
-		checkf(err, "failed to get network info from node")
-
-		for _, peer := range netInfo.Peers {
-			u, err := url.Parse(peer.URL)
-			checkf(err, "failed to parse url from network info %s", peer.URL)
-
-			clientUrl := fmt.Sprintf("tcp://%s:%s", u.Hostname(), u.Port())
-
-			if !flagInitNode.AllowUnhealthyPeers {
-				//check the health of the peer
-				peerClient, err := rpchttp.New(clientUrl)
-				checkf(err, "failed to create Tendermint client for %s", u.String())
-
-				peerStatus, err := peerClient.Status(context.Background())
-				if err != nil {
-					warnf("ignoring peer: not healthy %s", clientUrl)
-					continue
-				}
-
-				statBytes, err := peerStatus.NodeInfo.NodeID.Bytes()
-				if err != nil {
-					warnf("ignoring healthy peer %s because peer id is invalid", u.String())
-					continue
-				}
-
-				peerBytes, err := peer.ID.Bytes()
-				if err != nil {
-					warnf("ignoring peer %s because node id is not valid", u.String())
-					continue
-				}
-
-				if bytes.Compare(statBytes, peerBytes) != 0 {
-					warnf("ignoring stale peer %s", u.String())
-					continue
-
-				}
+			statBytes, err := peerStatus.NodeInfo.NodeID.Bytes()
+			if err != nil {
+				warnf("ignoring healthy peer %s because peer id is invalid", u.String())
+				continue
 			}
 
-			//if we have a healthy node with a matching id, add it as a bootstrap peer
-			config.P2P.BootstrapPeers += "," + u.String()
+			peerBytes, err := peer.ID.Bytes()
+			if err != nil {
+				warnf("ignoring peer %s because node id is not valid", u.String())
+				continue
+			}
+
+			if bytes.Compare(statBytes, peerBytes) != 0 {
+				warnf("ignoring stale peer %s", u.String())
+				continue
+			}
 		}
+
+		//if we have a healthy node with a matching id, add it as a bootstrap peer
+		config.P2P.BootstrapPeers += "," + u.String()
 	}
 
-	if publicAddr != "" {
-		partition, _, err := findInDescribe(publicAddr, description.PartitionId, &description.Network)
+	config.Accumulate.Describe = cfg.Describe{
+		NetworkType: description.NetworkType, PartitionId: description.PartitionId,
+		LocalAddress: "", Network: description.Network}
+	return netPort, config, genDoc, nil
+}
+
+func initNode(cmd *cobra.Command, args []string) {
+	if !cmd.Flag("work-dir").Changed {
+		fmt.Fprintf(os.Stderr, "Error: --work-dir flag is required\n\n")
+		_ = cmd.Usage()
+		os.Exit(1)
+	}
+
+	var config *cfg.Config
+	var genDoc *types.GenesisDoc
+	var basePort int
+	var err error
+	if flagInitNode.SeedProxy != "" {
+		basePort, config, genDoc, err = initNodeFromSeedProxy(cmd, args)
+		checkf(err, "failed to configure node from seed proxy, %v", err)
+	} else {
+		basePort, config, genDoc, err = initNodeFromPeer(cmd, args)
+		checkf(err, "failed to configure node from peer, %v", err)
+	}
+
+	var publicAddr string
+	if flagInitNode.PublicIP != "" {
+		publicAddr, err = resolveIp(flagInitNode.PublicIP)
+		checkf(err, "invalid public address")
+
+		partition, _, err := findInDescribe(publicAddr, config.Accumulate.PartitionId, &config.Accumulate.Network)
 		checkf(err, "cannot resolve public address in description")
 		//the address wasn't found in the network description, so add it
-		partition.Nodes = append(partition.Nodes, cfg.Node{Address: "http://" + publicAddr, Type: nodeType})
+		partition.Nodes = append(partition.Nodes, cfg.Node{Address: "http://" + publicAddr, Type: getNodeTypeFromFlag()})
 	}
-	config.Accumulate.Describe = cfg.Describe{NetworkType: description.NetworkType, PartitionId: description.PartitionId, LocalAddress: "", Network: description.Network}
+
 	config.Accumulate.AnalysisLog.Enabled = flagInit.EnableTimingLogs
 
 	if flagInit.LogLevels != "" {
@@ -419,12 +508,28 @@ func initNode(cmd *cobra.Command, args []string) {
 	if flagInit.Reset {
 		networkReset()
 	}
+
+	listenUrl, err := url.Parse(fmt.Sprintf("tcp://0.0.0.0:%d", basePort))
+	checkf(err, "invalid default listen url")
+	if flagInitNode.ListenIP != "" {
+		listenUrl, err = url.Parse(flagInitNode.ListenIP)
+		checkf(err, "invalid --listen %q", flagInitNode.ListenIP)
+
+		if listenUrl.Port() != "" {
+			p, err := strconv.ParseInt(listenUrl.Port(), 10, 16)
+			if err != nil {
+				fatalf("invalid port number %q", listenUrl.Port())
+			}
+			basePort = int(p)
+		}
+	}
+
 	netDir := netDir(config.Accumulate.Describe.NetworkType)
 	config.SetRoot(filepath.Join(flagMain.WorkDir, netDir))
 	accumulated.ConfigureNodePorts(&accumulated.NodeInit{
-		HostName: u.Hostname(),
-		ListenIP: u.Hostname(),
-		BasePort: uint64(nodePort),
+		HostName: listenUrl.Hostname(),
+		ListenIP: listenUrl.Hostname(),
+		BasePort: uint64(basePort),
 	}, config, 0)
 
 	config.PrivValidator.Key = "../priv_validator_key.json"
@@ -449,7 +554,7 @@ func netDir(networkType cfg.NetworkType) string {
 }
 
 func newLogger() log.Logger {
-	levels := config.DefaultLogLevels
+	levels := cfg.DefaultLogLevels
 	if flagInit.LogLevels != "" {
 		levels = flagInit.LogLevels
 	}
@@ -495,4 +600,27 @@ func resolveAddr(addr string) (string, int, error) {
 	}
 
 	return ip.Hostname(), int(port), nil
+}
+
+func getNodeTypeFromFlag() cfg.NodeType {
+	nodeType := cfg.Validator
+	if flagInitNode.Follower {
+		nodeType = cfg.Follower
+	}
+	return nodeType
+}
+
+func versionCheck(version *api.VersionResponse, peer string) error {
+	switch {
+	case !accumulate.IsVersionKnown() && !version.VersionIsKnown:
+		warnf("The version of this executable and %s is unknown. If there is a version mismatch, the node may fail.", peer)
+
+	case accumulate.Commit != version.Commit:
+		if flagInitNode.SkipVersionCheck {
+			warnf("This executable is version %s but %s is %s. This may cause the node to fail.", formatVersion(accumulate.Version, accumulate.IsVersionKnown()), peer, formatVersion(version.Version, version.VersionIsKnown))
+		} else {
+			return fmt.Errorf("wrong version: network is %s, we are %s", formatVersion(version.Version, version.VersionIsKnown), formatVersion(accumulate.Version, accumulate.IsVersionKnown()))
+		}
+	}
+	return nil
 }

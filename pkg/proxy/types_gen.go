@@ -14,12 +14,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-type NetworkConfig struct {
-	fieldsSet []bool
-	Network   config.Network `json:"network,omitempty" form:"network" query:"network" validate:"required"`
-	extraData []byte
-}
-
 type NetworkConfigRequest struct {
 	Network   string `json:"network,omitempty" form:"network" query:"network" validate:"required"`
 	Sign      bool   `json:"sign,omitempty" form:"sign" query:"sign"`
@@ -27,9 +21,19 @@ type NetworkConfigRequest struct {
 }
 
 type NetworkConfigResponse struct {
-	Network   config.Network        `json:"network,omitempty" form:"network" query:"network" validate:"required"`
-	Signature protocol.KeySignature `json:"signature,omitempty" form:"signature" query:"signature"`
-	extraData []byte
+	NetworkState NetworkState          `json:"networkState,omitempty" form:"networkState" query:"networkState" validate:"required"`
+	Signature    protocol.KeySignature `json:"signature,omitempty" form:"signature" query:"signature"`
+	extraData    []byte
+}
+
+type NetworkState struct {
+	fieldsSet      []bool
+	Network        config.Network `json:"network,omitempty" form:"network" query:"network" validate:"required"`
+	Version        string         `json:"version,omitempty" form:"version" query:"version" validate:"required"`
+	Commit         string         `json:"commit,omitempty" form:"commit" query:"commit" validate:"required"`
+	VersionIsKnown bool           `json:"versionIsKnown,omitempty" form:"versionIsKnown" query:"versionIsKnown" validate:"required"`
+	IsTestNet      bool           `json:"isTestNet,omitempty" form:"isTestNet" query:"isTestNet" validate:"required"`
+	extraData      []byte
 }
 
 type PartitionList struct {
@@ -71,7 +75,9 @@ type SeedCountResponse struct {
 
 type SeedList struct {
 	fieldsSet []bool
-	Addresses []string `json:"addresses,omitempty" form:"addresses" query:"addresses" validate:"required"`
+	BasePort  uint64             `json:"basePort,omitempty" form:"basePort" query:"basePort" validate:"required"`
+	Type      config.NetworkType `json:"type,omitempty" form:"type" query:"type" validate:"required"`
+	Addresses []string           `json:"addresses,omitempty" form:"addresses" query:"addresses" validate:"required"`
 	extraData []byte
 }
 
@@ -89,16 +95,6 @@ type SeedListResponse struct {
 	extraData []byte
 }
 
-func (v *NetworkConfig) Copy() *NetworkConfig {
-	u := new(NetworkConfig)
-
-	u.Network = *(&v.Network).Copy()
-
-	return u
-}
-
-func (v *NetworkConfig) CopyAsInterface() interface{} { return v.Copy() }
-
 func (v *NetworkConfigRequest) Copy() *NetworkConfigRequest {
 	u := new(NetworkConfigRequest)
 
@@ -113,7 +109,7 @@ func (v *NetworkConfigRequest) CopyAsInterface() interface{} { return v.Copy() }
 func (v *NetworkConfigResponse) Copy() *NetworkConfigResponse {
 	u := new(NetworkConfigResponse)
 
-	u.Network = *(&v.Network).Copy()
+	u.NetworkState = *(&v.NetworkState).Copy()
 	if v.Signature != nil {
 		u.Signature = (v.Signature).CopyAsInterface().(protocol.KeySignature)
 	}
@@ -122,6 +118,20 @@ func (v *NetworkConfigResponse) Copy() *NetworkConfigResponse {
 }
 
 func (v *NetworkConfigResponse) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *NetworkState) Copy() *NetworkState {
+	u := new(NetworkState)
+
+	u.Network = *(&v.Network).Copy()
+	u.Version = v.Version
+	u.Commit = v.Commit
+	u.VersionIsKnown = v.VersionIsKnown
+	u.IsTestNet = v.IsTestNet
+
+	return u
+}
+
+func (v *NetworkState) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *PartitionList) Copy() *PartitionList {
 	u := new(PartitionList)
@@ -198,6 +208,8 @@ func (v *SeedCountResponse) CopyAsInterface() interface{} { return v.Copy() }
 func (v *SeedList) Copy() *SeedList {
 	u := new(SeedList)
 
+	u.BasePort = v.BasePort
+	u.Type = v.Type
 	u.Addresses = make([]string, len(v.Addresses))
 	for i, v := range v.Addresses {
 		u.Addresses[i] = v
@@ -234,14 +246,6 @@ func (v *SeedListResponse) Copy() *SeedListResponse {
 
 func (v *SeedListResponse) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *NetworkConfig) Equal(u *NetworkConfig) bool {
-	if !((&v.Network).Equal(&u.Network)) {
-		return false
-	}
-
-	return true
-}
-
 func (v *NetworkConfigRequest) Equal(u *NetworkConfigRequest) bool {
 	if !(v.Network == u.Network) {
 		return false
@@ -254,10 +258,30 @@ func (v *NetworkConfigRequest) Equal(u *NetworkConfigRequest) bool {
 }
 
 func (v *NetworkConfigResponse) Equal(u *NetworkConfigResponse) bool {
-	if !((&v.Network).Equal(&u.Network)) {
+	if !((&v.NetworkState).Equal(&u.NetworkState)) {
 		return false
 	}
 	if !(protocol.EqualKeySignature(v.Signature, u.Signature)) {
+		return false
+	}
+
+	return true
+}
+
+func (v *NetworkState) Equal(u *NetworkState) bool {
+	if !((&v.Network).Equal(&u.Network)) {
+		return false
+	}
+	if !(v.Version == u.Version) {
+		return false
+	}
+	if !(v.Commit == u.Commit) {
+		return false
+	}
+	if !(v.VersionIsKnown == u.VersionIsKnown) {
+		return false
+	}
+	if !(v.IsTestNet == u.IsTestNet) {
 		return false
 	}
 
@@ -333,6 +357,12 @@ func (v *SeedCountResponse) Equal(u *SeedCountResponse) bool {
 }
 
 func (v *SeedList) Equal(u *SeedList) bool {
+	if !(v.BasePort == u.BasePort) {
+		return false
+	}
+	if !(v.Type == u.Type) {
+		return false
+	}
 	if len(v.Addresses) != len(u.Addresses) {
 		return false
 	}
@@ -373,19 +403,35 @@ func (v *SeedListResponse) Equal(u *SeedListResponse) bool {
 	return true
 }
 
-var fieldNames_NetworkConfig = []string{
+var fieldNames_NetworkState = []string{
 	1: "Network",
+	2: "Version",
+	3: "Commit",
+	4: "VersionIsKnown",
+	5: "IsTestNet",
 }
 
-func (v *NetworkConfig) MarshalBinary() ([]byte, error) {
+func (v *NetworkState) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
 	if !((v.Network).Equal(new(config.Network))) {
 		writer.WriteValue(1, v.Network.MarshalBinary)
 	}
+	if !(len(v.Version) == 0) {
+		writer.WriteString(2, v.Version)
+	}
+	if !(len(v.Commit) == 0) {
+		writer.WriteString(3, v.Commit)
+	}
+	if !(!v.VersionIsKnown) {
+		writer.WriteBool(4, v.VersionIsKnown)
+	}
+	if !(!v.IsTestNet) {
+		writer.WriteBool(5, v.IsTestNet)
+	}
 
-	_, _, err := writer.Reset(fieldNames_NetworkConfig)
+	_, _, err := writer.Reset(fieldNames_NetworkState)
 	if err != nil {
 		return nil, encoding.Error{E: err}
 	}
@@ -393,13 +439,33 @@ func (v *NetworkConfig) MarshalBinary() ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
-func (v *NetworkConfig) IsValid() error {
+func (v *NetworkState) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Network is missing")
 	} else if (v.Network).Equal(new(config.Network)) {
 		errs = append(errs, "field Network is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Version is missing")
+	} else if len(v.Version) == 0 {
+		errs = append(errs, "field Version is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Commit is missing")
+	} else if len(v.Commit) == 0 {
+		errs = append(errs, "field Commit is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field VersionIsKnown is missing")
+	} else if !v.VersionIsKnown {
+		errs = append(errs, "field VersionIsKnown is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field IsTestNet is missing")
+	} else if !v.IsTestNet {
+		errs = append(errs, "field IsTestNet is not set")
 	}
 
 	switch len(errs) {
@@ -493,16 +559,24 @@ func (v *SeedCount) IsValid() error {
 }
 
 var fieldNames_SeedList = []string{
-	1: "Addresses",
+	1: "BasePort",
+	2: "Type",
+	3: "Addresses",
 }
 
 func (v *SeedList) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
+	if !(v.BasePort == 0) {
+		writer.WriteUint(1, v.BasePort)
+	}
+	if !(v.Type == 0) {
+		writer.WriteEnum(2, v.Type)
+	}
 	if !(len(v.Addresses) == 0) {
 		for _, v := range v.Addresses {
-			writer.WriteString(1, v)
+			writer.WriteString(3, v)
 		}
 	}
 
@@ -518,6 +592,16 @@ func (v *SeedList) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field BasePort is missing")
+	} else if v.BasePort == 0 {
+		errs = append(errs, "field BasePort is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Type is missing")
+	} else if v.Type == 0 {
+		errs = append(errs, "field Type is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Addresses is missing")
 	} else if len(v.Addresses) == 0 {
 		errs = append(errs, "field Addresses is not set")
@@ -533,18 +617,30 @@ func (v *SeedList) IsValid() error {
 	}
 }
 
-func (v *NetworkConfig) UnmarshalBinary(data []byte) error {
+func (v *NetworkState) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
 
-func (v *NetworkConfig) UnmarshalBinaryFrom(rd io.Reader) error {
+func (v *NetworkState) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
 	if x := new(config.Network); reader.ReadValue(1, x.UnmarshalBinary) {
 		v.Network = *x
 	}
+	if x, ok := reader.ReadString(2); ok {
+		v.Version = x
+	}
+	if x, ok := reader.ReadString(3); ok {
+		v.Commit = x
+	}
+	if x, ok := reader.ReadBool(4); ok {
+		v.VersionIsKnown = x
+	}
+	if x, ok := reader.ReadBool(5); ok {
+		v.IsTestNet = x
+	}
 
-	seen, err := reader.Reset(fieldNames_NetworkConfig)
+	seen, err := reader.Reset(fieldNames_NetworkState)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -613,8 +709,14 @@ func (v *SeedList) UnmarshalBinary(data []byte) error {
 func (v *SeedList) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
+	if x, ok := reader.ReadUint(1); ok {
+		v.BasePort = x
+	}
+	if x := new(config.NetworkType); reader.ReadEnum(2, x) {
+		v.Type = *x
+	}
 	for {
-		if x, ok := reader.ReadString(1); ok {
+		if x, ok := reader.ReadString(3); ok {
 			v.Addresses = append(v.Addresses, x)
 		} else {
 			break
@@ -635,10 +737,10 @@ func (v *SeedList) UnmarshalBinaryFrom(rd io.Reader) error {
 
 func (v *NetworkConfigResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Network   config.Network                                    `json:"network,omitempty"`
-		Signature encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
+		NetworkState NetworkState                                      `json:"networkState,omitempty"`
+		Signature    encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
 	}{}
-	u.Network = v.Network
+	u.NetworkState = v.NetworkState
 	u.Signature = encoding.JsonUnmarshalWith[protocol.KeySignature]{Value: v.Signature, Func: protocol.UnmarshalKeySignatureJSON}
 	return json.Marshal(&u)
 }
@@ -673,17 +775,25 @@ func (v *SeedCountResponse) MarshalJSON() ([]byte, error) {
 
 func (v *SeedList) MarshalJSON() ([]byte, error) {
 	u := struct {
+		BasePort  uint64                    `json:"basePort,omitempty"`
+		Type      config.NetworkType        `json:"type,omitempty"`
 		Addresses encoding.JsonList[string] `json:"addresses,omitempty"`
 	}{}
+	u.BasePort = v.BasePort
+	u.Type = v.Type
 	u.Addresses = v.Addresses
 	return json.Marshal(&u)
 }
 
 func (v *SeedListResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
+		BasePort  uint64                                            `json:"basePort,omitempty"`
+		Type      config.NetworkType                                `json:"type,omitempty"`
 		Addresses encoding.JsonList[string]                         `json:"addresses,omitempty"`
 		Signature encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
 	}{}
+	u.BasePort = v.SeedList.BasePort
+	u.Type = v.SeedList.Type
 	u.Addresses = v.SeedList.Addresses
 	u.Signature = encoding.JsonUnmarshalWith[protocol.KeySignature]{Value: v.Signature, Func: protocol.UnmarshalKeySignatureJSON}
 	return json.Marshal(&u)
@@ -691,15 +801,15 @@ func (v *SeedListResponse) MarshalJSON() ([]byte, error) {
 
 func (v *NetworkConfigResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Network   config.Network                                    `json:"network,omitempty"`
-		Signature encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
+		NetworkState NetworkState                                      `json:"networkState,omitempty"`
+		Signature    encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
 	}{}
-	u.Network = v.Network
+	u.NetworkState = v.NetworkState
 	u.Signature = encoding.JsonUnmarshalWith[protocol.KeySignature]{Value: v.Signature, Func: protocol.UnmarshalKeySignatureJSON}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	v.Network = u.Network
+	v.NetworkState = u.NetworkState
 	v.Signature = u.Signature.Value
 
 	return nil
@@ -751,26 +861,38 @@ func (v *SeedCountResponse) UnmarshalJSON(data []byte) error {
 
 func (v *SeedList) UnmarshalJSON(data []byte) error {
 	u := struct {
+		BasePort  uint64                    `json:"basePort,omitempty"`
+		Type      config.NetworkType        `json:"type,omitempty"`
 		Addresses encoding.JsonList[string] `json:"addresses,omitempty"`
 	}{}
+	u.BasePort = v.BasePort
+	u.Type = v.Type
 	u.Addresses = v.Addresses
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
+	v.BasePort = u.BasePort
+	v.Type = u.Type
 	v.Addresses = u.Addresses
 	return nil
 }
 
 func (v *SeedListResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
+		BasePort  uint64                                            `json:"basePort,omitempty"`
+		Type      config.NetworkType                                `json:"type,omitempty"`
 		Addresses encoding.JsonList[string]                         `json:"addresses,omitempty"`
 		Signature encoding.JsonUnmarshalWith[protocol.KeySignature] `json:"signature,omitempty"`
 	}{}
+	u.BasePort = v.SeedList.BasePort
+	u.Type = v.SeedList.Type
 	u.Addresses = v.SeedList.Addresses
 	u.Signature = encoding.JsonUnmarshalWith[protocol.KeySignature]{Value: v.Signature, Func: protocol.UnmarshalKeySignatureJSON}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
+	v.SeedList.BasePort = u.BasePort
+	v.SeedList.Type = u.Type
 	v.SeedList.Addresses = u.Addresses
 	v.Signature = u.Signature.Value
 

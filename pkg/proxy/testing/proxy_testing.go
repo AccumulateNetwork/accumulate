@@ -5,15 +5,18 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	stdlog "log"
 	"net/http"
+	"net/url"
 	"os"
+	"strconv"
 	"testing"
 	"time"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/stretchr/testify/require"
-	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
+	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
@@ -22,12 +25,12 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-var AccuProxyAuthorityKey = acctesting.GenerateKey(nil)
-var AccuProxyKey = acctesting.GenerateKey(nil)
+var AccuProxyAuthorityKey ed25519.PrivateKey
+var AccuProxyKey ed25519.PrivateKey
 var AccuProxy = protocol.AccountUrl("accuproxy.acme")
 
 //LaunchAccuProcyDevNet will launch a devnet with the accuproxy.acme adi and authorized key(s)
-func LaunchAccuProxyDevNet(t *testing.T) *client.Client {
+func LaunchAccuProxyDevNet(t *testing.T) (*client.Client, *url.URL, *url.URL) {
 	t.Helper()
 	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	acctesting.RunTestNet(t, partitions, daemons)
@@ -40,13 +43,26 @@ func LaunchAccuProxyDevNet(t *testing.T) *client.Client {
 
 	//shortcut to create the account, add the key
 	batch := n.DB_TESTONLY().Begin(true)
-	tmAuthorityKey := tmed25519.GenPrivKeyFromSecret(AccuProxyAuthorityKey.Seed())
-	tmKey := tmed25519.GenPrivKeyFromSecret(AccuProxyKey.Seed())
-	require.NoError(t, acctesting.CreateADI(batch, tmAuthorityKey, "accuproxy.acme"))
-	require.NoError(t, acctesting.CreateKeyBook(batch, "accuproxy.acme/registry", tmKey.PubKey().(tmed25519.PubKey)))
+
+	require.NoError(t, acctesting.CreateADI(batch, []byte(AccuProxyAuthorityKey), "accuproxy.acme"))
+	require.NoError(t, acctesting.CreateKeyBook(batch, "accuproxy.acme/registry", []byte(AccuProxyKey.Public().(ed25519.PublicKey))))
 	require.NoError(t, batch.Commit())
 
-	return client
+	accApiUrl, err := url.Parse(c.Accumulate.API.ListenAddress)
+	require.NoError(t, err)
+
+	port, err := strconv.ParseInt(accApiUrl.Port(), 10, 16)
+	require.NoError(t, err, "invalid port number")
+	port -= int64(config.PortOffsetAccumulateApi)
+
+	dnEndpoint := fmt.Sprintf("%s://%s:%d", accApiUrl.Scheme, accApiUrl.Hostname(), port-config.PortOffsetBlockValidator)
+	bvnEndpoint := fmt.Sprintf("%s://%s:%d", accApiUrl.Scheme, accApiUrl.Hostname(), port)
+	dnEndpointUrl, err := url.Parse(dnEndpoint)
+	require.NoError(t, err)
+	bvnEndpointUrl, err := url.Parse(bvnEndpoint)
+	require.NoError(t, err)
+
+	return client, dnEndpointUrl, bvnEndpointUrl
 }
 
 //make up a fake default network configuration list
@@ -63,11 +79,17 @@ func seedList(_ context.Context, params json.RawMessage) interface{} {
 	slr := proxy.SeedListRequest{}
 	err := json.Unmarshal(params, &slr)
 	if err != nil {
-		return jsonrpc2.ErrorInvalidParams("Invalid SeedListRequest parameters")
+		return jsonrpc2.ErrorInvalidParams("invalid SeedListRequest parameters")
 	}
 
 	resp := proxy.SeedListResponse{}
 	snl := Network.GetPartitionByID(slr.Partition)
+	if snl == nil {
+		return jsonrpc2.ErrorInvalidParams(fmt.Sprintf("cannot find partition %s", slr.Partition))
+	}
+	resp.Type = snl.Type
+	resp.BasePort = uint64(snl.BasePort)
+
 	for _, n := range snl.Nodes {
 		resp.Addresses = append(resp.Addresses, n.Address)
 	}
@@ -100,6 +122,10 @@ func seedCount(_ context.Context, params json.RawMessage) interface{} {
 	resp := proxy.SeedCountResponse{}
 
 	snl := Network.GetPartitionByID(scr.Partition)
+	if snl == nil {
+		return jsonrpc2.ErrorInvalidParams(fmt.Sprintf("canont find partition %s", scr.Partition))
+	}
+
 	resp.Count = int64(len(snl.Nodes))
 
 	if scr.Sign {
@@ -156,10 +182,14 @@ func getNetwork(_ context.Context, params json.RawMessage) interface{} {
 	}
 
 	resp := proxy.NetworkConfigResponse{}
-	resp.Network = Network
+	resp.NetworkState.Network = Network
+	resp.NetworkState.Version = accumulate.Version
+	resp.NetworkState.VersionIsKnown = accumulate.IsVersionKnown()
+	resp.NetworkState.Commit = accumulate.Commit
+	resp.NetworkState.IsTestNet = true
 
 	if ncr.Sign {
-		s, err := resp.Network.MarshalBinary()
+		s, err := resp.NetworkState.MarshalBinary()
 		if err != nil {
 			return jsonrpc2.ErrorInvalidParams("cannot marshal payload")
 		}
@@ -177,8 +207,15 @@ func getNetwork(_ context.Context, params json.RawMessage) interface{} {
 
 var Endpoint = "http://localhost:18888"
 
-func LaunchFakeProxy(t *testing.T) (*proxy.Client, *client.Client) {
+func LaunchFakeProxy(t *testing.T) (*proxy.Client, *client.Client, *url.URL, *url.URL) {
 	t.Helper()
+
+	pk, _, err := ed25519.GenerateKey(nil)
+	require.NoError(t, err)
+	AccuProxyAuthorityKey = ed25519.NewKeyFromSeed(pk)
+	pk, _, err = ed25519.GenerateKey(nil)
+	require.NoError(t, err)
+	AccuProxyKey = ed25519.NewKeyFromSeed(pk)
 
 	go func() {
 		// Register RPC methods.
@@ -197,10 +234,10 @@ func LaunchFakeProxy(t *testing.T) (*proxy.Client, *client.Client) {
 	require.NoError(t, err)
 
 	//now spawn our little testnet and populate the fake proxy with the network info
-	accClient := LaunchAccuProxyDevNet(t)
+	accClient, dnEndpoint, bvnEndpoint := LaunchAccuProxyDevNet(t)
 	ProveNetworkToFakeProxy(t, accClient)
 
-	return proxyClient, accClient
+	return proxyClient, accClient, dnEndpoint, bvnEndpoint
 }
 
 func ProveNetworkToFakeProxy(t *testing.T, client *client.Client) {
@@ -259,16 +296,19 @@ func ProveNetworkToFakeProxy(t *testing.T, client *client.Client) {
 	Network = d.Network
 }
 
-func remove(s []config.Partition, i int) []config.Partition {
+func remove(s []string, i int) []string {
 	s[i] = s[len(s)-1]
 	return s[:len(s)-1]
 }
 
 func ensurePartitions(networkDefinition *protocol.NetworkDefinition, describe *config.Network) bool {
-	parts := describe.Partitions
+	parts := []string{}
+	for _, p := range describe.Partitions {
+		parts = append(parts, p.Id)
+	}
 	for _, p := range networkDefinition.Partitions {
 		for i, v := range parts {
-			if v.Id == p.PartitionID {
+			if v == p.PartitionID {
 				parts = remove(parts, i)
 				break
 			}
