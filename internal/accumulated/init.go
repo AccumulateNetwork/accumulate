@@ -153,7 +153,9 @@ func ConfigureNodePorts(node *NodeInit, cfg *config.Config, offset config.PortOf
 	cfg.P2P.ListenAddress = node.Address(true, "tcp", offset, config.PortOffsetTendermintP2P)
 	cfg.RPC.ListenAddress = node.Address(true, "tcp", offset, config.PortOffsetTendermintRpc)
 	cfg.Instrumentation.PrometheusListenAddr = fmt.Sprintf(":%d", node.Port(offset, config.PortOffsetPrometheus))
-	cfg.Accumulate.LocalAddress = node.Address(false, "", offset, config.PortOffsetTendermintP2P)
+	if cfg.Accumulate.LocalAddress == "" {
+		cfg.Accumulate.LocalAddress = node.Address(false, "", offset, config.PortOffsetTendermintP2P)
+	}
 	cfg.Accumulate.Website.ListenAddress = node.Address(true, "http", offset, config.PortOffsetWebsite)
 	cfg.Accumulate.API.ListenAddress = node.Address(true, "http", offset, config.PortOffsetAccumulateApi)
 }

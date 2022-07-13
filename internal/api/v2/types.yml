@@ -521,6 +521,8 @@ DescriptionResponse:
       alternative: Subnet
       type: config.Network
       marshal-as: reference
+    - name: NetworkAnchor
+      type: hash
     - name: Values
       type: core.GlobalValues
       marshal-as: reference
