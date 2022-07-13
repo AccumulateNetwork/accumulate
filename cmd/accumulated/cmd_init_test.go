@@ -33,8 +33,8 @@ func TestInitSeeds(t *testing.T) {
 	commandLine := []string{
 		fmt.Sprintf("accumulated init node %s --work-dir %s --listen=http://127.11.11.11:%s --no-prometheus", dnEndpoint.String(), workDirs[0], dnEndpoint.Port()),
 		fmt.Sprintf("accumulated init node %s --work-dir %s --listen=http://127.11.11.11:%s --no-prometheus", bvnEndpoint.String(), workDirs[1], bvnEndpoint.Port()),
-		fmt.Sprintf("accumulated init node directory.devnet --seed %s --work-dir %s --no-prometheus", proxy_testing.Endpoint, workDirs[2]),
-		fmt.Sprintf("accumulated init node bvn1.devnet --seed %s --work-dir %s --no-prometheus", proxy_testing.Endpoint, workDirs[3]),
+		fmt.Sprintf("accumulated init node directory.devnet --seed %s --listen=http://127.11.11.11 --work-dir %s --no-prometheus", proxy_testing.Endpoint, workDirs[2]),
+		fmt.Sprintf("accumulated init node bvn1.devnet --seed %s --work-dir %s --listen=http://127.11.11.11 --no-prometheus", proxy_testing.Endpoint, workDirs[3]),
 		fmt.Sprintf("accumulated init dual %s --work-dir %s --public=http://127.11.11.11 --listen=tcp://127.11.11.12 --no-prometheus", bvnEndpoint.String(), workDirs[4]),
 	}
 
