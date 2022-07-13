@@ -6,11 +6,9 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
-type BlockStateSynthTxnEntry = database.BlockStateSynthTxnEntry
-
 // BlockStateIndexer tracks transient state for a block.
 type BlockStateIndexer struct {
-	*record.Set[*BlockStateSynthTxnEntry]
+	*record.Set[*database.BlockStateSynthTxnEntry]
 }
 
 // BlockState returns a block state indexer.
@@ -24,6 +22,6 @@ func (x *BlockStateIndexer) Clear() error {
 }
 
 // DidProduceSynthTxn records a produced synthetic transaction.
-func (x *BlockStateIndexer) DidProduceSynthTxn(entry *BlockStateSynthTxnEntry) error {
+func (x *BlockStateIndexer) DidProduceSynthTxn(entry *database.BlockStateSynthTxnEntry) error {
 	return x.Add(entry)
 }
