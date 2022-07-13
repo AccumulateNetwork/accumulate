@@ -27,7 +27,10 @@ var cmdInitDualNode = &cobra.Command{
 
 func setFlagsForInit() error {
 	var err error
-	if flagInitDualNode.PublicIP == "" {
+	if flagInitDualNode.ResolvePublicIP && flagInitDualNode.PublicIP != "" {
+		return fmt.Errorf("cannot specify both --resolve-public-ip and --public-ip flags")
+	}
+	if flagInitDualNode.ResolvePublicIP {
 		flagInitNode.PublicIP, err = resolvePublicIp()
 		if err != nil {
 			return fmt.Errorf("cannot resolve public ip address, %v", err)
@@ -40,10 +43,19 @@ func setFlagsForInit() error {
 	flagInitNode.GenesisDoc = flagInitDualNode.GenesisDoc
 	flagInitNode.SeedProxy = flagInitDualNode.SeedProxy
 	flagInitNode.Follower = false
-
+	flagInitNode.NoPrometheus = flagInitDualNode.NoPrometheus
+	var listen string
+	if flagInitDualNode.ListenIP != "" {
+		u, err := url.Parse(flagInitDualNode.ListenIP)
+		if err != nil {
+			return err
+		}
+		listen = fmt.Sprintf("%s://%s", u.Scheme, u.Hostname())
+	}
+	flagInitNode.ListenIP = listen
 	return nil
-
 }
+
 func initDualNodeFromSeed(cmd *cobra.Command, args []string) error {
 	s := strings.Split(args[0], ".")
 	if len(s) != 2 {
@@ -89,7 +101,7 @@ func initDualNodeFromSeed(cmd *cobra.Command, args []string) error {
 
 	initNode(cmd, args)
 
-	return finalizeBvnn(c)
+	return finalizeBvnn()
 }
 
 func initDualNodeFromPeer(cmd *cobra.Command, args []string) error {
@@ -106,9 +118,9 @@ func initDualNodeFromPeer(cmd *cobra.Command, args []string) error {
 	_, err = net.LookupIP(host)
 	checkf(err, "unknown host %s", u.Hostname())
 
-	dnBasePort, err := strconv.ParseUint(port, 10, 16)
+	bvnBasePort, err := strconv.ParseUint(port, 10, 16)
 	checkf(err, "invalid DN port number")
-	dnBasePort -= uint64(cfg.PortOffsetBlockValidator)
+	dnBasePort := bvnBasePort - uint64(cfg.PortOffsetBlockValidator)
 
 	err = setFlagsForInit()
 	if err != nil {
@@ -121,7 +133,7 @@ func initDualNodeFromPeer(cmd *cobra.Command, args []string) error {
 
 	initNode(cmd, args)
 
-	c, err := finalizeDnn()
+	_, err = finalizeDnn()
 	if err != nil {
 		return fmt.Errorf("error finalizing dnn configuration, %v", err)
 	}
@@ -131,7 +143,7 @@ func initDualNodeFromPeer(cmd *cobra.Command, args []string) error {
 	initNode(cmd, args)
 
 	//finalize BVNN
-	err = finalizeBvnn(c)
+	err = finalizeBvnn()
 	if err != nil {
 		return err
 	}
@@ -170,12 +182,7 @@ func finalizeDnn() (*cfg.Config, error) {
 	return c, nil
 }
 
-func finalizeBvnn(dnnConfig *cfg.Config) error {
-	dnWebHostUrl, err := url.Parse(dnnConfig.Accumulate.Website.ListenAddress)
-	if err != nil {
-		return fmt.Errorf("cannot parse website listen address (%v) for node, %v", dnnConfig.Accumulate.Website.ListenAddress, err)
-	}
-
+func finalizeBvnn() error {
 	c, err := cfg.Load(filepath.Join(flagMain.WorkDir, "bvnn"))
 	if err != nil {
 		return fmt.Errorf("cannot load configuration file for node, %v", err)
@@ -191,12 +198,6 @@ func finalizeBvnn(dnnConfig *cfg.Config) error {
 	if flagInit.NoWebsite {
 		c.Accumulate.Website.Enabled = false
 	}
-	webPort, err := strconv.ParseUint(dnWebHostUrl.Port(), 10, 16)
-	if err != nil {
-		return fmt.Errorf("invalid port for bvn website (%v), %v", dnWebHostUrl.Port(), err)
-	}
-
-	c.Accumulate.Website.ListenAddress = fmt.Sprintf("http://%s:%d", dnWebHostUrl.Hostname(), webPort+1)
 
 	//in dual mode, the key between bvn and dn is shared.
 	//This will be cleaned up when init system is overhauled with AC-1263

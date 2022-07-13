@@ -43,8 +43,11 @@ var cmdInit = &cobra.Command{
 var cmdInitNode = &cobra.Command{
 	Use:   "node <partition.network name> or <peer url>",
 	Short: "Initialize a node using the partition.network name and --seed or via a peer URL",
-	Run:   initNode,
-	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		out, err := initNode(cmd, args)
+		printOutput(cmd, out, err)
+	},
+	Args: cobra.ExactArgs(1),
 }
 
 var flagInit struct {
@@ -64,6 +67,7 @@ var flagInitNode struct {
 	SkipVersionCheck    bool
 	SeedProxy           string
 	AllowUnhealthyPeers bool
+	NoPrometheus        bool
 }
 
 var flagInitDualNode struct {
@@ -72,6 +76,9 @@ var flagInitDualNode struct {
 	SkipVersionCheck bool
 	SeedProxy        string
 	PublicIP         string
+	ResolvePublicIP  bool
+	NoPrometheus     bool
+	ListenIP         string
 }
 
 var flagInitDevnet struct {
@@ -93,13 +100,12 @@ var flagInitNetwork struct {
 	FactomBalances string
 }
 
-func init() {
-	cmdMain.AddCommand(cmdInit)
-	cmdInit.AddCommand(cmdInitNode, cmdInitDevnet, cmdInitNetwork, cmdInitDualNode)
-
+func initInitFlags() {
+	cmdInitNetwork.ResetFlags()
 	cmdInitNetwork.Flags().StringVar(&flagInitNetwork.GenesisDoc, "genesis-doc", "", "Genesis doc for the target network")
 	cmdInitNetwork.Flags().StringVar(&flagInitNetwork.FactomBalances, "factom-balances", "", "Factom addresses and balances file path for writing onto the genesis block")
 
+	cmdInit.ResetFlags()
 	cmdInit.PersistentFlags().BoolVar(&flagInit.NoEmptyBlocks, "no-empty-blocks", false, "Do not create empty blocks")
 	cmdInit.PersistentFlags().BoolVar(&flagInit.NoWebsite, "no-website", false, "Disable website")
 	cmdInit.PersistentFlags().BoolVar(&flagInit.Reset, "reset", false, "Delete any existing directories within the working directory")
@@ -108,6 +114,7 @@ func init() {
 	cmdInit.PersistentFlags().BoolVar(&flagInit.EnableTimingLogs, "enable-timing-logs", false, "Enable core timing analysis logging")
 	_ = cmdInit.MarkFlagRequired("network")
 
+	cmdInitNode.ResetFlags()
 	cmdInitNode.Flags().BoolVarP(&flagInitNode.Follower, "follow", "f", false, "Do not participate in voting")
 	cmdInitNode.Flags().StringVar(&flagInitNode.GenesisDoc, "genesis-doc", "", "Genesis doc for the target network")
 	cmdInitNode.Flags().StringVarP(&flagInitNode.ListenIP, "listen", "l", "", "Address and port to listen on, e.g. tcp://1.2.3.4:5678, default will be http://0.0.0.0:basePort where base port is determined by seed or peer")
@@ -115,13 +122,19 @@ func init() {
 	cmdInitNode.Flags().BoolVar(&flagInitNode.SkipVersionCheck, "skip-version-check", false, "Do not enforce the version check")
 	cmdInitNode.Flags().StringVar(&flagInitNode.SeedProxy, "seed", "", "Fetch network configuration from seed proxy")
 	cmdInitNode.Flags().BoolVarP(&flagInitNode.AllowUnhealthyPeers, "skip-peer-health-check", "", false, "do not check health of peers")
+	cmdInitNode.Flags().BoolVarP(&flagInitNode.NoPrometheus, "no-prometheus", "", false, "disable prometheus")
 
+	cmdInitDualNode.ResetFlags()
 	cmdInitDualNode.Flags().BoolVarP(&flagInitDualNode.Follower, "follow", "f", false, "Do not participate in voting")
 	cmdInitDualNode.Flags().StringVar(&flagInitDualNode.GenesisDoc, "genesis-doc", "", "Genesis doc for the target network")
 	cmdInitDualNode.Flags().BoolVar(&flagInitDualNode.SkipVersionCheck, "skip-version-check", false, "Do not enforce the version check")
 	cmdInitDualNode.Flags().StringVarP(&flagInitDualNode.PublicIP, "public", "p", "", "public IP or URL")
+	cmdInitDualNode.Flags().StringVarP(&flagInitDualNode.ListenIP, "listen", "l", "", "Address to listen on, where port is determined by seed or peer")
 	cmdInitDualNode.Flags().StringVar(&flagInitDualNode.SeedProxy, "seed", "", "Fetch network configuration from seed proxy")
+	cmdInitDualNode.Flags().BoolVarP(&flagInitDualNode.NoPrometheus, "no-prometheus", "", false, "disable prometheus")
+	cmdInitDualNode.Flags().BoolVar(&flagInitDualNode.ResolvePublicIP, "resolve-public-ip", true, "resolve public IP address of node and add to configuration")
 
+	cmdInitDevnet.ResetFlags()
 	cmdInitDevnet.Flags().StringVar(&flagInitDevnet.Name, "name", "DevNet", "Network name")
 	cmdInitDevnet.Flags().IntVarP(&flagInitDevnet.NumBvns, "bvns", "b", 2, "Number of block validator networks to configure")
 	cmdInitDevnet.Flags().IntVarP(&flagInitDevnet.NumValidators, "validators", "v", 2, "Number of validator nodes per partition to configure")
@@ -133,6 +146,13 @@ func init() {
 	cmdInitDevnet.Flags().BoolVar(&flagInitDevnet.UseVolumes, "use-volumes", false, "Use Docker volumes instead of a local directory")
 	cmdInitDevnet.Flags().BoolVar(&flagInitDevnet.Compose, "compose", false, "Only write the Docker Compose file, do not write the configuration files")
 	cmdInitDevnet.Flags().StringVar(&flagInitDevnet.DnsSuffix, "dns-suffix", "", "DNS suffix to add to hostnames used when initializing dockerized nodes")
+}
+
+func init() {
+	cmdMain.AddCommand(cmdInit)
+	cmdInit.AddCommand(cmdInitNode, cmdInitDevnet, cmdInitNetwork, cmdInitDualNode)
+
+	initInitFlags()
 }
 
 func networkReset() {
@@ -296,8 +316,16 @@ func initNodeFromSeedProxy(cmd *cobra.Command, args []string) (int, *cfg.Config,
 		}
 
 		//if we have a healthy node with a matching id, add it as a bootstrap peer
-		config.P2P.BootstrapPeers += "," + peerStatus.NodeInfo.NodeID.AddressString(strconv.Itoa(int(resp.BasePort)+int(cfg.PortOffsetTendermintP2P)))
+		if config.P2P.BootstrapPeers != "" {
+			config.P2P.BootstrapPeers += ","
+		}
+		u, err = cfg.OffsetPort(addr, int(resp.BasePort), int(cfg.PortOffsetTendermintP2P))
+		if err != nil {
+			return 0, nil, nil, err
+		}
+		config.P2P.BootstrapPeers += peerStatus.NodeInfo.NodeID.AddressString(u.String())
 	}
+
 	if lastHealthyAccPeer == nil || lastHealthyTmPeer == nil {
 		return 0, nil, nil, fmt.Errorf("no healthy peers, cannot continue")
 	}
@@ -392,21 +420,29 @@ func initNodeFromPeer(cmd *cobra.Command, args []string) (int, *cfg.Config, *typ
 	versionCheck(version, args[0])
 
 	description, err := accClient.Describe(context.Background())
-	checkf(err, "failed to get description from %s", args[0])
+	if err != nil {
+		return 0, nil, nil, fmt.Errorf("failed to get description from %s, %v", args[0], err)
+	}
 
 	var genDoc *types.GenesisDoc
 	if cmd.Flag("genesis-doc").Changed {
 		genDoc, err = types.GenesisDocFromFile(flagInitNode.GenesisDoc)
-		checkf(err, "failed to load genesis doc %q", flagInitNode.GenesisDoc)
+		if err != nil {
+			return 0, nil, nil, fmt.Errorf("failed to load genesis doc %q, %v", flagInitNode.GenesisDoc, err)
+		}
 	} else {
 		warnf("You are fetching the Genesis document from %s! Only do this if you trust %[1]s and your connection to it!", args[0])
 		rgen, err := tmClient.Genesis(context.Background())
-		checkf(err, "failed to get genesis from %s", args[0])
+		if err != nil {
+			return 0, nil, nil, fmt.Errorf("failed to get genesis from %s, %v", args[0], err)
+		}
 		genDoc = rgen.Genesis
 	}
 
 	status, err := tmClient.Status(context.Background())
-	checkf(err, "failed to get status of %s", args[0])
+	if err != nil {
+		return 0, nil, nil, fmt.Errorf("failed to get status of %s, %v", args[0], err)
+	}
 
 	config := cfg.Default(description.Network.Id, description.NetworkType, getNodeTypeFromFlag(), description.PartitionId)
 	config.P2P.BootstrapPeers = fmt.Sprintf("%s@%s:%d", status.NodeInfo.NodeID, netAddr, netPort+int(cfg.PortOffsetTendermintP2P))
@@ -460,11 +496,9 @@ func initNodeFromPeer(cmd *cobra.Command, args []string) (int, *cfg.Config, *typ
 	return netPort, config, genDoc, nil
 }
 
-func initNode(cmd *cobra.Command, args []string) {
+func initNode(cmd *cobra.Command, args []string) (string, error) {
 	if !cmd.Flag("work-dir").Changed {
-		fmt.Fprintf(os.Stderr, "Error: --work-dir flag is required\n\n")
-		_ = cmd.Usage()
-		os.Exit(1)
+		return cmd.UsageString(), fmt.Errorf("Error: --work-dir flag is required\n\n")
 	}
 
 	var config *cfg.Config
@@ -473,10 +507,14 @@ func initNode(cmd *cobra.Command, args []string) {
 	var err error
 	if flagInitNode.SeedProxy != "" {
 		basePort, config, genDoc, err = initNodeFromSeedProxy(cmd, args)
-		checkf(err, "failed to configure node from seed proxy, %v", err)
+		if err != nil {
+			return "", fmt.Errorf("failed to configure node from seed proxy, %v", err)
+		}
 	} else {
 		basePort, config, genDoc, err = initNodeFromPeer(cmd, args)
-		checkf(err, "failed to configure node from peer, %v", err)
+		if err != nil {
+			return "", fmt.Errorf("failed to configure node from peer, %v", err)
+		}
 	}
 
 	var publicAddr string
@@ -485,16 +523,22 @@ func initNode(cmd *cobra.Command, args []string) {
 		checkf(err, "invalid public address")
 
 		partition, _, err := findInDescribe(publicAddr, config.Accumulate.PartitionId, &config.Accumulate.Network)
-		checkf(err, "cannot resolve public address in description")
+		if err != nil {
+			return "", fmt.Errorf("cannot resolve public address in description, %v", err)
+		}
 		//the address wasn't found in the network description, so add it
 		partition.Nodes = append(partition.Nodes, cfg.Node{Address: "http://" + publicAddr, Type: getNodeTypeFromFlag()})
 	}
 
 	config.Accumulate.AnalysisLog.Enabled = flagInit.EnableTimingLogs
+	config.Instrumentation.Prometheus = !flagInitNode.NoPrometheus
 
 	if flagInit.LogLevels != "" {
 		_, _, err := logging.ParseLogLevel(flagInit.LogLevels, io.Discard)
-		checkf(err, "--log-level")
+		if err != nil {
+			return "", fmt.Errorf("--log-level, %v", err)
+		}
+
 		config.LogLevel = flagInit.LogLevels
 	}
 
@@ -510,15 +554,19 @@ func initNode(cmd *cobra.Command, args []string) {
 	}
 
 	listenUrl, err := url.Parse(fmt.Sprintf("tcp://0.0.0.0:%d", basePort))
-	checkf(err, "invalid default listen url")
+	if err != nil {
+		return "", fmt.Errorf("invalid default listen url, %v", err)
+	}
 	if flagInitNode.ListenIP != "" {
 		listenUrl, err = url.Parse(flagInitNode.ListenIP)
-		checkf(err, "invalid --listen %q", flagInitNode.ListenIP)
+		if err != nil {
+			return "", fmt.Errorf("invalid --listen %q %v", flagInitNode.ListenIP, err)
+		}
 
 		if listenUrl.Port() != "" {
 			p, err := strconv.ParseInt(listenUrl.Port(), 10, 16)
 			if err != nil {
-				fatalf("invalid port number %q", listenUrl.Port())
+				return "", fmt.Errorf("invalid port number %q, %v", listenUrl.Port(), err)
 			}
 			basePort = int(p)
 		}
@@ -535,11 +583,22 @@ func initNode(cmd *cobra.Command, args []string) {
 	config.PrivValidator.Key = "../priv_validator_key.json"
 
 	privValKey, err := accumulated.LoadOrGenerateTmPrivKey(config.PrivValidator.KeyFile())
-	checkf(err, "load/generate private key files")
+	DidError = err
+	if err != nil {
+		return "", fmt.Errorf("load/generate private key files, %v", err)
+	}
+
 	nodeKey, err := accumulated.LoadOrGenerateTmPrivKey(config.NodeKeyFile())
-	checkf(err, "load/generate node key files")
+	if err != nil {
+		return "", fmt.Errorf("load/generate node key files, %v", err)
+	}
+
 	err = accumulated.WriteNodeFiles(config, privValKey, nodeKey, genDoc)
-	checkf(err, "write node files")
+	if err != nil {
+		return "", fmt.Errorf("write node files, %v", err)
+	}
+
+	return "", nil
 }
 
 func netDir(networkType cfg.NetworkType) string {

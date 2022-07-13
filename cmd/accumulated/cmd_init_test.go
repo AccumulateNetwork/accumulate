@@ -3,14 +3,15 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"github.com/spf13/cobra"
+	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/config"
+	proxy_testing "gitlab.com/accumulatenetwork/accumulate/pkg/proxy/testing"
 	"io"
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/spf13/cobra"
-	"github.com/stretchr/testify/require"
-	proxy_testing "gitlab.com/accumulatenetwork/accumulate/pkg/proxy/testing"
+	"time"
 )
 
 func TestInitSeeds(t *testing.T) {
@@ -29,11 +30,11 @@ func TestInitSeeds(t *testing.T) {
 	}
 
 	commandLine := []string{
-		fmt.Sprintf("accumulated init node %s --work-dir %s", dnEndpoint.String(), workDirs[0]),
-		fmt.Sprintf("accumulated init node %s --work-dir %s", bvnEndpoint.String(), workDirs[1]),
-		fmt.Sprintf("accumulated init node directory.devnet --seed %s --work-dir %s", proxy_testing.Endpoint, workDirs[2]),
-		fmt.Sprintf("accumulated init node bvn1.devnet --seed %s --work-dir %s", proxy_testing.Endpoint, workDirs[3]),
-		fmt.Sprintf("accumulated init dual %s --work-dir %s", bvnEndpoint.String(), workDirs[4]),
+		fmt.Sprintf("accumulated init node %s --work-dir %s --listen=http://127.11.11.11:%s --no-prometheus", dnEndpoint.String(), workDirs[0], dnEndpoint.Port()),
+		fmt.Sprintf("accumulated init node %s --work-dir %s --listen=http://127.11.11.11:%s --no-prometheus", bvnEndpoint.String(), workDirs[1], bvnEndpoint.Port()),
+		fmt.Sprintf("accumulated init node directory.devnet --seed %s --work-dir %s --no-prometheus", proxy_testing.Endpoint, workDirs[2]),
+		fmt.Sprintf("accumulated init node bvn1.devnet --seed %s --work-dir %s --no-prometheus", proxy_testing.Endpoint, workDirs[3]),
+		fmt.Sprintf("accumulated init dual %s --work-dir %s --listen=http://127.11.11.11 --no-prometheus --resolve-public-ip=false", bvnEndpoint.String(), workDirs[4]),
 	}
 
 	e := bytes.NewBufferString("")
@@ -44,26 +45,49 @@ func TestInitSeeds(t *testing.T) {
 
 	cmd.AddCommand(cmdMain)
 
-	for _, cl := range commandLine {
+	for i, cl := range commandLine {
+		initInitFlags()
 		args = strings.Split(cl, " ")
 		cmd.SetArgs(args)
 		require.NoError(t, cmd.Execute())
+		require.NoError(t, DidError, "when executing: ", cl)
+
+		//fix the timeouts to match devnet bvn to avoid consensus error
+		c, err := config.Load(workDirs[i] + "/bvnn")
+		if err == nil {
+			//handle the case for the dual node bvnn, don't care about other error
+			c.Consensus.TimeoutCommit = time.Millisecond * 200
+			config.Store(c)
+		}
 	}
 
 	//now for kicks fire up a dual node
-	runDual := fmt.Sprintf("accumulated run-dual %s/dnn %s/bvn", workDirs[0], workDirs[1])
-
-	args = strings.Split(runDual, " ")
-	cmd.SetArgs(args)
-	require.NoError(t, cmd.Execute())
-
-	errPrint, err := io.ReadAll(e)
-	require.NoError(t, err)
-	if len(errPrint) != 0 {
-		t.Fatalf("%s", string(errPrint))
+	runNodes := []string{
+		//	fmt.Sprintf("accumulated run -w %s/dnn --ci-stop-after 5s", workDirs[0]),
+		//	fmt.Sprintf("accumulated run -w %s/bvnn --ci-stop-after 5s", workDirs[1]),
+		//	fmt.Sprintf("accumulated run -w %s/dnn --ci-stop-after 5s", workDirs[2]),
+		//	fmt.Sprintf("accumulated run -w %s/bvnn --ci-stop-after 5s", workDirs[3]),
+		fmt.Sprintf("accumulated run-dual %s/dnn %s/bvnn", workDirs[4], workDirs[4]),
 	}
-	ret, err := io.ReadAll(b)
-	require.NoError(t, err)
-	t.Log(ret)
+	//todo: need to add local address to partition pool
+	//or use public IP ad the local address and add it to the pool, local address is used for nothing other than
+	//matching in the node pool for the partition
+
+	for _, run := range runNodes {
+		initInitFlags()
+		initRunFlags(cmd, true)
+
+		args := strings.Split(run, " ")
+		cmd.SetArgs(args)
+		require.NoError(t, cmd.Execute())
+		//make sure node can fire up without error
+		require.NoError(t, DidError, "when executing: %s", run)
+
+		errPrint, err := io.ReadAll(e)
+		require.NoError(t, err)
+		if len(errPrint) != 0 {
+			t.Fatalf("%s", string(errPrint))
+		}
+	}
 	//send in a transaction to the dual node
 }
