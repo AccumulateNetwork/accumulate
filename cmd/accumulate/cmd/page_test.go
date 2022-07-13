@@ -48,7 +48,7 @@ func testCase4_3(t *testing.T, tc *testCmd) {
 	t.Log(r)
 }
 
-// accumulate page create [origin adi url] [signing key name] [key index (optional)] [key height (optional)] [public key 1] ... [public key hex or name n + 1] Create new key page with 1 to N+1 public keys
+// accumulate page create [origin adi url] [key name[@key book or page]] [public key 1] ... [public key hex or name n + 1] Create new key page with 1 to N+1 public keys
 //testCase4_4 Create additional key pages sponsored by a book
 func testCase4_4(t *testing.T, tc *testCmd) {
 	t.Helper()
