@@ -5,7 +5,6 @@ set -e
 
 SCRIPT_DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
 source ${SCRIPT_DIR}/validate-commons.sh
-
 section "Setup"
 if which go > /dev/null || ! which accumulate > /dev/null ; then
     echo "Installing CLI"
@@ -98,7 +97,7 @@ success
 
 
 section "Attempting to update key page 3 using page 2 fails"
-cli-tx page key add test.acme/book/3 test-2-0 1 test-3-1 && die "Executed disallowed operation" || success
+cli-tx page key add test.acme/book/3 test-2-0  test-3-1 && die "Executed disallowed operation" || success
 
 section "Unlock key page 2 using page 1"
 wait-for cli-tx page unlock test.acme/book/2 test-1-0
@@ -114,9 +113,9 @@ BALANCE=$(accumulate -j page get test.acme/book/2 | jq -r .data.creditBalance)
 [ "$BALANCE" -ge 100 ] && success || die "test.acme/book/2 should have 100 credits but has ${BALANCE}"
 
 section "Add a key to page 2 using a key from page 3"
-wait-for cli-tx page key add test.acme/book/2 test-2-0 1 test-2-1
-wait-for cli-tx page key add test.acme/book/2 test-2-0 1 test-2-2
-wait-for cli-tx page key add test.acme/book/2 test-2-0 1 test-2-3-orig
+wait-for cli-tx page key add test.acme/book/2 test-2-0 test-2-1
+wait-for cli-tx page key add test.acme/book/2 test-2-0 test-2-2
+wait-for cli-tx page key add test.acme/book/2 test-2-0 test-2-3-orig
 success
 
 section "Update key page entry with same keyhash different delegate"
@@ -149,6 +148,11 @@ else
 die `want $keybook2 got $tokenAuthority`
 fi
 
+section "Burn Tokens for adi token account"
+wait-for cli-tx tx create ${LITE_ACME} test.acme/acmetokens 10 
+wait-for cli-tx token burn acc://test.acme/acmetokens test-2-0 5
+BALANCE1=$(accumulate account get acc://test.acme/acmetokens -j | jq -re .data.balance)                        
+[ "$BALANCE1" -eq 500000000 ] && success || die "test.acme/acmetokens should have 5 tokens but has $(expr ${BALANCE1} / 100000000)"
 
 section "Set KeyBook2 as authority for adi data account"
 dataTxHash=$(cli-tx account create data test.acme test-1-0 test.acme/testdata1 --authority acc://test.acme/book2)
@@ -173,7 +177,7 @@ accumulate -j get key test.acme test-2-3-new | jq -C --indent 0 || die "Could no
 success
 
 section "Create an ADI Token Account"
-wait-for cli-tx account create token test.acme test-1-0 0 test.acme/tokens ACME test.acme/book
+wait-for cli-tx account create token test.acme test-1-0 test.acme/tokens ACME test.acme/book
 accumulate account get test.acme/tokens 1> /dev/null || die "Cannot find test.acme/tokens"
 success
 
