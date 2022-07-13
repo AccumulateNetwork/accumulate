@@ -64,10 +64,10 @@ func listSnapshots(_ *cobra.Command, args []string) {
 		checkf(err, "open snapshot %s", entry.Name())
 		defer f.Close()
 
-		height, _, hash, _, err := database.ReadSnapshot(f)
+		header, _, err := database.ReadSnapshot(f)
 		checkf(err, "read snapshot %s", entry.Name())
 
-		fmt.Fprintf(wr, "%d\t%x\t%s\n", height, hash, entry.Name())
+		fmt.Fprintf(wr, "%d\t%x\t%s\n", header.Height, header.RootHash, entry.Name())
 	}
 }
 
@@ -77,10 +77,13 @@ func dumpSnapshot(_ *cobra.Command, args []string) {
 	checkf(err, "open snapshot %s", filename)
 	defer f.Close()
 
-	height, _, hash, rd, err := database.ReadSnapshot(f)
+	header, _, err := database.ReadSnapshot(f)
 	checkf(err, "read snapshot %s", filename)
-	fmt.Printf("Height:\t%d\n", height)
-	fmt.Printf("Hash:\t%x\n", hash)
+	fmt.Printf("Height:\t%d\n", header.Height)
+	fmt.Printf("Hash:\t%x\n", header.RootHash)
+
+	rd, err := ioutil2.NewSectionReader(f, -1, -1)
+	check(err)
 
 	store := memory.New(nil)
 	batch := store.Begin(true)
