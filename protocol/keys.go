@@ -46,6 +46,10 @@ func (ms *KeyPage) SetThreshold(m uint64) error {
 	} else {
 		return fmt.Errorf("cannot require %d signatures on a key page with %d keys", m, len(ms.Keys))
 	}
+
+	if m == 0 {
+		return fmt.Errorf("cannot require 0 signatures on a key page")
+	}
 	return nil
 }
 
