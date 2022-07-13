@@ -1,5 +1,5 @@
+
 Describe:
-  non-binary: true
   fields:
   - name: NetworkType
     toml: type
@@ -18,7 +18,6 @@ Describe:
     marshal-as: reference
 
 Network:
-  non-binary: true
   fields:
     - name: Id
       toml: id
@@ -31,7 +30,6 @@ Network:
       repeatable: true
 
 Partition:
-  non-binary: true
   fields:
     - name: Id
       toml: id
@@ -50,7 +48,6 @@ Partition:
       repeatable: true
 
 Node:
-  non-binary: true
   fields:
     - name: Address
       toml: address
