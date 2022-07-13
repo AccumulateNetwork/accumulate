@@ -29,21 +29,21 @@ var operatorCmd = &cobra.Command{
 }
 
 var operatorAddCmd = &cobra.Command{
-	Use:   "add [partition ID] [signing key name] [key index (optional)] [key height (optional)] [key name or path]",
+	Use:   "add [partition ID] [key name[@key book or page]] [key name or path]",
 	Short: "Add a operator",
 	Run:   runValCmdFunc(addOperator),
 	Args:  cobra.RangeArgs(3, 5),
 }
 
 var operatorRemoveCmd = &cobra.Command{
-	Use:   "remove [partition ID] [signing key name] [key index (optional)] [key height (optional)] [key name or path]",
+	Use:   "remove [partition ID] [key name[@key book or page]]  [key name or path]",
 	Short: "Remove a operator",
 	Run:   runValCmdFunc(removeOperator),
 	Args:  cobra.RangeArgs(3, 5),
 }
 
 var operatorUpdateKeyCmd = &cobra.Command{
-	Use:   "update-key [partition ID] [signing key name] [key index (optional)] [key height (optional)] [old key name or path] [new key name or path]",
+	Use:   "update-key [partition ID] [key name[@key book or page]] [old key name or path] [new key name or path]",
 	Short: "Update a operator's key",
 	Run:   runValCmdFunc(updateOperatorKey),
 	Args:  cobra.RangeArgs(4, 6),
@@ -55,21 +55,21 @@ var validatorCmd = &cobra.Command{
 }
 
 var validatorAddCmd = &cobra.Command{
-	Use:   "add [partition ID] [signing key name] [key index (optional)] [key height (optional)] [key name or path]",
+	Use:   "add [partition ID] [key name[@key book or page]] [key name or path]",
 	Short: "Add a validator",
 	Run:   runValCmdFunc(addValidator),
 	Args:  cobra.RangeArgs(3, 5),
 }
 
 var validatorRemoveCmd = &cobra.Command{
-	Use:   "remove [partition ID] [signing key name] [key index (optional)] [key height (optional)] [key name or path]",
+	Use:   "remove [partition ID] [key name[@key book or page]] [key name or path]",
 	Short: "Remove a validator",
 	Run:   runValCmdFunc(removeValidator),
 	Args:  cobra.RangeArgs(3, 5),
 }
 
 var validatorUpdateKeyCmd = &cobra.Command{
-	Use:   "update-key [partition ID] [signing key name] [key index (optional)] [key height (optional)] [old key name or path] [new key name or path]",
+	Use:   "update-key [partition ID] [key name[@key book or page]] [old key name or path] [new key name or path]",
 	Short: "Update a validator's key",
 	Run:   runValCmdFunc(updateValidatorKey),
 	Args:  cobra.RangeArgs(4, 6),
