@@ -527,9 +527,9 @@ func RestoreAccounts() (out string, err error) {
 		_, err = GetWallet().Get(BucketSigType, v.Value)
 		if err != nil {
 			//add the default key type
-			out += fmt.Sprintf("assigning default key type %s for key name %v\n", k.Type, string(v.Key))
+			out += fmt.Sprintf("assigning default key type %s for key name %v\n", k.KeyInfo.Type, string(v.Key))
 
-			err = GetWallet().Put(BucketSigType, v.Value, common.Uint64Bytes(k.Type.GetEnumValue()))
+			err = GetWallet().Put(BucketSigType, v.Value, common.Uint64Bytes(k.KeyInfo.Type.GetEnumValue()))
 			if err != nil {
 				return "", err
 			}

@@ -180,7 +180,7 @@ func resolvePublicKey(s string) (*Key, error) {
 func parseKey(s string) (*Key, error) {
 	privKey, err := hex.DecodeString(s)
 	if err == nil && len(privKey) == 64 {
-		return &Key{PrivateKey: privKey, PublicKey: privKey[32:], Type: protocol.SignatureTypeED25519}, nil
+		return &Key{PrivateKey: privKey, PublicKey: privKey[32:], KeyInfo: KeyInfo{Type: protocol.SignatureTypeED25519}}, nil
 	}
 
 	k, err := pubKeyFromString(s)
@@ -208,7 +208,7 @@ func parseKey(s string) (*Key, error) {
 			priv = pvkey.PrivKey.Bytes()
 		}
 		// TODO Check the key type
-		return &Key{PrivateKey: priv, PublicKey: pub, Type: protocol.SignatureTypeED25519}, nil
+		return &Key{PrivateKey: priv, PublicKey: pub, KeyInfo: KeyInfo{Type: protocol.SignatureTypeED25519}}, nil
 	}
 
 	return nil, fmt.Errorf("cannot resolve signing key, invalid key specifier: %q is in an unsupported format", s)
@@ -229,7 +229,7 @@ func pubKeyFromString(s string) (*Key, error) {
 		return nil, fmt.Errorf("invalid public key")
 	}
 
-	return &Key{PublicKey: pubKey[:], Type: protocol.SignatureTypeED25519}, nil
+	return &Key{PublicKey: pubKey[:], KeyInfo: KeyInfo{Type: protocol.SignatureTypeED25519}}, nil
 }
 
 func LookupByLiteTokenUrl(lite string) (*Key, error) {
@@ -393,7 +393,7 @@ func GenerateKey(label string) (string, error) {
 	k := new(Key)
 	k.PrivateKey = privKey
 	k.PublicKey = pubKey
-	k.Type = sigtype
+	k.KeyInfo.Type = sigtype
 	err = k.Save(label, liteLabel)
 	if err != nil {
 		return "", err
@@ -582,14 +582,14 @@ func ExportKey(label string) (string, error) {
 		a.Label = types.String(label)
 		a.PrivateKey = k.PrivateKey
 		a.PublicKey = k.PublicKey
-		a.KeyType = k.Type
+		a.KeyType = k.KeyInfo.Type
 		dump, err := json.Marshal(&a)
 		if err != nil {
 			return "", err
 		}
 		return fmt.Sprintf("%s\n", string(dump)), nil
 	} else {
-		return fmt.Sprintf("name\t\t\t:\t%s\n\tprivate key\t:\t%x\n\tpublic key\t:\t%x\nkey type\t\t:\t%s\n", label, k.PrivateKey, k.PublicKey, k.Type), nil
+		return fmt.Sprintf("name\t\t\t:\t%s\n\tprivate key\t:\t%x\n\tpublic key\t:\t%x\nkey type\t\t:\t%s\n", label, k.PrivateKey, k.PublicKey, k.KeyInfo.Type), nil
 	}
 }
 

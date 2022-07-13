@@ -13,11 +13,16 @@ import (
 type Key struct {
 	PublicKey  []byte
 	PrivateKey []byte
+	KeyInfo    KeyInfo
+}
+
+type KeyInfo struct {
 	Type       protocol.SignatureType
+	Derivation string
 }
 
 func (k *Key) PublicKeyHash() []byte {
-	switch k.Type {
+	switch k.KeyInfo.Type {
 	case protocol.SignatureTypeLegacyED25519,
 		protocol.SignatureTypeED25519:
 		hash := sha256.Sum256(k.PublicKey)
@@ -33,7 +38,7 @@ func (k *Key) PublicKeyHash() []byte {
 		return protocol.ETHhash(k.PublicKey)
 
 	default:
-		panic(fmt.Errorf("unsupported signature type %v", k.Type))
+		panic(fmt.Errorf("unsupported signature type %v", k.KeyInfo.Type))
 	}
 }
 
@@ -53,7 +58,7 @@ func (k *Key) Save(label, liteLabel string) error {
 		return err
 	}
 
-	err = GetWallet().Put(BucketSigType, k.PublicKey, encoding.UvarintMarshalBinary(k.Type.GetEnumValue()))
+	err = GetWallet().Put(BucketSigType, k.PublicKey, encoding.UvarintMarshalBinary(uint64(k.KeyInfo.Type.GetEnumValue())))
 	if err != nil {
 		return err
 	}
@@ -88,13 +93,13 @@ func (k *Key) LoadByPublicKey(publicKey []byte) error {
 		if err != nil {
 			return err
 		}
-		if !k.Type.SetEnumValue(v) {
+		if !k.KeyInfo.Type.SetEnumValue(v) {
 			return fmt.Errorf("invalid key type for %x", publicKey)
 		}
 
 	case errors.Is(err, db.ErrNotFound),
 		errors.Is(err, db.ErrNoBucket):
-		k.Type = protocol.SignatureTypeED25519
+		k.KeyInfo.Type = protocol.SignatureTypeED25519
 
 	default:
 		return err
