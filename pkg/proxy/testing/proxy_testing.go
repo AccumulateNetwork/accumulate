@@ -255,13 +255,14 @@ func ProveNetworkToFakeProxy(t *testing.T, client *client.Client) {
 	d := config.Describe{}
 	require.NoError(t, d.UnmarshalJSON([]byte(str)))
 
-	//now query the dn/network with prove capability to get the network names
+	//now query the acc://dn.acme/network account with prove flag enabled to get the network names and anchor hash
 	networkUrl := protocol.DnUrl().JoinPath("network")
 	gq := api.GeneralQuery{}
 	gq.Prove = true
 	gq.Url = networkUrl
 	gq.Expand = true
 	networkDefinition := protocol.NetworkDefinition{}
+	//sends {"jsonrpc":"2.0","method":"query","params":{"url":"acc://dn.acme/network","prove":true},"id":2282}
 	res, err = client.Query(context.Background(), &gq)
 	require.NoError(t, err)
 	out, err := json.Marshal(res)
@@ -272,6 +273,41 @@ func ProveNetworkToFakeProxy(t *testing.T, client *client.Client) {
 
 	localRecipt := qr.Receipt.Proof
 	_ = localRecipt
+	//example receipt, where "start" is the current account state hash, and "anchor" is the dn anchor hash
+	//running the merkle dag proof using "start" via the entries will give you anchor, and anchor is independently
+	//published so the anchor can also be verified as belonging to the network
+	//see https://gitlab.com/accumulatenetwork/sdk/anchor-solidity for more information and pseudocode
+	//for proving account states
+	/*
+	 "receipt": {
+	    "localBlock": 14583,
+	    "proof": {
+	      "start": "a5ad1114262b7cf565429a4268a4bd05263427580665d6236538f19b335c5fed",
+	      "endIndex": 2,
+	      "anchor": "329ca5b0e274fdca20f1508bbf5d8c4740a39503ea54df09489531eadb2340c5",
+	      "entries": [
+	        {
+	          "right": true,
+	          "hash": "2f137f695bc642abfdc186c89db86da9e1aa4c966abb8ca844851ea9125caee8"
+	        },
+	        {
+	          "right": true,
+	          "hash": "0000000000000000000000000000000000000000000000000000000000000000"
+	        },
+	        {
+	          "hash": "e1490ae8bdba2a94875001e121b6d4cec880585ccdff038f385f8fdb10b1d24b"
+	        },
+	        {
+	          "right": true,
+	          "hash": "1e0198860a741b5471c547b4c25ec1028aca137d2d3d5af43ab6eaa388d078aa"
+	        },
+	        {
+	          "right": true,
+	          "hash": "c2ca76496bb6c93b426ccf940300c1a8e2a6aa09a73cc3959fa94e064cc59b7c"
+	        }
+	      ]
+	    },
+	*/
 	out, err = json.Marshal(qr.Data)
 
 	da := protocol.DataAccount{}

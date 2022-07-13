@@ -73,10 +73,9 @@ func TestInitSeeds(t *testing.T) {
 		fmt.Sprintf("accumulated run -w %s/bvnn --ci-stop-after 5s", workDirs[3]),
 		fmt.Sprintf("accumulated run-dual %s/dnn %s/bvnn --ci-stop-after 5s", workDirs[4], workDirs[4]),
 	}
-	//todo: need to add local address to partition pool
-	//or use public IP ad the local address and add it to the pool, local address is used for nothing other than
-	//matching in the node pool for the partition
 
+	//this test will fire up various configurations to ensure things were configured ok and can start.
+	//This isn't perfect, but it is a great debugging tool
 	for _, run := range runNodes {
 		initInitFlags()
 		initRunFlags(cmd, true)
@@ -93,5 +92,4 @@ func TestInitSeeds(t *testing.T) {
 			t.Fatalf("%s", string(errPrint))
 		}
 	}
-	//send in a transaction to the dual node
 }

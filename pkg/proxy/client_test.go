@@ -2,7 +2,6 @@ package proxy_test
 
 import (
 	"context"
-	"crypto/ed25519"
 	"crypto/sha256"
 	"testing"
 
@@ -11,28 +10,10 @@ import (
 	testing2 "gitlab.com/accumulatenetwork/accumulate/pkg/proxy/testing"
 )
 
-func createProxyAccounts(node, nodeKey ed25519.PrivateKey) ed25519.PrivateKey {
-
-	return ed25519.NewKeyFromSeed(nil)
-}
-
 func TestAccuProxyClient(t *testing.T) {
 
 	// Provided as an example for accuproxy:
 	// Steps to secure the proxy.
-
-	// Create the lite addresses and one account
-	//sim := simulator.New(t, 1)
-	//sim.InitFromGenesis()
-
-	//accClient := testing2.LaunchBasicDevnet(t, 34000)
-	//
-	//dnNetwork := protocol.DnUrl().JoinPath(protocol.Network)
-	//q := query.RequestByUrl{Url: dnNetwork}
-	//sim.Query(protocol.DnUrl(), &q, true) //don't really need to prove, but the converse is true, need to prove the dn.acme/network account
-
-	//createProxyAccounts(d.,key)
-
 	client, _, _, _ := testing2.LaunchFakeProxy(t)
 
 	ssr := proxy.PartitionListRequest{}
@@ -83,5 +64,4 @@ func TestAccuProxyClient(t *testing.T) {
 	require.NoError(t, err)
 	hash = sha256.Sum256(d)
 	require.True(t, ncResp.Signature.Verify(hash[:]))
-
 }
