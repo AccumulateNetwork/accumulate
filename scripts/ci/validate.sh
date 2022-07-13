@@ -167,9 +167,7 @@ THRESHOLD=$(accumulate -j get test.acme/book/2 | jq -re .data.threshold)
 [ "$THRESHOLD" -eq 2 ] && success || die "Bad test.acme/book/2 threshold: want 2, got ${THRESHOLD}"
 
 section "Set threshold to 0 of 0"
-wait-for cli-tx tx execute test.acme/book/2 test-2-0 '{"type": "updateKeyPage", "operation": [{ "type": "setThreshold", "threshold": 0 }]}'
-THRESHOLD=$(accumulate -j get test.acme/book/2 | jq -re .data.threshold)
-[ "$THRESHOLD" -eq 0 ] || die "Bad test.acme/book/2 threshold: want 0, got ${THRESHOLD}"
+wait-for cli-tx tx execute test.acme/book/2 test-2-0 '{"type": "updateKeyPage", "operation": [{ "type": "setThreshold", "threshold": 0 }]}' && die "cannot require 0 signatures on a key page" || success
 
 section "Update a key with only that key's signature"
 wait-for cli-tx key update test.acme/book/2 test-2-3-orig test-2-3-new || die "Failed to update key"
