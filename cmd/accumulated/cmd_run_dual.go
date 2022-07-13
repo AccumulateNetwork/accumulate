@@ -1,12 +1,13 @@
 package main
 
 import (
+	"time"
+
 	"github.com/kardianos/service"
 	"github.com/spf13/cobra"
 	service2 "github.com/tendermint/tendermint/libs/service"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/badger"
-	"time"
 )
 
 var cmdRunDual = &cobra.Command{

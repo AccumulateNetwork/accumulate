@@ -3,15 +3,16 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"github.com/spf13/cobra"
-	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/config"
-	proxy_testing "gitlab.com/accumulatenetwork/accumulate/pkg/proxy/testing"
 	"io"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/spf13/cobra"
+	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/config"
+	proxy_testing "gitlab.com/accumulatenetwork/accumulate/pkg/proxy/testing"
 )
 
 func TestInitSeeds(t *testing.T) {

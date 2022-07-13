@@ -3,7 +3,6 @@ package main
 import (
 	"errors"
 	"fmt"
-	service2 "github.com/tendermint/tendermint/libs/service"
 	"io"
 	"os"
 	"strings"
@@ -15,6 +14,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 	"github.com/tendermint/tendermint/libs/log"
+	service2 "github.com/tendermint/tendermint/libs/service"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/badger"
 )
