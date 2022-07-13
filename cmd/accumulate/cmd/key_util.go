@@ -128,7 +128,7 @@ func (k *Key) Initialize(seed []byte, signatureType protocol.SignatureType) erro
 		}
 		pvkey, pubKey := btc.PrivKeyFromBytes(btc.S256(), seed)
 		k.PrivateKey = pvkey.Serialize()
-		k.PublicKey = pubKey.SerializeCompressed()
+		k.PublicKey = pubKey.SerializeUncompressed()
 	default:
 		return fmt.Errorf("unsupported signature type %v", k.Type)
 	}
