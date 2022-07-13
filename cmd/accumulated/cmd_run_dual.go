@@ -1,9 +1,10 @@
 package main
 
 import (
-	"fmt"
 	"github.com/kardianos/service"
 	"github.com/spf13/cobra"
+	service2 "github.com/tendermint/tendermint/libs/service"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/badger"
 	"time"
 )
@@ -31,7 +32,7 @@ func init() {
 	cmdRunDual.PersistentFlags().BoolVar(&flagRunDual.Truncate, "truncate", false, "Truncate Badger if necessary")
 	cmdRunDual.PersistentFlags().BoolVar(&flagRunDual.EnableTimingLogs, "enable-timing-logs", false, "Enable core timing analysis logging")
 
-	cmdRunDual.Flags().DurationVar(&flagRun.CiStopAfter, "ci-stop-after", 0, "FOR CI ONLY - stop the node after some time")
+	cmdRunDual.Flags().DurationVar(&flagRunDual.CiStopAfter, "ci-stop-after", 0, "FOR CI ONLY - stop the node after some time")
 	cmdRunDual.Flag("ci-stop-after").Hidden = true
 
 	cmdRunDual.PersistentPreRun = func(*cobra.Command, []string) {
@@ -58,15 +59,15 @@ func runDualNode(cmd *cobra.Command, args []string) (string, error) {
 	}
 
 	if flagRunDual.CiStopAfter != 0 {
-		go watchDog(prog, svc, flagRun.CiStopAfter)
+		go watchDog(prog, svc, flagRunDual.CiStopAfter)
 	}
 
 	err = svc.Run()
 	if err != nil {
-		_ = logger.Error(err)
-
-		if err != nil {
-			return "", fmt.Errorf("cannot start dual node service %v", err)
+		//if it is already stopped, that is ok.
+		if !errors.Is(err, service2.ErrAlreadyStopped) {
+			_ = logger.Error(err)
+			return "", err
 		}
 	}
 	return "run complete", nil

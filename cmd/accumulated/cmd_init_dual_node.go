@@ -27,10 +27,7 @@ var cmdInitDualNode = &cobra.Command{
 
 func setFlagsForInit() error {
 	var err error
-	if flagInitDualNode.ResolvePublicIP && flagInitDualNode.PublicIP != "" {
-		return fmt.Errorf("cannot specify both --resolve-public-ip and --public-ip flags")
-	}
-	if flagInitDualNode.ResolvePublicIP {
+	if flagInitNode.PublicIP == "" {
 		flagInitNode.PublicIP, err = resolvePublicIp()
 		if err != nil {
 			return fmt.Errorf("cannot resolve public ip address, %v", err)
@@ -44,15 +41,13 @@ func setFlagsForInit() error {
 	flagInitNode.SeedProxy = flagInitDualNode.SeedProxy
 	flagInitNode.Follower = false
 	flagInitNode.NoPrometheus = flagInitDualNode.NoPrometheus
-	var listen string
 	if flagInitDualNode.ListenIP != "" {
-		u, err := url.Parse(flagInitDualNode.ListenIP)
+		listenUrl, err := url.Parse(flagInitDualNode.ListenIP)
 		if err != nil {
-			return err
+			return fmt.Errorf("invalid --listen %q %v", flagInitDualNode.ListenIP, err)
 		}
-		listen = fmt.Sprintf("%s://%s", u.Scheme, u.Hostname())
+		flagInitNode.ListenIP = "tcp://" + listenUrl.Hostname()
 	}
-	flagInitNode.ListenIP = listen
 	return nil
 }
 
@@ -219,123 +214,6 @@ func initDualNode(cmd *cobra.Command, args []string) {
 	}
 	check(err)
 }
-
-//
-//// initDualNode accumulate init dual partition.network http://ip:bvnport
-//func initDualNode(cmd *cobra.Command, args []string) {
-//	s := strings.Split(args[0], ".")
-//	if len(s) != 2 {
-//		fatalf("network must be in the form of <network-name>.<partition-name>, e.g. mainnet.bvn0")
-//	}
-//	partitionName := s[0]
-//	networkName := s[1]
-//	if partitionName == "Directory" {
-//		fatalf("cannot specify \"Directory\" partition, please specify a bvn for init dual node")
-//	}
-//	_ = networkName
-//
-//	u, err := url.Parse(args[1])
-//	check(err)
-//
-//	host := u.Hostname()
-//	port := u.Port()
-//	if port == "" {
-//		fatalf("cannot resolve host and port %v", args[1])
-//	}
-//
-//	addr, err := net.LookupIP(host)
-//	checkf(err, "unknown host %s", u.Hostname())
-//	netAddr := addr[0].String()
-//
-//	dnBasePort, err := strconv.ParseUint(port, 10, 16)
-//	checkf(err, "invalid DN port number")
-//	dnBasePort -= uint64(cfg.PortOffsetBlockValidator)
-//
-//	flagInitNode.ListenIP = fmt.Sprintf("http://0.0.0.0:%d", dnBasePort)
-//	if flagInitDualNode.PublicIP == "" {
-//		flagInitNode.PublicIP, err = resolvePublicIp()
-//		checkf(err, "cannot resolve public ip address")
-//	} else {
-//		flagInitNode.PublicIP = flagInitDualNode.PublicIP
-//	}
-//	flagInitNode.SkipVersionCheck = flagInitDualNode.SkipVersionCheck
-//	flagInitNode.GenesisDoc = flagInitDualNode.GenesisDoc
-//	flagInitNode.SeedProxy = flagInitDualNode.SeedProxy
-//	flagInitNode.Follower = false
-//
-//	// configure the BVN first so we know how to setup the bvn.
-//	args = []string{u.String()}
-//
-//	initNode(cmd, args)
-//
-//	c, err := cfg.Load(filepath.Join(flagMain.WorkDir, "dnn"))
-//	check(err)
-//
-//	//make sure we have a block validator type
-//	if c.Accumulate.NetworkType != cfg.Directory {
-//		fatalf("expecting directory but received %v", c.Accumulate.NetworkType)
-//	}
-//
-//	//now find out what bvn we are on then let
-//	_ = netAddr
-//
-//	if flagInit.NoEmptyBlocks {
-//		c.Consensus.CreateEmptyBlocks = false
-//	}
-//	if flagInit.NoWebsite {
-//		c.Accumulate.Website.Enabled = false
-//	}
-//
-//	if len(c.P2P.PersistentPeers) > 0 {
-//		c.P2P.BootstrapPeers = c.P2P.PersistentPeers
-//		c.P2P.PersistentPeers = ""
-//	}
-//	dnWebHostUrl, err := url.Parse(c.Accumulate.Website.ListenAddress)
-//	checkf(err, "cannot parse website listen address (%v) for node", c.Accumulate.Website.ListenAddress)
-//
-//	err = cfg.Store(c)
-//	checkf(err, "cannot store configuration file for node")
-//
-//	flagInitNode.ListenIP = fmt.Sprintf("http://0.0.0.0:%v", dnBasePort+cfg.PortOffsetBlockValidator)
-//
-//	partition, _, err := findInDescribe("", partitionName, &c.Accumulate.Network)
-//	checkf(err, "cannot find partition %s in network configuration", partitionName)
-//
-//	if partition.Type == cfg.NetworkTypeDirectory {
-//		fatalf("network partition of second node configuration must be a block validator. Please specify {network-name}.{bvn-partition-id} first parameter to init dual")
-//	}
-//	bvnHost, err := findHealthyNodeOnPartition(partition)
-//	checkf(err, "cannot find a healthy node on partition %s", partitionName)
-//
-//	args = []string{fmt.Sprintf("tcp://%s:%d", bvnHost, dnBasePort+cfg.PortOffsetBlockValidator)}
-//
-//	initNode(cmd, args)
-//
-//	c, err = cfg.Load(filepath.Join(flagMain.WorkDir, "bvnn"))
-//
-//	checkf(err, "cannot load configuration file for node")
-//
-//	if flagInit.NoEmptyBlocks {
-//		c.Consensus.CreateEmptyBlocks = false
-//	}
-//	if flagInit.NoWebsite {
-//		c.Accumulate.Website.Enabled = false
-//	}
-//	webPort, err := strconv.ParseUint(dnWebHostUrl.Port(), 10, 16)
-//	checkf(err, "invalid port for bvn website (%v)", dnWebHostUrl.Port())
-//	c.Accumulate.Website.ListenAddress = fmt.Sprintf("http://%s:%d", dnWebHostUrl.Hostname(), webPort+1)
-//
-//	//in dual mode, the key between bvn and dn is shared.
-//	//This will be cleaned up when init system is overhauled with AC-1263
-//
-//	if len(c.P2P.PersistentPeers) > 0 {
-//		c.P2P.BootstrapPeers = c.P2P.PersistentPeers
-//		c.P2P.PersistentPeers = ""
-//	}
-//
-//	err = cfg.Store(c)
-//	checkf(err, "cannot store configuration file for node")
-//}
 
 func resolvePublicIp() (string, error) {
 	req, err := http.Get("http://ip-api.com/json/")

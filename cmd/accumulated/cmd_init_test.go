@@ -34,7 +34,7 @@ func TestInitSeeds(t *testing.T) {
 		fmt.Sprintf("accumulated init node %s --work-dir %s --listen=http://127.11.11.11:%s --no-prometheus", bvnEndpoint.String(), workDirs[1], bvnEndpoint.Port()),
 		fmt.Sprintf("accumulated init node directory.devnet --seed %s --work-dir %s --no-prometheus", proxy_testing.Endpoint, workDirs[2]),
 		fmt.Sprintf("accumulated init node bvn1.devnet --seed %s --work-dir %s --no-prometheus", proxy_testing.Endpoint, workDirs[3]),
-		fmt.Sprintf("accumulated init dual %s --work-dir %s --listen=http://127.11.11.11 --no-prometheus --resolve-public-ip=false", bvnEndpoint.String(), workDirs[4]),
+		fmt.Sprintf("accumulated init dual %s --work-dir %s --public=http://127.11.11.11 --listen=tcp://127.11.11.12 --no-prometheus", bvnEndpoint.String(), workDirs[4]),
 	}
 
 	e := bytes.NewBufferString("")
@@ -54,20 +54,24 @@ func TestInitSeeds(t *testing.T) {
 
 		//fix the timeouts to match devnet bvn to avoid consensus error
 		c, err := config.Load(workDirs[i] + "/bvnn")
-		if err == nil {
-			//handle the case for the dual node bvnn, don't care about other error
-			c.Consensus.TimeoutCommit = time.Millisecond * 200
-			config.Store(c)
+		if err != nil {
+			c, err = config.Load(workDirs[i] + "/dnn")
+			if err != nil {
+				continue
+			}
 		}
+		//handle the case for the dual node bvnn, don't care about other error
+		c.Consensus.TimeoutCommit = time.Millisecond * 200
+		config.Store(c)
 	}
 
 	//now for kicks fire up a dual node
 	runNodes := []string{
-		//	fmt.Sprintf("accumulated run -w %s/dnn --ci-stop-after 5s", workDirs[0]),
-		//	fmt.Sprintf("accumulated run -w %s/bvnn --ci-stop-after 5s", workDirs[1]),
-		//	fmt.Sprintf("accumulated run -w %s/dnn --ci-stop-after 5s", workDirs[2]),
-		//	fmt.Sprintf("accumulated run -w %s/bvnn --ci-stop-after 5s", workDirs[3]),
-		fmt.Sprintf("accumulated run-dual %s/dnn %s/bvnn", workDirs[4], workDirs[4]),
+		fmt.Sprintf("accumulated run -w %s/dnn --ci-stop-after 5s", workDirs[0]),
+		fmt.Sprintf("accumulated run -w %s/bvnn --ci-stop-after 5s", workDirs[1]),
+		fmt.Sprintf("accumulated run -w %s/dnn --ci-stop-after 5s", workDirs[2]),
+		fmt.Sprintf("accumulated run -w %s/bvnn --ci-stop-after 5s", workDirs[3]),
+		fmt.Sprintf("accumulated run-dual %s/dnn %s/bvnn --ci-stop-after 5s", workDirs[4], workDirs[4]),
 	}
 	//todo: need to add local address to partition pool
 	//or use public IP ad the local address and add it to the pool, local address is used for nothing other than

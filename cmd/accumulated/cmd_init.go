@@ -76,9 +76,9 @@ var flagInitDualNode struct {
 	SkipVersionCheck bool
 	SeedProxy        string
 	PublicIP         string
-	ResolvePublicIP  bool
-	NoPrometheus     bool
-	ListenIP         string
+	//ResolvePublicIP  bool
+	NoPrometheus bool
+	ListenIP     string
 }
 
 var flagInitDevnet struct {
@@ -132,7 +132,7 @@ func initInitFlags() {
 	cmdInitDualNode.Flags().StringVarP(&flagInitDualNode.ListenIP, "listen", "l", "", "Address to listen on, where port is determined by seed or peer")
 	cmdInitDualNode.Flags().StringVar(&flagInitDualNode.SeedProxy, "seed", "", "Fetch network configuration from seed proxy")
 	cmdInitDualNode.Flags().BoolVarP(&flagInitDualNode.NoPrometheus, "no-prometheus", "", false, "disable prometheus")
-	cmdInitDualNode.Flags().BoolVar(&flagInitDualNode.ResolvePublicIP, "resolve-public-ip", true, "resolve public IP address of node and add to configuration")
+	//cmdInitDualNode.Flags().BoolVar(&flagInitDualNode.ResolvePublicIP, "resolve-public-ip", true, "resolve public IP address of node and add to configuration")
 
 	cmdInitDevnet.ResetFlags()
 	cmdInitDevnet.Flags().StringVar(&flagInitDevnet.Name, "name", "DevNet", "Network name")
@@ -517,17 +517,51 @@ func initNode(cmd *cobra.Command, args []string) (string, error) {
 		}
 	}
 
+	listenUrl, err := url.Parse(fmt.Sprintf("tcp://0.0.0.0:%d", basePort))
+	if err != nil {
+		return "", fmt.Errorf("invalid default listen url, %v", err)
+	}
+	if flagInitNode.ListenIP != "" {
+		listenUrl, err = url.Parse(flagInitNode.ListenIP)
+		if err != nil {
+			return "", fmt.Errorf("invalid --listen %q %v", flagInitNode.ListenIP, err)
+		}
+
+		if listenUrl.Port() != "" {
+			p, err := strconv.ParseInt(listenUrl.Port(), 10, 16)
+			if err != nil {
+				return "", fmt.Errorf("invalid port number %q, %v", listenUrl.Port(), err)
+			}
+			basePort = int(p)
+		}
+		//partition, addr, err := findInDescribe(listenUrl.String(), config.Accumulate.PartitionId, &config.Accumulate.Network)
+		//if err != nil {
+		//	return "", fmt.Errorf("cannot resolve public address in description, %v", err)
+		//}
+		////the address wasn't found in the network description, so add it
+		//if addr == nil {
+		//	partition.Nodes = append(partition.Nodes, cfg.Node{Address: "http://" + listenUrl.Hostname(), Type: getNodeTypeFromFlag()})
+		//}
+		//listenUrl, err = url.Parse("tcp://" + listenUrl.Hostname())
+		//if err != nil {
+		//	return "", err
+		//}
+	}
+
 	var publicAddr string
 	if flagInitNode.PublicIP != "" {
 		publicAddr, err = resolveIp(flagInitNode.PublicIP)
 		checkf(err, "invalid public address")
 
-		partition, _, err := findInDescribe(publicAddr, config.Accumulate.PartitionId, &config.Accumulate.Network)
+		partition, addr, err := findInDescribe(publicAddr, config.Accumulate.PartitionId, &config.Accumulate.Network)
 		if err != nil {
 			return "", fmt.Errorf("cannot resolve public address in description, %v", err)
 		}
 		//the address wasn't found in the network description, so add it
-		partition.Nodes = append(partition.Nodes, cfg.Node{Address: "http://" + publicAddr, Type: getNodeTypeFromFlag()})
+		if addr == nil {
+			partition.Nodes = append(partition.Nodes, cfg.Node{Address: "http://" + publicAddr, Type: getNodeTypeFromFlag()})
+		}
+		config.Accumulate.LocalAddress = publicAddr
 	}
 
 	config.Accumulate.AnalysisLog.Enabled = flagInit.EnableTimingLogs
@@ -551,25 +585,6 @@ func initNode(cmd *cobra.Command, args []string) (string, error) {
 
 	if flagInit.Reset {
 		networkReset()
-	}
-
-	listenUrl, err := url.Parse(fmt.Sprintf("tcp://0.0.0.0:%d", basePort))
-	if err != nil {
-		return "", fmt.Errorf("invalid default listen url, %v", err)
-	}
-	if flagInitNode.ListenIP != "" {
-		listenUrl, err = url.Parse(flagInitNode.ListenIP)
-		if err != nil {
-			return "", fmt.Errorf("invalid --listen %q %v", flagInitNode.ListenIP, err)
-		}
-
-		if listenUrl.Port() != "" {
-			p, err := strconv.ParseInt(listenUrl.Port(), 10, 16)
-			if err != nil {
-				return "", fmt.Errorf("invalid port number %q, %v", listenUrl.Port(), err)
-			}
-			basePort = int(p)
-		}
 	}
 
 	netDir := netDir(config.Accumulate.Describe.NetworkType)
