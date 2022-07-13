@@ -66,10 +66,6 @@ func getRecord(urlStr string, rec interface{}) (*api2.MerkleState, error) {
 }
 
 func prepareSigner(origin *url2.URL, args []string) ([]string, []*signing.Builder, error) {
-	if len(args) == 0 {
-		return nil, nil, fmt.Errorf("insufficent arguments on comand line")
-	}
-
 	var key *Key
 	var err error
 	if IsLiteTokenAccount(origin.String()) {
@@ -104,6 +100,11 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, []*signing.Builde
 		firstSigner.SetPrivateKey(key.PrivateKey)
 		return args, []*signing.Builder{firstSigner}, nil
 	}
+
+	if len(args) == 0 {
+		return nil, nil, fmt.Errorf("key name argument is missing")
+	}
+
 	err = prepareSignerPage(firstSigner, origin, args[0])
 	if err != nil {
 		return nil, nil, err

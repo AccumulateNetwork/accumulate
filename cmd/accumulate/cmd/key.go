@@ -110,7 +110,7 @@ var keyCmd = &cobra.Command{
 }
 
 var keyUpdateCmd = &cobra.Command{
-	Use:   "update [key page url] [<keyname>@<keypage>] [new key name]",
+	Use:   "update [key page url] [key name[@key book or page]] [new key name]",
 	Short: "Self-update a key",
 	Args:  cobra.RangeArgs(3, 5),
 	Run:   runCmdFunc(UpdateKey),
