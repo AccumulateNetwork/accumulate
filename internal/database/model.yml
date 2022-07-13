@@ -54,6 +54,27 @@
       pointer: true
       emptyIfMissing: true
 
+    - name: Transaction
+      type: entity
+      parameters:
+      - name: Hash
+        type: hash
+      attributes:
+      - name: Votes
+        type: state
+        dataType: AuthorityVote
+        pointer: true
+        collection: set
+      - name: Signatures
+        type: state
+        dataType: sigSetData
+        pointer: true
+        emptyIfMissing: true
+      - name: Result
+        type: state
+        dataType: protocol.TransactionResult2
+        pointer: true
+
     # Chains
     - name: MainChain
       type: other

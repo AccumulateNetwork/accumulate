@@ -15,6 +15,13 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+type AuthorityVote struct {
+	fieldsSet []bool
+	Authority *url.URL `json:"authority,omitempty" form:"authority" query:"authority" validate:"required"`
+	Vote      VoteType `json:"vote,omitempty" form:"vote" query:"vote" validate:"required"`
+	extraData []byte
+}
+
 type BlockStateSynthTxnEntry struct {
 	fieldsSet   []bool
 	Transaction []byte `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
@@ -102,6 +109,19 @@ type transactionState struct {
 	Signatures  []*sigSetData               `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
 	extraData   []byte
 }
+
+func (v *AuthorityVote) Copy() *AuthorityVote {
+	u := new(AuthorityVote)
+
+	if v.Authority != nil {
+		u.Authority = (v.Authority).Copy()
+	}
+	u.Vote = v.Vote
+
+	return u
+}
+
+func (v *AuthorityVote) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *BlockStateSynthTxnEntry) Copy() *BlockStateSynthTxnEntry {
 	u := new(BlockStateSynthTxnEntry)
@@ -268,6 +288,22 @@ func (v *transactionState) Copy() *transactionState {
 }
 
 func (v *transactionState) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *AuthorityVote) Equal(u *AuthorityVote) bool {
+	switch {
+	case v.Authority == u.Authority:
+		// equal
+	case v.Authority == nil || u.Authority == nil:
+		return false
+	case !((v.Authority).Equal(u.Authority)):
+		return false
+	}
+	if !(v.Vote == u.Vote) {
+		return false
+	}
+
+	return true
+}
 
 func (v *BlockStateSynthTxnEntry) Equal(u *BlockStateSynthTxnEntry) bool {
 	if !(bytes.Equal(v.Transaction, u.Transaction)) {
@@ -487,6 +523,54 @@ func (v *transactionState) Equal(u *transactionState) bool {
 	}
 
 	return true
+}
+
+var fieldNames_AuthorityVote = []string{
+	1: "Authority",
+	2: "Vote",
+}
+
+func (v *AuthorityVote) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Authority == nil) {
+		writer.WriteUrl(1, v.Authority)
+	}
+	if !(v.Vote == 0) {
+		writer.WriteEnum(2, v.Vote)
+	}
+
+	_, _, err := writer.Reset(fieldNames_AuthorityVote)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *AuthorityVote) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Authority is missing")
+	} else if v.Authority == nil {
+		errs = append(errs, "field Authority is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Vote is missing")
+	} else if v.Vote == 0 {
+		errs = append(errs, "field Vote is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
 }
 
 var fieldNames_BlockStateSynthTxnEntry = []string{
@@ -1088,6 +1172,32 @@ func (v *transactionState) IsValid() error {
 	default:
 		return errors.New(strings.Join(errs, "; "))
 	}
+}
+
+func (v *AuthorityVote) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *AuthorityVote) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUrl(1); ok {
+		v.Authority = x
+	}
+	if x := new(VoteType); reader.ReadEnum(2, x) {
+		v.Vote = *x
+	}
+
+	seen, err := reader.Reset(fieldNames_AuthorityVote)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
 }
 
 func (v *BlockStateSynthTxnEntry) UnmarshalBinary(data []byte) error {

@@ -135,3 +135,12 @@ BlockStateSynthTxnEntry:
     type: bytes
   - name: ChainEntry
     type: uvarint
+
+AuthorityVote:
+  fields:
+    - name: Authority
+      type: url
+      pointer: true
+    - name: Vote
+      type: VoteType
+      marshal-as: enum

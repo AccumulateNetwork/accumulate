@@ -43,40 +43,24 @@ Transaction:
       type: bytes
       marshal-as: none
 
-TransactionStatus:
+TransactionResult2:
   fields:
-    - name: TxID
-      type: txid
-      pointer: true
+    - name: Result
+      type: TransactionResult
+      marshal-as: union
     - name: Code
       type: errors2.Status
       marshal-as: enum
-    - { name: Remote, type: bool, virtual: true, non-binary: true }
-    - { name: Delivered, type: bool, virtual: true, non-binary: true }
-    - { name: Pending, type: bool, virtual: true, non-binary: true }
-    - { name: Failed, type: bool, virtual: true, non-binary: true }
-    - { name: CodeNum, type: uint, virtual: true, non-binary: true }
     - name: Error
       type: errors2.Error
       marshal-as: reference
       pointer: true
-    - name: Result
-      type: TransactionResult
-      marshal-as: union
+
+SyntheticTransactionStatus:
+  fields:
     - name: Received
       description: is the block when the transaction was first received
       type: uint
-    - name: Initiator
-      description: is the signer that initiated the transaction
-      type: url
-      pointer: true
-    - name: Signers
-      description: lists accounts that have signed the transaction
-      type: Signer
-      marshal-as: union
-      repeatable: true
-
-    # For synthetic and system transactions
     - name: SourceNetwork
       description: is the network that produced the transaction
       type: url
@@ -96,3 +80,20 @@ TransactionStatus:
       type: managed.Receipt
       marshal-as: reference
       pointer: true
+
+TransactionStatus:
+  fields:
+    - name: TxID
+      type: txid
+      pointer: true
+    - type: TransactionResult2
+      marshal-as: reference
+      pointer: true
+    - type: SyntheticTransactionStatus
+      marshal-as: reference
+      pointer: true
+    - { name: Remote, type: bool, virtual: true, non-binary: true }
+    - { name: Delivered, type: bool, virtual: true, non-binary: true }
+    - { name: Pending, type: bool, virtual: true, non-binary: true }
+    - { name: Failed, type: bool, virtual: true, non-binary: true }
+    - { name: CodeNum, type: uint, virtual: true, non-binary: true }

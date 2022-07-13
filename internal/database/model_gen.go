@@ -174,6 +174,7 @@ type Account struct {
 	pending                *record.Set[*url.TxID]
 	syntheticForAnchor     map[storage.Key]*record.Set[*url.TxID]
 	directory              *record.Set[*url.URL]
+	transaction            map[storage.Key]*AccountTransaction
 	mainChain              *Chain2
 	scratchChain           *Chain2
 	signatureChain         *Chain2
@@ -208,6 +209,18 @@ func (c *Account) SyntheticForAnchor(anchor [32]byte) *record.Set[*url.TxID] {
 func (c *Account) Directory() *record.Set[*url.URL] {
 	return getOrCreateField(&c.directory, func() *record.Set[*url.URL] {
 		return record.NewSet(c.logger.L, c.store, c.key.Append("Directory"), c.label+" directory", record.Wrapped(record.UrlWrapper), record.CompareUrl)
+	})
+}
+
+func (c *Account) Transaction(hash [32]byte) *AccountTransaction {
+	return getOrCreateMap(&c.transaction, c.key.Append("Transaction", hash), func() *AccountTransaction {
+		v := new(AccountTransaction)
+		v.logger = c.logger
+		v.store = c.store
+		v.key = c.key.Append("Transaction", hash)
+		v.parent = c
+		v.label = c.label + " transaction %[4]x"
+		return v
 	})
 }
 
@@ -307,6 +320,16 @@ func (c *Account) Resolve(key record.Key) (record.Record, record.Key, error) {
 		return v, key[2:], nil
 	case "Directory":
 		return c.Directory(), key[1:], nil
+	case "Transaction":
+		if len(key) < 2 {
+			return nil, nil, errors.New(errors.StatusInternalError, "bad key for account")
+		}
+		hash, okHash := key[1].([32]byte)
+		if !okHash {
+			return nil, nil, errors.New(errors.StatusInternalError, "bad key for account")
+		}
+		v := c.Transaction(hash)
+		return v, key[2:], nil
 	case "MainChain":
 		return c.MainChain(), key[1:], nil
 	case "ScratchChain":
@@ -369,6 +392,11 @@ func (c *Account) IsDirty() bool {
 	if fieldIsDirty(c.directory) {
 		return true
 	}
+	for _, v := range c.transaction {
+		if v.IsDirty() {
+			return true
+		}
+	}
 	if fieldIsDirty(c.mainChain) {
 		return true
 	}
@@ -422,6 +450,9 @@ func (c *Account) baseCommit() error {
 		commitField(&err, v)
 	}
 	commitField(&err, c.directory)
+	for _, v := range c.transaction {
+		commitField(&err, v)
+	}
 	commitField(&err, c.mainChain)
 	commitField(&err, c.scratchChain)
 	commitField(&err, c.signatureChain)
@@ -437,6 +468,80 @@ func (c *Account) baseCommit() error {
 	commitField(&err, c.chains)
 	commitField(&err, c.syntheticAnchors)
 	commitField(&err, c.data)
+
+	return nil
+}
+
+type AccountTransaction struct {
+	logger logging.OptionalLogger
+	store  record.Store
+	key    record.Key
+	label  string
+	parent *Account
+
+	votes      *record.Set[*AuthorityVote]
+	signatures *record.Value[*sigSetData]
+	result     *record.Value[*protocol.TransactionResult2]
+}
+
+func (c *AccountTransaction) Votes() *record.Set[*AuthorityVote] {
+	return getOrCreateField(&c.votes, func() *record.Set[*AuthorityVote] {
+		return record.NewSet(c.logger.L, c.store, c.key.Append("Votes"), c.label+" votes", record.Struct[AuthorityVote](), func(u, v *AuthorityVote) int { return u.Compare(v) })
+	})
+}
+
+func (c *AccountTransaction) Signatures() *record.Value[*sigSetData] {
+	return getOrCreateField(&c.signatures, func() *record.Value[*sigSetData] {
+		return record.NewValue(c.logger.L, c.store, c.key.Append("Signatures"), c.label+" signatures", true, record.Struct[sigSetData]())
+	})
+}
+
+func (c *AccountTransaction) Result() *record.Value[*protocol.TransactionResult2] {
+	return getOrCreateField(&c.result, func() *record.Value[*protocol.TransactionResult2] {
+		return record.NewValue(c.logger.L, c.store, c.key.Append("Result"), c.label+" result", false, record.Struct[protocol.TransactionResult2]())
+	})
+}
+
+func (c *AccountTransaction) Resolve(key record.Key) (record.Record, record.Key, error) {
+	switch key[0] {
+	case "Votes":
+		return c.Votes(), key[1:], nil
+	case "Signatures":
+		return c.Signatures(), key[1:], nil
+	case "Result":
+		return c.Result(), key[1:], nil
+	default:
+		return nil, nil, errors.New(errors.StatusInternalError, "bad key for transaction")
+	}
+}
+
+func (c *AccountTransaction) IsDirty() bool {
+	if c == nil {
+		return false
+	}
+
+	if fieldIsDirty(c.votes) {
+		return true
+	}
+	if fieldIsDirty(c.signatures) {
+		return true
+	}
+	if fieldIsDirty(c.result) {
+		return true
+	}
+
+	return false
+}
+
+func (c *AccountTransaction) Commit() error {
+	if c == nil {
+		return nil
+	}
+
+	var err error
+	commitField(&err, c.votes)
+	commitField(&err, c.signatures)
+	commitField(&err, c.result)
 
 	return nil
 }

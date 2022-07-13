@@ -682,6 +682,23 @@ type SyntheticOrigin struct {
 	extraData []byte
 }
 
+type SyntheticTransactionStatus struct {
+	fieldsSet []bool
+	// Received is the block when the transaction was first received.
+	Received uint64 `json:"received,omitempty" form:"received" query:"received" validate:"required"`
+	// SourceNetwork is the network that produced the transaction.
+	SourceNetwork *url.URL `json:"sourceNetwork,omitempty" form:"sourceNetwork" query:"sourceNetwork" validate:"required"`
+	// DestinationNetwork is the network that the transaction is sent to.
+	DestinationNetwork *url.URL `json:"destinationNetwork,omitempty" form:"destinationNetwork" query:"destinationNetwork" validate:"required"`
+	// SequenceNumber is the sequence number of the transaction.
+	SequenceNumber uint64 `json:"sequenceNumber,omitempty" form:"sequenceNumber" query:"sequenceNumber" validate:"required"`
+	// GotDirectoryReceipt indicates if a receipt has been received from the DN.
+	GotDirectoryReceipt bool `json:"gotDirectoryReceipt,omitempty" form:"gotDirectoryReceipt" query:"gotDirectoryReceipt" validate:"required"`
+	// Proof is the proof of the transaction.
+	Proof     *managed.Receipt `json:"proof,omitempty" form:"proof" query:"proof" validate:"required"`
+	extraData []byte
+}
+
 type SyntheticWriteData struct {
 	fieldsSet []bool
 	SyntheticOrigin
@@ -766,6 +783,14 @@ type TransactionHeader struct {
 	extraData []byte
 }
 
+type TransactionResult2 struct {
+	fieldsSet []bool
+	Result    TransactionResult `json:"result,omitempty" form:"result" query:"result" validate:"required"`
+	Code      errors2.Status    `json:"code,omitempty" form:"code" query:"code" validate:"required"`
+	Error     *errors2.Error    `json:"error,omitempty" form:"error" query:"error" validate:"required"`
+	extraData []byte
+}
+
 type TransactionResultSet struct {
 	fieldsSet []bool
 	Results   []*TransactionStatus `json:"results,omitempty" form:"results" query:"results" validate:"required"`
@@ -774,26 +799,9 @@ type TransactionResultSet struct {
 
 type TransactionStatus struct {
 	fieldsSet []bool
-	TxID      *url.TxID         `json:"txID,omitempty" form:"txID" query:"txID" validate:"required"`
-	Code      errors2.Status    `json:"code,omitempty" form:"code" query:"code" validate:"required"`
-	Error     *errors2.Error    `json:"error,omitempty" form:"error" query:"error" validate:"required"`
-	Result    TransactionResult `json:"result,omitempty" form:"result" query:"result" validate:"required"`
-	// Received is the block when the transaction was first received.
-	Received uint64 `json:"received,omitempty" form:"received" query:"received" validate:"required"`
-	// Initiator is the signer that initiated the transaction.
-	Initiator *url.URL `json:"initiator,omitempty" form:"initiator" query:"initiator" validate:"required"`
-	// Signers lists accounts that have signed the transaction.
-	Signers []Signer `json:"signers,omitempty" form:"signers" query:"signers" validate:"required"`
-	// SourceNetwork is the network that produced the transaction.
-	SourceNetwork *url.URL `json:"sourceNetwork,omitempty" form:"sourceNetwork" query:"sourceNetwork" validate:"required"`
-	// DestinationNetwork is the network that the transaction is sent to.
-	DestinationNetwork *url.URL `json:"destinationNetwork,omitempty" form:"destinationNetwork" query:"destinationNetwork" validate:"required"`
-	// SequenceNumber is the sequence number of the transaction.
-	SequenceNumber uint64 `json:"sequenceNumber,omitempty" form:"sequenceNumber" query:"sequenceNumber" validate:"required"`
-	// GotDirectoryReceipt indicates if a receipt has been received from the DN.
-	GotDirectoryReceipt bool `json:"gotDirectoryReceipt,omitempty" form:"gotDirectoryReceipt" query:"gotDirectoryReceipt" validate:"required"`
-	// Proof is the proof of the transaction.
-	Proof     *managed.Receipt `json:"proof,omitempty" form:"proof" query:"proof" validate:"required"`
+	TxID      *url.TxID `json:"txID,omitempty" form:"txID" query:"txID" validate:"required"`
+	TransactionResult2
+	SyntheticTransactionStatus
 	extraData []byte
 }
 
@@ -2144,6 +2152,27 @@ func (v *SyntheticOrigin) Copy() *SyntheticOrigin {
 
 func (v *SyntheticOrigin) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *SyntheticTransactionStatus) Copy() *SyntheticTransactionStatus {
+	u := new(SyntheticTransactionStatus)
+
+	u.Received = v.Received
+	if v.SourceNetwork != nil {
+		u.SourceNetwork = (v.SourceNetwork).Copy()
+	}
+	if v.DestinationNetwork != nil {
+		u.DestinationNetwork = (v.DestinationNetwork).Copy()
+	}
+	u.SequenceNumber = v.SequenceNumber
+	u.GotDirectoryReceipt = v.GotDirectoryReceipt
+	if v.Proof != nil {
+		u.Proof = (v.Proof).Copy()
+	}
+
+	return u
+}
+
+func (v *SyntheticTransactionStatus) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *SyntheticWriteData) Copy() *SyntheticWriteData {
 	u := new(SyntheticWriteData)
 
@@ -2295,6 +2324,22 @@ func (v *TransactionHeader) Copy() *TransactionHeader {
 
 func (v *TransactionHeader) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *TransactionResult2) Copy() *TransactionResult2 {
+	u := new(TransactionResult2)
+
+	if v.Result != nil {
+		u.Result = (v.Result).CopyAsInterface().(TransactionResult)
+	}
+	u.Code = v.Code
+	if v.Error != nil {
+		u.Error = (v.Error).Copy()
+	}
+
+	return u
+}
+
+func (v *TransactionResult2) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *TransactionResultSet) Copy() *TransactionResultSet {
 	u := new(TransactionResultSet)
 
@@ -2316,34 +2361,8 @@ func (v *TransactionStatus) Copy() *TransactionStatus {
 	if v.TxID != nil {
 		u.TxID = (v.TxID).Copy()
 	}
-	u.Code = v.Code
-	if v.Error != nil {
-		u.Error = (v.Error).Copy()
-	}
-	if v.Result != nil {
-		u.Result = (v.Result).CopyAsInterface().(TransactionResult)
-	}
-	u.Received = v.Received
-	if v.Initiator != nil {
-		u.Initiator = (v.Initiator).Copy()
-	}
-	u.Signers = make([]Signer, len(v.Signers))
-	for i, v := range v.Signers {
-		if v != nil {
-			u.Signers[i] = (v).CopyAsInterface().(Signer)
-		}
-	}
-	if v.SourceNetwork != nil {
-		u.SourceNetwork = (v.SourceNetwork).Copy()
-	}
-	if v.DestinationNetwork != nil {
-		u.DestinationNetwork = (v.DestinationNetwork).Copy()
-	}
-	u.SequenceNumber = v.SequenceNumber
-	u.GotDirectoryReceipt = v.GotDirectoryReceipt
-	if v.Proof != nil {
-		u.Proof = (v.Proof).Copy()
-	}
+	u.TransactionResult2 = *v.TransactionResult2.Copy()
+	u.SyntheticTransactionStatus = *v.SyntheticTransactionStatus.Copy()
 
 	return u
 }
@@ -3951,6 +3970,44 @@ func (v *SyntheticOrigin) Equal(u *SyntheticOrigin) bool {
 	return true
 }
 
+func (v *SyntheticTransactionStatus) Equal(u *SyntheticTransactionStatus) bool {
+	if !(v.Received == u.Received) {
+		return false
+	}
+	switch {
+	case v.SourceNetwork == u.SourceNetwork:
+		// equal
+	case v.SourceNetwork == nil || u.SourceNetwork == nil:
+		return false
+	case !((v.SourceNetwork).Equal(u.SourceNetwork)):
+		return false
+	}
+	switch {
+	case v.DestinationNetwork == u.DestinationNetwork:
+		// equal
+	case v.DestinationNetwork == nil || u.DestinationNetwork == nil:
+		return false
+	case !((v.DestinationNetwork).Equal(u.DestinationNetwork)):
+		return false
+	}
+	if !(v.SequenceNumber == u.SequenceNumber) {
+		return false
+	}
+	if !(v.GotDirectoryReceipt == u.GotDirectoryReceipt) {
+		return false
+	}
+	switch {
+	case v.Proof == u.Proof:
+		// equal
+	case v.Proof == nil || u.Proof == nil:
+		return false
+	case !((v.Proof).Equal(u.Proof)):
+		return false
+	}
+
+	return true
+}
+
 func (v *SyntheticWriteData) Equal(u *SyntheticWriteData) bool {
 	if !v.SyntheticOrigin.Equal(&u.SyntheticOrigin) {
 		return false
@@ -4149,6 +4206,25 @@ func (v *TransactionHeader) Equal(u *TransactionHeader) bool {
 	return true
 }
 
+func (v *TransactionResult2) Equal(u *TransactionResult2) bool {
+	if !(EqualTransactionResult(v.Result, u.Result)) {
+		return false
+	}
+	if !(v.Code == u.Code) {
+		return false
+	}
+	switch {
+	case v.Error == u.Error:
+		// equal
+	case v.Error == nil || u.Error == nil:
+		return false
+	case !((v.Error).Equal(u.Error)):
+		return false
+	}
+
+	return true
+}
+
 func (v *TransactionResultSet) Equal(u *TransactionResultSet) bool {
 	if len(v.Results) != len(u.Results) {
 		return false
@@ -4171,67 +4247,10 @@ func (v *TransactionStatus) Equal(u *TransactionStatus) bool {
 	case !((v.TxID).Equal(u.TxID)):
 		return false
 	}
-	if !(v.Code == u.Code) {
+	if !v.TransactionResult2.Equal(&u.TransactionResult2) {
 		return false
 	}
-	switch {
-	case v.Error == u.Error:
-		// equal
-	case v.Error == nil || u.Error == nil:
-		return false
-	case !((v.Error).Equal(u.Error)):
-		return false
-	}
-	if !(EqualTransactionResult(v.Result, u.Result)) {
-		return false
-	}
-	if !(v.Received == u.Received) {
-		return false
-	}
-	switch {
-	case v.Initiator == u.Initiator:
-		// equal
-	case v.Initiator == nil || u.Initiator == nil:
-		return false
-	case !((v.Initiator).Equal(u.Initiator)):
-		return false
-	}
-	if len(v.Signers) != len(u.Signers) {
-		return false
-	}
-	for i := range v.Signers {
-		if !(EqualSigner(v.Signers[i], u.Signers[i])) {
-			return false
-		}
-	}
-	switch {
-	case v.SourceNetwork == u.SourceNetwork:
-		// equal
-	case v.SourceNetwork == nil || u.SourceNetwork == nil:
-		return false
-	case !((v.SourceNetwork).Equal(u.SourceNetwork)):
-		return false
-	}
-	switch {
-	case v.DestinationNetwork == u.DestinationNetwork:
-		// equal
-	case v.DestinationNetwork == nil || u.DestinationNetwork == nil:
-		return false
-	case !((v.DestinationNetwork).Equal(u.DestinationNetwork)):
-		return false
-	}
-	if !(v.SequenceNumber == u.SequenceNumber) {
-		return false
-	}
-	if !(v.GotDirectoryReceipt == u.GotDirectoryReceipt) {
-		return false
-	}
-	switch {
-	case v.Proof == u.Proof:
-		// equal
-	case v.Proof == nil || u.Proof == nil:
-		return false
-	case !((v.Proof).Equal(u.Proof)):
+	if !v.SyntheticTransactionStatus.Equal(&u.SyntheticTransactionStatus) {
 		return false
 	}
 
@@ -8642,6 +8661,90 @@ func (v *SyntheticOrigin) IsValid() error {
 	}
 }
 
+var fieldNames_SyntheticTransactionStatus = []string{
+	1: "Received",
+	2: "SourceNetwork",
+	3: "DestinationNetwork",
+	4: "SequenceNumber",
+	5: "GotDirectoryReceipt",
+	6: "Proof",
+}
+
+func (v *SyntheticTransactionStatus) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Received == 0) {
+		writer.WriteUint(1, v.Received)
+	}
+	if !(v.SourceNetwork == nil) {
+		writer.WriteUrl(2, v.SourceNetwork)
+	}
+	if !(v.DestinationNetwork == nil) {
+		writer.WriteUrl(3, v.DestinationNetwork)
+	}
+	if !(v.SequenceNumber == 0) {
+		writer.WriteUint(4, v.SequenceNumber)
+	}
+	if !(!v.GotDirectoryReceipt) {
+		writer.WriteBool(5, v.GotDirectoryReceipt)
+	}
+	if !(v.Proof == nil) {
+		writer.WriteValue(6, v.Proof.MarshalBinary)
+	}
+
+	_, _, err := writer.Reset(fieldNames_SyntheticTransactionStatus)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *SyntheticTransactionStatus) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Received is missing")
+	} else if v.Received == 0 {
+		errs = append(errs, "field Received is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field SourceNetwork is missing")
+	} else if v.SourceNetwork == nil {
+		errs = append(errs, "field SourceNetwork is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field DestinationNetwork is missing")
+	} else if v.DestinationNetwork == nil {
+		errs = append(errs, "field DestinationNetwork is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field SequenceNumber is missing")
+	} else if v.SequenceNumber == 0 {
+		errs = append(errs, "field SequenceNumber is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field GotDirectoryReceipt is missing")
+	} else if !v.GotDirectoryReceipt {
+		errs = append(errs, "field GotDirectoryReceipt is not set")
+	}
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+		errs = append(errs, "field Proof is missing")
+	} else if v.Proof == nil {
+		errs = append(errs, "field Proof is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_SyntheticWriteData = []string{
 	1: "Type",
 	2: "SyntheticOrigin",
@@ -9221,6 +9324,63 @@ func (v *TransactionHeader) IsValid() error {
 	}
 }
 
+var fieldNames_TransactionResult2 = []string{
+	1: "Result",
+	2: "Code",
+	3: "Error",
+}
+
+func (v *TransactionResult2) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Result == nil) {
+		writer.WriteValue(1, v.Result.MarshalBinary)
+	}
+	if !(v.Code == 0) {
+		writer.WriteEnum(2, v.Code)
+	}
+	if !(v.Error == nil) {
+		writer.WriteValue(3, v.Error.MarshalBinary)
+	}
+
+	_, _, err := writer.Reset(fieldNames_TransactionResult2)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *TransactionResult2) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Result is missing")
+	} else if v.Result == nil {
+		errs = append(errs, "field Result is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Code is missing")
+	} else if v.Code == 0 {
+		errs = append(errs, "field Code is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Error is missing")
+	} else if v.Error == nil {
+		errs = append(errs, "field Error is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_TransactionResultSet = []string{
 	1: "Results",
 }
@@ -9263,18 +9423,9 @@ func (v *TransactionResultSet) IsValid() error {
 }
 
 var fieldNames_TransactionStatus = []string{
-	1:  "TxID",
-	2:  "Code",
-	3:  "Error",
-	4:  "Result",
-	5:  "Received",
-	6:  "Initiator",
-	7:  "Signers",
-	8:  "SourceNetwork",
-	9:  "DestinationNetwork",
-	10: "SequenceNumber",
-	11: "GotDirectoryReceipt",
-	12: "Proof",
+	1: "TxID",
+	2: "TransactionResult2",
+	3: "SyntheticTransactionStatus",
 }
 
 func (v *TransactionStatus) MarshalBinary() ([]byte, error) {
@@ -9284,41 +9435,8 @@ func (v *TransactionStatus) MarshalBinary() ([]byte, error) {
 	if !(v.TxID == nil) {
 		writer.WriteTxid(1, v.TxID)
 	}
-	if !(v.Code == 0) {
-		writer.WriteEnum(2, v.Code)
-	}
-	if !(v.Error == nil) {
-		writer.WriteValue(3, v.Error.MarshalBinary)
-	}
-	if !(v.Result == nil) {
-		writer.WriteValue(4, v.Result.MarshalBinary)
-	}
-	if !(v.Received == 0) {
-		writer.WriteUint(5, v.Received)
-	}
-	if !(v.Initiator == nil) {
-		writer.WriteUrl(6, v.Initiator)
-	}
-	if !(len(v.Signers) == 0) {
-		for _, v := range v.Signers {
-			writer.WriteValue(7, v.MarshalBinary)
-		}
-	}
-	if !(v.SourceNetwork == nil) {
-		writer.WriteUrl(8, v.SourceNetwork)
-	}
-	if !(v.DestinationNetwork == nil) {
-		writer.WriteUrl(9, v.DestinationNetwork)
-	}
-	if !(v.SequenceNumber == 0) {
-		writer.WriteUint(10, v.SequenceNumber)
-	}
-	if !(!v.GotDirectoryReceipt) {
-		writer.WriteBool(11, v.GotDirectoryReceipt)
-	}
-	if !(v.Proof == nil) {
-		writer.WriteValue(12, v.Proof.MarshalBinary)
-	}
+	writer.WriteValue(2, v.TransactionResult2.MarshalBinary)
+	writer.WriteValue(3, v.SyntheticTransactionStatus.MarshalBinary)
 
 	_, _, err := writer.Reset(fieldNames_TransactionStatus)
 	if err != nil {
@@ -9336,60 +9454,11 @@ func (v *TransactionStatus) IsValid() error {
 	} else if v.TxID == nil {
 		errs = append(errs, "field TxID is not set")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Code is missing")
-	} else if v.Code == 0 {
-		errs = append(errs, "field Code is not set")
+	if err := v.TransactionResult2.IsValid(); err != nil {
+		errs = append(errs, err.Error())
 	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field Error is missing")
-	} else if v.Error == nil {
-		errs = append(errs, "field Error is not set")
-	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
-		errs = append(errs, "field Result is missing")
-	} else if v.Result == nil {
-		errs = append(errs, "field Result is not set")
-	}
-	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
-		errs = append(errs, "field Received is missing")
-	} else if v.Received == 0 {
-		errs = append(errs, "field Received is not set")
-	}
-	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
-		errs = append(errs, "field Initiator is missing")
-	} else if v.Initiator == nil {
-		errs = append(errs, "field Initiator is not set")
-	}
-	if len(v.fieldsSet) > 7 && !v.fieldsSet[7] {
-		errs = append(errs, "field Signers is missing")
-	} else if len(v.Signers) == 0 {
-		errs = append(errs, "field Signers is not set")
-	}
-	if len(v.fieldsSet) > 8 && !v.fieldsSet[8] {
-		errs = append(errs, "field SourceNetwork is missing")
-	} else if v.SourceNetwork == nil {
-		errs = append(errs, "field SourceNetwork is not set")
-	}
-	if len(v.fieldsSet) > 9 && !v.fieldsSet[9] {
-		errs = append(errs, "field DestinationNetwork is missing")
-	} else if v.DestinationNetwork == nil {
-		errs = append(errs, "field DestinationNetwork is not set")
-	}
-	if len(v.fieldsSet) > 10 && !v.fieldsSet[10] {
-		errs = append(errs, "field SequenceNumber is missing")
-	} else if v.SequenceNumber == 0 {
-		errs = append(errs, "field SequenceNumber is not set")
-	}
-	if len(v.fieldsSet) > 11 && !v.fieldsSet[11] {
-		errs = append(errs, "field GotDirectoryReceipt is missing")
-	} else if !v.GotDirectoryReceipt {
-		errs = append(errs, "field GotDirectoryReceipt is not set")
-	}
-	if len(v.fieldsSet) > 12 && !v.fieldsSet[12] {
-		errs = append(errs, "field Proof is missing")
-	} else if v.Proof == nil {
-		errs = append(errs, "field Proof is not set")
+	if err := v.SyntheticTransactionStatus.IsValid(); err != nil {
+		errs = append(errs, err.Error())
 	}
 
 	switch len(errs) {
@@ -12538,6 +12607,44 @@ func (v *SyntheticOrigin) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *SyntheticTransactionStatus) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *SyntheticTransactionStatus) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUint(1); ok {
+		v.Received = x
+	}
+	if x, ok := reader.ReadUrl(2); ok {
+		v.SourceNetwork = x
+	}
+	if x, ok := reader.ReadUrl(3); ok {
+		v.DestinationNetwork = x
+	}
+	if x, ok := reader.ReadUint(4); ok {
+		v.SequenceNumber = x
+	}
+	if x, ok := reader.ReadBool(5); ok {
+		v.GotDirectoryReceipt = x
+	}
+	if x := new(managed.Receipt); reader.ReadValue(6, x.UnmarshalBinary) {
+		v.Proof = x
+	}
+
+	seen, err := reader.Reset(fieldNames_SyntheticTransactionStatus)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *SyntheticWriteData) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -12887,6 +12994,39 @@ func (v *TransactionHeader) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *TransactionResult2) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *TransactionResult2) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	reader.ReadValue(1, func(b []byte) error {
+		x, err := UnmarshalTransactionResult(b)
+		if err == nil {
+			v.Result = x
+		}
+		return err
+	})
+	if x := new(errors2.Status); reader.ReadEnum(2, x) {
+		v.Code = *x
+	}
+	if x := new(errors2.Error); reader.ReadValue(3, x.UnmarshalBinary) {
+		v.Error = x
+	}
+
+	seen, err := reader.Reset(fieldNames_TransactionResult2)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *TransactionResultSet) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -12924,52 +13064,8 @@ func (v *TransactionStatus) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadTxid(1); ok {
 		v.TxID = x
 	}
-	if x := new(errors2.Status); reader.ReadEnum(2, x) {
-		v.Code = *x
-	}
-	if x := new(errors2.Error); reader.ReadValue(3, x.UnmarshalBinary) {
-		v.Error = x
-	}
-	reader.ReadValue(4, func(b []byte) error {
-		x, err := UnmarshalTransactionResult(b)
-		if err == nil {
-			v.Result = x
-		}
-		return err
-	})
-	if x, ok := reader.ReadUint(5); ok {
-		v.Received = x
-	}
-	if x, ok := reader.ReadUrl(6); ok {
-		v.Initiator = x
-	}
-	for {
-		ok := reader.ReadValue(7, func(b []byte) error {
-			x, err := UnmarshalSigner(b)
-			if err == nil {
-				v.Signers = append(v.Signers, x)
-			}
-			return err
-		})
-		if !ok {
-			break
-		}
-	}
-	if x, ok := reader.ReadUrl(8); ok {
-		v.SourceNetwork = x
-	}
-	if x, ok := reader.ReadUrl(9); ok {
-		v.DestinationNetwork = x
-	}
-	if x, ok := reader.ReadUint(10); ok {
-		v.SequenceNumber = x
-	}
-	if x, ok := reader.ReadBool(11); ok {
-		v.GotDirectoryReceipt = x
-	}
-	if x := new(managed.Receipt); reader.ReadValue(12, x.UnmarshalBinary) {
-		v.Proof = x
-	}
+	reader.ReadValue(2, v.TransactionResult2.UnmarshalBinary)
+	reader.ReadValue(3, v.SyntheticTransactionStatus.UnmarshalBinary)
 
 	seen, err := reader.Reset(fieldNames_TransactionStatus)
 	if err != nil {
@@ -14525,51 +14621,23 @@ func (v *TransactionHeader) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *TransactionResult2) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Result encoding.JsonUnmarshalWith[TransactionResult] `json:"result,omitempty"`
+		Code   errors2.Status                                `json:"code,omitempty"`
+		Error  *errors2.Error                                `json:"error,omitempty"`
+	}{}
+	u.Result = encoding.JsonUnmarshalWith[TransactionResult]{Value: v.Result, Func: UnmarshalTransactionResultJSON}
+	u.Code = v.Code
+	u.Error = v.Error
+	return json.Marshal(&u)
+}
+
 func (v *TransactionResultSet) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Results encoding.JsonList[*TransactionStatus] `json:"results,omitempty"`
 	}{}
 	u.Results = v.Results
-	return json.Marshal(&u)
-}
-
-func (v *TransactionStatus) MarshalJSON() ([]byte, error) {
-	u := struct {
-		TxID                *url.TxID                                     `json:"txID,omitempty"`
-		Code                errors2.Status                                `json:"code,omitempty"`
-		Remote              bool                                          `json:"remote,omitempty"`
-		Delivered           bool                                          `json:"delivered,omitempty"`
-		Pending             bool                                          `json:"pending,omitempty"`
-		Failed              bool                                          `json:"failed,omitempty"`
-		CodeNum             uint64                                        `json:"codeNum,omitempty"`
-		Error               *errors2.Error                                `json:"error,omitempty"`
-		Result              encoding.JsonUnmarshalWith[TransactionResult] `json:"result,omitempty"`
-		Received            uint64                                        `json:"received,omitempty"`
-		Initiator           *url.URL                                      `json:"initiator,omitempty"`
-		Signers             encoding.JsonUnmarshalListWith[Signer]        `json:"signers,omitempty"`
-		SourceNetwork       *url.URL                                      `json:"sourceNetwork,omitempty"`
-		DestinationNetwork  *url.URL                                      `json:"destinationNetwork,omitempty"`
-		SequenceNumber      uint64                                        `json:"sequenceNumber,omitempty"`
-		GotDirectoryReceipt bool                                          `json:"gotDirectoryReceipt,omitempty"`
-		Proof               *managed.Receipt                              `json:"proof,omitempty"`
-	}{}
-	u.TxID = v.TxID
-	u.Code = v.Code
-	u.Remote = v.Remote()
-	u.Delivered = v.Delivered()
-	u.Pending = v.Pending()
-	u.Failed = v.Failed()
-	u.CodeNum = v.CodeNum()
-	u.Error = v.Error
-	u.Result = encoding.JsonUnmarshalWith[TransactionResult]{Value: v.Result, Func: UnmarshalTransactionResultJSON}
-	u.Received = v.Received
-	u.Initiator = v.Initiator
-	u.Signers = encoding.JsonUnmarshalListWith[Signer]{Value: v.Signers, Func: UnmarshalSignerJSON}
-	u.SourceNetwork = v.SourceNetwork
-	u.DestinationNetwork = v.DestinationNetwork
-	u.SequenceNumber = v.SequenceNumber
-	u.GotDirectoryReceipt = v.GotDirectoryReceipt
-	u.Proof = v.Proof
 	return json.Marshal(&u)
 }
 
@@ -16840,6 +16908,25 @@ func (v *TransactionHeader) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *TransactionResult2) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Result encoding.JsonUnmarshalWith[TransactionResult] `json:"result,omitempty"`
+		Code   errors2.Status                                `json:"code,omitempty"`
+		Error  *errors2.Error                                `json:"error,omitempty"`
+	}{}
+	u.Result = encoding.JsonUnmarshalWith[TransactionResult]{Value: v.Result, Func: UnmarshalTransactionResultJSON}
+	u.Code = v.Code
+	u.Error = v.Error
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Result = u.Result.Value
+
+	v.Code = u.Code
+	v.Error = u.Error
+	return nil
+}
+
 func (v *TransactionResultSet) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Results encoding.JsonList[*TransactionStatus] `json:"results,omitempty"`
@@ -16849,65 +16936,6 @@ func (v *TransactionResultSet) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	v.Results = u.Results
-	return nil
-}
-
-func (v *TransactionStatus) UnmarshalJSON(data []byte) error {
-	u := struct {
-		TxID                *url.TxID                                     `json:"txID,omitempty"`
-		Code                errors2.Status                                `json:"code,omitempty"`
-		Remote              bool                                          `json:"remote,omitempty"`
-		Delivered           bool                                          `json:"delivered,omitempty"`
-		Pending             bool                                          `json:"pending,omitempty"`
-		Failed              bool                                          `json:"failed,omitempty"`
-		CodeNum             uint64                                        `json:"codeNum,omitempty"`
-		Error               *errors2.Error                                `json:"error,omitempty"`
-		Result              encoding.JsonUnmarshalWith[TransactionResult] `json:"result,omitempty"`
-		Received            uint64                                        `json:"received,omitempty"`
-		Initiator           *url.URL                                      `json:"initiator,omitempty"`
-		Signers             encoding.JsonUnmarshalListWith[Signer]        `json:"signers,omitempty"`
-		SourceNetwork       *url.URL                                      `json:"sourceNetwork,omitempty"`
-		DestinationNetwork  *url.URL                                      `json:"destinationNetwork,omitempty"`
-		SequenceNumber      uint64                                        `json:"sequenceNumber,omitempty"`
-		GotDirectoryReceipt bool                                          `json:"gotDirectoryReceipt,omitempty"`
-		Proof               *managed.Receipt                              `json:"proof,omitempty"`
-	}{}
-	u.TxID = v.TxID
-	u.Code = v.Code
-	u.Remote = v.Remote()
-	u.Delivered = v.Delivered()
-	u.Pending = v.Pending()
-	u.Failed = v.Failed()
-	u.CodeNum = v.CodeNum()
-	u.Error = v.Error
-	u.Result = encoding.JsonUnmarshalWith[TransactionResult]{Value: v.Result, Func: UnmarshalTransactionResultJSON}
-	u.Received = v.Received
-	u.Initiator = v.Initiator
-	u.Signers = encoding.JsonUnmarshalListWith[Signer]{Value: v.Signers, Func: UnmarshalSignerJSON}
-	u.SourceNetwork = v.SourceNetwork
-	u.DestinationNetwork = v.DestinationNetwork
-	u.SequenceNumber = v.SequenceNumber
-	u.GotDirectoryReceipt = v.GotDirectoryReceipt
-	u.Proof = v.Proof
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	v.TxID = u.TxID
-	v.Code = u.Code
-	v.Error = u.Error
-	v.Result = u.Result.Value
-
-	v.Received = u.Received
-	v.Initiator = u.Initiator
-	v.Signers = make([]Signer, len(u.Signers.Value))
-	for i, x := range u.Signers.Value {
-		v.Signers[i] = x
-	}
-	v.SourceNetwork = u.SourceNetwork
-	v.DestinationNetwork = u.DestinationNetwork
-	v.SequenceNumber = u.SequenceNumber
-	v.GotDirectoryReceipt = u.GotDirectoryReceipt
-	v.Proof = u.Proof
 	return nil
 }
 

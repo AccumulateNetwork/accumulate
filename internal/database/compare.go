@@ -5,6 +5,10 @@ import (
 	"strings"
 )
 
+func (e *AuthorityVote) Compare(f *AuthorityVote) int {
+	return e.Authority.Compare(f.Authority)
+}
+
 func (e *TransactionChainEntry) Compare(f *TransactionChainEntry) int {
 	v := e.Account.Compare(f.Account)
 	if v != 0 {
