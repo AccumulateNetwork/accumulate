@@ -279,13 +279,13 @@ func (n *Network) GetBvnNames() []string {
 	return names
 }
 
-func (n *Network) GetPartitionByID(partitionID string) Partition {
-	for _, partition := range n.Partitions {
-		if partition.Id == partitionID {
-			return partition
+func (n *Network) GetPartitionByID(partitionID string) *Partition {
+	for i, partition := range n.Partitions {
+		if strings.EqualFold(partition.Id, partitionID) {
+			return &n.Partitions[i]
 		}
 	}
-	panic(fmt.Sprintf("Partition ID %s does not exist", partitionID))
+	return nil
 }
 
 func Load(dir string) (*Config, error) {
