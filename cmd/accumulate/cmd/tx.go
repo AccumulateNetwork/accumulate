@@ -113,7 +113,7 @@ func PrintTXExecute() {
 }
 
 func PrintTxSign() {
-	fmt.Println("  accumulate tx sign [origin url] [signing key name] [key index (optional)] [key height (optional)] [txid]	Sign a pending transaction")
+	fmt.Println("  accumulate tx sign [origin url] [key name[@key book or page]] [txid]	Sign a pending transaction")
 }
 
 func PrintTXHistoryGet() {

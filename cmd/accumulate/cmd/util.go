@@ -9,7 +9,6 @@ import (
 	"log"
 	"math"
 	"math/big"
-	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -67,10 +66,6 @@ func getRecord(urlStr string, rec interface{}) (*api2.MerkleState, error) {
 }
 
 func prepareSigner(origin *url2.URL, args []string) ([]string, []*signing.Builder, error) {
-	if len(args) == 0 {
-		return nil, nil, fmt.Errorf("insufficent arguments on comand line")
-	}
-
 	var key *Key
 	var err error
 	if IsLiteTokenAccount(origin.String()) {
@@ -106,7 +101,11 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, []*signing.Builde
 		return args, []*signing.Builder{firstSigner}, nil
 	}
 
-	args, err = prepareSignerPage(firstSigner, origin, args...)
+	if len(args) == 0 {
+		return nil, nil, fmt.Errorf("key name argument is missing")
+	}
+
+	err = prepareSignerPage(firstSigner, origin, args[0])
 	if err != nil {
 		return nil, nil, err
 	}
@@ -115,58 +114,54 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, []*signing.Builde
 	for _, name := range AdditionalSigners {
 		signer := new(signing.Builder)
 		signer.Type = protocol.SignatureTypeLegacyED25519
-		_, err = prepareSignerPage(signer, origin, name)
+		err = prepareSignerPage(signer, origin, name)
 		if err != nil {
 			return nil, nil, err
 		}
 		signers = append(signers, signer)
 	}
 
-	return args, signers, nil
+	return args[1:], signers, nil
 }
 
-func prepareSignerPage(signer *signing.Builder, origin *url.URL, args ...string) ([]string, error) {
+func prepareSignerPage(signer *signing.Builder, origin *url.URL, signingKey string) error {
 	var keyName string
-	keyHolder, err := url2.Parse(args[0])
+	keyHolder, err := url2.Parse(signingKey)
 	if err == nil && keyHolder.UserInfo != "" {
 		keyName = keyHolder.UserInfo
 		keyHolder.UserInfo = ""
 	} else {
 		keyHolder = origin
-		keyName = args[0]
+		keyName = signingKey
 	}
 
 	key, err := resolvePrivateKey(keyName)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	signer.SetPrivateKey(key.PrivateKey)
-	ct := 1
 
 	signer.Type = key.Type
 
 	keyInfo, err := getKey(keyHolder.String(), key.PublicKeyHash())
 	if err != nil {
-		return nil, fmt.Errorf("failed to get key for %q : %v", origin, err)
+		return fmt.Errorf("failed to get key for %q : %v", origin, err)
 	}
 
-	if len(args) < 2 {
-		signer.Url = keyInfo.Signer
-	} else if v, err := strconv.ParseUint(args[1], 10, 64); err == nil {
-		signer.Url = protocol.FormatKeyPageUrl(keyInfo.Authority, v)
-		ct++
-	} else {
-		signer.Url = keyInfo.Signer
-	}
+	signer.Url = keyInfo.Signer
 
 	var page *protocol.KeyPage
 	_, err = getRecord(signer.Url.String(), &page)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get %q : %v", keyInfo.Signer, err)
+		return fmt.Errorf("failed to get %q : %v", keyInfo.Signer, err)
 	}
-	signer.Version = page.Version
+	if SignerVersion != 0 {
+		signer.Version = uint64(SignerVersion)
+	} else {
+		signer.Version = page.Version
+	}
 
-	return args[ct:], nil
+	return nil
 }
 
 func parseArgsAndPrepareSigner(args []string) ([]string, *url2.URL, []*signing.Builder, error) {
