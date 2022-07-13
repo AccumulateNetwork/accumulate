@@ -94,10 +94,10 @@ func watchDog(prog *Program, svc service.Service, duration time.Duration) {
 	time.Sleep(duration)
 
 	//this will cause tendermint to stop and exit cleanly.
-	prog.Stop(svc)
+	_ = prog.Stop(svc)
 
 	//the following will stop the Run()
-	syscall.Kill(syscall.Getpid(), syscall.SIGINT)
+	_ = syscall.Kill(syscall.Getpid(), syscall.SIGINT)
 }
 
 type logAnnotator func(io.Writer, string, bool) io.Writer

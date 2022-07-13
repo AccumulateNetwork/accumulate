@@ -310,6 +310,10 @@ func initNodeFromSeedProxy(cmd *cobra.Command, args []string) (int, *cfg.Config,
 
 		//need a healthy accumulate node to further verify the proxy
 		u, err = cfg.OffsetPort(addr, int(resp.BasePort), int(cfg.PortOffsetAccumulateApi))
+		if err != nil {
+			return 0, nil, nil, err
+		}
+
 		lastHealthyAccPeer, err = client.New(fmt.Sprintf("http://%s:%s", u.Hostname(), u.Port()))
 		if err != nil {
 			return 0, nil, nil, fmt.Errorf("failed to create accumulate client for %s, %v", u.String(), err)
@@ -329,7 +333,7 @@ func initNodeFromSeedProxy(cmd *cobra.Command, args []string) (int, *cfg.Config,
 	if lastHealthyAccPeer == nil || lastHealthyTmPeer == nil {
 		return 0, nil, nil, fmt.Errorf("no healthy peers, cannot continue")
 	}
-	genDoc := &types.GenesisDoc{}
+	var genDoc *types.GenesisDoc
 	if cmd.Flag("genesis-doc").Changed {
 		genDoc, err = types.GenesisDocFromFile(flagInitNode.GenesisDoc)
 		if err != nil {
@@ -375,6 +379,10 @@ func initNodeFromSeedProxy(cmd *cobra.Command, args []string) (int, *cfg.Config,
 	}
 
 	d, err := nc.NetworkState.MarshalBinary()
+	if err != nil {
+		return 0, nil, nil, err
+	}
+
 	h := sha256.Sum256(d)
 	if !nc.Signature.Verify(h[:]) {
 		return 0, nil, nil, fmt.Errorf("cannot verify network configuration from proxy")
@@ -417,7 +425,10 @@ func initNodeFromPeer(cmd *cobra.Command, args []string) (int, *cfg.Config, *typ
 	}
 
 	version := getVersion(accClient)
-	versionCheck(version, args[0])
+	err = versionCheck(version, args[0])
+	if err != nil {
+		return 0, nil, nil, err
+	}
 
 	description, err := accClient.Describe(context.Background())
 	if err != nil {

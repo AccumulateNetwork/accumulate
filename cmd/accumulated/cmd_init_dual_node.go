@@ -68,10 +68,13 @@ func initDualNodeFromSeed(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// configure the BVN first so we know how to setup the bvn.
+	// configure the Directory first so we know how to setup the bvn.
 	args = []string{args[0]}
 
-	initNode(cmd, args)
+	_, err = initNode(cmd, args)
+	if err != nil {
+		return fmt.Errorf("cannot configure the directory node, %v", err)
+	}
 
 	c, err := finalizeDnn()
 	if err != nil {
@@ -94,7 +97,10 @@ func initDualNodeFromSeed(cmd *cobra.Command, args []string) error {
 
 	args = []string{fmt.Sprintf("tcp://%s:%d", bvnHost, partition.BasePort)}
 
-	initNode(cmd, args)
+	_, err = initNode(cmd, args)
+	if err != nil {
+		return fmt.Errorf("cannot configure the directory node, %v", err)
+	}
 
 	return finalizeBvnn()
 }
@@ -126,7 +132,10 @@ func initDualNodeFromPeer(cmd *cobra.Command, args []string) error {
 	dnnUrl := fmt.Sprintf("%s://%s:%d", u.Scheme, u.Hostname(), dnBasePort)
 	args = []string{dnnUrl}
 
-	initNode(cmd, args)
+	_, err = initNode(cmd, args)
+	if err != nil {
+		return nil
+	}
 
 	_, err = finalizeDnn()
 	if err != nil {
@@ -135,7 +144,10 @@ func initDualNodeFromPeer(cmd *cobra.Command, args []string) error {
 
 	args = []string{bvnHost}
 
-	initNode(cmd, args)
+	_, err = initNode(cmd, args)
+	if err != nil {
+		return nil
+	}
 
 	//finalize BVNN
 	err = finalizeBvnn()

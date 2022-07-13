@@ -63,7 +63,7 @@ func TestInitSeeds(t *testing.T) {
 		}
 		//handle the case for the dual node bvnn, don't care about other error
 		c.Consensus.TimeoutCommit = time.Millisecond * 200
-		config.Store(c)
+		require.NoError(t, config.Store(c))
 	}
 
 	//now for kicks fire up a dual node
