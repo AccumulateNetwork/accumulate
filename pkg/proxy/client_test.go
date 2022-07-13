@@ -60,7 +60,7 @@ func TestAccuProxyClient(t *testing.T) {
 	ncResp, err := client.GetNetworkConfig(context.Background(), &ncr)
 	require.NoError(t, err)
 	require.True(t, ncResp.NetworkState.Network.Equal(&testing2.Network))
-	d, err = ncResp.NetworkState.Network.MarshalBinary()
+	d, err = ncResp.NetworkState.MarshalBinary()
 	require.NoError(t, err)
 	hash = sha256.Sum256(d)
 	require.True(t, ncResp.Signature.Verify(hash[:]))
