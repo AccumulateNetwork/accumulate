@@ -41,14 +41,12 @@ func (ms *KeyPage) GetMofN() (m, n uint64) {
 // SetThreshold
 // set the signature threshold to M.  Returns an error if m > n
 func (ms *KeyPage) SetThreshold(m uint64) error {
-	if m <= uint64(len(ms.Keys)) {
+	if m <= uint64(len(ms.Keys)) && m > 0 {
 		ms.AcceptThreshold = m
+	} else if m == 0 {
+		return fmt.Errorf("cannot require 0 signatures on a key page")
 	} else {
 		return fmt.Errorf("cannot require %d signatures on a key page with %d keys", m, len(ms.Keys))
-	}
-
-	if m == 0 {
-		return fmt.Errorf("cannot require 0 signatures on a key page")
 	}
 	return nil
 }
