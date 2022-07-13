@@ -16,6 +16,7 @@ func init() {
 
 	// Add auth cmd for backwards compatability
 	bookCmd.AddCommand(authCmd)
+
 }
 
 // bookCmd are the commands associated with managing key books
@@ -32,7 +33,7 @@ var bookGetCmd = &cobra.Command{
 }
 
 var bookCreateCmd = &cobra.Command{
-	Use:   "create [origin adi url] [signing key name] [key index (optional)] [key height (optional)] [new key book url] [public key 1 (optional)] ... [public key hex or name n + 1",
+	Use:   "create [origin adi url] [key name[@key book or page]] [new key book url] [public key 1 (optional)] ... [public key hex or name n + 1",
 	Short: "Create new key book and page. When public key 1 is specified it will be assigned to the page, otherwise the origin key is used.",
 	Args:  cobra.MinimumNArgs(3),
 	Run:   runCmdFunc(CreateKeyBook),
