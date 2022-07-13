@@ -30,7 +30,9 @@ var testMatrix testMatrixTests
 
 func bootstrap(t *testing.T, tc *testCmd) {
 	//add the DN private key to our key list.
-	_, err := tc.execute(t, fmt.Sprintf("key import private %x dnkey", tc.privKey.Bytes()))
+	tc.rootCmd.SetArgs([]string{"key", "import", "private", "dnkey"})
+	tc.rootCmd.SetIn(strings.NewReader(fmt.Sprintf("%v", tc.privKey.Bytes())))
+	_, err := executeCmd(tc.rootCmd)
 	require.NoError(t, err)
 
 	//set mnemonic for predictable addresses
@@ -53,6 +55,21 @@ func bootstrap(t *testing.T, tc *testCmd) {
 		}
 	}
 }
+
+// func getPasswdPrompt(cmd *cobra.Command, prompt string, mask bool) (string, error) {
+// 	rd, ok := cmd.InOrStdin().(gopass.FdReader)
+// 	if ok {
+// 		bytes, err := gopass.GetPasswdPrompt(prompt, mask, rd, cmd.ErrOrStderr())
+// 		return string(bytes), err
+// 	}
+
+// 	fmt.Fprintf(cmd.OutOrStdout(), prompt)
+// 	line, err := bufio.NewReader(cmd.InOrStdin()).ReadString('\n')
+// 	if err != nil {
+// 		return "", err
+// 	}
+// 	return strings.TrimSuffix(line, "\n"), nil
+// }
 
 func TestCli(t *testing.T) {
 	acctesting.SkipLong(t)
@@ -153,15 +170,22 @@ func (c *testCmd) execute(t *testing.T, cmdLine string) (string, error) {
 		c.jsonRpcAddr, cmdLine)
 	args := strings.Split(fullCommand, " ")
 
+	c.rootCmd.SetArgs(args)
+	return executeCmd(c.rootCmd)
+}
+
+func executeCmd(cmd *cobra.Command) (string, error) {
 	e := bytes.NewBufferString("")
 	b := bytes.NewBufferString("")
-	c.rootCmd.SetErr(e)
-	c.rootCmd.SetOut(b)
-	c.rootCmd.SetArgs(args)
+	cmd.SetErr(e)
+	cmd.SetOut(b)
 	DidError = nil
-	_ = c.rootCmd.Execute()
+	err := cmd.Execute()
 	if DidError != nil {
 		return "", DidError
+	}
+	if err != nil {
+		return "", err
 	}
 
 	errPrint, err := io.ReadAll(e)
