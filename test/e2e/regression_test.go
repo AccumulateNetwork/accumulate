@@ -16,6 +16,10 @@ import (
 )
 
 func TestOverwriteCreditBalance(t *testing.T) {
+	const x = 0.05
+	const y = 10000
+	big.NewInt(x * y)
+
 	// Tests AC-1555
 	var timestamp uint64
 
@@ -35,12 +39,12 @@ func TestOverwriteCreditBalance(t *testing.T) {
 
 	// Add credits
 	const additionalBalance = 99
-	const oracle = InitialAcmeOracle * AcmeOraclePrecision //nolint
+	const oracle = InitialAcmeOracleValue
 	acme := big.NewInt(AcmePrecision)
 	acme.Mul(acme, big.NewInt(additionalBalance))
 	acme.Div(acme, big.NewInt(CreditsPerDollar))
 	acme.Mul(acme, big.NewInt(AcmeOraclePrecision))
-	acme.Div(acme, big.NewInt(oracle)) //nolint
+	acme.Div(acme, big.NewInt(oracle))
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
 		acctesting.NewTransaction().
 			WithPrincipal(liteUrl).
@@ -113,12 +117,12 @@ func TestAddCreditsToLiteIdentityOnOtherBVN(t *testing.T) {
 
 	// Add credits
 	const creditAmount = 99
-	const oracle = InitialAcmeOracle * AcmeOraclePrecision //nolint
+	const oracle = InitialAcmeOracleValue
 	acme := big.NewInt(AcmePrecision)
 	acme.Mul(acme, big.NewInt(creditAmount))
 	acme.Div(acme, big.NewInt(CreditsPerDollar))
 	acme.Mul(acme, big.NewInt(AcmeOraclePrecision))
-	acme.Div(acme, big.NewInt(oracle)) //nolint
+	acme.Div(acme, big.NewInt(oracle))
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
 		acctesting.NewTransaction().
 			WithPrincipal(sender).
@@ -262,7 +266,6 @@ func TestSynthTxnToDn(t *testing.T) {
 	sim.InitFromGenesis()
 
 	// Setup accounts
-	const initialBalance = 100
 	alice := AccountUrl("alice")
 	aliceKey, liteKey := acctesting.GenerateKey(alice), acctesting.GenerateKey("lite")
 	liteUrl := acctesting.AcmeLiteAddressStdPriv(liteKey)

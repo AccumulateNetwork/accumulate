@@ -199,7 +199,7 @@ func (d *Daemon) Start() (err error) {
 	// Create a local client
 	lnode, ok := d.node.Service.(local.NodeService)
 	if !ok {
-		return fmt.Errorf("node is not a local node service!")
+		return fmt.Errorf("node is not a local node service")
 	}
 	lclient, err := local.New(lnode)
 	if err != nil {

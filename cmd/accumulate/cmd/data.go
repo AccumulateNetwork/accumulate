@@ -381,9 +381,7 @@ func prepareData(args []string, isFirstLiteEntry bool, signers []*signing.Builde
 		}
 		dataCopy := [][]byte{}
 		dataCopy = append(dataCopy, finData)
-		for _, v := range entry.Data {
-			dataCopy = append(dataCopy, v)
-		}
+		dataCopy = append(dataCopy, entry.Data...)
 		entry.Data = dataCopy
 	}
 	return entry, nil

@@ -1,5 +1,7 @@
 package simulator
 
+//lint:file-ignore ST1001 Don't care
+
 import (
 	"encoding"
 	"os"

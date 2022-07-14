@@ -16,7 +16,6 @@ import (
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/testing/e2e"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	query2 "gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
@@ -32,7 +31,7 @@ func TestEndToEnd(t *testing.T) {
 	suite.Run(t, e2e.NewSuite(func(s *e2e.Suite) e2e.DUT {
 		partitions, daemons := acctesting.CreateTestNet(s.T(), 1, 2, 0, false)
 		acctesting.RunTestNet(s.T(), partitions, daemons)
-		return &e2eDUT{s, daemons[protocol.Directory][0]}
+		return &e2eDUT{s, daemons[Directory][0]}
 	}))
 }
 
@@ -44,7 +43,7 @@ func TestValidate(t *testing.T) {
 	t.Skip("flaky")
 	partitions, daemons := acctesting.CreateTestNet(t, 2, 2, 0, false)
 	acctesting.RunTestNet(t, partitions, daemons)
-	japi := daemons[protocol.Directory][0].Jrpc_TESTONLY()
+	japi := daemons[Directory][0].Jrpc_TESTONLY()
 
 	t.Run("Not found", func(t *testing.T) {
 		b, err := json.Marshal(&api.TxnQuery{Txid: make([]byte, 32), Wait: 2 * time.Second})
@@ -71,7 +70,7 @@ func TestValidate(t *testing.T) {
 
 		account := new(LiteTokenAccount)
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: liteUrl}, account)
-		assert.Equal(t, int64(count*protocol.AcmeFaucetAmount*AcmePrecision), account.Balance.Int64())
+		assert.Equal(t, int64(count*AcmeFaucetAmount*AcmePrecision), account.Balance.Int64())
 	})
 
 	t.Run("Lite Token Identity Credits", func(t *testing.T) {
@@ -109,7 +108,7 @@ func TestValidate(t *testing.T) {
 			},
 		})
 
-		adi := new(protocol.ADI)
+		adi := new(ADI)
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: adiName}, adi)
 		assert.Equal(t, adiName, adi.Url)
 
@@ -179,7 +178,7 @@ func TestValidate(t *testing.T) {
 		assert.Equal(t, keyBookUrl, keyBook.Url)
 	})
 
-	keyPageUrl := protocol.FormatKeyPageUrl(keyBookUrl, 0)
+	keyPageUrl := FormatKeyPageUrl(keyBookUrl, 0)
 	t.Run("Create Key Page", func(t *testing.T) {
 		var keys []*KeySpecParams
 		// pubKey, _ := json.Marshal(adiKey.Public())
@@ -222,7 +221,7 @@ func TestValidate(t *testing.T) {
 			Origin: keyPageUrl.String(),
 			Key:    adiKey,
 			Payload: &UpdateKeyPage{
-				Operation: []protocol.KeyPageOperation{&AddKeyOperation{
+				Operation: []KeyPageOperation{&AddKeyOperation{
 					Entry: KeySpecParams{
 						KeyHash:  adiKey2[32:],
 						Delegate: makeUrl(t, "acc://foo/book1"),
@@ -242,7 +241,7 @@ func TestValidate(t *testing.T) {
 			Key:    adiKey,
 			Payload: &CreateTokenAccount{
 				Url:         tokenAccountUrl,
-				TokenUrl:    protocol.AcmeUrl(),
+				TokenUrl:    AcmeUrl(),
 				Authorities: []*url.URL{keyBookUrl},
 			},
 		})
