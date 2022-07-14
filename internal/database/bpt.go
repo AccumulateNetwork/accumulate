@@ -71,29 +71,70 @@ func (b *Batch) BptReceipt(key storage.Key, value [32]byte) (*managed.Receipt, e
 	return receipt, nil
 }
 
+func (h *snapshotHeader) WriteTo(wr io.Writer) (int64, error) {
+	b, err := h.MarshalBinary()
+	if err != nil {
+		return 0, errors.Format(errors.StatusEncodingError, "marshal: %w", err)
+	}
+
+	var v [8]byte
+	binary.BigEndian.PutUint64(v[:], uint64(len(b)))
+	n, err := wr.Write(v[:])
+	if err != nil {
+		return int64(n), errors.Format(errors.StatusEncodingError, "write length: %w", err)
+	}
+
+	m, err := wr.Write(b)
+	if err != nil {
+		return int64(n + m), errors.Format(errors.StatusEncodingError, "write data: %w", err)
+	}
+
+	return int64(n + m), nil
+}
+
+func (h *snapshotHeader) ReadFrom(rd io.Reader) (int64, error) {
+	var v [8]byte
+	n, err := io.ReadFull(rd, v[:])
+	if err != nil {
+		return int64(n), errors.Format(errors.StatusEncodingError, "read length: %w", err)
+	}
+
+	l := binary.BigEndian.Uint64(v[:])
+	b := make([]byte, l)
+	m, err := io.ReadFull(rd, b)
+	if err != nil {
+		return int64(n + m), errors.Format(errors.StatusEncodingError, "read data: %w", err)
+	}
+
+	err = h.UnmarshalBinary(b)
+	if err != nil {
+		return int64(n + m), errors.Format(errors.StatusEncodingError, "unmarshal: %w", err)
+	}
+
+	return int64(n + m), nil
+}
+
 // SaveSnapshot writes the full state of the partition out to a file.
 func (b *Batch) SaveSnapshot(file io.WriteSeeker, network *config.Describe) error {
 	/*synthetic := object("Account", network.Synthetic())
 	partition := network.NodeUrl()*/
 
-	// Write the block height
+	// Write the header
 	var ledger *protocol.SystemLedger
 	err := b.Account(network.Ledger()).GetStateAs(&ledger)
 	if err != nil {
 		return errors.Format(errors.StatusUnknownError, "load ledger: %w", err)
 	}
-	var v [8]byte
-	binary.BigEndian.PutUint64(v[:], ledger.Index)
-	_, err = file.Write(v[:])
-	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "write height: %w", err)
-	}
 
-	// Write the BPT root hash
 	bpt := pmt.NewBPTManager(b.kvstore)
-	_, err = file.Write(bpt.Bpt.RootHash[:])
+	header := new(snapshotHeader)
+	header.Version = core.SnapshotVersion1
+	header.Height = ledger.Index
+	header.RootHash = *(*[32]byte)(b.BptRoot())
+
+	_, err = header.WriteTo(file)
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "write BPT root: %w", err)
+		return errors.Format(errors.StatusUnknownError, "write header: %w", err)
 	}
 
 	// Create a section writer starting after the header
@@ -152,28 +193,26 @@ func (b *Batch) SaveSnapshot(file io.WriteSeeker, network *config.Describe) erro
 }
 
 // ReadSnapshot reads a snapshot file, returning the header values and a reader.
-func ReadSnapshot(file ioutil2.SectionReader) (height uint64, format uint32, bptRoot []byte, rd ioutil2.SectionReader, err error) {
-
-	// Load the header
-	var bytes [40]byte
-	_, err = io.ReadFull(file, bytes[:])
+func ReadSnapshot(file ioutil2.SectionReader) (*snapshotHeader, int64, error) {
+	header := new(snapshotHeader)
+	n, err := header.ReadFrom(file)
 	if err != nil {
-		return 0, 0, nil, nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, 0, errors.Format(errors.StatusUnknownError, "read header: %w", err)
 	}
 
-	// Make a new section reader starting after the header
-	rd, err = ioutil2.NewSectionReader(file, -1, -1)
-	if err != nil {
-		return 0, 0, nil, nil, errors.Wrap(errors.StatusUnknownError, err)
-	}
-
-	return binary.BigEndian.Uint64(bytes[:8]), core.SnapshotVersion1, bytes[8:], rd, nil
+	return header, n, nil
 }
 
 // RestoreSnapshot loads the full state of the partition from a file.
 func (b *Batch) RestoreSnapshot(file ioutil2.SectionReader) error {
 	// Read the snapshot
-	_, _, _, rd, err := ReadSnapshot(file)
+	_, _, err := ReadSnapshot(file)
+	if err != nil {
+		return errors.Wrap(errors.StatusUnknownError, err)
+	}
+
+	// Make a new section reader starting after the header
+	rd, err := ioutil2.NewSectionReader(file, -1, -1)
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknownError, err)
 	}
