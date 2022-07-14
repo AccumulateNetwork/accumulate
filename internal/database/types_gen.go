@@ -95,6 +95,17 @@ type sigSetData struct {
 	extraData []byte
 }
 
+type snapshotHeader struct {
+	fieldsSet []bool
+	// Version is the snapshot format version.
+	Version uint64 `json:"version,omitempty" form:"version" query:"version" validate:"required"`
+	// Height is the snapshot's block height.
+	Height uint64 `json:"height,omitempty" form:"height" query:"height" validate:"required"`
+	// RootHash is the snapshot's root hash.
+	RootHash  [32]byte `json:"rootHash,omitempty" form:"rootHash" query:"rootHash" validate:"required"`
+	extraData []byte
+}
+
 type transactionState struct {
 	fieldsSet   []bool
 	Transaction *protocol.Transaction       `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
@@ -247,6 +258,18 @@ func (v *sigSetData) Copy() *sigSetData {
 }
 
 func (v *sigSetData) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *snapshotHeader) Copy() *snapshotHeader {
+	u := new(snapshotHeader)
+
+	u.Version = v.Version
+	u.Height = v.Height
+	u.RootHash = v.RootHash
+
+	return u
+}
+
+func (v *snapshotHeader) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *transactionState) Copy() *transactionState {
 	u := new(transactionState)
@@ -455,6 +478,20 @@ func (v *sigSetData) Equal(u *sigSetData) bool {
 		if !((&v.Entries[i]).Equal(&u.Entries[i])) {
 			return false
 		}
+	}
+
+	return true
+}
+
+func (v *snapshotHeader) Equal(u *snapshotHeader) bool {
+	if !(v.Version == u.Version) {
+		return false
+	}
+	if !(v.Height == u.Height) {
+		return false
+	}
+	if !(v.RootHash == u.RootHash) {
+		return false
 	}
 
 	return true
@@ -1031,6 +1068,63 @@ func (v *sigSetData) IsValid() error {
 	}
 }
 
+var fieldNames_snapshotHeader = []string{
+	1: "Version",
+	2: "Height",
+	3: "RootHash",
+}
+
+func (v *snapshotHeader) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Version == 0) {
+		writer.WriteUint(1, v.Version)
+	}
+	if !(v.Height == 0) {
+		writer.WriteUint(2, v.Height)
+	}
+	if !(v.RootHash == ([32]byte{})) {
+		writer.WriteHash(3, &v.RootHash)
+	}
+
+	_, _, err := writer.Reset(fieldNames_snapshotHeader)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *snapshotHeader) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Version is missing")
+	} else if v.Version == 0 {
+		errs = append(errs, "field Version is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Height is missing")
+	} else if v.Height == 0 {
+		errs = append(errs, "field Height is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field RootHash is missing")
+	} else if v.RootHash == ([32]byte{}) {
+		errs = append(errs, "field RootHash is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_transactionState = []string{
 	1: "Transaction",
 	2: "State",
@@ -1382,6 +1476,35 @@ func (v *sigSetData) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *snapshotHeader) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *snapshotHeader) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUint(1); ok {
+		v.Version = x
+	}
+	if x, ok := reader.ReadUint(2); ok {
+		v.Height = x
+	}
+	if x, ok := reader.ReadHash(3); ok {
+		v.RootHash = *x
+	}
+
+	seen, err := reader.Reset(fieldNames_snapshotHeader)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *transactionState) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -1516,6 +1639,18 @@ func (v *sigSetData) MarshalJSON() ([]byte, error) {
 	}{}
 	u.Version = v.Version
 	u.Entries = v.Entries
+	return json.Marshal(&u)
+}
+
+func (v *snapshotHeader) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Version  uint64 `json:"version,omitempty"`
+		Height   uint64 `json:"height,omitempty"`
+		RootHash string `json:"rootHash,omitempty"`
+	}{}
+	u.Version = v.Version
+	u.Height = v.Height
+	u.RootHash = encoding.ChainToJSON(v.RootHash)
 	return json.Marshal(&u)
 }
 
@@ -1709,6 +1844,28 @@ func (v *sigSetData) UnmarshalJSON(data []byte) error {
 	}
 	v.Version = u.Version
 	v.Entries = u.Entries
+	return nil
+}
+
+func (v *snapshotHeader) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Version  uint64 `json:"version,omitempty"`
+		Height   uint64 `json:"height,omitempty"`
+		RootHash string `json:"rootHash,omitempty"`
+	}{}
+	u.Version = v.Version
+	u.Height = v.Height
+	u.RootHash = encoding.ChainToJSON(v.RootHash)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Version = u.Version
+	v.Height = u.Height
+	if x, err := encoding.ChainFromJSON(u.RootHash); err != nil {
+		return fmt.Errorf("error decoding RootHash: %w", err)
+	} else {
+		v.RootHash = x
+	}
 	return nil
 }
 
