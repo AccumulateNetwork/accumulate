@@ -26,13 +26,13 @@ import (
 )
 
 type InitOpts struct {
-	PartitionId         string
-	NetworkType         config.NetworkType
-	GenesisTime         time.Time
-	Logger              log.Logger
-	FactomAddressesFile string
-	GenesisGlobals      *core.GlobalValues
-	OperatorKeys        [][]byte
+	PartitionId     string
+	NetworkType     config.NetworkType
+	GenesisTime     time.Time
+	Logger          log.Logger
+	FactomAddresses func() (io.Reader, error)
+	GenesisGlobals  *core.GlobalValues
+	OperatorKeys    [][]byte
 }
 
 func Init(snapshot io.WriteSeeker, opts InitOpts) ([]byte, error) {
@@ -339,11 +339,16 @@ func (b *bootstrap) maybeCreateFaucet() {
 }
 
 func (b *bootstrap) maybeCreateFactomAccounts() error {
-	if b.FactomAddressesFile == "" {
+	if b.FactomAddresses == nil {
 		return nil
 	}
 
-	factomAddresses, err := LoadFactomAddressesAndBalances(b.FactomAddressesFile)
+	rd, err := b.FactomAddresses()
+	if err != nil {
+		return errors.Wrap(errors.StatusUnknownError, err)
+	}
+
+	factomAddresses, err := LoadFactomAddressesAndBalances(rd)
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknownError, err)
 	}
@@ -353,11 +358,15 @@ func (b *bootstrap) maybeCreateFactomAccounts() error {
 			continue
 		}
 
+		lid := new(protocol.LiteIdentity)
+		lid.Url = fa.Address.RootIdentity()
+
 		lite := new(protocol.LiteTokenAccount)
 		lite.Url = fa.Address
 		lite.TokenUrl = protocol.AcmeUrl()
 		lite.Balance = *big.NewInt(5 * fa.Balance)
-		b.WriteRecords(lite)
+
+		b.WriteRecords(lid, lite)
 	}
 	return nil
 }

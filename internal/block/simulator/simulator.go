@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"sync"
 	"time"
 
@@ -37,9 +38,10 @@ import (
 var GenesisTime = time.Date(2022, 7, 1, 0, 0, 0, 0, time.UTC)
 
 type SimulatorOptions struct {
-	BvnCount  int
-	LogLevels string
-	OpenDB    func(partition string, nodeIndex int, logger log.Logger) *database.Database
+	BvnCount        int
+	LogLevels       string
+	OpenDB          func(partition string, nodeIndex int, logger log.Logger) *database.Database
+	FactomAddresses func() (io.Reader, error)
 }
 
 type Simulator struct {
@@ -48,6 +50,7 @@ type Simulator struct {
 	Partitions []config.Partition
 	Executors  map[string]*ExecEntry
 
+	opts             SimulatorOptions
 	netInit          *accumulated.NetworkInit
 	router           routing.Router
 	routingOverrides map[[32]byte]string
@@ -85,6 +88,7 @@ func NewWith(t TB, opts SimulatorOptions) *Simulator {
 
 func (sim *Simulator) Setup(opts SimulatorOptions) {
 	sim.Helper()
+	sim.opts = opts
 
 	if opts.BvnCount == 0 {
 		opts.BvnCount = 3
@@ -308,7 +312,7 @@ func (s *Simulator) InitFromGenesisWith(values *core.GlobalValues) {
 	if values == nil {
 		values = new(core.GlobalValues)
 	}
-	genDocs, err := accumulated.BuildGenesisDocs(s.netInit, values, GenesisTime, s.Logger, "")
+	genDocs, err := accumulated.BuildGenesisDocs(s.netInit, values, GenesisTime, s.Logger, s.opts.FactomAddresses)
 	require.NoError(s, err)
 
 	// Execute bootstrap after the entire network is known

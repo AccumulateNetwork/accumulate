@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -158,7 +159,7 @@ func ConfigureNodePorts(node *NodeInit, cfg *config.Config, offset config.PortOf
 	cfg.Accumulate.API.ListenAddress = node.Address(true, "http", offset, config.PortOffsetAccumulateApi)
 }
 
-func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time time.Time, logger log.Logger, factomAddressesFile string) (map[string]*tmtypes.GenesisDoc, error) {
+func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time time.Time, logger log.Logger, factomAddresses func() (io.Reader, error)) (map[string]*tmtypes.GenesisDoc, error) {
 	docs := map[string]*tmtypes.GenesisDoc{}
 	var operators [][]byte
 	var partitions []protocol.PartitionDefinition
@@ -233,13 +234,13 @@ func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time tim
 		}
 		snapshot := new(ioutil2.Buffer)
 		root, err := genesis.Init(snapshot, genesis.InitOpts{
-			PartitionId:         id,
-			NetworkType:         netType,
-			GenesisTime:         time,
-			Logger:              logger.With("partition", id),
-			GenesisGlobals:      globals,
-			OperatorKeys:        operators,
-			FactomAddressesFile: factomAddressesFile,
+			PartitionId:     id,
+			NetworkType:     netType,
+			GenesisTime:     time,
+			Logger:          logger.With("partition", id),
+			GenesisGlobals:  globals,
+			OperatorKeys:    operators,
+			FactomAddresses: factomAddresses,
 		})
 		if err != nil {
 			return nil, err
