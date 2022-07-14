@@ -6,7 +6,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -24,39 +23,39 @@ func TestFee(t *testing.T) {
 	t.Run("SendTokens", func(t *testing.T) {
 		env := acctesting.NewTransaction().
 			WithCurrentTimestamp().
-			WithPrincipal(protocol.AcmeUrl()).
-			WithSigner(protocol.AccountUrl("foo", "book", "1"), 1).
+			WithPrincipal(AcmeUrl()).
+			WithSigner(AccountUrl("foo", "book", "1"), 1).
 			WithCurrentTimestamp().
-			WithBody(new(protocol.SendTokens)).
+			WithBody(new(SendTokens)).
 			Initiate(SignatureTypeLegacyED25519, acctesting.GenerateKey(t.Name()))
 		fee, err := ComputeTransactionFee(env.Transaction[0])
 		require.NoError(t, err)
-		require.Equal(t, protocol.FeeSendTokens, fee)
+		require.Equal(t, FeeSendTokens, fee)
 	})
 
 	t.Run("Lots of data", func(t *testing.T) {
 		env := acctesting.NewTransaction().
-			WithPrincipal(protocol.AcmeUrl()).
-			WithSigner(protocol.AccountUrl("foo", "book", "1"), 1).
+			WithPrincipal(AcmeUrl()).
+			WithSigner(AccountUrl("foo", "book", "1"), 1).
 			WithCurrentTimestamp().
-			WithBody(new(protocol.SendTokens)).
+			WithBody(new(SendTokens)).
 			Initiate(SignatureTypeLegacyED25519, acctesting.GenerateKey(t.Name()))
 		env.Transaction[0].Header.Metadata = make([]byte, 1024)
 		fee, err := ComputeTransactionFee(env.Transaction[0])
 		require.NoError(t, err)
-		require.Equal(t, protocol.FeeSendTokens+protocol.FeeData*4, fee)
+		require.Equal(t, FeeSendTokens+FeeData*4, fee)
 	})
 
 	t.Run("Scratch data", func(t *testing.T) {
 		env := acctesting.NewTransaction().
-			WithPrincipal(protocol.AcmeUrl()).
-			WithSigner(protocol.AccountUrl("foo", "book", "1"), 1).
+			WithPrincipal(AcmeUrl()).
+			WithSigner(AccountUrl("foo", "book", "1"), 1).
 			WithCurrentTimestamp().
-			WithBody(&protocol.WriteData{Scratch: true}).
+			WithBody(&WriteData{Scratch: true}).
 			Initiate(SignatureTypeLegacyED25519, acctesting.GenerateKey(t.Name()))
 		env.Transaction[0].Header.Metadata = make([]byte, 1024)
 		fee, err := ComputeTransactionFee(env.Transaction[0])
 		require.NoError(t, err)
-		require.Equal(t, protocol.FeeScratchData*5, fee)
+		require.Equal(t, FeeScratchData*5, fee)
 	})
 }

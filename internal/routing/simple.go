@@ -13,7 +13,7 @@ func buildSimpleTable(bvns []string, value, depth uint64) []protocol.Route {
 		value <<= 1
 		depth++
 		i := len(bvns) / 2
-		a := buildSimpleTable(bvns[:i], value|0, depth)
+		a := buildSimpleTable(bvns[:i], value|0, depth) //nolint clarity
 		b := buildSimpleTable(bvns[i:], value|1, depth)
 		return append(a, b...)
 	}
