@@ -10,15 +10,12 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+//go:generate go run ../../../tools/cmd/gen-types --package cmd --out key_info_gen.go key_info.yml
+
 type Key struct {
 	PublicKey  []byte
 	PrivateKey []byte
 	KeyInfo    KeyInfo
-}
-
-type KeyInfo struct {
-	Type       protocol.SignatureType
-	Derivation string
 }
 
 func (k *Key) PublicKeyHash() []byte {
