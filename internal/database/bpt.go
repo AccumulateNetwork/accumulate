@@ -159,7 +159,7 @@ func (b *Batch) SaveSnapshot(file io.WriteSeeker, network *config.Describe) erro
 		}
 
 		if !bytes.Equal(hash[:], hasher.MerkleHash()) {
-			return nil, fmt.Errorf("hash does not match for %v\n", u)
+			return nil, fmt.Errorf("hash does not match for %v", u)
 		}
 
 		/*// Load the full state - preserve chains if the account is a partition account
@@ -180,13 +180,7 @@ func (b *Batch) SaveSnapshot(file io.WriteSeeker, network *config.Describe) erro
 			return nil, err
 		}
 
-		for _, txn := range txns {
-			/*if txn.State.Delivered {
-				continue
-			}*/
-
-			state.Transactions = append(state.Transactions, txn)
-		}
+		state.Transactions = append(state.Transactions, txns...)
 
 		return state.MarshalBinary()
 	})

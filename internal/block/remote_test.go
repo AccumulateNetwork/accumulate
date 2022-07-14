@@ -11,7 +11,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -22,14 +21,14 @@ func doSha256(data []byte) []byte {
 	return hash[:]
 }
 
-var delivered = (*protocol.TransactionStatus).Delivered
-var pending = (*protocol.TransactionStatus).Pending
+var delivered = (*TransactionStatus).Delivered
+var pending = (*TransactionStatus).Pending
 
 func SetupForRemoteSignatures(sim *simulator.Simulator, timestamp *uint64, alice, bob, charlie ed25519.PrivateKey) {
 	aliceTm := tmed25519.PrivKey(alice)
 	aliceAcmeUrl := acctesting.AcmeLiteAddressTmPriv(aliceTm)
 	aliceUrl := aliceAcmeUrl.RootIdentity()
-	bobUrl, charlieUrl := protocol.AccountUrl("bob"), protocol.AccountUrl("charlie")
+	bobUrl, charlieUrl := AccountUrl("bob"), AccountUrl("charlie")
 
 	sim.SetRouteFor(aliceUrl, "BVN0")
 	sim.SetRouteFor(bobUrl, "BVN1")
@@ -142,7 +141,7 @@ func TestRemoteSignatures_SignPending(t *testing.T) {
 	alice := acctesting.GenerateKey(t.Name())
 	aliceAcmeUrl := acctesting.AcmeLiteAddressTmPriv(tmed25519.PrivKey(alice))
 	aliceUrl := aliceAcmeUrl.RootIdentity()
-	bobUrl, charlieUrl := protocol.AccountUrl("bob"), protocol.AccountUrl("charlie")
+	bobUrl, charlieUrl := AccountUrl("bob"), AccountUrl("charlie")
 	bobKey, charlieKey := acctesting.GenerateKey(), acctesting.GenerateKey()
 
 	// Force the accounts onto different BVNs
@@ -197,7 +196,7 @@ func TestRemoteSignatures_SameBVN(t *testing.T) {
 	alice := acctesting.GenerateKey(t.Name())
 	aliceAcmeUrl := acctesting.AcmeLiteAddressTmPriv(tmed25519.PrivKey(alice))
 	aliceUrl := aliceAcmeUrl.RootIdentity()
-	bobUrl, charlieUrl := protocol.AccountUrl("bob"), protocol.AccountUrl("charlie")
+	bobUrl, charlieUrl := AccountUrl("bob"), AccountUrl("charlie")
 	bobKey, charlieKey := acctesting.GenerateKey(), acctesting.GenerateKey()
 
 	// Force the accounts onto the same BVN
@@ -252,7 +251,7 @@ func TestRemoteSignatures_Initiate(t *testing.T) {
 	alice := acctesting.GenerateKey(t.Name())
 	aliceAcmeUrl := acctesting.AcmeLiteAddressTmPriv(tmed25519.PrivKey(alice))
 	aliceUrl := aliceAcmeUrl.RootIdentity()
-	bobUrl, charlieUrl := protocol.AccountUrl("bob"), protocol.AccountUrl("charlie")
+	bobUrl, charlieUrl := AccountUrl("bob"), AccountUrl("charlie")
 	bobKey := acctesting.GenerateKey(t.Name(), bobUrl)
 	charlieKey1 := acctesting.GenerateKey(t.Name(), charlieUrl, 1)
 	charlieKey2 := acctesting.GenerateKey(t.Name(), charlieUrl, 2)
@@ -323,7 +322,7 @@ func TestRemoteSignatures_Singlesig(t *testing.T) {
 	alice := acctesting.GenerateKey(t.Name())
 	aliceAcmeUrl := acctesting.AcmeLiteAddressTmPriv(tmed25519.PrivKey(alice))
 	aliceUrl := aliceAcmeUrl.RootIdentity()
-	bobUrl, charlieUrl := protocol.AccountUrl("bob"), protocol.AccountUrl("charlie")
+	bobUrl, charlieUrl := AccountUrl("bob"), AccountUrl("charlie")
 	bobKey, charlieKey := acctesting.GenerateKey(), acctesting.GenerateKey()
 
 	// Force the accounts onto different BVNs
@@ -335,7 +334,7 @@ func TestRemoteSignatures_Singlesig(t *testing.T) {
 	SetupForRemoteSignatures(sim, &timestamp, alice, bobKey, charlieKey)
 
 	// Remove the second authority directly
-	var account *protocol.DataAccount
+	var account *DataAccount
 	batch := sim.PartitionFor(bobUrl).Database.Begin(true)
 	defer batch.Discard()
 	require.NoError(t, batch.Account(bobUrl.JoinPath("account")).GetStateAs(&account))

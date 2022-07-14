@@ -135,9 +135,7 @@ func valueNameFormat(r typegen.Record) (string, int) {
 
 func chainName(r typegen.Record) string {
 	name := r.GetName()
-	if strings.HasSuffix(name, "Chain") {
-		name = name[:len(name)-len("Chain")]
-	}
+	name = strings.TrimSuffix(name, "Chain")
 	return typegen.DashCase(name)
 }
 
@@ -156,9 +154,7 @@ func chainNameFormat(r typegen.Record) (string, int) {
 	}
 
 	rname := r.GetName()
-	if strings.HasSuffix(rname, "Chain") {
-		rname = rname[:len(rname)-len("Chain")]
-	}
+	rname = strings.TrimSuffix(rname, "Chain")
 	rname = typegen.DashCase(rname)
 
 	name += rname

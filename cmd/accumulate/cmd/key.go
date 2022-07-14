@@ -560,7 +560,7 @@ func ExportKey(label string) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("no private key found for key name %s", label)
 		}
-		k, err = LookupByPubKey(k.PublicKey)
+		_, err = LookupByPubKey(k.PublicKey)
 		if err != nil {
 			return "", fmt.Errorf("no private key found for key name %s", label)
 		}

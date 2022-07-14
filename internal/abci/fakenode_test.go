@@ -21,7 +21,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
-	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
@@ -47,13 +47,12 @@ type FakeNode struct {
 	client  *acctesting.FakeTendermint
 	key     crypto.PrivKey
 	height  int64
-	api     api2.Querier
+	api     api.Querier
 	logger  log.Logger
 	router  routing.Router
 
-	assert       *assert.Assertions
-	require      *require.Assertions
-	nodeExecutor *block.Executor
+	assert  *assert.Assertions
+	require *require.Assertions
 }
 
 func RunTestNet(t *testing.T, partitions []string, daemons map[string][]*accumulated.Daemon, openDb func(d *accumulated.Daemon) (*database.Database, error), doGenesis bool, errorHandler func(err error)) map[string][]*FakeNode {
@@ -196,7 +195,7 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 	// immediately, but make sure it definitely happens
 	defer func() { appChan <- n.app }()
 
-	n.api = api2.NewQueryDispatch(api2.Options{
+	n.api = api.NewQueryDispatch(api.Options{
 		Logger:        n.logger,
 		Describe:      n.network,
 		Router:        n.router,
@@ -244,26 +243,26 @@ func (n *FakeNode) NextHeight() int64 {
 	return n.height
 }
 
-func (n *FakeNode) QueryAccount(url string) *api2.ChainQueryResponse {
+func (n *FakeNode) QueryAccount(url string) *api.ChainQueryResponse {
 	n.t.Helper()
-	r, err := n.api.QueryUrl(n.parseUrl(url), api2.QueryOptions{})
+	r, err := n.api.QueryUrl(n.parseUrl(url), api.QueryOptions{})
 	n.Require().NoError(err)
-	n.Require().IsType((*api2.ChainQueryResponse)(nil), r)
-	return r.(*api2.ChainQueryResponse)
+	n.Require().IsType((*api.ChainQueryResponse)(nil), r)
+	return r.(*api.ChainQueryResponse)
 }
 
-func (n *FakeNode) QueryTransaction(url string) *api2.TransactionQueryResponse {
-	r, err := n.api.QueryUrl(n.parseUrl(url), api2.QueryOptions{})
+func (n *FakeNode) QueryTransaction(url string) *api.TransactionQueryResponse {
+	r, err := n.api.QueryUrl(n.parseUrl(url), api.QueryOptions{})
 	n.require.NoError(err)
-	n.Require().IsType((*api2.TransactionQueryResponse)(nil), r)
-	return r.(*api2.TransactionQueryResponse)
+	n.Require().IsType((*api.TransactionQueryResponse)(nil), r)
+	return r.(*api.TransactionQueryResponse)
 }
 
-func (n *FakeNode) QueryMulti(url string) *api2.MultiResponse {
-	r, err := n.api.QueryUrl(n.parseUrl(url), api2.QueryOptions{})
+func (n *FakeNode) QueryMulti(url string) *api.MultiResponse {
+	r, err := n.api.QueryUrl(n.parseUrl(url), api.QueryOptions{})
 	n.require.NoError(err)
-	n.Require().IsType((*api2.MultiResponse)(nil), r)
-	return r.(*api2.MultiResponse)
+	n.Require().IsType((*api.MultiResponse)(nil), r)
+	return r.(*api.MultiResponse)
 }
 
 func (n *FakeNode) QueryAccountAs(url string, result interface{}) {
@@ -377,7 +376,7 @@ func (n *FakeNode) waitForTxns(cause []byte, ignorePending bool, ids ...[]byte) 
 		} else {
 			n.logger.Debug("Waiting for transaction", "module", "fake-node", "hash", logging.AsHex(id), "cause", logging.AsHex(cause))
 		}
-		res, err := n.api.QueryTx(id, 1*time.Second, ignorePending, api2.QueryOptions{})
+		res, err := n.api.QueryTx(id, 1*time.Second, ignorePending, api.QueryOptions{})
 		if err != nil {
 			return fmt.Errorf("Failed to query TX %X (%v)", id, err)
 		}
@@ -430,13 +429,13 @@ func (n *FakeNode) GetDirectory(adi string) []string {
 	return chains
 }
 
-func (n *FakeNode) GetTx(txid []byte) *api2.TransactionQueryResponse {
-	q := api2.NewQueryDirect(n.network.PartitionId, api2.Options{
+func (n *FakeNode) GetTx(txid []byte) *api.TransactionQueryResponse {
+	q := api.NewQueryDirect(n.network.PartitionId, api.Options{
 		Logger:   n.logger,
 		Describe: n.network,
 		Router:   n.router,
 	})
-	resp, err := q.QueryTx(txid, 0, false, api2.QueryOptions{})
+	resp, err := q.QueryTx(txid, 0, false, api.QueryOptions{})
 	require.NoError(n.t, err)
 	data, err := json.Marshal(resp.Data)
 	require.NoError(n.t, err)

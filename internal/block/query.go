@@ -863,7 +863,7 @@ func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove 
 	case *query.RequestByChainId:
 		chr := q
 
-		//nolint:staticcheck // Ignore the deprecation warning for AccountByID
+		//nolint:staticcheck // We can't remove this until we remove the API method
 		record, err := batch.AccountByID(chr.ChainId[:])
 		if err != nil {
 			return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
