@@ -14,7 +14,7 @@ var customLinters []*linter.Config
 func addCustomLinters(db *lintersdb.Manager) {
 	field, ok := reflect.TypeOf(db).Elem().FieldByName("nameToLCs")
 	if !ok {
-		panic(fmt.Errorf("Can't find linter config field"))
+		panic(fmt.Errorf("can't find linter config field"))
 	}
 
 	// This is a horrific abuse of Go. But using a plugin would be a huge PITA.

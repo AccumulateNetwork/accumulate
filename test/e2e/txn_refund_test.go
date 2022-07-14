@@ -10,7 +10,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -22,7 +21,7 @@ func TestRefundCycle(t *testing.T) {
 	sim.InitFromGenesis()
 
 	// Setup accounts
-	alice := protocol.AccountUrl("alice")
+	alice := AccountUrl("alice")
 	aliceKey := acctesting.GenerateKey(alice)
 	sim.CreateIdentity(alice, aliceKey[32:])
 	updateAccount(sim, alice.JoinPath("book", "1"), func(page *KeyPage) { page.CreditBalance = 1e9 })
@@ -36,7 +35,7 @@ func TestRefundCycle(t *testing.T) {
 			WithTimestampVar(&timestamp).
 			WithBody(&SendTokens{
 				To: []*TokenRecipient{{
-					Url:    protocol.AccountUrl("bob", "tokens"),
+					Url:    AccountUrl("bob", "tokens"),
 					Amount: *big.NewInt(1),
 				}},
 			}).

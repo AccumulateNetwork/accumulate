@@ -15,11 +15,12 @@ import (
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
-	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	errors2 "gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
+
+//lint:file-ignore S1039 Don't care
 
 func PrintJsonRpcError(err error) (string, error) {
 	switch e := err.(type) {
@@ -88,7 +89,7 @@ func printError(cmd *cobra.Command, err error) {
 }
 
 //nolint:gosimple
-func printGeneralTransactionParameters(res *api2.TransactionQueryResponse) string {
+func printGeneralTransactionParameters(res *api.TransactionQueryResponse) string {
 	out := fmt.Sprintf("---\n")
 	out += fmt.Sprintf("  - Transaction           : %x\n", res.TransactionHash)
 	out += fmt.Sprintf("  - Signer Url            : %s\n", res.Origin)
@@ -135,7 +136,7 @@ func PrintChainQueryResponseV2(res *QueryResponse) (string, error) {
 	return out, nil
 }
 
-func PrintTransactionQueryResponseV2(res *api2.TransactionQueryResponse) (string, error) {
+func PrintTransactionQueryResponseV2(res *api.TransactionQueryResponse) (string, error) {
 	if WantJsonOutput {
 		return PrintJson(res)
 	}
@@ -165,7 +166,7 @@ func PrintTransactionQueryResponseV2(res *api2.TransactionQueryResponse) (string
 	return out, nil
 }
 
-func PrintMinorBlockQueryResponseV2(res *api2.MinorQueryResponse) (string, error) {
+func PrintMinorBlockQueryResponseV2(res *api.MinorQueryResponse) (string, error) {
 	if WantJsonOutput {
 		return PrintJson(res)
 	}
@@ -193,7 +194,7 @@ func PrintMinorBlockQueryResponseV2(res *api2.MinorQueryResponse) (string, error
 	return str, nil
 }
 
-func PrintMajorBlockQueryResponseV2(res *api2.MajorQueryResponse) (string, error) {
+func PrintMajorBlockQueryResponseV2(res *api.MajorQueryResponse) (string, error) {
 	if WantJsonOutput {
 		return PrintJson(res)
 	}
@@ -206,7 +207,7 @@ func PrintMajorBlockQueryResponseV2(res *api2.MajorQueryResponse) (string, error
 			str += fmt.Sprintf("    minor block time : %s\n", getBlockTime(mnrBlk.BlockTime))
 		}
 	} else {
-		str += fmt.Sprintf("    (empty)")
+		str += fmt.Sprintf("    (empty)") //nolint
 	}
 	return str, nil
 }
@@ -218,7 +219,7 @@ func getBlockTime(blockTime *time.Time) string {
 	return "<not recorded>"
 }
 
-func PrintMultiResponse(res *api2.MultiResponse) (string, error) {
+func PrintMultiResponse(res *api.MultiResponse) (string, error) {
 	if WantJsonOutput || res.Type == "dataSet" {
 		return PrintJson(res)
 	}
@@ -236,7 +237,7 @@ func PrintMultiResponse(res *api2.MultiResponse) (string, error) {
 		}
 
 		for _, s := range res.OtherItems {
-			qr := new(api2.ChainQueryResponse)
+			qr := new(api.ChainQueryResponse)
 			var data json.RawMessage
 			qr.Data = &data
 			err := Remarshal(s, qr)
@@ -266,7 +267,7 @@ func PrintMultiResponse(res *api2.MultiResponse) (string, error) {
 		out += fmt.Sprintf("\n\tTrasaction History Start: %d\t Count: %d\t Total: %d\n", res.Start, res.Count, res.Total)
 		for i := range res.Items {
 			// Convert the item to a transaction query response
-			txr := new(api2.TransactionQueryResponse)
+			txr := new(api.TransactionQueryResponse)
 			err := Remarshal(res.Items[i], txr)
 			if err != nil {
 				return "", err
@@ -284,7 +285,7 @@ func PrintMultiResponse(res *api2.MultiResponse) (string, error) {
 			str += fmt.Sprintln("==========================================================================")
 
 			// Convert the item to a minor query response
-			mtr := new(api2.MinorQueryResponse)
+			mtr := new(api.MinorQueryResponse)
 			err := Remarshal(res.Items[i], mtr)
 			if err != nil {
 				return "", err
@@ -304,7 +305,7 @@ func PrintMultiResponse(res *api2.MultiResponse) (string, error) {
 			str += fmt.Sprintln("==========================================================================")
 
 			// Convert the item to a major query response
-			mtr := new(api2.MajorQueryResponse)
+			mtr := new(api.MajorQueryResponse)
 			err := Remarshal(res.Items[i], mtr)
 			if err != nil {
 				return "", err
@@ -337,7 +338,7 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		if err != nil {
 			amt = "unknown"
 		}
-		params := api2.UrlQuery{}
+		params := api.UrlQuery{}
 		params.Url = ata.Url.RootIdentity()
 		qres := new(QueryResponse)
 		litIdentity := new(protocol.LiteIdentity)
@@ -467,19 +468,15 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		params := api2.DirectoryQuery{}
+		params := api.DirectoryQuery{}
 		params.Url = li.Url
 		params.Start = uint64(0)
 		params.Count = uint64(10)
 		params.Expand = true
 
-		var adiRes api2.MultiResponse
+		var adiRes api.MultiResponse
 		if err := Client.RequestAPIv2(context.Background(), "query-directory", &params, &adiRes); err != nil {
-			ret, err := PrintJsonRpcError(err)
-			if err != nil {
-				return "", err
-			}
-			return "", fmt.Errorf("%v", ret)
+			return PrintJsonRpcError(err)
 		}
 		return PrintMultiResponse(&adiRes)
 	default:
@@ -487,11 +484,11 @@ func outputForHumans(res *QueryResponse) (string, error) {
 	}
 }
 
-func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
+func outputForHumansTx(res *api.TransactionQueryResponse) (string, error) {
 	typStr := res.Type
 	typ, ok := protocol.TransactionTypeByName(typStr)
 	if !ok {
-		return "", fmt.Errorf("Unknown transaction type %s", typStr)
+		return "", fmt.Errorf("unknown transaction type %s", typStr)
 	}
 
 	if typ == protocol.TransactionTypeSendTokens {

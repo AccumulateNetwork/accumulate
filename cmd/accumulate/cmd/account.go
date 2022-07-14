@@ -181,7 +181,7 @@ func GetTokenAccount(url string) (string, error) {
 func QrAccount(s string) (string, error) {
 	u, err := url2.Parse(s)
 	if err != nil {
-		return "", fmt.Errorf("%q is not a valid Accumulate URL: %v\n", s, err)
+		return "", fmt.Errorf("%q is not a valid Accumulate URL: %v", s, err)
 	}
 
 	b := bytes.NewBufferString("")
@@ -354,7 +354,7 @@ func ListAccounts() (string, error) {
 	b, err := GetWallet().GetBucket(BucketLite)
 	if err != nil {
 		//no accounts so nothing to do...
-		return "", fmt.Errorf("no lite accounts have been generated\n")
+		return "", fmt.Errorf("no lite accounts have been generated")
 	}
 	var out string
 

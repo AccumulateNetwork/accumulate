@@ -1248,6 +1248,7 @@ func TestIssueTokensRefund(t *testing.T) {
 			Build())
 	})
 	issuer = n.GetTokenIssuer("foo/tokens")
+	require.Equal(t, int64(123), issuer.Issued.Int64())
 
 	account := n.GetLiteTokenAccount(liteAddr.String())
 	require.Equal(t, "acc://foo.acme/tokens", account.TokenUrl.String())
