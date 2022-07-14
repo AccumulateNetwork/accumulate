@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
@@ -131,7 +131,7 @@ func GetMinorBlocks(cmd *cobra.Command, accountUrl string, s string, e string, t
 		return err
 	}
 
-	params := new(api2.MinorBlocksQuery)
+	params := new(api.MinorBlocksQuery)
 	params.UrlQuery.Url = u
 	params.QueryPagination.Start = uint64(start)
 	params.QueryPagination.Count = uint64(end)
@@ -176,7 +176,7 @@ func GetMajorBlocks(cmd *cobra.Command, accountUrl string, s string, e string) e
 		return err
 	}
 
-	params := new(api2.MajorBlocksQuery)
+	params := new(api.MajorBlocksQuery)
 	params.UrlQuery.Url = u
 	params.QueryPagination.Start = uint64(start)
 	params.QueryPagination.Count = uint64(end)

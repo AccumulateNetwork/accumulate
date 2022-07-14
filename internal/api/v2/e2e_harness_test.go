@@ -123,7 +123,7 @@ func prepareTx(t *testing.T, japi *api.JrpcMethods, params execParams) *api.TxRe
 	req.Origin = env.Transaction[0].Header.Principal
 	req.Signer.Timestamp = sig.GetTimestamp()
 	req.Signer.Url = sig.GetSigner()
-	req.Signer.PublicKey = sig.(protocol.KeySignature).GetPublicKey()
+	req.Signer.PublicKey = sig.GetPublicKey()
 	req.Signature = sig.GetSignature()
 	req.KeyPage.Version = sig.GetSignerVersion()
 	req.Payload = env.Transaction[0].Body
@@ -197,7 +197,7 @@ func (d *e2eDUT) SubmitTxn(tx *protocol.Envelope) {
 	pl.Origin = tx.Transaction[0].Header.Principal
 	pl.Signer.Timestamp = sig.GetTimestamp()
 	pl.Signer.Url = sig.GetSigner()
-	pl.Signer.PublicKey = sig.(protocol.KeySignature).GetPublicKey()
+	pl.Signer.PublicKey = sig.GetPublicKey()
 	pl.Signature = sig.GetSignature()
 	pl.KeyPage.Version = sig.GetSignerVersion()
 	pl.Payload = data
