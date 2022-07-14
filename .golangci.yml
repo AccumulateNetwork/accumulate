@@ -5,12 +5,7 @@ linters:
   - rangevarref
 
   disable:
-  # TODO Enable these and fix the issues
-  - staticcheck
-  - gosimple
-
-  # TODO Disabled due to http://github.com/golangci/golangci-lint/issues/2859
-  - unused
+  - structcheck # https://github.com/golangci/golangci-lint/issues/2649
 
 issues:
   max-same-issues: 0

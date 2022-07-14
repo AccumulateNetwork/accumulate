@@ -361,8 +361,6 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 			// Put the synthetic signature first
 			var gotSynth, gotReceipt, gotKey bool
 			for i, signature := range resp.Signatures {
-				if _, ok := signature.(*protocol.PartitionSignature); ok && i > 0 {
-				}
 				switch signature.(type) {
 				case *protocol.PartitionSignature:
 					gotSynth = true
