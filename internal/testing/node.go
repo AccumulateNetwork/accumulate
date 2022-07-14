@@ -13,7 +13,6 @@ import (
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/config"
-	cfg "gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
@@ -128,11 +127,11 @@ func CreateTestNet(t testing.TB, numBvns, numValidators, numFollowers int, withF
 	daemons := make(map[string][]*accumulated.Daemon, numBvns+1)
 	for _, configs := range configs {
 		for _, configs := range configs {
-			for _, config := range configs {
-				daemon, err := accumulated.Load(config.RootDir, func(c *cfg.Config) (io.Writer, error) { return logWriter(c.LogFormat) })
+			for _, cfg := range configs {
+				daemon, err := accumulated.Load(cfg.RootDir, func(c *config.Config) (io.Writer, error) { return logWriter(c.LogFormat) })
 				require.NoError(t, err)
-				partition := config.Accumulate.PartitionId
-				daemon.Logger = daemon.Logger.With("test", t.Name(), "partition", partition, "node", config.Moniker)
+				partition := cfg.Accumulate.PartitionId
+				daemon.Logger = daemon.Logger.With("test", t.Name(), "partition", partition, "node", cfg.Moniker)
 				daemons[partition] = append(daemons[partition], daemon)
 			}
 		}

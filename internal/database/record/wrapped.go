@@ -6,6 +6,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 )
 
+//lint:file-ignore U1000 false positive
+
 type wrappedValue[T any] struct {
 	value T
 	*wrapperFuncs[T]

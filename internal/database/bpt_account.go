@@ -363,7 +363,7 @@ func saveState[T any](lastErr *error, put func(T) error, v T) {
 }
 
 func saveStateN[T any](lastErr *error, put func(...T) error, v ...T) {
-	if *lastErr != nil || any(v) == nil {
+	if *lastErr != nil || v == nil {
 		return
 	}
 

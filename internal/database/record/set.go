@@ -1,5 +1,7 @@
 package record
 
+//lint:file-ignore U1000 false positive
+
 import (
 	"bytes"
 	"io"

@@ -76,6 +76,7 @@ func (q *queryDirect) QueryUrl(u *url.URL, opts QueryOptions) (interface{}, erro
 		}
 
 		var ms *MerkleState
+		//nolint:staticcheck // legacy code
 		if res.Height >= 0 || len(res.ChainState) > 0 {
 			ms = new(MerkleState)
 			ms.Height = uint64(res.Height)

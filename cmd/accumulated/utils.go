@@ -36,5 +36,4 @@ func printOutput(cmd *cobra.Command, out string, err error) {
 		cmd.Println(out)
 	}
 	cmd.PrintErrf("Error: %v\n", err)
-	return
 }

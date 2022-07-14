@@ -491,7 +491,7 @@ func initNodeFromPeer(cmd *cobra.Command, args []string) (int, *cfg.Config, *typ
 				continue
 			}
 
-			if bytes.Compare(statBytes, peerBytes) != 0 {
+			if !bytes.Equal(statBytes, peerBytes) {
 				warnf("ignoring stale peer %s", u.String())
 				continue
 			}

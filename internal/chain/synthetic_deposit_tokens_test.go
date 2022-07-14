@@ -7,7 +7,6 @@ import (
 	. "gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
-	testing2 "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -19,14 +18,14 @@ func TestSynthTokenDeposit_Lite(t *testing.T) {
 	tokenUrl := protocol.AcmeUrl().String()
 
 	var gtx *Delivery
-	// _, _, gtx, err := testing2.BuildTestSynthDepositGenTx()
+	// _, _, gtx, err := acctesting.BuildTestSynthDepositGenTx()
 	// require.NoError(t, err)
 
 	db := database.OpenInMemory(nil)
 
 	batch := db.Begin(true)
 	defer batch.Discard()
-	require.NoError(t, testing2.CreateTokenAccount(batch, protocol.FaucetUrl.String(), protocol.ACME, 1e9, true))
+	require.NoError(t, acctesting.CreateTokenAccount(batch, protocol.FaucetUrl.String(), protocol.ACME, 1e9, true))
 
 	st, d := LoadStateManagerForTest(t, db, nil)
 	defer st.Discard()

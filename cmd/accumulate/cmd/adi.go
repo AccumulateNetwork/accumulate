@@ -7,7 +7,7 @@ import (
 	"strconv"
 
 	"github.com/spf13/cobra"
-	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -89,7 +89,7 @@ func GetAdiDirectory(origin string, start string, count string) (string, error) 
 		return "", fmt.Errorf("count must be greater than zero")
 	}
 
-	params := api2.DirectoryQuery{}
+	params := api.DirectoryQuery{}
 	params.Url = u
 	params.Start = uint64(st)
 	params.Count = uint64(ct)
@@ -100,13 +100,9 @@ func GetAdiDirectory(origin string, start string, count string) (string, error) 
 		return "", err
 	}
 
-	var res api2.MultiResponse
+	var res api.MultiResponse
 	if err := Client.RequestAPIv2(context.Background(), "query-directory", json.RawMessage(data), &res); err != nil {
-		ret, err := PrintJsonRpcError(err)
-		if err != nil {
-			return "", err
-		}
-		return "", fmt.Errorf("%v", ret)
+		return PrintJsonRpcError(err)
 	}
 
 	return PrintMultiResponse(&res)

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 	"net/url"
-	neturl "net/url"
 	"strings"
 	"time"
 
@@ -267,7 +266,7 @@ func (cm *connectionManager) reformatAddress(address string) string {
 		return address
 	}
 
-	url, err := neturl.Parse(address)
+	url, err := url.Parse(address)
 	if err != nil {
 		return address
 	}
@@ -368,7 +367,7 @@ func (cm *connectionManager) createClient(connCtx *connectionContext) error {
 
 func resolveIPs(address string) ([]net.IP, error) {
 	var hostname string
-	nodeUrl, err := neturl.Parse(address)
+	nodeUrl, err := url.Parse(address)
 	if err == nil {
 		hostname = nodeUrl.Hostname()
 	} else {

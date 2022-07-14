@@ -18,7 +18,7 @@ func GetKey(password string, salt []byte) ([]byte, error) {
 	}
 
 	if len(key) != 32 {
-		return nil, fmt.Errorf("Keylength must be 32 bytes. Found %d", len(key))
+		return nil, fmt.Errorf("key length must be 32 bytes, found %d", len(key))
 	}
 
 	return key, err
