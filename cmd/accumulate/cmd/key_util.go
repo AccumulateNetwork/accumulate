@@ -55,7 +55,7 @@ func (k *Key) Save(label, liteLabel string) error {
 		return err
 	}
 
-	err = GetWallet().Put(BucketSigType, k.PublicKey, encoding.UvarintMarshalBinary(uint64(k.KeyInfo.Type.GetEnumValue())))
+	err = GetWallet().Put(BucketKeyInfo, k.PublicKey, encoding.UvarintMarshalBinary(uint64(k.KeyInfo.Type.GetEnumValue())))
 	if err != nil {
 		return err
 	}
@@ -83,7 +83,7 @@ func (k *Key) LoadByPublicKey(publicKey []byte) error {
 		return fmt.Errorf("private key not found for %x", publicKey)
 	}
 
-	b, err := GetWallet().Get(BucketSigType, k.PublicKey)
+	b, err := GetWallet().Get(BucketKeyInfo, k.PublicKey)
 	switch {
 	case err == nil:
 		v, err := encoding.UvarintUnmarshalBinary(b)

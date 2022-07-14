@@ -362,7 +362,7 @@ func ListAccounts() (string, error) {
 			return "", err
 		}
 
-		st, err := GetWallet().Get(BucketSigType, pubKey)
+		st, err := GetWallet().Get(BucketKeyInfo, pubKey)
 		if err != nil {
 			return "", err
 		}
@@ -383,7 +383,7 @@ func ListAccounts() (string, error) {
 		}
 		kr := KeyResponse{}
 		kr.LiteAccount = lt
-		kr.KeyType = sigType
+		kr.KeyInfo = k.KeyInfo
 		kr.PublicKey = pubKey
 		*kr.Label.AsString() = string(v.Value)
 		if WantJsonOutput {
@@ -524,12 +524,16 @@ func RestoreAccounts() (out string, err error) {
 		}
 
 		//check to see if the key type has been assigned, if not set it to the ed25519Legacy...
-		_, err = GetWallet().Get(BucketSigType, v.Value)
+		_, err = GetWallet().Get(BucketKeyInfo, v.Value)
 		if err != nil {
 			//add the default key type
 			out += fmt.Sprintf("assigning default key type %s for key name %v\n", k.KeyInfo.Type, string(v.Key))
 
-			err = GetWallet().Put(BucketSigType, v.Value, common.Uint64Bytes(k.KeyInfo.Type.GetEnumValue()))
+			keyinfo, err := k.KeyInfo.MarshalBinary()
+			if err != nil {
+				return "", err
+			}
+			err = GetWallet().Put(BucketKeyInfo, v.Value, keyinfo)
 			if err != nil {
 				return "", err
 			}

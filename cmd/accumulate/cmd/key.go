@@ -22,7 +22,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/db"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
@@ -120,13 +119,13 @@ var keyUpdateCmd = &cobra.Command{
 }
 
 type KeyResponse struct {
-	Label       types.String           `json:"name,omitempty"`
-	PrivateKey  types.Bytes            `json:"privateKey,omitempty"`
-	PublicKey   types.Bytes            `json:"publicKey,omitempty"`
-	KeyType     protocol.SignatureType `json:"keyType,omitempty"`
-	LiteAccount *url.URL               `json:"liteAccount,omitempty"`
-	Seed        types.Bytes            `json:"seed,omitempty"`
-	Mnemonic    types.String           `json:"mnemonic,omitempty"`
+	Label       types.String `json:"name,omitempty"`
+	PrivateKey  types.Bytes  `json:"privateKey,omitempty"`
+	PublicKey   types.Bytes  `json:"publicKey,omitempty"`
+	KeyInfo     KeyInfo      `json:"keyInfo,omitempty"`
+	LiteAccount *url.URL     `json:"liteAccount,omitempty"`
+	Seed        types.Bytes  `json:"seed,omitempty"`
+	Mnemonic    types.String `json:"mnemonic,omitempty"`
 }
 
 func PrintKeyPublic() {
@@ -404,7 +403,7 @@ func GenerateKey(label string) (string, error) {
 		a.Label = types.String(label)
 		a.PublicKey = pubKey
 		a.LiteAccount = lt
-		a.KeyType = sigtype
+		a.KeyInfo = KeyInfo{Type: sigtype}
 		dump, err := json.Marshal(&a)
 		if err != nil {
 			return "", err
@@ -482,11 +481,6 @@ func ImportKey(token []byte, label string, signatureType protocol.SignatureType)
 	var liteLabel string
 	var pk ed25519.PrivateKey
 
-	// token, err := hex.DecodeString(pkAscii)
-	// if err != nil {
-	// 	return "", err
-	// }
-
 	if len(token) == 32 {
 		pk = ed25519.NewKeyFromSeed(token)
 	} else {
@@ -542,7 +536,12 @@ func ImportKey(token []byte, label string, signatureType protocol.SignatureType)
 		return "", err
 	}
 
-	err = GetWallet().Put(BucketSigType, publicKey, common.Uint64Bytes(signatureType.GetEnumValue()))
+	keyInfo := KeyInfo{
+		Type:       signatureType,
+		Derivation: "external",
+	}
+	keyInfoBytes, err := keyInfo.MarshalBinary()
+	err = GetWallet().Put(BucketKeyInfo, publicKey, keyInfoBytes)
 	if err != nil {
 		return "", err
 	}
@@ -552,7 +551,7 @@ func ImportKey(token []byte, label string, signatureType protocol.SignatureType)
 		a.Label = types.String(label)
 		a.PublicKey = types.Bytes(pk[32:])
 		a.LiteAccount = lt
-		a.KeyType = signatureType
+		a.KeyInfo = keyInfo
 		dump, err := json.Marshal(&a)
 		if err != nil {
 			return "", err
@@ -582,7 +581,7 @@ func ExportKey(label string) (string, error) {
 		a.Label = types.String(label)
 		a.PrivateKey = k.PrivateKey
 		a.PublicKey = k.PublicKey
-		a.KeyType = k.KeyInfo.Type
+		a.KeyInfo = k.KeyInfo
 		dump, err := json.Marshal(&a)
 		if err != nil {
 			return "", err

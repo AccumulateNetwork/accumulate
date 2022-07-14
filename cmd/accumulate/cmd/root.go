@@ -171,7 +171,7 @@ var (
 	BucketLabel    = []byte("label")
 	BucketLite     = []byte("lite")
 	BucketMnemonic = []byte("mnemonic")
-	BucketSigType  = []byte("sigtype")
+	BucketKeyInfo  = []byte("keyInfo")
 )
 
 func initDB(defaultWorkDir string, memDb bool) db.DB {

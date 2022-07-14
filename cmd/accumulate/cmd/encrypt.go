@@ -164,7 +164,7 @@ func EncryptDatabase() (string, error) {
 		return "", err
 	}
 
-	err = copyBucket(dbe, dbu, BucketSigType)
+	err = copyBucket(dbe, dbu, BucketKeyInfo)
 	if err != nil && err != db.ErrNoBucket {
 		return "", err
 	}
@@ -174,7 +174,7 @@ func EncryptDatabase() (string, error) {
 		!equalBucket(dbe, dbu, BucketKeys) ||
 		!equalBucket(dbe, dbu, BucketLabel) ||
 		!equalBucket(dbe, dbu, BucketLite) ||
-		!equalBucket(dbe, dbu, BucketSigType) {
+		!equalBucket(dbe, dbu, BucketKeyInfo) {
 		return "", db.ErrMalformedEncryptedDatabase
 	}
 
