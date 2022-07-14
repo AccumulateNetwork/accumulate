@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"os/signal"
+	"syscall"
 
 	"golang.org/x/sys/unix"
 )
@@ -16,4 +17,8 @@ func onHUP(fn func()) {
 			fn()
 		}
 	}()
+}
+
+func interrupt(pid int) {
+	_ = syscall.Kill(pid, syscall.SIGINT)
 }
