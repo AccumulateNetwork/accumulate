@@ -65,7 +65,7 @@ var accountGetCmd = &cobra.Command{
 var accountCreateCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Create an account",
-	Args:  cobra.MinimumNArgs(2),
+	Args:  cobra.ExactValidArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Printf("Deprecation Warning!\nTo create a token account, in future please specify either \"token\" or \"data\"\n\n")
 		//this will be removed in future release and replaced with usage: PrintAccountCreate()
@@ -77,7 +77,7 @@ var accountCreateCmd = &cobra.Command{
 var accountCreateTokenCmd = &cobra.Command{
 	Use:   "token [actor adi] [key name[@key book or page]] [new token account url] [tokenUrl] --authority keyBook (optional)",
 	Short: "Create an ADI token account",
-	Args:  cobra.MinimumNArgs(4),
+	Args:  cobra.RangeArgs(4, 5),
 	Run: func(cmd *cobra.Command, args []string) {
 		out, err := CreateAccount(cmd, args[0], args[1:])
 		printOutput(cmd, out, err)
@@ -87,6 +87,7 @@ var accountCreateTokenCmd = &cobra.Command{
 var accountCreateDataCmd = &cobra.Command{
 	Use:   "data",
 	Short: "Create a data account",
+	Args:  cobra.RangeArgs(1, 3),
 	Run: func(cmd *cobra.Command, args []string) {
 		var out string
 		var err error
