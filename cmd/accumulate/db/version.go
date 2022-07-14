@@ -43,6 +43,13 @@ func (v Version) String() string {
 }
 
 // Compare returns < 0 if v < version, returns > 0 if v > version, returns 0 if v == version
-func (v Version) Compare(version Version) uint32 {
-	return uint32(v) - uint32(version)
+func (v Version) Compare(version Version) int {
+	switch {
+	case v < version:
+		return -1
+	case v > version:
+		return +1
+	default:
+		return 0
+	}
 }

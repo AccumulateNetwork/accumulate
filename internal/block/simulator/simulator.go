@@ -1,5 +1,7 @@
 package simulator
 
+//lint:file-ignore ST1001 Don't care
+
 import (
 	"bytes"
 	"fmt"
@@ -14,7 +16,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
-	. "gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
@@ -141,7 +142,7 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 			Network:      config.Network{Id: "simulator", Partitions: sim.Partitions},
 		}
 
-		execOpts := ExecutorOptions{
+		execOpts := block.ExecutorOptions{
 			Logger:   logger,
 			Key:      bvn.Nodes[0].PrivValKey,
 			Describe: network,
@@ -151,7 +152,7 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 		if execOpts.Describe.NetworkType == config.Directory {
 			execOpts.MajorBlockScheduler = blockscheduler.Init(mainEventBus)
 		}
-		exec, err := NewNodeExecutor(execOpts, db)
+		exec, err := block.NewNodeExecutor(execOpts, db)
 		require.NoError(sim, err)
 
 		jrpc, err := api.NewJrpc(api.Options{
@@ -187,14 +188,14 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 			Network:      config.Network{Id: "simulator", Partitions: sim.Partitions},
 		}
 
-		execOpts := ExecutorOptions{
+		execOpts := block.ExecutorOptions{
 			Logger:   logger,
 			Key:      bvnInit.Nodes[0].PrivValKey,
 			Describe: network,
 			Router:   sim.Router(),
 			EventBus: events.NewBus(logger),
 		}
-		exec, err := NewNodeExecutor(execOpts, db)
+		exec, err := block.NewNodeExecutor(execOpts, db)
 		require.NoError(sim, err)
 
 		jrpc, err := api.NewJrpc(api.Options{
@@ -610,7 +611,7 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 		})
 	}
 	x.blockTime = x.blockTime.Add(time.Second)
-	block := new(Block)
+	block := new(block.Block)
 	block.Index = x.BlockIndex
 	block.Time = x.blockTime
 	block.IsLeader = true

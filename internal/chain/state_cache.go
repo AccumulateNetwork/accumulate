@@ -106,11 +106,7 @@ func (c *stateCache) LoadTxn(txid [32]byte) (*protocol.Transaction, error) {
 
 func (c *stateCache) AddDirectoryEntry(directory *url.URL, u ...*url.URL) error {
 	dir := indexing.Directory(c.batch, directory)
-	var uarr []*url.URL
-	for _, u := range u {
-		uarr = append(uarr, u)
-	}
-	err := dir.Add(uarr...)
+	err := dir.Add(u...)
 	if err != nil {
 		return err
 	}

@@ -1,5 +1,7 @@
 package testing
 
+//lint:file-ignore ST1005 Don't care
+
 import (
 	"bytes"
 	"context"
@@ -198,7 +200,9 @@ func (c *FakeTendermint) execute(interval time.Duration) {
 			sub.Done = true
 		}
 
+		c.txMu.RLock()
 		c.txActive = 0
+		c.txMu.RUnlock()
 	}()
 
 	for {
@@ -295,8 +299,8 @@ func (c *FakeTendermint) execute(interval time.Duration) {
 			c.logTxns("Committed", sub.Envelopes...)
 		}
 
-		c.txActive -= len(queue)
 		c.txMu.RLock()
+		c.txActive -= len(queue)
 		c.txMu.RUnlock()
 
 		// Clear the queue (reuse the memory)

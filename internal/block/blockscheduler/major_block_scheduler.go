@@ -42,8 +42,5 @@ func (s *majorBlockScheduler) onWillChangeGlobals(event events.WillChangeGlobals
 }
 
 func (s *majorBlockScheduler) IsInitialized() bool {
-	if s.majorBlockSchedule == nil {
-		return false
-	}
-	return true
+	return s.majorBlockSchedule != nil
 }
