@@ -112,6 +112,7 @@ func prepareSigner(origin *url.URL, args []string) ([]string, []*signing.Builder
 		if err != nil {
 			return nil, nil, err
 		}
+		args = args[1:]
 	} else {
 		return nil, nil, fmt.Errorf("key name argument is missing")
 	}
@@ -120,7 +121,7 @@ func prepareSigner(origin *url.URL, args []string) ([]string, []*signing.Builder
 	signers = append(signers, nil)
 	copy(signers[1:], signers)
 	signers[0] = firstSigner
-	return args[1:], signers, nil
+	return args, signers, nil
 }
 
 func prepareSignerPage(signer *signing.Builder, origin *url.URL, signingKey string) error {
