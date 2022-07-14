@@ -1,3 +1,15 @@
+snapshotHeader:
+  fields:
+    - name: Version
+      description: is the snapshot format version
+      type: uint
+    - name: Height
+      description: is the snapshot's block height
+      type: uint
+    - name: RootHash
+      description: is the snapshot's root hash
+      type: hash
+
 sigSetData:
   fields:
     - name: Version
