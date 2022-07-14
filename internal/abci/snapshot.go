@@ -41,17 +41,17 @@ func (app *Accumulator) ListSnapshots(req abci.RequestListSnapshots) abci.Respon
 		}
 		defer f.Close()
 
-		height, format, hash, _, err := database.ReadSnapshot(f)
+		header, _, err := database.ReadSnapshot(f)
 		if err != nil {
 			app.logger.Error("Failed to read snapshot header", "error", err, "name", entry.Name())
 			continue
 		}
 
 		resp.Snapshots = append(resp.Snapshots, &abci.Snapshot{
-			Height: height,
-			Format: format,
+			Height: header.Height,
+			Format: uint32(header.Version),
 			Chunks: 1,
-			Hash:   hash,
+			Hash:   header.RootHash[:],
 		})
 	}
 	return resp
