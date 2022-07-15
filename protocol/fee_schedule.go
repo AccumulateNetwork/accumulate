@@ -48,10 +48,10 @@ const (
 	// FeeCreateToken $50.00
 	FeeCreateToken Fee = 500000
 
-	// FeeIssueTokens equiv. to token send @ $0.03
+	// FeeIssueTokens $0.03
 	FeeIssueTokens Fee = 300
 
-	// FeeBurnTokens equiv. to token send
+	// FeeBurnTokens $0.001
 	FeeBurnTokens Fee = 10
 
 	// FeeCreateKeyPage $1.00
@@ -62,6 +62,9 @@ const (
 
 	// FeeCreateScratchChain $0.25
 	FeeCreateScratchChain Fee = 2500
+
+	// FeeLockAccount $0.001
+	FeeLockAccount Fee = 10
 
 	// MinimumCreditPurchase $0.01
 	MinimumCreditPurchase Fee = 100
@@ -74,7 +77,8 @@ func BaseTransactionFee(typ TransactionType) (Fee, error) {
 		return FeeCreateIdentity, nil
 	case TransactionTypeCreateTokenAccount:
 		return FeeCreateTokenAccount, nil
-	case TransactionTypeSendTokens:
+	case TransactionTypeSendTokens,
+		TransactionTypeCreateLiteTokenAccount:
 		return FeeSendTokens, nil
 	case TransactionTypeCreateDataAccount:
 		return FeeCreateDataAccount, nil
@@ -94,6 +98,8 @@ func BaseTransactionFee(typ TransactionType) (Fee, error) {
 		return FeeUpdateAuth, nil
 	case TransactionTypeUpdateKey:
 		return FeeUpdateAuth, nil
+	case TransactionTypeLockAccount:
+		return FeeLockAccount, nil
 	case TransactionTypeRemote:
 		return FeeSignature, nil
 	case TransactionTypeAcmeFaucet,
