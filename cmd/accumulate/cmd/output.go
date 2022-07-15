@@ -353,6 +353,7 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		out += fmt.Sprintf("\tBalance\t\t:\t%s\n", amt)
 		out += fmt.Sprintf("\tCreditBalance\t:\t%v\n", protocol.FormatAmount(litIdentity.CreditBalance, protocol.CreditPrecisionPower))
 		out += fmt.Sprintf("\tLast Used On\t:\t%v\n", time.Unix(0, int64(litIdentity.LastUsedOn*uint64(time.Microsecond))))
+		out += fmt.Sprintf("\tLock Height\t:\t%v\n", ata.LockHeight)
 
 		return out, nil
 	case protocol.AccountTypeLiteIdentity.String():

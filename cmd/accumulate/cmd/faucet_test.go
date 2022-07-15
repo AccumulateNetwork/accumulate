@@ -17,7 +17,6 @@ func init() {
 }
 
 func testCase5_1(t *testing.T, tc *testCmd) {
-	t.Helper()
 
 	beenFauceted := make([]bool, len(liteAccounts))
 	//test to see if things have already been fauceted...

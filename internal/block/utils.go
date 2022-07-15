@@ -44,18 +44,6 @@ func addIndexChainEntry(chain *database.Chain2, entry *protocol.IndexEntry) (uin
 		return 0, err
 	}
 
-	// TODO Update SMT to handle non-32-byte entries?
-	if len(data) > 32 {
-		panic("Index entry is too big")
-	}
-	if len(data) < 32 {
-		padding := make([]byte, 32-len(data))
-		// TODO Remove once AC-1096 is done
-		// Fake field number to make unmarshalling work
-		padding[0] = 32
-		data = append(data, padding...)
-	}
-
 	// Add the entry
 	_ = data
 	err = indexChain.AddEntry(data, false)
