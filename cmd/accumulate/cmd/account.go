@@ -342,7 +342,7 @@ func proveTokenIssuerExistence(body *protocol.CreateTokenAccount) error {
 	return nil
 }
 
-func GenerateAccount(cmd *cobra.Command, args []string) (string, error) {
+func GenerateAccount(_ *cobra.Command, args []string) (string, error) {
 	// validate the amount arguments passed to the command
 	if len(args) > 1 {
 		return "", fmt.Errorf("too many arguments")
