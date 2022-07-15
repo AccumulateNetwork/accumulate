@@ -53,7 +53,7 @@ func TestMajorBlock(t *testing.T) {
 
 		// require.NotZero(t, entry.Source, "Expected non-zero source")
 		require.NotZero(t, entry.RootIndexIndex, "Expected non-zero root index index")
-		require.Equal(t, uint64(1), entry.BlockIndex, "Expected block index to be 1")
+		require.Equal(t, uint64(1), entry.BlockIndex, "Expected block index to be 1") // DO NOT REMOVE (validates SendTokens)
 		return nil
 	})
 }
