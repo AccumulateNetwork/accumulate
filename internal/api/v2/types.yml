@@ -494,6 +494,16 @@ StatusResponse:
   fields:
     - name: Ok
       type: bool
+    - name: BvnHeight
+      type: uvarint
+    - name: DnHeight
+      type: uvarint
+    - name: LastAnchor
+      type: hash
+    - name: BvnRootHash
+      type: hash
+    - name: DnRootHash
+      type: hash
 
 VersionResponse:
   non-binary: true
