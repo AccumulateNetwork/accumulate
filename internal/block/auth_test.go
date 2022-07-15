@@ -512,7 +512,8 @@ func TestCannotDisableAuthForAuthTxns(t *testing.T) {
 		var account *protocol.TokenAccount
 		require.NoError(t, t.Account(alice.JoinPath("tokens")).GetStateAs(&account))
 		account = t.PutAccountCopy(account).(*protocol.TokenAccount)
-		account.AddAuthority(protocol.AccountUrl("foo")).Disabled = true
+		a, _ := account.AddAuthority(protocol.AccountUrl("foo"))
+		a.Disabled = true
 
 		// The transaction
 		txn := new(protocol.Transaction)
