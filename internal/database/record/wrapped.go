@@ -6,6 +6,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 )
 
+//lint:file-ignore U1000 false positive
+
 type wrappedValue[T any] struct {
 	value T
 	*wrapperFuncs[T]
@@ -13,13 +15,13 @@ type wrappedValue[T any] struct {
 
 // Wrapped returns an encodable value for the given type using the given wrapper
 // functions.
-func Wrapped[T any](funcs *wrapperFuncs[T]) EncodableValue[T] {
+func Wrapped[T any](funcs *wrapperFuncs[T]) encodableValue[T] {
 	return &wrappedValue[T]{wrapperFuncs: funcs}
 }
 
 // WrappedFactory curries Wrapped.
-func WrappedFactory[T any](funcs *wrapperFuncs[T]) func() EncodableValue[T] {
-	return func() EncodableValue[T] { return &wrappedValue[T]{wrapperFuncs: funcs} }
+func WrappedFactory[T any](funcs *wrapperFuncs[T]) func() encodableValue[T] {
+	return func() encodableValue[T] { return &wrappedValue[T]{wrapperFuncs: funcs} }
 }
 
 func (v *wrappedValue[T]) getValue() T  { return v.value }

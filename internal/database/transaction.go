@@ -69,7 +69,7 @@ func (t *Transaction) PutStatus(v *protocol.TransactionStatus) error {
 	if err != nil {
 		return err
 	}
-	return t.batch.Account(txn.Transaction.Header.Principal).putBpt()
+	return t.parent.Account(txn.Transaction.Header.Principal).putBpt()
 }
 
 // Signatures returns a signature set for the given signer.
@@ -130,7 +130,7 @@ func (t *Transaction) AddSystemSignature(net *config.Describe, newSignature prot
 
 func (t *Transaction) newSigSet(signer *url.URL, writable bool) (*SignatureSet, error) {
 	var acct protocol.Signer
-	err := t.batch.Account(signer).GetStateAs(&acct)
+	err := t.parent.Account(signer).GetStateAs(&acct)
 	switch {
 	case err == nil:
 		// If the signer exists, use its version

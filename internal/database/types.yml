@@ -1,3 +1,15 @@
+snapshotHeader:
+  fields:
+    - name: Version
+      description: is the snapshot format version
+      type: uint
+    - name: Height
+      description: is the snapshot's block height
+      type: uint
+    - name: RootHash
+      description: is the snapshot's root hash
+      type: hash
+
 sigSetData:
   fields:
     - name: Version
@@ -72,6 +84,11 @@ accountState:
       marshal-as: reference
       pointer: true
       repeatable: true
+    - name: Directory
+      description: lists the account's sub-accounts
+      type: url
+      pointer: true
+      repeatable: true
 
 transactionState:
   fields:
@@ -104,3 +121,29 @@ TransactionChainEntry:
   - name: AnchorIndex
     description: is the index of the entry in the anchor chain's index chain
     type: uint
+
+ChainUpdate:
+  fields:
+    - name: Account
+      type: url
+      pointer: true
+    - name: Name
+      type: string
+    - name: Type
+      type: protocol.ChainType
+      marshal-as: enum
+    - name: Index
+      type: uint
+    - name: SourceIndex
+      type: uint
+    - name: SourceBlock
+      type: uint
+    - name: Entry
+      type: bytes
+
+BlockStateSynthTxnEntry:
+  fields:
+  - name: Transaction
+    type: bytes
+  - name: ChainEntry
+    type: uvarint

@@ -21,7 +21,7 @@ func (a *Account) loadState(preserveChains bool) (*accountState, error) {
 
 	// Load chain state
 	for _, c := range loadState(&err, false, a.Chains().Get) {
-		chain, err := a.ReadChain(c.Name)
+		chain, err := a.GetChainByName(c.Name)
 		if err != nil {
 			return nil, fmt.Errorf("load %s chain state: %w", c.Name, err)
 		}
@@ -52,31 +52,31 @@ func (a *Account) loadState(preserveChains bool) (*accountState, error) {
 	// Load transaction state
 	for _, h := range loadState(&err, false, a.Pending().Get) {
 		h := h.Hash()
-		state, err := a.batch.Transaction(h[:]).loadState() //nolint:rangevarref
+		state, err := a.parent.Transaction(h[:]).loadState() //nolint:rangevarref
 		if err != nil {
 			return nil, err
 		}
 		s.Pending = append(s.Pending, state)
 	}
-
+	s.Directory = loadState(&err, true, a.Directory().Get)
 	return s, nil
 }
 
-func (a *Account) stateOfTransactionsOnChain(name string) ([]*transactionState, error) {
-	chain, err := a.ReadChain(name)
+func (c *Chain2) stateOfTransactionsOnChain() ([]*transactionState, error) {
+	head, err := c.inner.Head().Get()
 	if err != nil {
-		return nil, fmt.Errorf("load main chain: %w", err)
+		return nil, errors.Format(errors.StatusUnknownError, "load chain head: %w", err)
 	}
 
 	// TODO We need to be more selective than this
-	state := make([]*transactionState, chain.Height())
+	state := make([]*transactionState, head.Count)
 	for i := range state {
-		hash, err := chain.Entry(int64(i))
+		hash, err := c.inner.Get(int64(i))
 		if err != nil {
-			return nil, fmt.Errorf("load %s chain entry %d: %w", name, i, err)
+			return nil, fmt.Errorf("load %s chain entry %d: %w", c.inner.Name(), i, err)
 		}
 
-		state[i], err = a.batch.Transaction(hash).loadState()
+		state[i], err = c.account.parent.Transaction(hash).loadState()
 		if err != nil {
 			return nil, err
 		}
@@ -89,7 +89,7 @@ func (a *Account) restoreState(s *accountState) error {
 	// Store main state
 	var err error
 	saveState(&err, a.Main().Put, s.Main)
-
+	saveState(&err, a.Directory().Put, s.Directory)
 	// Store pending transaction list
 	for _, p := range s.Pending {
 		saveStateN(&err, a.Pending().Add, p.Transaction.ID())
@@ -105,7 +105,7 @@ func (a *Account) restoreState(s *accountState) error {
 				head.Pending[i] = v
 			}
 		}
-		mgr, err := a.Chain(c.Name, c.Type)
+		mgr, err := a.GetChainByName(c.Name)
 		if err != nil {
 			return fmt.Errorf("store %s chain head: %w", c.Name, err)
 		}
@@ -131,7 +131,7 @@ func (a *Account) restoreState(s *accountState) error {
 			return fmt.Errorf("transaction %X state is invalid: %d signers and %d signatures", hash[:4], len(p.State.Signers), len(p.Signatures))
 		}
 
-		record := a.batch.Transaction(hash)
+		record := a.parent.Transaction(hash)
 		err := record.PutState(&SigOrTxn{Transaction: p.Transaction})
 		if err != nil {
 			return fmt.Errorf("store transaction %X: %w", hash[:4], err)
@@ -180,7 +180,7 @@ func (a *Account) putBpt() error {
 	}
 
 	hash := *(*[32]byte)(hasher.MerkleHash())
-	a.batch.putBpt(a.key.Hash(), hash)
+	a.parent.putBpt(a.key.Hash(), hash)
 	return nil
 }
 
@@ -190,7 +190,7 @@ func (a *Account) BptReceipt() (*managed.Receipt, error) {
 		return nil, errors.New(errors.StatusInternalError, "cannot generate a BPT receipt when there are uncommitted changes")
 	}
 
-	bpt := pmt.NewBPTManager(a.batch.store)
+	bpt := pmt.NewBPTManager(a.parent.kvstore)
 	receipt := bpt.Bpt.GetReceipt(a.key.Hash())
 	if receipt == nil {
 		return nil, errors.NotFound("BPT key %v not found", a.key.Hash())
@@ -229,9 +229,10 @@ func (a *Account) StateReceipt() (*managed.Receipt, error) {
 func (a *Account) hashState() (hash.Hasher, error) {
 	var err error
 	var hasher hash.Hasher
-	hashState(&err, &hasher, true, a.Main().Get)        // Add a simple hash of the main state
-	hashState(&err, &hasher, false, a.hashChains)       // Add a merkle hash of chains
-	hashState(&err, &hasher, false, a.hashTransactions) // Add a merkle hash of transactions
+	hashState(&err, &hasher, true, a.Main().Get)          // Add a simple hash of the main state
+	hashState(&err, &hasher, false, a.hashSecondaryState) // Add a merkle hash of the Secondary State which is a list of accounts contained by the adi
+	hashState(&err, &hasher, false, a.hashChains)         // Add a merkle hash of chains
+	hashState(&err, &hasher, false, a.hashTransactions)   // Add a merkle hash of transactions
 	return hasher, err
 }
 
@@ -241,7 +242,7 @@ func (a *Account) hashChains() (hash.Hasher, error) {
 	var err error
 	var hasher hash.Hasher
 	for _, chainMeta := range loadState(&err, false, a.Chains().Get) {
-		chain := loadState1(&err, false, a.ReadChain, chainMeta.Name)
+		chain := loadState1(&err, false, a.GetChainByName, chainMeta.Name)
 		if err != nil {
 			break
 		}
@@ -263,8 +264,8 @@ func (a *Account) hashTransactions() (hash.Hasher, error) {
 	var hasher hash.Hasher
 	for _, txid := range loadState(&err, false, a.Pending().Get) {
 		h := txid.Hash()
-		hashState(&err, &hasher, false, a.batch.Transaction(h[:]).GetState)
-		hashState(&err, &hasher, false, a.batch.Transaction(h[:]).GetStatus)
+		hashState(&err, &hasher, false, a.parent.Transaction(h[:]).GetState)
+		hashState(&err, &hasher, false, a.parent.Transaction(h[:]).GetStatus)
 	}
 
 	// // TODO Include this
@@ -362,7 +363,7 @@ func saveState[T any](lastErr *error, put func(T) error, v T) {
 }
 
 func saveStateN[T any](lastErr *error, put func(...T) error, v ...T) {
-	if *lastErr != nil || any(v) == nil {
+	if *lastErr != nil || v == nil {
 		return
 	}
 
@@ -370,4 +371,15 @@ func saveStateN[T any](lastErr *error, put func(...T) error, v ...T) {
 	if err != nil {
 		*lastErr = err
 	}
+}
+
+func (a *Account) hashSecondaryState() (hash.Hasher, error) {
+	var err error
+	var hasher hash.Hasher
+	for _, u := range loadState(&err, false, a.Directory().Get) {
+		hasher.AddUrl(u)
+	}
+	// Hash the hash to allow for future expansion
+	dirHash := hasher.MerkleHash()
+	return hash.Hasher{dirHash}, err
 }

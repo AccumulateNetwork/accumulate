@@ -107,7 +107,7 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 		if !md.Forwarded {
 			return nil, errors.New(errors.StatusBadRequest, "a signature set must be nested within another signature")
 		}
-		signer, err = x.processSigner(batch, delivery.Transaction, signature, md.Location, false)
+		signer, err = x.processSigner(batch, delivery.Transaction, signature, md.Location, !md.Delegated && md.Location.LocalTo(delivery.Transaction.Header.Principal))
 		if err != nil {
 			return nil, err
 		}
@@ -298,7 +298,7 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 
 	// Add the signature to the signer's chain
 	if isUserTxn && signer.GetUrl().LocalTo(md.Location) {
-		chain, err := batch.Account(signer.GetUrl()).Chain(protocol.SignatureChain, protocol.ChainTypeTransaction)
+		chain, err := batch.Account(signer.GetUrl()).SignatureChain().Get()
 		if err != nil {
 			return nil, fmt.Errorf("load chain: %w", err)
 		}
@@ -310,7 +310,7 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 
 	// Add the signature to the principal's chain
 	if isUserTxn && isLocalTxn {
-		chain, err := batch.Account(delivery.Transaction.Header.Principal).Chain(protocol.SignatureChain, protocol.ChainTypeTransaction)
+		chain, err := batch.Account(delivery.Transaction.Header.Principal).SignatureChain().Get()
 		if err != nil {
 			return nil, fmt.Errorf("load chain: %w", err)
 		}
@@ -510,7 +510,7 @@ func (x *Executor) verifyPageIsAuthorized(batch *database.Batch, transaction *pr
 	// Load the principal
 	principal, err := batch.Account(transaction.Header.Principal).GetState()
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.Format(errors.StatusUnknownError, "load principal: %w", err)
 	}
 
 	// Get the principal's account auth
@@ -526,21 +526,20 @@ func (x *Executor) verifyPageIsAuthorized(batch *database.Batch, transaction *pr
 		return errors.Format(errors.StatusInternalError, "invalid key page URL: %v", signer.GetUrl())
 	}
 
+	// Page belongs to book => authorized
 	_, foundAuthority := auth.GetAuthority(signerBook)
-	switch {
-	case foundAuthority:
-		// Page belongs to book => authorized
+	if foundAuthority {
 		return nil
-
-	case auth.AuthDisabled() && !transaction.Body.Type().RequireAuthorization():
-		// Authorization is disabled and the transaction type does not force authorization => authorized
-		return nil
-
-	default:
-		// Authorization is enabled => unauthorized
-		// Transaction type forces authorization => unauthorized
-		return errors.Format(errors.StatusUnauthorized, "%v is not authorized to sign transactions for %v", signer.GetUrl(), principal.GetUrl())
 	}
+
+	// Authorization is disabled and the transaction type does not force authorization => authorized
+	if auth.AuthDisabled() && !transaction.Body.Type().RequireAuthorization() {
+		return nil
+	}
+
+	// Authorization is enabled => unauthorized
+	// Transaction type forces authorization => unauthorized
+	return errors.Format(errors.StatusUnauthorized, "%v is not authorized to sign transactions for %v", signer.GetUrl(), principal.GetUrl())
 }
 
 // computeSignerFee computes the fee that will be charged to the signer.

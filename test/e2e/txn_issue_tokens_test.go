@@ -8,7 +8,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -60,7 +59,7 @@ func TestIssueTokens_Bad(t *testing.T) {
 	updateAccount(sim, alice.JoinPath("book", "1"), func(p *KeyPage) { p.CreditBalance = 1e9 })
 	sim.CreateAccount(&TokenIssuer{Url: alice.JoinPath("tokens"), Symbol: "FOO", Precision: 1})
 	liteKey := acctesting.GenerateKey("lite")
-	lite := LiteAuthorityForKey(liteKey[32:], SignatureTypeED25519).JoinPath(protocol.ACME)
+	lite := LiteAuthorityForKey(liteKey[32:], SignatureTypeED25519).JoinPath(ACME)
 
 	// Execute
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(

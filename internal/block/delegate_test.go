@@ -13,12 +13,11 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
-func updateAccount[T protocol.Account](sim *simulator.Simulator, accountUrl *url.URL, fn func(account T)) {
+func updateAccount[T Account](sim *simulator.Simulator, accountUrl *url.URL, fn func(account T)) {
 	sim.UpdateAccount(accountUrl, func(account Account) {
 		var typed T
 		err := encoding.SetPtr(account, &typed)
@@ -53,7 +52,7 @@ func TestDelegatedSignature_Local(t *testing.T) {
 	sim.InitFromGenesis()
 
 	// Setup
-	alice := protocol.AccountUrl("alice")
+	alice := AccountUrl("alice")
 	key1, key2 := acctesting.GenerateKey(alice), acctesting.GenerateKey(alice, 2)
 	sim.CreateIdentity(alice, key1[32:])
 	sim.CreateKeyBook(alice.JoinPath("other-book"), key2[32:])
@@ -96,7 +95,7 @@ func TestDelegatedSignature_LocalMultisig(t *testing.T) {
 	sim.InitFromGenesis()
 
 	// Setup
-	alice := protocol.AccountUrl("alice")
+	alice := AccountUrl("alice")
 	key1, otherKey1, otherKey2 := acctesting.GenerateKey(alice), acctesting.GenerateKey(alice, 1), acctesting.GenerateKey(alice, 2)
 	sim.CreateIdentity(alice, key1[32:])
 	sim.CreateKeyBook(alice.JoinPath("other-book"), otherKey1[32:], otherKey2[32:])
@@ -143,7 +142,7 @@ func TestDelegatedSignature_Double(t *testing.T) {
 	sim.InitFromGenesis()
 
 	// Setup
-	alice := protocol.AccountUrl("alice")
+	alice := AccountUrl("alice")
 	key1, key2, key3 := acctesting.GenerateKey(), acctesting.GenerateKey(), acctesting.GenerateKey()
 	updatePartitionFor(sim, alice, func(batch *database.Batch) {
 		require.NoError(t, acctesting.CreateAdiWithCredits(batch, tmed25519.PrivKey(key1), types.String(alice.String()), 1e9))
@@ -193,7 +192,7 @@ func TestDelegatedSignature_RemoteDelegate(t *testing.T) {
 	sim := simulator.New(t, 3)
 	sim.InitFromGenesis()
 
-	alice, bob := protocol.AccountUrl("alice"), protocol.AccountUrl("bob")
+	alice, bob := AccountUrl("alice"), AccountUrl("bob")
 	sim.SetRouteFor(alice, "BVN0")
 	sim.SetRouteFor(bob, "BVN1")
 
@@ -242,7 +241,7 @@ func TestDelegatedSignature_RemoteDelegator(t *testing.T) {
 	sim := simulator.New(t, 3)
 	sim.InitFromGenesis()
 
-	alice, bob := protocol.AccountUrl("alice"), protocol.AccountUrl("bob")
+	alice, bob := AccountUrl("alice"), AccountUrl("bob")
 	sim.SetRouteFor(alice, "BVN0")
 	sim.SetRouteFor(bob, "BVN1")
 
@@ -293,7 +292,7 @@ func TestDelegatedSignature_RemoteDelegateAndAuthority(t *testing.T) {
 	sim := simulator.New(t, 3)
 	sim.InitFromGenesis()
 
-	alice, bob, charlie := protocol.AccountUrl("alice"), protocol.AccountUrl("bob"), protocol.AccountUrl("charlie")
+	alice, bob, charlie := AccountUrl("alice"), AccountUrl("bob"), AccountUrl("charlie")
 	sim.SetRouteFor(alice, "BVN0")
 	sim.SetRouteFor(bob, "BVN1")
 	sim.SetRouteFor(charlie, "BVN2")
@@ -346,7 +345,7 @@ func TestDelegatedSignature_DobuleRemote(t *testing.T) {
 	sim := simulator.New(t, 3)
 	sim.InitFromGenesis()
 
-	alice, bob, charlie := protocol.AccountUrl("alice"), protocol.AccountUrl("bob"), protocol.AccountUrl("charlie")
+	alice, bob, charlie := AccountUrl("alice"), AccountUrl("bob"), AccountUrl("charlie")
 	sim.SetRouteFor(alice, "BVN0")
 	sim.SetRouteFor(bob, "BVN1")
 	sim.SetRouteFor(charlie, "BVN2")
@@ -403,7 +402,7 @@ func TestDelegatedSignature_Multisig(t *testing.T) {
 	sim := simulator.New(t, 3)
 	sim.InitFromGenesis()
 
-	alice, bob, charlie := protocol.AccountUrl("alice"), protocol.AccountUrl("bob"), protocol.AccountUrl("charlie")
+	alice, bob, charlie := AccountUrl("alice"), AccountUrl("bob"), AccountUrl("charlie")
 	sim.SetRouteFor(alice, "BVN0")
 	sim.SetRouteFor(bob, "BVN1")
 	sim.SetRouteFor(charlie, "BVN2")
@@ -508,8 +507,8 @@ func TestDelegatedSignature_Multisig(t *testing.T) {
 	})
 }
 
-func GetAllSignatures(batch *database.Batch, transaction *database.Transaction, status *protocol.TransactionStatus, txnInitHash []byte) ([]protocol.Signature, error) {
-	signatures := make([]protocol.Signature, 1)
+func GetAllSignatures(batch *database.Batch, transaction *database.Transaction, status *TransactionStatus, txnInitHash []byte) ([]Signature, error) {
+	signatures := make([]Signature, 1)
 
 	for _, signer := range status.Signers {
 		sigset, err := block.GetSignaturesForSigner(batch, transaction, signer)
@@ -518,7 +517,7 @@ func GetAllSignatures(batch *database.Batch, transaction *database.Transaction, 
 		}
 
 		for _, sig := range sigset {
-			if protocol.SignatureDidInitiate(sig, txnInitHash) {
+			if SignatureDidInitiate(sig, txnInitHash) {
 				signatures[0] = sig
 			} else {
 				signatures = append(signatures, sig)

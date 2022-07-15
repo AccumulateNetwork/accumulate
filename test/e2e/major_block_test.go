@@ -44,7 +44,7 @@ func TestMajorBlock(t *testing.T) {
 	// Verify
 	dn := sim.Partition(protocol.Directory)
 	_ = dn.Database.View(func(batch *database.Batch) error {
-		chain, err := batch.Account(dn.Executor.Describe.AnchorPool()).ReadIndexChain(protocol.MainChain, true)
+		chain, err := batch.Account(dn.Executor.Describe.AnchorPool()).MajorBlockChain().Get()
 		require.NoError(t, err, "Failed to read anchor major index chain")
 		require.Equal(t, int64(1), chain.Height(), "Expected anchor major index chain to have height 1")
 
@@ -53,7 +53,7 @@ func TestMajorBlock(t *testing.T) {
 
 		// require.NotZero(t, entry.Source, "Expected non-zero source")
 		require.NotZero(t, entry.RootIndexIndex, "Expected non-zero root index index")
-		require.Equal(t, uint64(1), entry.BlockIndex, "Expected block index to be 1")
+		require.Equal(t, uint64(1), entry.BlockIndex, "Expected block index to be 1") // DO NOT REMOVE (validates SendTokens)
 		return nil
 	})
 }

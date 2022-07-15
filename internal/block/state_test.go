@@ -11,7 +11,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -24,7 +23,7 @@ func TestStateSaveAndRestore(t *testing.T) {
 	sim.InitFromGenesis()
 
 	// Prepare the ADI
-	name := protocol.AccountUrl("foo")
+	name := AccountUrl("foo")
 	key := acctesting.GenerateKey(t.Name(), name)
 	SetupIdentity(sim, name, key, &timestamp)
 
@@ -132,7 +131,7 @@ func SetupIdentity(sim *simulator.Simulator, name *url.URL, key []byte, timestam
 			WithTimestampVar(timestamp).
 			WithBody(&CreateTokenAccount{
 				Url:      name.JoinPath("tokens"),
-				TokenUrl: protocol.AcmeUrl(),
+				TokenUrl: AcmeUrl(),
 			}).
 			Initiate(SignatureTypeED25519, key).
 			Build(),
@@ -146,7 +145,7 @@ func SetupIdentity(sim *simulator.Simulator, name *url.URL, key []byte, timestam
 			WithTimestampVar(timestamp).
 			WithBody(&SendTokens{
 				To: []*TokenRecipient{
-					{Url: name.JoinPath("tokens"), Amount: *big.NewInt(tokenAccountAmount * protocol.AcmePrecision)},
+					{Url: name.JoinPath("tokens"), Amount: *big.NewInt(tokenAccountAmount * AcmePrecision)},
 				},
 			}).
 			Initiate(SignatureTypeED25519, liteKey).

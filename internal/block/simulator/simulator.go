@@ -1,8 +1,12 @@
 package simulator
 
+//lint:file-ignore ST1001 Don't care
+
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
 	"sync"
 	"time"
 
@@ -14,7 +18,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
-	. "gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
@@ -22,6 +25,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
+	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/sortutil"
@@ -35,9 +39,10 @@ import (
 var GenesisTime = time.Date(2022, 7, 1, 0, 0, 0, 0, time.UTC)
 
 type SimulatorOptions struct {
-	BvnCount  int
-	LogLevels string
-	OpenDB    func(partition string, nodeIndex int, logger log.Logger) *database.Database
+	BvnCount        int
+	LogLevels       string
+	OpenDB          func(partition string, nodeIndex int, logger log.Logger) *database.Database
+	FactomAddresses func() (io.Reader, error)
 }
 
 type Simulator struct {
@@ -46,6 +51,7 @@ type Simulator struct {
 	Partitions []config.Partition
 	Executors  map[string]*ExecEntry
 
+	opts             SimulatorOptions
 	netInit          *accumulated.NetworkInit
 	router           routing.Router
 	routingOverrides map[[32]byte]string
@@ -83,6 +89,7 @@ func NewWith(t TB, opts SimulatorOptions) *Simulator {
 
 func (sim *Simulator) Setup(opts SimulatorOptions) {
 	sim.Helper()
+	sim.opts = opts
 
 	if opts.BvnCount == 0 {
 		opts.BvnCount = 3
@@ -141,7 +148,7 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 			Network:      config.Network{Id: "simulator", Partitions: sim.Partitions},
 		}
 
-		execOpts := ExecutorOptions{
+		execOpts := block.ExecutorOptions{
 			Logger:   logger,
 			Key:      bvn.Nodes[0].PrivValKey,
 			Describe: network,
@@ -151,7 +158,7 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 		if execOpts.Describe.NetworkType == config.Directory {
 			execOpts.MajorBlockScheduler = blockscheduler.Init(mainEventBus)
 		}
-		exec, err := NewNodeExecutor(execOpts, db)
+		exec, err := block.NewNodeExecutor(execOpts, db)
 		require.NoError(sim, err)
 
 		jrpc, err := api.NewJrpc(api.Options{
@@ -187,14 +194,14 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 			Network:      config.Network{Id: "simulator", Partitions: sim.Partitions},
 		}
 
-		execOpts := ExecutorOptions{
+		execOpts := block.ExecutorOptions{
 			Logger:   logger,
 			Key:      bvnInit.Nodes[0].PrivValKey,
 			Describe: network,
 			Router:   sim.Router(),
 			EventBus: events.NewBus(logger),
 		}
-		exec, err := NewNodeExecutor(execOpts, db)
+		exec, err := block.NewNodeExecutor(execOpts, db)
 		require.NoError(sim, err)
 
 		jrpc, err := api.NewJrpc(api.Options{
@@ -306,14 +313,16 @@ func (s *Simulator) InitFromGenesisWith(values *core.GlobalValues) {
 	if values == nil {
 		values = new(core.GlobalValues)
 	}
-	genDocs, err := accumulated.BuildGenesisDocs(s.netInit, values, GenesisTime, s.Logger, "")
+	genDocs, err := accumulated.BuildGenesisDocs(s.netInit, values, GenesisTime, s.Logger, s.opts.FactomAddresses)
 	require.NoError(s, err)
 
 	// Execute bootstrap after the entire network is known
 	for _, x := range s.Executors {
 		batch := x.Database.Begin(true)
 		defer batch.Discard()
-		require.NoError(tb{s}, x.Executor.InitFromGenesis(batch, genDocs[x.Partition.Id].AppState))
+		var snapshot []byte
+		require.NoError(s, json.Unmarshal(genDocs[x.Partition.Id].AppState, &snapshot))
+		require.NoError(tb{s}, x.Executor.RestoreSnapshot(batch, ioutil2.NewBuffer(snapshot)))
 		require.NoError(tb{s}, batch.Commit())
 	}
 }
@@ -610,11 +619,14 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 		})
 	}
 	x.blockTime = x.blockTime.Add(time.Second)
-	block := new(Block)
+	block := new(block.Block)
 	block.Index = x.BlockIndex
 	block.Time = x.blockTime
 	block.IsLeader = true
 	block.Batch = x.Database.Begin(true)
+
+	// Run background tasks in the error group to ensure they complete before the next block begins
+	x.Executor.Background = func(f func()) { errg.Go(func() error { f(); return nil }) }
 
 	deliveries := x.takeSubmitted()
 	errg.Go(func() error {

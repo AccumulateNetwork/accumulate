@@ -36,11 +36,13 @@ var keyCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		var out string
 		var err error
-
-		//set the default signature type
-		sigType := protocol.SignatureTypeED25519
+		var sigType protocol.SignatureType
+		var found bool
 		if SigType != "" {
-			sigType, err = ValidateSigType(SigType)
+			sigType, found = protocol.SignatureTypeByName(SigType)
+			if !found {
+				err = fmt.Errorf("unknown signature type %s", SigType)
+			}
 		}
 
 		if len(args) > 0 && err == nil {
@@ -112,7 +114,7 @@ var keyCmd = &cobra.Command{
 }
 
 var keyUpdateCmd = &cobra.Command{
-	Use:   "update [key page url] [original key name] [key index (optional)] [key height (optional)] [new key name]",
+	Use:   "update [key page url] [key name[@key book or page]] [new key name]",
 	Short: "Self-update a key",
 	Args:  cobra.RangeArgs(3, 5),
 	Run:   runCmdFunc(UpdateKey),
@@ -479,15 +481,13 @@ func ImportKeyPrompt(label string, signatureType protocol.SignatureType) (out st
 func ImportKey(token []byte, label string, signatureType protocol.SignatureType) (out string, err error) {
 
 	var liteLabel string
-	var pk ed25519.PrivateKey
+	pk := new(Key)
 
-	if len(token) == 32 {
-		pk = ed25519.NewKeyFromSeed(token)
-	} else {
-		pk = token
+	if err := pk.Initialize(token, signatureType); err != nil {
+		return "", err
 	}
 
-	lt, err := protocol.LiteTokenAddress(pk[32:], protocol.ACME, signatureType)
+	lt, err := protocol.LiteTokenAddress(pk.PublicKey, protocol.ACME, pk.Type)
 	if err != nil {
 		return "", fmt.Errorf("no label specified and cannot import as lite token account")
 	}
@@ -505,13 +505,13 @@ func ImportKey(token []byte, label string, signatureType protocol.SignatureType)
 		return "", fmt.Errorf("key name is already being used")
 	}
 
-	_, err = LookupByPubKey(pk[32:])
+	_, err = LookupByPubKey(pk.PublicKey)
 	lab := "not found"
 	if err == nil {
 		b, _ := GetWallet().GetBucket(BucketLabel)
 		if b != nil {
 			for _, v := range b.KeyValueList {
-				if bytes.Equal(v.Value, pk[32:]) {
+				if bytes.Equal(v.Value, pk.PublicKey) {
 					lab = string(v.Key)
 					break
 				}
@@ -520,13 +520,12 @@ func ImportKey(token []byte, label string, signatureType protocol.SignatureType)
 		}
 	}
 
-	publicKey := pk[32:]
-	err = GetWallet().Put(BucketKeys, publicKey, pk)
+	err = GetWallet().Put(BucketKeys, pk.PublicKey, pk.PrivateKey)
 	if err != nil {
 		return "", err
 	}
 
-	err = GetWallet().Put(BucketLabel, []byte(label), pk[32:])
+	err = GetWallet().Put(BucketLabel, []byte(label), pk.PublicKey)
 	if err != nil {
 		return "", err
 	}
@@ -536,12 +535,11 @@ func ImportKey(token []byte, label string, signatureType protocol.SignatureType)
 		return "", err
 	}
 
-	keyInfo := KeyInfo{
-		Type:       signatureType,
-		Derivation: "external",
+	keyInfoBytes, err := pk.KeyInfo.MarshalBinary()
+	if err != nil {
+		return "", err
 	}
-	keyInfoBytes, err := keyInfo.MarshalBinary()
-	err = GetWallet().Put(BucketKeyInfo, publicKey, keyInfoBytes)
+	err = GetWallet().Put(BucketKeyInfo, pk.PublicKey, keyInfoBytes)
 	if err != nil {
 		return "", err
 	}
@@ -549,16 +547,16 @@ func ImportKey(token []byte, label string, signatureType protocol.SignatureType)
 	if WantJsonOutput {
 		a := KeyResponse{}
 		a.Label = types.String(label)
-		a.PublicKey = types.Bytes(pk[32:])
+		a.PublicKey = types.Bytes(pk.PublicKey)
 		a.LiteAccount = lt
-		a.KeyInfo = keyInfo
+		a.KeyInfo = pk.KeyInfo
 		dump, err := json.Marshal(&a)
 		if err != nil {
 			return "", err
 		}
 		out = fmt.Sprintf("%s\n", string(dump))
 	} else {
-		out = fmt.Sprintf("\tname\t\t:\t%s\n\tlite account\t:\t%s\n\tpublic key\t:\t%x\n\tkey type\t:\t%s\n", label, lt, pk[32:], signatureType)
+		out = fmt.Sprintf("\tname\t\t:\t%s\n\tlite account\t:\t%s\n\tpublic key\t:\t%x\n\tkey type\t:\t%s\n\tderivation\t:\t%s\n", label, lt, pk.PublicKey, pk.KeyInfo.Type, pk.KeyInfo.Derivation)
 	}
 	return out, nil
 }
@@ -570,7 +568,7 @@ func ExportKey(label string) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("no private key found for key name %s", label)
 		}
-		k, err = LookupByPubKey(k.PublicKey)
+		_, err = LookupByPubKey(k.PublicKey)
 		if err != nil {
 			return "", fmt.Errorf("no private key found for key name %s", label)
 		}
@@ -588,7 +586,7 @@ func ExportKey(label string) (string, error) {
 		}
 		return fmt.Sprintf("%s\n", string(dump)), nil
 	} else {
-		return fmt.Sprintf("name\t\t\t:\t%s\n\tprivate key\t:\t%x\n\tpublic key\t:\t%x\nkey type\t\t:\t%s\n", label, k.PrivateKey, k.PublicKey, k.KeyInfo.Type), nil
+		return fmt.Sprintf("name\t\t\t:\t%s\n\tprivate key\t:\t%x\n\tpublic key\t:\t%x\nkey type\t\t:\t%s\n\tderivation\t:\t%s\n", label, k.PrivateKey, k.PublicKey, k.KeyInfo.Type, k.KeyInfo.Derivation), nil
 	}
 }
 

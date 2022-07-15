@@ -29,7 +29,6 @@ var goFuncs = template.FuncMap{
 	"parameterized":   func(r typegen.Record) bool { return len(r.GetParameters()) > 0 },
 	"parameterCount":  func(r typegen.Record) int { return len(r.GetParameters()) },
 	"add":             func(x, y int) int { return x + y },
-	"isBaseType":      func(r *typegen.EntityRecord) bool { return r.Parent == nil && !r.Root },
 }
 
 func hasChains(r typegen.Record) bool {
@@ -117,35 +116,31 @@ func parameterFormatters(r typegen.Record, keyDepth int) []string {
 }
 
 func valueNameFormat(r typegen.Record) (string, int) {
-	if r.GetParent() == nil {
+	if e, ok := r.(*typegen.EntityRecord); ok && (e == nil || e.Root) {
 		return "", 0
 	}
 
-	name, keyDepth := valueNameFormat(r.GetParent())
-	if name != "" {
-		name += " "
-	}
+	_, keyDepth := valueNameFormat(r.GetParent())
 
-	name += typegen.Natural(r.GetName())
+	name := typegen.Natural(r.GetName())
 	formatters := parameterFormatters(r, keyDepth+1)
 	if len(formatters) == 0 {
 		return name, keyDepth + 1
 	}
 
+	valueNameFormat(r.GetParent())
 	name += " " + strings.Join(formatters, " ")
 	return name, keyDepth + 1 + len(formatters)
 }
 
 func chainName(r typegen.Record) string {
 	name := r.GetName()
-	if strings.HasSuffix(name, "Chain") {
-		name = name[:len(name)-len("Chain")]
-	}
+	name = strings.TrimSuffix(name, "Chain")
 	return typegen.DashCase(name)
 }
 
 func chainNameFormat(r typegen.Record) (string, int) {
-	if r.GetParent() == nil {
+	if e, ok := r.(*typegen.EntityRecord); ok && (e == nil || e.Root) {
 		return "", 0
 	}
 
@@ -159,9 +154,7 @@ func chainNameFormat(r typegen.Record) (string, int) {
 	}
 
 	rname := r.GetName()
-	if strings.HasSuffix(rname, "Chain") {
-		rname = rname[:len(rname)-len("Chain")]
-	}
+	rname = strings.TrimSuffix(rname, "Chain")
 	rname = typegen.DashCase(rname)
 
 	name += rname

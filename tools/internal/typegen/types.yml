@@ -21,6 +21,8 @@ EntityRecord:
       type: bool
     - name: CustomResolve
       type: bool
+    - name: CustomIsDirty
+      type: bool
     - name: Parameters
       type: Field
       pointer: true
@@ -47,8 +49,6 @@ ChainRecord:
       type: bool
     - name: Name
       type: string
-    - name: CustomCommit
-      type: bool
     - name: Parameters
       type: Field
       pointer: true
@@ -71,8 +71,6 @@ StateRecord:
       type: bool
     - name: Name
       type: string
-    - name: CustomCommit
-      type: bool
     - name: Parameters
       type: Field
       pointer: true
@@ -105,8 +103,6 @@ IndexRecord:
       type: bool
     - name: Name
       type: string
-    - name: CustomCommit
-      type: bool
     - name: Parameters
       type: Field
       pointer: true

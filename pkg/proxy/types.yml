@@ -1,29 +1,62 @@
 
+NetworkState:
+  fields:
+    - name: Network
+      type: config.Network
+      marshal-as: reference
+    - name: Version
+      type: string
+    - name: Commit
+      type: string
+    - name: VersionIsKnown
+      type: bool
+    - name: IsTestNet
+      type: bool
+
 NetworkConfigRequest:
   non-binary: true
   fields:
     - name: Network
       type: string
+    - name: Sign
+      type: bool
+      optional: true
 
 NetworkConfigResponse:
   non-binary: true
   fields:
-    - name: Network
-      type: config.Network
+    - name: NetworkState
+      type: NetworkState
       marshal-as: reference
+    - name: Signature
+      type: protocol.KeySignature
+      marshal-as: union
+      optional: true
 
 PartitionListRequest:
   non-binary: true
   fields:
     - name: Network
       type: string
+    - name: Sign
+      type: bool
+      optional: true
 
-PartitionListResponse:
-  non-binary: true
+PartitionList:
   fields:
     - name: Partitions
       type: string
       repeatable: true
+
+PartitionListResponse:
+  non-binary: true
+  embeddings:
+    - PartitionList
+  fields:
+    - name: Signature
+      type: protocol.KeySignature
+      marshal-as: union
+      optional: true
 
 SeedListRequest:
   non-binary: true
@@ -34,13 +67,30 @@ SeedListRequest:
       type: string
     - name: Count
       type: int
+    - name: Sign
+      type: bool
+      optional: true
 
-SeedListResponse:
-  non-binary: true
+SeedList:
   fields:
+    - name: BasePort
+      type: uvarint
+    - name: Type
+      type: config.NetworkType
+      marshal-as: enum
     - name: Addresses
       type: string
       repeatable: true
+
+SeedListResponse:
+  non-binary: true
+  embeddings:
+    - SeedList
+  fields:
+    - name: Signature
+      type: protocol.KeySignature
+      marshal-as: union
+      optional: true
 
 SeedCountRequest:
   non-binary: true
@@ -49,10 +99,22 @@ SeedCountRequest:
       type: string
     - name: Partition
       type: string
+    - name: Sign
+      type: bool
+      optional: true
 
-SeedCountResponse:
-  non-binary: true
+SeedCount:
   fields:
     - name: Count
       type: int
+
+SeedCountResponse:
+  non-binary: true
+  embeddings:
+    - SeedCount
+  fields:
+    - name: Signature
+      type: protocol.KeySignature
+      marshal-as: union
+      optional: true
 

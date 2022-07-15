@@ -1,5 +1,7 @@
 package simulator
 
+//lint:file-ignore ST1001 Don't care
+
 import (
 	"encoding"
 	"os"
@@ -20,7 +22,7 @@ func InitFromSnapshot(t TB, db *database.Database, exec *Executor, filename stri
 	defer f.Close()
 	batch := db.Begin(true)
 	defer batch.Discard()
-	require.NoError(tb{t}, exec.InitFromSnapshot(batch, f))
+	require.NoError(tb{t}, exec.RestoreSnapshot(batch, f))
 	require.NoError(tb{t}, batch.Commit())
 }
 

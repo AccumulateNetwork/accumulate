@@ -5,11 +5,9 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 )
 
-type TransactionChainEntry = database.TransactionChainEntry
-
 // TransactionChainIndexer indexes account chains against a transaction.
 type TransactionChainIndexer struct {
-	*record.Set[*TransactionChainEntry]
+	*record.Set[*database.TransactionChainEntry]
 }
 
 // TransactionChain returns a transaction chain indexer.
