@@ -2,21 +2,18 @@ package hash_test
 
 import (
 	"fmt"
-	"io/ioutil"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding/hash"
+	"gitlab.com/accumulatenetwork/accumulate/internal/testdata"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gopkg.in/yaml.v3"
 )
 
 func TestMerkleCascade(t *testing.T) {
-	b, err := ioutil.ReadFile("../../../testdata/merkle.yaml")
-	require.NoError(t, err)
-
 	var cases []*acctesting.MerkleTestCase
-	require.NoError(t, yaml.Unmarshal(b, &cases))
+	require.NoError(t, yaml.Unmarshal([]byte(testdata.Merkle), &cases))
 
 	for _, c := range cases {
 		var entries [][]byte

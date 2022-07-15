@@ -142,6 +142,9 @@ TransactionType:
   BurnTokens:
     value: 0x0A
     description: burns tokens from a token account, which produces a synthetic burn tokens transaction
+  CreateLiteTokenAccount:
+    value: 0x0B
+    description: create a lite token account
   CreateKeyPage:
     value: 0x0C
     description: creates a key page, which produces a synthetic chain create transaction
@@ -154,6 +157,9 @@ TransactionType:
   UpdateKeyPage:
     value: 0x0F
     description: adds, removes, or updates keys in a key page, which *does not* produce a synthetic transaction
+  LockAccount:
+    value: 0x10
+    description: sets a major block height that prevents tokens from being transferred out of a lite token account until that height has been reached
   UpdateAccountAuth:
     value: 0x15
     description: updates authorization for an account

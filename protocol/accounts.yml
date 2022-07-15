@@ -39,6 +39,9 @@ LiteTokenAccount:
       pointer: true
     - name: Balance
       type: bigint
+    - name: LockHeight
+      description: is the major block height after which the balance can be transferred out of this account
+      type: uint
 
 LiteDataAccount:
   union: { type: account, value: LiteDataAccount }
