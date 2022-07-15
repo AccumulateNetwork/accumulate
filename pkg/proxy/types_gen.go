@@ -16,7 +16,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// swagger:routels POST /foobar foobar-tag idOfFoobarEndpoint
+// swagger:route POST /foobar foobar-tag idOfFoobarEndpoint
 // Foobar does some amazing stuff.
 // responses:
 //   200: foobarResponse
