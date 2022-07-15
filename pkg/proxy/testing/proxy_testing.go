@@ -1,3 +1,27 @@
+
+// Package classification awesome.
+//
+// Documentation of our awesome API.
+//
+//     Schemes: http
+//     BasePath: /
+//     Version: 1.0.0
+//     Host: some-url.com
+//
+//     Consumes:
+//     - application/json
+//
+//     Produces:
+//     - application/json
+//
+//     Security:
+//     - basic
+//
+//    SecurityDefinitions:
+//    basic:
+//      type: basic
+//
+// swagger:meta
 package testing
 
 import (
@@ -23,6 +47,7 @@ import (
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/proxy"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	_ "github.com/pdrum/swagger-automation/docs" // This line is necessary for go-swagger to find your docs!
 )
 
 var AccuProxyAuthorityKey ed25519.PrivateKey

@@ -10,4 +10,5 @@ import (
 	_ "github.com/rinchsan/gosimports/cmd/gosimports"
 	_ "golang.org/x/tools/cmd/goimports"
 	_ "gotest.tools/gotestsum"
+	_ "github.com/go-swagger/go-swagger/cmd/swagger"
 )
