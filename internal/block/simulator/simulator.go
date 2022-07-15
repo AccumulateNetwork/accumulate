@@ -4,7 +4,9 @@ package simulator
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
 	"sync"
 	"time"
 
@@ -23,6 +25,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
+	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/sortutil"
@@ -36,9 +39,10 @@ import (
 var GenesisTime = time.Date(2022, 7, 1, 0, 0, 0, 0, time.UTC)
 
 type SimulatorOptions struct {
-	BvnCount  int
-	LogLevels string
-	OpenDB    func(partition string, nodeIndex int, logger log.Logger) *database.Database
+	BvnCount        int
+	LogLevels       string
+	OpenDB          func(partition string, nodeIndex int, logger log.Logger) *database.Database
+	FactomAddresses func() (io.Reader, error)
 }
 
 type Simulator struct {
@@ -47,6 +51,7 @@ type Simulator struct {
 	Partitions []config.Partition
 	Executors  map[string]*ExecEntry
 
+	opts             SimulatorOptions
 	netInit          *accumulated.NetworkInit
 	router           routing.Router
 	routingOverrides map[[32]byte]string
@@ -84,6 +89,7 @@ func NewWith(t TB, opts SimulatorOptions) *Simulator {
 
 func (sim *Simulator) Setup(opts SimulatorOptions) {
 	sim.Helper()
+	sim.opts = opts
 
 	if opts.BvnCount == 0 {
 		opts.BvnCount = 3
@@ -307,14 +313,16 @@ func (s *Simulator) InitFromGenesisWith(values *core.GlobalValues) {
 	if values == nil {
 		values = new(core.GlobalValues)
 	}
-	genDocs, err := accumulated.BuildGenesisDocs(s.netInit, values, GenesisTime, s.Logger, "")
+	genDocs, err := accumulated.BuildGenesisDocs(s.netInit, values, GenesisTime, s.Logger, s.opts.FactomAddresses)
 	require.NoError(s, err)
 
 	// Execute bootstrap after the entire network is known
 	for _, x := range s.Executors {
 		batch := x.Database.Begin(true)
 		defer batch.Discard()
-		require.NoError(tb{s}, x.Executor.InitFromGenesis(batch, genDocs[x.Partition.Id].AppState))
+		var snapshot []byte
+		require.NoError(s, json.Unmarshal(genDocs[x.Partition.Id].AppState, &snapshot))
+		require.NoError(tb{s}, x.Executor.RestoreSnapshot(batch, ioutil2.NewBuffer(snapshot)))
 		require.NoError(tb{s}, batch.Commit())
 	}
 }
