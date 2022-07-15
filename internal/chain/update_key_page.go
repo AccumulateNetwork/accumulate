@@ -136,6 +136,9 @@ func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, op protocol.KeyPag
 		if op.Entry.IsEmpty() {
 			return fmt.Errorf("cannot add an empty entry")
 		}
+		if op.Entry.Delegate.ParentOf(page.Url) {
+			return fmt.Errorf("self-delegation is not allowed")
+		}
 
 		_, _, found := findKeyPageEntry(page, &op.Entry)
 		if found {
@@ -172,6 +175,9 @@ func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, op protocol.KeyPag
 	case *protocol.UpdateKeyOperation:
 		if op.NewEntry.IsEmpty() {
 			return fmt.Errorf("cannot add an empty entry")
+		}
+		if op.NewEntry.Delegate.ParentOf(page.Url) {
+			return fmt.Errorf("self-delegation is not allowed")
 		}
 
 		// Find the old entry
