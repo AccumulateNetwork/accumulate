@@ -112,7 +112,7 @@ var keyCmd = &cobra.Command{
 }
 
 var keyUpdateCmd = &cobra.Command{
-	Use:   "update [key page url] [original key name] [key index (optional)] [key height (optional)] [new key name]",
+	Use:   "update [key page url] [key name[@key book or page]] [new key name]",
 	Short: "Self-update a key",
 	Args:  cobra.RangeArgs(3, 5),
 	Run:   runCmdFunc(UpdateKey),
@@ -559,7 +559,7 @@ func ExportKey(label string) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("no private key found for key name %s", label)
 		}
-		k, err = LookupByPubKey(k.PublicKey)
+		_, err = LookupByPubKey(k.PublicKey)
 		if err != nil {
 			return "", fmt.Errorf("no private key found for key name %s", label)
 		}

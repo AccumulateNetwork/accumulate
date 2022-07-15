@@ -37,7 +37,7 @@ const nLen = 32 + 32 + 8    //                               Each node is a key 
 //
 func (b *BPT) SaveSnapshot(file io.WriteSeeker, loadState func(key storage.Key, hash [32]byte) ([]byte, error)) error {
 	if b.Manager == nil { //                                  Snapshot cannot be taken if we have no db
-		return fmt.Errorf("No manager found for BPT") //      return error
+		return fmt.Errorf("no manager found for BPT") //      return error
 	}
 
 	_, e1 := file.Write([]byte{0, 0, 0, 0, 0, 0, 0, 0}) //                    Safe Space to write number of nodes
@@ -125,7 +125,7 @@ func (b *BPT) SaveSnapshot(file io.WriteSeeker, loadState func(key storage.Key, 
 //
 func (b *BPT) LoadSnapshot(file ioutil2.SectionReader, storeState func(key storage.Key, hash [32]byte, reader ioutil2.SectionReader) error) error {
 	if b.MaxHeight != 0 {
-		return errors.New("A snapshot can only be read into a new BPT")
+		return errors.New("a snapshot can only be read into a new BPT")
 	}
 
 	buff := make([]byte, window*(nLen))    //			          buff is a window's worth of key/hash/offset

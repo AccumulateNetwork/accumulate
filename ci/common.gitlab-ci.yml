@@ -14,7 +14,9 @@ variables:
   VALIDATION_IMAGE: ${CI_REGISTRY_IMAGE}/validation:${CI_COMMIT_REF_SLUG}
 
 .go:
-  image: golang:1.18.2
+  # https://github.com/golang/go/issues/53762
+  # https://github.com/golang/go/issues/53254
+  image: golang:1.18.3
   cache:
     key: go-mod-cache
     paths:

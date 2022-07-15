@@ -1,5 +1,7 @@
 package main
 
+//lint:file-ignore ST1001 Don't care
+
 import (
 	"bytes"
 	"context"

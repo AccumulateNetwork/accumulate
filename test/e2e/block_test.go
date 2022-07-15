@@ -16,7 +16,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -55,7 +54,7 @@ func TestSendTokensToBadRecipient(t *testing.T) {
 	require.NoError(t, batch.Commit())
 
 	exch := new(SendTokens)
-	exch.AddRecipient(protocol.AccountUrl("foo"), big.NewInt(int64(1000)))
+	exch.AddRecipient(AccountUrl("foo"), big.NewInt(int64(1000)))
 	env := acctesting.NewTransaction().
 		WithPrincipal(aliceUrl).
 		WithTimestampVar(&timestamp).
@@ -76,7 +75,7 @@ func TestSendTokensToBadRecipient(t *testing.T) {
 	// The synthetic transaction should fail
 	synth, err := batch.Transaction(env.Transaction[0].GetHash()).GetSyntheticTxns()
 	require.NoError(t, err)
-	batch = sim.PartitionFor(protocol.AccountUrl("foo")).Database.Begin(false)
+	batch = sim.PartitionFor(AccountUrl("foo")).Database.Begin(false)
 	defer batch.Discard()
 	h := synth.Entries[0].Hash()
 	status, err := batch.Transaction(h[:]).GetStatus()
@@ -108,7 +107,7 @@ func TestSendTokensToBadRecipient2(t *testing.T) {
 	})
 
 	exch := new(SendTokens)
-	exch.AddRecipient(protocol.AccountUrl("foo"), big.NewInt(int64(1000)))
+	exch.AddRecipient(AccountUrl("foo"), big.NewInt(int64(1000)))
 	exch.AddRecipient(bobUrl, big.NewInt(int64(1000)))
 	env := acctesting.NewTransaction().
 		WithPrincipal(aliceUrl).
@@ -145,7 +144,7 @@ func TestCreateRootIdentity(t *testing.T) {
 	require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, tmed25519.PrivKey(lite), AcmeFaucetAmount, 1e9))
 	require.NoError(t, batch.Commit())
 
-	alice := protocol.AccountUrl("alice")
+	alice := AccountUrl("alice")
 	aliceKey := acctesting.GenerateKey(t.Name(), alice)
 	keyHash := sha256.Sum256(aliceKey[32:])
 
@@ -178,7 +177,7 @@ func TestWriteToLiteDataAccount(t *testing.T) {
 	// Setup
 	alice := acctesting.GenerateKey(t.Name())
 	aliceUrl := acctesting.AcmeLiteAddressTmPriv(tmed25519.PrivKey(alice))
-	aliceAdi := protocol.AccountUrl("alice")
+	aliceAdi := AccountUrl("alice")
 
 	firstEntry := AccumulateDataEntry{}
 	firstEntry.Data = append(firstEntry.Data, []byte{})
@@ -294,7 +293,7 @@ func TestCreateSubIdentityWithLite(t *testing.T) {
 
 	liteKey := acctesting.GenerateKey(t.Name(), "Lite")
 	liteUrl := acctesting.AcmeLiteAddressStdPriv(liteKey)
-	alice := protocol.AccountUrl("alice")
+	alice := AccountUrl("alice")
 	aliceKey := acctesting.GenerateKey(t.Name(), "Alice")
 	keyHash := sha256.Sum256(aliceKey[32:])
 	sim.CreateIdentity(alice, aliceKey[32:])
@@ -329,7 +328,7 @@ func TestCreateIdentityWithRemoteLite(t *testing.T) {
 
 	liteKey := acctesting.GenerateKey(t.Name(), "Lite")
 	liteUrl := acctesting.AcmeLiteAddressStdPriv(liteKey)
-	alice := protocol.AccountUrl("alice")
+	alice := AccountUrl("alice")
 	aliceKey := acctesting.GenerateKey(t.Name(), "Alice")
 	keyHash := sha256.Sum256(aliceKey[32:])
 	sim.CreateAccount(&LiteIdentity{Url: liteUrl.RootIdentity(), CreditBalance: 1e9})
@@ -409,7 +408,7 @@ func TestSubAdi(t *testing.T) {
 
 	lite := acctesting.GenerateKey(t.Name(), "Lite")
 	liteUrl := acctesting.AcmeLiteAddressStdPriv(lite)
-	alice := protocol.AccountUrl("alice")
+	alice := AccountUrl("alice")
 	aliceKey := acctesting.GenerateKey(t.Name(), alice)
 	sim.CreateAccount(&LiteIdentity{Url: liteUrl.RootIdentity(), CreditBalance: 1e9})
 	sim.CreateAccount(&LiteTokenAccount{Url: liteUrl, TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e9)})

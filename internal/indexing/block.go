@@ -1,51 +1,26 @@
 package indexing
 
 import (
-	"errors"
-
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 // BlockChainUpdatesIndexer indexes chain updates for each block.
 type BlockChainUpdatesIndexer struct {
-	value database.Value[*BlockChainUpdatesIndex]
+	*record.List[*database.ChainUpdate]
 }
 
 // BlockChainUpdates returns a block updates indexer.
 func BlockChainUpdates(batch *database.Batch, network *config.Describe, blockIndex uint64) *BlockChainUpdatesIndexer {
-	v := database.AccountIndex(batch, network.NodeUrl(), true, record.Struct[BlockChainUpdatesIndex](), "Block", "Minor", blockIndex)
-	return &BlockChainUpdatesIndexer{v}
+	return &BlockChainUpdatesIndexer{batch.BlockChainUpdates(network.NodeUrl(), blockIndex)}
 }
 
-// Get loads and unmarshals the index. Get returns an empty index if it has not
-// been defined.
-func (bu *BlockChainUpdatesIndexer) Get() (*BlockChainUpdatesIndex, error) {
-	v, err := bu.value.Get()
-	switch {
-	case err == nil:
-		return v, nil
-	case errors.Is(err, storage.ErrNotFound):
-		return new(BlockChainUpdatesIndex), nil
-	default:
-		return nil, err
+func (x *BlockChainUpdatesIndexer) Set(entries []database.ChainUpdate) error {
+	var ptrs []*database.ChainUpdate
+	for _, v := range entries {
+		v := v // See docs/developer/rangevarref.md
+		ptrs = append(ptrs, &v)
 	}
-}
-
-// Set adds the updates array to the index.
-func (bu *BlockChainUpdatesIndexer) Set(updates []ChainUpdate) error {
-	v, err := bu.Get()
-	if err != nil {
-		return err
-	}
-
-	v.Entries = make([]*ChainUpdate, len(updates))
-	for i, update := range updates {
-		update := update // See docs/developer/rangevarref.md
-		v.Entries[i] = &update
-	}
-
-	return bu.value.Put(v)
+	return x.Put(ptrs)
 }

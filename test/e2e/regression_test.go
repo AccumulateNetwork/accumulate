@@ -15,7 +15,12 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
-func TestIssueAC1555(t *testing.T) {
+func TestOverwriteCreditBalance(t *testing.T) {
+	const x = 0.05
+	const y = 10000
+	big.NewInt(x * y)
+
+	// Tests AC-1555
 	var timestamp uint64
 
 	// Initialize
@@ -34,12 +39,12 @@ func TestIssueAC1555(t *testing.T) {
 
 	// Add credits
 	const additionalBalance = 99
-	const oracle = InitialAcmeOracle * AcmeOraclePrecision //nolint
+	const oracle = InitialAcmeOracleValue
 	acme := big.NewInt(AcmePrecision)
 	acme.Mul(acme, big.NewInt(additionalBalance))
 	acme.Div(acme, big.NewInt(CreditsPerDollar))
 	acme.Mul(acme, big.NewInt(AcmeOraclePrecision))
-	acme.Div(acme, big.NewInt(oracle)) //nolint
+	acme.Div(acme, big.NewInt(oracle))
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
 		acctesting.NewTransaction().
 			WithPrincipal(liteUrl).
@@ -112,12 +117,12 @@ func TestAddCreditsToLiteIdentityOnOtherBVN(t *testing.T) {
 
 	// Add credits
 	const creditAmount = 99
-	const oracle = InitialAcmeOracle * AcmeOraclePrecision //nolint
+	const oracle = InitialAcmeOracleValue
 	acme := big.NewInt(AcmePrecision)
 	acme.Mul(acme, big.NewInt(creditAmount))
 	acme.Div(acme, big.NewInt(CreditsPerDollar))
 	acme.Mul(acme, big.NewInt(AcmeOraclePrecision))
-	acme.Div(acme, big.NewInt(oracle)) //nolint
+	acme.Div(acme, big.NewInt(oracle))
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
 		acctesting.NewTransaction().
 			WithPrincipal(sender).
@@ -250,4 +255,37 @@ func TestSigningDeliveredTxnDoesNothing(t *testing.T) {
 	// Verify no double-spend
 	require.Equal(t, 1, int(simulator.GetAccount[*LiteTokenAccount](sim, alice).Balance.Int64()))
 	require.Equal(t, 1, int(simulator.GetAccount[*LiteTokenAccount](sim, bob).Balance.Int64()))
+}
+
+func TestSynthTxnToDn(t *testing.T) {
+	// Tests AC-2231
+	var timestamp uint64
+
+	// Initialize
+	sim := simulator.New(t, 3)
+	sim.InitFromGenesis()
+
+	// Setup accounts
+	alice := AccountUrl("alice")
+	aliceKey, liteKey := acctesting.GenerateKey(alice), acctesting.GenerateKey("lite")
+	liteUrl := acctesting.AcmeLiteAddressStdPriv(liteKey)
+	sim.CreateAccount(&LiteIdentity{Url: liteUrl.RootIdentity(), CreditBalance: 1e9})
+	sim.CreateAccount(&LiteTokenAccount{Url: liteUrl, TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e9 * AcmePrecision)})
+	sim.SetRouteFor(alice, "Directory")
+	sim.CreateIdentity(alice, aliceKey[32:])
+	sim.CreateAccount(&TokenAccount{Url: alice.JoinPath("tokens"), TokenUrl: AcmeUrl()})
+
+	// Send some tokens
+	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
+		acctesting.NewTransaction().
+			WithPrincipal(liteUrl).
+			WithSigner(liteUrl, 1).
+			WithTimestampVar(&timestamp).
+			WithBody(&SendTokens{To: []*TokenRecipient{{
+				Url:    alice,
+				Amount: *big.NewInt(1),
+			}}}).
+			Initiate(SignatureTypeED25519, liteKey).
+			Build(),
+	)...)
 }

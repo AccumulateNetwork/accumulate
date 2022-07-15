@@ -11,6 +11,7 @@ import (
 
 // retain this for debugging purposes
 //nolint:unused,deadcode
+//lint:ignore U1000 Don't care
 func printNode(wr io.Writer, fset *token.FileSet, node ast.Node) {
 	var buf bytes.Buffer
 	printer.Fprint(&buf, fset, node)
