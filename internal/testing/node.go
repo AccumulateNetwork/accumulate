@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/internal/testdata"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"golang.org/x/sync/errgroup"
 )
@@ -100,11 +102,11 @@ func CreateTestNet(t testing.TB, numBvns, numValidators, numFollowers int, withF
 		initLogger = logging.NewTestLogger(t, "plain", DefaultLogLevels, false)
 	}
 
-	var factomAddressFilePath string
+	var factomAddresses func() (io.Reader, error)
 	if withFactomAddress {
-		factomAddressFilePath = "test_factom_addresses"
+		factomAddresses = func() (io.Reader, error) { return strings.NewReader(testdata.FactomAddresses), nil }
 	}
-	genDocs, err := accumulated.BuildGenesisDocs(netInit, new(core.GlobalValues), time.Now(), initLogger, factomAddressFilePath)
+	genDocs, err := accumulated.BuildGenesisDocs(netInit, new(core.GlobalValues), time.Now(), initLogger, factomAddresses)
 	require.NoError(t, err)
 
 	configs := accumulated.BuildNodesConfig(netInit, DefaultConfig)
