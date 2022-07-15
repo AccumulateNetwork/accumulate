@@ -97,7 +97,7 @@ func watchDog(prog *Program, svc service.Service, duration time.Duration) {
 	_ = prog.Stop(svc)
 
 	//the following will stop the Run()
-	_ = syscall.Kill(syscall.Getpid(), syscall.SIGINT)
+	interrupt(syscall.Getpid())
 }
 
 type logAnnotator func(io.Writer, string, bool) io.Writer
