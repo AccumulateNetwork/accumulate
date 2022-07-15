@@ -111,7 +111,10 @@ func (UpdateAccountAuth) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 			}
 			// TODO Require a proof of the existence of the remote authority
 
-			auth.AddAuthority(op.Authority)
+			_, new := auth.AddAuthority(op.Authority)
+			if !new {
+				return nil, fmt.Errorf("duplicate authority %v", op.Authority)
+			}
 
 		case *protocol.RemoveAccountAuthorityOperation:
 			if !auth.RemoveAuthority(op.Authority) {
