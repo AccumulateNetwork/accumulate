@@ -2,19 +2,16 @@ package managed
 
 import (
 	"fmt"
-	"io/ioutil"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/testdata"
 	"gopkg.in/yaml.v3"
 )
 
 func TestDAGRoot(t *testing.T) {
-	b, err := ioutil.ReadFile("../../testdata/merkle.yaml")
-	require.NoError(t, err)
-
 	var cases []*MerkleTestCase
-	require.NoError(t, yaml.Unmarshal(b, &cases))
+	require.NoError(t, yaml.Unmarshal([]byte(testdata.Merkle), &cases))
 
 	for _, c := range cases {
 		var result SparseHashList
