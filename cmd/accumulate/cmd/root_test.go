@@ -148,6 +148,7 @@ func (c *testCmd) execute(t *testing.T, cmdLine string) (string, error) {
 	TxWaitSynth = 0
 	TxIgnorePending = false
 	UseUnencryptedWallet = true
+	flagAccount.Lite = false
 
 	fullCommand := fmt.Sprintf("-j -s %s/v2 %s",
 		c.jsonRpcAddr, cmdLine)
