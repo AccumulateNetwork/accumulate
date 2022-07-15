@@ -322,6 +322,8 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(CreateKeyBook), nil
 	case TransactionTypeCreateKeyPage:
 		return new(CreateKeyPage), nil
+	case TransactionTypeCreateLiteTokenAccount:
+		return new(CreateLiteTokenAccount), nil
 	case TransactionTypeCreateToken:
 		return new(CreateToken), nil
 	case TransactionTypeCreateTokenAccount:
@@ -330,6 +332,8 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(DirectoryAnchor), nil
 	case TransactionTypeIssueTokens:
 		return new(IssueTokens), nil
+	case TransactionTypeLockAccount:
+		return new(LockAccount), nil
 	case TransactionTypeRemote:
 		return new(RemoteTransaction), nil
 	case TransactionTypeSendTokens:
@@ -395,6 +399,9 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 	case *CreateKeyPage:
 		b, ok := b.(*CreateKeyPage)
 		return ok && a.Equal(b)
+	case *CreateLiteTokenAccount:
+		b, ok := b.(*CreateLiteTokenAccount)
+		return ok && a.Equal(b)
 	case *CreateToken:
 		b, ok := b.(*CreateToken)
 		return ok && a.Equal(b)
@@ -406,6 +413,9 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 		return ok && a.Equal(b)
 	case *IssueTokens:
 		b, ok := b.(*IssueTokens)
+		return ok && a.Equal(b)
+	case *LockAccount:
+		b, ok := b.(*LockAccount)
 		return ok && a.Equal(b)
 	case *RemoteTransaction:
 		b, ok := b.(*RemoteTransaction)

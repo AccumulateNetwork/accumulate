@@ -159,6 +159,10 @@ BurnTokens:
     - name: Amount
       type: bigint
 
+CreateLiteTokenAccount:
+  union: { type: transaction }
+  fields:
+
 CreateKeyPage:
   union: { type: transaction }
   fields:
@@ -205,6 +209,13 @@ UpdateKeyPage:
       type: KeyPageOperation
       marshal-as: union
       repeatable: true
+
+LockAccount:
+  union: { type: transaction }
+  fields:
+    - name: Height
+      description: is the major block height when the account will be released
+      type: uint
 
 UpdateAccountAuth:
   union: { type: transaction }
