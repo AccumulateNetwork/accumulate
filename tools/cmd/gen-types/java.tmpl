@@ -46,14 +46,14 @@ public class {{.Name}} {
         {{-       if .Type.IsKnown}}
             marshaller.write{{.Type.Title}}({{.Number}}, this.{{lcName .Name}});
         {{-       else }}
-            marshaller.writeValue({{.Number}}, v.{{lcName .Name}});
+            marshaller.writeValue({{.Number}}, {{lcName .Name}});
         {{-       end}}
         }
         {{-     else }}
         {{-       if .Type.IsKnown}}
         marshaller.write{{.Type.Title}}({{.Number}}, this.{{lcName .Name}});
         {{-       else }}
-        marshaller.writeValue({{.Number}}, v.{{lcName .Name}});
+        marshaller.writeValue({{.Number}}, {{lcName .Name}});
         {{-       end}}
         {{-     end}}
         {{-   end}}

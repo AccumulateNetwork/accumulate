@@ -244,6 +244,5 @@ var Templates = typegen.NewTemplateLibrary(template.FuncMap{
 	"title":               typegen.TitleCase,
 	"map":                 typegen.MakeMap,
 	"natural":             typegen.Natural,
-	"afterDot":            typegen.AfterDot,
 	"debug":               fmt.Printf,
 })

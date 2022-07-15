@@ -37,11 +37,6 @@ func UnderscoreUpperCase(s string) string {
 	return strings.ToUpper(s) // FIXME shortcut
 }
 
-func AfterDot(s string) string {
-	split := strings.SplitAfter(s, ".")
-	return split[len(split)-1]
-}
-
 func TitleCase(s string) string {
 	return enUsTitle.String(s[:1]) + s[1:]
 }

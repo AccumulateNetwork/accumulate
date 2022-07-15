@@ -6,16 +6,24 @@ public enum {{.Name}} {
     {{- end}};
 
     private final int value;
-    private final String name;
+    private final String apiName;
 
-    {{.Name}}(int value, String name) {
+    {{.Name}}(int value, String apiName) {
         this.value = value;
-        this.name = name;
+        this.apiName = apiName;
     }
 
-    public int getValue() { return this.value; }
-    public String getName() { return this.name; }
-    public String toString() { return this.name; }
+    public int getValue() {
+        return this.value;
+    }
+
+    public String getApiName() {
+        return this.apiName;
+    }
+
+    public String toString() {
+        return this.apiName;
+    }
 
     public static {{.Name}} byValue(int value) {
         for (final var type : values()) {
