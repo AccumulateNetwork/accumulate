@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/ed25519"
@@ -9,12 +10,16 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"os"
+	"strconv"
+	"strings"
 
 	"github.com/mdp/qrterminal"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/db"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
@@ -27,7 +32,9 @@ func init() {
 		accountQrCmd,
 		accountGenerateCmd,
 		accountListCmd,
-		accountRestoreCmd)
+		accountRestoreCmd,
+		accountLockCmd,
+	)
 
 	accountCreateCmd.AddCommand(
 		accountCreateTokenCmd,
@@ -36,15 +43,17 @@ func init() {
 	accountCreateDataCmd.AddCommand(
 		accountCreateDataLiteCmd)
 
+	accountCreateTokenCmd.Flags().BoolVar(&flagAccount.Lite, "lite", false, "Create a lite token account")
 	accountCreateDataCmd.Flags().BoolVar(&flagAccount.Lite, "lite", false, "Create a lite data account")
 	accountGenerateCmd.Flags().StringVar(&SigType, "sigtype", "ed25519", "Specify the signature type use rcd1 for RCD1 type ; ed25519 for ED25519 ; legacyed25519 for LegacyED25519 ; btc for Bitcoin ; btclegacy for LegacyBitcoin  ; eth for Ethereum ")
 	accountCreateDataCmd.Flags().StringVar(&flagAccount.LiteData, "lite-data", "", "Add first entry data to lite data account")
-
+	accountLockCmd.Flags().BoolVarP(&flagAccount.Force, "force", "f", false, "Do not prompt the user")
 }
 
 var flagAccount = struct {
 	Lite     bool
 	LiteData string
+	Force    bool
 }{}
 
 var accountCmd = &cobra.Command{
@@ -69,19 +78,16 @@ var accountCreateCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Printf("Deprecation Warning!\nTo create a token account, in future please specify either \"token\" or \"data\"\n\n")
 		//this will be removed in future release and replaced with usage: PrintAccountCreate()
-		out, err := CreateAccount(cmd, args[0], args[1:])
-		printOutput(cmd, out, err)
+		runTxnCmdFunc(CreateTokenAccount)(cmd, args)
 	},
 }
 
 var accountCreateTokenCmd = &cobra.Command{
-	Use:   "token [actor adi] [key name[@key book or page]] [new token account url] [tokenUrl] --authority keyBook (optional)",
+	Use: "token [actor adi] [key name[@key book or page]]  [new token account url] [tokenUrl]",
+	// Or token --lite [lite token account url] --sign-with [key name[@key book or page]]
 	Short: "Create an ADI token account",
-	Args:  cobra.MinimumNArgs(4),
-	Run: func(cmd *cobra.Command, args []string) {
-		out, err := CreateAccount(cmd, args[0], args[1:])
-		printOutput(cmd, out, err)
-	},
+	Args:  cobra.RangeArgs(1, 6),
+	Run:   runTxnCmdFunc(CreateTokenAccount),
 }
 
 var accountCreateDataCmd = &cobra.Command{
@@ -163,6 +169,13 @@ var accountRestoreCmd = &cobra.Command{
 	},
 }
 
+var accountLockCmd = &cobra.Command{
+	Use:   "lock [account url] [signing key name] [height]",
+	Short: "Lock the account until the given block height",
+	Args:  cobra.ExactArgs(2),
+	Run:   runTxnCmdFunc(lockAccount),
+}
+
 func GetTokenAccount(url string) (string, error) {
 	res, err := GetUrl(url)
 	if err != nil {
@@ -200,29 +213,22 @@ func QrAccount(s string) (string, error) {
 	return string(r), err
 }
 
-//CreateAccount account create url labelOrPubKeyHex height index tokenUrl keyBookUrl
-func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, error) {
-	u, err := url2.Parse(origin)
-	if err != nil {
-		_ = cmd.Usage()
-		return "", err
+//CreateTokenAccount account create url labelOrPubKeyHex height index tokenUrl keyBookUrl
+func CreateTokenAccount(principal *url2.URL, signers []*signing.Builder, args []string) (string, error) {
+	if flagAccount.Lite {
+		return CreateLiteTokenAccount(principal, signers, args)
 	}
 
-	args, signer, err := prepareSigner(u, args)
-	if err != nil {
-		return "", err
-	}
 	if len(args) < 2 {
-		return "", fmt.Errorf("not enough arguments")
+		return "", fmt.Errorf("wrong number of arguments")
 	}
 
 	accountUrl, err := url2.Parse(args[0])
 	if err != nil {
-		_ = cmd.Usage()
 		return "", fmt.Errorf("invalid account url %s", args[0])
 	}
-	if u.Authority != accountUrl.Authority {
-		return "", fmt.Errorf("account url to create (%s) doesn't match the authority adi (%s)", accountUrl.Authority, u.Authority)
+	if principal.Authority != accountUrl.Authority {
+		return "", fmt.Errorf("account url to create (%s) doesn't match the authority adi (%s)", accountUrl.Authority, principal.Authority)
 	}
 	tok, err := url2.Parse(args[1])
 	if err != nil {
@@ -257,7 +263,38 @@ func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, er
 		tac.Authorities = append(tac.Authorities, authUrl)
 	}
 
-	return dispatchTxAndPrintResponse(&tac, u, signer)
+	return dispatchTxAndPrintResponse(&tac, principal, signers)
+}
+
+// CreateLiteTokenAccount usage is:
+// accumulate account create token --lite ${LTA} --sign-with ${KEY}@${SIGNER}
+func CreateLiteTokenAccount(principal *url2.URL, signers []*signing.Builder, args []string) (string, error) {
+	if len(args) != 0 {
+		return "", fmt.Errorf("wrong number of arguments")
+	}
+
+	if len(signers) == 0 || !signers[0].Url.Equal(principal.RootIdentity()) {
+		log.Fatal("Internal error: expected first signer to be the lite identity")
+	}
+	signers = signers[1:]
+	if len(signers) == 0 {
+		return "", fmt.Errorf("an additional signer must be specified by --sign-with")
+	}
+	signers[0].SetTimestamp(nonceFromTimeNow())
+
+	key, tok, err := protocol.ParseLiteTokenAddress(principal)
+	if err != nil {
+		return "", fmt.Errorf("invalid lite token address: %w", err)
+	} else if key == nil {
+		return "", fmt.Errorf("not a lite token address: %v", principal)
+	}
+
+	if !protocol.AcmeUrl().Equal(tok) {
+		return "", fmt.Errorf("create lite token account does not support creating non-ACME accounts")
+	}
+
+	body := new(protocol.CreateLiteTokenAccount)
+	return dispatchTxAndPrintResponse(body, principal, signers)
 }
 
 func proveTokenIssuerExistence(body *protocol.CreateTokenAccount) error {
@@ -561,4 +598,62 @@ func RestoreAccounts() (out string, err error) {
 	}
 
 	return out, nil
+}
+
+func lockAccount(principal *url2.URL, signers []*signing.Builder, args []string) (string, error) {
+	var err error
+	body := new(protocol.LockAccount)
+	body.Height, err = strconv.ParseUint(args[0], 10, 64)
+	if err != nil {
+		return "", fmt.Errorf("invalid height argument: %v", err)
+	}
+
+	if flagAccount.Force {
+		return dispatchTxAndPrintResponse(body, principal, signers)
+	}
+
+	req := new(api.MajorBlocksQuery)
+	req.Url = protocol.DnUrl()
+	req.Start = 0
+	req.Count = 0
+	res, err := Client.QueryMajorBlocks(context.Background(), req)
+	if err != nil {
+		return PrintJsonRpcError(err)
+	}
+
+	var latest *api.MajorQueryResponse
+	if res.Total == 0 {
+		latest = new(api.MajorQueryResponse)
+	} else {
+		req.Start = res.Total
+		req.Count = 1
+		res, err = Client.QueryMajorBlocks(context.Background(), req)
+		if err != nil {
+			return PrintJsonRpcError(err)
+		}
+		if len(res.Items) == 0 {
+			return "", fmt.Errorf("failed to query latest major block: empty response")
+		}
+		err = Remarshal(res.Items[0], latest)
+		if err != nil {
+			return "", fmt.Errorf("failed to parse query response: %w", err)
+		}
+
+		if body.Height <= latest.MajorBlockIndex {
+			return "", fmt.Errorf("specified height (%d) is before or the same as the current major block height (%d)", body.Height, latest.MajorBlockIndex)
+		}
+	}
+
+	days := float64(body.Height-latest.MajorBlockIndex) / 2
+	fmt.Printf("This will lock your account for %.1f days. Are you sure [yN]? ", days)
+	answer, err := bufio.NewReader(os.Stdin).ReadString('\n')
+	if err != nil {
+		return "", nil
+	}
+	answer = strings.ToLower(strings.TrimSpace(answer))
+	if answer != "y" && answer != "yes" {
+		return "", nil
+	}
+
+	return dispatchTxAndPrintResponse(body, principal, signers)
 }

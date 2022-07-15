@@ -199,6 +199,11 @@ type CreateKeyPage struct {
 	extraData []byte
 }
 
+type CreateLiteTokenAccount struct {
+	fieldsSet []bool
+	extraData []byte
+}
+
 type CreateToken struct {
 	fieldsSet   []bool
 	Url         *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
@@ -415,6 +420,15 @@ type LiteTokenAccount struct {
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	TokenUrl  *url.URL `json:"tokenUrl,omitempty" form:"tokenUrl" query:"tokenUrl" validate:"required"`
 	Balance   big.Int  `json:"balance,omitempty" form:"balance" query:"balance" validate:"required"`
+	// LockHeight is the major block height after which the balance can be transferred out of this account.
+	LockHeight uint64 `json:"lockHeight,omitempty" form:"lockHeight" query:"lockHeight" validate:"required"`
+	extraData  []byte
+}
+
+type LockAccount struct {
+	fieldsSet []bool
+	// Height is the major block height when the account will be released.
+	Height    uint64 `json:"height,omitempty" form:"height" query:"height" validate:"required"`
 	extraData []byte
 }
 
@@ -906,6 +920,8 @@ func (*CreateKeyBook) Type() TransactionType { return TransactionTypeCreateKeyBo
 
 func (*CreateKeyPage) Type() TransactionType { return TransactionTypeCreateKeyPage }
 
+func (*CreateLiteTokenAccount) Type() TransactionType { return TransactionTypeCreateLiteTokenAccount }
+
 func (*CreateToken) Type() TransactionType { return TransactionTypeCreateToken }
 
 func (*CreateTokenAccount) Type() TransactionType { return TransactionTypeCreateTokenAccount }
@@ -947,6 +963,8 @@ func (*LiteDataAccount) Type() AccountType { return AccountTypeLiteDataAccount }
 func (*LiteIdentity) Type() AccountType { return AccountTypeLiteIdentity }
 
 func (*LiteTokenAccount) Type() AccountType { return AccountTypeLiteTokenAccount }
+
+func (*LockAccount) Type() TransactionType { return TransactionTypeLockAccount }
 
 func (*PartitionSignature) Type() SignatureType { return SignatureTypePartition }
 
@@ -1333,6 +1351,14 @@ func (v *CreateKeyPage) Copy() *CreateKeyPage {
 
 func (v *CreateKeyPage) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *CreateLiteTokenAccount) Copy() *CreateLiteTokenAccount {
+	u := new(CreateLiteTokenAccount)
+
+	return u
+}
+
+func (v *CreateLiteTokenAccount) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *CreateToken) Copy() *CreateToken {
 	u := new(CreateToken)
 
@@ -1710,11 +1736,22 @@ func (v *LiteTokenAccount) Copy() *LiteTokenAccount {
 		u.TokenUrl = (v.TokenUrl).Copy()
 	}
 	u.Balance = *encoding.BigintCopy(&v.Balance)
+	u.LockHeight = v.LockHeight
 
 	return u
 }
 
 func (v *LiteTokenAccount) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *LockAccount) Copy() *LockAccount {
+	u := new(LockAccount)
+
+	u.Height = v.Height
+
+	return u
+}
+
+func (v *LockAccount) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *MetricsRequest) Copy() *MetricsRequest {
 	u := new(MetricsRequest)
@@ -2885,6 +2922,11 @@ func (v *CreateKeyPage) Equal(u *CreateKeyPage) bool {
 	return true
 }
 
+func (v *CreateLiteTokenAccount) Equal(u *CreateLiteTokenAccount) bool {
+
+	return true
+}
+
 func (v *CreateToken) Equal(u *CreateToken) bool {
 	switch {
 	case v.Url == u.Url:
@@ -3411,6 +3453,17 @@ func (v *LiteTokenAccount) Equal(u *LiteTokenAccount) bool {
 		return false
 	}
 	if !((&v.Balance).Cmp(&u.Balance) == 0) {
+		return false
+	}
+	if !(v.LockHeight == u.LockHeight) {
+		return false
+	}
+
+	return true
+}
+
+func (v *LockAccount) Equal(u *LockAccount) bool {
+	if !(v.Height == u.Height) {
 		return false
 	}
 
@@ -5599,6 +5652,41 @@ func (v *CreateKeyPage) IsValid() error {
 	}
 }
 
+var fieldNames_CreateLiteTokenAccount = []string{
+	1: "Type",
+}
+
+func (v *CreateLiteTokenAccount) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+
+	_, _, err := writer.Reset(fieldNames_CreateLiteTokenAccount)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *CreateLiteTokenAccount) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_CreateToken = []string{
 	1: "Type",
 	2: "Url",
@@ -6935,6 +7023,7 @@ var fieldNames_LiteTokenAccount = []string{
 	2: "Url",
 	3: "TokenUrl",
 	4: "Balance",
+	5: "LockHeight",
 }
 
 func (v *LiteTokenAccount) MarshalBinary() ([]byte, error) {
@@ -6950,6 +7039,9 @@ func (v *LiteTokenAccount) MarshalBinary() ([]byte, error) {
 	}
 	if !((v.Balance).Cmp(new(big.Int)) == 0) {
 		writer.WriteBigInt(4, &v.Balance)
+	}
+	if !(v.LockHeight == 0) {
+		writer.WriteUint(5, v.LockHeight)
 	}
 
 	_, _, err := writer.Reset(fieldNames_LiteTokenAccount)
@@ -6980,6 +7072,55 @@ func (v *LiteTokenAccount) IsValid() error {
 		errs = append(errs, "field Balance is missing")
 	} else if (v.Balance).Cmp(new(big.Int)) == 0 {
 		errs = append(errs, "field Balance is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field LockHeight is missing")
+	} else if v.LockHeight == 0 {
+		errs = append(errs, "field LockHeight is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_LockAccount = []string{
+	1: "Type",
+	2: "Height",
+}
+
+func (v *LockAccount) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Height == 0) {
+		writer.WriteUint(2, v.Height)
+	}
+
+	_, _, err := writer.Reset(fieldNames_LockAccount)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *LockAccount) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Height is missing")
+	} else if v.Height == 0 {
+		errs = append(errs, "field Height is not set")
 	}
 
 	switch len(errs) {
@@ -10691,6 +10832,33 @@ func (v *CreateKeyPage) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *CreateLiteTokenAccount) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *CreateLiteTokenAccount) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	seen, err := reader.Reset(fieldNames_CreateLiteTokenAccount)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *CreateToken) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -11526,8 +11694,41 @@ func (v *LiteTokenAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBigInt(4); ok {
 		v.Balance = *x
 	}
+	if x, ok := reader.ReadUint(5); ok {
+		v.LockHeight = x
+	}
 
 	seen, err := reader.Reset(fieldNames_LiteTokenAccount)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *LockAccount) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *LockAccount) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+	if x, ok := reader.ReadUint(2); ok {
+		v.Height = x
+	}
+
+	seen, err := reader.Reset(fieldNames_LockAccount)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -13639,6 +13840,14 @@ func (v *CreateKeyPage) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *CreateLiteTokenAccount) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type TransactionType `json:"type"`
+	}{}
+	u.Type = v.Type()
+	return json.Marshal(&u)
+}
+
 func (v *CreateToken) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type        TransactionType             `json:"type"`
@@ -13992,15 +14201,27 @@ func (v *LiteIdentity) MarshalJSON() ([]byte, error) {
 
 func (v *LiteTokenAccount) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type     AccountType `json:"type"`
-		Url      *url.URL    `json:"url,omitempty"`
-		TokenUrl *url.URL    `json:"tokenUrl,omitempty"`
-		Balance  *string     `json:"balance,omitempty"`
+		Type       AccountType `json:"type"`
+		Url        *url.URL    `json:"url,omitempty"`
+		TokenUrl   *url.URL    `json:"tokenUrl,omitempty"`
+		Balance    *string     `json:"balance,omitempty"`
+		LockHeight uint64      `json:"lockHeight,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
 	u.TokenUrl = v.TokenUrl
 	u.Balance = encoding.BigintToJSON(&v.Balance)
+	u.LockHeight = v.LockHeight
+	return json.Marshal(&u)
+}
+
+func (v *LockAccount) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type   TransactionType `json:"type"`
+		Height uint64          `json:"height,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Height = v.Height
 	return json.Marshal(&u)
 }
 
@@ -15203,6 +15424,20 @@ func (v *CreateKeyPage) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *CreateLiteTokenAccount) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type TransactionType `json:"type"`
+	}{}
+	u.Type = v.Type()
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	return nil
+}
+
 func (v *CreateToken) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type        TransactionType             `json:"type"`
@@ -15878,15 +16113,17 @@ func (v *LiteIdentity) UnmarshalJSON(data []byte) error {
 
 func (v *LiteTokenAccount) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type     AccountType `json:"type"`
-		Url      *url.URL    `json:"url,omitempty"`
-		TokenUrl *url.URL    `json:"tokenUrl,omitempty"`
-		Balance  *string     `json:"balance,omitempty"`
+		Type       AccountType `json:"type"`
+		Url        *url.URL    `json:"url,omitempty"`
+		TokenUrl   *url.URL    `json:"tokenUrl,omitempty"`
+		Balance    *string     `json:"balance,omitempty"`
+		LockHeight uint64      `json:"lockHeight,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
 	u.TokenUrl = v.TokenUrl
 	u.Balance = encoding.BigintToJSON(&v.Balance)
+	u.LockHeight = v.LockHeight
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -15900,6 +16137,24 @@ func (v *LiteTokenAccount) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Balance = *x
 	}
+	v.LockHeight = u.LockHeight
+	return nil
+}
+
+func (v *LockAccount) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type   TransactionType `json:"type"`
+		Height uint64          `json:"height,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Height = v.Height
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Height = u.Height
 	return nil
 }
 
