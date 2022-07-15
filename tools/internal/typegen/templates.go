@@ -29,6 +29,19 @@ func DashCase(s string) string {
 	return s
 }
 
+func UnderscoreUpperCase(s string) string {
+	s = LowerFirstWord(s)
+	s = reLowerUpper.ReplaceAllStringFunc(s, func(s string) string {
+		return s[:1] + "_" + strings.ToLower(s[1:])
+	})
+	return strings.ToUpper(s) // FIXME shortcut
+}
+
+func AfterDot(s string) string {
+	split := strings.SplitAfter(s, ".")
+	return split[len(split)-1]
+}
+
 func TitleCase(s string) string {
 	return enUsTitle.String(s[:1]) + s[1:]
 }

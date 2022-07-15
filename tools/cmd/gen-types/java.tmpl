@@ -1,38 +1,63 @@
-package {{.Package}};
+package {{.Package}}.models;
+
+import {{.Package}}.protocol.*;
+import {{.Package}}.support.*;
 
 {{- if .IsUnion}}{{skip}}{{end}}
 
 public class {{.Name}} {
+
+	{{- range .Fields}}
+	{{-   if and (.Virtual)}}
+	public static final {{resolveType .}} {{lcName .Name}} = {{resolveType .}}.{{underscoreUpperCase .ParentTypeName}};
+	{{-   end}}
+	{{- end}}
+
 	{{- range .Fields}}
 	{{-   if and (not .Virtual)}}
-	public {{resolveType .}} {{lcName .Name}};
+	private {{resolveType .}} {{lcName .Name}};
+	{{-   end}}
+	{{- end}}
+
+	{{- range .Fields}}
+	{{-   if and (not .Virtual)}}
+
+	public {{resolveType .}} get{{.Name}}() {
+	    return {{lcName .Name}};
+	}
+
+	public void set{{.Name}}(final {{resolveType .}} value) {
+	    this.{{lcName .Name}} = value;
+	}
+
+	public {{.ParentTypeName}} {{lcName .Name}}(final {{resolveType .}} value) {
+	    set{{.Name}}(value);
+	    return this;
+	}
 	{{-   end}}
 	{{- end}}
 
     public byte[] marshalBinary() {
-        byte[] data;
+        final var marshaller = new Marshaller();
         {{- range .Fields}}
         {{-   if and .IsBinary .IsMarshalled}}
         {{-     if .OmitEmpty}}
         if (!({{isZero . (print "this." (lcName .Name))}})) {
         {{-       if .Type.IsKnown}}
-            data = Marshaller.write{{.Type.Title}}(data, {{.Number}}, this.{{lcName .Name}});
+            marshaller.write{{.Type.Title}}({{.Number}}, this.{{lcName .Name}});
         {{-       else }}
-            data = Marshaller.writeValue(data, {{.Number}}, v.{{lcName .Name}});
+            marshaller.writeValue({{.Number}}, v.{{lcName .Name}});
         {{-       end}}
         }
         {{-     else }}
         {{-       if .Type.IsKnown}}
-        data = Marshaller.write{{.Type.Title}}(data, {{.Number}}, this.{{lcName .Name}});
+        marshaller.write{{.Type.Title}}({{.Number}}, this.{{lcName .Name}});
         {{-       else }}
-        data = Marshaller.writeValue(data, {{.Number}}, v.{{lcName .Name}});
+        marshaller.writeValue({{.Number}}, v.{{lcName .Name}});
         {{-       end}}
         {{-     end}}
         {{-   end}}
         {{- end}}
-        if (data == null || data.length == 0) {
-            return { 0x80 };
-        }
-        return data;
+        return marshaller.array();
     }
 }

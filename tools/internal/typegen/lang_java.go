@@ -15,7 +15,7 @@ func (f FieldType) JavaType() string {
 	case TypeCodeBigInt:
 		return "BigInteger"
 	case TypeCodeUint:
-		return "int"
+		return "long"
 	case TypeCodeInt:
 		return "int"
 	case TypeCodeHash:

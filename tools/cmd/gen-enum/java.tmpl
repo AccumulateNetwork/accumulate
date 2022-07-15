@@ -2,11 +2,12 @@ package {{.Package}};
 
 public enum {{.Name}} {
     {{- range $i, $v := .Values}}{{if gt $i 0}},{{end}}
-    {{$v.Name}}({{$v.Value}}, "{{lowerCamel $v.Name}}")
+    {{underscoreUpperCase $v.Name}}({{$v.Value}}, "{{lowerCamel $v.Name}}")
     {{- end}};
 
-    final int value;
-    final String name;
+    private final int value;
+    private final String name;
+
     {{.Name}}(int value, String name) {
         this.value = value;
         this.name = name;
@@ -17,29 +18,20 @@ public enum {{.Name}} {
     public String toString() { return this.name; }
 
     public static {{.Name}} byValue(int value) {
-        switch (value) {
-        {{- range .Values}}
-        case {{.Value}}:
-            return {{.Name}};
-        {{- end}}
-        default:
-            throw new RuntimeException(String.format("%d is not a valid {{.Name}}", value));
+        for (final var type : values()) {
+            if (value == type.ordinal()) {
+                return type;
+            }
         }
+        throw new RuntimeException(String.format("%d is not a valid TransactionType", value));
     }
 
     public static {{.Name}} byName(String name) {
-        switch (name.toLowerCase()) {
-        {{- range .Values}}
-        {{- $val := .Name}}
-        case "{{lower .Name}}":
-            return {{$val}};
-        {{- range .Aliases}}
-        case "{{.}}":
-            return {{$val}};
-        {{- end}}
-        {{- end}}
-        default:
-            throw new RuntimeException(String.format("'%s' is not a valid {{.Name}}", name));
+        for (final var type : values()) {
+            if (name != null && name.equalsIgnoreCase(type.name)) {
+                return type;
+            }
         }
+        throw new RuntimeException(String.format("'%s' is not a valid TransactionType", name));
     }
 }

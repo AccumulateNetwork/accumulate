@@ -58,6 +58,7 @@ func convert(types, refTypes typegen.Types, pkgName, pkgPath string) (*Types, er
 			field.MarshalAs = typegen.MarshalAsEnum
 			field.KeepEmpty = true
 			field.Virtual = true
+			field.ParentTypeName = typ.Name
 			typ.Fields = append(typ.Fields, field)
 		}
 
@@ -77,6 +78,7 @@ func convert(types, refTypes typegen.Types, pkgName, pkgPath string) (*Types, er
 		for _, field := range typ.Type.Fields {
 			tfield := new(Field)
 			tfield.Field = *field
+			tfield.ParentTypeName = typ.Name
 			if field.MarshalAs != typegen.MarshalAsBasic {
 				tfield.TypeRef = lup[tfield.Type.String()]
 			}
@@ -166,8 +168,9 @@ type Type struct {
 
 type Field struct {
 	typegen.Field
-	TypeRef    *Type
-	IsEmbedded bool
+	TypeRef        *Type
+	IsEmbedded     bool
+	ParentTypeName string
 }
 
 func (t *Type) IsAccount() bool    { return t.Union.Type == "account" }
@@ -235,9 +238,12 @@ func (f *Field) IsRequired() bool        { return !f.Optional }
 func (f *Field) OmitEmpty() bool         { return !f.KeepEmpty }
 
 var Templates = typegen.NewTemplateLibrary(template.FuncMap{
-	"lcName":  typegen.LowerFirstWord,
-	"title":   typegen.TitleCase,
-	"map":     typegen.MakeMap,
-	"natural": typegen.Natural,
-	"debug":   fmt.Printf,
+	"lcName":              typegen.LowerFirstWord,
+	"upper":               strings.ToUpper,
+	"underscoreUpperCase": typegen.UnderscoreUpperCase,
+	"title":               typegen.TitleCase,
+	"map":                 typegen.MakeMap,
+	"natural":             typegen.Natural,
+	"afterDot":            typegen.AfterDot,
+	"debug":               fmt.Printf,
 })

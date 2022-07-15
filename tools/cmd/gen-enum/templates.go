@@ -35,9 +35,11 @@ type TypeValue struct {
 var reCamel = regexp.MustCompile(`^\p{Lu}+`)
 
 var Templates = typegen.NewTemplateLibrary(template.FuncMap{
-	"lower":      strings.ToLower,
-	"lowerCamel": func(s string) string { return reCamel.ReplaceAllStringFunc(s, strings.ToLower) },
-	"natural":    natural,
+	"lower":               strings.ToLower,
+	"upper":               strings.ToUpper,
+	"underscoreUpperCase": typegen.UnderscoreUpperCase,
+	"lowerCamel":          func(s string) string { return reCamel.ReplaceAllStringFunc(s, strings.ToLower) },
+	"natural":             natural,
 })
 
 func convert(types map[string]typegen.Enum, pkgName string) *Types {

@@ -1,13 +1,14 @@
 #!/bin/bash
 
 set -eu
+set -x
 
 # Make sure we're within the java directory
 cd $( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
 function generate {
     TOOL=../../tools/cmd/gen-$1
-    FLAGS="--language java --package io.accumulatenetwork.accumulate --out {{.Name}}.java"
+    FLAGS="--language java --package io.accumulatenetwork.sdk --out {{.Name}}.java"
     go run ${TOOL} ${FLAGS} "${@:2}"
 }
 
