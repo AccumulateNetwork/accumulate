@@ -10,10 +10,10 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 )
 
-// loadIndexEntryFromEnd loads the Nth-to-last entry from an index chain.
-// loadIndexEntryFromEnd will panic if the offset is zero. If the offset is
-// greater than the chain height, loadIndexEntryFromEnd returns nil, nil.
-func loadIndexEntryFromEnd(c *database.Chain2, offset uint64) (*protocol.IndexEntry, error) {
+// LoadIndexEntryFromEnd loads the Nth-to-last entry from an index chain.
+// LoadIndexEntryFromEnd will panic if the offset is zero. If the offset is
+// greater than the chain height, LoadIndexEntryFromEnd returns nil, nil.
+func LoadIndexEntryFromEnd(c *database.Chain2, offset uint64) (*protocol.IndexEntry, error) {
 	if offset == 0 {
 		panic("offset must be > 0")
 	}
@@ -42,7 +42,7 @@ func loadIndexEntryFromEnd(c *database.Chain2, offset uint64) (*protocol.IndexEn
 // LoadLastTwoIndexEntries loads the last and next to last entries of the index
 // chain.
 func LoadLastTwoIndexEntries(chain *database.Chain2) (last, nextLast *protocol.IndexEntry, err error) {
-	last, err = loadIndexEntryFromEnd(chain, 1)
+	last, err = LoadIndexEntryFromEnd(chain, 1)
 	if err != nil {
 		return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
@@ -50,7 +50,7 @@ func LoadLastTwoIndexEntries(chain *database.Chain2) (last, nextLast *protocol.I
 		return
 	}
 
-	nextLast, err = loadIndexEntryFromEnd(chain, 2)
+	nextLast, err = LoadIndexEntryFromEnd(chain, 2)
 	if err != nil {
 		return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
@@ -124,7 +124,7 @@ func ReceiptForAccountState(net *config.Describe, batch *database.Batch, account
 
 	// Load the latest root index entry (just for the block index)
 	ledger := batch.Account(net.Ledger())
-	rootEntry, err := loadIndexEntryFromEnd(ledger.RootChain().Index(), 1)
+	rootEntry, err := LoadIndexEntryFromEnd(ledger.RootChain().Index(), 1)
 	if err != nil {
 		return 0, nil, errors.Wrap(errors.StatusUnknownError, err)
 	}

@@ -115,6 +115,18 @@ func (c *Chain) AddEntry(entry []byte, unique bool) error {
 		panic("attempted to add a nil entry to a chain")
 	}
 
+	// TODO Update SMT to handle non-32-byte entries?
+	if len(entry) > 32 {
+		panic("Entry is too big")
+	}
+	if len(entry) < 32 {
+		padding := make([]byte, 32-len(entry))
+		// TODO Remove once AC-1096 is done
+		// Fake field number to make unmarshalling work
+		padding[0] = 32
+		entry = append(entry, padding...)
+	}
+
 	err := c.merkle.AddHash(entry, unique)
 	return errors.Wrap(errors.StatusUnknownError, err)
 }

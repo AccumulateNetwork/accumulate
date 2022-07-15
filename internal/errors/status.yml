@@ -36,6 +36,9 @@ Status:
   NotFound:
     value: 404
     description: means a record could not be found
+  NotAllowed:
+    value: 405
+    description: means the requested action could not be performed
   Conflict:
     value: 409
     description: means the request failed due to a conflict
