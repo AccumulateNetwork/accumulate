@@ -290,3 +290,71 @@ func TestUpdateKeyPage_Update(t *testing.T) {
 		})
 	}
 }
+
+func TestUpdateKeyPage_SelfDelegation_Add(t *testing.T) {
+	// Initialize
+	sim := simulator.New(t, 1)
+	sim.InitFromGenesis()
+
+	alice := protocol.AccountUrl("alice")
+	aliceKey := acctesting.GenerateKey(alice)
+	sim.CreateIdentity(alice)
+	sim.CreateAccount(&protocol.TokenAccount{Url: alice.JoinPath("tokens")})
+
+	env := acctesting.NewTransaction().
+		WithPrincipal(alice.JoinPath("book", "1")).
+		WithSigner(alice.JoinPath("book", "1"), 1).
+		WithTimestamp(1).
+		WithBody(&protocol.UpdateKeyPage{Operation: []protocol.KeyPageOperation{
+			&protocol.AddKeyOperation{
+				Entry: protocol.KeySpecParams{
+					Delegate: alice.JoinPath("book"),
+				},
+			},
+		}}).
+		Initiate(protocol.SignatureTypeED25519, aliceKey).
+		Build()
+
+	x := sim.PartitionFor(alice)
+	st, txn := LoadStateManagerForTest(t, x.Database, env)
+	defer st.Discard()
+
+	_, err := UpdateKeyPage{}.Execute(st, txn)
+	require.EqualError(t, err, "self-delegation is not allowed")
+}
+
+func TestUpdateKeyPage_SelfDelegation_Update(t *testing.T) {
+	// Initialize
+	sim := simulator.New(t, 1)
+	sim.InitFromGenesis()
+
+	alice := protocol.AccountUrl("alice")
+	aliceKey := acctesting.GenerateKey(alice)
+	sim.CreateIdentity(alice)
+	sim.CreateAccount(&protocol.TokenAccount{Url: alice.JoinPath("tokens")})
+
+	env := acctesting.NewTransaction().
+		WithPrincipal(alice.JoinPath("book", "1")).
+		WithSigner(alice.JoinPath("book", "1"), 1).
+		WithTimestamp(1).
+		WithBody(&protocol.UpdateKeyPage{Operation: []protocol.KeyPageOperation{
+			&protocol.UpdateKeyOperation{
+				OldEntry: protocol.KeySpecParams{
+					KeyHash: doHash(aliceKey),
+				},
+				NewEntry: protocol.KeySpecParams{
+					KeyHash:  doHash(aliceKey),
+					Delegate: alice.JoinPath("book"),
+				},
+			},
+		}}).
+		Initiate(protocol.SignatureTypeED25519, aliceKey).
+		Build()
+
+	x := sim.PartitionFor(alice)
+	st, txn := LoadStateManagerForTest(t, x.Database, env)
+	defer st.Discard()
+
+	_, err := UpdateKeyPage{}.Execute(st, txn)
+	require.EqualError(t, err, "self-delegation is not allowed")
+}
