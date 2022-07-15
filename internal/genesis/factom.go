@@ -1,6 +1,7 @@
 package genesis
 
 import (
+	"io"
 	"io/ioutil"
 	"strconv"
 	"strings"
@@ -14,8 +15,8 @@ type GenesisAddressAndBalances struct {
 	Balance int64
 }
 
-func LoadFactomAddressesAndBalances(factomFilePath string) ([]*GenesisAddressAndBalances, error) {
-	factomData, err := ioutil.ReadFile(factomFilePath)
+func LoadFactomAddressesAndBalances(file io.Reader) ([]*GenesisAddressAndBalances, error) {
+	factomData, err := ioutil.ReadAll(file)
 	if err != nil {
 		return nil, err
 	}

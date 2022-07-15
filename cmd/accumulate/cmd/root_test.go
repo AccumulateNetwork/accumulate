@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/crypto"
 	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
+	"gitlab.com/accumulatenetwork/accumulate/internal/testdata"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -180,7 +181,7 @@ func (c *testCmd) executeTx(t *testing.T, cmdLine string, args ...interface{}) (
 }
 
 func testFactomAddresses() error {
-	factomAddresses, err := genesis.LoadFactomAddressesAndBalances("test_factom_addresses")
+	factomAddresses, err := genesis.LoadFactomAddressesAndBalances(strings.NewReader(testdata.FactomAddresses))
 	if err != nil {
 		return err
 	}
