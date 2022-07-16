@@ -22,6 +22,7 @@ var cmdRunSim = &cobra.Command{
 var flagRunSim = struct {
 	BvnCount       int
 	ApiListen      string
+	PprofListen    string
 	BlockFrequency time.Duration
 }{}
 
@@ -30,12 +31,17 @@ func init() {
 
 	cmdRunSim.Flags().IntVarP(&flagRunSim.BvnCount, "bvns", "b", 3, "Number of BVNs to simulate")
 	cmdRunSim.Flags().StringVarP(&flagRunSim.ApiListen, "listen", "l", "127.0.1.1:26660", "API server listen address")
+	cmdRunSim.Flags().StringVar(&flagRunSim.PprofListen, "pprof", "", "Address to run net/http/pprof on")
 	cmdRunSim.Flags().DurationVarP(&flagRunSim.BlockFrequency, "frequency", "f", time.Second/10, "Block frequency")
 }
 
 func runSim(*cobra.Command, []string) {
 	s := simulator.New(simTb{}, flagRunSim.BvnCount)
 	s.InitFromGenesis()
+
+	if flagRunSim.PprofListen != "" {
+		go func() { check(http.ListenAndServe(flagRunSim.PprofListen, nil)) }()
+	}
 
 	t := time.NewTicker(flagRunSim.BlockFrequency)
 	defer t.Stop()
