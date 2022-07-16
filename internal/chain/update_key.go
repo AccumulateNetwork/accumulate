@@ -81,17 +81,12 @@ func (UpdateKey) Execute(st *StateManager, tx *Delivery) (protocol.TransactionRe
 		return nil, fmt.Errorf("signature is not a key signature")
 	}
 
-	oldPos, entry, found := findKeyPageEntry(page, &protocol.KeySpecParams{KeyHash: keysig.GetPublicKeyHash()})
-	if !found {
-		return nil, fmt.Errorf("the signing key does not exist on %v", st.OriginUrl)
+	err = updateKey(page,
+		&protocol.KeySpecParams{KeyHash: keysig.GetPublicKeyHash()},
+		&protocol.KeySpecParams{KeyHash: body.NewKeyHash})
+	if err != nil {
+		return nil, err
 	}
-
-	// Update the entry
-	entry.PublicKeyHash = body.NewKeyHash
-
-	// Relocate the entry
-	page.RemoveKeySpecAt(oldPos)
-	page.AddKeySpec(entry)
 
 	// Store the update, but do not change the page version
 	err = st.Update(page)
@@ -99,4 +94,34 @@ func (UpdateKey) Execute(st *StateManager, tx *Delivery) (protocol.TransactionRe
 		return nil, fmt.Errorf("failed to update %v: %v", page.GetUrl(), err)
 	}
 	return nil, nil
+}
+
+func updateKey(page *protocol.KeyPage, old, new *protocol.KeySpecParams) error {
+	if new.IsEmpty() {
+		return fmt.Errorf("cannot add an empty entry")
+	}
+	if new.Delegate != nil && new.Delegate.ParentOf(page.Url) {
+		return fmt.Errorf("self-delegation is not allowed")
+	}
+
+	// Find the old entry
+	oldPos, entry, found := findKeyPageEntry(page, old)
+	if !found {
+		return fmt.Errorf("entry to be updated not found on the key page")
+	}
+
+	// Check for an existing key with same delegate
+	newPos, _, found := findKeyPageEntry(page, new)
+	if found && oldPos != newPos {
+		return fmt.Errorf("cannot have duplicate entries on key page")
+	}
+
+	// Update the entry
+	entry.PublicKeyHash = new.KeyHash
+	entry.Delegate = new.Delegate
+
+	// Relocate the entry
+	page.RemoveKeySpecAt(oldPos)
+	page.AddKeySpec(entry)
+	return nil
 }
