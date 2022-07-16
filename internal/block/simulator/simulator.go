@@ -166,6 +166,7 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 			Describe:      &network,
 			Router:        sim.Router(),
 			TxMaxWaitTime: time.Hour,
+			Database:      db,
 		})
 		require.NoError(sim, err)
 
@@ -209,6 +210,7 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 			Describe:      &network,
 			Router:        sim.Router(),
 			TxMaxWaitTime: time.Hour,
+			Database:      db,
 		})
 		require.NoError(sim, err)
 
