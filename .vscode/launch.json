@@ -55,6 +55,14 @@
       ]
     },
     {
+      "name": "Run Simulator",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/cmd/accumulated",
+      "args": ["run", "sim"]
+    },
+    {
       "name": "Run Playbook",
       "type": "go",
       "request": "launch",
