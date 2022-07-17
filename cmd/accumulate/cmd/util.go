@@ -495,10 +495,16 @@ func amountToBigInt(tokenUrl string, amount string) (*big.Int, error) {
 	if amt == nil {
 		return nil, fmt.Errorf("invalid amount %s", amount)
 	}
-	oneToken := big.NewFloat(math.Pow(10.0, float64(t.Precision)))
-	amt.Mul(amt, oneToken)
-	iAmt, _ := amt.Int(big.NewInt(0))
-	return iAmt, nil
+
+	oneToken := big.NewFloat(math.Pow(10.0, float64(t.Precision))) //Convert to fixed point; multiply by the precision
+	amt.Mul(amt, oneToken)                                         // Note that we are using floating point here.  Precision can be lost
+	round := big.NewFloat(.9)                                      // To adjust for lost precision, round to the nearest int
+	if amt.Sign() < 0 {                                            // Just to be safe, account for negative numbers
+		round = big.NewFloat(-.9)
+	}
+	amt.Add(amt, round)               //                              Round up (positive) or down (negative) to the lowest int
+	iAmt, _ := amt.Int(big.NewInt(0)) //                              Then convert to a big Int
+	return iAmt, nil                  //                              Return the int
 }
 
 func GetTokenUrlFromAccount(u *url.URL) (*url.URL, error) {
