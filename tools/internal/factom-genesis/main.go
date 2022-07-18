@@ -117,14 +117,14 @@ func WriteDataToAccumulateSim(data protocol.DataEntry, dataAccount *url.URL) err
 	var timestamp uint64
 	log.Println("Executing txn")
 	// responses, _ := simul.WaitForTransactions(delivered, simul.MustSubmitAndExecuteBlock(envelope)...)
-	responses, _ := simul.WaitForTransactions(delivered,
+	responses, _ := simul.WaitForTransactions(delivered, simul.MustSubmitAndExecuteBlock(
 		acctesting.NewTransaction().
 			WithPrincipal(dataAccount).
 			WithTimestampVar(&timestamp).
 			WithSigner(dataAccount, 1).
 			WithBody(wd).
 			Initiate(protocol.SignatureTypeED25519, key.PrivateKey).
-			Build())
+			Build())...)
 	for _, res := range responses {
 		log.Println("Response : ", res)
 	}
