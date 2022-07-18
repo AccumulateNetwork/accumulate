@@ -33,18 +33,18 @@ func bootstrap(t *testing.T, tc *testCmd) {
 
 	// import eth private key.
 	// res, err := tc.execute(t, "key import private 26b9b10aec1e75e68709689b446196a5235b26bb9d4c0fc91eaccc7d8b66ec16 ethKey --sigtype eth")
-	tc.rootCmd.SetArgs([]string{"-j", "-s", fmt.Sprintf("%s/v2", tc.jsonRpcAddr), "key", "import", "private", "ethKey", "--sigtype", "eth"})
-	tc.rootCmd.SetIn(strings.NewReader("26b9b10aec1e75e68709689b446196a5235b26bb9d4c0fc91eaccc7d8b66ec16"))
-	res, err := executeCmd(tc.rootCmd)
+	res, err := executeCmd(tc.rootCmd,
+		[]string{"-j", "-s", fmt.Sprintf("%s/v2", tc.jsonRpcAddr), "key", "import", "private", "ethKey", "--sigtype", "eth"},
+		"26b9b10aec1e75e68709689b446196a5235b26bb9d4c0fc91eaccc7d8b66ec16")
 	require.NoError(t, err)
 	var keyResponse KeyResponse
 	err = json.Unmarshal([]byte(res), &keyResponse)
 	require.NoError(t, err)
 
 	//add the DN private key to our key list.
-	tc.rootCmd.SetArgs([]string{"-j", "-s", fmt.Sprintf("%s/v2", tc.jsonRpcAddr), "key", "import", "private", "dnkey"})
-	tc.rootCmd.SetIn(strings.NewReader(fmt.Sprintf("%v", tc.privKey.Bytes())))
-	_, err = executeCmd(tc.rootCmd)
+	_, err = executeCmd(tc.rootCmd,
+		[]string{"-j", "-s", fmt.Sprintf("%s/v2", tc.jsonRpcAddr), "key", "import", "private", "dnkey"},
+		fmt.Sprintf("%v", tc.privKey.Bytes()))
 	require.NoError(t, err)
 
 	//set mnemonic for predictable addresses
@@ -146,6 +146,14 @@ func (c *testCmd) initalize(t *testing.T) {
 }
 
 func (c *testCmd) execute(t *testing.T, cmdLine string) (string, error) {
+	fullCommand := fmt.Sprintf("-j -s %s/v2 %s",
+		c.jsonRpcAddr, cmdLine)
+	args := strings.Split(fullCommand, " ")
+
+	return executeCmd(c.rootCmd, args, "")
+}
+
+func executeCmd(cmd *cobra.Command, args []string, input string) (string, error) {
 	// Reset flags
 	Client = nil
 	ClientTimeout = 0
@@ -164,19 +172,12 @@ func (c *testCmd) execute(t *testing.T, cmdLine string) (string, error) {
 	UseUnencryptedWallet = true
 	flagAccount.Lite = false
 
-	fullCommand := fmt.Sprintf("-j -s %s/v2 %s",
-		c.jsonRpcAddr, cmdLine)
-	args := strings.Split(fullCommand, " ")
-
-	c.rootCmd.SetArgs(args)
-	return executeCmd(c.rootCmd)
-}
-
-func executeCmd(cmd *cobra.Command) (string, error) {
 	e := bytes.NewBufferString("")
 	b := bytes.NewBufferString("")
 	cmd.SetErr(e)
 	cmd.SetOut(b)
+	cmd.SetArgs(args)
+	cmd.SetIn(strings.NewReader(input))
 	DidError = nil
 	err := cmd.Execute()
 	if DidError != nil {
