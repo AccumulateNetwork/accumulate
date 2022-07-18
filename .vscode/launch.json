@@ -199,6 +199,14 @@
       "args": ["run"]
     },
     {
+      "name": "Factom Genesis",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/tools/internal/factom-genesis/main",
+      "cwd": "${workspaceFolder}/tools/internal/factom-genesis/main",
+    },
+    {
       "name": "Run CLI",
       "type": "go",
       "request": "launch",

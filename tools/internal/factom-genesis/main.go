@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"os"
 	"sync"
-	"testing"
 	"time"
 
 	tmjson "github.com/tendermint/tendermint/libs/json"
@@ -31,14 +31,21 @@ var key *cmd.Key
 var simul *simulator.Simulator
 var delivered = (*protocol.TransactionStatus).Delivered
 
+type simTb struct{}
+
+func (simTb) Name() string         { return "Simulator" }
+func (simTb) Log(a ...interface{}) { fmt.Println(a...) } //nolint
+func (simTb) Fail()                {}                    // The simulator never exits so why record anything?
+func (simTb) FailNow()             { os.Exit(1) }
+func (simTb) Helper()              {}
+
 const (
 	LOCAL_URL = "http://127.0.1.1:26660"
 )
 
 func InitSim() {
 	// Initialize
-	t := &testing.T{}
-	sim := simulator.New(t, 3)
+	sim := simulator.New(simTb{}, 3)
 	simul = sim
 	simul.InitFromGenesis()
 }
