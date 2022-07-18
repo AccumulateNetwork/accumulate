@@ -12,8 +12,14 @@ func (s *Session) AcmeAmount(v float64) *big.Int {
 
 func (s *Session) Amount(v float64, precision uint64) *big.Int {
 	p := new(big.Float)
-	p.SetUint64(precision)
-	p.Mul(p, big.NewFloat(v))
+	p.SetUint64(precision)    // Loss of precision can occur with floating point math
+	p.Mul(p, big.NewFloat(v)) // Scale to the level of precision
+	round := big.NewFloat(.9) // To adjust for lost precision, round to the nearest int
+	if p.Sign() < 0 {         // Just to be safe, account for negative numbers
+		round = big.NewFloat(-.9)
+	}
+	p.Add(p, round) //           Adjusts the lowest digit
+
 	a, _ := p.Int(nil)
 	return a
 }
