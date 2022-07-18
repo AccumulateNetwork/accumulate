@@ -22,10 +22,10 @@ func main() {
 		log.Fatalf("Error : %v", err)
 	}
 
-	err = factom.FaucetWithCredits(factom.LOCAL_URL)
-	if err != nil {
-		log.Fatalf("failed to faucet account %v", err)
-	}
+	// err = factom.FaucetWithCredits(factom.LOCAL_URL)
+	// if err != nil {
+	// 	log.Fatalf("failed to faucet account %v", err)
+	// }
 
 	factom.Process(factom.LOCAL_URL)
 	// if faucet {

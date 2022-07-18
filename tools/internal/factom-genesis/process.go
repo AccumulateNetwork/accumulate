@@ -47,6 +47,7 @@ func Open() bool {
 }
 
 func Process(server string) {
+	InitSim()
 	var cg ChainGang
 	header := new(Header)
 	dBlock := directoryBlock.NewDirectoryBlock(nil)
@@ -97,8 +98,9 @@ func Process(server string) {
 					log.Fatalf("cannot decode account id")
 				}
 				dataEntry := ConvertFactomDataEntryToLiteDataEntry(*qEntry)
-				ch := cg.GetOrCreateChainWorker(server, (*[32]byte)(accountId), 1)
-				ch <- dataEntry
+				ExecuteDataEntry((*[32]byte)(accountId), dataEntry)
+				// ch := cg.GetOrCreateChainWorker(server, (*[32]byte)(accountId), 1)
+				// ch <- dataEntry
 			case TagTX:
 				tx := new(factoid.Transaction)
 				if err := tx.UnmarshalBinary(buff[:header.Size]); err != nil {

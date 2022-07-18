@@ -7,14 +7,17 @@ import (
 	"io/ioutil"
 	"log"
 	"sync"
+	"testing"
 	"time"
 
 	tmjson "github.com/tendermint/tendermint/libs/json"
+	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 
 	f2 "github.com/FactomProject/factom"
 	"github.com/tendermint/tendermint/privval"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/cmd"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
@@ -25,10 +28,20 @@ var factomChainData map[[32]byte]*Queue
 
 var origin *url.URL
 var key *cmd.Key
+var simul *simulator.Simulator
+var delivered = (*protocol.TransactionStatus).Delivered
 
 const (
 	LOCAL_URL = "http://127.0.1.1:26660"
 )
+
+func InitSim() {
+	// Initialize
+	t := &testing.T{}
+	sim := simulator.New(t, 3)
+	simul = sim
+	simul.InitFromGenesis()
+}
 
 func SetPrivateKeyAndOrigin(privateKey string) error {
 	b, err := ioutil.ReadFile(privateKey)
@@ -86,6 +99,37 @@ func buildEnvelope(payload protocol.TransactionBody, originUrl *url.URL) (*proto
 	envelope.TxHash = append(envelope.TxHash, txn.GetHash()...)
 
 	return envelope, nil
+}
+
+func WriteDataToAccumulateSim(data protocol.DataEntry, dataAccount *url.URL) error {
+	log.Println("Writing to : ", dataAccount.String())
+	wd := &protocol.WriteDataTo{
+		Entry:     &protocol.AccumulateDataEntry{Data: data.GetData()},
+		Recipient: dataAccount,
+	}
+	// mutex.Lock()
+	// log.Println("Creating envelope")
+	// envelope, err := buildEnvelope(wd, origin)
+	// if err != nil {
+	// 	// mutex.Unlock()
+	// 	return err
+	// }
+	var timestamp uint64
+	log.Println("Executing txn")
+	// responses, _ := simul.WaitForTransactions(delivered, simul.MustSubmitAndExecuteBlock(envelope)...)
+	responses, _ := simul.WaitForTransactions(delivered,
+		acctesting.NewTransaction().
+			WithPrincipal(dataAccount).
+			WithTimestampVar(&timestamp).
+			WithSigner(dataAccount, 1).
+			WithBody(wd).
+			Initiate(protocol.SignatureTypeED25519, key.PrivateKey).
+			Build())
+	for _, res := range responses {
+		log.Println("Response : ", res)
+	}
+	log.Println("Wrote to : ", dataAccount.String())
+	return nil
 }
 
 var mutex sync.Mutex
@@ -212,20 +256,36 @@ func (w *ChainGang) GetOrCreateChainWorker(s string, chainId *[32]byte, maxEntri
 			log.Fatalf("error creating lite address %x, %v", *chainId, err)
 		}
 		go w.WriteDataWorker(s, u, v)
+		// w.WriteDataWorker(s, u, v)
 	}
 	return v
+}
+
+func ExecuteDataEntry(chainId *[32]byte, entry *protocol.FactomDataEntry) {
+	u, err := protocol.LiteDataAddress((*chainId)[:])
+	if err != nil {
+		log.Fatalf("error creating lite address %x, %v", *chainId, err)
+	}
+	WriteDataToSim(u, entry)
 }
 
 func (w *ChainGang) WriteDataWorker(env string, chainUrl *url.URL, queue chan *protocol.FactomDataEntry) {
 	w.Wait.Add(1)
 	defer w.Wait.Done()
 	for entry := range queue {
-		err := WriteDataToAccumulate(env, entry, chainUrl)
+		err := WriteDataToAccumulateSim(entry, chainUrl)
 		if err != nil {
 			log.Printf("error writing data to accumulate : %v", err)
 		}
 	}
 
+}
+
+func WriteDataToSim(chainUrl *url.URL, entry *protocol.FactomDataEntry) {
+	err := WriteDataToAccumulateSim(entry, chainUrl)
+	if err != nil {
+		log.Printf("error writing data to accumulate : %v", err)
+	}
 }
 
 func ExecuteQueueToWriteData(env string, chainUrl *url.URL, queue *Queue) {
