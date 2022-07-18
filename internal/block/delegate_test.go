@@ -451,8 +451,7 @@ func TestDelegatedSignature_Multisig(t *testing.T) {
 	// Sign with bob/book/2
 	sim.WaitForTransactions(pending, sim.MustSubmitAndExecuteBlock(
 		acctesting.NewTransaction().
-			WithPrincipal(alice.JoinPath("data")).
-			WithTxnHash(txnHash).
+			WithTransaction(txn[0]).
 			WithSigner(bob.JoinPath("book", "2"), 1).
 			WithDelegator(alice.JoinPath("book", "1")).
 			WithTimestampVar(&timestamp).
@@ -463,8 +462,7 @@ func TestDelegatedSignature_Multisig(t *testing.T) {
 	// Sign with charlie/book/1
 	sim.WaitForTransactions(pending, sim.MustSubmitAndExecuteBlock(
 		acctesting.NewTransaction().
-			WithPrincipal(alice.JoinPath("data")).
-			WithTxnHash(txnHash).
+			WithTransaction(txn[0]).
 			WithSigner(charlie.JoinPath("book", "1"), 1).
 			WithDelegator(alice.JoinPath("book", "1")).
 			WithTimestampVar(&timestamp).
@@ -475,8 +473,7 @@ func TestDelegatedSignature_Multisig(t *testing.T) {
 	// Sign with charlie/book/1
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
 		acctesting.NewTransaction().
-			WithPrincipal(alice.JoinPath("data")).
-			WithTxnHash(txnHash).
+			WithTransaction(txn[0]).
 			WithSigner(charlie.JoinPath("book", "1"), 1).
 			WithDelegator(alice.JoinPath("book", "1")).
 			WithTimestampVar(&timestamp).

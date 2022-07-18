@@ -64,6 +64,7 @@ func (m *Executor) EndBlock(block *Block) error {
 	}
 
 	m.logger.Debug("Committing",
+		"module", "block",
 		"height", block.Index,
 		"delivered", block.State.Delivered,
 		"signed", block.State.Signed,
@@ -92,7 +93,7 @@ func (m *Executor) EndBlock(block *Block) error {
 		}
 
 		// Anchor and index the chain
-		m.logger.Debug("Updated a chain", "url", fmt.Sprintf("%s#chain/%s", u.Account, u.Name))
+		// m.logger.Debug("Updated a chain", "url", fmt.Sprintf("%s#chain/%s", u.Account, u.Name))
 		account := block.Batch.Account(u.Account)
 		chain, err := account.ChainByName(u.Name)
 		if err != nil {
@@ -202,7 +203,7 @@ func (m *Executor) EndBlock(block *Block) error {
 		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
-	m.logger.Debug("Committed", "height", block.Index, "duration", time.Since(t))
+	m.logger.Debug("Committed", "module", "block", "height", block.Index, "duration", time.Since(t))
 	return nil
 }
 
