@@ -10,8 +10,9 @@ import (
 	"time"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
+	"github.com/ghodss/yaml"
 	"github.com/spf13/cobra"
-	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"golang.org/x/sync/errgroup"
@@ -112,7 +113,7 @@ func PrintTXExecute() {
 }
 
 func PrintTxSign() {
-	fmt.Println("  accumulate tx sign [origin url] [signing key name] [key index (optional)] [key height (optional)] [txid]	Sign a pending transaction")
+	fmt.Println("  accumulate tx sign [origin url] [key name[@key book or page]] [txid]	Sign a pending transaction")
 }
 
 func PrintTXHistoryGet() {
@@ -136,7 +137,7 @@ func GetPendingTx(origin string, args []string) (string, error) {
 	//<record>#pending/<index> - fetch an envelope by index/height
 	//<record>#pending/<start>:<end> - fetch a range of envelope by index/height
 	//build the fragments:
-	params := api2.UrlQuery{}
+	params := api.UrlQuery{}
 
 	var out string
 	var perr error
@@ -145,7 +146,7 @@ func GetPendingTx(origin string, args []string) (string, error) {
 		//query with no parameters
 		u.Fragment = "pending"
 		params.Url = u
-		res := api2.MultiResponse{}
+		res := api.MultiResponse{}
 		err = queryAs("query", &params, &res)
 		if err != nil {
 			return "", err
@@ -167,7 +168,7 @@ func GetPendingTx(origin string, args []string) (string, error) {
 			u.Fragment = fmt.Sprintf("pending/%d", height)
 		}
 		params.Url = u
-		res := api2.TransactionQueryResponse{}
+		res := api.TransactionQueryResponse{}
 		err = queryAs("query", &params, &res)
 		if err != nil {
 			return "", err
@@ -185,7 +186,7 @@ func GetPendingTx(origin string, args []string) (string, error) {
 		}
 		u.Fragment = fmt.Sprintf("pending/%d:%d", start, count)
 		params.Url = u
-		res := api2.MultiResponse{}
+		res := api.MultiResponse{}
 		err = queryAs("query", &params, &res)
 		if err != nil {
 			return "", err
@@ -197,11 +198,11 @@ func GetPendingTx(origin string, args []string) (string, error) {
 
 	return out, perr
 }
-func getTX(hash []byte, wait time.Duration, ignorePending bool) (*api2.TransactionQueryResponse, error) {
-	var res api2.TransactionQueryResponse
+func getTX(hash []byte, wait time.Duration, ignorePending bool) (*api.TransactionQueryResponse, error) {
+	var res api.TransactionQueryResponse
 	var err error
 
-	params := new(api2.TxnQuery)
+	params := new(api.TxnQuery)
 	params.Txid = hash
 	params.Prove = Prove
 	params.IgnorePending = ignorePending
@@ -290,7 +291,7 @@ func GetTX(hash string) (string, error) {
 }
 
 func GetTXHistory(accountUrl string, startArg string, endArg string) (string, error) {
-	var res api2.MultiResponse
+	var res api.MultiResponse
 	start, err := strconv.Atoi(startArg)
 	if err != nil {
 		return "", err
@@ -304,7 +305,7 @@ func GetTXHistory(accountUrl string, startArg string, endArg string) (string, er
 		return "", err
 	}
 
-	params := new(api2.TxHistoryQuery)
+	params := new(api.TxHistoryQuery)
 	params.UrlQuery.Url = u
 	params.QueryPagination.Start = uint64(start)
 	params.QueryPagination.Count = uint64(end)
@@ -361,8 +362,8 @@ func CreateTX(sender string, args []string) (string, error) {
 	return dispatchTxAndPrintResponse(send, u, signer)
 }
 
-func waitForTxn(hash []byte, wait time.Duration, ignorePending bool) ([]*api2.TransactionQueryResponse, error) {
-	var queryResponses []*api2.TransactionQueryResponse
+func waitForTxn(hash []byte, wait time.Duration, ignorePending bool) ([]*api.TransactionQueryResponse, error) {
+	var queryResponses []*api.TransactionQueryResponse
 	queryRes, err := getTX(hash, wait, ignorePending)
 	if err != nil {
 		return nil, err
@@ -396,7 +397,7 @@ func ExecuteTX(sender string, args []string) (string, error) {
 	var typ struct {
 		Type protocol.TransactionType
 	}
-	err = json.Unmarshal([]byte(args[0]), &typ)
+	err = yaml.Unmarshal([]byte(args[0]), &typ)
 	if err != nil {
 		return "", fmt.Errorf("invalid payload 1: %v", err)
 	}
@@ -406,7 +407,7 @@ func ExecuteTX(sender string, args []string) (string, error) {
 		return "", fmt.Errorf("invalid payload 2: %v", err)
 	}
 
-	err = json.Unmarshal([]byte(args[0]), txn)
+	err = yaml.Unmarshal([]byte(args[0]), txn)
 	if err != nil {
 		return "", fmt.Errorf("invalid payload 3: %v", err)
 	}

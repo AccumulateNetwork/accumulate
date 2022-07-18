@@ -41,8 +41,8 @@ CreateTokenAccount:
       pointer: true
       repeatable: true
       optional: true
-    - name: TokenIssuerProof
-      type: AccountStateProof
+    - name: Proof
+      type: TokenIssuerProof
       marshal-as: reference
       pointer: true
       optional: true
@@ -142,17 +142,26 @@ CreateToken:
 IssueTokens:
   union: { type: transaction }
   fields:
-    - name: Recipient
+    - name: Recipient # Deprecated
       type: url
       pointer: true
-    - name: Amount
+    - name: Amount # Deprecated
       type: bigint
+    - name: To
+      repeatable: true
+      type: TokenRecipient
+      marshal-as: reference
+      pointer: true
 
 BurnTokens:
   union: { type: transaction }
   fields:
     - name: Amount
       type: bigint
+
+CreateLiteTokenAccount:
+  union: { type: transaction }
+  fields:
 
 CreateKeyPage:
   union: { type: transaction }
@@ -201,15 +210,12 @@ UpdateKeyPage:
       marshal-as: union
       repeatable: true
 
-AccountStateProof:
+LockAccount:
+  union: { type: transaction }
   fields:
-  - name: State
-    type: Account
-    marshal-as: union
-  - name: Proof
-    type: managed.Receipt
-    marshal-as: reference
-    pointer: true
+    - name: Height
+      description: is the major block height when the account will be released
+      type: uint
 
 UpdateAccountAuth:
   union: { type: transaction }

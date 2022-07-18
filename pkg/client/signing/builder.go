@@ -179,7 +179,7 @@ func (s *Builder) prepare(init bool) (protocol.KeySignature, error) {
 
 	case protocol.SignatureTypeReceipt, protocol.SignatureTypePartition:
 		// Calling Sign for SignatureTypeReceipt or SignatureTypeSynthetic makes zero sense
-		panic(fmt.Errorf("invalid attempt to generate signature of type %v!", s.Type))
+		panic(fmt.Errorf("invalid attempt to generate signature of type %v", s.Type))
 
 	default:
 		return nil, fmt.Errorf("unknown signature type %v", s.Type)

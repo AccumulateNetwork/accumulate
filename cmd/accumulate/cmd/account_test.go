@@ -38,7 +38,6 @@ func testCase1_1(t *testing.T, tc *testCmd) {
 //unitTest3_1
 //Create ADI Token Account (URL), should pass
 func testCase3_1(t *testing.T, tc *testCmd) {
-	t.Helper()
 
 	r, err := tc.executeTx(t, "account create token acc://RedWagon.acme red1 acc://RedWagon.acme/acct acc://acme acc://RedWagon.acme/book")
 	require.NoError(t, err)
@@ -50,7 +49,6 @@ func testCase3_1(t *testing.T, tc *testCmd) {
 //unitTest3_2
 //Create ADI Token Account without parent ADI, should fail
 func testCase3_2(t *testing.T, tc *testCmd) {
-	t.Helper()
 
 	r, err := tc.execute(t, "account create token acc://RedWagon.acme red1 acmeacct2 acc://acme acc://RedWagon.acme/book")
 	require.Error(t, err)
@@ -62,7 +60,6 @@ func testCase3_2(t *testing.T, tc *testCmd) {
 //unitTest3_3
 //Create ADI Token Account with invalid token URL, should fail
 func testCase3_3(t *testing.T, tc *testCmd) {
-	t.Helper()
 
 	r, err := tc.execute(t, "account create token acc://RedWagon.acme red1 acc://RedWagon.acme/acmeacct acc://factoid.acme acc://RedWagon.acme/book")
 	require.Error(t, err)
@@ -74,7 +71,6 @@ func testCase3_3(t *testing.T, tc *testCmd) {
 //unitTest1_2
 //Create Lite Token Accounts based on RCD1-based factoid addresses
 func testCase1_2(t *testing.T, tc *testCmd) {
-	t.Helper()
 
 	fs := "Fs1jQGc9GJjyWNroLPq7x6LbYQHveyjWNPXSqAvCEKpETNoTU5dP"
 	fa := "FA22de5NSG2FA2HmMaD4h8qSAZAJyztmmnwgLPghCQKoSekwYYct"

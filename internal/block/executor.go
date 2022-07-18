@@ -1,7 +1,6 @@
 package block
 
 import (
-	"bytes"
 	"crypto/ed25519"
 	"io"
 
@@ -9,7 +8,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
-	. "gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
@@ -20,14 +18,13 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 )
 
 type Executor struct {
 	ExecutorOptions
 
 	globals    *Globals
-	executors  map[protocol.TransactionType]TransactionExecutor
+	executors  map[protocol.TransactionType]chain.TransactionExecutor
 	dispatcher *dispatcher
 	logger     logging.OptionalLogger
 	db         *database.Database
@@ -36,12 +33,13 @@ type Executor struct {
 }
 
 type ExecutorOptions struct {
-	Logger              log.Logger
-	Key                 ed25519.PrivateKey
-	Router              routing.Router
-	Describe            config.Describe
-	EventBus            *events.Bus
-	MajorBlockScheduler blockscheduler.MajorBlockScheduler
+	Logger              log.Logger                         //
+	Key                 ed25519.PrivateKey                 // Private validator key
+	Router              routing.Router                     //
+	Describe            config.Describe                    // Network description
+	EventBus            *events.Bus                        //
+	MajorBlockScheduler blockscheduler.MajorBlockScheduler //
+	Background          func(func())                       // Background task launcher
 
 	isGenesis bool
 
@@ -50,45 +48,47 @@ type ExecutorOptions struct {
 
 // NewNodeExecutor creates a new Executor for a node.
 func NewNodeExecutor(opts ExecutorOptions, db *database.Database) (*Executor, error) {
-	executors := []TransactionExecutor{
+	executors := []chain.TransactionExecutor{
 		// User transactions
-		AddCredits{},
-		BurnTokens{},
-		CreateDataAccount{},
-		CreateIdentity{},
-		CreateKeyBook{},
-		CreateKeyPage{},
-		CreateToken{},
-		CreateTokenAccount{},
-		IssueTokens{},
-		SendTokens{},
-		UpdateKeyPage{},
-		WriteData{},
-		WriteDataTo{},
-		UpdateAccountAuth{},
-		UpdateKey{},
+		chain.AddCredits{},
+		chain.BurnTokens{},
+		chain.CreateDataAccount{},
+		chain.CreateIdentity{},
+		chain.CreateKeyBook{},
+		chain.CreateKeyPage{},
+		chain.CreateLiteTokenAccount{},
+		chain.CreateToken{},
+		chain.CreateTokenAccount{},
+		chain.IssueTokens{},
+		chain.LockAccount{},
+		chain.SendTokens{},
+		chain.UpdateAccountAuth{},
+		chain.UpdateKey{},
+		chain.UpdateKeyPage{},
+		chain.WriteData{},
+		chain.WriteDataTo{},
 
 		// Synthetic
-		SyntheticBurnTokens{},
-		SyntheticCreateIdentity{},
-		SyntheticDepositCredits{},
-		SyntheticDepositTokens{},
-		SyntheticWriteData{},
+		chain.SyntheticBurnTokens{},
+		chain.SyntheticCreateIdentity{},
+		chain.SyntheticDepositCredits{},
+		chain.SyntheticDepositTokens{},
+		chain.SyntheticWriteData{},
 
 		// Forwarding
-		SyntheticForwardTransaction{},
+		chain.SyntheticForwardTransaction{},
 	}
 
 	switch opts.Describe.NetworkType {
 	case config.Directory:
 		executors = append(executors,
-			PartitionAnchor{},
-			DirectoryAnchor{},
+			chain.PartitionAnchor{},
+			chain.DirectoryAnchor{},
 		)
 
 	case config.BlockValidator:
 		executors = append(executors,
-			DirectoryAnchor{},
+			chain.DirectoryAnchor{},
 		)
 
 	default:
@@ -112,14 +112,18 @@ func NewGenesisExecutor(db *database.Database, logger log.Logger, network *confi
 			isGenesis: true,
 		},
 		db,
-		SystemWriteData{},
+		chain.SystemWriteData{},
 	)
 }
 
-func newExecutor(opts ExecutorOptions, db *database.Database, executors ...TransactionExecutor) (*Executor, error) {
+func newExecutor(opts ExecutorOptions, db *database.Database, executors ...chain.TransactionExecutor) (*Executor, error) {
+	if opts.Background == nil {
+		opts.Background = func(f func()) { go f() }
+	}
+
 	m := new(Executor)
 	m.ExecutorOptions = opts
-	m.executors = map[protocol.TransactionType]TransactionExecutor{}
+	m.executors = map[protocol.TransactionType]chain.TransactionExecutor{}
 	m.dispatcher = newDispatcher(opts)
 	m.db = db
 
@@ -183,7 +187,7 @@ func (m *Executor) Genesis(block *Block, exec chain.TransactionExecutor) error {
 	delivery := new(chain.Delivery)
 	delivery.Transaction = txn
 
-	st := NewStateManager(&m.Describe, nil, block.Batch.Begin(true), nil, txn, m.logger.With("operation", "Genesis"))
+	st := chain.NewStateManager(&m.Describe, nil, block.Batch.Begin(true), nil, txn, m.logger.With("operation", "Genesis"))
 	defer st.Discard()
 
 	err = block.Batch.Transaction(txn.GetHash()).PutStatus(&protocol.TransactionStatus{
@@ -226,53 +230,7 @@ func (m *Executor) LoadStateRoot(batch *database.Batch) ([]byte, error) {
 	}
 }
 
-func (m *Executor) InitFromGenesis(batch *database.Batch, data []byte) error {
-	if m.isGenesis {
-		panic("Cannot call InitChain on a genesis txn executor")
-	}
-
-	// Load the genesis state (JSON) into an in-memory key-value store
-	src := memory.New(nil)
-	err := src.UnmarshalJSON(data)
-	if err != nil {
-		return errors.Format(errors.StatusInternalError, "failed to unmarshal app state: %w", err)
-	}
-
-	// Load the root anchor chain so we can verify the system state
-	srcBatch := database.New(src, nil).Begin(false)
-	defer srcBatch.Discard()
-	srcRoot := srcBatch.BptRoot()
-
-	// Dump the genesis state into the key-value store
-	subbatch := batch.Begin(true)
-	defer subbatch.Discard()
-	err = subbatch.Import(src)
-	if err != nil {
-		return errors.Format(errors.StatusInternalError, "failed to import database: %w", err)
-	}
-
-	// Commit the database batch
-	err = subbatch.Commit()
-	if err != nil {
-		return errors.Format(errors.StatusInternalError, "failed to load app state into database: %w", err)
-	}
-
-	root := batch.BptRoot()
-
-	// Make sure the database BPT root hash matches what we found in the genesis state
-	if !bytes.Equal(srcRoot, root) {
-		panic(errors.Format(errors.StatusInternalError, "Root chain anchor from state DB does not match the app state\nWant: %X\nGot:  %X", srcRoot, root))
-	}
-
-	err = m.loadGlobals(batch.View)
-	if err != nil {
-		return errors.Format(errors.StatusInternalError, "failed to load globals: %w", err)
-	}
-
-	return nil
-}
-
-func (m *Executor) InitFromSnapshot(batch *database.Batch, file ioutil2.SectionReader) error {
+func (m *Executor) RestoreSnapshot(batch *database.Batch, file ioutil2.SectionReader) error {
 	err := batch.RestoreSnapshot(file)
 	if err != nil {
 		return errors.Format(errors.StatusUnknownError, "load state: %w", err)

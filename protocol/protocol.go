@@ -63,27 +63,6 @@ const (
 	// MainChain is the main transaction chain of a record.
 	MainChain = "main"
 
-	// SignatureChain is the pending signature chain of a record.
-	SignatureChain = "signature"
-
-	// // MajorRootChain is the major anchor root chain of a partition.
-	// MajorRootChain = "major-root"
-
-	// MinorRootChain is the minor anchor root chain of a partition.
-	MinorRootChain = "minor-root"
-
-	// ScratchChain is the scratch transaction chain of a record.
-	ScratchChain = "scratch"
-
-	// // MajorRootIndexChain is the index chain of the major anchor root chain of a partition.
-	// MajorRootIndexChain = "major-root-index"
-
-	// MinorRootIndexChain is the index chain of the minor anchor root chain of a partition.
-	MinorRootIndexChain = "minor-root-index"
-
-	// AnchorSequenceChain is the chain of anchors produced by a partition.
-	AnchorSequenceChain = "anchor-sequence"
-
 	// GenesisBlock is the block index of the first block.
 	GenesisBlock = 1
 
@@ -511,46 +490,8 @@ func BvnNameFromPartitionId(partition string) string {
 	return PartitionUrl(partition).Authority
 }
 
-// IndexChain returns the major or minor index chain name for a given chain. Do
-// not use for the root anchor chain.
-func IndexChain(name string, major bool) string {
-	if major {
-		return "major-" + name + "-index"
-	}
-	return "minor-" + name + "-index"
-}
-
 func GetMOfN(count int, ratio float64) uint64 {
 	return uint64(math.Ceil(ratio * float64(count)))
-}
-
-const rootAnchorSuffix = "-root"
-const bptAnchorSuffix = "-bpt"
-
-// RootAnchorChain returns the name of the intermediate anchor chain for the given
-// partition's root chain.
-func RootAnchorChain(name string) string {
-	return name + rootAnchorSuffix
-}
-
-// BPTAnchorChain returns the name of the intermediate anchor chain for the given
-// partition's BPT.
-func BPTAnchorChain(name string) string {
-	return name + bptAnchorSuffix
-}
-
-// ParseBvnUrl extracts the partition name from a intermediate anchor chain name.
-func ParseAnchorChain(name string) (string, bool) {
-	if !strings.HasSuffix(strings.ToLower(name), rootAnchorSuffix) {
-		return "", false
-	}
-	return name[:len(name)-len(rootAnchorSuffix)], true
-}
-
-// SyntheticSequenceChain returns the name of the synthetic transaction index chain
-// for the given partition.
-func SyntheticSequenceChain(name string) string {
-	return "synthetic-sequence-" + name
 }
 
 // FormatKeyPageUrl constructs the URL of a key page from the URL of its key
