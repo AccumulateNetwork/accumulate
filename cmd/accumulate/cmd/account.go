@@ -280,7 +280,7 @@ func CreateLiteTokenAccount(principal *url2.URL, signers []*signing.Builder, arg
 	if len(signers) == 0 {
 		return "", fmt.Errorf("an additional signer must be specified by --sign-with")
 	}
-	signers[0].SetTimestamp(nonceFromTimeNow())
+	signers[0].SetTimestampToNow()
 
 	key, tok, err := protocol.ParseLiteTokenAddress(principal)
 	if err != nil {
