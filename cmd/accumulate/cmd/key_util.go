@@ -108,8 +108,8 @@ func (k *Key) LoadByPublicKey(publicKey []byte) error {
 }
 
 func (k *Key) Initialize(seed []byte, signatureType protocol.SignatureType) error {
-	k.Type = signatureType
-	switch k.Type {
+	k.KeyInfo.Type = signatureType
+	switch k.KeyInfo.Type {
 	case protocol.SignatureTypeLegacyED25519, protocol.SignatureTypeED25519, protocol.SignatureTypeRCD1:
 		if len(seed) != ed25519.SeedSize && len(seed) != ed25519.PrivateKeySize {
 			return fmt.Errorf("invalid private key length, expected %d or %d bytes", ed25519.SeedSize, ed25519.PrivateKeySize)
@@ -132,7 +132,7 @@ func (k *Key) Initialize(seed []byte, signatureType protocol.SignatureType) erro
 		k.PrivateKey = pvkey.Serialize()
 		k.PublicKey = pubKey.SerializeUncompressed()
 	default:
-		return fmt.Errorf("unsupported signature type %v", k.Type)
+		return fmt.Errorf("unsupported signature type %v", k.KeyInfo.Type)
 	}
 
 	return nil

@@ -32,16 +32,19 @@ var testMatrix testMatrixTests
 func bootstrap(t *testing.T, tc *testCmd) {
 
 	// import eth private key.
-	res, err := tc.execute(t, "key import private 26b9b10aec1e75e68709689b446196a5235b26bb9d4c0fc91eaccc7d8b66ec16 ethKey --sigtype eth")
+	// res, err := tc.execute(t, "key import private 26b9b10aec1e75e68709689b446196a5235b26bb9d4c0fc91eaccc7d8b66ec16 ethKey --sigtype eth")
+	tc.rootCmd.SetArgs([]string{"-j", "-s", fmt.Sprintf("%s/v2", tc.jsonRpcAddr), "key", "import", "private", "ethKey", "--sigtype", "eth"})
+	tc.rootCmd.SetIn(strings.NewReader("26b9b10aec1e75e68709689b446196a5235b26bb9d4c0fc91eaccc7d8b66ec16"))
+	res, err := executeCmd(tc.rootCmd)
 	require.NoError(t, err)
 	var keyResponse KeyResponse
 	err = json.Unmarshal([]byte(res), &keyResponse)
 	require.NoError(t, err)
 
 	//add the DN private key to our key list.
-	tc.rootCmd.SetArgs([]string{"key", "import", "private", "dnkey"})
+	tc.rootCmd.SetArgs([]string{"-j", "-s", fmt.Sprintf("%s/v2", tc.jsonRpcAddr), "key", "import", "private", "dnkey"})
 	tc.rootCmd.SetIn(strings.NewReader(fmt.Sprintf("%v", tc.privKey.Bytes())))
-	_, err := executeCmd(tc.rootCmd)
+	_, err = executeCmd(tc.rootCmd)
 	require.NoError(t, err)
 
 	//set mnemonic for predictable addresses

@@ -49,20 +49,36 @@ var keyCmd = &cobra.Command{
 			switch arg := args[0]; arg {
 			case "import":
 				if len(args) == 3 {
-					if args[1] == "lite" {
-
+					switch args[1] {
+					// case "mnemonic":
+					// 	out, err = ImportMnemonic(args[2:])
+					case "private":
+						// log.Panicln(args)
+						out, err = ImportKeyPrompt(args[2], sigType)
+					case "public":
+						//reserved for future use.
+						fallthrough
+					case "lite":
 						out, err = ImportKeyPrompt("", sigType)
-					} else if args[1] == "factoid" {
+					case "factoid":
 						out, err = ImportFactoidKey()
-					} else {
+					default:
 						PrintKeyImport()
 					}
+					// if args[1] == "lite" {
+
+					// 	out, err = ImportKeyPrompt("", sigType)
+					// } else if args[1] == "factoid" {
+					// 	out, err = ImportFactoidKey()
+					// } else {
+					// 	PrintKeyImport()
+					// }
 				} else if len(args) > 3 {
 					switch args[1] {
 					case "mnemonic":
 						out, err = ImportMnemonic(args[2:])
 					case "private":
-						out, err = ImportKeyPrompt(args[3], sigType)
+						out, err = ImportKeyPrompt(args[2], sigType)
 					case "public":
 						//reserved for future use.
 						fallthrough
@@ -487,7 +503,7 @@ func ImportKey(token []byte, label string, signatureType protocol.SignatureType)
 		return "", err
 	}
 
-	lt, err := protocol.LiteTokenAddress(pk.PublicKey, protocol.ACME, pk.Type)
+	lt, err := protocol.LiteTokenAddress(pk.PublicKey, protocol.ACME, pk.KeyInfo.Type)
 	if err != nil {
 		return "", fmt.Errorf("no label specified and cannot import as lite token account")
 	}
