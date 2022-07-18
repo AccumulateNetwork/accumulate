@@ -10,7 +10,6 @@ import (
 	"math"
 	"math/big"
 	"strings"
-	"time"
 	"unicode"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
@@ -92,7 +91,7 @@ func prepareSigner(origin *url.URL, args []string) ([]string, []*signing.Builder
 
 	firstSigner := new(signing.Builder)
 	firstSigner.Type = protocol.SignatureTypeLegacyED25519
-	firstSigner.SetTimestamp(nonceFromTimeNow())
+	firstSigner.SetTimestampToNow()
 
 	for _, del := range Delegators {
 		u, err := url.Parse(del)
@@ -582,11 +581,6 @@ func natural(name string) string {
 
 	w.WriteString(name)
 	return w.String()
-}
-
-func nonceFromTimeNow() uint64 {
-	t := time.Now()
-	return uint64(t.Unix()*1e6) + uint64(t.Nanosecond())/1e3
 }
 
 func QueryAcmeOracle() (*protocol.AcmeOracle, error) {
