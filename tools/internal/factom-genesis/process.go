@@ -46,8 +46,8 @@ func Open() bool {
 	return true
 }
 
-func Process(server string) {
-	InitSim()
+func Process() {
+
 	var cg ChainGang
 	header := new(Header)
 	dBlock := directoryBlock.NewDirectoryBlock(nil)

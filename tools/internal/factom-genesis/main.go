@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"math/big"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -114,21 +116,14 @@ func WriteDataToAccumulateSim(data protocol.DataEntry, dataAccount *url.URL) err
 		Entry:     &protocol.AccumulateDataEntry{Data: data.GetData()},
 		Recipient: dataAccount,
 	}
-	// mutex.Lock()
-	// log.Println("Creating envelope")
-	// envelope, err := buildEnvelope(wd, origin)
-	// if err != nil {
-	// 	// mutex.Unlock()
-	// 	return err
-	// }
-	var timestamp uint64
+
+	timestamp, _ := signing.TimestampFromValue(time.Now().UTC().UnixMilli()).Get()
 	log.Println("Executing txn")
-	// responses, _ := simul.WaitForTransactions(delivered, simul.MustSubmitAndExecuteBlock(envelope)...)
 	responses, _ := simul.WaitForTransactions(delivered, simul.MustSubmitAndExecuteBlock(
 		acctesting.NewTransaction().
-			WithPrincipal(dataAccount).
+			WithPrincipal(origin).
 			WithTimestampVar(&timestamp).
-			WithSigner(dataAccount, 1).
+			WithSigner(origin, 1).
 			WithBody(wd).
 			Initiate(protocol.SignatureTypeED25519, key.PrivateKey).
 			Build())...)
@@ -350,70 +345,25 @@ func GetDataAndPopulateQueue(entries []*f2.Entry) {
 }
 
 //FaucetWithCredits is only used for testing. Initial account will be prefunded.
-func FaucetWithCredits(env string) error {
-	client, err := client.New(env)
-	if err != nil {
-		return err
-	}
-
-	fmt.Printf("fauceting %s\n", origin.String())
-	faucet := protocol.AcmeFaucet{}
-	faucet.Url = origin
-	resp, err := client.Faucet(context.Background(), &faucet)
-	if err != nil {
-		return err
-	}
-
-	txReq := api.TxnQuery{}
-	txReq.Txid = resp.TransactionHash
-	txReq.Wait = time.Second * 10
-	txReq.IgnorePending = false
-
-	_, err = client.QueryTx(context.Background(), &txReq)
-	if err != nil {
-		return err
-	}
-
-	time.Sleep(time.Second * 3)
-	//now buy a bunch of credits.
-	cred := protocol.AddCredits{}
-	cred.Recipient = origin
-	cred.Oracle = 500
-	cred.Amount.SetInt64(200000000000000)
-
-	envelope, err := buildEnvelope(&cred, origin)
-	if err != nil {
-		return err
-	}
-
-	resp, err = client.ExecuteDirect(context.Background(), &api.ExecuteRequest{Envelope: envelope})
-	if err != nil {
-		return err
-	}
-
-	time.Sleep(time.Second * 2)
-	txReq = api.TxnQuery{}
-	txReq.Txid = resp.TransactionHash
-	txReq.Wait = time.Second * 10
-	txReq.IgnorePending = false
-
-	qtx, err := client.QueryTx(context.Background(), &txReq)
-	if err != nil {
-		if err != nil {
-			return err
-		}
-	}
-	_ = qtx
-
-	// for _, txid := range qtx.Produced {
-	// 	txReq.Txid = txid.Account().Hash()
-	// 	_, err = client.QueryTx(context.Background(), &txReq)
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// }
-
-	time.Sleep(time.Second * 2)
-	client.CloseIdleConnections()
+func FaucetWithCredits() error {
+	simul.CreateAccount(&protocol.LiteIdentity{Url: origin.RootIdentity(), CreditBalance: 1e9})
+	simul.CreateAccount(&protocol.LiteTokenAccount{Url: origin, TokenUrl: protocol.AcmeUrl(), Balance: *big.NewInt(1e9)})
 	return nil
+}
+
+func CreateAccumulateSnapshot() {
+	dir, _ := os.UserHomeDir()
+	filename := func(partition string) string {
+		return filepath.Join(dir, fmt.Sprintf("%s.bpt", partition))
+	}
+	for _, partition := range simul.Partitions {
+		x := simul.Partition(partition.Id)
+		batch := x.Database.Begin(false)
+		defer batch.Discard()
+		f, err := os.Create(filename(partition.Id))
+		if err != nil {
+			log.Panicln(err.Error())
+		}
+		x.Executor.SaveSnapshot(batch, f)
+	}
 }

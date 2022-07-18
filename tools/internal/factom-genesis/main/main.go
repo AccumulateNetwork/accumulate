@@ -21,13 +21,14 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error : %v", err)
 	}
+	factom.InitSim()
+	err = factom.FaucetWithCredits()
+	if err != nil {
+		log.Fatalf("failed to faucet account %v", err)
+	}
 
-	// err = factom.FaucetWithCredits(factom.LOCAL_URL)
-	// if err != nil {
-	// 	log.Fatalf("failed to faucet account %v", err)
-	// }
-
-	factom.Process(factom.LOCAL_URL)
+	factom.Process()
+	factom.CreateAccumulateSnapshot()
 	// if faucet {
 	// 	err := factom.FaucetWithCredits(factom.LOCAL_URL)
 	// 	if err != nil {
