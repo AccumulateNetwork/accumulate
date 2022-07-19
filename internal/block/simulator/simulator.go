@@ -131,7 +131,7 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 
 	mainEventBus := events.NewBus(sim.Logger.With("partition", protocol.Directory))
 	events.SubscribeSync(mainEventBus, sim.willChangeGlobals)
-	sim.router = routing.NewRouter(mainEventBus, nil)
+	sim.router = routing.NewRouter(mainEventBus, nil, sim.Logger)
 
 	// Initialize each executor
 	for i, bvn := range sim.netInit.Bvns[:1] {

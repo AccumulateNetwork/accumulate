@@ -15,7 +15,6 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
-	"gitlab.com/accumulatenetwork/accumulate/internal/testing"
 )
 
 var cmdRunDevnet = &cobra.Command{
@@ -27,14 +26,12 @@ var cmdRunDevnet = &cobra.Command{
 
 var flagRunDevnet = struct {
 	Except []int
-	Debug  bool
 }{}
 
 func init() {
 	cmdRun.AddCommand(cmdRunDevnet)
 
 	cmdRunDevnet.Flags().IntSliceVarP(&flagRunDevnet.Except, "except", "x", nil, "Numbers of nodes that should not be launched")
-	cmdRunDevnet.Flags().BoolVar(&flagRunDevnet.Debug, "debug", false, "Enable debugging features")
 
 	if os.Getenv("FORCE_COLOR") != "" {
 		color.NoColor = false
@@ -53,10 +50,6 @@ var colors = []*color.Color{
 var fallbackColor = color.New(color.FgHiBlack)
 
 func runDevNet(*cobra.Command, []string) {
-	if flagRunDevnet.Debug {
-		testing.EnableDebugFeatures()
-	}
-
 	skip := map[int]bool{}
 	for _, id := range flagRunDevnet.Except {
 		skip[id] = true
