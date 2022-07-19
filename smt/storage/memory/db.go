@@ -1,14 +1,10 @@
 package memory
 
 import (
-	"bytes"
 	"encoding/hex"
-	"encoding/json"
-	"sort"
 	"sync"
 	"sync/atomic"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
@@ -133,64 +129,6 @@ func (m *DB) get(key storage.Key) (value []byte, err error) {
 		return nil, errors.NotFound("key %v not found", key)
 	}
 	return append([]byte{}, v...), nil
-}
-
-type jsonDB []jsonEntry
-
-type jsonEntry struct {
-	Key   string
-	Value string
-}
-
-func (m *DB) MarshalJSON() ([]byte, error) {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-
-	var size uint64
-	var keys []storage.Key
-	for key, entry := range m.entries {
-		keys = append(keys, key)
-		n := uint64(len(entry))
-		size += 32
-		size += uint64(encoding.UvarintBinarySize(n))
-		size += n
-	}
-	sort.Slice(keys, func(i, j int) bool {
-		return bytes.Compare(keys[i][:], keys[j][:]) < 0
-	})
-
-	jdb := make(jsonDB, 0, size)
-	for _, key := range keys {
-		entry := m.entries[key]
-		jdb = append(jdb, jsonEntry{hex.EncodeToString(key[:]), hex.EncodeToString(entry)}) //nolint:rangevarref
-	}
-	return json.Marshal(jdb)
-}
-
-func (m *DB) UnmarshalJSON(b []byte) error {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-
-	var jdb jsonDB
-	err := json.Unmarshal(b, &jdb)
-	if err != nil {
-		return err
-	}
-
-	// Delete all entries first?
-
-	for _, e := range jdb {
-		key, err := hex.DecodeString(e.Key)
-		if err != nil {
-			return err
-		}
-		value, err := hex.DecodeString(e.Value)
-		if err != nil {
-			return err
-		}
-		m.entries[*(*storage.Key)(key)] = value
-	}
-	return nil
 }
 
 type atomicBool int32

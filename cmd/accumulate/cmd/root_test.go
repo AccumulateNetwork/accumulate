@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/crypto"
 	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
+	"gitlab.com/accumulatenetwork/accumulate/internal/testdata"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -29,8 +30,16 @@ type testMatrixTests []testCase
 var testMatrix testMatrixTests
 
 func bootstrap(t *testing.T, tc *testCmd) {
+
+	// import eth private key.
+	res, err := tc.execute(t, "key import private 26b9b10aec1e75e68709689b446196a5235b26bb9d4c0fc91eaccc7d8b66ec16 ethKey --sigtype eth")
+	require.NoError(t, err)
+	var keyResponse KeyResponse
+	err = json.Unmarshal([]byte(res), &keyResponse)
+	require.NoError(t, err)
+
 	//add the DN private key to our key list.
-	_, err := tc.execute(t, fmt.Sprintf("key import private %x dnkey", tc.privKey.Bytes()))
+	_, err = tc.execute(t, fmt.Sprintf("key import private %x dnkey --sigtype ed25519", tc.privKey.Bytes()))
 	require.NoError(t, err)
 
 	//set mnemonic for predictable addresses
@@ -148,6 +157,7 @@ func (c *testCmd) execute(t *testing.T, cmdLine string) (string, error) {
 	TxWaitSynth = 0
 	TxIgnorePending = false
 	UseUnencryptedWallet = true
+	flagAccount.Lite = false
 
 	fullCommand := fmt.Sprintf("-j -s %s/v2 %s",
 		c.jsonRpcAddr, cmdLine)
@@ -180,7 +190,7 @@ func (c *testCmd) executeTx(t *testing.T, cmdLine string, args ...interface{}) (
 }
 
 func testFactomAddresses() error {
-	factomAddresses, err := genesis.LoadFactomAddressesAndBalances("test_factom_addresses")
+	factomAddresses, err := genesis.LoadFactomAddressesAndBalances(strings.NewReader(testdata.FactomAddresses))
 	if err != nil {
 		return err
 	}
