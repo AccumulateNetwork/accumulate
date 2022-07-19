@@ -113,7 +113,7 @@ func run(_ *cobra.Command, args []string) {
 		w.Reset()
 		err := fileTmpl.Execute(w, typ)
 		check(err)
-		filename := w.String()
+		filename := SafeClassName(w.String())
 
 		w.Reset()
 		err = Templates.Execute(w, flags.Language, &SingleTypeFile{flags.Package, typ})

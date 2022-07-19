@@ -59,6 +59,7 @@ func convert(types, refTypes typegen.Types, pkgName, pkgPath string) (*Types, er
 			field.KeepEmpty = true
 			field.Virtual = true
 			field.ParentTypeName = typ.Name
+			field.ParentUnionValue = typ.UnionValue()
 			typ.Fields = append(typ.Fields, field)
 		}
 
@@ -71,6 +72,7 @@ func convert(types, refTypes typegen.Types, pkgName, pkgPath string) (*Types, er
 			field := new(Field)
 			field.Type.SetNamed(name)
 			field.TypeRef = etyp
+			field.ParentTypeName = typ.Name
 			typ.Fields = append(typ.Fields, field)
 		}
 
@@ -79,6 +81,7 @@ func convert(types, refTypes typegen.Types, pkgName, pkgPath string) (*Types, er
 			tfield := new(Field)
 			tfield.Field = *field
 			tfield.ParentTypeName = typ.Name
+			tfield.ParentUnionValue = typ.UnionValue()
 			if field.MarshalAs != typegen.MarshalAsBasic {
 				tfield.TypeRef = lup[tfield.Type.String()]
 			}
@@ -168,9 +171,10 @@ type Type struct {
 
 type Field struct {
 	typegen.Field
-	TypeRef        *Type
-	IsEmbedded     bool
-	ParentTypeName string
+	TypeRef          *Type
+	IsEmbedded       bool
+	ParentTypeName   string
+	ParentUnionValue string
 }
 
 func (t *Type) IsAccount() bool    { return t.Union.Type == "account" }

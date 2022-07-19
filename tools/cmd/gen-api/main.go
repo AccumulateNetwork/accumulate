@@ -3,25 +3,35 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"os"
-
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/tools/internal/typegen"
 	"gopkg.in/yaml.v3"
+	"os"
+	"path/filepath"
 )
 
 var flags struct {
-	Package string
-	Out     string
+	Package  string
+	Language string
+	Out      string
 }
 
 func run(_ *cobra.Command, args []string) {
 	api := readFile(args[0])
 	tapi := convert(api)
 
+	generateJava(tapi)
+	//w := new(bytes.Buffer)
+	//check(Go.Execute(w, tapi))
+	//check(typegen.GoFmt(flags.Out, w))
+}
+
+func generateJava(tapi *TApi) {
 	w := new(bytes.Buffer)
-	check(Go.Execute(w, tapi))
-	check(typegen.GoFmt(flags.Out, w))
+	dir, _ := filepath.Split(flags.Out)
+	filename := dir + "/RPCMethod.java"
+	check(Templates.Execute(w, flags.Language, tapi)) // FIXME is not finished but could make it work for now
+	check(typegen.WriteFile(filename, w))
 }
 
 func readFile(file string) typegen.API {
@@ -45,6 +55,7 @@ func main() {
 		Run:  run,
 	}
 
+	cmd.Flags().StringVarP(&flags.Language, "language", "l", "Go", "Output language or template file")
 	cmd.Flags().StringVar(&flags.Package, "package", "protocol", "Package name")
 	cmd.Flags().StringVarP(&flags.Out, "out", "o", "api_gen.go", "Output file")
 

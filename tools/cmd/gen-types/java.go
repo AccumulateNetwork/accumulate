@@ -3,6 +3,7 @@ package main
 import (
 	_ "embed"
 	"fmt"
+	"path/filepath"
 	"text/template"
 )
 
@@ -19,6 +20,9 @@ var javaFuncs = template.FuncMap{
 		}
 		return typ
 	},
+	"safeClassName": func(value string) string {
+		return SafeClassName(value)
+	},
 	"isZero": func(field *Field, varName string) (string, error) {
 		if field.Repeatable {
 			return fmt.Sprintf("%s == null || %[1]s.length == 0", varName), nil
@@ -33,14 +37,14 @@ var javaFuncs = template.FuncMap{
 			return fmt.Sprintf("%s == null || %[1]s.length == 0", varName), nil
 		case String:
 			return fmt.Sprintf("%s == null || %[1]s.length() == 0", varName), nil
-		case Any, Url, TxID, Time:
+		case Any, Url, TxID, Time, Duration:
 			return fmt.Sprintf("%s == null", varName), nil
 		case Bool:
 			return fmt.Sprintf("!%s", varName), nil
-		case Uint, Int, Duration, Float:
+		case Uint, Int, Float:
 			return fmt.Sprintf("%s == 0", varName), nil
 		case BigInt:
-			return fmt.Sprintf("(%s).equals(BigInteger.ZERO)", varName), nil
+			return fmt.Sprintf("(%s).equals(java.math.BigInteger.ZERO)", varName), nil
 		}
 
 		switch field.MarshalAs {
@@ -54,4 +58,15 @@ var javaFuncs = template.FuncMap{
 
 		return "", fmt.Errorf("field %q: cannot determine zero value for %s", field.Name, GoResolveType(field, false, false))
 	},
+}
+
+func SafeClassName(value string) string {
+	// Handle illegal keywords for java class/file names
+	_, className := filepath.Split(value)
+	if className == "Object" {
+		return "ProtocolObject"
+	} else if className == "Object.java" {
+		return "ProtocolObject.java"
+	}
+	return value
 }

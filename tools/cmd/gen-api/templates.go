@@ -10,7 +10,8 @@ import (
 )
 
 var (
-	Go = mustParseTemplate("Go", goSrc)
+	Go   = mustParseTemplate("Go", goSrc)
+	Java = mustParseTemplate("Java", javaSrc)
 )
 
 type TApi struct {
@@ -53,3 +54,9 @@ func mustParseTemplate(name, src string) *template.Template {
 	checkf(err, "bad template")
 	return tmpl
 }
+
+var Templates = typegen.NewTemplateLibrary(template.FuncMap{
+	"lower":               strings.ToLower,
+	"upper":               strings.ToUpper,
+	"underscoreUpperCase": typegen.UnderscoreUpperCase,
+})

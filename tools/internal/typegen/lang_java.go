@@ -1,9 +1,14 @@
 package typegen
 
+import "strings"
+
 func (f FieldType) JavaType() string {
 	switch f.Code {
 	case TypeCodeUnknown:
-		return f.Name
+		split := strings.SplitAfter(f.Name, ".")
+		return split[len(split)-1]
+	case TypeCodeString:
+		return "String"
 	case TypeCodeBytes:
 		return "byte[]"
 	case TypeCodeRawJson:
@@ -13,7 +18,7 @@ func (f FieldType) JavaType() string {
 	case TypeCodeTxid:
 		return "TxID"
 	case TypeCodeBigInt:
-		return "BigInteger"
+		return "java.math.BigInteger"
 	case TypeCodeUint:
 		return "long"
 	case TypeCodeInt:
@@ -23,9 +28,11 @@ func (f FieldType) JavaType() string {
 	case TypeCodeDuration:
 		return "Duration"
 	case TypeCodeTime:
-		return "Time"
+		return "java.time.OffsetDateTime"
 	case TypeCodeAny:
-		return "Object"
+		return "JsonNode"
+	case TypeCodeBool:
+		return "boolean"
 	case TypeCodeFloat:
 		return "float"
 	default:
