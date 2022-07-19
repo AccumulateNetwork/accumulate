@@ -138,11 +138,16 @@ func ParseLiteAddress(u *url.URL) ([]byte, error) {
 		return nil, err
 	}
 
-	i := len(b) - 4
+	const checksumLen = 4
+	if len(b) <= checksumLen {
+		return nil, errors.New("too short")
+	}
+
+	i := len(b) - checksumLen
 	byteValue, byteCheck := b[:i], b[i:]
-	hexValue := u.Authority[:len(u.Authority)-8]
+	hexValue := u.Authority[:len(u.Authority)-checksumLen*2]
 	checkSum := sha256.Sum256([]byte(hexValue))
-	if !bytes.Equal(byteCheck, checkSum[28:]) {
+	if !bytes.Equal(byteCheck, checkSum[len(checkSum)-checksumLen:]) {
 		return nil, errors.New("invalid checksum")
 	}
 
