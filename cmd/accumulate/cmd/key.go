@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bufio"
 	"bytes"
 	"crypto/ed25519"
 	"crypto/sha256"
@@ -54,12 +55,12 @@ var keyCmd = &cobra.Command{
 					// 	out, err = ImportMnemonic(args[2:])
 					case "private":
 						// log.Panicln(args)
-						out, err = ImportKeyPrompt(args[2], sigType)
+						out, err = ImportKeyPrompt(cmd, args[2], sigType)
 					case "public":
 						//reserved for future use.
 						fallthrough
 					case "lite":
-						out, err = ImportKeyPrompt("", sigType)
+						out, err = ImportKeyPrompt(cmd, "", sigType)
 					case "factoid":
 						out, err = ImportFactoidKey()
 					default:
@@ -78,7 +79,7 @@ var keyCmd = &cobra.Command{
 					case "mnemonic":
 						out, err = ImportMnemonic(args[2:])
 					case "private":
-						out, err = ImportKeyPrompt(args[2], sigType)
+						out, err = ImportKeyPrompt(cmd, args[2], sigType)
 					case "public":
 						//reserved for future use.
 						fallthrough
@@ -485,12 +486,27 @@ func FindLabelFromPubKey(pubKey []byte) (lab string, err error) {
 	return lab, err
 }
 
-func ImportKeyPrompt(label string, signatureType protocol.SignatureType) (out string, err error) {
-	token, err := gopass.GetPasswdPrompt("Private Key : ", false, os.Stdin, os.Stderr)
+func ImportKeyPrompt(cmd *cobra.Command, label string, signatureType protocol.SignatureType) (out string, err error) {
+	token, err := getPasswdPrompt(cmd, "Private Key : ", false)
 	if err != nil {
 		return "", db.ErrInvalidPassword
 	}
-	return ImportKey(token, label, signatureType)
+	return ImportKey([]byte(token), label, signatureType)
+}
+
+func getPasswdPrompt(cmd *cobra.Command, prompt string, mask bool) (string, error) {
+	rd, ok := cmd.InOrStdin().(gopass.FdReader)
+	if ok {
+		bytes, err := gopass.GetPasswdPrompt(prompt, mask, rd, cmd.ErrOrStderr())
+		return string(bytes), err
+	}
+
+	fmt.Fprintf(cmd.OutOrStdout(), prompt)
+	line, err := bufio.NewReader(cmd.InOrStdin()).ReadString('\n')
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSuffix(line, "\n"), nil
 }
 
 // ImportKey will import the private key and assign it to the label
