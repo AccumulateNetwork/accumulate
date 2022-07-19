@@ -2,6 +2,8 @@ package block_test
 
 import (
 	"bufio"
+	"encoding/hex"
+	"fmt"
 	"math/big"
 	"os"
 	"testing"
@@ -15,6 +17,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -156,4 +159,73 @@ func dumpLogs(b logging.TB, dataSetLog *logging.DataSetLog) {
 			require.NoError(b, err)
 		}
 	}
+}
+
+func BenchmarkBlock(b *testing.B) {
+	bvnCount := []int{1}
+	// blockSize := []int{50, 100, 200, 500, 1000}
+	blockSize := []int{50}
+
+	for _, bvnCount := range bvnCount {
+		sim := simulator.New(b, bvnCount)
+		sim.InitFromGenesis()
+
+		// Make AddCredits a no-op
+		for _, x := range sim.Executors {
+			x.Executor.SetExecutor(executor{
+				protocol.TransactionTypeAddCredits,
+				func(st *chain.StateManager, tx *chain.Delivery) error {
+					u := &url.URL{Authority: hex.EncodeToString(tx.Transaction.GetHash())}
+					return st.Create(&protocol.UnknownAccount{Url: u})
+					// st.Submit(u, &protocol.SyntheticDepositCredits{})
+					// return nil
+				},
+			})
+			x.Executor.SetExecutor(executor{
+				protocol.TransactionTypeSyntheticDepositCredits,
+				func(st *chain.StateManager, tx *chain.Delivery) error {
+					return nil
+				},
+			})
+		}
+
+		for _, blockSize := range blockSize {
+			var timestamp uint64
+			dn := sim.Executors[protocol.Directory]
+			envs := make([]*protocol.Envelope, blockSize)
+			for j := range envs {
+				envs[j] = acctesting.NewTransaction().
+					WithPrincipal(dn.Executor.Describe.PartitionUrl().URL).
+					WithSigner(dn.Executor.Describe.OperatorsPage(), 1).
+					WithTimestampVar(&timestamp).
+					WithBody(&protocol.AddCredits{}).
+					Initiate(protocol.SignatureTypeED25519, dn.Executor.Key).
+					Build()
+			}
+
+			b.Run(fmt.Sprintf("%d BVNs, %d txns", bvnCount, blockSize), func(b *testing.B) {
+				for i := 0; i < b.N; i++ {
+					sim.WithBatch(func(sim *simulator.Simulator) {
+						sim.MustSubmitAndExecuteBlock(envs...)
+						sim.WaitForTransactions(delivered, envs...)
+					})
+				}
+			})
+		}
+	}
+}
+
+type executor struct {
+	typ protocol.TransactionType
+	fn  func(st *chain.StateManager, tx *chain.Delivery) error
+}
+
+func (x executor) Type() protocol.TransactionType { return x.typ }
+
+func (x executor) Execute(st *chain.StateManager, tx *chain.Delivery) (protocol.TransactionResult, error) {
+	return nil, x.fn(st, tx)
+}
+
+func (x executor) Validate(st *chain.StateManager, tx *chain.Delivery) (protocol.TransactionResult, error) {
+	return nil, x.fn(st, tx)
 }

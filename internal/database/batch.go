@@ -1,6 +1,8 @@
 package database
 
 import (
+	"fmt"
+
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
@@ -8,12 +10,22 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
+// A Beginner can be a Database or a Batch
+type Beginner interface {
+	Begin(bool) *Batch
+	Update(func(*Batch) error) error
+	View(func(*Batch) error) error
+}
+
+var _ Beginner = (*Database)(nil)
+var _ Beginner = (*Batch)(nil)
+
 // Begin starts a new batch.
 func (d *Database) Begin(writable bool) *Batch {
 	d.nextBatchId++
 
 	b := new(Batch)
-	b.id = d.nextBatchId
+	b.id = fmt.Sprint(d.nextBatchId)
 	b.writable = writable
 	b.logger.L = d.logger
 	b.kvstore = d.store.Begin(writable)
@@ -30,7 +42,7 @@ func (b *Batch) Begin(writable bool) *Batch {
 	b.nextChildId++
 
 	c := new(Batch)
-	c.id = b.nextChildId
+	c.id = fmt.Sprintf("%s.%d", b.id, b.nextChildId)
 	c.writable = b.writable && writable
 	c.parent = b
 	c.logger = b.logger
@@ -90,7 +102,7 @@ func (b *Batch) Update(fn func(batch *Batch) error) error {
 // panic.
 func (b *Batch) Commit() error {
 	if b.done {
-		panic("attempted to use a commited or discarded batch")
+		panic(fmt.Sprintf("batch %s: attempted to use a commited or discarded batch", b.id))
 	}
 	defer func() { b.done = true }()
 
@@ -164,7 +176,7 @@ func (b *Batch) AccountByID(id []byte) (*Account, error) {
 // GetValue implements record.Store.
 func (b *Batch) GetValue(key record.Key, value record.ValueWriter) error {
 	if b.done {
-		panic("attempted to use a commited or discarded batch")
+		panic(fmt.Sprintf("batch %s: attempted to use a commited or discarded batch", b.id))
 	}
 
 	v, err := resolveValue[record.ValueReader](b, key)
@@ -179,7 +191,7 @@ func (b *Batch) GetValue(key record.Key, value record.ValueWriter) error {
 // PutValue implements record.Store.
 func (b *Batch) PutValue(key record.Key, value record.ValueReader) error {
 	if b.done {
-		panic("attempted to use a commited or discarded batch")
+		panic(fmt.Sprintf("batch %s: attempted to use a commited or discarded batch", b.id))
 	}
 
 	v, err := resolveValue[record.ValueWriter](b, key)

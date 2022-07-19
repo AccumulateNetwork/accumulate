@@ -89,7 +89,6 @@ func NewWith(t TB, opts SimulatorOptions) *Simulator {
 
 func (sim *Simulator) Setup(opts SimulatorOptions) {
 	sim.Helper()
-	sim.opts = opts
 
 	if opts.BvnCount == 0 {
 		opts.BvnCount = 3
@@ -102,6 +101,7 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 			return database.OpenInMemory(logger)
 		}
 	}
+	sim.opts = opts
 
 	// Initialize the simulartor and network
 	sim.routingOverrides = map[[32]byte]string{}
@@ -303,6 +303,21 @@ func (s *Simulator) Query(url *url.URL, req query.Request, prove bool) interface
 
 	x := s.PartitionFor(url)
 	return Query(s, x.Database, x.Executor, req, prove)
+}
+
+// WithBatch starts a batch for all databases, runs the function, then discards
+// the batch.
+func (s *Simulator) WithBatch(fn func(s *Simulator)) {
+	for _, x := range s.Executors {
+		old, new := x.Database, x.Database.Begin(true)
+		x.Database = new
+		defer func(x *ExecEntry) {
+			x.Database = old
+			new.Discard()
+		}(x)
+	}
+
+	fn(s)
 }
 
 func (s *Simulator) InitFromGenesis() {
@@ -549,7 +564,7 @@ type ExecEntry struct {
 	nextBlock, currentBlock []*chain.Delivery
 
 	Partition  *config.Partition
-	Database   *database.Database
+	Database   database.Beginner
 	Executor   *block.Executor
 	API        *client.Client
 	Validators [][]byte
