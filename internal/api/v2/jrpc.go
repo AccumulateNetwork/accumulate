@@ -8,6 +8,7 @@ import (
 	stdlog "log"
 	"mime"
 	"net/http"
+	u "net/url"
 	"os"
 	"strconv"
 
@@ -112,15 +113,14 @@ func (m *JrpcMethods) jrpc2http(jrpc jsonrpc2.MethodFunc) http.HandlerFunc {
 
 func (m *JrpcMethods) Status(_ context.Context, params json.RawMessage) interface{} {
 	add := m.Options.Describe.Network.Partitions[0].Nodes[0].Address
-	url, err := url.Parse(add)
-	if err != nil {
-		return internalError(err)
-	}
+	url, err := u.Parse(add)
 	port, err := strconv.Atoi(url.Port())
 	if err != nil {
 		return internalError(err)
 	}
-	tmurl := fmt.Sprint(url.Hostname(), port)
+	tmurl := fmt.Sprint(url.Scheme, "://", url.Hostname(), ":", port+1)
+	fmt.Println(tmurl)
+
 	client, err := ht.New(tmurl)
 
 	if err != nil {
@@ -139,10 +139,12 @@ func (m *JrpcMethods) Status(_ context.Context, params json.RawMessage) interfac
 		status.DnHeight = uint64(height)
 		status.DnRootHash = *hash
 		status.Ok = true
+		return status
 	}
 	status.BvnHeight = uint64(height)
 	status.BvnRootHash = *hash
 	status.Ok = true
+
 	return status
 }
 
