@@ -18,7 +18,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
@@ -72,15 +71,18 @@ func SetPrivateKeyAndOrigin(privateKey string) error {
 	return nil
 }
 
-func WriteDataToAccumulateSim(data protocol.DataEntry, dataAccount *url.URL) error {
+func ConstructWriteDataToSim(data protocol.DataEntry, dataAccount *url.URL) *protocol.Transaction {
 	log.Println("Writing to : ", dataAccount.String())
 	wd := &protocol.WriteDataTo{
 		Entry:     &protocol.AccumulateDataEntry{Data: data.GetData()},
 		Recipient: dataAccount,
 	}
+	txn := new(protocol.Transaction)
+	txn.Header.Principal = origin
+	txn.Body = wd
+	return txn
 
-	timestamp, _ := signing.TimestampFromValue(time.Now().UTC().UnixMilli()).Get()
-	log.Println("Executing txn")
+	// log.Println("Executing txn")
 	// responses, _ := simul.WaitForTransactions(delivered, simul.MustSubmitAndExecuteBlock(
 	// 	acctesting.NewTransaction().
 	// 		WithPrincipal(origin).
@@ -89,14 +91,6 @@ func WriteDataToAccumulateSim(data protocol.DataEntry, dataAccount *url.URL) err
 	// 		WithBody(wd).
 	// 		Initiate(protocol.SignatureTypeED25519, key.PrivateKey).
 	// 		Build())...)
-	simul.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(origin).
-			WithTimestampVar(&timestamp).
-			WithSigner(origin, 1).
-			WithBody(wd).
-			Initiate(protocol.SignatureTypeED25519, key.PrivateKey).
-			Build())
 	// for _, res := range responses {
 	// 	log.Println("TxId : ", res.TxID)
 	// 	request := query.RequestByTxId{
@@ -105,23 +99,11 @@ func WriteDataToAccumulateSim(data protocol.DataEntry, dataAccount *url.URL) err
 	// 	txRes := simul.Query(res.TxID.Account(), &request, true)
 	// 	log.Println("Txn Query Res : ", txRes)
 	// }
-	log.Println("Wrote to : ", dataAccount.String())
-	return nil
+	// log.Println("Wrote to : ", dataAccount.String())
 }
 
-func ExecuteDataEntry(chainId *[32]byte, entry *protocol.FactomDataEntry) {
-	u, err := protocol.LiteDataAddress((*chainId)[:])
-	if err != nil {
-		log.Fatalf("error creating lite address %x, %v", *chainId, err)
-	}
-	WriteDataToSim(u, entry)
-}
-
-func WriteDataToSim(chainUrl *url.URL, entry *protocol.FactomDataEntry) {
-	err := WriteDataToAccumulateSim(entry, chainUrl)
-	if err != nil {
-		log.Printf("error writing data to accumulate : %v", err)
-	}
+func ConstructWriteData(u *url.URL, entry *protocol.FactomDataEntry) *protocol.Transaction {
+	return ConstructWriteDataToSim(entry, u)
 }
 
 func GetAccountFromPrivateString(hexString string) *url.URL {
@@ -176,7 +158,7 @@ func FaucetWithCredits() error {
 				Oracle:    protocol.InitialAcmeOracleValue,
 				Amount:    *big.NewInt(protocol.AcmeFaucetAmount * protocol.AcmePrecision),
 			}).
-			WithCurrentTimestamp().
+			WithTimestamp(1).
 			Initiate(protocol.SignatureTypeED25519, key.PrivateKey).
 			Build(),
 	)...)
@@ -189,6 +171,7 @@ func CreateAccumulateSnapshot() {
 	filename := func(partition string) string {
 		return filepath.Join(dir, fmt.Sprintf("%s.bpt", partition))
 	}
+	t := time.Now()
 	for _, partition := range simul.Partitions {
 		x := simul.Partition(partition.Id)
 		batch := x.Database.Begin(false)
@@ -201,4 +184,5 @@ func CreateAccumulateSnapshot() {
 			log.Println("Snapshot error : ", err.Error())
 		}
 	}
+	fmt.Printf("Saved %d snapshots in %v\n", len(simul.Partitions), time.Since(t)) //nolint:noprint
 }
