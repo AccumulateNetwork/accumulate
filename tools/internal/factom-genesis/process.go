@@ -34,7 +34,7 @@ func Open() bool {
 	filename := filepath.Join(u.HomeDir, "tmp", "FactomObjects", fmt.Sprintf("objects-%d.dat", fileNumber))
 	f, err := os.OpenFile(filename, os.O_RDONLY, 07666)
 	if err != nil {
-		fmt.Println("Done. ", fileCnt, " files processed")
+		log.Println("Done. ", fileCnt, " files processed")
 		return false
 	}
 	fileNumber += FileIncrement
