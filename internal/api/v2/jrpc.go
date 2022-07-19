@@ -114,13 +114,14 @@ func (m *JrpcMethods) jrpc2http(jrpc jsonrpc2.MethodFunc) http.HandlerFunc {
 func (m *JrpcMethods) Status(c context.Context, params json.RawMessage) interface{} {
 	add := m.Options.Describe.Network.Partitions[0].Nodes[0].Address
 	nodeurl, err := neturl.Parse(add)
+	if err != nil {
+		return internalError(err)
+	}
 	port, err := strconv.Atoi(nodeurl.Port())
 	if err != nil {
 		return internalError(err)
 	}
 	tmurl := fmt.Sprint(nodeurl.Scheme, "://", nodeurl.Hostname(), ":", port+1)
-	fmt.Println(tmurl)
-
 	client, err := tmhttp.New(tmurl)
 
 	if err != nil {
@@ -133,20 +134,6 @@ func (m *JrpcMethods) Status(c context.Context, params json.RawMessage) interfac
 	if err != nil {
 		return internalError(err)
 	}
-	res := new(DescriptionResponse)
-	res.Network = m.Options.Describe.Network
-	res.PartitionId = m.Options.Describe.PartitionId
-	res.NetworkType = m.Options.Describe.NetworkType
-
-	// Load network variable values
-	err = res.Values.Load(m.Options.Describe.PartitionUrl(), func(account *url.URL, target interface{}) error {
-		return m.Database.View(func(batch *database.Batch) error {
-			return batch.Account(account).GetStateAs(target)
-		})
-	})
-	if err != nil {
-		res.Error = errors.Wrap(errors.StatusUnknownError, err).(*errors.Error)
-	}
 
 	status := new(StatusResponse)
 	status.Ok = true
@@ -158,7 +145,6 @@ func (m *JrpcMethods) Status(c context.Context, params json.RawMessage) interfac
 	status.BvnHeight = uint64(height)
 	status.BvnRootHash = *hash
 	status.Ok = true
-	status.LastAnchor = res.NetworkAnchor
 	return status
 }
 
