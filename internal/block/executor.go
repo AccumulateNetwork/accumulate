@@ -27,7 +27,7 @@ type Executor struct {
 	executors  map[protocol.TransactionType]chain.TransactionExecutor
 	dispatcher *dispatcher
 	logger     logging.OptionalLogger
-	db         *database.Database
+	db         database.Beginner
 
 	// oldBlockMeta blockMetadata
 }
@@ -47,7 +47,7 @@ type ExecutorOptions struct {
 }
 
 // NewNodeExecutor creates a new Executor for a node.
-func NewNodeExecutor(opts ExecutorOptions, db *database.Database) (*Executor, error) {
+func NewNodeExecutor(opts ExecutorOptions, db database.Beginner) (*Executor, error) {
 	executors := []chain.TransactionExecutor{
 		// User transactions
 		chain.AddCredits{},
@@ -116,7 +116,7 @@ func NewGenesisExecutor(db *database.Database, logger log.Logger, network *confi
 	)
 }
 
-func newExecutor(opts ExecutorOptions, db *database.Database, executors ...chain.TransactionExecutor) (*Executor, error) {
+func newExecutor(opts ExecutorOptions, db database.Beginner, executors ...chain.TransactionExecutor) (*Executor, error) {
 	if opts.Background == nil {
 		opts.Background = func(f func()) { go f() }
 	}

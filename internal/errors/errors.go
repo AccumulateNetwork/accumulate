@@ -28,15 +28,6 @@ func makeError(code Status) *Error {
 	return e
 }
 
-func (e *Error) errorf(format string, args ...interface{}) {
-	err := fmt.Errorf(format, args...)
-	e.Message = err.Error()
-
-	if u, ok := err.(interface{ Unwrap() error }); ok {
-		e.setCause(convert(u.Unwrap()))
-	}
-}
-
 func convert(err error) *Error {
 	switch err := err.(type) {
 	case *Error:

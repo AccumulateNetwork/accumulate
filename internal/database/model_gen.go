@@ -18,7 +18,7 @@ type Batch struct {
 	store       record.Store
 	done        bool
 	writable    bool
-	id          int64
+	id          string
 	nextChildId int64
 	parent      *Batch
 	kvstore     storage.KeyValueTxn
