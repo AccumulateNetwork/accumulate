@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"os"
 	"strconv"
 	"strings"
 
@@ -62,7 +61,7 @@ var keyCmd = &cobra.Command{
 					case "lite":
 						out, err = ImportKeyPrompt(cmd, "", sigType)
 					case "factoid":
-						out, err = ImportFactoidKey()
+						out, err = ImportFactoidKey(cmd)
 					default:
 						PrintKeyImport()
 					}
@@ -84,6 +83,12 @@ var keyCmd = &cobra.Command{
 						//reserved for future use.
 						fallthrough
 					default:
+						PrintKeyImport()
+					}
+				} else if len(args) == 2 {
+					if args[1] == "factoid" {
+						out, err = ImportFactoidKey(cmd)
+					} else {
 						PrintKeyImport()
 					}
 				} else {
@@ -491,7 +496,11 @@ func ImportKeyPrompt(cmd *cobra.Command, label string, signatureType protocol.Si
 	if err != nil {
 		return "", db.ErrInvalidPassword
 	}
-	return ImportKey([]byte(token), label, signatureType)
+	tokenBytes, err := hex.DecodeString(token)
+	if err != nil {
+		return "", err
+	}
+	return ImportKey(tokenBytes, label, signatureType)
 }
 
 func getPasswdPrompt(cmd *cobra.Command, prompt string, mask bool) (string, error) {
@@ -783,12 +792,12 @@ func ExportMnemonic() (string, error) {
 	}
 }
 
-func ImportFactoidKey() (out string, err error) {
-	token, err := gopass.GetPasswdPrompt("Factom Private Key : ", false, os.Stdin, os.Stderr)
+func ImportFactoidKey(cmd *cobra.Command) (out string, err error) {
+	token, err := getPasswdPrompt(cmd, "Private Key : ", false)
 	if err != nil {
 		return "", db.ErrInvalidPassword
 	}
-	if !strings.Contains(hex.EncodeToString(token), "Fs") {
+	if !strings.Contains(token, "Fs") {
 		return "", fmt.Errorf("key to import is not a factoid address")
 	}
 	label, _, privatekey, err := protocol.GetFactoidAddressRcdHashPkeyFromPrivateFs(string(token))

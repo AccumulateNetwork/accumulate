@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -35,16 +36,16 @@ func bootstrap(t *testing.T, tc *testCmd) {
 	// res, err := tc.execute(t, "key import private 26b9b10aec1e75e68709689b446196a5235b26bb9d4c0fc91eaccc7d8b66ec16 ethKey --sigtype eth")
 	res, err := executeCmd(tc.rootCmd,
 		[]string{"-j", "-s", fmt.Sprintf("%s/v2", tc.jsonRpcAddr), "key", "import", "private", "ethKey", "--sigtype", "eth"},
-		"26b9b10aec1e75e68709689b446196a5235b26bb9d4c0fc91eaccc7d8b66ec16")
+		"26b9b10aec1e75e68709689b446196a5235b26bb9d4c0fc91eaccc7d8b66ec16\n")
 	require.NoError(t, err)
 	var keyResponse KeyResponse
-	err = json.Unmarshal([]byte(res), &keyResponse)
+	err = json.Unmarshal([]byte(strings.Split(res, ": ")[1]), &keyResponse)
 	require.NoError(t, err)
 
 	//add the DN private key to our key list.
 	_, err = executeCmd(tc.rootCmd,
-		[]string{"-j", "-s", fmt.Sprintf("%s/v2", tc.jsonRpcAddr), "key", "import", "private", "dnkey"},
-		fmt.Sprintf("%v", tc.privKey.Bytes()))
+		[]string{"-j", "-s", fmt.Sprintf("%s/v2", tc.jsonRpcAddr), "key", "import", "private", "dnkey", "--sigtype", "ed25519"},
+		fmt.Sprintf("%v\n", hex.EncodeToString(tc.privKey.Bytes())))
 	require.NoError(t, err)
 
 	//set mnemonic for predictable addresses
