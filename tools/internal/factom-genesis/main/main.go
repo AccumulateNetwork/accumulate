@@ -7,10 +7,6 @@ import (
 )
 
 func main() {
-	// err := factom.SetPrivateKeyAndOrigin("priv_validator_key.json")
-	// if err != nil {
-	// 	log.Fatalf("Error : %v", err)
-	// }
 
 	factom.InitSim()
 	err := factom.FaucetWithCredits()
@@ -19,7 +15,6 @@ func main() {
 	}
 
 	factom.Process()
-	// time.Sleep(10 * time.Second)
 	factom.CreateAccumulateSnapshot()
 
 }

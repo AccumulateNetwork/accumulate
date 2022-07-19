@@ -21,7 +21,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
 var origin *url.URL
@@ -82,22 +81,30 @@ func WriteDataToAccumulateSim(data protocol.DataEntry, dataAccount *url.URL) err
 
 	timestamp, _ := signing.TimestampFromValue(time.Now().UTC().UnixMilli()).Get()
 	log.Println("Executing txn")
-	responses, _ := simul.WaitForTransactions(delivered, simul.MustSubmitAndExecuteBlock(
+	// responses, _ := simul.WaitForTransactions(delivered, simul.MustSubmitAndExecuteBlock(
+	// 	acctesting.NewTransaction().
+	// 		WithPrincipal(origin).
+	// 		WithTimestampVar(&timestamp).
+	// 		WithSigner(origin, 1).
+	// 		WithBody(wd).
+	// 		Initiate(protocol.SignatureTypeED25519, key.PrivateKey).
+	// 		Build())...)
+	simul.MustSubmitAndExecuteBlock(
 		acctesting.NewTransaction().
 			WithPrincipal(origin).
 			WithTimestampVar(&timestamp).
 			WithSigner(origin, 1).
 			WithBody(wd).
 			Initiate(protocol.SignatureTypeED25519, key.PrivateKey).
-			Build())...)
-	for _, res := range responses {
-		log.Println("TxId : ", res.TxID)
-		request := query.RequestByTxId{
-			TxId: res.TxID.Hash(),
-		}
-		txRes := simul.Query(res.TxID.Account(), &request, true)
-		log.Println("Txn Query Res : ", txRes)
-	}
+			Build())
+	// for _, res := range responses {
+	// 	log.Println("TxId : ", res.TxID)
+	// 	request := query.RequestByTxId{
+	// 		TxId: res.TxID.Hash(),
+	// 	}
+	// 	txRes := simul.Query(res.TxID.Account(), &request, true)
+	// 	log.Println("Txn Query Res : ", txRes)
+	// }
 	log.Println("Wrote to : ", dataAccount.String())
 	return nil
 }
