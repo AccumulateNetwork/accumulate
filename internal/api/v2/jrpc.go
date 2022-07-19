@@ -8,14 +8,14 @@ import (
 	stdlog "log"
 	"mime"
 	"net/http"
-	u "net/url"
+	neturl "net/url"
 	"os"
 	"strconv"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/go-playground/validator/v10"
 	"github.com/tendermint/tendermint/libs/log"
-	ht "github.com/tendermint/tendermint/rpc/client/http"
+	tmhttp "github.com/tendermint/tendermint/rpc/client/http"
 	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -111,40 +111,54 @@ func (m *JrpcMethods) jrpc2http(jrpc jsonrpc2.MethodFunc) http.HandlerFunc {
 	}
 }
 
-func (m *JrpcMethods) Status(_ context.Context, params json.RawMessage) interface{} {
+func (m *JrpcMethods) Status(c context.Context, params json.RawMessage) interface{} {
 	add := m.Options.Describe.Network.Partitions[0].Nodes[0].Address
-	url, err := u.Parse(add)
-	port, err := strconv.Atoi(url.Port())
+	nodeurl, err := neturl.Parse(add)
+	port, err := strconv.Atoi(nodeurl.Port())
 	if err != nil {
 		return internalError(err)
 	}
-	tmurl := fmt.Sprint(url.Scheme, "://", url.Hostname(), ":", port+1)
+	tmurl := fmt.Sprint(nodeurl.Scheme, "://", nodeurl.Hostname(), ":", port+1)
 	fmt.Println(tmurl)
 
-	client, err := ht.New(tmurl)
+	client, err := tmhttp.New(tmurl)
 
 	if err != nil {
 		return internalError(err)
 	}
-	tminfo, err := client.ABCIInfo(context.Background())
+	tminfo, err := client.ABCIInfo(c)
 	hash := new([32]byte)
 	height := tminfo.Response.LastBlockHeight
 	copy(hash[:], tminfo.Response.LastBlockAppHash)
 	if err != nil {
 		return internalError(err)
 	}
-	status := new(StatusResponse)
+	res := new(DescriptionResponse)
+	res.Network = m.Options.Describe.Network
+	res.PartitionId = m.Options.Describe.PartitionId
+	res.NetworkType = m.Options.Describe.NetworkType
 
+	// Load network variable values
+	err = res.Values.Load(m.Options.Describe.PartitionUrl(), func(account *url.URL, target interface{}) error {
+		return m.Database.View(func(batch *database.Batch) error {
+			return batch.Account(account).GetStateAs(target)
+		})
+	})
+	if err != nil {
+		res.Error = errors.Wrap(errors.StatusUnknownError, err).(*errors.Error)
+	}
+
+	status := new(StatusResponse)
+	status.Ok = true
 	if m.Options.Describe.NetworkType == config.NetworkTypeDirectory {
 		status.DnHeight = uint64(height)
 		status.DnRootHash = *hash
-		status.Ok = true
 		return status
 	}
 	status.BvnHeight = uint64(height)
 	status.BvnRootHash = *hash
 	status.Ok = true
-
+	status.LastAnchor = res.NetworkAnchor
 	return status
 }
 
