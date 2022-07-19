@@ -226,6 +226,7 @@ func (d *Daemon) Start() (err error) {
 	// Let the connection manager create and assign clients
 	statusChecker := statuschk.NewNodeStatusChecker()
 	err = d.connectionManager.InitClients(lclient, statusChecker)
+
 	if err != nil {
 		return fmt.Errorf("failed to initialize the connection manager: %v", err)
 	}

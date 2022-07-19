@@ -3,16 +3,20 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	stdlog "log"
 	"mime"
 	"net/http"
 	"os"
+	"strconv"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/go-playground/validator/v10"
 	"github.com/tendermint/tendermint/libs/log"
+	ht "github.com/tendermint/tendermint/rpc/client/http"
 	"gitlab.com/accumulatenetwork/accumulate"
+	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
@@ -107,9 +111,39 @@ func (m *JrpcMethods) jrpc2http(jrpc jsonrpc2.MethodFunc) http.HandlerFunc {
 }
 
 func (m *JrpcMethods) Status(_ context.Context, params json.RawMessage) interface{} {
-	return &StatusResponse{
-		Ok: true,
+	add := m.Options.Describe.Network.Partitions[0].Nodes[0].Address
+	url, err := url.Parse(add)
+	if err != nil {
+		return internalError(err)
 	}
+	port, err := strconv.Atoi(url.Port())
+	if err != nil {
+		return internalError(err)
+	}
+	tmurl := fmt.Sprint(url.Hostname(), port)
+	client, err := ht.New(tmurl)
+
+	if err != nil {
+		return internalError(err)
+	}
+	tminfo, err := client.ABCIInfo(context.Background())
+	hash := new([32]byte)
+	height := tminfo.Response.LastBlockHeight
+	copy(hash[:], tminfo.Response.LastBlockAppHash)
+	if err != nil {
+		return internalError(err)
+	}
+	status := new(StatusResponse)
+
+	if m.Options.Describe.NetworkType == config.NetworkTypeDirectory {
+		status.DnHeight = uint64(height)
+		status.DnRootHash = *hash
+		status.Ok = true
+	}
+	status.BvnHeight = uint64(height)
+	status.BvnRootHash = *hash
+	status.Ok = true
+	return status
 }
 
 func (m *JrpcMethods) Version(_ context.Context, params json.RawMessage) interface{} {
