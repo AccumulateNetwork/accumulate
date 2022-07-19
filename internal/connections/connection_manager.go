@@ -14,6 +14,7 @@ import (
 	"github.com/tendermint/tendermint/rpc/client/http"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2/query"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -37,7 +38,7 @@ type connectionManager struct {
 	all         []ConnectionContext
 	localCtx    ConnectionContext
 	localClient client.Client
-	logger      log.Logger
+	logger      logging.OptionalLogger
 	localHost   string
 
 	apiClientFactory func(string) (APIClient, error)
@@ -57,7 +58,7 @@ func (cm *connectionManager) doHealthCheckOnNode(connCtx *connectionContext) {
 		// FIXME code ErrorCodeInvalidQueryType will emit an error in the log, maybe there is a nicer option to probe the abci API
 		connCtx.ReportError(err)
 		if qryRes != nil {
-			cm.logger.Info("ABCIQuery response: %v", qryRes.Response)
+			cm.logger.Info("ABCIQuery", "response", qryRes.Response)
 			newStatus = OutOfService
 		}
 		return
@@ -87,7 +88,9 @@ func NewConnectionManager(config *config.Config, logger log.Logger, apiClientFac
 	cm.accConfig = &config.Accumulate
 	cm.apiClientFactory = apiClientFactory
 	cm.localHost = cm.reformatAddress(cm.accConfig.LocalAddress)
-	cm.logger = logger
+	if logger != nil {
+		cm.logger.L = logger.With("module", "connection-manager")
+	}
 	cm.buildNodeInventory()
 	return cm
 }
@@ -98,6 +101,7 @@ func (cm *connectionManager) SelectConnection(partitionId string, allowFollower 
 		if cm.localCtx == nil {
 			return nil, errNoLocalClient(partitionId)
 		}
+		cm.logger.Debug("Selected connection", "partition", partitionId, "address", "self")
 		return cm.localCtx, nil
 	}
 
@@ -127,6 +131,7 @@ func (cm *connectionManager) SelectConnection(partitionId string, allowFollower 
 		}
 	}
 	selCtx.GetMetrics().usageCnt++
+	cm.logger.Debug("Selected connection", "partition", partitionId, "address", selCtx.GetAddress())
 	return selCtx, nil
 }
 
@@ -270,6 +275,7 @@ func (cm *connectionManager) reformatAddress(address string) string {
 }
 
 func (cm *connectionManager) InitClients(lclClient client.Client, statusChecker StatusChecker) error {
+	cm.logger.Debug("Initializing clients")
 	cm.localClient = lclClient
 
 	for _, connCtxList := range cm.bvnCtxMap {
