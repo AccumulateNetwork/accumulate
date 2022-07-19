@@ -1,6 +1,7 @@
 package factom
 
 import (
+	"crypto/ed25519"
 	"encoding/hex"
 	"fmt"
 	"io/ioutil"
@@ -19,6 +20,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
@@ -141,8 +143,37 @@ func ConvertFactomDataEntryToLiteDataEntry(entry f2.Entry) *protocol.FactomDataE
 
 //FaucetWithCredits is only used for testing. Initial account will be prefunded.
 func FaucetWithCredits() error {
-	simul.CreateAccount(&protocol.LiteIdentity{Url: origin.RootIdentity(), CreditBalance: 1e9})
-	simul.CreateAccount(&protocol.LiteTokenAccount{Url: origin, TokenUrl: protocol.AcmeUrl(), Balance: *big.NewInt(1e9)})
+	// Generate a key
+	h := storage.MakeKey("factom-genesis")
+	liteKey := ed25519.NewKeyFromSeed(h[:])
+	key = &cmd.Key{PublicKey: liteKey[32:], PrivateKey: liteKey, Type: protocol.SignatureTypeED25519}
+	lite, err := protocol.LiteTokenAddress(key.PublicKey, protocol.ACME, key.Type)
+	if err != nil {
+		return err
+	}
+	origin = lite.RootIdentity()
+
+	simul.WaitForTransactions(delivered, simul.MustSubmitAndExecuteBlock(
+		acctesting.NewTransaction().
+			WithPrincipal(protocol.FaucetUrl).
+			WithBody(&protocol.AcmeFaucet{Url: lite}).
+			Faucet(),
+	)...)
+
+	simul.WaitForTransactions(delivered, simul.MustSubmitAndExecuteBlock(
+		acctesting.NewTransaction().
+			WithPrincipal(lite).
+			WithSigner(lite, 1).
+			WithBody(&protocol.AddCredits{
+				Recipient: lite.RootIdentity(),
+				Oracle:    protocol.InitialAcmeOracleValue,
+				Amount:    *big.NewInt(protocol.AcmeFaucetAmount * protocol.AcmePrecision),
+			}).
+			WithCurrentTimestamp().
+			Initiate(protocol.SignatureTypeED25519, key.PrivateKey).
+			Build(),
+	)...)
+
 	return nil
 }
 

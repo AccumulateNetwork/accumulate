@@ -59,7 +59,7 @@ func (tb TransactionBuilder) WithTimestampVar(nonce *uint64) TransactionBuilder 
 }
 
 func (tb TransactionBuilder) WithCurrentTimestamp() TransactionBuilder {
-	tb.signer.SetTimestamp(uint64(time.Now().UTC().UnixNano()))
+	tb.signer.SetTimestamp(uint64(time.Now().UTC().UnixMilli()))
 	return tb
 }
 
