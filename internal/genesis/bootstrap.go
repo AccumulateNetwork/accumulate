@@ -85,7 +85,7 @@ func Init(snapshot io.WriteSeeker, opts InitOpts) ([]byte, error) {
 
 	// Create the router
 	var err error
-	b.router, err = routing.NewStaticRouter(gg.Routing, nil)
+	b.router, err = routing.NewStaticRouter(gg.Routing, nil, b.Logger)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}

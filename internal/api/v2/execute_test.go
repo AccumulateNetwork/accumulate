@@ -46,7 +46,7 @@ func TestExecuteCheckOnly(t *testing.T) {
 		connectionManager.SetClients(clients)
 		table := new(protocol.RoutingTable)
 		table.Routes = routing.BuildSimpleTable([]string{""})
-		router, err := routing.NewStaticRouter(table, connectionManager)
+		router, err := routing.NewStaticRouter(table, connectionManager, nil)
 		require.NoError(t, err)
 		j, err := NewJrpc(Options{
 			Router: router,
@@ -74,7 +74,7 @@ func TestExecuteCheckOnly(t *testing.T) {
 		connectionManager.SetClients(clients)
 		table := new(protocol.RoutingTable)
 		table.Routes = routing.BuildSimpleTable([]string{""})
-		router, err := routing.NewStaticRouter(table, connectionManager)
+		router, err := routing.NewStaticRouter(table, connectionManager, nil)
 		require.NoError(t, err)
 		j, err := NewJrpc(Options{
 			Router: router,

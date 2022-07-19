@@ -5,6 +5,29 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "Attach to a docker container",
+      // Get a shell in the container: `docker exec --privileged -it ${NAME} bash`
+      // Launch delve:                 `dlv attach 1 --headless --listen=:2345 --accept-multiclient --api-version=2`
+      // Forward the port (if remote): `ssh ${USER}@${SERVER} -NL localhost:2345:localhost:2345`
+      // Then run this debug config
+      "type": "go",
+      "request": "attach",
+      "mode": "remote",
+      "remotePath": "${workspaceFolder}",
+      "port": 2345,
+      "host": "127.0.0.1",
+      "substitutePath": [
+        {
+          "to": "/go/",
+          "from": "${env:HOME}/go/", // <-- MODIFY THIS if you're not using the default GOPATH
+        },
+        {
+          "to": "/root/",
+          "from": "${workspaceFolder}",
+        },
+      ],
+    },
+    {
       "name": "Init DevNet",
       "type": "go",
       "request": "launch",

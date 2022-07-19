@@ -162,7 +162,7 @@ func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Da
 
 func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connections.ConnectionManager, genesis *tmtypes.GenesisDoc) *FakeNode {
 	eventBus := events.NewBus(nil)
-	n.router = routing.NewRouter(eventBus, connMgr)
+	n.router = routing.NewRouter(eventBus, connMgr, n.logger)
 
 	var err error
 	execOpts := block.ExecutorOptions{
