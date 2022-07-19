@@ -40,15 +40,17 @@ func Open() bool {
 	fileNumber += FileIncrement
 	fileCnt++
 	n, err := f.Read(Buff[:])
+	if err != nil {
+		log.Println("Error reading buff : ", err.Error())
+	}
 	buff = Buff[:n]
 	f.Close()
-	fmt.Println("Processing ", filename, " Reading ", n, " bytes.")
+	log.Println("Processing ", filename, " Reading ", n, " bytes.")
 	return true
 }
 
 func Process() {
 
-	var cg ChainGang
 	header := new(Header)
 	dBlock := directoryBlock.NewDirectoryBlock(nil)
 	aBlock := adminBlock.NewAdminBlock(nil)
@@ -67,7 +69,7 @@ func Process() {
 				}
 			case TagABlock:
 				if err := aBlock.UnmarshalBinary(buff[:header.Size]); err != nil {
-					fmt.Printf("Ht %d Admin size %d %v \n",
+					log.Printf("Ht %d Admin size %d %v \n",
 						dBlock.GetHeader().GetDBHeight(), header.Size, err)
 				}
 			case TagFBlock:
@@ -92,15 +94,12 @@ func Process() {
 					ExtIDs:  entry.ExternalIDs(),
 					Content: entry.GetContent(),
 				}
-				factomChainData = make(map[[32]byte]*Queue)
 				accountId, err := hex.DecodeString(qEntry.ChainID)
 				if err != nil {
 					log.Fatalf("cannot decode account id")
 				}
 				dataEntry := ConvertFactomDataEntryToLiteDataEntry(*qEntry)
 				ExecuteDataEntry((*[32]byte)(accountId), dataEntry)
-				// ch := cg.GetOrCreateChainWorker(server, (*[32]byte)(accountId), 1)
-				// ch <- dataEntry
 			case TagTX:
 				tx := new(factoid.Transaction)
 				if err := tx.UnmarshalBinary(buff[:header.Size]); err != nil {
@@ -111,6 +110,5 @@ func Process() {
 			}
 			buff = buff[header.Size:]
 		}
-		cg.Close()
 	}
 }
