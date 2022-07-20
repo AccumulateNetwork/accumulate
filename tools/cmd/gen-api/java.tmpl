@@ -28,7 +28,7 @@ public enum RPCMethod {
 
     public static RPCMethod fromClass(final Class aClass) {
         for (final var method : values()) {
-            if (method.requestClass.equals(aClass)) {
+            if (method.requestClass != null && method.requestClass.equals(aClass)) {
                 return method;
             }
         }
