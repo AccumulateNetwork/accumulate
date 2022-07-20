@@ -3,12 +3,9 @@ package cmd
 import (
 	"crypto/ed25519"
 	"crypto/sha256"
-	"errors"
 	"fmt"
 
 	btc "github.com/btcsuite/btcd/btcec"
-	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/db"
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -57,7 +54,12 @@ func (k *Key) Save(label, liteLabel string) error {
 		return err
 	}
 
-	err = GetWallet().Put(BucketKeyInfo, k.PublicKey, encoding.UvarintMarshalBinary(uint64(k.KeyInfo.Type.GetEnumValue())))
+	data, err := k.KeyInfo.MarshalBinary()
+	if err != nil {
+		return err
+	}
+
+	err = GetWallet().Put(BucketKeyInfo, k.PublicKey, data)
 	if err != nil {
 		return err
 	}
@@ -86,22 +88,12 @@ func (k *Key) LoadByPublicKey(publicKey []byte) error {
 	}
 
 	b, err := GetWallet().Get(BucketKeyInfo, k.PublicKey)
-	switch {
-	case err == nil:
-		v, err := encoding.UvarintUnmarshalBinary(b)
-		if err != nil {
-			return err
-		}
-		if !k.KeyInfo.Type.SetEnumValue(v) {
-			return fmt.Errorf("invalid key type for %x", publicKey)
-		}
-
-	case errors.Is(err, db.ErrNotFound),
-		errors.Is(err, db.ErrNoBucket):
-		k.KeyInfo.Type = protocol.SignatureTypeED25519
-
-	default:
-		return err
+	if err != nil {
+		return fmt.Errorf("key type info not found for key %x", k.PublicKey)
+	}
+	err = k.KeyInfo.UnmarshalBinary(b)
+	if err != nil {
+		return fmt.Errorf("cannot unmarshal key information for key %x", k.PublicKey)
 	}
 
 	return nil

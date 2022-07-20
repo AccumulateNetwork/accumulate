@@ -527,6 +527,7 @@ func ImportKey(token []byte, label string, signatureType protocol.SignatureType)
 	if err := pk.Initialize(token, signatureType); err != nil {
 		return "", err
 	}
+	pk.KeyInfo.Derivation = "external"
 
 	lt, err := protocol.LiteTokenAddress(pk.PublicKey, protocol.ACME, pk.KeyInfo.Type)
 	if err != nil {
@@ -561,26 +562,7 @@ func ImportKey(token []byte, label string, signatureType protocol.SignatureType)
 		}
 	}
 
-	err = GetWallet().Put(BucketKeys, pk.PublicKey, pk.PrivateKey)
-	if err != nil {
-		return "", err
-	}
-
-	err = GetWallet().Put(BucketLabel, []byte(label), pk.PublicKey)
-	if err != nil {
-		return "", err
-	}
-
-	err = GetWallet().Put(BucketLite, []byte(liteLabel), []byte(label))
-	if err != nil {
-		return "", err
-	}
-
-	keyInfoBytes, err := pk.KeyInfo.MarshalBinary()
-	if err != nil {
-		return "", err
-	}
-	err = GetWallet().Put(BucketKeyInfo, pk.PublicKey, keyInfoBytes)
+	err = pk.Save(label, liteLabel)
 	if err != nil {
 		return "", err
 	}

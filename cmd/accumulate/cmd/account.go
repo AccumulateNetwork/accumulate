@@ -8,6 +8,8 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 	"io"
 	"log"
 	"os"
@@ -21,7 +23,6 @@ import (
 	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 )
 
@@ -399,26 +400,12 @@ func ListAccounts() (string, error) {
 		out += "{\"liteAccounts\":["
 	}
 	for i, v := range b.KeyValueList {
-		pubKey, err := GetWallet().Get(BucketLabel, v.Value)
-		if err != nil {
-			return "", err
-		}
-
-		st, err := GetWallet().Get(BucketKeyInfo, pubKey)
-		if err != nil {
-			return "", err
-		}
-		s, _ := common.BytesUint64(st)
-		var sigType protocol.SignatureType
-		if !sigType.SetEnumValue(s) {
-			return "", fmt.Errorf("invalid signature type")
-		}
-
 		k := new(Key)
-		err = k.LoadByPublicKey(pubKey)
+		k.LoadByLabel(string(v.Value))
 		if err != nil {
 			return "", err
 		}
+
 		lt, err := protocol.LiteTokenAddressFromHash(k.PublicKeyHash(), protocol.ACME)
 		if err != nil {
 			return "", err
@@ -426,7 +413,7 @@ func ListAccounts() (string, error) {
 		kr := KeyResponse{}
 		kr.LiteAccount = lt
 		kr.KeyInfo = k.KeyInfo
-		kr.PublicKey = pubKey
+		kr.PublicKey = k.PublicKey
 		*kr.Label.AsString() = string(v.Value)
 		if WantJsonOutput {
 			if i > 0 {
@@ -438,7 +425,7 @@ func ListAccounts() (string, error) {
 			}
 			out += string(d)
 		} else {
-			out += fmt.Sprintf("\n\tkey name\t:\t%s\n\tlite account\t:\t%s\n\tpublic key\t:\t%x\n\tkey type\t:\t%s\n", v.Value, kr.LiteAccount, pubKey, sigType)
+			out += fmt.Sprintf("\n\tkey name\t:\t%s\n\tlite account\t:\t%s\n\tpublic key\t:\t%x\n\tkey type\t:\t%s\n\n\tderivation\t:\t%s\n", v.Value, kr.LiteAccount, k.PublicKey, k.KeyInfo.Type, k.KeyInfo.Derivation)
 		}
 	}
 	if WantJsonOutput {
@@ -566,16 +553,42 @@ func RestoreAccounts() (out string, err error) {
 		}
 
 		//check to see if the key type has been assigned, if not set it to the ed25519Legacy...
-		_, err = GetWallet().Get(BucketKeyInfo, v.Value)
+		sigTypeData, err := GetWallet().Get(BucketSigTypeDeprecated, v.Value)
 		if err != nil {
+			k.KeyInfo.Type = protocol.SignatureTypeLegacyED25519
+			k.KeyInfo.Derivation = "external"
+
 			//add the default key type
 			out += fmt.Sprintf("assigning default key type %s for key name %v\n", k.KeyInfo.Type, string(v.Key))
-
-			keyinfo, err := k.KeyInfo.MarshalBinary()
+			kiData, err := k.KeyInfo.MarshalBinary()
 			if err != nil {
 				return "", err
 			}
-			err = GetWallet().Put(BucketKeyInfo, v.Value, keyinfo)
+
+			err = GetWallet().Put(BucketKeyInfo, v.Value, kiData)
+			if err != nil {
+				return "", err
+			}
+		} else {
+			//we have some old data in the bucket, so move it to the new bucket.
+			common.BytesUint64(sigTypeData)
+			kt, err := encoding.UvarintUnmarshalBinary(sigTypeData)
+			if err != nil {
+				return "", err
+			}
+
+			k.KeyInfo.Type = protocol.SignatureType(kt)
+			k.KeyInfo.Derivation = "external"
+
+			//add the default key type
+			out += fmt.Sprintf("assigning default key type %s for key name %v\n", k.KeyInfo.Type, string(v.Key))
+
+			kiData, err := k.KeyInfo.MarshalBinary()
+			if err != nil {
+				return "", err
+			}
+
+			err = GetWallet().Put(BucketKeyInfo, v.Value, kiData)
 			if err != nil {
 				return "", err
 			}
@@ -593,6 +606,11 @@ func RestoreAccounts() (out string, err error) {
 		if err != nil {
 			return "", err
 		}
+	}
+
+	err = GetWallet().DeleteBucket(BucketSigTypeDeprecated)
+	if err != nil {
+		return "", err
 	}
 
 	//update wallet version
