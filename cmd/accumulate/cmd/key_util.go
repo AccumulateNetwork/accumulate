@@ -91,6 +91,7 @@ func (k *Key) LoadByPublicKey(publicKey []byte) error {
 	if err != nil {
 		return fmt.Errorf("key type info not found for key %x", k.PublicKey)
 	}
+
 	err = k.KeyInfo.UnmarshalBinary(b)
 	if err != nil {
 		return fmt.Errorf("cannot unmarshal key information for key %x", k.PublicKey)
