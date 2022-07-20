@@ -102,7 +102,7 @@ func initNetworkLocalFS(netInit *accumulated.NetworkInit) {
 	check(enc.Encode(netInit))
 	check(netFile.Close())
 
-	genDocs, err := accumulated.BuildGenesisDocs(netInit, new(core.GlobalValues), time.Now(), newLogger(), "")
+	genDocs, err := accumulated.BuildGenesisDocs(netInit, new(core.GlobalValues), time.Now(), newLogger(), nil)
 	checkf(err, "build genesis documents")
 
 	configs := accumulated.BuildNodesConfig(netInit, nil)

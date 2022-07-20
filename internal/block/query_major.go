@@ -18,6 +18,9 @@ func (m *Executor) queryMajorBlocks(batch *database.Batch, req *query.RequestMaj
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
+	if mjrIdxChain.Height() == 0 {
+		return new(query.ResponseMajorBlocks), nil
+	}
 
 	if req.Start == 0 { // We don't have major block 0, avoid crash
 		req.Start = 1

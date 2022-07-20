@@ -10,7 +10,6 @@ import (
 	"math"
 	"math/big"
 	"strings"
-	"time"
 	"unicode"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
@@ -64,6 +63,17 @@ func getRecord(urlStr string, rec interface{}) (*api.MerkleState, error) {
 }
 
 func prepareSigner(origin *url.URL, args []string) ([]string, []*signing.Builder, error) {
+	var signers []*signing.Builder
+	for _, name := range AdditionalSigners {
+		signer := new(signing.Builder)
+		signer.Type = protocol.SignatureTypeLegacyED25519
+		err := prepareSignerPage(signer, origin, name)
+		if err != nil {
+			return nil, nil, err
+		}
+		signers = append(signers, signer)
+	}
+
 	var key *Key
 	var err error
 	if IsLiteTokenAccount(origin.String()) {
@@ -81,7 +91,7 @@ func prepareSigner(origin *url.URL, args []string) ([]string, []*signing.Builder
 
 	firstSigner := new(signing.Builder)
 	firstSigner.Type = protocol.SignatureTypeLegacyED25519
-	firstSigner.SetTimestamp(nonceFromTimeNow())
+	firstSigner.SetTimestampToNow()
 
 	for _, del := range Delegators {
 		u, err := url.Parse(del)
@@ -96,30 +106,21 @@ func prepareSigner(origin *url.URL, args []string) ([]string, []*signing.Builder
 		firstSigner.Url = origin.RootIdentity()
 		firstSigner.Version = 1
 		firstSigner.SetPrivateKey(key.PrivateKey)
-		return args, []*signing.Builder{firstSigner}, nil
-	}
-
-	if len(args) == 0 {
-		return nil, nil, fmt.Errorf("key name argument is missing")
-	}
-
-	err = prepareSignerPage(firstSigner, origin, args[0])
-	if err != nil {
-		return nil, nil, err
-	}
-
-	signers := []*signing.Builder{firstSigner}
-	for _, name := range AdditionalSigners {
-		signer := new(signing.Builder)
-		signer.Type = protocol.SignatureTypeLegacyED25519
-		err = prepareSignerPage(signer, origin, name)
+	} else if len(args) > 0 {
+		err = prepareSignerPage(firstSigner, origin, args[0])
 		if err != nil {
 			return nil, nil, err
 		}
-		signers = append(signers, signer)
+		args = args[1:]
+	} else {
+		return nil, nil, fmt.Errorf("key name argument is missing")
 	}
 
-	return args[1:], signers, nil
+	// Put the first signer first
+	signers = append(signers, nil)
+	copy(signers[1:], signers)
+	signers[0] = firstSigner
+	return args, signers, nil
 }
 
 func prepareSignerPage(signer *signing.Builder, origin *url.URL, signingKey string) error {
@@ -489,14 +490,24 @@ func amountToBigInt(tokenUrl string, amount string) (*big.Int, error) {
 		return nil, err
 	}
 
+	return parseAmount(amount, t.Precision)
+}
+
+func parseAmount(amount string, precision uint64) (*big.Int, error) {
 	amt, _ := big.NewFloat(0).SetPrec(128).SetString(amount)
 	if amt == nil {
 		return nil, fmt.Errorf("invalid amount %s", amount)
 	}
-	oneToken := big.NewFloat(math.Pow(10.0, float64(t.Precision)))
-	amt.Mul(amt, oneToken)
-	iAmt, _ := amt.Int(big.NewInt(0))
-	return iAmt, nil
+
+	oneToken := big.NewFloat(math.Pow(10.0, float64(precision))) //Convert to fixed point; multiply by the precision
+	amt.Mul(amt, oneToken)                                       // Note that we are using floating point here.  Precision can be lost
+	round := big.NewFloat(.9)                                    // To adjust for lost precision, round to the nearest int
+	if amt.Sign() < 0 {                                          // Just to be safe, account for negative numbers
+		round = big.NewFloat(-.9)
+	}
+	amt.Add(amt, round)               //                              Round up (positive) or down (negative) to the lowest int
+	iAmt, _ := amt.Int(big.NewInt(0)) //                              Then convert to a big Int
+	return iAmt, nil                  //                              Return the int
 }
 
 func GetTokenUrlFromAccount(u *url.URL) (*url.URL, error) {
@@ -580,11 +591,6 @@ func natural(name string) string {
 
 	w.WriteString(name)
 	return w.String()
-}
-
-func nonceFromTimeNow() uint64 {
-	t := time.Now()
-	return uint64(t.Unix()*1e6) + uint64(t.Nanosecond())/1e3
 }
 
 func QueryAcmeOracle() (*protocol.AcmeOracle, error) {

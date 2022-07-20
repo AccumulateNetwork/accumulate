@@ -20,7 +20,6 @@ func init() {
 //testCase2_8
 //Create an adi data account
 func testCase2_8(t *testing.T, tc *testCmd) {
-	t.Helper()
 
 	_, err := tc.executeTx(t, "account create data acc://RedWagon.acme red1 acc://RedWagon.acme/DataAccount")
 	require.NoError(t, err)
@@ -31,7 +30,6 @@ func testCase2_8(t *testing.T, tc *testCmd) {
 }
 
 func testCase2_9a(t *testing.T, tc *testCmd) {
-	t.Helper()
 
 	//pass in some hex encoded stuff 2 ext id's and an encoded data entry
 	_, err := tc.executeTx(t, "data write acc://RedWagon.acme/DataAccount red1 badc0de9 deadbeef cafef00dbabe8badf00d")
@@ -51,7 +49,6 @@ func testCase2_9a(t *testing.T, tc *testCmd) {
 }
 
 func testCase2_9b(t *testing.T, tc *testCmd) {
-	t.Helper()
 
 	//pass in some hex encoded stuff 2 ext id's and an encoded data entry
 	r, err := tc.executeTx(t, "account create data --lite acc://RedWagon.acme/DataAccount red1 466163746f6d2050524f 5475746f7269616c")
@@ -79,7 +76,6 @@ func testCase2_9b(t *testing.T, tc *testCmd) {
 }
 
 func testCase2_9c(t *testing.T, tc *testCmd) {
-	t.Helper()
 
 	//pass in some hex encoded stuff 2 ext id's and an encoded data entry
 	_, err := tc.executeTx(t, "data write acc://RedWagon.acme/DataAccount red1 cafef00dbabe8badf00d --sign-data acc://61c185c8c6c929d6ad00aa5529ca880808718258c1bb69df/ACME")

@@ -37,12 +37,12 @@ func (a *AccountAuth) GetAuthority(entry *url.URL) (*AuthorityEntry, bool) {
 	return &a.Authorities[i], true
 }
 
-func (a *AccountAuth) AddAuthority(entry *url.URL) *AuthorityEntry {
+func (a *AccountAuth) AddAuthority(entry *url.URL) (*AuthorityEntry, bool) {
 	ptr, new := sortutil.BinaryInsert(&a.Authorities, func(e AuthorityEntry) int { return e.Url.Compare(entry) })
 	if new {
 		*ptr = AuthorityEntry{Url: entry}
 	}
-	return ptr
+	return ptr, new
 }
 
 func (a *AccountAuth) RemoveAuthority(entry *url.URL) bool {
