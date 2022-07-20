@@ -515,7 +515,5 @@ func ParseKeyPageUrl(keyPage *url.URL) (*url.URL, uint64, bool) {
 		return nil, 0, false
 	}
 
-	keyBook := *keyPage
-	keyBook.Path = keyBook.Path[:i]
-	return &keyBook, index, true
+	return keyPage.Identity(), index, true
 }

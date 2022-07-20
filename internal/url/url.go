@@ -16,6 +16,14 @@ type URL struct {
 	Path      string
 	Query     string
 	Fragment  string
+
+	memoize urlMemoize
+}
+
+type urlMemoize struct {
+	hash       [32]byte
+	accountID  [32]byte
+	identityID [32]byte
 }
 
 type Values = url.Values
@@ -144,6 +152,7 @@ func (u *URL) Compare(v *URL) int {
 // copy returns a copy of the url.
 func (u *URL) copy() *URL {
 	v := *u
+	v.memoize = urlMemoize{}
 	return &v
 }
 
@@ -309,7 +318,10 @@ func (u *URL) IdentityAccountID() []byte {
 
 // IdentityAccountID32 returns IdentityAccountID as a [32]byte.
 func (u *URL) IdentityAccountID32() [32]byte {
-	return id(u.Hostname())
+	if u.memoize.identityID == [32]byte{} {
+		u.memoize.identityID = id(u.Hostname())
+	}
+	return u.memoize.identityID
 }
 
 // AccountID constructs an account identifier from the lower case hostname and
@@ -324,7 +336,10 @@ func (u *URL) AccountID() []byte {
 
 // AccountID32 returns AccountID as a [32]byte.
 func (u *URL) AccountID32() [32]byte {
-	return id(u.Hostname() + ensurePath(u.Path))
+	if u.memoize.accountID == [32]byte{} {
+		u.memoize.accountID = id(u.Hostname() + ensurePath(u.Path))
+	}
+	return u.memoize.accountID
 }
 
 // Routing returns the first 8 bytes of the identity account ID as an integer.
@@ -346,6 +361,10 @@ func (u *URL) Hash() []byte {
 
 // Hash32 returns Hash as a [32]byte.
 func (u *URL) Hash32() [32]byte {
+	if u.memoize.hash != [32]byte{} {
+		return u.memoize.hash
+	}
+
 	hash := u.AccountID32()
 	if u.Query != "" {
 		hash = concatId(hash, id(u.Query))
@@ -353,6 +372,7 @@ func (u *URL) Hash32() [32]byte {
 	if u.Fragment != "" {
 		hash = concatId(hash, id(u.Fragment))
 	}
+	u.memoize.hash = hash
 	return hash
 }
 
