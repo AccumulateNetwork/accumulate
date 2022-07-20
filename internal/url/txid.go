@@ -63,13 +63,6 @@ func (x *TxID) Account() *URL { return x.url }
 // Hash returns the transaction hash.
 func (x *TxID) Hash() [32]byte { return x.hash }
 
-// Copy returns a copy of the transaction ID.
-func (x *TxID) Copy() *TxID {
-	y := *x
-	y.url = x.url.Copy()
-	return &y
-}
-
 // Equal checks if X and Y are the same transaction ID.
 func (x *TxID) Equal(y *TxID) bool {
 	return x.hash == y.hash &&

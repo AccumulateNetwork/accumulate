@@ -106,8 +106,8 @@ func (u *URL) Compare(v *URL) int {
 	}
 }
 
-// Copy returns a copy of the url.
-func (u *URL) Copy() *URL {
+// copy returns a copy of the url.
+func (u *URL) copy() *URL {
 	v := *u
 	return &v
 }
@@ -345,7 +345,7 @@ func (u *URL) JoinPath(s ...string) *URL {
 	if len(s) == 0 {
 		return u
 	}
-	v := u.Copy()
+	v := u.copy()
 	if len(v.Path) == 0 {
 		v.Path = "/"
 	}
@@ -355,7 +355,7 @@ func (u *URL) JoinPath(s ...string) *URL {
 
 // WithFragment returns a copy of U with the fragment set.
 func (u *URL) WithFragment(s string) *URL {
-	v := u.Copy()
+	v := u.copy()
 	v.Fragment = s
 	return v
 }
