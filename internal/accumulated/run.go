@@ -265,7 +265,7 @@ func (d *Daemon) Start() (err error) {
 	go d.ensureSufficientDiskSpace(d.Config.RootDir)
 
 	if d.node.IsRunning() {
-		color.HiBlue(" %s node running at %s:", d.node.Config.Accumulate.NetworkType, d.node.Config.Accumulate.Describe.LocalAddress)
+		color.HiBlue(" %s node running at %s :", d.node.Config.Accumulate.NetworkType, d.node.Config.Accumulate.Describe.LocalAddress)
 	}
 
 	// Clean up once the node is stopped (mostly for tests)
