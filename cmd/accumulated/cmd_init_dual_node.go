@@ -134,7 +134,7 @@ func initDualNodeFromPeer(cmd *cobra.Command, args []string) error {
 
 	_, err = initNode(cmd, args)
 	if err != nil {
-		return nil
+		return err
 	}
 
 	_, err = finalizeDnn()
