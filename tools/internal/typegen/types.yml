@@ -69,6 +69,8 @@ StateRecord:
       type: bool
     - name: Private
       type: bool
+    - name: Immutable
+      type: bool
     - name: Name
       type: string
     - name: Parameters
@@ -100,6 +102,8 @@ IndexRecord:
     - name: OmitAccessor
       type: bool
     - name: Private
+      type: bool
+    - name: Immutable
       type: bool
     - name: Name
       type: string

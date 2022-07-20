@@ -92,3 +92,5 @@ type UnionType interface {
 }
 
 func UnmarshalUnionType([]byte) (UnionType, error) { return nil, nil }
+
+func EqualUnionType(a, b UnionType) bool { return false }

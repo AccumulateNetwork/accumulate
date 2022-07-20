@@ -191,7 +191,7 @@ type Account struct {
 
 func (c *Account) Main() *record.Value[protocol.Account] {
 	return getOrCreateField(&c.main, func() *record.Value[protocol.Account] {
-		return record.NewValue(c.logger.L, c.store, c.key.Append("Main"), c.label+" main", false, record.Union(protocol.UnmarshalAccount))
+		return record.NewValue(c.logger.L, c.store, c.key.Append("Main"), c.label+" main", false, false, record.Union(protocol.UnmarshalAccount, protocol.EqualAccount))
 	})
 }
 
@@ -523,7 +523,7 @@ func (c *AccountData) Entry() *record.Counted[[32]byte] {
 
 func (c *AccountData) Transaction(entryHash [32]byte) *record.Value[[32]byte] {
 	return getOrCreateMap(&c.transaction, c.key.Append("Transaction", entryHash), func() *record.Value[[32]byte] {
-		return record.NewValue(c.logger.L, c.store, c.key.Append("Transaction", entryHash), c.label+" transaction %[5]x", false, record.Wrapped(record.HashWrapper))
+		return record.NewValue(c.logger.L, c.store, c.key.Append("Transaction", entryHash), c.label+" transaction %[5]x", false, false, record.Wrapped(record.HashWrapper))
 	})
 }
 
@@ -593,13 +593,13 @@ type Transaction struct {
 
 func (c *Transaction) Main() *record.Value[*SigOrTxn] {
 	return getOrCreateField(&c.main, func() *record.Value[*SigOrTxn] {
-		return record.NewValue(c.logger.L, c.store, c.key.Append("Main"), c.label+" main", false, record.Struct[SigOrTxn]())
+		return record.NewValue(c.logger.L, c.store, c.key.Append("Main"), c.label+" main", true, false, record.Struct[SigOrTxn]())
 	})
 }
 
 func (c *Transaction) Status() *record.Value[*protocol.TransactionStatus] {
 	return getOrCreateField(&c.status, func() *record.Value[*protocol.TransactionStatus] {
-		return record.NewValue(c.logger.L, c.store, c.key.Append("Status"), c.label+" status", true, record.Struct[protocol.TransactionStatus]())
+		return record.NewValue(c.logger.L, c.store, c.key.Append("Status"), c.label+" status", false, true, record.Struct[protocol.TransactionStatus]())
 	})
 }
 
@@ -611,7 +611,7 @@ func (c *Transaction) Produced() *record.Set[*url.TxID] {
 
 func (c *Transaction) getSignatures(signer *url.URL) *record.Value[*sigSetData] {
 	return getOrCreateMap(&c.signatures, c.key.Append("Signatures", signer), func() *record.Value[*sigSetData] {
-		return record.NewValue(c.logger.L, c.store, c.key.Append("Signatures", signer), c.label+" signatures %[4]v", true, record.Struct[sigSetData]())
+		return record.NewValue(c.logger.L, c.store, c.key.Append("Signatures", signer), c.label+" signatures %[4]v", false, true, record.Struct[sigSetData]())
 	})
 }
 

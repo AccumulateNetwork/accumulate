@@ -13,7 +13,7 @@ type List[T any] struct {
 // NewList returns a new List using the given encoder and comparison.
 func NewList[T any](logger log.Logger, store Store, key Key, namefmt string, encoder encodableValue[T]) *List[T] {
 	s := &List[T]{}
-	s.Value = *NewValue[[]T](logger, store, key, namefmt, true, &sliceValue[T]{encoder: encoder})
+	s.Value = *NewValue[[]T](logger, store, key, namefmt, false, true, &sliceValue[T]{encoder: encoder})
 	return s
 }
 

@@ -8,7 +8,7 @@
   - name: writable
     type: bool
   - name: id
-    type: int
+    type: string
   - name: nextChildId
     type: int
   - name: parent
@@ -138,6 +138,7 @@
       type: state
       dataType: SigOrTxn # TODO split apart
       pointer: true
+      immutable: true
     - name: Status
       type: state
       dataType: protocol.TransactionStatus

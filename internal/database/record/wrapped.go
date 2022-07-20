@@ -24,10 +24,11 @@ func WrappedFactory[T any](funcs *wrapperFuncs[T]) func() encodableValue[T] {
 	return func() encodableValue[T] { return &wrappedValue[T]{wrapperFuncs: funcs} }
 }
 
-func (v *wrappedValue[T]) getValue() T  { return v.value }
-func (v *wrappedValue[T]) setValue(u T) { v.value = u }
-func (v *wrappedValue[T]) setNew()      { v.value = zero[T]() }
-func (v *wrappedValue[T]) copyValue() T { return v.copy(v.value) }
+func (v *wrappedValue[T]) getValue() T         { return v.value }
+func (v *wrappedValue[T]) setValue(u T)        { v.value = u }
+func (v *wrappedValue[T]) setNew()             { v.value = zero[T]() }
+func (v *wrappedValue[T]) copyValue() T        { return v.copy(v.value) }
+func (v *wrappedValue[T]) equalValue(u T) bool { return v.equal(v.value, u) }
 
 func (v *wrappedValue[T]) MarshalBinary() ([]byte, error) {
 	data, err := v.marshal(v.value)

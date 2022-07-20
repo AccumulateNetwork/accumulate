@@ -30,25 +30,25 @@ type Chain struct {
 
 func (c *Chain) Head() *record.Value[*MerkleState] {
 	return getOrCreateField(&c.head, func() *record.Value[*MerkleState] {
-		return record.NewValue(c.logger.L, c.store, c.key.Append("Head"), c.label+" head", true, record.Struct[MerkleState]())
+		return record.NewValue(c.logger.L, c.store, c.key.Append("Head"), c.label+" head", false, true, record.Struct[MerkleState]())
 	})
 }
 
 func (c *Chain) States(index uint64) *record.Value[*MerkleState] {
 	return getOrCreateMap(&c.states, c.key.Append("States", index), func() *record.Value[*MerkleState] {
-		return record.NewValue(c.logger.L, c.store, c.key.Append("States", index), c.label+" states %[3]v", false, record.Struct[MerkleState]())
+		return record.NewValue(c.logger.L, c.store, c.key.Append("States", index), c.label+" states %[3]v", false, false, record.Struct[MerkleState]())
 	})
 }
 
 func (c *Chain) ElementIndex(hash []byte) *record.Value[uint64] {
 	return getOrCreateMap(&c.elementIndex, c.key.Append("ElementIndex", hash), func() *record.Value[uint64] {
-		return record.NewValue(c.logger.L, c.store, c.key.Append("ElementIndex", hash), c.label+" element index %[3]x", false, record.Wrapped(record.UintWrapper))
+		return record.NewValue(c.logger.L, c.store, c.key.Append("ElementIndex", hash), c.label+" element index %[3]x", false, false, record.Wrapped(record.UintWrapper))
 	})
 }
 
 func (c *Chain) Element(index uint64) *record.Value[[]byte] {
 	return getOrCreateMap(&c.element, c.key.Append("Element", index), func() *record.Value[[]byte] {
-		return record.NewValue(c.logger.L, c.store, c.key.Append("Element", index), c.label+" element %[3]v", false, record.Wrapped(record.BytesWrapper))
+		return record.NewValue(c.logger.L, c.store, c.key.Append("Element", index), c.label+" element %[3]v", false, false, record.Wrapped(record.BytesWrapper))
 	})
 }
 

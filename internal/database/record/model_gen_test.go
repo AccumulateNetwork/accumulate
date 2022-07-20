@@ -120,7 +120,7 @@ type Entity struct {
 
 func (c *Entity) Union() *record.Value[protocol.Account] {
 	return getOrCreateField(&c.union, func() *record.Value[protocol.Account] {
-		return record.NewValue(c.logger.L, c.store, c.key.Append("Union"), c.label+" union", false, record.Union(protocol.UnmarshalAccount))
+		return record.NewValue(c.logger.L, c.store, c.key.Append("Union"), c.label+" union", false, false, record.Union(protocol.UnmarshalAccount, protocol.EqualAccount))
 	})
 }
 
@@ -144,7 +144,7 @@ func (c *Entity) CountableRefType() *record.Counted[*protocol.Transaction] {
 
 func (c *Entity) CountableUnion() *record.Counted[protocol.Account] {
 	return getOrCreateField(&c.countableUnion, func() *record.Counted[protocol.Account] {
-		return record.NewCounted(c.logger.L, c.store, c.key.Append("CountableUnion"), c.label+" countable union", record.UnionFactory(protocol.UnmarshalAccount))
+		return record.NewCounted(c.logger.L, c.store, c.key.Append("CountableUnion"), c.label+" countable union", record.UnionFactory(protocol.UnmarshalAccount, protocol.EqualAccount))
 	})
 }
 
@@ -244,19 +244,19 @@ type TemplateTest struct {
 
 func (c *TemplateTest) Wrapped() *record.Value[string] {
 	return getOrCreateField(&c.wrapped, func() *record.Value[string] {
-		return record.NewValue(c.logger.L, c.store, c.key.Append("Wrapped"), c.label+" wrapped", false, record.Wrapped(record.StringWrapper))
+		return record.NewValue(c.logger.L, c.store, c.key.Append("Wrapped"), c.label+" wrapped", false, false, record.Wrapped(record.StringWrapper))
 	})
 }
 
 func (c *TemplateTest) StructPtr() *record.Value[*StructType] {
 	return getOrCreateField(&c.structPtr, func() *record.Value[*StructType] {
-		return record.NewValue(c.logger.L, c.store, c.key.Append("StructPtr"), c.label+" struct ptr", false, record.Struct[StructType]())
+		return record.NewValue(c.logger.L, c.store, c.key.Append("StructPtr"), c.label+" struct ptr", false, false, record.Struct[StructType]())
 	})
 }
 
 func (c *TemplateTest) Union() *record.Value[UnionType] {
 	return getOrCreateField(&c.union, func() *record.Value[UnionType] {
-		return record.NewValue(c.logger.L, c.store, c.key.Append("Union"), c.label+" union", false, record.Union(UnmarshalUnionType))
+		return record.NewValue(c.logger.L, c.store, c.key.Append("Union"), c.label+" union", false, false, record.Union(UnmarshalUnionType, EqualUnionType))
 	})
 }
 
@@ -274,7 +274,7 @@ func (c *TemplateTest) StructSet() *record.Set[*StructType] {
 
 func (c *TemplateTest) UnionSet() *record.Set[UnionType] {
 	return getOrCreateField(&c.unionSet, func() *record.Set[UnionType] {
-		return record.NewSet(c.logger.L, c.store, c.key.Append("UnionSet"), c.label+" union set", record.Union(UnmarshalUnionType), func(u, v UnionType) int { return u.Compare(v) })
+		return record.NewSet(c.logger.L, c.store, c.key.Append("UnionSet"), c.label+" union set", record.Union(UnmarshalUnionType, EqualUnionType), func(u, v UnionType) int { return u.Compare(v) })
 	})
 }
 
@@ -292,7 +292,7 @@ func (c *TemplateTest) StructList() *record.Counted[*StructType] {
 
 func (c *TemplateTest) UnionList() *record.Counted[UnionType] {
 	return getOrCreateField(&c.unionList, func() *record.Counted[UnionType] {
-		return record.NewCounted(c.logger.L, c.store, c.key.Append("UnionList"), c.label+" union list", record.UnionFactory(UnmarshalUnionType))
+		return record.NewCounted(c.logger.L, c.store, c.key.Append("UnionList"), c.label+" union list", record.UnionFactory(UnmarshalUnionType, EqualUnionType))
 	})
 }
 

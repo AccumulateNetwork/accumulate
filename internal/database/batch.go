@@ -151,7 +151,8 @@ func (b *Batch) getAccountUrl(key record.Key) (*url.URL, error) {
 		key.Append("Main"),
 		"account %[1]v",
 		false,
-		record.Union(protocol.UnmarshalAccount),
+		false,
+		record.Union(protocol.UnmarshalAccount, protocol.EqualAccount),
 	).Get()
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)

@@ -18,7 +18,7 @@ type Counted[T any] struct {
 // NewCounted returns a new Counted using the given encodable value type.
 func NewCounted[T any](logger log.Logger, store Store, key Key, namefmt string, new func() encodableValue[T]) *Counted[T] {
 	c := &Counted[T]{}
-	c.count = NewValue(logger, store, key, namefmt, true, Wrapped(UintWrapper))
+	c.count = NewValue(logger, store, key, namefmt, false, true, Wrapped(UintWrapper))
 	c.new = new
 	return c
 }
@@ -42,7 +42,7 @@ func (c *Counted[T]) value(i int) *Value[T] {
 
 	key := c.count.key.Append(i)
 	name := fmt.Sprintf("%s %d", c.count.name, i)
-	v := NewValue(c.count.logger.L, c.count.store, key, name, false, c.new())
+	v := NewValue(c.count.logger.L, c.count.store, key, name, false, false, c.new())
 	c.values[i] = v
 	return v
 }

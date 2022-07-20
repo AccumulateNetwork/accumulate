@@ -9,9 +9,13 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
-func zero[T any]() (z T)                     { return z }
-func copyValue[T any](v T) T                 { return v }
-func copyRef[T interface{ Copy() T }](v T) T { return v.Copy() }
+func zero[T any]() (z T) { return z }
+
+func copyValue[T any](v T) T               { return v }
+func equalValue[T comparable](a, b T) bool { return a == b }
+
+func copyRef[T interface{ Copy() T }](v T) T             { return v.Copy() }
+func equalRef[T interface{ Equal(T) bool }](a, b T) bool { return a.Equal(b) }
 
 func CompareHash(u, v [32]byte) int  { return bytes.Compare(u[:], v[:]) }
 func CompareTxid(u, v *url.TxID) int { return u.Compare(v) }
@@ -24,6 +28,7 @@ type ValueUnmarshaller[T any] func(data []byte) (T, error)
 
 type wrapperFuncs[T any] struct {
 	copy      func(T) T
+	equal     func(T, T) bool
 	marshal   ValueMarshaller[T]
 	unmarshal ValueUnmarshaller[T]
 }
@@ -31,6 +36,7 @@ type wrapperFuncs[T any] struct {
 // UintWrapper defines un/marshalling functions for uint fields.
 var UintWrapper = &wrapperFuncs[uint64]{
 	copy:      copyValue[uint64],
+	equal:     equalValue[uint64],
 	marshal:   oldMarshal(encoding.UvarintMarshalBinary),
 	unmarshal: encoding.UvarintUnmarshalBinary,
 }
@@ -45,6 +51,7 @@ var BytesWrapper = &wrapperFuncs[[]byte]{
 // HashWrapper defines un/marshalling functions for hash fields.
 var HashWrapper = &wrapperFuncs[[32]byte]{
 	copy:      copyValue[[32]byte],
+	equal:     equalValue[[32]byte],
 	marshal:   oldMarshalPtr(encoding.ChainMarshalBinary),
 	unmarshal: encoding.ChainUnmarshalBinary,
 }
@@ -52,6 +59,7 @@ var HashWrapper = &wrapperFuncs[[32]byte]{
 // UrlWrapper defines un/marshalling functions for url fields.
 var UrlWrapper = &wrapperFuncs[*url.URL]{
 	copy:      copyRef[*url.URL],
+	equal:     equalRef[*url.URL],
 	marshal:   marshalAsString[*url.URL],
 	unmarshal: unmarshalFromString(url.Parse),
 }
@@ -59,6 +67,7 @@ var UrlWrapper = &wrapperFuncs[*url.URL]{
 // TxidWrapper defines un/marshalling functions for txid fields.
 var TxidWrapper = &wrapperFuncs[*url.TxID]{
 	copy:      copyRef[*url.TxID],
+	equal:     equalRef[*url.TxID],
 	marshal:   marshalAsString[*url.TxID],
 	unmarshal: unmarshalFromString(url.ParseTxID),
 }
@@ -66,6 +75,7 @@ var TxidWrapper = &wrapperFuncs[*url.TxID]{
 // StringWrapper defines un/marshalling functions for string fields.
 var StringWrapper = &wrapperFuncs[string]{
 	copy:      copyValue[string],
+	equal:     equalValue[string],
 	marshal:   oldMarshal(encoding.StringMarshalBinary),
 	unmarshal: encoding.StringUnmarshalBinary,
 }

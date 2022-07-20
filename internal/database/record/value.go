@@ -14,6 +14,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
+var ErrImmutable = errors.New(errors.StatusConflict, "immutable")
+
 // debug is a bit field for enabling debug log messages
 //nolint
 const debug = 0 |
@@ -40,6 +42,7 @@ type encodableValue[T any] interface {
 	setValue(T)
 	setNew()
 	copyValue() T
+	equalValue(T) bool
 }
 
 type valueStatus int
@@ -59,6 +62,7 @@ type Value[T any] struct {
 	name         string
 	status       valueStatus
 	value        encodableValue[T]
+	immutable    bool
 	allowMissing bool
 }
 
@@ -66,7 +70,7 @@ var _ ValueReader = (*Value[*wrappedValue[uint64]])(nil)
 var _ ValueWriter = (*Value[*wrappedValue[uint64]])(nil)
 
 // NewValue returns a new Value using the given encodable value.
-func NewValue[T any](logger log.Logger, store Store, key Key, namefmt string, allowMissing bool, value encodableValue[T]) *Value[T] {
+func NewValue[T any](logger log.Logger, store Store, key Key, namefmt string, immutable, allowMissing bool, value encodableValue[T]) *Value[T] {
 	v := &Value[T]{}
 	v.logger.L = logger
 	v.store = store
@@ -77,6 +81,7 @@ func NewValue[T any](logger log.Logger, store Store, key Key, namefmt string, al
 		v.name = namefmt
 	}
 	v.value = value
+	v.immutable = immutable
 	v.allowMissing = allowMissing
 	v.status = valueUndefined
 	return v
@@ -157,6 +162,35 @@ func (v *Value[T]) GetAs(target interface{}) error {
 	return errors.Wrap(errors.StatusUnknownError, err)
 }
 
+func (v *Value[T]) canUpdate(u T) error {
+	// Allow updates if the value is mutable
+	if !v.immutable {
+		return nil
+	}
+
+	if v.status == valueUndefined {
+		if _, err := v.Get(); err != nil && !errors.Is(err, errors.StatusNotFound) {
+			return err
+		}
+	}
+
+	// Allow updates if the value is unset
+	if v.status == valueNotFound {
+		return nil
+	}
+	if v.value.equalValue(zero[T]()) {
+		return nil
+	}
+
+	// Allow updates if the value is unchanged
+	if v.value.equalValue(u) {
+		return nil
+	}
+
+	// Value is immutable and set so it can't change
+	return errors.Unknown("%s is %w", v.name, ErrImmutable)
+}
+
 // Put stores the value.
 func (v *Value[T]) Put(u T) error {
 	switch debug & (debugPut | debugPutValue) {
@@ -166,6 +200,11 @@ func (v *Value[T]) Put(u T) error {
 		v.logger.Debug("Put", "key", v.key)
 	case debugPutValue:
 		v.logger.Debug("Put", "value", u)
+	}
+
+	err := v.canUpdate(u)
+	if err != nil {
+		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	v.value.setValue(u)
@@ -229,7 +268,11 @@ func (v *Value[T]) LoadValue(value ValueReader, put bool) error {
 		v.value.setValue(u.getValue())
 		v.status = valueDirty
 	} else {
-		v.value.setValue(u.copyValue())
+		if v.immutable {
+			v.value.setValue(u.getValue())
+		} else {
+			v.value.setValue(u.copyValue())
+		}
 		v.status = valueClean
 	}
 	return nil
@@ -271,6 +314,17 @@ func (v *structValue[T, PT]) copyValue() PT {
 	return v.value.CopyAsInterface().(PT)
 }
 
+func (v *structValue[T, PT]) equalValue(u PT) bool {
+	if v.value == u {
+		return true
+	}
+	if v.value == nil || u == nil {
+		return false
+	}
+	w, ok := any(u).(interface{ Equal(PT) bool })
+	return ok && w.Equal(v.value)
+}
+
 func (v *structValue[T, PT]) CopyAsInterface() interface{} {
 	u := new(structValue[T, PT])
 	u.value = v.copyValue()
@@ -303,21 +357,23 @@ func (v *structValue[T, PT]) UnmarshalBinaryFrom(rd io.Reader) error {
 type unionValue[T encoding.BinaryValue] struct {
 	value     T
 	unmarshal func([]byte) (T, error)
+	equal     func(a, b T) bool
 }
 
 // Union returns an encodable value for the given encodable union type.
-func Union[T encoding.BinaryValue](unmarshal func([]byte) (T, error)) encodableValue[T] {
-	return &unionValue[T]{unmarshal: unmarshal}
+func Union[T encoding.BinaryValue](unmarshal func([]byte) (T, error), equal func(a, b T) bool) encodableValue[T] {
+	return &unionValue[T]{unmarshal: unmarshal, equal: equal}
 }
 
 // UnionFactory curries Union.
-func UnionFactory[T encoding.BinaryValue](unmarshal func([]byte) (T, error)) func() encodableValue[T] {
-	return func() encodableValue[T] { return &unionValue[T]{unmarshal: unmarshal} }
+func UnionFactory[T encoding.BinaryValue](unmarshal func([]byte) (T, error), equal func(a, b T) bool) func() encodableValue[T] {
+	return func() encodableValue[T] { return &unionValue[T]{unmarshal: unmarshal, equal: equal} }
 }
 
-func (v *unionValue[T]) getValue() T  { return v.value }
-func (v *unionValue[T]) setValue(u T) { v.value = u }
-func (v *unionValue[T]) setNew()      { v.value = zero[T]() }
+func (v *unionValue[T]) getValue() T         { return v.value }
+func (v *unionValue[T]) setValue(u T)        { v.value = u }
+func (v *unionValue[T]) setNew()             { v.value = zero[T]() }
+func (v *unionValue[T]) equalValue(u T) bool { return v.equal(v.value, u) }
 
 func (v *unionValue[T]) copyValue() T {
 	if interface{}(v.value) == nil {

@@ -38,6 +38,7 @@ type IndexRecord struct {
 	Parent         *EntityRecord  `json:"parent,omitempty" form:"parent" query:"parent" validate:"required"`
 	OmitAccessor   bool           `json:"omitAccessor,omitempty" form:"omitAccessor" query:"omitAccessor" validate:"required"`
 	Private        bool           `json:"private,omitempty" form:"private" query:"private" validate:"required"`
+	Immutable      bool           `json:"immutable,omitempty" form:"immutable" query:"immutable" validate:"required"`
 	Name           string         `json:"name,omitempty" form:"name" query:"name" validate:"required"`
 	Parameters     []*Field       `json:"parameters,omitempty" form:"parameters" query:"parameters" validate:"required"`
 	DataType       FieldType      `json:"dataType,omitempty" form:"dataType" query:"dataType" validate:"required"`
@@ -62,6 +63,7 @@ type StateRecord struct {
 	Parent         *EntityRecord  `json:"parent,omitempty" form:"parent" query:"parent" validate:"required"`
 	OmitAccessor   bool           `json:"omitAccessor,omitempty" form:"omitAccessor" query:"omitAccessor" validate:"required"`
 	Private        bool           `json:"private,omitempty" form:"private" query:"private" validate:"required"`
+	Immutable      bool           `json:"immutable,omitempty" form:"immutable" query:"immutable" validate:"required"`
 	Name           string         `json:"name,omitempty" form:"name" query:"name" validate:"required"`
 	Parameters     []*Field       `json:"parameters,omitempty" form:"parameters" query:"parameters" validate:"required"`
 	DataType       FieldType      `json:"dataType,omitempty" form:"dataType" query:"dataType" validate:"required"`
@@ -137,6 +139,7 @@ func (v *IndexRecord) MarshalJSON() ([]byte, error) {
 		Parent         *EntityRecord             `json:"parent,omitempty"`
 		OmitAccessor   bool                      `json:"omitAccessor,omitempty"`
 		Private        bool                      `json:"private,omitempty"`
+		Immutable      bool                      `json:"immutable,omitempty"`
 		Name           string                    `json:"name,omitempty"`
 		Parameters     encoding.JsonList[*Field] `json:"parameters,omitempty"`
 		DataType       FieldType                 `json:"dataType,omitempty"`
@@ -149,6 +152,7 @@ func (v *IndexRecord) MarshalJSON() ([]byte, error) {
 	u.Parent = v.Parent
 	u.OmitAccessor = v.OmitAccessor
 	u.Private = v.Private
+	u.Immutable = v.Immutable
 	u.Name = v.Name
 	u.Parameters = v.Parameters
 	u.DataType = v.DataType
@@ -189,6 +193,7 @@ func (v *StateRecord) MarshalJSON() ([]byte, error) {
 		Parent         *EntityRecord             `json:"parent,omitempty"`
 		OmitAccessor   bool                      `json:"omitAccessor,omitempty"`
 		Private        bool                      `json:"private,omitempty"`
+		Immutable      bool                      `json:"immutable,omitempty"`
 		Name           string                    `json:"name,omitempty"`
 		Parameters     encoding.JsonList[*Field] `json:"parameters,omitempty"`
 		DataType       FieldType                 `json:"dataType,omitempty"`
@@ -201,6 +206,7 @@ func (v *StateRecord) MarshalJSON() ([]byte, error) {
 	u.Parent = v.Parent
 	u.OmitAccessor = v.OmitAccessor
 	u.Private = v.Private
+	u.Immutable = v.Immutable
 	u.Name = v.Name
 	u.Parameters = v.Parameters
 	u.DataType = v.DataType
@@ -299,6 +305,7 @@ func (v *IndexRecord) UnmarshalJSON(data []byte) error {
 		Parent         *EntityRecord             `json:"parent,omitempty"`
 		OmitAccessor   bool                      `json:"omitAccessor,omitempty"`
 		Private        bool                      `json:"private,omitempty"`
+		Immutable      bool                      `json:"immutable,omitempty"`
 		Name           string                    `json:"name,omitempty"`
 		Parameters     encoding.JsonList[*Field] `json:"parameters,omitempty"`
 		DataType       FieldType                 `json:"dataType,omitempty"`
@@ -311,6 +318,7 @@ func (v *IndexRecord) UnmarshalJSON(data []byte) error {
 	u.Parent = v.Parent
 	u.OmitAccessor = v.OmitAccessor
 	u.Private = v.Private
+	u.Immutable = v.Immutable
 	u.Name = v.Name
 	u.Parameters = v.Parameters
 	u.DataType = v.DataType
@@ -327,6 +335,7 @@ func (v *IndexRecord) UnmarshalJSON(data []byte) error {
 	v.Parent = u.Parent
 	v.OmitAccessor = u.OmitAccessor
 	v.Private = u.Private
+	v.Immutable = u.Immutable
 	v.Name = u.Name
 	v.Parameters = u.Parameters
 	v.DataType = u.DataType
@@ -381,6 +390,7 @@ func (v *StateRecord) UnmarshalJSON(data []byte) error {
 		Parent         *EntityRecord             `json:"parent,omitempty"`
 		OmitAccessor   bool                      `json:"omitAccessor,omitempty"`
 		Private        bool                      `json:"private,omitempty"`
+		Immutable      bool                      `json:"immutable,omitempty"`
 		Name           string                    `json:"name,omitempty"`
 		Parameters     encoding.JsonList[*Field] `json:"parameters,omitempty"`
 		DataType       FieldType                 `json:"dataType,omitempty"`
@@ -393,6 +403,7 @@ func (v *StateRecord) UnmarshalJSON(data []byte) error {
 	u.Parent = v.Parent
 	u.OmitAccessor = v.OmitAccessor
 	u.Private = v.Private
+	u.Immutable = v.Immutable
 	u.Name = v.Name
 	u.Parameters = v.Parameters
 	u.DataType = v.DataType
@@ -409,6 +420,7 @@ func (v *StateRecord) UnmarshalJSON(data []byte) error {
 	v.Parent = u.Parent
 	v.OmitAccessor = u.OmitAccessor
 	v.Private = u.Private
+	v.Immutable = u.Immutable
 	v.Name = u.Name
 	v.Parameters = u.Parameters
 	v.DataType = u.DataType

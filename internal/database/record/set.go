@@ -22,7 +22,7 @@ type Set[T any] struct {
 // NewSet returns a new Set using the given encoder and comparison.
 func NewSet[T any](logger log.Logger, store Store, key Key, namefmt string, encoder encodableValue[T], cmp func(u, v T) int) *Set[T] {
 	s := &Set[T]{}
-	s.Value = *NewValue[[]T](logger, store, key, namefmt, true, &sliceValue[T]{encoder: encoder})
+	s.Value = *NewValue[[]T](logger, store, key, namefmt, false, true, &sliceValue[T]{encoder: encoder})
 	s.compare = cmp
 	return s
 }
@@ -140,6 +140,22 @@ func (v *sliceValue[T]) copyValue() []T {
 		u[i] = v.encoder.copyValue()
 	}
 	return u
+}
+
+func (v *sliceValue[T]) equalValue(u []T) bool {
+	if len(v.value) != len(u) {
+		return false
+	}
+	if len(u) == 0 {
+		return true
+	}
+	for i, w := range v.value {
+		v.encoder.setValue(w)
+		if !v.encoder.equalValue(u[i]) {
+			return false
+		}
+	}
+	return true
 }
 
 func (v *sliceValue[T]) CopyAsInterface() interface{} {

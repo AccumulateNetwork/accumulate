@@ -45,7 +45,7 @@ c.key
 {{- if .Wrapped -}}
 record.Wrapped(record.{{title .DataType.String}}Wrapper)
 {{- else if .Union -}}
-record.Union({{unionMethod . "Unmarshal"}})
+record.Union({{unionMethod . "Unmarshal"}}, {{unionMethod . "Equal"}})
 {{- else -}}
 record.Struct[{{stateType . true}}]()
 {{- end}}
@@ -63,7 +63,7 @@ return record.NewSet(c.logger.L, c.store, {{template "key" .}}, {{template "valu
 {{- else if .IsList}}
 return record.NewList(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, {{template "encoder" .}})
 {{- else}}
-return record.NewValue(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, {{.EmptyIfMissing}}, {{template "encoder" .}})
+return record.NewValue(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, {{.Immutable}}, {{.EmptyIfMissing}}, {{template "encoder" .}})
 {{- end}}
 {{- end}}
 
@@ -71,7 +71,7 @@ return record.NewValue(c.logger.L, c.store, {{template "key" .}}, {{template "va
 {{- if .Wrapped}}
 return record.NewCounted(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, record.WrappedFactory(record.{{title .DataType.String}}Wrapper))
 {{- else if .Union}}
-return record.NewCounted(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, record.UnionFactory({{unionMethod . "Unmarshal"}}))
+return record.NewCounted(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, record.UnionFactory({{unionMethod . "Unmarshal"}}, {{unionMethod . "Equal"}}))
 {{- else}}
 return record.NewCounted(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, record.Struct[{{stateType . true}}])
 {{- end}}
