@@ -19,6 +19,7 @@ accumulate account list 2>&1 | grep -q ACME || accumulate account generate
 LITE_ACME=$(accumulate account list -j | jq -re .liteAccounts[0].liteAccount)
 LITE_ID=$(cut -d/ -f-3 <<< "$LITE_ACME")
 TXS=()
+echo "fauceting lite account ${LITE_ACME}"
 for i in {1..1}
 do
 	TXS=(${TXS[@]} $(cli-tx faucet ${LITE_ACME}))
@@ -28,6 +29,8 @@ do
 	echo $tx
 	wait-for-tx $tx
 done
+
+echo "done fauceting lite account ${LITE_ACME}"
 
 accumulate account get ${LITE_ACME} 1> /dev/null && success || die "Cannot find ${LITE_ACME}"
 
