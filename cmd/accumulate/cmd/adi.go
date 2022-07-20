@@ -55,6 +55,7 @@ var adiDirectoryCmd = &cobra.Command{
 var adiCreateCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Create new ADI",
+	Args:  cobra.RangeArgs(2, 4),
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) < 3 {
 			PrintADICreate()
