@@ -8,7 +8,7 @@
   - name: writable
     type: bool
   - name: id
-    type: int
+    type: string
   - name: nextChildId
     type: int
   - name: parent

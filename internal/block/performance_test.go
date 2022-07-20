@@ -15,6 +15,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
@@ -168,36 +169,40 @@ func BenchmarkBlock(b *testing.B) {
 
 	// bvnCount := []int{1, 2, 4, 8}
 	bvnCount := []int{1}
-	blockSize := []int{50, 100, 200, 500, 1000}
-	// blockSize := []int{50}
+	// blockSize := []int{50, 100, 200, 500, 1000}
+	blockSize := []int{200}
 	scenarios := map[string][]executor{
-		"no-op": {
-			{protocol.TransactionTypeAddCredits, func(st *chain.StateManager, tx *chain.Delivery) error {
-				return nil
-			}},
-		},
-		"create account": {
-			{protocol.TransactionTypeAddCredits, func(st *chain.StateManager, tx *chain.Delivery) error {
-				u := &url.URL{Authority: hex.EncodeToString(tx.Transaction.GetHash())}
-				return st.Create(&protocol.UnknownAccount{Url: u})
-			}},
-		},
-		// "synth txn": {
+		// "no-op": {
 		// 	{protocol.TransactionTypeAddCredits, func(st *chain.StateManager, tx *chain.Delivery) error {
-		// 		u := &url.URL{Authority: hex.EncodeToString(tx.Transaction.GetHash())}
-		// 		st.Submit(u, &protocol.SyntheticDepositCredits{})
-		// 		return nil
-		// 	}},
-		// 	{protocol.TransactionTypeSyntheticDepositCredits, func(st *chain.StateManager, tx *chain.Delivery) error {
 		// 		return nil
 		// 	}},
 		// },
+		// "create account": {
+		// 	{protocol.TransactionTypeAddCredits, func(st *chain.StateManager, tx *chain.Delivery) error {
+		// 		u := &url.URL{Authority: hex.EncodeToString(tx.Transaction.GetHash())}
+		// 		return st.Create(&protocol.UnknownAccount{Url: u})
+		// 	}},
+		// },
+		"synth txn": {
+			{protocol.TransactionTypeAddCredits, func(st *chain.StateManager, tx *chain.Delivery) error {
+				u := &url.URL{Authority: hex.EncodeToString(tx.Transaction.GetHash())}
+				st.Submit(u, &protocol.SyntheticDepositCredits{})
+				return nil
+			}},
+			{protocol.TransactionTypeSyntheticDepositCredits, func(st *chain.StateManager, tx *chain.Delivery) error {
+				return nil
+			}},
+		},
 	}
+
+	alice := protocol.AccountUrl("alice")
+	aliceKey := acctesting.GenerateKey(alice)
 
 	for scname, scenario := range scenarios {
 		for _, bvnCount := range bvnCount {
 			sim := simulator.New(b, bvnCount)
 			sim.InitFromGenesis()
+			sim.CreateIdentity(alice, aliceKey[32:])
 
 			for _, x := range sim.Executors {
 				for _, exec := range scenario {
@@ -207,21 +212,20 @@ func BenchmarkBlock(b *testing.B) {
 
 			for _, blockSize := range blockSize {
 				var timestamp uint64
-				dn := sim.Executors[protocol.Directory]
 				envs := make([]*protocol.Envelope, blockSize)
 				for j := range envs {
 					envs[j] = acctesting.NewTransaction().
-						WithPrincipal(dn.Executor.Describe.PartitionUrl().URL).
-						WithSigner(dn.Executor.Describe.OperatorsPage(), 1).
+						WithPrincipal(alice).
+						WithSigner(alice.JoinPath("book", "1"), 1).
 						WithTimestampVar(&timestamp).
 						WithBody(&protocol.AddCredits{}).
-						Initiate(protocol.SignatureTypeED25519, dn.Executor.Key).
+						Initiate(protocol.SignatureTypeED25519, aliceKey).
 						Build()
 				}
 
 				b.Run(fmt.Sprintf("%d BVNs, %d txns, %s", bvnCount, blockSize, scname), func(b *testing.B) {
 					for i := 0; i < b.N; i++ {
-						sim.WithBatch(func(sim *simulator.Simulator) {
+						sim.RunAndReset(func() {
 							sim.MustSubmitAndExecuteBlock(envs...)
 							sim.WaitForTransactions(delivered, envs...)
 						})
@@ -230,6 +234,7 @@ func BenchmarkBlock(b *testing.B) {
 			}
 		}
 	}
+
 }
 
 type executor struct {
@@ -238,6 +243,18 @@ type executor struct {
 }
 
 func (x executor) Type() protocol.TransactionType { return x.typ }
+
+func (executor) SignerIsAuthorized(delegate chain.AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, checkAuthz bool) (fallback bool, err error) {
+	return false, nil // All signers are authorized
+}
+
+func (executor) TransactionIsReady(delegate chain.AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (ready, fallback bool, err error) {
+	return true, false, nil // Transaction is always ready
+}
+
+func (executor) AllowMissingPrincipal(transaction *protocol.Transaction) bool {
+	return true // Principal can be missing
+}
 
 func (x executor) Execute(st *chain.StateManager, tx *chain.Delivery) (protocol.TransactionResult, error) {
 	return nil, x.fn(st, tx)
