@@ -162,55 +162,72 @@ func dumpLogs(b logging.TB, dataSetLog *logging.DataSetLog) {
 }
 
 func BenchmarkBlock(b *testing.B) {
+	// Disable debug features for the duration
+	acctesting.DisableDebugFeatures()
+	defer acctesting.EnableDebugFeatures()
+
+	// bvnCount := []int{1, 2, 4, 8}
 	bvnCount := []int{1}
-	// blockSize := []int{50, 100, 200, 500, 1000}
-	blockSize := []int{50}
+	blockSize := []int{50, 100, 200, 500, 1000}
+	// blockSize := []int{50}
+	scenarios := map[string][]executor{
+		"no-op": {
+			{protocol.TransactionTypeAddCredits, func(st *chain.StateManager, tx *chain.Delivery) error {
+				return nil
+			}},
+		},
+		"create account": {
+			{protocol.TransactionTypeAddCredits, func(st *chain.StateManager, tx *chain.Delivery) error {
+				u := &url.URL{Authority: hex.EncodeToString(tx.Transaction.GetHash())}
+				return st.Create(&protocol.UnknownAccount{Url: u})
+			}},
+		},
+		// "synth txn": {
+		// 	{protocol.TransactionTypeAddCredits, func(st *chain.StateManager, tx *chain.Delivery) error {
+		// 		u := &url.URL{Authority: hex.EncodeToString(tx.Transaction.GetHash())}
+		// 		st.Submit(u, &protocol.SyntheticDepositCredits{})
+		// 		return nil
+		// 	}},
+		// 	{protocol.TransactionTypeSyntheticDepositCredits, func(st *chain.StateManager, tx *chain.Delivery) error {
+		// 		return nil
+		// 	}},
+		// },
+	}
 
-	for _, bvnCount := range bvnCount {
-		sim := simulator.New(b, bvnCount)
-		sim.InitFromGenesis()
+	for scname, scenario := range scenarios {
+		for _, bvnCount := range bvnCount {
+			sim := simulator.New(b, bvnCount)
+			sim.InitFromGenesis()
 
-		// Make AddCredits a no-op
-		for _, x := range sim.Executors {
-			x.Executor.SetExecutor(executor{
-				protocol.TransactionTypeAddCredits,
-				func(st *chain.StateManager, tx *chain.Delivery) error {
-					u := &url.URL{Authority: hex.EncodeToString(tx.Transaction.GetHash())}
-					return st.Create(&protocol.UnknownAccount{Url: u})
-					// st.Submit(u, &protocol.SyntheticDepositCredits{})
-					// return nil
-				},
-			})
-			x.Executor.SetExecutor(executor{
-				protocol.TransactionTypeSyntheticDepositCredits,
-				func(st *chain.StateManager, tx *chain.Delivery) error {
-					return nil
-				},
-			})
-		}
-
-		for _, blockSize := range blockSize {
-			var timestamp uint64
-			dn := sim.Executors[protocol.Directory]
-			envs := make([]*protocol.Envelope, blockSize)
-			for j := range envs {
-				envs[j] = acctesting.NewTransaction().
-					WithPrincipal(dn.Executor.Describe.PartitionUrl().URL).
-					WithSigner(dn.Executor.Describe.OperatorsPage(), 1).
-					WithTimestampVar(&timestamp).
-					WithBody(&protocol.AddCredits{}).
-					Initiate(protocol.SignatureTypeED25519, dn.Executor.Key).
-					Build()
+			for _, x := range sim.Executors {
+				for _, exec := range scenario {
+					x.Executor.SetExecutor(exec)
+				}
 			}
 
-			b.Run(fmt.Sprintf("%d BVNs, %d txns", bvnCount, blockSize), func(b *testing.B) {
-				for i := 0; i < b.N; i++ {
-					sim.WithBatch(func(sim *simulator.Simulator) {
-						sim.MustSubmitAndExecuteBlock(envs...)
-						sim.WaitForTransactions(delivered, envs...)
-					})
+			for _, blockSize := range blockSize {
+				var timestamp uint64
+				dn := sim.Executors[protocol.Directory]
+				envs := make([]*protocol.Envelope, blockSize)
+				for j := range envs {
+					envs[j] = acctesting.NewTransaction().
+						WithPrincipal(dn.Executor.Describe.PartitionUrl().URL).
+						WithSigner(dn.Executor.Describe.OperatorsPage(), 1).
+						WithTimestampVar(&timestamp).
+						WithBody(&protocol.AddCredits{}).
+						Initiate(protocol.SignatureTypeED25519, dn.Executor.Key).
+						Build()
 				}
-			})
+
+				b.Run(fmt.Sprintf("%d BVNs, %d txns, %s", bvnCount, blockSize, scname), func(b *testing.B) {
+					for i := 0; i < b.N; i++ {
+						sim.WithBatch(func(sim *simulator.Simulator) {
+							sim.MustSubmitAndExecuteBlock(envs...)
+							sim.WaitForTransactions(delivered, envs...)
+						})
+					}
+				})
+			}
 		}
 	}
 }
