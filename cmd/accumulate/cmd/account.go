@@ -620,9 +620,12 @@ func RestoreAccounts() (out string, err error) {
 		}
 	}
 
-	err = GetWallet().DeleteBucket(BucketSigTypeDeprecated)
-	if err != nil {
-		return "", err
+	_, err = GetWallet().GetBucket(BucketSigTypeDeprecated)
+	if err == nil {
+		err = GetWallet().DeleteBucket(BucketSigTypeDeprecated)
+		if err != nil {
+			return "", fmt.Errorf("error removing %s, %v", BucketSigTypeDeprecated, err)
+		}
 	}
 
 	//update wallet version
