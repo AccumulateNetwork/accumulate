@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
+	"github.com/fatih/color"
 	"github.com/getsentry/sentry-go"
 	"github.com/rs/zerolog"
 	"github.com/tendermint/tendermint/crypto"
@@ -262,6 +263,10 @@ func (d *Daemon) Start() (err error) {
 
 	// Shut down the node if the disk space gets too low
 	go d.ensureSufficientDiskSpace(d.Config.RootDir)
+
+	if d.node.IsRunning() {
+		color.HiBlue(" %s node running at %s:", d.node.Config.Accumulate.NetworkType, d.node.Config.Accumulate.Describe.LocalAddress)
+	}
 
 	// Clean up once the node is stopped (mostly for tests)
 	go func() {
