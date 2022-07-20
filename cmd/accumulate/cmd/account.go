@@ -401,7 +401,7 @@ func ListAccounts() (string, error) {
 	}
 	for i, v := range b.KeyValueList {
 		k := new(Key)
-		k.LoadByLabel(string(v.Value))
+		err = k.LoadByLabel(string(v.Value))
 		if err != nil {
 			return "", err
 		}

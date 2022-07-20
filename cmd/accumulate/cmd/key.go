@@ -510,7 +510,7 @@ func getPasswdPrompt(cmd *cobra.Command, prompt string, mask bool) (string, erro
 		return string(bytes), err
 	}
 
-	_, err := fmt.Fprintf(cmd.OutOrStdout(), prompt)
+	_, err := fmt.Fprint(cmd.OutOrStdout(), prompt)
 	if err != nil {
 		return "", err
 	}
