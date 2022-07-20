@@ -72,7 +72,7 @@ func NewValue[T any](logger log.Logger, store Store, key Key, namefmt string, al
 	v.store = store
 	v.key = key
 	if strings.ContainsRune(namefmt, '%') {
-		v.name = fmt.Sprintf(namefmt, key...)
+		v.name = fmt.Sprintf(namefmt, key.GetAll()...)
 	} else {
 		v.name = namefmt
 	}
@@ -84,7 +84,7 @@ func NewValue[T any](logger log.Logger, store Store, key Key, namefmt string, al
 
 // Key returns the I'th component of the value's key.
 func (v *Value[T]) Key(i int) interface{} {
-	return v.key[i]
+	return v.key.Get(i)
 }
 
 // Get loads the value, unmarshalling it if necessary.
@@ -196,8 +196,8 @@ func (v *Value[T]) Commit() error {
 }
 
 // Resolve implements Record.Resolve.
-func (v *Value[T]) Resolve(key Key) (Record, Key, error) {
-	if len(key) == 0 {
+func (v *Value[T]) Resolve(key KeyPart) (Record, KeyPart, error) {
+	if key == nil || key.Len() == 0 {
 		return v, nil, nil
 	}
 	return nil, nil, errors.New(errors.StatusInternalError, "bad key for value")

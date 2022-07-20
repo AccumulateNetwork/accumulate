@@ -16,6 +16,7 @@ import (
 type Batch struct {
 	logger      logging.OptionalLogger
 	store       record.Store
+	key         record.Key
 	done        bool
 	writable    bool
 	id          string
@@ -68,7 +69,7 @@ func (c *Batch) Account(url *url.URL) *Account {
 		v := new(Account)
 		v.logger = c.logger
 		v.store = c.store
-		v.key = record.Key{}.Append("Account", url)
+		v.key = c.key.Append("Account", url)
 		v.parent = c
 		v.label = "account %[2]v"
 		return v
@@ -80,7 +81,7 @@ func (c *Batch) getTransaction(hash [32]byte) *Transaction {
 		v := new(Transaction)
 		v.logger = c.logger
 		v.store = c.store
-		v.key = record.Key{}.Append("Transaction", hash)
+		v.key = c.key.Append("Transaction", hash)
 		v.parent = c
 		v.label = "transaction %[2]x"
 		return v
@@ -89,59 +90,59 @@ func (c *Batch) getTransaction(hash [32]byte) *Transaction {
 
 func (c *Batch) BlockChainUpdates(partition *url.URL, index uint64) *record.List[*ChainUpdate] {
 	return getOrCreateMap(&c.blockChainUpdates, keyForBlockChainUpdates(partition, index), func() *record.List[*ChainUpdate] {
-		return record.NewList(c.logger.L, c.store, record.Key{}.Append("BlockChainUpdates", partition, index), "block chain updates %[2]v %[3]v", record.Struct[ChainUpdate]())
+		return record.NewList(c.logger.L, c.store, c.key.Append("BlockChainUpdates", partition, index), "block chain updates %[2]v %[3]v", record.Struct[ChainUpdate]())
 	})
 }
 
 func (c *Batch) BlockState(partition *url.URL) *record.Set[*BlockStateSynthTxnEntry] {
 	return getOrCreateMap(&c.blockState, keyForBlockState(partition), func() *record.Set[*BlockStateSynthTxnEntry] {
-		return record.NewSet(c.logger.L, c.store, record.Key{}.Append("BlockState", partition), "block state %[2]v", record.Struct[BlockStateSynthTxnEntry](), func(u, v *BlockStateSynthTxnEntry) int { return u.Compare(v) })
+		return record.NewSet(c.logger.L, c.store, c.key.Append("BlockState", partition), "block state %[2]v", record.Struct[BlockStateSynthTxnEntry](), func(u, v *BlockStateSynthTxnEntry) int { return u.Compare(v) })
 	})
 }
 
-func (c *Batch) Resolve(key record.Key) (record.Record, record.Key, error) {
-	switch key[0] {
+func (c *Batch) Resolve(key record.KeyPart) (record.Record, record.KeyPart, error) {
+	switch key.Get(0) {
 	case "Account":
-		if len(key) < 2 {
+		if key.Len() < 2 {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for batch")
 		}
-		url, okUrl := key[1].(*url.URL)
+		url, okUrl := key.Get(1).(*url.URL)
 		if !okUrl {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for batch")
 		}
 		v := c.Account(url)
-		return v, key[2:], nil
+		return v, key.Rest(2), nil
 	case "Transaction":
-		if len(key) < 2 {
+		if key.Len() < 2 {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for batch")
 		}
-		hash, okHash := key[1].([32]byte)
+		hash, okHash := key.Get(1).([32]byte)
 		if !okHash {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for batch")
 		}
 		v := c.getTransaction(hash)
-		return v, key[2:], nil
+		return v, key.Rest(2), nil
 	case "BlockChainUpdates":
-		if len(key) < 3 {
+		if key.Len() < 3 {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for batch")
 		}
-		partition, okPartition := key[1].(*url.URL)
-		index, okIndex := key[2].(uint64)
+		partition, okPartition := key.Get(1).(*url.URL)
+		index, okIndex := key.Get(2).(uint64)
 		if !okPartition || !okIndex {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for batch")
 		}
 		v := c.BlockChainUpdates(partition, index)
-		return v, key[3:], nil
+		return v, key.Rest(3), nil
 	case "BlockState":
-		if len(key) < 2 {
+		if key.Len() < 2 {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for batch")
 		}
-		partition, okPartition := key[1].(*url.URL)
+		partition, okPartition := key.Get(1).(*url.URL)
 		if !okPartition {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for batch")
 		}
 		v := c.BlockState(partition)
-		return v, key[2:], nil
+		return v, key.Rest(2), nil
 	default:
 		return nil, nil, errors.New(errors.StatusInternalError, "bad key for batch")
 	}
@@ -348,62 +349,62 @@ func (c *Account) Data() *AccountData {
 	})
 }
 
-func (c *Account) Resolve(key record.Key) (record.Record, record.Key, error) {
-	switch key[0] {
+func (c *Account) Resolve(key record.KeyPart) (record.Record, record.KeyPart, error) {
+	switch key.Get(0) {
 	case "Main":
-		return c.Main(), key[1:], nil
+		return c.Main(), key.Rest(1), nil
 	case "Pending":
-		return c.Pending(), key[1:], nil
+		return c.Pending(), key.Rest(1), nil
 	case "SyntheticForAnchor":
-		if len(key) < 2 {
+		if key.Len() < 2 {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for account")
 		}
-		anchor, okAnchor := key[1].([32]byte)
+		anchor, okAnchor := key.Get(1).([32]byte)
 		if !okAnchor {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for account")
 		}
 		v := c.SyntheticForAnchor(anchor)
-		return v, key[2:], nil
+		return v, key.Rest(2), nil
 	case "Directory":
-		return c.Directory(), key[1:], nil
+		return c.Directory(), key.Rest(1), nil
 	case "MainChain":
-		return c.MainChain(), key[1:], nil
+		return c.MainChain(), key.Rest(1), nil
 	case "ScratchChain":
-		return c.ScratchChain(), key[1:], nil
+		return c.ScratchChain(), key.Rest(1), nil
 	case "SignatureChain":
-		return c.SignatureChain(), key[1:], nil
+		return c.SignatureChain(), key.Rest(1), nil
 	case "RootChain":
-		return c.RootChain(), key[1:], nil
+		return c.RootChain(), key.Rest(1), nil
 	case "AnchorSequenceChain":
-		return c.AnchorSequenceChain(), key[1:], nil
+		return c.AnchorSequenceChain(), key.Rest(1), nil
 	case "MajorBlockChain":
-		return c.MajorBlockChain(), key[1:], nil
+		return c.MajorBlockChain(), key.Rest(1), nil
 	case "SyntheticSequenceChain":
-		if len(key) < 2 {
+		if key.Len() < 2 {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for account")
 		}
-		partition, okPartition := key[1].(string)
+		partition, okPartition := key.Get(1).(string)
 		if !okPartition {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for account")
 		}
 		v := c.getSyntheticSequenceChain(partition)
-		return v, key[2:], nil
+		return v, key.Rest(2), nil
 	case "AnchorChain":
-		if len(key) < 2 {
+		if key.Len() < 2 {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for account")
 		}
-		partition, okPartition := key[1].(string)
+		partition, okPartition := key.Get(1).(string)
 		if !okPartition {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for account")
 		}
 		v := c.getAnchorChain(partition)
-		return v, key[2:], nil
+		return v, key.Rest(2), nil
 	case "Chains":
-		return c.Chains(), key[1:], nil
+		return c.Chains(), key.Rest(1), nil
 	case "SyntheticAnchors":
-		return c.SyntheticAnchors(), key[1:], nil
+		return c.SyntheticAnchors(), key.Rest(1), nil
 	case "Data":
-		return c.Data(), key[1:], nil
+		return c.Data(), key.Rest(1), nil
 	default:
 		return nil, nil, errors.New(errors.StatusInternalError, "bad key for account")
 	}
@@ -523,12 +524,12 @@ func (c *AccountAnchorChain) BPT() *Chain2 {
 	})
 }
 
-func (c *AccountAnchorChain) Resolve(key record.Key) (record.Record, record.Key, error) {
-	switch key[0] {
+func (c *AccountAnchorChain) Resolve(key record.KeyPart) (record.Record, record.KeyPart, error) {
+	switch key.Get(0) {
 	case "Root":
-		return c.Root(), key[1:], nil
+		return c.Root(), key.Rest(1), nil
 	case "BPT":
-		return c.BPT(), key[1:], nil
+		return c.BPT(), key.Rest(1), nil
 	default:
 		return nil, nil, errors.New(errors.StatusInternalError, "bad key for anchor chain")
 	}
@@ -592,20 +593,20 @@ func (c *AccountData) Transaction(entryHash [32]byte) *record.Value[[32]byte] {
 	})
 }
 
-func (c *AccountData) Resolve(key record.Key) (record.Record, record.Key, error) {
-	switch key[0] {
+func (c *AccountData) Resolve(key record.KeyPart) (record.Record, record.KeyPart, error) {
+	switch key.Get(0) {
 	case "Entry":
-		return c.Entry(), key[1:], nil
+		return c.Entry(), key.Rest(1), nil
 	case "Transaction":
-		if len(key) < 2 {
+		if key.Len() < 2 {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for data")
 		}
-		entryHash, okEntryHash := key[1].([32]byte)
+		entryHash, okEntryHash := key.Get(1).([32]byte)
 		if !okEntryHash {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for data")
 		}
 		v := c.Transaction(entryHash)
-		return v, key[2:], nil
+		return v, key.Rest(2), nil
 	default:
 		return nil, nil, errors.New(errors.StatusInternalError, "bad key for data")
 	}
@@ -694,26 +695,26 @@ func (c *Transaction) Chains() *record.Set[*TransactionChainEntry] {
 	})
 }
 
-func (c *Transaction) Resolve(key record.Key) (record.Record, record.Key, error) {
-	switch key[0] {
+func (c *Transaction) Resolve(key record.KeyPart) (record.Record, record.KeyPart, error) {
+	switch key.Get(0) {
 	case "Main":
-		return c.Main(), key[1:], nil
+		return c.Main(), key.Rest(1), nil
 	case "Status":
-		return c.Status(), key[1:], nil
+		return c.Status(), key.Rest(1), nil
 	case "Produced":
-		return c.Produced(), key[1:], nil
+		return c.Produced(), key.Rest(1), nil
 	case "Signatures":
-		if len(key) < 2 {
+		if key.Len() < 2 {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for transaction")
 		}
-		signer, okSigner := key[1].(*url.URL)
+		signer, okSigner := key.Get(1).(*url.URL)
 		if !okSigner {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for transaction")
 		}
 		v := c.getSignatures(signer)
-		return v, key[2:], nil
+		return v, key.Rest(2), nil
 	case "Chains":
-		return c.Chains(), key[1:], nil
+		return c.Chains(), key.Rest(1), nil
 	default:
 		return nil, nil, errors.New(errors.StatusInternalError, "bad key for transaction")
 	}

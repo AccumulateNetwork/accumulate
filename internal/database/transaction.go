@@ -11,7 +11,7 @@ import (
 )
 
 func (r *Transaction) hash() []byte {
-	h := r.key[1].([32]byte)
+	h := r.key.Get(1).([32]byte)
 	return h[:]
 }
 

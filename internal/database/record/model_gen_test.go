@@ -23,11 +23,11 @@ type ChangeSet struct {
 }
 
 func (c *ChangeSet) Entity(name string) *Entity {
-	return getOrCreateMap(&c.entity, record.Key{}.Append("Entity", name), func() *Entity {
+	return getOrCreateMap(&c.entity, record.NewKey().Append("Entity", name), func() *Entity {
 		v := new(Entity)
 		v.logger = c.logger
 		v.store = c.store
-		v.key = record.Key{}.Append("Entity", name)
+		v.key = record.NewKey().Append("Entity", name)
 		v.parent = c
 		v.label = "entity %[2]v"
 		return v
@@ -36,24 +36,24 @@ func (c *ChangeSet) Entity(name string) *Entity {
 
 func (c *ChangeSet) ChangeLog() *record.Counted[string] {
 	return getOrCreateField(&c.changeLog, func() *record.Counted[string] {
-		return record.NewCounted(c.logger.L, c.store, record.Key{}.Append("ChangeLog"), "change log", record.WrappedFactory(record.StringWrapper))
+		return record.NewCounted(c.logger.L, c.store, record.NewKey().Append("ChangeLog"), "change log", record.WrappedFactory(record.StringWrapper))
 	})
 }
 
-func (c *ChangeSet) Resolve(key record.Key) (record.Record, record.Key, error) {
-	switch key[0] {
+func (c *ChangeSet) Resolve(key record.KeyPart) (record.Record, record.KeyPart, error) {
+	switch key.Get(0) {
 	case "Entity":
-		if len(key) < 2 {
+		if key.Len() < 2 {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for change set")
 		}
-		name, okName := key[1].(string)
+		name, okName := key.Get(1).(string)
 		if !okName {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for change set")
 		}
 		v := c.Entity(name)
-		return v, key[2:], nil
+		return v, key.Rest(2), nil
 	case "ChangeLog":
-		return c.ChangeLog(), key[1:], nil
+		return c.ChangeLog(), key.Rest(1), nil
 	default:
 		return nil, nil, errors.New(errors.StatusInternalError, "bad key for change set")
 	}
@@ -148,18 +148,18 @@ func (c *Entity) CountableUnion() *record.Counted[protocol.Account] {
 	})
 }
 
-func (c *Entity) Resolve(key record.Key) (record.Record, record.Key, error) {
-	switch key[0] {
+func (c *Entity) Resolve(key record.KeyPart) (record.Record, record.KeyPart, error) {
+	switch key.Get(0) {
 	case "Union":
-		return c.Union(), key[1:], nil
+		return c.Union(), key.Rest(1), nil
 	case "Set":
-		return c.Set(), key[1:], nil
+		return c.Set(), key.Rest(1), nil
 	case "Chain":
-		return c.Chain(), key[1:], nil
+		return c.Chain(), key.Rest(1), nil
 	case "CountableRefType":
-		return c.CountableRefType(), key[1:], nil
+		return c.CountableRefType(), key.Rest(1), nil
 	case "CountableUnion":
-		return c.CountableUnion(), key[1:], nil
+		return c.CountableUnion(), key.Rest(1), nil
 	default:
 		return nil, nil, errors.New(errors.StatusInternalError, "bad key for entity")
 	}
@@ -296,26 +296,26 @@ func (c *TemplateTest) UnionList() *record.Counted[UnionType] {
 	})
 }
 
-func (c *TemplateTest) Resolve(key record.Key) (record.Record, record.Key, error) {
-	switch key[0] {
+func (c *TemplateTest) Resolve(key record.KeyPart) (record.Record, record.KeyPart, error) {
+	switch key.Get(0) {
 	case "Wrapped":
-		return c.Wrapped(), key[1:], nil
+		return c.Wrapped(), key.Rest(1), nil
 	case "StructPtr":
-		return c.StructPtr(), key[1:], nil
+		return c.StructPtr(), key.Rest(1), nil
 	case "Union":
-		return c.Union(), key[1:], nil
+		return c.Union(), key.Rest(1), nil
 	case "WrappedSet":
-		return c.WrappedSet(), key[1:], nil
+		return c.WrappedSet(), key.Rest(1), nil
 	case "StructSet":
-		return c.StructSet(), key[1:], nil
+		return c.StructSet(), key.Rest(1), nil
 	case "UnionSet":
-		return c.UnionSet(), key[1:], nil
+		return c.UnionSet(), key.Rest(1), nil
 	case "WrappedList":
-		return c.WrappedList(), key[1:], nil
+		return c.WrappedList(), key.Rest(1), nil
 	case "StructList":
-		return c.StructList(), key[1:], nil
+		return c.StructList(), key.Rest(1), nil
 	case "UnionList":
-		return c.UnionList(), key[1:], nil
+		return c.UnionList(), key.Rest(1), nil
 	default:
 		return nil, nil, errors.New(errors.StatusInternalError, "bad key for template test")
 	}

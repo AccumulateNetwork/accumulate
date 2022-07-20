@@ -1,6 +1,7 @@
 package record_test
 
 import (
+	"fmt"
 	"io"
 	"testing"
 
@@ -69,7 +70,7 @@ func (e *Entity) Commit() error {
 	}
 
 	// Log the update
-	err := e.parent.ChangeLog().Put(e.key.String())
+	err := e.parent.ChangeLog().Put(fmt.Sprint(e.key))
 	if err != nil {
 		return err
 	}

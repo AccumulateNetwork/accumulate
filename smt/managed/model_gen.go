@@ -52,40 +52,40 @@ func (c *Chain) Element(index uint64) *record.Value[[]byte] {
 	})
 }
 
-func (c *Chain) Resolve(key record.Key) (record.Record, record.Key, error) {
-	switch key[0] {
+func (c *Chain) Resolve(key record.KeyPart) (record.Record, record.KeyPart, error) {
+	switch key.Get(0) {
 	case "Head":
-		return c.Head(), key[1:], nil
+		return c.Head(), key.Rest(1), nil
 	case "States":
-		if len(key) < 2 {
+		if key.Len() < 2 {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for chain")
 		}
-		index, okIndex := key[1].(uint64)
+		index, okIndex := key.Get(1).(uint64)
 		if !okIndex {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for chain")
 		}
 		v := c.States(index)
-		return v, key[2:], nil
+		return v, key.Rest(2), nil
 	case "ElementIndex":
-		if len(key) < 2 {
+		if key.Len() < 2 {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for chain")
 		}
-		hash, okHash := key[1].([]byte)
+		hash, okHash := key.Get(1).([]byte)
 		if !okHash {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for chain")
 		}
 		v := c.ElementIndex(hash)
-		return v, key[2:], nil
+		return v, key.Rest(2), nil
 	case "Element":
-		if len(key) < 2 {
+		if key.Len() < 2 {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for chain")
 		}
-		index, okIndex := key[1].(uint64)
+		index, okIndex := key.Get(1).(uint64)
 		if !okIndex {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for chain")
 		}
 		v := c.Element(index)
-		return v, key[2:], nil
+		return v, key.Rest(2), nil
 	default:
 		return nil, nil, errors.New(errors.StatusInternalError, "bad key for chain")
 	}

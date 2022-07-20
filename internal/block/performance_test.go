@@ -16,6 +16,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
@@ -235,6 +236,7 @@ func BenchmarkBlock(b *testing.B) {
 		}
 	}
 
+	record.PrintStats()
 }
 
 type executor struct {

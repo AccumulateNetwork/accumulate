@@ -146,7 +146,7 @@ func (b *Batch) SaveSnapshot(file io.WriteSeeker, network *config.Describe) erro
 	// Save the snapshot
 	return bpt.Bpt.SaveSnapshot(wr, func(key storage.Key, hash [32]byte) ([]byte, error) {
 		// Create an Account object
-		u, err := b.getAccountUrl(record.Key{key})
+		u, err := b.getAccountUrl(record.NewKey(key))
 		if err != nil {
 			return nil, errors.Wrap(errors.StatusUnknownError, err)
 		}

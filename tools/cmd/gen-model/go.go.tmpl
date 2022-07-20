@@ -28,13 +28,8 @@ c.label + " {{valueNameFormat .}}"
 {{- end}}
 {{- end}}
 
-{{  define "key"}}
-{{- if .GetParent.Root -}}
-record.Key{}
-{{- else -}}
-c.key
-{{- end -}}
-.Append({{template "keyArgs" .}})
+{{  define "key" -}}
+c.key.Append({{template "keyArgs" .}})
 {{- end}}
 
 {{  define "keyArgs"}}
@@ -86,8 +81,8 @@ return record.NewCounted(c.logger.L, c.store, {{template "key" .}}, {{template "
 type {{.FullName}} struct {
 	logger logging.OptionalLogger
 	store record.Store
-	{{- if not .Root}}
 	key record.Key
+	{{- if not .Root}}
 	label string
 	{{- if .GetParent}}
 	parent *{{.GetParent.FullName}}
@@ -148,24 +143,24 @@ func (c *{{$c.FullName}}) {{template "accessor" .}}({{range .GetParameters}}{{lo
 {{end}}
 {{end}}
 
-func (c *{{.FullName}}) {{if .CustomResolve}}base{{end}}Resolve(key record.Key) (record.Record, record.Key, error) {
-	switch key[0] {
+func (c *{{.FullName}}) {{if .CustomResolve}}base{{end}}Resolve(key record.KeyPart) (record.Record, record.KeyPart, error) {
+	switch key.Get(0) {
 	{{- range .Attributes}}
 	case "{{.Name}}":
 		{{- if parameterized .}}
-		if len(key) < {{add 1 (parameterCount .)}} {
+		if key.Len() < {{add 1 (parameterCount .)}} {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for {{natural $c.Name}}")
 		}
 		{{- range $index, $param := .GetParameters}}
-		{{lower .Name}}, ok{{.Name}} := key[{{add 1 $index}}].({{parameterType $param}})
+		{{lower .Name}}, ok{{.Name}} := key.Get({{add 1 $index}}).({{parameterType $param}})
 		{{- end}}
 		if {{range $index, $param := .GetParameters}}{{if gt $index 0}} || {{end}}!ok{{.Name}}{{end}} {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for {{natural $c.Name}}")
 		}
 		v := c.{{template "accessor" .}}({{range .GetParameters}}{{lower .Name}},{{end}})
-		return v, key[{{add 1 (parameterCount .)}}:], nil
+		return v, key.Rest({{add 1 (parameterCount .)}}), nil
 		{{- else}}
-		return c.{{template "accessor" .}}(), key[1:], nil
+		return c.{{template "accessor" .}}(), key.Rest(1), nil
 		{{- end}}
 	{{- end}}
 	default:

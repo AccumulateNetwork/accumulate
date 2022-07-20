@@ -31,7 +31,7 @@ func UpdateAccount[T protocol.Account](batch *Batch, url *url.URL, fn func(T) er
 }
 
 func (r *Account) url() *url.URL {
-	return r.key[1].(*url.URL)
+	return r.key.Get(1).(*url.URL)
 }
 
 func (a *Account) Commit() error {

@@ -5,6 +5,7 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/badger"
@@ -17,6 +18,7 @@ const markPower = 8
 
 // Database is an Accumulate database.
 type Database struct {
+	key         record.Key
 	store       storage.KeyValueStore
 	logger      log.Logger
 	nextBatchId int64
@@ -25,6 +27,7 @@ type Database struct {
 // New creates a new database using the given key-value store.
 func New(store storage.KeyValueStore, logger log.Logger) *Database {
 	d := new(Database)
+	d.key = record.NewKey() // For memoization
 	d.store = store
 
 	if logger != nil {

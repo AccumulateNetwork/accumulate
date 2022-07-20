@@ -25,6 +25,7 @@ func (d *Database) Begin(writable bool) *Batch {
 	d.nextBatchId++
 
 	b := new(Batch)
+	b.key = d.key
 	b.id = fmt.Sprint(d.nextBatchId)
 	b.writable = writable
 	b.logger.L = d.logger
@@ -42,6 +43,7 @@ func (b *Batch) Begin(writable bool) *Batch {
 	b.nextChildId++
 
 	c := new(Batch)
+	c.key = b.key
 	c.id = fmt.Sprintf("%s.%d", b.id, b.nextChildId)
 	c.writable = b.writable && writable
 	c.parent = b
@@ -55,7 +57,7 @@ func (b *Batch) Begin(writable bool) *Batch {
 // DeleteAccountState_TESTONLY is intended for testing purposes only. It deletes an
 // account from the database.
 func (b *Batch) DeleteAccountState_TESTONLY(url *url.URL) error {
-	a := record.Key{"Account", url, "Main"}
+	a := record.NewKey("Account", url, "Main")
 	return b.kvstore.Put(a.Hash(), nil)
 }
 
@@ -166,7 +168,7 @@ func (b *Batch) getAccountUrl(key record.Key) (*url.URL, error) {
 //
 // Deprecated: Use Account.
 func (b *Batch) AccountByID(id []byte) (*Account, error) {
-	u, err := b.getAccountUrl(record.Key{"Account", id})
+	u, err := b.getAccountUrl(record.NewKey("Account", id))
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
@@ -207,8 +209,9 @@ func (b *Batch) PutValue(key record.Key, value record.ValueReader) error {
 func resolveValue[T any](c *Batch, key record.Key) (T, error) {
 	var r record.Record = c
 	var err error
-	for len(key) > 0 {
-		r, key, err = r.Resolve(key)
+	var kp record.KeyPart = key
+	for kp != nil && kp.Len() > 0 {
+		r, kp, err = r.Resolve(kp)
 		if err != nil {
 			return zero[T](), errors.Wrap(errors.StatusUnknownError, err)
 		}

@@ -156,16 +156,16 @@ func (c *Counted[T]) Commit() error {
 }
 
 // Resolve implements Record.Resolve.
-func (c *Counted[T]) Resolve(key Key) (Record, Key, error) {
-	if len(key) == 0 {
+func (c *Counted[T]) Resolve(key KeyPart) (Record, KeyPart, error) {
+	if key == nil || key.Len() == 0 {
 		return c.count, nil, nil
 	}
 
-	if len(key) > 1 {
+	if key.Len() > 1 {
 		return nil, nil, errors.New(errors.StatusInternalError, "bad key for counted")
 	}
 
-	i, ok := key[0].(int)
+	i, ok := key.Get(0).(int)
 	if !ok {
 		return nil, nil, errors.New(errors.StatusInternalError, "bad key for value")
 	}
