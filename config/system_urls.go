@@ -41,12 +41,15 @@ func (u NetworkUrl) AnchorPool() *url.URL {
 
 // PartitionUrl returns a NetworkUrl for the local partition.
 func (n *Describe) PartitionUrl() NetworkUrl {
-	return NetworkUrl{protocol.PartitionUrl(n.PartitionId)}
+	if n.partitionUrl.URL == nil {
+		n.partitionUrl.URL = protocol.PartitionUrl(n.PartitionId)
+	}
+	return n.partitionUrl
 }
 
 // NodeUrl returns the URL of the partition, optionally with a path appended.
 func (n *Describe) NodeUrl(path ...string) *url.URL {
-	return protocol.PartitionUrl(n.PartitionId).JoinPath(path...)
+	return n.PartitionUrl().JoinPath(path...)
 }
 
 // Ledger returns the URL of the partition's ledger account.

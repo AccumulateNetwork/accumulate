@@ -16,6 +16,8 @@ type URL struct {
 	Path      string
 	Query     string
 	Fragment  string
+
+	memoizeJoin map[string]*URL
 }
 
 type Values = url.Values
@@ -342,6 +344,14 @@ func (u *URL) PathEqual(v string) bool {
 
 // JoinPath returns a copy of U with additional path elements.
 func (u *URL) JoinPath(s ...string) *URL {
+	j := path.Join(s...)
+	if u.memoizeJoin == nil {
+		u.memoizeJoin = map[string]*URL{}
+	}
+	if v, ok := u.memoizeJoin[j]; ok {
+		return v
+	}
+
 	if len(s) == 0 {
 		return u
 	}
@@ -349,7 +359,8 @@ func (u *URL) JoinPath(s ...string) *URL {
 	if len(v.Path) == 0 {
 		v.Path = "/"
 	}
-	v.Path = path.Join(append([]string{v.Path}, s...)...)
+	v.Path = path.Join(v.Path, j)
+	u.memoizeJoin[j] = v
 	return v
 }
 

@@ -16,6 +16,7 @@ import (
 
 type Describe struct {
 	fieldsSet    []bool
+	partitionUrl NetworkUrl
 	NetworkType  NetworkType `json:"networkType,omitempty" form:"networkType" query:"networkType" validate:"required" toml:"type" mapstructure:"type"`
 	PartitionId  string      `json:"partitionId,omitempty" form:"partitionId" query:"partitionId" validate:"required" toml:"partition-id" mapstructure:"partition-id"`
 	LocalAddress string      `json:"localAddress,omitempty" form:"localAddress" query:"localAddress" validate:"required" toml:"local-address" mapstructure:"local-address"`
