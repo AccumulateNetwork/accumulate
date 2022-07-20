@@ -380,7 +380,8 @@ func goCopy(field *Field, dstName, srcName string) (string, error) {
 		return goCopyNonPointer(field, "%s = encoding.BytesCopy(%s)", dstName, srcName), nil
 
 	case Url, TxID:
-		return goCopyPointer(field, "(%s).Copy()", dstName, srcName), nil
+		// URLs and TxIDs should be immutable and thus do not need to be copied
+		return goCopyPointer(field, "%s", dstName, srcName), nil
 
 	case BigInt:
 		return goCopyPointer(field, "encoding.BigintCopy(%s)", dstName, srcName), nil
