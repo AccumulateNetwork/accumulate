@@ -24,9 +24,9 @@ var goFuncs = template.FuncMap{
 	"parameterType":   parameterType,
 	"keyType":         keyType,
 	"asKey":           asKey,
+	"keyToString":     keyToString,
 	"unionMethod":     unionMethod,
 	"chainName":       chainName,
-	"valueNameFormat": func(r typegen.Record) string { s, _ := valueNameFormat(r); return s },
 	"chainNameFormat": func(r typegen.Record) string { s, _ := chainNameFormat(r); return s },
 	"parameterized":   func(r typegen.Record) bool { return len(r.GetParameters()) > 0 },
 	"parameterCount":  func(r typegen.Record) int { return len(r.GetParameters()) },
@@ -125,6 +125,33 @@ func asKey(p *typegen.Field, varName string) string {
 	}
 }
 
+func keyToString(p *typegen.Field, varName string) string {
+	switch p.Type.Code {
+	case typegen.TypeCodeInt:
+		return "strconv.FormatInt(" + varName + ", 10)"
+	case typegen.TypeCodeUint:
+		return "strconv.FormatUint(" + varName + ", 10)"
+	case typegen.TypeCodeBool:
+		return "strconv.FormatBool(" + varName + ")"
+	case typegen.TypeCodeString:
+		return varName
+	case typegen.TypeCodeHash:
+		return "hex.EncodeToString(" + varName + "[:])"
+	case typegen.TypeCodeBytes:
+		return "hex.EncodeToString(" + varName + ")"
+	case typegen.TypeCodeFloat:
+		return "strconv.FormatFloat(" + varName + ", 'g', 3, 10)"
+	case typegen.TypeCodeUrl,
+		typegen.TypeCodeTime,
+		typegen.TypeCodeDuration,
+		typegen.TypeCodeBigInt,
+		typegen.TypeCodeTxid:
+		fallthrough
+	default:
+		return varName + ".String()"
+	}
+}
+
 func parameterFormatters(r typegen.Record, keyDepth int) []string {
 	var formatters []string
 	for i, p := range r.GetParameters() {
@@ -136,24 +163,6 @@ func parameterFormatters(r typegen.Record, keyDepth int) []string {
 		formatters = append(formatters, fmt.Sprintf("%%[%d]%c", keyDepth+i+1, r))
 	}
 	return formatters
-}
-
-func valueNameFormat(r typegen.Record) (string, int) {
-	if e, ok := r.(*typegen.EntityRecord); ok && (e == nil || e.Root) {
-		return "", 0
-	}
-
-	_, keyDepth := valueNameFormat(r.GetParent())
-
-	name := typegen.Natural(r.GetName())
-	formatters := parameterFormatters(r, keyDepth+1)
-	if len(formatters) == 0 {
-		return name, keyDepth + 1
-	}
-
-	valueNameFormat(r.GetParent())
-	name += " " + strings.Join(formatters, " ")
-	return name, keyDepth + 1 + len(formatters)
 }
 
 func chainName(r typegen.Record) string {

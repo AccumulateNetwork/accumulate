@@ -5,6 +5,9 @@ package database
 //lint:file-ignore S1008,U1000 generated code
 
 import (
+	"encoding/hex"
+	"strconv"
+
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -70,7 +73,7 @@ func (c *Batch) Account(url *url.URL) *Account {
 		v.store = c.store
 		v.key = record.Key{}.Append("Account", url)
 		v.parent = c
-		v.label = "account %[2]v"
+		v.label = "account" + " " + url.String()
 		return v
 	})
 }
@@ -82,20 +85,20 @@ func (c *Batch) getTransaction(hash [32]byte) *Transaction {
 		v.store = c.store
 		v.key = record.Key{}.Append("Transaction", hash)
 		v.parent = c
-		v.label = "transaction %[2]x"
+		v.label = "transaction" + " " + hex.EncodeToString(hash[:])
 		return v
 	})
 }
 
 func (c *Batch) BlockChainUpdates(partition *url.URL, index uint64) *record.List[*ChainUpdate] {
 	return getOrCreateMap(&c.blockChainUpdates, keyForBlockChainUpdates(partition, index), func() *record.List[*ChainUpdate] {
-		return record.NewList(c.logger.L, c.store, record.Key{}.Append("BlockChainUpdates", partition, index), "block chain updates %[2]v %[3]v", record.Struct[ChainUpdate]())
+		return record.NewList(c.logger.L, c.store, record.Key{}.Append("BlockChainUpdates", partition, index), "block chain updates"+" "+partition.String()+" "+strconv.FormatUint(index, 10), record.Struct[ChainUpdate]())
 	})
 }
 
 func (c *Batch) BlockState(partition *url.URL) *record.Set[*BlockStateSynthTxnEntry] {
 	return getOrCreateMap(&c.blockState, keyForBlockState(partition), func() *record.Set[*BlockStateSynthTxnEntry] {
-		return record.NewSet(c.logger.L, c.store, record.Key{}.Append("BlockState", partition), "block state %[2]v", record.Struct[BlockStateSynthTxnEntry](), func(u, v *BlockStateSynthTxnEntry) int { return u.Compare(v) })
+		return record.NewSet(c.logger.L, c.store, record.Key{}.Append("BlockState", partition), "block state"+" "+partition.String(), record.Struct[BlockStateSynthTxnEntry](), func(u, v *BlockStateSynthTxnEntry) int { return u.Compare(v) })
 	})
 }
 
@@ -248,67 +251,67 @@ func keyForAccountAnchorChain(partition string) accountAnchorChainKey {
 
 func (c *Account) Main() *record.Value[protocol.Account] {
 	return getOrCreateField(&c.main, func() *record.Value[protocol.Account] {
-		return record.NewValue(c.logger.L, c.store, c.key.Append("Main"), c.label+" main", false, record.Union(protocol.UnmarshalAccount))
+		return record.NewValue(c.logger.L, c.store, c.key.Append("Main"), c.label+" "+"main", false, record.Union(protocol.UnmarshalAccount))
 	})
 }
 
 func (c *Account) Pending() *record.Set[*url.TxID] {
 	return getOrCreateField(&c.pending, func() *record.Set[*url.TxID] {
-		return record.NewSet(c.logger.L, c.store, c.key.Append("Pending"), c.label+" pending", record.Wrapped(record.TxidWrapper), record.CompareTxid)
+		return record.NewSet(c.logger.L, c.store, c.key.Append("Pending"), c.label+" "+"pending", record.Wrapped(record.TxidWrapper), record.CompareTxid)
 	})
 }
 
 func (c *Account) SyntheticForAnchor(anchor [32]byte) *record.Set[*url.TxID] {
 	return getOrCreateMap(&c.syntheticForAnchor, keyForAccountSyntheticForAnchor(anchor), func() *record.Set[*url.TxID] {
-		return record.NewSet(c.logger.L, c.store, c.key.Append("SyntheticForAnchor", anchor), c.label+" synthetic for anchor %[4]x", record.Wrapped(record.TxidWrapper), record.CompareTxid)
+		return record.NewSet(c.logger.L, c.store, c.key.Append("SyntheticForAnchor", anchor), c.label+" "+"synthetic for anchor"+" "+hex.EncodeToString(anchor[:]), record.Wrapped(record.TxidWrapper), record.CompareTxid)
 	})
 }
 
 func (c *Account) Directory() *record.Set[*url.URL] {
 	return getOrCreateField(&c.directory, func() *record.Set[*url.URL] {
-		return record.NewSet(c.logger.L, c.store, c.key.Append("Directory"), c.label+" directory", record.Wrapped(record.UrlWrapper), record.CompareUrl)
+		return record.NewSet(c.logger.L, c.store, c.key.Append("Directory"), c.label+" "+"directory", record.Wrapped(record.UrlWrapper), record.CompareUrl)
 	})
 }
 
 func (c *Account) MainChain() *Chain2 {
 	return getOrCreateField(&c.mainChain, func() *Chain2 {
-		return newChain2(c, c.logger.L, c.store, c.key.Append("MainChain"), "main", c.label+" main chain")
+		return newChain2(c, c.logger.L, c.store, c.key.Append("MainChain"), "main", c.label+" "+"main chain")
 	})
 }
 
 func (c *Account) ScratchChain() *Chain2 {
 	return getOrCreateField(&c.scratchChain, func() *Chain2 {
-		return newChain2(c, c.logger.L, c.store, c.key.Append("ScratchChain"), "scratch", c.label+" scratch chain")
+		return newChain2(c, c.logger.L, c.store, c.key.Append("ScratchChain"), "scratch", c.label+" "+"scratch chain")
 	})
 }
 
 func (c *Account) SignatureChain() *Chain2 {
 	return getOrCreateField(&c.signatureChain, func() *Chain2 {
-		return newChain2(c, c.logger.L, c.store, c.key.Append("SignatureChain"), "signature", c.label+" signature chain")
+		return newChain2(c, c.logger.L, c.store, c.key.Append("SignatureChain"), "signature", c.label+" "+"signature chain")
 	})
 }
 
 func (c *Account) RootChain() *Chain2 {
 	return getOrCreateField(&c.rootChain, func() *Chain2 {
-		return newChain2(c, c.logger.L, c.store, c.key.Append("RootChain"), "root", c.label+" root chain")
+		return newChain2(c, c.logger.L, c.store, c.key.Append("RootChain"), "root", c.label+" "+"root chain")
 	})
 }
 
 func (c *Account) AnchorSequenceChain() *Chain2 {
 	return getOrCreateField(&c.anchorSequenceChain, func() *Chain2 {
-		return newChain2(c, c.logger.L, c.store, c.key.Append("AnchorSequenceChain"), "anchor-sequence", c.label+" anchor sequence chain")
+		return newChain2(c, c.logger.L, c.store, c.key.Append("AnchorSequenceChain"), "anchor-sequence", c.label+" "+"anchor sequence chain")
 	})
 }
 
 func (c *Account) MajorBlockChain() *Chain2 {
 	return getOrCreateField(&c.majorBlockChain, func() *Chain2 {
-		return newChain2(c, c.logger.L, c.store, c.key.Append("MajorBlockChain"), "major-block", c.label+" major block chain")
+		return newChain2(c, c.logger.L, c.store, c.key.Append("MajorBlockChain"), "major-block", c.label+" "+"major block chain")
 	})
 }
 
 func (c *Account) getSyntheticSequenceChain(partition string) *Chain2 {
 	return getOrCreateMap(&c.syntheticSequenceChain, keyForAccountSyntheticSequenceChain(partition), func() *Chain2 {
-		return newChain2(c, c.logger.L, c.store, c.key.Append("SyntheticSequenceChain", partition), "synthetic-sequence(%[4]v)", c.label+" synthetic sequence chain %[4]v")
+		return newChain2(c, c.logger.L, c.store, c.key.Append("SyntheticSequenceChain", partition), "synthetic-sequence(%[4]v)", c.label+" "+"synthetic sequence chain"+" "+partition)
 	})
 }
 
@@ -319,20 +322,20 @@ func (c *Account) getAnchorChain(partition string) *AccountAnchorChain {
 		v.store = c.store
 		v.key = c.key.Append("AnchorChain", partition)
 		v.parent = c
-		v.label = c.label + " anchor chain %[4]v"
+		v.label = c.label + " " + "anchor chain" + " " + partition
 		return v
 	})
 }
 
 func (c *Account) Chains() *record.Set[*protocol.ChainMetadata] {
 	return getOrCreateField(&c.chains, func() *record.Set[*protocol.ChainMetadata] {
-		return record.NewSet(c.logger.L, c.store, c.key.Append("Chains"), c.label+" chains", record.Struct[protocol.ChainMetadata](), func(u, v *protocol.ChainMetadata) int { return u.Compare(v) })
+		return record.NewSet(c.logger.L, c.store, c.key.Append("Chains"), c.label+" "+"chains", record.Struct[protocol.ChainMetadata](), func(u, v *protocol.ChainMetadata) int { return u.Compare(v) })
 	})
 }
 
 func (c *Account) SyntheticAnchors() *record.Set[[32]byte] {
 	return getOrCreateField(&c.syntheticAnchors, func() *record.Set[[32]byte] {
-		return record.NewSet(c.logger.L, c.store, c.key.Append("SyntheticAnchors"), c.label+" synthetic anchors", record.Wrapped(record.HashWrapper), record.CompareHash)
+		return record.NewSet(c.logger.L, c.store, c.key.Append("SyntheticAnchors"), c.label+" "+"synthetic anchors", record.Wrapped(record.HashWrapper), record.CompareHash)
 	})
 }
 
@@ -343,7 +346,7 @@ func (c *Account) Data() *AccountData {
 		v.store = c.store
 		v.key = c.key.Append("Data")
 		v.parent = c
-		v.label = c.label + " data"
+		v.label = c.label + " " + "data"
 		return v
 	})
 }
@@ -513,13 +516,13 @@ type AccountAnchorChain struct {
 
 func (c *AccountAnchorChain) Root() *Chain2 {
 	return getOrCreateField(&c.root, func() *Chain2 {
-		return newChain2(c, c.logger.L, c.store, c.key.Append("Root"), "anchor(%[4]v)-root", c.label+" root")
+		return newChain2(c, c.logger.L, c.store, c.key.Append("Root"), "anchor(%[4]v)-root", c.label+" "+"root")
 	})
 }
 
 func (c *AccountAnchorChain) BPT() *Chain2 {
 	return getOrCreateField(&c.bpt, func() *Chain2 {
-		return newChain2(c, c.logger.L, c.store, c.key.Append("BPT"), "anchor(%[4]v)-bpt", c.label+" bpt")
+		return newChain2(c, c.logger.L, c.store, c.key.Append("BPT"), "anchor(%[4]v)-bpt", c.label+" "+"bpt")
 	})
 }
 
@@ -582,13 +585,13 @@ func keyForAccountDataTransaction(entryHash [32]byte) accountDataTransactionKey 
 
 func (c *AccountData) Entry() *record.Counted[[32]byte] {
 	return getOrCreateField(&c.entry, func() *record.Counted[[32]byte] {
-		return record.NewCounted(c.logger.L, c.store, c.key.Append("Entry"), c.label+" entry", record.WrappedFactory(record.HashWrapper))
+		return record.NewCounted(c.logger.L, c.store, c.key.Append("Entry"), c.label+" "+"entry", record.WrappedFactory(record.HashWrapper))
 	})
 }
 
 func (c *AccountData) Transaction(entryHash [32]byte) *record.Value[[32]byte] {
 	return getOrCreateMap(&c.transaction, keyForAccountDataTransaction(entryHash), func() *record.Value[[32]byte] {
-		return record.NewValue(c.logger.L, c.store, c.key.Append("Transaction", entryHash), c.label+" transaction %[5]x", false, record.Wrapped(record.HashWrapper))
+		return record.NewValue(c.logger.L, c.store, c.key.Append("Transaction", entryHash), c.label+" "+"transaction"+" "+hex.EncodeToString(entryHash[:]), false, record.Wrapped(record.HashWrapper))
 	})
 }
 
@@ -666,31 +669,31 @@ func keyForTransactionSignatures(signer *url.URL) transactionSignaturesKey {
 
 func (c *Transaction) Main() *record.Value[*SigOrTxn] {
 	return getOrCreateField(&c.main, func() *record.Value[*SigOrTxn] {
-		return record.NewValue(c.logger.L, c.store, c.key.Append("Main"), c.label+" main", false, record.Struct[SigOrTxn]())
+		return record.NewValue(c.logger.L, c.store, c.key.Append("Main"), c.label+" "+"main", false, record.Struct[SigOrTxn]())
 	})
 }
 
 func (c *Transaction) Status() *record.Value[*protocol.TransactionStatus] {
 	return getOrCreateField(&c.status, func() *record.Value[*protocol.TransactionStatus] {
-		return record.NewValue(c.logger.L, c.store, c.key.Append("Status"), c.label+" status", true, record.Struct[protocol.TransactionStatus]())
+		return record.NewValue(c.logger.L, c.store, c.key.Append("Status"), c.label+" "+"status", true, record.Struct[protocol.TransactionStatus]())
 	})
 }
 
 func (c *Transaction) Produced() *record.Set[*url.TxID] {
 	return getOrCreateField(&c.produced, func() *record.Set[*url.TxID] {
-		return record.NewSet(c.logger.L, c.store, c.key.Append("Produced"), c.label+" produced", record.Wrapped(record.TxidWrapper), record.CompareTxid)
+		return record.NewSet(c.logger.L, c.store, c.key.Append("Produced"), c.label+" "+"produced", record.Wrapped(record.TxidWrapper), record.CompareTxid)
 	})
 }
 
 func (c *Transaction) getSignatures(signer *url.URL) *record.Value[*sigSetData] {
 	return getOrCreateMap(&c.signatures, keyForTransactionSignatures(signer), func() *record.Value[*sigSetData] {
-		return record.NewValue(c.logger.L, c.store, c.key.Append("Signatures", signer), c.label+" signatures %[4]v", true, record.Struct[sigSetData]())
+		return record.NewValue(c.logger.L, c.store, c.key.Append("Signatures", signer), c.label+" "+"signatures"+" "+signer.String(), true, record.Struct[sigSetData]())
 	})
 }
 
 func (c *Transaction) Chains() *record.Set[*TransactionChainEntry] {
 	return getOrCreateField(&c.chains, func() *record.Set[*TransactionChainEntry] {
-		return record.NewSet(c.logger.L, c.store, c.key.Append("Chains"), c.label+" chains", record.Struct[TransactionChainEntry](), func(u, v *TransactionChainEntry) int { return u.Compare(v) })
+		return record.NewSet(c.logger.L, c.store, c.key.Append("Chains"), c.label+" "+"chains", record.Struct[TransactionChainEntry](), func(u, v *TransactionChainEntry) int { return u.Compare(v) })
 	})
 }
 

@@ -5,7 +5,9 @@ package {{.Package}}
 //lint:file-ignore S1008,U1000 generated code
 
 import (
+	"encoding/hex"
 	"fmt"
+	"strconv"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -20,11 +22,13 @@ import (
 {{- if .Private}}get{{end}}{{.Name}}
 {{- end}}
 
-{{  define "valueLabelFormat"}}
-{{- if and .GetParent.Type.IsEntity .GetParent.Root -}}
-"{{valueNameFormat .}}"
-{{- else -}}
-c.label + " {{valueNameFormat .}}"
+{{  define "valueLabel"}}
+{{- if not (and .GetParent.Type.IsEntity .GetParent.Root) -}}
+c.label + " " +
+{{- end -}}
+"{{natural .Name}}"
+{{- if parameterized . -}}
+{{range .GetParameters}} + " " + {{keyToString . (lower .Name)}}{{end}}
 {{- end}}
 {{- end}}
 
@@ -57,7 +61,7 @@ record.Struct[{{stateType . true}}]()
 
 {{  define "newValue"}}
 {{- if .IsSet}}
-return record.NewSet(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, {{template "encoder" .}},
+return record.NewSet(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabel" .}}, {{template "encoder" .}},
 	{{- if .Wrapped -}}
 	record.Compare{{title .DataType.String}}
 	{{- else -}}
@@ -65,19 +69,19 @@ return record.NewSet(c.logger.L, c.store, {{template "key" .}}, {{template "valu
 	{{- end -}}
 )
 {{- else if .IsList}}
-return record.NewList(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, {{template "encoder" .}})
+return record.NewList(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabel" .}}, {{template "encoder" .}})
 {{- else}}
-return record.NewValue(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, {{.EmptyIfMissing}}, {{template "encoder" .}})
+return record.NewValue(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabel" .}}, {{.EmptyIfMissing}}, {{template "encoder" .}})
 {{- end}}
 {{- end}}
 
 {{define "newCounted"}}
 {{- if .Wrapped}}
-return record.NewCounted(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, record.WrappedFactory(record.{{title .DataType.String}}Wrapper))
+return record.NewCounted(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabel" .}}, record.WrappedFactory(record.{{title .DataType.String}}Wrapper))
 {{- else if .Union}}
-return record.NewCounted(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, record.UnionFactory({{unionMethod . "Unmarshal"}}))
+return record.NewCounted(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabel" .}}, record.UnionFactory({{unionMethod . "Unmarshal"}}))
 {{- else}}
-return record.NewCounted(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabelFormat" .}}, record.Struct[{{stateType . true}}])
+return record.NewCounted(c.logger.L, c.store, {{template "key" .}}, {{template "valueLabel" .}}, record.Struct[{{stateType . true}}])
 {{- end}}
 {{- end}}
 
@@ -132,12 +136,12 @@ func (c *{{$c.FullName}}) {{template "accessor" .}}({{range .GetParameters}}{{lo
 		v.store = c.store
 		v.key = {{template "key" .}}
 		v.parent = c
-		v.label = {{template "valueLabelFormat" .}}
+		v.label = {{template "valueLabel" .}}
 		return v
 		{{- else if .Type.IsChain}}
-		return managed.NewChain(c.logger.L, c.store, {{template "key" .}}, markPower, managed.ChainType{{title .ChainType}}, "{{chainNameFormat .}}", {{template "valueLabelFormat" .}})
+		return managed.NewChain(c.logger.L, c.store, {{template "key" .}}, markPower, managed.ChainType{{title .ChainType}}, "{{chainNameFormat .}}", {{template "valueLabel" .}})
 		{{- else if .Type.IsOther}}
-		return new{{.DataType}}(c, c.logger.L, c.store, {{template "key" .}}, "{{chainNameFormat .}}", {{template "valueLabelFormat" .}})
+		return new{{.DataType}}(c, c.logger.L, c.store, {{template "key" .}}, "{{chainNameFormat .}}", {{template "valueLabel" .}})
 		{{- else if .IsCounted}}
 		{{- template "newCounted" .}}
 		{{- else}}
