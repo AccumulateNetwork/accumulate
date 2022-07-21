@@ -248,5 +248,6 @@ var Templates = typegen.NewTemplateLibrary(template.FuncMap{
 	"title":               typegen.TitleCase,
 	"map":                 typegen.MakeMap,
 	"natural":             typegen.Natural,
+	"hasSuffix":           strings.HasSuffix,
 	"debug":               fmt.Printf,
 })
