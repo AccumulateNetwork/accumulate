@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -32,14 +33,19 @@ var testMatrix testMatrixTests
 func bootstrap(t *testing.T, tc *testCmd) {
 
 	// import eth private key.
-	res, err := tc.execute(t, "key import private 26b9b10aec1e75e68709689b446196a5235b26bb9d4c0fc91eaccc7d8b66ec16 ethKey --sigtype eth")
+	// res, err := tc.execute(t, "key import private 26b9b10aec1e75e68709689b446196a5235b26bb9d4c0fc91eaccc7d8b66ec16 ethKey --sigtype eth")
+	res, err := executeCmd(tc.rootCmd,
+		[]string{"-j", "-s", fmt.Sprintf("%s/v2", tc.jsonRpcAddr), "key", "import", "private", "ethKey", "--sigtype", "eth"},
+		"26b9b10aec1e75e68709689b446196a5235b26bb9d4c0fc91eaccc7d8b66ec16\n")
 	require.NoError(t, err)
 	var keyResponse KeyResponse
-	err = json.Unmarshal([]byte(res), &keyResponse)
+	err = json.Unmarshal([]byte(strings.Split(res, ": ")[1]), &keyResponse)
 	require.NoError(t, err)
 
 	//add the DN private key to our key list.
-	_, err = tc.execute(t, fmt.Sprintf("key import private %x dnkey --sigtype ed25519", tc.privKey.Bytes()))
+	_, err = executeCmd(tc.rootCmd,
+		[]string{"-j", "-s", fmt.Sprintf("%s/v2", tc.jsonRpcAddr), "key", "import", "private", "dnkey", "--sigtype", "ed25519"},
+		fmt.Sprintf("%v\n", hex.EncodeToString(tc.privKey.Bytes())))
 	require.NoError(t, err)
 
 	//set mnemonic for predictable addresses
@@ -141,6 +147,14 @@ func (c *testCmd) initalize(t *testing.T) {
 }
 
 func (c *testCmd) execute(t *testing.T, cmdLine string) (string, error) {
+	fullCommand := fmt.Sprintf("-j -s %s/v2 %s",
+		c.jsonRpcAddr, cmdLine)
+	args := strings.Split(fullCommand, " ")
+
+	return executeCmd(c.rootCmd, args, "")
+}
+
+func executeCmd(cmd *cobra.Command, args []string, input string) (string, error) {
 	// Reset flags
 	Client = nil
 	ClientTimeout = 0
@@ -159,19 +173,19 @@ func (c *testCmd) execute(t *testing.T, cmdLine string) (string, error) {
 	UseUnencryptedWallet = true
 	flagAccount.Lite = false
 
-	fullCommand := fmt.Sprintf("-j -s %s/v2 %s",
-		c.jsonRpcAddr, cmdLine)
-	args := strings.Split(fullCommand, " ")
-
 	e := bytes.NewBufferString("")
 	b := bytes.NewBufferString("")
-	c.rootCmd.SetErr(e)
-	c.rootCmd.SetOut(b)
-	c.rootCmd.SetArgs(args)
+	cmd.SetErr(e)
+	cmd.SetOut(b)
+	cmd.SetArgs(args)
+	cmd.SetIn(strings.NewReader(input))
 	DidError = nil
-	_ = c.rootCmd.Execute()
+	err := cmd.Execute()
 	if DidError != nil {
 		return "", DidError
+	}
+	if err != nil {
+		return "", err
 	}
 
 	errPrint, err := io.ReadAll(e)

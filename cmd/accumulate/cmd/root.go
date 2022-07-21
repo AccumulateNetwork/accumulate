@@ -166,13 +166,14 @@ func init() {
 }
 
 var (
-	BucketAnon     = []byte("anon")
-	BucketAdi      = []byte("adi")
-	BucketKeys     = []byte("keys")
-	BucketLabel    = []byte("label")
-	BucketLite     = []byte("lite")
-	BucketMnemonic = []byte("mnemonic")
-	BucketSigType  = []byte("sigtype")
+	BucketAnon              = []byte("anon")
+	BucketAdi               = []byte("adi")
+	BucketKeys              = []byte("keys")
+	BucketLabel             = []byte("label")
+	BucketLite              = []byte("lite")
+	BucketMnemonic          = []byte("mnemonic")
+	BucketKeyInfo           = []byte("keyinfo")
+	BucketSigTypeDeprecated = []byte("sigtype")
 )
 
 func initDB(defaultWorkDir string, memDb bool) db.DB {
