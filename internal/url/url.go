@@ -3,6 +3,7 @@ package url
 import (
 	"crypto/sha256"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"net/url"
 	"path"
@@ -22,6 +23,7 @@ type URL struct {
 }
 
 type urlMemoize struct {
+	str        string
 	hash       [32]byte
 	accountID  [32]byte
 	identityID [32]byte
@@ -157,17 +159,20 @@ func (u *URL) copy() *URL {
 	return &v
 }
 
-// String reassembles the URL into a valid URL string. See net/url.URL.String().
-func (u *URL) String() string {
+func (u *URL) format(txid []byte) string {
 	var buf strings.Builder
 
 	buf.WriteString("acc://")
-	if u.UserInfo != "" {
+	if txid != nil {
+		enc := make([]byte, hex.EncodedLen(len(txid)))
+		hex.Encode(enc, txid)
+		buf.Write(enc)
+		buf.WriteByte('@')
+	} else if u.UserInfo != "" {
 		buf.WriteString(u.UserInfo)
 		buf.WriteByte('@')
 	}
 
-	// TODO If we allow special characters, we'll need to escape them
 	buf.WriteString(u.Authority)
 
 	p := normalizePath(u.Path)
@@ -185,15 +190,25 @@ func (u *URL) String() string {
 
 	if u.Query != "" {
 		buf.WriteByte('?')
-		buf.WriteString(url.QueryEscape(u.Query))
+		buf.WriteString(u.Query)
 	}
 
 	if u.Fragment != "" {
 		buf.WriteByte('#')
-		buf.WriteString(u.Fragment) // TODO Encode?
+		buf.WriteString(u.Fragment)
 	}
 
 	return buf.String()
+}
+
+// String reassembles the URL into a valid URL string. See net/url.URL.String().
+func (u *URL) String() string {
+	if u.memoize.str != "" {
+		return u.memoize.str
+	}
+
+	u.memoize.str = u.format(nil)
+	return u.memoize.str
 }
 
 // ShortString returns String without the scheme prefix.
