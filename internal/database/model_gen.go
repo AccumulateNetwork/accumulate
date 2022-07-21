@@ -24,14 +24,47 @@ type Batch struct {
 	kvstore     storage.KeyValueTxn
 	bptEntries  map[storage.Key][32]byte
 
-	account           map[storage.Key]*Account
-	transaction       map[storage.Key]*Transaction
-	blockChainUpdates map[storage.Key]*record.List[*ChainUpdate]
-	blockState        map[storage.Key]*record.Set[*BlockStateSynthTxnEntry]
+	account           map[accountKey]*Account
+	transaction       map[transactionKey]*Transaction
+	blockChainUpdates map[blockChainUpdatesKey]*record.List[*ChainUpdate]
+	blockState        map[blockStateKey]*record.Set[*BlockStateSynthTxnEntry]
+}
+
+type accountKey struct {
+	Url [32]byte
+}
+
+func keyForAccount(url *url.URL) accountKey {
+	return accountKey{record.MapKeyUrl(url)}
+}
+
+type transactionKey struct {
+	Hash [32]byte
+}
+
+func keyForTransaction(hash [32]byte) transactionKey {
+	return transactionKey{hash}
+}
+
+type blockChainUpdatesKey struct {
+	Partition [32]byte
+	Index     uint64
+}
+
+func keyForBlockChainUpdates(partition *url.URL, index uint64) blockChainUpdatesKey {
+	return blockChainUpdatesKey{record.MapKeyUrl(partition), index}
+}
+
+type blockStateKey struct {
+	Partition [32]byte
+}
+
+func keyForBlockState(partition *url.URL) blockStateKey {
+	return blockStateKey{record.MapKeyUrl(partition)}
 }
 
 func (c *Batch) Account(url *url.URL) *Account {
-	return getOrCreateMap(&c.account, record.Key{}.Append("Account", url), func() *Account {
+	return getOrCreateMap(&c.account, keyForAccount(url), func() *Account {
 		v := new(Account)
 		v.logger = c.logger
 		v.store = c.store
@@ -43,7 +76,7 @@ func (c *Batch) Account(url *url.URL) *Account {
 }
 
 func (c *Batch) getTransaction(hash [32]byte) *Transaction {
-	return getOrCreateMap(&c.transaction, record.Key{}.Append("Transaction", hash), func() *Transaction {
+	return getOrCreateMap(&c.transaction, keyForTransaction(hash), func() *Transaction {
 		v := new(Transaction)
 		v.logger = c.logger
 		v.store = c.store
@@ -55,13 +88,13 @@ func (c *Batch) getTransaction(hash [32]byte) *Transaction {
 }
 
 func (c *Batch) BlockChainUpdates(partition *url.URL, index uint64) *record.List[*ChainUpdate] {
-	return getOrCreateMap(&c.blockChainUpdates, record.Key{}.Append("BlockChainUpdates", partition, index), func() *record.List[*ChainUpdate] {
+	return getOrCreateMap(&c.blockChainUpdates, keyForBlockChainUpdates(partition, index), func() *record.List[*ChainUpdate] {
 		return record.NewList(c.logger.L, c.store, record.Key{}.Append("BlockChainUpdates", partition, index), "block chain updates %[2]v %[3]v", record.Struct[ChainUpdate]())
 	})
 }
 
 func (c *Batch) BlockState(partition *url.URL) *record.Set[*BlockStateSynthTxnEntry] {
-	return getOrCreateMap(&c.blockState, record.Key{}.Append("BlockState", partition), func() *record.Set[*BlockStateSynthTxnEntry] {
+	return getOrCreateMap(&c.blockState, keyForBlockState(partition), func() *record.Set[*BlockStateSynthTxnEntry] {
 		return record.NewSet(c.logger.L, c.store, record.Key{}.Append("BlockState", partition), "block state %[2]v", record.Struct[BlockStateSynthTxnEntry](), func(u, v *BlockStateSynthTxnEntry) int { return u.Compare(v) })
 	})
 }
@@ -174,7 +207,7 @@ type Account struct {
 
 	main                   *record.Value[protocol.Account]
 	pending                *record.Set[*url.TxID]
-	syntheticForAnchor     map[storage.Key]*record.Set[*url.TxID]
+	syntheticForAnchor     map[accountSyntheticForAnchorKey]*record.Set[*url.TxID]
 	directory              *record.Set[*url.URL]
 	mainChain              *Chain2
 	scratchChain           *Chain2
@@ -182,11 +215,35 @@ type Account struct {
 	rootChain              *Chain2
 	anchorSequenceChain    *Chain2
 	majorBlockChain        *Chain2
-	syntheticSequenceChain map[storage.Key]*Chain2
-	anchorChain            map[storage.Key]*AccountAnchorChain
+	syntheticSequenceChain map[accountSyntheticSequenceChainKey]*Chain2
+	anchorChain            map[accountAnchorChainKey]*AccountAnchorChain
 	chains                 *record.Set[*protocol.ChainMetadata]
 	syntheticAnchors       *record.Set[[32]byte]
 	data                   *AccountData
+}
+
+type accountSyntheticForAnchorKey struct {
+	Anchor [32]byte
+}
+
+func keyForAccountSyntheticForAnchor(anchor [32]byte) accountSyntheticForAnchorKey {
+	return accountSyntheticForAnchorKey{anchor}
+}
+
+type accountSyntheticSequenceChainKey struct {
+	Partition string
+}
+
+func keyForAccountSyntheticSequenceChain(partition string) accountSyntheticSequenceChainKey {
+	return accountSyntheticSequenceChainKey{partition}
+}
+
+type accountAnchorChainKey struct {
+	Partition string
+}
+
+func keyForAccountAnchorChain(partition string) accountAnchorChainKey {
+	return accountAnchorChainKey{partition}
 }
 
 func (c *Account) Main() *record.Value[protocol.Account] {
@@ -202,7 +259,7 @@ func (c *Account) Pending() *record.Set[*url.TxID] {
 }
 
 func (c *Account) SyntheticForAnchor(anchor [32]byte) *record.Set[*url.TxID] {
-	return getOrCreateMap(&c.syntheticForAnchor, c.key.Append("SyntheticForAnchor", anchor), func() *record.Set[*url.TxID] {
+	return getOrCreateMap(&c.syntheticForAnchor, keyForAccountSyntheticForAnchor(anchor), func() *record.Set[*url.TxID] {
 		return record.NewSet(c.logger.L, c.store, c.key.Append("SyntheticForAnchor", anchor), c.label+" synthetic for anchor %[4]x", record.Wrapped(record.TxidWrapper), record.CompareTxid)
 	})
 }
@@ -250,13 +307,13 @@ func (c *Account) MajorBlockChain() *Chain2 {
 }
 
 func (c *Account) getSyntheticSequenceChain(partition string) *Chain2 {
-	return getOrCreateMap(&c.syntheticSequenceChain, c.key.Append("SyntheticSequenceChain", partition), func() *Chain2 {
+	return getOrCreateMap(&c.syntheticSequenceChain, keyForAccountSyntheticSequenceChain(partition), func() *Chain2 {
 		return newChain2(c, c.logger.L, c.store, c.key.Append("SyntheticSequenceChain", partition), "synthetic-sequence(%[4]v)", c.label+" synthetic sequence chain %[4]v")
 	})
 }
 
 func (c *Account) getAnchorChain(partition string) *AccountAnchorChain {
-	return getOrCreateMap(&c.anchorChain, c.key.Append("AnchorChain", partition), func() *AccountAnchorChain {
+	return getOrCreateMap(&c.anchorChain, keyForAccountAnchorChain(partition), func() *AccountAnchorChain {
 		v := new(AccountAnchorChain)
 		v.logger = c.logger
 		v.store = c.store
@@ -512,7 +569,15 @@ type AccountData struct {
 	parent *Account
 
 	entry       *record.Counted[[32]byte]
-	transaction map[storage.Key]*record.Value[[32]byte]
+	transaction map[accountDataTransactionKey]*record.Value[[32]byte]
+}
+
+type accountDataTransactionKey struct {
+	EntryHash [32]byte
+}
+
+func keyForAccountDataTransaction(entryHash [32]byte) accountDataTransactionKey {
+	return accountDataTransactionKey{entryHash}
 }
 
 func (c *AccountData) Entry() *record.Counted[[32]byte] {
@@ -522,7 +587,7 @@ func (c *AccountData) Entry() *record.Counted[[32]byte] {
 }
 
 func (c *AccountData) Transaction(entryHash [32]byte) *record.Value[[32]byte] {
-	return getOrCreateMap(&c.transaction, c.key.Append("Transaction", entryHash), func() *record.Value[[32]byte] {
+	return getOrCreateMap(&c.transaction, keyForAccountDataTransaction(entryHash), func() *record.Value[[32]byte] {
 		return record.NewValue(c.logger.L, c.store, c.key.Append("Transaction", entryHash), c.label+" transaction %[5]x", false, record.Wrapped(record.HashWrapper))
 	})
 }
@@ -587,8 +652,16 @@ type Transaction struct {
 	main       *record.Value[*SigOrTxn]
 	status     *record.Value[*protocol.TransactionStatus]
 	produced   *record.Set[*url.TxID]
-	signatures map[storage.Key]*record.Value[*sigSetData]
+	signatures map[transactionSignaturesKey]*record.Value[*sigSetData]
 	chains     *record.Set[*TransactionChainEntry]
+}
+
+type transactionSignaturesKey struct {
+	Signer [32]byte
+}
+
+func keyForTransactionSignatures(signer *url.URL) transactionSignaturesKey {
+	return transactionSignaturesKey{record.MapKeyUrl(signer)}
 }
 
 func (c *Transaction) Main() *record.Value[*SigOrTxn] {
@@ -610,7 +683,7 @@ func (c *Transaction) Produced() *record.Set[*url.TxID] {
 }
 
 func (c *Transaction) getSignatures(signer *url.URL) *record.Value[*sigSetData] {
-	return getOrCreateMap(&c.signatures, c.key.Append("Signatures", signer), func() *record.Value[*sigSetData] {
+	return getOrCreateMap(&c.signatures, keyForTransactionSignatures(signer), func() *record.Value[*sigSetData] {
 		return record.NewValue(c.logger.L, c.store, c.key.Append("Signatures", signer), c.label+" signatures %[4]v", true, record.Struct[sigSetData]())
 	})
 }
@@ -698,18 +771,17 @@ func getOrCreateField[T any](ptr **T, create func() *T) *T {
 	return *ptr
 }
 
-func getOrCreateMap[T any](ptr *map[storage.Key]T, key record.Key, create func() T) T {
+func getOrCreateMap[T any, K comparable](ptr *map[K]T, key K, create func() T) T {
 	if *ptr == nil {
-		*ptr = map[storage.Key]T{}
+		*ptr = map[K]T{}
 	}
 
-	k := key.Hash()
-	if v, ok := (*ptr)[k]; ok {
+	if v, ok := (*ptr)[key]; ok {
 		return v
 	}
 
 	v := create()
-	(*ptr)[k] = v
+	(*ptr)[key] = v
 	return v
 }
 

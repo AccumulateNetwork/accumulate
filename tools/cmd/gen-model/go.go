@@ -22,6 +22,8 @@ var goFuncs = template.FuncMap{
 	"recordType":      recordType,
 	"stateType":       stateType,
 	"parameterType":   parameterType,
+	"keyType":         keyType,
+	"asKey":           asKey,
 	"unionMethod":     unionMethod,
 	"chainName":       chainName,
 	"valueNameFormat": func(r typegen.Record) string { s, _ := valueNameFormat(r); return s },
@@ -51,7 +53,7 @@ func fieldType(r typegen.Record) string {
 	if len(r.GetParameters()) == 0 {
 		return "*" + recordType(r)
 	}
-	return "map[storage.Key]*" + recordType(r)
+	return "map[" + typegen.LowerFirstWord(r.FullName()) + "Key]*" + recordType(r)
 }
 
 func recordType(r typegen.Record) string {
@@ -100,6 +102,27 @@ func parameterType(p *typegen.Field) string {
 		typ = "*" + typ
 	}
 	return typ
+}
+
+func keyType(p *typegen.Field) string {
+	switch p.Type.Code {
+	case typegen.TypeCodeBytes,
+		typegen.TypeCodeUrl:
+		return "[32]byte"
+	default:
+		return p.Type.GoType()
+	}
+}
+
+func asKey(p *typegen.Field, varName string) string {
+	switch p.Type.Code {
+	case typegen.TypeCodeBytes:
+		return "record.MapKeyBytes(" + varName + ")"
+	case typegen.TypeCodeUrl:
+		return "record.MapKeyUrl(" + varName + ")"
+	default:
+		return varName
+	}
 }
 
 func parameterFormatters(r typegen.Record, keyDepth int) []string {
