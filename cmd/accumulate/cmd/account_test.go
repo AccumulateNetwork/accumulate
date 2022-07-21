@@ -83,7 +83,6 @@ func testCase1_2(t *testing.T, tc *testCmd) {
 	require.Equal(t, fa, fa2)
 
 	//quick protocol import check.
-	// r, err := tc.execute(t, "key import factoid "+fs)
 	r, err := executeCmd(tc.rootCmd,
 		[]string{"-j", "-s", fmt.Sprintf("%s/v2", tc.jsonRpcAddr), "key", "import", "factoid"},
 		fmt.Sprintf("%v\n", fs))

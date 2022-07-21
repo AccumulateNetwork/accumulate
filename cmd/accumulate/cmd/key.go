@@ -65,14 +65,6 @@ var keyCmd = &cobra.Command{
 					default:
 						PrintKeyImport()
 					}
-					// if args[1] == "lite" {
-
-					// 	out, err = ImportKeyPrompt("", sigType)
-					// } else if args[1] == "factoid" {
-					// 	out, err = ImportFactoidKey()
-					// } else {
-					// 	PrintKeyImport()
-					// }
 				} else if len(args) > 3 {
 					switch args[1] {
 					case "mnemonic":
