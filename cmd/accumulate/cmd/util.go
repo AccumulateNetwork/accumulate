@@ -10,7 +10,6 @@ import (
 	"math"
 	"math/big"
 	"strings"
-	"time"
 	"unicode"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
@@ -92,7 +91,7 @@ func prepareSigner(origin *url.URL, args []string) ([]string, []*signing.Builder
 
 	firstSigner := new(signing.Builder)
 	firstSigner.Type = protocol.SignatureTypeLegacyED25519
-	firstSigner.SetTimestamp(nonceFromTimeNow())
+	firstSigner.SetTimestampToNow()
 
 	for _, del := range Delegators {
 		u, err := url.Parse(del)
@@ -491,14 +490,24 @@ func amountToBigInt(tokenUrl string, amount string) (*big.Int, error) {
 		return nil, err
 	}
 
+	return parseAmount(amount, t.Precision)
+}
+
+func parseAmount(amount string, precision uint64) (*big.Int, error) {
 	amt, _ := big.NewFloat(0).SetPrec(128).SetString(amount)
 	if amt == nil {
 		return nil, fmt.Errorf("invalid amount %s", amount)
 	}
-	oneToken := big.NewFloat(math.Pow(10.0, float64(t.Precision)))
-	amt.Mul(amt, oneToken)
-	iAmt, _ := amt.Int(big.NewInt(0))
-	return iAmt, nil
+
+	oneToken := big.NewFloat(math.Pow(10.0, float64(precision))) //Convert to fixed point; multiply by the precision
+	amt.Mul(amt, oneToken)                                       // Note that we are using floating point here.  Precision can be lost
+	round := big.NewFloat(.9)                                    // To adjust for lost precision, round to the nearest int
+	if amt.Sign() < 0 {                                          // Just to be safe, account for negative numbers
+		round = big.NewFloat(-.9)
+	}
+	amt.Add(amt, round)               //                              Round up (positive) or down (negative) to the lowest int
+	iAmt, _ := amt.Int(big.NewInt(0)) //                              Then convert to a big Int
+	return iAmt, nil                  //                              Return the int
 }
 
 func GetTokenUrlFromAccount(u *url.URL) (*url.URL, error) {
@@ -582,11 +591,6 @@ func natural(name string) string {
 
 	w.WriteString(name)
 	return w.String()
-}
-
-func nonceFromTimeNow() uint64 {
-	t := time.Now()
-	return uint64(t.Unix()*1e6) + uint64(t.Nanosecond())/1e3
 }
 
 func QueryAcmeOracle() (*protocol.AcmeOracle, error) {

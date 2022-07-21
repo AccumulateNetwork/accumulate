@@ -424,7 +424,11 @@ func initNodeFromPeer(cmd *cobra.Command, args []string) (int, *cfg.Config, *typ
 		return 0, nil, nil, fmt.Errorf("failed to create Tendermint client for %s, %v", args[0], err)
 	}
 
-	version := getVersion(accClient)
+	version, err := getVersion(accClient)
+	if err != nil {
+		return 0, nil, nil, err
+	}
+
 	err = versionCheck(version, args[0])
 	if err != nil {
 		return 0, nil, nil, err
