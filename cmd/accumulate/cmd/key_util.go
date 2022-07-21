@@ -3,23 +3,22 @@ package cmd
 import (
 	"crypto/ed25519"
 	"crypto/sha256"
-	"errors"
 	"fmt"
 
 	btc "github.com/btcsuite/btcd/btcec"
-	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/db"
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
+
+//go:generate go run ../../../tools/cmd/gen-types --package cmd --out key_info_gen.go key_info.yml
 
 type Key struct {
 	PublicKey  []byte
 	PrivateKey []byte
-	Type       protocol.SignatureType
+	KeyInfo    KeyInfo
 }
 
 func (k *Key) PublicKeyHash() []byte {
-	switch k.Type {
+	switch k.KeyInfo.Type {
 	case protocol.SignatureTypeLegacyED25519,
 		protocol.SignatureTypeED25519:
 		hash := sha256.Sum256(k.PublicKey)
@@ -35,7 +34,7 @@ func (k *Key) PublicKeyHash() []byte {
 		return protocol.ETHhash(k.PublicKey)
 
 	default:
-		panic(fmt.Errorf("unsupported signature type %v", k.Type))
+		panic(fmt.Errorf("unsupported signature type %v", k.KeyInfo.Type))
 	}
 }
 
@@ -55,7 +54,12 @@ func (k *Key) Save(label, liteLabel string) error {
 		return err
 	}
 
-	err = GetWallet().Put(BucketSigType, k.PublicKey, encoding.UvarintMarshalBinary(k.Type.GetEnumValue()))
+	data, err := k.KeyInfo.MarshalBinary()
+	if err != nil {
+		return err
+	}
+
+	err = GetWallet().Put(BucketKeyInfo, k.PublicKey, data)
 	if err != nil {
 		return err
 	}
@@ -83,31 +87,22 @@ func (k *Key) LoadByPublicKey(publicKey []byte) error {
 		return fmt.Errorf("private key not found for %x", publicKey)
 	}
 
-	b, err := GetWallet().Get(BucketSigType, k.PublicKey)
-	switch {
-	case err == nil:
-		v, err := encoding.UvarintUnmarshalBinary(b)
-		if err != nil {
-			return err
-		}
-		if !k.Type.SetEnumValue(v) {
-			return fmt.Errorf("invalid key type for %x", publicKey)
-		}
+	b, err := GetWallet().Get(BucketKeyInfo, k.PublicKey)
+	if err != nil {
+		return fmt.Errorf("key type info not found for key %x", k.PublicKey)
+	}
 
-	case errors.Is(err, db.ErrNotFound),
-		errors.Is(err, db.ErrNoBucket):
-		k.Type = protocol.SignatureTypeED25519
-
-	default:
-		return err
+	err = k.KeyInfo.UnmarshalBinary(b)
+	if err != nil {
+		return fmt.Errorf("cannot unmarshal key information for key %x", k.PublicKey)
 	}
 
 	return nil
 }
 
 func (k *Key) Initialize(seed []byte, signatureType protocol.SignatureType) error {
-	k.Type = signatureType
-	switch k.Type {
+	k.KeyInfo.Type = signatureType
+	switch k.KeyInfo.Type {
 	case protocol.SignatureTypeLegacyED25519, protocol.SignatureTypeED25519, protocol.SignatureTypeRCD1:
 		if len(seed) != ed25519.SeedSize && len(seed) != ed25519.PrivateKeySize {
 			return fmt.Errorf("invalid private key length, expected %d or %d bytes", ed25519.SeedSize, ed25519.PrivateKeySize)
@@ -130,7 +125,7 @@ func (k *Key) Initialize(seed []byte, signatureType protocol.SignatureType) erro
 		k.PrivateKey = pvkey.Serialize()
 		k.PublicKey = pubKey.SerializeUncompressed()
 	default:
-		return fmt.Errorf("unsupported signature type %v", k.Type)
+		return fmt.Errorf("unsupported signature type %v", k.KeyInfo.Type)
 	}
 
 	return nil
