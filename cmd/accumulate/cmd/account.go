@@ -555,10 +555,11 @@ func RestoreAccounts() (out string, err error) {
 		//check to see if the key type has been assigned, if not set it to the ed25519Legacy...
 		sigTypeData, err := GetWallet().Get(BucketSigTypeDeprecated, v.Value)
 		if err != nil {
-			//if it doesn't exist then option 1) we are already upgraded and using BucketeKeyInfo instead or 2)
+			//if it doesn't exist then 1) we are already using BucketKeyInfo, so we're golden, or 2)
 			//we are an old wallet that supports only LegacyED25519 signature types
+
 			//first, test for 1)
-			err := k.LoadByPublicKey(v.Value)
+			_, err := GetWallet().Get(BucketKeyInfo, v.Value)
 			if err != nil {
 				//ok, so it is 2), wo we need to make the key info bucket
 				k.KeyInfo.Type = protocol.SignatureTypeLegacyED25519
