@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"log"
 	"math"
 	"math/big"
 	"strings"
@@ -76,16 +75,26 @@ func prepareSigner(origin *url.URL, args []string) ([]string, []*signing.Builder
 
 	var key *Key
 	var err error
-	if IsLiteTokenAccount(origin.String()) {
+	isLiteTokenAccount, err := IsLiteTokenAccount(origin.String())
+	if err != nil {
+		return nil, nil, err
+	}
+	if isLiteTokenAccount {
 		key, err = LookupByLiteTokenUrl(origin.String())
 		if err != nil {
 			return nil, nil, fmt.Errorf("unable to find private key for lite token account %s %v", origin.String(), err)
 		}
 
-	} else if IsLiteIdentity(origin.String()) {
-		key, err = LookupByLiteIdentityUrl(origin.String())
+	} else {
+		isLiteIdentity, err := IsLiteIdentity(origin.String())
 		if err != nil {
-			return nil, nil, fmt.Errorf("unable to find private key for lite identity account %s %v", origin.String(), err)
+			return nil, nil, err
+		}
+		if isLiteIdentity {
+			key, err = LookupByLiteIdentityUrl(origin.String())
+			if err != nil {
+				return nil, nil, fmt.Errorf("unable to find private key for lite identity account %s %v", origin.String(), err)
+			}
 		}
 	}
 
@@ -177,22 +186,28 @@ func parseArgsAndPrepareSigner(args []string) ([]string, *url.URL, []*signing.Bu
 	return args, principal, signers, nil
 }
 
-func IsLiteTokenAccount(urlstr string) bool {
+func IsLiteTokenAccount(urlstr string) (bool, error) {
 	u, err := url.Parse(urlstr)
 	if err != nil {
-		log.Fatal(err)
+		return false, err
 	}
-	key, _, _ := protocol.ParseLiteTokenAddress(u)
-	return key != nil
+	key, _, err := protocol.ParseLiteTokenAddress(u)
+	if err != nil {
+		return false, fmt.Errorf("invalid lite token address")
+	}
+	return key != nil, nil
 }
 
-func IsLiteIdentity(urlstr string) bool {
+func IsLiteIdentity(urlstr string) (bool, error) {
 	u, err := url.Parse(urlstr)
 	if err != nil {
-		log.Fatal(err)
+		return false, err
 	}
-	key, _ := protocol.ParseLiteIdentity(u)
-	return key != nil
+	key, err := protocol.ParseLiteIdentity(u)
+	if err != nil {
+		return false, fmt.Errorf("invalid lite identity")
+	}
+	return key != nil, nil
 }
 
 // Remarshal uses mapstructure to convert a generic JSON-decoded map into a struct.
@@ -513,7 +528,11 @@ func parseAmount(amount string, precision uint64) (*big.Int, error) {
 func GetTokenUrlFromAccount(u *url.URL) (*url.URL, error) {
 	var err error
 	var tokenUrl *url.URL
-	if IsLiteTokenAccount(u.String()) {
+	isLiteTokenAccount, err := IsLiteTokenAccount(u.String())
+	if err != nil {
+		return nil, err
+	}
+	if isLiteTokenAccount {
 		_, tokenUrl, err = protocol.ParseLiteTokenAddress(u)
 		if err != nil {
 			return nil, fmt.Errorf("cannot extract token url from lite token account, %v", err)
