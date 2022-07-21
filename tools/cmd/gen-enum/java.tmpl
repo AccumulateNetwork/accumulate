@@ -7,8 +7,9 @@ package {{.Package}}.generated;
 import com.fasterxml.jackson.annotation.JsonValue;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.databind.JsonNode;
+import io.accumulatenetwork.sdk.protocol.IntValueEnum;
 
-public enum {{.Name}} {
+public enum {{.Name}} implements IntValueEnum {
     {{- range $i, $v := .Values}}{{if gt $i 0}},{{end}}
     {{underscoreUpperCase $v.Name}}({{$v.Value}}, "{{lowerCamel $v.Name}}")
     {{- end}};
