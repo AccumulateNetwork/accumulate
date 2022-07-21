@@ -99,7 +99,7 @@ func (c *Batch) BlockState(partition *url.URL) *record.Set[*BlockStateSynthTxnEn
 	})
 }
 
-func (c *Batch) Resolve(key record.Key) (record.Record, record.Key, error) {
+func (c *Batch) Resolve(key record.Key, create bool) (record.Record, record.Key, error) {
 	switch key[0] {
 	case "Account":
 		if len(key) < 2 {
@@ -108,6 +108,13 @@ func (c *Batch) Resolve(key record.Key) (record.Record, record.Key, error) {
 		url, okUrl := key[1].(*url.URL)
 		if !okUrl {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for batch")
+		}
+		if !create {
+			v, ok := c.account[keyForAccount(url)]
+			if !ok {
+				return nil, nil, errors.New(errors.StatusUninitializedRecord, "uninitialized")
+			}
+			return v, key[2:], nil
 		}
 		v := c.Account(url)
 		return v, key[2:], nil
@@ -118,6 +125,13 @@ func (c *Batch) Resolve(key record.Key) (record.Record, record.Key, error) {
 		hash, okHash := key[1].([32]byte)
 		if !okHash {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for batch")
+		}
+		if !create {
+			v, ok := c.transaction[keyForTransaction(hash)]
+			if !ok {
+				return nil, nil, errors.New(errors.StatusUninitializedRecord, "uninitialized")
+			}
+			return v, key[2:], nil
 		}
 		v := c.getTransaction(hash)
 		return v, key[2:], nil
@@ -130,6 +144,13 @@ func (c *Batch) Resolve(key record.Key) (record.Record, record.Key, error) {
 		if !okPartition || !okIndex {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for batch")
 		}
+		if !create {
+			v, ok := c.blockChainUpdates[keyForBlockChainUpdates(partition, index)]
+			if !ok {
+				return nil, nil, errors.New(errors.StatusUninitializedRecord, "uninitialized")
+			}
+			return v, key[3:], nil
+		}
 		v := c.BlockChainUpdates(partition, index)
 		return v, key[3:], nil
 	case "BlockState":
@@ -139,6 +160,13 @@ func (c *Batch) Resolve(key record.Key) (record.Record, record.Key, error) {
 		partition, okPartition := key[1].(*url.URL)
 		if !okPartition {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for batch")
+		}
+		if !create {
+			v, ok := c.blockState[keyForBlockState(partition)]
+			if !ok {
+				return nil, nil, errors.New(errors.StatusUninitializedRecord, "uninitialized")
+			}
+			return v, key[2:], nil
 		}
 		v := c.BlockState(partition)
 		return v, key[2:], nil
@@ -348,11 +376,17 @@ func (c *Account) Data() *AccountData {
 	})
 }
 
-func (c *Account) Resolve(key record.Key) (record.Record, record.Key, error) {
+func (c *Account) Resolve(key record.Key, create bool) (record.Record, record.Key, error) {
 	switch key[0] {
 	case "Main":
+		if !create && c.main == nil {
+			return nil, nil, errors.New(errors.StatusUninitializedRecord, "uninitialized")
+		}
 		return c.Main(), key[1:], nil
 	case "Pending":
+		if !create && c.pending == nil {
+			return nil, nil, errors.New(errors.StatusUninitializedRecord, "uninitialized")
+		}
 		return c.Pending(), key[1:], nil
 	case "SyntheticForAnchor":
 		if len(key) < 2 {
@@ -362,21 +396,49 @@ func (c *Account) Resolve(key record.Key) (record.Record, record.Key, error) {
 		if !okAnchor {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for account")
 		}
+		if !create {
+			v, ok := c.syntheticForAnchor[keyForAccountSyntheticForAnchor(anchor)]
+			if !ok {
+				return nil, nil, errors.New(errors.StatusUninitializedRecord, "uninitialized")
+			}
+			return v, key[2:], nil
+		}
 		v := c.SyntheticForAnchor(anchor)
 		return v, key[2:], nil
 	case "Directory":
+		if !create && c.directory == nil {
+			return nil, nil, errors.New(errors.StatusUninitializedRecord, "uninitialized")
+		}
 		return c.Directory(), key[1:], nil
 	case "MainChain":
+		if !create && c.mainChain == nil {
+			return nil, nil, errors.New(errors.StatusUninitializedRecord, "uninitialized")
+		}
 		return c.MainChain(), key[1:], nil
 	case "ScratchChain":
+		if !create && c.scratchChain == nil {
+			return nil, nil, errors.New(errors.StatusUninitializedRecord, "uninitialized")
+		}
 		return c.ScratchChain(), key[1:], nil
 	case "SignatureChain":
+		if !create && c.signatureChain == nil {
+			return nil, nil, errors.New(errors.StatusUninitializedRecord, "uninitialized")
+		}
 		return c.SignatureChain(), key[1:], nil
 	case "RootChain":
+		if !create && c.rootChain == nil {
+			return nil, nil, errors.New(errors.StatusUninitializedRecord, "uninitialized")
+		}
 		return c.RootChain(), key[1:], nil
 	case "AnchorSequenceChain":
+		if !create && c.anchorSequenceChain == nil {
+			return nil, nil, errors.New(errors.StatusUninitializedRecord, "uninitialized")
+		}
 		return c.AnchorSequenceChain(), key[1:], nil
 	case "MajorBlockChain":
+		if !create && c.majorBlockChain == nil {
+			return nil, nil, errors.New(errors.StatusUninitializedRecord, "uninitialized")
+		}
 		return c.MajorBlockChain(), key[1:], nil
 	case "SyntheticSequenceChain":
 		if len(key) < 2 {
@@ -385,6 +447,13 @@ func (c *Account) Resolve(key record.Key) (record.Record, record.Key, error) {
 		partition, okPartition := key[1].(string)
 		if !okPartition {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for account")
+		}
+		if !create {
+			v, ok := c.syntheticSequenceChain[keyForAccountSyntheticSequenceChain(partition)]
+			if !ok {
+				return nil, nil, errors.New(errors.StatusUninitializedRecord, "uninitialized")
+			}
+			return v, key[2:], nil
 		}
 		v := c.getSyntheticSequenceChain(partition)
 		return v, key[2:], nil
@@ -396,13 +465,29 @@ func (c *Account) Resolve(key record.Key) (record.Record, record.Key, error) {
 		if !okPartition {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for account")
 		}
+		if !create {
+			v, ok := c.anchorChain[keyForAccountAnchorChain(partition)]
+			if !ok {
+				return nil, nil, errors.New(errors.StatusUninitializedRecord, "uninitialized")
+			}
+			return v, key[2:], nil
+		}
 		v := c.getAnchorChain(partition)
 		return v, key[2:], nil
 	case "Chains":
+		if !create && c.chains == nil {
+			return nil, nil, errors.New(errors.StatusUninitializedRecord, "uninitialized")
+		}
 		return c.Chains(), key[1:], nil
 	case "SyntheticAnchors":
+		if !create && c.syntheticAnchors == nil {
+			return nil, nil, errors.New(errors.StatusUninitializedRecord, "uninitialized")
+		}
 		return c.SyntheticAnchors(), key[1:], nil
 	case "Data":
+		if !create && c.data == nil {
+			return nil, nil, errors.New(errors.StatusUninitializedRecord, "uninitialized")
+		}
 		return c.Data(), key[1:], nil
 	default:
 		return nil, nil, errors.New(errors.StatusInternalError, "bad key for account")
@@ -523,11 +608,17 @@ func (c *AccountAnchorChain) BPT() *Chain2 {
 	})
 }
 
-func (c *AccountAnchorChain) Resolve(key record.Key) (record.Record, record.Key, error) {
+func (c *AccountAnchorChain) Resolve(key record.Key, create bool) (record.Record, record.Key, error) {
 	switch key[0] {
 	case "Root":
+		if !create && c.root == nil {
+			return nil, nil, errors.New(errors.StatusUninitializedRecord, "uninitialized")
+		}
 		return c.Root(), key[1:], nil
 	case "BPT":
+		if !create && c.bpt == nil {
+			return nil, nil, errors.New(errors.StatusUninitializedRecord, "uninitialized")
+		}
 		return c.BPT(), key[1:], nil
 	default:
 		return nil, nil, errors.New(errors.StatusInternalError, "bad key for anchor chain")
@@ -592,9 +683,12 @@ func (c *AccountData) Transaction(entryHash [32]byte) *record.Value[[32]byte] {
 	})
 }
 
-func (c *AccountData) Resolve(key record.Key) (record.Record, record.Key, error) {
+func (c *AccountData) Resolve(key record.Key, create bool) (record.Record, record.Key, error) {
 	switch key[0] {
 	case "Entry":
+		if !create && c.entry == nil {
+			return nil, nil, errors.New(errors.StatusUninitializedRecord, "uninitialized")
+		}
 		return c.Entry(), key[1:], nil
 	case "Transaction":
 		if len(key) < 2 {
@@ -603,6 +697,13 @@ func (c *AccountData) Resolve(key record.Key) (record.Record, record.Key, error)
 		entryHash, okEntryHash := key[1].([32]byte)
 		if !okEntryHash {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for data")
+		}
+		if !create {
+			v, ok := c.transaction[keyForAccountDataTransaction(entryHash)]
+			if !ok {
+				return nil, nil, errors.New(errors.StatusUninitializedRecord, "uninitialized")
+			}
+			return v, key[2:], nil
 		}
 		v := c.Transaction(entryHash)
 		return v, key[2:], nil
@@ -694,13 +795,22 @@ func (c *Transaction) Chains() *record.Set[*TransactionChainEntry] {
 	})
 }
 
-func (c *Transaction) Resolve(key record.Key) (record.Record, record.Key, error) {
+func (c *Transaction) Resolve(key record.Key, create bool) (record.Record, record.Key, error) {
 	switch key[0] {
 	case "Main":
+		if !create && c.main == nil {
+			return nil, nil, errors.New(errors.StatusUninitializedRecord, "uninitialized")
+		}
 		return c.Main(), key[1:], nil
 	case "Status":
+		if !create && c.status == nil {
+			return nil, nil, errors.New(errors.StatusUninitializedRecord, "uninitialized")
+		}
 		return c.Status(), key[1:], nil
 	case "Produced":
+		if !create && c.produced == nil {
+			return nil, nil, errors.New(errors.StatusUninitializedRecord, "uninitialized")
+		}
 		return c.Produced(), key[1:], nil
 	case "Signatures":
 		if len(key) < 2 {
@@ -710,9 +820,19 @@ func (c *Transaction) Resolve(key record.Key) (record.Record, record.Key, error)
 		if !okSigner {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for transaction")
 		}
+		if !create {
+			v, ok := c.signatures[keyForTransactionSignatures(signer)]
+			if !ok {
+				return nil, nil, errors.New(errors.StatusUninitializedRecord, "uninitialized")
+			}
+			return v, key[2:], nil
+		}
 		v := c.getSignatures(signer)
 		return v, key[2:], nil
 	case "Chains":
+		if !create && c.chains == nil {
+			return nil, nil, errors.New(errors.StatusUninitializedRecord, "uninitialized")
+		}
 		return c.Chains(), key[1:], nil
 	default:
 		return nil, nil, errors.New(errors.StatusInternalError, "bad key for transaction")

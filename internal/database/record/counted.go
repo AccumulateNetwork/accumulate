@@ -156,7 +156,7 @@ func (c *Counted[T]) Commit() error {
 }
 
 // Resolve implements Record.Resolve.
-func (c *Counted[T]) Resolve(key Key) (Record, Key, error) {
+func (c *Counted[T]) Resolve(key Key, create bool) (Record, Key, error) {
 	if len(key) == 0 {
 		return c.count, nil, nil
 	}

@@ -13,7 +13,7 @@ import (
 // A Record is a component of a data model.
 type Record interface {
 	// Resolve resolves the record or a child record.
-	Resolve(key Key) (Record, Key, error)
+	Resolve(key Key, create bool) (Record, Key, error)
 	// IsDirty returns true if the record has been modified.
 	IsDirty() bool
 	// Commit writes any modifications to the store.

@@ -196,7 +196,7 @@ func (v *Value[T]) Commit() error {
 }
 
 // Resolve implements Record.Resolve.
-func (v *Value[T]) Resolve(key Key) (Record, Key, error) {
+func (v *Value[T]) Resolve(key Key, create bool) (Record, Key, error) {
 	if len(key) == 0 {
 		return v, nil, nil
 	}

@@ -148,7 +148,7 @@ func (c *{{$c.FullName}}) {{template "accessor" .}}({{range .GetParameters}}{{lo
 {{end}}
 {{end}}
 
-func (c *{{.FullName}}) {{if .CustomResolve}}base{{end}}Resolve(key record.Key) (record.Record, record.Key, error) {
+func (c *{{.FullName}}) {{if .CustomResolve}}base{{end}}Resolve(key record.Key, create bool) (record.Record, record.Key, error) {
 	switch key[0] {
 	{{- range .Attributes}}
 	case "{{.Name}}":
@@ -162,9 +162,19 @@ func (c *{{.FullName}}) {{if .CustomResolve}}base{{end}}Resolve(key record.Key) 
 		if {{range $index, $param := .GetParameters}}{{if gt $index 0}} || {{end}}!ok{{.Name}}{{end}} {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for {{natural $c.Name}}")
 		}
+		if !create {
+			v, ok := c.{{lower .Name}}[keyFor{{.FullName}}({{range .GetParameters}}{{lower .Name}},{{end}})]
+			if !ok {
+				return nil, nil, errors.New(errors.StatusUninitializedRecord, "uninitialized")
+			}
+			return v, key[{{add 1 (parameterCount .)}}:], nil
+		}
 		v := c.{{template "accessor" .}}({{range .GetParameters}}{{lower .Name}},{{end}})
 		return v, key[{{add 1 (parameterCount .)}}:], nil
 		{{- else}}
+		if !create && c.{{lower .Name}} == nil {
+			return nil, nil, errors.New(errors.StatusUninitializedRecord, "uninitialized")
+		}
 		return c.{{template "accessor" .}}(), key[1:], nil
 		{{- end}}
 	{{- end}}

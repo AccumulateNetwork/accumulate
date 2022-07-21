@@ -136,7 +136,7 @@ func (st *stateCache) createOrUpdate(isUpdate bool, accounts []protocol.Account)
 		_, err := rec.GetState()
 		switch {
 		case err != nil && !errors.Is(err, storage.ErrNotFound):
-			return errors.Format(errors.StatusUnknownError, "failed to check for an existing record: %v", err)
+			return errors.Format(errors.StatusUnknownError, "failed to check for an existing record: %w", err)
 
 		case err == nil && isCreate:
 			return errors.Format(errors.StatusConflict, "account %v already exists", account.GetUrl())

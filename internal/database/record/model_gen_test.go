@@ -11,19 +11,26 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 type ChangeSet struct {
 	logger logging.OptionalLogger
 	store  record.Store
 
-	entity    map[storage.Key]*Entity
+	entity    map[entityKey]*Entity
 	changeLog *record.Counted[string]
 }
 
+type entityKey struct {
+	Name string
+}
+
+func keyForEntity(name string) entityKey {
+	return entityKey{name}
+}
+
 func (c *ChangeSet) Entity(name string) *Entity {
-	return getOrCreateMap(&c.entity, record.Key{}.Append("Entity", name), func() *Entity {
+	return getOrCreateMap(&c.entity, keyForEntity(name), func() *Entity {
 		v := new(Entity)
 		v.logger = c.logger
 		v.store = c.store
@@ -40,7 +47,7 @@ func (c *ChangeSet) ChangeLog() *record.Counted[string] {
 	})
 }
 
-func (c *ChangeSet) Resolve(key record.Key) (record.Record, record.Key, error) {
+func (c *ChangeSet) Resolve(key record.Key, create bool) (record.Record, record.Key, error) {
 	switch key[0] {
 	case "Entity":
 		if len(key) < 2 {
@@ -50,9 +57,19 @@ func (c *ChangeSet) Resolve(key record.Key) (record.Record, record.Key, error) {
 		if !okName {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for change set")
 		}
+		if !create {
+			v, ok := c.entity[keyForEntity(name)]
+			if !ok {
+				return nil, nil, errors.New(errors.StatusUninitializedRecord, "uninitialized")
+			}
+			return v, key[2:], nil
+		}
 		v := c.Entity(name)
 		return v, key[2:], nil
 	case "ChangeLog":
+		if !create && c.changeLog == nil {
+			return nil, nil, errors.New(errors.StatusUninitializedRecord, "uninitialized")
+		}
 		return c.ChangeLog(), key[1:], nil
 	default:
 		return nil, nil, errors.New(errors.StatusInternalError, "bad key for change set")
@@ -148,17 +165,32 @@ func (c *Entity) CountableUnion() *record.Counted[protocol.Account] {
 	})
 }
 
-func (c *Entity) Resolve(key record.Key) (record.Record, record.Key, error) {
+func (c *Entity) Resolve(key record.Key, create bool) (record.Record, record.Key, error) {
 	switch key[0] {
 	case "Union":
+		if !create && c.union == nil {
+			return nil, nil, errors.New(errors.StatusUninitializedRecord, "uninitialized")
+		}
 		return c.Union(), key[1:], nil
 	case "Set":
+		if !create && c.set == nil {
+			return nil, nil, errors.New(errors.StatusUninitializedRecord, "uninitialized")
+		}
 		return c.Set(), key[1:], nil
 	case "Chain":
+		if !create && c.chain == nil {
+			return nil, nil, errors.New(errors.StatusUninitializedRecord, "uninitialized")
+		}
 		return c.Chain(), key[1:], nil
 	case "CountableRefType":
+		if !create && c.countableRefType == nil {
+			return nil, nil, errors.New(errors.StatusUninitializedRecord, "uninitialized")
+		}
 		return c.CountableRefType(), key[1:], nil
 	case "CountableUnion":
+		if !create && c.countableUnion == nil {
+			return nil, nil, errors.New(errors.StatusUninitializedRecord, "uninitialized")
+		}
 		return c.CountableUnion(), key[1:], nil
 	default:
 		return nil, nil, errors.New(errors.StatusInternalError, "bad key for entity")
@@ -296,25 +328,52 @@ func (c *TemplateTest) UnionList() *record.Counted[UnionType] {
 	})
 }
 
-func (c *TemplateTest) Resolve(key record.Key) (record.Record, record.Key, error) {
+func (c *TemplateTest) Resolve(key record.Key, create bool) (record.Record, record.Key, error) {
 	switch key[0] {
 	case "Wrapped":
+		if !create && c.wrapped == nil {
+			return nil, nil, errors.New(errors.StatusUninitializedRecord, "uninitialized")
+		}
 		return c.Wrapped(), key[1:], nil
 	case "StructPtr":
+		if !create && c.structPtr == nil {
+			return nil, nil, errors.New(errors.StatusUninitializedRecord, "uninitialized")
+		}
 		return c.StructPtr(), key[1:], nil
 	case "Union":
+		if !create && c.union == nil {
+			return nil, nil, errors.New(errors.StatusUninitializedRecord, "uninitialized")
+		}
 		return c.Union(), key[1:], nil
 	case "WrappedSet":
+		if !create && c.wrappedSet == nil {
+			return nil, nil, errors.New(errors.StatusUninitializedRecord, "uninitialized")
+		}
 		return c.WrappedSet(), key[1:], nil
 	case "StructSet":
+		if !create && c.structSet == nil {
+			return nil, nil, errors.New(errors.StatusUninitializedRecord, "uninitialized")
+		}
 		return c.StructSet(), key[1:], nil
 	case "UnionSet":
+		if !create && c.unionSet == nil {
+			return nil, nil, errors.New(errors.StatusUninitializedRecord, "uninitialized")
+		}
 		return c.UnionSet(), key[1:], nil
 	case "WrappedList":
+		if !create && c.wrappedList == nil {
+			return nil, nil, errors.New(errors.StatusUninitializedRecord, "uninitialized")
+		}
 		return c.WrappedList(), key[1:], nil
 	case "StructList":
+		if !create && c.structList == nil {
+			return nil, nil, errors.New(errors.StatusUninitializedRecord, "uninitialized")
+		}
 		return c.StructList(), key[1:], nil
 	case "UnionList":
+		if !create && c.unionList == nil {
+			return nil, nil, errors.New(errors.StatusUninitializedRecord, "uninitialized")
+		}
 		return c.UnionList(), key[1:], nil
 	default:
 		return nil, nil, errors.New(errors.StatusInternalError, "bad key for template test")
@@ -385,18 +444,17 @@ func getOrCreateField[T any](ptr **T, create func() *T) *T {
 	return *ptr
 }
 
-func getOrCreateMap[T any](ptr *map[storage.Key]T, key record.Key, create func() T) T {
+func getOrCreateMap[T any, K comparable](ptr *map[K]T, key K, create func() T) T {
 	if *ptr == nil {
-		*ptr = map[storage.Key]T{}
+		*ptr = map[K]T{}
 	}
 
-	k := key.Hash()
-	if v, ok := (*ptr)[k]; ok {
+	if v, ok := (*ptr)[key]; ok {
 		return v
 	}
 
 	v := create()
-	(*ptr)[k] = v
+	(*ptr)[key] = v
 	return v
 }
 

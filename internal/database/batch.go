@@ -179,7 +179,7 @@ func (b *Batch) GetValue(key record.Key, value record.ValueWriter) error {
 		panic(fmt.Sprintf("batch %s: attempted to use a commited or discarded batch", b.id))
 	}
 
-	v, err := resolveValue[record.ValueReader](b, key)
+	v, err := resolveValueRecursive[record.ValueReader](b, key)
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknownError, err)
 	}
@@ -194,7 +194,7 @@ func (b *Batch) PutValue(key record.Key, value record.ValueReader) error {
 		panic(fmt.Sprintf("batch %s: attempted to use a commited or discarded batch", b.id))
 	}
 
-	v, err := resolveValue[record.ValueWriter](b, key)
+	v, err := resolveValue[record.ValueWriter](b, key, true)
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknownError, err)
 	}
@@ -204,17 +204,17 @@ func (b *Batch) PutValue(key record.Key, value record.ValueReader) error {
 }
 
 // resolveValue resolves the value for the given key.
-func resolveValue[T any](c *Batch, key record.Key) (T, error) {
+func resolveValue[T any](c *Batch, key record.Key, create bool) (T, error) {
 	var r record.Record = c
 	var err error
 	for len(key) > 0 {
-		r, key, err = r.Resolve(key)
+		r, key, err = r.Resolve(key, create)
 		if err != nil {
 			return zero[T](), errors.Wrap(errors.StatusUnknownError, err)
 		}
 	}
 
-	if s, _, err := r.Resolve(nil); err == nil {
+	if s, _, err := r.Resolve(nil, create); err == nil {
 		r = s
 	}
 
@@ -224,4 +224,27 @@ func resolveValue[T any](c *Batch, key record.Key) (T, error) {
 	}
 
 	return v, nil
+}
+
+func resolveValueRecursive[T any](b *Batch, key record.Key) (T, error) {
+	// If the batch doesn't have a parent, create the requested value
+	if b.parent == nil {
+		return resolveValue[T](b, key, true)
+	}
+
+	// Have we already created a value?
+	v, err := resolveValue[T](b, key, false)
+	switch {
+	case err == nil:
+		// Found it
+		return v, nil
+
+	case errors.Is(err, errors.StatusUninitializedRecord):
+		// We don't have a copy
+		return resolveValueRecursive[T](b.parent, key)
+
+	default:
+		// Unknown error
+		return zero[T](), errors.Wrap(errors.StatusUnknownError, err)
+	}
 }

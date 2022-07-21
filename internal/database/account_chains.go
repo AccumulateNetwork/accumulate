@@ -66,11 +66,11 @@ func (c *Chain2) Url() *url.URL {
 	return c.Account().WithFragment("chain/" + c.Name())
 }
 
-func (c *Chain2) Resolve(key record.Key) (record.Record, record.Key, error) {
+func (c *Chain2) Resolve(key record.Key, create bool) (record.Record, record.Key, error) {
 	if len(key) > 0 && key[0] == "Index" {
 		return c.Index(), key[1:], nil
 	}
-	return c.inner.Resolve(key)
+	return c.inner.Resolve(key, create)
 }
 
 func (c *Chain2) IsDirty() bool {

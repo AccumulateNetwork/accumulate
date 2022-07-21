@@ -50,10 +50,10 @@ const StatusBadSignerVersion Status = 411
 // StatusBadTimestamp means the timestamp is invalid.
 const StatusBadTimestamp Status = 412
 
-// StatusInternalError means an internal error occured.
+// StatusInternalError means an internal error occurred.
 const StatusInternalError Status = 500
 
-// StatusUnknownError means an unknown error occured.
+// StatusUnknownError means an unknown error occurred.
 const StatusUnknownError Status = 501
 
 // StatusEncodingError means encoding or decoding failed.
@@ -62,6 +62,9 @@ const StatusEncodingError Status = 502
 // StatusFatalError means something has gone seriously wrong.
 const StatusFatalError Status = 503
 
+// StatusUninitializedRecord is an internal error that means a record has not been initialized yet.
+const StatusUninitializedRecord Status = 504
+
 // GetEnumValue returns the value of the Status
 func (v Status) GetEnumValue() uint64 { return uint64(v) }
 
@@ -69,7 +72,7 @@ func (v Status) GetEnumValue() uint64 { return uint64(v) }
 func (v *Status) SetEnumValue(id uint64) bool {
 	u := Status(id)
 	switch u {
-	case StatusOK, StatusDelivered, StatusPending, StatusRemote, StatusWrongPartition, StatusBadRequest, StatusUnauthenticated, StatusInsufficientCredits, StatusUnauthorized, StatusNotFound, StatusNotAllowed, StatusConflict, StatusBadSignerVersion, StatusBadTimestamp, StatusInternalError, StatusUnknownError, StatusEncodingError, StatusFatalError:
+	case StatusOK, StatusDelivered, StatusPending, StatusRemote, StatusWrongPartition, StatusBadRequest, StatusUnauthenticated, StatusInsufficientCredits, StatusUnauthorized, StatusNotFound, StatusNotAllowed, StatusConflict, StatusBadSignerVersion, StatusBadTimestamp, StatusInternalError, StatusUnknownError, StatusEncodingError, StatusFatalError, StatusUninitializedRecord:
 		*v = u
 		return true
 	default:
@@ -116,6 +119,8 @@ func (v Status) String() string {
 		return "encodingError"
 	case StatusFatalError:
 		return "fatalError"
+	case StatusUninitializedRecord:
+		return "uninitializedRecord"
 	default:
 		return fmt.Sprintf("Status:%d", v)
 	}
@@ -160,6 +165,8 @@ func StatusByName(name string) (Status, bool) {
 		return StatusEncodingError, true
 	case "fatalerror":
 		return StatusFatalError, true
+	case "uninitializedrecord":
+		return StatusUninitializedRecord, true
 	default:
 		return 0, false
 	}
