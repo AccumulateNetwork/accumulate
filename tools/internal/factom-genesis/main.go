@@ -35,7 +35,7 @@ func AccountFromPrivateKey(privateKey []byte) (*url.URL, error) {
 	}
 
 	url, _ := protocol.LiteTokenAddress(pk[32:], protocol.ACME, protocol.SignatureTypeED25519)
-	key = &cmd.Key{PrivateKey: pk, PublicKey: pk[32:], Type: protocol.SignatureTypeED25519}
+	key = &cmd.Key{PrivateKey: pk, PublicKey: pk[32:], KeyInfo: cmd.KeyInfo{Type: protocol.SignatureTypeED25519}}
 	origin = url
 	return url, nil
 }
@@ -163,9 +163,9 @@ func GetAccountFromPrivateString(hexString string) *url.URL {
 	if err == nil && len(privKey) == 64 {
 		key.PrivateKey = privKey
 		key.PublicKey = privKey[32:]
-		key.Type = protocol.SignatureTypeED25519
+		key.KeyInfo.Type = protocol.SignatureTypeED25519
 	}
-	return protocol.LiteAuthorityForKey(key.PublicKey, key.Type)
+	return protocol.LiteAuthorityForKey(key.PublicKey, key.KeyInfo.Type)
 }
 
 func ConvertFactomDataEntryToLiteDataEntry(entry f2.Entry) *protocol.FactomDataEntry {

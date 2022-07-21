@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -82,10 +83,12 @@ func testCase1_2(t *testing.T, tc *testCmd) {
 	require.Equal(t, fa, fa2)
 
 	//quick protocol import check.
-	r, err := tc.execute(t, "key import factoid "+fs)
+	r, err := executeCmd(tc.rootCmd,
+		[]string{"-j", "-s", fmt.Sprintf("%s/v2", tc.jsonRpcAddr), "key", "import", "factoid"},
+		fmt.Sprintf("%v\n", fs))
 	require.NoError(t, err)
 	kr := KeyResponse{}
-	require.NoError(t, json.Unmarshal([]byte(r), &kr))
+	require.NoError(t, json.Unmarshal([]byte(strings.Split(r, ": ")[1]), &kr))
 
 	// make sure the right rcd account exists and the label is a FA address
 	lt, err := protocol.GetLiteAccountFromFactoidAddress(fa)
