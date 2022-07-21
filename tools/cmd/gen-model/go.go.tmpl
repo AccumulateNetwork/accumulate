@@ -33,11 +33,15 @@ c.label + " {{valueNameFormat .}}"
 record.Key{}
 {{- else -}}
 c.key
+{{- end -}}
+.Append({{template "keyArgs" .}})
 {{- end}}
+
+{{  define "keyArgs"}}
 {{- if parameterized . -}}
-.Append("{{.Name}}", {{range .GetParameters}}{{lower .Name}}, {{end}})
+"{{.Name}}", {{range .GetParameters}}{{lower .Name}}, {{end}}
 {{- else -}}
-.Append("{{.Name}}")
+"{{.Name}}"
 {{- end}}
 {{- end}}
 
@@ -78,6 +82,7 @@ return record.NewCounted(c.logger.L, c.store, {{template "key" .}}, {{template "
 {{- end}}
 
 {{define "entity"}}
+{{$c := .}}
 type {{.FullName}} struct {
 	logger logging.OptionalLogger
 	store record.Store
@@ -96,12 +101,26 @@ type {{.FullName}} struct {
 	{{- end}}
 }
 
-{{$c := .}}
+{{range .Attributes}}
+{{if parameterized .}}
+type {{lower .FullName}}Key struct {
+	{{- range $index, $param := .GetParameters}}
+	{{.Name}} {{keyType $param}}
+	{{- end}}
+}
+
+{{$a := .}}
+func keyFor{{.FullName}}({{range .GetParameters}}{{lower .Name}} {{parameterType .}}, {{end}}) {{lower $a.FullName}}Key {
+	return {{lower $a.FullName}}Key{ {{range .GetParameters}}{{asKey . (lower .Name)}}, {{end}} }
+}
+{{end}}
+{{end}}
+
 {{range .Attributes}}
 {{if not .OmitAccessor}}
 func (c *{{$c.FullName}}) {{template "accessor" .}}({{range .GetParameters}}{{lower .Name}} {{parameterType .}},{{end}}) *{{recordType .}} {
 	{{- if parameterized .}}
-	return getOrCreateMap(&c.{{lower .Name}}, {{template "key" .}},
+	return getOrCreateMap(&c.{{lower .Name}}, keyFor{{.FullName}}({{range .GetParameters}}{{lower .Name}},{{end}}),
 	{{- else}}
 	return getOrCreateField(&c.{{lower .Name}},
 	{{- end -}}
@@ -279,18 +298,17 @@ func getOrCreateField[T any](ptr **T, create func() *T) *T {
 	return *ptr
 }
 
-func getOrCreateMap[T any](ptr *map[storage.Key]T, key record.Key, create func() T) T {
+func getOrCreateMap[T any, K comparable](ptr *map[K]T, key K, create func() T) T {
 	if *ptr == nil {
-		*ptr = map[storage.Key]T{}
+		*ptr = map[K]T{}
 	}
 
-	k := key.Hash()
-	if v, ok := (*ptr)[k]; ok {
+	if v, ok := (*ptr)[key]; ok {
 		return v
 	}
 
 	v := create()
-	(*ptr)[k] = v
+	(*ptr)[key] = v
 	return v
 }
 

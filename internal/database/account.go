@@ -40,12 +40,12 @@ func (a *Account) Commit() error {
 	}
 
 	// Ensure the synthetic anchors index is up to date
-	for anchor, set := range a.syntheticForAnchor {
+	for k, set := range a.syntheticForAnchor {
 		if !set.IsDirty() {
 			continue
 		}
 
-		err := a.SyntheticAnchors().Add(anchor)
+		err := a.SyntheticAnchors().Add(k.Anchor)
 		if err != nil {
 			return errors.Wrap(errors.StatusUnknownError, err)
 		}
