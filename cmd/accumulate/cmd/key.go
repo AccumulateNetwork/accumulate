@@ -484,7 +484,7 @@ func FindLabelFromPubKey(pubKey []byte) (lab string, err error) {
 }
 
 func ImportKeyPrompt(cmd *cobra.Command, label string, signatureType protocol.SignatureType) (out string, err error) {
-	token, err := getPasswdPrompt(cmd, "Private Key : ", false)
+	token, err := getPasswdPrompt(cmd, "Private Key : ", true)
 	if err != nil {
 		return "", db.ErrInvalidPassword
 	}
@@ -770,7 +770,7 @@ func ExportMnemonic() (string, error) {
 }
 
 func ImportFactoidKey(cmd *cobra.Command) (out string, err error) {
-	token, err := getPasswdPrompt(cmd, "Private Key : ", false)
+	token, err := getPasswdPrompt(cmd, "Private Key : ", true)
 	if err != nil {
 		return "", db.ErrInvalidPassword
 	}
