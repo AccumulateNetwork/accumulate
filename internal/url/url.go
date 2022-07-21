@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"unicode/utf8"
 )
 
 // URL is an Accumulate URL.
@@ -158,7 +159,41 @@ func (u *URL) copy() *URL {
 
 // String reassembles the URL into a valid URL string. See net/url.URL.String().
 func (u *URL) String() string {
-	return u.URL().String()
+	var buf strings.Builder
+
+	buf.WriteString("acc://")
+	if u.UserInfo != "" {
+		buf.WriteString(u.UserInfo)
+		buf.WriteByte('@')
+	}
+
+	// TODO If we allow special characters, we'll need to escape them
+	buf.WriteString(u.Authority)
+
+	p := normalizePath(u.Path)
+	for len(p) > 0 {
+		buf.WriteByte('/')
+		i := strings.IndexByte(p[1:], '/') + 1
+		if i <= 0 {
+			buf.WriteString(url.PathEscape(p[1:]))
+			break
+		}
+
+		buf.WriteString(url.PathEscape(p[1:i]))
+		p = p[i:]
+	}
+
+	if u.Query != "" {
+		buf.WriteByte('?')
+		buf.WriteString(url.QueryEscape(u.Query))
+	}
+
+	if u.Fragment != "" {
+		buf.WriteByte('#')
+		buf.WriteString(u.Fragment) // TODO Encode?
+	}
+
+	return buf.String()
 }
 
 // ShortString returns String without the scheme prefix.
@@ -166,21 +201,13 @@ func (u *URL) ShortString() string {
 	return u.String()[6:]
 }
 
-// RawString concatenates all of the URL parts. Does not percent-encode
-// anything. Primarily used for validation.
-func (u *URL) RawString() string {
-	s := "acc://"
-	if u.UserInfo != "" {
-		s += u.UserInfo + "@"
-	}
-	s += u.Authority + u.Path
-	if u.Query != "" {
-		s += "?" + u.Query
-	}
-	if u.Fragment != "" {
-		s += "#" + u.Fragment
-	}
-	return s
+// ValidUTF8 verifies that all URL components are valid UTF-8 strings.
+func (u *URL) ValidUTF8() bool {
+	return utf8.ValidString(u.UserInfo) &&
+		utf8.ValidString(u.Authority) &&
+		utf8.ValidString(u.Path) &&
+		utf8.ValidString(u.Query) &&
+		utf8.ValidString(u.Fragment)
 }
 
 // Hostname returns the hostname from the authority component.
@@ -230,9 +257,10 @@ func concatId(ids ...[32]byte) [32]byte {
 	return result
 }
 
-func ensurePath(s string) string {
-	if s == "" || s[0] == '/' {
-		return s
+func normalizePath(s string) string {
+	s = strings.Trim(s, "/")
+	if s == "" {
+		return ""
 	}
 	return "/" + s
 }
@@ -337,7 +365,7 @@ func (u *URL) AccountID() []byte {
 // AccountID32 returns AccountID as a [32]byte.
 func (u *URL) AccountID32() [32]byte {
 	if u.memoize.accountID == [32]byte{} {
-		u.memoize.accountID = id(u.Hostname() + ensurePath(u.Path))
+		u.memoize.accountID = id(u.Hostname() + normalizePath(u.Path))
 	}
 	return u.memoize.accountID
 }

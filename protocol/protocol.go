@@ -11,7 +11,6 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
-	"unicode/utf8"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
@@ -362,7 +361,7 @@ func AccountUrl(rootIdentity string, path ...string) *url.URL {
 func IsValidAdiUrl(u *url.URL, allowReserved bool) error {
 	var errs []string
 
-	if !utf8.ValidString(u.RawString()) {
+	if !u.ValidUTF8() {
 		errs = append(errs, "not valid UTF-8")
 	}
 	if u.Port() != "" {
