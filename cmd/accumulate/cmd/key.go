@@ -30,6 +30,8 @@ func init() {
 	keyCmd.Flags().StringVar(&SigType, "sigtype", "ed25519", "Specify the signature type use rcd1 for RCD1 type ; ed25519 for ED25519 ; legacyed25519 for LegacyED25519 ; btc for Bitcoin ; btclegacy for Legacy Bitcoin  ; eth for Ethereum ")
 }
 
+var keyImportCmd = &cobra.Command{}
+
 var keyCmd = &cobra.Command{
 	Use:   "key",
 	Short: "Create and manage Keys for ADI Key Books, and Pages",
@@ -50,10 +52,8 @@ var keyCmd = &cobra.Command{
 			case "import":
 				if len(args) == 3 {
 					switch args[1] {
-					// case "mnemonic":
-					// 	out, err = ImportMnemonic(args[2:])
 					case "private":
-						// log.Panicln(args)
+						// with label
 						out, err = ImportKeyPrompt(cmd, args[2], sigType)
 					case "public":
 						//reserved for future use.
@@ -69,8 +69,6 @@ var keyCmd = &cobra.Command{
 					switch args[1] {
 					case "mnemonic":
 						out, err = ImportMnemonic(args[2:])
-					case "private":
-						out, err = ImportKeyPrompt(cmd, args[2], sigType)
 					case "public":
 						//reserved for future use.
 						fallthrough
@@ -78,9 +76,12 @@ var keyCmd = &cobra.Command{
 						PrintKeyImport()
 					}
 				} else if len(args) == 2 {
-					if args[1] == "factoid" {
+					switch args[1] {
+					case "factoid":
 						out, err = ImportFactoidKey(cmd)
-					} else {
+					case "private", "lite":
+						out, err = ImportKeyPrompt(cmd, "", sigType)
+					default:
 						PrintKeyImport()
 					}
 				} else {
