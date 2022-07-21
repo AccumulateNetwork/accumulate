@@ -75,10 +75,7 @@ func prepareSigner(origin *url.URL, args []string) ([]string, []*signing.Builder
 
 	var key *Key
 	var err error
-	isLiteTokenAccount, err := IsLiteTokenAccount(origin.String())
-	if err != nil {
-		return nil, nil, err
-	}
+	isLiteTokenAccount, _ := IsLiteTokenAccount(origin.String())
 	if isLiteTokenAccount {
 		key, err = LookupByLiteTokenUrl(origin.String())
 		if err != nil {
@@ -86,10 +83,7 @@ func prepareSigner(origin *url.URL, args []string) ([]string, []*signing.Builder
 		}
 
 	} else {
-		isLiteIdentity, err := IsLiteIdentity(origin.String())
-		if err != nil {
-			return nil, nil, err
-		}
+		isLiteIdentity, _ := IsLiteIdentity(origin.String())
 		if isLiteIdentity {
 			key, err = LookupByLiteIdentityUrl(origin.String())
 			if err != nil {
