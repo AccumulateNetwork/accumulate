@@ -103,7 +103,7 @@ func PrintTXPendingGet() {
 }
 
 func PrintTXCreate() {
-	fmt.Println("  accumulate tx create [adi token account url] [signing key name] [to] [amount]	Create new token tx")
+	fmt.Println("  accumulate tx create [token account url] [signing key ] [to] [amount]	Create new token tx")
 	fmt.Println("  accumulate tx create [lite token account url] [to] [amount]	Create new token tx")
 }
 
