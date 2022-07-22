@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"net/url"
 	"strconv"
 
 	"github.com/spf13/cobra"
@@ -77,6 +78,15 @@ var pageKeyUpdateCmd = &cobra.Command{
 	Args:  cobra.RangeArgs(4, 6),
 	Run: runCmdFunc(func(args []string) (string, error) {
 		return KeyPageUpdate(args[0], protocol.KeyPageOperationTypeUpdate, args[1:])
+	}),
+}
+
+var pageKeyReplaceCmd = &cobra.Command{
+	Use:   "replace [key page url] [key name[@key book or page]] [new public key or name]",
+	Short: "Update a key on a key page",
+	Args:  cobra.ExactArgs(3),
+	Run: runCmdFunc(func(args []string) (string, error) {
+		return ReplaceKey(args)
 	}),
 }
 
@@ -234,6 +244,27 @@ func KeyPageUpdate(origin string, op protocol.KeyPageOperationType, args []strin
 	}
 
 	return dispatchTxAndPrintResponse(&ukp, u, signer)
+}
+
+func ReplaceKey(args []string) (string, error) {
+	principal, err := url.Parse(args[0])
+	if err != nil {
+		return "", err
+	}
+
+	args, signer, err := prepareSigner(principal, args[1:])
+	if err != nil {
+		return "", err
+	}
+
+	k, err := resolvePublicKey(args[0])
+	if err != nil {
+		return "", err
+	}
+
+	txn := new(protocol.UpdateKey)
+	txn.NewKeyHash = k.PublicKeyHash()
+	return dispatchTxAndPrintResponse(txn, principal, signer)
 }
 
 func setKeyPageThreshold(args []string) (string, error) {
