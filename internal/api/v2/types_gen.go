@@ -199,7 +199,7 @@ type StatusResponse struct {
 	Ok          bool     `json:"ok,omitempty" form:"ok" query:"ok" validate:"required"`
 	BvnHeight   uint64   `json:"bvnHeight,omitempty" form:"bvnHeight" query:"bvnHeight" validate:"required"`
 	DnHeight    uint64   `json:"dnHeight,omitempty" form:"dnHeight" query:"dnHeight" validate:"required"`
-	LastAnchor  [32]byte `json:"lastAnchor,omitempty" form:"lastAnchor" query:"lastAnchor" validate:"required"`
+	LastAnchor  uint64   `json:"lastAnchor,omitempty" form:"lastAnchor" query:"lastAnchor" validate:"required"`
 	BvnRootHash [32]byte `json:"bvnRootHash,omitempty" form:"bvnRootHash" query:"bvnRootHash" validate:"required"`
 	DnRootHash  [32]byte `json:"dnRootHash,omitempty" form:"dnRootHash" query:"dnRootHash" validate:"required"`
 }
@@ -833,14 +833,14 @@ func (v *StatusResponse) MarshalJSON() ([]byte, error) {
 		Ok          bool   `json:"ok,omitempty"`
 		BvnHeight   uint64 `json:"bvnHeight,omitempty"`
 		DnHeight    uint64 `json:"dnHeight,omitempty"`
-		LastAnchor  string `json:"lastAnchor,omitempty"`
+		LastAnchor  uint64 `json:"lastAnchor,omitempty"`
 		BvnRootHash string `json:"bvnRootHash,omitempty"`
 		DnRootHash  string `json:"dnRootHash,omitempty"`
 	}{}
 	u.Ok = v.Ok
 	u.BvnHeight = v.BvnHeight
 	u.DnHeight = v.DnHeight
-	u.LastAnchor = encoding.ChainToJSON(v.LastAnchor)
+	u.LastAnchor = v.LastAnchor
 	u.BvnRootHash = encoding.ChainToJSON(v.BvnRootHash)
 	u.DnRootHash = encoding.ChainToJSON(v.DnRootHash)
 	return json.Marshal(&u)
@@ -1621,14 +1621,14 @@ func (v *StatusResponse) UnmarshalJSON(data []byte) error {
 		Ok          bool   `json:"ok,omitempty"`
 		BvnHeight   uint64 `json:"bvnHeight,omitempty"`
 		DnHeight    uint64 `json:"dnHeight,omitempty"`
-		LastAnchor  string `json:"lastAnchor,omitempty"`
+		LastAnchor  uint64 `json:"lastAnchor,omitempty"`
 		BvnRootHash string `json:"bvnRootHash,omitempty"`
 		DnRootHash  string `json:"dnRootHash,omitempty"`
 	}{}
 	u.Ok = v.Ok
 	u.BvnHeight = v.BvnHeight
 	u.DnHeight = v.DnHeight
-	u.LastAnchor = encoding.ChainToJSON(v.LastAnchor)
+	u.LastAnchor = v.LastAnchor
 	u.BvnRootHash = encoding.ChainToJSON(v.BvnRootHash)
 	u.DnRootHash = encoding.ChainToJSON(v.DnRootHash)
 	if err := json.Unmarshal(data, &u); err != nil {
@@ -1637,11 +1637,7 @@ func (v *StatusResponse) UnmarshalJSON(data []byte) error {
 	v.Ok = u.Ok
 	v.BvnHeight = u.BvnHeight
 	v.DnHeight = u.DnHeight
-	if x, err := encoding.ChainFromJSON(u.LastAnchor); err != nil {
-		return fmt.Errorf("error decoding LastAnchor: %w", err)
-	} else {
-		v.LastAnchor = x
-	}
+	v.LastAnchor = u.LastAnchor
 	if x, err := encoding.ChainFromJSON(u.BvnRootHash); err != nil {
 		return fmt.Errorf("error decoding BvnRootHash: %w", err)
 	} else {

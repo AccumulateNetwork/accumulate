@@ -8,20 +8,19 @@ import (
 	stdlog "log"
 	"mime"
 	"net/http"
-	neturl "net/url"
 	"os"
-	"strconv"
+
+	rpc "github.com/tendermint/tendermint/rpc/client"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/go-playground/validator/v10"
 	"github.com/tendermint/tendermint/libs/log"
-	tmhttp "github.com/tendermint/tendermint/rpc/client/http"
 	"gitlab.com/accumulatenetwork/accumulate"
-	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
 type JrpcMethods struct {
@@ -112,40 +111,64 @@ func (m *JrpcMethods) jrpc2http(jrpc jsonrpc2.MethodFunc) http.HandlerFunc {
 }
 
 func (m *JrpcMethods) Status(c context.Context, params json.RawMessage) interface{} {
-	add := m.Options.Describe.Network.Partitions[0].Nodes[0].Address
-	nodeurl, err := neturl.Parse(add)
-	if err != nil {
-		return internalError(err)
-	}
-	port, err := strconv.Atoi(nodeurl.Port())
-	if err != nil {
-		return internalError(err)
-	}
-	tmurl := fmt.Sprint(nodeurl.Scheme, "://", nodeurl.Hostname(), ":", port+1)
-	client, err := tmhttp.New(tmurl)
+	//Config := config.Default(m.Options.Describe.Network.Id, m.Options.Describe.NetworkType, config.NodeTypeValidator, m.Options.Describe.PartitionId)
+	// Create node
 
+	qu := new(query.UnknownRequest)
+	qd, _ := qu.MarshalBinary()
+	res, err := m.Router.Query(c, m.Options.Describe.PartitionId, qd, rpc.DefaultABCIQueryOptions)
 	if err != nil {
+		fmt.Printf("error is %w", err)
 		return internalError(err)
 	}
-	tminfo, err := client.ABCIInfo(c)
-	hash := new([32]byte)
-	height := tminfo.Response.LastBlockHeight
-	copy(hash[:], tminfo.Response.LastBlockAppHash)
-	if err != nil {
-		return internalError(err)
-	}
+	fmt.Printf("%v", *res)
+	//	cl := node.NewLocalClient
+	/*	cm := connections.NewConnectionManager(Config, m.Options.Logger, func(server string) (connections.APIClient, error) {
 
-	status := new(StatusResponse)
-	status.Ok = true
-	if m.Options.Describe.NetworkType == config.NetworkTypeDirectory {
-		status.DnHeight = uint64(height)
-		status.DnRootHash = *hash
-		return status
-	}
-	status.BvnHeight = uint64(height)
-	status.BvnRootHash = *hash
-	status.Ok = true
-	return status
+			return New(server)
+		})
+
+		fmt.Printf("%v", cm)
+		//cm.InitClients(cl., nil)
+		fmt.Println(cm.GetLocalClient())
+
+		/*cl, err := local.New()
+		if err != nil {
+			fmt.Printf("error is %w", err)
+			return internalError(err)
+		}
+		cm.InitClients(cl, nil)*/
+	/*	cc, err := cm.SelectConnection(m.Options.Describe.PartitionId, true)
+		if err != nil {
+			fmt.Printf("error is %w", err)
+			return internalError(err)
+		}
+		tmRes, err := cc.GetABCIClient().ABCIQueryWithOptions(context.Background(), "/status", qd, rpc.DefaultABCIQueryOptions)
+		fmt.Println(tmRes.Response)
+
+		/*hash := new([32]byte)
+		height := tminfo.Response.LastBlockHeight
+
+		if err != nil {
+			fmt.Printf("error is %w", err)
+			return internalError(err)
+		}
+		copy(hash[:], tminfo.Response.LastBlockAppHash)
+		if err != nil {
+			fmt.Printf("error is %w", err)
+			return internalError(err)
+		}
+		status := new(StatusResponse)
+		status.Ok = true
+		if m.Options.Describe.NetworkType == config.NetworkTypeDirectory {
+			status.DnHeight = uint64(height)
+			status.DnRootHash = *hash
+			return status
+		}
+		status.BvnHeight = uint64(height)
+		status.BvnRootHash = *hash
+		status.Ok = true*/
+	return "status"
 }
 
 func (m *JrpcMethods) Version(_ context.Context, params json.RawMessage) interface{} {

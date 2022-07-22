@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/tendermint/tendermint/rpc/client"
+	"github.com/tendermint/tendermint/rpc/coretypes"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -390,6 +391,11 @@ func (q *queryDirect) QueryData(url *url.URL, entryHash [32]byte) (*ChainQueryRe
 	qr.Type = "dataEntry"
 	qr.Data = &rde
 	return qr, nil
+}
+
+func (q *queryDirect) QueryStatus(opts client.ABCIQueryOptions) (*coretypes.ResultABCIQuery, error) {
+	return q.Router.Query(context.Background(), fmt.Sprint(q.Partition, "/status)"), []byte{}, client.ABCIQueryOptions{Height: int64(opts.Height), Prove: opts.Prove})
+
 }
 
 func (q *queryDirect) QueryDataSet(url *url.URL, pagination QueryPagination, opts QueryOptions) (*MultiResponse, error) {

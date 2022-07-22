@@ -499,7 +499,7 @@ StatusResponse:
     - name: DnHeight
       type: uvarint
     - name: LastAnchor
-      type: hash
+      type: uvarint
     - name: BvnRootHash
       type: hash
     - name: DnRootHash
