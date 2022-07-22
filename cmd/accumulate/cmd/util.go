@@ -102,7 +102,7 @@ func prepareSigner(origin *url.URL, args []string) ([]string, []*signing.Builder
 	}
 
 	if key != nil {
-		firstSigner.Type = key.Type
+		firstSigner.Type = key.KeyInfo.Type
 		firstSigner.Url = origin.RootIdentity()
 		firstSigner.Version = 1
 		firstSigner.SetPrivateKey(key.PrivateKey)
@@ -140,7 +140,7 @@ func prepareSignerPage(signer *signing.Builder, origin *url.URL, signingKey stri
 	}
 	signer.SetPrivateKey(key.PrivateKey)
 
-	signer.Type = key.Type
+	signer.Type = key.KeyInfo.Type
 
 	keyInfo, err := getKey(keyHolder.String(), key.PublicKeyHash())
 	if err != nil {
