@@ -173,33 +173,7 @@ func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, op protocol.KeyPag
 		return nil
 
 	case *protocol.UpdateKeyOperation:
-		if op.NewEntry.IsEmpty() {
-			return fmt.Errorf("cannot add an empty entry")
-		}
-		if op.NewEntry.Delegate.ParentOf(page.Url) {
-			return fmt.Errorf("self-delegation is not allowed")
-		}
-
-		// Find the old entry
-		oldPos, entry, found := findKeyPageEntry(page, &op.OldEntry)
-		if !found {
-			return fmt.Errorf("entry to be updated not found on the key page")
-		}
-
-		// Check for an existing key with same delegate
-		newPos, _, found := findKeyPageEntry(page, &op.NewEntry)
-		if found && oldPos != newPos {
-			return fmt.Errorf("cannot have duplicate entries on key page")
-		}
-
-		// Update the entry
-		entry.PublicKeyHash = op.NewEntry.KeyHash
-		entry.Delegate = op.NewEntry.Delegate
-
-		// Relocate the entry
-		page.RemoveKeySpecAt(oldPos)
-		page.AddKeySpec(entry)
-		return nil
+		return updateKey(page, &op.OldEntry, &op.NewEntry)
 
 	case *protocol.SetThresholdKeyPageOperation:
 		return page.SetThreshold(op.Threshold)
