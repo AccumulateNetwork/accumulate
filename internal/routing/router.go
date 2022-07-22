@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/tendermint/tendermint/rpc/client"
+	"github.com/tendermint/tendermint/rpc/client/local"
 	core "github.com/tendermint/tendermint/rpc/coretypes"
 	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
@@ -21,6 +22,7 @@ type Router interface {
 	Query(ctx context.Context, partition string, query []byte, opts client.ABCIQueryOptions) (*core.ResultABCIQuery, error)
 	RequestAPIv2(ctx context.Context, partitionId, method string, params, result interface{}) error
 	Submit(ctx context.Context, partition string, tx *protocol.Envelope, pretend, async bool) (*ResponseSubmit, error)
+	GetLocalClient() *local.Local
 }
 
 // ResponseSubmit is the response from a call to Submit.
@@ -204,6 +206,10 @@ func (r *RouterInstance) Query(ctx context.Context, partitionId string, query []
 			return nil, err
 		}
 	}
+}
+
+func (r *RouterInstance) GetLocalClient() *local.Local {
+	return r.connectionManager.GetLocalClient()
 }
 
 func (r *RouterInstance) RequestAPIv2(ctx context.Context, partitionId, method string, params, result interface{}) error {

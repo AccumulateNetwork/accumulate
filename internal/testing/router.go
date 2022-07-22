@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/tendermint/tendermint/rpc/client"
+	"github.com/tendermint/tendermint/rpc/client/local"
 	core "github.com/tendermint/tendermint/rpc/coretypes"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
@@ -33,4 +34,8 @@ func (NullRouter) Submit(ctx context.Context, partition string, tx *protocol.Env
 
 func (NullRouter) RequestAPIv2(ctx context.Context, partitionId, method string, params, result interface{}) error {
 	return errors.StatusNotFound
+}
+
+func (NullRouter) GetLocalClient() *local.Local {
+	return nil
 }

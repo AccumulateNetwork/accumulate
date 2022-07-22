@@ -21,6 +21,7 @@ const UnhealthyNodeCheckInterval = time.Minute * 10 // TODO Configurable in toml
 
 type ConnectionManager interface {
 	SelectConnection(partitionId string, allowFollower bool) (ConnectionContext, error)
+	GetLocalClient() *local.Local
 }
 
 type ConnectionInitializer interface {

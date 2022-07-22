@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/libs/log"
+	"github.com/tendermint/tendermint/rpc/client/local"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
@@ -296,6 +297,9 @@ func (s *Simulator) PartitionFor(url *url.URL) *ExecEntry {
 	partition, err := s.Router().RouteAccount(url)
 	require.NoError(s, err)
 	return s.Partition(partition)
+}
+func (router) GetLocalClient() *local.Local {
+	return nil
 }
 
 func (s *Simulator) Query(url *url.URL, req query.Request, prove bool) interface{} {
