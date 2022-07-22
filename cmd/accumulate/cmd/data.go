@@ -30,6 +30,7 @@ func init() {
 var dataCmd = &cobra.Command{
 	Use:   "data",
 	Short: "Create, add, and query adi data accounts",
+	Args:  cobra.OnlyValidArgs,
 	Run: func(cmd *cobra.Command, args []string) {
 		var out string
 		var err error
