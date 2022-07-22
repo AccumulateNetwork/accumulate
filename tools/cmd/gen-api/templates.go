@@ -21,10 +21,11 @@ type TApi struct {
 
 type TMethod struct {
 	typegen.Method
-	Name string
+	Name       string
+	SubPackage string
 }
 
-func convert(api typegen.API) *TApi {
+func convert(api typegen.API, subPkgName string) *TApi {
 	tapi := new(TApi)
 	tapi.Package = flags.Package
 	tapi.Methods = make([]*TMethod, 0, len(api))
@@ -33,6 +34,7 @@ func convert(api typegen.API) *TApi {
 		tm := new(TMethod)
 		tm.Method = method
 		tm.Name = name
+		tm.SubPackage = subPkgName
 		if tm.Call == "" {
 			tm.Call = name
 		}

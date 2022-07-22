@@ -36,6 +36,10 @@ func (f FieldType) JavaType() string {
 	case TypeCodeFloat:
 		return "float"
 	default:
+		switch f.Name {
+		case "AllowedTransactions":
+			return "long"
+		}
 		return f.Code.String()
 	}
 }

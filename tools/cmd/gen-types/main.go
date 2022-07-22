@@ -18,6 +18,7 @@ var flags struct {
 	files typegen.FileReader
 
 	Package     string
+	SubPackage  string
 	Out         string
 	Language    string
 	Reference   []string
@@ -33,6 +34,7 @@ func main() {
 
 	cmd.Flags().StringVarP(&flags.Language, "language", "l", "Go", "Output language or template file")
 	cmd.Flags().StringVar(&flags.Package, "package", "protocol", "Package name")
+	cmd.Flags().StringVar(&flags.SubPackage, "subpackage", "", "Subpackage name")
 	cmd.Flags().StringVarP(&flags.Out, "out", "o", "types_gen.go", "Output file")
 	cmd.Flags().StringSliceVar(&flags.Reference, "reference", nil, "Extra type definition files to use as a reference")
 	cmd.Flags().BoolVar(&flags.FilePerType, "file-per-type", false, "Generate a separate file for each type")
@@ -96,7 +98,7 @@ func run(_ *cobra.Command, args []string) {
 	check(flags.files.ReadAll(flags.Reference, &refTypes))
 	types.Sort()
 	refTypes.Sort()
-	ttypes, err := convert(types, refTypes, flags.Package, getWdPackagePath())
+	ttypes, err := convert(types, refTypes, flags.Package, flags.SubPackage, getWdPackagePath())
 	check(err)
 
 	if !flags.FilePerType {

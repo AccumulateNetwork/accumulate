@@ -23,8 +23,9 @@ type SingleTypeFile struct {
 }
 
 type Type struct {
-	Name   string
-	Values []*TypeValue
+	Name       string
+	SubPackage string
+	Values     []*TypeValue
 }
 
 type TypeValue struct {
@@ -42,13 +43,14 @@ var Templates = typegen.NewTemplateLibrary(template.FuncMap{
 	"natural":             natural,
 })
 
-func convert(types map[string]typegen.Enum, pkgName string) *Types {
+func convert(types map[string]typegen.Enum, pkgName, subPkgName string) *Types {
 	ttypes := make([]*Type, 0, len(types))
 
 	for name, typ := range types {
 		ttyp := new(Type)
 		ttypes = append(ttypes, ttyp)
 		ttyp.Name = name
+		ttyp.SubPackage = subPkgName
 		ttyp.Values = make([]*TypeValue, 0, len(typ))
 		for name, val := range typ {
 			tval := new(TypeValue)

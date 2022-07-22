@@ -12,7 +12,7 @@ import (
 var PackagePath string
 
 // convert converts typegen.Types to local Types.
-func convert(types, refTypes typegen.Types, pkgName, pkgPath string) (*Types, error) {
+func convert(types, refTypes typegen.Types, pkgName, subPkgName, pkgPath string) (*Types, error) {
 	// Initialize
 	ttypes := new(Types)
 	ttypes.Package = pkgName
@@ -25,6 +25,7 @@ func convert(types, refTypes typegen.Types, pkgName, pkgPath string) (*Types, er
 		// Initialize
 		ttyp := new(Type)
 		ttyp.Type = *typ
+		ttyp.SubPackage = subPkgName
 		ttypes.Types = append(ttypes.Types, ttyp)
 		lup[typ.Name] = ttyp
 		ttyp.Fields = make([]*Field, 0, len(typ.Fields)+len(typ.Embeddings))
@@ -40,6 +41,7 @@ func convert(types, refTypes typegen.Types, pkgName, pkgPath string) (*Types, er
 			union = new(UnionSpec)
 			union.Name = typ.Union.Name
 			union.Type = typ.Union.Type
+			union.SubPackage = subPkgName
 			ttypes.Unions = append(ttypes.Unions, union)
 			unions[typ.Union.Type] = union
 		}
@@ -158,15 +160,17 @@ type SingleUnionFile struct {
 func (f *SingleUnionFile) IsUnion() bool { return true }
 
 type UnionSpec struct {
-	Name    string
-	Type    string
-	Members []*Type
+	Name       string
+	Type       string
+	Members    []*Type
+	SubPackage string
 }
 
 type Type struct {
 	typegen.Type
-	Fields    []*Field
-	UnionSpec *UnionSpec
+	Fields     []*Field
+	SubPackage string
+	UnionSpec  *UnionSpec
 }
 
 type Field struct {

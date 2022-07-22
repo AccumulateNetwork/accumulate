@@ -8,17 +8,19 @@ import (
 	"gopkg.in/yaml.v3"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 var flags struct {
-	Package  string
-	Language string
-	Out      string
+	Package    string
+	SubPackage string
+	Language   string
+	Out        string
 }
 
 func run(_ *cobra.Command, args []string) {
 	api := readFile(args[0])
-	tapi := convert(api)
+	tapi := convert(api, flags.SubPackage)
 
 	generateJava(tapi)
 	//w := new(bytes.Buffer)
@@ -29,8 +31,8 @@ func run(_ *cobra.Command, args []string) {
 func generateJava(tapi *TApi) {
 	w := new(bytes.Buffer)
 	dir, _ := filepath.Split(flags.Out)
-	filename := dir + "/RPCMethod.java"
-	check(Templates.Execute(w, flags.Language, tapi)) // FIXME is not finished but could make it work for now
+	filename := strings.Replace(dir, "{{.SubPackage}}", flags.SubPackage, 1) + "/RPCMethod.java" // FIXME
+	check(Templates.Execute(w, flags.Language, tapi))                                            // FIXME is not finished but could make it work for now
 	check(typegen.WriteFile(filename, w))
 }
 
@@ -57,6 +59,7 @@ func main() {
 
 	cmd.Flags().StringVarP(&flags.Language, "language", "l", "Go", "Output language or template file")
 	cmd.Flags().StringVar(&flags.Package, "package", "protocol", "Package name")
+	cmd.Flags().StringVar(&flags.SubPackage, "subpackage", "", "Package name")
 	cmd.Flags().StringVarP(&flags.Out, "out", "o", "api_gen.go", "Output file")
 
 	_ = cmd.Execute()

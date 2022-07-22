@@ -14,6 +14,7 @@ var flags struct {
 	files typegen.FileReader
 
 	Package     string
+	SubPackage  string
 	Language    string
 	Out         string
 	FilePerType bool
@@ -28,6 +29,7 @@ func main() {
 
 	cmd.Flags().StringVarP(&flags.Language, "language", "l", "Go", "Output language or template file")
 	cmd.Flags().StringVar(&flags.Package, "package", "protocol", "Package name")
+	cmd.Flags().StringVar(&flags.SubPackage, "subpackage", "", "Package name")
 	cmd.Flags().StringVarP(&flags.Out, "out", "o", "enums_gen.go", "Output file")
 	cmd.Flags().BoolVar(&flags.FilePerType, "file-per-type", false, "Generate a separate file for each type")
 	flags.files.SetFlags(cmd.Flags(), "enums")
@@ -60,7 +62,7 @@ func run(_ *cobra.Command, args []string) {
 
 	types, err := flags.files.ReadMap(args, reflect.TypeOf((map[string]typegen.Enum)(nil)))
 	check(err)
-	ttypes := convert(types.(map[string]typegen.Enum), flags.Package)
+	ttypes := convert(types.(map[string]typegen.Enum), flags.Package, flags.SubPackage)
 
 	if !flags.FilePerType {
 		w := new(bytes.Buffer)
