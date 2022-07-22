@@ -18,7 +18,6 @@ import (
 	tmjson "github.com/tendermint/tendermint/libs/json"
 	"github.com/tendermint/tendermint/privval"
 	"github.com/tyler-smith/go-bip32"
-	"github.com/tyler-smith/go-bip39"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/db"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -50,8 +49,6 @@ var keyCmd = &cobra.Command{
 			case "import":
 				if len(args) == 3 {
 					switch args[1] {
-					// case "mnemonic":
-					// 	out, err = ImportMnemonic(args[2:])
 					case "private":
 						// log.Panicln(args)
 						out, err = ImportKeyPrompt(cmd, args[2], sigType)
@@ -67,8 +64,6 @@ var keyCmd = &cobra.Command{
 					}
 				} else if len(args) > 3 {
 					switch args[1] {
-					case "mnemonic":
-						out, err = ImportMnemonic(args[2:])
 					case "private":
 						out, err = ImportKeyPrompt(cmd, args[2], sigType)
 					case "public":
@@ -659,34 +654,6 @@ func lookupSeed() (seed []byte, err error) {
 	}
 
 	return seed, nil
-}
-
-func ImportMnemonic(mnemonic []string) (string, error) {
-	mns := strings.Join(mnemonic, " ")
-
-	if !bip39.IsMnemonicValid(mns) {
-		return "", fmt.Errorf("invalid mnemonic provided")
-	}
-
-	// Generate a Bip32 HD wallet for the mnemonic and a user supplied password
-	seed := bip39.NewSeed(mns, "")
-
-	root, _ := GetWallet().Get(BucketMnemonic, []byte("seed"))
-	if len(root) != 0 {
-		return "", fmt.Errorf("mnemonic seed phrase already exists within wallet")
-	}
-
-	err := GetWallet().Put(BucketMnemonic, []byte("seed"), seed)
-	if err != nil {
-		return "", fmt.Errorf("DB: seed write error, %v", err)
-	}
-
-	err = GetWallet().Put(BucketMnemonic, []byte("phrase"), []byte(mns))
-	if err != nil {
-		return "", fmt.Errorf("DB: phrase write error %s", err)
-	}
-
-	return "mnemonic import successful", nil
 }
 
 func ExportKeys() (out string, err error) {
