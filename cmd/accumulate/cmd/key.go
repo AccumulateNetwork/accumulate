@@ -30,7 +30,35 @@ func init() {
 	keyCmd.Flags().StringVar(&SigType, "sigtype", "ed25519", "Specify the signature type use rcd1 for RCD1 type ; ed25519 for ED25519 ; legacyed25519 for LegacyED25519 ; btc for Bitcoin ; btclegacy for Legacy Bitcoin  ; eth for Ethereum ")
 }
 
-var keyImportCmd = &cobra.Command{}
+var keyImportCmd = &cobra.Command{
+	Use:   "import",
+	Short: "Import private key from hex or factoid secret address",
+	Run: func(cmd *cobra.Command, args []string) {
+		fmt.Println("Usage:")
+		PrintKey()
+	},
+}
+
+var keyImportPrivateCmd = &cobra.Command{
+	Use:   "private [key name/label]",
+	Short: "Import private key in hex from terminal input",
+	Run: func(cmd *cobra.Command, args []string) {
+		var out string
+		var err error
+		var sigType protocol.SignatureType
+		var found bool
+		if SigType != "" {
+			sigType, found = protocol.SignatureTypeByName(SigType)
+			if !found {
+				err = fmt.Errorf("unknown signature type %s", SigType)
+			}
+		}
+		if err != nil {
+			out, err = ImportKeyPrompt(cmd, args[0], sigType)
+		}
+		printOutput(cmd, out, err)
+	},
+}
 
 var keyCmd = &cobra.Command{
 	Use:   "key",
@@ -55,13 +83,6 @@ var keyCmd = &cobra.Command{
 					case "private":
 						// with label
 						out, err = ImportKeyPrompt(cmd, args[2], sigType)
-					case "public":
-						//reserved for future use.
-						fallthrough
-					case "lite":
-						out, err = ImportKeyPrompt(cmd, "", sigType)
-					case "factoid":
-						out, err = ImportFactoidKey(cmd)
 					default:
 						PrintKeyImport()
 					}
