@@ -13,6 +13,7 @@ import (
 var faucetCmd = &cobra.Command{
 	Use:   "faucet",
 	Short: "Get tokens from faucet",
+	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		var out string
 		var err error

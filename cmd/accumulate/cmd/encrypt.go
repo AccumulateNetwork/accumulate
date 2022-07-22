@@ -15,6 +15,7 @@ import (
 var encryptCmd = &cobra.Command{
 	Use:   "encrypt",
 	Short: "encrypt the database",
+	Args:  cobra.ExactArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
 		var out string
 		var err error
