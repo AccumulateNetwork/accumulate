@@ -188,6 +188,9 @@ func IsLiteTokenAccount(urlstr string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	if strings.Contains(u.Hostname(), ".") {
+		return false, nil
+	}
 	key, _, err := protocol.ParseLiteTokenAddress(u)
 	if err != nil {
 		return false, fmt.Errorf("invalid lite token address : %s", u.String())
@@ -199,6 +202,9 @@ func IsLiteIdentity(urlstr string) (bool, error) {
 	u, err := url.Parse(strings.Trim(urlstr, " "))
 	if err != nil {
 		return false, err
+	}
+	if strings.Contains(u.Hostname(), ".") {
+		return false, nil
 	}
 	key, err := protocol.ParseLiteIdentity(u)
 	if err != nil {
