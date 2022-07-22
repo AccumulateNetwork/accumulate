@@ -83,7 +83,10 @@ func prepareSigner(origin *url.URL, args []string) ([]string, []*signing.Builder
 		}
 
 	} else {
-		isLiteIdentity, _ := IsLiteIdentity(origin.String())
+		isLiteIdentity, err := IsLiteIdentity(origin.String())
+		if err != nil {
+			return nil, nil, err
+		}
 		if isLiteIdentity {
 			key, err = LookupByLiteIdentityUrl(origin.String())
 			if err != nil {
@@ -181,25 +184,25 @@ func parseArgsAndPrepareSigner(args []string) ([]string, *url.URL, []*signing.Bu
 }
 
 func IsLiteTokenAccount(urlstr string) (bool, error) {
-	u, err := url.Parse(urlstr)
+	u, err := url.Parse(strings.Trim(urlstr, " "))
 	if err != nil {
 		return false, err
 	}
 	key, _, err := protocol.ParseLiteTokenAddress(u)
 	if err != nil {
-		return false, fmt.Errorf("invalid lite token address")
+		return false, fmt.Errorf("invalid lite token address : %s", u.String())
 	}
 	return key != nil, nil
 }
 
 func IsLiteIdentity(urlstr string) (bool, error) {
-	u, err := url.Parse(urlstr)
+	u, err := url.Parse(strings.Trim(urlstr, " "))
 	if err != nil {
 		return false, err
 	}
 	key, err := protocol.ParseLiteIdentity(u)
 	if err != nil {
-		return false, fmt.Errorf("invalid lite identity")
+		return false, fmt.Errorf("invalid lite identity : %s", u.String())
 	}
 	return key != nil, nil
 }
