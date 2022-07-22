@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"net/url"
 	"strconv"
 
 	"github.com/spf13/cobra"
@@ -247,7 +246,7 @@ func KeyPageUpdate(origin string, op protocol.KeyPageOperationType, args []strin
 }
 
 func ReplaceKey(args []string) (string, error) {
-	principal, err := url.Parse(args[0])
+	principal, err := url2.Parse(args[0])
 	if err != nil {
 		return "", err
 	}

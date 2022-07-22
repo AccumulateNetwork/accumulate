@@ -9,12 +9,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/labstack/gommon/log"
 	"io/ioutil"
 	"strconv"
 	"strings"
 
 	"github.com/howeyc/gopass"
+	"github.com/labstack/gommon/log"
 	"github.com/spf13/cobra"
 	tmjson "github.com/tendermint/tendermint/libs/json"
 	"github.com/tendermint/tendermint/privval"
@@ -855,4 +855,3 @@ func UpdateKey(args []string) (string, error) {
 	log.Warn("'accumulate key update' is deprecated, use 'accumulate page key replace' instead")
 	return ReplaceKey(args)
 }
-
