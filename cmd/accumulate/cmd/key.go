@@ -42,6 +42,7 @@ var keyImportCmd = &cobra.Command{
 var keyImportPrivateCmd = &cobra.Command{
 	Use:   "private [key name/label]",
 	Short: "Import private key in hex from terminal input",
+	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		var out string
 		var err error
@@ -60,6 +61,25 @@ var keyImportPrivateCmd = &cobra.Command{
 	},
 }
 
+var keyImportFactoidCmd = &cobra.Command{
+	Use:   "factoid",
+	Short: "Import secret factoid key from terminal input",
+	Args:  cobra.ExactArgs(0),
+	Run: func(cmd *cobra.Command, args []string) {
+		out, err := ImportFactoidKey(cmd)
+		printOutput(cmd, out, err)
+	},
+}
+
+var keyImportMnemonicCmd = &cobra.Command{
+	Use:   "mnemonic [12 word mnemonic phrase]",
+	Short: "Import secret bip39 mnemonic phrase from command line",
+	Args:  cobra.MinimumNArgs(12),
+	Run: func(cmd *cobra.Command, args []string) {
+		out, err := ImportMnemonic(args)
+		printOutput(cmd, out, err)
+	},
+}
 var keyCmd = &cobra.Command{
 	Use:   "key",
 	Short: "Create and manage Keys for ADI Key Books, and Pages",
