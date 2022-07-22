@@ -15,6 +15,7 @@ import (
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	errors2 "gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	url2 "gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -326,6 +327,11 @@ func PrintMultiResponse(res *api.MultiResponse) (string, error) {
 
 //nolint:gosimple
 func outputForHumans(res *QueryResponse) (string, error) {
+	out, err := outputForHumansSystem(res)
+	if out != "" || err != nil {
+		return out, err
+	}
+
 	switch string(res.Type) {
 	case protocol.AccountTypeLiteTokenAccount.String():
 		ata := protocol.LiteTokenAccount{}
@@ -483,6 +489,47 @@ func outputForHumans(res *QueryResponse) (string, error) {
 	default:
 		return printReflection("", "", reflect.ValueOf(res.Data)), nil
 	}
+}
+
+func outputForHumansSystem(res *QueryResponse) (string, error) {
+	if res.Type != protocol.AccountTypeDataAccount.String() {
+		return "", nil
+	}
+
+	account := protocol.DataAccount{}
+	err := Remarshal(res.Data, &account)
+	if err != nil {
+		return "", err
+	}
+
+	_, ok := protocol.ParsePartitionUrl(account.GetUrl())
+	if !ok {
+		return "", nil
+	}
+
+	var v encoding.BinaryValue
+	switch strings.Trim(account.GetUrl().Path, "/") {
+	case protocol.Network:
+		v = new(protocol.NetworkDefinition)
+	case protocol.Oracle:
+		v = new(protocol.AcmeOracle)
+	case protocol.Globals:
+		v = new(protocol.NetworkGlobals)
+	case protocol.Routing:
+		v = new(protocol.RoutingTable)
+	default:
+		return "", nil
+	}
+
+	err = v.UnmarshalBinary(account.Entry.GetData()[0])
+	if err != nil {
+		return "", err
+	}
+
+	return printReflection("", "", reflect.ValueOf(&struct {
+		Url   *url2.URL
+		Value interface{}
+	}{account.GetUrl(), v})), nil
 }
 
 func outputForHumansTx(res *api.TransactionQueryResponse) (string, error) {
