@@ -94,7 +94,7 @@ var accountCreateTokenCmd = &cobra.Command{
 var accountCreateDataCmd = &cobra.Command{
 	Use:   "data",
 	Short: "Create a data account",
-	Args:  cobra.RangeArgs(1, 3),
+	Args:  cobra.RangeArgs(1, 4),
 	Run: func(cmd *cobra.Command, args []string) {
 		var out string
 		var err error
