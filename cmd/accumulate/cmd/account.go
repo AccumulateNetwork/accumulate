@@ -578,6 +578,7 @@ func RestoreAccounts() (out string, err error) {
 				}
 			}
 		} else {
+			log.Println("have a legacy bucket so moving to the new one")
 			//we have some old data in the bucket, so move it to the new bucket.
 			common.BytesUint64(sigTypeData)
 			kt, err := encoding.UvarintUnmarshalBinary(sigTypeData)
@@ -585,7 +586,7 @@ func RestoreAccounts() (out string, err error) {
 				return "", err
 			}
 
-			k.KeyInfo.Type = protocol.SignatureType(kt)
+			k.KeyInfo.Type.SetEnumValue(kt)
 			k.KeyInfo.Derivation = "external"
 
 			//add the default key type
