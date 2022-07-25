@@ -34,6 +34,7 @@ const (
 // ABCIClient is a subset of from TM/rpc/client.ABCIClient.
 type ABCIClient interface {
 	ABCIQueryWithOptions(ctx context.Context, path string, data bytes.HexBytes, opts client.ABCIQueryOptions) (*core.ResultABCIQuery, error)
+	ABCIInfo(ctx context.Context) (*core.ResultABCIInfo, error)
 	CheckTx(ctx context.Context, tx tm.Tx) (*core.ResultCheckTx, error)
 	BroadcastTxAsync(context.Context, tm.Tx) (*core.ResultBroadcastTx, error)
 	BroadcastTxSync(context.Context, tm.Tx) (*core.ResultBroadcastTx, error)

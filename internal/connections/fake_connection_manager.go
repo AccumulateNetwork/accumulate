@@ -4,7 +4,6 @@ import (
 	"github.com/tendermint/tendermint/rpc/client/local"
 )
 
-
 type fakeConnectionManager struct {
 	ctxMap map[string]ConnectionContext
 }

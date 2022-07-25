@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	stdlog "log"
 	"mime"
@@ -109,34 +108,66 @@ func (m *JrpcMethods) jrpc2http(jrpc jsonrpc2.MethodFunc) http.HandlerFunc {
 }
 
 func (m *JrpcMethods) Status(c context.Context, params json.RawMessage) interface{} {
-	tmclient := m.Router.GetLocalClient()
+
+	ctx, err := m.ConnectionManager.SelectConnection(m.Options.Describe.PartitionId, true)
+	if err != nil {
+		return internalError(err)
+	}
+	tmclient := ctx.GetABCIClient()
+	apiclient := ctx.GetAPIClient()
+	req := new(GeneralQuery)
+	apiinfo := new(ChainQueryResponse)
+	anchorinfo := new(ChainQueryResponse)
+	ledgerurl := m.Options.Describe.Ledger()
+	anchorurl := m.Options.Describe.AnchorPool()
+	hash := new([32]byte)
+	roothash := new([32]byte)
+	var lastAnchor uint64
+	if err != nil {
+		return internalError(err)
+	}
+	req.Url = ledgerurl
+	req.Prove = true
+	req.Expand = true
+	err = apiclient.RequestAPIv2(context.Background(), "query", req, apiinfo)
+	if err != nil {
+		return internalError(err)
+	}
+	req.Url = anchorurl
+	err = apiclient.RequestAPIv2(context.Background(), "query", req, anchorinfo)
+	if err != nil {
+		return internalError(err)
+	}
 	tminfo, err := tmclient.ABCIInfo(c)
 	if err != nil {
-		fmt.Printf("error is %w", err)
 		return internalError(err)
 	}
-	hash := new([32]byte)
 	height := tminfo.Response.LastBlockHeight
-
-	if err != nil {
-		fmt.Printf("error is %w", err)
-		return internalError(err)
-	}
 	copy(hash[:], tminfo.Response.LastBlockAppHash)
-	if err != nil {
-		fmt.Printf("error is %w", err)
-		return internalError(err)
+	for _, chain := range apiinfo.Chains {
+		if chain.Name == "root" {
+			copy(roothash[:], []byte(chain.Roots[len(chain.Roots)-1]))
+		}
 	}
-	fmt.Printf("%v", tminfo.Response)
+
+	for _, chain := range anchorinfo.Chains {
+		if chain.Name == "anchor(directory)-root" {
+			lastAnchor = chain.Height
+		}
+	}
 	status := new(StatusResponse)
 	status.Ok = true
+
 	if m.Options.Describe.NetworkType == config.NetworkTypeDirectory {
 		status.DnHeight = uint64(height)
-		status.DnRootHash = *hash
+		status.DnBptHash = *hash
+		status.DnRootHash = *roothash
 		return status
 	}
 	status.BvnHeight = uint64(height)
-	status.BvnRootHash = *hash
+	status.BvnBptHash = *hash
+	status.BvnRootHash = *roothash
+	status.LastAnchorHeight = uint64(lastAnchor)
 	status.Ok = true
 	return status
 }

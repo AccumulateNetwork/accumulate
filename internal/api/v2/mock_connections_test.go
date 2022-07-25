@@ -41,6 +41,21 @@ func (m *MockABCIClient) EXPECT() *MockABCIClientMockRecorder {
 	return m.recorder
 }
 
+// ABCIInfo mocks base method.
+func (m *MockABCIClient) ABCIInfo(ctx context.Context) (*coretypes.ResultABCIInfo, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ABCIInfo", ctx)
+	ret0, _ := ret[0].(*coretypes.ResultABCIInfo)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ABCIInfo indicates an expected call of ABCIInfo.
+func (mr *MockABCIClientMockRecorder) ABCIInfo(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ABCIInfo", reflect.TypeOf((*MockABCIClient)(nil).ABCIInfo), ctx)
+}
+
 // ABCIQueryWithOptions mocks base method.
 func (m *MockABCIClient) ABCIQueryWithOptions(ctx context.Context, path string, data bytes.HexBytes, opts client.ABCIQueryOptions) (*coretypes.ResultABCIQuery, error) {
 	m.ctrl.T.Helper()

@@ -498,11 +498,15 @@ StatusResponse:
       type: uvarint
     - name: DnHeight
       type: uvarint
-    - name: LastAnchor
+    - name: LastAnchorHeight
       type: uvarint
     - name: BvnRootHash
       type: hash
     - name: DnRootHash
+      type: hash
+    - name: BvnBptHash
+      type: hash
+    - name: DnBptHash
       type: hash
 
 VersionResponse:

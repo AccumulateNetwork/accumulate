@@ -18,6 +18,7 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	protocrypto "github.com/tendermint/tendermint/proto/tendermint/crypto"
 	rpc "github.com/tendermint/tendermint/rpc/client"
+	core "github.com/tendermint/tendermint/rpc/coretypes"
 	ctypes "github.com/tendermint/tendermint/rpc/coretypes"
 	"github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
@@ -404,6 +405,14 @@ func (c *FakeTendermint) BroadcastTxSync(ctx context.Context, tx types.Tx) (*cty
 		MempoolError: st.CheckResult.MempoolError,
 		Hash:         st.Hash[:],
 	}, nil
+}
+
+func (c *FakeTendermint) ABCIInfo(ctx context.Context) (*core.ResultABCIInfo, error) {
+	req := new(abci.RequestInfo)
+	info := c.App().Info(*req)
+	res := new(core.ResultABCIInfo)
+	res.Response = info
+	return res, nil
 }
 
 func (c *FakeTendermint) logTxns(msg string, env ...*chain.Delivery) {
