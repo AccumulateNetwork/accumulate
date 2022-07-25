@@ -34,7 +34,7 @@ func (k *Key) PublicKeyHash() []byte {
 		return protocol.ETHhash(k.PublicKey)
 
 	default:
-		panic(fmt.Errorf("unsupported signature type %v", k.KeyInfo.Type))
+		panic(fmt.Errorf("cannot hash key for unsupported signature type %v(%d)", k.KeyInfo.Type, k.KeyInfo.Type.GetEnumValue()))
 	}
 }
 

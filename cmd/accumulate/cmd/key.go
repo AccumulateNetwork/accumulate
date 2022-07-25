@@ -71,7 +71,7 @@ var keyImportPrivateCmd = &cobra.Command{
 				err = fmt.Errorf("unknown signature type %s", SigType)
 			}
 		}
-		if err != nil {
+		if err == nil {
 			out, err = ImportKeyPrompt(cmd, args[0], sigType)
 		}
 		printOutput(cmd, out, err)
@@ -103,7 +103,7 @@ var keyImportLiteCmd = &cobra.Command{
 				err = fmt.Errorf("unknown signature type %s", SigType)
 			}
 		}
-		if err != nil {
+		if err == nil {
 			out, err = ImportKeyPrompt(cmd, "", sigType)
 		}
 		printOutput(cmd, out, err)
