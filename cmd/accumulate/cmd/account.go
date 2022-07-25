@@ -577,7 +577,7 @@ func RestoreAccounts() (out string, err error) {
 					return "", err
 				}
 			} else {
-				//we have key info, so assign it to key's key info make it fully formed
+				//we have key info, so assign it to key's key info
 				err = k.KeyInfo.UnmarshalBinary(kid)
 				if err != nil {
 					return "", err
