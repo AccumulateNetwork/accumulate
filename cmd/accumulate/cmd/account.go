@@ -559,7 +559,7 @@ func RestoreAccounts() (out string, err error) {
 			//we are an old wallet that supports only LegacyED25519 signature types
 
 			//first, test for 1)
-			_, err := GetWallet().Get(BucketKeyInfo, v.Value)
+			kid, err := GetWallet().Get(BucketKeyInfo, v.Value)
 			if err != nil {
 				log.Println("dont have a key bucket so making one")
 				//ok, so it is 2), wo we need to make the key info bucket
@@ -578,8 +578,11 @@ func RestoreAccounts() (out string, err error) {
 					return "", err
 				}
 			} else {
-
-				log.Printf("we appear to be golden, %v(%s, %d)", k.KeyInfo.Type, k.KeyInfo.Type.String(), k.KeyInfo.Type.GetEnumValue())
+				//we have key info, so assign it to make the key fully valid
+				err = k.KeyInfo.UnmarshalBinary(kid)
+				if err != nil {
+					return "", err
+				}
 			}
 		} else {
 			log.Println("have a legacy bucket so moving to the new one")
