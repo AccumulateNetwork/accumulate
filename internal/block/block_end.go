@@ -1,6 +1,7 @@
 package block
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"strings"
@@ -356,11 +357,32 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 			return
 		}
 
+		// Sanity check
+		if len(resp) != len(batch) {
+			x.logger.Error("Bad response to query-synth: the number of responses does not match the number of requests", "from", partition.Url, "want", len(batch), "got", len(resp))
+			return
+		}
+
 		// Broadcast each transaction locally
-		for _, resp := range resp {
+		for i, resp := range resp {
+			req := batch[i].Params.(*api.SyntheticTransactionRequest)
+
+			// Sanity check: the response includes a transaction
+			if resp.Transaction == nil {
+				x.logger.Error("Response to query-synth is missing the transaction", "from", partition.Url, "seq-num", req.SequenceNumber, "is-anchor", req.Anchor)
+				continue
+			}
+
 			// Put the synthetic signature first
-			var gotSynth, gotReceipt, gotKey bool
+			var gotSynth, gotReceipt, gotKey, bad bool
 			for i, signature := range resp.Signatures {
+				h := signature.GetTransactionHash()
+				if !bytes.Equal(h[:], resp.Transaction.GetHash()) {
+					x.logger.Error("Signature from query-synth does not match the transaction hash", "from", partition.Url, "seq-num", req.SequenceNumber, "is-anchor", req.Anchor, "hash", logging.AsHex(resp.Transaction.GetHash()).Slice(0, 4), "signature", signature)
+					bad = true
+					continue
+				}
+
 				switch signature.(type) {
 				case *protocol.PartitionSignature:
 					gotSynth = true
@@ -385,6 +407,10 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 			if len(missing) > 0 {
 				err := fmt.Errorf("missing %s signature(s)", strings.Join(missing, ", "))
 				x.logger.Error("Invalid synthetic transaction", "error", err, "hash", logging.AsHex(resp.Transaction.GetHash()).Slice(0, 4), "type", resp.Transaction.Body.Type())
+				bad = true
+			}
+
+			if bad {
 				continue
 			}
 
