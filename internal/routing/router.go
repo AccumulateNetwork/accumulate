@@ -36,7 +36,7 @@ type ResponseSubmit struct {
 }
 
 // submit calls the appropriate client method to submit a transaction.
-func submit(ctx context.Context, connMgr connections.ConnectionManager, partitionId string, tx []byte, async bool) (*ResponseSubmit, error) {
+func submit(ctx context.Context, logger log.Logger, connMgr connections.ConnectionManager, partitionId string, tx []byte, async bool) (*ResponseSubmit, error) {
 	var r1 *core.ResultBroadcastTx
 	errorCnt := 0
 	for {
@@ -45,6 +45,7 @@ func submit(ctx context.Context, connMgr connections.ConnectionManager, partitio
 			return nil, err
 		}
 
+		logger.Debug("Broadcasting a transaction", "partition", partitionId, "async", async, "address", connCtx.GetAddress(), "envelope", logging.AsHex(tx))
 		if async {
 			r1, err = connCtx.GetABCIClient().BroadcastTxAsync(ctx, tx)
 		} else {
@@ -68,7 +69,7 @@ func submit(ctx context.Context, connMgr connections.ConnectionManager, partitio
 	}
 }
 
-func submitPretend(ctx context.Context, connMgr connections.ConnectionManager, partition string, tx []byte) (*ResponseSubmit, error) {
+func submitPretend(ctx context.Context, logger log.Logger, connMgr connections.ConnectionManager, partition string, tx []byte) (*ResponseSubmit, error) {
 	var r1 *core.ResultCheckTx
 	errorCnt := 0
 	for {
@@ -76,6 +77,8 @@ func submitPretend(ctx context.Context, connMgr connections.ConnectionManager, p
 		if err != nil {
 			return nil, err
 		}
+
+		logger.Debug("Checking a transaction", "partition", partition, "address", connCtx.GetAddress(), "envelope", logging.AsHex(tx))
 		r1, err = connCtx.GetABCIClient().CheckTx(ctx, tx)
 		if err == nil {
 			r2 := new(ResponseSubmit)
@@ -266,8 +269,8 @@ func (r *RouterInstance) Submit(ctx context.Context, partitionId string, tx *pro
 		return nil, err
 	}
 	if pretend {
-		return submitPretend(ctx, r.connectionManager, partitionId, raw)
+		return submitPretend(ctx, r.logger, r.connectionManager, partitionId, raw)
 	} else {
-		return submit(ctx, r.connectionManager, partitionId, raw, async)
+		return submit(ctx, r.logger, r.connectionManager, partitionId, raw, async)
 	}
 }

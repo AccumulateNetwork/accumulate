@@ -278,6 +278,7 @@ func (cm *connectionManager) reformatAddress(address string) string {
 }
 
 func (cm *connectionManager) InitClients(lclClient *local.Local, statusChecker StatusChecker) error {
+	cm.logger.Debug("Initializing clients")
 	cm.localClient = lclClient
 
 	for _, connCtxList := range cm.bvnCtxMap {
