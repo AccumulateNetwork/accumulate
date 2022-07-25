@@ -4,6 +4,7 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"fmt"
+	"runtime/debug"
 
 	btc "github.com/btcsuite/btcd/btcec"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -34,6 +35,7 @@ func (k *Key) PublicKeyHash() []byte {
 		return protocol.ETHhash(k.PublicKey)
 
 	default:
+		debug.PrintStack()
 		panic(fmt.Errorf("cannot hash key for unsupported signature type %v(%d)", k.KeyInfo.Type, k.KeyInfo.Type.GetEnumValue()))
 	}
 }
