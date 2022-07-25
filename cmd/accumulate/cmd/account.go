@@ -578,14 +578,13 @@ func RestoreAccounts() (out string, err error) {
 					return "", err
 				}
 			} else {
-				//we have key info, so assign it to make the key fully valid
+				//we have key info, so assign it to key info make the key fully valid
 				err = k.KeyInfo.UnmarshalBinary(kid)
 				if err != nil {
 					return "", err
 				}
 			}
 		} else {
-			log.Println("have a legacy bucket so moving to the new one")
 			//we have some old data in the bucket, so move it to the new bucket.
 			common.BytesUint64(sigTypeData)
 			kt, err := encoding.UvarintUnmarshalBinary(sigTypeData)
