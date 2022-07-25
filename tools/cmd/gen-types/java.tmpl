@@ -94,8 +94,8 @@ public class {{safeClassName .Name}}{{
 	{{-     if eq (resolveType .) "byte[]"}}
 	public {{.ParentTypeName}} {{lcName .Name}}(final String value) {
 		try {
-			set{{.Name}}(org.apache.commons.codec.binary.Hex.decodeHex(value));
-		} catch (org.apache.commons.codec.DecoderException e) {
+			set{{.Name}}(io.accumulatenetwork.sdk.commons.codec.binary.Hex.decodeHex(value));
+		} catch (io.accumulatenetwork.sdk.commons.codec.DecoderException e) {
 			throw new RuntimeException(e);
 		}
 	    return this;
