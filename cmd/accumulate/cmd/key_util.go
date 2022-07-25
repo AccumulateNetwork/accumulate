@@ -39,6 +39,10 @@ func (k *Key) PublicKeyHash() []byte {
 }
 
 func (k *Key) Save(label, liteLabel string) error {
+	if k.KeyInfo.Type == protocol.SignatureTypeUnknown {
+		return fmt.Errorf("signature type is was not specified")
+	}
+
 	err := GetWallet().Put(BucketKeys, k.PublicKey, k.PrivateKey)
 	if err != nil {
 		return err

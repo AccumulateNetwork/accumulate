@@ -414,12 +414,10 @@ func GenerateKey(label string) (string, error) {
 	} else if sigtype == protocol.SignatureTypeBTC {
 		privKey, pubKey = protocol.SECP256K1Keypair()
 	} else {
-
 		privKey, err = GeneratePrivateKey()
 		if err != nil {
 			return "", err
 		}
-
 		pubKey = privKey[32:]
 	}
 
