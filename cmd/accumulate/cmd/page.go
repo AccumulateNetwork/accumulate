@@ -21,6 +21,7 @@ func init() {
 	pageKeyCmd.AddCommand(
 		pageKeyAddCmd,
 		pageKeyUpdateCmd,
+		pageKeyReplaceCmd,
 		pageKeyRemoveCmd)
 
 }
