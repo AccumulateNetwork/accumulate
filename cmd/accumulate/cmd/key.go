@@ -14,7 +14,6 @@ import (
 	"strings"
 
 	"github.com/howeyc/gopass"
-	"github.com/labstack/gommon/log"
 	"github.com/spf13/cobra"
 	tmjson "github.com/tendermint/tendermint/libs/json"
 	"github.com/tendermint/tendermint/privval"
@@ -35,8 +34,6 @@ func init() {
 	keyExportCmd.AddCommand(keyExportMnemonicCmd)
 	keyExportCmd.AddCommand(keyExportAllCmd)
 	keyExportCmd.AddCommand(keyExportSeedCmd)
-
-	keyCmd.AddCommand(keyUpdateCmd) //deprecated, moved to 'page key replace'
 
 	keyCmd.AddCommand(keyImportCmd)
 	keyCmd.AddCommand(keyExportCmd)
@@ -195,13 +192,6 @@ var keyCmd = &cobra.Command{
 		fmt.Println("Usage:")
 		PrintKey()
 	},
-}
-
-var keyUpdateCmd = &cobra.Command{
-	Use:   "update [key page url] [key name[@key book or page]] [new key name]",
-	Short: "Self-update a key",
-	Args:  cobra.RangeArgs(3, 5),
-	Run:   runCmdFunc(UpdateKey),
 }
 
 type KeyResponse struct {
@@ -852,9 +842,4 @@ func ImportFactoidKey(cmd *cobra.Command) (out string, err error) {
 		return "", err
 	}
 	return ImportKey(privatekey, label, protocol.SignatureTypeRCD1)
-}
-
-func UpdateKey(args []string) (string, error) {
-	log.Warn("'accumulate key update' is deprecated, use 'accumulate page key replace' instead")
-	return ReplaceKey(args)
 }
