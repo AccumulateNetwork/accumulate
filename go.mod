@@ -50,6 +50,7 @@ require (
 	github.com/ghodss/yaml v1.0.0
 	github.com/gorhill/cronexpr v0.0.0-20180427100037-88b0669f7d75
 	github.com/labstack/gommon v0.3.0
+	github.com/pdrum/swagger-automation v0.0.0-20190629163613-c8c7c80ba858
 )
 
 require (
@@ -62,6 +63,7 @@ require (
 	github.com/FactomProject/netki-go-partner-client v0.0.0-20160324224126-426acb535e66 // indirect
 	github.com/GaijinEntertainment/go-exhaustruct/v2 v2.2.0 // indirect
 	github.com/firefart/nonamedreturns v1.0.4 // indirect
+	github.com/labstack/echo v3.3.10+incompatible // indirect
 	github.com/lufeee/execinquery v1.2.1 // indirect
 	github.com/pelletier/go-toml/v2 v2.0.2 // indirect
 	github.com/quasilyte/stdinfo v0.0.0-20220114132959-f7386bf02567 // indirect
