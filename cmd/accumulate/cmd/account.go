@@ -579,7 +579,7 @@ func RestoreAccounts() (out string, err error) {
 				}
 			} else {
 
-				log.Println("we appear to be golden")
+				log.Printf("we appear to be golden, %v(%s, %d)", k.KeyInfo.Type, k.KeyInfo.Type.String(), k.KeyInfo.Type.GetEnumValue())
 			}
 		} else {
 			log.Println("have a legacy bucket so moving to the new one")
