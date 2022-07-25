@@ -18,6 +18,7 @@ import (
 var getCmd = &cobra.Command{
 	Use:   "get",
 	Short: "Get data by URL",
+	Args:  cobra.OnlyValidArgs,
 	Run: func(cmd *cobra.Command, args []string) {
 		var out string
 		var err error

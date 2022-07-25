@@ -33,6 +33,7 @@ func init() {
 var keyCmd = &cobra.Command{
 	Use:   "key",
 	Short: "Create and manage Keys for ADI Key Books, and Pages",
+	Args:  cobra.OnlyValidArgs,
 	Run: func(cmd *cobra.Command, args []string) {
 		var out string
 		var err error
