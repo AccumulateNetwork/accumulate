@@ -561,7 +561,6 @@ func RestoreAccounts() (out string, err error) {
 			//first, test for 1)
 			kid, err := GetWallet().Get(BucketKeyInfo, v.Value)
 			if err != nil {
-				log.Println("dont have a key bucket so making one")
 				//ok, so it is 2), wo we need to make the key info bucket
 				k.KeyInfo.Type = protocol.SignatureTypeLegacyED25519
 				k.KeyInfo.Derivation = "external"
@@ -578,7 +577,7 @@ func RestoreAccounts() (out string, err error) {
 					return "", err
 				}
 			} else {
-				//we have key info, so assign it to key info make the key fully valid
+				//we have key info, so assign it to key's key info make it fully formed
 				err = k.KeyInfo.UnmarshalBinary(kid)
 				if err != nil {
 					return "", err
