@@ -7,10 +7,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// version represents the faucet command
+// versionCmd represents the version command
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "get version of the accumulate node",
+	Args:  cobra.NoArgs,
 	Run: func(cmd *cobra.Command, _ []string) {
 		out, err := GetVersion()
 		printOutput(cmd, out, err)
@@ -35,6 +36,7 @@ func GetVersion() (string, error) {
 var describeCmd = &cobra.Command{
 	Use:   "describe",
 	Short: "describe the accumulate node",
+	Args:  cobra.NoArgs,
 	Run: func(cmd *cobra.Command, _ []string) {
 		out, err := describe()
 		printOutput(cmd, out, err)
