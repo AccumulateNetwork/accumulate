@@ -119,7 +119,7 @@ var keyListCmd = &cobra.Command{
 var keyImportMnemonicCmd = &cobra.Command{
 	Use:   "mnemonic [12 word mnemonic phrase]",
 	Short: "Import secret bip39 mnemonic phrase from command line",
-	Args:  cobra.MinimumNArgs(12),
+	Args:  cobra.ExactArgs(12),
 	Run: func(cmd *cobra.Command, args []string) {
 		out, err := ImportMnemonic(args)
 		printOutput(cmd, out, err)
@@ -169,7 +169,7 @@ var keyExportPrivateCmd = &cobra.Command{
 var keyExportCmd = &cobra.Command{
 	Use:   "export",
 	Short: "export wallet private data and accounts",
-	Args:  cobra.MinimumNArgs(1),
+	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		PrintKeyExport()
 	},
@@ -188,6 +188,7 @@ var keyGenerateCmd = &cobra.Command{
 var keyCmd = &cobra.Command{
 	Use:   "key",
 	Short: "Create and manage Keys for ADI Key Books, and Pages",
+	Args:  cobra.OnlyValidArgs,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("Usage:")
 		PrintKey()

@@ -12,6 +12,7 @@ import (
 var oracleCmd = &cobra.Command{
 	Use:   "oracle",
 	Short: "Send credits to a recipient",
+	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		var out string
 		var err error
