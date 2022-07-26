@@ -27,7 +27,7 @@ var cmdInitDualNode = &cobra.Command{
 
 func setFlagsForInit() error {
 	var err error
-	if flagInitNode.PublicIP == "" {
+	if flagInitDualNode.PublicIP == "" {
 		flagInitNode.PublicIP, err = resolvePublicIp()
 		if err != nil {
 			return fmt.Errorf("cannot resolve public ip address, %v", err)
