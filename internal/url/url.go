@@ -72,6 +72,41 @@ func splitColon(s string) (string, string) {
 	return t[0], t[1]
 }
 
+// WithUserInfo creates a copy of the URL with UserInfo set to the given value.
+func (u *URL) WithUserInfo(s string) *URL {
+	v := u.copy()
+	v.UserInfo = s
+	return v
+}
+
+// WithAuthority creates a copy of the URL with Authority set to the given value.
+func (u *URL) WithAuthority(s string) *URL {
+	v := u.copy()
+	v.Authority = s
+	return v
+}
+
+// WithPath creates a copy of the URL with Path set to the given value.
+func (u *URL) WithPath(s string) *URL {
+	v := u.copy()
+	v.Path = s
+	return v
+}
+
+// WithQuery creates a copy of the URL with Query set to the given value.
+func (u *URL) WithQuery(s string) *URL {
+	v := u.copy()
+	v.Query = s
+	return v
+}
+
+// WithFragment creates a copy of the URL with Fragment set to the given value.
+func (u *URL) WithFragment(s string) *URL {
+	v := u.copy()
+	v.Fragment = s
+	return v
+}
+
 // URL returns a net/url.URL.
 func (u *URL) URL() *url.URL {
 	v := new(url.URL)
@@ -350,13 +385,6 @@ func (u *URL) JoinPath(s ...string) *URL {
 		v.Path = "/"
 	}
 	v.Path = path.Join(append([]string{v.Path}, s...)...)
-	return v
-}
-
-// WithFragment returns a copy of U with the fragment set.
-func (u *URL) WithFragment(s string) *URL {
-	v := u.copy()
-	v.Fragment = s
 	return v
 }
 

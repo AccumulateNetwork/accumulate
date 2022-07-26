@@ -48,7 +48,7 @@ func (u *URL) AsTxID() (*TxID, error) {
 		return nil, invalidHash(u, "wrong length")
 	}
 
-	u.UserInfo = ""
+	u = u.WithUserInfo("")
 	return &TxID{u, *(*[32]byte)(hash)}, nil
 }
 

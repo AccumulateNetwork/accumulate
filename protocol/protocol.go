@@ -121,13 +121,11 @@ const CreditUnitsPerFiatUnit = CreditsPerDollar * CreditPrecision
 // The rules for generating the authority of a lite data chain are
 // the same as the address for a Lite Token Account
 func LiteDataAddress(chainId []byte) (*url.URL, error) {
-	liteUrl := new(url.URL)
 	if len(chainId) < 32 {
 		return nil, errors.New("chainId for LiteDataAddress must be 32 bytes in length")
 	}
 	keyStr := hex.EncodeToString(chainId[:32])
-	liteUrl.Authority = keyStr
-	return liteUrl, nil
+	return &url.URL{Authority: keyStr}, nil
 }
 
 // ParseLiteAddress parses the hostname as a hex string and verifies its
@@ -251,19 +249,17 @@ func LiteTokenAddressFromHash(pubKeyHash []byte, tokenUrlStr string) (*url.URL, 
 		return nil, errors.New("token URLs cannot include a fragment")
 	}
 
-	liteUrl := LiteAuthorityForHash(pubKeyHash)
-	liteUrl.Path = fmt.Sprintf("/%s%s", tokenUrl.Authority, tokenUrl.Path)
+	liteUrl := LiteAuthorityForHash(pubKeyHash).
+		WithPath(fmt.Sprintf("/%s%s", tokenUrl.Authority, tokenUrl.Path))
 
 	return liteUrl, nil
 }
 
 func LiteAuthorityForHash(pubKeyHash []byte) *url.URL {
-	liteUrl := new(url.URL)
 	keyStr := fmt.Sprintf("%x", pubKeyHash[:20])
 	checkSum := sha256.Sum256([]byte(keyStr))
 	checkStr := fmt.Sprintf("%x", checkSum[28:])
-	liteUrl.Authority = keyStr + checkStr
-	return liteUrl
+	return &url.URL{Authority: keyStr + checkStr}
 }
 
 func LiteAuthorityForKey(pubKey []byte, signatureType SignatureType) *url.URL {
@@ -325,16 +321,15 @@ func ParseLiteTokenAddress(u *url.URL) ([]byte, *url.URL, error) {
 		return nil, nil, nil
 	}
 
-	v := new(url.URL)
 	i := strings.IndexRune(u.Path[1:], '/')
+	var v *url.URL
 	if i >= 0 {
 		i++
-		v.Authority = u.Path[1:i]
-		v.Path = u.Path[i:]
+		v = &url.URL{Authority: u.Path[1:i], Path: u.Path[i:]}
 	} else if u.Path[0] == '/' {
-		v.Authority = u.Path[1:]
+		v = &url.URL{Authority: u.Path[1:]}
 	} else {
-		v.Authority = u.Path
+		v = &url.URL{Authority: u.Path}
 	}
 	return b[:20], v, nil
 }
