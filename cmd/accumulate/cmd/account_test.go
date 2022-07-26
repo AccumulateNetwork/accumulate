@@ -17,6 +17,7 @@ func init() {
 	testMatrix.addTest(testCase3_1)
 	testMatrix.addTest(testCase3_2)
 	testMatrix.addTest(testCase3_3)
+	testMatrix.addTest(testCase3_4)
 }
 
 //testCase1_1 Generate 100 lite account addresses in cli
@@ -63,6 +64,17 @@ func testCase3_2(t *testing.T, tc *testCmd) {
 func testCase3_3(t *testing.T, tc *testCmd) {
 
 	r, err := tc.execute(t, "account create token acc://RedWagon.acme red1 acc://RedWagon.acme/acmeacct acc://factoid.acme acc://RedWagon.acme/book")
+	require.Error(t, err)
+
+	t.Log(r)
+
+}
+
+//unitTest3_4
+//Credit amount with invalid lite address as sender, should fail
+func testCase3_4(t *testing.T, tc *testCmd) {
+
+	r, err := tc.execute(t, "accumulate credits acc://1a2d4a07f9cc525b43a63d8d89e32adca1194bc6e3bc4984 acc://ADIdoesntexist.acme 100")
 	require.Error(t, err)
 
 	t.Log(r)
