@@ -199,50 +199,6 @@ func initDB(defaultWorkDir string, memDb bool) db.DB {
 		ret = new(db.BoltDB)
 	}
 
-	res, err := promptGetMnemonicOption()
-	if err != nil {
-		log.Fatal(err)
-	}
-	switch res {
-	case "1":
-		entropy := make([]byte, 128)
-		_, err := rand.Read(entropy)
-		if err != nil {
-			log.Fatal(err)
-		}
-		_, err = bip39.NewMnemonic(entropy)
-		if err != nil {
-			log.Fatal(err)
-		}
-		mnemonicBytes, err := gopass.GetPasswdPrompt("Please write down your mnemonic phrase and press <enter> when done.", false, os.Stdin, os.Stderr)
-		if err != nil {
-			log.Fatal(err)
-		}
-		mnemonicBytesConfirm, err := gopass.GetPasswdPrompt("\rPlease re-enter the mnemonic phrase.", false, os.Stdin, os.Stderr)
-		if err != nil {
-			log.Fatal(err)
-		}
-		if string(mnemonicBytes) != string(mnemonicBytesConfirm) {
-			log.Fatal("mnemonic doesn't match.")
-		}
-		mnemonic := strings.Split(string(mnemonicBytes), " ")
-		_, err = ImportMnemonic(mnemonic)
-		if err != nil {
-			log.Fatal(err)
-		}
-	case "2":
-		mnemonicBytes, err := gopass.GetPasswdPrompt("Enter Mnemonic: ", false, os.Stdin, os.Stderr)
-		if err != nil {
-			log.Fatal(err)
-		}
-		mnemonic := strings.Split(string(mnemonicBytes), " ")
-		_, err = ImportMnemonic(mnemonic)
-		if err != nil {
-			log.Fatal(err)
-		}
-	default:
-		log.Fatal("invalid mnemonic option selected.")
-	}
 	//search for encrypted database first (this is the default)
 	databaseName := filepath.Join(defaultWorkDir, "wallet_encrypted.db")
 	if _, err := os.Stat(databaseName); errors.Is(err, os.ErrNotExist) || UseUnencryptedWallet {
@@ -252,6 +208,52 @@ func initDB(defaultWorkDir string, memDb bool) db.DB {
 		if _, err = os.Stat(databaseName); errors.Is(err, os.ErrNotExist) && !UseUnencryptedWallet {
 			//no databases exist, so create a new encrypted database unless the user wanted an unencrypted one
 			databaseName = filepath.Join(defaultWorkDir, "wallet_encrypted.db")
+
+			//get mnemonic
+			res, err := promptGetMnemonicOption()
+			if err != nil {
+				log.Fatal(err)
+			}
+			switch res {
+			case "1":
+				entropy := make([]byte, 128)
+				_, err := rand.Read(entropy)
+				if err != nil {
+					log.Fatal(err)
+				}
+				_, err = bip39.NewMnemonic(entropy)
+				if err != nil {
+					log.Fatal(err)
+				}
+				mnemonicBytes, err := gopass.GetPasswdPrompt("Please write down your mnemonic phrase and press <enter> when done.", false, os.Stdin, os.Stderr)
+				if err != nil {
+					log.Fatal(err)
+				}
+				mnemonicBytesConfirm, err := gopass.GetPasswdPrompt("\rPlease re-enter the mnemonic phrase.", false, os.Stdin, os.Stderr)
+				if err != nil {
+					log.Fatal(err)
+				}
+				if string(mnemonicBytes) != string(mnemonicBytesConfirm) {
+					log.Fatal("mnemonic doesn't match.")
+				}
+				mnemonic := strings.Split(string(mnemonicBytes), " ")
+				_, err = ImportMnemonic(mnemonic)
+				if err != nil {
+					log.Fatal(err)
+				}
+			case "2":
+				mnemonicBytes, err := gopass.GetPasswdPrompt("Enter Mnemonic: ", false, os.Stdin, os.Stderr)
+				if err != nil {
+					log.Fatal(err)
+				}
+				mnemonic := strings.Split(string(mnemonicBytes), " ")
+				_, err = ImportMnemonic(mnemonic)
+				if err != nil {
+					log.Fatal(err)
+				}
+			default:
+				log.Fatal("invalid mnemonic option selected.")
+			}
 
 			//let's get a new first-time password...
 			Password, err = newPassword()
@@ -270,7 +272,7 @@ func initDB(defaultWorkDir string, memDb bool) db.DB {
 		}
 	}
 
-	err = ret.InitDB(databaseName, Password)
+	err := ret.InitDB(databaseName, Password)
 
 	if err != nil {
 		if err != db.ErrDatabaseNotEncrypted {
