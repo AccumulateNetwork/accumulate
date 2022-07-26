@@ -5,7 +5,7 @@ WORKDIR /root
 COPY . .
 ENV CGO_ENABLED 0
 RUN make -B && make -B accumulate
-RUN go install -ldflags "-s -w -extldflags '-static'" github.com/go-delve/delve/cmd/dlv
+RUN go install github.com/go-delve/delve/cmd/dlv@latest
 
 FROM alpine:3
 
