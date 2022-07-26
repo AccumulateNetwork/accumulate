@@ -4,13 +4,17 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math/rand"
 	"os"
 	"os/user"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/howeyc/gopass"
+	"github.com/manifoldco/promptui"
 	"github.com/spf13/cobra"
+	"github.com/tyler-smith/go-bip39"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/db"
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
 )
@@ -194,6 +198,51 @@ func initDB(defaultWorkDir string, memDb bool) db.DB {
 
 		ret = new(db.BoltDB)
 	}
+
+	res, err := promptGetMnemonicOption()
+	if err != nil {
+		log.Fatal(err)
+	}
+	switch res {
+	case "1":
+		entropy := make([]byte, 128)
+		_, err := rand.Read(entropy)
+		if err != nil {
+			log.Fatal(err)
+		}
+		_, err = bip39.NewMnemonic(entropy)
+		if err != nil {
+			log.Fatal(err)
+		}
+		mnemonicBytes, err := gopass.GetPasswdPrompt("Please write down your mnemonic phrase and press <enter> when done.", false, os.Stdin, os.Stderr)
+		if err != nil {
+			log.Fatal(err)
+		}
+		mnemonicBytesConfirm, err := gopass.GetPasswdPrompt("\rPlease re-enter the mnemonic phrase.", false, os.Stdin, os.Stderr)
+		if err != nil {
+			log.Fatal(err)
+		}
+		if string(mnemonicBytes) != string(mnemonicBytesConfirm) {
+			log.Fatal("mnemonic doesn't match.")
+		}
+		mnemonic := strings.Split(string(mnemonicBytes), " ")
+		_, err = ImportMnemonic(mnemonic)
+		if err != nil {
+			log.Fatal(err)
+		}
+	case "2":
+		mnemonicBytes, err := gopass.GetPasswdPrompt("Enter Mnemonic: ", false, os.Stdin, os.Stderr)
+		if err != nil {
+			log.Fatal(err)
+		}
+		mnemonic := strings.Split(string(mnemonicBytes), " ")
+		_, err = ImportMnemonic(mnemonic)
+		if err != nil {
+			log.Fatal(err)
+		}
+	default:
+		log.Fatal("invalid mnemonic option selected.")
+	}
 	//search for encrypted database first (this is the default)
 	databaseName := filepath.Join(defaultWorkDir, "wallet_encrypted.db")
 	if _, err := os.Stat(databaseName); errors.Is(err, os.ErrNotExist) || UseUnencryptedWallet {
@@ -221,7 +270,7 @@ func initDB(defaultWorkDir string, memDb bool) db.DB {
 		}
 	}
 
-	err := ret.InitDB(databaseName, Password)
+	err = ret.InitDB(databaseName, Password)
 
 	if err != nil {
 		if err != db.ErrDatabaseNotEncrypted {
@@ -233,4 +282,40 @@ func initDB(defaultWorkDir string, memDb bool) db.DB {
 
 	return ret
 
+}
+
+type promptContent struct {
+	errorMsg string
+	label    string
+}
+
+func promptGetMnemonicOption() (string, error) {
+	pc := promptContent{
+		"Please select an option.",
+		"Select an option." +
+			"1. Create Mnemonic" +
+			"2. Import Mnemonic",
+	}
+	items := []string{"1", "2"}
+	index := -1
+	var result string
+	var err error
+
+	for index < 0 {
+		prompt := promptui.SelectWithAdd{
+			Label:    pc.label,
+			Items:    items,
+			AddLabel: "Other",
+		}
+		index, result, err = prompt.Run()
+		if index == -1 {
+			items = append(items, result)
+		}
+	}
+
+	if err != nil {
+		return "", err
+	}
+
+	return result, nil
 }

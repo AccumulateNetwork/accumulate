@@ -4,6 +4,7 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"fmt"
+	"runtime/debug"
 
 	btc "github.com/btcsuite/btcd/btcec"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -34,11 +35,16 @@ func (k *Key) PublicKeyHash() []byte {
 		return protocol.ETHhash(k.PublicKey)
 
 	default:
-		panic(fmt.Errorf("unsupported signature type %v", k.KeyInfo.Type))
+		debug.PrintStack()
+		panic(fmt.Errorf("cannot hash key for unsupported signature type %v(%d)", k.KeyInfo.Type, k.KeyInfo.Type.GetEnumValue()))
 	}
 }
 
 func (k *Key) Save(label, liteLabel string) error {
+	if k.KeyInfo.Type == protocol.SignatureTypeUnknown {
+		return fmt.Errorf("signature type is was not specified")
+	}
+
 	err := GetWallet().Put(BucketKeys, k.PublicKey, k.PrivateKey)
 	if err != nil {
 		return err
