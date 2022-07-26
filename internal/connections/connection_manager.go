@@ -101,6 +101,7 @@ func (cm *connectionManager) SelectConnection(partitionId string, allowFollower 
 		if cm.localCtx == nil {
 			return nil, errNoLocalClient(partitionId)
 		}
+		cm.logger.Debug("Selected connection", "partition", partitionId, "address", "self")
 		return cm.localCtx, nil
 	}
 

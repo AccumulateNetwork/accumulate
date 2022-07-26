@@ -45,7 +45,7 @@ func submit(ctx context.Context, logger log.Logger, connMgr connections.Connecti
 			return nil, err
 		}
 
-		logger.Debug("Broadcasting a transaction", "partition", partitionId, "async", async, "address", connCtx.GetAddress(), "envelope", logging.AsHex(tx))
+		logger.Debug("Broadcasting a transaction", "partition", partitionId, "async", async, "address", connCtx.GetAddress(), "base-port", connCtx.GetBasePort(), "envelope", logging.AsHex(tx))
 		if async {
 			r1, err = connCtx.GetABCIClient().BroadcastTxAsync(ctx, tx)
 		} else {
@@ -78,7 +78,7 @@ func submitPretend(ctx context.Context, logger log.Logger, connMgr connections.C
 			return nil, err
 		}
 
-		logger.Debug("Checking a transaction", "partition", partition, "address", connCtx.GetAddress(), "envelope", logging.AsHex(tx))
+		logger.Debug("Checking a transaction", "partition", partition, "address", connCtx.GetAddress(), "base-port", connCtx.GetBasePort(), "envelope", logging.AsHex(tx))
 		r1, err = connCtx.GetABCIClient().CheckTx(ctx, tx)
 		if err == nil {
 			r2 := new(ResponseSubmit)
