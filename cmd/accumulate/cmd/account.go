@@ -94,7 +94,7 @@ var accountCreateTokenCmd = &cobra.Command{
 var accountCreateDataCmd = &cobra.Command{
 	Use:   "data",
 	Short: "Create a data account",
-	Args:  cobra.RangeArgs(1, 4),
+	Args:  cobra.MinimumNArgs(3),
 	Run: func(cmd *cobra.Command, args []string) {
 		var out string
 		var err error
@@ -119,6 +119,7 @@ var accountCreateDataCmd = &cobra.Command{
 var accountCreateDataLiteCmd = &cobra.Command{
 	Use:   "lite",
 	Short: "Create a lite data account",
+	Args:  cobra.MinimumNArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Printf("Deprecation Warning!\nTo create a lite data account, use `accumulate account create data --lite ...`\n\n")
 		if len(args) < 2 {
