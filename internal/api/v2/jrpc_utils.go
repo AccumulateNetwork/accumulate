@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
@@ -51,6 +52,7 @@ func getLatestDirectoryAnchor(ctx connections.ConnectionContext, anchorurl *url.
 		return uint64(0), err
 
 	}
+
 	total := anchorinfo.Total
 	req.Start = total - 1
 	req.Count = 1
@@ -59,7 +61,20 @@ func getLatestDirectoryAnchor(ctx connections.ConnectionContext, anchorurl *url.
 	if err != nil {
 		return uint64(0), err
 	}
-	anchor := anchorinfo.Items[0].(protocol.DirectoryAnchor)
+	b, err := json.Marshal(anchorinfo.Items[0])
+	if err != nil {
+		return 0, err
+	}
+	txnresp := new(TransactionQueryResponse)
+	err = json.Unmarshal(b, txnresp)
+	if err != nil {
+		return 0, err
+	}
+	anchor, ok := txnresp.Transaction.Body.(*protocol.DirectoryAnchor)
+	if !ok {
+		// It's not an anchor so it's probably Genesis
+		return 0, nil
+	}
 	lastAnchor = anchor.MinorBlockIndex
 	return lastAnchor, nil
 }

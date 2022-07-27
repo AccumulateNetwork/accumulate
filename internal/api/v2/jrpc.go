@@ -112,48 +112,6 @@ func (m *JrpcMethods) Status(ctx context.Context, _ json.RawMessage) interface{}
 	if err != nil {
 		return internalError(err)
 	}
-
-	/*
-		req := new(GeneralQuery)
-		apiinfo := new(ChainQueryResponse)
-		anchorinfo := new(ChainQueryResponse)
-		ledgerurl := m.Options.Describe.Ledger()
-		anchorurl := m.Options.Describe.AnchorPool()
-		hash := new([32]byte)
-		roothash := new([32]byte)
-		var lastAnchor uint64
-		if err != nil {
-			return internalError(err)
-		}
-		req.Url = ledgerurl
-		req.Prove = true
-		req.Expand = true
-		err = apiclient.RequestAPIv2(context.Background(), "query", req, apiinfo)
-		if err != nil {
-			return internalError(err)
-		}
-		req.Url = anchorurl
-		err = apiclient.RequestAPIv2(context.Background(), "query", req, anchorinfo)
-		if err != nil {
-			return internalError(err)
-		}
-		tminfo, err := tmclient.ABCIInfo(c)
-		if err != nil {
-			return internalError(err)
-		}
-		height := tminfo.Response.LastBlockHeight
-		copy(hash[:], tminfo.Response.LastBlockAppHash)
-		for _, chain := range apiinfo.Chains {
-			if chain.Name == "root" {
-				copy(roothash[:], []byte(chain.Roots[len(chain.Roots)-1]))
-			}
-		}
-
-		for _, chain := range anchorinfo.Chains {
-			if chain.Name == "anchor(directory)-root" {
-				lastAnchor = chain.Height
-			}
-		}*/
 	tmclient := conn.GetABCIClient()
 	apiclient := conn.GetAPIClient()
 
