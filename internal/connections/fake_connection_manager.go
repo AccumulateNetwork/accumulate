@@ -1,9 +1,5 @@
 package connections
 
-import (
-	"github.com/tendermint/tendermint/rpc/client/local"
-)
-
 type fakeConnectionManager struct {
 	ctxMap map[string]ConnectionContext
 }
@@ -48,10 +44,6 @@ func (fcm *fakeConnectionManager) GetAllNodeContexts() []ConnectionContext {
 }
 
 func (fcm *fakeConnectionManager) GetLocalNodeContext() ConnectionContext {
-	return nil
-}
-
-func (fcm *fakeConnectionManager) GetLocalClient() *local.Local {
 	return nil
 }
 

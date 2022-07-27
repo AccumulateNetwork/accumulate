@@ -113,51 +113,56 @@ func (m *JrpcMethods) Status(c context.Context, params json.RawMessage) interfac
 	if err != nil {
 		return internalError(err)
 	}
+	/*
+		req := new(GeneralQuery)
+		apiinfo := new(ChainQueryResponse)
+		anchorinfo := new(ChainQueryResponse)
+		ledgerurl := m.Options.Describe.Ledger()
+		anchorurl := m.Options.Describe.AnchorPool()
+		hash := new([32]byte)
+		roothash := new([32]byte)
+		var lastAnchor uint64
+		if err != nil {
+			return internalError(err)
+		}
+		req.Url = ledgerurl
+		req.Prove = true
+		req.Expand = true
+		err = apiclient.RequestAPIv2(context.Background(), "query", req, apiinfo)
+		if err != nil {
+			return internalError(err)
+		}
+		req.Url = anchorurl
+		err = apiclient.RequestAPIv2(context.Background(), "query", req, anchorinfo)
+		if err != nil {
+			return internalError(err)
+		}
+		tminfo, err := tmclient.ABCIInfo(c)
+		if err != nil {
+			return internalError(err)
+		}
+		height := tminfo.Response.LastBlockHeight
+		copy(hash[:], tminfo.Response.LastBlockAppHash)
+		for _, chain := range apiinfo.Chains {
+			if chain.Name == "root" {
+				copy(roothash[:], []byte(chain.Roots[len(chain.Roots)-1]))
+			}
+		}
+
+		for _, chain := range anchorinfo.Chains {
+			if chain.Name == "anchor(directory)-root" {
+				lastAnchor = chain.Height
+			}
+		}*/
 	tmclient := ctx.GetABCIClient()
 	apiclient := ctx.GetAPIClient()
-	req := new(GeneralQuery)
-	apiinfo := new(ChainQueryResponse)
-	anchorinfo := new(ChainQueryResponse)
-	ledgerurl := m.Options.Describe.Ledger()
-	anchorurl := m.Options.Describe.AnchorPool()
-	hash := new([32]byte)
-	roothash := new([32]byte)
-	var lastAnchor uint64
-	if err != nil {
-		return internalError(err)
-	}
-	req.Url = ledgerurl
-	req.Prove = true
-	req.Expand = true
-	err = apiclient.RequestAPIv2(context.Background(), "query", req, apiinfo)
-	if err != nil {
-		return internalError(err)
-	}
-	req.Url = anchorurl
-	err = apiclient.RequestAPIv2(context.Background(), "query", req, anchorinfo)
-	if err != nil {
-		return internalError(err)
-	}
-	tminfo, err := tmclient.ABCIInfo(c)
-	if err != nil {
-		return internalError(err)
-	}
-	height := tminfo.Response.LastBlockHeight
-	copy(hash[:], tminfo.Response.LastBlockAppHash)
-	for _, chain := range apiinfo.Chains {
-		if chain.Name == "root" {
-			copy(roothash[:], []byte(chain.Roots[len(chain.Roots)-1]))
-		}
-	}
 
-	for _, chain := range anchorinfo.Chains {
-		if chain.Name == "anchor(directory)-root" {
-			lastAnchor = chain.Height
-		}
-	}
 	status := new(StatusResponse)
 	status.Ok = true
-
+	hash, roothash, height, err := GetLatestRootChainAnchor(tmclient, apiclient, m.Options.Describe.Ledger(), c)
+	if err != nil {
+		internalError(err)
+	}
 	if m.Options.Describe.NetworkType == config.NetworkTypeDirectory {
 		status.DnHeight = uint64(height)
 		status.DnBptHash = *hash
@@ -167,8 +172,7 @@ func (m *JrpcMethods) Status(c context.Context, params json.RawMessage) interfac
 	status.BvnHeight = uint64(height)
 	status.BvnBptHash = *hash
 	status.BvnRootHash = *roothash
-	status.LastAnchorHeight = uint64(lastAnchor)
-	status.Ok = true
+	//status.LastAnchorHeight = uint64(lastAnchor)
 	return status
 }
 

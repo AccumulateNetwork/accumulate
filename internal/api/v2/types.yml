@@ -498,7 +498,7 @@ StatusResponse:
       type: uvarint
     - name: DnHeight
       type: uvarint
-    - name: LastAnchorHeight
+    - name: LastDirectoryAnchorHeight
       type: uvarint
     - name: BvnRootHash
       type: hash
