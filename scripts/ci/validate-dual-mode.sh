@@ -25,7 +25,7 @@ fi
 echo
 
 #spin up a dual node 
-accumulated init dual tcp://node-1:26756 --public=tcp://127.0.1.101 --listen=tcp://127.0.1.101 -w "$NODES_DIR/dual-test" --skip-version-check --no-website && die "init dual mode failed"
+accumulated init dual tcp://node-1:26756 --public=tcp://127.0.1.101 --listen=tcp://127.0.1.101 -w "$NODES_DIR/dual-test" --skip-version-check --no-website && success || die "init dual mode failed"
 
 # Start the new validator and increment NUM_DMNS
 accumulated run-dual "$NODES_DIR/dual-test/dnn" "$NODES_DIR/dual-test/bvnn" &
