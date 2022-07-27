@@ -5,6 +5,7 @@ import (
 	"sort"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -51,6 +52,8 @@ func (x PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 	if err != nil {
 		return nil, fmt.Errorf("failed to update issuer state: %v", err)
 	}
+
+	st.logger.Info("Received anchor", "module", "anchoring", "source", body.Source, "root", logging.AsHex(body.RootChainAnchor).Slice(0, 4), "bpt", logging.AsHex(body.StateTreeAnchor).Slice(0, 4))
 
 	// Add the anchor to the chain - use the partition name as the chain name
 	record := st.batch.Account(st.OriginUrl).AnchorChain(name)

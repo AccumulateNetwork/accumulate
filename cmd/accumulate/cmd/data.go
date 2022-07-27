@@ -415,7 +415,9 @@ func WriteDataTo(accountUrl string, args []string) (string, error) {
 
 	wd.Recipient = r
 
-	if len(args) < 2 {
+	// Remove the recipient from the arg list
+	args = args[1:]
+	if len(args) == 0 {
 		return "", fmt.Errorf("expecting data")
 	}
 
@@ -433,6 +435,7 @@ func WriteDataTo(accountUrl string, args []string) (string, error) {
 		}
 	}
 
+	// args[0] is the
 	wd.Entry, err = prepareData(args, false, kSigners)
 	if err != nil {
 		return PrintJsonRpcError(err)

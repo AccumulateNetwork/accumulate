@@ -413,7 +413,11 @@ func (s *Simulator) MustSubmitAndExecuteBlock(envelopes ...*protocol.Envelope) [
 			continue
 		}
 
-		assert.False(s, status.Failed())
+		if status.Error != nil {
+			assert.NoError(s, status.Error)
+		} else {
+			assert.False(s, status.Failed())
+		}
 		didFail = true
 	}
 	if didFail {
