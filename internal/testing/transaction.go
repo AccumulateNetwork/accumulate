@@ -12,7 +12,8 @@ import (
 
 type TransactionBuilder struct {
 	*protocol.Envelope
-	signer signing.Builder
+	signer     signing.Builder
+	SkipChecks bool
 }
 
 func NewTransaction() TransactionBuilder {
@@ -22,8 +23,24 @@ func NewTransaction() TransactionBuilder {
 	return tb
 }
 
+// Unsafe allows the caller to generate invalid signatures
+func (tb TransactionBuilder) Unsafe() TransactionBuilder {
+	tb.SkipChecks = true
+	return tb
+}
+
 func (tb TransactionBuilder) SetSigner(s *signing.Builder) TransactionBuilder {
 	tb.signer = *s
+	return tb
+}
+
+func (tb TransactionBuilder) UseSimpleHash() TransactionBuilder {
+	tb.signer.UseSimpleHash()
+	return tb
+}
+
+func (tb TransactionBuilder) WithTransaction(txn *protocol.Transaction) TransactionBuilder {
+	tb.Transaction[0] = txn
 	return tb
 }
 
@@ -76,6 +93,8 @@ func (tb TransactionBuilder) WithTxnHash(hash []byte) TransactionBuilder {
 
 func (tb TransactionBuilder) Sign(typ protocol.SignatureType, privateKey []byte) TransactionBuilder {
 	switch {
+	case tb.SkipChecks:
+		// Skip checks
 	case tb.Transaction[0].Body == nil:
 		panic("cannot sign a transaction without the transaction body or transaction hash")
 	case tb.Transaction[0].Header.Initiator == ([32]byte{}) && tb.Transaction[0].Body.Type() != protocol.TransactionTypeRemote:
@@ -99,6 +118,8 @@ func (tb TransactionBuilder) SignFunc(fn func(txn *protocol.Transaction) protoco
 
 func (tb TransactionBuilder) Initiate(typ protocol.SignatureType, privateKey []byte) TransactionBuilder {
 	switch {
+	case tb.SkipChecks:
+		// Skip checks
 	case tb.Transaction[0].Body == nil:
 		panic("cannot initiate transaction without a body")
 	case tb.Transaction[0].Body.Type() == protocol.TransactionTypeRemote:

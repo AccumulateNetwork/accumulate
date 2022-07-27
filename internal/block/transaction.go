@@ -24,10 +24,6 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Del
 	if err != nil {
 		return nil, nil, err
 	}
-	if status.Initiator == nil {
-		// This should never happen
-		return nil, nil, fmt.Errorf("transaction initiator is missing")
-	}
 
 	// The status txid should not be nil, but fix it if it is *shrug*
 	if status.TxID == nil && delivery.Transaction.Header.Principal != nil {
@@ -127,6 +123,10 @@ func (x *Executor) TransactionIsReady(batch *database.Batch, delivery *chain.Del
 }
 
 func (x *Executor) userTransactionIsReady(batch *database.Batch, delivery *chain.Delivery, status *protocol.TransactionStatus, principal protocol.Account) (bool, error) {
+	if status.Initiator == nil {
+		return false, nil
+	}
+
 	// If the principal is missing, check if that's ok
 	if principal == nil {
 		val, ok := getValidator[chain.PrincipalValidator](x, delivery.Transaction.Body.Type())

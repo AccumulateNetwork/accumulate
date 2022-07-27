@@ -91,6 +91,9 @@ func TestTransactionIsReady(tt *testing.T) {
 	sig.Timestamp = 1
 	sig.PublicKey = []byte{1}
 
+	// Add a bogus initiator
+	_ = t.Transaction(txn.GetHash()).PutStatus(&protocol.TransactionStatus{Initiator: protocol.AccountUrl("x")})
+
 	// Singlesig unsigned
 	t.Run("Unsigned", func(t BatchTest) {
 		status := t.GetTxnStatus(txn.GetHash())
