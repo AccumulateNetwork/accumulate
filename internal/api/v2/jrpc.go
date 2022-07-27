@@ -107,12 +107,12 @@ func (m *JrpcMethods) jrpc2http(jrpc jsonrpc2.MethodFunc) http.HandlerFunc {
 	}
 }
 
-func (m *JrpcMethods) Status(c context.Context, params json.RawMessage) interface{} {
-
-	ctx, err := m.ConnectionManager.SelectConnection(m.Options.Describe.PartitionId, true)
+func (m *JrpcMethods) Status(ctx context.Context, _ json.RawMessage) interface{} {
+	conn, err := m.ConnectionManager.SelectConnection(m.Options.Describe.PartitionId, true)
 	if err != nil {
 		return internalError(err)
 	}
+
 	/*
 		req := new(GeneralQuery)
 		apiinfo := new(ChainQueryResponse)
@@ -154,25 +154,29 @@ func (m *JrpcMethods) Status(c context.Context, params json.RawMessage) interfac
 				lastAnchor = chain.Height
 			}
 		}*/
-	tmclient := ctx.GetABCIClient()
-	apiclient := ctx.GetAPIClient()
+	tmclient := conn.GetABCIClient()
+	apiclient := conn.GetAPIClient()
 
-	status := new(StatusResponse)
-	status.Ok = true
-	hash, roothash, height, err := GetLatestRootChainAnchor(tmclient, apiclient, m.Options.Describe.Ledger(), c)
+	hash, roothash, height, err := GetLatestRootChainAnchor(tmclient, apiclient, m.Options.Describe.Ledger(), ctx)
 	if err != nil {
 		return internalError(err)
 	}
-	lastAnchor, err := getLatestDirectoryAnchor(ctx, m.Options.Describe.AnchorPool())
+	lastAnchor, err := getLatestDirectoryAnchor(conn, m.Options.Describe.AnchorPool())
 	if err != nil {
 		return err
 	}
+
 	if m.Options.Describe.NetworkType == config.NetworkTypeDirectory {
+		status := new(StatusResponse)
+		status.Ok = true
 		status.DnHeight = uint64(height)
 		status.DnBptHash = *hash
 		status.DnRootHash = *roothash
 		return status
 	}
+
+	status := new(StatusResponse)
+	status.Ok = true
 	status.BvnHeight = uint64(height)
 	status.BvnBptHash = *hash
 	status.BvnRootHash = *roothash
