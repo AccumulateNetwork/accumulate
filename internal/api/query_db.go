@@ -51,13 +51,13 @@ func (m *DatabaseQueryModule) queryAccount(batch *database.Batch, accountUrl *ur
 	}
 
 	if opts.Expand {
-		obj, err := account.GetObject()
+		chains, err := account.Chains().Get()
 		if err != nil {
-			return nil, errors.Format(errors.StatusUnknownError, "get account %v state: %w", accountUrl, err)
+			return nil, errors.Format(errors.StatusUnknownError, "get account %v chains index: %w", accountUrl, err)
 		}
 
-		for _, c := range obj.Chains {
-			chain, err := account.ReadChain(c.Name)
+		for _, c := range chains {
+			chain, err := account.GetChainByName(c.Name)
 			if err != nil {
 				return nil, errors.Format(errors.StatusUnknownError, "read account %v chain %s: %w", accountUrl, c.Name, err)
 			}

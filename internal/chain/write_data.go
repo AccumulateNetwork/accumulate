@@ -107,13 +107,13 @@ func (WriteData) Validate(st *StateManager, tx *Delivery) (protocol.TransactionR
 		if body.WriteToState {
 			return nil, errors.Format(errors.StatusBadRequest, "cannot write data to the state of a lite data account")
 		}
-		return executeWriteLiteDataAccount(st, body.Entry, body.Scratch)
+		return executeWriteLiteDataAccount(st, body.Entry)
 	}
 
 	return executeWriteFullDataAccount(st, body.Entry, body.Scratch, body.WriteToState)
 }
 
-func executeWriteFullDataAccount(st *StateManager, entry protocol.DataEntry, scratch, writeToState bool) (protocol.TransactionResult, error) {
+func executeWriteFullDataAccount(st *StateManager, entry protocol.DataEntry, scratch bool, writeToState bool) (protocol.TransactionResult, error) {
 	if st.Origin == nil {
 		return nil, errors.NotFound("%v not found", st.OriginUrl)
 	}
@@ -124,13 +124,9 @@ func executeWriteFullDataAccount(st *StateManager, entry protocol.DataEntry, scr
 			protocol.AccountTypeDataAccount, st.Origin.Type())
 	}
 
-	if scratch && !account.Scratch {
-		return nil, errors.Format(errors.StatusBadRequest, "cannot write scratch data to a non-scratch account")
-	}
-
 	if writeToState {
-		if account.Scratch {
-			return nil, errors.Format(errors.StatusBadRequest, "cannot write data to the state of a scratch data account")
+		if scratch {
+			return nil, errors.Format(errors.StatusBadRequest, "writing scratch data to the account state is not permitted")
 		}
 
 		account.Entry = entry
@@ -144,6 +140,7 @@ func executeWriteFullDataAccount(st *StateManager, entry protocol.DataEntry, scr
 	result.EntryHash = *(*[32]byte)(entry.Hash())
 	result.AccountID = st.OriginUrl.AccountID()
 	result.AccountUrl = st.OriginUrl
+
 	st.UpdateData(st.Origin, result.EntryHash[:], entry)
 	return result, nil
 }

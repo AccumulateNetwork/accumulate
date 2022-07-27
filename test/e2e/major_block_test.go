@@ -1,13 +1,12 @@
 package e2e
 
 import (
-	"fmt"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -19,36 +18,33 @@ func TestMajorBlock(t *testing.T) {
 	// position capture for errors
 
 	// Initialize
+	globals := new(core.GlobalValues)
+	globals.Globals = new(protocol.NetworkGlobals)
+	globals.Globals.MajorBlockSchedule = "*/5 * * * *" // Every 5 minutes (300 minor blocks)
 	sim := simulator.New(t, 3)
-	sim.InitFromGenesis()
+	sim.InitFromGenesisWith(globals)
 
-	// Trigger a major block
-	count := int(12 * time.Hour / time.Second)
-	if os.Getenv("CI") != "" {
-		sim.ExecuteBlocks(count)
+	// Get ready to trigger a major block
+	nextMajorBlock := sim.Executors[protocol.Directory].Executor.MajorBlockScheduler.GetNextMajorBlockTime(simulator.GenesisTime)
+	count := int(nextMajorBlock.Sub(simulator.GenesisTime) / time.Second)
+	sim.ExecuteBlocks(count - protocol.GenesisBlock - 1)
+	ledger := simulator.GetAccount[*protocol.AnchorLedger](sim, protocol.DnUrl().JoinPath(protocol.AnchorPool))
+	require.Empty(t, ledger.PendingMajorBlockAnchors) // Major block is *not* open
 
-	} else {
-		// Give the user an indication that something is happening
-		count -= 1
-		for count > 0 {
-			n := count
-			if n > 5000 {
-				n = 5000
-			}
-			sim.ExecuteBlocks(n)
-			fmt.Printf(".\n")
-			count -= n
-		}
-		sim.ExecuteBlock(nil)
-	}
+	// Open the major block
+	sim.ExecuteBlock(nil)
+	ledger = simulator.GetAccount[*protocol.AnchorLedger](sim, protocol.DnUrl().JoinPath(protocol.AnchorPool))
+	require.NotEmpty(t, ledger.PendingMajorBlockAnchors) // Major block is *open*
 
 	// Complete the major block
 	sim.ExecuteBlocks(10)
+	ledger = simulator.GetAccount[*protocol.AnchorLedger](sim, protocol.DnUrl().JoinPath(protocol.AnchorPool))
+	require.Empty(t, ledger.PendingMajorBlockAnchors) // Major block is done
 
 	// Verify
 	dn := sim.Partition(protocol.Directory)
 	_ = dn.Database.View(func(batch *database.Batch) error {
-		chain, err := batch.Account(dn.Executor.Describe.AnchorPool()).ReadIndexChain(protocol.MainChain, true)
+		chain, err := batch.Account(dn.Executor.Describe.AnchorPool()).MajorBlockChain().Get()
 		require.NoError(t, err, "Failed to read anchor major index chain")
 		require.Equal(t, int64(1), chain.Height(), "Expected anchor major index chain to have height 1")
 
@@ -57,7 +53,7 @@ func TestMajorBlock(t *testing.T) {
 
 		// require.NotZero(t, entry.Source, "Expected non-zero source")
 		require.NotZero(t, entry.RootIndexIndex, "Expected non-zero root index index")
-		require.Equal(t, uint64(1), entry.BlockIndex, "Expected block index to be 1")
+		require.Equal(t, uint64(1), entry.BlockIndex, "Expected block index to be 1") // DO NOT REMOVE (validates SendTokens)
 		return nil
 	})
 }

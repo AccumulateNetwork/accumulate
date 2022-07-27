@@ -113,31 +113,25 @@ func (t Types) Sort() {
 	})
 }
 
-func (t *Types) DecodeFromFile(file string, dec Decoder) error {
-	var m map[string]*Type
-	err := dec.Decode(&m)
-	if err != nil {
-		return err
-	}
-
+func (t *Types) Unmap(types map[string]*Type, files map[*Type]string) error {
 	seen := map[string]bool{}
 	for _, t := range *t {
 		seen[t.Name] = true
 	}
 
 	if *t == nil {
-		*t = make(Types, 0, len(m))
+		*t = make(Types, 0, len(types))
 	} else {
-		*t = append(*t, make(Types, 0, len(m))...)
+		*t = append(*t, make(Types, 0, len(types))...)
 	}
-	for name, typ := range m {
+	for name, typ := range types {
 		if seen[name] {
 			return fmt.Errorf("duplicate entries for %q", name)
 		}
 		seen[name] = true
 
 		typ.Name = name
-		typ.File = file
+		typ.File = files[typ]
 		*t = append(*t, typ)
 
 		if typ.Union.Name == "" {

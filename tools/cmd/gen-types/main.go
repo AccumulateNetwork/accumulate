@@ -95,11 +95,8 @@ func run(_ *cobra.Command, args []string) {
 		flags.ExpandEmbedded = true
 	}
 
-	var types, refTypes typegen.Types
-	check(flags.files.ReadAll(args, &types))
-	check(flags.files.ReadAll(flags.Reference, &refTypes))
-	types.Sort()
-	refTypes.Sort()
+	types := read(args, true)
+	refTypes := read(nil, false)
 	ttypes, err := convert(types, refTypes, flags.Package, flags.SubPackage, getWdPackagePath())
 	check(err)
 
@@ -141,4 +138,26 @@ func run(_ *cobra.Command, args []string) {
 		check(err)
 		check(typegen.WriteFile(filename, w))
 	}
+}
+
+
+func read(files []string, main bool) typegen.Types {
+	flup := map[*typegen.Type]string{}
+	record := func(file string, typ *typegen.Type) {
+		flup[typ] = file
+	}
+
+	var all map[string]*typegen.Type
+	var err error
+	if main {
+		all, err = typegen.ReadMap(&flags.files, files, record)
+	} else {
+		all, err = typegen.ReadRaw(flags.Reference, record)
+	}
+	check(err)
+
+	var v typegen.Types
+	check(v.Unmap(all, flup))
+	v.Sort()
+	return v
 }

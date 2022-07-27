@@ -38,6 +38,9 @@ const StatusUnauthorized Status = 403
 // StatusNotFound means a record could not be found.
 const StatusNotFound Status = 404
 
+// StatusNotAllowed means the requested action could not be performed.
+const StatusNotAllowed Status = 405
+
 // StatusConflict means the request failed due to a conflict.
 const StatusConflict Status = 409
 
@@ -56,6 +59,9 @@ const StatusUnknownError Status = 501
 // StatusEncodingError means encoding or decoding failed.
 const StatusEncodingError Status = 502
 
+// StatusFatalError means something has gone seriously wrong.
+const StatusFatalError Status = 503
+
 // GetEnumValue returns the value of the Status
 func (v Status) GetEnumValue() uint64 { return uint64(v) }
 
@@ -63,7 +69,7 @@ func (v Status) GetEnumValue() uint64 { return uint64(v) }
 func (v *Status) SetEnumValue(id uint64) bool {
 	u := Status(id)
 	switch u {
-	case StatusOK, StatusDelivered, StatusPending, StatusRemote, StatusWrongPartition, StatusBadRequest, StatusUnauthenticated, StatusInsufficientCredits, StatusUnauthorized, StatusNotFound, StatusConflict, StatusBadSignerVersion, StatusBadTimestamp, StatusInternalError, StatusUnknownError, StatusEncodingError:
+	case StatusOK, StatusDelivered, StatusPending, StatusRemote, StatusWrongPartition, StatusBadRequest, StatusUnauthenticated, StatusInsufficientCredits, StatusUnauthorized, StatusNotFound, StatusNotAllowed, StatusConflict, StatusBadSignerVersion, StatusBadTimestamp, StatusInternalError, StatusUnknownError, StatusEncodingError, StatusFatalError:
 		*v = u
 		return true
 	default:
@@ -94,6 +100,8 @@ func (v Status) String() string {
 		return "unauthorized"
 	case StatusNotFound:
 		return "notFound"
+	case StatusNotAllowed:
+		return "notAllowed"
 	case StatusConflict:
 		return "conflict"
 	case StatusBadSignerVersion:
@@ -106,6 +114,8 @@ func (v Status) String() string {
 		return "unknownError"
 	case StatusEncodingError:
 		return "encodingError"
+	case StatusFatalError:
+		return "fatalError"
 	default:
 		return fmt.Sprintf("Status:%d", v)
 	}
@@ -134,6 +144,8 @@ func StatusByName(name string) (Status, bool) {
 		return StatusUnauthorized, true
 	case "notfound":
 		return StatusNotFound, true
+	case "notallowed":
+		return StatusNotAllowed, true
 	case "conflict":
 		return StatusConflict, true
 	case "badsignerversion":
@@ -146,6 +158,8 @@ func StatusByName(name string) (Status, bool) {
 		return StatusUnknownError, true
 	case "encodingerror":
 		return StatusEncodingError, true
+	case "fatalerror":
+		return StatusFatalError, true
 	default:
 		return 0, false
 	}

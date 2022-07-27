@@ -24,6 +24,9 @@ const (
 	// ACME is the name of the ACME token.
 	ACME = "ACME"
 
+	// Unknown is used to indicate that the principal of a transaction is unknown
+	Unknown = "unknown"
+
 	// Directory is the partition ID of the DN.
 	Directory = "Directory"
 
@@ -59,21 +62,6 @@ const (
 
 	// MainChain is the main transaction chain of a record.
 	MainChain = "main"
-
-	// SignatureChain is the pending signature chain of a record.
-	SignatureChain = "signature"
-
-	// // MajorRootChain is the major anchor root chain of a partition.
-	// MajorRootChain = "major-root"
-
-	// MinorRootChain is the minor anchor root chain of a partition.
-	MinorRootChain = "minor-root"
-
-	// // MajorRootIndexChain is the index chain of the major anchor root chain of a partition.
-	// MajorRootIndexChain = "major-root-index"
-
-	// MinorRootIndexChain is the index chain of the minor anchor root chain of a partition.
-	MinorRootIndexChain = "minor-root-index"
 
 	// GenesisBlock is the block index of the first block.
 	GenesisBlock = 1
@@ -150,11 +138,16 @@ func ParseLiteAddress(u *url.URL) ([]byte, error) {
 		return nil, err
 	}
 
-	i := len(b) - 4
+	const checksumLen = 4
+	if len(b) <= checksumLen {
+		return nil, errors.New("too short")
+	}
+
+	i := len(b) - checksumLen
 	byteValue, byteCheck := b[:i], b[i:]
-	hexValue := u.Authority[:len(u.Authority)-8]
+	hexValue := u.Authority[:len(u.Authority)-checksumLen*2]
 	checkSum := sha256.Sum256([]byte(hexValue))
-	if !bytes.Equal(byteCheck, checkSum[28:]) {
+	if !bytes.Equal(byteCheck, checkSum[len(checkSum)-checksumLen:]) {
 		return nil, errors.New("invalid checksum")
 	}
 
@@ -405,7 +398,7 @@ func IsValidAdiUrl(u *url.URL, allowReserved bool) error {
 	}
 
 	if !allowReserved && IsReserved(u) {
-		errs = append(errs, fmt.Sprintf("%q is a reserved URL", u))
+		errs = append(errs, fmt.Sprintf("%v is a reserved URL", u))
 	}
 
 	for _, r := range a {
@@ -433,8 +426,17 @@ func IsValidAdiUrl(u *url.URL, allowReserved bool) error {
 	return errors.New(strings.Join(errs, ", "))
 }
 
+// IsUnknown checks if the authority is 'unknown' or 'unknown.acme'.
+func IsUnknown(u *url.URL) bool {
+	return strings.EqualFold(u.Authority, Unknown) ||
+		strings.EqualFold(u.Authority, Unknown+TLD)
+}
+
 // IsReserved checks if the given URL is reserved.
 func IsReserved(u *url.URL) bool {
+	if IsUnknown(u) {
+		return true
+	}
 	_, ok := ParsePartitionUrl(u)
 	return ok || BelongsToDn(u)
 }
@@ -493,46 +495,8 @@ func BvnNameFromPartitionId(partition string) string {
 	return PartitionUrl(partition).Authority
 }
 
-// IndexChain returns the major or minor index chain name for a given chain. Do
-// not use for the root anchor chain.
-func IndexChain(name string, major bool) string {
-	if major {
-		return "major-" + name + "-index"
-	}
-	return "minor-" + name + "-index"
-}
-
 func GetMOfN(count int, ratio float64) uint64 {
 	return uint64(math.Ceil(ratio * float64(count)))
-}
-
-const rootAnchorSuffix = "-root"
-const bptAnchorSuffix = "-bpt"
-
-// RootAnchorChain returns the name of the intermediate anchor chain for the given
-// partition's root chain.
-func RootAnchorChain(name string) string {
-	return name + rootAnchorSuffix
-}
-
-// BPTAnchorChain returns the name of the intermediate anchor chain for the given
-// partition's BPT.
-func BPTAnchorChain(name string) string {
-	return name + bptAnchorSuffix
-}
-
-// ParseBvnUrl extracts the partition name from a intermediate anchor chain name.
-func ParseAnchorChain(name string) (string, bool) {
-	if !strings.HasSuffix(strings.ToLower(name), rootAnchorSuffix) {
-		return "", false
-	}
-	return name[:len(name)-len(rootAnchorSuffix)], true
-}
-
-// SyntheticIndexChain returns the name of the synthetic transaction index chain
-// for the given partition.
-func SyntheticIndexChain(name string) string {
-	return "index-" + name
 }
 
 // FormatKeyPageUrl constructs the URL of a key page from the URL of its key

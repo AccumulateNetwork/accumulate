@@ -53,15 +53,12 @@ func equalBucket(dst db.DB, src db.DB, bucket []byte) bool {
 	bucketDataDst, errDst := dst.GetBucket(bucket)
 	bucketDataSrc, errSrc := src.GetBucket(bucket)
 	if errDst != nil && errSrc != nil {
-		if errDst == db.ErrNoBucket {
-			return true
-		}
-		return false
+		return errDst == db.ErrNoBucket
 	}
 
 	for _, v := range bucketDataSrc.KeyValueList {
 		val := bucketDataDst.Get(v.Key)
-		if bytes.Compare(val, v.Value) != 0 {
+		if !bytes.Equal(val, v.Value) {
 			return false
 		}
 	}
@@ -86,7 +83,7 @@ func newPassword() (string, error) {
 		return "", db.ErrInvalidPassword
 	}
 
-	if bytes.Compare(bytepw1, bytepw2) != 0 {
+	if !bytes.Equal(bytepw1, bytepw2) {
 		return "", fmt.Errorf("passwords do not match")
 	}
 
@@ -164,7 +161,7 @@ func EncryptDatabase() (string, error) {
 		return "", err
 	}
 
-	err = copyBucket(dbe, dbu, BucketSigType)
+	err = copyBucket(dbe, dbu, BucketKeyInfo)
 	if err != nil && err != db.ErrNoBucket {
 		return "", err
 	}
@@ -174,7 +171,7 @@ func EncryptDatabase() (string, error) {
 		!equalBucket(dbe, dbu, BucketKeys) ||
 		!equalBucket(dbe, dbu, BucketLabel) ||
 		!equalBucket(dbe, dbu, BucketLite) ||
-		!equalBucket(dbe, dbu, BucketSigType) {
+		!equalBucket(dbe, dbu, BucketKeyInfo) {
 		return "", db.ErrMalformedEncryptedDatabase
 	}
 

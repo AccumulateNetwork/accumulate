@@ -65,7 +65,6 @@ func (CreateTokenAccount) Validate(st *StateManager, tx *Delivery) (protocol.Tra
 	account := new(protocol.TokenAccount)
 	account.Url = body.Url
 	account.TokenUrl = body.TokenUrl
-	account.Scratch = body.Scratch
 	err = st.SetAuth(account, body.Authorities)
 	if err != nil {
 		return nil, errors.Format(errors.StatusUnknownError, "set auth: %w", err)
@@ -98,8 +97,7 @@ func verifyCreateTokenAccountProof(net *config.Describe, batch *database.Batch, 
 	}
 
 	// Check that the proof is present if required
-	proof := body.TokenIssuerProof
-	if proof == nil {
+	if body.Proof == nil {
 		// Proof is not required for ACME
 		if body.TokenUrl.Equal(protocol.AcmeUrl()) {
 			return nil
@@ -114,48 +112,45 @@ func verifyCreateTokenAccountProof(net *config.Describe, batch *database.Batch, 
 	}
 
 	// Check the proof for missing fields and validity
-	if proof.State == nil {
-		return errors.Format(errors.StatusBadRequest, "invalid proof: missing state")
+	proof := body.Proof
+	if proof.Transaction == nil {
+		return errors.Format(errors.StatusBadRequest, "invalid proof: missing transaction")
 	}
-	if proof.Proof == nil {
-		return errors.Format(errors.StatusBadRequest, "invalid proof: missing Proof")
+	if proof.Receipt == nil {
+		return errors.Format(errors.StatusBadRequest, "invalid proof: missing receipt")
 	}
-	if !proof.Proof.Validate() {
+	if !proof.Receipt.Validate() {
 		return errors.Format(errors.StatusBadRequest, "proof is invalid")
 	}
 
 	// Check that the state matches expectations
-	_, ok := proof.State.(*protocol.TokenIssuer)
-	if !ok {
-		return errors.Format(errors.StatusBadRequest, "invalid proof state: expected %v, got %v", protocol.AccountTypeTokenIssuer, proof.State.Type())
-	}
-	if !body.TokenUrl.Equal(proof.State.GetUrl()) {
-		return errors.New(errors.StatusBadRequest, "invalid proof state: URL does not match token issuer URL")
+	if !body.TokenUrl.Equal(proof.Transaction.Url) {
+		return errors.New(errors.StatusBadRequest, "invalid proof: URL does not match token issuer URL")
 	}
 
 	// Check the state hash
-	stateBytes, err := proof.State.MarshalBinary()
+	b, err := proof.Transaction.MarshalBinary()
 	if err != nil {
 		return errors.Format(errors.StatusInternalError, "marshal proof state: %v", err)
 	}
 
-	stateHash := sha256.Sum256(stateBytes)
-	if !bytes.Equal(proof.Proof.Start, stateHash[:]) {
+	hash := sha256.Sum256(b)
+	if !bytes.Equal(proof.Receipt.Start, hash[:]) {
 		return errors.Format(errors.StatusBadRequest, "invalid proof: state hash does not match proof start")
 	}
 
 	// Check the anchor - TODO this will not work for the DN
-	chain, err := batch.Account(net.AnchorPool()).ReadChain(protocol.RootAnchorChain(protocol.Directory))
+	chain, err := batch.Account(net.AnchorPool()).AnchorChain(protocol.Directory).Root().Get()
 	if err != nil {
 		return errors.Format(errors.StatusInternalError, "load anchor pool for directory anchors: %w", err)
 	}
-	_, err = chain.HeightOf(proof.Proof.Anchor)
+	_, err = chain.HeightOf(proof.Receipt.Anchor)
 	if err != nil {
 		code := errors.StatusUnknownError
 		if errors.Is(err, errors.StatusNotFound) {
 			code = errors.StatusBadRequest
 		}
-		return errors.Format(code, "invalid proof: lookup DN anchor %X: %w", proof.Proof.Anchor[:4], err)
+		return errors.Format(code, "invalid proof: lookup DN anchor %X: %w", proof.Receipt.Anchor[:4], err)
 	}
 
 	return nil

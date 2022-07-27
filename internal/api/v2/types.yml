@@ -275,6 +275,10 @@ TxHistoryQuery:
   embeddings:
   - UrlQuery
   - QueryPagination
+  fields:
+  - name: Scratch
+    type: bool
+    optional: true
 
 QueryPagination:
   non-binary: true
@@ -326,6 +330,9 @@ QueryOptions:
       alternative: ExpandChains
     - name: Height
       type: uvarint
+      optional: true
+    - name: Scratch
+      type: bool
       optional: true
     - name: Prove
       type: bool
@@ -514,6 +521,8 @@ DescriptionResponse:
       alternative: Subnet
       type: config.Network
       marshal-as: reference
+    - name: NetworkAnchor
+      type: hash
     - name: Values
       type: core.GlobalValues
       marshal-as: reference
@@ -534,3 +543,7 @@ SyntheticTransactionRequest:
       pointer: true
     - name: SequenceNumber
       type: uint
+      optional: true
+    - name: Anchor
+      type: bool
+      optional: true

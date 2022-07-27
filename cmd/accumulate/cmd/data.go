@@ -18,10 +18,13 @@ import (
 
 var Keyname string
 var WriteState bool
+var Scratch bool
 
 func init() {
 	dataCmd.Flags().StringVar(&Keyname, "sign-data", "", "specify this to send random data as a signed & valid entry to data account")
 	dataCmd.PersistentFlags().BoolVar(&WriteState, "write-state", false, "Write to the account's state")
+	dataCmd.Flags().BoolVar(&Scratch, "scratch", false, "Write to the scratch chain")
+
 }
 
 var dataCmd = &cobra.Command{
@@ -51,10 +54,6 @@ var dataCmd = &cobra.Command{
 		case "write":
 			if len(args) > 2 {
 				out, err = WriteData(args[1], args[2:])
-				if err != nil {
-					fmt.Println("Usage:")
-					PrintDataWrite()
-				}
 			} else {
 				PrintDataWrite()
 			}
@@ -86,17 +85,17 @@ func PrintDataGet() {
 
 func PrintDataAccountCreate() {
 	//./cli data create acc://actor.acme key idx height acc://actor.acme/dataAccount acc://actor.acme/keyBook (optional)
-	fmt.Println("  accumulate account create data [actor adi url] [signing key name] [key index (optional)] [key height (optional)] [adi data account url] [key book (optional)] Create new data account")
-	fmt.Println("\t\t example usage: accumulate account create data acc://actor.acme signingKeyName acc://actor.acme/dataAccount acc://actor.acme/book0")
+	fmt.Println("  accumulate account create data [actor adi url] [key name[@key book or page]]  [adi data account url] --authority key book (optional) Create new data account")
+	fmt.Println("\t\t example usage: accumulate account create data acc://actor.acme signingKeyName acc://actor.acme/dataAccount --authority acc://actor.acme/book0")
 
 	//scratch data account
-	fmt.Println("  accumulate account create data --scratch [actor adi url] [signing key name] [key index (optional)] [key height (optional)] [adi data account url] [key book (optional)] Create new data account")
-	fmt.Println("\t\t example usage: accumulate account create data --scratch acc://actor.acme signingKeyName acc://actor.acme/dataAccount acc://actor.acme/book0")
+	fmt.Println("  accumulate account create data --scratch [actor adi url] [key name[@key book or page]]  [adi data account url] --authority key book (optional) Create new data account")
+	fmt.Println("\t\t example usage: accumulate account create data --scratch acc://actor.acme signingKeyName acc://actor.acme/dataAccount --authority acc://actor.acme/book0")
 }
 
 func PrintDataWrite() {
-	fmt.Println("accumulate data write [data account url] [signingKey] [extid_0 (optional)] ... [extid_n (optional)] [data] Write entry to your data account. Note: extid's and data needs to be a quoted string or hex")
-	fmt.Println("accumulate data write [data account url] [signingKey] --sign-data [keyname] [extid_0 (optional)] ... [extid_n (optional)] [data] Write entry to your data account. Note: extid's and data needs to be a quoted string or hex")
+	fmt.Println("accumulate data write [data account url] [signingKey] --scratch (optional) [extid_0 (optional)] ... [extid_n (optional)] [data] Write entry to your data account. Note: extid's and data needs to be a quoted string or hex")
+	fmt.Println("accumulate data write [data account url] [signingKey] --scratch (optional) --sign-data [keyname] [extid_0 (optional)] ... [extid_n (optional)] [data] Write entry to your data account. Note: extid's and data needs to be a quoted string or hex")
 
 }
 
@@ -106,7 +105,7 @@ func PrintDataWriteTo() {
 
 func PrintDataLiteAccountCreate() {
 	fmt.Println("  accumulate account create data lite [lite token account] [name_0] ... [name_n] Create new lite data account creating a chain based upon a name list")
-	fmt.Println("  accumulate account create data lite [origin url] [signing key name]  [key index (optional)] [key height (optional)] [name_0] ... [name_n] Create new lite data account creating a chain based upon a name list")
+	fmt.Println("  accumulate account create data lite [origin] [key name[@key book or page]] [name_0] ... [name_n] Create new lite data account creating a chain based upon a name list")
 	fmt.Println("\t\t example usage: accumulate account create data lite acc://actor.acme signingKeyName example1 example2 ")
 }
 
@@ -197,10 +196,6 @@ func GetDataEntrySet(accountUrl string, args []string) (string, error) {
 }
 
 func CreateLiteDataAccount(origin string, args []string) (string, error) {
-	if flagAccount.Scratch {
-		return "", fmt.Errorf("lite scratch data accounts are not supported")
-	}
-
 	u, err := url.Parse(origin)
 	if err != nil {
 		return "", err
@@ -278,15 +273,6 @@ func CreateDataAccount(origin string, args []string) (string, error) {
 
 	cda := protocol.CreateDataAccount{}
 	cda.Url = accountUrl
-	cda.Scratch = flagAccount.Scratch
-
-	if len(args) > 2 {
-		keybook, err := url.Parse(args[2])
-		if err != nil {
-			return "", fmt.Errorf("invalid key book url")
-		}
-		cda.Authorities = append(cda.Authorities, keybook)
-	}
 
 	for _, authUrlStr := range Authorities {
 		authUrl, err := url.Parse(authUrlStr)
@@ -315,6 +301,7 @@ func WriteData(accountUrl string, args []string) (string, error) {
 	}
 	wd := protocol.WriteData{}
 	wd.WriteToState = WriteState
+	wd.Scratch = Scratch
 
 	var kSigners []*signing.Builder
 	if Keyname != "" {
@@ -394,9 +381,7 @@ func prepareData(args []string, isFirstLiteEntry bool, signers []*signing.Builde
 		}
 		dataCopy := [][]byte{}
 		dataCopy = append(dataCopy, finData)
-		for _, v := range entry.Data {
-			dataCopy = append(dataCopy, v)
-		}
+		dataCopy = append(dataCopy, entry.Data...)
 		entry.Data = dataCopy
 	}
 	return entry, nil

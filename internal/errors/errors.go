@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"runtime"
+	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 )
@@ -180,11 +181,26 @@ func (e *Error) Format(f fmt.State, verb rune) {
 }
 
 func (e *Error) Print() string {
-	str := e.Message + "\n"
+	var str []string
 	for e != nil {
-		for _, cs := range e.CallStack {
-			str += fmt.Sprintf("%s\n    %s:%d\n", cs.FuncName, cs.File, cs.Line)
-		}
+		str = append(str, e.Message+"\n"+e.printCallstack())
+		e = e.Cause
+	}
+	return strings.Join(str, "\n")
+}
+
+func (e *Error) printCallstack() string {
+	var str string
+	for _, cs := range e.CallStack {
+		str += fmt.Sprintf("%s\n    %s:%d\n", cs.FuncName, cs.File, cs.Line)
+	}
+	return str
+}
+
+func (e *Error) PrintFullCallstack() string {
+	var str string
+	for e != nil {
+		str += e.printCallstack()
 		e = e.Cause
 	}
 	return str

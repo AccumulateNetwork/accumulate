@@ -1,5 +1,7 @@
 package pkg
 
+//lint:file-ignore ST1001 Don't care
+
 import (
 	"context"
 	"errors"
@@ -21,9 +23,9 @@ import (
 )
 
 var reYamlDoc = regexp.MustCompile("(?m)^---$")
-var reCodeFence = regexp.MustCompile("^([^\\s\\{]*)(\\{[^\\n]*\\})?")
+var reCodeFence = regexp.MustCompile(`^([^\s\{]*)(\{[^\n]*\})?`)
 
-func ExecuteFile(ctx context.Context, filename string, client *client.Client) error {
+func ExecuteFile(ctx context.Context, filename string, simBvns int, client *client.Client) error {
 	contents, err := ioutil.ReadFile(filename)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error reading %q: %v\n", filename, err)
@@ -55,7 +57,7 @@ func ExecuteFile(ctx context.Context, filename string, client *client.Client) er
 		},
 	}
 	if client == nil {
-		S.UseSimulator(3)
+		S.UseSimulator(simBvns)
 	} else {
 		S.SetStartTime(time.Now())
 		S.UseNetwork(client)

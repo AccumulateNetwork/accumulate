@@ -5,10 +5,9 @@ set -e
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source "${SCRIPT_DIR}"/validate-commons.sh
-
 # Format the path to priv_validator_key.json
 function dnPrivKey {
-  echo "$NODES_DIR/node-$1/dnn/config/priv_validator_key.json"
+  echo "$NODES_DIR/priv_validator_key.json"
 }
 
 function signCount {
@@ -33,9 +32,9 @@ if [ -f "$(dnPrivKey 1)" ] && [ -f "/.dockerenv" ] && [ "$NUM_NODES" -ge "3" ]; 
   section "Add a new DN validator"
 
   ((NUM_NODES++))
-  accumulated init node "$NUM_NODES" tcp://node-1:26656 --listen=tcp://127.0.1.100:26656 -w "$NODES_DIR" --genesis-doc="${NODES_DIR}/node-1/dnn/config/genesis.json" --skip-version-check --no-website --skip-peer-health-check
+  accumulated init node tcp://node-1:26656 --listen=tcp://127.0.1.100:26656 -w "$NODES_DIR" --genesis-doc="${NODES_DIR}/node-1/dnn/config/genesis.json" --skip-version-check --no-website --skip-peer-health-check
 
-  pubkey=$(jq -re .pub_key.value <"$(dnPrivKey $NUM_NODES)")
+  pubkey=$(jq -re .pub_key.value <"$(dnPrivKey 1)")
   pubkey=$(echo $pubkey | base64 -d | od -t x1 -An)
   declare -g hexPubKey=$(echo $pubkey | tr -d ' ')
 
@@ -84,8 +83,8 @@ if [ -f "$(dnPrivKey 1)" ]; then
     wait-for cli-tx-sig tx sign dn.acme/operators "$(dnPrivKey $sigNr)" $TXID
   done
 
-  echo "sleeping for 5 seconds (wait for anchor)"
-  sleep 5
+  echo "sleeping for 10 seconds (wait for anchor)"
+  sleep 10
   KEY_ADDED_BVN=$(accumulate page get bvn-BVN1.acme/operators/1 | grep $DN_NEW_KEY_HASH || true)
   [[ -z $KEY_ADDED_BVN ]] && die "operator-2 was not sent to the BVN"
 

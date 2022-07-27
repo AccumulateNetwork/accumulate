@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"math/big"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -20,11 +21,6 @@ func (SendTokens) Validate(st *StateManager, tx *Delivery) (protocol.Transaction
 	body, ok := tx.Transaction.Body.(*protocol.SendTokens)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SendTokens), tx.Transaction.Body)
-	}
-
-	recipients := make([]*url.URL, len(body.To))
-	for i, to := range body.To {
-		recipients[i] = to.Url
 	}
 
 	var account protocol.AccountWithTokens
@@ -54,8 +50,8 @@ func (SendTokens) Validate(st *StateManager, tx *Delivery) (protocol.Transaction
 	}
 
 	m := make(map[[32]byte]bool)
-	for i, u := range recipients {
-		id := u.AccountID32()
+	for _, to := range body.To {
+		id := to.Url.AccountID32()
 		_, ok := m[id]
 		if !ok {
 			m[id] = true
@@ -64,8 +60,29 @@ func (SendTokens) Validate(st *StateManager, tx *Delivery) (protocol.Transaction
 		}
 		deposit := new(protocol.SyntheticDepositTokens)
 		deposit.Token = account.GetTokenUrl()
-		deposit.Amount = body.To[i].Amount
-		st.Submit(u, deposit)
+		deposit.Amount = to.Amount
+		st.Submit(to.Url, deposit)
+	}
+
+	// Is the account locked?
+	lockable, ok := account.(protocol.LockableAccount)
+	if !ok || lockable.GetLockHeight() == 0 {
+		return nil, nil // No
+	}
+
+	entry, err := indexing.LoadIndexEntryFromEnd(st.batch.Account(st.AnchorPool()).MajorBlockChain(), 1)
+	if err != nil {
+		return nil, errors.Format(errors.StatusUnknownError, "load major block index: %w", err)
+	}
+
+	// If there's no entry there's no major block so we cannot have reached the
+	// threshold
+	if entry == nil {
+		return nil, errors.Format(errors.StatusNotAllowed, "account is locked until major block %d (currently at 0)", lockable.GetLockHeight())
+	}
+
+	if entry.BlockIndex < lockable.GetLockHeight() {
+		return nil, errors.Format(errors.StatusNotAllowed, "account is locked until major block %d (currently at %d)", lockable.GetLockHeight(), entry.BlockIndex)
 	}
 
 	return nil, nil

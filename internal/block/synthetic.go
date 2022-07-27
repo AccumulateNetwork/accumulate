@@ -1,16 +1,15 @@
 package block
 
 import (
-	"crypto/sha256"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 )
 
 func (x *Executor) ProduceSynthetic(batch *database.Batch, from *protocol.Transaction, produced []*protocol.Transaction) error {
@@ -97,8 +96,6 @@ func setSyntheticOrigin(batch *database.Batch, from *protocol.Transaction, produ
 }
 
 func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batch, dest *url.URL, body protocol.TransactionBody) (*protocol.Transaction, error) {
-	// m.logDebug("Built synth txn", "txid", logging.AsHex(tx.GetTxHash()), "dest", dest.String(), "nonce", tx.SigInfo.Nonce, "type", body.Type())
-
 	// Generate a synthetic tx and send to the router. Need to track txid to
 	// make sure they get processed.
 
@@ -110,15 +107,25 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 		panic(fmt.Errorf("failed to load the ledger: %v", err))
 	}
 
+	destPart, err := m.Router.RouteAccount(dest)
+	if err != nil {
+		return nil, err
+	}
+	destPartUrl := protocol.PartitionUrl(destPart)
+	destLedger := ledger.Partition(destPartUrl)
+	destLedger.Produced++
+
 	txn := new(protocol.Transaction)
 	txn.Header.Principal = dest
 	txn.Body = body
 	initSig, err := new(signing.Builder).
 		SetUrl(m.Describe.NodeUrl()).
-		InitiateSynthetic(txn, m.Router, ledger)
+		SetVersion(destLedger.Produced).
+		InitiateSynthetic(txn, destPartUrl)
 	if err != nil {
 		return nil, err
 	}
+	m.logger.Debug("Built synthetic transaction", "module", "synthetic", "txid", logging.AsHex(txn.GetHash()), "destination", dest.String(), "type", body.Type(), "seq-num", destLedger.Produced)
 
 	// Update the ledger
 	err = record.PutState(ledger)
@@ -127,16 +134,20 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 	}
 
 	// Store the transaction, its status, and the initiator
-	err = m.putSyntheticTransaction(
+	err = putSyntheticTransaction(
 		batch, txn,
-		&protocol.TransactionStatus{Code: errors.StatusRemote},
-		initSig)
+		&protocol.TransactionStatus{
+			Code:               errors.StatusRemote,
+			SourceNetwork:      initSig.SourceNetwork,
+			DestinationNetwork: initSig.DestinationNetwork,
+			SequenceNumber:     initSig.SequenceNumber,
+		})
 	if err != nil {
 		return nil, err
 	}
 
 	// Add the transaction to the synthetic transaction chain
-	chain, err := record.Chain(protocol.MainChain, protocol.ChainTypeTransaction)
+	chain, err := record.MainChain().Get()
 	if err != nil {
 		return nil, err
 	}
@@ -157,7 +168,7 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 		return nil, errors.Format(errors.StatusInternalError, "destination URL is not a valid partition")
 	}
 
-	indexIndex, err := addIndexChainEntry(record, protocol.SyntheticIndexChain(partition), &protocol.IndexEntry{
+	indexIndex, err := addIndexChainEntry(record.SyntheticSequenceChain(partition), &protocol.IndexEntry{
 		Source: uint64(index),
 	})
 	if err != nil {
@@ -172,7 +183,7 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 
 func (x *Executor) buildSynthReceipt(batch *database.Batch, produced []*protocol.Transaction, rootAnchor, synthAnchor int64) error {
 	// Load the root chain
-	chain, err := batch.Account(x.Describe.Ledger()).ReadChain(protocol.MinorRootChain)
+	chain, err := batch.Account(x.Describe.Ledger()).RootChain().Get()
 	if err != nil {
 		return errors.Format(errors.StatusUnknownError, "load root chain: %w", err)
 	}
@@ -184,7 +195,7 @@ func (x *Executor) buildSynthReceipt(batch *database.Batch, produced []*protocol
 	}
 
 	// Load the synthetic transaction chain
-	chain, err = batch.Account(x.Describe.Synthetic()).ReadChain(protocol.MainChain)
+	chain, err = batch.Account(x.Describe.Synthetic()).MainChain().Get()
 	if err != nil {
 		return errors.Format(errors.StatusUnknownError, "load root chain: %w", err)
 	}
@@ -200,15 +211,8 @@ func (x *Executor) buildSynthReceipt(batch *database.Batch, produced []*protocol
 		if err != nil {
 			return errors.Format(errors.StatusUnknownError, "load synthetic transaction status: %w", err)
 		}
-		sigs, err := GetAllSignatures(batch, record, status, transaction.Header.Initiator[:])
-		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "load synthetic transaction signatures: %w", err)
-		}
-		if len(sigs) == 0 {
-			return errors.Format(errors.StatusInternalError, "synthetic transaction %X does not have a synthetic origin signature", transaction.GetHash()[:4])
-		}
-		if len(sigs) > 1 {
-			return errors.Format(errors.StatusInternalError, "synthetic transaction %X has more than one signature", transaction.GetHash()[:4])
+		if status.SourceNetwork == nil || status.DestinationNetwork == nil || status.SequenceNumber == 0 {
+			return errors.Format(errors.StatusInternalError, "synthetic transaction %X status is not correctly initialized", transaction.GetHash()[:4])
 		}
 
 		// Prove it
@@ -222,24 +226,10 @@ func (x *Executor) buildSynthReceipt(batch *database.Batch, produced []*protocol
 			return errors.Format(errors.StatusUnknownError, "combine receipts: %w", err)
 		}
 
-		proofSig := new(protocol.ReceiptSignature)
-		proofSig.SourceNetwork = x.Describe.NodeUrl()
-		proofSig.TransactionHash = *(*[32]byte)(transaction.GetHash())
-		proofSig.Proof = *r
-
-		// Record the proof signature but DO NOT record the key signature! Each
-		// node has a different key, so recording the key signature here would
-		// cause a consensus failure!
-		err = batch.Transaction(proofSig.Hash()).PutState(&database.SigOrTxn{
-			Txid:      transaction.ID(),
-			Signature: proofSig,
-		})
+		status.Proof = r
+		err = record.PutStatus(status)
 		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "store signature: %w", err)
-		}
-		_, err = batch.Transaction(transaction.GetHash()).AddSystemSignature(&x.Describe, proofSig)
-		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "record receipt for %X: %w", transaction.GetHash()[:4], err)
+			return errors.Format(errors.StatusUnknownError, "store synthetic transaction status: %w", err)
 		}
 	}
 
@@ -247,17 +237,33 @@ func (x *Executor) buildSynthReceipt(batch *database.Batch, produced []*protocol
 }
 
 func processSyntheticTransaction(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) error {
-	// Load all of the signatures
-	signatures, err := GetAllSignatures(batch, batch.Transaction(transaction.GetHash()), status, transaction.Header.Initiator[:])
+	// Check that the partition signature has been received
+	if status.SourceNetwork == nil {
+		return errors.Format(errors.StatusUnauthenticated, "missing partition signature")
+	}
+
+	// Check for a key signature
+	hasKeySig, err := hasKeySignature(batch, status)
 	if err != nil {
 		return err
 	}
+	if !hasKeySig {
+		return errors.Format(errors.StatusUnauthenticated, "missing key signature")
+	}
 
-	// Validate signatures
-	return validateSyntheticTransactionSignatures(transaction, signatures)
+	if transaction.Body.Type() == protocol.TransactionTypeDirectoryAnchor || transaction.Body.Type() == protocol.TransactionTypeBlockValidatorAnchor {
+		return nil
+	}
+
+	// Check that the receipt signature has been received
+	if status.Proof == nil {
+		return errors.Format(errors.StatusUnauthenticated, "missing synthetic transaction receipt")
+	}
+
+	return nil
 }
 
-func (x *Executor) putSyntheticTransaction(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus, signature *protocol.SyntheticSignature) error {
+func putSyntheticTransaction(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) error {
 	// Store the transaction
 	obj := batch.Transaction(transaction.GetHash())
 	err := obj.PutState(&database.SigOrTxn{Transaction: transaction})
@@ -271,84 +277,5 @@ func (x *Executor) putSyntheticTransaction(batch *database.Batch, transaction *p
 		return fmt.Errorf("store status: %w", err)
 	}
 
-	if signature == nil {
-		return nil
-	}
-
-	// Record the signature against the transaction
-	_, err = obj.AddSystemSignature(&x.Describe, signature)
-	if err != nil {
-		return fmt.Errorf("add signature: %w", err)
-	}
-
-	// Hash the signature
-	sigData, err := signature.MarshalBinary()
-	if err != nil {
-		return fmt.Errorf("marshal signature: %w", err)
-	}
-	sigHash := sha256.Sum256(sigData)
-
-	// Store the signature
-	err = batch.Transaction(sigHash[:]).PutState(&database.SigOrTxn{
-		Txid:      transaction.ID(),
-		Signature: signature,
-	})
-	if err != nil {
-		return fmt.Errorf("store signature: %w", err)
-	}
-
-	// // Add the signature to the principal's chain
-	// chain, err := batch.Account(transaction.Header.Principal).Chain(protocol.SignatureChain, protocol.ChainTypeTransaction)
-	// if err != nil {
-	// 	return fmt.Errorf("load chain: %w", err)
-	// }
-	// err = chain.AddEntry(sigHash[:], true)
-	// if err != nil {
-	// 	return fmt.Errorf("store chain: %w", err)
-	// }
-
 	return nil
-}
-
-func assembleSynthReceipt(hash [32]byte, signatures []protocol.Signature) (*managed.Receipt, *url.URL, error) {
-	// Collect receipts
-	receipts := map[[32]byte]*managed.Receipt{}
-	var sourceNet *url.URL
-	for _, signature := range signatures {
-		receipt, ok := signature.(*protocol.ReceiptSignature)
-		if !ok {
-			continue
-		}
-		sourceNet = receipt.SourceNetwork
-		receipts[*(*[32]byte)(receipt.Proof.Start)] = &receipt.Proof
-	}
-
-	// Get the first
-	receipt, ok := receipts[hash]
-	delete(receipts, hash)
-	if !ok {
-		return nil, nil, errors.Format(errors.StatusInternalError, "missing initial receipt")
-	}
-
-	// Join the remaining receipts
-	for len(receipts) > 0 {
-		// Find the next receipt
-		hash = *(*[32]byte)(receipt.Anchor)
-		next, ok := receipts[hash]
-		if !ok {
-			// TODO Reject receipts that do not match up. We should probably
-			// just store all of this in the transaction status or something.
-			break
-			// return nil, nil, errors.Format(errors.StatusInternalError, "extra receipts")
-		}
-		delete(receipts, hash)
-
-		r, err := receipt.Combine(next)
-		if err != nil {
-			return nil, nil, errors.Format(errors.StatusInternalError, "combine receipts: %w", err)
-		}
-		receipt = r
-	}
-
-	return receipt, sourceNet, nil
 }

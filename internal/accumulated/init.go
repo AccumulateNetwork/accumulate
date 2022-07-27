@@ -2,23 +2,27 @@ package accumulated
 
 import (
 	"bytes"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"os"
-	"path"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/tendermint/tendermint/crypto/ed25519"
+	tmjson "github.com/tendermint/tendermint/libs/json"
 	"github.com/tendermint/tendermint/libs/log"
 	tmos "github.com/tendermint/tendermint/libs/os"
 	"github.com/tendermint/tendermint/privval"
 	tmtypes "github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
+	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 )
 
 const nodeDirPerm = 0755
@@ -149,14 +153,15 @@ func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][2]*config
 func ConfigureNodePorts(node *NodeInit, cfg *config.Config, offset config.PortOffset) {
 	cfg.P2P.ListenAddress = node.Address(true, "tcp", offset, config.PortOffsetTendermintP2P)
 	cfg.RPC.ListenAddress = node.Address(true, "tcp", offset, config.PortOffsetTendermintRpc)
-	cfg.RPC.GRPCListenAddress = node.Address(true, "tcp", offset, config.PortOffsetTendermintGrpc)
 	cfg.Instrumentation.PrometheusListenAddr = fmt.Sprintf(":%d", node.Port(offset, config.PortOffsetPrometheus))
-	cfg.Accumulate.LocalAddress = node.Address(false, "", offset, config.PortOffsetTendermintP2P)
+	if cfg.Accumulate.LocalAddress == "" {
+		cfg.Accumulate.LocalAddress = node.Address(false, "", offset, config.PortOffsetTendermintP2P)
+	}
 	cfg.Accumulate.Website.ListenAddress = node.Address(true, "http", offset, config.PortOffsetWebsite)
 	cfg.Accumulate.API.ListenAddress = node.Address(true, "http", offset, config.PortOffsetAccumulateApi)
 }
 
-func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time time.Time, logger log.Logger, factomAddressesFile string) (map[string]*tmtypes.GenesisDoc, error) {
+func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time time.Time, logger log.Logger, factomAddresses func() (io.Reader, error)) (map[string]*tmtypes.GenesisDoc, error) {
 	docs := map[string]*tmtypes.GenesisDoc{}
 	var operators [][]byte
 	var partitions []protocol.PartitionDefinition
@@ -229,30 +234,22 @@ func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time tim
 		if id == protocol.Directory {
 			netType = config.Directory
 		}
-		store := memory.New(logger.With("module", "storage"))
-		bs, err := genesis.Init(store, genesis.InitOpts{
-			PartitionId:         id,
-			NetworkType:         netType,
-			GenesisTime:         time,
-			Logger:              logger.With("partition", id),
-			GenesisGlobals:      globals,
-			OperatorKeys:        operators,
-			FactomAddressesFile: factomAddressesFile,
+		snapshot := new(ioutil2.Buffer)
+		root, err := genesis.Init(snapshot, genesis.InitOpts{
+			PartitionId:     id,
+			NetworkType:     netType,
+			GenesisTime:     time,
+			Logger:          logger.With("partition", id),
+			GenesisGlobals:  globals,
+			OperatorKeys:    operators,
+			FactomAddresses: factomAddresses,
 		})
 		if err != nil {
 			return nil, err
 		}
 
-		err = bs.Bootstrap()
-		if err != nil {
-			return nil, err
-		}
-
-		batch := database.New(store, logger).Begin(false)
-		defer batch.Discard()
-		docs[id].AppHash = batch.BptRoot()
-
-		docs[id].AppState, err = store.MarshalJSON()
+		docs[id].AppHash = root
+		docs[id].AppState, err = json.Marshal(snapshot.Bytes())
 		if err != nil {
 			return nil, err
 		}
@@ -269,12 +266,12 @@ func WriteNodeFiles(cfg *config.Config, privValKey, nodeKey []byte, genDoc *tmty
 	}()
 
 	// Create directories
-	err = os.MkdirAll(path.Join(cfg.RootDir, "config"), nodeDirPerm)
+	err = os.MkdirAll(filepath.Join(cfg.RootDir, "config"), nodeDirPerm)
 	if err != nil {
 		return fmt.Errorf("failed to create config dir: %v", err)
 	}
 
-	err = os.MkdirAll(path.Join(cfg.RootDir, "data"), nodeDirPerm)
+	err = os.MkdirAll(filepath.Join(cfg.RootDir, "data"), nodeDirPerm)
 	if err != nil {
 		return fmt.Errorf("failed to create data dir: %v", err)
 	}
@@ -311,14 +308,22 @@ func loadOrCreatePrivVal(config *config.Config, key []byte) error {
 		pv.Save()
 		return nil
 	}
-
-	pv, err := privval.LoadFilePV(keyFile, stateFile)
-	if err != nil {
-		return err
+	var pv *privval.FilePV
+	var err error
+	if !tmos.FileExists(stateFile) {
+		// When initializing the other node, the key file has already been created
+		pv = privval.NewFilePV(ed25519.PrivKey(key), keyFile, stateFile)
+		pv.LastSignState.Save()
+		// Don't return here - we still need to check that the key on disk matches what we expect
+	} else { // if file exists then we need to load it
+		pv, err = privval.LoadFilePV(keyFile, stateFile)
+		if err != nil {
+			return err
+		}
 	}
 
 	if !bytes.Equal(pv.Key.PrivKey.Bytes(), key) {
-		return fmt.Errorf("existing private key does not match")
+		return fmt.Errorf("existing private key does not match try using --reset flag")
 	}
 
 	return nil
@@ -340,8 +345,30 @@ func loadOrCreateNodeKey(config *config.Config, key []byte) error {
 	}
 
 	if !bytes.Equal(nodeKey.PrivKey.Bytes(), key) {
-		return fmt.Errorf("existing private key does not match")
+		return fmt.Errorf("existing private key does not match try using --reset flag")
 	}
 
 	return nil
+}
+
+func LoadOrGenerateTmPrivKey(privFileName string) (ed25519.PrivKey, error) {
+	//attempt to load the priv validator key, create otherwise.
+	b, err := ioutil.ReadFile(privFileName)
+	var privValKey ed25519.PrivKey
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			//do not overwrite a private validator key.
+			return ed25519.GenPrivKey(), nil
+		}
+		return nil, err
+	}
+	var pvkey privval.FilePVKey
+	err = tmjson.Unmarshal(b, &pvkey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal existing private validator from %s: %v try using --reset flag", privFileName, err)
+	} else {
+		privValKey = pvkey.PrivKey.(ed25519.PrivKey)
+	}
+
+	return privValKey, nil
 }

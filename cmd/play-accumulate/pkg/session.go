@@ -41,7 +41,7 @@ type Engine interface {
 	GetDirectory(*URL) ([]*url.URL, error)
 	GetTransaction([32]byte) (*protocol.Transaction, error)
 	Submit(*protocol.Envelope) (*protocol.TransactionStatus, error)
-	WaitFor([32]byte) ([]*protocol.TransactionStatus, []*protocol.Transaction, error)
+	WaitFor(txn [32]byte, delivered bool) ([]*protocol.TransactionStatus, []*protocol.Transaction, error)
 }
 
 type Abort struct {
@@ -124,8 +124,13 @@ func intexp(x *big.Int, precision int) *big.Int {
 func bigfloat(v float64, precision int) *big.Int {
 	e := intexp(big.NewInt(1), precision)
 	x := new(big.Float)
-	x.SetInt(e)
-	x.Mul(x, big.NewFloat(v))
+	x.SetInt(e)               // We have to consider rounding errors with floating point math
+	x.Mul(x, big.NewFloat(v)) // This scales v to the fixed point precision
+	round := big.NewFloat(.9) // To adjust for lost precision, round to the nearest int
+	if x.Sign() < 0 {         // Just to be safe, account for negative numbers
+		round = big.NewFloat(-.9)
+	}
+	x.Add(x, round)
 	x.Int(e)
 	return e
 }

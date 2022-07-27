@@ -14,6 +14,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
@@ -27,13 +28,13 @@ func (m *Executor) queryAccount(batch *database.Batch, account *database.Account
 	}
 	resp.Account = state
 
-	obj, err := account.GetObject()
+	chains, err := account.Chains().Get()
 	if err != nil {
-		return nil, fmt.Errorf("get object: %w", err)
+		return nil, fmt.Errorf("get chains index: %w", err)
 	}
 
-	for _, c := range obj.Chains {
-		chain, err := account.ReadChain(c.Name)
+	for _, c := range chains {
+		chain, err := account.GetChainByName(c.Name)
 		if err != nil {
 			return nil, fmt.Errorf("get chain %s: %w", c.Name, err)
 		}
@@ -63,7 +64,7 @@ func (m *Executor) queryAccount(batch *database.Batch, account *database.Account
 	return resp, nil
 }
 
-func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]byte, encoding.BinaryMarshaler, error) {
+func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool, scratch bool) ([]byte, encoding.BinaryMarshaler, error) {
 	qv := u.QueryValues()
 
 	switch {
@@ -74,14 +75,14 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 			return nil, nil, fmt.Errorf("invalid txid %q: %v", qv.Get("txid"), err)
 		}
 
-		v, err := m.queryByTxId(batch, txid, prove, false, false)
+		v, err := m.queryByTxId(batch, txid, prove, false, false, nil)
 		return []byte("tx"), v, err
 
 	case u.Fragment == "":
 		txid, err := u.AsTxID()
 		if err == nil {
 			h := txid.Hash()
-			v, err := m.queryByTxId(batch, h[:], prove, false, false)
+			v, err := m.queryByTxId(batch, h[:], prove, false, false, nil)
 			return []byte("tx"), v, err
 		}
 
@@ -105,19 +106,19 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 			return nil, nil, fmt.Errorf("invalid entry: %q is not a hash", fragment[1])
 		}
 
-		obj, err := batch.Account(u).GetObject()
+		chains, err := batch.Account(u).Chains().Get()
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to load metadata of %q: %v", u, err)
+			return nil, nil, fmt.Errorf("get chains index: %w", err)
 		}
 
 		var chainName string
 		var index int64
-		for _, chainMeta := range obj.Chains {
+		for _, chainMeta := range chains {
 			if chainMeta.Type != protocol.ChainTypeAnchor {
 				continue
 			}
 
-			chain, err := batch.Account(u).ReadChain(chainMeta.Name)
+			chain, err := batch.Account(u).GetChainByName(chainMeta.Name)
 			if err != nil {
 				return nil, nil, fmt.Errorf("failed to load chain %s of %q: %v", chainMeta.Name, u, err)
 			}
@@ -151,12 +152,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 			return nil, nil, fmt.Errorf("invalid fragment")
 		}
 
-		obj, err := batch.Account(u).GetObject()
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to load metadata of %q: %v", u, err)
-		}
-
-		chain, err := batch.Account(u).ReadChain(fragment[1])
+		chain, err := batch.Account(u).GetChainByName(fragment[1])
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to load chain %q of %q: %v", strings.Join(fragment[1:], "."), u, err)
 		}
@@ -169,13 +165,19 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 			}
 
 			res := new(query.ResponseChainRange)
-			res.Type = obj.ChainType(fragment[1])
 			res.Start = start
 			res.End = start + count
 			res.Total = chain.Height()
 			res.Entries, err = chain.Entries(start, start+count)
 			if err != nil {
 				return nil, nil, fmt.Errorf("failed to load entries: %v", err)
+			}
+
+			md, err := batch.Account(u).Chains().Find(&protocol.ChainMetadata{Name: fragment[1]})
+			if err == nil {
+				res.Type = md.Type
+			} else {
+				res.Type = managed.ChainTypeUnknown
 			}
 
 			return []byte("chain-range"), res, nil
@@ -192,18 +194,24 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 			}
 
 			res := new(query.ResponseChainEntry)
-			res.Type = obj.ChainType(fragment[1])
 			res.Height = uint64(height)
 			res.Entry = entry
 			res.State = make([][]byte, len(state.Pending))
 			for i, h := range state.Pending {
 				res.State[i] = h.Copy()
 			}
+
+			md, err := batch.Account(u).Chains().Find(&protocol.ChainMetadata{Name: fragment[1]})
+			if err == nil {
+				res.Type = md.Type
+			} else {
+				res.Type = managed.ChainTypeUnknown
+			}
+
 			return []byte("chain-entry"), res, nil
 		}
 
 	case "tx", "txn", "transaction", "signature":
-		chainName := chainNameFor(fragment[0])
 		switch len(fragment) {
 		case 1:
 			start, count, err := parseRange(qv)
@@ -211,7 +219,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 				return nil, nil, err
 			}
 
-			txns, perr := m.queryTxHistory(batch, u, uint64(start), uint64(start+count), protocol.MainChain)
+			txns, perr := m.queryTxHistory(batch, chainFor(batch.Account(u), "", scratch), uint64(start), uint64(start+count))
 			if perr != nil {
 				return nil, nil, perr
 			}
@@ -219,7 +227,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 			return []byte("tx-history"), txns, nil
 
 		case 2:
-			chain, err := batch.Account(u).ReadChain(chainName)
+			chain, err := chainFor(batch.Account(u), fragment[0], scratch).Get()
 			if err != nil {
 				return nil, nil, fmt.Errorf("failed to load main chain of %q: %v", u, err)
 			}
@@ -234,7 +242,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 				return nil, nil, fmt.Errorf("failed to load chain state: %v", err)
 			}
 
-			res, err := m.queryByTxId(batch, txid, prove, false, false)
+			res, err := m.queryByTxId(batch, txid, prove, false, false, nil)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -268,13 +276,13 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 				if err != nil {
 					return nil, nil, err
 				}
-				txns, perr := m.queryTxHistory(batch, u, uint64(start), uint64(end), protocol.SignatureChain)
+				txns, perr := m.queryTxHistory(batch, batch.Account(u).SignatureChain(), uint64(start), uint64(end))
 				if perr != nil {
 					return nil, nil, perr
 				}
 				return []byte("tx-history"), txns, nil
 			} else {
-				chain, err := batch.Account(u).ReadChain(protocol.SignatureChain)
+				chain, err := batch.Account(u).SignatureChain().Get()
 				if err != nil {
 					return nil, nil, fmt.Errorf("failed to load main chain of %q: %v", u, err)
 				}
@@ -298,7 +306,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 					}
 
 					// Return the transaction without height or state info
-					res, err := m.queryByTxId(batch, txid, prove, false, false)
+					res, err := m.queryByTxId(batch, txid, prove, false, false, nil)
 					if err != nil {
 						return nil, nil, err
 					}
@@ -311,7 +319,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 					return nil, nil, fmt.Errorf("failed to load chain state: %v", err)
 				}
 
-				res, err := m.queryByTxId(batch, txid, prove, false, false)
+				res, err := m.queryByTxId(batch, txid, prove, false, false, nil)
 				if err != nil {
 					return nil, nil, err
 				}
@@ -389,12 +397,15 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 	return nil, nil, fmt.Errorf("invalid fragment")
 }
 
-func chainNameFor(entity string) string {
+func chainFor(account *database.Account, entity string, scratch bool) *database.Chain2 {
 	switch entity {
 	case "signature":
-		return protocol.SignatureChain
+		return account.SignatureChain()
 	}
-	return protocol.MainChain
+	if scratch {
+		return account.ScratchChain()
+	}
+	return account.MainChain()
 }
 
 func parseRange(qv url.Values) (start, count int64, err error) {
@@ -515,7 +526,7 @@ func (m *Executor) queryDirectoryByChainId(batch *database.Batch, account *url.U
 	return resp, nil
 }
 
-func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove, remote, signSynth bool) (*query.ResponseByTxId, error) {
+func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove, remote, signSynth bool, anchorDest *url.URL) (*query.ResponseByTxId, error) {
 	var err error
 
 	tx := batch.Transaction(txid)
@@ -546,44 +557,13 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove, remote
 		return nil, errors.NotFound("transaction %X not found", txid[:4])
 	}
 
-	// If we have an account, lookup if it's a scratch chain. If so, filter out records that should have been pruned
-	account := txState.Transaction.Header.Principal
-	if account != nil && isScratchAccount(batch, account) {
-		shouldBePruned, err := m.shouldBePruned(batch, txid)
-		if err != nil {
-			return nil, err
-		}
-		if shouldBePruned {
-			return nil, errors.NotFound("transaction %X not found", txid[:4])
-		}
+	// Filter out scratch txs that should have been pruned
+	shouldBePruned, err := m.shouldBePruned(batch, txid, txState.Transaction.Body)
+	if err != nil {
+		return nil, err
 	}
-
-	if signSynth {
-		sigs, err := GetAllSignatures(batch, tx, status, txState.Transaction.Header.Initiator[:])
-		if err != nil {
-			return nil, err
-		}
-		keySig, err := m.signTransaction(batch, txState.Transaction, sigs)
-		if err != nil {
-			return nil, errors.Format(errors.StatusInternalError, "sign synthetic transaction: %w", err)
-		}
-		var page *protocol.KeyPage
-		err = batch.Account(m.Describe.OperatorsPage()).GetStateAs(&page)
-		if err != nil {
-			return nil, err
-		}
-		i, _, ok := page.EntryByKeyHash(keySig.(protocol.KeySignature).GetPublicKeyHash())
-		if !ok {
-			return nil, errors.Format(errors.StatusInternalError, "node key is missing from operator book")
-		}
-		_, err = tx.AddSignature(uint64(i), keySig)
-		if err != nil {
-			return nil, err
-		}
-		err = batch.Transaction(keySig.Hash()).PutState(&database.SigOrTxn{Signature: keySig})
-		if err != nil {
-			return nil, err
-		}
+	if shouldBePruned {
+		return nil, errors.NotFound("transaction %X not found", txid[:4])
 	}
 
 	qr := query.ResponseByTxId{}
@@ -592,6 +572,77 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove, remote
 	qr.Status = status
 	qr.TxId = txState.Transaction.ID()
 	// qr.Height = -1
+
+	if anchorDest != nil {
+		// Build a block anchor for the requester
+		qr.Envelope, err = m.prepareBlockAnchor(batch, txState.Transaction.Body, status.SequenceNumber, anchorDest)
+		if err != nil {
+			return nil, err
+		}
+		qr.TxId = qr.Envelope.Transaction[0].ID()
+
+	} else if signSynth {
+		// Build signatures for the synthetic transaction
+
+		// Add the partition signature
+		partSig := new(protocol.PartitionSignature)
+		partSig.SourceNetwork = status.SourceNetwork
+		partSig.DestinationNetwork = status.DestinationNetwork
+		partSig.SequenceNumber = status.SequenceNumber
+		partSig.TransactionHash = *(*[32]byte)(txid)
+		qr.Envelope.Signatures = append(qr.Envelope.Signatures, partSig)
+
+		// Add the receipt signature
+		receiptSig := new(protocol.ReceiptSignature)
+		receiptSig.SourceNetwork = status.SourceNetwork
+		if status.Proof != nil {
+			receiptSig.Proof = *status.Proof
+		}
+		receiptSig.TransactionHash = *(*[32]byte)(txid)
+		qr.Envelope.Signatures = append(qr.Envelope.Signatures, receiptSig)
+
+		// Add the key signature
+		keySig, err := m.signTransaction(batch, txState.Transaction, status.DestinationNetwork)
+		if err != nil {
+			return nil, errors.Format(errors.StatusInternalError, "sign synthetic transaction: %w", err)
+		}
+		qr.Envelope.Signatures = append(qr.Envelope.Signatures, keySig)
+	}
+
+	if signSynth || anchorDest != nil {
+		// TODO This is pretty hacky
+		var page *protocol.KeyPage
+		err = batch.Account(m.Describe.OperatorsPage()).GetStateAs(&page)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, sig := range qr.Envelope.Signatures {
+			err = batch.Transaction(sig.Hash()).PutState(&database.SigOrTxn{Signature: sig})
+			if err != nil {
+				return nil, err
+			}
+
+			switch sig := sig.(type) {
+			case *protocol.PartitionSignature,
+				*protocol.ReceiptSignature:
+				_, err = tx.AddSystemSignature(&m.Describe, sig)
+				if err != nil {
+					return nil, err
+				}
+
+			case protocol.KeySignature:
+				i, _, ok := page.EntryByKeyHash(sig.GetPublicKeyHash())
+				if !ok {
+					return nil, errors.Format(errors.StatusInternalError, "node key is missing from operator book")
+				}
+				_, err = tx.AddSignature(uint64(i), sig)
+				if err != nil {
+					return nil, err
+				}
+			}
+		}
+	}
 
 	synth, err := tx.GetSyntheticTxns()
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
@@ -634,8 +685,8 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove, remote
 		return nil, fmt.Errorf("failed to load transaction chain index: %v", err)
 	}
 
-	qr.Receipts = make([]*query.TxReceipt, len(chainIndex.Entries))
-	for i, entry := range chainIndex.Entries {
+	qr.Receipts = make([]*query.TxReceipt, len(chainIndex))
+	for i, entry := range chainIndex {
 		receipt, err := m.resolveTxReceipt(batch, txid, entry)
 		if err != nil {
 			// If one receipt fails to build, do not cause the entire request to
@@ -648,8 +699,8 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove, remote
 	return &qr, nil
 }
 
-func (m *Executor) queryTxHistory(batch *database.Batch, account *url.URL, start, end uint64, chainName string) (*query.ResponseTxHistory, error) {
-	chain, err := batch.Account(account).ReadChain(chainName)
+func (m *Executor) queryTxHistory(batch *database.Batch, chain_ *database.Chain2, start, end uint64) (*query.ResponseTxHistory, error) {
+	chain, err := chain_.Get()
 	if err != nil {
 		return nil, errors.Format(errors.StatusUnknownError, "error obtaining txid range %v", err)
 	}
@@ -665,7 +716,7 @@ func (m *Executor) queryTxHistory(batch *database.Batch, account *url.URL, start
 	}
 
 	for _, txid := range txids {
-		qr, err := m.queryByTxId(batch, txid, false, false, false)
+		qr, err := m.queryByTxId(batch, txid, false, false, false, nil)
 		if err != nil {
 			if errors.Is(err, storage.ErrNotFound) {
 				continue // txs can be filtered out for scratch accounts
@@ -753,7 +804,7 @@ func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove 
 	switch q := q.(type) {
 	case *query.RequestByTxId:
 		txr := q
-		qr, err := m.queryByTxId(batch, txr.TxId[:], prove, false, false)
+		qr, err := m.queryByTxId(batch, txr.TxId[:], prove, false, false, nil)
 		if err != nil {
 			return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 		}
@@ -765,8 +816,7 @@ func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove 
 		}
 	case *query.RequestTxHistory:
 		txh := q
-
-		thr, perr := m.queryTxHistory(batch, txh.Account, txh.Start, txh.Start+txh.Limit, protocol.MainChain)
+		thr, perr := m.queryTxHistory(batch, chainFor(batch.Account(txh.Account), "", txh.Scratch), txh.Start, txh.Start+txh.Limit)
 		if perr != nil {
 			return nil, nil, perr
 		}
@@ -782,7 +832,7 @@ func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove 
 
 		var err error
 		var obj encoding.BinaryMarshaler
-		k, obj, err = m.queryByUrl(batch, chr.Url, prove)
+		k, obj, err = m.queryByUrl(batch, chr.Url, prove, chr.Scratch)
 		if err != nil {
 			return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 		}
@@ -813,7 +863,7 @@ func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove 
 	case *query.RequestByChainId:
 		chr := q
 
-		//nolint:staticcheck // Ignore the deprecation warning for AccountByID
+		//nolint:staticcheck // We can't remove this until we remove the API method
 		record, err := batch.AccountByID(chr.ChainId[:])
 		if err != nil {
 			return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
@@ -944,30 +994,44 @@ func (m *Executor) Query(batch *database.Batch, q query.Request, _ int64, prove 
 			return nil, nil, errors.Format(errors.StatusUnknownError, "error marshalling payload for major blocks response")
 		}
 	case *query.RequestSynth:
-		partition, ok := protocol.ParsePartitionUrl(q.Destination)
-		if !ok {
-			return nil, nil, errors.Format(errors.StatusUnknownError, "destination is not a partition")
-		}
-		record := batch.Account(m.Describe.Synthetic())
-		chain, err := record.ReadChain(protocol.SyntheticIndexChain(partition))
-		if err != nil {
-			return nil, nil, errors.Format(errors.StatusUnknownError, "failed to load the synth index chain: %w", err)
-		}
-		entry := new(protocol.IndexEntry)
-		err = chain.EntryAs(int64(q.SequenceNumber)-1, entry)
-		if err != nil {
-			return nil, nil, errors.Format(errors.StatusUnknownError, "failed to unmarshal the index entry: %w", err)
-		}
-		chain, err = record.ReadChain(protocol.MainChain)
-		if err != nil {
-			return nil, nil, errors.Format(errors.StatusUnknownError, "failed to load the synth main chain: %w", err)
-		}
-		hash, err := chain.Entry(int64(entry.Source))
-		if err != nil {
-			return nil, nil, errors.Format(errors.StatusUnknownError, "failed to load the main entry: %w", err)
+		var hash []byte
+		var anchorDest *url.URL
+		if q.Anchor {
+			chain, err := batch.Account(m.Describe.AnchorPool()).AnchorSequenceChain().Get()
+			if err != nil {
+				return nil, nil, errors.Format(errors.StatusUnknownError, "failed to load the anchor sequence chain: %w", err)
+			}
+			hash, err = chain.Entry(int64(q.SequenceNumber) - 1)
+			if err != nil {
+				return nil, nil, errors.Format(errors.StatusUnknownError, "failed to load the main entry: %w", err)
+			}
+			anchorDest = q.Destination
+		} else {
+			partition, ok := protocol.ParsePartitionUrl(q.Destination)
+			if !ok {
+				return nil, nil, errors.Format(errors.StatusUnknownError, "destination is not a partition")
+			}
+			record := batch.Account(m.Describe.Synthetic())
+			chain, err := record.SyntheticSequenceChain(partition).Get()
+			if err != nil {
+				return nil, nil, errors.Format(errors.StatusUnknownError, "failed to load the synth sequence chain: %w", err)
+			}
+			entry := new(protocol.IndexEntry)
+			err = chain.EntryAs(int64(q.SequenceNumber)-1, entry)
+			if err != nil {
+				return nil, nil, errors.Format(errors.StatusUnknownError, "failed to unmarshal the index entry: %w", err)
+			}
+			chain, err = record.MainChain().Get()
+			if err != nil {
+				return nil, nil, errors.Format(errors.StatusUnknownError, "failed to load the synth main chain: %w", err)
+			}
+			hash, err = chain.Entry(int64(entry.Source))
+			if err != nil {
+				return nil, nil, errors.Format(errors.StatusUnknownError, "failed to load the main entry: %w", err)
+			}
 		}
 
-		qr, err := m.queryByTxId(batch, hash, prove, true, true)
+		qr, err := m.queryByTxId(batch, hash, prove, true, true, anchorDest)
 		if err != nil {
 			return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 		}
@@ -992,7 +1056,7 @@ func (m *Executor) queryMinorBlocks(batch *database.Batch, req *query.RequestMin
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
-	idxChain, err := ledgerAcc.ReadChain(protocol.MinorRootIndexChain)
+	idxChain, err := ledgerAcc.RootChain().Index().Get()
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
@@ -1049,7 +1113,7 @@ resultLoop:
 
 			minorEntry.TxCount = uint64(0)
 			seen := map[[32]byte]bool{}
-			for _, updIdx := range chainUpdatesIndex.Entries {
+			for _, updIdx := range chainUpdatesIndex {
 				// Only care about the main chain
 				if updIdx.Type != protocol.ChainTypeTransaction || updIdx.Name != "main" {
 					continue
@@ -1067,7 +1131,7 @@ resultLoop:
 					minorEntry.TxIds = append(minorEntry.TxIds, updIdx.Entry)
 				}
 				if req.TxFetchMode == query.TxFetchModeExpand {
-					qr, err := m.queryByTxId(batch, updIdx.Entry, false, false, false)
+					qr, err := m.queryByTxId(batch, updIdx.Entry, false, false, false, nil)
 					if err == nil {
 						minorEntry.TxCount++
 						minorEntry.Transactions = append(minorEntry.Transactions, qr)
@@ -1105,7 +1169,7 @@ func (m *Executor) expandChainEntries(batch *database.Batch, entries []string) (
 	return expEntries, nil
 }
 
-func (m *Executor) resolveTxReceipt(batch *database.Batch, txid []byte, entry *indexing.TransactionChainEntry) (*query.TxReceipt, error) {
+func (m *Executor) resolveTxReceipt(batch *database.Batch, txid []byte, entry *database.TransactionChainEntry) (*query.TxReceipt, error) {
 	receipt := new(query.TxReceipt)
 	receipt.Account = entry.Account
 	receipt.Chain = entry.Chain
@@ -1124,7 +1188,12 @@ func (m *Executor) resolveTxReceipt(batch *database.Batch, txid []byte, entry *i
 
 func (m *Executor) resolveChainReceipt(batch *database.Batch, account *url.URL, name string, index int64) (*query.GeneralReceipt, error) {
 	receipt := new(query.GeneralReceipt)
-	_, r, err := indexing.ReceiptForChainIndex(&m.Describe, batch, batch.Account(account), name, index)
+	chain, err := batch.Account(account).ChainByName(name)
+	if err != nil {
+		return receipt, err
+	}
+
+	_, r, err := indexing.ReceiptForChainIndex(&m.Describe, batch, chain, index)
 	if err != nil {
 		return receipt, err
 	}
@@ -1145,23 +1214,11 @@ func (m *Executor) resolveAccountStateReceipt(batch *database.Batch, account *da
 	return receipt, nil
 }
 
-func isScratchAccount(batch *database.Batch, account *url.URL) bool {
-	acc := batch.Account(account)
-	state, err := acc.GetState()
-	if err != nil {
-		return false // Account may not exist, don't emit an error because waitForTxns will not get back the tx for this BVN and fail
-	}
+func (m *Executor) shouldBePruned(batch *database.Batch, txid []byte, txBody protocol.TransactionBody) (bool, error) {
 
-	switch v := state.(type) {
-	case *protocol.DataAccount:
-		return v.Scratch
-	case *protocol.TokenAccount:
-		return v.Scratch
+	if body, ok := txBody.(*protocol.WriteData); !ok || !body.Scratch {
+		return false, nil
 	}
-	return false
-}
-
-func (m *Executor) shouldBePruned(batch *database.Batch, txid []byte) (bool, error) {
 
 	// Load the tx chain
 	txChain, err := indexing.TransactionChain(batch, txid).Get()
@@ -1173,12 +1230,12 @@ func (m *Executor) shouldBePruned(batch *database.Batch, txid []byte) (bool, err
 
 	// preload the minor root index chain
 	ledger := batch.Account(m.Describe.NodeUrl(protocol.Ledger))
-	minorIndexChain, err := ledger.ReadChain(protocol.MinorRootIndexChain)
+	minorIndexChain, err := ledger.RootChain().Index().Get()
 	if err != nil {
 		return false, err
 	}
 
-	for _, txChainEntry := range txChain.Entries {
+	for _, txChainEntry := range txChain {
 		if txChainEntry.Chain == protocol.MainChain {
 			// Load the index entry
 			indexEntry := new(protocol.IndexEntry)
@@ -1186,7 +1243,7 @@ func (m *Executor) shouldBePruned(batch *database.Batch, txid []byte) (bool, err
 			if err != nil {
 				return false, err
 			}
-			if indexEntry.BlockTime.Before(pruneTime) {
+			if !indexEntry.BlockTime.IsZero() && indexEntry.BlockTime.Before(pruneTime) {
 				return true, nil
 			}
 			return false, nil

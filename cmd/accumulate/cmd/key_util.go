@@ -1,23 +1,25 @@
 package cmd
 
 import (
+	"crypto/ed25519"
 	"crypto/sha256"
-	"errors"
 	"fmt"
+	"runtime/debug"
 
-	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/db"
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	btc "github.com/btcsuite/btcd/btcec"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
+
+//go:generate go run ../../../tools/cmd/gen-types --package cmd --out key_info_gen.go key_info.yml
 
 type Key struct {
 	PublicKey  []byte
 	PrivateKey []byte
-	Type       protocol.SignatureType
+	KeyInfo    KeyInfo
 }
 
 func (k *Key) PublicKeyHash() []byte {
-	switch k.Type {
+	switch k.KeyInfo.Type {
 	case protocol.SignatureTypeLegacyED25519,
 		protocol.SignatureTypeED25519:
 		hash := sha256.Sum256(k.PublicKey)
@@ -33,11 +35,16 @@ func (k *Key) PublicKeyHash() []byte {
 		return protocol.ETHhash(k.PublicKey)
 
 	default:
-		panic(fmt.Errorf("unsupported signature type %v", k.Type))
+		debug.PrintStack()
+		panic(fmt.Errorf("cannot hash key for unsupported signature type %v(%d)", k.KeyInfo.Type, k.KeyInfo.Type.GetEnumValue()))
 	}
 }
 
 func (k *Key) Save(label, liteLabel string) error {
+	if k.KeyInfo.Type == protocol.SignatureTypeUnknown {
+		return fmt.Errorf("signature type is was not specified")
+	}
+
 	err := GetWallet().Put(BucketKeys, k.PublicKey, k.PrivateKey)
 	if err != nil {
 		return err
@@ -53,7 +60,12 @@ func (k *Key) Save(label, liteLabel string) error {
 		return err
 	}
 
-	err = GetWallet().Put(BucketSigType, k.PublicKey, encoding.UvarintMarshalBinary(k.Type.GetEnumValue()))
+	data, err := k.KeyInfo.MarshalBinary()
+	if err != nil {
+		return err
+	}
+
+	err = GetWallet().Put(BucketKeyInfo, k.PublicKey, data)
 	if err != nil {
 		return err
 	}
@@ -81,23 +93,45 @@ func (k *Key) LoadByPublicKey(publicKey []byte) error {
 		return fmt.Errorf("private key not found for %x", publicKey)
 	}
 
-	b, err := GetWallet().Get(BucketSigType, k.PublicKey)
-	switch {
-	case err == nil:
-		v, err := encoding.UvarintUnmarshalBinary(b)
-		if err != nil {
-			return err
-		}
-		if !k.Type.SetEnumValue(v) {
-			return fmt.Errorf("invalid key type for %x", publicKey)
-		}
+	b, err := GetWallet().Get(BucketKeyInfo, k.PublicKey)
+	if err != nil {
+		return fmt.Errorf("key type info not found for key %x", k.PublicKey)
+	}
 
-	case errors.Is(err, db.ErrNotFound),
-		errors.Is(err, db.ErrNoBucket):
-		k.Type = protocol.SignatureTypeED25519
+	err = k.KeyInfo.UnmarshalBinary(b)
+	if err != nil {
+		return fmt.Errorf("cannot unmarshal key information for key %x", k.PublicKey)
+	}
 
+	return nil
+}
+
+func (k *Key) Initialize(seed []byte, signatureType protocol.SignatureType) error {
+	k.KeyInfo.Type = signatureType
+	switch k.KeyInfo.Type {
+	case protocol.SignatureTypeLegacyED25519, protocol.SignatureTypeED25519, protocol.SignatureTypeRCD1:
+		if len(seed) != ed25519.SeedSize && len(seed) != ed25519.PrivateKeySize {
+			return fmt.Errorf("invalid private key length, expected %d or %d bytes", ed25519.SeedSize, ed25519.PrivateKeySize)
+		}
+		pk := ed25519.NewKeyFromSeed(seed[:ed25519.SeedSize])
+		k.PrivateKey = pk
+		k.PublicKey = pk[ed25519.SeedSize:]
+	case protocol.SignatureTypeBTC:
+		if len(seed) != btc.PrivKeyBytesLen {
+			return fmt.Errorf("invalid private key length, expected %d bytes", btc.PrivKeyBytesLen)
+		}
+		pvkey, pubKey := btc.PrivKeyFromBytes(btc.S256(), seed)
+		k.PrivateKey = pvkey.Serialize()
+		k.PublicKey = pubKey.SerializeCompressed()
+	case protocol.SignatureTypeBTCLegacy, protocol.SignatureTypeETH:
+		if len(seed) != btc.PrivKeyBytesLen {
+			return fmt.Errorf("invalid private key length, expected %d bytes", btc.PrivKeyBytesLen)
+		}
+		pvkey, pubKey := btc.PrivKeyFromBytes(btc.S256(), seed)
+		k.PrivateKey = pvkey.Serialize()
+		k.PublicKey = pubKey.SerializeUncompressed()
 	default:
-		return err
+		return fmt.Errorf("unsupported signature type %v", k.KeyInfo.Type)
 	}
 
 	return nil

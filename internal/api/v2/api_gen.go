@@ -262,7 +262,7 @@ func (m *JrpcMethods) QuerySynth(_ context.Context, params json.RawMessage) inte
 		return err
 	}
 
-	return jrpcFormatResponse(m.querier.QuerySynth(req.Source, req.Destination, req.SequenceNumber))
+	return jrpcFormatResponse(m.querier.QuerySynth(req.Source, req.Destination, req.SequenceNumber, req.Anchor))
 }
 
 // QueryTx queries a transaction by ID.
@@ -284,5 +284,5 @@ func (m *JrpcMethods) QueryTxHistory(_ context.Context, params json.RawMessage) 
 		return err
 	}
 
-	return jrpcFormatResponse(m.querier.QueryTxHistory(req.Url, req.QueryPagination))
+	return jrpcFormatResponse(m.querier.QueryTxHistory(req.Url, req.QueryPagination, req.Scratch))
 }

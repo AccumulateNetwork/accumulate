@@ -1,5 +1,7 @@
 package main
 
+//lint:file-ignore ST1001 Don't care
+
 import (
 	"crypto/ed25519"
 	"crypto/sha256"
@@ -65,7 +67,6 @@ var txnTests = []*TCG{
 	{Name: "CreateTokenAccount", Cases: []*TC{
 		txnTest(AccountUrl("adi"), &CreateTokenAccount{Url: AccountUrl("adi", "ACME"), TokenUrl: AccountUrl("ACME")}),
 		txnTest(AccountUrl("adi"), &CreateTokenAccount{Url: AccountUrl("adi", "ACME"), TokenUrl: AccountUrl("ACME"), Authorities: []*url.URL{AccountUrl("adi", "book")}}),
-		txnTest(AccountUrl("adi"), &CreateTokenAccount{Url: AccountUrl("adi", "ACME"), TokenUrl: AccountUrl("ACME"), Scratch: true}),
 	}},
 	{Name: "SendTokens", Cases: []*TC{
 		txnTest(AccountUrl("adi", "ACME"), &SendTokens{To: []*TokenRecipient{{Url: AccountUrl("other", "ACME"), Amount: *new(big.Int).SetInt64(100)}}}),

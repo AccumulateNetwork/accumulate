@@ -207,7 +207,7 @@ func TestAnchorChain(t *testing.T) {
 	// // TODO FIX This is broken because the ledger no longer has a list of updates
 	// var ledgerState *protocol.InternalLedger
 	// require.NoError(t, ledger.GetStateAs(&ledgerState))
-	// rootChain, err := ledger.ReadChain(protocol.MinorRootChain)
+	// rootChain, err := ledger.MinorRootChain().Get()
 	// require.NoError(t, err)
 	// first := rootChain.Height() - int64(len(ledgerState.Updates))
 	// for i, meta := range ledgerState.Updates {
@@ -518,6 +518,75 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		}
 
 	})
+
+	t.Run("Data Account data entry to scratch chain", func(t *testing.T) {
+		partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+		nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
+		n := nodes[partitions[1]][0]
+
+		adiKey := generateKey()
+		batch := n.db.Begin(true)
+		require.NoError(t, acctesting.CreateAdiWithCredits(batch, adiKey, "FooBar", 1e9))
+		require.NoError(t, batch.Commit())
+
+		n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+			tac := new(protocol.CreateDataAccount)
+			tac.Url = protocol.AccountUrl("FooBar", "scr")
+			send(newTxn("FooBar").
+				WithSigner(protocol.AccountUrl("FooBar", "book0", "1"), 1).
+				WithBody(tac).
+				Initiate(protocol.SignatureTypeLegacyED25519, adiKey).
+				Build())
+		})
+
+		r := n.GetDataAccount("FooBar/scr")
+		require.Equal(t, "acc://FooBar.acme/scr", r.Url.String())
+		require.Contains(t, n.GetDirectory("FooBar"), protocol.AccountUrl("FooBar", "scr").String())
+
+		wd := new(protocol.WriteData)
+		wd.Scratch = true
+		n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+			entry := new(protocol.AccumulateDataEntry)
+			wd.Entry = entry
+			entry.Data = append(entry.Data, []byte("thequickbrownfoxjumpsoverthelazydog"))
+			for i := 0; i < 10; i++ {
+				entry.Data = append(entry.Data, []byte(fmt.Sprintf("test id %d", i)))
+			}
+
+			send(newTxn("FooBar/scr").
+				WithSigner(protocol.AccountUrl("FooBar", "book0", "1"), 1).
+				WithBody(wd).
+				Initiate(protocol.SignatureTypeLegacyED25519, adiKey).
+				Build())
+		})
+
+		// Without the sleep, this test fails on Windows and macOS
+		time.Sleep(3 * time.Second)
+
+		// Test getting the data by URL
+		rde := new(query.ResponseDataEntry)
+		n.QueryAccountAs("FooBar/scr#data", rde)
+
+		if !protocol.EqualDataEntry(rde.Entry, wd.Entry) {
+			t.Fatalf("data query does not match what was entered")
+		}
+
+		//now test query by entry hash.
+		rde2 := new(query.ResponseDataEntry)
+		n.QueryAccountAs(fmt.Sprintf("FooBar/scr#data/%X", wd.Entry.Hash()), rde2)
+
+		if !protocol.EqualDataEntry(rde.Entry, rde2.Entry) {
+			t.Fatalf("data query does not match what was entered")
+		}
+
+		//now test query by entry set
+		rde3 := new(query.ResponseDataEntrySet)
+		n.QueryAccountAs("FooBar/scr#data/0:1", rde3)
+		if !protocol.EqualDataEntry(rde.Entry, rde3.DataEntries[0].Entry) {
+			t.Fatalf("data query does not match what was entered")
+		}
+
+	})
 }
 
 func TestCreateAdiTokenAccount(t *testing.T) {
@@ -546,7 +615,7 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 		require.Equal(t, "acc://FooBar.acme/Baz", r.Url.String())
 		require.Equal(t, protocol.AcmeUrl().String(), r.TokenUrl.String())
 
-		require.Equal(t, []string{
+		require.ElementsMatch(t, []string{
 			protocol.AccountUrl("FooBar", "book0").String(),
 			protocol.AccountUrl("FooBar", "book0", "1").String(),
 			protocol.AccountUrl("FooBar", "Baz").String(),
@@ -1012,7 +1081,7 @@ func TestSignatorHeight(t *testing.T) {
 	getHeight := func(u *url.URL) uint64 {
 		batch := n.db.Begin(true)
 		defer batch.Discard()
-		chain, err := batch.Account(u).ReadChain(protocol.MainChain)
+		chain, err := batch.Account(u).MainChain().Get()
 		require.NoError(t, err)
 		return uint64(chain.Height())
 	}
@@ -1179,6 +1248,7 @@ func TestIssueTokensRefund(t *testing.T) {
 			Build())
 	})
 	issuer = n.GetTokenIssuer("foo/tokens")
+	require.Equal(t, int64(123), issuer.Issued.Int64())
 
 	account := n.GetLiteTokenAccount(liteAddr.String())
 	require.Equal(t, "acc://foo.acme/tokens", account.TokenUrl.String())
@@ -1419,11 +1489,11 @@ func DumpAccount(t *testing.T, batch *database.Batch, accountUrl *url.URL) {
 	state, err := account.GetState()
 	require.NoError(t, err)
 	fmt.Println("Dump", accountUrl, state.Type())
-	meta, err := account.GetObject()
+	chains, err := account.Chains().Get()
 	require.NoError(t, err)
 	seen := map[[32]byte]bool{}
-	for _, cmeta := range meta.Chains {
-		chain, err := account.ReadChain(cmeta.Name)
+	for _, cmeta := range chains {
+		chain, err := account.GetChainByName(cmeta.Name)
 		require.NoError(t, err)
 		fmt.Printf("  Chain: %s (%v)\n", cmeta.Name, cmeta.Type)
 		height := chain.Height()

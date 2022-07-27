@@ -21,7 +21,7 @@ func (CreateIdentity) SignerIsAuthorized(delegate AuthDelegate, batch *database.
 	}
 
 	// Anyone is allowed to sign for a root identity
-	if transaction.Header.Principal.IsRootIdentity() {
+	if body.Url.IsRootIdentity() {
 		return false, nil
 	}
 
@@ -42,7 +42,7 @@ func (CreateIdentity) TransactionIsReady(delegate AuthDelegate, batch *database.
 	}
 
 	// Anyone is allowed to sign for a root identity
-	if transaction.Header.Principal.IsRootIdentity() {
+	if body.Url.IsRootIdentity() {
 		return true, false, nil
 	}
 

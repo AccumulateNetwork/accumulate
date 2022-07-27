@@ -1,37 +1,191 @@
-- name: Account
+- name: Batch
   type: entity
+  root: true
   customCommit: true
-  customResolve: true
   fields:
-  - name: batch
+  - name: done
+    type: bool
+  - name: writable
+    type: bool
+  - name: id
+    type: int
+  - name: nextChildId
+    type: int
+  - name: parent
     type: Batch
     pointer: true
-  - name: label
-    type: string
-  - name: chains
-    type: map[storage.Key]*managed.Chain
+  - name: kvstore
+    type: storage.KeyValueTxn
+  - name: bptEntries
+    type: map[storage.Key][32]byte
   attributes:
-  - name: Object
-    type: state
-    dataType: protocol.Object
-    emptyIfMissing: true
-    pointer: true
-  - name: Main
-    type: state
-    dataType: protocol.Account
-    union: true
-  - name: Pending
-    type: state
-    dataType: txid
-    emptyIfMissing: true
-    pointer: true
-    set: true
-  - name: SyntheticForAnchor
-    type: state
+
+  - name: Account
+    type: entity
+    customCommit: true
     parameters:
-    - name: Anchor
+    - name: Url
+      type: url
+      pointer: true
+    attributes:
+    - name: Main
+      type: state
+      dataType: protocol.Account
+      union: true
+    - name: Pending
+      type: state
+      dataType: txid
+      emptyIfMissing: true
+      pointer: true
+      collection: set
+    - name: SyntheticForAnchor
+      type: state
+      parameters:
+      - name: Anchor
+        type: hash
+      dataType: txid
+      emptyIfMissing: true
+      pointer: true
+      collection: set
+    - name: Directory
+      type: state
+      collection: set
+      dataType: url
+      pointer: true
+      emptyIfMissing: true
+
+    # Chains
+    - name: MainChain
+      type: other
+      dataType: Chain2
+      pointer: true
+    - name: ScratchChain
+      type: other
+      dataType: Chain2
+      pointer: true
+    - name: SignatureChain
+      type: other
+      dataType: Chain2
+      pointer: true
+    - name: RootChain
+      type: other
+      dataType: Chain2
+      pointer: true
+    - name: AnchorSequenceChain
+      type: other
+      dataType: Chain2
+      pointer: true
+    - name: MajorBlockChain
+      type: other
+      dataType: Chain2
+      pointer: true
+    - name: SyntheticSequenceChain
+      type: other
+      dataType: Chain2
+      pointer: true
+      private: true
+      parameters:
+      - name: Partition
+        type: string
+    - name: AnchorChain
+      type: entity
+      private: true
+      parameters:
+      - name: Partition
+        type: string
+      attributes:
+      - name: Root
+        type: other
+        dataType: Chain2
+        pointer: true
+      - name: BPT
+        type: other
+        dataType: Chain2
+        pointer: true
+
+    # Indices
+    - name: Chains
+      type: index
+      dataType: protocol.ChainMetadata
+      pointer: true
+      collection: set
+    - name: SyntheticAnchors
+      type: index
+      dataType: hash
+      collection: set
+    - name: Data
+      type: entity
+      attributes:
+      - name: Entry
+        type: index
+        collection: counted
+        dataType: hash
+      - name: Transaction
+        type: index
+        parameters:
+        - name: EntryHash
+          type: hash
+        dataType: hash
+
+  - name: Transaction
+    type: entity
+    private: true
+    parameters:
+    - name: Hash
       type: hash
-    dataType: txid
-    emptyIfMissing: true
+    attributes:
+    - name: Main
+      type: state
+      dataType: SigOrTxn # TODO split apart
+      pointer: true
+    - name: Status
+      type: state
+      dataType: protocol.TransactionStatus
+      emptyIfMissing: true
+      pointer: true
+    - name: Produced
+      type: state
+      dataType: txid
+      pointer: true
+      collection: set
+    - name: Signatures
+      type: state
+      dataType: sigSetData
+      pointer: true
+      private: true
+      emptyIfMissing: true
+      parameters:
+      - name: Signer
+        type: url
+        pointer: true
+
+    # Indices
+    - name: Chains
+      type: index
+      dataType: TransactionChainEntry
+      pointer: true
+      collection: set
+      emptyIfMissing: true
+
+  # System Indices - TODO Remove or update these
+  - name: BlockChainUpdates
+    type: index
+    dataType: ChainUpdate
     pointer: true
-    set: true
+    emptyIfMissing: true
+    collection: list
+    parameters:
+    - name: Partition
+      type: url
+      pointer: true
+    - name: Index
+      type: uint
+  - name: BlockState
+    type: index
+    dataType: BlockStateSynthTxnEntry
+    pointer: true
+    collection: set
+    parameters:
+    - name: Partition
+      type: url
+      pointer: true

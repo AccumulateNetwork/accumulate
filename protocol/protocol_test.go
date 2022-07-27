@@ -2,9 +2,11 @@ package protocol
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
@@ -27,6 +29,9 @@ func TestIsValidAdiUrl(t *testing.T) {
 		"Identity has underscore": {URL{Authority: "foo_bar.acme"}, "illegal character '_'"},
 		"Identity has space":      {URL{Authority: "foo bar.acme"}, "illegal character ' '"},
 		"Empty identity with TLD": {URL{Authority: ".acme"}, "identity is empty"},
+		"Reserved DN":             {URL{Authority: "dn.acme", Path: "foo"}, "acc://dn.acme/foo is a reserved URL"},
+		"Reserved BVN":            {URL{Authority: "bvn-x.acme", Path: "foo"}, "acc://bvn-x.acme/foo is a reserved URL"},
+		"Reserved unknown":        {URL{Authority: "unknown.acme", Path: "foo"}, "acc://unknown.acme/foo is a reserved URL"},
 	}
 
 	for name, str := range good {
@@ -86,4 +91,9 @@ func TestParseLiteTokenAddress(t *testing.T) {
 			require.Equal(t, "acc://"+test, tok.String())
 		})
 	}
+}
+
+func TestParseLiteAddress_Invalid(t *testing.T) {
+	_, err := ParseLiteAddress(&url.URL{Authority: hex.EncodeToString([]byte{0xCA, 0xFE})})
+	require.Error(t, err)
 }

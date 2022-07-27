@@ -30,8 +30,8 @@ for example, assume **H**(x) indicates the hash of x, and **+** is the
 concatenation operator, then:
 ```
 ab       = H( a+b )
-abcd     = H( H( a+b ) + H( c+d )
-abcdefgh = H( H( H( a+b ) + H( c+d ) + H( H( e+f ) + H( g+h ) )
+abcd     = H( H( a+b ) + H( c+d ) )
+abcdefgh = H( H( H( a+b ) + H( c+d ) ) + H( H( e+f ) + H( g+h ) ) )
 ```
 
 Using this simplified notation, we can write out a Merkle Tree with 26 

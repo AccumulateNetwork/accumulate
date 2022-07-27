@@ -55,6 +55,14 @@
       ]
     },
     {
+      "name": "Run Simulator",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/cmd/accumulated",
+      "args": ["run", "sim"]
+    },
+    {
       "name": "Run Playbook",
       "type": "go",
       "request": "launch",
@@ -167,6 +175,15 @@
       "program": "${workspaceFolder}/tools/cmd/gen-types",
       "cwd": "${workspaceFolder}/internal/core",
       "args": ["types.yml"]
+    },
+    {
+      "name": "Generate Model",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/tools/cmd/gen-model",
+      "cwd": "${workspaceFolder}/internal/database",
+      "args": ["--package=database", "model.yml"]
     },
     {
       "name": "Generate Protocol Types",

@@ -24,6 +24,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
+	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	_ "gitlab.com/accumulatenetwork/accumulate/smt/pmt"
@@ -294,7 +295,12 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 	defer block.Batch.Discard()
 
 	// Initialize the chain
-	err = app.Executor.InitFromGenesis(block.Batch, req.AppStateBytes)
+	var snapshot []byte
+	err = json.Unmarshal(req.AppStateBytes, &snapshot)
+	if err != nil {
+		panic(fmt.Errorf("failed to init chain: %+v", err))
+	}
+	err = app.Executor.RestoreSnapshot(block.Batch, ioutil2.NewBuffer(snapshot))
 	if err != nil {
 		panic(fmt.Errorf("failed to init chain: %+v", err))
 	}
@@ -449,13 +455,13 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 func (app *Accumulator) EndBlock(req abci.RequestEndBlock) abci.ResponseEndBlock {
 	defer app.recover(nil, true)
 
-	if app.block.State.Empty() {
-		return abci.ResponseEndBlock{}
-	}
-
 	err := app.Executor.EndBlock(app.block)
 	if err != nil {
 		app.fatal(err, true)
+		return abci.ResponseEndBlock{}
+	}
+
+	if app.block.State.Empty() {
 		return abci.ResponseEndBlock{}
 	}
 

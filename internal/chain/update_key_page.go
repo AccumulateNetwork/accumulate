@@ -136,6 +136,9 @@ func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, op protocol.KeyPag
 		if op.Entry.IsEmpty() {
 			return fmt.Errorf("cannot add an empty entry")
 		}
+		if op.Entry.Delegate.ParentOf(page.Url) {
+			return fmt.Errorf("self-delegation is not allowed")
+		}
 
 		_, _, found := findKeyPageEntry(page, &op.Entry)
 		if found {
@@ -170,28 +173,7 @@ func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, op protocol.KeyPag
 		return nil
 
 	case *protocol.UpdateKeyOperation:
-		if op.NewEntry.IsEmpty() {
-			return fmt.Errorf("cannot add an empty entry")
-		}
-
-		// Find the old entry
-		oldPos, entry, found := findKeyPageEntry(page, &op.OldEntry)
-		if !found {
-			return fmt.Errorf("entry to be updated not found on the key page")
-		}
-
-		// Check for an existing key with same delegate
-		_, newEntry, foundNew := findKeyPageEntry(page, &op.NewEntry)
-		if foundNew && op.NewEntry.Delegate == newEntry.Delegate {
-			return fmt.Errorf("cannot have duplicate entries on key page")
-		} // Update the entry
-		entry.PublicKeyHash = op.NewEntry.KeyHash
-		entry.Delegate = op.NewEntry.Delegate
-
-		// Relocate the entry
-		page.RemoveKeySpecAt(oldPos)
-		page.AddKeySpec(entry)
-		return nil
+		return updateKey(page, &op.OldEntry, &op.NewEntry)
 
 	case *protocol.SetThresholdKeyPageOperation:
 		return page.SetThreshold(op.Threshold)
@@ -242,9 +224,11 @@ func findKeyPageEntry(page *protocol.KeyPage, search *protocol.KeySpecParams) (i
 	var ok bool
 	if len(search.KeyHash) > 0 {
 		i, entry, ok = page.EntryByKeyHash(search.KeyHash)
-	} else if search.Delegate != nil {
+	}
+	if !ok && search.Delegate != nil {
 		i, entry, ok = page.EntryByDelegate(search.Delegate)
-	} else {
+	}
+	if !ok {
 		return -1, nil, false
 	}
 

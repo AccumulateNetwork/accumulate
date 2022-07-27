@@ -12,8 +12,14 @@ func (s *Session) AcmeAmount(v float64) *big.Int {
 
 func (s *Session) Amount(v float64, precision uint64) *big.Int {
 	p := new(big.Float)
-	p.SetUint64(precision)
-	p.Mul(p, big.NewFloat(v))
+	p.SetUint64(precision)    // Loss of precision can occur with floating point math
+	p.Mul(p, big.NewFloat(v)) // Scale to the level of precision
+	round := big.NewFloat(.9) // To adjust for lost precision, round to the nearest int
+	if p.Sign() < 0 {         // Just to be safe, account for negative numbers
+		round = big.NewFloat(-.9)
+	}
+	p.Add(p, round) //           Adjusts the lowest digit
+
 	a, _ := p.Int(nil)
 	return a
 }
@@ -172,11 +178,6 @@ func (b bldTxn) CreateTokenAccount(url, token Urlish) bldCreateTokenAccount {
 	return c
 }
 
-func (b bldCreateTokenAccount) AsScratch() bldCreateTokenAccount {
-	b.body.Scratch = true
-	return b
-}
-
 func (b bldCreateTokenAccount) WithAuthority(book Urlish) bldCreateTokenAccount {
 	b.body.Authorities = append(b.body.Authorities, b.s.url(book))
 	return b
@@ -206,11 +207,6 @@ func (b bldTxn) CreateDataAccount() bldCreateDataAccount {
 	c.body = new(protocol.CreateDataAccount)
 	c.bldTxn = b.WithBody(c.body)
 	return c
-}
-
-func (b bldCreateDataAccount) AsScratch() bldCreateDataAccount {
-	b.body.Scratch = true
-	return b
 }
 
 func (b bldCreateDataAccount) WithAuthority(book Urlish) bldCreateDataAccount {

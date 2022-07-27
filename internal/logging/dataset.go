@@ -24,7 +24,6 @@ type DataSetLog struct {
 //nolint:unused
 type dataValue struct {
 	label     string // Description of value.
-	svalue    string // Alternate value for tags
 	value     any    // holds the data, but only suports POD types and byte slices
 	precision int    // Precision or width of value in output ascii file.
 	first     bool   // indicates if this is the first column in the data set
@@ -123,12 +122,16 @@ func (d *DataSetLog) DumpDataSetToDiskFile() ([]string, error) {
 			if needHeader {
 				if d.header != "" {
 					err = write(file, d.header)
-					return nil, err
+					if err != nil {
+						return nil, err
+					}
 				}
 
 				if dset.header != "" {
 					err = write(file, dset.header)
-					return nil, err
+					if err != nil {
+						return nil, err
+					}
 				}
 
 				spacer := "# "

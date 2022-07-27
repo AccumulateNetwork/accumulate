@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bufio"
 	"bytes"
 	"crypto/ed25519"
 	"crypto/sha256"
@@ -12,118 +13,195 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/howeyc/gopass"
 	"github.com/spf13/cobra"
 	tmjson "github.com/tendermint/tendermint/libs/json"
 	"github.com/tendermint/tendermint/privval"
 	"github.com/tyler-smith/go-bip32"
 	"github.com/tyler-smith/go-bip39"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/db"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
 func init() {
-	keyCmd.AddCommand(keyUpdateCmd)
-	keyCmd.Flags().StringVar(&SigType, "sigtype", "ed25519", "Specify the signature type use rcd1 for RCD1 type ; ed25519 for ED25519 ; legacyed25519 for LegacyED25519 ; btc for Bitcoin ; btclegacy for Legacy Bitcoin  ; eth for Ethereum ")
+	keyImportCmd.AddCommand(keyImportPrivateCmd)
+	keyImportCmd.AddCommand(keyImportFactoidCmd)
+	keyImportCmd.AddCommand(keyImportLiteCmd)
+	keyImportCmd.AddCommand(keyImportMnemonicCmd)
+	keyExportCmd.AddCommand(keyExportPrivateCmd)
+	keyExportCmd.AddCommand(keyExportMnemonicCmd)
+	keyExportCmd.AddCommand(keyExportAllCmd)
+	keyExportCmd.AddCommand(keyExportSeedCmd)
+
+	keyCmd.AddCommand(keyImportCmd)
+	keyCmd.AddCommand(keyExportCmd)
+	keyCmd.AddCommand(keyGenerateCmd)
+	keyCmd.AddCommand(keyListCmd)
+	keyImportPrivateCmd.Flags().StringVar(&SigType, "sigtype", "ed25519", "Specify the signature type use rcd1 for RCD1 type ; ed25519 for ED25519 ; legacyed25519 for LegacyED25519 ; btc for Bitcoin ; btclegacy for Legacy Bitcoin  ; eth for Ethereum ")
+	keyImportLiteCmd.Flags().StringVar(&SigType, "sigtype", "ed25519", "Specify the signature type use rcd1 for RCD1 type ; ed25519 for ED25519 ; legacyed25519 for LegacyED25519 ; btc for Bitcoin ; btclegacy for Legacy Bitcoin  ; eth for Ethereum ")
+	keyGenerateCmd.Flags().StringVar(&SigType, "sigtype", "ed25519", "Specify the signature type use rcd1 for RCD1 type ; ed25519 for ED25519 ; legacyed25519 for LegacyED25519 ; btc for Bitcoin ; btclegacy for Legacy Bitcoin  ; eth for Ethereum ")
+}
+
+var keyImportCmd = &cobra.Command{
+	Use:   "import",
+	Short: "Import private key from hex or factoid secret address",
+	Run: func(cmd *cobra.Command, args []string) {
+		fmt.Println("Usage:")
+		PrintKey()
+	},
+}
+
+var keyImportPrivateCmd = &cobra.Command{
+	Use:   "private [key name/label]",
+	Short: "Import private key in hex from terminal input",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		var out string
+		var err error
+		var sigType protocol.SignatureType
+		var found bool
+		if SigType != "" {
+			sigType, found = protocol.SignatureTypeByName(SigType)
+			if !found {
+				err = fmt.Errorf("unknown signature type %s", SigType)
+			}
+		}
+		if err == nil {
+			out, err = ImportKeyPrompt(cmd, args[0], sigType)
+		}
+		printOutput(cmd, out, err)
+	},
+}
+
+var keyImportFactoidCmd = &cobra.Command{
+	Use:   "factoid",
+	Short: "Import secret factoid key from terminal input",
+	Args:  cobra.ExactArgs(0),
+	Run: func(cmd *cobra.Command, args []string) {
+		out, err := ImportFactoidKey(cmd)
+		printOutput(cmd, out, err)
+	},
+}
+
+var keyImportLiteCmd = &cobra.Command{
+	Use:   "lite",
+	Short: "Import private key in hex and label the key with a lite address",
+	Args:  cobra.ExactArgs(0),
+	Run: func(cmd *cobra.Command, args []string) {
+		var out string
+		var err error
+		var sigType protocol.SignatureType
+		var found bool
+		if SigType != "" {
+			sigType, found = protocol.SignatureTypeByName(SigType)
+			if !found {
+				err = fmt.Errorf("unknown signature type %s", SigType)
+			}
+		}
+		if err == nil {
+			out, err = ImportKeyPrompt(cmd, "", sigType)
+		}
+		printOutput(cmd, out, err)
+	},
+}
+
+var keyListCmd = &cobra.Command{
+	Use:   "list",
+	Short: "list keys in the wallet",
+	Args:  cobra.ExactArgs(0),
+	Run: func(cmd *cobra.Command, args []string) {
+		out, err := ListKeyPublic()
+		printOutput(cmd, out, err)
+	},
+}
+var keyImportMnemonicCmd = &cobra.Command{
+	Use:   "mnemonic [12 word mnemonic phrase]",
+	Short: "Import secret bip39 mnemonic phrase from command line",
+	Args:  cobra.MinimumNArgs(12),
+	Run: func(cmd *cobra.Command, args []string) {
+		out, err := ImportMnemonic(args)
+		printOutput(cmd, out, err)
+	},
+}
+
+var keyExportAllCmd = &cobra.Command{
+	Use:   "all",
+	Short: "export wallet with private keys and accounts",
+	Args:  cobra.ExactArgs(0),
+	Run: func(cmd *cobra.Command, args []string) {
+		out, err := ExportKeys()
+		printOutput(cmd, out, err)
+	},
+}
+
+var keyExportMnemonicCmd = &cobra.Command{
+	Use:   "all",
+	Short: "export mnemonic phrase",
+	Args:  cobra.ExactArgs(0),
+	Run: func(cmd *cobra.Command, args []string) {
+		out, err := ExportMnemonic()
+		printOutput(cmd, out, err)
+	},
+}
+
+var keyExportSeedCmd = &cobra.Command{
+	Use:   "seed",
+	Short: "export key seed",
+	Args:  cobra.ExactArgs(0),
+	Run: func(cmd *cobra.Command, args []string) {
+		out, err := ExportSeed()
+		printOutput(cmd, out, err)
+	},
+}
+
+var keyExportPrivateCmd = &cobra.Command{
+	Use:   "private",
+	Short: "export key private",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		out, err := ExportKey(args[0])
+		printOutput(cmd, out, err)
+	},
+}
+
+var keyExportCmd = &cobra.Command{
+	Use:   "export",
+	Short: "export wallet private data and accounts",
+	Args:  cobra.MinimumNArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		PrintKeyExport()
+	},
+}
+
+var keyGenerateCmd = &cobra.Command{
+	Use:   "generate [key name/label]",
+	Short: "generate key private and give it a name",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		out, err := GenerateKey(args[0])
+		printOutput(cmd, out, err)
+	},
 }
 
 var keyCmd = &cobra.Command{
 	Use:   "key",
 	Short: "Create and manage Keys for ADI Key Books, and Pages",
 	Run: func(cmd *cobra.Command, args []string) {
-		var out string
-		var err error
-
-		//set the default signature type
-		sigType := protocol.SignatureTypeED25519
-		if SigType != "" {
-			sigType, err = ValidateSigType(SigType)
-		}
-
-		if len(args) > 0 && err == nil {
-			switch arg := args[0]; arg {
-			case "import":
-				if len(args) == 3 {
-					if args[1] == "lite" {
-
-						out, err = ImportKey(args[2], "", sigType)
-					} else if args[1] == "factoid" {
-						out, err = ImportFactoidKey(args[2])
-					} else {
-						PrintKeyImport()
-					}
-				} else if len(args) > 3 {
-					switch args[1] {
-					case "mnemonic":
-						out, err = ImportMnemonic(args[2:])
-					case "private":
-						out, err = ImportKey(args[2], args[3], sigType)
-					case "public":
-						//reserved for future use.
-						fallthrough
-					default:
-						PrintKeyImport()
-					}
-				} else {
-					PrintKeyImport()
-				}
-			case "export":
-				if len(args) > 1 {
-					switch args[1] {
-					case "all":
-						out, err = ExportKeys()
-					case "seed":
-						out, err = ExportSeed()
-					case "private":
-						if len(args) > 2 {
-							out, err = ExportKey(args[2])
-						} else {
-							PrintKeyExport()
-						}
-					case "mnemonic":
-						out, err = ExportMnemonic()
-					default:
-						PrintKeyExport()
-					}
-				} else {
-					PrintKeyExport()
-				}
-			case "list":
-				out, err = ListKeyPublic()
-			case "generate":
-				if len(args) > 1 {
-					out, err = GenerateKey(args[1])
-				} else {
-					PrintKeyGenerate()
-				}
-			default:
-				fmt.Println("Usage:")
-				PrintKey()
-			}
-		} else {
-			fmt.Println("Usage:")
-			PrintKey()
-		}
-		printOutput(cmd, out, err)
+		fmt.Println("Usage:")
+		PrintKey()
 	},
 }
 
-var keyUpdateCmd = &cobra.Command{
-	Use:   "update [key page url] [original key name] [key index (optional)] [key height (optional)] [new key name]",
-	Short: "Self-update a key",
-	Args:  cobra.RangeArgs(3, 5),
-	Run:   runCmdFunc(UpdateKey),
-}
-
 type KeyResponse struct {
-	Label       types.String           `json:"name,omitempty"`
-	PrivateKey  types.Bytes            `json:"privateKey,omitempty"`
-	PublicKey   types.Bytes            `json:"publicKey,omitempty"`
-	KeyType     protocol.SignatureType `json:"keyType,omitempty"`
-	LiteAccount *url.URL               `json:"liteAccount,omitempty"`
-	Seed        types.Bytes            `json:"seed,omitempty"`
-	Mnemonic    types.String           `json:"mnemonic,omitempty"`
+	Label       types.String `json:"name,omitempty"`
+	PrivateKey  types.Bytes  `json:"privateKey,omitempty"`
+	PublicKey   types.Bytes  `json:"publicKey,omitempty"`
+	KeyInfo     KeyInfo      `json:"keyInfo,omitempty"`
+	LiteAccount *url.URL     `json:"liteAccount,omitempty"`
+	Seed        types.Bytes  `json:"seed,omitempty"`
+	Mnemonic    types.String `json:"mnemonic,omitempty"`
 }
 
 func PrintKeyPublic() {
@@ -143,10 +221,10 @@ func PrintKeyGenerate() {
 
 func PrintKeyImport() {
 	fmt.Println("  accumulate key import mnemonic [mnemonic phrase...]     Import the mneumonic phrase used to generate keys in the wallet")
-	fmt.Println("  accumulate key import private [private key hex] [key name]      Import a key and give it a name in the wallet")
-	fmt.Println("  accumulate key import factoid [factoid private address]  Import a factoid private address")
+	fmt.Println("  accumulate key import private [key name]      Import a key and give it a name in the wallet, prompt for key")
+	fmt.Println("  accumulate key import factoid   Import a factoid private address, prompt for key")
 
-	fmt.Println("  accumulate key import lite [private key hex]       Import a key as a lite address")
+	fmt.Println("  accumulate key import lite        Import a key as a lite address, prompt for key")
 }
 
 func PrintKey() {
@@ -177,7 +255,7 @@ func resolvePublicKey(s string) (*Key, error) {
 func parseKey(s string) (*Key, error) {
 	privKey, err := hex.DecodeString(s)
 	if err == nil && len(privKey) == 64 {
-		return &Key{PrivateKey: privKey, PublicKey: privKey[32:], Type: protocol.SignatureTypeED25519}, nil
+		return &Key{PrivateKey: privKey, PublicKey: privKey[32:], KeyInfo: KeyInfo{Type: protocol.SignatureTypeED25519}}, nil
 	}
 
 	k, err := pubKeyFromString(s)
@@ -205,7 +283,7 @@ func parseKey(s string) (*Key, error) {
 			priv = pvkey.PrivKey.Bytes()
 		}
 		// TODO Check the key type
-		return &Key{PrivateKey: priv, PublicKey: pub, Type: protocol.SignatureTypeED25519}, nil
+		return &Key{PrivateKey: priv, PublicKey: pub, KeyInfo: KeyInfo{Type: protocol.SignatureTypeED25519}}, nil
 	}
 
 	return nil, fmt.Errorf("cannot resolve signing key, invalid key specifier: %q is in an unsupported format", s)
@@ -226,7 +304,7 @@ func pubKeyFromString(s string) (*Key, error) {
 		return nil, fmt.Errorf("invalid public key")
 	}
 
-	return &Key{PublicKey: pubKey[:], Type: protocol.SignatureTypeED25519}, nil
+	return &Key{PublicKey: pubKey[:], KeyInfo: KeyInfo{Type: protocol.SignatureTypeED25519}}, nil
 }
 
 func LookupByLiteTokenUrl(lite string) (*Key, error) {
@@ -336,12 +414,10 @@ func GenerateKey(label string) (string, error) {
 	} else if sigtype == protocol.SignatureTypeBTC {
 		privKey, pubKey = protocol.SECP256K1Keypair()
 	} else {
-
 		privKey, err = GeneratePrivateKey()
 		if err != nil {
 			return "", err
 		}
-
 		pubKey = privKey[32:]
 	}
 
@@ -390,7 +466,7 @@ func GenerateKey(label string) (string, error) {
 	k := new(Key)
 	k.PrivateKey = privKey
 	k.PublicKey = pubKey
-	k.Type = sigtype
+	k.KeyInfo.Type = sigtype
 	err = k.Save(label, liteLabel)
 	if err != nil {
 		return "", err
@@ -401,7 +477,7 @@ func GenerateKey(label string) (string, error) {
 		a.Label = types.String(label)
 		a.PublicKey = pubKey
 		a.LiteAccount = lt
-		a.KeyType = sigtype
+		a.KeyInfo = KeyInfo{Type: sigtype}
 		dump, err := json.Marshal(&a)
 		if err != nil {
 			return "", err
@@ -465,24 +541,48 @@ func FindLabelFromPubKey(pubKey []byte) (lab string, err error) {
 	return lab, err
 }
 
-// ImportKey will import the private key and assign it to the label
-func ImportKey(pkAscii string, label string, signatureType protocol.SignatureType) (out string, err error) {
-
-	var liteLabel string
-	var pk ed25519.PrivateKey
-
-	token, err := hex.DecodeString(pkAscii)
+func ImportKeyPrompt(cmd *cobra.Command, label string, signatureType protocol.SignatureType) (out string, err error) {
+	token, err := getPasswdPrompt(cmd, "Private Key : ", true)
+	if err != nil {
+		return "", db.ErrInvalidPassword
+	}
+	tokenBytes, err := hex.DecodeString(token)
 	if err != nil {
 		return "", err
 	}
+	return ImportKey(tokenBytes, label, signatureType)
+}
 
-	if len(token) == 32 {
-		pk = ed25519.NewKeyFromSeed(token)
-	} else {
-		pk = token
+func getPasswdPrompt(cmd *cobra.Command, prompt string, mask bool) (string, error) {
+	rd, ok := cmd.InOrStdin().(gopass.FdReader)
+	if ok {
+		bytes, err := gopass.GetPasswdPrompt(prompt, mask, rd, cmd.ErrOrStderr())
+		return string(bytes), err
 	}
 
-	lt, err := protocol.LiteTokenAddress(pk[32:], protocol.ACME, signatureType)
+	_, err := fmt.Fprint(cmd.OutOrStdout(), prompt)
+	if err != nil {
+		return "", err
+	}
+	line, err := bufio.NewReader(cmd.InOrStdin()).ReadString('\n')
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSuffix(line, "\n"), nil
+}
+
+// ImportKey will import the private key and assign it to the label
+func ImportKey(token []byte, label string, signatureType protocol.SignatureType) (out string, err error) {
+
+	var liteLabel string
+	pk := new(Key)
+
+	if err := pk.Initialize(token, signatureType); err != nil {
+		return "", err
+	}
+	pk.KeyInfo.Derivation = "external"
+
+	lt, err := protocol.LiteTokenAddress(pk.PublicKey, protocol.ACME, pk.KeyInfo.Type)
 	if err != nil {
 		return "", fmt.Errorf("no label specified and cannot import as lite token account")
 	}
@@ -500,13 +600,13 @@ func ImportKey(pkAscii string, label string, signatureType protocol.SignatureTyp
 		return "", fmt.Errorf("key name is already being used")
 	}
 
-	_, err = LookupByPubKey(pk[32:])
+	_, err = LookupByPubKey(pk.PublicKey)
 	lab := "not found"
 	if err == nil {
 		b, _ := GetWallet().GetBucket(BucketLabel)
 		if b != nil {
 			for _, v := range b.KeyValueList {
-				if bytes.Equal(v.Value, pk[32:]) {
+				if bytes.Equal(v.Value, pk.PublicKey) {
 					lab = string(v.Key)
 					break
 				}
@@ -515,23 +615,7 @@ func ImportKey(pkAscii string, label string, signatureType protocol.SignatureTyp
 		}
 	}
 
-	publicKey := pk[32:]
-	err = GetWallet().Put(BucketKeys, publicKey, pk)
-	if err != nil {
-		return "", err
-	}
-
-	err = GetWallet().Put(BucketLabel, []byte(label), pk[32:])
-	if err != nil {
-		return "", err
-	}
-
-	err = GetWallet().Put(BucketLite, []byte(liteLabel), []byte(label))
-	if err != nil {
-		return "", err
-	}
-
-	err = GetWallet().Put(BucketSigType, publicKey, common.Uint64Bytes(signatureType.GetEnumValue()))
+	err = pk.Save(label, liteLabel)
 	if err != nil {
 		return "", err
 	}
@@ -539,16 +623,16 @@ func ImportKey(pkAscii string, label string, signatureType protocol.SignatureTyp
 	if WantJsonOutput {
 		a := KeyResponse{}
 		a.Label = types.String(label)
-		a.PublicKey = types.Bytes(pk[32:])
+		a.PublicKey = types.Bytes(pk.PublicKey)
 		a.LiteAccount = lt
-		a.KeyType = signatureType
+		a.KeyInfo = pk.KeyInfo
 		dump, err := json.Marshal(&a)
 		if err != nil {
 			return "", err
 		}
 		out = fmt.Sprintf("%s\n", string(dump))
 	} else {
-		out = fmt.Sprintf("\tname\t\t:\t%s\n\tlite account\t:\t%s\n\tpublic key\t:\t%x\n\tkey type\t:\t%s\n", label, lt, pk[32:], signatureType)
+		out = fmt.Sprintf("\tname\t\t:\t%s\n\tlite account\t:\t%s\n\tpublic key\t:\t%x\n\tkey type\t:\t%s\n\tderivation\t:\t%s\n", label, lt, pk.PublicKey, pk.KeyInfo.Type, pk.KeyInfo.Derivation)
 	}
 	return out, nil
 }
@@ -560,7 +644,7 @@ func ExportKey(label string) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("no private key found for key name %s", label)
 		}
-		k, err = LookupByPubKey(k.PublicKey)
+		_, err = LookupByPubKey(k.PublicKey)
 		if err != nil {
 			return "", fmt.Errorf("no private key found for key name %s", label)
 		}
@@ -571,14 +655,14 @@ func ExportKey(label string) (string, error) {
 		a.Label = types.String(label)
 		a.PrivateKey = k.PrivateKey
 		a.PublicKey = k.PublicKey
-		a.KeyType = k.Type
+		a.KeyInfo = k.KeyInfo
 		dump, err := json.Marshal(&a)
 		if err != nil {
 			return "", err
 		}
 		return fmt.Sprintf("%s\n", string(dump)), nil
 	} else {
-		return fmt.Sprintf("name\t\t\t:\t%s\n\tprivate key\t:\t%x\n\tpublic key\t:\t%x\nkey type\t\t:\t%s\n", label, k.PrivateKey, k.PublicKey, k.Type), nil
+		return fmt.Sprintf("name\t\t\t:\t%s\n\tprivate key\t:\t%x\n\tpublic key\t:\t%x\nkey type\t\t:\t%s\n\tderivation\t:\t%s\n", label, k.PrivateKey, k.PublicKey, k.KeyInfo.Type, k.KeyInfo.Derivation), nil
 	}
 }
 
@@ -743,34 +827,17 @@ func ExportMnemonic() (string, error) {
 	}
 }
 
-func ImportFactoidKey(factoidkey string) (out string, err error) {
-	if !strings.Contains(factoidkey, "Fs") {
+func ImportFactoidKey(cmd *cobra.Command) (out string, err error) {
+	token, err := getPasswdPrompt(cmd, "Private Key : ", true)
+	if err != nil {
+		return "", db.ErrInvalidPassword
+	}
+	if !strings.Contains(token, "Fs") {
 		return "", fmt.Errorf("key to import is not a factoid address")
 	}
-	label, _, privatekey, err := protocol.GetFactoidAddressRcdHashPkeyFromPrivateFs(factoidkey)
+	label, _, privatekey, err := protocol.GetFactoidAddressRcdHashPkeyFromPrivateFs(string(token))
 	if err != nil {
 		return "", err
 	}
-	return ImportKey(hex.EncodeToString(privatekey), label, protocol.SignatureTypeRCD1)
-}
-
-func UpdateKey(args []string) (string, error) {
-	principal, err := url.Parse(args[0])
-	if err != nil {
-		return "", err
-	}
-
-	args, signer, err := prepareSigner(principal, args[1:])
-	if err != nil {
-		return "", err
-	}
-
-	k, err := resolvePublicKey(args[0])
-	if err != nil {
-		return "", err
-	}
-
-	txn := new(protocol.UpdateKey)
-	txn.NewKeyHash = k.PublicKeyHash()
-	return dispatchTxAndPrintResponse(txn, principal, signer)
+	return ImportKey(privatekey, label, protocol.SignatureTypeRCD1)
 }

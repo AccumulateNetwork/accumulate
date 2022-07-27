@@ -1,5 +1,7 @@
 package abci
 
+//lint:file-ignore ST1001 Don't care
+
 import (
 	"crypto/sha256"
 
@@ -13,7 +15,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-type executeFunc func(*chain.Delivery) (*protocol.TransactionStatus, error)
+type executeFunc func([]*chain.Delivery) []*protocol.TransactionStatus
 
 func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]*chain.Delivery, []*protocol.TransactionStatus, []byte, error) {
 	hash := sha256.Sum256(raw)
@@ -32,22 +34,7 @@ func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]
 		return nil, nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
-	results := make([]*protocol.TransactionStatus, len(deliveries))
-	for i, env := range deliveries {
-		status, err := execute(env)
-		if err == nil {
-			results[i] = status
-			continue
-		}
-
-		if status == nil {
-			status = new(protocol.TransactionStatus)
-		}
-
-		sentry.CaptureException(err)
-		status.Set(err)
-		results[i] = status
-	}
+	results := execute(deliveries)
 
 	// If the results can't be marshaled, provide no results but do not fail the
 	// batch
@@ -62,25 +49,17 @@ func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]
 }
 
 func checkTx(exec *Executor, batch *database.Batch) executeFunc {
-	return func(envelope *chain.Delivery) (*protocol.TransactionStatus, error) {
-		result, err := exec.ValidateEnvelope(batch, envelope)
-		if err != nil {
-			return nil, errors.Wrap(errors.StatusUnknownError, err)
-		}
-		if result == nil {
-			result = new(protocol.EmptyResult)
-		}
-		return &protocol.TransactionStatus{Result: result}, nil
+	return func(deliveries []*chain.Delivery) []*protocol.TransactionStatus {
+		return exec.ValidateEnvelopeSet(batch, deliveries, func(err error, _ *chain.Delivery, _ *protocol.TransactionStatus) {
+			sentry.CaptureException(err)
+		})
 	}
 }
 
 func deliverTx(exec *Executor, block *Block) executeFunc {
-	return func(envelope *chain.Delivery) (*protocol.TransactionStatus, error) {
-		status, err := exec.ExecuteEnvelope(block, envelope)
-		if err != nil {
-			return nil, err
-		}
-
-		return status, nil
+	return func(deliveries []*chain.Delivery) []*protocol.TransactionStatus {
+		return exec.ExecuteEnvelopeSet(block, deliveries, func(err error, _ *chain.Delivery, _ *protocol.TransactionStatus) {
+			sentry.CaptureException(err)
+		})
 	}
 }

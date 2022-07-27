@@ -4,39 +4,15 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
-// Transaction manages a transaction.
-type Transaction struct {
-	batch *Batch
-	key   transactionBucket
-	id    [32]byte
-}
-
-// Transaction returns a Transaction for the given transaction ID.
-func (b *Batch) Transaction(id []byte) *Transaction {
-	return &Transaction{b, transaction(id), *(*[32]byte)(id)}
-}
-
-func (t *Transaction) main() Value[*SigOrTxn] {
-	return getOrCreateValue(t.batch, t.key.State(), false, record.Struct[SigOrTxn]())
-}
-
-func (t *Transaction) status() Value[*protocol.TransactionStatus] {
-	return getOrCreateValue(t.batch, t.key.Status(), true, record.Struct[protocol.TransactionStatus]())
-}
-
-func (t *Transaction) signatures(signer *url.URL) Value[*sigSetData] {
-	return getOrCreateValue(t.batch, t.key.Signatures(signer), true, record.Struct[sigSetData]())
-}
-
-func (t *Transaction) synthTxns() Value[*protocol.TxIdSet] {
-	return getOrCreateValue(t.batch, t.key.Synthetic(), true, record.Struct[protocol.TxIdSet]())
+func (r *Transaction) hash() []byte {
+	h := r.key[1].([32]byte)
+	return h[:]
 }
 
 // ensureSigner ensures that the transaction's status includes the given signer.
@@ -52,24 +28,24 @@ func (t *Transaction) ensureSigner(signer protocol.Signer) error {
 
 // GetState loads the transaction state.
 func (t *Transaction) GetState() (*SigOrTxn, error) {
-	v, err := t.main().Get()
+	v, err := t.Main().Get()
 	if err == nil {
 		return v, nil
 	}
 	if !errors.Is(err, errors.StatusNotFound) {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
-	return nil, errors.FormatWithCause(errors.StatusNotFound, err, "transaction %X not found", t.id)
+	return nil, errors.FormatWithCause(errors.StatusNotFound, err, "transaction %X not found", t.hash())
 }
 
 // PutState stores the transaction state.
 func (t *Transaction) PutState(v *SigOrTxn) error {
-	return t.main().Put(v)
+	return t.Main().Put(v)
 }
 
 // GetStatus loads the transaction status.
 func (t *Transaction) GetStatus() (*protocol.TransactionStatus, error) {
-	return t.status().Get()
+	return t.Status().Get()
 }
 
 // PutStatus stores the transaction status.
@@ -78,7 +54,7 @@ func (t *Transaction) PutStatus(v *protocol.TransactionStatus) error {
 		v.Result = new(protocol.EmptyResult)
 	}
 
-	err := t.status().Put(v)
+	err := t.Status().Put(v)
 	if err != nil {
 		return err
 	}
@@ -93,7 +69,7 @@ func (t *Transaction) PutStatus(v *protocol.TransactionStatus) error {
 	if err != nil {
 		return err
 	}
-	return t.batch.Account(txn.Transaction.Header.Principal).putBpt()
+	return t.parent.Account(txn.Transaction.Header.Principal).putBpt()
 }
 
 // Signatures returns a signature set for the given signer.
@@ -154,7 +130,7 @@ func (t *Transaction) AddSystemSignature(net *config.Describe, newSignature prot
 
 func (t *Transaction) newSigSet(signer *url.URL, writable bool) (*SignatureSet, error) {
 	var acct protocol.Signer
-	err := t.batch.Account(signer).GetStateAs(&acct)
+	err := t.parent.Account(signer).GetStateAs(&acct)
 	switch {
 	case err == nil:
 		// If the signer exists, use its version
@@ -179,13 +155,17 @@ func (t *Transaction) newSigSet(signer *url.URL, writable bool) (*SignatureSet, 
 // GetSyntheticTxns loads the IDs of synthetic transactions produced by the
 // transaction.
 func (t *Transaction) GetSyntheticTxns() (*protocol.TxIdSet, error) {
-	return t.synthTxns().Get()
+	v, err := t.Produced().Get()
+	if err != nil {
+		return nil, err
+	}
+	return &protocol.TxIdSet{Entries: v}, nil
 }
 
 // PutSyntheticTxns stores the IDs of synthetic transactions produced by the
 // transaction.
 func (t *Transaction) PutSyntheticTxns(v *protocol.TxIdSet) error {
-	return t.synthTxns().Put(v)
+	return t.Produced().Put(v.Entries)
 }
 
 // AddSyntheticTxns is a convenience method that calls GetSyntheticTxns, adds

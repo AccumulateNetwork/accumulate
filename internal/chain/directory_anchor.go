@@ -8,8 +8,9 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 )
 
 // Process the anchor from DN -> BVN
@@ -48,13 +49,14 @@ func (x DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 	}
 
 	// Add the anchor to the chain - use the partition name as the chain name
-	err := st.AddChainEntry(st.OriginUrl, protocol.RootAnchorChain(protocol.Directory), protocol.ChainTypeAnchor, body.RootChainAnchor[:], body.RootChainIndex, body.MinorBlockIndex)
+	record := st.batch.Account(st.OriginUrl).AnchorChain(protocol.Directory)
+	err := st.AddChainEntry(record.Root(), body.RootChainAnchor[:], body.RootChainIndex, body.MinorBlockIndex)
 	if err != nil {
 		return nil, err
 	}
 
 	// And the BPT root
-	err = st.AddChainEntry(st.OriginUrl, protocol.BPTAnchorChain(protocol.Directory), protocol.ChainTypeAnchor, body.StateTreeAnchor[:], 0, 0)
+	err = st.AddChainEntry(record.BPT(), body.StateTreeAnchor[:], 0, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -78,32 +80,30 @@ func (x DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 }
 
 func processReceiptsFromDirectory(st *StateManager, tx *Delivery, body *protocol.DirectoryAnchor) error {
-	// Process receipts
 	var deliveries []*Delivery
 	var sequence = map[*Delivery]int{}
+
+	// Process pending transactions from the DN
+	d, err := loadSynthTxns(st, tx, body.RootChainAnchor[:], body.Source, nil, sequence)
+	if err != nil {
+		return err
+	}
+	deliveries = append(deliveries, d...)
+
+	// Process receipts
 	for i, receipt := range body.Receipts {
 		receipt := receipt // See docs/developer/rangevarref.md
 		if !bytes.Equal(receipt.Anchor, body.RootChainAnchor[:]) {
 			return fmt.Errorf("receipt %d is invalid: result does not match the anchor", i)
 		}
 
-		st.logger.Debug("Received receipt", "from", logging.AsHex(receipt.Start).Slice(0, 4), "to", logging.AsHex(body.RootChainAnchor).Slice(0, 4), "block", body.MinorBlockIndex, "source", body.Source, "module", "synthetic")
+		// st.logger.Debug("Received receipt", "from", logging.AsHex(receipt.Start).Slice(0, 4), "to", logging.AsHex(body.RootChainAnchor).Slice(0, 4), "block", body.MinorBlockIndex, "source", body.Source, "module", "synthetic")
 
-		synth, err := st.batch.Account(st.Ledger()).GetSyntheticForAnchor(*(*[32]byte)(receipt.Start))
+		d, err := loadSynthTxns(st, tx, receipt.Start, body.Source, &receipt, sequence)
 		if err != nil {
-			return fmt.Errorf("failed to load pending synthetic transactions for anchor %X: %w", receipt.Start[:4], err)
+			return err
 		}
-		for _, txid := range synth {
-			h := txid.Hash()
-			sig, err := getSyntheticSignature(st.batch, st.batch.Transaction(h[:]))
-			if err != nil {
-				return err
-			}
-
-			d := tx.NewSyntheticReceipt(txid.Hash(), body.Source, &receipt)
-			sequence[d] = int(sig.SequenceNumber)
-			deliveries = append(deliveries, d)
-		}
+		deliveries = append(deliveries, d...)
 	}
 
 	// Submit the receipts, sorted
@@ -114,6 +114,32 @@ func processReceiptsFromDirectory(st *StateManager, tx *Delivery, body *protocol
 		st.State.ProcessAdditionalTransaction(d)
 	}
 	return nil
+}
+
+func loadSynthTxns(st *StateManager, tx *Delivery, anchor []byte, source *url.URL, receipt *managed.Receipt, sequence map[*Delivery]int) ([]*Delivery, error) {
+	synth, err := st.batch.Account(st.Ledger()).GetSyntheticForAnchor(*(*[32]byte)(anchor))
+	if err != nil {
+		return nil, fmt.Errorf("failed to load pending synthetic transactions for anchor %X: %w", anchor[:4], err)
+	}
+
+	var deliveries []*Delivery
+	for _, txid := range synth {
+		h := txid.Hash()
+		sig, err := getSyntheticSignature(st.batch, st.batch.Transaction(h[:]))
+		if err != nil {
+			return nil, err
+		}
+
+		var d *Delivery
+		if receipt != nil {
+			d = tx.NewSyntheticReceipt(txid.Hash(), source, receipt)
+		} else {
+			d = tx.NewSyntheticFromSequence(txid.Hash())
+		}
+		sequence[d] = int(sig.SequenceNumber)
+		deliveries = append(deliveries, d)
+	}
+	return deliveries, nil
 }
 
 func processNetworkAccountUpdates(st *StateManager, delivery *Delivery, updates []protocol.NetworkAccountUpdate) error {
@@ -133,7 +159,7 @@ func processNetworkAccountUpdates(st *StateManager, delivery *Delivery, updates 
 	return nil
 }
 
-func getSyntheticSignature(batch *database.Batch, transaction *database.Transaction) (*protocol.SyntheticSignature, error) {
+func getSyntheticSignature(batch *database.Batch, transaction *database.Transaction) (*protocol.PartitionSignature, error) {
 	status, err := transaction.GetStatus()
 	if err != nil {
 		return nil, errors.Format(errors.StatusUnknownError, "load status: %w", err)
@@ -151,7 +177,7 @@ func getSyntheticSignature(batch *database.Batch, transaction *database.Transact
 				return nil, errors.Format(errors.StatusUnknownError, "load signature %x: %w", entry.SignatureHash[:8], err)
 			}
 
-			sig, ok := state.Signature.(*protocol.SyntheticSignature)
+			sig, ok := state.Signature.(*protocol.PartitionSignature)
 			if ok {
 				return sig, nil
 			}

@@ -3,11 +3,9 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"os"
-	"reflect"
-
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/tools/internal/typegen"
+	"os"
 )
 
 var flags struct {
@@ -60,9 +58,9 @@ func run(_ *cobra.Command, args []string) {
 		flags.FilePerType = true
 	}
 
-	types, err := flags.files.ReadMap(args, reflect.TypeOf((map[string]typegen.Enum)(nil)))
+	types, err := typegen.ReadMap[typegen.Enum](&flags.files, args, nil)
 	check(err)
-	ttypes := convert(types.(map[string]typegen.Enum), flags.Package, flags.SubPackage)
+	ttypes := convert(types, flags.Package, flags.SubPackage)
 
 	if !flags.FilePerType {
 		w := new(bytes.Buffer)

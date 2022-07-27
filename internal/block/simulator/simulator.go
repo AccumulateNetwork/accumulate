@@ -1,8 +1,12 @@
 package simulator
 
+//lint:file-ignore ST1001 Don't care
+
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
 	"sync"
 	"time"
 
@@ -14,13 +18,14 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
-	. "gitlab.com/accumulatenetwork/accumulate/internal/block"
+	"gitlab.com/accumulatenetwork/accumulate/internal/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
+	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/sortutil"
@@ -31,7 +36,14 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-var genesisTime = time.Date(2022, 7, 1, 0, 0, 0, 0, time.UTC)
+var GenesisTime = time.Date(2022, 7, 1, 0, 0, 0, 0, time.UTC)
+
+type SimulatorOptions struct {
+	BvnCount        int
+	LogLevels       string
+	OpenDB          func(partition string, nodeIndex int, logger log.Logger) *database.Database
+	FactomAddresses func() (io.Reader, error)
+}
 
 type Simulator struct {
 	tb
@@ -39,26 +51,20 @@ type Simulator struct {
 	Partitions []config.Partition
 	Executors  map[string]*ExecEntry
 
-	LogLevels string
-
+	opts             SimulatorOptions
 	netInit          *accumulated.NetworkInit
 	router           routing.Router
 	routingOverrides map[[32]byte]string
 }
 
-func (s *Simulator) newLogger() log.Logger {
-	levels := s.LogLevels
-	if levels == "" {
-		levels = acctesting.DefaultLogLevels
-	}
-
+func (s *Simulator) newLogger(opts SimulatorOptions) log.Logger {
 	if !acctesting.LogConsole {
-		return logging.NewTestLogger(s, "plain", levels, false)
+		return logging.NewTestLogger(s, "plain", opts.LogLevels, false)
 	}
 
 	w, err := logging.NewConsoleWriter("plain")
 	require.NoError(s, err)
-	level, writer, err := logging.ParseLogLevel(levels, w)
+	level, writer, err := logging.ParseLogLevel(opts.LogLevels, w)
 	require.NoError(s, err)
 	logger, err := logging.NewTendermintLogger(zerolog.New(writer), level, false)
 	require.NoError(s, err)
@@ -69,30 +75,42 @@ func New(t TB, bvnCount int) *Simulator {
 	t.Helper()
 	sim := new(Simulator)
 	sim.TB = t
-	sim.Setup(bvnCount)
+	sim.Setup(SimulatorOptions{BvnCount: bvnCount})
 	return sim
 }
 
-func NewWithLogLevels(t TB, bvnCount int, logLevels config.LogLevel) *Simulator {
+func NewWith(t TB, opts SimulatorOptions) *Simulator {
 	t.Helper()
 	sim := new(Simulator)
 	sim.TB = t
-	sim.LogLevels = logLevels.String()
-	sim.Setup(bvnCount)
+	sim.Setup(opts)
 	return sim
 }
 
-func (sim *Simulator) Setup(bvnCount int) {
+func (sim *Simulator) Setup(opts SimulatorOptions) {
 	sim.Helper()
+	sim.opts = opts
+
+	if opts.BvnCount == 0 {
+		opts.BvnCount = 3
+	}
+	if opts.LogLevels == "" {
+		opts.LogLevels = acctesting.DefaultLogLevels
+	}
+	if opts.OpenDB == nil {
+		opts.OpenDB = func(_ string, _ int, logger log.Logger) *database.Database {
+			return database.OpenInMemory(logger)
+		}
+	}
 
 	// Initialize the simulartor and network
 	sim.routingOverrides = map[[32]byte]string{}
-	sim.Logger = sim.newLogger().With("module", "simulator")
+	sim.Logger = sim.newLogger(opts).With("module", "simulator")
 	sim.Executors = map[string]*ExecEntry{}
 
 	sim.netInit = new(accumulated.NetworkInit)
 	sim.netInit.Id = sim.Name()
-	for i := 0; i < bvnCount; i++ {
+	for i := 0; i < opts.BvnCount; i++ {
 		bvnInit := new(accumulated.BvnInit)
 		bvnInit.Id = fmt.Sprintf("BVN%d", i)
 		bvnInit.Nodes = []*accumulated.NodeInit{{
@@ -115,13 +133,13 @@ func (sim *Simulator) Setup(bvnCount int) {
 	sim.router = routing.NewRouter(mainEventBus, nil)
 
 	// Initialize each executor
-	for _, bvn := range sim.netInit.Bvns[:1] {
+	for i, bvn := range sim.netInit.Bvns[:1] {
 		// TODO Initialize multiple executors for the DN
 		dn := &sim.Partitions[0]
 		dn.Nodes = append(dn.Nodes, config.Node{Type: config.Validator, Address: protocol.Directory})
 
-		logger := sim.newLogger().With("partition", protocol.Directory)
-		db := database.OpenInMemory(logger)
+		logger := sim.newLogger(opts).With("partition", protocol.Directory)
+		db := opts.OpenDB(protocol.Directory, i, logger)
 
 		network := config.Describe{
 			NetworkType:  config.Directory,
@@ -130,7 +148,7 @@ func (sim *Simulator) Setup(bvnCount int) {
 			Network:      config.Network{Id: "simulator", Partitions: sim.Partitions},
 		}
 
-		execOpts := ExecutorOptions{
+		execOpts := block.ExecutorOptions{
 			Logger:   logger,
 			Key:      bvn.Nodes[0].PrivValKey,
 			Describe: network,
@@ -138,9 +156,9 @@ func (sim *Simulator) Setup(bvnCount int) {
 			EventBus: mainEventBus,
 		}
 		if execOpts.Describe.NetworkType == config.Directory {
-			execOpts.MajorBlockScheduler = InitFakeMajorBlockScheduler(genesisTime)
+			execOpts.MajorBlockScheduler = blockscheduler.Init(mainEventBus)
 		}
-		exec, err := NewNodeExecutor(execOpts, db)
+		exec, err := block.NewNodeExecutor(execOpts, db)
 		require.NoError(sim, err)
 
 		jrpc, err := api.NewJrpc(api.Options{
@@ -148,6 +166,7 @@ func (sim *Simulator) Setup(bvnCount int) {
 			Describe:      &network,
 			Router:        sim.Router(),
 			TxMaxWaitTime: time.Hour,
+			Database:      db,
 		})
 		require.NoError(sim, err)
 
@@ -157,7 +176,7 @@ func (sim *Simulator) Setup(bvnCount int) {
 			Partition:  dn,
 			API:        acctesting.DirectJrpcClient(jrpc),
 			tb:         sim.tb,
-			blockTime:  genesisTime,
+			blockTime:  GenesisTime,
 			Validators: [][]byte{exec.Key[32:]},
 		}
 	}
@@ -166,8 +185,8 @@ func (sim *Simulator) Setup(bvnCount int) {
 		bvn := &sim.Partitions[i+1]
 		bvn.Nodes = []config.Node{{Type: config.Validator, Address: bvn.Id}}
 
-		logger := sim.newLogger().With("partition", bvn.Id)
-		db := database.OpenInMemory(logger)
+		logger := sim.newLogger(opts).With("partition", bvn.Id)
+		db := opts.OpenDB(bvn.Id, 0, logger)
 
 		network := config.Describe{
 			NetworkType:  bvn.Type,
@@ -176,17 +195,14 @@ func (sim *Simulator) Setup(bvnCount int) {
 			Network:      config.Network{Id: "simulator", Partitions: sim.Partitions},
 		}
 
-		execOpts := ExecutorOptions{
+		execOpts := block.ExecutorOptions{
 			Logger:   logger,
 			Key:      bvnInit.Nodes[0].PrivValKey,
 			Describe: network,
 			Router:   sim.Router(),
 			EventBus: events.NewBus(logger),
 		}
-		if execOpts.Describe.NetworkType == config.Directory {
-			execOpts.MajorBlockScheduler = InitFakeMajorBlockScheduler(genesisTime)
-		}
-		exec, err := NewNodeExecutor(execOpts, db)
+		exec, err := block.NewNodeExecutor(execOpts, db)
 		require.NoError(sim, err)
 
 		jrpc, err := api.NewJrpc(api.Options{
@@ -194,6 +210,7 @@ func (sim *Simulator) Setup(bvnCount int) {
 			Describe:      &network,
 			Router:        sim.Router(),
 			TxMaxWaitTime: time.Hour,
+			Database:      db,
 		})
 		require.NoError(sim, err)
 
@@ -203,7 +220,7 @@ func (sim *Simulator) Setup(bvnCount int) {
 			Partition:  bvn,
 			API:        acctesting.DirectJrpcClient(jrpc),
 			tb:         sim.tb,
-			blockTime:  genesisTime,
+			blockTime:  GenesisTime,
 			Validators: [][]byte{exec.Key[32:]},
 		}
 	}
@@ -298,14 +315,16 @@ func (s *Simulator) InitFromGenesisWith(values *core.GlobalValues) {
 	if values == nil {
 		values = new(core.GlobalValues)
 	}
-	genDocs, err := accumulated.BuildGenesisDocs(s.netInit, values, genesisTime, s.Logger, "")
+	genDocs, err := accumulated.BuildGenesisDocs(s.netInit, values, GenesisTime, s.Logger, s.opts.FactomAddresses)
 	require.NoError(s, err)
 
 	// Execute bootstrap after the entire network is known
 	for _, x := range s.Executors {
 		batch := x.Database.Begin(true)
 		defer batch.Discard()
-		require.NoError(tb{s}, x.Executor.InitFromGenesis(batch, genDocs[x.Partition.Id].AppState))
+		var snapshot []byte
+		require.NoError(s, json.Unmarshal(genDocs[x.Partition.Id].AppState, &snapshot))
+		require.NoError(tb{s}, x.Executor.RestoreSnapshot(batch, ioutil2.NewBuffer(snapshot)))
 		require.NoError(tb{s}, batch.Commit())
 	}
 }
@@ -364,15 +383,17 @@ func (s *Simulator) Submit(envelopes ...*protocol.Envelope) ([]*protocol.Envelop
 		}
 
 		// Check
-		for _, delivery := range deliveries {
-			_, err = CheckTx(s, x.Database, x.Executor, delivery)
-			if err != nil {
-				return nil, err
-			}
+		batch := x.Database.Begin(false)
+		defer batch.Discard()
+		x.Executor.ValidateEnvelopeSet(batch, deliveries, func(e error, _ *chain.Delivery, _ *protocol.TransactionStatus) {
+			err = e
+		})
+		if err != nil {
+			return nil, err
 		}
 
 		// Enqueue
-		x.Submit(envelope)
+		x.Submit(false, envelope)
 	}
 
 	return envelopes, nil
@@ -523,7 +544,7 @@ func (s *Simulator) WaitForTransactionFlow(statusCheck func(*protocol.Transactio
 type ExecEntry struct {
 	tb
 	mu                      sync.Mutex
-	blockIndex              uint64
+	BlockIndex              uint64
 	blockTime               time.Time
 	nextBlock, currentBlock []*chain.Delivery
 
@@ -543,7 +564,7 @@ type ExecEntry struct {
 //
 // By adding transactions to the next block and swaping queues when a block is
 // executed, we roughly simulate the process Tendermint uses to build blocks.
-func (x *ExecEntry) Submit(envelopes ...*protocol.Envelope) {
+func (x *ExecEntry) Submit(pretend bool, envelopes ...*protocol.Envelope) []*chain.Delivery {
 	var deliveries []*chain.Delivery
 	for _, env := range envelopes {
 		normalized, err := chain.NormalizeEnvelope(env)
@@ -561,9 +582,14 @@ func (x *ExecEntry) Submit(envelopes ...*protocol.Envelope) {
 		}
 	}
 
+	if pretend {
+		return deliveries
+	}
+
 	x.mu.Lock()
 	defer x.mu.Unlock()
 	x.nextBlock = append(x.nextBlock, deliveries...)
+	return deliveries
 }
 
 // takeSubmitted returns the envelopes for the current block.
@@ -577,17 +603,17 @@ func (x *ExecEntry) takeSubmitted() []*chain.Delivery {
 }
 
 func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protocol.TransactionStatus) {
-	if x.blockIndex > 0 {
-		x.blockIndex++
+	if x.BlockIndex > 0 {
+		x.BlockIndex++
 	} else {
 		_ = x.Database.View(func(batch *database.Batch) error {
 			var ledger *protocol.SystemLedger
 			err := batch.Account(x.Executor.Describe.Ledger()).GetStateAs(&ledger)
 			switch {
 			case err == nil:
-				x.blockIndex = ledger.Index + 1
+				x.BlockIndex = ledger.Index + 1
 			case errors.Is(err, errors.StatusNotFound):
-				x.blockIndex = protocol.GenesisBlock + 1
+				x.BlockIndex = protocol.GenesisBlock + 1
 			default:
 				require.NoError(tb{x.tb}, err)
 			}
@@ -595,11 +621,14 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 		})
 	}
 	x.blockTime = x.blockTime.Add(time.Second)
-	block := new(Block)
-	block.Index = x.blockIndex
+	block := new(block.Block)
+	block.Index = x.BlockIndex
 	block.Time = x.blockTime
 	block.IsLeader = true
 	block.Batch = x.Database.Begin(true)
+
+	// Run background tasks in the error group to ensure they complete before the next block begins
+	x.Executor.Background = func(f func()) { errg.Go(func() error { f(); return nil }) }
 
 	deliveries := x.takeSubmitted()
 	errg.Go(func() error {
@@ -608,27 +637,31 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 		err := x.Executor.BeginBlock(block)
 		require.NoError(x, err)
 
-		for _, delivery := range deliveries {
-			status, err := delivery.LoadTransaction(block.Batch)
-			if errors.Is(err, errors.StatusDelivered) {
-				if statusChan != nil {
-					status.TxID = delivery.Transaction.ID()
-					statusChan <- status
-				}
+		for i := 0; i < len(deliveries); i++ {
+			status, err := deliveries[i].LoadTransaction(block.Batch)
+			if err == nil {
 				continue
 			}
-			if err != nil {
+			if !errors.Is(err, errors.StatusDelivered) {
 				return errors.Wrap(errors.StatusUnknownError, err)
 			}
-
-			status, err = x.Executor.ExecuteEnvelope(block, delivery)
-			if err != nil {
-				return errors.Wrap(errors.StatusUnknownError, err)
-			}
-
 			if statusChan != nil {
-				status.TxID = delivery.Transaction.ID()
+				status.TxID = deliveries[i].Transaction.ID()
 				statusChan <- status
+			}
+			deliveries = append(deliveries[:i], deliveries[i+1:]...)
+			i--
+		}
+
+		results := x.Executor.ExecuteEnvelopeSet(block, deliveries, func(e error, _ *chain.Delivery, _ *protocol.TransactionStatus) {
+			err = e
+		})
+		if err != nil {
+			return errors.Wrap(errors.StatusUnknownError, err)
+		}
+		if statusChan != nil {
+			for _, result := range results {
+				statusChan <- result
 			}
 		}
 
