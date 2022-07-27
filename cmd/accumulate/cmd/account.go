@@ -241,7 +241,8 @@ func CreateTokenAccount(principal *url2.URL, signers []*signing.Builder, args []
 	req.Url = tok
 	resp := new(api.ChainQueryResponse)
 	token := protocol.TokenIssuer{}
-	resp.Data = &token
+	token.
+		resp.Data = &token
 	err = Client.RequestAPIv2(context.Background(), "query", req, resp)
 	if err != nil || resp.Type != protocol.AccountTypeTokenIssuer.String() {
 		return "", fmt.Errorf("invalid token type %v", err)

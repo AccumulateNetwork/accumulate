@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -27,7 +28,7 @@ var cmdInitDualNode = &cobra.Command{
 
 func setFlagsForInit() error {
 	var err error
-	if flagInitNode.PublicIP == "" {
+	if flagInitDualNode.PublicIP == "" {
 		flagInitNode.PublicIP, err = resolvePublicIp()
 		if err != nil {
 			return fmt.Errorf("cannot resolve public ip address, %v", err)
@@ -76,7 +77,7 @@ func initDualNodeFromSeed(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("cannot configure the directory node, %v", err)
 	}
 
-	c, err := finalizeDnn()
+	c, err := finalizeDnn(partitionName)
 	if err != nil {
 		return err
 	}
@@ -102,7 +103,8 @@ func initDualNodeFromSeed(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("cannot configure the directory node, %v", err)
 	}
 
-	return finalizeBvnn()
+	_, err = finalizeBvnn()
+	return err
 }
 
 func initDualNodeFromPeer(cmd *cobra.Command, args []string) error {
@@ -137,11 +139,6 @@ func initDualNodeFromPeer(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	_, err = finalizeDnn()
-	if err != nil {
-		return fmt.Errorf("error finalizing dnn configuration, %v", err)
-	}
-
 	args = []string{bvnHost}
 
 	_, err = initNode(cmd, args)
@@ -150,15 +147,20 @@ func initDualNodeFromPeer(cmd *cobra.Command, args []string) error {
 	}
 
 	//finalize BVNN
-	err = finalizeBvnn()
+	c, err := finalizeBvnn()
 	if err != nil {
 		return err
+	}
+
+	_, err = finalizeDnn(c.Accumulate.PartitionId)
+	if err != nil {
+		return fmt.Errorf("error finalizing dnn configuration, %v", err)
 	}
 
 	return nil
 }
 
-func finalizeDnn() (*cfg.Config, error) {
+func finalizeDnn(bvnId string) (*cfg.Config, error) {
 	c, err := cfg.Load(filepath.Join(flagMain.WorkDir, "dnn"))
 	if err != nil {
 		return nil, err
@@ -181,6 +183,16 @@ func finalizeDnn() (*cfg.Config, error) {
 		c.P2P.PersistentPeers = ""
 	}
 
+	bvn := c.Accumulate.Network.GetPartitionByID(bvnId)
+	if bvn == nil {
+		return nil, fmt.Errorf("bvn partition not found in configuration, %s", bvnId)
+	}
+
+	_, err = ensureNodeOnPartition(bvn, c.Accumulate.LocalAddress, cfg.NodeTypeValidator)
+	if err != nil {
+		return nil, err
+	}
+
 	err = cfg.Store(c)
 	if err != nil {
 		return nil, fmt.Errorf("cannot store configuration file for node, %v", err)
@@ -189,14 +201,14 @@ func finalizeDnn() (*cfg.Config, error) {
 	return c, nil
 }
 
-func finalizeBvnn() error {
+func finalizeBvnn() (*cfg.Config, error) {
 	c, err := cfg.Load(filepath.Join(flagMain.WorkDir, "bvnn"))
 	if err != nil {
-		return fmt.Errorf("cannot load configuration file for node, %v", err)
+		return nil, fmt.Errorf("cannot load configuration file for node, %v", err)
 	}
 
 	if c.Accumulate.NetworkType != cfg.NetworkTypeBlockValidator {
-		return fmt.Errorf("network partition of second node configuration must be a block validator. Please specify {network-name}.{bvn-partition-id} first parameter to init dual")
+		return nil, fmt.Errorf("network partition of second node configuration must be a block validator. Please specify {network-name}.{bvn-partition-id} first parameter to init dual")
 	}
 
 	if flagInit.NoEmptyBlocks {
@@ -213,7 +225,17 @@ func finalizeBvnn() error {
 		c.P2P.PersistentPeers = ""
 	}
 
-	return cfg.Store(c)
+	dn := c.Accumulate.Network.GetPartitionByID(protocol.Directory)
+	if dn == nil {
+		return nil, fmt.Errorf("cannot find directory parition on network in configuration")
+	}
+
+	_, err = ensureNodeOnPartition(dn, c.Accumulate.LocalAddress, cfg.NodeTypeValidator)
+	if err != nil {
+		return nil, err
+	}
+
+	return c, cfg.Store(c)
 }
 
 // initDualNode accumulate `init dual http://ip:bvnport` or `init dual partition.network --seed https://seednode
@@ -251,7 +273,7 @@ func resolvePublicIp() (string, error) {
 
 func findHealthyNodeOnPartition(partition *cfg.Partition) (string, error) {
 	for _, p := range partition.Nodes {
-		addr, _, err := resolveAddr(p.Address)
+		addr, err := resolveAddr(p.Address)
 		if err != nil {
 			continue
 		}
@@ -278,4 +300,31 @@ func findHealthyNodeOnPartition(partition *cfg.Partition) (string, error) {
 		return addr, nil
 	}
 	return "", fmt.Errorf("no viable node found on partition %s", partition.Id)
+}
+
+func ensureNodeOnPartition(partition *cfg.Partition, addr string, t cfg.NodeType) (*url.URL, error) {
+	testAddr, err := resolveIp(addr)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, n := range partition.Nodes {
+		nodeAddr, err := resolveAddr(n.Address)
+		if err != nil {
+			return nil, err
+		}
+
+		if strings.EqualFold(nodeAddr, testAddr) {
+			return url.Parse(testAddr)
+		}
+	}
+
+	//set port on url for partition, we need to add it to keep the connection mgr sane
+	u, err := cfg.OffsetPort(testAddr, int(partition.BasePort), int(cfg.PortOffsetTendermintP2P))
+	if err != nil {
+		return nil, err
+	}
+
+	partition.Nodes = append(partition.Nodes, cfg.Node{Address: u.String(), Type: t})
+	return u, nil
 }

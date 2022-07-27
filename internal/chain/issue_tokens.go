@@ -17,6 +17,8 @@ func (IssueTokens) Execute(st *StateManager, tx *Delivery) (protocol.Transaction
 
 func (IssueTokens) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.IssueTokens)
+	a := protocol.IssueTokens{}
+	a.
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.IssueTokens), tx.Transaction.Body)
 	}

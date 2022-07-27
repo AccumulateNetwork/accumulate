@@ -19,6 +19,7 @@ func TestInitSeeds(t *testing.T) {
 	proxyClient, accClient, dnEndpoint, bvnEndpoint := proxy_testing.LaunchFakeProxy(t)
 	_ = proxyClient
 	_ = accClient
+	_ = dnEndpoint
 	var args []string
 	workDir := t.TempDir()
 
@@ -30,12 +31,16 @@ func TestInitSeeds(t *testing.T) {
 		filepath.Join(workDir, "init_dual_test"),
 	}
 
+	baseEndpoint := fmt.Sprintf("http://127.11.11.11")
+	dnTestEndpoint := baseEndpoint + ":" + dnEndpoint.Port()
+	bvnTestEndpoint := baseEndpoint + ":" + bvnEndpoint.Port()
+
 	commandLine := []string{
-		fmt.Sprintf("accumulated init node %s --work-dir %s --listen=http://127.11.11.11:%s --no-prometheus", dnEndpoint.String(), workDirs[0], dnEndpoint.Port()),
-		fmt.Sprintf("accumulated init node %s --work-dir %s --listen=http://127.11.11.11:%s --no-prometheus", bvnEndpoint.String(), workDirs[1], bvnEndpoint.Port()),
-		fmt.Sprintf("accumulated init node directory.devnet --seed %s --listen=http://127.11.11.11 --work-dir %s --no-prometheus", proxy_testing.Endpoint, workDirs[2]),
-		fmt.Sprintf("accumulated init node bvn1.devnet --seed %s --work-dir %s --listen=http://127.11.11.11 --no-prometheus", proxy_testing.Endpoint, workDirs[3]),
-		fmt.Sprintf("accumulated init dual %s --work-dir %s --public=http://127.11.11.11 --listen=tcp://127.11.11.12 --no-prometheus", bvnEndpoint.String(), workDirs[4]),
+		fmt.Sprintf("accumulated init node %s --work-dir %s --listen %s --no-prometheus", dnEndpoint.String(), workDirs[0], dnTestEndpoint),
+		fmt.Sprintf("accumulated init node %s --work-dir %s --listen %s --no-prometheus", bvnEndpoint.String(), workDirs[1], bvnTestEndpoint),
+		fmt.Sprintf("accumulated init node directory.devnet --seed %s --listen %s --work-dir %s --no-prometheus", proxy_testing.Endpoint, baseEndpoint, workDirs[2]),
+		fmt.Sprintf("accumulated init node bvn1.devnet --seed %s --work-dir %s --listen %s --no-prometheus", proxy_testing.Endpoint, workDirs[3], baseEndpoint),
+		fmt.Sprintf("accumulated init dual %s --work-dir %s --public %s --listen %s --no-prometheus", bvnEndpoint.String(), workDirs[4], baseEndpoint, baseEndpoint),
 	}
 
 	e := bytes.NewBufferString("")
@@ -72,7 +77,6 @@ func TestInitSeeds(t *testing.T) {
 		fmt.Sprintf("accumulated run -w %s/bvnn --ci-stop-after 5s", workDirs[1]),
 		fmt.Sprintf("accumulated run -w %s/dnn --ci-stop-after 5s", workDirs[2]),
 		fmt.Sprintf("accumulated run -w %s/bvnn --ci-stop-after 5s", workDirs[3]),
-		fmt.Sprintf("accumulated run-dual %s/dnn %s/bvnn --ci-stop-after 5s", workDirs[4], workDirs[4]),
 	}
 
 	//this test will fire up various configurations to ensure things were configured ok and can start.
@@ -93,4 +97,37 @@ func TestInitSeeds(t *testing.T) {
 			t.Fatalf("%s", string(errPrint))
 		}
 	}
+
+	//now just run the dual node configuration
+	initInitFlags()
+	run := fmt.Sprintf("accumulated run-dual %s/dnn %s/bvnn --ci-stop-after 5s", workDirs[4], workDirs[4])
+	initRunFlags(cmd, true)
+
+	args = strings.Split(run, " ")
+	cmd.SetArgs(args)
+	require.NoError(t, cmd.Execute())
+	//make sure node can fire up without error
+	require.NoError(t, DidError, "when executing: %s", run)
+
+	errPrint, err := io.ReadAll(e)
+	require.NoError(t, err)
+	if len(errPrint) != 0 {
+		t.Fatalf("%s", string(errPrint))
+	}
+	////run a faucet to make sure the transaction makes it through the configured node(s)
+	//accClient, err = client.New(bvnTestEndpoint)
+	//require.NoError(t, err)
+	//_, pub, err := ed25519.GenerateKey(nil)
+	//require.NoError(t, err)
+	//lta, err := protocol.LiteTokenAddress(pub, protocol.ACME, protocol.SignatureTypeED25519)
+	//require.NoError(t, err)
+	//resp, err := accClient.Faucet(context.Background(), &protocol.AcmeFaucet{Url: lta})
+	//require.NoError(t, err)
+	//txReq := api.TxnQuery{}
+	//txReq.Txid = resp.TransactionHash
+	//txReq.Wait = time.Second * 100
+	//txReq.IgnorePending = false
+	//_, err = accClient.QueryTx(context.Background(), &txReq)
+	//require.NoError(t, err, "error: waiting for transaction to complete")
+
 }
