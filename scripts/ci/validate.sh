@@ -132,7 +132,7 @@ delegate=$(accumulate page get acc://test.acme/book2/1 -j | jq -r .data.keys[0].
 target=acc://test.acme/book
 if [ "$target" = "$delegate" ]; then
 success
-  else 
+  else
   die `want acc://test.acme/book got ${delegate}`
 fi
 
@@ -149,9 +149,9 @@ die `want $keybook2 got $tokenAuthority`
 fi
 
 section "Burn Tokens for adi token account"
-wait-for cli-tx tx create ${LITE_ACME} test.acme/acmetokens 10 
+wait-for cli-tx tx create ${LITE_ACME} test.acme/acmetokens 10
 wait-for cli-tx token burn acc://test.acme/acmetokens test-2-0 5
-BALANCE1=$(accumulate account get acc://test.acme/acmetokens -j | jq -re .data.balance)                        
+BALANCE1=$(accumulate account get acc://test.acme/acmetokens -j | jq -re .data.balance)
 [ "$BALANCE1" -eq 500000000 ] && success || die "test.acme/acmetokens should have 5 tokens but has $(expr ${BALANCE1} / 100000000)"
 
 section "Set KeyBook2 as authority for adi data account"
@@ -280,7 +280,9 @@ BALANCE=$(accumulate -j account get ${LITE_TOK} | jq -r .data.balance)
 [ "$BALANCE" -eq 230123456789 ] && success || die "${LITE_TOK} should have 1230123456789 test.acme tokens but has ${BALANCE}"
 
 section "Create lite data account and write the data"
-ACCOUNT_ID=$(accumulate -j account create data --lite test.acme test-1-0 "Factom PRO" "Tutorial" | jq -r .accountUrl)
+JSON=$(accumulate -j account create data --lite test.acme test-1-0 "Factom PRO" "Tutorial")
+wait-for-tx $(jq -r .transactionHash <<< "$JSON")
+ACCOUNT_ID=$(jq -r .accountUrl <<< "$JSON")
 [ "$ACCOUNT_ID" == "acc://b36c1c4073305a41edc6353a094329c24ffa54c0a47fb56227a04477bcb78923" ] || die "${ACCOUNT_ID} does not match expected value"
 accumulate data get $ACCOUNT_ID 0 1 1> /dev/null || die "lite data entry not found"
 wait-for cli-tx data write-to test.acme test-1-0 $ACCOUNT_ID "data test"
@@ -378,6 +380,7 @@ BALANCE=$(accumulate -j page get manager.acme/book/1 | jq -r .data.creditBalance
 
 section "Create token account with manager"
 TXID=$(cli-tx account create token test.acme test-1-0 --authority test.acme/book,manager.acme/book test.acme/managed-tokens ACME) || "Failed to create managed token account"
+wait-for-tx $TXID
 accumulate tx sign test.acme test-mgr@manager.acme/book $TXID
 wait-for-tx --ignore-pending $TXID
 RESULT=$(accumulate -j get test.acme/managed-tokens -j | jq -re '.data.authorities | length')
@@ -389,7 +392,7 @@ sleep 1 # resolve issue with docker validation
 TXID=$(cli-tx auth remove test.acme/managed-tokens test-1-0 manager.acme/book) || die "Failed to initiate txn to remove manager"
 wait-for-tx $TXID
 accumulate -j tx get $TXID | jq -re .status.pending 1> /dev/null || die "Transaction is not pending"
-wait-for cli-tx-sig tx sign test.acme/managed-tokens test-mgr@manager.acme $TXID || die "Failed to sign transaction"
+accumulate tx sign test.acme/managed-tokens test-mgr@manager.acme $TXID || die "Failed to sign transaction"
 wait-for-tx --ignore-pending $TXID || die "Transaction was not delivered"
 RESULT=$(accumulate -j get test.acme/managed-tokens -j | jq -re '.data.authorities | length')
 [ "$RESULT" -eq 1 ] || die "Expected 1 authority, got $RESULT"
@@ -397,6 +400,7 @@ success
 
 section "Add manager to token account"
 TXID=$(cli-tx auth add test.acme/managed-tokens test-1-0 manager.acme/book) || die "Failed to add the manager"
+wait-for-tx $TXID
 accumulate tx sign test.acme test-mgr@manager.acme/book $TXID
 wait-for-tx --ignore-pending $TXID
 RESULT=$(accumulate -j get test.acme/managed-tokens -j | jq -re '.data.authorities | length')
