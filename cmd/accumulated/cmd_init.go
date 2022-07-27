@@ -580,9 +580,9 @@ func initNode(cmd *cobra.Command, args []string) (string, error) {
 			if err != nil {
 				return "", fmt.Errorf("invalid node address %v", err)
 			}
-			//local address expect ip:port only with no scheme for connection manager to work
-			config.Accumulate.LocalAddress = fmt.Sprintf("%s:%d", localAddr, port)
 		}
+		//local address expect ip:port only with no scheme for connection manager to work
+		config.Accumulate.LocalAddress = fmt.Sprintf("%s:%d", localAddr, port)
 	}
 
 	config.Accumulate.AnalysisLog.Enabled = flagInit.EnableTimingLogs
