@@ -47,7 +47,7 @@ do
 	wait-for-tx $tx
 done
 
-//make sure no errors occurred
+#make sure no errors occurred
 accumulate account get ${LITE_ACME} 1> /dev/null && success || die "Cannot find ${LITE_ACME}"
 
 if [ ! -z "${ACCPID}" ]; then
