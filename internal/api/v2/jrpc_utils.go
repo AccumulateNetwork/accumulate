@@ -13,8 +13,6 @@ import (
 func GetLatestRootChainAnchor(tmclient connections.ABCIClient, apiclient connections.APIClient, ledgerurl *url.URL, c context.Context) (bptHash *[32]byte, rootHash *[32]byte, height int64, err error) {
 	req := new(GeneralQuery)
 	apiinfo := new(ChainQueryResponse)
-	hash := new([32]byte)
-	roothash := new([32]byte)
 	req.Url = ledgerurl
 	req.Prove = true
 	req.Expand = true
@@ -27,8 +25,7 @@ func GetLatestRootChainAnchor(tmclient connections.ABCIClient, apiclient connect
 		return nil, nil, int64(0), err
 	}
 	height = tminfo.Response.LastBlockHeight
-	copy(hash[:], tminfo.Response.LastBlockAppHash)
-	fmt.Printf("data is %v, %v %v %v %v %v", *apiinfo, *tminfo, string(hash[:]), string(rootHash[:]), height, err)
+	hash := (*[32]byte)(tminfo.Response.LastBlockAppHash)
 
 	ms := new(managed.MerkleState)
 	for _, chain := range apiinfo.Chains {
@@ -42,10 +39,7 @@ func GetLatestRootChainAnchor(tmclient connections.ABCIClient, apiclient connect
 	}
 
 	anchor := ms.GetMDRoot()
-
-	copy(roothash[:], []byte(anchor))
-
-	return hash, rootHash, height, nil
+	return hash, (*[32]byte)(anchor), height, nil
 }
 
 func getLatestDirectoryAnchor(ctx connections.ConnectionContext, anchorurl *url.URL) (lastAnchor uint64, err error) {

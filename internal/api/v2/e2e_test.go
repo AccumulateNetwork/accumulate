@@ -22,6 +22,25 @@ import (
 
 func init() { acctesting.EnableDebugFeatures() }
 
+func TestStatus(t *testing.T) {
+	partitions, daemons := acctesting.CreateTestNet(t, 2, 2, 0, false)
+	acctesting.RunTestNet(t, partitions, daemons)
+	japi := daemons["BVN1"][0].Jrpc_TESTONLY()
+
+	r := japi.Status(context.Background(), nil)
+	if err, ok := r.(error); ok {
+		require.NoError(t, err)
+	}
+	require.IsType(t, (*api.StatusResponse)(nil), r)
+	status := r.(*api.StatusResponse)
+
+	// Check the status
+	require.True(t, status.Ok)
+	require.NotZero(t, status.BvnHeight)
+	require.NotZero(t, status.BvnRootHash)
+	require.NotZero(t, status.BvnBptHash)
+}
+
 func TestEndToEnd(t *testing.T) {
 	acctesting.SkipCI(t, "flaky")
 	acctesting.SkipPlatform(t, "windows", "flaky")
