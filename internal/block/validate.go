@@ -67,7 +67,7 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 	// Check that the signatures are valid
 	for i, signature := range delivery.Signatures {
 		var md sigExecMetadata
-		md.Initiated = i > 0 || txnType == protocol.TransactionTypeRemote
+		md.IsInitiator = protocol.SignatureDidInitiate(signature, delivery.Transaction.Header.Initiator[:])
 		if !signature.Type().IsSystem() {
 			md.Location = signature.RoutingLocation()
 		}
@@ -230,7 +230,7 @@ func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Deli
 			}
 		}
 
-		signer, err = x.validateKeySignature(batch, delivery, signature, !md.Initiated, !md.Delegated && delivery.Transaction.Header.Principal.LocalTo(md.Location))
+		signer, err = x.validateKeySignature(batch, delivery, signature, md, !md.Delegated && delivery.Transaction.Header.Principal.LocalTo(md.Location))
 
 	default:
 		return nil, errors.Format(errors.StatusBadRequest, "unknown signature type %v", signature.Type())
