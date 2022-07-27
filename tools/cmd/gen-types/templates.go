@@ -71,11 +71,24 @@ func convert(types, refTypes typegen.Types, pkgName, subPkgName, pkgPath string)
 			if !ok {
 				return nil, fmt.Errorf("unknown embedded type %s", name)
 			}
-			field := new(Field)
-			field.Type.SetNamed(name)
-			field.TypeRef = etyp
-			field.ParentTypeName = typ.Name
-			typ.Fields = append(typ.Fields, field)
+			if flags.ExpandEmbedded {
+				for _, embField := range etyp.Type.Fields {
+					field := new(Field)
+					field.Name = embField.Name
+					field.Type.SetNamed(embField.Type.Name)
+					field.Type = embField.Type
+					field.Repeatable = embField.Repeatable
+					field.ParentTypeName = typ.Name
+					field.ParentUnionValue = etyp.UnionValue()
+					typ.Fields = append(typ.Fields, field)
+				}
+			} else {
+				field := new(Field)
+				field.Type.SetNamed(name)
+				field.TypeRef = etyp
+				field.ParentTypeName = typ.Name
+				typ.Fields = append(typ.Fields, field)
+			}
 		}
 
 		// Convert fields

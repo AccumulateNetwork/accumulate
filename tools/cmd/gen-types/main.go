@@ -17,12 +17,13 @@ import (
 var flags struct {
 	files typegen.FileReader
 
-	Package     string
-	SubPackage  string
-	Out         string
-	Language    string
-	Reference   []string
-	FilePerType bool
+	Package        string
+	SubPackage     string
+	Out            string
+	Language       string
+	Reference      []string
+	FilePerType    bool
+	ExpandEmbedded bool
 }
 
 func main() {
@@ -91,6 +92,7 @@ func run(_ *cobra.Command, args []string) {
 	switch flags.Language {
 	case "java", "Java":
 		flags.FilePerType = true
+		flags.ExpandEmbedded = true
 	}
 
 	var types, refTypes typegen.Types
