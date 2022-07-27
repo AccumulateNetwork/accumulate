@@ -25,26 +25,31 @@ fi
 echo
 
 #spin up a dual node 
-  accumulated init dual tcp://node-1:26656 --public=tcp://127.0.1.101 --listen=tcp://127.0.1.101 -w "$NODES_DIR/dual-test" --skip-version-check --no-website --skip-peer-health-check  || die "init dual mode failed"
+accumulated init dual tcp://node-1:26656 --public=tcp://127.0.1.101 --listen=tcp://127.0.1.101 -w "$NODES_DIR/dual-test" --skip-version-check --no-website --skip-peer-health-check  || die "init dual mode failed"
 
-  # Start the new validator and increment NUM_DMNS
-  accumulated run-dual "$NODES_DIR/dual-test/dnn" "$NODES_DIR/dual-test/bvnn" &
-  declare -g ACCPID=$!
+# Start the new validator and increment NUM_DMNS
+accumulated run-dual "$NODES_DIR/dual-test/dnn" "$NODES_DIR/dual-test/bvnn" &
+declare -g ACCPID=$!
 
+
+section "Generate a Lite Token Account"
+accumulate account list 2>&1 | grep -q ACME || accumulate account generate
+LITE_ACME=$(accumulate account list -j | jq -re .liteAccounts[0].liteAccount)
+LITE_ID=$(cut -d/ -f-3 <<< "$LITE_ACME")
+TXS=()
+for i in {1..1}
+do
+	TXS=(${TXS[@]} $(cli-tx -s http://127.0.1.101:26660/v2 faucet ${LITE_ACME}))
+done
+for tx in "${TXS[@]}"
+do
+	echo $tx
+	wait-for-tx $tx
+done
+
+//make sure no errors occurred
+accumulate account get ${LITE_ACME} 1> /dev/null && success || die "Cannot find ${LITE_ACME}"
 
 if [ ! -z "${ACCPID}" ]; then
-  section "Shutdown dual mode node validator"
-  TXID=$(cli-tx validator remove dn "$(dnPrivKey 1)" "$hexPubKey")
-  wait-for-tx $TXID
-
-  # Sign the required number of times
-  echo Signature count $(signCount)
-  for ((sigNr = 2; sigNr <= $(signCount); sigNr++)); do
-    echo Signature $sigNr
-    wait-for cli-tx-sig tx sign dn.acme/operators "$(dnPrivKey $sigNr)" $TXID
-  done
-  accumulate -j tx get $TXID | jq -re .status.pending 1>/dev/null && die "Transaction is pending"
-  accumulate -j tx get $TXID | jq -re .status.delivered 1>/dev/null || die "Transaction was not delivered"
-
   kill -9 $ACCPID || true
 fi
