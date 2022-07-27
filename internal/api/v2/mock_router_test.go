@@ -10,7 +10,6 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	client "github.com/tendermint/tendermint/rpc/client"
-	local "github.com/tendermint/tendermint/rpc/client/local"
 	coretypes "github.com/tendermint/tendermint/rpc/coretypes"
 	routing "gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	url "gitlab.com/accumulatenetwork/accumulate/internal/url"
@@ -38,20 +37,6 @@ func NewMockRouter(ctrl *gomock.Controller) *MockRouter {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockRouter) EXPECT() *MockRouterMockRecorder {
 	return m.recorder
-}
-
-// GetLocalClient mocks base method.
-func (m *MockRouter) GetLocalClient() *local.Local {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetLocalClient")
-	ret0, _ := ret[0].(*local.Local)
-	return ret0
-}
-
-// GetLocalClient indicates an expected call of GetLocalClient.
-func (mr *MockRouterMockRecorder) GetLocalClient() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLocalClient", reflect.TypeOf((*MockRouter)(nil).GetLocalClient))
 }
 
 // Query mocks base method.

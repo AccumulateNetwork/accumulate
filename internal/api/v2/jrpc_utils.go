@@ -10,7 +10,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 )
 
-func GetLatestRootChainAnchor(tmclient connections.ABCIClient, apiclient connections.APIClient, ledgerurl *url.URL, c context.Context) (bptHash *[32]byte, roothash *[32]byte, height int64, err error) {
+func GetLatestRootChainAnchor(apiclient connections.APIClient, ledgerurl *url.URL, c context.Context) (roothash *[32]byte, err error) {
 	req := new(GeneralQuery)
 	apiinfo := new(ChainQueryResponse)
 	req.Url = ledgerurl
@@ -18,15 +18,8 @@ func GetLatestRootChainAnchor(tmclient connections.ABCIClient, apiclient connect
 	req.Expand = true
 	err = apiclient.RequestAPIv2(c, "query", req, apiinfo)
 	if err != nil {
-		return nil, nil, int64(0), err
+		return nil, err
 	}
-	tminfo, err := tmclient.ABCIInfo(c)
-	if err != nil {
-		return nil, nil, int64(0), err
-	}
-	height = tminfo.Response.LastBlockHeight
-	hash := (*[32]byte)(tminfo.Response.LastBlockAppHash)
-
 	ms := new(managed.MerkleState)
 	for _, chain := range apiinfo.Chains {
 		if chain.Name == "root" {
@@ -38,7 +31,7 @@ func GetLatestRootChainAnchor(tmclient connections.ABCIClient, apiclient connect
 	}
 
 	anchor := ms.GetMDRoot()
-	return hash, (*[32]byte)(anchor), height, nil
+	return (*[32]byte)(anchor), nil
 }
 
 func getLatestDirectoryAnchor(ctx connections.ConnectionContext, anchorurl *url.URL) (lastAnchor uint64, err error) {

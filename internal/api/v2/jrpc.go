@@ -114,8 +114,13 @@ func (m *JrpcMethods) Status(ctx context.Context, _ json.RawMessage) interface{}
 	}
 	tmclient := conn.GetABCIClient()
 	apiclient := conn.GetAPIClient()
-
-	hash, roothash, height, err := GetLatestRootChainAnchor(tmclient, apiclient, m.Options.Describe.Ledger(), ctx)
+	tminfo, err := tmclient.ABCIInfo(ctx)
+	if err != nil {
+		return internalError(err)
+	}
+	height := tminfo.Response.LastBlockHeight
+	hash := (*[32]byte)(tminfo.Response.LastBlockAppHash)
+	roothash, err := GetLatestRootChainAnchor(apiclient, m.Options.Describe.Ledger(), ctx)
 	if err != nil {
 		return internalError(err)
 	}
@@ -138,7 +143,7 @@ func (m *JrpcMethods) Status(ctx context.Context, _ json.RawMessage) interface{}
 	status.BvnHeight = uint64(height)
 	status.BvnBptHash = *hash
 	status.BvnRootHash = *roothash
-	status.LastAnchorHeight = uint64(lastAnchor)
+	status.LastDirectoryAnchorHeight = uint64(lastAnchor)
 	return status
 }
 

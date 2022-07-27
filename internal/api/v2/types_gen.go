@@ -196,14 +196,14 @@ type SignerMetadata struct {
 }
 
 type StatusResponse struct {
-	Ok               bool     `json:"ok,omitempty" form:"ok" query:"ok" validate:"required"`
-	BvnHeight        uint64   `json:"bvnHeight,omitempty" form:"bvnHeight" query:"bvnHeight" validate:"required"`
-	DnHeight         uint64   `json:"dnHeight,omitempty" form:"dnHeight" query:"dnHeight" validate:"required"`
-	LastAnchorHeight uint64   `json:"lastAnchorHeight,omitempty" form:"lastAnchorHeight" query:"lastAnchorHeight" validate:"required"`
-	BvnRootHash      [32]byte `json:"bvnRootHash,omitempty" form:"bvnRootHash" query:"bvnRootHash" validate:"required"`
-	DnRootHash       [32]byte `json:"dnRootHash,omitempty" form:"dnRootHash" query:"dnRootHash" validate:"required"`
-	BvnBptHash       [32]byte `json:"bvnBptHash,omitempty" form:"bvnBptHash" query:"bvnBptHash" validate:"required"`
-	DnBptHash        [32]byte `json:"dnBptHash,omitempty" form:"dnBptHash" query:"dnBptHash" validate:"required"`
+	Ok                        bool     `json:"ok,omitempty" form:"ok" query:"ok" validate:"required"`
+	BvnHeight                 uint64   `json:"bvnHeight,omitempty" form:"bvnHeight" query:"bvnHeight" validate:"required"`
+	DnHeight                  uint64   `json:"dnHeight,omitempty" form:"dnHeight" query:"dnHeight" validate:"required"`
+	LastDirectoryAnchorHeight uint64   `json:"lastDirectoryAnchorHeight,omitempty" form:"lastDirectoryAnchorHeight" query:"lastDirectoryAnchorHeight" validate:"required"`
+	BvnRootHash               [32]byte `json:"bvnRootHash,omitempty" form:"bvnRootHash" query:"bvnRootHash" validate:"required"`
+	DnRootHash                [32]byte `json:"dnRootHash,omitempty" form:"dnRootHash" query:"dnRootHash" validate:"required"`
+	BvnBptHash                [32]byte `json:"bvnBptHash,omitempty" form:"bvnBptHash" query:"bvnBptHash" validate:"required"`
+	DnBptHash                 [32]byte `json:"dnBptHash,omitempty" form:"dnBptHash" query:"dnBptHash" validate:"required"`
 }
 
 type SyntheticTransactionRequest struct {
@@ -832,19 +832,19 @@ func (v *Signer) MarshalJSON() ([]byte, error) {
 
 func (v *StatusResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Ok               bool   `json:"ok,omitempty"`
-		BvnHeight        uint64 `json:"bvnHeight,omitempty"`
-		DnHeight         uint64 `json:"dnHeight,omitempty"`
-		LastAnchorHeight uint64 `json:"lastAnchorHeight,omitempty"`
-		BvnRootHash      string `json:"bvnRootHash,omitempty"`
-		DnRootHash       string `json:"dnRootHash,omitempty"`
-		BvnBptHash       string `json:"bvnBptHash,omitempty"`
-		DnBptHash        string `json:"dnBptHash,omitempty"`
+		Ok                        bool   `json:"ok,omitempty"`
+		BvnHeight                 uint64 `json:"bvnHeight,omitempty"`
+		DnHeight                  uint64 `json:"dnHeight,omitempty"`
+		LastDirectoryAnchorHeight uint64 `json:"lastDirectoryAnchorHeight,omitempty"`
+		BvnRootHash               string `json:"bvnRootHash,omitempty"`
+		DnRootHash                string `json:"dnRootHash,omitempty"`
+		BvnBptHash                string `json:"bvnBptHash,omitempty"`
+		DnBptHash                 string `json:"dnBptHash,omitempty"`
 	}{}
 	u.Ok = v.Ok
 	u.BvnHeight = v.BvnHeight
 	u.DnHeight = v.DnHeight
-	u.LastAnchorHeight = v.LastAnchorHeight
+	u.LastDirectoryAnchorHeight = v.LastDirectoryAnchorHeight
 	u.BvnRootHash = encoding.ChainToJSON(v.BvnRootHash)
 	u.DnRootHash = encoding.ChainToJSON(v.DnRootHash)
 	u.BvnBptHash = encoding.ChainToJSON(v.BvnBptHash)
@@ -1624,19 +1624,19 @@ func (v *Signer) UnmarshalJSON(data []byte) error {
 
 func (v *StatusResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Ok               bool   `json:"ok,omitempty"`
-		BvnHeight        uint64 `json:"bvnHeight,omitempty"`
-		DnHeight         uint64 `json:"dnHeight,omitempty"`
-		LastAnchorHeight uint64 `json:"lastAnchorHeight,omitempty"`
-		BvnRootHash      string `json:"bvnRootHash,omitempty"`
-		DnRootHash       string `json:"dnRootHash,omitempty"`
-		BvnBptHash       string `json:"bvnBptHash,omitempty"`
-		DnBptHash        string `json:"dnBptHash,omitempty"`
+		Ok                        bool   `json:"ok,omitempty"`
+		BvnHeight                 uint64 `json:"bvnHeight,omitempty"`
+		DnHeight                  uint64 `json:"dnHeight,omitempty"`
+		LastDirectoryAnchorHeight uint64 `json:"lastDirectoryAnchorHeight,omitempty"`
+		BvnRootHash               string `json:"bvnRootHash,omitempty"`
+		DnRootHash                string `json:"dnRootHash,omitempty"`
+		BvnBptHash                string `json:"bvnBptHash,omitempty"`
+		DnBptHash                 string `json:"dnBptHash,omitempty"`
 	}{}
 	u.Ok = v.Ok
 	u.BvnHeight = v.BvnHeight
 	u.DnHeight = v.DnHeight
-	u.LastAnchorHeight = v.LastAnchorHeight
+	u.LastDirectoryAnchorHeight = v.LastDirectoryAnchorHeight
 	u.BvnRootHash = encoding.ChainToJSON(v.BvnRootHash)
 	u.DnRootHash = encoding.ChainToJSON(v.DnRootHash)
 	u.BvnBptHash = encoding.ChainToJSON(v.BvnBptHash)
@@ -1647,7 +1647,7 @@ func (v *StatusResponse) UnmarshalJSON(data []byte) error {
 	v.Ok = u.Ok
 	v.BvnHeight = u.BvnHeight
 	v.DnHeight = u.DnHeight
-	v.LastAnchorHeight = u.LastAnchorHeight
+	v.LastDirectoryAnchorHeight = u.LastDirectoryAnchorHeight
 	if x, err := encoding.ChainFromJSON(u.BvnRootHash); err != nil {
 		return fmt.Errorf("error decoding BvnRootHash: %w", err)
 	} else {
