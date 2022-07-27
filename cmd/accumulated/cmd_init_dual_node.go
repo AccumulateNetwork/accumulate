@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -17,6 +16,7 @@ import (
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 	cfg "gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 var cmdInitDualNode = &cobra.Command{
