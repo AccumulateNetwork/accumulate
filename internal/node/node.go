@@ -14,6 +14,7 @@ import (
 	"github.com/tendermint/tendermint/libs/service"
 	nm "github.com/tendermint/tendermint/node"
 	"github.com/tendermint/tendermint/privval"
+	coregrpc "github.com/tendermint/tendermint/rpc/grpc"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	web "gitlab.com/accumulatenetwork/accumulate/internal/web/static"
 )
@@ -52,7 +53,6 @@ func (n *Node) Start() error {
 	if err != nil {
 		return err
 	}
-
 	if n.Config.Accumulate.Website.Enabled {
 		u, err := url.Parse(n.Config.Accumulate.Website.ListenAddress)
 		if err != nil {
@@ -75,5 +75,16 @@ func (n *Node) Start() error {
 			}
 		}()
 	}
+	n.waitForGRPC()
 	return nil
+}
+
+func (n *Node) waitForGRPC() coregrpc.BroadcastAPIClient {
+	client := coregrpc.StartGRPCClient(n.Config.RPC.GRPCListenAddress)
+	for {
+		_, err := client.Ping(context.Background(), &coregrpc.RequestPing{})
+		if err == nil {
+			return client
+		}
+	}
 }

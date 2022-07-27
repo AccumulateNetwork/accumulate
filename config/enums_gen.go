@@ -35,6 +35,9 @@ const PortOffsetPrometheus PortOffset = 3
 // PortOffsetAccumulateApi .
 const PortOffsetAccumulateApi PortOffset = 4
 
+// PortOffsetTmRpcGrpc .
+const PortOffsetTmRpcGrpc PortOffset = 5
+
 // GetEnumValue returns the value of the Network Type
 func (v NetworkType) GetEnumValue() uint64 { return uint64(v) }
 
@@ -164,7 +167,7 @@ func (v PortOffset) GetEnumValue() uint64 { return uint64(v) }
 func (v *PortOffset) SetEnumValue(id uint64) bool {
 	u := PortOffset(id)
 	switch u {
-	case PortOffsetTendermintP2P, PortOffsetTendermintRpc, PortOffsetWebsite, PortOffsetPrometheus, PortOffsetAccumulateApi:
+	case PortOffsetTendermintP2P, PortOffsetTendermintRpc, PortOffsetWebsite, PortOffsetPrometheus, PortOffsetAccumulateApi, PortOffsetTmRpcGrpc:
 		*v = u
 		return true
 	default:
@@ -185,6 +188,8 @@ func (v PortOffset) String() string {
 		return "prometheus"
 	case PortOffsetAccumulateApi:
 		return "accumulateApi"
+	case PortOffsetTmRpcGrpc:
+		return "tmRpcGrpc"
 	default:
 		return fmt.Sprintf("PortOffset:%d", v)
 	}
@@ -203,6 +208,8 @@ func PortOffsetByName(name string) (PortOffset, bool) {
 		return PortOffsetPrometheus, true
 	case "accumulateapi":
 		return PortOffsetAccumulateApi, true
+	case "tmrpcgrpc":
+		return PortOffsetTmRpcGrpc, true
 	default:
 		return 0, false
 	}

@@ -263,10 +263,11 @@ func (d *Daemon) Start() (err error) {
 
 	// Shut down the node if the disk space gets too low
 	go d.ensureSufficientDiskSpace(d.Config.RootDir)
-
-	if d.node.IsRunning() {
-		color.HiBlue(" %s node running at %s :", d.node.Config.Accumulate.NetworkType, d.node.Config.Accumulate.Describe.LocalAddress)
+	for !d.node.IsRunning() {
+		color.HiMagenta("Syncing ....")
+		time.Sleep(time.Second * 1)
 	}
+	color.HiBlue(" %s node running at %s :", d.node.Config.Accumulate.NetworkType, d.node.Config.Accumulate.Describe.LocalAddress)
 
 	// Clean up once the node is stopped (mostly for tests)
 	go func() {
