@@ -69,10 +69,26 @@ func (x DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 		}
 	}
 
-	if st.NetworkType != config.Directory {
-		err = processReceiptsFromDirectory(st, tx, body)
-		if err != nil {
-			return nil, err
+	// if st.NetworkType != config.Directory {
+	// 	err = processReceiptsFromDirectory(st, tx, body)
+	// 	if err != nil {
+	// 		return nil, err
+	// 	}
+	// }
+
+	for i, receipt := range body.Receipts {
+		receipt := receipt // See docs/developer/rangevarref.md
+		if !bytes.Equal(receipt.Anchor, body.RootChainAnchor[:]) {
+			return nil, fmt.Errorf("receipt %d is invalid: result does not match the anchor", i)
+		}
+
+		for _, synth := range GetSynthForAnchor(st.PartitionId, *(*[32]byte)(receipt.Start)) {
+			sig := new(protocol.ReceiptSignature)
+			sig.SourceNetwork = body.Source
+			sig.Proof = receipt
+			sig.TransactionHash = *(*[32]byte)(synth.Transaction[0].GetHash())
+			synth.Signatures = append(synth.Signatures, sig)
+			st.State.SynthToSend = append(st.State.SynthToSend, synth)
 		}
 	}
 
@@ -117,7 +133,7 @@ func processReceiptsFromDirectory(st *StateManager, tx *Delivery, body *protocol
 }
 
 func loadSynthTxns(st *StateManager, tx *Delivery, anchor []byte, source *url.URL, receipt *managed.Receipt, sequence map[*Delivery]int) ([]*Delivery, error) {
-	synth, err := st.batch.Account(st.Ledger()).GetSyntheticForAnchor(*(*[32]byte)(anchor))
+	synth, err := st.batch.Account(st.Ledger()).SyntheticForAnchor(*(*[32]byte)(anchor)).Get()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load pending synthetic transactions for anchor %X: %w", anchor[:4], err)
 	}

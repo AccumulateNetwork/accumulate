@@ -29,6 +29,8 @@ type BlockState struct {
 	ChainUpdates       chain.ChainUpdates
 
 	Anchor *BlockAnchorState
+
+	SynthToSend []*protocol.Envelope
 }
 
 // BlockAnchorState is used to construc the anchor for the block.
@@ -65,4 +67,6 @@ func (s *BlockState) MergeTransaction(r *chain.ProcessTransactionState) {
 		s.MakeMajorBlock = r.MakeMajorBlock
 		s.MakeMajorBlockTime = r.MakeMajorBlockTime
 	}
+
+	s.SynthToSend = append(s.SynthToSend, r.SynthToSend...)
 }

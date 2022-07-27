@@ -11,7 +11,7 @@ import (
 	jrpc "github.com/tendermint/tendermint/rpc/jsonrpc/types"
 	tm "github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
+	chainpkg "gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
@@ -119,7 +119,7 @@ func (x *Executor) captureValueAsDataEntry(batch *database.Batch, internalAccoun
 	txn.Body = &wd
 	txn.Header.Initiator = signerUrl.AccountID32()
 
-	st := chain.NewStateManager(&x.Describe, &x.globals.Active, batch.Begin(true), nil, txn, x.logger)
+	st := chainpkg.NewStateManager(&x.Describe, &x.globals.Active, batch.Begin(true), nil, txn, x.logger)
 	defer st.Discard()
 
 	var da *protocol.DataAccount
@@ -365,11 +365,13 @@ func (x *Executor) sendSyntheticTransactions(block *Block) error {
 			return errors.Wrap(errors.StatusUnknownError, err)
 		}
 
-		env := &protocol.Envelope{Transaction: []*protocol.Transaction{txn}, Signatures: []protocol.Signature{partSig, receiptSig, keySig}}
-		err = x.dispatcher.BroadcastTx(context.Background(), txn.Header.Principal, env)
-		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "send synthetic transaction %X: %w", hash[:4], err)
-		}
+		chainpkg.AddSynthForAnchor(x.Describe.PartitionId, *(*[32]byte)(status.Proof.Anchor), txn, partSig, receiptSig, keySig)
+
+		// env := &protocol.Envelope{Transaction: []*protocol.Transaction{txn}, Signatures: []protocol.Signature{partSig, receiptSig, keySig}}
+		// err = x.dispatcher.BroadcastTx(context.Background(), txn.Header.Principal, env)
+		// if err != nil {
+		// 	return errors.Format(errors.StatusUnknownError, "send synthetic transaction %X: %w", hash[:4], err)
+		// }
 	}
 
 	return nil

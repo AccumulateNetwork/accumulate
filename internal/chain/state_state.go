@@ -18,6 +18,8 @@ type ProcessTransactionState struct {
 	ChainUpdates           ChainUpdates
 	MakeMajorBlock         uint64
 	MakeMajorBlockTime     time.Time
+
+	SynthToSend []*protocol.Envelope
 }
 
 // DidProduceTxn records a produced transaction.
@@ -40,6 +42,8 @@ func (s *ProcessTransactionState) Merge(r *ProcessTransactionState) {
 	s.ProducedTxns = append(s.ProducedTxns, r.ProducedTxns...)
 	s.AdditionalTransactions = append(s.AdditionalTransactions, r.AdditionalTransactions...)
 	s.ChainUpdates.Merge(&r.ChainUpdates)
+
+	s.SynthToSend = append(s.SynthToSend, r.SynthToSend...)
 }
 
 type ChainUpdates struct {

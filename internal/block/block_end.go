@@ -202,6 +202,33 @@ func (m *Executor) EndBlock(block *Block) error {
 	}
 
 	m.logger.Debug("Committed", "height", block.Index, "duration", time.Since(t))
+
+	if !block.IsLeader || len(block.State.SynthToSend) == 0 {
+		return nil
+	}
+
+	d := newDispatcher(m.ExecutorOptions)
+
+	for _, synth := range block.State.SynthToSend {
+		err := d.BroadcastTx(context.Background(), synth.Transaction[0].Header.Principal, synth)
+		if err != nil {
+			return errors.Wrap(errors.StatusUnknownError, err)
+		}
+	}
+
+	m.Background(func() {
+		for err := range d.Send(context.Background()) {
+			m.checkDispatchError(err, func(err error) {
+				switch err := err.(type) {
+				case *txnDispatchError:
+					m.logger.Error("Failed to dispatch transactions", "error", err.status.Error, "stack", err.status.Error.PrintFullCallstack(), "type", err.typ, "hash", logging.AsHex(err.status.TxID.Hash()).Slice(0, 4))
+				default:
+					m.logger.Error("Failed to dispatch transactions", "error", fmt.Sprintf("%+v\n", err))
+				}
+			})
+		}
+	})
+
 	return nil
 }
 
