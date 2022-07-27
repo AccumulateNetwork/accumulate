@@ -348,6 +348,9 @@ func (x *Executor) sendSyntheticTransactions(block *Block) error {
 		if status.DestinationNetwork == nil {
 			return errors.Format(errors.StatusInternalError, "synthetic transaction destination is not set")
 		}
+		if status.Proof == nil {
+			return errors.Format(errors.StatusInternalError, "synthetic transaction proof is not set")
+		}
 
 		partSig := new(protocol.PartitionSignature)
 		partSig.SourceNetwork = status.SourceNetwork
