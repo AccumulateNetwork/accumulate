@@ -1,6 +1,7 @@
 package factom
 
 import (
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"log"
@@ -61,24 +62,24 @@ func Process() {
 	ecBlock := entryCreditBlock.NewECBlock()
 	eBlock := entryBlock.NewEBlock()
 	t := time.Now().Unix()
-	s := int64(0)
 
+	var entryCount int64
+	var entriesSkipped int64
 	for Open() {
 		clock := time.Now().Unix() - t
-		lap := clock - s
-		if lap > 1 {
-			perSecond := float64(FileIncrement) / float64(lap)
-			fmt.Printf("%4.1f blocks per second\n", perSecond)
+		if clock > 0 {
+			blocksPerSec := float64(FileIncrement) / float64(clock)
+			entriesPerSec := float64(entryCount) / float64(clock)
+			fmt.Printf("%4.1f Factom blocks/s & %8.1f Factom entries/s \n", blocksPerSec, entriesPerSec)
 
 			Hrs := clock / 60 / 60
 			Mins := (clock - Hrs*60*60) / 60
 			Secs := clock - Hrs*60*60 - Mins*60
 			fmt.Printf("Run time %d:%02d:%02d\n", Hrs, Mins, Secs)
 		}
-		s = clock
 
 		transactions := map[[32]byte][]*protocol.Transaction{}
-		var count int
+
 		for len(buff) > 0 {
 			buff = header.UnmarshalBinary(buff)
 			switch header.Tag {
@@ -108,6 +109,13 @@ func Process() {
 				if err := entry.UnmarshalBinary(buff[:header.Size]); err != nil {
 					panic("Bad Entry")
 				}
+
+				route := binary.BigEndian.Uint64(entry.ChainID.Bytes()) % 15
+				if route != 0 {
+					entriesSkipped++
+					break
+				}
+
 				qEntry := &f2.Entry{
 					ChainID: entry.ChainID.String(),
 					ExtIDs:  entry.ExternalIDs(),
@@ -125,8 +133,10 @@ func Process() {
 				dataEntry := ConvertFactomDataEntryToLiteDataEntry(*qEntry)
 				txn := ConstructWriteData(account, dataEntry)
 				transactions[account.AccountID32()] = append(transactions[account.AccountID32()], txn)
-				count++
-
+				entryCount++
+				if entryCount%10000 == 0 {
+					fmt.Printf("Entries: %8d %8d\n", entryCount, entriesSkipped)
+				}
 			case TagTX:
 				tx := new(factoid.Transaction)
 				if err := tx.UnmarshalBinary(buff[:header.Size]); err != nil {
@@ -137,26 +147,36 @@ func Process() {
 			}
 			buff = buff[header.Size:]
 		}
+		fmt.Printf("Entries: %8d %8d\n", entryCount, entriesSkipped)
 
 		// Submit the first transaction in one block, then all the rest in blocks of 100
 		blocks := make([][]*protocol.Transaction, 2)
 		block := 1
-		const blockSize = 1
+
+		const blockSize = 10300
+		size := 0
+		tCnt := 0
 		for _, transactions := range transactions {
 			blocks[0] = append(blocks[0], transactions[0])
 			// blocks[block] = append(blocks[block], transactions[1:]...)
 			for _, txn := range transactions[1:] {
-				if len(blocks[block]) >= blockSize {
+				tCnt++
+				bTxn, _ := txn.MarshalBinary()
+				size += len(bTxn)
+				if size >= blockSize {
 					block++
 					blocks = append(blocks, nil)
+					size = len(bTxn)
 				}
 				blocks[block] = append(blocks[block], txn)
 			}
 		}
 
+		fmt.Printf("Submitting %d blocks with %d transactions.", len(blocks), tCnt)
+
 		// Submit the blocks
 		timestamp := uint64(time.Now().UnixMilli())
-		allEnvelopes := make([]*protocol.Envelope, 0, count)
+		allEnvelopes := make([]*protocol.Envelope, 0, entryCount)
 		for i, block := range blocks {
 			_, _ = i, t
 			// t = time.Now()
@@ -176,7 +196,22 @@ func Process() {
 			//fmt.Printf("Executing block %d with %d transactions...", i+1, len(block))
 			simul.MustSubmitAndExecuteBlock(envelopes...)
 			//fmt.Printf(" took %v\n", time.Since(t))
+
+			if i%500 == 499 {
+				fmt.Printf(" %d", len(blocks)-i)
+				st, txn := simul.WaitForTransactions(delivered, allEnvelopes...)
+				for i, st := range st {
+					if !st.Failed() {
+						continue
+					}
+
+					fmt.Printf("\nTransaction %x for %v failed: %v\n", txn[i].GetHash()[:4], txn[i].Header.Principal, st.Error)
+				}
+				allEnvelopes = allEnvelopes[:0]
+			}
 		}
+
+		fmt.Printf(" %d", len(blocks))
 
 		// Wait for everything to complete
 		st, txn := simul.WaitForTransactions(delivered, allEnvelopes...)
@@ -185,7 +220,9 @@ func Process() {
 				continue
 			}
 
-			fmt.Printf("Transaction %x for %v failed: %v\n", txn[i].GetHash()[:4], txn[i].Header.Principal, st.Error)
+			fmt.Printf("\nTransaction %x for %v failed: %v\n", txn[i].GetHash()[:4], txn[i].Header.Principal, st.Error)
 		}
+
+		fmt.Print(" Done\n")
 	}
 }
