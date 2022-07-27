@@ -207,25 +207,27 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 			status.GotDirectoryReceipt = true
 		}
 
-		// Capture the initial receipt
-		if status.Proof == nil {
-			if !bytes.Equal(delivery.Transaction.GetHash(), signature.Proof.Start) {
-				return nil, errors.Format(errors.StatusUnauthorized, "receipt does not match transaction")
-			}
-			status.Proof = &signature.Proof
-			break
-		}
+		status.Proof = &signature.Proof
 
-		if status.Proof.Contains(&signature.Proof) {
-			// We already have the proof, nothing to do
-			break
-		}
+		// // Capture the initial receipt
+		// if status.Proof == nil {
+		// 	if !bytes.Equal(delivery.Transaction.GetHash(), signature.Proof.Start) {
+		// 		return nil, errors.Format(errors.StatusUnauthorized, "receipt does not match transaction")
+		// 	}
+		// 	status.Proof = &signature.Proof
+		// 	break
+		// }
 
-		// Capture subsequent receipts
-		status.Proof, err = status.Proof.Combine(&signature.Proof)
-		if err != nil {
-			return nil, errors.Format(errors.StatusUnauthorized, "combine receipts: %w", err)
-		}
+		// if status.Proof.Contains(&signature.Proof) {
+		// 	// We already have the proof, nothing to do
+		// 	break
+		// }
+
+		// // Capture subsequent receipts
+		// status.Proof, err = status.Proof.Combine(&signature.Proof)
+		// if err != nil {
+		// 	return nil, errors.Format(errors.StatusUnauthorized, "combine receipts: %w", err)
+		// }
 
 	case *protocol.DelegatedSignature:
 		// If the signature is a local delegated signature, check that the delegate
@@ -713,9 +715,9 @@ func verifyReceiptSignature(transaction *protocol.Transaction, receipt *protocol
 		return fmt.Errorf("receipt signatures must not be the initiator")
 	}
 
-	if !receipt.Proof.Validate() {
-		return fmt.Errorf("invalid receipt")
-	}
+	// if !receipt.Proof.Validate() {
+	// 	return fmt.Errorf("invalid receipt")
+	// }
 
 	return nil
 }

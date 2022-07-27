@@ -246,9 +246,13 @@ func (x *Executor) synthTransactionIsReady(batch *database.Batch, delivery *chai
 	// not delegate "is ready?" to the transaction executor - synthetic
 	// transactions _must_ be sequenced and proven before being executed.
 
+	// return true, nil
+
 	if status.Proof == nil {
 		return false, nil
 	}
+
+	return status.GotDirectoryReceipt, nil
 
 	// Determine which anchor chain to load
 	var partition string
@@ -463,11 +467,6 @@ func (x *Executor) recordPendingTransaction(net *config.Describe, batch *databas
 	}
 
 	x.logger.Debug("Pending synthetic transaction", "hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4), "type", delivery.Transaction.Body.Type(), "anchor", logging.AsHex(status.Proof.Anchor).Slice(0, 4), "module", "synthetic")
-
-	err = batch.Account(net.Ledger()).AddSyntheticForAnchor(*(*[32]byte)(status.Proof.Anchor), delivery.Transaction.ID())
-	if err != nil {
-		return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
-	}
 
 	return status, state, nil
 }

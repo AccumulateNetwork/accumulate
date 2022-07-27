@@ -10,6 +10,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 )
 
 func (x *Executor) ProduceSynthetic(batch *database.Batch, from *protocol.Transaction, produced []*protocol.Transaction) error {
@@ -181,27 +182,32 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 	return txn, nil
 }
 
-func (x *Executor) buildSynthReceipt(batch *database.Batch, produced []*protocol.Transaction, rootAnchor, synthAnchor int64) error {
-	// Load the root chain
-	chain, err := batch.Account(x.Describe.Ledger()).RootChain().Get()
-	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "load root chain: %w", err)
-	}
+func (x *Executor) buildSynthReceipt(batch *database.Batch, produced []*protocol.Transaction, rootAnchor, synthAnchor int64, rootAnchorHash []byte) error {
+	// // Load the root chain
+	// chain, err := batch.Account(x.Describe.Ledger()).RootChain().Get()
+	// if err != nil {
+	// 	return errors.Format(errors.StatusUnknownError, "load root chain: %w", err)
+	// }
 
-	// Prove the synthetic transaction chain anchor
-	rootProof, err := chain.Receipt(int64(synthAnchor), int64(rootAnchor))
-	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "prove from %d to %d on the root chain: %w", synthAnchor, rootAnchor, err)
-	}
+	// rootAnchorHash, err := chain.AnchorAt(uint64(rootAnchor))
+	// if err != nil {
+	// 	return errors.Format(errors.StatusUnknownError, "load root chain anchor: %w", err)
+	// }
 
-	// Load the synthetic transaction chain
-	chain, err = batch.Account(x.Describe.Synthetic()).MainChain().Get()
-	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "load root chain: %w", err)
-	}
+	// // Prove the synthetic transaction chain anchor
+	// rootProof, err := chain.Receipt(int64(synthAnchor), int64(rootAnchor))
+	// if err != nil {
+	// 	return errors.Format(errors.StatusUnknownError, "prove from %d to %d on the root chain: %w", synthAnchor, rootAnchor, err)
+	// }
 
-	synthStart := chain.Height() - int64(len(produced))
-	synthEnd := chain.Height() - 1
+	// // Load the synthetic transaction chain
+	// chain, err = batch.Account(x.Describe.Synthetic()).MainChain().Get()
+	// if err != nil {
+	// 	return errors.Format(errors.StatusUnknownError, "load root chain: %w", err)
+	// }
+
+	// synthStart := chain.Height() - int64(len(produced))
+	// synthEnd := chain.Height() - 1
 
 	// For each produced transaction
 	for i, transaction := range produced {
@@ -215,24 +221,73 @@ func (x *Executor) buildSynthReceipt(batch *database.Batch, produced []*protocol
 			return errors.Format(errors.StatusInternalError, "synthetic transaction %X status is not correctly initialized", transaction.GetHash()[:4])
 		}
 
-		// Prove it
-		synthProof, err := chain.Receipt(int64(i+int(synthStart)), int64(synthEnd))
-		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "prove from %d to %d on the synthetic transaction chain: %w", i+int(synthStart), synthEnd, err)
-		}
+		_ = i
+		// // Prove it
+		// synthProof, err := chain.Receipt(int64(i+int(synthStart)), int64(synthEnd))
+		// if err != nil {
+		// 	return errors.Format(errors.StatusUnknownError, "prove from %d to %d on the synthetic transaction chain: %w", i+int(synthStart), synthEnd, err)
+		// }
 
-		r, err := synthProof.Combine(rootProof)
-		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "combine receipts: %w", err)
-		}
+		// r, err := synthProof.Combine(rootProof)
+		// if err != nil {
+		// 	return errors.Format(errors.StatusUnknownError, "combine receipts: %w", err)
+		// }
 
-		status.Proof = r
+		// status.Proof = r
+
+		// Fake proof
+		status.Proof = new(managed.Receipt)
+		status.Proof.Start = transaction.GetHash()
+		status.Proof.Anchor = rootAnchorHash
+
 		err = record.PutStatus(status)
 		if err != nil {
 			return errors.Format(errors.StatusUnknownError, "store synthetic transaction status: %w", err)
 		}
 	}
 
+	return nil
+}
+
+func (m *Executor) createLocalDNReceipt(block *Block, rootChain *database.Chain, synthAnchorIndex uint64) error {
+	rootReceipt, err := rootChain.Receipt(int64(synthAnchorIndex), rootChain.Height()-1)
+	if err != nil {
+		return errors.Format(errors.StatusUnknownError, "build root chain receipt: %w", err)
+	}
+
+	synthChain, err := block.Batch.Account(m.Describe.Synthetic()).MainChain().Get()
+	if err != nil {
+		return fmt.Errorf("unable to load synthetic transaction chain: %w", err)
+	}
+
+	height := synthChain.Height()
+	offset := height - int64(len(block.State.ProducedTxns))
+	for i, txn := range block.State.ProducedTxns {
+		if txn.Body.Type().IsSystem() {
+			// Do not generate a receipt for the anchor
+			continue
+		}
+
+		synthReceipt, err := synthChain.Receipt(offset+int64(i), height-1)
+		if err != nil {
+			return errors.Format(errors.StatusUnknownError, "build synth chain receipt: %w", err)
+		}
+
+		receipt, err := synthReceipt.Combine(rootReceipt)
+		if err != nil {
+			return errors.Format(errors.StatusUnknownError, "combine receipts: %w", err)
+		}
+
+		// This should be the second signature (SyntheticSignature should be first)
+		sig := new(protocol.ReceiptSignature)
+		sig.SourceNetwork = m.Describe.NodeUrl()
+		sig.TransactionHash = *(*[32]byte)(txn.GetHash())
+		sig.Proof = *receipt
+		_, err = block.Batch.Transaction(txn.GetHash()).AddSystemSignature(&m.Describe, sig)
+		if err != nil {
+			return errors.Format(errors.StatusUnknownError, "store signature: %w", err)
+		}
+	}
 	return nil
 }
 

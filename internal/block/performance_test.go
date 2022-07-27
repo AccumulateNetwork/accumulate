@@ -169,30 +169,31 @@ func BenchmarkBlock(b *testing.B) {
 
 	// bvnCount := []int{1, 2, 4, 8}
 	bvnCount := []int{1}
-	blockSize := []int{50, 100, 200, 500, 1000}
-	// blockSize := []int{200}
+	// blockSize := []int{50, 100, 200, 500, 1000}
+	// blockSize := []int{50, 100, 200}
+	blockSize := []int{200}
 	scenarios := map[string][]executor{
-		"no-op": {
-			{protocol.TransactionTypeAddCredits, func(st *chain.StateManager, tx *chain.Delivery) error {
-				return nil
-			}},
-		},
-		"create account": {
-			{protocol.TransactionTypeAddCredits, func(st *chain.StateManager, tx *chain.Delivery) error {
-				u := &url.URL{Authority: hex.EncodeToString(tx.Transaction.GetHash())}
-				return st.Create(&protocol.UnknownAccount{Url: u})
-			}},
-		},
-		// "synth txn": {
+		// "no-op": {
 		// 	{protocol.TransactionTypeAddCredits, func(st *chain.StateManager, tx *chain.Delivery) error {
-		// 		u := &url.URL{Authority: hex.EncodeToString(tx.Transaction.GetHash())}
-		// 		st.Submit(u, &protocol.SyntheticDepositCredits{})
-		// 		return nil
-		// 	}},
-		// 	{protocol.TransactionTypeSyntheticDepositCredits, func(st *chain.StateManager, tx *chain.Delivery) error {
 		// 		return nil
 		// 	}},
 		// },
+		// "create account": {
+		// 	{protocol.TransactionTypeAddCredits, func(st *chain.StateManager, tx *chain.Delivery) error {
+		// 		u := &url.URL{Authority: hex.EncodeToString(tx.Transaction.GetHash())}
+		// 		return st.Create(&protocol.UnknownAccount{Url: u})
+		// 	}},
+		// },
+		"synth txn": {
+			{protocol.TransactionTypeAddCredits, func(st *chain.StateManager, tx *chain.Delivery) error {
+				u := &url.URL{Authority: hex.EncodeToString(tx.Transaction.GetHash())}
+				st.Submit(u, &protocol.SyntheticDepositCredits{})
+				return nil
+			}},
+			{protocol.TransactionTypeSyntheticDepositCredits, func(st *chain.StateManager, tx *chain.Delivery) error {
+				return nil
+			}},
+		},
 	}
 
 	alice := protocol.AccountUrl("alice")

@@ -185,7 +185,7 @@ func (m *Executor) EndBlock(block *Block) error {
 		}
 
 		// Build synthetic receipts
-		err = m.buildSynthReceipt(block.Batch, block.State.ProducedTxns, rootChain.Height()-1, int64(synthAnchorIndex))
+		err = m.buildSynthReceipt(block.Batch, block.State.ProducedTxns, rootChain.Height()-1, int64(synthAnchorIndex), rootChain.Anchor())
 		if err != nil {
 			return errors.Wrap(errors.StatusUnknownError, err)
 		}
@@ -204,48 +204,6 @@ func (m *Executor) EndBlock(block *Block) error {
 	}
 
 	m.logger.Debug("Committed", "module", "block", "height", block.Index, "duration", time.Since(t))
-	return nil
-}
-
-func (m *Executor) createLocalDNReceipt(block *Block, rootChain *database.Chain, synthAnchorIndex uint64) error {
-	rootReceipt, err := rootChain.Receipt(int64(synthAnchorIndex), rootChain.Height()-1)
-	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "build root chain receipt: %w", err)
-	}
-
-	synthChain, err := block.Batch.Account(m.Describe.Synthetic()).MainChain().Get()
-	if err != nil {
-		return fmt.Errorf("unable to load synthetic transaction chain: %w", err)
-	}
-
-	height := synthChain.Height()
-	offset := height - int64(len(block.State.ProducedTxns))
-	for i, txn := range block.State.ProducedTxns {
-		if txn.Body.Type().IsSystem() {
-			// Do not generate a receipt for the anchor
-			continue
-		}
-
-		synthReceipt, err := synthChain.Receipt(offset+int64(i), height-1)
-		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "build synth chain receipt: %w", err)
-		}
-
-		receipt, err := synthReceipt.Combine(rootReceipt)
-		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "combine receipts: %w", err)
-		}
-
-		// This should be the second signature (SyntheticSignature should be first)
-		sig := new(protocol.ReceiptSignature)
-		sig.SourceNetwork = m.Describe.NodeUrl()
-		sig.TransactionHash = *(*[32]byte)(txn.GetHash())
-		sig.Proof = *receipt
-		_, err = block.Batch.Transaction(txn.GetHash()).AddSystemSignature(&m.Describe, sig)
-		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "store signature: %w", err)
-		}
-	}
 	return nil
 }
 

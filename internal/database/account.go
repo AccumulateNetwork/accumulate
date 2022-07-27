@@ -112,10 +112,15 @@ func (r *Account) RemovePending(txid *url.TxID) error {
 	return r.Pending().Remove(txid)
 }
 
+var synthForAnchor = map[[32]byte][]*url.TxID{}
+
 func (r *Account) AddSyntheticForAnchor(anchor [32]byte, txid *url.TxID) error {
-	return r.SyntheticForAnchor(anchor).Add(txid)
+	synthForAnchor[anchor] = append(synthForAnchor[anchor], txid)
+	return nil
+	// return r.SyntheticForAnchor(anchor).Add(txid)
 }
 
 func (r *Account) GetSyntheticForAnchor(anchor [32]byte) ([]*url.TxID, error) {
-	return r.SyntheticForAnchor(anchor).Get()
+	return synthForAnchor[anchor], nil
+	// return r.SyntheticForAnchor(anchor).Get()
 }
