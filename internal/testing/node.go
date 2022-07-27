@@ -44,6 +44,8 @@ var DefaultLogLevels = config.LogLevel{}.
 	// SetModule("accumulate", "debug").
 	// SetModule("executor", "debug").
 	// SetModule("synthetic", "debug").
+	// SetModule("anchoring", "info").
+	// SetModule("block", "debug").
 	// SetModule("storage", "debug").
 	// SetModule("database", "debug").
 	// SetModule("fake-node", "debug").
