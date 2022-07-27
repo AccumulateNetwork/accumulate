@@ -161,7 +161,11 @@ func (m *JrpcMethods) Status(c context.Context, params json.RawMessage) interfac
 	status.Ok = true
 	hash, roothash, height, err := GetLatestRootChainAnchor(tmclient, apiclient, m.Options.Describe.Ledger(), c)
 	if err != nil {
-		internalError(err)
+		return internalError(err)
+	}
+	lastAnchor, err := getLatestDirectoryAnchor(ctx, m.Options.Describe.AnchorPool())
+	if err != nil {
+		return err
 	}
 	if m.Options.Describe.NetworkType == config.NetworkTypeDirectory {
 		status.DnHeight = uint64(height)
@@ -172,7 +176,7 @@ func (m *JrpcMethods) Status(c context.Context, params json.RawMessage) interfac
 	status.BvnHeight = uint64(height)
 	status.BvnBptHash = *hash
 	status.BvnRootHash = *roothash
-	//status.LastAnchorHeight = uint64(lastAnchor)
+	status.LastAnchorHeight = uint64(lastAnchor)
 	return status
 }
 

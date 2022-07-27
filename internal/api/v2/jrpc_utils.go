@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
@@ -10,11 +9,11 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 )
 
-func GetLatestRootChainAnchor(tmclient connections.ABCIClient, apiclient connections.APIClient, ledgerurl *url.URL, c context.Context) (bptHash *[32]byte, rootHash *[32]byte, height int64, err error) {
+func GetLatestRootChainAnchor(tmclient connections.ABCIClient, apiclient connections.APIClient, ledgerurl *url.URL, c context.Context) (bptHash *[32]byte, roothash *[32]byte, height int64, err error) {
 	req := new(GeneralQuery)
 	apiinfo := new(ChainQueryResponse)
 	hash := new([32]byte)
-	roothash := new([32]byte)
+	roothash = new([32]byte)
 	req.Url = ledgerurl
 	req.Prove = true
 	req.Expand = true
@@ -28,12 +27,9 @@ func GetLatestRootChainAnchor(tmclient connections.ABCIClient, apiclient connect
 	}
 	height = tminfo.Response.LastBlockHeight
 	copy(hash[:], tminfo.Response.LastBlockAppHash)
-	fmt.Printf("data is %v, %v %v %v %v %v", *apiinfo, *tminfo, string(hash[:]), string(rootHash[:]), height, err)
-
 	ms := new(managed.MerkleState)
 	for _, chain := range apiinfo.Chains {
 		if chain.Name == "root" {
-			fmt.Println("found root")
 			for _, h := range chain.Roots {
 				ms.Pending = append(ms.Pending, h)
 			}
@@ -45,7 +41,7 @@ func GetLatestRootChainAnchor(tmclient connections.ABCIClient, apiclient connect
 
 	copy(roothash[:], []byte(anchor))
 
-	return hash, rootHash, height, nil
+	return hash, roothash, height, nil
 }
 
 func getLatestDirectoryAnchor(ctx connections.ConnectionContext, anchorurl *url.URL) (lastAnchor uint64, err error) {
@@ -53,14 +49,14 @@ func getLatestDirectoryAnchor(ctx connections.ConnectionContext, anchorurl *url.
 	anchorinfo := new(MultiResponse)
 	req := new(TxHistoryQuery)
 	req.Url = anchorurl
-	req.Count = 0
+	req.Count = 1
 	err = apiclient.RequestAPIv2(context.Background(), "query-tx-history", req, anchorinfo)
 	if err != nil {
 		return uint64(0), err
 
 	}
 	total := anchorinfo.Total
-	req.Start = total
+	req.Start = total - 1
 	req.Count = 1
 	anchorinfo = new(MultiResponse)
 	err = apiclient.RequestAPIv2(context.Background(), "query-tx-history", req, anchorinfo)
