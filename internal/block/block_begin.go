@@ -30,7 +30,7 @@ func (x *Executor) BeginBlock(block *Block) error {
 	r := x.BlockTimers.Start(BlockTimerTypeBeginBlock)
 	defer x.BlockTimers.Stop(r)
 
-	x.logger.Debug("Begin block", "height", block.Index, "leader", block.IsLeader, "time", block.Time)
+	x.logger.Debug("Begin block", "module", "block", "height", block.Index, "leader", block.IsLeader, "time", block.Time)
 
 	// Finalize the previous block
 	err := x.finalizeBlock(block)
@@ -154,7 +154,7 @@ func (x *Executor) finalizeBlock(block *Block) error {
 
 	// Nothing to do
 	if uint64(ledger.Index) < block.Index-1 || ledger.Anchor == nil {
-		x.logger.Debug("Skipping anchor", "index", ledger.Index)
+		x.logger.Debug("Skipping anchor", "module", "anchoring", "index", ledger.Index)
 		return nil
 	}
 
@@ -173,7 +173,7 @@ func (x *Executor) finalizeBlock(block *Block) error {
 
 	// Send the block anchor
 	sequenceNumber := anchorLedger.MinorBlockSequenceNumber
-	x.logger.Debug("Anchor block", "index", ledger.Index, "seq-num", sequenceNumber)
+	x.logger.Debug("Anchor block", "module", "anchoring", "index", ledger.Index, "seq-num", sequenceNumber)
 
 	// Load the root chain
 	rootChain, err := block.Batch.Account(x.Describe.Ledger()).RootChain().Get()
