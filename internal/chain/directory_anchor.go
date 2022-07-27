@@ -8,6 +8,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
@@ -97,7 +98,7 @@ func processReceiptsFromDirectory(st *StateManager, tx *Delivery, body *protocol
 			return fmt.Errorf("receipt %d is invalid: result does not match the anchor", i)
 		}
 
-		// st.logger.Debug("Received receipt", "from", logging.AsHex(receipt.Start).Slice(0, 4), "to", logging.AsHex(body.RootChainAnchor).Slice(0, 4), "block", body.MinorBlockIndex, "source", body.Source, "module", "synthetic")
+		st.logger.Info("Received receipt", "module", "anchoring", "from", logging.AsHex(receipt.Start).Slice(0, 4), "to", logging.AsHex(body.RootChainAnchor).Slice(0, 4), "block", body.MinorBlockIndex, "source", body.Source)
 
 		d, err := loadSynthTxns(st, tx, receipt.Start, body.Source, &receipt, sequence)
 		if err != nil {
