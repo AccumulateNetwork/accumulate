@@ -146,7 +146,7 @@ func newExecutor(opts ExecutorOptions, db *database.Database, executors ...chain
 	switch {
 	case err == nil:
 		// Database has been initialized
-		m.logger.Debug("Loaded", "height", ledger.Index, "hash", logging.AsHex(batch.BptRoot()).Slice(0, 4))
+		// m.logger.Debug("Loaded", "height", ledger.Index, "hash", logging.AsHex(batch.BptRoot()).Slice(0, 4))
 
 		// Load globals
 		err = m.loadGlobals(db.View)
@@ -156,7 +156,7 @@ func newExecutor(opts ExecutorOptions, db *database.Database, executors ...chain
 
 	case errors.Is(err, storage.ErrNotFound):
 		// Database is uninitialized
-		m.logger.Debug("Loaded", "height", 0, "hash", logging.AsHex(batch.BptRoot()).Slice(0, 4))
+		// m.logger.Debug("Loaded", "height", 0, "hash", logging.AsHex(batch.BptRoot()).Slice(0, 4))
 
 	default:
 		return nil, errors.Format(errors.StatusUnknownError, "load ledger: %w", err)
