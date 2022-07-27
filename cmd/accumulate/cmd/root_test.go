@@ -48,10 +48,6 @@ func bootstrap(t *testing.T, tc *testCmd) {
 		fmt.Sprintf("%v\n", hex.EncodeToString(tc.privKey.Bytes())))
 	require.NoError(t, err)
 
-	//set mnemonic for predictable addresses
-	_, err = tc.execute(t, "key import mnemonic yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow")
-	require.NoError(t, err)
-
 	oracle := new(protocol.AcmeOracle)
 	oracle.Price = 1 * protocol.AcmeOraclePrecision
 	data, err := oracle.MarshalBinary()
