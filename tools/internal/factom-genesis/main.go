@@ -72,7 +72,7 @@ func SetPrivateKeyAndOrigin(privateKey string) error {
 }
 
 func ConstructWriteDataToSim(data protocol.DataEntry, dataAccount *url.URL) *protocol.Transaction {
-	log.Println("Writing to : ", dataAccount.String())
+	// log.Println("Writing to : ", dataAccount.String())
 	wd := &protocol.WriteDataTo{
 		Entry:     &protocol.AccumulateDataEntry{Data: data.GetData()},
 		Recipient: dataAccount,

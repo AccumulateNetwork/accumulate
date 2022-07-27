@@ -60,11 +60,23 @@ func Process() {
 	fBlock := new(factoid.FBlock)
 	ecBlock := entryCreditBlock.NewECBlock()
 	eBlock := entryBlock.NewEBlock()
+	t := time.Now().Unix()
+	s := int64(0)
 
 	for Open() {
-		_, _, _, _, _ = dBlock, aBlock, fBlock, ecBlock, eBlock
+		clock := time.Now().Unix() - t
+		lap := clock - s
+		if lap > 1 {
+			perSecond := float64(FileIncrement) / float64(lap)
+			fmt.Printf("%4.1f blocks per second\n", perSecond)
 
-		t := time.Now()
+			Hrs := clock / 60 / 60
+			Mins := (clock - Hrs*60*60) / 60
+			Secs := clock - Hrs*60*60 - Mins*60
+			fmt.Printf("Run time %d:%02d:%02d\n", Hrs, Mins, Secs)
+		}
+		s = clock
+
 		transactions := map[[32]byte][]*protocol.Transaction{}
 		var count int
 		for len(buff) > 0 {
@@ -125,12 +137,11 @@ func Process() {
 			}
 			buff = buff[header.Size:]
 		}
-		fmt.Printf("Constructed %d transactions for %d accounts in %v\n", count, len(transactions), time.Since(t))
 
 		// Submit the first transaction in one block, then all the rest in blocks of 100
 		blocks := make([][]*protocol.Transaction, 2)
 		block := 1
-		const blockSize = 50
+		const blockSize = 1
 		for _, transactions := range transactions {
 			blocks[0] = append(blocks[0], transactions[0])
 			// blocks[block] = append(blocks[block], transactions[1:]...)
@@ -147,7 +158,7 @@ func Process() {
 		timestamp := uint64(time.Now().UnixMilli())
 		allEnvelopes := make([]*protocol.Envelope, 0, count)
 		for i, block := range blocks {
-			var t time.Time
+			_, _ = i, t
 			// t = time.Now()
 			envelopes := make([]*protocol.Envelope, len(block))
 			for j, txn := range block {
@@ -162,10 +173,9 @@ func Process() {
 			allEnvelopes = append(allEnvelopes, envelopes...)
 			// fmt.Printf("Signed %d transactions in %v\n", len(block), time.Since(t))
 
-			t = time.Now()
-			fmt.Printf("Executing block %d with %d transactions...", i+1, len(block))
+			//fmt.Printf("Executing block %d with %d transactions...", i+1, len(block))
 			simul.MustSubmitAndExecuteBlock(envelopes...)
-			fmt.Printf(" took %v\n", time.Since(t))
+			//fmt.Printf(" took %v\n", time.Since(t))
 		}
 
 		// Wait for everything to complete

@@ -16,7 +16,7 @@ type DataEntry interface {
 	GetData() [][]byte
 }
 
-const TransactionSizeMax = 10240
+const TransactionSizeMax = 20480
 const SignatureSizeMax = 1024
 
 // Hash
