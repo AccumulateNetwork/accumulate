@@ -112,19 +112,24 @@ func (m *JrpcMethods) Status(ctx context.Context, _ json.RawMessage) interface{}
 	if err != nil {
 		return internalError(err)
 	}
-	tmclient := conn.GetABCIClient()
+
+	// Get the latest block height and BPT hash from Tendermint RPC
+	tminfo, err := conn.GetABCIClient().ABCIInfo(ctx)
+	if err != nil {
+		return internalError(err)
+	}
+	blockHeight := tminfo.Response.LastBlockHeight
+	bptRoot := (*[32]byte)(tminfo.Response.LastBlockAppHash)
+
+	// Get the latest root chain anchor from the Accumulate API
 	apiclient := conn.GetAPIClient()
-	tminfo, err := tmclient.ABCIInfo(ctx)
+	rootAnchor, err := GetLatestRootChainAnchor(apiclient, m.Options.Describe.Ledger(), ctx)
 	if err != nil {
 		return internalError(err)
 	}
-	height := tminfo.Response.LastBlockHeight
-	hash := (*[32]byte)(tminfo.Response.LastBlockAppHash)
-	roothash, err := GetLatestRootChainAnchor(apiclient, m.Options.Describe.Ledger(), ctx)
-	if err != nil {
-		return internalError(err)
-	}
-	lastAnchor, err := getLatestDirectoryAnchor(conn, m.Options.Describe.AnchorPool())
+
+	// Get the latest directory anchor from the Accumulate API
+	dnAnchorHeight, err := getLatestDirectoryAnchor(conn, m.Options.Describe.AnchorPool())
 	if err != nil {
 		return err
 	}
@@ -132,18 +137,18 @@ func (m *JrpcMethods) Status(ctx context.Context, _ json.RawMessage) interface{}
 	if m.Options.Describe.NetworkType == config.NetworkTypeDirectory {
 		status := new(StatusResponse)
 		status.Ok = true
-		status.DnHeight = uint64(height)
-		status.DnBptHash = *hash
-		status.DnRootHash = *roothash
+		status.DnHeight = uint64(blockHeight)
+		status.DnBptHash = *bptRoot
+		status.DnRootHash = *rootAnchor
 		return status
 	}
 
 	status := new(StatusResponse)
 	status.Ok = true
-	status.BvnHeight = uint64(height)
-	status.BvnBptHash = *hash
-	status.BvnRootHash = *roothash
-	status.LastDirectoryAnchorHeight = uint64(lastAnchor)
+	status.BvnHeight = uint64(blockHeight)
+	status.BvnBptHash = *bptRoot
+	status.BvnRootHash = *rootAnchor
+	status.LastDirectoryAnchorHeight = uint64(dnAnchorHeight)
 	return status
 }
 
