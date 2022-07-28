@@ -29,7 +29,7 @@ func testCase4_9(t *testing.T, tc *testCmd) {
 	require.NoError(t, json.Unmarshal([]byte(r), &kr))
 
 	// verify signature type
-	require.Equal(t, sig, kr.KeyType)
+	require.Equal(t, sig, kr.KeyInfo.Type)
 
 	t.Log(r)
 }
@@ -46,7 +46,7 @@ func testCase4_10(t *testing.T, tc *testCmd) {
 	require.NoError(t, json.Unmarshal([]byte(r), &kr))
 
 	// verify signature type
-	require.Equal(t, sig, kr.KeyType)
+	require.Equal(t, sig, kr.KeyInfo.Type)
 
 	t.Log(r)
 }
@@ -63,7 +63,7 @@ func testCase4_11(t *testing.T, tc *testCmd) {
 	require.NoError(t, json.Unmarshal([]byte(r), &kr))
 
 	// verify signature type
-	require.Equal(t, sig, kr.KeyType)
+	require.Equal(t, sig, kr.KeyInfo.Type)
 
 	t.Log(r)
 }
@@ -80,7 +80,7 @@ func testCase4_12(t *testing.T, tc *testCmd) {
 	require.NoError(t, json.Unmarshal([]byte(r), &kr))
 
 	// verify signature type
-	require.Equal(t, sig, kr.KeyType)
+	require.Equal(t, sig, kr.KeyInfo.Type)
 
 	t.Log(r)
 }
@@ -97,7 +97,7 @@ func testCase4_13(t *testing.T, tc *testCmd) {
 	require.NoError(t, json.Unmarshal([]byte(r), &kr))
 
 	// verify signature type
-	require.Equal(t, sig, kr.KeyType)
+	require.Equal(t, sig, kr.KeyInfo.Type)
 
 	t.Log(r)
 }
@@ -114,7 +114,7 @@ func testCase4_14(t *testing.T, tc *testCmd) {
 	require.NoError(t, json.Unmarshal([]byte(r), &kr))
 
 	// verify signature type
-	require.Equal(t, sig, kr.KeyType)
+	require.Equal(t, sig, kr.KeyInfo.Type)
 
 	t.Log(r)
 }
