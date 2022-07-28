@@ -115,7 +115,7 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 	}
 
 	for _, op := range body.Operation {
-		err = UpdateKeyPage{}.executeOperation(page, op)
+		err = UpdateKeyPage{}.executeOperation(page, book, op)
 		if err != nil {
 			return nil, err
 		}
@@ -130,14 +130,21 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 	return nil, nil
 }
 
-func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, op protocol.KeyPageOperation) error {
+func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, book *protocol.KeyBook, op protocol.KeyPageOperation) error {
 	switch op := op.(type) {
 	case *protocol.AddKeyOperation:
 		if op.Entry.IsEmpty() {
 			return fmt.Errorf("cannot add an empty entry")
 		}
-		if op.Entry.Delegate.ParentOf(page.Url) {
-			return fmt.Errorf("self-delegation is not allowed")
+
+		if op.Entry.Delegate != nil {
+			if op.Entry.Delegate.ParentOf(page.Url) {
+				return fmt.Errorf("self-delegation is not allowed")
+			}
+
+			if err := verifyIsNotPage(&book.AccountAuth, op.Entry.Delegate); err != nil {
+				return errors.Format(errors.StatusUnknownError, "invalid delegate %v: %w", op.Entry.Delegate, err)
+			}
 		}
 
 		_, _, found := findKeyPageEntry(page, &op.Entry)
@@ -173,7 +180,7 @@ func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, op protocol.KeyPag
 		return nil
 
 	case *protocol.UpdateKeyOperation:
-		return updateKey(page, &op.OldEntry, &op.NewEntry)
+		return updateKey(page, book, &op.OldEntry, &op.NewEntry)
 
 	case *protocol.SetThresholdKeyPageOperation:
 		return page.SetThreshold(op.Threshold)
