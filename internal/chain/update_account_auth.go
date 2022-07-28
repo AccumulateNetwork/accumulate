@@ -1,10 +1,11 @@
 package chain
 
 import (
-	"errors"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -111,6 +112,10 @@ func (UpdateAccountAuth) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 			}
 			// TODO Require a proof of the existence of the remote authority
 
+			if err := verifyIsNotPage(auth, op.Authority); err != nil {
+				return nil, errors.Format(errors.StatusUnknownError, "invalid authority %v: %w", op.Authority, err)
+			}
+
 			_, new := auth.AddAuthority(op.Authority)
 			if !new {
 				return nil, fmt.Errorf("duplicate authority %v", op.Authority)
@@ -125,7 +130,7 @@ func (UpdateAccountAuth) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 
 			// An account must retain at least one authority
 			if len(auth.Authorities) == 0 {
-				return nil, errors.New("removing the last authority from an account is not allowed")
+				return nil, errors.New(errors.StatusBadRequest, "removing the last authority from an account is not allowed")
 			}
 
 		default:
@@ -138,4 +143,31 @@ func (UpdateAccountAuth) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 		return nil, fmt.Errorf("failed to update %v: %w", st.OriginUrl, err)
 	}
 	return nil, nil
+}
+
+// verifyIsNotPage returns an error if the url is a page belonging to one of the
+// account's authorities.
+//
+// Given:
+// - 'foo/bar/1' is the new authority
+// - 'foo/bar' is an existing authority
+// And:
+// - If 'foo/bar' is an ADI, 'foo/bar/1' could be any type of account
+// - If 'foo/bar is a book, 'foo/bar/1' can be a page
+// - There are no other cases where 'foo/bar' can contain 'foo/bar/1'
+// - An ADI cannot be an authority
+// Then:
+// - 'foo/bar' must be a book and 'foo/bar/1' must be a page of that book
+func verifyIsNotPage(auth *protocol.AccountAuth, account *url.URL) error {
+	book, _, ok := protocol.ParseKeyPageUrl(account)
+	if !ok {
+		return nil
+	}
+
+	_, ok = auth.GetAuthority(book)
+	if !ok {
+		return nil
+	}
+
+	return errors.Format(errors.StatusBadRequest, "a key page is not a valid authority")
 }
