@@ -50,8 +50,8 @@ func InitSim() {
 
 func openDB() func(partition string, nodeIndex int, logger alog.Logger) *database.Database {
 	inFunc := func(partition string, nodeIndex int, logger alog.Logger) *database.Database {
-		// dir := os.TempDir() + "/tempbadger"
-		db, err := database.OpenBadger("/tmp/tempbadger", nil)
+		dir := os.TempDir() + "/tempbadger"
+		db, err := database.OpenBadger(dir+partition, nil)
 		if err != nil {
 			log.Fatal(err)
 		}
