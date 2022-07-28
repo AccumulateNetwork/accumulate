@@ -18,7 +18,7 @@ const majorBlockApiTimeout = 30 * time.Second
 var blocksCmd = &cobra.Command{
 	Use:   "blocks",
 	Short: "Create and get blocks",
-	Args:  cobra.OnlyValidArgs,
+	Args:  cobra.RangeArgs(3, 6),
 	Run: func(cmd *cobra.Command, args []string) {
 		var err error
 		var txFetchMode query.TxFetchMode

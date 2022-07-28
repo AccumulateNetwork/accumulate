@@ -14,7 +14,7 @@ import (
 var creditsCmd = &cobra.Command{
 	Use:   "credits [origin token account] [key page or lite identity url] [number of credits wanted] [max acme to spend]",
 	Short: "Purchase credits with acme and send to recipient.",
-	Args:  cobra.RangeArgs(2, 5),
+	Args:  cobra.RangeArgs(3, 5),
 	Run: func(cmd *cobra.Command, args []string) {
 		var out string
 		var err error

@@ -33,9 +33,9 @@ var bookGetCmd = &cobra.Command{
 }
 
 var bookCreateCmd = &cobra.Command{
-	Use:   "create [origin adi url] [key name[@key book or page]] [new key book url] [public key 1 (optional)] ... [public key hex or name n + 1]",
+	Use:   "create [origin adi url] [key name[@key book or page]] [new key book url] [public key 1 (optional)]",
 	Short: "Create new key book and page. When public key 1 is specified it will be assigned to the page, otherwise the origin key is used.",
-	Args:  cobra.RangeArgs(3, 5),
+	Args:  cobra.RangeArgs(3, 4),
 	Run:   runCmdFunc(CreateKeyBook),
 }
 
