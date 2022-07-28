@@ -495,9 +495,13 @@ StatusResponse:
     - name: Ok
       type: bool
     - name: BvnHeight
-      type: uvarint
+      type: varint
     - name: DnHeight
-      type: uvarint
+      type: varint
+    - name: BvnTime
+      type: time
+    - name: DnTime
+      type: time
     - name: LastDirectoryAnchorHeight
       type: uvarint
     - name: BvnRootHash

@@ -407,12 +407,8 @@ func (c *FakeTendermint) BroadcastTxSync(ctx context.Context, tx types.Tx) (*cty
 	}, nil
 }
 
-func (c *FakeTendermint) ABCIInfo(ctx context.Context) (*core.ResultABCIInfo, error) {
-	req := new(abci.RequestInfo)
-	info := c.App().Info(*req)
-	res := new(core.ResultABCIInfo)
-	res.Response = info
-	return res, nil
+func (c *FakeTendermint) Status(context.Context) (*core.ResultStatus, error) {
+	return new(core.ResultStatus), nil
 }
 
 func (c *FakeTendermint) logTxns(msg string, env ...*chain.Delivery) {

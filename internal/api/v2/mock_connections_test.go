@@ -41,21 +41,6 @@ func (m *MockABCIClient) EXPECT() *MockABCIClientMockRecorder {
 	return m.recorder
 }
 
-// ABCIInfo mocks base method.
-func (m *MockABCIClient) ABCIInfo(ctx context.Context) (*coretypes.ResultABCIInfo, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ABCIInfo", ctx)
-	ret0, _ := ret[0].(*coretypes.ResultABCIInfo)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ABCIInfo indicates an expected call of ABCIInfo.
-func (mr *MockABCIClientMockRecorder) ABCIInfo(ctx interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ABCIInfo", reflect.TypeOf((*MockABCIClient)(nil).ABCIInfo), ctx)
-}
-
 // ABCIQueryWithOptions mocks base method.
 func (m *MockABCIClient) ABCIQueryWithOptions(ctx context.Context, path string, data bytes.HexBytes, opts client.ABCIQueryOptions) (*coretypes.ResultABCIQuery, error) {
 	m.ctrl.T.Helper()
@@ -114,6 +99,21 @@ func (m *MockABCIClient) CheckTx(ctx context.Context, tx types.Tx) (*coretypes.R
 func (mr *MockABCIClientMockRecorder) CheckTx(ctx, tx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckTx", reflect.TypeOf((*MockABCIClient)(nil).CheckTx), ctx, tx)
+}
+
+// Status mocks base method.
+func (m *MockABCIClient) Status(arg0 context.Context) (*coretypes.ResultStatus, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Status", arg0)
+	ret0, _ := ret[0].(*coretypes.ResultStatus)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Status indicates an expected call of Status.
+func (mr *MockABCIClientMockRecorder) Status(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Status", reflect.TypeOf((*MockABCIClient)(nil).Status), arg0)
 }
 
 // MockAPIClient is a mock of APIClient interface.

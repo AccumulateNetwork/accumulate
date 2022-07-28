@@ -114,12 +114,10 @@ func (m *JrpcMethods) Status(ctx context.Context, _ json.RawMessage) interface{}
 	}
 
 	// Get the latest block height and BPT hash from Tendermint RPC
-	tminfo, err := conn.GetABCIClient().ABCIInfo(ctx)
+	tmStatus, err := conn.GetABCIClient().Status(ctx)
 	if err != nil {
 		return internalError(err)
 	}
-	blockHeight := tminfo.Response.LastBlockHeight
-	bptRoot := (*[32]byte)(tminfo.Response.LastBlockAppHash)
 
 	// Get the latest root chain anchor from the Accumulate API
 	apiclient := conn.GetAPIClient()
@@ -137,16 +135,18 @@ func (m *JrpcMethods) Status(ctx context.Context, _ json.RawMessage) interface{}
 	if m.Options.Describe.NetworkType == config.NetworkTypeDirectory {
 		status := new(StatusResponse)
 		status.Ok = true
-		status.DnHeight = uint64(blockHeight)
-		status.DnBptHash = *bptRoot
+		status.DnHeight = tmStatus.SyncInfo.LatestBlockHeight
+		status.DnTime = tmStatus.SyncInfo.LatestBlockTime
+		status.DnBptHash = *(*[32]byte)(tmStatus.SyncInfo.LatestBlockHash)
 		status.DnRootHash = *rootAnchor
 		return status
 	}
 
 	status := new(StatusResponse)
 	status.Ok = true
-	status.BvnHeight = uint64(blockHeight)
-	status.BvnBptHash = *bptRoot
+	status.BvnHeight = tmStatus.SyncInfo.LatestBlockHeight
+	status.BvnTime = tmStatus.SyncInfo.LatestBlockTime
+	status.BvnBptHash = *(*[32]byte)(tmStatus.SyncInfo.LatestBlockHash)
 	status.BvnRootHash = *rootAnchor
 	status.LastDirectoryAnchorHeight = uint64(dnAnchorHeight)
 	return status
