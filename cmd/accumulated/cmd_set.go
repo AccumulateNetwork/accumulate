@@ -117,7 +117,7 @@ var cmdSetRouting = &cobra.Command{
 			}
 		}
 
-		setNetworkValue(protocol.Globals, func(v *core.GlobalValues) {
+		setNetworkValue(protocol.Routing, func(v *core.GlobalValues) {
 			v.Routing = table
 		})
 	},
