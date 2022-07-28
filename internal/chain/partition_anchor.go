@@ -21,12 +21,13 @@ func (PartitionAnchor) Execute(st *StateManager, tx *Delivery) (protocol.Transac
 	return (PartitionAnchor{}).Validate(st, tx)
 }
 
-func (x PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+func (PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	// Unpack the payload
 	body, ok := tx.Transaction.Body.(*protocol.BlockValidatorAnchor)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.BlockValidatorAnchor), tx.Transaction.Body)
 	}
+	st.State.DidReceiveAnchor(body)
 
 	// Verify the origin
 	ledger, ok := st.Origin.(*protocol.AnchorLedger)

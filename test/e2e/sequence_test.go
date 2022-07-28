@@ -228,7 +228,7 @@ func TestMissingAnchorTxn(t *testing.T) {
 			if anchor != nil && env.Transaction.Body.Type() == TransactionTypeDirectoryAnchor {
 				body := env.Transaction.Body.(*DirectoryAnchor)
 				for _, receipt := range body.Receipts {
-					if *anchor == *(*[32]byte)(receipt.Start) {
+					if *anchor == *(*[32]byte)(receipt.RootChainReceipt.Start) {
 						fmt.Printf("Dropping %X with anchor %X to %X\n", env.Transaction.GetHash()[:4], anchor[:4], body.RootChainAnchor[:4])
 						didDrop = true
 						return append(envelopes[:i], envelopes[i+1:]...), false

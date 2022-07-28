@@ -18,6 +18,7 @@ type ProcessTransactionState struct {
 	ChainUpdates           ChainUpdates
 	MakeMajorBlock         uint64
 	MakeMajorBlockTime     time.Time
+	ReceivedAnchors        []protocol.AnchorBody
 }
 
 // DidProduceTxn records a produced transaction.
@@ -26,6 +27,10 @@ func (s *ProcessTransactionState) DidProduceTxn(url *url.URL, body protocol.Tran
 	txn.Header.Principal = url
 	txn.Body = body
 	s.ProducedTxns = append(s.ProducedTxns, txn)
+}
+
+func (s *ProcessTransactionState) DidReceiveAnchor(a protocol.AnchorBody) {
+	s.ReceivedAnchors = append(s.ReceivedAnchors, a)
 }
 
 func (s *ProcessTransactionState) ProcessAdditionalTransaction(txn *Delivery) {
@@ -40,6 +45,7 @@ func (s *ProcessTransactionState) Merge(r *ProcessTransactionState) {
 	s.ProducedTxns = append(s.ProducedTxns, r.ProducedTxns...)
 	s.AdditionalTransactions = append(s.AdditionalTransactions, r.AdditionalTransactions...)
 	s.ChainUpdates.Merge(&r.ChainUpdates)
+	s.ReceivedAnchors = append(s.ReceivedAnchors, r.ReceivedAnchors...)
 }
 
 type ChainUpdates struct {

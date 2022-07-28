@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"strings"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	jrpc "github.com/tendermint/tendermint/rpc/jsonrpc/types"
@@ -36,6 +37,25 @@ func (x *Executor) BeginBlock(block *Block) error {
 	err := x.finalizeBlock(block)
 	if err != nil {
 		return err
+	}
+
+	// Only send anchors from the leader
+	if block.IsLeader {
+		errs := x.dispatcher.Send(context.Background())
+		x.Background(func() {
+			for err := range errs {
+				x.checkDispatchError(err, func(err error) {
+					switch err := err.(type) {
+					case *txnDispatchError:
+						x.logger.Error("Failed to dispatch transactions", "error", err.status.Error, "stack", err.status.Error.PrintFullCallstack(), "type", err.typ, "hash", logging.AsHex(err.status.TxID.Hash()).Slice(0, 4))
+					default:
+						x.logger.Error("Failed to dispatch transactions", "error", fmt.Sprintf("%+v\n", err))
+					}
+				})
+			}
+		})
+	} else {
+		x.dispatcher.Reset()
 	}
 
 	// Reset the block state
@@ -152,16 +172,22 @@ func (x *Executor) finalizeBlock(block *Block) error {
 		return errors.Format(errors.StatusUnknownError, "load system ledger: %w", err)
 	}
 
-	// Nothing to do
-	if uint64(ledger.Index) < block.Index-1 || ledger.Anchor == nil {
+	// Did anything happen last block?
+	if uint64(ledger.Index) < block.Index-1 {
 		x.logger.Debug("Skipping anchor", "module", "anchoring", "index", ledger.Index)
 		return nil
 	}
 
 	// Build receipts for synthetic transactions produced in the previous block
-	err = x.sendSyntheticTransactions(block)
+	err = x.sendSyntheticTransactions(block.Batch)
 	if err != nil {
 		return errors.Format(errors.StatusUnknownError, "build synthetic transaction receipts: %w", err)
+	}
+
+	// Is there an anchor to send?
+	if ledger.Anchor == nil {
+		x.logger.Debug("Skipping anchor", "module", "anchoring", "index", ledger.Index)
+		return nil
 	}
 
 	// Load the anchor ledger state
@@ -258,76 +284,119 @@ func (x *Executor) finalizeBlock(block *Block) error {
 		}
 	}
 
-	// Only send anchors from the leader
-	if !block.IsLeader {
-		x.dispatcher.Reset()
-		return nil
+	return nil
+}
+
+func (x *Executor) sendSyntheticTransactions(batch *database.Batch) error {
+	// Check for received anchors
+	anchorLedger := batch.Account(x.Describe.AnchorPool())
+	anchorIndexLast, anchorIndexPrev, err := indexing.LoadLastTwoIndexEntries(anchorLedger.MainChain().Index())
+	if err != nil {
+		return errors.Format(errors.StatusInternalError, "load last two anchor index chain entries: %w", err)
+	}
+	if anchorIndexLast == nil {
+		return nil // Chain is empty
 	}
 
-	errs := x.dispatcher.Send(context.Background())
-	x.Background(func() {
-		for err := range errs {
-			x.checkDispatchError(err, func(err error) {
-				switch err := err.(type) {
-				case *txnDispatchError:
-					x.logger.Error("Failed to dispatch transactions", "error", err.status.Error, "stack", err.status.Error.PrintFullCallstack(), "type", err.typ, "hash", logging.AsHex(err.status.TxID.Hash()).Slice(0, 4))
-				default:
-					x.logger.Error("Failed to dispatch transactions", "error", fmt.Sprintf("%+v\n", err))
-				}
-			})
+	systemLedger := batch.Account(x.Describe.Ledger())
+	rootIndexPrev, err := indexing.LoadIndexEntryFromEnd(systemLedger.RootChain().Index(), 2)
+	if err != nil {
+		return errors.Format(errors.StatusInternalError, "load last root index chain entry: %w", err)
+	}
+
+	if rootIndexPrev != nil && anchorIndexLast.Source >= rootIndexPrev.Source {
+		return nil // Entries are from last block
+	}
+
+	var from, to uint64
+	if anchorIndexPrev != nil {
+		from = anchorIndexPrev.Source
+	}
+	to = anchorIndexLast.Source
+
+	anchorChain, err := anchorLedger.MainChain().Get()
+	if err != nil {
+		return errors.Format(errors.StatusInternalError, "load anchor main chain: %w", err)
+	}
+	entries, err := anchorChain.Entries(int64(from), int64(to+1))
+	if err != nil {
+		return errors.Format(errors.StatusInternalError, "load entries %d to %d of the anchor main chain: %w", from, to, err)
+	}
+
+	for i, hash := range entries {
+		state, err := batch.Transaction(hash).Main().Get()
+		if err != nil {
+			return errors.Format(errors.StatusInternalError, "load transaction %d of the anchor main chain: %w", from+uint64(i), err)
 		}
-	})
+		if state.Transaction == nil {
+			return errors.Format(errors.StatusInternalError, "load transaction %d of the anchor main chain: not a transaction", from+uint64(i))
+		}
+
+		// Ignore anything that's not a directory anchor
+		anchor, ok := state.Transaction.Body.(*protocol.DirectoryAnchor)
+		if !ok {
+			continue
+		}
+
+		for _, receipt := range anchor.Receipts {
+			// Ignore receipts for other partitions
+			if !strings.EqualFold(receipt.PartitionID, x.Describe.PartitionId) {
+				continue
+			}
+
+			err = x.sendSyntheticTransactionsForAnchor(batch, receipt)
+			if err != nil {
+				return errors.Wrap(errors.StatusUnknownError, err)
+			}
+		}
+	}
 
 	return nil
 }
 
-func (x *Executor) sendSyntheticTransactions(block *Block) error {
-	// Load the root chain's index chain's last two entries
-	last, nextLast, err := indexing.LoadLastTwoIndexEntries(block.Batch.Account(x.Describe.Ledger()).RootChain().Index())
+func (x *Executor) sendSyntheticTransactionsForAnchor(batch *database.Batch, receipt *protocol.PartitionAnchorReceipt) error {
+	// Find the synthetic main chain index entry for the block
+	record := batch.Account(x.Describe.Synthetic())
+	synthIndexChain, err := record.MainChain().Index().Get()
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "load root index chain's last two entries: %w", err)
-	}
-	if last == nil {
-		return nil // Root chain is empty
-	}
-	var prevRootAnchor uint64
-	if nextLast != nil {
-		prevRootAnchor = nextLast.Source + 1
+		return errors.Format(errors.StatusInternalError, "load synthetic index chain: %w", err)
 	}
 
-	// Load the synthetic transaction chain's index chain's last two entries
-	last, nextLast, err = indexing.LoadLastTwoIndexEntries(block.Batch.Account(x.Describe.Synthetic()).MainChain().Index())
+	entryIndex, indexEntry, err := indexing.SearchIndexChain(synthIndexChain, uint64(synthIndexChain.Height()-1), indexing.MatchExact, indexing.SearchIndexChainByBlock(receipt.MinorBlockIndex))
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "load synthetic transaction index chain's last two entries: %w", err)
+		if errors.Is(err, errors.StatusNotFound) {
+			return nil // No synthetic transactions produced in that block
+		}
+		return errors.Format(errors.StatusInternalError, "find synthetic index chain entry for block %d: %w", receipt.MinorBlockIndex, err)
 	}
-	if last == nil {
-		return nil // Synth chain is empty
-	}
-	synthEnd, synthAnchor := last.Source, last.Anchor
-	var synthStart uint64
-	if nextLast != nil {
-		synthStart = nextLast.Source + 1
-	}
-	if synthAnchor < prevRootAnchor {
-		return nil // No change since last block
+	to := indexEntry.Source
+
+	// Is there a previous entry?
+	var from uint64
+	if entryIndex > 0 {
+		prevEntry := new(protocol.IndexEntry)
+		err = synthIndexChain.EntryAs(int64(entryIndex-1), prevEntry)
+		if err != nil {
+			return errors.Format(errors.StatusInternalError, "load synthetic index chain entry %d: %w", entryIndex-1, err)
+		}
+		from = prevEntry.Source
 	}
 
-	// Load the synthetic transaction chain
-	chain, err := block.Batch.Account(x.Describe.Synthetic()).MainChain().Get()
+	// Process the transactions
+	synthMainChain, err := record.MainChain().Get()
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "load root chain: %w", err)
+		return errors.Format(errors.StatusInternalError, "load synthetic main chain: %w", err)
 	}
 
-	// Get transaction hashes
-	hashes, err := chain.Entries(int64(synthStart), int64(synthEnd)+1)
+	entries, err := synthMainChain.Entries(int64(from), int64(to+1))
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "load entries %d through %d of synthetic transaction chain: %w", synthStart, synthEnd, err)
+		return errors.Format(errors.StatusInternalError, "load synthetic main chain entries %d to %d: %w", from, to, err)
 	}
 
 	// For each synthetic transaction from the last block
-	for _, hash := range hashes {
+	for _, hash := range entries {
 		// Load it
-		record := block.Batch.Transaction(hash)
+		record := batch.Transaction(hash)
 		state, err := record.GetState()
 		if err != nil {
 			return errors.Format(errors.StatusUnknownError, "load synthetic transaction: %w", err)
@@ -355,17 +424,22 @@ func (x *Executor) sendSyntheticTransactions(block *Block) error {
 		partSig.SequenceNumber = status.SequenceNumber
 		partSig.TransactionHash = *(*[32]byte)(txn.GetHash())
 
-		receiptSig := new(protocol.ReceiptSignature)
-		receiptSig.SourceNetwork = status.SourceNetwork
-		receiptSig.Proof = *status.Proof
-		receiptSig.TransactionHash = *(*[32]byte)(txn.GetHash())
+		localReceipt := new(protocol.ReceiptSignature)
+		localReceipt.SourceNetwork = status.SourceNetwork
+		localReceipt.Proof = *status.Proof
+		localReceipt.TransactionHash = *(*[32]byte)(txn.GetHash())
 
-		keySig, err := x.signTransaction(block.Batch, txn, status.DestinationNetwork)
+		dnReceipt := new(protocol.ReceiptSignature)
+		dnReceipt.SourceNetwork = protocol.DnUrl()
+		dnReceipt.Proof = *receipt.RootChainReceipt
+		dnReceipt.TransactionHash = *(*[32]byte)(txn.GetHash())
+
+		keySig, err := x.signTransaction(batch, txn, status.DestinationNetwork)
 		if err != nil {
 			return errors.Wrap(errors.StatusUnknownError, err)
 		}
 
-		env := &protocol.Envelope{Transaction: []*protocol.Transaction{txn}, Signatures: []protocol.Signature{partSig, receiptSig, keySig}}
+		env := &protocol.Envelope{Transaction: []*protocol.Transaction{txn}, Signatures: []protocol.Signature{partSig, localReceipt, dnReceipt, keySig}}
 		err = x.dispatcher.BroadcastTx(context.Background(), txn.Header.Principal, env)
 		if err != nil {
 			return errors.Format(errors.StatusUnknownError, "send synthetic transaction %X: %w", hash[:4], err)
