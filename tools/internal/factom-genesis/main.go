@@ -13,9 +13,11 @@ import (
 
 	f2 "github.com/FactomProject/factom"
 	tmjson "github.com/tendermint/tendermint/libs/json"
+	alog "github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/privval"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/cmd"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -37,9 +39,25 @@ func (simTb) Helper()              {}
 
 func InitSim() {
 	// Initialize
-	sim := simulator.New(simTb{}, 3)
+	opts := simulator.SimulatorOptions{
+		BvnCount: 3,
+		OpenDB:   openDB(),
+	}
+	sim := simulator.NewWith(simTb{}, opts)
 	simul = sim
 	simul.InitFromGenesis()
+}
+
+func openDB() func(partition string, nodeIndex int, logger alog.Logger) *database.Database {
+	inFunc := func(partition string, nodeIndex int, logger alog.Logger) *database.Database {
+		// dir := os.TempDir() + "/tempbadger"
+		db, err := database.OpenBadger("/tmp/tempbadger", nil)
+		if err != nil {
+			log.Fatal(err)
+		}
+		return db
+	}
+	return inFunc
 }
 
 func SetPrivateKeyAndOrigin(privateKey string) error {
