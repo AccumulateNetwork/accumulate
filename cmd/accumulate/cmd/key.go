@@ -452,11 +452,16 @@ func GenerateKey(label string) (string, error) {
 	if err == nil {
 		return "", fmt.Errorf("key already exists for key name %s", label)
 	}
-
+	count, err := getKeyCountAndIncrement()
+	if err != nil {
+		return "", err
+	}
+	derivation := "m/0/0/" + strconv.Itoa(int(count))
 	k := new(Key)
 	k.PrivateKey = privKey
 	k.PublicKey = pubKey
 	k.KeyInfo.Type = sigtype
+	k.KeyInfo.Derivation = derivation
 	err = k.Save(label, liteLabel)
 	if err != nil {
 		return "", err
