@@ -21,7 +21,7 @@ import (
 var txCmd = &cobra.Command{
 	Use:   "tx",
 	Short: "Create and get token txs",
-	Args:  cobra.RangeArgs(1, 6),
+	Args:  cobra.RangeArgs(2, 5),
 	Run: func(cmd *cobra.Command, args []string) {
 		var out string
 		var err error

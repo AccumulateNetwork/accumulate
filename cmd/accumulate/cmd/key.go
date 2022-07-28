@@ -188,7 +188,7 @@ var keyGenerateCmd = &cobra.Command{
 var keyCmd = &cobra.Command{
 	Use:   "key",
 	Short: "Create and manage Keys for ADI Key Books, and Pages",
-	Args:  cobra.OnlyValidArgs,
+	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("Usage:")
 		PrintKey()

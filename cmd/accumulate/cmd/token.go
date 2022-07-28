@@ -29,7 +29,7 @@ var tokenCmdGet = &cobra.Command{
 var tokenCmdCreate = &cobra.Command{
 	Use:   "create [origin adi or lite url] [adi signer key name (if applicable)] [token url] [symbol] [precision (0 - 18)] [supply limit] [properties URL (optional)]",
 	Short: "Create new token",
-	Args:  cobra.RangeArgs(3, 6),
+	Args:  cobra.RangeArgs(4, 7),
 	Run: func(cmd *cobra.Command, args []string) {
 		var out string
 		var err error
