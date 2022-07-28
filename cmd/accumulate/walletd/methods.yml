@@ -1,0 +1,40 @@
+#GET
+Version:
+  description: returns the version of the wallet daemon
+  kind: query
+  rpc: version
+  output: Version
+
+KeyList:
+  description: returns a list of available keys in the wallet
+  kind: query
+  rpc: key-list
+  input: Authorization
+  output: AuthorizationRequred|KeyListResponse
+
+#Query:
+  # description: queries an account or account chain by URL
+  #kind: query
+  #rpc: query
+  #input: GeneralQuery
+  #output: ChainQueryResponse|TransactionQueryResponse|MultiResponse
+  #call: QueryUrl
+    #call-params: [Url, QueryOptions]
+    #route: /v2
+
+#POST
+  #Execute:
+  #description: submits a transaction
+  #rpc: execute
+  #input: TxRequest
+    #output: TxResponse
+    #route: /v2
+
+#POST
+  #ExecuteDirect:
+  #description: submits a transaction
+  #rpc: execute-direct
+  #input: ExecuteRequest
+  #output: TxResponse
+    #call-params: [Envelope, CheckOnly]
+    #route: /v2
