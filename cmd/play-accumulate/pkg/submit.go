@@ -63,9 +63,9 @@ func (b bldTxn) WithRemote(url Urlish, hash []byte) bldTxn {
 	return b.WithBody(&protocol.RemoteTransaction{Hash: *(*[32]byte)(hash)})
 }
 
-func (b bldTxn) WithPending(txn interface{ info() (*URL, [32]byte) }) bldTxn {
-	principal, hash := txn.info()
-	return b.WithRemote(principal, hash[:])
+func (b bldTxn) WithPending(txn interface{ submitted() *protocol.Transaction }) bldTxn {
+	b.transaction = txn.submitted()
+	return b
 }
 
 func (b bldTxn) WithSigner(url Urlish, version ...uint64) bldTxn {
@@ -137,7 +137,7 @@ func (b bldTxn) Submit() *submittedTxn {
 	hash := *(*[32]byte)(b.transaction.GetHash())
 	sub := new(submittedTxn)
 	sub.s = b.s
-	sub.Principal = b.transaction.Header.Principal
+	sub.Transaction = b.transaction
 	sub.Hash = hash
 	sub.Status = status
 	b.s.submitted = append(b.s.submitted, sub)
@@ -161,14 +161,14 @@ func (s *Session) Faucet(account Urlish) *submittedTxn {
 }
 
 type submittedTxn struct {
-	s         *Session
-	Principal *URL
-	Hash      [32]byte
-	Status    *protocol.TransactionStatus
+	s           *Session
+	Transaction *protocol.Transaction
+	Hash        [32]byte
+	Status      *protocol.TransactionStatus
 }
 
-func (s *submittedTxn) info() (*URL, [32]byte) {
-	return s.Principal, s.Hash
+func (s *submittedTxn) submitted() *protocol.Transaction {
+	return s.Transaction
 }
 
 func (s *submittedTxn) Ok() {
