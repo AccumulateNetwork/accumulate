@@ -12,11 +12,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
-type beginner interface {
-	Begin(bool) *database.Batch
-}
-
-func LoadStateManagerForTest(t *testing.T, db beginner, envelope *protocol.Envelope) (*StateManager, *Delivery) {
+func LoadStateManagerForTest(t *testing.T, db database.Beginner, envelope *protocol.Envelope) (*StateManager, *Delivery) {
 	t.Helper()
 	delivery, err := NormalizeEnvelope(envelope)
 	require.NoError(t, err)
@@ -29,7 +25,7 @@ func LoadStateManagerForTest(t *testing.T, db beginner, envelope *protocol.Envel
 	return NewStateManagerForTest(t, db, delivery[0].Transaction), delivery[0]
 }
 
-func NewStateManagerForTest(t *testing.T, db beginner, transaction *protocol.Transaction) *StateManager {
+func NewStateManagerForTest(t *testing.T, db database.Beginner, transaction *protocol.Transaction) *StateManager {
 	t.Helper()
 	txid := types.Bytes(transaction.GetHash()).AsBytes32()
 	m := new(StateManager)

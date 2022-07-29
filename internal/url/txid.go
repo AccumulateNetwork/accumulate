@@ -4,13 +4,16 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
-	"net/url"
 )
 
 // TxID is a transaction identifier.
 type TxID struct {
 	url  *URL
 	hash [32]byte
+
+	memoize struct {
+		str string
+	}
 }
 
 // ParseTxID parses the string as a URL and parses the URL's user info as a
@@ -48,13 +51,13 @@ func (u *URL) AsTxID() (*TxID, error) {
 		return nil, invalidHash(u, "wrong length")
 	}
 
-	u.UserInfo = ""
-	return &TxID{u, *(*[32]byte)(hash)}, nil
+	u = u.WithUserInfo("")
+	return &TxID{url: u, hash: *(*[32]byte)(hash)}, nil
 }
 
 // WithTxID constructs a transaction ID.
 func (u *URL) WithTxID(hash [32]byte) *TxID {
-	return &TxID{u, hash}
+	return &TxID{url: u, hash: hash}
 }
 
 // AsUrl returns a URL with the transaction ID as the user info.
@@ -69,13 +72,6 @@ func (x *TxID) Account() *URL { return x.url }
 
 // Hash returns the transaction hash.
 func (x *TxID) Hash() [32]byte { return x.hash }
-
-// Copy returns a copy of the transaction ID.
-func (x *TxID) Copy() *TxID {
-	y := *x
-	y.url = x.url.Copy()
-	return &y
-}
 
 // Equal checks if X and Y are the same transaction ID.
 func (x *TxID) Equal(y *TxID) bool {
@@ -93,9 +89,12 @@ func (x *TxID) Compare(y *TxID) int {
 // String reassembles the transaction ID into a valid URL string. See
 // net/url.URL.String().
 func (x *TxID) String() string {
-	u := x.url.URL()
-	u.User = url.User(hex.EncodeToString(x.hash[:]))
-	return u.String()
+	if x.memoize.str != "" {
+		return x.memoize.str
+	}
+
+	x.memoize.str = x.url.format(x.hash[:])
+	return x.memoize.str
 }
 
 // ShortString returns String without the scheme prefix.

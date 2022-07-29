@@ -14,7 +14,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
-func InitFromSnapshot(t TB, db *database.Database, exec *Executor, filename string) {
+func InitFromSnapshot(t TB, db database.Beginner, exec *Executor, filename string) {
 	t.Helper()
 
 	f, err := os.Open(filename)
@@ -34,7 +34,7 @@ func NormalizeEnvelope(t TB, envelope *protocol.Envelope) []*chain.Delivery {
 	return deliveries
 }
 
-func Query(t TB, db *database.Database, exec *Executor, req query.Request, prove bool) interface{} {
+func Query(t TB, db database.Beginner, exec *Executor, req query.Request, prove bool) interface{} {
 	t.Helper()
 
 	batch := db.Begin(false)

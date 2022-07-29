@@ -13,7 +13,7 @@ import (
 
 type DatabaseQueryModule struct {
 	Network *config.Describe
-	DB      *database.Database
+	DB      database.Beginner
 }
 
 var _ QueryModule = (*DatabaseQueryModule)(nil)
