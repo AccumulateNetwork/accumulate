@@ -128,7 +128,7 @@ func prepareSignerPage(signer *signing.Builder, origin *url.URL, signingKey stri
 	keyHolder, err := url.Parse(signingKey)
 	if err == nil && keyHolder.UserInfo != "" {
 		keyName = keyHolder.UserInfo
-		keyHolder.UserInfo = ""
+		keyHolder = keyHolder.WithUserInfo("")
 	} else {
 		keyHolder = origin
 		keyName = signingKey
