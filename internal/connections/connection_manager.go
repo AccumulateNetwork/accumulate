@@ -169,10 +169,6 @@ func (cm *connectionManager) GetLocalNodeContext() ConnectionContext {
 	return cm.localCtx
 }
 
-func (cm *connectionManager) GetLocalClient() *local.Local {
-	return cm.localClient
-}
-
 func (cm *connectionManager) ResetErrors() {
 	for _, nodeCtx := range cm.all {
 		nodeCtx.GetMetrics().status = Unknown
