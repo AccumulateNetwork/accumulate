@@ -62,7 +62,7 @@ func (u *URL) WithTxID(hash [32]byte) *TxID {
 
 // AsUrl returns a URL with the transaction ID as the user info.
 func (x *TxID) AsUrl() *URL {
-	u := x.url.Copy()
+	u := x.url.copy()
 	u.UserInfo = hex.EncodeToString(x.hash[:])
 	return u
 }
