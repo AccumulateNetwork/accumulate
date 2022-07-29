@@ -6,6 +6,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -28,6 +29,10 @@ func (DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Transa
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.DirectoryAnchor), tx.Transaction.Body)
 	}
 	st.State.DidReceiveAnchor(body)
+
+	if st.NetworkType == config.Directory {
+		st.logger.Info("Received anchor", "module", "anchoring", "source", body.Source, "root", logging.AsHex(body.RootChainAnchor).Slice(0, 4), "bpt", logging.AsHex(body.StateTreeAnchor).Slice(0, 4), "block", body.MinorBlockIndex)
+	}
 
 	// Verify the origin
 	if _, ok := st.Origin.(*protocol.AnchorLedger); !ok {

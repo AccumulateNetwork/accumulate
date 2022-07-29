@@ -29,6 +29,8 @@ func (PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Transa
 	}
 	st.State.DidReceiveAnchor(body)
 
+	st.logger.Info("Received anchor", "module", "anchoring", "source", body.Source, "root", logging.AsHex(body.RootChainAnchor).Slice(0, 4), "bpt", logging.AsHex(body.StateTreeAnchor).Slice(0, 4), "block", body.MinorBlockIndex)
+
 	// Verify the origin
 	ledger, ok := st.Origin.(*protocol.AnchorLedger)
 	if !ok {
@@ -53,8 +55,6 @@ func (PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Transa
 	if err != nil {
 		return nil, fmt.Errorf("failed to update issuer state: %v", err)
 	}
-
-	st.logger.Info("Received anchor", "module", "anchoring", "source", body.Source, "root", logging.AsHex(body.RootChainAnchor).Slice(0, 4), "bpt", logging.AsHex(body.StateTreeAnchor).Slice(0, 4))
 
 	// Add the anchor to the chain - use the partition name as the chain name
 	record := st.batch.Account(st.OriginUrl).AnchorChain(name)

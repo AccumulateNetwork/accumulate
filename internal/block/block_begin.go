@@ -20,6 +20,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
@@ -255,7 +256,7 @@ func (x *Executor) finalizeBlock(block *Block) error {
 	case config.Directory:
 		anchor := anchor.(*protocol.DirectoryAnchor)
 		if anchor.MakeMajorBlock > 0 {
-			x.logger.Info("Start major block", "major-index", anchor.MajorBlockIndex, "minor-index", block.Index)
+			x.logger.Info("Start major block", "major-index", anchor.MajorBlockIndex, "minor-index", ledger.Index)
 			block.State.OpenedMajorBlock = true
 			x.ExecutorOptions.MajorBlockScheduler.UpdateNextMajorBlockTime(anchor.MakeMajorBlockTime)
 		}
@@ -264,7 +265,7 @@ func (x *Executor) finalizeBlock(block *Block) error {
 		for _, bvn := range x.Describe.Network.GetBvnNames() {
 			err = x.sendBlockAnchor(block.Batch, anchor, sequenceNumber, bvn)
 			if err != nil {
-				return errors.Format(errors.StatusUnknownError, "send anchor for block %d: %w", block.Index, err)
+				return errors.Format(errors.StatusUnknownError, "send anchor for block %d: %w", ledger.Index, err)
 			}
 		}
 
@@ -273,15 +274,26 @@ func (x *Executor) finalizeBlock(block *Block) error {
 		anchor.MakeMajorBlock = 0
 		err = x.sendBlockAnchor(block.Batch, anchor, sequenceNumber, protocol.Directory)
 		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "send anchor for block %d: %w", block.Index, err)
+			return errors.Format(errors.StatusUnknownError, "send anchor for block %d: %w", ledger.Index, err)
 		}
 
 	case config.BlockValidator:
 		// BVN -> DN
 		err = x.sendBlockAnchor(block.Batch, anchor, sequenceNumber, protocol.Directory)
 		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "send anchor for block %d: %w", block.Index, err)
+			return errors.Format(errors.StatusUnknownError, "send anchor for block %d: %w", ledger.Index, err)
 		}
+	}
+
+	if x.Describe.NetworkType != config.Directory {
+		return nil
+	}
+
+	// If we're the DN, send synthetic transactions produced by the block we're
+	// anchoring, but send them after the anchor
+	err = x.sendSyntheticTransactionsForBlock(block.Batch, ledger.Index, nil)
+	if err != nil {
+		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	return nil
@@ -297,6 +309,7 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch) error {
 	if anchorIndexLast == nil {
 		return nil // Chain is empty
 	}
+	to := anchorIndexLast.Source
 
 	systemLedger := batch.Account(x.Describe.Ledger())
 	rootIndexPrev, err := indexing.LoadIndexEntryFromEnd(systemLedger.RootChain().Index(), 2)
@@ -308,11 +321,10 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch) error {
 		return nil // Entries are from last block
 	}
 
-	var from, to uint64
+	var from uint64
 	if anchorIndexPrev != nil {
-		from = anchorIndexPrev.Source
+		from = anchorIndexPrev.Source + 1
 	}
-	to = anchorIndexLast.Source
 
 	anchorChain, err := anchorLedger.MainChain().Get()
 	if err != nil {
@@ -344,7 +356,7 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch) error {
 				continue
 			}
 
-			err = x.sendSyntheticTransactionsForAnchor(batch, receipt)
+			err = x.sendSyntheticTransactionsForBlock(batch, receipt.MinorBlockIndex, receipt.RootChainReceipt)
 			if err != nil {
 				return errors.Wrap(errors.StatusUnknownError, err)
 			}
@@ -354,7 +366,7 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch) error {
 	return nil
 }
 
-func (x *Executor) sendSyntheticTransactionsForAnchor(batch *database.Batch, receipt *protocol.PartitionAnchorReceipt) error {
+func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, blockIndex uint64, blockReceipt *managed.Receipt) error {
 	// Find the synthetic main chain index entry for the block
 	record := batch.Account(x.Describe.Synthetic())
 	synthIndexChain, err := record.MainChain().Index().Get()
@@ -362,12 +374,12 @@ func (x *Executor) sendSyntheticTransactionsForAnchor(batch *database.Batch, rec
 		return errors.Format(errors.StatusInternalError, "load synthetic index chain: %w", err)
 	}
 
-	entryIndex, indexEntry, err := indexing.SearchIndexChain(synthIndexChain, uint64(synthIndexChain.Height()-1), indexing.MatchExact, indexing.SearchIndexChainByBlock(receipt.MinorBlockIndex))
+	entryIndex, indexEntry, err := indexing.SearchIndexChain(synthIndexChain, uint64(synthIndexChain.Height()-1), indexing.MatchExact, indexing.SearchIndexChainByBlock(blockIndex))
 	if err != nil {
 		if errors.Is(err, errors.StatusNotFound) {
 			return nil // No synthetic transactions produced in that block
 		}
-		return errors.Format(errors.StatusInternalError, "find synthetic index chain entry for block %d: %w", receipt.MinorBlockIndex, err)
+		return errors.Format(errors.StatusInternalError, "find synthetic index chain entry for block %d: %w", blockIndex, err)
 	}
 	to := indexEntry.Source
 
@@ -379,7 +391,7 @@ func (x *Executor) sendSyntheticTransactionsForAnchor(batch *database.Batch, rec
 		if err != nil {
 			return errors.Format(errors.StatusInternalError, "load synthetic index chain entry %d: %w", entryIndex-1, err)
 		}
-		from = prevEntry.Source
+		from = prevEntry.Source + 1
 	}
 
 	// Process the transactions
@@ -418,28 +430,36 @@ func (x *Executor) sendSyntheticTransactionsForAnchor(batch *database.Batch, rec
 			return errors.Format(errors.StatusInternalError, "synthetic transaction destination is not set")
 		}
 
+		var signatures []protocol.Signature
+
 		partSig := new(protocol.PartitionSignature)
 		partSig.SourceNetwork = status.SourceNetwork
 		partSig.DestinationNetwork = status.DestinationNetwork
 		partSig.SequenceNumber = status.SequenceNumber
 		partSig.TransactionHash = *(*[32]byte)(txn.GetHash())
+		signatures = append(signatures, partSig)
 
 		localReceipt := new(protocol.ReceiptSignature)
 		localReceipt.SourceNetwork = status.SourceNetwork
 		localReceipt.Proof = *status.Proof
 		localReceipt.TransactionHash = *(*[32]byte)(txn.GetHash())
+		signatures = append(signatures, localReceipt)
 
-		dnReceipt := new(protocol.ReceiptSignature)
-		dnReceipt.SourceNetwork = protocol.DnUrl()
-		dnReceipt.Proof = *receipt.RootChainReceipt
-		dnReceipt.TransactionHash = *(*[32]byte)(txn.GetHash())
+		if blockReceipt != nil {
+			dnReceipt := new(protocol.ReceiptSignature)
+			dnReceipt.SourceNetwork = protocol.DnUrl()
+			dnReceipt.Proof = *blockReceipt
+			dnReceipt.TransactionHash = *(*[32]byte)(txn.GetHash())
+			signatures = append(signatures, dnReceipt)
+		}
 
 		keySig, err := x.signTransaction(batch, txn, status.DestinationNetwork)
 		if err != nil {
 			return errors.Wrap(errors.StatusUnknownError, err)
 		}
+		signatures = append(signatures, keySig)
 
-		env := &protocol.Envelope{Transaction: []*protocol.Transaction{txn}, Signatures: []protocol.Signature{partSig, localReceipt, dnReceipt, keySig}}
+		env := &protocol.Envelope{Transaction: []*protocol.Transaction{txn}, Signatures: signatures}
 		err = x.dispatcher.BroadcastTx(context.Background(), txn.Header.Principal, env)
 		if err != nil {
 			return errors.Format(errors.StatusUnknownError, "send synthetic transaction %X: %w", hash[:4], err)
