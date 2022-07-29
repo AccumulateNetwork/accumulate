@@ -376,7 +376,7 @@ func (v *RequestByUrl) Copy() *RequestByUrl {
 	u := new(RequestByUrl)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 	u.Scratch = v.Scratch
 
@@ -389,7 +389,7 @@ func (v *RequestDataEntry) Copy() *RequestDataEntry {
 	u := new(RequestDataEntry)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 	u.EntryHash = v.EntryHash
 
@@ -402,7 +402,7 @@ func (v *RequestDataEntrySet) Copy() *RequestDataEntrySet {
 	u := new(RequestDataEntrySet)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 	u.Start = v.Start
 	u.Count = v.Count
@@ -417,7 +417,7 @@ func (v *RequestDirectory) Copy() *RequestDirectory {
 	u := new(RequestDirectory)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 	u.Start = v.Start
 	u.Limit = v.Limit
@@ -432,7 +432,7 @@ func (v *RequestKeyPageIndex) Copy() *RequestKeyPageIndex {
 	u := new(RequestKeyPageIndex)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 	u.Key = encoding.BytesCopy(v.Key)
 
@@ -445,7 +445,7 @@ func (v *RequestMajorBlocks) Copy() *RequestMajorBlocks {
 	u := new(RequestMajorBlocks)
 
 	if v.Account != nil {
-		u.Account = (v.Account).Copy()
+		u.Account = v.Account
 	}
 	u.Start = v.Start
 	u.Limit = v.Limit
@@ -459,7 +459,7 @@ func (v *RequestMinorBlocks) Copy() *RequestMinorBlocks {
 	u := new(RequestMinorBlocks)
 
 	if v.Account != nil {
-		u.Account = (v.Account).Copy()
+		u.Account = v.Account
 	}
 	u.Start = v.Start
 	u.Limit = v.Limit
@@ -475,10 +475,10 @@ func (v *RequestSynth) Copy() *RequestSynth {
 	u := new(RequestSynth)
 
 	if v.Source != nil {
-		u.Source = (v.Source).Copy()
+		u.Source = v.Source
 	}
 	if v.Destination != nil {
-		u.Destination = (v.Destination).Copy()
+		u.Destination = v.Destination
 	}
 	u.SequenceNumber = v.SequenceNumber
 	u.Anchor = v.Anchor
@@ -492,7 +492,7 @@ func (v *RequestTxHistory) Copy() *RequestTxHistory {
 	u := new(RequestTxHistory)
 
 	if v.Account != nil {
-		u.Account = (v.Account).Copy()
+		u.Account = v.Account
 	}
 	u.Start = v.Start
 	u.Limit = v.Limit
@@ -526,7 +526,7 @@ func (v *ResponseByTxId) Copy() *ResponseByTxId {
 	u := new(ResponseByTxId)
 
 	if v.TxId != nil {
-		u.TxId = (v.TxId).Copy()
+		u.TxId = v.TxId
 	}
 	if v.Envelope != nil {
 		u.Envelope = (v.Envelope).Copy()
@@ -537,7 +537,7 @@ func (v *ResponseByTxId) Copy() *ResponseByTxId {
 	u.Produced = make([]*url.TxID, len(v.Produced))
 	for i, v := range v.Produced {
 		if v != nil {
-			u.Produced[i] = (v).Copy()
+			u.Produced[i] = v
 		}
 	}
 	u.Height = v.Height
@@ -628,10 +628,10 @@ func (v *ResponseKeyPageIndex) Copy() *ResponseKeyPageIndex {
 	u := new(ResponseKeyPageIndex)
 
 	if v.Authority != nil {
-		u.Authority = (v.Authority).Copy()
+		u.Authority = v.Authority
 	}
 	if v.Signer != nil {
-		u.Signer = (v.Signer).Copy()
+		u.Signer = v.Signer
 	}
 	u.Index = v.Index
 
@@ -723,7 +723,7 @@ func (v *ResponsePending) Copy() *ResponsePending {
 	u.Transactions = make([]*url.TxID, len(v.Transactions))
 	for i, v := range v.Transactions {
 		if v != nil {
-			u.Transactions[i] = (v).Copy()
+			u.Transactions[i] = v
 		}
 	}
 
@@ -771,7 +771,7 @@ func (v *TxReceipt) Copy() *TxReceipt {
 
 	u.GeneralReceipt = *v.GeneralReceipt.Copy()
 	if v.Account != nil {
-		u.Account = (v.Account).Copy()
+		u.Account = v.Account
 	}
 	u.Chain = v.Chain
 

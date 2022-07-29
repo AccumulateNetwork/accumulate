@@ -131,7 +131,7 @@ func (v *ChainUpdate) Copy() *ChainUpdate {
 	u := new(ChainUpdate)
 
 	if v.Account != nil {
-		u.Account = (v.Account).Copy()
+		u.Account = v.Account
 	}
 	u.Name = v.Name
 	u.Type = v.Type
@@ -155,7 +155,7 @@ func (v *SigOrTxn) Copy() *SigOrTxn {
 		u.Signature = (v.Signature).CopyAsInterface().(protocol.Signature)
 	}
 	if v.Txid != nil {
-		u.Txid = (v.Txid).Copy()
+		u.Txid = v.Txid
 	}
 
 	return u
@@ -180,7 +180,7 @@ func (v *TransactionChainEntry) Copy() *TransactionChainEntry {
 	u := new(TransactionChainEntry)
 
 	if v.Account != nil {
-		u.Account = (v.Account).Copy()
+		u.Account = v.Account
 	}
 	u.Chain = v.Chain
 	u.ChainIndex = v.ChainIndex
@@ -218,7 +218,7 @@ func (v *accountState) Copy() *accountState {
 	u.Directory = make([]*url.URL, len(v.Directory))
 	for i, v := range v.Directory {
 		if v != nil {
-			u.Directory[i] = (v).Copy()
+			u.Directory[i] = v
 		}
 	}
 
