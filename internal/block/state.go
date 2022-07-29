@@ -27,7 +27,7 @@ type BlockState struct {
 	Signed             uint64
 	ProducedTxns       []*protocol.Transaction
 	ChainUpdates       chain.ChainUpdates
-	ReceivedAnchors    []protocol.AnchorBody
+	ReceivedAnchors    []*chain.ReceivedAnchor
 
 	Anchor *BlockAnchorState
 }

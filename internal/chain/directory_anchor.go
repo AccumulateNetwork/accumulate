@@ -32,7 +32,6 @@ func (DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Transa
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.DirectoryAnchor), tx.Transaction.Body)
 	}
-	st.State.DidReceiveAnchor(body)
 
 	st.logger.Info("Received anchor", "module", "anchoring", "source", body.Source, "root", logging.AsHex(body.RootChainAnchor).Slice(0, 4), "bpt", logging.AsHex(body.StateTreeAnchor).Slice(0, 4), "block", body.MinorBlockIndex)
 
@@ -54,13 +53,14 @@ func (DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Transa
 
 	// Add the anchor to the chain - use the partition name as the chain name
 	record := st.batch.Account(st.OriginUrl).AnchorChain(protocol.Directory)
-	err := st.AddChainEntry(record.Root(), body.RootChainAnchor[:], body.RootChainIndex, body.MinorBlockIndex)
+	index, err := st.State.ChainUpdates.AddChainEntry2(st.batch, record.Root(), body.RootChainAnchor[:], body.RootChainIndex, body.MinorBlockIndex, false)
 	if err != nil {
 		return nil, err
 	}
+	st.State.DidReceiveAnchor(protocol.Directory, body, index)
 
 	// And the BPT root
-	err = st.AddChainEntry(record.BPT(), body.StateTreeAnchor[:], 0, 0)
+	_, err = st.State.ChainUpdates.AddChainEntry2(st.batch, record.BPT(), body.StateTreeAnchor[:], 0, 0, false)
 	if err != nil {
 		return nil, err
 	}

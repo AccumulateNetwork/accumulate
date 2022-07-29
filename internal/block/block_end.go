@@ -692,30 +692,14 @@ func (x *Executor) buildDirectoryAnchor(block *Block, systemLedger *protocol.Sys
 	record := block.Batch.Account(anchorUrl)
 
 	for _, received := range block.State.ReceivedAnchors {
-		received := received.GetPartitionAnchor()
-		partitionId, ok := protocol.ParsePartitionUrl(received.Source)
-		if !ok {
-			return nil, errors.Format(errors.StatusInternalError, "received anchor from non-partition %v", received.Source)
+		entry, err := indexing.LoadIndexEntryFromEnd(record.AnchorChain(received.Partition).Root().Index(), 1)
+		if err != nil {
+			return nil, errors.Format(errors.StatusUnknownError, "load last entry of %s intermediate anchor index chain: %w", received.Partition, err)
 		}
 
-		anchorChain, err := record.AnchorChain(partitionId).Root().Get()
+		anchorChain, err := record.AnchorChain(received.Partition).Root().Get()
 		if err != nil {
-			return nil, errors.Format(errors.StatusUnknownError, "load %s intermediate anchor chain: %w", partitionId, err)
-		}
-
-		anchorIndex, err := anchorChain.HeightOf(received.RootChainAnchor[:])
-		if err != nil {
-			return nil, errors.Format(errors.StatusUnknownError, "locate anchor %x in %s intermediate anchor chain: %w", received.RootChainAnchor[:4], partitionId, err)
-		}
-
-		anchorIndexChain, err := record.AnchorChain(partitionId).Root().Index().Get()
-		if err != nil {
-			return nil, errors.Format(errors.StatusUnknownError, "load %s intermediate anchor index chain: %w", partitionId, err)
-		}
-
-		_, entry, err := indexing.SearchIndexChain(anchorIndexChain, uint64(anchorIndexChain.Height()-1), indexing.MatchAfter, indexing.SearchIndexChainBySource(uint64(anchorIndex)))
-		if err != nil {
-			return nil, errors.Format(errors.StatusUnknownError, "find index entry for entry %d of %s intermediate anchor chain: %w", anchorIndex, partitionId, err)
+			return nil, errors.Format(errors.StatusUnknownError, "load %s intermediate anchor chain: %w", received.Partition, err)
 		}
 
 		rootReceipt, err := rootChain.Receipt(int64(entry.Anchor), rootChain.Height()-1)
@@ -723,19 +707,19 @@ func (x *Executor) buildDirectoryAnchor(block *Block, systemLedger *protocol.Sys
 			return nil, errors.Format(errors.StatusUnknownError, "build receipt for entry %d (to %d) of the root chain: %w", entry.Anchor, rootChain.Height()-1, err)
 		}
 
-		anchorReceipt, err := anchorChain.Receipt(anchorIndex, int64(entry.Source))
+		anchorReceipt, err := anchorChain.Receipt(received.Index, int64(entry.Source))
 		if err != nil {
-			return nil, errors.Format(errors.StatusUnknownError, "build receipt for entry %d (to %d) of %s intermediate anchor chain: %w", anchorIndex, entry.Source, partitionId, err)
+			return nil, errors.Format(errors.StatusUnknownError, "build receipt for entry %d (to %d) of %s intermediate anchor chain: %w", received.Index, entry.Source, received.Partition, err)
 		}
 
 		receipt := new(protocol.PartitionAnchorReceipt)
-		receipt.PartitionID = partitionId
-		receipt.MinorBlockIndex = received.MinorBlockIndex
-		receipt.RootChainIndex = received.RootChainIndex
+		receipt.PartitionID = received.Partition
+		receipt.MinorBlockIndex = received.Body.GetPartitionAnchor().MinorBlockIndex
+		receipt.RootChainIndex = received.Body.GetPartitionAnchor().RootChainIndex
 
 		receipt.RootChainReceipt, err = anchorReceipt.Combine(rootReceipt)
 		if err != nil {
-			return nil, errors.Format(errors.StatusUnknownError, "combine receipt for entry %d of %s intermediate anchor chain: %w", anchorIndex, partitionId, err)
+			return nil, errors.Format(errors.StatusUnknownError, "combine receipt for entry %d of %s intermediate anchor chain: %w", received.Index, received.Partition, err)
 		}
 
 		anchor.Receipts = append(anchor.Receipts, receipt)

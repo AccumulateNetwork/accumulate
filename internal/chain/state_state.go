@@ -18,7 +18,13 @@ type ProcessTransactionState struct {
 	ChainUpdates           ChainUpdates
 	MakeMajorBlock         uint64
 	MakeMajorBlockTime     time.Time
-	ReceivedAnchors        []protocol.AnchorBody
+	ReceivedAnchors        []*ReceivedAnchor
+}
+
+type ReceivedAnchor struct {
+	Partition string
+	Body      protocol.AnchorBody
+	Index     int64
 }
 
 // DidProduceTxn records a produced transaction.
@@ -29,8 +35,8 @@ func (s *ProcessTransactionState) DidProduceTxn(url *url.URL, body protocol.Tran
 	s.ProducedTxns = append(s.ProducedTxns, txn)
 }
 
-func (s *ProcessTransactionState) DidReceiveAnchor(a protocol.AnchorBody) {
-	s.ReceivedAnchors = append(s.ReceivedAnchors, a)
+func (s *ProcessTransactionState) DidReceiveAnchor(partition string, body protocol.AnchorBody, index int64) {
+	s.ReceivedAnchors = append(s.ReceivedAnchors, &ReceivedAnchor{partition, body, index})
 }
 
 func (s *ProcessTransactionState) ProcessAdditionalTransaction(txn *Delivery) {
@@ -107,23 +113,33 @@ func (c *ChainUpdates) DidAddChainEntry(batch *database.Batch, u *url.URL, name 
 // AddChainEntry adds an entry to a chain and records the chain update in the
 // block state.
 func (u *ChainUpdates) AddChainEntry(batch *database.Batch, chain *database.Chain2, entry []byte, sourceIndex, sourceBlock uint64) error {
+	_, err := u.AddChainEntry2(batch, chain, entry, sourceIndex, sourceBlock, true)
+	return err
+}
+
+func (u *ChainUpdates) AddChainEntry2(batch *database.Batch, chain *database.Chain2, entry []byte, sourceIndex, sourceBlock uint64, unique bool) (int64, error) {
 	// Add an entry to the chain
 	c, err := chain.Get()
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "load %s chain: %w", chain.Name(), err)
+		return 0, errors.Format(errors.StatusUnknownError, "load %s chain: %w", chain.Name(), err)
 	}
 
 	index := c.Height()
 	err = c.AddEntry(entry, true)
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "add entry to %s chain: %w", chain.Name(), err)
+		return 0, errors.Format(errors.StatusUnknownError, "add entry to %s chain: %w", chain.Name(), err)
 	}
 
 	// The entry was a duplicate, do not update the ledger
 	if index == c.Height() {
-		return nil
+		return c.HeightOf(entry)
 	}
 
 	// Update the ledger
-	return u.DidAddChainEntry(batch, chain.Account(), chain.Name(), chain.Type(), entry, uint64(index), sourceIndex, sourceBlock)
+	err = u.DidAddChainEntry(batch, chain.Account(), chain.Name(), chain.Type(), entry, uint64(index), sourceIndex, sourceBlock)
+	if err != nil {
+		return 0, errors.Wrap(errors.StatusUnknownError, err)
+	}
+
+	return index, nil
 }
