@@ -394,6 +394,12 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, bloc
 		from = prevEntry.Source + 1
 	}
 
+	if blockReceipt == nil {
+		x.logger.Debug("Sending synthetic transactions for block", "module", "synthetic", "index", blockIndex)
+	} else {
+		x.logger.Debug("Sending synthetic transactions for block", "module", "synthetic", "index", blockIndex, "anchor-from", logging.AsHex(blockReceipt.Start).Slice(0, 4), "anchor-to", logging.AsHex(blockReceipt.Anchor).Slice(0, 4))
+	}
+
 	// Process the transactions
 	synthMainChain, err := record.MainChain().Get()
 	if err != nil {
