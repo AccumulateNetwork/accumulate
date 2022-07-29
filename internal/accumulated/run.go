@@ -212,12 +212,13 @@ func (d *Daemon) Start() (err error) {
 
 	// Create the JSON-RPC handler
 	d.jrpc, err = api.NewJrpc(api.Options{
-		Logger:           d.Logger,
-		Describe:         &d.Config.Accumulate.Describe,
-		Router:           router,
-		PrometheusServer: d.Config.Accumulate.API.PrometheusServer,
-		TxMaxWaitTime:    d.Config.Accumulate.API.TxMaxWaitTime,
-		Database:         d.db,
+		Logger:            d.Logger,
+		Describe:          &d.Config.Accumulate.Describe,
+		Router:            router,
+		PrometheusServer:  d.Config.Accumulate.API.PrometheusServer,
+		TxMaxWaitTime:     d.Config.Accumulate.API.TxMaxWaitTime,
+		Database:          d.db,
+		ConnectionManager: d.connectionManager,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to start API: %v", err)
@@ -226,6 +227,7 @@ func (d *Daemon) Start() (err error) {
 	// Let the connection manager create and assign clients
 	statusChecker := statuschk.NewNodeStatusChecker()
 	err = d.connectionManager.InitClients(lclient, statusChecker)
+
 	if err != nil {
 		return fmt.Errorf("failed to initialize the connection manager: %v", err)
 	}
