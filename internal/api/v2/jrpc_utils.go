@@ -10,7 +10,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 )
 
-func GetLatestRootChainAnchor(apiclient connections.APIClient, ledgerurl *url.URL, c context.Context) (roothash *[32]byte, err error) {
+func getLatestRootChainAnchor(apiclient connections.APIClient, ledgerurl *url.URL, c context.Context) (roothash *[32]byte, err error) {
 	req := new(GeneralQuery)
 	apiinfo := new(ChainQueryResponse)
 	req.Url = ledgerurl

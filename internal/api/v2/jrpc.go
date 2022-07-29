@@ -121,7 +121,7 @@ func (m *JrpcMethods) Status(ctx context.Context, _ json.RawMessage) interface{}
 
 	// Get the latest root chain anchor from the Accumulate API
 	apiclient := conn.GetAPIClient()
-	rootAnchor, err := GetLatestRootChainAnchor(apiclient, m.Options.Describe.Ledger(), ctx)
+	rootAnchor, err := getLatestRootChainAnchor(apiclient, m.Options.Describe.Ledger(), ctx)
 	if err != nil {
 		return internalError(err)
 	}
@@ -141,7 +141,6 @@ func (m *JrpcMethods) Status(ctx context.Context, _ json.RawMessage) interface{}
 		status.DnRootHash = *rootAnchor
 		return status
 	}
-
 	status := new(StatusResponse)
 	status.Ok = true
 	status.BvnHeight = tmStatus.SyncInfo.LatestBlockHeight
