@@ -41,23 +41,20 @@ func InitSim() {
 	// Initialize
 	opts := simulator.SimulatorOptions{
 		BvnCount: 3,
-		OpenDB:   openDB(),
+		OpenDB:   openDB,
 	}
 	sim := simulator.NewWith(simTb{}, opts)
 	simul = sim
 	simul.InitFromGenesis()
 }
 
-func openDB() func(partition string, nodeIndex int, logger alog.Logger) *database.Database {
-	inFunc := func(partition string, nodeIndex int, logger alog.Logger) *database.Database {
-		dir := os.TempDir() + "/tempbadger"
-		db, err := database.OpenBadger(dir+partition, nil)
-		if err != nil {
-			log.Fatal(err)
-		}
-		return db
+func openDB(partition string, nodeIndex int, logger alog.Logger) *database.Database {
+	dir := os.TempDir() + "/tempbadger"
+	db, err := database.OpenBadger(dir+partition, nil)
+	if err != nil {
+		log.Fatal(err)
 	}
-	return inFunc
+	return db
 }
 
 func SetPrivateKeyAndOrigin(privateKey string) error {
