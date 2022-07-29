@@ -168,14 +168,10 @@ func TestSynthTxnWithMissingPrincipal(t *testing.T) {
 	)
 	_, _, synth := sim.WaitForTransaction(delivered, txn[0].Transaction[0].GetHash(), 50)
 
-	// The synthetic transaction should be received and marked as pending
+	// The synthetic transaction must fail
 	require.Len(t, synth, 1)
 	hash := synth[0].Hash()
-	_, status, _ := sim.WaitForTransaction(received, hash[:], 50)
-	require.True(t, status.Pending(), "The transaction was delivered prematurely")
-
-	// The synthetic transaction must fail, but only after the anchor is received
-	_, status, _ = sim.WaitForTransaction(delivered, hash[:], 50)
+	_, status, _ := sim.WaitForTransaction(delivered, hash[:], 50)
 	require.NotZero(t, status.Code, "The transaction did not fail")
 }
 
