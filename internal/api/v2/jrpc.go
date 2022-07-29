@@ -137,15 +137,20 @@ func (m *JrpcMethods) Status(ctx context.Context, _ json.RawMessage) interface{}
 		status.Ok = true
 		status.DnHeight = tmStatus.SyncInfo.LatestBlockHeight
 		status.DnTime = tmStatus.SyncInfo.LatestBlockTime
-		status.DnBptHash = *(*[32]byte)(tmStatus.SyncInfo.LatestBlockHash)
+		if len(tmStatus.SyncInfo.LatestAppHash) == 32 {
+			status.DnBptHash = *(*[32]byte)(tmStatus.SyncInfo.LatestBlockHash)
+		}
 		status.DnRootHash = *rootAnchor
 		return status
 	}
+
 	status := new(StatusResponse)
 	status.Ok = true
 	status.BvnHeight = tmStatus.SyncInfo.LatestBlockHeight
 	status.BvnTime = tmStatus.SyncInfo.LatestBlockTime
-	status.BvnBptHash = *(*[32]byte)(tmStatus.SyncInfo.LatestBlockHash)
+	if len(tmStatus.SyncInfo.LatestAppHash) == 32 {
+		status.BvnBptHash = *(*[32]byte)(tmStatus.SyncInfo.LatestBlockHash)
+	}
 	status.BvnRootHash = *rootAnchor
 	status.LastDirectoryAnchorHeight = uint64(dnAnchorHeight)
 	return status

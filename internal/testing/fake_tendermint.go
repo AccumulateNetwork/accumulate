@@ -51,6 +51,8 @@ type FakeTendermint struct {
 	txMu     *sync.RWMutex
 	txActive int
 	isEvil   bool
+
+	syncInfo core.SyncInfo
 }
 
 type txStatus struct {
@@ -247,6 +249,7 @@ func (c *FakeTendermint) execute(interval time.Duration) {
 
 		begin := abci.RequestBeginBlock{}
 		begin.Header.Height = height
+		begin.Header.Time = time.Now()
 		begin.Header.ProposerAddress = c.address
 		if c.isEvil {
 			//add evidence of something happening to the evidence chain.
@@ -258,6 +261,9 @@ func (c *FakeTendermint) execute(interval time.Duration) {
 			ev.TotalVotingPower = 1
 			begin.ByzantineValidators = append(begin.ByzantineValidators, ev)
 		}
+
+		c.syncInfo.LatestBlockHeight = height
+		c.syncInfo.LatestBlockTime = begin.Header.Time
 
 		c.app.BeginBlock(begin)
 
@@ -289,7 +295,8 @@ func (c *FakeTendermint) execute(interval time.Duration) {
 		}
 
 		endBlockResp := c.app.EndBlock(abci.RequestEndBlock{})
-		c.app.Commit()
+		commitResp := c.app.Commit()
+		c.syncInfo.LatestAppHash = commitResp.Data
 
 		for _, update := range endBlockResp.ValidatorUpdates {
 			c.applyValidatorUpdate(&update) //nolint:rangevarref
@@ -408,6 +415,8 @@ func (c *FakeTendermint) BroadcastTxSync(ctx context.Context, tx types.Tx) (*cty
 }
 
 func (c *FakeTendermint) Status(context.Context) (*core.ResultStatus, error) {
+	s := new(core.ResultStatus)
+	s.SyncInfo = c.syncInfo
 	return new(core.ResultStatus), nil
 }
 
