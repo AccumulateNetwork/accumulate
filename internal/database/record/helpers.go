@@ -2,6 +2,7 @@ package record
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
@@ -11,13 +12,25 @@ import (
 
 func zero[T any]() (z T)                     { return z }
 func copyValue[T any](v T) T                 { return v }
-func copyRef[T interface{ Copy() T }](v T) T { return v.Copy() }
+func copyRef[T interface{ Copy() T }](v T) T { return v.Copy() } //nolint
 
 func CompareHash(u, v [32]byte) int  { return bytes.Compare(u[:], v[:]) }
 func CompareTxid(u, v *url.TxID) int { return u.Compare(v) }
 func CompareUrl(u, v *url.URL) int   { return u.Compare(v) }
 
 func ParseString(s string) (string, error) { return s, nil }
+
+func MapKeyBytes(v []byte) [32]byte {
+	if len(v) == 32 {
+		// Most (all?) of our byte-keys are actually [32]byte so this should help
+		return *(*[32]byte)(v)
+	}
+	return sha256.Sum256(v)
+}
+
+func MapKeyUrl(v *url.URL) [32]byte {
+	return v.AccountID32()
+}
 
 type ValueMarshaller[T any] func(value T) ([]byte, error)
 type ValueUnmarshaller[T any] func(data []byte) (T, error)
@@ -51,14 +64,14 @@ var HashWrapper = &wrapperFuncs[[32]byte]{
 
 // UrlWrapper defines un/marshalling functions for url fields.
 var UrlWrapper = &wrapperFuncs[*url.URL]{
-	copy:      copyRef[*url.URL],
+	copy:      copyValue[*url.URL], // URLs are immutable so don't copy
 	marshal:   marshalAsString[*url.URL],
 	unmarshal: unmarshalFromString(url.Parse),
 }
 
 // TxidWrapper defines un/marshalling functions for txid fields.
 var TxidWrapper = &wrapperFuncs[*url.TxID]{
-	copy:      copyRef[*url.TxID],
+	copy:      copyValue[*url.TxID], // TxIDs are immutable so don't copy
 	marshal:   marshalAsString[*url.TxID],
 	unmarshal: unmarshalFromString(url.ParseTxID),
 }
