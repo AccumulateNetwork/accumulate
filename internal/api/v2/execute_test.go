@@ -18,6 +18,8 @@ import (
 
 func init() { acctesting.EnableDebugFeatures() }
 
+//go:generate go run github.com/golang/mock/mockgen -source ../../connections/connection_context.go -package api_test -destination ./mock_connections_test.go
+
 func TestExecuteCheckOnly(t *testing.T) {
 	env := acctesting.NewTransaction().
 		WithPrincipal(protocol.FaucetUrl).
@@ -37,7 +39,7 @@ func TestExecuteCheckOnly(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		local := connections.NewMockClient(ctrl)
+		local := NewMockABCIClient(ctrl)
 		clients := map[string]connections.ABCIClient{}
 		clients[""] = local
 		connectionManager := connections.NewFakeConnectionManager(clients)
@@ -63,7 +65,7 @@ func TestExecuteCheckOnly(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		local := connections.NewMockClient(ctrl)
+		local := NewMockABCIClient(ctrl)
 		clients := map[string]connections.ABCIClient{}
 		clients[""] = local
 		connectionManager := connections.NewFakeConnectionManager(clients)
