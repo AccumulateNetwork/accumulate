@@ -1042,7 +1042,7 @@ func (v *ADI) Copy() *ADI {
 	u := new(ADI)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 	u.AccountAuth = *v.AccountAuth.Copy()
 
@@ -1081,7 +1081,7 @@ func (v *AcmeFaucet) Copy() *AcmeFaucet {
 	u := new(AcmeFaucet)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 
 	return u
@@ -1103,7 +1103,7 @@ func (v *AddAccountAuthorityOperation) Copy() *AddAccountAuthorityOperation {
 	u := new(AddAccountAuthorityOperation)
 
 	if v.Authority != nil {
-		u.Authority = (v.Authority).Copy()
+		u.Authority = v.Authority
 	}
 
 	return u
@@ -1115,7 +1115,7 @@ func (v *AddCredits) Copy() *AddCredits {
 	u := new(AddCredits)
 
 	if v.Recipient != nil {
-		u.Recipient = (v.Recipient).Copy()
+		u.Recipient = v.Recipient
 	}
 	u.Amount = *encoding.BigintCopy(&v.Amount)
 	u.Oracle = v.Oracle
@@ -1151,7 +1151,7 @@ func (v *AnchorLedger) Copy() *AnchorLedger {
 	u := new(AnchorLedger)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 	u.MinorBlockSequenceNumber = v.MinorBlockSequenceNumber
 	u.MajorBlockIndex = v.MajorBlockIndex
@@ -1159,7 +1159,7 @@ func (v *AnchorLedger) Copy() *AnchorLedger {
 	u.PendingMajorBlockAnchors = make([]*url.URL, len(v.PendingMajorBlockAnchors))
 	for i, v := range v.PendingMajorBlockAnchors {
 		if v != nil {
-			u.PendingMajorBlockAnchors[i] = (v).Copy()
+			u.PendingMajorBlockAnchors[i] = v
 		}
 	}
 
@@ -1173,7 +1173,7 @@ func (v *AnchorMetadata) Copy() *AnchorMetadata {
 
 	u.ChainMetadata = *v.ChainMetadata.Copy()
 	if v.Account != nil {
-		u.Account = (v.Account).Copy()
+		u.Account = v.Account
 	}
 	u.Index = v.Index
 	u.SourceIndex = v.SourceIndex
@@ -1189,7 +1189,7 @@ func (v *AuthorityEntry) Copy() *AuthorityEntry {
 	u := new(AuthorityEntry)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 	u.Disabled = v.Disabled
 
@@ -1204,7 +1204,7 @@ func (v *BTCLegacySignature) Copy() *BTCLegacySignature {
 	u.PublicKey = encoding.BytesCopy(v.PublicKey)
 	u.Signature = encoding.BytesCopy(v.Signature)
 	if v.Signer != nil {
-		u.Signer = (v.Signer).Copy()
+		u.Signer = v.Signer
 	}
 	u.SignerVersion = v.SignerVersion
 	u.Timestamp = v.Timestamp
@@ -1222,7 +1222,7 @@ func (v *BTCSignature) Copy() *BTCSignature {
 	u.PublicKey = encoding.BytesCopy(v.PublicKey)
 	u.Signature = encoding.BytesCopy(v.Signature)
 	if v.Signer != nil {
-		u.Signer = (v.Signer).Copy()
+		u.Signer = v.Signer
 	}
 	u.SignerVersion = v.SignerVersion
 	u.Timestamp = v.Timestamp
@@ -1281,12 +1281,12 @@ func (v *CreateDataAccount) Copy() *CreateDataAccount {
 	u := new(CreateDataAccount)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 	u.Authorities = make([]*url.URL, len(v.Authorities))
 	for i, v := range v.Authorities {
 		if v != nil {
-			u.Authorities[i] = (v).Copy()
+			u.Authorities[i] = v
 		}
 	}
 
@@ -1299,16 +1299,16 @@ func (v *CreateIdentity) Copy() *CreateIdentity {
 	u := new(CreateIdentity)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 	u.KeyHash = encoding.BytesCopy(v.KeyHash)
 	if v.KeyBookUrl != nil {
-		u.KeyBookUrl = (v.KeyBookUrl).Copy()
+		u.KeyBookUrl = v.KeyBookUrl
 	}
 	u.Authorities = make([]*url.URL, len(v.Authorities))
 	for i, v := range v.Authorities {
 		if v != nil {
-			u.Authorities[i] = (v).Copy()
+			u.Authorities[i] = v
 		}
 	}
 
@@ -1321,13 +1321,13 @@ func (v *CreateKeyBook) Copy() *CreateKeyBook {
 	u := new(CreateKeyBook)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 	u.PublicKeyHash = encoding.BytesCopy(v.PublicKeyHash)
 	u.Authorities = make([]*url.URL, len(v.Authorities))
 	for i, v := range v.Authorities {
 		if v != nil {
-			u.Authorities[i] = (v).Copy()
+			u.Authorities[i] = v
 		}
 	}
 
@@ -1363,12 +1363,12 @@ func (v *CreateToken) Copy() *CreateToken {
 	u := new(CreateToken)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 	u.Symbol = v.Symbol
 	u.Precision = v.Precision
 	if v.Properties != nil {
-		u.Properties = (v.Properties).Copy()
+		u.Properties = v.Properties
 	}
 	if v.SupplyLimit != nil {
 		u.SupplyLimit = encoding.BigintCopy(v.SupplyLimit)
@@ -1376,7 +1376,7 @@ func (v *CreateToken) Copy() *CreateToken {
 	u.Authorities = make([]*url.URL, len(v.Authorities))
 	for i, v := range v.Authorities {
 		if v != nil {
-			u.Authorities[i] = (v).Copy()
+			u.Authorities[i] = v
 		}
 	}
 
@@ -1389,15 +1389,15 @@ func (v *CreateTokenAccount) Copy() *CreateTokenAccount {
 	u := new(CreateTokenAccount)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 	if v.TokenUrl != nil {
-		u.TokenUrl = (v.TokenUrl).Copy()
+		u.TokenUrl = v.TokenUrl
 	}
 	u.Authorities = make([]*url.URL, len(v.Authorities))
 	for i, v := range v.Authorities {
 		if v != nil {
-			u.Authorities[i] = (v).Copy()
+			u.Authorities[i] = v
 		}
 	}
 	if v.Proof != nil {
@@ -1413,7 +1413,7 @@ func (v *DataAccount) Copy() *DataAccount {
 	u := new(DataAccount)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 	u.AccountAuth = *v.AccountAuth.Copy()
 	if v.Entry != nil {
@@ -1432,7 +1432,7 @@ func (v *DelegatedSignature) Copy() *DelegatedSignature {
 		u.Signature = (v.Signature).CopyAsInterface().(Signature)
 	}
 	if v.Delegator != nil {
-		u.Delegator = (v.Delegator).Copy()
+		u.Delegator = v.Delegator
 	}
 
 	return u
@@ -1464,7 +1464,7 @@ func (v *DisableAccountAuthOperation) Copy() *DisableAccountAuthOperation {
 	u := new(DisableAccountAuthOperation)
 
 	if v.Authority != nil {
-		u.Authority = (v.Authority).Copy()
+		u.Authority = v.Authority
 	}
 
 	return u
@@ -1478,7 +1478,7 @@ func (v *ED25519Signature) Copy() *ED25519Signature {
 	u.PublicKey = encoding.BytesCopy(v.PublicKey)
 	u.Signature = encoding.BytesCopy(v.Signature)
 	if v.Signer != nil {
-		u.Signer = (v.Signer).Copy()
+		u.Signer = v.Signer
 	}
 	u.SignerVersion = v.SignerVersion
 	u.Timestamp = v.Timestamp
@@ -1496,7 +1496,7 @@ func (v *ETHSignature) Copy() *ETHSignature {
 	u.PublicKey = encoding.BytesCopy(v.PublicKey)
 	u.Signature = encoding.BytesCopy(v.Signature)
 	if v.Signer != nil {
-		u.Signer = (v.Signer).Copy()
+		u.Signer = v.Signer
 	}
 	u.SignerVersion = v.SignerVersion
 	u.Timestamp = v.Timestamp
@@ -1520,7 +1520,7 @@ func (v *EnableAccountAuthOperation) Copy() *EnableAccountAuthOperation {
 	u := new(EnableAccountAuthOperation)
 
 	if v.Authority != nil {
-		u.Authority = (v.Authority).Copy()
+		u.Authority = v.Authority
 	}
 
 	return u
@@ -1597,7 +1597,7 @@ func (v *IssueTokens) Copy() *IssueTokens {
 	u := new(IssueTokens)
 
 	if v.Recipient != nil {
-		u.Recipient = (v.Recipient).Copy()
+		u.Recipient = v.Recipient
 	}
 	u.Amount = *encoding.BigintCopy(&v.Amount)
 	u.To = make([]*TokenRecipient, len(v.To))
@@ -1616,7 +1616,7 @@ func (v *KeyBook) Copy() *KeyBook {
 	u := new(KeyBook)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 	u.BookType = v.BookType
 	u.AccountAuth = *v.AccountAuth.Copy()
@@ -1631,7 +1631,7 @@ func (v *KeyPage) Copy() *KeyPage {
 	u := new(KeyPage)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 	u.CreditBalance = v.CreditBalance
 	u.AcceptThreshold = v.AcceptThreshold
@@ -1661,7 +1661,7 @@ func (v *KeySpec) Copy() *KeySpec {
 	u.PublicKeyHash = encoding.BytesCopy(v.PublicKeyHash)
 	u.LastUsedOn = v.LastUsedOn
 	if v.Delegate != nil {
-		u.Delegate = (v.Delegate).Copy()
+		u.Delegate = v.Delegate
 	}
 
 	return u
@@ -1674,7 +1674,7 @@ func (v *KeySpecParams) Copy() *KeySpecParams {
 
 	u.KeyHash = encoding.BytesCopy(v.KeyHash)
 	if v.Delegate != nil {
-		u.Delegate = (v.Delegate).Copy()
+		u.Delegate = v.Delegate
 	}
 
 	return u
@@ -1689,7 +1689,7 @@ func (v *LegacyED25519Signature) Copy() *LegacyED25519Signature {
 	u.PublicKey = encoding.BytesCopy(v.PublicKey)
 	u.Signature = encoding.BytesCopy(v.Signature)
 	if v.Signer != nil {
-		u.Signer = (v.Signer).Copy()
+		u.Signer = v.Signer
 	}
 	u.SignerVersion = v.SignerVersion
 	u.Vote = v.Vote
@@ -1704,7 +1704,7 @@ func (v *LiteDataAccount) Copy() *LiteDataAccount {
 	u := new(LiteDataAccount)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 
 	return u
@@ -1716,7 +1716,7 @@ func (v *LiteIdentity) Copy() *LiteIdentity {
 	u := new(LiteIdentity)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 	u.CreditBalance = v.CreditBalance
 	u.LastUsedOn = v.LastUsedOn
@@ -1730,10 +1730,10 @@ func (v *LiteTokenAccount) Copy() *LiteTokenAccount {
 	u := new(LiteTokenAccount)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 	if v.TokenUrl != nil {
-		u.TokenUrl = (v.TokenUrl).Copy()
+		u.TokenUrl = v.TokenUrl
 	}
 	u.Balance = *encoding.BigintCopy(&v.Balance)
 	u.LockHeight = v.LockHeight
@@ -1822,7 +1822,7 @@ func (v *PartitionAnchor) Copy() *PartitionAnchor {
 	u := new(PartitionAnchor)
 
 	if v.Source != nil {
-		u.Source = (v.Source).Copy()
+		u.Source = v.Source
 	}
 	u.MajorBlockIndex = v.MajorBlockIndex
 	u.MinorBlockIndex = v.MinorBlockIndex
@@ -1853,10 +1853,10 @@ func (v *PartitionSignature) Copy() *PartitionSignature {
 	u := new(PartitionSignature)
 
 	if v.SourceNetwork != nil {
-		u.SourceNetwork = (v.SourceNetwork).Copy()
+		u.SourceNetwork = v.SourceNetwork
 	}
 	if v.DestinationNetwork != nil {
-		u.DestinationNetwork = (v.DestinationNetwork).Copy()
+		u.DestinationNetwork = v.DestinationNetwork
 	}
 	u.SequenceNumber = v.SequenceNumber
 	u.TransactionHash = v.TransactionHash
@@ -1870,7 +1870,7 @@ func (v *PartitionSyntheticLedger) Copy() *PartitionSyntheticLedger {
 	u := new(PartitionSyntheticLedger)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 	u.Produced = v.Produced
 	u.Received = v.Received
@@ -1878,7 +1878,7 @@ func (v *PartitionSyntheticLedger) Copy() *PartitionSyntheticLedger {
 	u.Pending = make([]*url.TxID, len(v.Pending))
 	for i, v := range v.Pending {
 		if v != nil {
-			u.Pending[i] = (v).Copy()
+			u.Pending[i] = v
 		}
 	}
 
@@ -1893,7 +1893,7 @@ func (v *RCD1Signature) Copy() *RCD1Signature {
 	u.PublicKey = encoding.BytesCopy(v.PublicKey)
 	u.Signature = encoding.BytesCopy(v.Signature)
 	if v.Signer != nil {
-		u.Signer = (v.Signer).Copy()
+		u.Signer = v.Signer
 	}
 	u.SignerVersion = v.SignerVersion
 	u.Timestamp = v.Timestamp
@@ -1920,7 +1920,7 @@ func (v *ReceiptSignature) Copy() *ReceiptSignature {
 	u := new(ReceiptSignature)
 
 	if v.SourceNetwork != nil {
-		u.SourceNetwork = (v.SourceNetwork).Copy()
+		u.SourceNetwork = v.SourceNetwork
 	}
 	u.Proof = *(&v.Proof).Copy()
 	u.TransactionHash = v.TransactionHash
@@ -1934,7 +1934,7 @@ func (v *RemoteSignature) Copy() *RemoteSignature {
 	u := new(RemoteSignature)
 
 	if v.Destination != nil {
-		u.Destination = (v.Destination).Copy()
+		u.Destination = v.Destination
 	}
 	if v.Signature != nil {
 		u.Signature = (v.Signature).CopyAsInterface().(Signature)
@@ -1959,7 +1959,7 @@ func (v *RemoveAccountAuthorityOperation) Copy() *RemoveAccountAuthorityOperatio
 	u := new(RemoveAccountAuthorityOperation)
 
 	if v.Authority != nil {
-		u.Authority = (v.Authority).Copy()
+		u.Authority = v.Authority
 	}
 
 	return u
@@ -1993,7 +1993,7 @@ func (v *RouteOverride) Copy() *RouteOverride {
 	u := new(RouteOverride)
 
 	if v.Account != nil {
-		u.Account = (v.Account).Copy()
+		u.Account = v.Account
 	}
 	u.Partition = v.Partition
 
@@ -2051,7 +2051,7 @@ func (v *SignatureSet) Copy() *SignatureSet {
 
 	u.Vote = v.Vote
 	if v.Signer != nil {
-		u.Signer = (v.Signer).Copy()
+		u.Signer = v.Signer
 	}
 	u.TransactionHash = v.TransactionHash
 	u.Signatures = make([]Signature, len(v.Signatures))
@@ -2114,7 +2114,7 @@ func (v *SyntheticDepositTokens) Copy() *SyntheticDepositTokens {
 
 	u.SyntheticOrigin = *v.SyntheticOrigin.Copy()
 	if v.Token != nil {
-		u.Token = (v.Token).Copy()
+		u.Token = v.Token
 	}
 	u.Amount = *encoding.BigintCopy(&v.Amount)
 	u.IsIssuer = v.IsIssuer
@@ -2145,7 +2145,7 @@ func (v *SyntheticLedger) Copy() *SyntheticLedger {
 	u := new(SyntheticLedger)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 	u.Partitions = make([]*PartitionSyntheticLedger, len(v.Partitions))
 	for i, v := range v.Partitions {
@@ -2169,10 +2169,10 @@ func (v *SyntheticOrigin) Copy() *SyntheticOrigin {
 	u := new(SyntheticOrigin)
 
 	if v.Cause != nil {
-		u.Cause = (v.Cause).Copy()
+		u.Cause = v.Cause
 	}
 	if v.Initiator != nil {
-		u.Initiator = (v.Initiator).Copy()
+		u.Initiator = v.Initiator
 	}
 	u.FeeRefund = v.FeeRefund
 
@@ -2206,7 +2206,7 @@ func (v *SystemLedger) Copy() *SystemLedger {
 	u := new(SystemLedger)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 	u.Index = v.Index
 	u.Timestamp = v.Timestamp
@@ -2241,11 +2241,11 @@ func (v *TokenAccount) Copy() *TokenAccount {
 	u := new(TokenAccount)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 	u.AccountAuth = *v.AccountAuth.Copy()
 	if v.TokenUrl != nil {
-		u.TokenUrl = (v.TokenUrl).Copy()
+		u.TokenUrl = v.TokenUrl
 	}
 	u.Balance = *encoding.BigintCopy(&v.Balance)
 
@@ -2258,13 +2258,13 @@ func (v *TokenIssuer) Copy() *TokenIssuer {
 	u := new(TokenIssuer)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 	u.AccountAuth = *v.AccountAuth.Copy()
 	u.Symbol = v.Symbol
 	u.Precision = v.Precision
 	if v.Properties != nil {
-		u.Properties = (v.Properties).Copy()
+		u.Properties = v.Properties
 	}
 	u.Issued = *encoding.BigintCopy(&v.Issued)
 	if v.SupplyLimit != nil {
@@ -2295,7 +2295,7 @@ func (v *TokenRecipient) Copy() *TokenRecipient {
 	u := new(TokenRecipient)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 	u.Amount = *encoding.BigintCopy(&v.Amount)
 
@@ -2321,7 +2321,7 @@ func (v *TransactionHeader) Copy() *TransactionHeader {
 	u := new(TransactionHeader)
 
 	if v.Principal != nil {
-		u.Principal = (v.Principal).Copy()
+		u.Principal = v.Principal
 	}
 	u.Initiator = v.Initiator
 	u.Memo = v.Memo
@@ -2351,7 +2351,7 @@ func (v *TransactionStatus) Copy() *TransactionStatus {
 	u := new(TransactionStatus)
 
 	if v.TxID != nil {
-		u.TxID = (v.TxID).Copy()
+		u.TxID = v.TxID
 	}
 	u.Code = v.Code
 	if v.Error != nil {
@@ -2362,7 +2362,7 @@ func (v *TransactionStatus) Copy() *TransactionStatus {
 	}
 	u.Received = v.Received
 	if v.Initiator != nil {
-		u.Initiator = (v.Initiator).Copy()
+		u.Initiator = v.Initiator
 	}
 	u.Signers = make([]Signer, len(v.Signers))
 	for i, v := range v.Signers {
@@ -2371,10 +2371,10 @@ func (v *TransactionStatus) Copy() *TransactionStatus {
 		}
 	}
 	if v.SourceNetwork != nil {
-		u.SourceNetwork = (v.SourceNetwork).Copy()
+		u.SourceNetwork = v.SourceNetwork
 	}
 	if v.DestinationNetwork != nil {
-		u.DestinationNetwork = (v.DestinationNetwork).Copy()
+		u.DestinationNetwork = v.DestinationNetwork
 	}
 	u.SequenceNumber = v.SequenceNumber
 	u.GotDirectoryReceipt = v.GotDirectoryReceipt
@@ -2393,7 +2393,7 @@ func (v *TxIdSet) Copy() *TxIdSet {
 	u.Entries = make([]*url.TxID, len(v.Entries))
 	for i, v := range v.Entries {
 		if v != nil {
-			u.Entries[i] = (v).Copy()
+			u.Entries[i] = v
 		}
 	}
 
@@ -2406,7 +2406,7 @@ func (v *UnknownAccount) Copy() *UnknownAccount {
 	u := new(UnknownAccount)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 
 	return u
@@ -2418,7 +2418,7 @@ func (v *UnknownSigner) Copy() *UnknownSigner {
 	u := new(UnknownSigner)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 	u.Version = v.Version
 
@@ -2514,7 +2514,7 @@ func (v *WriteDataResult) Copy() *WriteDataResult {
 
 	u.EntryHash = v.EntryHash
 	if v.AccountUrl != nil {
-		u.AccountUrl = (v.AccountUrl).Copy()
+		u.AccountUrl = v.AccountUrl
 	}
 	u.AccountID = encoding.BytesCopy(v.AccountID)
 
@@ -2527,7 +2527,7 @@ func (v *WriteDataTo) Copy() *WriteDataTo {
 	u := new(WriteDataTo)
 
 	if v.Recipient != nil {
-		u.Recipient = (v.Recipient).Copy()
+		u.Recipient = v.Recipient
 	}
 	if v.Entry != nil {
 		u.Entry = (v.Entry).CopyAsInterface().(DataEntry)

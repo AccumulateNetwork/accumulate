@@ -3,9 +3,7 @@ package record
 //lint:file-ignore U1000 false positive
 
 import (
-	"fmt"
 	"io"
-	"strings"
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
@@ -66,16 +64,12 @@ var _ ValueReader = (*Value[*wrappedValue[uint64]])(nil)
 var _ ValueWriter = (*Value[*wrappedValue[uint64]])(nil)
 
 // NewValue returns a new Value using the given encodable value.
-func NewValue[T any](logger log.Logger, store Store, key Key, namefmt string, allowMissing bool, value encodableValue[T]) *Value[T] {
+func NewValue[T any](logger log.Logger, store Store, key Key, name string, allowMissing bool, value encodableValue[T]) *Value[T] {
 	v := &Value[T]{}
 	v.logger.L = logger
 	v.store = store
 	v.key = key
-	if strings.ContainsRune(namefmt, '%') {
-		v.name = fmt.Sprintf(namefmt, key...)
-	} else {
-		v.name = namefmt
-	}
+	v.name = name
 	v.value = value
 	v.allowMissing = allowMissing
 	v.status = valueUndefined
