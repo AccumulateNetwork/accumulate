@@ -295,7 +295,7 @@ func (v *DataEntryQuery) Copy() *DataEntryQuery {
 	u := new(DataEntryQuery)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 	u.EntryHash = v.EntryHash
 

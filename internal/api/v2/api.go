@@ -20,6 +20,6 @@ type Options struct {
 	Router            routing.Router
 	TxMaxWaitTime     time.Duration
 	PrometheusServer  string
-	Database          *database.Database
+	Database          database.Beginner
 	ConnectionManager connections.ConnectionManager
 }
