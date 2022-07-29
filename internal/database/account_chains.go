@@ -20,7 +20,7 @@ type Chain2 struct {
 	labelfmt string
 }
 
-func newChain2(parent record.Record, logger log.Logger, store record.Store, key record.Key, namefmt, labelfmt string) *Chain2 {
+func newChain2(parent record.Record, _ log.Logger, _ record.Store, key record.Key, namefmt, labelfmt string) *Chain2 {
 	var account *Account
 	switch parent := parent.(type) {
 	case *Account:
