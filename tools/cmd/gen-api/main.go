@@ -26,7 +26,6 @@ func run(_ *cobra.Command, args []string) {
 	switch flags.Language {
 	case "java", "Java":
 		generateJava(tapi)
-		break
 	default:
 		w := new(bytes.Buffer)
 		check(Go.Execute(w, tapi))
@@ -39,7 +38,7 @@ func generateJava(tapi *TApi) {
 	w := new(bytes.Buffer)
 	dir, _ := filepath.Split(flags.Out)
 	filename := strings.Replace(dir, "{{.SubPackage}}", flags.SubPackage, 1) + "/RPCMethod.java" // FIXME
-	check(Templates.Execute(w, flags.Language, tapi))
+	check(Java.Execute(w, tapi))
 	check(typegen.WriteFile(filename, w))
 }
 
