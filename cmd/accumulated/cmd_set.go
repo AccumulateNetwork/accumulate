@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
 	neturl "net/url"
+	"os"
 	"strconv"
 	"strings"
 
@@ -25,13 +27,17 @@ func init() {
 		cmdSetOracle,
 		cmdSetSchedule,
 		cmdSetAnchorEmptyBlocks,
+		cmdSetRouting,
 	)
 
 	cmdSet.PersistentFlags().StringVarP(&flagSet.Server, "server", "s", "", "Override the API URL")
+	cmdSet.PersistentFlags().BoolVarP(&flagSet.Yes, "yes", "y", false, "Skip prompts (answer yes)")
 }
 
 var flagSet = struct {
-	Server string
+	Server  string
+	Suggest bool
+	Yes     bool
 }{}
 
 var cmdSet = &cobra.Command{
@@ -77,6 +83,42 @@ var cmdSetAnchorEmptyBlocks = &cobra.Command{
 
 		setNetworkValue(protocol.Globals, func(v *core.GlobalValues) {
 			v.Globals.AnchorEmptyBlocks = value
+		})
+	},
+}
+
+var cmdSetRouting = &cobra.Command{
+	Use:   "routing [table]",
+	Short: "Set the routing table",
+	Args:  cobra.ExactArgs(1),
+	Run: func(_ *cobra.Command, args []string) {
+		table := new(protocol.RoutingTable)
+		err := json.Unmarshal([]byte(args[0]), table)
+		checkf(err, "value is invalid")
+
+		if !flagSet.Yes {
+			fmt.Printf("Updating the network's routing table:\n")
+			for _, o := range table.Overrides {
+				fmt.Printf("Override: %v <- %v\n", o.Partition, o.Account)
+			}
+			for _, r := range table.Routes {
+				v := strconv.FormatUint(r.Value, 2)
+				v = strings.Repeat("0", int(r.Length)-len(v)) + v
+				fmt.Printf("Prefix:   %v <- %v\n", r.Partition, v)
+			}
+			fmt.Printf("Proceed [yN]? ")
+			answer, err := bufio.NewReader(os.Stdin).ReadString('\n')
+			if err != nil {
+				return
+			}
+			answer = strings.ToLower(strings.TrimSpace(answer))
+			if answer != "y" && answer != "yes" {
+				return
+			}
+		}
+
+		setNetworkValue(protocol.Routing, func(v *core.GlobalValues) {
+			v.Routing = table
 		})
 	},
 }
