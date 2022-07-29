@@ -3,9 +3,10 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"os"
+
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/tools/internal/typegen"
-	"os"
 )
 
 var flags struct {
@@ -66,20 +67,21 @@ func run(_ *cobra.Command, args []string) {
 		w := new(bytes.Buffer)
 		check(Templates.Execute(w, flags.Language, ttypes))
 		check(typegen.WriteFile(flags.Out, w))
-	}
+	} else {
 
-	fileTmpl, err := Templates.Parse(flags.Out, "filename", nil)
-	checkf(err, "--out")
+		fileTmpl, err := Templates.Parse(flags.Out, "filename", nil)
+		checkf(err, "--out")
 
-	w := new(bytes.Buffer)
-	for _, typ := range ttypes.Types {
-		w.Reset()
-		err := fileTmpl.Execute(w, typ)
-		check(err)
-		filename := w.String()
+		w := new(bytes.Buffer)
+		for _, typ := range ttypes.Types {
+			w.Reset()
+			err := fileTmpl.Execute(w, typ)
+			check(err)
+			filename := w.String()
 
-		w.Reset()
-		check(Templates.Execute(w, flags.Language, SingleTypeFile{flags.Package, typ}))
-		check(typegen.WriteFile(filename, w))
+			w.Reset()
+			check(Templates.Execute(w, flags.Language, SingleTypeFile{flags.Package, typ}))
+			check(typegen.WriteFile(filename, w))
+		}
 	}
 }

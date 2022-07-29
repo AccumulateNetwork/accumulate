@@ -3,12 +3,13 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"github.com/spf13/cobra"
-	"gitlab.com/accumulatenetwork/accumulate/tools/internal/typegen"
-	"gopkg.in/yaml.v3"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/tools/internal/typegen"
+	"gopkg.in/yaml.v3"
 )
 
 var flags struct {
@@ -22,17 +23,23 @@ func run(_ *cobra.Command, args []string) {
 	api := readFile(args[0])
 	tapi := convert(api, flags.SubPackage)
 
-	generateJava(tapi)
-	//w := new(bytes.Buffer)
-	//check(Go.Execute(w, tapi))
-	//check(typegen.GoFmt(flags.Out, w))
+	switch flags.Language {
+	case "java", "Java":
+		generateJava(tapi)
+		break
+	default:
+		w := new(bytes.Buffer)
+		check(Go.Execute(w, tapi))
+		check(typegen.GoFmt(flags.Out, w))
+	}
 }
 
+// FIXME is not finished but could make it work for what I need atm
 func generateJava(tapi *TApi) {
 	w := new(bytes.Buffer)
 	dir, _ := filepath.Split(flags.Out)
 	filename := strings.Replace(dir, "{{.SubPackage}}", flags.SubPackage, 1) + "/RPCMethod.java" // FIXME
-	check(Templates.Execute(w, flags.Language, tapi))                                            // FIXME is not finished but could make it work for now
+	check(Templates.Execute(w, flags.Language, tapi))
 	check(typegen.WriteFile(filename, w))
 }
 

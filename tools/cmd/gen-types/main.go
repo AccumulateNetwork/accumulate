@@ -104,42 +104,41 @@ func run(_ *cobra.Command, args []string) {
 		w := new(bytes.Buffer)
 		check(Templates.Execute(w, flags.Language, ttypes))
 		check(typegen.WriteFile(flags.Out, w))
-	}
+	} else {
+		fileTmpl, err := Templates.Parse(flags.Out, "filename", nil)
+		checkf(err, "--out")
 
-	fileTmpl, err := Templates.Parse(flags.Out, "filename", nil)
-	checkf(err, "--out")
+		w := new(bytes.Buffer)
+		for _, typ := range ttypes.Types {
+			w.Reset()
+			err := fileTmpl.Execute(w, typ)
+			check(err)
+			filename := SafeClassName(w.String())
 
-	w := new(bytes.Buffer)
-	for _, typ := range ttypes.Types {
-		w.Reset()
-		err := fileTmpl.Execute(w, typ)
-		check(err)
-		filename := SafeClassName(w.String())
-
-		w.Reset()
-		err = Templates.Execute(w, flags.Language, &SingleTypeFile{flags.Package, typ})
-		if errors.Is(err, typegen.ErrSkip) {
-			continue
+			w.Reset()
+			err = Templates.Execute(w, flags.Language, &SingleTypeFile{flags.Package, typ})
+			if errors.Is(err, typegen.ErrSkip) {
+				continue
+			}
+			check(err)
+			check(typegen.WriteFile(filename, w))
 		}
-		check(err)
-		check(typegen.WriteFile(filename, w))
-	}
-	for _, typ := range ttypes.Unions {
-		w.Reset()
-		err := fileTmpl.Execute(w, typ)
-		check(err)
-		filename := w.String()
+		for _, typ := range ttypes.Unions {
+			w.Reset()
+			err := fileTmpl.Execute(w, typ)
+			check(err)
+			filename := w.String()
 
-		w.Reset()
-		err = Templates.Execute(w, flags.Language, &SingleUnionFile{flags.Package, typ})
-		if errors.Is(err, typegen.ErrSkip) {
-			continue
+			w.Reset()
+			err = Templates.Execute(w, flags.Language, &SingleUnionFile{flags.Package, typ})
+			if errors.Is(err, typegen.ErrSkip) {
+				continue
+			}
+			check(err)
+			check(typegen.WriteFile(filename, w))
 		}
-		check(err)
-		check(typegen.WriteFile(filename, w))
 	}
 }
-
 
 func read(files []string, main bool) typegen.Types {
 	flup := map[*typegen.Type]string{}
