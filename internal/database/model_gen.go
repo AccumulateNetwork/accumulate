@@ -27,10 +27,9 @@ type Batch struct {
 	kvstore     storage.KeyValueTxn
 	bptEntries  map[storage.Key][32]byte
 
-	account           map[accountKey]*Account
-	transaction       map[transactionKey]*Transaction
-	blockChainUpdates map[blockChainUpdatesKey]*record.List[*ChainUpdate]
-	blockState        map[blockStateKey]*record.Set[*BlockStateSynthTxnEntry]
+	account     map[accountKey]*Account
+	transaction map[transactionKey]*Transaction
+	systemData  map[systemDataKey]*SystemData
 }
 
 type accountKey struct {
@@ -49,21 +48,12 @@ func keyForTransaction(hash [32]byte) transactionKey {
 	return transactionKey{hash}
 }
 
-type blockChainUpdatesKey struct {
-	Partition [32]byte
-	Index     uint64
+type systemDataKey struct {
+	Partition string
 }
 
-func keyForBlockChainUpdates(partition *url.URL, index uint64) blockChainUpdatesKey {
-	return blockChainUpdatesKey{record.MapKeyUrl(partition), index}
-}
-
-type blockStateKey struct {
-	Partition [32]byte
-}
-
-func keyForBlockState(partition *url.URL) blockStateKey {
-	return blockStateKey{record.MapKeyUrl(partition)}
+func keyForSystemData(partition string) systemDataKey {
+	return systemDataKey{partition}
 }
 
 func (c *Batch) Account(url *url.URL) *Account {
@@ -90,15 +80,15 @@ func (c *Batch) getTransaction(hash [32]byte) *Transaction {
 	})
 }
 
-func (c *Batch) BlockChainUpdates(partition *url.URL, index uint64) *record.List[*ChainUpdate] {
-	return getOrCreateMap(&c.blockChainUpdates, keyForBlockChainUpdates(partition, index), func() *record.List[*ChainUpdate] {
-		return record.NewList(c.logger.L, c.store, record.Key{}.Append("BlockChainUpdates", partition, index), "block chain updates"+" "+partition.String()+" "+strconv.FormatUint(index, 10), record.Struct[ChainUpdate]())
-	})
-}
-
-func (c *Batch) BlockState(partition *url.URL) *record.Set[*BlockStateSynthTxnEntry] {
-	return getOrCreateMap(&c.blockState, keyForBlockState(partition), func() *record.Set[*BlockStateSynthTxnEntry] {
-		return record.NewSet(c.logger.L, c.store, record.Key{}.Append("BlockState", partition), "block state"+" "+partition.String(), record.Struct[BlockStateSynthTxnEntry](), func(u, v *BlockStateSynthTxnEntry) int { return u.Compare(v) })
+func (c *Batch) SystemData(partition string) *SystemData {
+	return getOrCreateMap(&c.systemData, keyForSystemData(partition), func() *SystemData {
+		v := new(SystemData)
+		v.logger = c.logger
+		v.store = c.store
+		v.key = record.Key{}.Append("SystemData", partition)
+		v.parent = c
+		v.label = "system data" + " " + partition
+		return v
 	})
 }
 
@@ -124,26 +114,15 @@ func (c *Batch) Resolve(key record.Key) (record.Record, record.Key, error) {
 		}
 		v := c.getTransaction(hash)
 		return v, key[2:], nil
-	case "BlockChainUpdates":
-		if len(key) < 3 {
-			return nil, nil, errors.New(errors.StatusInternalError, "bad key for batch")
-		}
-		partition, okPartition := key[1].(*url.URL)
-		index, okIndex := key[2].(uint64)
-		if !okPartition || !okIndex {
-			return nil, nil, errors.New(errors.StatusInternalError, "bad key for batch")
-		}
-		v := c.BlockChainUpdates(partition, index)
-		return v, key[3:], nil
-	case "BlockState":
+	case "SystemData":
 		if len(key) < 2 {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for batch")
 		}
-		partition, okPartition := key[1].(*url.URL)
+		partition, okPartition := key[1].(string)
 		if !okPartition {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for batch")
 		}
-		v := c.BlockState(partition)
+		v := c.SystemData(partition)
 		return v, key[2:], nil
 	default:
 		return nil, nil, errors.New(errors.StatusInternalError, "bad key for batch")
@@ -165,12 +144,7 @@ func (c *Batch) IsDirty() bool {
 			return true
 		}
 	}
-	for _, v := range c.blockChainUpdates {
-		if v.IsDirty() {
-			return true
-		}
-	}
-	for _, v := range c.blockState {
+	for _, v := range c.systemData {
 		if v.IsDirty() {
 			return true
 		}
@@ -191,10 +165,7 @@ func (c *Batch) baseCommit() error {
 	for _, v := range c.transaction {
 		commitField(&err, v)
 	}
-	for _, v := range c.blockChainUpdates {
-		commitField(&err, v)
-	}
-	for _, v := range c.blockState {
+	for _, v := range c.systemData {
 		commitField(&err, v)
 	}
 
@@ -761,6 +732,120 @@ func (c *Transaction) Commit() error {
 		commitField(&err, v)
 	}
 	commitField(&err, c.chains)
+
+	return nil
+}
+
+type SystemData struct {
+	logger logging.OptionalLogger
+	store  record.Store
+	key    record.Key
+	label  string
+	parent *Batch
+
+	syntheticIndexIndex map[systemDataSyntheticIndexIndexKey]*record.Value[uint64]
+	blockChainUpdates   map[systemDataBlockChainUpdatesKey]*record.List[*ChainUpdate]
+	blockState          *record.Set[*BlockStateSynthTxnEntry]
+}
+
+type systemDataSyntheticIndexIndexKey struct {
+	Block uint64
+}
+
+func keyForSystemDataSyntheticIndexIndex(block uint64) systemDataSyntheticIndexIndexKey {
+	return systemDataSyntheticIndexIndexKey{block}
+}
+
+type systemDataBlockChainUpdatesKey struct {
+	Index uint64
+}
+
+func keyForSystemDataBlockChainUpdates(index uint64) systemDataBlockChainUpdatesKey {
+	return systemDataBlockChainUpdatesKey{index}
+}
+
+func (c *SystemData) SyntheticIndexIndex(block uint64) *record.Value[uint64] {
+	return getOrCreateMap(&c.syntheticIndexIndex, keyForSystemDataSyntheticIndexIndex(block), func() *record.Value[uint64] {
+		return record.NewValue(c.logger.L, c.store, c.key.Append("SyntheticIndexIndex", block), c.label+" "+"synthetic index index"+" "+strconv.FormatUint(block, 10), false, record.Wrapped(record.UintWrapper))
+	})
+}
+
+func (c *SystemData) BlockChainUpdates(index uint64) *record.List[*ChainUpdate] {
+	return getOrCreateMap(&c.blockChainUpdates, keyForSystemDataBlockChainUpdates(index), func() *record.List[*ChainUpdate] {
+		return record.NewList(c.logger.L, c.store, c.key.Append("BlockChainUpdates", index), c.label+" "+"block chain updates"+" "+strconv.FormatUint(index, 10), record.Struct[ChainUpdate]())
+	})
+}
+
+func (c *SystemData) BlockState() *record.Set[*BlockStateSynthTxnEntry] {
+	return getOrCreateField(&c.blockState, func() *record.Set[*BlockStateSynthTxnEntry] {
+		return record.NewSet(c.logger.L, c.store, c.key.Append("BlockState"), c.label+" "+"block state", record.Struct[BlockStateSynthTxnEntry](), func(u, v *BlockStateSynthTxnEntry) int { return u.Compare(v) })
+	})
+}
+
+func (c *SystemData) Resolve(key record.Key) (record.Record, record.Key, error) {
+	switch key[0] {
+	case "SyntheticIndexIndex":
+		if len(key) < 2 {
+			return nil, nil, errors.New(errors.StatusInternalError, "bad key for system data")
+		}
+		block, okBlock := key[1].(uint64)
+		if !okBlock {
+			return nil, nil, errors.New(errors.StatusInternalError, "bad key for system data")
+		}
+		v := c.SyntheticIndexIndex(block)
+		return v, key[2:], nil
+	case "BlockChainUpdates":
+		if len(key) < 2 {
+			return nil, nil, errors.New(errors.StatusInternalError, "bad key for system data")
+		}
+		index, okIndex := key[1].(uint64)
+		if !okIndex {
+			return nil, nil, errors.New(errors.StatusInternalError, "bad key for system data")
+		}
+		v := c.BlockChainUpdates(index)
+		return v, key[2:], nil
+	case "BlockState":
+		return c.BlockState(), key[1:], nil
+	default:
+		return nil, nil, errors.New(errors.StatusInternalError, "bad key for system data")
+	}
+}
+
+func (c *SystemData) IsDirty() bool {
+	if c == nil {
+		return false
+	}
+
+	for _, v := range c.syntheticIndexIndex {
+		if v.IsDirty() {
+			return true
+		}
+	}
+	for _, v := range c.blockChainUpdates {
+		if v.IsDirty() {
+			return true
+		}
+	}
+	if fieldIsDirty(c.blockState) {
+		return true
+	}
+
+	return false
+}
+
+func (c *SystemData) Commit() error {
+	if c == nil {
+		return nil
+	}
+
+	var err error
+	for _, v := range c.syntheticIndexIndex {
+		commitField(&err, v)
+	}
+	for _, v := range c.blockChainUpdates {
+		commitField(&err, v)
+	}
+	commitField(&err, c.blockState)
 
 	return nil
 }

@@ -167,25 +167,33 @@
       collection: set
       emptyIfMissing: true
 
-  # System Indices - TODO Remove or update these
-  - name: BlockChainUpdates
-    type: index
-    dataType: ChainUpdate
-    pointer: true
-    emptyIfMissing: true
-    collection: list
+  # System Indices
+  - name: SystemData
+    type: entity
     parameters:
     - name: Partition
-      type: url
+      type: string
+    attributes:
+    - name: SyntheticIndexIndex
+      # Indexes from a block index to a synthetic index chain index
+      type: index
+      dataType: uint
+      parameters:
+      - name: Block
+        type: uint
+
+    # Legacy - TODO Remove or update
+    - name: BlockChainUpdates
+      type: index
+      dataType: ChainUpdate
       pointer: true
-    - name: Index
-      type: uint
-  - name: BlockState
-    type: index
-    dataType: BlockStateSynthTxnEntry
-    pointer: true
-    collection: set
-    parameters:
-    - name: Partition
-      type: url
+      emptyIfMissing: true
+      collection: list
+      parameters:
+      - name: Index
+        type: uint
+    - name: BlockState
+      type: index
+      dataType: BlockStateSynthTxnEntry
       pointer: true
+      collection: set

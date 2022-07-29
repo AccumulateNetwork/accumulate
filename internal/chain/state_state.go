@@ -82,7 +82,7 @@ func (c *ChainUpdates) DidAddChainEntry(batch *database.Batch, u *url.URL, name 
 	if name == protocol.MainChain && typ == protocol.ChainTypeTransaction {
 		partition, ok := protocol.ParsePartitionUrl(u)
 		if ok && protocol.PartitionUrl(partition).JoinPath(protocol.Synthetic).Equal(u) {
-			err := indexing.BlockState(batch, u).DidProduceSynthTxn(&database.BlockStateSynthTxnEntry{
+			err := indexing.BlockState(batch, partition).DidProduceSynthTxn(&database.BlockStateSynthTxnEntry{
 				Transaction: entry,
 				ChainEntry:  index,
 			})

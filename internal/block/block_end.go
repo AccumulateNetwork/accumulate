@@ -158,7 +158,7 @@ func (m *Executor) EndBlock(block *Block) error {
 	}
 
 	// Add transaction-chain index entries for synthetic transactions
-	producedSynthTxns, err := indexing.BlockState(block.Batch, ledgerUrl).Get()
+	producedSynthTxns, err := indexing.BlockState(block.Batch, m.Describe.PartitionId).Get()
 	if err != nil {
 		return errors.Format(errors.StatusUnknownError, "load block state index: %w", err)
 	}
@@ -254,7 +254,12 @@ func (m *Executor) anchorSynthChain(block *Block, rootChain *database.Chain) (in
 	url := m.Describe.Synthetic()
 	indexIndex, _, err = addChainAnchor(rootChain, block.Batch.Account(url).MainChain(), block.Index)
 	if err != nil {
-		return 0, err
+		return 0, errors.Wrap(errors.StatusUnknownError, err)
+	}
+
+	err = block.Batch.SystemData(m.Describe.PartitionId).SyntheticIndexIndex(block.Index).Put(indexIndex)
+	if err != nil {
+		return 0, errors.Format(errors.StatusUnknownError, "store synthetic transaction index index for block: %w", err)
 	}
 
 	block.State.ChainUpdates.DidUpdateChain(database.ChainUpdate{

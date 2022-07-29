@@ -60,7 +60,7 @@ func (x *Executor) BeginBlock(block *Block) error {
 	}
 
 	// Reset the block state
-	err = indexing.BlockState(block.Batch, x.Describe.NodeUrl(protocol.Ledger)).Clear()
+	err = indexing.BlockState(block.Batch, x.Describe.PartitionId).Clear()
 	if err != nil {
 		return err
 	}
@@ -367,6 +367,16 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch) error {
 }
 
 func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, blockIndex uint64, blockReceipt *managed.Receipt) error {
+	indexIndex, err := batch.SystemData(x.Describe.PartitionId).SyntheticIndexIndex(blockIndex).Get()
+	switch {
+	case err == nil:
+		// Found
+	case errors.Is(err, errors.StatusNotFound):
+		return nil
+	default:
+		return errors.Format(errors.StatusInternalError, "load synthetic transaction index index for block %d: %w", blockIndex, err)
+	}
+
 	// Find the synthetic main chain index entry for the block
 	record := batch.Account(x.Describe.Synthetic())
 	synthIndexChain, err := record.MainChain().Index().Get()
@@ -374,22 +384,20 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, bloc
 		return errors.Format(errors.StatusInternalError, "load synthetic index chain: %w", err)
 	}
 
-	entryIndex, indexEntry, err := indexing.SearchIndexChain(synthIndexChain, uint64(synthIndexChain.Height()-1), indexing.MatchExact, indexing.SearchIndexChainByBlock(blockIndex))
+	indexEntry := new(protocol.IndexEntry)
+	err = synthIndexChain.EntryAs(int64(indexIndex), indexEntry)
 	if err != nil {
-		if errors.Is(err, errors.StatusNotFound) {
-			return nil // No synthetic transactions produced in that block
-		}
-		return errors.Format(errors.StatusInternalError, "find synthetic index chain entry for block %d: %w", blockIndex, err)
+		return errors.Format(errors.StatusInternalError, "load synthetic index chain entry %d: %w", indexIndex-1, err)
 	}
 	to := indexEntry.Source
 
 	// Is there a previous entry?
 	var from uint64
-	if entryIndex > 0 {
+	if indexIndex > 0 {
 		prevEntry := new(protocol.IndexEntry)
-		err = synthIndexChain.EntryAs(int64(entryIndex-1), prevEntry)
+		err = synthIndexChain.EntryAs(int64(indexIndex-1), prevEntry)
 		if err != nil {
-			return errors.Format(errors.StatusInternalError, "load synthetic index chain entry %d: %w", entryIndex-1, err)
+			return errors.Format(errors.StatusInternalError, "load synthetic index chain entry %d: %w", indexIndex-1, err)
 		}
 		from = prevEntry.Source + 1
 	}

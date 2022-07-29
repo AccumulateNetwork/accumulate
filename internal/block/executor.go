@@ -197,7 +197,7 @@ func (m *Executor) Genesis(block *Block, exec chain.TransactionExecutor) error {
 		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
-	err = indexing.BlockState(block.Batch, m.Describe.NodeUrl(protocol.Ledger)).Clear()
+	err = indexing.BlockState(block.Batch, m.Describe.PartitionId).Clear()
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknownError, err)
 	}
@@ -231,7 +231,7 @@ func (m *Executor) LoadStateRoot(batch *database.Batch) ([]byte, error) {
 }
 
 func (m *Executor) RestoreSnapshot(batch *database.Batch, file ioutil2.SectionReader) error {
-	err := batch.RestoreSnapshot(file)
+	err := batch.RestoreSnapshot(file, &m.Describe)
 	if err != nil {
 		return errors.Format(errors.StatusUnknownError, "load state: %w", err)
 	}

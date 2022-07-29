@@ -183,16 +183,16 @@ func BenchmarkBlock(b *testing.B) {
 				return st.Create(&protocol.UnknownAccount{Url: u})
 			}},
 		},
-		// "synth txn": {
-		// 	{protocol.TransactionTypeAddCredits, func(st *chain.StateManager, tx *chain.Delivery) error {
-		// 		u := &url.URL{Authority: hex.EncodeToString(tx.Transaction.GetHash())}
-		// 		st.Submit(u, &protocol.SyntheticDepositCredits{})
-		// 		return nil
-		// 	}},
-		// 	{protocol.TransactionTypeSyntheticDepositCredits, func(st *chain.StateManager, tx *chain.Delivery) error {
-		// 		return nil
-		// 	}},
-		// },
+		"synth txn": {
+			{protocol.TransactionTypeAddCredits, func(st *chain.StateManager, tx *chain.Delivery) error {
+				u := &url.URL{Authority: hex.EncodeToString(tx.Transaction.GetHash())}
+				st.Submit(u, &protocol.SyntheticDepositCredits{})
+				return nil
+			}},
+			{protocol.TransactionTypeSyntheticDepositCredits, func(st *chain.StateManager, tx *chain.Delivery) error {
+				return nil
+			}},
+		},
 	}
 
 	alice := protocol.AccountUrl("alice")

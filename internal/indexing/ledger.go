@@ -3,7 +3,6 @@ package indexing
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
 // BlockStateIndexer tracks transient state for a block.
@@ -12,8 +11,8 @@ type BlockStateIndexer struct {
 }
 
 // BlockState returns a block state indexer.
-func BlockState(batch *database.Batch, ledger *url.URL) *BlockStateIndexer {
-	return &BlockStateIndexer{batch.BlockState(ledger)}
+func BlockState(batch *database.Batch, partition string) *BlockStateIndexer {
+	return &BlockStateIndexer{batch.SystemData(partition).BlockState()}
 }
 
 // Clear resets the block state.
