@@ -143,16 +143,14 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 	if len(args) > 0 {
 		adiUrlStr = args[0]
 	}
-	if len(args) < 1 {
+
+	if len(args) < 2 {
 		return "", fmt.Errorf("invalid number of arguments")
 	}
 
-	var k *Key
-	if len(args) > 1 {
-		k, err = resolvePublicKey(args[1])
-		if err != nil {
-			return "", err
-		}
+	k, err := resolvePublicKey(args[1])
+	if err != nil {
+		return "", err
 	}
 
 	adiUrl, err := url2.Parse(adiUrlStr)
