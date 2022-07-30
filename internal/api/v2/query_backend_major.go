@@ -1,12 +1,12 @@
 package api
 
 import (
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2/query"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
 func (m *queryBackend) queryMajorBlocks(batch *database.Batch, req *query.RequestMajorBlocks) (resp *query.ResponseMajorBlocks, _ error) {

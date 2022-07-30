@@ -53,7 +53,6 @@ func LaunchAccuProxyDevNet(t *testing.T) (*client.Client, *url.URL, *url.URL) {
 
 	port, err := strconv.ParseInt(accApiUrl.Port(), 10, 16)
 	require.NoError(t, err, "invalid port number")
-	port -= int64(config.PortOffsetAccumulateApi)
 
 	dnEndpoint := fmt.Sprintf("%s://%s:%d", accApiUrl.Scheme, accApiUrl.Hostname(), port-config.PortOffsetBlockValidator)
 	bvnEndpoint := fmt.Sprintf("%s://%s:%d", accApiUrl.Scheme, accApiUrl.Hostname(), port)

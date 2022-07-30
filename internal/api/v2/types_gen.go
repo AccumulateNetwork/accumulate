@@ -20,7 +20,7 @@ import (
 	errors2 "gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2/query"
 )
 
 type ChainEntry struct {
