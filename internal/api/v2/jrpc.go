@@ -16,7 +16,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/internal/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -47,20 +46,6 @@ func NewJrpc(opts Options) (*JrpcMethods, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	// (Re)open a batch now and after each block
-	m.querier.batch = opts.Database.Begin(false)
-	events.SubscribeSync(opts.EventBus, func(events.DidCommitBlock) error {
-		new := opts.Database.Begin(false)
-		go func() {
-			m.querier.batchMu.Lock()
-			defer m.querier.batchMu.Unlock()
-			old := m.querier.batch
-			m.querier.batch = new
-			old.Discard()
-		}()
-		return nil
-	})
 
 	m.populateMethodTable()
 	return m, nil

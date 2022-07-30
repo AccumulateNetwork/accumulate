@@ -4,11 +4,9 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math"
-	"sync"
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2/query"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
@@ -18,17 +16,16 @@ const QueryBlocksMaxCount = 1000 // Hardcoded ceiling for now
 
 type queryFrontend struct {
 	Options
-	batch   *database.Batch
-	batchMu sync.Mutex
 	backend *queryBackend
 }
 
 func (q *queryFrontend) query(req query.Request, opts QueryOptions) (string, []byte, error) {
-	q.batchMu.Lock()
-	defer q.batchMu.Unlock()
+	// This only works because we don't commit any changes from a block until ABCI.Commit
+	batch := q.Database.Begin(false)
+	defer batch.Discard()
 
 	// Query the backend
-	k, v, err := q.backend.Query(q.batch, req, int64(opts.Height), opts.Prove)
+	k, v, err := q.backend.Query(batch, req, int64(opts.Height), opts.Prove)
 	if err != nil {
 		return "", nil, err
 	}
