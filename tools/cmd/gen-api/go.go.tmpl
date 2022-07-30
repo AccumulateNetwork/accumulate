@@ -55,14 +55,28 @@ func jrpcFormatResponse(res interface{}, err error) interface{} {
 {{- if .Experimental}}
 //
 // WARNING: EXPERIMENTAL! {{end}}
-func (m *JrpcMethods) {{.Name}}(_ context.Context, params json.RawMessage) interface{} {
+func (m *JrpcMethods) {{.Name}}(ctx context.Context, params json.RawMessage) interface{} {
 	req := new({{.Input}})
 	err := m.parse(params, req)
 	if err != nil {
 		return err
 	}
 
-	return jrpcFormatResponse(m.querier.{{.Call}}({{range $i, $v := .CallParams}}{{if gt $i 0}}, {{end}}req.{{$v}}{{end}}))
+	subnet, err := m.Router.RouteAccount(req.{{.RouteParam}})
+	if err != nil {
+		return validatorError(err)
+	}
+
+	if subnet == m.Options.Describe.PartitionId {
+		return jrpcFormatResponse(m.querier.{{.Call}}({{range $i, $v := .CallParams}}{{if gt $i 0}}, {{end}}req.{{$v}}{{end}}))
+	}
+
+	var result interface{}
+	err = m.Router.RequestAPIv2(ctx, subnet, "{{.RPC}}", params, &result)
+	if err != nil {
+		return accumulateError(err)
+	}
+	return result
 }
 {{else if eq .Kind "execute"}}
 {{if .Description}}// {{.Name}} {{.Description}}.{{end}}

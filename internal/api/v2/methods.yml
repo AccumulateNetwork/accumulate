@@ -32,6 +32,7 @@ Query:
   input: GeneralQuery
   output: ChainQueryResponse|TransactionQueryResponse|MultiResponse
   call: QueryUrl
+  route-param: Url
   call-params: [Url, QueryOptions]
 
 QueryDirectory:
@@ -40,21 +41,19 @@ QueryDirectory:
   rpc: query-directory
   input: DirectoryQuery
   output: MultiResponse
+  route-param: Url
   call-params: [Url, QueryPagination, QueryOptions]
-
-QueryChain:
-  description: queries an account by ID
-  deprecated: Querying by account ID will be removed in the future
-  kind: query
-  rpc: query-chain
-  input: ChainIdQuery
-  output: ChainQueryResponse
-  call-params: [ChainId]
 
 QueryTx:
   description: queries a transaction by ID
-  kind: query
   rpc: query-tx
+  input: TxnQuery
+  output: TransactionQueryResponse
+  call-params: [Txid, Wait, IgnorePending, QueryOptions]
+
+QueryTxLocal:
+  description: queries a transaction by ID
+  rpc: query-tx-local
   input: TxnQuery
   output: TransactionQueryResponse
   call-params: [Txid, Wait, IgnorePending, QueryOptions]
@@ -65,6 +64,7 @@ QueryTxHistory:
   rpc: query-tx-history
   input: TxHistoryQuery
   output: MultiResponse
+  route-param: Url
   call-params: [Url, QueryPagination, Scratch]
 
 QueryData:
@@ -73,6 +73,7 @@ QueryData:
   rpc: query-data
   input: DataEntryQuery
   output: ChainQueryResponse
+  route-param: Url
   call-params: [Url, EntryHash]
 
 QueryDataSet:
@@ -81,6 +82,7 @@ QueryDataSet:
   rpc: query-data-set
   input: DataEntrySetQuery
   output: MultiResponse
+  route-param: Url
   call-params: [Url, QueryPagination, QueryOptions]
 
 QueryKeyPageIndex:
@@ -89,6 +91,7 @@ QueryKeyPageIndex:
   rpc: query-key-index
   input: KeyPageIndexQuery
   output: ChainQueryResponse
+  route-param: Url
   call-params: [Url, Key]
 
 QueryMinorBlocks:
@@ -98,6 +101,7 @@ QueryMinorBlocks:
   rpc: query-minor-blocks
   input: MinorBlocksQuery
   output: MultiResponse
+  route-param: Url
   call-params: [Url, QueryPagination, TxFetchMode, BlockFilterMode]
 
 QueryMajorBlocks:
@@ -107,6 +111,7 @@ QueryMajorBlocks:
   rpc: query-major-blocks
   input: MajorBlocksQuery
   output: MultiResponse
+  route-param: Url
   call-params: [Url, QueryPagination]
 
 QuerySynth:
@@ -115,6 +120,7 @@ QuerySynth:
   rpc: query-synth
   input: SyntheticTransactionRequest
   output: TransactionQueryResponse
+  route-param: Source
   call-params: [Source, Destination, SequenceNumber, Anchor]
 
 Execute:

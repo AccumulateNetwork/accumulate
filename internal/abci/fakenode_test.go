@@ -25,6 +25,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/client"
 	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
@@ -47,7 +48,7 @@ type FakeNode struct {
 	client  *acctesting.FakeTendermint
 	key     crypto.PrivKey
 	height  int64
-	api     api.Querier
+	api     *client.Client
 	logger  log.Logger
 	router  routing.Router
 
@@ -195,12 +196,15 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 	// immediately, but make sure it definitely happens
 	defer func() { appChan <- n.app }()
 
-	n.api = api.NewQueryDispatch(api.Options{
+	jrpc, err := api.NewJrpc(api.Options{
 		Logger:        n.logger,
 		Describe:      n.network,
 		Router:        n.router,
 		TxMaxWaitTime: 10 * time.Second,
+		Database:      n.db,
 	})
+	require.NoError(n.t, err)
+	n.api = acctesting.DirectJrpcClient(jrpc)
 
 	n.T().Cleanup(func() { n.client.Shutdown() })
 
@@ -243,23 +247,29 @@ func (n *FakeNode) NextHeight() int64 {
 	return n.height
 }
 
+func (n *FakeNode) queryUrl(url string) (interface{}, error) {
+	req := new(api.GeneralQuery)
+	req.Url = n.parseUrl(url)
+	return n.api.Query(context.Background(), req)
+}
+
 func (n *FakeNode) QueryAccount(url string) *api.ChainQueryResponse {
 	n.t.Helper()
-	r, err := n.api.QueryUrl(n.parseUrl(url), api.QueryOptions{})
+	r, err := n.queryUrl(url)
 	n.Require().NoError(err)
 	n.Require().IsType((*api.ChainQueryResponse)(nil), r)
 	return r.(*api.ChainQueryResponse)
 }
 
 func (n *FakeNode) QueryTransaction(url string) *api.TransactionQueryResponse {
-	r, err := n.api.QueryUrl(n.parseUrl(url), api.QueryOptions{})
+	r, err := n.queryUrl(url)
 	n.require.NoError(err)
 	n.Require().IsType((*api.TransactionQueryResponse)(nil), r)
 	return r.(*api.TransactionQueryResponse)
 }
 
 func (n *FakeNode) QueryMulti(url string) *api.MultiResponse {
-	r, err := n.api.QueryUrl(n.parseUrl(url), api.QueryOptions{})
+	r, err := n.queryUrl(url)
 	n.require.NoError(err)
 	n.Require().IsType((*api.MultiResponse)(nil), r)
 	return r.(*api.MultiResponse)
@@ -367,6 +377,14 @@ func (n *FakeNode) WaitForTxns(ids ...[]byte) error {
 	return n.waitForTxns(nil, false, ids...)
 }
 
+func (n *FakeNode) QueryTx(txid []byte, wait time.Duration, ignorePending bool) (*api.TransactionQueryResponse, error) {
+	req := new(api.TxnQuery)
+	req.Txid = txid
+	req.Wait = wait
+	req.IgnorePending = ignorePending
+	return n.api.QueryTx(context.Background(), req)
+}
+
 func (n *FakeNode) waitForTxns(cause []byte, ignorePending bool, ids ...[]byte) error {
 	n.t.Helper()
 
@@ -376,7 +394,7 @@ func (n *FakeNode) waitForTxns(cause []byte, ignorePending bool, ids ...[]byte) 
 		} else {
 			n.logger.Debug("Waiting for transaction", "module", "fake-node", "hash", logging.AsHex(id), "cause", logging.AsHex(cause))
 		}
-		res, err := n.api.QueryTx(id, 1*time.Second, ignorePending, api.QueryOptions{})
+		res, err := n.QueryTx(id, 1*time.Second, ignorePending)
 		if err != nil {
 			return fmt.Errorf("Failed to query TX %X (%v)", id, err)
 		}
@@ -430,12 +448,7 @@ func (n *FakeNode) GetDirectory(adi string) []string {
 }
 
 func (n *FakeNode) GetTx(txid []byte) *api.TransactionQueryResponse {
-	q := api.NewQueryDirect(n.network.PartitionId, api.Options{
-		Logger:   n.logger,
-		Describe: n.network,
-		Router:   n.router,
-	})
-	resp, err := q.QueryTx(txid, 0, false, api.QueryOptions{})
+	resp, err := n.QueryTx(txid, 0, false)
 	require.NoError(n.t, err)
 	data, err := json.Marshal(resp.Data)
 	require.NoError(n.t, err)

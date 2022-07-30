@@ -16,13 +16,14 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/internal/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 type JrpcMethods struct {
 	Options
-	querier  *queryDispatch
+	querier  *queryFrontend
 	methods  jsonrpc2.MethodMap
 	validate *validator.Validate
 	logger   log.Logger
@@ -32,11 +33,14 @@ func NewJrpc(opts Options) (*JrpcMethods, error) {
 	var err error
 	m := new(JrpcMethods)
 	m.Options = opts
-	m.querier = new(queryDispatch)
+	m.querier = new(queryFrontend)
 	m.querier.Options = opts
+	m.querier.backend = new(queryBackend)
+	m.querier.backend.Options = opts
 
 	if opts.Logger != nil {
 		m.logger = opts.Logger.With("module", "jrpc")
+		m.querier.backend.logger.L = m.logger
 	}
 
 	m.validate, err = protocol.NewValidator()
@@ -44,12 +48,22 @@ func NewJrpc(opts Options) (*JrpcMethods, error) {
 		return nil, err
 	}
 
+	// (Re)open a batch now and after each block
+	m.querier.batch = opts.Database.Begin(false)
+	events.SubscribeSync(opts.EventBus, func(events.DidCommitBlock) error {
+		new := opts.Database.Begin(false)
+		go func() {
+			m.querier.batchMu.Lock()
+			defer m.querier.batchMu.Unlock()
+			old := m.querier.batch
+			m.querier.batch = new
+			old.Discard()
+		}()
+		return nil
+	})
+
 	m.populateMethodTable()
 	return m, nil
-}
-
-func (m *JrpcMethods) Querier_TESTONLY() Querier {
-	return m.querier
 }
 
 func (m *JrpcMethods) logError(msg string, keyVals ...interface{}) {
@@ -59,7 +73,6 @@ func (m *JrpcMethods) logError(msg string, keyVals ...interface{}) {
 }
 
 func (m *JrpcMethods) EnableDebug() {
-	q := m.querier.direct(m.Options.Describe.PartitionId)
 	m.methods["debug-query-direct"] = func(_ context.Context, params json.RawMessage) interface{} {
 		req := new(GeneralQuery)
 		err := m.parse(params, req)
@@ -67,7 +80,7 @@ func (m *JrpcMethods) EnableDebug() {
 			return err
 		}
 
-		return jrpcFormatResponse(q.QueryUrl(req.Url, req.QueryOptions))
+		return jrpcFormatResponse(m.querier.QueryUrl(req.Url, req.QueryOptions))
 	}
 }
 

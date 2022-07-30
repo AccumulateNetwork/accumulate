@@ -15,7 +15,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	types2 "github.com/tendermint/tendermint/abci/types"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
@@ -770,10 +769,10 @@ func TestSendTokensToBadRecipient(t *testing.T) {
 	})
 
 	// The synthetic transaction should fail
-	res, err := n.api.QueryTx(txnHashes[0][:], time.Second, true, api.QueryOptions{})
+	res, err := n.QueryTx(txnHashes[0][:], time.Second, true)
 	require.NoError(t, err)
 	h := res.Produced[0].Hash()
-	res, err = n.api.QueryTx(h[:], time.Second, true, api.QueryOptions{})
+	res, err = n.QueryTx(h[:], time.Second, true)
 	require.NoError(t, err)
 	require.Equal(t, errors.StatusNotFound, res.Status.Code)
 

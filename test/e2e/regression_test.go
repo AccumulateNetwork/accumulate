@@ -7,12 +7,11 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
 func TestOverwriteCreditBalance(t *testing.T) {
@@ -86,17 +85,11 @@ func TestQueryKeyIndexWithRemoteAuthority(t *testing.T) {
 	})
 
 	// Query key
-	req := new(query.RequestKeyPageIndex)
+	req := new(api.KeyPageIndexQuery)
 	req.Url = alice.JoinPath("managed-tokens")
 	req.Key = aliceKey[32:]
-	x := sim.PartitionFor(req.Url)
-	_ = x.Database.View(func(batch *database.Batch) error {
-		// The query MUST fail with "no authority of ... holds ..." NOT with
-		// "account ... not found"
-		_, _, err := x.Executor.Query(batch, req, 0, false)
-		require.EqualError(t, err, fmt.Sprintf("no authority of %s holds %X", req.Url, req.Key))
-		return nil
-	})
+	_, err := sim.PartitionFor(req.Url).API.QueryKeyPageIndex(context.Background(), req)
+	require.EqualError(t, err, fmt.Sprintf("no authority of %s holds %X", req.Url, req.Key))
 }
 
 func TestAddCreditsToLiteIdentityOnOtherBVN(t *testing.T) {

@@ -1,4 +1,4 @@
-package block
+package api
 
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -9,7 +9,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
-func (m *Executor) queryMajorBlocks(batch *database.Batch, req *query.RequestMajorBlocks) (resp *query.ResponseMajorBlocks, _ error) {
+func (m *queryBackend) queryMajorBlocks(batch *database.Batch, req *query.RequestMajorBlocks) (resp *query.ResponseMajorBlocks, _ error) {
 
 	anchorsAcc := batch.Account(m.Describe.NodeUrl(protocol.AnchorPool))
 	ledgerAcc := batch.Account(m.Describe.NodeUrl(protocol.Ledger))
