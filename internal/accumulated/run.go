@@ -220,6 +220,7 @@ func (d *Daemon) Start() (err error) {
 		TxMaxWaitTime:     d.Config.Accumulate.API.TxMaxWaitTime,
 		Database:          d.db,
 		ConnectionManager: d.connectionManager,
+		Key:               d.Key().Bytes(),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to start API: %v", err)
