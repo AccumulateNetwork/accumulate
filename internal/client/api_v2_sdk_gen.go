@@ -274,18 +274,6 @@ func (c *Client) Query(ctx context.Context, req *api.GeneralQuery) (interface{},
 	return resp, nil
 }
 
-// QueryChain queries an account by ID.
-func (c *Client) QueryChain(ctx context.Context, req *api.ChainIdQuery) (*api.ChainQueryResponse, error) {
-	var resp api.ChainQueryResponse
-
-	err := c.RequestAPIv2(ctx, "query-chain", req, &resp)
-	if err != nil {
-		return nil, err
-	}
-
-	return &resp, nil
-}
-
 // QueryData queries an entry on an account's data chain.
 func (c *Client) QueryData(ctx context.Context, req *api.DataEntryQuery) (*api.ChainQueryResponse, error) {
 	var resp api.ChainQueryResponse
@@ -392,6 +380,18 @@ func (c *Client) QueryTxHistory(ctx context.Context, req *api.TxHistoryQuery) (*
 	var resp api.MultiResponse
 
 	err := c.RequestAPIv2(ctx, "query-tx-history", req, &resp)
+	if err != nil {
+		return nil, err
+	}
+
+	return &resp, nil
+}
+
+// QueryTxLocal queries a transaction by ID.
+func (c *Client) QueryTxLocal(ctx context.Context, req *api.TxnQuery) (*api.TransactionQueryResponse, error) {
+	var resp api.TransactionQueryResponse
+
+	err := c.RequestAPIv2(ctx, "query-tx-local", req, &resp)
 	if err != nil {
 		return nil, err
 	}
