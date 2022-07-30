@@ -745,7 +745,6 @@ type SystemData struct {
 
 	syntheticIndexIndex map[systemDataSyntheticIndexIndexKey]*record.Value[uint64]
 	blockChainUpdates   map[systemDataBlockChainUpdatesKey]*record.List[*ChainUpdate]
-	blockState          *record.Set[*BlockStateSynthTxnEntry]
 }
 
 type systemDataSyntheticIndexIndexKey struct {
@@ -776,12 +775,6 @@ func (c *SystemData) BlockChainUpdates(index uint64) *record.List[*ChainUpdate] 
 	})
 }
 
-func (c *SystemData) BlockState() *record.Set[*BlockStateSynthTxnEntry] {
-	return getOrCreateField(&c.blockState, func() *record.Set[*BlockStateSynthTxnEntry] {
-		return record.NewSet(c.logger.L, c.store, c.key.Append("BlockState"), c.label+" "+"block state", record.Struct[BlockStateSynthTxnEntry](), func(u, v *BlockStateSynthTxnEntry) int { return u.Compare(v) })
-	})
-}
-
 func (c *SystemData) Resolve(key record.Key) (record.Record, record.Key, error) {
 	switch key[0] {
 	case "SyntheticIndexIndex":
@@ -804,8 +797,6 @@ func (c *SystemData) Resolve(key record.Key) (record.Record, record.Key, error) 
 		}
 		v := c.BlockChainUpdates(index)
 		return v, key[2:], nil
-	case "BlockState":
-		return c.BlockState(), key[1:], nil
 	default:
 		return nil, nil, errors.New(errors.StatusInternalError, "bad key for system data")
 	}
@@ -826,9 +817,6 @@ func (c *SystemData) IsDirty() bool {
 			return true
 		}
 	}
-	if fieldIsDirty(c.blockState) {
-		return true
-	}
 
 	return false
 }
@@ -845,7 +833,6 @@ func (c *SystemData) Commit() error {
 	for _, v := range c.blockChainUpdates {
 		commitField(&err, v)
 	}
-	commitField(&err, c.blockState)
 
 	return nil
 }

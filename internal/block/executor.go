@@ -12,7 +12,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
-	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
@@ -193,11 +192,6 @@ func (m *Executor) Genesis(block *Block, exec chain.TransactionExecutor) error {
 	err = block.Batch.Transaction(txn.GetHash()).PutStatus(&protocol.TransactionStatus{
 		Initiator: txn.Header.Principal,
 	})
-	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
-	}
-
-	err = indexing.BlockState(block.Batch, m.Describe.PartitionId).Clear()
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknownError, err)
 	}

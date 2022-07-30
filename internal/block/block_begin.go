@@ -59,12 +59,6 @@ func (x *Executor) BeginBlock(block *Block) error {
 		x.dispatcher.Reset()
 	}
 
-	// Reset the block state
-	err = indexing.BlockState(block.Batch, x.Describe.PartitionId).Clear()
-	if err != nil {
-		return err
-	}
-
 	// Load the ledger state
 	ledger := block.Batch.Account(x.Describe.NodeUrl(protocol.Ledger))
 	var ledgerState *protocol.SystemLedger

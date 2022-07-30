@@ -7,7 +7,6 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -55,14 +54,16 @@ func (s *ProcessTransactionState) Merge(r *ProcessTransactionState) {
 }
 
 type ChainUpdates struct {
-	chains  map[string]*database.ChainUpdate
-	Entries []database.ChainUpdate
+	chains       map[string]*database.ChainUpdate
+	Entries      []database.ChainUpdate
+	SynthEntries []*database.BlockStateSynthTxnEntry
 }
 
 func (c *ChainUpdates) Merge(d *ChainUpdates) {
 	for _, u := range d.Entries {
 		c.DidUpdateChain(u)
 	}
+	c.SynthEntries = append(c.SynthEntries, d.SynthEntries...)
 }
 
 // DidUpdateChain records a chain update.
@@ -88,13 +89,11 @@ func (c *ChainUpdates) DidAddChainEntry(batch *database.Batch, u *url.URL, name 
 	if name == protocol.MainChain && typ == protocol.ChainTypeTransaction {
 		partition, ok := protocol.ParsePartitionUrl(u)
 		if ok && protocol.PartitionUrl(partition).JoinPath(protocol.Synthetic).Equal(u) {
-			err := indexing.BlockState(batch, partition).DidProduceSynthTxn(&database.BlockStateSynthTxnEntry{
+			c.SynthEntries = append(c.SynthEntries, &database.BlockStateSynthTxnEntry{
+				Account:     u,
 				Transaction: entry,
 				ChainEntry:  index,
 			})
-			if err != nil {
-				return errors.Format(errors.StatusUnknownError, "load block state: %w", err)
-			}
 		}
 	}
 

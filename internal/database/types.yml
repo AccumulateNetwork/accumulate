@@ -143,6 +143,9 @@ ChainUpdate:
 
 BlockStateSynthTxnEntry:
   fields:
+  - name: Account
+    type: url
+    pointer: true
   - name: Transaction
     type: bytes
   - name: ChainEntry
