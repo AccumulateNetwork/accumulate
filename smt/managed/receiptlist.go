@@ -39,12 +39,12 @@ func (r *ReceiptList) Validate() bool {
 		} //
 		MS.AddToMerkleTree(h) //              Add each element to the MS
 	} //                                      Once all elements are added, compute
-	anchor := MS.GetMDRoot()               //   the anchor at this point.
-	if anchor == nil || len(anchor) == 0 { // If an anchor can't be produced, this
+	anchor := MS.GetMDRoot() //                 the anchor at this point.
+	if len(anchor) == 0 {    //               If an anchor can't be produced, this
 		return false //                         receipt fails.
 	}
 
-	if !bytes.Equal(r.Elements[0],r.Receipt.Start) {
+	if !bytes.Equal(r.Elements[0], r.Receipt.Start) {
 		return false
 	}
 
@@ -74,6 +74,9 @@ func GetReceiptList(manager *MerkleManager, element []byte, Start int64, End int
 
 	// Make sure the end is in the range of the Merkle Tree
 	ms, err := manager.Head().Get()
+	if err != nil {
+		return nil, err
+	}
 	if ms.Count <= End {
 		return nil, fmt.Errorf("end %d is out of range for SMT length %d", End, ms.Count)
 	}

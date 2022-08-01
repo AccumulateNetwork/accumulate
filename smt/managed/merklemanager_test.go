@@ -26,7 +26,6 @@ func testChain2(store record.KvStore, markPower int64, key ...interface{}) *Chai
 	return NewChain(nil, store, record.Key(key), markPower, ChainTypeUnknown, "chain2", "chain2")
 }
 
-
 func TestMerkleManager_GetChainState(t *testing.T) {
 	const numTests = 100
 	var randHash common.RandHash
