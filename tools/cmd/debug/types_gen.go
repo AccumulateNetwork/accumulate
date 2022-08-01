@@ -106,7 +106,7 @@ func (v *accountState) Copy() *accountState {
 	u.Directory = make([]*url.URL, len(v.Directory))
 	for i, v := range v.Directory {
 		if v != nil {
-			u.Directory[i] = (v).Copy()
+			u.Directory[i] = v
 		}
 	}
 

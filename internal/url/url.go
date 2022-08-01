@@ -3,10 +3,12 @@ package url
 import (
 	"crypto/sha256"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"net/url"
 	"path"
 	"strings"
+	"unicode/utf8"
 )
 
 // URL is an Accumulate URL.
@@ -16,6 +18,15 @@ type URL struct {
 	Path      string
 	Query     string
 	Fragment  string
+
+	memoize urlMemoize
+}
+
+type urlMemoize struct {
+	str        string
+	hash       [32]byte
+	accountID  [32]byte
+	identityID [32]byte
 }
 
 type Values = url.Values
@@ -72,6 +83,41 @@ func splitColon(s string) (string, string) {
 	return t[0], t[1]
 }
 
+// WithUserInfo creates a copy of the URL with UserInfo set to the given value.
+func (u *URL) WithUserInfo(s string) *URL {
+	v := u.copy()
+	v.UserInfo = s
+	return v
+}
+
+// WithAuthority creates a copy of the URL with Authority set to the given value.
+func (u *URL) WithAuthority(s string) *URL {
+	v := u.copy()
+	v.Authority = s
+	return v
+}
+
+// WithPath creates a copy of the URL with Path set to the given value.
+func (u *URL) WithPath(s string) *URL {
+	v := u.copy()
+	v.Path = s
+	return v
+}
+
+// WithQuery creates a copy of the URL with Query set to the given value.
+func (u *URL) WithQuery(s string) *URL {
+	v := u.copy()
+	v.Query = s
+	return v
+}
+
+// WithFragment creates a copy of the URL with Fragment set to the given value.
+func (u *URL) WithFragment(s string) *URL {
+	v := u.copy()
+	v.Fragment = s
+	return v
+}
+
 // URL returns a net/url.URL.
 func (u *URL) URL() *url.URL {
 	v := new(url.URL)
@@ -106,15 +152,63 @@ func (u *URL) Compare(v *URL) int {
 	}
 }
 
-// Copy returns a copy of the url.
-func (u *URL) Copy() *URL {
+// copy returns a copy of the url.
+func (u *URL) copy() *URL {
 	v := *u
+	v.memoize = urlMemoize{}
 	return &v
+}
+
+func (u *URL) format(txid []byte) string {
+	var buf strings.Builder
+
+	buf.WriteString("acc://")
+	if txid != nil {
+		enc := make([]byte, hex.EncodedLen(len(txid)))
+		hex.Encode(enc, txid)
+		buf.Write(enc)
+		buf.WriteByte('@')
+	} else if u.UserInfo != "" {
+		buf.WriteString(u.UserInfo)
+		buf.WriteByte('@')
+	}
+
+	buf.WriteString(u.Authority)
+
+	p := normalizePath(u.Path)
+	for len(p) > 0 {
+		buf.WriteByte('/')
+		i := strings.IndexByte(p[1:], '/') + 1
+		if i <= 0 {
+			buf.WriteString(url.PathEscape(p[1:]))
+			break
+		}
+
+		buf.WriteString(url.PathEscape(p[1:i]))
+		p = p[i:]
+	}
+
+	if u.Query != "" {
+		buf.WriteByte('?')
+		buf.WriteString(u.Query)
+	}
+
+	if u.Fragment != "" {
+		buf.WriteByte('#')
+		buf.WriteString(u.Fragment)
+	}
+
+	return buf.String()
 }
 
 // String reassembles the URL into a valid URL string. See net/url.URL.String().
 func (u *URL) String() string {
-	return u.URL().String()
+	if u.memoize.str != "" {
+		return u.memoize.str
+	}
+
+	u.memoize.str = u.format(nil)
+	return u.memoize.str
 }
 
 // ShortString returns String without the scheme prefix.
@@ -122,21 +216,13 @@ func (u *URL) ShortString() string {
 	return u.String()[6:]
 }
 
-// RawString concatenates all of the URL parts. Does not percent-encode
-// anything. Primarily used for validation.
-func (u *URL) RawString() string {
-	s := "acc://"
-	if u.UserInfo != "" {
-		s += u.UserInfo + "@"
-	}
-	s += u.Authority + u.Path
-	if u.Query != "" {
-		s += "?" + u.Query
-	}
-	if u.Fragment != "" {
-		s += "#" + u.Fragment
-	}
-	return s
+// ValidUTF8 verifies that all URL components are valid UTF-8 strings.
+func (u *URL) ValidUTF8() bool {
+	return utf8.ValidString(u.UserInfo) &&
+		utf8.ValidString(u.Authority) &&
+		utf8.ValidString(u.Path) &&
+		utf8.ValidString(u.Query) &&
+		utf8.ValidString(u.Fragment)
 }
 
 // Hostname returns the hostname from the authority component.
@@ -186,9 +272,10 @@ func concatId(ids ...[32]byte) [32]byte {
 	return result
 }
 
-func ensurePath(s string) string {
-	if s == "" || s[0] == '/' {
-		return s
+func normalizePath(s string) string {
+	s = strings.Trim(s, "/")
+	if s == "" {
+		return ""
 	}
 	return "/" + s
 }
@@ -274,7 +361,10 @@ func (u *URL) IdentityAccountID() []byte {
 
 // IdentityAccountID32 returns IdentityAccountID as a [32]byte.
 func (u *URL) IdentityAccountID32() [32]byte {
-	return id(u.Hostname())
+	if u.memoize.identityID == [32]byte{} {
+		u.memoize.identityID = id(u.Hostname())
+	}
+	return u.memoize.identityID
 }
 
 // AccountID constructs an account identifier from the lower case hostname and
@@ -289,7 +379,10 @@ func (u *URL) AccountID() []byte {
 
 // AccountID32 returns AccountID as a [32]byte.
 func (u *URL) AccountID32() [32]byte {
-	return id(u.Hostname() + ensurePath(u.Path))
+	if u.memoize.accountID == [32]byte{} {
+		u.memoize.accountID = id(u.Hostname() + normalizePath(u.Path))
+	}
+	return u.memoize.accountID
 }
 
 // Routing returns the first 8 bytes of the identity account ID as an integer.
@@ -311,6 +404,10 @@ func (u *URL) Hash() []byte {
 
 // Hash32 returns Hash as a [32]byte.
 func (u *URL) Hash32() [32]byte {
+	if u.memoize.hash != [32]byte{} {
+		return u.memoize.hash
+	}
+
 	hash := u.AccountID32()
 	if u.Query != "" {
 		hash = concatId(hash, id(u.Query))
@@ -318,6 +415,7 @@ func (u *URL) Hash32() [32]byte {
 	if u.Fragment != "" {
 		hash = concatId(hash, id(u.Fragment))
 	}
+	u.memoize.hash = hash
 	return hash
 }
 
@@ -345,18 +443,11 @@ func (u *URL) JoinPath(s ...string) *URL {
 	if len(s) == 0 {
 		return u
 	}
-	v := u.Copy()
+	v := u.copy()
 	if len(v.Path) == 0 {
 		v.Path = "/"
 	}
 	v.Path = path.Join(append([]string{v.Path}, s...)...)
-	return v
-}
-
-// WithFragment returns a copy of U with the fragment set.
-func (u *URL) WithFragment(s string) *URL {
-	v := u.Copy()
-	v.Fragment = s
 	return v
 }
 
