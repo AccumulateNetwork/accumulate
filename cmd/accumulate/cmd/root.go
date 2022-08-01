@@ -301,8 +301,8 @@ func promptGetMnemonicOption() (string, error) {
 	pc := promptContent{
 		"Please select an option.",
 		"Select an option." +
-			"1. Create Mnemonic" +
-			"2. Import Mnemonic",
+			" 1. Create Mnemonic" +
+			" 2. Import Mnemonic",
 	}
 	items := []string{"1", "2"}
 	index := -1
@@ -311,9 +311,8 @@ func promptGetMnemonicOption() (string, error) {
 
 	for index < 0 {
 		prompt := promptui.SelectWithAdd{
-			Label:    pc.label,
-			Items:    items,
-			AddLabel: "Other",
+			Label: pc.label,
+			Items: items,
 		}
 		index, result, err = prompt.Run()
 		if index == -1 {
@@ -331,8 +330,8 @@ func promptGetMnemonicOption() (string, error) {
 func promptMnemonic(mnemonic string) (string, error) {
 	pc := promptContent{
 		"",
-		"Please write down your mnemonic phrase and press <enter> when done." +
-			mnemonic,
+		"Please write down your mnemonic phrase and press <enter> when done. '" +
+			mnemonic + "'",
 	}
 	items := []string{"\n"}
 	index := -1
@@ -341,9 +340,8 @@ func promptMnemonic(mnemonic string) (string, error) {
 
 	for index < 0 {
 		prompt := promptui.SelectWithAdd{
-			Label:    pc.label,
-			Items:    items,
-			AddLabel: "Other",
+			Label: pc.label,
+			Items: items,
 		}
 		index, result, err = prompt.Run()
 		if index == -1 {
@@ -359,16 +357,20 @@ func promptMnemonic(mnemonic string) (string, error) {
 }
 
 func promptMnemonicConfirm() (string, error) {
-	prompt := promptui.Select{
-		Label: "\r Please re-enter the mnemonic phrase.",
-		Items: []string{},
+	validate := func(input string) error {
+		if len(input) <= 0 {
+			return errors.New("Invalid mnemonic enttered")
+		}
+		return nil
 	}
 
-	_, result, err := prompt.Run()
-
+	prompt := promptui.Prompt{
+		Label:    "Please re-enter the mnemonic phrase.",
+		Validate: validate,
+	}
+	result, err := prompt.Run()
 	if err != nil {
 		return "", err
 	}
-
 	return result, nil
 }
