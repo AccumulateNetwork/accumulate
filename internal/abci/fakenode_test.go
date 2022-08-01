@@ -61,13 +61,13 @@ func RunTestNet(t *testing.T, partitions []string, daemons map[string][]*accumul
 
 	allNodes := map[string][]*FakeNode{}
 	allChans := map[string][]chan<- abcitypes.Application{}
-	clients := map[string]connections.ABCIClient{}
 	evilNodePrefix := "evil-"
-	for _, netName := range partitions {
+	for i, netName := range partitions {
 		isEvil := false
 		if strings.HasPrefix(netName, evilNodePrefix) {
 			isEvil = true
 			netName = strings.TrimPrefix(netName, evilNodePrefix)
+			partitions[i] = netName
 		}
 
 		daemons := daemons[netName]
@@ -77,8 +77,6 @@ func RunTestNet(t *testing.T, partitions []string, daemons map[string][]*accumul
 		for i, daemon := range daemons {
 			nodes[i], chans[i] = InitFake(t, daemon, openDb, errorHandler, isEvil)
 		}
-		// TODO It _should_ be one or the other - why doesn't that work?
-		clients[netName] = nodes[0].client
 	}
 
 	genesis := map[string]*tmtypes.GenesisDoc{}
@@ -90,7 +88,7 @@ func RunTestNet(t *testing.T, partitions []string, daemons map[string][]*accumul
 		}
 	}
 
-	connectionManager := connections.NewFakeConnectionManager(clients)
+	connectionManager := connections.NewFakeConnectionManager(partitions)
 	for _, netName := range partitions {
 		netName = strings.TrimPrefix(netName, evilNodePrefix)
 		nodes, chans := allNodes[netName], allChans[netName]
@@ -98,6 +96,14 @@ func RunTestNet(t *testing.T, partitions []string, daemons map[string][]*accumul
 			nodes[i].Start(chans[i], connectionManager, genesis[netName])
 		}
 	}
+
+	clients := map[string]connections.FakeClient{}
+	for _, netName := range partitions {
+		nodes := allNodes[netName]
+		// TODO It _should_ be one or the other - why doesn't that work?
+		clients[netName] = connections.FakeClient{nodes[0].client, nodes[0].api}
+	}
+	connectionManager.SetClients(clients)
 
 	return allNodes
 }
@@ -247,32 +253,29 @@ func (n *FakeNode) NextHeight() int64 {
 	return n.height
 }
 
-func (n *FakeNode) queryUrl(url string) (interface{}, error) {
+func (n *FakeNode) queryUrl(url string, resp interface{}) error {
 	req := new(api.GeneralQuery)
 	req.Url = n.parseUrl(url)
-	return n.api.Query(context.Background(), req)
+	return n.api.RequestAPIv2(context.Background(), "query", req, resp)
 }
 
 func (n *FakeNode) QueryAccount(url string) *api.ChainQueryResponse {
 	n.t.Helper()
-	r, err := n.queryUrl(url)
-	n.Require().NoError(err)
-	n.Require().IsType((*api.ChainQueryResponse)(nil), r)
-	return r.(*api.ChainQueryResponse)
+	var r *api.ChainQueryResponse
+	n.Require().NoError(n.queryUrl(url, &r))
+	return r
 }
 
 func (n *FakeNode) QueryTransaction(url string) *api.TransactionQueryResponse {
-	r, err := n.queryUrl(url)
-	n.require.NoError(err)
-	n.Require().IsType((*api.TransactionQueryResponse)(nil), r)
-	return r.(*api.TransactionQueryResponse)
+	var r *api.TransactionQueryResponse
+	n.require.NoError(n.queryUrl(url, &r))
+	return r
 }
 
 func (n *FakeNode) QueryMulti(url string) *api.MultiResponse {
-	r, err := n.queryUrl(url)
-	n.require.NoError(err)
-	n.Require().IsType((*api.MultiResponse)(nil), r)
-	return r.(*api.MultiResponse)
+	var r *api.MultiResponse
+	n.require.NoError(n.queryUrl(url, &r))
+	return r
 }
 
 func (n *FakeNode) QueryAccountAs(url string, result interface{}) {

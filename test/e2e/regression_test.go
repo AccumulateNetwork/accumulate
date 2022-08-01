@@ -6,6 +6,7 @@ import (
 	"math/big"
 	"testing"
 
+	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
@@ -89,7 +90,9 @@ func TestQueryKeyIndexWithRemoteAuthority(t *testing.T) {
 	req.Url = alice.JoinPath("managed-tokens")
 	req.Key = aliceKey[32:]
 	_, err := sim.PartitionFor(req.Url).API.QueryKeyPageIndex(context.Background(), req)
-	require.EqualError(t, err, fmt.Sprintf("no authority of %s holds %X", req.Url, req.Key))
+	require.Error(t, err)
+	require.IsType(t, jsonrpc2.Error{}, err)
+	require.Equal(t, err.(jsonrpc2.Error).Data, fmt.Sprintf("no authority of %s holds %X", req.Url, req.Key))
 }
 
 func TestAddCreditsToLiteIdentityOnOtherBVN(t *testing.T) {

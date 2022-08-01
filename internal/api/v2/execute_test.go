@@ -39,10 +39,11 @@ func TestExecuteCheckOnly(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
+		connectionManager := connections.NewFakeConnectionManager([]string{""})
 		local := NewMockABCIClient(ctrl)
-		clients := map[string]connections.ABCIClient{}
-		clients[""] = local
-		connectionManager := connections.NewFakeConnectionManager(clients)
+		clients := map[string]connections.FakeClient{}
+		clients[""] = connections.FakeClient{local, nil}
+		connectionManager.SetClients(clients)
 		table := new(protocol.RoutingTable)
 		table.Routes = routing.BuildSimpleTable([]string{""})
 		router, err := routing.NewStaticRouter(table, connectionManager)
@@ -65,10 +66,11 @@ func TestExecuteCheckOnly(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
+		connectionManager := connections.NewFakeConnectionManager([]string{""})
 		local := NewMockABCIClient(ctrl)
-		clients := map[string]connections.ABCIClient{}
-		clients[""] = local
-		connectionManager := connections.NewFakeConnectionManager(clients)
+		clients := map[string]connections.FakeClient{}
+		clients[""] = connections.FakeClient{local, nil}
+		connectionManager.SetClients(clients)
 		table := new(protocol.RoutingTable)
 		table.Routes = routing.BuildSimpleTable([]string{""})
 		router, err := routing.NewStaticRouter(table, connectionManager)
