@@ -1,4 +1,7 @@
 
+Void:
+  fields:
+
 Version:
   fields:
     - name: Version

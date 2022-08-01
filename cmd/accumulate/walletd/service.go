@@ -3,7 +3,6 @@ package walletd
 import (
 	"errors"
 	"fmt"
-	"golang.org/x/sys/unix"
 	"io"
 	"os"
 	"os/signal"
@@ -15,6 +14,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"golang.org/x/sys/unix"
 )
 
 func onHUP(fn func()) {

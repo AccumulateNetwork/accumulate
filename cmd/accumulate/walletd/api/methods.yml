@@ -1,16 +1,16 @@
 #GET
 Version:
   description: returns the version of the wallet daemon
-  kind: query
+  #kind: query
   rpc: version
-  output: Version
+  output: api.Version
 
-KeyList:
-  description: returns a list of available keys in the wallet
-  kind: query
-  rpc: key-list
-  input: Authorization
-  output: AuthorizationRequred|KeyListResponse
+#KeyList:
+#  description: returns a list of available keys in the wallet
+#  kind: query
+#  rpc: key-list
+#  input: Authorization
+#  output: AuthorizationRequred|KeyListResponse
 
 #Query:
   # description: queries an account or account chain by URL

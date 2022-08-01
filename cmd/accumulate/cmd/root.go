@@ -98,6 +98,7 @@ func InitRootCmd(database db.DB) *cobra.Command {
 	flags.StringSliceVar(&AdditionalSigners, "sign-with", nil, "Specifies additional keys to sign the transaction with")
 	flags.UintVar(&SignerVersion, "signer-version", uint(0), "Specify the signer version. Overrides the default behavior of fetching the signer version.")
 	//add the commands
+	cmd.AddCommand(walletdCmd)
 	cmd.AddCommand(encryptCmd)
 	cmd.AddCommand(accountCmd)
 	cmd.AddCommand(adiCmd)
