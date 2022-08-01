@@ -1,6 +1,8 @@
 package chain
 
 import (
+	"fmt"
+
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -133,6 +135,9 @@ func (st *stateCache) createOrUpdate(isUpdate bool, accounts []protocol.Account)
 	isCreate := !isUpdate
 	for _, account := range accounts {
 		rec := st.batch.Account(account.GetUrl())
+		if len([]byte(account.GetUrl().String())) > 500 {
+			return errors.Wrap(errors.StatusBadUrlLength, fmt.Errorf("url specified exceeds maximum character length: %s", account.GetUrl().String()))
+		}
 		_, err := rec.GetState()
 		switch {
 		case err != nil && !errors.Is(err, storage.ErrNotFound):
