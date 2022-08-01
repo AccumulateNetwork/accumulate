@@ -80,6 +80,6 @@ func (m *JrpcMethods) QueryTx(ctx context.Context, params json.RawMessage) inter
 	case res := <-resCh:
 		return res
 	case err := <-errCh:
-		return err
+		return accumulateError(err)
 	}
 }
