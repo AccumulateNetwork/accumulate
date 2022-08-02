@@ -14,12 +14,6 @@ import (
 // If anchored into another Second Merkle Tree, this proof can be extended
 // by combining receipt built off the Second Merkle Tree with the receipt
 // given in the ReceiptList
-type ReceiptList struct {
-	Element     []byte       // Element we wish to prove to be in the list
-	MerkleState *MerkleState // Starting Merkle State
-	Elements    [][]byte     // Element hashes.  Last entry is the anchor
-	Receipt     *Receipt     // Receipt for the last hash in Elements (the anchor)
-}
 
 // Validate
 // Take a receipt and validate that the element hash progresses to the

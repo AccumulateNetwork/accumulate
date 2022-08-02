@@ -30,3 +30,21 @@ ReceiptEntry:
       type: bool
     - name: Hash
       type: bytes
+
+ReceiptList:
+  fields:
+    - name: Element
+      description: is the entry for which we want a proof
+      type: bytes
+    - name: MerkleState
+      description: MerkleState at the beginning of the list
+      type: MerkleState
+      marshal-as: reference
+      pointer: true
+    - name: Elements
+      type: bytes
+      repeatable: true
+    - name: Receipt
+      type: Receipt
+      marshal-as: reference
+      pointer: true
