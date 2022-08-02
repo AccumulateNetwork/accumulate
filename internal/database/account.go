@@ -38,7 +38,20 @@ func (a *Account) Commit() error {
 	if !a.IsDirty() {
 		return nil
 	}
+	if fieldIsDirty(a.main) {
+		acc, err := a.Main().Get()
+		switch {
+		case err == nil:
 
+			if len(acc.GetUrl().String()) > protocol.AccountUrlMaxLength {
+				return errors.Wrap(errors.StatusBadUrlLength, fmt.Errorf("url specified exceeds maximum character length: %s", acc.GetUrl().String()))
+			}
+		case errors.Is(err, errors.StatusNotFound):
+			// The main state is unset so there's nothing to check
+		default:
+			return errors.Wrap(errors.StatusUnknownError, err)
+		}
+	}
 	// Ensure the synthetic anchors index is up to date
 	for k, set := range a.syntheticForAnchor {
 		if !set.IsDirty() {
