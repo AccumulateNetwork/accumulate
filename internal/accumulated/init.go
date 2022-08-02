@@ -153,7 +153,6 @@ func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][2]*config
 func ConfigureNodePorts(node *NodeInit, cfg *config.Config, offset config.PortOffset) {
 	cfg.P2P.ListenAddress = node.Address(true, "tcp", offset, config.PortOffsetTendermintP2P)
 	cfg.RPC.ListenAddress = node.Address(true, "tcp", offset, config.PortOffsetTendermintRpc)
-	cfg.RPC.GRPCListenAddress = node.Address(true, "tcp", offset, config.PortOffsetTmRpcGrpc)
 
 	cfg.Instrumentation.PrometheusListenAddr = fmt.Sprintf(":%d", node.Port(offset, config.PortOffsetPrometheus))
 	if cfg.Accumulate.LocalAddress == "" {

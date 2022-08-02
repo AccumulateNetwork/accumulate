@@ -22,5 +22,4 @@ PortOffset:
     value: 3
   AccumulateApi:
     value: 4
-  TmRpcGrpc:
-    value: 5
+  

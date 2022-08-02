@@ -14,7 +14,8 @@ import (
 	"github.com/tendermint/tendermint/libs/service"
 	nm "github.com/tendermint/tendermint/node"
 	"github.com/tendermint/tendermint/privval"
-	coregrpc "github.com/tendermint/tendermint/rpc/grpc"
+	coretypes "github.com/tendermint/tendermint/rpc/coretypes"
+	corerpc "github.com/tendermint/tendermint/rpc/jsonrpc/client"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	web "gitlab.com/accumulatenetwork/accumulate/internal/web/static"
 )
@@ -75,16 +76,24 @@ func (n *Node) Start() error {
 			}
 		}()
 	}
-	n.waitForGRPC()
+	_, err = n.waitForRPC()
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
-func (n *Node) waitForGRPC() coregrpc.BroadcastAPIClient {
-	client := coregrpc.StartGRPCClient(n.Config.RPC.GRPCListenAddress)
+func (n *Node) waitForRPC() (*corerpc.Client, error) {
+	client, err := corerpc.New(n.Config.RPC.ListenAddress)
+	if err != nil {
+		return nil, err
+	}
+	result := new(*coretypes.ResultStatus)
 	for {
-		_, err := client.Ping(context.Background(), &coregrpc.RequestPing{})
+		_, err := client.Call(context.Background(), "status", nil, &result)
 		if err == nil {
-			return client
+			return client, nil
 		}
 	}
+
 }
