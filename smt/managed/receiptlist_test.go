@@ -13,22 +13,30 @@ func TestReceiptList(t *testing.T) {
 	var start float64
 	const MSize = int64(200) // Use a Merkle Tree size
 	var cnt int
-	var rb common.RandHash
+	var rh, rh2 common.RandHash
+	rh2.SetSeed([]byte{1, 2, 3})
 
 	store := begin()                    // Create a memory database
-	manager := testChain(store, 4)      // Create a test chain
-	manager2 := testChain2(store, 4)    // and create another
+	manager := testChain(store, 4, 1)   // Create a test chain
+	manager2 := testChain(store, 4, 2)  // and create another
 	for i := int64(0); i < MSize; i++ { // Now put MSize elements in the first test chain
-		v := rb.NextList()                                                  // Get a random hash
-		require.NoError(t, manager.AddHash(v, false))                       //   and put it in the first chain
-		ms, err := manager.Head().Get()                                     // Get the current merkle state
-		require.NoError(t, err)                                             //
+		v := rh.NextList()                            // Get a random hash
+		require.NoError(t, manager.AddHash(v, false)) //   and put it in the first chain
+		ms, err := manager.Head().Get()               // Get the current merkle state
+		require.NoError(t, err)                       //
+
 		require.NoError(t, manager2.AddHash(ms.GetMDRoot().Bytes(), false)) // Then anchor the first chain into the second
+		for i := 0; i < int(rh2.GetRandInt64())%10; i++ {                   // Mix some non matching hashes in.
+			require.NoError(t, manager2.AddHash(rh2.NextList(), false)) // Then anchor the first chain into the second
+		}
 	}
+	MS, _ := manager.Head().Get()
+	MS2, _ := manager2.Head().Get()
+	_, _ = MS, MS2
 
 	start = float64(time.Now().UnixMilli()) / 1000
 
-	for startTest := int64(0); startTest < MSize; startTest++ { // Test a range
+	for startTest := int64(16); startTest < MSize; startTest++ { // Test a range
 		for endTest := startTest; endTest < startTest+10 && endTest < MSize; endTest++ {
 
 			element, err := manager.Get(startTest) // Get the first element of a test of a list
@@ -41,14 +49,12 @@ func TestReceiptList(t *testing.T) {
 			anchor1 := receiptList.Receipt.Anchor                                    // Get the anchor1 that
 			cnt++
 			for i := startTest; i <= endTest; i++ { //     Test every list we can make for the given range
-				element = rb.List[i]          //           Get an element
+				element = rh.List[i]          //           Get an element
 				receiptList.Element = element //           Stuff it into the receiptList
 				cnt++
 				require.True(t, receiptList.Validate()) //
 			}
-			if true {
-				continue
-			}
+
 			receipt, err := GetReceipt(manager2, anchor1, anchor1)         // Build a receipt of the anchor in the second chain
 			require.NoError(t, err)                                        //
 			require.NotNil(t, receipt)                                     //
@@ -60,7 +66,7 @@ func TestReceiptList(t *testing.T) {
 			require.True(t, receipt2.Validate()) //                            Test the receipt for grins.
 			cnt++
 			for i := startTest; i <= endTest; i++ { //     Rerun the test of every list we can make for the given range
-				element := rb.List[i]                   // Note we are testing a combined receipt here.  Get an element
+				element := rh.List[i]                   // Note we are testing a combined receipt here.  Get an element
 				receiptList.Element = element           // Stuff the element into the receiptList
 				require.NoError(t, err)                 //
 				require.NotNil(t, receiptList)          //
