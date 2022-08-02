@@ -70,6 +70,9 @@ const (
 
 	// DefaultMajorBlockSchedule is the default cron schedule of when new major blocks are created
 	DefaultMajorBlockSchedule = "0 */12 * * *"
+
+	//AccountUrlMaxLength is the maximum size allowed for accumulate adi urls
+	AccountUrlMaxLength = 500
 )
 
 //AcmeSupplyLimit set at 500,000,000.00000000 million acme (external units)
