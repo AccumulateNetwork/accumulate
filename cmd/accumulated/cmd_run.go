@@ -17,6 +17,7 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	service2 "github.com/tendermint/tendermint/libs/service"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/badger"
 )
 
@@ -38,6 +39,7 @@ var flagRun = struct {
 	JsonLogFile      string
 	EnableTimingLogs bool
 	PprofListen      string
+	Debug            bool
 }{}
 
 func init() {
@@ -54,6 +56,7 @@ func initRunFlags(cmd *cobra.Command, forService bool) {
 	cmd.PersistentFlags().StringVar(&flagRun.JsonLogFile, "json-log-file", "", "Write logs to a file as JSON")
 	cmd.PersistentFlags().BoolVar(&flagRun.EnableTimingLogs, "enable-timing-logs", false, "Enable core timing analysis logging")
 	cmd.PersistentFlags().StringVar(&flagRun.PprofListen, "pprof", "", "Address to run net/http/pprof on")
+	cmd.PersistentFlags().BoolVar(&flagRun.Debug, "debug", false, "Enable debugging features")
 
 	if !forService {
 		cmd.Flags().DurationVar(&flagRun.CiStopAfter, "ci-stop-after", 0, "FOR CI ONLY - stop the node after some time")
@@ -65,6 +68,10 @@ func initRunFlags(cmd *cobra.Command, forService bool) {
 
 		if flagRun.PprofListen != "" {
 			go func() { check(http.ListenAndServe(flagRun.PprofListen, nil)) }()
+		}
+
+		if flagRun.Debug {
+			testing.EnableDebugFeatures()
 		}
 	}
 }
