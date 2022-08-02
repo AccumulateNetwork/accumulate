@@ -45,6 +45,10 @@ func GetAccountAuthoritySet(account protocol.Account) (*protocol.AccountAuth, *u
 func SignTransaction(network *config.Describe, nodeKey []byte, batch *database.Batch, txn *protocol.Transaction, destination *url.URL) (protocol.Signature, error) {
 	// TODO Exporting this is not great
 
+	if nodeKey == nil {
+		return nil, errors.Format(errors.StatusInternalError, "attempted to sign with a nil key")
+	}
+
 	var page *protocol.KeyPage
 	err := batch.Account(network.OperatorsPage()).GetStateAs(&page)
 	if err != nil {

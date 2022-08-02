@@ -175,6 +175,7 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 			Router:        sim.Router(),
 			TxMaxWaitTime: time.Hour,
 			Database:      x,
+			Key:           execOpts.Key,
 		})
 		require.NoError(sim, err)
 		x.API = acctesting.DirectJrpcClient(jrpc)
@@ -218,6 +219,7 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 			Router:        sim.Router(),
 			TxMaxWaitTime: time.Hour,
 			Database:      x,
+			Key:           execOpts.Key,
 		})
 		require.NoError(sim, err)
 		x.API = acctesting.DirectJrpcClient(jrpc)

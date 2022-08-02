@@ -37,6 +37,10 @@ func NewJrpc(opts Options) (*JrpcMethods, error) {
 	m.querier.backend = new(queryBackend)
 	m.querier.backend.Options = opts
 
+	if opts.Key == nil {
+		return nil, errors.Format(errors.StatusBadRequest, "missing key")
+	}
+
 	if opts.Logger != nil {
 		m.logger = opts.Logger.With("module", "jrpc")
 		m.querier.backend.logger.L = m.logger
