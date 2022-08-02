@@ -39,6 +39,7 @@ type ExecutorOptions struct {
 	EventBus            *events.Bus                        //
 	MajorBlockScheduler blockscheduler.MajorBlockScheduler //
 	Background          func(func())                       // Background task launcher
+	BatchSize           int                                // The batch size for sending synthetic transactions
 
 	isGenesis bool
 

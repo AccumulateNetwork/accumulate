@@ -154,6 +154,7 @@ func (d *Daemon) Start() (err error) {
 		Describe: d.Config.Accumulate.Describe,
 		Router:   router,
 		EventBus: d.eventBus,
+		// BatchSize: 20,
 	}
 
 	// On DNs initialize the major block scheduler

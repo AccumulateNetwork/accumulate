@@ -96,6 +96,24 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 			continue
 		}
 
+		// If BatchSize is set, group envelopes into batches
+		if d.BatchSize > 0 {
+			count := len(batch) / d.BatchSize
+			if len(d.batches)%d.BatchSize != 0 {
+				count++
+			}
+			rebatch := make([]*protocol.Envelope, count)
+			for i := range rebatch {
+				rebatch[i] = new(protocol.Envelope)
+			}
+			for i, delivery := range batch {
+				b := rebatch[i/d.BatchSize]
+				b.Signatures = append(b.Signatures, delivery.Signatures...)
+				b.Transaction = append(b.Transaction, delivery.Transaction...)
+			}
+			batch = rebatch
+		}
+
 		wg.Add(1)
 		partition, batch := partition, batch // Don't capture loop variables
 		go func() {

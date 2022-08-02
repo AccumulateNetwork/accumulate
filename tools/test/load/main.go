@@ -185,6 +185,7 @@ func initializeClients(c int) ([]*Client, error) {
 			return nil, err
 		}
 		cl.DebugRequest = false
+		cl.Timeout = 300 * time.Second
 		clients[i] = &Client{ds, cl, i, 0}
 	}
 
