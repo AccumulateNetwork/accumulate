@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"strings"
 	"testing"
 	"time"
 
@@ -273,8 +274,9 @@ func TestCreateADI(t *testing.T) {
 }
 
 func TestAdiUrlLengthLimit(t *testing.T) {
+	check := newDefaultCheckError(t, false)
 	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
-	nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
+	nodes := RunTestNet(t, partitions, daemons, nil, true, check.ErrorHandler())
 	n := nodes[partitions[1]][0]
 
 	liteAccount := generateKey()
@@ -283,12 +285,8 @@ func TestAdiUrlLengthLimit(t *testing.T) {
 	batch := n.db.Begin(true)
 	require.NoError(n.t, acctesting.CreateLiteTokenAccountWithCredits(batch, liteAccount, protocol.AcmeFaucetAmount, 1e6))
 	require.NoError(t, batch.Commit())
-	accurl := ""
-	i := 0
-	for i < 1000 {
-		accurl = fmt.Sprint(accurl, "t")
-		i++
-	}
+	accurl := strings.Repeat("𒀹", 250) // 𒀹 is 4 bytes
+
 	txn := n.MustExecuteAndWait(func(send func(*Tx)) {
 		adi := new(protocol.CreateIdentity)
 		adi.Url = protocol.AccountUrl(accurl)
