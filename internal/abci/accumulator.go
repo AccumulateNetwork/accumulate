@@ -20,6 +20,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
+	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
@@ -39,7 +40,9 @@ type Accumulator struct {
 	AccumulatorOptions
 	logger log.Logger
 
-	block          *block.Block
+	block           *block.Block
+	blockDeliveries []*chain.Delivery
+
 	txct           int64
 	timer          time.Time
 	didPanic       bool
@@ -437,7 +440,7 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 		}
 	}
 
-	envelopes, _, respData, err := executeTransactions(app.logger.With("operation", "DeliverTx"), deliverTx(app.Executor, app.block), req.Tx)
+	deliveries, err := normalizeTransactions(app.logger.With("operation", "DeliverTx"), req.Tx)
 	if err != nil {
 		b, _ := errors.Wrap(errors.StatusUnknownError, err).(*errors.Error).MarshalJSON()
 		var res abci.ResponseDeliverTx
@@ -446,14 +449,23 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 		return res
 	}
 
+	app.blockDeliveries = append(app.blockDeliveries, deliveries...)
+
 	// Deliver never fails, unless the batch cannot be decoded
-	app.txct += int64(len(envelopes))
-	return abci.ResponseDeliverTx{Code: uint32(protocol.ErrorCodeOK), Data: respData}
+	app.txct += int64(len(deliveries))
+	return abci.ResponseDeliverTx{Code: uint32(protocol.ErrorCodeOK)}
 }
 
 // EndBlock implements github.com/tendermint/tendermint/abci/types.Application.
 func (app *Accumulator) EndBlock(req abci.RequestEndBlock) abci.ResponseEndBlock {
 	defer app.recover(nil, true)
+
+	for _, delivery := range app.blockDeliveries {
+		_, err := app.Executor.ExecuteEnvelope(app.block, delivery)
+		if err != nil {
+			sentry.CaptureException(err)
+		}
+	}
 
 	err := app.Executor.EndBlock(app.block)
 	if err != nil {

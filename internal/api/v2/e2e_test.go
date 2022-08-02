@@ -64,11 +64,6 @@ func TestEndToEnd(t *testing.T) {
 }
 
 func TestValidate(t *testing.T) {
-	acctesting.SkipCI(t, "flaky")
-	acctesting.SkipPlatform(t, "windows", "flaky")
-	acctesting.SkipPlatform(t, "darwin", "flaky")
-	acctesting.SkipPlatformCI(t, "darwin", "requires setting up localhost aliases")
-	t.Skip("flaky")
 	partitions, daemons := acctesting.CreateTestNet(t, 2, 2, 0, false)
 	acctesting.RunTestNet(t, partitions, daemons)
 	japi := daemons[Directory][0].Jrpc_TESTONLY()

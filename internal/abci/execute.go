@@ -17,20 +17,29 @@ import (
 
 type executeFunc func([]*chain.Delivery) []*protocol.TransactionStatus
 
-func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]*chain.Delivery, []*protocol.TransactionStatus, []byte, error) {
+func normalizeTransactions(logger log.Logger, raw []byte) ([]*chain.Delivery, error) {
 	hash := sha256.Sum256(raw)
 	envelope := new(protocol.Envelope)
 	err := envelope.UnmarshalBinary(raw)
 	if err != nil {
 		sentry.CaptureException(err)
 		logger.Info("Failed to unmarshal", "tx", logging.AsHex(hash), "error", err)
-		return nil, nil, nil, errors.Format(errors.StatusUnknownError, "decoding envelopes: %w", err)
+		return nil, errors.Format(errors.StatusUnknownError, "decoding envelopes: %w", err)
 	}
 
 	deliveries, err := chain.NormalizeEnvelope(envelope)
 	if err != nil {
 		sentry.CaptureException(err)
 		logger.Info("Failed to normalize envelope", "tx", logging.AsHex(hash), "error", err)
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
+	}
+
+	return deliveries, nil
+}
+
+func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]*chain.Delivery, []*protocol.TransactionStatus, []byte, error) {
+	deliveries, err := normalizeTransactions(logger, raw)
+	if err != nil {
 		return nil, nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
@@ -51,14 +60,6 @@ func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]
 func checkTx(exec *Executor, batch *database.Batch) executeFunc {
 	return func(deliveries []*chain.Delivery) []*protocol.TransactionStatus {
 		return exec.ValidateEnvelopeSet(batch, deliveries, func(err error, _ *chain.Delivery, _ *protocol.TransactionStatus) {
-			sentry.CaptureException(err)
-		})
-	}
-}
-
-func deliverTx(exec *Executor, block *Block) executeFunc {
-	return func(deliveries []*chain.Delivery) []*protocol.TransactionStatus {
-		return exec.ExecuteEnvelopeSet(block, deliveries, func(err error, _ *chain.Delivery, _ *protocol.TransactionStatus) {
 			sentry.CaptureException(err)
 		})
 	}
