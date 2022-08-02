@@ -272,6 +272,45 @@ func TestCreateADI(t *testing.T) {
 	require.Equal(t, keyHash[:], ks.Keys[0].PublicKeyHash)
 }
 
+func TestAdiUrlLengthLimit(t *testing.T) {
+	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
+	n := nodes[partitions[1]][0]
+
+	liteAccount := generateKey()
+	newAdi := generateKey()
+	keyHash := sha256.Sum256(newAdi.PubKey().Address())
+	batch := n.db.Begin(true)
+	require.NoError(n.t, acctesting.CreateLiteTokenAccountWithCredits(batch, liteAccount, protocol.AcmeFaucetAmount, 1e6))
+	require.NoError(t, batch.Commit())
+	accurl := ""
+	i := 0
+	for i < 1000 {
+		accurl = fmt.Sprint(accurl, "t")
+		i++
+	}
+	txn := n.MustExecuteAndWait(func(send func(*Tx)) {
+		adi := new(protocol.CreateIdentity)
+		adi.Url = protocol.AccountUrl(accurl)
+		adi.KeyHash = keyHash[:]
+		var err error
+		adi.KeyBookUrl, err = url.Parse(fmt.Sprintf("%s/foo-book", adi.Url))
+		require.NoError(t, err)
+
+		sponsorUrl := acctesting.AcmeLiteAddressTmPriv(liteAccount).RootIdentity().String()
+		send(newTxn(sponsorUrl).
+			WithBody(adi).
+			Initiate(protocol.SignatureTypeLegacyED25519, liteAccount).
+			Build())
+	})
+
+	res, err := n.api.QueryTx(txn[0][:], time.Second, true, api.QueryOptions{})
+	require.NoError(t, err)
+	h := res.Produced[0].Hash()
+	res, err = n.api.QueryTx(h[:], time.Second, true, api.QueryOptions{})
+	require.NoError(t, err)
+	require.Equal(t, errors.StatusBadUrlLength, res.Status.Code)
+}
 func TestCreateADIWithoutKeybook(t *testing.T) {
 	check := newDefaultCheckError(t, false)
 
