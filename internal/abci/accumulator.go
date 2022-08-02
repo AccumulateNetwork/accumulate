@@ -226,7 +226,12 @@ func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
 //
 // Exposed as Tendermint RPC /abci_query.
 func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.ResponseQuery) {
-	return abci.ResponseQuery{Code: 1}
+	switch reqQuery.Path {
+	case "/up":
+		return abci.ResponseQuery{Code: uint32(protocol.ErrorCodeOK), Info: "Up"}
+	}
+
+	return abci.ResponseQuery{Code: uint32(protocol.ErrorCodeFailed)}
 }
 
 // InitChain implements github.com/tendermint/tendermint/abci/types.Application.
