@@ -147,7 +147,7 @@ func (d *Daemon) Start() (err error) {
 	d.eventBus = events.NewBus(d.Logger.With("module", "events"))
 	events.SubscribeSync(d.eventBus, d.onDidCommitBlock)
 
-	router := routing.NewRouter(d.eventBus, d.connectionManager)
+	router := routing.NewRouter(d.eventBus, d.connectionManager, d.Logger)
 	execOpts := block.ExecutorOptions{
 		Logger:   d.Logger,
 		Key:      d.Key().Bytes(),
