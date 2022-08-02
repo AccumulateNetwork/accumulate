@@ -16,13 +16,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// swagger:route POST /foobar foobar-tag idOfFoobarEndpoint
-// Foobar does some amazing stuff.
-// responses:
-//   200: foobarResponse
-
-// This text will appear as description of your response body.
-// swagger:response NetworkConfigResponse
 type NetworkConfigRequest struct {
 	Network string `json:"network,omitempty" form:"network" query:"network" validate:"required"`
 	Sign    bool   `json:"sign,omitempty" form:"sign" query:"sign"`

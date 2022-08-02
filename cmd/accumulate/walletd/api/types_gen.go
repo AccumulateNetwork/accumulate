@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 type AuthorizationRequired struct {
@@ -22,10 +23,28 @@ type AuthorizationRequired struct {
 	extraData []byte
 }
 
+type DecodeTransactionRequest struct {
+	TransactionBinary []byte `json:"transactionBinary,omitempty" form:"transactionBinary" query:"transactionBinary" validate:"required"`
+}
+
+type DecodeTransactionResponse struct {
+	TransactionJson string `json:"transactionJson,omitempty" form:"transactionJson" query:"transactionJson" validate:"required"`
+}
+
+type EncodeTransactionRequest struct {
+	TransactionJson string `json:"transactionJson,omitempty" form:"transactionJson" query:"transactionJson" validate:"required"`
+}
+
+type EncodeTransactionRespones struct {
+	TransactionBinary []byte `json:"transactionBinary,omitempty" form:"transactionBinary" query:"transactionBinary" validate:"required"`
+	TransactionHash   []byte `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash" validate:"required"`
+}
+
 type KeyList struct {
 	fieldsSet []bool
-	Name      string `json:"name,omitempty" form:"name" query:"name" validate:"required"`
-	PublicKey []byte `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
+	Name      string                 `json:"name,omitempty" form:"name" query:"name" validate:"required"`
+	PublicKey []byte                 `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
+	KeyType   protocol.SignatureType `json:"keyType,omitempty" form:"keyType" query:"keyType" validate:"required"`
 	extraData []byte
 }
 
@@ -35,15 +54,20 @@ type KeyListResponse struct {
 	extraData []byte
 }
 
-type Version struct {
+type SignRequest struct {
+	ReferenceId int64  `json:"referenceId,omitempty" form:"referenceId" query:"referenceId" validate:"required"`
+	KeyName     string `json:"keyName,omitempty" form:"keyName" query:"keyName"`
+}
+
+type SignResponse struct {
+	Signature []byte `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
+	PublicKey []byte `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
+}
+
+type VersionResponse struct {
 	fieldsSet []bool
 	Version   string `json:"version,omitempty" form:"version" query:"version" validate:"required"`
 	Commit    string `json:"commit,omitempty" form:"commit" query:"commit" validate:"required"`
-	extraData []byte
-}
-
-type Void struct {
-	fieldsSet []bool
 	extraData []byte
 }
 
@@ -58,11 +82,53 @@ func (v *AuthorizationRequired) Copy() *AuthorizationRequired {
 
 func (v *AuthorizationRequired) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *DecodeTransactionRequest) Copy() *DecodeTransactionRequest {
+	u := new(DecodeTransactionRequest)
+
+	u.TransactionBinary = encoding.BytesCopy(v.TransactionBinary)
+
+	return u
+}
+
+func (v *DecodeTransactionRequest) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *DecodeTransactionResponse) Copy() *DecodeTransactionResponse {
+	u := new(DecodeTransactionResponse)
+
+	u.TransactionJson = v.TransactionJson
+
+	return u
+}
+
+func (v *DecodeTransactionResponse) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *EncodeTransactionRequest) Copy() *EncodeTransactionRequest {
+	u := new(EncodeTransactionRequest)
+
+	u.TransactionJson = v.TransactionJson
+
+	return u
+}
+
+func (v *EncodeTransactionRequest) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *EncodeTransactionRespones) Copy() *EncodeTransactionRespones {
+	u := new(EncodeTransactionRespones)
+
+	u.TransactionBinary = encoding.BytesCopy(v.TransactionBinary)
+	u.TransactionHash = encoding.BytesCopy(v.TransactionHash)
+
+	return u
+}
+
+func (v *EncodeTransactionRespones) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *KeyList) Copy() *KeyList {
 	u := new(KeyList)
 
 	u.Name = v.Name
 	u.PublicKey = encoding.BytesCopy(v.PublicKey)
+	u.KeyType = v.KeyType
 
 	return u
 }
@@ -82,8 +148,30 @@ func (v *KeyListResponse) Copy() *KeyListResponse {
 
 func (v *KeyListResponse) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *Version) Copy() *Version {
-	u := new(Version)
+func (v *SignRequest) Copy() *SignRequest {
+	u := new(SignRequest)
+
+	u.ReferenceId = v.ReferenceId
+	u.KeyName = v.KeyName
+
+	return u
+}
+
+func (v *SignRequest) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *SignResponse) Copy() *SignResponse {
+	u := new(SignResponse)
+
+	u.Signature = encoding.BytesCopy(v.Signature)
+	u.PublicKey = encoding.BytesCopy(v.PublicKey)
+
+	return u
+}
+
+func (v *SignResponse) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *VersionResponse) Copy() *VersionResponse {
+	u := new(VersionResponse)
 
 	u.Version = v.Version
 	u.Commit = v.Commit
@@ -91,15 +179,7 @@ func (v *Version) Copy() *Version {
 	return u
 }
 
-func (v *Version) CopyAsInterface() interface{} { return v.Copy() }
-
-func (v *Void) Copy() *Void {
-	u := new(Void)
-
-	return u
-}
-
-func (v *Void) CopyAsInterface() interface{} { return v.Copy() }
+func (v *VersionResponse) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *AuthorizationRequired) Equal(u *AuthorizationRequired) bool {
 	if !(bytes.Equal(v.Key, u.Key)) {
@@ -112,11 +192,49 @@ func (v *AuthorizationRequired) Equal(u *AuthorizationRequired) bool {
 	return true
 }
 
+func (v *DecodeTransactionRequest) Equal(u *DecodeTransactionRequest) bool {
+	if !(bytes.Equal(v.TransactionBinary, u.TransactionBinary)) {
+		return false
+	}
+
+	return true
+}
+
+func (v *DecodeTransactionResponse) Equal(u *DecodeTransactionResponse) bool {
+	if !(v.TransactionJson == u.TransactionJson) {
+		return false
+	}
+
+	return true
+}
+
+func (v *EncodeTransactionRequest) Equal(u *EncodeTransactionRequest) bool {
+	if !(v.TransactionJson == u.TransactionJson) {
+		return false
+	}
+
+	return true
+}
+
+func (v *EncodeTransactionRespones) Equal(u *EncodeTransactionRespones) bool {
+	if !(bytes.Equal(v.TransactionBinary, u.TransactionBinary)) {
+		return false
+	}
+	if !(bytes.Equal(v.TransactionHash, u.TransactionHash)) {
+		return false
+	}
+
+	return true
+}
+
 func (v *KeyList) Equal(u *KeyList) bool {
 	if !(v.Name == u.Name) {
 		return false
 	}
 	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
+		return false
+	}
+	if !(v.KeyType == u.KeyType) {
 		return false
 	}
 
@@ -136,18 +254,35 @@ func (v *KeyListResponse) Equal(u *KeyListResponse) bool {
 	return true
 }
 
-func (v *Version) Equal(u *Version) bool {
-	if !(v.Version == u.Version) {
+func (v *SignRequest) Equal(u *SignRequest) bool {
+	if !(v.ReferenceId == u.ReferenceId) {
 		return false
 	}
-	if !(v.Commit == u.Commit) {
+	if !(v.KeyName == u.KeyName) {
 		return false
 	}
 
 	return true
 }
 
-func (v *Void) Equal(u *Void) bool {
+func (v *SignResponse) Equal(u *SignResponse) bool {
+	if !(bytes.Equal(v.Signature, u.Signature)) {
+		return false
+	}
+	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
+		return false
+	}
+
+	return true
+}
+
+func (v *VersionResponse) Equal(u *VersionResponse) bool {
+	if !(v.Version == u.Version) {
+		return false
+	}
+	if !(v.Commit == u.Commit) {
+		return false
+	}
 
 	return true
 }
@@ -203,6 +338,7 @@ func (v *AuthorizationRequired) IsValid() error {
 var fieldNames_KeyList = []string{
 	1: "Name",
 	2: "PublicKey",
+	3: "KeyType",
 }
 
 func (v *KeyList) MarshalBinary() ([]byte, error) {
@@ -214,6 +350,9 @@ func (v *KeyList) MarshalBinary() ([]byte, error) {
 	}
 	if !(len(v.PublicKey) == 0) {
 		writer.WriteBytes(2, v.PublicKey)
+	}
+	if !(v.KeyType == 0) {
+		writer.WriteEnum(3, v.KeyType)
 	}
 
 	_, _, err := writer.Reset(fieldNames_KeyList)
@@ -236,6 +375,11 @@ func (v *KeyList) IsValid() error {
 		errs = append(errs, "field PublicKey is missing")
 	} else if len(v.PublicKey) == 0 {
 		errs = append(errs, "field PublicKey is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field KeyType is missing")
+	} else if v.KeyType == 0 {
+		errs = append(errs, "field KeyType is not set")
 	}
 
 	switch len(errs) {
@@ -289,12 +433,12 @@ func (v *KeyListResponse) IsValid() error {
 	}
 }
 
-var fieldNames_Version = []string{
+var fieldNames_VersionResponse = []string{
 	1: "Version",
 	2: "Commit",
 }
 
-func (v *Version) MarshalBinary() ([]byte, error) {
+func (v *VersionResponse) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
@@ -305,7 +449,7 @@ func (v *Version) MarshalBinary() ([]byte, error) {
 		writer.WriteString(2, v.Commit)
 	}
 
-	_, _, err := writer.Reset(fieldNames_Version)
+	_, _, err := writer.Reset(fieldNames_VersionResponse)
 	if err != nil {
 		return nil, encoding.Error{E: err}
 	}
@@ -313,7 +457,7 @@ func (v *Version) MarshalBinary() ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
-func (v *Version) IsValid() error {
+func (v *VersionResponse) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
@@ -326,33 +470,6 @@ func (v *Version) IsValid() error {
 	} else if len(v.Commit) == 0 {
 		errs = append(errs, "field Commit is not set")
 	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
-var fieldNames_Void = []string{}
-
-func (v *Void) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	_, _, err := writer.Reset(fieldNames_Void)
-	if err != nil {
-		return nil, encoding.Error{E: err}
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
-}
-
-func (v *Void) IsValid() error {
-	var errs []string
 
 	switch len(errs) {
 	case 0:
@@ -403,6 +520,9 @@ func (v *KeyList) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBytes(2); ok {
 		v.PublicKey = x
 	}
+	if x := new(protocol.SignatureType); reader.ReadEnum(3, x) {
+		v.KeyType = *x
+	}
 
 	seen, err := reader.Reset(fieldNames_KeyList)
 	if err != nil {
@@ -443,11 +563,11 @@ func (v *KeyListResponse) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
-func (v *Version) UnmarshalBinary(data []byte) error {
+func (v *VersionResponse) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
 
-func (v *Version) UnmarshalBinaryFrom(rd io.Reader) error {
+func (v *VersionResponse) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
 	if x, ok := reader.ReadString(1); ok {
@@ -457,26 +577,7 @@ func (v *Version) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Commit = x
 	}
 
-	seen, err := reader.Reset(fieldNames_Version)
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	return nil
-}
-
-func (v *Void) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *Void) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	seen, err := reader.Reset(fieldNames_Void)
+	seen, err := reader.Reset(fieldNames_VersionResponse)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -498,13 +599,33 @@ func (v *AuthorizationRequired) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *DecodeTransactionRequest) MarshalJSON() ([]byte, error) {
+	u := struct {
+		TransactionBinary *string `json:"transactionBinary,omitempty"`
+	}{}
+	u.TransactionBinary = encoding.BytesToJSON(v.TransactionBinary)
+	return json.Marshal(&u)
+}
+
+func (v *EncodeTransactionRespones) MarshalJSON() ([]byte, error) {
+	u := struct {
+		TransactionBinary *string `json:"transactionBinary,omitempty"`
+		TransactionHash   *string `json:"transactionHash,omitempty"`
+	}{}
+	u.TransactionBinary = encoding.BytesToJSON(v.TransactionBinary)
+	u.TransactionHash = encoding.BytesToJSON(v.TransactionHash)
+	return json.Marshal(&u)
+}
+
 func (v *KeyList) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Name      string  `json:"name,omitempty"`
-		PublicKey *string `json:"publicKey,omitempty"`
+		Name      string                 `json:"name,omitempty"`
+		PublicKey *string                `json:"publicKey,omitempty"`
+		KeyType   protocol.SignatureType `json:"keyType,omitempty"`
 	}{}
 	u.Name = v.Name
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	u.KeyType = v.KeyType
 	return json.Marshal(&u)
 }
 
@@ -513,6 +634,16 @@ func (v *KeyListResponse) MarshalJSON() ([]byte, error) {
 		KeyList encoding.JsonList[KeyList] `json:"keyList,omitempty"`
 	}{}
 	u.KeyList = v.KeyList
+	return json.Marshal(&u)
+}
+
+func (v *SignResponse) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Signature *string `json:"signature,omitempty"`
+		PublicKey *string `json:"publicKey,omitempty"`
+	}{}
+	u.Signature = encoding.BytesToJSON(v.Signature)
+	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	return json.Marshal(&u)
 }
 
@@ -535,13 +666,54 @@ func (v *AuthorizationRequired) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *DecodeTransactionRequest) UnmarshalJSON(data []byte) error {
+	u := struct {
+		TransactionBinary *string `json:"transactionBinary,omitempty"`
+	}{}
+	u.TransactionBinary = encoding.BytesToJSON(v.TransactionBinary)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if x, err := encoding.BytesFromJSON(u.TransactionBinary); err != nil {
+		return fmt.Errorf("error decoding TransactionBinary: %w", err)
+	} else {
+		v.TransactionBinary = x
+	}
+	return nil
+}
+
+func (v *EncodeTransactionRespones) UnmarshalJSON(data []byte) error {
+	u := struct {
+		TransactionBinary *string `json:"transactionBinary,omitempty"`
+		TransactionHash   *string `json:"transactionHash,omitempty"`
+	}{}
+	u.TransactionBinary = encoding.BytesToJSON(v.TransactionBinary)
+	u.TransactionHash = encoding.BytesToJSON(v.TransactionHash)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if x, err := encoding.BytesFromJSON(u.TransactionBinary); err != nil {
+		return fmt.Errorf("error decoding TransactionBinary: %w", err)
+	} else {
+		v.TransactionBinary = x
+	}
+	if x, err := encoding.BytesFromJSON(u.TransactionHash); err != nil {
+		return fmt.Errorf("error decoding TransactionHash: %w", err)
+	} else {
+		v.TransactionHash = x
+	}
+	return nil
+}
+
 func (v *KeyList) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Name      string  `json:"name,omitempty"`
-		PublicKey *string `json:"publicKey,omitempty"`
+		Name      string                 `json:"name,omitempty"`
+		PublicKey *string                `json:"publicKey,omitempty"`
+		KeyType   protocol.SignatureType `json:"keyType,omitempty"`
 	}{}
 	u.Name = v.Name
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	u.KeyType = v.KeyType
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -551,6 +723,7 @@ func (v *KeyList) UnmarshalJSON(data []byte) error {
 	} else {
 		v.PublicKey = x
 	}
+	v.KeyType = u.KeyType
 	return nil
 }
 
@@ -563,5 +736,28 @@ func (v *KeyListResponse) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	v.KeyList = u.KeyList
+	return nil
+}
+
+func (v *SignResponse) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Signature *string `json:"signature,omitempty"`
+		PublicKey *string `json:"publicKey,omitempty"`
+	}{}
+	u.Signature = encoding.BytesToJSON(v.Signature)
+	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if x, err := encoding.BytesFromJSON(u.Signature); err != nil {
+		return fmt.Errorf("error decoding Signature: %w", err)
+	} else {
+		v.Signature = x
+	}
+	if x, err := encoding.BytesFromJSON(u.PublicKey); err != nil {
+		return fmt.Errorf("error decoding PublicKey: %w", err)
+	} else {
+		v.PublicKey = x
+	}
 	return nil
 }

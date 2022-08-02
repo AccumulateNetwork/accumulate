@@ -1,8 +1,50 @@
 
-Void:
+DecodeTransactionRequest:
+  non-binary: true
   fields:
+    - name: TransactionBinary
+      type: bytes
 
-Version:
+DecodeTransactionResponse:
+  non-binary: true
+  fields:
+    - name: TransactionJson
+      type: string
+
+EncodeTransactionRequest:
+  non-binary: true
+  fields:
+    - name: TransactionJson
+      type: string
+
+EncodeTransactionRespones:
+  non-binary: true
+  fields:
+    - name: TransactionBinary
+      type: bytes
+      marshal-as: reference
+    - name: TransactionHash
+      type: bytes
+      marshal-as: reference
+
+SignRequest:
+  non-binary: true
+  fields:
+    - name: ReferenceId
+      type: int
+    - name: KeyName
+      type: string
+      optional: true
+
+SignResponse:
+  non-binary: true
+  fields:
+    - name: Signature
+      type: bytes
+    - name: PublicKey
+      type: bytes
+
+VersionResponse:
   fields:
     - name: Version
       type: string
@@ -23,6 +65,9 @@ KeyList:
       type: string
     - name: PublicKey
       type: bytes
+    - name: KeyType
+      type: protocol.SignatureType
+      marshal-as: enum
 
 KeyListResponse:
   fields:

@@ -3,12 +3,32 @@ Version:
   description: returns the version of the wallet daemon
   #kind: query
   rpc: version
-  output: api.Version
+  output: api.VersionResponse
 
-#KeyList:
-#  description: returns a list of available keys in the wallet
+Sign:
+  description: sign a transaction
+  rpc: sign
+  input: api.SignRequest
+  output: api.SignRespose|api.AuthorizationRequired
+
+EncodeTransaction:
+  description: binary marshal a json transaction body and return encoded hex
+  rpc: encode-transaction
+  input: api.EncodeTransactionRequest
+  output: api.EncodeTransactionResponse
+
+DecodeTransaction:
+  description: unmarshal a binary transaction body and return the json transaction body
+  rpc: decode-transaction
+  input: api.DecodeTransactionRequest
+  output: api.DecodeTransactionResponse
+
+KeyList:
+  description: returns a list of available keys in the wallet
 #  kind: query
-#  rpc: key-list
+  rpc: key-list
+  input: api.KeyListRequest
+  output: api.KeyListResponse|api.AuthorizationRequred
 #  input: Authorization
 #  output: AuthorizationRequred|KeyListResponse
 
