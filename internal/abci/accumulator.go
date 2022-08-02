@@ -368,12 +368,30 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 	var resp abci.ResponseCheckTx
 	resp.Data = respData
 
+	const maxPriority = (1 << 32) - 1
+
+	seq := map[[32]byte]uint64{}
+	for _, env := range envelopes {
+		for _, sig := range env.Signatures {
+			sig, ok := sig.(*protocol.PartitionSignature)
+			if ok {
+				seq[sig.TransactionHash] = sig.SequenceNumber
+			}
+		}
+	}
+
 	// If a user transaction fails, the batch fails
 	for i, result := range results {
-		if typ := envelopes[i].Transaction.Body.Type(); typ.IsSystem() && resp.Priority < 2 {
-			resp.Priority = 2
-		} else if typ.IsSynthetic() && resp.Priority < 1 {
-			resp.Priority = 1
+		var priority int64
+		if typ := envelopes[i].Transaction.Body.Type(); typ.IsSystem() {
+			priority = maxPriority
+		} else if typ.IsSynthetic() {
+			// Set the priority based on the sequence number to try to keep them in order
+			seq := seq[*(*[32]byte)(envelopes[i].Transaction.GetHash())]
+			priority = maxPriority - 1 - int64(seq)
+		}
+		if resp.Priority < priority {
+			resp.Priority = priority
 		}
 		if result.Code.Success() {
 			continue

@@ -56,7 +56,7 @@ func TestState(t *testing.T) {
 	db := database.OpenInMemory(nil)
 	var blockHash2, bptRoot2 []byte
 	require.NoError(t, db.Update(func(b *database.Batch) error {
-		require.NoError(t, b.RestoreSnapshot(f))
+		require.NoError(t, b.RestoreSnapshot(f, &bvn.Executor.Describe))
 		blockHash2, err = b.GetMinorRootChainAnchor(&bvn.Executor.Describe)
 		require.NoError(t, err)
 		bptRoot2 = b.BptRoot()

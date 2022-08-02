@@ -1157,9 +1157,10 @@ func TestIssueTokens(t *testing.T) {
 	require.NoError(t, acctesting.CreateTokenAccount(batch, "foo.acme/acmetokens", "acc://ACME", float64(10), false))
 	require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, liteKey, 1, 1e9))
 	liteAddr, err := protocol.LiteTokenAddress(liteKey[32:], "foo.acme/tokens", protocol.SignatureTypeED25519)
+	require.NoError(t, err)
 	require.NoError(t, batch.Commit())
 
-	require.NoError(t, err)
+	// Issue foo.acme/tokens to a foo.acme/tokens lite token account
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.IssueTokens)
 		body.Recipient = liteAddr
@@ -1171,8 +1172,14 @@ func TestIssueTokens(t *testing.T) {
 			Initiate(protocol.SignatureTypeLegacyED25519, fooKey).
 			Build())
 	})
-	//issue to incorrect token account
 
+	// Verify tokens were received
+	account := n.GetLiteTokenAccount(liteAddr.String())
+	require.Equal(t, "acc://foo.acme/tokens", account.TokenUrl.String())
+	require.Equal(t, int64(123), account.Balance.Int64())
+
+	// Issue foo.acme/tokens to an ACME token account
+	check.Disable = true
 	initialbalance := n.GetTokenAccount("acc://foo.acme/acmetokens").Balance
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.IssueTokens)
@@ -1185,10 +1192,9 @@ func TestIssueTokens(t *testing.T) {
 			Initiate(protocol.SignatureTypeLegacyED25519, fooKey).
 			Build())
 	})
+
+	// Verify tokens were not received
 	finalbalance := n.GetTokenAccount("acc://foo.acme/acmetokens").Balance
-	account := n.GetLiteTokenAccount(liteAddr.String())
-	require.Equal(t, "acc://foo.acme/tokens", account.TokenUrl.String())
-	require.Equal(t, int64(123), account.Balance.Int64())
 	require.Equal(t, initialbalance, finalbalance)
 }
 
