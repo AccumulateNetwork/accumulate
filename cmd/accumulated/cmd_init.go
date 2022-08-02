@@ -233,7 +233,7 @@ func findInDescribe(addr string, partitionId string, d *cfg.Network) (partition 
 		partition = &d.Partitions[i]
 		if strings.EqualFold(partition.Id, partitionId) {
 			for j, n := range v.Nodes {
-				nodeAddr, _, err := resolveAddr(n.Address)
+				nodeAddr, err := resolveAddr(n.Address)
 				if err != nil {
 					return nil, nil, fmt.Errorf("cannot resolve node address in network describe")
 				}
@@ -245,7 +245,7 @@ func findInDescribe(addr string, partitionId string, d *cfg.Network) (partition 
 			return partition, nil, nil
 		}
 	}
-	return nil, nil, fmt.Errorf("cannot locate %s in network description", addr)
+	return nil, nil, fmt.Errorf("cannot locate partition %s or address %s in network description", partitionId, addr)
 }
 
 func initNodeFromSeedProxy(cmd *cobra.Command, args []string) (int, *cfg.Config, *types.GenesisDoc, error) {
@@ -409,7 +409,7 @@ func initNodeFromSeedProxy(cmd *cobra.Command, args []string) (int, *cfg.Config,
 }
 
 func initNodeFromPeer(cmd *cobra.Command, args []string) (int, *cfg.Config, *types.GenesisDoc, error) {
-	netAddr, netPort, err := resolveAddr(args[0])
+	netAddr, netPort, err := resolveAddrWithPort(args[0])
 	if err != nil {
 		return 0, nil, nil, fmt.Errorf("invalid peer url %v", err)
 	}
@@ -424,7 +424,11 @@ func initNodeFromPeer(cmd *cobra.Command, args []string) (int, *cfg.Config, *typ
 		return 0, nil, nil, fmt.Errorf("failed to create Tendermint client for %s, %v", args[0], err)
 	}
 
-	version := getVersion(accClient)
+	version, err := getVersion(accClient)
+	if err != nil {
+		return 0, nil, nil, err
+	}
+
 	err = versionCheck(version, args[0])
 	if err != nil {
 		return 0, nil, nil, err
@@ -545,34 +549,41 @@ func initNode(cmd *cobra.Command, args []string) (string, error) {
 			}
 			basePort = int(p)
 		}
-		//partition, addr, err := findInDescribe(listenUrl.String(), config.Accumulate.PartitionId, &config.Accumulate.Network)
-		//if err != nil {
-		//	return "", fmt.Errorf("cannot resolve public address in description, %v", err)
-		//}
-		////the address wasn't found in the network description, so add it
-		//if addr == nil {
-		//	partition.Nodes = append(partition.Nodes, cfg.Node{Address: "http://" + listenUrl.Hostname(), Type: getNodeTypeFromFlag()})
-		//}
-		//listenUrl, err = url.Parse("tcp://" + listenUrl.Hostname())
-		//if err != nil {
-		//	return "", err
-		//}
 	}
 
 	var publicAddr string
 	if flagInitNode.PublicIP != "" {
 		publicAddr, err = resolveIp(flagInitNode.PublicIP)
-		checkf(err, "invalid public address")
+		if err != nil {
+			return "", fmt.Errorf("invalid public address %v", err)
+		}
 
-		partition, addr, err := findInDescribe(publicAddr, config.Accumulate.PartitionId, &config.Accumulate.Network)
+		partition, node, err := findInDescribe(publicAddr, config.Accumulate.PartitionId, &config.Accumulate.Network)
 		if err != nil {
 			return "", fmt.Errorf("cannot resolve public address in description, %v", err)
 		}
+
 		//the address wasn't found in the network description, so add it
-		if addr == nil {
-			partition.Nodes = append(partition.Nodes, cfg.Node{Address: "http://" + publicAddr, Type: getNodeTypeFromFlag()})
+		var localAddr string
+		var port int
+		if node == nil {
+			u, err := ensureNodeOnPartition(partition, publicAddr, getNodeTypeFromFlag())
+			if err != nil {
+				return "", err
+			}
+
+			localAddr, port, err = resolveAddrWithPort(u.String())
+			if err != nil {
+				return "", fmt.Errorf("invalid node address %v", err)
+			}
+		} else {
+			localAddr, port, err = resolveAddrWithPort(node.Address)
+			if err != nil {
+				return "", fmt.Errorf("invalid node address %v", err)
+			}
 		}
-		config.Accumulate.LocalAddress = publicAddr
+		//local address expect ip:port only with no scheme for connection manager to work
+		config.Accumulate.LocalAddress = fmt.Sprintf("%s:%d", localAddr, port)
 	}
 
 	config.Accumulate.AnalysisLog.Enabled = flagInit.EnableTimingLogs
@@ -654,7 +665,7 @@ func newLogger() log.Logger {
 }
 
 func resolveIp(addr string) (string, error) {
-	host, _, err := resolveAddr(addr)
+	host, err := resolveAddr(addr)
 	if err == nil {
 		return host, nil
 	}
@@ -667,11 +678,16 @@ func resolveIp(addr string) (string, error) {
 	return ip.String(), nil
 }
 
-func resolveAddr(addr string) (string, int, error) {
+func resolveAddrWithPort(addr string) (string, int, error) {
 	ip, err := url.Parse(addr)
 	if err != nil {
-		return "", 0, fmt.Errorf("%q is not a URL", addr)
+		//try adding a scheme to see if that helps
+		ip, err = url.Parse("tcp://" + addr)
+		if err != nil {
+			return "", 0, fmt.Errorf("%q is not a URL", addr)
+		}
 	}
+
 	if ip.Path != "" && ip.Path != "/" {
 		return "", 0, fmt.Errorf("address cannot have a path")
 	}
@@ -685,6 +701,23 @@ func resolveAddr(addr string) (string, int, error) {
 	}
 
 	return ip.Hostname(), int(port), nil
+}
+
+func resolveAddr(addr string) (string, error) {
+	ip, err := url.Parse(addr)
+	if err != nil {
+		//try adding a scheme to see if that helps
+		ip, err = url.Parse("tcp://" + addr)
+		if err != nil {
+			return "", fmt.Errorf("%q is not a URL", addr)
+		}
+	}
+
+	if ip.Path != "" && ip.Path != "/" {
+		return "", fmt.Errorf("address cannot have a path")
+	}
+
+	return ip.Hostname(), nil
 }
 
 func getNodeTypeFromFlag() cfg.NodeType {

@@ -1258,7 +1258,7 @@ func TestIssueTokensRefund(t *testing.T) {
 	check.Disable = true
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.IssueTokens)
-		liteAddr.Authority = liteAddr.Authority + "u"
+		liteAddr = liteAddr.WithAuthority(liteAddr.Authority + "u")
 		body.Recipient = liteAddr
 		body.Amount.SetUint64(123)
 

@@ -75,7 +75,7 @@ func InitRootCmd(database db.DB) *cobra.Command {
 
 	serverAddr := os.Getenv("ACC_API")
 	if serverAddr == "" {
-		serverAddr = "https://testnet2.accumulatenetwork.io/v2"
+		serverAddr = "https://beta.testnet.accumulatenetwork.io/v2"
 	}
 
 	flags := cmd.PersistentFlags()
@@ -166,13 +166,14 @@ func init() {
 }
 
 var (
-	BucketAnon     = []byte("anon")
-	BucketAdi      = []byte("adi")
-	BucketKeys     = []byte("keys")
-	BucketLabel    = []byte("label")
-	BucketLite     = []byte("lite")
-	BucketMnemonic = []byte("mnemonic")
-	BucketSigType  = []byte("sigtype")
+	BucketAnon              = []byte("anon")
+	BucketAdi               = []byte("adi")
+	BucketKeys              = []byte("keys")
+	BucketLabel             = []byte("label")
+	BucketLite              = []byte("lite")
+	BucketMnemonic          = []byte("mnemonic")
+	BucketKeyInfo           = []byte("keyinfo")
+	BucketSigTypeDeprecated = []byte("sigtype")
 )
 
 func initDB(defaultWorkDir string, memDb bool) db.DB {

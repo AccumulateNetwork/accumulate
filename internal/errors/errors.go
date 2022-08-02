@@ -28,15 +28,6 @@ func makeError(code Status) *Error {
 	return e
 }
 
-func (e *Error) errorf(format string, args ...interface{}) {
-	err := fmt.Errorf(format, args...)
-	e.Message = err.Error()
-
-	if u, ok := err.(interface{ Unwrap() error }); ok {
-		e.setCause(convert(u.Unwrap()))
-	}
-}
-
 func convert(err error) *Error {
 	switch err := err.(type) {
 	case *Error:
@@ -105,6 +96,12 @@ func Wrap(code Status, err error) error {
 		// The return type must be `error` - otherwise this returns statement
 		// can cause strange errors
 		return nil
+	}
+	// If err is an Error and we're not going to add anything, return it
+	if !trackLocation && code == StatusUnknownError {
+		if _, ok := err.(*Error); ok {
+			return err
+		}
 	}
 	e := makeError(code)
 	e.setCause(convert(err))

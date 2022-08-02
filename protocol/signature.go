@@ -117,31 +117,52 @@ func ETHaddress(pubKey []byte) string {
 }
 
 func SignatureDidInitiate(sig Signature, txnInitHash []byte) bool {
-loop:
-	for sig := sig; ; {
-		switch s := sig.(type) {
-		case *ReceiptSignature,
-			*RemoteSignature,
-			*SignatureSet:
+	for _, sig := range unpackSignature(sig) {
+		if bytes.Equal(txnInitHash, sig.Metadata().Hash()) {
+			return true
+		}
+
+		init, err := sig.Initiator()
+		if err != nil {
 			return false
-
-		case *DelegatedSignature:
-			sig = s.Signature
-
-		default:
-			break loop
+		}
+		if bytes.Equal(txnInitHash, init.MerkleHash()) {
+			return true
 		}
 	}
+	return false
+}
 
-	if bytes.Equal(txnInitHash, sig.Metadata().Hash()) {
-		return true
-	}
+func unpackSignature(sig Signature) []Signature {
+	switch s := sig.(type) {
+	case *SignatureSet:
+		signatures := make([]Signature, 0, len(s.Signatures))
+		for _, s := range s.Signatures {
+			signatures = append(signatures, unpackSignature(s)...)
+		}
+		return signatures
 
-	init, err := sig.Initiator()
-	if err != nil {
-		return false
+	case *RemoteSignature:
+		return unpackSignature(s.Signature)
+
+	case *DelegatedSignature:
+		// Unpack the inner signature
+		signatures := unpackSignature(s.Signature)
+
+		// Convert each unpacked signature back into a delegated signature
+		for i, signature := range signatures {
+			// Copy the delegated signature and set the inner signature to the
+			// unpacked signature
+			s := *s
+			s.Signature = signature
+			signatures[i] = &s
+		}
+
+		return signatures
+
+	default:
+		return []Signature{s}
 	}
-	return bytes.Equal(txnInitHash, init.MerkleHash())
 }
 
 func EqualKeySignature(a, b KeySignature) bool {
