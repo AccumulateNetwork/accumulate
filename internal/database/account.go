@@ -38,15 +38,19 @@ func (a *Account) Commit() error {
 	if !a.IsDirty() {
 		return nil
 	}
-	main := a.Main()
-	acc, err := main.Get()
-	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
-	}
-	url := acc.GetUrl()
-	str := url.String()
-	if len([]byte(str)) > 500 {
-		return errors.Wrap(errors.StatusBadUrlLength, fmt.Errorf("url specified exceeds maximum character length: %s", str))
+	if fieldIsDirty(a.main) {
+		acc, err := a.Main().Get()
+		switch {
+		case err == nil:
+
+			if len(acc.GetUrl().String()) > protocol.AccountUrlMaxLength {
+				return errors.Wrap(errors.StatusBadUrlLength, fmt.Errorf("url specified exceeds maximum character length: %s", acc.GetUrl().String()))
+			}
+		case errors.Is(err, errors.StatusNotFound):
+			// The main state is unset so there's nothing to check
+		default:
+			return errors.Wrap(errors.StatusUnknownError, err)
+		}
 	}
 	// Ensure the synthetic anchors index is up to date
 	for k, set := range a.syntheticForAnchor {
@@ -61,7 +65,7 @@ func (a *Account) Commit() error {
 	}
 
 	// If anything has changed, update the BPT entry
-	err = a.putBpt()
+	err := a.putBpt()
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknownError, err)
 	}
