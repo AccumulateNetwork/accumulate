@@ -7,10 +7,12 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
@@ -288,4 +290,62 @@ func TestSynthTxnToDn(t *testing.T) {
 			Initiate(SignatureTypeED25519, liteKey).
 			Build(),
 	)...)
+}
+
+func TestSendDirectToWrongPartition(t *testing.T) {
+	// Initialize
+	sim := simulator.New(t, 3)
+	sim.InitFromGenesis()
+
+	// Create the lite addresses and one account
+	aliceKey, bobKey := acctesting.GenerateKey("alice"), acctesting.GenerateKey("bob")
+	alice, bob := acctesting.AcmeLiteAddressStdPriv(aliceKey), acctesting.AcmeLiteAddressStdPriv(bobKey)
+
+	goodBvn := sim.PartitionFor(alice)
+	_ = goodBvn.Update(func(batch *database.Batch) error {
+		require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, tmed25519.PrivKey(aliceKey), 1e6, 1e9))
+		return nil
+	})
+
+	// Set route to something else
+	var badBvn *simulator.ExecEntry
+	for _, partition := range sim.Partitions[1:] {
+		if partition.Id != goodBvn.Partition.Id {
+			badBvn = sim.Partition(partition.Id)
+			break
+		}
+	}
+
+	// Create the transaction
+	env := acctesting.NewTransaction().
+		WithPrincipal(alice).
+		WithSigner(alice, 1).
+		WithTimestamp(1).
+		WithBody(&protocol.SendTokens{
+			To: []*protocol.TokenRecipient{{
+				Url:    bob,
+				Amount: *big.NewInt(1),
+			}},
+		}).
+		Initiate(protocol.SignatureTypeED25519, aliceKey).
+		Build()
+
+	// Submit the transaction directly to the wrong BVN
+	badBvn.Submit(false, env)
+	var status *protocol.TransactionStatus
+	for i := 0; i < 50 && status == nil; i++ {
+		ch := make(chan *protocol.TransactionStatus)
+		go sim.ExecuteBlock(ch)
+		for s := range ch {
+			if s.TxID.Equal(env.Transaction[0].ID()) {
+				status = s
+				break
+			}
+		}
+	}
+
+	require.NotNil(t, status, fmt.Sprintf("Transaction %X has not been delivered after 50 blocks", env.Transaction[0].GetHash()[:4]))
+
+	require.NotNil(t, status.Error)
+	require.Equal(t, fmt.Sprintf("signature submitted to %s instead of %s", badBvn.Partition.Id, goodBvn.Partition.Id), status.Error.Message)
 }
