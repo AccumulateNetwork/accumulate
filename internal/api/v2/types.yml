@@ -494,6 +494,24 @@ StatusResponse:
   fields:
     - name: Ok
       type: bool
+    - name: BvnHeight
+      type: varint
+    - name: DnHeight
+      type: varint
+    - name: BvnTime
+      type: time
+    - name: DnTime
+      type: time
+    - name: LastDirectoryAnchorHeight
+      type: uvarint
+    - name: BvnRootHash
+      type: hash
+    - name: DnRootHash
+      type: hash
+    - name: BvnBptHash
+      type: hash
+    - name: DnBptHash
+      type: hash
 
 VersionResponse:
   non-binary: true

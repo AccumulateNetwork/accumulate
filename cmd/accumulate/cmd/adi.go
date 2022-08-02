@@ -136,16 +136,11 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 	//args[2] is an optional setting for the key book name
 	//args[3] is an optional setting for the key page name
 	//Note: if args[2] is not the keybook, the keypage also cannot be specified.
-	if len(args) == 0 {
+	if len(args) < 2 {
 		return "", fmt.Errorf("insufficient number of command line arguments")
 	}
 
-	if len(args) > 0 {
-		adiUrlStr = args[0]
-	}
-	if len(args) < 2 {
-		return "", fmt.Errorf("invalid number of arguments")
-	}
+	adiUrlStr = args[0]
 
 	k, err := resolvePublicKey(args[1])
 	if err != nil {
