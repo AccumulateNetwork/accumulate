@@ -118,6 +118,7 @@ func InitRootCmd(database db.DB) *cobra.Command {
 	cmd.AddCommand(blocksCmd)
 	cmd.AddCommand(operatorCmd, validatorCmd)
 	cmd.AddCommand(versionCmd, describeCmd)
+	cmd.AddCommand(initWalletCmd)
 
 	//for the testnet integration
 	cmd.AddCommand(faucetCmd)
@@ -183,7 +184,6 @@ var (
 func initDB(defaultWorkDir string, memDb bool) db.DB {
 	var ret db.DB
 	if memDb {
-		getMnemonic()
 		ret = new(db.MemoryDB)
 
 		err := ret.InitDB("", "")
@@ -209,9 +209,6 @@ func initDB(defaultWorkDir string, memDb bool) db.DB {
 		if _, err = os.Stat(databaseName); errors.Is(err, os.ErrNotExist) && !UseUnencryptedWallet {
 			//no databases exist, so create a new encrypted database unless the user wanted an unencrypted one
 			databaseName = filepath.Join(defaultWorkDir, "wallet_encrypted.db")
-
-			//get mnemonic
-			getMnemonic()
 
 			//let's get a new first-time password...
 			Password, err = newPassword()
@@ -244,87 +241,53 @@ func initDB(defaultWorkDir string, memDb bool) db.DB {
 
 }
 
-func getMnemonic() {
-	res, err := promptGetMnemonicOption()
+func InitDBImport(cmd *cobra.Command, memDb bool) error {
+	initDB(DatabaseDir, memDb)
+	mnemonicString, err := getPasswdPrompt(cmd, "Enter mnemonic : ", true)
 	if err != nil {
-		log.Fatal(err)
+		return db.ErrInvalidPassword
 	}
-	switch res {
-	case "1":
-		entropy := make([]byte, 128)
-		_, err := rand.Read(entropy)
-		if err != nil {
-			log.Fatal(err)
-		}
-		mnemonicString, err := bip39.NewMnemonic(entropy)
-		if err != nil {
-			log.Fatal(err)
-		}
-		_, err = promptMnemonic(mnemonicString)
-		if err != nil {
-			log.Fatal(err)
-		}
-		mnemonicConfirm, err := promptMnemonicConfirm()
-		if err != nil {
-			log.Fatal(err)
-		}
-		if mnemonicString != mnemonicConfirm {
-			log.Fatal("mnemonic doesn't match.")
-		}
-		mnemonic := strings.Split(mnemonicString, " ")
-		_, err = ImportMnemonic(mnemonic)
-		if err != nil {
-			log.Fatal(err)
-		}
-	case "2":
-		mnemonicBytes, err := gopass.GetPasswdPrompt("Enter Mnemonic: ", false, os.Stdin, os.Stderr)
-		if err != nil {
-			log.Fatal(err)
-		}
-		mnemonic := strings.Split(string(mnemonicBytes), " ")
-		_, err = ImportMnemonic(mnemonic)
-		if err != nil {
-			log.Fatal(err)
-		}
-	default:
-		log.Fatal("invalid mnemonic option selected.")
+	mnemonic := strings.Split(mnemonicString, " ")
+	_, err = ImportMnemonic(mnemonic)
+	if err != nil {
+		return err
 	}
+	return nil
+}
 
+func InitDBCreate(memDb bool) error {
+	initDB(DatabaseDir, memDb)
+	entropy := make([]byte, 128)
+	_, err := rand.Read(entropy)
+	if err != nil {
+		return err
+	}
+	mnemonicString, err := bip39.NewMnemonic(entropy)
+	if err != nil {
+		return err
+	}
+	_, err = promptMnemonic(mnemonicString)
+	if err != nil {
+		return err
+	}
+	mnemonicConfirm, err := promptMnemonicConfirm()
+	if err != nil {
+		return err
+	}
+	if mnemonicString != mnemonicConfirm {
+		return fmt.Errorf("mnemonic doesn't match.")
+	}
+	mnemonic := strings.Split(mnemonicString, " ")
+	_, err = ImportMnemonic(mnemonic)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 type promptContent struct {
 	errorMsg string
 	label    string
-}
-
-func promptGetMnemonicOption() (string, error) {
-	pc := promptContent{
-		"Please select an option.",
-		"Select an option." +
-			" 1. Create Mnemonic" +
-			" 2. Import Mnemonic",
-	}
-	items := []string{"1", "2"}
-	index := -1
-	var result string
-	var err error
-
-	for index < 0 {
-		prompt := promptui.SelectWithAdd{
-			Label: pc.label,
-			Items: items,
-		}
-		index, result, err = prompt.Run()
-		if index == -1 {
-			items = append(items, result)
-		}
-	}
-
-	if err != nil {
-		return "", err
-	}
-
-	return result, nil
 }
 
 func promptMnemonic(mnemonic string) (string, error) {
