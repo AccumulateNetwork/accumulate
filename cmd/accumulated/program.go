@@ -63,7 +63,9 @@ func (p *Program) Start(s service.Service) (err error) {
 	}
 
 	p.primary, err = accumulated.Load(primaryDir, func(c *config.Config) (io.Writer, error) {
-		return logWriter(c.LogFormat, nil)
+		return logWriter(c.LogFormat, func(w io.Writer, format string, color bool) io.Writer {
+			return newNodeWriter(w, format, "node", 0, color)
+		})
 	})
 	if err != nil {
 		return err
@@ -78,7 +80,9 @@ func (p *Program) Start(s service.Service) (err error) {
 	}
 
 	p.secondary, err = accumulated.Load(secondaryDir, func(c *config.Config) (io.Writer, error) {
-		return logWriter(c.LogFormat, nil)
+		return logWriter(c.LogFormat, func(w io.Writer, format string, color bool) io.Writer {
+			return newNodeWriter(w, format, "node", 1, color)
+		})
 	})
 	if err != nil {
 		return err
