@@ -1758,7 +1758,7 @@ func TestMultiLevelDelegation(t *testing.T) {
 		op.Entry = protocol.KeySpecParams{KeyHash: bobkeyHash[:], Delegate: protocol.AccountUrl("bob", "book0")}
 		body := new(protocol.UpdateKeyPage)
 		body.Operation = append(body.Operation, op)
-		send(newTxn("alice").WithSigner(protocol.AccountUrl("alice", "book0", "1"), 1).WithBody(body).
+		send(newTxn("alice/book0/1").WithSigner(protocol.AccountUrl("alice", "book0", "1"), 1).WithBody(body).
 			Initiate(protocol.SignatureTypeLegacyED25519, aliceKey).
 			Build())
 	})
@@ -1767,7 +1767,7 @@ func TestMultiLevelDelegation(t *testing.T) {
 		op.Entry = protocol.KeySpecParams{KeyHash: charliekeyHash[:], Delegate: protocol.AccountUrl("charlie", "book0")}
 		body := new(protocol.UpdateKeyPage)
 		body.Operation = append(body.Operation, op)
-		send(newTxn("alice").WithSigner(protocol.AccountUrl("alice", "book0", "1"), 1).WithBody(body).
+		send(newTxn("alice/book0/1").WithSigner(protocol.AccountUrl("alice", "book0", "1"), 1).WithBody(body).
 			Initiate(protocol.SignatureTypeLegacyED25519, aliceKey).
 			Build())
 	})
@@ -1776,11 +1776,27 @@ func TestMultiLevelDelegation(t *testing.T) {
 		op.Entry = protocol.KeySpecParams{KeyHash: charliekeyHash[:], Delegate: protocol.AccountUrl("charlie", "book0")}
 		body := new(protocol.UpdateKeyPage)
 		body.Operation = append(body.Operation, op)
-		send(newTxn("bob").WithSigner(protocol.AccountUrl("bob", "book0", "1"), 1).WithBody(body).
+		send(newTxn("bob/book0/1").WithSigner(protocol.AccountUrl("bob", "book0", "1"), 1).WithBody(body).
 			Initiate(protocol.SignatureTypeLegacyED25519, bobKey).
 			Build())
 	})
-	fmt.Println(n.GetKeyPage(protocol.AccountUrl("alice", "book0", "1").String()), n.GetKeyPage(protocol.AccountUrl("bob", "book0", "1").String()), n.GetKeyPage(protocol.AccountUrl("charlie", "book0", "1").String()))
+	_, _, err := n.Execute(func(send func(*protocol.Envelope)) {
+		cda := new(protocol.CreateDataAccount)
+		cda.Url = protocol.AccountUrl("alice", "data")
+
+		send(newTxn("alice").
+			WithSigner(protocol.AccountUrl("alice", "book0", "1"), 1).
+			WithBody(cda).
+			Initiate(protocol.SignatureTypeLegacyED25519, aliceKey).
+			WithSigner(protocol.AccountUrl("charlie", "book0", "1"), 1).
+			Sign(protocol.SignatureTypeED25519, charlieKey).
+			WithSigner(protocol.AccountUrl("bob", "book0", "1"), 1).
+			Sign(protocol.SignatureTypeED25519, charlieKey).
+			Build())
+	})
+	require.NoError(t, err)
+	//fmt.Println(n.GetKeyPage(protocol.AccountUrl("alice", "book0", "1").String()), n.GetKeyPage(protocol.AccountUrl("bob", "book0", "1").String()), n.GetKeyPage(protocol.AccountUrl("charlie", "book0", "1").String()))
+
 }
 
 func TestNetworkDefinition(t *testing.T) {
