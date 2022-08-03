@@ -30,7 +30,7 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.12.0
 	github.com/stretchr/testify v1.8.0
-	github.com/tendermint/tendermint v0.35.8
+	github.com/tendermint/tendermint v0.35.9
 	github.com/tyler-smith/go-bip32 v1.0.0
 	github.com/tyler-smith/go-bip39 v1.1.0
 	gitlab.com/ethan.reesor/vscode-notebooks/go-playbooks v0.0.0-20220417214602-1121b9fae118
@@ -49,6 +49,7 @@ require (
 require (
 	github.com/ghodss/yaml v1.0.0
 	github.com/gorhill/cronexpr v0.0.0-20180427100037-88b0669f7d75
+	github.com/manifoldco/promptui v0.9.0
 )
 
 require (
@@ -62,9 +63,9 @@ require (
 	github.com/GaijinEntertainment/go-exhaustruct/v2 v2.2.0 // indirect
 	github.com/alingse/asasalint v0.0.11 // indirect
 	github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e // indirect
+	github.com/creachadair/taskgroup v0.3.2 // indirect
 	github.com/firefart/nonamedreturns v1.0.4 // indirect
 	github.com/lufeee/execinquery v1.2.1 // indirect
-	github.com/manifoldco/promptui v0.9.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.0.2 // indirect
 	github.com/quasilyte/stdinfo v0.0.0-20220114132959-f7386bf02567 // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect

@@ -213,7 +213,7 @@ func TestTypes(t *testing.T) {
 		u, ok := r.ReadUrl(1)
 		require.True(t, ok)
 		rdOk(t, r)
-		require.Equal(t, v, u)
+		require.Equal(t, u.String(), v.String())
 	})
 }
 

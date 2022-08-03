@@ -8,7 +8,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 // NormalizeEnvelope normalizes the envelope into one or more deliveries.
@@ -204,8 +203,36 @@ func (d *Delivery) IsForwarded() bool {
 
 // LoadTransaction attempts to load the transaction from the database.
 func (d *Delivery) LoadTransaction(batch *database.Batch) (*protocol.TransactionStatus, error) {
-	// Check the transaction status
+	// Load previous transaction state
+	isRemote := d.Transaction.Body.Type() == protocol.TransactionTypeRemote
 	record := batch.Transaction(d.Transaction.GetHash())
+	txState, err := record.GetState()
+	switch {
+	case err == nil:
+		// Loaded existing the transaction from the database
+		if isRemote {
+			// Overwrite the transaction in the delivery
+			d.Transaction = txState.Transaction
+		} else if !txState.Transaction.Equal(d.Transaction) {
+			// This should be impossible
+			return nil, errors.Format(errors.StatusInternalError, "submitted transaction does not match the locally stored transaction")
+		}
+
+	case errors.Is(err, errors.StatusNotFound):
+		if isRemote {
+			// Remote transactions are only supported if the BVN has a local copy
+			return nil, errors.Format(errors.StatusUnknownError, "load transaction: %w", err)
+		}
+
+		// The delivery includes the full transaction so it's ok that the
+		// transaction does not (yet) exist locally
+
+	default:
+		// Unknown error
+		return nil, errors.Format(errors.StatusUnknownError, "load transaction: %w", err)
+	}
+
+	// Check the transaction status
 	status, err := record.GetStatus()
 	switch {
 	case err != nil:
@@ -215,37 +242,6 @@ func (d *Delivery) LoadTransaction(batch *database.Batch) (*protocol.Transaction
 	case status.Delivered():
 		// Transaction has already been delivered
 		return status, errors.Format(errors.StatusDelivered, "transaction %X has been delivered", d.Transaction.GetHash()[:4])
-	}
-
-	// Load previous transaction state
-	txState, err := record.GetState()
-	if err == nil {
-		// Loaded existing the transaction from the database
-		d.Transaction = txState.Transaction
-		return status, nil
-	} else if !errors.Is(err, storage.ErrNotFound) {
-		// Unknown error
-		return nil, errors.Format(errors.StatusUnknownError, "load transaction: %w", err)
-	}
-
-	// Did the envelope include the full body?
-	if d.Transaction.Body.Type() != protocol.TransactionTypeRemote {
-		return status, nil
-	}
-
-	// If the remote transaction does not specify a principal, the transaction
-	// must exist locally
-	principal := d.Transaction.Header.Principal
-	if principal == nil {
-		return nil, errors.NotFound("load transaction: no principal: transaction not found")
-	}
-
-	// If any signature is local or forwarded, the transaction must exist
-	// locally
-	for _, signature := range d.Signatures {
-		if signature.RoutingLocation().LocalTo(principal) {
-			return nil, errors.NotFound("load transaction: local signature: transaction not found")
-		}
 	}
 
 	return status, nil

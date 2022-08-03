@@ -81,7 +81,7 @@ func (v *FakeAuthority) Copy() *FakeAuthority {
 
 	u.FakeAccount = *v.FakeAccount.Copy()
 	if v.Signers != nil {
-		u.Signers = (v.Signers).Copy()
+		u.Signers = v.Signers
 	}
 
 	return u
@@ -94,7 +94,7 @@ func (v *FakeLiteAccount) Copy() *FakeLiteAccount {
 
 	u.TheType = v.TheType
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 
 	return u
@@ -109,7 +109,7 @@ func (v *FakeSignature) Copy() *FakeSignature {
 	u.Vote = v.Vote
 	u.PublicKey = encoding.BytesCopy(v.PublicKey)
 	if v.Signer != nil {
-		u.Signer = (v.Signer).Copy()
+		u.Signer = v.Signer
 	}
 	u.SignerVersion = v.SignerVersion
 	u.Timestamp = v.Timestamp

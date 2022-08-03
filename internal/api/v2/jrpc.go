@@ -13,6 +13,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate"
+	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
@@ -106,10 +107,53 @@ func (m *JrpcMethods) jrpc2http(jrpc jsonrpc2.MethodFunc) http.HandlerFunc {
 	}
 }
 
-func (m *JrpcMethods) Status(_ context.Context, params json.RawMessage) interface{} {
-	return &StatusResponse{
-		Ok: true,
+func (m *JrpcMethods) Status(ctx context.Context, _ json.RawMessage) interface{} {
+	conn, err := m.ConnectionManager.SelectConnection(m.Options.Describe.PartitionId, true)
+	if err != nil {
+		return internalError(err)
 	}
+
+	// Get the latest block height and BPT hash from Tendermint RPC
+	tmStatus, err := conn.GetABCIClient().Status(ctx)
+	if err != nil {
+		return internalError(err)
+	}
+
+	// Get the latest root chain anchor from the Accumulate API
+	apiclient := conn.GetAPIClient()
+	rootAnchor, err := getLatestRootChainAnchor(apiclient, m.Options.Describe.Ledger(), ctx)
+	if err != nil {
+		return internalError(err)
+	}
+
+	// Get the latest directory anchor from the Accumulate API
+	dnAnchorHeight, err := getLatestDirectoryAnchor(conn, m.Options.Describe.AnchorPool())
+	if err != nil {
+		return err
+	}
+
+	if m.Options.Describe.NetworkType == config.NetworkTypeDirectory {
+		status := new(StatusResponse)
+		status.Ok = true
+		status.DnHeight = tmStatus.SyncInfo.LatestBlockHeight
+		status.DnTime = tmStatus.SyncInfo.LatestBlockTime
+		if len(tmStatus.SyncInfo.LatestAppHash) == 32 {
+			status.DnBptHash = *(*[32]byte)(tmStatus.SyncInfo.LatestBlockHash)
+		}
+		status.DnRootHash = *rootAnchor
+		return status
+	}
+
+	status := new(StatusResponse)
+	status.Ok = true
+	status.BvnHeight = tmStatus.SyncInfo.LatestBlockHeight
+	status.BvnTime = tmStatus.SyncInfo.LatestBlockTime
+	if len(tmStatus.SyncInfo.LatestAppHash) == 32 {
+		status.BvnBptHash = *(*[32]byte)(tmStatus.SyncInfo.LatestBlockHash)
+	}
+	status.BvnRootHash = *rootAnchor
+	status.LastDirectoryAnchorHeight = uint64(dnAnchorHeight)
+	return status
 }
 
 func (m *JrpcMethods) Version(_ context.Context, params json.RawMessage) interface{} {
