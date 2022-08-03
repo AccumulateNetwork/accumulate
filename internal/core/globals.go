@@ -15,6 +15,7 @@ const labelOracle = "oracle"
 const labelGlobals = "network globals"
 const labelNetwork = "network definition"
 const labelRouting = "routing table"
+const labelAddressBook = "address book"
 
 func (g *GlobalValues) Load(net config.NetworkUrl, getState getStateFunc) error {
 	if err := loadAccount(net.JoinPath(protocol.Oracle), labelOracle, getState, new(protocol.AcmeOracle), &g.Oracle); err != nil {
@@ -33,6 +34,10 @@ func (g *GlobalValues) Load(net config.NetworkUrl, getState getStateFunc) error 
 		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
+	if err := loadAccount(net.JoinPath(protocol.AddressBook), labelAddressBook, getState, new(protocol.AddressBookEntries), &g.AddressBook); err != nil {
+		return errors.Wrap(errors.StatusUnknownError, err)
+	}
+
 	return nil
 }
 
@@ -45,15 +50,15 @@ func (g *GlobalValues) Store(net config.NetworkUrl, getState getStateFunc, putSt
 		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
-	if g.Network != nil {
-		// TODO Make this unconditional once the corresponding part of genesis
-		// is unconditional
-		if err := storeAccount(net.JoinPath(protocol.Network), labelNetwork, getState, putState, g.Network); err != nil {
-			return errors.Wrap(errors.StatusUnknownError, err)
-		}
+	if err := storeAccount(net.JoinPath(protocol.Network), labelNetwork, getState, putState, g.Network); err != nil {
+		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	if err := storeAccount(net.JoinPath(protocol.Routing), labelRouting, getState, putState, g.Routing); err != nil {
+		return errors.Wrap(errors.StatusUnknownError, err)
+	}
+
+	if err := storeAccount(net.JoinPath(protocol.AddressBook), labelAddressBook, getState, putState, g.AddressBook); err != nil {
 		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
@@ -90,6 +95,14 @@ func (g *GlobalValues) ParseRouting(entry protocol.DataEntry) error {
 
 func (g *GlobalValues) FormatRouting() protocol.DataEntry {
 	return formatEntry(g.Routing)
+}
+
+func (g *GlobalValues) ParseAddressBook(entry protocol.DataEntry) error {
+	return parseEntryAs(labelAddressBook, entry, new(protocol.AddressBookEntries), &g.AddressBook)
+}
+
+func (g *GlobalValues) FormatAddressBook() protocol.DataEntry {
+	return formatEntry(g.AddressBook)
 }
 
 func loadAccount[T encoding.BinaryValue](accountUrl *url.URL, name string, getState getStateFunc, value T, ptr *T) error {

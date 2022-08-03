@@ -248,11 +248,7 @@ func (d *Delivery) LoadTransaction(batch *database.Batch) (*protocol.Transaction
 }
 
 func (d *Delivery) LoadSyntheticMetadata(batch *database.Batch, typ protocol.TransactionType, status *protocol.TransactionStatus) error {
-	if typ.IsUser() {
-		return nil
-	}
-	switch typ {
-	case protocol.TransactionTypeSystemGenesis, protocol.TransactionTypeSystemWriteData:
+	if typ.IsUser() || typ.IsSystem() && !typ.IsAnchor() {
 		return nil
 	}
 

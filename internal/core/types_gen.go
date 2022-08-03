@@ -9,10 +9,11 @@ import (
 )
 
 type GlobalValues struct {
-	Oracle  *protocol.AcmeOracle        `json:"oracle,omitempty" form:"oracle" query:"oracle" validate:"required"`
-	Globals *protocol.NetworkGlobals    `json:"globals,omitempty" form:"globals" query:"globals" validate:"required"`
-	Network *protocol.NetworkDefinition `json:"network,omitempty" form:"network" query:"network" validate:"required"`
-	Routing *protocol.RoutingTable      `json:"routing,omitempty" form:"routing" query:"routing" validate:"required"`
+	Oracle      *protocol.AcmeOracle         `json:"oracle,omitempty" form:"oracle" query:"oracle" validate:"required"`
+	Globals     *protocol.NetworkGlobals     `json:"globals,omitempty" form:"globals" query:"globals" validate:"required"`
+	Network     *protocol.NetworkDefinition  `json:"network,omitempty" form:"network" query:"network" validate:"required"`
+	Routing     *protocol.RoutingTable       `json:"routing,omitempty" form:"routing" query:"routing" validate:"required"`
+	AddressBook *protocol.AddressBookEntries `json:"addressBook,omitempty" form:"addressBook" query:"addressBook" validate:"required"`
 }
 
 func (v *GlobalValues) Copy() *GlobalValues {
@@ -29,6 +30,9 @@ func (v *GlobalValues) Copy() *GlobalValues {
 	}
 	if v.Routing != nil {
 		u.Routing = (v.Routing).Copy()
+	}
+	if v.AddressBook != nil {
+		u.AddressBook = (v.AddressBook).Copy()
 	}
 
 	return u
@@ -67,6 +71,14 @@ func (v *GlobalValues) Equal(u *GlobalValues) bool {
 	case v.Routing == nil || u.Routing == nil:
 		return false
 	case !((v.Routing).Equal(u.Routing)):
+		return false
+	}
+	switch {
+	case v.AddressBook == u.AddressBook:
+		// equal
+	case v.AddressBook == nil || u.AddressBook == nil:
+		return false
+	case !((v.AddressBook).Equal(u.AddressBook)):
 		return false
 	}
 

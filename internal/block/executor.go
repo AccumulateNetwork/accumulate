@@ -83,6 +83,7 @@ func NewNodeExecutor(opts ExecutorOptions, db database.Beginner) (*Executor, err
 		executors = append(executors,
 			chain.PartitionAnchor{},
 			chain.DirectoryAnchor{},
+			chain.NodeStatusUpdate{},
 		)
 
 	case config.BlockValidator:
@@ -163,6 +164,8 @@ func newExecutor(opts ExecutorOptions, db database.Beginner, executors ...chain.
 
 	return m, nil
 }
+
+func (x *Executor) DescribeNetwork() *config.Describe { return &x.Describe }
 
 func (m *Executor) EnableTimers() {
 	m.BlockTimers.Initialize(&m.executors)

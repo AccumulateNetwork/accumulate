@@ -112,6 +112,16 @@ SystemWriteData:
       type: bool
       optional: true
 
+NodeStatusUpdate:
+  union: { type: transaction }
+  fields:
+    - name: Status
+      type: NodeStatus
+      marshal-as: enum
+    - name: Address
+      type: string
+      optional: true
+
 
 ##### Data Types #####
 
@@ -181,3 +191,18 @@ PartitionSyntheticLedger:
       type: txid
       pointer: true
       repeatable: true
+
+AddressBookEntries:
+  fields:
+    - name: Entries
+      type: AddressBookEntry
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+
+AddressBookEntry:
+  fields:
+    - name: PublicKeyHash
+      type: hash
+    - name: Address
+      type: string

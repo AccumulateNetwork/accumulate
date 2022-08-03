@@ -39,6 +39,11 @@ func (u NetworkUrl) AnchorPool() *url.URL {
 	return u.JoinPath(protocol.AnchorPool)
 }
 
+// AddressBook returns the URL of the partition's address book.
+func (u NetworkUrl) AddressBook() *url.URL {
+	return u.JoinPath(protocol.AddressBook)
+}
+
 // PartitionUrl returns a NetworkUrl for the local partition.
 func (n *Describe) PartitionUrl() NetworkUrl {
 	return NetworkUrl{protocol.PartitionUrl(n.PartitionId)}
@@ -72,4 +77,9 @@ func (n *Describe) OperatorsPage() *url.URL {
 // AnchorPool returns the URL of the partition's anchor pool.
 func (n *Describe) AnchorPool() *url.URL {
 	return n.PartitionUrl().AnchorPool()
+}
+
+// AddressBook returns the URL of the partition's address book.
+func (n *Describe) AddressBook() *url.URL {
+	return n.PartitionUrl().AddressBook()
 }

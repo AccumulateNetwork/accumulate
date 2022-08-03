@@ -31,6 +31,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 type Daemon struct {
@@ -45,6 +47,7 @@ type Daemon struct {
 	jrpc              *api.JrpcMethods
 	connectionManager connections.ConnectionInitializer
 	eventBus          *events.Bus
+	router            routing.Router
 
 	// knobs for tests
 	// IsTest   bool
@@ -148,12 +151,12 @@ func (d *Daemon) Start() (err error) {
 	d.eventBus = events.NewBus(d.Logger.With("module", "events"))
 	events.SubscribeSync(d.eventBus, d.onDidCommitBlock)
 
-	router := routing.NewRouter(d.eventBus, d.connectionManager)
+	d.router = routing.NewRouter(d.eventBus, d.connectionManager)
 	execOpts := block.ExecutorOptions{
 		Logger:   d.Logger,
 		Key:      d.Key().Bytes(),
 		Describe: d.Config.Accumulate.Describe,
-		Router:   router,
+		Router:   d.router,
 		EventBus: d.eventBus,
 	}
 
@@ -215,7 +218,7 @@ func (d *Daemon) Start() (err error) {
 	d.jrpc, err = api.NewJrpc(api.Options{
 		Logger:            d.Logger,
 		Describe:          &d.Config.Accumulate.Describe,
-		Router:            router,
+		Router:            d.router,
 		PrometheusServer:  d.Config.Accumulate.API.PrometheusServer,
 		TxMaxWaitTime:     d.Config.Accumulate.API.TxMaxWaitTime,
 		Database:          d.db,
@@ -272,6 +275,11 @@ func (d *Daemon) Start() (err error) {
 	}
 	color.HiBlue(" %s node running at %s :", d.node.Config.Accumulate.NetworkType, d.node.Config.Accumulate.Describe.LocalAddress)
 
+	// Send status notification
+	if d.Config.Accumulate.NetworkType == config.Directory {
+		d.sendNodeStatusUpdate(protocol.NodeStatusUp)
+	}
+
 	// Clean up once the node is stopped (mostly for tests)
 	go func() {
 		defer close(d.done)
@@ -297,6 +305,40 @@ func (d *Daemon) Start() (err error) {
 	}()
 
 	return nil
+}
+
+func (d *Daemon) sendNodeStatusUpdate(status protocol.NodeStatus) {
+	txn := new(protocol.Transaction)
+	txn.Header.Principal = d.Config.Accumulate.AddressBook()
+	txn.Body = &protocol.NodeStatusUpdate{
+		Status:  status,
+		Address: "http://" + d.Config.Accumulate.LocalAddress,
+	}
+
+	sig, err := new(signing.Builder).
+		UseSimpleHash().
+		SetType(protocol.SignatureTypeED25519).
+		SetUrl(d.Config.Accumulate.OperatorsPage()).
+		SetVersion(1).
+		SetTimestampToNow().
+		SetPrivateKey(d.pv.Key.PrivKey.Bytes()).
+		Initiate(txn)
+	if err != nil {
+		d.Logger.Error("Sign node status update", "error", err)
+		return
+	}
+
+	env := new(protocol.Envelope)
+	env.Transaction = []*protocol.Transaction{txn}
+	env.Signatures = []protocol.Signature{sig}
+
+	_, err = d.router.Submit(context.Background(), d.Config.Accumulate.PartitionId, env, false, true)
+	if err != nil {
+		d.Logger.Error("Submit node status update", "error", err)
+		return
+	}
+
+	d.Logger.Info("Submitted node status update", "hash", logging.AsHex(txn.GetHash()))
 }
 
 func (d *Daemon) LocalClient() (connections.ABCIClient, error) {
@@ -371,6 +413,8 @@ func listenHttpUrl(s string) (net.Listener, bool, error) {
 }
 
 func (d *Daemon) Stop() error {
+	d.sendNodeStatusUpdate(protocol.NodeStatusDown)
+
 	err := d.node.Stop()
 	if err != nil {
 		return err

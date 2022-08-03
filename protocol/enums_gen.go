@@ -122,6 +122,15 @@ const KeyPageOperationTypeSetThreshold KeyPageOperationType = 4
 // KeyPageOperationTypeUpdateAllowed updates the transactions the key page is allowed to execute.
 const KeyPageOperationTypeUpdateAllowed KeyPageOperationType = 5
 
+// NodeStatusUnknown indicates the node status is not known.
+const NodeStatusUnknown NodeStatus = 0
+
+// NodeStatusUp indicates the node is up.
+const NodeStatusUp NodeStatus = 1
+
+// NodeStatusDown indicates the node is up.
+const NodeStatusDown NodeStatus = 2
+
 // ObjectTypeUnknown is used when the object type is not known.
 const ObjectTypeUnknown ObjectType = 0
 
@@ -268,6 +277,9 @@ const TransactionTypeBlockValidatorAnchor TransactionType = 98
 
 // TransactionTypeSystemWriteData writes data to a system data account.
 const TransactionTypeSystemWriteData TransactionType = 99
+
+// TransactionTypeNodeStatusUpdate updates the status of a node.
+const TransactionTypeNodeStatusUpdate TransactionType = 100
 
 // VoteTypeAccept vote yea in favor of proposal.
 const VoteTypeAccept VoteType = 0
@@ -799,6 +811,70 @@ func (v *KeyPageOperationType) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// GetEnumValue returns the value of the Node Status
+func (v NodeStatus) GetEnumValue() uint64 { return uint64(v) }
+
+// SetEnumValue sets the value. SetEnumValue returns false if the value is invalid.
+func (v *NodeStatus) SetEnumValue(id uint64) bool {
+	u := NodeStatus(id)
+	switch u {
+	case NodeStatusUnknown, NodeStatusUp, NodeStatusDown:
+		*v = u
+		return true
+	default:
+		return false
+	}
+}
+
+// String returns the name of the Node Status.
+func (v NodeStatus) String() string {
+	switch v {
+	case NodeStatusUnknown:
+		return "unknown"
+	case NodeStatusUp:
+		return "up"
+	case NodeStatusDown:
+		return "down"
+	default:
+		return fmt.Sprintf("NodeStatus:%d", v)
+	}
+}
+
+// NodeStatusByName returns the named Node Status.
+func NodeStatusByName(name string) (NodeStatus, bool) {
+	switch strings.ToLower(name) {
+	case "unknown":
+		return NodeStatusUnknown, true
+	case "up":
+		return NodeStatusUp, true
+	case "down":
+		return NodeStatusDown, true
+	default:
+		return 0, false
+	}
+}
+
+// MarshalJSON marshals the Node Status to JSON as a string.
+func (v NodeStatus) MarshalJSON() ([]byte, error) {
+	return json.Marshal(v.String())
+}
+
+// UnmarshalJSON unmarshals the Node Status from JSON as a string.
+func (v *NodeStatus) UnmarshalJSON(data []byte) error {
+	var s string
+	err := json.Unmarshal(data, &s)
+	if err != nil {
+		return err
+	}
+
+	var ok bool
+	*v, ok = NodeStatusByName(s)
+	if !ok || strings.ContainsRune(v.String(), ':') {
+		return fmt.Errorf("invalid Node Status %q", s)
+	}
+	return nil
+}
+
 // GetEnumValue returns the value of the Object Type
 func (v ObjectType) GetEnumValue() uint64 { return uint64(v) }
 
@@ -1040,7 +1116,7 @@ func (v TransactionType) GetEnumValue() uint64 { return uint64(v) }
 func (v *TransactionType) SetEnumValue(id uint64) bool {
 	u := TransactionType(id)
 	switch u {
-	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateLiteTokenAccount, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeLockAccount, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeRemote, TransactionTypeSyntheticCreateIdentity, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeSystemGenesis, TransactionTypeDirectoryAnchor, TransactionTypeBlockValidatorAnchor, TransactionTypeSystemWriteData:
+	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateLiteTokenAccount, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeLockAccount, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeRemote, TransactionTypeSyntheticCreateIdentity, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeSystemGenesis, TransactionTypeDirectoryAnchor, TransactionTypeBlockValidatorAnchor, TransactionTypeSystemWriteData, TransactionTypeNodeStatusUpdate:
 		*v = u
 		return true
 	default:
@@ -1111,6 +1187,8 @@ func (v TransactionType) String() string {
 		return "blockValidatorAnchor"
 	case TransactionTypeSystemWriteData:
 		return "systemWriteData"
+	case TransactionTypeNodeStatusUpdate:
+		return "nodeStatusUpdate"
 	default:
 		return fmt.Sprintf("TransactionType:%d", v)
 	}
@@ -1181,6 +1259,8 @@ func TransactionTypeByName(name string) (TransactionType, bool) {
 		return TransactionTypeBlockValidatorAnchor, true
 	case "systemwritedata":
 		return TransactionTypeSystemWriteData, true
+	case "nodestatusupdate":
+		return TransactionTypeNodeStatusUpdate, true
 	default:
 		return 0, false
 	}

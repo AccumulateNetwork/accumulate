@@ -190,6 +190,8 @@ func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protoc
 		b.globals.Routing = b.routingTable
 	}
 
+	b.globals.AddressBook = new(protocol.AddressBookEntries)
+
 	err := b.globals.Store(b.partition, func(accountUrl *url.URL, target interface{}) error {
 		da := new(protocol.DataAccount)
 		da.Url = accountUrl

@@ -17,3 +17,7 @@ GlobalValues:
       type: protocol.RoutingTable
       marshal-as: reference
       pointer: true
+    - name: AddressBook
+      type: protocol.AddressBookEntries
+      marshal-as: reference
+      pointer: true

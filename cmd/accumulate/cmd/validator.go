@@ -110,7 +110,7 @@ func runValCmdFunc(fn func(values *core.GlobalValues, pageCount int, signer []*s
 			return "", err
 		}
 
-		return dispatchTxAndPrintResponse(env, principal, signers)
+		return dispatchTxAndPrintResponse(env, principal, nil)
 	})
 }
 
