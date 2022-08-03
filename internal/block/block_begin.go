@@ -255,7 +255,7 @@ func (x *Executor) finalizeBlock(block *Block) error {
 		}
 
 		// DN -> BVN
-		for _, bvn := range x.Describe.Network.GetBvnNames() {
+		for _, bvn := range x.globals.Active.GetBvns() {
 			err = x.sendBlockAnchor(block.Batch, anchor, sequenceNumber, bvn)
 			if err != nil {
 				return errors.Format(errors.StatusUnknownError, "send anchor for block %d: %w", ledger.Index, err)

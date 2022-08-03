@@ -20,17 +20,21 @@ func (m *JrpcMethods) QueryTxLocal(ctx context.Context, params json.RawMessage) 
 }
 
 func (m *JrpcMethods) QueryTx(ctx context.Context, params json.RawMessage) interface{} {
+	if m.globals == nil {
+		return accumulateError(errors.Format(errors.StatusUninitialized, "globals have not been initialized"))
+	}
+
 	req := new(TxnQuery)
 	err := m.parse(params, req)
 	if err != nil {
 		return err
 	}
 
-	resCh := make(chan interface{})                    // Result channel
-	errCh := make(chan error)                          // Error channel
-	doneCh := make(chan struct{})                      // Completion channel
-	wg := new(sync.WaitGroup)                          // Wait for completion
-	wg.Add(len(m.Options.Describe.Network.Partitions)) //
+	resCh := make(chan interface{})        // Result channel
+	errCh := make(chan error)              // Error channel
+	doneCh := make(chan struct{})          // Completion channel
+	wg := new(sync.WaitGroup)              // Wait for completion
+	wg.Add(len(m.globals.GetPartitions())) //
 
 	// Mark complete on return
 	defer close(doneCh)
@@ -48,7 +52,7 @@ func (m *JrpcMethods) QueryTx(ctx context.Context, params json.RawMessage) inter
 	}()
 
 	// Create a request for each client in a separate goroutine
-	for _, subnet := range m.Options.Describe.Network.Partitions {
+	for _, subnet := range m.globals.GetPartitions() {
 		go func(subnetId string) {
 			// Mark complete on return
 			defer wg.Done()
@@ -72,7 +76,7 @@ func (m *JrpcMethods) QueryTx(ctx context.Context, params json.RawMessage) inter
 					// A result or error has already been sent
 				}
 			}
-		}(subnet.Id)
+		}(subnet)
 	}
 
 	// Wait for an error or a result

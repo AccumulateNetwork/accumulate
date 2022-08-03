@@ -49,6 +49,17 @@ func (n *NodeInit) Address(listen bool, scheme string, offset ...config.PortOffs
 	return fmt.Sprintf("%s://%s:%d", scheme, addr, n.Port(offset...))
 }
 
+func (n *NodeInit) Address2(listen bool, offset ...config.PortOffset) *protocol.InternetAddress {
+	var addr string
+	if listen && n.ListenIP != "" {
+		addr = n.ListenIP
+	} else {
+		addr = n.HostName
+	}
+
+	return protocol.NewInternetAddress("http", addr, n.Port(offset...))
+}
+
 func (n *NodeInit) TmNodeAddress(offset ...config.PortOffset) string {
 	nodeId := tmtypes.NodeIDFromPubKey(ed25519.PubKey(n.NodeKey[32:]))
 	return nodeId.AddressString(n.Address(false, "", offset...))
@@ -102,16 +113,16 @@ func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][2]*config
 			dnn.Moniker = fmt.Sprintf("Directory.%d", i)
 			ConfigureNodePorts(node, dnn, config.PortOffsetDirectory)
 			dnConfig.Nodes = append(dnConfig.Nodes, config.Node{
-				Address: node.Address(false, "http", config.PortOffsetTendermintP2P, config.PortOffsetDirectory),
-				Type:    node.DnnType,
+				Address:   node.Address2(false, config.PortOffsetTendermintP2P, config.PortOffsetDirectory),
+				PublicKey: node.PrivValKey[32:],
 			})
 
 			bvnn := mkcfg(network.Id, config.BlockValidator, node.BvnnType, bvn.Id)
 			bvnn.Moniker = fmt.Sprintf("%s.%d", bvn.Id, j+1)
 			ConfigureNodePorts(node, bvnn, config.PortOffsetBlockValidator)
 			bvnConfig.Nodes = append(bvnConfig.Nodes, config.Node{
-				Address: node.Address(false, "http", config.PortOffsetTendermintP2P, config.PortOffsetBlockValidator),
-				Type:    node.BvnnType,
+				Address:   node.Address2(false, config.PortOffsetTendermintP2P, config.PortOffsetBlockValidator),
+				PublicKey: node.PrivValKey[32:],
 			})
 
 			if len(network.Bvns) == 1 && len(bvn.Nodes) == 1 {
@@ -155,8 +166,8 @@ func ConfigureNodePorts(node *NodeInit, cfg *config.Config, offset config.PortOf
 	cfg.RPC.ListenAddress = node.Address(true, "tcp", offset, config.PortOffsetTendermintRpc)
 
 	cfg.Instrumentation.PrometheusListenAddr = fmt.Sprintf(":%d", node.Port(offset, config.PortOffsetPrometheus))
-	if cfg.Accumulate.LocalAddress == "" {
-		cfg.Accumulate.LocalAddress = node.Address(false, "", offset, config.PortOffsetTendermintP2P)
+	if cfg.Accumulate.Advertise == nil {
+		cfg.Accumulate.Advertise = node.Address2(false, offset)
 	}
 	cfg.Accumulate.Website.ListenAddress = node.Address(true, "http", offset, config.PortOffsetWebsite)
 	cfg.Accumulate.API.ListenAddress = node.Address(true, "http", offset, config.PortOffsetAccumulateApi)
@@ -165,8 +176,8 @@ func ConfigureNodePorts(node *NodeInit, cfg *config.Config, offset config.PortOf
 func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time time.Time, logger log.Logger, factomAddresses func() (io.Reader, error)) (map[string]*tmtypes.GenesisDoc, error) {
 	docs := map[string]*tmtypes.GenesisDoc{}
 	var operators [][]byte
-	var partitions []protocol.PartitionDefinition
-	partitions = append(partitions, protocol.PartitionDefinition{
+	var partitions []*protocol.PartitionDefinition
+	partitions = append(partitions, &protocol.PartitionDefinition{
 		PartitionID: protocol.Directory,
 	})
 
@@ -203,7 +214,7 @@ func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time tim
 			}
 		}
 
-		partitions = append(partitions, protocol.PartitionDefinition{
+		partitions = append(partitions, &protocol.PartitionDefinition{
 			PartitionID:   bvn.Id,
 			ValidatorKeys: bvnValidators,
 		})

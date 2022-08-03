@@ -402,3 +402,7 @@ func StringToEnumHookFunc() mapstructure.DecodeHookFuncType {
 		return data, nil
 	}
 }
+
+func (d *Describe) LocalAddress() string {
+	return d.Advertise.Host
+}

@@ -136,7 +136,7 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 	for i, bvn := range sim.netInit.Bvns[:1] {
 		// TODO Initialize multiple executors for the DN
 		dn := &sim.Partitions[0]
-		dn.Nodes = append(dn.Nodes, config.Node{Type: config.Validator, Address: protocol.Directory})
+		dn.Nodes = []config.Node{{Address: protocol.NewInternetAddress("http", protocol.Directory, 1000), PublicKey: bvn.Nodes[0].PrivValKey[32:]}}
 
 		x := new(ExecEntry)
 		x.Partition = dn
@@ -149,10 +149,10 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 		x.Database = opts.OpenDB(protocol.Directory, i, logger)
 
 		network := config.Describe{
-			NetworkType:  config.Directory,
-			PartitionId:  protocol.Directory,
-			LocalAddress: protocol.Directory,
-			Network:      config.Network{Id: "simulator", Partitions: sim.Partitions},
+			NetworkType: config.Directory,
+			PartitionId: protocol.Directory,
+			Advertise:   protocol.NewInternetAddress("http", protocol.Directory, 1000),
+			Network:     config.Network{Id: "simulator", Partitions: sim.Partitions},
 		}
 
 		execOpts := block.ExecutorOptions{
@@ -184,7 +184,7 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 
 	for i, bvnInit := range sim.netInit.Bvns {
 		bvn := &sim.Partitions[i+1]
-		bvn.Nodes = []config.Node{{Type: config.Validator, Address: bvn.Id}}
+		bvn.Nodes = []config.Node{{Address: protocol.NewInternetAddress("http", bvn.Id, 1000), PublicKey: bvnInit.Nodes[0].PrivValKey[32:]}}
 
 		x := new(ExecEntry)
 		x.Partition = bvn
@@ -197,10 +197,10 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 		x.Database = opts.OpenDB(bvn.Id, 0, logger)
 
 		network := config.Describe{
-			NetworkType:  bvn.Type,
-			PartitionId:  bvn.Id,
-			LocalAddress: bvn.Id,
-			Network:      config.Network{Id: "simulator", Partitions: sim.Partitions},
+			NetworkType: bvn.Type,
+			PartitionId: bvn.Id,
+			Advertise:   protocol.NewInternetAddress("http", bvn.Id, 1000),
+			Network:     config.Network{Id: "simulator", Partitions: sim.Partitions},
 		}
 
 		execOpts := block.ExecutorOptions{

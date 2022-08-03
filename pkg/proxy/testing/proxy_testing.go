@@ -66,7 +66,7 @@ func LaunchAccuProxyDevNet(t *testing.T) (*client.Client, *url.URL, *url.URL) {
 }
 
 //make up a fake default network configuration list
-var Nodes = []config.Node{{Address: "127.0.0.1", Type: config.NodeTypeValidator}}
+var Nodes = []config.Node{{Address: protocol.NewInternetAddress("http", "127.0.0.1", 1000)}}
 var Partitions = []config.Partition{
 	{Id: "Directory", Type: config.NetworkTypeDirectory, BasePort: 30000, Nodes: Nodes},
 	{Id: "BVN0", Type: config.NetworkTypeBlockValidator, BasePort: 40000, Nodes: Nodes},
@@ -91,7 +91,7 @@ func seedList(_ context.Context, params json.RawMessage) interface{} {
 	resp.BasePort = uint64(snl.BasePort)
 
 	for _, n := range snl.Nodes {
-		resp.Addresses = append(resp.Addresses, n.Address)
+		resp.Addresses = append(resp.Addresses, n.Address.String())
 	}
 
 	if slr.Sign {

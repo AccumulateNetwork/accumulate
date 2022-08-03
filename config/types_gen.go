@@ -8,32 +8,36 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 type Describe struct {
-	fieldsSet    []bool
-	NetworkType  NetworkType `json:"networkType,omitempty" form:"networkType" query:"networkType" validate:"required" toml:"type" mapstructure:"type"`
-	PartitionId  string      `json:"partitionId,omitempty" form:"partitionId" query:"partitionId" validate:"required" toml:"partition-id" mapstructure:"partition-id"`
-	LocalAddress string      `json:"localAddress,omitempty" form:"localAddress" query:"localAddress" validate:"required" toml:"local-address" mapstructure:"local-address"`
-	Network      Network     `json:"network,omitempty" form:"network" query:"network" validate:"required" toml:"network" mapstructure:"network"`
-	extraData    []byte
+	fieldsSet   []bool
+	NetworkType NetworkType               `json:"networkType,omitempty" form:"networkType" query:"networkType" validate:"required" toml:"type" mapstructure:"type"`
+	PartitionId string                    `json:"partitionId,omitempty" form:"partitionId" query:"partitionId" validate:"required" toml:"partition-id" mapstructure:"partition-id"`
+	Advertise   *protocol.InternetAddress `json:"advertise,omitempty" form:"advertise" query:"advertise" validate:"required" toml:"advertise" mapstructure:"advertise"`
+	Network     Network                   `json:"network,omitempty" form:"network" query:"network" validate:"required" toml:"network" mapstructure:"network"`
+	extraData   []byte
 }
 
 type Network struct {
 	fieldsSet  []bool
-	Id         string      `json:"id,omitempty" form:"id" query:"id" validate:"required" toml:"id" mapstructure:"id"`
-	Partitions []Partition `json:"partitions,omitempty" form:"partitions" query:"partitions" validate:"required" toml:"partitions" mapstructure:"partitions"`
+	Id         string                       `json:"id,omitempty" form:"id" query:"id" validate:"required" toml:"id" mapstructure:"id"`
+	Seeds      []*protocol.AddressBookEntry `json:"seeds,omitempty" form:"seeds" query:"seeds" validate:"required"`
+	Ignore     []*protocol.AddressBookEntry `json:"ignore,omitempty" form:"ignore" query:"ignore" validate:"required"`
+	Partitions []Partition                  `json:"partitions,omitempty" form:"partitions" query:"partitions" validate:"required" toml:"partitions" mapstructure:"partitions"`
 	extraData  []byte
 }
 
 type Node struct {
 	fieldsSet []bool
-	Address   string   `json:"address,omitempty" form:"address" query:"address" validate:"required" toml:"address" mapstructure:"address"`
-	Type      NodeType `json:"type,omitempty" form:"type" query:"type" validate:"required" toml:"type" mapstructure:"type"`
+	Address   *protocol.InternetAddress `json:"address,omitempty" form:"address" query:"address" validate:"required" toml:"address" mapstructure:"address"`
+	PublicKey []byte                    `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required" toml:"public-key" mapstructure:"public-key"`
 	extraData []byte
 }
 
@@ -51,7 +55,9 @@ func (v *Describe) Copy() *Describe {
 
 	u.NetworkType = v.NetworkType
 	u.PartitionId = v.PartitionId
-	u.LocalAddress = v.LocalAddress
+	if v.Advertise != nil {
+		u.Advertise = (v.Advertise).Copy()
+	}
 	u.Network = *(&v.Network).Copy()
 
 	return u
@@ -63,6 +69,18 @@ func (v *Network) Copy() *Network {
 	u := new(Network)
 
 	u.Id = v.Id
+	u.Seeds = make([]*protocol.AddressBookEntry, len(v.Seeds))
+	for i, v := range v.Seeds {
+		if v != nil {
+			u.Seeds[i] = (v).Copy()
+		}
+	}
+	u.Ignore = make([]*protocol.AddressBookEntry, len(v.Ignore))
+	for i, v := range v.Ignore {
+		if v != nil {
+			u.Ignore[i] = (v).Copy()
+		}
+	}
 	u.Partitions = make([]Partition, len(v.Partitions))
 	for i, v := range v.Partitions {
 		u.Partitions[i] = *(&v).Copy()
@@ -76,8 +94,10 @@ func (v *Network) CopyAsInterface() interface{} { return v.Copy() }
 func (v *Node) Copy() *Node {
 	u := new(Node)
 
-	u.Address = v.Address
-	u.Type = v.Type
+	if v.Address != nil {
+		u.Address = (v.Address).Copy()
+	}
+	u.PublicKey = encoding.BytesCopy(v.PublicKey)
 
 	return u
 }
@@ -107,7 +127,12 @@ func (v *Describe) Equal(u *Describe) bool {
 	if !(v.PartitionId == u.PartitionId) {
 		return false
 	}
-	if !(v.LocalAddress == u.LocalAddress) {
+	switch {
+	case v.Advertise == u.Advertise:
+		// equal
+	case v.Advertise == nil || u.Advertise == nil:
+		return false
+	case !((v.Advertise).Equal(u.Advertise)):
 		return false
 	}
 	if !((&v.Network).Equal(&u.Network)) {
@@ -120,6 +145,22 @@ func (v *Describe) Equal(u *Describe) bool {
 func (v *Network) Equal(u *Network) bool {
 	if !(v.Id == u.Id) {
 		return false
+	}
+	if len(v.Seeds) != len(u.Seeds) {
+		return false
+	}
+	for i := range v.Seeds {
+		if !((v.Seeds[i]).Equal(u.Seeds[i])) {
+			return false
+		}
+	}
+	if len(v.Ignore) != len(u.Ignore) {
+		return false
+	}
+	for i := range v.Ignore {
+		if !((v.Ignore[i]).Equal(u.Ignore[i])) {
+			return false
+		}
 	}
 	if len(v.Partitions) != len(u.Partitions) {
 		return false
@@ -134,10 +175,15 @@ func (v *Network) Equal(u *Network) bool {
 }
 
 func (v *Node) Equal(u *Node) bool {
-	if !(v.Address == u.Address) {
+	switch {
+	case v.Address == u.Address:
+		// equal
+	case v.Address == nil || u.Address == nil:
+		return false
+	case !((v.Address).Equal(u.Address)):
 		return false
 	}
-	if !(v.Type == u.Type) {
+	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
 		return false
 	}
 
@@ -169,7 +215,7 @@ func (v *Partition) Equal(u *Partition) bool {
 var fieldNames_Describe = []string{
 	1: "NetworkType",
 	2: "PartitionId",
-	3: "LocalAddress",
+	3: "Advertise",
 	4: "Network",
 }
 
@@ -183,8 +229,8 @@ func (v *Describe) MarshalBinary() ([]byte, error) {
 	if !(len(v.PartitionId) == 0) {
 		writer.WriteString(2, v.PartitionId)
 	}
-	if !(len(v.LocalAddress) == 0) {
-		writer.WriteString(3, v.LocalAddress)
+	if !(v.Advertise == nil) {
+		writer.WriteValue(3, v.Advertise.MarshalBinary)
 	}
 	if !((v.Network).Equal(new(Network))) {
 		writer.WriteValue(4, v.Network.MarshalBinary)
@@ -212,9 +258,9 @@ func (v *Describe) IsValid() error {
 		errs = append(errs, "field PartitionId is not set")
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field LocalAddress is missing")
-	} else if len(v.LocalAddress) == 0 {
-		errs = append(errs, "field LocalAddress is not set")
+		errs = append(errs, "field Advertise is missing")
+	} else if v.Advertise == nil {
+		errs = append(errs, "field Advertise is not set")
 	}
 	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field Network is missing")
@@ -234,7 +280,9 @@ func (v *Describe) IsValid() error {
 
 var fieldNames_Network = []string{
 	1: "Id",
-	2: "Partitions",
+	2: "Seeds",
+	3: "Ignore",
+	4: "Partitions",
 }
 
 func (v *Network) MarshalBinary() ([]byte, error) {
@@ -244,9 +292,19 @@ func (v *Network) MarshalBinary() ([]byte, error) {
 	if !(len(v.Id) == 0) {
 		writer.WriteString(1, v.Id)
 	}
+	if !(len(v.Seeds) == 0) {
+		for _, v := range v.Seeds {
+			writer.WriteValue(2, v.MarshalBinary)
+		}
+	}
+	if !(len(v.Ignore) == 0) {
+		for _, v := range v.Ignore {
+			writer.WriteValue(3, v.MarshalBinary)
+		}
+	}
 	if !(len(v.Partitions) == 0) {
 		for _, v := range v.Partitions {
-			writer.WriteValue(2, v.MarshalBinary)
+			writer.WriteValue(4, v.MarshalBinary)
 		}
 	}
 
@@ -267,6 +325,16 @@ func (v *Network) IsValid() error {
 		errs = append(errs, "field Id is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Seeds is missing")
+	} else if len(v.Seeds) == 0 {
+		errs = append(errs, "field Seeds is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Ignore is missing")
+	} else if len(v.Ignore) == 0 {
+		errs = append(errs, "field Ignore is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field Partitions is missing")
 	} else if len(v.Partitions) == 0 {
 		errs = append(errs, "field Partitions is not set")
@@ -284,18 +352,18 @@ func (v *Network) IsValid() error {
 
 var fieldNames_Node = []string{
 	1: "Address",
-	2: "Type",
+	2: "PublicKey",
 }
 
 func (v *Node) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	if !(len(v.Address) == 0) {
-		writer.WriteString(1, v.Address)
+	if !(v.Address == nil) {
+		writer.WriteValue(1, v.Address.MarshalBinary)
 	}
-	if !(v.Type == 0) {
-		writer.WriteEnum(2, v.Type)
+	if !(len(v.PublicKey) == 0) {
+		writer.WriteBytes(2, v.PublicKey)
 	}
 
 	_, _, err := writer.Reset(fieldNames_Node)
@@ -311,13 +379,13 @@ func (v *Node) IsValid() error {
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Address is missing")
-	} else if len(v.Address) == 0 {
+	} else if v.Address == nil {
 		errs = append(errs, "field Address is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Type is missing")
-	} else if v.Type == 0 {
-		errs = append(errs, "field Type is not set")
+		errs = append(errs, "field PublicKey is missing")
+	} else if len(v.PublicKey) == 0 {
+		errs = append(errs, "field PublicKey is not set")
 	}
 
 	switch len(errs) {
@@ -411,8 +479,8 @@ func (v *Describe) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadString(2); ok {
 		v.PartitionId = x
 	}
-	if x, ok := reader.ReadString(3); ok {
-		v.LocalAddress = x
+	if x := new(protocol.InternetAddress); reader.ReadValue(3, x.UnmarshalBinary) {
+		v.Advertise = x
 	}
 	if x := new(Network); reader.ReadValue(4, x.UnmarshalBinary) {
 		v.Network = *x
@@ -441,7 +509,21 @@ func (v *Network) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Id = x
 	}
 	for {
-		if x := new(Partition); reader.ReadValue(2, x.UnmarshalBinary) {
+		if x := new(protocol.AddressBookEntry); reader.ReadValue(2, x.UnmarshalBinary) {
+			v.Seeds = append(v.Seeds, x)
+		} else {
+			break
+		}
+	}
+	for {
+		if x := new(protocol.AddressBookEntry); reader.ReadValue(3, x.UnmarshalBinary) {
+			v.Ignore = append(v.Ignore, x)
+		} else {
+			break
+		}
+	}
+	for {
+		if x := new(Partition); reader.ReadValue(4, x.UnmarshalBinary) {
 			v.Partitions = append(v.Partitions, *x)
 		} else {
 			break
@@ -467,11 +549,11 @@ func (v *Node) UnmarshalBinary(data []byte) error {
 func (v *Node) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	if x, ok := reader.ReadString(1); ok {
+	if x := new(protocol.InternetAddress); reader.ReadValue(1, x.UnmarshalBinary) {
 		v.Address = x
 	}
-	if x := new(NodeType); reader.ReadEnum(2, x) {
-		v.Type = *x
+	if x, ok := reader.ReadBytes(2); ok {
+		v.PublicKey = x
 	}
 
 	seen, err := reader.Reset(fieldNames_Node)
@@ -524,29 +606,45 @@ func (v *Partition) UnmarshalBinaryFrom(rd io.Reader) error {
 
 func (v *Describe) MarshalJSON() ([]byte, error) {
 	u := struct {
-		NetworkType  NetworkType `json:"networkType,omitempty"`
-		PartitionId  string      `json:"partitionId,omitempty"`
-		SubnetId     string      `json:"subnetId,omitempty"`
-		LocalAddress string      `json:"localAddress,omitempty"`
-		Network      Network     `json:"network,omitempty"`
+		NetworkType  NetworkType               `json:"networkType,omitempty"`
+		PartitionId  string                    `json:"partitionId,omitempty"`
+		SubnetId     string                    `json:"subnetId,omitempty"`
+		Advertise    *protocol.InternetAddress `json:"advertise,omitempty"`
+		LocalAddress string                    `json:"localAddress,omitempty"`
+		Network      Network                   `json:"network,omitempty"`
 	}{}
 	u.NetworkType = v.NetworkType
 	u.PartitionId = v.PartitionId
 	u.SubnetId = v.PartitionId
-	u.LocalAddress = v.LocalAddress
+	u.Advertise = v.Advertise
+	u.LocalAddress = v.LocalAddress()
 	u.Network = v.Network
 	return json.Marshal(&u)
 }
 
 func (v *Network) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Id         string                       `json:"id,omitempty"`
-		Partitions encoding.JsonList[Partition] `json:"partitions,omitempty"`
-		Subnets    encoding.JsonList[Partition] `json:"subnets,omitempty"`
+		Id         string                                        `json:"id,omitempty"`
+		Seeds      encoding.JsonList[*protocol.AddressBookEntry] `json:"seeds,omitempty"`
+		Ignore     encoding.JsonList[*protocol.AddressBookEntry] `json:"ignore,omitempty"`
+		Partitions encoding.JsonList[Partition]                  `json:"partitions,omitempty"`
+		Subnets    encoding.JsonList[Partition]                  `json:"subnets,omitempty"`
 	}{}
 	u.Id = v.Id
+	u.Seeds = v.Seeds
+	u.Ignore = v.Ignore
 	u.Partitions = v.Partitions
 	u.Subnets = v.Partitions
+	return json.Marshal(&u)
+}
+
+func (v *Node) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Address   *protocol.InternetAddress `json:"address,omitempty"`
+		PublicKey *string                   `json:"publicKey,omitempty"`
+	}{}
+	u.Address = v.Address
+	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	return json.Marshal(&u)
 }
 
@@ -566,16 +664,18 @@ func (v *Partition) MarshalJSON() ([]byte, error) {
 
 func (v *Describe) UnmarshalJSON(data []byte) error {
 	u := struct {
-		NetworkType  NetworkType `json:"networkType,omitempty"`
-		PartitionId  string      `json:"partitionId,omitempty"`
-		SubnetId     string      `json:"subnetId,omitempty"`
-		LocalAddress string      `json:"localAddress,omitempty"`
-		Network      Network     `json:"network,omitempty"`
+		NetworkType  NetworkType               `json:"networkType,omitempty"`
+		PartitionId  string                    `json:"partitionId,omitempty"`
+		SubnetId     string                    `json:"subnetId,omitempty"`
+		Advertise    *protocol.InternetAddress `json:"advertise,omitempty"`
+		LocalAddress string                    `json:"localAddress,omitempty"`
+		Network      Network                   `json:"network,omitempty"`
 	}{}
 	u.NetworkType = v.NetworkType
 	u.PartitionId = v.PartitionId
 	u.SubnetId = v.PartitionId
-	u.LocalAddress = v.LocalAddress
+	u.Advertise = v.Advertise
+	u.LocalAddress = v.LocalAddress()
 	u.Network = v.Network
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -586,28 +686,53 @@ func (v *Describe) UnmarshalJSON(data []byte) error {
 	} else {
 		v.PartitionId = u.SubnetId
 	}
-	v.LocalAddress = u.LocalAddress
+	v.Advertise = u.Advertise
 	v.Network = u.Network
 	return nil
 }
 
 func (v *Network) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Id         string                       `json:"id,omitempty"`
-		Partitions encoding.JsonList[Partition] `json:"partitions,omitempty"`
-		Subnets    encoding.JsonList[Partition] `json:"subnets,omitempty"`
+		Id         string                                        `json:"id,omitempty"`
+		Seeds      encoding.JsonList[*protocol.AddressBookEntry] `json:"seeds,omitempty"`
+		Ignore     encoding.JsonList[*protocol.AddressBookEntry] `json:"ignore,omitempty"`
+		Partitions encoding.JsonList[Partition]                  `json:"partitions,omitempty"`
+		Subnets    encoding.JsonList[Partition]                  `json:"subnets,omitempty"`
 	}{}
 	u.Id = v.Id
+	u.Seeds = v.Seeds
+	u.Ignore = v.Ignore
 	u.Partitions = v.Partitions
 	u.Subnets = v.Partitions
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.Id = u.Id
+	v.Seeds = u.Seeds
+	v.Ignore = u.Ignore
 	if !(len(u.Partitions) == 0) {
 		v.Partitions = u.Partitions
 	} else {
 		v.Partitions = u.Subnets
+	}
+	return nil
+}
+
+func (v *Node) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Address   *protocol.InternetAddress `json:"address,omitempty"`
+		PublicKey *string                   `json:"publicKey,omitempty"`
+	}{}
+	u.Address = v.Address
+	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Address = u.Address
+	if x, err := encoding.BytesFromJSON(u.PublicKey); err != nil {
+		return fmt.Errorf("error decoding PublicKey: %w", err)
+	} else {
+		v.PublicKey = x
 	}
 	return nil
 }

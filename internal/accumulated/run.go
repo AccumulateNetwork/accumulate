@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/http"
 	stdurl "net/url"
-	"strings"
 	"time"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
@@ -52,7 +51,6 @@ type Daemon struct {
 	connectionManager connections.ConnectionInitializer
 	eventBus          *events.Bus
 	router            routing.Router
-	advertize         *protocol.InternetAddress
 
 	// knobs for tests
 	// IsTest   bool
@@ -87,15 +85,6 @@ func Load(dir string, newWriter func(*config.Config) (io.Writer, error)) (*Daemo
 	daemon.Logger, err = logging.NewTendermintLogger(zerolog.New(logWriter), logLevel, false)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize logger: %v", err)
-	}
-
-	addr := daemon.Config.Accumulate.LocalAddress
-	if !strings.Contains(addr, "://") {
-		addr = "http://" + addr
-	}
-	daemon.advertize, err = protocol.ParseInternetAddress(addr)
-	if err != nil {
-		return nil, errors.Format(errors.StatusBadRequest, "invalid local address: %w", err)
 	}
 
 	return &daemon, nil
@@ -158,12 +147,18 @@ func (d *Daemon) Start() (err error) {
 		return fmt.Errorf("failed to load private validator: %v", err)
 	}
 
-	d.connectionManager = connections.NewConnectionManager(d.Config, d.Logger, func(server string) (connections.APIClient, error) {
-		return client.New(server)
-	})
-
 	d.eventBus = events.NewBus(d.Logger.With("module", "events"))
 	events.SubscribeSync(d.eventBus, d.onDidCommitBlock)
+
+	d.connectionManager = connections.NewConnectionManager(connections.Options{
+		Config:   d.Config,
+		Logger:   d.Logger,
+		EventBus: d.eventBus,
+		Key:      d.pv.Key.PrivKey.Bytes(),
+		ApiClientFactory: func(server string) (connections.APIClient, error) {
+			return client.New(server)
+		},
+	})
 
 	d.router = routing.NewRouter(d.eventBus, d.connectionManager)
 	execOpts := block.ExecutorOptions{
@@ -288,7 +283,7 @@ func (d *Daemon) Start() (err error) {
 		color.HiMagenta("Syncing ....")
 		time.Sleep(time.Second * 1)
 	}
-	color.HiBlue(" %s node running at %s :", d.node.Config.Accumulate.NetworkType, d.node.Config.Accumulate.LocalAddress)
+	color.HiBlue(" %s node running at %s :", d.node.Config.Accumulate.NetworkType, d.node.Config.Accumulate.Advertise)
 
 	// Send status notification
 	if d.Config.Accumulate.NetworkType == config.Directory {
@@ -351,7 +346,7 @@ func (d *Daemon) sendNodeStatusUpdate(status protocol.NodeStatus) {
 	txn.Header.Principal = d.Config.Accumulate.AddressBook()
 	txn.Body = &protocol.NodeStatusUpdate{
 		Status:  status,
-		Address: d.advertize,
+		Address: d.Config.Accumulate.Advertise,
 	}
 
 	sig, err := new(signing.Builder).

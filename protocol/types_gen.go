@@ -465,8 +465,8 @@ type NetworkAccountUpdate struct {
 
 type NetworkDefinition struct {
 	fieldsSet   []bool
-	NetworkName string                `json:"networkName,omitempty" form:"networkName" query:"networkName" validate:"required"`
-	Partitions  []PartitionDefinition `json:"partitions,omitempty" form:"partitions" query:"partitions" validate:"required"`
+	NetworkName string                 `json:"networkName,omitempty" form:"networkName" query:"networkName" validate:"required"`
+	Partitions  []*PartitionDefinition `json:"partitions,omitempty" form:"partitions" query:"partitions" validate:"required"`
 	extraData   []byte
 }
 
@@ -1845,9 +1845,11 @@ func (v *NetworkDefinition) Copy() *NetworkDefinition {
 	u := new(NetworkDefinition)
 
 	u.NetworkName = v.NetworkName
-	u.Partitions = make([]PartitionDefinition, len(v.Partitions))
+	u.Partitions = make([]*PartitionDefinition, len(v.Partitions))
 	for i, v := range v.Partitions {
-		u.Partitions[i] = *(&v).Copy()
+		if v != nil {
+			u.Partitions[i] = (v).Copy()
+		}
 	}
 
 	return u
@@ -3621,7 +3623,7 @@ func (v *NetworkDefinition) Equal(u *NetworkDefinition) bool {
 		return false
 	}
 	for i := range v.Partitions {
-		if !((&v.Partitions[i]).Equal(&u.Partitions[i])) {
+		if !((v.Partitions[i]).Equal(u.Partitions[i])) {
 			return false
 		}
 	}
@@ -12228,7 +12230,7 @@ func (v *NetworkDefinition) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	for {
 		if x := new(PartitionDefinition); reader.ReadValue(2, x.UnmarshalBinary) {
-			v.Partitions = append(v.Partitions, *x)
+			v.Partitions = append(v.Partitions, x)
 		} else {
 			break
 		}
@@ -14758,9 +14760,9 @@ func (v *NetworkAccountUpdate) MarshalJSON() ([]byte, error) {
 
 func (v *NetworkDefinition) MarshalJSON() ([]byte, error) {
 	u := struct {
-		NetworkName string                                 `json:"networkName,omitempty"`
-		Partitions  encoding.JsonList[PartitionDefinition] `json:"partitions,omitempty"`
-		Subnets     encoding.JsonList[PartitionDefinition] `json:"subnets,omitempty"`
+		NetworkName string                                  `json:"networkName,omitempty"`
+		Partitions  encoding.JsonList[*PartitionDefinition] `json:"partitions,omitempty"`
+		Subnets     encoding.JsonList[*PartitionDefinition] `json:"subnets,omitempty"`
 	}{}
 	u.NetworkName = v.NetworkName
 	u.Partitions = v.Partitions
@@ -16757,9 +16759,9 @@ func (v *NetworkAccountUpdate) UnmarshalJSON(data []byte) error {
 
 func (v *NetworkDefinition) UnmarshalJSON(data []byte) error {
 	u := struct {
-		NetworkName string                                 `json:"networkName,omitempty"`
-		Partitions  encoding.JsonList[PartitionDefinition] `json:"partitions,omitempty"`
-		Subnets     encoding.JsonList[PartitionDefinition] `json:"subnets,omitempty"`
+		NetworkName string                                  `json:"networkName,omitempty"`
+		Partitions  encoding.JsonList[*PartitionDefinition] `json:"partitions,omitempty"`
+		Subnets     encoding.JsonList[*PartitionDefinition] `json:"subnets,omitempty"`
 	}{}
 	u.NetworkName = v.NetworkName
 	u.Partitions = v.Partitions

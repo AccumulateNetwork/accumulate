@@ -6,7 +6,6 @@ package api_test
 
 import (
 	context "context"
-	url "net/url"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
@@ -16,6 +15,7 @@ import (
 	types "github.com/tendermint/tendermint/types"
 	config "gitlab.com/accumulatenetwork/accumulate/config"
 	connections "gitlab.com/accumulatenetwork/accumulate/internal/connections"
+	protocol "gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // MockABCIClient is a mock of ABCIClient interface.
@@ -217,10 +217,10 @@ func (mr *MockConnectionContextMockRecorder) GetAPIClient() *gomock.Call {
 }
 
 // GetAddress mocks base method.
-func (m *MockConnectionContext) GetAddress() string {
+func (m *MockConnectionContext) GetAddress() *protocol.InternetAddress {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetAddress")
-	ret0, _ := ret[0].(string)
+	ret0, _ := ret[0].(*protocol.InternetAddress)
 	return ret0
 }
 
@@ -228,20 +228,6 @@ func (m *MockConnectionContext) GetAddress() string {
 func (mr *MockConnectionContextMockRecorder) GetAddress() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAddress", reflect.TypeOf((*MockConnectionContext)(nil).GetAddress))
-}
-
-// GetBasePort mocks base method.
-func (m *MockConnectionContext) GetBasePort() int {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetBasePort")
-	ret0, _ := ret[0].(int)
-	return ret0
-}
-
-// GetBasePort indicates an expected call of GetBasePort.
-func (mr *MockConnectionContextMockRecorder) GetBasePort() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBasePort", reflect.TypeOf((*MockConnectionContext)(nil).GetBasePort))
 }
 
 // GetMetrics mocks base method.
@@ -286,6 +272,20 @@ func (mr *MockConnectionContextMockRecorder) GetNodeType() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNodeType", reflect.TypeOf((*MockConnectionContext)(nil).GetNodeType))
 }
 
+// GetPublicKey mocks base method.
+func (m *MockConnectionContext) GetPublicKey() []byte {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetPublicKey")
+	ret0, _ := ret[0].([]byte)
+	return ret0
+}
+
+// GetPublicKey indicates an expected call of GetPublicKey.
+func (mr *MockConnectionContextMockRecorder) GetPublicKey() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPublicKey", reflect.TypeOf((*MockConnectionContext)(nil).GetPublicKey))
+}
+
 // IsHealthy mocks base method.
 func (m *MockConnectionContext) IsHealthy() bool {
 	m.ctrl.T.Helper()
@@ -322,18 +322,6 @@ func (m *MockConnectionContext) ReportErrorStatus(status connections.NodeStatus)
 func (mr *MockConnectionContextMockRecorder) ReportErrorStatus(status interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReportErrorStatus", reflect.TypeOf((*MockConnectionContext)(nil).ReportErrorStatus), status)
-}
-
-// SetNodeUrl mocks base method.
-func (m *MockConnectionContext) SetNodeUrl(addr *url.URL) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetNodeUrl", addr)
-}
-
-// SetNodeUrl indicates an expected call of SetNodeUrl.
-func (mr *MockConnectionContextMockRecorder) SetNodeUrl(addr interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetNodeUrl", reflect.TypeOf((*MockConnectionContext)(nil).SetNodeUrl), addr)
 }
 
 // MockStatusChecker is a mock of StatusChecker interface.

@@ -171,8 +171,9 @@ NetworkDefinition:
     - name: Partitions
       alternative: Subnets
       type: PartitionDefinition
-      repeatable: true
       marshal-as: reference
+      pointer: true
+      repeatable: true
 
 PartitionDefinition:
   fields:

@@ -1,10 +1,11 @@
 package connections
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"net"
-	"net/url"
 	"strings"
 	"time"
 
@@ -14,6 +15,9 @@ import (
 	"github.com/tendermint/tendermint/rpc/client/local"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2/query"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	"gitlab.com/accumulatenetwork/accumulate/internal/events"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -30,15 +34,16 @@ type ConnectionInitializer interface {
 }
 
 type connectionManager struct {
-	accConfig   *config.Accumulate
-	bvnCtxMap   map[string][]ConnectionContext
-	dnCtxList   []ConnectionContext
-	fnCtxList   []ConnectionContext
-	all         []ConnectionContext
-	localCtx    ConnectionContext
-	localClient *local.Local
-	logger      log.Logger
-	localHost   string
+	globals       *core.GlobalValues
+	accConfig     *config.Accumulate
+	bvnCtxMap     map[string][]ConnectionContext
+	dnCtxList     []ConnectionContext
+	fnCtxList     []ConnectionContext
+	all           []ConnectionContext
+	localCtx      *connectionContext
+	logger        logging.OptionalLogger
+	publicKey     []byte
+	statusChecker StatusChecker
 
 	apiClientFactory func(string) (APIClient, error)
 }
@@ -82,13 +87,26 @@ type NodeMetrics struct {
 	// TODO add metrics that can be useful for the router to determine whether it should put or should avoid putting put more load on a BVN
 }
 
-func NewConnectionManager(config *config.Config, logger log.Logger, apiClientFactory func(string) (APIClient, error)) ConnectionInitializer {
+type Options struct {
+	Config           *config.Config
+	Logger           log.Logger
+	EventBus         *events.Bus
+	Key              []byte
+	ApiClientFactory func(string) (APIClient, error)
+}
+
+func NewConnectionManager(opts Options) ConnectionInitializer {
 	cm := new(connectionManager)
-	cm.accConfig = &config.Accumulate
-	cm.apiClientFactory = apiClientFactory
-	cm.localHost = cm.reformatAddress(cm.accConfig.LocalAddress)
-	cm.logger = logger
-	cm.buildNodeInventory()
+	cm.accConfig = &opts.Config.Accumulate
+	cm.apiClientFactory = opts.ApiClientFactory
+	cm.logger.L = opts.Logger
+	cm.publicKey = opts.Key[32:]
+
+	if len(cm.accConfig.Network.Seeds) == 0 {
+		cm.buildStaticNodeInventory()
+	}
+
+	events.SubscribeAsync(opts.EventBus, cm.updateNodeInventory)
 	return cm
 }
 
@@ -176,127 +194,182 @@ func (cm *connectionManager) ResetErrors() {
 	}
 }
 
-func (cm *connectionManager) buildNodeInventory() {
-	cm.bvnCtxMap = make(map[string][]ConnectionContext)
+func (cm *connectionManager) updateNodeInventory(e events.WillChangeGlobals) {
+	isFirst := cm.globals == nil
+	cm.globals = e.New
+	if isFirst {
+		cm.initFromGlobals(e.New)
+		return
+	}
 
-	for _, partition := range cm.accConfig.Network.Partitions {
-		for _, node := range partition.Nodes {
-			connCtx, err := cm.buildNodeContext(node, partition)
-			if err != nil {
-				cm.logger.Error("error building node context for node %s on net %s with type %s: %w, ignoring node...",
-					connCtx.GetAddress(), connCtx.partitionId, connCtx.nodeConfig.Type, err)
+	addresses := e.Old.DiffAddressBook(e.New)
+	myKeyHash := sha256.Sum256(cm.publicKey)
+	for keyHash, address := range addresses {
+		// Don't touch the local node context
+		if keyHash == myKeyHash {
+			delete(addresses, keyHash)
+			continue
+		}
+
+		// Remove from everywhere
+		for bvn := range cm.bvnCtxMap {
+			cm.bvnCtxMap[bvn] = removeConnection(cm.bvnCtxMap[bvn], keyHash)
+		}
+		cm.dnCtxList = removeConnection(cm.dnCtxList, keyHash)
+		cm.fnCtxList = removeConnection(cm.fnCtxList, keyHash)
+		cm.all = removeConnection(cm.all, keyHash)
+
+		// If the node was removed don't add it back
+		if address == nil {
+			delete(addresses, keyHash)
+		}
+	}
+
+	cm.addConnections(e.New, addresses)
+
+	if cm.statusChecker != nil {
+		err := cm.initClients()
+		if err != nil {
+			cm.logger.Error("Failed to initialize new clients", "error", err)
+		}
+	}
+}
+
+func removeConnection(list []ConnectionContext, keyHash [32]byte) []ConnectionContext {
+	for i, cc := range list {
+		if keyHash == sha256.Sum256(cc.GetPublicKey()) {
+			return append(list[:i], list[i+1:]...)
+		}
+	}
+	return list
+}
+
+func (cm *connectionManager) initFromGlobals(g *core.GlobalValues) {
+	addresses := map[[32]byte]*protocol.InternetAddress{}
+	for _, entry := range g.AddressBook.Entries {
+		addresses[entry.PublicKeyHash] = entry.Address
+	}
+	cm.addConnections(g, addresses)
+}
+
+func (cm *connectionManager) addConnections(g *core.GlobalValues, addresses map[[32]byte]*protocol.InternetAddress) {
+	for _, partition := range g.Network.Partitions {
+		for _, validator := range partition.ValidatorKeys {
+			// Skip validators we don't have an address for
+			h := sha256.Sum256(validator)
+			if addresses[h] == nil {
 				continue
 			}
 
-			switch connCtx.nodeConfig.Type {
-			case config.Validator:
-				switch connCtx.partition.Type {
-				case config.BlockValidator:
-					bvnName := protocol.BvnNameFromPartitionId(partition.Id)
-					if partition.Id == protocol.Directory {
-						panic("Directory partition node is misconfigured as blockvalidator")
-					}
-					nodeList, ok := cm.bvnCtxMap[bvnName]
-					if ok {
-						cm.bvnCtxMap[bvnName] = append(nodeList, connCtx)
-					} else {
-						nodeList := make([]ConnectionContext, 1)
-						nodeList[0] = connCtx
-						cm.bvnCtxMap[bvnName] = nodeList
-					}
-					cm.all = append(cm.all, connCtx)
-				case config.Directory:
-					cm.dnCtxList = append(cm.dnCtxList, connCtx)
-					cm.all = append(cm.all, connCtx)
-				}
-			case config.Follower:
-				cm.fnCtxList = append(cm.fnCtxList, connCtx)
-				cm.all = append(cm.all, connCtx)
-			}
-			if connCtx.networkGroup == Local {
-				cm.localCtx = connCtx
-			}
+			connCtx := new(connectionContext)
+			connCtx.partitionId = partition.PartitionID
+			connCtx.validatorPubKey = validator
+			connCtx.address = addresses[h]
+			connCtx.connMgr = cm
+			connCtx.metrics = NodeMetrics{status: Unknown}
+			connCtx.hasClient = make(chan struct{})
+			cm.addConnection(connCtx)
 		}
 	}
 }
 
-func (cm *connectionManager) buildNodeContext(node config.Node, partition config.Partition) (*connectionContext, error) {
-	connCtx := &connectionContext{partitionId: partition.Id,
-		partition:  partition,
-		nodeConfig: node,
-		connMgr:    cm,
-		metrics:    NodeMetrics{status: Unknown},
-		hasClient:  make(chan struct{}),
-	}
-	connCtx.networkGroup = cm.determineNetworkGroup(partition.Id, node.Address)
-
-	if node.Address != "local" && node.Address != "self" {
-		var err error
-		connCtx.resolvedIPs, err = resolveIPs(node.Address)
-		if err != nil {
-			cm.logger.Error(fmt.Sprintf("error resolving IPs for %q: %v", node.Address, err))
-			connCtx.ReportErrorStatus(Down)
+func (cm *connectionManager) buildStaticNodeInventory() {
+	for _, partition := range cm.accConfig.Network.Partitions {
+		for _, validator := range partition.Nodes {
+			connCtx := new(connectionContext)
+			connCtx.partitionId = partition.Id
+			connCtx.validatorPubKey = validator.PublicKey
+			connCtx.address = validator.Address
+			connCtx.connMgr = cm
+			connCtx.metrics = NodeMetrics{status: Unknown}
+			connCtx.hasClient = make(chan struct{})
+			cm.addConnection(connCtx)
 		}
 	}
-	return connCtx, nil
 }
 
-func (cm *connectionManager) determineNetworkGroup(partitionId string, address string) NetworkGroup {
-	ownpartition := cm.accConfig.PartitionId
-	fmtAddr := cm.reformatAddress(address)
+func (cm *connectionManager) addConnection(cc *connectionContext) {
+	pubKeyHash := sha256.Sum256(cc.validatorPubKey)
+	for _, entry := range cm.accConfig.Network.Ignore {
+		if entry.PublicKeyHash == pubKeyHash && entry.Address.Equal(cc.address) {
+			return // Ignore this connection
+		}
+	}
+
 	switch {
-	case strings.EqualFold(partitionId, ownpartition) && strings.EqualFold(fmtAddr, cm.localHost):
-		return Local
-	case strings.EqualFold(partitionId, ownpartition):
-		return SamePartition
+	case bytes.Equal(cc.validatorPubKey, cm.publicKey):
+		cc.networkGroup = Local
+		cm.localCtx = cc
+	case strings.EqualFold(cc.partitionId, cm.accConfig.PartitionId):
+		cc.networkGroup = SamePartition
 	default:
-		return OtherPartition
-	}
-}
-
-func (cm *connectionManager) reformatAddress(address string) string {
-	if address == "local" || address == "self" {
-		return cm.localHost
-	}
-	if !strings.Contains(address, "//") {
-		return address
+		cc.networkGroup = OtherPartition
 	}
 
-	url, err := url.Parse(address)
+	var err error
+	cc.resolvedIPs, err = resolveIPs(cc.address)
 	if err != nil {
-		return address
+		cm.logger.Error(fmt.Sprintf("error resolving IPs for %q: %v", cc.address, err))
+		cc.ReportErrorStatus(Down)
 	}
-	return url.Host
+
+	// if !cc.validator.Active {
+	// 	cm.fnCtxList = append(cm.fnCtxList, cc)
+	// 	cm.all = append(cm.all, cc)
+	// 	return
+	// }
+
+	if strings.EqualFold(cc.partitionId, protocol.Directory) {
+		cm.dnCtxList = append(cm.dnCtxList, cc)
+		cm.all = append(cm.all, cc)
+		return
+	}
+
+	bvnName := protocol.BvnNameFromPartitionId(cc.partitionId)
+	nodeList, ok := cm.bvnCtxMap[bvnName]
+	if ok {
+		cm.bvnCtxMap[bvnName] = append(nodeList, cc)
+	} else {
+		nodeList := make([]ConnectionContext, 1)
+		nodeList[0] = cc
+		cm.bvnCtxMap[bvnName] = nodeList
+	}
+	cm.all = append(cm.all, cc)
 }
 
-func (cm *connectionManager) InitClients(lclClient *local.Local, statusChecker StatusChecker) error {
-	cm.localClient = lclClient
+func (cm *connectionManager) InitClients(localABCI *local.Local, statusChecker StatusChecker) error {
+	cm.statusChecker = statusChecker
 
+	// TODO Support local API requests without any TCP call
+	localAPI, err := cm.apiClientFactory(cm.accConfig.API.ListenAddress)
+	if err != nil {
+		return errCreateRPCClient(err)
+	}
+	cm.localCtx.setClient(localABCI, localAPI)
+
+	return cm.initClients()
+}
+
+func (cm *connectionManager) initClients() error {
 	for _, connCtxList := range cm.bvnCtxMap {
-		for _, connCtx := range connCtxList {
-			cc := connCtx.(*connectionContext)
-			err := cm.createClient(cc)
+		for _, cc := range connCtxList {
+			err := cm.createClient(cc.(*connectionContext), cm.statusChecker)
 			if err != nil {
 				return err
 			}
-			cc.statusChecker = statusChecker
 		}
 	}
-	for _, connCtx := range cm.dnCtxList {
-		cc := connCtx.(*connectionContext)
-		err := cm.createClient(cc)
+	for _, cc := range cm.dnCtxList {
+		err := cm.createClient(cc.(*connectionContext), cm.statusChecker)
 		if err != nil {
 			return err
 		}
-		cc.statusChecker = statusChecker
 	}
-	for _, connCtx := range cm.fnCtxList {
-		cc := connCtx.(*connectionContext)
-		err := cm.createClient(cc)
+	for _, cc := range cm.fnCtxList {
+		err := cm.createClient(cc.(*connectionContext), cm.statusChecker)
 		if err != nil {
 			return err
 		}
-		cc.statusChecker = statusChecker
 	}
 	return nil
 }
@@ -306,75 +379,66 @@ func (cm *connectionManager) ConnectDirectly(other ConnectionManager) error {
 	if !ok {
 		return fmt.Errorf("incompatible connection managers: want %T, got %T", cm, cm2)
 	}
+	if cm2.localCtx == nil {
+		return fmt.Errorf("local context has not been initialized")
+	}
+	if cm2.localCtx.abciClient == nil {
+		return fmt.Errorf("local context's clients have not been initialized")
+	}
 
 	for _, connCtx := range cm.all {
 		cc := connCtx.(*connectionContext)
-		url, err := url.Parse(cc.nodeConfig.Address)
-		if err != nil {
+		if !cc.address.Equal(cm2.accConfig.Advertise) {
 			continue
 		}
 
-		if url.Host != cm2.accConfig.LocalAddress {
-			continue
-		}
-
-		api, err := cm.apiClientFactory(cm2.accConfig.API.ListenAddress)
-		if err != nil {
-			return errCreateRPCClient(err)
-		}
-		cc.setClient(cm2.localClient, api)
+		cc.setClient(cm2.localCtx.abciClient, cm2.localCtx.apiClient)
 		return nil
 	}
 
-	return fmt.Errorf("cannot find %s node %s", cm2.accConfig.PartitionId, cm2.accConfig.LocalAddress)
-}
-
-func (cm *connectionManager) createClient(connCtx *connectionContext) error {
-	switch connCtx.GetNetworkGroup() {
-	case Local:
-		// TODO Support local API requests without any TCP call
-		api, err := cm.apiClientFactory(cm.accConfig.API.ListenAddress)
-		if err != nil {
-			return errCreateRPCClient(err)
-		}
-		connCtx.setClient(cm.localClient, api)
-	default:
-		abciAddr, err := config.OffsetPort(connCtx.GetAddress(), connCtx.GetBasePort(), int(config.PortOffsetTendermintRpc))
-		if err != nil {
-			return errInvalidAddress(err)
-		}
-		abci, err := http.New(abciAddr.String())
-		if err != nil {
-			return errCreateRPCClient(err)
-		}
-		apiAddr, err := config.OffsetPort(connCtx.GetAddress(), connCtx.GetBasePort(), int(config.PortOffsetAccumulateApi))
-		if err != nil {
-			return errInvalidAddress(err)
-		}
-		api, err := cm.apiClientFactory(apiAddr.String())
-		if err != nil {
-			return errCreateRPCClient(err)
-		}
-		connCtx.setClient(abci, api)
-		connCtx.SetNodeUrl(abciAddr)
+	if cm.globals == nil {
+		return fmt.Errorf("cannot find entry for node %v", cm2.accConfig.Advertise)
 	}
+
+	partition := cm.globals.Network.Partition(cm2.accConfig.PartitionId)
+	if partition == nil {
+		return fmt.Errorf("%v is not a partition", cm2.accConfig.PartitionId)
+	}
+	if !partition.FindValidator(cm2.publicKey) {
+		return fmt.Errorf("%x is not a validator for %x", cm2.publicKey, cm2.accConfig.PartitionId)
+	}
+
+	cc := new(connectionContext)
+	cc.partitionId = partition.PartitionID
+	cc.validatorPubKey = cm2.publicKey
+	cc.address = cm2.accConfig.Advertise
+	cc.connMgr = cm
+	cc.metrics = NodeMetrics{status: Unknown}
+	cc.hasClient = make(chan struct{})
+	cm.addConnection(cc)
 	return nil
 }
 
-func resolveIPs(address string) ([]net.IP, error) {
-	var hostname string
-	nodeUrl, err := url.Parse(address)
-	if err == nil {
-		hostname = nodeUrl.Hostname()
-	} else {
-		hostname = address
+func (cm *connectionManager) createClient(cc *connectionContext, statusChecker StatusChecker) error {
+	if cc == cm.localCtx || cc.statusChecker != nil {
+		return nil
 	}
 
-	if hostname == "" {
-		//no hostname, but url is valid? could happen if scheme is missing.
-		hostname = address
+	abci, err := http.New(cc.address.WithOffset(int(config.PortOffsetTendermintRpc)).String())
+	if err != nil {
+		return errCreateRPCClient(err)
 	}
+	api, err := cm.apiClientFactory(cc.address.WithOffset(int(config.PortOffsetAccumulateApi)).String())
+	if err != nil {
+		return errCreateRPCClient(err)
+	}
+	cc.statusChecker = statusChecker
+	cc.setClient(abci, api)
+	return nil
+}
 
+func resolveIPs(address *protocol.InternetAddress) ([]net.IP, error) {
+	hostname := address.Hostname()
 	ip := net.ParseIP(hostname)
 	if ip != nil {
 		return []net.IP{ip}, nil

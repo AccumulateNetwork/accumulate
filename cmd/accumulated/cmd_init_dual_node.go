@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/tendermint/tendermint/privval"
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 	cfg "gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
@@ -188,7 +189,12 @@ func finalizeDnn(bvnId string) (*cfg.Config, error) {
 		return nil, fmt.Errorf("bvn partition not found in configuration, %s", bvnId)
 	}
 
-	_, err = ensureNodeOnPartition(bvn, c.Accumulate.LocalAddress, cfg.NodeTypeValidator)
+	pv, err := privval.LoadFilePV(c.PrivValidator.KeyFile(), c.PrivValidator.StateFile())
+	if err != nil {
+		return nil, fmt.Errorf("failed to load key: %w", err)
+	}
+
+	_, err = ensureNodeOnPartition(bvn, c.Accumulate.Advertise.String(), pv.Key.PubKey.Bytes())
 	if err != nil {
 		return nil, err
 	}
@@ -225,12 +231,17 @@ func finalizeBvnn() (*cfg.Config, error) {
 		c.P2P.PersistentPeers = ""
 	}
 
+	pv, err := privval.LoadFilePV(c.PrivValidator.KeyFile(), c.PrivValidator.StateFile())
+	if err != nil {
+		return nil, fmt.Errorf("failed to load key: %w", err)
+	}
+
 	dn := c.Accumulate.Network.GetPartitionByID(protocol.Directory)
 	if dn == nil {
 		return nil, fmt.Errorf("cannot find directory parition on network in configuration")
 	}
 
-	_, err = ensureNodeOnPartition(dn, c.Accumulate.LocalAddress, cfg.NodeTypeValidator)
+	_, err = ensureNodeOnPartition(dn, c.Accumulate.Advertise.String(), pv.Key.PubKey.Bytes())
 	if err != nil {
 		return nil, err
 	}
@@ -273,7 +284,7 @@ func resolvePublicIp() (string, error) {
 
 func findHealthyNodeOnPartition(partition *cfg.Partition) (string, error) {
 	for _, p := range partition.Nodes {
-		addr, err := resolveAddr(p.Address)
+		addr, err := resolveAddr(p.Address.String())
 		if err != nil {
 			continue
 		}
@@ -302,14 +313,14 @@ func findHealthyNodeOnPartition(partition *cfg.Partition) (string, error) {
 	return "", fmt.Errorf("no viable node found on partition %s", partition.Id)
 }
 
-func ensureNodeOnPartition(partition *cfg.Partition, addr string, t cfg.NodeType) (*url.URL, error) {
+func ensureNodeOnPartition(partition *cfg.Partition, addr string, pubKey []byte) (*url.URL, error) {
 	testAddr, err := resolveIp(addr)
 	if err != nil {
 		return nil, err
 	}
 
 	for _, n := range partition.Nodes {
-		nodeAddr, err := resolveAddr(n.Address)
+		nodeAddr, err := resolveAddr(n.Address.String())
 		if err != nil {
 			return nil, err
 		}
@@ -320,11 +331,7 @@ func ensureNodeOnPartition(partition *cfg.Partition, addr string, t cfg.NodeType
 	}
 
 	//set port on url for partition, we need to add it to keep the connection mgr sane
-	u, err := cfg.OffsetPort(testAddr, int(partition.BasePort), int(cfg.PortOffsetTendermintP2P))
-	if err != nil {
-		return nil, err
-	}
-
-	partition.Nodes = append(partition.Nodes, cfg.Node{Address: u.String(), Type: t})
-	return u, nil
+	u := protocol.NewInternetAddress("http", testAddr, int(partition.BasePort))
+	partition.Nodes = append(partition.Nodes, cfg.Node{Address: u, PublicKey: pubKey})
+	return &u.URL, nil
 }

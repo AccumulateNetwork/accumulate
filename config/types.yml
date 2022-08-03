@@ -9,9 +9,12 @@ Describe:
     alternative: SubnetId
     toml: partition-id
     type: string
-  - name: LocalAddress
-    toml: local-address
-    type: string
+  - name: Advertise
+    toml: advertise
+    type: protocol.InternetAddress
+    marshal-as: reference
+    pointer: true
+  - { name: LocalAddress, type: string, virtual: true, non-binary: true }
   - name: Network
     toml: network
     type: Network
@@ -22,6 +25,16 @@ Network:
     - name: Id
       toml: id
       type: string
+    - name: Seeds
+      type: protocol.AddressBookEntry
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+    - name: Ignore
+      type: protocol.AddressBookEntry
+      marshal-as: reference
+      pointer: true
+      repeatable: true
     - name: Partitions
       alternative: Subnets
       toml: partitions
@@ -51,9 +64,10 @@ Node:
   fields:
     - name: Address
       toml: address
-      type: string
-    - name: Type
-      toml: type
-      type: NodeType
-      marshal-as: enum
+      type: protocol.InternetAddress
+      marshal-as: reference
+      pointer: true
+    - name: PublicKey
+      toml: public-key
+      type: bytes
 

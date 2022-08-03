@@ -233,7 +233,7 @@ func findInDescribe(addr string, partitionId string, d *cfg.Network) (partition 
 		partition = &d.Partitions[i]
 		if strings.EqualFold(partition.Id, partitionId) {
 			for j, n := range v.Nodes {
-				nodeAddr, err := resolveAddr(n.Address)
+				nodeAddr, err := resolveAddr(n.Address.String())
 				if err != nil {
 					return nil, nil, fmt.Errorf("cannot resolve node address in network describe")
 				}
@@ -404,7 +404,7 @@ func initNodeFromSeedProxy(cmd *cobra.Command, args []string) (int, *cfg.Config,
 		return 0, nil, nil, err
 	}
 
-	config.Accumulate.Describe = cfg.Describe{NetworkType: resp.Type, PartitionId: partitionName, LocalAddress: "", Network: nc.NetworkState.Network}
+	config.Accumulate.Describe = cfg.Describe{NetworkType: resp.Type, PartitionId: partitionName, Network: nc.NetworkState.Network}
 
 	return int(resp.BasePort), config, genDoc, nil
 }
@@ -511,7 +511,7 @@ func initNodeFromPeer(cmd *cobra.Command, args []string) (int, *cfg.Config, *typ
 
 	config.Accumulate.Describe = cfg.Describe{
 		NetworkType: description.NetworkType, PartitionId: description.PartitionId,
-		LocalAddress: "", Network: description.Network}
+		Network: description.Network}
 	return netPort, config, genDoc, nil
 }
 
@@ -571,7 +571,7 @@ func initNode(cmd *cobra.Command, args []string) (string, error) {
 		var localAddr string
 		var port int
 		if node == nil {
-			u, err := ensureNodeOnPartition(partition, publicAddr, getNodeTypeFromFlag())
+			u, err := ensureNodeOnPartition(partition, publicAddr, node.PublicKey)
 			if err != nil {
 				return "", err
 			}
@@ -581,13 +581,13 @@ func initNode(cmd *cobra.Command, args []string) (string, error) {
 				return "", fmt.Errorf("invalid node address %v", err)
 			}
 		} else {
-			localAddr, port, err = resolveAddrWithPort(node.Address)
+			localAddr, port, err = resolveAddrWithPort(node.Address.String())
 			if err != nil {
 				return "", fmt.Errorf("invalid node address %v", err)
 			}
 		}
 		//local address expect ip:port only with no scheme for connection manager to work
-		config.Accumulate.LocalAddress = fmt.Sprintf("%s:%d", localAddr, port)
+		config.Accumulate.Advertise = protocol.NewInternetAddress("http", localAddr, port)
 	}
 
 	config.Accumulate.AnalysisLog.Enabled = flagInit.EnableTimingLogs

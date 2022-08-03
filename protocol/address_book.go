@@ -59,31 +59,31 @@ func NewInternetAddress(scheme, host string, port int) *InternetAddress {
 	return v
 }
 
-// func (u *InternetAddress) Port() int { return u.port }
+func (u *InternetAddress) Port() int { return u.port }
 
-// func (u *InternetAddress) WithScheme(scheme string) *InternetAddress {
-// 	v := new(InternetAddress)
-// 	v.port = u.port
-// 	v.URL = u.URL
-// 	v.URL.Scheme = scheme
-// 	return v
-// }
+func (u *InternetAddress) WithScheme(scheme string) *InternetAddress {
+	v := new(InternetAddress)
+	v.port = u.port
+	v.URL = u.URL
+	v.URL.Scheme = scheme
+	return v
+}
 
-// func (u *InternetAddress) WithHostname(hostname string) *InternetAddress {
-// 	v := new(InternetAddress)
-// 	v.port = u.port
-// 	v.URL = u.URL
-// 	v.URL.Host = fmt.Sprintf("%s:%d", hostname, v.port)
-// 	return v
-// }
+func (u *InternetAddress) WithHostname(hostname string) *InternetAddress {
+	v := new(InternetAddress)
+	v.port = u.port
+	v.URL = u.URL
+	v.URL.Host = fmt.Sprintf("%s:%d", hostname, v.port)
+	return v
+}
 
-// func (u *InternetAddress) WithOffset(offset int) *InternetAddress {
-// 	v := new(InternetAddress)
-// 	v.port = u.port + offset
-// 	v.URL = u.URL
-// 	v.URL.Host = fmt.Sprintf("%s:%d", u.Hostname(), v.port)
-// 	return v
-// }
+func (u *InternetAddress) WithOffset(offset int) *InternetAddress {
+	v := new(InternetAddress)
+	v.port = u.port + offset
+	v.URL = u.URL
+	v.URL.Host = fmt.Sprintf("%s:%d", u.Hostname(), v.port)
+	return v
+}
 
 // Copy implements the type generator's value interface. It does not copy. URLs
 // should be immutable so there's no reason to copy.
