@@ -140,7 +140,7 @@ func runDevNet(*cobra.Command, []string) {
 func startDevNetNode(daemon *accumulated.Daemon, started, done *sync.WaitGroup, stop chan struct{}) {
 	// Disable features not compatible with multi-node, single-process
 	daemon.Config.Instrumentation.Prometheus = false
-	daemon.Config.Accumulate.Website.Enabled = false
+	// daemon.Config.Accumulate.Website.Enabled = false
 
 	started.Add(1)
 	go func() {

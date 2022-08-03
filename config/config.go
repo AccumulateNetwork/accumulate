@@ -113,6 +113,7 @@ var DefaultLogLevels = LogLevel{}.
 	SetModule("synthetic", "info").
 	// SetModule("storage", "debug").
 	// SetModule("database", "debug").
+	SetModule("website", "info").
 	// SetModule("disk-monitor", "info").
 	// SetModule("init", "info").
 	String()

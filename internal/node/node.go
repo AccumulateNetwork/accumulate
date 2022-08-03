@@ -15,7 +15,7 @@ import (
 	nm "github.com/tendermint/tendermint/node"
 	"github.com/tendermint/tendermint/privval"
 	"gitlab.com/accumulatenetwork/accumulate/config"
-	web "gitlab.com/accumulatenetwork/accumulate/internal/web/static"
+	web "gitlab.com/accumulatenetwork/accumulate/internal/web"
 )
 
 // AppFactory creates and returns an ABCI application.
@@ -62,7 +62,7 @@ func (n *Node) Start() error {
 			return fmt.Errorf("invalid website listen address: expected scheme http, got %q", u.Scheme)
 		}
 
-		website := http.Server{Addr: u.Host, Handler: http.FileServer(http.FS(web.FS))}
+		website := http.Server{Addr: u.Host, Handler: web.Handler()}
 		go func() {
 			<-n.Quit()
 			_ = website.Shutdown(context.Background())

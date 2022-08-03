@@ -115,9 +115,7 @@
       "args": [
         "run",
         "-w",
-        "${workspaceFolder}/.nodes/bvn0",
-        "-n",
-        "101",
+        "${workspaceFolder}/.nodes/node-1/dnn",
         "--truncate",
       ]
     },
