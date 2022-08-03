@@ -68,8 +68,7 @@ var currentUser = func() *user.User {
 
 var DidError error
 
-func InitRootCmd(database db.DB) *cobra.Command {
-	wallet = database
+func InitRootCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "accumulate",
 		Short: "CLI for Accumulate Network",
@@ -162,7 +161,7 @@ func InitRootCmd(database db.DB) *cobra.Command {
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
-	rootCmd := InitRootCmd(nil)
+	rootCmd := InitRootCmd()
 	cobra.CheckErr(rootCmd.Execute())
 }
 
@@ -242,8 +241,8 @@ func initDB(defaultWorkDir string, memDb bool) db.DB {
 }
 
 func InitDBImport(cmd *cobra.Command, memDb bool) error {
-	initDB(DatabaseDir, memDb)
-	mnemonicString, err := getPasswdPrompt(cmd, "Enter mnemonic : ", true)
+	wallet = initDB(DatabaseDir, memDb)
+	mnemonicString, err := getPasswdPrompt(cmd, "Enter mnemonic : ", false)
 	if err != nil {
 		return db.ErrInvalidPassword
 	}
@@ -256,7 +255,7 @@ func InitDBImport(cmd *cobra.Command, memDb bool) error {
 }
 
 func InitDBCreate(memDb bool) error {
-	initDB(DatabaseDir, memDb)
+	wallet = initDB(DatabaseDir, memDb)
 	entropy := make([]byte, 128)
 	_, err := rand.Read(entropy)
 	if err != nil {
