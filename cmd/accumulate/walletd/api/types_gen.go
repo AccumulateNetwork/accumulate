@@ -16,6 +16,27 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+type AddTokenTransactionOutput struct {
+	Name   string `json:"name,omitempty" form:"name" query:"name" validate:"required"`
+	Url    string `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	Amount string `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+}
+
+type AddTransactionBodyRequest struct {
+	Name string `json:"name,omitempty" form:"name" query:"name" validate:"required"`
+	Body string `json:"body,omitempty" form:"body" query:"body" validate:"required"`
+}
+
+type AddTransactionInputRequest struct {
+	Name string `json:"name,omitempty" form:"name" query:"name" validate:"required"`
+	Url  string `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+}
+
+type AddTransactionToEnvelopeRequest struct {
+	EnvelopeName    string `json:"envelopeName,omitempty" form:"envelopeName" query:"envelopeName" validate:"required"`
+	TransactionName string `json:"transactionName,omitempty" form:"transactionName" query:"transactionName" validate:"required"`
+}
+
 type AuthorizationRequired struct {
 	fieldsSet []bool
 	Key       []byte  `json:"key,omitempty" form:"key" query:"key" validate:"required"`
@@ -23,29 +44,66 @@ type AuthorizationRequired struct {
 	extraData []byte
 }
 
-type DecodeTransactionRequest struct {
-	TransactionBinary []byte `json:"transactionBinary,omitempty" form:"transactionBinary" query:"transactionBinary" validate:"required"`
+type CreateTransactionRequest struct {
+	Name            string                   `json:"name,omitempty" form:"name" query:"name" validate:"required"`
+	TransactionType protocol.TransactionType `json:"transactionType,omitempty" form:"transactionType" query:"transactionType" validate:"required"`
 }
 
-type DecodeTransactionResponse struct {
-	TransactionJson string `json:"transactionJson,omitempty" form:"transactionJson" query:"transactionJson" validate:"required"`
+type CreateTransactionResponse struct {
+	Name string `json:"name,omitempty" form:"name" query:"name" validate:"required"`
 }
 
-type EncodeTransactionRequest struct {
-	TransactionJson string `json:"transactionJson,omitempty" form:"transactionJson" query:"transactionJson" validate:"required"`
+type DecodeRequest struct {
+	DataBinary []byte `json:"dataBinary,omitempty" form:"dataBinary" query:"dataBinary" validate:"required"`
 }
 
-type EncodeTransactionRespones struct {
+type DecodeResponse struct {
+	DataJson string `json:"dataJson,omitempty" form:"dataJson" query:"dataJson" validate:"required"`
+}
+
+type DeleteTransactionRequest struct {
+	Name string `json:"name,omitempty" form:"name" query:"name" validate:"required"`
+}
+
+type DeleteTransactionResponse struct {
+	Name string `json:"name,omitempty" form:"name" query:"name" validate:"required"`
+}
+
+type EncodeAccountResponse struct {
+	AccountBinary []byte `json:"accountBinary,omitempty" form:"accountBinary" query:"accountBinary" validate:"required"`
+}
+
+type EncodeRequest struct {
+	DataJson string `json:"dataJson,omitempty" form:"dataJson" query:"dataJson" validate:"required"`
+}
+
+type EncodeTransactionBodyResponse struct {
+	TransactionBodyBinary []byte `json:"transactionBodyBinary,omitempty" form:"transactionBodyBinary" query:"transactionBodyBinary" validate:"required"`
+}
+
+type EncodeTransactionHeaderResponse struct {
+	TransactionHeaderBinary []byte `json:"transactionHeaderBinary,omitempty" form:"transactionHeaderBinary" query:"transactionHeaderBinary" validate:"required"`
+}
+
+type EncodeTransactionResponse struct {
 	TransactionBinary []byte `json:"transactionBinary,omitempty" form:"transactionBinary" query:"transactionBinary" validate:"required"`
 	TransactionHash   []byte `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash" validate:"required"`
 }
 
+type FinalizeEnvelopeRequest struct {
+	Name string `json:"name,omitempty" form:"name" query:"name" validate:"required"`
+}
+
+type GeneralResponse struct {
+	Info  string    `json:"info,omitempty" form:"info" query:"info" validate:"required"`
+	Code  ErrorCode `json:"code,omitempty" form:"code" query:"code" validate:"required"`
+	Error string    `json:"error,omitempty" form:"error" query:"error" validate:"required"`
+}
+
 type KeyList struct {
-	fieldsSet []bool
 	Name      string                 `json:"name,omitempty" form:"name" query:"name" validate:"required"`
 	PublicKey []byte                 `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
 	KeyType   protocol.SignatureType `json:"keyType,omitempty" form:"keyType" query:"keyType" validate:"required"`
-	extraData []byte
 }
 
 type KeyListResponse struct {
@@ -54,9 +112,14 @@ type KeyListResponse struct {
 	extraData []byte
 }
 
+type ProveReceiptRequest struct {
+	DataJson    string `json:"dataJson,omitempty" form:"dataJson" query:"dataJson" validate:"required"`
+	ReceiptJson string `json:"receiptJson,omitempty" form:"receiptJson" query:"receiptJson" validate:"required"`
+}
+
 type SignRequest struct {
-	ReferenceId int64  `json:"referenceId,omitempty" form:"referenceId" query:"referenceId" validate:"required"`
-	KeyName     string `json:"keyName,omitempty" form:"keyName" query:"keyName"`
+	Name    int64  `json:"name,omitempty" form:"name" query:"name" validate:"required"`
+	KeyName string `json:"keyName,omitempty" form:"keyName" query:"keyName"`
 }
 
 type SignResponse struct {
@@ -71,6 +134,51 @@ type VersionResponse struct {
 	extraData []byte
 }
 
+func (v *AddTokenTransactionOutput) Copy() *AddTokenTransactionOutput {
+	u := new(AddTokenTransactionOutput)
+
+	u.Name = v.Name
+	u.Url = v.Url
+	u.Amount = v.Amount
+
+	return u
+}
+
+func (v *AddTokenTransactionOutput) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *AddTransactionBodyRequest) Copy() *AddTransactionBodyRequest {
+	u := new(AddTransactionBodyRequest)
+
+	u.Name = v.Name
+	u.Body = v.Body
+
+	return u
+}
+
+func (v *AddTransactionBodyRequest) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *AddTransactionInputRequest) Copy() *AddTransactionInputRequest {
+	u := new(AddTransactionInputRequest)
+
+	u.Name = v.Name
+	u.Url = v.Url
+
+	return u
+}
+
+func (v *AddTransactionInputRequest) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *AddTransactionToEnvelopeRequest) Copy() *AddTransactionToEnvelopeRequest {
+	u := new(AddTransactionToEnvelopeRequest)
+
+	u.EnvelopeName = v.EnvelopeName
+	u.TransactionName = v.TransactionName
+
+	return u
+}
+
+func (v *AddTransactionToEnvelopeRequest) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *AuthorizationRequired) Copy() *AuthorizationRequired {
 	u := new(AuthorizationRequired)
 
@@ -82,38 +190,109 @@ func (v *AuthorizationRequired) Copy() *AuthorizationRequired {
 
 func (v *AuthorizationRequired) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *DecodeTransactionRequest) Copy() *DecodeTransactionRequest {
-	u := new(DecodeTransactionRequest)
+func (v *CreateTransactionRequest) Copy() *CreateTransactionRequest {
+	u := new(CreateTransactionRequest)
 
-	u.TransactionBinary = encoding.BytesCopy(v.TransactionBinary)
-
-	return u
-}
-
-func (v *DecodeTransactionRequest) CopyAsInterface() interface{} { return v.Copy() }
-
-func (v *DecodeTransactionResponse) Copy() *DecodeTransactionResponse {
-	u := new(DecodeTransactionResponse)
-
-	u.TransactionJson = v.TransactionJson
+	u.Name = v.Name
+	u.TransactionType = v.TransactionType
 
 	return u
 }
 
-func (v *DecodeTransactionResponse) CopyAsInterface() interface{} { return v.Copy() }
+func (v *CreateTransactionRequest) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *EncodeTransactionRequest) Copy() *EncodeTransactionRequest {
-	u := new(EncodeTransactionRequest)
+func (v *CreateTransactionResponse) Copy() *CreateTransactionResponse {
+	u := new(CreateTransactionResponse)
 
-	u.TransactionJson = v.TransactionJson
+	u.Name = v.Name
 
 	return u
 }
 
-func (v *EncodeTransactionRequest) CopyAsInterface() interface{} { return v.Copy() }
+func (v *CreateTransactionResponse) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *EncodeTransactionRespones) Copy() *EncodeTransactionRespones {
-	u := new(EncodeTransactionRespones)
+func (v *DecodeRequest) Copy() *DecodeRequest {
+	u := new(DecodeRequest)
+
+	u.DataBinary = encoding.BytesCopy(v.DataBinary)
+
+	return u
+}
+
+func (v *DecodeRequest) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *DecodeResponse) Copy() *DecodeResponse {
+	u := new(DecodeResponse)
+
+	u.DataJson = v.DataJson
+
+	return u
+}
+
+func (v *DecodeResponse) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *DeleteTransactionRequest) Copy() *DeleteTransactionRequest {
+	u := new(DeleteTransactionRequest)
+
+	u.Name = v.Name
+
+	return u
+}
+
+func (v *DeleteTransactionRequest) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *DeleteTransactionResponse) Copy() *DeleteTransactionResponse {
+	u := new(DeleteTransactionResponse)
+
+	u.Name = v.Name
+
+	return u
+}
+
+func (v *DeleteTransactionResponse) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *EncodeAccountResponse) Copy() *EncodeAccountResponse {
+	u := new(EncodeAccountResponse)
+
+	u.AccountBinary = encoding.BytesCopy(v.AccountBinary)
+
+	return u
+}
+
+func (v *EncodeAccountResponse) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *EncodeRequest) Copy() *EncodeRequest {
+	u := new(EncodeRequest)
+
+	u.DataJson = v.DataJson
+
+	return u
+}
+
+func (v *EncodeRequest) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *EncodeTransactionBodyResponse) Copy() *EncodeTransactionBodyResponse {
+	u := new(EncodeTransactionBodyResponse)
+
+	u.TransactionBodyBinary = encoding.BytesCopy(v.TransactionBodyBinary)
+
+	return u
+}
+
+func (v *EncodeTransactionBodyResponse) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *EncodeTransactionHeaderResponse) Copy() *EncodeTransactionHeaderResponse {
+	u := new(EncodeTransactionHeaderResponse)
+
+	u.TransactionHeaderBinary = encoding.BytesCopy(v.TransactionHeaderBinary)
+
+	return u
+}
+
+func (v *EncodeTransactionHeaderResponse) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *EncodeTransactionResponse) Copy() *EncodeTransactionResponse {
+	u := new(EncodeTransactionResponse)
 
 	u.TransactionBinary = encoding.BytesCopy(v.TransactionBinary)
 	u.TransactionHash = encoding.BytesCopy(v.TransactionHash)
@@ -121,7 +300,29 @@ func (v *EncodeTransactionRespones) Copy() *EncodeTransactionRespones {
 	return u
 }
 
-func (v *EncodeTransactionRespones) CopyAsInterface() interface{} { return v.Copy() }
+func (v *EncodeTransactionResponse) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *FinalizeEnvelopeRequest) Copy() *FinalizeEnvelopeRequest {
+	u := new(FinalizeEnvelopeRequest)
+
+	u.Name = v.Name
+
+	return u
+}
+
+func (v *FinalizeEnvelopeRequest) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *GeneralResponse) Copy() *GeneralResponse {
+	u := new(GeneralResponse)
+
+	u.Info = v.Info
+	u.Code = v.Code
+	u.Error = v.Error
+
+	return u
+}
+
+func (v *GeneralResponse) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *KeyList) Copy() *KeyList {
 	u := new(KeyList)
@@ -148,10 +349,21 @@ func (v *KeyListResponse) Copy() *KeyListResponse {
 
 func (v *KeyListResponse) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *ProveReceiptRequest) Copy() *ProveReceiptRequest {
+	u := new(ProveReceiptRequest)
+
+	u.DataJson = v.DataJson
+	u.ReceiptJson = v.ReceiptJson
+
+	return u
+}
+
+func (v *ProveReceiptRequest) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *SignRequest) Copy() *SignRequest {
 	u := new(SignRequest)
 
-	u.ReferenceId = v.ReferenceId
+	u.Name = v.Name
 	u.KeyName = v.KeyName
 
 	return u
@@ -181,6 +393,53 @@ func (v *VersionResponse) Copy() *VersionResponse {
 
 func (v *VersionResponse) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *AddTokenTransactionOutput) Equal(u *AddTokenTransactionOutput) bool {
+	if !(v.Name == u.Name) {
+		return false
+	}
+	if !(v.Url == u.Url) {
+		return false
+	}
+	if !(v.Amount == u.Amount) {
+		return false
+	}
+
+	return true
+}
+
+func (v *AddTransactionBodyRequest) Equal(u *AddTransactionBodyRequest) bool {
+	if !(v.Name == u.Name) {
+		return false
+	}
+	if !(v.Body == u.Body) {
+		return false
+	}
+
+	return true
+}
+
+func (v *AddTransactionInputRequest) Equal(u *AddTransactionInputRequest) bool {
+	if !(v.Name == u.Name) {
+		return false
+	}
+	if !(v.Url == u.Url) {
+		return false
+	}
+
+	return true
+}
+
+func (v *AddTransactionToEnvelopeRequest) Equal(u *AddTransactionToEnvelopeRequest) bool {
+	if !(v.EnvelopeName == u.EnvelopeName) {
+		return false
+	}
+	if !(v.TransactionName == u.TransactionName) {
+		return false
+	}
+
+	return true
+}
+
 func (v *AuthorizationRequired) Equal(u *AuthorizationRequired) bool {
 	if !(bytes.Equal(v.Key, u.Key)) {
 		return false
@@ -192,35 +451,116 @@ func (v *AuthorizationRequired) Equal(u *AuthorizationRequired) bool {
 	return true
 }
 
-func (v *DecodeTransactionRequest) Equal(u *DecodeTransactionRequest) bool {
-	if !(bytes.Equal(v.TransactionBinary, u.TransactionBinary)) {
+func (v *CreateTransactionRequest) Equal(u *CreateTransactionRequest) bool {
+	if !(v.Name == u.Name) {
+		return false
+	}
+	if !(v.TransactionType == u.TransactionType) {
 		return false
 	}
 
 	return true
 }
 
-func (v *DecodeTransactionResponse) Equal(u *DecodeTransactionResponse) bool {
-	if !(v.TransactionJson == u.TransactionJson) {
+func (v *CreateTransactionResponse) Equal(u *CreateTransactionResponse) bool {
+	if !(v.Name == u.Name) {
 		return false
 	}
 
 	return true
 }
 
-func (v *EncodeTransactionRequest) Equal(u *EncodeTransactionRequest) bool {
-	if !(v.TransactionJson == u.TransactionJson) {
+func (v *DecodeRequest) Equal(u *DecodeRequest) bool {
+	if !(bytes.Equal(v.DataBinary, u.DataBinary)) {
 		return false
 	}
 
 	return true
 }
 
-func (v *EncodeTransactionRespones) Equal(u *EncodeTransactionRespones) bool {
+func (v *DecodeResponse) Equal(u *DecodeResponse) bool {
+	if !(v.DataJson == u.DataJson) {
+		return false
+	}
+
+	return true
+}
+
+func (v *DeleteTransactionRequest) Equal(u *DeleteTransactionRequest) bool {
+	if !(v.Name == u.Name) {
+		return false
+	}
+
+	return true
+}
+
+func (v *DeleteTransactionResponse) Equal(u *DeleteTransactionResponse) bool {
+	if !(v.Name == u.Name) {
+		return false
+	}
+
+	return true
+}
+
+func (v *EncodeAccountResponse) Equal(u *EncodeAccountResponse) bool {
+	if !(bytes.Equal(v.AccountBinary, u.AccountBinary)) {
+		return false
+	}
+
+	return true
+}
+
+func (v *EncodeRequest) Equal(u *EncodeRequest) bool {
+	if !(v.DataJson == u.DataJson) {
+		return false
+	}
+
+	return true
+}
+
+func (v *EncodeTransactionBodyResponse) Equal(u *EncodeTransactionBodyResponse) bool {
+	if !(bytes.Equal(v.TransactionBodyBinary, u.TransactionBodyBinary)) {
+		return false
+	}
+
+	return true
+}
+
+func (v *EncodeTransactionHeaderResponse) Equal(u *EncodeTransactionHeaderResponse) bool {
+	if !(bytes.Equal(v.TransactionHeaderBinary, u.TransactionHeaderBinary)) {
+		return false
+	}
+
+	return true
+}
+
+func (v *EncodeTransactionResponse) Equal(u *EncodeTransactionResponse) bool {
 	if !(bytes.Equal(v.TransactionBinary, u.TransactionBinary)) {
 		return false
 	}
 	if !(bytes.Equal(v.TransactionHash, u.TransactionHash)) {
+		return false
+	}
+
+	return true
+}
+
+func (v *FinalizeEnvelopeRequest) Equal(u *FinalizeEnvelopeRequest) bool {
+	if !(v.Name == u.Name) {
+		return false
+	}
+
+	return true
+}
+
+func (v *GeneralResponse) Equal(u *GeneralResponse) bool {
+	if !(v.Info == u.Info) {
+		return false
+	}
+	if !(v.Code == u.Code) {
+		return false
+	}
+	if !(v.Error == u.Error) {
 		return false
 	}
 
@@ -254,8 +594,19 @@ func (v *KeyListResponse) Equal(u *KeyListResponse) bool {
 	return true
 }
 
+func (v *ProveReceiptRequest) Equal(u *ProveReceiptRequest) bool {
+	if !(v.DataJson == u.DataJson) {
+		return false
+	}
+	if !(v.ReceiptJson == u.ReceiptJson) {
+		return false
+	}
+
+	return true
+}
+
 func (v *SignRequest) Equal(u *SignRequest) bool {
-	if !(v.ReferenceId == u.ReferenceId) {
+	if !(v.Name == u.Name) {
 		return false
 	}
 	if !(v.KeyName == u.KeyName) {
@@ -323,63 +674,6 @@ func (v *AuthorizationRequired) IsValid() error {
 		errs = append(errs, "field Version is missing")
 	} else if (v.Version).Equal(new(Version)) {
 		errs = append(errs, "field Version is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
-var fieldNames_KeyList = []string{
-	1: "Name",
-	2: "PublicKey",
-	3: "KeyType",
-}
-
-func (v *KeyList) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	if !(len(v.Name) == 0) {
-		writer.WriteString(1, v.Name)
-	}
-	if !(len(v.PublicKey) == 0) {
-		writer.WriteBytes(2, v.PublicKey)
-	}
-	if !(v.KeyType == 0) {
-		writer.WriteEnum(3, v.KeyType)
-	}
-
-	_, _, err := writer.Reset(fieldNames_KeyList)
-	if err != nil {
-		return nil, encoding.Error{E: err}
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
-}
-
-func (v *KeyList) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Name is missing")
-	} else if len(v.Name) == 0 {
-		errs = append(errs, "field Name is not set")
-	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field PublicKey is missing")
-	} else if len(v.PublicKey) == 0 {
-		errs = append(errs, "field PublicKey is not set")
-	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field KeyType is missing")
-	} else if v.KeyType == 0 {
-		errs = append(errs, "field KeyType is not set")
 	}
 
 	switch len(errs) {
@@ -507,35 +801,6 @@ func (v *AuthorizationRequired) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
-func (v *KeyList) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *KeyList) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	if x, ok := reader.ReadString(1); ok {
-		v.Name = x
-	}
-	if x, ok := reader.ReadBytes(2); ok {
-		v.PublicKey = x
-	}
-	if x := new(protocol.SignatureType); reader.ReadEnum(3, x) {
-		v.KeyType = *x
-	}
-
-	seen, err := reader.Reset(fieldNames_KeyList)
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	return nil
-}
-
 func (v *KeyListResponse) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -599,15 +864,39 @@ func (v *AuthorizationRequired) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
-func (v *DecodeTransactionRequest) MarshalJSON() ([]byte, error) {
+func (v *DecodeRequest) MarshalJSON() ([]byte, error) {
 	u := struct {
-		TransactionBinary *string `json:"transactionBinary,omitempty"`
+		DataBinary *string `json:"dataBinary,omitempty"`
 	}{}
-	u.TransactionBinary = encoding.BytesToJSON(v.TransactionBinary)
+	u.DataBinary = encoding.BytesToJSON(v.DataBinary)
 	return json.Marshal(&u)
 }
 
-func (v *EncodeTransactionRespones) MarshalJSON() ([]byte, error) {
+func (v *EncodeAccountResponse) MarshalJSON() ([]byte, error) {
+	u := struct {
+		AccountBinary *string `json:"accountBinary,omitempty"`
+	}{}
+	u.AccountBinary = encoding.BytesToJSON(v.AccountBinary)
+	return json.Marshal(&u)
+}
+
+func (v *EncodeTransactionBodyResponse) MarshalJSON() ([]byte, error) {
+	u := struct {
+		TransactionBodyBinary *string `json:"transactionBodyBinary,omitempty"`
+	}{}
+	u.TransactionBodyBinary = encoding.BytesToJSON(v.TransactionBodyBinary)
+	return json.Marshal(&u)
+}
+
+func (v *EncodeTransactionHeaderResponse) MarshalJSON() ([]byte, error) {
+	u := struct {
+		TransactionHeaderBinary *string `json:"transactionHeaderBinary,omitempty"`
+	}{}
+	u.TransactionHeaderBinary = encoding.BytesToJSON(v.TransactionHeaderBinary)
+	return json.Marshal(&u)
+}
+
+func (v *EncodeTransactionResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
 		TransactionBinary *string `json:"transactionBinary,omitempty"`
 		TransactionHash   *string `json:"transactionHash,omitempty"`
@@ -666,23 +955,71 @@ func (v *AuthorizationRequired) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (v *DecodeTransactionRequest) UnmarshalJSON(data []byte) error {
+func (v *DecodeRequest) UnmarshalJSON(data []byte) error {
 	u := struct {
-		TransactionBinary *string `json:"transactionBinary,omitempty"`
+		DataBinary *string `json:"dataBinary,omitempty"`
 	}{}
-	u.TransactionBinary = encoding.BytesToJSON(v.TransactionBinary)
+	u.DataBinary = encoding.BytesToJSON(v.DataBinary)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	if x, err := encoding.BytesFromJSON(u.TransactionBinary); err != nil {
-		return fmt.Errorf("error decoding TransactionBinary: %w", err)
+	if x, err := encoding.BytesFromJSON(u.DataBinary); err != nil {
+		return fmt.Errorf("error decoding DataBinary: %w", err)
 	} else {
-		v.TransactionBinary = x
+		v.DataBinary = x
 	}
 	return nil
 }
 
-func (v *EncodeTransactionRespones) UnmarshalJSON(data []byte) error {
+func (v *EncodeAccountResponse) UnmarshalJSON(data []byte) error {
+	u := struct {
+		AccountBinary *string `json:"accountBinary,omitempty"`
+	}{}
+	u.AccountBinary = encoding.BytesToJSON(v.AccountBinary)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if x, err := encoding.BytesFromJSON(u.AccountBinary); err != nil {
+		return fmt.Errorf("error decoding AccountBinary: %w", err)
+	} else {
+		v.AccountBinary = x
+	}
+	return nil
+}
+
+func (v *EncodeTransactionBodyResponse) UnmarshalJSON(data []byte) error {
+	u := struct {
+		TransactionBodyBinary *string `json:"transactionBodyBinary,omitempty"`
+	}{}
+	u.TransactionBodyBinary = encoding.BytesToJSON(v.TransactionBodyBinary)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if x, err := encoding.BytesFromJSON(u.TransactionBodyBinary); err != nil {
+		return fmt.Errorf("error decoding TransactionBodyBinary: %w", err)
+	} else {
+		v.TransactionBodyBinary = x
+	}
+	return nil
+}
+
+func (v *EncodeTransactionHeaderResponse) UnmarshalJSON(data []byte) error {
+	u := struct {
+		TransactionHeaderBinary *string `json:"transactionHeaderBinary,omitempty"`
+	}{}
+	u.TransactionHeaderBinary = encoding.BytesToJSON(v.TransactionHeaderBinary)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if x, err := encoding.BytesFromJSON(u.TransactionHeaderBinary); err != nil {
+		return fmt.Errorf("error decoding TransactionHeaderBinary: %w", err)
+	} else {
+		v.TransactionHeaderBinary = x
+	}
+	return nil
+}
+
+func (v *EncodeTransactionResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
 		TransactionBinary *string `json:"transactionBinary,omitempty"`
 		TransactionHash   *string `json:"transactionHash,omitempty"`

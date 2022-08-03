@@ -1,23 +1,23 @@
 
-DecodeTransactionRequest:
+DecodeRequest:
   non-binary: true
   fields:
-    - name: TransactionBinary
+    - name: DataBinary
       type: bytes
 
-DecodeTransactionResponse:
+DecodeResponse:
   non-binary: true
   fields:
-    - name: TransactionJson
+    - name: DataJson
       type: string
 
-EncodeTransactionRequest:
+EncodeRequest:
   non-binary: true
   fields:
-    - name: TransactionJson
+    - name: DataJson
       type: string
 
-EncodeTransactionRespones:
+EncodeTransactionResponse:
   non-binary: true
   fields:
     - name: TransactionBinary
@@ -27,10 +27,92 @@ EncodeTransactionRespones:
       type: bytes
       marshal-as: reference
 
+EncodeTransactionBodyResponse:
+  non-binary: true
+  fields:
+    - name: TransactionBodyBinary
+      type: bytes
+      marshal-as: reference
+
+EncodeTransactionHeaderResponse:
+  non-binary: true
+  fields:
+    - name: TransactionHeaderBinary
+      type: bytes
+      marshal-as: reference
+
+EncodeAccountResponse:
+  non-binary: true
+  fields:
+    - name: AccountBinary
+      type: bytes
+      marshal-as: reference
+
+ProveReceiptRequest:
+  non-binary: true
+  fields:
+    - name: DataJson
+      type: string
+    - name: ReceiptJson
+      type: string
+
+CreateTransactionRequest:
+  non-binary: true
+  fields:
+    - name: Name
+      type: string
+    - name: TransactionType
+      type: protocol.TransactionType
+      marshal-as: enum
+
+CreateTransactionResponse:
+  non-binary: true
+  fields:
+    - name: Name
+      type: string
+
+AddTransactionInputRequest:
+  non-binary: true
+  fields:
+    - name: Name
+      type: string
+    - name: Url
+      type: string
+
+AddTransactionBodyRequest:
+  non-binary: true
+  fields:
+    - name: Name
+      type: string
+    - name: Body
+      type: string
+
+AddTokenTransactionOutput:
+  non-binary: true
+  fields:
+    - name: Name
+      type: string
+    - name: Url
+      type: string
+    - name: Amount
+      type: string
+
+DeleteTransactionRequest:
+  non-binary: true
+  fields:
+    - name: Name
+      type: string
+
+DeleteTransactionResponse:
+  non-binary: true
+  fields:
+    - name: Name
+      type: string
+
 SignRequest:
   non-binary: true
   fields:
-    - name: ReferenceId
+    - name: Name
       type: int
     - name: KeyName
       type: string
@@ -43,6 +125,20 @@ SignResponse:
       type: bytes
     - name: PublicKey
       type: bytes
+
+AddTransactionToEnvelopeRequest:
+  non-binary: true
+  fields:
+    - name: EnvelopeName
+      type: string
+    - name: TransactionName
+      type: string
+
+FinalizeEnvelopeRequest:
+  non-binary: true
+  fields:
+    - name: Name
+      type: string
 
 VersionResponse:
   fields:
@@ -59,7 +155,20 @@ AuthorizationRequired:
       type: Version
       marshal-as: reference
 
+
+GeneralResponse:
+  non-binary: true
+  fields:
+    - name: Info
+      type: string
+    - name: Code
+      type: ErrorCode
+      marshal-as: enum
+    - name: Error
+      type: string
+
 KeyList:
+  non-binary: true
   fields:
     - name: Name
       type: string

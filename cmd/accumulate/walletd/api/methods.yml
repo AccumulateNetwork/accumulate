@@ -1,7 +1,6 @@
-#GET
+
 Version:
   description: returns the version of the wallet daemon
-  #kind: query
   rpc: version
   output: api.VersionResponse
 
@@ -9,28 +8,37 @@ Sign:
   description: sign a transaction
   rpc: sign
   input: api.SignRequest
-  output: api.SignRespose|api.AuthorizationRequired
+  output: api.SignResponse|api.AuthorizationRequired
 
-EncodeTransaction:
+Encode:
   description: binary marshal a json transaction body and return encoded hex
   rpc: encode-transaction
-  input: api.EncodeTransactionRequest
-  output: api.EncodeTransactionResponse
+  input: api.EncodeRequest
+  output: api.EncodeAccountResponse|api.EncodeTransactionResponse|api.EncodeTransactionHeaderResponse|api.EncodeTransactionBodyResponse
 
-DecodeTransaction:
+Decode:
   description: unmarshal a binary transaction body and return the json transaction body
   rpc: decode-transaction
-  input: api.DecodeTransactionRequest
-  output: api.DecodeTransactionResponse
+  input: api.DecodeRequest
+  output: api.DecodeResponse
 
 KeyList:
   description: returns a list of available keys in the wallet
-#  kind: query
   rpc: key-list
   input: api.KeyListRequest
-  output: api.KeyListResponse|api.AuthorizationRequred
-#  input: Authorization
-#  output: AuthorizationRequred|KeyListResponse
+  output: api.KeyListResponse|api.AuthorizationRequired
+
+CreateTransaction:
+  description: create a transaction by name
+  rpc: create-transaction
+  input: api.CreateTransactionRequest
+  output: api.GeneralResponse
+
+CreateEnvelope:
+  description: create an envelope by name
+  rpc: create-envelope
+  input: api.CreateEnvelopeRequest
+  output: api.GeneralResponse
 
 #Query:
   # description: queries an account or account chain by URL

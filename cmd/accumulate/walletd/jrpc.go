@@ -193,10 +193,6 @@ func validatorError(err error) jsonrpc2.Error {
 	return jsonrpc2.NewError(apiv2.ErrCodeValidation, "Validation Error", err)
 }
 
-// func submissionError(err error) jsonrpc2.Error {
-// 	return jsonrpc2.NewError(ErrCodeSubmission, "Submission Entry Error", err)
-// }
-
 func accumulateError(err error) jsonrpc2.Error {
 
 	if errors.Is(err, storage.ErrNotFound) {
