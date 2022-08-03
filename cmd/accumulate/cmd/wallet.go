@@ -11,9 +11,11 @@ var initWalletCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		switch args[1] {
 		case "create":
-			InitDBCreate(false)
+			err := InitDBCreate(false)
+			printOutput(cmd, "", err)
 		case "import":
-			InitDBImport(cmd, false)
+			err := InitDBImport(cmd, false)
+			printOutput(cmd, "", err)
 		default:
 		}
 	},
