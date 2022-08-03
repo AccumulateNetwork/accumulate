@@ -16,7 +16,7 @@ type DataEntry interface {
 	GetData() [][]byte
 }
 
-const TransactionSizeMax = 11000 // Make the limit *slightly* over 10k to accommodate Factom entries
+const TransactionSizeMax = 20480 // Must be over 10k to accommodate Factom entries
 const SignatureSizeMax = 1024
 
 // Hash
