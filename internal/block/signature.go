@@ -106,10 +106,6 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 		return x.processSignature(batch, delivery, signature.Signature, md.SetForwarded())
 
 	case *protocol.DelegatedSignature:
-		delegate, err = x.processSignature(batch, delivery, signature.Signature, md.SetDelegated())
-		if err != nil {
-			return nil, err
-		}
 
 		if !signature.Verify(signature.Metadata().Hash(), delivery.Transaction.GetHash()) {
 			return nil, errors.Format(errors.StatusBadRequest, "invalid delegated wrapper signature")
@@ -124,7 +120,10 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 		if err != nil {
 			return nil, errors.Wrap(errors.StatusUnknownError, err)
 		}
-
+		delegate, err = x.processSignature(batch, delivery, signature.Signature, md.SetDelegated())
+		if err != nil {
+			return nil, err
+		}
 		// Verify delegation
 		_, _, ok := signer.EntryByDelegate(delegate.GetUrl())
 		if !ok {

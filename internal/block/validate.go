@@ -198,10 +198,7 @@ func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Deli
 		return nil, errors.New(errors.StatusBadRequest, "a signature set is not allowed outside of a forwarded transaction")
 
 	case *protocol.DelegatedSignature:
-		delegate, err = x.validateSignature(batch, delivery, signature.Signature, md.SetDelegated())
-		if err != nil {
-			return nil, err
-		}
+
 		if !signature.Verify(signature.Metadata().Hash(), delivery.Transaction.GetHash()) {
 			return nil, errors.Format(errors.StatusBadRequest, "invalid delegated wrapper signature")
 		}
@@ -214,7 +211,10 @@ func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Deli
 		if err != nil {
 			return nil, errors.Wrap(errors.StatusUnknownError, err)
 		}
-
+		delegate, err = x.validateSignature(batch, delivery, signature.Signature, md.SetDelegated())
+		if err != nil {
+			return nil, err
+		}
 		// Verify delegation
 		_, _, ok := signer.EntryByDelegate(delegate.GetUrl())
 		if !ok {
