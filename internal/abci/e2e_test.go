@@ -1784,17 +1784,30 @@ func TestMultiLevelDelegation(t *testing.T) {
 		cda := new(protocol.CreateDataAccount)
 		cda.Url = protocol.AccountUrl("alice", "data")
 
-		send(newTxn("alice").
-			WithSigner(protocol.AccountUrl("alice", "book0", "1"), 1).
+		env := newTxn("alice").
 			WithBody(cda).
-			Initiate(protocol.SignatureTypeLegacyED25519, aliceKey).
+
+			// Initiate with Alice
+			WithSigner(protocol.AccountUrl("alice", "book0", "1"), 1).
+			Initiate(protocol.SignatureTypeED25519, aliceKey).
+
+			// Sign with Charlie via Alice (one-layer delegation)
 			WithSigner(protocol.AccountUrl("charlie", "book0", "1"), 1).
+			WithDelegator(protocol.AccountUrl("alice", "book0", "1")).
 			Sign(protocol.SignatureTypeED25519, charlieKey).
-			WithSigner(protocol.AccountUrl("bob", "book0", "1"), 1).
-			Sign(protocol.SignatureTypeED25519, charlieKey).
-			Build())
+			Build()
+
+		// Take Charlie's signature, extract the key signature, and reconstruct
+		// it as via Bob via Alice (two-layer delegation)
+		sig := env.Signatures[1].(*protocol.DelegatedSignature).Signature
+		sig = &protocol.DelegatedSignature{Delegator: protocol.AccountUrl("bob", "book0", "1"), Signature: sig}
+		sig = &protocol.DelegatedSignature{Delegator: protocol.AccountUrl("alice", "book0", "1"), Signature: sig}
+		env.Signatures = append(env.Signatures, sig)
+
+		send(env)
 	})
-	require.NoError(t, err)
+	_ = err
+	t.Fatal("This should fail with something like 'invalid signature'")
 	//fmt.Println(n.GetKeyPage(protocol.AccountUrl("alice", "book0", "1").String()), n.GetKeyPage(protocol.AccountUrl("bob", "book0", "1").String()), n.GetKeyPage(protocol.AccountUrl("charlie", "book0", "1").String()))
 
 }
