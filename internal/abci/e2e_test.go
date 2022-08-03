@@ -1740,6 +1740,49 @@ func TestAccountAuth(t *testing.T) {
 	require.Error(t, err, "expected a failure but instead an unauthorized signature succeeded")
 }
 
+func TestMultiLevelDelegation(t *testing.T) {
+	check := newDefaultCheckError(t, true)
+	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	nodes := RunTestNet(t, partitions, daemons, nil, true, check.ErrorHandler())
+	n := nodes[partitions[1]][0]
+	aliceKey, charlieKey, bobKey := generateKey(), generateKey(), generateKey()
+	bobkeyHash, charliekeyHash := sha256.Sum256(bobKey.PubKey().Address()), sha256.Sum256(charlieKey.PubKey().Address())
+	batch := n.db.Begin(true)
+	require.NoError(t, acctesting.CreateAdiWithCredits(batch, aliceKey, "alice", 1e9))
+	require.NoError(t, acctesting.CreateAdiWithCredits(batch, bobKey, "bob", 1e9))
+	require.NoError(t, acctesting.CreateAdiWithCredits(batch, charlieKey, "charlie", 1e9))
+	require.NoError(t, batch.Commit())
+	fmt.Println(n.GetADI("acc://alice.acme"))
+	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		op := new(protocol.AddKeyOperation)
+		op.Entry = protocol.KeySpecParams{KeyHash: bobkeyHash[:], Delegate: protocol.AccountUrl("bob", "book0")}
+		body := new(protocol.UpdateKeyPage)
+		body.Operation = append(body.Operation, op)
+		send(newTxn("alice").WithSigner(protocol.AccountUrl("alice", "book0", "1"), 1).WithBody(body).
+			Initiate(protocol.SignatureTypeLegacyED25519, aliceKey).
+			Build())
+	})
+	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		op := new(protocol.AddKeyOperation)
+		op.Entry = protocol.KeySpecParams{KeyHash: charliekeyHash[:], Delegate: protocol.AccountUrl("charlie", "book0")}
+		body := new(protocol.UpdateKeyPage)
+		body.Operation = append(body.Operation, op)
+		send(newTxn("alice").WithSigner(protocol.AccountUrl("alice", "book0", "1"), 1).WithBody(body).
+			Initiate(protocol.SignatureTypeLegacyED25519, aliceKey).
+			Build())
+	})
+	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		op := new(protocol.AddKeyOperation)
+		op.Entry = protocol.KeySpecParams{KeyHash: charliekeyHash[:], Delegate: protocol.AccountUrl("charlie", "book0")}
+		body := new(protocol.UpdateKeyPage)
+		body.Operation = append(body.Operation, op)
+		send(newTxn("bob").WithSigner(protocol.AccountUrl("bob", "book0", "1"), 1).WithBody(body).
+			Initiate(protocol.SignatureTypeLegacyED25519, bobKey).
+			Build())
+	})
+	fmt.Println(n.GetKeyPage(protocol.AccountUrl("alice", "book0", "1").String()), n.GetKeyPage(protocol.AccountUrl("bob", "book0", "1").String()), n.GetKeyPage(protocol.AccountUrl("charlie", "book0", "1").String()))
+}
+
 func TestNetworkDefinition(t *testing.T) {
 	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
