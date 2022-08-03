@@ -14,6 +14,8 @@ import (
 	"github.com/tendermint/tendermint/libs/service"
 	nm "github.com/tendermint/tendermint/node"
 	"github.com/tendermint/tendermint/privval"
+	coretypes "github.com/tendermint/tendermint/rpc/coretypes"
+	corerpc "github.com/tendermint/tendermint/rpc/jsonrpc/client"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	web "gitlab.com/accumulatenetwork/accumulate/internal/web/static"
 )
@@ -52,7 +54,6 @@ func (n *Node) Start() error {
 	if err != nil {
 		return err
 	}
-
 	if n.Config.Accumulate.Website.Enabled {
 		u, err := url.Parse(n.Config.Accumulate.Website.ListenAddress)
 		if err != nil {
@@ -75,5 +76,24 @@ func (n *Node) Start() error {
 			}
 		}()
 	}
+	_, err = n.waitForRPC()
+	if err != nil {
+		return err
+	}
 	return nil
+}
+
+func (n *Node) waitForRPC() (*corerpc.Client, error) {
+	client, err := corerpc.New(n.Config.RPC.ListenAddress)
+	if err != nil {
+		return nil, err
+	}
+	result := new(*coretypes.ResultStatus)
+	for {
+		_, err := client.Call(context.Background(), "status", nil, &result)
+		if err == nil {
+			return client, nil
+		}
+	}
+
 }
