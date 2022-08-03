@@ -1741,45 +1741,28 @@ func TestAccountAuth(t *testing.T) {
 }
 
 func TestMultiLevelDelegation(t *testing.T) {
-	check := newDefaultCheckError(t, true)
+	check := newDefaultCheckError(t, false)
 	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, partitions, daemons, nil, true, check.ErrorHandler())
 	n := nodes[partitions[1]][0]
 	aliceKey, charlieKey, bobKey := generateKey(), generateKey(), generateKey()
-	bobkeyHash, charliekeyHash := sha256.Sum256(bobKey.PubKey().Address()), sha256.Sum256(charlieKey.PubKey().Address())
+	charliekeyHash := sha256.Sum256(charlieKey.PubKey().Address())
 	batch := n.db.Begin(true)
 	require.NoError(t, acctesting.CreateAdiWithCredits(batch, aliceKey, "alice", 1e9))
 	require.NoError(t, acctesting.CreateAdiWithCredits(batch, bobKey, "bob", 1e9))
 	require.NoError(t, acctesting.CreateAdiWithCredits(batch, charlieKey, "charlie", 1e9))
+	require.NoError(t, acctesting.UpdateKeyPage(batch, protocol.AccountUrl("alice", "book0", "1"), func(kp *protocol.KeyPage) {
+		kp.AddKeySpec(&protocol.KeySpec{Delegate: protocol.AccountUrl("bob", "book0")})
+		kp.AddKeySpec(&protocol.KeySpec{Delegate: protocol.AccountUrl("charlie", "book0")})
+		kp.AddKeySpec(&protocol.KeySpec{PublicKeyHash: charliekeyHash[:]})
+		kp.SetThreshold(2)
+	}))
+	require.NoError(t, acctesting.UpdateKeyPage(batch, protocol.AccountUrl("bob", "book0", "1"), func(kp *protocol.KeyPage) {
+		kp.AddKeySpec(&protocol.KeySpec{Delegate: protocol.AccountUrl("charlie", "book0")})
+	}))
 	require.NoError(t, batch.Commit())
 	fmt.Println(n.GetADI("acc://alice.acme"))
-	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
-		op := new(protocol.AddKeyOperation)
-		op.Entry = protocol.KeySpecParams{KeyHash: bobkeyHash[:], Delegate: protocol.AccountUrl("bob", "book0")}
-		body := new(protocol.UpdateKeyPage)
-		body.Operation = append(body.Operation, op)
-		send(newTxn("alice/book0/1").WithSigner(protocol.AccountUrl("alice", "book0", "1"), 1).WithBody(body).
-			Initiate(protocol.SignatureTypeLegacyED25519, aliceKey).
-			Build())
-	})
-	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
-		op := new(protocol.AddKeyOperation)
-		op.Entry = protocol.KeySpecParams{KeyHash: charliekeyHash[:], Delegate: protocol.AccountUrl("charlie", "book0")}
-		body := new(protocol.UpdateKeyPage)
-		body.Operation = append(body.Operation, op)
-		send(newTxn("alice/book0/1").WithSigner(protocol.AccountUrl("alice", "book0", "1"), 1).WithBody(body).
-			Initiate(protocol.SignatureTypeLegacyED25519, aliceKey).
-			Build())
-	})
-	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
-		op := new(protocol.AddKeyOperation)
-		op.Entry = protocol.KeySpecParams{KeyHash: charliekeyHash[:], Delegate: protocol.AccountUrl("charlie", "book0")}
-		body := new(protocol.UpdateKeyPage)
-		body.Operation = append(body.Operation, op)
-		send(newTxn("bob/book0/1").WithSigner(protocol.AccountUrl("bob", "book0", "1"), 1).WithBody(body).
-			Initiate(protocol.SignatureTypeLegacyED25519, bobKey).
-			Build())
-	})
+
 	_, _, err := n.Execute(func(send func(*protocol.Envelope)) {
 		cda := new(protocol.CreateDataAccount)
 		cda.Url = protocol.AccountUrl("alice", "data")
@@ -1800,15 +1783,16 @@ func TestMultiLevelDelegation(t *testing.T) {
 		// Take Charlie's signature, extract the key signature, and reconstruct
 		// it as via Bob via Alice (two-layer delegation)
 		sig := env.Signatures[1].(*protocol.DelegatedSignature).Signature
+		fmt.Println(sig)
 		sig = &protocol.DelegatedSignature{Delegator: protocol.AccountUrl("bob", "book0", "1"), Signature: sig}
+		fmt.Println(sig)
 		sig = &protocol.DelegatedSignature{Delegator: protocol.AccountUrl("alice", "book0", "1"), Signature: sig}
+		fmt.Println(sig)
 		env.Signatures = append(env.Signatures, sig)
 
 		send(env)
 	})
-	_ = err
-	t.Fatal("This should fail with something like 'invalid signature'")
-	//fmt.Println(n.GetKeyPage(protocol.AccountUrl("alice", "book0", "1").String()), n.GetKeyPage(protocol.AccountUrl("bob", "book0", "1").String()), n.GetKeyPage(protocol.AccountUrl("charlie", "book0", "1").String()))
+	require.Error(t, err)
 
 }
 

@@ -257,7 +257,7 @@ func (s *Builder) sign(sig protocol.Signature, hash []byte) error {
 	case *protocol.ETHSignature:
 		sig.TransactionHash = *(*[32]byte)(hash)
 	case *protocol.DelegatedSignature:
-		return s.sign(sig.Signature, hash)
+		return s.sign(sig.Signature, append(hash, sig.Metadata().Hash()...))
 	default:
 		panic("unreachable")
 	}

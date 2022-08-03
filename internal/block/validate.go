@@ -202,6 +202,9 @@ func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Deli
 		if err != nil {
 			return nil, err
 		}
+		if !signature.Verify(signature.Metadata().Hash(), delivery.Transaction.GetHash()) {
+			return nil, errors.Format(errors.StatusBadRequest, "invalid delegated wrapper signature")
+		}
 		if !signature.Delegator.LocalTo(md.Location) {
 			return nil, nil
 		}
@@ -220,8 +223,10 @@ func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Deli
 
 	case protocol.KeySignature:
 		// Basic validation
-		if !signature.Verify(delivery.Transaction.GetHash()) {
-			return nil, errors.New(errors.StatusBadRequest, "invalid")
+		if !md.Delegated == true {
+			if !signature.Verify(nil, delivery.Transaction.GetHash()) {
+				return nil, errors.New(errors.StatusBadRequest, "invalid")
+			}
 		}
 		if !delivery.Transaction.Body.Type().IsUser() {
 			err = x.validatePartitionSignature(md.Location, signature, delivery.Transaction)

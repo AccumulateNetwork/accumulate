@@ -40,7 +40,7 @@ type KeySignature interface {
 	GetPublicKey() []byte
 	GetSignerVersion() uint64
 	GetTimestamp() uint64
-	Verify(hash []byte) bool
+	Verify(sigMdHash, hash []byte) bool
 }
 
 // IsSystem returns true if the signature type is a system signature type.
@@ -265,13 +265,14 @@ func (s *LegacyED25519Signature) GetVote() VoteType {
 
 // Verify returns true if this signature is a valid legacy ED25519 signature of
 // the hash.
-func (e *LegacyED25519Signature) Verify(txnHash []byte) bool {
+func (e *LegacyED25519Signature) Verify(sigMdHash, txnHash []byte) bool {
 	if len(e.PublicKey) != 32 || len(e.Signature) != 64 {
 		return false
 	}
 	data := e.Metadata().Hash()
 	data = append(data, common.Uint64Bytes(e.Timestamp)...)
 	data = append(data, txnHash...)
+	data = append(data, sigMdHash...)
 	hash := sha256.Sum256(data)
 	return ed25519.Verify(e.PublicKey, hash[:], e.Signature)
 }
@@ -343,12 +344,13 @@ func (s *ED25519Signature) GetVote() VoteType {
 
 // Verify returns true if this signature is a valid ED25519 signature of the
 // hash.
-func (e *ED25519Signature) Verify(txnHash []byte) bool {
+func (e *ED25519Signature) Verify(sigMdHash, txnHash []byte) bool {
 	if len(e.PublicKey) != 32 || len(e.Signature) != 64 {
 		return false
 	}
 	data := e.Metadata().Hash()
 	data = append(data, txnHash...)
+	data = append(data, sigMdHash...)
 	hash := sha256.Sum256(data)
 	return ed25519.Verify(e.PublicKey, hash[:], e.Signature)
 }
@@ -383,12 +385,13 @@ func (s *RCD1Signature) GetPublicKeyHash() []byte { return GetRCDHashFromPublicK
 func (s *RCD1Signature) GetPublicKey() []byte { return s.PublicKey }
 
 // Verify returns true if this signature is a valid RCD1 signature of the hash.
-func (e *RCD1Signature) Verify(txnHash []byte) bool {
+func (e *RCD1Signature) Verify(sigMdHash, txnHash []byte) bool {
 	if len(e.PublicKey) != 32 || len(e.Signature) != 64 {
 		return false
 	}
 	data := e.Metadata().Hash()
 	data = append(data, txnHash...)
+	data = append(data, sigMdHash...)
 	hash := sha256.Sum256(data)
 	return ed25519.Verify(e.PublicKey, hash[:], e.Signature)
 }
@@ -502,10 +505,11 @@ func (s *BTCSignature) GetVote() VoteType {
 
 // Verify returns true if this signature is a valid SECP256K1 signature of the
 // hash.
-func (e *BTCSignature) Verify(txnHash []byte) bool {
+func (e *BTCSignature) Verify(sigMdHash, txnHash []byte) bool {
 
 	data := e.Metadata().Hash()
 	data = append(data, txnHash...)
+	data = append(data, sigMdHash...)
 	hash := sha256.Sum256(data)
 	sig, err := btc.ParseSignature(e.Signature, btc.S256())
 	if err != nil {
@@ -591,10 +595,11 @@ func (s *BTCLegacySignature) GetVote() VoteType {
 
 // Verify returns true if this signature is a valid SECP256K1 signature of the
 // hash.
-func (e *BTCLegacySignature) Verify(txnHash []byte) bool {
+func (e *BTCLegacySignature) Verify(sigMdHash, txnHash []byte) bool {
 
 	data := e.Metadata().Hash()
 	data = append(data, txnHash...)
+	data = append(data, sigMdHash...)
 	hash := sha256.Sum256(data)
 	sig, err := btc.ParseSignature(e.Signature, btc.S256())
 	if err != nil {
@@ -680,10 +685,12 @@ func (s *ETHSignature) GetVote() VoteType {
 
 // Verify returns true if this signature is a valid SECP256K1 signature of the
 // hash.
-func (e *ETHSignature) Verify(txnHash []byte) bool {
+func (e *ETHSignature) Verify(sigMdHash, txnHash []byte) bool {
 
 	data := e.Metadata().Hash()
 	data = append(data, txnHash...)
+	data = append(data, sigMdHash...)
+
 	hash := sha256.Sum256(data)
 	sig, err := btc.ParseSignature(e.Signature, btc.S256())
 	if err != nil {
@@ -880,6 +887,25 @@ func (s *DelegatedSignature) Initiator() (hash.Hasher, error) {
 
 	hasher.AddUrl(s.Delegator)
 	return hasher, nil
+}
+
+func (s *DelegatedSignature) Verify(sigMdHash, hash []byte) bool {
+	sig := s.Signature
+	switch sig.(type) {
+	case *ED25519Signature:
+		return sig.(*ED25519Signature).Verify(sigMdHash, hash)
+	case *LegacyED25519Signature:
+		return sig.(*LegacyED25519Signature).Verify(sigMdHash, hash)
+	case *ETHSignature:
+		return sig.(*ETHSignature).Verify(sigMdHash, hash)
+	case *BTCLegacySignature:
+		return sig.(*BTCLegacySignature).Verify(sigMdHash, hash)
+	case *BTCSignature:
+		return sig.(*BTCSignature).Verify(sigMdHash, hash)
+	case *RCD1Signature:
+		return sig.(*RCD1Signature).Verify(sigMdHash, hash)
+	}
+	return false
 }
 
 /*

@@ -23,7 +23,7 @@ func TestBTCSignature(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NoError(t, SignBTC(secp, privkey.Serialize(), hash[:]))
-	res := secp.Verify(hash[:])
+	res := secp.Verify(nil, hash[:])
 
 	require.Equal(t, res, true)
 
@@ -44,7 +44,7 @@ func TestBTCLegacySignature(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NoError(t, SignBTCLegacy(secp, privkey.Serialize(), hash[:]))
-	res := secp.Verify(hash[:])
+	res := secp.Verify(nil, hash[:])
 
 	require.Equal(t, res, true)
 
@@ -65,7 +65,7 @@ func TestETHSignature(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NoError(t, SignETH(secp, privkey.Serialize(), hash[:]))
-	res := secp.Verify(hash[:])
+	res := secp.Verify(nil, hash[:])
 
 	require.Equal(t, res, true)
 
