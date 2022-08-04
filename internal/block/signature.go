@@ -110,6 +110,10 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 		if err != nil {
 			return nil, err
 		}
+		if !md.Nested() && !signature.Verify(signature.Metadata().Hash(), delivery.Transaction.GetHash()) {
+			return nil, errors.Format(errors.StatusBadRequest, "invalid signature")
+		}
+
 		if !signature.Delegator.LocalTo(md.Location) {
 			return nil, nil
 		}
@@ -128,9 +132,10 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 
 	case protocol.KeySignature:
 		// Basic validation
-		if signature.Type() != protocol.SignatureTypeReceipt && !signature.Verify(delivery.Transaction.GetHash()) {
+		if !md.Nested() && !signature.Verify(nil, delivery.Transaction.GetHash()) {
 			return nil, errors.Format(errors.StatusBadRequest, "invalid signature")
 		}
+
 		if !delivery.Transaction.Body.Type().IsUser() {
 			err = x.validatePartitionSignature(md.Location, signature, delivery.Transaction)
 			if err != nil {
