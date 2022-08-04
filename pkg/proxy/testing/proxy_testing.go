@@ -104,7 +104,7 @@ func seedList(_ context.Context, params json.RawMessage) interface{} {
 		sig.PublicKey = AccuProxyKey.Public().(ed25519.PublicKey)
 		sig.Timestamp = uint64(time.Now().UnixNano())
 		txnHash := sha256.Sum256(s)
-		protocol.SignED25519(&sig, AccuProxyKey, txnHash[:])
+		protocol.SignED25519(&sig, AccuProxyKey, nil, txnHash[:])
 		resp.Signature = &sig
 	}
 	return resp
@@ -138,7 +138,7 @@ func seedCount(_ context.Context, params json.RawMessage) interface{} {
 		sig.PublicKey = AccuProxyKey.Public().(ed25519.PublicKey)
 		sig.Timestamp = uint64(time.Now().UnixNano())
 		txnHash := sha256.Sum256(s)
-		protocol.SignED25519(&sig, AccuProxyKey, txnHash[:])
+		protocol.SignED25519(&sig, AccuProxyKey, nil, txnHash[:])
 		resp.Signature = &sig
 	}
 
@@ -166,7 +166,7 @@ func getPartitions(_ context.Context, params json.RawMessage) interface{} {
 		sig.PublicKey = AccuProxyKey.Public().(ed25519.PublicKey)
 		sig.Timestamp = uint64(time.Now().UnixNano())
 		txnHash := sha256.Sum256(s)
-		protocol.SignED25519(&sig, AccuProxyKey, txnHash[:])
+		protocol.SignED25519(&sig, AccuProxyKey, nil, txnHash[:])
 		resp.Signature = &sig
 	}
 
@@ -198,7 +198,7 @@ func getNetwork(_ context.Context, params json.RawMessage) interface{} {
 		sig.PublicKey = AccuProxyKey.Public().(ed25519.PublicKey)
 		sig.Timestamp = uint64(time.Now().UnixNano())
 		txnHash := sha256.Sum256(s)
-		protocol.SignED25519(&sig, AccuProxyKey, txnHash[:])
+		protocol.SignED25519(&sig, AccuProxyKey, nil, txnHash[:])
 		resp.Signature = &sig
 	}
 
