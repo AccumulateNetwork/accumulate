@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"math/rand"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -56,6 +55,7 @@ var (
 	NoWalletVersionCheck bool
 	AdditionalSigners    []string
 	SignerVersion        uint
+	Entropy              uint
 )
 
 var currentUser = func() *user.User {
@@ -100,6 +100,7 @@ func InitRootCmd() *cobra.Command {
 	flags.StringSliceVar(&Delegators, "delegator", nil, "Specifies the delegator when creating a delegated signature")
 	flags.StringSliceVar(&AdditionalSigners, "sign-with", nil, "Specifies additional keys to sign the transaction with")
 	flags.UintVar(&SignerVersion, "signer-version", uint(0), "Specify the signer version. Overrides the default behavior of fetching the signer version.")
+	flags.UintVar(&Entropy, "entropy", uint(128), "Specifies the size of the mnemonic entropy.")
 	//add the commands
 	cmd.AddCommand(encryptCmd)
 	cmd.AddCommand(accountCmd)
@@ -256,8 +257,7 @@ func InitDBImport(cmd *cobra.Command, memDb bool) error {
 
 func InitDBCreate(memDb bool) error {
 	wallet = initDB(DatabaseDir, memDb)
-	entropy := make([]byte, 128)
-	_, err := rand.Read(entropy)
+	entropy, err := bip39.NewEntropy(int(Entropy))
 	if err != nil {
 		return err
 	}
