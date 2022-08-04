@@ -22,7 +22,7 @@ import (
 
 type JrpcMethods struct {
 	Options
-	querier  *queryDispatch
+	querier  *queryFrontend
 	methods  jsonrpc2.MethodMap
 	validate *validator.Validate
 	logger   log.Logger
@@ -32,11 +32,18 @@ func NewJrpc(opts Options) (*JrpcMethods, error) {
 	var err error
 	m := new(JrpcMethods)
 	m.Options = opts
-	m.querier = new(queryDispatch)
+	m.querier = new(queryFrontend)
 	m.querier.Options = opts
+	m.querier.backend = new(queryBackend)
+	m.querier.backend.Options = opts
+
+	if opts.Key == nil {
+		return nil, errors.Format(errors.StatusBadRequest, "missing key")
+	}
 
 	if opts.Logger != nil {
 		m.logger = opts.Logger.With("module", "jrpc")
+		m.querier.backend.logger.L = m.logger
 	}
 
 	m.validate, err = protocol.NewValidator()
@@ -48,10 +55,6 @@ func NewJrpc(opts Options) (*JrpcMethods, error) {
 	return m, nil
 }
 
-func (m *JrpcMethods) Querier_TESTONLY() Querier {
-	return m.querier
-}
-
 func (m *JrpcMethods) logError(msg string, keyVals ...interface{}) {
 	if m.logger != nil {
 		m.logger.Error(msg, keyVals...)
@@ -59,7 +62,6 @@ func (m *JrpcMethods) logError(msg string, keyVals ...interface{}) {
 }
 
 func (m *JrpcMethods) EnableDebug() {
-	q := m.querier.direct(m.Options.Describe.PartitionId)
 	m.methods["debug-query-direct"] = func(_ context.Context, params json.RawMessage) interface{} {
 		req := new(GeneralQuery)
 		err := m.parse(params, req)
@@ -67,7 +69,7 @@ func (m *JrpcMethods) EnableDebug() {
 			return err
 		}
 
-		return jrpcFormatResponse(q.QueryUrl(req.Url, req.QueryOptions))
+		return jrpcFormatResponse(m.querier.QueryUrl(req.Url, req.QueryOptions))
 	}
 }
 

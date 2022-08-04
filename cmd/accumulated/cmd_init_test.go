@@ -51,7 +51,7 @@ func TestInitSeeds(t *testing.T) {
 		args = strings.Split(cl, " ")
 		cmd.SetArgs(args)
 		require.NoError(t, cmd.Execute())
-		require.NoError(t, DidError, "when executing: ", cl)
+		require.NoError(t, DidError, "when executing (%d): %s", i, cl)
 
 		//fix the timeouts to match devnet bvn to avoid consensus error
 		c, err := config.Load(workDirs[i] + "/bvnn")
