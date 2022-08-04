@@ -23,10 +23,6 @@ func init() { acctesting.EnableDebugFeatures() }
 
 var delivered = (*TransactionStatus).Delivered
 
-func received(status *TransactionStatus) bool {
-	return status.Code > 0 && status.Code != errors.StatusRemote
-}
-
 func updateAccount[T Account](sim *simulator.Simulator, accountUrl *url.URL, fn func(account T)) {
 	sim.UpdateAccount(accountUrl, func(account Account) {
 		var typed T

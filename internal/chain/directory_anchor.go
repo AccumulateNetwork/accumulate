@@ -26,12 +26,14 @@ func (DirectoryAnchor) Execute(st *StateManager, tx *Delivery) (protocol.Transac
 	return (DirectoryAnchor{}).Validate(st, tx)
 }
 
-func (x DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+func (DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	// Unpack the payload
 	body, ok := tx.Transaction.Body.(*protocol.DirectoryAnchor)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.DirectoryAnchor), tx.Transaction.Body)
 	}
+
+	st.logger.Info("Received anchor", "module", "anchoring", "source", body.Source, "root", logging.AsHex(body.RootChainAnchor).Slice(0, 4), "bpt", logging.AsHex(body.StateTreeAnchor).Slice(0, 4), "block", body.MinorBlockIndex)
 
 	// Verify the origin
 	if _, ok := st.Origin.(*protocol.AnchorLedger); !ok {
@@ -51,13 +53,14 @@ func (x DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 
 	// Add the anchor to the chain - use the partition name as the chain name
 	record := st.batch.Account(st.OriginUrl).AnchorChain(protocol.Directory)
-	err := st.AddChainEntry(record.Root(), body.RootChainAnchor[:], body.RootChainIndex, body.MinorBlockIndex)
+	index, err := st.State.ChainUpdates.AddChainEntry2(st.batch, record.Root(), body.RootChainAnchor[:], body.RootChainIndex, body.MinorBlockIndex, false)
 	if err != nil {
 		return nil, err
 	}
+	st.State.DidReceiveAnchor(protocol.Directory, body, index)
 
 	// And the BPT root
-	err = st.AddChainEntry(record.BPT(), body.StateTreeAnchor[:], 0, 0)
+	_, err = st.State.ChainUpdates.AddChainEntry2(st.batch, record.BPT(), body.StateTreeAnchor[:], 0, 0, false)
 	if err != nil {
 		return nil, err
 	}
@@ -94,13 +97,13 @@ func processReceiptsFromDirectory(st *StateManager, tx *Delivery, body *protocol
 	// Process receipts
 	for i, receipt := range body.Receipts {
 		receipt := receipt // See docs/developer/rangevarref.md
-		if !bytes.Equal(receipt.Anchor, body.RootChainAnchor[:]) {
+		if !bytes.Equal(receipt.RootChainReceipt.Anchor, body.RootChainAnchor[:]) {
 			return fmt.Errorf("receipt %d is invalid: result does not match the anchor", i)
 		}
 
-		st.logger.Info("Received receipt", "module", "anchoring", "from", logging.AsHex(receipt.Start).Slice(0, 4), "to", logging.AsHex(body.RootChainAnchor).Slice(0, 4), "block", body.MinorBlockIndex, "source", body.Source)
+		st.logger.Info("Received receipt", "module", "anchoring", "from", logging.AsHex(receipt.RootChainReceipt.Start).Slice(0, 4), "to", logging.AsHex(body.RootChainAnchor).Slice(0, 4), "block", body.MinorBlockIndex, "source", body.Source)
 
-		d, err := loadSynthTxns(st, tx, receipt.Start, body.Source, &receipt, sequence)
+		d, err := loadSynthTxns(st, tx, receipt.RootChainReceipt.Start, body.Source, receipt.RootChainReceipt, sequence)
 		if err != nil {
 			return err
 		}

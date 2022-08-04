@@ -13,7 +13,7 @@ type BlockChainUpdatesIndexer struct {
 
 // BlockChainUpdates returns a block updates indexer.
 func BlockChainUpdates(batch *database.Batch, network *config.Describe, blockIndex uint64) *BlockChainUpdatesIndexer {
-	return &BlockChainUpdatesIndexer{batch.BlockChainUpdates(network.NodeUrl(), blockIndex)}
+	return &BlockChainUpdatesIndexer{batch.SystemData(network.PartitionId).BlockChainUpdates(blockIndex)}
 }
 
 func (x *BlockChainUpdatesIndexer) Set(entries []database.ChainUpdate) error {
