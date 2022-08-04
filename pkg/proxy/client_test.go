@@ -26,7 +26,7 @@ func TestAccuProxyClient(t *testing.T) {
 	d, err := PartitionListResp.PartitionList.MarshalBinary()
 	require.NoError(t, err)
 	hash := sha256.Sum256(d)
-	require.True(t, PartitionListResp.Signature.Verify(hash[:]))
+	require.True(t, PartitionListResp.Signature.Verify(nil, hash[:]))
 
 	scr := proxy.SeedCountRequest{}
 	scr.Network = "AccuProxyTest"
@@ -37,7 +37,7 @@ func TestAccuProxyClient(t *testing.T) {
 	d, err = seedCountResp.SeedCount.MarshalBinary()
 	require.NoError(t, err)
 	hash = sha256.Sum256(d)
-	require.True(t, seedCountResp.Signature.Verify(hash[:]))
+	require.True(t, seedCountResp.Signature.Verify(nil, hash[:]))
 
 	slr := proxy.SeedListRequest{}
 	slr.Sign = true
@@ -50,7 +50,7 @@ func TestAccuProxyClient(t *testing.T) {
 	d, err = seedListResp.SeedList.MarshalBinary()
 	require.NoError(t, err)
 	hash = sha256.Sum256(d)
-	require.True(t, seedListResp.Signature.Verify(hash[:]))
+	require.True(t, seedListResp.Signature.Verify(nil, hash[:]))
 
 	require.Equal(t, len(seedListResp.Addresses), len(testing2.Nodes))
 
@@ -63,5 +63,5 @@ func TestAccuProxyClient(t *testing.T) {
 	d, err = ncResp.NetworkState.MarshalBinary()
 	require.NoError(t, err)
 	hash = sha256.Sum256(d)
-	require.True(t, ncResp.Signature.Verify(hash[:]))
+	require.True(t, ncResp.Signature.Verify(nil, hash[:]))
 }
