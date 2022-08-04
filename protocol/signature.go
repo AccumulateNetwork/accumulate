@@ -12,7 +12,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding/hash"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
-	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 	"golang.org/x/crypto/ripemd160" //nolint:staticcheck
 	"golang.org/x/crypto/sha3"
 )
@@ -206,7 +205,7 @@ func SignLegacyED25519(sig *LegacyED25519Signature, privateKey, sigMdHash, txnHa
 		sigMdHash = sig.Metadata().Hash()
 	}
 	data := sigMdHash
-	data = append(data, common.Uint64Bytes(sig.Timestamp)...)
+
 	data = append(data, txnHash...)
 	hash := sha256.Sum256(data)
 	sig.Signature = ed25519.Sign(privateKey, hash[:])
@@ -276,7 +275,7 @@ func (e *LegacyED25519Signature) Verify(sigMdHash, txnHash []byte) bool {
 		sigMdHash = e.Metadata().Hash()
 	}
 	data := sigMdHash
-	data = append(data, common.Uint64Bytes(e.Timestamp)...)
+
 	data = append(data, txnHash...)
 	hash := sha256.Sum256(data)
 	return ed25519.Verify(e.PublicKey, hash[:], e.Signature)
@@ -291,7 +290,7 @@ func SignED25519(sig *ED25519Signature, privateKey, sigMdHash, txnHash []byte) {
 		sigMdHash = sig.Metadata().Hash()
 	}
 	data := sigMdHash
-	data = append(data, common.Uint64Bytes(sig.Timestamp)...)
+
 	data = append(data, txnHash...)
 	hash := sha256.Sum256(data)
 	sig.Signature = ed25519.Sign(privateKey, hash[:])
@@ -362,7 +361,6 @@ func (e *ED25519Signature) Verify(sigMdHash, txnHash []byte) bool {
 	}
 	data := sigMdHash
 
-	data = append(data, common.Uint64Bytes(e.Timestamp)...)
 	data = append(data, txnHash...)
 	hash := sha256.Sum256(data)
 	return ed25519.Verify(e.PublicKey, hash[:], e.Signature)
@@ -377,7 +375,7 @@ func SignRCD1(sig *RCD1Signature, privateKey, sigMdHash, txnHash []byte) {
 		sigMdHash = sig.Metadata().Hash()
 	}
 	data := sigMdHash
-	data = append(data, common.Uint64Bytes(sig.Timestamp)...)
+
 	data = append(data, txnHash...)
 	hash := sha256.Sum256(data)
 	sig.Signature = ed25519.Sign(privateKey, hash[:])
@@ -411,7 +409,6 @@ func (e *RCD1Signature) Verify(sigMdHash, txnHash []byte) bool {
 	}
 	data := sigMdHash
 
-	data = append(data, common.Uint64Bytes(e.Timestamp)...)
 	data = append(data, txnHash...)
 	hash := sha256.Sum256(data)
 	return ed25519.Verify(e.PublicKey, hash[:], e.Signature)
@@ -462,7 +459,7 @@ func SignBTC(sig *BTCSignature, privateKey, sigMdHash, txnHash []byte) error {
 		sigMdHash = sig.Metadata().Hash()
 	}
 	data := sigMdHash
-	data = append(data, common.Uint64Bytes(sig.Timestamp)...)
+
 	data = append(data, txnHash...)
 	hash := sha256.Sum256(data)
 	pvkey, pubKey := btc.PrivKeyFromBytes(btc.S256(), privateKey)
@@ -537,7 +534,6 @@ func (e *BTCSignature) Verify(sigMdHash, txnHash []byte) bool {
 	}
 	data := sigMdHash
 
-	data = append(data, common.Uint64Bytes(e.Timestamp)...)
 	data = append(data, txnHash...)
 	hash := sha256.Sum256(data)
 	sig, err := btc.ParseSignature(e.Signature, btc.S256())
@@ -560,7 +556,7 @@ func SignBTCLegacy(sig *BTCLegacySignature, privateKey, sigMdHash, txnHash []byt
 		sigMdHash = sig.Metadata().Hash()
 	}
 	data := sigMdHash
-	data = append(data, common.Uint64Bytes(sig.Timestamp)...)
+
 	data = append(data, txnHash...)
 	hash := sha256.Sum256(data)
 	pvkey, pubKey := btc.PrivKeyFromBytes(btc.S256(), privateKey)
@@ -635,7 +631,6 @@ func (e *BTCLegacySignature) Verify(sigMdHash, txnHash []byte) bool {
 	}
 	data := sigMdHash
 
-	data = append(data, common.Uint64Bytes(e.Timestamp)...)
 	data = append(data, txnHash...)
 	hash := sha256.Sum256(data)
 	sig, err := btc.ParseSignature(e.Signature, btc.S256())
@@ -659,7 +654,7 @@ func SignETH(sig *ETHSignature, privateKey, sigMdHash, txnHash []byte) error {
 		sigMdHash = sig.Metadata().Hash()
 	}
 	data := sigMdHash
-	data = append(data, common.Uint64Bytes(sig.Timestamp)...)
+
 	data = append(data, txnHash...)
 	hash := sha256.Sum256(data)
 	pvkey, pubKey := btc.PrivKeyFromBytes(btc.S256(), privateKey)
@@ -734,7 +729,6 @@ func (e *ETHSignature) Verify(sigMdHash, txnHash []byte) bool {
 	}
 	data := sigMdHash
 
-	data = append(data, common.Uint64Bytes(e.Timestamp)...)
 	data = append(data, txnHash...)
 	hash := sha256.Sum256(data)
 	sig, err := btc.ParseSignature(e.Signature, btc.S256())
