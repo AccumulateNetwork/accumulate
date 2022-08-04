@@ -1,7 +1,6 @@
 package main
 
 import (
-	"gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"net/http"
 	"time"
 
@@ -9,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 	service2 "github.com/tendermint/tendermint/libs/service"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/badger"
 )
 
@@ -54,7 +54,6 @@ func init() {
 			testing.EnableDebugFeatures()
 		}
 	}
-
 }
 
 func runDualNode(cmd *cobra.Command, args []string) (string, error) {
