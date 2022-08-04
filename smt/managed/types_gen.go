@@ -40,13 +40,12 @@ type ReceiptEntry struct {
 
 type ReceiptList struct {
 	fieldsSet []bool
-	// Element is the entry for which we want a proof.
-	Element []byte `json:"element,omitempty" form:"element" query:"element" validate:"required"`
 	// MerkleState MerkleState at the beginning of the list.
-	MerkleState *MerkleState `json:"merkleState,omitempty" form:"merkleState" query:"merkleState" validate:"required"`
-	Elements    [][]byte     `json:"elements,omitempty" form:"elements" query:"elements" validate:"required"`
-	Receipt     *Receipt     `json:"receipt,omitempty" form:"receipt" query:"receipt" validate:"required"`
-	extraData   []byte
+	MerkleState      *MerkleState `json:"merkleState,omitempty" form:"merkleState" query:"merkleState" validate:"required"`
+	Elements         [][]byte     `json:"elements,omitempty" form:"elements" query:"elements" validate:"required"`
+	Receipt          *Receipt     `json:"receipt,omitempty" form:"receipt" query:"receipt" validate:"required"`
+	ContinuedReceipt *Receipt     `json:"continuedReceipt,omitempty" form:"continuedReceipt" query:"continuedReceipt" validate:"required"`
+	extraData        []byte
 }
 
 func (v *Receipt) Copy() *Receipt {
@@ -83,7 +82,6 @@ func (v *ReceiptEntry) CopyAsInterface() interface{} { return v.Copy() }
 func (v *ReceiptList) Copy() *ReceiptList {
 	u := new(ReceiptList)
 
-	u.Element = encoding.BytesCopy(v.Element)
 	if v.MerkleState != nil {
 		u.MerkleState = (v.MerkleState).Copy()
 	}
@@ -93,6 +91,9 @@ func (v *ReceiptList) Copy() *ReceiptList {
 	}
 	if v.Receipt != nil {
 		u.Receipt = (v.Receipt).Copy()
+	}
+	if v.ContinuedReceipt != nil {
+		u.ContinuedReceipt = (v.ContinuedReceipt).Copy()
 	}
 
 	return u
@@ -140,9 +141,6 @@ func (v *ReceiptEntry) Equal(u *ReceiptEntry) bool {
 }
 
 func (v *ReceiptList) Equal(u *ReceiptList) bool {
-	if !(bytes.Equal(v.Element, u.Element)) {
-		return false
-	}
 	switch {
 	case v.MerkleState == u.MerkleState:
 		// equal
@@ -165,6 +163,14 @@ func (v *ReceiptList) Equal(u *ReceiptList) bool {
 	case v.Receipt == nil || u.Receipt == nil:
 		return false
 	case !((v.Receipt).Equal(u.Receipt)):
+		return false
+	}
+	switch {
+	case v.ContinuedReceipt == u.ContinuedReceipt:
+		// equal
+	case v.ContinuedReceipt == nil || u.ContinuedReceipt == nil:
+		return false
+	case !((v.ContinuedReceipt).Equal(u.ContinuedReceipt)):
 		return false
 	}
 
@@ -306,29 +312,29 @@ func (v *ReceiptEntry) IsValid() error {
 }
 
 var fieldNames_ReceiptList = []string{
-	1: "Element",
-	2: "MerkleState",
-	3: "Elements",
-	4: "Receipt",
+	1: "MerkleState",
+	2: "Elements",
+	3: "Receipt",
+	4: "ContinuedReceipt",
 }
 
 func (v *ReceiptList) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	if !(len(v.Element) == 0) {
-		writer.WriteBytes(1, v.Element)
-	}
 	if !(v.MerkleState == nil) {
-		writer.WriteValue(2, v.MerkleState.MarshalBinary)
+		writer.WriteValue(1, v.MerkleState.MarshalBinary)
 	}
 	if !(len(v.Elements) == 0) {
 		for _, v := range v.Elements {
-			writer.WriteBytes(3, v)
+			writer.WriteBytes(2, v)
 		}
 	}
 	if !(v.Receipt == nil) {
-		writer.WriteValue(4, v.Receipt.MarshalBinary)
+		writer.WriteValue(3, v.Receipt.MarshalBinary)
+	}
+	if !(v.ContinuedReceipt == nil) {
+		writer.WriteValue(4, v.ContinuedReceipt.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_ReceiptList)
@@ -343,24 +349,24 @@ func (v *ReceiptList) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Element is missing")
-	} else if len(v.Element) == 0 {
-		errs = append(errs, "field Element is not set")
-	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field MerkleState is missing")
 	} else if v.MerkleState == nil {
 		errs = append(errs, "field MerkleState is not set")
 	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Elements is missing")
 	} else if len(v.Elements) == 0 {
 		errs = append(errs, "field Elements is not set")
 	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Receipt is missing")
 	} else if v.Receipt == nil {
 		errs = append(errs, "field Receipt is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field ContinuedReceipt is missing")
+	} else if v.ContinuedReceipt == nil {
+		errs = append(errs, "field ContinuedReceipt is not set")
 	}
 
 	switch len(errs) {
@@ -448,21 +454,21 @@ func (v *ReceiptList) UnmarshalBinary(data []byte) error {
 func (v *ReceiptList) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	if x, ok := reader.ReadBytes(1); ok {
-		v.Element = x
-	}
-	if x := new(MerkleState); reader.ReadValue(2, x.UnmarshalBinary) {
+	if x := new(MerkleState); reader.ReadValue(1, x.UnmarshalBinary) {
 		v.MerkleState = x
 	}
 	for {
-		if x, ok := reader.ReadBytes(3); ok {
+		if x, ok := reader.ReadBytes(2); ok {
 			v.Elements = append(v.Elements, x)
 		} else {
 			break
 		}
 	}
-	if x := new(Receipt); reader.ReadValue(4, x.UnmarshalBinary) {
+	if x := new(Receipt); reader.ReadValue(3, x.UnmarshalBinary) {
 		v.Receipt = x
+	}
+	if x := new(Receipt); reader.ReadValue(4, x.UnmarshalBinary) {
+		v.ContinuedReceipt = x
 	}
 
 	seen, err := reader.Reset(fieldNames_ReceiptList)
@@ -507,18 +513,18 @@ func (v *ReceiptEntry) MarshalJSON() ([]byte, error) {
 
 func (v *ReceiptList) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Element     *string                    `json:"element,omitempty"`
-		MerkleState *MerkleState               `json:"merkleState,omitempty"`
-		Elements    encoding.JsonList[*string] `json:"elements,omitempty"`
-		Receipt     *Receipt                   `json:"receipt,omitempty"`
+		MerkleState      *MerkleState               `json:"merkleState,omitempty"`
+		Elements         encoding.JsonList[*string] `json:"elements,omitempty"`
+		Receipt          *Receipt                   `json:"receipt,omitempty"`
+		ContinuedReceipt *Receipt                   `json:"continuedReceipt,omitempty"`
 	}{}
-	u.Element = encoding.BytesToJSON(v.Element)
 	u.MerkleState = v.MerkleState
 	u.Elements = make(encoding.JsonList[*string], len(v.Elements))
 	for i, x := range v.Elements {
 		u.Elements[i] = encoding.BytesToJSON(x)
 	}
 	u.Receipt = v.Receipt
+	u.ContinuedReceipt = v.ContinuedReceipt
 	return json.Marshal(&u)
 }
 
@@ -582,25 +588,20 @@ func (v *ReceiptEntry) UnmarshalJSON(data []byte) error {
 
 func (v *ReceiptList) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Element     *string                    `json:"element,omitempty"`
-		MerkleState *MerkleState               `json:"merkleState,omitempty"`
-		Elements    encoding.JsonList[*string] `json:"elements,omitempty"`
-		Receipt     *Receipt                   `json:"receipt,omitempty"`
+		MerkleState      *MerkleState               `json:"merkleState,omitempty"`
+		Elements         encoding.JsonList[*string] `json:"elements,omitempty"`
+		Receipt          *Receipt                   `json:"receipt,omitempty"`
+		ContinuedReceipt *Receipt                   `json:"continuedReceipt,omitempty"`
 	}{}
-	u.Element = encoding.BytesToJSON(v.Element)
 	u.MerkleState = v.MerkleState
 	u.Elements = make(encoding.JsonList[*string], len(v.Elements))
 	for i, x := range v.Elements {
 		u.Elements[i] = encoding.BytesToJSON(x)
 	}
 	u.Receipt = v.Receipt
+	u.ContinuedReceipt = v.ContinuedReceipt
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
-	}
-	if x, err := encoding.BytesFromJSON(u.Element); err != nil {
-		return fmt.Errorf("error decoding Element: %w", err)
-	} else {
-		v.Element = x
 	}
 	v.MerkleState = u.MerkleState
 	v.Elements = make([][]byte, len(u.Elements))
@@ -612,5 +613,6 @@ func (v *ReceiptList) UnmarshalJSON(data []byte) error {
 		}
 	}
 	v.Receipt = u.Receipt
+	v.ContinuedReceipt = u.ContinuedReceipt
 	return nil
 }

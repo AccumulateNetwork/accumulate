@@ -31,23 +31,52 @@ func (r *ReceiptList) Validate() bool {
 		if h == nil || len(h) != 32 { //      Make sure every element in Elements
 			return false //                     is a proper hash and not nil
 		} //
-		MS.AddToMerkleTree(h) //              Add each element to the MS
+		MS.AddToMerkleTree(append([]byte{}, h...)) // Add each element to the MS
 	} //                                      Once all elements are added, compute
 	anchor := MS.GetMDRoot() //                 the anchor at this point.
 	if len(anchor) == 0 {    //               If an anchor can't be produced, this
-		return false //                         receipt fails.
+		return false //                         receiptList fails. (shouldn't happen)
 	}
 
-	if !bytes.Equal(r.Elements[0], r.Receipt.Start) {
+	lastElement := r.Elements[len(r.Elements)-1]    // Make sure the last Element is the
+	if !bytes.Equal(lastElement, r.Receipt.Start) { // starting hash of the Receipt
 		return false
 	}
 
-	if !r.Receipt.Validate() { //                 The Receipt must be valid
+	if !bytes.Equal(r.Receipt.Anchor, anchor) { // The Anchor must match the receipt
 		return false
 	}
 
-	// The receipt doesn't match the ReceiptList.
-	return true
+	if !r.Receipt.Validate() { //             The Receipt must be valid
+		return false
+	}
+
+	if r.ContinuedReceipt != nil { //                           If the ReceiptList is anchored,
+		if !bytes.Equal(anchor, r.ContinuedReceipt.Start) { //  Make sure it properly anchors this
+			return false //                                     ReceiptList
+		}
+		if !r.ContinuedReceipt.Validate() { //                  If it does, it still has to be valid
+			return false //
+		} //
+	}
+
+	return true // all is good.
+}
+
+// Included
+// Tests an entry for inclusion in the given ReceiptList
+// Note that while a ReceiptList proves inclusion in a Merkle Tree, and the fact
+// that the list of elements proceed in order up to and including the anchor point,
+// the ReceiptList does not necessarily prove the indices of the elements in the
+// Merkle Tree.  This could be solved by salting Receipts with the index of the
+// hash at the anchor point.
+func (r *ReceiptList) Included(entry []byte) bool {
+	for _, e := range r.Elements { // Every entry in Elements is included
+		if bytes.Equal(e, entry) { // in the ReceiptList proof.
+			return true
+		}
+	}
+	return false
 }
 
 // NewReceiptList
@@ -61,7 +90,7 @@ func NewReceiptList() *ReceiptList {
 // GetReceiptList
 // Given a merkle tree with a start point and an end point, create a ReceiptList for
 // all the elements from the start hash to the end hash, inclusive.
-func GetReceiptList(manager *MerkleManager, element []byte, Start int64, End int64) (r *ReceiptList, err error) {
+func GetReceiptList(manager *MerkleManager, Start int64, End int64) (r *ReceiptList, err error) {
 	if Start > End { // Start must be before the end
 		return nil, fmt.Errorf("start %d and end %d is invalid for ReceiptList", Start, End)
 	}
@@ -75,40 +104,22 @@ func GetReceiptList(manager *MerkleManager, element []byte, Start int64, End int
 		return nil, fmt.Errorf("end %d is out of range for SMT length %d", End, ms.Count)
 	}
 
-	// Make sure the element is the right length for a hash
-	if element == nil || len(element) != 32 {
-		lenElement := len(element)
-		truncate := ""
-		if lenElement > 32 {
-			element = element[:32]
-			truncate = fmt.Sprintf("... Len(element)=%d", lenElement)
-		}
-		return nil, fmt.Errorf("The element provided is not a valid hash %x%s", element, truncate)
-	}
-
 	// Allocate the ReceiptList, add all the elements to the ReceiptList
 	r = NewReceiptList()
-	r.Element = element
-	found := false
 	for i := Start; i <= End; i++ { // Get all the elements for the list
 		h, err := manager.Get(i)
 		if err != nil {
 			return nil, err
 		}
-		if bytes.Equal(element, h) {
-			found = true
-		}
-		r.Elements = append(r.Elements, h)
-	}
-	if !found {
-		return nil, fmt.Errorf("%x is not found in the elements of the ReceiptList", element)
+		r.Elements = append(r.Elements, h.Copy().Bytes())
 	}
 
 	r.MerkleState, err = manager.GetAnyState(Start - 1)
 	if err != nil {
 		return nil, err
 	}
-	r.Receipt, err = GetReceipt(manager, r.Elements[0], r.Elements[len(r.Elements)-1])
+	lastElement := append([]byte{}, r.Elements[len(r.Elements)-1]...)
+	r.Receipt, err = GetReceipt(manager, lastElement, lastElement)
 	if err != nil {
 		return nil, err
 	}

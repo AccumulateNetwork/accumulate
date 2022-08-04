@@ -87,6 +87,7 @@ func (r *Receipt) Contains(other *Receipt) bool {
 // the way down to an anchor in the root receipt.
 // Note that both this receipt and the root receipt are expected to be good.
 func (r *Receipt) Combine(rm *Receipt) (*Receipt, error) {
+	rm = rm.Copy()
 	if !bytes.Equal(r.Anchor, rm.Start) {
 		return nil, fmt.Errorf("receipts cannot be combined. "+
 			"anchor %x doesn't match root merkle tree %x", r.End, rm.Start)

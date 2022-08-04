@@ -33,9 +33,6 @@ ReceiptEntry:
 
 ReceiptList:
   fields:
-    - name: Element
-      description: is the entry for which we want a proof
-      type: bytes
     - name: MerkleState
       description: MerkleState at the beginning of the list
       type: MerkleState
@@ -45,6 +42,10 @@ ReceiptList:
       type: bytes
       repeatable: true
     - name: Receipt
+      type: Receipt
+      marshal-as: reference
+      pointer: true
+    - name: ContinuedReceipt
       type: Receipt
       marshal-as: reference
       pointer: true
