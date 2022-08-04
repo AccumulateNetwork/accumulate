@@ -4,15 +4,11 @@ import (
 	"context"
 
 	"github.com/stretchr/testify/require"
-	"github.com/tendermint/tendermint/rpc/client"
-	coretypes "github.com/tendermint/tendermint/rpc/coretypes"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
 type router struct {
@@ -29,29 +25,6 @@ func (r router) RouteAccount(account *url.URL) (string, error) {
 
 func (r router) Route(envs ...*protocol.Envelope) (string, error) {
 	return routing.RouteEnvelopes(r.RouteAccount, envs...)
-}
-
-func (r router) Query(ctx context.Context, partition string, rawQuery []byte, opts client.ABCIQueryOptions) (*coretypes.ResultABCIQuery, error) {
-	qu, e := query.UnmarshalRequest(rawQuery)
-	require.NoError(r, e)
-
-	x := r.Partition(partition)
-	batch := x.Database.Begin(false)
-	defer batch.Discard()
-	k, v, err := x.Executor.Query(batch, qu, opts.Height, opts.Prove)
-	if err != nil {
-		r.Logger.Debug("Query failed", "error", err)
-		b, _ := errors.Wrap(errors.StatusUnknownError, err).(*errors.Error).MarshalJSON()
-		res := new(coretypes.ResultABCIQuery)
-		res.Response.Info = string(b)
-		res.Response.Code = uint32(protocol.ErrorCodeFailed)
-		return res, nil
-	}
-
-	res := new(coretypes.ResultABCIQuery)
-	res.Response.Code = uint32(protocol.ErrorCodeOK)
-	res.Response.Key, res.Response.Value = k, v
-	return res, nil
 }
 
 func (r router) RequestAPIv2(ctx context.Context, partitionId, method string, params, result interface{}) error {
