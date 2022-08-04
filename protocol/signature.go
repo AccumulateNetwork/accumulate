@@ -269,10 +269,12 @@ func (e *LegacyED25519Signature) Verify(sigMdHash, txnHash []byte) bool {
 	if len(e.PublicKey) != 32 || len(e.Signature) != 64 {
 		return false
 	}
-	data := e.Metadata().Hash()
+	if sigMdHash == nil {
+		sigMdHash = e.Metadata().Hash()
+	}
+	data := sigMdHash
 	data = append(data, common.Uint64Bytes(e.Timestamp)...)
 	data = append(data, txnHash...)
-	data = append(data, sigMdHash...)
 	hash := sha256.Sum256(data)
 	return ed25519.Verify(e.PublicKey, hash[:], e.Signature)
 }
@@ -348,9 +350,12 @@ func (e *ED25519Signature) Verify(sigMdHash, txnHash []byte) bool {
 	if len(e.PublicKey) != 32 || len(e.Signature) != 64 {
 		return false
 	}
-	data := e.Metadata().Hash()
+	if sigMdHash == nil {
+		sigMdHash = e.Metadata().Hash()
+	}
+	data := sigMdHash
+	data = append(data, common.Uint64Bytes(e.Timestamp)...)
 	data = append(data, txnHash...)
-	data = append(data, sigMdHash...)
 	hash := sha256.Sum256(data)
 	return ed25519.Verify(e.PublicKey, hash[:], e.Signature)
 }
@@ -389,9 +394,12 @@ func (e *RCD1Signature) Verify(sigMdHash, txnHash []byte) bool {
 	if len(e.PublicKey) != 32 || len(e.Signature) != 64 {
 		return false
 	}
-	data := e.Metadata().Hash()
+	if sigMdHash == nil {
+		sigMdHash = e.Metadata().Hash()
+	}
+	data := sigMdHash
+	data = append(data, common.Uint64Bytes(e.Timestamp)...)
 	data = append(data, txnHash...)
-	data = append(data, sigMdHash...)
 	hash := sha256.Sum256(data)
 	return ed25519.Verify(e.PublicKey, hash[:], e.Signature)
 }
@@ -507,9 +515,12 @@ func (s *BTCSignature) GetVote() VoteType {
 // hash.
 func (e *BTCSignature) Verify(sigMdHash, txnHash []byte) bool {
 
-	data := e.Metadata().Hash()
+	if sigMdHash == nil {
+		sigMdHash = e.Metadata().Hash()
+	}
+	data := sigMdHash
+	data = append(data, common.Uint64Bytes(e.Timestamp)...)
 	data = append(data, txnHash...)
-	data = append(data, sigMdHash...)
 	hash := sha256.Sum256(data)
 	sig, err := btc.ParseSignature(e.Signature, btc.S256())
 	if err != nil {
@@ -597,9 +608,12 @@ func (s *BTCLegacySignature) GetVote() VoteType {
 // hash.
 func (e *BTCLegacySignature) Verify(sigMdHash, txnHash []byte) bool {
 
-	data := e.Metadata().Hash()
+	if sigMdHash == nil {
+		sigMdHash = e.Metadata().Hash()
+	}
+	data := sigMdHash
+	data = append(data, common.Uint64Bytes(e.Timestamp)...)
 	data = append(data, txnHash...)
-	data = append(data, sigMdHash...)
 	hash := sha256.Sum256(data)
 	sig, err := btc.ParseSignature(e.Signature, btc.S256())
 	if err != nil {
@@ -687,10 +701,12 @@ func (s *ETHSignature) GetVote() VoteType {
 // hash.
 func (e *ETHSignature) Verify(sigMdHash, txnHash []byte) bool {
 
-	data := e.Metadata().Hash()
+	if sigMdHash == nil {
+		sigMdHash = e.Metadata().Hash()
+	}
+	data := sigMdHash
+	data = append(data, common.Uint64Bytes(e.Timestamp)...)
 	data = append(data, txnHash...)
-	data = append(data, sigMdHash...)
-
 	hash := sha256.Sum256(data)
 	sig, err := btc.ParseSignature(e.Signature, btc.S256())
 	if err != nil {
@@ -890,20 +906,12 @@ func (s *DelegatedSignature) Initiator() (hash.Hasher, error) {
 }
 
 func (s *DelegatedSignature) Verify(sigMdHash, hash []byte) bool {
-	sig := s.Signature
-	switch sig.(type) {
-	case *ED25519Signature:
-		return sig.(*ED25519Signature).Verify(sigMdHash, hash)
-	case *LegacyED25519Signature:
-		return sig.(*LegacyED25519Signature).Verify(sigMdHash, hash)
-	case *ETHSignature:
-		return sig.(*ETHSignature).Verify(sigMdHash, hash)
-	case *BTCLegacySignature:
-		return sig.(*BTCLegacySignature).Verify(sigMdHash, hash)
-	case *BTCSignature:
-		return sig.(*BTCSignature).Verify(sigMdHash, hash)
-	case *RCD1Signature:
-		return sig.(*RCD1Signature).Verify(sigMdHash, hash)
+
+	switch sig := s.Signature.(type) {
+	case KeySignature:
+		return sig.Verify(sigMdHash, hash)
+	case *DelegatedSignature:
+		return sig.Verify(sigMdHash, hash)
 	}
 	return false
 }
