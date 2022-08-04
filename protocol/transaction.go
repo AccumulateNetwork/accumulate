@@ -28,11 +28,6 @@ func (s *TransactionStatus) Set(err error) {
 // AddSigner adds a signer to the object's list of signer using a binary search
 // to ensure ordering.
 func (s *TransactionStatus) AddSigner(signer Signer) {
-	// Initial signer
-	if len(s.Signers) == 0 {
-		s.Initiator = signer.GetUrl()
-	}
-
 	// Find the matching entry
 	ptr, new := sortutil.BinaryInsert(&s.Signers, func(entry Signer) int { return entry.GetUrl().Compare(signer.GetUrl()) })
 
