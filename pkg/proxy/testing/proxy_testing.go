@@ -1,26 +1,3 @@
-// Package classification awesome.
-//
-// Documentation of our awesome API.
-//
-//     Schemes: http
-//     BasePath: /
-//     Version: 1.0.0
-//     Host: some-url.com
-//
-//     Consumes:
-//     - application/json
-//
-//     Produces:
-//     - application/json
-//
-//     Security:
-//     - basic
-//
-//    SecurityDefinitions:
-//    basic:
-//      type: basic
-//
-// swagger:meta
 package testing
 
 import (
@@ -38,7 +15,6 @@ import (
 	"time"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
-	_ "github.com/pdrum/swagger-automation/docs" // This line is necessary for go-swagger to find your docs!
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/config"
