@@ -10,7 +10,8 @@ COMMIT = gitlab.com/accumulatenetwork/accumulate.Commit=$(GIT_COMMIT)
 
 # TODO Add mainnet to tags
 LDFLAGS = '-X "$(VERSION)" -X "$(COMMIT)"'
-FLAGS = $(BUILDFLAGS) -tags production -ldflags $(LDFLAGS)
+#FLAGS = $(BUILDFLAGS) -tags production -ldflags $(LDFLAGS)
+FLAGS = $(BUILDFLAGS) -ldflags $(LDFLAGS)
 
 build:
 	go build $(FLAGS) ./cmd/accumulated
