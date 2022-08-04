@@ -280,7 +280,7 @@ func initNodeFromSeedProxy(cmd *cobra.Command, args []string) (int, *cfg.Config,
 	}
 
 	txHash := sha256.Sum256(b)
-	if !resp.Signature.Verify(txHash[:]) {
+	if !resp.Signature.Verify(nil, txHash[:]) {
 		return 0, nil, nil, fmt.Errorf("invalid signature from proxy")
 	}
 
@@ -384,7 +384,7 @@ func initNodeFromSeedProxy(cmd *cobra.Command, args []string) (int, *cfg.Config,
 	}
 
 	h := sha256.Sum256(d)
-	if !nc.Signature.Verify(h[:]) {
+	if !nc.Signature.Verify(nil, h[:]) {
 		return 0, nil, nil, fmt.Errorf("cannot verify network configuration from proxy")
 	}
 	_, _, found = kp.EntryByKeyHash(nc.Signature.GetPublicKeyHash())
