@@ -223,7 +223,7 @@ func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Deli
 
 	case protocol.KeySignature:
 		// Basic validation
-		if !md.Delegated == true && !signature.Verify(nil, delivery.Transaction.GetHash()) {
+		if !md.Delegated && !signature.Verify(nil, delivery.Transaction.GetHash()) {
 			return nil, errors.New(errors.StatusBadRequest, "invalid")
 		}
 

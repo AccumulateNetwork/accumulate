@@ -1755,7 +1755,7 @@ func TestMultiLevelDelegation(t *testing.T) {
 		kp.AddKeySpec(&protocol.KeySpec{Delegate: protocol.AccountUrl("bob", "book0")})
 		kp.AddKeySpec(&protocol.KeySpec{Delegate: protocol.AccountUrl("charlie", "book0")})
 		kp.AddKeySpec(&protocol.KeySpec{PublicKeyHash: charliekeyHash[:]})
-		kp.SetThreshold(2)
+		require.NoError(t, kp.SetThreshold(2))
 	}))
 	require.NoError(t, acctesting.UpdateKeyPage(batch, protocol.AccountUrl("bob", "book0", "1"), func(kp *protocol.KeyPage) {
 		kp.AddKeySpec(&protocol.KeySpec{Delegate: protocol.AccountUrl("charlie", "book0")})
