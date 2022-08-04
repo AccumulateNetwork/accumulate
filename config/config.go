@@ -113,6 +113,7 @@ var DefaultLogLevels = LogLevel{}.
 	SetModule("synthetic", "info").
 	// SetModule("storage", "debug").
 	// SetModule("database", "debug").
+	SetModule("website", "info").
 	// SetModule("disk-monitor", "info").
 	// SetModule("init", "info").
 	String()
@@ -124,7 +125,6 @@ func Default(netName string, net NetworkType, node NodeType, partitionId string)
 	c.Accumulate.PartitionId = partitionId
 	c.Accumulate.API.PrometheusServer = "http://18.119.26.7:9090"
 	c.Accumulate.SentryDSN = "https://glet_78c3bf45d009794a4d9b0c990a1f1ed5@gitlab.com/api/v4/error_tracking/collector/29762666"
-	c.Accumulate.Website.Enabled = true
 	c.Accumulate.API.TxMaxWaitTime = 10 * time.Minute
 	c.Accumulate.API.EnableDebugMethods = true
 	c.Accumulate.API.ConnectionLimit = 500
@@ -160,7 +160,6 @@ type Accumulate struct {
 	Snapshots   Snapshots   `toml:"snapshots" mapstructure:"snapshots"`
 	Storage     Storage     `toml:"storage" mapstructure:"storage"`
 	API         API         `toml:"api" mapstructure:"api"`
-	Website     Website     `toml:"website" mapstructure:"website"`
 	AnalysisLog AnalysisLog `toml:"analysis" mapstructure:"analysis"`
 }
 
@@ -233,11 +232,6 @@ type API struct {
 	DebugJSONRPC       bool          `toml:"debug-jsonrpc" mapstructure:"debug-jsonrpc"`
 	EnableDebugMethods bool          `toml:"enable-debug-methods" mapstructure:"enable-debug-methods"`
 	ConnectionLimit    int           `toml:"connection-limit" mapstructure:"connection-limit"`
-}
-
-type Website struct {
-	Enabled       bool   `toml:"website-enabled" mapstructure:"website-enabled"`
-	ListenAddress string `toml:"website-listen-address" mapstructure:"website-listen-address"`
 }
 
 func MakeAbsolute(root, path string) string {
