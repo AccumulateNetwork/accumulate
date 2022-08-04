@@ -1,13 +1,14 @@
 package cmd
 
 import (
+	"syscall"
+	"time"
+
 	"github.com/kardianos/service"
 	"github.com/spf13/cobra"
 	service2 "github.com/tendermint/tendermint/libs/service"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"syscall"
-	"time"
 )
 
 var walletdCmd = &cobra.Command{

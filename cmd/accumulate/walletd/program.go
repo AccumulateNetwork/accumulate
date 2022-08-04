@@ -1,10 +1,11 @@
 package walletd
 
 import (
+	"time"
+
 	"github.com/kardianos/service"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
-	"time"
 )
 
 type ServiceOptions struct {

@@ -28,8 +28,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/go-playground/validator/v10"
-	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/db"
 	"io"
 	stdlog "log"
 	"mime"
@@ -40,8 +38,9 @@ import (
 	"time"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
-	//_ "github.com/pdrum/swagger-automation/docs" // This line is necessary for go-swagger to find your docs!
+	"github.com/go-playground/validator/v10"
 	"github.com/tendermint/tendermint/libs/log"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/db"
 	apiv2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"

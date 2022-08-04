@@ -2,11 +2,12 @@ package walletd
 
 import (
 	"errors"
-	"github.com/howeyc/gopass"
-	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/db"
 	"log"
 	"os"
 	"path/filepath"
+
+	"github.com/howeyc/gopass"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/db"
 )
 
 func GetWallet() db.DB {

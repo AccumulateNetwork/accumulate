@@ -7,7 +7,6 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
 	"io"
 	"log"
 	"os"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/mdp/qrterminal"
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"

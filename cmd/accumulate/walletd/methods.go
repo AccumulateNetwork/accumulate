@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd/api"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )

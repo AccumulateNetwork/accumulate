@@ -1,4 +1,3 @@
-
 // Package classification awesome.
 //
 // Documentation of our awesome API.
@@ -39,6 +38,7 @@ import (
 	"time"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
+	_ "github.com/pdrum/swagger-automation/docs" // This line is necessary for go-swagger to find your docs!
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/config"
@@ -47,7 +47,6 @@ import (
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/proxy"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	_ "github.com/pdrum/swagger-automation/docs" // This line is necessary for go-swagger to find your docs!
 )
 
 var AccuProxyAuthorityKey ed25519.PrivateKey

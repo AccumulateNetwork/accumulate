@@ -2,6 +2,7 @@ package walletd
 
 import (
 	"fmt"
+
 	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
