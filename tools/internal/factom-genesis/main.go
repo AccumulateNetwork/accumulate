@@ -9,7 +9,7 @@ import (
 	"time"
 
 	f2 "github.com/FactomProject/factom"
-	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/cmd"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
@@ -20,7 +20,7 @@ import (
 var factomChainData map[[32]byte]*Queue
 
 var origin *url.URL
-var key *cmd.Key
+var key *walletd.Key
 
 const (
 	LOCAL_URL = "http://127.0.1.1:26660"
@@ -35,7 +35,7 @@ func AccountFromPrivateKey(privateKey []byte) (*url.URL, error) {
 	}
 
 	url, _ := protocol.LiteTokenAddress(pk[32:], protocol.ACME, protocol.SignatureTypeED25519)
-	key = &cmd.Key{PrivateKey: pk, PublicKey: pk[32:], KeyInfo: cmd.KeyInfo{Type: protocol.SignatureTypeED25519}}
+	key = &walletd.Key{PrivateKey: pk, PublicKey: pk[32:], KeyInfo: walletd.KeyInfo{Type: protocol.SignatureTypeED25519}}
 	origin = url
 	return url, nil
 }
@@ -158,7 +158,7 @@ func ExecuteQueueToWriteData(env string, chainUrl *url.URL, queue *Queue) {
 }
 
 func GetAccountFromPrivateString(hexString string) *url.URL {
-	var key cmd.Key
+	var key walletd.Key
 	privKey, err := hex.DecodeString(hexString)
 	if err == nil && len(privKey) == 64 {
 		key.PrivateKey = privKey

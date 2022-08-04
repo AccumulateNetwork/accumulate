@@ -45,30 +45,3 @@ CreateEnvelope:
   rpc: create-envelope
   input: api.CreateEnvelopeRequest
   output: api.GeneralResponse
-
-#Query:
-  # description: queries an account or account chain by URL
-  #kind: query
-  #rpc: query
-  #input: GeneralQuery
-  #output: ChainQueryResponse|TransactionQueryResponse|MultiResponse
-  #call: QueryUrl
-    #call-params: [Url, QueryOptions]
-    #route: /v2
-
-#POST
-  #Execute:
-  #description: submits a transaction
-  #rpc: execute
-  #input: TxRequest
-    #output: TxResponse
-    #route: /v2
-
-#POST
-  #ExecuteDirect:
-  #description: submits a transaction
-  #rpc: execute-direct
-  #input: ExecuteRequest
-  #output: TxResponse
-    #call-params: [Envelope, CheckOnly]
-    #route: /v2

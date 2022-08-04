@@ -65,7 +65,7 @@ CreateTransactionRequest:
       type: protocol.TransactionType
       marshal-as: enum
 
-CreateTransactionResponse:
+CreateEnvelopeRequest:
   non-binary: true
   fields:
     - name: Name

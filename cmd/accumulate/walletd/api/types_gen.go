@@ -44,13 +44,13 @@ type AuthorizationRequired struct {
 	extraData []byte
 }
 
+type CreateEnvelopeRequest struct {
+	Name string `json:"name,omitempty" form:"name" query:"name" validate:"required"`
+}
+
 type CreateTransactionRequest struct {
 	Name            string                   `json:"name,omitempty" form:"name" query:"name" validate:"required"`
 	TransactionType protocol.TransactionType `json:"transactionType,omitempty" form:"transactionType" query:"transactionType" validate:"required"`
-}
-
-type CreateTransactionResponse struct {
-	Name string `json:"name,omitempty" form:"name" query:"name" validate:"required"`
 }
 
 type DecodeRequest struct {
@@ -197,6 +197,16 @@ func (v *AuthorizationRequired) Copy() *AuthorizationRequired {
 
 func (v *AuthorizationRequired) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *CreateEnvelopeRequest) Copy() *CreateEnvelopeRequest {
+	u := new(CreateEnvelopeRequest)
+
+	u.Name = v.Name
+
+	return u
+}
+
+func (v *CreateEnvelopeRequest) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *CreateTransactionRequest) Copy() *CreateTransactionRequest {
 	u := new(CreateTransactionRequest)
 
@@ -207,16 +217,6 @@ func (v *CreateTransactionRequest) Copy() *CreateTransactionRequest {
 }
 
 func (v *CreateTransactionRequest) CopyAsInterface() interface{} { return v.Copy() }
-
-func (v *CreateTransactionResponse) Copy() *CreateTransactionResponse {
-	u := new(CreateTransactionResponse)
-
-	u.Name = v.Name
-
-	return u
-}
-
-func (v *CreateTransactionResponse) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *DecodeRequest) Copy() *DecodeRequest {
 	u := new(DecodeRequest)
@@ -479,19 +479,19 @@ func (v *AuthorizationRequired) Equal(u *AuthorizationRequired) bool {
 	return true
 }
 
-func (v *CreateTransactionRequest) Equal(u *CreateTransactionRequest) bool {
+func (v *CreateEnvelopeRequest) Equal(u *CreateEnvelopeRequest) bool {
 	if !(v.Name == u.Name) {
-		return false
-	}
-	if !(v.TransactionType == u.TransactionType) {
 		return false
 	}
 
 	return true
 }
 
-func (v *CreateTransactionResponse) Equal(u *CreateTransactionResponse) bool {
+func (v *CreateTransactionRequest) Equal(u *CreateTransactionRequest) bool {
 	if !(v.Name == u.Name) {
+		return false
+	}
+	if !(v.TransactionType == u.TransactionType) {
 		return false
 	}
 
