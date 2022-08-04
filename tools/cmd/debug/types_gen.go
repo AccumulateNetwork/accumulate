@@ -36,6 +36,8 @@ type accountState struct {
 	Pending []*transactionState `json:"pending,omitempty" form:"pending" query:"pending" validate:"required"`
 	// Transactions is the state of other transactions related to the account.
 	Transactions []*transactionState `json:"transactions,omitempty" form:"transactions" query:"transactions" validate:"required"`
+	// Signatures is the state of signatures related to the account.
+	Signatures []protocol.Signature `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
 	// Directory lists the account's sub-accounts.
 	Directory []*url.URL `json:"directory,omitempty" form:"directory" query:"directory" validate:"required"`
 	extraData []byte
@@ -101,6 +103,12 @@ func (v *accountState) Copy() *accountState {
 	for i, v := range v.Transactions {
 		if v != nil {
 			u.Transactions[i] = (v).Copy()
+		}
+	}
+	u.Signatures = make([]protocol.Signature, len(v.Signatures))
+	for i, v := range v.Signatures {
+		if v != nil {
+			u.Signatures[i] = (v).CopyAsInterface().(protocol.Signature)
 		}
 	}
 	u.Directory = make([]*url.URL, len(v.Directory))
@@ -212,6 +220,14 @@ func (v *accountState) Equal(u *accountState) bool {
 	}
 	for i := range v.Transactions {
 		if !((v.Transactions[i]).Equal(u.Transactions[i])) {
+			return false
+		}
+	}
+	if len(v.Signatures) != len(u.Signatures) {
+		return false
+	}
+	for i := range v.Signatures {
+		if !(protocol.EqualSignature(v.Signatures[i], u.Signatures[i])) {
 			return false
 		}
 	}
@@ -373,7 +389,8 @@ var fieldNames_accountState = []string{
 	2: "Chains",
 	3: "Pending",
 	4: "Transactions",
-	5: "Directory",
+	5: "Signatures",
+	6: "Directory",
 }
 
 func (v *accountState) MarshalBinary() ([]byte, error) {
@@ -398,9 +415,14 @@ func (v *accountState) MarshalBinary() ([]byte, error) {
 			writer.WriteValue(4, v.MarshalBinary)
 		}
 	}
+	if !(len(v.Signatures) == 0) {
+		for _, v := range v.Signatures {
+			writer.WriteValue(5, v.MarshalBinary)
+		}
+	}
 	if !(len(v.Directory) == 0) {
 		for _, v := range v.Directory {
-			writer.WriteUrl(5, v)
+			writer.WriteUrl(6, v)
 		}
 	}
 
@@ -436,6 +458,11 @@ func (v *accountState) IsValid() error {
 		errs = append(errs, "field Transactions is not set")
 	}
 	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field Signatures is missing")
+	} else if len(v.Signatures) == 0 {
+		errs = append(errs, "field Signatures is not set")
+	}
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
 		errs = append(errs, "field Directory is missing")
 	} else if len(v.Directory) == 0 {
 		errs = append(errs, "field Directory is not set")
@@ -707,7 +734,19 @@ func (v *accountState) UnmarshalBinaryFrom(rd io.Reader) error {
 		}
 	}
 	for {
-		if x, ok := reader.ReadUrl(5); ok {
+		ok := reader.ReadValue(5, func(b []byte) error {
+			x, err := protocol.UnmarshalSignature(b)
+			if err == nil {
+				v.Signatures = append(v.Signatures, x)
+			}
+			return err
+		})
+		if !ok {
+			break
+		}
+	}
+	for {
+		if x, ok := reader.ReadUrl(6); ok {
 			v.Directory = append(v.Directory, x)
 		} else {
 			break
@@ -848,16 +887,18 @@ func (v *SigSetEntry) MarshalJSON() ([]byte, error) {
 
 func (v *accountState) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Main         encoding.JsonUnmarshalWith[protocol.Account] `json:"main,omitempty"`
-		Chains       encoding.JsonList[*merkleState]              `json:"chains,omitempty"`
-		Pending      encoding.JsonList[*transactionState]         `json:"pending,omitempty"`
-		Transactions encoding.JsonList[*transactionState]         `json:"transactions,omitempty"`
-		Directory    encoding.JsonList[*url.URL]                  `json:"directory,omitempty"`
+		Main         encoding.JsonUnmarshalWith[protocol.Account]       `json:"main,omitempty"`
+		Chains       encoding.JsonList[*merkleState]                    `json:"chains,omitempty"`
+		Pending      encoding.JsonList[*transactionState]               `json:"pending,omitempty"`
+		Transactions encoding.JsonList[*transactionState]               `json:"transactions,omitempty"`
+		Signatures   encoding.JsonUnmarshalListWith[protocol.Signature] `json:"signatures,omitempty"`
+		Directory    encoding.JsonList[*url.URL]                        `json:"directory,omitempty"`
 	}{}
 	u.Main = encoding.JsonUnmarshalWith[protocol.Account]{Value: v.Main, Func: protocol.UnmarshalAccountJSON}
 	u.Chains = v.Chains
 	u.Pending = v.Pending
 	u.Transactions = v.Transactions
+	u.Signatures = encoding.JsonUnmarshalListWith[protocol.Signature]{Value: v.Signatures, Func: protocol.UnmarshalSignatureJSON}
 	u.Directory = v.Directory
 	return json.Marshal(&u)
 }
@@ -933,16 +974,18 @@ func (v *SigSetEntry) UnmarshalJSON(data []byte) error {
 
 func (v *accountState) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Main         encoding.JsonUnmarshalWith[protocol.Account] `json:"main,omitempty"`
-		Chains       encoding.JsonList[*merkleState]              `json:"chains,omitempty"`
-		Pending      encoding.JsonList[*transactionState]         `json:"pending,omitempty"`
-		Transactions encoding.JsonList[*transactionState]         `json:"transactions,omitempty"`
-		Directory    encoding.JsonList[*url.URL]                  `json:"directory,omitempty"`
+		Main         encoding.JsonUnmarshalWith[protocol.Account]       `json:"main,omitempty"`
+		Chains       encoding.JsonList[*merkleState]                    `json:"chains,omitempty"`
+		Pending      encoding.JsonList[*transactionState]               `json:"pending,omitempty"`
+		Transactions encoding.JsonList[*transactionState]               `json:"transactions,omitempty"`
+		Signatures   encoding.JsonUnmarshalListWith[protocol.Signature] `json:"signatures,omitempty"`
+		Directory    encoding.JsonList[*url.URL]                        `json:"directory,omitempty"`
 	}{}
 	u.Main = encoding.JsonUnmarshalWith[protocol.Account]{Value: v.Main, Func: protocol.UnmarshalAccountJSON}
 	u.Chains = v.Chains
 	u.Pending = v.Pending
 	u.Transactions = v.Transactions
+	u.Signatures = encoding.JsonUnmarshalListWith[protocol.Signature]{Value: v.Signatures, Func: protocol.UnmarshalSignatureJSON}
 	u.Directory = v.Directory
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -952,6 +995,10 @@ func (v *accountState) UnmarshalJSON(data []byte) error {
 	v.Chains = u.Chains
 	v.Pending = u.Pending
 	v.Transactions = u.Transactions
+	v.Signatures = make([]protocol.Signature, len(u.Signatures.Value))
+	for i, x := range u.Signatures.Value {
+		v.Signatures[i] = x
+	}
 	v.Directory = u.Directory
 	return nil
 }
