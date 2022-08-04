@@ -291,6 +291,7 @@ func SignED25519(sig *ED25519Signature, privateKey, sigMdHash, txnHash []byte) {
 		sigMdHash = sig.Metadata().Hash()
 	}
 	data := sigMdHash
+	data = append(data, common.Uint64Bytes(sig.Timestamp)...)
 	data = append(data, txnHash...)
 	hash := sha256.Sum256(data)
 	sig.Signature = ed25519.Sign(privateKey, hash[:])
@@ -360,6 +361,7 @@ func (e *ED25519Signature) Verify(sigMdHash, txnHash []byte) bool {
 		sigMdHash = e.Metadata().Hash()
 	}
 	data := sigMdHash
+
 	data = append(data, common.Uint64Bytes(e.Timestamp)...)
 	data = append(data, txnHash...)
 	hash := sha256.Sum256(data)
@@ -375,6 +377,7 @@ func SignRCD1(sig *RCD1Signature, privateKey, sigMdHash, txnHash []byte) {
 		sigMdHash = sig.Metadata().Hash()
 	}
 	data := sigMdHash
+	data = append(data, common.Uint64Bytes(sig.Timestamp)...)
 	data = append(data, txnHash...)
 	hash := sha256.Sum256(data)
 	sig.Signature = ed25519.Sign(privateKey, hash[:])
@@ -407,6 +410,7 @@ func (e *RCD1Signature) Verify(sigMdHash, txnHash []byte) bool {
 		sigMdHash = e.Metadata().Hash()
 	}
 	data := sigMdHash
+
 	data = append(data, common.Uint64Bytes(e.Timestamp)...)
 	data = append(data, txnHash...)
 	hash := sha256.Sum256(data)
@@ -458,6 +462,7 @@ func SignBTC(sig *BTCSignature, privateKey, sigMdHash, txnHash []byte) error {
 		sigMdHash = sig.Metadata().Hash()
 	}
 	data := sigMdHash
+	data = append(data, common.Uint64Bytes(sig.Timestamp)...)
 	data = append(data, txnHash...)
 	hash := sha256.Sum256(data)
 	pvkey, pubKey := btc.PrivKeyFromBytes(btc.S256(), privateKey)
@@ -531,6 +536,7 @@ func (e *BTCSignature) Verify(sigMdHash, txnHash []byte) bool {
 		sigMdHash = e.Metadata().Hash()
 	}
 	data := sigMdHash
+
 	data = append(data, common.Uint64Bytes(e.Timestamp)...)
 	data = append(data, txnHash...)
 	hash := sha256.Sum256(data)
@@ -554,6 +560,7 @@ func SignBTCLegacy(sig *BTCLegacySignature, privateKey, sigMdHash, txnHash []byt
 		sigMdHash = sig.Metadata().Hash()
 	}
 	data := sigMdHash
+	data = append(data, common.Uint64Bytes(sig.Timestamp)...)
 	data = append(data, txnHash...)
 	hash := sha256.Sum256(data)
 	pvkey, pubKey := btc.PrivKeyFromBytes(btc.S256(), privateKey)
@@ -627,6 +634,7 @@ func (e *BTCLegacySignature) Verify(sigMdHash, txnHash []byte) bool {
 		sigMdHash = e.Metadata().Hash()
 	}
 	data := sigMdHash
+
 	data = append(data, common.Uint64Bytes(e.Timestamp)...)
 	data = append(data, txnHash...)
 	hash := sha256.Sum256(data)
@@ -651,6 +659,7 @@ func SignETH(sig *ETHSignature, privateKey, sigMdHash, txnHash []byte) error {
 		sigMdHash = sig.Metadata().Hash()
 	}
 	data := sigMdHash
+	data = append(data, common.Uint64Bytes(sig.Timestamp)...)
 	data = append(data, txnHash...)
 	hash := sha256.Sum256(data)
 	pvkey, pubKey := btc.PrivKeyFromBytes(btc.S256(), privateKey)
@@ -724,6 +733,7 @@ func (e *ETHSignature) Verify(sigMdHash, txnHash []byte) bool {
 		sigMdHash = e.Metadata().Hash()
 	}
 	data := sigMdHash
+
 	data = append(data, common.Uint64Bytes(e.Timestamp)...)
 	data = append(data, txnHash...)
 	hash := sha256.Sum256(data)

@@ -202,7 +202,7 @@ func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Deli
 		if err != nil {
 			return nil, err
 		}
-		if !signature.Verify(signature.Metadata().Hash(), delivery.Transaction.GetHash()) {
+		if !md.Delegated && !signature.Verify(signature.Metadata().Hash(), delivery.Transaction.GetHash()) {
 			return nil, errors.Format(errors.StatusBadRequest, "invalid delegated wrapper signature")
 		}
 		if !signature.Delegator.LocalTo(md.Location) {
