@@ -12,7 +12,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
-	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
@@ -197,11 +196,6 @@ func (m *Executor) Genesis(block *Block, exec chain.TransactionExecutor) error {
 		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
-	err = indexing.BlockState(block.Batch, m.Describe.NodeUrl(protocol.Ledger)).Clear()
-	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
-	}
-
 	status, err := m.ExecuteEnvelope(block, delivery)
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknownError, err)
@@ -231,7 +225,7 @@ func (m *Executor) LoadStateRoot(batch *database.Batch) ([]byte, error) {
 }
 
 func (m *Executor) RestoreSnapshot(batch *database.Batch, file ioutil2.SectionReader) error {
-	err := batch.RestoreSnapshot(file)
+	err := batch.RestoreSnapshot(file, &m.Describe)
 	if err != nil {
 		return errors.Format(errors.StatusUnknownError, "load state: %w", err)
 	}
