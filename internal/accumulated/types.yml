@@ -32,10 +32,9 @@ NodeInit:
   - name: BvnnType
     type: config.NodeType
     marshal-as: enum
-  - name: BasePort
-    type: uint
-  - name: HostName
-    type: string
+  - name: Advertise
+    type: protocol.InternetAddress
+    pointer: true
   - name: ListenIP
     type: string
   - name: PrivValKey

@@ -16,10 +16,6 @@ func errNoLocalClient(partitionId string) error {
 	return fmt.Errorf("local client not initialized for partition %q", partitionId)
 }
 
-func errInvalidAddress(err error) error {
-	return fmt.Errorf("invalid address: %v", err)
-}
-
 func errCreateRPCClient(err error) error {
 	return fmt.Errorf("failed to create RPC client: %v", err)
 }

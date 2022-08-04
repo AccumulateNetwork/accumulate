@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 type DevnetOptions struct {
@@ -32,8 +33,11 @@ func NewDevnet(opts DevnetOptions) *NetworkInit {
 			nodeInit := new(NodeInit)
 			nodeInit.DnnType = nodeType
 			nodeInit.BvnnType = nodeType
-			nodeInit.BasePort = uint64(opts.BasePort)
 			bvnInit.Nodes = append(bvnInit.Nodes, nodeInit)
+
+			host, listen := opts.HostName(i, j)
+			nodeInit.Advertise = protocol.NewInternetAddress("http", host, opts.BasePort)
+			nodeInit.ListenIP = listen
 
 			if opts.GenerateKeys != nil {
 				privVal, node := opts.GenerateKeys()
@@ -41,11 +45,6 @@ func NewDevnet(opts DevnetOptions) *NetworkInit {
 				nodeInit.NodeKey = node
 			}
 
-			if opts.HostName != nil {
-				host, listen := opts.HostName(i, j)
-				nodeInit.HostName = host
-				nodeInit.ListenIP = listen
-			}
 		}
 	}
 

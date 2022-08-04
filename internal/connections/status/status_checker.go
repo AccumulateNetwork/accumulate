@@ -31,7 +31,7 @@ func NewNodeStatusChecker() NodeStatusChecker {
 }
 
 func (sc *nodeStatusChecker) createAccApiClient(connCtx connections.ConnectionContext) (*client.Client, error) {
-	address := connCtx.GetAddress2().WithOffset(int(config.PortOffsetAccumulateApi))
+	address := connCtx.GetAddress().WithOffset(int(config.PortOffsetAccumulateApi))
 	client, err := client.New(address.String() + "/v2")
 	return client, err
 }

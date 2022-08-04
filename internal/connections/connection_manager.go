@@ -15,6 +15,7 @@ import (
 	"github.com/tendermint/tendermint/rpc/client/local"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2/query"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -33,14 +34,16 @@ type ConnectionInitializer interface {
 }
 
 type connectionManager struct {
-	accConfig *config.Accumulate
-	bvnCtxMap map[string][]ConnectionContext
-	dnCtxList []ConnectionContext
-	fnCtxList []ConnectionContext
-	all       []ConnectionContext
-	localCtx  *connectionContext
-	logger    logging.OptionalLogger
-	publicKey []byte
+	globals       *core.GlobalValues
+	accConfig     *config.Accumulate
+	bvnCtxMap     map[string][]ConnectionContext
+	dnCtxList     []ConnectionContext
+	fnCtxList     []ConnectionContext
+	all           []ConnectionContext
+	localCtx      *connectionContext
+	logger        logging.OptionalLogger
+	publicKey     []byte
+	statusChecker StatusChecker
 
 	apiClientFactory func(string) (APIClient, error)
 }
@@ -98,7 +101,15 @@ func NewConnectionManager(opts Options) ConnectionInitializer {
 	cm.apiClientFactory = opts.ApiClientFactory
 	cm.logger.L = opts.Logger
 	cm.publicKey = opts.Key[32:]
-	events.SubscribeAsync(opts.EventBus, cm.buildNodeInventory)
+
+	events.SubscribeAsync(opts.EventBus, func(e events.DidBootFromSeed) {
+		cm.globals = e.Globals
+		cm.buildNodeInventory(e.Globals)
+	})
+	events.SubscribeAsync(opts.EventBus, func(e events.WillChangeGlobals) {
+		cm.globals = e.New
+		cm.updateNodeInventory(e)
+	})
 	return cm
 }
 
@@ -186,13 +197,64 @@ func (cm *connectionManager) ResetErrors() {
 	}
 }
 
-func (cm *connectionManager) buildNodeInventory(g events.WillChangeGlobals) {
-	addresses := map[[32]byte]*protocol.InternetAddress{}
-	for _, entry := range g.New.AddressBook.Entries {
-		addresses[entry.PublicKeyHash] = entry.Address
+func (cm *connectionManager) updateNodeInventory(e events.WillChangeGlobals) {
+	if e.Old == nil {
+		cm.buildNodeInventory(e.New)
+		return
 	}
 
-	for _, partition := range g.New.Network.Partitions {
+	addresses := e.Old.DiffAddressBook(e.New)
+	myKeyHash := sha256.Sum256(cm.publicKey)
+	for keyHash, address := range addresses {
+		// Don't touch the local node context
+		if keyHash == myKeyHash {
+			delete(addresses, keyHash)
+			continue
+		}
+
+		// Remove from everywhere
+		for bvn := range cm.bvnCtxMap {
+			cm.bvnCtxMap[bvn] = removeConnection(cm.bvnCtxMap[bvn], keyHash)
+		}
+		cm.dnCtxList = removeConnection(cm.dnCtxList, keyHash)
+		cm.fnCtxList = removeConnection(cm.fnCtxList, keyHash)
+		cm.all = removeConnection(cm.all, keyHash)
+
+		// If the node was removed don't add it back
+		if address == nil {
+			delete(addresses, keyHash)
+		}
+	}
+
+	cm.buildNodeInventoryFor(e.New, addresses)
+
+	if cm.statusChecker != nil {
+		err := cm.initClients()
+		if err != nil {
+			cm.logger.Error("Failed to initialize new clients", "error", err)
+		}
+	}
+}
+
+func removeConnection(list []ConnectionContext, keyHash [32]byte) []ConnectionContext {
+	for i, cc := range list {
+		if keyHash == sha256.Sum256(cc.GetPublicKey()) {
+			return append(list[:i], list[i+1:]...)
+		}
+	}
+	return list
+}
+
+func (cm *connectionManager) buildNodeInventory(g *core.GlobalValues) {
+	addresses := map[[32]byte]*protocol.InternetAddress{}
+	for _, entry := range g.AddressBook.Entries {
+		addresses[entry.PublicKeyHash] = entry.Address
+	}
+	cm.buildNodeInventoryFor(g, addresses)
+}
+
+func (cm *connectionManager) buildNodeInventoryFor(g *core.GlobalValues, addresses map[[32]byte]*protocol.InternetAddress) {
+	for _, partition := range g.Network.Partitions {
 		for _, validator := range partition.Validators {
 			// Skip validators we don't have an address for
 			h := sha256.Sum256(validator.PublicKey)
@@ -207,24 +269,27 @@ func (cm *connectionManager) buildNodeInventory(g events.WillChangeGlobals) {
 			connCtx.connMgr = cm
 			connCtx.metrics = NodeMetrics{status: Unknown}
 			connCtx.hasClient = make(chan struct{})
-
-			switch {
-			case bytes.Equal(validator.PublicKey, cm.publicKey):
-				connCtx.networkGroup = Local
-			case strings.EqualFold(partition.ID, cm.accConfig.PartitionId):
-				connCtx.networkGroup = SamePartition
-			default:
-				connCtx.networkGroup = OtherPartition
-			}
-
 			cm.addConnection(connCtx)
 		}
 	}
 }
 
 func (cm *connectionManager) addConnection(cc *connectionContext) {
-	if cc.networkGroup == Local {
+	pubKeyHash := sha256.Sum256(cc.validator.PublicKey)
+	for _, entry := range cm.accConfig.Network.Ignore {
+		if entry.PublicKeyHash == pubKeyHash && entry.Address.Equal(cc.address) {
+			return // Ignore this connection
+		}
+	}
+
+	switch {
+	case bytes.Equal(cc.validator.PublicKey, cm.publicKey):
+		cc.networkGroup = Local
 		cm.localCtx = cc
+	case strings.EqualFold(cc.partition.ID, cm.accConfig.PartitionId):
+		cc.networkGroup = SamePartition
+	default:
+		cc.networkGroup = OtherPartition
 	}
 
 	var err error
@@ -263,6 +328,8 @@ func (cm *connectionManager) addConnection(cc *connectionContext) {
 }
 
 func (cm *connectionManager) InitClients(localABCI *local.Local, statusChecker StatusChecker) error {
+	cm.statusChecker = statusChecker
+
 	// TODO Support local API requests without any TCP call
 	localAPI, err := cm.apiClientFactory(cm.accConfig.API.ListenAddress)
 	if err != nil {
@@ -270,22 +337,26 @@ func (cm *connectionManager) InitClients(localABCI *local.Local, statusChecker S
 	}
 	cm.localCtx.setClient(localABCI, localAPI)
 
+	return cm.initClients()
+}
+
+func (cm *connectionManager) initClients() error {
 	for _, connCtxList := range cm.bvnCtxMap {
 		for _, cc := range connCtxList {
-			err := cm.createClient(cc.(*connectionContext), statusChecker)
+			err := cm.createClient(cc.(*connectionContext), cm.statusChecker)
 			if err != nil {
 				return err
 			}
 		}
 	}
 	for _, cc := range cm.dnCtxList {
-		err := cm.createClient(cc.(*connectionContext), statusChecker)
+		err := cm.createClient(cc.(*connectionContext), cm.statusChecker)
 		if err != nil {
 			return err
 		}
 	}
 	for _, cc := range cm.fnCtxList {
-		err := cm.createClient(cc.(*connectionContext), statusChecker)
+		err := cm.createClient(cc.(*connectionContext), cm.statusChecker)
 		if err != nil {
 			return err
 		}
@@ -294,15 +365,19 @@ func (cm *connectionManager) InitClients(localABCI *local.Local, statusChecker S
 }
 
 func (cm *connectionManager) ConnectDirectly(other ConnectionManager) error {
+	if cm.globals == nil {
+		return fmt.Errorf("globals have not been initialized")
+	}
+
 	cm2, ok := other.(*connectionManager)
 	if !ok {
 		return fmt.Errorf("incompatible connection managers: want %T, got %T", cm, cm2)
 	}
 	if cm2.localCtx == nil {
-		return fmt.Errorf("other connection manager: local context has not been initialized")
+		return fmt.Errorf("local context has not been initialized")
 	}
 	if cm2.localCtx.abciClient == nil {
-		return fmt.Errorf("other connection manager: local context's clients have not been initialized")
+		return fmt.Errorf("local context's clients have not been initialized")
 	}
 
 	for _, connCtx := range cm.all {
@@ -315,11 +390,28 @@ func (cm *connectionManager) ConnectDirectly(other ConnectionManager) error {
 		return nil
 	}
 
-	return fmt.Errorf("cannot find %s node %s", cm2.accConfig.PartitionId, cm2.accConfig.Network.Advertise)
+	partition := cm.globals.Network.Partition(cm2.accConfig.PartitionId)
+	if partition == nil {
+		return fmt.Errorf("%v is not a partition", cm2.accConfig.PartitionId)
+	}
+	validator := partition.FindValidator(cm2.publicKey)
+	if validator == nil {
+		return fmt.Errorf("%x is not a validator for %x", cm2.publicKey, cm2.accConfig.PartitionId)
+	}
+
+	cc := new(connectionContext)
+	cc.partition = partition
+	cc.validator = validator
+	cc.address = cm2.accConfig.Network.Advertise
+	cc.connMgr = cm
+	cc.metrics = NodeMetrics{status: Unknown}
+	cc.hasClient = make(chan struct{})
+	cm.addConnection(cc)
+	return nil
 }
 
 func (cm *connectionManager) createClient(cc *connectionContext, statusChecker StatusChecker) error {
-	if cc == cm.localCtx {
+	if cc == cm.localCtx || cc.statusChecker != nil {
 		return nil
 	}
 

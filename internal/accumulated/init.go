@@ -28,30 +28,29 @@ import (
 const nodeDirPerm = 0755
 
 func (n *NodeInit) Port(offset ...config.PortOffset) int {
-	port := int(n.BasePort)
+	port := n.Advertise.Port()
 	for _, o := range offset {
 		port += int(o)
 	}
 	return port
 }
 
-func (n *NodeInit) Address(listen bool, scheme string, offset ...config.PortOffset) string {
-	var addr string
+func (n *NodeInit) Address(listen bool, offset ...config.PortOffset) *protocol.InternetAddress {
+	addr := n.Advertise
 	if listen && n.ListenIP != "" {
-		addr = n.ListenIP
-	} else {
-		addr = n.HostName
+		addr = addr.WithHostname(n.ListenIP)
 	}
 
-	if scheme == "" {
-		return fmt.Sprintf("%s:%d", addr, n.Port(offset...))
+	var full int
+	for _, o := range offset {
+		full += int(o)
 	}
-	return fmt.Sprintf("%s://%s:%d", scheme, addr, n.Port(offset...))
+	return addr.WithOffset(full)
 }
 
 func (n *NodeInit) TmNodeAddress(offset ...config.PortOffset) string {
 	nodeId := tmtypes.NodeIDFromPubKey(ed25519.PubKey(n.NodeKey[32:]))
-	return nodeId.AddressString(n.Address(false, "", offset...))
+	return nodeId.AddressString(n.Address(false, offset...).Host)
 }
 
 func (b *BvnInit) Peers(node *NodeInit, offset ...config.PortOffset) []string {
@@ -74,45 +73,25 @@ func (n *NetworkInit) Peers(node *NodeInit, offset ...config.PortOffset) []strin
 
 type MakeConfigFunc func(networkName string, net config.NetworkType, node config.NodeType, netId string) *config.Config
 
-func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][2]*config.Config {
+func BuildNodesConfig(network *NetworkInit, seeds []*protocol.AddressBookEntry, mkcfg MakeConfigFunc) [][][2]*config.Config {
 	var allConfigs [][][2]*config.Config
 
 	if mkcfg == nil {
 		mkcfg = config.Default
 	}
 
-	netConfig := config.Network{Id: network.Id, Partitions: make([]config.Partition, 1)}
-	dnConfig := config.Partition{
-		Id:       protocol.Directory,
-		Type:     config.Directory,
-		BasePort: int64(network.Bvns[0].Nodes[0].BasePort), // TODO This is not great
-	}
-
 	var i int
 	for _, bvn := range network.Bvns {
 		var bvnConfigs [][2]*config.Config
-		bvnConfig := config.Partition{
-			Id:       bvn.Id,
-			Type:     config.BlockValidator,
-			BasePort: int64(bvn.Nodes[0].BasePort) + int64(config.PortOffsetBlockValidator), // TODO This is not great
-		}
 		for j, node := range bvn.Nodes {
 			i++
 			dnn := mkcfg(network.Id, config.Directory, node.DnnType, protocol.Directory)
 			dnn.Moniker = fmt.Sprintf("Directory.%d", i)
 			ConfigureNodePorts(node, dnn, config.PortOffsetDirectory)
-			dnConfig.Nodes = append(dnConfig.Nodes, config.Node{
-				Address: node.Address(false, "http", config.PortOffsetTendermintP2P, config.PortOffsetDirectory),
-				Type:    node.DnnType,
-			})
 
 			bvnn := mkcfg(network.Id, config.BlockValidator, node.BvnnType, bvn.Id)
 			bvnn.Moniker = fmt.Sprintf("%s.%d", bvn.Id, j+1)
 			ConfigureNodePorts(node, bvnn, config.PortOffsetBlockValidator)
-			bvnConfig.Nodes = append(bvnConfig.Nodes, config.Node{
-				Address: node.Address(false, "http", config.PortOffsetTendermintP2P, config.PortOffsetBlockValidator),
-				Type:    node.BvnnType,
-			})
 
 			if len(network.Bvns) == 1 && len(bvn.Nodes) == 1 {
 				dnn.P2P.AddrBookStrict = true
@@ -135,14 +114,12 @@ func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][2]*config
 			bvnConfigs = append(bvnConfigs, [2]*config.Config{dnn, bvnn})
 		}
 		allConfigs = append(allConfigs, bvnConfigs)
-		netConfig.Partitions = append(netConfig.Partitions, bvnConfig)
 	}
-	netConfig.Partitions[0] = dnConfig
 
 	for _, configs := range allConfigs {
 		for _, configs := range configs {
 			for _, config := range configs {
-				config.Accumulate.Network = netConfig
+				config.Accumulate.Network.Seeds = seeds
 			}
 		}
 	}
@@ -151,39 +128,40 @@ func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][2]*config
 }
 
 func ConfigureNodePorts(node *NodeInit, cfg *config.Config, offset config.PortOffset) {
-	cfg.P2P.ListenAddress = node.Address(true, "tcp", offset, config.PortOffsetTendermintP2P)
-	cfg.RPC.ListenAddress = node.Address(true, "tcp", offset, config.PortOffsetTendermintRpc)
+	cfg.P2P.ListenAddress = node.Address(true, offset, config.PortOffsetTendermintP2P).WithScheme("tcp").String()
+	cfg.RPC.ListenAddress = node.Address(true, offset, config.PortOffsetTendermintRpc).WithScheme("tcp").String()
 
 	cfg.Instrumentation.PrometheusListenAddr = fmt.Sprintf(":%d", node.Port(offset, config.PortOffsetPrometheus))
-	if cfg.Accumulate.LocalAddress == "" {
-		cfg.Accumulate.LocalAddress = node.Address(false, "", offset, config.PortOffsetTendermintP2P)
+	if cfg.Accumulate.Network.Advertise == nil {
+		cfg.Accumulate.Network.Advertise = node.Address(false, offset, config.PortOffsetTendermintP2P)
 	}
-	cfg.Accumulate.Website.ListenAddress = node.Address(true, "http", offset, config.PortOffsetWebsite)
-	cfg.Accumulate.API.ListenAddress = node.Address(true, "http", offset, config.PortOffsetAccumulateApi)
+	cfg.Accumulate.Website.ListenAddress = node.Address(true, offset, config.PortOffsetWebsite).String()
+	cfg.Accumulate.API.ListenAddress = node.Address(true, offset, config.PortOffsetAccumulateApi).String()
 }
 
 func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time time.Time, logger log.Logger, factomAddresses func() (io.Reader, error)) (map[string]*tmtypes.GenesisDoc, error) {
 	docs := map[string]*tmtypes.GenesisDoc{}
 	var operators [][]byte
-	var partitions []protocol.PartitionDefinition
-	partitions = append(partitions, protocol.PartitionDefinition{
-		ID: protocol.Directory,
+	var partitions []*protocol.PartitionDefinition
+	partitions = append(partitions, &protocol.PartitionDefinition{
+		ID:   protocol.Directory,
+		Type: protocol.PartitionTypeDirectory,
 	})
 
-	var dnValidators [][]byte
+	var dnValidators []*protocol.ValidatorDefinition
 	var dnTmValidators []tmtypes.GenesisValidator
 
 	var i int
 	for _, bvn := range network.Bvns {
-		var bvnValidators [][]byte
+		var bvnValidators []*protocol.ValidatorDefinition
 		var bvnTmValidators []tmtypes.GenesisValidator
 
 		for j, node := range bvn.Nodes {
 			i++
 			key := ed25519.PrivKey(node.PrivValKey)
 			operators = append(operators, key.PubKey().Bytes())
+			dnValidators = append(dnValidators, &protocol.ValidatorDefinition{PublicKey: key.PubKey().Bytes(), Active: node.DnnType == config.Validator})
 			if node.DnnType == config.Validator {
-				dnValidators = append(dnValidators, key.PubKey().Bytes())
 				dnTmValidators = append(dnTmValidators, tmtypes.GenesisValidator{
 					Name:    fmt.Sprintf("Directory.%d", i),
 					Address: key.PubKey().Address(),
@@ -192,8 +170,8 @@ func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time tim
 				})
 			}
 
+			bvnValidators = append(bvnValidators, &protocol.ValidatorDefinition{PublicKey: key.PubKey().Bytes(), Active: node.BvnnType == config.Validator})
 			if node.BvnnType == config.Validator {
-				bvnValidators = append(bvnValidators, key.PubKey().Bytes())
 				bvnTmValidators = append(bvnTmValidators, tmtypes.GenesisValidator{
 					Name:    fmt.Sprintf("%s.%d", bvn.Id, j+1),
 					Address: key.PubKey().Address(),
@@ -203,10 +181,10 @@ func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time tim
 			}
 		}
 
-		partitions = append(partitions, protocol.PartitionDefinition{
-			ID:            bvn.Id,
-			Type:          protocol.PartitionTypeBlockValidator,
-			ValidatorKeys: bvnValidators,
+		partitions = append(partitions, &protocol.PartitionDefinition{
+			ID:         bvn.Id,
+			Type:       protocol.PartitionTypeBlockValidator,
+			Validators: bvnValidators,
 		})
 		docs[bvn.Id] = &tmtypes.GenesisDoc{
 			ChainID:         bvn.Id,
@@ -217,7 +195,7 @@ func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time tim
 		}
 	}
 
-	partitions[0].ValidatorKeys = dnValidators
+	partitions[0].Validators = dnValidators
 	docs[protocol.Directory] = &tmtypes.GenesisDoc{
 		ChainID:         protocol.Directory,
 		GenesisTime:     time,

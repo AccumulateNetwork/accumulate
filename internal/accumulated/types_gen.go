@@ -10,6 +10,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 type BvnInit struct {
@@ -23,13 +24,12 @@ type NetworkInit struct {
 }
 
 type NodeInit struct {
-	DnnType    config.NodeType `json:"dnnType,omitempty" form:"dnnType" query:"dnnType" validate:"required"`
-	BvnnType   config.NodeType `json:"bvnnType,omitempty" form:"bvnnType" query:"bvnnType" validate:"required"`
-	BasePort   uint64          `json:"basePort,omitempty" form:"basePort" query:"basePort" validate:"required"`
-	HostName   string          `json:"hostName,omitempty" form:"hostName" query:"hostName" validate:"required"`
-	ListenIP   string          `json:"listenIP,omitempty" form:"listenIP" query:"listenIP" validate:"required"`
-	PrivValKey []byte          `json:"privValKey,omitempty" form:"privValKey" query:"privValKey" validate:"required"`
-	NodeKey    []byte          `json:"nodeKey,omitempty" form:"nodeKey" query:"nodeKey" validate:"required"`
+	DnnType    config.NodeType           `json:"dnnType,omitempty" form:"dnnType" query:"dnnType" validate:"required"`
+	BvnnType   config.NodeType           `json:"bvnnType,omitempty" form:"bvnnType" query:"bvnnType" validate:"required"`
+	Advertise  *protocol.InternetAddress `json:"advertise,omitempty" form:"advertise" query:"advertise" validate:"required"`
+	ListenIP   string                    `json:"listenIP,omitempty" form:"listenIP" query:"listenIP" validate:"required"`
+	PrivValKey []byte                    `json:"privValKey,omitempty" form:"privValKey" query:"privValKey" validate:"required"`
+	NodeKey    []byte                    `json:"nodeKey,omitempty" form:"nodeKey" query:"nodeKey" validate:"required"`
 }
 
 func (v *BvnInit) MarshalJSON() ([]byte, error) {
@@ -54,18 +54,16 @@ func (v *NetworkInit) MarshalJSON() ([]byte, error) {
 
 func (v *NodeInit) MarshalJSON() ([]byte, error) {
 	u := struct {
-		DnnType    config.NodeType `json:"dnnType,omitempty"`
-		BvnnType   config.NodeType `json:"bvnnType,omitempty"`
-		BasePort   uint64          `json:"basePort,omitempty"`
-		HostName   string          `json:"hostName,omitempty"`
-		ListenIP   string          `json:"listenIP,omitempty"`
-		PrivValKey *string         `json:"privValKey,omitempty"`
-		NodeKey    *string         `json:"nodeKey,omitempty"`
+		DnnType    config.NodeType           `json:"dnnType,omitempty"`
+		BvnnType   config.NodeType           `json:"bvnnType,omitempty"`
+		Advertise  *protocol.InternetAddress `json:"advertise,omitempty"`
+		ListenIP   string                    `json:"listenIP,omitempty"`
+		PrivValKey *string                   `json:"privValKey,omitempty"`
+		NodeKey    *string                   `json:"nodeKey,omitempty"`
 	}{}
 	u.DnnType = v.DnnType
 	u.BvnnType = v.BvnnType
-	u.BasePort = v.BasePort
-	u.HostName = v.HostName
+	u.Advertise = v.Advertise
 	u.ListenIP = v.ListenIP
 	u.PrivValKey = encoding.BytesToJSON(v.PrivValKey)
 	u.NodeKey = encoding.BytesToJSON(v.NodeKey)
@@ -104,18 +102,16 @@ func (v *NetworkInit) UnmarshalJSON(data []byte) error {
 
 func (v *NodeInit) UnmarshalJSON(data []byte) error {
 	u := struct {
-		DnnType    config.NodeType `json:"dnnType,omitempty"`
-		BvnnType   config.NodeType `json:"bvnnType,omitempty"`
-		BasePort   uint64          `json:"basePort,omitempty"`
-		HostName   string          `json:"hostName,omitempty"`
-		ListenIP   string          `json:"listenIP,omitempty"`
-		PrivValKey *string         `json:"privValKey,omitempty"`
-		NodeKey    *string         `json:"nodeKey,omitempty"`
+		DnnType    config.NodeType           `json:"dnnType,omitempty"`
+		BvnnType   config.NodeType           `json:"bvnnType,omitempty"`
+		Advertise  *protocol.InternetAddress `json:"advertise,omitempty"`
+		ListenIP   string                    `json:"listenIP,omitempty"`
+		PrivValKey *string                   `json:"privValKey,omitempty"`
+		NodeKey    *string                   `json:"nodeKey,omitempty"`
 	}{}
 	u.DnnType = v.DnnType
 	u.BvnnType = v.BvnnType
-	u.BasePort = v.BasePort
-	u.HostName = v.HostName
+	u.Advertise = v.Advertise
 	u.ListenIP = v.ListenIP
 	u.PrivValKey = encoding.BytesToJSON(v.PrivValKey)
 	u.NodeKey = encoding.BytesToJSON(v.NodeKey)
@@ -124,8 +120,7 @@ func (v *NodeInit) UnmarshalJSON(data []byte) error {
 	}
 	v.DnnType = u.DnnType
 	v.BvnnType = u.BvnnType
-	v.BasePort = u.BasePort
-	v.HostName = u.HostName
+	v.Advertise = u.Advertise
 	v.ListenIP = u.ListenIP
 	if x, err := encoding.BytesFromJSON(u.PrivValKey); err != nil {
 		return fmt.Errorf("error decoding PrivValKey: %w", err)

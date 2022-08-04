@@ -13,6 +13,7 @@ type Event interface {
 func (DidCommitBlock) isEvent()    {}
 func (DidSaveSnapshot) isEvent()   {}
 func (WillChangeGlobals) isEvent() {}
+func (DidBootFromSeed) isEvent()   {}
 
 type DidCommitBlock struct {
 	Index uint64
@@ -26,4 +27,8 @@ type DidSaveSnapshot struct {
 
 type WillChangeGlobals struct {
 	New, Old *core.GlobalValues
+}
+
+type DidBootFromSeed struct {
+	Globals *core.GlobalValues
 }

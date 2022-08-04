@@ -48,8 +48,9 @@ type APIClient interface {
 type ConnectionContext interface {
 	GetNetworkGroup() NetworkGroup
 	GetNodeType() config.NodeType
+	GetPublicKey() []byte
 	GetMetrics() *NodeMetrics
-	GetAddress2() *protocol.InternetAddress
+	GetAddress() *protocol.InternetAddress
 	GetABCIClient() ABCIClient
 	GetAPIClient() APIClient
 	IsHealthy() bool
@@ -78,8 +79,12 @@ type connectionContext struct {
 	lastErrorExpiryTime time.Time
 }
 
-func (cc *connectionContext) GetAddress2() *protocol.InternetAddress {
+func (cc *connectionContext) GetAddress() *protocol.InternetAddress {
 	return cc.address
+}
+
+func (cc *connectionContext) GetPublicKey() []byte {
+	return cc.validator.PublicKey
 }
 
 func (cc *connectionContext) GetABCIClient() ABCIClient {

@@ -41,7 +41,31 @@ func ParseInternetAddress(s string) (*InternetAddress, error) {
 	return &InternetAddress{*u, int(p)}, nil
 }
 
+func NewInternetAddress(scheme, host string, port int) *InternetAddress {
+	v := new(InternetAddress)
+	v.port = port
+	v.Scheme = scheme
+	v.Host = fmt.Sprintf("%s:%d", host, port)
+	return v
+}
+
 func (u *InternetAddress) Port() int { return u.port }
+
+func (u *InternetAddress) WithScheme(scheme string) *InternetAddress {
+	v := new(InternetAddress)
+	v.port = u.port
+	v.URL = u.URL
+	v.URL.Scheme = scheme
+	return v
+}
+
+func (u *InternetAddress) WithHostname(hostname string) *InternetAddress {
+	v := new(InternetAddress)
+	v.port = u.port
+	v.URL = u.URL
+	v.URL.Host = fmt.Sprintf("%s:%d", hostname, v.port)
+	return v
+}
 
 func (u *InternetAddress) WithOffset(offset int) *InternetAddress {
 	v := new(InternetAddress)

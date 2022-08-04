@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	neturl "net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -173,19 +172,7 @@ func loadConfigAndClient() (*config.Config, *client.Client) {
 
 	server := flagSet.Server
 	if server == "" {
-		addr := cfg.Accumulate.LocalAddress
-		if !strings.Contains(addr, "://") {
-			addr = "http://" + addr
-		}
-		u, err := neturl.Parse(addr)
-		checkf(err, "invalid address")
-
-		port, err := strconv.ParseInt(u.Port(), 0, 16)
-		checkf(err, "invalid port number on address")
-
-		u, err = config.OffsetPort(addr, int(port), int(config.PortOffsetAccumulateApi))
-		checkf(err, "applying offset to node's local address")
-		server = u.String()
+		server = cfg.Accumulate.Network.Advertise.WithOffset(int(config.PortOffsetAccumulateApi)).String()
 	}
 
 	client, err := client.New(server)
