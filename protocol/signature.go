@@ -276,6 +276,7 @@ func (e *LegacyED25519Signature) Verify(sigMdHash, txnHash []byte) bool {
 		sigMdHash = e.Metadata().Hash()
 	}
 	data := sigMdHash
+	data = append(data, common.Uint64Bytes(e.Timestamp)...)
 	data = append(data, txnHash...)
 	hash := sha256.Sum256(data)
 	return ed25519.Verify(e.PublicKey, hash[:], e.Signature)
