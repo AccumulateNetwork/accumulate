@@ -110,8 +110,8 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 		if err != nil {
 			return nil, err
 		}
-		if !md.Delegated && !signature.Verify(signature.Metadata().Hash(), delivery.Transaction.GetHash()) {
-			return nil, errors.Format(errors.StatusBadRequest, "invalid delegated wrapper signature")
+		if !md.Nested() && !signature.Verify(signature.Metadata().Hash(), delivery.Transaction.GetHash()) {
+			return nil, errors.Format(errors.StatusBadRequest, "invalid signature")
 		}
 
 		if !signature.Delegator.LocalTo(md.Location) {
@@ -132,7 +132,7 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 
 	case protocol.KeySignature:
 		// Basic validation
-		if !md.Delegated && !signature.Verify(nil, delivery.Transaction.GetHash()) {
+		if !md.Nested() && !signature.Verify(nil, delivery.Transaction.GetHash()) {
 			return nil, errors.Format(errors.StatusBadRequest, "invalid signature")
 		}
 
