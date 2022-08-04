@@ -1,5 +1,5 @@
-//_go:build !production
-//_ +build !production
+//go:build !production
+// +build !production
 
 package testing
 
