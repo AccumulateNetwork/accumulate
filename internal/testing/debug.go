@@ -1,6 +1,3 @@
-//go:build !production
-// +build !production
-
 package testing
 
 import (
