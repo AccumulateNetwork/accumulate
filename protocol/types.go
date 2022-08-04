@@ -31,6 +31,8 @@ type AccountAuthOperationType uint8
 
 type ErrorCode int
 
+type PartitionType int
+
 // NodeStatus is the status of a network node
 type NodeStatus int
 

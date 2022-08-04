@@ -18,7 +18,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2/query"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
-	errors2 "gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -64,12 +63,15 @@ type DataEntrySetQuery struct {
 }
 
 type DescriptionResponse struct {
-	PartitionId   string             `json:"partitionId,omitempty" form:"partitionId" query:"partitionId" validate:"required"`
-	NetworkType   config.NetworkType `json:"networkType,omitempty" form:"networkType" query:"networkType" validate:"required"`
-	Network       config.Network     `json:"network,omitempty" form:"network" query:"network" validate:"required"`
-	NetworkAnchor [32]byte           `json:"networkAnchor,omitempty" form:"networkAnchor" query:"networkAnchor" validate:"required"`
-	Values        core.GlobalValues  `json:"values,omitempty" form:"values" query:"values" validate:"required"`
-	Error         *errors2.Error     `json:"error,omitempty" form:"error" query:"error" validate:"required"`
+	fieldsSet   []bool
+	PartitionId string                 `json:"partitionId,omitempty" form:"partitionId" query:"partitionId" validate:"required"`
+	NetworkId   string                 `json:"networkId,omitempty" form:"networkId" query:"networkId" validate:"required"`
+	NetworkType config.NetworkType     `json:"networkType,omitempty" form:"networkType" query:"networkType" validate:"required"`
+	Values      core.GlobalValues      `json:"values,omitempty" form:"values" query:"values" validate:"required"`
+	Signature   []byte                 `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
+	PublicKey   []byte                 `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
+	KeyType     protocol.SignatureType `json:"keyType,omitempty" form:"keyType" query:"keyType" validate:"required"`
+	extraData   []byte
 }
 
 type DirectoryQuery struct {
@@ -435,6 +437,99 @@ func (v *DataEntryQueryResponse) IsValid() error {
 	}
 }
 
+var fieldNames_DescriptionResponse = []string{
+	1: "PartitionId",
+	2: "NetworkId",
+	3: "NetworkType",
+	4: "Values",
+	5: "Signature",
+	6: "PublicKey",
+	7: "KeyType",
+}
+
+func (v *DescriptionResponse) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(len(v.PartitionId) == 0) {
+		writer.WriteString(1, v.PartitionId)
+	}
+	if !(len(v.NetworkId) == 0) {
+		writer.WriteString(2, v.NetworkId)
+	}
+	if !(v.NetworkType == 0) {
+		writer.WriteEnum(3, v.NetworkType)
+	}
+	if !((v.Values).Equal(new(core.GlobalValues))) {
+		writer.WriteValue(4, v.Values.MarshalBinary)
+	}
+	if !(len(v.Signature) == 0) {
+		writer.WriteBytes(5, v.Signature)
+	}
+	if !(len(v.PublicKey) == 0) {
+		writer.WriteBytes(6, v.PublicKey)
+	}
+	if !(v.KeyType == 0) {
+		writer.WriteEnum(7, v.KeyType)
+	}
+
+	_, _, err := writer.Reset(fieldNames_DescriptionResponse)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *DescriptionResponse) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field PartitionId is missing")
+	} else if len(v.PartitionId) == 0 {
+		errs = append(errs, "field PartitionId is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field NetworkId is missing")
+	} else if len(v.NetworkId) == 0 {
+		errs = append(errs, "field NetworkId is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field NetworkType is missing")
+	} else if v.NetworkType == 0 {
+		errs = append(errs, "field NetworkType is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Values is missing")
+	} else if (v.Values).Equal(new(core.GlobalValues)) {
+		errs = append(errs, "field Values is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field Signature is missing")
+	} else if len(v.Signature) == 0 {
+		errs = append(errs, "field Signature is not set")
+	}
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+		errs = append(errs, "field PublicKey is missing")
+	} else if len(v.PublicKey) == 0 {
+		errs = append(errs, "field PublicKey is not set")
+	}
+	if len(v.fieldsSet) > 7 && !v.fieldsSet[7] {
+		errs = append(errs, "field KeyType is missing")
+	} else if v.KeyType == 0 {
+		errs = append(errs, "field KeyType is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 func (v *DataEntryQuery) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -480,6 +575,47 @@ func (v *DataEntryQueryResponse) UnmarshalBinaryFrom(rd io.Reader) error {
 	})
 
 	seen, err := reader.Reset(fieldNames_DataEntryQueryResponse)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *DescriptionResponse) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *DescriptionResponse) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadString(1); ok {
+		v.PartitionId = x
+	}
+	if x, ok := reader.ReadString(2); ok {
+		v.NetworkId = x
+	}
+	if x := new(config.NetworkType); reader.ReadEnum(3, x) {
+		v.NetworkType = *x
+	}
+	if x := new(core.GlobalValues); reader.ReadValue(4, x.UnmarshalBinary) {
+		v.Values = *x
+	}
+	if x, ok := reader.ReadBytes(5); ok {
+		v.Signature = x
+	}
+	if x, ok := reader.ReadBytes(6); ok {
+		v.PublicKey = x
+	}
+	if x := new(protocol.SignatureType); reader.ReadEnum(7, x) {
+		v.KeyType = *x
+	}
+
+	seen, err := reader.Reset(fieldNames_DescriptionResponse)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -580,23 +716,23 @@ func (v *DataEntrySetQuery) MarshalJSON() ([]byte, error) {
 
 func (v *DescriptionResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		PartitionId   string             `json:"partitionId,omitempty"`
-		SubnetId      string             `json:"subnetId,omitempty"`
-		NetworkType   config.NetworkType `json:"networkType,omitempty"`
-		Network       config.Network     `json:"network,omitempty"`
-		Subnet        config.Network     `json:"subnet,omitempty"`
-		NetworkAnchor string             `json:"networkAnchor,omitempty"`
-		Values        core.GlobalValues  `json:"values,omitempty"`
-		Error         *errors2.Error     `json:"error,omitempty"`
+		PartitionId string                 `json:"partitionId,omitempty"`
+		SubnetId    string                 `json:"subnetId,omitempty"`
+		NetworkId   string                 `json:"networkId,omitempty"`
+		NetworkType config.NetworkType     `json:"networkType,omitempty"`
+		Values      core.GlobalValues      `json:"values,omitempty"`
+		Signature   *string                `json:"signature,omitempty"`
+		PublicKey   *string                `json:"publicKey,omitempty"`
+		KeyType     protocol.SignatureType `json:"keyType,omitempty"`
 	}{}
 	u.PartitionId = v.PartitionId
 	u.SubnetId = v.PartitionId
+	u.NetworkId = v.NetworkId
 	u.NetworkType = v.NetworkType
-	u.Network = v.Network
-	u.Subnet = v.Network
-	u.NetworkAnchor = encoding.ChainToJSON(v.NetworkAnchor)
 	u.Values = v.Values
-	u.Error = v.Error
+	u.Signature = encoding.BytesToJSON(v.Signature)
+	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	u.KeyType = v.KeyType
 	return json.Marshal(&u)
 }
 
@@ -1180,23 +1316,23 @@ func (v *DataEntrySetQuery) UnmarshalJSON(data []byte) error {
 
 func (v *DescriptionResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		PartitionId   string             `json:"partitionId,omitempty"`
-		SubnetId      string             `json:"subnetId,omitempty"`
-		NetworkType   config.NetworkType `json:"networkType,omitempty"`
-		Network       config.Network     `json:"network,omitempty"`
-		Subnet        config.Network     `json:"subnet,omitempty"`
-		NetworkAnchor string             `json:"networkAnchor,omitempty"`
-		Values        core.GlobalValues  `json:"values,omitempty"`
-		Error         *errors2.Error     `json:"error,omitempty"`
+		PartitionId string                 `json:"partitionId,omitempty"`
+		SubnetId    string                 `json:"subnetId,omitempty"`
+		NetworkId   string                 `json:"networkId,omitempty"`
+		NetworkType config.NetworkType     `json:"networkType,omitempty"`
+		Values      core.GlobalValues      `json:"values,omitempty"`
+		Signature   *string                `json:"signature,omitempty"`
+		PublicKey   *string                `json:"publicKey,omitempty"`
+		KeyType     protocol.SignatureType `json:"keyType,omitempty"`
 	}{}
 	u.PartitionId = v.PartitionId
 	u.SubnetId = v.PartitionId
+	u.NetworkId = v.NetworkId
 	u.NetworkType = v.NetworkType
-	u.Network = v.Network
-	u.Subnet = v.Network
-	u.NetworkAnchor = encoding.ChainToJSON(v.NetworkAnchor)
 	u.Values = v.Values
-	u.Error = v.Error
+	u.Signature = encoding.BytesToJSON(v.Signature)
+	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	u.KeyType = v.KeyType
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -1205,19 +1341,20 @@ func (v *DescriptionResponse) UnmarshalJSON(data []byte) error {
 	} else {
 		v.PartitionId = u.SubnetId
 	}
+	v.NetworkId = u.NetworkId
 	v.NetworkType = u.NetworkType
-	if !(u.Network.Equal(&config.Network{})) {
-		v.Network = u.Network
-	} else {
-		v.Network = u.Subnet
-	}
-	if x, err := encoding.ChainFromJSON(u.NetworkAnchor); err != nil {
-		return fmt.Errorf("error decoding NetworkAnchor: %w", err)
-	} else {
-		v.NetworkAnchor = x
-	}
 	v.Values = u.Values
-	v.Error = u.Error
+	if x, err := encoding.BytesFromJSON(u.Signature); err != nil {
+		return fmt.Errorf("error decoding Signature: %w", err)
+	} else {
+		v.Signature = x
+	}
+	if x, err := encoding.BytesFromJSON(u.PublicKey); err != nil {
+		return fmt.Errorf("error decoding PublicKey: %w", err)
+	} else {
+		v.PublicKey = x
+	}
+	v.KeyType = u.KeyType
 	return nil
 }
 

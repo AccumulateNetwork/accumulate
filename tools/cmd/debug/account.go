@@ -69,29 +69,22 @@ func accountId(_ *cobra.Command, args []string) {
 	account := new(protocol.DataAccount)
 	resp.Data = account
 	err = dclient.RequestAPIv2(context.Background(), "query", req, resp)
-	if err == nil {
-		table := new(protocol.RoutingTable)
-		check(table.UnmarshalBinary(account.Entry.GetData()[0]))
-		router, err := routing.NewStaticRouter(table, nil)
-		check(err)
-
-		partition, err := router.RouteAccount(u)
-		check(err)
-		fmt.Printf("Method:         prefix routing table\n")
-		fmt.Printf("Routes to:      %s\n", partition)
-		return
+	if err != nil {
+		var jerr *jsonrpc2.Error
+		if errors.As(err, &jerr) && jerr.Code == api.ErrCodeNotFound {
+			checkf(err, "modulo routing is no longer supported")
+		} else {
+			check(err)
+		}
 	}
 
-	var jerr *jsonrpc2.Error
-	if errors.As(err, &jerr) && jerr.Code == api.ErrCodeNotFound {
-		check(err)
-	}
-
-	// Route using old-style modulo routing
-	info, err := dclient.Describe(context.Background())
+	table := new(protocol.RoutingTable)
+	check(table.UnmarshalBinary(account.Entry.GetData()[0]))
+	router, err := routing.NewStaticRouter(table, nil)
 	check(err)
-	bvns := info.Network.GetBvnNames()
-	nr := u.Routing() % uint64(len(bvns))
-	fmt.Printf("Method:         modulo routing\n")
-	fmt.Printf("Routes to:      %s\n", bvns[nr])
+
+	partition, err := router.RouteAccount(u)
+	check(err)
+	fmt.Printf("Method:         prefix routing table\n")
+	fmt.Printf("Routes to:      %s\n", partition)
 }

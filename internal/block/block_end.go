@@ -629,11 +629,10 @@ func (x *Executor) prepareAnchor(block *Block) error {
 			return nil
 		}
 
-		bvns := x.Describe.Network.GetBvnNames()
 		ledger.MajorBlockIndex++
 		ledger.MajorBlockTime = block.State.Anchor.OpenMajorBlockTime
-		ledger.PendingMajorBlockAnchors = make([]*url.URL, len(bvns))
-		for i, bvn := range bvns {
+		ledger.PendingMajorBlockAnchors = make([]*url.URL, 0, len(x.globals.Active.GetBvns()))
+		for i, bvn := range x.globals.Active.GetBvns() {
 			ledger.PendingMajorBlockAnchors[i] = protocol.PartitionUrl(bvn)
 		}
 		return nil

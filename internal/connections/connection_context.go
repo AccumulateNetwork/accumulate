@@ -12,6 +12,7 @@ import (
 	core "github.com/tendermint/tendermint/rpc/coretypes"
 	tm "github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 type NodeStatus int
@@ -48,9 +49,7 @@ type ConnectionContext interface {
 	GetNetworkGroup() NetworkGroup
 	GetNodeType() config.NodeType
 	GetMetrics() *NodeMetrics
-	GetAddress() string
-	GetBasePort() int
-	SetNodeUrl(addr *url.URL)
+	GetAddress2() *protocol.InternetAddress
 	GetABCIClient() ABCIClient
 	GetAPIClient() APIClient
 	IsHealthy() bool
@@ -64,23 +63,23 @@ type StatusChecker interface {
 }
 
 type connectionContext struct {
-	partitionId         string
-	nodeUrl             *url.URL
+	partition           *protocol.PartitionDefinition
+	validator           *protocol.ValidatorDefinition
+	address             *protocol.InternetAddress
+	nodeType            config.NodeType
 	abciClient          ABCIClient
 	apiClient           APIClient
 	hasClient           chan struct{}
 	connMgr             *connectionManager
 	statusChecker       StatusChecker
-	partition           config.Partition
-	nodeConfig          config.Node
 	networkGroup        NetworkGroup
 	resolvedIPs         []net.IP
 	metrics             NodeMetrics
 	lastErrorExpiryTime time.Time
 }
 
-func (cc *connectionContext) GetBasePort() int {
-	return int(cc.partition.BasePort)
+func (cc *connectionContext) GetAddress2() *protocol.InternetAddress {
+	return cc.address
 }
 
 func (cc *connectionContext) GetABCIClient() ABCIClient {
@@ -104,20 +103,12 @@ func (cc *connectionContext) getClients() (ABCIClient, APIClient) {
 	case <-cc.hasClient:
 		return cc.abciClient, cc.apiClient
 	case <-timeout:
-		panic(fmt.Sprintf("Could not obtain a client for node %s  ", cc.nodeUrl))
+		panic(fmt.Sprintf("Could not obtain a client for node %s  ", cc.address))
 	}
 }
 
-func (cc *connectionContext) GetAddress() string {
-	return cc.nodeConfig.Address
-}
-
 func (cc *connectionContext) GetNodeType() config.NodeType {
-	return cc.nodeConfig.Type
-}
-
-func (cc *connectionContext) SetNodeUrl(addr *url.URL) {
-	cc.nodeUrl = addr
+	return cc.nodeType
 }
 
 func (cc *connectionContext) GetNetworkGroup() NetworkGroup {

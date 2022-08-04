@@ -144,12 +144,18 @@ func (d *Daemon) Start() (err error) {
 		return fmt.Errorf("failed to load private validator: %v", err)
 	}
 
-	d.connectionManager = connections.NewConnectionManager(d.Config, d.Logger, func(server string) (connections.APIClient, error) {
-		return client.New(server)
-	})
-
 	d.eventBus = events.NewBus(d.Logger.With("module", "events"))
 	events.SubscribeSync(d.eventBus, d.onDidCommitBlock)
+
+	d.connectionManager = connections.NewConnectionManager(connections.Options{
+		Config:   d.Config,
+		Logger:   d.Logger,
+		EventBus: d.eventBus,
+		Key:      d.pv.Key.PrivKey.Bytes(),
+		ApiClientFactory: func(server string) (connections.APIClient, error) {
+			return client.New(server)
+		},
+	})
 
 	d.router = routing.NewRouter(d.eventBus, d.connectionManager)
 	execOpts := block.ExecutorOptions{
@@ -223,6 +229,7 @@ func (d *Daemon) Start() (err error) {
 		TxMaxWaitTime:     d.Config.Accumulate.API.TxMaxWaitTime,
 		Database:          d.db,
 		ConnectionManager: d.connectionManager,
+		EventBus:          d.eventBus,
 		Key:               d.Key().Bytes(),
 	})
 	if err != nil {
@@ -273,7 +280,7 @@ func (d *Daemon) Start() (err error) {
 		color.HiMagenta("Syncing ....")
 		time.Sleep(time.Second * 1)
 	}
-	color.HiBlue(" %s node running at %s :", d.node.Config.Accumulate.NetworkType, d.node.Config.Accumulate.Describe.LocalAddress)
+	color.HiBlue(" %s node running at %s :", d.node.Config.Accumulate.NetworkType, d.node.Config.Accumulate.Network.Advertise)
 
 	// Send status notification
 	if d.Config.Accumulate.NetworkType == config.Directory {
@@ -312,7 +319,7 @@ func (d *Daemon) sendNodeStatusUpdate(status protocol.NodeStatus) {
 	txn.Header.Principal = d.Config.Accumulate.AddressBook()
 	txn.Body = &protocol.NodeStatusUpdate{
 		Status:  status,
-		Address: "http://" + d.Config.Accumulate.LocalAddress,
+		Address: d.Config.Accumulate.Network.Advertise,
 	}
 
 	sig, err := new(signing.Builder).

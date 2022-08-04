@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/sha256"
 	"encoding/json"
 	"io"
 	stdlog "log"
@@ -13,10 +15,9 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate"
-	"gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/internal/events"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -26,6 +27,7 @@ type JrpcMethods struct {
 	methods  jsonrpc2.MethodMap
 	validate *validator.Validate
 	logger   log.Logger
+	globals  *core.GlobalValues
 }
 
 func NewJrpc(opts Options) (*JrpcMethods, error) {
@@ -50,6 +52,10 @@ func NewJrpc(opts Options) (*JrpcMethods, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	events.SubscribeAsync(opts.EventBus, func(g events.WillChangeGlobals) {
+		m.globals = g.New
+	})
 
 	m.populateMethodTable()
 	return m, nil
@@ -134,7 +140,7 @@ func (m *JrpcMethods) Status(ctx context.Context, _ json.RawMessage) interface{}
 		return err
 	}
 
-	if m.Options.Describe.NetworkType == config.NetworkTypeDirectory {
+	if m.Options.Describe.NetworkType == protocol.PartitionTypeDirectory {
 		status := new(StatusResponse)
 		status.Ok = true
 		status.DnHeight = tmStatus.SyncInfo.LatestBlockHeight
@@ -158,7 +164,7 @@ func (m *JrpcMethods) Status(ctx context.Context, _ json.RawMessage) interface{}
 	return status
 }
 
-func (m *JrpcMethods) Version(_ context.Context, params json.RawMessage) interface{} {
+func (m *JrpcMethods) Version(context.Context, json.RawMessage) interface{} {
 	res := new(ChainQueryResponse)
 	res.Type = "version"
 	res.Data = VersionResponse{
@@ -169,21 +175,26 @@ func (m *JrpcMethods) Version(_ context.Context, params json.RawMessage) interfa
 	return res
 }
 
-func (m *JrpcMethods) Describe(_ context.Context, params json.RawMessage) interface{} {
-	res := new(DescriptionResponse)
-	res.Network = m.Options.Describe.Network
-	res.PartitionId = m.Options.Describe.PartitionId
-	res.NetworkType = m.Options.Describe.NetworkType
-
-	// Load network variable values
-	err := res.Values.Load(m.Options.Describe.PartitionUrl(), func(account *url.URL, target interface{}) error {
-		return m.Database.View(func(batch *database.Batch) error {
-			return batch.Account(account).GetStateAs(target)
-		})
-	})
-	if err != nil {
-		res.Error = errors.Wrap(errors.StatusUnknownError, err).(*errors.Error)
+func (m *JrpcMethods) Describe(context.Context, json.RawMessage) interface{} {
+	if m.globals == nil {
+		return accumulateError(errors.Format(errors.StatusUninitialized, "globals have not been initialized"))
 	}
 
+	// Create response
+	res := new(DescriptionResponse)
+	res.NetworkId = m.Options.Describe.NetworkId
+	res.PartitionId = m.Options.Describe.PartitionId
+	res.NetworkType = m.Options.Describe.NetworkType
+	res.Values = *m.globals
+
+	// Sign it
+	b, err := res.MarshalBinary()
+	if err != nil {
+		return accumulateError(errors.Format(errors.StatusInternalError, "marshal address book: %w", err))
+	}
+	h := sha256.Sum256(b)
+	res.Signature = ed25519.Sign(m.Key, h[:])
+	res.PublicKey = m.Key[32:]
+	res.KeyType = protocol.SignatureTypeED25519
 	return res
 }

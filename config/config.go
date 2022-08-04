@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/viper"
 	tm "github.com/tendermint/tendermint/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	etcd "go.etcd.io/etcd/client/v3"
 )
 
@@ -33,11 +34,11 @@ const (
 
 const DevNet = "devnet"
 
-type NetworkType uint64
+type NetworkType = protocol.PartitionType
 
 const (
-	BlockValidator = NetworkTypeBlockValidator
-	Directory      = NetworkTypeDirectory
+	BlockValidator = protocol.PartitionTypeBlockValidator
+	Directory      = protocol.PartitionTypeDirectory
 )
 
 type NodeType uint64
@@ -119,7 +120,7 @@ var DefaultLogLevels = LogLevel{}.
 
 func Default(netName string, net NetworkType, node NodeType, partitionId string) *Config {
 	c := new(Config)
-	c.Accumulate.Network.Id = netName
+	c.Accumulate.NetworkId = netName
 	c.Accumulate.NetworkType = net
 	c.Accumulate.PartitionId = partitionId
 	c.Accumulate.API.PrometheusServer = "http://18.119.26.7:9090"
@@ -153,15 +154,21 @@ type Config struct {
 }
 
 type Accumulate struct {
-	SentryDSN string `toml:"sentry-dsn" mapstructure:"sentry-dsn"`
-	Describe  `toml:"describe" mapstructure:"describe"`
-	// TODO: move network config to its own file since it will be constantly changing over time.
-	//	NetworkConfig string      `toml:"network" mapstructure:"network"`
+	SentryDSN   string `toml:"sentry-dsn" mapstructure:"sentry-dsn"`
+	Describe    `toml:"describe" mapstructure:"describe"`
+	Network     Network     `toml:"network" mapstructure:"network"`
 	Snapshots   Snapshots   `toml:"snapshots" mapstructure:"snapshots"`
 	Storage     Storage     `toml:"storage" mapstructure:"storage"`
 	API         API         `toml:"api" mapstructure:"api"`
 	Website     Website     `toml:"website" mapstructure:"website"`
 	AnalysisLog AnalysisLog `toml:"analysis" mapstructure:"analysis"`
+}
+
+type Network struct {
+	// Advertise is the address that is advertized to the network
+	Advertise *protocol.InternetAddress    `toml:"advertise" mapstructure:"advertise"`
+	Seeds     []*protocol.AddressBookEntry `toml:"seeds" mapstructure:"seeds"`
+	Ignore    []*protocol.AddressBookEntry `toml:"ignore" mapstructure:"ignore"`
 }
 
 type Snapshots struct {
@@ -269,25 +276,6 @@ func OffsetPort(addr string, basePort int, offset int) (*url.URL, error) {
 	return u, nil
 }
 
-func (n *Network) GetBvnNames() []string {
-	var names []string
-	for _, partition := range n.Partitions {
-		if partition.Type == BlockValidator {
-			names = append(names, partition.Id)
-		}
-	}
-	return names
-}
-
-func (n *Network) GetPartitionByID(partitionID string) *Partition {
-	for i, partition := range n.Partitions {
-		if strings.EqualFold(partition.Id, partitionID) {
-			return &n.Partitions[i]
-		}
-	}
-	return nil
-}
-
 func Load(dir string) (*Config, error) {
 	return loadFile(dir, filepath.Join(dir, configDir, tmConfigFile), filepath.Join(dir, configDir, accConfigFile))
 }
@@ -374,11 +362,6 @@ func load(dir, file string, c interface{}) error {
 	return nil
 }
 
-// MarshalTOML marshals the Network Type to Toml as a string.
-func (v NetworkType) MarshalTOML() ([]byte, error) {
-	return []byte("\"" + v.String() + "\""), nil
-}
-
 // MarshalTOML marshals the Node Type to Toml as a string.
 func (v NodeType) MarshalTOML() ([]byte, error) {
 	return []byte("\"" + v.String() + "\""), nil
@@ -387,13 +370,13 @@ func (v NodeType) MarshalTOML() ([]byte, error) {
 // StringToEnumHookFunc is a decode hook for mapstructure that will convert enums to strings
 func StringToEnumHookFunc() mapstructure.DecodeHookFuncType {
 	return func(
-		f reflect.Type,
+		_ reflect.Type,
 		t reflect.Type,
 		data interface{},
 	) (interface{}, error) {
 		switch t {
-		case reflect.TypeOf(NetworkTypeDirectory):
-			ret, _ := NetworkTypeByName(data.(string))
+		case reflect.TypeOf(Directory):
+			ret, _ := protocol.PartitionTypeByName(data.(string))
 			return ret, nil
 		case reflect.TypeOf(NodeTypeValidator):
 			ret, _ := NodeTypeByName(data.(string))

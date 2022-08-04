@@ -7,6 +7,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 )
 
@@ -22,5 +23,6 @@ type Options struct {
 	PrometheusServer  string
 	Database          database.Beginner
 	ConnectionManager connections.ConnectionManager
+	EventBus          *events.Bus
 	Key               []byte
 }

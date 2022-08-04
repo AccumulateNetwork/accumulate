@@ -119,8 +119,9 @@ NodeStatusUpdate:
       type: NodeStatus
       marshal-as: enum
     - name: Address
-      type: string
-      optional: true
+      type: InternetAddress
+      marshal-as: reference
+      pointer: true
 
 
 ##### Data Types #####
@@ -205,4 +206,6 @@ AddressBookEntry:
     - name: PublicKeyHash
       type: hash
     - name: Address
-      type: string
+      type: InternetAddress
+      marshal-as: reference
+      pointer: true

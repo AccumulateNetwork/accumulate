@@ -49,8 +49,8 @@ func Init(snapshot io.WriteSeeker, opts InitOpts) ([]byte, error) {
 	// Build the routing table
 	var bvns []string
 	for _, partition := range opts.GenesisGlobals.Network.Partitions {
-		if partition.PartitionID != protocol.Directory {
-			bvns = append(bvns, partition.PartitionID)
+		if partition.Type == protocol.PartitionTypeBlockValidator {
+			bvns = append(bvns, partition.ID)
 		}
 	}
 	b.routingTable = new(protocol.RoutingTable)
@@ -58,8 +58,8 @@ func Init(snapshot io.WriteSeeker, opts InitOpts) ([]byte, error) {
 	b.routingTable.Overrides = make([]protocol.RouteOverride, 1, len(opts.GenesisGlobals.Network.Partitions)+1)
 	b.routingTable.Overrides[0] = protocol.RouteOverride{Account: protocol.AcmeUrl(), Partition: protocol.Directory}
 	for _, partition := range opts.GenesisGlobals.Network.Partitions {
-		u := protocol.PartitionUrl(partition.PartitionID)
-		b.routingTable.Overrides = append(b.routingTable.Overrides, protocol.RouteOverride{Account: u, Partition: partition.PartitionID})
+		u := protocol.PartitionUrl(partition.ID)
+		b.routingTable.Overrides = append(b.routingTable.Overrides, protocol.RouteOverride{Account: u, Partition: partition.ID})
 	}
 
 	// Create the router

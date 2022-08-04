@@ -88,8 +88,8 @@ type AddressBookEntries struct {
 
 type AddressBookEntry struct {
 	fieldsSet     []bool
-	PublicKeyHash [32]byte `json:"publicKeyHash,omitempty" form:"publicKeyHash" query:"publicKeyHash" validate:"required"`
-	Address       string   `json:"address,omitempty" form:"address" query:"address" validate:"required"`
+	PublicKeyHash [32]byte         `json:"publicKeyHash,omitempty" form:"publicKeyHash" query:"publicKeyHash" validate:"required"`
+	Address       *InternetAddress `json:"address,omitempty" form:"address" query:"address" validate:"required"`
 	extraData     []byte
 }
 
@@ -465,8 +465,8 @@ type NetworkAccountUpdate struct {
 
 type NetworkDefinition struct {
 	fieldsSet   []bool
-	NetworkName string                `json:"networkName,omitempty" form:"networkName" query:"networkName" validate:"required"`
-	Partitions  []PartitionDefinition `json:"partitions,omitempty" form:"partitions" query:"partitions" validate:"required"`
+	NetworkName string                 `json:"networkName,omitempty" form:"networkName" query:"networkName" validate:"required"`
+	Partitions  []*PartitionDefinition `json:"partitions,omitempty" form:"partitions" query:"partitions" validate:"required"`
 	extraData   []byte
 }
 
@@ -482,8 +482,8 @@ type NetworkGlobals struct {
 
 type NodeStatusUpdate struct {
 	fieldsSet []bool
-	Status    NodeStatus `json:"status,omitempty" form:"status" query:"status" validate:"required"`
-	Address   string     `json:"address,omitempty" form:"address" query:"address"`
+	Status    NodeStatus       `json:"status,omitempty" form:"status" query:"status" validate:"required"`
+	Address   *InternetAddress `json:"address,omitempty" form:"address" query:"address" validate:"required"`
 	extraData []byte
 }
 
@@ -528,10 +528,11 @@ type PartitionAnchorReceipt struct {
 }
 
 type PartitionDefinition struct {
-	fieldsSet     []bool
-	PartitionID   string   `json:"partitionID,omitempty" form:"partitionID" query:"partitionID" validate:"required"`
-	ValidatorKeys [][]byte `json:"validatorKeys,omitempty" form:"validatorKeys" query:"validatorKeys" validate:"required"`
-	extraData     []byte
+	fieldsSet  []bool
+	ID         string                 `json:"id,omitempty" form:"id" query:"id" validate:"required"`
+	Type       PartitionType          `json:"type,omitempty" form:"type" query:"type" validate:"required"`
+	Validators []*ValidatorDefinition `json:"validators,omitempty" form:"validators" query:"validators" validate:"required"`
+	extraData  []byte
 }
 
 // PartitionSignature is used to initiate transactions between BVNs.
@@ -894,6 +895,13 @@ type UpdateKeyPage struct {
 	extraData []byte
 }
 
+type ValidatorDefinition struct {
+	fieldsSet []bool
+	PublicKey []byte `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
+	Active    bool   `json:"active" form:"active" query:"active" validate:"required"`
+	extraData []byte
+}
+
 type WriteData struct {
 	fieldsSet []bool
 	Entry     DataEntry `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
@@ -1200,7 +1208,9 @@ func (v *AddressBookEntry) Copy() *AddressBookEntry {
 	u := new(AddressBookEntry)
 
 	u.PublicKeyHash = v.PublicKeyHash
-	u.Address = v.Address
+	if v.Address != nil {
+		u.Address = (v.Address).Copy()
+	}
 
 	return u
 }
@@ -1843,9 +1853,11 @@ func (v *NetworkDefinition) Copy() *NetworkDefinition {
 	u := new(NetworkDefinition)
 
 	u.NetworkName = v.NetworkName
-	u.Partitions = make([]PartitionDefinition, len(v.Partitions))
+	u.Partitions = make([]*PartitionDefinition, len(v.Partitions))
 	for i, v := range v.Partitions {
-		u.Partitions[i] = *(&v).Copy()
+		if v != nil {
+			u.Partitions[i] = (v).Copy()
+		}
 	}
 
 	return u
@@ -1869,7 +1881,9 @@ func (v *NodeStatusUpdate) Copy() *NodeStatusUpdate {
 	u := new(NodeStatusUpdate)
 
 	u.Status = v.Status
-	u.Address = v.Address
+	if v.Address != nil {
+		u.Address = (v.Address).Copy()
+	}
 
 	return u
 }
@@ -1926,10 +1940,13 @@ func (v *PartitionAnchorReceipt) CopyAsInterface() interface{} { return v.Copy()
 func (v *PartitionDefinition) Copy() *PartitionDefinition {
 	u := new(PartitionDefinition)
 
-	u.PartitionID = v.PartitionID
-	u.ValidatorKeys = make([][]byte, len(v.ValidatorKeys))
-	for i, v := range v.ValidatorKeys {
-		u.ValidatorKeys[i] = encoding.BytesCopy(v)
+	u.ID = v.ID
+	u.Type = v.Type
+	u.Validators = make([]*ValidatorDefinition, len(v.Validators))
+	for i, v := range v.Validators {
+		if v != nil {
+			u.Validators[i] = (v).Copy()
+		}
 	}
 
 	return u
@@ -2583,6 +2600,17 @@ func (v *UpdateKeyPage) Copy() *UpdateKeyPage {
 
 func (v *UpdateKeyPage) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *ValidatorDefinition) Copy() *ValidatorDefinition {
+	u := new(ValidatorDefinition)
+
+	u.PublicKey = encoding.BytesCopy(v.PublicKey)
+	u.Active = v.Active
+
+	return u
+}
+
+func (v *ValidatorDefinition) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *WriteData) Copy() *WriteData {
 	u := new(WriteData)
 
@@ -2760,7 +2788,12 @@ func (v *AddressBookEntry) Equal(u *AddressBookEntry) bool {
 	if !(v.PublicKeyHash == u.PublicKeyHash) {
 		return false
 	}
-	if !(v.Address == u.Address) {
+	switch {
+	case v.Address == u.Address:
+		// equal
+	case v.Address == nil || u.Address == nil:
+		return false
+	case !((v.Address).Equal(u.Address)):
 		return false
 	}
 
@@ -3612,7 +3645,7 @@ func (v *NetworkDefinition) Equal(u *NetworkDefinition) bool {
 		return false
 	}
 	for i := range v.Partitions {
-		if !((&v.Partitions[i]).Equal(&u.Partitions[i])) {
+		if !((v.Partitions[i]).Equal(u.Partitions[i])) {
 			return false
 		}
 	}
@@ -3638,7 +3671,12 @@ func (v *NodeStatusUpdate) Equal(u *NodeStatusUpdate) bool {
 	if !(v.Status == u.Status) {
 		return false
 	}
-	if !(v.Address == u.Address) {
+	switch {
+	case v.Address == u.Address:
+		// equal
+	case v.Address == nil || u.Address == nil:
+		return false
+	case !((v.Address).Equal(u.Address)):
 		return false
 	}
 
@@ -3715,14 +3753,17 @@ func (v *PartitionAnchorReceipt) Equal(u *PartitionAnchorReceipt) bool {
 }
 
 func (v *PartitionDefinition) Equal(u *PartitionDefinition) bool {
-	if !(v.PartitionID == u.PartitionID) {
+	if !(v.ID == u.ID) {
 		return false
 	}
-	if len(v.ValidatorKeys) != len(u.ValidatorKeys) {
+	if !(v.Type == u.Type) {
 		return false
 	}
-	for i := range v.ValidatorKeys {
-		if !(bytes.Equal(v.ValidatorKeys[i], u.ValidatorKeys[i])) {
+	if len(v.Validators) != len(u.Validators) {
+		return false
+	}
+	for i := range v.Validators {
+		if !((v.Validators[i]).Equal(u.Validators[i])) {
 			return false
 		}
 	}
@@ -4544,6 +4585,17 @@ func (v *UpdateKeyPage) Equal(u *UpdateKeyPage) bool {
 	return true
 }
 
+func (v *ValidatorDefinition) Equal(u *ValidatorDefinition) bool {
+	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
+		return false
+	}
+	if !(v.Active == u.Active) {
+		return false
+	}
+
+	return true
+}
+
 func (v *WriteData) Equal(u *WriteData) bool {
 	if !(EqualDataEntry(v.Entry, u.Entry)) {
 		return false
@@ -5072,8 +5124,8 @@ func (v *AddressBookEntry) MarshalBinary() ([]byte, error) {
 	if !(v.PublicKeyHash == ([32]byte{})) {
 		writer.WriteHash(1, &v.PublicKeyHash)
 	}
-	if !(len(v.Address) == 0) {
-		writer.WriteString(2, v.Address)
+	if !(v.Address == nil) {
+		writer.WriteValue(2, v.Address.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_AddressBookEntry)
@@ -5094,7 +5146,7 @@ func (v *AddressBookEntry) IsValid() error {
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Address is missing")
-	} else if len(v.Address) == 0 {
+	} else if v.Address == nil {
 		errs = append(errs, "field Address is not set")
 	}
 
@@ -7584,8 +7636,8 @@ func (v *NodeStatusUpdate) MarshalBinary() ([]byte, error) {
 	if !(v.Status == 0) {
 		writer.WriteEnum(2, v.Status)
 	}
-	if !(len(v.Address) == 0) {
-		writer.WriteString(3, v.Address)
+	if !(v.Address == nil) {
+		writer.WriteValue(3, v.Address.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_NodeStatusUpdate)
@@ -7606,6 +7658,11 @@ func (v *NodeStatusUpdate) IsValid() error {
 		errs = append(errs, "field Status is missing")
 	} else if v.Status == 0 {
 		errs = append(errs, "field Status is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Address is missing")
+	} else if v.Address == nil {
+		errs = append(errs, "field Address is not set")
 	}
 
 	switch len(errs) {
@@ -7828,20 +7885,24 @@ func (v *PartitionAnchorReceipt) IsValid() error {
 }
 
 var fieldNames_PartitionDefinition = []string{
-	1: "PartitionID",
-	2: "ValidatorKeys",
+	1: "ID",
+	2: "Type",
+	3: "Validators",
 }
 
 func (v *PartitionDefinition) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	if !(len(v.PartitionID) == 0) {
-		writer.WriteString(1, v.PartitionID)
+	if !(len(v.ID) == 0) {
+		writer.WriteString(1, v.ID)
 	}
-	if !(len(v.ValidatorKeys) == 0) {
-		for _, v := range v.ValidatorKeys {
-			writer.WriteBytes(2, v)
+	if !(v.Type == 0) {
+		writer.WriteEnum(2, v.Type)
+	}
+	if !(len(v.Validators) == 0) {
+		for _, v := range v.Validators {
+			writer.WriteValue(3, v.MarshalBinary)
 		}
 	}
 
@@ -7857,14 +7918,19 @@ func (v *PartitionDefinition) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field PartitionID is missing")
-	} else if len(v.PartitionID) == 0 {
-		errs = append(errs, "field PartitionID is not set")
+		errs = append(errs, "field ID is missing")
+	} else if len(v.ID) == 0 {
+		errs = append(errs, "field ID is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field ValidatorKeys is missing")
-	} else if len(v.ValidatorKeys) == 0 {
-		errs = append(errs, "field ValidatorKeys is not set")
+		errs = append(errs, "field Type is missing")
+	} else if v.Type == 0 {
+		errs = append(errs, "field Type is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Validators is missing")
+	} else if len(v.Validators) == 0 {
+		errs = append(errs, "field Validators is not set")
 	}
 
 	switch len(errs) {
@@ -10265,6 +10331,50 @@ func (v *UpdateKeyPage) IsValid() error {
 	}
 }
 
+var fieldNames_ValidatorDefinition = []string{
+	1: "PublicKey",
+	2: "Active",
+}
+
+func (v *ValidatorDefinition) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(len(v.PublicKey) == 0) {
+		writer.WriteBytes(1, v.PublicKey)
+	}
+	writer.WriteBool(2, v.Active)
+
+	_, _, err := writer.Reset(fieldNames_ValidatorDefinition)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *ValidatorDefinition) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field PublicKey is missing")
+	} else if len(v.PublicKey) == 0 {
+		errs = append(errs, "field PublicKey is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Active is missing")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_WriteData = []string{
 	1: "Type",
 	2: "Entry",
@@ -10746,7 +10856,7 @@ func (v *AddressBookEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadHash(1); ok {
 		v.PublicKeyHash = *x
 	}
-	if x, ok := reader.ReadString(2); ok {
+	if x := new(InternetAddress); reader.ReadValue(2, x.UnmarshalBinary) {
 		v.Address = x
 	}
 
@@ -12209,7 +12319,7 @@ func (v *NetworkDefinition) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	for {
 		if x := new(PartitionDefinition); reader.ReadValue(2, x.UnmarshalBinary) {
-			v.Partitions = append(v.Partitions, *x)
+			v.Partitions = append(v.Partitions, x)
 		} else {
 			break
 		}
@@ -12273,7 +12383,7 @@ func (v *NodeStatusUpdate) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x := new(NodeStatus); reader.ReadEnum(2, x) {
 		v.Status = *x
 	}
-	if x, ok := reader.ReadString(3); ok {
+	if x := new(InternetAddress); reader.ReadValue(3, x.UnmarshalBinary) {
 		v.Address = x
 	}
 
@@ -12400,11 +12510,14 @@ func (v *PartitionDefinition) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
 	if x, ok := reader.ReadString(1); ok {
-		v.PartitionID = x
+		v.ID = x
+	}
+	if x := new(PartitionType); reader.ReadEnum(2, x) {
+		v.Type = *x
 	}
 	for {
-		if x, ok := reader.ReadBytes(2); ok {
-			v.ValidatorKeys = append(v.ValidatorKeys, x)
+		if x := new(ValidatorDefinition); reader.ReadValue(3, x.UnmarshalBinary) {
+			v.Validators = append(v.Validators, x)
 		} else {
 			break
 		}
@@ -13922,6 +14035,32 @@ func (v *UpdateKeyPage) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *ValidatorDefinition) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *ValidatorDefinition) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadBytes(1); ok {
+		v.PublicKey = x
+	}
+	if x, ok := reader.ReadBool(2); ok {
+		v.Active = x
+	}
+
+	seen, err := reader.Reset(fieldNames_ValidatorDefinition)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *WriteData) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -14140,8 +14279,8 @@ func (v *AddressBookEntries) MarshalJSON() ([]byte, error) {
 
 func (v *AddressBookEntry) MarshalJSON() ([]byte, error) {
 	u := struct {
-		PublicKeyHash string `json:"publicKeyHash,omitempty"`
-		Address       string `json:"address,omitempty"`
+		PublicKeyHash string           `json:"publicKeyHash,omitempty"`
+		Address       *InternetAddress `json:"address,omitempty"`
 	}{}
 	u.PublicKeyHash = encoding.ChainToJSON(v.PublicKeyHash)
 	u.Address = v.Address
@@ -14739,9 +14878,9 @@ func (v *NetworkAccountUpdate) MarshalJSON() ([]byte, error) {
 
 func (v *NetworkDefinition) MarshalJSON() ([]byte, error) {
 	u := struct {
-		NetworkName string                                 `json:"networkName,omitempty"`
-		Partitions  encoding.JsonList[PartitionDefinition] `json:"partitions,omitempty"`
-		Subnets     encoding.JsonList[PartitionDefinition] `json:"subnets,omitempty"`
+		NetworkName string                                  `json:"networkName,omitempty"`
+		Partitions  encoding.JsonList[*PartitionDefinition] `json:"partitions,omitempty"`
+		Subnets     encoding.JsonList[*PartitionDefinition] `json:"subnets,omitempty"`
 	}{}
 	u.NetworkName = v.NetworkName
 	u.Partitions = v.Partitions
@@ -14751,9 +14890,9 @@ func (v *NetworkDefinition) MarshalJSON() ([]byte, error) {
 
 func (v *NodeStatusUpdate) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type    TransactionType `json:"type"`
-		Status  NodeStatus      `json:"status,omitempty"`
-		Address string          `json:"address,omitempty"`
+		Type    TransactionType  `json:"type"`
+		Status  NodeStatus       `json:"status,omitempty"`
+		Address *InternetAddress `json:"address,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Status = v.Status
@@ -14793,16 +14932,17 @@ func (v *PartitionAnchor) MarshalJSON() ([]byte, error) {
 
 func (v *PartitionDefinition) MarshalJSON() ([]byte, error) {
 	u := struct {
-		PartitionID   string                     `json:"partitionID,omitempty"`
-		SubnetID      string                     `json:"subnetID,omitempty"`
-		ValidatorKeys encoding.JsonList[*string] `json:"validatorKeys,omitempty"`
+		ID          string                                  `json:"id,omitempty"`
+		PartitionID string                                  `json:"partitionID,omitempty"`
+		SubnetID    string                                  `json:"subnetID,omitempty"`
+		Type        PartitionType                           `json:"type,omitempty"`
+		Validators  encoding.JsonList[*ValidatorDefinition] `json:"validators,omitempty"`
 	}{}
-	u.PartitionID = v.PartitionID
-	u.SubnetID = v.PartitionID
-	u.ValidatorKeys = make(encoding.JsonList[*string], len(v.ValidatorKeys))
-	for i, x := range v.ValidatorKeys {
-		u.ValidatorKeys[i] = encoding.BytesToJSON(x)
-	}
+	u.ID = v.ID
+	u.PartitionID = v.PartitionID()
+	u.SubnetID = v.SubnetID()
+	u.Type = v.Type
+	u.Validators = v.Validators
 	return json.Marshal(&u)
 }
 
@@ -15374,6 +15514,16 @@ func (v *UpdateKeyPage) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *ValidatorDefinition) MarshalJSON() ([]byte, error) {
+	u := struct {
+		PublicKey *string `json:"publicKey,omitempty"`
+		Active    bool    `json:"active"`
+	}{}
+	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	u.Active = v.Active
+	return json.Marshal(&u)
+}
+
 func (v *WriteData) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type         TransactionType                       `json:"type"`
@@ -15596,8 +15746,8 @@ func (v *AddressBookEntries) UnmarshalJSON(data []byte) error {
 
 func (v *AddressBookEntry) UnmarshalJSON(data []byte) error {
 	u := struct {
-		PublicKeyHash string `json:"publicKeyHash,omitempty"`
-		Address       string `json:"address,omitempty"`
+		PublicKeyHash string           `json:"publicKeyHash,omitempty"`
+		Address       *InternetAddress `json:"address,omitempty"`
 	}{}
 	u.PublicKeyHash = encoding.ChainToJSON(v.PublicKeyHash)
 	u.Address = v.Address
@@ -16738,9 +16888,9 @@ func (v *NetworkAccountUpdate) UnmarshalJSON(data []byte) error {
 
 func (v *NetworkDefinition) UnmarshalJSON(data []byte) error {
 	u := struct {
-		NetworkName string                                 `json:"networkName,omitempty"`
-		Partitions  encoding.JsonList[PartitionDefinition] `json:"partitions,omitempty"`
-		Subnets     encoding.JsonList[PartitionDefinition] `json:"subnets,omitempty"`
+		NetworkName string                                  `json:"networkName,omitempty"`
+		Partitions  encoding.JsonList[*PartitionDefinition] `json:"partitions,omitempty"`
+		Subnets     encoding.JsonList[*PartitionDefinition] `json:"subnets,omitempty"`
 	}{}
 	u.NetworkName = v.NetworkName
 	u.Partitions = v.Partitions
@@ -16759,9 +16909,9 @@ func (v *NetworkDefinition) UnmarshalJSON(data []byte) error {
 
 func (v *NodeStatusUpdate) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type    TransactionType `json:"type"`
-		Status  NodeStatus      `json:"status,omitempty"`
-		Address string          `json:"address,omitempty"`
+		Type    TransactionType  `json:"type"`
+		Status  NodeStatus       `json:"status,omitempty"`
+		Address *InternetAddress `json:"address,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Status = v.Status
@@ -16832,32 +16982,23 @@ func (v *PartitionAnchor) UnmarshalJSON(data []byte) error {
 
 func (v *PartitionDefinition) UnmarshalJSON(data []byte) error {
 	u := struct {
-		PartitionID   string                     `json:"partitionID,omitempty"`
-		SubnetID      string                     `json:"subnetID,omitempty"`
-		ValidatorKeys encoding.JsonList[*string] `json:"validatorKeys,omitempty"`
+		ID          string                                  `json:"id,omitempty"`
+		PartitionID string                                  `json:"partitionID,omitempty"`
+		SubnetID    string                                  `json:"subnetID,omitempty"`
+		Type        PartitionType                           `json:"type,omitempty"`
+		Validators  encoding.JsonList[*ValidatorDefinition] `json:"validators,omitempty"`
 	}{}
-	u.PartitionID = v.PartitionID
-	u.SubnetID = v.PartitionID
-	u.ValidatorKeys = make(encoding.JsonList[*string], len(v.ValidatorKeys))
-	for i, x := range v.ValidatorKeys {
-		u.ValidatorKeys[i] = encoding.BytesToJSON(x)
-	}
+	u.ID = v.ID
+	u.PartitionID = v.PartitionID()
+	u.SubnetID = v.SubnetID()
+	u.Type = v.Type
+	u.Validators = v.Validators
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	if !(u.PartitionID == "") {
-		v.PartitionID = u.PartitionID
-	} else {
-		v.PartitionID = u.SubnetID
-	}
-	v.ValidatorKeys = make([][]byte, len(u.ValidatorKeys))
-	for i, x := range u.ValidatorKeys {
-		if x, err := encoding.BytesFromJSON(x); err != nil {
-			return fmt.Errorf("error decoding ValidatorKeys: %w", err)
-		} else {
-			v.ValidatorKeys[i] = x
-		}
-	}
+	v.ID = u.ID
+	v.Type = u.Type
+	v.Validators = u.Validators
 	return nil
 }
 
@@ -17860,6 +18001,25 @@ func (v *UpdateKeyPage) UnmarshalJSON(data []byte) error {
 	for i, x := range u.Operation.Value {
 		v.Operation[i] = x
 	}
+	return nil
+}
+
+func (v *ValidatorDefinition) UnmarshalJSON(data []byte) error {
+	u := struct {
+		PublicKey *string `json:"publicKey,omitempty"`
+		Active    bool    `json:"active"`
+	}{}
+	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	u.Active = v.Active
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if x, err := encoding.BytesFromJSON(u.PublicKey); err != nil {
+		return fmt.Errorf("error decoding PublicKey: %w", err)
+	} else {
+		v.PublicKey = x
+	}
+	v.Active = u.Active
 	return nil
 }
 

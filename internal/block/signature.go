@@ -793,12 +793,11 @@ func (x *Executor) validatePartitionSignature(location *url.URL, sig protocol.Ke
 	if subnet == nil {
 		return errors.Format(errors.StatusUnknownError, "unable to resolve originating subnet of the signature")
 	}
-	for _, vkey := range subnet.ValidatorKeys {
-		if bytes.Equal(vkey, skey) {
-			return nil
-		}
+	val := subnet.FindValidator(skey)
+	if val == nil || !val.Active {
+		return errors.Format(errors.StatusUnauthorized, "the key used to sign does not belong to an active validator of the originating subnet")
 	}
-	return errors.Format(errors.StatusUnauthorized, "the key used to sign does not belong to the originating subnet")
+	return nil
 }
 
 func hasKeySignature(batch *database.Batch, status *protocol.TransactionStatus) (bool, error) {

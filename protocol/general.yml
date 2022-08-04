@@ -171,17 +171,32 @@ NetworkDefinition:
     - name: Partitions
       alternative: Subnets
       type: PartitionDefinition
-      repeatable: true
       marshal-as: reference
+      pointer: true
+      repeatable: true
 
 PartitionDefinition:
   fields:
-    - name: PartitionID
-      alternative: SubnetID
+    - name: ID
       type: string
-    - name: ValidatorKeys
-      type: bytes
+    - { name: PartitionID, type: string, virtual: true, non-binary: true }
+    - { name: SubnetID, type: string, virtual: true, non-binary: true }
+    - name: Type
+      type: PartitionType
+      marshal-as: enum
+    - name: Validators
+      type: ValidatorDefinition
+      marshal-as: reference
+      pointer: true
       repeatable: true
+
+ValidatorDefinition:
+  fields:
+    - name: PublicKey
+      type: bytes
+    - name: Active
+      type: bool
+      keep-empty: true
 
 RoutingTable:
   fields:

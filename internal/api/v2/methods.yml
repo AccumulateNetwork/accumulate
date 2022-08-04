@@ -1,15 +1,15 @@
 Status:
-  description: queries the status of the node
+  description: returns the status of the node
   rpc: status
   output: StatusResponse
 
 Version:
   rpc: version
   output: ChainQueryResponse
-  description: queries the software version of the node
+  description: returns the software version of the node
 
 Describe:
-  description: queries the basic configuration of the node
+  description: returns the description of the node and global values
   rpc: describe
   output: DescriptionResponse
 

@@ -1,8 +1,6 @@
 package chain
 
 import (
-	"net/url"
-
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -38,9 +36,8 @@ func validateNodeStatusUpdate(st *StateManager, tx *Delivery) (*protocol.NodeSta
 		return nil, errors.Format(errors.StatusInternalError, "invalid payload: want %T, got %T", new(protocol.NodeStatusUpdate), tx.Transaction.Body)
 	}
 
-	_, err := url.Parse(body.Address) // Parse as a normal URL, not a protocol URL
-	if err != nil {
-		return nil, errors.Format(errors.StatusBadRequest, "invalid address %v: not a URL: %w", body.Address, err)
+	if body.Address == nil {
+		return nil, errors.Format(errors.StatusBadRequest, "missing address")
 	}
 
 	if !protocol.DnUrl().JoinPath(protocol.AddressBook).Equal(st.OriginUrl) {
@@ -120,7 +117,5 @@ func (NodeStatusUpdate) Execute(st *StateManager, tx *Delivery) (protocol.Transa
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
-	// If everything succeeded, update the pending globals
-	// st.PendingGlobals.AddressBook = entries
 	return result, nil
 }

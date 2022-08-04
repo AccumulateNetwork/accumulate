@@ -527,27 +527,26 @@ VersionResponse:
       type: bool
 
 DescriptionResponse:
-  non-binary: true
   incomparable: true
   fields:
     - name: PartitionId
       alternative: SubnetId
       type: string
+    - name: NetworkId
+      type: string
     - name: NetworkType
       type: config.NetworkType
-    - name: Network
-      alternative: Subnet
-      type: config.Network
-      marshal-as: reference
-    - name: NetworkAnchor
-      type: hash
+      marshal-as: enum
     - name: Values
       type: core.GlobalValues
       marshal-as: reference
-    - name: Error
-      type: errors2.Error
-      marshal-as: reference
-      pointer: true
+    - name: Signature
+      type: bytes
+    - name: PublicKey
+      type: bytes
+    - name: KeyType
+      type: protocol.SignatureType
+      marshal-as: enum
 
 SyntheticTransactionRequest:
   non-binary: true

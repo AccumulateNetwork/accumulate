@@ -1,5 +1,7 @@
 package connections
 
+import "gitlab.com/accumulatenetwork/accumulate/protocol"
+
 type FakeConnectionManager interface {
 	ConnectionManager
 	SetClients(clients map[string]FakeClient)
@@ -28,9 +30,9 @@ func NewFakeConnectionManager(partitions []string) FakeConnectionManager {
 	fcm.ctxMap = make(map[string]ConnectionContext)
 	for _, partition := range partitions {
 		connCtx := &connectionContext{
-			partitionId: partition,
-			hasClient:   make(chan struct{}),
-			metrics:     NodeMetrics{status: Up}}
+			partition: &protocol.PartitionDefinition{ID: partition},
+			hasClient: make(chan struct{}),
+			metrics:   NodeMetrics{status: Up}}
 		fcm.ctxMap[partition] = connCtx
 	}
 	return fcm

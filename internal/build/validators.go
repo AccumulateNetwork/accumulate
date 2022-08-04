@@ -1,8 +1,6 @@
 package build
 
 import (
-	"bytes"
-
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
@@ -42,7 +40,7 @@ func AddToOperatorPage(values *core.GlobalValues, operatorCount int, newKeyHash 
 func AddValidator(values *core.GlobalValues, operatorCount int, newPubKey []byte, partition string, signers ...*signing.Builder) (*protocol.Envelope, error) {
 	// Add the key to the network definition
 	return updateNetworkDefinition(values, signers, partition, func(def *protocol.PartitionDefinition) {
-		def.ValidatorKeys = append(def.ValidatorKeys, newPubKey)
+		def.UpdateValidator(newPubKey, true)
 	})
 }
 
@@ -78,12 +76,7 @@ func RemoveFromOperatorPage(values *core.GlobalValues, operatorCount int, oldKey
 func RemoveValidator(values *core.GlobalValues, operatorCount int, oldPubKey []byte, partition string, signers ...*signing.Builder) (*protocol.Envelope, error) {
 	// Remove the key from the network definition
 	return updateNetworkDefinition(values, signers, partition, func(def *protocol.PartitionDefinition) {
-		for i, k := range def.ValidatorKeys {
-			if bytes.Equal(k, oldPubKey) {
-				def.ValidatorKeys = append(def.ValidatorKeys[:i], def.ValidatorKeys[i+1:]...)
-				break
-			}
-		}
+		def.RemoveValidator(oldPubKey)
 	})
 }
 
@@ -118,12 +111,8 @@ func UpdateKeyOnOperatorPage(oldKeyHash, newKeyHash []byte, signers ...*signing.
 func UpdateValidatorKey(values *core.GlobalValues, oldPubKey, newPubKey []byte, partition string, signers ...*signing.Builder) (*protocol.Envelope, error) {
 	// Update the key in the network
 	return updateNetworkDefinition(values, signers, partition, func(def *protocol.PartitionDefinition) {
-		for i, k := range def.ValidatorKeys {
-			if bytes.Equal(k, oldPubKey) {
-				def.ValidatorKeys[i] = newPubKey
-				break
-			}
-		}
+		def.RemoveValidator(oldPubKey)
+		def.UpdateValidator(newPubKey, true)
 	})
 }
 

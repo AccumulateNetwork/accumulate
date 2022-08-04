@@ -1,6 +1,8 @@
 GlobalValues:
-  non-binary: true
   fields:
+    - name: memoize
+      type: globalValueMemos
+      marshal-as: none
     - name: Oracle
       type: protocol.AcmeOracle
       marshal-as: reference

@@ -167,7 +167,7 @@ func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time tim
 	var operators [][]byte
 	var partitions []protocol.PartitionDefinition
 	partitions = append(partitions, protocol.PartitionDefinition{
-		PartitionID: protocol.Directory,
+		ID: protocol.Directory,
 	})
 
 	var dnValidators [][]byte
@@ -204,7 +204,8 @@ func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time tim
 		}
 
 		partitions = append(partitions, protocol.PartitionDefinition{
-			PartitionID:   bvn.Id,
+			ID:            bvn.Id,
+			Type:          protocol.PartitionTypeBlockValidator,
 			ValidatorKeys: bvnValidators,
 		})
 		docs[bvn.Id] = &tmtypes.GenesisDoc{
