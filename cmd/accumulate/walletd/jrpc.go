@@ -83,6 +83,7 @@ func NewJrpc(opts Options) (*JrpcMethods, error) {
 
 func (m *JrpcMethods) NewMux() *http.ServeMux {
 	mux := http.NewServeMux()
+	mux.Handle("/version", m.jrpc2http(m.Version))
 	mux.Handle("/wallet", jsonrpc2.HTTPRequestHandler(m.methods, stdlog.New(os.Stdout, "", 0)))
 	return mux
 }

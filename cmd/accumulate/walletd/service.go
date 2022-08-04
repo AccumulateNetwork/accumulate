@@ -30,12 +30,6 @@ func onHUP(fn func()) {
 
 type logAnnotator func(io.Writer, string, bool) io.Writer
 
-func loggerError(err error) func(string, logAnnotator) (io.Writer, error) {
-	return func(string, logAnnotator) (io.Writer, error) {
-		return nil, err
-	}
-}
-
 func NewLogWriter(s service.Service, logFilename, jsonLogFilename string) func(string, logAnnotator) (io.Writer, error) {
 	// Each log file writer must be created once, otherwise different copies
 	// will step on each other
