@@ -91,12 +91,12 @@ func TestLiteDataEntry(t *testing.T) {
 		t.Fatalf("expected a cost of 40 credits, but computed %d", cost)
 	}
 
-	//now let's blow up the size of the entry to > 10kB to make sure it fails.
-	for i := 0; i < 1000; i++ {
+	//now let's blow up the size of the entry to > 20kB to make sure it fails.
+	for i := 0; i < 2000; i++ {
 		de.Data = append(de.Data, []byte(fmt.Sprintf("extid %d", i)))
 	}
 
-	//now the size of the entry is 10878 bytes, so the cost should fail.
+	//now the size of the entry is 20480 bytes, so the cost should fail.
 	cost, err = DataEntryCost(de)
 	if err == nil {
 		t.Fatalf("expected failure on data to large, but it passed and returned a cost of %d", cost)
