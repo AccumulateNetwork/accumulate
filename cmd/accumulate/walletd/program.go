@@ -5,7 +5,6 @@ import (
 
 	"github.com/kardianos/service"
 	"github.com/spf13/cobra"
-	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
 )
 
 type ServiceOptions struct {
@@ -37,8 +36,4 @@ func (p *Program) Start(s service.Service) (err error) {
 
 func (p *Program) Stop(service.Service) error {
 	return p.primary.Stop()
-}
-
-func start(primary *accumulated.Daemon) (err error) {
-	return primary.Start()
 }
