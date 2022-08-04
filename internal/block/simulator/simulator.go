@@ -4,6 +4,7 @@ package simulator
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -32,7 +33,6 @@ import (
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -175,6 +175,7 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 			Router:        sim.Router(),
 			TxMaxWaitTime: time.Hour,
 			Database:      x,
+			Key:           execOpts.Key,
 		})
 		require.NoError(sim, err)
 		x.API = acctesting.DirectJrpcClient(jrpc)
@@ -218,6 +219,7 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 			Router:        sim.Router(),
 			TxMaxWaitTime: time.Hour,
 			Database:      x,
+			Key:           execOpts.Key,
 		})
 		require.NoError(sim, err)
 		x.API = acctesting.DirectJrpcClient(jrpc)
@@ -296,11 +298,14 @@ func (s *Simulator) PartitionFor(url *url.URL) *ExecEntry {
 	return s.Partition(partition)
 }
 
-func (s *Simulator) Query(url *url.URL, req query.Request, prove bool) interface{} {
+func QueryUrl[T any](s *Simulator, url *url.URL, prove bool) T {
 	s.Helper()
-
-	x := s.PartitionFor(url)
-	return Query(s, x.Database, x.Executor, req, prove)
+	req := new(api.GeneralQuery)
+	req.Url = url
+	req.Prove = prove
+	var resp T
+	require.NoError(s, s.PartitionFor(url).API.RequestAPIv2(context.Background(), "query", req, &resp))
+	return resp
 }
 
 // RunAndReset runs everything in a batch (which is discarded) then resets the
