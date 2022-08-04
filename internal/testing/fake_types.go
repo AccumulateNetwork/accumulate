@@ -16,19 +16,19 @@ func (f *FakeTransactionBody) Type() protocol.TransactionType { return f.TheType
 var _ protocol.Signature = (*FakeSignature)(nil)
 var _ protocol.KeySignature = (*FakeSignature)(nil)
 
-func (f *FakeSignature) Type() protocol.SignatureType    { return f.TheType }
-func (f *FakeSignature) GetVote() protocol.VoteType      { return f.Vote }
-func (f *FakeSignature) Verify(hash []byte) bool         { return true }
-func (f *FakeSignature) Hash() []byte                    { return make([]byte, 32) }
-func (f *FakeSignature) Metadata() protocol.Signature    { return f }
-func (f *FakeSignature) Initiator() (hash.Hasher, error) { return nil, nil }
-func (f *FakeSignature) GetSigner() *url.URL             { return f.Signer }
-func (f *FakeSignature) RoutingLocation() *url.URL       { return f.Signer }
-func (f *FakeSignature) GetSignerVersion() uint64        { return f.SignerVersion }
-func (f *FakeSignature) GetTimestamp() uint64            { return f.Timestamp }
-func (f *FakeSignature) GetPublicKey() []byte            { return f.PublicKey }
-func (f *FakeSignature) GetSignature() []byte            { return make([]byte, 32) }
-func (f *FakeSignature) GetTransactionHash() [32]byte    { return [32]byte{} }
+func (f *FakeSignature) Type() protocol.SignatureType       { return f.TheType }
+func (f *FakeSignature) GetVote() protocol.VoteType         { return f.Vote }
+func (f *FakeSignature) Verify(sigMdHash, hash []byte) bool { return true }
+func (f *FakeSignature) Hash() []byte                       { return make([]byte, 32) }
+func (f *FakeSignature) Metadata() protocol.Signature       { return f }
+func (f *FakeSignature) Initiator() (hash.Hasher, error)    { return nil, nil }
+func (f *FakeSignature) GetSigner() *url.URL                { return f.Signer }
+func (f *FakeSignature) RoutingLocation() *url.URL          { return f.Signer }
+func (f *FakeSignature) GetSignerVersion() uint64           { return f.SignerVersion }
+func (f *FakeSignature) GetTimestamp() uint64               { return f.Timestamp }
+func (f *FakeSignature) GetPublicKey() []byte               { return f.PublicKey }
+func (f *FakeSignature) GetSignature() []byte               { return make([]byte, 32) }
+func (f *FakeSignature) GetTransactionHash() [32]byte       { return [32]byte{} }
 
 func (f *FakeSignature) GetPublicKeyHash() []byte {
 	if f.Type() == protocol.SignatureTypeRCD1 {
