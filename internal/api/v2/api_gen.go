@@ -37,7 +37,6 @@ func (m *JrpcMethods) populateMethodTable() jsonrpc2.MethodMap {
 	m.methods["faucet"] = m.Faucet
 	m.methods["metrics"] = m.Metrics
 	m.methods["query"] = m.Query
-	m.methods["query-chain"] = m.QueryChain
 	m.methods["query-data"] = m.QueryData
 	m.methods["query-data-set"] = m.QueryDataSet
 	m.methods["query-directory"] = m.QueryDirectory
@@ -47,6 +46,7 @@ func (m *JrpcMethods) populateMethodTable() jsonrpc2.MethodMap {
 	m.methods["query-synth"] = m.QuerySynth
 	m.methods["query-tx"] = m.QueryTx
 	m.methods["query-tx-history"] = m.QueryTxHistory
+	m.methods["query-tx-local"] = m.QueryTxLocal
 	m.methods["status"] = m.Status
 	m.methods["version"] = m.Version
 
@@ -162,127 +162,231 @@ func (m *JrpcMethods) ExecuteWriteDataTo(ctx context.Context, params json.RawMes
 }
 
 // Query queries an account or account chain by URL.
-func (m *JrpcMethods) Query(_ context.Context, params json.RawMessage) interface{} {
+func (m *JrpcMethods) Query(ctx context.Context, params json.RawMessage) interface{} {
 	req := new(GeneralQuery)
 	err := m.parse(params, req)
 	if err != nil {
 		return err
 	}
 
-	return jrpcFormatResponse(m.querier.QueryUrl(req.Url, req.QueryOptions))
-}
-
-// QueryChain queries an account by ID.
-func (m *JrpcMethods) QueryChain(_ context.Context, params json.RawMessage) interface{} {
-	req := new(ChainIdQuery)
-	err := m.parse(params, req)
+	subnet, err := m.Router.RouteAccount(req.Url)
 	if err != nil {
-		return err
+		return validatorError(err)
 	}
 
-	return jrpcFormatResponse(m.querier.QueryChain(req.ChainId))
+	if subnet == m.Options.Describe.PartitionId {
+		return jrpcFormatResponse(m.querier.QueryUrl(req.Url, req.QueryOptions))
+	}
+
+	var result interface{}
+	err = m.Router.RequestAPIv2(ctx, subnet, "query", params, &result)
+	if err != nil {
+		return accumulateError(err)
+	}
+	return result
 }
 
 // QueryData queries an entry on an account's data chain.
-func (m *JrpcMethods) QueryData(_ context.Context, params json.RawMessage) interface{} {
+func (m *JrpcMethods) QueryData(ctx context.Context, params json.RawMessage) interface{} {
 	req := new(DataEntryQuery)
 	err := m.parse(params, req)
 	if err != nil {
 		return err
 	}
 
-	return jrpcFormatResponse(m.querier.QueryData(req.Url, req.EntryHash))
+	subnet, err := m.Router.RouteAccount(req.Url)
+	if err != nil {
+		return validatorError(err)
+	}
+
+	if subnet == m.Options.Describe.PartitionId {
+		return jrpcFormatResponse(m.querier.QueryData(req.Url, req.EntryHash))
+	}
+
+	var result interface{}
+	err = m.Router.RequestAPIv2(ctx, subnet, "query-data", params, &result)
+	if err != nil {
+		return accumulateError(err)
+	}
+	return result
 }
 
 // QueryDataSet queries a range of entries on an account's data chain.
-func (m *JrpcMethods) QueryDataSet(_ context.Context, params json.RawMessage) interface{} {
+func (m *JrpcMethods) QueryDataSet(ctx context.Context, params json.RawMessage) interface{} {
 	req := new(DataEntrySetQuery)
 	err := m.parse(params, req)
 	if err != nil {
 		return err
 	}
 
-	return jrpcFormatResponse(m.querier.QueryDataSet(req.Url, req.QueryPagination, req.QueryOptions))
+	subnet, err := m.Router.RouteAccount(req.Url)
+	if err != nil {
+		return validatorError(err)
+	}
+
+	if subnet == m.Options.Describe.PartitionId {
+		return jrpcFormatResponse(m.querier.QueryDataSet(req.Url, req.QueryPagination, req.QueryOptions))
+	}
+
+	var result interface{}
+	err = m.Router.RequestAPIv2(ctx, subnet, "query-data-set", params, &result)
+	if err != nil {
+		return accumulateError(err)
+	}
+	return result
 }
 
 // QueryDirectory queries the directory entries of an account.
-func (m *JrpcMethods) QueryDirectory(_ context.Context, params json.RawMessage) interface{} {
+func (m *JrpcMethods) QueryDirectory(ctx context.Context, params json.RawMessage) interface{} {
 	req := new(DirectoryQuery)
 	err := m.parse(params, req)
 	if err != nil {
 		return err
 	}
 
-	return jrpcFormatResponse(m.querier.QueryDirectory(req.Url, req.QueryPagination, req.QueryOptions))
+	subnet, err := m.Router.RouteAccount(req.Url)
+	if err != nil {
+		return validatorError(err)
+	}
+
+	if subnet == m.Options.Describe.PartitionId {
+		return jrpcFormatResponse(m.querier.QueryDirectory(req.Url, req.QueryPagination, req.QueryOptions))
+	}
+
+	var result interface{}
+	err = m.Router.RequestAPIv2(ctx, subnet, "query-directory", params, &result)
+	if err != nil {
+		return accumulateError(err)
+	}
+	return result
 }
 
 // QueryKeyPageIndex queries the location of a key within an account's key book(s).
-func (m *JrpcMethods) QueryKeyPageIndex(_ context.Context, params json.RawMessage) interface{} {
+func (m *JrpcMethods) QueryKeyPageIndex(ctx context.Context, params json.RawMessage) interface{} {
 	req := new(KeyPageIndexQuery)
 	err := m.parse(params, req)
 	if err != nil {
 		return err
 	}
 
-	return jrpcFormatResponse(m.querier.QueryKeyPageIndex(req.Url, req.Key))
+	subnet, err := m.Router.RouteAccount(req.Url)
+	if err != nil {
+		return validatorError(err)
+	}
+
+	if subnet == m.Options.Describe.PartitionId {
+		return jrpcFormatResponse(m.querier.QueryKeyPageIndex(req.Url, req.Key))
+	}
+
+	var result interface{}
+	err = m.Router.RequestAPIv2(ctx, subnet, "query-key-index", params, &result)
+	if err != nil {
+		return accumulateError(err)
+	}
+	return result
 }
 
 // QueryMajorBlocks queries an account's major blocks.
 //
 // WARNING: EXPERIMENTAL!
-func (m *JrpcMethods) QueryMajorBlocks(_ context.Context, params json.RawMessage) interface{} {
+func (m *JrpcMethods) QueryMajorBlocks(ctx context.Context, params json.RawMessage) interface{} {
 	req := new(MajorBlocksQuery)
 	err := m.parse(params, req)
 	if err != nil {
 		return err
 	}
 
-	return jrpcFormatResponse(m.querier.QueryMajorBlocks(req.Url, req.QueryPagination))
+	subnet, err := m.Router.RouteAccount(req.Url)
+	if err != nil {
+		return validatorError(err)
+	}
+
+	if subnet == m.Options.Describe.PartitionId {
+		return jrpcFormatResponse(m.querier.QueryMajorBlocks(req.Url, req.QueryPagination))
+	}
+
+	var result interface{}
+	err = m.Router.RequestAPIv2(ctx, subnet, "query-major-blocks", params, &result)
+	if err != nil {
+		return accumulateError(err)
+	}
+	return result
 }
 
 // QueryMinorBlocks queries an account's minor blocks.
 //
 // WARNING: EXPERIMENTAL!
-func (m *JrpcMethods) QueryMinorBlocks(_ context.Context, params json.RawMessage) interface{} {
+func (m *JrpcMethods) QueryMinorBlocks(ctx context.Context, params json.RawMessage) interface{} {
 	req := new(MinorBlocksQuery)
 	err := m.parse(params, req)
 	if err != nil {
 		return err
 	}
 
-	return jrpcFormatResponse(m.querier.QueryMinorBlocks(req.Url, req.QueryPagination, req.TxFetchMode, req.BlockFilterMode))
+	subnet, err := m.Router.RouteAccount(req.Url)
+	if err != nil {
+		return validatorError(err)
+	}
+
+	if subnet == m.Options.Describe.PartitionId {
+		return jrpcFormatResponse(m.querier.QueryMinorBlocks(req.Url, req.QueryPagination, req.TxFetchMode, req.BlockFilterMode))
+	}
+
+	var result interface{}
+	err = m.Router.RequestAPIv2(ctx, subnet, "query-minor-blocks", params, &result)
+	if err != nil {
+		return accumulateError(err)
+	}
+	return result
 }
 
 //
 // WARNING: EXPERIMENTAL!
-func (m *JrpcMethods) QuerySynth(_ context.Context, params json.RawMessage) interface{} {
+func (m *JrpcMethods) QuerySynth(ctx context.Context, params json.RawMessage) interface{} {
 	req := new(SyntheticTransactionRequest)
 	err := m.parse(params, req)
 	if err != nil {
 		return err
 	}
 
-	return jrpcFormatResponse(m.querier.QuerySynth(req.Source, req.Destination, req.SequenceNumber, req.Anchor))
-}
-
-// QueryTx queries a transaction by ID.
-func (m *JrpcMethods) QueryTx(_ context.Context, params json.RawMessage) interface{} {
-	req := new(TxnQuery)
-	err := m.parse(params, req)
+	subnet, err := m.Router.RouteAccount(req.Source)
 	if err != nil {
-		return err
+		return validatorError(err)
 	}
 
-	return jrpcFormatResponse(m.querier.QueryTx(req.Txid, req.Wait, req.IgnorePending, req.QueryOptions))
+	if subnet == m.Options.Describe.PartitionId {
+		return jrpcFormatResponse(m.querier.QuerySynth(req.Source, req.Destination, req.SequenceNumber, req.Anchor))
+	}
+
+	var result interface{}
+	err = m.Router.RequestAPIv2(ctx, subnet, "query-synth", params, &result)
+	if err != nil {
+		return accumulateError(err)
+	}
+	return result
 }
 
 // QueryTxHistory queries an account's transaction history.
-func (m *JrpcMethods) QueryTxHistory(_ context.Context, params json.RawMessage) interface{} {
+func (m *JrpcMethods) QueryTxHistory(ctx context.Context, params json.RawMessage) interface{} {
 	req := new(TxHistoryQuery)
 	err := m.parse(params, req)
 	if err != nil {
 		return err
 	}
 
-	return jrpcFormatResponse(m.querier.QueryTxHistory(req.Url, req.QueryPagination, req.Scratch))
+	subnet, err := m.Router.RouteAccount(req.Url)
+	if err != nil {
+		return validatorError(err)
+	}
+
+	if subnet == m.Options.Describe.PartitionId {
+		return jrpcFormatResponse(m.querier.QueryTxHistory(req.Url, req.QueryPagination, req.Scratch))
+	}
+
+	var result interface{}
+	err = m.Router.RequestAPIv2(ctx, subnet, "query-tx-history", params, &result)
+	if err != nil {
+		return accumulateError(err)
+	}
+	return result
 }

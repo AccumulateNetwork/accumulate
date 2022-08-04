@@ -22,4 +22,5 @@ type Options struct {
 	PrometheusServer  string
 	Database          database.Beginner
 	ConnectionManager connections.ConnectionManager
+	Key               []byte
 }
