@@ -54,7 +54,7 @@ func (m *JrpcMethods) QueryTx(ctx context.Context, params json.RawMessage) inter
 			defer wg.Done()
 
 			var result *TransactionQueryResponse
-			var rpcErr *jsonrpc2.Error
+			var rpcErr jsonrpc2.Error
 			err := m.Router.RequestAPIv2(ctx, subnetId, "query-tx-local", params, &result)
 			switch {
 			case err == nil:
