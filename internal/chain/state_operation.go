@@ -3,7 +3,6 @@ package chain
 import (
 	"fmt"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -58,20 +57,4 @@ func (op *addDataEntry) Execute(st *stateCache) ([]protocol.Account, error) {
 
 	// Add TX to main chain
 	return nil, st.State.ChainUpdates.AddChainEntry(st.batch, record.MainChain(), st.txHash[:], 0, 0)
-}
-
-type addChainEntryOp struct {
-	chain       *database.Chain2
-	entry       []byte
-	sourceIndex uint64
-	sourceBlock uint64
-}
-
-func (m *stateCache) AddChainEntry(chain *database.Chain2, entry []byte, sourceIndex, sourceBlock uint64) error {
-	m.operations = append(m.operations, &addChainEntryOp{chain, entry, sourceIndex, sourceBlock})
-	return nil
-}
-
-func (op *addChainEntryOp) Execute(st *stateCache) ([]protocol.Account, error) {
-	return nil, st.State.ChainUpdates.AddChainEntry(st.batch, op.chain, op.entry, op.sourceIndex, op.sourceBlock)
 }

@@ -198,7 +198,7 @@ func ReadSnapshot(file ioutil2.SectionReader) (*snapshotHeader, int64, error) {
 }
 
 // RestoreSnapshot loads the full state of the partition from a file.
-func (b *Batch) RestoreSnapshot(file ioutil2.SectionReader) error {
+func (b *Batch) RestoreSnapshot(file ioutil2.SectionReader, network *config.Describe) error {
 	// Read the snapshot
 	_, _, err := ReadSnapshot(file)
 	if err != nil {
@@ -213,7 +213,7 @@ func (b *Batch) RestoreSnapshot(file ioutil2.SectionReader) error {
 
 	// Load the snapshot
 	bpt := pmt.NewBPTManager(b.kvstore)
-	return bpt.Bpt.LoadSnapshot(rd, func(key storage.Key, hash [32]byte, reader ioutil2.SectionReader) error {
+	err = bpt.Bpt.LoadSnapshot(rd, func(key storage.Key, hash [32]byte, reader ioutil2.SectionReader) error {
 		state := new(accountState)
 		err := state.UnmarshalBinaryFrom(reader)
 		if err != nil {
@@ -242,4 +242,34 @@ func (b *Batch) RestoreSnapshot(file ioutil2.SectionReader) error {
 
 		return nil
 	})
+	if err != nil {
+		return errors.Wrap(errors.StatusUnknownError, err)
+	}
+
+	// Rebuild the synthetic transaction index index
+	record := b.Account(network.Synthetic())
+	synthIndexChain, err := record.MainChain().Index().Get()
+	if err != nil {
+		return errors.Format(errors.StatusInternalError, "load synthetic index chain: %w", err)
+	}
+
+	entries, err := synthIndexChain.Entries(0, synthIndexChain.Height())
+	if err != nil {
+		return errors.Format(errors.StatusInternalError, "load synthetic index chain entries: %w", err)
+	}
+
+	for i, data := range entries {
+		entry := new(protocol.IndexEntry)
+		err = entry.UnmarshalBinary(data)
+		if err != nil {
+			return errors.Format(errors.StatusInternalError, "unmarshal synthetic index chain entry %d: %w", i, err)
+		}
+
+		err = b.SystemData(network.PartitionId).SyntheticIndexIndex(entry.BlockIndex).Put(uint64(i))
+		if err != nil {
+			return errors.Format(errors.StatusUnknownError, "store synthetic transaction index index %d for block: %w", i, err)
+		}
+	}
+
+	return nil
 }
