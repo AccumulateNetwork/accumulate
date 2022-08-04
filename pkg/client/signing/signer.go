@@ -9,7 +9,7 @@ import (
 
 type Signer interface {
 	SetPublicKey(protocol.Signature) error
-	Sign(protocol.Signature, []byte) error
+	Sign(protocol.Signature, []byte, []byte) error
 }
 
 type PrivateKey []byte
@@ -44,25 +44,25 @@ func (k PrivateKey) SetPublicKey(sig protocol.Signature) error {
 	return nil
 }
 
-func (k PrivateKey) Sign(sig protocol.Signature, message []byte) error {
+func (k PrivateKey) Sign(sig protocol.Signature, sigMdHash, message []byte) error {
 	switch sig := sig.(type) {
 	case *protocol.LegacyED25519Signature:
-		protocol.SignLegacyED25519(sig, k, message)
+		protocol.SignLegacyED25519(sig, k, sigMdHash, message)
 
 	case *protocol.ED25519Signature:
-		protocol.SignED25519(sig, k, message)
+		protocol.SignED25519(sig, k, sigMdHash, message)
 
 	case *protocol.RCD1Signature:
-		protocol.SignRCD1(sig, k, message)
+		protocol.SignRCD1(sig, k, sigMdHash, message)
 
 	case *protocol.BTCSignature:
-		return protocol.SignBTC(sig, k, message)
+		return protocol.SignBTC(sig, k, sigMdHash, message)
 
 	case *protocol.BTCLegacySignature:
-		return protocol.SignBTCLegacy(sig, k, message)
+		return protocol.SignBTCLegacy(sig, k, sigMdHash, message)
 
 	case *protocol.ETHSignature:
-		return protocol.SignETH(sig, k, message)
+		return protocol.SignETH(sig, k, sigMdHash, message)
 
 	default:
 		return fmt.Errorf("cannot sign %T with a key", sig)

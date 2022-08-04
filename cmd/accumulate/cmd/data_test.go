@@ -99,7 +99,7 @@ func testCase2_9c(t *testing.T, tc *testCmd) {
 	require.NoError(t, err)
 
 	h := sha256.Sum256(wd.Entry.GetData()[1])
-	require.True(t, sig.Verify(h[:]), "invalid signature for signed data")
+	require.True(t, sig.Verify(nil, h[:]), "invalid signature for signed data")
 }
 
 //liteAccounts is the predictable test accounts for the unit tests.
