@@ -19,8 +19,9 @@ import (
 
 type BlockStateSynthTxnEntry struct {
 	fieldsSet   []bool
-	Transaction []byte `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
-	ChainEntry  uint64 `json:"chainEntry,omitempty" form:"chainEntry" query:"chainEntry" validate:"required"`
+	Account     *url.URL `json:"account,omitempty" form:"account" query:"account" validate:"required"`
+	Transaction []byte   `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
+	ChainEntry  uint64   `json:"chainEntry,omitempty" form:"chainEntry" query:"chainEntry" validate:"required"`
 	extraData   []byte
 }
 
@@ -119,6 +120,9 @@ type transactionState struct {
 func (v *BlockStateSynthTxnEntry) Copy() *BlockStateSynthTxnEntry {
 	u := new(BlockStateSynthTxnEntry)
 
+	if v.Account != nil {
+		u.Account = v.Account
+	}
 	u.Transaction = encoding.BytesCopy(v.Transaction)
 	u.ChainEntry = v.ChainEntry
 
@@ -295,6 +299,14 @@ func (v *transactionState) Copy() *transactionState {
 func (v *transactionState) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *BlockStateSynthTxnEntry) Equal(u *BlockStateSynthTxnEntry) bool {
+	switch {
+	case v.Account == u.Account:
+		// equal
+	case v.Account == nil || u.Account == nil:
+		return false
+	case !((v.Account).Equal(u.Account)):
+		return false
+	}
 	if !(bytes.Equal(v.Transaction, u.Transaction)) {
 		return false
 	}
@@ -529,19 +541,23 @@ func (v *transactionState) Equal(u *transactionState) bool {
 }
 
 var fieldNames_BlockStateSynthTxnEntry = []string{
-	1: "Transaction",
-	2: "ChainEntry",
+	1: "Account",
+	2: "Transaction",
+	3: "ChainEntry",
 }
 
 func (v *BlockStateSynthTxnEntry) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
+	if !(v.Account == nil) {
+		writer.WriteUrl(1, v.Account)
+	}
 	if !(len(v.Transaction) == 0) {
-		writer.WriteBytes(1, v.Transaction)
+		writer.WriteBytes(2, v.Transaction)
 	}
 	if !(v.ChainEntry == 0) {
-		writer.WriteUint(2, v.ChainEntry)
+		writer.WriteUint(3, v.ChainEntry)
 	}
 
 	_, _, err := writer.Reset(fieldNames_BlockStateSynthTxnEntry)
@@ -556,11 +572,16 @@ func (v *BlockStateSynthTxnEntry) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Account is missing")
+	} else if v.Account == nil {
+		errs = append(errs, "field Account is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Transaction is missing")
 	} else if len(v.Transaction) == 0 {
 		errs = append(errs, "field Transaction is not set")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field ChainEntry is missing")
 	} else if v.ChainEntry == 0 {
 		errs = append(errs, "field ChainEntry is not set")
@@ -1193,10 +1214,13 @@ func (v *BlockStateSynthTxnEntry) UnmarshalBinary(data []byte) error {
 func (v *BlockStateSynthTxnEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	if x, ok := reader.ReadBytes(1); ok {
+	if x, ok := reader.ReadUrl(1); ok {
+		v.Account = x
+	}
+	if x, ok := reader.ReadBytes(2); ok {
 		v.Transaction = x
 	}
-	if x, ok := reader.ReadUint(2); ok {
+	if x, ok := reader.ReadUint(3); ok {
 		v.ChainEntry = x
 	}
 
@@ -1542,9 +1566,11 @@ func (v *transactionState) UnmarshalBinaryFrom(rd io.Reader) error {
 
 func (v *BlockStateSynthTxnEntry) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Transaction *string `json:"transaction,omitempty"`
-		ChainEntry  uint64  `json:"chainEntry,omitempty"`
+		Account     *url.URL `json:"account,omitempty"`
+		Transaction *string  `json:"transaction,omitempty"`
+		ChainEntry  uint64   `json:"chainEntry,omitempty"`
 	}{}
+	u.Account = v.Account
 	u.Transaction = encoding.BytesToJSON(v.Transaction)
 	u.ChainEntry = v.ChainEntry
 	return json.Marshal(&u)
@@ -1670,14 +1696,17 @@ func (v *transactionState) MarshalJSON() ([]byte, error) {
 
 func (v *BlockStateSynthTxnEntry) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Transaction *string `json:"transaction,omitempty"`
-		ChainEntry  uint64  `json:"chainEntry,omitempty"`
+		Account     *url.URL `json:"account,omitempty"`
+		Transaction *string  `json:"transaction,omitempty"`
+		ChainEntry  uint64   `json:"chainEntry,omitempty"`
 	}{}
+	u.Account = v.Account
 	u.Transaction = encoding.BytesToJSON(v.Transaction)
 	u.ChainEntry = v.ChainEntry
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
+	v.Account = u.Account
 	if x, err := encoding.BytesFromJSON(u.Transaction); err != nil {
 		return fmt.Errorf("error decoding Transaction: %w", err)
 	} else {
