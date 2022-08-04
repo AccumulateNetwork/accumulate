@@ -5,7 +5,7 @@ package wallet
 import (
 	"context"
 
-	"gitlab.com/accumulatenetwork/cmd/accumulate/walletd/api"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd/api"
 )
 
 // CreateEnvelope create an envelope by name.
