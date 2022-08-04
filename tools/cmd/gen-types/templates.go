@@ -12,7 +12,7 @@ import (
 var PackagePath string
 
 // convert converts typegen.Types to local Types.
-func convert(types, refTypes typegen.Types, pkgName, pkgPath string) (*Types, error) {
+func convert(types, refTypes typegen.Types, pkgName, subPkgName, pkgPath string) (*Types, error) {
 	// Initialize
 	ttypes := new(Types)
 	ttypes.Package = pkgName
@@ -25,6 +25,7 @@ func convert(types, refTypes typegen.Types, pkgName, pkgPath string) (*Types, er
 		// Initialize
 		ttyp := new(Type)
 		ttyp.Type = *typ
+		ttyp.SubPackage = subPkgName
 		ttypes.Types = append(ttypes.Types, ttyp)
 		lup[typ.Name] = ttyp
 		ttyp.Fields = make([]*Field, 0, len(typ.Fields)+len(typ.Embeddings))
@@ -40,6 +41,7 @@ func convert(types, refTypes typegen.Types, pkgName, pkgPath string) (*Types, er
 			union = new(UnionSpec)
 			union.Name = typ.Union.Name
 			union.Type = typ.Union.Type
+			union.SubPackage = subPkgName
 			ttypes.Unions = append(ttypes.Unions, union)
 			unions[typ.Union.Type] = union
 		}
@@ -58,6 +60,8 @@ func convert(types, refTypes typegen.Types, pkgName, pkgPath string) (*Types, er
 			field.MarshalAs = typegen.MarshalAsEnum
 			field.KeepEmpty = true
 			field.Virtual = true
+			field.ParentTypeName = typ.Name
+			field.ParentUnionValue = typ.UnionValue()
 			typ.Fields = append(typ.Fields, field)
 		}
 
@@ -67,16 +71,32 @@ func convert(types, refTypes typegen.Types, pkgName, pkgPath string) (*Types, er
 			if !ok {
 				return nil, fmt.Errorf("unknown embedded type %s", name)
 			}
-			field := new(Field)
-			field.Type.SetNamed(name)
-			field.TypeRef = etyp
-			typ.Fields = append(typ.Fields, field)
+			if flags.ExpandEmbedded {
+				for _, embField := range etyp.Type.Fields {
+					field := new(Field)
+					field.Name = embField.Name
+					field.Type.SetNamed(embField.Type.Name)
+					field.Type = embField.Type
+					field.Repeatable = embField.Repeatable
+					field.ParentTypeName = typ.Name
+					field.ParentUnionValue = etyp.UnionValue()
+					typ.Fields = append(typ.Fields, field)
+				}
+			} else {
+				field := new(Field)
+				field.Type.SetNamed(name)
+				field.TypeRef = etyp
+				field.ParentTypeName = typ.Name
+				typ.Fields = append(typ.Fields, field)
+			}
 		}
 
 		// Convert fields
 		for _, field := range typ.Type.Fields {
 			tfield := new(Field)
 			tfield.Field = *field
+			tfield.ParentTypeName = typ.Name
+			tfield.ParentUnionValue = typ.UnionValue()
 			if field.MarshalAs != typegen.MarshalAsBasic {
 				tfield.TypeRef = lup[tfield.Type.String()]
 			}
@@ -138,22 +158,40 @@ type Types struct {
 	Unions  []*UnionSpec
 }
 
+type SingleTypeFile struct {
+	Package string
+	*Type
+}
+
+func (f *SingleTypeFile) IsUnion() bool { return false }
+
+type SingleUnionFile struct {
+	Package string
+	*UnionSpec
+}
+
+func (f *SingleUnionFile) IsUnion() bool { return true }
+
 type UnionSpec struct {
-	Name    string
-	Type    string
-	Members []*Type
+	Name       string
+	Type       string
+	Members    []*Type
+	SubPackage string
 }
 
 type Type struct {
 	typegen.Type
-	Fields    []*Field
-	UnionSpec *UnionSpec
+	Fields     []*Field
+	SubPackage string
+	UnionSpec  *UnionSpec
 }
 
 type Field struct {
 	typegen.Field
-	TypeRef    *Type
-	IsEmbedded bool
+	TypeRef          *Type
+	IsEmbedded       bool
+	ParentTypeName   string
+	ParentUnionValue string
 }
 
 func (t *Type) IsAccount() bool    { return t.Union.Type == "account" }
@@ -221,8 +259,12 @@ func (f *Field) IsRequired() bool        { return !f.Optional }
 func (f *Field) OmitEmpty() bool         { return !f.KeepEmpty }
 
 var Templates = typegen.NewTemplateLibrary(template.FuncMap{
-	"lcName":  typegen.LowerFirstWord,
-	"map":     typegen.MakeMap,
-	"natural": typegen.Natural,
-	"debug":   fmt.Printf,
+	"lcName":              typegen.LowerFirstWord,
+	"upper":               strings.ToUpper,
+	"underscoreUpperCase": typegen.UnderscoreUpperCase,
+	"title":               typegen.TitleCase,
+	"map":                 typegen.MakeMap,
+	"natural":             typegen.Natural,
+	"hasSuffix":           strings.HasSuffix,
+	"debug":               fmt.Printf,
 })
