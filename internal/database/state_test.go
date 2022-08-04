@@ -54,16 +54,31 @@ func TestState(t *testing.T) {
 
 	// Load the file into a new database
 	db := database.OpenInMemory(nil)
-	var blockHash2, bptRoot2 []byte
 	require.NoError(t, db.Update(func(b *database.Batch) error {
 		require.NoError(t, b.RestoreSnapshot(f, &bvn.Executor.Describe))
-		blockHash2, err = b.GetMinorRootChainAnchor(&bvn.Executor.Describe)
+
+		// Does it match?
+		blockHash2, err := b.GetMinorRootChainAnchor(&bvn.Executor.Describe)
 		require.NoError(t, err)
-		bptRoot2 = b.BptRoot()
+		require.Equal(t, blockHash, blockHash2)
+		require.Equal(t, bptRoot, b.BptRoot())
+
+		// Verify that transactions and signatures are saved
+		c, err := b.Account(protocol.FaucetUrl).MainChain().Get()
+		require.NoError(t, err)
+		hash, err := c.Entry(0)
+		require.NoError(t, err)
+		_, err = b.Transaction(hash).Main().Get()
+		require.NoError(t, err)
+
+		c, err = b.Account(protocol.FaucetUrl).SignatureChain().Get()
+		require.NoError(t, err)
+		hash, err = c.Entry(0)
+		require.NoError(t, err)
+		_, err = b.Transaction(hash).Main().Get()
+		require.NoError(t, err)
+
 		return nil
 	}))
 
-	// Does it match?
-	require.Equal(t, blockHash, blockHash2)
-	require.Equal(t, bptRoot, bptRoot2)
 }
