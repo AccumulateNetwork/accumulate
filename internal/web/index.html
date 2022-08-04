@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Accumulate</title>
+        <style>
+            body {
+                margin: 0;
+                padding: 0;
+                background: hsl(210, 10%, 95%);
+
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                flex-flow: column;
+            }
+
+            a {
+                padding: 1em 0;
+            }
+
+            img {
+                max-width: 800px;
+            }
+
+            main {
+                flex: 1;
+
+                display: flex;
+                align-items: center;
+                flex-flow: column;
+            }
+
+            #input {
+                margin-top: 1em;
+                width: 50em;
+                max-width: 50vw;
+            }
+
+            #response {
+                margin-top: 1em;
+                width: 100%;
+            }
+
+            #response:empty {
+                display: none;
+            }
+
+            #response[status=error] {
+                border: 3px solid hsl(0, 60%, 50%);
+            }
+
+            #response > div {
+                overflow: visible;
+            }
+        </style>
+    </head>
+    <body>
+        <a href="https://accumulatenetwork.io">
+            <img src="logo.svg" alt="Accumulate" id="logo" />
+        </a>
+        <main>
+            <section>
+                <select id="method">
+                    <option>query</option>
+                    <option>query-tx</option>
+                    <option>query-directory</option>
+                    <option>query-minor-blocks</option>
+                    <option>query-major-blocks</option>
+
+                    <option>faucet</option>
+                    <option>status</option>
+                    <option>version</option>
+                    <option>describe</option>
+                </select>
+                <input id="request" type="text" />
+            </section>
+            <pre id="response" class="shj-lang-json"></pre>
+        </main>
+        <script type="module" src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.slim.min.js" integrity="sha512-6ORWJX/LrnSjBzwefdNUyLCMTIsGoNP6NftMy2UAm1JBm6PRZCO1d7OHBStWpVFZLO+RerTvqX/Z9mBFfCJZ4A==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+        <script type="module" src="https://cdn.jsdelivr.net/npm/@speed-highlight/core@1.1.7/dist/index.js" integrity="sha256-TtO9GRfac4F1TwEZ8aLolPVLzdKkcXps8JXsF/1sK1Q=" crossorigin="anonymous"></script>
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@speed-highlight/core@1.1.7/dist/themes/github-dim.css" integrity="sha256-u7iPdEAINODU216F8UAvUwxLTUeGQgMYseq+VTmXoXg=" crossorigin="anonymous">
+        <script type="module">
+            import { highlightElement } from 'https://cdn.jsdelivr.net/npm/@speed-highlight/core@1.1.7/dist/index.js'
+
+            const request = $('#request')
+            const response = $('#response')
+            const method = $('#method')
+
+            function setResponse(x, isError = false) {
+                response.text(JSON.stringify(x, null, 2))
+                if (isError) {
+                    response.attr('status', 'error')
+                } else {
+                    response.attr('status', '')
+                }
+                highlightElement(response[0])
+            }
+
+            async function sendRequest(method, request) {
+                try {
+                    request = JSON.parse(request)
+                } catch(_) {
+                    switch (method) {
+                    case 'query':
+                        location.hash = request
+                        request = { url: request }
+                        break
+                    case 'query-directory':
+                    case 'query-minor-blocks':
+                    case 'query-major-blocks':
+                    case 'faucet':
+                        request = { url: request }
+                        break
+                    case 'query-tx':
+                        request = { txid: request }
+                        break
+
+                    case 'status':
+                    case 'describe':
+                    case 'version':
+                        request = {}
+                        break
+                    default:
+                        setResponse({ method, error: 'must specify the JSON request parameters' }, true)
+                        return
+                    }
+                }
+
+                const r1 = await fetch('/v2', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        jsonrpc: '2.0',
+                        id: 1,
+                        method,
+                        params: request,
+                    })
+                })
+                const r2 = await r1.json()
+                if (typeof r2 !== 'object' || !('jsonrpc' in r2) || r2.jsonrpc != '2.0') {
+                    setResponse({ error: 'response is not JSON-RPC 2.0' }, true)
+                    return
+                }
+
+                const { error, result } = r2
+                setResponse(error || result || { messag: 'empty response' }, !!error)
+                highlightElement(response[0])
+            }
+
+            request.keypress(function (e) {
+                if (e.which == 13) {
+                    sendRequest(method.val(), request.val())
+                }
+            })
+
+            if (location.hash.length) {
+                method.val('query')
+                request.val(location.hash.slice(1))
+                sendRequest('query', location.hash.slice(1))
+            }
+        </script>
+    </body>
+</html>
