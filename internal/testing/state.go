@@ -44,7 +44,7 @@ func ParseUrl(s string) (*url.URL, error) {
 	}
 	// Fixup URL
 	if !strings.HasSuffix(u.Authority, protocol.TLD) {
-		u.Authority += protocol.TLD
+		u = u.WithAuthority(u.Authority + protocol.TLD)
 	}
 	return u, nil
 }

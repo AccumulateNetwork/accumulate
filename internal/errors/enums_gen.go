@@ -50,6 +50,9 @@ const StatusBadSignerVersion Status = 411
 // StatusBadTimestamp means the timestamp is invalid.
 const StatusBadTimestamp Status = 412
 
+// StatusBadUrlLength means the url length is too big.
+const StatusBadUrlLength Status = 413
+
 // StatusInternalError means an internal error occured.
 const StatusInternalError Status = 500
 
@@ -69,7 +72,7 @@ func (v Status) GetEnumValue() uint64 { return uint64(v) }
 func (v *Status) SetEnumValue(id uint64) bool {
 	u := Status(id)
 	switch u {
-	case StatusOK, StatusDelivered, StatusPending, StatusRemote, StatusWrongPartition, StatusBadRequest, StatusUnauthenticated, StatusInsufficientCredits, StatusUnauthorized, StatusNotFound, StatusNotAllowed, StatusConflict, StatusBadSignerVersion, StatusBadTimestamp, StatusInternalError, StatusUnknownError, StatusEncodingError, StatusFatalError:
+	case StatusOK, StatusDelivered, StatusPending, StatusRemote, StatusWrongPartition, StatusBadRequest, StatusUnauthenticated, StatusInsufficientCredits, StatusUnauthorized, StatusNotFound, StatusNotAllowed, StatusConflict, StatusBadSignerVersion, StatusBadTimestamp, StatusBadUrlLength, StatusInternalError, StatusUnknownError, StatusEncodingError, StatusFatalError:
 		*v = u
 		return true
 	default:
@@ -108,6 +111,8 @@ func (v Status) String() string {
 		return "badSignerVersion"
 	case StatusBadTimestamp:
 		return "badTimestamp"
+	case StatusBadUrlLength:
+		return "badUrlLength"
 	case StatusInternalError:
 		return "internalError"
 	case StatusUnknownError:
@@ -152,6 +157,8 @@ func StatusByName(name string) (Status, bool) {
 		return StatusBadSignerVersion, true
 	case "badtimestamp":
 		return StatusBadTimestamp, true
+	case "badurllength":
+		return StatusBadUrlLength, true
 	case "internalerror":
 		return StatusInternalError, true
 	case "unknownerror":

@@ -103,7 +103,7 @@ func PrintTXPendingGet() {
 }
 
 func PrintTXCreate() {
-	fmt.Println("  accumulate tx create [adi token account url] [signing key name] [to] [amount]	Create new token tx")
+	fmt.Println("  accumulate tx create [token account url] [signing key ] [to] [amount]	Create new token tx")
 	fmt.Println("  accumulate tx create [lite token account url] [to] [amount]	Create new token tx")
 }
 
@@ -144,7 +144,7 @@ func GetPendingTx(origin string, args []string) (string, error) {
 	switch len(args) {
 	case 0:
 		//query with no parameters
-		u.Fragment = "pending"
+		u = u.WithFragment("pending")
 		params.Url = u
 		res := api.MultiResponse{}
 		err = queryAs("query", &params, &res)
@@ -159,13 +159,13 @@ func GetPendingTx(origin string, args []string) (string, error) {
 			if err != nil {
 				return "", fmt.Errorf("cannot decode transaction id")
 			}
-			u.Fragment = fmt.Sprintf("pending/%x", txid)
+			u = u.WithFragment(fmt.Sprintf("pending/%x", txid))
 		} else {
 			height, err := strconv.ParseUint(args[0], 10, 64)
 			if err != nil {
 				return "", fmt.Errorf("expecting height, but could not convert argument, %v", err)
 			}
-			u.Fragment = fmt.Sprintf("pending/%d", height)
+			u = u.WithFragment(fmt.Sprintf("pending/%d", height))
 		}
 		params.Url = u
 		res := api.TransactionQueryResponse{}
@@ -184,7 +184,7 @@ func GetPendingTx(origin string, args []string) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("error converting count %v", err)
 		}
-		u.Fragment = fmt.Sprintf("pending/%d:%d", start, count)
+		u = u.WithFragment(fmt.Sprintf("pending/%d:%d", start, count))
 		params.Url = u
 		res := api.MultiResponse{}
 		err = queryAs("query", &params, &res)

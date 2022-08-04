@@ -23,6 +23,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
+	"golang.org/x/sync/errgroup"
 )
 
 type InitOpts struct {
@@ -76,6 +77,10 @@ func Init(snapshot io.WriteSeeker, opts InitOpts) ([]byte, error) {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
+	// Capture background tasks
+	errg := new(errgroup.Group)
+	exec.Background = func(f func()) { errg.Go(func() error { f(); return nil }) }
+
 	b.block = new(block.Block)
 	b.block.Index = protocol.GenesisBlock
 
@@ -89,6 +94,12 @@ func Init(snapshot io.WriteSeeker, opts InitOpts) ([]byte, error) {
 	}
 
 	err = b.block.Batch.Commit()
+	if err != nil {
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
+	}
+
+	// Wait for background tasks
+	err = errg.Wait()
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}

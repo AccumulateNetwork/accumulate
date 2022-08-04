@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/fatih/color"
 	"github.com/kardianos/service"
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
@@ -92,6 +93,7 @@ func runNode(cmd *cobra.Command, _ []string) (string, error) {
 	if flagRun.CiStopAfter != 0 {
 		go watchDog(prog, svc, flagRun.CiStopAfter)
 	}
+	color.HiGreen("------ starting a new node ------")
 
 	err = svc.Run()
 	if err != nil {
