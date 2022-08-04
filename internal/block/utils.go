@@ -57,7 +57,7 @@ func addIndexChainEntry(chain *database.Chain2, entry *protocol.IndexEntry) (uin
 
 // addChainAnchor anchors the target chain into the root chain, adding an index
 // entry to the target chain's index chain, if appropriate.
-func addChainAnchor(rootChain *database.Chain, chain *database.Chain2) (indexIndex uint64, didIndex bool, err error) {
+func addChainAnchor(rootChain *database.Chain, chain *database.Chain2, blockIndex uint64) (indexIndex uint64, didIndex bool, err error) {
 	// Load the chain
 	accountChain, err := chain.Get()
 	if err != nil {
@@ -78,34 +78,15 @@ func addChainAnchor(rootChain *database.Chain, chain *database.Chain2) (indexInd
 
 	// Add the index chain entry
 	indexIndex, err = addIndexChainEntry(chain.Index(), &protocol.IndexEntry{
-		Source: uint64(accountChain.Height() - 1),
-		Anchor: uint64(rootChain.Height() - 1),
+		BlockIndex: blockIndex,
+		Source:     uint64(accountChain.Height() - 1),
+		Anchor:     uint64(rootChain.Height() - 1),
 	})
 	if err != nil {
 		return 0, false, err
 	}
 
 	return indexIndex, true, nil
-}
-
-func getRangeFromIndexEntry(chain *database.Chain, index uint64) (from, to, anchor uint64, err error) {
-	entry := new(protocol.IndexEntry)
-	err = chain.EntryAs(int64(index), entry)
-	if err != nil {
-		return 0, 0, 0, fmt.Errorf("entry %d: %w", index, err)
-	}
-
-	if index == 0 {
-		return 0, entry.Source, entry.Anchor, nil
-	}
-
-	prev := new(protocol.IndexEntry)
-	err = chain.EntryAs(int64(index)-1, prev)
-	if err != nil {
-		return 0, 0, 0, fmt.Errorf("entry %d: %w", index-1, err)
-	}
-
-	return prev.Source + 1, entry.Source, entry.Anchor, nil
 }
 
 func (*Executor) GetAccountAuthoritySet(batch *database.Batch, account protocol.Account) (*protocol.AccountAuth, error) {
