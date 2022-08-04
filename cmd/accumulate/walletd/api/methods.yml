@@ -25,7 +25,6 @@ Decode:
 KeyList:
   description: returns a list of available keys in the wallet
   rpc: key-list
-  input: api.KeyListRequest
   output: api.KeyListResponse|api.AuthorizationRequired
 
 ResolveKey:
