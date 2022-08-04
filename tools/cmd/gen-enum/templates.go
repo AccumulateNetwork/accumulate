@@ -17,9 +17,15 @@ type Types struct {
 	Types   []*Type
 }
 
+type SingleTypeFile struct {
+	Package string
+	*Type
+}
+
 type Type struct {
-	Name   string
-	Values []*TypeValue
+	Name       string
+	SubPackage string
+	Values     []*TypeValue
 }
 
 type TypeValue struct {
@@ -30,18 +36,21 @@ type TypeValue struct {
 var reCamel = regexp.MustCompile(`^\p{Lu}+`)
 
 var Templates = typegen.NewTemplateLibrary(template.FuncMap{
-	"lower":      strings.ToLower,
-	"lowerCamel": func(s string) string { return reCamel.ReplaceAllStringFunc(s, strings.ToLower) },
-	"natural":    natural,
+	"lower":               strings.ToLower,
+	"upper":               strings.ToUpper,
+	"underscoreUpperCase": typegen.UnderscoreUpperCase,
+	"lowerCamel":          func(s string) string { return reCamel.ReplaceAllStringFunc(s, strings.ToLower) },
+	"natural":             natural,
 })
 
-func convert(types map[string]typegen.Enum, pkgName string) *Types {
+func convert(types map[string]typegen.Enum, pkgName, subPkgName string) *Types {
 	ttypes := make([]*Type, 0, len(types))
 
 	for name, typ := range types {
 		ttyp := new(Type)
 		ttypes = append(ttypes, ttyp)
 		ttyp.Name = name
+		ttyp.SubPackage = subPkgName
 		ttyp.Values = make([]*TypeValue, 0, len(typ))
 		for name, val := range typ {
 			tval := new(TypeValue)
