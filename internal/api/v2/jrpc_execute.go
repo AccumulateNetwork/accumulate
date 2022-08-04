@@ -140,7 +140,7 @@ func (r txRequestSigner) SetPublicKey(sig protocol.Signature) error {
 	return nil
 }
 
-func (r txRequestSigner) Sign(sig protocol.Signature, message []byte) error {
+func (r txRequestSigner) Sign(sig protocol.Signature, sigMdHash, message []byte) error {
 	switch sig := sig.(type) {
 	case *protocol.LegacyED25519Signature:
 		sig.Signature = r.Signature
