@@ -75,12 +75,18 @@ func (d *e2eDUT) SubmitTxn(tx *protocol.Envelope) {
 func (d *e2eDUT) WaitForTxns(txids ...[]byte) {
 	d.T().Helper()
 
-	q := d.api.Querier_TESTONLY()
-
 	for len(txids) > 0 {
 		var synth [][]byte
 		for _, txid := range txids {
-			r, err := q.QueryTx(txid, 10*time.Second, false, apiv2.QueryOptions{})
+			req, err := json.Marshal(&apiv2.TxnQuery{
+				Txid: txid,
+				Wait: 10 * time.Second,
+			})
+			d.Require().NoError(err)
+			resp := d.api.QueryTx(context.Background(), req)
+			err, _ = resp.(error)
+			d.Require().NoError(err)
+			r := resp.(*apiv2.TransactionQueryResponse)
 			d.Require().NoError(err)
 			d.Require().NotNil(r.Status, "Transaction status is empty")
 			d.Require().True(r.Status.Delivered(), "Transaction has not been delivered")
