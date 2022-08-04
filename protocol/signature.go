@@ -201,8 +201,11 @@ func UnmarshalKeySignatureJSON(data []byte) (KeySignature, error) {
  * Legacy ED25519 Signature
  */
 
-func SignLegacyED25519(sig *LegacyED25519Signature, privateKey, txnHash []byte) {
-	data := sig.Metadata().Hash()
+func SignLegacyED25519(sig *LegacyED25519Signature, privateKey, sigMdHash, txnHash []byte) {
+	if sigMdHash == nil {
+		sigMdHash = sig.Metadata().Hash()
+	}
+	data := sigMdHash
 	data = append(data, common.Uint64Bytes(sig.Timestamp)...)
 	data = append(data, txnHash...)
 	hash := sha256.Sum256(data)
@@ -283,8 +286,11 @@ func (e *LegacyED25519Signature) Verify(sigMdHash, txnHash []byte) bool {
  * ED25519 Signature
  */
 
-func SignED25519(sig *ED25519Signature, privateKey, txnHash []byte) {
-	data := sig.Metadata().Hash()
+func SignED25519(sig *ED25519Signature, privateKey, sigMdHash, txnHash []byte) {
+	if sigMdHash == nil {
+		sigMdHash = sig.Metadata().Hash()
+	}
+	data := sigMdHash
 	data = append(data, txnHash...)
 	hash := sha256.Sum256(data)
 	sig.Signature = ed25519.Sign(privateKey, hash[:])
@@ -364,8 +370,11 @@ func (e *ED25519Signature) Verify(sigMdHash, txnHash []byte) bool {
  * RCD1 Signature
  */
 
-func SignRCD1(sig *RCD1Signature, privateKey, txnHash []byte) {
-	data := sig.Metadata().Hash()
+func SignRCD1(sig *RCD1Signature, privateKey, sigMdHash, txnHash []byte) {
+	if sigMdHash == nil {
+		sigMdHash = sig.Metadata().Hash()
+	}
+	data := sigMdHash
 	data = append(data, txnHash...)
 	hash := sha256.Sum256(data)
 	sig.Signature = ed25519.Sign(privateKey, hash[:])
@@ -444,8 +453,11 @@ func (s *RCD1Signature) GetVote() VoteType {
  * BTC Signature
  */
 
-func SignBTC(sig *BTCSignature, privateKey, txnHash []byte) error {
-	data := sig.Metadata().Hash()
+func SignBTC(sig *BTCSignature, privateKey, sigMdHash, txnHash []byte) error {
+	if sigMdHash == nil {
+		sigMdHash = sig.Metadata().Hash()
+	}
+	data := sigMdHash
 	data = append(data, txnHash...)
 	hash := sha256.Sum256(data)
 	pvkey, pubKey := btc.PrivKeyFromBytes(btc.S256(), privateKey)
@@ -537,8 +549,11 @@ func (e *BTCSignature) Verify(sigMdHash, txnHash []byte) bool {
  * BTCLegacy Signature
  */
 
-func SignBTCLegacy(sig *BTCLegacySignature, privateKey, txnHash []byte) error {
-	data := sig.Metadata().Hash()
+func SignBTCLegacy(sig *BTCLegacySignature, privateKey, sigMdHash, txnHash []byte) error {
+	if sigMdHash == nil {
+		sigMdHash = sig.Metadata().Hash()
+	}
+	data := sigMdHash
 	data = append(data, txnHash...)
 	hash := sha256.Sum256(data)
 	pvkey, pubKey := btc.PrivKeyFromBytes(btc.S256(), privateKey)
@@ -630,8 +645,12 @@ func (e *BTCLegacySignature) Verify(sigMdHash, txnHash []byte) bool {
  * ETH Signature
  */
 
-func SignETH(sig *ETHSignature, privateKey, txnHash []byte) error {
-	data := sig.Metadata().Hash()
+func SignETH(sig *ETHSignature, privateKey, sigMdHash, txnHash []byte) error {
+
+	if sigMdHash == nil {
+		sigMdHash = sig.Metadata().Hash()
+	}
+	data := sigMdHash
 	data = append(data, txnHash...)
 	hash := sha256.Sum256(data)
 	pvkey, pubKey := btc.PrivKeyFromBytes(btc.S256(), privateKey)

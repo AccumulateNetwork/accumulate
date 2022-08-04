@@ -1741,7 +1741,7 @@ func TestAccountAuth(t *testing.T) {
 }
 
 func TestMultiLevelDelegation(t *testing.T) {
-	check := newDefaultCheckError(t, false)
+	check := newDefaultCheckError(t, true)
 	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, partitions, daemons, nil, true, check.ErrorHandler())
 	n := nodes[partitions[1]][0]
