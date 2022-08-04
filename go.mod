@@ -47,20 +47,23 @@ require (
 )
 
 require (
+	github.com/FactomProject/factomd v1.13.0
 	github.com/ghodss/yaml v1.0.0
 	github.com/gorhill/cronexpr v0.0.0-20180427100037-88b0669f7d75
 )
 
 require (
-	github.com/FactomProject/btcutil v0.0.0-20160826074221-43986820ccd5 // indirect
+	github.com/FactomProject/btcutil v0.0.0-20200312214114-5fd3eaf71bd2 // indirect
 	github.com/FactomProject/ed25519 v0.0.0-20150814230546-38002c4fe7b6 // indirect
-	github.com/FactomProject/go-bip32 v0.3.5 // indirect
-	github.com/FactomProject/go-bip39 v0.3.5 // indirect
+	github.com/FactomProject/go-bip32 v0.3.6-0.20161206200006-3b593af1c415 // indirect
+	github.com/FactomProject/go-bip39 v0.3.6-0.20161217174232-d1007fb78d9a // indirect
 	github.com/FactomProject/go-bip44 v0.0.0-20190306062959-b541a96d8da9 // indirect
 	github.com/FactomProject/go-simplejson v0.5.0 // indirect
+	github.com/FactomProject/goleveldb v0.2.2-0.20170418171130-e7800c6976c5 // indirect
 	github.com/FactomProject/netki-go-partner-client v0.0.0-20160324224126-426acb535e66 // indirect
 	github.com/GaijinEntertainment/go-exhaustruct/v2 v2.2.0 // indirect
 	github.com/alingse/asasalint v0.0.11 // indirect
+	github.com/btcsuitereleases/btcutil v0.0.0-20150612230727-f2b1058a8255 // indirect
 	github.com/creachadair/taskgroup v0.3.2 // indirect
 	github.com/firefart/nonamedreturns v1.0.4 // indirect
 	github.com/lufeee/execinquery v1.2.1 // indirect
