@@ -152,8 +152,7 @@ AuthorizationRequired:
     - name: Key
       type: bytes
     - name: Version
-      type: Version
-      marshal-as: reference
+      type: string
 
 
 GeneralResponse:
@@ -179,8 +178,26 @@ KeyList:
       marshal-as: enum
 
 KeyListResponse:
+  non-binary: true
   fields:
     - name: KeyList
       type: KeyList
       repeatable: true
       marshal-as: reference
+
+ResolveKeyRequest:
+  non-binary: true
+  fields:
+    - name: KeyLabel
+      type: string
+      optional: true
+    - name: KeyHash
+      type: bytes
+      optional: true
+
+ResolveKeyResponse:
+  non-binary: true
+  fields:
+    - name: PublicKey
+      type: bytes
+      

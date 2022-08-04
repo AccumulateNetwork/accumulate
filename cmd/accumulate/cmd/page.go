@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
 	"strconv"
 
 	"github.com/spf13/cobra"
@@ -170,7 +171,7 @@ func CreateKeyPage(bookUrlStr string, args []string) (string, error) {
 	for i := range keyLabels {
 		ksp := protocol.KeySpecParams{}
 
-		k, err := LookupByLabel(keyLabels[i])
+		k, err := walletd.LookupByLabel(keyLabels[i])
 
 		if err != nil {
 			//now check to see if it is a valid key hex, if so we can assume that is the public key.

@@ -11,14 +11,14 @@ Sign:
   output: api.SignResponse|api.AuthorizationRequired
 
 Encode:
-  description: binary marshal a json transaction body and return encoded hex
-  rpc: encode-transaction
+  description: binary marshal a json transaction or account and return encoded hex
+  rpc: encode
   input: api.EncodeRequest
   output: api.EncodeAccountResponse|api.EncodeTransactionResponse|api.EncodeTransactionHeaderResponse|api.EncodeTransactionBodyResponse
 
 Decode:
-  description: unmarshal a binary transaction body and return the json transaction body
-  rpc: decode-transaction
+  description: unmarshal a binary transaction or account and return the json transaction body
+  rpc: decode
   input: api.DecodeRequest
   output: api.DecodeResponse
 
@@ -27,6 +27,12 @@ KeyList:
   rpc: key-list
   input: api.KeyListRequest
   output: api.KeyListResponse|api.AuthorizationRequired
+
+ResolveKey:
+  description: returns a public key from either a label or keyhash
+  rpc: resolve-key
+  input: api.ResolveKeyRequest|api.GeneralResponse
+  output: api.ResolveKeyResponse
 
 CreateTransaction:
   description: create a transaction by name

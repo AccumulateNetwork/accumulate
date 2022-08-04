@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/db"
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
 )
 
@@ -58,7 +57,7 @@ var currentUser = func() *user.User {
 
 var DidError error
 
-func InitRootCmd(database db.DB) *cobra.Command {
+func InitRootCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "accumulate",
 		Short: "CLI for Accumulate Network",
@@ -154,7 +153,7 @@ func InitRootCmd(database db.DB) *cobra.Command {
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
-	rootCmd := InitRootCmd(nil)
+	rootCmd := InitRootCmd()
 	cobra.CheckErr(rootCmd.Execute())
 }
 

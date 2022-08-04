@@ -17,7 +17,7 @@ func (m *JrpcMethods) Version(_ context.Context, params json.RawMessage) interfa
 	return resp
 }
 
-func (m *JrpcMethods) DecodeTransaction(_ context.Context, params json.RawMessage) interface{} {
+func (m *JrpcMethods) Decode(_ context.Context, params json.RawMessage) interface{} {
 	req := api.DecodeRequest{}
 	err := json.Unmarshal(params, &req)
 	if err != nil {
@@ -145,7 +145,22 @@ func (m *JrpcMethods) Sign(_ context.Context, params json.RawMessage) interface{
 	return resp
 }
 
-func (m *JrpcMethods) KeyList(_ context.Context, _ json.RawMessage) interface{} {
+func (m *JrpcMethods) CreateEnvelope(_ context.Context, params json.RawMessage) interface{} {
 	resp := api.KeyListResponse{}
+	return resp
+}
+
+func (m *JrpcMethods) CreateTransaction(_ context.Context, params json.RawMessage) interface{} {
+	resp := api.KeyListResponse{}
+	return resp
+}
+
+func (m *JrpcMethods) KeyList(_ context.Context, params json.RawMessage) interface{} {
+	resp := api.KeyListResponse{}
+	return resp
+}
+
+func (m *JrpcMethods) ResolveKey(_ context.Context, params json.RawMessage) interface{} {
+	resp := api.ResolveKeyResponse{}
 	return resp
 }

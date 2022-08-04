@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
 	"strconv"
 
 	"github.com/spf13/cobra"
@@ -39,7 +40,7 @@ var adiListCmd = &cobra.Command{
 	Short: "Get existing ADI by URL",
 	Args:  cobra.NoArgs,
 	Run: func(cmd *cobra.Command, _ []string) {
-		out, err := ListADIs()
+		out, err := walletd.ListADIs()
 		printOutput(cmd, out, err)
 	},
 }
@@ -186,7 +187,7 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 
 	//todo: turn around and query the ADI and store the results.
 	if k != nil {
-		err = GetWallet().Put(BucketAdi, []byte(adiUrl.Authority), k.PublicKey)
+		err = walletd.GetWallet().Put(walletd.BucketAdi, []byte(adiUrl.Authority), k.PublicKey)
 		if err != nil {
 			return "", fmt.Errorf("DB: %v", err)
 		}
@@ -204,27 +205,4 @@ func NewADI(origin string, params []string) (string, error) {
 	}
 
 	return NewADIFromADISigner(u, params[:])
-}
-
-func ListADIs() (string, error) {
-	b, err := GetWallet().GetBucket(BucketAdi)
-	if err != nil {
-		return "", err
-	}
-
-	var out string
-	for _, v := range b.KeyValueList {
-		u, err := url2.Parse(string(v.Key))
-		if err != nil {
-			out += fmt.Sprintf("%s\t:\t%x \n", v.Key, v.Value)
-		} else {
-			lab, err := FindLabelFromPubKey(v.Value)
-			if err != nil {
-				out += fmt.Sprintf("%v\t:\t%x \n", u, v.Value)
-			} else {
-				out += fmt.Sprintf("%v\t:\t%s\n", u, lab)
-			}
-		}
-	}
-	return out, nil
 }

@@ -375,7 +375,7 @@ func GenerateAccount(_ *cobra.Command, args []string) (string, error) {
 }
 
 func ListAccounts() (string, error) {
-	b, err := GetWallet().GetBucket(BucketLite)
+	b, err := walletd.GetWallet().GetBucket(walletd.BucketLite)
 	if err != nil {
 		//no accounts so nothing to do...
 		return "", fmt.Errorf("no lite accounts have been generated")

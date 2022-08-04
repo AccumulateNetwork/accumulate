@@ -51,8 +51,8 @@ func initRunFlags(cmd *cobra.Command, forService bool) {
 
 func runWalletd(cmd *cobra.Command, _ []string) (string, error) {
 	//this will be reworked when wallet database accessed via GetWallet() is moved to the backend.
-	prog, err := walletd.NewProgram(cmd, &walletd.ServiceOptions{WorkDir: DatabaseDir,
-		LogFilename: flagRunWalletd.LogFile, JsonLogFilename: flagRunWalletd.JsonLogFile}, flagRunWalletd.ListenAddress, GetWallet())
+	prog, err := walletd.NewProgram(cmd, &walletd.ServiceOptions{WorkDir: walletd.DatabaseDir,
+		LogFilename: flagRunWalletd.LogFile, JsonLogFilename: flagRunWalletd.JsonLogFile}, flagRunWalletd.ListenAddress)
 	if err != nil {
 		return "", err
 	}

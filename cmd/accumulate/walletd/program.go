@@ -3,7 +3,6 @@ package walletd
 import (
 	"github.com/kardianos/service"
 	"github.com/spf13/cobra"
-	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/db"
 	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
 	"time"
 )
@@ -20,11 +19,11 @@ type Program struct {
 	primary        *JrpcMethods
 }
 
-func NewProgram(cmd *cobra.Command, options *ServiceOptions, listenAddress string, db db.DB) (p *Program, err error) {
+func NewProgram(cmd *cobra.Command, options *ServiceOptions, listenAddress string) (p *Program, err error) {
 	p = new(Program)
 	p.cmd = cmd
 	p.serviceOptions = *options
-	p.primary, err = NewJrpc(Options{nil, time.Second, listenAddress, db})
+	p.primary, err = NewJrpc(Options{nil, time.Second, listenAddress, GetWallet()})
 	return p, err
 }
 

@@ -39,8 +39,8 @@ type AddTransactionToEnvelopeRequest struct {
 
 type AuthorizationRequired struct {
 	fieldsSet []bool
-	Key       []byte  `json:"key,omitempty" form:"key" query:"key" validate:"required"`
-	Version   Version `json:"version,omitempty" form:"version" query:"version" validate:"required"`
+	Key       []byte `json:"key,omitempty" form:"key" query:"key" validate:"required"`
+	Version   string `json:"version,omitempty" form:"version" query:"version" validate:"required"`
 	extraData []byte
 }
 
@@ -107,14 +107,21 @@ type KeyList struct {
 }
 
 type KeyListResponse struct {
-	fieldsSet []bool
-	KeyList   []KeyList `json:"keyList,omitempty" form:"keyList" query:"keyList" validate:"required"`
-	extraData []byte
+	KeyList []KeyList `json:"keyList,omitempty" form:"keyList" query:"keyList" validate:"required"`
 }
 
 type ProveReceiptRequest struct {
 	DataJson    string `json:"dataJson,omitempty" form:"dataJson" query:"dataJson" validate:"required"`
 	ReceiptJson string `json:"receiptJson,omitempty" form:"receiptJson" query:"receiptJson" validate:"required"`
+}
+
+type ResolveKeyRequest struct {
+	KeyLabel string `json:"keyLabel,omitempty" form:"keyLabel" query:"keyLabel"`
+	KeyHash  []byte `json:"keyHash,omitempty" form:"keyHash" query:"keyHash"`
+}
+
+type ResolveKeyResponse struct {
+	PublicKey []byte `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
 }
 
 type SignRequest struct {
@@ -183,7 +190,7 @@ func (v *AuthorizationRequired) Copy() *AuthorizationRequired {
 	u := new(AuthorizationRequired)
 
 	u.Key = encoding.BytesCopy(v.Key)
-	u.Version = *(&v.Version).Copy()
+	u.Version = v.Version
 
 	return u
 }
@@ -360,6 +367,27 @@ func (v *ProveReceiptRequest) Copy() *ProveReceiptRequest {
 
 func (v *ProveReceiptRequest) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *ResolveKeyRequest) Copy() *ResolveKeyRequest {
+	u := new(ResolveKeyRequest)
+
+	u.KeyLabel = v.KeyLabel
+	u.KeyHash = encoding.BytesCopy(v.KeyHash)
+
+	return u
+}
+
+func (v *ResolveKeyRequest) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *ResolveKeyResponse) Copy() *ResolveKeyResponse {
+	u := new(ResolveKeyResponse)
+
+	u.PublicKey = encoding.BytesCopy(v.PublicKey)
+
+	return u
+}
+
+func (v *ResolveKeyResponse) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *SignRequest) Copy() *SignRequest {
 	u := new(SignRequest)
 
@@ -444,7 +472,7 @@ func (v *AuthorizationRequired) Equal(u *AuthorizationRequired) bool {
 	if !(bytes.Equal(v.Key, u.Key)) {
 		return false
 	}
-	if !((&v.Version).Equal(&u.Version)) {
+	if !(v.Version == u.Version) {
 		return false
 	}
 
@@ -605,6 +633,25 @@ func (v *ProveReceiptRequest) Equal(u *ProveReceiptRequest) bool {
 	return true
 }
 
+func (v *ResolveKeyRequest) Equal(u *ResolveKeyRequest) bool {
+	if !(v.KeyLabel == u.KeyLabel) {
+		return false
+	}
+	if !(bytes.Equal(v.KeyHash, u.KeyHash)) {
+		return false
+	}
+
+	return true
+}
+
+func (v *ResolveKeyResponse) Equal(u *ResolveKeyResponse) bool {
+	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
+		return false
+	}
+
+	return true
+}
+
 func (v *SignRequest) Equal(u *SignRequest) bool {
 	if !(v.Name == u.Name) {
 		return false
@@ -650,8 +697,8 @@ func (v *AuthorizationRequired) MarshalBinary() ([]byte, error) {
 	if !(len(v.Key) == 0) {
 		writer.WriteBytes(1, v.Key)
 	}
-	if !((v.Version).Equal(new(Version))) {
-		writer.WriteValue(2, v.Version.MarshalBinary)
+	if !(len(v.Version) == 0) {
+		writer.WriteString(2, v.Version)
 	}
 
 	_, _, err := writer.Reset(fieldNames_AuthorizationRequired)
@@ -672,49 +719,8 @@ func (v *AuthorizationRequired) IsValid() error {
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Version is missing")
-	} else if (v.Version).Equal(new(Version)) {
+	} else if len(v.Version) == 0 {
 		errs = append(errs, "field Version is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
-var fieldNames_KeyListResponse = []string{
-	1: "KeyList",
-}
-
-func (v *KeyListResponse) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	if !(len(v.KeyList) == 0) {
-		for _, v := range v.KeyList {
-			writer.WriteValue(1, v.MarshalBinary)
-		}
-	}
-
-	_, _, err := writer.Reset(fieldNames_KeyListResponse)
-	if err != nil {
-		return nil, encoding.Error{E: err}
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
-}
-
-func (v *KeyListResponse) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field KeyList is missing")
-	} else if len(v.KeyList) == 0 {
-		errs = append(errs, "field KeyList is not set")
 	}
 
 	switch len(errs) {
@@ -785,38 +791,11 @@ func (v *AuthorizationRequired) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBytes(1); ok {
 		v.Key = x
 	}
-	if x := new(Version); reader.ReadValue(2, x.UnmarshalBinary) {
-		v.Version = *x
+	if x, ok := reader.ReadString(2); ok {
+		v.Version = x
 	}
 
 	seen, err := reader.Reset(fieldNames_AuthorizationRequired)
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	return nil
-}
-
-func (v *KeyListResponse) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *KeyListResponse) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	for {
-		if x := new(KeyList); reader.ReadValue(1, x.UnmarshalBinary) {
-			v.KeyList = append(v.KeyList, *x)
-		} else {
-			break
-		}
-	}
-
-	seen, err := reader.Reset(fieldNames_KeyListResponse)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -857,7 +836,7 @@ func (v *VersionResponse) UnmarshalBinaryFrom(rd io.Reader) error {
 func (v *AuthorizationRequired) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Key     *string `json:"key,omitempty"`
-		Version Version `json:"version,omitempty"`
+		Version string  `json:"version,omitempty"`
 	}{}
 	u.Key = encoding.BytesToJSON(v.Key)
 	u.Version = v.Version
@@ -926,6 +905,24 @@ func (v *KeyListResponse) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *ResolveKeyRequest) MarshalJSON() ([]byte, error) {
+	u := struct {
+		KeyLabel string  `json:"keyLabel,omitempty"`
+		KeyHash  *string `json:"keyHash,omitempty"`
+	}{}
+	u.KeyLabel = v.KeyLabel
+	u.KeyHash = encoding.BytesToJSON(v.KeyHash)
+	return json.Marshal(&u)
+}
+
+func (v *ResolveKeyResponse) MarshalJSON() ([]byte, error) {
+	u := struct {
+		PublicKey *string `json:"publicKey,omitempty"`
+	}{}
+	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	return json.Marshal(&u)
+}
+
 func (v *SignResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Signature *string `json:"signature,omitempty"`
@@ -939,7 +936,7 @@ func (v *SignResponse) MarshalJSON() ([]byte, error) {
 func (v *AuthorizationRequired) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Key     *string `json:"key,omitempty"`
-		Version Version `json:"version,omitempty"`
+		Version string  `json:"version,omitempty"`
 	}{}
 	u.Key = encoding.BytesToJSON(v.Key)
 	u.Version = v.Version
@@ -1073,6 +1070,41 @@ func (v *KeyListResponse) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	v.KeyList = u.KeyList
+	return nil
+}
+
+func (v *ResolveKeyRequest) UnmarshalJSON(data []byte) error {
+	u := struct {
+		KeyLabel string  `json:"keyLabel,omitempty"`
+		KeyHash  *string `json:"keyHash,omitempty"`
+	}{}
+	u.KeyLabel = v.KeyLabel
+	u.KeyHash = encoding.BytesToJSON(v.KeyHash)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.KeyLabel = u.KeyLabel
+	if x, err := encoding.BytesFromJSON(u.KeyHash); err != nil {
+		return fmt.Errorf("error decoding KeyHash: %w", err)
+	} else {
+		v.KeyHash = x
+	}
+	return nil
+}
+
+func (v *ResolveKeyResponse) UnmarshalJSON(data []byte) error {
+	u := struct {
+		PublicKey *string `json:"publicKey,omitempty"`
+	}{}
+	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if x, err := encoding.BytesFromJSON(u.PublicKey); err != nil {
+		return fmt.Errorf("error decoding PublicKey: %w", err)
+	} else {
+		v.PublicKey = x
+	}
 	return nil
 }
 

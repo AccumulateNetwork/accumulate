@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
 	"reflect"
 	"strings"
 	"text/tabwriter"
@@ -434,7 +435,7 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		fmt.Fprintf(tw, "Index\tNonce\tKey Name\tDelegate\tPublic Key Hash\n")
 		for i, k := range ss.Keys {
 			var keyName string
-			name, err := FindLabelFromPublicKeyHash(k.PublicKeyHash)
+			name, err := walletd.FindLabelFromPublicKeyHash(k.PublicKeyHash)
 			if err == nil {
 				keyName = name
 			} else {
@@ -597,7 +598,7 @@ func outputForHumansTx(res *api.TransactionQueryResponse) (string, error) {
 		out += fmt.Sprintf("ADI URL \t\t:\t%s\n", id.Url)
 		out += fmt.Sprintf("Key Book URL\t\t:\t%s\n", id.KeyBookUrl)
 
-		keyName, err := FindLabelFromPublicKeyHash(id.KeyHash)
+		keyName, err := walletd.FindLabelFromPublicKeyHash(id.KeyHash)
 		if err != nil {
 			out += fmt.Sprintf("Public Key \t:\t%x\n", id.KeyHash)
 		} else {

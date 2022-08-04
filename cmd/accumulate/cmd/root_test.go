@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
 	"io"
 	"reflect"
 	"runtime"
@@ -139,7 +140,8 @@ func NewTestBVNN(t *testing.T) (string, crypto.PrivKey) {
 func (c *testCmd) initalize(t *testing.T) {
 	t.Helper()
 
-	c.rootCmd = InitRootCmd(initDB(t.TempDir(), true))
+	walletd.InitTestDB(t)
+	c.rootCmd = InitRootCmd()
 	c.rootCmd.PersistentPostRun = nil
 
 	c.jsonRpcAddr, c.privKey = NewTestBVNN(t)
@@ -170,8 +172,9 @@ func executeCmd(cmd *cobra.Command, args []string, input string) (string, error)
 	TxNoWait = false
 	TxWaitSynth = 0
 	TxIgnorePending = false
-	UseUnencryptedWallet = true
 	flagAccount.Lite = false
+
+	walletd.UseUnencryptedWallet = true
 
 	e := bytes.NewBufferString("")
 	b := bytes.NewBufferString("")
