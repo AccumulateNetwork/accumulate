@@ -18,6 +18,7 @@ import (
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/db"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -280,7 +281,7 @@ func CreateLiteTokenAccount(principal *url2.URL, signers []*signing.Builder, arg
 	if len(signers) == 0 {
 		return "", fmt.Errorf("an additional signer must be specified by --sign-with")
 	}
-	signers[0].SetTimestamp(nonceFromTimeNow())
+	signers[0].SetTimestampToNow()
 
 	key, tok, err := protocol.ParseLiteTokenAddress(principal)
 	if err != nil {
@@ -399,34 +400,20 @@ func ListAccounts() (string, error) {
 		out += "{\"liteAccounts\":["
 	}
 	for i, v := range b.KeyValueList {
-		pubKey, err := GetWallet().Get(BucketLabel, v.Value)
-		if err != nil {
-			return "", err
-		}
-
-		st, err := GetWallet().Get(BucketSigType, pubKey)
-		if err != nil {
-			return "", err
-		}
-		s, _ := common.BytesUint64(st)
-		var sigType protocol.SignatureType
-		if !sigType.SetEnumValue(s) {
-			return "", fmt.Errorf("invalid signature type")
-		}
-
 		k := new(Key)
-		err = k.LoadByPublicKey(pubKey)
+		err = k.LoadByLabel(string(v.Value))
 		if err != nil {
 			return "", err
 		}
+
 		lt, err := protocol.LiteTokenAddressFromHash(k.PublicKeyHash(), protocol.ACME)
 		if err != nil {
 			return "", err
 		}
 		kr := KeyResponse{}
 		kr.LiteAccount = lt
-		kr.KeyType = sigType
-		kr.PublicKey = pubKey
+		kr.KeyInfo = k.KeyInfo
+		kr.PublicKey = k.PublicKey
 		*kr.Label.AsString() = string(v.Value)
 		if WantJsonOutput {
 			if i > 0 {
@@ -438,7 +425,7 @@ func ListAccounts() (string, error) {
 			}
 			out += string(d)
 		} else {
-			out += fmt.Sprintf("\n\tkey name\t:\t%s\n\tlite account\t:\t%s\n\tpublic key\t:\t%x\n\tkey type\t:\t%s\n", v.Value, kr.LiteAccount, pubKey, sigType)
+			out += fmt.Sprintf("\n\tkey name\t:\t%s\n\tlite account\t:\t%s\n\tpublic key\t:\t%x\n\tkey type\t:\t%s\n\tderivation\t:\t%s\n", v.Value, kr.LiteAccount, k.PublicKey, k.KeyInfo.Type, k.KeyInfo.Derivation)
 		}
 	}
 	if WantJsonOutput {
@@ -556,25 +543,74 @@ func RestoreAccounts() (out string, err error) {
 	}
 	for _, v := range labelz.KeyValueList {
 		k := new(Key)
-		err = k.LoadByPublicKey(v.Value)
+
+		var err error
+		k.PrivateKey, err = GetWallet().Get(BucketKeys, v.Value)
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("private key not found for %x", v.Value)
 		}
-		liteAccount, err := protocol.LiteTokenAddressFromHash(k.PublicKeyHash(), protocol.ACME)
-		if err != nil {
-			return "", err
-		}
+
+		k.PublicKey = v.Value
 
 		//check to see if the key type has been assigned, if not set it to the ed25519Legacy...
-		_, err = GetWallet().Get(BucketSigType, v.Value)
+		sigTypeData, err := GetWallet().Get(BucketSigTypeDeprecated, v.Value)
 		if err != nil {
-			//add the default key type
-			out += fmt.Sprintf("assigning default key type %s for key name %v\n", k.Type, string(v.Key))
+			//if it doesn't exist then 1) we are already using BucketKeyInfo, so we're golden, or 2)
+			//we are an old wallet that supports only LegacyED25519 signature types
 
-			err = GetWallet().Put(BucketSigType, v.Value, common.Uint64Bytes(k.Type.GetEnumValue()))
+			//first, test for 1)
+			kid, err := GetWallet().Get(BucketKeyInfo, v.Value)
+			if err != nil {
+				//ok, so it is 2), wo we need to make the key info bucket
+				k.KeyInfo.Type = protocol.SignatureTypeLegacyED25519
+				k.KeyInfo.Derivation = "external"
+
+				//add the default key type
+				out += fmt.Sprintf("assigning default key type %s for key name %v\n", k.KeyInfo.Type, string(v.Key))
+				kiData, err := k.KeyInfo.MarshalBinary()
+				if err != nil {
+					return "", err
+				}
+
+				err = GetWallet().Put(BucketKeyInfo, v.Value, kiData)
+				if err != nil {
+					return "", err
+				}
+			} else {
+				//we have key info, so assign it to key's key info
+				err = k.KeyInfo.UnmarshalBinary(kid)
+				if err != nil {
+					return "", err
+				}
+			}
+		} else {
+			//we have some old data in the bucket, so move it to the new bucket.
+			common.BytesUint64(sigTypeData)
+			kt, err := encoding.UvarintUnmarshalBinary(sigTypeData)
 			if err != nil {
 				return "", err
 			}
+
+			k.KeyInfo.Type.SetEnumValue(kt)
+			k.KeyInfo.Derivation = "external"
+
+			//add the default key type
+			out += fmt.Sprintf("assigning default key type %s for key name %v\n", k.KeyInfo.Type, string(v.Key))
+
+			kiData, err := k.KeyInfo.MarshalBinary()
+			if err != nil {
+				return "", err
+			}
+
+			err = GetWallet().Put(BucketKeyInfo, v.Value, kiData)
+			if err != nil {
+				return "", err
+			}
+		}
+
+		liteAccount, err := protocol.LiteTokenAddressFromHash(k.PublicKeyHash(), protocol.ACME)
+		if err != nil {
+			return "", err
 		}
 
 		liteLabel, _ := LabelForLiteTokenAccount(liteAccount.String())
@@ -588,6 +624,14 @@ func RestoreAccounts() (out string, err error) {
 		err = GetWallet().Put(BucketLite, []byte(liteLabel), v.Key)
 		if err != nil {
 			return "", err
+		}
+	}
+
+	_, err = GetWallet().GetBucket(BucketSigTypeDeprecated)
+	if err == nil {
+		err = GetWallet().DeleteBucket(BucketSigTypeDeprecated)
+		if err != nil {
+			return "", fmt.Errorf("error removing %s, %v", BucketSigTypeDeprecated, err)
 		}
 	}
 

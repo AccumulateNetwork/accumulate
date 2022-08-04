@@ -75,7 +75,7 @@ func SetPrivateKeyAndOrigin(privateKey string) error {
 		priv = pvkey.PrivKey.Bytes()
 	}
 
-	key = &cmd.Key{PrivateKey: priv, PublicKey: pub, Type: protocol.SignatureTypeED25519}
+	key = &cmd.Key{PrivateKey: priv, PublicKey: pub, KeyInfo: cmd.KeyInfo{Type: protocol.SignatureTypeED25519}}
 	url, err := protocol.LiteTokenAddress(key.PublicKey, protocol.ACME, protocol.SignatureTypeED25519)
 	if err != nil {
 		log.Fatalf("cannot create lite token account %v", err)
@@ -127,9 +127,9 @@ func GetAccountFromPrivateString(hexString string) *url.URL {
 	if err == nil && len(privKey) == 64 {
 		key.PrivateKey = privKey
 		key.PublicKey = privKey[32:]
-		key.Type = protocol.SignatureTypeED25519
+		key.KeyInfo.Type = protocol.SignatureTypeED25519
 	}
-	return protocol.LiteAuthorityForKey(key.PublicKey, key.Type)
+	return protocol.LiteAuthorityForKey(key.PublicKey, key.KeyInfo.Type)
 }
 
 func ConvertFactomDataEntryToLiteDataEntry(entry f2.Entry) *protocol.FactomDataEntry {
@@ -150,8 +150,8 @@ func FaucetWithCredits() error {
 	// Generate a key
 	h := storage.MakeKey("factom-genesis")
 	liteKey := ed25519.NewKeyFromSeed(h[:])
-	key = &cmd.Key{PublicKey: liteKey[32:], PrivateKey: liteKey, Type: protocol.SignatureTypeED25519}
-	lite, err := protocol.LiteTokenAddress(key.PublicKey, protocol.ACME, key.Type)
+	key = &cmd.Key{PublicKey: liteKey[32:], PrivateKey: liteKey, KeyInfo: cmd.KeyInfo{Type: protocol.SignatureTypeED25519}}
+	lite, err := protocol.LiteTokenAddress(key.PublicKey, protocol.ACME, key.KeyInfo.Type)
 	if err != nil {
 		return err
 	}
