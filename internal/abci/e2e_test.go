@@ -13,6 +13,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	abci "github.com/tendermint/tendermint/abci/types"
 	types2 "github.com/tendermint/tendermint/abci/types"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
@@ -1741,7 +1742,7 @@ func TestAccountAuth(t *testing.T) {
 }
 
 func TestMultiLevelDelegation(t *testing.T) {
-	check := newDefaultCheckError(t, true)
+	check := newDefaultCheckError(t, false)
 	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, partitions, daemons, nil, true, check.ErrorHandler())
 	n := nodes[partitions[1]][0]
@@ -1755,13 +1756,12 @@ func TestMultiLevelDelegation(t *testing.T) {
 		kp.AddKeySpec(&protocol.KeySpec{Delegate: protocol.AccountUrl("bob", "book0")})
 		kp.AddKeySpec(&protocol.KeySpec{Delegate: protocol.AccountUrl("charlie", "book0")})
 		kp.AddKeySpec(&protocol.KeySpec{PublicKeyHash: charliekeyHash[:]})
-		require.NoError(t, kp.SetThreshold(2))
+		require.NoError(t, kp.SetThreshold(3))
 	}))
 	require.NoError(t, acctesting.UpdateKeyPage(batch, protocol.AccountUrl("bob", "book0", "1"), func(kp *protocol.KeyPage) {
 		kp.AddKeySpec(&protocol.KeySpec{Delegate: protocol.AccountUrl("charlie", "book0")})
 	}))
 	require.NoError(t, batch.Commit())
-	fmt.Println(n.GetADI("acc://alice.acme"))
 
 	_, _, err := n.Execute(func(send func(*protocol.Envelope)) {
 		cda := new(protocol.CreateDataAccount)
@@ -1783,17 +1783,22 @@ func TestMultiLevelDelegation(t *testing.T) {
 		// Take Charlie's signature, extract the key signature, and reconstruct
 		// it as via Bob via Alice (two-layer delegation)
 		sig := env.Signatures[1].(*protocol.DelegatedSignature).Signature
-		fmt.Println(sig)
 		sig = &protocol.DelegatedSignature{Delegator: protocol.AccountUrl("bob", "book0", "1"), Signature: sig}
-		fmt.Println(sig)
 		sig = &protocol.DelegatedSignature{Delegator: protocol.AccountUrl("alice", "book0", "1"), Signature: sig}
-		fmt.Println(sig)
 		env.Signatures = append(env.Signatures, sig)
 
 		send(env)
 	})
 	require.Error(t, err)
 
+	var resp *abci.ResponseCheckTx
+	require.NoError(t, json.Unmarshal([]byte(err.Error()), &resp), "Expected error to be a CheckTx response")
+
+	result := new(protocol.TransactionResultSet)
+	require.NoError(t, result.UnmarshalBinary(resp.Data))
+	require.Len(t, result.Results, 1)
+	require.NotNil(t, result.Results[0].Error)
+	require.EqualError(t, result.Results[0].Error, "signature 2: invalid signature")
 }
 
 func TestNetworkDefinition(t *testing.T) {
