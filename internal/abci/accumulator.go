@@ -29,7 +29,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	_ "gitlab.com/accumulatenetwork/accumulate/smt/pmt"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
 // Accumulator is an ABCI application that accumulates validated transactions in
@@ -227,46 +226,12 @@ func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
 //
 // Exposed as Tendermint RPC /abci_query.
 func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.ResponseQuery) {
-	defer app.recover(&resQuery.Code, false)
-
-	if app.didPanic {
-		return abci.ResponseQuery{
-			Code: uint32(protocol.ErrorCodeDidPanic),
-			Info: "Node state is invalid",
-		}
+	switch reqQuery.Path {
+	case "/up":
+		return abci.ResponseQuery{Code: uint32(protocol.ErrorCodeOK), Info: "Up"}
 	}
 
-	resQuery.Key = reqQuery.Data
-	qu, err := query.UnmarshalRequest(reqQuery.Data)
-	if err != nil {
-		// sentry.CaptureException(err)
-		app.logger.Debug("Query failed", "error", err)
-		resQuery.Info = "request is not an Accumulate Query"
-		resQuery.Code = uint32(protocol.ErrorCodeEncodingError)
-		return resQuery
-	}
-
-	batch := app.DB.Begin(false)
-	defer batch.Discard()
-
-	k, v, err := app.Executor.Query(batch, qu, reqQuery.Height, reqQuery.Prove)
-	if err != nil {
-		b, _ := errors.Wrap(errors.StatusUnknownError, err).(*errors.Error).MarshalJSON()
-		resQuery.Info = string(b)
-		resQuery.Code = uint32(protocol.ErrorCodeFailed)
-		return resQuery
-	}
-
-	//if we get here, we have a valid state object, so let's return it.
-	resQuery.Code = uint32(protocol.ErrorCodeOK)
-	//return a generic state object for the chain and let the query deal with decoding it
-	resQuery.Key, resQuery.Value = k, v
-
-	///implement lazy sync calls. If a node falls behind it needs to have several query calls
-	///1 get current height
-	///2 get block data for height X
-	///3 get block data for given hash
-	return
+	return abci.ResponseQuery{Code: uint32(protocol.ErrorCodeFailed)}
 }
 
 // InitChain implements github.com/tendermint/tendermint/abci/types.Application.
