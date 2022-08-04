@@ -1,6 +1,8 @@
 package main
 
 import (
+	"gitlab.com/accumulatenetwork/accumulate/internal/testing"
+	"net/http"
 	"time"
 
 	"github.com/kardianos/service"
@@ -23,6 +25,8 @@ var cmdRunDual = &cobra.Command{
 var flagRunDual = struct {
 	Truncate         bool
 	EnableTimingLogs bool
+	PprofListen      string
+	Debug            bool
 
 	CiStopAfter time.Duration
 }{}
@@ -36,9 +40,21 @@ func init() {
 	cmdRunDual.Flags().DurationVar(&flagRunDual.CiStopAfter, "ci-stop-after", 0, "FOR CI ONLY - stop the node after some time")
 	cmdRunDual.Flag("ci-stop-after").Hidden = true
 
+	cmdRunDual.PersistentFlags().StringVar(&flagRunDual.PprofListen, "pprof", "", "Address to run net/http/pprof on")
+	cmdRunDual.PersistentFlags().BoolVar(&flagRunDual.Debug, "debug", false, "Enable debugging features")
+
 	cmdRunDual.PersistentPreRun = func(*cobra.Command, []string) {
 		badger.TruncateBadger = flagRunDual.Truncate
+
+		if flagRunDual.PprofListen != "" {
+			go func() { check(http.ListenAndServe(flagRunDual.PprofListen, nil)) }()
+		}
+
+		if flagRunDual.Debug {
+			testing.EnableDebugFeatures()
+		}
 	}
+
 }
 
 func runDualNode(cmd *cobra.Command, args []string) (string, error) {
