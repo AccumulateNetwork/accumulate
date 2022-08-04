@@ -116,9 +116,6 @@ func (h *snapshotHeader) ReadFrom(rd io.Reader) (int64, error) {
 
 // SaveSnapshot writes the full state of the partition out to a file.
 func (b *Batch) SaveSnapshot(file io.WriteSeeker, network *config.Describe) error {
-	/*synthetic := object("Account", network.Synthetic())
-	partition := network.NodeUrl()*/
-
 	// Write the header
 	var ledger *protocol.SystemLedger
 	err := b.Account(network.Ledger()).GetStateAs(&ledger)
@@ -142,6 +139,9 @@ func (b *Batch) SaveSnapshot(file io.WriteSeeker, network *config.Describe) erro
 	if err != nil {
 		return errors.Format(errors.StatusUnknownError, "create section writer: %w", err)
 	}
+
+	// This must match how the model constructs the key
+	anchorLedgerKey := storage.MakeKey("Account", network.AnchorPool())
 
 	// Save the snapshot
 	return bpt.Bpt.SaveSnapshot(wr, func(key storage.Key, hash [32]byte) ([]byte, error) {
@@ -175,14 +175,18 @@ func (b *Batch) SaveSnapshot(file io.WriteSeeker, network *config.Describe) erro
 			return state.MarshalBinary()
 		}*/
 
-		txns, err := account.MainChain().stateOfTransactionsOnChain()
-		if err != nil {
-			return nil, err
+		// Load transactions and signatures
+		state.Transactions = append(state.Transactions, loadState(&err, false, account.MainChain().stateOfTransactionsOnChain)...)
+		state.Transactions = append(state.Transactions, loadState(&err, false, account.ScratchChain().stateOfTransactionsOnChain)...)
+		state.Signatures = append(state.Signatures, loadState(&err, false, account.SignatureChain().stateOfSignaturesOnChain)...)
+
+		// Load transactions for system chains
+		if key == anchorLedgerKey {
+			state.Transactions = append(state.Transactions, loadState(&err, false, account.AnchorSequenceChain().stateOfTransactionsOnChain)...)
 		}
 
-		state.Transactions = append(state.Transactions, txns...)
-
-		return state.MarshalBinary()
+		b := loadState(&err, false, state.MarshalBinary)
+		return b, err
 	})
 }
 
