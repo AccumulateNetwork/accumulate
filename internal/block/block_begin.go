@@ -12,13 +12,12 @@ import (
 	jrpc "github.com/tendermint/tendermint/rpc/jsonrpc/types"
 	tm "github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/block/shared"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
@@ -461,7 +460,7 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, bloc
 			signatures = append(signatures, dnReceipt)
 		}
 
-		keySig, err := x.signTransaction(batch, txn, status.DestinationNetwork)
+		keySig, err := shared.SignTransaction(&x.Describe, x.Key, batch, txn, status.DestinationNetwork)
 		if err != nil {
 			return errors.Wrap(errors.StatusUnknownError, err)
 		}
@@ -477,55 +476,9 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, bloc
 	return nil
 }
 
-func (x *Executor) signTransaction(batch *database.Batch, txn *protocol.Transaction, destination *url.URL) (protocol.Signature, error) {
-	var page *protocol.KeyPage
-	err := batch.Account(x.Describe.OperatorsPage()).GetStateAs(&page)
-	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "load operator key page: %w", err)
-	}
-
-	// Sign it
-	bld := new(signing.Builder).
-		SetType(protocol.SignatureTypeED25519).
-		SetPrivateKey(x.Key).
-		SetUrl(config.NetworkUrl{URL: destination}.OperatorsPage()).
-		SetVersion(1).
-		SetTimestamp(1)
-
-	keySig, err := bld.Sign(txn.GetHash())
-	if err != nil {
-		return nil, errors.Format(errors.StatusInternalError, "sign synthetic transaction: %w", err)
-	}
-
-	return keySig, nil
-}
-
-func (x *Executor) prepareBlockAnchor(batch *database.Batch, anchor protocol.TransactionBody, sequenceNumber uint64, destPartUrl *url.URL) (*protocol.Envelope, error) {
-	txn := new(protocol.Transaction)
-	txn.Header.Principal = destPartUrl.JoinPath(protocol.AnchorPool)
-	txn.Body = anchor
-
-	// Create a synthetic origin signature
-	initSig, err := new(signing.Builder).
-		SetUrl(x.Describe.NodeUrl()).
-		SetVersion(sequenceNumber).
-		InitiateSynthetic(txn, destPartUrl)
-	if err != nil {
-		return nil, errors.Wrap(errors.StatusInternalError, err)
-	}
-
-	// Create a key signature
-	keySig, err := x.signTransaction(batch, txn, initSig.DestinationNetwork)
-	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
-	}
-
-	return &protocol.Envelope{Transaction: []*protocol.Transaction{txn}, Signatures: []protocol.Signature{initSig, keySig}}, nil
-}
-
 func (x *Executor) sendBlockAnchor(batch *database.Batch, anchor protocol.AnchorBody, sequenceNumber uint64, destPart string) error {
 	destPartUrl := protocol.PartitionUrl(destPart)
-	env, err := x.prepareBlockAnchor(batch, anchor, sequenceNumber, destPartUrl)
+	env, err := shared.PrepareBlockAnchor(&x.Describe, x.Key, batch, anchor, sequenceNumber, destPartUrl)
 	if err != nil {
 		return errors.Wrap(errors.StatusInternalError, err)
 	}
