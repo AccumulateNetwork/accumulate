@@ -1,4 +1,4 @@
-package cmd
+package walletd
 
 import (
 	"crypto/ed25519"

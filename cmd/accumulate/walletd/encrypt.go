@@ -1,4 +1,4 @@
-package cmd
+package walletd
 
 import (
 	"bytes"
@@ -8,29 +8,8 @@ import (
 	"path/filepath"
 
 	"github.com/howeyc/gopass"
-	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/db"
 )
-
-var encryptCmd = &cobra.Command{
-	Use:   "encrypt",
-	Short: "encrypt the database",
-	Run: func(cmd *cobra.Command, args []string) {
-		var out string
-		var err error
-		if len(args) == 0 {
-			out, err = EncryptDatabase()
-		} else {
-			fmt.Println("Usage:")
-			PrintEncrypt()
-		}
-		printOutput(cmd, out, err)
-	},
-}
-
-func PrintEncrypt() {
-	fmt.Println("  accumulate encrypt 		Encrypt the database, will be prompted for password")
-}
 
 func copyBucket(dst db.DB, src db.DB, bucket []byte) error {
 	bucketData, err := src.GetBucket(bucket)

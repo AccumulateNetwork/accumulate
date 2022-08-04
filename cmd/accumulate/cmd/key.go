@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
 	"io/ioutil"
 	"strconv"
 	"strings"
@@ -195,13 +196,13 @@ var keyCmd = &cobra.Command{
 }
 
 type KeyResponse struct {
-	Label       types.String `json:"name,omitempty"`
-	PrivateKey  types.Bytes  `json:"privateKey,omitempty"`
-	PublicKey   types.Bytes  `json:"publicKey,omitempty"`
-	KeyInfo     KeyInfo      `json:"keyInfo,omitempty"`
-	LiteAccount *url.URL     `json:"liteAccount,omitempty"`
-	Seed        types.Bytes  `json:"seed,omitempty"`
-	Mnemonic    types.String `json:"mnemonic,omitempty"`
+	Label       types.String    `json:"name,omitempty"`
+	PrivateKey  types.Bytes     `json:"privateKey,omitempty"`
+	PublicKey   types.Bytes     `json:"publicKey,omitempty"`
+	KeyInfo     walletd.KeyInfo `json:"keyInfo,omitempty"`
+	LiteAccount *url.URL        `json:"liteAccount,omitempty"`
+	Seed        types.Bytes     `json:"seed,omitempty"`
+	Mnemonic    types.String    `json:"mnemonic,omitempty"`
 }
 
 func PrintKeyPublic() {
@@ -235,7 +236,7 @@ func PrintKey() {
 	PrintKeyExport()
 }
 
-func resolvePrivateKey(s string) (*Key, error) {
+func resolvePrivateKey(s string) (*walletd.Key, error) {
 	k, err := parseKey(s)
 	if err != nil {
 		return nil, err
@@ -248,14 +249,14 @@ func resolvePrivateKey(s string) (*Key, error) {
 	return LookupByPubKey(k.PublicKey)
 }
 
-func resolvePublicKey(s string) (*Key, error) {
+func resolvePublicKey(s string) (*walletd.Key, error) {
 	return parseKey(s)
 }
 
-func parseKey(s string) (*Key, error) {
+func parseKey(s string) (*walletd.Key, error) {
 	privKey, err := hex.DecodeString(s)
 	if err == nil && len(privKey) == 64 {
-		return &Key{PrivateKey: privKey, PublicKey: privKey[32:], KeyInfo: KeyInfo{Type: protocol.SignatureTypeED25519}}, nil
+		return &walletd.Key{PrivateKey: privKey, PublicKey: privKey[32:], KeyInfo: walletd.KeyInfo{Type: protocol.SignatureTypeED25519}}, nil
 	}
 
 	k, err := pubKeyFromString(s)
@@ -283,13 +284,13 @@ func parseKey(s string) (*Key, error) {
 			priv = pvkey.PrivKey.Bytes()
 		}
 		// TODO Check the key type
-		return &Key{PrivateKey: priv, PublicKey: pub, KeyInfo: KeyInfo{Type: protocol.SignatureTypeED25519}}, nil
+		return &walletd.Key{PrivateKey: priv, PublicKey: pub, KeyInfo: walletd.KeyInfo{Type: protocol.SignatureTypeED25519}}, nil
 	}
 
 	return nil, fmt.Errorf("cannot resolve signing key, invalid key specifier: %q is in an unsupported format", s)
 }
 
-func pubKeyFromString(s string) (*Key, error) {
+func pubKeyFromString(s string) (*walletd.Key, error) {
 	var pubKey types.Bytes32
 	if len(s) != 64 {
 		return nil, fmt.Errorf("invalid public key or wallet key name")
@@ -304,10 +305,10 @@ func pubKeyFromString(s string) (*Key, error) {
 		return nil, fmt.Errorf("invalid public key")
 	}
 
-	return &Key{PublicKey: pubKey[:], KeyInfo: KeyInfo{Type: protocol.SignatureTypeED25519}}, nil
+	return &walletd.Key{PublicKey: pubKey[:], KeyInfo: walletd.KeyInfo{Type: protocol.SignatureTypeED25519}}, nil
 }
 
-func LookupByLiteTokenUrl(lite string) (*Key, error) {
+func LookupByLiteTokenUrl(lite string) (*walletd.Key, error) {
 	liteKey, isLite := LabelForLiteTokenAccount(lite)
 	if !isLite {
 		return nil, fmt.Errorf("invalid lite account %s", liteKey)
@@ -321,7 +322,7 @@ func LookupByLiteTokenUrl(lite string) (*Key, error) {
 	return LookupByLabel(string(label))
 }
 
-func LookupByLiteIdentityUrl(lite string) (*Key, error) {
+func LookupByLiteIdentityUrl(lite string) (*walletd.Key, error) {
 	liteKey, isLite := LabelForLiteIdentity(lite)
 	if !isLite {
 		return nil, fmt.Errorf("invalid lite identity %s", liteKey)
@@ -335,8 +336,8 @@ func LookupByLiteIdentityUrl(lite string) (*Key, error) {
 	return LookupByLabel(string(label))
 }
 
-func LookupByLabel(label string) (*Key, error) {
-	k := new(Key)
+func LookupByLabel(label string) (*walletd.Key, error) {
+	k := new(walletd.Key)
 	return k, k.LoadByLabel(label)
 }
 
@@ -374,8 +375,8 @@ func LabelForLiteIdentity(label string) (string, bool) {
 	return u.Hostname(), true
 }
 
-func LookupByPubKey(pubKey []byte) (*Key, error) {
-	k := new(Key)
+func LookupByPubKey(pubKey []byte) (*walletd.Key, error) {
+	k := new(walletd.Key)
 	return k, k.LoadByPublicKey(pubKey)
 }
 
@@ -463,7 +464,7 @@ func GenerateKey(label string) (string, error) {
 		return "", fmt.Errorf("key already exists for key name %s", label)
 	}
 
-	k := new(Key)
+	k := new(walletd.Key)
 	k.PrivateKey = privKey
 	k.PublicKey = pubKey
 	k.KeyInfo.Type = sigtype
@@ -477,7 +478,7 @@ func GenerateKey(label string) (string, error) {
 		a.Label = types.String(label)
 		a.PublicKey = pubKey
 		a.LiteAccount = lt
-		a.KeyInfo = KeyInfo{Type: sigtype}
+		a.KeyInfo = walletd.KeyInfo{Type: sigtype}
 		dump, err := json.Marshal(&a)
 		if err != nil {
 			return "", err
@@ -575,7 +576,7 @@ func getPasswdPrompt(cmd *cobra.Command, prompt string, mask bool) (string, erro
 func ImportKey(token []byte, label string, signatureType protocol.SignatureType) (out string, err error) {
 
 	var liteLabel string
-	pk := new(Key)
+	pk := new(walletd.Key)
 
 	if err := pk.Initialize(token, signatureType); err != nil {
 		return "", err

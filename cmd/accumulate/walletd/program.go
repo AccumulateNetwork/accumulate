@@ -20,11 +20,11 @@ type Program struct {
 	primary        *JrpcMethods
 }
 
-func NewProgram(cmd *cobra.Command, options *ServiceOptions, db db.DB) (p *Program, err error) {
+func NewProgram(cmd *cobra.Command, options *ServiceOptions, listenAddress string, db db.DB) (p *Program, err error) {
 	p = new(Program)
 	p.cmd = cmd
 	p.serviceOptions = *options
-	p.primary, err = NewJrpc(Options{nil, time.Second, db})
+	p.primary, err = NewJrpc(Options{nil, time.Second, listenAddress, db})
 	return p, err
 }
 

@@ -51,6 +51,7 @@ import (
 type Options struct {
 	Logger        log.Logger
 	TxMaxWaitTime time.Duration
+	listenAddress string
 	database      db.DB
 }
 
@@ -150,8 +151,6 @@ func listenHttpUrl(s string) (net.Listener, bool, error) {
 	return l, secure, nil
 }
 
-var walletEndpoint = "http://0.0.0.0:33322"
-
 func (m *JrpcMethods) Start() error {
 	// Create the JSON-RPC handler
 	jrpc, err := NewJrpc(Options{
@@ -164,21 +163,13 @@ func (m *JrpcMethods) Start() error {
 
 	// Run JSON-RPC server
 	m.api = &http.Server{Handler: jrpc.NewMux()}
-	l, secure, err := listenHttpUrl(walletEndpoint)
+	l, secure, err := listenHttpUrl(m.listenAddress)
 	if err != nil {
 		return err
 	}
 	if secure {
 		return fmt.Errorf("currently doesn't support secure server")
 	}
-	//
-	//go func() {
-	//	err := api.Serve(l)
-	//	if err != nil {
-	//		jrpc.Logger.Error("JSON-RPC server", "err", err)
-	//	}
-	//}()
-
 	return m.api.Serve(l)
 }
 

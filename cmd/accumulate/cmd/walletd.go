@@ -6,20 +6,9 @@ import (
 	service2 "github.com/tendermint/tendermint/libs/service"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage/badger"
 	"syscall"
 	"time"
 )
-
-//var walletdCmd = &cobra.Command{
-//	Use:   "walletd",
-//	Short: "Run wallet daemon",
-//	Run: func(cmd *cobra.Command, _ []string) {
-//		out, err := GetVersion()
-//		printOutput(cmd, out, err)
-//	},
-//	Args: cobra.NoArgs,
-//}
 
 var walletdCmd = &cobra.Command{
 	Use:   "walletd",
@@ -36,42 +25,34 @@ var walletdConfig = &service.Config{
 	Description: "Service daemon for the accumulate wallet",
 	Arguments:   []string{"run"},
 }
-var flagRun = struct {
-	Node             int
-	Truncate         bool
-	CiStopAfter      time.Duration
-	LogFile          string
-	JsonLogFile      string
-	EnableTimingLogs bool
+
+var flagRunWalletd = struct {
+	ListenAddress string
+	CiStopAfter   time.Duration
+	LogFile       string
+	JsonLogFile   string
 }{}
 
 func init() {
-	//cmd.RootCmd.AddCommand(walletdCmd)
-
-	//	initRunFlags(walletdCmd, false)
+	initRunFlags(walletdCmd, false)
 }
 
 func initRunFlags(cmd *cobra.Command, forService bool) {
 	cmd.ResetFlags()
-	cmd.Flags().IntVarP(&flagRun.Node, "node", "n", -1, "Which node are we? [0, n)")
-	cmd.PersistentFlags().BoolVar(&flagRun.Truncate, "truncate", false, "Truncate Badger if necessary")
-	cmd.PersistentFlags().StringVar(&flagRun.LogFile, "log-file", "", "Write logs to a file as plain text")
-	cmd.PersistentFlags().StringVar(&flagRun.JsonLogFile, "json-log-file", "", "Write logs to a file as JSON")
-	cmd.PersistentFlags().BoolVar(&flagRun.EnableTimingLogs, "enable-timing-logs", false, "Enable core timing analysis logging")
+	cmd.PersistentFlags().StringVar(&flagRunWalletd.ListenAddress, "listen", "http://0.0.0.0:26661", "listen address for daemon")
+	cmd.PersistentFlags().StringVar(&flagRunWalletd.LogFile, "log-file", "", "Write logs to a file as plain text")
+	cmd.PersistentFlags().StringVar(&flagRunWalletd.JsonLogFile, "json-log-file", "", "Write logs to a file as JSON")
 
 	if !forService {
-		cmd.Flags().DurationVar(&flagRun.CiStopAfter, "ci-stop-after", 0, "FOR CI ONLY - stop the node after some time")
+		cmd.Flags().DurationVar(&flagRunWalletd.CiStopAfter, "ci-stop-after", 0, "FOR CI ONLY - stop the node after some time")
 		cmd.Flag("ci-stop-after").Hidden = true
-	}
-
-	cmd.PersistentPreRun = func(*cobra.Command, []string) {
-		badger.TruncateBadger = flagRun.Truncate
 	}
 }
 
 func runWalletd(cmd *cobra.Command, _ []string) (string, error) {
+	//this will be reworked when wallet database accessed via GetWallet() is moved to the backend.
 	prog, err := walletd.NewProgram(cmd, &walletd.ServiceOptions{WorkDir: DatabaseDir,
-		LogFilename: flagRun.LogFile, JsonLogFilename: flagRun.JsonLogFile}, GetWallet())
+		LogFilename: flagRunWalletd.LogFile, JsonLogFilename: flagRunWalletd.JsonLogFile}, flagRunWalletd.ListenAddress, GetWallet())
 	if err != nil {
 		return "", err
 	}
@@ -86,8 +67,8 @@ func runWalletd(cmd *cobra.Command, _ []string) (string, error) {
 		return "", err
 	}
 
-	if flagRun.CiStopAfter != 0 {
-		go watchDog(prog, svc, flagRun.CiStopAfter)
+	if flagRunWalletd.CiStopAfter != 0 {
+		go watchDog(prog, svc, flagRunWalletd.CiStopAfter)
 	}
 
 	err = svc.Run()
