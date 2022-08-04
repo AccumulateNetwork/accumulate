@@ -170,14 +170,10 @@ func TestSynthTxnWithMissingPrincipal(t *testing.T) {
 	)
 	_, _, synth := sim.WaitForTransaction(delivered, txn[0].Transaction[0].GetHash(), 50)
 
-	// The synthetic transaction should be received and marked as pending
+	// The synthetic transaction must fail
 	require.Len(t, synth, 1)
 	hash := synth[0].Hash()
-	_, status, _ := sim.WaitForTransaction(received, hash[:], 50)
-	require.True(t, status.Pending(), "The transaction was delivered prematurely")
-
-	// The synthetic transaction must fail, but only after the anchor is received
-	_, status, _ = sim.WaitForTransaction(delivered, hash[:], 50)
+	_, status, _ := sim.WaitForTransaction(delivered, hash[:], 50)
 	require.NotZero(t, status.Code, "The transaction did not fail")
 }
 
@@ -259,7 +255,7 @@ func TestSigningDeliveredTxnDoesNothing(t *testing.T) {
 	require.Equal(t, 1, int(simulator.GetAccount[*LiteTokenAccount](sim, bob).Balance.Int64()))
 }
 
-func TestSynthTxnToDn(t *testing.T) {
+func TestSynthTxnToDirectory(t *testing.T) {
 	// Tests AC-2231
 	var timestamp uint64
 
@@ -267,29 +263,72 @@ func TestSynthTxnToDn(t *testing.T) {
 	sim := simulator.New(t, 3)
 	sim.InitFromGenesis()
 
-	// Setup accounts
-	alice := AccountUrl("alice")
-	aliceKey, liteKey := acctesting.GenerateKey(alice), acctesting.GenerateKey("lite")
-	liteUrl := acctesting.AcmeLiteAddressStdPriv(liteKey)
-	sim.CreateAccount(&LiteIdentity{Url: liteUrl.RootIdentity(), CreditBalance: 1e9})
-	sim.CreateAccount(&LiteTokenAccount{Url: liteUrl, TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e9 * AcmePrecision)})
-	sim.SetRouteFor(alice, "Directory")
-	sim.CreateIdentity(alice, aliceKey[32:])
-	sim.CreateAccount(&TokenAccount{Url: alice.JoinPath("tokens"), TokenUrl: AcmeUrl()})
+	alice := acctesting.GenerateKey(t.Name(), "alice")
+	aliceUrl := acctesting.AcmeLiteAddressStdPriv(alice)
+	bob := acctesting.GenerateKey(t.Name(), "bob")
+	bobUrl := acctesting.AcmeLiteAddressStdPriv(bob)
 
-	// Send some tokens
-	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(liteUrl).
-			WithSigner(liteUrl, 1).
-			WithTimestampVar(&timestamp).
-			WithBody(&SendTokens{To: []*TokenRecipient{{
-				Url:    alice,
-				Amount: *big.NewInt(1),
-			}}}).
-			Initiate(SignatureTypeED25519, liteKey).
-			Build(),
-	)...)
+	// Put Alice on BVN0 and Bob on the DN
+	sim.SetRouteFor(aliceUrl.RootIdentity(), "BVN0")
+	sim.SetRouteFor(bobUrl.RootIdentity(), "Directory")
+
+	// Create Alice
+	sim.CreateAccount(&LiteIdentity{Url: aliceUrl.RootIdentity(), CreditBalance: 1e9})
+	sim.CreateAccount(&LiteTokenAccount{Url: aliceUrl, TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e9)})
+
+	// Send tokens from BVN to DN
+	env := acctesting.NewTransaction().
+		WithPrincipal(aliceUrl).
+		WithTimestampVar(&timestamp).
+		WithSigner(aliceUrl.RootIdentity(), 1).
+		WithBody(&SendTokens{
+			To: []*TokenRecipient{{
+				Url:    bobUrl,
+				Amount: *big.NewInt(1e6),
+			}},
+		}).
+		Initiate(SignatureTypeED25519, alice).
+		Build()
+	sim.MustSubmitAndExecuteBlock(env)
+	sim.WaitForTransactionFlow(delivered, env.Transaction[0].GetHash())
+}
+
+func TestSynthTxnFromDirectory(t *testing.T) {
+	// Tests AC-2231
+	var timestamp uint64
+
+	// Initialize
+	sim := simulator.New(t, 3)
+	sim.InitFromGenesis()
+
+	alice := acctesting.GenerateKey(t.Name(), "alice")
+	aliceUrl := acctesting.AcmeLiteAddressStdPriv(alice)
+	bob := acctesting.GenerateKey(t.Name(), "bob")
+	bobUrl := acctesting.AcmeLiteAddressStdPriv(bob)
+
+	// Put Alice on the DN and Bob on BVN0
+	sim.SetRouteFor(aliceUrl.RootIdentity(), "Directory")
+	sim.SetRouteFor(bobUrl.RootIdentity(), "BVN0")
+
+	// Create Alice
+	sim.CreateAccount(&LiteIdentity{Url: aliceUrl.RootIdentity(), CreditBalance: 1e9})
+	sim.CreateAccount(&LiteTokenAccount{Url: aliceUrl, TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e9)})
+
+	// Send tokens from BVN to DN
+	env := acctesting.NewTransaction().
+		WithPrincipal(aliceUrl).
+		WithTimestampVar(&timestamp).
+		WithSigner(aliceUrl.RootIdentity(), 1).
+		WithBody(&SendTokens{
+			To: []*TokenRecipient{{
+				Url:    bobUrl,
+				Amount: *big.NewInt(1e6),
+			}},
+		}).
+		Initiate(SignatureTypeED25519, alice).
+		Build()
+	sim.MustSubmitAndExecuteBlock(env)
+	sim.WaitForTransactionFlow(delivered, env.Transaction[0].GetHash())
 }
 
 func TestSendDirectToWrongPartition(t *testing.T) {
