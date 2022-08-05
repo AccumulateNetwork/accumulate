@@ -170,7 +170,7 @@ func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, book *protocol.Key
 		if !ok {
 			return errors.Format(errors.StatusInternalError, "principal is not a key page")
 		}
-		if len(page.Keys) == 1 && pageIndex == 1 {
+		if len(page.Keys) == 1 && pageIndex == 0 {
 			return fmt.Errorf("cannot delete last key of the highest priority page of a key book")
 		}
 
