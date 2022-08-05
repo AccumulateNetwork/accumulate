@@ -1745,6 +1745,113 @@ func TestAccountAuth(t *testing.T) {
 	require.Error(t, err, "expected a failure but instead an unauthorized signature succeeded")
 }
 
+func TestDelegatedKeypageUpdate(t *testing.T) {
+	check := newDefaultCheckError(t, false)
+	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	nodes := RunTestNet(t, partitions, daemons, nil, true, check.ErrorHandler())
+	n := nodes[partitions[1]][0]
+	aliceKey, charlieKey, bobKey, jjkey := generateKey(), generateKey(), generateKey(), generateKey()
+	charliekeyHash := sha256.Sum256(charlieKey.PubKey().Address())
+	batch := n.db.Begin(true)
+	require.NoError(t, acctesting.CreateAdiWithCredits(batch, aliceKey, "alice", 1e9))
+	require.NoError(t, acctesting.CreateAdiWithCredits(batch, bobKey, "bob", 1e9))
+	require.NoError(t, acctesting.CreateAdiWithCredits(batch, charlieKey, "charlie", 1e9))
+	require.NoError(t, acctesting.CreateAdiWithCredits(batch, jjkey, "jj", 1e9))
+	require.NoError(t, acctesting.UpdateKeyPage(batch, protocol.AccountUrl("alice", "book0", "1"), func(kp *protocol.KeyPage) {
+		kp.AddKeySpec(&protocol.KeySpec{Delegate: protocol.AccountUrl("bob", "book0")})
+		kp.AddKeySpec(&protocol.KeySpec{Delegate: protocol.AccountUrl("charlie", "book0")})
+		kp.AddKeySpec(&protocol.KeySpec{PublicKeyHash: charliekeyHash[:]})
+	}))
+	require.NoError(t, acctesting.UpdateKeyPage(batch, protocol.AccountUrl("bob", "book0", "1"), func(kp *protocol.KeyPage) {
+		kp.AddKeySpec(&protocol.KeySpec{Delegate: protocol.AccountUrl("charlie", "book0")})
+	}))
+	require.NoError(t, batch.Commit())
+
+	//Test with single level Key
+	_, _, err := n.Execute(func(send func(*protocol.Envelope)) {
+		op := new(protocol.AddKeyOperation)
+		op.Entry = protocol.KeySpecParams{Delegate: protocol.AccountUrl("jj", "book0")}
+		body := new(protocol.UpdateKeyPage)
+		body.Operation = append(body.Operation, op)
+		send(newTxn("bob/book0/1").WithSigner(protocol.AccountUrl("bob", "book0", "1"), 1).WithBody(body).
+			Initiate(protocol.SignatureTypeLegacyED25519, bobKey).
+			Build())
+	})
+	require.NoError(t, err)
+
+	//Test with singleLevel Delegation
+	_, txns, err := n.Execute(func(send func(*protocol.Envelope)) {
+		op := new(protocol.AddKeyOperation)
+		op.Entry = protocol.KeySpecParams{Delegate: protocol.AccountUrl("jj", "book0")}
+		body := new(protocol.UpdateKeyPage)
+		body.Operation = append(body.Operation, op)
+		env := newTxn("alice/book0/1").
+			WithBody(body).
+
+			// Initiate with Alice
+			WithSigner(protocol.AccountUrl("alice", "book0", "1"), 1).
+			Initiate(protocol.SignatureTypeED25519, aliceKey).
+
+			// Sign with Charlie via Alice (one-layer delegation)
+			WithSigner(protocol.AccountUrl("charlie", "book0", "1"), 1).
+			WithDelegator(protocol.AccountUrl("alice", "book0", "1")).
+			Sign(protocol.SignatureTypeED25519, charlieKey).
+			Build()
+		send(env)
+	})
+	require.NoError(t, err)
+	n.MustWaitForTxns(txns[0][:])
+	for _, key := range n.GetKeyPage("acc://alice/book0/1").Keys {
+		fmt.Printf("%v\n", key)
+	}
+	fmt.Printf("%x\n", txns[0][:])
+
+	response := n.GetTx(txns[0][:])
+	fmt.Println("response", response.Status)
+	batch = n.db.Begin(true)
+	require.NoError(t, acctesting.UpdateKeyPage(batch, protocol.AccountUrl("alice", "book0", "1"), func(kp *protocol.KeyPage) {
+		kp.SetThreshold(3)
+	}))
+	require.NoError(t, batch.Commit())
+	//Testwith multilevel delegation
+	_, _, err = n.Execute(func(send func(*protocol.Envelope)) {
+		op := new(protocol.AddKeyOperation)
+		op.Entry = protocol.KeySpecParams{Delegate: protocol.AccountUrl("jj", "book0")}
+		body := new(protocol.UpdateKeyPage)
+		body.Operation = append(body.Operation, op)
+		env := newTxn("alice/book0/1").
+			WithBody(body).
+
+			// Initiate with Alice
+			WithSigner(protocol.AccountUrl("alice", "book0", "1"), 1).
+			Initiate(protocol.SignatureTypeED25519, aliceKey).
+
+			// Sign with Charlie via Alice (one-layer delegation)
+			WithSigner(protocol.AccountUrl("charlie", "book0", "1"), 1).
+			WithDelegator(protocol.AccountUrl("alice", "book0", "1")).
+			Sign(protocol.SignatureTypeED25519, charlieKey).
+			Build()
+
+		// Take Charlie's signature, extract the key signature, and reconstruct
+		// it as via Bob via Alice (two-layer delegation)
+		sig := env.Signatures[1].(*protocol.DelegatedSignature).Signature
+		sig = &protocol.DelegatedSignature{Delegator: protocol.AccountUrl("bob", "book0", "1"), Signature: sig}
+		sig = &protocol.DelegatedSignature{Delegator: protocol.AccountUrl("alice", "book0", "1"), Signature: sig}
+		env.Signatures = append(env.Signatures, sig)
+		send(env)
+	})
+	require.Error(t, err)
+
+	var resp *abci.ResponseCheckTx
+	require.NoError(t, json.Unmarshal([]byte(err.Error()), &resp), "Expected error to be a CheckTx response")
+
+	result := new(protocol.TransactionResultSet)
+	require.NoError(t, result.UnmarshalBinary(resp.Data))
+	require.Len(t, result.Results, 1)
+	require.NotNil(t, result.Results[0].Error)
+	require.EqualError(t, result.Results[0].Error, "signature 2: invalid signature")
+}
+
 func TestMultiLevelDelegation(t *testing.T) {
 	check := newDefaultCheckError(t, false)
 	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
