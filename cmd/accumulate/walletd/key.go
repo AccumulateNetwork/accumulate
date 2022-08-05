@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"fmt"
-
+	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd/api"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -79,6 +79,23 @@ func LabelForLiteIdentity(label string) (string, bool) {
 func LookupByPubKey(pubKey []byte) (*Key, error) {
 	k := new(Key)
 	return k, k.LoadByPublicKey(pubKey)
+}
+
+func GetKeyList() (kla []api.KeyData, err error) {
+	b, err := GetWallet().GetBucket(BucketLabel)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, v := range b.KeyValueList {
+		k := Key{}
+		err := k.LoadByLabel(string(v.Value))
+		if err != nil {
+			return nil, err
+		}
+		kla = append(kla, api.KeyData{PublicKey: k.PublicKey, Name: string(v.Value), KeyType: k.KeyInfo.Type, Derivation: k.KeyInfo.Derivation})
+	}
+	return kla, nil
 }
 
 func ListKeyPublic() (out string, err error) {

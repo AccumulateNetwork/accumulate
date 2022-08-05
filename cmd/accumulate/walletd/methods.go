@@ -158,6 +158,14 @@ func (m *JrpcMethods) CreateTransaction(_ context.Context, params json.RawMessag
 
 func (m *JrpcMethods) KeyList(_ context.Context, params json.RawMessage) interface{} {
 	resp := api.KeyListResponse{}
+	var err error
+	resp.KeyList, err = GetKeyList()
+	if err != nil {
+		genResp := api.GeneralResponse{}
+		genResp.Error = err.Error()
+		genResp.Code = api.ErrorCodeGeneralError
+		return genResp
+	}
 	return resp
 }
 

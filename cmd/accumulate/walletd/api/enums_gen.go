@@ -17,6 +17,9 @@ const ErrorCodeNotFound ErrorCode = 1
 // ErrorCodeAlreadyExists .
 const ErrorCodeAlreadyExists ErrorCode = 2
 
+// ErrorCodeGeneralError .
+const ErrorCodeGeneralError ErrorCode = 3
+
 // GetEnumValue returns the value of the Error Code
 func (v ErrorCode) GetEnumValue() uint64 { return uint64(v) }
 
@@ -24,7 +27,7 @@ func (v ErrorCode) GetEnumValue() uint64 { return uint64(v) }
 func (v *ErrorCode) SetEnumValue(id uint64) bool {
 	u := ErrorCode(id)
 	switch u {
-	case ErrorCodeOk, ErrorCodeNotFound, ErrorCodeAlreadyExists:
+	case ErrorCodeOk, ErrorCodeNotFound, ErrorCodeAlreadyExists, ErrorCodeGeneralError:
 		*v = u
 		return true
 	default:
@@ -41,6 +44,8 @@ func (v ErrorCode) String() string {
 		return "notFound"
 	case ErrorCodeAlreadyExists:
 		return "alreadyExists"
+	case ErrorCodeGeneralError:
+		return "generalError"
 	default:
 		return fmt.Sprintf("ErrorCode:%d", v)
 	}
@@ -55,6 +60,8 @@ func ErrorCodeByName(name string) (ErrorCode, bool) {
 		return ErrorCodeNotFound, true
 	case "alreadyexists":
 		return ErrorCodeAlreadyExists, true
+	case "generalerror":
+		return ErrorCodeGeneralError, true
 	default:
 		return 0, false
 	}
