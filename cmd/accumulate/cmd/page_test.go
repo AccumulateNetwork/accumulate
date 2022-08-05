@@ -78,10 +78,12 @@ func testCase4_6(t *testing.T, tc *testCmd) {
 	//remove red5
 	r, err := tc.executeTx(t, "page key remove acc://RedWagon.acme/book0/1 red2 red5")
 	require.NoError(t, err)
+	t.Log(r)
 
 	//remove red4
 	r, err = tc.executeTx(t, "page key remove acc://RedWagon.acme/book0/1 red2 red4")
 	require.NoError(t, err)
+	t.Log(r)
 
 	//remove red2
 	r, err = tc.executeTx(t, "page key remove acc://RedWagon.acme/book0/1 red2 red2")
