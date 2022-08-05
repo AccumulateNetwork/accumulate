@@ -490,11 +490,6 @@ func ParsePartitionUrl(u *url.URL) (string, bool) {
 	return a[len(bvnUrlPrefix) : len(a)-len(TLD)], true
 }
 
-// BvnNameFromPartitionId formats a BVN partition name from the configuration to a valid URL hostname.
-func BvnNameFromPartitionId(partition string) string {
-	return PartitionUrl(partition).Authority
-}
-
 func GetMOfN(count int, ratio float64) uint64 {
 	return uint64(math.Ceil(ratio * float64(count)))
 }

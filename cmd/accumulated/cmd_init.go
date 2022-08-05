@@ -228,17 +228,17 @@ func findInDescribe(addr string, partitionId string, d *cfg.Network) (partition 
 	if partitionId == "" {
 		partitionId = d.Id
 	}
-	for i, v := range d.Partitions {
+	for i := range d.Partitions {
 		//search for the address.
 		partition = &d.Partitions[i]
 		if strings.EqualFold(partition.Id, partitionId) {
-			for j, n := range v.Nodes {
+			for j, n := range partition.Nodes {
 				nodeAddr, err := resolveAddr(n.Address.String())
 				if err != nil {
 					return nil, nil, fmt.Errorf("cannot resolve node address in network describe")
 				}
 				if nodeAddr == addr {
-					node = &v.Nodes[j]
+					node = &partition.Nodes[j]
 					return partition, node, nil
 				}
 			}
@@ -555,41 +555,6 @@ func initNode(cmd *cobra.Command, args []string) (string, error) {
 		}
 	}
 
-	var publicAddr string
-	if flagInitNode.PublicIP != "" {
-		publicAddr, err = resolveIp(flagInitNode.PublicIP)
-		if err != nil {
-			return "", fmt.Errorf("invalid public address %v", err)
-		}
-
-		partition, node, err := findInDescribe(publicAddr, config.Accumulate.PartitionId, &config.Accumulate.Network)
-		if err != nil {
-			return "", fmt.Errorf("cannot resolve public address in description, %v", err)
-		}
-
-		//the address wasn't found in the network description, so add it
-		var localAddr string
-		var port int
-		if node == nil {
-			u, err := ensureNodeOnPartition(partition, publicAddr, node.PublicKey)
-			if err != nil {
-				return "", err
-			}
-
-			localAddr, port, err = resolveAddrWithPort(u.String())
-			if err != nil {
-				return "", fmt.Errorf("invalid node address %v", err)
-			}
-		} else {
-			localAddr, port, err = resolveAddrWithPort(node.Address.String())
-			if err != nil {
-				return "", fmt.Errorf("invalid node address %v", err)
-			}
-		}
-		//local address expect ip:port only with no scheme for connection manager to work
-		config.Accumulate.Advertise = protocol.NewInternetAddress("http", localAddr, port)
-	}
-
 	config.Accumulate.AnalysisLog.Enabled = flagInit.EnableTimingLogs
 	config.Instrumentation.Prometheus = !flagInitNode.NoPrometheus
 
@@ -632,6 +597,41 @@ func initNode(cmd *cobra.Command, args []string) (string, error) {
 	nodeKey, err := accumulated.LoadOrGenerateTmPrivKey(config.NodeKeyFile())
 	if err != nil {
 		return "", fmt.Errorf("load/generate node key files, %v", err)
+	}
+
+	var publicAddr string
+	if flagInitNode.PublicIP != "" {
+		publicAddr, err = resolveIp(flagInitNode.PublicIP)
+		if err != nil {
+			return "", fmt.Errorf("invalid public address %v", err)
+		}
+
+		partition, node, err := findInDescribe(publicAddr, config.Accumulate.PartitionId, &config.Accumulate.Network)
+		if err != nil {
+			return "", fmt.Errorf("cannot resolve public address in description, %v", err)
+		}
+
+		//the address wasn't found in the network description, so add it
+		var localAddr string
+		var port int
+		if node == nil {
+			u, err := ensureNodeOnPartition(partition, publicAddr, privValKey.PubKey().Bytes())
+			if err != nil {
+				return "", err
+			}
+
+			localAddr, port, err = resolveAddrWithPort(u.String())
+			if err != nil {
+				return "", fmt.Errorf("invalid node address %v", err)
+			}
+		} else {
+			localAddr, port, err = resolveAddrWithPort(node.Address.String())
+			if err != nil {
+				return "", fmt.Errorf("invalid node address %v", err)
+			}
+		}
+		//local address expect ip:port only with no scheme for connection manager to work
+		config.Accumulate.Advertise = protocol.NewInternetAddress("http", localAddr, port)
 	}
 
 	err = accumulated.WriteNodeFiles(config, privValKey, nodeKey, genDoc)

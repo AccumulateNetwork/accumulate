@@ -6,7 +6,9 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"net"
+	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/tendermint/tendermint/libs/log"
@@ -34,24 +36,58 @@ type ConnectionInitializer interface {
 }
 
 type connectionManager struct {
-	globals       *core.GlobalValues
-	accConfig     *config.Accumulate
-	bvnCtxMap     map[string][]ConnectionContext
-	dnCtxList     []ConnectionContext
-	fnCtxList     []ConnectionContext
-	all           []ConnectionContext
-	localCtx      *connectionContext
-	logger        logging.OptionalLogger
-	publicKey     []byte
-	statusChecker StatusChecker
-
+	globals          *core.GlobalValues
+	accConfig        *config.Accumulate
 	apiClientFactory func(string) (APIClient, error)
+	localCtx         *connectionContext
+	connections      map[[32]byte][]*connectionContext
+	logger           logging.OptionalLogger
+	publicKey        []byte
+	statusChecker    StatusChecker
+
+	memoize struct {
+		sync.RWMutex
+		byPartition map[string][]*connectionContext
+	}
+}
+
+func (cm *connectionManager) connectionsForPartition(id string) []*connectionContext {
+	id = strings.ToLower(id)
+
+	// Acquire a read lock and check if memoization is done
+	cm.memoize.RLock()
+	if cm.memoize.byPartition != nil {
+		defer cm.memoize.RUnlock()
+		return cm.memoize.byPartition[id]
+	}
+	cm.memoize.RUnlock()
+
+	// Acquire a write lock and verify that memoization was not done by someone else
+	cm.memoize.Lock()
+	defer cm.memoize.Unlock()
+	if cm.memoize.byPartition != nil {
+		return cm.memoize.byPartition[id]
+	}
+
+	cm.memoize.byPartition = map[string][]*connectionContext{}
+	for _, cc := range cm.connections {
+		for _, cc := range cc {
+			id := strings.ToLower(cc.partitionId)
+			cm.logger.Debug("Assigning connection to partition", "key", logging.AsHex(cc.validatorPubKey).Slice(0, 4), "address", cc.address, "partition", cc.partitionId)
+			cm.memoize.byPartition[id] = append(cm.memoize.byPartition[id], cc)
+		}
+	}
+
+	for _, ccs := range cm.memoize.byPartition {
+		sort.Slice(ccs, func(i, j int) bool { return bytes.Compare(ccs[i].validatorPubKey, ccs[j].validatorPubKey) <= 0 })
+	}
+	return cm.memoize.byPartition[id]
 }
 
 func (cm *connectionManager) doHealthCheckOnNode(connCtx *connectionContext) {
 	newStatus := Down
 	defer func() {
-		connCtx.GetMetrics().status = newStatus
+		connCtx.metrics.status = newStatus
 	}()
 
 	// Try to query Tendermint with something it should not find
@@ -99,9 +135,11 @@ func NewConnectionManager(opts Options) ConnectionInitializer {
 	cm := new(connectionManager)
 	cm.accConfig = &opts.Config.Accumulate
 	cm.apiClientFactory = opts.ApiClientFactory
-	cm.logger.L = opts.Logger
+	if opts.Logger != nil {
+		cm.logger.L = opts.Logger.With("module", "connections")
+	}
 	cm.publicKey = opts.Key[32:]
-	cm.bvnCtxMap = map[string][]ConnectionContext{}
+	cm.connections = map[[32]byte][]*connectionContext{}
 
 	if len(cm.accConfig.Network.Seeds) == 0 {
 		cm.buildStaticNodeInventory()
@@ -120,14 +158,9 @@ func (cm *connectionManager) SelectConnection(partitionId string, allowFollower 
 		return cm.localCtx, nil
 	}
 
-	bvnName := protocol.BvnNameFromPartitionId(partitionId)
-	nodeList, ok := cm.bvnCtxMap[bvnName]
-	if !ok {
-		if strings.EqualFold(partitionId, "directory") {
-			nodeList = cm.dnCtxList
-		} else {
-			return nil, errUnknownPartition(partitionId)
-		}
+	nodeList := cm.connectionsForPartition(strings.ToLower(partitionId))
+	if nodeList == nil {
+		return nil, errUnknownPartition(partitionId)
 	}
 
 	healthyNodes := cm.getHealthyNodes(nodeList, allowFollower)
@@ -136,31 +169,31 @@ func (cm *connectionManager) SelectConnection(partitionId string, allowFollower 
 	}
 
 	// Apply simple round-robin balancing to nodes in non-local partitions
-	var selCtx ConnectionContext
+	var selCtx *connectionContext
 	selCtxCnt := ^uint64(0)
 	for _, connCtx := range healthyNodes {
-		usageCnt := connCtx.GetMetrics().usageCnt
+		usageCnt := connCtx.metrics.usageCnt
 		if usageCnt < selCtxCnt {
 			selCtx = connCtx
 			selCtxCnt = usageCnt
 		}
 	}
-	selCtx.GetMetrics().usageCnt++
+	selCtx.metrics.usageCnt++
 	return selCtx, nil
 }
 
-func (cm *connectionManager) getHealthyNodes(nodeList []ConnectionContext, allowFollower bool) []ConnectionContext {
-	var healthyNodes = make([]ConnectionContext, 0)
+func (cm *connectionManager) getHealthyNodes(nodeList []*connectionContext, allowFollower bool) []*connectionContext {
+	var healthyNodes = make([]*connectionContext, 0)
 	for _, connCtx := range nodeList {
-		if (allowFollower || connCtx.GetNodeType() != config.Follower) && connCtx.IsHealthy() {
+		if (allowFollower || connCtx.nodeType != config.Follower) && connCtx.isHealthy() {
 			healthyNodes = append(healthyNodes, connCtx)
 		}
 	}
 
 	if len(healthyNodes) == 0 { // When there is no alternative node available in the partition, do another health check & try again
-		cm.ResetErrors()
+		cm.resetErrors()
 		for _, connCtx := range nodeList {
-			if connCtx.GetNodeType() != config.Follower && connCtx.IsHealthy() {
+			if connCtx.nodeType != config.Follower && connCtx.isHealthy() {
 				healthyNodes = append(healthyNodes, connCtx)
 			}
 		}
@@ -168,34 +201,20 @@ func (cm *connectionManager) getHealthyNodes(nodeList []ConnectionContext, allow
 	return healthyNodes
 }
 
-func (cm *connectionManager) GetBVNContextMap() map[string][]ConnectionContext {
-	return cm.bvnCtxMap
-}
-
-func (cm *connectionManager) GetDNContextList() []ConnectionContext {
-	return cm.dnCtxList
-}
-
-func (cm *connectionManager) GetFNContextList() []ConnectionContext {
-	return cm.fnCtxList
-}
-
-func (cm *connectionManager) GetAllNodeContexts() []ConnectionContext {
-	return cm.all
-}
-
-func (cm *connectionManager) GetLocalNodeContext() ConnectionContext {
-	return cm.localCtx
-}
-
-func (cm *connectionManager) ResetErrors() {
-	for _, nodeCtx := range cm.all {
-		nodeCtx.GetMetrics().status = Unknown
-		nodeCtx.ClearErrors()
+func (cm *connectionManager) resetErrors() {
+	for _, cc := range cm.connections {
+		for _, cc := range cc {
+			cc.metrics.status = Unknown
+			cc.clearErrors()
+		}
 	}
 }
 
 func (cm *connectionManager) updateNodeInventory(e events.WillChangeGlobals) {
+	cm.memoize.Lock()
+	defer cm.memoize.Unlock()
+	cm.memoize.byPartition = nil
+
 	isFirst := cm.globals == nil
 	cm.globals = e.New
 	if isFirst {
@@ -212,20 +231,31 @@ func (cm *connectionManager) updateNodeInventory(e events.WillChangeGlobals) {
 			continue
 		}
 
-		// Remove from everywhere
-		for bvn := range cm.bvnCtxMap {
-			cm.bvnCtxMap[bvn] = removeConnection(cm.bvnCtxMap[bvn], keyHash)
-		}
-		cm.dnCtxList = removeConnection(cm.dnCtxList, keyHash)
-		cm.fnCtxList = removeConnection(cm.fnCtxList, keyHash)
-		cm.all = removeConnection(cm.all, keyHash)
-
-		// If the node was removed don't add it back
-		if address == nil {
+		if len(cm.connections[keyHash]) == 0 {
+			// New connection
+			continue
+		} else {
+			// Don't re-add existing connections
 			delete(addresses, keyHash)
+		}
+
+		// Remove connections if the node is down
+		if address == nil {
+			delete(cm.connections, keyHash)
+			continue
+		}
+
+		for _, cc := range cm.connections[keyHash] {
+			if strings.EqualFold(cc.partitionId, protocol.Directory) {
+				cc.address = address.WithOffset(config.PortOffsetDirectory)
+			} else {
+				cc.address = address.WithOffset(config.PortOffsetBlockValidator)
+			}
+			cc.resetClient()
 		}
 	}
 
+	// Add new connections
 	cm.addConnections(e.New, addresses)
 
 	if cm.statusChecker != nil {
@@ -234,15 +264,6 @@ func (cm *connectionManager) updateNodeInventory(e events.WillChangeGlobals) {
 			cm.logger.Error("Failed to initialize new clients", "error", err)
 		}
 	}
-}
-
-func removeConnection(list []ConnectionContext, keyHash [32]byte) []ConnectionContext {
-	for i, cc := range list {
-		if keyHash == sha256.Sum256(cc.GetPublicKey()) {
-			return append(list[:i], list[i+1:]...)
-		}
-	}
-	return list
 }
 
 func (cm *connectionManager) initFromGlobals(g *core.GlobalValues) {
@@ -255,20 +276,24 @@ func (cm *connectionManager) initFromGlobals(g *core.GlobalValues) {
 
 func (cm *connectionManager) addConnections(g *core.GlobalValues, addresses map[[32]byte]*protocol.InternetAddress) {
 	for _, partition := range g.Network.Partitions {
+		isDir := strings.EqualFold(partition.PartitionID, protocol.Directory)
 		for _, validator := range partition.ValidatorKeys {
 			// Skip validators we don't have an address for
-			h := sha256.Sum256(validator)
-			if addresses[h] == nil {
+			address := addresses[sha256.Sum256(validator)]
+			if address == nil {
 				continue
+			}
+			if !isDir {
+				address = address.WithOffset(config.PortOffsetBlockValidator - config.PortOffsetDirectory)
 			}
 
 			connCtx := new(connectionContext)
 			connCtx.partitionId = partition.PartitionID
 			connCtx.validatorPubKey = validator
-			connCtx.address = addresses[h]
+			connCtx.address = address
 			connCtx.connMgr = cm
 			connCtx.metrics = NodeMetrics{status: Unknown}
-			connCtx.hasClient = make(chan struct{})
+			connCtx.resetClient()
 			cm.addConnection(connCtx)
 		}
 	}
@@ -283,7 +308,7 @@ func (cm *connectionManager) buildStaticNodeInventory() {
 			connCtx.address = validator.Address
 			connCtx.connMgr = cm
 			connCtx.metrics = NodeMetrics{status: Unknown}
-			connCtx.hasClient = make(chan struct{})
+			connCtx.resetClient()
 			cm.addConnection(connCtx)
 		}
 	}
@@ -297,10 +322,10 @@ func (cm *connectionManager) addConnection(cc *connectionContext) {
 		}
 	}
 
-	cm.logger.Error("Add connection", "key", logging.AsHex(cc.validatorPubKey).Slice(0, 4), "address", cc.address)
+	cm.logger.Info("Add connection", "key", logging.AsHex(cc.validatorPubKey).Slice(0, 4), "address", cc.address, "partition", cc.partitionId)
 
 	switch {
-	case bytes.Equal(cc.validatorPubKey, cm.publicKey):
+	case bytes.Equal(cc.validatorPubKey, cm.publicKey) && cc.address.Equal(cm.accConfig.Advertise):
 		cc.networkGroup = Local
 		cm.localCtx = cc
 	case strings.EqualFold(cc.partitionId, cm.accConfig.PartitionId):
@@ -313,31 +338,10 @@ func (cm *connectionManager) addConnection(cc *connectionContext) {
 	cc.resolvedIPs, err = resolveIPs(cc.address)
 	if err != nil {
 		cm.logger.Error(fmt.Sprintf("error resolving IPs for %q: %v", cc.address, err))
-		cc.ReportErrorStatus(Down)
+		cc.reportErrorStatus(Down)
 	}
 
-	// if !cc.validator.Active {
-	// 	cm.fnCtxList = append(cm.fnCtxList, cc)
-	// 	cm.all = append(cm.all, cc)
-	// 	return
-	// }
-
-	if strings.EqualFold(cc.partitionId, protocol.Directory) {
-		cm.dnCtxList = append(cm.dnCtxList, cc)
-		cm.all = append(cm.all, cc)
-		return
-	}
-
-	bvnName := protocol.BvnNameFromPartitionId(cc.partitionId)
-	nodeList, ok := cm.bvnCtxMap[bvnName]
-	if ok {
-		cm.bvnCtxMap[bvnName] = append(nodeList, cc)
-	} else {
-		nodeList := make([]ConnectionContext, 1)
-		nodeList[0] = cc
-		cm.bvnCtxMap[bvnName] = nodeList
-	}
-	cm.all = append(cm.all, cc)
+	cm.connections[pubKeyHash] = append(cm.connections[pubKeyHash], cc)
 }
 
 func (cm *connectionManager) InitClients(localABCI *local.Local, statusChecker StatusChecker) error {
@@ -354,24 +358,12 @@ func (cm *connectionManager) InitClients(localABCI *local.Local, statusChecker S
 }
 
 func (cm *connectionManager) initClients() error {
-	for _, connCtxList := range cm.bvnCtxMap {
-		for _, cc := range connCtxList {
-			err := cm.createClient(cc.(*connectionContext), cm.statusChecker)
+	for _, cc := range cm.connections {
+		for _, cc := range cc {
+			err := cm.createClient(cc, cm.statusChecker)
 			if err != nil {
 				return err
 			}
-		}
-	}
-	for _, cc := range cm.dnCtxList {
-		err := cm.createClient(cc.(*connectionContext), cm.statusChecker)
-		if err != nil {
-			return err
-		}
-	}
-	for _, cc := range cm.fnCtxList {
-		err := cm.createClient(cc.(*connectionContext), cm.statusChecker)
-		if err != nil {
-			return err
 		}
 	}
 	return nil
@@ -382,48 +374,30 @@ func (cm *connectionManager) ConnectDirectly(other ConnectionManager) error {
 	if !ok {
 		return fmt.Errorf("incompatible connection managers: want %T, got %T", cm, cm2)
 	}
-	if cm2.localCtx == nil {
+
+	cc2 := cm2.localCtx
+	if cc2 == nil {
 		return fmt.Errorf("local context has not been initialized")
 	}
-	if cm2.localCtx.abciClient == nil {
-		return fmt.Errorf("local context's clients have not been initialized")
-	}
 
-	for _, connCtx := range cm.all {
-		cc := connCtx.(*connectionContext)
-		if !cc.address.Equal(cm2.accConfig.Advertise) {
-			continue
+	// Replace the connection context with the other connection manager's local connection
+	pubKeyHash := sha256.Sum256(cc2.validatorPubKey)
+	list := cm.connections[pubKeyHash]
+	if len(list) > 2 {
+		panic("How!")
+	}
+	for i, cc := range list {
+		if cc.address.Equal(cc2.address) {
+			list = append(list[:i], list[i+1:]...)
+			break
 		}
-
-		cc.setClient(cm2.localCtx.abciClient, cm2.localCtx.apiClient)
-		return nil
 	}
-
-	if cm.globals == nil {
-		return fmt.Errorf("cannot find entry for node %v", cm2.accConfig.Advertise)
-	}
-
-	partition := cm.globals.Network.Partition(cm2.accConfig.PartitionId)
-	if partition == nil {
-		return fmt.Errorf("%v is not a partition", cm2.accConfig.PartitionId)
-	}
-	if !partition.FindValidator(cm2.publicKey) {
-		return fmt.Errorf("%x is not a validator for %x", cm2.publicKey, cm2.accConfig.PartitionId)
-	}
-
-	cc := new(connectionContext)
-	cc.partitionId = partition.PartitionID
-	cc.validatorPubKey = cm2.publicKey
-	cc.address = cm2.accConfig.Advertise
-	cc.connMgr = cm
-	cc.metrics = NodeMetrics{status: Unknown}
-	cc.hasClient = make(chan struct{})
-	cm.addConnection(cc)
+	cm.connections[pubKeyHash] = append(list, cc2)
 	return nil
 }
 
 func (cm *connectionManager) createClient(cc *connectionContext, statusChecker StatusChecker) error {
-	if cc == cm.localCtx || cc.statusChecker != nil {
+	if cc.networkGroup == Local || cc.networkGroup == Direct || cc.statusChecker != nil {
 		return nil
 	}
 

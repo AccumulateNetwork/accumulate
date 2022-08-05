@@ -447,7 +447,9 @@ func listenHttpUrl(s string) (net.Listener, bool, error) {
 }
 
 func (d *Daemon) Stop() error {
-	d.sendNodeStatusUpdate(protocol.NodeStatusDown)
+	if d.Config.Accumulate.NetworkType == config.Directory {
+		d.sendNodeStatusUpdate(protocol.NodeStatusDown)
+	}
 
 	err := d.node.Stop()
 	if err != nil {

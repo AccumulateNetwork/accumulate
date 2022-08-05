@@ -49,8 +49,24 @@
         "node",
         "tcp://127.0.1.1:26656",
         "-w",
-        ".nodes/node-101",
+        "${workspaceFolder}/.nodes/node-101",
         "--listen=tcp://127.0.2.1:26656",
+        "--skip-version-check",
+      ]
+    },
+    {
+      "name": "Init Dual",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/cmd/accumulated",
+      "args": [
+        "init",
+        "dual",
+        "tcp://127.0.1.1:26756",
+        "-w",
+        "${workspaceFolder}/.nodes/node-101",
+        "--public=127.0.2.1",
         "--skip-version-check",
       ]
     },

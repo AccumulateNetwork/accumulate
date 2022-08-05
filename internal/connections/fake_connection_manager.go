@@ -41,26 +41,3 @@ func (fcm *fakeConnectionManager) SetClients(clients map[string]FakeClient) {
 		fcm.ctxMap[partition].(*connectionContext).setClient(client.ABCI, client.API)
 	}
 }
-
-func (fcm *fakeConnectionManager) GetBVNContextMap() map[string][]ConnectionContext {
-	return nil
-}
-
-func (fcm *fakeConnectionManager) GetDNContextList() []ConnectionContext {
-	return nil
-}
-
-func (fcm *fakeConnectionManager) GetFNContextList() []ConnectionContext {
-	return nil
-}
-
-func (fcm *fakeConnectionManager) GetAllNodeContexts() []ConnectionContext {
-	return nil
-}
-
-func (fcm *fakeConnectionManager) GetLocalNodeContext() ConnectionContext {
-	return nil
-}
-
-func (fcm *fakeConnectionManager) ResetErrors() {
-}

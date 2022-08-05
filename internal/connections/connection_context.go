@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"sync"
 	"time"
 
 	"github.com/tendermint/tendermint/libs/bytes"
@@ -12,6 +13,7 @@ import (
 	core "github.com/tendermint/tendermint/rpc/coretypes"
 	tm "github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -30,6 +32,7 @@ const (
 	Local NetworkGroup = iota
 	SamePartition
 	OtherPartition
+	Direct
 )
 
 // ABCIClient is a subset of from TM/rpc/client.ABCIClient.
@@ -46,17 +49,11 @@ type APIClient interface {
 }
 
 type ConnectionContext interface {
-	GetNetworkGroup() NetworkGroup
-	GetNodeType() config.NodeType
 	GetPublicKey() []byte
-	GetMetrics() *NodeMetrics
 	GetAddress() *protocol.InternetAddress
 	GetABCIClient() ABCIClient
 	GetAPIClient() APIClient
-	IsHealthy() bool
 	ReportError(err error)
-	ReportErrorStatus(status NodeStatus)
-	ClearErrors()
 }
 
 type StatusChecker interface {
@@ -71,6 +68,7 @@ type connectionContext struct {
 	abciClient          ABCIClient
 	apiClient           APIClient
 	hasClient           chan struct{}
+	clientMu            *sync.RWMutex
 	connMgr             *connectionManager
 	statusChecker       StatusChecker
 	networkGroup        NetworkGroup
@@ -108,19 +106,12 @@ func (cc *connectionContext) getClients() (ABCIClient, APIClient) {
 	case <-cc.hasClient:
 		return cc.abciClient, cc.apiClient
 	case <-timeout:
-		panic(fmt.Sprintf("Could not obtain a client for node %s  ", cc.address))
+		cc.connMgr.logger.Error("Could not obtain a client", "partition", cc.partitionId, "key", logging.AsHex(cc.validatorPubKey).Slice(0, 4), "address", cc.address)
+		panic(fmt.Sprintf("Could not obtain a client for %s node %x (%s)", cc.partitionId, cc.validatorPubKey[:4], cc.address))
 	}
 }
 
-func (cc *connectionContext) GetNodeType() config.NodeType {
-	return cc.nodeType
-}
-
-func (cc *connectionContext) GetNetworkGroup() NetworkGroup {
-	return cc.networkGroup
-}
-
-func (cc *connectionContext) IsHealthy() bool {
+func (cc *connectionContext) isHealthy() bool {
 	switch cc.metrics.status {
 	case Up:
 		return true
@@ -139,12 +130,8 @@ func (cc *connectionContext) IsHealthy() bool {
 	return false
 }
 
-func (cc *connectionContext) ClearErrors() {
+func (cc *connectionContext) clearErrors() {
 	cc.lastErrorExpiryTime = time.Now()
-}
-
-func (cc *connectionContext) GetMetrics() *NodeMetrics {
-	return &cc.metrics
 }
 
 func (cc *connectionContext) ReportError(err error) {
@@ -166,7 +153,7 @@ func (cc *connectionContext) ReportError(err error) {
 	}
 }
 
-func (cc *connectionContext) ReportErrorStatus(status NodeStatus) {
+func (cc *connectionContext) reportErrorStatus(status NodeStatus) {
 	cc.metrics.status = status
 	cc.lastErrorExpiryTime = time.Now().Add(UnhealthyNodeCheckInterval)
 }
@@ -178,4 +165,17 @@ func (cc *connectionContext) setClient(abci ABCIClient, api APIClient) {
 	if shouldClose {
 		close(cc.hasClient)
 	}
+}
+
+func (cc *connectionContext) resetClient() {
+	if cc.clientMu == nil {
+		cc.clientMu = new(sync.RWMutex)
+	} else {
+		cc.clientMu.Lock()
+		defer cc.clientMu.Unlock()
+	}
+
+	cc.hasClient = make(chan struct{})
+	cc.abciClient = nil
+	cc.apiClient = nil
 }
