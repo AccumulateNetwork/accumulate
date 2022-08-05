@@ -101,6 +101,7 @@ func NewConnectionManager(opts Options) ConnectionInitializer {
 	cm.apiClientFactory = opts.ApiClientFactory
 	cm.logger.L = opts.Logger
 	cm.publicKey = opts.Key[32:]
+	cm.bvnCtxMap = map[string][]ConnectionContext{}
 
 	if len(cm.accConfig.Network.Seeds) == 0 {
 		cm.buildStaticNodeInventory()
@@ -295,6 +296,8 @@ func (cm *connectionManager) addConnection(cc *connectionContext) {
 			return // Ignore this connection
 		}
 	}
+
+	cm.logger.Error("Add connection", "key", logging.AsHex(cc.validatorPubKey).Slice(0, 4), "address", cc.address)
 
 	switch {
 	case bytes.Equal(cc.validatorPubKey, cm.publicKey):

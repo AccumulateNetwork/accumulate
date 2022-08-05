@@ -177,6 +177,13 @@ func getNodeDirs(dir string) []int {
 			continue
 		}
 
+		dir := filepath.Join(dir, ent.Name())
+		ent, err := os.ReadDir(dir)
+		checkf(err, "failed to read %q", dir)
+		if len(ent) == 0 {
+			continue // Skip empty directories
+		}
+
 		nodes = append(nodes, int(node))
 	}
 

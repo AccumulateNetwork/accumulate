@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/viper"
 	tm "github.com/tendermint/tendermint/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	etcd "go.etcd.io/etcd/client/v3"
 )
 
@@ -365,13 +366,18 @@ func load(dir, file string, c interface{}) error {
 	err = v.Unmarshal(c, viper.DecodeHook(mapstructure.ComposeDecodeHookFunc(
 		mapstructure.StringToTimeDurationHookFunc(),
 		mapstructure.StringToSliceHookFunc(","),
-		StringToEnumHookFunc())))
+		StringToEnumHookFunc,
+		StringToAddrHookFunc)))
 
 	if err != nil {
 		return fmt.Errorf("unmarshal: %v", err)
 	}
 
 	return nil
+}
+
+func (d *Describe) LocalAddress() string {
+	return d.Advertise.Host
 }
 
 // MarshalTOML marshals the Network Type to Toml as a string.
@@ -385,24 +391,53 @@ func (v NodeType) MarshalTOML() ([]byte, error) {
 }
 
 // StringToEnumHookFunc is a decode hook for mapstructure that will convert enums to strings
-func StringToEnumHookFunc() mapstructure.DecodeHookFuncType {
-	return func(
-		f reflect.Type,
-		t reflect.Type,
-		data interface{},
-	) (interface{}, error) {
-		switch t {
-		case reflect.TypeOf(NetworkTypeDirectory):
-			ret, _ := NetworkTypeByName(data.(string))
-			return ret, nil
-		case reflect.TypeOf(NodeTypeValidator):
-			ret, _ := NodeTypeByName(data.(string))
-			return ret, nil
-		}
-		return data, nil
+func StringToEnumHookFunc(
+	_ reflect.Type,
+	t reflect.Type,
+	data interface{},
+) (interface{}, error) {
+	switch t {
+	case reflect.TypeOf(NetworkTypeDirectory):
+		ret, _ := NetworkTypeByName(data.(string))
+		return ret, nil
+	case reflect.TypeOf(NodeTypeValidator):
+		ret, _ := NodeTypeByName(data.(string))
+		return ret, nil
 	}
+	return data, nil
 }
 
-func (d *Describe) LocalAddress() string {
-	return d.Advertise.Host
+var _ mapstructure.DecodeHookFuncType = StringToEnumHookFunc
+
+var netAddrPtr = reflect.TypeOf((*protocol.InternetAddress)(nil))
+
+// StringToAddrHookFunc is a decode hook for mapstructure that will convert addresses to strings
+func StringToAddrHookFunc(
+	_ reflect.Type,
+	t reflect.Type,
+	data interface{},
+) (interface{}, error) {
+	str, ok := data.(string)
+	if !ok {
+		return data, nil
+	}
+
+	var isPtr bool
+	if netAddrPtr.AssignableTo(t) {
+		isPtr = true
+	} else if !netAddrPtr.Elem().AssignableTo(t) {
+		return data, nil
+	}
+
+	addr, err := protocol.ParseInternetAddress(str)
+	if err != nil {
+		return nil, err
+	}
+
+	if isPtr {
+		return addr, nil
+	}
+	return *addr, nil
 }
+
+var _ mapstructure.DecodeHookFuncType = StringToAddrHookFunc

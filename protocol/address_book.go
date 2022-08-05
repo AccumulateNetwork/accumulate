@@ -7,6 +7,7 @@ import (
 	stdurl "net/url"
 	"strconv"
 
+	"github.com/pelletier/go-toml"
 	"gitlab.com/accumulatenetwork/accumulate/internal/sortutil"
 )
 
@@ -112,6 +113,28 @@ func (u *InternetAddress) MarshalJSON() ([]byte, error) {
 func (u *InternetAddress) UnmarshalJSON(data []byte) error {
 	var s string
 	err := json.Unmarshal(data, &s)
+	if err != nil {
+		return err
+	}
+
+	v, err := ParseInternetAddress(s)
+	if err != nil {
+		return err
+	}
+
+	*u = *v
+	return nil
+}
+
+// MarshalTOML marshals the URL to TOML as a string.
+func (u *InternetAddress) MarshalTOML() ([]byte, error) {
+	return json.Marshal(u.String())
+}
+
+// UnmarshalTOML unmarshals the URL from TOML as a string.
+func (u *InternetAddress) UnmarshalTOML(data []byte) error {
+	var s string
+	err := toml.Unmarshal(data, &s)
 	if err != nil {
 		return err
 	}
