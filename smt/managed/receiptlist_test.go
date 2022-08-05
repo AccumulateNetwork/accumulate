@@ -46,7 +46,7 @@ func TestReceiptList(t *testing.T) {
 	for startTest := int64(Offset); startTest < MSize; startTest++ { // Test a range
 		for endTest := startTest; endTest < startTest+ListLen && endTest < MSize; endTest++ {
 
-			element, err := manager.Get(startTest) // Get the first element of a test of a list
+			_, err := manager.Get(startTest) // Get the first element of a test of a list
 			require.NoError(t, err)
 
 			receiptList, err := GetReceiptList(manager, startTest, endTest) // Get a receipt list
@@ -54,9 +54,9 @@ func TestReceiptList(t *testing.T) {
 			require.NotNil(t, receiptList)                                  // It should return a receiptList
 			anchor := receiptList.Receipt.Anchor                            // Get the anchor1 that
 			cnt++
-			for i := startTest; i <= endTest; i++ { //             Test every list we can make for the given range
-				element = rh.List[i]                           //           Get an element
-				cnt++                                          //
+			for i := startTest; i <= endTest; i++ { //            Test every list we can make for the given range
+				element := rh.List[i]                          // Get an element
+				cnt++                                          // Count validations
 				require.True(t, receiptList.Included(element)) // Check that the element is included in the receiptList
 			}
 
