@@ -243,7 +243,7 @@ func initDB(defaultWorkDir string, memDb bool) db.DB {
 
 func InitDBImport(cmd *cobra.Command, memDb bool) error {
 	wallet = initDB(DatabaseDir, memDb)
-	mnemonicString, err := getPasswdPrompt(cmd, "Enter mnemonic : ", false)
+	mnemonicString, err := getPasswdPrompt(cmd, "Enter mnemonic : ", true)
 	if err != nil {
 		return db.ErrInvalidPassword
 	}
@@ -256,6 +256,10 @@ func InitDBImport(cmd *cobra.Command, memDb bool) error {
 }
 
 func InitDBCreate(memDb bool) error {
+	root, _ := GetWallet().Get(BucketMnemonic, []byte("seed"))
+	if len(root) != 0 {
+		return fmt.Errorf("mnemonic seed phrase already exists within wallet")
+	}
 	wallet = initDB(DatabaseDir, memDb)
 	entropy, err := bip39.NewEntropy(int(Entropy))
 	if err != nil {
