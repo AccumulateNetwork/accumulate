@@ -11,6 +11,7 @@ import (
 	core "github.com/tendermint/tendermint/rpc/coretypes"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
+	"gitlab.com/accumulatenetwork/accumulate/internal/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -49,8 +50,9 @@ func TestExecuteCheckOnly(t *testing.T) {
 		router, err := routing.NewStaticRouter(table, connectionManager)
 		require.NoError(t, err)
 		j, err := NewJrpc(Options{
-			Router: router,
-			Key:    make([]byte, 64),
+			Router:   router,
+			EventBus: events.NewBus(nil),
+			Key:      make([]byte, 64),
 		})
 		require.NoError(t, err)
 
@@ -77,8 +79,9 @@ func TestExecuteCheckOnly(t *testing.T) {
 		router, err := routing.NewStaticRouter(table, connectionManager)
 		require.NoError(t, err)
 		j, err := NewJrpc(Options{
-			Router: router,
-			Key:    make([]byte, 64),
+			Router:   router,
+			EventBus: events.NewBus(nil),
+			Key:      make([]byte, 64),
 		})
 		require.NoError(t, err)
 

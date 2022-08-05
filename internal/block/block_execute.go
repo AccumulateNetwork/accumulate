@@ -39,7 +39,6 @@ func (x *Executor) ExecuteEnvelopeSet(block *Block, deliveries []*chain.Delivery
 }
 
 func (x *Executor) ExecuteEnvelope(block *Block, delivery *chain.Delivery) (*protocol.TransactionStatus, error) {
-
 	if delivery.Transaction.Body.Type() == protocol.TransactionTypeSystemWriteData {
 		return nil, errors.Format(errors.StatusBadRequest, "a %v transaction cannot be submitted directly", protocol.TransactionTypeSystemWriteData)
 	}
@@ -140,6 +139,22 @@ func (x *Executor) executeEnvelope(block *Block, delivery *chain.Delivery, addit
 				status := new(protocol.TransactionStatus)
 				status.Set(err)
 				status.Result = new(protocol.EmptyResult)
+
+				kv := []interface{}{
+					"block", block.Index,
+					"type", signature.Type(),
+				}
+				if !signature.Type().IsSystem() {
+					kv = append(kv,
+						"signer", signature.GetSigner(),
+					)
+				}
+				kv = append(kv, "error", status.Error)
+				if additional {
+					x.logger.Info("Additional signature failed", kv...)
+				} else {
+					x.logger.Info("Signature failed", kv...)
+				}
 				return status, nil, nil
 			}
 			if err != nil {

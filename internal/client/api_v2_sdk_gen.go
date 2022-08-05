@@ -9,7 +9,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// Describe queries the basic configuration of the node.
+// Describe returns the description of the node and global values.
 func (c *Client) Describe(ctx context.Context) (*api.DescriptionResponse, error) {
 	var req struct{}
 	var resp api.DescriptionResponse
@@ -399,7 +399,7 @@ func (c *Client) QueryTxLocal(ctx context.Context, req *api.TxnQuery) (*api.Tran
 	return &resp, nil
 }
 
-// Status queries the status of the node.
+// Status returns the status of the node.
 func (c *Client) Status(ctx context.Context) (*api.StatusResponse, error) {
 	var req struct{}
 	var resp api.StatusResponse
@@ -412,7 +412,7 @@ func (c *Client) Status(ctx context.Context) (*api.StatusResponse, error) {
 	return &resp, nil
 }
 
-// Version queries the software version of the node.
+// Version returns the software version of the node.
 func (c *Client) Version(ctx context.Context) (*api.ChainQueryResponse, error) {
 	var req struct{}
 	var resp api.ChainQueryResponse

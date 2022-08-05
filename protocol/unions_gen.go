@@ -334,6 +334,8 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(IssueTokens), nil
 	case TransactionTypeLockAccount:
 		return new(LockAccount), nil
+	case TransactionTypeNodeStatusUpdate:
+		return new(NodeStatusUpdate), nil
 	case TransactionTypeRemote:
 		return new(RemoteTransaction), nil
 	case TransactionTypeSendTokens:
@@ -416,6 +418,9 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 		return ok && a.Equal(b)
 	case *LockAccount:
 		b, ok := b.(*LockAccount)
+		return ok && a.Equal(b)
+	case *NodeStatusUpdate:
+		b, ok := b.(*NodeStatusUpdate)
 		return ok && a.Equal(b)
 	case *RemoteTransaction:
 		b, ok := b.(*RemoteTransaction)

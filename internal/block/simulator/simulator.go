@@ -175,6 +175,7 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 			Router:        sim.Router(),
 			TxMaxWaitTime: time.Hour,
 			Database:      x,
+			EventBus:      execOpts.EventBus,
 			Key:           execOpts.Key,
 		})
 		require.NoError(sim, err)
@@ -219,6 +220,7 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 			Router:        sim.Router(),
 			TxMaxWaitTime: time.Hour,
 			Database:      x,
+			EventBus:      execOpts.EventBus,
 			Key:           execOpts.Key,
 		})
 		require.NoError(sim, err)

@@ -29,5 +29,5 @@ func (SystemWriteData) Validate(st *StateManager, tx *Delivery) (protocol.Transa
 		return nil, errors.Format(errors.StatusBadRequest, "invalid principal: %v belongs to the wrong partition", st.OriginUrl)
 	}
 
-	return executeWriteFullDataAccount(st, body.Entry, false, body.WriteToState)
+	return executeWriteFullDataAccount(st, body.Entry, body.WriteToState)
 }

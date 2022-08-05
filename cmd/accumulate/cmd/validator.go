@@ -105,12 +105,12 @@ func runValCmdFunc(fn func(values *core.GlobalValues, pageCount int, signer []*s
 			return "", err
 		}
 
-		env, err := fn(&describe.Values, len(page.Keys), signers, partition, args)
+		env, err := fn(describe.Values, len(page.Keys), signers, partition, args)
 		if err != nil {
 			return "", err
 		}
 
-		return dispatchTxAndPrintResponse(env, principal, signers)
+		return dispatchTxAndPrintResponse(env, principal, nil)
 	})
 }
 

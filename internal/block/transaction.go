@@ -309,47 +309,52 @@ func (x *Executor) systemTransactionIsReady(batch *database.Batch, delivery *cha
 	// not delegate "is ready?" to the transaction executor - anchors _must_ be
 	// sequenced.
 
-	switch delivery.Transaction.Body.Type() {
-	case protocol.TransactionTypeSystemGenesis, protocol.TransactionTypeSystemWriteData:
-		// Do not check these
-		return true, nil
+	// Anchors must be sequenced. Do not check genesis, system write data, or
+	// node status update.
+	typ := delivery.Transaction.Body.Type()
+	if typ.IsAnchor() {
+		// Load the ledger
+		var ledger *protocol.SyntheticLedger
+		err := batch.Account(x.Describe.Synthetic()).GetStateAs(&ledger)
+		if err != nil {
+			return false, errors.Format(errors.StatusUnknownError, "load synthetic transaction ledger: %w", err)
+		}
 
-	default:
-		// Anchors must be sequenced
-	}
-
-	// Load the ledger
-	var ledger *protocol.SyntheticLedger
-	err := batch.Account(x.Describe.Synthetic()).GetStateAs(&ledger)
-	if err != nil {
-		return false, errors.Format(errors.StatusUnknownError, "load synthetic transaction ledger: %w", err)
-	}
-
-	// If the transaction is out of sequence, mark it pending
-	partLedger := ledger.Anchor(delivery.SourceNetwork)
-	if partLedger.Delivered+1 != status.SequenceNumber {
-		x.logger.Info("Out of sequence anchor transaction",
-			"hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4),
-			"seq-got", status.SequenceNumber,
-			"seq-want", partLedger.Delivered+1,
-			"source", status.SourceNetwork,
-			"destination", status.DestinationNetwork,
-			"type", delivery.Transaction.Body.Type(),
-			"hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4),
-		)
-		return false, nil
-	}
-
-	if principal != nil {
-		return true, nil
+		// If the transaction is out of sequence, mark it pending
+		partLedger := ledger.Anchor(delivery.SourceNetwork)
+		if partLedger.Delivered+1 != status.SequenceNumber {
+			x.logger.Info("Out of sequence anchor transaction",
+				"hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4),
+				"seq-got", status.SequenceNumber,
+				"seq-want", partLedger.Delivered+1,
+				"source", status.SourceNetwork,
+				"destination", status.DestinationNetwork,
+				"type", typ,
+				"hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4),
+			)
+			return false, nil
+		}
 	}
 
 	// If the principal is required but missing, do not return an error unless
 	// the transaction is ready to execute.
 	// https://accumulate.atlassian.net/browse/AC-1704
-	val, ok := getValidator[chain.PrincipalValidator](x, delivery.Transaction.Body.Type())
-	if !ok || !val.AllowMissingPrincipal(delivery.Transaction) {
-		return false, errors.NotFound("missing principal: %v not found", delivery.Transaction.Header.Principal)
+	if principal == nil {
+		val, ok := getValidator[chain.PrincipalValidator](x, typ)
+		if !ok || !val.AllowMissingPrincipal(delivery.Transaction) {
+			return false, errors.NotFound("missing principal: %v not found", delivery.Transaction.Header.Principal)
+		}
+	}
+
+	val, ok := getValidator[chain.SignerValidator](x, delivery.Transaction.Body.Type())
+	if ok {
+		ready, fallback, err := val.TransactionIsReady(x, batch, delivery.Transaction, status)
+		if err != nil {
+			return false, errors.Wrap(errors.StatusUnknownError, err)
+		}
+		if !fallback {
+			return ready, nil
+		}
 	}
 
 	return true, nil
@@ -376,12 +381,10 @@ func (x *Executor) recordTransaction(batch *database.Batch, delivery *chain.Deli
 		return nil, fmt.Errorf("store transaction status: %w", err)
 	}
 
-	// If the transaction is synthetic, update the synthetic ledger
-	if delivery.Transaction.Body.Type().IsUser() {
-		return status, nil
-	}
-	switch delivery.Transaction.Body.Type() {
-	case protocol.TransactionTypeSystemGenesis, protocol.TransactionTypeSystemWriteData:
+	// If the transaction is synthetic or an anchor, update the synthetic or
+	// anchor ledger
+	typ := delivery.Transaction.Body.Type()
+	if typ.IsUser() || typ.IsSystem() && !typ.IsAnchor() {
 		return status, nil
 	}
 
@@ -498,10 +501,13 @@ func (x *Executor) recordSuccessfulTransaction(batch *database.Batch, state *cha
 }
 
 func selectTargetChain(account *database.Account, body protocol.TransactionBody) *database.Chain2 {
-	if writeData, ok := body.(*protocol.WriteData); ok {
-		if writeData.Scratch {
+	switch body := body.(type) {
+	case *protocol.WriteData:
+		if body.Scratch {
 			return account.ScratchChain()
 		}
+	case *protocol.NodeStatusUpdate:
+		return account.ScratchChain()
 	}
 	return account.MainChain()
 }

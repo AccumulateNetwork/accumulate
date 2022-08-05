@@ -20,8 +20,23 @@ func (x *Executor) processNetworkAccountUpdates(batch *database.Batch, delivery 
 		return nil
 	}
 
+	// Update the pending globals for node status updates
+	typ := delivery.Transaction.Body.Type()
+	if typ == protocol.TransactionTypeNodeStatusUpdate {
+		account, ok := principal.(*protocol.DataAccount)
+		if !ok {
+			return errors.Format(errors.StatusInternalError, "node status update principal is not a data account")
+		}
+
+		// Validate entry and update variable
+		err := x.globals.Pending.ParseAddressBook(account.Entry)
+		if err != nil {
+			return errors.Wrap(errors.StatusUnknownError, err)
+		}
+	}
+
 	// Allow system transactions to do their thing
-	if delivery.Transaction.Body.Type().IsSystem() {
+	if typ.IsSystem() {
 		return nil
 	}
 

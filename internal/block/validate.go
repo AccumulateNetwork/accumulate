@@ -264,13 +264,14 @@ func validateSyntheticTransactionSignatures(transaction *protocol.Transaction, s
 		}
 	}
 
-	if !gotSynthSig {
+	typ := transaction.Body.Type()
+	if !gotSynthSig && typ != protocol.TransactionTypeNodeStatusUpdate {
 		return errors.Format(errors.StatusUnauthenticated, "missing synthetic transaction origin")
 	}
 	if !gotED25519Sig {
 		return errors.Format(errors.StatusUnauthenticated, "missing ED25519 signature")
 	}
-	if transaction.Body.Type() == protocol.TransactionTypeDirectoryAnchor || transaction.Body.Type() == protocol.TransactionTypeBlockValidatorAnchor {
+	if typ.IsSystem() {
 		return nil
 	}
 

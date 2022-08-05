@@ -80,6 +80,19 @@ type AddKeyOperation struct {
 	extraData []byte
 }
 
+type AddressBookEntries struct {
+	fieldsSet []bool
+	Entries   []*AddressBookEntry `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
+	extraData []byte
+}
+
+type AddressBookEntry struct {
+	fieldsSet     []bool
+	PublicKeyHash [32]byte         `json:"publicKeyHash,omitempty" form:"publicKeyHash" query:"publicKeyHash" validate:"required"`
+	Address       *InternetAddress `json:"address,omitempty" form:"address" query:"address" validate:"required"`
+	extraData     []byte
+}
+
 type AnchorLedger struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
@@ -465,6 +478,13 @@ type NetworkGlobals struct {
 	// AnchorEmptyBlocks controls whether an anchor is sent for a block if the block contains no transactions other than a directory anchor.
 	AnchorEmptyBlocks bool `json:"anchorEmptyBlocks,omitempty" form:"anchorEmptyBlocks" query:"anchorEmptyBlocks" validate:"required"`
 	extraData         []byte
+}
+
+type NodeStatusUpdate struct {
+	fieldsSet []bool
+	Status    NodeStatus       `json:"status,omitempty" form:"status" query:"status" validate:"required"`
+	Address   *InternetAddress `json:"address,omitempty" form:"address" query:"address" validate:"required"`
+	extraData []byte
 }
 
 type Object struct {
@@ -978,6 +998,8 @@ func (*LiteTokenAccount) Type() AccountType { return AccountTypeLiteTokenAccount
 
 func (*LockAccount) Type() TransactionType { return TransactionTypeLockAccount }
 
+func (*NodeStatusUpdate) Type() TransactionType { return TransactionTypeNodeStatusUpdate }
+
 func (*PartitionSignature) Type() SignatureType { return SignatureTypePartition }
 
 func (*RCD1Signature) Type() SignatureType { return SignatureTypeRCD1 }
@@ -1158,6 +1180,34 @@ func (v *AddKeyOperation) Copy() *AddKeyOperation {
 }
 
 func (v *AddKeyOperation) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *AddressBookEntries) Copy() *AddressBookEntries {
+	u := new(AddressBookEntries)
+
+	u.Entries = make([]*AddressBookEntry, len(v.Entries))
+	for i, v := range v.Entries {
+		if v != nil {
+			u.Entries[i] = (v).Copy()
+		}
+	}
+
+	return u
+}
+
+func (v *AddressBookEntries) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *AddressBookEntry) Copy() *AddressBookEntry {
+	u := new(AddressBookEntry)
+
+	u.PublicKeyHash = v.PublicKeyHash
+	if v.Address != nil {
+		u.Address = (v.Address).Copy()
+	}
+
+	return u
+}
+
+func (v *AddressBookEntry) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *AnchorLedger) Copy() *AnchorLedger {
 	u := new(AnchorLedger)
@@ -1816,6 +1866,19 @@ func (v *NetworkGlobals) Copy() *NetworkGlobals {
 }
 
 func (v *NetworkGlobals) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *NodeStatusUpdate) Copy() *NodeStatusUpdate {
+	u := new(NodeStatusUpdate)
+
+	u.Status = v.Status
+	if v.Address != nil {
+		u.Address = (v.Address).Copy()
+	}
+
+	return u
+}
+
+func (v *NodeStatusUpdate) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *Object) Copy() *Object {
 	u := new(Object)
@@ -2684,6 +2747,35 @@ func (v *AddKeyOperation) Equal(u *AddKeyOperation) bool {
 	return true
 }
 
+func (v *AddressBookEntries) Equal(u *AddressBookEntries) bool {
+	if len(v.Entries) != len(u.Entries) {
+		return false
+	}
+	for i := range v.Entries {
+		if !((v.Entries[i]).Equal(u.Entries[i])) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (v *AddressBookEntry) Equal(u *AddressBookEntry) bool {
+	if !(v.PublicKeyHash == u.PublicKeyHash) {
+		return false
+	}
+	switch {
+	case v.Address == u.Address:
+		// equal
+	case v.Address == nil || u.Address == nil:
+		return false
+	case !((v.Address).Equal(u.Address)):
+		return false
+	}
+
+	return true
+}
+
 func (v *AnchorLedger) Equal(u *AnchorLedger) bool {
 	switch {
 	case v.Url == u.Url:
@@ -3545,6 +3637,22 @@ func (v *NetworkGlobals) Equal(u *NetworkGlobals) bool {
 		return false
 	}
 	if !(v.AnchorEmptyBlocks == u.AnchorEmptyBlocks) {
+		return false
+	}
+
+	return true
+}
+
+func (v *NodeStatusUpdate) Equal(u *NodeStatusUpdate) bool {
+	if !(v.Status == u.Status) {
+		return false
+	}
+	switch {
+	case v.Address == u.Address:
+		// equal
+	case v.Address == nil || u.Address == nil:
+		return false
+	case !((v.Address).Equal(u.Address)):
 		return false
 	}
 
@@ -4913,6 +5021,95 @@ func (v *AddKeyOperation) IsValid() error {
 		errs = append(errs, "field Entry is missing")
 	} else if (v.Entry).Equal(new(KeySpecParams)) {
 		errs = append(errs, "field Entry is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_AddressBookEntries = []string{
+	1: "Entries",
+}
+
+func (v *AddressBookEntries) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(len(v.Entries) == 0) {
+		for _, v := range v.Entries {
+			writer.WriteValue(1, v.MarshalBinary)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_AddressBookEntries)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *AddressBookEntries) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Entries is missing")
+	} else if len(v.Entries) == 0 {
+		errs = append(errs, "field Entries is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_AddressBookEntry = []string{
+	1: "PublicKeyHash",
+	2: "Address",
+}
+
+func (v *AddressBookEntry) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.PublicKeyHash == ([32]byte{})) {
+		writer.WriteHash(1, &v.PublicKeyHash)
+	}
+	if !(v.Address == nil) {
+		writer.WriteValue(2, v.Address.MarshalBinary)
+	}
+
+	_, _, err := writer.Reset(fieldNames_AddressBookEntry)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *AddressBookEntry) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field PublicKeyHash is missing")
+	} else if v.PublicKeyHash == ([32]byte{}) {
+		errs = append(errs, "field PublicKeyHash is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Address is missing")
+	} else if v.Address == nil {
+		errs = append(errs, "field Address is not set")
 	}
 
 	switch len(errs) {
@@ -7375,6 +7572,59 @@ func (v *NetworkGlobals) IsValid() error {
 		errs = append(errs, "field AnchorEmptyBlocks is missing")
 	} else if !v.AnchorEmptyBlocks {
 		errs = append(errs, "field AnchorEmptyBlocks is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_NodeStatusUpdate = []string{
+	1: "Type",
+	2: "Status",
+	3: "Address",
+}
+
+func (v *NodeStatusUpdate) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Status == 0) {
+		writer.WriteEnum(2, v.Status)
+	}
+	if !(v.Address == nil) {
+		writer.WriteValue(3, v.Address.MarshalBinary)
+	}
+
+	_, _, err := writer.Reset(fieldNames_NodeStatusUpdate)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *NodeStatusUpdate) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Status is missing")
+	} else if v.Status == 0 {
+		errs = append(errs, "field Status is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Address is missing")
+	} else if v.Address == nil {
+		errs = append(errs, "field Address is not set")
 	}
 
 	switch len(errs) {
@@ -10478,6 +10728,59 @@ func (v *AddKeyOperation) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *AddressBookEntries) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *AddressBookEntries) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	for {
+		if x := new(AddressBookEntry); reader.ReadValue(1, x.UnmarshalBinary) {
+			v.Entries = append(v.Entries, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_AddressBookEntries)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *AddressBookEntry) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *AddressBookEntry) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadHash(1); ok {
+		v.PublicKeyHash = *x
+	}
+	if x := new(InternetAddress); reader.ReadValue(2, x.UnmarshalBinary) {
+		v.Address = x
+	}
+
+	seen, err := reader.Reset(fieldNames_AddressBookEntry)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *AnchorLedger) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -11961,6 +12264,39 @@ func (v *NetworkGlobals) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_NetworkGlobals)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *NodeStatusUpdate) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *NodeStatusUpdate) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+	if x := new(NodeStatus); reader.ReadEnum(2, x) {
+		v.Status = *x
+	}
+	if x := new(InternetAddress); reader.ReadValue(3, x.UnmarshalBinary) {
+		v.Address = x
+	}
+
+	seen, err := reader.Reset(fieldNames_NodeStatusUpdate)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -13813,6 +14149,24 @@ func (v *AddKeyOperation) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *AddressBookEntries) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Entries encoding.JsonList[*AddressBookEntry] `json:"entries,omitempty"`
+	}{}
+	u.Entries = v.Entries
+	return json.Marshal(&u)
+}
+
+func (v *AddressBookEntry) MarshalJSON() ([]byte, error) {
+	u := struct {
+		PublicKeyHash string           `json:"publicKeyHash,omitempty"`
+		Address       *InternetAddress `json:"address,omitempty"`
+	}{}
+	u.PublicKeyHash = encoding.ChainToJSON(v.PublicKeyHash)
+	u.Address = v.Address
+	return json.Marshal(&u)
+}
+
 func (v *AnchorLedger) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type                     AccountType                 `json:"type"`
@@ -14411,6 +14765,18 @@ func (v *NetworkDefinition) MarshalJSON() ([]byte, error) {
 	u.NetworkName = v.NetworkName
 	u.Partitions = v.Partitions
 	u.Subnets = v.Partitions
+	return json.Marshal(&u)
+}
+
+func (v *NodeStatusUpdate) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type    TransactionType  `json:"type"`
+		Status  NodeStatus       `json:"status,omitempty"`
+		Address *InternetAddress `json:"address,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Status = v.Status
+	u.Address = v.Address
 	return json.Marshal(&u)
 }
 
@@ -15232,6 +15598,37 @@ func (v *AddKeyOperation) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Entry = u.Entry
+	return nil
+}
+
+func (v *AddressBookEntries) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Entries encoding.JsonList[*AddressBookEntry] `json:"entries,omitempty"`
+	}{}
+	u.Entries = v.Entries
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Entries = u.Entries
+	return nil
+}
+
+func (v *AddressBookEntry) UnmarshalJSON(data []byte) error {
+	u := struct {
+		PublicKeyHash string           `json:"publicKeyHash,omitempty"`
+		Address       *InternetAddress `json:"address,omitempty"`
+	}{}
+	u.PublicKeyHash = encoding.ChainToJSON(v.PublicKeyHash)
+	u.Address = v.Address
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if x, err := encoding.ChainFromJSON(u.PublicKeyHash); err != nil {
+		return fmt.Errorf("error decoding PublicKeyHash: %w", err)
+	} else {
+		v.PublicKeyHash = x
+	}
+	v.Address = u.Address
 	return nil
 }
 
@@ -16376,6 +16773,26 @@ func (v *NetworkDefinition) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Partitions = u.Subnets
 	}
+	return nil
+}
+
+func (v *NodeStatusUpdate) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type    TransactionType  `json:"type"`
+		Status  NodeStatus       `json:"status,omitempty"`
+		Address *InternetAddress `json:"address,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Status = v.Status
+	u.Address = v.Address
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Status = u.Status
+	v.Address = u.Address
 	return nil
 }
 

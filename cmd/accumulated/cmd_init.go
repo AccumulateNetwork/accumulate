@@ -294,6 +294,7 @@ func initNodeFromSeedProxy(cmd *cobra.Command, args []string) (int, *cfg.Config,
 		if err != nil {
 			return 0, nil, nil, fmt.Errorf("failed to parse url from network info %s, %v", addr, err)
 		}
+
 		//check the health of the peer
 		peerClient, err := rpchttp.New(fmt.Sprintf("tcp://%s:%s", u.Hostname(), u.Port()))
 		if err != nil {
@@ -470,7 +471,10 @@ func initNodeFromPeer(cmd *cobra.Command, args []string) (int, *cfg.Config, *typ
 		u, err := url.Parse(peer.URL)
 		checkf(err, "failed to parse url from network info %s", peer.URL)
 
-		clientUrl := fmt.Sprintf("tcp://%s:%s", u.Hostname(), u.Port())
+		port, err := strconv.ParseInt(u.Port(), 10, 64)
+		checkf(err, "failed to parse port from peer URL %s", peer.URL)
+
+		clientUrl := fmt.Sprintf("tcp://%s:%d", u.Hostname(), port+int64(cfg.PortOffsetTendermintRpc))
 
 		if !flagInitNode.AllowUnhealthyPeers {
 			//check the health of the peer

@@ -28,7 +28,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	_ "gitlab.com/accumulatenetwork/accumulate/smt/pmt"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 // Accumulator is an ABCI application that accumulates validated transactions in
@@ -196,30 +195,23 @@ func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
 		sentry.CaptureException(err)
 	}
 
+	resp := abci.ResponseInfo{
+		Data:       string(data),
+		Version:    version.ABCIVersion,
+		AppVersion: Version,
+	}
+
 	batch := app.DB.Begin(false)
 	defer batch.Discard()
-
-	var height int64
-	var ledger *protocol.SystemLedger
-	err = batch.Account(app.Accumulate.Describe.NodeUrl(protocol.Ledger)).GetStateAs(&ledger)
-	switch {
-	case err == nil:
-		height = int64(ledger.Index)
-	case errors.Is(err, storage.ErrNotFound):
-		// InitChain has not been called yet
-		height = 0
-	default:
-		height = -1
+	height, hash, err := app.Executor.LastBlock(batch)
+	if err != nil {
+		resp.LastBlockHeight = -1
 		sentry.CaptureException(err)
+	} else {
+		resp.LastBlockHeight = int64(height)
+		resp.LastBlockAppHash = hash
 	}
-
-	return abci.ResponseInfo{
-		Data:             string(data),
-		Version:          version.ABCIVersion,
-		AppVersion:       Version,
-		LastBlockHeight:  height,
-		LastBlockAppHash: batch.BptRoot(),
-	}
+	return resp
 }
 
 // Query implements github.com/tendermint/tendermint/abci/types.Application.

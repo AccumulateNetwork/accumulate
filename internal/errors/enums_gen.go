@@ -65,6 +65,9 @@ const StatusEncodingError Status = 502
 // StatusFatalError means something has gone seriously wrong.
 const StatusFatalError Status = 503
 
+// StatusUninitialized means something is not initialized.
+const StatusUninitialized Status = 504
+
 // GetEnumValue returns the value of the Status
 func (v Status) GetEnumValue() uint64 { return uint64(v) }
 
@@ -72,7 +75,7 @@ func (v Status) GetEnumValue() uint64 { return uint64(v) }
 func (v *Status) SetEnumValue(id uint64) bool {
 	u := Status(id)
 	switch u {
-	case StatusOK, StatusDelivered, StatusPending, StatusRemote, StatusWrongPartition, StatusBadRequest, StatusUnauthenticated, StatusInsufficientCredits, StatusUnauthorized, StatusNotFound, StatusNotAllowed, StatusConflict, StatusBadSignerVersion, StatusBadTimestamp, StatusBadUrlLength, StatusInternalError, StatusUnknownError, StatusEncodingError, StatusFatalError:
+	case StatusOK, StatusDelivered, StatusPending, StatusRemote, StatusWrongPartition, StatusBadRequest, StatusUnauthenticated, StatusInsufficientCredits, StatusUnauthorized, StatusNotFound, StatusNotAllowed, StatusConflict, StatusBadSignerVersion, StatusBadTimestamp, StatusBadUrlLength, StatusInternalError, StatusUnknownError, StatusEncodingError, StatusFatalError, StatusUninitialized:
 		*v = u
 		return true
 	default:
@@ -121,6 +124,8 @@ func (v Status) String() string {
 		return "encodingError"
 	case StatusFatalError:
 		return "fatalError"
+	case StatusUninitialized:
+		return "uninitialized"
 	default:
 		return fmt.Sprintf("Status:%d", v)
 	}
@@ -167,6 +172,8 @@ func StatusByName(name string) (Status, bool) {
 		return StatusEncodingError, true
 	case "fatalerror":
 		return StatusFatalError, true
+	case "uninitialized":
+		return StatusUninitialized, true
 	default:
 		return 0, false
 	}

@@ -1,5 +1,4 @@
 GlobalValues:
-  non-binary: true
   fields:
     - name: Oracle
       type: protocol.AcmeOracle
@@ -15,5 +14,9 @@ GlobalValues:
       pointer: true
     - name: Routing
       type: protocol.RoutingTable
+      marshal-as: reference
+      pointer: true
+    - name: AddressBook
+      type: protocol.AddressBookEntries
       marshal-as: reference
       pointer: true

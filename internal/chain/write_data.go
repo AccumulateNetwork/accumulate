@@ -110,10 +110,13 @@ func (WriteData) Validate(st *StateManager, tx *Delivery) (protocol.TransactionR
 		return executeWriteLiteDataAccount(st, body.Entry)
 	}
 
-	return executeWriteFullDataAccount(st, body.Entry, body.Scratch, body.WriteToState)
+	if body.Scratch && body.WriteToState {
+		return nil, errors.Format(errors.StatusBadRequest, "writing scratch data to the account state is not permitted")
+	}
+	return executeWriteFullDataAccount(st, body.Entry, body.WriteToState)
 }
 
-func executeWriteFullDataAccount(st *StateManager, entry protocol.DataEntry, scratch bool, writeToState bool) (protocol.TransactionResult, error) {
+func executeWriteFullDataAccount(st *StateManager, entry protocol.DataEntry, writeToState bool) (protocol.TransactionResult, error) {
 	if st.Origin == nil {
 		return nil, errors.NotFound("%v not found", st.OriginUrl)
 	}
@@ -125,10 +128,6 @@ func executeWriteFullDataAccount(st *StateManager, entry protocol.DataEntry, scr
 	}
 
 	if writeToState {
-		if scratch {
-			return nil, errors.Format(errors.StatusBadRequest, "writing scratch data to the account state is not permitted")
-		}
-
 		account.Entry = entry
 		err := st.Update(account)
 		if err != nil {

@@ -17,6 +17,17 @@ ObjectType:
     value: 0x02
     description: represents a transaction object
 
+NodeStatus:
+  Unknown:
+    value: 0
+    description: indicates the node status is not known
+  Up:
+    value: 1
+    description: indicates the node is up
+  Down:
+    value: 2
+    description: indicates the node is up
+
 SignatureType:
   Unknown:
     value: 0
@@ -204,6 +215,9 @@ TransactionType:
   SystemWriteData:
     value: 0x63
     description: writes data to a system data account
+  NodeStatusUpdate:
+    value: 0x64
+    description: updates the status of a node
 
 AccountType:
   Unknown:

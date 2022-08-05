@@ -208,6 +208,7 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 		Router:        n.router,
 		TxMaxWaitTime: 10 * time.Second,
 		Database:      n.db,
+		EventBus:      eventBus,
 		Key:           n.key.Bytes(),
 	})
 	require.NoError(n.t, err)

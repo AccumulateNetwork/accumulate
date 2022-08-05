@@ -83,6 +83,7 @@ func NewNodeExecutor(opts ExecutorOptions, db database.Beginner) (*Executor, err
 		executors = append(executors,
 			chain.PartitionAnchor{},
 			chain.DirectoryAnchor{},
+			chain.NodeStatusUpdate{},
 		)
 
 	case config.BlockValidator:
@@ -164,12 +165,27 @@ func newExecutor(opts ExecutorOptions, db database.Beginner, executors ...chain.
 	return m, nil
 }
 
+func (x *Executor) DescribeNetwork() *config.Describe { return &x.Describe }
+
 func (m *Executor) EnableTimers() {
 	m.BlockTimers.Initialize(&m.executors)
 }
 
 func (m *Executor) ActiveGlobals_TESTONLY() *core.GlobalValues {
 	return &m.globals.Active
+}
+
+func (x *Executor) LastBlock(batch *database.Batch) (uint64, []byte, error) {
+	var ledger *protocol.SystemLedger
+	err := batch.Account(x.Describe.Ledger()).GetStateAs(&ledger)
+	switch {
+	case err == nil:
+		return ledger.Index, batch.BptRoot(), nil
+	case errors.Is(err, storage.ErrNotFound):
+		return 0, nil, nil // Uninitialized
+	default:
+		return 0, nil, err
+	}
 }
 
 func (m *Executor) Genesis(block *Block, exec chain.TransactionExecutor) error {

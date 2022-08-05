@@ -40,11 +40,13 @@ func (g *GlobalValues) DiffValidators(h *GlobalValues, partitionID string) (map[
 		}
 		k32 := *(*[32]byte)(key)
 
-		// If the key is present in new and old, unmark it
-		delete(updates, k32)
-
-		// If the key is only present in new, mark it for addition
-		updates[k32] = 1
+		if _, ok := updates[k32]; ok {
+			// If the key is present in new and old, unmark it
+			delete(updates, k32)
+		} else {
+			// If the key is only present in new, mark it for addition
+			updates[k32] = 1
+		}
 	}
 
 	return updates, nil

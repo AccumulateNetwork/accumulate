@@ -6,7 +6,8 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/url"
+	stdurl "net/url"
+	"strings"
 	"time"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
@@ -26,11 +27,16 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
 	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
 	statuschk "gitlab.com/accumulatenetwork/accumulate/internal/connections/status"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 type Daemon struct {
@@ -45,6 +51,8 @@ type Daemon struct {
 	jrpc              *api.JrpcMethods
 	connectionManager connections.ConnectionInitializer
 	eventBus          *events.Bus
+	router            routing.Router
+	advertize         *protocol.InternetAddress
 
 	// knobs for tests
 	// IsTest   bool
@@ -79,6 +87,15 @@ func Load(dir string, newWriter func(*config.Config) (io.Writer, error)) (*Daemo
 	daemon.Logger, err = logging.NewTendermintLogger(zerolog.New(logWriter), logLevel, false)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize logger: %v", err)
+	}
+
+	addr := daemon.Config.Accumulate.LocalAddress
+	if !strings.Contains(addr, "://") {
+		addr = "http://" + addr
+	}
+	daemon.advertize, err = protocol.ParseInternetAddress(addr)
+	if err != nil {
+		return nil, errors.Format(errors.StatusBadRequest, "invalid local address: %w", err)
 	}
 
 	return &daemon, nil
@@ -148,12 +165,12 @@ func (d *Daemon) Start() (err error) {
 	d.eventBus = events.NewBus(d.Logger.With("module", "events"))
 	events.SubscribeSync(d.eventBus, d.onDidCommitBlock)
 
-	router := routing.NewRouter(d.eventBus, d.connectionManager)
+	d.router = routing.NewRouter(d.eventBus, d.connectionManager)
 	execOpts := block.ExecutorOptions{
 		Logger:   d.Logger,
 		Key:      d.Key().Bytes(),
 		Describe: d.Config.Accumulate.Describe,
-		Router:   router,
+		Router:   d.router,
 		EventBus: d.eventBus,
 	}
 
@@ -215,11 +232,12 @@ func (d *Daemon) Start() (err error) {
 	d.jrpc, err = api.NewJrpc(api.Options{
 		Logger:            d.Logger,
 		Describe:          &d.Config.Accumulate.Describe,
-		Router:            router,
+		Router:            d.router,
 		PrometheusServer:  d.Config.Accumulate.API.PrometheusServer,
 		TxMaxWaitTime:     d.Config.Accumulate.API.TxMaxWaitTime,
 		Database:          d.db,
 		ConnectionManager: d.connectionManager,
+		EventBus:          d.eventBus,
 		Key:               d.Key().Bytes(),
 	})
 	if err != nil {
@@ -270,7 +288,36 @@ func (d *Daemon) Start() (err error) {
 		color.HiMagenta("Syncing ....")
 		time.Sleep(time.Second * 1)
 	}
-	color.HiBlue(" %s node running at %s :", d.node.Config.Accumulate.NetworkType, d.node.Config.Accumulate.Describe.LocalAddress)
+	color.HiBlue(" %s node running at %s :", d.node.Config.Accumulate.NetworkType, d.node.Config.Accumulate.LocalAddress)
+
+	// Send status notification
+	if d.Config.Accumulate.NetworkType == config.Directory {
+		d.sendNodeStatusUpdate(protocol.NodeStatusUp)
+	}
+
+	// Notify everyone that the node is booted. TODO Can we detect when replay is done?
+	err = d.db.View(func(batch *database.Batch) error {
+		// Is the database initialized?
+		height, _, err := exec.LastBlock(batch)
+		if err != nil || height == 0 {
+			return err
+		}
+
+		g := new(core.GlobalValues)
+		err = g.Load(d.Config.Accumulate.PartitionUrl(), func(account *url.URL, target interface{}) error {
+			return batch.Account(account).Main().GetAs(target)
+		})
+		if err != nil {
+			return err
+		}
+
+		// We're using the globals loaded from the DB so nothing has actually
+		// changed
+		return d.eventBus.Publish(events.WillChangeGlobals{Old: g, New: g})
+	})
+	if err != nil {
+		return errors.Wrap(errors.StatusUnknownError, err)
+	}
 
 	// Clean up once the node is stopped (mostly for tests)
 	go func() {
@@ -297,6 +344,40 @@ func (d *Daemon) Start() (err error) {
 	}()
 
 	return nil
+}
+
+func (d *Daemon) sendNodeStatusUpdate(status protocol.NodeStatus) {
+	txn := new(protocol.Transaction)
+	txn.Header.Principal = d.Config.Accumulate.AddressBook()
+	txn.Body = &protocol.NodeStatusUpdate{
+		Status:  status,
+		Address: d.advertize,
+	}
+
+	sig, err := new(signing.Builder).
+		UseSimpleHash().
+		SetType(protocol.SignatureTypeED25519).
+		SetUrl(d.Config.Accumulate.OperatorsPage()).
+		SetVersion(1).
+		SetTimestampToNow().
+		SetPrivateKey(d.pv.Key.PrivKey.Bytes()).
+		Initiate(txn)
+	if err != nil {
+		d.Logger.Error("Sign node status update", "error", err)
+		return
+	}
+
+	env := new(protocol.Envelope)
+	env.Transaction = []*protocol.Transaction{txn}
+	env.Signatures = []protocol.Signature{sig}
+
+	_, err = d.router.Submit(context.Background(), d.Config.Accumulate.PartitionId, env, false, true)
+	if err != nil {
+		d.Logger.Error("Submit node status update", "error", err)
+		return
+	}
+
+	d.Logger.Info("Submitted node status update", "hash", logging.AsHex(txn.GetHash()))
 }
 
 func (d *Daemon) LocalClient() (connections.ABCIClient, error) {
@@ -343,7 +424,7 @@ func (d *Daemon) ensureSufficientDiskSpace(dbPath string) {
 // listenHttpUrl takes a string such as `http://localhost:123` and creates a TCP
 // listener.
 func listenHttpUrl(s string) (net.Listener, bool, error) {
-	u, err := url.Parse(s)
+	u, err := stdurl.Parse(s)
 	if err != nil {
 		return nil, false, fmt.Errorf("invalid address: %v", err)
 	}
@@ -371,6 +452,8 @@ func listenHttpUrl(s string) (net.Listener, bool, error) {
 }
 
 func (d *Daemon) Stop() error {
+	d.sendNodeStatusUpdate(protocol.NodeStatusDown)
+
 	err := d.node.Stop()
 	if err != nil {
 		return err
