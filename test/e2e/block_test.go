@@ -108,7 +108,7 @@ func TestDoesChargeFee(t *testing.T) {
 	)...)
 
 	lid := simulator.GetAccount[*LiteIdentity](sim, alice.RootIdentity())
-	require.Equal(t, int(initialBalance-FeeSendTokens), int(lid.CreditBalance))
+	require.Equal(t, int(initialBalance-FeeTransferTokens), int(lid.CreditBalance))
 }
 
 func TestSendTokensToBadRecipient2(t *testing.T) {
@@ -148,7 +148,7 @@ func TestSendTokensToBadRecipient2(t *testing.T) {
 	sim.WaitForTransactionFlow(delivered, env.Transaction[0].GetHash())
 
 	lid := simulator.GetAccount[*LiteIdentity](sim, aliceUrl.RootIdentity())
-	expectedFee := FeeSendTokens - (FeeSendTokens-FeeFailedMaximum)/2
+	expectedFee := FeeTransferTokens - (FeeTransferTokens-FeeFailedMaximum)/2
 	require.Equal(t, int(creditsBefore-expectedFee.AsUInt64()), int(lid.CreditBalance))
 }
 
