@@ -148,7 +148,8 @@ func TestSendTokensToBadRecipient2(t *testing.T) {
 	sim.WaitForTransactionFlow(delivered, env.Transaction[0].GetHash())
 
 	lid := simulator.GetAccount[*LiteIdentity](sim, aliceUrl.RootIdentity())
-	expectedFee := FeeTransferTokens - (FeeTransferTokens-FeeFailedMaximum)/2
+	fee := FeeTransferTokens + FeeTransferTokensExtra
+	expectedFee := fee - (fee-FeeFailedMaximum)/2
 	require.Equal(t, int(creditsBefore-expectedFee.AsUInt64()), int(lid.CreditBalance))
 }
 

@@ -65,6 +65,7 @@ func TestFee(t *testing.T) {
 					// Remote transactions should never be passed to
 					// ComputeTransactionFee so it returns an error
 					require.Error(t, err)
+					return
 				} else {
 					// Every other legal transaction type must have a fee
 					require.NoError(t, err)
