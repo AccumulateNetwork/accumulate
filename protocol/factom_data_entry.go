@@ -6,7 +6,6 @@ import (
 	"crypto/sha512"
 	"encoding/binary"
 	"fmt"
-	"io"
 )
 
 func NewFactomDataEntry() *FactomDataEntry {
@@ -28,7 +27,7 @@ func ComputeFactomEntryHashForAccount(accountId []byte, entry [][]byte) ([]byte,
 
 	if accountId == nil && entry != nil {
 		//if we don't know the chain id, we compute one off of the entry
-		copy(lde.AccountId[:], ComputeLiteDataAccountId(&lde))
+		copy(lde.AccountId[:], ComputeLiteDataAccountId(lde.Wrap()))
 	} else {
 		copy(lde.AccountId[:], accountId)
 	}
@@ -56,7 +55,7 @@ func (e *FactomDataEntry) Hash() []byte {
 	return ComputeFactomEntryHash(d)
 }
 
-func (e *FactomDataEntry) GetData() [][]byte {
+func (e *FactomDataEntryWrapper) GetData() [][]byte {
 	return append([][]byte{e.Data}, e.ExtIds...)
 }
 
@@ -104,7 +103,6 @@ const LiteEntryMaxTotalSize = TransactionSizeMax + LiteEntryHeaderSize
 // UnmarshalBinary unmarshal the FactomDataEntry in accordance to
 // https://github.com/FactomProject/FactomDocs/blob/master/factomDataStructureDetails.md#entry
 func (e *FactomDataEntry) UnmarshalBinary(data []byte) error {
-
 	if len(data) < LiteEntryHeaderSize || len(data) > LiteEntryMaxTotalSize {
 		return fmt.Errorf("malformed entry header")
 	}
@@ -136,11 +134,5 @@ func (e *FactomDataEntry) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
-func (e *FactomDataEntry) UnmarshalBinaryFrom(reader io.Reader) error {
-	data, err := io.ReadAll(reader)
-	if err != nil {
-		return err
-	}
-
-	return e.UnmarshalBinary(data)
-}
+func (e *FactomDataEntry) IsValid() error  { return nil }
+func (e *FactomDataEntry) Wrap() DataEntry { return &FactomDataEntryWrapper{FactomDataEntry: *e} }
