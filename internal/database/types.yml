@@ -84,6 +84,11 @@ accountState:
       marshal-as: reference
       pointer: true
       repeatable: true
+    - name: Signatures
+      description: is the state of signatures related to the account
+      type: protocol.Signature
+      marshal-as: union
+      repeatable: true
     - name: Directory
       description: lists the account's sub-accounts
       type: url
@@ -143,6 +148,9 @@ ChainUpdate:
 
 BlockStateSynthTxnEntry:
   fields:
+  - name: Account
+    type: url
+    pointer: true
   - name: Transaction
     type: bytes
   - name: ChainEntry

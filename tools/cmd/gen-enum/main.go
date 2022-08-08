@@ -12,9 +12,11 @@ import (
 var flags struct {
 	files typegen.FileReader
 
-	Package  string
-	Language string
-	Out      string
+	Package     string
+	SubPackage  string
+	Language    string
+	Out         string
+	FilePerType bool
 }
 
 func main() {
@@ -26,7 +28,9 @@ func main() {
 
 	cmd.Flags().StringVarP(&flags.Language, "language", "l", "Go", "Output language or template file")
 	cmd.Flags().StringVar(&flags.Package, "package", "protocol", "Package name")
+	cmd.Flags().StringVar(&flags.SubPackage, "subpackage", "", "Package name")
 	cmd.Flags().StringVarP(&flags.Out, "out", "o", "enums_gen.go", "Output file")
+	cmd.Flags().BoolVar(&flags.FilePerType, "file-per-type", false, "Generate a separate file for each type")
 	flags.files.SetFlags(cmd.Flags(), "enums")
 
 	_ = cmd.Execute()
@@ -43,12 +47,41 @@ func check(err error) {
 	}
 }
 
+func checkf(err error, format string, otherArgs ...interface{}) {
+	if err != nil {
+		fatalf(format+": %v", append(otherArgs, err)...)
+	}
+}
+
 func run(_ *cobra.Command, args []string) {
+	switch flags.Language {
+	case "java", "Java":
+		flags.FilePerType = true
+	}
+
 	types, err := typegen.ReadMap[typegen.Enum](&flags.files, args, nil)
 	check(err)
-	ttypes := convert(types, flags.Package)
+	ttypes := convert(types, flags.Package, flags.SubPackage)
 
-	w := new(bytes.Buffer)
-	check(Templates.Execute(w, flags.Language, ttypes))
-	check(typegen.WriteFile(flags.Out, w))
+	if !flags.FilePerType {
+		w := new(bytes.Buffer)
+		check(Templates.Execute(w, flags.Language, ttypes))
+		check(typegen.WriteFile(flags.Out, w))
+	} else {
+
+		fileTmpl, err := Templates.Parse(flags.Out, "filename", nil)
+		checkf(err, "--out")
+
+		w := new(bytes.Buffer)
+		for _, typ := range ttypes.Types {
+			w.Reset()
+			err := fileTmpl.Execute(w, typ)
+			check(err)
+			filename := w.String()
+
+			w.Reset()
+			check(Templates.Execute(w, flags.Language, SingleTypeFile{flags.Package, typ}))
+			check(typegen.WriteFile(filename, w))
+		}
+	}
 }

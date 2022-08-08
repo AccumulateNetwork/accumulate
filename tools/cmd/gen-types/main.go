@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -16,10 +17,13 @@ import (
 var flags struct {
 	files typegen.FileReader
 
-	Package   string
-	Out       string
-	Language  string
-	Reference []string
+	Package        string
+	SubPackage     string
+	Out            string
+	Language       string
+	Reference      []string
+	FilePerType    bool
+	ExpandEmbedded bool
 }
 
 func main() {
@@ -31,8 +35,10 @@ func main() {
 
 	cmd.Flags().StringVarP(&flags.Language, "language", "l", "Go", "Output language or template file")
 	cmd.Flags().StringVar(&flags.Package, "package", "protocol", "Package name")
+	cmd.Flags().StringVar(&flags.SubPackage, "subpackage", "", "Subpackage name")
 	cmd.Flags().StringVarP(&flags.Out, "out", "o", "types_gen.go", "Output file")
 	cmd.Flags().StringSliceVar(&flags.Reference, "reference", nil, "Extra type definition files to use as a reference")
+	cmd.Flags().BoolVar(&flags.FilePerType, "file-per-type", false, "Generate a separate file for each type")
 	flags.files.SetFlags(cmd.Flags(), "types")
 
 	_ = cmd.Execute()
@@ -46,6 +52,12 @@ func fatalf(format string, args ...interface{}) {
 func check(err error) {
 	if err != nil {
 		fatalf("%v", err)
+	}
+}
+
+func checkf(err error, format string, otherArgs ...interface{}) {
+	if err != nil {
+		fatalf(format+": %v", append(otherArgs, err)...)
 	}
 }
 
@@ -76,14 +88,55 @@ func getPackagePath(dir string) string {
 }
 
 func run(_ *cobra.Command, args []string) {
+	switch flags.Language {
+	case "java", "Java":
+		flags.FilePerType = true
+		flags.ExpandEmbedded = true
+	}
+
 	types := read(args, true)
 	refTypes := read(nil, false)
-	ttypes, err := convert(types, refTypes, flags.Package, getWdPackagePath())
+	ttypes, err := convert(types, refTypes, flags.Package, flags.SubPackage, getWdPackagePath())
 	check(err)
 
-	w := new(bytes.Buffer)
-	check(Templates.Execute(w, flags.Language, ttypes))
-	check(typegen.WriteFile(flags.Out, w))
+	if !flags.FilePerType {
+		w := new(bytes.Buffer)
+		check(Templates.Execute(w, flags.Language, ttypes))
+		check(typegen.WriteFile(flags.Out, w))
+	} else {
+		fileTmpl, err := Templates.Parse(flags.Out, "filename", nil)
+		checkf(err, "--out")
+
+		w := new(bytes.Buffer)
+		for _, typ := range ttypes.Types {
+			w.Reset()
+			err := fileTmpl.Execute(w, typ)
+			check(err)
+			filename := SafeClassName(w.String())
+
+			w.Reset()
+			err = Templates.Execute(w, flags.Language, &SingleTypeFile{flags.Package, typ})
+			if errors.Is(err, typegen.ErrSkip) {
+				continue
+			}
+			check(err)
+			check(typegen.WriteFile(filename, w))
+		}
+		for _, typ := range ttypes.Unions {
+			w.Reset()
+			err := fileTmpl.Execute(w, typ)
+			check(err)
+			filename := w.String()
+
+			w.Reset()
+			err = Templates.Execute(w, flags.Language, &SingleUnionFile{flags.Package, typ})
+			if errors.Is(err, typegen.ErrSkip) {
+				continue
+			}
+			check(err)
+			check(typegen.WriteFile(filename, w))
+		}
+	}
 }
 
 func read(files []string, main bool) typegen.Types {

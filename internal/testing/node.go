@@ -59,7 +59,6 @@ func DefaultConfig(networkName string, net config.NetworkType, node config.NodeT
 	cfg.Mempool.Size = 50000                             //
 	cfg.Consensus.CreateEmptyBlocks = false              // Empty blocks are annoying to debug
 	cfg.Consensus.TimeoutCommit = time.Second / 5        // Increase block frequency
-	cfg.Accumulate.Website.Enabled = false               // No need for the website
 	cfg.Instrumentation.Prometheus = false               // Disable prometheus: https://github.com/tendermint/tendermint/issues/7076
 	cfg.Accumulate.Network.Partitions = []config.Partition{
 		{

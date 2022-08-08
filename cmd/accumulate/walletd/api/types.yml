@@ -166,6 +166,13 @@ GeneralResponse:
     - name: Error
       type: string
 
+AdiListResponse:
+  non-binary: true
+  fields:
+    - name: Urls
+      type: string
+      repeatable: true
+
 KeyList:
   non-binary: true
   fields:

@@ -8,6 +8,19 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd/api"
 )
 
+// AdiList returns a list of adi's managed by the wallet.
+func (c *Client) AdiList(ctx context.Context) (interface{}, error) {
+	var req struct{}
+	var resp interface{}
+
+	err := c.RequestAPIv2(ctx, "adi-list", req, &resp)
+	if err != nil {
+		return nil, err
+	}
+
+	return resp, nil
+}
+
 // CreateEnvelope create an envelope by name.
 func (c *Client) CreateEnvelope(ctx context.Context, req *api.CreateEnvelopeRequest) (*api.GeneralResponse, error) {
 	var resp api.GeneralResponse

@@ -246,26 +246,14 @@ func (x *Executor) synthTransactionIsReady(batch *database.Batch, delivery *chai
 	// not delegate "is ready?" to the transaction executor - synthetic
 	// transactions _must_ be sequenced and proven before being executed.
 
-	if status.Proof == nil {
+	if status.Proof == nil || !status.GotDirectoryReceipt {
 		return false, nil
 	}
 
-	// Determine which anchor chain to load
-	var partition string
-	if x.Describe.NetworkType != config.Directory {
-		partition = protocol.Directory
-	} else {
-		var ok bool
-		partition, ok = protocol.ParsePartitionUrl(status.SourceNetwork)
-		if !ok {
-			return false, errors.Format(errors.StatusUnknownError, "%v is not a valid partition URL", status.SourceNetwork)
-		}
-	}
-
 	// Load the anchor chain
-	anchorChain, err := batch.Account(x.Describe.AnchorPool()).AnchorChain(partition).Root().Get()
+	anchorChain, err := batch.Account(x.Describe.AnchorPool()).AnchorChain(protocol.Directory).Root().Get()
 	if err != nil {
-		return false, errors.Format(errors.StatusUnknownError, "load %s intermediate anchor chain: %w", partition, err)
+		return false, errors.Format(errors.StatusUnknownError, "load %s intermediate anchor chain: %w", protocol.Directory, err)
 	}
 
 	// Is the result a valid DN anchor?
@@ -276,7 +264,7 @@ func (x *Executor) synthTransactionIsReady(batch *database.Batch, delivery *chai
 	case errors.Is(err, storage.ErrNotFound):
 		return false, nil
 	default:
-		return false, errors.Format(errors.StatusUnknownError, "get height of entry %X of %s intermediate anchor chain: %w", status.Proof.Anchor[:4], partition, err)
+		return false, errors.Format(errors.StatusUnknownError, "get height of entry %X of %s intermediate anchor chain: %w", status.Proof.Anchor[:4], protocol.Directory, err)
 	}
 
 	// Load the ledger

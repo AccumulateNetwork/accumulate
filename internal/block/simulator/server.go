@@ -22,7 +22,6 @@ func (s *Simulator) NewServer() http.Handler {
 		"version":  infoServerMethod(s, (*client.Client).Version),
 
 		"query":              routedServerMethod(s, (*client.Client).Query, func(r *api.GeneralQuery) *url.URL { return r.Url }),
-		"query-chain":        routedServerMethod(s, (*client.Client).QueryChain, nil),
 		"query-data":         routedServerMethod(s, (*client.Client).QueryData, func(r *api.DataEntryQuery) *url.URL { return r.Url }),
 		"query-data-set":     routedServerMethod(s, (*client.Client).QueryDataSet, func(r *api.DataEntrySetQuery) *url.URL { return r.Url }),
 		"query-directory":    routedServerMethod(s, (*client.Client).QueryDirectory, func(r *api.DirectoryQuery) *url.URL { return r.Url }),

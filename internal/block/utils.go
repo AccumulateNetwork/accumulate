@@ -3,6 +3,7 @@ package block
 import (
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/block/shared"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
@@ -57,7 +58,7 @@ func addIndexChainEntry(chain *database.Chain2, entry *protocol.IndexEntry) (uin
 
 // addChainAnchor anchors the target chain into the root chain, adding an index
 // entry to the target chain's index chain, if appropriate.
-func addChainAnchor(rootChain *database.Chain, chain *database.Chain2) (indexIndex uint64, didIndex bool, err error) {
+func addChainAnchor(rootChain *database.Chain, chain *database.Chain2, blockIndex uint64) (indexIndex uint64, didIndex bool, err error) {
 	// Load the chain
 	accountChain, err := chain.Get()
 	if err != nil {
@@ -78,8 +79,9 @@ func addChainAnchor(rootChain *database.Chain, chain *database.Chain2) (indexInd
 
 	// Add the index chain entry
 	indexIndex, err = addIndexChainEntry(chain.Index(), &protocol.IndexEntry{
-		Source: uint64(accountChain.Height() - 1),
-		Anchor: uint64(rootChain.Height() - 1),
+		BlockIndex: blockIndex,
+		Source:     uint64(accountChain.Height() - 1),
+		Anchor:     uint64(rootChain.Height() - 1),
 	})
 	if err != nil {
 		return 0, false, err
@@ -88,59 +90,20 @@ func addChainAnchor(rootChain *database.Chain, chain *database.Chain2) (indexInd
 	return indexIndex, true, nil
 }
 
-func getRangeFromIndexEntry(chain *database.Chain, index uint64) (from, to, anchor uint64, err error) {
-	entry := new(protocol.IndexEntry)
-	err = chain.EntryAs(int64(index), entry)
+func (x *Executor) GetAccountAuthoritySet(batch *database.Batch, account protocol.Account) (*protocol.AccountAuth, error) {
+	auth, url, err := shared.GetAccountAuthoritySet(account)
 	if err != nil {
-		return 0, 0, 0, fmt.Errorf("entry %d: %w", index, err)
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
+	}
+	if auth != nil {
+		return auth, nil
 	}
 
-	if index == 0 {
-		return 0, entry.Source, entry.Anchor, nil
-	}
-
-	prev := new(protocol.IndexEntry)
-	err = chain.EntryAs(int64(index)-1, prev)
+	account, err = batch.Account(url).GetState()
 	if err != nil {
-		return 0, 0, 0, fmt.Errorf("entry %d: %w", index-1, err)
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
-
-	return prev.Source + 1, entry.Source, entry.Anchor, nil
-}
-
-func (*Executor) GetAccountAuthoritySet(batch *database.Batch, account protocol.Account) (*protocol.AccountAuth, error) {
-	switch account := account.(type) {
-	case *protocol.LiteIdentity:
-		return &protocol.AccountAuth{
-			Authorities: []protocol.AuthorityEntry{
-				{Url: account.Url},
-			},
-		}, nil
-	case *protocol.LiteTokenAccount:
-		return &protocol.AccountAuth{
-			Authorities: []protocol.AuthorityEntry{
-				{Url: account.Url.RootIdentity()},
-			},
-		}, nil
-
-	case protocol.FullAccount:
-		return account.GetAuth(), nil
-
-	case *protocol.KeyPage:
-		bookUrl, _, ok := protocol.ParseKeyPageUrl(account.Url)
-		if !ok {
-			return nil, errors.Format(errors.StatusInternalError, "invalid key page URL: %v", account.Url)
-		}
-		var book *protocol.KeyBook
-		err := batch.Account(bookUrl).GetStateAs(&book)
-		if err != nil {
-			return nil, errors.Wrap(errors.StatusUnknownError, err)
-		}
-		return book.GetAuth(), nil
-
-	default:
-		return &protocol.AccountAuth{}, nil
-	}
+	return x.GetAccountAuthoritySet(batch, account)
 }
 
 func getValidator[T any](x *Executor, typ protocol.TransactionType) (T, bool) {

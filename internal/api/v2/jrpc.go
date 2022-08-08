@@ -8,6 +8,7 @@ import (
 	"mime"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/go-playground/validator/v10"
@@ -17,12 +18,13 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/internal/web"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 type JrpcMethods struct {
 	Options
-	querier  *queryDispatch
+	querier  *queryFrontend
 	methods  jsonrpc2.MethodMap
 	validate *validator.Validate
 	logger   log.Logger
@@ -32,11 +34,18 @@ func NewJrpc(opts Options) (*JrpcMethods, error) {
 	var err error
 	m := new(JrpcMethods)
 	m.Options = opts
-	m.querier = new(queryDispatch)
+	m.querier = new(queryFrontend)
 	m.querier.Options = opts
+	m.querier.backend = new(queryBackend)
+	m.querier.backend.Options = opts
+
+	if opts.Key == nil {
+		return nil, errors.Format(errors.StatusBadRequest, "missing key")
+	}
 
 	if opts.Logger != nil {
 		m.logger = opts.Logger.With("module", "jrpc")
+		m.querier.backend.logger.L = m.logger
 	}
 
 	m.validate, err = protocol.NewValidator()
@@ -48,10 +57,6 @@ func NewJrpc(opts Options) (*JrpcMethods, error) {
 	return m, nil
 }
 
-func (m *JrpcMethods) Querier_TESTONLY() Querier {
-	return m.querier
-}
-
 func (m *JrpcMethods) logError(msg string, keyVals ...interface{}) {
 	if m.logger != nil {
 		m.logger.Error(msg, keyVals...)
@@ -59,7 +64,6 @@ func (m *JrpcMethods) logError(msg string, keyVals ...interface{}) {
 }
 
 func (m *JrpcMethods) EnableDebug() {
-	q := m.querier.direct(m.Options.Describe.PartitionId)
 	m.methods["debug-query-direct"] = func(_ context.Context, params json.RawMessage) interface{} {
 		req := new(GeneralQuery)
 		err := m.parse(params, req)
@@ -67,7 +71,7 @@ func (m *JrpcMethods) EnableDebug() {
 			return err
 		}
 
-		return jrpcFormatResponse(q.QueryUrl(req.Url, req.QueryOptions))
+		return jrpcFormatResponse(m.querier.QueryUrl(req.Url, req.QueryOptions))
 	}
 }
 
@@ -77,6 +81,18 @@ func (m *JrpcMethods) NewMux() *http.ServeMux {
 	mux.Handle("/version", m.jrpc2http(m.Version))
 	mux.Handle("/describe", m.jrpc2http(m.Describe))
 	mux.Handle("/v2", jsonrpc2.HTTPRequestHandler(m.methods, stdlog.New(os.Stdout, "", 0)))
+
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Location", "/x")
+		w.WriteHeader(http.StatusTemporaryRedirect)
+	})
+
+	webex := web.Handler()
+	mux.HandleFunc("/x/", func(w http.ResponseWriter, r *http.Request) {
+		r.URL.Path = strings.TrimPrefix(r.URL.Path, "/x")
+		r.RequestURI = strings.TrimPrefix(r.RequestURI, "/x")
+		webex.ServeHTTP(w, r)
+	})
 	return mux
 }
 

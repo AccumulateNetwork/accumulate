@@ -37,6 +37,10 @@ type AddTransactionToEnvelopeRequest struct {
 	TransactionName string `json:"transactionName,omitempty" form:"transactionName" query:"transactionName" validate:"required"`
 }
 
+type AdiListResponse struct {
+	Urls []string `json:"urls,omitempty" form:"urls" query:"urls" validate:"required"`
+}
+
 type AuthorizationRequired struct {
 	fieldsSet []bool
 	Key       []byte `json:"key,omitempty" form:"key" query:"key" validate:"required"`
@@ -185,6 +189,19 @@ func (v *AddTransactionToEnvelopeRequest) Copy() *AddTransactionToEnvelopeReques
 }
 
 func (v *AddTransactionToEnvelopeRequest) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *AdiListResponse) Copy() *AdiListResponse {
+	u := new(AdiListResponse)
+
+	u.Urls = make([]string, len(v.Urls))
+	for i, v := range v.Urls {
+		u.Urls[i] = v
+	}
+
+	return u
+}
+
+func (v *AdiListResponse) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *AuthorizationRequired) Copy() *AuthorizationRequired {
 	u := new(AuthorizationRequired)
@@ -463,6 +480,19 @@ func (v *AddTransactionToEnvelopeRequest) Equal(u *AddTransactionToEnvelopeReque
 	}
 	if !(v.TransactionName == u.TransactionName) {
 		return false
+	}
+
+	return true
+}
+
+func (v *AdiListResponse) Equal(u *AdiListResponse) bool {
+	if len(v.Urls) != len(u.Urls) {
+		return false
+	}
+	for i := range v.Urls {
+		if !(v.Urls[i] == u.Urls[i]) {
+			return false
+		}
 	}
 
 	return true
@@ -833,6 +863,14 @@ func (v *VersionResponse) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *AdiListResponse) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Urls encoding.JsonList[string] `json:"urls,omitempty"`
+	}{}
+	u.Urls = v.Urls
+	return json.Marshal(&u)
+}
+
 func (v *AuthorizationRequired) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Key     *string `json:"key,omitempty"`
@@ -931,6 +969,18 @@ func (v *SignResponse) MarshalJSON() ([]byte, error) {
 	u.Signature = encoding.BytesToJSON(v.Signature)
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	return json.Marshal(&u)
+}
+
+func (v *AdiListResponse) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Urls encoding.JsonList[string] `json:"urls,omitempty"`
+	}{}
+	u.Urls = v.Urls
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Urls = u.Urls
+	return nil
 }
 
 func (v *AuthorizationRequired) UnmarshalJSON(data []byte) error {

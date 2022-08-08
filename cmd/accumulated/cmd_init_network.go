@@ -123,9 +123,6 @@ func initNetworkLocalFS(netInit *accumulated.NetworkInit) {
 				if flagInit.NoEmptyBlocks {
 					config.Consensus.CreateEmptyBlocks = false
 				}
-				if flagInit.NoWebsite {
-					config.Accumulate.Website.Enabled = false
-				}
 
 				if len(flagInit.Etcd) > 0 {
 					config.Accumulate.Storage.Type = cfg.EtcdStorage

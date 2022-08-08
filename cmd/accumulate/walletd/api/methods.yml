@@ -27,6 +27,11 @@ KeyList:
   rpc: key-list
   output: api.KeyListResponse|api.AuthorizationRequired
 
+AdiList:
+  description: returns a list of adi's managed by the wallet
+  rpc: adi-list
+  output: api.AdiListResponse|api.AuthorizationRequired
+
 ResolveKey:
   description: returns a public key from either a label or keyhash
   rpc: resolve-key
