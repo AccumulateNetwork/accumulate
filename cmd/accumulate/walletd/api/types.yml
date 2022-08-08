@@ -166,6 +166,13 @@ GeneralResponse:
     - name: Error
       type: string
 
+AdiListResponse:
+  non-binary: true
+  fields:
+    - name: Urls
+      type: string
+      repeatable: true
+
 KeyData:
   non-binary: true
   fields:
@@ -190,16 +197,13 @@ KeyListResponse:
 ResolveKeyRequest:
   non-binary: true
   fields:
-    - name: KeyLabel
+    - name: KeyNameOrLiteAddress
       type: string
-      optional: true
-    - name: KeyHash
-      type: bytes
-      optional: true
 
 ResolveKeyResponse:
   non-binary: true
   fields:
-    - name: PublicKey
-      type: bytes
+    - name: KeyData
+      type: KeyData
+      marshal-as: reference
       

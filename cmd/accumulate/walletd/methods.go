@@ -171,5 +171,40 @@ func (m *JrpcMethods) KeyList(_ context.Context, params json.RawMessage) interfa
 
 func (m *JrpcMethods) ResolveKey(_ context.Context, params json.RawMessage) interface{} {
 	resp := api.ResolveKeyResponse{}
+
+	req := api.ResolveKeyRequest{}
+	err := json.Unmarshal(params, &req)
+	if req.KeyNameOrLiteAddress != "" {
+		k, err := LookupByLiteIdentityUrl(req.KeyNameOrLiteAddress)
+		if err != nil {
+			gen := api.GeneralResponse{}
+			gen.Code = api.ErrorCodeNotFound
+			gen.Error = err.Error()
+			return gen
+		}
+		resp.KeyData.PublicKey = k.PublicKey
+		resp.KeyData.Derivation = k.KeyInfo.Derivation
+		resp.KeyData.KeyType = k.KeyInfo.Type
+		return resp
+	}
+	LookupByLiteTokenUrl()
+	k, err := LookupByLiteIdentityUrl(req.LiteUrl)
+	if err != nil {
+		err2 := LookupByLiteTokenUrl(req.LiteUrl)
+	}
+	resp.KeyList, err = Fin()
+	if err != nil {
+		genResp := api.GeneralResponse{}
+		genResp.Error = err.Error()
+		genResp.Code = api.ErrorCodeGeneralError
+		return genResp
+	}
+	resp := api.ResolveKeyResponse{}
+	return resp
+}
+
+func (m *JrpcMethods) AdiList(_ context.Context, params json.RawMessage) interface{} {
+	resp := api.AdiListRespones{}
+
 	return resp
 }

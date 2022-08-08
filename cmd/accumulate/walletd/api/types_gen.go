@@ -37,6 +37,10 @@ type AddTransactionToEnvelopeRequest struct {
 	TransactionName string `json:"transactionName,omitempty" form:"transactionName" query:"transactionName" validate:"required"`
 }
 
+type AdiListResponse struct {
+	Urls []string `json:"urls,omitempty" form:"urls" query:"urls" validate:"required"`
+}
+
 type AuthorizationRequired struct {
 	fieldsSet []bool
 	Key       []byte `json:"key,omitempty" form:"key" query:"key" validate:"required"`
@@ -117,12 +121,11 @@ type ProveReceiptRequest struct {
 }
 
 type ResolveKeyRequest struct {
-	KeyLabel string `json:"keyLabel,omitempty" form:"keyLabel" query:"keyLabel"`
-	KeyHash  []byte `json:"keyHash,omitempty" form:"keyHash" query:"keyHash"`
+	KeyNameOrLiteAddress string `json:"keyNameOrLiteAddress,omitempty" form:"keyNameOrLiteAddress" query:"keyNameOrLiteAddress" validate:"required"`
 }
 
 type ResolveKeyResponse struct {
-	PublicKey []byte `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
+	KeyData KeyData `json:"keyData,omitempty" form:"keyData" query:"keyData" validate:"required"`
 }
 
 type SignRequest struct {
@@ -186,6 +189,19 @@ func (v *AddTransactionToEnvelopeRequest) Copy() *AddTransactionToEnvelopeReques
 }
 
 func (v *AddTransactionToEnvelopeRequest) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *AdiListResponse) Copy() *AdiListResponse {
+	u := new(AdiListResponse)
+
+	u.Urls = make([]string, len(v.Urls))
+	for i, v := range v.Urls {
+		u.Urls[i] = v
+	}
+
+	return u
+}
+
+func (v *AdiListResponse) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *AuthorizationRequired) Copy() *AuthorizationRequired {
 	u := new(AuthorizationRequired)
@@ -372,8 +388,7 @@ func (v *ProveReceiptRequest) CopyAsInterface() interface{} { return v.Copy() }
 func (v *ResolveKeyRequest) Copy() *ResolveKeyRequest {
 	u := new(ResolveKeyRequest)
 
-	u.KeyLabel = v.KeyLabel
-	u.KeyHash = encoding.BytesCopy(v.KeyHash)
+	u.KeyNameOrLiteAddress = v.KeyNameOrLiteAddress
 
 	return u
 }
@@ -383,7 +398,7 @@ func (v *ResolveKeyRequest) CopyAsInterface() interface{} { return v.Copy() }
 func (v *ResolveKeyResponse) Copy() *ResolveKeyResponse {
 	u := new(ResolveKeyResponse)
 
-	u.PublicKey = encoding.BytesCopy(v.PublicKey)
+	u.KeyData = *(&v.KeyData).Copy()
 
 	return u
 }
@@ -465,6 +480,19 @@ func (v *AddTransactionToEnvelopeRequest) Equal(u *AddTransactionToEnvelopeReque
 	}
 	if !(v.TransactionName == u.TransactionName) {
 		return false
+	}
+
+	return true
+}
+
+func (v *AdiListResponse) Equal(u *AdiListResponse) bool {
+	if len(v.Urls) != len(u.Urls) {
+		return false
+	}
+	for i := range v.Urls {
+		if !(v.Urls[i] == u.Urls[i]) {
+			return false
+		}
 	}
 
 	return true
@@ -639,10 +667,7 @@ func (v *ProveReceiptRequest) Equal(u *ProveReceiptRequest) bool {
 }
 
 func (v *ResolveKeyRequest) Equal(u *ResolveKeyRequest) bool {
-	if !(v.KeyLabel == u.KeyLabel) {
-		return false
-	}
-	if !(bytes.Equal(v.KeyHash, u.KeyHash)) {
+	if !(v.KeyNameOrLiteAddress == u.KeyNameOrLiteAddress) {
 		return false
 	}
 
@@ -650,7 +675,7 @@ func (v *ResolveKeyRequest) Equal(u *ResolveKeyRequest) bool {
 }
 
 func (v *ResolveKeyResponse) Equal(u *ResolveKeyResponse) bool {
-	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
+	if !((&v.KeyData).Equal(&u.KeyData)) {
 		return false
 	}
 
@@ -838,6 +863,14 @@ func (v *VersionResponse) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *AdiListResponse) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Urls encoding.JsonList[string] `json:"urls,omitempty"`
+	}{}
+	u.Urls = v.Urls
+	return json.Marshal(&u)
+}
+
 func (v *AuthorizationRequired) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Key     *string `json:"key,omitempty"`
@@ -912,24 +945,6 @@ func (v *KeyListResponse) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
-func (v *ResolveKeyRequest) MarshalJSON() ([]byte, error) {
-	u := struct {
-		KeyLabel string  `json:"keyLabel,omitempty"`
-		KeyHash  *string `json:"keyHash,omitempty"`
-	}{}
-	u.KeyLabel = v.KeyLabel
-	u.KeyHash = encoding.BytesToJSON(v.KeyHash)
-	return json.Marshal(&u)
-}
-
-func (v *ResolveKeyResponse) MarshalJSON() ([]byte, error) {
-	u := struct {
-		PublicKey *string `json:"publicKey,omitempty"`
-	}{}
-	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
-	return json.Marshal(&u)
-}
-
 func (v *SignResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Signature *string `json:"signature,omitempty"`
@@ -938,6 +953,18 @@ func (v *SignResponse) MarshalJSON() ([]byte, error) {
 	u.Signature = encoding.BytesToJSON(v.Signature)
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	return json.Marshal(&u)
+}
+
+func (v *AdiListResponse) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Urls encoding.JsonList[string] `json:"urls,omitempty"`
+	}{}
+	u.Urls = v.Urls
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Urls = u.Urls
+	return nil
 }
 
 func (v *AuthorizationRequired) UnmarshalJSON(data []byte) error {
@@ -1080,41 +1107,6 @@ func (v *KeyListResponse) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	v.KeyList = u.KeyList
-	return nil
-}
-
-func (v *ResolveKeyRequest) UnmarshalJSON(data []byte) error {
-	u := struct {
-		KeyLabel string  `json:"keyLabel,omitempty"`
-		KeyHash  *string `json:"keyHash,omitempty"`
-	}{}
-	u.KeyLabel = v.KeyLabel
-	u.KeyHash = encoding.BytesToJSON(v.KeyHash)
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	v.KeyLabel = u.KeyLabel
-	if x, err := encoding.BytesFromJSON(u.KeyHash); err != nil {
-		return fmt.Errorf("error decoding KeyHash: %w", err)
-	} else {
-		v.KeyHash = x
-	}
-	return nil
-}
-
-func (v *ResolveKeyResponse) UnmarshalJSON(data []byte) error {
-	u := struct {
-		PublicKey *string `json:"publicKey,omitempty"`
-	}{}
-	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	if x, err := encoding.BytesFromJSON(u.PublicKey); err != nil {
-		return fmt.Errorf("error decoding PublicKey: %w", err)
-	} else {
-		v.PublicKey = x
-	}
 	return nil
 }
 
