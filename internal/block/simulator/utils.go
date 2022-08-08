@@ -3,7 +3,6 @@ package simulator
 //lint:file-ignore ST1001 Don't care
 
 import (
-	"encoding"
 	"os"
 
 	"github.com/stretchr/testify/require"
@@ -11,7 +10,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
 func InitFromSnapshot(t TB, db database.Beginner, exec *Executor, filename string) {
@@ -32,48 +30,4 @@ func NormalizeEnvelope(t TB, envelope *protocol.Envelope) []*chain.Delivery {
 	deliveries, err := chain.NormalizeEnvelope(envelope)
 	require.NoError(tb{t}, err)
 	return deliveries
-}
-
-func Query(t TB, db database.Beginner, exec *Executor, req query.Request, prove bool) interface{} {
-	t.Helper()
-
-	batch := db.Begin(false)
-	defer batch.Discard()
-	key, value, perr := exec.Query(batch, req, 0, prove)
-	if perr != nil {
-		require.NoError(tb{t}, perr)
-	}
-
-	var resp encoding.BinaryUnmarshaler
-	switch string(key) {
-	case "account":
-		resp = new(query.ResponseAccount)
-
-	case "tx":
-		resp = new(query.ResponseByTxId)
-
-	case "tx-history":
-		resp = new(query.ResponseTxHistory)
-
-	case "chain-range":
-		resp = new(query.ResponseChainRange)
-
-	case "chain-entry":
-		resp = new(query.ResponseChainEntry)
-
-	case "data-entry":
-		resp = new(query.ResponseDataEntry)
-
-	case "data-entry-set":
-		resp = new(query.ResponseDataEntrySet)
-
-	case "pending":
-		resp = new(query.ResponsePending)
-
-	default:
-		tb{t}.Fatalf("Unknown response type %s", key)
-	}
-
-	require.NoError(tb{t}, resp.UnmarshalBinary(value))
-	return resp
 }

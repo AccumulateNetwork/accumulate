@@ -174,37 +174,40 @@ func (m *JrpcMethods) ResolveKey(_ context.Context, params json.RawMessage) inte
 
 	req := api.ResolveKeyRequest{}
 	err := json.Unmarshal(params, &req)
-	if req.KeyNameOrLiteAddress != "" {
-		k, err := LookupByLiteIdentityUrl(req.KeyNameOrLiteAddress)
-		if err != nil {
-			gen := api.GeneralResponse{}
-			gen.Code = api.ErrorCodeNotFound
-			gen.Error = err.Error()
-			return gen
-		}
-		resp.KeyData.PublicKey = k.PublicKey
-		resp.KeyData.Derivation = k.KeyInfo.Derivation
-		resp.KeyData.KeyType = k.KeyInfo.Type
-		return resp
+	label, isLite := LabelForLiteIdentity(req.KeyNameOrLiteAddress)
+	var k *Key
+	if isLite {
+		k, err = LookupByLiteIdentityUrl(label)
+	} else {
+		k, err = LookupByLabel(label)
 	}
-	LookupByLiteTokenUrl()
-	k, err := LookupByLiteIdentityUrl(req.LiteUrl)
+
 	if err != nil {
-		err2 := LookupByLiteTokenUrl(req.LiteUrl)
+		gen := api.GeneralResponse{}
+		gen.Code = api.ErrorCodeNotFound
+		gen.Error = err.Error()
+		return gen
 	}
-	resp.KeyList, err = Fin()
-	if err != nil {
-		genResp := api.GeneralResponse{}
-		genResp.Error = err.Error()
-		genResp.Code = api.ErrorCodeGeneralError
-		return genResp
-	}
-	resp := api.ResolveKeyResponse{}
+
+	resp.KeyData.PublicKey = k.PublicKey
+	resp.KeyData.Derivation = k.KeyInfo.Derivation
+	resp.KeyData.KeyType = k.KeyInfo.Type
 	return resp
 }
 
 func (m *JrpcMethods) AdiList(_ context.Context, params json.RawMessage) interface{} {
-	resp := api.AdiListRespones{}
+	resp := api.AdiListResponse{}
+	var err error
+	adis, err := getAdiList()
+	if err != nil {
+		gen := api.GeneralResponse{}
+		gen.Code = api.ErrorCodeNotFound
+		gen.Error = err.Error()
+		return gen
+	}
 
+	for _, v := range adis {
+		resp.Urls = append(resp.Urls, v.String())
+	}
 	return resp
 }

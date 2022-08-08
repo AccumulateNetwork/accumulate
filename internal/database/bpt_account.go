@@ -7,6 +7,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding/hash"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/smt/pmt"
 )
@@ -71,15 +72,39 @@ func (c *Chain2) stateOfTransactionsOnChain() ([]*transactionState, error) {
 	// TODO We need to be more selective than this
 	state := make([]*transactionState, head.Count)
 	for i := range state {
-		hash, err := c.inner.Get(int64(i))
+		hash := loadState1(&err, false, c.inner.Get, int64(i))
 		if err != nil {
-			return nil, fmt.Errorf("load %s chain entry %d: %w", c.inner.Name(), i, err)
+			break
 		}
 
-		state[i], err = c.account.parent.Transaction(hash).loadState()
+		state[i] = loadState(&err, false, c.account.parent.Transaction(hash).loadState)
+	}
+
+	return state, nil
+}
+
+func (c *Chain2) stateOfSignaturesOnChain() ([]protocol.Signature, error) {
+	head, err := c.inner.Head().Get()
+	if err != nil {
+		return nil, errors.Format(errors.StatusUnknownError, "load chain head: %w", err)
+	}
+
+	// TODO We need to be more selective than this
+	state := make([]protocol.Signature, head.Count)
+	for i := range state {
+		hash := loadState1(&err, false, c.inner.Get, int64(i))
 		if err != nil {
-			return nil, err
+			break
 		}
+
+		s := loadState(&err, false, c.account.parent.Transaction(hash).Main().Get)
+		if s == nil {
+			break
+		}
+		if s.Signature == nil {
+			return nil, errors.Format(errors.StatusInternalError, "%v signature chain entry %d is not a signature", c.Account(), i)
+		}
+		state[i] = s.Signature
 	}
 
 	return state, nil
@@ -93,6 +118,9 @@ func (a *Account) restoreState(s *accountState) error {
 	// Store pending transaction list
 	for _, p := range s.Pending {
 		saveStateN(&err, a.Pending().Add, p.Transaction.ID())
+	}
+	if err != nil {
+		return err
 	}
 
 	// Store chain state
@@ -151,7 +179,12 @@ func (a *Account) restoreState(s *accountState) error {
 		}
 	}
 
-	return nil
+	// Store signature state
+	for _, sig := range s.Signatures {
+		saveState(&err, a.parent.Transaction(sig.Hash()).Main().Put, &SigOrTxn{Signature: sig})
+	}
+
+	return err
 }
 
 // MerkleHash calculates the Merkle DAG root hash.

@@ -38,7 +38,8 @@ func (t *Transaction) GetHash() []byte {
 	sha := sha256.New()
 	sha.Write(headerHash[:])
 	sha.Write(t.getBodyHash())
-	return sha.Sum(nil)
+	t.hash = sha.Sum(nil)
+	return t.hash
 }
 
 func (t *Transaction) getBodyHash() []byte {

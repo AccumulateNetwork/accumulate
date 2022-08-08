@@ -88,8 +88,7 @@ func (r *Receipt) Contains(other *Receipt) bool {
 // Note that both this receipt and the root receipt are expected to be good.
 func (r *Receipt) Combine(rm *Receipt) (*Receipt, error) {
 	if !bytes.Equal(r.Anchor, rm.Start) {
-		return nil, fmt.Errorf("receipts cannot be combined. "+
-			"anchor %x doesn't match root merkle tree %x", r.End, rm.Start)
+		return nil, fmt.Errorf("receipts cannot be combined: anchor %x doesn't match root merkle tree %x", r.Anchor, rm.Start)
 	}
 	nr := r.Copy()                 // Make a copy of the first Receipt
 	nr.Anchor = rm.Anchor          // The MDRoot will be the one from the appended receipt

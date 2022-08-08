@@ -1,5 +1,10 @@
 package connections
 
+type FakeConnectionManager interface {
+	ConnectionManager
+	SetClients(clients map[string]FakeClient)
+}
+
 type fakeConnectionManager struct {
 	ctxMap map[string]ConnectionContext
 }
@@ -13,18 +18,28 @@ func (fcm *fakeConnectionManager) SelectConnection(partitionId string, allowFoll
 	}
 }
 
-func NewFakeConnectionManager(clients map[string]ABCIClient) ConnectionManager {
+type FakeClient = struct {
+	ABCI ABCIClient
+	API  APIClient
+}
+
+func NewFakeConnectionManager(partitions []string) FakeConnectionManager {
 	fcm := new(fakeConnectionManager)
 	fcm.ctxMap = make(map[string]ConnectionContext)
-	for partition, client := range clients {
+	for _, partition := range partitions {
 		connCtx := &connectionContext{
 			partitionId: partition,
 			hasClient:   make(chan struct{}),
 			metrics:     NodeMetrics{status: Up}}
-		connCtx.setClient(client, nil)
 		fcm.ctxMap[partition] = connCtx
 	}
 	return fcm
+}
+
+func (fcm *fakeConnectionManager) SetClients(clients map[string]FakeClient) {
+	for partition, client := range clients {
+		fcm.ctxMap[partition].(*connectionContext).setClient(client.ABCI, client.API)
+	}
 }
 
 func (fcm *fakeConnectionManager) GetBVNContextMap() map[string][]ConnectionContext {
