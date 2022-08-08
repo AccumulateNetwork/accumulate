@@ -189,3 +189,35 @@ func ComputeTransactionFee(tx *Transaction) (Fee, error) {
 
 	return fee, nil
 }
+
+func ComputeSyntheticRefund(txn *Transaction, synthCount int) (Fee, error) {
+	// Calculate what was paid
+	paid, err := ComputeTransactionFee(txn)
+	if err != nil {
+		return 0, errors.Wrap(errors.StatusUnknownError, err)
+	}
+
+	// If it's less than the max failed fee, do not refund anything
+	if paid <= FeeFailedMaximum {
+		return 0, nil
+	}
+
+	// For SendTokens and IssueTokens, the refund is limited to the per-transfer
+	// fee. This means sending tokens to a bad address costs more than other
+	// failed transactions.
+	switch txn.Body.(type) {
+	case *SendTokens, *IssueTokens:
+		return FeeTransferTokensExtra, nil
+	}
+
+	// Special care must be taken when issuing refunds for multi-output
+	// transactions. Otherwise it's possible for a transaction with one good
+	// output and one bad output to cost less (net) than a transaction with one
+	// good output.
+	if synthCount > 1 {
+		return 0, errors.Format(errors.StatusUnknownError, "a %v transaction cannot have multiple outputs", txn.Body.Type())
+	}
+
+	// Refund the amount paid in excess of the max failed fee
+	return paid - FeeFailedMaximum, nil
+}

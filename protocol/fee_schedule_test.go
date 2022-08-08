@@ -1,6 +1,7 @@
 package protocol_test
 
 import (
+	"math/big"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -88,4 +89,30 @@ func TestFee(t *testing.T) {
 			})
 		}
 	})
+}
+
+func TestMultiOutputRefund(t *testing.T) {
+	// Verifies that a two output transaction with a good and a bad output does
+	// not cost less than a single output transaction
+
+	body := new(SendTokens)
+	txn := new(Transaction)
+	txn.Header.Principal = AccountUrl("foo")
+	txn.Body = body
+
+	// Calculate fee and refund for a single output transaction
+	body.AddRecipient(AccountUrl("bar"), big.NewInt(0))
+	fee1, err := ComputeTransactionFee(txn)
+	require.NoError(t, err)
+
+	// Calculate fee and refund for a two output transaction
+	body.AddRecipient(AccountUrl("bar"), big.NewInt(0))
+	paid2, err := ComputeTransactionFee(txn)
+	require.NoError(t, err)
+	refund2, err := ComputeSyntheticRefund(txn, len(body.To))
+	require.NoError(t, err)
+	fee2 := paid2 - refund2
+
+	// Verify
+	require.GreaterOrEqual(t, fee2, fee1)
 }
