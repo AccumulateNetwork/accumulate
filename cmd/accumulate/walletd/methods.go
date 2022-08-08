@@ -165,3 +165,8 @@ func (m *JrpcMethods) ResolveKey(_ context.Context, params json.RawMessage) inte
 	resp := api.ResolveKeyResponse{}
 	return resp
 }
+
+func (m *JrpcMethods) AdiList(_ context.Context, params json.RawMessage) interface{} {
+	resp := api.AdiListResponse{}
+	return resp
+}
