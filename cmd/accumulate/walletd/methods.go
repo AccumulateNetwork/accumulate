@@ -179,7 +179,12 @@ func (m *JrpcMethods) ResolveKey(_ context.Context, params json.RawMessage) inte
 	if isLite {
 		k, err = LookupByLiteIdentityUrl(label)
 	} else {
-		k, err = LookupByLabel(label)
+		label, isLite = LabelForLiteTokenAccount(req.KeyNameOrLiteAddress)
+		if isLite {
+			k, err = LookupByLiteTokenUrl(label)
+		} else {
+			k, err = LookupByLabel(label)
+		}
 	}
 
 	if err != nil {
