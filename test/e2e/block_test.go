@@ -11,30 +11,13 @@ import (
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 func init() { acctesting.EnableDebugFeatures() }
-
-var delivered = (*TransactionStatus).Delivered
-
-func updateAccount[T Account](sim *simulator.Simulator, accountUrl *url.URL, fn func(account T)) {
-	sim.UpdateAccount(accountUrl, func(account Account) {
-		var typed T
-		err := encoding.SetPtr(account, &typed)
-		if err != nil {
-			sim.Log(err)
-			sim.FailNow()
-		}
-
-		fn(typed)
-	})
-}
 
 func TestSendTokensToBadRecipient(t *testing.T) {
 	var timestamp uint64

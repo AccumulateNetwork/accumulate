@@ -44,6 +44,10 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Del
 		return x.recordFailedTransaction(batch, delivery, err)
 	}
 
+	if delivery.Transaction.Body.Type().IsUser() {
+		print("")
+	}
+
 	// Check if the transaction is ready to be executed
 	ready, err := x.TransactionIsReady(batch, delivery, status, principal)
 	if err != nil {

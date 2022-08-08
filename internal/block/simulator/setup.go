@@ -162,3 +162,16 @@ func GetAccount[T protocol.Account](sim *Simulator, accountUrl *url.URL) T {
 	})
 	return account
 }
+
+func GetAccountState[V any, T interface{ Get() (V, error) }](sim *Simulator, account *url.URL, state func(*database.Account) T) V {
+	sim.Helper()
+	var value V
+	var err error
+	_ = sim.PartitionFor(account).Database.View(func(batch *database.Batch) error {
+		sim.Helper()
+		value, err = state(batch.Account(account)).Get()
+		require.NoError(tb{sim}, err)
+		return nil
+	})
+	return value
+}

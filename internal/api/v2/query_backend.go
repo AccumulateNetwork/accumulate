@@ -11,6 +11,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2/query"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/shared"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -233,6 +234,23 @@ func (m *queryBackend) queryByUrl(batch *database.Batch, u *url.URL, prove bool,
 			return []byte("tx-history"), txns, nil
 
 		case 2:
+			if strings.Contains(fragment[1], ":") {
+				indexes := strings.Split(fragment[1], ":")
+				start, err := strconv.Atoi(indexes[0])
+				if err != nil {
+					return nil, nil, err
+				}
+				end, err := strconv.Atoi(indexes[1])
+				if err != nil {
+					return nil, nil, err
+				}
+				txns, perr := m.queryTxHistory(batch, chainFor(batch.Account(u), fragment[0], scratch), uint64(start), uint64(end))
+				if perr != nil {
+					return nil, nil, perr
+				}
+				return []byte("tx-history"), txns, nil
+			}
+
 			chain, err := chainFor(batch.Account(u), fragment[0], scratch).Get()
 			if err != nil {
 				return nil, nil, fmt.Errorf("failed to load main chain of %q: %v", u, err)
@@ -264,13 +282,13 @@ func (m *queryBackend) queryByUrl(batch *database.Batch, u *url.URL, prove bool,
 	case "pending":
 		switch len(fragment) {
 		case 1:
-			txIds, err := batch.Account(u).GetPending()
+			// Query first 10
+			resp, err := m.queryPending(batch, u, 0, 10)
 			if err != nil {
 				return nil, nil, err
 			}
-			resp := new(query.ResponsePending)
-			resp.Transactions = txIds.Entries
 			return []byte("pending"), resp, nil
+
 		case 2:
 			if strings.Contains(fragment[1], ":") {
 				indexes := strings.Split(fragment[1], ":")
@@ -282,62 +300,26 @@ func (m *queryBackend) queryByUrl(batch *database.Batch, u *url.URL, prove bool,
 				if err != nil {
 					return nil, nil, err
 				}
-				txns, perr := m.queryTxHistory(batch, batch.Account(u).SignatureChain(), uint64(start), uint64(end))
-				if perr != nil {
-					return nil, nil, perr
-				}
-				return []byte("tx-history"), txns, nil
-			} else {
-				chain, err := batch.Account(u).SignatureChain().Get()
-				if err != nil {
-					return nil, nil, fmt.Errorf("failed to load main chain of %q: %v", u, err)
-				}
-
-				height, txid, err := getTransaction(chain, fragment[1])
-				switch {
-				case err == nil:
-					// Ok
-				case !errors.Is(err, storage.ErrNotFound):
-					return nil, nil, err
-				default:
-					// Is the hash a transaction?
-					state, e2 := batch.Transaction(txid).GetState()
-					if e2 != nil || state.Transaction == nil {
-						return nil, nil, err
-					}
-
-					// Does it belong to the account?
-					if !state.Transaction.Header.Principal.Equal(u.WithFragment("")) {
-						return nil, nil, err
-					}
-
-					// Return the transaction without height or state info
-					res, err := m.queryByTxId(batch, txid, prove, false, false, nil)
-					if err != nil {
-						return nil, nil, err
-					}
-
-					return []byte("tx"), res, nil
-				}
-
-				state, err := chain.State(height)
-				if err != nil {
-					return nil, nil, fmt.Errorf("failed to load chain state: %v", err)
-				}
-
-				res, err := m.queryByTxId(batch, txid, prove, false, false, nil)
+				resp, err := m.queryPending(batch, u, uint64(start), uint64(end))
 				if err != nil {
 					return nil, nil, err
 				}
-
-				res.Height = uint64(height)
-				res.ChainState = make([][]byte, len(state.Pending))
-				for i, h := range state.Pending {
-					res.ChainState[i] = h.Copy()
-				}
-
-				return []byte("tx"), res, nil
+				return []byte("pending"), resp, nil
 			}
+
+			txid, err := getPendingTxid(u, batch.Account(u).Pending(), fragment[1])
+			if err != nil {
+				return nil, nil, err
+			}
+
+			// Return the transaction without height or state info
+			hash := txid.Hash()
+			res, err := m.queryByTxId(batch, hash[:], prove, false, false, nil)
+			if err != nil {
+				return nil, nil, err
+			}
+
+			return []byte("tx"), res, nil
 		}
 	case "data":
 		switch len(fragment) {
@@ -500,6 +482,32 @@ func getTransaction(chain *database.Chain, s string) (int64, []byte, error) {
 		return 0, entry, errors.NotFound("transaction %q not found", s)
 	}
 	return 0, entry, fmt.Errorf("invalid transaction: %q is not a number or a hash", s)
+}
+
+func getPendingTxid(account *url.URL, list *record.Set[*url.TxID], s string) (*url.TxID, error) {
+	entry, err := hex.DecodeString(s)
+	if err == nil && len(entry) == 32 {
+		txid := account.WithTxID(*(*[32]byte)(entry))
+		_, err := list.Index(txid)
+		if err != nil {
+			return nil, err
+		}
+		return txid, nil
+	}
+
+	height, err := strconv.ParseUint(s, 10, 64)
+	if err == nil {
+		pending, err := list.Get()
+		if err != nil {
+			return nil, err
+		}
+		if height >= uint64(len(pending)) {
+			return nil, errors.NotFound("%v#pending/%d not found", account, height)
+		}
+		return pending[height], nil
+	}
+
+	return nil, fmt.Errorf("invalid transaction: %q is not a number or a hash", s)
 }
 
 func (m *queryBackend) queryDirectoryByChainId(batch *database.Batch, account *url.URL, start uint64, limit uint64) (*query.DirectoryQueryResult, error) {
@@ -733,6 +741,27 @@ func (m *queryBackend) queryTxHistory(batch *database.Batch, chain_ *database.Ch
 	}
 
 	return &thr, nil
+}
+
+func (m *queryBackend) queryPending(batch *database.Batch, account *url.URL, start, end uint64) (*query.ResponsePending, error) {
+	txIds, err := batch.Account(account).Pending().Get()
+	if err != nil {
+		return nil, err
+	}
+
+	resp := new(query.ResponsePending)
+	resp.Start = start
+	resp.Count = end
+	resp.Total = uint64(len(txIds))
+
+	if start >= uint64(len(txIds)) {
+		return resp, nil
+	}
+	if end > uint64(len(txIds)) {
+		end = uint64(len(txIds))
+	}
+	resp.Transactions = txIds[start:end]
+	return resp, nil
 }
 
 func (m *queryBackend) queryDataByUrl(batch *database.Batch, u *url.URL) (*query.ResponseDataEntry, error) {

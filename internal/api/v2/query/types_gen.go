@@ -247,6 +247,9 @@ type ResponseMinorEntry struct {
 type ResponsePending struct {
 	fieldsSet    []bool
 	Transactions []*url.TxID `json:"transactions,omitempty" form:"transactions" query:"transactions" validate:"required"`
+	Start        uint64      `json:"start" form:"start" query:"start" validate:"required"`
+	Count        uint64      `json:"count" form:"count" query:"count" validate:"required"`
+	Total        uint64      `json:"total" form:"total" query:"total" validate:"required"`
 	extraData    []byte
 }
 
@@ -726,6 +729,9 @@ func (v *ResponsePending) Copy() *ResponsePending {
 			u.Transactions[i] = v
 		}
 	}
+	u.Start = v.Start
+	u.Count = v.Count
+	u.Total = v.Total
 
 	return u
 }
@@ -1345,6 +1351,15 @@ func (v *ResponsePending) Equal(u *ResponsePending) bool {
 		if !((v.Transactions[i]).Equal(u.Transactions[i])) {
 			return false
 		}
+	}
+	if !(v.Start == u.Start) {
+		return false
+	}
+	if !(v.Count == u.Count) {
+		return false
+	}
+	if !(v.Total == u.Total) {
+		return false
 	}
 
 	return true
@@ -2982,6 +2997,9 @@ func (v *ResponseMinorEntry) IsValid() error {
 
 var fieldNames_ResponsePending = []string{
 	1: "Transactions",
+	2: "Start",
+	3: "Count",
+	4: "Total",
 }
 
 func (v *ResponsePending) MarshalBinary() ([]byte, error) {
@@ -2993,6 +3011,9 @@ func (v *ResponsePending) MarshalBinary() ([]byte, error) {
 			writer.WriteTxid(1, v)
 		}
 	}
+	writer.WriteUint(2, v.Start)
+	writer.WriteUint(3, v.Count)
+	writer.WriteUint(4, v.Total)
 
 	_, _, err := writer.Reset(fieldNames_ResponsePending)
 	if err != nil {
@@ -3009,6 +3030,15 @@ func (v *ResponsePending) IsValid() error {
 		errs = append(errs, "field Transactions is missing")
 	} else if len(v.Transactions) == 0 {
 		errs = append(errs, "field Transactions is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Start is missing")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Count is missing")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Total is missing")
 	}
 
 	switch len(errs) {
@@ -4171,6 +4201,15 @@ func (v *ResponsePending) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
+	if x, ok := reader.ReadUint(2); ok {
+		v.Start = x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.Count = x
+	}
+	if x, ok := reader.ReadUint(4); ok {
+		v.Total = x
+	}
 
 	seen, err := reader.Reset(fieldNames_ResponsePending)
 	if err != nil {
@@ -4693,8 +4732,14 @@ func (v *ResponseMinorEntry) MarshalJSON() ([]byte, error) {
 func (v *ResponsePending) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Transactions encoding.JsonList[*url.TxID] `json:"transactions,omitempty"`
+		Start        uint64                       `json:"start"`
+		Count        uint64                       `json:"count"`
+		Total        uint64                       `json:"total"`
 	}{}
 	u.Transactions = v.Transactions
+	u.Start = v.Start
+	u.Count = v.Count
+	u.Total = v.Total
 	return json.Marshal(&u)
 }
 
@@ -5409,12 +5454,21 @@ func (v *ResponseMinorEntry) UnmarshalJSON(data []byte) error {
 func (v *ResponsePending) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Transactions encoding.JsonList[*url.TxID] `json:"transactions,omitempty"`
+		Start        uint64                       `json:"start"`
+		Count        uint64                       `json:"count"`
+		Total        uint64                       `json:"total"`
 	}{}
 	u.Transactions = v.Transactions
+	u.Start = v.Start
+	u.Count = v.Count
+	u.Total = v.Total
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.Transactions = u.Transactions
+	v.Start = u.Start
+	v.Count = u.Count
+	v.Total = u.Total
 	return nil
 }
 

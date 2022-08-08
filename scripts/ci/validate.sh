@@ -204,19 +204,20 @@ wait-for-tx $TXID
 success
 
 section "Query pending by URL"
-accumulate -j get test.acme/tokens#pending | jq -re .items[0] &> /dev/null|| die "Failed to retrieve pending transactions"
-accumulate -j get test.acme/tokens#signature | jq -re .items[0] &> /dev/null|| die "Failed to retrieve signature transactions"
+accumulate -j get test.acme/tokens#pending | jq -re .items[0] &> /dev/null|| die "Failed to query pending transactions"
+accumulate -j get test.acme/tokens#pending/0:10 | jq -re .items[0] &> /dev/null|| die "Failed to query pending transaction range"
+accumulate -j get test.acme/tokens#signature | jq -re .items[0] &> /dev/null|| die "Failed to query signature chain"
 success
 
-section "Query pending chain at height 0 by URL"
-TXID=$(accumulate -j get test.acme/tokens#pending/0 | jq -re .transactionHash) && success || die "Failed to query pending chain by height"
+section "Query signature chain at height 0 by URL"
+TXID=$(accumulate -j get test.acme/tokens#signature/0 | jq -re .transactionHash) && success || die "Failed to query signature chain by height"
 
-section "Query pending chain with hash by URL"
-RESULT=$(accumulate -j get test.acme/tokens#pending/${TXID} | jq -re .transactionHash) || die "Failed to query pending chain by hash"
+section "Query signature chain with hash by URL"
+RESULT=$(accumulate -j get test.acme/tokens#signature/${TXID} | jq -re .transactionHash) || die "Failed to query signature chain by hash"
 [ "$RESULT" == "$TXID" ] && success || die "Querying by height and by hash gives different results"
 
-section "Query pending chain range by URL"
-RESULT=$(accumulate -j get test.acme/tokens#pending/0:10 | jq -re .total)
+section "Query signature chain range by URL"
+RESULT=$(accumulate -j get test.acme/tokens#signature/0:10 | jq -re .total)
 [ "$RESULT" -ge 1 ] && success || die "No entries found"
 
 section "Query signature chain range by URL"

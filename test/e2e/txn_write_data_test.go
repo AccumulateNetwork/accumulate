@@ -24,7 +24,7 @@ func TestWriteData_ToState(t *testing.T) {
 	updateAccount(sim, alice.JoinPath("book", "1"), func(page *KeyPage) { page.CreditBalance = 1e9 })
 	sim.CreateAccount(&DataAccount{Url: alice.JoinPath("data")})
 
-	// Add credits
+	// Write data
 	entry := &AccumulateDataEntry{Data: [][]byte{[]byte("foo"), []byte("bar")}}
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
 		acctesting.NewTransaction().
