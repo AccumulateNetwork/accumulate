@@ -107,30 +107,44 @@ func (e *FactomDataEntry) UnmarshalBinary(data []byte) error {
 		return fmt.Errorf("malformed entry header")
 	}
 
-	copy(e.AccountId[:], data[1:33])
+	// Ignore version
+	data = data[1:]
 
-	totalExtIdSize := binary.BigEndian.Uint16(data[33:35])
+	// Get account ID
+	copy(e.AccountId[:], data[:32])
+	data = data[32:]
 
-	if int(totalExtIdSize) > len(data)-LiteEntryHeaderSize || totalExtIdSize == 1 {
+	// Get total ExtIDs size
+	totalExtIdSize := binary.BigEndian.Uint16(data[:2])
+	data = data[2:]
+
+	if int(totalExtIdSize) > len(data) || totalExtIdSize == 1 {
 		return fmt.Errorf("malformed entry payload")
 	}
 
-	j := LiteEntryHeaderSize
-
-	//reset the extId's if present
+	// Reset fields if present
 	e.Data = nil
-	e.ExtIds = [][]byte{}
-	for n := 0; n < int(totalExtIdSize); {
-		extIdSize := binary.BigEndian.Uint16(data[j : j+2])
-		if extIdSize > totalExtIdSize {
+	e.ExtIds = nil
+
+	// Get entry data
+	e.Data = data[totalExtIdSize:]
+	data = data[:totalExtIdSize]
+
+	for len(data) > 0 {
+		// Get ExtID size
+		if len(data) < 2 {
 			return fmt.Errorf("malformed extId")
 		}
-		j += 2
-		e.ExtIds = append(e.ExtIds, data[j:j+int(extIdSize)])
-		j += n
-	}
+		extIdSize := binary.BigEndian.Uint16(data[:2])
+		data = data[2:]
+		if int(extIdSize) > len(data) {
+			return fmt.Errorf("malformed extId")
+		}
 
-	e.Data = data[j:]
+		// Get ExtID data
+		e.ExtIds = append(e.ExtIds, data[:extIdSize])
+		data = data[extIdSize:]
+	}
 	return nil
 }
 
