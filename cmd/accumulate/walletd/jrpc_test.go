@@ -1,6 +1,7 @@
 package walletd
 
 import (
+	"context"
 	"net/http"
 	"testing"
 	"time"
@@ -15,7 +16,6 @@ func TestWallet(t *testing.T) {
 	})
 
 	require.NoError(t, err)
-	//mux := j.NewMux()
 
 	// Run JSON-RPC server
 	api := &http.Server{Handler: jrpc.NewMux()}
@@ -29,4 +29,6 @@ func TestWallet(t *testing.T) {
 			jrpc.Logger.Error("JSON-RPC server", "err", err)
 		}
 	}()
+
+	t.Cleanup(func() { api.Shutdown(context.Background()) })
 }

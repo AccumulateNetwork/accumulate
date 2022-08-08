@@ -40,7 +40,7 @@ func init() {
 
 func initRunFlags(cmd *cobra.Command, forService bool) {
 	cmd.ResetFlags()
-	cmd.PersistentFlags().StringVar(&flagRunWalletd.ListenAddress, "listen", "http://0.0.0.0:26661", "listen address for daemon")
+	cmd.PersistentFlags().StringVar(&flagRunWalletd.ListenAddress, "listen", "http://localhost:26661", "listen address for daemon")
 	cmd.PersistentFlags().StringVar(&flagRunWalletd.LogFile, "log-file", "", "Write logs to a file as plain text")
 	cmd.PersistentFlags().StringVar(&flagRunWalletd.JsonLogFile, "json-log-file", "", "Write logs to a file as JSON")
 

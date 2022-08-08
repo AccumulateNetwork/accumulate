@@ -211,3 +211,8 @@ func (m *JrpcMethods) AdiList(_ context.Context, params json.RawMessage) interfa
 	}
 	return resp
 }
+
+func (m *JrpcMethods) AdiList(_ context.Context, params json.RawMessage) interface{} {
+	resp := api.AdiListResponse{}
+	return resp
+}

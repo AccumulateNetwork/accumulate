@@ -12,32 +12,22 @@ import (
 	"time"
 
 	f2 "github.com/FactomProject/factom"
-<<<<<<< HEAD
-	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
-	"gitlab.com/accumulatenetwork/accumulate/internal/client"
-=======
 	tmjson "github.com/tendermint/tendermint/libs/json"
 	alog "github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/privval"
-	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/cmd"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
->>>>>>> origin/develop
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 var origin *url.URL
-<<<<<<< HEAD
 var key *walletd.Key
-=======
-var key *cmd.Key
 var simul *simulator.Simulator
 var delivered = (*protocol.TransactionStatus).Delivered
->>>>>>> origin/develop
 
 type simTb struct{}
 
@@ -85,18 +75,13 @@ func SetPrivateKeyAndOrigin(privateKey string) error {
 		priv = pvkey.PrivKey.Bytes()
 	}
 
-<<<<<<< HEAD
-	url, _ := protocol.LiteTokenAddress(pk[32:], protocol.ACME, protocol.SignatureTypeED25519)
-	key = &walletd.Key{PrivateKey: pk, PublicKey: pk[32:], KeyInfo: walletd.KeyInfo{Type: protocol.SignatureTypeED25519}}
-=======
-	key = &cmd.Key{PrivateKey: priv, PublicKey: pub, KeyInfo: cmd.KeyInfo{Type: protocol.SignatureTypeED25519}}
+	key = &walletd.Key{PrivateKey: priv, PublicKey: pub, KeyInfo: walletd.KeyInfo{Type: protocol.SignatureTypeED25519}}
 	url, err := protocol.LiteTokenAddress(key.PublicKey, protocol.ACME, protocol.SignatureTypeED25519)
 	if err != nil {
 		log.Fatalf("cannot create lite token account %v", err)
 	}
 	log.Println("URL : ", url)
 
->>>>>>> origin/develop
 	origin = url
 	return nil
 }
@@ -165,7 +150,7 @@ func FaucetWithCredits() error {
 	// Generate a key
 	h := storage.MakeKey("factom-genesis")
 	liteKey := ed25519.NewKeyFromSeed(h[:])
-	key = &cmd.Key{PublicKey: liteKey[32:], PrivateKey: liteKey, KeyInfo: cmd.KeyInfo{Type: protocol.SignatureTypeED25519}}
+	key = &walletd.Key{PublicKey: liteKey[32:], PrivateKey: liteKey, KeyInfo: walletd.KeyInfo{Type: protocol.SignatureTypeED25519}}
 	lite, err := protocol.LiteTokenAddress(key.PublicKey, protocol.ACME, key.KeyInfo.Type)
 	if err != nil {
 		return err
