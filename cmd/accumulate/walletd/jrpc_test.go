@@ -30,5 +30,5 @@ func TestWallet(t *testing.T) {
 		}
 	}()
 
-	t.Cleanup(func() { api.Shutdown(context.Background()) })
+	t.Cleanup(func() { _ = api.Shutdown(context.Background()) })
 }
