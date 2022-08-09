@@ -1805,6 +1805,80 @@ func TestMultiLevelDelegation(t *testing.T) {
 	require.EqualError(t, result.Results[0].Error, "signature 2: invalid signature")
 }
 
+func TestDuplicateKeyNewKeypage(t *testing.T) {
+	check := newDefaultCheckError(t, false)
+	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	nodes := RunTestNet(t, partitions, daemons, nil, true, check.ErrorHandler())
+	n := nodes[partitions[1]][0]
+	aliceKey := generateKey()
+	aliceKeyHash := sha256.Sum256(aliceKey.PubKey().Bytes())
+	aliceKey1 := generateKey()
+	aliceKeyHash1 := sha256.Sum256(aliceKey1.PubKey().Bytes())
+	batch := n.db.Begin(true)
+	require.NoError(t, acctesting.CreateAdiWithCredits(batch, aliceKey, "alice", 1e9))
+	require.NoError(t, batch.Commit())
+
+	page := n.GetKeyPage("alice/book0/1")
+	require.Len(t, page.Keys, 1)
+
+	key := page.Keys[0]
+	require.Equal(t, uint64(0), key.LastUsedOn)
+	require.Equal(t, aliceKeyHash[:], key.PublicKeyHash)
+
+	//check for unique keys
+	_, txns, err := n.Execute(func(send func(*protocol.Envelope)) {
+		cms := new(protocol.CreateKeyPage)
+		cms.Keys = append(cms.Keys, &protocol.KeySpecParams{
+			KeyHash: aliceKeyHash[:],
+		})
+		cms.Keys = append(cms.Keys, &protocol.KeySpecParams{
+			KeyHash: aliceKeyHash1[:],
+		})
+
+		send(newTxn("alice/book0").
+			WithSigner(protocol.AccountUrl("alice", "book0", "1"), 1).
+			WithBody(cms).
+			Initiate(protocol.SignatureTypeLegacyED25519, aliceKey).
+			Build())
+	})
+	require.NoError(t, err)
+	n.MustWaitForTxns(txns[0][:])
+	page = n.GetKeyPage("alice/book0/2")
+
+	require.Len(t, page.Keys, 2)
+	key1 := page.Keys[0]
+	key2 := page.Keys[1]
+	require.Equal(t, uint64(0), key1.LastUsedOn)
+	require.Equal(t, aliceKeyHash[:], key1.PublicKeyHash)
+	require.Equal(t, uint64(0), key2.LastUsedOn)
+	require.Equal(t, aliceKeyHash1[:], key2.PublicKeyHash)
+
+	//check for duplicate keys
+	_, _, err = n.Execute(func(send func(*protocol.Envelope)) {
+		cms := new(protocol.CreateKeyPage)
+		cms.Keys = append(cms.Keys, &protocol.KeySpecParams{
+			KeyHash: aliceKeyHash[:],
+		})
+		cms.Keys = append(cms.Keys, &protocol.KeySpecParams{
+			KeyHash: aliceKeyHash[:],
+		})
+
+		send(newTxn("alice/book0").
+			WithSigner(protocol.AccountUrl("alice", "book0", "1"), 1).
+			WithBody(cms).
+			Initiate(protocol.SignatureTypeLegacyED25519, aliceKey).
+			Build())
+	})
+	var resp *abci.ResponseCheckTx
+	require.NoError(t, json.Unmarshal([]byte(err.Error()), &resp), "Expected error to be a CheckTx response")
+
+	result := new(protocol.TransactionResultSet)
+	require.NoError(t, result.UnmarshalBinary(resp.Data))
+	require.Len(t, result.Results, 1)
+	require.NotNil(t, result.Results[0].Error)
+	require.EqualError(t, result.Results[0].Error, "duplicate keys: signing keys of a keypage must be unique")
+}
+
 func TestNetworkDefinition(t *testing.T) {
 	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
