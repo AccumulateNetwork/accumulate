@@ -5,7 +5,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
-	"gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
@@ -508,7 +507,7 @@ func GetAllSignatures(batch *database.Batch, transaction *database.Transaction, 
 	signatures := make([]Signature, 1)
 
 	for _, signer := range status.Signers {
-		sigset, err := block.GetSignaturesForSigner(batch, transaction, signer)
+		sigset, err := database.GetSignaturesForSigner(transaction, signer)
 		if err != nil {
 			return nil, errors.Wrap(errors.StatusUnknownError, err)
 		}

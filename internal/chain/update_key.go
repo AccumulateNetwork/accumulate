@@ -3,6 +3,7 @@ package chain
 import (
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -65,33 +66,22 @@ func (UpdateKey) Execute(st *StateManager, tx *Delivery) (protocol.TransactionRe
 		return nil, fmt.Errorf("load transaction status: %w", err)
 	}
 
-	if status.Initiator == nil {
-		// This should be impossible
-		return nil, fmt.Errorf("transaction does not have an initiator")
+	var initiator protocol.Signature
+outer:
+	for _, signer := range status.Signers {
+		sigs, err := database.GetSignaturesForSigner(txObj, signer)
+		if err != nil {
+			return nil, fmt.Errorf("load signatures for %v: %w", signer.GetUrl(), err)
+		}
+
+		for _, sig := range sigs {
+			if protocol.SignatureDidInitiate(sig, tx.Transaction.Header.Initiator[:]) {
+				initiator = sig
+				break outer
+			}
+		}
 	}
 
-	sigs, err := txObj.ReadSignatures(status.Initiator)
-	if err != nil {
-		return nil, fmt.Errorf("load signatures for %v: %w", status.Initiator, err)
-	}
-
-	if sigs.Count() == 0 {
-		// This should never happen, because this transaction is not multisig.
-		// But it's possible (maybe) for the initiator to be invalidated by the
-		// key page version changing.
-		return nil, fmt.Errorf("no valid signatures found for %v", status.Initiator)
-	}
-
-	e := sigs.Entries()[0]
-	sigOrTxn, err := st.batch.Transaction(e.SignatureHash[:]).GetState()
-	if err != nil {
-		return nil, fmt.Errorf("load first signature from %v: %w", status.Initiator, err)
-	}
-	if sigOrTxn.Signature == nil {
-		// This should be impossible
-		return nil, fmt.Errorf("invalid signature state")
-	}
-	signature := sigOrTxn.Signature
 	/*control := true
 	for control {
 		if signature.Type() == protocol.SignatureTypeDelegated {
@@ -99,7 +89,7 @@ func (UpdateKey) Execute(st *StateManager, tx *Delivery) (protocol.TransactionRe
 		}
 		control = false
 	}*/
-	keysig, ok := signature.(protocol.KeySignature)
+	keysig, ok := initiator.(protocol.KeySignature)
 	if !ok {
 		return nil, fmt.Errorf("signature is not a key signature")
 	}
