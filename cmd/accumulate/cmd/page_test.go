@@ -43,6 +43,10 @@ func testCase4_3(t *testing.T, tc *testCmd) {
 	r, err := tc.executeTx(t, "page key add acc://RedWagon.acme/book0/1 red2 red4")
 	require.NoError(t, err)
 	t.Log(r)
+
+	r, err = tc.executeTx(t, "page key add acc://RedWagon.acme/book0/1 red2 red5")
+	require.NoError(t, err)
+	t.Log(r)
 }
 
 // accumulate page create [origin adi url] [key name[@key book or page]] [public key 1] ... [public key hex or name n + 1] Create new key page with 1 to N+1 public keys
@@ -71,9 +75,19 @@ func testCase4_5(t *testing.T, tc *testCmd) {
 //testCase4_6 Delete a key in a key page
 func testCase4_6(t *testing.T, tc *testCmd) {
 
-	//remove red4
-	r, err := tc.executeTx(t, "page key remove acc://RedWagon.acme/book0/1 red2 red4")
+	//remove red5
+	r, err := tc.executeTx(t, "page key remove acc://RedWagon.acme/book0/1 red2 red5")
 	require.NoError(t, err)
+	t.Log(r)
+
+	//remove red4
+	r, err = tc.executeTx(t, "page key remove acc://RedWagon.acme/book0/1 red2 red4")
+	require.NoError(t, err)
+	t.Log(r)
+
+	//remove red2
+	r, err = tc.executeTx(t, "page key remove acc://RedWagon.acme/book0/1 red2 red2")
+	require.EqualError(t, err, "cannot delete last key of the highest priority page of a key book")
 
 	t.Log(r)
 }
