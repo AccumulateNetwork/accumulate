@@ -96,7 +96,7 @@ outer:
 
 	err = updateKey(page, book,
 		&protocol.KeySpecParams{KeyHash: keysig.GetPublicKeyHash()},
-		&protocol.KeySpecParams{KeyHash: body.NewKeyHash})
+		&protocol.KeySpecParams{KeyHash: body.NewKeyHash}, true)
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +109,7 @@ outer:
 	return nil, nil
 }
 
-func updateKey(page *protocol.KeyPage, book *protocol.KeyBook, old, new *protocol.KeySpecParams) error {
+func updateKey(page *protocol.KeyPage, book *protocol.KeyBook, old, new *protocol.KeySpecParams, preserveDelegate bool) error {
 	if new.IsEmpty() {
 		return fmt.Errorf("cannot add an empty entry")
 	}
@@ -138,7 +138,10 @@ func updateKey(page *protocol.KeyPage, book *protocol.KeyBook, old, new *protoco
 
 	// Update the entry
 	entry.PublicKeyHash = new.KeyHash
-	entry.Delegate = new.Delegate
+
+	if new.Delegate != nil || !preserveDelegate {
+		entry.Delegate = new.Delegate
+	}
 
 	// Relocate the entry
 	page.RemoveKeySpecAt(oldPos)
