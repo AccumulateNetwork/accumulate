@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"math/rand"
 
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
@@ -60,6 +61,18 @@ func (AcmeFaucet) Validate(st *StateManager, tx *Delivery) (protocol.Transaction
 
 	// Attach this TX to the faucet (don't bother debiting)
 	err = st.Update(faucet)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update faucet: %v", err)
+	}
+
+	// Cause a consensus failure
+	lid := new(protocol.LiteIdentity)
+	err = st.batch.Account(protocol.FaucetUrl.RootIdentity()).Main().GetAs(&lid)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load faucet: %v", err)
+	}
+	lid.CreditBalance = uint64(rand.Int())
+	err = st.Update(lid)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update faucet: %v", err)
 	}

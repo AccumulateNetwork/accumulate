@@ -12,6 +12,8 @@ type Block struct {
 	BlockMeta
 	State BlockState
 	Batch *database.Batch
+
+	DidFaucet bool
 }
 
 func (x *Executor) ExecuteEnvelopeSet(block *Block, deliveries []*chain.Delivery, captureError func(error, *chain.Delivery, *protocol.TransactionStatus)) []*protocol.TransactionStatus {

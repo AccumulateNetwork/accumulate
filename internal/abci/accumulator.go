@@ -38,7 +38,7 @@ type Accumulator struct {
 	AccumulatorOptions
 	logger log.Logger
 
-	block          *block.Block
+	block, last    *block.Block
 	txct           int64
 	timer          time.Time
 	didPanic       bool
@@ -310,6 +310,11 @@ func (app *Accumulator) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBegi
 	app.block.Evidence = req.ByzantineValidators
 	app.block.Batch = app.DB.Begin(true)
 
+	if app.last != nil && app.last.DidFaucet {
+		b, _ := json.Marshal(req.LastCommitInfo.Votes)
+		fmt.Printf("Begin block: %s\n", b)
+	}
+
 	//Identify the leader for this block, if we are the proposer... then we are the leader.
 	err := app.Executor.BeginBlock(app.block)
 	if err != nil {
@@ -429,6 +434,12 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 		return res
 	}
 
+	for _, env := range envelopes {
+		if env.Transaction.Body.Type() == protocol.TransactionTypeAcmeFaucet {
+			app.block.DidFaucet = true
+		}
+	}
+
 	// Deliver never fails, unless the batch cannot be decoded
 	app.txct += int64(len(envelopes))
 	return abci.ResponseDeliverTx{Code: uint32(protocol.ErrorCodeOK), Data: respData}
@@ -514,6 +525,8 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 	batch := app.DB.Begin(false)
 	defer batch.Discard()
 	resp.Data = batch.BptRoot()
+
+	app.last = app.block
 
 	// Keep this disabled until we have real snapshot support through Tendermint
 	if false {
