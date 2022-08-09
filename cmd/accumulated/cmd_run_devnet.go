@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -68,6 +69,11 @@ func runDevNet(*cobra.Command, []string) {
 		if len(id) > nodeIdLen {
 			nodeIdLen = len(id)
 		}
+	}
+
+	threads := len(nodes) * 4
+	if runtime.GOMAXPROCS(0) < threads {
+		runtime.GOMAXPROCS(threads)
 	}
 
 	stop := make(chan struct{})

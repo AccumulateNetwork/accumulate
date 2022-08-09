@@ -116,6 +116,8 @@ func (cm *connectionManager) SelectConnection(partitionId string, allowFollower 
 		return nil, errNoHealthyNodes(partitionId) // None of the nodes in the partition could be reached
 	}
 
+	return healthyNodes[0], nil
+
 	// Apply simple round-robin balancing to nodes in non-local partitions
 	var selCtx ConnectionContext
 	selCtxCnt := ^uint64(0)

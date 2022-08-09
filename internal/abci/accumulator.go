@@ -550,6 +550,10 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 	}
 
 	go app.Accumulate.AnalysisLog.Flush()
-	app.logger.Debug("Committed", "minor", app.block.Index, "hash", logging.AsHex(batch.BptRoot()).Slice(0, 4), "major", app.block.State.MakeMajorBlock)
+	duration := time.Since(app.timer)
+	if app.block.IsLeader && app.txct > 0 {
+		fmt.Printf("%v TPS: %.2f (%d, %v)\n", app.Accumulate.PartitionId, float64(app.txct)/duration.Seconds(), app.txct, duration)
+	}
+	app.logger.Debug("Committed", "minor", app.block.Index, "hash", logging.AsHex(batch.BptRoot()).Slice(0, 4), "major", app.block.State.MakeMajorBlock, "duration", duration, "count", app.txct)
 	return resp
 }
