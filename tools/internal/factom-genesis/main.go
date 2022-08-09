@@ -118,7 +118,7 @@ func ConstructWriteDataToSim(data protocol.DataEntry, dataAccount *url.URL) *pro
 }
 
 func ConstructWriteData(u *url.URL, entry *protocol.FactomDataEntry) *protocol.Transaction {
-	return ConstructWriteDataToSim(entry, u)
+	return ConstructWriteDataToSim(entry.Wrap(), u)
 }
 
 func GetAccountFromPrivateString(hexString string) *url.URL {

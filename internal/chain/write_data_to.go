@@ -23,10 +23,6 @@ func (WriteDataTo) Validate(st *StateManager, tx *Delivery) (protocol.Transactio
 		return nil, errors.Format(errors.StatusBadRequest, "entry is missing")
 	}
 
-	if _, ok := body.Entry.(*protocol.FactomDataEntry); ok {
-		return nil, errors.Format(errors.StatusBadRequest, "writing new Factom-formatted data entries is not supported")
-	}
-
 	if _, err := protocol.ParseLiteDataAddress(body.Recipient); err != nil {
 		return nil, errors.Format(errors.StatusBadRequest, "only writes to lite data accounts supported: %s: %v", body.Recipient, err)
 	}
