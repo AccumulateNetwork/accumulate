@@ -174,6 +174,14 @@ func (m *JrpcMethods) ResolveKey(_ context.Context, params json.RawMessage) inte
 
 	req := api.ResolveKeyRequest{}
 	err := json.Unmarshal(params, &req)
+
+	if err != nil {
+		gen := api.GeneralResponse{}
+		gen.Code = api.ErrorCodeGeneralError
+		gen.Error = err.Error()
+		return gen
+	}
+
 	label, isLite := LabelForLiteIdentity(req.KeyNameOrLiteAddress)
 	var k *Key
 	if isLite {
