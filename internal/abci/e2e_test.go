@@ -1750,8 +1750,12 @@ func TestDelegatedKeypageUpdate(t *testing.T) {
 	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, partitions, daemons, nil, true, check.ErrorHandler())
 	n := nodes[partitions[1]][0]
-	aliceKey, charlieKey, bobKey, jjkey := generateKey(), generateKey(), generateKey(), generateKey()
+	aliceKey, charlieKey, bobKey, jjkey, newKey1, newKey2, newKey3 := generateKey(), generateKey(), generateKey(), generateKey(), generateKey(), generateKey(), generateKey()
 	charliekeyHash := sha256.Sum256(charlieKey.PubKey().Address())
+	newKey1hash := sha256.Sum256(newKey1.PubKey().Address())
+	newKey2hash := sha256.Sum256(newKey2.PubKey().Address())
+	newKey3hash := sha256.Sum256(newKey3.PubKey().Address())
+
 	batch := n.db.Begin(true)
 	require.NoError(t, acctesting.CreateAdiWithCredits(batch, aliceKey, "alice", 1e9))
 	require.NoError(t, acctesting.CreateAdiWithCredits(batch, bobKey, "bob", 1e9))
@@ -1768,23 +1772,24 @@ func TestDelegatedKeypageUpdate(t *testing.T) {
 	require.NoError(t, batch.Commit())
 
 	//Test with single level Key
-	_, _, err := n.Execute(func(send func(*protocol.Envelope)) {
-		op := new(protocol.AddKeyOperation)
-		op.Entry = protocol.KeySpecParams{Delegate: protocol.AccountUrl("jj", "book0")}
-		body := new(protocol.UpdateKeyPage)
-		body.Operation = append(body.Operation, op)
-		send(newTxn("bob/book0/1").WithSigner(protocol.AccountUrl("bob", "book0", "1"), 1).WithBody(body).
-			Initiate(protocol.SignatureTypeLegacyED25519, bobKey).
+	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		body := new(protocol.UpdateKey)
+		body.NewKeyHash = newKey1hash[:]
+		send(newTxn("jj/book0/1").WithSigner(protocol.AccountUrl("jj", "book0", "1"), 1).WithBody(body).
+			Initiate(protocol.SignatureTypeLegacyED25519, jjkey).
 			Build())
 	})
-	require.NoError(t, err)
-
+	time.Sleep(time.Second * 5)
+	page := n.GetKeyPage("jj/book0/1")
+	require.Len(t, page.Keys, 2)
+	//look for the key.
+	_, _, found := page.EntryByKeyHash(newKey1hash[:])
+	require.True(t, found, "key not found in page")
 	//Test with singleLevel Delegation
-	_, txns, err := n.Execute(func(send func(*protocol.Envelope)) {
-		op := new(protocol.AddKeyOperation)
-		op.Entry = protocol.KeySpecParams{Delegate: protocol.AccountUrl("jj", "book0")}
-		body := new(protocol.UpdateKeyPage)
-		body.Operation = append(body.Operation, op)
+	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+
+		body := new(protocol.UpdateKey)
+		body.NewKeyHash = newKey2hash[:]
 		env := newTxn("alice/book0/1").
 			WithBody(body).
 
@@ -1799,26 +1804,32 @@ func TestDelegatedKeypageUpdate(t *testing.T) {
 			Build()
 		send(env)
 	})
-	require.NoError(t, err)
-	n.MustWaitForTxns(txns[0][:])
+	time.Sleep(time.Second * 5)
+
 	for _, key := range n.GetKeyPage("acc://alice/book0/1").Keys {
 		fmt.Printf("%v\n", key)
 	}
-	fmt.Printf("%x\n", txns[0][:])
+	for _, key := range n.GetKeyPage("acc://bob/book0/1").Keys {
+		fmt.Printf("%v\n", key)
+	}
+	for _, key := range n.GetKeyPage("acc://jj/book0/1").Keys {
+		fmt.Printf("%v\n", key)
+	}
+	page = n.GetKeyPage("alice/book0/1")
+	require.Len(t, page.Keys, 5)
+	//look for the key.
+	_, _, found = page.EntryByKeyHash(newKey2hash[:])
+	require.True(t, found, "key not found in page")
 
-	response := n.GetTx(txns[0][:])
-	fmt.Println("response", response.Status)
 	batch = n.db.Begin(true)
 	require.NoError(t, acctesting.UpdateKeyPage(batch, protocol.AccountUrl("alice", "book0", "1"), func(kp *protocol.KeyPage) {
 		kp.SetThreshold(3)
 	}))
 	require.NoError(t, batch.Commit())
 	//Testwith multilevel delegation
-	_, _, err = n.Execute(func(send func(*protocol.Envelope)) {
-		op := new(protocol.AddKeyOperation)
-		op.Entry = protocol.KeySpecParams{Delegate: protocol.AccountUrl("jj", "book0")}
-		body := new(protocol.UpdateKeyPage)
-		body.Operation = append(body.Operation, op)
+	_, _, err := n.Execute(func(send func(*protocol.Envelope)) {
+		body := new(protocol.UpdateKey)
+		body.NewKeyHash = newKey3hash[:]
 		env := newTxn("alice/book0/1").
 			WithBody(body).
 
