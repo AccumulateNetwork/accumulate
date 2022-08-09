@@ -92,10 +92,6 @@ func (WriteData) Validate(st *StateManager, tx *Delivery) (protocol.TransactionR
 		return nil, errors.Format(errors.StatusBadRequest, "entry is missing")
 	}
 
-	if _, ok := body.Entry.(*protocol.FactomDataEntry); ok {
-		return nil, errors.Format(errors.StatusBadRequest, "writing new Factom-formatted data entries is not supported")
-	}
-
 	//check will return error if there is too much data or no data for the entry
 	_, err := protocol.CheckDataEntrySize(body.Entry)
 	if err != nil {
