@@ -67,7 +67,7 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 	// Check that the signatures are valid
 	for i, signature := range delivery.Signatures {
 		var md sigExecMetadata
-		md.IsInitiator = protocol.SignatureDidInitiate(signature, delivery.Transaction.Header.Initiator[:])
+		md.IsInitiator = protocol.SignatureDidInitiate(signature, delivery.Transaction.Header.Initiator[:], nil)
 		if !signature.Type().IsSystem() {
 			md.Location = signature.RoutingLocation()
 		}
