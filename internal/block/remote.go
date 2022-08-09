@@ -115,7 +115,7 @@ func (x *Executor) shouldForwardSignature(batch *database.Batch, transaction *pr
 	}
 
 	// Load all of the signatures
-	sigset, err := GetSignaturesForSigner(batch, batch.Transaction(transaction.GetHash()), signer)
+	sigset, err := database.GetSignaturesForSigner(batch.Transaction(transaction.GetHash()), signer)
 	if err != nil {
 		return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 	}

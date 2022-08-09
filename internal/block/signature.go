@@ -249,7 +249,7 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 		}
 
 		// Load all the signatures
-		sigset, err := GetSignaturesForSigner(batch, batch.Transaction(delivery.Transaction.GetHash()), delegate)
+		sigset, err := database.GetSignaturesForSigner(batch.Transaction(delivery.Transaction.GetHash()), delegate)
 		if err != nil {
 			return nil, errors.Wrap(errors.StatusUnknownError, err)
 		}
@@ -739,31 +739,6 @@ func verifyInternalSignature(delivery *chain.Delivery, _ *protocol.InternalSigna
 	}
 
 	return nil
-}
-
-func GetSignaturesForSigner(batch *database.Batch, transaction *database.Transaction, signer protocol.Signer) ([]protocol.Signature, error) {
-	// Load the signature set
-	sigset, err := transaction.ReadSignaturesForSigner(signer)
-	if err != nil {
-		return nil, fmt.Errorf("load signatures set %v: %w", signer.GetUrl(), err)
-	}
-
-	entries := sigset.Entries()
-	signatures := make([]protocol.Signature, 0, len(entries))
-	for _, e := range entries {
-		state, err := batch.Transaction(e.SignatureHash[:]).GetState()
-		if err != nil {
-			return nil, fmt.Errorf("load signature entry %X: %w", e.SignatureHash, err)
-		}
-
-		if state.Signature == nil {
-			// This should not happen
-			continue
-		}
-
-		signatures = append(signatures, state.Signature)
-	}
-	return signatures, nil
 }
 
 //validationPartitionSignature checks if the key used to sign the synthetic or system transaction belongs to the same subnet
