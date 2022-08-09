@@ -81,24 +81,21 @@ outer:
 			}
 		}
 	}
-	switch initiator.(type) {
+	switch keysig := initiator.(type) {
 	case protocol.KeySignature:
-		keysig, ok := initiator.(protocol.KeySignature)
-		if !ok {
-			return nil, fmt.Errorf("signature is not a key signature")
-		}
+
 		err = updateKey(page, book,
 			&protocol.KeySpecParams{KeyHash: keysig.GetPublicKeyHash()},
 			&protocol.KeySpecParams{KeyHash: body.NewKeyHash}, true)
 
 	case *protocol.DelegatedSignature:
-		keysig, ok := initiator.(*protocol.DelegatedSignature)
-		if !ok {
-			return nil, fmt.Errorf("signature is not a key signature")
-		}
+
 		err = updateKey(page, book,
 			&protocol.KeySpecParams{Delegate: keysig.Signature.GetSigner()},
 			&protocol.KeySpecParams{KeyHash: body.NewKeyHash}, true)
+	default:
+		return nil, fmt.Errorf("unable to resolve Signature")
+
 	}
 	if err != nil {
 		return nil, err
