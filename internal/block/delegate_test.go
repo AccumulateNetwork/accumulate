@@ -513,7 +513,7 @@ func GetAllSignatures(batch *database.Batch, transaction *database.Transaction, 
 		}
 
 		for _, sig := range sigset {
-			if SignatureDidInitiate(sig, txnInitHash) {
+			if SignatureDidInitiate(sig, txnInitHash, nil) {
 				signatures[0] = sig
 			} else {
 				signatures = append(signatures, sig)
