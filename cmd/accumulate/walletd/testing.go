@@ -5,5 +5,5 @@ import (
 )
 
 func InitTestDB(t *testing.T) {
-	_ = initDB(t.TempDir(), true)
+	wallet = initDB(t.TempDir(), true)
 }

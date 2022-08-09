@@ -3,9 +3,6 @@ package cmd
 import (
 	"bufio"
 	"bytes"
-	"crypto/ed25519"
-	"crypto/sha256"
-	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -17,7 +14,6 @@ import (
 	"github.com/spf13/cobra"
 	tmjson "github.com/tendermint/tendermint/libs/json"
 	"github.com/tendermint/tendermint/privval"
-	"github.com/tyler-smith/go-bip32"
 	"github.com/tyler-smith/go-bip39"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/db"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
@@ -308,116 +304,6 @@ func pubKeyFromString(s string) (*walletd.Key, error) {
 	return &walletd.Key{PublicKey: pubKey[:], KeyInfo: walletd.KeyInfo{Type: protocol.SignatureTypeED25519}}, nil
 }
 
-func GenerateKey(label string) (string, error) {
-	var out string
-	if _, err := strconv.ParseInt(label, 10, 64); err == nil {
-		return "", fmt.Errorf("key name cannot be a number")
-	}
-
-	if label != "" {
-		_, _, _, errFs := protocol.GetFactoidAddressRcdHashPkeyFromPrivateFs(label)
-		_, errFA := protocol.GetRCDFromFactoidAddress(label)
-		if errFs == nil || errFA == nil {
-			return "", fmt.Errorf("key name cannot be a factoid address")
-		}
-		u, err := url.Parse(label)
-		if err != nil {
-			return "", err
-		}
-		_, _, err = protocol.ParseLiteTokenAddress(u)
-		if err != nil {
-			return "", fmt.Errorf("key name cannot look like an account")
-		}
-	}
-
-	sigtype, err := ValidateSigType(SigType)
-	if err != nil {
-		return "", err
-	}
-
-	var privKey []byte
-	var pubKey []byte
-
-	if sigtype == protocol.SignatureTypeBTCLegacy || sigtype == protocol.SignatureTypeETH {
-		privKey, pubKey = protocol.SECP256K1UncompressedKeypair()
-	} else if sigtype == protocol.SignatureTypeBTC {
-		privKey, pubKey = protocol.SECP256K1Keypair()
-	} else {
-		privKey, err = GeneratePrivateKey()
-		if err != nil {
-			return "", err
-		}
-		pubKey = privKey[32:]
-	}
-
-	var keyHash []byte
-	if sigtype == protocol.SignatureTypeRCD1 {
-		keyHash = protocol.GetRCDHashFromPublicKey(pubKey, 1)
-		if label == "" {
-			label, err = protocol.GetFactoidAddressFromRCDHash(keyHash)
-			if err != nil {
-				return "", err
-			}
-		}
-	} else if sigtype == protocol.SignatureTypeBTC || sigtype == protocol.SignatureTypeBTCLegacy {
-		keyHash = protocol.BTCHash(pubKey)
-		if label == "" {
-			label = protocol.BTCaddress(pubKey)
-		}
-	} else if sigtype == protocol.SignatureTypeETH {
-		keyHash = protocol.ETHhash(pubKey)
-		if label == "" {
-			label = protocol.ETHaddress(pubKey)
-		}
-	} else {
-		h := sha256.Sum256(pubKey)
-		keyHash = h[:]
-	}
-
-	lt, err := protocol.LiteTokenAddressFromHash(keyHash, protocol.ACME)
-	if err != nil {
-		return "", fmt.Errorf("no label specified and cannot import as lite token account")
-	}
-	liteLabel, _ := walletd.LabelForLiteTokenAccount(lt.String())
-
-	if label == "" {
-		label = liteLabel
-	}
-
-	//here will change the label if it is a lite account specified, otherwise just use the label
-	label, _ = walletd.LabelForLiteTokenAccount(label)
-
-	_, err = walletd.LookupByLabel(label)
-	if err == nil {
-		return "", fmt.Errorf("key already exists for key name %s", label)
-	}
-
-	k := new(walletd.Key)
-	k.PrivateKey = privKey
-	k.PublicKey = pubKey
-	k.KeyInfo.Type = sigtype
-	err = k.Save(label, liteLabel)
-	if err != nil {
-		return "", err
-	}
-
-	if WantJsonOutput {
-		a := KeyResponse{}
-		a.Label = types.String(label)
-		a.PublicKey = pubKey
-		a.LiteAccount = lt
-		a.KeyInfo = walletd.KeyInfo{Type: sigtype}
-		dump, err := json.Marshal(&a)
-		if err != nil {
-			return "", err
-		}
-		out += fmt.Sprintf("%s\n", string(dump))
-	} else {
-		out += fmt.Sprintf("\tname\t\t:\t%s\n\tlite account\t:\t%s\n\tpublic key\t:\t%x\n\tkey type\t:\t%s\n", label, lt, pubKey, sigtype)
-	}
-	return out, nil
-}
-
 func ImportKeyPrompt(cmd *cobra.Command, label string, signatureType protocol.SignatureType) (out string, err error) {
 	token, err := getPasswdPrompt(cmd, "Private Key : ", true)
 	if err != nil {
@@ -454,10 +340,9 @@ func ImportKey(token []byte, label string, signatureType protocol.SignatureType)
 	var liteLabel string
 	pk := new(walletd.Key)
 
-	if err := pk.Initialize(token, signatureType); err != nil {
+	if err := pk.InitializeFromSeed(token, signatureType, "external"); err != nil {
 		return "", err
 	}
-	pk.KeyInfo.Derivation = "external"
 
 	lt, err := protocol.LiteTokenAddress(pk.PublicKey, protocol.ACME, pk.KeyInfo.Type)
 	if err != nil {
@@ -543,56 +428,83 @@ func ExportKey(label string) (string, error) {
 	}
 }
 
-func GeneratePrivateKey() ([]byte, error) {
-	seed, err := lookupSeed()
-	if err != nil {
-		//if private key seed doesn't exist, just create a key
-		_, privKey, err := ed25519.GenerateKey(nil)
-		if err != nil {
-			return nil, err
+func GenerateKey(label string) (string, error) {
+	var out string
+	if _, err := strconv.ParseInt(label, 10, 64); err == nil {
+		return "", fmt.Errorf("key name cannot be a number")
+	}
+
+	if label != "" {
+		_, _, _, errFs := protocol.GetFactoidAddressRcdHashPkeyFromPrivateFs(label)
+		_, errFA := protocol.GetRCDFromFactoidAddress(label)
+		if errFs == nil || errFA == nil {
+			return "", fmt.Errorf("key name cannot be a factoid address")
 		}
-		return privKey, nil
+		u, err := url.Parse(label)
+		if err != nil {
+			return "", err
+		}
+		_, _, err = protocol.ParseLiteTokenAddress(u)
+		if err != nil {
+			return "", fmt.Errorf("key name cannot look like an account")
+		}
 	}
 
-	//if we do have a seed, then create a new key
-	masterKey, _ := bip32.NewMasterKey(seed)
-
-	ct, err := getKeyCountAndIncrement()
+	sigtype, err := ValidateSigType(SigType)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
-	newKey, err := masterKey.NewChildKey(ct)
+	key, err := walletd.GenerateKey(sigtype)
 	if err != nil {
-		return nil, err
-	}
-	privKey := ed25519.NewKeyFromSeed(newKey.Key)
-	return privKey, nil
-}
-
-func getKeyCountAndIncrement() (count uint32, err error) {
-	ct, _ := walletd.GetWallet().Get(walletd.BucketMnemonic, []byte("count"))
-	if ct != nil {
-		count = binary.LittleEndian.Uint32(ct)
+		return "", err
 	}
 
-	ct = make([]byte, 8)
-	binary.LittleEndian.PutUint32(ct, count+1)
-	err = walletd.GetWallet().Put(walletd.BucketMnemonic, []byte("count"), ct)
+	//assign a label if needed
+	if label == "" {
+		label, err = key.NativeAddress()
+		if err != nil {
+
+		}
+	}
+
+	//derive a lite label if needed that will reference the Accumulate lite account
+	keyHash := key.PublicKeyHash()
+	lt, err := protocol.LiteTokenAddressFromHash(keyHash, protocol.ACME)
 	if err != nil {
-		return 0, err
+		return "", fmt.Errorf("no label specified and cannot import as lite token account")
+	}
+	liteLabel, _ := walletd.LabelForLiteTokenAccount(lt.String())
+
+	//here will change the label if it is a lite account specified, otherwise just use the label
+	label, _ = walletd.LabelForLiteTokenAccount(label)
+
+	//make sure it doesn't exist
+	_, err = walletd.LookupByLabel(label)
+	if err == nil {
+		return "", fmt.Errorf("key already exists for key name %s", label)
 	}
 
-	return count, nil
-}
-
-func lookupSeed() (seed []byte, err error) {
-	seed, err = walletd.GetWallet().Get(walletd.BucketMnemonic, []byte("seed"))
+	err = key.Save(label, liteLabel)
 	if err != nil {
-		return nil, fmt.Errorf("mnemonic seed doesn't exist")
+		return "", err
 	}
 
-	return seed, nil
+	if WantJsonOutput {
+		a := KeyResponse{}
+		a.Label = types.String(label)
+		a.PublicKey = key.PublicKey
+		a.LiteAccount = lt
+		a.KeyInfo = walletd.KeyInfo{Type: sigtype}
+		dump, err := json.Marshal(&a)
+		if err != nil {
+			return "", err
+		}
+		out += fmt.Sprintf("%s\n", string(dump))
+	} else {
+		out += fmt.Sprintf("\tname\t\t:\t%s\n\tlite account\t:\t%s\n\tpublic key\t:\t%x\n\tkey type\t:\t%s\n", label, lt, key.PublicKey, sigtype)
+	}
+	return out, nil
 }
 
 func ImportMnemonic(mnemonic []string) (string, error) {
