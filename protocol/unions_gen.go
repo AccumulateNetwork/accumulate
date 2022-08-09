@@ -193,7 +193,7 @@ func NewDataEntry(typ DataEntryType) (DataEntry, error) {
 	case DataEntryTypeAccumulate:
 		return new(AccumulateDataEntry), nil
 	case DataEntryTypeFactom:
-		return new(FactomDataEntry), nil
+		return new(FactomDataEntryWrapper), nil
 	default:
 		return nil, fmt.Errorf("unknown data entry %v", typ)
 	}
@@ -208,8 +208,8 @@ func EqualDataEntry(a, b DataEntry) bool {
 	case *AccumulateDataEntry:
 		b, ok := b.(*AccumulateDataEntry)
 		return ok && a.Equal(b)
-	case *FactomDataEntry:
-		b, ok := b.(*FactomDataEntry)
+	case *FactomDataEntryWrapper:
+		b, ok := b.(*FactomDataEntryWrapper)
 		return ok && a.Equal(b)
 	default:
 		return false
