@@ -1746,7 +1746,7 @@ func TestAccountAuth(t *testing.T) {
 }
 
 func TestDelegatedKeypageUpdate(t *testing.T) {
-	check := newDefaultCheckError(t, true)
+	check := newDefaultCheckError(t, false)
 	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, partitions, daemons, nil, true, check.ErrorHandler())
 	n := nodes[partitions[1]][0]
@@ -1855,7 +1855,7 @@ func TestDelegatedKeypageUpdate(t *testing.T) {
 	require.NoError(t, result.UnmarshalBinary(resp.Data))
 	require.Len(t, result.Results, 1)
 	require.NotNil(t, result.Results[0].Error)
-	require.EqualError(t, result.Results[0].Error, "signature 0: key does not belong to signer")
+	require.EqualError(t, result.Results[0].Error, "signature 2: invalid signature")
 }
 
 func TestMultiLevelDelegation(t *testing.T) {

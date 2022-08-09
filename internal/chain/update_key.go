@@ -81,38 +81,25 @@ outer:
 			}
 		}
 	}
-
-	control := true
-
-	for control {
-		fmt.Println(initiator.Type())
-		switch initiator.(type) {
-		case *protocol.DelegatedSignature:
-			initiator = initiator.(*protocol.DelegatedSignature).Signature
-		case protocol.KeySignature:
-			fmt.Println("keysignature")
-			control = false
-		default:
-			fmt.Println("default")
-			control = false
-		}
-	}
-	var keysig protocol.KeySignature
-	var ok bool
-	if initiator.Type() == protocol.SignatureTypeSet {
-		set := initiator.(*protocol.SignatureSet).Signatures
-		fmt.Println(set, len(set))
-		keysig, ok = set[0].(protocol.KeySignature)
-	} else {
-		keysig, ok = initiator.(protocol.KeySignature)
+	switch initiator.(type) {
+	case protocol.KeySignature:
+		keysig, ok := initiator.(protocol.KeySignature)
 		if !ok {
 			return nil, fmt.Errorf("signature is not a key signature")
-
 		}
+		err = updateKey(page, book,
+			&protocol.KeySpecParams{KeyHash: keysig.GetPublicKeyHash()},
+			&protocol.KeySpecParams{KeyHash: body.NewKeyHash}, true)
+
+	case *protocol.DelegatedSignature:
+		keysig, ok := initiator.(*protocol.DelegatedSignature)
+		if !ok {
+			return nil, fmt.Errorf("signature is not a key signature")
+		}
+		err = updateKey(page, book,
+			&protocol.KeySpecParams{Delegate: keysig.Signature.GetSigner()},
+			&protocol.KeySpecParams{KeyHash: body.NewKeyHash}, true)
 	}
-	err = updateKey(page, book,
-		&protocol.KeySpecParams{KeyHash: keysig.GetPublicKeyHash()},
-		&protocol.KeySpecParams{KeyHash: body.NewKeyHash}, true)
 	if err != nil {
 		return nil, err
 	}
