@@ -164,15 +164,15 @@ func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, book *protocol.Key
 			return fmt.Errorf("entry to be removed not found on the key page")
 		}
 
-		page.RemoveKeySpecAt(index)
-
 		_, pageIndex, ok := protocol.ParseKeyPageUrl(page.Url)
 		if !ok {
 			return errors.Format(errors.StatusInternalError, "principal is not a key page")
 		}
-		if len(page.Keys) == 0 && pageIndex == 0 {
+		if len(page.Keys) == 1 && pageIndex == 1 {
 			return fmt.Errorf("cannot delete last key of the highest priority page of a key book")
 		}
+
+		page.RemoveKeySpecAt(index)
 
 		if page.AcceptThreshold > uint64(len(page.Keys)) {
 			page.AcceptThreshold = uint64(len(page.Keys))
