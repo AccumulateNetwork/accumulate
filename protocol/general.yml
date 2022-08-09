@@ -88,9 +88,14 @@ AccumulateDataEntry:
       repeatable: true
       type: bytes
 
+FactomDataEntryWrapper:
+  union: { type: dataEntry, value: Factom }
+  fields:
+    - type: FactomDataEntry
+      marshal-as: reference
+
 FactomDataEntry:
   non-binary: true
-  union: { type: dataEntry }
   fields:
     - name: AccountId
       type: hash
