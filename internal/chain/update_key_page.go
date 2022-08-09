@@ -180,7 +180,7 @@ func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, book *protocol.Key
 		return nil
 
 	case *protocol.UpdateKeyOperation:
-		return updateKey(page, book, &op.OldEntry, &op.NewEntry)
+		return updateKey(page, book, &op.OldEntry, &op.NewEntry, false)
 
 	case *protocol.SetThresholdKeyPageOperation:
 		return page.SetThreshold(op.Threshold)
