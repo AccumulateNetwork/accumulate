@@ -91,7 +91,15 @@ func (UpdateKey) Execute(st *StateManager, tx *Delivery) (protocol.TransactionRe
 		// This should be impossible
 		return nil, fmt.Errorf("invalid signature state")
 	}
-	keysig, ok := sigOrTxn.Signature.(protocol.KeySignature)
+	signature := sigOrTxn.Signature
+	control := true
+	for control {
+		if signature.Type() == protocol.SignatureTypeDelegated {
+			signature = signature.(*protocol.DelegatedSignature).Signature
+		}
+		control = false
+	}
+	keysig, ok := signature.(protocol.KeySignature)
 	if !ok {
 		return nil, fmt.Errorf("signature is not a key signature")
 	}
