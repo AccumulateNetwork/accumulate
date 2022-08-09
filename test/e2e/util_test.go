@@ -1,6 +1,7 @@
 package e2e
 
 import (
+	"crypto/sha256"
 	"sort"
 	"strings"
 	"testing"
@@ -31,4 +32,12 @@ func Run[Case any, TB runTB[TB]](t TB, cases map[string]Case, run func(TB, Case)
 	RunSorted(t, cases, func(a, b string) bool {
 		return strings.Compare(a, b) < 0
 	}, run)
+}
+
+func hash(b ...[]byte) []byte {
+	h := sha256.New()
+	for _, b := range b {
+		_, _ = h.Write(b)
+	}
+	return h.Sum(nil)
 }

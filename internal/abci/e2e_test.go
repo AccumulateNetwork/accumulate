@@ -1745,6 +1745,74 @@ func TestAccountAuth(t *testing.T) {
 	require.Error(t, err, "expected a failure but instead an unauthorized signature succeeded")
 }
 
+func TestDelegatedKeypageUpdate(t *testing.T) {
+	check := newDefaultCheckError(t, false)
+	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	nodes := RunTestNet(t, partitions, daemons, nil, true, check.ErrorHandler())
+	n := nodes[partitions[1]][0]
+	aliceKey, charlieKey, bobKey, jjkey, newKey1, newKey2 := generateKey(), generateKey(), generateKey(), generateKey(), generateKey(), generateKey()
+	charliekeyHash := sha256.Sum256(charlieKey.PubKey().Address())
+	newKey1hash := sha256.Sum256(newKey1.PubKey().Address())
+	newKey2hash := sha256.Sum256(newKey2.PubKey().Address())
+
+	batch := n.db.Begin(true)
+	require.NoError(t, acctesting.CreateAdiWithCredits(batch, aliceKey, "alice", 1e9))
+	require.NoError(t, acctesting.CreateAdiWithCredits(batch, bobKey, "bob", 1e9))
+	require.NoError(t, acctesting.CreateAdiWithCredits(batch, charlieKey, "charlie", 1e9))
+	require.NoError(t, acctesting.CreateAdiWithCredits(batch, jjkey, "jj", 1e9))
+	require.NoError(t, acctesting.UpdateKeyPage(batch, protocol.AccountUrl("alice", "book0", "1"), func(kp *protocol.KeyPage) {
+		kp.AddKeySpec(&protocol.KeySpec{Delegate: protocol.AccountUrl("bob", "book0")})
+		kp.AddKeySpec(&protocol.KeySpec{Delegate: protocol.AccountUrl("charlie", "book0")})
+		kp.AddKeySpec(&protocol.KeySpec{PublicKeyHash: charliekeyHash[:]})
+	}))
+	require.NoError(t, acctesting.UpdateKeyPage(batch, protocol.AccountUrl("bob", "book0", "1"), func(kp *protocol.KeyPage) {
+		kp.AddKeySpec(&protocol.KeySpec{Delegate: protocol.AccountUrl("charlie", "book0")})
+	}))
+	require.NoError(t, batch.Commit())
+
+	page := n.GetKeyPage("jj/book0/1")
+	//look for the key.
+	_, _, found := page.EntryByKeyHash(newKey1hash[:])
+	require.False(t, found, "key not found in page")
+	//Test with single level Key
+	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		body := new(protocol.UpdateKey)
+		body.NewKeyHash = newKey1hash[:]
+		send(newTxn("jj/book0/1").WithSigner(protocol.AccountUrl("jj", "book0", "1"), 1).WithBody(body).
+			Initiate(protocol.SignatureTypeLegacyED25519, jjkey).
+			Build())
+	})
+	page = n.GetKeyPage("jj/book0/1")
+	//look for the key.
+	_, _, found = page.EntryByKeyHash(newKey1hash[:])
+	require.True(t, found, "key not found in page")
+
+	page = n.GetKeyPage("alice/book0/1")
+	//look for the key.
+	_, _, found = page.EntryByKeyHash(newKey2hash[:])
+	require.False(t, found, "key not found in page")
+
+	//Test with singleLevel Delegation
+	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+
+		body := new(protocol.UpdateKey)
+		body.NewKeyHash = newKey2hash[:]
+		send(newTxn("alice/book0/1").
+			WithBody(body).
+
+			// Sign with Charlie via Alice (one-layer delegation)
+			WithSigner(protocol.AccountUrl("charlie", "book0", "1"), 1).
+			WithDelegator(protocol.AccountUrl("alice", "book0", "1")).
+			Initiate(protocol.SignatureTypeED25519, charlieKey).
+			Build())
+	})
+
+	page = n.GetKeyPage("alice/book0/1")
+	//look for the key.
+	_, _, found = page.EntryByKeyHash(newKey2hash[:])
+	require.True(t, found, "key not found in page")
+}
+
 func TestMultiLevelDelegation(t *testing.T) {
 	check := newDefaultCheckError(t, false)
 	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
