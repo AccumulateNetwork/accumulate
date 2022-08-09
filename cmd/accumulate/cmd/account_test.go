@@ -3,11 +3,11 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -37,6 +37,7 @@ func testCase1_1(t *testing.T, tc *testCmd) {
 			t.Fatalf("account generate error, expected %s, but got %s", liteAccounts[i], out["name"])
 		}
 	}
+
 }
 
 //unitTest3_1
