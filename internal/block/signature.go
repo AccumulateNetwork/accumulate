@@ -22,7 +22,7 @@ func (x *Executor) ProcessSignature(batch *database.Batch, delivery *chain.Deliv
 	}
 
 	var md sigExecMetadata
-	md.IsInitiator = protocol.SignatureDidInitiate(signature, delivery.Transaction.Header.Initiator[:])
+	md.IsInitiator = protocol.SignatureDidInitiate(signature, delivery.Transaction.Header.Initiator[:], nil)
 	if !signature.Type().IsSystem() {
 		md.Location = signature.RoutingLocation()
 	}

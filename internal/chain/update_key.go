@@ -75,8 +75,7 @@ outer:
 		}
 
 		for _, sig := range sigs {
-			if protocol.SignatureDidInitiate(sig, tx.Transaction.Header.Initiator[:]) {
-				initiator = sig
+			if protocol.SignatureDidInitiate(sig, tx.Transaction.Header.Initiator[:], &initiator) {
 				break outer
 			}
 		}
