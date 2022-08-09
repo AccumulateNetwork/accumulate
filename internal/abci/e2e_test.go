@@ -1750,11 +1750,10 @@ func TestDelegatedKeypageUpdate(t *testing.T) {
 	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, partitions, daemons, nil, true, check.ErrorHandler())
 	n := nodes[partitions[1]][0]
-	aliceKey, charlieKey, bobKey, jjkey, newKey1, newKey2, newKey3 := generateKey(), generateKey(), generateKey(), generateKey(), generateKey(), generateKey(), generateKey()
+	aliceKey, charlieKey, bobKey, jjkey, newKey1, newKey2 := generateKey(), generateKey(), generateKey(), generateKey(), generateKey(), generateKey()
 	charliekeyHash := sha256.Sum256(charlieKey.PubKey().Address())
 	newKey1hash := sha256.Sum256(newKey1.PubKey().Address())
 	newKey2hash := sha256.Sum256(newKey2.PubKey().Address())
-	newKey3hash := sha256.Sum256(newKey3.PubKey().Address())
 
 	batch := n.db.Begin(true)
 	require.NoError(t, acctesting.CreateAdiWithCredits(batch, aliceKey, "alice", 1e9))
@@ -1801,8 +1800,6 @@ func TestDelegatedKeypageUpdate(t *testing.T) {
 		send(newTxn("alice/book0/1").
 			WithBody(body).
 
-			// Initiate with Alice
-
 			// Sign with Charlie via Alice (one-layer delegation)
 			WithSigner(protocol.AccountUrl("charlie", "book0", "1"), 1).
 			WithDelegator(protocol.AccountUrl("alice", "book0", "1")).
@@ -1814,48 +1811,6 @@ func TestDelegatedKeypageUpdate(t *testing.T) {
 	//look for the key.
 	_, _, found = page.EntryByKeyHash(newKey2hash[:])
 	require.True(t, found, "key not found in page")
-
-	batch = n.db.Begin(true)
-	require.NoError(t, acctesting.UpdateKeyPage(batch, protocol.AccountUrl("alice", "book0", "1"), func(kp *protocol.KeyPage) {
-		require.NoError(t, kp.SetThreshold(3))
-	}))
-	require.NoError(t, batch.Commit())
-
-	//Testwith multilevel delegation
-	_, _, err := n.Execute(func(send func(*protocol.Envelope)) {
-		body := new(protocol.UpdateKey)
-		body.NewKeyHash = newKey3hash[:]
-		env := newTxn("alice/book0/1").
-			WithBody(body).
-
-			// Initiate with Alice
-			WithSigner(protocol.AccountUrl("alice", "book0", "1"), 1).
-			Initiate(protocol.SignatureTypeED25519, aliceKey).
-
-			// Sign with Charlie via Alice (one-layer delegation)
-			WithSigner(protocol.AccountUrl("charlie", "book0", "1"), 1).
-			WithDelegator(protocol.AccountUrl("alice", "book0", "1")).
-			Sign(protocol.SignatureTypeED25519, charlieKey).
-			Build()
-
-		// Take Charlie's signature, extract the key signature, and reconstruct
-		// it as via Bob via Alice (two-layer delegation)
-		sig := env.Signatures[1].(*protocol.DelegatedSignature).Signature
-		sig = &protocol.DelegatedSignature{Delegator: protocol.AccountUrl("bob", "book0", "1"), Signature: sig}
-		sig = &protocol.DelegatedSignature{Delegator: protocol.AccountUrl("alice", "book0", "1"), Signature: sig}
-		env.Signatures = append(env.Signatures, sig)
-		send(env)
-	})
-	require.Error(t, err)
-
-	var resp *abci.ResponseCheckTx
-	require.NoError(t, json.Unmarshal([]byte(err.Error()), &resp), "Expected error to be a CheckTx response")
-
-	result := new(protocol.TransactionResultSet)
-	require.NoError(t, result.UnmarshalBinary(resp.Data))
-	require.Len(t, result.Results, 1)
-	require.NotNil(t, result.Results[0].Error)
-	require.EqualError(t, result.Results[0].Error, "signature 2: invalid signature")
 }
 
 func TestMultiLevelDelegation(t *testing.T) {

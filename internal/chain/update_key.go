@@ -80,18 +80,20 @@ outer:
 			}
 		}
 	}
-	switch keysig := initiator.(type) {
+	switch initiator := initiator.(type) {
 	case protocol.KeySignature:
-
 		err = updateKey(page, book,
-			&protocol.KeySpecParams{KeyHash: keysig.GetPublicKeyHash()},
+			&protocol.KeySpecParams{KeyHash: initiator.GetPublicKeyHash()},
 			&protocol.KeySpecParams{KeyHash: body.NewKeyHash}, true)
 
 	case *protocol.DelegatedSignature:
-
 		err = updateKey(page, book,
-			&protocol.KeySpecParams{Delegate: keysig.Signature.GetSigner()},
+			&protocol.KeySpecParams{Delegate: initiator.GetSigner()},
 			&protocol.KeySpecParams{KeyHash: body.NewKeyHash}, true)
+
+		if _, ok := initiator.Signature.(protocol.KeySignature); !ok {
+			return nil, fmt.Errorf("cannot UpdateKey with a multi-level delegated signature")
+		}
 	default:
 		return nil, fmt.Errorf("unable to resolve Signature")
 
