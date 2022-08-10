@@ -663,7 +663,7 @@ func GeneratePrivateKey() ([]byte, uint32, error) {
 	seed, err := lookupSeed()
 	if err != nil {
 		//if private key seed doesn't exist, just create a key
-		return nil, 0, fmt.Errorf("wallet has not been initalized, please run \"accumulate wallet init\" or \"accumulate wallet create\"")
+		return nil, 0, fmt.Errorf("wallet has not been initalized, please run \"accumulate wallet init import\" or \"accumulate wallet init create\"")
 	}
 
 	//if we do have a seed, then create a new key
