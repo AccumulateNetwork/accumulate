@@ -16,6 +16,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -108,7 +109,7 @@ func TestDoesChargeFee(t *testing.T) {
 	)...)
 
 	lid := simulator.GetAccount[*LiteIdentity](sim, alice.RootIdentity())
-	require.Equal(t, int(initialBalance-FeeSendTokens), int(lid.CreditBalance))
+	require.Equal(t, int(initialBalance-FeeTransferTokens), int(lid.CreditBalance))
 }
 
 func TestSendTokensToBadRecipient2(t *testing.T) {
@@ -147,9 +148,13 @@ func TestSendTokensToBadRecipient2(t *testing.T) {
 	sim.MustSubmitAndExecuteBlock(env)
 	sim.WaitForTransactionFlow(delivered, env.Transaction[0].GetHash())
 
+	fee, err := protocol.ComputeTransactionFee(env.Transaction[0])
+	require.NoError(t, err)
+	refund, err := protocol.ComputeSyntheticRefund(env.Transaction[0], len(exch.To))
+	require.NoError(t, err)
+
 	lid := simulator.GetAccount[*LiteIdentity](sim, aliceUrl.RootIdentity())
-	expectedFee := FeeSendTokens - (FeeSendTokens-FeeFailedMaximum)/2
-	require.Equal(t, int(creditsBefore-expectedFee.AsUInt64()), int(lid.CreditBalance))
+	require.Equal(t, int(creditsBefore-(fee-refund).AsUInt64()), int(lid.CreditBalance))
 }
 
 func TestCreateRootIdentity(t *testing.T) {
