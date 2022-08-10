@@ -464,7 +464,7 @@ func GenerateKey(label string) (string, error) {
 	if label == "" {
 		label, err = key.NativeAddress()
 		if err != nil {
-
+			return "", err
 		}
 	}
 
