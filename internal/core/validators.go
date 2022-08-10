@@ -14,37 +14,36 @@ func (g *GlobalValues) DiffValidators(h *GlobalValues, partitionID string) (map[
 
 	// Mark the old keys for deletion
 	if g != nil {
-		old := g.Network.Partition(partitionID)
-		if old == nil {
-			return nil, fmt.Errorf("partition %s is missing from network definition", partitionID)
-		}
+		for _, v := range g.Network.Validators {
+			if !v.IsActiveOn(partitionID) {
+				continue
+			}
 
-		for _, key := range old.ValidatorKeys {
-			if len(key) != 32 {
+			if len(v.PublicKey) != 32 {
 				return nil, fmt.Errorf("invalid ED25519 key: wrong length")
 			}
 
-			updates[*(*[32]byte)(key)] = ValidatorUpdateRemove
+			updates[*(*[32]byte)(v.PublicKey)] = ValidatorUpdateRemove
 		}
 	}
 
 	// Process the new keys
-	new := h.Network.Partition(partitionID)
-	if new == nil {
-		return nil, fmt.Errorf("partition %s is missing from network definition", partitionID)
-	}
-
-	for _, key := range new.ValidatorKeys {
-		if len(key) != 32 {
+	for _, v := range h.Network.Validators {
+		if !v.IsActiveOn(partitionID) {
+			continue
+		}
+		if len(v.PublicKey) != 32 {
 			return nil, fmt.Errorf("invalid ED25519 key: wrong length")
 		}
-		k32 := *(*[32]byte)(key)
+		k32 := *(*[32]byte)(v.PublicKey)
 
-		// If the key is present in new and old, unmark it
-		delete(updates, k32)
-
-		// If the key is only present in new, mark it for addition
-		updates[k32] = 1
+		if _, ok := updates[k32]; ok {
+			// If the key is present in new and old, unmark it
+			delete(updates, k32)
+		} else {
+			// If the key is only present in new, mark it for addition
+			updates[k32] = 1
+		}
 	}
 
 	return updates, nil

@@ -744,10 +744,9 @@ func verifyInternalSignature(delivery *chain.Delivery, _ *protocol.InternalSigna
 //validationPartitionSignature checks if the key used to sign the synthetic or system transaction belongs to the same subnet
 func (x *Executor) validatePartitionSignature(location *url.URL, sig protocol.KeySignature, tx *protocol.Transaction) error {
 	// TODO AC-1702 Use GetAllSignatures to determine the source
-	var sigurl string
+	var partition string
 	var source *url.URL
 	var err error
-	skey := sig.GetPublicKey()
 
 	switch txn := tx.Body.(type) {
 	case protocol.SynthTxnWithOrigin:
@@ -759,21 +758,18 @@ func (x *Executor) validatePartitionSignature(location *url.URL, sig protocol.Ke
 	default:
 		return nil
 	}
-	sigurl, err = x.Router.RouteAccount(source)
 
+	partition, err = x.Router.RouteAccount(source)
 	if err != nil {
 		return errors.Format(errors.StatusInternalError, "unable to resolve source of transaction %w", err)
 	}
-	subnet := x.globals.Active.Network.Partition(sigurl)
-	if subnet == nil {
-		return errors.Format(errors.StatusUnknownError, "unable to resolve originating subnet of the signature")
+
+	key := sig.GetPublicKey()
+	if !x.globals.Active.Network.Validator(key).IsActiveOn(partition) {
+		return errors.Format(errors.StatusUnauthorized, "%x is not an active validator for %s", key[:4], partition)
 	}
-	for _, vkey := range subnet.ValidatorKeys {
-		if bytes.Equal(vkey, skey) {
-			return nil
-		}
-	}
-	return errors.Format(errors.StatusUnauthorized, "the key used to sign does not belong to the originating subnet")
+
+	return nil
 }
 
 func hasKeySignature(batch *database.Batch, status *protocol.TransactionStatus) (bool, error) {

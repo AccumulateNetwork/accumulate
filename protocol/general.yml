@@ -174,19 +174,41 @@ NetworkDefinition:
     - name: NetworkName
       type: string
     - name: Partitions
-      alternative: Subnets
-      type: PartitionDefinition
-      repeatable: true
+      type: PartitionInfo
       marshal-as: reference
-
-PartitionDefinition:
-  fields:
-    - name: PartitionID
-      alternative: SubnetID
-      type: string
-    - name: ValidatorKeys
-      type: bytes
+      pointer: true
       repeatable: true
+    - name: Validators
+      type: ValidatorInfo
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+
+PartitionInfo:
+  fields:
+    - name: ID
+      type: string
+    - name: Type
+      type: PartitionType
+      marshal-as: enum
+
+ValidatorInfo:
+  fields:
+    - name: PublicKey
+      type: bytes
+    - name: Partitions
+      type: ValidatorPartitionInfo
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+
+ValidatorPartitionInfo:
+  fields:
+    - name: ID
+      type: string
+    - name: Active
+      type: bool
+      keep-empty: true
 
 RoutingTable:
   fields:
