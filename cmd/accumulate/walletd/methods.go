@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/AccumulateNetwork/jsonrpc2/v15"
 
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd/api"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -161,10 +162,7 @@ func (m *JrpcMethods) KeyList(_ context.Context, params json.RawMessage) interfa
 	var err error
 	resp.KeyList, err = GetKeyList()
 	if err != nil {
-		genResp := api.GeneralResponse{}
-		genResp.Error = err.Error()
-		genResp.Code = api.ErrorCodeGeneralError
-		return genResp
+		return jsonrpc2.NewError(api.ErrorCodeGeneralError.Code(), "key list error", err)
 	}
 	return resp
 }
@@ -176,10 +174,7 @@ func (m *JrpcMethods) ResolveKey(_ context.Context, params json.RawMessage) inte
 	err := json.Unmarshal(params, &req)
 
 	if err != nil {
-		gen := api.GeneralResponse{}
-		gen.Code = api.ErrorCodeGeneralError
-		gen.Error = err.Error()
-		return gen
+		return jsonrpc2.NewError(api.ErrorCodeGeneralError.Code(), "resolve key error", err)
 	}
 
 	label, isLite := LabelForLiteIdentity(req.KeyNameOrLiteAddress)
@@ -196,10 +191,7 @@ func (m *JrpcMethods) ResolveKey(_ context.Context, params json.RawMessage) inte
 	}
 
 	if err != nil {
-		gen := api.GeneralResponse{}
-		gen.Code = api.ErrorCodeNotFound
-		gen.Error = err.Error()
-		return gen
+		return jsonrpc2.NewError(api.ErrorCodeNotFound.Code(), "resolve key error", err)
 	}
 
 	resp.KeyData.PublicKey = k.PublicKey
@@ -213,10 +205,7 @@ func (m *JrpcMethods) AdiList(_ context.Context, params json.RawMessage) interfa
 	var err error
 	adis, err := getAdiList()
 	if err != nil {
-		gen := api.GeneralResponse{}
-		gen.Code = api.ErrorCodeNotFound
-		gen.Error = err.Error()
-		return gen
+		return jsonrpc2.NewError(api.ErrorCodeNotFound.Code(), "adi list error", err)
 	}
 
 	for _, v := range adis {
