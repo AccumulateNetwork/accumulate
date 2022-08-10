@@ -173,6 +173,8 @@ NetworkDefinition:
   fields:
     - name: NetworkName
       type: string
+    - name: Version
+      type: uint
     - name: Partitions
       type: PartitionInfo
       marshal-as: reference
@@ -196,6 +198,8 @@ ValidatorInfo:
   fields:
     - name: PublicKey
       type: bytes
+    - name: PublicKeyHash
+      type: hash
     - name: Partitions
       type: ValidatorPartitionInfo
       marshal-as: reference

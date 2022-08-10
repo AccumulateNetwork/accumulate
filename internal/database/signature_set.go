@@ -11,14 +11,14 @@ import (
 
 type SignatureSet struct {
 	txn      *Transaction
-	signer   protocol.Signer
+	signer   protocol.Signer2
 	writable bool
 	value    *record.Value[*sigSetData]
 	entries  *sigSetData
 }
 
 // newSigSet creates a new SignatureSet.
-func newSigSet(txn *Transaction, signer protocol.Signer, writable bool) (*SignatureSet, error) {
+func newSigSet(txn *Transaction, signer protocol.Signer2, writable bool) (*SignatureSet, error) {
 	s := new(SignatureSet)
 	s.txn = txn
 	s.signer = signer

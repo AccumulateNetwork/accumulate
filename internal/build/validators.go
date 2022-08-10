@@ -116,6 +116,7 @@ func UpdateValidatorKey(values *core.GlobalValues, oldPubKey, newPubKey []byte, 
 }
 
 func updateNetworkDefinition(values *core.GlobalValues, signers []*signing.Builder) (*protocol.Envelope, error) {
+	values.Network.Version++
 	writeData := new(protocol.WriteData)
 	writeData.WriteToState = true
 	writeData.Entry = values.FormatNetwork()

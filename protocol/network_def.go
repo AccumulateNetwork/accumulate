@@ -2,16 +2,17 @@ package protocol
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/sortutil"
 )
 
-type valKeyCmp []byte
+type valHashCmp []byte
 
-func (k valKeyCmp) cmp(v *ValidatorInfo) int {
-	return bytes.Compare(v.PublicKey, k)
+func (k valHashCmp) cmp(v *ValidatorInfo) int {
+	return bytes.Compare(v.PublicKeyHash[:], k)
 }
 
 func (n *NetworkDefinition) AddPartition(id string, typ PartitionType) bool {
@@ -25,19 +26,16 @@ func (n *NetworkDefinition) AddPartition(id string, typ PartitionType) bool {
 	return true
 }
 
-func (n *NetworkDefinition) Validator(key []byte) *ValidatorInfo {
-	i, found := sortutil.Search(n.Validators, valKeyCmp(key).cmp)
+func (n *NetworkDefinition) ValidatorByHash(hash []byte) (int, *ValidatorInfo, bool) {
+	i, found := sortutil.Search(n.Validators, valHashCmp(hash).cmp)
 	if !found {
-		return nil
+		return 0, nil, false
 	}
-	return n.Validators[i]
+	return i, n.Validators[i], true
 }
 
 // IsActiveOn returns true if the validator is active on the partition.
 func (v *ValidatorInfo) IsActiveOn(partition string) bool {
-	if v == nil {
-		return false
-	}
 	for _, p := range v.Partitions {
 		if strings.EqualFold(p.ID, partition) {
 			return p.Active
@@ -49,9 +47,10 @@ func (v *ValidatorInfo) IsActiveOn(partition string) bool {
 // AddValidator adds or updates a validator and its corresponding partition
 // entry.
 func (n *NetworkDefinition) AddValidator(key []byte, partition string, active bool) {
-	ptr, new := sortutil.BinaryInsert(&n.Validators, valKeyCmp(key).cmp)
+	hash := sha256.Sum256(key)
+	ptr, new := sortutil.BinaryInsert(&n.Validators, valHashCmp(hash[:]).cmp)
 	if new {
-		*ptr = &ValidatorInfo{PublicKey: key}
+		*ptr = &ValidatorInfo{PublicKey: key, PublicKeyHash: hash}
 	}
 
 	v := *ptr
@@ -67,7 +66,8 @@ func (n *NetworkDefinition) AddValidator(key []byte, partition string, active bo
 
 // RemoveValidator completely removes a validator.
 func (n *NetworkDefinition) RemoveValidator(key []byte) {
-	i, found := sortutil.Search(n.Validators, valKeyCmp(key).cmp)
+	hash := sha256.Sum256(key)
+	i, found := sortutil.Search(n.Validators, valHashCmp(hash[:]).cmp)
 	if !found {
 		return
 	}
@@ -77,19 +77,22 @@ func (n *NetworkDefinition) RemoveValidator(key []byte) {
 
 // UpdateValidatorKey updates a validator's key.
 func (n *NetworkDefinition) UpdateValidatorKey(oldKey, newKey []byte) error {
-	i, found := sortutil.Search(n.Validators, valKeyCmp(oldKey).cmp)
+	oldHash := sha256.Sum256(oldKey)
+	i, found := sortutil.Search(n.Validators, valHashCmp(oldHash[:]).cmp)
 	if !found {
 		return errors.NotFound("validator %x not found", oldKey[:4])
 	}
 
+	newHash := sha256.Sum256(newKey)
 	v := n.Validators[i]
 	v.PublicKey = newKey
+	v.PublicKeyHash = newHash
 
 	val := make([]*ValidatorInfo, len(n.Validators)-1)
 	copy(val, n.Validators[:i])
 	copy(val[i:], n.Validators[i+1:])
 
-	ptr, new := sortutil.BinaryInsert(&val, valKeyCmp(newKey).cmp)
+	ptr, new := sortutil.BinaryInsert(&val, valHashCmp(newHash[:]).cmp)
 	if !new {
 		return errors.Format(errors.StatusConflict, "validator %x already exists", newKey[:4])
 	}

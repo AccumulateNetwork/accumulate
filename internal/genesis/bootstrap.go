@@ -37,6 +37,43 @@ type InitOpts struct {
 }
 
 func Init(snapshot io.WriteSeeker, opts InitOpts) ([]byte, error) {
+	// Initialize globals
+	gg := opts.GenesisGlobals
+
+	// set the initial price to 1/5 fct price * 1/4 market cap dilution = 1/20 fct price
+	// for this exercise, we'll assume that 1 FCT = $1, so initial ACME price is $0.05
+	if gg.Oracle == nil {
+		gg.Oracle = new(protocol.AcmeOracle)
+		gg.Oracle.Price = uint64(protocol.InitialAcmeOracleValue)
+	}
+
+	// Set the initial threshold to 2/3 & MajorBlockSchedule
+	if gg.Globals == nil {
+		gg.Globals = new(protocol.NetworkGlobals)
+	}
+	if gg.Globals.OperatorAcceptThreshold.Numerator == 0 {
+		gg.Globals.OperatorAcceptThreshold.Set(2, 3)
+	}
+	if gg.Globals.MajorBlockSchedule == "" {
+		gg.Globals.MajorBlockSchedule = protocol.DefaultMajorBlockSchedule
+	}
+
+	// Build the routing table
+	var bvns []string
+	for _, partition := range gg.Network.Partitions {
+		if partition.Type != protocol.PartitionTypeDirectory {
+			bvns = append(bvns, partition.ID)
+		}
+	}
+	gg.Routing = new(protocol.RoutingTable)
+	gg.Routing.Routes = routing.BuildSimpleTable(bvns)
+	gg.Routing.Overrides = make([]protocol.RouteOverride, 1, len(gg.Network.Partitions)+1)
+	gg.Routing.Overrides[0] = protocol.RouteOverride{Account: protocol.AcmeUrl(), Partition: protocol.Directory}
+	for _, partition := range gg.Network.Partitions {
+		u := protocol.PartitionUrl(partition.ID)
+		gg.Routing.Overrides = append(gg.Routing.Overrides, protocol.RouteOverride{Account: u, Partition: partition.ID})
+	}
+
 	store := memory.New(opts.Logger.With("module", "storage"))
 	b := &bootstrap{
 		InitOpts:    opts,
@@ -46,25 +83,9 @@ func Init(snapshot io.WriteSeeker, opts InitOpts) ([]byte, error) {
 		records:     make([]protocol.Account, 0),
 	}
 
-	// Build the routing table
-	var bvns []string
-	for _, partition := range opts.GenesisGlobals.Network.Partitions {
-		if partition.Type != protocol.PartitionTypeDirectory {
-			bvns = append(bvns, partition.ID)
-		}
-	}
-	b.routingTable = new(protocol.RoutingTable)
-	b.routingTable.Routes = routing.BuildSimpleTable(bvns)
-	b.routingTable.Overrides = make([]protocol.RouteOverride, 1, len(opts.GenesisGlobals.Network.Partitions)+1)
-	b.routingTable.Overrides[0] = protocol.RouteOverride{Account: protocol.AcmeUrl(), Partition: protocol.Directory}
-	for _, partition := range opts.GenesisGlobals.Network.Partitions {
-		u := protocol.PartitionUrl(partition.ID)
-		b.routingTable.Overrides = append(b.routingTable.Overrides, protocol.RouteOverride{Account: u, Partition: partition.ID})
-	}
-
 	// Create the router
 	var err error
-	b.router, err = routing.NewStaticRouter(b.routingTable, nil)
+	b.router, err = routing.NewStaticRouter(gg.Routing, nil)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
@@ -72,7 +93,7 @@ func Init(snapshot io.WriteSeeker, opts InitOpts) ([]byte, error) {
 	exec, err := block.NewGenesisExecutor(b.db, opts.Logger, &config.Describe{
 		NetworkType: opts.NetworkType,
 		PartitionId: opts.PartitionId,
-	}, b.router)
+	}, gg, b.router)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
@@ -120,15 +141,13 @@ type bootstrap struct {
 	partition        config.NetworkUrl
 	localAuthority   *url.URL
 
-	kvdb         storage.KeyValueStore
-	db           *database.Database
-	block        *block.Block
-	urls         []*url.URL
-	records      []protocol.Account
-	dataRecords  []DataRecord
-	router       routing.Router
-	routingTable *protocol.RoutingTable
-	globals      *core.GlobalValues
+	kvdb        storage.KeyValueStore
+	db          *database.Database
+	block       *block.Block
+	urls        []*url.URL
+	records     []protocol.Account
+	dataRecords []DataRecord
+	router      routing.Router
 }
 
 type DataRecord struct {
@@ -161,36 +180,8 @@ func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protoc
 		panic(fmt.Errorf("%q is not a valid partition ID: %v", b.PartitionId, err))
 	}
 
-	// Setup globals and create network variable accounts
-	if b.GenesisGlobals == nil {
-		b.globals = new(core.GlobalValues)
-	} else {
-		b.globals = b.GenesisGlobals
-	}
-
-	// set the initial price to 1/5 fct price * 1/4 market cap dilution = 1/20 fct price
-	// for this exercise, we'll assume that 1 FCT = $1, so initial ACME price is $0.05
-	if b.globals.Oracle == nil {
-		b.globals.Oracle = new(protocol.AcmeOracle)
-		b.globals.Oracle.Price = uint64(protocol.InitialAcmeOracleValue)
-	}
-
-	// Set the initial threshold to 2/3 & MajorBlockSchedule
-	if b.globals.Globals == nil {
-		b.globals.Globals = new(protocol.NetworkGlobals)
-	}
-	if b.globals.Globals.OperatorAcceptThreshold.Numerator == 0 {
-		b.globals.Globals.OperatorAcceptThreshold.Set(2, 3)
-	}
-	if b.globals.Globals.MajorBlockSchedule == "" {
-		b.globals.Globals.MajorBlockSchedule = protocol.DefaultMajorBlockSchedule
-	}
-
-	if b.globals.Routing == nil {
-		b.globals.Routing = b.routingTable
-	}
-
-	err := b.globals.Store(b.partition, func(accountUrl *url.URL, target interface{}) error {
+	// Create network variable accounts
+	err := b.GenesisGlobals.Store(b.partition, func(accountUrl *url.URL, target interface{}) error {
 		da := new(protocol.DataAccount)
 		da.Url = accountUrl
 		da.AddAuthority(b.networkAuthority)
@@ -408,7 +399,7 @@ func (b *bootstrap) createOperatorBook() {
 		page.AddKeySpec(spec)
 	}
 
-	page.AcceptThreshold = b.globals.Globals.OperatorAcceptThreshold.Threshold(len(page.Keys))
+	page.AcceptThreshold = b.GenesisGlobals.Globals.OperatorAcceptThreshold.Threshold(len(page.Keys))
 	b.WriteRecords(book, page)
 }
 

@@ -572,6 +572,12 @@ func (m *queryBackend) queryByTxId(batch *database.Batch, txid []byte, prove, re
 		return nil, errors.NotFound("transaction %X not found", txid[:4])
 	}
 
+	globals, err := m.loadGlobals()
+	if err != nil {
+		m.logger.Error("Failed to load globals", "error", err)
+		return nil, errors.Format(errors.StatusInternalError, "Internal error")
+	}
+
 	qr := query.ResponseByTxId{}
 	qr.Envelope = new(protocol.Envelope)
 	qr.Envelope.Transaction = []*protocol.Transaction{txState.Transaction}
@@ -581,7 +587,7 @@ func (m *queryBackend) queryByTxId(batch *database.Batch, txid []byte, prove, re
 
 	if anchorDest != nil {
 		// Build a block anchor for the requester
-		qr.Envelope, err = shared.PrepareBlockAnchor(m.Describe, m.Key, batch, txState.Transaction.Body, status.SequenceNumber, anchorDest)
+		qr.Envelope, err = shared.PrepareBlockAnchor(m.Describe, globals.Network, m.Key, batch, txState.Transaction.Body, status.SequenceNumber, anchorDest)
 		if err != nil {
 			return nil, err
 		}
@@ -608,7 +614,7 @@ func (m *queryBackend) queryByTxId(batch *database.Batch, txid []byte, prove, re
 		qr.Envelope.Signatures = append(qr.Envelope.Signatures, receiptSig)
 
 		// Add the key signature
-		keySig, err := shared.SignTransaction(m.Describe, m.Key, batch, txState.Transaction, status.DestinationNetwork)
+		keySig, err := shared.SignTransaction(globals.Network, m.Key, batch, txState.Transaction, status.DestinationNetwork)
 		if err != nil {
 			return nil, errors.Format(errors.StatusInternalError, "sign synthetic transaction: %w", err)
 		}

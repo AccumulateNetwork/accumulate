@@ -16,7 +16,7 @@ func (r *Transaction) hash() []byte {
 }
 
 // ensureSigner ensures that the transaction's status includes the given signer.
-func (t *Transaction) ensureSigner(signer protocol.Signer) error {
+func (t *Transaction) ensureSigner(signer protocol.Signer2) error {
 	status, err := t.GetStatus()
 	if err != nil {
 		return err
@@ -83,7 +83,7 @@ func (t *Transaction) ReadSignatures(signer *url.URL) (*SignatureSet, error) {
 }
 
 // SignaturesForSigner returns a signature set for the given signer account.
-func (t *Transaction) SignaturesForSigner(signer protocol.Signer) (*SignatureSet, error) {
+func (t *Transaction) SignaturesForSigner(signer protocol.Signer2) (*SignatureSet, error) {
 	set, err := newSigSet(t, signer, true)
 	if err != nil {
 		return nil, fmt.Errorf("load signature set: %w", err)

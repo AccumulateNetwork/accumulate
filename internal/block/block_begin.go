@@ -460,7 +460,7 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, bloc
 			signatures = append(signatures, dnReceipt)
 		}
 
-		keySig, err := shared.SignTransaction(&x.Describe, x.Key, batch, txn, status.DestinationNetwork)
+		keySig, err := shared.SignTransaction(x.globals.Active.Network, x.Key, batch, txn, status.DestinationNetwork)
 		if err != nil {
 			return errors.Wrap(errors.StatusUnknownError, err)
 		}
@@ -478,7 +478,7 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, bloc
 
 func (x *Executor) sendBlockAnchor(batch *database.Batch, anchor protocol.AnchorBody, sequenceNumber uint64, destPart string) error {
 	destPartUrl := protocol.PartitionUrl(destPart)
-	env, err := shared.PrepareBlockAnchor(&x.Describe, x.Key, batch, anchor, sequenceNumber, destPartUrl)
+	env, err := shared.PrepareBlockAnchor(&x.Describe, x.globals.Active.Network, x.Key, batch, anchor, sequenceNumber, destPartUrl)
 	if err != nil {
 		return errors.Wrap(errors.StatusInternalError, err)
 	}

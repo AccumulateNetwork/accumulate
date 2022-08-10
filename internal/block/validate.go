@@ -175,7 +175,7 @@ func (x *Executor) ValidateSignature(batch *database.Batch, delivery *chain.Deli
 	return errors.Wrap(errors.StatusUnknownError, err)
 }
 
-func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Delivery, signature protocol.Signature, md sigExecMetadata) (protocol.Signer, error) {
+func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Delivery, signature protocol.Signature, md sigExecMetadata) (protocol.Signer2, error) {
 	err := x.checkRouting(delivery, signature)
 	if err != nil {
 		return nil, err
@@ -188,12 +188,15 @@ func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Deli
 	}
 
 	// Stateful validation (mostly for synthetic transactions)
-	var signer, delegate protocol.Signer
+	var signer protocol.Signer2
+	var delegate protocol.Signer
 	switch signature := signature.(type) {
 	case *protocol.PartitionSignature:
+		signer = x.globals.Active.AsSigner(x.Describe.PartitionId)
 		err = verifyPartitionSignature(&x.Describe, batch, delivery.Transaction, signature, md)
 
 	case *protocol.ReceiptSignature:
+		signer = x.globals.Active.AsSigner(x.Describe.PartitionId)
 		err = verifyReceiptSignature(delivery.Transaction, signature, md)
 
 	case *protocol.RemoteSignature:
@@ -217,9 +220,16 @@ func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Deli
 			}
 		}
 
-		delegate, err = x.validateSignature(batch, delivery, signature.Signature, md.SetDelegated())
+		s, err := x.validateSignature(batch, delivery, signature.Signature, md.SetDelegated())
 		if err != nil {
-			return nil, err
+			return nil, errors.Format(errors.StatusUnknownError, "validate delegated signature: %w", err)
+		}
+		var ok bool
+		delegate, ok = s.(protocol.Signer)
+		if !ok {
+			// The only non-account signer is the network signer which is only
+			// used for system signatures, so this should never happen
+			return nil, errors.Format(errors.StatusInternalError, "delegate is not an account")
 		}
 		if !md.Nested() && !signature.Verify(signature.Metadata().Hash(), delivery.Transaction.GetHash()) {
 			return nil, errors.Format(errors.StatusBadRequest, "invalid signature")
@@ -235,7 +245,7 @@ func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Deli
 		}
 
 		// Verify delegation
-		_, _, ok := signer.EntryByDelegate(delegate.GetUrl())
+		_, _, ok = signer.EntryByDelegate(delegate.GetUrl())
 		if !ok {
 			return nil, errors.Format(errors.StatusUnauthorized, "%v is not authorized to sign for %v", delegate.GetUrl(), signature.Delegator)
 		}
@@ -246,14 +256,11 @@ func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Deli
 			return nil, errors.New(errors.StatusBadRequest, "invalid")
 		}
 
-		if !delivery.Transaction.Body.Type().IsUser() {
-			err = x.validatePartitionSignature(md.Location, signature, delivery.Transaction)
-			if err != nil {
-				return nil, errors.Wrap(errors.StatusUnknownError, err)
-			}
+		if delivery.Transaction.Body.Type().IsUser() {
+			signer, err = x.validateKeySignature(batch, delivery, signature, md, !md.Delegated && delivery.Transaction.Header.Principal.LocalTo(md.Location))
+		} else {
+			signer, err = x.validatePartitionSignature(signature, delivery.Transaction)
 		}
-
-		signer, err = x.validateKeySignature(batch, delivery, signature, md, !md.Delegated && delivery.Transaction.Header.Principal.LocalTo(md.Location))
 
 	default:
 		return nil, errors.Format(errors.StatusBadRequest, "unknown signature type %v", signature.Type())
