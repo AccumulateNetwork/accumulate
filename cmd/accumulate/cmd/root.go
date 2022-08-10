@@ -242,7 +242,6 @@ func initDB(defaultWorkDir string, memDb bool) db.DB {
 }
 
 func InitDBImport(cmd *cobra.Command, memDb bool) error {
-	wallet = initDB(DatabaseDir, memDb)
 	mnemonicString, err := getPasswdPrompt(cmd, "Enter mnemonic : ", true)
 	if err != nil {
 		return db.ErrInvalidPassword

@@ -140,6 +140,7 @@ func NewTestBVNN(t *testing.T) (string, crypto.PrivKey) {
 func (c *testCmd) initalize(t *testing.T) {
 	t.Helper()
 
+	wallet = initDB("", true)
 	c.rootCmd = InitRootCmd()
 	c.rootCmd.PersistentPostRun = nil
 

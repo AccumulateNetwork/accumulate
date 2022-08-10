@@ -398,13 +398,14 @@ func GenerateKey(label string) (string, error) {
 
 	var privKey []byte
 	var pubKey []byte
+	address := uint32(0)
 
 	if sigtype == protocol.SignatureTypeBTCLegacy || sigtype == protocol.SignatureTypeETH {
 		privKey, pubKey = protocol.SECP256K1UncompressedKeypair()
 	} else if sigtype == protocol.SignatureTypeBTC {
 		privKey, pubKey = protocol.SECP256K1Keypair()
 	} else {
-		privKey, err = GeneratePrivateKey()
+		privKey, address, err = GeneratePrivateKey()
 		if err != nil {
 			return "", err
 		}
@@ -452,11 +453,8 @@ func GenerateKey(label string) (string, error) {
 	if err == nil {
 		return "", fmt.Errorf("key already exists for key name %s", label)
 	}
-	count, err := getKeyCountAndIncrement()
-	if err != nil {
-		return "", err
-	}
-	derivation := "m/0/0/" + strconv.Itoa(int(count))
+
+	derivation := strconv.Itoa(int(address))
 	k := new(Key)
 	k.PrivateKey = privKey
 	k.PublicKey = pubKey
@@ -661,15 +659,11 @@ func ExportKey(label string) (string, error) {
 	}
 }
 
-func GeneratePrivateKey() ([]byte, error) {
+func GeneratePrivateKey() ([]byte, uint32, error) {
 	seed, err := lookupSeed()
 	if err != nil {
 		//if private key seed doesn't exist, just create a key
-		_, privKey, err := ed25519.GenerateKey(nil)
-		if err != nil {
-			return nil, err
-		}
-		return privKey, nil
+		return nil, 0, fmt.Errorf("wallet has not been initalized, please run \"accumulate wallet init\" or \"accumulate wallet create\"")
 	}
 
 	//if we do have a seed, then create a new key
@@ -677,19 +671,18 @@ func GeneratePrivateKey() ([]byte, error) {
 
 	ct, err := getKeyCountAndIncrement()
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	newKey, err := masterKey.NewChildKey(ct)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	privKey := ed25519.NewKeyFromSeed(newKey.Key)
-	return privKey, nil
+	return privKey, ct, nil
 }
 
 func getKeyCountAndIncrement() (count uint32, err error) {
-
 	ct, _ := GetWallet().Get(BucketMnemonic, []byte("count"))
 	if ct != nil {
 		count = binary.LittleEndian.Uint32(ct)
