@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
+	"github.com/fatih/color"
 	"github.com/getsentry/sentry-go"
 	"github.com/rs/zerolog"
 	"github.com/tendermint/tendermint/crypto"
@@ -219,6 +220,7 @@ func (d *Daemon) Start() (err error) {
 		TxMaxWaitTime:     d.Config.Accumulate.API.TxMaxWaitTime,
 		Database:          d.db,
 		ConnectionManager: d.connectionManager,
+		Key:               d.Key().Bytes(),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to start API: %v", err)
@@ -264,6 +266,11 @@ func (d *Daemon) Start() (err error) {
 
 	// Shut down the node if the disk space gets too low
 	go d.ensureSufficientDiskSpace(d.Config.RootDir)
+	for !d.node.IsRunning() {
+		color.HiMagenta("Syncing ....")
+		time.Sleep(time.Second * 1)
+	}
+	color.HiBlue(" %s node running at %s :", d.node.Config.Accumulate.NetworkType, d.node.Config.Accumulate.Describe.LocalAddress)
 
 	// Clean up once the node is stopped (mostly for tests)
 	go func() {

@@ -1,15 +1,16 @@
 package indexing
 
 import (
-	"errors"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-var ErrReachedChainEnd = errors.New("reached the end of the chain")
-var ErrReachedChainStart = errors.New("reached the start of the chain")
+var ErrReachedChainEnd = errors.New(errors.StatusNotFound, "reached the end of the chain")
+var ErrReachedChainStart = errors.New(errors.StatusNotFound, "reached the start of the chain")
+var ErrTargetDoesNotExist = errors.New(errors.StatusNotFound, "target does not exist")
 
 // SearchDirection represents a direction to search along a linear index.
 type SearchDirection int
@@ -102,7 +103,7 @@ func SearchIndexChain(chain *database.Chain, index uint64, mode MatchMode, find 
 		// the target does not exist
 		switch mode {
 		default: // SearchExact
-			return 0, nil, fmt.Errorf("target does not exist")
+			return 0, nil, ErrTargetDoesNotExist
 
 		case MatchBefore:
 			return prevIndex, prevEntry, nil

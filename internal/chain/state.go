@@ -92,7 +92,7 @@ func (m *StateManager) Submit(url *url.URL, body protocol.TransactionBody) {
 }
 
 func (m *StateManager) AddAuthority(account protocol.FullAccount, authority *url.URL) error {
-	if m.OriginUrl.LocalTo(authority) {
+	if account.GetUrl().LocalTo(authority) {
 		var book *protocol.KeyBook
 		err := m.LoadUrlAs(authority, &book)
 		if err != nil {

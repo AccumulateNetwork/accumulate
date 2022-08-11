@@ -249,7 +249,7 @@ type DirectoryAnchor struct {
 	// Updates are synchronization updates for network accounts.
 	Updates []NetworkAccountUpdate `json:"updates,omitempty" form:"updates" query:"updates" validate:"required"`
 	// Receipts are receipts for anchors from other partitions that were included in the block.
-	Receipts []managed.Receipt `json:"receipts,omitempty" form:"receipts" query:"receipts" validate:"required"`
+	Receipts []*PartitionAnchorReceipt `json:"receipts,omitempty" form:"receipts" query:"receipts" validate:"required"`
 	// MakeMajorBlock notifies the partition that the DN has opened a major block.
 	MakeMajorBlock uint64 `json:"makeMajorBlock,omitempty" form:"makeMajorBlock" query:"makeMajorBlock" validate:"required"`
 	// MakeMajorBlockTime holds the time when the major block was opened.
@@ -312,6 +312,12 @@ type FactomDataEntry struct {
 	AccountId [32]byte `json:"accountId,omitempty" form:"accountId" query:"accountId" validate:"required"`
 	Data      []byte   `json:"data,omitempty" form:"data" query:"data" validate:"required"`
 	ExtIds    [][]byte `json:"extIds,omitempty" form:"extIds" query:"extIds" validate:"required"`
+}
+
+type FactomDataEntryWrapper struct {
+	fieldsSet []bool
+	FactomDataEntry
+	extraData []byte
 }
 
 // IndexEntry represents an entry in an index chain.
@@ -493,6 +499,18 @@ type PartitionAnchor struct {
 	// StateTreeAnchor is the root of the source's state tree (BPT).
 	StateTreeAnchor [32]byte `json:"stateTreeAnchor,omitempty" form:"stateTreeAnchor" query:"stateTreeAnchor" validate:"required"`
 	extraData       []byte
+}
+
+type PartitionAnchorReceipt struct {
+	fieldsSet   []bool
+	PartitionID string `json:"partitionID,omitempty" form:"partitionID" query:"partitionID" validate:"required"`
+	// MinorBlockIndex is the minor block index.
+	MinorBlockIndex uint64 `json:"minorBlockIndex,omitempty" form:"minorBlockIndex" query:"minorBlockIndex" validate:"required"`
+	// RootChainIndex is the index of the anchored root chain entry.
+	RootChainIndex uint64 `json:"rootChainIndex,omitempty" form:"rootChainIndex" query:"rootChainIndex" validate:"required"`
+	// RootChainReceipt is a receipt for the anchored root chain entry.
+	RootChainReceipt *managed.Receipt `json:"rootChainReceipt,omitempty" form:"rootChainReceipt" query:"rootChainReceipt" validate:"required"`
+	extraData        []byte
 }
 
 type PartitionDefinition struct {
@@ -946,7 +964,7 @@ func (*EnableAccountAuthOperation) Type() AccountAuthOperationType {
 	return AccountAuthOperationTypeEnable
 }
 
-func (*FactomDataEntry) Type() DataEntryType { return DataEntryTypeFactom }
+func (*FactomDataEntryWrapper) Type() DataEntryType { return DataEntryTypeFactom }
 
 func (*InternalSignature) Type() SignatureType { return SignatureTypeInternal }
 
@@ -1448,9 +1466,11 @@ func (v *DirectoryAnchor) Copy() *DirectoryAnchor {
 	for i, v := range v.Updates {
 		u.Updates[i] = *(&v).Copy()
 	}
-	u.Receipts = make([]managed.Receipt, len(v.Receipts))
+	u.Receipts = make([]*PartitionAnchorReceipt, len(v.Receipts))
 	for i, v := range v.Receipts {
-		u.Receipts[i] = *(&v).Copy()
+		if v != nil {
+			u.Receipts[i] = (v).Copy()
+		}
 	}
 	u.MakeMajorBlock = v.MakeMajorBlock
 	u.MakeMajorBlockTime = v.MakeMajorBlockTime
@@ -1564,6 +1584,16 @@ func (v *FactomDataEntry) Copy() *FactomDataEntry {
 }
 
 func (v *FactomDataEntry) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *FactomDataEntryWrapper) Copy() *FactomDataEntryWrapper {
+	u := new(FactomDataEntryWrapper)
+
+	u.FactomDataEntry = *v.FactomDataEntry.Copy()
+
+	return u
+}
+
+func (v *FactomDataEntryWrapper) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *IndexEntry) Copy() *IndexEntry {
 	u := new(IndexEntry)
@@ -1834,6 +1864,21 @@ func (v *PartitionAnchor) Copy() *PartitionAnchor {
 }
 
 func (v *PartitionAnchor) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *PartitionAnchorReceipt) Copy() *PartitionAnchorReceipt {
+	u := new(PartitionAnchorReceipt)
+
+	u.PartitionID = v.PartitionID
+	u.MinorBlockIndex = v.MinorBlockIndex
+	u.RootChainIndex = v.RootChainIndex
+	if v.RootChainReceipt != nil {
+		u.RootChainReceipt = (v.RootChainReceipt).Copy()
+	}
+
+	return u
+}
+
+func (v *PartitionAnchorReceipt) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *PartitionDefinition) Copy() *PartitionDefinition {
 	u := new(PartitionDefinition)
@@ -3058,7 +3103,7 @@ func (v *DirectoryAnchor) Equal(u *DirectoryAnchor) bool {
 		return false
 	}
 	for i := range v.Receipts {
-		if !((&v.Receipts[i]).Equal(&u.Receipts[i])) {
+		if !((v.Receipts[i]).Equal(u.Receipts[i])) {
 			return false
 		}
 	}
@@ -3203,6 +3248,14 @@ func (v *FactomDataEntry) Equal(u *FactomDataEntry) bool {
 		if !(bytes.Equal(v.ExtIds[i], u.ExtIds[i])) {
 			return false
 		}
+	}
+
+	return true
+}
+
+func (v *FactomDataEntryWrapper) Equal(u *FactomDataEntryWrapper) bool {
+	if !v.FactomDataEntry.Equal(&u.FactomDataEntry) {
+		return false
 	}
 
 	return true
@@ -3563,6 +3616,28 @@ func (v *PartitionAnchor) Equal(u *PartitionAnchor) bool {
 		return false
 	}
 	if !(v.StateTreeAnchor == u.StateTreeAnchor) {
+		return false
+	}
+
+	return true
+}
+
+func (v *PartitionAnchorReceipt) Equal(u *PartitionAnchorReceipt) bool {
+	if !(v.PartitionID == u.PartitionID) {
+		return false
+	}
+	if !(v.MinorBlockIndex == u.MinorBlockIndex) {
+		return false
+	}
+	if !(v.RootChainIndex == u.RootChainIndex) {
+		return false
+	}
+	switch {
+	case v.RootChainReceipt == u.RootChainReceipt:
+		// equal
+	case v.RootChainReceipt == nil || u.RootChainReceipt == nil:
+		return false
+	case !((v.RootChainReceipt).Equal(u.RootChainReceipt)):
 		return false
 	}
 
@@ -6352,6 +6427,46 @@ func (v *Envelope) IsValid() error {
 	}
 }
 
+var fieldNames_FactomDataEntryWrapper = []string{
+	1: "Type",
+	2: "FactomDataEntry",
+}
+
+func (v *FactomDataEntryWrapper) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	writer.WriteValue(2, v.FactomDataEntry.MarshalBinary)
+
+	_, _, err := writer.Reset(fieldNames_FactomDataEntryWrapper)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *FactomDataEntryWrapper) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
+	if err := v.FactomDataEntry.IsValid(); err != nil {
+		errs = append(errs, err.Error())
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_IndexEntry = []string{
 	1: "Source",
 	2: "Anchor",
@@ -7467,6 +7582,72 @@ func (v *PartitionAnchor) IsValid() error {
 		errs = append(errs, "field StateTreeAnchor is missing")
 	} else if v.StateTreeAnchor == ([32]byte{}) {
 		errs = append(errs, "field StateTreeAnchor is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_PartitionAnchorReceipt = []string{
+	1: "PartitionID",
+	2: "MinorBlockIndex",
+	3: "RootChainIndex",
+	4: "RootChainReceipt",
+}
+
+func (v *PartitionAnchorReceipt) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(len(v.PartitionID) == 0) {
+		writer.WriteString(1, v.PartitionID)
+	}
+	if !(v.MinorBlockIndex == 0) {
+		writer.WriteUint(2, v.MinorBlockIndex)
+	}
+	if !(v.RootChainIndex == 0) {
+		writer.WriteUint(3, v.RootChainIndex)
+	}
+	if !(v.RootChainReceipt == nil) {
+		writer.WriteValue(4, v.RootChainReceipt.MarshalBinary)
+	}
+
+	_, _, err := writer.Reset(fieldNames_PartitionAnchorReceipt)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *PartitionAnchorReceipt) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field PartitionID is missing")
+	} else if len(v.PartitionID) == 0 {
+		errs = append(errs, "field PartitionID is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field MinorBlockIndex is missing")
+	} else if v.MinorBlockIndex == 0 {
+		errs = append(errs, "field MinorBlockIndex is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field RootChainIndex is missing")
+	} else if v.RootChainIndex == 0 {
+		errs = append(errs, "field RootChainIndex is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field RootChainReceipt is missing")
+	} else if v.RootChainReceipt == nil {
+		errs = append(errs, "field RootChainReceipt is not set")
 	}
 
 	switch len(errs) {
@@ -11049,8 +11230,8 @@ func (v *DirectoryAnchor) UnmarshalBinaryFrom(rd io.Reader) error {
 		}
 	}
 	for {
-		if x := new(managed.Receipt); reader.ReadValue(4, x.UnmarshalBinary) {
-			v.Receipts = append(v.Receipts, *x)
+		if x := new(PartitionAnchorReceipt); reader.ReadValue(4, x.UnmarshalBinary) {
+			v.Receipts = append(v.Receipts, x)
 		} else {
 			break
 		}
@@ -11288,6 +11469,34 @@ func (v *Envelope) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_Envelope)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *FactomDataEntryWrapper) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *FactomDataEntryWrapper) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType DataEntryType
+	if x := new(DataEntryType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+	reader.ReadValue(2, v.FactomDataEntry.UnmarshalBinary)
+
+	seen, err := reader.Reset(fieldNames_FactomDataEntryWrapper)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -11915,6 +12124,38 @@ func (v *PartitionAnchor) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_PartitionAnchor)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *PartitionAnchorReceipt) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *PartitionAnchorReceipt) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadString(1); ok {
+		v.PartitionID = x
+	}
+	if x, ok := reader.ReadUint(2); ok {
+		v.MinorBlockIndex = x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.RootChainIndex = x
+	}
+	if x := new(managed.Receipt); reader.ReadValue(4, x.UnmarshalBinary) {
+		v.RootChainReceipt = x
+	}
+
+	seen, err := reader.Reset(fieldNames_PartitionAnchorReceipt)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -13916,17 +14157,17 @@ func (v *DelegatedSignature) MarshalJSON() ([]byte, error) {
 
 func (v *DirectoryAnchor) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type               TransactionType                         `json:"type"`
-		Source             *url.URL                                `json:"source,omitempty"`
-		MajorBlockIndex    uint64                                  `json:"majorBlockIndex,omitempty"`
-		MinorBlockIndex    uint64                                  `json:"minorBlockIndex,omitempty"`
-		RootChainIndex     uint64                                  `json:"rootChainIndex,omitempty"`
-		RootChainAnchor    string                                  `json:"rootChainAnchor,omitempty"`
-		StateTreeAnchor    string                                  `json:"stateTreeAnchor,omitempty"`
-		Updates            encoding.JsonList[NetworkAccountUpdate] `json:"updates,omitempty"`
-		Receipts           encoding.JsonList[managed.Receipt]      `json:"receipts,omitempty"`
-		MakeMajorBlock     uint64                                  `json:"makeMajorBlock,omitempty"`
-		MakeMajorBlockTime time.Time                               `json:"makeMajorBlockTime,omitempty"`
+		Type               TransactionType                            `json:"type"`
+		Source             *url.URL                                   `json:"source,omitempty"`
+		MajorBlockIndex    uint64                                     `json:"majorBlockIndex,omitempty"`
+		MinorBlockIndex    uint64                                     `json:"minorBlockIndex,omitempty"`
+		RootChainIndex     uint64                                     `json:"rootChainIndex,omitempty"`
+		RootChainAnchor    string                                     `json:"rootChainAnchor,omitempty"`
+		StateTreeAnchor    string                                     `json:"stateTreeAnchor,omitempty"`
+		Updates            encoding.JsonList[NetworkAccountUpdate]    `json:"updates,omitempty"`
+		Receipts           encoding.JsonList[*PartitionAnchorReceipt] `json:"receipts,omitempty"`
+		MakeMajorBlock     uint64                                     `json:"makeMajorBlock,omitempty"`
+		MakeMajorBlockTime time.Time                                  `json:"makeMajorBlockTime,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Source = v.PartitionAnchor.Source
@@ -14028,16 +14269,31 @@ func (v *Envelope) MarshalJSON() ([]byte, error) {
 
 func (v *FactomDataEntry) MarshalJSON() ([]byte, error) {
 	u := struct {
+		AccountId string                     `json:"accountId,omitempty"`
+		Data      *string                    `json:"data,omitempty"`
+		ExtIds    encoding.JsonList[*string] `json:"extIds,omitempty"`
+	}{}
+	u.AccountId = encoding.ChainToJSON(v.AccountId)
+	u.Data = encoding.BytesToJSON(v.Data)
+	u.ExtIds = make(encoding.JsonList[*string], len(v.ExtIds))
+	for i, x := range v.ExtIds {
+		u.ExtIds[i] = encoding.BytesToJSON(x)
+	}
+	return json.Marshal(&u)
+}
+
+func (v *FactomDataEntryWrapper) MarshalJSON() ([]byte, error) {
+	u := struct {
 		Type      DataEntryType              `json:"type"`
 		AccountId string                     `json:"accountId,omitempty"`
 		Data      *string                    `json:"data,omitempty"`
 		ExtIds    encoding.JsonList[*string] `json:"extIds,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.AccountId = encoding.ChainToJSON(v.AccountId)
-	u.Data = encoding.BytesToJSON(v.Data)
-	u.ExtIds = make(encoding.JsonList[*string], len(v.ExtIds))
-	for i, x := range v.ExtIds {
+	u.AccountId = encoding.ChainToJSON(v.FactomDataEntry.AccountId)
+	u.Data = encoding.BytesToJSON(v.FactomDataEntry.Data)
+	u.ExtIds = make(encoding.JsonList[*string], len(v.FactomDataEntry.ExtIds))
+	for i, x := range v.FactomDataEntry.ExtIds {
 		u.ExtIds[i] = encoding.BytesToJSON(x)
 	}
 	return json.Marshal(&u)
@@ -15551,17 +15807,17 @@ func (v *DelegatedSignature) UnmarshalJSON(data []byte) error {
 
 func (v *DirectoryAnchor) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type               TransactionType                         `json:"type"`
-		Source             *url.URL                                `json:"source,omitempty"`
-		MajorBlockIndex    uint64                                  `json:"majorBlockIndex,omitempty"`
-		MinorBlockIndex    uint64                                  `json:"minorBlockIndex,omitempty"`
-		RootChainIndex     uint64                                  `json:"rootChainIndex,omitempty"`
-		RootChainAnchor    string                                  `json:"rootChainAnchor,omitempty"`
-		StateTreeAnchor    string                                  `json:"stateTreeAnchor,omitempty"`
-		Updates            encoding.JsonList[NetworkAccountUpdate] `json:"updates,omitempty"`
-		Receipts           encoding.JsonList[managed.Receipt]      `json:"receipts,omitempty"`
-		MakeMajorBlock     uint64                                  `json:"makeMajorBlock,omitempty"`
-		MakeMajorBlockTime time.Time                               `json:"makeMajorBlockTime,omitempty"`
+		Type               TransactionType                            `json:"type"`
+		Source             *url.URL                                   `json:"source,omitempty"`
+		MajorBlockIndex    uint64                                     `json:"majorBlockIndex,omitempty"`
+		MinorBlockIndex    uint64                                     `json:"minorBlockIndex,omitempty"`
+		RootChainIndex     uint64                                     `json:"rootChainIndex,omitempty"`
+		RootChainAnchor    string                                     `json:"rootChainAnchor,omitempty"`
+		StateTreeAnchor    string                                     `json:"stateTreeAnchor,omitempty"`
+		Updates            encoding.JsonList[NetworkAccountUpdate]    `json:"updates,omitempty"`
+		Receipts           encoding.JsonList[*PartitionAnchorReceipt] `json:"receipts,omitempty"`
+		MakeMajorBlock     uint64                                     `json:"makeMajorBlock,omitempty"`
+		MakeMajorBlockTime time.Time                                  `json:"makeMajorBlockTime,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Source = v.PartitionAnchor.Source
@@ -15770,12 +16026,10 @@ func (v *Envelope) UnmarshalJSON(data []byte) error {
 
 func (v *FactomDataEntry) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type      DataEntryType              `json:"type"`
 		AccountId string                     `json:"accountId,omitempty"`
 		Data      *string                    `json:"data,omitempty"`
 		ExtIds    encoding.JsonList[*string] `json:"extIds,omitempty"`
 	}{}
-	u.Type = v.Type()
 	u.AccountId = encoding.ChainToJSON(v.AccountId)
 	u.Data = encoding.BytesToJSON(v.Data)
 	u.ExtIds = make(encoding.JsonList[*string], len(v.ExtIds))
@@ -15784,9 +16038,6 @@ func (v *FactomDataEntry) UnmarshalJSON(data []byte) error {
 	}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
-	}
-	if !(v.Type() == u.Type) {
-		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	if x, err := encoding.ChainFromJSON(u.AccountId); err != nil {
 		return fmt.Errorf("error decoding AccountId: %w", err)
@@ -15804,6 +16055,47 @@ func (v *FactomDataEntry) UnmarshalJSON(data []byte) error {
 			return fmt.Errorf("error decoding ExtIds: %w", err)
 		} else {
 			v.ExtIds[i] = x
+		}
+	}
+	return nil
+}
+
+func (v *FactomDataEntryWrapper) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      DataEntryType              `json:"type"`
+		AccountId string                     `json:"accountId,omitempty"`
+		Data      *string                    `json:"data,omitempty"`
+		ExtIds    encoding.JsonList[*string] `json:"extIds,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.AccountId = encoding.ChainToJSON(v.FactomDataEntry.AccountId)
+	u.Data = encoding.BytesToJSON(v.FactomDataEntry.Data)
+	u.ExtIds = make(encoding.JsonList[*string], len(v.FactomDataEntry.ExtIds))
+	for i, x := range v.FactomDataEntry.ExtIds {
+		u.ExtIds[i] = encoding.BytesToJSON(x)
+	}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	if x, err := encoding.ChainFromJSON(u.AccountId); err != nil {
+		return fmt.Errorf("error decoding AccountId: %w", err)
+	} else {
+		v.FactomDataEntry.AccountId = x
+	}
+	if x, err := encoding.BytesFromJSON(u.Data); err != nil {
+		return fmt.Errorf("error decoding Data: %w", err)
+	} else {
+		v.FactomDataEntry.Data = x
+	}
+	v.FactomDataEntry.ExtIds = make([][]byte, len(u.ExtIds))
+	for i, x := range u.ExtIds {
+		if x, err := encoding.BytesFromJSON(x); err != nil {
+			return fmt.Errorf("error decoding ExtIds: %w", err)
+		} else {
+			v.FactomDataEntry.ExtIds[i] = x
 		}
 	}
 	return nil

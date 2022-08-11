@@ -27,6 +27,7 @@ type BlockState struct {
 	Signed             uint64
 	ProducedTxns       []*protocol.Transaction
 	ChainUpdates       chain.ChainUpdates
+	ReceivedAnchors    []*chain.ReceivedAnchor
 
 	Anchor *BlockAnchorState
 }
@@ -61,6 +62,7 @@ func (s *BlockState) MergeTransaction(r *chain.ProcessTransactionState) {
 	s.Delivered++
 	s.ProducedTxns = append(s.ProducedTxns, r.ProducedTxns...)
 	s.ChainUpdates.Merge(&r.ChainUpdates)
+	s.ReceivedAnchors = append(s.ReceivedAnchors, r.ReceivedAnchors...)
 	if r.MakeMajorBlock > 0 {
 		s.MakeMajorBlock = r.MakeMajorBlock
 		s.MakeMajorBlockTime = r.MakeMajorBlockTime

@@ -22,7 +22,7 @@ func (x *Executor) ProcessSignature(batch *database.Batch, delivery *chain.Deliv
 	}
 
 	var md sigExecMetadata
-	md.IsInitiator = protocol.SignatureDidInitiate(signature, delivery.Transaction.Header.Initiator[:])
+	md.IsInitiator = protocol.SignatureDidInitiate(signature, delivery.Transaction.Header.Initiator[:], nil)
 	if !signature.Type().IsSystem() {
 		md.Location = signature.RoutingLocation()
 	}
@@ -110,6 +110,10 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 		if err != nil {
 			return nil, err
 		}
+		if !md.Nested() && !signature.Verify(signature.Metadata().Hash(), delivery.Transaction.GetHash()) {
+			return nil, errors.Format(errors.StatusBadRequest, "invalid signature")
+		}
+
 		if !signature.Delegator.LocalTo(md.Location) {
 			return nil, nil
 		}
@@ -128,9 +132,10 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 
 	case protocol.KeySignature:
 		// Basic validation
-		if signature.Type() != protocol.SignatureTypeReceipt && !signature.Verify(delivery.Transaction.GetHash()) {
+		if !md.Nested() && !signature.Verify(nil, delivery.Transaction.GetHash()) {
 			return nil, errors.Format(errors.StatusBadRequest, "invalid signature")
 		}
+
 		if !delivery.Transaction.Body.Type().IsUser() {
 			err = x.validatePartitionSignature(md.Location, signature, delivery.Transaction)
 			if err != nil {
@@ -244,7 +249,7 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 		}
 
 		// Load all the signatures
-		sigset, err := GetSignaturesForSigner(batch, batch.Transaction(delivery.Transaction.GetHash()), delegate)
+		sigset, err := database.GetSignaturesForSigner(batch.Transaction(delivery.Transaction.GetHash()), delegate)
 		if err != nil {
 			return nil, errors.Wrap(errors.StatusUnknownError, err)
 		}
@@ -734,31 +739,6 @@ func verifyInternalSignature(delivery *chain.Delivery, _ *protocol.InternalSigna
 	}
 
 	return nil
-}
-
-func GetSignaturesForSigner(batch *database.Batch, transaction *database.Transaction, signer protocol.Signer) ([]protocol.Signature, error) {
-	// Load the signature set
-	sigset, err := transaction.ReadSignaturesForSigner(signer)
-	if err != nil {
-		return nil, fmt.Errorf("load signatures set %v: %w", signer.GetUrl(), err)
-	}
-
-	entries := sigset.Entries()
-	signatures := make([]protocol.Signature, 0, len(entries))
-	for _, e := range entries {
-		state, err := batch.Transaction(e.SignatureHash[:]).GetState()
-		if err != nil {
-			return nil, fmt.Errorf("load signature entry %X: %w", e.SignatureHash, err)
-		}
-
-		if state.Signature == nil {
-			// This should not happen
-			continue
-		}
-
-		signatures = append(signatures, state.Signature)
-	}
-	return signatures, nil
 }
 
 //validationPartitionSignature checks if the key used to sign the synthetic or system transaction belongs to the same subnet
