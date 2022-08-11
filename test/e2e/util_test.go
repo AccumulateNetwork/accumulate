@@ -5,6 +5,9 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 type runTB[T any] interface {
@@ -32,6 +35,22 @@ func Run[Case any, TB runTB[TB]](t TB, cases map[string]Case, run func(TB, Case)
 	RunSorted(t, cases, func(a, b string) bool {
 		return strings.Compare(a, b) < 0
 	}, run)
+}
+
+type overrideExecutor struct {
+	typ      protocol.TransactionType
+	validate func(st *chain.StateManager, tx *chain.Delivery) error
+	execute  func(st *chain.StateManager, tx *chain.Delivery) error
+}
+
+func (x *overrideExecutor) Type() protocol.TransactionType { return x.typ }
+
+func (x *overrideExecutor) Execute(st *chain.StateManager, tx *chain.Delivery) (protocol.TransactionResult, error) {
+	return nil, x.execute(st, tx)
+}
+
+func (x *overrideExecutor) Validate(st *chain.StateManager, tx *chain.Delivery) (protocol.TransactionResult, error) {
+	return nil, x.validate(st, tx)
 }
 
 func hash(b ...[]byte) []byte {
