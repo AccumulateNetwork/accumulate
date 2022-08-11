@@ -7,10 +7,13 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/howeyc/gopass"
+	"github.com/manifoldco/promptui"
 	"github.com/spf13/cobra"
+	"github.com/tyler-smith/go-bip39"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/db"
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
 )
@@ -52,6 +55,7 @@ var (
 	NoWalletVersionCheck bool
 	AdditionalSigners    []string
 	SignerVersion        uint
+	Entropy              uint
 )
 
 var currentUser = func() *user.User {
@@ -64,8 +68,7 @@ var currentUser = func() *user.User {
 
 var DidError error
 
-func InitRootCmd(database db.DB) *cobra.Command {
-	wallet = database
+func InitRootCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "accumulate",
 		Short: "CLI for Accumulate Network",
@@ -97,6 +100,7 @@ func InitRootCmd(database db.DB) *cobra.Command {
 	flags.StringSliceVar(&Delegators, "delegator", nil, "Specifies the delegator when creating a delegated signature")
 	flags.StringSliceVar(&AdditionalSigners, "sign-with", nil, "Specifies additional keys to sign the transaction with")
 	flags.UintVar(&SignerVersion, "signer-version", uint(0), "Specify the signer version. Overrides the default behavior of fetching the signer version.")
+	flags.UintVar(&Entropy, "entropy", uint(128), "Specifies the size of the mnemonic entropy.")
 	//add the commands
 	cmd.AddCommand(encryptCmd)
 	cmd.AddCommand(accountCmd)
@@ -114,6 +118,7 @@ func InitRootCmd(database db.DB) *cobra.Command {
 	cmd.AddCommand(blocksCmd)
 	cmd.AddCommand(operatorCmd, validatorCmd)
 	cmd.AddCommand(versionCmd, describeCmd)
+	cmd.AddCommand(initWalletCmd)
 
 	//for the testnet integration
 	cmd.AddCommand(faucetCmd)
@@ -157,7 +162,7 @@ func InitRootCmd(database db.DB) *cobra.Command {
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
-	rootCmd := InitRootCmd(nil)
+	rootCmd := InitRootCmd()
 	cobra.CheckErr(rootCmd.Execute())
 }
 
@@ -194,6 +199,7 @@ func initDB(defaultWorkDir string, memDb bool) db.DB {
 
 		ret = new(db.BoltDB)
 	}
+
 	//search for encrypted database first (this is the default)
 	databaseName := filepath.Join(defaultWorkDir, "wallet_encrypted.db")
 	if _, err := os.Stat(databaseName); errors.Is(err, os.ErrNotExist) || UseUnencryptedWallet {
@@ -233,4 +239,103 @@ func initDB(defaultWorkDir string, memDb bool) db.DB {
 
 	return ret
 
+}
+
+func InitDBImport(cmd *cobra.Command, memDb bool) error {
+	mnemonicString, err := getPasswdPrompt(cmd, "Enter mnemonic : ", true)
+	if err != nil {
+		return db.ErrInvalidPassword
+	}
+	mnemonic := strings.Split(mnemonicString, " ")
+	_, err = ImportMnemonic(mnemonic)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func InitDBCreate(memDb bool) error {
+	root, _ := GetWallet().Get(BucketMnemonic, []byte("seed"))
+	if len(root) != 0 {
+		return fmt.Errorf("mnemonic seed phrase already exists within wallet")
+	}
+	wallet = initDB(DatabaseDir, memDb)
+	entropy, err := bip39.NewEntropy(int(Entropy))
+	if err != nil {
+		return err
+	}
+	mnemonicString, err := bip39.NewMnemonic(entropy)
+	if err != nil {
+		return err
+	}
+	_, err = promptMnemonic(mnemonicString)
+	if err != nil {
+		return err
+	}
+	mnemonicConfirm, err := promptMnemonicConfirm()
+	if err != nil {
+		return err
+	}
+	if mnemonicString != mnemonicConfirm {
+		return fmt.Errorf("mnemonic doesn't match.")
+	}
+	mnemonic := strings.Split(mnemonicString, " ")
+	_, err = ImportMnemonic(mnemonic)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+type promptContent struct {
+	errorMsg string
+	label    string
+}
+
+func promptMnemonic(mnemonic string) (string, error) {
+	pc := promptContent{
+		"",
+		"Please write down your mnemonic phrase and press <enter> when done. '" +
+			mnemonic + "'",
+	}
+	items := []string{"\n"}
+	index := -1
+	var result string
+	var err error
+
+	for index < 0 {
+		prompt := promptui.SelectWithAdd{
+			Label: pc.label,
+			Items: items,
+		}
+		index, result, err = prompt.Run()
+		if index == -1 {
+			items = append(items, result)
+		}
+	}
+
+	if err != nil {
+		return "", err
+	}
+
+	return result, nil
+}
+
+func promptMnemonicConfirm() (string, error) {
+	validate := func(input string) error {
+		if len(input) <= 0 {
+			return errors.New("Invalid mnemonic enttered")
+		}
+		return nil
+	}
+
+	prompt := promptui.Prompt{
+		Label:    "Please re-enter the mnemonic phrase.",
+		Validate: validate,
+	}
+	result, err := prompt.Run()
+	if err != nil {
+		return "", err
+	}
+	return result, nil
 }
