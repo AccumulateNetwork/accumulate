@@ -206,7 +206,7 @@ func BenchmarkBlock(b *testing.B) {
 
 			for _, x := range sim.Executors {
 				for _, exec := range scenario {
-					x.Executor.SetExecutor(exec)
+					x.Executor.SetExecutor_TESTONLY(exec)
 				}
 			}
 
