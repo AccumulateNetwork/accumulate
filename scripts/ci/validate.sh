@@ -11,7 +11,7 @@ if which go > /dev/null || ! which accumulate > /dev/null ; then
     go install ./cmd/accumulate
     export PATH="${PATH}:$(go env GOPATH)/bin"
 fi
-echo ${MNEMONIC} || accumulate wallet init import
+echo ${MNEMONIC} | accumulate wallet init import
 echo
 
 section "Generate a Lite Token Account"
