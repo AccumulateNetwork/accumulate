@@ -13,6 +13,7 @@ import (
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
@@ -73,11 +74,11 @@ func prepareSigner(origin *url.URL, args []string) ([]string, []*signing.Builder
 		signers = append(signers, signer)
 	}
 
-	var key *Key
+	var key *walletd.Key
 	var err error
 	isLiteTokenAccount, _ := IsLiteTokenAccount(origin.String())
 	if isLiteTokenAccount {
-		key, err = LookupByLiteTokenUrl(origin.String())
+		key, err = walletd.LookupByLiteTokenUrl(origin.String())
 		if err != nil {
 			return nil, nil, fmt.Errorf("unable to find private key for lite token account %s %v", origin.String(), err)
 		}
@@ -88,7 +89,7 @@ func prepareSigner(origin *url.URL, args []string) ([]string, []*signing.Builder
 			return nil, nil, err
 		}
 		if isLiteIdentity {
-			key, err = LookupByLiteIdentityUrl(origin.String())
+			key, err = walletd.LookupByLiteIdentityUrl(origin.String())
 			if err != nil {
 				return nil, nil, fmt.Errorf("unable to find private key for lite identity account %s %v", origin.String(), err)
 			}
