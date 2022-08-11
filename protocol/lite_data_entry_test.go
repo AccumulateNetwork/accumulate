@@ -58,7 +58,7 @@ func TestLiteDataEntry(t *testing.T) {
 		t.Fatalf("expected hash %v, but received %x", expectedHash, entryHash)
 	}
 
-	cost, err := DataEntryCost(lde)
+	cost, err := DataEntryCost(lde.Wrap())
 	if err != nil {
 		t.Fatal(err)
 	}

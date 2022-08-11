@@ -1,6 +1,7 @@
 package e2e
 
 import (
+	"crypto/sha256"
 	"sort"
 	"strings"
 	"testing"
@@ -50,4 +51,12 @@ func (x *overrideExecutor) Execute(st *chain.StateManager, tx *chain.Delivery) (
 
 func (x *overrideExecutor) Validate(st *chain.StateManager, tx *chain.Delivery) (protocol.TransactionResult, error) {
 	return nil, x.validate(st, tx)
+}
+
+func hash(b ...[]byte) []byte {
+	h := sha256.New()
+	for _, b := range b {
+		_, _ = h.Write(b)
+	}
+	return h.Sum(nil)
 }
