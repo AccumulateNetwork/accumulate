@@ -13,6 +13,7 @@ import (
 var flags struct {
 	Package string
 	Out     string
+	ApiPath string
 }
 
 func run(_ *cobra.Command, args []string) {
@@ -47,6 +48,7 @@ func main() {
 
 	cmd.Flags().StringVar(&flags.Package, "package", "protocol", "Package name")
 	cmd.Flags().StringVarP(&flags.Out, "out", "o", "sdk_gen.go", "Output file")
+	cmd.Flags().StringVar(&flags.ApiPath, "api-path", "gitlab.com/accumulatenetwork/accumulate/internal/api/v2", "Package name")
 
 	_ = cmd.Execute()
 }
