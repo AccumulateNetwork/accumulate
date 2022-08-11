@@ -22,7 +22,7 @@ var walletCmd = &cobra.Command{
 }
 
 var WalletInitCmd = &cobra.Command{
-	Use:   "wallet init [create/import]",
+	Use:   "init [create/import]",
 	Short: "Import secret factoid key from terminal input",
 	Args:  cobra.ExactArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
@@ -132,7 +132,7 @@ func InitDBImport(cmd *cobra.Command, memDb bool) error {
 		return db.ErrInvalidPassword
 	}
 	mnemonic := strings.Split(mnemonicString, " ")
-	_, err = ImportMnemonic(mnemonic)
+	_, err = walletd.ImportMnemonic(mnemonic)
 	if err != nil {
 		return err
 	}
@@ -165,7 +165,7 @@ func InitDBCreate(memDb bool) error {
 		return fmt.Errorf("mnemonic doesn't match.")
 	}
 	mnemonic := strings.Split(mnemonicString, " ")
-	_, err = ImportMnemonic(mnemonic)
+	_, err = walletd.ImportMnemonic(mnemonic)
 	if err != nil {
 		return err
 	}
@@ -223,32 +223,4 @@ func promptMnemonicConfirm() (string, error) {
 		return "", err
 	}
 	return result, nil
-}
-
-func ImportMnemonic(mnemonic []string) (string, error) {
-	mns := strings.Join(mnemonic, " ")
-
-	if !bip39.IsMnemonicValid(mns) {
-		return "", fmt.Errorf("invalid mnemonic provided")
-	}
-
-	// Generate a Bip32 HD wallet for the mnemonic and a user supplied password
-	seed := bip39.NewSeed(mns, "")
-
-	root, _ := walletd.GetWallet().Get(walletd.BucketMnemonic, []byte("seed"))
-	if len(root) != 0 {
-		return "", fmt.Errorf("mnemonic seed phrase already exists within wallet")
-	}
-
-	err := walletd.GetWallet().Put(walletd.BucketMnemonic, []byte("seed"), seed)
-	if err != nil {
-		return "", fmt.Errorf("DB: seed write error, %v", err)
-	}
-
-	err = walletd.GetWallet().Put(walletd.BucketMnemonic, []byte("phrase"), []byte(mns))
-	if err != nil {
-		return "", fmt.Errorf("DB: phrase write error %s", err)
-	}
-
-	return "mnemonic import successful", nil
 }
