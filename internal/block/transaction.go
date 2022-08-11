@@ -540,13 +540,8 @@ func (x *Executor) recordFailedTransaction(batch *database.Batch, delivery *chai
 		return nil, nil, fmt.Errorf("update pending list: %w", err)
 	}
 
-	// Refund the signer
+	// Issue a refund to the initial signer
 	if status.Initiator == nil || !delivery.Transaction.Body.Type().IsUser() {
-		return status, state, nil
-	}
-
-	// TODO Send a refund for a failed remotely initiated transaction
-	if !delivery.Transaction.Header.Principal.LocalTo(status.Initiator) {
 		return status, state, nil
 	}
 
@@ -559,19 +554,8 @@ func (x *Executor) recordFailedTransaction(batch *database.Batch, delivery *chai
 		return status, state, nil
 	}
 
-	var signer protocol.Signer
-	obj := batch.Account(status.Initiator)
-	err = obj.GetStateAs(&signer)
-	if err != nil {
-		return nil, nil, fmt.Errorf("load initial signer: %w", err)
-	}
-
-	refund := paid - protocol.FeeFailedMaximum
-	signer.CreditCredits(refund.AsUInt64())
-	err = obj.PutState(signer)
-	if err != nil {
-		return nil, nil, fmt.Errorf("store initial signer: %w", err)
-	}
-
+	refund := new(protocol.SyntheticDepositCredits)
+	refund.Amount = (paid - protocol.FeeFailedMaximum).AsUInt64()
+	state.DidProduceTxn(status.Initiator, refund)
 	return status, state, nil
 }

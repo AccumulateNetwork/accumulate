@@ -162,3 +162,17 @@ func GetAccount[T protocol.Account](sim *Simulator, accountUrl *url.URL) T {
 	})
 	return account
 }
+
+func GetTxnState[V any, T interface{ Get() (V, error) }](sim *Simulator, txid *url.TxID, state func(*database.Transaction) T) V {
+	sim.Helper()
+	var value V
+	var err error
+	_ = sim.PartitionFor(txid.Account()).Database.View(func(batch *database.Batch) error {
+		sim.Helper()
+		h := txid.Hash()
+		value, err = state(batch.Transaction(h[:])).Get()
+		require.NoError(tb{sim}, err)
+		return nil
+	})
+	return value
+}

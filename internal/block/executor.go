@@ -172,6 +172,10 @@ func (m *Executor) ActiveGlobals_TESTONLY() *core.GlobalValues {
 	return &m.globals.Active
 }
 
+func (x *Executor) SetExecutor_TESTONLY(y chain.TransactionExecutor) {
+	x.executors[y.Type()] = y
+}
+
 func (m *Executor) Genesis(block *Block, exec chain.TransactionExecutor) error {
 	var err error
 
