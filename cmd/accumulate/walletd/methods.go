@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd/api"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -158,15 +159,60 @@ func (m *JrpcMethods) CreateTransaction(_ context.Context, params json.RawMessag
 
 func (m *JrpcMethods) KeyList(_ context.Context, params json.RawMessage) interface{} {
 	resp := api.KeyListResponse{}
+	var err error
+	resp.KeyList, err = GetKeyList()
+	if err != nil {
+		return jsonrpc2.NewError(api.ErrorCodeGeneralError.Code(), "key list error", err)
+	}
 	return resp
 }
 
 func (m *JrpcMethods) ResolveKey(_ context.Context, params json.RawMessage) interface{} {
 	resp := api.ResolveKeyResponse{}
+
+	req := api.ResolveKeyRequest{}
+	err := json.Unmarshal(params, &req)
+
+	if err != nil {
+		return jsonrpc2.NewError(api.ErrorCodeGeneralError.Code(), "resolve key error", err)
+	}
+
+	label, isLite := LabelForLiteIdentity(req.KeyNameOrLiteAddress)
+	var k *Key
+	if isLite {
+		k, err = LookupByLiteIdentityUrl(label)
+	} else {
+		label, isLite = LabelForLiteTokenAccount(req.KeyNameOrLiteAddress)
+		if isLite {
+			k, err = LookupByLiteTokenUrl(label)
+		} else {
+			k, err = LookupByLabel(label)
+		}
+	}
+
+	if err != nil {
+		gen := api.GeneralResponse{}
+		gen.Code = api.ErrorCodeNotFound
+		gen.Error = err.Error()
+		return gen
+	}
+
+	resp.KeyData.PublicKey = k.PublicKey
+	resp.KeyData.Derivation = k.KeyInfo.Derivation
+	resp.KeyData.KeyType = k.KeyInfo.Type
 	return resp
 }
 
 func (m *JrpcMethods) AdiList(_ context.Context, params json.RawMessage) interface{} {
 	resp := api.AdiListResponse{}
+	var err error
+	adis, err := getAdiList()
+	if err != nil {
+		return jsonrpc2.NewError(api.ErrorCodeGeneralError.Code(), "adi list error", err)
+	}
+
+	for _, v := range adis {
+		resp.Urls = append(resp.Urls, v.String())
+	}
 	return resp
 }

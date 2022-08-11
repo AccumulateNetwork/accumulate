@@ -5,3 +5,5 @@ ErrorCode:
     value: 0x01
   AlreadyExists:
     value: 0x02
+  GeneralError:
+    value: 0x03
