@@ -26,5 +26,22 @@ func ListADIs() (string, error) {
 			}
 		}
 	}
+
 	return out, nil
+}
+
+func getAdiList() (urls []url2.URL, err error) {
+	b, err := GetWallet().GetBucket(BucketAdi)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, v := range b.KeyValueList {
+		u, err := url2.Parse(string(v.Key))
+		if err != nil {
+			return nil, err
+		}
+		urls = append(urls, *u)
+	}
+	return urls, nil
 }

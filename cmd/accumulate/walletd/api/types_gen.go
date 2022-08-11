@@ -104,14 +104,15 @@ type GeneralResponse struct {
 	Error string    `json:"error,omitempty" form:"error" query:"error" validate:"required"`
 }
 
-type KeyList struct {
-	Name      string                 `json:"name,omitempty" form:"name" query:"name" validate:"required"`
-	PublicKey []byte                 `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
-	KeyType   protocol.SignatureType `json:"keyType,omitempty" form:"keyType" query:"keyType" validate:"required"`
+type KeyData struct {
+	Name       string                 `json:"name,omitempty" form:"name" query:"name" validate:"required"`
+	PublicKey  []byte                 `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
+	Derivation string                 `json:"derivation,omitempty" form:"derivation" query:"derivation" validate:"required"`
+	KeyType    protocol.SignatureType `json:"keyType,omitempty" form:"keyType" query:"keyType" validate:"required"`
 }
 
 type KeyListResponse struct {
-	KeyList []KeyList `json:"keyList,omitempty" form:"keyList" query:"keyList" validate:"required"`
+	KeyList []KeyData `json:"keyList,omitempty" form:"keyList" query:"keyList" validate:"required"`
 }
 
 type ProveReceiptRequest struct {
@@ -120,12 +121,11 @@ type ProveReceiptRequest struct {
 }
 
 type ResolveKeyRequest struct {
-	KeyLabel string `json:"keyLabel,omitempty" form:"keyLabel" query:"keyLabel"`
-	KeyHash  []byte `json:"keyHash,omitempty" form:"keyHash" query:"keyHash"`
+	KeyNameOrLiteAddress string `json:"keyNameOrLiteAddress,omitempty" form:"keyNameOrLiteAddress" query:"keyNameOrLiteAddress" validate:"required"`
 }
 
 type ResolveKeyResponse struct {
-	PublicKey []byte `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
+	KeyData KeyData `json:"keyData,omitempty" form:"keyData" query:"keyData" validate:"required"`
 }
 
 type SignRequest struct {
@@ -348,22 +348,23 @@ func (v *GeneralResponse) Copy() *GeneralResponse {
 
 func (v *GeneralResponse) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *KeyList) Copy() *KeyList {
-	u := new(KeyList)
+func (v *KeyData) Copy() *KeyData {
+	u := new(KeyData)
 
 	u.Name = v.Name
 	u.PublicKey = encoding.BytesCopy(v.PublicKey)
+	u.Derivation = v.Derivation
 	u.KeyType = v.KeyType
 
 	return u
 }
 
-func (v *KeyList) CopyAsInterface() interface{} { return v.Copy() }
+func (v *KeyData) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *KeyListResponse) Copy() *KeyListResponse {
 	u := new(KeyListResponse)
 
-	u.KeyList = make([]KeyList, len(v.KeyList))
+	u.KeyList = make([]KeyData, len(v.KeyList))
 	for i, v := range v.KeyList {
 		u.KeyList[i] = *(&v).Copy()
 	}
@@ -387,8 +388,7 @@ func (v *ProveReceiptRequest) CopyAsInterface() interface{} { return v.Copy() }
 func (v *ResolveKeyRequest) Copy() *ResolveKeyRequest {
 	u := new(ResolveKeyRequest)
 
-	u.KeyLabel = v.KeyLabel
-	u.KeyHash = encoding.BytesCopy(v.KeyHash)
+	u.KeyNameOrLiteAddress = v.KeyNameOrLiteAddress
 
 	return u
 }
@@ -398,7 +398,7 @@ func (v *ResolveKeyRequest) CopyAsInterface() interface{} { return v.Copy() }
 func (v *ResolveKeyResponse) Copy() *ResolveKeyResponse {
 	u := new(ResolveKeyResponse)
 
-	u.PublicKey = encoding.BytesCopy(v.PublicKey)
+	u.KeyData = *(&v.KeyData).Copy()
 
 	return u
 }
@@ -625,11 +625,14 @@ func (v *GeneralResponse) Equal(u *GeneralResponse) bool {
 	return true
 }
 
-func (v *KeyList) Equal(u *KeyList) bool {
+func (v *KeyData) Equal(u *KeyData) bool {
 	if !(v.Name == u.Name) {
 		return false
 	}
 	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
+		return false
+	}
+	if !(v.Derivation == u.Derivation) {
 		return false
 	}
 	if !(v.KeyType == u.KeyType) {
@@ -664,10 +667,7 @@ func (v *ProveReceiptRequest) Equal(u *ProveReceiptRequest) bool {
 }
 
 func (v *ResolveKeyRequest) Equal(u *ResolveKeyRequest) bool {
-	if !(v.KeyLabel == u.KeyLabel) {
-		return false
-	}
-	if !(bytes.Equal(v.KeyHash, u.KeyHash)) {
+	if !(v.KeyNameOrLiteAddress == u.KeyNameOrLiteAddress) {
 		return false
 	}
 
@@ -675,7 +675,7 @@ func (v *ResolveKeyRequest) Equal(u *ResolveKeyRequest) bool {
 }
 
 func (v *ResolveKeyResponse) Equal(u *ResolveKeyResponse) bool {
-	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
+	if !((&v.KeyData).Equal(&u.KeyData)) {
 		return false
 	}
 
@@ -923,41 +923,25 @@ func (v *EncodeTransactionResponse) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
-func (v *KeyList) MarshalJSON() ([]byte, error) {
+func (v *KeyData) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Name      string                 `json:"name,omitempty"`
-		PublicKey *string                `json:"publicKey,omitempty"`
-		KeyType   protocol.SignatureType `json:"keyType,omitempty"`
+		Name       string                 `json:"name,omitempty"`
+		PublicKey  *string                `json:"publicKey,omitempty"`
+		Derivation string                 `json:"derivation,omitempty"`
+		KeyType    protocol.SignatureType `json:"keyType,omitempty"`
 	}{}
 	u.Name = v.Name
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	u.Derivation = v.Derivation
 	u.KeyType = v.KeyType
 	return json.Marshal(&u)
 }
 
 func (v *KeyListResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		KeyList encoding.JsonList[KeyList] `json:"keyList,omitempty"`
+		KeyList encoding.JsonList[KeyData] `json:"keyList,omitempty"`
 	}{}
 	u.KeyList = v.KeyList
-	return json.Marshal(&u)
-}
-
-func (v *ResolveKeyRequest) MarshalJSON() ([]byte, error) {
-	u := struct {
-		KeyLabel string  `json:"keyLabel,omitempty"`
-		KeyHash  *string `json:"keyHash,omitempty"`
-	}{}
-	u.KeyLabel = v.KeyLabel
-	u.KeyHash = encoding.BytesToJSON(v.KeyHash)
-	return json.Marshal(&u)
-}
-
-func (v *ResolveKeyResponse) MarshalJSON() ([]byte, error) {
-	u := struct {
-		PublicKey *string `json:"publicKey,omitempty"`
-	}{}
-	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	return json.Marshal(&u)
 }
 
@@ -1089,14 +1073,16 @@ func (v *EncodeTransactionResponse) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (v *KeyList) UnmarshalJSON(data []byte) error {
+func (v *KeyData) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Name      string                 `json:"name,omitempty"`
-		PublicKey *string                `json:"publicKey,omitempty"`
-		KeyType   protocol.SignatureType `json:"keyType,omitempty"`
+		Name       string                 `json:"name,omitempty"`
+		PublicKey  *string                `json:"publicKey,omitempty"`
+		Derivation string                 `json:"derivation,omitempty"`
+		KeyType    protocol.SignatureType `json:"keyType,omitempty"`
 	}{}
 	u.Name = v.Name
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	u.Derivation = v.Derivation
 	u.KeyType = v.KeyType
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -1107,54 +1093,20 @@ func (v *KeyList) UnmarshalJSON(data []byte) error {
 	} else {
 		v.PublicKey = x
 	}
+	v.Derivation = u.Derivation
 	v.KeyType = u.KeyType
 	return nil
 }
 
 func (v *KeyListResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		KeyList encoding.JsonList[KeyList] `json:"keyList,omitempty"`
+		KeyList encoding.JsonList[KeyData] `json:"keyList,omitempty"`
 	}{}
 	u.KeyList = v.KeyList
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.KeyList = u.KeyList
-	return nil
-}
-
-func (v *ResolveKeyRequest) UnmarshalJSON(data []byte) error {
-	u := struct {
-		KeyLabel string  `json:"keyLabel,omitempty"`
-		KeyHash  *string `json:"keyHash,omitempty"`
-	}{}
-	u.KeyLabel = v.KeyLabel
-	u.KeyHash = encoding.BytesToJSON(v.KeyHash)
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	v.KeyLabel = u.KeyLabel
-	if x, err := encoding.BytesFromJSON(u.KeyHash); err != nil {
-		return fmt.Errorf("error decoding KeyHash: %w", err)
-	} else {
-		v.KeyHash = x
-	}
-	return nil
-}
-
-func (v *ResolveKeyResponse) UnmarshalJSON(data []byte) error {
-	u := struct {
-		PublicKey *string `json:"publicKey,omitempty"`
-	}{}
-	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	if x, err := encoding.BytesFromJSON(u.PublicKey); err != nil {
-		return fmt.Errorf("error decoding PublicKey: %w", err)
-	} else {
-		v.PublicKey = x
-	}
 	return nil
 }
 
