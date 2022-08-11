@@ -1916,10 +1916,10 @@ func TestDuplicateKeyNewKeypage(t *testing.T) {
 	require.Len(t, page.Keys, 2)
 	_, key1, alice1Found := page.EntryByKeyHash(aliceKeyHash[:])
 	_, key2, alice2Found := page.EntryByKeyHash(aliceKeyHash1[:])
-	require.Equal(t, uint64(0), key1.GetLastUsedOn())
 	require.True(t, alice1Found, "alice key 1 not found")
-	require.Equal(t, uint64(0), key2.GetLastUsedOn())
+	require.Equal(t, uint64(0), key1.GetLastUsedOn())
 	require.True(t, alice2Found, "alice key 2 not found")
+	require.Equal(t, uint64(0), key2.GetLastUsedOn())
 
 	//check for duplicate keys
 	_, _, err = n.Execute(func(send func(*protocol.Envelope)) {
