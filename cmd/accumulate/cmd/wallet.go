@@ -21,12 +21,12 @@ var walletCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(2),
 }
 
-var WalletInitCmd = &cobra.Command{
+var walletInitCmd = &cobra.Command{
 	Use:   "init [create/import]",
 	Short: "Import secret factoid key from terminal input",
-	Args:  cobra.ExactArgs(2),
+	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		switch args[1] {
+		switch args[0] {
 		case "create":
 			err := InitDBCreate(false)
 			printOutput(cmd, "", err)
@@ -49,7 +49,7 @@ var walletServeCmd = &cobra.Command{
 
 func init() {
 	initRunFlags(walletCmd, false)
-	walletCmd.AddCommand(WalletInitCmd)
+	walletCmd.AddCommand(walletInitCmd)
 	walletCmd.AddCommand(walletServeCmd)
 }
 
