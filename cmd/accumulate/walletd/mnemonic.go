@@ -2,8 +2,9 @@ package walletd
 
 import (
 	"fmt"
-	"github.com/tyler-smith/go-bip39"
 	"strings"
+
+	"github.com/tyler-smith/go-bip39"
 )
 
 func ImportMnemonic(mnemonic []string) (string, error) {

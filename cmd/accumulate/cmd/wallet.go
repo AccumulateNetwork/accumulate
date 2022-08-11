@@ -3,6 +3,10 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"strings"
+	"syscall"
+	"time"
+
 	"github.com/kardianos/service"
 	"github.com/manifoldco/promptui"
 	"github.com/spf13/cobra"
@@ -10,9 +14,6 @@ import (
 	"github.com/tyler-smith/go-bip39"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/db"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
-	"strings"
-	"syscall"
-	"time"
 )
 
 var walletCmd = &cobra.Command{

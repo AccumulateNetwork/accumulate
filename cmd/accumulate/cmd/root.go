@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
 	"log"
 	"os"
 	"os/user"
@@ -10,6 +9,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
 )
 
