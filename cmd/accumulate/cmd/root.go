@@ -1,61 +1,50 @@
 package cmd
 
 import (
-	"errors"
 	"fmt"
 	"log"
 	"os"
 	"os/user"
 	"path/filepath"
-	"strings"
 	"time"
 
-	"github.com/howeyc/gopass"
-	"github.com/manifoldco/promptui"
 	"github.com/spf13/cobra"
-	"github.com/tyler-smith/go-bip39"
-	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/db"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
 )
 
-func GetWallet() db.DB {
-	if wallet == nil {
-		wallet = initDB(DatabaseDir, false)
-		//upon first use, make sure database format is up-to-date.
-		if !NoWalletVersionCheck {
-			out, err := RestoreAccounts()
-			if err != nil && err != db.ErrNoBucket {
-				log.Fatalf("failed to update wallet database: %v", err)
-			}
-			if out != "" {
-				log.Println("performing account database update")
-				log.Println(out)
-			}
-		}
-	}
-	return wallet
-}
+//func GetWallet() db.DB {
+//	if wallet == nil {
+//		wallet = initDB(DatabaseDir, false)
+//		//upon first use, make sure database format is up-to-date.
+//		if !NoWalletVersionCheck {
+//			out, err := RestoreAccounts()
+//			if err != nil && err != db.ErrNoBucket {
+//				log.Fatalf("failed to update wallet database: %v", err)
+//			}
+//			if out != "" {
+//				log.Println("performing account database update")
+//				log.Println(out)
+//			}
+//		}
+//	}
+//	return wallet
+//}
 
 var (
-	Client               *client.Client
-	ClientTimeout        time.Duration
-	ClientDebug          bool
-	UseUnencryptedWallet bool
-	wallet               db.DB
-	WantJsonOutput       = false
-	TxPretend            = false
-	Prove                = false
-	Memo                 string
-	Metadata             string
-	SigType              string
-	Authorities          []string
-	Delegators           []string
-	Password             string
-	DatabaseDir          string
-	NoWalletVersionCheck bool
-	AdditionalSigners    []string
-	SignerVersion        uint
-	Entropy              uint
+	Client            *client.Client
+	ClientTimeout     time.Duration
+	ClientDebug       bool
+	WantJsonOutput    = false
+	TxPretend         = false
+	Prove             = false
+	Memo              string
+	Metadata          string
+	SigType           string
+	Authorities       []string
+	Delegators        []string
+	AdditionalSigners []string
+	SignerVersion     uint
 )
 
 var currentUser = func() *user.User {
@@ -82,11 +71,8 @@ func InitRootCmd() *cobra.Command {
 	}
 
 	flags := cmd.PersistentFlags()
-	flags.StringVar(&DatabaseDir, "database", filepath.Join(currentUser.HomeDir, ".accumulate"), "Directory the database is stored in")
 	flags.StringVarP(&serverAddr, "server", "s", serverAddr, "Accumulated server")
 	flags.DurationVarP(&ClientTimeout, "timeout", "t", 5*time.Second, "Timeout for all API requests (i.e. 10s, 1m)")
-	flags.BoolVar(&UseUnencryptedWallet, "use-unencrypted-wallet", false, "Use unencrypted wallet (strongly discouraged) stored at ~/.accumulate/wallet.db")
-	flags.BoolVar(&NoWalletVersionCheck, "no-wallet-version-check", false, "Bypass the check to prevent updating the wallet to the format supported by the cli")
 	flags.BoolVarP(&ClientDebug, "debug", "d", false, "Print accumulated API calls")
 	flags.BoolVarP(&WantJsonOutput, "json", "j", false, "print outputs as json")
 	flags.BoolVarP(&TxPretend, "pretend", "n", false, "Enables check-only mode for transactions")
@@ -100,7 +86,13 @@ func InitRootCmd() *cobra.Command {
 	flags.StringSliceVar(&Delegators, "delegator", nil, "Specifies the delegator when creating a delegated signature")
 	flags.StringSliceVar(&AdditionalSigners, "sign-with", nil, "Specifies additional keys to sign the transaction with")
 	flags.UintVar(&SignerVersion, "signer-version", uint(0), "Specify the signer version. Overrides the default behavior of fetching the signer version.")
-	flags.UintVar(&Entropy, "entropy", uint(128), "Specifies the size of the mnemonic entropy.")
+
+	//TODO: to be moved to walletd configuration
+	flags.UintVar(&walletd.Entropy, "entropy", uint(128), "Specifies the size of the mnemonic entropy.")
+	flags.StringVar(&walletd.DatabaseDir, "database", filepath.Join(currentUser.HomeDir, ".accumulate"), "Directory the database is stored in")
+	flags.BoolVar(&walletd.UseUnencryptedWallet, "use-unencrypted-wallet", false, "Use unencrypted wallet (strongly discouraged) stored at ~/.accumulate/wallet.db")
+	flags.BoolVar(&walletd.NoWalletVersionCheck, "no-wallet-version-check", false, "Bypass the check to prevent updating the wallet to the format supported by the cli")
+
 	//add the commands
 	cmd.AddCommand(encryptCmd)
 	cmd.AddCommand(accountCmd)
@@ -118,7 +110,7 @@ func InitRootCmd() *cobra.Command {
 	cmd.AddCommand(blocksCmd)
 	cmd.AddCommand(operatorCmd, validatorCmd)
 	cmd.AddCommand(versionCmd, describeCmd)
-	cmd.AddCommand(initWalletCmd)
+	cmd.AddCommand(walletCmd)
 
 	//for the testnet integration
 	cmd.AddCommand(faucetCmd)
@@ -168,174 +160,4 @@ func Execute() {
 
 func init() {
 	cobra.OnInitialize()
-}
-
-var (
-	BucketAnon              = []byte("anon")
-	BucketAdi               = []byte("adi")
-	BucketKeys              = []byte("keys")
-	BucketLabel             = []byte("label")
-	BucketLite              = []byte("lite")
-	BucketMnemonic          = []byte("mnemonic")
-	BucketKeyInfo           = []byte("keyinfo")
-	BucketSigTypeDeprecated = []byte("sigtype")
-)
-
-func initDB(defaultWorkDir string, memDb bool) db.DB {
-	var ret db.DB
-	if memDb {
-		ret = new(db.MemoryDB)
-
-		err := ret.InitDB("", "")
-		if err != nil {
-			log.Fatal(err)
-		}
-		return ret
-	} else {
-		err := os.MkdirAll(defaultWorkDir, 0700)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		ret = new(db.BoltDB)
-	}
-
-	//search for encrypted database first (this is the default)
-	databaseName := filepath.Join(defaultWorkDir, "wallet_encrypted.db")
-	if _, err := os.Stat(databaseName); errors.Is(err, os.ErrNotExist) || UseUnencryptedWallet {
-		// path/to/whatever does not exist -- OR -- we want to fall back to the unencrypted database
-		databaseName = filepath.Join(defaultWorkDir, "wallet.db")
-
-		if _, err = os.Stat(databaseName); errors.Is(err, os.ErrNotExist) && !UseUnencryptedWallet {
-			//no databases exist, so create a new encrypted database unless the user wanted an unencrypted one
-			databaseName = filepath.Join(defaultWorkDir, "wallet_encrypted.db")
-
-			//let's get a new first-time password...
-			Password, err = newPassword()
-			if err != nil {
-				log.Fatal(err)
-			}
-		}
-	} else {
-		if !UseUnencryptedWallet {
-			bytepw1, err := gopass.GetPasswdPrompt("Password: ", true, os.Stdin, os.Stderr) // term.ReadPassword(int(syscall.Stdin))
-			if err != nil {
-				log.Fatal(db.ErrNoPassword)
-			}
-
-			Password = string(bytepw1)
-		}
-	}
-
-	err := ret.InitDB(databaseName, Password)
-
-	if err != nil {
-		if err != db.ErrDatabaseNotEncrypted {
-			log.Fatal(err)
-		}
-		//so here we want to implicitly indicate to the rest of the code we're using the unencrypted wallet
-		UseUnencryptedWallet = true
-	}
-
-	return ret
-
-}
-
-func InitDBImport(cmd *cobra.Command, memDb bool) error {
-	mnemonicString, err := getPasswdPrompt(cmd, "Enter mnemonic : ", true)
-	if err != nil {
-		return db.ErrInvalidPassword
-	}
-	mnemonic := strings.Split(mnemonicString, " ")
-	_, err = ImportMnemonic(mnemonic)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func InitDBCreate(memDb bool) error {
-	root, _ := GetWallet().Get(BucketMnemonic, []byte("seed"))
-	if len(root) != 0 {
-		return fmt.Errorf("mnemonic seed phrase already exists within wallet")
-	}
-	wallet = initDB(DatabaseDir, memDb)
-	entropy, err := bip39.NewEntropy(int(Entropy))
-	if err != nil {
-		return err
-	}
-	mnemonicString, err := bip39.NewMnemonic(entropy)
-	if err != nil {
-		return err
-	}
-	_, err = promptMnemonic(mnemonicString)
-	if err != nil {
-		return err
-	}
-	mnemonicConfirm, err := promptMnemonicConfirm()
-	if err != nil {
-		return err
-	}
-	if mnemonicString != mnemonicConfirm {
-		return fmt.Errorf("mnemonic doesn't match.")
-	}
-	mnemonic := strings.Split(mnemonicString, " ")
-	_, err = ImportMnemonic(mnemonic)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-type promptContent struct {
-	errorMsg string
-	label    string
-}
-
-func promptMnemonic(mnemonic string) (string, error) {
-	pc := promptContent{
-		"",
-		"Please write down your mnemonic phrase and press <enter> when done. '" +
-			mnemonic + "'",
-	}
-	items := []string{"\n"}
-	index := -1
-	var result string
-	var err error
-
-	for index < 0 {
-		prompt := promptui.SelectWithAdd{
-			Label: pc.label,
-			Items: items,
-		}
-		index, result, err = prompt.Run()
-		if index == -1 {
-			items = append(items, result)
-		}
-	}
-
-	if err != nil {
-		return "", err
-	}
-
-	return result, nil
-}
-
-func promptMnemonicConfirm() (string, error) {
-	validate := func(input string) error {
-		if len(input) <= 0 {
-			return errors.New("Invalid mnemonic enttered")
-		}
-		return nil
-	}
-
-	prompt := promptui.Prompt{
-		Label:    "Please re-enter the mnemonic phrase.",
-		Validate: validate,
-	}
-	result, err := prompt.Run()
-	if err != nil {
-		return "", err
-	}
-	return result, nil
 }

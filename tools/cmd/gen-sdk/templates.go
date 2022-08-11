@@ -11,6 +11,7 @@ import (
 
 type TApi struct {
 	Package string
+	ApiPath string
 	Methods []*TMethod
 }
 
@@ -22,6 +23,7 @@ type TMethod struct {
 func convert(api typegen.API) *TApi {
 	tapi := new(TApi)
 	tapi.Package = flags.Package
+	tapi.ApiPath = flags.ApiPath
 	tapi.Methods = make([]*TMethod, 0, len(api))
 
 	for name, method := range api {
