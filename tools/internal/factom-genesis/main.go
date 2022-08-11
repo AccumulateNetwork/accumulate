@@ -15,7 +15,7 @@ import (
 	tmjson "github.com/tendermint/tendermint/libs/json"
 	alog "github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/privval"
-	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/cmd"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
@@ -25,7 +25,7 @@ import (
 )
 
 var origin *url.URL
-var key *cmd.Key
+var key *walletd.Key
 var simul *simulator.Simulator
 var delivered = (*protocol.TransactionStatus).Delivered
 
@@ -75,7 +75,7 @@ func SetPrivateKeyAndOrigin(privateKey string) error {
 		priv = pvkey.PrivKey.Bytes()
 	}
 
-	key = &cmd.Key{PrivateKey: priv, PublicKey: pub, KeyInfo: cmd.KeyInfo{Type: protocol.SignatureTypeED25519}}
+	key = &walletd.Key{PrivateKey: priv, PublicKey: pub, KeyInfo: walletd.KeyInfo{Type: protocol.SignatureTypeED25519}}
 	url, err := protocol.LiteTokenAddress(key.PublicKey, protocol.ACME, protocol.SignatureTypeED25519)
 	if err != nil {
 		log.Fatalf("cannot create lite token account %v", err)
@@ -122,7 +122,7 @@ func ConstructWriteData(u *url.URL, entry *protocol.FactomDataEntry) *protocol.T
 }
 
 func GetAccountFromPrivateString(hexString string) *url.URL {
-	var key cmd.Key
+	var key walletd.Key
 	privKey, err := hex.DecodeString(hexString)
 	if err == nil && len(privKey) == 64 {
 		key.PrivateKey = privKey
@@ -150,7 +150,7 @@ func FaucetWithCredits() error {
 	// Generate a key
 	h := storage.MakeKey("factom-genesis")
 	liteKey := ed25519.NewKeyFromSeed(h[:])
-	key = &cmd.Key{PublicKey: liteKey[32:], PrivateKey: liteKey, KeyInfo: cmd.KeyInfo{Type: protocol.SignatureTypeED25519}}
+	key = &walletd.Key{PublicKey: liteKey[32:], PrivateKey: liteKey, KeyInfo: walletd.KeyInfo{Type: protocol.SignatureTypeED25519}}
 	lite, err := protocol.LiteTokenAddress(key.PublicKey, protocol.ACME, key.KeyInfo.Type)
 	if err != nil {
 		return err

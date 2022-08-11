@@ -1,0 +1,7 @@
+ErrorCode:
+  Ok:
+    value: 0x00
+  NotFound:
+    value: 0x01
+  AlreadyExists:
+    value: 0x02
