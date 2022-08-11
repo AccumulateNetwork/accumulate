@@ -173,13 +173,15 @@ AdiListResponse:
       type: string
       repeatable: true
 
-KeyList:
+KeyData:
   non-binary: true
   fields:
     - name: Name
       type: string
     - name: PublicKey
       type: bytes
+    - name: Derivation
+      type: string
     - name: KeyType
       type: protocol.SignatureType
       marshal-as: enum
@@ -188,23 +190,20 @@ KeyListResponse:
   non-binary: true
   fields:
     - name: KeyList
-      type: KeyList
+      type: KeyData
       repeatable: true
       marshal-as: reference
 
 ResolveKeyRequest:
   non-binary: true
   fields:
-    - name: KeyLabel
+    - name: KeyNameOrLiteAddress
       type: string
-      optional: true
-    - name: KeyHash
-      type: bytes
-      optional: true
 
 ResolveKeyResponse:
   non-binary: true
   fields:
-    - name: PublicKey
-      type: bytes
+    - name: KeyData
+      type: KeyData
+      marshal-as: reference
       
