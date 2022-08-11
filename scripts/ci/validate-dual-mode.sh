@@ -21,7 +21,7 @@ if which go >/dev/null || ! which accumulate >/dev/null; then
   go install ./cmd/accumulated
   export PATH="${PATH}:$(go env GOPATH)/bin"
 fi
-[ -z "${MNEMONIC}" ] || accumulate key import mnemonic ${MNEMONIC}
+[ -z "${MNEMONIC}" ] && die "mnemonic not set" || echo ${MNEMONIC} | accumulate key import mnemonic ${MNEMONIC}
 echo
 
 #spin up a dual node 
