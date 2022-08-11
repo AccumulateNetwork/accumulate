@@ -44,6 +44,7 @@ var (
 	Password             string
 	DatabaseDir          string
 	NoWalletVersionCheck bool
+	Entropy              uint
 )
 
 func initDB(defaultWorkDir string, memDb bool) db.DB {

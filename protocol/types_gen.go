@@ -314,6 +314,12 @@ type FactomDataEntry struct {
 	ExtIds    [][]byte `json:"extIds,omitempty" form:"extIds" query:"extIds" validate:"required"`
 }
 
+type FactomDataEntryWrapper struct {
+	fieldsSet []bool
+	FactomDataEntry
+	extraData []byte
+}
+
 // IndexEntry represents an entry in an index chain.
 type IndexEntry struct {
 	fieldsSet []bool
@@ -958,7 +964,7 @@ func (*EnableAccountAuthOperation) Type() AccountAuthOperationType {
 	return AccountAuthOperationTypeEnable
 }
 
-func (*FactomDataEntry) Type() DataEntryType { return DataEntryTypeFactom }
+func (*FactomDataEntryWrapper) Type() DataEntryType { return DataEntryTypeFactom }
 
 func (*InternalSignature) Type() SignatureType { return SignatureTypeInternal }
 
@@ -1578,6 +1584,16 @@ func (v *FactomDataEntry) Copy() *FactomDataEntry {
 }
 
 func (v *FactomDataEntry) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *FactomDataEntryWrapper) Copy() *FactomDataEntryWrapper {
+	u := new(FactomDataEntryWrapper)
+
+	u.FactomDataEntry = *v.FactomDataEntry.Copy()
+
+	return u
+}
+
+func (v *FactomDataEntryWrapper) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *IndexEntry) Copy() *IndexEntry {
 	u := new(IndexEntry)
@@ -3232,6 +3248,14 @@ func (v *FactomDataEntry) Equal(u *FactomDataEntry) bool {
 		if !(bytes.Equal(v.ExtIds[i], u.ExtIds[i])) {
 			return false
 		}
+	}
+
+	return true
+}
+
+func (v *FactomDataEntryWrapper) Equal(u *FactomDataEntryWrapper) bool {
+	if !v.FactomDataEntry.Equal(&u.FactomDataEntry) {
+		return false
 	}
 
 	return true
@@ -6391,6 +6415,46 @@ func (v *Envelope) IsValid() error {
 		errs = append(errs, "field Signatures is missing")
 	} else if len(v.Signatures) == 0 {
 		errs = append(errs, "field Signatures is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_FactomDataEntryWrapper = []string{
+	1: "Type",
+	2: "FactomDataEntry",
+}
+
+func (v *FactomDataEntryWrapper) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	writer.WriteValue(2, v.FactomDataEntry.MarshalBinary)
+
+	_, _, err := writer.Reset(fieldNames_FactomDataEntryWrapper)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *FactomDataEntryWrapper) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
+	if err := v.FactomDataEntry.IsValid(); err != nil {
+		errs = append(errs, err.Error())
 	}
 
 	switch len(errs) {
@@ -11416,6 +11480,34 @@ func (v *Envelope) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *FactomDataEntryWrapper) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *FactomDataEntryWrapper) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType DataEntryType
+	if x := new(DataEntryType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+	reader.ReadValue(2, v.FactomDataEntry.UnmarshalBinary)
+
+	seen, err := reader.Reset(fieldNames_FactomDataEntryWrapper)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *IndexEntry) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -14177,16 +14269,31 @@ func (v *Envelope) MarshalJSON() ([]byte, error) {
 
 func (v *FactomDataEntry) MarshalJSON() ([]byte, error) {
 	u := struct {
+		AccountId string                     `json:"accountId,omitempty"`
+		Data      *string                    `json:"data,omitempty"`
+		ExtIds    encoding.JsonList[*string] `json:"extIds,omitempty"`
+	}{}
+	u.AccountId = encoding.ChainToJSON(v.AccountId)
+	u.Data = encoding.BytesToJSON(v.Data)
+	u.ExtIds = make(encoding.JsonList[*string], len(v.ExtIds))
+	for i, x := range v.ExtIds {
+		u.ExtIds[i] = encoding.BytesToJSON(x)
+	}
+	return json.Marshal(&u)
+}
+
+func (v *FactomDataEntryWrapper) MarshalJSON() ([]byte, error) {
+	u := struct {
 		Type      DataEntryType              `json:"type"`
 		AccountId string                     `json:"accountId,omitempty"`
 		Data      *string                    `json:"data,omitempty"`
 		ExtIds    encoding.JsonList[*string] `json:"extIds,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.AccountId = encoding.ChainToJSON(v.AccountId)
-	u.Data = encoding.BytesToJSON(v.Data)
-	u.ExtIds = make(encoding.JsonList[*string], len(v.ExtIds))
-	for i, x := range v.ExtIds {
+	u.AccountId = encoding.ChainToJSON(v.FactomDataEntry.AccountId)
+	u.Data = encoding.BytesToJSON(v.FactomDataEntry.Data)
+	u.ExtIds = make(encoding.JsonList[*string], len(v.FactomDataEntry.ExtIds))
+	for i, x := range v.FactomDataEntry.ExtIds {
 		u.ExtIds[i] = encoding.BytesToJSON(x)
 	}
 	return json.Marshal(&u)
@@ -15919,12 +16026,10 @@ func (v *Envelope) UnmarshalJSON(data []byte) error {
 
 func (v *FactomDataEntry) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type      DataEntryType              `json:"type"`
 		AccountId string                     `json:"accountId,omitempty"`
 		Data      *string                    `json:"data,omitempty"`
 		ExtIds    encoding.JsonList[*string] `json:"extIds,omitempty"`
 	}{}
-	u.Type = v.Type()
 	u.AccountId = encoding.ChainToJSON(v.AccountId)
 	u.Data = encoding.BytesToJSON(v.Data)
 	u.ExtIds = make(encoding.JsonList[*string], len(v.ExtIds))
@@ -15933,9 +16038,6 @@ func (v *FactomDataEntry) UnmarshalJSON(data []byte) error {
 	}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
-	}
-	if !(v.Type() == u.Type) {
-		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	if x, err := encoding.ChainFromJSON(u.AccountId); err != nil {
 		return fmt.Errorf("error decoding AccountId: %w", err)
@@ -15953,6 +16055,47 @@ func (v *FactomDataEntry) UnmarshalJSON(data []byte) error {
 			return fmt.Errorf("error decoding ExtIds: %w", err)
 		} else {
 			v.ExtIds[i] = x
+		}
+	}
+	return nil
+}
+
+func (v *FactomDataEntryWrapper) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      DataEntryType              `json:"type"`
+		AccountId string                     `json:"accountId,omitempty"`
+		Data      *string                    `json:"data,omitempty"`
+		ExtIds    encoding.JsonList[*string] `json:"extIds,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.AccountId = encoding.ChainToJSON(v.FactomDataEntry.AccountId)
+	u.Data = encoding.BytesToJSON(v.FactomDataEntry.Data)
+	u.ExtIds = make(encoding.JsonList[*string], len(v.FactomDataEntry.ExtIds))
+	for i, x := range v.FactomDataEntry.ExtIds {
+		u.ExtIds[i] = encoding.BytesToJSON(x)
+	}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	if x, err := encoding.ChainFromJSON(u.AccountId); err != nil {
+		return fmt.Errorf("error decoding AccountId: %w", err)
+	} else {
+		v.FactomDataEntry.AccountId = x
+	}
+	if x, err := encoding.BytesFromJSON(u.Data); err != nil {
+		return fmt.Errorf("error decoding Data: %w", err)
+	} else {
+		v.FactomDataEntry.Data = x
+	}
+	v.FactomDataEntry.ExtIds = make([][]byte, len(u.ExtIds))
+	for i, x := range u.ExtIds {
+		if x, err := encoding.BytesFromJSON(x); err != nil {
+			return fmt.Errorf("error decoding ExtIds: %w", err)
+		} else {
+			v.FactomDataEntry.ExtIds[i] = x
 		}
 	}
 	return nil

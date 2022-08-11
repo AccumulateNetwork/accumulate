@@ -133,7 +133,7 @@ func TestCheckTx_SharedBatch(t *testing.T) {
 	aliceUrl := acctesting.AcmeLiteAddressTmPriv(alice)
 	bobUrl := acctesting.AcmeLiteAddressTmPriv(bob)
 	_ = n.db.Update(func(batch *database.Batch) error {
-		require.NoError(n.t, acctesting.CreateLiteTokenAccountWithCredits(batch, alice, protocol.AcmeFaucetAmount, float64(protocol.FeeSendTokens)/protocol.CreditPrecision))
+		require.NoError(n.t, acctesting.CreateLiteTokenAccountWithCredits(batch, alice, protocol.AcmeFaucetAmount, float64(protocol.FeeTransferTokens)/protocol.CreditPrecision))
 		return nil
 	})
 
