@@ -1914,12 +1914,12 @@ func TestDuplicateKeyNewKeypage(t *testing.T) {
 	page = n.GetKeyPage("alice/book0/2")
 
 	require.Len(t, page.Keys, 2)
-	key1 := page.Keys[0]
-	key2 := page.Keys[1]
-	require.Equal(t, uint64(0), key1.LastUsedOn)
-	require.Equal(t, aliceKeyHash[:], key1.PublicKeyHash)
-	require.Equal(t, uint64(0), key2.LastUsedOn)
-	require.Equal(t, aliceKeyHash1[:], key2.PublicKeyHash)
+	_, key1, alice1Found := page.EntryByKeyHash(aliceKeyHash[:])
+	_, key2, alice2Found := page.EntryByKeyHash(aliceKeyHash1[:])
+	require.Equal(t, uint64(0), key1.GetLastUsedOn())
+	require.True(t, alice1Found, "alice key 1 not found")
+	require.Equal(t, uint64(0), key2.GetLastUsedOn())
+	require.True(t, alice2Found, "alice key 2 not found")
 
 	//check for duplicate keys
 	_, _, err = n.Execute(func(send func(*protocol.Envelope)) {
