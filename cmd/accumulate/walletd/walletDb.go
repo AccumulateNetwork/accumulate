@@ -29,14 +29,14 @@ func GetWallet() db.DB {
 }
 
 var (
-	bucketAnon              = []byte("anon")
-	bucketAdi               = []byte("adi")
-	bucketKeys              = []byte("keys")
-	bucketLabel             = []byte("label")
-	bucketLite              = []byte("lite")
-	bucketMnemonic          = []byte("mnemonic")
-	bucketKeyInfo           = []byte("keyinfo")
-	bucketSigTypeDeprecated = []byte("sigtype")
+	BucketAnon              = []byte("anon")
+	BucketAdi               = []byte("adi")
+	BucketKeys              = []byte("keys")
+	BucketLabel             = []byte("label")
+	BucketLite              = []byte("lite")
+	BucketMnemonic          = []byte("mnemonic")
+	BucketKeyInfo           = []byte("keyinfo")
+	BucketSigTypeDeprecated = []byte("sigtype")
 )
 var (
 	UseUnencryptedWallet bool

@@ -3,10 +3,13 @@ package cmd
 import (
 	"bufio"
 	"bytes"
+	"crypto/ed25519"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/tyler-smith/go-bip32"
 	"io/ioutil"
 	"strconv"
 	"strings"
@@ -167,7 +170,7 @@ var keyGenerateCmd = &cobra.Command{
 	Short: "generate key private and give it a name",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		out, err := walletd.GenerateKey(args[0])
+		out, err := GenerateKey(args[0])
 		printOutput(cmd, out, err)
 	},
 }
@@ -331,6 +334,7 @@ func GenerateKey(label string) (string, error) {
 		privKey, pubKey = protocol.SECP256K1Keypair()
 	} else {
 		privKey, address, err = GeneratePrivateKey()
+		_ = address
 		if err != nil {
 			return "", err
 		}
@@ -383,6 +387,7 @@ func GenerateKey(label string) (string, error) {
 	k.PrivateKey = privKey
 	k.PublicKey = pubKey
 	k.KeyInfo.Type = sigtype
+	k.KeyInfo.Derivation = "external"
 	err = k.Save(label, liteLabel)
 	if err != nil {
 		return "", err
@@ -530,54 +535,53 @@ func ExportKey(label string) (string, error) {
 	}
 }
 
-//
-//func GeneratePrivateKey() ([]byte, uint32, error) {
-//	seed, err := lookupSeed()
-//	if err != nil {
-//		//if private key seed doesn't exist, just create a key
-//		return nil, 0, fmt.Errorf("wallet has not been initalized, please run \"accumulate wallet init import\" or \"accumulate wallet init create\"")
-//	}
-//
-//	//if we do have a seed, then create a new key
-//	masterKey, _ := bip32.NewMasterKey(seed)
-//
-//	ct, err := getKeyCountAndIncrement()
-//	if err != nil {
-//		return nil, 0, err
-//	}
-//
-//	newKey, err := masterKey.NewChildKey(ct)
-//	if err != nil {
-//		return nil, 0, err
-//	}
-//	privKey := ed25519.NewKeyFromSeed(newKey.Key)
-//	return privKey, ct, nil
-//}
-//
-//func getKeyCountAndIncrement() (count uint32, err error) {
-//	ct, _ := walletd.GetWallet().Get(walletd.BucketMnemonic, []byte("count"))
-//	if ct != nil {
-//		count = binary.LittleEndian.Uint32(ct)
-//	}
-//
-//	ct = make([]byte, 8)
-//	binary.LittleEndian.PutUint32(ct, count+1)
-//	err = walletd.GetWallet().Put(walletd.BucketMnemonic, []byte("count"), ct)
-//	if err != nil {
-//		return 0, err
-//	}
-//
-//	return count, nil
-//}
-//
-//func lookupSeed() (seed []byte, err error) {
-//	seed, err = walletd.GetWallet().Get(walletd.BucketMnemonic, []byte("seed"))
-//	if err != nil {
-//		return nil, fmt.Errorf("mnemonic seed doesn't exist")
-//	}
-//
-//	return seed, nil
-//}
+func GeneratePrivateKey() ([]byte, uint32, error) {
+	seed, err := lookupSeed()
+	if err != nil {
+		//if private key seed doesn't exist, just create a key
+		return nil, 0, fmt.Errorf("wallet has not been initalized, please run \"accumulate wallet init import\" or \"accumulate wallet init create\"")
+	}
+
+	//if we do have a seed, then create a new key
+	masterKey, _ := bip32.NewMasterKey(seed)
+
+	ct, err := getKeyCountAndIncrement()
+	if err != nil {
+		return nil, 0, err
+	}
+
+	newKey, err := masterKey.NewChildKey(ct)
+	if err != nil {
+		return nil, 0, err
+	}
+	privKey := ed25519.NewKeyFromSeed(newKey.Key)
+	return privKey, ct, nil
+}
+
+func getKeyCountAndIncrement() (count uint32, err error) {
+	ct, _ := walletd.GetWallet().Get(walletd.BucketMnemonic, []byte("count"))
+	if ct != nil {
+		count = binary.LittleEndian.Uint32(ct)
+	}
+
+	ct = make([]byte, 8)
+	binary.LittleEndian.PutUint32(ct, count+1)
+	err = walletd.GetWallet().Put(walletd.BucketMnemonic, []byte("count"), ct)
+	if err != nil {
+		return 0, err
+	}
+
+	return count, nil
+}
+
+func lookupSeed() (seed []byte, err error) {
+	seed, err = walletd.GetWallet().Get(walletd.BucketMnemonic, []byte("seed"))
+	if err != nil {
+		return nil, fmt.Errorf("mnemonic seed doesn't exist")
+	}
+
+	return seed, nil
+}
 
 func ExportKeys() (out string, err error) {
 	b, err := walletd.GetWallet().GetBucket(walletd.BucketKeys)
