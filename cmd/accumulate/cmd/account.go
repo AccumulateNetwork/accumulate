@@ -371,7 +371,7 @@ func GenerateAccount(_ *cobra.Command, args []string) (string, error) {
 	if len(args) > 1 {
 		return "", fmt.Errorf("too many arguments")
 	}
-	return GenerateKey("")
+	return walletd.GenerateKey("")
 }
 
 func ListAccounts() (string, error) {

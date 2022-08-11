@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
 	"log"
 	"os"
 	"os/user"
@@ -9,7 +10,6 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
 )
 
@@ -88,12 +88,12 @@ func InitRootCmd() *cobra.Command {
 	flags.UintVar(&SignerVersion, "signer-version", uint(0), "Specify the signer version. Overrides the default behavior of fetching the signer version.")
 
 	//TODO: to be moved to walletd configuration
+	flags.UintVar(&walletd.Entropy, "entropy", uint(128), "Specifies the size of the mnemonic entropy.")
 	flags.StringVar(&walletd.DatabaseDir, "database", filepath.Join(currentUser.HomeDir, ".accumulate"), "Directory the database is stored in")
 	flags.BoolVar(&walletd.UseUnencryptedWallet, "use-unencrypted-wallet", false, "Use unencrypted wallet (strongly discouraged) stored at ~/.accumulate/wallet.db")
 	flags.BoolVar(&walletd.NoWalletVersionCheck, "no-wallet-version-check", false, "Bypass the check to prevent updating the wallet to the format supported by the cli")
 
 	//add the commands
-	cmd.AddCommand(walletdCmd)
 	cmd.AddCommand(encryptCmd)
 	cmd.AddCommand(accountCmd)
 	cmd.AddCommand(adiCmd)
@@ -110,6 +110,7 @@ func InitRootCmd() *cobra.Command {
 	cmd.AddCommand(blocksCmd)
 	cmd.AddCommand(operatorCmd, validatorCmd)
 	cmd.AddCommand(versionCmd, describeCmd)
+	cmd.AddCommand(initWalletCmd)
 
 	//for the testnet integration
 	cmd.AddCommand(faucetCmd)

@@ -3,9 +3,7 @@ package cmd
 import (
 	"bufio"
 	"bytes"
-	"crypto/ed25519"
 	"crypto/sha256"
-	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -17,8 +15,6 @@ import (
 	"github.com/spf13/cobra"
 	tmjson "github.com/tendermint/tendermint/libs/json"
 	"github.com/tendermint/tendermint/privval"
-	"github.com/tyler-smith/go-bip32"
-	"github.com/tyler-smith/go-bip39"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/db"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
@@ -30,7 +26,6 @@ func init() {
 	keyImportCmd.AddCommand(keyImportPrivateCmd)
 	keyImportCmd.AddCommand(keyImportFactoidCmd)
 	keyImportCmd.AddCommand(keyImportLiteCmd)
-	keyImportCmd.AddCommand(keyImportMnemonicCmd)
 	keyExportCmd.AddCommand(keyExportPrivateCmd)
 	keyExportCmd.AddCommand(keyExportMnemonicCmd)
 	keyExportCmd.AddCommand(keyExportAllCmd)
@@ -117,15 +112,6 @@ var keyListCmd = &cobra.Command{
 		printOutput(cmd, out, err)
 	},
 }
-var keyImportMnemonicCmd = &cobra.Command{
-	Use:   "mnemonic [12 word mnemonic phrase]",
-	Short: "Import secret bip39 mnemonic phrase from command line",
-	Args:  cobra.MinimumNArgs(12),
-	Run: func(cmd *cobra.Command, args []string) {
-		out, err := ImportMnemonic(args)
-		printOutput(cmd, out, err)
-	},
-}
 
 var keyExportAllCmd = &cobra.Command{
 	Use:   "all",
@@ -181,7 +167,7 @@ var keyGenerateCmd = &cobra.Command{
 	Short: "generate key private and give it a name",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		out, err := GenerateKey(args[0])
+		out, err := walletd.GenerateKey(args[0])
 		printOutput(cmd, out, err)
 	},
 }
@@ -337,13 +323,14 @@ func GenerateKey(label string) (string, error) {
 
 	var privKey []byte
 	var pubKey []byte
+	address := uint32(0)
 
 	if sigtype == protocol.SignatureTypeBTCLegacy || sigtype == protocol.SignatureTypeETH {
 		privKey, pubKey = protocol.SECP256K1UncompressedKeypair()
 	} else if sigtype == protocol.SignatureTypeBTC {
 		privKey, pubKey = protocol.SECP256K1Keypair()
 	} else {
-		privKey, err = GeneratePrivateKey()
+		privKey, address, err = GeneratePrivateKey()
 		if err != nil {
 			return "", err
 		}
@@ -543,85 +530,54 @@ func ExportKey(label string) (string, error) {
 	}
 }
 
-func GeneratePrivateKey() ([]byte, error) {
-	seed, err := lookupSeed()
-	if err != nil {
-		//if private key seed doesn't exist, just create a key
-		_, privKey, err := ed25519.GenerateKey(nil)
-		if err != nil {
-			return nil, err
-		}
-		return privKey, nil
-	}
-
-	//if we do have a seed, then create a new key
-	masterKey, _ := bip32.NewMasterKey(seed)
-
-	ct, err := getKeyCountAndIncrement()
-	if err != nil {
-		return nil, err
-	}
-
-	newKey, err := masterKey.NewChildKey(ct)
-	if err != nil {
-		return nil, err
-	}
-	privKey := ed25519.NewKeyFromSeed(newKey.Key)
-	return privKey, nil
-}
-
-func getKeyCountAndIncrement() (count uint32, err error) {
-	ct, _ := walletd.GetWallet().Get(walletd.BucketMnemonic, []byte("count"))
-	if ct != nil {
-		count = binary.LittleEndian.Uint32(ct)
-	}
-
-	ct = make([]byte, 8)
-	binary.LittleEndian.PutUint32(ct, count+1)
-	err = walletd.GetWallet().Put(walletd.BucketMnemonic, []byte("count"), ct)
-	if err != nil {
-		return 0, err
-	}
-
-	return count, nil
-}
-
-func lookupSeed() (seed []byte, err error) {
-	seed, err = walletd.GetWallet().Get(walletd.BucketMnemonic, []byte("seed"))
-	if err != nil {
-		return nil, fmt.Errorf("mnemonic seed doesn't exist")
-	}
-
-	return seed, nil
-}
-
-func ImportMnemonic(mnemonic []string) (string, error) {
-	mns := strings.Join(mnemonic, " ")
-
-	if !bip39.IsMnemonicValid(mns) {
-		return "", fmt.Errorf("invalid mnemonic provided")
-	}
-
-	// Generate a Bip32 HD wallet for the mnemonic and a user supplied password
-	seed := bip39.NewSeed(mns, "")
-
-	root, _ := walletd.GetWallet().Get(walletd.BucketMnemonic, []byte("seed"))
-	if len(root) != 0 {
-		return "", fmt.Errorf("mnemonic seed phrase already exists within wallet")
-	}
-
-	err := walletd.GetWallet().Put(walletd.BucketMnemonic, []byte("seed"), seed)
-	if err != nil {
-		return "", fmt.Errorf("DB: seed write error, %v", err)
-	}
-
-	err = walletd.GetWallet().Put(walletd.BucketMnemonic, []byte("phrase"), []byte(mns))
-	if err != nil {
-		return "", fmt.Errorf("DB: phrase write error %s", err)
-	}
-
-	return "mnemonic import successful", nil
-}
+//
+//func GeneratePrivateKey() ([]byte, uint32, error) {
+//	seed, err := lookupSeed()
+//	if err != nil {
+//		//if private key seed doesn't exist, just create a key
+//		return nil, 0, fmt.Errorf("wallet has not been initalized, please run \"accumulate wallet init import\" or \"accumulate wallet init create\"")
+//	}
+//
+//	//if we do have a seed, then create a new key
+//	masterKey, _ := bip32.NewMasterKey(seed)
+//
+//	ct, err := getKeyCountAndIncrement()
+//	if err != nil {
+//		return nil, 0, err
+//	}
+//
+//	newKey, err := masterKey.NewChildKey(ct)
+//	if err != nil {
+//		return nil, 0, err
+//	}
+//	privKey := ed25519.NewKeyFromSeed(newKey.Key)
+//	return privKey, ct, nil
+//}
+//
+//func getKeyCountAndIncrement() (count uint32, err error) {
+//	ct, _ := walletd.GetWallet().Get(walletd.BucketMnemonic, []byte("count"))
+//	if ct != nil {
+//		count = binary.LittleEndian.Uint32(ct)
+//	}
+//
+//	ct = make([]byte, 8)
+//	binary.LittleEndian.PutUint32(ct, count+1)
+//	err = walletd.GetWallet().Put(walletd.BucketMnemonic, []byte("count"), ct)
+//	if err != nil {
+//		return 0, err
+//	}
+//
+//	return count, nil
+//}
+//
+//func lookupSeed() (seed []byte, err error) {
+//	seed, err = walletd.GetWallet().Get(walletd.BucketMnemonic, []byte("seed"))
+//	if err != nil {
+//		return nil, fmt.Errorf("mnemonic seed doesn't exist")
+//	}
+//
+//	return seed, nil
+//}
 
 func ExportKeys() (out string, err error) {
 	b, err := walletd.GetWallet().GetBucket(walletd.BucketKeys)

@@ -31,7 +31,14 @@ func (CreateKeyPage) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 	if len(body.Keys) == 0 {
 		return nil, fmt.Errorf("cannot create empty sig spec")
 	}
-
+	//check for duplicate entries
+	uniqueKeys := make(map[string]bool, len(body.Keys))
+	for _, key := range body.Keys {
+		if uniqueKeys[string(key.KeyHash)] {
+			return nil, fmt.Errorf("duplicate keys: signing keys of a keypage must be unique")
+		}
+		uniqueKeys[string(key.KeyHash)] = true
+	}
 	page := new(protocol.KeyPage)
 	page.Version = 1
 	page.Url = protocol.FormatKeyPageUrl(book.Url, book.PageCount)
