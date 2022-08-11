@@ -14,7 +14,6 @@ import (
 	"github.com/spf13/cobra"
 	tmjson "github.com/tendermint/tendermint/libs/json"
 	"github.com/tendermint/tendermint/privval"
-	"github.com/tyler-smith/go-bip39"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/db"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
@@ -26,7 +25,6 @@ func init() {
 	keyImportCmd.AddCommand(keyImportPrivateCmd)
 	keyImportCmd.AddCommand(keyImportFactoidCmd)
 	keyImportCmd.AddCommand(keyImportLiteCmd)
-	keyImportCmd.AddCommand(keyImportMnemonicCmd)
 	keyExportCmd.AddCommand(keyExportPrivateCmd)
 	keyExportCmd.AddCommand(keyExportMnemonicCmd)
 	keyExportCmd.AddCommand(keyExportAllCmd)
@@ -110,15 +108,6 @@ var keyListCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
 		out, err := walletd.ListKeyPublic()
-		printOutput(cmd, out, err)
-	},
-}
-var keyImportMnemonicCmd = &cobra.Command{
-	Use:   "mnemonic [12 word mnemonic phrase]",
-	Short: "Import secret bip39 mnemonic phrase from command line",
-	Args:  cobra.MinimumNArgs(12),
-	Run: func(cmd *cobra.Command, args []string) {
-		out, err := ImportMnemonic(args)
 		printOutput(cmd, out, err)
 	},
 }
@@ -505,34 +494,6 @@ func GenerateKey(label string) (string, error) {
 		out += fmt.Sprintf("\tname\t\t:\t%s\n\tlite account\t:\t%s\n\tpublic key\t:\t%x\n\tkey type\t:\t%s\n", label, lt, key.PublicKey, sigtype)
 	}
 	return out, nil
-}
-
-func ImportMnemonic(mnemonic []string) (string, error) {
-	mns := strings.Join(mnemonic, " ")
-
-	if !bip39.IsMnemonicValid(mns) {
-		return "", fmt.Errorf("invalid mnemonic provided")
-	}
-
-	// Generate a Bip32 HD wallet for the mnemonic and a user supplied password
-	seed := bip39.NewSeed(mns, "")
-
-	root, _ := walletd.GetWallet().Get(walletd.BucketMnemonic, []byte("seed"))
-	if len(root) != 0 {
-		return "", fmt.Errorf("mnemonic seed phrase already exists within wallet")
-	}
-
-	err := walletd.GetWallet().Put(walletd.BucketMnemonic, []byte("seed"), seed)
-	if err != nil {
-		return "", fmt.Errorf("DB: seed write error, %v", err)
-	}
-
-	err = walletd.GetWallet().Put(walletd.BucketMnemonic, []byte("phrase"), []byte(mns))
-	if err != nil {
-		return "", fmt.Errorf("DB: phrase write error %s", err)
-	}
-
-	return "mnemonic import successful", nil
 }
 
 func ExportKeys() (out string, err error) {

@@ -96,7 +96,7 @@ func ETHaddress(pubKey []byte) string {
 	return fmt.Sprintf("0x%x", address[:])
 }
 
-func SignatureDidInitiate(sig Signature, txnInitHash []byte) bool {
+func SignatureDidInitiate(sig Signature, txnInitHash []byte, initiator *Signature) bool {
 	for _, sig := range unpackSignature(sig) {
 		if bytes.Equal(txnInitHash, sig.Metadata().Hash()) {
 			return true
@@ -107,6 +107,9 @@ func SignatureDidInitiate(sig Signature, txnInitHash []byte) bool {
 			return false
 		}
 		if bytes.Equal(txnInitHash, init.MerkleHash()) {
+			if initiator != nil {
+				*initiator = sig
+			}
 			return true
 		}
 	}

@@ -73,13 +73,10 @@ func setSyntheticOrigin(batch *database.Batch, from *protocol.Transaction, produ
 		return nil
 	}
 
-	// Get the fee
-	paid, err := protocol.ComputeTransactionFee(from)
+	// Set the refund amount for each output
+	refund, err := protocol.ComputeSyntheticRefund(from, len(swos))
 	if err != nil {
-		return errors.Format(errors.StatusInternalError, "compute fee: %w", err)
-	}
-	if paid <= protocol.FeeFailedMaximum {
-		return nil
+		return errors.Format(errors.StatusInternalError, "compute refund: %w", err)
 	}
 
 	status, err := batch.Transaction(from.GetHash()).GetStatus()
@@ -87,8 +84,6 @@ func setSyntheticOrigin(batch *database.Batch, from *protocol.Transaction, produ
 		return errors.Format(errors.StatusUnknownError, "load status: %w", err)
 	}
 
-	// Set the refund amount
-	refund := (paid - protocol.FeeFailedMaximum) / protocol.Fee(len(swos))
 	for _, swo := range swos {
 		swo.SetRefund(status.Initiator, refund)
 	}

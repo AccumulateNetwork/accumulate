@@ -3,6 +3,7 @@ package chain
 import (
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -65,40 +66,38 @@ func (UpdateKey) Execute(st *StateManager, tx *Delivery) (protocol.TransactionRe
 		return nil, fmt.Errorf("load transaction status: %w", err)
 	}
 
-	if status.Initiator == nil {
-		// This should be impossible
-		return nil, fmt.Errorf("transaction does not have an initiator")
-	}
+	var initiator protocol.Signature
+outer:
+	for _, signer := range status.Signers {
+		sigs, err := database.GetSignaturesForSigner(txObj, signer)
+		if err != nil {
+			return nil, fmt.Errorf("load signatures for %v: %w", signer.GetUrl(), err)
+		}
 
-	sigs, err := txObj.ReadSignatures(status.Initiator)
-	if err != nil {
-		return nil, fmt.Errorf("load signatures for %v: %w", status.Initiator, err)
+		for _, sig := range sigs {
+			if protocol.SignatureDidInitiate(sig, tx.Transaction.Header.Initiator[:], &initiator) {
+				break outer
+			}
+		}
 	}
+	switch initiator := initiator.(type) {
+	case protocol.KeySignature:
+		err = updateKey(page, book,
+			&protocol.KeySpecParams{KeyHash: initiator.GetPublicKeyHash()},
+			&protocol.KeySpecParams{KeyHash: body.NewKeyHash}, true)
 
-	if sigs.Count() == 0 {
-		// This should never happen, because this transaction is not multisig.
-		// But it's possible (maybe) for the initiator to be invalidated by the
-		// key page version changing.
-		return nil, fmt.Errorf("no valid signatures found for %v", status.Initiator)
-	}
+	case *protocol.DelegatedSignature:
+		err = updateKey(page, book,
+			&protocol.KeySpecParams{Delegate: initiator.GetSigner()},
+			&protocol.KeySpecParams{KeyHash: body.NewKeyHash}, true)
 
-	e := sigs.Entries()[0]
-	sigOrTxn, err := st.batch.Transaction(e.SignatureHash[:]).GetState()
-	if err != nil {
-		return nil, fmt.Errorf("load first signature from %v: %w", status.Initiator, err)
-	}
-	if sigOrTxn.Signature == nil {
-		// This should be impossible
-		return nil, fmt.Errorf("invalid signature state")
-	}
-	keysig, ok := sigOrTxn.Signature.(protocol.KeySignature)
-	if !ok {
-		return nil, fmt.Errorf("signature is not a key signature")
-	}
+		if _, ok := initiator.Signature.(protocol.KeySignature); !ok {
+			return nil, fmt.Errorf("cannot UpdateKey with a multi-level delegated signature")
+		}
+	default:
+		return nil, fmt.Errorf("unable to resolve Signature")
 
-	err = updateKey(page, book,
-		&protocol.KeySpecParams{KeyHash: keysig.GetPublicKeyHash()},
-		&protocol.KeySpecParams{KeyHash: body.NewKeyHash})
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +110,7 @@ func (UpdateKey) Execute(st *StateManager, tx *Delivery) (protocol.TransactionRe
 	return nil, nil
 }
 
-func updateKey(page *protocol.KeyPage, book *protocol.KeyBook, old, new *protocol.KeySpecParams) error {
+func updateKey(page *protocol.KeyPage, book *protocol.KeyBook, old, new *protocol.KeySpecParams, preserveDelegate bool) error {
 	if new.IsEmpty() {
 		return fmt.Errorf("cannot add an empty entry")
 	}
@@ -140,7 +139,10 @@ func updateKey(page *protocol.KeyPage, book *protocol.KeyBook, old, new *protoco
 
 	// Update the entry
 	entry.PublicKeyHash = new.KeyHash
-	entry.Delegate = new.Delegate
+
+	if new.Delegate != nil || !preserveDelegate {
+		entry.Delegate = new.Delegate
+	}
 
 	// Relocate the entry
 	page.RemoveKeySpecAt(oldPos)
