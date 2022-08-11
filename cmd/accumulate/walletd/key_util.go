@@ -1,4 +1,4 @@
-package cmd
+package walletd
 
 import (
 	"crypto/ed25519"
@@ -10,7 +10,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-//go:generate go run ../../../tools/cmd/gen-types --package cmd --out key_info_gen.go key_info.yml
+//go:generate go run ../../../tools/cmd/gen-types --package walletd --out key_info_gen.go key_info.yml
 
 type Key struct {
 	PublicKey  []byte
