@@ -50,6 +50,7 @@ require (
 	github.com/FactomProject/factomd v1.13.0
 	github.com/ghodss/yaml v1.0.0
 	github.com/gorhill/cronexpr v0.0.0-20180427100037-88b0669f7d75
+	github.com/manifoldco/promptui v0.9.0
 )
 
 require (
@@ -64,6 +65,7 @@ require (
 	github.com/GaijinEntertainment/go-exhaustruct/v2 v2.2.0 // indirect
 	github.com/alingse/asasalint v0.0.11 // indirect
 	github.com/btcsuitereleases/btcutil v0.0.0-20150612230727-f2b1058a8255 // indirect
+	github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e // indirect
 	github.com/creachadair/taskgroup v0.3.2 // indirect
 	github.com/firefart/nonamedreturns v1.0.4 // indirect
 	github.com/lufeee/execinquery v1.2.1 // indirect

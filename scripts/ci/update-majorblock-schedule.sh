@@ -37,8 +37,7 @@ if which go >/dev/null || ! which accumulate >/dev/null; then
   go install ./cmd/accumulated
   export PATH="${PATH}:$(go env GOPATH)/bin"
 fi
-
-[ -z "${MNEMONIC}" ] || accumulate key import mnemonic ${MNEMONIC}
+[ -z "${MNEMONIC}" ] && die "mnemonic not set" || echo ${MNEMONIC} | accumulate wallet init import
 echo
 
 declare -g NUM_NODES=$(find ${NODES_DIR} -mindepth 1 -maxdepth 1 -type d | wc -l)
