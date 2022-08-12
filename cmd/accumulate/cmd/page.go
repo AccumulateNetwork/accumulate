@@ -84,7 +84,7 @@ var pageKeyUpdateCmd = &cobra.Command{
 
 var pageKeyReplaceCmd = &cobra.Command{
 	Use:   "replace [key page url] [key name[@key book or page]] [new public key or name]",
-	Short: "Update a key on a key page",
+	Short: "Update a your key on a key page which bypasses threshold",
 	Args:  cobra.ExactArgs(3),
 	Run: runCmdFunc(func(args []string) (string, error) {
 		return ReplaceKey(args)

@@ -52,9 +52,17 @@ type CreateEnvelopeRequest struct {
 	Name string `json:"name,omitempty" form:"name" query:"name" validate:"required"`
 }
 
+type CreateEnvelopeResponse struct {
+	CreateEnvelopeRequest
+}
+
 type CreateTransactionRequest struct {
 	Name            string                   `json:"name,omitempty" form:"name" query:"name" validate:"required"`
 	TransactionType protocol.TransactionType `json:"transactionType,omitempty" form:"transactionType" query:"transactionType" validate:"required"`
+}
+
+type CreateTransactionResponse struct {
+	CreateTransactionRequest
 }
 
 type DecodeRequest struct {
@@ -96,12 +104,6 @@ type EncodeTransactionResponse struct {
 
 type FinalizeEnvelopeRequest struct {
 	Name string `json:"name,omitempty" form:"name" query:"name" validate:"required"`
-}
-
-type GeneralResponse struct {
-	Info  string    `json:"info,omitempty" form:"info" query:"info" validate:"required"`
-	Code  ErrorCode `json:"code,omitempty" form:"code" query:"code" validate:"required"`
-	Error string    `json:"error,omitempty" form:"error" query:"error" validate:"required"`
 }
 
 type KeyData struct {
@@ -224,6 +226,16 @@ func (v *CreateEnvelopeRequest) Copy() *CreateEnvelopeRequest {
 
 func (v *CreateEnvelopeRequest) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *CreateEnvelopeResponse) Copy() *CreateEnvelopeResponse {
+	u := new(CreateEnvelopeResponse)
+
+	u.CreateEnvelopeRequest = *v.CreateEnvelopeRequest.Copy()
+
+	return u
+}
+
+func (v *CreateEnvelopeResponse) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *CreateTransactionRequest) Copy() *CreateTransactionRequest {
 	u := new(CreateTransactionRequest)
 
@@ -234,6 +246,16 @@ func (v *CreateTransactionRequest) Copy() *CreateTransactionRequest {
 }
 
 func (v *CreateTransactionRequest) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *CreateTransactionResponse) Copy() *CreateTransactionResponse {
+	u := new(CreateTransactionResponse)
+
+	u.CreateTransactionRequest = *v.CreateTransactionRequest.Copy()
+
+	return u
+}
+
+func (v *CreateTransactionResponse) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *DecodeRequest) Copy() *DecodeRequest {
 	u := new(DecodeRequest)
@@ -335,18 +357,6 @@ func (v *FinalizeEnvelopeRequest) Copy() *FinalizeEnvelopeRequest {
 }
 
 func (v *FinalizeEnvelopeRequest) CopyAsInterface() interface{} { return v.Copy() }
-
-func (v *GeneralResponse) Copy() *GeneralResponse {
-	u := new(GeneralResponse)
-
-	u.Info = v.Info
-	u.Code = v.Code
-	u.Error = v.Error
-
-	return u
-}
-
-func (v *GeneralResponse) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *KeyData) Copy() *KeyData {
 	u := new(KeyData)
@@ -517,11 +527,27 @@ func (v *CreateEnvelopeRequest) Equal(u *CreateEnvelopeRequest) bool {
 	return true
 }
 
+func (v *CreateEnvelopeResponse) Equal(u *CreateEnvelopeResponse) bool {
+	if !v.CreateEnvelopeRequest.Equal(&u.CreateEnvelopeRequest) {
+		return false
+	}
+
+	return true
+}
+
 func (v *CreateTransactionRequest) Equal(u *CreateTransactionRequest) bool {
 	if !(v.Name == u.Name) {
 		return false
 	}
 	if !(v.TransactionType == u.TransactionType) {
+		return false
+	}
+
+	return true
+}
+
+func (v *CreateTransactionResponse) Equal(u *CreateTransactionResponse) bool {
+	if !v.CreateTransactionRequest.Equal(&u.CreateTransactionRequest) {
 		return false
 	}
 
@@ -605,20 +631,6 @@ func (v *EncodeTransactionResponse) Equal(u *EncodeTransactionResponse) bool {
 
 func (v *FinalizeEnvelopeRequest) Equal(u *FinalizeEnvelopeRequest) bool {
 	if !(v.Name == u.Name) {
-		return false
-	}
-
-	return true
-}
-
-func (v *GeneralResponse) Equal(u *GeneralResponse) bool {
-	if !(v.Info == u.Info) {
-		return false
-	}
-	if !(v.Code == u.Code) {
-		return false
-	}
-	if !(v.Error == u.Error) {
 		return false
 	}
 
@@ -881,6 +893,24 @@ func (v *AuthorizationRequired) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *CreateEnvelopeResponse) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Name string `json:"name,omitempty"`
+	}{}
+	u.Name = v.CreateEnvelopeRequest.Name
+	return json.Marshal(&u)
+}
+
+func (v *CreateTransactionResponse) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Name            string                   `json:"name,omitempty"`
+		TransactionType protocol.TransactionType `json:"transactionType,omitempty"`
+	}{}
+	u.Name = v.CreateTransactionRequest.Name
+	u.TransactionType = v.CreateTransactionRequest.TransactionType
+	return json.Marshal(&u)
+}
+
 func (v *DecodeRequest) MarshalJSON() ([]byte, error) {
 	u := struct {
 		DataBinary *string `json:"dataBinary,omitempty"`
@@ -983,6 +1013,33 @@ func (v *AuthorizationRequired) UnmarshalJSON(data []byte) error {
 		v.Key = x
 	}
 	v.Version = u.Version
+	return nil
+}
+
+func (v *CreateEnvelopeResponse) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Name string `json:"name,omitempty"`
+	}{}
+	u.Name = v.CreateEnvelopeRequest.Name
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.CreateEnvelopeRequest.Name = u.Name
+	return nil
+}
+
+func (v *CreateTransactionResponse) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Name            string                   `json:"name,omitempty"`
+		TransactionType protocol.TransactionType `json:"transactionType,omitempty"`
+	}{}
+	u.Name = v.CreateTransactionRequest.Name
+	u.TransactionType = v.CreateTransactionRequest.TransactionType
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.CreateTransactionRequest.Name = u.Name
+	v.CreateTransactionRequest.TransactionType = u.TransactionType
 	return nil
 }
 
