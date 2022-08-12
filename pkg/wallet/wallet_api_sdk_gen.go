@@ -22,8 +22,8 @@ func (c *Client) AdiList(ctx context.Context) (interface{}, error) {
 }
 
 // CreateEnvelope create an envelope by name.
-func (c *Client) CreateEnvelope(ctx context.Context, req *api.CreateEnvelopeRequest) (*api.GeneralResponse, error) {
-	var resp api.GeneralResponse
+func (c *Client) CreateEnvelope(ctx context.Context, req *api.CreateEnvelopeRequest) (*api.CreateEnvelopeResponse, error) {
+	var resp api.CreateEnvelopeResponse
 
 	err := c.RequestAPIv2(ctx, "create-envelope", req, &resp)
 	if err != nil {
@@ -34,8 +34,8 @@ func (c *Client) CreateEnvelope(ctx context.Context, req *api.CreateEnvelopeRequ
 }
 
 // CreateTransaction create a transaction by name.
-func (c *Client) CreateTransaction(ctx context.Context, req *api.CreateTransactionRequest) (*api.GeneralResponse, error) {
-	var resp api.GeneralResponse
+func (c *Client) CreateTransaction(ctx context.Context, req *api.CreateTransactionRequest) (*api.CreateTransactionResponse, error) {
+	var resp api.CreateTransactionResponse
 
 	err := c.RequestAPIv2(ctx, "create-transaction", req, &resp)
 	if err != nil {
@@ -83,7 +83,7 @@ func (c *Client) KeyList(ctx context.Context) (interface{}, error) {
 }
 
 // ResolveKey returns a public key from either a label or keyhash.
-func (c *Client) ResolveKey(ctx context.Context, req interface{}) (*api.ResolveKeyResponse, error) {
+func (c *Client) ResolveKey(ctx context.Context, req *api.ResolveKeyRequest) (*api.ResolveKeyResponse, error) {
 	var resp api.ResolveKeyResponse
 
 	err := c.RequestAPIv2(ctx, "resolve-key", req, &resp)

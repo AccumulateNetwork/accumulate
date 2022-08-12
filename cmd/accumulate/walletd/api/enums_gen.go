@@ -8,17 +8,14 @@ import (
 	"strings"
 )
 
-// ErrorCodeOk .
-const ErrorCodeOk ErrorCode = 0
-
-// ErrorCodeNotFound .
-const ErrorCodeNotFound ErrorCode = 1
+// ErrorCodeGeneralError .
+const ErrorCodeGeneralError ErrorCode = -33002
 
 // ErrorCodeAlreadyExists .
-const ErrorCodeAlreadyExists ErrorCode = 2
+const ErrorCodeAlreadyExists ErrorCode = -33001
 
-// ErrorCodeGeneralError .
-const ErrorCodeGeneralError ErrorCode = 3
+// ErrorCodeNotFound .
+const ErrorCodeNotFound ErrorCode = -33000
 
 // GetEnumValue returns the value of the Error Code
 func (v ErrorCode) GetEnumValue() uint64 { return uint64(v) }
@@ -27,7 +24,7 @@ func (v ErrorCode) GetEnumValue() uint64 { return uint64(v) }
 func (v *ErrorCode) SetEnumValue(id uint64) bool {
 	u := ErrorCode(id)
 	switch u {
-	case ErrorCodeOk, ErrorCodeNotFound, ErrorCodeAlreadyExists, ErrorCodeGeneralError:
+	case ErrorCodeGeneralError, ErrorCodeAlreadyExists, ErrorCodeNotFound:
 		*v = u
 		return true
 	default:
@@ -38,14 +35,12 @@ func (v *ErrorCode) SetEnumValue(id uint64) bool {
 // String returns the name of the Error Code.
 func (v ErrorCode) String() string {
 	switch v {
-	case ErrorCodeOk:
-		return "ok"
-	case ErrorCodeNotFound:
-		return "notFound"
-	case ErrorCodeAlreadyExists:
-		return "alreadyExists"
 	case ErrorCodeGeneralError:
 		return "generalError"
+	case ErrorCodeAlreadyExists:
+		return "alreadyExists"
+	case ErrorCodeNotFound:
+		return "notFound"
 	default:
 		return fmt.Sprintf("ErrorCode:%d", v)
 	}
@@ -54,14 +49,12 @@ func (v ErrorCode) String() string {
 // ErrorCodeByName returns the named Error Code.
 func ErrorCodeByName(name string) (ErrorCode, bool) {
 	switch strings.ToLower(name) {
-	case "ok":
-		return ErrorCodeOk, true
-	case "notfound":
-		return ErrorCodeNotFound, true
-	case "alreadyexists":
-		return ErrorCodeAlreadyExists, true
 	case "generalerror":
 		return ErrorCodeGeneralError, true
+	case "alreadyexists":
+		return ErrorCodeAlreadyExists, true
+	case "notfound":
+		return ErrorCodeNotFound, true
 	default:
 		return 0, false
 	}

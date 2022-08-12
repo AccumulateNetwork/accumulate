@@ -191,10 +191,7 @@ func (m *JrpcMethods) ResolveKey(_ context.Context, params json.RawMessage) inte
 	}
 
 	if err != nil {
-		gen := api.GeneralResponse{}
-		gen.Code = api.ErrorCodeNotFound
-		gen.Error = err.Error()
-		return gen
+		return jsonrpc2.NewError(api.ErrorCodeNotFound.Code(), "resolve key error", err)
 	}
 
 	resp.KeyData.PublicKey = k.PublicKey
@@ -208,7 +205,7 @@ func (m *JrpcMethods) AdiList(_ context.Context, params json.RawMessage) interfa
 	var err error
 	adis, err := getAdiList()
 	if err != nil {
-		return jsonrpc2.NewError(api.ErrorCodeGeneralError.Code(), "adi list error", err)
+		return jsonrpc2.NewError(api.ErrorCodeNotFound.Code(), "adi list error", err)
 	}
 
 	for _, v := range adis {

@@ -65,11 +65,21 @@ CreateTransactionRequest:
       type: protocol.TransactionType
       marshal-as: enum
 
+CreateTransactionResponse:
+  non-binary: true
+  embeddings:
+    - CreateTransactionRequest
+
 CreateEnvelopeRequest:
   non-binary: true
   fields:
     - name: Name
       type: string
+
+CreateEnvelopeResponse:
+  non-binary: true
+  embeddings:
+    - CreateEnvelopeRequest
 
 AddTransactionInputRequest:
   non-binary: true
@@ -152,18 +162,6 @@ AuthorizationRequired:
     - name: Key
       type: bytes
     - name: Version
-      type: string
-
-
-GeneralResponse:
-  non-binary: true
-  fields:
-    - name: Info
-      type: string
-    - name: Code
-      type: ErrorCode
-      marshal-as: enum
-    - name: Error
       type: string
 
 AdiListResponse:
