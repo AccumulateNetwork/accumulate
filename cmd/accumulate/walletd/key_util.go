@@ -215,8 +215,10 @@ func GenerateKeyFromHDPath(derivationPath string) (*Key, error) {
 		return nil, err
 	}
 	key := new(Key)
-	key.InitializeFromSeed(newKey.Key, sigType, derivationPath)
-
+	err = key.InitializeFromSeed(newKey.Key, sigType, derivationPath)
+	if err != nil {
+		return nil, err
+	}
 	return key, nil
 }
 
