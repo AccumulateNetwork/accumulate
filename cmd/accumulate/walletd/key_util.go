@@ -187,7 +187,7 @@ func GenerateKeyFromHDPath(derivationPath string) (*Key, error) {
 		return nil, err
 	}
 
-	sigType := protocol.SignatureTypeED25519
+	var sigType protocol.SignatureType
 	switch hd.CoinType {
 	case TypeBitcoin:
 		sigType = protocol.SignatureTypeBTC
