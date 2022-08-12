@@ -35,17 +35,17 @@ AdiList:
 ResolveKey:
   description: returns a public key from either a label or keyhash
   rpc: resolve-key
-  input: api.ResolveKeyRequest|api.GeneralResponse
+  input: api.ResolveKeyRequest
   output: api.ResolveKeyResponse
 
 CreateTransaction:
   description: create a transaction by name
   rpc: create-transaction
   input: api.CreateTransactionRequest
-  output: api.GeneralResponse
+  output: api.CreateTransactionResponse
 
 CreateEnvelope:
   description: create an envelope by name
   rpc: create-envelope
   input: api.CreateEnvelopeRequest
-  output: api.GeneralResponse
+  output: api.CreateEnvelopeResponse
