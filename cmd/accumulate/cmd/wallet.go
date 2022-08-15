@@ -113,10 +113,6 @@ func runWalletd(cmd *cobra.Command, _ []string) (string, error) {
 	return "shutdown complete", nil
 }
 
-func interrupt(pid int) {
-	_ = syscall.Kill(pid, syscall.SIGINT)
-}
-
 func watchDog(prog *walletd.Program, svc service.Service, duration time.Duration) {
 	time.Sleep(duration)
 
@@ -124,7 +120,7 @@ func watchDog(prog *walletd.Program, svc service.Service, duration time.Duration
 	_ = prog.Stop(svc)
 
 	//the following will stop the Run()
-	interrupt(syscall.Getpid())
+	walletd.Interrupt(syscall.Getpid())
 }
 
 func InitDBImport(cmd *cobra.Command, memDb bool) error {
