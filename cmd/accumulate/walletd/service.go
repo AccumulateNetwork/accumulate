@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/signal"
 	"strings"
 	"sync"
 	"time"
@@ -14,19 +13,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"golang.org/x/sys/unix"
 )
-
-func onHUP(fn func()) {
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, unix.SIGHUP)
-
-	go func() {
-		for range sigs {
-			fn()
-		}
-	}()
-}
 
 type logAnnotator func(io.Writer, string, bool) io.Writer
 
@@ -104,6 +91,10 @@ func NewLogWriter(s service.Service, logFilename, jsonLogFilename string) func(s
 		}
 		return writers, nil
 	}
+}
+
+func Interrupt(pid int) {
+	interrupt(pid)
 }
 
 type multiWriter []io.Writer
