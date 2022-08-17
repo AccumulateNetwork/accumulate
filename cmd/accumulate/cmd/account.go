@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"os"
 	"strconv"
@@ -31,6 +32,8 @@ func init() {
 		accountGenerateCmd,
 		accountListCmd,
 		accountLockCmd,
+		accountExportCmd,
+		accountImportCmd,
 	)
 
 	accountCreateCmd.AddCommand(
@@ -153,6 +156,26 @@ var accountListCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		out, err := ListAccounts()
 		printOutput(cmd, out, err)
+	},
+}
+
+var accountExportCmd = &cobra.Command{
+	Use:   "export",
+	Short: "Exports all lite token accounts",
+	Args:  cobra.NoArgs,
+	Run: func(cmd *cobra.Command, _ []string) {
+		err := ExportAccounts()
+		printOutput(cmd, "File downloaded successfully", err)
+	},
+}
+
+var accountImportCmd = &cobra.Command{
+	Use:   "import [filePath]",
+	Short: "Imports all lite token accounts in specified file",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		err := ImportAccounts(args[0])
+		printOutput(cmd, "", err)
 	},
 }
 
@@ -477,4 +500,64 @@ func lockAccount(principal *url2.URL, signers []*signing.Builder, args []string)
 	}
 
 	return dispatchTxAndPrintResponse(body, principal, signers)
+}
+
+func ExportAccounts() error {
+	b, err := walletd.GetWallet().GetBucket(walletd.BucketLite)
+	if err != nil {
+		//no accounts so nothing to do...
+		return fmt.Errorf("no lite accounts have been generated")
+	}
+	var res []*KeyResponse
+	for _, v := range b.KeyValueList {
+		k := new(walletd.Key)
+		err = k.LoadByLabel(string(v.Value))
+		if err != nil {
+			return err
+		}
+
+		lt, err := protocol.LiteTokenAddressFromHash(k.PublicKeyHash(), protocol.ACME)
+		if err != nil {
+			return err
+		}
+		kr := KeyResponse{}
+		kr.LiteAccount = lt
+		kr.KeyInfo = k.KeyInfo
+		kr.PublicKey = k.PublicKey
+		kr.PrivateKey = k.PrivateKey
+		*kr.Label.AsString() = string(v.Value)
+		res = append(res, &kr)
+	}
+	out, err := os.Create(os.TempDir() + "/accounts.json")
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	bytes, err := json.Marshal(res)
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(out, strings.NewReader(string(bytes)))
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func ImportAccounts(filePath string) error {
+	data, err := ioutil.ReadFile(filePath)
+	if err != nil {
+		return fmt.Errorf("failed reading data from file: %s", err)
+	}
+	var req []*KeyResponse
+	if err := json.Unmarshal(data, &req); err != nil {
+		return err
+	}
+	for _, key := range req {
+		_, err = ImportKey(key.PrivateKey, string(key.Label), key.KeyInfo.Type)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
