@@ -238,13 +238,6 @@ func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Deli
 		if err != nil {
 			return nil, errors.Format(errors.StatusUnknownError, "validate delegated signature: %w", err)
 		}
-		var ok bool
-		delegate, ok = s.(protocol.Signer)
-		if !ok {
-			// The only non-account signer is the network signer which is only
-			// used for system signatures, so this should never happen
-			return nil, errors.Format(errors.StatusInternalError, "delegate is not an account")
-		}
 		if !md.Nested() && !signature.Verify(signature.Metadata().Hash(), delivery.Transaction.GetHash()) {
 			return nil, errors.Format(errors.StatusBadRequest, "invalid signature")
 		}
@@ -259,6 +252,13 @@ func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Deli
 		}
 
 		// Verify delegation
+		var ok bool
+		delegate, ok = s.(protocol.Signer)
+		if !ok {
+			// The only non-account signer is the network signer which is only
+			// used for system signatures, so this should never happen
+			return nil, errors.Format(errors.StatusInternalError, "delegate is not an account")
+		}
 		_, _, ok = signer.EntryByDelegate(delegate.GetUrl())
 		if !ok {
 			return nil, errors.Format(errors.StatusUnauthorized, "%v is not authorized to sign for %v", delegate.GetUrl(), signature.Delegator)
