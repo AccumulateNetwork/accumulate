@@ -33,6 +33,7 @@ import (
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage/badger"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -358,6 +359,25 @@ func (s *Simulator) InitFromSnapshot(filename func(string) string) {
 	for _, partition := range s.Partitions {
 		x := s.Partition(partition.Id)
 		InitFromSnapshot(s, x.Database, x.Executor, filename(partition.Id))
+	}
+}
+
+// GC runs value log garbage collection on Badger databases.
+func (s *Simulator) GC(discardRatio float64) {
+	for _, x := range s.Executors {
+		db, ok := x.Database.(*database.Database)
+		if !ok {
+			continue
+		}
+		err := db.GC(discardRatio)
+		switch {
+		case err == nil,
+			errors.Is(err, database.ErrGCNotSupported),
+			errors.Is(err, badger.ErrNoRewrite):
+			// Ok
+		default:
+			s.Logger.Error("Database GC failed", "error", err)
+		}
 	}
 }
 

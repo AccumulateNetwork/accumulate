@@ -1,6 +1,7 @@
 package database
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/tendermint/tendermint/libs/log"
@@ -14,6 +15,8 @@ import (
 )
 
 const markPower = 8
+
+var ErrGCNotSupported = errors.New("gc not supported")
 
 // Database is an Accumulate database.
 type Database struct {
@@ -85,6 +88,15 @@ func Open(cfg *config.Config, logger log.Logger) (*Database, error) {
 	default:
 		return nil, fmt.Errorf("unknown storage format %q", cfg.Accumulate.Storage.Type)
 	}
+}
+
+// GC runs value log garbage collection on Badger databases or returns ErrGCNotSupported.
+func (d *Database) GC(discardRatio float64) error {
+	b, ok := d.store.(*badger.DB)
+	if !ok {
+		return ErrGCNotSupported
+	}
+	return b.GC(discardRatio)
 }
 
 // Close closes the database and the key-value store.

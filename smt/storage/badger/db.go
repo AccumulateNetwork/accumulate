@@ -91,7 +91,7 @@ func (d *DB) gc() {
 		}
 
 		// Run GC if 50% space could be reclaimed
-		err = d.badgerDB.RunValueLogGC(0.5)
+		err = d.GC(0.5)
 		if d.logger != nil && err != nil && !errors.Is(err, badger.ErrNoRewrite) {
 			d.logger.Error("Badger GC failed", "error", err)
 		}
@@ -99,6 +99,12 @@ func (d *DB) gc() {
 		// Release the lock
 		l.Unlock()
 	}
+}
+
+var ErrNoRewrite = badger.ErrNoRewrite
+
+func (d *DB) GC(discardRatio float64) error {
+	return d.badgerDB.RunValueLogGC(discardRatio)
 }
 
 // lock acquires a lock on the ready mutex and checks for readiness. This

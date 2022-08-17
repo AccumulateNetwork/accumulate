@@ -198,6 +198,9 @@ func Process() {
 			//fmt.Printf(" took %v\n", time.Since(t))
 
 			if i%500 == 499 {
+				// Compact badger
+				simul.GC(0.5)
+
 				fmt.Printf(" %d", len(blocks)-i)
 				st, txn := simul.WaitForTransactions(delivered, allEnvelopes...)
 				for i, st := range st {
