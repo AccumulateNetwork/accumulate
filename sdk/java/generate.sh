@@ -8,7 +8,7 @@ cd $( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
 function generate {
     TOOL=../../tools/cmd/gen-$1
-    declare outDir=/media/pcRyzen/accumulate/accumulate-java-sdk/src/main/java/io/accumulatenetwork/sdk/generated
+    declare outDir=./generated
     mkdir -p $outDir/$2
     FLAGS="--language java --package io.accumulatenetwork.sdk --subpackage $2 --out $outDir/{{.SubPackage}}/{{.Name}}.java"
     go run ${TOOL} ${FLAGS} "${@:3}"
