@@ -435,8 +435,8 @@ func loadSigner(batch *database.Batch, signerUrl *url.URL) (protocol.Signer, err
 	return signer, nil
 }
 
-// validateSignature verifies that the signature matches the signer state.
-func validateSignature(transaction *protocol.Transaction, signer protocol.Signer, signature protocol.KeySignature) (protocol.KeyEntry, error) {
+// validateKeySignature verifies that the signature matches the signer state.
+func validateKeySignature(transaction *protocol.Transaction, signer protocol.Signer, signature protocol.KeySignature) (protocol.KeyEntry, error) {
 	// Check the height
 	if transaction.Body.Type().IsUser() && signature.GetSignerVersion() != signer.GetVersion() {
 		return nil, errors.Format(errors.StatusBadSignerVersion, "invalid version: have %d, got %d", signer.GetVersion(), signature.GetSignerVersion())
@@ -448,9 +448,8 @@ func validateSignature(transaction *protocol.Transaction, signer protocol.Signer
 		return nil, errors.New(errors.StatusUnauthorized, "key does not belong to signer")
 	}
 
-	// Check the timestamp for user transactions, except for faucet transactions
+	// Check the timestamp, except for faucet transactions
 	if transaction.Body.Type() != protocol.TransactionTypeAcmeFaucet &&
-		transaction.Body.Type().IsUser() &&
 		signature.GetTimestamp() != 0 &&
 		entry.GetLastUsedOn() >= signature.GetTimestamp() {
 		return nil, errors.Format(errors.StatusBadTimestamp, "invalid timestamp: have %d, got %d", entry.GetLastUsedOn(), signature.GetTimestamp())
@@ -582,7 +581,7 @@ func (x *Executor) validateKeySignature(batch *database.Batch, delivery *chain.D
 	}
 
 	// Load the signer and validate the signature against it
-	_, err = validateSignature(delivery.Transaction, signer, signature)
+	_, err = validateKeySignature(delivery.Transaction, signer, signature)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
@@ -647,7 +646,7 @@ func (x *Executor) processKeySignature(batch *database.Batch, delivery *chain.De
 	// it
 
 	// Validate the signature against the signer. This should also not fail.
-	entry, err := validateSignature(delivery.Transaction, signer, signature)
+	entry, err := validateKeySignature(delivery.Transaction, signer, signature)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
@@ -749,9 +748,10 @@ func (x *Executor) validatePartitionSignature(signature protocol.KeySignature, t
 	}
 
 	signer := x.globals.Active.AsSigner(partition)
-	if signature.GetSignerVersion() != signer.GetVersion() {
-		return nil, errors.Format(errors.StatusBadSignerVersion, "invalid version: have %d, got %d", signer.GetVersion(), signature.GetSignerVersion())
-	}
+
+	// TODO: Consider checking the version. However this can get messy because
+	// it takes some time for changes to propagate, so we'd need an activation
+	// height or something.
 
 	_, _, ok = signer.EntryByKeyHash(signature.GetPublicKeyHash())
 	if !ok {
