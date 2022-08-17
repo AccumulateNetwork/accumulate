@@ -78,6 +78,9 @@ const (
 //AcmeSupplyLimit set at 500,000,000.00000000 million acme (external units)
 const AcmeSupplyLimit = 500_000_000
 
+// DelegationDepthLimit limits the number of layers of delegation.
+const DelegationDepthLimit = 20
+
 // AcmeUrl returns `acc://ACME`.
 func AcmeUrl() *url.URL {
 	return &url.URL{Authority: ACME}
