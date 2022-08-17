@@ -65,7 +65,7 @@ func (g *globalSigner) EntryByKeyHash(keyHash []byte) (int, protocol.KeyEntry, b
 	if !ok || !v.IsActiveOn(g.Partition) {
 		return 0, nil, false
 	}
-	return i, noopEntry{}, false
+	return i, noopEntry{}, true
 }
 
 type noopEntry struct{}
