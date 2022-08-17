@@ -738,26 +738,14 @@ func verifyInternalSignature(delivery *chain.Delivery, _ *protocol.InternalSigna
 }
 
 //validationPartitionSignature checks if the key used to sign the synthetic or system transaction belongs to the same subnet
-func (x *Executor) validatePartitionSignature(signature protocol.KeySignature, transaction *protocol.Transaction) (protocol.Signer2, error) {
-	// TODO AC-1702 Use GetAllSignatures to determine the source
-	var partition string
-	var source *url.URL
-	var err error
-
-	switch txn := transaction.Body.(type) {
-	case protocol.SynthTxnWithOrigin:
-		_, source = txn.GetCause()
-	case *protocol.DirectoryAnchor:
-		source = txn.Source
-	case *protocol.BlockValidatorAnchor:
-		source = txn.Source
-	default:
-		return nil, errors.Format(errors.StatusInternalError, "unable to resolve source of transaction: unknown transaction type")
+func (x *Executor) validatePartitionSignature(signature protocol.KeySignature, transaction *protocol.Transaction, status *protocol.TransactionStatus) (protocol.Signer2, error) {
+	if status.SourceNetwork == nil {
+		return nil, errors.Format(errors.StatusBadRequest, "missing partition signature")
 	}
 
-	partition, err = x.Router.RouteAccount(source)
-	if err != nil {
-		return nil, errors.Format(errors.StatusInternalError, "unable to resolve source of transaction: %w", err)
+	partition, ok := protocol.ParsePartitionUrl(status.SourceNetwork)
+	if !ok {
+		return nil, errors.Format(errors.StatusBadRequest, "partition signature source is not a partition")
 	}
 
 	signer := x.globals.Active.AsSigner(partition)
@@ -765,7 +753,7 @@ func (x *Executor) validatePartitionSignature(signature protocol.KeySignature, t
 		return nil, errors.Format(errors.StatusBadSignerVersion, "invalid version: have %d, got %d", signer.GetVersion(), signature.GetSignerVersion())
 	}
 
-	_, _, ok := signer.EntryByKeyHash(signature.GetPublicKeyHash())
+	_, _, ok = signer.EntryByKeyHash(signature.GetPublicKeyHash())
 	if !ok {
 		return nil, errors.Format(errors.StatusUnauthorized, "key is not an active validator for %s", partition)
 	}
@@ -774,13 +762,13 @@ func (x *Executor) validatePartitionSignature(signature protocol.KeySignature, t
 }
 
 func (x *Executor) processPartitionSignature(batch *database.Batch, signature protocol.KeySignature, transaction *protocol.Transaction) (protocol.Signer2, error) {
-	signer, err := x.validatePartitionSignature(signature, transaction)
+	record := batch.Transaction(transaction.GetHash())
+	status, err := record.GetStatus()
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
-	record := batch.Transaction(transaction.GetHash())
-	status, err := record.GetStatus()
+	signer, err := x.validatePartitionSignature(signature, transaction, status)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
