@@ -7,9 +7,41 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 )
+
+func TestUpdateKey(t *testing.T) {
+	alice := url.MustParse("alice")
+	aliceKey := acctesting.GenerateKey(alice, "main")
+	otherKey := acctesting.GenerateKey(alice, "other")
+
+	// Initialize
+	var timestamp uint64
+	sim := simulator.New(t, 3)
+	sim.InitFromGenesis()
+
+	sim.CreateIdentity(alice, aliceKey[32:])
+	updateAccount(sim, alice.JoinPath("book", "1"), func(page *KeyPage) {
+		page.CreditBalance = 1e9
+	})
+
+	// Update the key
+	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
+		acctesting.NewTransaction().
+			WithPrincipal(alice.JoinPath("book", "1")).
+			WithSigner(alice.JoinPath("book", "1"), 1).
+			WithTimestampVar(&timestamp).
+			UseSimpleHash(). // Test AC-2953
+			WithBody(&UpdateKey{NewKeyHash: hash(otherKey[32:])}).
+			Initiate(SignatureTypeED25519, aliceKey).
+			Build(),
+	)...)
+
+	// Verify the key changed
+	page := simulator.GetAccount[*KeyPage](sim, alice.JoinPath("book", "1"))
+	require.Len(t, page.Keys, 1)
+	require.Equal(t, hash(otherKey[32:]), page.Keys[0].PublicKeyHash)
+}
 
 func TestUpdateKey_HasDelegate(t *testing.T) {
 	alice := url.MustParse("alice")
@@ -24,7 +56,7 @@ func TestUpdateKey_HasDelegate(t *testing.T) {
 	sim.CreateIdentity(alice, aliceKey[32:])
 	updateAccount(sim, alice.JoinPath("book", "1"), func(page *KeyPage) {
 		page.CreditBalance = 1e9
-		page.Keys[0].Delegate = protocol.AccountUrl("foo")
+		page.Keys[0].Delegate = AccountUrl("foo")
 	})
 
 	// Update the key
