@@ -67,7 +67,6 @@ func (UpdateKey) Execute(st *StateManager, tx *Delivery) (protocol.TransactionRe
 	}
 
 	var initiator protocol.Signature
-outer:
 	for _, signer := range status.Signers {
 		sigs, err := database.GetSignaturesForSigner(txObj, signer)
 		if err != nil {
@@ -76,10 +75,13 @@ outer:
 
 		for _, sig := range sigs {
 			if protocol.SignatureDidInitiate(sig, tx.Transaction.Header.Initiator[:], &initiator) {
-				break outer
+				goto found_init
 			}
 		}
 	}
+	return nil, errors.Format(errors.StatusInternalError, "unable to locate initiator signature")
+
+found_init:
 	switch initiator := initiator.(type) {
 	case protocol.KeySignature:
 		err = updateKey(page, book,
@@ -95,7 +97,7 @@ outer:
 			return nil, fmt.Errorf("cannot UpdateKey with a multi-level delegated signature")
 		}
 	default:
-		return nil, fmt.Errorf("unable to resolve Signature")
+		return nil, errors.Format(errors.StatusInternalError, "%v does not support %v signatures", protocol.TransactionTypeUpdateKey, initiator.Type())
 
 	}
 	if err != nil {
