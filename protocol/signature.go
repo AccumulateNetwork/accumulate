@@ -99,6 +99,9 @@ func ETHaddress(pubKey []byte) string {
 func SignatureDidInitiate(sig Signature, txnInitHash []byte, initiator *Signature) bool {
 	for _, sig := range unpackSignature(sig) {
 		if bytes.Equal(txnInitHash, sig.Metadata().Hash()) {
+			if initiator != nil {
+				*initiator = sig
+			}
 			return true
 		}
 
