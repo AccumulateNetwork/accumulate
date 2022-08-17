@@ -29,7 +29,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	_ "gitlab.com/accumulatenetwork/accumulate/smt/pmt"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
 // Accumulator is an ABCI application that accumulates validated transactions in
@@ -227,46 +226,12 @@ func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
 //
 // Exposed as Tendermint RPC /abci_query.
 func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.ResponseQuery) {
-	defer app.recover(&resQuery.Code, false)
-
-	if app.didPanic {
-		return abci.ResponseQuery{
-			Code: uint32(protocol.ErrorCodeDidPanic),
-			Info: "Node state is invalid",
-		}
+	switch reqQuery.Path {
+	case "/up":
+		return abci.ResponseQuery{Code: uint32(protocol.ErrorCodeOK), Info: "Up"}
 	}
 
-	resQuery.Key = reqQuery.Data
-	qu, err := query.UnmarshalRequest(reqQuery.Data)
-	if err != nil {
-		// sentry.CaptureException(err)
-		app.logger.Debug("Query failed", "error", err)
-		resQuery.Info = "request is not an Accumulate Query"
-		resQuery.Code = uint32(protocol.ErrorCodeEncodingError)
-		return resQuery
-	}
-
-	batch := app.DB.Begin(false)
-	defer batch.Discard()
-
-	k, v, err := app.Executor.Query(batch, qu, reqQuery.Height, reqQuery.Prove)
-	if err != nil {
-		b, _ := errors.Wrap(errors.StatusUnknownError, err).(*errors.Error).MarshalJSON()
-		resQuery.Info = string(b)
-		resQuery.Code = uint32(protocol.ErrorCodeFailed)
-		return resQuery
-	}
-
-	//if we get here, we have a valid state object, so let's return it.
-	resQuery.Code = uint32(protocol.ErrorCodeOK)
-	//return a generic state object for the chain and let the query deal with decoding it
-	resQuery.Key, resQuery.Value = k, v
-
-	///implement lazy sync calls. If a node falls behind it needs to have several query calls
-	///1 get current height
-	///2 get block data for height X
-	///3 get block data for given hash
-	return
+	return abci.ResponseQuery{Code: uint32(protocol.ErrorCodeFailed)}
 }
 
 // InitChain implements github.com/tendermint/tendermint/abci/types.Application.
@@ -403,12 +368,30 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 	var resp abci.ResponseCheckTx
 	resp.Data = respData
 
+	const maxPriority = (1 << 32) - 1
+
+	seq := map[[32]byte]uint64{}
+	for _, env := range envelopes {
+		for _, sig := range env.Signatures {
+			sig, ok := sig.(*protocol.PartitionSignature)
+			if ok {
+				seq[sig.TransactionHash] = sig.SequenceNumber
+			}
+		}
+	}
+
 	// If a user transaction fails, the batch fails
 	for i, result := range results {
-		if typ := envelopes[i].Transaction.Body.Type(); typ.IsSystem() && resp.Priority < 2 {
-			resp.Priority = 2
-		} else if typ.IsSynthetic() && resp.Priority < 1 {
-			resp.Priority = 1
+		var priority int64
+		if typ := envelopes[i].Transaction.Body.Type(); typ.IsSystem() {
+			priority = maxPriority
+		} else if typ.IsSynthetic() {
+			// Set the priority based on the sequence number to try to keep them in order
+			seq := seq[*(*[32]byte)(envelopes[i].Transaction.GetHash())]
+			priority = maxPriority - 1 - int64(seq)
+		}
+		if resp.Priority < priority {
+			resp.Priority = priority
 		}
 		if result.Code.Success() {
 			continue
@@ -417,7 +400,7 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 			continue
 		}
 		resp.Code = uint32(protocol.ErrorCodeUnknownError)
-		resp.Log = "One or more user transactions failed"
+		resp.Log += fmt.Sprintf("envelope(%d/%s) %v;", i, result.Code.String(), result.Error)
 	}
 
 	return resp

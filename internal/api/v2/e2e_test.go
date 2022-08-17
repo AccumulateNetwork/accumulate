@@ -11,28 +11,41 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	query2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2/query"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/testing/e2e"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
-	query2 "gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
 func init() { acctesting.EnableDebugFeatures() }
 
-func TestEndToEnd(t *testing.T) {
-	acctesting.SkipCI(t, "flaky")
-	acctesting.SkipPlatform(t, "windows", "flaky")
-	acctesting.SkipPlatform(t, "darwin", "flaky")
-	acctesting.SkipPlatformCI(t, "darwin", "requires setting up localhost aliases")
-	t.Skip("flaky")
-	suite.Run(t, e2e.NewSuite(func(s *e2e.Suite) e2e.DUT {
-		partitions, daemons := acctesting.CreateTestNet(s.T(), 1, 2, 0, false)
-		acctesting.RunTestNet(s.T(), partitions, daemons)
-		return &e2eDUT{s, daemons[Directory][0]}
-	}))
+func TestStatus(t *testing.T) {
+	partitions, daemons := acctesting.CreateTestNet(t, 2, 2, 0, false)
+	acctesting.RunTestNet(t, partitions, daemons)
+	japi := daemons["BVN1"][0].Jrpc_TESTONLY()
+
+	// Create some history
+	liteUrl := makeLiteUrl(t, newKey([]byte(t.Name())), ACME)
+	xr := new(api.TxResponse)
+	callApi(t, japi, "faucet", &AcmeFaucet{Url: liteUrl}, xr)
+	require.Zero(t, xr.Code, xr.Message)
+	txWait(t, japi, xr.TransactionHash)
+
+	// Test
+	r := japi.Status(context.Background(), nil)
+	if err, ok := r.(error); ok {
+		require.NoError(t, err)
+	}
+	require.IsType(t, (*api.StatusResponse)(nil), r)
+	status := r.(*api.StatusResponse)
+
+	// Check the status
+	assert.True(t, status.Ok, "Ok should be true")
+	assert.NotZero(t, status.LastDirectoryAnchorHeight, "Last directory anchor height should be non-zero")
+	assert.NotZero(t, status.BvnHeight, "Height should be non-zero")
+	assert.NotZero(t, status.BvnRootHash, "Root hash should be present")
+	assert.NotZero(t, status.BvnBptHash, "BPT hash should be present")
 }
 
 func TestValidate(t *testing.T) {

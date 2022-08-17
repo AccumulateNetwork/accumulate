@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -39,7 +40,7 @@ var adiListCmd = &cobra.Command{
 	Short: "Get existing ADI by URL",
 	Args:  cobra.NoArgs,
 	Run: func(cmd *cobra.Command, _ []string) {
-		out, err := ListADIs()
+		out, err := walletd.ListADIs()
 		printOutput(cmd, out, err)
 	},
 }
@@ -56,7 +57,7 @@ var adiCreateCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Create new ADI",
 	Run: func(cmd *cobra.Command, args []string) {
-		if len(args) < 3 {
+		if len(args) < 2 {
 			PrintADICreate()
 			return
 		}
@@ -136,23 +137,15 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 	//args[2] is an optional setting for the key book name
 	//args[3] is an optional setting for the key page name
 	//Note: if args[2] is not the keybook, the keypage also cannot be specified.
-	if len(args) == 0 {
+	if len(args) < 2 {
 		return "", fmt.Errorf("insufficient number of command line arguments")
 	}
 
-	if len(args) > 0 {
-		adiUrlStr = args[0]
-	}
-	if len(args) < 1 {
-		return "", fmt.Errorf("invalid number of arguments")
-	}
+	adiUrlStr = args[0]
 
-	var k *Key
-	if len(args) > 1 {
-		k, err = resolvePublicKey(args[1])
-		if err != nil {
-			return "", err
-		}
+	k, err := resolvePublicKey(args[1])
+	if err != nil {
+		return "", err
 	}
 
 	adiUrl, err := url2.Parse(adiUrlStr)
@@ -168,7 +161,7 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("invalid book url %s, %v", bookUrlStr, err)
 		}
-	} else if adiUrl.IsRootIdentity() || k != nil {
+	} else if k != nil {
 		bookUrl = adiUrl.JoinPath("/book")
 	}
 
@@ -194,7 +187,7 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 
 	//todo: turn around and query the ADI and store the results.
 	if k != nil {
-		err = GetWallet().Put(BucketAdi, []byte(adiUrl.Authority), k.PublicKey)
+		err = walletd.GetWallet().Put(walletd.BucketAdi, []byte(adiUrl.Authority), k.PublicKey)
 		if err != nil {
 			return "", fmt.Errorf("DB: %v", err)
 		}
@@ -212,27 +205,4 @@ func NewADI(origin string, params []string) (string, error) {
 	}
 
 	return NewADIFromADISigner(u, params[:])
-}
-
-func ListADIs() (string, error) {
-	b, err := GetWallet().GetBucket(BucketAdi)
-	if err != nil {
-		return "", err
-	}
-
-	var out string
-	for _, v := range b.KeyValueList {
-		u, err := url2.Parse(string(v.Key))
-		if err != nil {
-			out += fmt.Sprintf("%s\t:\t%x \n", v.Key, v.Value)
-		} else {
-			lab, err := FindLabelFromPubKey(v.Value)
-			if err != nil {
-				out += fmt.Sprintf("%v\t:\t%x \n", u, v.Value)
-			} else {
-				out += fmt.Sprintf("%v\t:\t%s\n", u, lab)
-			}
-		}
-	}
-	return out, nil
 }

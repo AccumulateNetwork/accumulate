@@ -5,10 +5,12 @@ package managed
 //lint:file-ignore S1008,U1000 generated code
 
 import (
+	"encoding/hex"
+	"strconv"
+
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 type Chain struct {
@@ -23,32 +25,56 @@ type Chain struct {
 	markMask  int64
 
 	head         *record.Value[*MerkleState]
-	states       map[storage.Key]*record.Value[*MerkleState]
-	elementIndex map[storage.Key]*record.Value[uint64]
-	element      map[storage.Key]*record.Value[[]byte]
+	states       map[chainStatesKey]*record.Value[*MerkleState]
+	elementIndex map[chainElementIndexKey]*record.Value[uint64]
+	element      map[chainElementKey]*record.Value[[]byte]
+}
+
+type chainStatesKey struct {
+	Index uint64
+}
+
+func keyForChainStates(index uint64) chainStatesKey {
+	return chainStatesKey{index}
+}
+
+type chainElementIndexKey struct {
+	Hash [32]byte
+}
+
+func keyForChainElementIndex(hash []byte) chainElementIndexKey {
+	return chainElementIndexKey{record.MapKeyBytes(hash)}
+}
+
+type chainElementKey struct {
+	Index uint64
+}
+
+func keyForChainElement(index uint64) chainElementKey {
+	return chainElementKey{index}
 }
 
 func (c *Chain) Head() *record.Value[*MerkleState] {
 	return getOrCreateField(&c.head, func() *record.Value[*MerkleState] {
-		return record.NewValue(c.logger.L, c.store, c.key.Append("Head"), c.label+" head", true, record.Struct[MerkleState]())
+		return record.NewValue(c.logger.L, c.store, c.key.Append("Head"), c.label+" "+"head", true, record.Struct[MerkleState]())
 	})
 }
 
 func (c *Chain) States(index uint64) *record.Value[*MerkleState] {
-	return getOrCreateMap(&c.states, c.key.Append("States", index), func() *record.Value[*MerkleState] {
-		return record.NewValue(c.logger.L, c.store, c.key.Append("States", index), c.label+" states %[3]v", false, record.Struct[MerkleState]())
+	return getOrCreateMap(&c.states, keyForChainStates(index), func() *record.Value[*MerkleState] {
+		return record.NewValue(c.logger.L, c.store, c.key.Append("States", index), c.label+" "+"states"+" "+strconv.FormatUint(index, 10), false, record.Struct[MerkleState]())
 	})
 }
 
 func (c *Chain) ElementIndex(hash []byte) *record.Value[uint64] {
-	return getOrCreateMap(&c.elementIndex, c.key.Append("ElementIndex", hash), func() *record.Value[uint64] {
-		return record.NewValue(c.logger.L, c.store, c.key.Append("ElementIndex", hash), c.label+" element index %[3]x", false, record.Wrapped(record.UintWrapper))
+	return getOrCreateMap(&c.elementIndex, keyForChainElementIndex(hash), func() *record.Value[uint64] {
+		return record.NewValue(c.logger.L, c.store, c.key.Append("ElementIndex", hash), c.label+" "+"element index"+" "+hex.EncodeToString(hash), false, record.Wrapped(record.UintWrapper))
 	})
 }
 
 func (c *Chain) Element(index uint64) *record.Value[[]byte] {
-	return getOrCreateMap(&c.element, c.key.Append("Element", index), func() *record.Value[[]byte] {
-		return record.NewValue(c.logger.L, c.store, c.key.Append("Element", index), c.label+" element %[3]v", false, record.Wrapped(record.BytesWrapper))
+	return getOrCreateMap(&c.element, keyForChainElement(index), func() *record.Value[[]byte] {
+		return record.NewValue(c.logger.L, c.store, c.key.Append("Element", index), c.label+" "+"element"+" "+strconv.FormatUint(index, 10), false, record.Wrapped(record.BytesWrapper))
 	})
 }
 
@@ -147,18 +173,17 @@ func getOrCreateField[T any](ptr **T, create func() *T) *T {
 	return *ptr
 }
 
-func getOrCreateMap[T any](ptr *map[storage.Key]T, key record.Key, create func() T) T {
+func getOrCreateMap[T any, K comparable](ptr *map[K]T, key K, create func() T) T {
 	if *ptr == nil {
-		*ptr = map[storage.Key]T{}
+		*ptr = map[K]T{}
 	}
 
-	k := key.Hash()
-	if v, ok := (*ptr)[k]; ok {
+	if v, ok := (*ptr)[key]; ok {
 		return v
 	}
 
 	v := create()
-	(*ptr)[k] = v
+	(*ptr)[key] = v
 	return v
 }
 

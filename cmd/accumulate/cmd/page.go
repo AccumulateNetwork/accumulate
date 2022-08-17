@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
 	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -83,7 +84,7 @@ var pageKeyUpdateCmd = &cobra.Command{
 
 var pageKeyReplaceCmd = &cobra.Command{
 	Use:   "replace [key page url] [key name[@key book or page]] [new public key or name]",
-	Short: "Update a key on a key page",
+	Short: "Update a your key on a key page which bypasses threshold",
 	Args:  cobra.ExactArgs(3),
 	Run: runCmdFunc(func(args []string) (string, error) {
 		return ReplaceKey(args)
@@ -170,7 +171,7 @@ func CreateKeyPage(bookUrlStr string, args []string) (string, error) {
 	for i := range keyLabels {
 		ksp := protocol.KeySpecParams{}
 
-		k, err := LookupByLabel(keyLabels[i])
+		k, err := walletd.LookupByLabel(keyLabels[i])
 
 		if err != nil {
 			//now check to see if it is a valid key hex, if so we can assume that is the public key.

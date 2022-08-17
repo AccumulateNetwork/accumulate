@@ -67,7 +67,7 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 	// Check that the signatures are valid
 	for i, signature := range delivery.Signatures {
 		var md sigExecMetadata
-		md.Initiated = i > 0 || txnType == protocol.TransactionTypeRemote
+		md.IsInitiator = protocol.SignatureDidInitiate(signature, delivery.Transaction.Header.Initiator[:], nil)
 		if !signature.Type().IsSystem() {
 			md.Location = signature.RoutingLocation()
 		}
@@ -202,6 +202,9 @@ func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Deli
 		if err != nil {
 			return nil, err
 		}
+		if !md.Nested() && !signature.Verify(signature.Metadata().Hash(), delivery.Transaction.GetHash()) {
+			return nil, errors.Format(errors.StatusBadRequest, "invalid signature")
+		}
 		if !signature.Delegator.LocalTo(md.Location) {
 			return nil, nil
 		}
@@ -220,9 +223,10 @@ func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Deli
 
 	case protocol.KeySignature:
 		// Basic validation
-		if !signature.Verify(delivery.Transaction.GetHash()) {
+		if !md.Nested() && !signature.Verify(nil, delivery.Transaction.GetHash()) {
 			return nil, errors.New(errors.StatusBadRequest, "invalid")
 		}
+
 		if !delivery.Transaction.Body.Type().IsUser() {
 			err = x.validatePartitionSignature(md.Location, signature, delivery.Transaction)
 			if err != nil {
@@ -230,7 +234,7 @@ func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Deli
 			}
 		}
 
-		signer, err = x.validateKeySignature(batch, delivery, signature, !md.Initiated, !md.Delegated && delivery.Transaction.Header.Principal.LocalTo(md.Location))
+		signer, err = x.validateKeySignature(batch, delivery, signature, md, !md.Delegated && delivery.Transaction.Header.Principal.LocalTo(md.Location))
 
 	default:
 		return nil, errors.Format(errors.StatusBadRequest, "unknown signature type %v", signature.Type())

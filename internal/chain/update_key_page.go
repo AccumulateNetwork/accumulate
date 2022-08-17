@@ -115,7 +115,7 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 	}
 
 	for _, op := range body.Operation {
-		err = UpdateKeyPage{}.executeOperation(page, op)
+		err = UpdateKeyPage{}.executeOperation(page, book, op)
 		if err != nil {
 			return nil, err
 		}
@@ -130,14 +130,21 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 	return nil, nil
 }
 
-func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, op protocol.KeyPageOperation) error {
+func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, book *protocol.KeyBook, op protocol.KeyPageOperation) error {
 	switch op := op.(type) {
 	case *protocol.AddKeyOperation:
 		if op.Entry.IsEmpty() {
 			return fmt.Errorf("cannot add an empty entry")
 		}
-		if op.Entry.Delegate.ParentOf(page.Url) {
-			return fmt.Errorf("self-delegation is not allowed")
+
+		if op.Entry.Delegate != nil {
+			if op.Entry.Delegate.ParentOf(page.Url) {
+				return fmt.Errorf("self-delegation is not allowed")
+			}
+
+			if err := verifyIsNotPage(&book.AccountAuth, op.Entry.Delegate); err != nil {
+				return errors.Format(errors.StatusUnknownError, "invalid delegate %v: %w", op.Entry.Delegate, err)
+			}
 		}
 
 		_, _, found := findKeyPageEntry(page, &op.Entry)
@@ -157,15 +164,15 @@ func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, op protocol.KeyPag
 			return fmt.Errorf("entry to be removed not found on the key page")
 		}
 
-		page.RemoveKeySpecAt(index)
-
 		_, pageIndex, ok := protocol.ParseKeyPageUrl(page.Url)
 		if !ok {
 			return errors.Format(errors.StatusInternalError, "principal is not a key page")
 		}
-		if len(page.Keys) == 0 && pageIndex == 0 {
+		if len(page.Keys) == 1 && pageIndex == 1 {
 			return fmt.Errorf("cannot delete last key of the highest priority page of a key book")
 		}
+
+		page.RemoveKeySpecAt(index)
 
 		if page.AcceptThreshold > uint64(len(page.Keys)) {
 			page.AcceptThreshold = uint64(len(page.Keys))
@@ -173,7 +180,7 @@ func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, op protocol.KeyPag
 		return nil
 
 	case *protocol.UpdateKeyOperation:
-		return updateKey(page, &op.OldEntry, &op.NewEntry)
+		return updateKey(page, book, &op.OldEntry, &op.NewEntry, false)
 
 	case *protocol.SetThresholdKeyPageOperation:
 		return page.SetThreshold(op.Threshold)

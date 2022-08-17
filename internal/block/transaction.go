@@ -24,10 +24,6 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Del
 	if err != nil {
 		return nil, nil, err
 	}
-	if status.Initiator == nil {
-		// This should never happen
-		return nil, nil, fmt.Errorf("transaction initiator is missing")
-	}
 
 	// The status txid should not be nil, but fix it if it is *shrug*
 	if status.TxID == nil && delivery.Transaction.Header.Principal != nil {
@@ -127,6 +123,10 @@ func (x *Executor) TransactionIsReady(batch *database.Batch, delivery *chain.Del
 }
 
 func (x *Executor) userTransactionIsReady(batch *database.Batch, delivery *chain.Delivery, status *protocol.TransactionStatus, principal protocol.Account) (bool, error) {
+	if status.Initiator == nil {
+		return false, nil
+	}
+
 	// If the principal is missing, check if that's ok
 	if principal == nil {
 		val, ok := getValidator[chain.PrincipalValidator](x, delivery.Transaction.Body.Type())
@@ -246,26 +246,14 @@ func (x *Executor) synthTransactionIsReady(batch *database.Batch, delivery *chai
 	// not delegate "is ready?" to the transaction executor - synthetic
 	// transactions _must_ be sequenced and proven before being executed.
 
-	if status.Proof == nil {
+	if status.Proof == nil || !status.GotDirectoryReceipt {
 		return false, nil
 	}
 
-	// Determine which anchor chain to load
-	var partition string
-	if x.Describe.NetworkType != config.Directory {
-		partition = protocol.Directory
-	} else {
-		var ok bool
-		partition, ok = protocol.ParsePartitionUrl(status.SourceNetwork)
-		if !ok {
-			return false, errors.Format(errors.StatusUnknownError, "%v is not a valid partition URL", status.SourceNetwork)
-		}
-	}
-
 	// Load the anchor chain
-	anchorChain, err := batch.Account(x.Describe.AnchorPool()).AnchorChain(partition).Root().Get()
+	anchorChain, err := batch.Account(x.Describe.AnchorPool()).AnchorChain(protocol.Directory).Root().Get()
 	if err != nil {
-		return false, errors.Format(errors.StatusUnknownError, "load %s intermediate anchor chain: %w", partition, err)
+		return false, errors.Format(errors.StatusUnknownError, "load %s intermediate anchor chain: %w", protocol.Directory, err)
 	}
 
 	// Is the result a valid DN anchor?
@@ -276,7 +264,7 @@ func (x *Executor) synthTransactionIsReady(batch *database.Batch, delivery *chai
 	case errors.Is(err, storage.ErrNotFound):
 		return false, nil
 	default:
-		return false, errors.Format(errors.StatusUnknownError, "get height of entry %X of %s intermediate anchor chain: %w", status.Proof.Anchor[:4], partition, err)
+		return false, errors.Format(errors.StatusUnknownError, "get height of entry %X of %s intermediate anchor chain: %w", status.Proof.Anchor[:4], protocol.Directory, err)
 	}
 
 	// Load the ledger
@@ -552,13 +540,8 @@ func (x *Executor) recordFailedTransaction(batch *database.Batch, delivery *chai
 		return nil, nil, fmt.Errorf("update pending list: %w", err)
 	}
 
-	// Refund the signer
+	// Issue a refund to the initial signer
 	if status.Initiator == nil || !delivery.Transaction.Body.Type().IsUser() {
-		return status, state, nil
-	}
-
-	// TODO Send a refund for a failed remotely initiated transaction
-	if !delivery.Transaction.Header.Principal.LocalTo(status.Initiator) {
 		return status, state, nil
 	}
 
@@ -571,19 +554,8 @@ func (x *Executor) recordFailedTransaction(batch *database.Batch, delivery *chai
 		return status, state, nil
 	}
 
-	var signer protocol.Signer
-	obj := batch.Account(status.Initiator)
-	err = obj.GetStateAs(&signer)
-	if err != nil {
-		return nil, nil, fmt.Errorf("load initial signer: %w", err)
-	}
-
-	refund := paid - protocol.FeeFailedMaximum
-	signer.CreditCredits(refund.AsUInt64())
-	err = obj.PutState(signer)
-	if err != nil {
-		return nil, nil, fmt.Errorf("store initial signer: %w", err)
-	}
-
+	refund := new(protocol.SyntheticDepositCredits)
+	refund.Amount = (paid - protocol.FeeFailedMaximum).AsUInt64()
+	state.DidProduceTxn(status.Initiator, refund)
 	return status, state, nil
 }

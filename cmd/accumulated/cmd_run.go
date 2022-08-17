@@ -4,12 +4,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
 
+	"github.com/fatih/color"
 	"github.com/kardianos/service"
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
@@ -36,6 +38,7 @@ var flagRun = struct {
 	LogFile          string
 	JsonLogFile      string
 	EnableTimingLogs bool
+	PprofListen      string
 }{}
 
 func init() {
@@ -51,6 +54,7 @@ func initRunFlags(cmd *cobra.Command, forService bool) {
 	cmd.PersistentFlags().StringVar(&flagRun.LogFile, "log-file", "", "Write logs to a file as plain text")
 	cmd.PersistentFlags().StringVar(&flagRun.JsonLogFile, "json-log-file", "", "Write logs to a file as JSON")
 	cmd.PersistentFlags().BoolVar(&flagRun.EnableTimingLogs, "enable-timing-logs", false, "Enable core timing analysis logging")
+	cmd.PersistentFlags().StringVar(&flagRun.PprofListen, "pprof", "", "Address to run net/http/pprof on")
 
 	if !forService {
 		cmd.Flags().DurationVar(&flagRun.CiStopAfter, "ci-stop-after", 0, "FOR CI ONLY - stop the node after some time")
@@ -59,6 +63,10 @@ func initRunFlags(cmd *cobra.Command, forService bool) {
 
 	cmd.PersistentPreRun = func(*cobra.Command, []string) {
 		badger.TruncateBadger = flagRun.Truncate
+
+		if flagRun.PprofListen != "" {
+			go func() { check(http.ListenAndServe(flagRun.PprofListen, nil)) }()
+		}
 	}
 }
 
@@ -78,6 +86,7 @@ func runNode(cmd *cobra.Command, _ []string) (string, error) {
 	if flagRun.CiStopAfter != 0 {
 		go watchDog(prog, svc, flagRun.CiStopAfter)
 	}
+	color.HiGreen("------ starting a new node ------")
 
 	err = svc.Run()
 	if err != nil {

@@ -4,6 +4,7 @@ package simulator
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -32,7 +33,6 @@ import (
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -89,7 +89,6 @@ func NewWith(t TB, opts SimulatorOptions) *Simulator {
 
 func (sim *Simulator) Setup(opts SimulatorOptions) {
 	sim.Helper()
-	sim.opts = opts
 
 	if opts.BvnCount == 0 {
 		opts.BvnCount = 3
@@ -102,6 +101,7 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 			return database.OpenInMemory(logger)
 		}
 	}
+	sim.opts = opts
 
 	// Initialize the simulartor and network
 	sim.routingOverrides = map[[32]byte]string{}
@@ -138,8 +138,15 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 		dn := &sim.Partitions[0]
 		dn.Nodes = append(dn.Nodes, config.Node{Type: config.Validator, Address: protocol.Directory})
 
+		x := new(ExecEntry)
+		x.Partition = dn
+		x.tb = sim.tb
+		x.blockTime = GenesisTime
+		x.Validators = [][]byte{bvn.Nodes[0].PrivValKey[32:]}
+		sim.Executors[protocol.Directory] = x
+
 		logger := sim.newLogger(opts).With("partition", protocol.Directory)
-		db := opts.OpenDB(protocol.Directory, i, logger)
+		x.Database = opts.OpenDB(protocol.Directory, i, logger)
 
 		network := config.Describe{
 			NetworkType:  config.Directory,
@@ -158,7 +165,8 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 		if execOpts.Describe.NetworkType == config.Directory {
 			execOpts.MajorBlockScheduler = blockscheduler.Init(mainEventBus)
 		}
-		exec, err := block.NewNodeExecutor(execOpts, db)
+		var err error
+		x.Executor, err = block.NewNodeExecutor(execOpts, x)
 		require.NoError(sim, err)
 
 		jrpc, err := api.NewJrpc(api.Options{
@@ -166,27 +174,26 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 			Describe:      &network,
 			Router:        sim.Router(),
 			TxMaxWaitTime: time.Hour,
-			Database:      db,
+			Database:      x,
+			Key:           execOpts.Key,
 		})
 		require.NoError(sim, err)
-
-		sim.Executors[protocol.Directory] = &ExecEntry{
-			Database:   db,
-			Executor:   exec,
-			Partition:  dn,
-			API:        acctesting.DirectJrpcClient(jrpc),
-			tb:         sim.tb,
-			blockTime:  GenesisTime,
-			Validators: [][]byte{exec.Key[32:]},
-		}
+		x.API = acctesting.DirectJrpcClient(jrpc)
 	}
 
 	for i, bvnInit := range sim.netInit.Bvns {
 		bvn := &sim.Partitions[i+1]
 		bvn.Nodes = []config.Node{{Type: config.Validator, Address: bvn.Id}}
 
+		x := new(ExecEntry)
+		x.Partition = bvn
+		x.tb = sim.tb
+		x.blockTime = GenesisTime
+		x.Validators = [][]byte{bvnInit.Nodes[0].PrivValKey[32:]}
+		sim.Executors[bvn.Id] = x
+
 		logger := sim.newLogger(opts).With("partition", bvn.Id)
-		db := opts.OpenDB(bvn.Id, 0, logger)
+		x.Database = opts.OpenDB(bvn.Id, 0, logger)
 
 		network := config.Describe{
 			NetworkType:  bvn.Type,
@@ -202,7 +209,8 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 			Router:   sim.Router(),
 			EventBus: events.NewBus(logger),
 		}
-		exec, err := block.NewNodeExecutor(execOpts, db)
+		var err error
+		x.Executor, err = block.NewNodeExecutor(execOpts, x)
 		require.NoError(sim, err)
 
 		jrpc, err := api.NewJrpc(api.Options{
@@ -210,19 +218,11 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 			Describe:      &network,
 			Router:        sim.Router(),
 			TxMaxWaitTime: time.Hour,
-			Database:      db,
+			Database:      x,
+			Key:           execOpts.Key,
 		})
 		require.NoError(sim, err)
-
-		sim.Executors[bvn.Id] = &ExecEntry{
-			Database:   db,
-			Executor:   exec,
-			Partition:  bvn,
-			API:        acctesting.DirectJrpcClient(jrpc),
-			tb:         sim.tb,
-			blockTime:  GenesisTime,
-			Validators: [][]byte{exec.Key[32:]},
-		}
+		x.API = acctesting.DirectJrpcClient(jrpc)
 	}
 }
 
@@ -298,11 +298,34 @@ func (s *Simulator) PartitionFor(url *url.URL) *ExecEntry {
 	return s.Partition(partition)
 }
 
-func (s *Simulator) Query(url *url.URL, req query.Request, prove bool) interface{} {
+func QueryUrl[T any](s *Simulator, url *url.URL, prove bool) T {
 	s.Helper()
+	req := new(api.GeneralQuery)
+	req.Url = url
+	req.Prove = prove
+	var resp T
+	require.NoError(s, s.PartitionFor(url).API.RequestAPIv2(context.Background(), "query", req, &resp))
+	return resp
+}
 
-	x := s.PartitionFor(url)
-	return Query(s, x.Database, x.Executor, req, prove)
+// RunAndReset runs everything in a batch (which is discarded) then resets the
+// simulator state.
+func (s *Simulator) RunAndReset(fn func()) {
+	for _, x := range s.Executors {
+		old, new := x.Database, x.Database.Begin(true)
+		x.Database = new
+		defer func(x *ExecEntry) {
+			x.Database = old
+			new.Discard()
+
+			x.BlockIndex = 0
+			x.blockTime = GenesisTime
+			x.nextBlock = nil
+			x.currentBlock = nil
+		}(x)
+	}
+
+	fn()
 }
 
 func (s *Simulator) InitFromGenesis() {
@@ -413,7 +436,11 @@ func (s *Simulator) MustSubmitAndExecuteBlock(envelopes ...*protocol.Envelope) [
 			continue
 		}
 
-		assert.False(s, status.Failed())
+		if status.Error != nil {
+			assert.NoError(s, status.Error)
+		} else {
+			assert.False(s, status.Failed())
+		}
 		didFail = true
 	}
 	if didFail {
@@ -549,7 +576,7 @@ type ExecEntry struct {
 	nextBlock, currentBlock []*chain.Delivery
 
 	Partition  *config.Partition
-	Database   *database.Database
+	Database   database.Beginner
 	Executor   *block.Executor
 	API        *client.Client
 	Validators [][]byte
@@ -559,6 +586,10 @@ type ExecEntry struct {
 	// Submit.
 	SubmitHook func([]*chain.Delivery) ([]*chain.Delivery, bool)
 }
+
+func (x *ExecEntry) Begin(writable bool) *database.Batch         { return x.Database.Begin(writable) }
+func (x *ExecEntry) Update(fn func(*database.Batch) error) error { return x.Database.Update(fn) }
+func (x *ExecEntry) View(fn func(*database.Batch) error) error   { return x.Database.View(fn) }
 
 // Submit adds the envelopes to the next block's queue.
 //

@@ -6,13 +6,16 @@ import (
 	"math/big"
 	"testing"
 
+	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/stretchr/testify/require"
+	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
 func TestOverwriteCreditBalance(t *testing.T) {
@@ -86,17 +89,13 @@ func TestQueryKeyIndexWithRemoteAuthority(t *testing.T) {
 	})
 
 	// Query key
-	req := new(query.RequestKeyPageIndex)
+	req := new(api.KeyPageIndexQuery)
 	req.Url = alice.JoinPath("managed-tokens")
 	req.Key = aliceKey[32:]
-	x := sim.PartitionFor(req.Url)
-	_ = x.Database.View(func(batch *database.Batch) error {
-		// The query MUST fail with "no authority of ... holds ..." NOT with
-		// "account ... not found"
-		_, _, err := x.Executor.Query(batch, req, 0, false)
-		require.EqualError(t, err, fmt.Sprintf("no authority of %s holds %X", req.Url, req.Key))
-		return nil
-	})
+	_, err := sim.PartitionFor(req.Url).API.QueryKeyPageIndex(context.Background(), req)
+	require.Error(t, err)
+	require.IsType(t, jsonrpc2.Error{}, err)
+	require.Equal(t, err.(jsonrpc2.Error).Data, fmt.Sprintf("no authority of %s holds %X", req.Url, req.Key))
 }
 
 func TestAddCreditsToLiteIdentityOnOtherBVN(t *testing.T) {
@@ -168,14 +167,10 @@ func TestSynthTxnWithMissingPrincipal(t *testing.T) {
 	)
 	_, _, synth := sim.WaitForTransaction(delivered, txn[0].Transaction[0].GetHash(), 50)
 
-	// The synthetic transaction should be received and marked as pending
+	// The synthetic transaction must fail
 	require.Len(t, synth, 1)
 	hash := synth[0].Hash()
-	_, status, _ := sim.WaitForTransaction(received, hash[:], 50)
-	require.True(t, status.Pending(), "The transaction was delivered prematurely")
-
-	// The synthetic transaction must fail, but only after the anchor is received
-	_, status, _ = sim.WaitForTransaction(delivered, hash[:], 50)
+	_, status, _ := sim.WaitForTransaction(delivered, hash[:], 50)
 	require.NotZero(t, status.Code, "The transaction did not fail")
 }
 
@@ -257,7 +252,7 @@ func TestSigningDeliveredTxnDoesNothing(t *testing.T) {
 	require.Equal(t, 1, int(simulator.GetAccount[*LiteTokenAccount](sim, bob).Balance.Int64()))
 }
 
-func TestSynthTxnToDn(t *testing.T) {
+func TestSynthTxnToDirectory(t *testing.T) {
 	// Tests AC-2231
 	var timestamp uint64
 
@@ -265,27 +260,128 @@ func TestSynthTxnToDn(t *testing.T) {
 	sim := simulator.New(t, 3)
 	sim.InitFromGenesis()
 
-	// Setup accounts
-	alice := AccountUrl("alice")
-	aliceKey, liteKey := acctesting.GenerateKey(alice), acctesting.GenerateKey("lite")
-	liteUrl := acctesting.AcmeLiteAddressStdPriv(liteKey)
-	sim.CreateAccount(&LiteIdentity{Url: liteUrl.RootIdentity(), CreditBalance: 1e9})
-	sim.CreateAccount(&LiteTokenAccount{Url: liteUrl, TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e9 * AcmePrecision)})
-	sim.SetRouteFor(alice, "Directory")
-	sim.CreateIdentity(alice, aliceKey[32:])
-	sim.CreateAccount(&TokenAccount{Url: alice.JoinPath("tokens"), TokenUrl: AcmeUrl()})
+	alice := acctesting.GenerateKey(t.Name(), "alice")
+	aliceUrl := acctesting.AcmeLiteAddressStdPriv(alice)
+	bob := acctesting.GenerateKey(t.Name(), "bob")
+	bobUrl := acctesting.AcmeLiteAddressStdPriv(bob)
 
-	// Send some tokens
-	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
-		acctesting.NewTransaction().
-			WithPrincipal(liteUrl).
-			WithSigner(liteUrl, 1).
-			WithTimestampVar(&timestamp).
-			WithBody(&SendTokens{To: []*TokenRecipient{{
-				Url:    alice,
+	// Put Alice on BVN0 and Bob on the DN
+	sim.SetRouteFor(aliceUrl.RootIdentity(), "BVN0")
+	sim.SetRouteFor(bobUrl.RootIdentity(), "Directory")
+
+	// Create Alice
+	sim.CreateAccount(&LiteIdentity{Url: aliceUrl.RootIdentity(), CreditBalance: 1e9})
+	sim.CreateAccount(&LiteTokenAccount{Url: aliceUrl, TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e9)})
+
+	// Send tokens from BVN to DN
+	env := acctesting.NewTransaction().
+		WithPrincipal(aliceUrl).
+		WithTimestampVar(&timestamp).
+		WithSigner(aliceUrl.RootIdentity(), 1).
+		WithBody(&SendTokens{
+			To: []*TokenRecipient{{
+				Url:    bobUrl,
+				Amount: *big.NewInt(1e6),
+			}},
+		}).
+		Initiate(SignatureTypeED25519, alice).
+		Build()
+	sim.MustSubmitAndExecuteBlock(env)
+	sim.WaitForTransactionFlow(delivered, env.Transaction[0].GetHash())
+}
+
+func TestSynthTxnFromDirectory(t *testing.T) {
+	// Tests AC-2231
+	var timestamp uint64
+
+	// Initialize
+	sim := simulator.New(t, 3)
+	sim.InitFromGenesis()
+
+	alice := acctesting.GenerateKey(t.Name(), "alice")
+	aliceUrl := acctesting.AcmeLiteAddressStdPriv(alice)
+	bob := acctesting.GenerateKey(t.Name(), "bob")
+	bobUrl := acctesting.AcmeLiteAddressStdPriv(bob)
+
+	// Put Alice on the DN and Bob on BVN0
+	sim.SetRouteFor(aliceUrl.RootIdentity(), "Directory")
+	sim.SetRouteFor(bobUrl.RootIdentity(), "BVN0")
+
+	// Create Alice
+	sim.CreateAccount(&LiteIdentity{Url: aliceUrl.RootIdentity(), CreditBalance: 1e9})
+	sim.CreateAccount(&LiteTokenAccount{Url: aliceUrl, TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e9)})
+
+	// Send tokens from BVN to DN
+	env := acctesting.NewTransaction().
+		WithPrincipal(aliceUrl).
+		WithTimestampVar(&timestamp).
+		WithSigner(aliceUrl.RootIdentity(), 1).
+		WithBody(&SendTokens{
+			To: []*TokenRecipient{{
+				Url:    bobUrl,
+				Amount: *big.NewInt(1e6),
+			}},
+		}).
+		Initiate(SignatureTypeED25519, alice).
+		Build()
+	sim.MustSubmitAndExecuteBlock(env)
+	sim.WaitForTransactionFlow(delivered, env.Transaction[0].GetHash())
+}
+
+func TestSendDirectToWrongPartition(t *testing.T) {
+	// Initialize
+	sim := simulator.New(t, 3)
+	sim.InitFromGenesis()
+
+	// Create the lite addresses and one account
+	aliceKey, bobKey := acctesting.GenerateKey("alice"), acctesting.GenerateKey("bob")
+	alice, bob := acctesting.AcmeLiteAddressStdPriv(aliceKey), acctesting.AcmeLiteAddressStdPriv(bobKey)
+
+	goodBvn := sim.PartitionFor(alice)
+	_ = goodBvn.Update(func(batch *database.Batch) error {
+		require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, tmed25519.PrivKey(aliceKey), 1e6, 1e9))
+		return nil
+	})
+
+	// Set route to something else
+	var badBvn *simulator.ExecEntry
+	for _, partition := range sim.Partitions[1:] {
+		if partition.Id != goodBvn.Partition.Id {
+			badBvn = sim.Partition(partition.Id)
+			break
+		}
+	}
+
+	// Create the transaction
+	env := acctesting.NewTransaction().
+		WithPrincipal(alice).
+		WithSigner(alice, 1).
+		WithTimestamp(1).
+		WithBody(&protocol.SendTokens{
+			To: []*protocol.TokenRecipient{{
+				Url:    bob,
 				Amount: *big.NewInt(1),
-			}}}).
-			Initiate(SignatureTypeED25519, liteKey).
-			Build(),
-	)...)
+			}},
+		}).
+		Initiate(protocol.SignatureTypeED25519, aliceKey).
+		Build()
+
+	// Submit the transaction directly to the wrong BVN
+	badBvn.Submit(false, env)
+	var status *protocol.TransactionStatus
+	for i := 0; i < 50 && status == nil; i++ {
+		ch := make(chan *protocol.TransactionStatus)
+		go sim.ExecuteBlock(ch)
+		for s := range ch {
+			if s.TxID.Equal(env.Transaction[0].ID()) {
+				status = s
+				break
+			}
+		}
+	}
+
+	require.NotNil(t, status, fmt.Sprintf("Transaction %X has not been delivered after 50 blocks", env.Transaction[0].GetHash()[:4]))
+
+	require.NotNil(t, status.Error)
+	require.Equal(t, fmt.Sprintf("signature submitted to %s instead of %s", badBvn.Partition.Id, goodBvn.Partition.Id), status.Error.Message)
 }

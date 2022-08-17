@@ -12,7 +12,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
-	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
@@ -27,7 +26,7 @@ type Executor struct {
 	executors  map[protocol.TransactionType]chain.TransactionExecutor
 	dispatcher *dispatcher
 	logger     logging.OptionalLogger
-	db         *database.Database
+	db         database.Beginner
 
 	// oldBlockMeta blockMetadata
 }
@@ -47,7 +46,7 @@ type ExecutorOptions struct {
 }
 
 // NewNodeExecutor creates a new Executor for a node.
-func NewNodeExecutor(opts ExecutorOptions, db *database.Database) (*Executor, error) {
+func NewNodeExecutor(opts ExecutorOptions, db database.Beginner) (*Executor, error) {
 	executors := []chain.TransactionExecutor{
 		// User transactions
 		chain.AddCredits{},
@@ -116,7 +115,7 @@ func NewGenesisExecutor(db *database.Database, logger log.Logger, network *confi
 	)
 }
 
-func newExecutor(opts ExecutorOptions, db *database.Database, executors ...chain.TransactionExecutor) (*Executor, error) {
+func newExecutor(opts ExecutorOptions, db database.Beginner, executors ...chain.TransactionExecutor) (*Executor, error) {
 	if opts.Background == nil {
 		opts.Background = func(f func()) { go f() }
 	}
@@ -146,7 +145,7 @@ func newExecutor(opts ExecutorOptions, db *database.Database, executors ...chain
 	switch {
 	case err == nil:
 		// Database has been initialized
-		m.logger.Debug("Loaded", "height", ledger.Index, "hash", logging.AsHex(batch.BptRoot()).Slice(0, 4))
+		// m.logger.Debug("Loaded", "height", ledger.Index, "hash", logging.AsHex(batch.BptRoot()).Slice(0, 4))
 
 		// Load globals
 		err = m.loadGlobals(db.View)
@@ -156,7 +155,7 @@ func newExecutor(opts ExecutorOptions, db *database.Database, executors ...chain
 
 	case errors.Is(err, storage.ErrNotFound):
 		// Database is uninitialized
-		m.logger.Debug("Loaded", "height", 0, "hash", logging.AsHex(batch.BptRoot()).Slice(0, 4))
+		// m.logger.Debug("Loaded", "height", 0, "hash", logging.AsHex(batch.BptRoot()).Slice(0, 4))
 
 	default:
 		return nil, errors.Format(errors.StatusUnknownError, "load ledger: %w", err)
@@ -171,6 +170,10 @@ func (m *Executor) EnableTimers() {
 
 func (m *Executor) ActiveGlobals_TESTONLY() *core.GlobalValues {
 	return &m.globals.Active
+}
+
+func (x *Executor) SetExecutor_TESTONLY(y chain.TransactionExecutor) {
+	x.executors[y.Type()] = y
 }
 
 func (m *Executor) Genesis(block *Block, exec chain.TransactionExecutor) error {
@@ -193,11 +196,6 @@ func (m *Executor) Genesis(block *Block, exec chain.TransactionExecutor) error {
 	err = block.Batch.Transaction(txn.GetHash()).PutStatus(&protocol.TransactionStatus{
 		Initiator: txn.Header.Principal,
 	})
-	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
-	}
-
-	err = indexing.BlockState(block.Batch, m.Describe.NodeUrl(protocol.Ledger)).Clear()
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknownError, err)
 	}
@@ -231,7 +229,7 @@ func (m *Executor) LoadStateRoot(batch *database.Batch) ([]byte, error) {
 }
 
 func (m *Executor) RestoreSnapshot(batch *database.Batch, file ioutil2.SectionReader) error {
-	err := batch.RestoreSnapshot(file)
+	err := batch.RestoreSnapshot(file, &m.Describe)
 	if err != nil {
 		return errors.Format(errors.StatusUnknownError, "load state: %w", err)
 	}

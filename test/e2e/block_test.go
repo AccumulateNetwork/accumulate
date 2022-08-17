@@ -16,16 +16,13 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 func init() { acctesting.EnableDebugFeatures() }
 
 var delivered = (*TransactionStatus).Delivered
-
-func received(status *TransactionStatus) bool {
-	return status.Code > 0 && status.Code != errors.StatusRemote
-}
 
 func updateAccount[T Account](sim *simulator.Simulator, accountUrl *url.URL, fn func(account T)) {
 	sim.UpdateAccount(accountUrl, func(account Account) {
@@ -83,6 +80,38 @@ func TestSendTokensToBadRecipient(t *testing.T) {
 	assert.Equal(t, errors.StatusNotFound, status.Code)
 }
 
+func TestDoesChargeFee(t *testing.T) {
+	const initialBalance = 1000
+	var timestamp uint64
+	aliceKey := acctesting.GenerateKey("alice")
+	bobKey := acctesting.GenerateKey("bob")
+	alice := acctesting.AcmeLiteAddressStdPriv(aliceKey)
+	bob := acctesting.AcmeLiteAddressStdPriv(bobKey)
+
+	// Initialize
+	sim := simulator.New(t, 3)
+	sim.InitFromGenesis()
+	sim.CreateAccount(&LiteIdentity{Url: alice.RootIdentity(), CreditBalance: initialBalance})
+	sim.CreateAccount(&LiteTokenAccount{Url: alice, TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e12)})
+
+	// Send tokens
+	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
+		acctesting.NewTransaction().
+			WithPrincipal(alice).
+			WithSigner(alice, 1).
+			WithTimestampVar(&timestamp).
+			WithBody(&SendTokens{To: []*TokenRecipient{{
+				Url:    bob,
+				Amount: *big.NewInt(1),
+			}}}).
+			Initiate(SignatureTypeED25519, aliceKey).
+			Build(),
+	)...)
+
+	lid := simulator.GetAccount[*LiteIdentity](sim, alice.RootIdentity())
+	require.Equal(t, int(initialBalance-FeeTransferTokens), int(lid.CreditBalance))
+}
+
 func TestSendTokensToBadRecipient2(t *testing.T) {
 	var timestamp uint64
 
@@ -119,16 +148,13 @@ func TestSendTokensToBadRecipient2(t *testing.T) {
 	sim.MustSubmitAndExecuteBlock(env)
 	sim.WaitForTransactionFlow(delivered, env.Transaction[0].GetHash())
 
-	var creditsAfter uint64
-	_ = sim.PartitionFor(aliceUrl).Database.View(func(batch *database.Batch) error {
-		var account *LiteIdentity
-		require.NoError(t, batch.Account(aliceUrl.RootIdentity()).GetStateAs(&account))
-		creditsAfter = account.CreditBalance
-		return nil
-	})
+	fee, err := protocol.ComputeTransactionFee(env.Transaction[0])
+	require.NoError(t, err)
+	refund, err := protocol.ComputeSyntheticRefund(env.Transaction[0], len(exch.To))
+	require.NoError(t, err)
 
-	expectedFee := FeeSendTokens - (FeeSendTokens-FeeFailedMaximum)/2
-	require.Equal(t, creditsBefore-expectedFee.AsUInt64(), creditsAfter)
+	lid := simulator.GetAccount[*LiteIdentity](sim, aliceUrl.RootIdentity())
+	require.Equal(t, int(creditsBefore-(fee-refund).AsUInt64()), int(lid.CreditBalance))
 }
 
 func TestCreateRootIdentity(t *testing.T) {

@@ -230,6 +230,7 @@ type Method struct {
 	Input        string
 	Output       string
 	Call         string
+	RouteParam   string   `yaml:"route-param"`
 	CallParams   []string `yaml:"call-params"`
 	Validate     []string `yaml:"validate"`
 }

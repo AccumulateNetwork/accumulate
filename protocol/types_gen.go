@@ -249,7 +249,7 @@ type DirectoryAnchor struct {
 	// Updates are synchronization updates for network accounts.
 	Updates []NetworkAccountUpdate `json:"updates,omitempty" form:"updates" query:"updates" validate:"required"`
 	// Receipts are receipts for anchors from other partitions that were included in the block.
-	Receipts []managed.Receipt `json:"receipts,omitempty" form:"receipts" query:"receipts" validate:"required"`
+	Receipts []*PartitionAnchorReceipt `json:"receipts,omitempty" form:"receipts" query:"receipts" validate:"required"`
 	// MakeMajorBlock notifies the partition that the DN has opened a major block.
 	MakeMajorBlock uint64 `json:"makeMajorBlock,omitempty" form:"makeMajorBlock" query:"makeMajorBlock" validate:"required"`
 	// MakeMajorBlockTime holds the time when the major block was opened.
@@ -312,6 +312,12 @@ type FactomDataEntry struct {
 	AccountId [32]byte `json:"accountId,omitempty" form:"accountId" query:"accountId" validate:"required"`
 	Data      []byte   `json:"data,omitempty" form:"data" query:"data" validate:"required"`
 	ExtIds    [][]byte `json:"extIds,omitempty" form:"extIds" query:"extIds" validate:"required"`
+}
+
+type FactomDataEntryWrapper struct {
+	fieldsSet []bool
+	FactomDataEntry
+	extraData []byte
 }
 
 // IndexEntry represents an entry in an index chain.
@@ -493,6 +499,18 @@ type PartitionAnchor struct {
 	// StateTreeAnchor is the root of the source's state tree (BPT).
 	StateTreeAnchor [32]byte `json:"stateTreeAnchor,omitempty" form:"stateTreeAnchor" query:"stateTreeAnchor" validate:"required"`
 	extraData       []byte
+}
+
+type PartitionAnchorReceipt struct {
+	fieldsSet   []bool
+	PartitionID string `json:"partitionID,omitempty" form:"partitionID" query:"partitionID" validate:"required"`
+	// MinorBlockIndex is the minor block index.
+	MinorBlockIndex uint64 `json:"minorBlockIndex,omitempty" form:"minorBlockIndex" query:"minorBlockIndex" validate:"required"`
+	// RootChainIndex is the index of the anchored root chain entry.
+	RootChainIndex uint64 `json:"rootChainIndex,omitempty" form:"rootChainIndex" query:"rootChainIndex" validate:"required"`
+	// RootChainReceipt is a receipt for the anchored root chain entry.
+	RootChainReceipt *managed.Receipt `json:"rootChainReceipt,omitempty" form:"rootChainReceipt" query:"rootChainReceipt" validate:"required"`
+	extraData        []byte
 }
 
 type PartitionDefinition struct {
@@ -946,7 +964,7 @@ func (*EnableAccountAuthOperation) Type() AccountAuthOperationType {
 	return AccountAuthOperationTypeEnable
 }
 
-func (*FactomDataEntry) Type() DataEntryType { return DataEntryTypeFactom }
+func (*FactomDataEntryWrapper) Type() DataEntryType { return DataEntryTypeFactom }
 
 func (*InternalSignature) Type() SignatureType { return SignatureTypeInternal }
 
@@ -1042,7 +1060,7 @@ func (v *ADI) Copy() *ADI {
 	u := new(ADI)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 	u.AccountAuth = *v.AccountAuth.Copy()
 
@@ -1081,7 +1099,7 @@ func (v *AcmeFaucet) Copy() *AcmeFaucet {
 	u := new(AcmeFaucet)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 
 	return u
@@ -1103,7 +1121,7 @@ func (v *AddAccountAuthorityOperation) Copy() *AddAccountAuthorityOperation {
 	u := new(AddAccountAuthorityOperation)
 
 	if v.Authority != nil {
-		u.Authority = (v.Authority).Copy()
+		u.Authority = v.Authority
 	}
 
 	return u
@@ -1115,7 +1133,7 @@ func (v *AddCredits) Copy() *AddCredits {
 	u := new(AddCredits)
 
 	if v.Recipient != nil {
-		u.Recipient = (v.Recipient).Copy()
+		u.Recipient = v.Recipient
 	}
 	u.Amount = *encoding.BigintCopy(&v.Amount)
 	u.Oracle = v.Oracle
@@ -1151,7 +1169,7 @@ func (v *AnchorLedger) Copy() *AnchorLedger {
 	u := new(AnchorLedger)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 	u.MinorBlockSequenceNumber = v.MinorBlockSequenceNumber
 	u.MajorBlockIndex = v.MajorBlockIndex
@@ -1159,7 +1177,7 @@ func (v *AnchorLedger) Copy() *AnchorLedger {
 	u.PendingMajorBlockAnchors = make([]*url.URL, len(v.PendingMajorBlockAnchors))
 	for i, v := range v.PendingMajorBlockAnchors {
 		if v != nil {
-			u.PendingMajorBlockAnchors[i] = (v).Copy()
+			u.PendingMajorBlockAnchors[i] = v
 		}
 	}
 
@@ -1173,7 +1191,7 @@ func (v *AnchorMetadata) Copy() *AnchorMetadata {
 
 	u.ChainMetadata = *v.ChainMetadata.Copy()
 	if v.Account != nil {
-		u.Account = (v.Account).Copy()
+		u.Account = v.Account
 	}
 	u.Index = v.Index
 	u.SourceIndex = v.SourceIndex
@@ -1189,7 +1207,7 @@ func (v *AuthorityEntry) Copy() *AuthorityEntry {
 	u := new(AuthorityEntry)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 	u.Disabled = v.Disabled
 
@@ -1204,7 +1222,7 @@ func (v *BTCLegacySignature) Copy() *BTCLegacySignature {
 	u.PublicKey = encoding.BytesCopy(v.PublicKey)
 	u.Signature = encoding.BytesCopy(v.Signature)
 	if v.Signer != nil {
-		u.Signer = (v.Signer).Copy()
+		u.Signer = v.Signer
 	}
 	u.SignerVersion = v.SignerVersion
 	u.Timestamp = v.Timestamp
@@ -1222,7 +1240,7 @@ func (v *BTCSignature) Copy() *BTCSignature {
 	u.PublicKey = encoding.BytesCopy(v.PublicKey)
 	u.Signature = encoding.BytesCopy(v.Signature)
 	if v.Signer != nil {
-		u.Signer = (v.Signer).Copy()
+		u.Signer = v.Signer
 	}
 	u.SignerVersion = v.SignerVersion
 	u.Timestamp = v.Timestamp
@@ -1281,12 +1299,12 @@ func (v *CreateDataAccount) Copy() *CreateDataAccount {
 	u := new(CreateDataAccount)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 	u.Authorities = make([]*url.URL, len(v.Authorities))
 	for i, v := range v.Authorities {
 		if v != nil {
-			u.Authorities[i] = (v).Copy()
+			u.Authorities[i] = v
 		}
 	}
 
@@ -1299,16 +1317,16 @@ func (v *CreateIdentity) Copy() *CreateIdentity {
 	u := new(CreateIdentity)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 	u.KeyHash = encoding.BytesCopy(v.KeyHash)
 	if v.KeyBookUrl != nil {
-		u.KeyBookUrl = (v.KeyBookUrl).Copy()
+		u.KeyBookUrl = v.KeyBookUrl
 	}
 	u.Authorities = make([]*url.URL, len(v.Authorities))
 	for i, v := range v.Authorities {
 		if v != nil {
-			u.Authorities[i] = (v).Copy()
+			u.Authorities[i] = v
 		}
 	}
 
@@ -1321,13 +1339,13 @@ func (v *CreateKeyBook) Copy() *CreateKeyBook {
 	u := new(CreateKeyBook)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 	u.PublicKeyHash = encoding.BytesCopy(v.PublicKeyHash)
 	u.Authorities = make([]*url.URL, len(v.Authorities))
 	for i, v := range v.Authorities {
 		if v != nil {
-			u.Authorities[i] = (v).Copy()
+			u.Authorities[i] = v
 		}
 	}
 
@@ -1363,12 +1381,12 @@ func (v *CreateToken) Copy() *CreateToken {
 	u := new(CreateToken)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 	u.Symbol = v.Symbol
 	u.Precision = v.Precision
 	if v.Properties != nil {
-		u.Properties = (v.Properties).Copy()
+		u.Properties = v.Properties
 	}
 	if v.SupplyLimit != nil {
 		u.SupplyLimit = encoding.BigintCopy(v.SupplyLimit)
@@ -1376,7 +1394,7 @@ func (v *CreateToken) Copy() *CreateToken {
 	u.Authorities = make([]*url.URL, len(v.Authorities))
 	for i, v := range v.Authorities {
 		if v != nil {
-			u.Authorities[i] = (v).Copy()
+			u.Authorities[i] = v
 		}
 	}
 
@@ -1389,15 +1407,15 @@ func (v *CreateTokenAccount) Copy() *CreateTokenAccount {
 	u := new(CreateTokenAccount)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 	if v.TokenUrl != nil {
-		u.TokenUrl = (v.TokenUrl).Copy()
+		u.TokenUrl = v.TokenUrl
 	}
 	u.Authorities = make([]*url.URL, len(v.Authorities))
 	for i, v := range v.Authorities {
 		if v != nil {
-			u.Authorities[i] = (v).Copy()
+			u.Authorities[i] = v
 		}
 	}
 	if v.Proof != nil {
@@ -1413,7 +1431,7 @@ func (v *DataAccount) Copy() *DataAccount {
 	u := new(DataAccount)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 	u.AccountAuth = *v.AccountAuth.Copy()
 	if v.Entry != nil {
@@ -1432,7 +1450,7 @@ func (v *DelegatedSignature) Copy() *DelegatedSignature {
 		u.Signature = (v.Signature).CopyAsInterface().(Signature)
 	}
 	if v.Delegator != nil {
-		u.Delegator = (v.Delegator).Copy()
+		u.Delegator = v.Delegator
 	}
 
 	return u
@@ -1448,9 +1466,11 @@ func (v *DirectoryAnchor) Copy() *DirectoryAnchor {
 	for i, v := range v.Updates {
 		u.Updates[i] = *(&v).Copy()
 	}
-	u.Receipts = make([]managed.Receipt, len(v.Receipts))
+	u.Receipts = make([]*PartitionAnchorReceipt, len(v.Receipts))
 	for i, v := range v.Receipts {
-		u.Receipts[i] = *(&v).Copy()
+		if v != nil {
+			u.Receipts[i] = (v).Copy()
+		}
 	}
 	u.MakeMajorBlock = v.MakeMajorBlock
 	u.MakeMajorBlockTime = v.MakeMajorBlockTime
@@ -1464,7 +1484,7 @@ func (v *DisableAccountAuthOperation) Copy() *DisableAccountAuthOperation {
 	u := new(DisableAccountAuthOperation)
 
 	if v.Authority != nil {
-		u.Authority = (v.Authority).Copy()
+		u.Authority = v.Authority
 	}
 
 	return u
@@ -1478,7 +1498,7 @@ func (v *ED25519Signature) Copy() *ED25519Signature {
 	u.PublicKey = encoding.BytesCopy(v.PublicKey)
 	u.Signature = encoding.BytesCopy(v.Signature)
 	if v.Signer != nil {
-		u.Signer = (v.Signer).Copy()
+		u.Signer = v.Signer
 	}
 	u.SignerVersion = v.SignerVersion
 	u.Timestamp = v.Timestamp
@@ -1496,7 +1516,7 @@ func (v *ETHSignature) Copy() *ETHSignature {
 	u.PublicKey = encoding.BytesCopy(v.PublicKey)
 	u.Signature = encoding.BytesCopy(v.Signature)
 	if v.Signer != nil {
-		u.Signer = (v.Signer).Copy()
+		u.Signer = v.Signer
 	}
 	u.SignerVersion = v.SignerVersion
 	u.Timestamp = v.Timestamp
@@ -1520,7 +1540,7 @@ func (v *EnableAccountAuthOperation) Copy() *EnableAccountAuthOperation {
 	u := new(EnableAccountAuthOperation)
 
 	if v.Authority != nil {
-		u.Authority = (v.Authority).Copy()
+		u.Authority = v.Authority
 	}
 
 	return u
@@ -1565,6 +1585,16 @@ func (v *FactomDataEntry) Copy() *FactomDataEntry {
 
 func (v *FactomDataEntry) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *FactomDataEntryWrapper) Copy() *FactomDataEntryWrapper {
+	u := new(FactomDataEntryWrapper)
+
+	u.FactomDataEntry = *v.FactomDataEntry.Copy()
+
+	return u
+}
+
+func (v *FactomDataEntryWrapper) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *IndexEntry) Copy() *IndexEntry {
 	u := new(IndexEntry)
 
@@ -1597,7 +1627,7 @@ func (v *IssueTokens) Copy() *IssueTokens {
 	u := new(IssueTokens)
 
 	if v.Recipient != nil {
-		u.Recipient = (v.Recipient).Copy()
+		u.Recipient = v.Recipient
 	}
 	u.Amount = *encoding.BigintCopy(&v.Amount)
 	u.To = make([]*TokenRecipient, len(v.To))
@@ -1616,7 +1646,7 @@ func (v *KeyBook) Copy() *KeyBook {
 	u := new(KeyBook)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 	u.BookType = v.BookType
 	u.AccountAuth = *v.AccountAuth.Copy()
@@ -1631,7 +1661,7 @@ func (v *KeyPage) Copy() *KeyPage {
 	u := new(KeyPage)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 	u.CreditBalance = v.CreditBalance
 	u.AcceptThreshold = v.AcceptThreshold
@@ -1661,7 +1691,7 @@ func (v *KeySpec) Copy() *KeySpec {
 	u.PublicKeyHash = encoding.BytesCopy(v.PublicKeyHash)
 	u.LastUsedOn = v.LastUsedOn
 	if v.Delegate != nil {
-		u.Delegate = (v.Delegate).Copy()
+		u.Delegate = v.Delegate
 	}
 
 	return u
@@ -1674,7 +1704,7 @@ func (v *KeySpecParams) Copy() *KeySpecParams {
 
 	u.KeyHash = encoding.BytesCopy(v.KeyHash)
 	if v.Delegate != nil {
-		u.Delegate = (v.Delegate).Copy()
+		u.Delegate = v.Delegate
 	}
 
 	return u
@@ -1689,7 +1719,7 @@ func (v *LegacyED25519Signature) Copy() *LegacyED25519Signature {
 	u.PublicKey = encoding.BytesCopy(v.PublicKey)
 	u.Signature = encoding.BytesCopy(v.Signature)
 	if v.Signer != nil {
-		u.Signer = (v.Signer).Copy()
+		u.Signer = v.Signer
 	}
 	u.SignerVersion = v.SignerVersion
 	u.Vote = v.Vote
@@ -1704,7 +1734,7 @@ func (v *LiteDataAccount) Copy() *LiteDataAccount {
 	u := new(LiteDataAccount)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 
 	return u
@@ -1716,7 +1746,7 @@ func (v *LiteIdentity) Copy() *LiteIdentity {
 	u := new(LiteIdentity)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 	u.CreditBalance = v.CreditBalance
 	u.LastUsedOn = v.LastUsedOn
@@ -1730,10 +1760,10 @@ func (v *LiteTokenAccount) Copy() *LiteTokenAccount {
 	u := new(LiteTokenAccount)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 	if v.TokenUrl != nil {
-		u.TokenUrl = (v.TokenUrl).Copy()
+		u.TokenUrl = v.TokenUrl
 	}
 	u.Balance = *encoding.BigintCopy(&v.Balance)
 	u.LockHeight = v.LockHeight
@@ -1822,7 +1852,7 @@ func (v *PartitionAnchor) Copy() *PartitionAnchor {
 	u := new(PartitionAnchor)
 
 	if v.Source != nil {
-		u.Source = (v.Source).Copy()
+		u.Source = v.Source
 	}
 	u.MajorBlockIndex = v.MajorBlockIndex
 	u.MinorBlockIndex = v.MinorBlockIndex
@@ -1834,6 +1864,21 @@ func (v *PartitionAnchor) Copy() *PartitionAnchor {
 }
 
 func (v *PartitionAnchor) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *PartitionAnchorReceipt) Copy() *PartitionAnchorReceipt {
+	u := new(PartitionAnchorReceipt)
+
+	u.PartitionID = v.PartitionID
+	u.MinorBlockIndex = v.MinorBlockIndex
+	u.RootChainIndex = v.RootChainIndex
+	if v.RootChainReceipt != nil {
+		u.RootChainReceipt = (v.RootChainReceipt).Copy()
+	}
+
+	return u
+}
+
+func (v *PartitionAnchorReceipt) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *PartitionDefinition) Copy() *PartitionDefinition {
 	u := new(PartitionDefinition)
@@ -1853,10 +1898,10 @@ func (v *PartitionSignature) Copy() *PartitionSignature {
 	u := new(PartitionSignature)
 
 	if v.SourceNetwork != nil {
-		u.SourceNetwork = (v.SourceNetwork).Copy()
+		u.SourceNetwork = v.SourceNetwork
 	}
 	if v.DestinationNetwork != nil {
-		u.DestinationNetwork = (v.DestinationNetwork).Copy()
+		u.DestinationNetwork = v.DestinationNetwork
 	}
 	u.SequenceNumber = v.SequenceNumber
 	u.TransactionHash = v.TransactionHash
@@ -1870,7 +1915,7 @@ func (v *PartitionSyntheticLedger) Copy() *PartitionSyntheticLedger {
 	u := new(PartitionSyntheticLedger)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 	u.Produced = v.Produced
 	u.Received = v.Received
@@ -1878,7 +1923,7 @@ func (v *PartitionSyntheticLedger) Copy() *PartitionSyntheticLedger {
 	u.Pending = make([]*url.TxID, len(v.Pending))
 	for i, v := range v.Pending {
 		if v != nil {
-			u.Pending[i] = (v).Copy()
+			u.Pending[i] = v
 		}
 	}
 
@@ -1893,7 +1938,7 @@ func (v *RCD1Signature) Copy() *RCD1Signature {
 	u.PublicKey = encoding.BytesCopy(v.PublicKey)
 	u.Signature = encoding.BytesCopy(v.Signature)
 	if v.Signer != nil {
-		u.Signer = (v.Signer).Copy()
+		u.Signer = v.Signer
 	}
 	u.SignerVersion = v.SignerVersion
 	u.Timestamp = v.Timestamp
@@ -1920,7 +1965,7 @@ func (v *ReceiptSignature) Copy() *ReceiptSignature {
 	u := new(ReceiptSignature)
 
 	if v.SourceNetwork != nil {
-		u.SourceNetwork = (v.SourceNetwork).Copy()
+		u.SourceNetwork = v.SourceNetwork
 	}
 	u.Proof = *(&v.Proof).Copy()
 	u.TransactionHash = v.TransactionHash
@@ -1934,7 +1979,7 @@ func (v *RemoteSignature) Copy() *RemoteSignature {
 	u := new(RemoteSignature)
 
 	if v.Destination != nil {
-		u.Destination = (v.Destination).Copy()
+		u.Destination = v.Destination
 	}
 	if v.Signature != nil {
 		u.Signature = (v.Signature).CopyAsInterface().(Signature)
@@ -1959,7 +2004,7 @@ func (v *RemoveAccountAuthorityOperation) Copy() *RemoveAccountAuthorityOperatio
 	u := new(RemoveAccountAuthorityOperation)
 
 	if v.Authority != nil {
-		u.Authority = (v.Authority).Copy()
+		u.Authority = v.Authority
 	}
 
 	return u
@@ -1993,7 +2038,7 @@ func (v *RouteOverride) Copy() *RouteOverride {
 	u := new(RouteOverride)
 
 	if v.Account != nil {
-		u.Account = (v.Account).Copy()
+		u.Account = v.Account
 	}
 	u.Partition = v.Partition
 
@@ -2051,7 +2096,7 @@ func (v *SignatureSet) Copy() *SignatureSet {
 
 	u.Vote = v.Vote
 	if v.Signer != nil {
-		u.Signer = (v.Signer).Copy()
+		u.Signer = v.Signer
 	}
 	u.TransactionHash = v.TransactionHash
 	u.Signatures = make([]Signature, len(v.Signatures))
@@ -2114,7 +2159,7 @@ func (v *SyntheticDepositTokens) Copy() *SyntheticDepositTokens {
 
 	u.SyntheticOrigin = *v.SyntheticOrigin.Copy()
 	if v.Token != nil {
-		u.Token = (v.Token).Copy()
+		u.Token = v.Token
 	}
 	u.Amount = *encoding.BigintCopy(&v.Amount)
 	u.IsIssuer = v.IsIssuer
@@ -2145,7 +2190,7 @@ func (v *SyntheticLedger) Copy() *SyntheticLedger {
 	u := new(SyntheticLedger)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 	u.Partitions = make([]*PartitionSyntheticLedger, len(v.Partitions))
 	for i, v := range v.Partitions {
@@ -2169,10 +2214,10 @@ func (v *SyntheticOrigin) Copy() *SyntheticOrigin {
 	u := new(SyntheticOrigin)
 
 	if v.Cause != nil {
-		u.Cause = (v.Cause).Copy()
+		u.Cause = v.Cause
 	}
 	if v.Initiator != nil {
-		u.Initiator = (v.Initiator).Copy()
+		u.Initiator = v.Initiator
 	}
 	u.FeeRefund = v.FeeRefund
 
@@ -2206,7 +2251,7 @@ func (v *SystemLedger) Copy() *SystemLedger {
 	u := new(SystemLedger)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 	u.Index = v.Index
 	u.Timestamp = v.Timestamp
@@ -2241,11 +2286,11 @@ func (v *TokenAccount) Copy() *TokenAccount {
 	u := new(TokenAccount)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 	u.AccountAuth = *v.AccountAuth.Copy()
 	if v.TokenUrl != nil {
-		u.TokenUrl = (v.TokenUrl).Copy()
+		u.TokenUrl = v.TokenUrl
 	}
 	u.Balance = *encoding.BigintCopy(&v.Balance)
 
@@ -2258,13 +2303,13 @@ func (v *TokenIssuer) Copy() *TokenIssuer {
 	u := new(TokenIssuer)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 	u.AccountAuth = *v.AccountAuth.Copy()
 	u.Symbol = v.Symbol
 	u.Precision = v.Precision
 	if v.Properties != nil {
-		u.Properties = (v.Properties).Copy()
+		u.Properties = v.Properties
 	}
 	u.Issued = *encoding.BigintCopy(&v.Issued)
 	if v.SupplyLimit != nil {
@@ -2295,7 +2340,7 @@ func (v *TokenRecipient) Copy() *TokenRecipient {
 	u := new(TokenRecipient)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 	u.Amount = *encoding.BigintCopy(&v.Amount)
 
@@ -2321,7 +2366,7 @@ func (v *TransactionHeader) Copy() *TransactionHeader {
 	u := new(TransactionHeader)
 
 	if v.Principal != nil {
-		u.Principal = (v.Principal).Copy()
+		u.Principal = v.Principal
 	}
 	u.Initiator = v.Initiator
 	u.Memo = v.Memo
@@ -2351,7 +2396,7 @@ func (v *TransactionStatus) Copy() *TransactionStatus {
 	u := new(TransactionStatus)
 
 	if v.TxID != nil {
-		u.TxID = (v.TxID).Copy()
+		u.TxID = v.TxID
 	}
 	u.Code = v.Code
 	if v.Error != nil {
@@ -2362,7 +2407,7 @@ func (v *TransactionStatus) Copy() *TransactionStatus {
 	}
 	u.Received = v.Received
 	if v.Initiator != nil {
-		u.Initiator = (v.Initiator).Copy()
+		u.Initiator = v.Initiator
 	}
 	u.Signers = make([]Signer, len(v.Signers))
 	for i, v := range v.Signers {
@@ -2371,10 +2416,10 @@ func (v *TransactionStatus) Copy() *TransactionStatus {
 		}
 	}
 	if v.SourceNetwork != nil {
-		u.SourceNetwork = (v.SourceNetwork).Copy()
+		u.SourceNetwork = v.SourceNetwork
 	}
 	if v.DestinationNetwork != nil {
-		u.DestinationNetwork = (v.DestinationNetwork).Copy()
+		u.DestinationNetwork = v.DestinationNetwork
 	}
 	u.SequenceNumber = v.SequenceNumber
 	u.GotDirectoryReceipt = v.GotDirectoryReceipt
@@ -2393,7 +2438,7 @@ func (v *TxIdSet) Copy() *TxIdSet {
 	u.Entries = make([]*url.TxID, len(v.Entries))
 	for i, v := range v.Entries {
 		if v != nil {
-			u.Entries[i] = (v).Copy()
+			u.Entries[i] = v
 		}
 	}
 
@@ -2406,7 +2451,7 @@ func (v *UnknownAccount) Copy() *UnknownAccount {
 	u := new(UnknownAccount)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 
 	return u
@@ -2418,7 +2463,7 @@ func (v *UnknownSigner) Copy() *UnknownSigner {
 	u := new(UnknownSigner)
 
 	if v.Url != nil {
-		u.Url = (v.Url).Copy()
+		u.Url = v.Url
 	}
 	u.Version = v.Version
 
@@ -2514,7 +2559,7 @@ func (v *WriteDataResult) Copy() *WriteDataResult {
 
 	u.EntryHash = v.EntryHash
 	if v.AccountUrl != nil {
-		u.AccountUrl = (v.AccountUrl).Copy()
+		u.AccountUrl = v.AccountUrl
 	}
 	u.AccountID = encoding.BytesCopy(v.AccountID)
 
@@ -2527,7 +2572,7 @@ func (v *WriteDataTo) Copy() *WriteDataTo {
 	u := new(WriteDataTo)
 
 	if v.Recipient != nil {
-		u.Recipient = (v.Recipient).Copy()
+		u.Recipient = v.Recipient
 	}
 	if v.Entry != nil {
 		u.Entry = (v.Entry).CopyAsInterface().(DataEntry)
@@ -3058,7 +3103,7 @@ func (v *DirectoryAnchor) Equal(u *DirectoryAnchor) bool {
 		return false
 	}
 	for i := range v.Receipts {
-		if !((&v.Receipts[i]).Equal(&u.Receipts[i])) {
+		if !((v.Receipts[i]).Equal(u.Receipts[i])) {
 			return false
 		}
 	}
@@ -3203,6 +3248,14 @@ func (v *FactomDataEntry) Equal(u *FactomDataEntry) bool {
 		if !(bytes.Equal(v.ExtIds[i], u.ExtIds[i])) {
 			return false
 		}
+	}
+
+	return true
+}
+
+func (v *FactomDataEntryWrapper) Equal(u *FactomDataEntryWrapper) bool {
+	if !v.FactomDataEntry.Equal(&u.FactomDataEntry) {
+		return false
 	}
 
 	return true
@@ -3563,6 +3616,28 @@ func (v *PartitionAnchor) Equal(u *PartitionAnchor) bool {
 		return false
 	}
 	if !(v.StateTreeAnchor == u.StateTreeAnchor) {
+		return false
+	}
+
+	return true
+}
+
+func (v *PartitionAnchorReceipt) Equal(u *PartitionAnchorReceipt) bool {
+	if !(v.PartitionID == u.PartitionID) {
+		return false
+	}
+	if !(v.MinorBlockIndex == u.MinorBlockIndex) {
+		return false
+	}
+	if !(v.RootChainIndex == u.RootChainIndex) {
+		return false
+	}
+	switch {
+	case v.RootChainReceipt == u.RootChainReceipt:
+		// equal
+	case v.RootChainReceipt == nil || u.RootChainReceipt == nil:
+		return false
+	case !((v.RootChainReceipt).Equal(u.RootChainReceipt)):
 		return false
 	}
 
@@ -6352,6 +6427,46 @@ func (v *Envelope) IsValid() error {
 	}
 }
 
+var fieldNames_FactomDataEntryWrapper = []string{
+	1: "Type",
+	2: "FactomDataEntry",
+}
+
+func (v *FactomDataEntryWrapper) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	writer.WriteValue(2, v.FactomDataEntry.MarshalBinary)
+
+	_, _, err := writer.Reset(fieldNames_FactomDataEntryWrapper)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *FactomDataEntryWrapper) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
+	if err := v.FactomDataEntry.IsValid(); err != nil {
+		errs = append(errs, err.Error())
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_IndexEntry = []string{
 	1: "Source",
 	2: "Anchor",
@@ -7467,6 +7582,72 @@ func (v *PartitionAnchor) IsValid() error {
 		errs = append(errs, "field StateTreeAnchor is missing")
 	} else if v.StateTreeAnchor == ([32]byte{}) {
 		errs = append(errs, "field StateTreeAnchor is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_PartitionAnchorReceipt = []string{
+	1: "PartitionID",
+	2: "MinorBlockIndex",
+	3: "RootChainIndex",
+	4: "RootChainReceipt",
+}
+
+func (v *PartitionAnchorReceipt) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(len(v.PartitionID) == 0) {
+		writer.WriteString(1, v.PartitionID)
+	}
+	if !(v.MinorBlockIndex == 0) {
+		writer.WriteUint(2, v.MinorBlockIndex)
+	}
+	if !(v.RootChainIndex == 0) {
+		writer.WriteUint(3, v.RootChainIndex)
+	}
+	if !(v.RootChainReceipt == nil) {
+		writer.WriteValue(4, v.RootChainReceipt.MarshalBinary)
+	}
+
+	_, _, err := writer.Reset(fieldNames_PartitionAnchorReceipt)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *PartitionAnchorReceipt) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field PartitionID is missing")
+	} else if len(v.PartitionID) == 0 {
+		errs = append(errs, "field PartitionID is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field MinorBlockIndex is missing")
+	} else if v.MinorBlockIndex == 0 {
+		errs = append(errs, "field MinorBlockIndex is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field RootChainIndex is missing")
+	} else if v.RootChainIndex == 0 {
+		errs = append(errs, "field RootChainIndex is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field RootChainReceipt is missing")
+	} else if v.RootChainReceipt == nil {
+		errs = append(errs, "field RootChainReceipt is not set")
 	}
 
 	switch len(errs) {
@@ -11049,8 +11230,8 @@ func (v *DirectoryAnchor) UnmarshalBinaryFrom(rd io.Reader) error {
 		}
 	}
 	for {
-		if x := new(managed.Receipt); reader.ReadValue(4, x.UnmarshalBinary) {
-			v.Receipts = append(v.Receipts, *x)
+		if x := new(PartitionAnchorReceipt); reader.ReadValue(4, x.UnmarshalBinary) {
+			v.Receipts = append(v.Receipts, x)
 		} else {
 			break
 		}
@@ -11288,6 +11469,34 @@ func (v *Envelope) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_Envelope)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *FactomDataEntryWrapper) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *FactomDataEntryWrapper) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType DataEntryType
+	if x := new(DataEntryType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+	reader.ReadValue(2, v.FactomDataEntry.UnmarshalBinary)
+
+	seen, err := reader.Reset(fieldNames_FactomDataEntryWrapper)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -11915,6 +12124,38 @@ func (v *PartitionAnchor) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_PartitionAnchor)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *PartitionAnchorReceipt) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *PartitionAnchorReceipt) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadString(1); ok {
+		v.PartitionID = x
+	}
+	if x, ok := reader.ReadUint(2); ok {
+		v.MinorBlockIndex = x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.RootChainIndex = x
+	}
+	if x := new(managed.Receipt); reader.ReadValue(4, x.UnmarshalBinary) {
+		v.RootChainReceipt = x
+	}
+
+	seen, err := reader.Reset(fieldNames_PartitionAnchorReceipt)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -13916,17 +14157,17 @@ func (v *DelegatedSignature) MarshalJSON() ([]byte, error) {
 
 func (v *DirectoryAnchor) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type               TransactionType                         `json:"type"`
-		Source             *url.URL                                `json:"source,omitempty"`
-		MajorBlockIndex    uint64                                  `json:"majorBlockIndex,omitempty"`
-		MinorBlockIndex    uint64                                  `json:"minorBlockIndex,omitempty"`
-		RootChainIndex     uint64                                  `json:"rootChainIndex,omitempty"`
-		RootChainAnchor    string                                  `json:"rootChainAnchor,omitempty"`
-		StateTreeAnchor    string                                  `json:"stateTreeAnchor,omitempty"`
-		Updates            encoding.JsonList[NetworkAccountUpdate] `json:"updates,omitempty"`
-		Receipts           encoding.JsonList[managed.Receipt]      `json:"receipts,omitempty"`
-		MakeMajorBlock     uint64                                  `json:"makeMajorBlock,omitempty"`
-		MakeMajorBlockTime time.Time                               `json:"makeMajorBlockTime,omitempty"`
+		Type               TransactionType                            `json:"type"`
+		Source             *url.URL                                   `json:"source,omitempty"`
+		MajorBlockIndex    uint64                                     `json:"majorBlockIndex,omitempty"`
+		MinorBlockIndex    uint64                                     `json:"minorBlockIndex,omitempty"`
+		RootChainIndex     uint64                                     `json:"rootChainIndex,omitempty"`
+		RootChainAnchor    string                                     `json:"rootChainAnchor,omitempty"`
+		StateTreeAnchor    string                                     `json:"stateTreeAnchor,omitempty"`
+		Updates            encoding.JsonList[NetworkAccountUpdate]    `json:"updates,omitempty"`
+		Receipts           encoding.JsonList[*PartitionAnchorReceipt] `json:"receipts,omitempty"`
+		MakeMajorBlock     uint64                                     `json:"makeMajorBlock,omitempty"`
+		MakeMajorBlockTime time.Time                                  `json:"makeMajorBlockTime,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Source = v.PartitionAnchor.Source
@@ -14028,16 +14269,31 @@ func (v *Envelope) MarshalJSON() ([]byte, error) {
 
 func (v *FactomDataEntry) MarshalJSON() ([]byte, error) {
 	u := struct {
+		AccountId string                     `json:"accountId,omitempty"`
+		Data      *string                    `json:"data,omitempty"`
+		ExtIds    encoding.JsonList[*string] `json:"extIds,omitempty"`
+	}{}
+	u.AccountId = encoding.ChainToJSON(v.AccountId)
+	u.Data = encoding.BytesToJSON(v.Data)
+	u.ExtIds = make(encoding.JsonList[*string], len(v.ExtIds))
+	for i, x := range v.ExtIds {
+		u.ExtIds[i] = encoding.BytesToJSON(x)
+	}
+	return json.Marshal(&u)
+}
+
+func (v *FactomDataEntryWrapper) MarshalJSON() ([]byte, error) {
+	u := struct {
 		Type      DataEntryType              `json:"type"`
 		AccountId string                     `json:"accountId,omitempty"`
 		Data      *string                    `json:"data,omitempty"`
 		ExtIds    encoding.JsonList[*string] `json:"extIds,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.AccountId = encoding.ChainToJSON(v.AccountId)
-	u.Data = encoding.BytesToJSON(v.Data)
-	u.ExtIds = make(encoding.JsonList[*string], len(v.ExtIds))
-	for i, x := range v.ExtIds {
+	u.AccountId = encoding.ChainToJSON(v.FactomDataEntry.AccountId)
+	u.Data = encoding.BytesToJSON(v.FactomDataEntry.Data)
+	u.ExtIds = make(encoding.JsonList[*string], len(v.FactomDataEntry.ExtIds))
+	for i, x := range v.FactomDataEntry.ExtIds {
 		u.ExtIds[i] = encoding.BytesToJSON(x)
 	}
 	return json.Marshal(&u)
@@ -15551,17 +15807,17 @@ func (v *DelegatedSignature) UnmarshalJSON(data []byte) error {
 
 func (v *DirectoryAnchor) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type               TransactionType                         `json:"type"`
-		Source             *url.URL                                `json:"source,omitempty"`
-		MajorBlockIndex    uint64                                  `json:"majorBlockIndex,omitempty"`
-		MinorBlockIndex    uint64                                  `json:"minorBlockIndex,omitempty"`
-		RootChainIndex     uint64                                  `json:"rootChainIndex,omitempty"`
-		RootChainAnchor    string                                  `json:"rootChainAnchor,omitempty"`
-		StateTreeAnchor    string                                  `json:"stateTreeAnchor,omitempty"`
-		Updates            encoding.JsonList[NetworkAccountUpdate] `json:"updates,omitempty"`
-		Receipts           encoding.JsonList[managed.Receipt]      `json:"receipts,omitempty"`
-		MakeMajorBlock     uint64                                  `json:"makeMajorBlock,omitempty"`
-		MakeMajorBlockTime time.Time                               `json:"makeMajorBlockTime,omitempty"`
+		Type               TransactionType                            `json:"type"`
+		Source             *url.URL                                   `json:"source,omitempty"`
+		MajorBlockIndex    uint64                                     `json:"majorBlockIndex,omitempty"`
+		MinorBlockIndex    uint64                                     `json:"minorBlockIndex,omitempty"`
+		RootChainIndex     uint64                                     `json:"rootChainIndex,omitempty"`
+		RootChainAnchor    string                                     `json:"rootChainAnchor,omitempty"`
+		StateTreeAnchor    string                                     `json:"stateTreeAnchor,omitempty"`
+		Updates            encoding.JsonList[NetworkAccountUpdate]    `json:"updates,omitempty"`
+		Receipts           encoding.JsonList[*PartitionAnchorReceipt] `json:"receipts,omitempty"`
+		MakeMajorBlock     uint64                                     `json:"makeMajorBlock,omitempty"`
+		MakeMajorBlockTime time.Time                                  `json:"makeMajorBlockTime,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Source = v.PartitionAnchor.Source
@@ -15770,12 +16026,10 @@ func (v *Envelope) UnmarshalJSON(data []byte) error {
 
 func (v *FactomDataEntry) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type      DataEntryType              `json:"type"`
 		AccountId string                     `json:"accountId,omitempty"`
 		Data      *string                    `json:"data,omitempty"`
 		ExtIds    encoding.JsonList[*string] `json:"extIds,omitempty"`
 	}{}
-	u.Type = v.Type()
 	u.AccountId = encoding.ChainToJSON(v.AccountId)
 	u.Data = encoding.BytesToJSON(v.Data)
 	u.ExtIds = make(encoding.JsonList[*string], len(v.ExtIds))
@@ -15784,9 +16038,6 @@ func (v *FactomDataEntry) UnmarshalJSON(data []byte) error {
 	}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
-	}
-	if !(v.Type() == u.Type) {
-		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	if x, err := encoding.ChainFromJSON(u.AccountId); err != nil {
 		return fmt.Errorf("error decoding AccountId: %w", err)
@@ -15804,6 +16055,47 @@ func (v *FactomDataEntry) UnmarshalJSON(data []byte) error {
 			return fmt.Errorf("error decoding ExtIds: %w", err)
 		} else {
 			v.ExtIds[i] = x
+		}
+	}
+	return nil
+}
+
+func (v *FactomDataEntryWrapper) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      DataEntryType              `json:"type"`
+		AccountId string                     `json:"accountId,omitempty"`
+		Data      *string                    `json:"data,omitempty"`
+		ExtIds    encoding.JsonList[*string] `json:"extIds,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.AccountId = encoding.ChainToJSON(v.FactomDataEntry.AccountId)
+	u.Data = encoding.BytesToJSON(v.FactomDataEntry.Data)
+	u.ExtIds = make(encoding.JsonList[*string], len(v.FactomDataEntry.ExtIds))
+	for i, x := range v.FactomDataEntry.ExtIds {
+		u.ExtIds[i] = encoding.BytesToJSON(x)
+	}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	if x, err := encoding.ChainFromJSON(u.AccountId); err != nil {
+		return fmt.Errorf("error decoding AccountId: %w", err)
+	} else {
+		v.FactomDataEntry.AccountId = x
+	}
+	if x, err := encoding.BytesFromJSON(u.Data); err != nil {
+		return fmt.Errorf("error decoding Data: %w", err)
+	} else {
+		v.FactomDataEntry.Data = x
+	}
+	v.FactomDataEntry.ExtIds = make([][]byte, len(u.ExtIds))
+	for i, x := range u.ExtIds {
+		if x, err := encoding.BytesFromJSON(x); err != nil {
+			return fmt.Errorf("error decoding ExtIds: %w", err)
+		} else {
+			v.FactomDataEntry.ExtIds[i] = x
 		}
 	}
 	return nil
