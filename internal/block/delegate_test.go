@@ -1,17 +1,21 @@
 package block_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
+	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types"
 )
@@ -41,6 +45,71 @@ func viewPartitionFor(sim *simulator.Simulator, account *url.URL, fn func(batch 
 		fn(batch)
 		return nil
 	})
+}
+
+func TestDelegatedSignatureDepth(tt *testing.T) {
+	// Initialize
+	sim := simulator.New(tt, 1)
+	sim.InitFromGenesis()
+	x := sim.PartitionFor(AccountUrl("foo"))
+	exec := x.Executor
+	t := acctesting.NewBatchTest(tt, x.Database)
+	defer t.Discard()
+
+	// Foo's first authority and signer
+	authority := new(acctesting.FakeAuthority)
+	authority.Url = protocol.AccountUrl("foo", "authority")
+	authority.AddAuthority(authority.Url)
+	t.PutAccount(authority)
+
+	key := acctesting.GenerateKey(tt.Name())
+	signer := new(acctesting.FakeSigner)
+	signer.Url = authority.Url.JoinPath("signer")
+	signer.Version = 1
+	signer.CreditBalance = 1e9
+	signer.Keys = []*KeySpec{{PublicKeyHash: doSha256(key[32:])}}
+	t.PutAccount(signer)
+
+	// Foo's account
+	account := new(acctesting.FakeAccount)
+	account.Url = protocol.AccountUrl("foo", "account")
+	account.AddAuthority(authority.Url)
+	t.PutAccount(account)
+
+	// The transaction
+	body := new(acctesting.FakeTransactionBody)
+	body.TheType = protocol.TransactionTypeSendTokens
+	txn := new(protocol.Transaction)
+	txn.Header.Principal = account.Url
+	txn.Body = body
+	delivery := new(chain.Delivery)
+	delivery.Transaction = txn
+
+	// Use a fake executor that overrides TransactionIsReady
+	exec.SetExecutor_TESTONLY(executor{typ: body.TheType})
+
+	// The key signature
+	builder := new(signing.Builder).
+		SetUrl(signer.Url).
+		SetPrivateKey(key).
+		SetVersion(signer.Version)
+
+	// It should succeed when under the limit
+	for i := 0; i < protocol.DelegationDepthLimit; i++ {
+		builder.AddDelegator(AccountUrl("baz", fmt.Sprint(i)))
+	}
+
+	sig, err := builder.Sign(txn.GetHash())
+	require.NoError(t, err)
+	require.NoError(t, exec.ValidateSignature(t.Batch, delivery, sig))
+
+	// It should fail when over the limit
+	builder.AddDelegator(AccountUrl("baz", fmt.Sprint(protocol.DelegationDepthLimit)))
+
+	sig, err = builder.Sign(txn.GetHash())
+	require.NoError(t, err)
+	err = exec.ValidateSignature(t.Batch, delivery, sig)
+	require.EqualError(t, err, fmt.Sprintf("delegated signature exceeded the depth limit (%d)", protocol.DelegationDepthLimit))
 }
 
 func TestDelegatedSignature_Local(t *testing.T) {
