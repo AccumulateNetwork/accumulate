@@ -346,6 +346,11 @@ TxnQuery:
   fields:
   - name: Txid
     type: bytes
+    optional: true
+  - name: TxUrl
+    type: url
+    pointer: true
+    optional: true
   - name: Wait
     type: duration
     optional: true

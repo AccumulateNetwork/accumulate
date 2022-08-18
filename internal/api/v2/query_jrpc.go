@@ -13,17 +13,21 @@ func (m *JrpcMethods) QueryTxLocal(ctx context.Context, params json.RawMessage) 
 	req := new(TxnQuery)
 	err := m.parse(params, req)
 	if err != nil {
-		return err
+		return accumulateError(err)
 	}
 
-	return jrpcFormatResponse(m.querier.QueryTxLocal(req.Txid, req.Wait, req.IgnorePending, req.QueryOptions))
+	txid, err := getTxId(req)
+	if err != nil {
+		return accumulateError(err)
+	}
+	return jrpcFormatResponse(m.querier.QueryTxLocal(txid, req.Wait, req.IgnorePending, req.QueryOptions))
 }
 
 func (m *JrpcMethods) QueryTx(ctx context.Context, params json.RawMessage) interface{} {
 	req := new(TxnQuery)
 	err := m.parse(params, req)
 	if err != nil {
-		return err
+		return accumulateError(err)
 	}
 
 	resCh := make(chan interface{})                    // Result channel
@@ -42,7 +46,7 @@ func (m *JrpcMethods) QueryTx(ctx context.Context, params json.RawMessage) inter
 		// If all queries are done and no error or result has been produced, the
 		// record must not exist
 		select {
-		case errCh <- errors.NotFound("transaction %X not found", req.Txid[:8]):
+		case errCh <- formatTxIdError(req):
 		case <-doneCh:
 		}
 	}()
@@ -82,4 +86,34 @@ func (m *JrpcMethods) QueryTx(ctx context.Context, params json.RawMessage) inter
 	case err := <-errCh:
 		return accumulateError(err)
 	}
+}
+
+func getTxId(req *TxnQuery) ([]byte, error) {
+	var txid []byte
+	if req.Txid != nil {
+		txid = req.Txid
+	} else if req.TxUrl != nil {
+		txId, err2 := req.TxUrl.AsTxID()
+		if err2 != nil {
+			return nil, errors.Unknown("transaction ID could not be parsed from the txID URL")
+		}
+		hash := txId.Hash()
+		txid = hash[:]
+	} else {
+		return nil, errors.Unknown("no transaction ID present in request")
+	}
+	return txid, nil
+}
+
+func formatTxIdError(req *TxnQuery) error {
+	if req.Txid != nil {
+		return errors.NotFound("transaction %X not found", req.Txid[:8])
+	} else if req.TxUrl != nil {
+		txID, err := req.TxUrl.AsTxID()
+		if err != nil {
+			return errors.Unknown("transaction ID could not be parsed from the txID URL")
+		}
+		return errors.NotFound("transaction %s not found", txID.ShortString())
+	}
+	return errors.Unknown("no transaction ID present in request")
 }

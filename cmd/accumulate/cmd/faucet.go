@@ -42,7 +42,11 @@ func Faucet(url string) (string, error) {
 	}
 
 	if TxWait != 0 {
-		_, err = waitForTxn(res.TransactionHash, TxWait, true)
+		txID, err := url2.TxIDFromHash(res.TransactionHash)
+		if err != nil {
+			return PrintJsonRpcError(err)
+		}
+		_, err = waitForTxn(txID, TxWait, true)
 		if err != nil {
 			return PrintJsonRpcError(err)
 		}
