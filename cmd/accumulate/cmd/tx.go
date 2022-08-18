@@ -199,31 +199,27 @@ func GetPendingTx(origin string, args []string) (string, error) {
 	return out, perr
 }
 
-func getTxUsingID(txID *url.TxID, wait time.Duration, ignorePending bool) (*api.TransactionQueryResponse, error) {
-	var res api.TransactionQueryResponse
-	var err error
-
+func getTxUsingUrl(txID *url.TxID, wait time.Duration, ignorePending bool) (*api.TransactionQueryResponse, error) {
 	params := new(api.TxnQuery)
 	params.TxUrl = txID.AsUrl()
 	params.Prove = Prove
 	params.IgnorePending = ignorePending
 
-	return getTX(wait, params, err, res)
+	return getTX(wait, params)
 }
 
 func getTxUsingHash(hash []byte, wait time.Duration, ignorePending bool) (*api.TransactionQueryResponse, error) {
-	var res api.TransactionQueryResponse
-	var err error
-
 	params := new(api.TxnQuery)
 	params.Txid = hash
 	params.Prove = Prove
 	params.IgnorePending = ignorePending
 
-	return getTX(wait, params, err, res)
+	return getTX(wait, params)
 }
 
-func getTX(wait time.Duration, params *api.TxnQuery, err error, res api.TransactionQueryResponse) (*api.TransactionQueryResponse, error) {
+func getTX(wait time.Duration, params *api.TxnQuery) (*api.TransactionQueryResponse, error) {
+	var res api.TransactionQueryResponse
+
 	if wait > 0 {
 		params.Wait = wait
 
@@ -250,7 +246,7 @@ func GetTX(hashOrUrl string) (string, error) {
 	var res *api.TransactionQueryResponse
 	txID, err := url.ParseTxID(hashOrUrl)
 	if err == nil {
-		res, err = getTxUsingID(txID, TxWait, TxIgnorePending)
+		res, err = getTxUsingUrl(txID, TxWait, TxIgnorePending)
 	} else {
 		if len(hashOrUrl) == 64 {
 			var hash []byte
@@ -288,7 +284,7 @@ func GetTX(hashOrUrl string) (string, error) {
 	for _, txid := range res.Produced {
 		lclTxId := txid
 		errg.Go(func() error {
-			res, err := getTxUsingID(lclTxId, TxWaitSynth, true)
+			res, err := getTxUsingUrl(lclTxId, TxWaitSynth, true)
 			if err != nil {
 				return err
 			}
@@ -391,7 +387,7 @@ func CreateTX(sender string, args []string) (string, error) {
 
 func waitForTxnUsingUrl(txID *url.TxID, wait time.Duration, ignorePending bool) ([]*api.TransactionQueryResponse, error) {
 	var queryResponses []*api.TransactionQueryResponse
-	queryRes, err := getTxUsingID(txID, wait, ignorePending)
+	queryRes, err := getTxUsingUrl(txID, wait, ignorePending)
 	if err != nil {
 		return nil, err
 	}
