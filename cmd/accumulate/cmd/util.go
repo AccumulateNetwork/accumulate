@@ -380,12 +380,7 @@ func dispatchTxAndWait(payload interface{}, origin *url.URL, signers []*signing.
 		return res, nil, nil
 	}
 
-	txID, err := url.TxIDFromHash(res.TransactionHash)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	resps, err := waitForTxn(txID, TxWait, TxIgnorePending)
+	resps, err := waitForTxnUsingHash(res.TransactionHash, TxWait, TxIgnorePending)
 	if err != nil {
 		return nil, nil, err
 	}

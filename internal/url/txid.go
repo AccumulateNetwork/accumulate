@@ -27,17 +27,6 @@ func ParseTxID(s string) (*TxID, error) {
 	return u.AsTxID()
 }
 
-// TxIDFromHash parses the string as a URL and parses the URL's user info as a
-// transaction hash.
-func TxIDFromHash(hash []byte) (*TxID, error) {
-	u, err := Parse(hex.EncodeToString(hash) + "@unknown")
-	if err != nil {
-		return nil, err
-	}
-
-	return u.AsTxID()
-}
-
 // MustParseTxID calls ParseTxID and panics if it returns an error.
 func MustParseTxID(s string) *TxID {
 	x, err := ParseTxID(s)
