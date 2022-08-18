@@ -26,6 +26,7 @@ type DB struct {
 	readyMu  *sync.RWMutex
 	badgerDB *badger.DB
 	logger   storage.Logger
+	cache    map[[32]byte][]byte
 }
 
 var _ storage.KeyValueStore = (*DB)(nil)

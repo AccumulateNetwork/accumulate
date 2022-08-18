@@ -1,6 +1,7 @@
 package badger
 
 import (
+	"bytes"
 	"sync"
 
 	"github.com/dgraph-io/badger"
@@ -13,6 +14,7 @@ type Batch struct {
 	db       *DB
 	txn      *badger.Txn
 	writable bool
+	cache    *map[[32]byte][]byte
 }
 
 var _ storage.KeyValueTxn = (*Batch)(nil)
@@ -22,6 +24,10 @@ func (db *DB) Begin(writable bool) storage.KeyValueTxn {
 	b.db = db
 	b.txn = db.badgerDB.NewTransaction(writable)
 	b.writable = writable
+	if db.cache == nil {
+		db.cache = make(map[[32]byte][]byte)
+	}
+	b.cache = &db.cache
 	if db.logger == nil {
 		return b
 	}
@@ -52,7 +58,16 @@ func (b *Batch) Put(key storage.Key, value []byte) error {
 		defer l.Unlock()
 	}
 
-	return b.txn.Set(key[:], value)
+	if bytes.Equal((*b.cache)[key],value){ // If we already have that value, ignore
+		return nil
+	}
+
+	err := b.txn.Set(key[:], value)
+	if err != nil {
+		(*b.cache)[key] = value
+	}
+
+	return err
 }
 
 func (b *Batch) PutAll(values map[storage.Key][]byte) error {
@@ -68,6 +83,7 @@ func (b *Batch) PutAll(values map[storage.Key][]byte) error {
 		if err != nil {
 			return err
 		}
+		(*b.cache)[k] = v
 	}
 
 	return nil
@@ -78,6 +94,10 @@ func (b *Batch) Get(key storage.Key) (v []byte, err error) {
 		return nil, err
 	} else {
 		defer l.Unlock()
+	}
+
+	if v, ok := (*b.cache)[key]; ok {
+		return v, nil
 	}
 
 	item, err := b.txn.Get(key[:])
@@ -95,6 +115,8 @@ func (b *Batch) Get(key storage.Key) (v []byte, err error) {
 	if errors.Is(err, badger.ErrKeyNotFound) {
 		return nil, errors.NotFound("key %v not found", key)
 	}
+
+	b.cache[key] = v
 
 	return v, nil
 }

@@ -48,10 +48,33 @@ func (h Hash) Equal(g Hash) bool { return bytes.Equal(h, g) }
 
 type HashFunc func([]byte) Hash
 
+var cache1 map[[64]byte][]byte
+var cache2 map[[64]byte][]byte
+var cacheKey [64]byte
+
 // Combine
 // Hash this hash (the left hash) with the given right hash to produce a new hash
 func (h Hash) Combine(hf HashFunc, right Hash) Hash {
-	return hf(append(h.Copy(), right[:]...)) // Process the left side, i.e. v from this position in c.MD
+	if cache1 == nil {
+		cache1 = make(map[[64]byte][]byte)
+		cache2 = make(map[[64]byte][]byte)
+	}
+	if len(cache1)>2000 {
+		cache2 =cache1
+		cache1 = make(map[[64]byte][]byte)
+	}
+	copy(h.Bytes(), cacheKey[:32])
+	copy(right.Bytes(), cacheKey[32:64])
+	if v, ok := cache1[cacheKey]; ok {
+		return Hash(v)
+	}
+	if v, ok := cache2[cacheKey]; ok {
+		cache1[cacheKey] = v
+		return Hash(v)
+	}
+
+	h = hf(append(h.Copy(), right[:]...)) // Process the left side, i.e. v from this position in c.md
+	cache1[cacheKey] = h
 }
 
 func Sha256(b []byte) Hash {

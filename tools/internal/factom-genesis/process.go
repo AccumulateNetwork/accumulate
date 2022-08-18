@@ -1,7 +1,6 @@
 package factom
 
 import (
-	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"log"
@@ -16,6 +15,7 @@ import (
 	"github.com/FactomProject/factomd/common/entryBlock"
 	"github.com/FactomProject/factomd/common/entryCreditBlock"
 	"github.com/FactomProject/factomd/common/factoid"
+	"github.com/dustin/go-humanize"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -26,6 +26,7 @@ var Buff [1000000000]byte // Buffer to read a file
 var buff []byte           // Slice to process the buffer
 var fileNumber int
 var fileCnt int
+var bytesProcessed int
 
 // Open
 // Open a FactomObjects file.  Returns false if all files have been
@@ -49,7 +50,12 @@ func Open() bool {
 	}
 	buff = Buff[:n]
 	f.Close()
-	log.Println("Processing ", filename, " Reading ", n, " bytes.")
+	bytesProcessed += n
+	totalBytes := humanize.Comma(int64(bytesProcessed))
+	reading := humanize.Comma(int64(n))
+	fn := humanize.Comma(int64(fileNumber))
+	log.Println("Processing FCT block: ", fn, " Reading ", reading, " bytes, total so far ", totalBytes)
+	fmt.Println("Processing FCT block: ", fn, " Reading ", reading, " bytes, total so far ", totalBytes)
 	return true
 }
 
@@ -70,7 +76,7 @@ func Process() {
 		if clock > 0 {
 			blocksPerSec := float64(FileIncrement) / float64(clock)
 			entriesPerSec := float64(entryCount) / float64(clock)
-			fmt.Printf("%4.1f Factom blocks/s & %8.1f Factom entries/s \n", blocksPerSec, entriesPerSec)
+			fmt.Printf("%16.4f Factom blocks/s\n%16.4f Factom entries/s \n", blocksPerSec, entriesPerSec)
 
 			Hrs := clock / 60 / 60
 			Mins := (clock - Hrs*60*60) / 60
@@ -109,13 +115,13 @@ func Process() {
 				if err := entry.UnmarshalBinary(buff[:header.Size]); err != nil {
 					panic("Bad Entry")
 				}
-
-				route := binary.BigEndian.Uint64(entry.ChainID.Bytes()) % 15
-				if route != 0 {
-					entriesSkipped++
-					break
-				}
-
+				/*
+					route := binary.BigEndian.Uint64(entry.ChainID.Bytes()) % 15
+					if route != 0  {
+						entriesSkipped++
+						break
+					}
+				*/
 				qEntry := &f2.Entry{
 					ChainID: entry.ChainID.String(),
 					ExtIDs:  entry.ExternalIDs(),
@@ -147,13 +153,15 @@ func Process() {
 			}
 			buff = buff[header.Size:]
 		}
-		fmt.Printf("Entries: %8d %8d\n", entryCount, entriesSkipped)
+		entries := humanize.Comma(entryCount)
+		skipped := humanize.Comma(entriesSkipped)
+		fmt.Printf("Entries: %s   Entries Skipped: %s\n", entries, skipped)
 
 		// Submit the first transaction in one block, then all the rest in blocks of 100
 		blocks := make([][]*protocol.Transaction, 2)
 		block := 1
 
-		const blockSize = 10300
+		const blockSize = 100000 // Tinderment block size
 		size := 0
 		tCnt := 0
 		for _, transactions := range transactions {
@@ -171,8 +179,9 @@ func Process() {
 				blocks[block] = append(blocks[block], txn)
 			}
 		}
-
-		fmt.Printf("Submitting %d blocks with %d transactions.", len(blocks), tCnt)
+		trans := humanize.Comma(int64(tCnt))
+		numBlocks := humanize.Comma(int64(len(blocks)))
+		fmt.Printf("Submitting %s blocks with %s transactions.", numBlocks, trans)
 
 		// Submit the blocks
 		timestamp := uint64(time.Now().UnixMilli())
