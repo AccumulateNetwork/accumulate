@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -46,7 +47,8 @@ func testCase5_1(t *testing.T, tc *testCmd) {
 	for _, r := range results {
 		var res ActionResponse
 		require.NoError(t, json.Unmarshal([]byte(r), &res))
-		_, err := waitForTxn(res.TransactionHash, 10*time.Second, true)
+		txID, _ := url.TxIDFromHash(res.TransactionHash)
+		_, err := waitForTxn(txID, 10*time.Second, true)
 		require.NoError(t, err)
 	}
 

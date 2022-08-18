@@ -269,8 +269,9 @@ func GetTX(hashOrUrl string) (string, error) {
 
 	errg := new(errgroup.Group)
 	for _, txid := range res.Produced {
+		lclTxId := txid
 		errg.Go(func() error {
-			res, err := getTX(txid, TxWaitSynth, true)
+			res, err := getTX(lclTxId, TxWaitSynth, true)
 			if err != nil {
 				return err
 			}
