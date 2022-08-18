@@ -239,6 +239,24 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 // Called when a chain is created.
 func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitChain {
 	// Check if initialization is required
+	var newValidators []abci.ValidatorUpdate
+	for _, validator := range req.Validators {
+		exist := false
+		partitions := app.AccumulatorOptions.Executor.ActiveGlobals_TESTONLY().Network.Partitions
+		for _, partition := range partitions {
+			if partition.PartitionID == app.Accumulate.PartitionId {
+				for _, existing := range partition.ValidatorKeys {
+					keyBytes, _ := validator.PubKey.Descriptor()
+					if bytes.Compare(keyBytes, existing) == 0 {
+						exist = true
+					}
+				}
+			}
+		}
+		if !exist {
+			newValidators = append(newValidators, validator)
+		}
+	}
 	var root []byte
 	err := app.DB.View(func(batch *database.Batch) (err error) {
 		root, err = app.Executor.LoadStateRoot(batch)
@@ -248,7 +266,7 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 		panic(fmt.Errorf("failed to load state hash: %v", err))
 	}
 	if root != nil {
-		return abci.ResponseInitChain{AppHash: root}
+		return abci.ResponseInitChain{AppHash: root, Validators: newValidators}
 	}
 
 	app.logger.Info("Initializing")
@@ -293,7 +311,7 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 		panic(fmt.Errorf("failed to load state hash: %v", err))
 	}
 
-	return abci.ResponseInitChain{AppHash: root}
+	return abci.ResponseInitChain{AppHash: root, Validators: newValidators}
 }
 
 // BeginBlock implements github.com/tendermint/tendermint/abci/types.Application.
