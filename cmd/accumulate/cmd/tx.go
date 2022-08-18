@@ -93,7 +93,7 @@ func init() {
 }
 
 func PrintTXGet() {
-	fmt.Println("  accumulate tx get [txid]			Get token transaction by txid")
+	fmt.Println("  accumulate tx get [txid | tx url]	Get token transaction by txid")
 }
 
 func PrintTXPendingGet() {
