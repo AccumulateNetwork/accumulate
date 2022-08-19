@@ -274,3 +274,22 @@ func TestValidate(t *testing.T) {
 		assert.Equal(t, keyPageUrl, keyIndex.Signer)
 	})
 }
+
+func TestQueryTxByUrl(t *testing.T) {
+	partitions, daemons := acctesting.CreateTestNet(t, 2, 2, 0, false)
+	acctesting.RunTestNet(t, partitions, daemons)
+	japi := daemons["BVN1"][0].Jrpc_TESTONLY()
+
+	liteKey := newKey([]byte(t.Name()))
+	liteUrl := makeLiteUrl(t, liteKey, ACME)
+
+	xr := new(api.TxResponse)
+	callApi(t, japi, "faucet", &AcmeFaucet{Url: liteUrl}, xr)
+	require.Zero(t, xr.Code, xr.Message)
+	txWait(t, japi, xr.TransactionHash)
+
+	// Test if last tx can be queried by TxID URL
+	tqr := new(api.TransactionQueryResponse)
+	callApi(t, japi, "query-tx", &api.TxnQuery{TxIdUrl: xr.Txid}, tqr)
+	require.Equal(t, xr.Txid.String(), tqr.Txid.String())
+}
