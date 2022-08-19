@@ -284,10 +284,7 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 	}
 	requestMap := make(map[[32]byte]abci.ValidatorUpdate)
 	for _, validator := range req.Validators {
-		keyBytes, err := validator.PubKey.Marshal()
-		if err != nil {
-			panic(fmt.Errorf("invalid validator in request: %v", err))
-		}
+		keyBytes := validator.PubKey.GetEd25519()
 		var bytes [32]byte
 		copy(bytes[:], keyBytes)
 		_, ok := validatorMap[bytes]
