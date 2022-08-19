@@ -12,42 +12,44 @@ import (
 )
 
 func ReadObjectFile(buff []byte, fn func(header *Header, object interface{})) error {
-	header := new(Header)
-	dBlock := directoryBlock.NewDirectoryBlock(nil)
-	aBlock := adminBlock.NewAdminBlock(nil)
-	fBlock := new(factoid.FBlock)
-	ecBlock := entryCreditBlock.NewECBlock()
-	eBlock := entryBlock.NewEBlock()
+	var lastHeight uint32
 	for len(buff) > 0 {
+		header := new(Header)
 		buff = header.UnmarshalBinary(buff)
 		switch header.Tag {
 		case TagDBlock:
+			dBlock := directoryBlock.NewDirectoryBlock(nil)
 			if err := dBlock.UnmarshalBinary(buff[:header.Size]); err != nil {
 				return fmt.Errorf("unmarshal directory block: %w", err)
 			} else {
+				lastHeight = dBlock.GetHeader().GetDBHeight()
 				fn(header, dBlock)
 			}
 		case TagABlock:
+			aBlock := adminBlock.NewAdminBlock(nil)
 			if err := aBlock.UnmarshalBinary(buff[:header.Size]); err != nil {
 				// Why?
-				log.Printf("Ht %d Admin size %d: %v\n", dBlock.GetHeader().GetDBHeight(), header.Size, err)
+				log.Printf("Ht %d Admin size %d: %v\n", lastHeight, header.Size, err)
 				// return fmt.Errorf("unmarshal admin block: %w", err)
 			} else {
 				fn(header, aBlock)
 			}
 		case TagFBlock:
+			fBlock := new(factoid.FBlock)
 			if err := fBlock.UnmarshalBinary(buff[:header.Size]); err != nil {
 				return fmt.Errorf("unmarshal factoid block: %w", err)
 			} else {
 				fn(header, fBlock)
 			}
 		case TagECBlock:
+			ecBlock := entryCreditBlock.NewECBlock()
 			if err := ecBlock.UnmarshalBinary(buff[:header.Size]); err != nil {
 				return fmt.Errorf("unmarshal entry credit block: %w", err)
 			} else {
 				fn(header, ecBlock)
 			}
 		case TagEBlock:
+			eBlock := entryBlock.NewEBlock()
 			if _, err := eBlock.UnmarshalBinaryData(buff[:header.Size]); err != nil {
 				return fmt.Errorf("unmarshal entry block: %w", err)
 			} else {

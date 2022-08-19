@@ -116,20 +116,43 @@ func (h *snapshotHeader) ReadFrom(rd io.Reader) (int64, error) {
 
 // SaveSnapshot writes the full state of the partition out to a file.
 func (b *Batch) SaveSnapshot(file io.WriteSeeker, network *config.Describe) error {
-	// Write the header
 	var ledger *protocol.SystemLedger
 	err := b.Account(network.Ledger()).GetStateAs(&ledger)
 	if err != nil {
 		return errors.Format(errors.StatusUnknownError, "load ledger: %w", err)
 	}
 
+	// This must match how the model constructs the key
+	anchorLedgerKey := storage.MakeKey("Account", network.AnchorPool())
+
+	return b.saveSnapshot(file, ledger.Index, func(key [32]byte, state *accountState, account *Account) error {
+		// Load transactions for system chains
+		if key != anchorLedgerKey {
+			return nil
+		}
+
+		var err error
+		state.Transactions = append(state.Transactions, loadState(&err, false, account.AnchorSequenceChain().stateOfTransactionsOnChain)...)
+		return err
+	})
+}
+
+// SaveFactomSnapshot is a special version of SaveSnapshot for creating a
+// pre-genesis snapshot for Factom data entries.
+func (b *Batch) SaveFactomSnapshot(file io.WriteSeeker) error {
+	return b.saveSnapshot(file, 0, func([32]byte, *accountState, *Account) error { return nil })
+}
+
+// SaveSnapshot writes the full state of the partition out to a file.
+func (b *Batch) saveSnapshot(file io.WriteSeeker, height uint64, extra func(key [32]byte, state *accountState, account *Account) error) error {
+	// Write the header
 	bpt := pmt.NewBPTManager(b.kvstore)
 	header := new(snapshotHeader)
 	header.Version = core.SnapshotVersion1
-	header.Height = ledger.Index
+	header.Height = height
 	header.RootHash = *(*[32]byte)(b.BptRoot())
 
-	_, err = header.WriteTo(file)
+	_, err := header.WriteTo(file)
 	if err != nil {
 		return errors.Format(errors.StatusUnknownError, "write header: %w", err)
 	}
@@ -139,9 +162,6 @@ func (b *Batch) SaveSnapshot(file io.WriteSeeker, network *config.Describe) erro
 	if err != nil {
 		return errors.Format(errors.StatusUnknownError, "create section writer: %w", err)
 	}
-
-	// This must match how the model constructs the key
-	anchorLedgerKey := storage.MakeKey("Account", network.AnchorPool())
 
 	// Save the snapshot
 	return bpt.Bpt.SaveSnapshot(wr, func(key storage.Key, hash [32]byte) ([]byte, error) {
@@ -181,8 +201,9 @@ func (b *Batch) SaveSnapshot(file io.WriteSeeker, network *config.Describe) erro
 		state.Signatures = append(state.Signatures, loadState(&err, false, account.SignatureChain().stateOfSignaturesOnChain)...)
 
 		// Load transactions for system chains
-		if key == anchorLedgerKey {
-			state.Transactions = append(state.Transactions, loadState(&err, false, account.AnchorSequenceChain().stateOfTransactionsOnChain)...)
+		err = extra(key, state, account)
+		if err != nil {
+			return nil, err
 		}
 
 		b := loadState(&err, false, state.MarshalBinary)
