@@ -172,6 +172,10 @@ func (m *Executor) ActiveGlobals_TESTONLY() *core.GlobalValues {
 	return &m.globals.Active
 }
 
+func (m *Executor) ActiveGlobals() *core.GlobalValues {
+	return &m.globals.Active
+}
+
 func (x *Executor) SetExecutor_TESTONLY(y chain.TransactionExecutor) {
 	x.executors[y.Type()] = y
 }
