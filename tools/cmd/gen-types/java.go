@@ -4,6 +4,7 @@ import (
 	_ "embed"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"text/template"
 )
 
@@ -66,7 +67,7 @@ func SafeClassName(value string) string {
 	if className == "Object" {
 		return "ProtocolObject"
 	} else if className == "Object.java" {
-		return "ProtocolObject.java"
+		return strings.Replace(value, "Object.java", "ProtocolObject.java", 1)
 	}
 	return value
 }
