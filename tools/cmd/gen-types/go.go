@@ -316,7 +316,7 @@ func GoAreEqual(field *Field, varName, otherName, whenNotEqual string) (string, 
 		case Value, Enum:
 			expr, wantPtr = "%[1]s%[2]s == %[1]s%[3]s", false
 		default:
-			return "", fmt.Errorf("field %q: cannot determine how to compare %s", field.Name, GoResolveType(field, false, false))
+			return "", fmt.Errorf("field %q: %s cannot determine how to compare %s", field.Name, field.Type.Name, GoResolveType(field, false, false))
 		}
 	}
 
