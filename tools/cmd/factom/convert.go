@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/FactomProject/factomd/common/entryBlock"
@@ -17,9 +18,9 @@ import (
 )
 
 var cmdConvert = &cobra.Command{
-	Use:   "convert [output database] [output snapshot] [input object files*]",
+	Use:   "convert [output database] [output snapshot] [input object file directory]",
 	Short: "convert a Factom object dump to Accumulate",
-	Args:  cobra.MinimumNArgs(3),
+	Args:  cobra.ExactArgs(3),
 	Run:   convert,
 }
 
@@ -36,7 +37,15 @@ func convert(_ *cobra.Command, args []string) {
 	checkf(err, "output file")
 	defer output.Close()
 
-	for _, filename := range args[2:] {
+	dirent, err := os.ReadDir(args[2])
+	checkf(err, "input directory")
+
+	for _, dirent := range dirent {
+		if dirent.IsDir() || filepath.Ext(dirent.Name()) != ".dat" {
+			continue
+		}
+
+		filename := filepath.Join(args[2], dirent.Name())
 		input, err := ioutil.ReadFile(filename)
 		checkf(err, "read %s", filename)
 
