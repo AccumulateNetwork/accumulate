@@ -46,7 +46,7 @@ func main() {
 
 func fatalf(format string, args ...interface{}) {
 	fmt.Fprintf(os.Stderr, "Error: "+format+"\n", args...)
-	panic("error")
+	os.Exit(1)
 }
 
 func check(err error) {
