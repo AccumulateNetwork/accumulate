@@ -37,7 +37,7 @@ type globalSigner struct {
 	*protocol.NetworkDefinition
 }
 
-func (g *GlobalValues) AsSigner(partition string) protocol.Signer2 {
+func (g *GlobalValues) AsSigner(partition string) *globalSigner {
 	s := new(globalSigner)
 	s.Partition = partition
 	s.Threshold = g.Globals.OperatorAcceptThreshold.Threshold(g.countActive(partition))

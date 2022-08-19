@@ -481,8 +481,9 @@ type NetworkDefinition struct {
 }
 
 type NetworkGlobals struct {
-	fieldsSet               []bool
-	OperatorAcceptThreshold Rational `json:"operatorAcceptThreshold,omitempty" form:"operatorAcceptThreshold" query:"operatorAcceptThreshold" validate:"required"`
+	fieldsSet                []bool
+	OperatorAcceptThreshold  Rational `json:"operatorAcceptThreshold,omitempty" form:"operatorAcceptThreshold" query:"operatorAcceptThreshold" validate:"required"`
+	ValidatorAcceptThreshold Rational `json:"validatorAcceptThreshold,omitempty" form:"validatorAcceptThreshold" query:"validatorAcceptThreshold" validate:"required"`
 	// MajorBlockSchedule a cron expression defining the (approximate) major blocks interval.
 	MajorBlockSchedule string `json:"majorBlockSchedule,omitempty" form:"majorBlockSchedule" query:"majorBlockSchedule" validate:"required"`
 	// AnchorEmptyBlocks controls whether an anchor is sent for a block if the block contains no transactions other than a directory anchor.
@@ -1900,6 +1901,7 @@ func (v *NetworkGlobals) Copy() *NetworkGlobals {
 	u := new(NetworkGlobals)
 
 	u.OperatorAcceptThreshold = *(&v.OperatorAcceptThreshold).Copy()
+	u.ValidatorAcceptThreshold = *(&v.ValidatorAcceptThreshold).Copy()
 	u.MajorBlockSchedule = v.MajorBlockSchedule
 	u.AnchorEmptyBlocks = v.AnchorEmptyBlocks
 
@@ -3714,6 +3716,9 @@ func (v *NetworkDefinition) Equal(u *NetworkDefinition) bool {
 
 func (v *NetworkGlobals) Equal(u *NetworkGlobals) bool {
 	if !((&v.OperatorAcceptThreshold).Equal(&u.OperatorAcceptThreshold)) {
+		return false
+	}
+	if !((&v.ValidatorAcceptThreshold).Equal(&u.ValidatorAcceptThreshold)) {
 		return false
 	}
 	if !(v.MajorBlockSchedule == u.MajorBlockSchedule) {
@@ -7700,8 +7705,9 @@ func (v *NetworkDefinition) IsValid() error {
 
 var fieldNames_NetworkGlobals = []string{
 	1: "OperatorAcceptThreshold",
-	2: "MajorBlockSchedule",
-	3: "AnchorEmptyBlocks",
+	2: "ValidatorAcceptThreshold",
+	3: "MajorBlockSchedule",
+	4: "AnchorEmptyBlocks",
 }
 
 func (v *NetworkGlobals) MarshalBinary() ([]byte, error) {
@@ -7711,11 +7717,14 @@ func (v *NetworkGlobals) MarshalBinary() ([]byte, error) {
 	if !((v.OperatorAcceptThreshold).Equal(new(Rational))) {
 		writer.WriteValue(1, v.OperatorAcceptThreshold.MarshalBinary)
 	}
+	if !((v.ValidatorAcceptThreshold).Equal(new(Rational))) {
+		writer.WriteValue(2, v.ValidatorAcceptThreshold.MarshalBinary)
+	}
 	if !(len(v.MajorBlockSchedule) == 0) {
-		writer.WriteString(2, v.MajorBlockSchedule)
+		writer.WriteString(3, v.MajorBlockSchedule)
 	}
 	if !(!v.AnchorEmptyBlocks) {
-		writer.WriteBool(3, v.AnchorEmptyBlocks)
+		writer.WriteBool(4, v.AnchorEmptyBlocks)
 	}
 
 	_, _, err := writer.Reset(fieldNames_NetworkGlobals)
@@ -7735,11 +7744,16 @@ func (v *NetworkGlobals) IsValid() error {
 		errs = append(errs, "field OperatorAcceptThreshold is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field ValidatorAcceptThreshold is missing")
+	} else if (v.ValidatorAcceptThreshold).Equal(new(Rational)) {
+		errs = append(errs, "field ValidatorAcceptThreshold is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field MajorBlockSchedule is missing")
 	} else if len(v.MajorBlockSchedule) == 0 {
 		errs = append(errs, "field MajorBlockSchedule is not set")
 	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field AnchorEmptyBlocks is missing")
 	} else if !v.AnchorEmptyBlocks {
 		errs = append(errs, "field AnchorEmptyBlocks is not set")
@@ -12526,10 +12540,13 @@ func (v *NetworkGlobals) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x := new(Rational); reader.ReadValue(1, x.UnmarshalBinary) {
 		v.OperatorAcceptThreshold = *x
 	}
-	if x, ok := reader.ReadString(2); ok {
+	if x := new(Rational); reader.ReadValue(2, x.UnmarshalBinary) {
+		v.ValidatorAcceptThreshold = *x
+	}
+	if x, ok := reader.ReadString(3); ok {
 		v.MajorBlockSchedule = x
 	}
-	if x, ok := reader.ReadBool(3); ok {
+	if x, ok := reader.ReadBool(4); ok {
 		v.AnchorEmptyBlocks = x
 	}
 

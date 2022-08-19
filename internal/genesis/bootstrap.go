@@ -54,6 +54,9 @@ func Init(snapshot io.WriteSeeker, opts InitOpts) ([]byte, error) {
 	if gg.Globals.OperatorAcceptThreshold.Numerator == 0 {
 		gg.Globals.OperatorAcceptThreshold.Set(2, 3)
 	}
+	if gg.Globals.ValidatorAcceptThreshold.Numerator == 0 {
+		gg.Globals.ValidatorAcceptThreshold.Set(2, 3)
+	}
 	if gg.Globals.MajorBlockSchedule == "" {
 		gg.Globals.MajorBlockSchedule = protocol.DefaultMajorBlockSchedule
 	}

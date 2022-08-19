@@ -340,6 +340,17 @@ func (x *Executor) systemTransactionIsReady(batch *database.Batch, delivery *cha
 		return false, nil
 	}
 
+	// Have we received enough signatures?
+	signer := x.globals.Active.AsSigner(x.Describe.PartitionId)
+	sigset, err := batch.Transaction(delivery.Transaction.GetHash()).ReadSignaturesForSigner(signer)
+	if err != nil {
+		return false, errors.Format(errors.StatusUnknownError, "load signature set: %w", err)
+	}
+
+	if sigset.Count() < int(signer.Threshold) {
+		return false, nil
+	}
+
 	if principal != nil {
 		return true, nil
 	}
