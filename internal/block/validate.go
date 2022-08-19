@@ -66,12 +66,7 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 
 	// Check that the signatures are valid
 	for i, signature := range delivery.Signatures {
-		var md sigExecMetadata
-		md.IsInitiator = protocol.SignatureDidInitiate(signature, delivery.Transaction.Header.Initiator[:], nil)
-		if !signature.Type().IsSystem() {
-			md.Location = signature.RoutingLocation()
-		}
-		_, err := x.validateSignature(batch, delivery, signature, md)
+		err = x.ValidateSignature(batch, delivery, signature)
 		if err != nil {
 			return nil, errors.Format(errors.StatusUnknownError, "signature %d: %w", i, err)
 		}
@@ -170,6 +165,16 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 	return result, nil
 }
 
+func (x *Executor) ValidateSignature(batch *database.Batch, delivery *chain.Delivery, signature protocol.Signature) error {
+	var md sigExecMetadata
+	md.IsInitiator = protocol.SignatureDidInitiate(signature, delivery.Transaction.Header.Initiator[:], nil)
+	if !signature.Type().IsSystem() {
+		md.Location = signature.RoutingLocation()
+	}
+	_, err := x.validateSignature(batch, delivery, signature, md)
+	return errors.Wrap(errors.StatusUnknownError, err)
+}
+
 func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Delivery, signature protocol.Signature, md sigExecMetadata) (protocol.Signer, error) {
 	err := x.checkRouting(delivery, signature)
 	if err != nil {
@@ -198,6 +203,20 @@ func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Deli
 		return nil, errors.New(errors.StatusBadRequest, "a signature set is not allowed outside of a forwarded transaction")
 
 	case *protocol.DelegatedSignature:
+		if !md.Nested() {
+			// Limit delegation depth
+			for i, sig := 1, signature.Signature; ; i++ {
+				if i > protocol.DelegationDepthLimit {
+					return nil, errors.Format(errors.StatusBadRequest, "delegated signature exceeded the depth limit (%d)", protocol.DelegationDepthLimit)
+				}
+				if del, ok := sig.(*protocol.DelegatedSignature); ok {
+					sig = del.Signature
+				} else {
+					break
+				}
+			}
+		}
+
 		delegate, err = x.validateSignature(batch, delivery, signature.Signature, md.SetDelegated())
 		if err != nil {
 			return nil, err
