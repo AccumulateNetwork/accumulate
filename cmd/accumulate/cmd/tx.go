@@ -201,7 +201,7 @@ func GetPendingTx(origin string, args []string) (string, error) {
 
 func getTxUsingUrl(txID *url.TxID, wait time.Duration, ignorePending bool) (*api.TransactionQueryResponse, error) {
 	params := new(api.TxnQuery)
-	params.TxUrl = txID.AsUrl()
+	params.TxIdUrl = txID
 	params.Prove = Prove
 	params.IgnorePending = ignorePending
 

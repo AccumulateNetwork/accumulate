@@ -347,8 +347,8 @@ TxnQuery:
   - name: Txid
     type: bytes
     optional: true
-  - name: TxUrl
-    type: url
+  - name: TxIdUrl
+    type: txid
     pointer: true
     optional: true
   - name: Wait

@@ -92,12 +92,8 @@ func getTxId(req *TxnQuery) ([]byte, error) {
 	var txid []byte
 	if req.Txid != nil {
 		txid = req.Txid
-	} else if req.TxUrl != nil {
-		txId, err2 := req.TxUrl.AsTxID()
-		if err2 != nil {
-			return nil, errors.Unknown("transaction ID could not be parsed from the txID URL")
-		}
-		hash := txId.Hash()
+	} else if req.TxIdUrl != nil {
+		hash := req.TxIdUrl.Hash()
 		txid = hash[:]
 	} else {
 		return nil, errors.Unknown("no transaction ID present in request")
@@ -108,12 +104,8 @@ func getTxId(req *TxnQuery) ([]byte, error) {
 func formatTxIdError(req *TxnQuery) error {
 	if req.Txid != nil {
 		return errors.NotFound("transaction %X not found", req.Txid[:8])
-	} else if req.TxUrl != nil {
-		txID, err := req.TxUrl.AsTxID()
-		if err != nil {
-			return errors.Unknown("transaction ID could not be parsed from the txID URL")
-		}
-		return errors.NotFound("transaction %s not found", txID.ShortString())
+	} else if req.TxIdUrl != nil {
+		return errors.NotFound("transaction %s not found", req.TxIdUrl.ShortString())
 	}
 	return errors.Unknown("no transaction ID present in request")
 }
