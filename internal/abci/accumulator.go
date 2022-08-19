@@ -294,7 +294,7 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 		requestMap[bytes] = validator
 	}
 
-	for val, _ := range validatorMap {
+	for val := range validatorMap {
 		validator, ok := requestMap[val]
 		if !ok {
 			missing = append(missing, validator)
