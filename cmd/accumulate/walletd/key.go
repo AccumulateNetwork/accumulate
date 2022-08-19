@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd/api"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
