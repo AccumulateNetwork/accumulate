@@ -2,6 +2,7 @@ package block
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sync"
 
@@ -9,6 +10,7 @@ import (
 	jrpc "github.com/tendermint/tendermint/rpc/jsonrpc/types"
 	tm "github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -91,27 +93,38 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 	wg := new(sync.WaitGroup)
 
 	// Send transactions to each destination in parallel
-	for partition, batch := range d.batches {
-		if len(batch) == 0 {
+	for partition, envelopes := range d.batches {
+		if len(envelopes) == 0 {
 			continue
 		}
 
+		batch := make(jsonrpc2.BatchRequest, 0, len(envelopes))
+		types := make(map[[32]byte]protocol.TransactionType, len(envelopes))
+		for i, envelope := range envelopes {
+			for _, tx := range envelope.Transaction {
+				types[tx.ID().Hash()] = tx.Body.Type()
+			}
+
+			batch = append(batch, jsonrpc2.Request{
+				ID:     i + 1,
+				Method: "execute-local",
+				Params: &api.ExecuteRequest{Envelope: envelope},
+			})
+		}
+
 		wg.Add(1)
-		partition, batch := partition, batch // Don't capture loop variables
+		partition := partition // Don't capture loop variables
 		go func() {
 			defer wg.Done()
-			for _, tx := range batch {
-				types := map[[32]byte]protocol.TransactionType{}
-				for _, tx := range tx.Transaction {
-					types[tx.ID().Hash()] = tx.Body.Type()
-				}
 
-				resp, err := d.Router.Submit(ctx, partition, tx, false, false)
-				if err != nil {
-					errs <- err
-					return
-				}
+			var resp []*api.TxResponse
+			err := d.Router.RequestAPIv2(ctx, partition, "", batch, &resp)
+			if err != nil {
+				errs <- err
+				return
+			}
 
+			for _, resp := range resp {
 				if resp == nil {
 					//Guard put here to prevent nil responses.
 					errs <- fmt.Errorf("nil response returned from router in transaction dispatcher")
@@ -119,14 +132,22 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 				}
 
 				// Parse the results
-				rset := new(protocol.TransactionResultSet)
-				err = rset.UnmarshalBinary(resp.Data)
+				data, err := json.Marshal(resp.Result)
 				if err != nil {
 					errs <- err
 					return
 				}
 
-				for _, r := range rset.Results {
+				var results []*protocol.TransactionStatus
+				if json.Unmarshal(data, &results) != nil {
+					results = []*protocol.TransactionStatus{new(protocol.TransactionStatus)}
+					if json.Unmarshal(data, results[0]) != nil {
+						errs <- fmt.Errorf("failed to unmarshal response for %v", resp.Txid)
+						return
+					}
+				}
+
+				for _, r := range results {
 					if r.Error != nil {
 						errs <- &txnDispatchError{types[r.TxID.Hash()], r}
 					}
