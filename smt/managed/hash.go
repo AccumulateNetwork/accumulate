@@ -15,6 +15,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"math/bits"
+	"sync"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 )
@@ -50,31 +51,36 @@ type HashFunc func([]byte) Hash
 
 var cache1 map[[64]byte][]byte
 var cache2 map[[64]byte][]byte
+var cachelock sync.Mutex
 var cacheKey [64]byte
 
 // Combine
 // Hash this hash (the left hash) with the given right hash to produce a new hash
 func (h Hash) Combine(hf HashFunc, right Hash) Hash {
+	cachelock.Lock()
+	defer cachelock.Unlock()
 	if cache1 == nil {
 		cache1 = make(map[[64]byte][]byte)
 		cache2 = make(map[[64]byte][]byte)
 	}
-	if len(cache1)>2000 {
-		cache2 =cache1
+	if len(cache1) > 10000000 {
+		cache2 = cache1
 		cache1 = make(map[[64]byte][]byte)
 	}
-	copy(h.Bytes(), cacheKey[:32])
-	copy(right.Bytes(), cacheKey[32:64])
+	copy(cacheKey[:32], h.Bytes())
+	copy(cacheKey[32:64], right.Bytes())
 	if v, ok := cache1[cacheKey]; ok {
-		return Hash(v)
+		return v
 	}
 	if v, ok := cache2[cacheKey]; ok {
+		delete (cache2,cacheKey)
 		cache1[cacheKey] = v
-		return Hash(v)
+		return v
 	}
 
 	h = hf(append(h.Copy(), right[:]...)) // Process the left side, i.e. v from this position in c.md
 	cache1[cacheKey] = h
+	return h
 }
 
 func Sha256(b []byte) Hash {

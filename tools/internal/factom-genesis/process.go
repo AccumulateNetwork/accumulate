@@ -161,7 +161,7 @@ func Process() {
 		blocks := make([][]*protocol.Transaction, 2)
 		block := 1
 
-		const blockSize = 100000 // Tinderment block size
+		const blockSize = 300000 // Tinderment block size
 		size := 0
 		tCnt := 0
 		for _, transactions := range transactions {
