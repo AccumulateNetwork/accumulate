@@ -12,6 +12,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -67,6 +68,7 @@ func (d *dispatcher) BroadcastTxLocal(ctx context.Context, tx *protocol.Envelope
 
 var errTxInCache1 = jrpc.RPCInternalError(jrpc.JSONRPCIntID(0), tm.ErrTxInCache).Error
 var errTxInCache2 = jsonrpc2.NewError(jsonrpc2.ErrorCode(errTxInCache1.Code), errTxInCache1.Message, errTxInCache1.Data)
+var errTxInCacheAcc = jsonrpc2.NewError(api.ErrCodeAccumulate, "Accumulate Error", errTxInCache1.Data)
 
 type txnDispatchError struct {
 	typ    protocol.TransactionType
@@ -85,6 +87,42 @@ func (d *dispatcher) Reset() {
 	for key := range d.batches {
 		d.batches[key] = d.batches[key][:0]
 	}
+}
+
+func checkDispatchError(err error, errs chan<- error) {
+	if err == nil {
+		return
+	}
+
+	// TODO This may be unnecessary once this issue is fixed:
+	// https://github.com/tendermint/tendermint/issues/7185.
+
+	// Is the error "tx already exists in cache"?
+	if err.Error() == tm.ErrTxInCache.Error() {
+		return
+	}
+
+	// Or RPC error "tx already exists in cache"?
+	var rpcErr1 *jrpc.RPCError
+	if errors.As(err, &rpcErr1) && *rpcErr1 == *errTxInCache1 {
+		return
+	}
+
+	var rpcErr2 jsonrpc2.Error
+	if errors.As(err, &rpcErr2) && (rpcErr2 == errTxInCache2 || rpcErr2 == errTxInCacheAcc) {
+		return
+	}
+
+	var errorsErr *errors.Error
+	if errors.As(err, &errorsErr) {
+		// This probably should not be necessary
+		if errorsErr.Code == errors.StatusDelivered {
+			return
+		}
+	}
+
+	// It's a real error
+	errs <- err
 }
 
 // Send sends all of the batches asynchronously.
@@ -118,23 +156,34 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 			defer wg.Done()
 
 			var resp []*api.TxResponse
+			var berrs jsonrpc2.BatchError
 			err := d.Router.RequestAPIv2(ctx, partition, "", batch, &resp)
-			if err != nil {
-				errs <- err
+			switch {
+			case err == nil:
+				// Ok
+			case errors.As(err, &berrs):
+				for _, err := range berrs {
+					checkDispatchError(err, errs)
+				}
+				// Continue
+			default:
+				checkDispatchError(err, errs)
 				return
 			}
 
 			for _, resp := range resp {
 				if resp == nil {
 					//Guard put here to prevent nil responses.
-					errs <- fmt.Errorf("nil response returned from router in transaction dispatcher")
+					if berrs == nil {
+						errs <- fmt.Errorf("nil response returned from router in transaction dispatcher")
+					}
 					return
 				}
 
 				// Parse the results
 				data, err := json.Marshal(resp.Result)
 				if err != nil {
-					errs <- err
+					errs <- errors.Format(errors.StatusUnknownError, "marshal result for %v: %w", resp.Txid, err)
 					return
 				}
 
@@ -142,7 +191,7 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 				if json.Unmarshal(data, &results) != nil {
 					results = []*protocol.TransactionStatus{new(protocol.TransactionStatus)}
 					if json.Unmarshal(data, results[0]) != nil {
-						errs <- fmt.Errorf("failed to unmarshal response for %v", resp.Txid)
+						errs <- errors.Format(errors.StatusUnknownError, "unmarshal result for %v: %w", resp.Txid, err)
 						return
 					}
 				}
