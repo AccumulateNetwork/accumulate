@@ -1,7 +1,6 @@
 package factom
 
 import (
-	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"log"
@@ -11,13 +10,10 @@ import (
 	"time"
 
 	f2 "github.com/FactomProject/factom"
-	"github.com/FactomProject/factomd/common/adminBlock"
-	"github.com/FactomProject/factomd/common/directoryBlock"
 	"github.com/FactomProject/factomd/common/entryBlock"
-	"github.com/FactomProject/factomd/common/entryCreditBlock"
-	"github.com/FactomProject/factomd/common/factoid"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/tools/internal/factom"
 )
 
 const FileIncrement = 2000
@@ -55,12 +51,6 @@ func Open() bool {
 
 //nolint:noprint
 func Process() {
-	header := new(Header)
-	dBlock := directoryBlock.NewDirectoryBlock(nil)
-	aBlock := adminBlock.NewAdminBlock(nil)
-	fBlock := new(factoid.FBlock)
-	ecBlock := entryCreditBlock.NewECBlock()
-	eBlock := entryBlock.NewEBlock()
 	t := time.Now().Unix()
 
 	var entryCount int64
@@ -80,46 +70,13 @@ func Process() {
 
 		transactions := map[[32]byte][]*protocol.Transaction{}
 
-		for len(buff) > 0 {
-			buff = header.UnmarshalBinary(buff)
-			switch header.Tag {
-			case TagDBlock:
-				if err := dBlock.UnmarshalBinary(buff[:header.Size]); err != nil {
-					panic("Bad Directory block")
-				}
-			case TagABlock:
-				if err := aBlock.UnmarshalBinary(buff[:header.Size]); err != nil {
-					log.Printf("Ht %d Admin size %d %v \n",
-						dBlock.GetHeader().GetDBHeight(), header.Size, err)
-				}
-			case TagFBlock:
-				if err := fBlock.UnmarshalBinary(buff[:header.Size]); err != nil {
-					panic("Bad Factoid block")
-				}
-			case TagECBlock:
-				if err := ecBlock.UnmarshalBinary(buff[:header.Size]); err != nil {
-					panic("Bad Entry Credit block")
-				}
-			case TagEBlock:
-				if _, err := eBlock.UnmarshalBinaryData(buff[:header.Size]); err != nil {
-					panic("Bad Entry Block block")
-				}
-			case TagEntry:
-				entry := new(entryBlock.Entry)
-				if err := entry.UnmarshalBinary(buff[:header.Size]); err != nil {
-					panic("Bad Entry")
-				}
-
-				route := binary.BigEndian.Uint64(entry.ChainID.Bytes()) % 15
-				if route != 0 {
-					entriesSkipped++
-					break
-				}
-
+		err := factom.ReadObjectFile(buff, func(_ *factom.Header, object interface{}) {
+			switch object := object.(type) {
+			case *entryBlock.Entry:
 				qEntry := &f2.Entry{
-					ChainID: entry.ChainID.String(),
-					ExtIDs:  entry.ExternalIDs(),
-					Content: entry.GetContent(),
+					ChainID: object.ChainID.String(),
+					ExtIDs:  object.ExternalIDs(),
+					Content: object.GetContent(),
 				}
 				accountId, err := hex.DecodeString(qEntry.ChainID)
 				if err != nil {
@@ -137,15 +94,10 @@ func Process() {
 				if entryCount%10000 == 0 {
 					fmt.Printf("Entries: %8d %8d\n", entryCount, entriesSkipped)
 				}
-			case TagTX:
-				tx := new(factoid.Transaction)
-				if err := tx.UnmarshalBinary(buff[:header.Size]); err != nil {
-					panic("Bad Transaction")
-				}
-			default:
-				panic("Unknown TX encountered")
 			}
-			buff = buff[header.Size:]
+		})
+		if err != nil {
+			panic(err)
 		}
 		fmt.Printf("Entries: %8d %8d\n", entryCount, entriesSkipped)
 
