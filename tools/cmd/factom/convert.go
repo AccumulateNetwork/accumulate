@@ -40,6 +40,7 @@ func convert(_ *cobra.Command, args []string) {
 		input, err := ioutil.ReadFile(filename)
 		checkf(err, "read %s", filename)
 
+		// Create a map of all the entries in the object file
 		entries := map[[32]byte][]*entryBlock.Entry{}
 		err = factom.ReadObjectFile(input, func(_ *factom.Header, object interface{}) {
 			entry, ok := object.(*entryBlock.Entry)
@@ -52,7 +53,9 @@ func convert(_ *cobra.Command, args []string) {
 		})
 		checkf(err, "process object file")
 
+		// For each chain ID
 		for chainId, entries := range entries {
+			// Format the URL
 			chainId := chainId // See docs/developer/rangevarref.md
 			address, err := protocol.LiteDataAddress(chainId[:])
 			checkf(err, "create LDA URL")
@@ -61,6 +64,7 @@ func convert(_ *cobra.Command, args []string) {
 			batch := db.Begin(true)
 			account := batch.Account(address)
 
+			// Create the LDA's main record if it doesn't exist
 			var lda *protocol.LiteDataAccount
 			err = account.Main().GetAs(&lda)
 			switch {
@@ -76,11 +80,14 @@ func convert(_ *cobra.Command, args []string) {
 				checkf(err, "load record")
 			}
 
+			// For each entry
 			for _, entry := range entries {
+				// Convert the entry and calculate the entry hash
 				entry := factom.ConvertEntry(entry).Wrap()
 				entryHash, err := protocol.ComputeFactomEntryHashForAccount(chainId[:], entry.GetData())
 				checkf(err, "calculate entry hash")
 
+				// Construct a transaction
 				txn := new(protocol.Transaction)
 				txn.Header.Principal = address
 				txn.Body = &protocol.WriteData{Entry: entry}
@@ -89,16 +96,19 @@ func convert(_ *cobra.Command, args []string) {
 				// TODO: Derive this from Factom?
 				txn.Header.Memo = fmt.Sprintf("Imported on %v", time.Now())
 
+				// Construct the transaction result
 				result := new(protocol.WriteDataResult)
 				result.AccountID = chainId[:]
 				result.AccountUrl = address
 				result.EntryHash = *(*[32]byte)(entryHash)
 
+				// Construct the transaction status
 				status := new(protocol.TransactionStatus)
 				status.TxID = txn.ID()
 				status.Code = errors.StatusDelivered
 				status.Result = result
 
+				// Check if the transaction already exists
 				txnrec := batch.Transaction(txn.GetHash())
 				_, err = txnrec.Main().Get()
 				switch {
@@ -110,6 +120,7 @@ func convert(_ *cobra.Command, args []string) {
 					checkf(err, "check for duplicate transaction")
 				}
 
+				// Write everything to the database
 				err = indexing.Data(batch, address).Put(entryHash, txn.GetHash())
 				checkf(err, "add data index")
 
@@ -129,12 +140,14 @@ func convert(_ *cobra.Command, args []string) {
 			checkf(err, "commit")
 		}
 
+		// Do a GC after each object file to keep badger under control
 		err = db.GC(0.5)
 		if err != nil && !errors.Is(err, badger.ErrNoRewrite) {
 			checkf(err, "compact database")
 		}
 	}
 
+	// Create a snapshot
 	check(db.View(func(batch *database.Batch) error {
 		return batch.SaveFactomSnapshot(output)
 	}))
