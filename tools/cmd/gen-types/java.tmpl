@@ -66,6 +66,8 @@ public class {{safeClassName .Name}}{{
 	@JsonIgnore{{- end}}
 	{{-   if eq (resolveType .) "byte[]" }}
 	@JsonDeserialize(using = HexDeserializer.class){{- end}}
+	{{-   if eq (resolveType .) "byte[][]" }}
+	@JsonDeserialize(using = Hex2DDeserializer.class){{- end}}
 	{{-   if eq (resolveType .) "java.math.BigInteger" }}
 	@JsonDeserialize(using = GoBigIntDeserializer.class){{- end}}
 	public {{resolveType .}} get{{.Name}}() {
@@ -74,6 +76,8 @@ public class {{safeClassName .Name}}{{
 
 	{{-   if eq (resolveType .) "byte[]" }}
 	@JsonSerialize(using = HexSerializer.class){{- end}}
+	{{-   if eq (resolveType .) "byte[][]" }}
+	@JsonSerialize(using = Hex2DSerializer.class){{- end}}
 	{{-   if eq (resolveType .) "java.math.BigInteger" }}
 	@JsonSerialize(using = GoBigIntSerializer.class){{- end}}
 	public void set{{.Name}}(final {{resolveType .}} value) {

@@ -37,8 +37,9 @@ API=../../../internal/api/v2
 generate types apiv2 $API/types.yml
 generate api apiv2 $API/methods.yml
 
-QRY=../../../types/api/query
+QRY=../../../internal/api/v2/query
 generate enum query $QRY/enums.yml
+generate types query $QRY/requests.yml
 generate types query $QRY/responses.yml
 
 CFG=../../../config
