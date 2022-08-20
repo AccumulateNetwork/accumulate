@@ -17,6 +17,7 @@ var flags struct {
 	Language    string
 	Out         string
 	FilePerType bool
+	OmitPrefix  bool
 }
 
 func main() {
@@ -31,6 +32,7 @@ func main() {
 	cmd.Flags().StringVar(&flags.SubPackage, "subpackage", "", "Package name")
 	cmd.Flags().StringVarP(&flags.Out, "out", "o", "enums_gen.go", "Output file")
 	cmd.Flags().BoolVar(&flags.FilePerType, "file-per-type", false, "Generate a separate file for each type")
+	cmd.Flags().BoolVar(&flags.OmitPrefix, "omit-prefix", false, "Do not prefix the constant with the type name (Go)")
 	flags.files.SetFlags(cmd.Flags(), "enums")
 
 	_ = cmd.Execute()

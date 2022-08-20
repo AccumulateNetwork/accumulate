@@ -18,7 +18,7 @@ func (WriteData) Type() protocol.TransactionType { return protocol.TransactionTy
 func isWriteToLiteDataAccount(batch *database.Batch, transaction *protocol.Transaction) (bool, error) {
 	body, ok := transaction.Body.(*protocol.WriteData)
 	if !ok {
-		return false, errors.StatusInternalError.Format("invalid payload: want %T, got %T", new(protocol.WriteData), transaction.Body)
+		return false, errors.Internal.Format("invalid payload: want %T, got %T", new(protocol.WriteData), transaction.Body)
 	}
 
 	chainId, err := protocol.ParseLiteDataAddress(transaction.Header.Principal)
@@ -33,14 +33,14 @@ func isWriteToLiteDataAccount(batch *database.Batch, transaction *protocol.Trans
 		_, ok := account.(*protocol.LiteDataAccount)
 		return ok, nil
 
-	case errors.Is(err, errors.StatusNotFound):
+	case errors.Is(err, errors.NotFound):
 		// Are we creating a lite data account?
 		computedChainId := protocol.ComputeLiteDataAccountId(body.Entry)
 		return bytes.HasPrefix(computedChainId, chainId), nil
 
 	default:
 		// Unknown error
-		return false, errors.StatusUnknownError.Wrap(err)
+		return false, errors.Unknown.Wrap(err)
 	}
 }
 
@@ -55,7 +55,7 @@ func (WriteData) AllowMissingPrincipal(transaction *protocol.Transaction) bool {
 func (WriteData) SignerIsAuthorized(_ AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, _ protocol.Signer, _ bool) (fallback bool, err error) {
 	lite, err := isWriteToLiteDataAccount(batch, transaction)
 	if err != nil {
-		return false, errors.StatusUnknownError.Wrap(err)
+		return false, errors.Unknown.Wrap(err)
 	}
 
 	return !lite, nil
@@ -66,7 +66,7 @@ func (WriteData) SignerIsAuthorized(_ AuthDelegate, batch *database.Batch, trans
 func (WriteData) TransactionIsReady(_ AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (ready, fallback bool, err error) {
 	lite, err := isWriteToLiteDataAccount(batch, transaction)
 	if err != nil {
-		return false, false, errors.StatusUnknownError.Wrap(err)
+		return false, false, errors.Unknown.Wrap(err)
 	}
 
 	// Writing to a lite data account only requires one signature
@@ -85,11 +85,11 @@ func (WriteData) Execute(st *StateManager, tx *Delivery) (protocol.TransactionRe
 func (WriteData) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.WriteData)
 	if !ok {
-		return nil, errors.StatusInternalError.Format("invalid payload: want %T, got %T", new(protocol.WriteData), tx.Transaction.Body)
+		return nil, errors.Internal.Format("invalid payload: want %T, got %T", new(protocol.WriteData), tx.Transaction.Body)
 	}
 
 	if body.Entry == nil {
-		return nil, errors.StatusBadRequest.Format("entry is missing")
+		return nil, errors.BadRequest.Format("entry is missing")
 	}
 
 	//check will return error if there is too much data or no data for the entry
@@ -101,7 +101,7 @@ func (WriteData) Validate(st *StateManager, tx *Delivery) (protocol.TransactionR
 	_, err = protocol.ParseLiteDataAddress(st.OriginUrl)
 	if err == nil {
 		if body.WriteToState {
-			return nil, errors.StatusBadRequest.Format("cannot write data to the state of a lite data account")
+			return nil, errors.BadRequest.Format("cannot write data to the state of a lite data account")
 		}
 		return executeWriteLiteDataAccount(st, body.Entry)
 	}
@@ -111,23 +111,23 @@ func (WriteData) Validate(st *StateManager, tx *Delivery) (protocol.TransactionR
 
 func executeWriteFullDataAccount(st *StateManager, entry protocol.DataEntry, scratch bool, writeToState bool) (protocol.TransactionResult, error) {
 	if st.Origin == nil {
-		return nil, errors.StatusNotFound.Format("%v not found", st.OriginUrl)
+		return nil, errors.NotFound.Format("%v not found", st.OriginUrl)
 	}
 
 	account, ok := st.Origin.(*protocol.DataAccount)
 	if !ok {
-		return nil, errors.StatusBadRequest.Format("invalid principal: want %v, got %v", protocol.AccountTypeDataAccount, st.Origin.Type())
+		return nil, errors.BadRequest.Format("invalid principal: want %v, got %v", protocol.AccountTypeDataAccount, st.Origin.Type())
 	}
 
 	if writeToState {
 		if scratch {
-			return nil, errors.StatusBadRequest.Format("writing scratch data to the account state is not permitted")
+			return nil, errors.BadRequest.Format("writing scratch data to the account state is not permitted")
 		}
 
 		account.Entry = entry
 		err := st.Update(account)
 		if err != nil {
-			return nil, errors.StatusUnknownError.Format("store account: %w", err)
+			return nil, errors.Unknown.Format("store account: %w", err)
 		}
 	}
 

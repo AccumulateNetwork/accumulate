@@ -7,7 +7,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
-var ErrInvalidUrl = errors.StatusBadRequest.New("invalid URL")
+var ErrInvalidUrl = errors.BadRequest.New("invalid URL")
 
 // General Errors
 const (

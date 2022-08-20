@@ -51,18 +51,18 @@ func (c *ChangeSet) Resolve(key record.Key) (record.Record, record.Key, error) {
 	switch key[0] {
 	case "Entity":
 		if len(key) < 2 {
-			return nil, nil, errors.StatusInternalError.New("bad key for change set")
+			return nil, nil, errors.Internal.New("bad key for change set")
 		}
 		name, okName := key[1].(string)
 		if !okName {
-			return nil, nil, errors.StatusInternalError.New("bad key for change set")
+			return nil, nil, errors.Internal.New("bad key for change set")
 		}
 		v := c.Entity(name)
 		return v, key[2:], nil
 	case "ChangeLog":
 		return c.ChangeLog(), key[1:], nil
 	default:
-		return nil, nil, errors.StatusInternalError.New("bad key for change set")
+		return nil, nil, errors.Internal.New("bad key for change set")
 	}
 }
 
@@ -168,7 +168,7 @@ func (c *Entity) Resolve(key record.Key) (record.Record, record.Key, error) {
 	case "CountableUnion":
 		return c.CountableUnion(), key[1:], nil
 	default:
-		return nil, nil, errors.StatusInternalError.New("bad key for entity")
+		return nil, nil, errors.Internal.New("bad key for entity")
 	}
 }
 
@@ -324,7 +324,7 @@ func (c *TemplateTest) Resolve(key record.Key) (record.Record, record.Key, error
 	case "UnionList":
 		return c.UnionList(), key[1:], nil
 	default:
-		return nil, nil, errors.StatusInternalError.New("bad key for template test")
+		return nil, nil, errors.Internal.New("bad key for template test")
 	}
 }
 

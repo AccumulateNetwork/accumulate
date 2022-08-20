@@ -27,7 +27,7 @@ func (x *Executor) ProcessRemoteSignatures(block *Block, delivery *chain.Deliver
 	for _, signature := range delivery.Signatures {
 		_, fwd, err := x.shouldForwardSignature(batch, delivery.Transaction, signature, delivery.Transaction.Header.Principal, signerSeen)
 		if err != nil {
-			return errors.StatusUnknownError.Wrap(err)
+			return errors.Unknown.Wrap(err)
 		}
 		if fwd == nil {
 			continue
@@ -60,7 +60,7 @@ func (x *Executor) shouldForwardSignature(batch *database.Batch, transaction *pr
 		// Check inner signature
 		s, fwd, err := x.shouldForwardSignature(batch, transaction, signature.Signature, signature.Delegator, seen)
 		if err != nil {
-			return nil, nil, errors.StatusUnknownError.Wrap(err)
+			return nil, nil, errors.Unknown.Wrap(err)
 		}
 		if fwd != nil {
 			delegated := signature.Copy()
@@ -99,25 +99,25 @@ func (x *Executor) shouldForwardSignature(batch *database.Batch, transaction *pr
 
 	signer, err := loadSigner(batch, signerUrl)
 	if err != nil {
-		return nil, nil, errors.StatusUnknownError.Format("load signer: %w", err)
+		return nil, nil, errors.Unknown.Format("load signer: %w", err)
 	}
 
 	// Signer is satisfied?
 	record := batch.Transaction(transaction.GetHash())
 	status, err := record.GetStatus()
 	if err != nil {
-		return nil, nil, errors.StatusUnknownError.Format("load transaction status: %w", err)
+		return nil, nil, errors.Unknown.Format("load transaction status: %w", err)
 	}
 
 	ready, err := x.SignerIsSatisfied(batch, transaction, status, signer)
 	if !ready || err != nil {
-		return nil, nil, errors.StatusUnknownError.Wrap(err)
+		return nil, nil, errors.Unknown.Wrap(err)
 	}
 
 	// Load all of the signatures
 	sigset, err := database.GetSignaturesForSigner(batch.Transaction(transaction.GetHash()), signer)
 	if err != nil {
-		return nil, nil, errors.StatusUnknownError.Wrap(err)
+		return nil, nil, errors.Unknown.Wrap(err)
 	}
 
 	set := new(protocol.SignatureSet)

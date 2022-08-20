@@ -24,7 +24,7 @@ func (NullRouter) Route(...*protocol.Envelope) (string, error) {
 }
 
 func (NullRouter) Query(ctx context.Context, partition string, query []byte, opts client.ABCIQueryOptions) (*core.ResultABCIQuery, error) {
-	return nil, errors.StatusNotFound
+	return nil, errors.NotFound
 }
 
 func (NullRouter) Submit(ctx context.Context, partition string, tx *protocol.Envelope, pretend, async bool) (*routing.ResponseSubmit, error) {
@@ -32,5 +32,5 @@ func (NullRouter) Submit(ctx context.Context, partition string, tx *protocol.Env
 }
 
 func (NullRouter) RequestAPIv2(ctx context.Context, partitionId, method string, params, result interface{}) error {
-	return errors.StatusNotFound
+	return errors.NotFound
 }

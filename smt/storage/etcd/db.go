@@ -55,7 +55,7 @@ func (db *DB) get(key storage.Key) ([]byte, error) {
 	}
 
 	if resp.Count == 0 {
-		return nil, errors.StatusNotFound.Format("key %v not found", key)
+		return nil, errors.NotFound.Format("key %v not found", key)
 	}
 
 	if resp.Count != 1 {
@@ -76,7 +76,7 @@ func (db *DB) commit(batch map[storage.Key][]byte) error {
 		return err
 	}
 	if !resp.Succeeded {
-		return errors.StatusInternalError.New("transaction failed")
+		return errors.Internal.New("transaction failed")
 	}
 	return nil
 }

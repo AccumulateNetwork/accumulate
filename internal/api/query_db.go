@@ -23,22 +23,22 @@ func (m *DatabaseQueryModule) QueryState(_ context.Context, account *url.URL, fr
 	defer batch.Discard()
 
 	if len(fragment) > 0 {
-		return nil, errors.StatusBadRequest.Format("unsupported fragment query %q", strings.Join(fragment, "/"))
+		return nil, errors.BadRequest.Format("unsupported fragment query %q", strings.Join(fragment, "/"))
 	}
 
 	return m.queryAccount(batch, account, opts)
 }
 
 func (m *DatabaseQueryModule) QuerySet(_ context.Context, account *url.URL, fragment []string, opts QuerySetOptions) (Record, error) {
-	return nil, errors.StatusBadRequest.Format("unsupported fragment query %q", strings.Join(fragment, "/"))
+	return nil, errors.BadRequest.Format("unsupported fragment query %q", strings.Join(fragment, "/"))
 }
 
 func (m *DatabaseQueryModule) Search(_ context.Context, scope *url.URL, query string, opts SearchOptions) (Record, error) {
 	if opts.Kind == "" {
-		return nil, errors.StatusBadRequest.Format("missing option `kind`")
+		return nil, errors.BadRequest.Format("missing option `kind`")
 	}
 
-	return nil, errors.StatusBadRequest.Format("unsupported search kind %q", opts.Kind)
+	return nil, errors.BadRequest.Format("unsupported search kind %q", opts.Kind)
 }
 
 func (m *DatabaseQueryModule) queryAccount(batch *database.Batch, accountUrl *url.URL, opts QueryStateOptions) (Record, error) {
@@ -47,19 +47,19 @@ func (m *DatabaseQueryModule) queryAccount(batch *database.Batch, accountUrl *ur
 	var err error
 	rec.Account, err = account.GetState()
 	if err != nil {
-		return nil, errors.StatusUnknownError.Format("get account %v main state: %w", accountUrl, err)
+		return nil, errors.Unknown.Format("get account %v main state: %w", accountUrl, err)
 	}
 
 	if opts.Expand {
 		chains, err := account.Chains().Get()
 		if err != nil {
-			return nil, errors.StatusUnknownError.Format("get account %v chains index: %w", accountUrl, err)
+			return nil, errors.Unknown.Format("get account %v chains index: %w", accountUrl, err)
 		}
 
 		for _, c := range chains {
 			chain, err := account.GetChainByName(c.Name)
 			if err != nil {
-				return nil, errors.StatusUnknownError.Format("read account %v chain %s: %w", accountUrl, c.Name, err)
+				return nil, errors.Unknown.Format("read account %v chain %s: %w", accountUrl, c.Name, err)
 			}
 
 			state := new(ChainState)
@@ -79,7 +79,7 @@ func (m *DatabaseQueryModule) queryAccount(batch *database.Batch, accountUrl *ur
 		rec.Proof = receipt
 		block, mr, err := indexing.ReceiptForAccountState(m.Network, batch, account)
 		if err != nil {
-			receipt.Error = errors.StatusUnknownError.Wrap(err).(*errors.Error)
+			receipt.Error = errors.Unknown.Wrap(err).(*errors.Error)
 		} else {
 			receipt.LocalBlock = block
 			receipt.Proof = *mr

@@ -130,7 +130,7 @@ func UpdateValidatorKey(values *core.GlobalValues, oldPubKey, newPubKey []byte, 
 func updateNetworkDefinition(values *core.GlobalValues, signers []*signing.Builder, partition string, update func(*protocol.PartitionDefinition)) (*protocol.Envelope, error) {
 	def := values.Network.Partition(partition)
 	if def == nil {
-		return nil, errors.StatusNotFound.Format("partition %s is not present in the network definition", partition)
+		return nil, errors.NotFound.Format("partition %s is not present in the network definition", partition)
 	}
 
 	update(def)
@@ -140,7 +140,7 @@ func updateNetworkDefinition(values *core.GlobalValues, signers []*signing.Build
 	writeData.Entry = values.FormatNetwork()
 	env, err := initiateTransaction(signers, protocol.DnUrl().JoinPath(protocol.Network), writeData)
 	if err != nil {
-		return nil, errors.StatusUnknownError.Wrap(err)
+		return nil, errors.Unknown.Wrap(err)
 	}
 
 	return env, nil
@@ -162,7 +162,7 @@ func initiateTransaction(signers []*signing.Builder, principal *url.URL, body pr
 			sig, err = signer.Sign(txn.GetHash())
 		}
 		if err != nil {
-			return nil, errors.StatusUnknownError.Format("sign: %w", err)
+			return nil, errors.Unknown.Format("sign: %w", err)
 		}
 		env.Signatures = append(env.Signatures, sig)
 	}

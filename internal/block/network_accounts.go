@@ -35,19 +35,19 @@ func (x *Executor) processNetworkAccountUpdates(batch *database.Batch, delivery 
 
 			page, ok := principal.(*protocol.KeyPage)
 			if !ok {
-				return errors.StatusInternalError.Format("%v is not a key page", principal.GetUrl())
+				return errors.Internal.Format("%v is not a key page", principal.GetUrl())
 			}
 
 			// Reject the transaction if the threshold is not set correctly according to the ratio
 			expectedThreshold := x.globals.Active.Globals.OperatorAcceptThreshold.Threshold(len(page.Keys))
 			if page.AcceptThreshold != expectedThreshold {
-				return errors.StatusBadRequest.Format("invalid %v update: incorrect accept threshold: want %d, got %d", principal.GetUrl(), expectedThreshold, page.AcceptThreshold)
+				return errors.BadRequest.Format("invalid %v update: incorrect accept threshold: want %d, got %d", principal.GetUrl(), expectedThreshold, page.AcceptThreshold)
 			}
 		}
 
 	case *protocol.UpdateAccountAuth:
 		// Prevent authority changes
-		return errors.StatusBadRequest.Format("the authority set of a network account cannot be updated")
+		return errors.BadRequest.Format("the authority set of a network account cannot be updated")
 
 	case *protocol.WriteData:
 		var err error
@@ -71,18 +71,18 @@ func (x *Executor) processNetworkAccountUpdates(batch *database.Batch, delivery 
 		case protocol.Votes,
 			protocol.Evidence:
 			// Prevent direct writes
-			return errors.StatusBadRequest.Format("%v cannot be updated directly", principal)
+			return errors.BadRequest.Format("%v cannot be updated directly", principal)
 
 		default:
 			return nil
 		}
 		if err != nil {
-			return errors.StatusUnknownError.Wrap(err)
+			return errors.Unknown.Wrap(err)
 		}
 
 		// Force WriteToState for variable accounts
 		if !body.WriteToState {
-			return errors.StatusBadRequest.Format("updates to %v must write to state", principal)
+			return errors.BadRequest.Format("updates to %v must write to state", principal)
 		}
 	}
 
@@ -90,7 +90,7 @@ func (x *Executor) processNetworkAccountUpdates(batch *database.Batch, delivery 
 	if x.Describe.NetworkType != config.Directory {
 		// Do not allow direct updates of the BVN accounts
 		if !delivery.WasProducedByPushedUpdate() {
-			return errors.StatusBadRequest.Format("%v cannot be updated directly", principal.GetUrl())
+			return errors.BadRequest.Format("%v cannot be updated directly", principal.GetUrl())
 		}
 
 		return nil
@@ -101,7 +101,7 @@ func (x *Executor) processNetworkAccountUpdates(batch *database.Batch, delivery 
 	record := batch.Account(x.Describe.Ledger())
 	err := record.GetStateAs(&ledger)
 	if err != nil {
-		return errors.StatusUnknownError.Format("load ledger: %w", err)
+		return errors.Unknown.Format("load ledger: %w", err)
 	}
 
 	var update protocol.NetworkAccountUpdate
@@ -111,7 +111,7 @@ func (x *Executor) processNetworkAccountUpdates(batch *database.Batch, delivery 
 
 	err = record.PutState(ledger)
 	if err != nil {
-		return errors.StatusUnknownError.Format("store ledger: %w", err)
+		return errors.Unknown.Format("store ledger: %w", err)
 	}
 
 	return nil

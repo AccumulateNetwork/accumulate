@@ -84,36 +84,36 @@ func (c *Chain) Resolve(key record.Key) (record.Record, record.Key, error) {
 		return c.Head(), key[1:], nil
 	case "States":
 		if len(key) < 2 {
-			return nil, nil, errors.StatusInternalError.New("bad key for chain")
+			return nil, nil, errors.Internal.New("bad key for chain")
 		}
 		index, okIndex := key[1].(uint64)
 		if !okIndex {
-			return nil, nil, errors.StatusInternalError.New("bad key for chain")
+			return nil, nil, errors.Internal.New("bad key for chain")
 		}
 		v := c.States(index)
 		return v, key[2:], nil
 	case "ElementIndex":
 		if len(key) < 2 {
-			return nil, nil, errors.StatusInternalError.New("bad key for chain")
+			return nil, nil, errors.Internal.New("bad key for chain")
 		}
 		hash, okHash := key[1].([]byte)
 		if !okHash {
-			return nil, nil, errors.StatusInternalError.New("bad key for chain")
+			return nil, nil, errors.Internal.New("bad key for chain")
 		}
 		v := c.ElementIndex(hash)
 		return v, key[2:], nil
 	case "Element":
 		if len(key) < 2 {
-			return nil, nil, errors.StatusInternalError.New("bad key for chain")
+			return nil, nil, errors.Internal.New("bad key for chain")
 		}
 		index, okIndex := key[1].(uint64)
 		if !okIndex {
-			return nil, nil, errors.StatusInternalError.New("bad key for chain")
+			return nil, nil, errors.Internal.New("bad key for chain")
 		}
 		v := c.Element(index)
 		return v, key[2:], nil
 	default:
-		return nil, nil, errors.StatusInternalError.New("bad key for chain")
+		return nil, nil, errors.Internal.New("bad key for chain")
 	}
 }
 

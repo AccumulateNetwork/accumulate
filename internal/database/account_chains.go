@@ -100,12 +100,12 @@ func (c *Chain2) Get() (*Chain, error) {
 	switch {
 	case err == nil:
 		// Ok
-	case !errors.Is(err, errors.StatusNotFound):
-		return nil, errors.StatusUnknownError.Wrap(err)
+	case !errors.Is(err, errors.NotFound):
+		return nil, errors.Unknown.Wrap(err)
 	default:
 		err = c.account.Chains().Add(&protocol.ChainMetadata{Name: c.Name(), Type: c.Type()})
 		if err != nil {
-			return nil, errors.StatusUnknownError.Wrap(err)
+			return nil, errors.Unknown.Wrap(err)
 		}
 	}
 	return wrapChain(c.inner)
@@ -137,7 +137,7 @@ func (a *Account) ChainByName(name string) (*Chain2, error) {
 
 	c := a.chainByName(name)
 	if c == nil {
-		return nil, errors.StatusNotFound.Format("account %v chain %s not found", a.url(), name)
+		return nil, errors.NotFound.Format("account %v chain %s not found", a.url(), name)
 	}
 
 	if index {

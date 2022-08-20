@@ -27,7 +27,7 @@ func NewCounted[T any](logger log.Logger, store Store, key Key, namefmt string, 
 func (c *Counted[T]) Count() (int, error) {
 	v, err := c.count.Get()
 	if err != nil {
-		return 0, errors.StatusUnknownError.Wrap(err)
+		return 0, errors.Unknown.Wrap(err)
 	}
 	return int(v), nil
 }
@@ -51,7 +51,7 @@ func (c *Counted[T]) value(i int) *Value[T] {
 func (c *Counted[T]) Get(i int) (T, error) {
 	v, err := c.value(i).Get()
 	if err != nil {
-		return v, errors.StatusUnknownError.Wrap(err)
+		return v, errors.Unknown.Wrap(err)
 	}
 
 	return v, nil
@@ -61,14 +61,14 @@ func (c *Counted[T]) Get(i int) (T, error) {
 func (c *Counted[T]) GetAll() ([]T, error) {
 	count, err := c.Count()
 	if err != nil {
-		return nil, errors.StatusUnknownError.Wrap(err)
+		return nil, errors.Unknown.Wrap(err)
 	}
 
 	values := make([]T, count)
 	for i := range values {
 		values[i], err = c.Get(i)
 		if err != nil {
-			return nil, errors.StatusUnknownError.Wrap(err)
+			return nil, errors.Unknown.Wrap(err)
 		}
 	}
 
@@ -79,17 +79,17 @@ func (c *Counted[T]) GetAll() ([]T, error) {
 func (c *Counted[T]) Put(v T) error {
 	count, err := c.Count()
 	if err != nil {
-		return errors.StatusUnknownError.Wrap(err)
+		return errors.Unknown.Wrap(err)
 	}
 
 	err = c.count.Put(uint64(count + 1))
 	if err != nil {
-		return errors.StatusUnknownError.Wrap(err)
+		return errors.Unknown.Wrap(err)
 	}
 
 	err = c.value(count).Put(v)
 	if err != nil {
-		return errors.StatusUnknownError.Wrap(err)
+		return errors.Unknown.Wrap(err)
 	}
 
 	return nil
@@ -99,16 +99,16 @@ func (c *Counted[T]) Put(v T) error {
 func (c *Counted[T]) Last() (int, T, error) {
 	count, err := c.Count()
 	if err != nil {
-		return 0, zero[T](), errors.StatusUnknownError.Wrap(err)
+		return 0, zero[T](), errors.Unknown.Wrap(err)
 	}
 
 	if count == 0 {
-		return 0, zero[T](), errors.StatusNotFound.Format("empty")
+		return 0, zero[T](), errors.NotFound.Format("empty")
 	}
 
 	v, err := c.Get(count - 1)
 	if err != nil {
-		return 0, zero[T](), errors.StatusInternalError.Wrap(err)
+		return 0, zero[T](), errors.Internal.Wrap(err)
 	}
 
 	return count - 1, v, nil
@@ -140,7 +140,7 @@ func (c *Counted[T]) Commit() error {
 	}
 
 	if err := c.count.Commit(); err != nil {
-		return errors.StatusUnknownError.Wrap(err)
+		return errors.Unknown.Wrap(err)
 	}
 
 	for _, v := range c.values {
@@ -148,7 +148,7 @@ func (c *Counted[T]) Commit() error {
 			continue
 		}
 		if err := v.Commit(); err != nil {
-			return errors.StatusUnknownError.Wrap(err)
+			return errors.Unknown.Wrap(err)
 		}
 	}
 
@@ -162,12 +162,12 @@ func (c *Counted[T]) Resolve(key Key) (Record, Key, error) {
 	}
 
 	if len(key) > 1 {
-		return nil, nil, errors.StatusInternalError.New("bad key for counted")
+		return nil, nil, errors.Internal.New("bad key for counted")
 	}
 
 	i, ok := key[0].(int)
 	if !ok {
-		return nil, nil, errors.StatusInternalError.New("bad key for value")
+		return nil, nil, errors.Internal.New("bad key for value")
 	}
 
 	return c.value(i), nil, nil

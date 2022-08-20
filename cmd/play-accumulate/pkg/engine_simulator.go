@@ -99,7 +99,7 @@ func (s SimEngine) GetTransaction(hash [32]byte) (*protocol.Transaction, error) 
 		}
 	}
 
-	return nil, errors.StatusNotFound.Format("transaction %X not found", hash[:4])
+	return nil, errors.NotFound.Format("transaction %X not found", hash[:4])
 }
 
 func (s SimEngine) Submit(envelope *protocol.Envelope) (*protocol.TransactionStatus, error) {

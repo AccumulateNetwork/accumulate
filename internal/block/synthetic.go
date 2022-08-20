@@ -19,7 +19,7 @@ func (x *Executor) ProduceSynthetic(batch *database.Batch, from *protocol.Transa
 
 	err := setSyntheticOrigin(batch, from, produced)
 	if err != nil {
-		return errors.StatusUnknownError.Wrap(err)
+		return errors.Unknown.Wrap(err)
 	}
 
 	state := new(chain.ChainUpdates)
@@ -76,12 +76,12 @@ func setSyntheticOrigin(batch *database.Batch, from *protocol.Transaction, produ
 	// Set the refund amount for each output
 	refund, err := protocol.ComputeSyntheticRefund(from, len(swos))
 	if err != nil {
-		return errors.StatusInternalError.Format("compute refund: %w", err)
+		return errors.Internal.Format("compute refund: %w", err)
 	}
 
 	status, err := batch.Transaction(from.GetHash()).GetStatus()
 	if err != nil {
-		return errors.StatusUnknownError.Format("load status: %w", err)
+		return errors.Unknown.Format("load status: %w", err)
 	}
 
 	for _, swo := range swos {
@@ -132,7 +132,7 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 	err = putSyntheticTransaction(
 		batch, txn,
 		&protocol.TransactionStatus{
-			Code:               errors.StatusRemote,
+			Code:               errors.Remote,
 			SourceNetwork:      initSig.SourceNetwork,
 			DestinationNetwork: initSig.DestinationNetwork,
 			SequenceNumber:     initSig.SequenceNumber,
@@ -160,7 +160,7 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 
 	partition, ok := protocol.ParsePartitionUrl(initSig.DestinationNetwork)
 	if !ok {
-		return nil, errors.StatusInternalError.Format("destination URL is not a valid partition")
+		return nil, errors.Internal.Format("destination URL is not a valid partition")
 	}
 
 	indexIndex, err := addIndexChainEntry(record.SyntheticSequenceChain(partition), &protocol.IndexEntry{
@@ -180,19 +180,19 @@ func (x *Executor) buildSynthReceipt(batch *database.Batch, produced []*protocol
 	// Load the root chain
 	chain, err := batch.Account(x.Describe.Ledger()).RootChain().Get()
 	if err != nil {
-		return errors.StatusUnknownError.Format("load root chain: %w", err)
+		return errors.Unknown.Format("load root chain: %w", err)
 	}
 
 	// Prove the synthetic transaction chain anchor
 	rootProof, err := chain.Receipt(int64(synthAnchor), int64(rootAnchor))
 	if err != nil {
-		return errors.StatusUnknownError.Format("prove from %d to %d on the root chain: %w", synthAnchor, rootAnchor, err)
+		return errors.Unknown.Format("prove from %d to %d on the root chain: %w", synthAnchor, rootAnchor, err)
 	}
 
 	// Load the synthetic transaction chain
 	chain, err = batch.Account(x.Describe.Synthetic()).MainChain().Get()
 	if err != nil {
-		return errors.StatusUnknownError.Format("load root chain: %w", err)
+		return errors.Unknown.Format("load root chain: %w", err)
 	}
 
 	synthStart := chain.Height() - int64(len(produced))
@@ -204,27 +204,27 @@ func (x *Executor) buildSynthReceipt(batch *database.Batch, produced []*protocol
 		record := batch.Transaction(transaction.GetHash())
 		status, err := record.GetStatus()
 		if err != nil {
-			return errors.StatusUnknownError.Format("load synthetic transaction status: %w", err)
+			return errors.Unknown.Format("load synthetic transaction status: %w", err)
 		}
 		if status.SourceNetwork == nil || status.DestinationNetwork == nil || status.SequenceNumber == 0 {
-			return errors.StatusInternalError.Format("synthetic transaction %X status is not correctly initialized", transaction.GetHash()[:4])
+			return errors.Internal.Format("synthetic transaction %X status is not correctly initialized", transaction.GetHash()[:4])
 		}
 
 		// Prove it
 		synthProof, err := chain.Receipt(int64(i+int(synthStart)), int64(synthEnd))
 		if err != nil {
-			return errors.StatusUnknownError.Format("prove from %d to %d on the synthetic transaction chain: %w", i+int(synthStart), synthEnd, err)
+			return errors.Unknown.Format("prove from %d to %d on the synthetic transaction chain: %w", i+int(synthStart), synthEnd, err)
 		}
 
 		r, err := synthProof.Combine(rootProof)
 		if err != nil {
-			return errors.StatusUnknownError.Format("combine receipts: %w", err)
+			return errors.Unknown.Format("combine receipts: %w", err)
 		}
 
 		status.Proof = r
 		err = record.PutStatus(status)
 		if err != nil {
-			return errors.StatusUnknownError.Format("store synthetic transaction status: %w", err)
+			return errors.Unknown.Format("store synthetic transaction status: %w", err)
 		}
 	}
 
@@ -234,7 +234,7 @@ func (x *Executor) buildSynthReceipt(batch *database.Batch, produced []*protocol
 func processSyntheticTransaction(batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) error {
 	// Check that the partition signature has been received
 	if status.SourceNetwork == nil {
-		return errors.StatusUnauthenticated.Format("missing partition signature")
+		return errors.Unauthenticated.Format("missing partition signature")
 	}
 
 	// Check for a key signature
@@ -243,7 +243,7 @@ func processSyntheticTransaction(batch *database.Batch, transaction *protocol.Tr
 		return err
 	}
 	if !hasKeySig {
-		return errors.StatusUnauthenticated.Format("missing key signature")
+		return errors.Unauthenticated.Format("missing key signature")
 	}
 
 	if transaction.Body.Type() == protocol.TransactionTypeDirectoryAnchor || transaction.Body.Type() == protocol.TransactionTypeBlockValidatorAnchor {
@@ -252,7 +252,7 @@ func processSyntheticTransaction(batch *database.Batch, transaction *protocol.Tr
 
 	// Check that the receipt signature has been received
 	if status.Proof == nil {
-		return errors.StatusUnauthenticated.Format("missing synthetic transaction receipt")
+		return errors.Unauthenticated.Format("missing synthetic transaction receipt")
 	}
 
 	return nil

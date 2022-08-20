@@ -455,7 +455,7 @@ func (s *Simulator) SubmitAndExecuteBlock(envelopes ...*protocol.Envelope) ([]*p
 
 	_, err := s.Submit(envelopes...)
 	if err != nil {
-		return nil, errors.StatusUnknownError.Wrap(err)
+		return nil, errors.Unknown.Wrap(err)
 	}
 
 	ids := map[[32]byte]bool{}
@@ -643,7 +643,7 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 			switch {
 			case err == nil:
 				x.BlockIndex = ledger.Index + 1
-			case errors.Is(err, errors.StatusNotFound):
+			case errors.Is(err, errors.NotFound):
 				x.BlockIndex = protocol.GenesisBlock + 1
 			default:
 				require.NoError(tb{x.tb}, err)
@@ -673,8 +673,8 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 			if err == nil {
 				continue
 			}
-			if !errors.Is(err, errors.StatusDelivered) {
-				return errors.StatusUnknownError.Wrap(err)
+			if !errors.Is(err, errors.Delivered) {
+				return errors.Unknown.Wrap(err)
 			}
 			if statusChan != nil {
 				status.TxID = deliveries[i].Transaction.ID()
@@ -688,7 +688,7 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 			err = e
 		})
 		if err != nil {
-			return errors.StatusUnknownError.Wrap(err)
+			return errors.Unknown.Wrap(err)
 		}
 		if statusChan != nil {
 			for _, result := range results {

@@ -18,19 +18,19 @@ const labelRouting = "routing table"
 
 func (g *GlobalValues) Load(net config.NetworkUrl, getState getStateFunc) error {
 	if err := loadAccount(net.JoinPath(protocol.Oracle), labelOracle, getState, new(protocol.AcmeOracle), &g.Oracle); err != nil {
-		return errors.StatusUnknownError.Wrap(err)
+		return errors.Unknown.Wrap(err)
 	}
 
 	if err := loadAccount(net.JoinPath(protocol.Globals), labelGlobals, getState, new(protocol.NetworkGlobals), &g.Globals); err != nil {
-		return errors.StatusUnknownError.Wrap(err)
+		return errors.Unknown.Wrap(err)
 	}
 
 	if err := loadAccount(net.JoinPath(protocol.Network), labelNetwork, getState, new(protocol.NetworkDefinition), &g.Network); err != nil {
-		return errors.StatusUnknownError.Wrap(err)
+		return errors.Unknown.Wrap(err)
 	}
 
 	if err := loadAccount(net.JoinPath(protocol.Routing), labelRouting, getState, new(protocol.RoutingTable), &g.Routing); err != nil {
-		return errors.StatusUnknownError.Wrap(err)
+		return errors.Unknown.Wrap(err)
 	}
 
 	return nil
@@ -38,23 +38,23 @@ func (g *GlobalValues) Load(net config.NetworkUrl, getState getStateFunc) error 
 
 func (g *GlobalValues) Store(net config.NetworkUrl, getState getStateFunc, putState putStateFunc) error {
 	if err := storeAccount(net.JoinPath(protocol.Oracle), labelOracle, getState, putState, g.Oracle); err != nil {
-		return errors.StatusUnknownError.Wrap(err)
+		return errors.Unknown.Wrap(err)
 	}
 
 	if err := storeAccount(net.JoinPath(protocol.Globals), labelGlobals, getState, putState, g.Globals); err != nil {
-		return errors.StatusUnknownError.Wrap(err)
+		return errors.Unknown.Wrap(err)
 	}
 
 	if g.Network != nil {
 		// TODO Make this unconditional once the corresponding part of genesis
 		// is unconditional
 		if err := storeAccount(net.JoinPath(protocol.Network), labelNetwork, getState, putState, g.Network); err != nil {
-			return errors.StatusUnknownError.Wrap(err)
+			return errors.Unknown.Wrap(err)
 		}
 	}
 
 	if err := storeAccount(net.JoinPath(protocol.Routing), labelRouting, getState, putState, g.Routing); err != nil {
-		return errors.StatusUnknownError.Wrap(err)
+		return errors.Unknown.Wrap(err)
 	}
 
 	return nil
@@ -96,7 +96,7 @@ func loadAccount[T encoding.BinaryValue](accountUrl *url.URL, name string, getSt
 	var account *protocol.DataAccount
 	err := getState(accountUrl, &account)
 	if err != nil {
-		return errors.StatusUnknownError.Format("load %s: %w", name, err)
+		return errors.Unknown.Format("load %s: %w", name, err)
 	}
 
 	return parseEntryAs(name, account.Entry, value, ptr)
@@ -104,16 +104,16 @@ func loadAccount[T encoding.BinaryValue](accountUrl *url.URL, name string, getSt
 
 func parseEntryAs[T encoding.BinaryValue](name string, entry protocol.DataEntry, value T, ptr *T) error {
 	if entry == nil {
-		return errors.StatusBadRequest.Format("unmarshal %s: entry is missing", name)
+		return errors.BadRequest.Format("unmarshal %s: entry is missing", name)
 	}
 
 	if len(entry.GetData()) != 1 {
-		return errors.StatusBadRequest.Format("unmarshal %s: want 1 record, got %d", name, len(entry.GetData()))
+		return errors.BadRequest.Format("unmarshal %s: want 1 record, got %d", name, len(entry.GetData()))
 	}
 
 	err := value.UnmarshalBinary(entry.GetData()[0])
 	if err != nil {
-		return errors.StatusBadRequest.Format("unmarshal %s: %w", name, err)
+		return errors.BadRequest.Format("unmarshal %s: %w", name, err)
 	}
 
 	*ptr = value
@@ -124,14 +124,14 @@ func storeAccount(accountUrl *url.URL, name string, getState getStateFunc, putSt
 	var dataAccount *protocol.DataAccount
 	err := getState(accountUrl, &dataAccount)
 	if err != nil {
-		return errors.StatusBadRequest.Format("load %s: %w", name, err)
+		return errors.BadRequest.Format("load %s: %w", name, err)
 	}
 
 	dataAccount.Entry = formatEntry(value)
 
 	err = putState(dataAccount)
 	if err != nil {
-		return errors.StatusBadRequest.Format("store %s: %w", name, err)
+		return errors.BadRequest.Format("store %s: %w", name, err)
 	}
 
 	return nil

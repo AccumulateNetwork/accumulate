@@ -40,7 +40,7 @@ func NewJrpc(opts Options) (*JrpcMethods, error) {
 	m.querier.backend.Options = opts
 
 	if opts.Key == nil {
-		return nil, errors.StatusBadRequest.Format("missing key")
+		return nil, errors.BadRequest.Format("missing key")
 	}
 
 	if opts.Logger != nil {
@@ -196,7 +196,7 @@ func (m *JrpcMethods) Describe(_ context.Context, params json.RawMessage) interf
 		})
 	})
 	if err != nil {
-		res.Error = errors.StatusUnknownError.Wrap(err).(*errors.Error)
+		res.Error = errors.Unknown.Wrap(err).(*errors.Error)
 	}
 
 	return res

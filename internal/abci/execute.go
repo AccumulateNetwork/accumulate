@@ -24,14 +24,14 @@ func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]
 	if err != nil {
 		sentry.CaptureException(err)
 		logger.Info("Failed to unmarshal", "tx", logging.AsHex(hash), "error", err)
-		return nil, nil, nil, errors.StatusUnknownError.Format("decoding envelopes: %w", err)
+		return nil, nil, nil, errors.Unknown.Format("decoding envelopes: %w", err)
 	}
 
 	deliveries, err := chain.NormalizeEnvelope(envelope)
 	if err != nil {
 		sentry.CaptureException(err)
 		logger.Info("Failed to normalize envelope", "tx", logging.AsHex(hash), "error", err)
-		return nil, nil, nil, errors.StatusUnknownError.Wrap(err)
+		return nil, nil, nil, errors.Unknown.Wrap(err)
 	}
 
 	results := execute(deliveries)

@@ -83,7 +83,7 @@ func TestCreateIdentity(t *testing.T) {
 		if c.Success {
 			// Should succeed
 			st, _ = sim.WaitForTransactionFlow(delivered, h[:])
-			require.Equal(t, errors.StatusDelivered, st[0].Code, "Expected the transaction to succeed")
+			require.Equal(t, errors.Delivered, st[0].Code, "Expected the transaction to succeed")
 		} else {
 			// Should fail or not be delivered
 			_, st, _ := sim.WaitForTransaction(delivered, h[:], 50)
@@ -99,7 +99,7 @@ func TestCreateIdentity(t *testing.T) {
 				require.NoError(t, err, "Expected the ADI to have been created")
 			} else {
 				require.Error(t, err, "Expected the ADI to not have been created")
-				require.ErrorIs(t, err, errors.StatusNotFound, "Expected the ADI to not have been created")
+				require.ErrorIs(t, err, errors.NotFound, "Expected the ADI to not have been created")
 			}
 			return nil
 		})

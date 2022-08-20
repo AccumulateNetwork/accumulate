@@ -68,13 +68,13 @@ func routedServerMethod[In, Out any](s *Simulator, handler func(*client.Client, 
 			switch {
 			case err == nil:
 				return resp
-			case errors.Is(err, errors.StatusNotFound):
+			case errors.Is(err, errors.NotFound):
 				continue
 			default:
 				return accumulateError(err)
 			}
 		}
-		return errors.StatusNotFound
+		return errors.NotFound
 	}
 }
 
@@ -83,7 +83,7 @@ func validatorError(err error) jsonrpc2.Error {
 }
 
 func accumulateError(err error) jsonrpc2.Error {
-	if errors.Is(err, errors.StatusNotFound) {
+	if errors.Is(err, errors.NotFound) {
 		return jsonrpc2.NewError(api.ErrCodeNotFound, "Accumulate Error", "Not Found")
 	}
 

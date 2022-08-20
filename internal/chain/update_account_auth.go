@@ -113,7 +113,7 @@ func (UpdateAccountAuth) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 			// TODO Require a proof of the existence of the remote authority
 
 			if err := verifyIsNotPage(auth, op.Authority); err != nil {
-				return nil, errors.StatusUnknownError.Format("invalid authority %v: %w", op.Authority, err)
+				return nil, errors.Unknown.Format("invalid authority %v: %w", op.Authority, err)
 			}
 
 			_, new := auth.AddAuthority(op.Authority)
@@ -130,7 +130,7 @@ func (UpdateAccountAuth) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 
 			// An account must retain at least one authority
 			if len(auth.Authorities) == 0 {
-				return nil, errors.StatusBadRequest.New("removing the last authority from an account is not allowed")
+				return nil, errors.BadRequest.New("removing the last authority from an account is not allowed")
 			}
 
 		default:
@@ -169,5 +169,5 @@ func verifyIsNotPage(auth *protocol.AccountAuth, account *url.URL) error {
 		return nil
 	}
 
-	return errors.StatusBadRequest.Format("a key page is not a valid authority")
+	return errors.BadRequest.Format("a key page is not a valid authority")
 }

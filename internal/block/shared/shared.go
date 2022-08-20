@@ -33,7 +33,7 @@ func GetAccountAuthoritySet(account protocol.Account) (*protocol.AccountAuth, *u
 	case *protocol.KeyPage:
 		bookUrl, _, ok := protocol.ParseKeyPageUrl(account.Url)
 		if !ok {
-			return nil, nil, errors.StatusInternalError.Format("invalid key page URL: %v", account.Url)
+			return nil, nil, errors.Internal.Format("invalid key page URL: %v", account.Url)
 		}
 		return nil, bookUrl, nil
 
@@ -46,13 +46,13 @@ func SignTransaction(network *config.Describe, nodeKey []byte, batch *database.B
 	// TODO Exporting this is not great
 
 	if nodeKey == nil {
-		return nil, errors.StatusInternalError.Format("attempted to sign with a nil key")
+		return nil, errors.Internal.Format("attempted to sign with a nil key")
 	}
 
 	var page *protocol.KeyPage
 	err := batch.Account(network.OperatorsPage()).GetStateAs(&page)
 	if err != nil {
-		return nil, errors.StatusUnknownError.Format("load operator key page: %w", err)
+		return nil, errors.Unknown.Format("load operator key page: %w", err)
 	}
 
 	// Sign it
@@ -65,7 +65,7 @@ func SignTransaction(network *config.Describe, nodeKey []byte, batch *database.B
 
 	keySig, err := bld.Sign(txn.GetHash())
 	if err != nil {
-		return nil, errors.StatusInternalError.Format("sign synthetic transaction: %w", err)
+		return nil, errors.Internal.Format("sign synthetic transaction: %w", err)
 	}
 
 	return keySig, nil
@@ -84,13 +84,13 @@ func PrepareBlockAnchor(network *config.Describe, nodeKey []byte, batch *databas
 		SetVersion(sequenceNumber).
 		InitiateSynthetic(txn, destPartUrl)
 	if err != nil {
-		return nil, errors.StatusInternalError.Wrap(err)
+		return nil, errors.Internal.Wrap(err)
 	}
 
 	// Create a key signature
 	keySig, err := SignTransaction(network, nodeKey, batch, txn, initSig.DestinationNetwork)
 	if err != nil {
-		return nil, errors.StatusUnknownError.Wrap(err)
+		return nil, errors.Unknown.Wrap(err)
 	}
 
 	return &protocol.Envelope{Transaction: []*protocol.Transaction{txn}, Signatures: []protocol.Signature{initSig, keySig}}, nil

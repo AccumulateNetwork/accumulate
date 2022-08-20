@@ -49,26 +49,26 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 	txnType := delivery.Transaction.Body.Type()
 	if txnType == protocol.TransactionTypeSystemWriteData {
 		// SystemWriteData transactions are purely internal transactions
-		return nil, errors.StatusBadRequest.Format("unsupported transaction type: %v", txnType)
+		return nil, errors.BadRequest.Format("unsupported transaction type: %v", txnType)
 	}
 	if txnType != protocol.TransactionTypeRemote {
 		_, ok := x.executors[txnType]
 		if !ok {
-			return nil, errors.StatusBadRequest.Format("unsupported transaction type: %v", txnType)
+			return nil, errors.BadRequest.Format("unsupported transaction type: %v", txnType)
 		}
 	}
 
 	// Load the transaction
 	_, err := delivery.LoadTransaction(batch)
 	if err != nil {
-		return nil, errors.StatusUnknownError.Wrap(err)
+		return nil, errors.Unknown.Wrap(err)
 	}
 
 	// Check that the signatures are valid
 	for i, signature := range delivery.Signatures {
 		err = x.ValidateSignature(batch, delivery, signature)
 		if err != nil {
-			return nil, errors.StatusUnknownError.Format("signature %d: %w", i, err)
+			return nil, errors.Unknown.Format("signature %d: %w", i, err)
 		}
 	}
 
@@ -79,10 +79,10 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 		err = validateSyntheticTransactionSignatures(delivery.Transaction, delivery.Signatures)
 	default:
 		// Should be unreachable
-		return nil, errors.StatusInternalError.Format("transaction type %v is not user, synthetic, or internal", txnType)
+		return nil, errors.Internal.Format("transaction type %v is not user, synthetic, or internal", txnType)
 	}
 	if err != nil {
-		return nil, errors.StatusUnknownError.Wrap(err)
+		return nil, errors.Unknown.Wrap(err)
 	}
 
 	// Only validate the transaction when we first receive it
@@ -107,7 +107,7 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 	// Load the first signer
 	firstSig := delivery.Signatures[0]
 	if _, ok := firstSig.(*protocol.ReceiptSignature); ok {
-		return nil, errors.StatusBadRequest.Format("invalid transaction: initiated by receipt signature")
+		return nil, errors.BadRequest.Format("invalid transaction: initiated by receipt signature")
 	}
 
 	// Lite token address => lite identity
@@ -124,7 +124,7 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 	var signer protocol.Signer
 	err = batch.Account(signerUrl).GetStateAs(&signer)
 	if err != nil {
-		return nil, errors.StatusUnknownError.Format("load signer: %w", err)
+		return nil, errors.Unknown.Format("load signer: %w", err)
 	}
 
 	// Do not validate remote transactions
@@ -138,11 +138,11 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 	case err == nil:
 		// Ok
 	case !errors.Is(err, storage.ErrNotFound):
-		return nil, errors.StatusUnknownError.Format("load principal: %w", err)
+		return nil, errors.Unknown.Format("load principal: %w", err)
 	case delivery.Transaction.Body.Type().IsUser():
 		val, ok := getValidator[chain.PrincipalValidator](x, delivery.Transaction.Body.Type())
 		if !ok || !val.AllowMissingPrincipal(delivery.Transaction) {
-			return nil, errors.StatusNotFound.Format("missing principal: %v not found", delivery.Transaction.Header.Principal)
+			return nil, errors.NotFound.Format("missing principal: %v not found", delivery.Transaction.Header.Principal)
 		}
 	}
 
@@ -154,12 +154,12 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 	// Execute the transaction
 	executor, ok := x.executors[delivery.Transaction.Body.Type()]
 	if !ok {
-		return nil, errors.StatusInternalError.Format("missing executor for %v", delivery.Transaction.Body.Type())
+		return nil, errors.Internal.Format("missing executor for %v", delivery.Transaction.Body.Type())
 	}
 
 	result, err := executor.Validate(st, delivery)
 	if err != nil {
-		return nil, errors.StatusUnknownError.Wrap(err)
+		return nil, errors.Unknown.Wrap(err)
 	}
 
 	return result, nil
@@ -172,7 +172,7 @@ func (x *Executor) ValidateSignature(batch *database.Batch, delivery *chain.Deli
 		md.Location = signature.RoutingLocation()
 	}
 	_, err := x.validateSignature(batch, delivery, signature, md)
-	return errors.StatusUnknownError.Wrap(err)
+	return errors.Unknown.Wrap(err)
 }
 
 func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Delivery, signature protocol.Signature, md sigExecMetadata) (protocol.Signer, error) {
@@ -184,7 +184,7 @@ func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Deli
 	// Verify that the initiator signature matches the transaction
 	err = validateInitialSignature(delivery.Transaction, signature, md)
 	if err != nil {
-		return nil, errors.StatusUnknownError.Wrap(err)
+		return nil, errors.Unknown.Wrap(err)
 	}
 
 	// Stateful validation (mostly for synthetic transactions)
@@ -197,17 +197,17 @@ func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Deli
 		err = verifyReceiptSignature(delivery.Transaction, signature, md)
 
 	case *protocol.RemoteSignature:
-		return nil, errors.StatusBadRequest.New("a remote signature is not allowed outside of a forwarded transaction")
+		return nil, errors.BadRequest.New("a remote signature is not allowed outside of a forwarded transaction")
 
 	case *protocol.SignatureSet:
-		return nil, errors.StatusBadRequest.New("a signature set is not allowed outside of a forwarded transaction")
+		return nil, errors.BadRequest.New("a signature set is not allowed outside of a forwarded transaction")
 
 	case *protocol.DelegatedSignature:
 		if !md.Nested() {
 			// Limit delegation depth
 			for i, sig := 1, signature.Signature; ; i++ {
 				if i > protocol.DelegationDepthLimit {
-					return nil, errors.StatusBadRequest.Format("delegated signature exceeded the depth limit (%d)", protocol.DelegationDepthLimit)
+					return nil, errors.BadRequest.Format("delegated signature exceeded the depth limit (%d)", protocol.DelegationDepthLimit)
 				}
 				if del, ok := sig.(*protocol.DelegatedSignature); ok {
 					sig = del.Signature
@@ -222,7 +222,7 @@ func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Deli
 			return nil, err
 		}
 		if !md.Nested() && !signature.Verify(signature.Metadata().Hash(), delivery.Transaction.GetHash()) {
-			return nil, errors.StatusBadRequest.Format("invalid signature")
+			return nil, errors.BadRequest.Format("invalid signature")
 		}
 		if !signature.Delegator.LocalTo(md.Location) {
 			return nil, nil
@@ -231,35 +231,35 @@ func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Deli
 		// Validate the delegator
 		signer, err = x.validateSigner(batch, delivery.Transaction, signature.Delegator, md.Location, false)
 		if err != nil {
-			return nil, errors.StatusUnknownError.Wrap(err)
+			return nil, errors.Unknown.Wrap(err)
 		}
 
 		// Verify delegation
 		_, _, ok := signer.EntryByDelegate(delegate.GetUrl())
 		if !ok {
-			return nil, errors.StatusUnauthorized.Format("%v is not authorized to sign for %v", delegate.GetUrl(), signature.Delegator)
+			return nil, errors.Unauthorized.Format("%v is not authorized to sign for %v", delegate.GetUrl(), signature.Delegator)
 		}
 
 	case protocol.KeySignature:
 		// Basic validation
 		if !md.Nested() && !signature.Verify(nil, delivery.Transaction.GetHash()) {
-			return nil, errors.StatusBadRequest.New("invalid")
+			return nil, errors.BadRequest.New("invalid")
 		}
 
 		if !delivery.Transaction.Body.Type().IsUser() {
 			err = x.validatePartitionSignature(md.Location, signature, delivery.Transaction)
 			if err != nil {
-				return nil, errors.StatusUnknownError.Wrap(err)
+				return nil, errors.Unknown.Wrap(err)
 			}
 		}
 
 		signer, err = x.validateKeySignature(batch, delivery, signature, md, !md.Delegated && delivery.Transaction.Header.Principal.LocalTo(md.Location))
 
 	default:
-		return nil, errors.StatusBadRequest.Format("unknown signature type %v", signature.Type())
+		return nil, errors.BadRequest.Format("unknown signature type %v", signature.Type())
 	}
 	if err != nil {
-		return nil, errors.StatusUnauthenticated.Wrap(err)
+		return nil, errors.Unauthenticated.Wrap(err)
 	}
 
 	return signer, nil
@@ -279,22 +279,22 @@ func validateSyntheticTransactionSignatures(transaction *protocol.Transaction, s
 			gotED25519Sig = true
 
 		default:
-			return errors.StatusBadRequest.Format("synthetic transaction do not support %T signatures", sig)
+			return errors.BadRequest.Format("synthetic transaction do not support %T signatures", sig)
 		}
 	}
 
 	if !gotSynthSig {
-		return errors.StatusUnauthenticated.Format("missing synthetic transaction origin")
+		return errors.Unauthenticated.Format("missing synthetic transaction origin")
 	}
 	if !gotED25519Sig {
-		return errors.StatusUnauthenticated.Format("missing ED25519 signature")
+		return errors.Unauthenticated.Format("missing ED25519 signature")
 	}
 	if transaction.Body.Type() == protocol.TransactionTypeDirectoryAnchor || transaction.Body.Type() == protocol.TransactionTypeBlockValidatorAnchor {
 		return nil
 	}
 
 	if !gotReceiptSig {
-		return errors.StatusUnauthenticated.Format("missing synthetic transaction receipt")
+		return errors.Unauthenticated.Format("missing synthetic transaction receipt")
 	}
 	return nil
 }
@@ -308,10 +308,10 @@ func (x *Executor) checkRouting(delivery *chain.Delivery, signature protocol.Sig
 	if delivery.Transaction.Body.Type().IsUser() {
 		partition, err := x.Router.RouteAccount(signature.RoutingLocation())
 		if err != nil {
-			return errors.StatusUnknownError.Wrap(err)
+			return errors.Unknown.Wrap(err)
 		}
 		if !strings.EqualFold(partition, x.Describe.PartitionId) {
-			return errors.StatusBadRequest.Format("signature submitted to %v instead of %v", x.Describe.PartitionId, partition)
+			return errors.BadRequest.Format("signature submitted to %v instead of %v", x.Describe.PartitionId, partition)
 		}
 	}
 

@@ -362,7 +362,7 @@ func dispatchTxRequest(payload interface{}, origin *url.URL, signers []*signing.
 	if res.Code != 0 {
 		result := new(protocol.TransactionStatus)
 		if Remarshal(res.Result, result) != nil {
-			return nil, errors.StatusEncodingError.New(res.Message)
+			return nil, errors.Encoding.New(res.Message)
 		}
 		return nil, result.Error
 	}

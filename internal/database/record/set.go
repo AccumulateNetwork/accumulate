@@ -35,14 +35,14 @@ func (s *Set[T]) Put(u []T) error {
 	})
 
 	err := s.Value.Put(u)
-	return errors.StatusUnknownError.Wrap(err)
+	return errors.Unknown.Wrap(err)
 }
 
 // Add inserts values into the set, sorted.
 func (s *Set[T]) Add(v ...T) error {
 	l, err := s.Get()
 	if err != nil {
-		return errors.StatusUnknownError.Wrap(err)
+		return errors.Unknown.Wrap(err)
 	}
 
 	for _, v := range v {
@@ -51,14 +51,14 @@ func (s *Set[T]) Add(v ...T) error {
 	}
 
 	err = s.Value.Put(l)
-	return errors.StatusUnknownError.Wrap(err)
+	return errors.Unknown.Wrap(err)
 }
 
 // Remove removes a value from the set.
 func (s *Set[T]) Remove(v T) error {
 	l, err := s.Get()
 	if err != nil {
-		return errors.StatusUnknownError.Wrap(err)
+		return errors.Unknown.Wrap(err)
 	}
 
 	i, found := sortutil.Search(l, func(u T) int { return s.compare(u, v) })
@@ -68,19 +68,19 @@ func (s *Set[T]) Remove(v T) error {
 	l = append(l[:i], l[i+1:]...)
 
 	err = s.Value.Put(l)
-	return errors.StatusUnknownError.Wrap(err)
+	return errors.Unknown.Wrap(err)
 }
 
 // Index returns the index of the value.
 func (s *Set[T]) Index(v T) (int, error) {
 	l, err := s.Get()
 	if err != nil {
-		return 0, errors.StatusUnknownError.Wrap(err)
+		return 0, errors.Unknown.Wrap(err)
 	}
 
 	i, found := sortutil.Search(l, func(u T) int { return s.compare(u, v) })
 	if !found {
-		return 0, errors.StatusNotFound.Format("entry not found in %s", s.name)
+		return 0, errors.NotFound.Format("entry not found in %s", s.name)
 	}
 
 	return i, nil
@@ -90,12 +90,12 @@ func (s *Set[T]) Index(v T) (int, error) {
 func (s *Set[T]) Find(v T) (T, error) {
 	l, err := s.Get()
 	if err != nil {
-		return zero[T](), errors.StatusUnknownError.Wrap(err)
+		return zero[T](), errors.Unknown.Wrap(err)
 	}
 
 	i, found := sortutil.Search(l, func(u T) int { return s.compare(u, v) })
 	if !found {
-		return zero[T](), errors.StatusNotFound.Format("%s entry not found", s.name)
+		return zero[T](), errors.NotFound.Format("%s entry not found", s.name)
 	}
 
 	return l[i], nil
@@ -115,7 +115,7 @@ func (s *Set[T]) Commit() error {
 		return nil
 	}
 	err := s.Value.Commit()
-	return errors.StatusUnknownError.Wrap(err)
+	return errors.Unknown.Wrap(err)
 }
 
 // sliceValue uses an encoder to manage a slice.
@@ -153,7 +153,7 @@ func (v *sliceValue[T]) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 	marshalSlice(writer, v.encoder, v.value)
 	_, _, err := writer.Reset(nil)
-	return buffer.Bytes(), errors.StatusUnknownError.Wrap(err)
+	return buffer.Bytes(), errors.Unknown.Wrap(err)
 }
 
 func (v *sliceValue[T]) UnmarshalBinary(data []byte) error {
@@ -164,7 +164,7 @@ func (v *sliceValue[T]) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 	v.value = unmarshalSlice(reader, v.encoder)
 	_, err := reader.Reset(nil)
-	return errors.StatusUnknownError.Wrap(err)
+	return errors.Unknown.Wrap(err)
 }
 
 // marshalSlice uses an encodable value to marshal a slice. If this

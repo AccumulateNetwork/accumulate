@@ -578,7 +578,7 @@ func GetAllSignatures(batch *database.Batch, transaction *database.Transaction, 
 	for _, signer := range status.Signers {
 		sigset, err := database.GetSignaturesForSigner(transaction, signer)
 		if err != nil {
-			return nil, errors.StatusUnknownError.Wrap(err)
+			return nil, errors.Unknown.Wrap(err)
 		}
 
 		for _, sig := range sigset {

@@ -28,7 +28,7 @@ func (code Status) Wrap(err error) error {
 	}
 
 	// If err is an Error and we're not going to add anything, return it
-	if !trackLocation && code == StatusUnknownError {
+	if !trackLocation && code == Unknown {
 		if _, ok := err.(*Error); ok {
 			return err
 		}
@@ -85,13 +85,13 @@ func convert(err error) *Error {
 	}
 
 	e := &Error{
-		Code:    StatusUnknownError,
+		Code:    Unknown,
 		Message: err.Error(),
 	}
 
 	var encErr encoding.Error
 	if errors.As(err, &encErr) {
-		e.Code = StatusEncodingError
+		e.Code = Encoding
 		err = encErr.E
 	}
 
@@ -109,7 +109,7 @@ func (e *Error) setCause(f *Error) {
 		return
 	}
 
-	if e.Code != StatusUnknownError {
+	if e.Code != Unknown {
 		return
 	}
 

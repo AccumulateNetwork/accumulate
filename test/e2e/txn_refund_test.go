@@ -72,7 +72,7 @@ func TestRefundCycle(t *testing.T) {
 
 		// Verify the refunds failed (because the account no longer exists)
 		require.NotNil(t, status.Error)
-		require.Equal(t, errors.StatusNotFound, status.Error.Code)
+		require.Equal(t, errors.NotFound, status.Error.Code)
 	}
 
 	// Verify the failed refund did not generate a refund

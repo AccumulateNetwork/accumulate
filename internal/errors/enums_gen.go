@@ -8,62 +8,62 @@ import (
 	"strings"
 )
 
-// StatusOK means the request completed successfully.
-const StatusOK Status = 200
+// OK means the request completed successfully.
+const OK Status = 200
 
-// StatusDelivered means the transaction has been delivered.
-const StatusDelivered Status = 201
+// Delivered means the transaction has been delivered.
+const Delivered Status = 201
 
-// StatusPending means the transaction is pending.
-const StatusPending Status = 202
+// Pending means the transaction is pending.
+const Pending Status = 202
 
-// StatusRemote means the transaction is a local reference to a remote.
-const StatusRemote Status = 203
+// Remote means the transaction is a local reference to a remote.
+const Remote Status = 203
 
-// StatusWrongPartition means the requested resource is assigned to a different network partition.
-const StatusWrongPartition Status = 301
+// WrongPartition means the requested resource is assigned to a different network partition.
+const WrongPartition Status = 301
 
-// StatusBadRequest means the request was invalid.
-const StatusBadRequest Status = 400
+// BadRequest means the request was invalid.
+const BadRequest Status = 400
 
-// StatusUnauthenticated means the signature could not be validated.
-const StatusUnauthenticated Status = 401
+// Unauthenticated means the signature could not be validated.
+const Unauthenticated Status = 401
 
-// StatusInsufficientCredits means the signer does not have sufficient credits to execute the transaction.
-const StatusInsufficientCredits Status = 402
+// InsufficientCredits means the signer does not have sufficient credits to execute the transaction.
+const InsufficientCredits Status = 402
 
-// StatusUnauthorized means the signer is not authorized to sign the transaction.
-const StatusUnauthorized Status = 403
+// Unauthorized means the signer is not authorized to sign the transaction.
+const Unauthorized Status = 403
 
-// StatusNotFound means a record could not be found.
-const StatusNotFound Status = 404
+// NotFound means a record could not be found.
+const NotFound Status = 404
 
-// StatusNotAllowed means the requested action could not be performed.
-const StatusNotAllowed Status = 405
+// NotAllowed means the requested action could not be performed.
+const NotAllowed Status = 405
 
-// StatusConflict means the request failed due to a conflict.
-const StatusConflict Status = 409
+// Conflict means the request failed due to a conflict.
+const Conflict Status = 409
 
-// StatusBadSignerVersion means the signer version does not match.
-const StatusBadSignerVersion Status = 411
+// BadSignerVersion means the signer version does not match.
+const BadSignerVersion Status = 411
 
-// StatusBadTimestamp means the timestamp is invalid.
-const StatusBadTimestamp Status = 412
+// BadTimestamp means the timestamp is invalid.
+const BadTimestamp Status = 412
 
-// StatusBadUrlLength means the url length is too big.
-const StatusBadUrlLength Status = 413
+// BadUrlLength means the url length is too big.
+const BadUrlLength Status = 413
 
-// StatusInternalError means an internal error occurred.
-const StatusInternalError Status = 500
+// Internal means an internal error occurred.
+const Internal Status = 500
 
-// StatusUnknownError means an unknown error occurred.
-const StatusUnknownError Status = 501
+// Unknown means an unknown error occurred.
+const Unknown Status = 501
 
-// StatusEncodingError means encoding or decoding failed.
-const StatusEncodingError Status = 502
+// Encoding means encoding or decoding failed.
+const Encoding Status = 502
 
-// StatusFatalError means something has gone seriously wrong.
-const StatusFatalError Status = 503
+// Fatal means something has gone seriously wrong.
+const Fatal Status = 503
 
 // GetEnumValue returns the value of the Status
 func (v Status) GetEnumValue() uint64 { return uint64(v) }
@@ -72,7 +72,7 @@ func (v Status) GetEnumValue() uint64 { return uint64(v) }
 func (v *Status) SetEnumValue(id uint64) bool {
 	u := Status(id)
 	switch u {
-	case StatusOK, StatusDelivered, StatusPending, StatusRemote, StatusWrongPartition, StatusBadRequest, StatusUnauthenticated, StatusInsufficientCredits, StatusUnauthorized, StatusNotFound, StatusNotAllowed, StatusConflict, StatusBadSignerVersion, StatusBadTimestamp, StatusBadUrlLength, StatusInternalError, StatusUnknownError, StatusEncodingError, StatusFatalError:
+	case OK, Delivered, Pending, Remote, WrongPartition, BadRequest, Unauthenticated, InsufficientCredits, Unauthorized, NotFound, NotAllowed, Conflict, BadSignerVersion, BadTimestamp, BadUrlLength, Internal, Unknown, Encoding, Fatal:
 		*v = u
 		return true
 	default:
@@ -83,44 +83,44 @@ func (v *Status) SetEnumValue(id uint64) bool {
 // String returns the name of the Status.
 func (v Status) String() string {
 	switch v {
-	case StatusOK:
+	case OK:
 		return "ok"
-	case StatusDelivered:
+	case Delivered:
 		return "delivered"
-	case StatusPending:
+	case Pending:
 		return "pending"
-	case StatusRemote:
+	case Remote:
 		return "remote"
-	case StatusWrongPartition:
+	case WrongPartition:
 		return "wrongPartition"
-	case StatusBadRequest:
+	case BadRequest:
 		return "badRequest"
-	case StatusUnauthenticated:
+	case Unauthenticated:
 		return "unauthenticated"
-	case StatusInsufficientCredits:
+	case InsufficientCredits:
 		return "insufficientCredits"
-	case StatusUnauthorized:
+	case Unauthorized:
 		return "unauthorized"
-	case StatusNotFound:
+	case NotFound:
 		return "notFound"
-	case StatusNotAllowed:
+	case NotAllowed:
 		return "notAllowed"
-	case StatusConflict:
+	case Conflict:
 		return "conflict"
-	case StatusBadSignerVersion:
+	case BadSignerVersion:
 		return "badSignerVersion"
-	case StatusBadTimestamp:
+	case BadTimestamp:
 		return "badTimestamp"
-	case StatusBadUrlLength:
+	case BadUrlLength:
 		return "badUrlLength"
-	case StatusInternalError:
-		return "internalError"
-	case StatusUnknownError:
-		return "unknownError"
-	case StatusEncodingError:
-		return "encodingError"
-	case StatusFatalError:
-		return "fatalError"
+	case Internal:
+		return "internal"
+	case Unknown:
+		return "unknown"
+	case Encoding:
+		return "encoding"
+	case Fatal:
+		return "fatal"
 	default:
 		return fmt.Sprintf("Status:%d", v)
 	}
@@ -130,43 +130,43 @@ func (v Status) String() string {
 func StatusByName(name string) (Status, bool) {
 	switch strings.ToLower(name) {
 	case "ok":
-		return StatusOK, true
+		return OK, true
 	case "delivered":
-		return StatusDelivered, true
+		return Delivered, true
 	case "pending":
-		return StatusPending, true
+		return Pending, true
 	case "remote":
-		return StatusRemote, true
+		return Remote, true
 	case "wrongpartition":
-		return StatusWrongPartition, true
+		return WrongPartition, true
 	case "badrequest":
-		return StatusBadRequest, true
+		return BadRequest, true
 	case "unauthenticated":
-		return StatusUnauthenticated, true
+		return Unauthenticated, true
 	case "insufficientcredits":
-		return StatusInsufficientCredits, true
+		return InsufficientCredits, true
 	case "unauthorized":
-		return StatusUnauthorized, true
+		return Unauthorized, true
 	case "notfound":
-		return StatusNotFound, true
+		return NotFound, true
 	case "notallowed":
-		return StatusNotAllowed, true
+		return NotAllowed, true
 	case "conflict":
-		return StatusConflict, true
+		return Conflict, true
 	case "badsignerversion":
-		return StatusBadSignerVersion, true
+		return BadSignerVersion, true
 	case "badtimestamp":
-		return StatusBadTimestamp, true
+		return BadTimestamp, true
 	case "badurllength":
-		return StatusBadUrlLength, true
-	case "internalerror":
-		return StatusInternalError, true
-	case "unknownerror":
-		return StatusUnknownError, true
-	case "encodingerror":
-		return StatusEncodingError, true
-	case "fatalerror":
-		return StatusFatalError, true
+		return BadUrlLength, true
+	case "internal":
+		return Internal, true
+	case "unknown":
+		return Unknown, true
+	case "encoding":
+		return Encoding, true
+	case "fatal":
+		return Fatal, true
 	default:
 		return 0, false
 	}

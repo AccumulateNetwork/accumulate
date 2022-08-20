@@ -307,7 +307,7 @@ func TestAdiUrlLengthLimit(t *testing.T) {
 	h := res.Produced[0].Hash()
 	res, err = n.QueryTx(h[:], time.Second, true)
 	require.NoError(t, err)
-	require.Equal(t, errors.StatusBadUrlLength, res.Status.Code)
+	require.Equal(t, errors.BadUrlLength, res.Status.Code)
 }
 
 func TestCreateADIWithoutKeybook(t *testing.T) {
@@ -813,7 +813,7 @@ func TestSendTokensToBadRecipient(t *testing.T) {
 	h := res.Produced[0].Hash()
 	res, err = n.QueryTx(h[:], time.Second, true)
 	require.NoError(t, err)
-	require.Equal(t, errors.StatusNotFound, res.Status.Code)
+	require.Equal(t, errors.NotFound, res.Status.Code)
 
 	// Give the synthetic receipt a second to resolve - workaround AC-1238
 	time.Sleep(time.Second)

@@ -23,17 +23,17 @@ func (LockAccount) Validate(st *StateManager, tx *Delivery) (protocol.Transactio
 
 	account, ok := st.Origin.(protocol.LockableAccount)
 	if !ok {
-		return nil, errors.StatusBadRequest.Format("locking is not supported for %v accounts", st.Origin.Type())
+		return nil, errors.BadRequest.Format("locking is not supported for %v accounts", st.Origin.Type())
 	}
 
 	err := account.SetLockHeight(body.Height)
 	if err != nil {
-		return nil, errors.StatusUnknownError.Format("set lock height: %w", err)
+		return nil, errors.Unknown.Format("set lock height: %w", err)
 	}
 
 	err = st.Update(account)
 	if err != nil {
-		return nil, errors.StatusUnknownError.Format("store account state: %w", err)
+		return nil, errors.Unknown.Format("store account state: %w", err)
 	}
 
 	return nil, nil

@@ -48,7 +48,7 @@ func (d *DataIndexer) GetLatest() (index uint64, entryHash, txnHash []byte, err 
 	}
 
 	if count == 0 {
-		return 0, nil, nil, errors.StatusNotFound.Format("empty")
+		return 0, nil, nil, errors.NotFound.Format("empty")
 	}
 
 	entryHash, err = d.Entry(count - 1)
@@ -80,7 +80,7 @@ func GetDataEntry(batch *database.Batch, txnHash []byte) (protocol.DataEntry, er
 	case *protocol.SystemWriteData:
 		return txn.Entry, nil
 	default:
-		return nil, errors.StatusInternalError.Format("invalid data transaction: expected %v or %v, got %v", protocol.TransactionTypeWriteData, protocol.TransactionTypeWriteDataTo, state.Transaction.Body.Type())
+		return nil, errors.Internal.Format("invalid data transaction: expected %v or %v, got %v", protocol.TransactionTypeWriteData, protocol.TransactionTypeWriteDataTo, state.Transaction.Body.Type())
 	}
 }
 
@@ -114,9 +114,9 @@ func (d *DataIndexer) Transaction(entryHash []byte) ([]byte, error) {
 func (d *DataIndexer) Put(entryHash, txnHash []byte) error {
 	err := d.AccountData.Entry().Put(*(*[32]byte)(entryHash))
 	if err != nil {
-		return errors.StatusUnknownError.Wrap(err)
+		return errors.Unknown.Wrap(err)
 	}
 
 	err = d.AccountData.Transaction(*(*[32]byte)(entryHash)).Put(*(*[32]byte)(txnHash))
-	return errors.StatusUnknownError.Wrap(err)
+	return errors.Unknown.Wrap(err)
 }

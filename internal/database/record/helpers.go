@@ -103,11 +103,11 @@ func unmarshalFromString[T any](fn func(string) (T, error)) ValueUnmarshaller[T]
 	return func(data []byte) (T, error) {
 		s, err := encoding.StringUnmarshalBinary(data)
 		if err != nil {
-			return zero[T](), errors.StatusUnknownError.Wrap(err)
+			return zero[T](), errors.Unknown.Wrap(err)
 		}
 		v, err := fn(s)
 		if err != nil {
-			return zero[T](), errors.StatusUnknownError.Wrap(err)
+			return zero[T](), errors.Unknown.Wrap(err)
 		}
 		return v, nil
 	}

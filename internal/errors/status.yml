@@ -53,15 +53,15 @@ Status:
     description: means the url length is too big
 
   # Server/system errors
-  InternalError:
+  Internal:
     value: 500
     description: means an internal error occurred
-  UnknownError:
+  Unknown:
     value: 501
     description: means an unknown error occurred
-  EncodingError:
+  Encoding:
     value: 502
     description: means encoding or decoding failed
-  FatalError:
+  Fatal:
     value: 503
     description: means something has gone seriously wrong

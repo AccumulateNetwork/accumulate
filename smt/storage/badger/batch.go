@@ -85,7 +85,7 @@ func (b *Batch) Get(key storage.Key) (v []byte, err error) {
 	case err == nil:
 		// Ok
 	case errors.Is(err, badger.ErrKeyNotFound):
-		return nil, errors.StatusNotFound.Format("key %s not found", key)
+		return nil, errors.NotFound.Format("key %s not found", key)
 	default:
 		return nil, err
 	}
@@ -93,7 +93,7 @@ func (b *Batch) Get(key storage.Key) (v []byte, err error) {
 	v, err = item.ValueCopy(nil)
 	// If we didn't find the value, return ErrNotFound
 	if errors.Is(err, badger.ErrKeyNotFound) {
-		return nil, errors.StatusNotFound.Format("key %v not found", key)
+		return nil, errors.NotFound.Format("key %v not found", key)
 	}
 
 	return v, nil

@@ -14,7 +14,7 @@ func (l *LiteTokenAccount) GetLockHeight() uint64 {
 
 func (l *LiteTokenAccount) SetLockHeight(v uint64) error {
 	if v < l.LockHeight {
-		return errors.StatusBadRequest.Format("cannot reduce lockup period")
+		return errors.BadRequest.Format("cannot reduce lockup period")
 	}
 	l.LockHeight = v
 	return nil

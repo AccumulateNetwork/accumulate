@@ -21,11 +21,11 @@ func NewList[T any](logger log.Logger, store Store, key Key, namefmt string, enc
 func (s *List[T]) Add(v ...T) error {
 	l, err := s.Get()
 	if err != nil {
-		return errors.StatusUnknownError.Wrap(err)
+		return errors.Unknown.Wrap(err)
 	}
 
 	err = s.Value.Put(append(l, v...))
-	return errors.StatusUnknownError.Wrap(err)
+	return errors.Unknown.Wrap(err)
 }
 
 // IsDirty implements Record.IsDirty.
@@ -42,5 +42,5 @@ func (s *List[T]) Commit() error {
 		return nil
 	}
 	err := s.Value.Commit()
-	return errors.StatusUnknownError.Wrap(err)
+	return errors.Unknown.Wrap(err)
 }

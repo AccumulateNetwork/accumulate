@@ -325,7 +325,7 @@ func (c *FakeTendermint) checkResultSet(data []byte) {
 	}
 
 	for _, r := range rs.Results {
-		if r.Error == nil || r.Code == errors.StatusDelivered {
+		if r.Error == nil || r.Code == errors.Delivered {
 			continue
 		}
 
@@ -362,7 +362,7 @@ func (c *FakeTendermint) Tx(ctx context.Context, hash []byte, prove bool) (*ctyp
 	c.txMu.RUnlock()
 
 	if st == nil || st.DeliverResult == nil {
-		return nil, errors.StatusNotFound.Format("not found")
+		return nil, errors.NotFound.Format("not found")
 	}
 	return &ctypes.ResultTx{
 		Hash:     st.Hash[:],

@@ -96,7 +96,7 @@ func (m *StateManager) AddAuthority(account protocol.FullAccount, authority *url
 		var book *protocol.KeyBook
 		err := m.LoadUrlAs(authority, &book)
 		if err != nil {
-			return errors.StatusUnknownError.Format("load %q: %w", authority, err)
+			return errors.Unknown.Format("load %q: %w", authority, err)
 		}
 	}
 
@@ -108,12 +108,12 @@ func (m *StateManager) AddAuthority(account protocol.FullAccount, authority *url
 
 func (m *StateManager) InheritAuth(account protocol.FullAccount) error {
 	if !account.GetUrl().RootIdentity().Equal(m.OriginUrl.RootIdentity()) {
-		return errors.StatusBadRequest.New("cannot inherit from principal: belongs to a different root identity")
+		return errors.BadRequest.New("cannot inherit from principal: belongs to a different root identity")
 	}
 
 	principal, ok := m.Origin.(protocol.FullAccount)
 	if !ok {
-		return errors.StatusBadRequest.New("cannot inherit from principal: not a full account")
+		return errors.BadRequest.New("cannot inherit from principal: not a full account")
 	}
 
 	// Inherit auth from the principal
@@ -135,14 +135,14 @@ func (m *StateManager) SetAuth(account protocol.FullAccount, authorities []*url.
 		// Otherwise, inherit
 		err := m.InheritAuth(account)
 		if err != nil {
-			return errors.StatusUnknownError.Wrap(err)
+			return errors.Unknown.Wrap(err)
 		}
 	}
 
 	for _, authority := range authorities {
 		err := m.AddAuthority(account, authority)
 		if err != nil {
-			return errors.StatusUnknownError.Wrap(err)
+			return errors.Unknown.Wrap(err)
 		}
 	}
 

@@ -21,7 +21,7 @@ func wrapChain(merkle *managed.Chain) (*Chain, error) {
 	var err error
 	m.head, err = m.merkle.Head().Get()
 	if err != nil {
-		return nil, errors.StatusUnknownError.Wrap(err)
+		return nil, errors.Unknown.Wrap(err)
 	}
 
 	return m, nil
@@ -54,7 +54,7 @@ func (c *Chain) Entries(start int64, end int64) ([][]byte, error) {
 	}
 
 	if end < start {
-		return nil, errors.StatusBadRequest.New("invalid range: start is greater than end")
+		return nil, errors.BadRequest.New("invalid range: start is greater than end")
 	}
 
 	// GetRange will not cross mark point boundaries, so we may need to call it
@@ -128,7 +128,7 @@ func (c *Chain) AddEntry(entry []byte, unique bool) error {
 	}
 
 	err := c.merkle.AddHash(entry, unique)
-	return errors.StatusUnknownError.Wrap(err)
+	return errors.Unknown.Wrap(err)
 }
 
 // Receipt builds a receipt from one index to another

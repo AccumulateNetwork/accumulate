@@ -18,7 +18,7 @@ func ClientsMap[T any](clients map[string]T) func(string) (T, error) {
 		var zero T
 		client, ok := clients[partition]
 		if !ok {
-			return zero, errors.StatusInternalError.Format("no client defined for partition %q", partition)
+			return zero, errors.Internal.Format("no client defined for partition %q", partition)
 		}
 		return client, nil
 	}

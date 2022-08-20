@@ -109,7 +109,7 @@ func (b *Batch) Get(key storage.Key) (v []byte, err error) {
 
 	v, err = b.get(key)
 	if err != nil {
-		return nil, errors.StatusUnknownError.Wrap(err)
+		return nil, errors.Unknown.Wrap(err)
 	}
 	return v, nil
 }

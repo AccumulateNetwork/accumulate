@@ -38,7 +38,7 @@ func Init(eventBus *events.Bus) *majorBlockScheduler {
 func (s *majorBlockScheduler) onWillChangeGlobals(event events.WillChangeGlobals) (err error) {
 	s.majorBlockSchedule, err = cronexpr.Parse(event.New.Globals.MajorBlockSchedule)
 	s.nextMajorBlockTime = time.Time{}
-	return errors.StatusUnknownError.Wrap(err)
+	return errors.Unknown.Wrap(err)
 }
 
 func (s *majorBlockScheduler) IsInitialized() bool {

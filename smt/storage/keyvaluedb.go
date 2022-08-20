@@ -5,11 +5,11 @@ import (
 )
 
 // ErrNotFound is returned by KeyValueDB.Get if the key is not found.
-var ErrNotFound = errors.StatusNotFound
+var ErrNotFound = errors.NotFound
 
 // ErrNotOpen is returned by KeyValueDB.Get, .Put, and .Close if the database is
 // not open.
-var ErrNotOpen = errors.StatusInternalError.New("not open")
+var ErrNotOpen = errors.Internal.New("not open")
 
 type KeyValueTxn interface {
 	// Get gets a value.

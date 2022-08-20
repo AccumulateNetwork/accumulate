@@ -49,7 +49,7 @@ func (SyntheticDepositTokens) Validate(st *StateManager, tx *Delivery) (protocol
 	} else if keyHash, tok, err := protocol.ParseLiteTokenAddress(tx.Transaction.Header.Principal); err != nil {
 		return nil, fmt.Errorf("invalid lite token account URL: %v", err)
 	} else if keyHash == nil {
-		return nil, errors.StatusNotFound.Format("could not find token account")
+		return nil, errors.NotFound.Format("could not find token account")
 	} else if !body.Token.Equal(tok) {
 		return nil, fmt.Errorf("token URL does not match lite token account URL")
 	} else {
