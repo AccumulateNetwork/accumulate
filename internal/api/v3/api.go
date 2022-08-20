@@ -8,9 +8,9 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-//go:generate go run ../../tools/cmd/gen-enum --package api enums.yml
-//go:generate go run ../../tools/cmd/gen-types --package api responses.yml options.yml types.yml
-//go:generate go run ../../tools/cmd/gen-types --package api --language go-union --out unions_gen.go responses.yml
+//go:generate go run ../../../tools/cmd/gen-enum --package api enums.yml
+//go:generate go run ../../../tools/cmd/gen-types --package api responses.yml options.yml types.yml
+//go:generate go run ../../../tools/cmd/gen-types --package api --language go-union --out unions_gen.go responses.yml
 
 type NetworkModule interface {
 	Metrics(context.Context) (*NetworkMetrics, error)
