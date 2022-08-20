@@ -11,9 +11,9 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	cfg "gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	etcd "go.etcd.io/etcd/client/v3"
 )
@@ -25,7 +25,7 @@ var cmdInitNetwork = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 }
 
-func loadNetworkConfiguration(file string) (ret *accumulated.NetworkInit, err error) {
+func loadNetworkConfiguration(file string) (ret *daemon.NetworkInit, err error) {
 	jsonFile, err := os.Open(file)
 	defer func() { _ = jsonFile.Close() }()
 	// if we os.Open returns an error then handle it
@@ -87,7 +87,7 @@ func verifyInitFlags(cmd *cobra.Command, count int) {
 	}
 }
 
-func initNetworkLocalFS(netInit *accumulated.NetworkInit) {
+func initNetworkLocalFS(netInit *daemon.NetworkInit) {
 	if flagInit.LogLevels != "" {
 		_, _, err := logging.ParseLogLevel(flagInit.LogLevels, io.Discard)
 		checkf(err, "--log-level")
@@ -102,10 +102,10 @@ func initNetworkLocalFS(netInit *accumulated.NetworkInit) {
 	check(enc.Encode(netInit))
 	check(netFile.Close())
 
-	genDocs, err := accumulated.BuildGenesisDocs(netInit, new(core.GlobalValues), time.Now(), newLogger(), nil)
+	genDocs, err := daemon.BuildGenesisDocs(netInit, new(core.GlobalValues), time.Now(), newLogger(), nil)
 	checkf(err, "build genesis documents")
 
-	configs := accumulated.BuildNodesConfig(netInit, nil)
+	configs := daemon.BuildNodesConfig(netInit, nil)
 	var count int
 	dnGenDoc := genDocs[protocol.Directory]
 	for i, bvn := range netInit.Bvns {
@@ -132,10 +132,10 @@ func initNetworkLocalFS(netInit *accumulated.NetworkInit) {
 				}
 			}
 			configs[i][j][0].Config.PrivValidator.Key = "../priv_validator_key.json"
-			err = accumulated.WriteNodeFiles(configs[i][j][0], node.PrivValKey, node.NodeKey, dnGenDoc)
+			err = daemon.WriteNodeFiles(configs[i][j][0], node.PrivValKey, node.NodeKey, dnGenDoc)
 			checkf(err, "write DNN files")
 			configs[i][j][1].Config.PrivValidator.Key = "../priv_validator_key.json"
-			err = accumulated.WriteNodeFiles(configs[i][j][1], node.PrivValKey, node.NodeKey, bvnGenDoc)
+			err = daemon.WriteNodeFiles(configs[i][j][1], node.PrivValKey, node.NodeKey, bvnGenDoc)
 			checkf(err, "write BVNN files")
 
 		}

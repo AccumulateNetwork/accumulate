@@ -1,4 +1,4 @@
-package accumulated
+package daemon
 
 import (
 	"bytes"
@@ -20,8 +20,8 @@ import (
 	tmtypes "github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 

@@ -1,4 +1,4 @@
-package accumulated
+package daemon
 
 import (
 	"context"
@@ -19,7 +19,6 @@ import (
 	"github.com/tendermint/tendermint/rpc/client/local"
 	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/blockscheduler"
@@ -29,7 +28,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/node"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 )
 

@@ -25,10 +25,10 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate"
 	cmd2 "gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/cmd"
 	cfg "gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/proxy"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	etcd "go.etcd.io/etcd/client/v3"
@@ -611,7 +611,7 @@ func initNode(cmd *cobra.Command, args []string) (string, error) {
 
 	netDir := netDir(config.Accumulate.Describe.NetworkType)
 	config.SetRoot(filepath.Join(flagMain.WorkDir, netDir))
-	accumulated.ConfigureNodePorts(&accumulated.NodeInit{
+	daemon.ConfigureNodePorts(&daemon.NodeInit{
 		HostName: listenUrl.Hostname(),
 		ListenIP: listenUrl.Hostname(),
 		BasePort: uint64(basePort),
@@ -619,18 +619,18 @@ func initNode(cmd *cobra.Command, args []string) (string, error) {
 
 	config.PrivValidator.Key = "../priv_validator_key.json"
 
-	privValKey, err := accumulated.LoadOrGenerateTmPrivKey(config.PrivValidator.KeyFile())
+	privValKey, err := daemon.LoadOrGenerateTmPrivKey(config.PrivValidator.KeyFile())
 	DidError = err
 	if err != nil {
 		return "", fmt.Errorf("load/generate private key files, %v", err)
 	}
 
-	nodeKey, err := accumulated.LoadOrGenerateTmPrivKey(config.NodeKeyFile())
+	nodeKey, err := daemon.LoadOrGenerateTmPrivKey(config.NodeKeyFile())
 	if err != nil {
 		return "", fmt.Errorf("load/generate node key files, %v", err)
 	}
 
-	err = accumulated.WriteNodeFiles(config, privValKey, nodeKey, genDoc)
+	err = daemon.WriteNodeFiles(config, privValKey, nodeKey, genDoc)
 	if err != nil {
 		return "", fmt.Errorf("write node files, %v", err)
 	}

@@ -14,10 +14,10 @@ import (
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/abci"
-	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/internal/testdata"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"golang.org/x/sync/errgroup"
@@ -71,10 +71,10 @@ func DefaultConfig(networkName string, net config.NetworkType, node config.NodeT
 	return cfg
 }
 
-func CreateTestNet(t testing.TB, numBvns, numValidators, numFollowers int, withFactomAddress bool) ([]string, map[string][]*accumulated.Daemon) {
+func CreateTestNet(t testing.TB, numBvns, numValidators, numFollowers int, withFactomAddress bool) ([]string, map[string][]*daemon.Daemon) {
 	tempDir := t.TempDir()
 
-	netInit := accumulated.NewDevnet(accumulated.DevnetOptions{
+	netInit := daemon.NewDevnet(daemon.DevnetOptions{
 		BvnCount:       numBvns,
 		ValidatorCount: numValidators,
 		FollowerCount:  numFollowers,
@@ -107,10 +107,10 @@ func CreateTestNet(t testing.TB, numBvns, numValidators, numFollowers int, withF
 	if withFactomAddress {
 		factomAddresses = func() (io.Reader, error) { return strings.NewReader(testdata.FactomAddresses), nil }
 	}
-	genDocs, err := accumulated.BuildGenesisDocs(netInit, new(core.GlobalValues), time.Now(), initLogger, factomAddresses)
+	genDocs, err := daemon.BuildGenesisDocs(netInit, new(core.GlobalValues), time.Now(), initLogger, factomAddresses)
 	require.NoError(t, err)
 
-	configs := accumulated.BuildNodesConfig(netInit, DefaultConfig)
+	configs := daemon.BuildNodesConfig(netInit, DefaultConfig)
 	var count int
 	dnGenDoc := genDocs[protocol.Directory]
 	for i, bvn := range netInit.Bvns {
@@ -120,18 +120,18 @@ func CreateTestNet(t testing.TB, numBvns, numValidators, numFollowers int, withF
 			configs[i][j][0].SetRoot(filepath.Join(tempDir, fmt.Sprintf("node-%d", count), "dnn"))
 			configs[i][j][1].SetRoot(filepath.Join(tempDir, fmt.Sprintf("node-%d", count), "bvnn"))
 
-			err = accumulated.WriteNodeFiles(configs[i][j][0], node.PrivValKey, node.NodeKey, dnGenDoc)
+			err = daemon.WriteNodeFiles(configs[i][j][0], node.PrivValKey, node.NodeKey, dnGenDoc)
 			require.NoError(t, err)
-			err = accumulated.WriteNodeFiles(configs[i][j][1], node.PrivValKey, node.NodeKey, bvnGenDoc)
+			err = daemon.WriteNodeFiles(configs[i][j][1], node.PrivValKey, node.NodeKey, bvnGenDoc)
 			require.NoError(t, err)
 		}
 	}
 
-	daemons := make(map[string][]*accumulated.Daemon, numBvns+1)
+	daemons := make(map[string][]*daemon.Daemon, numBvns+1)
 	for _, configs := range configs {
 		for _, configs := range configs {
 			for _, cfg := range configs {
-				daemon, err := accumulated.Load(cfg.RootDir, func(c *config.Config) (io.Writer, error) { return logWriter(c.LogFormat) })
+				daemon, err := daemon.Load(cfg.RootDir, func(c *config.Config) (io.Writer, error) { return logWriter(c.LogFormat) })
 				require.NoError(t, err)
 				partition := cfg.Accumulate.PartitionId
 				daemon.Logger = daemon.Logger.With("test", t.Name(), "partition", partition, "node", cfg.Moniker)
@@ -148,7 +148,7 @@ func CreateTestNet(t testing.TB, numBvns, numValidators, numFollowers int, withF
 	return partitionNames, daemons
 }
 
-func RunTestNet(t testing.TB, partitions []string, daemons map[string][]*accumulated.Daemon) {
+func RunTestNet(t testing.TB, partitions []string, daemons map[string][]*daemon.Daemon) {
 	t.Helper()
 	for _, netName := range partitions {
 		for _, daemon := range daemons[netName] {

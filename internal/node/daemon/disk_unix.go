@@ -1,7 +1,7 @@
 //go:build linux || darwin
 // +build linux darwin
 
-package accumulated
+package daemon
 
 import (
 	"math"

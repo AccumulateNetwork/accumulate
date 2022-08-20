@@ -19,8 +19,6 @@ import (
 	"github.com/tendermint/tendermint/privval"
 	tmtypes "github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/abci"
-	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/blockscheduler"
@@ -32,6 +30,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/testing/e2e"
@@ -56,7 +56,7 @@ type FakeNode struct {
 	require *require.Assertions
 }
 
-func RunTestNet(t *testing.T, partitions []string, daemons map[string][]*accumulated.Daemon, openDb func(d *accumulated.Daemon) (*database.Database, error), doGenesis bool, errorHandler func(err error)) map[string][]*FakeNode {
+func RunTestNet(t *testing.T, partitions []string, daemons map[string][]*daemon.Daemon, openDb func(d *daemon.Daemon) (*database.Database, error), doGenesis bool, errorHandler func(err error)) map[string][]*FakeNode {
 	t.Helper()
 
 	allNodes := map[string][]*FakeNode{}
@@ -115,7 +115,7 @@ func NewDefaultErrorHandler(t *testing.T) func(err error) {
 	}
 }
 
-func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Daemon) (*database.Database, error), errorHandler func(err error), isEvil bool) (*FakeNode, chan<- abcitypes.Application) {
+func InitFake(t *testing.T, d *daemon.Daemon, openDb func(d *daemon.Daemon) (*database.Database, error), errorHandler func(err error), isEvil bool) (*FakeNode, chan<- abcitypes.Application) {
 	if errorHandler == nil {
 		errorHandler = NewDefaultErrorHandler(t)
 	}
@@ -133,7 +133,7 @@ func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Da
 	n.logger = d.Logger
 
 	if openDb == nil {
-		openDb = func(d *accumulated.Daemon) (*database.Database, error) {
+		openDb = func(d *daemon.Daemon) (*database.Database, error) {
 			return database.OpenInMemory(d.Logger), nil
 		}
 	}

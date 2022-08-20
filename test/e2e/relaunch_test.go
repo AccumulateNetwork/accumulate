@@ -10,10 +10,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/abci"
-	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
+	daemonpkg "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -77,7 +77,7 @@ func TestRelaunch(t *testing.T) {
 		for i := range daemons {
 			dir := daemons[i].Config.RootDir
 			var err error
-			daemons[i], err = accumulated.Load(dir, func(c *config.Config) (io.Writer, error) { return logWriter(c.LogFormat) })
+			daemons[i], err = daemonpkg.Load(dir, func(c *config.Config) (io.Writer, error) { return logWriter(c.LogFormat) })
 			require.NoError(t, err)
 			daemons[i].Logger = daemons[i].Logger.With("test", t.Name(), "partition", partition, "node", i)
 		}

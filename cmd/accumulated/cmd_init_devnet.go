@@ -13,7 +13,7 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	cfg "gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gopkg.in/yaml.v2"
 )
 
@@ -35,7 +35,7 @@ func initDevNet(cmd *cobra.Command, _ []string) {
 		networkReset()
 	}
 
-	initOpts := accumulated.DevnetOptions{
+	initOpts := daemon.DevnetOptions{
 		BvnCount:       flagInitDevnet.NumBvns,
 		ValidatorCount: flagInitDevnet.NumValidators,
 		FollowerCount:  flagInitDevnet.NumFollowers,
@@ -58,7 +58,7 @@ func initDevNet(cmd *cobra.Command, _ []string) {
 		}
 	}
 
-	netInit := accumulated.NewDevnet(initOpts)
+	netInit := daemon.NewDevnet(initOpts)
 
 	if flagInitDevnet.Compose {
 		writeDevnetDockerCompose(cmd, netInit)
@@ -93,7 +93,7 @@ func nextIP() string {
 	return ip.String()
 }
 
-func writeDevnetDockerCompose(cmd *cobra.Command, netInit *accumulated.NetworkInit) {
+func writeDevnetDockerCompose(cmd *cobra.Command, netInit *daemon.NetworkInit) {
 	nodeCount := flagInitDevnet.NumValidators + flagInitDevnet.NumFollowers
 	compose := new(dc.Config)
 	compose.Version = "3"

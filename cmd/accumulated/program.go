@@ -9,14 +9,14 @@ import (
 	"github.com/kardianos/service"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"golang.org/x/sync/errgroup"
 )
 
 type Program struct {
 	cmd                      *cobra.Command
 	primaryDir, secondaryDir func(cmd *cobra.Command) (string, error)
-	primary, secondary       *accumulated.Daemon
+	primary, secondary       *daemon.Daemon
 }
 
 func NewProgram(cmd *cobra.Command, primary, secondary func(cmd *cobra.Command) (string, error)) *Program {
@@ -62,7 +62,7 @@ func (p *Program) Start(s service.Service) (err error) {
 		}
 	}
 
-	p.primary, err = accumulated.Load(primaryDir, func(c *config.Config) (io.Writer, error) {
+	p.primary, err = daemon.Load(primaryDir, func(c *config.Config) (io.Writer, error) {
 		return logWriter(c.LogFormat, func(w io.Writer, format string, color bool) io.Writer {
 			return newNodeWriter(w, format, "node", 0, color)
 		})
@@ -79,7 +79,7 @@ func (p *Program) Start(s service.Service) (err error) {
 		return p.primary.Start()
 	}
 
-	p.secondary, err = accumulated.Load(secondaryDir, func(c *config.Config) (io.Writer, error) {
+	p.secondary, err = daemon.Load(secondaryDir, func(c *config.Config) (io.Writer, error) {
 		return logWriter(c.LogFormat, func(w io.Writer, format string, color bool) io.Writer {
 			return newNodeWriter(w, format, "node", 1, color)
 		})
@@ -106,7 +106,7 @@ func (p *Program) Stop(service.Service) error {
 	return stopDual(p.primary, p.secondary)
 }
 
-func startDual(primary, secondary *accumulated.Daemon) (err error) {
+func startDual(primary, secondary *daemon.Daemon) (err error) {
 	var didStartPrimary, didStartSecondary bool
 	errg := new(errgroup.Group)
 	errg.Go(func() error {
@@ -145,7 +145,7 @@ func startDual(primary, secondary *accumulated.Daemon) (err error) {
 	return primary.ConnectDirectly(secondary)
 }
 
-func stopDual(primary, secondary *accumulated.Daemon) error {
+func stopDual(primary, secondary *daemon.Daemon) error {
 	errg := new(errgroup.Group)
 	errg.Go(primary.Stop)
 	errg.Go(secondary.Stop)

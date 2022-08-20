@@ -40,7 +40,7 @@ Accumulate is broken into the following components:
 - `cmd/accumulated` - Daemon
 - `cmd/accumulate` - CLI wallet
 - `config` - Daemon configuration types
-- `internal/abci` - [ABCI](https://docs.tendermint.com/master/spec/abci/)
+- `internal/node/abci` - [ABCI](https://docs.tendermint.com/master/spec/abci/)
   implementation
 - `internal/api`- JSON-RPC v1; **Deprecated**: use `internal/api/v2`
 - `internal/api/v2`- JSON-RPC v2

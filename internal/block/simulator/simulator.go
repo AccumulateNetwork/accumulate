@@ -16,7 +16,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/blockscheduler"
@@ -28,6 +27,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/sortutil"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
@@ -52,7 +52,7 @@ type Simulator struct {
 	Executors  map[string]*ExecEntry
 
 	opts             SimulatorOptions
-	netInit          *accumulated.NetworkInit
+	netInit          *daemon.NetworkInit
 	router           routing.Router
 	routingOverrides map[[32]byte]string
 }
@@ -108,12 +108,12 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 	sim.Logger = sim.newLogger(opts).With("module", "simulator")
 	sim.Executors = map[string]*ExecEntry{}
 
-	sim.netInit = new(accumulated.NetworkInit)
+	sim.netInit = new(daemon.NetworkInit)
 	sim.netInit.Id = sim.Name()
 	for i := 0; i < opts.BvnCount; i++ {
-		bvnInit := new(accumulated.BvnInit)
+		bvnInit := new(daemon.BvnInit)
 		bvnInit.Id = fmt.Sprintf("BVN%d", i)
-		bvnInit.Nodes = []*accumulated.NodeInit{{
+		bvnInit.Nodes = []*daemon.NodeInit{{
 			DnnType:    config.Validator,
 			BvnnType:   config.Validator,
 			PrivValKey: acctesting.GenerateKey(sim.Name(), bvnInit.Id),
@@ -338,7 +338,7 @@ func (s *Simulator) InitFromGenesisWith(values *core.GlobalValues) {
 	if values == nil {
 		values = new(core.GlobalValues)
 	}
-	genDocs, err := accumulated.BuildGenesisDocs(s.netInit, values, GenesisTime, s.Logger, s.opts.FactomAddresses)
+	genDocs, err := daemon.BuildGenesisDocs(s.netInit, values, GenesisTime, s.Logger, s.opts.FactomAddresses)
 	require.NoError(s, err)
 
 	// Execute bootstrap after the entire network is known

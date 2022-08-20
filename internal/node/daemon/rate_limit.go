@@ -1,4 +1,4 @@
-package accumulated
+package daemon
 
 import (
 	"net"

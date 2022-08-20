@@ -14,7 +14,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/internal/testing"
 )
 
@@ -84,7 +84,7 @@ func runDevNet(*cobra.Command, []string) {
 		name := fmt.Sprintf("node-%d", node)
 
 		// Load the DNN
-		dnn, err := accumulated.Load(
+		dnn, err := daemon.Load(
 			filepath.Join(flagMain.WorkDir, name, "dnn"),
 			func(c *config.Config) (io.Writer, error) {
 				return logWriter(c.LogFormat, func(w io.Writer, format string, color bool) io.Writer {
@@ -94,7 +94,7 @@ func runDevNet(*cobra.Command, []string) {
 		)
 		check(err)
 
-		bvnn, err := accumulated.Load(
+		bvnn, err := daemon.Load(
 			filepath.Join(flagMain.WorkDir, name, "bvnn"),
 			func(c *config.Config) (io.Writer, error) {
 				return logWriter(c.LogFormat, func(w io.Writer, format string, color bool) io.Writer {
@@ -137,7 +137,7 @@ func runDevNet(*cobra.Command, []string) {
 	done.Wait()
 }
 
-func startDevNetNode(daemon *accumulated.Daemon, started, done *sync.WaitGroup, stop chan struct{}) {
+func startDevNetNode(daemon *daemon.Daemon, started, done *sync.WaitGroup, stop chan struct{}) {
 	// Disable features not compatible with multi-node, single-process
 	daemon.Config.Instrumentation.Prometheus = false
 
