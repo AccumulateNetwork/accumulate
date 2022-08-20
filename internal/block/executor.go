@@ -4,6 +4,7 @@ import (
 	"crypto/ed25519"
 	"io"
 
+	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/blockscheduler"
@@ -244,4 +245,40 @@ func (m *Executor) RestoreSnapshot(batch *database.Batch, file ioutil2.SectionRe
 
 func (m *Executor) SaveSnapshot(batch *database.Batch, file io.WriteSeeker) error {
 	return batch.SaveSnapshot(file, &m.Describe)
+}
+
+func (x *Executor) InitChainValidators(initVal []abci.ValidatorUpdate) (additional [][]byte, err error) {
+	// Verify the initial keys are ED25519 and build a map
+	initValMap := map[[32]byte]bool{}
+	for _, val := range initVal {
+		key := val.PubKey.GetEd25519()
+		if key == nil {
+			return nil, errors.Format(errors.StatusBadRequest, "validator key type %T is not supported", val.PubKey.Sum)
+		}
+		if len(key) != ed25519.PublicKeySize {
+			return nil, errors.Format(errors.StatusBadRequest, "invalid ED25519 key: want length %d, got %d", ed25519.PublicKeySize, len(key))
+		}
+		initValMap[*(*[32]byte)(key)] = true
+	}
+
+	partition := x.globals.Active.Network.Partition(x.Describe.PartitionId)
+	if partition == nil {
+		return nil, errors.Format(errors.StatusInternalError, "missing partition definition for %v", x.Describe.PartitionId)
+	}
+
+	// Capture any validators missing from the initial set
+	for _, val := range partition.ValidatorKeys {
+		if initValMap[*(*[32]byte)(val)] {
+			delete(initValMap, *(*[32]byte)(val))
+		} else {
+			additional = append(additional, val)
+		}
+	}
+
+	// Verify no additional validators were introduced
+	if len(initValMap) > 0 {
+		return nil, errors.Format(errors.StatusBadRequest, "InitChain request includes %d validator(s) not present in genesis", len(initValMap))
+	}
+
+	return additional, nil
 }
