@@ -16,17 +16,17 @@ var _ Store = KvStore{}
 func (s KvStore) GetValue(key Key, value ValueWriter) error {
 	b, err := s.Store.Get(key.Hash())
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.StatusUnknownError.Wrap(err)
 	}
 
 	// Tests may 'delete' an account by setting its value to nil
 	if len(b) == 0 {
-		return errors.NotFound("%v not found", key)
+		return errors.StatusNotFound.Format("%v not found", key)
 	}
 
 	err = value.LoadBytes(b)
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.StatusUnknownError.Wrap(err)
 	}
 
 	return nil
@@ -36,17 +36,17 @@ func (s KvStore) GetValue(key Key, value ValueWriter) error {
 func (s KvStore) PutValue(key Key, value ValueReader) error {
 	v, err := value.GetValue()
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.StatusUnknownError.Wrap(err)
 	}
 
 	b, err := v.MarshalBinary()
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.StatusUnknownError.Wrap(err)
 	}
 
 	err = s.Store.Put(key.Hash(), b)
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.StatusUnknownError.Wrap(err)
 	}
 
 	return nil

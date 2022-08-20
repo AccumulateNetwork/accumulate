@@ -72,17 +72,17 @@ func (SendTokens) Validate(st *StateManager, tx *Delivery) (protocol.Transaction
 
 	entry, err := indexing.LoadIndexEntryFromEnd(st.batch.Account(st.AnchorPool()).MajorBlockChain(), 1)
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "load major block index: %w", err)
+		return nil, errors.StatusUnknownError.Format("load major block index: %w", err)
 	}
 
 	// If there's no entry there's no major block so we cannot have reached the
 	// threshold
 	if entry == nil {
-		return nil, errors.Format(errors.StatusNotAllowed, "account is locked until major block %d (currently at 0)", lockable.GetLockHeight())
+		return nil, errors.StatusNotAllowed.Format("account is locked until major block %d (currently at 0)", lockable.GetLockHeight())
 	}
 
 	if entry.BlockIndex < lockable.GetLockHeight() {
-		return nil, errors.Format(errors.StatusNotAllowed, "account is locked until major block %d (currently at %d)", lockable.GetLockHeight(), entry.BlockIndex)
+		return nil, errors.StatusNotAllowed.Format("account is locked until major block %d (currently at %d)", lockable.GetLockHeight(), entry.BlockIndex)
 	}
 
 	return nil, nil

@@ -59,13 +59,13 @@ func (b *Batch) BptRoot() []byte {
 // BptReceipt builds a BPT receipt for the given key.
 func (b *Batch) BptReceipt(key storage.Key, value [32]byte) (*managed.Receipt, error) {
 	if len(b.bptEntries) > 0 {
-		return nil, errors.New(errors.StatusInternalError, "cannot generate a BPT receipt when there are uncommitted BPT entries")
+		return nil, errors.StatusInternalError.New("cannot generate a BPT receipt when there are uncommitted BPT entries")
 	}
 
 	bpt := pmt.NewBPTManager(b.kvstore)
 	receipt := bpt.Bpt.GetReceipt(key)
 	if receipt == nil {
-		return nil, errors.NotFound("BPT key %v not found", key)
+		return nil, errors.StatusNotFound.Format("BPT key %v not found", key)
 	}
 
 	return receipt, nil
@@ -74,19 +74,19 @@ func (b *Batch) BptReceipt(key storage.Key, value [32]byte) (*managed.Receipt, e
 func (h *snapshotHeader) WriteTo(wr io.Writer) (int64, error) {
 	b, err := h.MarshalBinary()
 	if err != nil {
-		return 0, errors.Format(errors.StatusEncodingError, "marshal: %w", err)
+		return 0, errors.StatusEncodingError.Format("marshal: %w", err)
 	}
 
 	var v [8]byte
 	binary.BigEndian.PutUint64(v[:], uint64(len(b)))
 	n, err := wr.Write(v[:])
 	if err != nil {
-		return int64(n), errors.Format(errors.StatusEncodingError, "write length: %w", err)
+		return int64(n), errors.StatusEncodingError.Format("write length: %w", err)
 	}
 
 	m, err := wr.Write(b)
 	if err != nil {
-		return int64(n + m), errors.Format(errors.StatusEncodingError, "write data: %w", err)
+		return int64(n + m), errors.StatusEncodingError.Format("write data: %w", err)
 	}
 
 	return int64(n + m), nil
@@ -96,19 +96,19 @@ func (h *snapshotHeader) ReadFrom(rd io.Reader) (int64, error) {
 	var v [8]byte
 	n, err := io.ReadFull(rd, v[:])
 	if err != nil {
-		return int64(n), errors.Format(errors.StatusEncodingError, "read length: %w", err)
+		return int64(n), errors.StatusEncodingError.Format("read length: %w", err)
 	}
 
 	l := binary.BigEndian.Uint64(v[:])
 	b := make([]byte, l)
 	m, err := io.ReadFull(rd, b)
 	if err != nil {
-		return int64(n + m), errors.Format(errors.StatusEncodingError, "read data: %w", err)
+		return int64(n + m), errors.StatusEncodingError.Format("read data: %w", err)
 	}
 
 	err = h.UnmarshalBinary(b)
 	if err != nil {
-		return int64(n + m), errors.Format(errors.StatusEncodingError, "unmarshal: %w", err)
+		return int64(n + m), errors.StatusEncodingError.Format("unmarshal: %w", err)
 	}
 
 	return int64(n + m), nil
@@ -120,7 +120,7 @@ func (b *Batch) SaveSnapshot(file io.WriteSeeker, network *config.Describe) erro
 	var ledger *protocol.SystemLedger
 	err := b.Account(network.Ledger()).GetStateAs(&ledger)
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "load ledger: %w", err)
+		return errors.StatusUnknownError.Format("load ledger: %w", err)
 	}
 
 	bpt := pmt.NewBPTManager(b.kvstore)
@@ -131,13 +131,13 @@ func (b *Batch) SaveSnapshot(file io.WriteSeeker, network *config.Describe) erro
 
 	_, err = header.WriteTo(file)
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "write header: %w", err)
+		return errors.StatusUnknownError.Format("write header: %w", err)
 	}
 
 	// Create a section writer starting after the header
 	wr, err := ioutil2.NewSectionWriter(file, -1, -1)
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "create section writer: %w", err)
+		return errors.StatusUnknownError.Format("create section writer: %w", err)
 	}
 
 	// This must match how the model constructs the key
@@ -148,7 +148,7 @@ func (b *Batch) SaveSnapshot(file io.WriteSeeker, network *config.Describe) erro
 		// Create an Account object
 		u, err := b.getAccountUrl(record.Key{key})
 		if err != nil {
-			return nil, errors.Wrap(errors.StatusUnknownError, err)
+			return nil, errors.StatusUnknownError.Wrap(err)
 		}
 		account := b.Account(u)
 
@@ -195,7 +195,7 @@ func ReadSnapshot(file ioutil2.SectionReader) (*snapshotHeader, int64, error) {
 	header := new(snapshotHeader)
 	n, err := header.ReadFrom(file)
 	if err != nil {
-		return nil, 0, errors.Format(errors.StatusUnknownError, "read header: %w", err)
+		return nil, 0, errors.StatusUnknownError.Format("read header: %w", err)
 	}
 
 	return header, n, nil
@@ -206,13 +206,13 @@ func (b *Batch) RestoreSnapshot(file ioutil2.SectionReader, network *config.Desc
 	// Read the snapshot
 	_, _, err := ReadSnapshot(file)
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.StatusUnknownError.Wrap(err)
 	}
 
 	// Make a new section reader starting after the header
 	rd, err := ioutil2.NewSectionReader(file, -1, -1)
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.StatusUnknownError.Wrap(err)
 	}
 
 	// Load the snapshot
@@ -226,7 +226,7 @@ func (b *Batch) RestoreSnapshot(file ioutil2.SectionReader, network *config.Desc
 
 		account := b.Account(state.Main.GetUrl())
 		if account.key.Hash() != key {
-			return errors.Format(errors.StatusInternalError, "hash key %x does not match URL %v", key, state.Main.GetUrl())
+			return errors.StatusInternalError.Format("hash key %x does not match URL %v", key, state.Main.GetUrl())
 		}
 
 		err = account.restoreState(state)
@@ -247,31 +247,31 @@ func (b *Batch) RestoreSnapshot(file ioutil2.SectionReader, network *config.Desc
 		return nil
 	})
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.StatusUnknownError.Wrap(err)
 	}
 
 	// Rebuild the synthetic transaction index index
 	record := b.Account(network.Synthetic())
 	synthIndexChain, err := record.MainChain().Index().Get()
 	if err != nil {
-		return errors.Format(errors.StatusInternalError, "load synthetic index chain: %w", err)
+		return errors.StatusInternalError.Format("load synthetic index chain: %w", err)
 	}
 
 	entries, err := synthIndexChain.Entries(0, synthIndexChain.Height())
 	if err != nil {
-		return errors.Format(errors.StatusInternalError, "load synthetic index chain entries: %w", err)
+		return errors.StatusInternalError.Format("load synthetic index chain entries: %w", err)
 	}
 
 	for i, data := range entries {
 		entry := new(protocol.IndexEntry)
 		err = entry.UnmarshalBinary(data)
 		if err != nil {
-			return errors.Format(errors.StatusInternalError, "unmarshal synthetic index chain entry %d: %w", i, err)
+			return errors.StatusInternalError.Format("unmarshal synthetic index chain entry %d: %w", i, err)
 		}
 
 		err = b.SystemData(network.PartitionId).SyntheticIndexIndex(entry.BlockIndex).Put(uint64(i))
 		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "store synthetic transaction index index %d for block: %w", i, err)
+			return errors.StatusUnknownError.Format("store synthetic transaction index index %d for block: %w", i, err)
 		}
 	}
 

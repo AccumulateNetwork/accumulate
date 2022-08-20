@@ -16,12 +16,12 @@ func EqualAnchorBody(a, b AnchorBody) bool {
 
 func unmarshalAnchorBody(body TransactionBody, err error) (AnchorBody, error) {
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.StatusUnknownError.Wrap(err)
 	}
 
 	anchor, ok := body.(AnchorBody)
 	if !ok {
-		return nil, errors.Format(errors.StatusEncodingError, "%T is not an anchor body", body)
+		return nil, errors.StatusEncodingError.Format("%T is not an anchor body", body)
 	}
 
 	return anchor, nil
@@ -29,10 +29,10 @@ func unmarshalAnchorBody(body TransactionBody, err error) (AnchorBody, error) {
 
 func UnmarshalAnchorBody(b []byte) (AnchorBody, error) {
 	body, err := unmarshalAnchorBody(UnmarshalTransactionBody(b))
-	return body, errors.Wrap(errors.StatusUnknownError, err)
+	return body, errors.StatusUnknownError.Wrap(err)
 }
 
 func UnmarshalAnchorBodyJSON(b []byte) (AnchorBody, error) {
 	body, err := unmarshalAnchorBody(UnmarshalTransactionBodyJSON(b))
-	return body, errors.Wrap(errors.StatusUnknownError, err)
+	return body, errors.StatusUnknownError.Wrap(err)
 }

@@ -243,7 +243,7 @@ func (m *JrpcMethods) executeDirect(ctx context.Context, env *protocol.Envelope,
 		res.Message = resp.Info
 		return res
 	case resp.Code != 0:
-		res.Message = "An unknown error occured"
+		res.Message = "An unknown error occurred"
 		return res
 	default:
 		return res

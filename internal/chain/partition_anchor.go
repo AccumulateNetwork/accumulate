@@ -79,7 +79,7 @@ func (PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Transa
 			}
 		}
 		if found < 0 {
-			return nil, errors.Format(errors.StatusInternalError, "partition %v is not in the pending list", body.Source)
+			return nil, errors.StatusInternalError.Format("partition %v is not in the pending list", body.Source)
 		}
 		ledger.PendingMajorBlockAnchors = append(ledger.PendingMajorBlockAnchors[:found], ledger.PendingMajorBlockAnchors[found+1:]...)
 		err = st.Update(ledger)
@@ -101,7 +101,7 @@ func (PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Transa
 	var sequence = map[*Delivery]int{}
 	synth, err := st.batch.Account(st.Ledger()).GetSyntheticForAnchor(body.RootChainAnchor)
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "load synth txns for anchor %x: %w", body.RootChainAnchor[:8], err)
+		return nil, errors.StatusUnknownError.Format("load synth txns for anchor %x: %w", body.RootChainAnchor[:8], err)
 	}
 	for _, txid := range synth {
 		h := txid.Hash()

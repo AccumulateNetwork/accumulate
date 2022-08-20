@@ -99,7 +99,7 @@ func NormalizeEnvelope(envelope *protocol.Envelope) ([]*Delivery, error) {
 	for _, delivery := range txnList {
 		// A transaction with no signatures is invalid
 		if len(delivery.Signatures) == 0 {
-			return nil, errors.Format(errors.StatusBadRequest, "the envelope does not contain any signatures matching transaction %X (%v)", delivery.Transaction.GetHash()[:8], delivery.Transaction.Body.Type())
+			return nil, errors.StatusBadRequest.Format("the envelope does not contain any signatures matching transaction %X (%v)", delivery.Transaction.GetHash()[:8], delivery.Transaction.Body.Type())
 		}
 	}
 
@@ -215,13 +215,13 @@ func (d *Delivery) LoadTransaction(batch *database.Batch) (*protocol.Transaction
 			d.Transaction = txState.Transaction
 		} else if !txState.Transaction.Equal(d.Transaction) {
 			// This should be impossible
-			return nil, errors.Format(errors.StatusInternalError, "submitted transaction does not match the locally stored transaction")
+			return nil, errors.StatusInternalError.Format("submitted transaction does not match the locally stored transaction")
 		}
 
 	case errors.Is(err, errors.StatusNotFound):
 		if isRemote {
 			// Remote transactions are only supported if the BVN has a local copy
-			return nil, errors.Format(errors.StatusUnknownError, "load transaction: %w", err)
+			return nil, errors.StatusUnknownError.Format("load transaction: %w", err)
 		}
 
 		// The delivery includes the full transaction so it's ok that the
@@ -229,7 +229,7 @@ func (d *Delivery) LoadTransaction(batch *database.Batch) (*protocol.Transaction
 
 	default:
 		// Unknown error
-		return nil, errors.Format(errors.StatusUnknownError, "load transaction: %w", err)
+		return nil, errors.StatusUnknownError.Format("load transaction: %w", err)
 	}
 
 	// Check the transaction status
@@ -237,11 +237,11 @@ func (d *Delivery) LoadTransaction(batch *database.Batch) (*protocol.Transaction
 	switch {
 	case err != nil:
 		// Unknown error
-		return nil, errors.Format(errors.StatusUnknownError, "load transaction status: %w", err)
+		return nil, errors.StatusUnknownError.Format("load transaction status: %w", err)
 
 	case status.Delivered():
 		// Transaction has already been delivered
-		return status, errors.Format(errors.StatusDelivered, "transaction %X has been delivered", d.Transaction.GetHash()[:4])
+		return status, errors.StatusDelivered.Format("transaction %X has been delivered", d.Transaction.GetHash()[:4])
 	}
 
 	return status, nil
@@ -266,7 +266,7 @@ func (d *Delivery) LoadSyntheticMetadata(batch *database.Batch, typ protocol.Tra
 	}
 
 	if status.SequenceNumber == 0 {
-		return errors.Format(errors.StatusInternalError, "synthetic transaction sequence number is missing")
+		return errors.StatusInternalError.Format("synthetic transaction sequence number is missing")
 	}
 
 	// Get the sequence number from the status

@@ -21,7 +21,7 @@ func (x *Executor) loadGlobals(view func(func(batch *database.Batch) error) erro
 		})
 	})
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "load globals: %w", err)
+		return errors.StatusUnknownError.Format("load globals: %w", err)
 	}
 
 	// Publish an update
@@ -29,7 +29,7 @@ func (x *Executor) loadGlobals(view func(func(batch *database.Batch) error) erro
 		New: &x.globals.Active,
 	})
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "publish globals update: %w", err)
+		return errors.StatusUnknownError.Format("publish globals update: %w", err)
 	}
 
 	// Make a copy for pending

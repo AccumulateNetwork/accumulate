@@ -66,7 +66,7 @@ func (a *Account) loadState(preserveChains bool) (*accountState, error) {
 func (c *Chain2) stateOfTransactionsOnChain() ([]*transactionState, error) {
 	head, err := c.inner.Head().Get()
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "load chain head: %w", err)
+		return nil, errors.StatusUnknownError.Format("load chain head: %w", err)
 	}
 
 	// TODO We need to be more selective than this
@@ -86,7 +86,7 @@ func (c *Chain2) stateOfTransactionsOnChain() ([]*transactionState, error) {
 func (c *Chain2) stateOfSignaturesOnChain() ([]protocol.Signature, error) {
 	head, err := c.inner.Head().Get()
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "load chain head: %w", err)
+		return nil, errors.StatusUnknownError.Format("load chain head: %w", err)
 	}
 
 	// TODO We need to be more selective than this
@@ -102,7 +102,7 @@ func (c *Chain2) stateOfSignaturesOnChain() ([]protocol.Signature, error) {
 			break
 		}
 		if s.Signature == nil {
-			return nil, errors.Format(errors.StatusInternalError, "%v signature chain entry %d is not a signature", c.Account(), i)
+			return nil, errors.StatusInternalError.Format("%v signature chain entry %d is not a signature", c.Account(), i)
 		}
 		state[i] = s.Signature
 	}
@@ -220,13 +220,13 @@ func (a *Account) putBpt() error {
 // BptReceipt builds a BPT receipt for the account.
 func (a *Account) BptReceipt() (*managed.Receipt, error) {
 	if a.IsDirty() {
-		return nil, errors.New(errors.StatusInternalError, "cannot generate a BPT receipt when there are uncommitted changes")
+		return nil, errors.StatusInternalError.New("cannot generate a BPT receipt when there are uncommitted changes")
 	}
 
 	bpt := pmt.NewBPTManager(a.parent.kvstore)
 	receipt := bpt.Bpt.GetReceipt(a.key.Hash())
 	if receipt == nil {
-		return nil, errors.NotFound("BPT key %v not found", a.key.Hash())
+		return nil, errors.StatusNotFound.Format("BPT key %v not found", a.key.Hash())
 	}
 
 	return receipt, nil
@@ -246,7 +246,7 @@ func (a *Account) StateReceipt() (*managed.Receipt, error) {
 
 	rState := hasher.Receipt(0, len(hasher)-1)
 	if !bytes.Equal(rState.Anchor, rBPT.Start) {
-		return nil, errors.New(errors.StatusInternalError, "bpt entry does not match account state")
+		return nil, errors.StatusInternalError.New("bpt entry does not match account state")
 	}
 
 	receipt, err := rState.Combine(rBPT)

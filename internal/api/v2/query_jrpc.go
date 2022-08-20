@@ -96,16 +96,16 @@ func getTxId(req *TxnQuery) ([]byte, error) {
 		hash := req.TxIdUrl.Hash()
 		txid = hash[:]
 	} else {
-		return nil, errors.Unknown("no transaction ID present in request")
+		return nil, errors.StatusUnknownError.Format("no transaction ID present in request")
 	}
 	return txid, nil
 }
 
 func formatTxIdError(req *TxnQuery) error {
 	if req.Txid != nil {
-		return errors.NotFound("transaction %X not found", req.Txid[:8])
+		return errors.StatusNotFound.Format("transaction %X not found", req.Txid[:8])
 	} else if req.TxIdUrl != nil {
-		return errors.NotFound("transaction %s not found", req.TxIdUrl.ShortString())
+		return errors.StatusNotFound.Format("transaction %s not found", req.TxIdUrl.ShortString())
 	}
-	return errors.Unknown("no transaction ID present in request")
+	return errors.StatusUnknownError.Format("no transaction ID present in request")
 }

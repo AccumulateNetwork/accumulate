@@ -14,17 +14,17 @@ func UpdateAccount[T protocol.Account](batch *Batch, url *url.URL, fn func(T) er
 	var account T
 	err := record.GetAs(&account)
 	if err != nil {
-		return account, errors.Format(errors.StatusUnknownError, "load %v: %w", url, err)
+		return account, errors.StatusUnknownError.Format("load %v: %w", url, err)
 	}
 
 	err = fn(account)
 	if err != nil {
-		return account, errors.Wrap(errors.StatusUnknownError, err)
+		return account, errors.StatusUnknownError.Wrap(err)
 	}
 
 	err = record.Put(account)
 	if err != nil {
-		return account, errors.Format(errors.StatusUnknownError, "store %v: %w", url, err)
+		return account, errors.StatusUnknownError.Format("store %v: %w", url, err)
 	}
 
 	return account, nil
@@ -44,12 +44,12 @@ func (a *Account) Commit() error {
 		case err == nil:
 
 			if len(acc.GetUrl().String()) > protocol.AccountUrlMaxLength {
-				return errors.Wrap(errors.StatusBadUrlLength, fmt.Errorf("url specified exceeds maximum character length: %s", acc.GetUrl().String()))
+				return errors.StatusBadUrlLength.Wrap(fmt.Errorf("url specified exceeds maximum character length: %s", acc.GetUrl().String()))
 			}
 		case errors.Is(err, errors.StatusNotFound):
 			// The main state is unset so there's nothing to check
 		default:
-			return errors.Wrap(errors.StatusUnknownError, err)
+			return errors.StatusUnknownError.Wrap(err)
 		}
 	}
 	// Ensure the synthetic anchors index is up to date
@@ -60,19 +60,19 @@ func (a *Account) Commit() error {
 
 		err := a.SyntheticAnchors().Add(k.Anchor)
 		if err != nil {
-			return errors.Wrap(errors.StatusUnknownError, err)
+			return errors.StatusUnknownError.Wrap(err)
 		}
 	}
 
 	// If anything has changed, update the BPT entry
 	err := a.putBpt()
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.StatusUnknownError.Wrap(err)
 	}
 
 	// Do the normal commit stuff
 	err = a.baseCommit()
-	return errors.Wrap(errors.StatusUnknownError, err)
+	return errors.StatusUnknownError.Wrap(err)
 }
 
 // GetState loads the record state.
@@ -90,7 +90,7 @@ func (r *Account) GetStateAs(state interface{}) error {
 func (r *Account) PutState(state protocol.Account) error {
 	// Does the record state have a URL?
 	if state.GetUrl() == nil {
-		return errors.New(errors.StatusInternalError, "invalid URL: empty")
+		return errors.StatusInternalError.New("invalid URL: empty")
 	}
 
 	// Is this the right URL - does it match the record's key?
@@ -106,7 +106,7 @@ func (r *Account) PutState(state protocol.Account) error {
 
 	// Store the state
 	err := r.Main().Put(state)
-	return errors.Wrap(errors.StatusUnknownError, err)
+	return errors.StatusUnknownError.Wrap(err)
 }
 
 func (r *Account) GetPending() (*protocol.TxIdSet, error) {

@@ -108,7 +108,7 @@ func (b *Batch) Commit() error {
 
 	err := b.baseCommit()
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.StatusUnknownError.Wrap(err)
 	}
 
 	if b.parent != nil {
@@ -121,7 +121,7 @@ func (b *Batch) Commit() error {
 	} else {
 		err := b.commitBpt()
 		if err != nil {
-			return errors.Wrap(errors.StatusUnknownError, err)
+			return errors.StatusUnknownError.Wrap(err)
 		}
 	}
 
@@ -154,7 +154,7 @@ func (b *Batch) getAccountUrl(key record.Key) (*url.URL, error) {
 		record.Union(protocol.UnmarshalAccount),
 	).Get()
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.StatusUnknownError.Wrap(err)
 	}
 	return v.GetUrl(), nil
 }
@@ -168,7 +168,7 @@ func (b *Batch) getAccountUrl(key record.Key) (*url.URL, error) {
 func (b *Batch) AccountByID(id []byte) (*Account, error) {
 	u, err := b.getAccountUrl(record.Key{"Account", id})
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.StatusUnknownError.Wrap(err)
 	}
 	return b.Account(u), nil
 }
@@ -181,11 +181,11 @@ func (b *Batch) GetValue(key record.Key, value record.ValueWriter) error {
 
 	v, err := resolveValue[record.ValueReader](b, key)
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.StatusUnknownError.Wrap(err)
 	}
 
 	err = value.LoadValue(v, false)
-	return errors.Wrap(errors.StatusUnknownError, err)
+	return errors.StatusUnknownError.Wrap(err)
 }
 
 // PutValue implements record.Store.
@@ -196,11 +196,11 @@ func (b *Batch) PutValue(key record.Key, value record.ValueReader) error {
 
 	v, err := resolveValue[record.ValueWriter](b, key)
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.StatusUnknownError.Wrap(err)
 	}
 
 	err = v.LoadValue(value, true)
-	return errors.Wrap(errors.StatusUnknownError, err)
+	return errors.StatusUnknownError.Wrap(err)
 }
 
 // resolveValue resolves the value for the given key.
@@ -210,7 +210,7 @@ func resolveValue[T any](c *Batch, key record.Key) (T, error) {
 	for len(key) > 0 {
 		r, key, err = r.Resolve(key)
 		if err != nil {
-			return zero[T](), errors.Wrap(errors.StatusUnknownError, err)
+			return zero[T](), errors.StatusUnknownError.Wrap(err)
 		}
 	}
 
@@ -220,7 +220,7 @@ func resolveValue[T any](c *Batch, key record.Key) (T, error) {
 
 	v, ok := r.(T)
 	if !ok {
-		return zero[T](), errors.Format(errors.StatusInternalError, "bad key: %T is not value", r)
+		return zero[T](), errors.StatusInternalError.Format("bad key: %T is not value", r)
 	}
 
 	return v, nil

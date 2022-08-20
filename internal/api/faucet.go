@@ -26,7 +26,7 @@ func (f Faucet) Faucet(ctx context.Context, account *url.URL, opts SubmitOptions
 		UseSimpleHash().
 		Initiate(txn)
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusInternalError, err)
+		return nil, errors.StatusInternalError.Wrap(err)
 	}
 	env.Signatures = append(env.Signatures, sig)
 

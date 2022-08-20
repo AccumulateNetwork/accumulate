@@ -9,7 +9,7 @@ var ErrNotFound = errors.StatusNotFound
 
 // ErrNotOpen is returned by KeyValueDB.Get, .Put, and .Close if the database is
 // not open.
-var ErrNotOpen = errors.New(errors.StatusInternalError, "not open")
+var ErrNotOpen = errors.StatusInternalError.New("not open")
 
 type KeyValueTxn interface {
 	// Get gets a value.

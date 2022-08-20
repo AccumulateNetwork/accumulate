@@ -64,7 +64,7 @@ func dataCount(obj encoding.BinaryMarshaler) (int, int, error) {
 	// Check the transaction size (including signatures)
 	data, err := obj.MarshalBinary()
 	if err != nil {
-		return 0, 0, errors.Wrap(errors.StatusInternalError, err)
+		return 0, 0, errors.StatusInternalError.Wrap(err)
 	}
 
 	// count the number of 256-byte chunks
@@ -81,10 +81,10 @@ func ComputeSignatureFee(sig Signature) (Fee, error) {
 	// Check the transaction size
 	count, size, err := dataCount(sig)
 	if err != nil {
-		return 0, errors.Wrap(errors.StatusUnknownError, err)
+		return 0, errors.StatusUnknownError.Wrap(err)
 	}
 	if size > SignatureSizeMax {
-		return 0, errors.Format(errors.StatusBadRequest, "signature size exceeds %v byte entry limit", SignatureSizeMax)
+		return 0, errors.StatusBadRequest.Format("signature size exceeds %v byte entry limit", SignatureSizeMax)
 	}
 
 	// Base fee
@@ -123,10 +123,10 @@ func ComputeTransactionFee(tx *Transaction) (Fee, error) {
 	// Check the transaction size
 	count, size, err := dataCount(tx)
 	if err != nil {
-		return 0, errors.Wrap(errors.StatusUnknownError, err)
+		return 0, errors.StatusUnknownError.Wrap(err)
 	}
 	if size > TransactionSizeMax {
-		return 0, errors.Format(errors.StatusBadRequest, "transaction size exceeds %v byte entry limit", TransactionSizeMax)
+		return 0, errors.StatusBadRequest.Format("transaction size exceeds %v byte entry limit", TransactionSizeMax)
 	}
 
 	var fee Fee
@@ -184,7 +184,7 @@ func ComputeTransactionFee(tx *Transaction) (Fee, error) {
 
 	default:
 		// All user transactions must have a defined fee amount, even if it's zero
-		return 0, errors.Format(errors.StatusInternalError, "unknown transaction type %v", body.Type())
+		return 0, errors.StatusInternalError.Format("unknown transaction type %v", body.Type())
 	}
 
 	return fee, nil
@@ -194,7 +194,7 @@ func ComputeSyntheticRefund(txn *Transaction, synthCount int) (Fee, error) {
 	// Calculate what was paid
 	paid, err := ComputeTransactionFee(txn)
 	if err != nil {
-		return 0, errors.Wrap(errors.StatusUnknownError, err)
+		return 0, errors.StatusUnknownError.Wrap(err)
 	}
 
 	// If it's less than the max failed fee, do not refund anything
@@ -215,7 +215,7 @@ func ComputeSyntheticRefund(txn *Transaction, synthCount int) (Fee, error) {
 	// output and one bad output to cost less (net) than a transaction with one
 	// good output.
 	if synthCount > 1 {
-		return 0, errors.Format(errors.StatusUnknownError, "a %v transaction cannot have multiple outputs", txn.Body.Type())
+		return 0, errors.StatusUnknownError.Format("a %v transaction cannot have multiple outputs", txn.Body.Type())
 	}
 
 	// Refund the amount paid in excess of the max failed fee

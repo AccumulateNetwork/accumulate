@@ -143,7 +143,7 @@ func (m *MerkleManager) GetAnyState(element int64) (ms *MerkleState, err error) 
 	if err != nil {
 		return nil, err
 	} else if element >= head.Count { //               Check to make sure element is not outside bounds
-		return nil, errors.New(errors.StatusBadRequest, "element out of range")
+		return nil, errors.StatusBadRequest.New("element out of range")
 	}
 	MIPrev := element&(^m.markMask) - 1 //               Calculate the index of the prior markpoint
 	cState := m.GetState(MIPrev)        //               Use state at the prior mark point to compute what we need
@@ -152,8 +152,8 @@ func (m *MerkleManager) GetAnyState(element int64) (ms *MerkleState, err error) 
 		cState.InitSha256()
 	}
 	if cState == nil { //                                Should be in the database.
-		return nil, errors.New( //                        Report error if it isn't in the database'
-			errors.StatusInternalError, "should have a state for all elements(1)")
+		return nil, errors.StatusInternalError.New( //   Report error if it isn't in the database'
+			"should have a state for all elements(1)")
 	}
 	cState.HashList = cState.HashList[:0] //             element is past the previous mark, so clear the HashList
 
@@ -165,7 +165,7 @@ func (m *MerkleManager) GetAnyState(element int64) (ms *MerkleState, err error) 
 		}
 	} else {
 		if NMark = m.GetState(MINext); NMark == nil { //             Read the mark point
-			return nil, errors.New(errors.StatusInternalError, "mark not found in the database")
+			return nil, errors.StatusInternalError.New("mark not found in the database")
 		}
 	}
 	for _, v := range NMark.HashList { //                           Now iterate and add to the cState

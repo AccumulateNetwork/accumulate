@@ -158,13 +158,13 @@ func (c *{{.FullName}}) {{if .CustomResolve}}base{{end}}Resolve(key record.Key) 
 	case "{{.Name}}":
 		{{- if parameterized .}}
 		if len(key) < {{add 1 (parameterCount .)}} {
-			return nil, nil, errors.New(errors.StatusInternalError, "bad key for {{natural $c.Name}}")
+			return nil, nil, errors.StatusInternalError.New("bad key for {{natural $c.Name}}")
 		}
 		{{- range $index, $param := .GetParameters}}
 		{{lower .Name}}, ok{{.Name}} := key[{{add 1 $index}}].({{parameterType $param}})
 		{{- end}}
 		if {{range $index, $param := .GetParameters}}{{if gt $index 0}} || {{end}}!ok{{.Name}}{{end}} {
-			return nil, nil, errors.New(errors.StatusInternalError, "bad key for {{natural $c.Name}}")
+			return nil, nil, errors.StatusInternalError.New("bad key for {{natural $c.Name}}")
 		}
 		v := c.{{template "accessor" .}}({{range .GetParameters}}{{lower .Name}},{{end}})
 		return v, key[{{add 1 (parameterCount .)}}:], nil
@@ -173,7 +173,7 @@ func (c *{{.FullName}}) {{if .CustomResolve}}base{{end}}Resolve(key record.Key) 
 		{{- end}}
 	{{- end}}
 	default:
-		return nil, nil, errors.New(errors.StatusInternalError, "bad key for {{natural .Name}}")
+		return nil, nil, errors.StatusInternalError.New("bad key for {{natural .Name}}")
 	}
 }
 

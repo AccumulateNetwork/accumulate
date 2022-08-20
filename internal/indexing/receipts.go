@@ -21,7 +21,7 @@ func LoadIndexEntryFromEnd(c *database.Chain2, offset uint64) (*protocol.IndexEn
 	// Load the chain
 	chain, err := c.Get()
 	if err != nil {
-		return nil, errors.Unknown("get account chain %s: %w", c.Name(), err)
+		return nil, errors.StatusUnknownError.Format("get account chain %s: %w", c.Name(), err)
 	}
 
 	if chain.Height() < int64(offset) {
@@ -33,7 +33,7 @@ func LoadIndexEntryFromEnd(c *database.Chain2, offset uint64) (*protocol.IndexEn
 	entry := new(protocol.IndexEntry)
 	err = chain.EntryAs(int64(index), entry)
 	if err != nil {
-		return nil, errors.Unknown("get account chain %s entry %d: %w", c.Name(), index, err)
+		return nil, errors.StatusUnknownError.Format("get account chain %s entry %d: %w", c.Name(), index, err)
 	}
 
 	return entry, nil
@@ -44,7 +44,7 @@ func LoadIndexEntryFromEnd(c *database.Chain2, offset uint64) (*protocol.IndexEn
 func LoadLastTwoIndexEntries(chain *database.Chain2) (last, nextLast *protocol.IndexEntry, err error) {
 	last, err = LoadIndexEntryFromEnd(chain, 1)
 	if err != nil {
-		return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, nil, errors.StatusUnknownError.Wrap(err)
 	}
 	if last == nil {
 		return
@@ -52,7 +52,7 @@ func LoadLastTwoIndexEntries(chain *database.Chain2) (last, nextLast *protocol.I
 
 	nextLast, err = LoadIndexEntryFromEnd(chain, 2)
 	if err != nil {
-		return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, nil, errors.StatusUnknownError.Wrap(err)
 	}
 	return
 }
@@ -60,12 +60,12 @@ func LoadLastTwoIndexEntries(chain *database.Chain2) (last, nextLast *protocol.I
 func getRootReceipt(net *config.Describe, batch *database.Batch, from, to int64) (*managed.Receipt, error) {
 	localChain, err := batch.Account(net.Ledger()).RootChain().Get()
 	if err != nil {
-		return nil, errors.Unknown("get minor root chain: %w", err)
+		return nil, errors.StatusUnknownError.Format("get minor root chain: %w", err)
 	}
 
 	local, err := localChain.Receipt(from, to)
 	if err != nil {
-		return nil, errors.Unknown("unable to construct a receipt from %d to %d for the local root chain chain: %w", from, to, err)
+		return nil, errors.StatusUnknownError.Format("unable to construct a receipt from %d to %d for the local root chain chain: %w", from, to, err)
 	}
 
 	// TODO Include the part of the receipt from the DN
@@ -119,14 +119,14 @@ func ReceiptForAccountState(net *config.Describe, batch *database.Batch, account
 	// Get a receipt from the BPT
 	r, err := account.StateReceipt()
 	if err != nil {
-		return 0, nil, errors.Unknown("get account state receipt: %w", err)
+		return 0, nil, errors.StatusUnknownError.Format("get account state receipt: %w", err)
 	}
 
 	// Load the latest root index entry (just for the block index)
 	ledger := batch.Account(net.Ledger())
 	rootEntry, err := LoadIndexEntryFromEnd(ledger.RootChain().Index(), 1)
 	if err != nil {
-		return 0, nil, errors.Wrap(errors.StatusUnknownError, err)
+		return 0, nil, errors.StatusUnknownError.Wrap(err)
 	}
 
 	return rootEntry.BlockIndex, r, nil

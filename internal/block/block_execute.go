@@ -41,12 +41,12 @@ func (x *Executor) ExecuteEnvelopeSet(block *Block, deliveries []*chain.Delivery
 func (x *Executor) ExecuteEnvelope(block *Block, delivery *chain.Delivery) (*protocol.TransactionStatus, error) {
 
 	if delivery.Transaction.Body.Type() == protocol.TransactionTypeSystemWriteData {
-		return nil, errors.Format(errors.StatusBadRequest, "a %v transaction cannot be submitted directly", protocol.TransactionTypeSystemWriteData)
+		return nil, errors.StatusBadRequest.Format("a %v transaction cannot be submitted directly", protocol.TransactionTypeSystemWriteData)
 	}
 
 	status, additional, err := x.executeEnvelope(block, delivery, false)
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.StatusUnknownError.Wrap(err)
 	}
 
 	// Record when the transaction is received
@@ -54,7 +54,7 @@ func (x *Executor) ExecuteEnvelope(block *Block, delivery *chain.Delivery) (*pro
 		status.Received = block.Index
 		err = block.Batch.Transaction(delivery.Transaction.GetHash()).PutStatus(status)
 		if err != nil {
-			return nil, errors.Wrap(errors.StatusUnknownError, err)
+			return nil, errors.StatusUnknownError.Wrap(err)
 		}
 	}
 
@@ -64,7 +64,7 @@ func (x *Executor) ExecuteEnvelope(block *Block, delivery *chain.Delivery) (*pro
 		for _, delivery := range additional {
 			_, additional, err := x.executeEnvelope(block, delivery, true)
 			if err != nil {
-				return nil, errors.Wrap(errors.StatusUnknownError, err)
+				return nil, errors.StatusUnknownError.Wrap(err)
 			}
 
 			next = append(next, additional...)
@@ -110,7 +110,7 @@ func (x *Executor) executeEnvelope(block *Block, delivery *chain.Delivery, addit
 
 	case !errors.Is(err, errors.StatusDelivered):
 		// Unknown error
-		return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, nil, errors.StatusUnknownError.Wrap(err)
 
 	default:
 		// Transaction has already been delivered
@@ -121,7 +121,7 @@ func (x *Executor) executeEnvelope(block *Block, delivery *chain.Delivery, addit
 
 	err = delivery.LoadSyntheticMetadata(block.Batch, delivery.Transaction.Body.Type(), status)
 	if err != nil {
-		return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, nil, errors.StatusUnknownError.Wrap(err)
 	}
 
 	// Process signatures
@@ -150,7 +150,7 @@ func (x *Executor) executeEnvelope(block *Block, delivery *chain.Delivery, addit
 
 		err = batch.Commit()
 		if err != nil {
-			return nil, nil, errors.Format(errors.StatusUnknownError, "commit batch: %w", err)
+			return nil, nil, errors.StatusUnknownError.Format("commit batch: %w", err)
 		}
 	}
 
@@ -167,7 +167,7 @@ func (x *Executor) executeEnvelope(block *Block, delivery *chain.Delivery, addit
 
 		err = batch.Commit()
 		if err != nil {
-			return nil, nil, errors.Format(errors.StatusUnknownError, "commit batch: %w", err)
+			return nil, nil, errors.StatusUnknownError.Format("commit batch: %w", err)
 		}
 
 		delivery.State.Merge(state)
@@ -225,12 +225,12 @@ func (x *Executor) executeEnvelope(block *Block, delivery *chain.Delivery, addit
 
 		err = x.ProduceSynthetic(batch, delivery.Transaction, delivery.State.ProducedTxns)
 		if err != nil {
-			return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
+			return nil, nil, errors.StatusUnknownError.Wrap(err)
 		}
 
 		err = batch.Commit()
 		if err != nil {
-			return nil, nil, errors.Format(errors.StatusUnknownError, "commit batch: %w", err)
+			return nil, nil, errors.StatusUnknownError.Format("commit batch: %w", err)
 		}
 	}
 

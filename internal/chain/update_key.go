@@ -20,7 +20,7 @@ func (UpdateKey) validate(st *StateManager, tx *Delivery) (*protocol.UpdateKey, 
 		return nil, nil, nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.UpdateKey), tx.Transaction.Body)
 	}
 	if len(body.NewKeyHash) != 32 {
-		return nil, nil, nil, errors.New(errors.StatusBadRequest, "key hash is not a valid length for a SHA-256 hash")
+		return nil, nil, nil, errors.StatusBadRequest.New("key hash is not a valid length for a SHA-256 hash")
 	}
 
 	page, ok := st.Origin.(*protocol.KeyPage)
@@ -79,7 +79,7 @@ func (UpdateKey) Execute(st *StateManager, tx *Delivery) (protocol.TransactionRe
 			}
 		}
 	}
-	return nil, errors.Format(errors.StatusInternalError, "unable to locate initiator signature")
+	return nil, errors.StatusInternalError.Format("unable to locate initiator signature")
 
 found_init:
 	switch initiator := initiator.(type) {
@@ -97,7 +97,7 @@ found_init:
 			return nil, fmt.Errorf("cannot UpdateKey with a multi-level delegated signature")
 		}
 	default:
-		return nil, errors.Format(errors.StatusInternalError, "%v does not support %v signatures", protocol.TransactionTypeUpdateKey, initiator.Type())
+		return nil, errors.StatusInternalError.Format("%v does not support %v signatures", protocol.TransactionTypeUpdateKey, initiator.Type())
 
 	}
 	if err != nil {
@@ -123,7 +123,7 @@ func updateKey(page *protocol.KeyPage, book *protocol.KeyBook, old, new *protoco
 		}
 
 		if err := verifyIsNotPage(&book.AccountAuth, new.Delegate); err != nil {
-			return errors.Format(errors.StatusUnknownError, "invalid delegate %v: %w", new.Delegate, err)
+			return errors.StatusUnknownError.Format("invalid delegate %v: %w", new.Delegate, err)
 		}
 	}
 

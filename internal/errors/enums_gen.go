@@ -53,10 +53,10 @@ const StatusBadTimestamp Status = 412
 // StatusBadUrlLength means the url length is too big.
 const StatusBadUrlLength Status = 413
 
-// StatusInternalError means an internal error occured.
+// StatusInternalError means an internal error occurred.
 const StatusInternalError Status = 500
 
-// StatusUnknownError means an unknown error occured.
+// StatusUnknownError means an unknown error occurred.
 const StatusUnknownError Status = 501
 
 // StatusEncodingError means encoding or decoding failed.

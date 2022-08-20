@@ -105,7 +105,7 @@ func NewRouter(eventBus *events.Bus, cm connections.ConnectionManager) *RouterIn
 	events.SubscribeSync(eventBus, func(e events.WillChangeGlobals) error {
 		tree, err := NewRouteTree(e.New.Routing)
 		if err != nil {
-			return errors.Wrap(errors.StatusUnknownError, err)
+			return errors.StatusUnknownError.Wrap(err)
 		}
 
 		r.tree = tree
@@ -119,7 +119,7 @@ func NewRouter(eventBus *events.Bus, cm connections.ConnectionManager) *RouterIn
 func NewStaticRouter(table *protocol.RoutingTable, cm connections.ConnectionManager) (*RouterInstance, error) {
 	tree, err := NewRouteTree(table)
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.StatusUnknownError.Wrap(err)
 	}
 
 	return &RouterInstance{tree, cm}, nil
@@ -129,13 +129,13 @@ var _ Router = (*RouterInstance)(nil)
 
 func RouteEnvelopes(routeAccount func(*url.URL) (string, error), envs ...*protocol.Envelope) (string, error) {
 	if len(envs) == 0 {
-		return "", errors.New(errors.StatusBadRequest, "nothing to route")
+		return "", errors.StatusBadRequest.New("nothing to route")
 	}
 
 	var route string
 	for _, env := range envs {
 		if len(env.Signatures) == 0 {
-			return "", errors.New(errors.StatusBadRequest, "cannot route envelope: no signatures")
+			return "", errors.StatusBadRequest.New("cannot route envelope: no signatures")
 		}
 		for _, sig := range env.Signatures {
 			sigRoute, err := routeAccount(sig.RoutingLocation())
@@ -149,7 +149,7 @@ func RouteEnvelopes(routeAccount func(*url.URL) (string, error), envs ...*protoc
 			}
 
 			if route != sigRoute {
-				return "", errors.New(errors.StatusBadRequest, "cannot route envelope(s): conflicting routes")
+				return "", errors.StatusBadRequest.New("cannot route envelope(s): conflicting routes")
 			}
 		}
 	}
@@ -159,10 +159,10 @@ func RouteEnvelopes(routeAccount func(*url.URL) (string, error), envs ...*protoc
 
 func (r *RouterInstance) RouteAccount(account *url.URL) (string, error) {
 	if r.tree == nil {
-		return "", errors.New(errors.StatusInternalError, "the routing table has not been initialized")
+		return "", errors.StatusInternalError.New("the routing table has not been initialized")
 	}
 	if protocol.IsUnknown(account) {
-		return "", errors.New(errors.StatusBadRequest, "URL is unknown, cannot route")
+		return "", errors.StatusBadRequest.New("URL is unknown, cannot route")
 	}
 	return r.tree.Route(account)
 }
@@ -180,11 +180,11 @@ func (r *RouterInstance) RequestAPIv2(ctx context.Context, partitionId, method s
 			return err
 		}
 		if connCtx == nil {
-			return errors.New(errors.StatusInternalError, "connCtx is nil")
+			return errors.StatusInternalError.New("connCtx is nil")
 		}
 		client := connCtx.GetAPIClient()
 		if client == nil {
-			return errors.New(errors.StatusInternalError, "connCtx.client is nil")
+			return errors.StatusInternalError.New("connCtx.client is nil")
 		}
 
 		err = client.RequestAPIv2(ctx, method, params, result)

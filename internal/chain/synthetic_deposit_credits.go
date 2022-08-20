@@ -42,7 +42,7 @@ func (SyntheticDepositCredits) Validate(st *StateManager, tx *Delivery) (protoco
 		create = true
 		key, _ := protocol.ParseLiteIdentity(tx.Transaction.Header.Principal)
 		if key == nil {
-			return nil, errors.NotFound("%v not found", tx.Transaction.Header.Principal)
+			return nil, errors.StatusNotFound.Format("%v not found", tx.Transaction.Header.Principal)
 		}
 		account = &protocol.LiteIdentity{Url: tx.Transaction.Header.Principal}
 

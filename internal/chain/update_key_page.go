@@ -20,7 +20,7 @@ func (UpdateKeyPage) Type() protocol.TransactionType {
 func (UpdateKeyPage) SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, checkAuthz bool) (fallback bool, err error) {
 	principalBook, principalPageIdx, ok := protocol.ParseKeyPageUrl(transaction.Header.Principal)
 	if !ok {
-		return false, errors.Format(errors.StatusBadRequest, "principal is not a key page")
+		return false, errors.StatusBadRequest.Format("principal is not a key page")
 	}
 
 	signerBook, signerPageIdx, ok := protocol.ParseKeyPageUrl(signer.GetUrl())
@@ -32,19 +32,19 @@ func (UpdateKeyPage) SignerIsAuthorized(delegate AuthDelegate, batch *database.B
 	if principalBook.Equal(signerBook) {
 		// Lower indices are higher priority
 		if signerPageIdx > principalPageIdx {
-			return false, errors.Format(errors.StatusUnauthorized, "signer %v is lower priority than the principal %v", signer.GetUrl(), transaction.Header.Principal)
+			return false, errors.StatusUnauthorized.Format("signer %v is lower priority than the principal %v", signer.GetUrl(), transaction.Header.Principal)
 		}
 
 		// Operation-specific checks
 		body, ok := transaction.Body.(*protocol.UpdateKeyPage)
 		if !ok {
-			return false, errors.Format(errors.StatusBadRequest, "invalid payload: want %T, got %T", new(protocol.UpdateKeyPage), transaction.Body)
+			return false, errors.StatusBadRequest.Format("invalid payload: want %T, got %T", new(protocol.UpdateKeyPage), transaction.Body)
 		}
 		for _, op := range body.Operation {
 			switch op.Type() {
 			case protocol.KeyPageOperationTypeUpdateAllowed:
 				if signerPageIdx == principalPageIdx {
-					return false, errors.Format(errors.StatusUnauthorized, "%v cannot modify its own allowed operations", transaction.Header.Principal)
+					return false, errors.StatusUnauthorized.Format("%v cannot modify its own allowed operations", transaction.Header.Principal)
 				}
 			}
 		}
@@ -53,7 +53,7 @@ func (UpdateKeyPage) SignerIsAuthorized(delegate AuthDelegate, batch *database.B
 	// Signers belonging to new delegates are authorized to sign the transaction
 	newOwners, err := getNewOwners(batch, transaction)
 	if err != nil {
-		return false, errors.Wrap(errors.StatusUnknownError, err)
+		return false, errors.StatusUnknownError.Wrap(err)
 	}
 
 	for _, owner := range newOwners {
@@ -70,7 +70,7 @@ func (UpdateKeyPage) TransactionIsReady(delegate AuthDelegate, batch *database.B
 	// All new delegates must sign the transaction
 	newOwners, err := getNewOwners(batch, transaction)
 	if err != nil {
-		return false, false, errors.Wrap(errors.StatusUnknownError, err)
+		return false, false, errors.StatusUnknownError.Wrap(err)
 	}
 
 	for _, owner := range newOwners {
@@ -143,7 +143,7 @@ func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, book *protocol.Key
 			}
 
 			if err := verifyIsNotPage(&book.AccountAuth, op.Entry.Delegate); err != nil {
-				return errors.Format(errors.StatusUnknownError, "invalid delegate %v: %w", op.Entry.Delegate, err)
+				return errors.StatusUnknownError.Format("invalid delegate %v: %w", op.Entry.Delegate, err)
 			}
 		}
 
@@ -166,7 +166,7 @@ func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, book *protocol.Key
 
 		_, pageIndex, ok := protocol.ParseKeyPageUrl(page.Url)
 		if !ok {
-			return errors.Format(errors.StatusInternalError, "principal is not a key page")
+			return errors.StatusInternalError.Format("principal is not a key page")
 		}
 		if len(page.Keys) == 1 && pageIndex == 1 {
 			return fmt.Errorf("cannot delete last key of the highest priority page of a key book")
@@ -256,7 +256,7 @@ func getNewOwners(batch *database.Batch, transaction *protocol.Transaction) ([]*
 	var page *protocol.KeyPage
 	err := batch.Account(transaction.Header.Principal).GetStateAs(&page)
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "load principal: %w", err)
+		return nil, errors.StatusUnknownError.Format("load principal: %w", err)
 	}
 
 	var owners []*url.URL

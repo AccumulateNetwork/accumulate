@@ -8,9 +8,9 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-var ErrReachedChainEnd = errors.New(errors.StatusNotFound, "reached the end of the chain")
-var ErrReachedChainStart = errors.New(errors.StatusNotFound, "reached the start of the chain")
-var ErrTargetDoesNotExist = errors.New(errors.StatusNotFound, "target does not exist")
+var ErrReachedChainEnd = errors.StatusNotFound.New("reached the end of the chain")
+var ErrReachedChainStart = errors.StatusNotFound.New("reached the start of the chain")
+var ErrTargetDoesNotExist = errors.StatusNotFound.New("target does not exist")
 
 // SearchDirection represents a direction to search along a linear index.
 type SearchDirection int

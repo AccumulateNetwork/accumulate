@@ -17,7 +17,7 @@ import (
 	"golang.org/x/crypto/sha3"
 )
 
-var ErrCannotInitiate = errors.New(errors.StatusBadRequest, "signature cannot initiate a transaction: values are missing")
+var ErrCannotInitiate = errors.StatusBadRequest.New("signature cannot initiate a transaction: values are missing")
 
 type Signature interface {
 	encoding.BinaryValue
@@ -811,7 +811,7 @@ func (s *PartitionSignature) Metadata() Signature {
 
 // Initiator returns an error.
 func (s *PartitionSignature) Initiator() (hash.Hasher, error) {
-	return nil, errors.New(errors.StatusBadRequest, "use of the initiator hash for a synthetic signature is not supported")
+	return nil, errors.StatusBadRequest.New("use of the initiator hash for a synthetic signature is not supported")
 }
 
 // GetVote returns VoteTypeAccept.
@@ -940,7 +940,7 @@ func (s *InternalSignature) Metadata() Signature {
 
 // InitiatorHash returns an error.
 func (s *InternalSignature) Initiator() (hash.Hasher, error) {
-	return nil, errors.New(errors.StatusBadRequest, "use of the initiator hash for an internal signature is not supported")
+	return nil, errors.StatusBadRequest.New("use of the initiator hash for an internal signature is not supported")
 }
 
 // GetVote returns VoteTypeAccept.

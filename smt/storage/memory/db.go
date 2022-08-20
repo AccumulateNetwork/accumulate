@@ -126,7 +126,7 @@ func (m *DB) get(key storage.Key) (value []byte, err error) {
 
 	v, ok := m.entries[key]
 	if !ok {
-		return nil, errors.NotFound("key %v not found", key)
+		return nil, errors.StatusNotFound.Format("key %v not found", key)
 	}
 	return append([]byte{}, v...), nil
 }

@@ -17,7 +17,7 @@ func (CreateIdentity) Type() protocol.TransactionType { return protocol.Transact
 func (CreateIdentity) SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, checkAuthz bool) (fallback bool, err error) {
 	body, ok := transaction.Body.(*protocol.CreateIdentity)
 	if !ok {
-		return false, errors.Format(errors.StatusInternalError, "invalid payload: want %T, got %T", new(protocol.CreateIdentity), transaction.Body)
+		return false, errors.StatusInternalError.Format("invalid payload: want %T, got %T", new(protocol.CreateIdentity), transaction.Body)
 	}
 
 	// Anyone is allowed to sign for a root identity
@@ -32,7 +32,7 @@ func (CreateIdentity) SignerIsAuthorized(delegate AuthDelegate, batch *database.
 func (CreateIdentity) TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (ready, fallback bool, err error) {
 	body, ok := transaction.Body.(*protocol.CreateIdentity)
 	if !ok {
-		return false, false, errors.Format(errors.StatusInternalError, "invalid payload: want %T, got %T", new(protocol.CreateIdentity), transaction.Body)
+		return false, false, errors.StatusInternalError.Format("invalid payload: want %T, got %T", new(protocol.CreateIdentity), transaction.Body)
 	}
 
 	// Check additional authorities
@@ -62,7 +62,7 @@ func (CreateIdentity) Execute(st *StateManager, tx *Delivery) (protocol.Transact
 func (CreateIdentity) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.CreateIdentity)
 	if !ok {
-		return nil, errors.Format(errors.StatusInternalError, "invalid payload: want %T, got %T", new(protocol.CreateIdentity), tx.Transaction.Body)
+		return nil, errors.StatusInternalError.Format("invalid payload: want %T, got %T", new(protocol.CreateIdentity), tx.Transaction.Body)
 	}
 
 	// TODO Require the principal to be the ADI when creating a root identity?
@@ -74,12 +74,12 @@ func (CreateIdentity) Validate(st *StateManager, tx *Delivery) (protocol.Transac
 	}
 
 	if body.KeyBookUrl == nil && len(body.Authorities) == 0 && body.Url.IsRootIdentity() {
-		return nil, errors.Format(errors.StatusBadRequest, "a root identity cannot be created with an empty authority set")
+		return nil, errors.StatusBadRequest.Format("a root identity cannot be created with an empty authority set")
 	}
 
 	err := protocol.IsValidAdiUrl(body.Url, false)
 	if err != nil {
-		return nil, errors.Format(errors.StatusBadRequest, "invalid URL: %v", err)
+		return nil, errors.StatusBadRequest.Format("invalid URL: %v", err)
 	}
 
 	identity := new(protocol.ADI)
@@ -90,7 +90,7 @@ func (CreateIdentity) Validate(st *StateManager, tx *Delivery) (protocol.Transac
 	if body.KeyBookUrl != nil {
 		// Verify the user provided a first key
 		if len(body.KeyHash) == 0 {
-			return nil, errors.Format(errors.StatusBadRequest, "missing PublicKey which is required when creating a new KeyBook/KeyPage pair")
+			return nil, errors.StatusBadRequest.Format("missing PublicKey which is required when creating a new KeyBook/KeyPage pair")
 		}
 
 		// Verify the URL is ok
@@ -109,7 +109,7 @@ func (CreateIdentity) Validate(st *StateManager, tx *Delivery) (protocol.Transac
 		book.AddAuthority(body.KeyBookUrl)
 		accounts = append(accounts, book)
 		if len(body.KeyHash) != 32 {
-			return nil, errors.Format(errors.StatusBadRequest, "invalid Key Hash: length must be equal to 32 bytes")
+			return nil, errors.StatusBadRequest.Format("invalid Key Hash: length must be equal to 32 bytes")
 		}
 
 		// Create the page
@@ -138,7 +138,7 @@ func (CreateIdentity) Validate(st *StateManager, tx *Delivery) (protocol.Transac
 	// If the ADI is local, create it directly
 	err = st.Create(accounts...)
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "failed to create %v: %v", body.Url, err)
+		return nil, errors.StatusUnknownError.Format("failed to create %v: %v", body.Url, err)
 	}
 
 	return nil, nil
@@ -147,14 +147,14 @@ func (CreateIdentity) Validate(st *StateManager, tx *Delivery) (protocol.Transac
 func validateKeyBookUrl(bookUrl *url.URL, adiUrl *url.URL) error {
 	err := protocol.IsValidAdiUrl(bookUrl, false)
 	if err != nil {
-		return errors.Format(errors.StatusBadRequest, "invalid KeyBook URL %s: %v", bookUrl.String(), err)
+		return errors.StatusBadRequest.Format("invalid KeyBook URL %s: %v", bookUrl.String(), err)
 	}
 	parent, ok := bookUrl.Parent()
 	if !ok {
-		return errors.Format(errors.StatusBadRequest, "invalid URL %s, the KeyBook URL must be adi_path/KeyBook", bookUrl)
+		return errors.StatusBadRequest.Format("invalid URL %s, the KeyBook URL must be adi_path/KeyBook", bookUrl)
 	}
 	if !parent.Equal(adiUrl) {
-		return errors.Format(errors.StatusBadRequest, "KeyBook %s must be a direct child of its ADI %s", bookUrl.String(), adiUrl.String())
+		return errors.StatusBadRequest.Format("KeyBook %s must be a direct child of its ADI %s", bookUrl.String(), adiUrl.String())
 	}
 	return nil
 }

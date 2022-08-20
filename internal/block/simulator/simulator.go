@@ -455,7 +455,7 @@ func (s *Simulator) SubmitAndExecuteBlock(envelopes ...*protocol.Envelope) ([]*p
 
 	_, err := s.Submit(envelopes...)
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.StatusUnknownError.Wrap(err)
 	}
 
 	ids := map[[32]byte]bool{}
@@ -674,7 +674,7 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 				continue
 			}
 			if !errors.Is(err, errors.StatusDelivered) {
-				return errors.Wrap(errors.StatusUnknownError, err)
+				return errors.StatusUnknownError.Wrap(err)
 			}
 			if statusChan != nil {
 				status.TxID = deliveries[i].Transaction.ID()
@@ -688,7 +688,7 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 			err = e
 		})
 		if err != nil {
-			return errors.Wrap(errors.StatusUnknownError, err)
+			return errors.StatusUnknownError.Wrap(err)
 		}
 		if statusChan != nil {
 			for _, result := range results {

@@ -66,7 +66,7 @@ func Init(snapshot io.WriteSeeker, opts InitOpts) ([]byte, error) {
 	var err error
 	b.router, err = routing.NewStaticRouter(b.routingTable, nil)
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.StatusUnknownError.Wrap(err)
 	}
 
 	exec, err := block.NewGenesisExecutor(b.db, opts.Logger, &config.Describe{
@@ -74,7 +74,7 @@ func Init(snapshot io.WriteSeeker, opts InitOpts) ([]byte, error) {
 		PartitionId: opts.PartitionId,
 	}, b.router)
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.StatusUnknownError.Wrap(err)
 	}
 
 	// Capture background tasks
@@ -90,25 +90,25 @@ func Init(snapshot io.WriteSeeker, opts InitOpts) ([]byte, error) {
 
 	err = exec.Genesis(b.block, b)
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.StatusUnknownError.Wrap(err)
 	}
 
 	err = b.block.Batch.Commit()
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.StatusUnknownError.Wrap(err)
 	}
 
 	// Wait for background tasks
 	err = errg.Wait()
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.StatusUnknownError.Wrap(err)
 	}
 
 	batch := b.db.Begin(false)
 	defer batch.Discard()
 	err = exec.SaveSnapshot(batch, snapshot)
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.StatusUnknownError.Wrap(err)
 	}
 
 	return batch.BptRoot(), nil
@@ -200,7 +200,7 @@ func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protoc
 		return nil
 	})
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.StatusUnknownError.Wrap(err)
 	}
 
 	// Create accounts
@@ -215,24 +215,24 @@ func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protoc
 
 	err = b.createVoteScratchChain()
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.StatusUnknownError.Wrap(err)
 	}
 
 	err = b.maybeCreateFactomAccounts()
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.StatusUnknownError.Wrap(err)
 	}
 
 	// Persist accounts
 	err = st.Create(b.records...)
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "store records: %w", err)
+		return nil, errors.StatusUnknownError.Format("store records: %w", err)
 	}
 
 	// Update the directory index
 	err = st.AddDirectoryEntry(b.partition.Identity(), b.urls...)
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.StatusUnknownError.Wrap(err)
 	}
 
 	// Write data entries
@@ -291,7 +291,7 @@ func (b *bootstrap) createVoteScratchChain() error {
 	lci := types.LastCommitInfo{}
 	data, err := json.Marshal(&lci)
 	if err != nil {
-		return errors.Format(errors.StatusInternalError, "marshal last commit info: %w", err)
+		return errors.StatusInternalError.Format("marshal last commit info: %w", err)
 	}
 	wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
 	wd.Scratch = true
@@ -356,12 +356,12 @@ func (b *bootstrap) maybeCreateFactomAccounts() error {
 
 	rd, err := b.FactomAddresses()
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.StatusUnknownError.Wrap(err)
 	}
 
 	factomAddresses, err := LoadFactomAddressesAndBalances(rd)
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.StatusUnknownError.Wrap(err)
 	}
 
 	for _, fa := range factomAddresses {

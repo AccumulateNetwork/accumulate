@@ -7,7 +7,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
-var ErrInvalidUrl = errors.New(errors.StatusBadRequest, "invalid URL")
+var ErrInvalidUrl = errors.StatusBadRequest.New("invalid URL")
 
 // General Errors
 const (
@@ -35,7 +35,7 @@ const (
 )
 
 var (
-	ErrInternal           = jsonrpc2.NewError(ErrCodeInternal, "Internal Error", "An internal error occured")
+	ErrInternal           = jsonrpc2.NewError(ErrCodeInternal, "Internal Error", "An internal error occurred")
 	ErrCanceled           = jsonrpc2.NewError(ErrCodeCanceled, "Canceled", "The request was canceled")
 	ErrMetricsNotAVector  = jsonrpc2.NewError(ErrCodeMetricsNotAVector, "Metrics Query Error", "response is not a vector")
 	ErrMetricsVectorEmpty = jsonrpc2.NewError(ErrCodeMetricsVectorEmpty, "Metrics Query Error", "response vector is empty")

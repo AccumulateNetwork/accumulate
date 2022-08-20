@@ -93,7 +93,7 @@ func addChainAnchor(rootChain *database.Chain, chain *database.Chain2, blockInde
 func (x *Executor) GetAccountAuthoritySet(batch *database.Batch, account protocol.Account) (*protocol.AccountAuth, error) {
 	auth, url, err := shared.GetAccountAuthoritySet(account)
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.StatusUnknownError.Wrap(err)
 	}
 	if auth != nil {
 		return auth, nil
@@ -101,7 +101,7 @@ func (x *Executor) GetAccountAuthoritySet(batch *database.Batch, account protoco
 
 	account, err = batch.Account(url).GetState()
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.StatusUnknownError.Wrap(err)
 	}
 	return x.GetAccountAuthoritySet(batch, account)
 }

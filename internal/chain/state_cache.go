@@ -66,7 +66,7 @@ func (c *stateCache) LoadUrl(account *url.URL) (protocol.Account, error) {
 
 	state, err := c.batch.Account(account).GetState()
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "load %v: %w", account, err)
+		return nil, errors.StatusUnknownError.Format("load %v: %w", account, err)
 	}
 
 	c.chains[account.AccountID32()] = state
@@ -101,7 +101,7 @@ func (c *stateCache) LoadTxn(txid [32]byte) (*protocol.Transaction, error) {
 	}
 	if env.Transaction == nil {
 		// This is a signature, not an envelope
-		return nil, errors.NotFound("transaction %X not found", txid[:4])
+		return nil, errors.StatusNotFound.Format("transaction %X not found", txid[:4])
 	}
 	return env.Transaction, nil
 }
@@ -136,15 +136,15 @@ func (st *stateCache) createOrUpdate(isUpdate bool, accounts []protocol.Account)
 	for _, account := range accounts {
 		rec := st.batch.Account(account.GetUrl())
 		if len(account.GetUrl().String()) > protocol.AccountUrlMaxLength {
-			return errors.Wrap(errors.StatusBadUrlLength, fmt.Errorf("url specified exceeds maximum character length: %s", account.GetUrl().String()))
+			return errors.StatusBadUrlLength.Wrap(fmt.Errorf("url specified exceeds maximum character length: %s", account.GetUrl().String()))
 		}
 		_, err := rec.GetState()
 		switch {
 		case err != nil && !errors.Is(err, storage.ErrNotFound):
-			return errors.Format(errors.StatusUnknownError, "failed to check for an existing record: %v", err)
+			return errors.StatusUnknownError.Format("failed to check for an existing record: %v", err)
 
 		case err == nil && isCreate:
-			return errors.Format(errors.StatusConflict, "account %v already exists", account.GetUrl())
+			return errors.StatusConflict.Format("account %v already exists", account.GetUrl())
 
 		case st.txType.IsSynthetic() || st.txType.IsSystem():
 			// Synthetic and internal transactions are allowed to create accounts
@@ -152,7 +152,7 @@ func (st *stateCache) createOrUpdate(isUpdate bool, accounts []protocol.Account)
 			// TODO Make synthetic transactions call Create
 
 		case err != nil && isUpdate:
-			return errors.Format(errors.StatusConflict, "account %v does not exist", account.GetUrl())
+			return errors.StatusConflict.Format("account %v does not exist", account.GetUrl())
 		}
 
 		if st.Pretend {
@@ -162,13 +162,13 @@ func (st *stateCache) createOrUpdate(isUpdate bool, accounts []protocol.Account)
 		// Update/Create the state
 		err = rec.PutState(account)
 		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "failed to update state of %q: %w", account.GetUrl(), err)
+			return errors.StatusUnknownError.Format("failed to update state of %q: %w", account.GetUrl(), err)
 		}
 
 		// Add to the account's main chain
 		err = st.State.ChainUpdates.AddChainEntry(st.batch, rec.MainChain(), st.txHash[:], 0, 0)
 		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "failed to update main chain of %q: %w", account.GetUrl(), err)
+			return errors.StatusUnknownError.Format("failed to update main chain of %q: %w", account.GetUrl(), err)
 		}
 
 		// Add it to the directory
@@ -176,7 +176,7 @@ func (st *stateCache) createOrUpdate(isUpdate bool, accounts []protocol.Account)
 			u := account.GetUrl()
 			err = st.AddDirectoryEntry(u.Identity(), u)
 			if err != nil {
-				return errors.Format(errors.StatusUnknownError, "failed to add a directory entry for %q: %w", u, err)
+				return errors.StatusUnknownError.Format("failed to add a directory entry for %q: %w", u, err)
 			}
 		}
 

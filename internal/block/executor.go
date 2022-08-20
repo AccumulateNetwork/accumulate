@@ -91,7 +91,7 @@ func NewNodeExecutor(opts ExecutorOptions, db database.Beginner) (*Executor, err
 		)
 
 	default:
-		return nil, errors.Format(errors.StatusInternalError, "invalid partition type %v", opts.Describe.NetworkType)
+		return nil, errors.StatusInternalError.Format("invalid partition type %v", opts.Describe.NetworkType)
 	}
 
 	// This is a no-op in dev
@@ -132,7 +132,7 @@ func newExecutor(opts ExecutorOptions, db database.Beginner, executors ...chain.
 
 	for _, x := range executors {
 		if _, ok := m.executors[x.Type()]; ok {
-			panic(errors.Format(errors.StatusInternalError, "duplicate executor for %d", x.Type()))
+			panic(errors.StatusInternalError.Format("duplicate executor for %d", x.Type()))
 		}
 		m.executors[x.Type()] = x
 	}
@@ -150,7 +150,7 @@ func newExecutor(opts ExecutorOptions, db database.Beginner, executors ...chain.
 		// Load globals
 		err = m.loadGlobals(db.View)
 		if err != nil {
-			return nil, errors.Wrap(errors.StatusUnknownError, err)
+			return nil, errors.StatusUnknownError.Wrap(err)
 		}
 
 	case errors.Is(err, storage.ErrNotFound):
@@ -158,7 +158,7 @@ func newExecutor(opts ExecutorOptions, db database.Beginner, executors ...chain.
 		// m.logger.Debug("Loaded", "height", 0, "hash", logging.AsHex(batch.BptRoot()).Slice(0, 4))
 
 	default:
-		return nil, errors.Format(errors.StatusUnknownError, "load ledger: %w", err)
+		return nil, errors.StatusUnknownError.Format("load ledger: %w", err)
 	}
 
 	return m, nil
@@ -197,20 +197,20 @@ func (m *Executor) Genesis(block *Block, exec chain.TransactionExecutor) error {
 		Initiator: txn.Header.Principal,
 	})
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.StatusUnknownError.Wrap(err)
 	}
 
 	status, err := m.ExecuteEnvelope(block, delivery)
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.StatusUnknownError.Wrap(err)
 	}
 	if status.Error != nil {
-		return errors.Wrap(errors.StatusUnknownError, status.Error)
+		return errors.StatusUnknownError.Wrap(status.Error)
 	}
 
 	err = m.EndBlock(block)
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.StatusUnknownError.Wrap(err)
 	}
 
 	return nil
@@ -224,19 +224,19 @@ func (m *Executor) LoadStateRoot(batch *database.Batch) ([]byte, error) {
 	case errors.Is(err, storage.ErrNotFound):
 		return nil, nil
 	default:
-		return nil, errors.Format(errors.StatusUnknownError, "load partition identity: %w", err)
+		return nil, errors.StatusUnknownError.Format("load partition identity: %w", err)
 	}
 }
 
 func (m *Executor) RestoreSnapshot(batch *database.Batch, file ioutil2.SectionReader) error {
 	err := batch.RestoreSnapshot(file, &m.Describe)
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "load state: %w", err)
+		return errors.StatusUnknownError.Format("load state: %w", err)
 	}
 
 	err = m.loadGlobals(batch.View)
 	if err != nil {
-		return errors.Format(errors.StatusInternalError, "failed to load globals: %w", err)
+		return errors.StatusInternalError.Format("failed to load globals: %w", err)
 	}
 
 	return nil
