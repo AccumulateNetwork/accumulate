@@ -5,8 +5,8 @@ import (
 	"io"
 	"net/http"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/client/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
-	"gitlab.com/accumulatenetwork/accumulate/internal/client"
 )
 
 // DirectJrpcClient returns a client that executes HTTP requests directly

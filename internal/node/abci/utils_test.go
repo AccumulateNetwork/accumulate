@@ -4,7 +4,7 @@ import (
 	"crypto/ed25519"
 
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
-	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
+	acctesting "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 )
 
 var globalNonce uint64

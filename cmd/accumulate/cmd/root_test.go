@@ -19,9 +19,9 @@ import (
 	"github.com/tendermint/tendermint/crypto"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/genesis"
-	"gitlab.com/accumulatenetwork/accumulate/internal/testdata"
-	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	testdata "gitlab.com/accumulatenetwork/accumulate/test/data"
+	acctesting "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 )
 
 func init() { acctesting.EnableDebugFeatures() }

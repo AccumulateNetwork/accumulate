@@ -12,10 +12,10 @@ import (
 	"github.com/tendermint/tendermint/rpc/client/local"
 	apiv2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/testing/e2e"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	acctesting "gitlab.com/accumulatenetwork/accumulate/test/helpers"
+	"gitlab.com/accumulatenetwork/accumulate/test/helpers/e2e"
 )
 
 func TestEndToEnd(t *testing.T) {

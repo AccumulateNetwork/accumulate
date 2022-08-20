@@ -7,8 +7,8 @@ import (
 
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/play-accumulate/pkg"
-	"gitlab.com/accumulatenetwork/accumulate/internal/client"
-	testing "gitlab.com/accumulatenetwork/accumulate/internal/testing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/client/v2"
+	testing "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 )
 
 var Flag = struct {

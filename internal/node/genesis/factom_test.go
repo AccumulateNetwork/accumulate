@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/testdata"
+	testdata "gitlab.com/accumulatenetwork/accumulate/test/data"
 )
 
 func TestFactomAddressesUpload(t *testing.T) {

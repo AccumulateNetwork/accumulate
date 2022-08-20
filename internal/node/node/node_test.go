@@ -10,7 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
+	acctesting "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 )
 
 func TestNodeLifecycle(t *testing.T) {

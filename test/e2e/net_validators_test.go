@@ -8,9 +8,9 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/build"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
+	acctesting "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 )
 
 func requireHasKeyHash(t *testing.T, page *KeyPage, hash []byte) {

@@ -14,7 +14,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/play-accumulate/pkg"
-	"gitlab.com/accumulatenetwork/accumulate/internal/testing"
+	testing "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	. "gitlab.com/ethan.reesor/vscode-notebooks/go-playbooks/pkg/kernel"
 	"gitlab.com/ethan.reesor/vscode-notebooks/yaegi/interp"
 )

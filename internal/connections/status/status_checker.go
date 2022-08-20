@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/client"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/client/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
 )
 

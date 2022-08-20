@@ -18,8 +18,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
-	"gitlab.com/accumulatenetwork/accumulate/internal/testdata"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	testdata "gitlab.com/accumulatenetwork/accumulate/test/data"
 	"golang.org/x/sync/errgroup"
 )
 

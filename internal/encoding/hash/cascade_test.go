@@ -6,8 +6,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding/hash"
-	"gitlab.com/accumulatenetwork/accumulate/internal/testdata"
-	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
+	testdata "gitlab.com/accumulatenetwork/accumulate/test/data"
+	acctesting "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	"gopkg.in/yaml.v3"
 )
 

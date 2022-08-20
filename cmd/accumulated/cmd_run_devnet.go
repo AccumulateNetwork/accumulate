@@ -15,7 +15,7 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
-	"gitlab.com/accumulatenetwork/accumulate/internal/testing"
+	testing "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 )
 
 var cmdRunDevnet = &cobra.Command{

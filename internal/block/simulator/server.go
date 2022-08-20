@@ -8,8 +8,8 @@ import (
 	"os"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/client/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
-	"gitlab.com/accumulatenetwork/accumulate/internal/client"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"

@@ -10,7 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
-	"gitlab.com/accumulatenetwork/accumulate/internal/client"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/client/v2"
 )
 
 //func GetWallet() db.DB {

@@ -54,7 +54,7 @@ Accumulate is broken into the following components:
 - `internal/node` - Node configuration, initialization, and execution
 - `internal/relay` - The relay, responsible for relaying transactions to the
   appropriate BVC; **Deprecated**: use `internal/api/v2`
-- `internal/testing` - Test helpers
+- `test/helpers` - Test helpers
 - `pkg/url` - Accumulate URL parser
 - `internal/web/static` - Embedded web server content
 - `networks` - Accumulate network definitions

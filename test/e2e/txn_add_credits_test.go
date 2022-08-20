@@ -6,9 +6,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
-	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
+	acctesting "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 )
 
 func TestAddCredits_BurnsAcme(t *testing.T) {

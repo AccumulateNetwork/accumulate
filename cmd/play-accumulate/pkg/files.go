@@ -16,7 +16,7 @@ import (
 
 	"github.com/fatih/color"
 	. "github.com/russross/blackfriday/v2"
-	"gitlab.com/accumulatenetwork/accumulate/internal/client"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/client/v2"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/ethan.reesor/vscode-notebooks/yaegi/interp"
 	"gitlab.com/ethan.reesor/vscode-notebooks/yaegi/stdlib"

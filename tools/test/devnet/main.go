@@ -17,7 +17,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/play-accumulate/pkg"
-	"gitlab.com/accumulatenetwork/accumulate/internal/client"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/client/v2"
 )
 
 var extraFlags []string
