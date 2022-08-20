@@ -16,7 +16,7 @@ import (
 	alog "github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/privval"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
-	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"

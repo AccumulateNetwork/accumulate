@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/execute"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 

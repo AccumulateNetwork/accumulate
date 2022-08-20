@@ -9,7 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/libs/log"
-	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/memory"

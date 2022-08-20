@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/build"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/helpers"

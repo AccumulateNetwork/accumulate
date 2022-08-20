@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
-	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"

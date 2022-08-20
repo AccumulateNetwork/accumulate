@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	testdata "gitlab.com/accumulatenetwork/accumulate/test/data"

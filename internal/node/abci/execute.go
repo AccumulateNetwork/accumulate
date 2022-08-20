@@ -7,9 +7,9 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/tendermint/tendermint/libs/log"
-	. "gitlab.com/accumulatenetwork/accumulate/internal/block"
+	. "gitlab.com/accumulatenetwork/accumulate/internal/core/block"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
