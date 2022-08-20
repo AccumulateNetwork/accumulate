@@ -3,7 +3,7 @@ package protocol
 import (
 	"encoding"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 // Fee is the unit cost of a transaction.

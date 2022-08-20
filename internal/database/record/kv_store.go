@@ -2,7 +2,7 @@ package record
 
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 // KvStore is a Store that reads/writes from/to a key-value store.

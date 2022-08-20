@@ -1,8 +1,8 @@
 package storage
 
 import (
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 // debug is a bit field for enabling debug log messages

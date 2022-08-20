@@ -1,6 +1,6 @@
 package protocol
 
-import "gitlab.com/accumulatenetwork/accumulate/internal/errors"
+import "gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 
 type LockableAccount interface {
 	Account

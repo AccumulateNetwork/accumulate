@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 func (m *JrpcMethods) QueryTxLocal(ctx context.Context, params json.RawMessage) interface{} {

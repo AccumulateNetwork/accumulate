@@ -4,7 +4,7 @@ import (
 	"bytes"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/sortutil"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
 func (s *TxIdSet) Add(txid *url.TxID) {

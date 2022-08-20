@@ -15,7 +15,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
 	daemonpkg "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 

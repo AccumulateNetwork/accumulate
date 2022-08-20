@@ -6,7 +6,7 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/managed"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
 // ChainType is the type of a chain belonging to an account.

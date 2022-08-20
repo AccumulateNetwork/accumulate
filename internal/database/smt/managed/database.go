@@ -5,7 +5,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 )
 
-//go:generate go run ../../../tools/cmd/gen-types --package managed types.yml
+//go:generate go run ../../../../tools/cmd/gen-types --package managed types.yml
 
 type DbValue[T encoding.BinaryValue] interface {
 	Get() (T, error)
