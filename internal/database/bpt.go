@@ -11,8 +11,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/pmt"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
-	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
+	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )

@@ -14,7 +14,7 @@ import (
 	. "gitlab.com/accumulatenetwork/accumulate/internal/database/smt/pmt"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/badger"
-	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
+	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 )
 
 func TestSaveState(t *testing.T) {

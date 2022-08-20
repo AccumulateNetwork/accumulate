@@ -12,7 +12,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/pmt"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/memory"
-	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
+	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 )
 
 var snapshotCmd = &cobra.Command{

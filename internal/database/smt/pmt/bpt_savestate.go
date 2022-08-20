@@ -8,7 +8,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/common"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
-	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
+	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 )
 
 const window = uint64(1000) //                               Process this many BPT entries at a time

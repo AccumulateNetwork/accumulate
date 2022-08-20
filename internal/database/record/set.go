@@ -9,7 +9,7 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/encoding"
-	"gitlab.com/accumulatenetwork/accumulate/internal/sortutil"
+	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 

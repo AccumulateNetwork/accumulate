@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/sortutil"
+	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
