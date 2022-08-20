@@ -270,37 +270,6 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 		panic(fmt.Errorf("failed to init chain: %+v", err))
 	}
 
-	//Validate validators from genesis
-	var missing []abci.ValidatorUpdate
-	validatorMap := make(map[[32]byte]bool)
-	for _, partition := range app.AccumulatorOptions.Executor.ActiveGlobals().Network.Partitions {
-		if partition.PartitionID == app.Accumulate.PartitionId {
-			for _, existing := range partition.ValidatorKeys {
-				var bytes [32]byte
-				copy(bytes[:], existing)
-				validatorMap[bytes] = true
-			}
-		}
-	}
-	requestMap := make(map[[32]byte]abci.ValidatorUpdate)
-	for _, validator := range req.Validators {
-		keyBytes := validator.PubKey.GetEd25519()
-		var bytes [32]byte
-		copy(bytes[:], keyBytes)
-		_, ok := validatorMap[bytes]
-		if !ok {
-			panic(fmt.Errorf("invalid validators in request"))
-		}
-		requestMap[bytes] = validator
-	}
-
-	for val := range validatorMap {
-		validator, ok := requestMap[val]
-		if !ok {
-			missing = append(missing, validator)
-		}
-	}
-
 	// Commit the batch
 	err = block.Batch.Commit()
 	if err != nil {
@@ -316,6 +285,21 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 		panic(fmt.Errorf("failed to publish block notification: %v", err))
 	}
 
+	// Compare initial validators with genesis
+	additional, err := app.Executor.InitChainValidators(req.Validators)
+	if err != nil {
+		panic(err)
+	}
+
+	var updates []abci.ValidatorUpdate
+	for _, key := range additional {
+		updates = append(updates, abci.ValidatorUpdate{
+			PubKey: protocrypto.PublicKey{Sum: &protocrypto.PublicKey_Ed25519{Ed25519: key}},
+			Power:  1,
+		})
+	}
+
+	// Get the app state hash
 	err = app.DB.View(func(batch *database.Batch) (err error) {
 		root, err = app.Executor.LoadStateRoot(batch)
 		return err
@@ -324,7 +308,7 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 		panic(fmt.Errorf("failed to load state hash: %v", err))
 	}
 
-	return abci.ResponseInitChain{AppHash: root, Validators: missing}
+	return abci.ResponseInitChain{AppHash: root, Validators: updates}
 }
 
 // BeginBlock implements github.com/tendermint/tendermint/abci/types.Application.
