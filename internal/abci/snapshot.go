@@ -11,7 +11,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	_ "gitlab.com/accumulatenetwork/accumulate/smt/pmt"
+	_ "gitlab.com/accumulatenetwork/accumulate/internal/database/smt/pmt"
 )
 
 // ListSnapshots queries the node for available snapshots.

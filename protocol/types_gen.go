@@ -16,8 +16,8 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	errors2 "gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
-	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 )
 
 type ADI struct {

@@ -8,11 +8,11 @@ import (
 
 	btc "github.com/btcsuite/btcd/btcec"
 	"github.com/btcsuite/btcutil/base58"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/common"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding/hash"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
-	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 	"golang.org/x/crypto/ripemd160" //nolint:staticcheck
 	"golang.org/x/crypto/sha3"
 )

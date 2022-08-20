@@ -1,6 +1,6 @@
 package pmt
 
-import "gitlab.com/accumulatenetwork/accumulate/smt/managed"
+import "gitlab.com/accumulatenetwork/accumulate/internal/database/smt/managed"
 
 // CollectReceipt
 // A recursive routine that searches the BPT for the given chainID.  Once it is

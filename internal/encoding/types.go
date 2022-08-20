@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 
-	"gitlab.com/accumulatenetwork/accumulate/smt/common"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/common"
 )
 
 type Error struct {

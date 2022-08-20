@@ -6,8 +6,8 @@ import (
 	"github.com/kardianos/service"
 	"github.com/spf13/cobra"
 	service2 "github.com/tendermint/tendermint/libs/service"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/badger"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage/badger"
 )
 
 var cmdRunDual = &cobra.Command{

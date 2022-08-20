@@ -10,8 +10,8 @@ import (
 
 	"github.com/dustin/go-humanize"
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/smt/common"
-	. "gitlab.com/accumulatenetwork/accumulate/smt/pmt"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/common"
+	. "gitlab.com/accumulatenetwork/accumulate/internal/database/smt/pmt"
 )
 
 const defaultNodeCnt = 1000

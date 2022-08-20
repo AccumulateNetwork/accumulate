@@ -4,8 +4,8 @@ import (
 	"encoding"
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 )
 
 // Chain manages a Merkle tree (chain).

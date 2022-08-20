@@ -13,8 +13,8 @@ import (
 	"github.com/dustin/go-humanize"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
-	"gitlab.com/accumulatenetwork/accumulate/smt/common"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage/badger"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/common"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/badger"
 )
 
 func GetHash(i int) Hash {

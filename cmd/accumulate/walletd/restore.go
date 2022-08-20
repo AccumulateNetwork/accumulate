@@ -6,10 +6,10 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/db"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/common"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 )
 
 func RestoreAccounts() (out string, err error) {

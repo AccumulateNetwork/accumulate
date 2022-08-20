@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"io"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/common"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
-	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 )
 
 // MerkleState

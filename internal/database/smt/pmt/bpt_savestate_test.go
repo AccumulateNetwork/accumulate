@@ -10,11 +10,11 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/common"
+	. "gitlab.com/accumulatenetwork/accumulate/internal/database/smt/pmt"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/badger"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
-	"gitlab.com/accumulatenetwork/accumulate/smt/common"
-	. "gitlab.com/accumulatenetwork/accumulate/smt/pmt"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage/badger"
 )
 
 func TestSaveState(t *testing.T) {

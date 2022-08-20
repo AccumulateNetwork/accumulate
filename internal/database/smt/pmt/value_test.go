@@ -4,7 +4,7 @@ import (
 	"crypto/sha256"
 	"testing"
 
-	. "gitlab.com/accumulatenetwork/accumulate/smt/pmt"
+	. "gitlab.com/accumulatenetwork/accumulate/internal/database/smt/pmt"
 )
 
 func TestValue_Equal(t *testing.T) {

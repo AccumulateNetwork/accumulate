@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/dgraph-io/badger"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 )
 
 // TruncateBadger controls whether Badger is configured to truncate corrupted
