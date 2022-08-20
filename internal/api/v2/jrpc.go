@@ -16,7 +16,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/web"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/web"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
