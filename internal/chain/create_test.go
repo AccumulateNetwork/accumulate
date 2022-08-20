@@ -8,7 +8,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
 func TestCreateAccountWithinNonAdi(t *testing.T) {
@@ -18,7 +17,7 @@ func TestCreateAccountWithinNonAdi(t *testing.T) {
 	aliceTokens := alice.JoinPath("tokens")
 	badAccount := aliceTokens.JoinPath("account")
 	_ = db.Update(func(batch *database.Batch) error {
-		require.NoError(t, acctesting.CreateADI(batch, acctesting.GenerateTmKey(alice), types.String(alice.String())))
+		require.NoError(t, acctesting.CreateADI(batch, acctesting.GenerateTmKey(alice), alice.String()))
 		require.NoError(t, acctesting.CreateTokenAccount(batch, aliceTokens.String(), protocol.ACME, 0, false))
 		return nil
 	})
@@ -59,8 +58,8 @@ func TestCreateAccountWithinOtherAdi(t *testing.T) {
 	bob := protocol.AccountUrl("bob")
 	badAccount := bob.JoinPath("account")
 	_ = db.Update(func(batch *database.Batch) error {
-		require.NoError(t, acctesting.CreateADI(batch, acctesting.GenerateTmKey(alice), types.String(alice.String())))
-		require.NoError(t, acctesting.CreateADI(batch, acctesting.GenerateTmKey(bob), types.String(bob.String())))
+		require.NoError(t, acctesting.CreateADI(batch, acctesting.GenerateTmKey(alice), alice.String()))
+		require.NoError(t, acctesting.CreateADI(batch, acctesting.GenerateTmKey(bob), bob.String()))
 		return nil
 	})
 

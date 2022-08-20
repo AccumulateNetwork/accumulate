@@ -13,14 +13,13 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
 type stateCache struct {
 	*config.Describe
 	logger logging.OptionalLogger
 	txType protocol.TransactionType
-	txHash types.Bytes32
+	txHash [32]byte
 
 	Globals    *core.GlobalValues
 	State      ProcessTransactionState
