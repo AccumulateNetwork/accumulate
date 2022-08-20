@@ -9,8 +9,8 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/sortutil"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 // Set records an ordered list of values as a single record.

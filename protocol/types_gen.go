@@ -15,8 +15,8 @@ import (
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
-	errors2 "gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	errors2 "gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 )
 

@@ -1,7 +1,7 @@
 package storage
 
 import (
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 // ErrNotFound is returned by KeyValueDB.Get if the key is not found.

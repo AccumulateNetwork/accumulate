@@ -4,8 +4,8 @@ import (
 	"time"
 
 	"github.com/gorhill/cronexpr"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 type majorBlockScheduler struct {

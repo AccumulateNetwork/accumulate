@@ -3,7 +3,7 @@ package record
 import (
 	"io"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 //lint:file-ignore U1000 false positive
