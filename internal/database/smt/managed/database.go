@@ -1,8 +1,8 @@
 package managed
 
 import (
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 )
 
 //go:generate go run ../../../../tools/cmd/gen-types --package managed types.yml

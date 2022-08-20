@@ -1,7 +1,7 @@
 package pkg
 
 import (
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 

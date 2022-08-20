@@ -1,7 +1,7 @@
 package query
 
 import (
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/encoding"
 )
 
 //go:generate go run ../../../../tools/cmd/gen-enum --package query --out enums_gen.go enums.yml

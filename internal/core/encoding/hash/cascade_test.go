@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding/hash"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/encoding/hash"
 	testdata "gitlab.com/accumulatenetwork/accumulate/test/data"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	"gopkg.in/yaml.v3"

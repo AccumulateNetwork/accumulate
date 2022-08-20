@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"io"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/encoding"
 )
 
 // NewAccount creates a new Account for the specified AccountType.

@@ -16,7 +16,7 @@ import (
 	"fmt"
 	"math/bits"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/encoding"
 )
 
 // This Stateful Merkle Tree implementation handles 256 bit hashes

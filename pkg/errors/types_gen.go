@@ -11,7 +11,7 @@ import (
 	"io"
 	"strings"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/encoding"
 )
 
 type CallSite struct {

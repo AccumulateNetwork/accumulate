@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/gorhill/cronexpr"
-	"gitlab.com/accumulatenetwork/accumulate/internal/events"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 

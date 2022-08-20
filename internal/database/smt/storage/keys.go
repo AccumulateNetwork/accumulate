@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"sync"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/encoding"
 )
 
 const (

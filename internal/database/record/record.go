@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 )
 
 // A Record is a component of a data model.

@@ -6,7 +6,7 @@ import (
 	"runtime"
 	"strings"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/encoding"
 )
 
 // Success returns true if the status represents success.

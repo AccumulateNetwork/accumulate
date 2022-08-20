@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"io"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/encoding"
 )
 
 // NewRecord creates a new Record for the specified RecordType.
