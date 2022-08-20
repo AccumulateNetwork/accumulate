@@ -48,6 +48,19 @@ func (e *Error) Is(target error) bool {
 	return false
 }
 
+func (e *Error) As(target any) bool {
+	switch f := target.(type) {
+	case *Status:
+		// If the error has a cause and the code is unknown, let errors.As check
+		// the cause
+		if e.Cause == nil || e.Code != Unknown {
+			*f = e.Code
+			return true
+		}
+	}
+	return false
+}
+
 func (e *Error) Format(f fmt.State, verb rune) {
 	if f.Flag('+') {
 		f.Write([]byte(e.Print()))
