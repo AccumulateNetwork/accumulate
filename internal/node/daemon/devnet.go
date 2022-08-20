@@ -3,7 +3,7 @@ package daemon
 import (
 	"fmt"
 
-	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 )
 
 type DevnetOptions struct {

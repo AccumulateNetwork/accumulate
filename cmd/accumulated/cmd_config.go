@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
-	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 )
 
 var cmdConfig = &cobra.Command{

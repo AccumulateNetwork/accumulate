@@ -12,7 +12,7 @@ import (
 	"github.com/tendermint/tendermint/privval"
 	coretypes "github.com/tendermint/tendermint/rpc/coretypes"
 	corerpc "github.com/tendermint/tendermint/rpc/jsonrpc/client"
-	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 )
 
 // AppFactory creates and returns an ABCI application.

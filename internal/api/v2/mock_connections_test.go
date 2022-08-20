@@ -14,7 +14,7 @@ import (
 	client "github.com/tendermint/tendermint/rpc/client"
 	coretypes "github.com/tendermint/tendermint/rpc/coretypes"
 	types "github.com/tendermint/tendermint/types"
-	config "gitlab.com/accumulatenetwork/accumulate/config"
+	config "gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	connections "gitlab.com/accumulatenetwork/accumulate/internal/node/connections"
 )
 

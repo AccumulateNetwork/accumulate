@@ -11,7 +11,7 @@ import (
 	"github.com/tendermint/tendermint/rpc/client"
 	core "github.com/tendermint/tendermint/rpc/coretypes"
 	tm "github.com/tendermint/tendermint/types"
-	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 )
 
 type NodeStatus int

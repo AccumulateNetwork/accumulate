@@ -8,8 +8,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 )
 
 type BvnInit struct {

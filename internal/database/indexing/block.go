@@ -1,9 +1,9 @@
 package indexing
 
 import (
-	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 )
 
 // BlockChainUpdatesIndexer indexes chain updates for each block.

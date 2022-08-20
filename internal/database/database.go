@@ -4,11 +4,11 @@ import (
 	"fmt"
 
 	"github.com/tendermint/tendermint/libs/log"
-	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/badger"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/etcd"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/memory"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )

@@ -8,10 +8,10 @@ import (
 	"path/filepath"
 
 	abci "github.com/tendermint/tendermint/abci/types"
-	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	_ "gitlab.com/accumulatenetwork/accumulate/internal/database/smt/pmt"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 )
 
 // ListSnapshots queries the node for available snapshots.

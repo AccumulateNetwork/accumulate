@@ -12,7 +12,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/tendermint/tendermint/crypto/ed25519"
-	cfg "gitlab.com/accumulatenetwork/accumulate/config"
+	cfg "gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gopkg.in/yaml.v2"
 )
