@@ -13,6 +13,7 @@ import (
 	"github.com/tendermint/tendermint/rpc/client/http"
 	"github.com/tendermint/tendermint/rpc/client/local"
 	"gitlab.com/accumulatenetwork/accumulate/config"
+	abcicodes "gitlab.com/accumulatenetwork/accumulate/internal/abci/codes"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2/query"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -53,7 +54,7 @@ func (cm *connectionManager) doHealthCheckOnNode(connCtx *connectionContext) {
 	qu := new(query.UnknownRequest)
 	qd, _ := qu.MarshalBinary()
 	qryRes, err := connCtx.GetABCIClient().ABCIQueryWithOptions(context.Background(), "/up", qd, rpc.DefaultABCIQueryOptions)
-	if err != nil || protocol.ErrorCode(qryRes.Response.Code) != protocol.ErrorCodeOK {
+	if err != nil || qryRes.Response.Code != abcicodes.OK {
 		// FIXME code ErrorCodeInvalidQueryType will emit an error in the log, maybe there is a nicer option to probe the abci API
 		connCtx.ReportError(err)
 		if qryRes != nil {

@@ -89,21 +89,6 @@ const DataEntryTypeFactom DataEntryType = 1
 // DataEntryTypeAccumulate .
 const DataEntryTypeAccumulate DataEntryType = 2
 
-// ErrorCodeOK indicates the request succeeded.
-const ErrorCodeOK ErrorCode = 0
-
-// ErrorCodeEncodingError indicates something could not be decoded or encoded.
-const ErrorCodeEncodingError ErrorCode = 1
-
-// ErrorCodeFailed indicates the request failed.
-const ErrorCodeFailed ErrorCode = 2
-
-// ErrorCodeDidPanic indicates the request failed due to a fatal error.
-const ErrorCodeDidPanic ErrorCode = 3
-
-// ErrorCodeUnknownError indicates the request failed due to an unknown error.
-const ErrorCodeUnknownError ErrorCode = 4
-
 // KeyPageOperationTypeUnknown is used when the key page operation is not known.
 const KeyPageOperationTypeUnknown KeyPageOperationType = 0
 
@@ -647,78 +632,6 @@ func (v *DataEntryType) UnmarshalJSON(data []byte) error {
 	*v, ok = DataEntryTypeByName(s)
 	if !ok || strings.ContainsRune(v.String(), ':') {
 		return fmt.Errorf("invalid Data Entry Type %q", s)
-	}
-	return nil
-}
-
-// GetEnumValue returns the value of the Error Code
-func (v ErrorCode) GetEnumValue() uint64 { return uint64(v) }
-
-// SetEnumValue sets the value. SetEnumValue returns false if the value is invalid.
-func (v *ErrorCode) SetEnumValue(id uint64) bool {
-	u := ErrorCode(id)
-	switch u {
-	case ErrorCodeOK, ErrorCodeEncodingError, ErrorCodeFailed, ErrorCodeDidPanic, ErrorCodeUnknownError:
-		*v = u
-		return true
-	default:
-		return false
-	}
-}
-
-// String returns the name of the Error Code.
-func (v ErrorCode) String() string {
-	switch v {
-	case ErrorCodeOK:
-		return "ok"
-	case ErrorCodeEncodingError:
-		return "encodingError"
-	case ErrorCodeFailed:
-		return "failed"
-	case ErrorCodeDidPanic:
-		return "didPanic"
-	case ErrorCodeUnknownError:
-		return "unknownError"
-	default:
-		return fmt.Sprintf("ErrorCode:%d", v)
-	}
-}
-
-// ErrorCodeByName returns the named Error Code.
-func ErrorCodeByName(name string) (ErrorCode, bool) {
-	switch strings.ToLower(name) {
-	case "ok":
-		return ErrorCodeOK, true
-	case "encodingerror":
-		return ErrorCodeEncodingError, true
-	case "failed":
-		return ErrorCodeFailed, true
-	case "didpanic":
-		return ErrorCodeDidPanic, true
-	case "unknownerror":
-		return ErrorCodeUnknownError, true
-	default:
-		return 0, false
-	}
-}
-
-// MarshalJSON marshals the Error Code to JSON as a string.
-func (v ErrorCode) MarshalJSON() ([]byte, error) {
-	return json.Marshal(v.String())
-}
-
-// UnmarshalJSON unmarshals the Error Code from JSON as a string.
-func (v *ErrorCode) UnmarshalJSON(data []byte) error {
-	var s string
-	err := json.Unmarshal(data, &s)
-	if err != nil {
-		return err
-	}
-
-	var ok bool
-	*v, ok = ErrorCodeByName(s)
-	if !ok || strings.ContainsRune(v.String(), ':') {
-		return fmt.Errorf("invalid Error Code %q", s)
 	}
 	return nil
 }

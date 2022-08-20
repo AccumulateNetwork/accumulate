@@ -19,6 +19,7 @@ import (
 	"github.com/tendermint/tendermint/version"
 	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/config"
+	abcicodes "gitlab.com/accumulatenetwork/accumulate/internal/abci/codes"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -122,7 +123,7 @@ func (app *Accumulator) recover(code *uint32, setDidPanic bool) {
 	app.fatal(err, setDidPanic)
 
 	if code != nil {
-		*code = uint32(protocol.ErrorCodeDidPanic)
+		*code = uint32(abcicodes.DidPanic)
 	}
 }
 
@@ -228,10 +229,10 @@ func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
 func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.ResponseQuery) {
 	switch reqQuery.Path {
 	case "/up":
-		return abci.ResponseQuery{Code: uint32(protocol.ErrorCodeOK), Info: "Up"}
+		return abci.ResponseQuery{Code: uint32(abcicodes.OK), Info: "Up"}
 	}
 
-	return abci.ResponseQuery{Code: uint32(protocol.ErrorCodeFailed)}
+	return abci.ResponseQuery{Code: uint32(abcicodes.Failed)}
 }
 
 // InitChain implements github.com/tendermint/tendermint/abci/types.Application.
@@ -333,7 +334,7 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 	// Is the node borked?
 	if app.didPanic {
 		return abci.ResponseCheckTx{
-			Code: uint32(protocol.ErrorCodeDidPanic),
+			Code: uint32(abcicodes.DidPanic),
 			Log:  "Node state is invalid",
 		}
 	}
@@ -361,7 +362,7 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 		b, _ := errors.Unknown.Wrap(err).(*errors.Error).MarshalJSON()
 		var res abci.ResponseCheckTx
 		res.Info = string(b)
-		res.Code = uint32(protocol.ErrorCodeFailed)
+		res.Code = uint32(abcicodes.Failed)
 		return res
 	}
 
@@ -399,7 +400,7 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 		if !envelopes[i].Transaction.Body.Type().IsUser() {
 			continue
 		}
-		resp.Code = uint32(protocol.ErrorCodeUnknownError)
+		resp.Code = uint32(abcicodes.UnknownError)
 		resp.Log += fmt.Sprintf("envelope(%d/%s) %v;", i, result.Code.String(), result.Error)
 	}
 
@@ -415,7 +416,7 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 	// Is the node borked?
 	if app.didPanic {
 		return abci.ResponseDeliverTx{
-			Code: uint32(protocol.ErrorCodeDidPanic),
+			Code: uint32(abcicodes.DidPanic),
 			Info: "Node state is invalid",
 		}
 	}
@@ -425,13 +426,13 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 		b, _ := errors.Unknown.Wrap(err).(*errors.Error).MarshalJSON()
 		var res abci.ResponseDeliverTx
 		res.Info = string(b)
-		res.Code = uint32(protocol.ErrorCodeFailed)
+		res.Code = uint32(abcicodes.Failed)
 		return res
 	}
 
 	// Deliver never fails, unless the batch cannot be decoded
 	app.txct += int64(len(envelopes))
-	return abci.ResponseDeliverTx{Code: uint32(protocol.ErrorCodeOK), Data: respData}
+	return abci.ResponseDeliverTx{Code: uint32(abcicodes.OK), Data: respData}
 }
 
 // EndBlock implements github.com/tendermint/tendermint/abci/types.Application.

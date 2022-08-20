@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/stretchr/testify/require"
+	abcicodes "gitlab.com/accumulatenetwork/accumulate/internal/abci/codes"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
@@ -65,7 +66,7 @@ func (r router) Submit(ctx context.Context, partition string, envelope *protocol
 			continue
 		}
 		if deliveries[i].Transaction.Body.Type().IsUser() {
-			resp.Code = uint32(protocol.ErrorCodeUnknownError)
+			resp.Code = abcicodes.UnknownError
 			resp.Log = "One or more user transactions failed"
 		}
 	}

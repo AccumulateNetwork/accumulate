@@ -22,6 +22,7 @@ import (
 	ctypes "github.com/tendermint/tendermint/rpc/coretypes"
 	"github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
+	abcicodes "gitlab.com/accumulatenetwork/accumulate/internal/abci/codes"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
@@ -398,7 +399,7 @@ func (c *FakeTendermint) BroadcastTxSync(ctx context.Context, tx types.Tx) (*cty
 	if st == nil {
 		h := sha256.Sum256(tx)
 		return &ctypes.ResultBroadcastTx{
-			Code: uint32(protocol.ErrorCodeUnknownError),
+			Code: abcicodes.UnknownError,
 			Log:  "An unknown error occurred",
 			Hash: h[:],
 		}, nil

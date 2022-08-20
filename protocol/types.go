@@ -29,10 +29,8 @@ type KeyPageOperationType uint8
 // AccountAuthOperationType is the operation type of an UpdateAccountAuth operation.
 type AccountAuthOperationType uint8
 
-type ErrorCode int
-
 //go:generate go run ../tools/cmd/gen-types account_auth_operations.yml accounts.yml general.yml system.yml key_page_operations.yml query.yml signatures.yml synthetic_transactions.yml transaction.yml transaction_results.yml user_transactions.yml
-//go:generate go run ../tools/cmd/gen-enum --out enums_gen.go enums.yml errors.yml
+//go:generate go run ../tools/cmd/gen-enum --out enums_gen.go enums.yml
 
 ///intentionally disabled for now
 ///go:generate go run ../tools/cmd/gen-types --out ../export/sdk/c --language c account_auth_operations.yml accounts.yml general.yml system.yml key_page_operations.yml query.yml signatures.yml synthetic_transactions.yml transaction.yml transaction_results.yml user_transactions.yml
