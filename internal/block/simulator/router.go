@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/routing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -41,7 +41,7 @@ func (r router) Submit(ctx context.Context, partition string, envelope *protocol
 
 	batch := x.Database.Begin(false)
 	defer batch.Discard()
-	results := x.Executor.ValidateEnvelopeSet(batch, deliveries, func(err error, d *chain.Delivery, s *protocol.TransactionStatus) {
+	results := x.Executor.ValidateEnvelopeSet(batch, deliveries, func(err error, d *execute.Delivery, s *protocol.TransactionStatus) {
 		if !s.Failed() {
 			return
 		}

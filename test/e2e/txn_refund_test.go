@@ -7,8 +7,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
-	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/execute"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -95,8 +95,8 @@ func TestRefundFailedUserTransaction_Local(t *testing.T) {
 	// The transaction is submitted but fails when delivered
 	exec := &overrideExecutor{
 		typ:      TransactionTypeSendTokens,
-		validate: func(st *chain.StateManager, tx *chain.Delivery) error { return nil },
-		execute:  func(st *chain.StateManager, tx *chain.Delivery) error { return fmt.Errorf("") },
+		validate: func(st *execute.StateManager, tx *execute.Delivery) error { return nil },
+		execute:  func(st *execute.StateManager, tx *execute.Delivery) error { return fmt.Errorf("") },
 	}
 	for _, x := range sim.Executors {
 		x.Executor.SetExecutor_TESTONLY(exec)
@@ -146,8 +146,8 @@ func TestRefundFailedUserTransaction_Remote(t *testing.T) {
 	// The transaction would fail if submitted directly
 	exec := &overrideExecutor{
 		typ:      TransactionTypeSendTokens,
-		validate: func(st *chain.StateManager, tx *chain.Delivery) error { return fmt.Errorf("") },
-		execute:  func(st *chain.StateManager, tx *chain.Delivery) error { return fmt.Errorf("") },
+		validate: func(st *execute.StateManager, tx *execute.Delivery) error { return fmt.Errorf("") },
+		execute:  func(st *execute.StateManager, tx *execute.Delivery) error { return fmt.Errorf("") },
 	}
 	for _, x := range sim.Executors {
 		x.Executor.SetExecutor_TESTONLY(exec)

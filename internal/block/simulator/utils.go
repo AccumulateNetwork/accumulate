@@ -7,8 +7,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/block"
-	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/execute"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -24,10 +24,10 @@ func InitFromSnapshot(t TB, db database.Beginner, exec *Executor, filename strin
 	require.NoError(tb{t}, batch.Commit())
 }
 
-func NormalizeEnvelope(t TB, envelope *protocol.Envelope) []*chain.Delivery {
+func NormalizeEnvelope(t TB, envelope *protocol.Envelope) []*execute.Delivery {
 	t.Helper()
 
-	deliveries, err := chain.NormalizeEnvelope(envelope)
+	deliveries, err := execute.NormalizeEnvelope(envelope)
 	require.NoError(tb{t}, err)
 	return deliveries
 }

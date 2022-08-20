@@ -9,8 +9,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2/query"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
-	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/helpers"
@@ -32,7 +32,7 @@ func TestOutOfSequenceSynth(t *testing.T) {
 
 	// If any envelope contains a deposit, reverse the envelopes and the
 	// transactions within each
-	sim.PartitionFor(bobUrl.RootIdentity()).SubmitHook = func(envelopes []*chain.Delivery) ([]*chain.Delivery, bool) {
+	sim.PartitionFor(bobUrl.RootIdentity()).SubmitHook = func(envelopes []*execute.Delivery) ([]*execute.Delivery, bool) {
 		for _, env := range envelopes {
 			if env.Transaction.Body.Type() == TransactionTypeSyntheticDepositTokens {
 				for i, n := 0, len(envelopes); i < n/2; i++ {
@@ -95,7 +95,7 @@ func TestMissingSynthTxn(t *testing.T) {
 
 	// The first time an envelope contains a deposit, drop the first deposit
 	var didDrop bool
-	sim.PartitionFor(bobUrl.RootIdentity()).SubmitHook = func(envelopes []*chain.Delivery) ([]*chain.Delivery, bool) {
+	sim.PartitionFor(bobUrl.RootIdentity()).SubmitHook = func(envelopes []*execute.Delivery) ([]*execute.Delivery, bool) {
 		for i, env := range envelopes {
 			if env.Transaction.Body.Type() == TransactionTypeSyntheticDepositTokens {
 				fmt.Printf("Dropping %X\n", env.Transaction.GetHash()[:4])
@@ -152,8 +152,8 @@ func TestSendSynthTxnAfterAnchor(t *testing.T) {
 	sim.CreateAccount(&LiteTokenAccount{Url: aliceUrl, TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e9)})
 
 	// Capture the first deposit
-	var deposit *chain.Delivery
-	sim.PartitionFor(bobUrl.RootIdentity()).SubmitHook = func(envelopes []*chain.Delivery) ([]*chain.Delivery, bool) {
+	var deposit *execute.Delivery
+	sim.PartitionFor(bobUrl.RootIdentity()).SubmitHook = func(envelopes []*execute.Delivery) ([]*execute.Delivery, bool) {
 		for i, env := range envelopes {
 			if env.Transaction.Body.Type() == TransactionTypeSyntheticDepositTokens {
 				fmt.Printf("Dropping %X\n", env.Transaction.GetHash()[:4])
@@ -240,7 +240,7 @@ func TestMissingAnchorTxn(t *testing.T) {
 
 	// Drop the anchor
 	var didDrop bool
-	sim.PartitionFor(lite).SubmitHook = func(envelopes []*chain.Delivery) ([]*chain.Delivery, bool) {
+	sim.PartitionFor(lite).SubmitHook = func(envelopes []*execute.Delivery) ([]*execute.Delivery, bool) {
 		for i, env := range envelopes {
 			body, ok := env.Transaction.Body.(*DirectoryAnchor)
 			if !ok {

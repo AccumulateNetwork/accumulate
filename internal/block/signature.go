@@ -4,15 +4,15 @@ import (
 	"bytes"
 	"fmt"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-func (x *Executor) ProcessSignature(batch *database.Batch, delivery *chain.Delivery, signature protocol.Signature) (*ProcessSignatureState, error) {
+func (x *Executor) ProcessSignature(batch *database.Batch, delivery *execute.Delivery, signature protocol.Signature) (*ProcessSignatureState, error) {
 	r := x.BlockTimers.Start(BlockTimerTypeProcessSignature)
 	defer x.BlockTimers.Stop(r)
 
@@ -57,7 +57,7 @@ func (d sigExecMetadata) Nested() bool {
 	return d.Delegated || d.Forwarded
 }
 
-func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Delivery, signature protocol.Signature, md sigExecMetadata) (protocol.Signer, error) {
+func (x *Executor) processSignature(batch *database.Batch, delivery *execute.Delivery, signature protocol.Signature, md sigExecMetadata) (protocol.Signer, error) {
 	var signer, delegate protocol.Signer
 	var err error
 	switch signature := signature.(type) {
@@ -399,7 +399,7 @@ func (x *Executor) validateSigner(batch *database.Batch, transaction *protocol.T
 	}
 
 	// Delegate to the transaction executor?
-	val, ok := getValidator[chain.SignerValidator](x, transaction.Body.Type())
+	val, ok := getValidator[execute.SignerValidator](x, transaction.Body.Type())
 	if ok {
 		fallback, err := val.SignerIsAuthorized(x, batch, transaction, signer, checkAuthz)
 		if err != nil {
@@ -578,7 +578,7 @@ func computeSignerFee(transaction *protocol.Transaction, signature protocol.KeyS
 }
 
 // validateKeySignature validates a private key signature.
-func (x *Executor) validateKeySignature(batch *database.Batch, delivery *chain.Delivery, signature protocol.KeySignature, md sigExecMetadata, checkAuthz bool) (protocol.Signer, error) {
+func (x *Executor) validateKeySignature(batch *database.Batch, delivery *execute.Delivery, signature protocol.KeySignature, md sigExecMetadata, checkAuthz bool) (protocol.Signer, error) {
 	// Validate the signer
 	signer, err := x.validateSigner(batch, delivery.Transaction, signature.GetSigner(), signature.RoutingLocation(), checkAuthz)
 	if err != nil {
@@ -638,7 +638,7 @@ func (x *Executor) processSigner(batch *database.Batch, transaction *protocol.Tr
 
 // processKeySignature validates a private key signature and updates the
 // signer.
-func (x *Executor) processKeySignature(batch *database.Batch, delivery *chain.Delivery, signature protocol.KeySignature, md sigExecMetadata, checkAuthz bool) (protocol.Signer, error) {
+func (x *Executor) processKeySignature(batch *database.Batch, delivery *execute.Delivery, signature protocol.KeySignature, md sigExecMetadata, checkAuthz bool) (protocol.Signer, error) {
 	// Validate the signer and/or delegator. This should not fail, because this
 	// signature has presumably already passed ValidateEnvelope. But defensive
 	// programming is always a good idea.
@@ -725,7 +725,7 @@ func verifyReceiptSignature(transaction *protocol.Transaction, receipt *protocol
 	return nil
 }
 
-func verifyInternalSignature(delivery *chain.Delivery, _ *protocol.InternalSignature, md sigExecMetadata) error {
+func verifyInternalSignature(delivery *execute.Delivery, _ *protocol.InternalSignature, md sigExecMetadata) error {
 	if md.Nested() {
 		return errors.New(errors.StatusBadRequest, "internal signatures cannot be nested within another signature")
 	}

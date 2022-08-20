@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/tendermint/tendermint/abci/types"
-	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/execute"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -26,8 +26,8 @@ type BlockState struct {
 	Delivered          uint64
 	Signed             uint64
 	ProducedTxns       []*protocol.Transaction
-	ChainUpdates       chain.ChainUpdates
-	ReceivedAnchors    []*chain.ReceivedAnchor
+	ChainUpdates       execute.ChainUpdates
+	ReceivedAnchors    []*execute.ReceivedAnchor
 
 	Anchor *BlockAnchorState
 }
@@ -58,7 +58,7 @@ func (s *BlockState) MergeSignature(r *ProcessSignatureState) {
 	s.Signed++
 }
 
-func (s *BlockState) MergeTransaction(r *chain.ProcessTransactionState) {
+func (s *BlockState) MergeTransaction(r *execute.ProcessTransactionState) {
 	s.Delivered++
 	s.ProducedTxns = append(s.ProducedTxns, r.ProducedTxns...)
 	s.ChainUpdates.Merge(&r.ChainUpdates)

@@ -3,10 +3,10 @@
 
 package block
 
-import "gitlab.com/accumulatenetwork/accumulate/internal/chain"
+import "gitlab.com/accumulatenetwork/accumulate/internal/execute"
 
-func addTestnetExecutors(x []chain.TransactionExecutor) []chain.TransactionExecutor {
+func addTestnetExecutors(x []execute.TransactionExecutor) []execute.TransactionExecutor {
 	return append(x,
-		chain.AcmeFaucet{},
+		execute.AcmeFaucet{},
 	)
 }

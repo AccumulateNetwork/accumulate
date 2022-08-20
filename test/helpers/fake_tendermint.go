@@ -21,8 +21,8 @@ import (
 	core "github.com/tendermint/tendermint/rpc/coretypes"
 	ctypes "github.com/tendermint/tendermint/rpc/coretypes"
 	"github.com/tendermint/tendermint/types"
-	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -56,7 +56,7 @@ type FakeTendermint struct {
 }
 
 type txStatus struct {
-	Envelopes     []*chain.Delivery
+	Envelopes     []*execute.Delivery
 	Tx            []byte
 	Hash          [32]byte
 	Height        int64
@@ -147,7 +147,7 @@ func (c *FakeTendermint) didSubmit(tx []byte, txh [32]byte) *txStatus {
 		return nil
 	}
 
-	deliveries, err := chain.NormalizeEnvelope(env)
+	deliveries, err := execute.NormalizeEnvelope(env)
 	if err != nil {
 		c.onError(err)
 		c.logger.Error("Rejecting invalid transaction", "error", err)
@@ -420,7 +420,7 @@ func (c *FakeTendermint) Status(context.Context) (*core.ResultStatus, error) {
 	return new(core.ResultStatus), nil
 }
 
-func (c *FakeTendermint) logTxns(msg string, env ...*chain.Delivery) {
+func (c *FakeTendermint) logTxns(msg string, env ...*execute.Delivery) {
 	for _, env := range env {
 		txnType := env.Transaction.Body.Type()
 		if !txnType.IsSystem() {

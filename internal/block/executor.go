@@ -6,11 +6,11 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/blockscheduler"
-	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
+	"gitlab.com/accumulatenetwork/accumulate/internal/execute"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
@@ -23,7 +23,7 @@ type Executor struct {
 	ExecutorOptions
 
 	globals    *Globals
-	executors  map[protocol.TransactionType]chain.TransactionExecutor
+	executors  map[protocol.TransactionType]execute.TransactionExecutor
 	dispatcher *dispatcher
 	logger     logging.OptionalLogger
 	db         database.Beginner
@@ -47,47 +47,47 @@ type ExecutorOptions struct {
 
 // NewNodeExecutor creates a new Executor for a node.
 func NewNodeExecutor(opts ExecutorOptions, db database.Beginner) (*Executor, error) {
-	executors := []chain.TransactionExecutor{
+	executors := []execute.TransactionExecutor{
 		// User transactions
-		chain.AddCredits{},
-		chain.BurnTokens{},
-		chain.CreateDataAccount{},
-		chain.CreateIdentity{},
-		chain.CreateKeyBook{},
-		chain.CreateKeyPage{},
-		chain.CreateLiteTokenAccount{},
-		chain.CreateToken{},
-		chain.CreateTokenAccount{},
-		chain.IssueTokens{},
-		chain.LockAccount{},
-		chain.SendTokens{},
-		chain.UpdateAccountAuth{},
-		chain.UpdateKey{},
-		chain.UpdateKeyPage{},
-		chain.WriteData{},
-		chain.WriteDataTo{},
+		execute.AddCredits{},
+		execute.BurnTokens{},
+		execute.CreateDataAccount{},
+		execute.CreateIdentity{},
+		execute.CreateKeyBook{},
+		execute.CreateKeyPage{},
+		execute.CreateLiteTokenAccount{},
+		execute.CreateToken{},
+		execute.CreateTokenAccount{},
+		execute.IssueTokens{},
+		execute.LockAccount{},
+		execute.SendTokens{},
+		execute.UpdateAccountAuth{},
+		execute.UpdateKey{},
+		execute.UpdateKeyPage{},
+		execute.WriteData{},
+		execute.WriteDataTo{},
 
 		// Synthetic
-		chain.SyntheticBurnTokens{},
-		chain.SyntheticCreateIdentity{},
-		chain.SyntheticDepositCredits{},
-		chain.SyntheticDepositTokens{},
-		chain.SyntheticWriteData{},
+		execute.SyntheticBurnTokens{},
+		execute.SyntheticCreateIdentity{},
+		execute.SyntheticDepositCredits{},
+		execute.SyntheticDepositTokens{},
+		execute.SyntheticWriteData{},
 
 		// Forwarding
-		chain.SyntheticForwardTransaction{},
+		execute.SyntheticForwardTransaction{},
 	}
 
 	switch opts.Describe.NetworkType {
 	case config.Directory:
 		executors = append(executors,
-			chain.PartitionAnchor{},
-			chain.DirectoryAnchor{},
+			execute.PartitionAnchor{},
+			execute.DirectoryAnchor{},
 		)
 
 	case config.BlockValidator:
 		executors = append(executors,
-			chain.DirectoryAnchor{},
+			execute.DirectoryAnchor{},
 		)
 
 	default:
@@ -111,18 +111,18 @@ func NewGenesisExecutor(db *database.Database, logger log.Logger, network *confi
 			isGenesis: true,
 		},
 		db,
-		chain.SystemWriteData{},
+		execute.SystemWriteData{},
 	)
 }
 
-func newExecutor(opts ExecutorOptions, db database.Beginner, executors ...chain.TransactionExecutor) (*Executor, error) {
+func newExecutor(opts ExecutorOptions, db database.Beginner, executors ...execute.TransactionExecutor) (*Executor, error) {
 	if opts.Background == nil {
 		opts.Background = func(f func()) { go f() }
 	}
 
 	m := new(Executor)
 	m.ExecutorOptions = opts
-	m.executors = map[protocol.TransactionType]chain.TransactionExecutor{}
+	m.executors = map[protocol.TransactionType]execute.TransactionExecutor{}
 	m.dispatcher = newDispatcher(opts)
 	m.db = db
 
@@ -172,11 +172,11 @@ func (m *Executor) ActiveGlobals_TESTONLY() *core.GlobalValues {
 	return &m.globals.Active
 }
 
-func (x *Executor) SetExecutor_TESTONLY(y chain.TransactionExecutor) {
+func (x *Executor) SetExecutor_TESTONLY(y execute.TransactionExecutor) {
 	x.executors[y.Type()] = y
 }
 
-func (m *Executor) Genesis(block *Block, exec chain.TransactionExecutor) error {
+func (m *Executor) Genesis(block *Block, exec execute.TransactionExecutor) error {
 	var err error
 
 	if !m.isGenesis {
@@ -187,10 +187,10 @@ func (m *Executor) Genesis(block *Block, exec chain.TransactionExecutor) error {
 	txn := new(protocol.Transaction)
 	txn.Header.Principal = protocol.AcmeUrl()
 	txn.Body = new(protocol.SystemGenesis)
-	delivery := new(chain.Delivery)
+	delivery := new(execute.Delivery)
 	delivery.Transaction = txn
 
-	st := chain.NewStateManager(&m.Describe, nil, block.Batch.Begin(true), nil, txn, m.logger.With("operation", "Genesis"))
+	st := execute.NewStateManager(&m.Describe, nil, block.Batch.Begin(true), nil, txn, m.logger.With("operation", "Genesis"))
 	defer st.Discard()
 
 	err = block.Batch.Transaction(txn.GetHash()).PutStatus(&protocol.TransactionStatus{

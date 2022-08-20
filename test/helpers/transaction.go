@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/execute"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -143,8 +143,8 @@ func (tb TransactionBuilder) Build() *protocol.Envelope {
 	return tb.Envelope
 }
 
-func (tb TransactionBuilder) BuildDelivery() *chain.Delivery {
-	delivery, err := chain.NormalizeEnvelope(tb.Envelope)
+func (tb TransactionBuilder) BuildDelivery() *execute.Delivery {
+	delivery, err := execute.NormalizeEnvelope(tb.Envelope)
 	if err != nil {
 		panic(err)
 	}

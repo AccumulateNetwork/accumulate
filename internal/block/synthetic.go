@@ -3,8 +3,8 @@ package block
 import (
 	"fmt"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -22,7 +22,7 @@ func (x *Executor) ProduceSynthetic(batch *database.Batch, from *protocol.Transa
 		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
-	state := new(chain.ChainUpdates)
+	state := new(execute.ChainUpdates)
 	for _, sub := range produced {
 		tx, err := x.buildSynthTxn(state, batch, sub.Header.Principal, sub.Body)
 		if err != nil {
@@ -90,7 +90,7 @@ func setSyntheticOrigin(batch *database.Batch, from *protocol.Transaction, produ
 	return nil
 }
 
-func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batch, dest *url.URL, body protocol.TransactionBody) (*protocol.Transaction, error) {
+func (m *Executor) buildSynthTxn(state *execute.ChainUpdates, batch *database.Batch, dest *url.URL, body protocol.TransactionBody) (*protocol.Transaction, error) {
 	// Generate a synthetic tx and send to the router. Need to track txid to
 	// make sure they get processed.
 

@@ -8,7 +8,7 @@ import (
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	jrpc "github.com/tendermint/tendermint/rpc/jsonrpc/types"
 	tm "github.com/tendermint/tendermint/types"
-	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -32,7 +32,7 @@ func newDispatcher(opts ExecutorOptions) *dispatcher {
 }
 
 func (d *dispatcher) push(partition string, env *protocol.Envelope) error {
-	deliveries, err := chain.NormalizeEnvelope(env)
+	deliveries, err := execute.NormalizeEnvelope(env)
 	if err != nil {
 		return err
 	}

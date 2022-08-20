@@ -3,8 +3,8 @@ package block
 import (
 	"strings"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -12,7 +12,7 @@ import (
 
 // processNetworkAccountUpdates processes updates to network data accounts,
 // updating the in-memory globals variable and pushing updates when necessary.
-func (x *Executor) processNetworkAccountUpdates(batch *database.Batch, delivery *chain.Delivery, principal protocol.Account) error {
+func (x *Executor) processNetworkAccountUpdates(batch *database.Batch, delivery *execute.Delivery, principal protocol.Account) error {
 	r := x.BlockTimers.Start(BlockTimerTypeNetworkAccountUpdates)
 	defer x.BlockTimers.Stop(r)
 	// Only process updates to network accounts

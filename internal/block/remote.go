@@ -1,14 +1,14 @@
 package block
 
 import (
-	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/execute"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-func (x *Executor) ProcessRemoteSignatures(block *Block, delivery *chain.Delivery) error {
+func (x *Executor) ProcessRemoteSignatures(block *Block, delivery *execute.Delivery) error {
 	r := x.BlockTimers.Start(BlockTimerTypeNetworkAccountUpdates)
 	defer x.BlockTimers.Stop(r)
 

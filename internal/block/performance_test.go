@@ -13,8 +13,8 @@ import (
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
-	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -83,7 +83,7 @@ func BenchmarkBlockTimes(b *testing.B) {
 
 	// Pre-populate the block with 500 transactions
 	for i := 0; i < 500; i++ {
-		env, err := chain.NormalizeEnvelope(acctesting.NewTransaction().
+		env, err := execute.NormalizeEnvelope(acctesting.NewTransaction().
 			WithPrincipal(protocol.FaucetUrl).
 			WithBody(&protocol.AcmeFaucet{Url: aliceUrl}).
 			Faucet())
@@ -94,7 +94,7 @@ func BenchmarkBlockTimes(b *testing.B) {
 		require.NoError(b, err)
 	}
 	// Construct a new transaction
-	env, err := chain.NormalizeEnvelope(acctesting.NewTransaction().
+	env, err := execute.NormalizeEnvelope(acctesting.NewTransaction().
 		WithPrincipal(protocol.FaucetUrl).
 		WithBody(&protocol.AcmeFaucet{Url: aliceUrl}).
 		Faucet())
@@ -173,23 +173,23 @@ func BenchmarkBlock(b *testing.B) {
 	// blockSize := []int{200}
 	scenarios := map[string][]executor{
 		"no-op": {
-			{protocol.TransactionTypeAddCredits, func(st *chain.StateManager, tx *chain.Delivery) error {
+			{protocol.TransactionTypeAddCredits, func(st *execute.StateManager, tx *execute.Delivery) error {
 				return nil
 			}},
 		},
 		"create account": {
-			{protocol.TransactionTypeAddCredits, func(st *chain.StateManager, tx *chain.Delivery) error {
+			{protocol.TransactionTypeAddCredits, func(st *execute.StateManager, tx *execute.Delivery) error {
 				u := &url.URL{Authority: hex.EncodeToString(tx.Transaction.GetHash())}
 				return st.Create(&protocol.UnknownAccount{Url: u})
 			}},
 		},
 		"synth txn": {
-			{protocol.TransactionTypeAddCredits, func(st *chain.StateManager, tx *chain.Delivery) error {
+			{protocol.TransactionTypeAddCredits, func(st *execute.StateManager, tx *execute.Delivery) error {
 				u := &url.URL{Authority: hex.EncodeToString(tx.Transaction.GetHash())}
 				st.Submit(u, &protocol.SyntheticDepositCredits{})
 				return nil
 			}},
-			{protocol.TransactionTypeSyntheticDepositCredits, func(st *chain.StateManager, tx *chain.Delivery) error {
+			{protocol.TransactionTypeSyntheticDepositCredits, func(st *execute.StateManager, tx *execute.Delivery) error {
 				return nil
 			}},
 		},
@@ -239,16 +239,16 @@ func BenchmarkBlock(b *testing.B) {
 
 type executor struct {
 	typ protocol.TransactionType
-	fn  func(st *chain.StateManager, tx *chain.Delivery) error
+	fn  func(st *execute.StateManager, tx *execute.Delivery) error
 }
 
 func (x executor) Type() protocol.TransactionType { return x.typ }
 
-func (executor) SignerIsAuthorized(delegate chain.AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, checkAuthz bool) (fallback bool, err error) {
+func (executor) SignerIsAuthorized(delegate execute.AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, checkAuthz bool) (fallback bool, err error) {
 	return false, nil // All signers are authorized
 }
 
-func (executor) TransactionIsReady(delegate chain.AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (ready, fallback bool, err error) {
+func (executor) TransactionIsReady(delegate execute.AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (ready, fallback bool, err error) {
 	return true, false, nil // Transaction is always ready
 }
 
@@ -256,10 +256,10 @@ func (executor) AllowMissingPrincipal(transaction *protocol.Transaction) bool {
 	return true // Principal can be missing
 }
 
-func (x executor) Execute(st *chain.StateManager, tx *chain.Delivery) (protocol.TransactionResult, error) {
+func (x executor) Execute(st *execute.StateManager, tx *execute.Delivery) (protocol.TransactionResult, error) {
 	return nil, x.fn(st, tx)
 }
 
-func (x executor) Validate(st *chain.StateManager, tx *chain.Delivery) (protocol.TransactionResult, error) {
+func (x executor) Validate(st *execute.StateManager, tx *execute.Delivery) (protocol.TransactionResult, error) {
 	return nil, x.fn(st, tx)
 }

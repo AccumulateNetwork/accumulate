@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -13,7 +13,7 @@ import (
 
 type BlockTimerType uint64
 
-func trackTransactionTimers(executors *map[protocol.TransactionType]chain.TransactionExecutor) (timerList []uint64) {
+func trackTransactionTimers(executors *map[protocol.TransactionType]execute.TransactionExecutor) (timerList []uint64) {
 	//register the executor transaction timers
 	for k := range *executors {
 		timerList = append(timerList, k.GetEnumValue()+BlockTimerTypeTransactionOffset.GetEnumValue())
@@ -66,7 +66,7 @@ func (t *TimerSet) Store(ds *logging.DataSet) {
 	}
 }
 
-func (t *TimerSet) Initialize(executors *map[protocol.TransactionType]chain.TransactionExecutor) {
+func (t *TimerSet) Initialize(executors *map[protocol.TransactionType]execute.TransactionExecutor) {
 	t.enable = true
 	t.timeRec = make(map[uint64]*TimerRecord)
 

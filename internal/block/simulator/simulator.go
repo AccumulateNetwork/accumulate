@@ -19,10 +19,10 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/blockscheduler"
-	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
+	"gitlab.com/accumulatenetwork/accumulate/internal/execute"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
@@ -400,7 +400,7 @@ func (s *Simulator) Submit(envelopes ...*protocol.Envelope) ([]*protocol.Envelop
 		x := s.Partition(partition)
 
 		// Normalize - use a copy to avoid weird issues caused by modifying values
-		deliveries, err := chain.NormalizeEnvelope(envelope.Copy())
+		deliveries, err := execute.NormalizeEnvelope(envelope.Copy())
 		if err != nil {
 			return nil, err
 		}
@@ -408,7 +408,7 @@ func (s *Simulator) Submit(envelopes ...*protocol.Envelope) ([]*protocol.Envelop
 		// Check
 		batch := x.Database.Begin(false)
 		defer batch.Discard()
-		x.Executor.ValidateEnvelopeSet(batch, deliveries, func(e error, _ *chain.Delivery, _ *protocol.TransactionStatus) {
+		x.Executor.ValidateEnvelopeSet(batch, deliveries, func(e error, _ *execute.Delivery, _ *protocol.TransactionStatus) {
 			err = e
 		})
 		if err != nil {
@@ -573,7 +573,7 @@ type ExecEntry struct {
 	mu                      sync.Mutex
 	BlockIndex              uint64
 	blockTime               time.Time
-	nextBlock, currentBlock []*chain.Delivery
+	nextBlock, currentBlock []*execute.Delivery
 
 	Partition  *config.Partition
 	Database   database.Beginner
@@ -584,7 +584,7 @@ type ExecEntry struct {
 	// SubmitHook can be used to control how envelopes are submitted to the
 	// partition. It is not safe to change SubmitHook concurrently with calls to
 	// Submit.
-	SubmitHook func([]*chain.Delivery) ([]*chain.Delivery, bool)
+	SubmitHook func([]*execute.Delivery) ([]*execute.Delivery, bool)
 }
 
 func (x *ExecEntry) Begin(writable bool) *database.Batch         { return x.Database.Begin(writable) }
@@ -595,10 +595,10 @@ func (x *ExecEntry) View(fn func(*database.Batch) error) error   { return x.Data
 //
 // By adding transactions to the next block and swaping queues when a block is
 // executed, we roughly simulate the process Tendermint uses to build blocks.
-func (x *ExecEntry) Submit(pretend bool, envelopes ...*protocol.Envelope) []*chain.Delivery {
-	var deliveries []*chain.Delivery
+func (x *ExecEntry) Submit(pretend bool, envelopes ...*protocol.Envelope) []*execute.Delivery {
+	var deliveries []*execute.Delivery
 	for _, env := range envelopes {
-		normalized, err := chain.NormalizeEnvelope(env)
+		normalized, err := execute.NormalizeEnvelope(env)
 		require.NoErrorf(x, err, "Normalizing envelopes for %s", x.Executor.Describe.PartitionId)
 		deliveries = append(deliveries, normalized...)
 	}
@@ -624,7 +624,7 @@ func (x *ExecEntry) Submit(pretend bool, envelopes ...*protocol.Envelope) []*cha
 }
 
 // takeSubmitted returns the envelopes for the current block.
-func (x *ExecEntry) takeSubmitted() []*chain.Delivery {
+func (x *ExecEntry) takeSubmitted() []*execute.Delivery {
 	x.mu.Lock()
 	defer x.mu.Unlock()
 	submitted := x.currentBlock
@@ -684,7 +684,7 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 			i--
 		}
 
-		results := x.Executor.ExecuteEnvelopeSet(block, deliveries, func(e error, _ *chain.Delivery, _ *protocol.TransactionStatus) {
+		results := x.Executor.ExecuteEnvelopeSet(block, deliveries, func(e error, _ *execute.Delivery, _ *protocol.TransactionStatus) {
 			err = e
 		})
 		if err != nil {

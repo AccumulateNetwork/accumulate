@@ -3,15 +3,15 @@ package block
 import (
 	"strings"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/internal/execute"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-func (x *Executor) ValidateEnvelopeSet(batch *database.Batch, deliveries []*chain.Delivery, captureError func(error, *chain.Delivery, *protocol.TransactionStatus)) []*protocol.TransactionStatus {
+func (x *Executor) ValidateEnvelopeSet(batch *database.Batch, deliveries []*execute.Delivery, captureError func(error, *execute.Delivery, *protocol.TransactionStatus)) []*protocol.TransactionStatus {
 	results := make([]*protocol.TransactionStatus, len(deliveries))
 	for i, delivery := range deliveries {
 		status := new(protocol.TransactionStatus)
@@ -42,7 +42,7 @@ func (x *Executor) ValidateEnvelopeSet(batch *database.Batch, deliveries []*chai
 //
 // ValidateEnvelope should not modify anything. Right now it updates signer
 // timestamps and credits, but that will be moved to ProcessSignature.
-func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Delivery) (protocol.TransactionResult, error) {
+func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *execute.Delivery) (protocol.TransactionResult, error) {
 	// If the transaction is borked, the transaction type is probably invalid,
 	// so check that first. "Invalid transaction type" is a more useful error
 	// than "invalid signature" if the real error is the transaction got borked.
@@ -140,14 +140,14 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 	case !errors.Is(err, storage.ErrNotFound):
 		return nil, errors.Format(errors.StatusUnknownError, "load principal: %w", err)
 	case delivery.Transaction.Body.Type().IsUser():
-		val, ok := getValidator[chain.PrincipalValidator](x, delivery.Transaction.Body.Type())
+		val, ok := getValidator[execute.PrincipalValidator](x, delivery.Transaction.Body.Type())
 		if !ok || !val.AllowMissingPrincipal(delivery.Transaction) {
 			return nil, errors.NotFound("missing principal: %v not found", delivery.Transaction.Header.Principal)
 		}
 	}
 
 	// Set up the state manager
-	st := chain.NewStateManager(&x.Describe, &x.globals.Active, batch.Begin(false), principal, delivery.Transaction, x.logger.With("operation", "ValidateEnvelope"))
+	st := execute.NewStateManager(&x.Describe, &x.globals.Active, batch.Begin(false), principal, delivery.Transaction, x.logger.With("operation", "ValidateEnvelope"))
 	defer st.Discard()
 	st.Pretend = true
 
@@ -165,7 +165,7 @@ func (x *Executor) ValidateEnvelope(batch *database.Batch, delivery *chain.Deliv
 	return result, nil
 }
 
-func (x *Executor) ValidateSignature(batch *database.Batch, delivery *chain.Delivery, signature protocol.Signature) error {
+func (x *Executor) ValidateSignature(batch *database.Batch, delivery *execute.Delivery, signature protocol.Signature) error {
 	var md sigExecMetadata
 	md.IsInitiator = protocol.SignatureDidInitiate(signature, delivery.Transaction.Header.Initiator[:], nil)
 	if !signature.Type().IsSystem() {
@@ -175,7 +175,7 @@ func (x *Executor) ValidateSignature(batch *database.Batch, delivery *chain.Deli
 	return errors.Wrap(errors.StatusUnknownError, err)
 }
 
-func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Delivery, signature protocol.Signature, md sigExecMetadata) (protocol.Signer, error) {
+func (x *Executor) validateSignature(batch *database.Batch, delivery *execute.Delivery, signature protocol.Signature, md sigExecMetadata) (protocol.Signer, error) {
 	err := x.checkRouting(delivery, signature)
 	if err != nil {
 		return nil, err
@@ -300,7 +300,7 @@ func validateSyntheticTransactionSignatures(transaction *protocol.Transaction, s
 }
 
 // checkRouting verifies that the signature was routed to the correct partition.
-func (x *Executor) checkRouting(delivery *chain.Delivery, signature protocol.Signature) error {
+func (x *Executor) checkRouting(delivery *execute.Delivery, signature protocol.Signature) error {
 	if signature.Type().IsSystem() {
 		return nil
 	}

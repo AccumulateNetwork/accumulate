@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
-	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/execute"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -81,7 +81,7 @@ func TestTransactionIsReady(tt *testing.T) {
 	txn := new(protocol.Transaction)
 	txn.Header.Principal = account.Url
 	txn.Body = body
-	delivery := new(chain.Delivery)
+	delivery := new(execute.Delivery)
 	delivery.Transaction = txn
 
 	// The first signature
@@ -522,7 +522,7 @@ func TestCannotDisableAuthForAuthTxns(t *testing.T) {
 		txn := new(protocol.Transaction)
 		txn.Header.Principal = account.Url
 		txn.Body = new(protocol.UpdateAccountAuth)
-		delivery := new(chain.Delivery)
+		delivery := new(execute.Delivery)
 		delivery.Transaction = txn
 
 		// The signature
@@ -540,7 +540,7 @@ func TestCannotDisableAuthForAuthTxns(t *testing.T) {
 	})
 }
 
-func forwardSignature(txn *protocol.Transaction, sig protocol.Signature) *chain.Delivery {
+func forwardSignature(txn *protocol.Transaction, sig protocol.Signature) *execute.Delivery {
 	body := &protocol.SyntheticForwardTransaction{
 		Transaction: txn,
 		Signatures: []protocol.RemoteSignature{{
@@ -553,7 +553,7 @@ func forwardSignature(txn *protocol.Transaction, sig protocol.Signature) *chain.
 			},
 		}},
 	}
-	parent := &chain.Delivery{Transaction: &protocol.Transaction{Body: body}}
+	parent := &execute.Delivery{Transaction: &protocol.Transaction{Body: body}}
 	return parent.NewForwarded(body)
 }
 
@@ -572,8 +572,8 @@ func TestValidateKeyForSynthTxns(t *testing.T) {
 	sim.CreateAccount(&protocol.LiteTokenAccount{Url: alice, TokenUrl: protocol.AcmeUrl(), Balance: *big.NewInt(1e12)})
 
 	// Grab the deposit
-	var deposit *chain.Delivery
-	sim.Executors["BVN1"].SubmitHook = func(envelopes []*chain.Delivery) ([]*chain.Delivery, bool) {
+	var deposit *execute.Delivery
+	sim.Executors["BVN1"].SubmitHook = func(envelopes []*execute.Delivery) ([]*execute.Delivery, bool) {
 		for i, env := range envelopes {
 			if env.Transaction.Body.Type() == protocol.TransactionTypeSyntheticDepositTokens {
 				fmt.Printf("Dropping %X\n", env.Transaction.GetHash()[:4])
@@ -649,8 +649,8 @@ func TestKeySignaturePartition(t *testing.T) {
 	sim.CreateAccount(&protocol.LiteTokenAccount{Url: alice, TokenUrl: protocol.AcmeUrl(), Balance: *big.NewInt(1e12)})
 
 	// Grab the deposit
-	var deposit *chain.Delivery
-	sim.Executors["BVN1"].SubmitHook = func(envelopes []*chain.Delivery) ([]*chain.Delivery, bool) {
+	var deposit *execute.Delivery
+	sim.Executors["BVN1"].SubmitHook = func(envelopes []*execute.Delivery) ([]*execute.Delivery, bool) {
 		for i, env := range envelopes {
 			if env.Transaction.Body.Type() == protocol.TransactionTypeSyntheticDepositTokens {
 				fmt.Printf("Dropping %X\n", env.Transaction.GetHash()[:4])

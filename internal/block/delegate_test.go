@@ -7,10 +7,10 @@ import (
 	"github.com/stretchr/testify/require"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
-	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/internal/execute"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -81,7 +81,7 @@ func TestDelegatedSignatureDepth(tt *testing.T) {
 	txn := new(protocol.Transaction)
 	txn.Header.Principal = account.Url
 	txn.Body = body
-	delivery := new(chain.Delivery)
+	delivery := new(execute.Delivery)
 	delivery.Transaction = txn
 
 	// Use a fake executor that overrides TransactionIsReady

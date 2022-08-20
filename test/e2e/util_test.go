@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/execute"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -39,17 +39,17 @@ func Run[Case any, TB runTB[TB]](t TB, cases map[string]Case, run func(TB, Case)
 
 type overrideExecutor struct {
 	typ      protocol.TransactionType
-	validate func(st *chain.StateManager, tx *chain.Delivery) error
-	execute  func(st *chain.StateManager, tx *chain.Delivery) error
+	validate func(st *execute.StateManager, tx *execute.Delivery) error
+	execute  func(st *execute.StateManager, tx *execute.Delivery) error
 }
 
 func (x *overrideExecutor) Type() protocol.TransactionType { return x.typ }
 
-func (x *overrideExecutor) Execute(st *chain.StateManager, tx *chain.Delivery) (protocol.TransactionResult, error) {
+func (x *overrideExecutor) Execute(st *execute.StateManager, tx *execute.Delivery) (protocol.TransactionResult, error) {
 	return nil, x.execute(st, tx)
 }
 
-func (x *overrideExecutor) Validate(st *chain.StateManager, tx *chain.Delivery) (protocol.TransactionResult, error) {
+func (x *overrideExecutor) Validate(st *execute.StateManager, tx *execute.Delivery) (protocol.TransactionResult, error) {
 	return nil, x.validate(st, tx)
 }
 

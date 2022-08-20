@@ -3,9 +3,9 @@ package block
 import (
 	"fmt"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/internal/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -16,7 +16,7 @@ import (
 // ProcessTransaction processes a transaction. It will not return an error if
 // the transaction fails - in that case the status code will be non zero. It
 // only returns an error in cases like a database failure.
-func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Delivery) (*protocol.TransactionStatus, *chain.ProcessTransactionState, error) {
+func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *execute.Delivery) (*protocol.TransactionStatus, *execute.ProcessTransactionState, error) {
 	r := x.BlockTimers.Start(BlockTimerTypeProcessTransaction)
 	defer x.BlockTimers.Stop(r)
 	// Load the status
@@ -62,11 +62,11 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Del
 	}
 
 	// Set up the state manager
-	var st *chain.StateManager
+	var st *execute.StateManager
 	if x.isGenesis {
-		st = chain.NewStateManager(&x.Describe, nil, batch.Begin(true), principal, delivery.Transaction, x.logger.With("operation", "ProcessTransaction"))
+		st = execute.NewStateManager(&x.Describe, nil, batch.Begin(true), principal, delivery.Transaction, x.logger.With("operation", "ProcessTransaction"))
 	} else {
-		st, err = chain.LoadStateManager(&x.Describe, &x.globals.Active, batch.Begin(true), principal, delivery.Transaction, status, x.logger.With("operation", "ProcessTransaction"))
+		st, err = execute.LoadStateManager(&x.Describe, &x.globals.Active, batch.Begin(true), principal, delivery.Transaction, status, x.logger.With("operation", "ProcessTransaction"))
 		if err != nil {
 			return x.recordFailedTransaction(batch, delivery, err)
 		}
@@ -82,7 +82,7 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Del
 	}
 
 	r2 := x.BlockTimers.Start(executor.Type())
-	result, err := executor.Execute(st, &chain.Delivery{Transaction: delivery.Transaction})
+	result, err := executor.Execute(st, &execute.Delivery{Transaction: delivery.Transaction})
 	x.BlockTimers.Stop(r2)
 	if err != nil {
 		err = errors.Wrap(errors.StatusUnknownError, err)
@@ -105,7 +105,7 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Del
 	return x.recordSuccessfulTransaction(batch, state, delivery, result)
 }
 
-func (x *Executor) TransactionIsReady(batch *database.Batch, delivery *chain.Delivery, status *protocol.TransactionStatus, principal protocol.Account) (bool, error) {
+func (x *Executor) TransactionIsReady(batch *database.Batch, delivery *execute.Delivery, status *protocol.TransactionStatus, principal protocol.Account) (bool, error) {
 	var ready bool
 	var err error
 	typ := delivery.Transaction.Body.Type()
@@ -122,14 +122,14 @@ func (x *Executor) TransactionIsReady(batch *database.Batch, delivery *chain.Del
 	return ready, errors.Wrap(errors.StatusUnknownError, err)
 }
 
-func (x *Executor) userTransactionIsReady(batch *database.Batch, delivery *chain.Delivery, status *protocol.TransactionStatus, principal protocol.Account) (bool, error) {
+func (x *Executor) userTransactionIsReady(batch *database.Batch, delivery *execute.Delivery, status *protocol.TransactionStatus, principal protocol.Account) (bool, error) {
 	if status.Initiator == nil {
 		return false, nil
 	}
 
 	// If the principal is missing, check if that's ok
 	if principal == nil {
-		val, ok := getValidator[chain.PrincipalValidator](x, delivery.Transaction.Body.Type())
+		val, ok := getValidator[execute.PrincipalValidator](x, delivery.Transaction.Body.Type())
 		if !ok || !val.AllowMissingPrincipal(delivery.Transaction) {
 			return false, errors.NotFound("missing principal: %v not found", delivery.Transaction.Header.Principal)
 		}
@@ -160,7 +160,7 @@ func (x *Executor) userTransactionIsReady(batch *database.Batch, delivery *chain
 	}
 
 	// Delegate to the transaction executor?
-	val, ok := getValidator[chain.SignerValidator](x, delivery.Transaction.Body.Type())
+	val, ok := getValidator[execute.SignerValidator](x, delivery.Transaction.Body.Type())
 	if ok {
 		ready, fallback, err := val.TransactionIsReady(x, batch, delivery.Transaction, status)
 		if err != nil {
@@ -241,7 +241,7 @@ func (x *Executor) SignerIsSatisfied(batch *database.Batch, transaction *protoco
 	return false, nil
 }
 
-func (x *Executor) synthTransactionIsReady(batch *database.Batch, delivery *chain.Delivery, status *protocol.TransactionStatus, principal protocol.Account) (bool, error) {
+func (x *Executor) synthTransactionIsReady(batch *database.Batch, delivery *execute.Delivery, status *protocol.TransactionStatus, principal protocol.Account) (bool, error) {
 	// Do not check the principal until the transaction is ready (see below). Do
 	// not delegate "is ready?" to the transaction executor - synthetic
 	// transactions _must_ be sequenced and proven before being executed.
@@ -296,7 +296,7 @@ func (x *Executor) synthTransactionIsReady(batch *database.Batch, delivery *chai
 	// If the principal is required but missing, do not return an error unless
 	// the transaction is ready to execute.
 	// https://accumulate.atlassian.net/browse/AC-1704
-	val, ok := getValidator[chain.PrincipalValidator](x, delivery.Transaction.Body.Type())
+	val, ok := getValidator[execute.PrincipalValidator](x, delivery.Transaction.Body.Type())
 	if !ok || !val.AllowMissingPrincipal(delivery.Transaction) {
 		return false, errors.NotFound("missing principal: %v not found", delivery.Transaction.Header.Principal)
 	}
@@ -304,7 +304,7 @@ func (x *Executor) synthTransactionIsReady(batch *database.Batch, delivery *chai
 	return true, nil
 }
 
-func (x *Executor) systemTransactionIsReady(batch *database.Batch, delivery *chain.Delivery, status *protocol.TransactionStatus, principal protocol.Account) (bool, error) {
+func (x *Executor) systemTransactionIsReady(batch *database.Batch, delivery *execute.Delivery, status *protocol.TransactionStatus, principal protocol.Account) (bool, error) {
 	// Do not check the principal until the transaction is ready (see below). Do
 	// not delegate "is ready?" to the transaction executor - anchors _must_ be
 	// sequenced.
@@ -347,7 +347,7 @@ func (x *Executor) systemTransactionIsReady(batch *database.Batch, delivery *cha
 	// If the principal is required but missing, do not return an error unless
 	// the transaction is ready to execute.
 	// https://accumulate.atlassian.net/browse/AC-1704
-	val, ok := getValidator[chain.PrincipalValidator](x, delivery.Transaction.Body.Type())
+	val, ok := getValidator[execute.PrincipalValidator](x, delivery.Transaction.Body.Type())
 	if !ok || !val.AllowMissingPrincipal(delivery.Transaction) {
 		return false, errors.NotFound("missing principal: %v not found", delivery.Transaction.Header.Principal)
 	}
@@ -355,7 +355,7 @@ func (x *Executor) systemTransactionIsReady(batch *database.Batch, delivery *cha
 	return true, nil
 }
 
-func (x *Executor) recordTransaction(batch *database.Batch, delivery *chain.Delivery, state *chain.ProcessTransactionState, updateStatus func(*protocol.TransactionStatus)) (*protocol.TransactionStatus, error) {
+func (x *Executor) recordTransaction(batch *database.Batch, delivery *execute.Delivery, state *execute.ProcessTransactionState, updateStatus func(*protocol.TransactionStatus)) (*protocol.TransactionStatus, error) {
 	// Store the transaction state (without signatures)
 	db := batch.Transaction(delivery.Transaction.GetHash())
 	err := db.PutState(&database.SigOrTxn{Transaction: delivery.Transaction})
@@ -421,9 +421,9 @@ func (x *Executor) recordTransaction(batch *database.Batch, delivery *chain.Deli
 	return status, nil
 }
 
-func (x *Executor) recordPendingTransaction(net *config.Describe, batch *database.Batch, delivery *chain.Delivery) (*protocol.TransactionStatus, *chain.ProcessTransactionState, error) {
+func (x *Executor) recordPendingTransaction(net *config.Describe, batch *database.Batch, delivery *execute.Delivery) (*protocol.TransactionStatus, *execute.ProcessTransactionState, error) {
 	// Record the transaction
-	state := new(chain.ProcessTransactionState)
+	state := new(execute.ProcessTransactionState)
 	status, err := x.recordTransaction(batch, delivery, state, func(status *protocol.TransactionStatus) {
 		status.Code = errors.StatusPending
 	})
@@ -460,7 +460,7 @@ func (x *Executor) recordPendingTransaction(net *config.Describe, batch *databas
 	return status, state, nil
 }
 
-func (x *Executor) recordSuccessfulTransaction(batch *database.Batch, state *chain.ProcessTransactionState, delivery *chain.Delivery, result protocol.TransactionResult) (*protocol.TransactionStatus, *chain.ProcessTransactionState, error) {
+func (x *Executor) recordSuccessfulTransaction(batch *database.Batch, state *execute.ProcessTransactionState, delivery *execute.Delivery, result protocol.TransactionResult) (*protocol.TransactionStatus, *execute.ProcessTransactionState, error) {
 	// Record the transaction
 	status, err := x.recordTransaction(batch, delivery, state, func(status *protocol.TransactionStatus) {
 		status.Code = errors.StatusDelivered
@@ -506,9 +506,9 @@ func selectTargetChain(account *database.Account, body protocol.TransactionBody)
 	return account.MainChain()
 }
 
-func (x *Executor) recordFailedTransaction(batch *database.Batch, delivery *chain.Delivery, failure error) (*protocol.TransactionStatus, *chain.ProcessTransactionState, error) {
+func (x *Executor) recordFailedTransaction(batch *database.Batch, delivery *execute.Delivery, failure error) (*protocol.TransactionStatus, *execute.ProcessTransactionState, error) {
 	// Record the transaction
-	state := new(chain.ProcessTransactionState)
+	state := new(execute.ProcessTransactionState)
 	status, err := x.recordTransaction(batch, delivery, state, func(status *protocol.TransactionStatus) {
 		status.Set(failure)
 	})
@@ -527,7 +527,7 @@ func (x *Executor) recordFailedTransaction(batch *database.Batch, delivery *chai
 	}
 
 	// Execute the post-failure hook if the transaction executor defines one
-	if val, ok := getValidator[chain.TransactionExecutorCleanup](x, delivery.Transaction.Body.Type()); ok {
+	if val, ok := getValidator[execute.TransactionExecutorCleanup](x, delivery.Transaction.Body.Type()); ok {
 		err = val.DidFail(state, delivery.Transaction)
 		if err != nil {
 			return nil, nil, err

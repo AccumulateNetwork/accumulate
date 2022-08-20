@@ -22,11 +22,11 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/blockscheduler"
-	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
+	"gitlab.com/accumulatenetwork/accumulate/internal/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
@@ -292,7 +292,7 @@ func (n *FakeNode) Execute(inBlock func(func(*protocol.Envelope))) (sigHashes, t
 
 	bulk := new(protocol.Envelope)
 	inBlock(func(tx *protocol.Envelope) {
-		deliveries, err := chain.NormalizeEnvelope(tx)
+		deliveries, err := execute.NormalizeEnvelope(tx)
 		require.NoError(n.t, err)
 		for _, d := range deliveries {
 			bulk.Signatures = append(bulk.Signatures, d.Signatures...)

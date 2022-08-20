@@ -12,12 +12,12 @@ import (
 	"github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
-	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/memory"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/internal/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/routing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -136,8 +136,8 @@ type DataRecord struct {
 	Entry   protocol.DataEntry
 }
 
-var _ chain.TransactionExecutor = &bootstrap{}
-var _ chain.PrincipalValidator = &bootstrap{}
+var _ execute.TransactionExecutor = &bootstrap{}
+var _ execute.PrincipalValidator = &bootstrap{}
 
 func (bootstrap) Type() protocol.TransactionType {
 	return protocol.TransactionTypeSyntheticDepositTokens
@@ -147,11 +147,11 @@ func (b *bootstrap) AllowMissingPrincipal(*protocol.Transaction) bool {
 	return true
 }
 
-func (b *bootstrap) Execute(st *chain.StateManager, tx *chain.Delivery) (protocol.TransactionResult, error) {
+func (b *bootstrap) Execute(st *execute.StateManager, tx *execute.Delivery) (protocol.TransactionResult, error) {
 	return b.Validate(st, tx)
 }
 
-func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protocol.TransactionResult, error) {
+func (b *bootstrap) Validate(st *execute.StateManager, tx *execute.Delivery) (protocol.TransactionResult, error) {
 	b.networkAuthority = protocol.DnUrl().JoinPath(protocol.Operators)
 	b.partition = config.NetworkUrl{URL: protocol.PartitionUrl(b.PartitionId)}
 	b.localAuthority = b.partition.Operators()

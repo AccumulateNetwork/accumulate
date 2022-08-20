@@ -1,8 +1,8 @@
 package block
 
 import (
-	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -14,7 +14,7 @@ type Block struct {
 	Batch *database.Batch
 }
 
-func (x *Executor) ExecuteEnvelopeSet(block *Block, deliveries []*chain.Delivery, captureError func(error, *chain.Delivery, *protocol.TransactionStatus)) []*protocol.TransactionStatus {
+func (x *Executor) ExecuteEnvelopeSet(block *Block, deliveries []*execute.Delivery, captureError func(error, *execute.Delivery, *protocol.TransactionStatus)) []*protocol.TransactionStatus {
 	results := make([]*protocol.TransactionStatus, len(deliveries))
 	for i, delivery := range deliveries {
 		status, err := x.ExecuteEnvelope(block, delivery)
@@ -38,7 +38,7 @@ func (x *Executor) ExecuteEnvelopeSet(block *Block, deliveries []*chain.Delivery
 	return results
 }
 
-func (x *Executor) ExecuteEnvelope(block *Block, delivery *chain.Delivery) (*protocol.TransactionStatus, error) {
+func (x *Executor) ExecuteEnvelope(block *Block, delivery *execute.Delivery) (*protocol.TransactionStatus, error) {
 
 	if delivery.Transaction.Body.Type() == protocol.TransactionTypeSystemWriteData {
 		return nil, errors.Format(errors.StatusBadRequest, "a %v transaction cannot be submitted directly", protocol.TransactionTypeSystemWriteData)
@@ -60,7 +60,7 @@ func (x *Executor) ExecuteEnvelope(block *Block, delivery *chain.Delivery) (*pro
 
 	// Process additional transactions. This is intentionally non-recursive.
 	for len(additional) > 0 {
-		var next []*chain.Delivery
+		var next []*execute.Delivery
 		for _, delivery := range additional {
 			_, additional, err := x.executeEnvelope(block, delivery, true)
 			if err != nil {
@@ -78,7 +78,7 @@ func (x *Executor) ExecuteEnvelope(block *Block, delivery *chain.Delivery) (*pro
 	return status, nil
 }
 
-func (x *Executor) executeEnvelope(block *Block, delivery *chain.Delivery, additional bool) (*protocol.TransactionStatus, []*chain.Delivery, error) {
+func (x *Executor) executeEnvelope(block *Block, delivery *execute.Delivery, additional bool) (*protocol.TransactionStatus, []*execute.Delivery, error) {
 	{
 		fn := x.logger.Debug
 		kv := []interface{}{
@@ -159,7 +159,7 @@ func (x *Executor) executeEnvelope(block *Block, delivery *chain.Delivery, addit
 		batch := block.Batch.Begin(true)
 		defer batch.Discard()
 
-		var state *chain.ProcessTransactionState
+		var state *execute.ProcessTransactionState
 		status, state, err = x.ProcessTransaction(batch, delivery)
 		if err != nil {
 			return nil, nil, err
