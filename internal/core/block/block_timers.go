@@ -9,7 +9,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-//go:generate go run ../../tools/cmd/gen-enum  --package block enums.yml
+//go:generate go run ../../../tools/cmd/gen-enum  --package block enums.yml
 
 type BlockTimerType uint64
 
