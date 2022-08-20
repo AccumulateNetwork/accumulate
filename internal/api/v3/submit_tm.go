@@ -3,7 +3,7 @@ package api
 import (
 	"context"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/connections"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 

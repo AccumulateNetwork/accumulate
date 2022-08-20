@@ -9,7 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/client/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
-	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/routing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )

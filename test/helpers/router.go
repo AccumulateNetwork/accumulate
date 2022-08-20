@@ -5,7 +5,7 @@ import (
 
 	"github.com/tendermint/tendermint/rpc/client"
 	core "github.com/tendermint/tendermint/rpc/coretypes"
-	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/routing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"

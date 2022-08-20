@@ -23,14 +23,14 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/blockscheduler"
-	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
-	statuschk "gitlab.com/accumulatenetwork/accumulate/internal/connections/status"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/abci"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/connections"
+	statuschk "gitlab.com/accumulatenetwork/accumulate/internal/node/connections/status"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/node"
-	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/routing"
 )
 
 type Daemon struct {

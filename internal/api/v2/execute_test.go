@@ -10,15 +10,15 @@ import (
 	"github.com/stretchr/testify/require"
 	core "github.com/tendermint/tendermint/rpc/coretypes"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
-	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
-	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/connections"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/routing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 )
 
 func init() { acctesting.EnableDebugFeatures() }
 
-//go:generate go run github.com/golang/mock/mockgen -source ../../connections/connection_context.go -package api_test -destination ./mock_connections_test.go
+//go:generate go run github.com/golang/mock/mockgen -source ../../node/connections/connection_context.go -package api_test -destination ./mock_connections_test.go
 
 func TestExecuteCheckOnly(t *testing.T) {
 	env := acctesting.NewTransaction().

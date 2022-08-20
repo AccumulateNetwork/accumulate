@@ -7,7 +7,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/client/v2"
-	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/connections"
 )
 
 type NodeStatusChecker interface {

@@ -4,8 +4,8 @@ import (
 	"context"
 
 	core "github.com/tendermint/tendermint/rpc/coretypes"
-	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/connections"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
