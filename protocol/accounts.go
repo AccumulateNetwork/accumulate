@@ -26,6 +26,7 @@ func (a *ADI) GetUrl() *url.URL             { return a.Url }
 func (a *AnchorLedger) GetUrl() *url.URL    { return a.Url }
 func (a *DataAccount) GetUrl() *url.URL     { return a.Url }
 func (a *SystemLedger) GetUrl() *url.URL    { return a.Url }
+func (a *BlockLedger) GetUrl() *url.URL     { return a.Url }
 func (a *KeyBook) GetUrl() *url.URL         { return a.Url }
 func (a *KeyPage) GetUrl() *url.URL         { return a.Url }
 func (a *TokenAccount) GetUrl() *url.URL    { return a.Url }
