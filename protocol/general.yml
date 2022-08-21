@@ -143,7 +143,6 @@ KeySpecParams:
     - name: KeyHash
       type: bytes
     - name: Delegate
-      alternative: Owner
       type: url
       pointer: true
       optional: true
@@ -155,9 +154,7 @@ KeySpec:
       alternative: PublicKey
     - name: LastUsedOn
       type: uvarint
-      alternative: Nonce
     - name: Delegate
-      alternative: Owner
       type: url
       pointer: true
 
@@ -245,7 +242,6 @@ Route:
       description: is the prefix value
       type: uint
     - name: Partition
-      alternative: Subnet
       type: string
 
 RouteOverride:
@@ -254,7 +250,6 @@ RouteOverride:
       type: url
       pointer: true
     - name: Partition
-      alternative: Subnet
       type: string
 
 TokenIssuerProof:
