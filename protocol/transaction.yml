@@ -21,7 +21,6 @@ TransactionHeader:
     - name: Principal
       type: url
       pointer: true
-      alternative: Origin
     - name: Initiator
       type: hash
     - name: Memo
