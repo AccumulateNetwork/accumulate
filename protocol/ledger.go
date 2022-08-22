@@ -1,6 +1,6 @@
 package protocol
 
-import "gitlab.com/accumulatenetwork/accumulate/internal/url"
+import "gitlab.com/accumulatenetwork/accumulate/pkg/url"
 
 // Add records a received or delivered synthetic transaction.
 func (s *PartitionSyntheticLedger) Add(delivered bool, sequenceNumber uint64, txid *url.TxID) (dirty bool) {
