@@ -1,0 +1,12 @@
+EntryMetadata:
+  fields:
+  - name: BlockTime
+    type: time
+  - name: BlockHeight
+    type: uint
+    keep-empty: true
+  - name: EntryIndex
+    type: uint
+    keep-empty: true
+  - name: EntryTime
+    type: time

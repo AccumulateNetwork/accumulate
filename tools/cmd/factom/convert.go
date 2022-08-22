@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"io/ioutil"
@@ -70,8 +71,8 @@ func convert(_ *cobra.Command, args []string) {
 		fmt.Printf("Processing %s\n", filename)
 
 		type EntryData struct {
-			EntryTime time.Time //derived timestamp of entry
-			Entry     *entryBlock.Entry
+			Metadata *factom.EntryMetadata
+			Entry    *entryBlock.Entry
 		}
 
 		// Create a map of all the entries in the object file
@@ -79,8 +80,7 @@ func convert(_ *cobra.Command, args []string) {
 
 		eblocks := map[[32]byte]*entryBlock.EBlock{}
 		ebEntryIndex := map[[32]byte]int{} //duplicates tracker
-		blockTime := time.Time{}
-		blockHeight := uint32(0)
+		blockMeta := new(factom.EntryMetadata)
 
 		err = factom.ReadObjectFile(input, logger, func(header *factom.Header, object interface{}) {
 			switch header.Tag {
@@ -89,8 +89,8 @@ func convert(_ *cobra.Command, args []string) {
 				if !ok {
 					panic("expected directory block")
 				}
-				blockTime = idb.GetTimestamp().GetTime()
-				blockHeight = idb.GetHeader().GetDBHeight()
+				blockMeta.BlockTime = idb.GetTimestamp().GetTime()
+				blockMeta.BlockHeight = uint64(idb.GetHeader().GetDBHeight())
 				//reset index tracking map
 				ebEntryIndex = map[[32]byte]int{}
 			case factom.TagEBlock:
@@ -142,20 +142,19 @@ func convert(_ *cobra.Command, args []string) {
 					}
 					entriesInMinute++
 				}
-
-				ed := EntryData{blockTime, entry}
-				if found {
-					//entry timestamp down to the minute
-					ed.EntryTime = ed.EntryTime.Add(time.Minute*time.Duration(minute) +
-						//entry timestamp to order entry within minute.
-						//Option1: use arbitrary sub-minute time based on index, but uniqueness is provided
-						//time.Duration(float64(time.Minute)*float64(ebEntryIndex[entryHash])/float64(entryCountInMinute[minute]+1)))
-						//Option2: simply use the index into the minute as a microsecond (this option looks much cleaner)
-						time.Microsecond*time.Duration(ebEntryIndex[entryHash]+1))
-				} else {
-					fatalf("cannot find entry in entry block, %x at height %d", entry.GetHash().Bytes(), blockHeight)
+				if !found {
+					fatalf("cannot find entry in entry block, %x at height %d", entry.GetHash().Bytes(), blockMeta.BlockHeight)
 				}
 
+				md := blockMeta.Copy()
+				md.EntryIndex = uint64(ebEntryIndex[entryHash])
+				md.EntryTime = md.BlockTime.Add(time.Minute*time.Duration(minute) +
+					//entry timestamp to order entry within minute.
+					//Option1: use arbitrary sub-minute time based on index, but uniqueness is provided
+					//time.Duration(float64(time.Minute)*float64(md.EntryIndex)/float64(entryCountInMinute[minute]+1)))
+					//Option2: simply use the index into the minute as a microsecond (this option looks much cleaner)
+					time.Microsecond*time.Duration(md.EntryIndex+1))
+				ed := EntryData{md, entry}
 				entries[id] = append(entries[id], &ed)
 			default:
 				return
@@ -212,9 +211,8 @@ func convert(_ *cobra.Command, args []string) {
 					txn := new(protocol.Transaction)
 					txn.Header.Principal = address
 					txn.Body = &protocol.WriteData{Entry: entry}
-
-					// Each transaction needs to be unique so add a timestamp which is the timestamp from the Factom chain
-					txn.Header.Memo = fmt.Sprintf("%v", e.EntryTime.UTC())
+					txn.Header.Metadata, err = e.Metadata.MarshalBinary()
+					checkf(err, "marshal entry metadata")
 
 					// Construct the transaction result
 					result := new(protocol.WriteDataResult)
@@ -233,7 +231,8 @@ func convert(_ *cobra.Command, args []string) {
 					_, err = txnrec.Main().Get()
 					switch {
 					case err == nil:
-						fatalf("Somehow we created a duplicate transaction")
+						b, _ := json.Marshal(e.Metadata)
+						fatalf("Duplicate transaction for %s\n", b)
 					case errors.Is(err, errors.StatusNotFound):
 						// Ok
 					default:
