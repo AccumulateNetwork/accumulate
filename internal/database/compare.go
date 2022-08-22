@@ -13,14 +13,6 @@ func (e *TransactionChainEntry) Compare(f *TransactionChainEntry) int {
 	return strings.Compare(e.Chain, f.Chain)
 }
 
-func (u *ChainUpdate) Compare(v *ChainUpdate) int {
-	c := u.Account.Compare(v.Account)
-	if c != 0 {
-		return c
-	}
-	return strings.Compare(u.Name, v.Name)
-}
-
 func (e *BlockStateSynthTxnEntry) Compare(f *BlockStateSynthTxnEntry) int {
 	v := bytes.Compare(e.Transaction, f.Transaction)
 	switch {
