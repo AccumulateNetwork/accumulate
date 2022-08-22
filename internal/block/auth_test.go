@@ -629,7 +629,7 @@ func TestValidateKeyForSynthTxns(t *testing.T) {
 	batch := x.Database.Begin(false)
 	defer batch.Discard()
 	_, err := x.Executor.ValidateEnvelope(batch, deposit)
-	require.EqualError(t, err, fmt.Sprintf("signature %d: the key used to sign does not belong to the originating subnet", index))
+	require.EqualError(t, err, fmt.Sprintf("signature %d: key is not an active validator for BVN0", index))
 }
 
 //Checks if the key used to sign the synthetic transaction belongs to the same subnet
@@ -703,5 +703,5 @@ func TestKeySignaturePartition(t *testing.T) {
 	batch := x.Database.Begin(false)
 	defer batch.Discard()
 	_, err := x.Executor.ValidateEnvelope(batch, deposit)
-	require.EqualError(t, err, fmt.Sprintf("signature %d: the key used to sign does not belong to the originating subnet", index))
+	require.EqualError(t, err, fmt.Sprintf("signature %d: key is not an active validator for BVN0", index))
 }
