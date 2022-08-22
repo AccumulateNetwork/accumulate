@@ -536,12 +536,10 @@ DescriptionResponse:
   incomparable: true
   fields:
     - name: PartitionId
-      alternative: SubnetId
       type: string
     - name: NetworkType
       type: config.NetworkType
     - name: Network
-      alternative: Subnet
       type: config.Network
       marshal-as: reference
     - name: NetworkAnchor

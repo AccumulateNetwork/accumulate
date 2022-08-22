@@ -14348,15 +14348,11 @@ func (v *WriteDataTo) UnmarshalBinaryFrom(rd io.Reader) error {
 
 func (v *ADI) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type           AccountType                       `json:"type"`
-		KeyBook        *url.URL                          `json:"keyBook,omitempty"`
-		ManagerKeyBook *url.URL                          `json:"managerKeyBook,omitempty"`
-		Url            *url.URL                          `json:"url,omitempty"`
-		Authorities    encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
+		Type        AccountType                       `json:"type"`
+		Url         *url.URL                          `json:"url,omitempty"`
+		Authorities encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.KeyBook = v.KeyBook()
-	u.ManagerKeyBook = v.ManagerKeyBook()
 	u.Url = v.Url
 	u.Authorities = v.AccountAuth.Authorities
 	return json.Marshal(&u)
@@ -14675,16 +14671,12 @@ func (v *CreateTokenAccount) MarshalJSON() ([]byte, error) {
 
 func (v *DataAccount) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type           AccountType                           `json:"type"`
-		KeyBook        *url.URL                              `json:"keyBook,omitempty"`
-		ManagerKeyBook *url.URL                              `json:"managerKeyBook,omitempty"`
-		Url            *url.URL                              `json:"url,omitempty"`
-		Authorities    encoding.JsonList[AuthorityEntry]     `json:"authorities,omitempty"`
-		Entry          encoding.JsonUnmarshalWith[DataEntry] `json:"entry,omitempty"`
+		Type        AccountType                           `json:"type"`
+		Url         *url.URL                              `json:"url,omitempty"`
+		Authorities encoding.JsonList[AuthorityEntry]     `json:"authorities,omitempty"`
+		Entry       encoding.JsonUnmarshalWith[DataEntry] `json:"entry,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.KeyBook = v.KeyBook()
-	u.ManagerKeyBook = v.ManagerKeyBook()
 	u.Url = v.Url
 	u.Authorities = v.AccountAuth.Authorities
 	u.Entry = encoding.JsonUnmarshalWith[DataEntry]{Value: v.Entry, Func: UnmarshalDataEntryJSON}
@@ -14875,17 +14867,13 @@ func (v *IssueTokens) MarshalJSON() ([]byte, error) {
 
 func (v *KeyBook) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type           AccountType                       `json:"type"`
-		KeyBook        *url.URL                          `json:"keyBook,omitempty"`
-		ManagerKeyBook *url.URL                          `json:"managerKeyBook,omitempty"`
-		Url            *url.URL                          `json:"url,omitempty"`
-		BookType       BookType                          `json:"bookType,omitempty"`
-		Authorities    encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
-		PageCount      uint64                            `json:"pageCount,omitempty"`
+		Type        AccountType                       `json:"type"`
+		Url         *url.URL                          `json:"url,omitempty"`
+		BookType    BookType                          `json:"bookType,omitempty"`
+		Authorities encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
+		PageCount   uint64                            `json:"pageCount,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.KeyBook = v.KeyBook()
-	u.ManagerKeyBook = v.ManagerKeyBook()
 	u.Url = v.Url
 	u.BookType = v.BookType
 	u.Authorities = v.AccountAuth.Authorities
@@ -14928,16 +14916,12 @@ func (v *KeySpec) MarshalJSON() ([]byte, error) {
 		PublicKeyHash *string  `json:"publicKeyHash,omitempty"`
 		PublicKey     *string  `json:"publicKey,omitempty"`
 		LastUsedOn    uint64   `json:"lastUsedOn,omitempty"`
-		Nonce         uint64   `json:"nonce,omitempty"`
 		Delegate      *url.URL `json:"delegate,omitempty"`
-		Owner         *url.URL `json:"owner,omitempty"`
 	}{}
 	u.PublicKeyHash = encoding.BytesToJSON(v.PublicKeyHash)
 	u.PublicKey = encoding.BytesToJSON(v.PublicKeyHash)
 	u.LastUsedOn = v.LastUsedOn
-	u.Nonce = v.LastUsedOn
 	u.Delegate = v.Delegate
-	u.Owner = v.Delegate
 	return json.Marshal(&u)
 }
 
@@ -14945,11 +14929,9 @@ func (v *KeySpecParams) MarshalJSON() ([]byte, error) {
 	u := struct {
 		KeyHash  *string  `json:"keyHash,omitempty"`
 		Delegate *url.URL `json:"delegate,omitempty"`
-		Owner    *url.URL `json:"owner,omitempty"`
 	}{}
 	u.KeyHash = encoding.BytesToJSON(v.KeyHash)
 	u.Delegate = v.Delegate
-	u.Owner = v.Delegate
 	return json.Marshal(&u)
 }
 
@@ -14957,7 +14939,6 @@ func (v *LegacyED25519Signature) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type            SignatureType `json:"type"`
 		Timestamp       uint64        `json:"timestamp,omitempty"`
-		Nonce           uint64        `json:"nonce,omitempty"`
 		PublicKey       *string       `json:"publicKey,omitempty"`
 		Signature       *string       `json:"signature,omitempty"`
 		Signer          *url.URL      `json:"signer,omitempty"`
@@ -14967,7 +14948,6 @@ func (v *LegacyED25519Signature) MarshalJSON() ([]byte, error) {
 	}{}
 	u.Type = v.Type()
 	u.Timestamp = v.Timestamp
-	u.Nonce = v.Timestamp
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.Signature = encoding.BytesToJSON(v.Signature)
 	u.Signer = v.Signer
@@ -14993,13 +14973,11 @@ func (v *LiteIdentity) MarshalJSON() ([]byte, error) {
 		Url           *url.URL    `json:"url,omitempty"`
 		CreditBalance uint64      `json:"creditBalance,omitempty"`
 		LastUsedOn    uint64      `json:"lastUsedOn,omitempty"`
-		Nonce         uint64      `json:"nonce,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
 	u.CreditBalance = v.CreditBalance
 	u.LastUsedOn = v.LastUsedOn
-	u.Nonce = v.LastUsedOn
 	return json.Marshal(&u)
 }
 
@@ -15208,32 +15186,6 @@ func (v *RemoveKeyOperation) MarshalJSON() ([]byte, error) {
 	}{}
 	u.Type = v.Type()
 	u.Entry = v.Entry
-	return json.Marshal(&u)
-}
-
-func (v *Route) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Length    uint64 `json:"length,omitempty"`
-		Value     uint64 `json:"value,omitempty"`
-		Partition string `json:"partition,omitempty"`
-		Subnet    string `json:"subnet,omitempty"`
-	}{}
-	u.Length = v.Length
-	u.Value = v.Value
-	u.Partition = v.Partition
-	u.Subnet = v.Partition
-	return json.Marshal(&u)
-}
-
-func (v *RouteOverride) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Account   *url.URL `json:"account,omitempty"`
-		Partition string   `json:"partition,omitempty"`
-		Subnet    string   `json:"subnet,omitempty"`
-	}{}
-	u.Account = v.Account
-	u.Partition = v.Partition
-	u.Subnet = v.Partition
 	return json.Marshal(&u)
 }
 
@@ -15457,17 +15409,13 @@ func (v *SystemWriteData) MarshalJSON() ([]byte, error) {
 
 func (v *TokenAccount) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type           AccountType                       `json:"type"`
-		KeyBook        *url.URL                          `json:"keyBook,omitempty"`
-		ManagerKeyBook *url.URL                          `json:"managerKeyBook,omitempty"`
-		Url            *url.URL                          `json:"url,omitempty"`
-		Authorities    encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
-		TokenUrl       *url.URL                          `json:"tokenUrl,omitempty"`
-		Balance        *string                           `json:"balance,omitempty"`
+		Type        AccountType                       `json:"type"`
+		Url         *url.URL                          `json:"url,omitempty"`
+		Authorities encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
+		TokenUrl    *url.URL                          `json:"tokenUrl,omitempty"`
+		Balance     *string                           `json:"balance,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.KeyBook = v.KeyBook()
-	u.ManagerKeyBook = v.ManagerKeyBook()
 	u.Url = v.Url
 	u.Authorities = v.AccountAuth.Authorities
 	u.TokenUrl = v.TokenUrl
@@ -15477,20 +15425,16 @@ func (v *TokenAccount) MarshalJSON() ([]byte, error) {
 
 func (v *TokenIssuer) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type           AccountType                       `json:"type"`
-		KeyBook        *url.URL                          `json:"keyBook,omitempty"`
-		ManagerKeyBook *url.URL                          `json:"managerKeyBook,omitempty"`
-		Url            *url.URL                          `json:"url,omitempty"`
-		Authorities    encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
-		Symbol         string                            `json:"symbol,omitempty"`
-		Precision      uint64                            `json:"precision,omitempty"`
-		Properties     *url.URL                          `json:"properties,omitempty"`
-		Issued         *string                           `json:"issued,omitempty"`
-		SupplyLimit    *string                           `json:"supplyLimit,omitempty"`
+		Type        AccountType                       `json:"type"`
+		Url         *url.URL                          `json:"url,omitempty"`
+		Authorities encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
+		Symbol      string                            `json:"symbol,omitempty"`
+		Precision   uint64                            `json:"precision,omitempty"`
+		Properties  *url.URL                          `json:"properties,omitempty"`
+		Issued      *string                           `json:"issued,omitempty"`
+		SupplyLimit *string                           `json:"supplyLimit,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.KeyBook = v.KeyBook()
-	u.ManagerKeyBook = v.ManagerKeyBook()
 	u.Url = v.Url
 	u.Authorities = v.AccountAuth.Authorities
 	u.Symbol = v.Symbol
@@ -15524,13 +15468,11 @@ func (v *Transaction) MarshalJSON() ([]byte, error) {
 func (v *TransactionHeader) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Principal *url.URL `json:"principal,omitempty"`
-		Origin    *url.URL `json:"origin,omitempty"`
 		Initiator string   `json:"initiator,omitempty"`
 		Memo      string   `json:"memo,omitempty"`
 		Metadata  *string  `json:"metadata,omitempty"`
 	}{}
 	u.Principal = v.Principal
-	u.Origin = v.Principal
 	u.Initiator = encoding.ChainToJSON(v.Initiator)
 	u.Memo = v.Memo
 	u.Metadata = encoding.BytesToJSON(v.Metadata)
@@ -15723,15 +15665,11 @@ func (v *WriteDataTo) MarshalJSON() ([]byte, error) {
 
 func (v *ADI) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type           AccountType                       `json:"type"`
-		KeyBook        *url.URL                          `json:"keyBook,omitempty"`
-		ManagerKeyBook *url.URL                          `json:"managerKeyBook,omitempty"`
-		Url            *url.URL                          `json:"url,omitempty"`
-		Authorities    encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
+		Type        AccountType                       `json:"type"`
+		Url         *url.URL                          `json:"url,omitempty"`
+		Authorities encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.KeyBook = v.KeyBook()
-	u.ManagerKeyBook = v.ManagerKeyBook()
 	u.Url = v.Url
 	u.Authorities = v.AccountAuth.Authorities
 	if err := json.Unmarshal(data, &u); err != nil {
@@ -16325,16 +16263,12 @@ func (v *CreateTokenAccount) UnmarshalJSON(data []byte) error {
 
 func (v *DataAccount) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type           AccountType                           `json:"type"`
-		KeyBook        *url.URL                              `json:"keyBook,omitempty"`
-		ManagerKeyBook *url.URL                              `json:"managerKeyBook,omitempty"`
-		Url            *url.URL                              `json:"url,omitempty"`
-		Authorities    encoding.JsonList[AuthorityEntry]     `json:"authorities,omitempty"`
-		Entry          encoding.JsonUnmarshalWith[DataEntry] `json:"entry,omitempty"`
+		Type        AccountType                           `json:"type"`
+		Url         *url.URL                              `json:"url,omitempty"`
+		Authorities encoding.JsonList[AuthorityEntry]     `json:"authorities,omitempty"`
+		Entry       encoding.JsonUnmarshalWith[DataEntry] `json:"entry,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.KeyBook = v.KeyBook()
-	u.ManagerKeyBook = v.ManagerKeyBook()
 	u.Url = v.Url
 	u.Authorities = v.AccountAuth.Authorities
 	u.Entry = encoding.JsonUnmarshalWith[DataEntry]{Value: v.Entry, Func: UnmarshalDataEntryJSON}
@@ -16725,17 +16659,13 @@ func (v *IssueTokens) UnmarshalJSON(data []byte) error {
 
 func (v *KeyBook) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type           AccountType                       `json:"type"`
-		KeyBook        *url.URL                          `json:"keyBook,omitempty"`
-		ManagerKeyBook *url.URL                          `json:"managerKeyBook,omitempty"`
-		Url            *url.URL                          `json:"url,omitempty"`
-		BookType       BookType                          `json:"bookType,omitempty"`
-		Authorities    encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
-		PageCount      uint64                            `json:"pageCount,omitempty"`
+		Type        AccountType                       `json:"type"`
+		Url         *url.URL                          `json:"url,omitempty"`
+		BookType    BookType                          `json:"bookType,omitempty"`
+		Authorities encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
+		PageCount   uint64                            `json:"pageCount,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.KeyBook = v.KeyBook()
-	u.ManagerKeyBook = v.ManagerKeyBook()
 	u.Url = v.Url
 	u.BookType = v.BookType
 	u.Authorities = v.AccountAuth.Authorities
@@ -16807,16 +16737,12 @@ func (v *KeySpec) UnmarshalJSON(data []byte) error {
 		PublicKeyHash *string  `json:"publicKeyHash,omitempty"`
 		PublicKey     *string  `json:"publicKey,omitempty"`
 		LastUsedOn    uint64   `json:"lastUsedOn,omitempty"`
-		Nonce         uint64   `json:"nonce,omitempty"`
 		Delegate      *url.URL `json:"delegate,omitempty"`
-		Owner         *url.URL `json:"owner,omitempty"`
 	}{}
 	u.PublicKeyHash = encoding.BytesToJSON(v.PublicKeyHash)
 	u.PublicKey = encoding.BytesToJSON(v.PublicKeyHash)
 	u.LastUsedOn = v.LastUsedOn
-	u.Nonce = v.LastUsedOn
 	u.Delegate = v.Delegate
-	u.Owner = v.Delegate
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -16833,16 +16759,8 @@ func (v *KeySpec) UnmarshalJSON(data []byte) error {
 			v.PublicKeyHash = x
 		}
 	}
-	if !(u.LastUsedOn == 0) {
-		v.LastUsedOn = u.LastUsedOn
-	} else {
-		v.LastUsedOn = u.Nonce
-	}
-	if !(u.Delegate == nil) {
-		v.Delegate = u.Delegate
-	} else {
-		v.Delegate = u.Owner
-	}
+	v.LastUsedOn = u.LastUsedOn
+	v.Delegate = u.Delegate
 	return nil
 }
 
@@ -16850,11 +16768,9 @@ func (v *KeySpecParams) UnmarshalJSON(data []byte) error {
 	u := struct {
 		KeyHash  *string  `json:"keyHash,omitempty"`
 		Delegate *url.URL `json:"delegate,omitempty"`
-		Owner    *url.URL `json:"owner,omitempty"`
 	}{}
 	u.KeyHash = encoding.BytesToJSON(v.KeyHash)
 	u.Delegate = v.Delegate
-	u.Owner = v.Delegate
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -16863,11 +16779,7 @@ func (v *KeySpecParams) UnmarshalJSON(data []byte) error {
 	} else {
 		v.KeyHash = x
 	}
-	if !(u.Delegate == nil) {
-		v.Delegate = u.Delegate
-	} else {
-		v.Delegate = u.Owner
-	}
+	v.Delegate = u.Delegate
 	return nil
 }
 
@@ -16875,7 +16787,6 @@ func (v *LegacyED25519Signature) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type            SignatureType `json:"type"`
 		Timestamp       uint64        `json:"timestamp,omitempty"`
-		Nonce           uint64        `json:"nonce,omitempty"`
 		PublicKey       *string       `json:"publicKey,omitempty"`
 		Signature       *string       `json:"signature,omitempty"`
 		Signer          *url.URL      `json:"signer,omitempty"`
@@ -16885,7 +16796,6 @@ func (v *LegacyED25519Signature) UnmarshalJSON(data []byte) error {
 	}{}
 	u.Type = v.Type()
 	u.Timestamp = v.Timestamp
-	u.Nonce = v.Timestamp
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.Signature = encoding.BytesToJSON(v.Signature)
 	u.Signer = v.Signer
@@ -16898,11 +16808,7 @@ func (v *LegacyED25519Signature) UnmarshalJSON(data []byte) error {
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
-	if !(u.Timestamp == 0) {
-		v.Timestamp = u.Timestamp
-	} else {
-		v.Timestamp = u.Nonce
-	}
+	v.Timestamp = u.Timestamp
 	if x, err := encoding.BytesFromJSON(u.PublicKey); err != nil {
 		return fmt.Errorf("error decoding PublicKey: %w", err)
 	} else {
@@ -16947,13 +16853,11 @@ func (v *LiteIdentity) UnmarshalJSON(data []byte) error {
 		Url           *url.URL    `json:"url,omitempty"`
 		CreditBalance uint64      `json:"creditBalance,omitempty"`
 		LastUsedOn    uint64      `json:"lastUsedOn,omitempty"`
-		Nonce         uint64      `json:"nonce,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
 	u.CreditBalance = v.CreditBalance
 	u.LastUsedOn = v.LastUsedOn
-	u.Nonce = v.LastUsedOn
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -16962,11 +16866,7 @@ func (v *LiteIdentity) UnmarshalJSON(data []byte) error {
 	}
 	v.Url = u.Url
 	v.CreditBalance = u.CreditBalance
-	if !(u.LastUsedOn == 0) {
-		v.LastUsedOn = u.LastUsedOn
-	} else {
-		v.LastUsedOn = u.Nonce
-	}
+	v.LastUsedOn = u.LastUsedOn
 	return nil
 }
 
@@ -17343,51 +17243,6 @@ func (v *RemoveKeyOperation) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Entry = u.Entry
-	return nil
-}
-
-func (v *Route) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Length    uint64 `json:"length,omitempty"`
-		Value     uint64 `json:"value,omitempty"`
-		Partition string `json:"partition,omitempty"`
-		Subnet    string `json:"subnet,omitempty"`
-	}{}
-	u.Length = v.Length
-	u.Value = v.Value
-	u.Partition = v.Partition
-	u.Subnet = v.Partition
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	v.Length = u.Length
-	v.Value = u.Value
-	if !(u.Partition == "") {
-		v.Partition = u.Partition
-	} else {
-		v.Partition = u.Subnet
-	}
-	return nil
-}
-
-func (v *RouteOverride) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Account   *url.URL `json:"account,omitempty"`
-		Partition string   `json:"partition,omitempty"`
-		Subnet    string   `json:"subnet,omitempty"`
-	}{}
-	u.Account = v.Account
-	u.Partition = v.Partition
-	u.Subnet = v.Partition
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	v.Account = u.Account
-	if !(u.Partition == "") {
-		v.Partition = u.Partition
-	} else {
-		v.Partition = u.Subnet
-	}
 	return nil
 }
 
@@ -17774,17 +17629,13 @@ func (v *SystemWriteData) UnmarshalJSON(data []byte) error {
 
 func (v *TokenAccount) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type           AccountType                       `json:"type"`
-		KeyBook        *url.URL                          `json:"keyBook,omitempty"`
-		ManagerKeyBook *url.URL                          `json:"managerKeyBook,omitempty"`
-		Url            *url.URL                          `json:"url,omitempty"`
-		Authorities    encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
-		TokenUrl       *url.URL                          `json:"tokenUrl,omitempty"`
-		Balance        *string                           `json:"balance,omitempty"`
+		Type        AccountType                       `json:"type"`
+		Url         *url.URL                          `json:"url,omitempty"`
+		Authorities encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
+		TokenUrl    *url.URL                          `json:"tokenUrl,omitempty"`
+		Balance     *string                           `json:"balance,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.KeyBook = v.KeyBook()
-	u.ManagerKeyBook = v.ManagerKeyBook()
 	u.Url = v.Url
 	u.Authorities = v.AccountAuth.Authorities
 	u.TokenUrl = v.TokenUrl
@@ -17808,20 +17659,16 @@ func (v *TokenAccount) UnmarshalJSON(data []byte) error {
 
 func (v *TokenIssuer) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type           AccountType                       `json:"type"`
-		KeyBook        *url.URL                          `json:"keyBook,omitempty"`
-		ManagerKeyBook *url.URL                          `json:"managerKeyBook,omitempty"`
-		Url            *url.URL                          `json:"url,omitempty"`
-		Authorities    encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
-		Symbol         string                            `json:"symbol,omitempty"`
-		Precision      uint64                            `json:"precision,omitempty"`
-		Properties     *url.URL                          `json:"properties,omitempty"`
-		Issued         *string                           `json:"issued,omitempty"`
-		SupplyLimit    *string                           `json:"supplyLimit,omitempty"`
+		Type        AccountType                       `json:"type"`
+		Url         *url.URL                          `json:"url,omitempty"`
+		Authorities encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
+		Symbol      string                            `json:"symbol,omitempty"`
+		Precision   uint64                            `json:"precision,omitempty"`
+		Properties  *url.URL                          `json:"properties,omitempty"`
+		Issued      *string                           `json:"issued,omitempty"`
+		SupplyLimit *string                           `json:"supplyLimit,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.KeyBook = v.KeyBook()
-	u.ManagerKeyBook = v.ManagerKeyBook()
 	u.Url = v.Url
 	u.Authorities = v.AccountAuth.Authorities
 	u.Symbol = v.Symbol
@@ -17891,24 +17738,18 @@ func (v *Transaction) UnmarshalJSON(data []byte) error {
 func (v *TransactionHeader) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Principal *url.URL `json:"principal,omitempty"`
-		Origin    *url.URL `json:"origin,omitempty"`
 		Initiator string   `json:"initiator,omitempty"`
 		Memo      string   `json:"memo,omitempty"`
 		Metadata  *string  `json:"metadata,omitempty"`
 	}{}
 	u.Principal = v.Principal
-	u.Origin = v.Principal
 	u.Initiator = encoding.ChainToJSON(v.Initiator)
 	u.Memo = v.Memo
 	u.Metadata = encoding.BytesToJSON(v.Metadata)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	if !(u.Principal == nil) {
-		v.Principal = u.Principal
-	} else {
-		v.Principal = u.Origin
-	}
+	v.Principal = u.Principal
 	if x, err := encoding.ChainFromJSON(u.Initiator); err != nil {
 		return fmt.Errorf("error decoding Initiator: %w", err)
 	} else {
