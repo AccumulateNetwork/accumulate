@@ -21,8 +21,6 @@ sigSetData:
 
 SigSetEntry:
   fields:
-    - name: System
-      type: bool
     - name: Type
       type: protocol.SignatureType
       marshal-as: enum
@@ -30,6 +28,9 @@ SigSetEntry:
       type: uint
     - name: SignatureHash
       type: hash
+    - name: ValidatorKeyHash
+      type: hash
+      pointer: true
 
 SigOrTxn:
   fields:
@@ -126,25 +127,6 @@ TransactionChainEntry:
   - name: AnchorIndex
     description: is the index of the entry in the anchor chain's index chain
     type: uint
-
-ChainUpdate:
-  fields:
-    - name: Account
-      type: url
-      pointer: true
-    - name: Name
-      type: string
-    - name: Type
-      type: protocol.ChainType
-      marshal-as: enum
-    - name: Index
-      type: uint
-    - name: SourceIndex
-      type: uint
-    - name: SourceBlock
-      type: uint
-    - name: Entry
-      type: bytes
 
 BlockStateSynthTxnEntry:
   fields:

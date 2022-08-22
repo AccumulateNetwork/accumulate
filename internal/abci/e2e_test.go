@@ -23,7 +23,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/testing/e2e"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	randpkg "golang.org/x/exp/rand"
 )
@@ -1954,7 +1954,8 @@ func TestNetworkDefinition(t *testing.T) {
 
 	networkDefs := dn.exec.ActiveGlobals_TESTONLY().Network
 	require.NotEmpty(t, networkDefs.Partitions)
-	require.NotEmpty(t, networkDefs.Partitions[0].PartitionID)
-	require.NotEmpty(t, networkDefs.Partitions[0].ValidatorKeys)
-	require.NotEmpty(t, networkDefs.Partitions[0].ValidatorKeys[0])
+	require.NotEmpty(t, networkDefs.Partitions[0].ID)
+	require.NotEmpty(t, networkDefs.Validators)
+	require.NotEmpty(t, networkDefs.Validators[0].PublicKey)
+	require.NotEmpty(t, networkDefs.Validators[0].Partitions)
 }

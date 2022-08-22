@@ -1,13 +1,11 @@
 package chain
 
 import (
-	"fmt"
-	"strings"
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -54,8 +52,7 @@ func (s *ProcessTransactionState) Merge(r *ProcessTransactionState) {
 }
 
 type ChainUpdates struct {
-	chains       map[string]*database.ChainUpdate
-	Entries      []database.ChainUpdate
+	Entries      []*protocol.BlockEntry
 	SynthEntries []*database.BlockStateSynthTxnEntry
 }
 
@@ -67,21 +64,8 @@ func (c *ChainUpdates) Merge(d *ChainUpdates) {
 }
 
 // DidUpdateChain records a chain update.
-func (c *ChainUpdates) DidUpdateChain(update database.ChainUpdate) {
-	if c.chains == nil {
-		c.chains = map[string]*database.ChainUpdate{}
-	}
-
-	str := strings.ToLower(fmt.Sprintf("%s#chain/%s", update.Account, update.Name))
-	ptr, ok := c.chains[str]
-	if ok {
-		*ptr = update
-		return
-	}
-
-	i := len(c.Entries)
+func (c *ChainUpdates) DidUpdateChain(update *protocol.BlockEntry) {
 	c.Entries = append(c.Entries, update)
-	c.chains[str] = &c.Entries[i]
 }
 
 // DidAddChainEntry records a chain update in the block state.
@@ -97,15 +81,11 @@ func (c *ChainUpdates) DidAddChainEntry(batch *database.Batch, u *url.URL, name 
 		}
 	}
 
-	var update database.ChainUpdate
-	update.Name = name
-	update.Type = typ
+	var update protocol.BlockEntry
 	update.Account = u
+	update.Chain = name
 	update.Index = index
-	update.SourceIndex = sourceIndex
-	update.SourceBlock = sourceBlock
-	update.Entry = entry
-	c.DidUpdateChain(update)
+	c.DidUpdateChain(&update)
 	return nil
 }
 

@@ -14,7 +14,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
@@ -572,6 +572,12 @@ func (m *queryBackend) queryByTxId(batch *database.Batch, txid []byte, prove, re
 		return nil, errors.NotFound("transaction %X not found", txid[:4])
 	}
 
+	globals, err := m.loadGlobals()
+	if err != nil {
+		m.logger.Error("Failed to load globals", "error", err)
+		return nil, errors.Format(errors.StatusInternalError, "Internal error")
+	}
+
 	qr := query.ResponseByTxId{}
 	qr.Envelope = new(protocol.Envelope)
 	qr.Envelope.Transaction = []*protocol.Transaction{txState.Transaction}
@@ -581,7 +587,7 @@ func (m *queryBackend) queryByTxId(batch *database.Batch, txid []byte, prove, re
 
 	if anchorDest != nil {
 		// Build a block anchor for the requester
-		qr.Envelope, err = shared.PrepareBlockAnchor(m.Describe, m.Key, batch, txState.Transaction.Body, status.SequenceNumber, anchorDest)
+		qr.Envelope, err = shared.PrepareBlockAnchor(m.Describe, globals.Network, m.Key, batch, txState.Transaction.Body, status.SequenceNumber, anchorDest)
 		if err != nil {
 			return nil, err
 		}
@@ -608,7 +614,7 @@ func (m *queryBackend) queryByTxId(batch *database.Batch, txid []byte, prove, re
 		qr.Envelope.Signatures = append(qr.Envelope.Signatures, receiptSig)
 
 		// Add the key signature
-		keySig, err := shared.SignTransaction(m.Describe, m.Key, batch, txState.Transaction, status.DestinationNetwork)
+		keySig, err := shared.SignTransaction(globals.Network, m.Key, batch, txState.Transaction, status.DestinationNetwork)
 		if err != nil {
 			return nil, errors.Format(errors.StatusInternalError, "sign synthetic transaction: %w", err)
 		}
@@ -617,8 +623,13 @@ func (m *queryBackend) queryByTxId(batch *database.Batch, txid []byte, prove, re
 
 	if signSynth || anchorDest != nil {
 		// TODO This is pretty hacky
-		var page *protocol.KeyPage
-		err = batch.Account(m.Describe.OperatorsPage()).GetStateAs(&page)
+		source, ok := protocol.ParsePartitionUrl(status.SourceNetwork)
+		if !ok {
+			return nil, errors.Format(errors.StatusInternalError, "source is not a partition")
+		}
+
+		signer := globals.AsSigner(source)
+		sigSet, err := tx.SignaturesForSigner(signer)
 		if err != nil {
 			return nil, err
 		}
@@ -638,11 +649,11 @@ func (m *queryBackend) queryByTxId(batch *database.Batch, txid []byte, prove, re
 				}
 
 			case protocol.KeySignature:
-				i, _, ok := page.EntryByKeyHash(sig.GetPublicKeyHash())
+				i, _, ok := signer.EntryByKeyHash(sig.GetPublicKeyHash())
 				if !ok {
-					return nil, errors.Format(errors.StatusInternalError, "node key is missing from operator book")
+					return nil, errors.Format(errors.StatusInternalError, "node key is missing from network definition")
 				}
-				_, err = tx.AddSignature(uint64(i), sig)
+				_, err = sigSet.Add(uint64(i), sig)
 				if err != nil {
 					return nil, err
 				}
@@ -1112,21 +1123,43 @@ resultLoop:
 		minorEntry.BlockTime = curEntry.BlockTime
 
 		if req.TxFetchMode < query.TxFetchModeOmit {
-			chainUpdatesIndex, err := indexing.BlockChainUpdates(batch, m.Options.Describe, curEntry.BlockIndex).Get()
+			var block *protocol.BlockLedger
+			err = batch.Account(m.Describe.BlockLedger(curEntry.BlockIndex)).Main().GetAs(&block)
 			if err != nil {
 				return nil, errors.Wrap(errors.StatusUnknownError, err)
 			}
 
 			minorEntry.TxCount = uint64(0)
 			seen := map[[32]byte]bool{}
-			for _, updIdx := range chainUpdatesIndex {
+			for _, entry := range block.Entries {
+				chain, err := batch.Account(entry.Account).ChainByName(entry.Chain)
+				switch {
+				case err == nil:
+					// Ok
+				case errors.Is(err, errors.StatusNotFound):
+					// If the chain can't be found, skip it
+					continue
+				default:
+					return nil, errors.Format(errors.StatusUnknownError, "load account %v chain %v: %w", entry.Account, entry.Chain, err)
+				}
+
 				// Only care about the main chain
-				if updIdx.Type != protocol.ChainTypeTransaction || updIdx.Name != "main" {
+				if chain.Type() != protocol.ChainTypeTransaction || !strings.EqualFold(chain.Name(), "main") {
 					continue
 				}
 
+				chain2, err := chain.Get()
+				if err != nil {
+					return nil, errors.Format(errors.StatusUnknownError, "load head of account %v chain %v: %w", entry.Account, entry.Chain, err)
+				}
+
+				hash, err := chain2.Entry(int64(entry.Index))
+				if err != nil {
+					return nil, errors.Format(errors.StatusUnknownError, "load account %v chain %v entry %d: %w", entry.Account, entry.Chain, entry.Index, err)
+				}
+
 				// Only include each transaction once
-				entry := *(*[32]byte)(updIdx.Entry)
+				entry := *(*[32]byte)(hash)
 				if seen[entry] {
 					continue
 				} else {
@@ -1134,10 +1167,10 @@ resultLoop:
 				}
 
 				if req.TxFetchMode <= query.TxFetchModeIds {
-					minorEntry.TxIds = append(minorEntry.TxIds, updIdx.Entry)
+					minorEntry.TxIds = append(minorEntry.TxIds, hash)
 				}
 				if req.TxFetchMode == query.TxFetchModeExpand {
-					qr, err := m.queryByTxId(batch, updIdx.Entry, false, false, false, nil)
+					qr, err := m.queryByTxId(batch, hash, false, false, false, nil)
 					if err == nil {
 						minorEntry.TxCount++
 						minorEntry.Transactions = append(minorEntry.Transactions, qr)

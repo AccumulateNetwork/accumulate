@@ -4,7 +4,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -77,7 +77,16 @@ func (g *GlobalValues) FormatGlobals() protocol.DataEntry {
 }
 
 func (g *GlobalValues) ParseNetwork(entry protocol.DataEntry) error {
-	return parseEntryAs(labelNetwork, entry, new(protocol.NetworkDefinition), &g.Network)
+	version := g.Network.Version
+	err := parseEntryAs(labelNetwork, entry, new(protocol.NetworkDefinition), &g.Network)
+	if err != nil {
+		return err
+	}
+
+	if g.Network.Version <= version {
+		return errors.Format(errors.StatusBadRequest, "version must increase: %d <= %d", g.Network.Version, version)
+	}
+	return nil
 }
 
 func (g *GlobalValues) FormatNetwork() protocol.DataEntry {

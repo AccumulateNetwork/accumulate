@@ -103,8 +103,8 @@ func NewNodeExecutor(opts ExecutorOptions, db database.Beginner) (*Executor, err
 
 // NewGenesisExecutor creates a transaction executor that can be used to set up
 // the genesis state.
-func NewGenesisExecutor(db *database.Database, logger log.Logger, network *config.Describe, router routing.Router) (*Executor, error) {
-	return newExecutor(
+func NewGenesisExecutor(db *database.Database, logger log.Logger, network *config.Describe, globals *core.GlobalValues, router routing.Router) (*Executor, error) {
+	exec, err := newExecutor(
 		ExecutorOptions{
 			Describe:  *network,
 			Logger:    logger,
@@ -114,6 +114,13 @@ func NewGenesisExecutor(db *database.Database, logger log.Logger, network *confi
 		db,
 		chain.SystemWriteData{},
 	)
+	if err != nil {
+		return nil, err
+	}
+	exec.globals = new(Globals)
+	exec.globals.Pending = *globals
+	exec.globals.Active = *globals
+	return exec, nil
 }
 
 func newExecutor(opts ExecutorOptions, db database.Beginner, executors ...chain.TransactionExecutor) (*Executor, error) {
@@ -261,17 +268,16 @@ func (x *Executor) InitChainValidators(initVal []abci.ValidatorUpdate) (addition
 		initValMap[*(*[32]byte)(key)] = true
 	}
 
-	partition := x.globals.Active.Network.Partition(x.Describe.PartitionId)
-	if partition == nil {
-		return nil, errors.Format(errors.StatusInternalError, "missing partition definition for %v", x.Describe.PartitionId)
-	}
-
 	// Capture any validators missing from the initial set
-	for _, val := range partition.ValidatorKeys {
-		if initValMap[*(*[32]byte)(val)] {
-			delete(initValMap, *(*[32]byte)(val))
+	for _, val := range x.globals.Active.Network.Validators {
+		if !val.IsActiveOn(x.Describe.PartitionId) {
+			continue
+		}
+
+		if initValMap[*(*[32]byte)(val.PublicKey)] {
+			delete(initValMap, *(*[32]byte)(val.PublicKey))
 		} else {
-			additional = append(additional, val)
+			additional = append(additional, val.PublicKey)
 		}
 	}
 

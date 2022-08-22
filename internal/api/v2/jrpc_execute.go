@@ -173,7 +173,13 @@ func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byt
 		return err
 	}
 
-	return m.executeDirect(ctx, env, req.CheckOnly)
+	// Route the request
+	partition, err := m.Router.Route(env)
+	if err != nil {
+		return validatorError(err)
+	}
+
+	return m.submit(ctx, partition, env, req.CheckOnly)
 }
 
 func (m *JrpcMethods) ExecuteDirect(ctx context.Context, params json.RawMessage) interface{} {
@@ -183,16 +189,26 @@ func (m *JrpcMethods) ExecuteDirect(ctx context.Context, params json.RawMessage)
 		return validatorError(err)
 	}
 
-	return m.executeDirect(ctx, req.Envelope, req.CheckOnly)
-}
-
-func (m *JrpcMethods) executeDirect(ctx context.Context, env *protocol.Envelope, checkOnly bool) interface{} {
 	// Route the request
-	partition, err := m.Router.Route(env)
+	partition, err := m.Router.Route(req.Envelope)
 	if err != nil {
 		return validatorError(err)
 	}
 
+	return m.submit(ctx, partition, req.Envelope, req.CheckOnly)
+}
+
+func (m *JrpcMethods) ExecuteLocal(ctx context.Context, params json.RawMessage) interface{} {
+	req := new(ExecuteRequest)
+	err := json.Unmarshal(params, req)
+	if err != nil {
+		return validatorError(err)
+	}
+
+	return m.submit(ctx, m.Options.Describe.PartitionId, req.Envelope, req.CheckOnly)
+}
+
+func (m *JrpcMethods) submit(ctx context.Context, partition string, env *protocol.Envelope, checkOnly bool) interface{} {
 	// Marshal the envelope
 	txData, err := env.MarshalBinary()
 	if err != nil {

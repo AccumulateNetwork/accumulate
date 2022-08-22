@@ -11,7 +11,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
@@ -744,7 +744,6 @@ type SystemData struct {
 	parent *Batch
 
 	syntheticIndexIndex map[systemDataSyntheticIndexIndexKey]*record.Value[uint64]
-	blockChainUpdates   map[systemDataBlockChainUpdatesKey]*record.List[*ChainUpdate]
 }
 
 type systemDataSyntheticIndexIndexKey struct {
@@ -755,23 +754,9 @@ func keyForSystemDataSyntheticIndexIndex(block uint64) systemDataSyntheticIndexI
 	return systemDataSyntheticIndexIndexKey{block}
 }
 
-type systemDataBlockChainUpdatesKey struct {
-	Index uint64
-}
-
-func keyForSystemDataBlockChainUpdates(index uint64) systemDataBlockChainUpdatesKey {
-	return systemDataBlockChainUpdatesKey{index}
-}
-
 func (c *SystemData) SyntheticIndexIndex(block uint64) *record.Value[uint64] {
 	return getOrCreateMap(&c.syntheticIndexIndex, keyForSystemDataSyntheticIndexIndex(block), func() *record.Value[uint64] {
 		return record.NewValue(c.logger.L, c.store, c.key.Append("SyntheticIndexIndex", block), c.label+" "+"synthetic index index"+" "+strconv.FormatUint(block, 10), false, record.Wrapped(record.UintWrapper))
-	})
-}
-
-func (c *SystemData) BlockChainUpdates(index uint64) *record.List[*ChainUpdate] {
-	return getOrCreateMap(&c.blockChainUpdates, keyForSystemDataBlockChainUpdates(index), func() *record.List[*ChainUpdate] {
-		return record.NewList(c.logger.L, c.store, c.key.Append("BlockChainUpdates", index), c.label+" "+"block chain updates"+" "+strconv.FormatUint(index, 10), record.Struct[ChainUpdate]())
 	})
 }
 
@@ -786,16 +771,6 @@ func (c *SystemData) Resolve(key record.Key) (record.Record, record.Key, error) 
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for system data")
 		}
 		v := c.SyntheticIndexIndex(block)
-		return v, key[2:], nil
-	case "BlockChainUpdates":
-		if len(key) < 2 {
-			return nil, nil, errors.New(errors.StatusInternalError, "bad key for system data")
-		}
-		index, okIndex := key[1].(uint64)
-		if !okIndex {
-			return nil, nil, errors.New(errors.StatusInternalError, "bad key for system data")
-		}
-		v := c.BlockChainUpdates(index)
 		return v, key[2:], nil
 	default:
 		return nil, nil, errors.New(errors.StatusInternalError, "bad key for system data")
@@ -812,11 +787,6 @@ func (c *SystemData) IsDirty() bool {
 			return true
 		}
 	}
-	for _, v := range c.blockChainUpdates {
-		if v.IsDirty() {
-			return true
-		}
-	}
 
 	return false
 }
@@ -828,9 +798,6 @@ func (c *SystemData) Commit() error {
 
 	var err error
 	for _, v := range c.syntheticIndexIndex {
-		commitField(&err, v)
-	}
-	for _, v := range c.blockChainUpdates {
 		commitField(&err, v)
 	}
 

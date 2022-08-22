@@ -6,7 +6,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/sortutil"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
 func (s *TransactionStatus) Delivered() bool { return s.Code == errors.StatusDelivered || s.Failed() }
@@ -27,7 +27,7 @@ func (s *TransactionStatus) Set(err error) {
 
 // AddSigner adds a signer to the object's list of signer using a binary search
 // to ensure ordering.
-func (s *TransactionStatus) AddSigner(signer Signer) {
+func (s *TransactionStatus) AddSigner(signer Signer2) {
 	// Find the matching entry
 	ptr, new := sortutil.BinaryInsert(&s.Signers, func(entry Signer) int { return entry.GetUrl().Compare(signer.GetUrl()) })
 

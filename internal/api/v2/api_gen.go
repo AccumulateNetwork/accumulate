@@ -12,7 +12,7 @@ import (
 
 func (m *JrpcMethods) populateMethodTable() jsonrpc2.MethodMap {
 	if m.methods == nil {
-		m.methods = make(jsonrpc2.MethodMap, 34)
+		m.methods = make(jsonrpc2.MethodMap, 35)
 	}
 
 	m.methods["describe"] = m.Describe
@@ -28,6 +28,7 @@ func (m *JrpcMethods) populateMethodTable() jsonrpc2.MethodMap {
 	m.methods["create-token-account"] = m.ExecuteCreateTokenAccount
 	m.methods["execute-direct"] = m.ExecuteDirect
 	m.methods["issue-tokens"] = m.ExecuteIssueTokens
+	m.methods["execute-local"] = m.ExecuteLocal
 	m.methods["send-tokens"] = m.ExecuteSendTokens
 	m.methods["update-account-auth"] = m.ExecuteUpdateAccountAuth
 	m.methods["update-key"] = m.ExecuteUpdateKey

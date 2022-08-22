@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/btcsuite/btcutil/base58"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
 type RCD struct {

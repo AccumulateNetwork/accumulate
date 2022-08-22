@@ -16,7 +16,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	errors2 "gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 )
 
@@ -135,6 +135,21 @@ type BTCSignature struct {
 	Vote            VoteType `json:"vote,omitempty" form:"vote" query:"vote"`
 	TransactionHash [32]byte `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash"`
 	extraData       []byte
+}
+
+type BlockEntry struct {
+	fieldsSet []bool
+	Account   *url.URL `json:"account,omitempty" form:"account" query:"account" validate:"required"`
+	Chain     string   `json:"chain,omitempty" form:"chain" query:"chain" validate:"required"`
+	Index     uint64   `json:"index" form:"index" query:"index" validate:"required"`
+	extraData []byte
+}
+
+type BlockLedger struct {
+	fieldsSet []bool
+	Url       *url.URL      `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	Entries   []*BlockEntry `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
+	extraData []byte
 }
 
 type BlockValidatorAnchor struct {
@@ -458,8 +473,10 @@ type NetworkAccountUpdate struct {
 
 type NetworkDefinition struct {
 	fieldsSet   []bool
-	NetworkName string                `json:"networkName,omitempty" form:"networkName" query:"networkName" validate:"required"`
-	Partitions  []PartitionDefinition `json:"partitions,omitempty" form:"partitions" query:"partitions" validate:"required"`
+	NetworkName string           `json:"networkName,omitempty" form:"networkName" query:"networkName" validate:"required"`
+	Version     uint64           `json:"version,omitempty" form:"version" query:"version" validate:"required"`
+	Partitions  []*PartitionInfo `json:"partitions,omitempty" form:"partitions" query:"partitions" validate:"required"`
+	Validators  []*ValidatorInfo `json:"validators,omitempty" form:"validators" query:"validators" validate:"required"`
 	extraData   []byte
 }
 
@@ -513,11 +530,11 @@ type PartitionAnchorReceipt struct {
 	extraData        []byte
 }
 
-type PartitionDefinition struct {
-	fieldsSet     []bool
-	PartitionID   string   `json:"partitionID,omitempty" form:"partitionID" query:"partitionID" validate:"required"`
-	ValidatorKeys [][]byte `json:"validatorKeys,omitempty" form:"validatorKeys" query:"validatorKeys" validate:"required"`
-	extraData     []byte
+type PartitionInfo struct {
+	fieldsSet []bool
+	ID        string        `json:"id,omitempty" form:"id" query:"id" validate:"required"`
+	Type      PartitionType `json:"type,omitempty" form:"type" query:"type" validate:"required"`
+	extraData []byte
 }
 
 // PartitionSignature is used to initiate transactions between BVNs.
@@ -880,6 +897,21 @@ type UpdateKeyPage struct {
 	extraData []byte
 }
 
+type ValidatorInfo struct {
+	fieldsSet     []bool
+	PublicKey     []byte                    `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
+	PublicKeyHash [32]byte                  `json:"publicKeyHash,omitempty" form:"publicKeyHash" query:"publicKeyHash" validate:"required"`
+	Partitions    []*ValidatorPartitionInfo `json:"partitions,omitempty" form:"partitions" query:"partitions" validate:"required"`
+	extraData     []byte
+}
+
+type ValidatorPartitionInfo struct {
+	fieldsSet []bool
+	ID        string `json:"id,omitempty" form:"id" query:"id" validate:"required"`
+	Active    bool   `json:"active" form:"active" query:"active" validate:"required"`
+	extraData []byte
+}
+
 type WriteData struct {
 	fieldsSet []bool
 	Entry     DataEntry `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
@@ -925,6 +957,8 @@ func (*AnchorLedger) Type() AccountType { return AccountTypeAnchorLedger }
 func (*BTCLegacySignature) Type() SignatureType { return SignatureTypeBTCLegacy }
 
 func (*BTCSignature) Type() SignatureType { return SignatureTypeBTC }
+
+func (*BlockLedger) Type() AccountType { return AccountTypeBlockLedger }
 
 func (*BlockValidatorAnchor) Type() TransactionType { return TransactionTypeBlockValidatorAnchor }
 
@@ -1251,6 +1285,38 @@ func (v *BTCSignature) Copy() *BTCSignature {
 }
 
 func (v *BTCSignature) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *BlockEntry) Copy() *BlockEntry {
+	u := new(BlockEntry)
+
+	if v.Account != nil {
+		u.Account = v.Account
+	}
+	u.Chain = v.Chain
+	u.Index = v.Index
+
+	return u
+}
+
+func (v *BlockEntry) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *BlockLedger) Copy() *BlockLedger {
+	u := new(BlockLedger)
+
+	if v.Url != nil {
+		u.Url = v.Url
+	}
+	u.Entries = make([]*BlockEntry, len(v.Entries))
+	for i, v := range v.Entries {
+		if v != nil {
+			u.Entries[i] = (v).Copy()
+		}
+	}
+
+	return u
+}
+
+func (v *BlockLedger) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *BlockValidatorAnchor) Copy() *BlockValidatorAnchor {
 	u := new(BlockValidatorAnchor)
@@ -1811,9 +1877,18 @@ func (v *NetworkDefinition) Copy() *NetworkDefinition {
 	u := new(NetworkDefinition)
 
 	u.NetworkName = v.NetworkName
-	u.Partitions = make([]PartitionDefinition, len(v.Partitions))
+	u.Version = v.Version
+	u.Partitions = make([]*PartitionInfo, len(v.Partitions))
 	for i, v := range v.Partitions {
-		u.Partitions[i] = *(&v).Copy()
+		if v != nil {
+			u.Partitions[i] = (v).Copy()
+		}
+	}
+	u.Validators = make([]*ValidatorInfo, len(v.Validators))
+	for i, v := range v.Validators {
+		if v != nil {
+			u.Validators[i] = (v).Copy()
+		}
 	}
 
 	return u
@@ -1880,19 +1955,16 @@ func (v *PartitionAnchorReceipt) Copy() *PartitionAnchorReceipt {
 
 func (v *PartitionAnchorReceipt) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *PartitionDefinition) Copy() *PartitionDefinition {
-	u := new(PartitionDefinition)
+func (v *PartitionInfo) Copy() *PartitionInfo {
+	u := new(PartitionInfo)
 
-	u.PartitionID = v.PartitionID
-	u.ValidatorKeys = make([][]byte, len(v.ValidatorKeys))
-	for i, v := range v.ValidatorKeys {
-		u.ValidatorKeys[i] = encoding.BytesCopy(v)
-	}
+	u.ID = v.ID
+	u.Type = v.Type
 
 	return u
 }
 
-func (v *PartitionDefinition) CopyAsInterface() interface{} { return v.Copy() }
+func (v *PartitionInfo) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *PartitionSignature) Copy() *PartitionSignature {
 	u := new(PartitionSignature)
@@ -2540,6 +2612,34 @@ func (v *UpdateKeyPage) Copy() *UpdateKeyPage {
 
 func (v *UpdateKeyPage) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *ValidatorInfo) Copy() *ValidatorInfo {
+	u := new(ValidatorInfo)
+
+	u.PublicKey = encoding.BytesCopy(v.PublicKey)
+	u.PublicKeyHash = v.PublicKeyHash
+	u.Partitions = make([]*ValidatorPartitionInfo, len(v.Partitions))
+	for i, v := range v.Partitions {
+		if v != nil {
+			u.Partitions[i] = (v).Copy()
+		}
+	}
+
+	return u
+}
+
+func (v *ValidatorInfo) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *ValidatorPartitionInfo) Copy() *ValidatorPartitionInfo {
+	u := new(ValidatorPartitionInfo)
+
+	u.ID = v.ID
+	u.Active = v.Active
+
+	return u
+}
+
+func (v *ValidatorPartitionInfo) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *WriteData) Copy() *WriteData {
 	u := new(WriteData)
 
@@ -2831,6 +2931,46 @@ func (v *BTCSignature) Equal(u *BTCSignature) bool {
 	}
 	if !(v.TransactionHash == u.TransactionHash) {
 		return false
+	}
+
+	return true
+}
+
+func (v *BlockEntry) Equal(u *BlockEntry) bool {
+	switch {
+	case v.Account == u.Account:
+		// equal
+	case v.Account == nil || u.Account == nil:
+		return false
+	case !((v.Account).Equal(u.Account)):
+		return false
+	}
+	if !(v.Chain == u.Chain) {
+		return false
+	}
+	if !(v.Index == u.Index) {
+		return false
+	}
+
+	return true
+}
+
+func (v *BlockLedger) Equal(u *BlockLedger) bool {
+	switch {
+	case v.Url == u.Url:
+		// equal
+	case v.Url == nil || u.Url == nil:
+		return false
+	case !((v.Url).Equal(u.Url)):
+		return false
+	}
+	if len(v.Entries) != len(u.Entries) {
+		return false
+	}
+	for i := range v.Entries {
+		if !((v.Entries[i]).Equal(u.Entries[i])) {
+			return false
+		}
 	}
 
 	return true
@@ -3549,11 +3689,22 @@ func (v *NetworkDefinition) Equal(u *NetworkDefinition) bool {
 	if !(v.NetworkName == u.NetworkName) {
 		return false
 	}
+	if !(v.Version == u.Version) {
+		return false
+	}
 	if len(v.Partitions) != len(u.Partitions) {
 		return false
 	}
 	for i := range v.Partitions {
-		if !((&v.Partitions[i]).Equal(&u.Partitions[i])) {
+		if !((v.Partitions[i]).Equal(u.Partitions[i])) {
+			return false
+		}
+	}
+	if len(v.Validators) != len(u.Validators) {
+		return false
+	}
+	for i := range v.Validators {
+		if !((v.Validators[i]).Equal(u.Validators[i])) {
 			return false
 		}
 	}
@@ -3644,17 +3795,12 @@ func (v *PartitionAnchorReceipt) Equal(u *PartitionAnchorReceipt) bool {
 	return true
 }
 
-func (v *PartitionDefinition) Equal(u *PartitionDefinition) bool {
-	if !(v.PartitionID == u.PartitionID) {
+func (v *PartitionInfo) Equal(u *PartitionInfo) bool {
+	if !(v.ID == u.ID) {
 		return false
 	}
-	if len(v.ValidatorKeys) != len(u.ValidatorKeys) {
+	if !(v.Type == u.Type) {
 		return false
-	}
-	for i := range v.ValidatorKeys {
-		if !(bytes.Equal(v.ValidatorKeys[i], u.ValidatorKeys[i])) {
-			return false
-		}
 	}
 
 	return true
@@ -4469,6 +4615,36 @@ func (v *UpdateKeyPage) Equal(u *UpdateKeyPage) bool {
 		if !(EqualKeyPageOperation(v.Operation[i], u.Operation[i])) {
 			return false
 		}
+	}
+
+	return true
+}
+
+func (v *ValidatorInfo) Equal(u *ValidatorInfo) bool {
+	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
+		return false
+	}
+	if !(v.PublicKeyHash == u.PublicKeyHash) {
+		return false
+	}
+	if len(v.Partitions) != len(u.Partitions) {
+		return false
+	}
+	for i := range v.Partitions {
+		if !((v.Partitions[i]).Equal(u.Partitions[i])) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (v *ValidatorPartitionInfo) Equal(u *ValidatorPartitionInfo) bool {
+	if !(v.ID == u.ID) {
+		return false
+	}
+	if !(v.Active == u.Active) {
+		return false
 	}
 
 	return true
@@ -5313,6 +5489,114 @@ func (v *BTCSignature) IsValid() error {
 		errs = append(errs, "field SignerVersion is missing")
 	} else if v.SignerVersion == 0 {
 		errs = append(errs, "field SignerVersion is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_BlockEntry = []string{
+	1: "Account",
+	2: "Chain",
+	3: "Index",
+}
+
+func (v *BlockEntry) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Account == nil) {
+		writer.WriteUrl(1, v.Account)
+	}
+	if !(len(v.Chain) == 0) {
+		writer.WriteString(2, v.Chain)
+	}
+	writer.WriteUint(3, v.Index)
+
+	_, _, err := writer.Reset(fieldNames_BlockEntry)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *BlockEntry) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Account is missing")
+	} else if v.Account == nil {
+		errs = append(errs, "field Account is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Chain is missing")
+	} else if len(v.Chain) == 0 {
+		errs = append(errs, "field Chain is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Index is missing")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_BlockLedger = []string{
+	1: "Type",
+	2: "Url",
+	3: "Entries",
+}
+
+func (v *BlockLedger) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Url == nil) {
+		writer.WriteUrl(2, v.Url)
+	}
+	if !(len(v.Entries) == 0) {
+		for _, v := range v.Entries {
+			writer.WriteValue(3, v.MarshalBinary)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_BlockLedger)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *BlockLedger) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Url is missing")
+	} else if v.Url == nil {
+		errs = append(errs, "field Url is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Entries is missing")
+	} else if len(v.Entries) == 0 {
+		errs = append(errs, "field Entries is not set")
 	}
 
 	switch len(errs) {
@@ -7346,7 +7630,9 @@ func (v *NetworkAccountUpdate) IsValid() error {
 
 var fieldNames_NetworkDefinition = []string{
 	1: "NetworkName",
-	2: "Partitions",
+	2: "Version",
+	3: "Partitions",
+	4: "Validators",
 }
 
 func (v *NetworkDefinition) MarshalBinary() ([]byte, error) {
@@ -7356,9 +7642,17 @@ func (v *NetworkDefinition) MarshalBinary() ([]byte, error) {
 	if !(len(v.NetworkName) == 0) {
 		writer.WriteString(1, v.NetworkName)
 	}
+	if !(v.Version == 0) {
+		writer.WriteUint(2, v.Version)
+	}
 	if !(len(v.Partitions) == 0) {
 		for _, v := range v.Partitions {
-			writer.WriteValue(2, v.MarshalBinary)
+			writer.WriteValue(3, v.MarshalBinary)
+		}
+	}
+	if !(len(v.Validators) == 0) {
+		for _, v := range v.Validators {
+			writer.WriteValue(4, v.MarshalBinary)
 		}
 	}
 
@@ -7379,9 +7673,19 @@ func (v *NetworkDefinition) IsValid() error {
 		errs = append(errs, "field NetworkName is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Version is missing")
+	} else if v.Version == 0 {
+		errs = append(errs, "field Version is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Partitions is missing")
 	} else if len(v.Partitions) == 0 {
 		errs = append(errs, "field Partitions is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Validators is missing")
+	} else if len(v.Validators) == 0 {
+		errs = append(errs, "field Validators is not set")
 	}
 
 	switch len(errs) {
@@ -7660,25 +7964,23 @@ func (v *PartitionAnchorReceipt) IsValid() error {
 	}
 }
 
-var fieldNames_PartitionDefinition = []string{
-	1: "PartitionID",
-	2: "ValidatorKeys",
+var fieldNames_PartitionInfo = []string{
+	1: "ID",
+	2: "Type",
 }
 
-func (v *PartitionDefinition) MarshalBinary() ([]byte, error) {
+func (v *PartitionInfo) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	if !(len(v.PartitionID) == 0) {
-		writer.WriteString(1, v.PartitionID)
+	if !(len(v.ID) == 0) {
+		writer.WriteString(1, v.ID)
 	}
-	if !(len(v.ValidatorKeys) == 0) {
-		for _, v := range v.ValidatorKeys {
-			writer.WriteBytes(2, v)
-		}
+	if !(v.Type == 0) {
+		writer.WriteEnum(2, v.Type)
 	}
 
-	_, _, err := writer.Reset(fieldNames_PartitionDefinition)
+	_, _, err := writer.Reset(fieldNames_PartitionInfo)
 	if err != nil {
 		return nil, encoding.Error{E: err}
 	}
@@ -7686,18 +7988,18 @@ func (v *PartitionDefinition) MarshalBinary() ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
-func (v *PartitionDefinition) IsValid() error {
+func (v *PartitionInfo) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field PartitionID is missing")
-	} else if len(v.PartitionID) == 0 {
-		errs = append(errs, "field PartitionID is not set")
+		errs = append(errs, "field ID is missing")
+	} else if len(v.ID) == 0 {
+		errs = append(errs, "field ID is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field ValidatorKeys is missing")
-	} else if len(v.ValidatorKeys) == 0 {
-		errs = append(errs, "field ValidatorKeys is not set")
+		errs = append(errs, "field Type is missing")
+	} else if v.Type == 0 {
+		errs = append(errs, "field Type is not set")
 	}
 
 	switch len(errs) {
@@ -10098,6 +10400,109 @@ func (v *UpdateKeyPage) IsValid() error {
 	}
 }
 
+var fieldNames_ValidatorInfo = []string{
+	1: "PublicKey",
+	2: "PublicKeyHash",
+	3: "Partitions",
+}
+
+func (v *ValidatorInfo) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(len(v.PublicKey) == 0) {
+		writer.WriteBytes(1, v.PublicKey)
+	}
+	if !(v.PublicKeyHash == ([32]byte{})) {
+		writer.WriteHash(2, &v.PublicKeyHash)
+	}
+	if !(len(v.Partitions) == 0) {
+		for _, v := range v.Partitions {
+			writer.WriteValue(3, v.MarshalBinary)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_ValidatorInfo)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *ValidatorInfo) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field PublicKey is missing")
+	} else if len(v.PublicKey) == 0 {
+		errs = append(errs, "field PublicKey is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field PublicKeyHash is missing")
+	} else if v.PublicKeyHash == ([32]byte{}) {
+		errs = append(errs, "field PublicKeyHash is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Partitions is missing")
+	} else if len(v.Partitions) == 0 {
+		errs = append(errs, "field Partitions is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_ValidatorPartitionInfo = []string{
+	1: "ID",
+	2: "Active",
+}
+
+func (v *ValidatorPartitionInfo) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(len(v.ID) == 0) {
+		writer.WriteString(1, v.ID)
+	}
+	writer.WriteBool(2, v.Active)
+
+	_, _, err := writer.Reset(fieldNames_ValidatorPartitionInfo)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *ValidatorPartitionInfo) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field ID is missing")
+	} else if len(v.ID) == 0 {
+		errs = append(errs, "field ID is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Active is missing")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_WriteData = []string{
 	1: "Type",
 	2: "Entry",
@@ -10735,6 +11140,72 @@ func (v *BTCSignature) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_BTCSignature)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *BlockEntry) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *BlockEntry) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUrl(1); ok {
+		v.Account = x
+	}
+	if x, ok := reader.ReadString(2); ok {
+		v.Chain = x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.Index = x
+	}
+
+	seen, err := reader.Reset(fieldNames_BlockEntry)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *BlockLedger) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *BlockLedger) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType AccountType
+	if x := new(AccountType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+	if x, ok := reader.ReadUrl(2); ok {
+		v.Url = x
+	}
+	for {
+		if x := new(BlockEntry); reader.ReadValue(3, x.UnmarshalBinary) {
+			v.Entries = append(v.Entries, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_BlockLedger)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -12015,9 +12486,19 @@ func (v *NetworkDefinition) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadString(1); ok {
 		v.NetworkName = x
 	}
+	if x, ok := reader.ReadUint(2); ok {
+		v.Version = x
+	}
 	for {
-		if x := new(PartitionDefinition); reader.ReadValue(2, x.UnmarshalBinary) {
-			v.Partitions = append(v.Partitions, *x)
+		if x := new(PartitionInfo); reader.ReadValue(3, x.UnmarshalBinary) {
+			v.Partitions = append(v.Partitions, x)
+		} else {
+			break
+		}
+	}
+	for {
+		if x := new(ValidatorInfo); reader.ReadValue(4, x.UnmarshalBinary) {
+			v.Validators = append(v.Validators, x)
 		} else {
 			break
 		}
@@ -12167,25 +12648,21 @@ func (v *PartitionAnchorReceipt) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
-func (v *PartitionDefinition) UnmarshalBinary(data []byte) error {
+func (v *PartitionInfo) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
 
-func (v *PartitionDefinition) UnmarshalBinaryFrom(rd io.Reader) error {
+func (v *PartitionInfo) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
 	if x, ok := reader.ReadString(1); ok {
-		v.PartitionID = x
+		v.ID = x
 	}
-	for {
-		if x, ok := reader.ReadBytes(2); ok {
-			v.ValidatorKeys = append(v.ValidatorKeys, x)
-		} else {
-			break
-		}
+	if x := new(PartitionType); reader.ReadEnum(2, x) {
+		v.Type = *x
 	}
 
-	seen, err := reader.Reset(fieldNames_PartitionDefinition)
+	seen, err := reader.Reset(fieldNames_PartitionInfo)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -13697,6 +14174,65 @@ func (v *UpdateKeyPage) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *ValidatorInfo) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *ValidatorInfo) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadBytes(1); ok {
+		v.PublicKey = x
+	}
+	if x, ok := reader.ReadHash(2); ok {
+		v.PublicKeyHash = *x
+	}
+	for {
+		if x := new(ValidatorPartitionInfo); reader.ReadValue(3, x.UnmarshalBinary) {
+			v.Partitions = append(v.Partitions, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_ValidatorInfo)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *ValidatorPartitionInfo) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *ValidatorPartitionInfo) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadString(1); ok {
+		v.ID = x
+	}
+	if x, ok := reader.ReadBool(2); ok {
+		v.Active = x
+	}
+
+	seen, err := reader.Reset(fieldNames_ValidatorPartitionInfo)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *WriteData) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -13812,15 +14348,11 @@ func (v *WriteDataTo) UnmarshalBinaryFrom(rd io.Reader) error {
 
 func (v *ADI) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type           AccountType                       `json:"type"`
-		KeyBook        *url.URL                          `json:"keyBook,omitempty"`
-		ManagerKeyBook *url.URL                          `json:"managerKeyBook,omitempty"`
-		Url            *url.URL                          `json:"url,omitempty"`
-		Authorities    encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
+		Type        AccountType                       `json:"type"`
+		Url         *url.URL                          `json:"url,omitempty"`
+		Authorities encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.KeyBook = v.KeyBook()
-	u.ManagerKeyBook = v.ManagerKeyBook()
 	u.Url = v.Url
 	u.Authorities = v.AccountAuth.Authorities
 	return json.Marshal(&u)
@@ -13987,6 +14519,18 @@ func (v *BTCSignature) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *BlockLedger) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type    AccountType                    `json:"type"`
+		Url     *url.URL                       `json:"url,omitempty"`
+		Entries encoding.JsonList[*BlockEntry] `json:"entries,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Url = v.Url
+	u.Entries = v.Entries
+	return json.Marshal(&u)
+}
+
 func (v *BlockValidatorAnchor) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type            TransactionType `json:"type"`
@@ -14127,16 +14671,12 @@ func (v *CreateTokenAccount) MarshalJSON() ([]byte, error) {
 
 func (v *DataAccount) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type           AccountType                           `json:"type"`
-		KeyBook        *url.URL                              `json:"keyBook,omitempty"`
-		ManagerKeyBook *url.URL                              `json:"managerKeyBook,omitempty"`
-		Url            *url.URL                              `json:"url,omitempty"`
-		Authorities    encoding.JsonList[AuthorityEntry]     `json:"authorities,omitempty"`
-		Entry          encoding.JsonUnmarshalWith[DataEntry] `json:"entry,omitempty"`
+		Type        AccountType                           `json:"type"`
+		Url         *url.URL                              `json:"url,omitempty"`
+		Authorities encoding.JsonList[AuthorityEntry]     `json:"authorities,omitempty"`
+		Entry       encoding.JsonUnmarshalWith[DataEntry] `json:"entry,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.KeyBook = v.KeyBook()
-	u.ManagerKeyBook = v.ManagerKeyBook()
 	u.Url = v.Url
 	u.Authorities = v.AccountAuth.Authorities
 	u.Entry = encoding.JsonUnmarshalWith[DataEntry]{Value: v.Entry, Func: UnmarshalDataEntryJSON}
@@ -14327,17 +14867,13 @@ func (v *IssueTokens) MarshalJSON() ([]byte, error) {
 
 func (v *KeyBook) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type           AccountType                       `json:"type"`
-		KeyBook        *url.URL                          `json:"keyBook,omitempty"`
-		ManagerKeyBook *url.URL                          `json:"managerKeyBook,omitempty"`
-		Url            *url.URL                          `json:"url,omitempty"`
-		BookType       BookType                          `json:"bookType,omitempty"`
-		Authorities    encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
-		PageCount      uint64                            `json:"pageCount,omitempty"`
+		Type        AccountType                       `json:"type"`
+		Url         *url.URL                          `json:"url,omitempty"`
+		BookType    BookType                          `json:"bookType,omitempty"`
+		Authorities encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
+		PageCount   uint64                            `json:"pageCount,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.KeyBook = v.KeyBook()
-	u.ManagerKeyBook = v.ManagerKeyBook()
 	u.Url = v.Url
 	u.BookType = v.BookType
 	u.Authorities = v.AccountAuth.Authorities
@@ -14380,16 +14916,12 @@ func (v *KeySpec) MarshalJSON() ([]byte, error) {
 		PublicKeyHash *string  `json:"publicKeyHash,omitempty"`
 		PublicKey     *string  `json:"publicKey,omitempty"`
 		LastUsedOn    uint64   `json:"lastUsedOn,omitempty"`
-		Nonce         uint64   `json:"nonce,omitempty"`
 		Delegate      *url.URL `json:"delegate,omitempty"`
-		Owner         *url.URL `json:"owner,omitempty"`
 	}{}
 	u.PublicKeyHash = encoding.BytesToJSON(v.PublicKeyHash)
 	u.PublicKey = encoding.BytesToJSON(v.PublicKeyHash)
 	u.LastUsedOn = v.LastUsedOn
-	u.Nonce = v.LastUsedOn
 	u.Delegate = v.Delegate
-	u.Owner = v.Delegate
 	return json.Marshal(&u)
 }
 
@@ -14397,11 +14929,9 @@ func (v *KeySpecParams) MarshalJSON() ([]byte, error) {
 	u := struct {
 		KeyHash  *string  `json:"keyHash,omitempty"`
 		Delegate *url.URL `json:"delegate,omitempty"`
-		Owner    *url.URL `json:"owner,omitempty"`
 	}{}
 	u.KeyHash = encoding.BytesToJSON(v.KeyHash)
 	u.Delegate = v.Delegate
-	u.Owner = v.Delegate
 	return json.Marshal(&u)
 }
 
@@ -14409,7 +14939,6 @@ func (v *LegacyED25519Signature) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type            SignatureType `json:"type"`
 		Timestamp       uint64        `json:"timestamp,omitempty"`
-		Nonce           uint64        `json:"nonce,omitempty"`
 		PublicKey       *string       `json:"publicKey,omitempty"`
 		Signature       *string       `json:"signature,omitempty"`
 		Signer          *url.URL      `json:"signer,omitempty"`
@@ -14419,7 +14948,6 @@ func (v *LegacyED25519Signature) MarshalJSON() ([]byte, error) {
 	}{}
 	u.Type = v.Type()
 	u.Timestamp = v.Timestamp
-	u.Nonce = v.Timestamp
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.Signature = encoding.BytesToJSON(v.Signature)
 	u.Signer = v.Signer
@@ -14445,13 +14973,11 @@ func (v *LiteIdentity) MarshalJSON() ([]byte, error) {
 		Url           *url.URL    `json:"url,omitempty"`
 		CreditBalance uint64      `json:"creditBalance,omitempty"`
 		LastUsedOn    uint64      `json:"lastUsedOn,omitempty"`
-		Nonce         uint64      `json:"nonce,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
 	u.CreditBalance = v.CreditBalance
 	u.LastUsedOn = v.LastUsedOn
-	u.Nonce = v.LastUsedOn
 	return json.Marshal(&u)
 }
 
@@ -14511,13 +15037,15 @@ func (v *NetworkAccountUpdate) MarshalJSON() ([]byte, error) {
 
 func (v *NetworkDefinition) MarshalJSON() ([]byte, error) {
 	u := struct {
-		NetworkName string                                 `json:"networkName,omitempty"`
-		Partitions  encoding.JsonList[PartitionDefinition] `json:"partitions,omitempty"`
-		Subnets     encoding.JsonList[PartitionDefinition] `json:"subnets,omitempty"`
+		NetworkName string                            `json:"networkName,omitempty"`
+		Version     uint64                            `json:"version,omitempty"`
+		Partitions  encoding.JsonList[*PartitionInfo] `json:"partitions,omitempty"`
+		Validators  encoding.JsonList[*ValidatorInfo] `json:"validators,omitempty"`
 	}{}
 	u.NetworkName = v.NetworkName
+	u.Version = v.Version
 	u.Partitions = v.Partitions
-	u.Subnets = v.Partitions
+	u.Validators = v.Validators
 	return json.Marshal(&u)
 }
 
@@ -14548,21 +15076,6 @@ func (v *PartitionAnchor) MarshalJSON() ([]byte, error) {
 	u.RootChainIndex = v.RootChainIndex
 	u.RootChainAnchor = encoding.ChainToJSON(v.RootChainAnchor)
 	u.StateTreeAnchor = encoding.ChainToJSON(v.StateTreeAnchor)
-	return json.Marshal(&u)
-}
-
-func (v *PartitionDefinition) MarshalJSON() ([]byte, error) {
-	u := struct {
-		PartitionID   string                     `json:"partitionID,omitempty"`
-		SubnetID      string                     `json:"subnetID,omitempty"`
-		ValidatorKeys encoding.JsonList[*string] `json:"validatorKeys,omitempty"`
-	}{}
-	u.PartitionID = v.PartitionID
-	u.SubnetID = v.PartitionID
-	u.ValidatorKeys = make(encoding.JsonList[*string], len(v.ValidatorKeys))
-	for i, x := range v.ValidatorKeys {
-		u.ValidatorKeys[i] = encoding.BytesToJSON(x)
-	}
 	return json.Marshal(&u)
 }
 
@@ -14673,32 +15186,6 @@ func (v *RemoveKeyOperation) MarshalJSON() ([]byte, error) {
 	}{}
 	u.Type = v.Type()
 	u.Entry = v.Entry
-	return json.Marshal(&u)
-}
-
-func (v *Route) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Length    uint64 `json:"length,omitempty"`
-		Value     uint64 `json:"value,omitempty"`
-		Partition string `json:"partition,omitempty"`
-		Subnet    string `json:"subnet,omitempty"`
-	}{}
-	u.Length = v.Length
-	u.Value = v.Value
-	u.Partition = v.Partition
-	u.Subnet = v.Partition
-	return json.Marshal(&u)
-}
-
-func (v *RouteOverride) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Account   *url.URL `json:"account,omitempty"`
-		Partition string   `json:"partition,omitempty"`
-		Subnet    string   `json:"subnet,omitempty"`
-	}{}
-	u.Account = v.Account
-	u.Partition = v.Partition
-	u.Subnet = v.Partition
 	return json.Marshal(&u)
 }
 
@@ -14922,17 +15409,13 @@ func (v *SystemWriteData) MarshalJSON() ([]byte, error) {
 
 func (v *TokenAccount) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type           AccountType                       `json:"type"`
-		KeyBook        *url.URL                          `json:"keyBook,omitempty"`
-		ManagerKeyBook *url.URL                          `json:"managerKeyBook,omitempty"`
-		Url            *url.URL                          `json:"url,omitempty"`
-		Authorities    encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
-		TokenUrl       *url.URL                          `json:"tokenUrl,omitempty"`
-		Balance        *string                           `json:"balance,omitempty"`
+		Type        AccountType                       `json:"type"`
+		Url         *url.URL                          `json:"url,omitempty"`
+		Authorities encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
+		TokenUrl    *url.URL                          `json:"tokenUrl,omitempty"`
+		Balance     *string                           `json:"balance,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.KeyBook = v.KeyBook()
-	u.ManagerKeyBook = v.ManagerKeyBook()
 	u.Url = v.Url
 	u.Authorities = v.AccountAuth.Authorities
 	u.TokenUrl = v.TokenUrl
@@ -14942,20 +15425,16 @@ func (v *TokenAccount) MarshalJSON() ([]byte, error) {
 
 func (v *TokenIssuer) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type           AccountType                       `json:"type"`
-		KeyBook        *url.URL                          `json:"keyBook,omitempty"`
-		ManagerKeyBook *url.URL                          `json:"managerKeyBook,omitempty"`
-		Url            *url.URL                          `json:"url,omitempty"`
-		Authorities    encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
-		Symbol         string                            `json:"symbol,omitempty"`
-		Precision      uint64                            `json:"precision,omitempty"`
-		Properties     *url.URL                          `json:"properties,omitempty"`
-		Issued         *string                           `json:"issued,omitempty"`
-		SupplyLimit    *string                           `json:"supplyLimit,omitempty"`
+		Type        AccountType                       `json:"type"`
+		Url         *url.URL                          `json:"url,omitempty"`
+		Authorities encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
+		Symbol      string                            `json:"symbol,omitempty"`
+		Precision   uint64                            `json:"precision,omitempty"`
+		Properties  *url.URL                          `json:"properties,omitempty"`
+		Issued      *string                           `json:"issued,omitempty"`
+		SupplyLimit *string                           `json:"supplyLimit,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.KeyBook = v.KeyBook()
-	u.ManagerKeyBook = v.ManagerKeyBook()
 	u.Url = v.Url
 	u.Authorities = v.AccountAuth.Authorities
 	u.Symbol = v.Symbol
@@ -14989,13 +15468,11 @@ func (v *Transaction) MarshalJSON() ([]byte, error) {
 func (v *TransactionHeader) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Principal *url.URL `json:"principal,omitempty"`
-		Origin    *url.URL `json:"origin,omitempty"`
 		Initiator string   `json:"initiator,omitempty"`
 		Memo      string   `json:"memo,omitempty"`
 		Metadata  *string  `json:"metadata,omitempty"`
 	}{}
 	u.Principal = v.Principal
-	u.Origin = v.Principal
 	u.Initiator = encoding.ChainToJSON(v.Initiator)
 	u.Memo = v.Memo
 	u.Metadata = encoding.BytesToJSON(v.Metadata)
@@ -15134,6 +15611,18 @@ func (v *UpdateKeyPage) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *ValidatorInfo) MarshalJSON() ([]byte, error) {
+	u := struct {
+		PublicKey     *string                                    `json:"publicKey,omitempty"`
+		PublicKeyHash string                                     `json:"publicKeyHash,omitempty"`
+		Partitions    encoding.JsonList[*ValidatorPartitionInfo] `json:"partitions,omitempty"`
+	}{}
+	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	u.PublicKeyHash = encoding.ChainToJSON(v.PublicKeyHash)
+	u.Partitions = v.Partitions
+	return json.Marshal(&u)
+}
+
 func (v *WriteData) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type         TransactionType                       `json:"type"`
@@ -15176,15 +15665,11 @@ func (v *WriteDataTo) MarshalJSON() ([]byte, error) {
 
 func (v *ADI) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type           AccountType                       `json:"type"`
-		KeyBook        *url.URL                          `json:"keyBook,omitempty"`
-		ManagerKeyBook *url.URL                          `json:"managerKeyBook,omitempty"`
-		Url            *url.URL                          `json:"url,omitempty"`
-		Authorities    encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
+		Type        AccountType                       `json:"type"`
+		Url         *url.URL                          `json:"url,omitempty"`
+		Authorities encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.KeyBook = v.KeyBook()
-	u.ManagerKeyBook = v.ManagerKeyBook()
 	u.Url = v.Url
 	u.Authorities = v.AccountAuth.Authorities
 	if err := json.Unmarshal(data, &u); err != nil {
@@ -15499,6 +15984,26 @@ func (v *BTCSignature) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *BlockLedger) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type    AccountType                    `json:"type"`
+		Url     *url.URL                       `json:"url,omitempty"`
+		Entries encoding.JsonList[*BlockEntry] `json:"entries,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Url = v.Url
+	u.Entries = v.Entries
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Url = u.Url
+	v.Entries = u.Entries
+	return nil
+}
+
 func (v *BlockValidatorAnchor) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type            TransactionType `json:"type"`
@@ -15758,16 +16263,12 @@ func (v *CreateTokenAccount) UnmarshalJSON(data []byte) error {
 
 func (v *DataAccount) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type           AccountType                           `json:"type"`
-		KeyBook        *url.URL                              `json:"keyBook,omitempty"`
-		ManagerKeyBook *url.URL                              `json:"managerKeyBook,omitempty"`
-		Url            *url.URL                              `json:"url,omitempty"`
-		Authorities    encoding.JsonList[AuthorityEntry]     `json:"authorities,omitempty"`
-		Entry          encoding.JsonUnmarshalWith[DataEntry] `json:"entry,omitempty"`
+		Type        AccountType                           `json:"type"`
+		Url         *url.URL                              `json:"url,omitempty"`
+		Authorities encoding.JsonList[AuthorityEntry]     `json:"authorities,omitempty"`
+		Entry       encoding.JsonUnmarshalWith[DataEntry] `json:"entry,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.KeyBook = v.KeyBook()
-	u.ManagerKeyBook = v.ManagerKeyBook()
 	u.Url = v.Url
 	u.Authorities = v.AccountAuth.Authorities
 	u.Entry = encoding.JsonUnmarshalWith[DataEntry]{Value: v.Entry, Func: UnmarshalDataEntryJSON}
@@ -16158,17 +16659,13 @@ func (v *IssueTokens) UnmarshalJSON(data []byte) error {
 
 func (v *KeyBook) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type           AccountType                       `json:"type"`
-		KeyBook        *url.URL                          `json:"keyBook,omitempty"`
-		ManagerKeyBook *url.URL                          `json:"managerKeyBook,omitempty"`
-		Url            *url.URL                          `json:"url,omitempty"`
-		BookType       BookType                          `json:"bookType,omitempty"`
-		Authorities    encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
-		PageCount      uint64                            `json:"pageCount,omitempty"`
+		Type        AccountType                       `json:"type"`
+		Url         *url.URL                          `json:"url,omitempty"`
+		BookType    BookType                          `json:"bookType,omitempty"`
+		Authorities encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
+		PageCount   uint64                            `json:"pageCount,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.KeyBook = v.KeyBook()
-	u.ManagerKeyBook = v.ManagerKeyBook()
 	u.Url = v.Url
 	u.BookType = v.BookType
 	u.Authorities = v.AccountAuth.Authorities
@@ -16240,16 +16737,12 @@ func (v *KeySpec) UnmarshalJSON(data []byte) error {
 		PublicKeyHash *string  `json:"publicKeyHash,omitempty"`
 		PublicKey     *string  `json:"publicKey,omitempty"`
 		LastUsedOn    uint64   `json:"lastUsedOn,omitempty"`
-		Nonce         uint64   `json:"nonce,omitempty"`
 		Delegate      *url.URL `json:"delegate,omitempty"`
-		Owner         *url.URL `json:"owner,omitempty"`
 	}{}
 	u.PublicKeyHash = encoding.BytesToJSON(v.PublicKeyHash)
 	u.PublicKey = encoding.BytesToJSON(v.PublicKeyHash)
 	u.LastUsedOn = v.LastUsedOn
-	u.Nonce = v.LastUsedOn
 	u.Delegate = v.Delegate
-	u.Owner = v.Delegate
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -16266,16 +16759,8 @@ func (v *KeySpec) UnmarshalJSON(data []byte) error {
 			v.PublicKeyHash = x
 		}
 	}
-	if !(u.LastUsedOn == 0) {
-		v.LastUsedOn = u.LastUsedOn
-	} else {
-		v.LastUsedOn = u.Nonce
-	}
-	if !(u.Delegate == nil) {
-		v.Delegate = u.Delegate
-	} else {
-		v.Delegate = u.Owner
-	}
+	v.LastUsedOn = u.LastUsedOn
+	v.Delegate = u.Delegate
 	return nil
 }
 
@@ -16283,11 +16768,9 @@ func (v *KeySpecParams) UnmarshalJSON(data []byte) error {
 	u := struct {
 		KeyHash  *string  `json:"keyHash,omitempty"`
 		Delegate *url.URL `json:"delegate,omitempty"`
-		Owner    *url.URL `json:"owner,omitempty"`
 	}{}
 	u.KeyHash = encoding.BytesToJSON(v.KeyHash)
 	u.Delegate = v.Delegate
-	u.Owner = v.Delegate
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -16296,11 +16779,7 @@ func (v *KeySpecParams) UnmarshalJSON(data []byte) error {
 	} else {
 		v.KeyHash = x
 	}
-	if !(u.Delegate == nil) {
-		v.Delegate = u.Delegate
-	} else {
-		v.Delegate = u.Owner
-	}
+	v.Delegate = u.Delegate
 	return nil
 }
 
@@ -16308,7 +16787,6 @@ func (v *LegacyED25519Signature) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type            SignatureType `json:"type"`
 		Timestamp       uint64        `json:"timestamp,omitempty"`
-		Nonce           uint64        `json:"nonce,omitempty"`
 		PublicKey       *string       `json:"publicKey,omitempty"`
 		Signature       *string       `json:"signature,omitempty"`
 		Signer          *url.URL      `json:"signer,omitempty"`
@@ -16318,7 +16796,6 @@ func (v *LegacyED25519Signature) UnmarshalJSON(data []byte) error {
 	}{}
 	u.Type = v.Type()
 	u.Timestamp = v.Timestamp
-	u.Nonce = v.Timestamp
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.Signature = encoding.BytesToJSON(v.Signature)
 	u.Signer = v.Signer
@@ -16331,11 +16808,7 @@ func (v *LegacyED25519Signature) UnmarshalJSON(data []byte) error {
 	if !(v.Type() == u.Type) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
-	if !(u.Timestamp == 0) {
-		v.Timestamp = u.Timestamp
-	} else {
-		v.Timestamp = u.Nonce
-	}
+	v.Timestamp = u.Timestamp
 	if x, err := encoding.BytesFromJSON(u.PublicKey); err != nil {
 		return fmt.Errorf("error decoding PublicKey: %w", err)
 	} else {
@@ -16380,13 +16853,11 @@ func (v *LiteIdentity) UnmarshalJSON(data []byte) error {
 		Url           *url.URL    `json:"url,omitempty"`
 		CreditBalance uint64      `json:"creditBalance,omitempty"`
 		LastUsedOn    uint64      `json:"lastUsedOn,omitempty"`
-		Nonce         uint64      `json:"nonce,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
 	u.CreditBalance = v.CreditBalance
 	u.LastUsedOn = v.LastUsedOn
-	u.Nonce = v.LastUsedOn
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -16395,11 +16866,7 @@ func (v *LiteIdentity) UnmarshalJSON(data []byte) error {
 	}
 	v.Url = u.Url
 	v.CreditBalance = u.CreditBalance
-	if !(u.LastUsedOn == 0) {
-		v.LastUsedOn = u.LastUsedOn
-	} else {
-		v.LastUsedOn = u.Nonce
-	}
+	v.LastUsedOn = u.LastUsedOn
 	return nil
 }
 
@@ -16503,22 +16970,22 @@ func (v *NetworkAccountUpdate) UnmarshalJSON(data []byte) error {
 
 func (v *NetworkDefinition) UnmarshalJSON(data []byte) error {
 	u := struct {
-		NetworkName string                                 `json:"networkName,omitempty"`
-		Partitions  encoding.JsonList[PartitionDefinition] `json:"partitions,omitempty"`
-		Subnets     encoding.JsonList[PartitionDefinition] `json:"subnets,omitempty"`
+		NetworkName string                            `json:"networkName,omitempty"`
+		Version     uint64                            `json:"version,omitempty"`
+		Partitions  encoding.JsonList[*PartitionInfo] `json:"partitions,omitempty"`
+		Validators  encoding.JsonList[*ValidatorInfo] `json:"validators,omitempty"`
 	}{}
 	u.NetworkName = v.NetworkName
+	u.Version = v.Version
 	u.Partitions = v.Partitions
-	u.Subnets = v.Partitions
+	u.Validators = v.Validators
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.NetworkName = u.NetworkName
-	if !(len(u.Partitions) == 0) {
-		v.Partitions = u.Partitions
-	} else {
-		v.Partitions = u.Subnets
-	}
+	v.Version = u.Version
+	v.Partitions = u.Partitions
+	v.Validators = u.Validators
 	return nil
 }
 
@@ -16571,37 +17038,6 @@ func (v *PartitionAnchor) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("error decoding StateTreeAnchor: %w", err)
 	} else {
 		v.StateTreeAnchor = x
-	}
-	return nil
-}
-
-func (v *PartitionDefinition) UnmarshalJSON(data []byte) error {
-	u := struct {
-		PartitionID   string                     `json:"partitionID,omitempty"`
-		SubnetID      string                     `json:"subnetID,omitempty"`
-		ValidatorKeys encoding.JsonList[*string] `json:"validatorKeys,omitempty"`
-	}{}
-	u.PartitionID = v.PartitionID
-	u.SubnetID = v.PartitionID
-	u.ValidatorKeys = make(encoding.JsonList[*string], len(v.ValidatorKeys))
-	for i, x := range v.ValidatorKeys {
-		u.ValidatorKeys[i] = encoding.BytesToJSON(x)
-	}
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	if !(u.PartitionID == "") {
-		v.PartitionID = u.PartitionID
-	} else {
-		v.PartitionID = u.SubnetID
-	}
-	v.ValidatorKeys = make([][]byte, len(u.ValidatorKeys))
-	for i, x := range u.ValidatorKeys {
-		if x, err := encoding.BytesFromJSON(x); err != nil {
-			return fmt.Errorf("error decoding ValidatorKeys: %w", err)
-		} else {
-			v.ValidatorKeys[i] = x
-		}
 	}
 	return nil
 }
@@ -16807,51 +17243,6 @@ func (v *RemoveKeyOperation) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Entry = u.Entry
-	return nil
-}
-
-func (v *Route) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Length    uint64 `json:"length,omitempty"`
-		Value     uint64 `json:"value,omitempty"`
-		Partition string `json:"partition,omitempty"`
-		Subnet    string `json:"subnet,omitempty"`
-	}{}
-	u.Length = v.Length
-	u.Value = v.Value
-	u.Partition = v.Partition
-	u.Subnet = v.Partition
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	v.Length = u.Length
-	v.Value = u.Value
-	if !(u.Partition == "") {
-		v.Partition = u.Partition
-	} else {
-		v.Partition = u.Subnet
-	}
-	return nil
-}
-
-func (v *RouteOverride) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Account   *url.URL `json:"account,omitempty"`
-		Partition string   `json:"partition,omitempty"`
-		Subnet    string   `json:"subnet,omitempty"`
-	}{}
-	u.Account = v.Account
-	u.Partition = v.Partition
-	u.Subnet = v.Partition
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	v.Account = u.Account
-	if !(u.Partition == "") {
-		v.Partition = u.Partition
-	} else {
-		v.Partition = u.Subnet
-	}
 	return nil
 }
 
@@ -17238,17 +17629,13 @@ func (v *SystemWriteData) UnmarshalJSON(data []byte) error {
 
 func (v *TokenAccount) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type           AccountType                       `json:"type"`
-		KeyBook        *url.URL                          `json:"keyBook,omitempty"`
-		ManagerKeyBook *url.URL                          `json:"managerKeyBook,omitempty"`
-		Url            *url.URL                          `json:"url,omitempty"`
-		Authorities    encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
-		TokenUrl       *url.URL                          `json:"tokenUrl,omitempty"`
-		Balance        *string                           `json:"balance,omitempty"`
+		Type        AccountType                       `json:"type"`
+		Url         *url.URL                          `json:"url,omitempty"`
+		Authorities encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
+		TokenUrl    *url.URL                          `json:"tokenUrl,omitempty"`
+		Balance     *string                           `json:"balance,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.KeyBook = v.KeyBook()
-	u.ManagerKeyBook = v.ManagerKeyBook()
 	u.Url = v.Url
 	u.Authorities = v.AccountAuth.Authorities
 	u.TokenUrl = v.TokenUrl
@@ -17272,20 +17659,16 @@ func (v *TokenAccount) UnmarshalJSON(data []byte) error {
 
 func (v *TokenIssuer) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type           AccountType                       `json:"type"`
-		KeyBook        *url.URL                          `json:"keyBook,omitempty"`
-		ManagerKeyBook *url.URL                          `json:"managerKeyBook,omitempty"`
-		Url            *url.URL                          `json:"url,omitempty"`
-		Authorities    encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
-		Symbol         string                            `json:"symbol,omitempty"`
-		Precision      uint64                            `json:"precision,omitempty"`
-		Properties     *url.URL                          `json:"properties,omitempty"`
-		Issued         *string                           `json:"issued,omitempty"`
-		SupplyLimit    *string                           `json:"supplyLimit,omitempty"`
+		Type        AccountType                       `json:"type"`
+		Url         *url.URL                          `json:"url,omitempty"`
+		Authorities encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
+		Symbol      string                            `json:"symbol,omitempty"`
+		Precision   uint64                            `json:"precision,omitempty"`
+		Properties  *url.URL                          `json:"properties,omitempty"`
+		Issued      *string                           `json:"issued,omitempty"`
+		SupplyLimit *string                           `json:"supplyLimit,omitempty"`
 	}{}
 	u.Type = v.Type()
-	u.KeyBook = v.KeyBook()
-	u.ManagerKeyBook = v.ManagerKeyBook()
 	u.Url = v.Url
 	u.Authorities = v.AccountAuth.Authorities
 	u.Symbol = v.Symbol
@@ -17355,24 +17738,18 @@ func (v *Transaction) UnmarshalJSON(data []byte) error {
 func (v *TransactionHeader) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Principal *url.URL `json:"principal,omitempty"`
-		Origin    *url.URL `json:"origin,omitempty"`
 		Initiator string   `json:"initiator,omitempty"`
 		Memo      string   `json:"memo,omitempty"`
 		Metadata  *string  `json:"metadata,omitempty"`
 	}{}
 	u.Principal = v.Principal
-	u.Origin = v.Principal
 	u.Initiator = encoding.ChainToJSON(v.Initiator)
 	u.Memo = v.Memo
 	u.Metadata = encoding.BytesToJSON(v.Metadata)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	if !(u.Principal == nil) {
-		v.Principal = u.Principal
-	} else {
-		v.Principal = u.Origin
-	}
+	v.Principal = u.Principal
 	if x, err := encoding.ChainFromJSON(u.Initiator); err != nil {
 		return fmt.Errorf("error decoding Initiator: %w", err)
 	} else {
@@ -17605,6 +17982,32 @@ func (v *UpdateKeyPage) UnmarshalJSON(data []byte) error {
 	for i, x := range u.Operation.Value {
 		v.Operation[i] = x
 	}
+	return nil
+}
+
+func (v *ValidatorInfo) UnmarshalJSON(data []byte) error {
+	u := struct {
+		PublicKey     *string                                    `json:"publicKey,omitempty"`
+		PublicKeyHash string                                     `json:"publicKeyHash,omitempty"`
+		Partitions    encoding.JsonList[*ValidatorPartitionInfo] `json:"partitions,omitempty"`
+	}{}
+	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	u.PublicKeyHash = encoding.ChainToJSON(v.PublicKeyHash)
+	u.Partitions = v.Partitions
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if x, err := encoding.BytesFromJSON(u.PublicKey); err != nil {
+		return fmt.Errorf("error decoding PublicKey: %w", err)
+	} else {
+		v.PublicKey = x
+	}
+	if x, err := encoding.ChainFromJSON(u.PublicKeyHash); err != nil {
+		return fmt.Errorf("error decoding PublicKeyHash: %w", err)
+	} else {
+		v.PublicKeyHash = x
+	}
+	v.Partitions = u.Partitions
 	return nil
 }
 

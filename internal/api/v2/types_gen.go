@@ -19,7 +19,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	errors2 "gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -582,19 +582,15 @@ func (v *DataEntrySetQuery) MarshalJSON() ([]byte, error) {
 func (v *DescriptionResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
 		PartitionId   string             `json:"partitionId,omitempty"`
-		SubnetId      string             `json:"subnetId,omitempty"`
 		NetworkType   config.NetworkType `json:"networkType,omitempty"`
 		Network       config.Network     `json:"network,omitempty"`
-		Subnet        config.Network     `json:"subnet,omitempty"`
 		NetworkAnchor string             `json:"networkAnchor,omitempty"`
 		Values        core.GlobalValues  `json:"values,omitempty"`
 		Error         *errors2.Error     `json:"error,omitempty"`
 	}{}
 	u.PartitionId = v.PartitionId
-	u.SubnetId = v.PartitionId
 	u.NetworkType = v.NetworkType
 	u.Network = v.Network
-	u.Subnet = v.Network
 	u.NetworkAnchor = encoding.ChainToJSON(v.NetworkAnchor)
 	u.Values = v.Values
 	u.Error = v.Error
@@ -1184,36 +1180,24 @@ func (v *DataEntrySetQuery) UnmarshalJSON(data []byte) error {
 func (v *DescriptionResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
 		PartitionId   string             `json:"partitionId,omitempty"`
-		SubnetId      string             `json:"subnetId,omitempty"`
 		NetworkType   config.NetworkType `json:"networkType,omitempty"`
 		Network       config.Network     `json:"network,omitempty"`
-		Subnet        config.Network     `json:"subnet,omitempty"`
 		NetworkAnchor string             `json:"networkAnchor,omitempty"`
 		Values        core.GlobalValues  `json:"values,omitempty"`
 		Error         *errors2.Error     `json:"error,omitempty"`
 	}{}
 	u.PartitionId = v.PartitionId
-	u.SubnetId = v.PartitionId
 	u.NetworkType = v.NetworkType
 	u.Network = v.Network
-	u.Subnet = v.Network
 	u.NetworkAnchor = encoding.ChainToJSON(v.NetworkAnchor)
 	u.Values = v.Values
 	u.Error = v.Error
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	if !(u.PartitionId == "") {
-		v.PartitionId = u.PartitionId
-	} else {
-		v.PartitionId = u.SubnetId
-	}
+	v.PartitionId = u.PartitionId
 	v.NetworkType = u.NetworkType
-	if !(u.Network.Equal(&config.Network{})) {
-		v.Network = u.Network
-	} else {
-		v.Network = u.Subnet
-	}
+	v.Network = u.Network
 	if x, err := encoding.ChainFromJSON(u.NetworkAnchor); err != nil {
 		return fmt.Errorf("error decoding NetworkAnchor: %w", err)
 	} else {

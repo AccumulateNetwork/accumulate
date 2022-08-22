@@ -8,9 +8,6 @@ import (
 	"math/big"
 	"strings"
 
-	"github.com/AccumulateNetwork/jsonrpc2/v15"
-	jrpc "github.com/tendermint/tendermint/rpc/jsonrpc/types"
-	tm "github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/shared"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
@@ -44,14 +41,12 @@ func (x *Executor) BeginBlock(block *Block) error {
 		errs := x.dispatcher.Send(context.Background())
 		x.Background(func() {
 			for err := range errs {
-				x.checkDispatchError(err, func(err error) {
-					switch err := err.(type) {
-					case *txnDispatchError:
-						x.logger.Error("Failed to dispatch transactions", "error", err.status.Error, "stack", err.status.Error.PrintFullCallstack(), "type", err.typ, "hash", logging.AsHex(err.status.TxID.Hash()).Slice(0, 4))
-					default:
-						x.logger.Error("Failed to dispatch transactions", "error", fmt.Sprintf("%+v\n", err))
-					}
-				})
+				switch err := err.(type) {
+				case *txnDispatchError:
+					x.logger.Error("Failed to dispatch transactions", "error", err.status.Error, "stack", err.status.Error.PrintFullCallstack(), "type", err.typ, "hash", logging.AsHex(err.status.TxID.Hash()).Slice(0, 4))
+				default:
+					x.logger.Error("Failed to dispatch transactions", "error", fmt.Sprintf("%+v\n", err))
+				}
 			}
 		})
 	} else {
@@ -460,7 +455,7 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, bloc
 			signatures = append(signatures, dnReceipt)
 		}
 
-		keySig, err := shared.SignTransaction(&x.Describe, x.Key, batch, txn, status.DestinationNetwork)
+		keySig, err := shared.SignTransaction(x.globals.Active.Network, x.Key, batch, txn, status.DestinationNetwork)
 		if err != nil {
 			return errors.Wrap(errors.StatusUnknownError, err)
 		}
@@ -478,7 +473,7 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, bloc
 
 func (x *Executor) sendBlockAnchor(batch *database.Batch, anchor protocol.AnchorBody, sequenceNumber uint64, destPart string) error {
 	destPartUrl := protocol.PartitionUrl(destPart)
-	env, err := shared.PrepareBlockAnchor(&x.Describe, x.Key, batch, anchor, sequenceNumber, destPartUrl)
+	env, err := shared.PrepareBlockAnchor(&x.Describe, x.globals.Active.Network, x.Key, batch, anchor, sequenceNumber, destPartUrl)
 	if err != nil {
 		return errors.Wrap(errors.StatusInternalError, err)
 	}
@@ -490,41 +485,4 @@ func (x *Executor) sendBlockAnchor(batch *database.Batch, anchor protocol.Anchor
 	}
 
 	return nil
-}
-
-// checkDispatchError returns nil if the error can be ignored.
-func (x *Executor) checkDispatchError(err error, fn func(error)) {
-	if err == nil {
-		return
-	}
-
-	// TODO This may be unnecessary once this issue is fixed:
-	// https://github.com/tendermint/tendermint/issues/7185.
-
-	// Is the error "tx already exists in cache"?
-	if err.Error() == tm.ErrTxInCache.Error() {
-		return
-	}
-
-	// Or RPC error "tx already exists in cache"?
-	var rpcErr1 *jrpc.RPCError
-	if errors.As(err, &rpcErr1) && *rpcErr1 == *errTxInCache1 {
-		return
-	}
-
-	var rpcErr2 jsonrpc2.Error
-	if errors.As(err, &rpcErr2) && rpcErr2 == errTxInCache2 {
-		return
-	}
-
-	var errorsErr *errors.Error
-	if errors.As(err, &errorsErr) {
-		// This probably should not be necessary
-		if errorsErr.Code == errors.StatusDelivered {
-			return
-		}
-	}
-
-	// It's a real error
-	fn(err)
 }

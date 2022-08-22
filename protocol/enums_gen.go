@@ -41,6 +41,9 @@ const AccountTypeTokenAccount AccountType = 4
 // AccountTypeLiteTokenAccount is a Lite Token Account.
 const AccountTypeLiteTokenAccount AccountType = 5
 
+// AccountTypeBlockLedger is a Block Ledger account.
+const AccountTypeBlockLedger AccountType = 6
+
 // AccountTypeKeyPage is a Key Page account.
 const AccountTypeKeyPage AccountType = 9
 
@@ -130,6 +133,12 @@ const ObjectTypeAccount ObjectType = 1
 
 // ObjectTypeTransaction represents a transaction object.
 const ObjectTypeTransaction ObjectType = 2
+
+// PartitionTypeDirectory .
+const PartitionTypeDirectory PartitionType = 1
+
+// PartitionTypeBlockValidator .
+const PartitionTypeBlockValidator PartitionType = 2
 
 // SignatureTypeUnknown is used when the signature type is not known.
 const SignatureTypeUnknown SignatureType = 0
@@ -360,7 +369,7 @@ func (v AccountType) GetEnumValue() uint64 { return uint64(v) }
 func (v *AccountType) SetEnumValue(id uint64) bool {
 	u := AccountType(id)
 	switch u {
-	case AccountTypeUnknown, AccountTypeAnchorLedger, AccountTypeIdentity, AccountTypeTokenIssuer, AccountTypeTokenAccount, AccountTypeLiteTokenAccount, AccountTypeKeyPage, AccountTypeKeyBook, AccountTypeDataAccount, AccountTypeLiteDataAccount, AccountTypeUnknownSigner, AccountTypeSystemLedger, AccountTypeLiteIdentity, AccountTypeSyntheticLedger:
+	case AccountTypeUnknown, AccountTypeAnchorLedger, AccountTypeIdentity, AccountTypeTokenIssuer, AccountTypeTokenAccount, AccountTypeLiteTokenAccount, AccountTypeBlockLedger, AccountTypeKeyPage, AccountTypeKeyBook, AccountTypeDataAccount, AccountTypeLiteDataAccount, AccountTypeUnknownSigner, AccountTypeSystemLedger, AccountTypeLiteIdentity, AccountTypeSyntheticLedger:
 		*v = u
 		return true
 	default:
@@ -383,6 +392,8 @@ func (v AccountType) String() string {
 		return "tokenAccount"
 	case AccountTypeLiteTokenAccount:
 		return "liteTokenAccount"
+	case AccountTypeBlockLedger:
+		return "blockLedger"
 	case AccountTypeKeyPage:
 		return "keyPage"
 	case AccountTypeKeyBook:
@@ -421,6 +432,8 @@ func AccountTypeByName(name string) (AccountType, bool) {
 		return AccountTypeTokenAccount, true
 	case "litetokenaccount":
 		return AccountTypeLiteTokenAccount, true
+	case "blockledger":
+		return AccountTypeBlockLedger, true
 	case "keypage":
 		return AccountTypeKeyPage, true
 	case "keybook":
@@ -859,6 +872,68 @@ func (v *ObjectType) UnmarshalJSON(data []byte) error {
 	*v, ok = ObjectTypeByName(s)
 	if !ok || strings.ContainsRune(v.String(), ':') {
 		return fmt.Errorf("invalid Object Type %q", s)
+	}
+	return nil
+}
+
+// GetEnumValue returns the value of the Partition Type
+func (v PartitionType) GetEnumValue() uint64 { return uint64(v) }
+
+// SetEnumValue sets the value. SetEnumValue returns false if the value is invalid.
+func (v *PartitionType) SetEnumValue(id uint64) bool {
+	u := PartitionType(id)
+	switch u {
+	case PartitionTypeDirectory, PartitionTypeBlockValidator:
+		*v = u
+		return true
+	default:
+		return false
+	}
+}
+
+// String returns the name of the Partition Type.
+func (v PartitionType) String() string {
+	switch v {
+	case PartitionTypeDirectory:
+		return "directory"
+	case PartitionTypeBlockValidator:
+		return "blockValidator"
+	default:
+		return fmt.Sprintf("PartitionType:%d", v)
+	}
+}
+
+// PartitionTypeByName returns the named Partition Type.
+func PartitionTypeByName(name string) (PartitionType, bool) {
+	switch strings.ToLower(name) {
+	case "directory":
+		return PartitionTypeDirectory, true
+	case "blockvalidator":
+		return PartitionTypeBlockValidator, true
+	case "block-validator":
+		return PartitionTypeBlockValidator, true
+	default:
+		return 0, false
+	}
+}
+
+// MarshalJSON marshals the Partition Type to JSON as a string.
+func (v PartitionType) MarshalJSON() ([]byte, error) {
+	return json.Marshal(v.String())
+}
+
+// UnmarshalJSON unmarshals the Partition Type from JSON as a string.
+func (v *PartitionType) UnmarshalJSON(data []byte) error {
+	var s string
+	err := json.Unmarshal(data, &s)
+	if err != nil {
+		return err
+	}
+
+	var ok bool
+	*v, ok = PartitionTypeByName(s)
+	if !ok || strings.ContainsRune(v.String(), ':') {
+		return fmt.Errorf("invalid Partition Type %q", s)
 	}
 	return nil
 }

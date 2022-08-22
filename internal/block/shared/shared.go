@@ -4,8 +4,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -42,25 +42,19 @@ func GetAccountAuthoritySet(account protocol.Account) (*protocol.AccountAuth, *u
 	}
 }
 
-func SignTransaction(network *config.Describe, nodeKey []byte, batch *database.Batch, txn *protocol.Transaction, destination *url.URL) (protocol.Signature, error) {
+func SignTransaction(network *protocol.NetworkDefinition, nodeKey []byte, batch *database.Batch, txn *protocol.Transaction, destination *url.URL) (protocol.Signature, error) {
 	// TODO Exporting this is not great
 
 	if nodeKey == nil {
 		return nil, errors.Format(errors.StatusInternalError, "attempted to sign with a nil key")
 	}
 
-	var page *protocol.KeyPage
-	err := batch.Account(network.OperatorsPage()).GetStateAs(&page)
-	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "load operator key page: %w", err)
-	}
-
 	// Sign it
 	bld := new(signing.Builder).
 		SetType(protocol.SignatureTypeED25519).
 		SetPrivateKey(nodeKey).
-		SetUrl(config.NetworkUrl{URL: destination}.OperatorsPage()).
-		SetVersion(1).
+		SetUrl(protocol.DnUrl().JoinPath(protocol.Network)).
+		SetVersion(network.Version).
 		SetTimestamp(1)
 
 	keySig, err := bld.Sign(txn.GetHash())
@@ -71,7 +65,7 @@ func SignTransaction(network *config.Describe, nodeKey []byte, batch *database.B
 	return keySig, nil
 }
 
-func PrepareBlockAnchor(network *config.Describe, nodeKey []byte, batch *database.Batch, anchor protocol.TransactionBody, sequenceNumber uint64, destPartUrl *url.URL) (*protocol.Envelope, error) {
+func PrepareBlockAnchor(network *config.Describe, netdef *protocol.NetworkDefinition, nodeKey []byte, batch *database.Batch, anchor protocol.TransactionBody, sequenceNumber uint64, destPartUrl *url.URL) (*protocol.Envelope, error) {
 	// TODO Exporting this is not great
 
 	txn := new(protocol.Transaction)
@@ -88,7 +82,7 @@ func PrepareBlockAnchor(network *config.Describe, nodeKey []byte, batch *databas
 	}
 
 	// Create a key signature
-	keySig, err := SignTransaction(network, nodeKey, batch, txn, initSig.DestinationNetwork)
+	keySig, err := SignTransaction(netdef, nodeKey, batch, txn, initSig.DestinationNetwork)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
