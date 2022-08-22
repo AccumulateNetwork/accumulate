@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/client"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -176,15 +177,38 @@ func initializeClients(c int) ([]*Client, error) {
 	dsl.Initialize(dsName, logging.DefaultOptions())
 	ds := dsl.GetDataSet(dsName)
 
-	clients := make([]*Client, c)
+	// Ask the server to describe the network
+	cl, err := client.New(serverUrl)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := cl.Describe(context.Background())
+	if err != nil {
+		return nil, err
+	}
+
+	// Build a list of all the nodes' addresses
+	var addrs []string
+	for _, p := range resp.Network.Partitions {
+		for _, n := range p.Nodes {
+			u, err := config.OffsetPort(n.Address, int(p.BasePort), int(config.PortOffsetAccumulateApi))
+			if err != nil {
+				return nil, err
+			}
+			addrs = append(addrs, u.String())
+		}
+	}
 
 	//initialize the datasets and clients
+	clients := make([]*Client, c)
 	for i := 0; i < c; i++ {
-		cl, err := client.New(serverUrl)
+		// Round-robin the clients
+		cl, err := client.New(addrs[i%len(addrs)])
 		if err != nil {
 			return nil, err
 		}
 		cl.DebugRequest = false
+		cl.Timeout = 5 * time.Minute
 		clients[i] = &Client{ds, cl, i, 0}
 	}
 
