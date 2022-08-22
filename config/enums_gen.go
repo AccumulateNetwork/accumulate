@@ -8,12 +8,6 @@ import (
 	"strings"
 )
 
-// NetworkTypeDirectory .
-const NetworkTypeDirectory NetworkType = 1
-
-// NetworkTypeBlockValidator .
-const NetworkTypeBlockValidator NetworkType = 2
-
 // NodeTypeValidator .
 const NodeTypeValidator NodeType = 1
 
@@ -34,68 +28,6 @@ const PortOffsetPrometheus PortOffset = 3
 
 // PortOffsetAccumulateApi .
 const PortOffsetAccumulateApi PortOffset = 4
-
-// GetEnumValue returns the value of the Network Type
-func (v NetworkType) GetEnumValue() uint64 { return uint64(v) }
-
-// SetEnumValue sets the value. SetEnumValue returns false if the value is invalid.
-func (v *NetworkType) SetEnumValue(id uint64) bool {
-	u := NetworkType(id)
-	switch u {
-	case NetworkTypeDirectory, NetworkTypeBlockValidator:
-		*v = u
-		return true
-	default:
-		return false
-	}
-}
-
-// String returns the name of the Network Type.
-func (v NetworkType) String() string {
-	switch v {
-	case NetworkTypeDirectory:
-		return "directory"
-	case NetworkTypeBlockValidator:
-		return "blockValidator"
-	default:
-		return fmt.Sprintf("NetworkType:%d", v)
-	}
-}
-
-// NetworkTypeByName returns the named Network Type.
-func NetworkTypeByName(name string) (NetworkType, bool) {
-	switch strings.ToLower(name) {
-	case "directory":
-		return NetworkTypeDirectory, true
-	case "blockvalidator":
-		return NetworkTypeBlockValidator, true
-	case "block-validator":
-		return NetworkTypeBlockValidator, true
-	default:
-		return 0, false
-	}
-}
-
-// MarshalJSON marshals the Network Type to JSON as a string.
-func (v NetworkType) MarshalJSON() ([]byte, error) {
-	return json.Marshal(v.String())
-}
-
-// UnmarshalJSON unmarshals the Network Type from JSON as a string.
-func (v *NetworkType) UnmarshalJSON(data []byte) error {
-	var s string
-	err := json.Unmarshal(data, &s)
-	if err != nil {
-		return err
-	}
-
-	var ok bool
-	*v, ok = NetworkTypeByName(s)
-	if !ok || strings.ContainsRune(v.String(), ':') {
-		return fmt.Errorf("invalid Network Type %q", s)
-	}
-	return nil
-}
 
 // GetEnumValue returns the value of the Node Type
 func (v NodeType) GetEnumValue() uint64 { return uint64(v) }
