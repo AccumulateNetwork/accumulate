@@ -18,6 +18,8 @@ func NewAccount(typ AccountType) (Account, error) {
 		return new(ADI), nil
 	case AccountTypeAnchorLedger:
 		return new(AnchorLedger), nil
+	case AccountTypeBlockLedger:
+		return new(BlockLedger), nil
 	case AccountTypeDataAccount:
 		return new(DataAccount), nil
 	case AccountTypeKeyBook:
@@ -58,6 +60,9 @@ func EqualAccount(a, b Account) bool {
 		return ok && a.Equal(b)
 	case *AnchorLedger:
 		b, ok := b.(*AnchorLedger)
+		return ok && a.Equal(b)
+	case *BlockLedger:
+		b, ok := b.(*BlockLedger)
 		return ok && a.Equal(b)
 	case *DataAccount:
 		b, ok := b.(*DataAccount)
