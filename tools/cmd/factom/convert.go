@@ -142,8 +142,11 @@ func convert(_ *cobra.Command, args []string) {
 				if found {
 					//entry timestamp down to the minute
 					ed.EntryTime = ed.EntryTime.Add(time.Minute*time.Duration(minute) +
-						//entry timestamp to order entry within minute. (Note: sub-minute time is arbitrary, but uniqueness is provided)
-						time.Duration(float64(time.Minute)*float64(ebEntryIndex[entryHash])/float64(entryCountInMinute[minute]+1)))
+						//entry timestamp to order entry within minute.
+						//Option1: use arbitrary sub-minute time based on index, but uniqueness is provided
+						//time.Duration(float64(time.Minute)*float64(ebEntryIndex[entryHash])/float64(entryCountInMinute[minute]+1)))
+						//Option2: simply use the index into the minute as a microsecond (this option looks much cleaner)
+						time.Microsecond*time.Duration(ebEntryIndex[entryHash]+1))
 				} else {
 					fatalf("cannot find entry in entry block, %x at height %d", entry.GetHash().Bytes(), blockHeight)
 				}
