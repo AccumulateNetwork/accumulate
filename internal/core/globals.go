@@ -77,7 +77,16 @@ func (g *GlobalValues) FormatGlobals() protocol.DataEntry {
 }
 
 func (g *GlobalValues) ParseNetwork(entry protocol.DataEntry) error {
-	return parseEntryAs(labelNetwork, entry, new(protocol.NetworkDefinition), &g.Network)
+	version := g.Network.Version
+	err := parseEntryAs(labelNetwork, entry, new(protocol.NetworkDefinition), &g.Network)
+	if err != nil {
+		return err
+	}
+
+	if g.Network.Version <= version {
+		return errors.Format(errors.StatusBadRequest, "version must increase: %d <= %d", g.Network.Version, version)
+	}
+	return nil
 }
 
 func (g *GlobalValues) FormatNetwork() protocol.DataEntry {
