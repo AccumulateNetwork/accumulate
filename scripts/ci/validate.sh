@@ -133,7 +133,7 @@ target=acc://test.acme/book
 if [ "$target" = "$delegate" ]; then
 success
   else
-  die `want acc://test.acme/book got ${delegate}`
+  die "want acc://test.acme/book got ${delegate}"
 fi
 
 section "Set KeyBook2 as authority for adi token account"
@@ -141,11 +141,11 @@ keybook2=acc://test.acme/book2
 tokenTxHash=$(cli-tx account create token test.acme test-1-0 test.acme/acmetokens acc://ACME --authority acc://test.acme/book2)
 wait-for-tx $tokenTxHash
 wait-for cli-tx-sig tx sign  test.acme/book2 test-2-0 $tokenTxHash
-tokenAuthority=$(accumulate get test.acme/acmetokens -j | jq -re .data.keyBook)
+tokenAuthority=$(accumulate get test.acme/acmetokens -j | jq -re '.data.authorities[0].url')
 if [ "$keybook2" = "$tokenAuthority" ]; then
 success
 else
-die `want $keybook2 got $tokenAuthority`
+die "want $keybook2 got $tokenAuthority"
 fi
 
 section "Burn Tokens for adi token account"
@@ -158,11 +158,11 @@ section "Set KeyBook2 as authority for adi data account"
 dataTxHash=$(cli-tx account create data test.acme test-1-0 test.acme/testdata1 --authority acc://test.acme/book2)
 wait-for-tx $dataTxHash
 wait-for cli-tx-sig tx sign  test.acme/book2 test-2-0 $dataTxHash
-dataAuthority=$(accumulate account get test.acme/testdata1 -j | jq -re .data.keyBook)
+dataAuthority=$(accumulate account get test.acme/testdata1 -j | jq -re '.data.authorities[0].url')
 if [ "$dataAuthority" = "$keybook2" ]; then
 success
 else
-die `want $keybook2 got $dataAuthority`
+die "want $keybook2 got $dataAuthority"
 fi
 
 section "Set threshold to 2 of 2"
