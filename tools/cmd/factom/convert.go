@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io/fs"
 	"io/ioutil"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/FactomProject/factomd/common/entryBlock"
+	"github.com/FactomProject/factomd/common/interfaces"
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -67,16 +69,98 @@ func convert(_ *cobra.Command, args []string) {
 		checkf(err, "read %s", filename)
 		fmt.Printf("Processing %s\n", filename)
 
+		type EntryData struct {
+			EntryTime time.Time //derived timestamp of entry
+			Entry     *entryBlock.Entry
+		}
+
 		// Create a map of all the entries in the object file
-		entries := map[[32]byte][]*entryBlock.Entry{}
-		err = factom.ReadObjectFile(input, logger, func(_ *factom.Header, object interface{}) {
-			entry, ok := object.(*entryBlock.Entry)
-			if !ok {
+		entries := map[[32]byte][]*EntryData{}
+
+		eblocks := map[[32]byte]*entryBlock.EBlock{}
+		ebEntryIndex := map[[32]byte]int{} //duplicates tracker
+		blockTime := time.Time{}
+		blockHeight := uint32(0)
+
+		err = factom.ReadObjectFile(input, logger, func(header *factom.Header, object interface{}) {
+			switch header.Tag {
+			case factom.TagDBlock:
+				idb, ok := object.(interfaces.IDirectoryBlock)
+				if !ok {
+					panic("expected directory block")
+				}
+				blockTime = idb.GetTimestamp().GetTime()
+				blockHeight = idb.GetHeader().GetDBHeight()
+				//reset index tracking map
+				ebEntryIndex = map[[32]byte]int{}
+			case factom.TagEBlock:
+				eb, ok := object.(*entryBlock.EBlock)
+				if !ok {
+					panic("expected entry block")
+				}
+				id := eb.GetChainID().Fixed()
+				eblocks[id] = eb
+			case factom.TagEntry:
+				entry, ok := object.(*entryBlock.Entry)
+				if !ok {
+					panic("expected entry")
+				}
+				id := entry.ChainID.Fixed()
+				//look for entry in entry block to figure out minute, need to handle duplicate entries
+				//since we don't have any more resolution we'll just divide the number of entries in the minute
+				//min by the count to give us some arbitrary resolution in seconds.
+				minute := byte(0)
+				found := false
+				entriesInMinute := 0
+				var entryHash [32]byte
+
+				//count the number of entries per minute for a given block
+				var entryCountInMinute [10]byte
+				j := 0
+				for _, e := range eblocks[id].GetBody().GetEBEntries() {
+					if e.IsMinuteMarker() {
+						j++
+						continue
+					}
+					entryCountInMinute[j]++
+				}
+
+				//now search for the time marker of the entry, handle duplicate entries
+				for i, e := range eblocks[id].GetBody().GetEBEntries() {
+					entryHash = entry.GetHash().Fixed()
+					if e.IsMinuteMarker() {
+						minute = e.ToMinute()
+						entriesInMinute = 0
+						continue
+					} else if bytes.Equal(e.Bytes(), entryHash[:]) {
+						//we have a match, but is it a duplicate? if so, continue on to look for next match
+						if ebEntryIndex[entryHash] <= i {
+							ebEntryIndex[entryHash] = i
+							found = true
+							break
+						}
+					}
+					entriesInMinute++
+				}
+
+				ed := EntryData{blockTime, entry}
+				if found {
+					//entry timestamp down to the minute
+					ed.EntryTime = ed.EntryTime.Add(time.Minute*time.Duration(minute) +
+						//entry timestamp to order entry within minute.
+						//Option1: use arbitrary sub-minute time based on index, but uniqueness is provided
+						//time.Duration(float64(time.Minute)*float64(ebEntryIndex[entryHash])/float64(entryCountInMinute[minute]+1)))
+						//Option2: simply use the index into the minute as a microsecond (this option looks much cleaner)
+						time.Microsecond*time.Duration(ebEntryIndex[entryHash]+1))
+				} else {
+					fatalf("cannot find entry in entry block, %x at height %d", entry.GetHash().Bytes(), blockHeight)
+				}
+
+				entries[id] = append(entries[id], &ed)
+			default:
 				return
 			}
 
-			id := entry.ChainID.Fixed()
-			entries[id] = append(entries[id], entry)
 		})
 		checkf(err, "process object file")
 
@@ -88,7 +172,7 @@ func convert(_ *cobra.Command, args []string) {
 			checkf(err, "create LDA URL")
 
 			for len(entriesAll) > 0 {
-				var entries []*entryBlock.Entry
+				var entries []*EntryData
 				if len(entriesAll) > 1000 {
 					entries = entriesAll[:1000]
 					entriesAll = entriesAll[1000:]
@@ -117,10 +201,10 @@ func convert(_ *cobra.Command, args []string) {
 				}
 
 				// For each entry
-				for _, entry := range entries {
+				for _, e := range entries {
 					entryCount++
 					// Convert the entry and calculate the entry hash
-					entry := factom.ConvertEntry(entry).Wrap()
+					entry := factom.ConvertEntry(e.Entry).Wrap()
 					entryHash, err := protocol.ComputeFactomEntryHashForAccount(chainId[:], entry.GetData())
 					checkf(err, "calculate entry hash")
 
@@ -129,9 +213,8 @@ func convert(_ *cobra.Command, args []string) {
 					txn.Header.Principal = address
 					txn.Body = &protocol.WriteData{Entry: entry}
 
-					// Each transaction needs to be unique so add a timestamp
-					// TODO: Derive this from Factom?
-					txn.Header.Memo = fmt.Sprintf("Imported on %v", time.Now())
+					// Each transaction needs to be unique so add a timestamp which is the timestamp from the Factom chain
+					txn.Header.Memo = fmt.Sprintf("%v", e.EntryTime.UTC())
 
 					// Construct the transaction result
 					result := new(protocol.WriteDataResult)
