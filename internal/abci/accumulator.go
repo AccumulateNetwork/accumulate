@@ -565,6 +565,7 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 	}
 
 	go app.Accumulate.AnalysisLog.Flush()
-	app.logger.Debug("Committed", "minor", app.block.Index, "hash", logging.AsHex(batch.BptRoot()).Slice(0, 4), "major", app.block.State.MakeMajorBlock)
+	duration := time.Since(app.timer)
+	app.logger.Debug("Committed", "minor", app.block.Index, "hash", logging.AsHex(batch.BptRoot()).Slice(0, 4), "major", app.block.State.MakeMajorBlock, "duration", duration, "count", app.txct)
 	return resp
 }

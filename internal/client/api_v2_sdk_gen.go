@@ -166,6 +166,18 @@ func (c *Client) ExecuteIssueTokens(ctx context.Context, req *api.TxRequest) (*a
 	return &resp, nil
 }
 
+// ExecuteLocal submits a transaction without routing it. INTENDED FOR INTERNAL USE ONLY.
+func (c *Client) ExecuteLocal(ctx context.Context, req *api.ExecuteRequest) (*api.TxResponse, error) {
+	var resp api.TxResponse
+
+	err := c.RequestAPIv2(ctx, "execute-local", req, &resp)
+	if err != nil {
+		return nil, err
+	}
+
+	return &resp, nil
+}
+
 // ExecuteSendTokens submits a SendTokens transaction.
 func (c *Client) ExecuteSendTokens(ctx context.Context, req *api.TxRequest) (*api.TxResponse, error) {
 	var resp api.TxResponse
