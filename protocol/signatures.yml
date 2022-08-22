@@ -5,7 +5,6 @@ LegacyED25519Signature:
   fields:
     - name: Timestamp
       type: uint
-      alternative: Nonce
     - name: PublicKey
       type: bytes
     - name: Signature
