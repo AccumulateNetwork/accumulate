@@ -1,6 +1,8 @@
 package config
 
 import (
+	"strconv"
+
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -17,6 +19,11 @@ func (u NetworkUrl) Identity() *url.URL {
 // Ledger returns the URL of the partition's ledger account.
 func (u NetworkUrl) Ledger() *url.URL {
 	return u.JoinPath(protocol.Ledger)
+}
+
+// BlockLedger returns the URL of a partition's ledger for a block.
+func (u NetworkUrl) BlockLedger(i uint64) *url.URL {
+	return u.JoinPath(protocol.Ledger, strconv.FormatUint(i, 10))
 }
 
 // Synthetic returns the URL of the partition's synthetic transaction ledger account.
@@ -52,6 +59,11 @@ func (n *Describe) NodeUrl(path ...string) *url.URL {
 // Ledger returns the URL of the partition's ledger account.
 func (n *Describe) Ledger() *url.URL {
 	return n.PartitionUrl().Ledger()
+}
+
+// BlockLedger returns the URL of a partition's ledger for a block.
+func (n *Describe) BlockLedger(i uint64) *url.URL {
+	return n.PartitionUrl().BlockLedger(i)
 }
 
 // Synthetic returns the URL of the partition's ledger account.
