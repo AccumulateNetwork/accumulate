@@ -127,25 +127,6 @@ TransactionChainEntry:
     description: is the index of the entry in the anchor chain's index chain
     type: uint
 
-ChainUpdate:
-  fields:
-    - name: Account
-      type: url
-      pointer: true
-    - name: Name
-      type: string
-    - name: Type
-      type: protocol.ChainType
-      marshal-as: enum
-    - name: Index
-      type: uint
-    - name: SourceIndex
-      type: uint
-    - name: SourceBlock
-      type: uint
-    - name: Entry
-      type: bytes
-
 BlockStateSynthTxnEntry:
   fields:
   - name: Account

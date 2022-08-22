@@ -64,6 +64,18 @@ AnchorLedger:
       pointer: true
       repeatable: true
 
+BlockLedger:
+  union: { type: account }
+  fields:
+    - name: Url
+      type: url
+      pointer: true
+    - name: Entries
+      type: BlockEntry
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+
 ##### Transactions #####
 
 SystemGenesis:
