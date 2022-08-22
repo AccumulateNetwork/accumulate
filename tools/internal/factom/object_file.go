@@ -2,16 +2,29 @@ package factom
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/FactomProject/factomd/common/adminBlock"
 	"github.com/FactomProject/factomd/common/directoryBlock"
 	"github.com/FactomProject/factomd/common/entryBlock"
 	"github.com/FactomProject/factomd/common/entryCreditBlock"
 	"github.com/FactomProject/factomd/common/factoid"
+	"github.com/rs/zerolog"
+	"github.com/tendermint/tendermint/libs/log"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 )
 
-func ReadObjectFile(buff []byte, fn func(header *Header, object interface{})) error {
+func ReadObjectFile(buff []byte, logger log.Logger, fn func(header *Header, object interface{})) error {
+	if logger == nil {
+		logWriter, err := logging.NewConsoleWriter("plain")
+		if err != nil {
+			panic(err)
+		}
+		logger, err = logging.NewTendermintLogger(zerolog.New(logWriter), "info", false)
+		if err != nil {
+			panic(err)
+		}
+	}
+
 	var lastHeight uint32
 	for len(buff) > 0 {
 		header := new(Header)
@@ -29,7 +42,7 @@ func ReadObjectFile(buff []byte, fn func(header *Header, object interface{})) er
 			aBlock := adminBlock.NewAdminBlock(nil)
 			if err := aBlock.UnmarshalBinary(buff[:header.Size]); err != nil {
 				// Why?
-				log.Printf("Ht %d Admin size %d: %v\n", lastHeight, header.Size, err)
+				logger.Info("Bad admin block", "height", lastHeight, "size", header.Size, "error", err)
 				// return fmt.Errorf("unmarshal admin block: %w", err)
 			} else {
 				fn(header, aBlock)

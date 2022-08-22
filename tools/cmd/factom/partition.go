@@ -54,7 +54,7 @@ func partition(_ *cobra.Command, args []string) {
 	checkf(err, "create router")
 
 	// Read the object file
-	err = factom.ReadObjectFile(input, func(_ *factom.Header, object interface{}) {
+	err = factom.ReadObjectFile(input, nil, func(_ *factom.Header, object interface{}) {
 		entry, ok := object.(*entryBlock.Entry)
 		if !ok {
 			return

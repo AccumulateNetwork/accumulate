@@ -29,7 +29,7 @@ func list(_ *cobra.Command, args []string) {
 		input, err := ioutil.ReadFile(filename)
 		checkf(err, "read %s", filename)
 
-		err = factom.ReadObjectFile(input, func(_ *factom.Header, object interface{}) {
+		err = factom.ReadObjectFile(input, nil, func(_ *factom.Header, object interface{}) {
 			switch object.(type) {
 			case *directoryBlock.DirectoryBlock:
 				fmt.Println("Directory block")

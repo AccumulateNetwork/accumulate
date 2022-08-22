@@ -70,7 +70,7 @@ func Process() {
 
 		transactions := map[[32]byte][]*protocol.Transaction{}
 
-		err := factom.ReadObjectFile(buff, func(_ *factom.Header, object interface{}) {
+		err := factom.ReadObjectFile(buff, nil, func(_ *factom.Header, object interface{}) {
 			switch object := object.(type) {
 			case *entryBlock.Entry:
 				qEntry := &f2.Entry{

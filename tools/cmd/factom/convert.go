@@ -2,16 +2,19 @@ package main
 
 import (
 	"fmt"
+	"io/fs"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/FactomProject/factomd/common/entryBlock"
+	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/badger"
 	"gitlab.com/accumulatenetwork/accumulate/tools/internal/factom"
@@ -24,15 +27,25 @@ var cmdConvert = &cobra.Command{
 	Run:   convert,
 }
 
+var flagConvert = struct {
+	LogLevel string
+}{}
+
 func init() {
 	cmd.AddCommand(cmdConvert)
+	cmdConvert.Flags().StringVarP(&flagConvert.LogLevel, "log-level", "l", "error", "Set the logging level")
 }
 
 func convert(_ *cobra.Command, args []string) {
 	entryCount := 0
 	FCTHeight := 0
 
-	db, err := database.OpenBadger(args[0], nil)
+	logWriter, err := logging.NewConsoleWriter("plain")
+	check(err)
+	logger, err := logging.NewTendermintLogger(zerolog.New(logWriter), flagConvert.LogLevel, false)
+	check(err)
+
+	db, err := database.OpenBadger(args[0], logger)
 	checkf(err, "output database")
 	defer db.Close()
 
@@ -40,31 +53,23 @@ func convert(_ *cobra.Command, args []string) {
 	checkf(err, "output file")
 	defer output.Close()
 
-	start := time.Now().Unix()
+	start := time.Now()
 	for {
-		runTime := time.Now().Unix() - start
-		if runTime > 0 {
-			hours := runTime / 60 / 60
-			minutes := (runTime - hours*60*60) / 60
-			seconds := runTime % 60
-
-			fmt.Printf("FCT Blocks\t\t%d\nEntries\t\t\t%d\nTime\t\t\t%d:%02d:%02d\n",
-				FCTHeight, entryCount, hours, minutes, seconds)
-			fmt.Printf("BLK/s\t\t\t%d\nEntries/s per Second\t%d\n\n",
-				int64(FCTHeight)/runTime, int64(entryCount)/runTime)
-		}
-
 		filename := fmt.Sprintf("objects-%d.dat", FCTHeight)
 		FCTHeight += 2000
 
 		filename = filepath.Join(args[2], filename)
 
 		input, err := ioutil.ReadFile(filename)
+		if errors.Is(err, fs.ErrNotExist) {
+			break
+		}
 		checkf(err, "read %s", filename)
+		fmt.Printf("Processing %s\n", filename)
 
 		// Create a map of all the entries in the object file
 		entries := map[[32]byte][]*entryBlock.Entry{}
-		err = factom.ReadObjectFile(input, func(_ *factom.Header, object interface{}) {
+		err = factom.ReadObjectFile(input, logger, func(_ *factom.Header, object interface{}) {
 			entry, ok := object.(*entryBlock.Entry)
 			if !ok {
 				return
@@ -172,6 +177,12 @@ func convert(_ *cobra.Command, args []string) {
 				checkf(err, "commit")
 			}
 		}
+
+		runTime := time.Since(start)
+		fmt.Printf("FCT Blocks\t\t%d\nEntries\t\t\t%d\nTime\t\t\t%v\n",
+			FCTHeight, entryCount, runTime)
+		fmt.Printf("BLK/s\t\t\t%.0f\nEntries/s per Second\t%.0f\n\n",
+			float64(FCTHeight)/runTime.Seconds(), float64(entryCount)/runTime.Seconds())
 
 		// Do a GC after each object file to keep badger under control
 		err = db.GC(0.5)
