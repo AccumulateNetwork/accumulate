@@ -2,7 +2,7 @@ package protocol
 
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/sortutil"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
 // Partition finds or creates a synthetic ledger entry for the given partition.

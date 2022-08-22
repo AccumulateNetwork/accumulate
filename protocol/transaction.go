@@ -6,7 +6,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/sortutil"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
 func (s *TransactionStatus) Delivered() bool { return s.Code == errors.StatusDelivered || s.Failed() }
