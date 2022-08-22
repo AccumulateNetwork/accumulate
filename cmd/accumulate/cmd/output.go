@@ -16,7 +16,7 @@ import (
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	errors2 "gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
+	url2 "gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
