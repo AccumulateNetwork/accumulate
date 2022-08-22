@@ -30,6 +30,25 @@ func (m *JrpcMethods) QueryTx(ctx context.Context, params json.RawMessage) inter
 		return accumulateError(err)
 	}
 
+	// When querying with a full transaction ID URL, route the request
+	if req.TxIdUrl != nil {
+		subnet, err := m.Router.RouteAccount(req.TxIdUrl.Account())
+		if err != nil {
+			return validatorError(err)
+		}
+
+		if subnet == m.Options.Describe.PartitionId {
+			return m.QueryTxLocal(ctx, params)
+		}
+
+		var result interface{}
+		err = m.Router.RequestAPIv2(ctx, subnet, "query-tx-local", params, &result)
+		if err != nil {
+			return accumulateError(err)
+		}
+		return result
+	}
+
 	resCh := make(chan interface{})                    // Result channel
 	errCh := make(chan error)                          // Error channel
 	doneCh := make(chan struct{})                      // Completion channel
