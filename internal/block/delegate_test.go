@@ -101,14 +101,14 @@ func TestDelegatedSignatureDepth(tt *testing.T) {
 
 	sig, err := builder.Sign(txn.GetHash())
 	require.NoError(t, err)
-	require.NoError(t, exec.ValidateSignature(t.Batch, delivery, sig))
+	require.NoError(t, exec.ValidateSignature(t.Batch, delivery, new(TransactionStatus), sig))
 
 	// It should fail when over the limit
 	builder.AddDelegator(AccountUrl("baz", fmt.Sprint(protocol.DelegationDepthLimit)))
 
 	sig, err = builder.Sign(txn.GetHash())
 	require.NoError(t, err)
-	err = exec.ValidateSignature(t.Batch, delivery, sig)
+	err = exec.ValidateSignature(t.Batch, delivery, new(TransactionStatus), sig)
 	require.EqualError(t, err, fmt.Sprintf("delegated signature exceeded the depth limit (%d)", protocol.DelegationDepthLimit))
 }
 

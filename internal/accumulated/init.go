@@ -164,25 +164,25 @@ func ConfigureNodePorts(node *NodeInit, cfg *config.Config, offset config.PortOf
 func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time time.Time, logger log.Logger, factomAddresses func() (io.Reader, error)) (map[string]*tmtypes.GenesisDoc, error) {
 	docs := map[string]*tmtypes.GenesisDoc{}
 	var operators [][]byte
-	var partitions []protocol.PartitionDefinition
-	partitions = append(partitions, protocol.PartitionDefinition{
-		PartitionID: protocol.Directory,
-	})
+	netinfo := new(protocol.NetworkDefinition)
+	netinfo.NetworkName = network.Id
+	netinfo.AddPartition(protocol.Directory, protocol.PartitionTypeDirectory)
 
-	var dnValidators [][]byte
 	var dnTmValidators []tmtypes.GenesisValidator
 
 	var i int
 	for _, bvn := range network.Bvns {
-		var bvnValidators [][]byte
 		var bvnTmValidators []tmtypes.GenesisValidator
 
 		for j, node := range bvn.Nodes {
 			i++
 			key := ed25519.PrivKey(node.PrivValKey)
 			operators = append(operators, key.PubKey().Bytes())
+
+			netinfo.AddValidator(key.PubKey().Bytes(), protocol.Directory, node.DnnType == config.Validator)
+			netinfo.AddValidator(key.PubKey().Bytes(), bvn.Id, node.BvnnType == config.Validator)
+
 			if node.DnnType == config.Validator {
-				dnValidators = append(dnValidators, key.PubKey().Bytes())
 				dnTmValidators = append(dnTmValidators, tmtypes.GenesisValidator{
 					Name:    fmt.Sprintf("Directory.%d", i),
 					Address: key.PubKey().Address(),
@@ -192,7 +192,6 @@ func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time tim
 			}
 
 			if node.BvnnType == config.Validator {
-				bvnValidators = append(bvnValidators, key.PubKey().Bytes())
 				bvnTmValidators = append(bvnTmValidators, tmtypes.GenesisValidator{
 					Name:    fmt.Sprintf("%s.%d", bvn.Id, j+1),
 					Address: key.PubKey().Address(),
@@ -202,10 +201,7 @@ func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time tim
 			}
 		}
 
-		partitions = append(partitions, protocol.PartitionDefinition{
-			PartitionID:   bvn.Id,
-			ValidatorKeys: bvnValidators,
-		})
+		netinfo.AddPartition(bvn.Id, protocol.PartitionTypeBlockValidator)
 		docs[bvn.Id] = &tmtypes.GenesisDoc{
 			ChainID:         bvn.Id,
 			GenesisTime:     time,
@@ -215,7 +211,6 @@ func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time tim
 		}
 	}
 
-	partitions[0].ValidatorKeys = dnValidators
 	docs[protocol.Directory] = &tmtypes.GenesisDoc{
 		ChainID:         protocol.Directory,
 		GenesisTime:     time,
@@ -224,10 +219,7 @@ func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time tim
 		ConsensusParams: tmtypes.DefaultConsensusParams(),
 	}
 
-	globals.Network = &protocol.NetworkDefinition{
-		NetworkName: network.Id,
-		Partitions:  partitions,
-	}
+	globals.Network = netinfo
 
 	for id := range docs {
 		netType := config.BlockValidator
