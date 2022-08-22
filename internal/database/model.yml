@@ -181,14 +181,3 @@
       parameters:
       - name: Block
         type: uint
-
-    # Legacy - TODO Remove or update
-    - name: BlockChainUpdates
-      type: index
-      dataType: ChainUpdate
-      pointer: true
-      emptyIfMissing: true
-      collection: list
-      parameters:
-      - name: Index
-        type: uint
