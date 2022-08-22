@@ -1,6 +1,6 @@
 package protocol
 
-import "gitlab.com/accumulatenetwork/accumulate/internal/url"
+import "gitlab.com/accumulatenetwork/accumulate/pkg/url"
 
 type SynthTxnWithOrigin interface {
 	GetCause() (cause [32]byte, source *url.URL)
