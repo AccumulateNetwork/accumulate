@@ -4,7 +4,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 

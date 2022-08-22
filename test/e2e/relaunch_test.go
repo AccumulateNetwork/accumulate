@@ -15,7 +15,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
