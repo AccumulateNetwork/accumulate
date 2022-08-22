@@ -7,7 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
-	"gitlab.com/accumulatenetwork/accumulate/internal/client"
+	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 )
 
 func getVersion(client *client.Client) (*api.VersionResponse, error) {
