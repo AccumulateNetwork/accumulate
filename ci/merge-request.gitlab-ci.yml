@@ -1,9 +1,16 @@
 merge request target:
   stage: test
   needs: []
-  rules:
-  - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+  # rules:
+  # - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+  image: alpine
+  variables:
+    CI_MERGE_REQUEST_IID: 528
   script:
-  # Merge requests can only be merged into develop
-  # See https://gitlab.com/gitlab-org/gitlab/-/merge_requests/52532
-  - test "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" == "$CI_DEFAULT_BRANCH"
+  - apk add jq --no-cache
+  - LABELS=$(curl -H "JOB-TOKEN:$CI_JOB_TOKEN" "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests/${CI_MERGE_REQUEST_IID}" | jq .labels)
+  - echo $LABELS
+
+  # # Merge requests can only be merged into develop
+  # # See https://gitlab.com/gitlab-org/gitlab/-/merge_requests/52532
+  # - test "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" == "$CI_DEFAULT_BRANCH"
