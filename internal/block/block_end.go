@@ -297,9 +297,7 @@ func (x *Executor) requestMissingSyntheticTransactions(blockIndex uint64, ledger
 
 	wg.Wait()
 	for err := range dispatcher.Send(ctx) {
-		x.checkDispatchError(err, func(err error) {
-			x.logger.Error("Failed to dispatch missing synthetic transactions", "error", err)
-		})
+		x.logger.Error("Failed to dispatch missing synthetic transactions", "error", err)
 	}
 }
 
