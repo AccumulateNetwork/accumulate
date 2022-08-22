@@ -1123,21 +1123,43 @@ resultLoop:
 		minorEntry.BlockTime = curEntry.BlockTime
 
 		if req.TxFetchMode < query.TxFetchModeOmit {
-			chainUpdatesIndex, err := indexing.BlockChainUpdates(batch, m.Options.Describe, curEntry.BlockIndex).Get()
+			var block *protocol.BlockLedger
+			err = batch.Account(m.Describe.BlockLedger(curEntry.BlockIndex)).Main().GetAs(&block)
 			if err != nil {
 				return nil, errors.Wrap(errors.StatusUnknownError, err)
 			}
 
 			minorEntry.TxCount = uint64(0)
 			seen := map[[32]byte]bool{}
-			for _, updIdx := range chainUpdatesIndex {
+			for _, entry := range block.Entries {
+				chain, err := batch.Account(entry.Account).ChainByName(entry.Chain)
+				switch {
+				case err == nil:
+					// Ok
+				case errors.Is(err, errors.StatusNotFound):
+					// If the chain can't be found, skip it
+					continue
+				default:
+					return nil, errors.Format(errors.StatusUnknownError, "load account %v chain %v: %w", entry.Account, entry.Chain, err)
+				}
+
 				// Only care about the main chain
-				if updIdx.Type != protocol.ChainTypeTransaction || updIdx.Name != "main" {
+				if chain.Type() != protocol.ChainTypeTransaction || !strings.EqualFold(chain.Name(), "main") {
 					continue
 				}
 
+				chain2, err := chain.Get()
+				if err != nil {
+					return nil, errors.Format(errors.StatusUnknownError, "load head of account %v chain %v: %w", entry.Account, entry.Chain, err)
+				}
+
+				hash, err := chain2.Entry(int64(entry.Index))
+				if err != nil {
+					return nil, errors.Format(errors.StatusUnknownError, "load account %v chain %v entry %d: %w", entry.Account, entry.Chain, entry.Index, err)
+				}
+
 				// Only include each transaction once
-				entry := *(*[32]byte)(updIdx.Entry)
+				entry := *(*[32]byte)(hash)
 				if seen[entry] {
 					continue
 				} else {
@@ -1145,10 +1167,10 @@ resultLoop:
 				}
 
 				if req.TxFetchMode <= query.TxFetchModeIds {
-					minorEntry.TxIds = append(minorEntry.TxIds, updIdx.Entry)
+					minorEntry.TxIds = append(minorEntry.TxIds, hash)
 				}
 				if req.TxFetchMode == query.TxFetchModeExpand {
-					qr, err := m.queryByTxId(batch, updIdx.Entry, false, false, false, nil)
+					qr, err := m.queryByTxId(batch, hash, false, false, false, nil)
 					if err == nil {
 						minorEntry.TxCount++
 						minorEntry.Transactions = append(minorEntry.Transactions, qr)
