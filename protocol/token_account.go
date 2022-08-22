@@ -3,7 +3,7 @@ package protocol
 import (
 	"math/big"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
 type AccountWithTokens interface {
