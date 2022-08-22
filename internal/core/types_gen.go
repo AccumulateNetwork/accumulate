@@ -9,6 +9,7 @@ import (
 )
 
 type GlobalValues struct {
+	memoize globalValueMemos
 	Oracle  *protocol.AcmeOracle        `json:"oracle,omitempty" form:"oracle" query:"oracle" validate:"required"`
 	Globals *protocol.NetworkGlobals    `json:"globals,omitempty" form:"globals" query:"globals" validate:"required"`
 	Network *protocol.NetworkDefinition `json:"network,omitempty" form:"network" query:"network" validate:"required"`

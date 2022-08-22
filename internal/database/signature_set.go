@@ -11,14 +11,14 @@ import (
 
 type SignatureSet struct {
 	txn      *Transaction
-	signer   protocol.Signer
+	signer   protocol.Signer2
 	writable bool
 	value    *record.Value[*sigSetData]
 	entries  *sigSetData
 }
 
 // newSigSet creates a new SignatureSet.
-func newSigSet(txn *Transaction, signer protocol.Signer, writable bool) (*SignatureSet, error) {
+func newSigSet(txn *Transaction, signer protocol.Signer2, writable bool) (*SignatureSet, error) {
 	s := new(SignatureSet)
 	s.txn = txn
 	s.signer = signer
@@ -49,47 +49,49 @@ func (s *SignatureSet) Entries() []SigSetEntry {
 }
 
 func (s *sigSetData) Reset(version uint64) {
-	// Retain system signature entries
-	system := make([]SigSetEntry, 0, len(s.Entries))
+	// Retain retain signature entries
+	retain := make([]SigSetEntry, 0, len(s.Entries))
 	for _, e := range s.Entries {
-		if e.System {
-			system = append(system, e)
+		if e.Type.IsSystem() || e.ValidatorKeyHash != nil {
+			retain = append(retain, e)
 		}
 	}
 
 	// Remove all other entries and update the version
 	s.Version = version
-	s.Entries = system
+	s.Entries = retain
 }
 
 func (s *SigSetEntry) Compare(t *SigSetEntry) int {
+	// If both are system, compare by signature hash, otherwise system sorts
+	// first
 	switch {
-	case !s.System && !t.System:
-		return int(s.KeyEntryIndex) - int(t.KeyEntryIndex)
-	case !s.System:
+	case s.Type.IsSystem() && t.Type.IsSystem():
+		return bytes.Compare(s.SignatureHash[:], t.SignatureHash[:])
+	case s.Type.IsSystem():
 		return -1
-	case !t.System:
+	case t.Type.IsSystem():
 		return +1
 	}
 
-	return bytes.Compare(s.SignatureHash[:], t.SignatureHash[:])
+	// If both are validators, compare by key hash, otherwise validators sort
+	// first
+	switch {
+	case s.ValidatorKeyHash != nil && t.ValidatorKeyHash != nil:
+		return bytes.Compare((*s.ValidatorKeyHash)[:], (*t.ValidatorKeyHash)[:])
+	case s.ValidatorKeyHash != nil:
+		return -1
+	case t.ValidatorKeyHash != nil:
+		return +1
+	}
+
+	// Compare by key entry index
+	return int(s.KeyEntryIndex) - int(t.KeyEntryIndex)
 }
 
 func (s *sigSetData) Add(newEntry SigSetEntry, newSignature protocol.Signature) bool {
-	// The signature is a system signature if it's one of the system types or if
-	// the signer is a node.
-	switch {
-	case newSignature.Type().IsSystem():
-		newEntry.System = true
-	case protocol.IsDnUrl(newSignature.GetSigner()):
-		newEntry.System = true
-	default:
-		_, ok := protocol.ParsePartitionUrl(newSignature.GetSigner())
-		newEntry.System = ok
-	}
-
 	// Check the signer version
-	if keysig, ok := newSignature.(protocol.KeySignature); ok && !newEntry.System && s.Version != keysig.GetSignerVersion() {
+	if keysig, ok := newSignature.(protocol.KeySignature); ok && newEntry.ValidatorKeyHash == nil && s.Version != keysig.GetSignerVersion() {
 		return false
 	}
 
@@ -114,6 +116,9 @@ func (s *SignatureSet) Add(keyEntryIndex uint64, newSignature protocol.Signature
 	newEntry.Type = newSignature.Type()
 	newEntry.KeyEntryIndex = keyEntryIndex
 	newEntry.SignatureHash = *(*[32]byte)(newSignature.Hash())
+	if sig, ok := newSignature.(protocol.KeySignature); ok && protocol.DnUrl().JoinPath(protocol.Network).Equal(newSignature.GetSigner()) {
+		newEntry.ValidatorKeyHash = (*[32]byte)(sig.GetPublicKeyHash())
+	}
 	if !s.entries.Add(newEntry, newSignature) {
 		return len(s.entries.Entries), nil
 	}

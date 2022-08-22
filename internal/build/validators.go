@@ -1,8 +1,6 @@
 package build
 
 import (
-	"bytes"
-
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
@@ -41,20 +39,19 @@ func AddToOperatorPage(values *core.GlobalValues, operatorCount int, newKeyHash 
 
 func AddValidator(values *core.GlobalValues, operatorCount int, newPubKey []byte, partition string, signers ...*signing.Builder) (*protocol.Envelope, error) {
 	// Add the key to the network definition
-	return updateNetworkDefinition(values, signers, partition, func(def *protocol.PartitionDefinition) {
-		def.ValidatorKeys = append(def.ValidatorKeys, newPubKey)
-	})
+	values.Network.AddValidator(newPubKey, partition, true)
+	return updateNetworkDefinition(values, signers)
 }
 
 // RemoveOperator constructs an envelope that will remove an operator from the
 // network. If partition is non-empty, the envelope will also remove the operator
 // as a validator from the partition.
-func RemoveOperator(values *core.GlobalValues, operatorCount int, oldPubKey, oldKeyHash []byte, partition string, signers ...*signing.Builder) ([]*protocol.Envelope, error) {
+func RemoveOperator(values *core.GlobalValues, operatorCount int, oldPubKey, oldKeyHash []byte, signers ...*signing.Builder) ([]*protocol.Envelope, error) {
 	env1, err1 := RemoveFromOperatorPage(values, operatorCount, oldKeyHash, signers...)
 	for _, signer := range signers {
 		signer.Version++
 	}
-	env2, err2 := RemoveValidator(values, operatorCount, oldPubKey, partition, signers...)
+	env2, err2 := RemoveValidator(values, operatorCount, oldPubKey, signers...)
 	if err1 != nil {
 		return nil, err1
 	} else if err2 != nil {
@@ -75,27 +72,21 @@ func RemoveFromOperatorPage(values *core.GlobalValues, operatorCount int, oldKey
 	return initiateTransaction(signers, protocol.DnUrl().JoinPath(protocol.Operators, "1"), updatePage)
 }
 
-func RemoveValidator(values *core.GlobalValues, operatorCount int, oldPubKey []byte, partition string, signers ...*signing.Builder) (*protocol.Envelope, error) {
+func RemoveValidator(values *core.GlobalValues, operatorCount int, oldPubKey []byte, signers ...*signing.Builder) (*protocol.Envelope, error) {
 	// Remove the key from the network definition
-	return updateNetworkDefinition(values, signers, partition, func(def *protocol.PartitionDefinition) {
-		for i, k := range def.ValidatorKeys {
-			if bytes.Equal(k, oldPubKey) {
-				def.ValidatorKeys = append(def.ValidatorKeys[:i], def.ValidatorKeys[i+1:]...)
-				break
-			}
-		}
-	})
+	values.Network.RemoveValidator(oldPubKey)
+	return updateNetworkDefinition(values, signers)
 }
 
 // UpdateOperatorKey constructs an envelope that will update an operator's key.
 // If partition is non-empty, the envelope will also update the operator's key in
 // the network definition.
-func UpdateOperatorKey(values *core.GlobalValues, oldPubKey, oldKeyHash, newPubKey, newKeyHash []byte, partition string, signers ...*signing.Builder) ([]*protocol.Envelope, error) {
+func UpdateOperatorKey(values *core.GlobalValues, oldPubKey, oldKeyHash, newPubKey, newKeyHash []byte, signers ...*signing.Builder) ([]*protocol.Envelope, error) {
 	env1, err1 := UpdateKeyOnOperatorPage(oldKeyHash, newKeyHash, signers...)
 	for _, signer := range signers {
 		signer.Version++
 	}
-	env2, err2 := UpdateValidatorKey(values, oldPubKey, newPubKey, partition, signers...)
+	env2, err2 := UpdateValidatorKey(values, oldPubKey, newPubKey, signers...)
 	if err1 != nil {
 		return nil, err1
 	} else if err2 != nil {
@@ -115,26 +106,17 @@ func UpdateKeyOnOperatorPage(oldKeyHash, newKeyHash []byte, signers ...*signing.
 	return initiateTransaction(signers, protocol.DnUrl().JoinPath(protocol.Operators, "1"), updatePage)
 }
 
-func UpdateValidatorKey(values *core.GlobalValues, oldPubKey, newPubKey []byte, partition string, signers ...*signing.Builder) (*protocol.Envelope, error) {
+func UpdateValidatorKey(values *core.GlobalValues, oldPubKey, newPubKey []byte, signers ...*signing.Builder) (*protocol.Envelope, error) {
 	// Update the key in the network
-	return updateNetworkDefinition(values, signers, partition, func(def *protocol.PartitionDefinition) {
-		for i, k := range def.ValidatorKeys {
-			if bytes.Equal(k, oldPubKey) {
-				def.ValidatorKeys[i] = newPubKey
-				break
-			}
-		}
-	})
+	err := values.Network.UpdateValidatorKey(oldPubKey, newPubKey)
+	if err != nil {
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
+	}
+	return updateNetworkDefinition(values, signers)
 }
 
-func updateNetworkDefinition(values *core.GlobalValues, signers []*signing.Builder, partition string, update func(*protocol.PartitionDefinition)) (*protocol.Envelope, error) {
-	def := values.Network.Partition(partition)
-	if def == nil {
-		return nil, errors.Format(errors.StatusNotFound, "partition %s is not present in the network definition", partition)
-	}
-
-	update(def)
-
+func updateNetworkDefinition(values *core.GlobalValues, signers []*signing.Builder) (*protocol.Envelope, error) {
+	values.Network.Version++
 	writeData := new(protocol.WriteData)
 	writeData.WriteToState = true
 	writeData.Entry = values.FormatNetwork()

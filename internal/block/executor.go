@@ -102,8 +102,8 @@ func NewNodeExecutor(opts ExecutorOptions, db database.Beginner) (*Executor, err
 
 // NewGenesisExecutor creates a transaction executor that can be used to set up
 // the genesis state.
-func NewGenesisExecutor(db *database.Database, logger log.Logger, network *config.Describe, router routing.Router) (*Executor, error) {
-	return newExecutor(
+func NewGenesisExecutor(db *database.Database, logger log.Logger, network *config.Describe, globals *core.GlobalValues, router routing.Router) (*Executor, error) {
+	exec, err := newExecutor(
 		ExecutorOptions{
 			Describe:  *network,
 			Logger:    logger,
@@ -113,6 +113,13 @@ func NewGenesisExecutor(db *database.Database, logger log.Logger, network *confi
 		db,
 		chain.SystemWriteData{},
 	)
+	if err != nil {
+		return nil, err
+	}
+	exec.globals = new(Globals)
+	exec.globals.Pending = *globals
+	exec.globals.Active = *globals
+	return exec, nil
 }
 
 func newExecutor(opts ExecutorOptions, db database.Beginner, executors ...chain.TransactionExecutor) (*Executor, error) {
