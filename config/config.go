@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/viper"
 	tm "github.com/tendermint/tendermint/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	etcd "go.etcd.io/etcd/client/v3"
 )
 
@@ -33,11 +34,13 @@ const (
 
 const DevNet = "devnet"
 
-type NetworkType uint64
+type NetworkType = protocol.PartitionType
 
 const (
-	BlockValidator = NetworkTypeBlockValidator
-	Directory      = NetworkTypeDirectory
+	BlockValidator            = protocol.PartitionTypeBlockValidator
+	Directory                 = protocol.PartitionTypeDirectory
+	NetworkTypeBlockValidator = protocol.PartitionTypeBlockValidator
+	NetworkTypeDirectory      = protocol.PartitionTypeDirectory
 )
 
 type NodeType uint64
@@ -374,11 +377,6 @@ func load(dir, file string, c interface{}) error {
 	return nil
 }
 
-// MarshalTOML marshals the Network Type to Toml as a string.
-func (v NetworkType) MarshalTOML() ([]byte, error) {
-	return []byte("\"" + v.String() + "\""), nil
-}
-
 // MarshalTOML marshals the Node Type to Toml as a string.
 func (v NodeType) MarshalTOML() ([]byte, error) {
 	return []byte("\"" + v.String() + "\""), nil
@@ -393,7 +391,7 @@ func StringToEnumHookFunc() mapstructure.DecodeHookFuncType {
 	) (interface{}, error) {
 		switch t {
 		case reflect.TypeOf(NetworkTypeDirectory):
-			ret, _ := NetworkTypeByName(data.(string))
+			ret, _ := protocol.PartitionTypeByName(data.(string))
 			return ret, nil
 		case reflect.TypeOf(NodeTypeValidator):
 			ret, _ := NodeTypeByName(data.(string))
