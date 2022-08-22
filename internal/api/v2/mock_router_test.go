@@ -10,7 +10,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	routing "gitlab.com/accumulatenetwork/accumulate/internal/routing"
-	url "gitlab.com/accumulatenetwork/accumulate/internal/url"
+	url "gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	protocol "gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
