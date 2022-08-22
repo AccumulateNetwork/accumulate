@@ -6,8 +6,8 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/client"
 	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
+	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 )
 
 type NodeStatusChecker interface {
