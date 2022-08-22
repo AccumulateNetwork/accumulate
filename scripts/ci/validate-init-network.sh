@@ -1,6 +1,10 @@
 
 #!/bin/bash
 
+# SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# cd "${SCRIPT_DIR}"
+# source validate-commons.sh
+
 tmpNodeDir=$(mktemp -d -t accumulated-ci-XXXXXXXX)
 accumulated init network data/devnet.json --no-website -w ${tmpNodeDir} --no-empty-blocks
 accumulated run-dual "$tmpNodeDir/node-1/dnn" "$tmpNodeDir/node-1/bvnn" &

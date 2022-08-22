@@ -21,8 +21,6 @@ sigSetData:
 
 SigSetEntry:
   fields:
-    - name: System
-      type: bool
     - name: Type
       type: protocol.SignatureType
       marshal-as: enum
@@ -30,6 +28,9 @@ SigSetEntry:
       type: uint
     - name: SignatureHash
       type: hash
+    - name: ValidatorKeyHash
+      type: hash
+      pointer: true
 
 SigOrTxn:
   fields:
