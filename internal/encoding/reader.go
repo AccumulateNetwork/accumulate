@@ -10,7 +10,7 @@ import (
 	"math/big"
 	"time"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
 var ErrFieldsOutOfOrder = errors.New("fields are out of order")
