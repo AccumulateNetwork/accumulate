@@ -136,6 +136,13 @@ ExecuteDirect:
   output: TxResponse
   call-params: [Envelope, CheckOnly]
 
+ExecuteLocal:
+  description: submits a transaction without routing it. INTENDED FOR INTERNAL USE ONLY
+  rpc: execute-local
+  input: ExecuteRequest
+  output: TxResponse
+  call-params: [Envelope, CheckOnly]
+
 ExecuteCreateAdi:
   description: submits a CreateIdentity transaction
   kind: execute
