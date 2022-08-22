@@ -285,6 +285,21 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 		panic(fmt.Errorf("failed to publish block notification: %v", err))
 	}
 
+	// Compare initial validators with genesis
+	additional, err := app.Executor.InitChainValidators(req.Validators)
+	if err != nil {
+		panic(err)
+	}
+
+	var updates []abci.ValidatorUpdate
+	for _, key := range additional {
+		updates = append(updates, abci.ValidatorUpdate{
+			PubKey: protocrypto.PublicKey{Sum: &protocrypto.PublicKey_Ed25519{Ed25519: key}},
+			Power:  1,
+		})
+	}
+
+	// Get the app state hash
 	err = app.DB.View(func(batch *database.Batch) (err error) {
 		root, err = app.Executor.LoadStateRoot(batch)
 		return err
@@ -293,7 +308,7 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 		panic(fmt.Errorf("failed to load state hash: %v", err))
 	}
 
-	return abci.ResponseInitChain{AppHash: root}
+	return abci.ResponseInitChain{AppHash: root, Validators: updates}
 }
 
 // BeginBlock implements github.com/tendermint/tendermint/abci/types.Application.
