@@ -24,6 +24,17 @@ ChainMetadata:
       type: ChainType
       marshal-as: enum
 
+BlockEntry:
+  fields:
+    - name: Account
+      type: url
+      pointer: true
+    - name: Chain
+      type: string
+    - name: Index
+      type: uint
+      keep-empty: true
+
 AccountAuth:
   fields:
     - name: Authorities

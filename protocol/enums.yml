@@ -225,6 +225,9 @@ AccountType:
   LiteTokenAccount:
     value: 5
     description: is a Lite Token Account
+  BlockLedger:
+    value: 6
+    description: is a Block Ledger account
   KeyPage:
     value: 9
     description: is a Key Page account
