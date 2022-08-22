@@ -268,17 +268,16 @@ func (x *Executor) InitChainValidators(initVal []abci.ValidatorUpdate) (addition
 		initValMap[*(*[32]byte)(key)] = true
 	}
 
-	partition := x.globals.Active.Network.Partition(x.Describe.PartitionId)
-	if partition == nil {
-		return nil, errors.Format(errors.StatusInternalError, "missing partition definition for %v", x.Describe.PartitionId)
-	}
-
 	// Capture any validators missing from the initial set
-	for _, val := range partition.ValidatorKeys {
-		if initValMap[*(*[32]byte)(val)] {
-			delete(initValMap, *(*[32]byte)(val))
+	for _, val := range x.globals.Active.Network.Validators {
+		if !val.IsActiveOn(x.Describe.PartitionId) {
+			continue
+		}
+
+		if initValMap[*(*[32]byte)(val.PublicKey)] {
+			delete(initValMap, *(*[32]byte)(val.PublicKey))
 		} else {
-			additional = append(additional, val)
+			additional = append(additional, val.PublicKey)
 		}
 	}
 
