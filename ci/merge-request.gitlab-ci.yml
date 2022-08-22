@@ -7,7 +7,7 @@ merge request target:
   variables:
     CI_MERGE_REQUEST_IID: 528
   script:
-  - apk add jq --no-cache
+  - apk add --no-cache jq curl
   - LABELS=$(curl -H "JOB-TOKEN:$CI_JOB_TOKEN" "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/merge_requests/${CI_MERGE_REQUEST_IID}" | jq .labels)
   - echo $LABELS
 
