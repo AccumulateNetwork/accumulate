@@ -211,8 +211,8 @@ func (b *Batch) saveSnapshot(file io.WriteSeeker, height uint64, extra func(key 
 	})
 }
 
-// ReadSnapshot reads a snapshot file, returning the header values and a reader.
-func ReadSnapshot(file ioutil2.SectionReader) (*snapshotHeader, int64, error) {
+// ReadSnapshotHeader reads a snapshot file, returning the header values and a reader.
+func ReadSnapshotHeader(file ioutil2.SectionReader) (*snapshotHeader, int64, error) {
 	header := new(snapshotHeader)
 	n, err := header.ReadFrom(file)
 	if err != nil {
@@ -222,10 +222,9 @@ func ReadSnapshot(file ioutil2.SectionReader) (*snapshotHeader, int64, error) {
 	return header, n, nil
 }
 
-// RestoreSnapshot loads the full state of the partition from a file.
-func (b *Batch) RestoreSnapshot(file ioutil2.SectionReader, network *config.Describe) error {
-	// Read the snapshot
-	_, _, err := ReadSnapshot(file)
+func readSnapshot(file ioutil2.SectionReader, process func(key storage.Key, hash [32]byte, state *accountState) error) error {
+	// Read the snapshot header
+	_, _, err := ReadSnapshotHeader(file)
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknownError, err)
 	}
@@ -237,36 +236,35 @@ func (b *Batch) RestoreSnapshot(file ioutil2.SectionReader, network *config.Desc
 	}
 
 	// Load the snapshot
-	bpt := pmt.NewBPTManager(b.kvstore)
-	err = bpt.Bpt.LoadSnapshot(rd, func(key storage.Key, hash [32]byte, reader ioutil2.SectionReader) error {
+	err = pmt.ReadSnapshot(rd, func(key storage.Key, hash [32]byte, reader ioutil2.SectionReader) error {
 		state := new(accountState)
 		err := state.UnmarshalBinaryFrom(reader)
 		if err != nil {
 			return err
 		}
 
-		account := b.Account(state.Main.GetUrl())
-		if account.key.Hash() != key {
-			return errors.Format(errors.StatusInternalError, "hash key %x does not match URL %v", key, state.Main.GetUrl())
-		}
-
-		err = account.restoreState(state)
-		if err != nil {
-			return err
-		}
-
-		// Check the hash
-		hasher, err := account.hashState()
-		if err != nil {
-			return err
-		}
-
-		if !bytes.Equal(hash[:], hasher.MerkleHash()) {
-			return fmt.Errorf("hash does not match for %v", state.Main.GetUrl())
-		}
-
-		return nil
+		return process(key, hash, state)
 	})
+	return errors.Wrap(errors.StatusUnknownError, err)
+}
+
+// RestoreSnapshot loads the full state of the partition from a file.
+func (b *Batch) RestoreSnapshot(file ioutil2.SectionReader, network *config.Describe) error {
+	bpt := pmt.NewBPTManager(b.kvstore)
+	if bpt.Bpt.MaxHeight != 0 {
+		return errors.New(errors.StatusBadRequest, "a snapshot can only be read into a new BPT")
+	}
+
+	err := readSnapshot(file, func(key storage.Key, hash [32]byte, state *accountState) error {
+		bpt.Bpt.Insert(key, hash)
+		account := b.Account(state.Main.GetUrl())
+		return account.safeRestoreState(key, hash, state)
+	})
+	if err != nil {
+		return errors.Wrap(errors.StatusUnknownError, err)
+	}
+
+	err = bpt.Bpt.Update()
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknownError, err)
 	}
@@ -297,4 +295,26 @@ func (b *Batch) RestoreSnapshot(file ioutil2.SectionReader, network *config.Desc
 	}
 
 	return nil
+}
+
+func (b *Batch) ImportFactomSnapshot(file ioutil2.SectionReader, include func(account protocol.Account) (bool, error)) error {
+	bpt := pmt.NewBPTManager(b.kvstore)
+
+	err := readSnapshot(file, func(key storage.Key, hash [32]byte, state *accountState) error {
+		ok, err := include(state.Main)
+		if !ok || err != nil {
+			return errors.Wrap(errors.StatusUnknownError, err)
+		}
+
+		bpt.Bpt.Insert(key, hash)
+		account := b.Account(state.Main.GetUrl())
+		err = account.safeRestoreState(key, hash, state)
+		return errors.Wrap(errors.StatusUnknownError, err)
+	})
+	if err != nil {
+		return errors.Wrap(errors.StatusUnknownError, err)
+	}
+
+	err = bpt.Bpt.Update()
+	return errors.Wrap(errors.StatusUnknownError, err)
 }

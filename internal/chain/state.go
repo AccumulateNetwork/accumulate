@@ -67,7 +67,7 @@ func (m *StateManager) Commit() (*ProcessTransactionState, error) {
 		return nil, err
 	}
 
-	err = m.batch.Commit()
+	err = m.Batch.Commit()
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +76,7 @@ func (m *StateManager) Commit() (*ProcessTransactionState, error) {
 }
 
 func (m *StateManager) Discard() {
-	m.batch.Discard()
+	m.Batch.Discard()
 }
 
 // Submit queues a synthetic transaction for submission.

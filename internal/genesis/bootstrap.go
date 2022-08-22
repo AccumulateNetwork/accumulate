@@ -18,6 +18,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -32,6 +33,7 @@ type InitOpts struct {
 	GenesisTime     time.Time
 	Logger          log.Logger
 	FactomAddresses func() (io.Reader, error)
+	FactomSnapshot  func() (ioutil2.SectionReader, error)
 	GenesisGlobals  *core.GlobalValues
 	OperatorKeys    [][]byte
 }
@@ -223,6 +225,11 @@ func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protoc
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
+	err = b.maybeImportFactomSnapshot(st)
+	if err != nil {
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
+	}
+
 	// Persist accounts
 	err = st.Create(b.records...)
 	if err != nil {
@@ -358,6 +365,9 @@ func (b *bootstrap) maybeCreateFactomAccounts() error {
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknownError, err)
 	}
+	if c, ok := rd.(io.Closer); ok {
+		defer c.Close()
+	}
 
 	factomAddresses, err := LoadFactomAddressesAndBalances(rd)
 	if err != nil {
@@ -378,6 +388,46 @@ func (b *bootstrap) maybeCreateFactomAccounts() error {
 		lite.Balance = *big.NewInt(5 * fa.Balance)
 
 		b.WriteRecords(lid, lite)
+	}
+	return nil
+}
+
+func (b *bootstrap) maybeImportFactomSnapshot(st *chain.StateManager) error {
+	if b.FactomSnapshot == nil {
+		return nil
+	}
+
+	file, err := b.FactomSnapshot()
+	if err != nil {
+		return errors.Wrap(errors.StatusUnknownError, err)
+	}
+	if c, ok := file.(io.Closer); ok {
+		defer c.Close()
+	}
+
+	var accounts []*url.URL
+	err = st.Batch.ImportFactomSnapshot(file, func(account protocol.Account) (bool, error) {
+		if account.Type() != protocol.AccountTypeLiteDataAccount {
+			return false, errors.Format(errors.StatusBadRequest, "invalid Factom import: want %v, got %v", protocol.AccountTypeLiteDataAccount, account.Type())
+		}
+
+		accounts = append(accounts, account.GetUrl())
+		return true, nil
+	})
+	if err != nil {
+		return errors.Wrap(errors.StatusUnknownError, err)
+	}
+
+	// Add Genesis to the accounts' main chain. This also anchors the imported
+	// transactions. This *must* be done outside of ImportFactomSnapshot.
+	// Attempting this within the callback leads to a mismatch between the
+	// account state and the hash in the snapshot.
+	for _, account := range accounts {
+		chain := st.Batch.Account(account).MainChain()
+		err = st.State.ChainUpdates.AddChainEntry(st.Batch, chain, st.TxHash[:], 0, 0)
+		if err != nil {
+			return errors.Wrap(errors.StatusUnknownError, err)
+		}
 	}
 	return nil
 }

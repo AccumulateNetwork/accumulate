@@ -10,6 +10,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/smt/pmt"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 // loadState returns the fully realized account loadState.
@@ -108,6 +109,29 @@ func (c *Chain2) stateOfSignaturesOnChain() ([]protocol.Signature, error) {
 	}
 
 	return state, nil
+}
+
+func (a *Account) safeRestoreState(key storage.Key, hash [32]byte, state *accountState) error {
+	if a.key.Hash() != key {
+		return errors.Format(errors.StatusInternalError, "hash key %x does not match URL %v", key, state.Main.GetUrl())
+	}
+
+	err := a.restoreState(state)
+	if err != nil {
+		return err
+	}
+
+	// Check the hash
+	hasher, err := a.hashState()
+	if err != nil {
+		return err
+	}
+
+	if !bytes.Equal(hash[:], hasher.MerkleHash()) {
+		return fmt.Errorf("hash does not match for %v", state.Main.GetUrl())
+	}
+
+	return nil
 }
 
 func (a *Account) restoreState(s *accountState) error {

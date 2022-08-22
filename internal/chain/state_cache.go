@@ -20,11 +20,11 @@ type stateCache struct {
 	*config.Describe
 	logger logging.OptionalLogger
 	txType protocol.TransactionType
-	txHash types.Bytes32
+	TxHash types.Bytes32
 
 	Globals    *core.GlobalValues
 	State      ProcessTransactionState
-	batch      *database.Batch
+	Batch      *database.Batch
 	operations []stateOperation
 	chains     map[[32]byte]protocol.Account
 
@@ -36,8 +36,8 @@ func newStateCache(net *config.Describe, globals *core.GlobalValues, txtype prot
 	c.Describe = net
 	c.Globals = globals
 	c.txType = txtype
-	c.txHash = txid
-	c.batch = batch
+	c.TxHash = txid
+	c.Batch = batch
 	c.operations = c.operations[:0]
 	c.chains = map[[32]byte]protocol.Account{}
 	_ = c.logger // Get static analsis to shut up
@@ -64,7 +64,7 @@ func (c *stateCache) LoadUrl(account *url.URL) (protocol.Account, error) {
 		return state, nil
 	}
 
-	state, err := c.batch.Account(account).GetState()
+	state, err := c.Batch.Account(account).GetState()
 	if err != nil {
 		return nil, errors.Format(errors.StatusUnknownError, "load %v: %w", account, err)
 	}
@@ -85,7 +85,7 @@ func (c *stateCache) LoadUrlAs(account *url.URL, target interface{}) error {
 
 //GetHeight loads the height of the chain
 func (c *stateCache) GetHeight(u *url.URL) (uint64, error) {
-	chain, err := c.batch.Account(u).MainChain().Get()
+	chain, err := c.Batch.Account(u).MainChain().Get()
 	if err != nil {
 		return 0, err
 	}
@@ -95,7 +95,7 @@ func (c *stateCache) GetHeight(u *url.URL) (uint64, error) {
 
 // LoadTxn loads and unmarshals a saved transaction
 func (c *stateCache) LoadTxn(txid [32]byte) (*protocol.Transaction, error) {
-	env, err := c.batch.Transaction(txid[:]).GetState()
+	env, err := c.Batch.Transaction(txid[:]).GetState()
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +107,7 @@ func (c *stateCache) LoadTxn(txid [32]byte) (*protocol.Transaction, error) {
 }
 
 func (c *stateCache) AddDirectoryEntry(directory *url.URL, u ...*url.URL) error {
-	dir := indexing.Directory(c.batch, directory)
+	dir := indexing.Directory(c.Batch, directory)
 	err := dir.Add(u...)
 	if err != nil {
 		return err
@@ -134,7 +134,7 @@ func (st *stateCache) Update(accounts ...protocol.Account) error {
 func (st *stateCache) createOrUpdate(isUpdate bool, accounts []protocol.Account) error {
 	isCreate := !isUpdate
 	for _, account := range accounts {
-		rec := st.batch.Account(account.GetUrl())
+		rec := st.Batch.Account(account.GetUrl())
 		if len(account.GetUrl().String()) > protocol.AccountUrlMaxLength {
 			return errors.Wrap(errors.StatusBadUrlLength, fmt.Errorf("url specified exceeds maximum character length: %s", account.GetUrl().String()))
 		}
@@ -166,7 +166,7 @@ func (st *stateCache) createOrUpdate(isUpdate bool, accounts []protocol.Account)
 		}
 
 		// Add to the account's main chain
-		err = st.State.ChainUpdates.AddChainEntry(st.batch, rec.MainChain(), st.txHash[:], 0, 0)
+		err = st.State.ChainUpdates.AddChainEntry(st.Batch, rec.MainChain(), st.TxHash[:], 0, 0)
 		if err != nil {
 			return errors.Format(errors.StatusUnknownError, "failed to update main chain of %q: %w", account.GetUrl(), err)
 		}

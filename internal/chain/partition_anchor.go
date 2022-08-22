@@ -56,15 +56,15 @@ func (PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Transa
 	}
 
 	// Add the anchor to the chain - use the partition name as the chain name
-	record := st.batch.Account(st.OriginUrl).AnchorChain(name)
-	index, err := st.State.ChainUpdates.AddChainEntry2(st.batch, record.Root(), body.RootChainAnchor[:], body.RootChainIndex, body.MinorBlockIndex, false)
+	record := st.Batch.Account(st.OriginUrl).AnchorChain(name)
+	index, err := st.State.ChainUpdates.AddChainEntry2(st.Batch, record.Root(), body.RootChainAnchor[:], body.RootChainIndex, body.MinorBlockIndex, false)
 	if err != nil {
 		return nil, err
 	}
 	st.State.DidReceiveAnchor(name, body, index)
 
 	// And the BPT root
-	_, err = st.State.ChainUpdates.AddChainEntry2(st.batch, record.BPT(), body.StateTreeAnchor[:], 0, 0, false)
+	_, err = st.State.ChainUpdates.AddChainEntry2(st.Batch, record.BPT(), body.StateTreeAnchor[:], 0, 0, false)
 	if err != nil {
 		return nil, err
 	}
@@ -99,13 +99,13 @@ func (PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Transa
 	// Process pending synthetic transactions sent to the DN
 	var deliveries []*Delivery
 	var sequence = map[*Delivery]int{}
-	synth, err := st.batch.Account(st.Ledger()).GetSyntheticForAnchor(body.RootChainAnchor)
+	synth, err := st.Batch.Account(st.Ledger()).GetSyntheticForAnchor(body.RootChainAnchor)
 	if err != nil {
 		return nil, errors.Format(errors.StatusUnknownError, "load synth txns for anchor %x: %w", body.RootChainAnchor[:8], err)
 	}
 	for _, txid := range synth {
 		h := txid.Hash()
-		sig, err := getSyntheticSignature(st.batch, st.batch.Transaction(h[:]))
+		sig, err := getSyntheticSignature(st.Batch, st.Batch.Transaction(h[:]))
 		if err != nil {
 			return nil, err
 		}

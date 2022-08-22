@@ -44,6 +44,7 @@ type SimulatorOptions struct {
 	LogLevels       string
 	OpenDB          func(partition string, nodeIndex int, logger log.Logger) *database.Database
 	FactomAddresses func() (io.Reader, error)
+	FactomSnapshot  func() (ioutil2.SectionReader, error)
 }
 
 type Simulator struct {
@@ -339,7 +340,7 @@ func (s *Simulator) InitFromGenesisWith(values *core.GlobalValues) {
 	if values == nil {
 		values = new(core.GlobalValues)
 	}
-	genDocs, err := accumulated.BuildGenesisDocs(s.netInit, values, GenesisTime, s.Logger, s.opts.FactomAddresses)
+	genDocs, err := accumulated.BuildGenesisDocs(s.netInit, values, GenesisTime, s.Logger, s.opts.FactomAddresses, s.opts.FactomSnapshot)
 	require.NoError(s, err)
 
 	// Execute bootstrap after the entire network is known

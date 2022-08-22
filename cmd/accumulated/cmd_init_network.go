@@ -13,6 +13,7 @@ import (
 	cfg "gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	etcd "go.etcd.io/etcd/client/v3"
@@ -102,7 +103,16 @@ func initNetworkLocalFS(netInit *accumulated.NetworkInit) {
 	check(enc.Encode(netInit))
 	check(netFile.Close())
 
-	genDocs, err := accumulated.BuildGenesisDocs(netInit, new(core.GlobalValues), time.Now(), newLogger(), nil)
+	var factomAddresses func() (io.Reader, error)
+	var factomSnapshot func() (ioutil2.SectionReader, error)
+	if flagInit.FactomAddresses != "" {
+		factomAddresses = func() (io.Reader, error) { return os.Open(flagInit.FactomAddresses) }
+	}
+	if flagInit.FactomSnapshots != "" {
+		factomSnapshot = func() (ioutil2.SectionReader, error) { return os.Open(flagInit.FactomSnapshots) }
+	}
+
+	genDocs, err := accumulated.BuildGenesisDocs(netInit, new(core.GlobalValues), time.Now(), newLogger(), factomAddresses, factomSnapshot)
 	checkf(err, "build genesis documents")
 
 	configs := accumulated.BuildNodesConfig(netInit, nil)

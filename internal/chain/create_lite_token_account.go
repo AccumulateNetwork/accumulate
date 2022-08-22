@@ -80,7 +80,7 @@ func (CreateLiteTokenAccount) Validate(st *StateManager, tx *Delivery) (protocol
 	}
 
 	var root *protocol.LiteIdentity
-	err = st.batch.Account(account.Url.RootIdentity()).Main().GetAs(&root)
+	err = st.Batch.Account(account.Url.RootIdentity()).Main().GetAs(&root)
 	switch {
 	case err == nil:
 		// Lite identity exists, nothing to do

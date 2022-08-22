@@ -60,7 +60,7 @@ func (UpdateKey) Execute(st *StateManager, tx *Delivery) (protocol.TransactionRe
 	// Do not update the key page version. Do not reset LastUsedOn.
 
 	// Find the first signature
-	txObj := st.batch.Transaction(tx.Transaction.GetHash())
+	txObj := st.Batch.Transaction(tx.Transaction.GetHash())
 	status, err := txObj.GetStatus()
 	if err != nil {
 		return nil, fmt.Errorf("load transaction status: %w", err)

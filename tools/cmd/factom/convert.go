@@ -24,9 +24,9 @@ import (
 )
 
 var cmdConvert = &cobra.Command{
-	Use:   "convert [output database] [output snapshot] [input object file directory]",
+	Use:   "convert [output snapshot] [input object file directory]",
 	Short: "convert a Factom object dump to Accumulate",
-	Args:  cobra.ExactArgs(3),
+	Args:  cobra.ExactArgs(2),
 	Run:   convert,
 }
 
@@ -48,20 +48,22 @@ func convert(_ *cobra.Command, args []string) {
 	logger, err := logging.NewTendermintLogger(zerolog.New(logWriter), flagConvert.LogLevel, false)
 	check(err)
 
-	db, err := database.OpenBadger(args[0], logger)
+	dbdir, err := os.MkdirTemp("", "badger-*.db")
+	check(err)
+	defer func() { _ = os.RemoveAll(dbdir) }()
+
+	db, err := database.OpenBadger(dbdir, logger)
 	checkf(err, "output database")
 	defer db.Close()
 
-	output, err := os.Create(args[1])
+	output, err := os.Create(args[0])
 	checkf(err, "output file")
 	defer output.Close()
 
 	start := time.Now()
 	for {
-		filename := fmt.Sprintf("objects-%d.dat", FCTHeight)
+		filename := filepath.Join(args[1], fmt.Sprintf("objects-%d.dat", FCTHeight))
 		FCTHeight += 2000
-
-		filename = filepath.Join(args[2], filename)
 
 		input, err := ioutil.ReadFile(filename)
 		if errors.Is(err, fs.ErrNotExist) {
@@ -156,6 +158,7 @@ func convert(_ *cobra.Command, args []string) {
 					time.Microsecond*time.Duration(md.EntryIndex+1))
 				ed := EntryData{md, entry}
 				entries[id] = append(entries[id], &ed)
+				entryCount++
 			default:
 				return
 			}
@@ -176,6 +179,7 @@ func convert(_ *cobra.Command, args []string) {
 					entries = entriesAll[:1000]
 					entriesAll = entriesAll[1000:]
 				} else {
+					entries = entriesAll
 					entriesAll = entriesAll[:0]
 				}
 
@@ -191,6 +195,7 @@ func convert(_ *cobra.Command, args []string) {
 					// Record exists
 				case errors.Is(err, errors.StatusNotFound):
 					// Create the record
+					logger.Debug("Creating Lite Data Account", "address", address)
 					lda = new(protocol.LiteDataAccount)
 					lda.Url = address
 					err = account.Main().Put(lda)
@@ -201,7 +206,6 @@ func convert(_ *cobra.Command, args []string) {
 
 				// For each entry
 				for _, e := range entries {
-					entryCount++
 					// Convert the entry and calculate the entry hash
 					entry := factom.ConvertEntry(e.Entry).Wrap()
 					entryHash, err := protocol.ComputeFactomEntryHashForAccount(chainId[:], entry.GetData())

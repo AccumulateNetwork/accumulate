@@ -107,7 +107,7 @@ func CreateTestNet(t testing.TB, numBvns, numValidators, numFollowers int, withF
 	if withFactomAddress {
 		factomAddresses = func() (io.Reader, error) { return strings.NewReader(testdata.FactomAddresses), nil }
 	}
-	genDocs, err := accumulated.BuildGenesisDocs(netInit, new(core.GlobalValues), time.Now(), initLogger, factomAddresses)
+	genDocs, err := accumulated.BuildGenesisDocs(netInit, new(core.GlobalValues), time.Now(), initLogger, factomAddresses, nil)
 	require.NoError(t, err)
 
 	configs := accumulated.BuildNodesConfig(netInit, DefaultConfig)

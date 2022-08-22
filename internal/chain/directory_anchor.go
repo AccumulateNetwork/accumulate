@@ -52,15 +52,15 @@ func (DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Transa
 	}
 
 	// Add the anchor to the chain - use the partition name as the chain name
-	record := st.batch.Account(st.OriginUrl).AnchorChain(protocol.Directory)
-	index, err := st.State.ChainUpdates.AddChainEntry2(st.batch, record.Root(), body.RootChainAnchor[:], body.RootChainIndex, body.MinorBlockIndex, false)
+	record := st.Batch.Account(st.OriginUrl).AnchorChain(protocol.Directory)
+	index, err := st.State.ChainUpdates.AddChainEntry2(st.Batch, record.Root(), body.RootChainAnchor[:], body.RootChainIndex, body.MinorBlockIndex, false)
 	if err != nil {
 		return nil, err
 	}
 	st.State.DidReceiveAnchor(protocol.Directory, body, index)
 
 	// And the BPT root
-	_, err = st.State.ChainUpdates.AddChainEntry2(st.batch, record.BPT(), body.StateTreeAnchor[:], 0, 0, false)
+	_, err = st.State.ChainUpdates.AddChainEntry2(st.Batch, record.BPT(), body.StateTreeAnchor[:], 0, 0, false)
 	if err != nil {
 		return nil, err
 	}
@@ -121,7 +121,7 @@ func processReceiptsFromDirectory(st *StateManager, tx *Delivery, body *protocol
 }
 
 func loadSynthTxns(st *StateManager, tx *Delivery, anchor []byte, source *url.URL, receipt *managed.Receipt, sequence map[*Delivery]int) ([]*Delivery, error) {
-	synth, err := st.batch.Account(st.Ledger()).GetSyntheticForAnchor(*(*[32]byte)(anchor))
+	synth, err := st.Batch.Account(st.Ledger()).GetSyntheticForAnchor(*(*[32]byte)(anchor))
 	if err != nil {
 		return nil, fmt.Errorf("failed to load pending synthetic transactions for anchor %X: %w", anchor[:4], err)
 	}
@@ -129,7 +129,7 @@ func loadSynthTxns(st *StateManager, tx *Delivery, anchor []byte, source *url.UR
 	var deliveries []*Delivery
 	for _, txid := range synth {
 		h := txid.Hash()
-		sig, err := getSyntheticSignature(st.batch, st.batch.Transaction(h[:]))
+		sig, err := getSyntheticSignature(st.Batch, st.Batch.Transaction(h[:]))
 		if err != nil {
 			return nil, err
 		}

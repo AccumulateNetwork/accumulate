@@ -64,7 +64,7 @@ func listSnapshots(_ *cobra.Command, args []string) {
 		checkf(err, "open snapshot %s", entry.Name())
 		defer f.Close()
 
-		header, _, err := database.ReadSnapshot(f)
+		header, _, err := database.ReadSnapshotHeader(f)
 		checkf(err, "read snapshot %s", entry.Name())
 
 		fmt.Fprintf(wr, "%d\t%x\t%s\n", header.Height, header.RootHash, entry.Name())
@@ -77,7 +77,7 @@ func dumpSnapshot(_ *cobra.Command, args []string) {
 	checkf(err, "open snapshot %s", filename)
 	defer f.Close()
 
-	header, _, err := database.ReadSnapshot(f)
+	header, _, err := database.ReadSnapshotHeader(f)
 	checkf(err, "read snapshot %s", filename)
 	fmt.Printf("Height:\t%d\n", header.Height)
 	fmt.Printf("Hash:\t%x\n", header.RootHash)

@@ -57,6 +57,8 @@ var flagInit struct {
 	LogLevels        string
 	Etcd             []string
 	EnableTimingLogs bool
+	FactomAddresses  string
+	FactomSnapshots  string
 }
 
 var flagInitNode struct {
@@ -112,6 +114,8 @@ func initInitFlags() {
 	cmdInit.PersistentFlags().StringVar(&flagInit.LogLevels, "log-levels", "", "Override the default log levels")
 	cmdInit.PersistentFlags().StringSliceVar(&flagInit.Etcd, "etcd", nil, "Use etcd endpoint(s)")
 	cmdInit.PersistentFlags().BoolVar(&flagInit.EnableTimingLogs, "enable-timing-logs", false, "Enable core timing analysis logging")
+	cmdInit.PersistentFlags().StringVar(&flagInit.FactomAddresses, "factom-addresses", "", "A text file containing Factoid addresses to import")
+	cmdInit.PersistentFlags().StringVar(&flagInit.FactomSnapshots, "factom-snapshot", "", "A snapshot of converted Factom accounts to import")
 	_ = cmdInit.MarkFlagRequired("network")
 
 	cmdInitNode.ResetFlags()

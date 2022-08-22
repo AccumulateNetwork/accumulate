@@ -70,7 +70,7 @@ func (SendTokens) Validate(st *StateManager, tx *Delivery) (protocol.Transaction
 		return nil, nil // No
 	}
 
-	entry, err := indexing.LoadIndexEntryFromEnd(st.batch.Account(st.AnchorPool()).MajorBlockChain(), 1)
+	entry, err := indexing.LoadIndexEntryFromEnd(st.Batch.Account(st.AnchorPool()).MajorBlockChain(), 1)
 	if err != nil {
 		return nil, errors.Format(errors.StatusUnknownError, "load major block index: %w", err)
 	}

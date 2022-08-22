@@ -36,7 +36,7 @@ func (m *stateCache) UpdateData(record protocol.Account, entryHash []byte, dataE
 
 func (op *addDataEntry) Execute(st *stateCache) ([]protocol.Account, error) {
 	// Add entry to data chain
-	record := st.batch.Account(op.url)
+	record := st.Batch.Account(op.url)
 
 	// Add lite record to data chain if applicable
 	if op.liteStateRec != nil {
@@ -50,11 +50,11 @@ func (op *addDataEntry) Execute(st *stateCache) ([]protocol.Account, error) {
 		}
 	}
 
-	err := indexing.Data(st.batch, op.url).Put(op.hash, st.txHash[:])
+	err := indexing.Data(st.Batch, op.url).Put(op.hash, st.TxHash[:])
 	if err != nil {
 		return nil, fmt.Errorf("failed to add entry to data index of %q: %v", op.url, err)
 	}
 
 	// Add TX to main chain
-	return nil, st.State.ChainUpdates.AddChainEntry(st.batch, record.MainChain(), st.txHash[:], 0, 0)
+	return nil, st.State.ChainUpdates.AddChainEntry(st.Batch, record.MainChain(), st.TxHash[:], 0, 0)
 }

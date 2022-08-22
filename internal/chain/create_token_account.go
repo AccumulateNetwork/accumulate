@@ -57,7 +57,7 @@ func (CreateTokenAccount) Validate(st *StateManager, tx *Delivery) (protocol.Tra
 		return nil, errors.Format(errors.StatusBadRequest, "token URL is missing")
 	}
 
-	err = verifyCreateTokenAccountProof(st.Describe, st.batch, tx.Transaction.Header.Principal, body)
+	err = verifyCreateTokenAccountProof(st.Describe, st.Batch, tx.Transaction.Header.Principal, body)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
