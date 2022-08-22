@@ -3,13 +3,13 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"github.com/FactomProject/factomd/common/interfaces"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/FactomProject/factomd/common/entryBlock"
+	"github.com/FactomProject/factomd/common/interfaces"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
@@ -31,6 +31,9 @@ func init() {
 }
 
 func convert(_ *cobra.Command, args []string) {
+	entryCount := 0
+	FCTHeight := 0
+
 	db, err := database.OpenBadger(args[0], nil)
 	checkf(err, "output database")
 	defer db.Close()
@@ -39,15 +42,25 @@ func convert(_ *cobra.Command, args []string) {
 	checkf(err, "output file")
 	defer output.Close()
 
-	dirent, err := os.ReadDir(args[2])
-	checkf(err, "input directory")
+	start := time.Now().Unix()
+	for {
+		runTime := time.Now().Unix() - start
+		if runTime > 0 {
+			hours := runTime / 60 / 60
+			minutes := (runTime - hours*60*60) / 60
+			seconds := runTime % 60
 
-	for _, dirent := range dirent {
-		if dirent.IsDir() || filepath.Ext(dirent.Name()) != ".dat" {
-			continue
+			fmt.Printf("FCT Blocks\t\t%d\nEntries\t\t\t%d\nTime\t\t\t%d:%02d:%02d\n",
+				FCTHeight, entryCount, hours, minutes, seconds)
+			fmt.Printf("BLK/s\t\t\t%d\nEntries/s per Second\t%d\n\n",
+				int64(FCTHeight)/runTime, int64(entryCount)/runTime)
 		}
 
-		filename := filepath.Join(args[2], dirent.Name())
+		filename := fmt.Sprintf("objects-%d.dat", FCTHeight)
+		FCTHeight += 2000
+
+		filename = filepath.Join(args[2], filename)
+
 		input, err := ioutil.ReadFile(filename)
 		checkf(err, "read %s", filename)
 
@@ -144,89 +157,100 @@ func convert(_ *cobra.Command, args []string) {
 		checkf(err, "process object file")
 
 		// For each chain ID
-		for chainId, entries := range entries {
+		for chainId, entriesAll := range entries {
 			// Format the URL
 			chainId := chainId // See docs/developer/rangevarref.md
 			address, err := protocol.LiteDataAddress(chainId[:])
 			checkf(err, "create LDA URL")
 
-			// Commit each account separately so we don't exceed Badger's limits
-			batch := db.Begin(true)
-			account := batch.Account(address)
-
-			// Create the LDA's main record if it doesn't exist
-			var lda *protocol.LiteDataAccount
-			err = account.Main().GetAs(&lda)
-			switch {
-			case err == nil:
-				// Record exists
-			case errors.Is(err, errors.StatusNotFound):
-				// Create the record
-				lda = new(protocol.LiteDataAccount)
-				lda.Url = address
-				err = account.Main().Put(lda)
-				checkf(err, "store record")
-			default:
-				checkf(err, "load record")
-			}
-
-			// For each entry
-			for _, e := range entries {
-				// Convert the entry and calculate the entry hash
-				entry := factom.ConvertEntry(e.Entry).Wrap()
-				entryHash, err := protocol.ComputeFactomEntryHashForAccount(chainId[:], entry.GetData())
-				checkf(err, "calculate entry hash")
-
-				// Construct a transaction
-				txn := new(protocol.Transaction)
-				txn.Header.Principal = address
-				txn.Body = &protocol.WriteData{Entry: entry}
-
-				// Each transaction needs to be unique so add a timestamp which is the timestamp from the Factom chain
-				txn.Header.Memo = fmt.Sprintf("%v", e.EntryTime.UTC())
-
-				// Construct the transaction result
-				result := new(protocol.WriteDataResult)
-				result.AccountID = chainId[:]
-				result.AccountUrl = address
-				result.EntryHash = *(*[32]byte)(entryHash)
-
-				// Construct the transaction status
-				status := new(protocol.TransactionStatus)
-				status.TxID = txn.ID()
-				status.Code = errors.StatusDelivered
-				status.Result = result
-
-				// Check if the transaction already exists
-				txnrec := batch.Transaction(txn.GetHash())
-				_, err = txnrec.Main().Get()
-				switch {
-				case err == nil:
-					fatalf("Somehow we created a duplicate transaction")
-				case errors.Is(err, errors.StatusNotFound):
-					// Ok
-				default:
-					checkf(err, "check for duplicate transaction")
+			for len(entriesAll) > 0 {
+				var entries []*EntryData
+				if len(entriesAll) > 1000 {
+					entries = entriesAll[:1000]
+					entriesAll = entriesAll[1000:]
+				} else {
+					entriesAll = entriesAll[:0]
 				}
 
-				// Write everything to the database
-				err = indexing.Data(batch, address).Put(entryHash, txn.GetHash())
-				checkf(err, "add data index")
+				// Commit each account separately so we don't exceed Badger's limits
+				batch := db.Begin(true)
+				account := batch.Account(address)
 
-				err = txnrec.Main().Put(&database.SigOrTxn{Transaction: txn})
-				checkf(err, "store transaction")
+				// Create the LDA's main record if it doesn't exist
+				var lda *protocol.LiteDataAccount
+				err = account.Main().GetAs(&lda)
+				switch {
+				case err == nil:
+					// Record exists
+				case errors.Is(err, errors.StatusNotFound):
+					// Create the record
+					lda = new(protocol.LiteDataAccount)
+					lda.Url = address
+					err = account.Main().Put(lda)
+					checkf(err, "store record")
+				default:
+					checkf(err, "load record")
+				}
 
-				err = txnrec.Status().Put(status)
-				checkf(err, "store status")
+				// For each entry
+				for _, e := range entries {
+					entryCount++
+					// Convert the entry and calculate the entry hash
+					entry := factom.ConvertEntry(e.Entry).Wrap()
+					entryHash, err := protocol.ComputeFactomEntryHashForAccount(chainId[:], entry.GetData())
+					checkf(err, "calculate entry hash")
 
-				mainChain, err := account.MainChain().Get()
-				checkf(err, "load main chain")
-				err = mainChain.AddEntry(txn.GetHash(), false)
-				checkf(err, "store main chain entry")
+					// Construct a transaction
+					txn := new(protocol.Transaction)
+					txn.Header.Principal = address
+					txn.Body = &protocol.WriteData{Entry: entry}
+
+					// Each transaction needs to be unique so add a timestamp which is the timestamp from the Factom chain
+					txn.Header.Memo = fmt.Sprintf("%v", e.EntryTime.UTC())
+
+					// Construct the transaction result
+					result := new(protocol.WriteDataResult)
+					result.AccountID = chainId[:]
+					result.AccountUrl = address
+					result.EntryHash = *(*[32]byte)(entryHash)
+
+					// Construct the transaction status
+					status := new(protocol.TransactionStatus)
+					status.TxID = txn.ID()
+					status.Code = errors.StatusDelivered
+					status.Result = result
+
+					// Check if the transaction already exists
+					txnrec := batch.Transaction(txn.GetHash())
+					_, err = txnrec.Main().Get()
+					switch {
+					case err == nil:
+						fatalf("Somehow we created a duplicate transaction")
+					case errors.Is(err, errors.StatusNotFound):
+						// Ok
+					default:
+						checkf(err, "check for duplicate transaction")
+					}
+
+					// Write everything to the database
+					err = indexing.Data(batch, address).Put(entryHash, txn.GetHash())
+					checkf(err, "add data index")
+
+					err = txnrec.Main().Put(&database.SigOrTxn{Transaction: txn})
+					checkf(err, "store transaction")
+
+					err = txnrec.Status().Put(status)
+					checkf(err, "store status")
+
+					mainChain, err := account.MainChain().Get()
+					checkf(err, "load main chain")
+					err = mainChain.AddEntry(txn.GetHash(), false)
+					checkf(err, "store main chain entry")
+				}
+
+				err = batch.Commit()
+				checkf(err, "commit")
 			}
-
-			err = batch.Commit()
-			checkf(err, "commit")
 		}
 
 		// Do a GC after each object file to keep badger under control
