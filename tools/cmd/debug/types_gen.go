@@ -18,12 +18,12 @@ import (
 )
 
 type SigSetEntry struct {
-	fieldsSet     []bool
-	System        bool                   `json:"system,omitempty" form:"system" query:"system" validate:"required"`
-	Type          protocol.SignatureType `json:"type,omitempty" form:"type" query:"type" validate:"required"`
-	KeyEntryIndex uint64                 `json:"keyEntryIndex,omitempty" form:"keyEntryIndex" query:"keyEntryIndex" validate:"required"`
-	SignatureHash [32]byte               `json:"signatureHash,omitempty" form:"signatureHash" query:"signatureHash" validate:"required"`
-	extraData     []byte
+	fieldsSet        []bool
+	Type             protocol.SignatureType `json:"type,omitempty" form:"type" query:"type" validate:"required"`
+	KeyEntryIndex    uint64                 `json:"keyEntryIndex,omitempty" form:"keyEntryIndex" query:"keyEntryIndex" validate:"required"`
+	SignatureHash    [32]byte               `json:"signatureHash,omitempty" form:"signatureHash" query:"signatureHash" validate:"required"`
+	ValidatorKeyHash *[32]byte              `json:"validatorKeyHash,omitempty" form:"validatorKeyHash" query:"validatorKeyHash" validate:"required"`
+	extraData        []byte
 }
 
 type accountState struct {
@@ -71,10 +71,13 @@ type transactionState struct {
 func (v *SigSetEntry) Copy() *SigSetEntry {
 	u := new(SigSetEntry)
 
-	u.System = v.System
 	u.Type = v.Type
 	u.KeyEntryIndex = v.KeyEntryIndex
 	u.SignatureHash = v.SignatureHash
+	if v.ValidatorKeyHash != nil {
+		u.ValidatorKeyHash = new([32]byte)
+		*u.ValidatorKeyHash = *v.ValidatorKeyHash
+	}
 
 	return u
 }
@@ -179,9 +182,6 @@ func (v *transactionState) Copy() *transactionState {
 func (v *transactionState) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *SigSetEntry) Equal(u *SigSetEntry) bool {
-	if !(v.System == u.System) {
-		return false
-	}
 	if !(v.Type == u.Type) {
 		return false
 	}
@@ -189,6 +189,14 @@ func (v *SigSetEntry) Equal(u *SigSetEntry) bool {
 		return false
 	}
 	if !(v.SignatureHash == u.SignatureHash) {
+		return false
+	}
+	switch {
+	case v.ValidatorKeyHash == u.ValidatorKeyHash:
+		// equal
+	case v.ValidatorKeyHash == nil || u.ValidatorKeyHash == nil:
+		return false
+	case !(*v.ValidatorKeyHash == *u.ValidatorKeyHash):
 		return false
 	}
 
@@ -319,27 +327,27 @@ func (v *transactionState) Equal(u *transactionState) bool {
 }
 
 var fieldNames_SigSetEntry = []string{
-	1: "System",
-	2: "Type",
-	3: "KeyEntryIndex",
-	4: "SignatureHash",
+	1: "Type",
+	2: "KeyEntryIndex",
+	3: "SignatureHash",
+	4: "ValidatorKeyHash",
 }
 
 func (v *SigSetEntry) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	if !(!v.System) {
-		writer.WriteBool(1, v.System)
-	}
 	if !(v.Type == 0) {
-		writer.WriteEnum(2, v.Type)
+		writer.WriteEnum(1, v.Type)
 	}
 	if !(v.KeyEntryIndex == 0) {
-		writer.WriteUint(3, v.KeyEntryIndex)
+		writer.WriteUint(2, v.KeyEntryIndex)
 	}
 	if !(v.SignatureHash == ([32]byte{})) {
-		writer.WriteHash(4, &v.SignatureHash)
+		writer.WriteHash(3, &v.SignatureHash)
+	}
+	if !(v.ValidatorKeyHash == nil) {
+		writer.WriteHash(4, v.ValidatorKeyHash)
 	}
 
 	_, _, err := writer.Reset(fieldNames_SigSetEntry)
@@ -354,24 +362,24 @@ func (v *SigSetEntry) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field System is missing")
-	} else if !v.System {
-		errs = append(errs, "field System is not set")
-	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Type is missing")
 	} else if v.Type == 0 {
 		errs = append(errs, "field Type is not set")
 	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field KeyEntryIndex is missing")
 	} else if v.KeyEntryIndex == 0 {
 		errs = append(errs, "field KeyEntryIndex is not set")
 	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field SignatureHash is missing")
 	} else if v.SignatureHash == ([32]byte{}) {
 		errs = append(errs, "field SignatureHash is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field ValidatorKeyHash is missing")
+	} else if v.ValidatorKeyHash == nil {
+		errs = append(errs, "field ValidatorKeyHash is not set")
 	}
 
 	switch len(errs) {
@@ -673,17 +681,17 @@ func (v *SigSetEntry) UnmarshalBinary(data []byte) error {
 func (v *SigSetEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	if x, ok := reader.ReadBool(1); ok {
-		v.System = x
-	}
-	if x := new(protocol.SignatureType); reader.ReadEnum(2, x) {
+	if x := new(protocol.SignatureType); reader.ReadEnum(1, x) {
 		v.Type = *x
 	}
-	if x, ok := reader.ReadUint(3); ok {
+	if x, ok := reader.ReadUint(2); ok {
 		v.KeyEntryIndex = x
 	}
-	if x, ok := reader.ReadHash(4); ok {
+	if x, ok := reader.ReadHash(3); ok {
 		v.SignatureHash = *x
+	}
+	if x, ok := reader.ReadHash(4); ok {
+		v.ValidatorKeyHash = x
 	}
 
 	seen, err := reader.Reset(fieldNames_SigSetEntry)
@@ -873,15 +881,15 @@ func (v *transactionState) UnmarshalBinaryFrom(rd io.Reader) error {
 
 func (v *SigSetEntry) MarshalJSON() ([]byte, error) {
 	u := struct {
-		System        bool                   `json:"system,omitempty"`
-		Type          protocol.SignatureType `json:"type,omitempty"`
-		KeyEntryIndex uint64                 `json:"keyEntryIndex,omitempty"`
-		SignatureHash string                 `json:"signatureHash,omitempty"`
+		Type             protocol.SignatureType `json:"type,omitempty"`
+		KeyEntryIndex    uint64                 `json:"keyEntryIndex,omitempty"`
+		SignatureHash    string                 `json:"signatureHash,omitempty"`
+		ValidatorKeyHash string                 `json:"validatorKeyHash,omitempty"`
 	}{}
-	u.System = v.System
 	u.Type = v.Type
 	u.KeyEntryIndex = v.KeyEntryIndex
 	u.SignatureHash = encoding.ChainToJSON(v.SignatureHash)
+	u.ValidatorKeyHash = encoding.ChainToJSON(*v.ValidatorKeyHash)
 	return json.Marshal(&u)
 }
 
@@ -949,25 +957,29 @@ func (v *transactionState) MarshalJSON() ([]byte, error) {
 
 func (v *SigSetEntry) UnmarshalJSON(data []byte) error {
 	u := struct {
-		System        bool                   `json:"system,omitempty"`
-		Type          protocol.SignatureType `json:"type,omitempty"`
-		KeyEntryIndex uint64                 `json:"keyEntryIndex,omitempty"`
-		SignatureHash string                 `json:"signatureHash,omitempty"`
+		Type             protocol.SignatureType `json:"type,omitempty"`
+		KeyEntryIndex    uint64                 `json:"keyEntryIndex,omitempty"`
+		SignatureHash    string                 `json:"signatureHash,omitempty"`
+		ValidatorKeyHash string                 `json:"validatorKeyHash,omitempty"`
 	}{}
-	u.System = v.System
 	u.Type = v.Type
 	u.KeyEntryIndex = v.KeyEntryIndex
 	u.SignatureHash = encoding.ChainToJSON(v.SignatureHash)
+	u.ValidatorKeyHash = encoding.ChainToJSON(*v.ValidatorKeyHash)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	v.System = u.System
 	v.Type = u.Type
 	v.KeyEntryIndex = u.KeyEntryIndex
 	if x, err := encoding.ChainFromJSON(u.SignatureHash); err != nil {
 		return fmt.Errorf("error decoding SignatureHash: %w", err)
 	} else {
 		v.SignatureHash = x
+	}
+	if x, err := encoding.ChainFromJSON(u.ValidatorKeyHash); err != nil {
+		return fmt.Errorf("error decoding ValidatorKeyHash: %w", err)
+	} else {
+		v.ValidatorKeyHash = &x
 	}
 	return nil
 }

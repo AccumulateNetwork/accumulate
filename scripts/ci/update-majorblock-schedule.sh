@@ -46,12 +46,12 @@ declare -g ACCEPT_THRESHOLD=$(accumulate page get -j dn.acme/operators/1 | jq -r
 
 section "Set major block time to 1 minute"
 TXID=$(daemon-tx -w "${NODES_DIR}/node-1/dnn" set schedule "* * * * *")
-echo RESULT: |$TXID|
+echo "RESULT: |$TXID|"
 wait-for-tx $TXID
 
 # Sign the required number of times
 echo Signature count $(signCount)
-for ((sigNr = 1; sigNr < $(signCount); sigNr++)); do
+for ((sigNr = 2; sigNr <= $(signCount); sigNr++)); do
   echo Signature $sigNr
   wait-for cli-tx-sig tx sign dn.acme/operators "$(dnPrivKey $sigNr)" $TXID
 done
