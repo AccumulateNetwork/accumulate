@@ -344,7 +344,7 @@ func ensurePartitions(networkDefinition *protocol.NetworkDefinition, describe *c
 	}
 	for _, p := range networkDefinition.Partitions {
 		for i, v := range parts {
-			if v == p.PartitionID {
+			if v == p.ID {
 				parts = remove(parts, i)
 				break
 			}

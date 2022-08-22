@@ -1,3 +1,10 @@
+PartitionType:
+  Directory:
+    value: 1
+  BlockValidator:
+    value: 2
+    aliases: [block-validator]
+
 DataEntryType:
   Unknown:
     value: 0

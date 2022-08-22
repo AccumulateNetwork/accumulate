@@ -1,6 +1,8 @@
 package sortutil
 
-import "sort"
+import (
+	"sort"
+)
 
 // Search uses a binary search to find and return the smallest index i in [0,
 // len(l)) at which cmp(l[i]) ≥ 0, assuming that on the range [0, len(l)),
