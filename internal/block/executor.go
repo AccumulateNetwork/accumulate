@@ -228,13 +228,13 @@ func (m *Executor) LoadStateRoot(batch *database.Batch) ([]byte, error) {
 	}
 }
 
-func (m *Executor) RestoreSnapshot(batch *database.Batch, file ioutil2.SectionReader) error {
-	err := batch.RestoreSnapshot(file, &m.Describe)
+func (m *Executor) RestoreSnapshot(db database.Beginner, file ioutil2.SectionReader) error {
+	err := database.RestoreSnapshot(db, file, &m.Describe)
 	if err != nil {
 		return errors.Format(errors.StatusUnknownError, "load state: %w", err)
 	}
 
-	err = m.loadGlobals(batch.View)
+	err = m.loadGlobals(db.View)
 	if err != nil {
 		return errors.Format(errors.StatusInternalError, "failed to load globals: %w", err)
 	}

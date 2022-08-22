@@ -25,7 +25,6 @@ func ReadObjectFile(buff []byte, logger log.Logger, fn func(header *Header, obje
 		}
 	}
 
-	var lastHeight uint32
 	for len(buff) > 0 {
 		header := new(Header)
 		buff = header.UnmarshalBinary(buff)
@@ -35,16 +34,15 @@ func ReadObjectFile(buff []byte, logger log.Logger, fn func(header *Header, obje
 			if err := dBlock.UnmarshalBinary(buff[:header.Size]); err != nil {
 				return fmt.Errorf("unmarshal directory block: %w", err)
 			} else {
-				lastHeight = dBlock.GetHeader().GetDBHeight()
+				logger.Debug("Directory block", "height", dBlock.GetDatabaseHeight())
 				fn(header, dBlock)
 			}
 		case TagABlock:
 			aBlock := adminBlock.NewAdminBlock(nil)
 			if err := aBlock.UnmarshalBinary(buff[:header.Size]); err != nil {
-				// Why?
-				logger.Info("Bad admin block", "height", lastHeight, "size", header.Size, "error", err)
-				// return fmt.Errorf("unmarshal admin block: %w", err)
+				return fmt.Errorf("unmarshal admin block: %w", err)
 			} else {
+				logger.Debug("Admin block", "height", aBlock.GetDatabaseHeight())
 				fn(header, aBlock)
 			}
 		case TagFBlock:
@@ -52,6 +50,7 @@ func ReadObjectFile(buff []byte, logger log.Logger, fn func(header *Header, obje
 			if err := fBlock.UnmarshalBinary(buff[:header.Size]); err != nil {
 				return fmt.Errorf("unmarshal factoid block: %w", err)
 			} else {
+				logger.Debug("Factoid block", "height", fBlock.GetDatabaseHeight())
 				fn(header, fBlock)
 			}
 		case TagECBlock:
@@ -59,6 +58,7 @@ func ReadObjectFile(buff []byte, logger log.Logger, fn func(header *Header, obje
 			if err := ecBlock.UnmarshalBinary(buff[:header.Size]); err != nil {
 				return fmt.Errorf("unmarshal entry credit block: %w", err)
 			} else {
+				logger.Debug("Entry credit block", "height", ecBlock.GetDatabaseHeight())
 				fn(header, ecBlock)
 			}
 		case TagEBlock:
@@ -66,6 +66,7 @@ func ReadObjectFile(buff []byte, logger log.Logger, fn func(header *Header, obje
 			if _, err := eBlock.UnmarshalBinaryData(buff[:header.Size]); err != nil {
 				return fmt.Errorf("unmarshal entry block: %w", err)
 			} else {
+				logger.Debug("Entry block", "height", eBlock.GetDatabaseHeight())
 				fn(header, eBlock)
 			}
 		case TagEntry:
@@ -73,6 +74,7 @@ func ReadObjectFile(buff []byte, logger log.Logger, fn func(header *Header, obje
 			if err := entry.UnmarshalBinary(buff[:header.Size]); err != nil {
 				return fmt.Errorf("unmarshal entry: %w", err)
 			} else {
+				logger.Debug("Entry", "chain", logging.AsHex(entry.ChainID))
 				fn(header, entry)
 			}
 		case TagTX:
@@ -80,6 +82,7 @@ func ReadObjectFile(buff []byte, logger log.Logger, fn func(header *Header, obje
 			if err := tx.UnmarshalBinary(buff[:header.Size]); err != nil {
 				return fmt.Errorf("unmarshal transaction: %w", err)
 			} else {
+				logger.Debug("Factoid transaction", "hash", logging.AsHex(tx.Txid.Bytes()))
 				fn(header, tx)
 			}
 		default:

@@ -249,28 +249,30 @@ func readSnapshot(file ioutil2.SectionReader, process func(key storage.Key, hash
 }
 
 // RestoreSnapshot loads the full state of the partition from a file.
-func (b *Batch) RestoreSnapshot(file ioutil2.SectionReader, network *config.Describe) error {
-	bpt := pmt.NewBPTManager(b.kvstore)
-	if bpt.Bpt.MaxHeight != 0 {
-		return errors.New(errors.StatusBadRequest, "a snapshot can only be read into a new BPT")
-	}
-
+func RestoreSnapshot(db Beginner, file ioutil2.SectionReader, network *config.Describe) error {
 	err := readSnapshot(file, func(key storage.Key, hash [32]byte, state *accountState) error {
-		bpt.Bpt.Insert(key, hash)
-		account := b.Account(state.Main.GetUrl())
-		return account.safeRestoreState(key, hash, state)
+		// Restore each account with a separate transaction
+		batch := db.Begin(true)
+		defer batch.Discard()
+
+		account := batch.Account(state.Main.GetUrl())
+		err := account.safeRestoreState(key, hash, state)
+		if err != nil {
+			return errors.Wrap(errors.StatusUnknownError, err)
+		}
+
+		err = batch.Commit()
+		return errors.Wrap(errors.StatusUnknownError, err)
 	})
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
-	err = bpt.Bpt.Update()
-	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
-	}
+	batch := db.Begin(true)
+	defer batch.Discard()
 
 	// Rebuild the synthetic transaction index index
-	record := b.Account(network.Synthetic())
+	record := batch.Account(network.Synthetic())
 	synthIndexChain, err := record.MainChain().Index().Get()
 	if err != nil {
 		return errors.Format(errors.StatusInternalError, "load synthetic index chain: %w", err)
@@ -288,13 +290,14 @@ func (b *Batch) RestoreSnapshot(file ioutil2.SectionReader, network *config.Desc
 			return errors.Format(errors.StatusInternalError, "unmarshal synthetic index chain entry %d: %w", i, err)
 		}
 
-		err = b.SystemData(network.PartitionId).SyntheticIndexIndex(entry.BlockIndex).Put(uint64(i))
+		err = batch.SystemData(network.PartitionId).SyntheticIndexIndex(entry.BlockIndex).Put(uint64(i))
 		if err != nil {
 			return errors.Format(errors.StatusUnknownError, "store synthetic transaction index index %d for block: %w", i, err)
 		}
 	}
 
-	return nil
+	err = batch.Commit()
+	return errors.Wrap(errors.StatusUnknownError, err)
 }
 
 func (b *Batch) ImportFactomSnapshot(file ioutil2.SectionReader, include func(account protocol.Account) (bool, error)) error {

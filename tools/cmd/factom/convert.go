@@ -235,8 +235,9 @@ func convert(_ *cobra.Command, args []string) {
 					_, err = txnrec.Main().Get()
 					switch {
 					case err == nil:
-						b, _ := json.Marshal(e.Metadata)
-						fatalf("Duplicate transaction for %s\n", b)
+						b1, _ := json.Marshal(txn.Body)
+						b2, _ := json.Marshal(e.Metadata)
+						fatalf("Duplicate transaction for %s (%s)\n", b1, b2)
 					case errors.Is(err, errors.StatusNotFound):
 						// Ok
 					default:

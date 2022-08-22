@@ -55,7 +55,7 @@ func TestState(t *testing.T) {
 	// Load the file into a new database
 	db := database.OpenInMemory(nil)
 	require.NoError(t, db.Update(func(b *database.Batch) error {
-		require.NoError(t, b.RestoreSnapshot(f, &bvn.Executor.Describe))
+		require.NoError(t, database.RestoreSnapshot(b, f, &bvn.Executor.Describe))
 
 		// Does it match?
 		blockHash2, err := b.GetMinorRootChainAnchor(&bvn.Executor.Describe)
