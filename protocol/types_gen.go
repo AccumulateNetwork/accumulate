@@ -137,6 +137,21 @@ type BTCSignature struct {
 	extraData       []byte
 }
 
+type BlockEntry struct {
+	fieldsSet []bool
+	Account   *url.URL `json:"account,omitempty" form:"account" query:"account" validate:"required"`
+	Chain     string   `json:"chain,omitempty" form:"chain" query:"chain" validate:"required"`
+	Index     uint64   `json:"index" form:"index" query:"index" validate:"required"`
+	extraData []byte
+}
+
+type BlockLedger struct {
+	fieldsSet []bool
+	Url       *url.URL      `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	Entries   []*BlockEntry `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
+	extraData []byte
+}
+
 type BlockValidatorAnchor struct {
 	fieldsSet []bool
 	PartitionAnchor
@@ -926,6 +941,8 @@ func (*BTCLegacySignature) Type() SignatureType { return SignatureTypeBTCLegacy 
 
 func (*BTCSignature) Type() SignatureType { return SignatureTypeBTC }
 
+func (*BlockLedger) Type() AccountType { return AccountTypeBlockLedger }
+
 func (*BlockValidatorAnchor) Type() TransactionType { return TransactionTypeBlockValidatorAnchor }
 
 func (*BurnTokens) Type() TransactionType { return TransactionTypeBurnTokens }
@@ -1251,6 +1268,38 @@ func (v *BTCSignature) Copy() *BTCSignature {
 }
 
 func (v *BTCSignature) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *BlockEntry) Copy() *BlockEntry {
+	u := new(BlockEntry)
+
+	if v.Account != nil {
+		u.Account = v.Account
+	}
+	u.Chain = v.Chain
+	u.Index = v.Index
+
+	return u
+}
+
+func (v *BlockEntry) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *BlockLedger) Copy() *BlockLedger {
+	u := new(BlockLedger)
+
+	if v.Url != nil {
+		u.Url = v.Url
+	}
+	u.Entries = make([]*BlockEntry, len(v.Entries))
+	for i, v := range v.Entries {
+		if v != nil {
+			u.Entries[i] = (v).Copy()
+		}
+	}
+
+	return u
+}
+
+func (v *BlockLedger) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *BlockValidatorAnchor) Copy() *BlockValidatorAnchor {
 	u := new(BlockValidatorAnchor)
@@ -2831,6 +2880,46 @@ func (v *BTCSignature) Equal(u *BTCSignature) bool {
 	}
 	if !(v.TransactionHash == u.TransactionHash) {
 		return false
+	}
+
+	return true
+}
+
+func (v *BlockEntry) Equal(u *BlockEntry) bool {
+	switch {
+	case v.Account == u.Account:
+		// equal
+	case v.Account == nil || u.Account == nil:
+		return false
+	case !((v.Account).Equal(u.Account)):
+		return false
+	}
+	if !(v.Chain == u.Chain) {
+		return false
+	}
+	if !(v.Index == u.Index) {
+		return false
+	}
+
+	return true
+}
+
+func (v *BlockLedger) Equal(u *BlockLedger) bool {
+	switch {
+	case v.Url == u.Url:
+		// equal
+	case v.Url == nil || u.Url == nil:
+		return false
+	case !((v.Url).Equal(u.Url)):
+		return false
+	}
+	if len(v.Entries) != len(u.Entries) {
+		return false
+	}
+	for i := range v.Entries {
+		if !((v.Entries[i]).Equal(u.Entries[i])) {
+			return false
+		}
 	}
 
 	return true
@@ -5313,6 +5402,114 @@ func (v *BTCSignature) IsValid() error {
 		errs = append(errs, "field SignerVersion is missing")
 	} else if v.SignerVersion == 0 {
 		errs = append(errs, "field SignerVersion is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_BlockEntry = []string{
+	1: "Account",
+	2: "Chain",
+	3: "Index",
+}
+
+func (v *BlockEntry) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Account == nil) {
+		writer.WriteUrl(1, v.Account)
+	}
+	if !(len(v.Chain) == 0) {
+		writer.WriteString(2, v.Chain)
+	}
+	writer.WriteUint(3, v.Index)
+
+	_, _, err := writer.Reset(fieldNames_BlockEntry)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *BlockEntry) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Account is missing")
+	} else if v.Account == nil {
+		errs = append(errs, "field Account is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Chain is missing")
+	} else if len(v.Chain) == 0 {
+		errs = append(errs, "field Chain is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Index is missing")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_BlockLedger = []string{
+	1: "Type",
+	2: "Url",
+	3: "Entries",
+}
+
+func (v *BlockLedger) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.Url == nil) {
+		writer.WriteUrl(2, v.Url)
+	}
+	if !(len(v.Entries) == 0) {
+		for _, v := range v.Entries {
+			writer.WriteValue(3, v.MarshalBinary)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_BlockLedger)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *BlockLedger) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Url is missing")
+	} else if v.Url == nil {
+		errs = append(errs, "field Url is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Entries is missing")
+	} else if len(v.Entries) == 0 {
+		errs = append(errs, "field Entries is not set")
 	}
 
 	switch len(errs) {
@@ -10746,6 +10943,72 @@ func (v *BTCSignature) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *BlockEntry) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *BlockEntry) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUrl(1); ok {
+		v.Account = x
+	}
+	if x, ok := reader.ReadString(2); ok {
+		v.Chain = x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.Index = x
+	}
+
+	seen, err := reader.Reset(fieldNames_BlockEntry)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *BlockLedger) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *BlockLedger) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType AccountType
+	if x := new(AccountType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+	if x, ok := reader.ReadUrl(2); ok {
+		v.Url = x
+	}
+	for {
+		if x := new(BlockEntry); reader.ReadValue(3, x.UnmarshalBinary) {
+			v.Entries = append(v.Entries, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_BlockLedger)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *BlockValidatorAnchor) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -13987,6 +14250,18 @@ func (v *BTCSignature) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *BlockLedger) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type    AccountType                    `json:"type"`
+		Url     *url.URL                       `json:"url,omitempty"`
+		Entries encoding.JsonList[*BlockEntry] `json:"entries,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Url = v.Url
+	u.Entries = v.Entries
+	return json.Marshal(&u)
+}
+
 func (v *BlockValidatorAnchor) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type            TransactionType `json:"type"`
@@ -15496,6 +15771,26 @@ func (v *BTCSignature) UnmarshalJSON(data []byte) error {
 	} else {
 		v.TransactionHash = x
 	}
+	return nil
+}
+
+func (v *BlockLedger) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type    AccountType                    `json:"type"`
+		Url     *url.URL                       `json:"url,omitempty"`
+		Entries encoding.JsonList[*BlockEntry] `json:"entries,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Url = v.Url
+	u.Entries = v.Entries
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Url = u.Url
+	v.Entries = u.Entries
 	return nil
 }
 

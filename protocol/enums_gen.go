@@ -41,6 +41,9 @@ const AccountTypeTokenAccount AccountType = 4
 // AccountTypeLiteTokenAccount is a Lite Token Account.
 const AccountTypeLiteTokenAccount AccountType = 5
 
+// AccountTypeBlockLedger is a Block Ledger account.
+const AccountTypeBlockLedger AccountType = 6
+
 // AccountTypeKeyPage is a Key Page account.
 const AccountTypeKeyPage AccountType = 9
 
@@ -360,7 +363,7 @@ func (v AccountType) GetEnumValue() uint64 { return uint64(v) }
 func (v *AccountType) SetEnumValue(id uint64) bool {
 	u := AccountType(id)
 	switch u {
-	case AccountTypeUnknown, AccountTypeAnchorLedger, AccountTypeIdentity, AccountTypeTokenIssuer, AccountTypeTokenAccount, AccountTypeLiteTokenAccount, AccountTypeKeyPage, AccountTypeKeyBook, AccountTypeDataAccount, AccountTypeLiteDataAccount, AccountTypeUnknownSigner, AccountTypeSystemLedger, AccountTypeLiteIdentity, AccountTypeSyntheticLedger:
+	case AccountTypeUnknown, AccountTypeAnchorLedger, AccountTypeIdentity, AccountTypeTokenIssuer, AccountTypeTokenAccount, AccountTypeLiteTokenAccount, AccountTypeBlockLedger, AccountTypeKeyPage, AccountTypeKeyBook, AccountTypeDataAccount, AccountTypeLiteDataAccount, AccountTypeUnknownSigner, AccountTypeSystemLedger, AccountTypeLiteIdentity, AccountTypeSyntheticLedger:
 		*v = u
 		return true
 	default:
@@ -383,6 +386,8 @@ func (v AccountType) String() string {
 		return "tokenAccount"
 	case AccountTypeLiteTokenAccount:
 		return "liteTokenAccount"
+	case AccountTypeBlockLedger:
+		return "blockLedger"
 	case AccountTypeKeyPage:
 		return "keyPage"
 	case AccountTypeKeyBook:
@@ -421,6 +426,8 @@ func AccountTypeByName(name string) (AccountType, bool) {
 		return AccountTypeTokenAccount, true
 	case "litetokenaccount":
 		return AccountTypeLiteTokenAccount, true
+	case "blockledger":
+		return AccountTypeBlockLedger, true
 	case "keypage":
 		return AccountTypeKeyPage, true
 	case "keybook":
