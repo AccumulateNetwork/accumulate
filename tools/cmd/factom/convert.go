@@ -111,7 +111,6 @@ func convert(_ *cobra.Command, args []string) {
 				//look for entry in entry block to figure out minute, need to handle duplicate entries
 				//since we don't have any more resolution we'll just divide the number of entries in the minute
 				//min by the count to give us some arbitrary resolution in seconds.
-				minute := byte(0)
 				found := false
 				entriesInMinute := 0
 				var entryHash [32]byte
@@ -131,7 +130,6 @@ func convert(_ *cobra.Command, args []string) {
 				for i, e := range eblocks[id].GetBody().GetEBEntries() {
 					entryHash = entry.GetHash().Fixed()
 					if e.IsMinuteMarker() {
-						minute = e.ToMinute()
 						entriesInMinute = 0
 						continue
 					} else if bytes.Equal(e.Bytes(), entryHash[:]) {
@@ -150,12 +148,7 @@ func convert(_ *cobra.Command, args []string) {
 
 				md := blockMeta.Copy()
 				md.EntryIndex = uint64(ebEntryIndex[entryHash])
-				md.EntryTime = md.BlockTime.Add(time.Minute*time.Duration(minute) +
-					//entry timestamp to order entry within minute.
-					//Option1: use arbitrary sub-minute time based on index, but uniqueness is provided
-					//time.Duration(float64(time.Minute)*float64(md.EntryIndex)/float64(entryCountInMinute[minute]+1)))
-					//Option2: simply use the index into the minute as a microsecond (this option looks much cleaner)
-					time.Microsecond*time.Duration(md.EntryIndex+1))
+				md.EntryTime = md.BlockTime.Add(time.Second * time.Duration(entryCount))
 				ed := EntryData{md, entry}
 				entries[id] = append(entries[id], &ed)
 				entryCount++
@@ -175,9 +168,9 @@ func convert(_ *cobra.Command, args []string) {
 
 			for len(entriesAll) > 0 {
 				var entries []*EntryData
-				if len(entriesAll) > 1000 {
-					entries = entriesAll[:1000]
-					entriesAll = entriesAll[1000:]
+				if len(entriesAll) > 400 {
+					entries = entriesAll[:400]
+					entriesAll = entriesAll[400:]
 				} else {
 					entries = entriesAll
 					entriesAll = entriesAll[:0]
