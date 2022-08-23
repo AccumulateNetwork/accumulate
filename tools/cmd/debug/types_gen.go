@@ -33,11 +33,7 @@ type accountState struct {
 	// Chains is the state of the account's chains.
 	Chains []*merkleState `json:"chains,omitempty" form:"chains" query:"chains" validate:"required"`
 	// Pending is the state of the account's pending transactions.
-	Pending []*transactionState `json:"pending,omitempty" form:"pending" query:"pending" validate:"required"`
-	// Transactions is the state of other transactions related to the account.
-	Transactions []*transactionState `json:"transactions,omitempty" form:"transactions" query:"transactions" validate:"required"`
-	// Signatures is the state of signatures related to the account.
-	Signatures []protocol.Signature `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
+	Pending []*url.TxID `json:"pending,omitempty" form:"pending" query:"pending" validate:"required"`
 	// Directory lists the account's sub-accounts.
 	Directory []*url.URL `json:"directory,omitempty" form:"directory" query:"directory" validate:"required"`
 	extraData []byte
@@ -60,8 +56,21 @@ type sigSetData struct {
 	extraData []byte
 }
 
+type signatureSection struct {
+	fieldsSet  []bool
+	Signatures []protocol.Signature `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
+	extraData  []byte
+}
+
+type transactionSection struct {
+	fieldsSet    []bool
+	Transactions []*transactionState `json:"transactions,omitempty" form:"transactions" query:"transactions" validate:"required"`
+	extraData    []byte
+}
+
 type transactionState struct {
 	fieldsSet   []bool
+	hash        [32]byte
 	Transaction *protocol.Transaction       `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
 	State       *protocol.TransactionStatus `json:"state,omitempty" form:"state" query:"state" validate:"required"`
 	Signatures  []*sigSetData               `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
@@ -93,22 +102,10 @@ func (v *accountState) Copy() *accountState {
 			u.Chains[i] = (v).Copy()
 		}
 	}
-	u.Pending = make([]*transactionState, len(v.Pending))
+	u.Pending = make([]*url.TxID, len(v.Pending))
 	for i, v := range v.Pending {
 		if v != nil {
-			u.Pending[i] = (v).Copy()
-		}
-	}
-	u.Transactions = make([]*transactionState, len(v.Transactions))
-	for i, v := range v.Transactions {
-		if v != nil {
-			u.Transactions[i] = (v).Copy()
-		}
-	}
-	u.Signatures = make([]protocol.Signature, len(v.Signatures))
-	for i, v := range v.Signatures {
-		if v != nil {
-			u.Signatures[i] = (v).CopyAsInterface().(protocol.Signature)
+			u.Pending[i] = v
 		}
 	}
 	u.Directory = make([]*url.URL, len(v.Directory))
@@ -156,6 +153,36 @@ func (v *sigSetData) Copy() *sigSetData {
 }
 
 func (v *sigSetData) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *signatureSection) Copy() *signatureSection {
+	u := new(signatureSection)
+
+	u.Signatures = make([]protocol.Signature, len(v.Signatures))
+	for i, v := range v.Signatures {
+		if v != nil {
+			u.Signatures[i] = (v).CopyAsInterface().(protocol.Signature)
+		}
+	}
+
+	return u
+}
+
+func (v *signatureSection) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *transactionSection) Copy() *transactionSection {
+	u := new(transactionSection)
+
+	u.Transactions = make([]*transactionState, len(v.Transactions))
+	for i, v := range v.Transactions {
+		if v != nil {
+			u.Transactions[i] = (v).Copy()
+		}
+	}
+
+	return u
+}
+
+func (v *transactionSection) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *transactionState) Copy() *transactionState {
 	u := new(transactionState)
@@ -215,22 +242,6 @@ func (v *accountState) Equal(u *accountState) bool {
 			return false
 		}
 	}
-	if len(v.Transactions) != len(u.Transactions) {
-		return false
-	}
-	for i := range v.Transactions {
-		if !((v.Transactions[i]).Equal(u.Transactions[i])) {
-			return false
-		}
-	}
-	if len(v.Signatures) != len(u.Signatures) {
-		return false
-	}
-	for i := range v.Signatures {
-		if !(protocol.EqualSignature(v.Signatures[i], u.Signatures[i])) {
-			return false
-		}
-	}
 	if len(v.Directory) != len(u.Directory) {
 		return false
 	}
@@ -282,6 +293,32 @@ func (v *sigSetData) Equal(u *sigSetData) bool {
 	}
 	for i := range v.Entries {
 		if !((&v.Entries[i]).Equal(&u.Entries[i])) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (v *signatureSection) Equal(u *signatureSection) bool {
+	if len(v.Signatures) != len(u.Signatures) {
+		return false
+	}
+	for i := range v.Signatures {
+		if !(protocol.EqualSignature(v.Signatures[i], u.Signatures[i])) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (v *transactionSection) Equal(u *transactionSection) bool {
+	if len(v.Transactions) != len(u.Transactions) {
+		return false
+	}
+	for i := range v.Transactions {
+		if !((v.Transactions[i]).Equal(u.Transactions[i])) {
 			return false
 		}
 	}
@@ -388,9 +425,7 @@ var fieldNames_accountState = []string{
 	1: "Main",
 	2: "Chains",
 	3: "Pending",
-	4: "Transactions",
-	5: "Signatures",
-	6: "Directory",
+	4: "Directory",
 }
 
 func (v *accountState) MarshalBinary() ([]byte, error) {
@@ -407,22 +442,12 @@ func (v *accountState) MarshalBinary() ([]byte, error) {
 	}
 	if !(len(v.Pending) == 0) {
 		for _, v := range v.Pending {
-			writer.WriteValue(3, v.MarshalBinary)
-		}
-	}
-	if !(len(v.Transactions) == 0) {
-		for _, v := range v.Transactions {
-			writer.WriteValue(4, v.MarshalBinary)
-		}
-	}
-	if !(len(v.Signatures) == 0) {
-		for _, v := range v.Signatures {
-			writer.WriteValue(5, v.MarshalBinary)
+			writer.WriteTxid(3, v)
 		}
 	}
 	if !(len(v.Directory) == 0) {
 		for _, v := range v.Directory {
-			writer.WriteUrl(6, v)
+			writer.WriteUrl(4, v)
 		}
 	}
 
@@ -453,16 +478,6 @@ func (v *accountState) IsValid() error {
 		errs = append(errs, "field Pending is not set")
 	}
 	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
-		errs = append(errs, "field Transactions is missing")
-	} else if len(v.Transactions) == 0 {
-		errs = append(errs, "field Transactions is not set")
-	}
-	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
-		errs = append(errs, "field Signatures is missing")
-	} else if len(v.Signatures) == 0 {
-		errs = append(errs, "field Signatures is not set")
-	}
-	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
 		errs = append(errs, "field Directory is missing")
 	} else if len(v.Directory) == 0 {
 		errs = append(errs, "field Directory is not set")
@@ -607,6 +622,88 @@ func (v *sigSetData) IsValid() error {
 	}
 }
 
+var fieldNames_signatureSection = []string{
+	1: "Signatures",
+}
+
+func (v *signatureSection) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(len(v.Signatures) == 0) {
+		for _, v := range v.Signatures {
+			writer.WriteValue(1, v.MarshalBinary)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_signatureSection)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *signatureSection) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Signatures is missing")
+	} else if len(v.Signatures) == 0 {
+		errs = append(errs, "field Signatures is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_transactionSection = []string{
+	1: "Transactions",
+}
+
+func (v *transactionSection) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(len(v.Transactions) == 0) {
+		for _, v := range v.Transactions {
+			writer.WriteValue(1, v.MarshalBinary)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_transactionSection)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *transactionSection) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Transactions is missing")
+	} else if len(v.Transactions) == 0 {
+		errs = append(errs, "field Transactions is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_transactionState = []string{
 	1: "Transaction",
 	2: "State",
@@ -720,33 +817,14 @@ func (v *accountState) UnmarshalBinaryFrom(rd io.Reader) error {
 		}
 	}
 	for {
-		if x := new(transactionState); reader.ReadValue(3, x.UnmarshalBinary) {
+		if x, ok := reader.ReadTxid(3); ok {
 			v.Pending = append(v.Pending, x)
 		} else {
 			break
 		}
 	}
 	for {
-		if x := new(transactionState); reader.ReadValue(4, x.UnmarshalBinary) {
-			v.Transactions = append(v.Transactions, x)
-		} else {
-			break
-		}
-	}
-	for {
-		ok := reader.ReadValue(5, func(b []byte) error {
-			x, err := protocol.UnmarshalSignature(b)
-			if err == nil {
-				v.Signatures = append(v.Signatures, x)
-			}
-			return err
-		})
-		if !ok {
-			break
-		}
-	}
-	for {
-		if x, ok := reader.ReadUrl(6); ok {
+		if x, ok := reader.ReadUrl(4); ok {
 			v.Directory = append(v.Directory, x)
 		} else {
 			break
@@ -838,6 +916,65 @@ func (v *sigSetData) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *signatureSection) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *signatureSection) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	for {
+		ok := reader.ReadValue(1, func(b []byte) error {
+			x, err := protocol.UnmarshalSignature(b)
+			if err == nil {
+				v.Signatures = append(v.Signatures, x)
+			}
+			return err
+		})
+		if !ok {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_signatureSection)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *transactionSection) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *transactionSection) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	for {
+		if x := new(transactionState); reader.ReadValue(1, x.UnmarshalBinary) {
+			v.Transactions = append(v.Transactions, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_transactionSection)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *transactionState) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -887,18 +1024,14 @@ func (v *SigSetEntry) MarshalJSON() ([]byte, error) {
 
 func (v *accountState) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Main         encoding.JsonUnmarshalWith[protocol.Account]       `json:"main,omitempty"`
-		Chains       encoding.JsonList[*merkleState]                    `json:"chains,omitempty"`
-		Pending      encoding.JsonList[*transactionState]               `json:"pending,omitempty"`
-		Transactions encoding.JsonList[*transactionState]               `json:"transactions,omitempty"`
-		Signatures   encoding.JsonUnmarshalListWith[protocol.Signature] `json:"signatures,omitempty"`
-		Directory    encoding.JsonList[*url.URL]                        `json:"directory,omitempty"`
+		Main      encoding.JsonUnmarshalWith[protocol.Account] `json:"main,omitempty"`
+		Chains    encoding.JsonList[*merkleState]              `json:"chains,omitempty"`
+		Pending   encoding.JsonList[*url.TxID]                 `json:"pending,omitempty"`
+		Directory encoding.JsonList[*url.URL]                  `json:"directory,omitempty"`
 	}{}
 	u.Main = encoding.JsonUnmarshalWith[protocol.Account]{Value: v.Main, Func: protocol.UnmarshalAccountJSON}
 	u.Chains = v.Chains
 	u.Pending = v.Pending
-	u.Transactions = v.Transactions
-	u.Signatures = encoding.JsonUnmarshalListWith[protocol.Signature]{Value: v.Signatures, Func: protocol.UnmarshalSignatureJSON}
 	u.Directory = v.Directory
 	return json.Marshal(&u)
 }
@@ -932,6 +1065,22 @@ func (v *sigSetData) MarshalJSON() ([]byte, error) {
 	}{}
 	u.Version = v.Version
 	u.Entries = v.Entries
+	return json.Marshal(&u)
+}
+
+func (v *signatureSection) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Signatures encoding.JsonUnmarshalListWith[protocol.Signature] `json:"signatures,omitempty"`
+	}{}
+	u.Signatures = encoding.JsonUnmarshalListWith[protocol.Signature]{Value: v.Signatures, Func: protocol.UnmarshalSignatureJSON}
+	return json.Marshal(&u)
+}
+
+func (v *transactionSection) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Transactions encoding.JsonList[*transactionState] `json:"transactions,omitempty"`
+	}{}
+	u.Transactions = v.Transactions
 	return json.Marshal(&u)
 }
 
@@ -974,18 +1123,14 @@ func (v *SigSetEntry) UnmarshalJSON(data []byte) error {
 
 func (v *accountState) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Main         encoding.JsonUnmarshalWith[protocol.Account]       `json:"main,omitempty"`
-		Chains       encoding.JsonList[*merkleState]                    `json:"chains,omitempty"`
-		Pending      encoding.JsonList[*transactionState]               `json:"pending,omitempty"`
-		Transactions encoding.JsonList[*transactionState]               `json:"transactions,omitempty"`
-		Signatures   encoding.JsonUnmarshalListWith[protocol.Signature] `json:"signatures,omitempty"`
-		Directory    encoding.JsonList[*url.URL]                        `json:"directory,omitempty"`
+		Main      encoding.JsonUnmarshalWith[protocol.Account] `json:"main,omitempty"`
+		Chains    encoding.JsonList[*merkleState]              `json:"chains,omitempty"`
+		Pending   encoding.JsonList[*url.TxID]                 `json:"pending,omitempty"`
+		Directory encoding.JsonList[*url.URL]                  `json:"directory,omitempty"`
 	}{}
 	u.Main = encoding.JsonUnmarshalWith[protocol.Account]{Value: v.Main, Func: protocol.UnmarshalAccountJSON}
 	u.Chains = v.Chains
 	u.Pending = v.Pending
-	u.Transactions = v.Transactions
-	u.Signatures = encoding.JsonUnmarshalListWith[protocol.Signature]{Value: v.Signatures, Func: protocol.UnmarshalSignatureJSON}
 	u.Directory = v.Directory
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -994,11 +1139,6 @@ func (v *accountState) UnmarshalJSON(data []byte) error {
 
 	v.Chains = u.Chains
 	v.Pending = u.Pending
-	v.Transactions = u.Transactions
-	v.Signatures = make([]protocol.Signature, len(u.Signatures.Value))
-	for i, x := range u.Signatures.Value {
-		v.Signatures[i] = x
-	}
 	v.Directory = u.Directory
 	return nil
 }
@@ -1059,6 +1199,33 @@ func (v *sigSetData) UnmarshalJSON(data []byte) error {
 	}
 	v.Version = u.Version
 	v.Entries = u.Entries
+	return nil
+}
+
+func (v *signatureSection) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Signatures encoding.JsonUnmarshalListWith[protocol.Signature] `json:"signatures,omitempty"`
+	}{}
+	u.Signatures = encoding.JsonUnmarshalListWith[protocol.Signature]{Value: v.Signatures, Func: protocol.UnmarshalSignatureJSON}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Signatures = make([]protocol.Signature, len(u.Signatures.Value))
+	for i, x := range u.Signatures.Value {
+		v.Signatures[i] = x
+	}
+	return nil
+}
+
+func (v *transactionSection) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Transactions encoding.JsonList[*transactionState] `json:"transactions,omitempty"`
+	}{}
+	u.Transactions = v.Transactions
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Transactions = u.Transactions
 	return nil
 }
 

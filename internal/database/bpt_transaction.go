@@ -30,3 +30,28 @@ func (t *Transaction) loadState() (*transactionState, error) {
 
 	return state, nil
 }
+
+func (t *Transaction) restoreState(s *transactionState) error {
+	if len(s.State.Signers) != len(s.Signatures) {
+		return fmt.Errorf("state is invalid: %d signers and %d signatures", len(s.State.Signers), len(s.Signatures))
+	}
+
+	err := t.PutState(&SigOrTxn{Transaction: s.Transaction})
+	if err != nil {
+		return fmt.Errorf("store state: %w", err)
+	}
+
+	err = t.PutStatus(s.State)
+	if err != nil {
+		return fmt.Errorf("store status: %w", err)
+	}
+
+	for i, set := range s.Signatures {
+		signer := s.State.Signers[i].GetUrl()
+		err = t.getSignatures(signer).Put(set)
+		if err != nil {
+			return fmt.Errorf("store signers %v: %w", signer, err)
+		}
+	}
+	return nil
+}

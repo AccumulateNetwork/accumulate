@@ -5,10 +5,12 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"sort"
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -125,14 +127,16 @@ func (b *Batch) SaveSnapshot(file io.WriteSeeker, network *config.Describe) erro
 	// This must match how the model constructs the key
 	anchorLedgerKey := storage.MakeKey("Account", network.AnchorPool())
 
-	return b.saveSnapshot(file, ledger.Index, func(key [32]byte, state *accountState, account *Account) error {
+	return b.saveSnapshot(file, ledger.Index, func(key [32]byte, state *accountState, account *Account, transactions, signatures map[[32]byte]bool) error {
 		// Load transactions for system chains
 		if key != anchorLedgerKey {
 			return nil
 		}
 
 		var err error
-		state.Transactions = append(state.Transactions, loadState(&err, false, account.AnchorSequenceChain().stateOfTransactionsOnChain)...)
+		for _, h := range loadState(&err, false, account.AnchorSequenceChain().allEntries) {
+			transactions[h.Bytes32()] = true
+		}
 		return err
 	})
 }
@@ -140,31 +144,45 @@ func (b *Batch) SaveSnapshot(file io.WriteSeeker, network *config.Describe) erro
 // SaveFactomSnapshot is a special version of SaveSnapshot for creating a
 // pre-genesis snapshot for Factom data entries.
 func (b *Batch) SaveFactomSnapshot(file io.WriteSeeker) error {
-	return b.saveSnapshot(file, 0, func([32]byte, *accountState, *Account) error { return nil })
+	return b.saveSnapshot(file, 0, func(key [32]byte, state *accountState, account *Account, transactions, signatures map[[32]byte]bool) error {
+		return nil
+	})
 }
 
 // SaveSnapshot writes the full state of the partition out to a file.
-func (b *Batch) saveSnapshot(file io.WriteSeeker, height uint64, extra func(key [32]byte, state *accountState, account *Account) error) error {
+func (b *Batch) saveSnapshot(file io.WriteSeeker, height uint64, extra func(key [32]byte, state *accountState, account *Account, transactions, signatures map[[32]byte]bool) error) error {
+	wr := snapshot.NewWriter(file)
+
 	// Write the header
-	bpt := pmt.NewBPTManager(b.kvstore)
+	sw, err := wr.Open(snapshot.SectionTypeHeader)
+	if err != nil {
+		return errors.Format(errors.StatusUnknownError, "open header section: %w", err)
+	}
+
 	header := new(snapshotHeader)
 	header.Version = core.SnapshotVersion1
 	header.Height = height
 	header.RootHash = *(*[32]byte)(b.BptRoot())
-
-	_, err := header.WriteTo(file)
+	_, err = header.WriteTo(sw)
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "write header: %w", err)
+		return errors.Format(errors.StatusUnknownError, "write header section: %w", err)
+	}
+	err = sw.Close()
+	if err != nil {
+		return errors.Format(errors.StatusUnknownError, "close header section: %w", err)
 	}
 
-	// Create a section writer starting after the header
-	wr, err := ioutil2.NewSectionWriter(file, -1, -1)
+	// Write accounts
+	sw, err = wr.Open(snapshot.SectionTypeAccounts)
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "create section writer: %w", err)
+		return errors.Format(errors.StatusUnknownError, "open accounts section: %w", err)
 	}
 
 	// Save the snapshot
-	return bpt.Bpt.SaveSnapshot(wr, func(key storage.Key, hash [32]byte) ([]byte, error) {
+	txnMap := map[[32]byte]bool{}
+	sigMap := map[[32]byte]bool{}
+	bpt := pmt.NewBPTManager(b.kvstore)
+	err = bpt.Bpt.SaveSnapshot(sw, func(key storage.Key, hash [32]byte) ([]byte, error) {
 		// Create an Account object
 		u, err := b.getAccountUrl(record.Key{key})
 		if err != nil {
@@ -195,13 +213,23 @@ func (b *Batch) saveSnapshot(file io.WriteSeeker, height uint64, extra func(key 
 			return state.MarshalBinary()
 		}*/
 
-		// Load transactions and signatures
-		state.Transactions = append(state.Transactions, loadState(&err, false, account.MainChain().stateOfTransactionsOnChain)...)
-		state.Transactions = append(state.Transactions, loadState(&err, false, account.ScratchChain().stateOfTransactionsOnChain)...)
-		state.Signatures = append(state.Signatures, loadState(&err, false, account.SignatureChain().stateOfSignaturesOnChain)...)
+		// Queue transactions and signatures
+		// TODO: We need to be more selective than this
+		for _, txid := range state.Pending {
+			txnMap[txid.Hash()] = true
+		}
+		for _, h := range loadState(&err, false, account.MainChain().allEntries) {
+			txnMap[h.Copy().Bytes32()] = true
+		}
+		for _, h := range loadState(&err, false, account.ScratchChain().allEntries) {
+			txnMap[h.Copy().Bytes32()] = true
+		}
+		for _, h := range loadState(&err, false, account.SignatureChain().allEntries) {
+			sigMap[h.Copy().Bytes32()] = true
+		}
 
 		// Load transactions for system chains
-		err = extra(key, state, account)
+		err = extra(key, state, account, txnMap, sigMap)
 		if err != nil {
 			return nil, err
 		}
@@ -209,60 +237,231 @@ func (b *Batch) saveSnapshot(file io.WriteSeeker, height uint64, extra func(key 
 		b := loadState(&err, false, state.MarshalBinary)
 		return b, err
 	})
-}
-
-// ReadSnapshotHeader reads a snapshot file, returning the header values and a reader.
-func ReadSnapshotHeader(file ioutil2.SectionReader) (*snapshotHeader, int64, error) {
-	header := new(snapshotHeader)
-	n, err := header.ReadFrom(file)
-	if err != nil {
-		return nil, 0, errors.Format(errors.StatusUnknownError, "read header: %w", err)
-	}
-
-	return header, n, nil
-}
-
-func readSnapshot(file ioutil2.SectionReader, process func(key storage.Key, hash [32]byte, state *accountState) error) error {
-	// Read the snapshot header
-	_, _, err := ReadSnapshotHeader(file)
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
-	// Make a new section reader starting after the header
-	rd, err := ioutil2.NewSectionReader(file, -1, -1)
+	err = sw.Close()
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.Format(errors.StatusUnknownError, "close accounts section: %w", err)
 	}
 
-	// Load the snapshot
-	err = pmt.ReadSnapshot(rd, func(key storage.Key, hash [32]byte, reader ioutil2.SectionReader) error {
-		state := new(accountState)
-		err := state.UnmarshalBinaryFrom(reader)
+	// Write transactions (in order)
+	if len(txnMap) > 0 {
+		sw, err := wr.Open(snapshot.SectionTypeTransactions)
 		if err != nil {
-			return err
+			return errors.Format(errors.StatusUnknownError, "open transactions section: %w", err)
+		}
+		txns := make([]*transactionState, 0, len(txnMap))
+		for txid, ok := range txnMap {
+			if !ok {
+				continue
+			}
+			s, err := b.Transaction(txid[:]).loadState() //nolint:rangevarref
+			if err != nil {
+				return errors.Wrap(errors.StatusUnknownError, err)
+			}
+			s.hash = txid
+			txns = append(txns, s)
+		}
+		sort.Slice(txns, func(i, j int) bool { return bytes.Compare(txns[i].hash[:], txns[j].hash[:]) <= 0 })
+		// TODO: Do this in a way that allows for random-access
+		data, err := (&transactionSection{Transactions: txns}).MarshalBinary()
+		if err != nil {
+			return errors.Format(errors.StatusUnknownError, "marshal transactions section: %w", err)
+		}
+		_, err = sw.Write(data)
+		if err != nil {
+			return errors.Format(errors.StatusUnknownError, "write transactions section: %w", err)
 		}
 
-		return process(key, hash, state)
-	})
-	return errors.Wrap(errors.StatusUnknownError, err)
+		err = sw.Close()
+		if err != nil {
+			return errors.Format(errors.StatusUnknownError, "close transactions section: %w", err)
+		}
+	}
+
+	// Write signatures (in order)
+	if len(sigMap) > 0 {
+		sw, err := wr.Open(snapshot.SectionTypeSignatures)
+		if err != nil {
+			return errors.Format(errors.StatusUnknownError, "open signatures section: %w", err)
+		}
+		sigList := make([][32]byte, 0, len(sigMap))
+		for h, ok := range sigMap {
+			if !ok {
+				continue
+			}
+			sigList = append(sigList, h)
+		}
+		sort.Slice(sigList, func(i, j int) bool { return bytes.Compare(sigList[i][:], sigList[j][:]) <= 0 })
+		sigs := make([]protocol.Signature, len(sigList))
+		for i, h := range sigList {
+			s, err := b.Transaction(h[:]).Main().Get() //nolint:rangevarref
+			if err != nil {
+				return errors.Format(errors.StatusUnknownError, "load signature: %w", err)
+			}
+			if s.Signature == nil {
+				return errors.Format(errors.StatusInternalError, "signature %x is not a signature", h)
+			}
+			sigs[i] = s.Signature
+		}
+		// TODO: Do this in a way that allows for random-access
+		data, err := (&signatureSection{Signatures: sigs}).MarshalBinary()
+		if err != nil {
+			return errors.Format(errors.StatusUnknownError, "marshal signatures section: %w", err)
+		}
+		_, err = sw.Write(data)
+		if err != nil {
+			return errors.Format(errors.StatusUnknownError, "write signatures section: %w", err)
+		}
+
+		err = sw.Close()
+		if err != nil {
+			return errors.Format(errors.StatusUnknownError, "close signatures section: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// OpenSnapshot reads a snapshot file, returning the header values and a reader.
+func OpenSnapshot(file ioutil2.SectionReader) (*snapshotHeader, *snapshot.Reader, error) {
+	r := snapshot.NewReader(file)
+	s, err := r.Next()
+	if err != nil {
+		return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
+	}
+	if s.Type() != snapshot.SectionTypeHeader {
+		return nil, nil, errors.Format(errors.StatusBadRequest, "bad first section: expected %v, got %v", snapshot.SectionTypeHeader, s.Type())
+	}
+
+	sr, err := s.Open()
+	if err != nil {
+		return nil, nil, errors.Format(errors.StatusUnknownError, "open header section: %w", err)
+	}
+
+	header := new(snapshotHeader)
+	_, err = header.ReadFrom(sr)
+	if err != nil {
+		return nil, nil, errors.Format(errors.StatusUnknownError, "read header: %w", err)
+	}
+
+	return header, r, nil
+}
+
+func readSnapshot(file ioutil2.SectionReader, process func(typ snapshot.SectionType, rd ioutil2.SectionReader) error) error {
+	// Read the snapshot header
+	h, r, err := OpenSnapshot(file)
+	if err != nil {
+		return errors.Wrap(errors.StatusUnknownError, err)
+	}
+	if h.Version != 1 {
+		return errors.Format(errors.StatusBadRequest, "expected version 1, got %d", h.Version)
+	}
+
+	for {
+		s, err := r.Next()
+		switch {
+		case err == nil:
+			// Ok
+		case errors.Is(err, io.EOF):
+			return nil
+		default:
+			return errors.Format(errors.StatusUnknownError, "read next section header: %w", err)
+		}
+
+		sr, err := s.Open()
+		if err != nil {
+			return errors.Format(errors.StatusUnknownError, "open section: %w", err)
+		}
+
+		err = process(s.Type(), sr)
+		if err != nil {
+			return errors.Wrap(errors.StatusUnknownError, err)
+		}
+	}
 }
 
 // RestoreSnapshot loads the full state of the partition from a file.
 func RestoreSnapshot(db Beginner, file ioutil2.SectionReader, network *config.Describe) error {
-	err := readSnapshot(file, func(key storage.Key, hash [32]byte, state *accountState) error {
-		// Restore each account with a separate transaction
-		batch := db.Begin(true)
-		defer batch.Discard()
+	err := readSnapshot(file, func(typ snapshot.SectionType, rd ioutil2.SectionReader) error {
+		switch typ {
+		case snapshot.SectionTypeAccounts:
+			err := pmt.ReadSnapshot(rd, func(key storage.Key, hash [32]byte, reader ioutil2.SectionReader) error {
+				state := new(accountState)
+				err := state.UnmarshalBinaryFrom(reader)
+				if err != nil {
+					return err
+				}
 
-		account := batch.Account(state.Main.GetUrl())
-		err := account.safeRestoreState(key, hash, state)
-		if err != nil {
+				// Restore each account with a separate batch
+				batch := db.Begin(true)
+				defer batch.Discard()
+
+				account := batch.Account(state.Main.GetUrl())
+				err = account.safeRestoreState(key, hash, state)
+				if err != nil {
+					return errors.Wrap(errors.StatusUnknownError, err)
+				}
+
+				err = batch.Commit()
+				return errors.Wrap(errors.StatusUnknownError, err)
+			})
 			return errors.Wrap(errors.StatusUnknownError, err)
-		}
 
-		err = batch.Commit()
-		return errors.Wrap(errors.StatusUnknownError, err)
+		case snapshot.SectionTypeTransactions:
+			s := new(transactionSection)
+			err := s.UnmarshalBinaryFrom(rd)
+			if err != nil {
+				return errors.Format(errors.StatusEncodingError, "unmarshal transaction section: %w", err)
+			}
+
+			for _, s := range s.Transactions {
+				// Restore each transaction with a separate batch
+				batch := db.Begin(true)
+				defer batch.Discard()
+
+				hash := s.Transaction.GetHash()
+				err = batch.Transaction(hash).restoreState(s)
+				if err != nil {
+					return fmt.Errorf("transaction %X: %w", hash[:4], err)
+				}
+
+				err = batch.Commit()
+				if err != nil {
+					return errors.Wrap(errors.StatusUnknownError, err)
+				}
+			}
+			return nil
+
+		case snapshot.SectionTypeSignatures:
+			s := new(signatureSection)
+			err := s.UnmarshalBinaryFrom(rd)
+			if err != nil {
+				return errors.Format(errors.StatusEncodingError, "unmarshal signature section: %w", err)
+			}
+
+			for _, s := range s.Signatures {
+				// Restore each signature with a separate batch
+				batch := db.Begin(true)
+				defer batch.Discard()
+
+				err = batch.Transaction(s.Hash()).Main().Put(&SigOrTxn{Signature: s})
+				if err != nil {
+					return errors.Format(errors.StatusEncodingError, "store signature: %w", err)
+				}
+
+				err = batch.Commit()
+				if err != nil {
+					return errors.Wrap(errors.StatusUnknownError, err)
+				}
+			}
+			return nil
+
+		default:
+			return errors.Format(errors.StatusBadRequest, "unknown snapshot section type %v", typ)
+		}
 	})
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknownError, err)
@@ -303,16 +502,60 @@ func RestoreSnapshot(db Beginner, file ioutil2.SectionReader, network *config.De
 func (b *Batch) ImportFactomSnapshot(file ioutil2.SectionReader, include func(account protocol.Account) (bool, error)) error {
 	bpt := pmt.NewBPTManager(b.kvstore)
 
-	err := readSnapshot(file, func(key storage.Key, hash [32]byte, state *accountState) error {
-		ok, err := include(state.Main)
-		if !ok || err != nil {
-			return errors.Wrap(errors.StatusUnknownError, err)
-		}
+	err := readSnapshot(file, func(typ snapshot.SectionType, rd ioutil2.SectionReader) error {
+		switch typ {
+		case snapshot.SectionTypeAccounts:
+			err := pmt.ReadSnapshot(rd, func(key storage.Key, hash [32]byte, reader ioutil2.SectionReader) error {
+				state := new(accountState)
+				err := state.UnmarshalBinaryFrom(reader)
+				if err != nil {
+					return err
+				}
 
-		bpt.Bpt.Insert(key, hash)
-		account := b.Account(state.Main.GetUrl())
-		err = account.safeRestoreState(key, hash, state)
-		return errors.Wrap(errors.StatusUnknownError, err)
+				ok, err := include(state.Main)
+				if !ok || err != nil {
+					return errors.Wrap(errors.StatusUnknownError, err)
+				}
+
+				bpt.Bpt.Insert(key, hash)
+				account := b.Account(state.Main.GetUrl())
+				err = account.safeRestoreState(key, hash, state)
+				return errors.Wrap(errors.StatusUnknownError, err)
+			})
+			return errors.Wrap(errors.StatusUnknownError, err)
+
+		case snapshot.SectionTypeTransactions:
+			s := new(transactionSection)
+			err := s.UnmarshalBinaryFrom(rd)
+			if err != nil {
+				return errors.Format(errors.StatusEncodingError, "unmarshal transaction section: %w", err)
+			}
+
+			for _, s := range s.Transactions {
+				hash := s.Transaction.GetHash()
+				account, err := b.Account(s.Transaction.Header.Principal).Main().Get()
+				if err != nil {
+					return errors.Format(errors.StatusUnknownError, "load transction %X principal: %w", hash[:4], err)
+				}
+
+				ok, err := include(account)
+				if !ok || err != nil {
+					return errors.Wrap(errors.StatusUnknownError, err)
+				}
+
+				err = b.Transaction(hash).restoreState(s)
+				if err != nil {
+					return errors.Format(errors.StatusUnknownError, "transaction %X: %w", hash[:4], err)
+				}
+			}
+			return nil
+
+		case snapshot.SectionTypeSignatures:
+			return errors.Format(errors.StatusBadRequest, "unexpected signatures section")
+
+		default:
+			return errors.Format(errors.StatusBadRequest, "unknown snapshot section type %v", typ)
+		}
 	})
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknownError, err)

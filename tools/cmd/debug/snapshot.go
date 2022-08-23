@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"text/tabwriter"
@@ -9,10 +10,14 @@ import (
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/smt/pmt"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 var snapshotCmd = &cobra.Command{
@@ -34,12 +39,17 @@ var snapshotDumpCmd = &cobra.Command{
 	Run:   dumpSnapshot,
 }
 
+var snapshotDumpFlag = struct {
+	Short bool
+}{}
+
 func init() {
 	cmd.AddCommand(snapshotCmd)
 	snapshotCmd.AddCommand(
 		snapshotListCmd,
 		snapshotDumpCmd,
 	)
+	snapshotDumpCmd.Flags().BoolVarP(&snapshotDumpFlag.Short, "short", "s", false, "Short output")
 }
 
 func listSnapshots(_ *cobra.Command, args []string) {
@@ -64,12 +74,14 @@ func listSnapshots(_ *cobra.Command, args []string) {
 		checkf(err, "open snapshot %s", entry.Name())
 		defer f.Close()
 
-		header, _, err := database.ReadSnapshotHeader(f)
-		checkf(err, "read snapshot %s", entry.Name())
+		header, _, err := database.OpenSnapshot(f)
+		checkf(err, "oepn snapshot %s", entry.Name())
 
 		fmt.Fprintf(wr, "%d\t%x\t%s\n", header.Height, header.RootHash, entry.Name())
 	}
 }
+
+var enUsTitle = cases.Title(language.AmericanEnglish)
 
 func dumpSnapshot(_ *cobra.Command, args []string) {
 	filename := args[0]
@@ -77,44 +89,77 @@ func dumpSnapshot(_ *cobra.Command, args []string) {
 	checkf(err, "open snapshot %s", filename)
 	defer f.Close()
 
-	header, _, err := database.ReadSnapshotHeader(f)
-	checkf(err, "read snapshot %s", filename)
+	header, rd, err := database.OpenSnapshot(f)
+	checkf(err, "open snapshot %s", filename)
 	fmt.Printf("Height:\t%d\n", header.Height)
 	fmt.Printf("Hash:\t%x\n", header.RootHash)
 
-	rd, err := ioutil2.NewSectionReader(f, -1, -1)
-	check(err)
-
-	store := memory.New(nil)
-	batch := store.Begin(true)
-	defer batch.Discard()
-	bpt := pmt.NewBPTManager(batch)
-	err = bpt.Bpt.LoadSnapshot(rd, func(_ storage.Key, _ [32]byte, reader ioutil2.SectionReader) error {
-		state := new(accountState)
-		err := state.UnmarshalBinaryFrom(reader)
-		if err != nil {
-			return err
+	for {
+		s, err := rd.Next()
+		switch {
+		case err == nil:
+			// Ok
+		case errors.Is(err, io.EOF):
+			return
+		default:
+			checkf(err, "read section header")
 		}
 
-		fmt.Printf("Account %v (%v)\n", state.Main.GetUrl(), state.Main.Type())
+		typstr := s.Type().String()
+		fmt.Printf("%s%s section at %d (size %d)\n", enUsTitle.String(typstr[:1]), typstr[1:], s.Offset(), s.Size())
+		if snapshotDumpFlag.Short {
+			continue
+		}
 
-		for _, chain := range state.Chains {
-			fmt.Printf("    Chain %s (%v) height %d", chain.Name, chain.Type, chain.Count)
-			if chain.Count > 0 && len(chain.Entries) == 0 {
-				fmt.Printf(" (pruned)")
+		sr, err := s.Open()
+		checkf(err, "open section")
+
+		switch s.Type() {
+		case snapshot.SectionTypeAccounts:
+			store := memory.New(nil)
+			batch := store.Begin(true)
+			defer batch.Discard()
+			bpt := pmt.NewBPTManager(batch)
+			err = bpt.Bpt.LoadSnapshot(sr, func(_ storage.Key, _ [32]byte, reader ioutil2.SectionReader) error {
+				state := new(accountState)
+				err := state.UnmarshalBinaryFrom(reader)
+				if err != nil {
+					return err
+				}
+
+				fmt.Printf("  Account %v (%v)\n", state.Main.GetUrl(), state.Main.Type())
+
+				for _, chain := range state.Chains {
+					fmt.Printf("    Chain %s (%v) height %d", chain.Name, chain.Type, chain.Count)
+					if chain.Count > 0 && len(chain.Entries) == 0 {
+						fmt.Printf(" (pruned)")
+					}
+					fmt.Println()
+				}
+				return nil
+			})
+			checkf(err, "load snapshot")
+
+		case snapshot.SectionTypeTransactions:
+			s := new(transactionSection)
+			err = s.UnmarshalBinaryFrom(sr)
+			checkf(err, "unmarshal transaction section")
+
+			for _, txn := range s.Transactions {
+				fmt.Printf("    Transaction %x (%v)\n", txn.Transaction.GetHash()[:4], txn.Transaction.Body.Type())
 			}
-			fmt.Println()
-		}
 
-		for _, txn := range state.Pending {
-			fmt.Printf("    Pending transaction %x (%v)\n", txn.Transaction.GetHash()[:4], txn.Transaction.Body.Type())
-		}
+		case snapshot.SectionTypeSignatures:
+			s := new(signatureSection)
+			err = s.UnmarshalBinaryFrom(sr)
+			checkf(err, "unmarshal transaction section")
 
-		for _, txn := range state.Transactions {
-			fmt.Printf("    Other transaction %x (%v)\n", txn.Transaction.GetHash()[:4], txn.Transaction.Body.Type())
-		}
+			for _, sig := range s.Signatures {
+				fmt.Printf("    Signature %x (%v)\n", sig.Hash()[:4], sig.Type())
+			}
 
-		return nil
-	})
-	checkf(err, "load snapshot")
+		default:
+			fmt.Printf("  (do not know how to handle %v)\n", s.Type())
+		}
+	}
 }

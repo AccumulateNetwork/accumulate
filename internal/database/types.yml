@@ -74,20 +74,8 @@ accountState:
       repeatable: true
     - name: Pending
       description: is the state of the account's pending transactions
-      type: transactionState
-      marshal-as: reference
+      type: txid
       pointer: true
-      repeatable: true
-    - name: Transactions
-      description: is the state of other transactions related to the account
-      type: transactionState
-      marshal-as: reference
-      pointer: true
-      repeatable: true
-    - name: Signatures
-      description: is the state of signatures related to the account
-      type: protocol.Signature
-      marshal-as: union
       repeatable: true
     - name: Directory
       description: lists the account's sub-accounts
@@ -97,6 +85,9 @@ accountState:
 
 transactionState:
   fields:
+    - name: hash
+      type: hash
+      marshal-as: none
     - name: Transaction
       type: protocol.Transaction
       marshal-as: reference
@@ -109,6 +100,21 @@ transactionState:
       type: sigSetData
       marshal-as: reference
       pointer: true
+      repeatable: true
+
+transactionSection:
+  fields:
+    - name: Transactions
+      type: transactionState
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+
+signatureSection:
+  fields:
+    - name: Signatures
+      type: protocol.Signature
+      marshal-as: union
       repeatable: true
 
 TransactionChainEntry:

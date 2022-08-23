@@ -1,0 +1,9 @@
+SectionType:
+  Header:
+    value: 1
+  Accounts:
+    value: 2
+  Transactions:
+    value: 3
+  Signatures:
+    value: 4

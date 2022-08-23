@@ -7,7 +7,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding/hash"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/smt/pmt"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
@@ -17,9 +16,11 @@ import (
 func (a *Account) loadState(preserveChains bool) (*accountState, error) {
 	s := new(accountState)
 
-	// Load main state
+	// Load simple states
 	var err error
 	s.Main = loadState(&err, true, a.Main().Get)
+	s.Pending = loadState(&err, true, a.Pending().Get)
+	s.Directory = loadState(&err, true, a.Directory().Get)
 
 	// Load chain state
 	for _, c := range loadState(&err, false, a.Chains().Get) {
@@ -50,65 +51,16 @@ func (a *Account) loadState(preserveChains bool) (*accountState, error) {
 			}
 		}
 	}
-
-	// Load transaction state
-	for _, h := range loadState(&err, false, a.Pending().Get) {
-		h := h.Hash()
-		state, err := a.parent.Transaction(h[:]).loadState() //nolint:rangevarref
-		if err != nil {
-			return nil, err
-		}
-		s.Pending = append(s.Pending, state)
-	}
-	s.Directory = loadState(&err, true, a.Directory().Get)
 	return s, nil
 }
 
-func (c *Chain2) stateOfTransactionsOnChain() ([]*transactionState, error) {
+func (c *Chain2) allEntries() ([]managed.Hash, error) {
 	head, err := c.inner.Head().Get()
 	if err != nil {
 		return nil, errors.Format(errors.StatusUnknownError, "load chain head: %w", err)
 	}
 
-	// TODO We need to be more selective than this
-	state := make([]*transactionState, head.Count)
-	for i := range state {
-		hash := loadState1(&err, false, c.inner.Get, int64(i))
-		if err != nil {
-			break
-		}
-
-		state[i] = loadState(&err, false, c.account.parent.Transaction(hash).loadState)
-	}
-
-	return state, nil
-}
-
-func (c *Chain2) stateOfSignaturesOnChain() ([]protocol.Signature, error) {
-	head, err := c.inner.Head().Get()
-	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "load chain head: %w", err)
-	}
-
-	// TODO We need to be more selective than this
-	state := make([]protocol.Signature, head.Count)
-	for i := range state {
-		hash := loadState1(&err, false, c.inner.Get, int64(i))
-		if err != nil {
-			break
-		}
-
-		s := loadState(&err, false, c.account.parent.Transaction(hash).Main().Get)
-		if s == nil {
-			break
-		}
-		if s.Signature == nil {
-			return nil, errors.Format(errors.StatusInternalError, "%v signature chain entry %d is not a signature", c.Account(), i)
-		}
-		state[i] = s.Signature
-	}
-
-	return state, nil
+	return c.inner.GetRange(0, head.Count)
 }
 
 func (a *Account) safeRestoreState(key storage.Key, hash [32]byte, state *accountState) error {
@@ -139,10 +91,7 @@ func (a *Account) restoreState(s *accountState) error {
 	var err error
 	saveState(&err, a.Main().Put, s.Main)
 	saveState(&err, a.Directory().Put, s.Directory)
-	// Store pending transaction list
-	for _, p := range s.Pending {
-		saveStateN(&err, a.Pending().Add, p.Transaction.ID())
-	}
+	saveState(&err, a.Pending().Put, s.Pending)
 	if err != nil {
 		return err
 	}
@@ -171,41 +120,6 @@ func (a *Account) restoreState(s *accountState) error {
 				return fmt.Errorf("store %s chain entry %d: %w", c.Name, c.Count+uint64(i), err)
 			}
 		}
-	}
-
-	// Store transaction state
-	txns := make([]*transactionState, 0, len(s.Pending)+len(s.Transactions))
-	txns = append(txns, s.Pending...)
-	txns = append(txns, s.Transactions...)
-	for _, p := range txns {
-		hash := p.Transaction.GetHash()
-		if len(p.State.Signers) != len(p.Signatures) {
-			return fmt.Errorf("transaction %X state is invalid: %d signers and %d signatures", hash[:4], len(p.State.Signers), len(p.Signatures))
-		}
-
-		record := a.parent.Transaction(hash)
-		err := record.PutState(&SigOrTxn{Transaction: p.Transaction})
-		if err != nil {
-			return fmt.Errorf("store transaction %X: %w", hash[:4], err)
-		}
-
-		err = record.PutStatus(p.State)
-		if err != nil {
-			return fmt.Errorf("store transaction %X status: %w", hash[:4], err)
-		}
-
-		for i, set := range p.Signatures {
-			signer := p.State.Signers[i].GetUrl()
-			err = record.getSignatures(signer).Put(set)
-			if err != nil {
-				return fmt.Errorf("store transaction %X signers %v: %w", hash[:4], signer, err)
-			}
-		}
-	}
-
-	// Store signature state
-	for _, sig := range s.Signatures {
-		saveState(&err, a.parent.Transaction(sig.Hash()).Main().Put, &SigOrTxn{Signature: sig})
 	}
 
 	return err
@@ -414,17 +328,6 @@ func saveState[T any](lastErr *error, put func(T) error, v T) {
 	}
 
 	err := put(v)
-	if err != nil {
-		*lastErr = err
-	}
-}
-
-func saveStateN[T any](lastErr *error, put func(...T) error, v ...T) {
-	if *lastErr != nil || v == nil {
-		return
-	}
-
-	err := put(v...)
 	if err != nil {
 		*lastErr = err
 	}
