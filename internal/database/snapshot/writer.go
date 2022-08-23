@@ -46,40 +46,47 @@ func (w *Writer) Open(typ SectionType) (*SectionWriter, error) {
 	}
 
 	// Get the current offset
-	offset1, err := w.file.Seek(0, io.SeekCurrent)
+	offset, err := w.file.Seek(0, io.SeekCurrent)
 	if err != nil {
 		return nil, errors.Format(errors.StatusUnknownError, "get file offset: %w", err)
 	}
 
 	// Update the previous section's header
-	if offset1 > 0 {
+	if offset > 0 {
+		// Seek to the header
 		_, err = w.file.Seek(w.prevSection+16, io.SeekStart)
 		if err != nil {
 			return nil, errors.Format(errors.StatusUnknownError, "set file offset: %w", err)
 		}
 
 		var headerPart [8]byte
-		binary.BigEndian.PutUint64(headerPart[:], uint64(offset1))
+		binary.BigEndian.PutUint64(headerPart[:], uint64(offset))
 		_, err = w.file.Write(headerPart[:])
 		if err != nil {
 			return nil, errors.Format(errors.StatusUnknownError, "read section header: %w", err)
 		}
+
+		// Restore the previous location
+		_, err = w.file.Seek(offset, io.SeekStart)
+		if err != nil {
+			return nil, errors.Format(errors.StatusUnknownError, "set file offset: %w", err)
+		}
 	}
 
 	// Save space for the header
-	offset2, err := w.file.Seek(offset1+64, io.SeekStart)
+	_, err = w.file.Write(make([]byte, 64))
 	if err != nil {
 		return nil, errors.Format(errors.StatusUnknownError, "allocate space for header: %w", err)
 	}
 
 	// Create a section reader
-	section, err := ioutil2.NewSectionWriter(w.file, offset2, -1)
+	section, err := ioutil2.NewSectionWriter(w.file, offset+64, -1)
 	if err != nil {
 		return nil, errors.Format(errors.StatusUnknownError, "create section writer: %w", err)
 	}
 
 	w.openSection = true
-	return &SectionWriter{typ, offset1, w, section}, nil
+	return &SectionWriter{typ, offset, w, section}, nil
 }
 
 func (w *SectionWriter) Close() error {
@@ -108,13 +115,19 @@ func (w *Writer) closeSection(s *SectionWriter) error {
 		return errors.Format(errors.StatusUnknownError, "write section header: %w", err)
 	}
 
-	// Return to the original offset (round up to 256)
-	if current%align > 0 {
-		current += align - current%align
-	}
+	// Return to the original offset
 	_, err = w.file.Seek(current, io.SeekStart)
 	if err != nil {
 		return errors.Format(errors.StatusUnknownError, "restore file offset: %w", err)
+	}
+
+	// Pad
+	if current%align > 0 {
+		pad := align - current%align
+		_, err = w.file.Write(make([]byte, pad))
+		if err != nil {
+			return errors.Format(errors.StatusUnknownError, "pad end of section: %w", err)
+		}
 	}
 
 	w.openSection = false

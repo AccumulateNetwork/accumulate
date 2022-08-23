@@ -59,6 +59,9 @@ func (c *Chain2) allEntries() ([]managed.Hash, error) {
 	if err != nil {
 		return nil, errors.Format(errors.StatusUnknownError, "load chain head: %w", err)
 	}
+	if head.Count == 0 {
+		return nil, nil
+	}
 
 	return c.inner.GetRange(0, head.Count)
 }

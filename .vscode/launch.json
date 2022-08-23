@@ -17,7 +17,8 @@
         "--reset",
         "-b=2",
         "-v=1",
-        "-f=0"
+        "-f=0",
+        // "--factom-snapshot=${workspaceFolder}/.factom/import.snapshot"
       ]
     },
     {
@@ -228,7 +229,7 @@
       "args": [
         "convert",
         "${workspaceFolder}/.factom/import.snapshot",
-        "${workspaceFolder}/.factom/old"
+        "${workspaceFolder}/.factom/objects"
       ]
     },
     {
