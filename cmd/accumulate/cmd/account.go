@@ -162,9 +162,9 @@ var accountListCmd = &cobra.Command{
 var accountExportCmd = &cobra.Command{
 	Use:   "export",
 	Short: "Exports all lite token accounts",
-	Args:  cobra.NoArgs,
-	Run: func(cmd *cobra.Command, _ []string) {
-		err := ExportAccounts()
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		err := ExportAccounts(args[0])
 		printOutput(cmd, "File downloaded successfully", err)
 	},
 }
@@ -397,6 +397,12 @@ func GenerateAccount(_ *cobra.Command, args []string) (string, error) {
 	return GenerateKey("")
 }
 
+type response struct {
+	LiteIdentities []*KeyResponse
+	ADIs           map[string]string
+	Mnemonics      string
+}
+
 func ListAccounts() (string, error) {
 	b, err := walletd.GetWallet().GetBucket(walletd.BucketLite)
 	if err != nil {
@@ -502,7 +508,7 @@ func lockAccount(principal *url2.URL, signers []*signing.Builder, args []string)
 	return dispatchTxAndPrintResponse(body, principal, signers)
 }
 
-func ExportAccounts() error {
+func ExportAccounts(filename string) error {
 	b, err := walletd.GetWallet().GetBucket(walletd.BucketLite)
 	if err != nil {
 		//no accounts so nothing to do...
@@ -528,12 +534,44 @@ func ExportAccounts() error {
 		*kr.Label.AsString() = string(v.Value)
 		res = append(res, &kr)
 	}
-	out, err := os.Create(os.TempDir() + "/accounts.json")
+
+	a, err := walletd.GetWallet().GetBucket(walletd.BucketAdi)
+	if err != nil {
+		return fmt.Errorf("mnemonic was not define")
+	}
+
+	adiMap := make(map[string]string)
+	for _, v := range a.KeyValueList {
+		u, err := url2.Parse(string(v.Key))
+		if err != nil {
+			adiMap[string(v.Key)] = string(v.Value)
+		} else {
+			lab, err := walletd.FindLabelFromPubKey(v.Value)
+			if err != nil {
+				adiMap[u.String()] = string(v.Value)
+			} else {
+				adiMap[u.String()] = lab
+			}
+		}
+	}
+
+	seed, err := walletd.GetWallet().Get(walletd.BucketMnemonic, []byte("seed"))
+	if err != nil {
+		return fmt.Errorf("mnemonic seed doesn't exist")
+	}
+
+	backupRes := response{
+		LiteIdentities: res,
+		ADIs:           adiMap,
+		Mnemonics:      string(seed),
+	}
+
+	bytes, err := json.Marshal(backupRes)
 	if err != nil {
 		return err
 	}
-	defer out.Close()
-	bytes, err := json.Marshal(res)
+
+	out, err := os.Create(os.TempDir() + "/" + filename + ".json")
 	if err != nil {
 		return err
 	}
@@ -549,11 +587,11 @@ func ImportAccounts(filePath string) error {
 	if err != nil {
 		return fmt.Errorf("failed reading data from file: %s", err)
 	}
-	var req []*KeyResponse
+	var req *response
 	if err := json.Unmarshal(data, &req); err != nil {
 		return err
 	}
-	for _, key := range req {
+	for _, key := range req.LiteIdentities {
 		_, err = ImportKey(key.PrivateKey, string(key.Label), key.KeyInfo.Type)
 		if err != nil {
 			return err
