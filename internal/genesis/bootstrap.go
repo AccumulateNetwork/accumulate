@@ -406,13 +406,26 @@ func (b *bootstrap) maybeImportFactomSnapshot(st *chain.StateManager) error {
 	}
 
 	var accounts []*url.URL
+	amap := map[[32]byte]bool{}
 	err = st.Batch.ImportFactomSnapshot(file, func(account protocol.Account) (bool, error) {
 		if account.Type() != protocol.AccountTypeLiteDataAccount {
 			return false, errors.Format(errors.StatusBadRequest, "invalid Factom import: want %v, got %v", protocol.AccountTypeLiteDataAccount, account.Type())
 		}
 
+		partition, err := b.router.RouteAccount(account.GetUrl())
+		if err != nil {
+			return false, errors.Format(errors.StatusInternalError, "route %v: %w", account.GetUrl(), err)
+		}
+
+		if !strings.EqualFold(partition, b.PartitionId) {
+			return false, nil
+		}
+
+		amap[account.GetUrl().AccountID32()] = true
 		accounts = append(accounts, account.GetUrl())
 		return true, nil
+	}, func(transaction *protocol.Transaction) (bool, error) {
+		return amap[transaction.Header.Principal.AccountID32()], nil
 	})
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknownError, err)

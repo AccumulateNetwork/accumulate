@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
@@ -417,23 +418,35 @@ func RestoreSnapshot(db Beginner, file ioutil2.SectionReader, network *config.De
 				return errors.Format(errors.StatusEncodingError, "unmarshal transaction section: %w", err)
 			}
 
-			for _, s := range s.Transactions {
-				// Restore each transaction with a separate batch
-				batch := db.Begin(true)
-				defer batch.Discard()
+			batch := db.Begin(true)
+			defer batch.Discard()
+
+			start := time.Now()
+			for i, s := range s.Transactions {
+				if i > 0 && i%10000 == 0 {
+					d := time.Since(start)
+					batch.logger.Info("Restored transactions", "module", "restore", "count", i, "duration", d, "per-second", float64(i)/d.Seconds())
+
+					// Create a new batch
+					err = batch.Commit()
+					if err != nil {
+						return errors.Wrap(errors.StatusUnknownError, err)
+					}
+					batch = db.Begin(true)
+					defer batch.Discard()
+				}
 
 				hash := s.Transaction.GetHash()
 				err = batch.Transaction(hash).restoreState(s)
 				if err != nil {
 					return fmt.Errorf("transaction %X: %w", hash[:4], err)
 				}
-
-				err = batch.Commit()
-				if err != nil {
-					return errors.Wrap(errors.StatusUnknownError, err)
-				}
 			}
-			return nil
+
+			d := time.Since(start)
+			batch.logger.Info("Restored transactions", "module", "restore", "count", len(s.Transactions), "duration", d, "per-second", float64(len(s.Transactions))/d.Seconds())
+			err = batch.Commit()
+			return errors.Wrap(errors.StatusUnknownError, err)
 
 		case snapshot.SectionTypeSignatures:
 			s := new(signatureSection)
@@ -441,23 +454,34 @@ func RestoreSnapshot(db Beginner, file ioutil2.SectionReader, network *config.De
 			if err != nil {
 				return errors.Format(errors.StatusEncodingError, "unmarshal signature section: %w", err)
 			}
+			batch := db.Begin(true)
+			defer batch.Discard()
 
-			for _, s := range s.Signatures {
-				// Restore each signature with a separate batch
-				batch := db.Begin(true)
-				defer batch.Discard()
+			start := time.Now()
+			for i, s := range s.Signatures {
+				if i > 0 && i%10000 == 0 {
+					d := time.Since(start)
+					batch.logger.Info("Restored signatures", "module", "restore", "count", i, "duration", d, "per-second", float64(i)/d.Seconds())
+
+					// Create a new batch
+					err = batch.Commit()
+					if err != nil {
+						return errors.Wrap(errors.StatusUnknownError, err)
+					}
+					batch = db.Begin(true)
+					defer batch.Discard()
+				}
 
 				err = batch.Transaction(s.Hash()).Main().Put(&SigOrTxn{Signature: s})
 				if err != nil {
 					return errors.Format(errors.StatusEncodingError, "store signature: %w", err)
 				}
-
-				err = batch.Commit()
-				if err != nil {
-					return errors.Wrap(errors.StatusUnknownError, err)
-				}
 			}
-			return nil
+
+			d := time.Since(start)
+			batch.logger.Info("Restored signatures", "module", "restore", "count", len(s.Signatures), "duration", d, "per-second", float64(len(s.Signatures))/d.Seconds())
+			err = batch.Commit()
+			return errors.Wrap(errors.StatusUnknownError, err)
 
 		default:
 			return errors.Format(errors.StatusBadRequest, "unknown snapshot section type %v", typ)
@@ -499,9 +523,7 @@ func RestoreSnapshot(db Beginner, file ioutil2.SectionReader, network *config.De
 	return errors.Wrap(errors.StatusUnknownError, err)
 }
 
-func (b *Batch) ImportFactomSnapshot(file ioutil2.SectionReader, include func(account protocol.Account) (bool, error)) error {
-	bpt := pmt.NewBPTManager(b.kvstore)
-
+func (b *Batch) ImportFactomSnapshot(file ioutil2.SectionReader, includeAccount func(account protocol.Account) (bool, error), includeTransaction func(transaction *protocol.Transaction) (bool, error)) error {
 	err := readSnapshot(file, func(typ snapshot.SectionType, rd ioutil2.SectionReader) error {
 		switch typ {
 		case snapshot.SectionTypeAccounts:
@@ -512,12 +534,11 @@ func (b *Batch) ImportFactomSnapshot(file ioutil2.SectionReader, include func(ac
 					return err
 				}
 
-				ok, err := include(state.Main)
+				ok, err := includeAccount(state.Main)
 				if !ok || err != nil {
 					return errors.Wrap(errors.StatusUnknownError, err)
 				}
 
-				bpt.Bpt.Insert(key, hash)
 				account := b.Account(state.Main.GetUrl())
 				err = account.safeRestoreState(key, hash, state)
 				return errors.Wrap(errors.StatusUnknownError, err)
@@ -532,17 +553,15 @@ func (b *Batch) ImportFactomSnapshot(file ioutil2.SectionReader, include func(ac
 			}
 
 			for _, s := range s.Transactions {
-				hash := s.Transaction.GetHash()
-				account, err := b.Account(s.Transaction.Header.Principal).Main().Get()
+				ok, err := includeTransaction(s.Transaction)
 				if err != nil {
-					return errors.Format(errors.StatusUnknownError, "load transction %X principal: %w", hash[:4], err)
-				}
-
-				ok, err := include(account)
-				if !ok || err != nil {
 					return errors.Wrap(errors.StatusUnknownError, err)
 				}
+				if !ok {
+					continue
+				}
 
+				hash := s.Transaction.GetHash()
 				err = b.Transaction(hash).restoreState(s)
 				if err != nil {
 					return errors.Format(errors.StatusUnknownError, "transaction %X: %w", hash[:4], err)
@@ -561,6 +580,5 @@ func (b *Batch) ImportFactomSnapshot(file ioutil2.SectionReader, include func(ac
 		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
-	err = bpt.Bpt.Update()
 	return errors.Wrap(errors.StatusUnknownError, err)
 }
