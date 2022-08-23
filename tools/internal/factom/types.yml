@@ -8,5 +8,6 @@ EntryMetadata:
   - name: EntryIndex
     type: uint
     keep-empty: true
-  - name: EntryTime
-    type: time
+  - name: EntryNumber
+    type: uint
+    keep-empty: true

@@ -19,7 +19,7 @@ type EntryMetadata struct {
 	BlockTime   time.Time `json:"blockTime,omitempty" form:"blockTime" query:"blockTime" validate:"required"`
 	BlockHeight uint64    `json:"blockHeight" form:"blockHeight" query:"blockHeight" validate:"required"`
 	EntryIndex  uint64    `json:"entryIndex" form:"entryIndex" query:"entryIndex" validate:"required"`
-	EntryTime   time.Time `json:"entryTime,omitempty" form:"entryTime" query:"entryTime" validate:"required"`
+	EntryNumber uint64    `json:"entryNumber" form:"entryNumber" query:"entryNumber" validate:"required"`
 	extraData   []byte
 }
 
@@ -29,7 +29,7 @@ func (v *EntryMetadata) Copy() *EntryMetadata {
 	u.BlockTime = v.BlockTime
 	u.BlockHeight = v.BlockHeight
 	u.EntryIndex = v.EntryIndex
-	u.EntryTime = v.EntryTime
+	u.EntryNumber = v.EntryNumber
 
 	return u
 }
@@ -46,7 +46,7 @@ func (v *EntryMetadata) Equal(u *EntryMetadata) bool {
 	if !(v.EntryIndex == u.EntryIndex) {
 		return false
 	}
-	if !(v.EntryTime == u.EntryTime) {
+	if !(v.EntryNumber == u.EntryNumber) {
 		return false
 	}
 
@@ -57,7 +57,7 @@ var fieldNames_EntryMetadata = []string{
 	1: "BlockTime",
 	2: "BlockHeight",
 	3: "EntryIndex",
-	4: "EntryTime",
+	4: "EntryNumber",
 }
 
 func (v *EntryMetadata) MarshalBinary() ([]byte, error) {
@@ -69,9 +69,7 @@ func (v *EntryMetadata) MarshalBinary() ([]byte, error) {
 	}
 	writer.WriteUint(2, v.BlockHeight)
 	writer.WriteUint(3, v.EntryIndex)
-	if !(v.EntryTime == (time.Time{})) {
-		writer.WriteTime(4, v.EntryTime)
-	}
+	writer.WriteUint(4, v.EntryNumber)
 
 	_, _, err := writer.Reset(fieldNames_EntryMetadata)
 	if err != nil {
@@ -96,9 +94,7 @@ func (v *EntryMetadata) IsValid() error {
 		errs = append(errs, "field EntryIndex is missing")
 	}
 	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
-		errs = append(errs, "field EntryTime is missing")
-	} else if v.EntryTime == (time.Time{}) {
-		errs = append(errs, "field EntryTime is not set")
+		errs = append(errs, "field EntryNumber is missing")
 	}
 
 	switch len(errs) {
@@ -127,8 +123,8 @@ func (v *EntryMetadata) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUint(3); ok {
 		v.EntryIndex = x
 	}
-	if x, ok := reader.ReadTime(4); ok {
-		v.EntryTime = x
+	if x, ok := reader.ReadUint(4); ok {
+		v.EntryNumber = x
 	}
 
 	seen, err := reader.Reset(fieldNames_EntryMetadata)

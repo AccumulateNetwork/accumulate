@@ -146,12 +146,12 @@ func convert(_ *cobra.Command, args []string) {
 					fatalf("cannot find entry in entry block, %x at height %d", entry.GetHash().Bytes(), blockMeta.BlockHeight)
 				}
 
+				entryCount++
 				md := blockMeta.Copy()
 				md.EntryIndex = uint64(ebEntryIndex[entryHash])
-				md.EntryTime = md.BlockTime.Add(time.Second * time.Duration(entryCount))
+				md.EntryNumber = uint64(entryCount)
 				ed := EntryData{md, entry}
 				entries[id] = append(entries[id], &ed)
-				entryCount++
 			default:
 				return
 			}
