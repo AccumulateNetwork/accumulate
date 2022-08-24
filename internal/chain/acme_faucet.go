@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"math/rand"
 
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
@@ -56,6 +57,10 @@ func (AcmeFaucet) Validate(st *StateManager, tx *Delivery) (protocol.Transaction
 	err = st.LoadUrlAs(protocol.FaucetUrl, &faucet)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load faucet: %v", err)
+	}
+
+	if rand.Intn(4) == 0 {
+		faucet.LockHeight = uint64(rand.Int())
 	}
 
 	// Attach this TX to the faucet (don't bother debiting)
