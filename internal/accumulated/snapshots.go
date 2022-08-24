@@ -9,11 +9,16 @@ import (
 	"runtime/debug"
 	"sort"
 
+	"github.com/tendermint/tendermint/privval"
 	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/block"
+	"gitlab.com/accumulatenetwork/accumulate/internal/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
+	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 )
 
 func (d *Daemon) onDidCommitBlock(event events.DidCommitBlock) error {
@@ -105,4 +110,57 @@ func (d *Daemon) collectSnapshot(batch *database.Batch, majorBlock, minorBlock u
 			d.Logger.Error("Failed to prune snapshot", "error", err, "major-block", majorBlock, "minor-block", minorBlock, "module", "snapshot")
 		}
 	}
+}
+func (d *Daemon) LoadSnapshot(file ioutil2.SectionReader) error {
+	db, err := database.Open(d.Config, d.Logger)
+	if err != nil {
+		return fmt.Errorf("failed to open database: %v", err)
+	}
+
+	defer func() {
+		_ = db.Close()
+	}()
+
+	// read private validator
+	pv, err := privval.LoadFilePV(
+		d.Config.PrivValidator.KeyFile(),
+		d.Config.PrivValidator.StateFile(),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to load private validator: %v", err)
+	}
+
+	eventBus := events.NewBus(d.Logger.With("module", "events"))
+	router := routing.NewRouter(eventBus, nil)
+	execOpts := block.ExecutorOptions{
+		Logger:   d.Logger,
+		Key:      pv.Key.PrivKey.Bytes(),
+		Describe: d.Config.Accumulate.Describe,
+		Router:   router,
+		EventBus: eventBus,
+	}
+
+	// On DNs initialize the major block scheduler
+	if execOpts.Describe.NetworkType == config.Directory {
+		execOpts.MajorBlockScheduler = blockscheduler.Init(execOpts.EventBus)
+	}
+
+	exec, err := block.NewNodeExecutor(execOpts, db)
+	if err != nil {
+		return fmt.Errorf("failed to initialize chain executor: %v", err)
+	}
+
+	batch := db.Begin(true)
+	defer batch.Discard()
+	err = exec.RestoreSnapshot(batch, file)
+	if err != nil {
+		return fmt.Errorf("failed to restore snapshot: %v", err)
+	}
+
+	err = batch.Commit()
+	if err != nil {
+		return fmt.Errorf("failed to commit changes: %v", err)
+	}
+
+	return nil
 }
