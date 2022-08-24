@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"math/big"
 	"strings"
 	"time"
@@ -340,6 +341,10 @@ func (b *bootstrap) maybeCreateFaucet() {
 	liteToken.Url = protocol.FaucetUrl
 	liteToken.TokenUrl = protocol.AcmeUrl()
 	liteToken.Balance.SetString(protocol.AcmeFaucetBalance, 10)
+
+	// Lock forever
+	liteToken.LockHeight = math.MaxUint64
+
 	b.WriteRecords(liteId, liteToken)
 }
 

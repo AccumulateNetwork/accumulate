@@ -318,6 +318,15 @@ func (x *Executor) systemTransactionIsReady(batch *database.Batch, delivery *cha
 		// Anchors must be sequenced
 	}
 
+	// Have we received enough signatures?
+	partition, ok := protocol.ParsePartitionUrl(status.SourceNetwork)
+	if !ok {
+		return false, errors.Format(errors.StatusBadRequest, "source %v is not a partition", status.SourceNetwork)
+	}
+	if len(status.AnchorSigners) < int(x.globals.Active.ValidatorThreshold(partition)) {
+		return false, nil
+	}
+
 	// Load the ledger
 	var ledger *protocol.SyntheticLedger
 	err := batch.Account(x.Describe.Synthetic()).GetStateAs(&ledger)
@@ -337,17 +346,6 @@ func (x *Executor) systemTransactionIsReady(batch *database.Batch, delivery *cha
 			"type", delivery.Transaction.Body.Type(),
 			"hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4),
 		)
-		return false, nil
-	}
-
-	// Have we received enough signatures?
-	signer := x.globals.Active.AsSigner(x.Describe.PartitionId)
-	sigset, err := batch.Transaction(delivery.Transaction.GetHash()).ReadSignaturesForSigner(signer)
-	if err != nil {
-		return false, errors.Format(errors.StatusUnknownError, "load signature set: %w", err)
-	}
-
-	if sigset.Count() < int(signer.Threshold) {
 		return false, nil
 	}
 
