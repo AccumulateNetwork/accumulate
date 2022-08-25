@@ -461,8 +461,9 @@ func WriteDataTo(accountUrl string, args []string) (string, error) {
 		lde.Data = data[0]
 		lde.ExtIds = data[1:]
 	}
+	entryHash := lde.Hash()
 
-	ar := ActionResponseFromLiteData(res, wd.Recipient.String(), lde.AccountId[:], wd.Entry.Hash())
+	ar := ActionResponseFromLiteData(res, wd.Recipient.String(), lde.AccountId[:], entryHash)
 	ar.Flow = resps
 	return ar.Print()
 }
