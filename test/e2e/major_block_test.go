@@ -14,7 +14,8 @@ import (
 
 func TestMajorBlock(t *testing.T) {
 	acctesting.SkipLong(t)
-	// TODO Make it possible to disable debug features, specifically call
+	acctesting.DisableDebugFeatures()
+	defer acctesting.EnableDebugFeatures()
 	// position capture for errors
 
 	// Initialize
@@ -54,6 +55,9 @@ func TestMajorBlock(t *testing.T) {
 		// require.NotZero(t, entry.Source, "Expected non-zero source")
 		require.NotZero(t, entry.RootIndexIndex, "Expected non-zero root index index")
 		require.Equal(t, uint64(1), entry.BlockIndex, "Expected block index to be 1") // DO NOT REMOVE (validates SendTokens)
+
+		require.NoError(t, chain.EntryAs(0, entry), "Failed to read entry 0 of anchor major index chain")
+		require.True(t, entry.BlockTime.After(time.Date(2022, time.January, 1, 0, 0, 0, 0, time.UTC)))
 		return nil
 	})
 }
