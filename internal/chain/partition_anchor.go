@@ -92,6 +92,7 @@ func (PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Transa
 		if len(ledger.PendingMajorBlockAnchors) == 0 {
 			st.logger.Info("Completed major block", "major-index", ledger.MajorBlockIndex, "minor-index", body.MinorBlockIndex)
 			st.State.MakeMajorBlock = ledger.MajorBlockIndex
+			st.State.MakeMajorBlockTime = ledger.MajorBlockTime
 		}
 		return nil, nil
 	}
