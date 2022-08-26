@@ -22,6 +22,7 @@ import (
 func init() { acctesting.EnableDebugFeatures() }
 
 var delivered = (*TransactionStatus).Delivered
+var pending = (*TransactionStatus).Pending
 
 func updateAccount[T Account](sim *simulator.Simulator, accountUrl *url.URL, fn func(account T)) {
 	sim.UpdateAccount(accountUrl, func(account Account) {
