@@ -335,6 +335,13 @@ type FactomDataEntryWrapper struct {
 	extraData []byte
 }
 
+type FeeSchedule struct {
+	fieldsSet []bool
+	// CreateIdentitySliding is the sliding fee schedule for creating an ADI. The first entry is the cost of a one-character ADI, the second is the cost of a two-character ADI, etc.
+	CreateIdentitySliding []Fee `json:"createIdentitySliding,omitempty" form:"createIdentitySliding" query:"createIdentitySliding" validate:"required"`
+	extraData             []byte
+}
+
 // IndexEntry represents an entry in an index chain.
 type IndexEntry struct {
 	fieldsSet []bool
@@ -487,7 +494,8 @@ type NetworkGlobals struct {
 	// MajorBlockSchedule a cron expression defining the (approximate) major blocks interval.
 	MajorBlockSchedule string `json:"majorBlockSchedule,omitempty" form:"majorBlockSchedule" query:"majorBlockSchedule" validate:"required"`
 	// AnchorEmptyBlocks controls whether an anchor is sent for a block if the block contains no transactions other than a directory anchor.
-	AnchorEmptyBlocks bool `json:"anchorEmptyBlocks,omitempty" form:"anchorEmptyBlocks" query:"anchorEmptyBlocks" validate:"required"`
+	AnchorEmptyBlocks bool         `json:"anchorEmptyBlocks,omitempty" form:"anchorEmptyBlocks" query:"anchorEmptyBlocks" validate:"required"`
+	FeeSchedule       *FeeSchedule `json:"feeSchedule,omitempty" form:"feeSchedule" query:"feeSchedule" validate:"required"`
 	extraData         []byte
 }
 
@@ -1664,6 +1672,19 @@ func (v *FactomDataEntryWrapper) Copy() *FactomDataEntryWrapper {
 
 func (v *FactomDataEntryWrapper) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *FeeSchedule) Copy() *FeeSchedule {
+	u := new(FeeSchedule)
+
+	u.CreateIdentitySliding = make([]Fee, len(v.CreateIdentitySliding))
+	for i, v := range v.CreateIdentitySliding {
+		u.CreateIdentitySliding[i] = v
+	}
+
+	return u
+}
+
+func (v *FeeSchedule) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *IndexEntry) Copy() *IndexEntry {
 	u := new(IndexEntry)
 
@@ -1906,6 +1927,9 @@ func (v *NetworkGlobals) Copy() *NetworkGlobals {
 	u.ValidatorAcceptThreshold = *(&v.ValidatorAcceptThreshold).Copy()
 	u.MajorBlockSchedule = v.MajorBlockSchedule
 	u.AnchorEmptyBlocks = v.AnchorEmptyBlocks
+	if v.FeeSchedule != nil {
+		u.FeeSchedule = (v.FeeSchedule).Copy()
+	}
 
 	return u
 }
@@ -3409,6 +3433,19 @@ func (v *FactomDataEntryWrapper) Equal(u *FactomDataEntryWrapper) bool {
 	return true
 }
 
+func (v *FeeSchedule) Equal(u *FeeSchedule) bool {
+	if len(v.CreateIdentitySliding) != len(u.CreateIdentitySliding) {
+		return false
+	}
+	for i := range v.CreateIdentitySliding {
+		if !(v.CreateIdentitySliding[i] == u.CreateIdentitySliding[i]) {
+			return false
+		}
+	}
+
+	return true
+}
+
 func (v *IndexEntry) Equal(u *IndexEntry) bool {
 	if !(v.Source == u.Source) {
 		return false
@@ -3731,6 +3768,14 @@ func (v *NetworkGlobals) Equal(u *NetworkGlobals) bool {
 		return false
 	}
 	if !(v.AnchorEmptyBlocks == u.AnchorEmptyBlocks) {
+		return false
+	}
+	switch {
+	case v.FeeSchedule == u.FeeSchedule:
+		// equal
+	case v.FeeSchedule == nil || u.FeeSchedule == nil:
+		return false
+	case !((v.FeeSchedule).Equal(u.FeeSchedule)):
 		return false
 	}
 
@@ -6770,6 +6815,47 @@ func (v *FactomDataEntryWrapper) IsValid() error {
 	}
 }
 
+var fieldNames_FeeSchedule = []string{
+	1: "CreateIdentitySliding",
+}
+
+func (v *FeeSchedule) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(len(v.CreateIdentitySliding) == 0) {
+		for _, v := range v.CreateIdentitySliding {
+			writer.WriteEnum(1, v)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_FeeSchedule)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *FeeSchedule) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field CreateIdentitySliding is missing")
+	} else if len(v.CreateIdentitySliding) == 0 {
+		errs = append(errs, "field CreateIdentitySliding is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_IndexEntry = []string{
 	1: "Source",
 	2: "Anchor",
@@ -7722,6 +7808,7 @@ var fieldNames_NetworkGlobals = []string{
 	2: "ValidatorAcceptThreshold",
 	3: "MajorBlockSchedule",
 	4: "AnchorEmptyBlocks",
+	5: "FeeSchedule",
 }
 
 func (v *NetworkGlobals) MarshalBinary() ([]byte, error) {
@@ -7739,6 +7826,9 @@ func (v *NetworkGlobals) MarshalBinary() ([]byte, error) {
 	}
 	if !(!v.AnchorEmptyBlocks) {
 		writer.WriteBool(4, v.AnchorEmptyBlocks)
+	}
+	if !(v.FeeSchedule == nil) {
+		writer.WriteValue(5, v.FeeSchedule.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_NetworkGlobals)
@@ -7771,6 +7861,11 @@ func (v *NetworkGlobals) IsValid() error {
 		errs = append(errs, "field AnchorEmptyBlocks is missing")
 	} else if !v.AnchorEmptyBlocks {
 		errs = append(errs, "field AnchorEmptyBlocks is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field FeeSchedule is missing")
+	} else if v.FeeSchedule == nil {
+		errs = append(errs, "field FeeSchedule is not set")
 	}
 
 	switch len(errs) {
@@ -12018,6 +12113,33 @@ func (v *FactomDataEntryWrapper) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *FeeSchedule) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *FeeSchedule) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	for {
+		if x := new(Fee); reader.ReadEnum(1, x) {
+			v.CreateIdentitySliding = append(v.CreateIdentitySliding, *x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_FeeSchedule)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *IndexEntry) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -12573,6 +12695,9 @@ func (v *NetworkGlobals) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	if x, ok := reader.ReadBool(4); ok {
 		v.AnchorEmptyBlocks = x
+	}
+	if x := new(FeeSchedule); reader.ReadValue(5, x.UnmarshalBinary) {
+		v.FeeSchedule = x
 	}
 
 	seen, err := reader.Reset(fieldNames_NetworkGlobals)
@@ -14888,6 +15013,14 @@ func (v *FactomDataEntryWrapper) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *FeeSchedule) MarshalJSON() ([]byte, error) {
+	u := struct {
+		CreateIdentitySliding encoding.JsonList[Fee] `json:"createIdentitySliding,omitempty"`
+	}{}
+	u.CreateIdentitySliding = v.CreateIdentitySliding
+	return json.Marshal(&u)
+}
+
 func (v *InternalSignature) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type            SignatureType `json:"type"`
@@ -16653,6 +16786,18 @@ func (v *FactomDataEntryWrapper) UnmarshalJSON(data []byte) error {
 			v.FactomDataEntry.ExtIds[i] = x
 		}
 	}
+	return nil
+}
+
+func (v *FeeSchedule) UnmarshalJSON(data []byte) error {
+	u := struct {
+		CreateIdentitySliding encoding.JsonList[Fee] `json:"createIdentitySliding,omitempty"`
+	}{}
+	u.CreateIdentitySliding = v.CreateIdentitySliding
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.CreateIdentitySliding = u.CreateIdentitySliding
 	return nil
 }
 
