@@ -387,6 +387,9 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 
 	seq := map[[32]byte]uint64{}
 	for _, env := range envelopes {
+		if env.Transaction.Body.Type().IsUser() {
+			app.logger.Error("Check", "req", req.Type, "hash", logging.AsHex(env.Transaction.GetHash()).Slice(0, 4), "type", env.Transaction.Body.Type())
+		}
 		for _, sig := range env.Signatures {
 			sig, ok := sig.(*protocol.PartitionSignature)
 			if ok {
