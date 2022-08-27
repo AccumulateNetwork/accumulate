@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"math/big"
 	"strings"
 	"time"
@@ -53,6 +54,9 @@ func Init(snapshot io.WriteSeeker, opts InitOpts) ([]byte, error) {
 	}
 	if gg.Globals.OperatorAcceptThreshold.Numerator == 0 {
 		gg.Globals.OperatorAcceptThreshold.Set(2, 3)
+	}
+	if gg.Globals.ValidatorAcceptThreshold.Numerator == 0 {
+		gg.Globals.ValidatorAcceptThreshold.Set(2, 3)
 	}
 	if gg.Globals.MajorBlockSchedule == "" {
 		gg.Globals.MajorBlockSchedule = protocol.DefaultMajorBlockSchedule
@@ -337,6 +341,10 @@ func (b *bootstrap) maybeCreateFaucet() {
 	liteToken.Url = protocol.FaucetUrl
 	liteToken.TokenUrl = protocol.AcmeUrl()
 	liteToken.Balance.SetString(protocol.AcmeFaucetBalance, 10)
+
+	// Lock forever
+	liteToken.LockHeight = math.MaxUint64
+
 	b.WriteRecords(liteId, liteToken)
 }
 

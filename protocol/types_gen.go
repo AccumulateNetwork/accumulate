@@ -481,8 +481,9 @@ type NetworkDefinition struct {
 }
 
 type NetworkGlobals struct {
-	fieldsSet               []bool
-	OperatorAcceptThreshold Rational `json:"operatorAcceptThreshold,omitempty" form:"operatorAcceptThreshold" query:"operatorAcceptThreshold" validate:"required"`
+	fieldsSet                []bool
+	OperatorAcceptThreshold  Rational `json:"operatorAcceptThreshold,omitempty" form:"operatorAcceptThreshold" query:"operatorAcceptThreshold" validate:"required"`
+	ValidatorAcceptThreshold Rational `json:"validatorAcceptThreshold,omitempty" form:"validatorAcceptThreshold" query:"validatorAcceptThreshold" validate:"required"`
 	// MajorBlockSchedule a cron expression defining the (approximate) major blocks interval.
 	MajorBlockSchedule string `json:"majorBlockSchedule,omitempty" form:"majorBlockSchedule" query:"majorBlockSchedule" validate:"required"`
 	// AnchorEmptyBlocks controls whether an anchor is sent for a block if the block contains no transactions other than a directory anchor.
@@ -833,6 +834,8 @@ type TransactionStatus struct {
 	Initiator *url.URL `json:"initiator,omitempty" form:"initiator" query:"initiator" validate:"required"`
 	// Signers lists accounts that have signed the transaction.
 	Signers []Signer `json:"signers,omitempty" form:"signers" query:"signers" validate:"required"`
+	// AnchorSigners is the list of validators that have signed the anchor.
+	AnchorSigners [][]byte `json:"anchorSigners,omitempty" form:"anchorSigners" query:"anchorSigners" validate:"required"`
 	// SourceNetwork is the network that produced the transaction.
 	SourceNetwork *url.URL `json:"sourceNetwork,omitempty" form:"sourceNetwork" query:"sourceNetwork" validate:"required"`
 	// DestinationNetwork is the network that the transaction is sent to.
@@ -1900,6 +1903,7 @@ func (v *NetworkGlobals) Copy() *NetworkGlobals {
 	u := new(NetworkGlobals)
 
 	u.OperatorAcceptThreshold = *(&v.OperatorAcceptThreshold).Copy()
+	u.ValidatorAcceptThreshold = *(&v.ValidatorAcceptThreshold).Copy()
 	u.MajorBlockSchedule = v.MajorBlockSchedule
 	u.AnchorEmptyBlocks = v.AnchorEmptyBlocks
 
@@ -2486,6 +2490,10 @@ func (v *TransactionStatus) Copy() *TransactionStatus {
 		if v != nil {
 			u.Signers[i] = (v).CopyAsInterface().(Signer)
 		}
+	}
+	u.AnchorSigners = make([][]byte, len(v.AnchorSigners))
+	for i, v := range v.AnchorSigners {
+		u.AnchorSigners[i] = encoding.BytesCopy(v)
 	}
 	if v.SourceNetwork != nil {
 		u.SourceNetwork = v.SourceNetwork
@@ -3716,6 +3724,9 @@ func (v *NetworkGlobals) Equal(u *NetworkGlobals) bool {
 	if !((&v.OperatorAcceptThreshold).Equal(&u.OperatorAcceptThreshold)) {
 		return false
 	}
+	if !((&v.ValidatorAcceptThreshold).Equal(&u.ValidatorAcceptThreshold)) {
+		return false
+	}
 	if !(v.MajorBlockSchedule == u.MajorBlockSchedule) {
 		return false
 	}
@@ -4475,6 +4486,14 @@ func (v *TransactionStatus) Equal(u *TransactionStatus) bool {
 	}
 	for i := range v.Signers {
 		if !(EqualSigner(v.Signers[i], u.Signers[i])) {
+			return false
+		}
+	}
+	if len(v.AnchorSigners) != len(u.AnchorSigners) {
+		return false
+	}
+	for i := range v.AnchorSigners {
+		if !(bytes.Equal(v.AnchorSigners[i], u.AnchorSigners[i])) {
 			return false
 		}
 	}
@@ -7700,8 +7719,9 @@ func (v *NetworkDefinition) IsValid() error {
 
 var fieldNames_NetworkGlobals = []string{
 	1: "OperatorAcceptThreshold",
-	2: "MajorBlockSchedule",
-	3: "AnchorEmptyBlocks",
+	2: "ValidatorAcceptThreshold",
+	3: "MajorBlockSchedule",
+	4: "AnchorEmptyBlocks",
 }
 
 func (v *NetworkGlobals) MarshalBinary() ([]byte, error) {
@@ -7711,11 +7731,14 @@ func (v *NetworkGlobals) MarshalBinary() ([]byte, error) {
 	if !((v.OperatorAcceptThreshold).Equal(new(Rational))) {
 		writer.WriteValue(1, v.OperatorAcceptThreshold.MarshalBinary)
 	}
+	if !((v.ValidatorAcceptThreshold).Equal(new(Rational))) {
+		writer.WriteValue(2, v.ValidatorAcceptThreshold.MarshalBinary)
+	}
 	if !(len(v.MajorBlockSchedule) == 0) {
-		writer.WriteString(2, v.MajorBlockSchedule)
+		writer.WriteString(3, v.MajorBlockSchedule)
 	}
 	if !(!v.AnchorEmptyBlocks) {
-		writer.WriteBool(3, v.AnchorEmptyBlocks)
+		writer.WriteBool(4, v.AnchorEmptyBlocks)
 	}
 
 	_, _, err := writer.Reset(fieldNames_NetworkGlobals)
@@ -7735,11 +7758,16 @@ func (v *NetworkGlobals) IsValid() error {
 		errs = append(errs, "field OperatorAcceptThreshold is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field ValidatorAcceptThreshold is missing")
+	} else if (v.ValidatorAcceptThreshold).Equal(new(Rational)) {
+		errs = append(errs, "field ValidatorAcceptThreshold is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field MajorBlockSchedule is missing")
 	} else if len(v.MajorBlockSchedule) == 0 {
 		errs = append(errs, "field MajorBlockSchedule is not set")
 	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field AnchorEmptyBlocks is missing")
 	} else if !v.AnchorEmptyBlocks {
 		errs = append(errs, "field AnchorEmptyBlocks is not set")
@@ -9894,11 +9922,12 @@ var fieldNames_TransactionStatus = []string{
 	5:  "Received",
 	6:  "Initiator",
 	7:  "Signers",
-	8:  "SourceNetwork",
-	9:  "DestinationNetwork",
-	10: "SequenceNumber",
-	11: "GotDirectoryReceipt",
-	12: "Proof",
+	8:  "AnchorSigners",
+	9:  "SourceNetwork",
+	10: "DestinationNetwork",
+	11: "SequenceNumber",
+	12: "GotDirectoryReceipt",
+	13: "Proof",
 }
 
 func (v *TransactionStatus) MarshalBinary() ([]byte, error) {
@@ -9928,20 +9957,25 @@ func (v *TransactionStatus) MarshalBinary() ([]byte, error) {
 			writer.WriteValue(7, v.MarshalBinary)
 		}
 	}
+	if !(len(v.AnchorSigners) == 0) {
+		for _, v := range v.AnchorSigners {
+			writer.WriteBytes(8, v)
+		}
+	}
 	if !(v.SourceNetwork == nil) {
-		writer.WriteUrl(8, v.SourceNetwork)
+		writer.WriteUrl(9, v.SourceNetwork)
 	}
 	if !(v.DestinationNetwork == nil) {
-		writer.WriteUrl(9, v.DestinationNetwork)
+		writer.WriteUrl(10, v.DestinationNetwork)
 	}
 	if !(v.SequenceNumber == 0) {
-		writer.WriteUint(10, v.SequenceNumber)
+		writer.WriteUint(11, v.SequenceNumber)
 	}
 	if !(!v.GotDirectoryReceipt) {
-		writer.WriteBool(11, v.GotDirectoryReceipt)
+		writer.WriteBool(12, v.GotDirectoryReceipt)
 	}
 	if !(v.Proof == nil) {
-		writer.WriteValue(12, v.Proof.MarshalBinary)
+		writer.WriteValue(13, v.Proof.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_TransactionStatus)
@@ -9991,26 +10025,31 @@ func (v *TransactionStatus) IsValid() error {
 		errs = append(errs, "field Signers is not set")
 	}
 	if len(v.fieldsSet) > 8 && !v.fieldsSet[8] {
+		errs = append(errs, "field AnchorSigners is missing")
+	} else if len(v.AnchorSigners) == 0 {
+		errs = append(errs, "field AnchorSigners is not set")
+	}
+	if len(v.fieldsSet) > 9 && !v.fieldsSet[9] {
 		errs = append(errs, "field SourceNetwork is missing")
 	} else if v.SourceNetwork == nil {
 		errs = append(errs, "field SourceNetwork is not set")
 	}
-	if len(v.fieldsSet) > 9 && !v.fieldsSet[9] {
+	if len(v.fieldsSet) > 10 && !v.fieldsSet[10] {
 		errs = append(errs, "field DestinationNetwork is missing")
 	} else if v.DestinationNetwork == nil {
 		errs = append(errs, "field DestinationNetwork is not set")
 	}
-	if len(v.fieldsSet) > 10 && !v.fieldsSet[10] {
+	if len(v.fieldsSet) > 11 && !v.fieldsSet[11] {
 		errs = append(errs, "field SequenceNumber is missing")
 	} else if v.SequenceNumber == 0 {
 		errs = append(errs, "field SequenceNumber is not set")
 	}
-	if len(v.fieldsSet) > 11 && !v.fieldsSet[11] {
+	if len(v.fieldsSet) > 12 && !v.fieldsSet[12] {
 		errs = append(errs, "field GotDirectoryReceipt is missing")
 	} else if !v.GotDirectoryReceipt {
 		errs = append(errs, "field GotDirectoryReceipt is not set")
 	}
-	if len(v.fieldsSet) > 12 && !v.fieldsSet[12] {
+	if len(v.fieldsSet) > 13 && !v.fieldsSet[13] {
 		errs = append(errs, "field Proof is missing")
 	} else if v.Proof == nil {
 		errs = append(errs, "field Proof is not set")
@@ -12526,10 +12565,13 @@ func (v *NetworkGlobals) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x := new(Rational); reader.ReadValue(1, x.UnmarshalBinary) {
 		v.OperatorAcceptThreshold = *x
 	}
-	if x, ok := reader.ReadString(2); ok {
+	if x := new(Rational); reader.ReadValue(2, x.UnmarshalBinary) {
+		v.ValidatorAcceptThreshold = *x
+	}
+	if x, ok := reader.ReadString(3); ok {
 		v.MajorBlockSchedule = x
 	}
-	if x, ok := reader.ReadBool(3); ok {
+	if x, ok := reader.ReadBool(4); ok {
 		v.AnchorEmptyBlocks = x
 	}
 
@@ -13874,19 +13916,26 @@ func (v *TransactionStatus) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
-	if x, ok := reader.ReadUrl(8); ok {
-		v.SourceNetwork = x
+	for {
+		if x, ok := reader.ReadBytes(8); ok {
+			v.AnchorSigners = append(v.AnchorSigners, x)
+		} else {
+			break
+		}
 	}
 	if x, ok := reader.ReadUrl(9); ok {
+		v.SourceNetwork = x
+	}
+	if x, ok := reader.ReadUrl(10); ok {
 		v.DestinationNetwork = x
 	}
-	if x, ok := reader.ReadUint(10); ok {
+	if x, ok := reader.ReadUint(11); ok {
 		v.SequenceNumber = x
 	}
-	if x, ok := reader.ReadBool(11); ok {
+	if x, ok := reader.ReadBool(12); ok {
 		v.GotDirectoryReceipt = x
 	}
-	if x := new(managed.Receipt); reader.ReadValue(12, x.UnmarshalBinary) {
+	if x := new(managed.Receipt); reader.ReadValue(13, x.UnmarshalBinary) {
 		v.Proof = x
 	}
 
@@ -15501,6 +15550,7 @@ func (v *TransactionStatus) MarshalJSON() ([]byte, error) {
 		Received            uint64                                        `json:"received,omitempty"`
 		Initiator           *url.URL                                      `json:"initiator,omitempty"`
 		Signers             encoding.JsonUnmarshalListWith[Signer]        `json:"signers,omitempty"`
+		AnchorSigners       encoding.JsonList[*string]                    `json:"anchorSigners,omitempty"`
 		SourceNetwork       *url.URL                                      `json:"sourceNetwork,omitempty"`
 		DestinationNetwork  *url.URL                                      `json:"destinationNetwork,omitempty"`
 		SequenceNumber      uint64                                        `json:"sequenceNumber,omitempty"`
@@ -15519,6 +15569,10 @@ func (v *TransactionStatus) MarshalJSON() ([]byte, error) {
 	u.Received = v.Received
 	u.Initiator = v.Initiator
 	u.Signers = encoding.JsonUnmarshalListWith[Signer]{Value: v.Signers, Func: UnmarshalSignerJSON}
+	u.AnchorSigners = make(encoding.JsonList[*string], len(v.AnchorSigners))
+	for i, x := range v.AnchorSigners {
+		u.AnchorSigners[i] = encoding.BytesToJSON(x)
+	}
 	u.SourceNetwork = v.SourceNetwork
 	u.DestinationNetwork = v.DestinationNetwork
 	u.SequenceNumber = v.SequenceNumber
@@ -17790,6 +17844,7 @@ func (v *TransactionStatus) UnmarshalJSON(data []byte) error {
 		Received            uint64                                        `json:"received,omitempty"`
 		Initiator           *url.URL                                      `json:"initiator,omitempty"`
 		Signers             encoding.JsonUnmarshalListWith[Signer]        `json:"signers,omitempty"`
+		AnchorSigners       encoding.JsonList[*string]                    `json:"anchorSigners,omitempty"`
 		SourceNetwork       *url.URL                                      `json:"sourceNetwork,omitempty"`
 		DestinationNetwork  *url.URL                                      `json:"destinationNetwork,omitempty"`
 		SequenceNumber      uint64                                        `json:"sequenceNumber,omitempty"`
@@ -17808,6 +17863,10 @@ func (v *TransactionStatus) UnmarshalJSON(data []byte) error {
 	u.Received = v.Received
 	u.Initiator = v.Initiator
 	u.Signers = encoding.JsonUnmarshalListWith[Signer]{Value: v.Signers, Func: UnmarshalSignerJSON}
+	u.AnchorSigners = make(encoding.JsonList[*string], len(v.AnchorSigners))
+	for i, x := range v.AnchorSigners {
+		u.AnchorSigners[i] = encoding.BytesToJSON(x)
+	}
 	u.SourceNetwork = v.SourceNetwork
 	u.DestinationNetwork = v.DestinationNetwork
 	u.SequenceNumber = v.SequenceNumber
@@ -17826,6 +17885,14 @@ func (v *TransactionStatus) UnmarshalJSON(data []byte) error {
 	v.Signers = make([]Signer, len(u.Signers.Value))
 	for i, x := range u.Signers.Value {
 		v.Signers[i] = x
+	}
+	v.AnchorSigners = make([][]byte, len(u.AnchorSigners))
+	for i, x := range u.AnchorSigners {
+		if x, err := encoding.BytesFromJSON(x); err != nil {
+			return fmt.Errorf("error decoding AnchorSigners: %w", err)
+		} else {
+			v.AnchorSigners[i] = x
+		}
 	}
 	v.SourceNetwork = u.SourceNetwork
 	v.DestinationNetwork = u.DestinationNetwork

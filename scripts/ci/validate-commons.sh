@@ -10,6 +10,14 @@ function accumulate {
     command accumulate --use-unencrypted-wallet --database="$HOME/.accumulate/validate" "$@"
 }
 
+function init-wallet {
+    if [ -n "${MNEMONIC}" ]; then
+        echo ${MNEMONIC} | accumulate wallet init import
+    else
+        accumulate wallet init script
+    fi
+}
+
 # section <name> - Print a section header
 function section {
     echo -e '\033[1m'"$1"'\033[0m'

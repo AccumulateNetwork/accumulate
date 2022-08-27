@@ -36,22 +36,17 @@ func (x *Executor) BeginBlock(block *Block) error {
 		return err
 	}
 
-	// Only send anchors from the leader
-	if block.IsLeader {
-		errs := x.dispatcher.Send(context.Background())
-		x.Background(func() {
-			for err := range errs {
-				switch err := err.(type) {
-				case *txnDispatchError:
-					x.logger.Error("Failed to dispatch transactions", "error", err.status.Error, "stack", err.status.Error.PrintFullCallstack(), "type", err.typ, "hash", logging.AsHex(err.status.TxID.Hash()).Slice(0, 4))
-				default:
-					x.logger.Error("Failed to dispatch transactions", "error", fmt.Sprintf("%+v\n", err))
-				}
+	errs := x.dispatcher.Send(context.Background())
+	x.Background(func() {
+		for err := range errs {
+			switch err := err.(type) {
+			case *txnDispatchError:
+				x.logger.Error("Failed to dispatch transactions", "error", err.status.Error, "stack", err.status.Error.PrintFullCallstack(), "type", err.typ, "hash", logging.AsHex(err.status.TxID.Hash()).Slice(0, 4))
+			default:
+				x.logger.Error("Failed to dispatch transactions", "error", fmt.Sprintf("%+v\n", err))
 			}
-		})
-	} else {
-		x.dispatcher.Reset()
-	}
+		}
+	})
 
 	// Load the ledger state
 	ledger := block.Batch.Account(x.Describe.NodeUrl(protocol.Ledger))
@@ -168,7 +163,7 @@ func (x *Executor) finalizeBlock(block *Block) error {
 	}
 
 	// Build receipts for synthetic transactions produced in the previous block
-	err = x.sendSyntheticTransactions(block.Batch)
+	err = x.sendSyntheticTransactions(block.Batch, block.IsLeader)
 	if err != nil {
 		return errors.Format(errors.StatusUnknownError, "build synthetic transaction receipts: %w", err)
 	}
@@ -279,7 +274,7 @@ func (x *Executor) finalizeBlock(block *Block) error {
 
 	// If we're the DN, send synthetic transactions produced by the block we're
 	// anchoring, but send them after the anchor
-	err = x.sendSyntheticTransactionsForBlock(block.Batch, ledger.Index, nil)
+	err = x.sendSyntheticTransactionsForBlock(block.Batch, block.IsLeader, ledger.Index, nil)
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknownError, err)
 	}
@@ -287,7 +282,7 @@ func (x *Executor) finalizeBlock(block *Block) error {
 	return nil
 }
 
-func (x *Executor) sendSyntheticTransactions(batch *database.Batch) error {
+func (x *Executor) sendSyntheticTransactions(batch *database.Batch, isLeader bool) error {
 	// Check for received anchors
 	anchorLedger := batch.Account(x.Describe.AnchorPool())
 	anchorIndexLast, anchorIndexPrev, err := indexing.LoadLastTwoIndexEntries(anchorLedger.MainChain().Index())
@@ -344,7 +339,7 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch) error {
 				continue
 			}
 
-			err = x.sendSyntheticTransactionsForBlock(batch, receipt.MinorBlockIndex, receipt.RootChainReceipt)
+			err = x.sendSyntheticTransactionsForBlock(batch, isLeader, receipt.MinorBlockIndex, receipt.RootChainReceipt)
 			if err != nil {
 				return errors.Wrap(errors.StatusUnknownError, err)
 			}
@@ -354,7 +349,7 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch) error {
 	return nil
 }
 
-func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, blockIndex uint64, blockReceipt *managed.Receipt) error {
+func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLeader bool, blockIndex uint64, blockReceipt *managed.Receipt) error {
 	indexIndex, err := batch.SystemData(x.Describe.PartitionId).SyntheticIndexIndex(blockIndex).Get()
 	switch {
 	case err == nil:
@@ -461,10 +456,13 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, bloc
 		}
 		signatures = append(signatures, keySig)
 
-		env := &protocol.Envelope{Transaction: []*protocol.Transaction{txn}, Signatures: signatures}
-		err = x.dispatcher.BroadcastTx(context.Background(), txn.Header.Principal, env)
-		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "send synthetic transaction %X: %w", hash[:4], err)
+		// Only send synthetic transactions from the leader
+		if isLeader {
+			env := &protocol.Envelope{Transaction: []*protocol.Transaction{txn}, Signatures: signatures}
+			err = x.dispatcher.BroadcastTx(context.Background(), txn.Header.Principal, env)
+			if err != nil {
+				return errors.Format(errors.StatusUnknownError, "send synthetic transaction %X: %w", hash[:4], err)
+			}
 		}
 	}
 

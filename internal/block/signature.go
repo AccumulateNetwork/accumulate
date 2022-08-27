@@ -776,6 +776,9 @@ func (x *Executor) processPartitionSignature(batch *database.Batch, signature pr
 	// Add all signers to the signer list so that the transaction readiness
 	// check knows to look for delegates
 	status.AddSigner(signer)
+	if transaction.Body.Type().IsAnchor() {
+		status.AddAnchorSigner(signature)
+	}
 	err = record.PutStatus(status)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
