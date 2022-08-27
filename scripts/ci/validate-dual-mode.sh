@@ -21,10 +21,10 @@ if which go >/dev/null || ! which accumulate >/dev/null; then
   go install ./cmd/accumulated
   export PATH="${PATH}:$(go env GOPATH)/bin"
 fi
-[ -z "${MNEMONIC}" ] || accumulate key import mnemonic ${MNEMONIC}
+init-wallet
 echo
 
-#spin up a dual node 
+#spin up a dual node
 accumulated init dual tcp://node-1:26756 --public=tcp://127.0.1.101 --listen=tcp://127.0.1.101 -w "$NODES_DIR/dual-test" --skip-version-check --no-website && success || die "init dual mode failed"
 
 # Start the new validator and increment NUM_DMNS

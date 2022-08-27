@@ -93,7 +93,7 @@ func (t *Transaction) SignaturesForSigner(signer protocol.Signer2) (*SignatureSe
 }
 
 // SignaturesForSigner returns a read-only signature set for the given signer account.
-func (t *Transaction) ReadSignaturesForSigner(signer protocol.Signer) (*SignatureSet, error) {
+func (t *Transaction) ReadSignaturesForSigner(signer protocol.Signer2) (*SignatureSet, error) {
 	set, err := newSigSet(t, signer, false)
 	if err != nil {
 		return nil, fmt.Errorf("load signature set: %w", err)
