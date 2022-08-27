@@ -9,13 +9,13 @@ import (
 )
 
 type globalValueMemos struct {
-	active map[string]int
+	threshold map[string]uint64
+	active    map[string]int
 }
 
-func (g *GlobalValues) countActive(partition string) int {
-	partition = strings.ToLower(partition)
+func (g *GlobalValues) memoizeValidators() {
 	if g.memoize.active != nil {
-		return g.memoize.active[partition]
+		return
 	}
 
 	active := make(map[string]int, len(g.Network.Partitions))
@@ -27,20 +27,28 @@ func (g *GlobalValues) countActive(partition string) int {
 		}
 	}
 
+	threshold := make(map[string]uint64, len(g.Network.Partitions))
+	for partition, active := range active {
+		threshold[partition] = g.Globals.ValidatorAcceptThreshold.Threshold(active)
+	}
+
 	g.memoize.active = active
-	return active[partition]
+	g.memoize.threshold = threshold
+}
+
+func (g *GlobalValues) ValidatorThreshold(partition string) uint64 {
+	g.memoizeValidators()
+	return g.memoize.threshold[partition]
 }
 
 type globalSigner struct {
 	Partition string
-	Threshold uint64
 	*protocol.NetworkDefinition
 }
 
-func (g *GlobalValues) AsSigner(partition string) protocol.Signer2 {
+func (g *GlobalValues) AsSigner(partition string) *globalSigner {
 	s := new(globalSigner)
 	s.Partition = partition
-	s.Threshold = g.Globals.OperatorAcceptThreshold.Threshold(g.countActive(partition))
 	s.NetworkDefinition = g.Network
 	return s
 }
@@ -48,7 +56,6 @@ func (g *GlobalValues) AsSigner(partition string) protocol.Signer2 {
 func (g *globalSigner) GetUrl() *url.URL   { return protocol.DnUrl().JoinPath(protocol.Network) }
 func (g *globalSigner) GetVersion() uint64 { return g.Version }
 
-// func (g *globalSigner) GetSignatureThreshold() uint64 { return g.Threshold }
 func (g *globalSigner) GetSignatureThreshold() uint64 { return 1 }
 
 func (g *globalSigner) EntryByDelegate(owner *url.URL) (int, protocol.KeyEntry, bool) {

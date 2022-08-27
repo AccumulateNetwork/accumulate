@@ -39,7 +39,6 @@ func (x *Executor) ExecuteEnvelopeSet(block *Block, deliveries []*chain.Delivery
 }
 
 func (x *Executor) ExecuteEnvelope(block *Block, delivery *chain.Delivery) (*protocol.TransactionStatus, error) {
-
 	if delivery.Transaction.Body.Type() == protocol.TransactionTypeSystemWriteData {
 		return nil, errors.Format(errors.StatusBadRequest, "a %v transaction cannot be submitted directly", protocol.TransactionTypeSystemWriteData)
 	}
