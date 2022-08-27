@@ -14,7 +14,6 @@ function signCount {
    echo "$(bc -l <<<"$ACCEPT_THRESHOLD")"
 }
 
-
 function daemon-run {
     if ! RESULT=`accumulated "$@" 2>&1`; then
         echo "$RESULT" >&2
@@ -37,8 +36,7 @@ if which go >/dev/null || ! which accumulate >/dev/null; then
   go install ./cmd/accumulated
   export PATH="${PATH}:$(go env GOPATH)/bin"
 fi
-
-[ -z "${MNEMONIC}" ] || accumulate key import mnemonic ${MNEMONIC}
+init-wallet
 echo
 
 declare -g NUM_NODES=$(find ${NODES_DIR} -mindepth 1 -maxdepth 1 -type d | wc -l)
