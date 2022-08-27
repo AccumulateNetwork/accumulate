@@ -1,6 +1,7 @@
 package protocol
 
 import (
+	"bytes"
 	"math/big"
 	"sort"
 
@@ -22,6 +23,15 @@ func (s *TransactionStatus) Set(err error) {
 		s.Code = errors.StatusUnknownError
 	} else {
 		s.Code = s.Error.Code
+	}
+}
+
+func (s *TransactionStatus) AddAnchorSigner(signature KeySignature) {
+	ptr, new := sortutil.BinaryInsert(&s.AnchorSigners, func(key []byte) int {
+		return bytes.Compare(key, signature.GetPublicKey())
+	})
+	if new {
+		*ptr = signature.GetPublicKey()
 	}
 }
 
