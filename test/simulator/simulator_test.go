@@ -1,15 +1,14 @@
 package simulator_test
 
 import (
-	"crypto/sha256"
+	"math/big"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
+	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
 )
 
@@ -17,78 +16,41 @@ func init() {
 	acctesting.EnableDebugFeatures()
 }
 
-func hash(b ...[]byte) []byte {
-	h := sha256.New()
-	for _, b := range b {
-		_, _ = h.Write(b)
-	}
-	return h.Sum(nil)
-}
-
 func TestSimulator(t *testing.T) {
-	var timestamp uint64
 	alice := url.MustParse("alice")
-	aliceKey := acctesting.GenerateKey(alice, "main")
-	otherKey := acctesting.GenerateKey(alice, "other")
+	bob := url.MustParse("bob")
+	aliceKey := acctesting.GenerateKey(alice)
+	bobKey := acctesting.GenerateKey(bob)
 
-	sim, err := simulator.New(
-		acctesting.NewTestLogger(t),
-		simulator.SimpleNetwork(t.Name(), 3, 3),
+	// Initialize
+	sim := NewSim(t,
 		simulator.MemoryDatabase,
+		simulator.SimpleNetwork(t.Name(), 3, 3),
+		simulator.Genesis(),
 	)
-	require.NoError(t, err)
-	require.NoError(t, sim.InitFromGenesis())
 
-	require.NoError(t, sim.Update(alice, func(batch *database.Batch) error {
-		identity := new(ADI)
-		identity.Url = alice
-		identity.AddAuthority(alice.JoinPath("book"))
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
+	MakeAccount(t, sim.DatabaseFor(alice), &TokenAccount{Url: alice.JoinPath("tokens"), TokenUrl: AcmeUrl()})
+	CreditTokens(t, sim.DatabaseFor(alice), alice.JoinPath("tokens"), big.NewInt(1e12))
+	MakeIdentity(t, sim.DatabaseFor(bob), bob, bobKey[32:])
+	MakeAccount(t, sim.DatabaseFor(bob), &TokenAccount{Url: bob.JoinPath("tokens"), TokenUrl: AcmeUrl()})
 
-		book := new(KeyBook)
-		book.Url = alice.JoinPath("book")
-		book.AddAuthority(alice.JoinPath("book"))
-		book.PageCount = 1
-
-		page := new(KeyPage)
-		page.Url = FormatKeyPageUrl(alice.JoinPath("book"), 0)
-		page.AcceptThreshold = 1
-		page.Version = 1
-
-		key := new(KeySpec)
-		key.PublicKeyHash = hash(aliceKey[32:])
-		page.AddKeySpec(key)
-		page.CreditBalance = 1e9
-
-		for _, a := range []protocol.Account{identity, book, page} {
-			require.NoError(t, batch.Account(a.GetUrl()).Main().Put(a))
-		}
-		return nil
-	}))
-
-	st, err := sim.Submit(
+	// Execute
+	st := sim.SubmitSuccessfully(
 		acctesting.NewTransaction().
-			WithPrincipal(alice.JoinPath("book", "1")).
+			WithPrincipal(alice.JoinPath("tokens")).
 			WithSigner(alice.JoinPath("book", "1"), 1).
-			WithTimestampVar(&timestamp).
-			UseSimpleHash(). // Test AC-2953
-			WithBody(&UpdateKey{NewKeyHash: hash(otherKey[32:])}).
+			WithTimestamp(1).
+			WithBody(&SendTokens{To: []*TokenRecipient{{Url: bob.JoinPath("tokens"), Amount: *big.NewInt(123)}}}).
 			Initiate(SignatureTypeED25519, aliceKey).
 			BuildDelivery())
-	require.NoError(t, err)
-	if st.Error != nil {
-		require.NoError(t, st.Error)
-	}
 
-	require.NoError(t, sim.Step())
-	require.NoError(t, sim.Step())
+	sim.StepUntil(
+		Txn(st.TxID).Succeeds(),
+		Txn(st.TxID).Produced().Succeeds())
 
-	require.NoError(t, sim.View(alice, func(batch *database.Batch) error {
-		h := st.TxID.Hash()
-		_, err := batch.Transaction(h[:]).Main().Get()
-		require.NoError(t, err)
-		var page *protocol.KeyPage
-		require.NoError(t, batch.Account(alice.JoinPath("book", "1")).Main().GetAs(&page))
-		require.Len(t, page.Keys, 2)
-		return nil
-	}))
+	// Verify
+	account := GetAccount[*TokenAccount](t, sim.DatabaseFor(bob), bob.JoinPath("tokens"))
+	require.Equal(t, 123, int(account.Balance.Int64()))
 }

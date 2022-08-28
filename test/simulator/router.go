@@ -78,7 +78,7 @@ func (r *Router) RequestAPIv2(ctx context.Context, partition, method string, par
 	// Round robin
 	last := r.lastUsed[partition]
 	r.lastUsed[partition] = (last + 1) % len(p.nodes)
-	c := p.nodes[last].api
+	c := p.nodes[last].client
 
 	return c.RequestAPIv2(ctx, method, params, result)
 }

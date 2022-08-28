@@ -27,7 +27,7 @@ type Node struct {
 	eventBus  *events.Bus
 	database  database.Beginner
 	executor  *block.Executor
-	api       *client.Client
+	client    *client.Client
 
 	checkBatch       *database.Batch
 	validatorUpdates []*validatorUpdate
@@ -44,7 +44,7 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 		NetworkType:  p.Type,
 		PartitionId:  p.ID,
 		LocalAddress: init.HostName,
-		// Network:      config.Network{Id: "simulator", Partitions: sim.Partitions},
+		Network:      *s.netcfg,
 	}
 
 	var err error
@@ -70,7 +70,7 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
-	n.api = testing.DirectJrpcClient(api)
+	n.client = testing.DirectJrpcClient(api)
 
 	events.SubscribeSync(n.eventBus, n.willChangeGlobals)
 
@@ -110,6 +110,10 @@ func (n *Node) initChain(snapshot ioutil2.SectionReader) ([]byte, error) {
 	err := n.executor.RestoreSnapshot(batch, snapshot)
 	if err != nil {
 		return nil, errors.Format(errors.StatusUnknownError, "restore snapshot: %w", err)
+	}
+	err = batch.Commit()
+	if err != nil {
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	var root []byte

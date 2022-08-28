@@ -58,8 +58,8 @@ func newBvn(s *Simulator, init *accumulated.BvnInit) (*Partition, error) {
 		Type: protocol.PartitionTypeBlockValidator,
 	})
 
-	for _, init := range init.Nodes {
-		n, err := newNode(s, p, len(p.nodes), init)
+	for _, node := range init.Nodes {
+		n, err := newNode(s, p, len(p.nodes), node)
 		if err != nil {
 			return nil, errors.Wrap(errors.StatusUnknownError, err)
 		}
@@ -127,6 +127,16 @@ func (p *Partition) initChain(snapshot ioutil2.SectionReader) error {
 	return nil
 }
 
+func copyDelivery(d *chain.Delivery) *chain.Delivery {
+	e := new(chain.Delivery)
+	e.Transaction = d.Transaction.Copy()
+	e.Signatures = make([]protocol.Signature, len(d.Signatures))
+	for i, s := range d.Signatures {
+		e.Signatures[i] = s.CopyAsInterface().(protocol.Signature)
+	}
+	return e
+}
+
 func (p *Partition) Submit(delivery *chain.Delivery, pretend bool) (*protocol.TransactionStatus, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -146,7 +156,8 @@ func (p *Partition) Submit(delivery *chain.Delivery, pretend bool) (*protocol.Tr
 	var err error
 	result := make([]*protocol.TransactionStatus, len(p.nodes))
 	for i, node := range p.nodes {
-		result[i], err = node.checkTx(delivery, types.CheckTxType_New)
+		// Make a copy to prevent changes
+		result[i], err = node.checkTx(copyDelivery(delivery), types.CheckTxType_New)
 		if err != nil {
 			return nil, errors.Wrap(errors.StatusFatalError, err)
 		}
@@ -215,9 +226,10 @@ func (p *Partition) execute(background *errgroup.Group) error {
 	// Deliver Tx
 	var err error
 	results := make([]*protocol.TransactionStatus, len(p.nodes))
-	for i, delivery := range deliveries {
-		for j, node := range p.nodes {
-			results[j], err = node.deliverTx(blocks[i], delivery)
+	for _, delivery := range deliveries {
+		for i, node := range p.nodes {
+			// Make a copy to prevent changes
+			results[i], err = node.deliverTx(blocks[i], copyDelivery(delivery))
 			if err != nil {
 				return errors.Format(errors.StatusFatalError, "execute: %w", err)
 			}
@@ -242,7 +254,7 @@ func (p *Partition) execute(background *errgroup.Group) error {
 			return errors.Format(errors.StatusFatalError, "consensus failure: end block")
 		}
 		for i, v := range v {
-			if v != endBlock[0][i] {
+			if *v != *endBlock[0][i] {
 				return errors.Format(errors.StatusFatalError, "consensus failure: end block")
 			}
 		}

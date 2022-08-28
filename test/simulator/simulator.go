@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/tendermint/tendermint/libs/log"
+	tmtypes "github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
@@ -26,33 +27,66 @@ var GenesisTime = time.Date(2022, 7, 1, 0, 0, 0, 0, time.UTC)
 type Simulator struct {
 	logger     logging.OptionalLogger
 	init       *accumulated.NetworkInit
-	database   func(partition string, node int, logger log.Logger) database.Beginner
+	database   OpenDatabaseFunc
 	partitions map[string]*Partition
 	router     *Router
+	netcfg     *config.Network
 }
 
-func New(logger log.Logger, init *accumulated.NetworkInit, database func(partition string, node int, logger log.Logger) database.Beginner) (*Simulator, error) {
+type OpenDatabaseFunc func(partition string, node int, logger log.Logger) database.Beginner
+type SnapshotFunc func(partition string, network *accumulated.NetworkInit, logger log.Logger) (ioutil2.SectionReader, error)
+
+func New(logger log.Logger, database OpenDatabaseFunc, network *accumulated.NetworkInit, snapshot SnapshotFunc) (*Simulator, error) {
 	s := new(Simulator)
 	s.logger.Set(logger)
-	s.init = init
+	s.init = network
 	s.database = database
-	s.partitions = make(map[string]*Partition, len(init.Bvns)+1)
+	s.partitions = make(map[string]*Partition, len(network.Bvns)+1)
 	s.router = newRouter(logger, s.partitions)
 
+	s.netcfg = new(config.Network)
+	s.netcfg.Id = network.Id
+	s.netcfg.Partitions = make([]config.Partition, len(network.Bvns)+1)
+	s.netcfg.Partitions[0].Id = protocol.Directory
+	s.netcfg.Partitions[0].Type = config.Directory
+	for i, bvn := range network.Bvns {
+		s.netcfg.Partitions[i+1].Id = bvn.Id
+		s.netcfg.Partitions[i+1].Type = config.BlockValidator
+		s.netcfg.Partitions[i+1].Nodes = make([]config.Node, len(bvn.Nodes))
+		for j, node := range bvn.Nodes {
+			s.netcfg.Partitions[i+1].Nodes[j].Address = node.HostName
+			s.netcfg.Partitions[i+1].Nodes[j].Type = node.BvnnType
+
+			dnn := config.Node{Address: node.HostName, Type: node.DnnType}
+			s.netcfg.Partitions[0].Nodes = append(s.netcfg.Partitions[0].Nodes, dnn)
+		}
+	}
+
 	var err error
-	s.partitions[protocol.Directory], err = newDn(s, init)
+	s.partitions[protocol.Directory], err = newDn(s, network)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
-	for _, init := range init.Bvns {
-		s.partitions[init.Id], err = newBvn(s, init)
+	for _, bvn := range network.Bvns {
+		s.partitions[bvn.Id], err = newBvn(s, bvn)
 		if err != nil {
 			return nil, errors.Wrap(errors.StatusUnknownError, err)
 		}
 	}
 
 	events.SubscribeSync(s.partitions[protocol.Directory].nodes[0].eventBus, s.router.willChangeGlobals)
+
+	for _, p := range s.partitions {
+		snapshot, err := snapshot(p.ID, s.init, s.logger)
+		if err != nil {
+			return nil, errors.Format(errors.StatusUnknownError, "open snapshot: %w", err)
+		}
+		err = p.initChain(snapshot)
+		if err != nil {
+			return nil, errors.Format(errors.StatusUnknownError, "init %s: %w", p.ID, err)
+		}
+	}
 	return s, nil
 }
 
@@ -82,47 +116,33 @@ func (s *Simulator) SetRoute(account *url.URL, partition string) {
 	s.router.SetRoute(account, partition)
 }
 
-func (s *Simulator) InitFromGenesis() error {
-	return s.InitFromGenesisWith(nil)
+func Genesis() SnapshotFunc {
+	return GenesisWith(nil)
 }
 
-func (s *Simulator) InitFromGenesisWith(values *core.GlobalValues) error {
+func GenesisWith(values *core.GlobalValues) SnapshotFunc {
 	if values == nil {
 		values = new(core.GlobalValues)
 	}
 
-	genDocs, err := accumulated.BuildGenesisDocs(s.init, values, GenesisTime, s.logger, nil)
-	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "build genesis docs: %w", err)
-	}
+	var genDocs map[string]*tmtypes.GenesisDoc
+	return func(partition string, network *accumulated.NetworkInit, logger log.Logger) (ioutil2.SectionReader, error) {
+		var err error
+		if genDocs == nil {
+			genDocs, err = accumulated.BuildGenesisDocs(network, values, GenesisTime, logger, nil)
+			if err != nil {
+				return nil, errors.Format(errors.StatusUnknownError, "build genesis docs: %w", err)
+			}
+		}
 
-	for _, p := range s.partitions {
 		var snapshot []byte
-		err = json.Unmarshal(genDocs[p.ID].AppState, &snapshot)
+		err = json.Unmarshal(genDocs[partition].AppState, &snapshot)
 		if err != nil {
-			panic(err)
+			return nil, errors.Wrap(errors.StatusUnknownError, err)
 		}
 
-		err = p.initChain(ioutil2.NewBuffer(snapshot))
-		if err != nil {
-			return errors.Wrap(errors.StatusUnknownError, err)
-		}
+		return ioutil2.NewBuffer(snapshot), nil
 	}
-	return nil
-}
-
-func (s *Simulator) InitFromSnapshot(snapshot func(string) (ioutil2.SectionReader, error)) error {
-	for _, p := range s.partitions {
-		snapshot, err := snapshot(p.ID)
-		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "open snapshot: %w", err)
-		}
-		err = p.initChain(snapshot)
-		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "init %s: %w", p.ID, err)
-		}
-	}
-	return nil
 }
 
 // Step executes a single simulator step
@@ -152,34 +172,23 @@ func (s *Simulator) Submit(delivery *chain.Delivery) (*protocol.TransactionStatu
 	return p.Submit(delivery, false)
 }
 
-func (s *Simulator) partitionFor(account *url.URL) (*Partition, error) {
-	partition, err := s.router.RouteAccount(account)
-	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
-	}
+type errDb struct{ err error }
 
+func (e errDb) View(func(*database.Batch) error) error   { return e.err }
+func (e errDb) Update(func(*database.Batch) error) error { return e.err }
+
+func (s *Simulator) Database(partition string) database.Updater {
 	p, ok := s.partitions[partition]
 	if !ok {
-		return nil, errors.Format(errors.StatusBadRequest, "%s is not a partition", partition)
+		return errDb{errors.Format(errors.StatusBadRequest, "%s is not a partition", partition)}
 	}
-
-	return p, nil
+	return p
 }
 
-func (s *Simulator) View(account *url.URL, fn func(batch *database.Batch) error) error {
-	p, err := s.partitionFor(account)
+func (s *Simulator) DatabaseFor(account *url.URL) database.Updater {
+	partition, err := s.router.RouteAccount(account)
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errDb{errors.Wrap(errors.StatusUnknownError, err)}
 	}
-
-	return p.View(fn)
-}
-
-func (s *Simulator) Update(account *url.URL, fn func(batch *database.Batch) error) error {
-	p, err := s.partitionFor(account)
-	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
-	}
-
-	return p.Update(fn)
+	return s.Database(partition)
 }
