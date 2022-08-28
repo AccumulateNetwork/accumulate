@@ -111,26 +111,24 @@ func (r *Router) Submit(ctx context.Context, partition string, envelope *protoco
 		return nil, errors.Format(errors.StatusUnknownError, "submit: %w", err)
 	}
 
-	results, err := p.Submit(deliveries, pretend)
-	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
-	}
-
 	resp := new(routing.ResponseSubmit)
-	resp.Data, err = (&protocol.TransactionResultSet{Results: results}).MarshalBinary()
-	if err != nil {
-		return nil, errors.Format(errors.StatusFatalError, "marshal results: %w", err)
-	}
-
-	// If a user transaction fails, the batch fails
-	for i, result := range results {
-		if result.Code.Success() {
-			continue
+	results := make([]*protocol.TransactionStatus, len(deliveries))
+	for i, delivery := range deliveries {
+		results[i], err = p.Submit(delivery, pretend)
+		if err != nil {
+			return nil, errors.Wrap(errors.StatusUnknownError, err)
 		}
+
+		// If a user transaction fails, the batch fails
 		if deliveries[i].Transaction.Body.Type().IsUser() {
 			resp.Code = uint32(protocol.ErrorCodeUnknownError)
 			resp.Log = "One or more user transactions failed"
 		}
+	}
+
+	resp.Data, err = (&protocol.TransactionResultSet{Results: results}).MarshalBinary()
+	if err != nil {
+		return nil, errors.Format(errors.StatusFatalError, "marshal results: %w", err)
 	}
 
 	return resp, nil

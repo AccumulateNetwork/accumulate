@@ -8,6 +8,7 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
+	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
@@ -82,12 +83,7 @@ func (s *Simulator) SetRoute(account *url.URL, partition string) {
 }
 
 func (s *Simulator) InitFromGenesis() error {
-	// Disable the sliding fee schedule
-	values := new(core.GlobalValues)
-	values.Globals = new(protocol.NetworkGlobals)
-	values.Globals.FeeSchedule = new(protocol.FeeSchedule)
-
-	return s.InitFromGenesisWith(values)
+	return s.InitFromGenesisWith(nil)
 }
 
 func (s *Simulator) InitFromGenesisWith(values *core.GlobalValues) error {
@@ -137,4 +133,53 @@ func (s *Simulator) Step() error {
 		errg.Go(func() error { return p.execute(errg) })
 	}
 	return errg.Wait()
+}
+
+func (s *Simulator) Submit(delivery *chain.Delivery) (*protocol.TransactionStatus, error) {
+	partition, err := s.router.Route(&protocol.Envelope{
+		Transaction: []*protocol.Transaction{delivery.Transaction},
+		Signatures:  delivery.Signatures,
+	})
+	if err != nil {
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
+	}
+
+	p, ok := s.partitions[partition]
+	if !ok {
+		return nil, errors.Format(errors.StatusBadRequest, "%s is not a partition", partition)
+	}
+
+	return p.Submit(delivery, false)
+}
+
+func (s *Simulator) partitionFor(account *url.URL) (*Partition, error) {
+	partition, err := s.router.RouteAccount(account)
+	if err != nil {
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
+	}
+
+	p, ok := s.partitions[partition]
+	if !ok {
+		return nil, errors.Format(errors.StatusBadRequest, "%s is not a partition", partition)
+	}
+
+	return p, nil
+}
+
+func (s *Simulator) View(account *url.URL, fn func(batch *database.Batch) error) error {
+	p, err := s.partitionFor(account)
+	if err != nil {
+		return errors.Wrap(errors.StatusUnknownError, err)
+	}
+
+	return p.View(fn)
+}
+
+func (s *Simulator) Update(account *url.URL, fn func(batch *database.Batch) error) error {
+	p, err := s.partitionFor(account)
+	if err != nil {
+		return errors.Wrap(errors.StatusUnknownError, err)
+	}
+
+	return p.Update(fn)
 }

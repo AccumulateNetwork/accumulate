@@ -127,54 +127,40 @@ func (p *Partition) initChain(snapshot ioutil2.SectionReader) error {
 	return nil
 }
 
-func (p *Partition) Submit(deliveries []*chain.Delivery, pretend bool) ([]*protocol.TransactionStatus, error) {
+func (p *Partition) Submit(delivery *chain.Delivery, pretend bool) (*protocol.TransactionStatus, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	// Call the hook
-	drop := make([]bool, len(deliveries))
 	if p.submitHook != nil {
-		for i, delivery := range deliveries {
-			dropTx, keepHook := p.submitHook(delivery)
-			if !dropTx {
-				drop[i] = true
-			}
-			if !keepHook {
-				p.submitHook = nil
-				break
-			}
+		drop, keep := p.submitHook(delivery)
+		if !keep {
+			p.submitHook = nil
+		}
+		if drop {
+			s := new(protocol.TransactionStatus)
+			s.TxID = delivery.Transaction.ID()
+			return s, nil
 		}
 	}
 
 	var err error
-	results := make([]*protocol.TransactionStatus, len(deliveries))
-	consensus := make([]*protocol.TransactionStatus, len(p.nodes))
-	for i, delivery := range deliveries {
-		if drop[i] {
-			s := new(protocol.TransactionStatus)
-			s.TxID = delivery.Transaction.ID()
-			results[i] = s
-			continue
+	result := make([]*protocol.TransactionStatus, len(p.nodes))
+	for i, node := range p.nodes {
+		result[i], err = node.checkTx(delivery, types.CheckTxType_New)
+		if err != nil {
+			return nil, errors.Wrap(errors.StatusFatalError, err)
 		}
-
-		for i, node := range p.nodes {
-			consensus[i], err = node.checkTx(delivery, types.CheckTxType_New)
-			if err != nil {
-				return nil, errors.Wrap(errors.StatusFatalError, err)
-			}
-		}
-		for _, r := range consensus[1:] {
-			if !consensus[0].Equal(r) {
-				return nil, errors.Format(errors.StatusFatalError, "consensus failure: check tx: transaction %x (%v)", delivery.Transaction.GetHash()[:4], delivery.Transaction.Body.Type())
-			}
-		}
-		results[i] = consensus[0]
-		if !pretend && consensus[0].Code.Success() {
-			p.mempool = append(p.mempool, delivery)
+	}
+	for _, r := range result[1:] {
+		if !result[0].Equal(r) {
+			return nil, errors.Format(errors.StatusFatalError, "consensus failure: check tx: transaction %x (%v)", delivery.Transaction.GetHash()[:4], delivery.Transaction.Body.Type())
 		}
 	}
 
-	return results, nil
+	if !pretend && result[0].Code.Success() {
+		p.mempool = append(p.mempool, delivery)
+	}
+	return result[0], nil
 }
 
 func (p *Partition) execute(background *errgroup.Group) error {
