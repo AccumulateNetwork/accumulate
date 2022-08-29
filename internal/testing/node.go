@@ -103,11 +103,16 @@ func CreateTestNet(t testing.TB, numBvns, numValidators, numFollowers int, withF
 		initLogger = logging.NewTestLogger(t, "plain", DefaultLogLevels, false)
 	}
 
+	// Disable the sliding fee schedule
+	values := new(core.GlobalValues)
+	values.Globals = new(protocol.NetworkGlobals)
+	values.Globals.FeeSchedule = new(protocol.FeeSchedule)
+
 	var factomAddresses func() (io.Reader, error)
 	if withFactomAddress {
 		factomAddresses = func() (io.Reader, error) { return strings.NewReader(testdata.FactomAddresses), nil }
 	}
-	genDocs, err := accumulated.BuildGenesisDocs(netInit, new(core.GlobalValues), time.Now(), initLogger, factomAddresses)
+	genDocs, err := accumulated.BuildGenesisDocs(netInit, values, time.Now(), initLogger, factomAddresses)
 	require.NoError(t, err)
 
 	configs := accumulated.BuildNodesConfig(netInit, DefaultConfig)
