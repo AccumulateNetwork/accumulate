@@ -2,6 +2,7 @@ package protocol_test
 
 import (
 	"math/big"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -10,6 +11,7 @@ import (
 )
 
 func TestFee(t *testing.T) {
+	s := new(FeeSchedule)
 	t.Run("SendTokens", func(t *testing.T) {
 		env := acctesting.NewTransaction().
 			WithCurrentTimestamp().
@@ -18,7 +20,7 @@ func TestFee(t *testing.T) {
 			WithCurrentTimestamp().
 			WithBody(&SendTokens{To: []*TokenRecipient{{}}}).
 			Initiate(SignatureTypeLegacyED25519, acctesting.GenerateKey(t.Name()))
-		fee, err := ComputeTransactionFee(env.Transaction[0])
+		fee, err := s.ComputeTransactionFee(env.Transaction[0])
 		require.NoError(t, err)
 		require.Equal(t, FeeTransferTokens, fee)
 	})
@@ -31,7 +33,7 @@ func TestFee(t *testing.T) {
 			WithBody(&SendTokens{To: []*TokenRecipient{{}}}).
 			Initiate(SignatureTypeLegacyED25519, acctesting.GenerateKey(t.Name()))
 		env.Transaction[0].Header.Metadata = make([]byte, 1024)
-		fee, err := ComputeTransactionFee(env.Transaction[0])
+		fee, err := s.ComputeTransactionFee(env.Transaction[0])
 		require.NoError(t, err)
 		require.Equal(t, FeeTransferTokens+FeeData*4, fee)
 	})
@@ -44,7 +46,7 @@ func TestFee(t *testing.T) {
 			WithBody(&WriteData{Scratch: true}).
 			Initiate(SignatureTypeLegacyED25519, acctesting.GenerateKey(t.Name()))
 		env.Transaction[0].Header.Metadata = make([]byte, 1024)
-		fee, err := ComputeTransactionFee(env.Transaction[0])
+		fee, err := s.ComputeTransactionFee(env.Transaction[0])
 		require.NoError(t, err)
 		require.Equal(t, FeeScratchData*5, fee)
 	})
@@ -61,7 +63,7 @@ func TestFee(t *testing.T) {
 				txn := new(Transaction)
 				txn.Header.Principal = AccountUrl("foo")
 				txn.Body = body
-				fee, err := ComputeTransactionFee(txn)
+				fee, err := s.ComputeTransactionFee(txn)
 				if i == TransactionTypeRemote {
 					// Remote transactions should never be passed to
 					// ComputeTransactionFee so it returns an error
@@ -91,10 +93,77 @@ func TestFee(t *testing.T) {
 	})
 }
 
+func TestSubAdiFee(t *testing.T) {
+	s := new(FeeSchedule)
+	s.CreateIdentitySliding = []Fee{
+		FeeCreateIdentity << 12,
+		FeeCreateIdentity << 11,
+		FeeCreateIdentity << 10,
+		FeeCreateIdentity << 9,
+		FeeCreateIdentity << 8,
+		FeeCreateIdentity << 7,
+		FeeCreateIdentity << 6,
+		FeeCreateIdentity << 5,
+		FeeCreateIdentity << 4,
+		FeeCreateIdentity << 3,
+		FeeCreateIdentity << 2,
+		FeeCreateIdentity << 1,
+	}
+
+	env := acctesting.NewTransaction().
+		WithCurrentTimestamp().
+		WithPrincipal(AcmeUrl()).
+		WithSigner(AccountUrl("foo", "book", "1"), 1).
+		WithCurrentTimestamp().
+		WithBody(&CreateIdentity{Url: AccountUrl("foo.acme", "sub")}).
+		Initiate(SignatureTypeLegacyED25519, acctesting.GenerateKey(t.Name()))
+	fee, err := s.ComputeTransactionFee(env.Transaction[0])
+	require.NoError(t, err)
+
+	require.Equal(t, FeeCreateIdentity, fee)
+}
+
+func TestSlidingIdentityFeeSchedule(t *testing.T) {
+	s := new(FeeSchedule)
+	s.CreateIdentitySliding = []Fee{
+		FeeCreateIdentity << 12,
+		FeeCreateIdentity << 11,
+		FeeCreateIdentity << 10,
+		FeeCreateIdentity << 9,
+		FeeCreateIdentity << 8,
+		FeeCreateIdentity << 7,
+		FeeCreateIdentity << 6,
+		FeeCreateIdentity << 5,
+		FeeCreateIdentity << 4,
+		FeeCreateIdentity << 3,
+		FeeCreateIdentity << 2,
+		FeeCreateIdentity << 1,
+	}
+
+	for i := 0; i <= len(s.CreateIdentitySliding); i++ {
+		env := acctesting.NewTransaction().
+			WithCurrentTimestamp().
+			WithPrincipal(AcmeUrl()).
+			WithSigner(AccountUrl("foo", "book", "1"), 1).
+			WithCurrentTimestamp().
+			WithBody(&CreateIdentity{Url: AccountUrl(strings.Repeat("a", i+1))}).
+			Initiate(SignatureTypeLegacyED25519, acctesting.GenerateKey(t.Name()))
+		fee, err := s.ComputeTransactionFee(env.Transaction[0])
+		require.NoError(t, err)
+
+		if i < len(s.CreateIdentitySliding) {
+			require.Equal(t, s.CreateIdentitySliding[i], fee)
+		} else {
+			require.Equal(t, FeeCreateIdentity, fee)
+		}
+	}
+}
+
 func TestMultiOutputRefund(t *testing.T) {
 	// Verifies that a two output transaction with a good and a bad output does
 	// not cost less than a single output transaction
 
+	s := new(FeeSchedule)
 	body := new(SendTokens)
 	txn := new(Transaction)
 	txn.Header.Principal = AccountUrl("foo")
@@ -102,14 +171,14 @@ func TestMultiOutputRefund(t *testing.T) {
 
 	// Calculate fee and refund for a single output transaction
 	body.AddRecipient(AccountUrl("bar"), big.NewInt(0))
-	fee1, err := ComputeTransactionFee(txn)
+	fee1, err := s.ComputeTransactionFee(txn)
 	require.NoError(t, err)
 
 	// Calculate fee and refund for a two output transaction
 	body.AddRecipient(AccountUrl("bar"), big.NewInt(0))
-	paid2, err := ComputeTransactionFee(txn)
+	paid2, err := s.ComputeTransactionFee(txn)
 	require.NoError(t, err)
-	refund2, err := ComputeSyntheticRefund(txn, len(body.To))
+	refund2, err := s.ComputeSyntheticRefund(txn, len(body.To))
 	require.NoError(t, err)
 	fee2 := paid2 - refund2
 

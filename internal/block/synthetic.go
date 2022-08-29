@@ -17,7 +17,7 @@ func (x *Executor) ProduceSynthetic(batch *database.Batch, from *protocol.Transa
 		return nil
 	}
 
-	err := setSyntheticOrigin(batch, from, produced)
+	err := x.setSyntheticOrigin(batch, from, produced)
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknownError, err)
 	}
@@ -53,7 +53,7 @@ func (x *Executor) ProduceSynthetic(batch *database.Batch, from *protocol.Transa
 // transaction. setSyntheticOrigin sets the refund amount for each synthetic
 // transaction, spreading the potential refund across all produced synthetic
 // transactions.
-func setSyntheticOrigin(batch *database.Batch, from *protocol.Transaction, produced []*protocol.Transaction) error {
+func (x *Executor) setSyntheticOrigin(batch *database.Batch, from *protocol.Transaction, produced []*protocol.Transaction) error {
 	if len(produced) == 0 {
 		return nil
 	}
@@ -74,7 +74,7 @@ func setSyntheticOrigin(batch *database.Batch, from *protocol.Transaction, produ
 	}
 
 	// Set the refund amount for each output
-	refund, err := protocol.ComputeSyntheticRefund(from, len(swos))
+	refund, err := x.globals.Active.Globals.FeeSchedule.ComputeSyntheticRefund(from, len(swos))
 	if err != nil {
 		return errors.Format(errors.StatusInternalError, "compute refund: %w", err)
 	}
