@@ -23,6 +23,10 @@ func (AddCredits) Validate(st *StateManager, tx *Delivery) (protocol.Transaction
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.AddCredits), tx.Transaction.Body)
 	}
 
+	if body.Recipient == nil {
+		return nil, fmt.Errorf("invalid payload: missing recipient")
+	}
+
 	// need to make sure acme amount is greater than 0
 	if body.Amount.Cmp(bigZeroAmount) <= 0 {
 		return nil, fmt.Errorf("invalid ACME amount specified for credit purchase, must be greater than zero")

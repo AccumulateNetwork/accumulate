@@ -163,12 +163,27 @@ NetworkGlobals:
     - name: OperatorAcceptThreshold
       type: Rational
       marshal-as: reference
+    - name: ValidatorAcceptThreshold
+      type: Rational
+      marshal-as: reference
     - name: MajorBlockSchedule
       type: string
       description: a cron expression defining the (approximate) major blocks interval
     - name: AnchorEmptyBlocks
       description: controls whether an anchor is sent for a block if the block contains no transactions other than a directory anchor
       type: bool
+    - name: FeeSchedule
+      type: FeeSchedule
+      marshal-as: reference
+      pointer: true
+
+FeeSchedule:
+  fields:
+    - name: CreateIdentitySliding
+      description: is the sliding fee schedule for creating an ADI. The first entry is the cost of a one-character ADI, the second is the cost of a two-character ADI, etc
+      type: Fee
+      marshal-as: enum
+      repeatable: true
 
 Rational:
   fields:

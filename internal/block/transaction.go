@@ -318,6 +318,15 @@ func (x *Executor) systemTransactionIsReady(batch *database.Batch, delivery *cha
 		// Anchors must be sequenced
 	}
 
+	// Have we received enough signatures?
+	partition, ok := protocol.ParsePartitionUrl(status.SourceNetwork)
+	if !ok {
+		return false, errors.Format(errors.StatusBadRequest, "source %v is not a partition", status.SourceNetwork)
+	}
+	if len(status.AnchorSigners) < int(x.globals.Active.ValidatorThreshold(partition)) {
+		return false, nil
+	}
+
 	// Load the ledger
 	var ledger *protocol.SyntheticLedger
 	err := batch.Account(x.Describe.Synthetic()).GetStateAs(&ledger)
@@ -546,7 +555,7 @@ func (x *Executor) recordFailedTransaction(batch *database.Batch, delivery *chai
 	}
 
 	// But only if the paid paid is larger than the max failure paid
-	paid, err := protocol.ComputeTransactionFee(delivery.Transaction)
+	paid, err := x.globals.Active.Globals.FeeSchedule.ComputeTransactionFee(delivery.Transaction)
 	if err != nil {
 		return nil, nil, fmt.Errorf("compute fee: %w", err)
 	}

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"math/big"
 	"strings"
 	"time"
@@ -54,8 +55,28 @@ func Init(snapshot io.WriteSeeker, opts InitOpts) ([]byte, error) {
 	if gg.Globals.OperatorAcceptThreshold.Numerator == 0 {
 		gg.Globals.OperatorAcceptThreshold.Set(2, 3)
 	}
+	if gg.Globals.ValidatorAcceptThreshold.Numerator == 0 {
+		gg.Globals.ValidatorAcceptThreshold.Set(2, 3)
+	}
 	if gg.Globals.MajorBlockSchedule == "" {
 		gg.Globals.MajorBlockSchedule = protocol.DefaultMajorBlockSchedule
+	}
+	if gg.Globals.FeeSchedule == nil {
+		gg.Globals.FeeSchedule = new(protocol.FeeSchedule)
+		gg.Globals.FeeSchedule.CreateIdentitySliding = []protocol.Fee{
+			protocol.FeeCreateIdentity << 12,
+			protocol.FeeCreateIdentity << 11,
+			protocol.FeeCreateIdentity << 10,
+			protocol.FeeCreateIdentity << 9,
+			protocol.FeeCreateIdentity << 8,
+			protocol.FeeCreateIdentity << 7,
+			protocol.FeeCreateIdentity << 6,
+			protocol.FeeCreateIdentity << 5,
+			protocol.FeeCreateIdentity << 4,
+			protocol.FeeCreateIdentity << 3,
+			protocol.FeeCreateIdentity << 2,
+			protocol.FeeCreateIdentity << 1,
+		}
 	}
 
 	// Build the routing table
@@ -337,6 +358,10 @@ func (b *bootstrap) maybeCreateFaucet() {
 	liteToken.Url = protocol.FaucetUrl
 	liteToken.TokenUrl = protocol.AcmeUrl()
 	liteToken.Balance.SetString(protocol.AcmeFaucetBalance, 10)
+
+	// Lock forever
+	liteToken.LockHeight = math.MaxUint64
+
 	b.WriteRecords(liteId, liteToken)
 }
 

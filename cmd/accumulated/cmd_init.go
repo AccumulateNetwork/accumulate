@@ -180,10 +180,12 @@ func networkReset() {
 			continue
 		}
 
-		if !nodeReset(filepath.Join(dir)) {
+		if !nodeReset(dir) {
+			fmt.Printf("Keeping %s\n", dir)
 			continue
 		}
 
+		fmt.Printf("Deleting %s\n", dir)
 		err = os.Remove(dir)
 		check(err)
 	}
@@ -192,36 +194,34 @@ func networkReset() {
 func nodeReset(dir string) bool {
 	ent, err := os.ReadDir(dir)
 	check(err)
-	var skipped bool
+	var keep bool
 	for _, ent := range ent {
-
 		if ent.Name() == "priv_validator_key.json" {
-			err := os.Remove(filepath.Join(dir, ent.Name()))
+			file := filepath.Join(dir, ent.Name())
+			fmt.Printf("Deleting %s\n", file)
+			err := os.Remove(file)
 			check(err)
+			continue
 		}
 		if !ent.IsDir() {
-			skipped = true
+			keep = true
 			continue
 		}
 
-		isDelete := false
-		if ent.Name() == "bvnn" {
-			isDelete = true
-		} else if ent.Name() == "dnn" {
-			isDelete = true
-		}
-		if isDelete {
+		switch strings.ToLower(ent.Name()) {
+		case "dnn", "bvnn":
 			dir := path.Join(dir, ent.Name())
 			fmt.Fprintf(os.Stderr, "Deleting %s\n", dir)
 			err = os.RemoveAll(dir)
 			check(err)
-		} else {
+
+		default:
 			dir := path.Join(dir, ent.Name())
 			fmt.Fprintf(os.Stderr, "Skipping %s\n", dir)
-			skipped = true
+			keep = true
 		}
 	}
-	return !skipped
+	return !keep
 }
 
 func findInDescribe(addr string, partitionId string, d *cfg.Network) (partition *cfg.Partition, node *cfg.Node, err error) {
@@ -470,7 +470,10 @@ func initNodeFromPeer(cmd *cobra.Command, args []string) (int, *cfg.Config, *typ
 		u, err := url.Parse(peer.URL)
 		checkf(err, "failed to parse url from network info %s", peer.URL)
 
-		clientUrl := fmt.Sprintf("tcp://%s:%s", u.Hostname(), u.Port())
+		port, err := strconv.ParseInt(u.Port(), 10, 64)
+		checkf(err, "failed to parse port for peer: %q", u.Port())
+
+		clientUrl := fmt.Sprintf("tcp://%s:%d", u.Hostname(), port+int64(cfg.PortOffsetTendermintRpc))
 
 		if !flagInitNode.AllowUnhealthyPeers {
 			//check the health of the peer
