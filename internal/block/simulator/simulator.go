@@ -329,7 +329,12 @@ func (s *Simulator) RunAndReset(fn func()) {
 }
 
 func (s *Simulator) InitFromGenesis() {
-	s.InitFromGenesisWith(nil)
+	// Disable the sliding fee schedule
+	values := new(core.GlobalValues)
+	values.Globals = new(protocol.NetworkGlobals)
+	values.Globals.FeeSchedule = new(protocol.FeeSchedule)
+
+	s.InitFromGenesisWith(values)
 }
 
 func (s *Simulator) InitFromGenesisWith(values *core.GlobalValues) {
