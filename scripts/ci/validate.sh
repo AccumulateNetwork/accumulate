@@ -32,7 +32,7 @@ done
 accumulate account get ${LITE_ACME} 1> /dev/null && success || die "Cannot find ${LITE_ACME}"
 
 section "Add credits to lite account"
-TXID=$(cli-tx credits ${LITE_ACME} ${LITE_ID} 2700)
+TXID=$(cli-tx credits ${LITE_ACME} ${LITE_ID} 1000000)
 wait-for-tx $TXID
 BALANCE=$(accumulate -j account get ${LITE_ID} | jq -r .data.creditBalance)
 [ "$BALANCE" -ge 2700 ] || die "${LITE_ID} should have at least 2700 credits but only has ${BALANCE}"
