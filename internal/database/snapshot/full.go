@@ -23,10 +23,16 @@ func FullCollect(batch *database.Batch, file io.WriteSeeker, network *config.Des
 		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
-	// Collect anchors
+	err = CollectAnchors(w, batch, network)
+	return errors.Wrap(errors.StatusUnknownError, err)
+}
+
+// CollectAnchors collects anchors from the anchor ledger's anchor sequence
+// chain.
+func CollectAnchors(w *Writer, batch *database.Batch, network *config.Describe) error {
 	txnHashes := new(HashSet)
 	record := batch.Account(network.AnchorPool())
-	err = txnHashes.CollectFromChain(record.AnchorSequenceChain())
+	err := txnHashes.CollectFromChain(record.AnchorSequenceChain())
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknownError, err)
 	}

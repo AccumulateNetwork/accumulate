@@ -64,22 +64,6 @@ func TestState(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, blockHash, blockHash2)
 		require.Equal(t, bptRoot, b.BptRoot())
-
-		// Verify that transactions and signatures are saved
-		c, err := b.Account(protocol.FaucetUrl).MainChain().Get()
-		require.NoError(t, err)
-		hash, err := c.Entry(0)
-		require.NoError(t, err)
-		_, err = b.Transaction(hash).Main().Get()
-		require.NoError(t, err)
-
-		c, err = b.Account(protocol.FaucetUrl).SignatureChain().Get()
-		require.NoError(t, err)
-		hash, err = c.Entry(0)
-		require.NoError(t, err)
-		_, err = b.Transaction(hash).Main().Get()
-		require.NoError(t, err)
-
 		return nil
 	}))
 

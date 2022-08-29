@@ -147,9 +147,15 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) ([]byte, error) {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
+	// Preserve history in the Genesis snapshot
 	batch := b.db.Begin(false)
 	defer batch.Discard()
-	err = snapshot.FullCollect(batch, snapshotWriter, &exec.Describe)
+	w, err := snapshot.Collect(batch, snapshotWriter, func(account *database.Account) (bool, error) { return true, nil })
+	if err != nil {
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
+	}
+
+	err = snapshot.CollectAnchors(w, batch, &exec.Describe)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
