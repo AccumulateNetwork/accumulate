@@ -19,7 +19,7 @@ Faucet(liteTokenAddr).
 	Wait().Ok()
 Transaction(liteTokenAddr).
 	WithSigner(liteTokenAddr).
-	AddCredits(liteTokenAddr, 200).
+	AddCredits(liteTokenAddr, 200000).
 		Oracle(5).
 	Initiate(liteKey).
 	Submit().Wait().Ok()
