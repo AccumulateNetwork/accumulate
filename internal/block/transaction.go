@@ -555,7 +555,7 @@ func (x *Executor) recordFailedTransaction(batch *database.Batch, delivery *chai
 	}
 
 	// But only if the paid paid is larger than the max failure paid
-	paid, err := protocol.ComputeTransactionFee(delivery.Transaction)
+	paid, err := x.globals.Active.Globals.FeeSchedule.ComputeTransactionFee(delivery.Transaction)
 	if err != nil {
 		return nil, nil, fmt.Errorf("compute fee: %w", err)
 	}

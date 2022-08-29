@@ -542,7 +542,7 @@ func (x *Executor) verifyPageIsAuthorized(batch *database.Batch, transaction *pr
 // fee + signature data surcharge + transaction data surcharge.
 //
 // Otherwise, the fee is the base signature fee + signature data surcharge.
-func computeSignerFee(transaction *protocol.Transaction, signature protocol.KeySignature, md sigExecMetadata) (protocol.Fee, error) {
+func (x *Executor) computeSignerFee(transaction *protocol.Transaction, signature protocol.KeySignature, md sigExecMetadata) (protocol.Fee, error) {
 	// Don't charge fees for internal administrative functions
 	signer := signature.GetSigner()
 	_, isBvn := protocol.ParsePartitionUrl(signer)
@@ -551,7 +551,7 @@ func computeSignerFee(transaction *protocol.Transaction, signature protocol.KeyS
 	}
 
 	// Compute the signature fee
-	fee, err := protocol.ComputeSignatureFee(signature)
+	fee, err := x.globals.Active.Globals.FeeSchedule.ComputeSignatureFee(signature)
 	if err != nil {
 		return 0, errors.Wrap(errors.StatusUnknownError, err)
 	}
@@ -562,7 +562,7 @@ func computeSignerFee(transaction *protocol.Transaction, signature protocol.KeyS
 	}
 
 	// Add the transaction fee for the initial signature
-	txnFee, err := protocol.ComputeTransactionFee(transaction)
+	txnFee, err := x.globals.Active.Globals.FeeSchedule.ComputeTransactionFee(transaction)
 	if err != nil {
 		return 0, errors.Wrap(errors.StatusUnknownError, err)
 	}
@@ -592,7 +592,7 @@ func (x *Executor) validateKeySignature(batch *database.Batch, delivery *chain.D
 	}
 
 	// Ensure the signer has sufficient credits for the fee
-	fee, err := computeSignerFee(delivery.Transaction, signature, md)
+	fee, err := x.computeSignerFee(delivery.Transaction, signature, md)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
@@ -657,7 +657,7 @@ func (x *Executor) processKeySignature(batch *database.Batch, delivery *chain.De
 	}
 
 	// Charge the fee
-	fee, err := computeSignerFee(delivery.Transaction, signature, md)
+	fee, err := x.computeSignerFee(delivery.Transaction, signature, md)
 	if err != nil {
 		return nil, errors.Format(errors.StatusBadRequest, "calculating fee: %w", err)
 	}
