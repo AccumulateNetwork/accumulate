@@ -16,7 +16,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -148,9 +147,10 @@ func TestSendTokensToBadRecipient2(t *testing.T) {
 	sim.MustSubmitAndExecuteBlock(env)
 	sim.WaitForTransactionFlow(delivered, env.Transaction[0].GetHash())
 
-	fee, err := protocol.ComputeTransactionFee(env.Transaction[0])
+	s := sim.PartitionFor(aliceUrl).Executor.ActiveGlobals_TESTONLY().Globals.FeeSchedule
+	fee, err := s.ComputeTransactionFee(env.Transaction[0])
 	require.NoError(t, err)
-	refund, err := protocol.ComputeSyntheticRefund(env.Transaction[0], len(exch.To))
+	refund, err := s.ComputeSyntheticRefund(env.Transaction[0], len(exch.To))
 	require.NoError(t, err)
 
 	lid := simulator.GetAccount[*LiteIdentity](sim, aliceUrl.RootIdentity())
