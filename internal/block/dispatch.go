@@ -197,7 +197,7 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 				}
 
 				for _, r := range results {
-					if r.Error != nil {
+					if r.Error != nil && r.Code != errors.StatusDelivered {
 						errs <- &txnDispatchError{types[r.TxID.Hash()], r}
 					}
 				}
