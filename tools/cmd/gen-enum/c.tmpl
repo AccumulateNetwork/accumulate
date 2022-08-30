@@ -11,7 +11,7 @@ extern "C" {
 #else
 #define ACME_API extern
 #endif
-#include <accumulate/common/encoding.h>
+#include <accumulate/common/encoding/encoding.h>
 
 typedef struct {
    const char *name;
@@ -52,12 +52,12 @@ ACME_API Error {{.Name}}_unmarshalBinary(Bytes *v, const Marshaler *in);
 
 ACME_API Error {{.Name}}_valid(const Bytes *v) {
     if (!v) {
-        return ErrorCode[ErrorParameterNil];
+        return ErrorCode(ErrorParameterNil);
     }
     if (v->buffer.size != sizeof({{.Name}})) {
-        return ErrorCode[ErrorBufferTooSmall];
+        return ErrorCode(ErrorBufferTooSmall);
     }
-    return ErrorCode[ErrorNone];
+    return ErrorCode(ErrorNone);
 }
 
 ACME_API Error {{.Name}}_set(Bytes *v, {{.Name}} n) {
@@ -67,7 +67,7 @@ ACME_API Error {{.Name}}_set(Bytes *v, {{.Name}} n) {
     }
 
     *(uint64_t*)(v->buffer.ptr+v->buffer.offset) = n;
-    return ErrorCode[ErrorNone];
+    return ErrorCode(ErrorNone);
 }
 
 ACME_API Error {{.Name}}_get(const Bytes *v, {{.Name}} *n) {
@@ -77,11 +77,11 @@ ACME_API Error {{.Name}}_get(const Bytes *v, {{.Name}} *n) {
     }
 
     if (!n) {
-        return ErrorCode[ErrorParameterNil];
+        return ErrorCode(ErrorParameterNil);
     }
 
     *n = *({{.Name}}*)(v->buffer.ptr+v->buffer.offset);
-    return ErrorCode[ErrorNone];
+    return ErrorCode(ErrorNone);
 }
 
 
@@ -106,10 +106,10 @@ ACME_API Error {{.Name}}_asString(const Bytes *v, String *out) {
     for ( int i = 0; i < sizeof({{.Name}}_l); ++i ) {
         if ( {{.Name}}_l[i].e == val ) {
             out->set(&out->data, {{.Name}}_l[i].name);
-            return ErrorCode[ErrorNone];
+            return ErrorCode(ErrorNone);
         }
     }
-    return ErrorCode[ErrorTypeNotFound];
+    return ErrorCode(ErrorTypeNotFound);
 }
 
 // {{.Name}}ByName returns the named {{natural .Name}}.
@@ -125,14 +125,13 @@ ACME_API Error {{.Name}}_fromString(Bytes *v, String *name) {
             return e;
         }
     }
-    e.code = ErrorTypeNotFound;
-    return e;
+    return ErrorCode(ErrorTypeNotFound);
 }
 
 // {{.Name}}_marshalJSON marshals the {{natural .Name}} to JSON as a string.
 ACME_API Error {{.Name}}_marshalJSON(const Bytes *v, Marshaler *out) {
     if (!v || !out ) {
-        return ErrorCode[ErrorParameterNil];
+        return ErrorCode(ErrorParameterNil);
     }
     Error e = {{.Name}}_valid(v);
     if (e.code != ErrorNone) {
@@ -152,7 +151,7 @@ ACME_API Error {{.Name}}_marshalJSON(const Bytes *v, Marshaler *out) {
 // {{.Name}}_unmarshalJSON unmarshals the {{natural .Name}} from JSON as a string.
 ACME_API Error {{.Name}}_unmarshalJSON(Bytes *v, const Marshaler *in) {
     if (!v || !in ) {
-        return ErrorCode[ErrorParameterNil];
+        return ErrorCode(ErrorParameterNil);
     }
     Error e = {{.Name}}_valid(v);
     if (e.code != ErrorNone) {
@@ -173,7 +172,7 @@ ACME_API Error {{.Name}}_unmarshalJSON(Bytes *v, const Marshaler *in) {
 // MarshalBinary marshals the {{natural .Name}} to bytes as a unsigned varint.
 ACME_API Error {{.Name}}_marshalBinary(const Bytes *v, Marshaler *out) {
     if ( !out ) {
-        return ErrorCode[ErrorParameterNil];
+        return ErrorCode(ErrorParameterNil);
     }
     Error e = {{.Name}}_valid(v);
     if (e.code != ErrorNone) {
@@ -181,7 +180,7 @@ ACME_API Error {{.Name}}_marshalBinary(const Bytes *v, Marshaler *out) {
     }
 
     if ( !buffer_can_read(&out->cache, VarInt_binarySize(v)) ) {
-        return ErrorCode[ErrorParameterInsufficientData];
+        return ErrorCode(ErrorParameterInsufficientData);
     }
     {{.Name}} n;
     e = {{.Name}}_get(v, &n);
@@ -193,15 +192,15 @@ ACME_API Error {{.Name}}_marshalBinary(const Bytes *v, Marshaler *out) {
     out->cache.offset += r;
     out->data.buffer.size += r;
     if ( r < 0 ) {
-        return ErrorCode[ErrorVarIntWrite];
+        return ErrorCode(ErrorVarIntWrite);
     }
-    return ErrorCode[ErrorNone];
+    return ErrorCode(ErrorNone);
 }
 
 // UnmarshalBinary unmarshals the {{natural .Name}} from bytes as a unsigned varint.
 ACME_API Error {{.Name}}_unmarshalBinary(Bytes *v, const Marshaler *in) {
     if ( !in ) {
-        return ErrorCode[ErrorParameterNil];
+        return ErrorCode(ErrorParameterNil);
     }
     Error e = {{.Name}}_valid(v);
     if (e.code != ErrorNone) {
@@ -211,10 +210,10 @@ ACME_API Error {{.Name}}_unmarshalBinary(Bytes *v, const Marshaler *in) {
     uint64_t t = 0;
     int r = varint_read((uint8_t*)in->data.buffer.ptr+in->data.buffer.offset, in->data.buffer.size,&t);
 	if ( r < 0 ) {
-		return ErrorCode[ErrorVarIntRead];
+		return ErrorCode(ErrorVarIntRead);
 	}
 	{{.Name}}_set(v,({{.Name}})t);
-	return ErrorCode[ErrorNone];
+	return ErrorCode(ErrorNone);
 }
 
 // {{.Name}}_binarySize returns the number of bytes required to binary marshal the {{natural .Name}}.
