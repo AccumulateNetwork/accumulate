@@ -75,6 +75,10 @@ BlockLedger:
       marshal-as: reference
       pointer: true
       repeatable: true
+    - name: Index
+      type: uint
+    - name: Time
+      type: time
 
 ##### Transactions #####
 

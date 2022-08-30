@@ -1,0 +1,34 @@
+QueryRecordOptions:
+  fields:
+    - name: IncludeReceipt
+      description: requests a Merkle receipt
+      type: bool
+      optional: true
+    - name: WaitForRecord
+      description: blocks until the record is available
+      type: duration
+      optional: true
+    - name: OnlyDelivered
+      description: ignores incomplete transactions
+      type: bool
+      optional: true
+
+QueryRecordSetOptions:
+  fields:
+    - name: Start
+      description: is the starting index
+      type: bool
+      optional: true
+    - name: Count
+      description: is the number of requested results
+      type: bool
+      optional: true
+
+# SearchOptions:
+#   fields:
+#     - name: Kind
+#       description: is the kind of record to search for
+#       type: string
+
+SubmitOptions:
+  fields:

@@ -1,0 +1,46 @@
+NodeStatus:
+  fields:
+    - name: Ok
+      type: bool
+    - name: LastBlock
+      type: LastBlock
+      marshal-as: reference
+      pointer: true
+
+NodeVersion:
+  fields:
+    - name: Version
+      type: string
+    - name: Commit
+      type: string
+    - name: VersionIsKnown
+      type: bool
+
+NodeDescription:
+  non-binary: true
+  incomparable: true
+  fields:
+    - name: ValidatorKeyHash
+      type: hash
+    - name: Network
+      type: protocol.NetworkDefinition
+      marshal-as: reference
+      pointer: true
+
+NodeMetrics:
+  fields:
+    - name: TPS
+      type: float
+      keep-empty: true
+
+Submission:
+  fields:
+    - name: Transaction
+      type: txid
+    - name: Signatures
+      type: txid
+      repeatable: true
+    - name: Status
+      type: protocol.TransactionStatus
+      marshal-as: reference
+      pointer: true

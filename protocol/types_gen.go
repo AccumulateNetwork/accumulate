@@ -149,6 +149,8 @@ type BlockLedger struct {
 	fieldsSet []bool
 	Url       *url.URL      `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	Entries   []*BlockEntry `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
+	Index     uint64        `json:"index,omitempty" form:"index" query:"index" validate:"required"`
+	Time      time.Time     `json:"time,omitempty" form:"time" query:"time" validate:"required"`
 	extraData []byte
 }
 
@@ -1323,6 +1325,8 @@ func (v *BlockLedger) Copy() *BlockLedger {
 			u.Entries[i] = (v).Copy()
 		}
 	}
+	u.Index = v.Index
+	u.Time = v.Time
 
 	return u
 }
@@ -3003,6 +3007,12 @@ func (v *BlockLedger) Equal(u *BlockLedger) bool {
 		if !((v.Entries[i]).Equal(u.Entries[i])) {
 			return false
 		}
+	}
+	if !(v.Index == u.Index) {
+		return false
+	}
+	if !(v.Time == u.Time) {
+		return false
 	}
 
 	return true
@@ -5622,6 +5632,8 @@ var fieldNames_BlockLedger = []string{
 	1: "Type",
 	2: "Url",
 	3: "Entries",
+	4: "Index",
+	5: "Time",
 }
 
 func (v *BlockLedger) MarshalBinary() ([]byte, error) {
@@ -5636,6 +5648,12 @@ func (v *BlockLedger) MarshalBinary() ([]byte, error) {
 		for _, v := range v.Entries {
 			writer.WriteValue(3, v.MarshalBinary)
 		}
+	}
+	if !(v.Index == 0) {
+		writer.WriteUint(4, v.Index)
+	}
+	if !(v.Time == (time.Time{})) {
+		writer.WriteTime(5, v.Time)
 	}
 
 	_, _, err := writer.Reset(fieldNames_BlockLedger)
@@ -5661,6 +5679,16 @@ func (v *BlockLedger) IsValid() error {
 		errs = append(errs, "field Entries is missing")
 	} else if len(v.Entries) == 0 {
 		errs = append(errs, "field Entries is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Index is missing")
+	} else if v.Index == 0 {
+		errs = append(errs, "field Index is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field Time is missing")
+	} else if v.Time == (time.Time{}) {
+		errs = append(errs, "field Time is not set")
 	}
 
 	switch len(errs) {
@@ -11338,6 +11366,12 @@ func (v *BlockLedger) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
+	if x, ok := reader.ReadUint(4); ok {
+		v.Index = x
+	}
+	if x, ok := reader.ReadTime(5); ok {
+		v.Time = x
+	}
 
 	seen, err := reader.Reset(fieldNames_BlockLedger)
 	if err != nil {
@@ -14698,10 +14732,14 @@ func (v *BlockLedger) MarshalJSON() ([]byte, error) {
 		Type    AccountType                    `json:"type"`
 		Url     *url.URL                       `json:"url,omitempty"`
 		Entries encoding.JsonList[*BlockEntry] `json:"entries,omitempty"`
+		Index   uint64                         `json:"index,omitempty"`
+		Time    time.Time                      `json:"time,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
 	u.Entries = v.Entries
+	u.Index = v.Index
+	u.Time = v.Time
 	return json.Marshal(&u)
 }
 
@@ -16176,10 +16214,14 @@ func (v *BlockLedger) UnmarshalJSON(data []byte) error {
 		Type    AccountType                    `json:"type"`
 		Url     *url.URL                       `json:"url,omitempty"`
 		Entries encoding.JsonList[*BlockEntry] `json:"entries,omitempty"`
+		Index   uint64                         `json:"index,omitempty"`
+		Time    time.Time                      `json:"time,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
 	u.Entries = v.Entries
+	u.Index = v.Index
+	u.Time = v.Time
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -16188,6 +16230,8 @@ func (v *BlockLedger) UnmarshalJSON(data []byte) error {
 	}
 	v.Url = u.Url
 	v.Entries = u.Entries
+	v.Index = u.Index
+	v.Time = u.Time
 	return nil
 }
 

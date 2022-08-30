@@ -2,6 +2,7 @@ package accumulated
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"io"
 	"net"
@@ -29,7 +30,9 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node"
+	nodeapi "gitlab.com/accumulatenetwork/accumulate/internal/node/api"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/jsonrpc"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 )
 
@@ -240,7 +243,25 @@ func (d *Daemon) Start() (err error) {
 	}
 
 	// Run JSON-RPC server
-	d.api = &http.Server{Handler: d.jrpc.NewMux()}
+	nodeService := nodeapi.NewNodeService(nodeapi.NodeServiceParams{
+		Logger:           d.Logger.With("module", "api"),
+		Local:            lclient,
+		Database:         d.db,
+		Partition:        d.Config.Accumulate.PartitionId,
+		EventBus:         d.eventBus,
+		ValidatorKeyHash: sha256.Sum256(d.Key().Bytes()),
+	})
+	v3, err := jsonrpc.Handler(
+		d.Logger.With("module", "json-rpc"),
+		jsonrpc.NodeService{NodeService: nodeService},
+	)
+	if err != nil {
+		return fmt.Errorf("failed to start JSON-RPC: %v", err)
+	}
+
+	mux := d.jrpc.NewMux()
+	mux.Handle("/v3", v3)
+	d.api = &http.Server{Handler: mux}
 	l, secure, err := listenHttpUrl(d.Config.Accumulate.API.ListenAddress)
 	if err != nil {
 		return fmt.Errorf("failed to start JSON-RPC: %v", err)
