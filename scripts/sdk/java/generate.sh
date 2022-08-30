@@ -8,7 +8,7 @@ if [ -z "$1" ]; then
     exit 1
 fi
 
-mkdir $1
+mkdir -p $1
 declare outDir="$( cd -- "$1" &> /dev/null && pwd )"
 
 # Make sure we're within the java directory
