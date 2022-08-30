@@ -17,13 +17,14 @@ import (
 var flags struct {
 	files typegen.FileReader
 
-	Package        string
-	SubPackage     string
-	Out            string
-	Language       string
-	Reference      []string
-	FilePerType    bool
-	ExpandEmbedded bool
+	Package                string
+	SubPackage             string
+	Out                    string
+	Language               string
+	Reference              []string
+	FilePerType            bool
+	ExpandEmbedded         bool
+	LongUnionDiscriminator bool
 }
 
 func main() {
@@ -39,6 +40,7 @@ func main() {
 	cmd.Flags().StringVarP(&flags.Out, "out", "o", "types_gen.go", "Output file")
 	cmd.Flags().StringSliceVar(&flags.Reference, "reference", nil, "Extra type definition files to use as a reference")
 	cmd.Flags().BoolVar(&flags.FilePerType, "file-per-type", false, "Generate a separate file for each type")
+	cmd.Flags().BoolVar(&flags.LongUnionDiscriminator, "long-union-discriminator", false, "Use the full name of the union type for the discriminator method")
 	flags.files.SetFlags(cmd.Flags(), "types")
 
 	_ = cmd.Execute()

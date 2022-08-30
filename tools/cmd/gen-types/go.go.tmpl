@@ -56,8 +56,9 @@ type {{.Name}} struct {
 }
 {{end}}
 
+{{ $lud := .LongUnionDiscriminator }}
 {{range .Types}}{{if .IsUnion}}
-func (*{{.Name}}) Type() {{.UnionType}} { return {{.UnionType}}{{.UnionValue}} }
+func (*{{.Name}}) {{if $lud}}{{.UnionType}}{{else}}Type{{end}}() {{.UnionType}} { return {{.UnionType}}{{.UnionValue}} }
 {{end}}{{end}}
 
 {{range .Types}}{{if .IsComparable}}

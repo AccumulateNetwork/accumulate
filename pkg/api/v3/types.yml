@@ -1,0 +1,12 @@
+LastBlock:
+  fields:
+    - name: Height
+      type: int
+    - name: Time
+      type: time
+    - name: ChainRoot
+      type: hash
+    - name: StateRoot
+      type: hash
+    - name: DirectoryAnchorHeight
+      type: uint

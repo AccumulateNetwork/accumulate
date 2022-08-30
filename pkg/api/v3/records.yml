@@ -1,0 +1,49 @@
+AccountRecord:
+  union: { type: record }
+  fields:
+    - name: Account
+      type: protocol.Account
+      marshal-as: union
+    - name: Receipt
+      type: managed.Receipt
+      marshal-as: reference
+      pointer: true
+
+TransactionRecord:
+  # Don't add signatures until after AC-2230
+  union: { type: record }
+  fields:
+    - name: TxID
+      type: txid
+      pointer: true
+    - name: Transaction
+      type: protocol.Transaction
+      marshal-as: reference
+      pointer: true
+    - name: Status
+      type: protocol.TransactionStatus
+      marshal-as: reference
+      pointer: true
+    - name: Produced
+      alternative: SyntheticTxids
+      type: txid
+      pointer: true
+      repeatable: true
+    - name: Receipt
+      type: managed.Receipt
+      marshal-as: reference
+      pointer: true
+
+ChainRecord:
+  union: { type: record }
+  fields:
+    - name: Name
+      type: string
+    - name: Type
+      type: managed.ChainType
+      marshal-as: enum
+    - name: Count
+      type: uint
+    - name: State
+      type: bytes
+      repeatable: true

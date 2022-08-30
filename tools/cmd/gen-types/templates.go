@@ -16,6 +16,7 @@ func convert(types, refTypes typegen.Types, pkgName, subPkgName, pkgPath string)
 	// Initialize
 	ttypes := new(Types)
 	ttypes.Package = pkgName
+	ttypes.LongUnionDiscriminator = flags.LongUnionDiscriminator
 	PackagePath = pkgPath
 	lup := map[string]*Type{}
 	unions := map[string]*UnionSpec{}
@@ -55,7 +56,11 @@ func convert(types, refTypes typegen.Types, pkgName, subPkgName, pkgPath string)
 		// Unions have a virtual field for the discriminator
 		if typ.IsUnion() {
 			field := new(Field)
-			field.Name = "Type"
+			if flags.LongUnionDiscriminator {
+				field.Name = typ.UnionType()
+			} else {
+				field.Name = "Type"
+			}
 			field.Type.SetNamed(typ.UnionSpec.Enumeration())
 			field.MarshalAs = typegen.MarshalAsEnum
 			field.KeepEmpty = true
@@ -153,9 +158,10 @@ func convert(types, refTypes typegen.Types, pkgName, subPkgName, pkgPath string)
 }
 
 type Types struct {
-	Package string
-	Types   []*Type
-	Unions  []*UnionSpec
+	Package                string
+	LongUnionDiscriminator bool
+	Types                  []*Type
+	Unions                 []*UnionSpec
 }
 
 type SingleTypeFile struct {
