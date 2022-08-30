@@ -101,9 +101,8 @@
       "args": [
         "run-dual",
         "--truncate",
-        "--debug",
-        "${workspaceFolder}/.nodes/dn/Node0",
-        "${workspaceFolder}/.nodes/bvn0/Node0",
+        "${workspaceFolder}/.nodes/node-1/dnn",
+        "${workspaceFolder}/.nodes/node-1/bvnn",
       ]
     },
     {
