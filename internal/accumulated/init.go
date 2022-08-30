@@ -167,7 +167,7 @@ func ConfigureNodePorts(node *NodeInit, cfg *config.Config, offset config.PortOf
 	cfg.Accumulate.API.ListenAddress = node.Address(ListenAddress, "http", offset, config.PortOffsetAccumulateApi)
 }
 
-func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time time.Time, logger log.Logger, factomAddresses func() (io.Reader, error)) (map[string]*tmtypes.GenesisDoc, error) {
+func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time time.Time, logger log.Logger, factomAddresses func() (io.Reader, error), snapshots []func() (ioutil2.SectionReader, error)) (map[string]*tmtypes.GenesisDoc, error) {
 	docs := map[string]*tmtypes.GenesisDoc{}
 	var operators [][]byte
 	netinfo := new(protocol.NetworkDefinition)
@@ -241,6 +241,7 @@ func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time tim
 			GenesisGlobals:  globals,
 			OperatorKeys:    operators,
 			FactomAddresses: factomAddresses,
+			Snapshots:       snapshots,
 		})
 		if err != nil {
 			return nil, err

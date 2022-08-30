@@ -1,8 +1,9 @@
 package managed
 
 import (
-	"errors"
 	"fmt"
+
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 )
 
 // GetRange
@@ -36,14 +37,22 @@ func (m *MerkleManager) GetRange(begin, end int64) (hashes []Hash, err error) {
 	var hl []Hash // Collect all the hashes of the mark points covering the range of begin-end
 	marks := (end-(begin&^m.markMask))/m.markFreq + 1
 	for i := int64(0); i < marks; i++ {
+		last := markPoint
 		markPoint += m.markFreq
 		if s = m.GetState(markPoint - 1); s != nil {
+			if len(s.HashList) != int(m.markFreq) {
+				return nil, errors.Format(errors.StatusIncompleteChain, "markpoint %d: expected %d entries, got %d", i, m.markFreq, len(s.HashList))
+			}
 			hl = append(hl, s.HashList...)
 		} else {
 			s, err = m.Head().Get()
 			if err != nil {
-				return nil, errors.New("a chain should always have a chain state")
+				return nil, errors.New(errors.StatusInternalError, "a chain should always have a chain state")
 			}
+			if len(s.HashList) != int(s.Count-last) {
+				return nil, errors.Format(errors.StatusIncompleteChain, "head: expected %d entries, got %d", s.Count-last, len(s.HashList))
+			}
+
 			hl = append(hl, s.HashList...)
 			break
 		}

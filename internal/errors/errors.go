@@ -178,6 +178,9 @@ func (e *Error) Format(f fmt.State, verb rune) {
 }
 
 func (e *Error) Print() string {
+	if e.CallStack == nil {
+		return e.Error()
+	}
 	var str []string
 	for e != nil {
 		str = append(str, e.Message+"\n"+e.printCallstack())
