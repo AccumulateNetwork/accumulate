@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/tendermint/tendermint/libs/log"
+	"github.com/tendermint/tendermint/rpc/client"
 	rpc "github.com/tendermint/tendermint/rpc/client"
 	"github.com/tendermint/tendermint/rpc/client/http"
-	"github.com/tendermint/tendermint/rpc/client/local"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2/query"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -25,7 +25,7 @@ type ConnectionManager interface {
 
 type ConnectionInitializer interface {
 	ConnectionManager
-	InitClients(*local.Local, StatusChecker) error
+	InitClients(client.Client, StatusChecker) error
 	ConnectDirectly(other ConnectionManager) error
 }
 
@@ -36,7 +36,7 @@ type connectionManager struct {
 	fnCtxList   []ConnectionContext
 	all         []ConnectionContext
 	localCtx    ConnectionContext
-	localClient *local.Local
+	localClient client.Client
 	logger      log.Logger
 	localHost   string
 
@@ -269,7 +269,7 @@ func (cm *connectionManager) reformatAddress(address string) string {
 	return url.Host
 }
 
-func (cm *connectionManager) InitClients(lclClient *local.Local, statusChecker StatusChecker) error {
+func (cm *connectionManager) InitClients(lclClient client.Client, statusChecker StatusChecker) error {
 	cm.localClient = lclClient
 
 	for _, connCtxList := range cm.bvnCtxMap {

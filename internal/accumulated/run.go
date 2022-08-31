@@ -16,6 +16,7 @@ import (
 	"github.com/tendermint/tendermint/crypto"
 	tmlog "github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/privval"
+	tmclient "github.com/tendermint/tendermint/rpc/client"
 	"github.com/tendermint/tendermint/rpc/client/local"
 	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/config"
@@ -45,6 +46,7 @@ type Daemon struct {
 	jrpc              *api.JrpcMethods
 	connectionManager connections.ConnectionInitializer
 	eventBus          *events.Bus
+	localTm           tmclient.Client
 
 	// knobs for tests
 	// IsTest   bool
@@ -202,7 +204,7 @@ func (d *Daemon) Start() (err error) {
 	if !ok {
 		return fmt.Errorf("node is not a local node service")
 	}
-	lclient, err := local.New(lnode)
+	d.localTm, err = local.New(lnode)
 	if err != nil {
 		return fmt.Errorf("failed to create local node client: %v", err)
 	}
@@ -228,7 +230,7 @@ func (d *Daemon) Start() (err error) {
 
 	// Let the connection manager create and assign clients
 	statusChecker := statuschk.NewNodeStatusChecker()
-	err = d.connectionManager.InitClients(lclient, statusChecker)
+	err = d.connectionManager.InitClients(d.localTm, statusChecker)
 
 	if err != nil {
 		return fmt.Errorf("failed to initialize the connection manager: %v", err)
