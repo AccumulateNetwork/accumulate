@@ -699,6 +699,14 @@ func (x *Executor) buildDirectoryAnchor(block *Block, systemLedger *protocol.Sys
 		anchor.MakeMajorBlockTime = anchorLedger.MajorBlockTime
 	}
 
+	// Load the synthetic ledger
+	var synthLedger *protocol.SyntheticLedger
+	err := block.Batch.Account(x.Describe.Synthetic()).Main().GetAs(&synthLedger)
+	if err != nil {
+		return nil, errors.Format(errors.StatusUnknownError, "load synthetic ledger: %w", err)
+	}
+	anchor.Synthetic = synthLedger.Exchange
+
 	// Load the root chain
 	rootChain, err := block.Batch.Account(x.Describe.Ledger()).RootChain().Get()
 	if err != nil {
@@ -757,5 +765,14 @@ func (x *Executor) buildPartitionAnchor(block *Block, ledger *protocol.SystemLed
 	anchor.MinorBlockIndex = uint64(block.Index)
 	anchor.MajorBlockIndex = block.State.MakeMajorBlock
 	anchor.AcmeBurnt = ledger.AcmeBurnt
+
+	// Load the synthetic ledger
+	var synthLedger *protocol.SyntheticLedger
+	err := block.Batch.Account(x.Describe.Synthetic()).Main().GetAs(&synthLedger)
+	if err != nil {
+		return nil, errors.Format(errors.StatusUnknownError, "load synthetic ledger: %w", err)
+	}
+	anchor.Synthetic = synthLedger.Exchange
+
 	return anchor, nil
 }

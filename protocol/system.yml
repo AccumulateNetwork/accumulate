@@ -153,6 +153,12 @@ PartitionAnchor:
     - name: StateTreeAnchor
       description: is the root of the source's state tree (BPT)
       type: hash
+    - name: Synthetic
+      description: lists synthetic transactions produced and received
+      type: TransactionExchangeLedger
+      marshal-as: reference
+      pointer: true
+      repeatable: true
 
 PartitionAnchorReceipt:
   fields:

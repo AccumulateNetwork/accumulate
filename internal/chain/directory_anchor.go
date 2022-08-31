@@ -77,22 +77,42 @@ func (DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Transa
 		}
 	}
 
-	// Record the latest anchored anchor
-	var ledger *protocol.AnchorLedger
-	err = st.batch.Account(st.AnchorPool()).Main().GetAs(&ledger)
+	// Acknowledge anchors and synthetic transactions
+	var anchorLedger *protocol.AnchorLedger
+	err = st.batch.Account(st.AnchorPool()).Main().GetAs(&anchorLedger)
 	if err != nil {
 		return nil, fmt.Errorf("load anchor ledger: %w", err)
 	}
-	dnLedger := ledger.Partition(body.Source)
-	var didUpdate bool
+	var synthLedger *protocol.SyntheticLedger
+	err = st.batch.Account(st.Synthetic()).Main().GetAs(&synthLedger)
+	if err != nil {
+		return nil, fmt.Errorf("load anchor ledger: %w", err)
+	}
+	var didUpdateAnchor, didUpdateSynth bool
 	for _, receipt := range body.Receipts {
-		if st.PartitionUrl().Equal(receipt.Anchor.Source) && receipt.SequenceNumber > dnLedger.Acknowledged {
-			dnLedger.Acknowledged = receipt.SequenceNumber
-			didUpdate = true
+		if st.PartitionUrl().Equal(receipt.Anchor.Source) {
+			ledger := anchorLedger.Partition(body.Source)
+			if receipt.SequenceNumber > ledger.Acknowledged {
+				ledger.Acknowledged = receipt.SequenceNumber
+				didUpdateAnchor = true
+			}
+		}
+
+		anchorTxl := receipt.Anchor.SynthFrom(st.PartitionUrl().URL)
+		localTxl := synthLedger.Partition(receipt.Anchor.Source)
+		if anchorTxl.Delivered > localTxl.Acknowledged {
+			localTxl.Acknowledged = anchorTxl.Delivered
+			didUpdateSynth = true
 		}
 	}
-	if didUpdate {
-		err = st.batch.Account(st.AnchorPool()).Main().Put(ledger)
+	if didUpdateAnchor {
+		err = st.batch.Account(st.AnchorPool()).Main().Put(anchorLedger)
+		if err != nil {
+			return nil, fmt.Errorf("store anchor ledger: %w", err)
+		}
+	}
+	if didUpdateSynth {
+		err = st.batch.Account(st.Synthetic()).Main().Put(synthLedger)
 		if err != nil {
 			return nil, fmt.Errorf("store anchor ledger: %w", err)
 		}

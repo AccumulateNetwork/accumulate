@@ -31,3 +31,13 @@ func (s *AnchorLedger) Partition(url *url.URL) *TransactionExchangeLedger {
 	}
 	return *ptr
 }
+
+func (a *PartitionAnchor) SynthFrom(url *url.URL) *TransactionExchangeLedger {
+	i, found := sortutil.Search(a.Synthetic, func(entry *TransactionExchangeLedger) int {
+		return entry.Url.Compare(url)
+	})
+	if !found {
+		return new(TransactionExchangeLedger)
+	}
+	return a.Synthetic[i]
+}

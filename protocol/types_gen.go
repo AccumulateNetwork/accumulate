@@ -524,7 +524,9 @@ type PartitionAnchor struct {
 	RootChainAnchor [32]byte `json:"rootChainAnchor,omitempty" form:"rootChainAnchor" query:"rootChainAnchor" validate:"required"`
 	// StateTreeAnchor is the root of the source's state tree (BPT).
 	StateTreeAnchor [32]byte `json:"stateTreeAnchor,omitempty" form:"stateTreeAnchor" query:"stateTreeAnchor" validate:"required"`
-	extraData       []byte
+	// Synthetic lists synthetic transactions produced and received.
+	Synthetic []*TransactionExchangeLedger `json:"synthetic,omitempty" form:"synthetic" query:"synthetic" validate:"required"`
+	extraData []byte
 }
 
 type PartitionAnchorReceipt struct {
@@ -1964,6 +1966,12 @@ func (v *PartitionAnchor) Copy() *PartitionAnchor {
 	u.RootChainIndex = v.RootChainIndex
 	u.RootChainAnchor = v.RootChainAnchor
 	u.StateTreeAnchor = v.StateTreeAnchor
+	u.Synthetic = make([]*TransactionExchangeLedger, len(v.Synthetic))
+	for i, v := range v.Synthetic {
+		if v != nil {
+			u.Synthetic[i] = (v).Copy()
+		}
+	}
 
 	return u
 }
@@ -3827,6 +3835,14 @@ func (v *PartitionAnchor) Equal(u *PartitionAnchor) bool {
 	}
 	if !(v.StateTreeAnchor == u.StateTreeAnchor) {
 		return false
+	}
+	if len(v.Synthetic) != len(u.Synthetic) {
+		return false
+	}
+	for i := range v.Synthetic {
+		if !((v.Synthetic[i]).Equal(u.Synthetic[i])) {
+			return false
+		}
 	}
 
 	return true
@@ -7946,6 +7962,7 @@ var fieldNames_PartitionAnchor = []string{
 	4: "RootChainIndex",
 	5: "RootChainAnchor",
 	6: "StateTreeAnchor",
+	7: "Synthetic",
 }
 
 func (v *PartitionAnchor) MarshalBinary() ([]byte, error) {
@@ -7969,6 +7986,11 @@ func (v *PartitionAnchor) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.StateTreeAnchor == ([32]byte{})) {
 		writer.WriteHash(6, &v.StateTreeAnchor)
+	}
+	if !(len(v.Synthetic) == 0) {
+		for _, v := range v.Synthetic {
+			writer.WriteValue(7, v.MarshalBinary)
+		}
 	}
 
 	_, _, err := writer.Reset(fieldNames_PartitionAnchor)
@@ -8011,6 +8033,11 @@ func (v *PartitionAnchor) IsValid() error {
 		errs = append(errs, "field StateTreeAnchor is missing")
 	} else if v.StateTreeAnchor == ([32]byte{}) {
 		errs = append(errs, "field StateTreeAnchor is not set")
+	}
+	if len(v.fieldsSet) > 7 && !v.fieldsSet[7] {
+		errs = append(errs, "field Synthetic is missing")
+	} else if len(v.Synthetic) == 0 {
+		errs = append(errs, "field Synthetic is not set")
 	}
 
 	switch len(errs) {
@@ -12765,6 +12792,13 @@ func (v *PartitionAnchor) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadHash(6); ok {
 		v.StateTreeAnchor = *x
 	}
+	for {
+		if x := new(TransactionExchangeLedger); reader.ReadValue(7, x.UnmarshalBinary) {
+			v.Synthetic = append(v.Synthetic, x)
+		} else {
+			break
+		}
+	}
 
 	seen, err := reader.Reset(fieldNames_PartitionAnchor)
 	if err != nil {
@@ -14695,14 +14729,15 @@ func (v *BlockLedger) MarshalJSON() ([]byte, error) {
 
 func (v *BlockValidatorAnchor) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type            TransactionType `json:"type"`
-		Source          *url.URL        `json:"source,omitempty"`
-		MajorBlockIndex uint64          `json:"majorBlockIndex,omitempty"`
-		MinorBlockIndex uint64          `json:"minorBlockIndex,omitempty"`
-		RootChainIndex  uint64          `json:"rootChainIndex,omitempty"`
-		RootChainAnchor string          `json:"rootChainAnchor,omitempty"`
-		StateTreeAnchor string          `json:"stateTreeAnchor,omitempty"`
-		AcmeBurnt       *string         `json:"acmeBurnt,omitempty"`
+		Type            TransactionType                               `json:"type"`
+		Source          *url.URL                                      `json:"source,omitempty"`
+		MajorBlockIndex uint64                                        `json:"majorBlockIndex,omitempty"`
+		MinorBlockIndex uint64                                        `json:"minorBlockIndex,omitempty"`
+		RootChainIndex  uint64                                        `json:"rootChainIndex,omitempty"`
+		RootChainAnchor string                                        `json:"rootChainAnchor,omitempty"`
+		StateTreeAnchor string                                        `json:"stateTreeAnchor,omitempty"`
+		Synthetic       encoding.JsonList[*TransactionExchangeLedger] `json:"synthetic,omitempty"`
+		AcmeBurnt       *string                                       `json:"acmeBurnt,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Source = v.PartitionAnchor.Source
@@ -14711,6 +14746,7 @@ func (v *BlockValidatorAnchor) MarshalJSON() ([]byte, error) {
 	u.RootChainIndex = v.PartitionAnchor.RootChainIndex
 	u.RootChainAnchor = encoding.ChainToJSON(v.PartitionAnchor.RootChainAnchor)
 	u.StateTreeAnchor = encoding.ChainToJSON(v.PartitionAnchor.StateTreeAnchor)
+	u.Synthetic = v.PartitionAnchor.Synthetic
 	u.AcmeBurnt = encoding.BigintToJSON(&v.AcmeBurnt)
 	return json.Marshal(&u)
 }
@@ -14859,17 +14895,18 @@ func (v *DelegatedSignature) MarshalJSON() ([]byte, error) {
 
 func (v *DirectoryAnchor) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type               TransactionType                            `json:"type"`
-		Source             *url.URL                                   `json:"source,omitempty"`
-		MajorBlockIndex    uint64                                     `json:"majorBlockIndex,omitempty"`
-		MinorBlockIndex    uint64                                     `json:"minorBlockIndex,omitempty"`
-		RootChainIndex     uint64                                     `json:"rootChainIndex,omitempty"`
-		RootChainAnchor    string                                     `json:"rootChainAnchor,omitempty"`
-		StateTreeAnchor    string                                     `json:"stateTreeAnchor,omitempty"`
-		Updates            encoding.JsonList[NetworkAccountUpdate]    `json:"updates,omitempty"`
-		Receipts           encoding.JsonList[*PartitionAnchorReceipt] `json:"receipts,omitempty"`
-		MakeMajorBlock     uint64                                     `json:"makeMajorBlock,omitempty"`
-		MakeMajorBlockTime time.Time                                  `json:"makeMajorBlockTime,omitempty"`
+		Type               TransactionType                               `json:"type"`
+		Source             *url.URL                                      `json:"source,omitempty"`
+		MajorBlockIndex    uint64                                        `json:"majorBlockIndex,omitempty"`
+		MinorBlockIndex    uint64                                        `json:"minorBlockIndex,omitempty"`
+		RootChainIndex     uint64                                        `json:"rootChainIndex,omitempty"`
+		RootChainAnchor    string                                        `json:"rootChainAnchor,omitempty"`
+		StateTreeAnchor    string                                        `json:"stateTreeAnchor,omitempty"`
+		Synthetic          encoding.JsonList[*TransactionExchangeLedger] `json:"synthetic,omitempty"`
+		Updates            encoding.JsonList[NetworkAccountUpdate]       `json:"updates,omitempty"`
+		Receipts           encoding.JsonList[*PartitionAnchorReceipt]    `json:"receipts,omitempty"`
+		MakeMajorBlock     uint64                                        `json:"makeMajorBlock,omitempty"`
+		MakeMajorBlockTime time.Time                                     `json:"makeMajorBlockTime,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Source = v.PartitionAnchor.Source
@@ -14878,6 +14915,7 @@ func (v *DirectoryAnchor) MarshalJSON() ([]byte, error) {
 	u.RootChainIndex = v.PartitionAnchor.RootChainIndex
 	u.RootChainAnchor = encoding.ChainToJSON(v.PartitionAnchor.RootChainAnchor)
 	u.StateTreeAnchor = encoding.ChainToJSON(v.PartitionAnchor.StateTreeAnchor)
+	u.Synthetic = v.PartitionAnchor.Synthetic
 	u.Updates = v.Updates
 	u.Receipts = v.Receipts
 	u.MakeMajorBlock = v.MakeMajorBlock
@@ -15233,12 +15271,13 @@ func (v *Object) MarshalJSON() ([]byte, error) {
 
 func (v *PartitionAnchor) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Source          *url.URL `json:"source,omitempty"`
-		MajorBlockIndex uint64   `json:"majorBlockIndex,omitempty"`
-		MinorBlockIndex uint64   `json:"minorBlockIndex,omitempty"`
-		RootChainIndex  uint64   `json:"rootChainIndex,omitempty"`
-		RootChainAnchor string   `json:"rootChainAnchor,omitempty"`
-		StateTreeAnchor string   `json:"stateTreeAnchor,omitempty"`
+		Source          *url.URL                                      `json:"source,omitempty"`
+		MajorBlockIndex uint64                                        `json:"majorBlockIndex,omitempty"`
+		MinorBlockIndex uint64                                        `json:"minorBlockIndex,omitempty"`
+		RootChainIndex  uint64                                        `json:"rootChainIndex,omitempty"`
+		RootChainAnchor string                                        `json:"rootChainAnchor,omitempty"`
+		StateTreeAnchor string                                        `json:"stateTreeAnchor,omitempty"`
+		Synthetic       encoding.JsonList[*TransactionExchangeLedger] `json:"synthetic,omitempty"`
 	}{}
 	u.Source = v.Source
 	u.MajorBlockIndex = v.MajorBlockIndex
@@ -15246,6 +15285,7 @@ func (v *PartitionAnchor) MarshalJSON() ([]byte, error) {
 	u.RootChainIndex = v.RootChainIndex
 	u.RootChainAnchor = encoding.ChainToJSON(v.RootChainAnchor)
 	u.StateTreeAnchor = encoding.ChainToJSON(v.StateTreeAnchor)
+	u.Synthetic = v.Synthetic
 	return json.Marshal(&u)
 }
 
@@ -16181,14 +16221,15 @@ func (v *BlockLedger) UnmarshalJSON(data []byte) error {
 
 func (v *BlockValidatorAnchor) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type            TransactionType `json:"type"`
-		Source          *url.URL        `json:"source,omitempty"`
-		MajorBlockIndex uint64          `json:"majorBlockIndex,omitempty"`
-		MinorBlockIndex uint64          `json:"minorBlockIndex,omitempty"`
-		RootChainIndex  uint64          `json:"rootChainIndex,omitempty"`
-		RootChainAnchor string          `json:"rootChainAnchor,omitempty"`
-		StateTreeAnchor string          `json:"stateTreeAnchor,omitempty"`
-		AcmeBurnt       *string         `json:"acmeBurnt,omitempty"`
+		Type            TransactionType                               `json:"type"`
+		Source          *url.URL                                      `json:"source,omitempty"`
+		MajorBlockIndex uint64                                        `json:"majorBlockIndex,omitempty"`
+		MinorBlockIndex uint64                                        `json:"minorBlockIndex,omitempty"`
+		RootChainIndex  uint64                                        `json:"rootChainIndex,omitempty"`
+		RootChainAnchor string                                        `json:"rootChainAnchor,omitempty"`
+		StateTreeAnchor string                                        `json:"stateTreeAnchor,omitempty"`
+		Synthetic       encoding.JsonList[*TransactionExchangeLedger] `json:"synthetic,omitempty"`
+		AcmeBurnt       *string                                       `json:"acmeBurnt,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Source = v.PartitionAnchor.Source
@@ -16197,6 +16238,7 @@ func (v *BlockValidatorAnchor) UnmarshalJSON(data []byte) error {
 	u.RootChainIndex = v.PartitionAnchor.RootChainIndex
 	u.RootChainAnchor = encoding.ChainToJSON(v.PartitionAnchor.RootChainAnchor)
 	u.StateTreeAnchor = encoding.ChainToJSON(v.PartitionAnchor.StateTreeAnchor)
+	u.Synthetic = v.PartitionAnchor.Synthetic
 	u.AcmeBurnt = encoding.BigintToJSON(&v.AcmeBurnt)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -16218,6 +16260,7 @@ func (v *BlockValidatorAnchor) UnmarshalJSON(data []byte) error {
 	} else {
 		v.PartitionAnchor.StateTreeAnchor = x
 	}
+	v.PartitionAnchor.Synthetic = u.Synthetic
 	if x, err := encoding.BigintFromJSON(u.AcmeBurnt); err != nil {
 		return fmt.Errorf("error decoding AcmeBurnt: %w", err)
 	} else {
@@ -16483,17 +16526,18 @@ func (v *DelegatedSignature) UnmarshalJSON(data []byte) error {
 
 func (v *DirectoryAnchor) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type               TransactionType                            `json:"type"`
-		Source             *url.URL                                   `json:"source,omitempty"`
-		MajorBlockIndex    uint64                                     `json:"majorBlockIndex,omitempty"`
-		MinorBlockIndex    uint64                                     `json:"minorBlockIndex,omitempty"`
-		RootChainIndex     uint64                                     `json:"rootChainIndex,omitempty"`
-		RootChainAnchor    string                                     `json:"rootChainAnchor,omitempty"`
-		StateTreeAnchor    string                                     `json:"stateTreeAnchor,omitempty"`
-		Updates            encoding.JsonList[NetworkAccountUpdate]    `json:"updates,omitempty"`
-		Receipts           encoding.JsonList[*PartitionAnchorReceipt] `json:"receipts,omitempty"`
-		MakeMajorBlock     uint64                                     `json:"makeMajorBlock,omitempty"`
-		MakeMajorBlockTime time.Time                                  `json:"makeMajorBlockTime,omitempty"`
+		Type               TransactionType                               `json:"type"`
+		Source             *url.URL                                      `json:"source,omitempty"`
+		MajorBlockIndex    uint64                                        `json:"majorBlockIndex,omitempty"`
+		MinorBlockIndex    uint64                                        `json:"minorBlockIndex,omitempty"`
+		RootChainIndex     uint64                                        `json:"rootChainIndex,omitempty"`
+		RootChainAnchor    string                                        `json:"rootChainAnchor,omitempty"`
+		StateTreeAnchor    string                                        `json:"stateTreeAnchor,omitempty"`
+		Synthetic          encoding.JsonList[*TransactionExchangeLedger] `json:"synthetic,omitempty"`
+		Updates            encoding.JsonList[NetworkAccountUpdate]       `json:"updates,omitempty"`
+		Receipts           encoding.JsonList[*PartitionAnchorReceipt]    `json:"receipts,omitempty"`
+		MakeMajorBlock     uint64                                        `json:"makeMajorBlock,omitempty"`
+		MakeMajorBlockTime time.Time                                     `json:"makeMajorBlockTime,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Source = v.PartitionAnchor.Source
@@ -16502,6 +16546,7 @@ func (v *DirectoryAnchor) UnmarshalJSON(data []byte) error {
 	u.RootChainIndex = v.PartitionAnchor.RootChainIndex
 	u.RootChainAnchor = encoding.ChainToJSON(v.PartitionAnchor.RootChainAnchor)
 	u.StateTreeAnchor = encoding.ChainToJSON(v.PartitionAnchor.StateTreeAnchor)
+	u.Synthetic = v.PartitionAnchor.Synthetic
 	u.Updates = v.Updates
 	u.Receipts = v.Receipts
 	u.MakeMajorBlock = v.MakeMajorBlock
@@ -16526,6 +16571,7 @@ func (v *DirectoryAnchor) UnmarshalJSON(data []byte) error {
 	} else {
 		v.PartitionAnchor.StateTreeAnchor = x
 	}
+	v.PartitionAnchor.Synthetic = u.Synthetic
 	v.Updates = u.Updates
 	v.Receipts = u.Receipts
 	v.MakeMajorBlock = u.MakeMajorBlock
@@ -17196,12 +17242,13 @@ func (v *Object) UnmarshalJSON(data []byte) error {
 
 func (v *PartitionAnchor) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Source          *url.URL `json:"source,omitempty"`
-		MajorBlockIndex uint64   `json:"majorBlockIndex,omitempty"`
-		MinorBlockIndex uint64   `json:"minorBlockIndex,omitempty"`
-		RootChainIndex  uint64   `json:"rootChainIndex,omitempty"`
-		RootChainAnchor string   `json:"rootChainAnchor,omitempty"`
-		StateTreeAnchor string   `json:"stateTreeAnchor,omitempty"`
+		Source          *url.URL                                      `json:"source,omitempty"`
+		MajorBlockIndex uint64                                        `json:"majorBlockIndex,omitempty"`
+		MinorBlockIndex uint64                                        `json:"minorBlockIndex,omitempty"`
+		RootChainIndex  uint64                                        `json:"rootChainIndex,omitempty"`
+		RootChainAnchor string                                        `json:"rootChainAnchor,omitempty"`
+		StateTreeAnchor string                                        `json:"stateTreeAnchor,omitempty"`
+		Synthetic       encoding.JsonList[*TransactionExchangeLedger] `json:"synthetic,omitempty"`
 	}{}
 	u.Source = v.Source
 	u.MajorBlockIndex = v.MajorBlockIndex
@@ -17209,6 +17256,7 @@ func (v *PartitionAnchor) UnmarshalJSON(data []byte) error {
 	u.RootChainIndex = v.RootChainIndex
 	u.RootChainAnchor = encoding.ChainToJSON(v.RootChainAnchor)
 	u.StateTreeAnchor = encoding.ChainToJSON(v.StateTreeAnchor)
+	u.Synthetic = v.Synthetic
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -17226,6 +17274,7 @@ func (v *PartitionAnchor) UnmarshalJSON(data []byte) error {
 	} else {
 		v.StateTreeAnchor = x
 	}
+	v.Synthetic = u.Synthetic
 	return nil
 }
 
