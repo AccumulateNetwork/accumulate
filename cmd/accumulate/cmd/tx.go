@@ -407,7 +407,8 @@ func waitForTxn(queryResponses []*api.TransactionQueryResponse, queryRes *api.Tr
 	queryResponses = append(queryResponses, queryRes)
 	if queryRes.Produced != nil {
 		for _, txid := range queryRes.Produced {
-			resp, err := waitForTxnUsingUrl(txid, wait, true)
+			txhash := txid.Hash()
+			resp, err := waitForTxnUsingHash(txhash[:], wait, true)
 			if err != nil {
 				return nil, err
 			}
