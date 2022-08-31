@@ -528,8 +528,9 @@ type PartitionAnchor struct {
 }
 
 type PartitionAnchorReceipt struct {
-	fieldsSet   []bool
-	PartitionID string `json:"partitionID,omitempty" form:"partitionID" query:"partitionID" validate:"required"`
+	fieldsSet            []bool
+	PartitionID          string `json:"partitionID,omitempty" form:"partitionID" query:"partitionID" validate:"required"`
+	AnchorSequenceNumber uint64 `json:"anchorSequenceNumber,omitempty" form:"anchorSequenceNumber" query:"anchorSequenceNumber" validate:"required"`
 	// MinorBlockIndex is the minor block index.
 	MinorBlockIndex uint64 `json:"minorBlockIndex,omitempty" form:"minorBlockIndex" query:"minorBlockIndex" validate:"required"`
 	// RootChainIndex is the index of the anchored root chain entry.
@@ -802,13 +803,15 @@ type TransactionExchangeLedger struct {
 	fieldsSet []bool
 	// Url is the URL of the partition.
 	Url *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
-	// Produced is the maximum sequence number of synthetic transactions produced for the partition.
+	// Produced is the maximum sequence number of transactions produced for the partition.
 	Produced uint64 `json:"produced,omitempty" form:"produced" query:"produced" validate:"required"`
-	// Received is the maximum sequence number of synthetic transactions received from the partition.
+	// Acknowledged is the maximum sequence number of acknowledged transactions produced for the partition.
+	Acknowledged uint64 `json:"acknowledged,omitempty" form:"acknowledged" query:"acknowledged" validate:"required"`
+	// Received is the maximum sequence number of transactions received from the partition.
 	Received uint64 `json:"received,omitempty" form:"received" query:"received" validate:"required"`
-	// Delivered is the maximum sequence number of delivered synthetic transactions received from the partition.
+	// Delivered is the maximum sequence number of delivered transactions received from the partition.
 	Delivered uint64 `json:"delivered,omitempty" form:"delivered" query:"delivered" validate:"required"`
-	// Pending is the transaction hashes of synthetic transactions received out of order.
+	// Pending is the transaction hashes of transactions received out of order.
 	Pending   []*url.TxID `json:"pending,omitempty" form:"pending" query:"pending" validate:"required"`
 	extraData []byte
 }
@@ -1975,6 +1978,7 @@ func (v *PartitionAnchorReceipt) Copy() *PartitionAnchorReceipt {
 	u := new(PartitionAnchorReceipt)
 
 	u.PartitionID = v.PartitionID
+	u.AnchorSequenceNumber = v.AnchorSequenceNumber
 	u.MinorBlockIndex = v.MinorBlockIndex
 	u.RootChainIndex = v.RootChainIndex
 	if v.RootChainReceipt != nil {
@@ -2445,6 +2449,7 @@ func (v *TransactionExchangeLedger) Copy() *TransactionExchangeLedger {
 		u.Url = v.Url
 	}
 	u.Produced = v.Produced
+	u.Acknowledged = v.Acknowledged
 	u.Received = v.Received
 	u.Delivered = v.Delivered
 	u.Pending = make([]*url.TxID, len(v.Pending))
@@ -3835,6 +3840,9 @@ func (v *PartitionAnchorReceipt) Equal(u *PartitionAnchorReceipt) bool {
 	if !(v.PartitionID == u.PartitionID) {
 		return false
 	}
+	if !(v.AnchorSequenceNumber == u.AnchorSequenceNumber) {
+		return false
+	}
 	if !(v.MinorBlockIndex == u.MinorBlockIndex) {
 		return false
 	}
@@ -4431,6 +4439,9 @@ func (v *TransactionExchangeLedger) Equal(u *TransactionExchangeLedger) bool {
 		return false
 	}
 	if !(v.Produced == u.Produced) {
+		return false
+	}
+	if !(v.Acknowledged == u.Acknowledged) {
 		return false
 	}
 	if !(v.Received == u.Received) {
@@ -8019,9 +8030,10 @@ func (v *PartitionAnchor) IsValid() error {
 
 var fieldNames_PartitionAnchorReceipt = []string{
 	1: "PartitionID",
-	2: "MinorBlockIndex",
-	3: "RootChainIndex",
-	4: "RootChainReceipt",
+	2: "AnchorSequenceNumber",
+	3: "MinorBlockIndex",
+	4: "RootChainIndex",
+	5: "RootChainReceipt",
 }
 
 func (v *PartitionAnchorReceipt) MarshalBinary() ([]byte, error) {
@@ -8031,14 +8043,17 @@ func (v *PartitionAnchorReceipt) MarshalBinary() ([]byte, error) {
 	if !(len(v.PartitionID) == 0) {
 		writer.WriteString(1, v.PartitionID)
 	}
+	if !(v.AnchorSequenceNumber == 0) {
+		writer.WriteUint(2, v.AnchorSequenceNumber)
+	}
 	if !(v.MinorBlockIndex == 0) {
-		writer.WriteUint(2, v.MinorBlockIndex)
+		writer.WriteUint(3, v.MinorBlockIndex)
 	}
 	if !(v.RootChainIndex == 0) {
-		writer.WriteUint(3, v.RootChainIndex)
+		writer.WriteUint(4, v.RootChainIndex)
 	}
 	if !(v.RootChainReceipt == nil) {
-		writer.WriteValue(4, v.RootChainReceipt.MarshalBinary)
+		writer.WriteValue(5, v.RootChainReceipt.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_PartitionAnchorReceipt)
@@ -8058,16 +8073,21 @@ func (v *PartitionAnchorReceipt) IsValid() error {
 		errs = append(errs, "field PartitionID is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field AnchorSequenceNumber is missing")
+	} else if v.AnchorSequenceNumber == 0 {
+		errs = append(errs, "field AnchorSequenceNumber is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field MinorBlockIndex is missing")
 	} else if v.MinorBlockIndex == 0 {
 		errs = append(errs, "field MinorBlockIndex is not set")
 	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field RootChainIndex is missing")
 	} else if v.RootChainIndex == 0 {
 		errs = append(errs, "field RootChainIndex is not set")
 	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
 		errs = append(errs, "field RootChainReceipt is missing")
 	} else if v.RootChainReceipt == nil {
 		errs = append(errs, "field RootChainReceipt is not set")
@@ -9823,9 +9843,10 @@ func (v *Transaction) IsValid() error {
 var fieldNames_TransactionExchangeLedger = []string{
 	1: "Url",
 	2: "Produced",
-	3: "Received",
-	4: "Delivered",
-	5: "Pending",
+	3: "Acknowledged",
+	4: "Received",
+	5: "Delivered",
+	6: "Pending",
 }
 
 func (v *TransactionExchangeLedger) MarshalBinary() ([]byte, error) {
@@ -9838,15 +9859,18 @@ func (v *TransactionExchangeLedger) MarshalBinary() ([]byte, error) {
 	if !(v.Produced == 0) {
 		writer.WriteUint(2, v.Produced)
 	}
+	if !(v.Acknowledged == 0) {
+		writer.WriteUint(3, v.Acknowledged)
+	}
 	if !(v.Received == 0) {
-		writer.WriteUint(3, v.Received)
+		writer.WriteUint(4, v.Received)
 	}
 	if !(v.Delivered == 0) {
-		writer.WriteUint(4, v.Delivered)
+		writer.WriteUint(5, v.Delivered)
 	}
 	if !(len(v.Pending) == 0) {
 		for _, v := range v.Pending {
-			writer.WriteTxid(5, v)
+			writer.WriteTxid(6, v)
 		}
 	}
 
@@ -9872,16 +9896,21 @@ func (v *TransactionExchangeLedger) IsValid() error {
 		errs = append(errs, "field Produced is not set")
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Acknowledged is missing")
+	} else if v.Acknowledged == 0 {
+		errs = append(errs, "field Acknowledged is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field Received is missing")
 	} else if v.Received == 0 {
 		errs = append(errs, "field Received is not set")
 	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
 		errs = append(errs, "field Delivered is missing")
 	} else if v.Delivered == 0 {
 		errs = append(errs, "field Delivered is not set")
 	}
-	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
 		errs = append(errs, "field Pending is missing")
 	} else if len(v.Pending) == 0 {
 		errs = append(errs, "field Pending is not set")
@@ -12783,12 +12812,15 @@ func (v *PartitionAnchorReceipt) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.PartitionID = x
 	}
 	if x, ok := reader.ReadUint(2); ok {
-		v.MinorBlockIndex = x
+		v.AnchorSequenceNumber = x
 	}
 	if x, ok := reader.ReadUint(3); ok {
+		v.MinorBlockIndex = x
+	}
+	if x, ok := reader.ReadUint(4); ok {
 		v.RootChainIndex = x
 	}
-	if x := new(managed.Receipt); reader.ReadValue(4, x.UnmarshalBinary) {
+	if x := new(managed.Receipt); reader.ReadValue(5, x.UnmarshalBinary) {
 		v.RootChainReceipt = x
 	}
 
@@ -13898,13 +13930,16 @@ func (v *TransactionExchangeLedger) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Produced = x
 	}
 	if x, ok := reader.ReadUint(3); ok {
-		v.Received = x
+		v.Acknowledged = x
 	}
 	if x, ok := reader.ReadUint(4); ok {
+		v.Received = x
+	}
+	if x, ok := reader.ReadUint(5); ok {
 		v.Delivered = x
 	}
 	for {
-		if x, ok := reader.ReadTxid(5); ok {
+		if x, ok := reader.ReadTxid(6); ok {
 			v.Pending = append(v.Pending, x)
 		} else {
 			break
@@ -15613,14 +15648,16 @@ func (v *Transaction) MarshalJSON() ([]byte, error) {
 
 func (v *TransactionExchangeLedger) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Url       *url.URL                     `json:"url,omitempty"`
-		Produced  uint64                       `json:"produced,omitempty"`
-		Received  uint64                       `json:"received,omitempty"`
-		Delivered uint64                       `json:"delivered,omitempty"`
-		Pending   encoding.JsonList[*url.TxID] `json:"pending,omitempty"`
+		Url          *url.URL                     `json:"url,omitempty"`
+		Produced     uint64                       `json:"produced,omitempty"`
+		Acknowledged uint64                       `json:"acknowledged,omitempty"`
+		Received     uint64                       `json:"received,omitempty"`
+		Delivered    uint64                       `json:"delivered,omitempty"`
+		Pending      encoding.JsonList[*url.TxID] `json:"pending,omitempty"`
 	}{}
 	u.Url = v.Url
 	u.Produced = v.Produced
+	u.Acknowledged = v.Acknowledged
 	u.Received = v.Received
 	u.Delivered = v.Delivered
 	u.Pending = v.Pending
@@ -17889,14 +17926,16 @@ func (v *Transaction) UnmarshalJSON(data []byte) error {
 
 func (v *TransactionExchangeLedger) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Url       *url.URL                     `json:"url,omitempty"`
-		Produced  uint64                       `json:"produced,omitempty"`
-		Received  uint64                       `json:"received,omitempty"`
-		Delivered uint64                       `json:"delivered,omitempty"`
-		Pending   encoding.JsonList[*url.TxID] `json:"pending,omitempty"`
+		Url          *url.URL                     `json:"url,omitempty"`
+		Produced     uint64                       `json:"produced,omitempty"`
+		Acknowledged uint64                       `json:"acknowledged,omitempty"`
+		Received     uint64                       `json:"received,omitempty"`
+		Delivered    uint64                       `json:"delivered,omitempty"`
+		Pending      encoding.JsonList[*url.TxID] `json:"pending,omitempty"`
 	}{}
 	u.Url = v.Url
 	u.Produced = v.Produced
+	u.Acknowledged = v.Acknowledged
 	u.Received = v.Received
 	u.Delivered = v.Delivered
 	u.Pending = v.Pending
@@ -17905,6 +17944,7 @@ func (v *TransactionExchangeLedger) UnmarshalJSON(data []byte) error {
 	}
 	v.Url = u.Url
 	v.Produced = u.Produced
+	v.Acknowledged = u.Acknowledged
 	v.Received = u.Received
 	v.Delivered = u.Delivered
 	v.Pending = u.Pending

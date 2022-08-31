@@ -158,6 +158,8 @@ PartitionAnchorReceipt:
   fields:
     - name: PartitionID
       type: string
+    - name: AnchorSequenceNumber
+      type: uint
     - name: MinorBlockIndex
       description: is the minor block index
       type: uvarint
@@ -177,16 +179,19 @@ TransactionExchangeLedger:
       type: url
       pointer: true
     - name: Produced
-      description: is the maximum sequence number of synthetic transactions produced for the partition
+      description: is the maximum sequence number of transactions produced for the partition
+      type: uint
+    - name: Acknowledged
+      description: is the maximum sequence number of acknowledged transactions produced for the partition
       type: uint
     - name: Received
-      description: is the maximum sequence number of synthetic transactions received from the partition
+      description: is the maximum sequence number of transactions received from the partition
       type: uint
     - name: Delivered
-      description: is the maximum sequence number of delivered synthetic transactions received from the partition
+      description: is the maximum sequence number of delivered transactions received from the partition
       type: uint
     - name: Pending
-      description: is the transaction hashes of synthetic transactions received out of order
+      description: is the transaction hashes of transactions received out of order
       type: txid
       pointer: true
       repeatable: true

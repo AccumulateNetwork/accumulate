@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"sort"
+	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -57,7 +58,11 @@ func (DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Transa
 	if err != nil {
 		return nil, err
 	}
-	st.State.DidReceiveAnchor(protocol.Directory, body, index)
+	status, err := st.batch.Transaction(st.txHash[:]).Status().Get()
+	if err != nil {
+		return nil, err
+	}
+	st.State.DidReceiveAnchor(protocol.Directory, body, index, status)
 
 	// And the BPT root
 	_, err = st.State.ChainUpdates.AddChainEntry2(st.batch, record.BPT(), body.StateTreeAnchor[:], 0, 0, false)
@@ -70,6 +75,30 @@ func (DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Transa
 		err := processNetworkAccountUpdates(st, tx, body.Updates)
 		if err != nil {
 			return nil, err
+		}
+	}
+
+	// Record the latest anchored anchor
+	var ledger *protocol.AnchorLedger
+	err = st.batch.Account(st.AnchorPool()).Main().GetAs(&ledger)
+	if err != nil {
+		return nil, fmt.Errorf("load anchor ledger: %w", err)
+	}
+	dnLedger := ledger.Partition(body.Source)
+	var didUpdate bool
+	for _, receipt := range body.Receipts {
+		if !strings.EqualFold(st.PartitionId, receipt.PartitionID) {
+			continue
+		}
+		if receipt.AnchorSequenceNumber > dnLedger.Acknowledged {
+			dnLedger.Acknowledged = receipt.AnchorSequenceNumber
+			didUpdate = true
+		}
+	}
+	if didUpdate {
+		err = st.batch.Account(st.AnchorPool()).Main().Put(ledger)
+		if err != nil {
+			return nil, fmt.Errorf("store anchor ledger: %w", err)
 		}
 	}
 

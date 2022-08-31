@@ -61,7 +61,11 @@ func (PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Transa
 	if err != nil {
 		return nil, err
 	}
-	st.State.DidReceiveAnchor(name, body, index)
+	status, err := st.batch.Transaction(st.txHash[:]).Status().Get()
+	if err != nil {
+		return nil, err
+	}
+	st.State.DidReceiveAnchor(name, body, index, status)
 
 	// And the BPT root
 	_, err = st.State.ChainUpdates.AddChainEntry2(st.batch, record.BPT(), body.StateTreeAnchor[:], 0, 0, false)

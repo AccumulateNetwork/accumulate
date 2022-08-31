@@ -736,6 +736,7 @@ func (x *Executor) buildDirectoryAnchor(block *Block, systemLedger *protocol.Sys
 
 		receipt := new(protocol.PartitionAnchorReceipt)
 		receipt.PartitionID = received.Partition
+		receipt.AnchorSequenceNumber = received.Status.SequenceNumber
 		receipt.MinorBlockIndex = received.Body.GetPartitionAnchor().MinorBlockIndex
 		receipt.RootChainIndex = received.Body.GetPartitionAnchor().RootChainIndex
 
