@@ -735,11 +735,8 @@ func (x *Executor) buildDirectoryAnchor(block *Block, systemLedger *protocol.Sys
 		}
 
 		receipt := new(protocol.PartitionAnchorReceipt)
-		receipt.PartitionID = received.Partition
-		receipt.AnchorSequenceNumber = received.Status.SequenceNumber
-		receipt.MinorBlockIndex = received.Body.GetPartitionAnchor().MinorBlockIndex
-		receipt.RootChainIndex = received.Body.GetPartitionAnchor().RootChainIndex
-
+		receipt.Anchor = received.Body.GetPartitionAnchor()
+		receipt.SequenceNumber = received.Status.SequenceNumber
 		receipt.RootChainReceipt, err = anchorReceipt.Combine(rootReceipt)
 		if err != nil {
 			return nil, errors.Format(errors.StatusUnknownError, "combine receipt for entry %d of %s intermediate anchor chain: %w", received.Index, received.Partition, err)

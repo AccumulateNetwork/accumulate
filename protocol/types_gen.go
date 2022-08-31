@@ -528,13 +528,9 @@ type PartitionAnchor struct {
 }
 
 type PartitionAnchorReceipt struct {
-	fieldsSet            []bool
-	PartitionID          string `json:"partitionID,omitempty" form:"partitionID" query:"partitionID" validate:"required"`
-	AnchorSequenceNumber uint64 `json:"anchorSequenceNumber,omitempty" form:"anchorSequenceNumber" query:"anchorSequenceNumber" validate:"required"`
-	// MinorBlockIndex is the minor block index.
-	MinorBlockIndex uint64 `json:"minorBlockIndex,omitempty" form:"minorBlockIndex" query:"minorBlockIndex" validate:"required"`
-	// RootChainIndex is the index of the anchored root chain entry.
-	RootChainIndex uint64 `json:"rootChainIndex,omitempty" form:"rootChainIndex" query:"rootChainIndex" validate:"required"`
+	fieldsSet      []bool
+	Anchor         *PartitionAnchor `json:"anchor,omitempty" form:"anchor" query:"anchor" validate:"required"`
+	SequenceNumber uint64           `json:"sequenceNumber,omitempty" form:"sequenceNumber" query:"sequenceNumber" validate:"required"`
 	// RootChainReceipt is a receipt for the anchored root chain entry.
 	RootChainReceipt *managed.Receipt `json:"rootChainReceipt,omitempty" form:"rootChainReceipt" query:"rootChainReceipt" validate:"required"`
 	extraData        []byte
@@ -1977,10 +1973,10 @@ func (v *PartitionAnchor) CopyAsInterface() interface{} { return v.Copy() }
 func (v *PartitionAnchorReceipt) Copy() *PartitionAnchorReceipt {
 	u := new(PartitionAnchorReceipt)
 
-	u.PartitionID = v.PartitionID
-	u.AnchorSequenceNumber = v.AnchorSequenceNumber
-	u.MinorBlockIndex = v.MinorBlockIndex
-	u.RootChainIndex = v.RootChainIndex
+	if v.Anchor != nil {
+		u.Anchor = (v.Anchor).Copy()
+	}
+	u.SequenceNumber = v.SequenceNumber
 	if v.RootChainReceipt != nil {
 		u.RootChainReceipt = (v.RootChainReceipt).Copy()
 	}
@@ -3837,16 +3833,15 @@ func (v *PartitionAnchor) Equal(u *PartitionAnchor) bool {
 }
 
 func (v *PartitionAnchorReceipt) Equal(u *PartitionAnchorReceipt) bool {
-	if !(v.PartitionID == u.PartitionID) {
+	switch {
+	case v.Anchor == u.Anchor:
+		// equal
+	case v.Anchor == nil || u.Anchor == nil:
+		return false
+	case !((v.Anchor).Equal(u.Anchor)):
 		return false
 	}
-	if !(v.AnchorSequenceNumber == u.AnchorSequenceNumber) {
-		return false
-	}
-	if !(v.MinorBlockIndex == u.MinorBlockIndex) {
-		return false
-	}
-	if !(v.RootChainIndex == u.RootChainIndex) {
+	if !(v.SequenceNumber == u.SequenceNumber) {
 		return false
 	}
 	switch {
@@ -8029,31 +8024,23 @@ func (v *PartitionAnchor) IsValid() error {
 }
 
 var fieldNames_PartitionAnchorReceipt = []string{
-	1: "PartitionID",
-	2: "AnchorSequenceNumber",
-	3: "MinorBlockIndex",
-	4: "RootChainIndex",
-	5: "RootChainReceipt",
+	1: "Anchor",
+	2: "SequenceNumber",
+	3: "RootChainReceipt",
 }
 
 func (v *PartitionAnchorReceipt) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	if !(len(v.PartitionID) == 0) {
-		writer.WriteString(1, v.PartitionID)
+	if !(v.Anchor == nil) {
+		writer.WriteValue(1, v.Anchor.MarshalBinary)
 	}
-	if !(v.AnchorSequenceNumber == 0) {
-		writer.WriteUint(2, v.AnchorSequenceNumber)
-	}
-	if !(v.MinorBlockIndex == 0) {
-		writer.WriteUint(3, v.MinorBlockIndex)
-	}
-	if !(v.RootChainIndex == 0) {
-		writer.WriteUint(4, v.RootChainIndex)
+	if !(v.SequenceNumber == 0) {
+		writer.WriteUint(2, v.SequenceNumber)
 	}
 	if !(v.RootChainReceipt == nil) {
-		writer.WriteValue(5, v.RootChainReceipt.MarshalBinary)
+		writer.WriteValue(3, v.RootChainReceipt.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_PartitionAnchorReceipt)
@@ -8068,26 +8055,16 @@ func (v *PartitionAnchorReceipt) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field PartitionID is missing")
-	} else if len(v.PartitionID) == 0 {
-		errs = append(errs, "field PartitionID is not set")
+		errs = append(errs, "field Anchor is missing")
+	} else if v.Anchor == nil {
+		errs = append(errs, "field Anchor is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field AnchorSequenceNumber is missing")
-	} else if v.AnchorSequenceNumber == 0 {
-		errs = append(errs, "field AnchorSequenceNumber is not set")
+		errs = append(errs, "field SequenceNumber is missing")
+	} else if v.SequenceNumber == 0 {
+		errs = append(errs, "field SequenceNumber is not set")
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field MinorBlockIndex is missing")
-	} else if v.MinorBlockIndex == 0 {
-		errs = append(errs, "field MinorBlockIndex is not set")
-	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
-		errs = append(errs, "field RootChainIndex is missing")
-	} else if v.RootChainIndex == 0 {
-		errs = append(errs, "field RootChainIndex is not set")
-	}
-	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
 		errs = append(errs, "field RootChainReceipt is missing")
 	} else if v.RootChainReceipt == nil {
 		errs = append(errs, "field RootChainReceipt is not set")
@@ -12808,19 +12785,13 @@ func (v *PartitionAnchorReceipt) UnmarshalBinary(data []byte) error {
 func (v *PartitionAnchorReceipt) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	if x, ok := reader.ReadString(1); ok {
-		v.PartitionID = x
+	if x := new(PartitionAnchor); reader.ReadValue(1, x.UnmarshalBinary) {
+		v.Anchor = x
 	}
 	if x, ok := reader.ReadUint(2); ok {
-		v.AnchorSequenceNumber = x
+		v.SequenceNumber = x
 	}
-	if x, ok := reader.ReadUint(3); ok {
-		v.MinorBlockIndex = x
-	}
-	if x, ok := reader.ReadUint(4); ok {
-		v.RootChainIndex = x
-	}
-	if x := new(managed.Receipt); reader.ReadValue(5, x.UnmarshalBinary) {
+	if x := new(managed.Receipt); reader.ReadValue(3, x.UnmarshalBinary) {
 		v.RootChainReceipt = x
 	}
 

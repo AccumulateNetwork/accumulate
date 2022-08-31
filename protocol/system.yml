@@ -156,16 +156,12 @@ PartitionAnchor:
 
 PartitionAnchorReceipt:
   fields:
-    - name: PartitionID
-      type: string
-    - name: AnchorSequenceNumber
+    - name: Anchor
+      type: PartitionAnchor
+      marshal-as: reference
+      pointer: true
+    - name: SequenceNumber
       type: uint
-    - name: MinorBlockIndex
-      description: is the minor block index
-      type: uvarint
-    - name: RootChainIndex
-      description: is the index of the anchored root chain entry
-      type: uvarint
     - name: RootChainReceipt
       description: is a receipt for the anchored root chain entry
       type: managed.Receipt

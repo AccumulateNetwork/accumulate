@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"sort"
-	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -87,11 +86,8 @@ func (DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Transa
 	dnLedger := ledger.Partition(body.Source)
 	var didUpdate bool
 	for _, receipt := range body.Receipts {
-		if !strings.EqualFold(st.PartitionId, receipt.PartitionID) {
-			continue
-		}
-		if receipt.AnchorSequenceNumber > dnLedger.Acknowledged {
-			dnLedger.Acknowledged = receipt.AnchorSequenceNumber
+		if st.PartitionUrl().Equal(receipt.Anchor.Source) && receipt.SequenceNumber > dnLedger.Acknowledged {
+			dnLedger.Acknowledged = receipt.SequenceNumber
 			didUpdate = true
 		}
 	}

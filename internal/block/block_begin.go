@@ -334,12 +334,17 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch, isLeader boo
 		}
 
 		for _, receipt := range anchor.Receipts {
+			partition, ok := protocol.ParsePartitionUrl(receipt.Anchor.Source)
+			if !ok {
+				return errors.Format(errors.StatusBadRequest, "invalid source: %v is not a partition", receipt.Anchor.Source)
+			}
+
 			// Ignore receipts for other partitions
-			if !strings.EqualFold(receipt.PartitionID, x.Describe.PartitionId) {
+			if !strings.EqualFold(partition, x.Describe.PartitionId) {
 				continue
 			}
 
-			err = x.sendSyntheticTransactionsForBlock(batch, isLeader, receipt.MinorBlockIndex, receipt.RootChainReceipt)
+			err = x.sendSyntheticTransactionsForBlock(batch, isLeader, receipt.Anchor.MinorBlockIndex, receipt.RootChainReceipt)
 			if err != nil {
 				return errors.Wrap(errors.StatusUnknownError, err)
 			}
