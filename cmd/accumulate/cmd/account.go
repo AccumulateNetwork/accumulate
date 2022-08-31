@@ -32,8 +32,6 @@ func init() {
 		accountGenerateCmd,
 		accountListCmd,
 		accountLockCmd,
-		accountExportCmd,
-		accountImportCmd,
 	)
 
 	accountCreateCmd.AddCommand(
@@ -156,26 +154,6 @@ var accountListCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, _ []string) {
 		out, err := ListAccounts()
 		printOutput(cmd, out, err)
-	},
-}
-
-var accountExportCmd = &cobra.Command{
-	Use:   "export",
-	Short: "Exports all lite token accounts",
-	Args:  cobra.ExactArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
-		err := ExportAccounts(args[0])
-		printOutput(cmd, "File downloaded successfully", err)
-	},
-}
-
-var accountImportCmd = &cobra.Command{
-	Use:   "import [filePath]",
-	Short: "Imports all lite token accounts in specified file",
-	Args:  cobra.ExactArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
-		err := ImportAccounts(args[0])
-		printOutput(cmd, "", err)
 	},
 }
 
@@ -555,7 +533,7 @@ func ExportAccounts(filename string) error {
 		}
 	}
 
-	seed, err := walletd.GetWallet().Get(walletd.BucketMnemonic, []byte("seed"))
+	phrase, err := walletd.GetWallet().Get(walletd.BucketMnemonic, []byte("phrase"))
 	if err != nil {
 		return fmt.Errorf("mnemonic seed doesn't exist")
 	}
@@ -563,7 +541,7 @@ func ExportAccounts(filename string) error {
 	backupRes := response{
 		LiteIdentities: res,
 		ADIs:           adiMap,
-		Mnemonics:      string(seed),
+		Mnemonics:      string(phrase),
 	}
 
 	bytes, err := json.Marshal(backupRes)
@@ -590,6 +568,11 @@ func ImportAccounts(filePath string) error {
 	var req *response
 	if err := json.Unmarshal(data, &req); err != nil {
 		return err
+	}
+	mnemonics := strings.Split(req.Mnemonics, " ")
+	_, err = walletd.ImportMnemonic(mnemonics)
+	if err != nil {
+		return fmt.Errorf("failed importing mnemonic: %s", err)
 	}
 	for _, key := range req.LiteIdentities {
 		_, err = ImportKey(key.PrivateKey, string(key.Label), key.KeyInfo.Type)

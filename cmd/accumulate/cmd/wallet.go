@@ -34,6 +34,9 @@ var walletInitCmd = &cobra.Command{
 		case "import":
 			err := InitDBImport(cmd, false)
 			printOutput(cmd, "", err)
+		case "restore":
+			err := ImportAccounts(args[1])
+			printOutput(cmd, "", err)
 		default:
 		}
 	},
@@ -48,10 +51,20 @@ var walletServeCmd = &cobra.Command{
 	},
 }
 
+var walletExportCmd = &cobra.Command{
+	Use:   "export",
+	Short: "export wallet details",
+	Run: func(cmd *cobra.Command, args []string) {
+		err := ExportAccounts(args[0])
+		printOutput(cmd, "File downloaded successfully", err)
+	},
+}
+
 func init() {
 	initRunFlags(walletCmd, false)
 	walletCmd.AddCommand(walletInitCmd)
 	walletCmd.AddCommand(walletServeCmd)
+	walletCmd.AddCommand(walletExportCmd)
 }
 
 var walletdConfig = &service.Config{
