@@ -91,7 +91,9 @@ type AnchorLedger struct {
 	MajorBlockTime time.Time `json:"majorBlockTime,omitempty" form:"majorBlockTime" query:"majorBlockTime" validate:"required"`
 	// PendingMajorBlockAnchors is the list of partitions that have joined the open major block. If there is no open major block, this is unset.
 	PendingMajorBlockAnchors []*url.URL `json:"pendingMajorBlockAnchors,omitempty" form:"pendingMajorBlockAnchors" query:"pendingMajorBlockAnchors" validate:"required"`
-	extraData                []byte
+	// Exchange tracks sent and received anchor transactions.
+	Exchange  []*TransactionExchangeLedger `json:"exchange,omitempty" form:"exchange" query:"exchange" validate:"required"`
+	extraData []byte
 }
 
 type AnchorMetadata struct {
@@ -559,21 +561,6 @@ type PartitionSignature struct {
 	extraData       []byte
 }
 
-type PartitionSyntheticLedger struct {
-	fieldsSet []bool
-	// Url is the URL of the partition.
-	Url *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
-	// Produced is the maximum sequence number of synthetic transactions produced for the partition.
-	Produced uint64 `json:"produced,omitempty" form:"produced" query:"produced" validate:"required"`
-	// Received is the maximum sequence number of synthetic transactions received from the partition.
-	Received uint64 `json:"received,omitempty" form:"received" query:"received" validate:"required"`
-	// Delivered is the maximum sequence number of delivered synthetic transactions received from the partition.
-	Delivered uint64 `json:"delivered,omitempty" form:"delivered" query:"delivered" validate:"required"`
-	// Pending is the transaction hashes of synthetic transactions received out of order.
-	Pending   []*url.TxID `json:"pending,omitempty" form:"pending" query:"pending" validate:"required"`
-	extraData []byte
-}
-
 type RCD1Signature struct {
 	fieldsSet       []bool
 	PublicKey       []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
@@ -722,10 +709,8 @@ type SyntheticForwardTransaction struct {
 type SyntheticLedger struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
-	// Partitions tracks sent and received synthetic transactions.
-	Partitions []*PartitionSyntheticLedger `json:"partitions,omitempty" form:"partitions" query:"partitions" validate:"required"`
-	// Anchors tracks sent and received anchors.
-	Anchors   []*PartitionSyntheticLedger `json:"anchors,omitempty" form:"anchors" query:"anchors" validate:"required"`
+	// Exchange tracks sent and received synthetic transactions.
+	Exchange  []*TransactionExchangeLedger `json:"exchange,omitempty" form:"exchange" query:"exchange" validate:"required"`
 	extraData []byte
 }
 
@@ -812,6 +797,21 @@ type Transaction struct {
 	Header    TransactionHeader `json:"header,omitempty" form:"header" query:"header" validate:"required"`
 	Body      TransactionBody   `json:"body,omitempty" form:"body" query:"body" validate:"required"`
 	hash      []byte
+	extraData []byte
+}
+
+type TransactionExchangeLedger struct {
+	fieldsSet []bool
+	// Url is the URL of the partition.
+	Url *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	// Produced is the maximum sequence number of synthetic transactions produced for the partition.
+	Produced uint64 `json:"produced,omitempty" form:"produced" query:"produced" validate:"required"`
+	// Received is the maximum sequence number of synthetic transactions received from the partition.
+	Received uint64 `json:"received,omitempty" form:"received" query:"received" validate:"required"`
+	// Delivered is the maximum sequence number of delivered synthetic transactions received from the partition.
+	Delivered uint64 `json:"delivered,omitempty" form:"delivered" query:"delivered" validate:"required"`
+	// Pending is the transaction hashes of synthetic transactions received out of order.
+	Pending   []*url.TxID `json:"pending,omitempty" form:"pending" query:"pending" validate:"required"`
 	extraData []byte
 }
 
@@ -1223,6 +1223,12 @@ func (v *AnchorLedger) Copy() *AnchorLedger {
 	for i, v := range v.PendingMajorBlockAnchors {
 		if v != nil {
 			u.PendingMajorBlockAnchors[i] = v
+		}
+	}
+	u.Exchange = make([]*TransactionExchangeLedger, len(v.Exchange))
+	for i, v := range v.Exchange {
+		if v != nil {
+			u.Exchange[i] = (v).Copy()
 		}
 	}
 
@@ -2011,27 +2017,6 @@ func (v *PartitionSignature) Copy() *PartitionSignature {
 
 func (v *PartitionSignature) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *PartitionSyntheticLedger) Copy() *PartitionSyntheticLedger {
-	u := new(PartitionSyntheticLedger)
-
-	if v.Url != nil {
-		u.Url = v.Url
-	}
-	u.Produced = v.Produced
-	u.Received = v.Received
-	u.Delivered = v.Delivered
-	u.Pending = make([]*url.TxID, len(v.Pending))
-	for i, v := range v.Pending {
-		if v != nil {
-			u.Pending[i] = v
-		}
-	}
-
-	return u
-}
-
-func (v *PartitionSyntheticLedger) CopyAsInterface() interface{} { return v.Copy() }
-
 func (v *RCD1Signature) Copy() *RCD1Signature {
 	u := new(RCD1Signature)
 
@@ -2292,16 +2277,10 @@ func (v *SyntheticLedger) Copy() *SyntheticLedger {
 	if v.Url != nil {
 		u.Url = v.Url
 	}
-	u.Partitions = make([]*PartitionSyntheticLedger, len(v.Partitions))
-	for i, v := range v.Partitions {
+	u.Exchange = make([]*TransactionExchangeLedger, len(v.Exchange))
+	for i, v := range v.Exchange {
 		if v != nil {
-			u.Partitions[i] = (v).Copy()
-		}
-	}
-	u.Anchors = make([]*PartitionSyntheticLedger, len(v.Anchors))
-	for i, v := range v.Anchors {
-		if v != nil {
-			u.Anchors[i] = (v).Copy()
+			u.Exchange[i] = (v).Copy()
 		}
 	}
 
@@ -2461,6 +2440,27 @@ func (v *Transaction) Copy() *Transaction {
 }
 
 func (v *Transaction) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *TransactionExchangeLedger) Copy() *TransactionExchangeLedger {
+	u := new(TransactionExchangeLedger)
+
+	if v.Url != nil {
+		u.Url = v.Url
+	}
+	u.Produced = v.Produced
+	u.Received = v.Received
+	u.Delivered = v.Delivered
+	u.Pending = make([]*url.TxID, len(v.Pending))
+	for i, v := range v.Pending {
+		if v != nil {
+			u.Pending[i] = v
+		}
+	}
+
+	return u
+}
+
+func (v *TransactionExchangeLedger) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *TransactionHeader) Copy() *TransactionHeader {
 	u := new(TransactionHeader)
@@ -2855,6 +2855,14 @@ func (v *AnchorLedger) Equal(u *AnchorLedger) bool {
 	}
 	for i := range v.PendingMajorBlockAnchors {
 		if !((v.PendingMajorBlockAnchors[i]).Equal(u.PendingMajorBlockAnchors[i])) {
+			return false
+		}
+	}
+	if len(v.Exchange) != len(u.Exchange) {
+		return false
+	}
+	for i := range v.Exchange {
+		if !((v.Exchange[i]).Equal(u.Exchange[i])) {
 			return false
 		}
 	}
@@ -3889,36 +3897,6 @@ func (v *PartitionSignature) Equal(u *PartitionSignature) bool {
 	return true
 }
 
-func (v *PartitionSyntheticLedger) Equal(u *PartitionSyntheticLedger) bool {
-	switch {
-	case v.Url == u.Url:
-		// equal
-	case v.Url == nil || u.Url == nil:
-		return false
-	case !((v.Url).Equal(u.Url)):
-		return false
-	}
-	if !(v.Produced == u.Produced) {
-		return false
-	}
-	if !(v.Received == u.Received) {
-		return false
-	}
-	if !(v.Delivered == u.Delivered) {
-		return false
-	}
-	if len(v.Pending) != len(u.Pending) {
-		return false
-	}
-	for i := range v.Pending {
-		if !((v.Pending[i]).Equal(u.Pending[i])) {
-			return false
-		}
-	}
-
-	return true
-}
-
 func (v *RCD1Signature) Equal(u *RCD1Signature) bool {
 	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
 		return false
@@ -4237,19 +4215,11 @@ func (v *SyntheticLedger) Equal(u *SyntheticLedger) bool {
 	case !((v.Url).Equal(u.Url)):
 		return false
 	}
-	if len(v.Partitions) != len(u.Partitions) {
+	if len(v.Exchange) != len(u.Exchange) {
 		return false
 	}
-	for i := range v.Partitions {
-		if !((v.Partitions[i]).Equal(u.Partitions[i])) {
-			return false
-		}
-	}
-	if len(v.Anchors) != len(u.Anchors) {
-		return false
-	}
-	for i := range v.Anchors {
-		if !((v.Anchors[i]).Equal(u.Anchors[i])) {
+	for i := range v.Exchange {
+		if !((v.Exchange[i]).Equal(u.Exchange[i])) {
 			return false
 		}
 	}
@@ -4452,6 +4422,36 @@ func (v *Transaction) Equal(u *Transaction) bool {
 	}
 	if !(EqualTransactionBody(v.Body, u.Body)) {
 		return false
+	}
+
+	return true
+}
+
+func (v *TransactionExchangeLedger) Equal(u *TransactionExchangeLedger) bool {
+	switch {
+	case v.Url == u.Url:
+		// equal
+	case v.Url == nil || u.Url == nil:
+		return false
+	case !((v.Url).Equal(u.Url)):
+		return false
+	}
+	if !(v.Produced == u.Produced) {
+		return false
+	}
+	if !(v.Received == u.Received) {
+		return false
+	}
+	if !(v.Delivered == u.Delivered) {
+		return false
+	}
+	if len(v.Pending) != len(u.Pending) {
+		return false
+	}
+	for i := range v.Pending {
+		if !((v.Pending[i]).Equal(u.Pending[i])) {
+			return false
+		}
 	}
 
 	return true
@@ -5196,6 +5196,7 @@ var fieldNames_AnchorLedger = []string{
 	4: "MajorBlockIndex",
 	5: "MajorBlockTime",
 	6: "PendingMajorBlockAnchors",
+	7: "Exchange",
 }
 
 func (v *AnchorLedger) MarshalBinary() ([]byte, error) {
@@ -5218,6 +5219,11 @@ func (v *AnchorLedger) MarshalBinary() ([]byte, error) {
 	if !(len(v.PendingMajorBlockAnchors) == 0) {
 		for _, v := range v.PendingMajorBlockAnchors {
 			writer.WriteUrl(6, v)
+		}
+	}
+	if !(len(v.Exchange) == 0) {
+		for _, v := range v.Exchange {
+			writer.WriteValue(7, v.MarshalBinary)
 		}
 	}
 
@@ -5259,6 +5265,11 @@ func (v *AnchorLedger) IsValid() error {
 		errs = append(errs, "field PendingMajorBlockAnchors is missing")
 	} else if len(v.PendingMajorBlockAnchors) == 0 {
 		errs = append(errs, "field PendingMajorBlockAnchors is not set")
+	}
+	if len(v.fieldsSet) > 7 && !v.fieldsSet[7] {
+		errs = append(errs, "field Exchange is missing")
+	} else if len(v.Exchange) == 0 {
+		errs = append(errs, "field Exchange is not set")
 	}
 
 	switch len(errs) {
@@ -8201,83 +8212,6 @@ func (v *PartitionSignature) IsValid() error {
 	}
 }
 
-var fieldNames_PartitionSyntheticLedger = []string{
-	1: "Url",
-	2: "Produced",
-	3: "Received",
-	4: "Delivered",
-	5: "Pending",
-}
-
-func (v *PartitionSyntheticLedger) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	if !(v.Url == nil) {
-		writer.WriteUrl(1, v.Url)
-	}
-	if !(v.Produced == 0) {
-		writer.WriteUint(2, v.Produced)
-	}
-	if !(v.Received == 0) {
-		writer.WriteUint(3, v.Received)
-	}
-	if !(v.Delivered == 0) {
-		writer.WriteUint(4, v.Delivered)
-	}
-	if !(len(v.Pending) == 0) {
-		for _, v := range v.Pending {
-			writer.WriteTxid(5, v)
-		}
-	}
-
-	_, _, err := writer.Reset(fieldNames_PartitionSyntheticLedger)
-	if err != nil {
-		return nil, encoding.Error{E: err}
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
-}
-
-func (v *PartitionSyntheticLedger) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Url is missing")
-	} else if v.Url == nil {
-		errs = append(errs, "field Url is not set")
-	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Produced is missing")
-	} else if v.Produced == 0 {
-		errs = append(errs, "field Produced is not set")
-	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field Received is missing")
-	} else if v.Received == 0 {
-		errs = append(errs, "field Received is not set")
-	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
-		errs = append(errs, "field Delivered is missing")
-	} else if v.Delivered == 0 {
-		errs = append(errs, "field Delivered is not set")
-	}
-	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
-		errs = append(errs, "field Pending is missing")
-	} else if len(v.Pending) == 0 {
-		errs = append(errs, "field Pending is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
 var fieldNames_RCD1Signature = []string{
 	1: "Type",
 	2: "PublicKey",
@@ -9269,8 +9203,7 @@ func (v *SyntheticForwardTransaction) IsValid() error {
 var fieldNames_SyntheticLedger = []string{
 	1: "Type",
 	2: "Url",
-	3: "Partitions",
-	4: "Anchors",
+	3: "Exchange",
 }
 
 func (v *SyntheticLedger) MarshalBinary() ([]byte, error) {
@@ -9281,14 +9214,9 @@ func (v *SyntheticLedger) MarshalBinary() ([]byte, error) {
 	if !(v.Url == nil) {
 		writer.WriteUrl(2, v.Url)
 	}
-	if !(len(v.Partitions) == 0) {
-		for _, v := range v.Partitions {
+	if !(len(v.Exchange) == 0) {
+		for _, v := range v.Exchange {
 			writer.WriteValue(3, v.MarshalBinary)
-		}
-	}
-	if !(len(v.Anchors) == 0) {
-		for _, v := range v.Anchors {
-			writer.WriteValue(4, v.MarshalBinary)
 		}
 	}
 
@@ -9312,14 +9240,9 @@ func (v *SyntheticLedger) IsValid() error {
 		errs = append(errs, "field Url is not set")
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field Partitions is missing")
-	} else if len(v.Partitions) == 0 {
-		errs = append(errs, "field Partitions is not set")
-	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
-		errs = append(errs, "field Anchors is missing")
-	} else if len(v.Anchors) == 0 {
-		errs = append(errs, "field Anchors is not set")
+		errs = append(errs, "field Exchange is missing")
+	} else if len(v.Exchange) == 0 {
+		errs = append(errs, "field Exchange is not set")
 	}
 
 	switch len(errs) {
@@ -9900,6 +9823,83 @@ func (v *Transaction) IsValid() error {
 		errs = append(errs, "field Body is missing")
 	} else if v.Body == nil {
 		errs = append(errs, "field Body is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_TransactionExchangeLedger = []string{
+	1: "Url",
+	2: "Produced",
+	3: "Received",
+	4: "Delivered",
+	5: "Pending",
+}
+
+func (v *TransactionExchangeLedger) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Url == nil) {
+		writer.WriteUrl(1, v.Url)
+	}
+	if !(v.Produced == 0) {
+		writer.WriteUint(2, v.Produced)
+	}
+	if !(v.Received == 0) {
+		writer.WriteUint(3, v.Received)
+	}
+	if !(v.Delivered == 0) {
+		writer.WriteUint(4, v.Delivered)
+	}
+	if !(len(v.Pending) == 0) {
+		for _, v := range v.Pending {
+			writer.WriteTxid(5, v)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_TransactionExchangeLedger)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *TransactionExchangeLedger) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Url is missing")
+	} else if v.Url == nil {
+		errs = append(errs, "field Url is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Produced is missing")
+	} else if v.Produced == 0 {
+		errs = append(errs, "field Produced is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Received is missing")
+	} else if v.Received == 0 {
+		errs = append(errs, "field Received is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Delivered is missing")
+	} else if v.Delivered == 0 {
+		errs = append(errs, "field Delivered is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field Pending is missing")
+	} else if len(v.Pending) == 0 {
+		errs = append(errs, "field Pending is not set")
 	}
 
 	switch len(errs) {
@@ -11110,6 +11110,13 @@ func (v *AnchorLedger) UnmarshalBinaryFrom(rd io.Reader) error {
 	for {
 		if x, ok := reader.ReadUrl(6); ok {
 			v.PendingMajorBlockAnchors = append(v.PendingMajorBlockAnchors, x)
+		} else {
+			break
+		}
+	}
+	for {
+		if x := new(TransactionExchangeLedger); reader.ReadValue(7, x.UnmarshalBinary) {
+			v.Exchange = append(v.Exchange, x)
 		} else {
 			break
 		}
@@ -12880,45 +12887,6 @@ func (v *PartitionSignature) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
-func (v *PartitionSyntheticLedger) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *PartitionSyntheticLedger) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	if x, ok := reader.ReadUrl(1); ok {
-		v.Url = x
-	}
-	if x, ok := reader.ReadUint(2); ok {
-		v.Produced = x
-	}
-	if x, ok := reader.ReadUint(3); ok {
-		v.Received = x
-	}
-	if x, ok := reader.ReadUint(4); ok {
-		v.Delivered = x
-	}
-	for {
-		if x, ok := reader.ReadTxid(5); ok {
-			v.Pending = append(v.Pending, x)
-		} else {
-			break
-		}
-	}
-
-	seen, err := reader.Reset(fieldNames_PartitionSyntheticLedger)
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	return nil
-}
-
 func (v *RCD1Signature) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -13569,15 +13537,8 @@ func (v *SyntheticLedger) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Url = x
 	}
 	for {
-		if x := new(PartitionSyntheticLedger); reader.ReadValue(3, x.UnmarshalBinary) {
-			v.Partitions = append(v.Partitions, x)
-		} else {
-			break
-		}
-	}
-	for {
-		if x := new(PartitionSyntheticLedger); reader.ReadValue(4, x.UnmarshalBinary) {
-			v.Anchors = append(v.Anchors, x)
+		if x := new(TransactionExchangeLedger); reader.ReadValue(3, x.UnmarshalBinary) {
+			v.Exchange = append(v.Exchange, x)
 		} else {
 			break
 		}
@@ -13930,6 +13891,45 @@ func (v *Transaction) UnmarshalBinaryFrom(rd io.Reader) error {
 	})
 
 	seen, err := reader.Reset(fieldNames_Transaction)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *TransactionExchangeLedger) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *TransactionExchangeLedger) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUrl(1); ok {
+		v.Url = x
+	}
+	if x, ok := reader.ReadUint(2); ok {
+		v.Produced = x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.Received = x
+	}
+	if x, ok := reader.ReadUint(4); ok {
+		v.Delivered = x
+	}
+	for {
+		if x, ok := reader.ReadTxid(5); ok {
+			v.Pending = append(v.Pending, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_TransactionExchangeLedger)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -14613,12 +14613,13 @@ func (v *AddKeyOperation) MarshalJSON() ([]byte, error) {
 
 func (v *AnchorLedger) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type                     AccountType                 `json:"type"`
-		Url                      *url.URL                    `json:"url,omitempty"`
-		MinorBlockSequenceNumber uint64                      `json:"minorBlockSequenceNumber,omitempty"`
-		MajorBlockIndex          uint64                      `json:"majorBlockIndex,omitempty"`
-		MajorBlockTime           time.Time                   `json:"majorBlockTime,omitempty"`
-		PendingMajorBlockAnchors encoding.JsonList[*url.URL] `json:"pendingMajorBlockAnchors,omitempty"`
+		Type                     AccountType                                   `json:"type"`
+		Url                      *url.URL                                      `json:"url,omitempty"`
+		MinorBlockSequenceNumber uint64                                        `json:"minorBlockSequenceNumber,omitempty"`
+		MajorBlockIndex          uint64                                        `json:"majorBlockIndex,omitempty"`
+		MajorBlockTime           time.Time                                     `json:"majorBlockTime,omitempty"`
+		PendingMajorBlockAnchors encoding.JsonList[*url.URL]                   `json:"pendingMajorBlockAnchors,omitempty"`
+		Exchange                 encoding.JsonList[*TransactionExchangeLedger] `json:"exchange,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
@@ -14626,6 +14627,7 @@ func (v *AnchorLedger) MarshalJSON() ([]byte, error) {
 	u.MajorBlockIndex = v.MajorBlockIndex
 	u.MajorBlockTime = v.MajorBlockTime
 	u.PendingMajorBlockAnchors = v.PendingMajorBlockAnchors
+	u.Exchange = v.Exchange
 	return json.Marshal(&u)
 }
 
@@ -15277,22 +15279,6 @@ func (v *PartitionSignature) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
-func (v *PartitionSyntheticLedger) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Url       *url.URL                     `json:"url,omitempty"`
-		Produced  uint64                       `json:"produced,omitempty"`
-		Received  uint64                       `json:"received,omitempty"`
-		Delivered uint64                       `json:"delivered,omitempty"`
-		Pending   encoding.JsonList[*url.TxID] `json:"pending,omitempty"`
-	}{}
-	u.Url = v.Url
-	u.Produced = v.Produced
-	u.Received = v.Received
-	u.Delivered = v.Delivered
-	u.Pending = v.Pending
-	return json.Marshal(&u)
-}
-
 func (v *RCD1Signature) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type            SignatureType `json:"type"`
@@ -15519,15 +15505,13 @@ func (v *SyntheticForwardTransaction) MarshalJSON() ([]byte, error) {
 
 func (v *SyntheticLedger) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type       AccountType                                  `json:"type"`
-		Url        *url.URL                                     `json:"url,omitempty"`
-		Partitions encoding.JsonList[*PartitionSyntheticLedger] `json:"partitions,omitempty"`
-		Anchors    encoding.JsonList[*PartitionSyntheticLedger] `json:"anchors,omitempty"`
+		Type     AccountType                                   `json:"type"`
+		Url      *url.URL                                      `json:"url,omitempty"`
+		Exchange encoding.JsonList[*TransactionExchangeLedger] `json:"exchange,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
-	u.Partitions = v.Partitions
-	u.Anchors = v.Anchors
+	u.Exchange = v.Exchange
 	return json.Marshal(&u)
 }
 
@@ -15644,6 +15628,22 @@ func (v *Transaction) MarshalJSON() ([]byte, error) {
 	}{}
 	u.Header = v.Header
 	u.Body = encoding.JsonUnmarshalWith[TransactionBody]{Value: v.Body, Func: UnmarshalTransactionBodyJSON}
+	return json.Marshal(&u)
+}
+
+func (v *TransactionExchangeLedger) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Url       *url.URL                     `json:"url,omitempty"`
+		Produced  uint64                       `json:"produced,omitempty"`
+		Received  uint64                       `json:"received,omitempty"`
+		Delivered uint64                       `json:"delivered,omitempty"`
+		Pending   encoding.JsonList[*url.TxID] `json:"pending,omitempty"`
+	}{}
+	u.Url = v.Url
+	u.Produced = v.Produced
+	u.Received = v.Received
+	u.Delivered = v.Delivered
+	u.Pending = v.Pending
 	return json.Marshal(&u)
 }
 
@@ -16016,12 +16016,13 @@ func (v *AddKeyOperation) UnmarshalJSON(data []byte) error {
 
 func (v *AnchorLedger) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type                     AccountType                 `json:"type"`
-		Url                      *url.URL                    `json:"url,omitempty"`
-		MinorBlockSequenceNumber uint64                      `json:"minorBlockSequenceNumber,omitempty"`
-		MajorBlockIndex          uint64                      `json:"majorBlockIndex,omitempty"`
-		MajorBlockTime           time.Time                   `json:"majorBlockTime,omitempty"`
-		PendingMajorBlockAnchors encoding.JsonList[*url.URL] `json:"pendingMajorBlockAnchors,omitempty"`
+		Type                     AccountType                                   `json:"type"`
+		Url                      *url.URL                                      `json:"url,omitempty"`
+		MinorBlockSequenceNumber uint64                                        `json:"minorBlockSequenceNumber,omitempty"`
+		MajorBlockIndex          uint64                                        `json:"majorBlockIndex,omitempty"`
+		MajorBlockTime           time.Time                                     `json:"majorBlockTime,omitempty"`
+		PendingMajorBlockAnchors encoding.JsonList[*url.URL]                   `json:"pendingMajorBlockAnchors,omitempty"`
+		Exchange                 encoding.JsonList[*TransactionExchangeLedger] `json:"exchange,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
@@ -16029,6 +16030,7 @@ func (v *AnchorLedger) UnmarshalJSON(data []byte) error {
 	u.MajorBlockIndex = v.MajorBlockIndex
 	u.MajorBlockTime = v.MajorBlockTime
 	u.PendingMajorBlockAnchors = v.PendingMajorBlockAnchors
+	u.Exchange = v.Exchange
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -16040,6 +16042,7 @@ func (v *AnchorLedger) UnmarshalJSON(data []byte) error {
 	v.MajorBlockIndex = u.MajorBlockIndex
 	v.MajorBlockTime = u.MajorBlockTime
 	v.PendingMajorBlockAnchors = u.PendingMajorBlockAnchors
+	v.Exchange = u.Exchange
 	return nil
 }
 
@@ -17271,30 +17274,6 @@ func (v *PartitionSignature) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (v *PartitionSyntheticLedger) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Url       *url.URL                     `json:"url,omitempty"`
-		Produced  uint64                       `json:"produced,omitempty"`
-		Received  uint64                       `json:"received,omitempty"`
-		Delivered uint64                       `json:"delivered,omitempty"`
-		Pending   encoding.JsonList[*url.TxID] `json:"pending,omitempty"`
-	}{}
-	u.Url = v.Url
-	u.Produced = v.Produced
-	u.Received = v.Received
-	u.Delivered = v.Delivered
-	u.Pending = v.Pending
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	v.Url = u.Url
-	v.Produced = u.Produced
-	v.Received = u.Received
-	v.Delivered = u.Delivered
-	v.Pending = u.Pending
-	return nil
-}
-
 func (v *RCD1Signature) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type            SignatureType `json:"type"`
@@ -17704,15 +17683,13 @@ func (v *SyntheticForwardTransaction) UnmarshalJSON(data []byte) error {
 
 func (v *SyntheticLedger) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type       AccountType                                  `json:"type"`
-		Url        *url.URL                                     `json:"url,omitempty"`
-		Partitions encoding.JsonList[*PartitionSyntheticLedger] `json:"partitions,omitempty"`
-		Anchors    encoding.JsonList[*PartitionSyntheticLedger] `json:"anchors,omitempty"`
+		Type     AccountType                                   `json:"type"`
+		Url      *url.URL                                      `json:"url,omitempty"`
+		Exchange encoding.JsonList[*TransactionExchangeLedger] `json:"exchange,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
-	u.Partitions = v.Partitions
-	u.Anchors = v.Anchors
+	u.Exchange = v.Exchange
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -17720,8 +17697,7 @@ func (v *SyntheticLedger) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Url = u.Url
-	v.Partitions = u.Partitions
-	v.Anchors = u.Anchors
+	v.Exchange = u.Exchange
 	return nil
 }
 
@@ -17931,6 +17907,30 @@ func (v *Transaction) UnmarshalJSON(data []byte) error {
 	v.Header = u.Header
 	v.Body = u.Body.Value
 
+	return nil
+}
+
+func (v *TransactionExchangeLedger) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Url       *url.URL                     `json:"url,omitempty"`
+		Produced  uint64                       `json:"produced,omitempty"`
+		Received  uint64                       `json:"received,omitempty"`
+		Delivered uint64                       `json:"delivered,omitempty"`
+		Pending   encoding.JsonList[*url.TxID] `json:"pending,omitempty"`
+	}{}
+	u.Url = v.Url
+	u.Produced = v.Produced
+	u.Received = v.Received
+	u.Delivered = v.Delivered
+	u.Pending = v.Pending
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Url = u.Url
+	v.Produced = u.Produced
+	v.Received = u.Received
+	v.Delivered = u.Delivered
+	v.Pending = u.Pending
 	return nil
 }
 

@@ -30,15 +30,9 @@ SyntheticLedger:
     - name: Url
       type: url
       pointer: true
-    - name: Partitions
+    - name: Exchange
       description: tracks sent and received synthetic transactions
-      type: PartitionSyntheticLedger
-      marshal-as: reference
-      pointer: true
-      repeatable: true
-    - name: Anchors
-      description: tracks sent and received anchors
-      type: PartitionSyntheticLedger
+      type: TransactionExchangeLedger
       marshal-as: reference
       pointer: true
       repeatable: true
@@ -61,6 +55,12 @@ AnchorLedger:
     - name: PendingMajorBlockAnchors
       description: is the list of partitions that have joined the open major block. If there is no open major block, this is unset
       type: url
+      pointer: true
+      repeatable: true
+    - name: Exchange
+      description: tracks sent and received anchor transactions
+      type: TransactionExchangeLedger
+      marshal-as: reference
       pointer: true
       repeatable: true
 
@@ -173,7 +173,7 @@ PartitionAnchorReceipt:
       marshal-as: reference
       pointer: true
 
-PartitionSyntheticLedger:
+TransactionExchangeLedger:
   fields:
     - name: Url
       description: is the URL of the partition

@@ -8,7 +8,7 @@ import (
 )
 
 func TestPartitionSyntheticLedger_Add(t *testing.T) {
-	ledger := new(PartitionSyntheticLedger)
+	ledger := new(TransactionExchangeLedger)
 	ledger.Received, ledger.Delivered = 3, 3
 
 	foo := AccountUrl("foo")
