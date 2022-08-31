@@ -2,7 +2,6 @@ package protocol
 
 import "gitlab.com/accumulatenetwork/accumulate/pkg/url"
 
-
 // Add records a received or delivered synthetic transaction.
 func (s *TransactionExchangeLedger) Add(delivered bool, sequenceNumber uint64, txid *url.TxID) (dirty bool) {
 	// Update received
