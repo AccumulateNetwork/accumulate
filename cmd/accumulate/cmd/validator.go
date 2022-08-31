@@ -99,7 +99,7 @@ func runValCmdFunc(fn func(values *core.GlobalValues, pageCount int, signer []*s
 		if partition == "dn" {
 			partition = protocol.Directory
 		}
-		args[0] = protocol.PartitionUrl(partition).JoinPath(protocol.Operators, "1").String()
+		args[0] = protocol.DnUrl().JoinPath(protocol.Operators, "1").String()
 		args, principal, signers, err := parseArgsAndPrepareSigner(args)
 		if err != nil {
 			return "", err
@@ -110,7 +110,7 @@ func runValCmdFunc(fn func(values *core.GlobalValues, pageCount int, signer []*s
 			return "", err
 		}
 
-		return dispatchTxAndPrintResponse(env, principal, signers)
+		return dispatchTxAndPrintResponse(env, principal, nil)
 	})
 }
 
