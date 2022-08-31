@@ -83,8 +83,6 @@ type AddKeyOperation struct {
 type AnchorLedger struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
-	// MinorBlockSequenceNumber is the sequence number of the last minor block.
-	MinorBlockSequenceNumber uint64 `json:"minorBlockSequenceNumber,omitempty" form:"minorBlockSequenceNumber" query:"minorBlockSequenceNumber" validate:"required"`
 	// MajorBlockIndex is the block index of the last major block.
 	MajorBlockIndex uint64 `json:"majorBlockIndex,omitempty" form:"majorBlockIndex" query:"majorBlockIndex" validate:"required"`
 	// MajorBlockTime is the timestamp of the last major block.
@@ -1216,7 +1214,6 @@ func (v *AnchorLedger) Copy() *AnchorLedger {
 	if v.Url != nil {
 		u.Url = v.Url
 	}
-	u.MinorBlockSequenceNumber = v.MinorBlockSequenceNumber
 	u.MajorBlockIndex = v.MajorBlockIndex
 	u.MajorBlockTime = v.MajorBlockTime
 	u.PendingMajorBlockAnchors = make([]*url.URL, len(v.PendingMajorBlockAnchors))
@@ -2839,9 +2836,6 @@ func (v *AnchorLedger) Equal(u *AnchorLedger) bool {
 	case v.Url == nil || u.Url == nil:
 		return false
 	case !((v.Url).Equal(u.Url)):
-		return false
-	}
-	if !(v.MinorBlockSequenceNumber == u.MinorBlockSequenceNumber) {
 		return false
 	}
 	if !(v.MajorBlockIndex == u.MajorBlockIndex) {
@@ -5192,11 +5186,10 @@ func (v *AddKeyOperation) IsValid() error {
 var fieldNames_AnchorLedger = []string{
 	1: "Type",
 	2: "Url",
-	3: "MinorBlockSequenceNumber",
-	4: "MajorBlockIndex",
-	5: "MajorBlockTime",
-	6: "PendingMajorBlockAnchors",
-	7: "Exchange",
+	3: "MajorBlockIndex",
+	4: "MajorBlockTime",
+	5: "PendingMajorBlockAnchors",
+	6: "Exchange",
 }
 
 func (v *AnchorLedger) MarshalBinary() ([]byte, error) {
@@ -5207,23 +5200,20 @@ func (v *AnchorLedger) MarshalBinary() ([]byte, error) {
 	if !(v.Url == nil) {
 		writer.WriteUrl(2, v.Url)
 	}
-	if !(v.MinorBlockSequenceNumber == 0) {
-		writer.WriteUint(3, v.MinorBlockSequenceNumber)
-	}
 	if !(v.MajorBlockIndex == 0) {
-		writer.WriteUint(4, v.MajorBlockIndex)
+		writer.WriteUint(3, v.MajorBlockIndex)
 	}
 	if !(v.MajorBlockTime == (time.Time{})) {
-		writer.WriteTime(5, v.MajorBlockTime)
+		writer.WriteTime(4, v.MajorBlockTime)
 	}
 	if !(len(v.PendingMajorBlockAnchors) == 0) {
 		for _, v := range v.PendingMajorBlockAnchors {
-			writer.WriteUrl(6, v)
+			writer.WriteUrl(5, v)
 		}
 	}
 	if !(len(v.Exchange) == 0) {
 		for _, v := range v.Exchange {
-			writer.WriteValue(7, v.MarshalBinary)
+			writer.WriteValue(6, v.MarshalBinary)
 		}
 	}
 
@@ -5247,26 +5237,21 @@ func (v *AnchorLedger) IsValid() error {
 		errs = append(errs, "field Url is not set")
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field MinorBlockSequenceNumber is missing")
-	} else if v.MinorBlockSequenceNumber == 0 {
-		errs = append(errs, "field MinorBlockSequenceNumber is not set")
-	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field MajorBlockIndex is missing")
 	} else if v.MajorBlockIndex == 0 {
 		errs = append(errs, "field MajorBlockIndex is not set")
 	}
-	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field MajorBlockTime is missing")
 	} else if v.MajorBlockTime == (time.Time{}) {
 		errs = append(errs, "field MajorBlockTime is not set")
 	}
-	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
 		errs = append(errs, "field PendingMajorBlockAnchors is missing")
 	} else if len(v.PendingMajorBlockAnchors) == 0 {
 		errs = append(errs, "field PendingMajorBlockAnchors is not set")
 	}
-	if len(v.fieldsSet) > 7 && !v.fieldsSet[7] {
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
 		errs = append(errs, "field Exchange is missing")
 	} else if len(v.Exchange) == 0 {
 		errs = append(errs, "field Exchange is not set")
@@ -11099,23 +11084,20 @@ func (v *AnchorLedger) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Url = x
 	}
 	if x, ok := reader.ReadUint(3); ok {
-		v.MinorBlockSequenceNumber = x
-	}
-	if x, ok := reader.ReadUint(4); ok {
 		v.MajorBlockIndex = x
 	}
-	if x, ok := reader.ReadTime(5); ok {
+	if x, ok := reader.ReadTime(4); ok {
 		v.MajorBlockTime = x
 	}
 	for {
-		if x, ok := reader.ReadUrl(6); ok {
+		if x, ok := reader.ReadUrl(5); ok {
 			v.PendingMajorBlockAnchors = append(v.PendingMajorBlockAnchors, x)
 		} else {
 			break
 		}
 	}
 	for {
-		if x := new(TransactionExchangeLedger); reader.ReadValue(7, x.UnmarshalBinary) {
+		if x := new(TransactionExchangeLedger); reader.ReadValue(6, x.UnmarshalBinary) {
 			v.Exchange = append(v.Exchange, x)
 		} else {
 			break
@@ -14615,7 +14597,6 @@ func (v *AnchorLedger) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type                     AccountType                                   `json:"type"`
 		Url                      *url.URL                                      `json:"url,omitempty"`
-		MinorBlockSequenceNumber uint64                                        `json:"minorBlockSequenceNumber,omitempty"`
 		MajorBlockIndex          uint64                                        `json:"majorBlockIndex,omitempty"`
 		MajorBlockTime           time.Time                                     `json:"majorBlockTime,omitempty"`
 		PendingMajorBlockAnchors encoding.JsonList[*url.URL]                   `json:"pendingMajorBlockAnchors,omitempty"`
@@ -14623,7 +14604,6 @@ func (v *AnchorLedger) MarshalJSON() ([]byte, error) {
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
-	u.MinorBlockSequenceNumber = v.MinorBlockSequenceNumber
 	u.MajorBlockIndex = v.MajorBlockIndex
 	u.MajorBlockTime = v.MajorBlockTime
 	u.PendingMajorBlockAnchors = v.PendingMajorBlockAnchors
@@ -16018,7 +15998,6 @@ func (v *AnchorLedger) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type                     AccountType                                   `json:"type"`
 		Url                      *url.URL                                      `json:"url,omitempty"`
-		MinorBlockSequenceNumber uint64                                        `json:"minorBlockSequenceNumber,omitempty"`
 		MajorBlockIndex          uint64                                        `json:"majorBlockIndex,omitempty"`
 		MajorBlockTime           time.Time                                     `json:"majorBlockTime,omitempty"`
 		PendingMajorBlockAnchors encoding.JsonList[*url.URL]                   `json:"pendingMajorBlockAnchors,omitempty"`
@@ -16026,7 +16005,6 @@ func (v *AnchorLedger) UnmarshalJSON(data []byte) error {
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
-	u.MinorBlockSequenceNumber = v.MinorBlockSequenceNumber
 	u.MajorBlockIndex = v.MajorBlockIndex
 	u.MajorBlockTime = v.MajorBlockTime
 	u.PendingMajorBlockAnchors = v.PendingMajorBlockAnchors
@@ -16038,7 +16016,6 @@ func (v *AnchorLedger) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Url = u.Url
-	v.MinorBlockSequenceNumber = u.MinorBlockSequenceNumber
 	v.MajorBlockIndex = u.MajorBlockIndex
 	v.MajorBlockTime = u.MajorBlockTime
 	v.PendingMajorBlockAnchors = u.PendingMajorBlockAnchors

@@ -43,9 +43,6 @@ AnchorLedger:
     - name: Url
       type: url
       pointer: true
-    - name: MinorBlockSequenceNumber
-      description: is the sequence number of the last minor block
-      type: uint
     - name: MajorBlockIndex
       description: is the block index of the last major block
       type: uint

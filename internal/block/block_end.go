@@ -651,7 +651,7 @@ func (x *Executor) prepareAnchor(block *Block) error {
 
 	// Update the anchor ledger
 	anchorLedger, err := database.UpdateAccount(block.Batch, x.Describe.AnchorPool(), func(ledger *protocol.AnchorLedger) error {
-		ledger.MinorBlockSequenceNumber++
+		ledger.Partition(protocol.DnUrl()).Produced++
 		if !block.State.Anchor.ShouldOpenMajorBlock {
 			return nil
 		}

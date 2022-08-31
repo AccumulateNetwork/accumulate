@@ -182,7 +182,7 @@ func (x *Executor) finalizeBlock(block *Block) error {
 	}
 
 	// Send the block anchor
-	sequenceNumber := anchorLedger.MinorBlockSequenceNumber
+	sequenceNumber := anchorLedger.Partition(protocol.DnUrl()).Produced
 	x.logger.Debug("Anchor block", "module", "anchoring", "index", ledger.Index, "seq-num", sequenceNumber)
 
 	// Load the root chain
