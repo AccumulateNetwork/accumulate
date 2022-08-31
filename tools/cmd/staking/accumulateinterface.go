@@ -1,5 +1,7 @@
 package main
 
+import "net/url"
+
 const (
 	PureStaker        = "Pure Staker"
 	ProtocolValidator = "Protocol Validator"
@@ -16,13 +18,10 @@ type Accumulate interface {
 }
 
 type StakingADI struct {
-	Activation int64  // Block where Staker is activated
-	AdiUrl     string // The Staker's ADI
-	AccountUrl string // URL of the Staking Account
-	Type       string // Type of validator
-
-	StakerADI string        // ADI of the staking account (if delegated)
-	Delegates []*StakingADI // List of Delegates (if not a delegate)
+	Activation int64         // Block where Staker is activated
+	AdiUrl     *url.URL      // The Staker's ADI
+	AccountUrl *url.URL      // URL of the Staking Account
+	Type       string        // Type of validator
+	StakerADI  *url.URL      // ADI of the staking account (if delegated)
+	Delegates  []*StakingADI // List of Delegates (if not a delegate)
 }
-
-

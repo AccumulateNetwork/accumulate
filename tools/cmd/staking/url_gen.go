@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"math/rand"
+	"net/url"
 	"unicode"
 )
 
@@ -51,22 +52,34 @@ func cap(word string) string {
 	return word
 }
 
-// GenUrl
+// GenUrls
 // Generates ADI and an account (as provided)
 // We use a random matching of adjs and nouns, so we use a map to ensure we have not
 // returned a pair before.
-func GenUrl(account string) (ADI, url string) {
+func GenUrls(account string) (ADI, URL *url.URL) {
 	if currentUrls == nil {
 		currentUrls = make(map[string]int) // allocate the duplicate map
 		rand.Seed(1971)                    // make sure we return the same data for calls in the same order
 	}
 	i := rand.Int() % len(Adjectives)
 	j := rand.Int() % len(Nouns)
-	ADI = "acc://" + cap(Adjectives[i]) + cap(Nouns[j]) + ".acme"
-	url = fmt.Sprintf("%s/%s", ADI, account)
-	if currentUrls[url] == 1 {
-		return GenUrl(account)
+	a := "acc://" + cap(Adjectives[i]) + cap(Nouns[j]) + ".acme"
+	u := fmt.Sprintf("%s/%s", a, account)
+	if currentUrls[u] == 1 {
+		return GenUrls(account)
 	}
-	currentUrls[url] = 1
-	return ADI, url
+	currentUrls[u] = 1
+	ADI, err1 := url.Parse(a)
+	URL, err2 := url.Parse(u)
+	if err1 != nil || err2 != nil {
+		panic(fmt.Sprintf("Found error(s) %v %v ", err1, err2))
+	}
+	return ADI, URL
+}
+
+// GenAccount
+// Same as GenUrl but doesn't return the ADI
+func GenAccount(account string) (Url *url.URL) {
+	_, u := GenUrls(account)
+	return u
 }

@@ -8,13 +8,19 @@ import (
 )
 
 type Deposit struct {
-	Amount     int64 // Amount of tokens deposited into the Account
 	MajorBlock int64 // The major block when the deposit was made
+	Amount     int64 // Amount of tokens deposited into the Account
+}
+
+type UrlEntry struct {
+	MajorBlock int64 // The major block when the URL was recorded
+	Url        url.URL
 }
 
 type Account struct {
-	URL      url.URL
-	Deposits []*Deposit // List of deposits made into the Account
+	MajorBlock int64 // The major block when Account was created
+	URL        *url.URL
+	Entries    []interface{} // Returns some struct from the account
 }
 
 type Block struct {
@@ -22,97 +28,72 @@ type Block struct {
 	MinorHeight  int64
 	TokensIssued int64
 	Timestamp    time.Time
+	Accounts     []*Account
 }
 
 type Simulator struct {
-	mutex      sync.Mutex
-	major,minor int64
-	parameters *Parameters
-	ADIs       []url.URL
-	Accounts   []Account
-	Blocks     []Block
-}
-
-type Parameters struct {
-	ADI struct {
-		StakingService *url.URL // Staking Service ADI acc://staking.acme
-	}
-	Account struct {
-		TokenIssuance  *url.URL // Token Issuance account acc://acme
-		RegisteredADIs *url.URL // RegisteredADIs staking acc://stacking.acme/Registered
-		ApprovedADIs   *url.URL // ApprovedADIs staking acc://stacking.acme/Approved
-		Disputes       *url.URL // Disputes of staking acc://staking.acme/Disputes
-	}
-
-	MajorTime         int64   // Time for a Major Block in seconds
-	FirstPayOut       int64   // Block of the first Staking Payout
-	PayOutFreq        int64   // Frequency of Payouts
-	TokenLimit        int64   // Total Tokens to be issued
-	TokenIssuanceRate float64 // APR of payout of unissued tokens
-	StakingWeight     struct {
-		PureStaking       float64 // Added weight for Pure Staking
-		ProtocolValidator float64 // for Protocol Validators
-		ProtocolFollower  float64 // for Protocol Followers
-		StakingValidator  float64 // for Staking Validators
-	}
-	DelegateShare float64 // The share a Delegate Staker Keeps
-	StakingShare  float64 // The share the Staker gets from the Delegates
-}
-
-// init()
-// Initialize stuff in the package
-// Initialize the starting values for Parameters
-func (p *Parameters) Init() {
-	var err1, err2, err3, err4, err5 error
-	p.ADI.StakingService, err1 = url.Parse("acc://Staking.acme")
-	p.Account.TokenIssuance, err2 = url.Parse("acc://acme")
-	p.Account.RegisteredADIs, err3 = url.Parse("acc://staking.acme/Registered")
-	p.Account.ApprovedADIs, err4 = url.Parse("acc://staking.acme/Approved")
-	p.Account.Disputes, err5 = url.Parse("acc://staking.acme/Disputes")
-	switch {
-	case err1 != nil:
-		panic(err1)
-	case err2 != nil:
-		panic(err1)
-	case err3 != nil:
-		panic(err1)
-	case err4 != nil:
-		panic(err1)
-	case err5 != nil:
-		panic(err1)
-	}
-	p.MajorTime = 5
-	p.FirstPayOut = 4
-	p.PayOutFreq = 4
-	p.TokenLimit = 500e6
-	p.TokenIssuanceRate = .16
-	p.StakingWeight.PureStaking = 1.00
-	p.StakingWeight.ProtocolValidator = 1.10
-	p.StakingWeight.ProtocolFollower = 1.10
-	p.StakingWeight.StakingValidator = 1.10
-	p.DelegateShare = .95
-	p.StakingShare = .05
+	mutex        sync.Mutex          // Handle concurrent access
+	major, minor int64               // Current block height
+	parameters   *Parameters         // 
+	ADIs         map[string]*url.URL //
+	Accounts     map[string]*Account //
+	Blocks       []*Block            //
+	CurrentBlock *Block              //
 }
 
 func (s *Simulator) Init() {
-	s.major = -1 
+	s.major = -1
 	s.minor = -1
 	s.parameters = new(Parameters)
 	s.parameters.Init()
+	s.CurrentBlock = new(Block)
+	s.CurrentBlock.Timestamp=time.Now()
+	s.CurrentBlock.TokensIssued=203e6
+
+	// Add some staking accounts
+	a := new(Account)
+	a.MajorBlock=0
+	a.URL=s.parameters.Account.RegisteredADIs
+	for i:=0;i<15;i++{
+		st := new(StakingADI)
+		adi,account := GenUrls("StakingAccount") 
+		st.AccountUrl= account
+		st.AdiUrl= adi
+		switch i%4 {
+		case 0:
+			st.Type = PureStaker
+		case 1:
+			st.Type = ProtocolValidator
+		case 2:
+			st.Type = ProtocolFollower
+		case 3:
+			st.Type = ProtocolFollower
+		}
+		st.Activation=0
+		a.Entries = append(a.Entries,st)
+		s.CurrentBlock.Accounts = append(s.CurrentBlock.Accounts,a)
+	}
 }
 
 func (s *Simulator) Run() {
-	
 	for {
-		s.mutex.Lock()	
-		 s.minor++
+		s.mutex.Lock()
+		s.minor++
 		if s.minor%s.parameters.MajorTime == 0 {
 			s.major++
-			fmt.Printf("\n%d :",s.major)
+			fmt.Printf("\n%d :", s.major)
 		}
-		fmt.Printf(" %d",s.minor)
+		fmt.Printf(" %d", s.minor)
+
+		s.Blocks = append(s.Blocks,s.CurrentBlock)
+		s.CurrentBlock = new(Block)
+		s.CurrentBlock.MinorHeight = s.minor
+		s.CurrentBlock.MajorHeight = s.major
+		s.CurrentBlock.Timestamp=time.Now()
+		s.CurrentBlock.TokensIssued=0
 		s.mutex.Unlock()
 		time.Sleep(time.Second)
 	}
-
 }
+
+
