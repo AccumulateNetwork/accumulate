@@ -114,6 +114,8 @@ GeneralReceipt:
       type: uvarint
     - name: DirectoryBlock
       type: uvarint
+    - name: MajorBlock
+      type: uint
     - name: Proof
       type: managed.Receipt
       marshal-as: reference
