@@ -385,15 +385,6 @@ func CreateTX(sender string, args []string) (string, error) {
 	return dispatchTxAndPrintResponse(send, u, signer)
 }
 
-func waitForTxnUsingUrl(txID *url.TxID, wait time.Duration, ignorePending bool) ([]*api.TransactionQueryResponse, error) {
-	var queryResponses []*api.TransactionQueryResponse
-	queryRes, err := getTxUsingUrl(txID, wait, ignorePending)
-	if err != nil {
-		return nil, err
-	}
-	return waitForTxn(queryResponses, queryRes, wait)
-}
-
 func waitForTxnUsingHash(hash []byte, wait time.Duration, ignorePending bool) ([]*api.TransactionQueryResponse, error) {
 	var queryResponses []*api.TransactionQueryResponse
 	queryRes, err := getTxUsingHash(hash, wait, ignorePending)
