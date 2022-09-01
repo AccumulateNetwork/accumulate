@@ -3,6 +3,7 @@ package simulator
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
@@ -19,6 +20,7 @@ type Router struct {
 	logger     logging.OptionalLogger
 	partitions map[string]*Partition
 	lastUsed   map[string]int
+	lastUsedMu *sync.Mutex
 	overrides  map[[32]byte]string
 }
 
@@ -27,6 +29,7 @@ func newRouter(logger log.Logger, partitions map[string]*Partition) *Router {
 	r.logger.Set(logger, "module", "router")
 	r.partitions = partitions
 	r.lastUsed = map[string]int{}
+	r.lastUsedMu = new(sync.Mutex)
 	r.overrides = map[[32]byte]string{}
 	return r
 }
@@ -76,9 +79,11 @@ func (r *Router) RequestAPIv2(ctx context.Context, partition, method string, par
 	}
 
 	// Round robin
+	r.lastUsedMu.Lock()
 	last := r.lastUsed[partition]
 	r.lastUsed[partition] = (last + 1) % len(p.nodes)
 	c := p.nodes[last].client
+	r.lastUsedMu.Unlock()
 
 	return c.RequestAPIv2(ctx, method, params, result)
 }
@@ -120,7 +125,7 @@ func (r *Router) Submit(ctx context.Context, partition string, envelope *protoco
 		}
 
 		// If a user transaction fails, the batch fails
-		if deliveries[i].Transaction.Body.Type().IsUser() {
+		if results[i].Failed() && deliveries[i].Transaction.Body.Type().IsUser() {
 			resp.Code = uint32(protocol.ErrorCodeUnknownError)
 			resp.Log = "One or more user transactions failed"
 		}

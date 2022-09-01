@@ -45,7 +45,6 @@ type validatorUpdate struct {
 
 func newPartition(s *Simulator, partition protocol.PartitionInfo) *Partition {
 	p := new(Partition)
-	p.blockTime = GenesisTime
 	p.PartitionInfo = partition
 	p.logger.Set(s.logger, "partition", partition.ID)
 	p.mu = new(sync.Mutex)
@@ -188,22 +187,25 @@ func (p *Partition) execute(background *errgroup.Group) error {
 		p.blockTime = p.blockTime.Add(time.Second)
 	} else {
 		err := p.View(func(batch *database.Batch) error {
-			var ledger *protocol.SystemLedger
-			err := batch.Account(protocol.PartitionUrl(p.ID).JoinPath(protocol.Ledger)).GetStateAs(&ledger)
-			switch {
-			case err == nil:
-				p.blockIndex = ledger.Index + 1
-			case errors.Is(err, errors.StatusNotFound):
-				p.blockIndex = protocol.GenesisBlock + 1
-			default:
-				return errors.Format(errors.StatusFatalError, "load system ledger: %w", err)
+			record := batch.Account(protocol.PartitionUrl(p.ID).JoinPath(protocol.Ledger))
+			c, err := record.RootChain().Index().Get()
+			if err != nil {
+				return errors.Format(errors.StatusFatalError, "load root index chain: %w", err)
 			}
+			entry := new(protocol.IndexEntry)
+			err = c.EntryAs(c.Height()-1, entry)
+			if err != nil {
+				return errors.Format(errors.StatusFatalError, "load root index chain entry 0: %w", err)
+			}
+			p.blockIndex = entry.BlockIndex + 1
+			p.blockTime = entry.BlockTime.Add(time.Second)
 			return nil
 		})
 		if err != nil {
 			return err
 		}
 	}
+	p.logger.Debug("Stepping", "block", p.blockIndex)
 
 	// Begin block
 	leader := int(p.blockIndex) % len(p.nodes)

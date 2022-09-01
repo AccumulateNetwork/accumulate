@@ -26,7 +26,7 @@ func TestSimulator(t *testing.T) {
 	sim := NewSim(t,
 		simulator.MemoryDatabase,
 		simulator.SimpleNetwork(t.Name(), 3, 3),
-		simulator.Genesis(),
+		simulator.Genesis(GenesisTime),
 	)
 
 	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])

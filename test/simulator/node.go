@@ -10,6 +10,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
+	"gitlab.com/accumulatenetwork/accumulate/internal/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
@@ -22,19 +23,23 @@ import (
 )
 
 type Node struct {
+	id        int
+	init      *accumulated.NodeInit
 	partition *protocol.PartitionInfo
 	logger    logging.OptionalLogger
 	eventBus  *events.Bus
 	database  database.Beginner
 	executor  *block.Executor
+	api       *api.JrpcMethods
 	client    *client.Client
 
-	checkBatch       *database.Batch
 	validatorUpdates []*validatorUpdate
 }
 
 func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (*Node, error) {
 	n := new(Node)
+	n.id = node
+	n.init = init
 	n.partition = &p.PartitionInfo
 	n.logger.Set(p.logger, "node", node)
 	n.eventBus = events.NewBus(n.logger)
@@ -47,19 +52,24 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 		Network:      *s.netcfg,
 	}
 
-	var err error
-	n.executor, err = block.NewNodeExecutor(block.ExecutorOptions{
+	execOpts := block.ExecutorOptions{
 		Logger:   n.logger,
 		Key:      init.PrivValKey,
 		Describe: network,
 		Router:   s.router,
 		EventBus: n.eventBus,
-	}, n)
+	}
+	if p.Type == config.Directory {
+		execOpts.MajorBlockScheduler = blockscheduler.Init(n.eventBus)
+	}
+
+	var err error
+	n.executor, err = block.NewNodeExecutor(execOpts, n)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
-	api, err := api.NewJrpc(api.Options{
+	n.api, err = api.NewJrpc(api.Options{
 		Logger:        n.logger,
 		Describe:      &network,
 		Router:        s.router,
@@ -70,7 +80,7 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
-	n.client = testing.DirectJrpcClient(api)
+	n.client = testing.DirectJrpcClient(n.api)
 
 	events.SubscribeSync(n.eventBus, n.willChangeGlobals)
 
@@ -105,9 +115,23 @@ func (n *Node) willChangeGlobals(e events.WillChangeGlobals) error {
 }
 
 func (n *Node) initChain(snapshot ioutil2.SectionReader) ([]byte, error) {
+	// Check if initialization is required
+	var root []byte
+	err := n.View(func(batch *database.Batch) (err error) {
+		root, err = n.executor.LoadStateRoot(batch)
+		return err
+	})
+	if err != nil {
+		return nil, errors.Format(errors.StatusUnknownError, "load state root: %w", err)
+	}
+	if root != nil {
+		return root, nil
+	}
+
+	// Restore the snapshot
 	batch := n.Begin(true)
 	defer batch.Discard()
-	err := n.executor.RestoreSnapshot(batch, snapshot)
+	err = n.executor.RestoreSnapshot(batch, snapshot)
 	if err != nil {
 		return nil, errors.Format(errors.StatusUnknownError, "restore snapshot: %w", err)
 	}
@@ -116,7 +140,6 @@ func (n *Node) initChain(snapshot ioutil2.SectionReader) ([]byte, error) {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
-	var root []byte
 	err = n.View(func(batch *database.Batch) (err error) {
 		root, err = n.executor.LoadStateRoot(batch)
 		return err
@@ -128,16 +151,11 @@ func (n *Node) initChain(snapshot ioutil2.SectionReader) ([]byte, error) {
 }
 
 func (n *Node) checkTx(delivery *chain.Delivery, typ abci.CheckTxType) (*protocol.TransactionStatus, error) {
-	var batch *database.Batch
-	if typ == abci.CheckTxType_New {
-		if n.checkBatch == nil {
-			n.checkBatch = n.database.Begin(false)
-		}
-		batch = n.checkBatch
-	} else {
-		batch = n.database.Begin(false)
-		defer batch.Discard()
-	}
+	// TODO: Maintain a shared batch if typ is not recheck. I tried to do this
+	// but it lead to "attempted to use a commited or discarded batch" panics.
+
+	batch := n.database.Begin(false)
+	defer batch.Discard()
 
 	r, err := n.executor.ValidateEnvelope(batch, delivery)
 	s := new(protocol.TransactionStatus)
@@ -207,12 +225,6 @@ func (n *Node) commit(block *block.Block) ([]byte, error) {
 	if err != nil {
 		return nil, errors.Format(errors.StatusUnknownError, "notify of commit: %w", err)
 	}
-
-	// Reset check batch
-	if n.checkBatch != nil {
-		n.checkBatch.Discard()
-	}
-	n.checkBatch = n.database.Begin(false)
 
 	// Get the  root
 	batch := n.database.Begin(false)

@@ -2,6 +2,7 @@ package helpers
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
@@ -12,6 +13,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
 )
+
+var GenesisTime = time.Date(2022, 7, 1, 0, 0, 0, 0, time.UTC)
 
 type Sim struct {
 	*simulator.Simulator

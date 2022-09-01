@@ -1,8 +1,13 @@
 package simulator
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"net"
+	"net/http"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/tendermint/tendermint/libs/log"
@@ -22,8 +27,6 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-var GenesisTime = time.Date(2022, 7, 1, 0, 0, 0, 0, time.UTC)
-
 type Simulator struct {
 	logger     logging.OptionalLogger
 	init       *accumulated.NetworkInit
@@ -38,7 +41,7 @@ type SnapshotFunc func(partition string, network *accumulated.NetworkInit, logge
 
 func New(logger log.Logger, database OpenDatabaseFunc, network *accumulated.NetworkInit, snapshot SnapshotFunc) (*Simulator, error) {
 	s := new(Simulator)
-	s.logger.Set(logger)
+	s.logger.Set(logger, "module", "sim")
 	s.init = network
 	s.database = database
 	s.partitions = make(map[string]*Partition, len(network.Bvns)+1)
@@ -59,6 +62,11 @@ func New(logger log.Logger, database OpenDatabaseFunc, network *accumulated.Netw
 
 			dnn := config.Node{Address: node.HostName, Type: node.DnnType}
 			s.netcfg.Partitions[0].Nodes = append(s.netcfg.Partitions[0].Nodes, dnn)
+
+			if node.BasePort != 0 {
+				s.netcfg.Partitions[i+1].Nodes[j].Address = node.Address(false, "http", config.PortOffsetBlockValidator)
+				s.netcfg.Partitions[0].Nodes[j].Address = node.Address(false, "http", config.PortOffsetDirectory)
+			}
 		}
 	}
 
@@ -94,6 +102,24 @@ func MemoryDatabase(_ string, _ int, logger log.Logger) database.Beginner {
 	return database.OpenInMemory(logger)
 }
 
+func BadgerDatabaseFromDirectory(dir string, onErr func(error)) OpenDatabaseFunc {
+	return func(partition string, node int, logger log.Logger) database.Beginner {
+		err := os.MkdirAll(dir, 0700)
+		if err != nil {
+			onErr(err)
+			panic(err)
+		}
+
+		db, err := database.OpenBadger(filepath.Join(dir, fmt.Sprintf("%s-%d.db", partition, node)), logger)
+		if err != nil {
+			onErr(err)
+			panic(err)
+		}
+
+		return db
+	}
+}
+
 func SimpleNetwork(name string, bvnCount, nodeCount int) *accumulated.NetworkInit {
 	net := new(accumulated.NetworkInit)
 	net.Id = name
@@ -116,11 +142,17 @@ func (s *Simulator) SetRoute(account *url.URL, partition string) {
 	s.router.SetRoute(account, partition)
 }
 
-func Genesis() SnapshotFunc {
-	return GenesisWith(nil)
+func SnapshotFromDirectory(dir string) SnapshotFunc {
+	return func(partition string, network *accumulated.NetworkInit, logger log.Logger) (ioutil2.SectionReader, error) {
+		return os.Open(filepath.Join(dir, fmt.Sprintf("%s.snapshot", partition)))
+	}
 }
 
-func GenesisWith(values *core.GlobalValues) SnapshotFunc {
+func Genesis(time time.Time) SnapshotFunc {
+	return GenesisWith(time, nil)
+}
+
+func GenesisWith(time time.Time, values *core.GlobalValues) SnapshotFunc {
 	if values == nil {
 		values = new(core.GlobalValues)
 	}
@@ -129,7 +161,7 @@ func GenesisWith(values *core.GlobalValues) SnapshotFunc {
 	return func(partition string, network *accumulated.NetworkInit, logger log.Logger) (ioutil2.SectionReader, error) {
 		var err error
 		if genDocs == nil {
-			genDocs, err = accumulated.BuildGenesisDocs(network, values, GenesisTime, logger, nil)
+			genDocs, err = accumulated.BuildGenesisDocs(network, values, time, logger, nil)
 			if err != nil {
 				return nil, errors.Format(errors.StatusUnknownError, "build genesis docs: %w", err)
 			}
@@ -191,4 +223,45 @@ func (s *Simulator) DatabaseFor(account *url.URL) database.Updater {
 		return errDb{errors.Wrap(errors.StatusUnknownError, err)}
 	}
 	return s.Database(partition)
+}
+
+func (s *Simulator) ViewAll(fn func(batch *database.Batch) error) error {
+	for _, p := range s.partitions {
+		err := p.View(fn)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Simulator) ListenAndServe(hook func(*Simulator, http.Handler) http.Handler) error {
+	errg := new(errgroup.Group)
+	for _, part := range s.partitions {
+		for _, node := range part.nodes {
+			var addr string
+			if part.Type == config.Directory {
+				addr = node.init.Address(true, "", config.PortOffsetDirectory, config.PortOffsetAccumulateApi)
+			} else {
+				addr = node.init.Address(true, "", config.PortOffsetBlockValidator, config.PortOffsetAccumulateApi)
+			}
+
+			ln, err := net.Listen("tcp", addr)
+			if err != nil {
+				return err
+			}
+			defer func() { _ = ln.Close() }()
+
+			srv := http.Server{Handler: node.api.NewMux()}
+			if hook != nil {
+				srv.Handler = hook(s, srv.Handler)
+			}
+
+			defer func() { _ = srv.Shutdown(context.Background()) }()
+			errg.Go(func() error { return srv.Serve(ln) })
+
+			s.logger.Info("Node up", "partition", part.ID, "node", node.id, "address", "http://"+addr)
+		}
+	}
+	return errg.Wait()
 }
