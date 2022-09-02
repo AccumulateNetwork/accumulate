@@ -133,11 +133,12 @@ func (d *Daemon) LoadSnapshot(file ioutil2.SectionReader) error {
 	eventBus := events.NewBus(d.Logger.With("module", "events"))
 	router := routing.NewRouter(eventBus, nil)
 	execOpts := block.ExecutorOptions{
-		Logger:   d.Logger,
-		Key:      pv.Key.PrivKey.Bytes(),
-		Describe: d.Config.Accumulate.Describe,
-		Router:   router,
-		EventBus: eventBus,
+		Logger:     d.Logger,
+		Key:        pv.Key.PrivKey.Bytes(),
+		Describe:   d.Config.Accumulate.Describe,
+		Router:     router,
+		EventBus:   eventBus,
+		IsFollower: true,
 	}
 
 	// On DNs initialize the major block scheduler
