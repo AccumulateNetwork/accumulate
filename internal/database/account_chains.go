@@ -137,7 +137,7 @@ func (a *Account) ChainByName(name string) (*Chain2, error) {
 
 	c := a.chainByName(name)
 	if c == nil {
-		return nil, errors.NotFound("account %v chain %s not found", a.url(), name)
+		return nil, errors.NotFound("account %v chain %s not found", a.Url(), name)
 	}
 
 	if index {
