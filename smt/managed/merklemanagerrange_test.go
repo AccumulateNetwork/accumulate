@@ -32,7 +32,7 @@ func TestMerkleManager_GetRange(t *testing.T) {
 
 		var rh common.RandHash
 		store := begin()
-		mm := testChain(store, 2, "try")
+		mm := testChain(store, 8, "try")
 		for i := int64(0); i < NumTests; i++ {
 			require.NoError(t, mm.AddHash(rh.NextList(), false))
 		}
