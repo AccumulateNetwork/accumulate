@@ -2,6 +2,7 @@ package core
 
 import (
 	"crypto/sha256"
+	"math"
 	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -38,7 +39,11 @@ func (g *GlobalValues) memoizeValidators() {
 
 func (g *GlobalValues) ValidatorThreshold(partition string) uint64 {
 	g.memoizeValidators()
-	return g.memoize.threshold[partition]
+	v, ok := g.memoize.threshold[strings.ToLower(partition)]
+	if !ok {
+		return math.MaxUint64
+	}
+	return v
 }
 
 type globalSigner struct {
