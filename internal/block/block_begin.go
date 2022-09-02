@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
-	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/shared"
@@ -335,11 +334,11 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch, isLeader boo
 
 		for _, receipt := range anchor.Receipts {
 			// Ignore receipts for other partitions
-			if !strings.EqualFold(receipt.PartitionID, x.Describe.PartitionId) {
+			if !x.Describe.PartitionUrl().URL.LocalTo(receipt.Anchor.Source) {
 				continue
 			}
 
-			err = x.sendSyntheticTransactionsForBlock(batch, isLeader, receipt.MinorBlockIndex, receipt.RootChainReceipt)
+			err = x.sendSyntheticTransactionsForBlock(batch, isLeader, receipt.Anchor.MinorBlockIndex, receipt.RootChainReceipt)
 			if err != nil {
 				return errors.Wrap(errors.StatusUnknownError, err)
 			}

@@ -91,7 +91,9 @@ type AnchorLedger struct {
 	MajorBlockTime time.Time `json:"majorBlockTime,omitempty" form:"majorBlockTime" query:"majorBlockTime" validate:"required"`
 	// PendingMajorBlockAnchors is the list of partitions that have joined the open major block. If there is no open major block, this is unset.
 	PendingMajorBlockAnchors []*url.URL `json:"pendingMajorBlockAnchors,omitempty" form:"pendingMajorBlockAnchors" query:"pendingMajorBlockAnchors" validate:"required"`
-	extraData                []byte
+	// Sequence tracks sent and received anchors.
+	Sequence  []*PartitionSyntheticLedger `json:"sequence,omitempty" form:"sequence" query:"sequence" validate:"required"`
+	extraData []byte
 }
 
 type AnchorMetadata struct {
@@ -528,12 +530,8 @@ type PartitionAnchor struct {
 }
 
 type PartitionAnchorReceipt struct {
-	fieldsSet   []bool
-	PartitionID string `json:"partitionID,omitempty" form:"partitionID" query:"partitionID" validate:"required"`
-	// MinorBlockIndex is the minor block index.
-	MinorBlockIndex uint64 `json:"minorBlockIndex,omitempty" form:"minorBlockIndex" query:"minorBlockIndex" validate:"required"`
-	// RootChainIndex is the index of the anchored root chain entry.
-	RootChainIndex uint64 `json:"rootChainIndex,omitempty" form:"rootChainIndex" query:"rootChainIndex" validate:"required"`
+	fieldsSet []bool
+	Anchor    *PartitionAnchor `json:"anchor,omitempty" form:"anchor" query:"anchor" validate:"required"`
 	// RootChainReceipt is a receipt for the anchored root chain entry.
 	RootChainReceipt *managed.Receipt `json:"rootChainReceipt,omitempty" form:"rootChainReceipt" query:"rootChainReceipt" validate:"required"`
 	extraData        []byte
@@ -563,13 +561,13 @@ type PartitionSyntheticLedger struct {
 	fieldsSet []bool
 	// Url is the URL of the partition.
 	Url *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
-	// Produced is the maximum sequence number of synthetic transactions produced for the partition.
+	// Produced is the maximum sequence number of transactions produced for the partition.
 	Produced uint64 `json:"produced,omitempty" form:"produced" query:"produced" validate:"required"`
-	// Received is the maximum sequence number of synthetic transactions received from the partition.
+	// Received is the maximum sequence number of transactions received from the partition.
 	Received uint64 `json:"received,omitempty" form:"received" query:"received" validate:"required"`
-	// Delivered is the maximum sequence number of delivered synthetic transactions received from the partition.
+	// Delivered is the maximum sequence number of delivered transactions received from the partition.
 	Delivered uint64 `json:"delivered,omitempty" form:"delivered" query:"delivered" validate:"required"`
-	// Pending is the transaction hashes of synthetic transactions received out of order.
+	// Pending is the transaction hashes of transactions received out of order.
 	Pending   []*url.TxID `json:"pending,omitempty" form:"pending" query:"pending" validate:"required"`
 	extraData []byte
 }
@@ -722,10 +720,8 @@ type SyntheticForwardTransaction struct {
 type SyntheticLedger struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
-	// Partitions tracks sent and received synthetic transactions.
-	Partitions []*PartitionSyntheticLedger `json:"partitions,omitempty" form:"partitions" query:"partitions" validate:"required"`
-	// Anchors tracks sent and received anchors.
-	Anchors   []*PartitionSyntheticLedger `json:"anchors,omitempty" form:"anchors" query:"anchors" validate:"required"`
+	// Sequence tracks sent and received synthetic transactions.
+	Sequence  []*PartitionSyntheticLedger `json:"sequence,omitempty" form:"sequence" query:"sequence" validate:"required"`
 	extraData []byte
 }
 
@@ -1223,6 +1219,12 @@ func (v *AnchorLedger) Copy() *AnchorLedger {
 	for i, v := range v.PendingMajorBlockAnchors {
 		if v != nil {
 			u.PendingMajorBlockAnchors[i] = v
+		}
+	}
+	u.Sequence = make([]*PartitionSyntheticLedger, len(v.Sequence))
+	for i, v := range v.Sequence {
+		if v != nil {
+			u.Sequence[i] = (v).Copy()
 		}
 	}
 
@@ -1971,9 +1973,9 @@ func (v *PartitionAnchor) CopyAsInterface() interface{} { return v.Copy() }
 func (v *PartitionAnchorReceipt) Copy() *PartitionAnchorReceipt {
 	u := new(PartitionAnchorReceipt)
 
-	u.PartitionID = v.PartitionID
-	u.MinorBlockIndex = v.MinorBlockIndex
-	u.RootChainIndex = v.RootChainIndex
+	if v.Anchor != nil {
+		u.Anchor = (v.Anchor).Copy()
+	}
 	if v.RootChainReceipt != nil {
 		u.RootChainReceipt = (v.RootChainReceipt).Copy()
 	}
@@ -2292,16 +2294,10 @@ func (v *SyntheticLedger) Copy() *SyntheticLedger {
 	if v.Url != nil {
 		u.Url = v.Url
 	}
-	u.Partitions = make([]*PartitionSyntheticLedger, len(v.Partitions))
-	for i, v := range v.Partitions {
+	u.Sequence = make([]*PartitionSyntheticLedger, len(v.Sequence))
+	for i, v := range v.Sequence {
 		if v != nil {
-			u.Partitions[i] = (v).Copy()
-		}
-	}
-	u.Anchors = make([]*PartitionSyntheticLedger, len(v.Anchors))
-	for i, v := range v.Anchors {
-		if v != nil {
-			u.Anchors[i] = (v).Copy()
+			u.Sequence[i] = (v).Copy()
 		}
 	}
 
@@ -2855,6 +2851,14 @@ func (v *AnchorLedger) Equal(u *AnchorLedger) bool {
 	}
 	for i := range v.PendingMajorBlockAnchors {
 		if !((v.PendingMajorBlockAnchors[i]).Equal(u.PendingMajorBlockAnchors[i])) {
+			return false
+		}
+	}
+	if len(v.Sequence) != len(u.Sequence) {
+		return false
+	}
+	for i := range v.Sequence {
+		if !((v.Sequence[i]).Equal(u.Sequence[i])) {
 			return false
 		}
 	}
@@ -3830,13 +3834,12 @@ func (v *PartitionAnchor) Equal(u *PartitionAnchor) bool {
 }
 
 func (v *PartitionAnchorReceipt) Equal(u *PartitionAnchorReceipt) bool {
-	if !(v.PartitionID == u.PartitionID) {
+	switch {
+	case v.Anchor == u.Anchor:
+		// equal
+	case v.Anchor == nil || u.Anchor == nil:
 		return false
-	}
-	if !(v.MinorBlockIndex == u.MinorBlockIndex) {
-		return false
-	}
-	if !(v.RootChainIndex == u.RootChainIndex) {
+	case !((v.Anchor).Equal(u.Anchor)):
 		return false
 	}
 	switch {
@@ -4237,19 +4240,11 @@ func (v *SyntheticLedger) Equal(u *SyntheticLedger) bool {
 	case !((v.Url).Equal(u.Url)):
 		return false
 	}
-	if len(v.Partitions) != len(u.Partitions) {
+	if len(v.Sequence) != len(u.Sequence) {
 		return false
 	}
-	for i := range v.Partitions {
-		if !((v.Partitions[i]).Equal(u.Partitions[i])) {
-			return false
-		}
-	}
-	if len(v.Anchors) != len(u.Anchors) {
-		return false
-	}
-	for i := range v.Anchors {
-		if !((v.Anchors[i]).Equal(u.Anchors[i])) {
+	for i := range v.Sequence {
+		if !((v.Sequence[i]).Equal(u.Sequence[i])) {
 			return false
 		}
 	}
@@ -5196,6 +5191,7 @@ var fieldNames_AnchorLedger = []string{
 	4: "MajorBlockIndex",
 	5: "MajorBlockTime",
 	6: "PendingMajorBlockAnchors",
+	7: "Sequence",
 }
 
 func (v *AnchorLedger) MarshalBinary() ([]byte, error) {
@@ -5218,6 +5214,11 @@ func (v *AnchorLedger) MarshalBinary() ([]byte, error) {
 	if !(len(v.PendingMajorBlockAnchors) == 0) {
 		for _, v := range v.PendingMajorBlockAnchors {
 			writer.WriteUrl(6, v)
+		}
+	}
+	if !(len(v.Sequence) == 0) {
+		for _, v := range v.Sequence {
+			writer.WriteValue(7, v.MarshalBinary)
 		}
 	}
 
@@ -5259,6 +5260,11 @@ func (v *AnchorLedger) IsValid() error {
 		errs = append(errs, "field PendingMajorBlockAnchors is missing")
 	} else if len(v.PendingMajorBlockAnchors) == 0 {
 		errs = append(errs, "field PendingMajorBlockAnchors is not set")
+	}
+	if len(v.fieldsSet) > 7 && !v.fieldsSet[7] {
+		errs = append(errs, "field Sequence is missing")
+	} else if len(v.Sequence) == 0 {
+		errs = append(errs, "field Sequence is not set")
 	}
 
 	switch len(errs) {
@@ -8022,27 +8028,19 @@ func (v *PartitionAnchor) IsValid() error {
 }
 
 var fieldNames_PartitionAnchorReceipt = []string{
-	1: "PartitionID",
-	2: "MinorBlockIndex",
-	3: "RootChainIndex",
-	4: "RootChainReceipt",
+	1: "Anchor",
+	2: "RootChainReceipt",
 }
 
 func (v *PartitionAnchorReceipt) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	if !(len(v.PartitionID) == 0) {
-		writer.WriteString(1, v.PartitionID)
-	}
-	if !(v.MinorBlockIndex == 0) {
-		writer.WriteUint(2, v.MinorBlockIndex)
-	}
-	if !(v.RootChainIndex == 0) {
-		writer.WriteUint(3, v.RootChainIndex)
+	if !(v.Anchor == nil) {
+		writer.WriteValue(1, v.Anchor.MarshalBinary)
 	}
 	if !(v.RootChainReceipt == nil) {
-		writer.WriteValue(4, v.RootChainReceipt.MarshalBinary)
+		writer.WriteValue(2, v.RootChainReceipt.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_PartitionAnchorReceipt)
@@ -8057,21 +8055,11 @@ func (v *PartitionAnchorReceipt) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field PartitionID is missing")
-	} else if len(v.PartitionID) == 0 {
-		errs = append(errs, "field PartitionID is not set")
+		errs = append(errs, "field Anchor is missing")
+	} else if v.Anchor == nil {
+		errs = append(errs, "field Anchor is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field MinorBlockIndex is missing")
-	} else if v.MinorBlockIndex == 0 {
-		errs = append(errs, "field MinorBlockIndex is not set")
-	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field RootChainIndex is missing")
-	} else if v.RootChainIndex == 0 {
-		errs = append(errs, "field RootChainIndex is not set")
-	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field RootChainReceipt is missing")
 	} else if v.RootChainReceipt == nil {
 		errs = append(errs, "field RootChainReceipt is not set")
@@ -9269,8 +9257,7 @@ func (v *SyntheticForwardTransaction) IsValid() error {
 var fieldNames_SyntheticLedger = []string{
 	1: "Type",
 	2: "Url",
-	3: "Partitions",
-	4: "Anchors",
+	3: "Sequence",
 }
 
 func (v *SyntheticLedger) MarshalBinary() ([]byte, error) {
@@ -9281,14 +9268,9 @@ func (v *SyntheticLedger) MarshalBinary() ([]byte, error) {
 	if !(v.Url == nil) {
 		writer.WriteUrl(2, v.Url)
 	}
-	if !(len(v.Partitions) == 0) {
-		for _, v := range v.Partitions {
+	if !(len(v.Sequence) == 0) {
+		for _, v := range v.Sequence {
 			writer.WriteValue(3, v.MarshalBinary)
-		}
-	}
-	if !(len(v.Anchors) == 0) {
-		for _, v := range v.Anchors {
-			writer.WriteValue(4, v.MarshalBinary)
 		}
 	}
 
@@ -9312,14 +9294,9 @@ func (v *SyntheticLedger) IsValid() error {
 		errs = append(errs, "field Url is not set")
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field Partitions is missing")
-	} else if len(v.Partitions) == 0 {
-		errs = append(errs, "field Partitions is not set")
-	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
-		errs = append(errs, "field Anchors is missing")
-	} else if len(v.Anchors) == 0 {
-		errs = append(errs, "field Anchors is not set")
+		errs = append(errs, "field Sequence is missing")
+	} else if len(v.Sequence) == 0 {
+		errs = append(errs, "field Sequence is not set")
 	}
 
 	switch len(errs) {
@@ -11114,6 +11091,13 @@ func (v *AnchorLedger) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
+	for {
+		if x := new(PartitionSyntheticLedger); reader.ReadValue(7, x.UnmarshalBinary) {
+			v.Sequence = append(v.Sequence, x)
+		} else {
+			break
+		}
+	}
 
 	seen, err := reader.Reset(fieldNames_AnchorLedger)
 	if err != nil {
@@ -12790,16 +12774,10 @@ func (v *PartitionAnchorReceipt) UnmarshalBinary(data []byte) error {
 func (v *PartitionAnchorReceipt) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	if x, ok := reader.ReadString(1); ok {
-		v.PartitionID = x
+	if x := new(PartitionAnchor); reader.ReadValue(1, x.UnmarshalBinary) {
+		v.Anchor = x
 	}
-	if x, ok := reader.ReadUint(2); ok {
-		v.MinorBlockIndex = x
-	}
-	if x, ok := reader.ReadUint(3); ok {
-		v.RootChainIndex = x
-	}
-	if x := new(managed.Receipt); reader.ReadValue(4, x.UnmarshalBinary) {
+	if x := new(managed.Receipt); reader.ReadValue(2, x.UnmarshalBinary) {
 		v.RootChainReceipt = x
 	}
 
@@ -13570,14 +13548,7 @@ func (v *SyntheticLedger) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	for {
 		if x := new(PartitionSyntheticLedger); reader.ReadValue(3, x.UnmarshalBinary) {
-			v.Partitions = append(v.Partitions, x)
-		} else {
-			break
-		}
-	}
-	for {
-		if x := new(PartitionSyntheticLedger); reader.ReadValue(4, x.UnmarshalBinary) {
-			v.Anchors = append(v.Anchors, x)
+			v.Sequence = append(v.Sequence, x)
 		} else {
 			break
 		}
@@ -14613,12 +14584,13 @@ func (v *AddKeyOperation) MarshalJSON() ([]byte, error) {
 
 func (v *AnchorLedger) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type                     AccountType                 `json:"type"`
-		Url                      *url.URL                    `json:"url,omitempty"`
-		MinorBlockSequenceNumber uint64                      `json:"minorBlockSequenceNumber,omitempty"`
-		MajorBlockIndex          uint64                      `json:"majorBlockIndex,omitempty"`
-		MajorBlockTime           time.Time                   `json:"majorBlockTime,omitempty"`
-		PendingMajorBlockAnchors encoding.JsonList[*url.URL] `json:"pendingMajorBlockAnchors,omitempty"`
+		Type                     AccountType                                  `json:"type"`
+		Url                      *url.URL                                     `json:"url,omitempty"`
+		MinorBlockSequenceNumber uint64                                       `json:"minorBlockSequenceNumber,omitempty"`
+		MajorBlockIndex          uint64                                       `json:"majorBlockIndex,omitempty"`
+		MajorBlockTime           time.Time                                    `json:"majorBlockTime,omitempty"`
+		PendingMajorBlockAnchors encoding.JsonList[*url.URL]                  `json:"pendingMajorBlockAnchors,omitempty"`
+		Sequence                 encoding.JsonList[*PartitionSyntheticLedger] `json:"sequence,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
@@ -14626,6 +14598,7 @@ func (v *AnchorLedger) MarshalJSON() ([]byte, error) {
 	u.MajorBlockIndex = v.MajorBlockIndex
 	u.MajorBlockTime = v.MajorBlockTime
 	u.PendingMajorBlockAnchors = v.PendingMajorBlockAnchors
+	u.Sequence = v.Sequence
 	return json.Marshal(&u)
 }
 
@@ -15519,15 +15492,13 @@ func (v *SyntheticForwardTransaction) MarshalJSON() ([]byte, error) {
 
 func (v *SyntheticLedger) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type       AccountType                                  `json:"type"`
-		Url        *url.URL                                     `json:"url,omitempty"`
-		Partitions encoding.JsonList[*PartitionSyntheticLedger] `json:"partitions,omitempty"`
-		Anchors    encoding.JsonList[*PartitionSyntheticLedger] `json:"anchors,omitempty"`
+		Type     AccountType                                  `json:"type"`
+		Url      *url.URL                                     `json:"url,omitempty"`
+		Sequence encoding.JsonList[*PartitionSyntheticLedger] `json:"sequence,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
-	u.Partitions = v.Partitions
-	u.Anchors = v.Anchors
+	u.Sequence = v.Sequence
 	return json.Marshal(&u)
 }
 
@@ -16016,12 +15987,13 @@ func (v *AddKeyOperation) UnmarshalJSON(data []byte) error {
 
 func (v *AnchorLedger) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type                     AccountType                 `json:"type"`
-		Url                      *url.URL                    `json:"url,omitempty"`
-		MinorBlockSequenceNumber uint64                      `json:"minorBlockSequenceNumber,omitempty"`
-		MajorBlockIndex          uint64                      `json:"majorBlockIndex,omitempty"`
-		MajorBlockTime           time.Time                   `json:"majorBlockTime,omitempty"`
-		PendingMajorBlockAnchors encoding.JsonList[*url.URL] `json:"pendingMajorBlockAnchors,omitempty"`
+		Type                     AccountType                                  `json:"type"`
+		Url                      *url.URL                                     `json:"url,omitempty"`
+		MinorBlockSequenceNumber uint64                                       `json:"minorBlockSequenceNumber,omitempty"`
+		MajorBlockIndex          uint64                                       `json:"majorBlockIndex,omitempty"`
+		MajorBlockTime           time.Time                                    `json:"majorBlockTime,omitempty"`
+		PendingMajorBlockAnchors encoding.JsonList[*url.URL]                  `json:"pendingMajorBlockAnchors,omitempty"`
+		Sequence                 encoding.JsonList[*PartitionSyntheticLedger] `json:"sequence,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
@@ -16029,6 +16001,7 @@ func (v *AnchorLedger) UnmarshalJSON(data []byte) error {
 	u.MajorBlockIndex = v.MajorBlockIndex
 	u.MajorBlockTime = v.MajorBlockTime
 	u.PendingMajorBlockAnchors = v.PendingMajorBlockAnchors
+	u.Sequence = v.Sequence
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -16040,6 +16013,7 @@ func (v *AnchorLedger) UnmarshalJSON(data []byte) error {
 	v.MajorBlockIndex = u.MajorBlockIndex
 	v.MajorBlockTime = u.MajorBlockTime
 	v.PendingMajorBlockAnchors = u.PendingMajorBlockAnchors
+	v.Sequence = u.Sequence
 	return nil
 }
 
@@ -17704,15 +17678,13 @@ func (v *SyntheticForwardTransaction) UnmarshalJSON(data []byte) error {
 
 func (v *SyntheticLedger) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type       AccountType                                  `json:"type"`
-		Url        *url.URL                                     `json:"url,omitempty"`
-		Partitions encoding.JsonList[*PartitionSyntheticLedger] `json:"partitions,omitempty"`
-		Anchors    encoding.JsonList[*PartitionSyntheticLedger] `json:"anchors,omitempty"`
+		Type     AccountType                                  `json:"type"`
+		Url      *url.URL                                     `json:"url,omitempty"`
+		Sequence encoding.JsonList[*PartitionSyntheticLedger] `json:"sequence,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
-	u.Partitions = v.Partitions
-	u.Anchors = v.Anchors
+	u.Sequence = v.Sequence
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -17720,8 +17692,7 @@ func (v *SyntheticLedger) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Url = u.Url
-	v.Partitions = u.Partitions
-	v.Anchors = u.Anchors
+	v.Sequence = u.Sequence
 	return nil
 }
 

@@ -7,7 +7,7 @@ import (
 
 // Partition finds or creates a synthetic ledger entry for the given partition.
 func (s *SyntheticLedger) Partition(url *url.URL) *PartitionSyntheticLedger {
-	ptr, create := sortutil.BinaryInsert(&s.Partitions, func(entry *PartitionSyntheticLedger) int {
+	ptr, create := sortutil.BinaryInsert(&s.Sequence, func(entry *PartitionSyntheticLedger) int {
 		return entry.Url.Compare(url)
 	})
 	if create {
@@ -17,8 +17,8 @@ func (s *SyntheticLedger) Partition(url *url.URL) *PartitionSyntheticLedger {
 }
 
 // Anchor finds or creates an anchor ledger entry for the given partition.
-func (s *SyntheticLedger) Anchor(url *url.URL) *PartitionSyntheticLedger {
-	ptr, create := sortutil.BinaryInsert(&s.Anchors, func(entry *PartitionSyntheticLedger) int {
+func (s *AnchorLedger) Anchor(url *url.URL) *PartitionSyntheticLedger {
+	ptr, create := sortutil.BinaryInsert(&s.Sequence, func(entry *PartitionSyntheticLedger) int {
 		return entry.Url.Compare(url)
 	})
 	if create {

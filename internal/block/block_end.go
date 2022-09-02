@@ -33,7 +33,12 @@ func (m *Executor) EndBlock(block *Block) error {
 	if err != nil {
 		return errors.Format(errors.StatusUnknownError, "load synthetic ledger: %w", err)
 	}
-	m.Background(func() { m.requestMissingSyntheticTransactions(block.Index, synthLedger) })
+	var anchorLedger *protocol.AnchorLedger
+	err = block.Batch.Account(m.Describe.AnchorPool()).GetStateAs(&anchorLedger)
+	if err != nil {
+		return errors.Format(errors.StatusUnknownError, "load synthetic ledger: %w", err)
+	}
+	m.Background(func() { m.requestMissingSyntheticTransactions(block.Index, synthLedger, anchorLedger) })
 
 	// Update active globals
 	if !m.isGenesis && !m.globals.Active.Equal(&m.globals.Pending) {
@@ -290,7 +295,7 @@ func (m *Executor) anchorSynthChain(block *Block, rootChain *database.Chain) (in
 	return indexIndex, nil
 }
 
-func (x *Executor) requestMissingSyntheticTransactions(blockIndex uint64, ledger *protocol.SyntheticLedger) {
+func (x *Executor) requestMissingSyntheticTransactions(blockIndex uint64, synthLedger *protocol.SyntheticLedger, anchorLedger *protocol.AnchorLedger) {
 	batch := x.db.Begin(false)
 	defer batch.Discard()
 
@@ -302,10 +307,10 @@ func (x *Executor) requestMissingSyntheticTransactions(blockIndex uint64, ledger
 
 	// For each partition
 	var pending []*url.TxID
-	for _, partition := range ledger.Partitions {
+	for _, partition := range synthLedger.Sequence {
 		pending = append(pending, x.requestMissingTransactionsFromPartition(ctx, wg, dispatcher, partition, false)...)
 	}
-	for _, partition := range ledger.Anchors {
+	for _, partition := range anchorLedger.Sequence {
 		pending = append(pending, x.requestMissingTransactionsFromPartition(ctx, wg, dispatcher, partition, true)...)
 	}
 
@@ -730,10 +735,7 @@ func (x *Executor) buildDirectoryAnchor(block *Block, systemLedger *protocol.Sys
 		}
 
 		receipt := new(protocol.PartitionAnchorReceipt)
-		receipt.PartitionID = received.Partition
-		receipt.MinorBlockIndex = received.Body.GetPartitionAnchor().MinorBlockIndex
-		receipt.RootChainIndex = received.Body.GetPartitionAnchor().RootChainIndex
-
+		receipt.Anchor = received.Body.GetPartitionAnchor()
 		receipt.RootChainReceipt, err = anchorReceipt.Combine(rootReceipt)
 		if err != nil {
 			return nil, errors.Format(errors.StatusUnknownError, "combine receipt for entry %d of %s intermediate anchor chain: %w", received.Index, received.Partition, err)

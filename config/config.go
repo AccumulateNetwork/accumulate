@@ -385,7 +385,7 @@ func (v NodeType) MarshalTOML() ([]byte, error) {
 // StringToEnumHookFunc is a decode hook for mapstructure that will convert enums to strings
 func StringToEnumHookFunc() mapstructure.DecodeHookFuncType {
 	return func(
-		f reflect.Type,
+		_ reflect.Type,
 		t reflect.Type,
 		data interface{},
 	) (interface{}, error) {
