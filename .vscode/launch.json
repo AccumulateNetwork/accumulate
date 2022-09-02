@@ -269,37 +269,47 @@
       ]
     },
     {
-      "name": "Factom Genesis",
+      "name": "Import Factom",
       "presentation": { "group": "99-Miscellaneous", },
       "type": "go",
       "request": "launch",
       "mode": "auto",
-      "program": "${workspaceFolder}/tools/internal/factom-genesis/main",
-      "cwd": "${workspaceFolder}/tools/internal/factom-genesis/main",
+      "program": "${workspaceFolder}/tools/cmd/factom",
+      "args": [
+        "convert",
+        "entries",
+        "${workspaceFolder}/.nodes/import",
+        "${workspaceFolder}/.factom/objects"
+      ]
     },
     {
-      "name": "Attach to a docker container",
-      // Get a shell in the container: `docker exec --privileged -it ${NAME} bash`
-      // Launch delve:                 `dlv attach 1 --headless --listen=:2345 --accept-multiclient --api-version=2`
-      // Forward the port (if remote): `ssh ${USER}@${SERVER} -NL localhost:2345:localhost:2345`
-      // Then run this debug config
+      "name": "Merge snapshots",
       "presentation": { "group": "99-Miscellaneous", },
       "type": "go",
-      "request": "attach",
-      "mode": "remote",
-      "remotePath": "${workspaceFolder}",
-      "port": 2345,
-      "host": "127.0.0.1",
-      "substitutePath": [
-        {
-          "to": "/go/",
-          "from": "${env:HOME}/go/", // <-- MODIFY THIS if you're not using the default GOPATH
-        },
-        {
-          "to": "/root/",
-          "from": "${workspaceFolder}",
-        },
-      ],
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/tools/cmd/debug",
+      "args": [
+        "snapshot",
+        "concat",
+        "${workspaceFolder}/.nodes/import/all.snapshot",
+        "${workspaceFolder}/.nodes/import/factom-0.snapshot",
+      ]
+    },
+    {
+      "name": "Factom: entries -> chains",
+      "presentation": { "group": "99-Miscellaneous", },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/tools/cmd/factom",
+      "args": [
+        "convert",
+        "chains",
+        "--start-from=90000",
+        "${workspaceFolder}/.nodes/import",
+        "${workspaceFolder}/.nodes/import/factom-ldas.snapshot"
+      ]
     },
   ]
 }
