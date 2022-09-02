@@ -385,3 +385,101 @@ func TestSendDirectToWrongPartition(t *testing.T) {
 	require.NotNil(t, status.Error)
 	require.Equal(t, fmt.Sprintf("signature submitted to %s instead of %s", badBvn.Partition.Id, goodBvn.Partition.Id), status.Error.Message)
 }
+
+func TestDelegateBetweenPartitions(t *testing.T) {
+	// Tests AC-3069
+	var timestamp uint64
+	alice := AccountUrl("alice")
+	bob := AccountUrl("bob")
+	aliceKey := acctesting.GenerateKey(alice)
+	bobKey := acctesting.GenerateKey(bob)
+
+	// Initialize
+	sim := simulator.New(t, 3)
+	sim.InitFromGenesis()
+
+	sim.SetRouteFor(alice, "BVN1")
+	sim.SetRouteFor(bob, "BVN2")
+	sim.CreateIdentity(alice, aliceKey[32:])
+	sim.CreateIdentity(bob, bobKey[32:])
+	updateAccount(sim, alice.JoinPath("book", "1"), func(p *KeyPage) { p.CreditBalance = 1e9 })
+	updateAccount(sim, bob.JoinPath("book", "1"), func(p *KeyPage) { p.CreditBalance = 1e9 })
+
+	// Submit with Alice
+	env := acctesting.NewTransaction().
+		WithPrincipal(alice.JoinPath("book", "1")).
+		WithTimestampVar(&timestamp).
+		WithSigner(alice.JoinPath("book", "1"), 1).
+		WithBody(&UpdateKeyPage{Operation: []KeyPageOperation{
+			&AddKeyOperation{
+				Entry: KeySpecParams{
+					Delegate: bob.JoinPath("book"),
+				},
+			},
+		}}).
+		Initiate(SignatureTypeED25519, aliceKey).
+		Build()
+	sim.MustSubmitAndExecuteBlock(env)
+	sim.WaitForTransactionFlow(pending, env.Transaction[0].GetHash())
+
+	// Sign with Bob
+	env = acctesting.NewTransaction().
+		WithTransaction(env.Transaction[0]).
+		WithSigner(bob.JoinPath("book", "1"), 1).
+		Sign(SignatureTypeED25519, bobKey).
+		Build()
+	sim.MustSubmitAndExecuteBlock(env)
+	sim.WaitForTransactionFlow(delivered, env.Transaction[0].GetHash())
+
+	page := simulator.GetAccount[*KeyPage](sim, alice.JoinPath("book", "1"))
+	_, _, ok := page.EntryByDelegate(bob.JoinPath("book"))
+	require.True(t, ok, "Expected Bob to be a delegate of Alice")
+}
+
+func TestAuthorityBetweenPartitions(t *testing.T) {
+	// Tests AC-3069
+	var timestamp uint64
+	alice := AccountUrl("alice")
+	bob := AccountUrl("bob")
+	aliceKey := acctesting.GenerateKey(alice)
+	bobKey := acctesting.GenerateKey(bob)
+
+	// Initialize
+	sim := simulator.New(t, 3)
+	sim.InitFromGenesis()
+
+	sim.SetRouteFor(alice, "BVN1")
+	sim.SetRouteFor(bob, "BVN2")
+	sim.CreateIdentity(alice, aliceKey[32:])
+	sim.CreateIdentity(bob, bobKey[32:])
+	updateAccount(sim, alice.JoinPath("book", "1"), func(p *KeyPage) { p.CreditBalance = 1e9 })
+	updateAccount(sim, bob.JoinPath("book", "1"), func(p *KeyPage) { p.CreditBalance = 1e9 })
+
+	// Submit with Alice
+	env := acctesting.NewTransaction().
+		WithPrincipal(alice).
+		WithTimestampVar(&timestamp).
+		WithSigner(alice.JoinPath("book", "1"), 1).
+		WithBody(&UpdateAccountAuth{Operations: []AccountAuthOperation{
+			&AddAccountAuthorityOperation{
+				Authority: bob.JoinPath("book"),
+			},
+		}}).
+		Initiate(SignatureTypeED25519, aliceKey).
+		Build()
+	sim.MustSubmitAndExecuteBlock(env)
+	sim.WaitForTransactionFlow(pending, env.Transaction[0].GetHash())
+
+	// Sign with Bob
+	env = acctesting.NewTransaction().
+		WithTransaction(env.Transaction[0]).
+		WithSigner(bob.JoinPath("book", "1"), 1).
+		Sign(SignatureTypeED25519, bobKey).
+		Build()
+	sim.MustSubmitAndExecuteBlock(env)
+	sim.WaitForTransactionFlow(delivered, env.Transaction[0].GetHash())
+
+	adi := simulator.GetAccount[*ADI](sim, alice)
+	_, ok := adi.GetAuthority(bob.JoinPath("book"))
+	require.True(t, ok, "Expected Bob to be an authority of Alice")
+}
