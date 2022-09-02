@@ -10,11 +10,19 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
+type Viewer interface {
+	View(func(batch *Batch) error) error
+}
+
+type Updater interface {
+	Viewer
+	Update(func(batch *Batch) error) error
+}
+
 // A Beginner can be a Database or a Batch
 type Beginner interface {
+	Updater
 	Begin(bool) *Batch
-	Update(func(*Batch) error) error
-	View(func(*Batch) error) error
 }
 
 var _ Beginner = (*Database)(nil)

@@ -45,3 +45,9 @@ func BinaryInsert[T any](l *[]T, cmp func(entry T) int) (entry *T, added bool) {
 	(*l)[i] = zero
 	return &(*l)[i], true
 }
+
+// RemoveAt removes the specified element.
+func RemoveAt[T any](l *[]T, i int) {
+	copy((*l)[i:], (*l)[i+1:])
+	*l = (*l)[:len(*l)-1]
+}
