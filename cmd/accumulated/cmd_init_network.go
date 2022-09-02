@@ -56,8 +56,8 @@ func initNetwork(cmd *cobra.Command, args []string) {
 			node.PrivValKey = ed25519.GenPrivKey()
 			node.NodeKey = ed25519.GenPrivKey()
 
-			if node.ListenIP == "" {
-				node.ListenIP = "0.0.0.0"
+			if node.ListenAddress == "" {
+				node.ListenAddress = "0.0.0.0"
 			}
 		}
 	}
