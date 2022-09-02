@@ -1202,10 +1202,26 @@ func (m *queryBackend) resolveTxReceipt(batch *database.Batch, txid []byte, entr
 	receipt.Chain = entry.Chain
 	receipt.Proof.Start = txid
 
+	// Build the receipt
 	account := batch.Account(entry.Account)
 	block, r, err := indexing.ReceiptForChainEntry(m.Options.Describe, batch, account, txid, entry)
 	if err != nil {
 		return receipt, err
+	}
+
+	// Find the major block
+	rxc, err := batch.Account(m.Describe.AnchorPool()).MajorBlockChain().Get()
+	if err != nil {
+		return nil, errors.Format(errors.StatusInternalError, "load root index chain: %w", err)
+	}
+	_, major, err := indexing.SearchIndexChain(rxc, 0, indexing.MatchAfter, indexing.SearchIndexChainByRootIndexIndex(entry.AnchorIndex))
+	switch {
+	case err == nil:
+		receipt.MajorBlock = major.BlockIndex
+	case errors.Is(err, errors.StatusNotFound):
+		// Not in a major block yet
+	default:
+		return nil, errors.Format(errors.StatusInternalError, "locate major block for root index entry %d: %w", entry.AnchorIndex, err)
 	}
 
 	receipt.LocalBlock = block
