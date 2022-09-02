@@ -99,10 +99,14 @@ func UnmarshalTransactionResultFrom(rd io.ReadSeeker) (TransactionResult, error)
 }
 
 func UnmarshalTransactionResultJSON(data []byte) (TransactionResult, error) {
-	var typ struct{ Type TransactionType }
+	var typ *struct{ Type TransactionType }
 	err := json.Unmarshal(data, &typ)
 	if err != nil {
 		return nil, err
+	}
+
+	if typ == nil {
+		return nil, nil
 	}
 
 	tx, err := NewTransactionResult(typ.Type)

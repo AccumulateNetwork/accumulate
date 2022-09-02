@@ -52,6 +52,10 @@ func UnmarshalSignerJSON(data []byte) (Signer, error) {
 		return nil, err
 	}
 
+	if account == nil {
+		return nil, nil
+	}
+
 	signer, ok := account.(Signer)
 	if !ok {
 		return nil, fmt.Errorf("account type %v is not a signer", account.Type())

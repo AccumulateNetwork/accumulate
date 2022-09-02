@@ -2850,7 +2850,7 @@ func (v *AnchorLedger) Equal(u *AnchorLedger) bool {
 	if !(v.MajorBlockIndex == u.MajorBlockIndex) {
 		return false
 	}
-	if !(v.MajorBlockTime == u.MajorBlockTime) {
+	if !((v.MajorBlockTime).Equal(u.MajorBlockTime)) {
 		return false
 	}
 	if len(v.PendingMajorBlockAnchors) != len(u.PendingMajorBlockAnchors) {
@@ -3293,7 +3293,7 @@ func (v *DirectoryAnchor) Equal(u *DirectoryAnchor) bool {
 	if !(v.MakeMajorBlock == u.MakeMajorBlock) {
 		return false
 	}
-	if !(v.MakeMajorBlockTime == u.MakeMajorBlockTime) {
+	if !((v.MakeMajorBlockTime).Equal(u.MakeMajorBlockTime)) {
 		return false
 	}
 
@@ -3472,7 +3472,7 @@ func (v *IndexEntry) Equal(u *IndexEntry) bool {
 		// equal
 	case v.BlockTime == nil || u.BlockTime == nil:
 		return false
-	case !(*v.BlockTime == *u.BlockTime):
+	case !((*v.BlockTime).Equal(*u.BlockTime)):
 		return false
 	}
 	if !(v.RootIndexIndex == u.RootIndexIndex) {
@@ -4292,7 +4292,7 @@ func (v *SystemLedger) Equal(u *SystemLedger) bool {
 	if !(v.Index == u.Index) {
 		return false
 	}
-	if !(v.Timestamp == u.Timestamp) {
+	if !((v.Timestamp).Equal(u.Timestamp)) {
 		return false
 	}
 	if !((&v.AcmeBurnt).Cmp(&u.AcmeBurnt) == 0) {
