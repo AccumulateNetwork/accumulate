@@ -1276,7 +1276,7 @@ func (v *ResponseMajorEntry) Equal(u *ResponseMajorEntry) bool {
 		// equal
 	case v.MajorBlockTime == nil || u.MajorBlockTime == nil:
 		return false
-	case !(*v.MajorBlockTime == *u.MajorBlockTime):
+	case !((*v.MajorBlockTime).Equal(*u.MajorBlockTime)):
 		return false
 	}
 	if len(v.MinorBlocks) != len(u.MinorBlocks) {
@@ -1316,7 +1316,7 @@ func (v *ResponseMinorEntry) Equal(u *ResponseMinorEntry) bool {
 		// equal
 	case v.BlockTime == nil || u.BlockTime == nil:
 		return false
-	case !(*v.BlockTime == *u.BlockTime):
+	case !((*v.BlockTime).Equal(*u.BlockTime)):
 		return false
 	}
 	if !(v.TxCount == u.TxCount) {
