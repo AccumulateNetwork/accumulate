@@ -383,8 +383,7 @@ func TestCreateLiteDataAccount(t *testing.T) {
 	require.Equal(t, liteDataAddress.String(), r.Url.String())
 	require.Equal(t, partialChainId, chainId)
 
-	firstEntryHash, err := protocol.ComputeFactomEntryHashForAccount(chainId, firstEntry.Data)
-	require.NoError(t, err)
+	firstEntryHash := firstEntry.Hash()
 
 	batch = n.db.Begin(false)
 	defer batch.Discard()
@@ -407,15 +406,11 @@ func TestCreateLiteDataAccount(t *testing.T) {
 	require.NoError(t, err)
 	entry, err := indexing.GetDataEntry(batch, txnHash)
 	require.NoError(t, err)
-	hashFromEntry, err := protocol.ComputeFactomEntryHashForAccount(chainId, entry.GetData())
-	require.NoError(t, err)
+	hashFromEntry := entry.Hash()
 	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(hashFromEntry), "Chain Entry.Hash does not match")
 	//sample verification for calculating the hash from lite data entry
-	id := protocol.ComputeLiteDataAccountId(entry)
-	newh, err := protocol.ComputeFactomEntryHashForAccount(id, entry.GetData())
-	require.NoError(t, err)
 	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(entryHash), "Chain GetHashes does not match")
-	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(newh), "Chain GetHashes does not match")
+	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(entry.Hash()), "Chain GetHashes does not match")
 
 }
 
