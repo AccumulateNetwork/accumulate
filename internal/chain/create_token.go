@@ -13,13 +13,13 @@ var _ SignerValidator = (*CreateToken)(nil)
 
 func (CreateToken) Type() protocol.TransactionType { return protocol.TransactionTypeCreateToken }
 
-func (CreateToken) SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, checkAuthz bool) (fallback bool, err error) {
+func (CreateToken) SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, md SignatureValidationMetadata) (fallback bool, err error) {
 	body, ok := transaction.Body.(*protocol.CreateToken)
 	if !ok {
 		return false, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.CreateToken), transaction.Body)
 	}
 
-	return additionalAuthorities(body.Authorities).SignerIsAuthorized(delegate, batch, transaction, signer, checkAuthz)
+	return additionalAuthorities(body.Authorities).SignerIsAuthorized(delegate, batch, transaction, signer, md)
 }
 
 func (CreateToken) TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (ready, fallback bool, err error) {
