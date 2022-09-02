@@ -94,6 +94,7 @@ var flagInitDevnet struct {
 	UseVolumes    bool
 	Compose       bool
 	DnsSuffix     string
+	Globals       string
 }
 
 var flagInitNetwork struct {
@@ -148,6 +149,7 @@ func initInitFlags() {
 	cmdInitDevnet.Flags().BoolVar(&flagInitDevnet.UseVolumes, "use-volumes", false, "Use Docker volumes instead of a local directory")
 	cmdInitDevnet.Flags().BoolVar(&flagInitDevnet.Compose, "compose", false, "Only write the Docker Compose file, do not write the configuration files")
 	cmdInitDevnet.Flags().StringVar(&flagInitDevnet.DnsSuffix, "dns-suffix", "", "DNS suffix to add to hostnames used when initializing dockerized nodes")
+	cmdInitDevnet.Flags().StringVar(&flagInitDevnet.Globals, "globals", "", "Override network globals")
 }
 
 func init() {
