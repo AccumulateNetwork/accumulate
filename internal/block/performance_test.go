@@ -242,9 +242,12 @@ type executor struct {
 	fn  func(st *chain.StateManager, tx *chain.Delivery) error
 }
 
+var _ chain.SignerValidator = executor{}
+var _ chain.PrincipalValidator = executor{}
+
 func (x executor) Type() protocol.TransactionType { return x.typ }
 
-func (executor) SignerIsAuthorized(delegate chain.AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, checkAuthz bool) (fallback bool, err error) {
+func (executor) SignerIsAuthorized(delegate chain.AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, md chain.SignatureValidationMetadata) (fallback bool, err error) {
 	return false, nil // All signers are authorized
 }
 
