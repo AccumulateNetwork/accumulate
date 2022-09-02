@@ -89,11 +89,8 @@ func (app *Accumulator) OnFatal(f func(error)) {
 
 // fatal is called when a fatal error occurs. If fatal is called, all subsequent
 // transactions will fail with CodeDidPanic.
-func (app *Accumulator) fatal(err error, setDidPanic bool) {
-	if setDidPanic {
-		app.didPanic = true
-	}
-
+func (app *Accumulator) fatal(err error) {
+	app.didPanic = true
 	app.logger.Error("Fatal error", "error", err, "stack", debug.Stack())
 	sentry.CaptureException(err)
 
@@ -101,13 +98,15 @@ func (app *Accumulator) fatal(err error, setDidPanic bool) {
 		app.onFatal(err)
 	}
 
+	_ = app.EventBus.Publish(events.FatalError{Err: err})
+
 	// Throw the panic back at Tendermint
 	panic(err)
 }
 
 // recover will recover from a panic. If a panic occurs, it is passed to fatal
 // and code is set to CodeDidPanic (unless the pointer is nil).
-func (app *Accumulator) recover(code *uint32, setDidPanic bool) {
+func (app *Accumulator) recover(code *uint32) {
 	r := recover()
 	if r == nil {
 		return
@@ -119,7 +118,7 @@ func (app *Accumulator) recover(code *uint32, setDidPanic bool) {
 	} else {
 		err = fmt.Errorf("panicked: %v", r)
 	}
-	app.fatal(err, setDidPanic)
+	app.fatal(err)
 
 	if code != nil {
 		*code = uint32(protocol.ErrorCodeDidPanic)
@@ -168,8 +167,8 @@ func (app *Accumulator) willChangeGlobals(e events.WillChangeGlobals) error {
 }
 
 // Info implements github.com/tendermint/tendermint/abci/types.Application.
-func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
-	defer app.recover(nil, false)
+func (app *Accumulator) Info(abci.RequestInfo) abci.ResponseInfo {
+	defer app.recover(nil)
 
 	if app.Accumulate.AnalysisLog.Enabled {
 		app.Accumulate.AnalysisLog.InitDataSet("accumulator", logging.DefaultOptions())
@@ -304,7 +303,7 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 
 // BeginBlock implements github.com/tendermint/tendermint/abci/types.Application.
 func (app *Accumulator) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBeginBlock {
-	defer app.recover(nil, true)
+	defer app.recover(nil)
 
 	var ret abci.ResponseBeginBlock
 
@@ -319,7 +318,7 @@ func (app *Accumulator) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBegi
 	//Identify the leader for this block, if we are the proposer... then we are the leader.
 	err := app.Executor.BeginBlock(app.block)
 	if err != nil {
-		app.fatal(err, true)
+		app.fatal(err)
 		return ret
 	}
 
@@ -334,7 +333,7 @@ func (app *Accumulator) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBegi
 //
 // Verifies the transaction is sane.
 func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheckTx) {
-	defer app.recover(&rct.Code, true)
+	defer app.recover(&rct.Code)
 
 	// Is the node borked?
 	if app.didPanic {
@@ -416,7 +415,7 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 //
 // Verifies the transaction is valid.
 func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseDeliverTx) {
-	defer app.recover(&rdt.Code, true)
+	defer app.recover(&rdt.Code)
 
 	// Is the node borked?
 	if app.didPanic {
@@ -442,11 +441,11 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 
 // EndBlock implements github.com/tendermint/tendermint/abci/types.Application.
 func (app *Accumulator) EndBlock(req abci.RequestEndBlock) abci.ResponseEndBlock {
-	defer app.recover(nil, true)
+	defer app.recover(nil)
 
 	err := app.Executor.EndBlock(app.block)
 	if err != nil {
-		app.fatal(err, true)
+		app.fatal(err)
 		return abci.ResponseEndBlock{}
 	}
 
@@ -464,7 +463,7 @@ func (app *Accumulator) EndBlock(req abci.RequestEndBlock) abci.ResponseEndBlock
 //
 // Commits the transaction block to the chains.
 func (app *Accumulator) Commit() abci.ResponseCommit {
-	defer app.recover(nil, true)
+	defer app.recover(nil)
 	defer func() { app.block = nil }()
 
 	tick := time.Now()
@@ -489,7 +488,7 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 	tick = time.Now()
 
 	if err != nil {
-		app.fatal(err, true)
+		app.fatal(err)
 		return abci.ResponseCommit{}
 	}
 
@@ -500,7 +499,7 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 		Major: app.block.State.MakeMajorBlock,
 	})
 	if err != nil {
-		app.fatal(err, true)
+		app.fatal(err)
 		return abci.ResponseCommit{}
 	}
 

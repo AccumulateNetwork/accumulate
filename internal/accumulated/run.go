@@ -2,6 +2,7 @@ package accumulated
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -16,6 +17,7 @@ import (
 	tmcfg "github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/crypto"
 	tmlog "github.com/tendermint/tendermint/libs/log"
+	service2 "github.com/tendermint/tendermint/libs/service"
 	"github.com/tendermint/tendermint/privval"
 	tmclient "github.com/tendermint/tendermint/rpc/client"
 	"github.com/tendermint/tendermint/rpc/client/local"
@@ -201,6 +203,17 @@ func (d *Daemon) Start() (err error) {
 		}
 	}()
 
+	events.SubscribeAsync(d.eventBus, func(e events.FatalError) {
+		d.Logger.Error("Shutting down due to a fatal error", "error", e.Err)
+		err := d.Stop()
+		if errors.Is(err, service2.ErrAlreadyStopped) {
+			return
+		}
+		if err != nil {
+			d.Logger.Error("Error while shutting down", "error", err)
+		}
+	})
+
 	// Create a local client
 	lnode, ok := d.node.Service.(local.NodeService)
 	if !ok {
@@ -382,4 +395,8 @@ func (d *Daemon) Stop() error {
 
 	<-d.done
 	return nil
+}
+
+func (d *Daemon) Done() <-chan struct{} {
+	return d.node.Quit()
 }
