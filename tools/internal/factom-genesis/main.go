@@ -18,6 +18,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/cmd"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -195,7 +196,8 @@ func CreateAccumulateSnapshot() {
 		if err != nil {
 			log.Panicln(err.Error())
 		}
-		if err := x.Executor.SaveSnapshot(batch, f); err != nil {
+		err = snapshot.FullCollect(batch, f, &x.Executor.Describe)
+		if err != nil {
 			log.Println("Snapshot error : ", err.Error())
 		}
 	}
