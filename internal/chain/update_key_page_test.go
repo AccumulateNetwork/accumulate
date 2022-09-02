@@ -71,7 +71,7 @@ func TestUpdateKeyPage_Priority(t *testing.T) {
 			var signer protocol.Signer
 			require.NoError(t, batch.Account(env.Signatures[0].GetSigner()).GetStateAs(&signer))
 
-			_, err := UpdateKeyPage{}.SignerIsAuthorized(nil, batch, env.Transaction[0], signer, true)
+			_, err := UpdateKeyPage{}.SignerIsAuthorized(nil, batch, env.Transaction[0], signer, SignatureValidationMetadata{Location: bookUrl})
 			if idx <= 1 {
 				require.NoError(t, err)
 			} else {
