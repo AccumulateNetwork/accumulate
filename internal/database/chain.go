@@ -105,7 +105,7 @@ func (c *Chain) AnchorAt(height uint64) ([]byte, error) {
 }
 
 // Pending returns the pending roots of the current Merkle state.
-func (c *Chain) Pending() []managed.Hash {
+func (c *Chain) Pending() [][]byte {
 	return c.head.Pending
 }
 
@@ -174,4 +174,10 @@ func (c *Chain) Receipt(from, to int64) (*managed.Receipt, error) {
 	}
 
 	return r, nil
+}
+
+// RestoreHead is specifically only to be used to restore a
+// chain's head from a snapshot.
+func (c *Chain) RestoreHead(head *managed.MerkleState) error {
+	return c.merkle.Head().Put(head)
 }
