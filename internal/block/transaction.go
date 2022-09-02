@@ -19,6 +19,7 @@ import (
 func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Delivery) (*protocol.TransactionStatus, *chain.ProcessTransactionState, error) {
 	r := x.BlockTimers.Start(BlockTimerTypeProcessTransaction)
 	defer x.BlockTimers.Stop(r)
+
 	// Load the status
 	status, err := batch.Transaction(delivery.Transaction.GetHash()).GetStatus()
 	if err != nil {
@@ -47,6 +48,10 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Del
 	// Check if the transaction is ready to be executed
 	ready, err := x.TransactionIsReady(batch, delivery, status, principal)
 	if err != nil {
+		if errors.Is(err, errors.StatusDelivered) {
+			// If a synthetic transaction is re-delivered, don't record anything
+			return status, new(chain.ProcessTransactionState), nil
+		}
 		return x.recordFailedTransaction(batch, delivery, err)
 	}
 	if !ready {
@@ -274,8 +279,13 @@ func (x *Executor) synthTransactionIsReady(batch *database.Batch, delivery *chai
 		return false, errors.Format(errors.StatusUnknownError, "load synthetic transaction ledger: %w", err)
 	}
 
-	// If the transaction is out of sequence, mark it pending
+	// If the sequence number is old, mark it already delivered
 	partitionLedger := ledger.Partition(status.SourceNetwork)
+	if status.SequenceNumber <= partitionLedger.Delivered {
+		return false, errors.Format(errors.StatusDelivered, "synthetic transaction has been delivered")
+	}
+
+	// If the transaction is out of sequence, mark it pending
 	if partitionLedger.Delivered+1 != status.SequenceNumber {
 		x.logger.Info("Out of sequence synthetic transaction",
 			"hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4),

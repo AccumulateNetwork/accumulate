@@ -7,202 +7,19 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding/hash"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/smt/pmt"
 )
 
-// loadState returns the fully realized account loadState.
-func (a *Account) loadState(preserveChains bool) (*accountState, error) {
-	s := new(accountState)
-
-	// Load main state
-	var err error
-	s.Main = loadState(&err, true, a.Main().Get)
-
-	// Load chain state
-	for _, c := range loadState(&err, false, a.Chains().Get) {
-		chain, err := a.GetChainByName(c.Name)
-		if err != nil {
-			return nil, fmt.Errorf("load %s chain state: %w", c.Name, err)
-		}
-
-		ms1 := chain.CurrentState()
-		ms2 := new(merkleState)
-		ms2.Name = c.Name
-		ms2.Type = c.Type
-		s.Chains = append(s.Chains, ms2)
-
-		if preserveChains {
-			ms2.Entries, err = chain.Entries(0, ms1.Count)
-			if err != nil {
-				return nil, fmt.Errorf("load %s chain entries: %w", c.Name, err)
-			}
-		} else {
-			ms2.Count = uint64(ms1.Count)
-			ms2.Pending = make([][]byte, len(ms1.Pending))
-			for i, v := range ms1.Pending {
-				if len(v) == 0 {
-					continue
-				}
-				ms2.Pending[i] = v
-			}
-		}
-	}
-
-	// Load transaction state
-	for _, h := range loadState(&err, false, a.Pending().Get) {
-		h := h.Hash()
-		state, err := a.parent.Transaction(h[:]).loadState() //nolint:rangevarref
-		if err != nil {
-			return nil, err
-		}
-		s.Pending = append(s.Pending, state)
-	}
-	s.Directory = loadState(&err, true, a.Directory().Get)
-	return s, nil
-}
-
-func (c *Chain2) stateOfTransactionsOnChain() ([]*transactionState, error) {
-	head, err := c.inner.Head().Get()
+func (a *Account) VerifyHash(hash []byte) error {
+	hasher, err := a.hashState()
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "load chain head: %w", err)
+		return errors.Wrap(errors.StatusUnknownError, err)
 	}
-
-	// TODO We need to be more selective than this
-	state := make([]*transactionState, head.Count)
-	for i := range state {
-		hash := loadState1(&err, false, c.inner.Get, int64(i))
-		if err != nil {
-			break
-		}
-
-		state[i] = loadState(&err, false, c.account.parent.Transaction(hash).loadState)
+	if !bytes.Equal(hash[:], hasher.MerkleHash()) {
+		return errors.Format(errors.StatusConflict, "hash does not match")
 	}
-
-	return state, nil
-}
-
-func (c *Chain2) stateOfSignaturesOnChain() ([]protocol.Signature, error) {
-	head, err := c.inner.Head().Get()
-	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "load chain head: %w", err)
-	}
-
-	// TODO We need to be more selective than this
-	state := make([]protocol.Signature, head.Count)
-	for i := range state {
-		hash := loadState1(&err, false, c.inner.Get, int64(i))
-		if err != nil {
-			break
-		}
-
-		s := loadState(&err, false, c.account.parent.Transaction(hash).Main().Get)
-		if s == nil {
-			break
-		}
-		if s.Signature == nil {
-			return nil, errors.Format(errors.StatusInternalError, "%v signature chain entry %d is not a signature", c.Account(), i)
-		}
-		state[i] = s.Signature
-	}
-
-	return state, nil
-}
-
-func (a *Account) restoreState(s *accountState) error {
-	// Store main state
-	var err error
-	saveState(&err, a.Main().Put, s.Main)
-	saveState(&err, a.Directory().Put, s.Directory)
-	// Store pending transaction list
-	for _, p := range s.Pending {
-		saveStateN(&err, a.Pending().Add, p.Transaction.ID())
-	}
-	if err != nil {
-		return err
-	}
-
-	// Store chain state
-	for _, c := range s.Chains {
-		head := new(managed.MerkleState)
-		head.Count = int64(c.Count)
-		head.Pending = make(managed.SparseHashList, len(c.Pending))
-		for i, v := range c.Pending {
-			if len(v) > 0 {
-				head.Pending[i] = v
-			}
-		}
-		mgr, err := a.GetChainByName(c.Name)
-		if err != nil {
-			return fmt.Errorf("store %s chain head: %w", c.Name, err)
-		}
-		err = mgr.merkle.Head().Put(head)
-		if err != nil {
-			return fmt.Errorf("store %s chain head: %w", c.Name, err)
-		}
-		for i, entry := range c.Entries {
-			err := mgr.AddEntry(entry, false)
-			if err != nil {
-				return fmt.Errorf("store %s chain entry %d: %w", c.Name, c.Count+uint64(i), err)
-			}
-		}
-	}
-
-	// Store transaction state
-	txns := make([]*transactionState, 0, len(s.Pending)+len(s.Transactions))
-	txns = append(txns, s.Pending...)
-	txns = append(txns, s.Transactions...)
-	for _, p := range txns {
-		hash := p.Transaction.GetHash()
-		if len(p.State.Signers) != len(p.Signatures) {
-			return fmt.Errorf("transaction %X state is invalid: %d signers and %d signatures", hash[:4], len(p.State.Signers), len(p.Signatures))
-		}
-
-		record := a.parent.Transaction(hash)
-		err := record.PutState(&SigOrTxn{Transaction: p.Transaction})
-		if err != nil {
-			return fmt.Errorf("store transaction %X: %w", hash[:4], err)
-		}
-
-		err = record.PutStatus(p.State)
-		if err != nil {
-			return fmt.Errorf("store transaction %X status: %w", hash[:4], err)
-		}
-
-		for i, set := range p.Signatures {
-			signer := p.State.Signers[i].GetUrl()
-			err = record.getSignatures(signer).Put(set)
-			if err != nil {
-				return fmt.Errorf("store transaction %X signers %v: %w", hash[:4], signer, err)
-			}
-		}
-	}
-
-	// Store signature state
-	for _, sig := range s.Signatures {
-		saveState(&err, a.parent.Transaction(sig.Hash()).Main().Put, &SigOrTxn{Signature: sig})
-	}
-
-	return err
-}
-
-// MerkleHash calculates the Merkle DAG root hash.
-func (s *merkleState) MerkleHash() []byte {
-	ms := new(managed.MerkleState)
-	ms.InitSha256()
-	ms.Count = int64(s.Count)
-	ms.Pending = make(managed.SparseHashList, len(s.Pending))
-	for i, v := range s.Pending {
-		if len(v) > 0 {
-			ms.Pending[i] = v
-		}
-	}
-	for _, entry := range s.Entries {
-		ms.AddToMerkleTree(entry)
-	}
-
-	return ms.GetMDRoot()
+	return nil
 }
 
 // PutBpt writes the record's BPT entry.
@@ -382,28 +199,6 @@ func loadState1[T, A1 any](lastErr *error, allowMissing bool, get func(A1) (T, e
 	}
 
 	return v
-}
-
-func saveState[T any](lastErr *error, put func(T) error, v T) {
-	if *lastErr != nil || any(v) == nil {
-		return
-	}
-
-	err := put(v)
-	if err != nil {
-		*lastErr = err
-	}
-}
-
-func saveStateN[T any](lastErr *error, put func(...T) error, v ...T) {
-	if *lastErr != nil || v == nil {
-		return
-	}
-
-	err := put(v...)
-	if err != nil {
-		*lastErr = err
-	}
 }
 
 func (a *Account) hashSecondaryState() (hash.Hasher, error) {

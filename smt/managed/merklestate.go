@@ -56,12 +56,12 @@ func (m MerkleState) String() string {
 // references to the structures in the given Merkle State.  This means copying
 // any entries in the Pending slice
 func (m MerkleState) Copy() *MerkleState {
-	m.Pending = append([]Hash{}, m.Pending...) // New slice for Pending, but hashes are immutable
+	m.Pending = append(SparseHashList{}, m.Pending...) // New slice for Pending, but hashes are immutable
 	// Extra paranoid, make the hashes new hashes in pending
 	// (nobody should change a hash, but even if they do the copy will be independent
 	for i, v := range m.Pending {
 		if v != nil {
-			m.Pending[i] = v.Copy()
+			m.Pending[i] = Hash(v).Copy()
 		}
 	}
 	m.HashList = append([]Hash{}, m.HashList...) // copy the underlying storage under slice
@@ -212,7 +212,7 @@ func (m *MerkleState) UnMarshal(MSBytes []byte) (err error) {
 
 	// Make a copy to avoid weird memory bugs
 	for i, h := range m.Pending {
-		m.Pending[i] = h.Copy()
+		m.Pending[i] = Hash(h).Copy()
 	}
 	for i, h := range m.HashList {
 		m.HashList[i] = h.Copy()
@@ -250,8 +250,8 @@ func (m *MerkleState) AddToMerkleTree(hash_ []byte) {
 			m.Pending[i] = hash //               And put the Hash there if one is found
 			return              //          Mission complete, so return
 		}
-		hash = v.Combine(Sha256, hash) // If this slot isn't empty, combine the hash with the slot
-		m.Pending[i] = nil             //   and carry the result to the next (clearing this one)
+		hash = Hash(v).Combine(Sha256, hash) // If this slot isn't empty, combine the hash with the slot
+		m.Pending[i] = nil                   //   and carry the result to the next (clearing this one)
 	}
 }
 
@@ -271,9 +271,9 @@ func (m *MerkleState) GetMDRoot() (MDRoot Hash) {
 	}
 	for _, v := range m.Pending {
 		if MDRoot == nil { // Pick up the first hash in m.MerkleState no matter what.
-			MDRoot = v.Copy() // If a nil is assigned over a nil, no harm no foul.  Fewer cases to test this way.
+			MDRoot = Hash(v).Copy() // If a nil is assigned over a nil, no harm no foul.  Fewer cases to test this way.
 		} else if v != nil { // If MDRoot isn't nil and v isn't nil, combine them.
-			MDRoot = v.Combine(Sha256, MDRoot) // v is on the left, MDRoot candidate is on the right, for a new MDRoot
+			MDRoot = Hash(v).Combine(Sha256, MDRoot) // v is on the left, MDRoot candidate is on the right, for a new MDRoot
 		}
 	}
 	// Drop out with a MDRoot unless m.MerkleState is zero length, in which case return a nil (correct)
@@ -308,11 +308,11 @@ func (m *MerkleState) GetIntermediate(hash Hash, height int64) (left, right Hash
 			return nil, nil, fmt.Errorf("should not encounter a nil at height %d", height)
 		}
 		if i+1 == int(height) { // Found the height
-			left = v.Copy()         // Get the left and right
+			left = Hash(v).Copy()   // Get the left and right
 			right = hash.Copy()     //
 			return left, right, nil // return them
 		}
-		hash = v.Combine(Sha256, hash) // If this slot isn't empty, combine the hash with the slot
+		hash = Hash(v).Combine(Sha256, hash) // If this slot isn't empty, combine the hash with the slot
 	}
 	return nil, nil, fmt.Errorf("no values found at height %d", height)
 }
