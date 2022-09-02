@@ -50,8 +50,8 @@ func (m *MerkleManager) GetRange(begin, end int64) (hashes []Hash, err error) {
 				return nil, errors.New(errors.StatusInternalError, "a chain should always have a chain state")
 			}
 			c := s.Count - last
-			if c%m.markFreq == 0 {
-				c ^= m.markFreq //Swaps c==0 with c==m.markFreq
+			if c%m.markFreq == m.markFreq {
+				c = m.markFreq //Swaps c==0 with c==m.markFreq
 			}
 			if len(s.HashList) != int(c) {
 				return nil, errors.Format(errors.StatusIncompleteChain, "head: expected %d entries, got %d", s.Count-last, len(s.HashList))
