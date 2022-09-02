@@ -18,6 +18,9 @@ func unmarshalAnchorBody(body TransactionBody, err error) (AnchorBody, error) {
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
+	if body == nil {
+		return nil, nil
+	}
 
 	anchor, ok := body.(AnchorBody)
 	if !ok {
