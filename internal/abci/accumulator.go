@@ -252,12 +252,6 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 	}
 
 	app.logger.Info("Initializing")
-	block := new(block.Block)
-	block.Index = protocol.GenesisBlock
-	block.Time = req.Time
-	block.IsLeader = true
-	block.Batch = app.DB.Begin(true)
-	defer block.Batch.Discard()
 
 	// Initialize the chain
 	var snapshot []byte
@@ -265,18 +259,15 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 	if err != nil {
 		panic(fmt.Errorf("failed to init chain: %+v", err))
 	}
-	err = app.Executor.RestoreSnapshot(block.Batch, ioutil2.NewBuffer(snapshot))
+	err = app.Executor.RestoreSnapshot(app.DB, ioutil2.NewBuffer(snapshot))
 	if err != nil {
 		panic(fmt.Errorf("failed to init chain: %+v", err))
 	}
 
-	// Commit the batch
-	err = block.Batch.Commit()
-	if err != nil {
-		panic(fmt.Errorf("failed to commit block: %v", err))
-	}
-
 	// Notify the world of the committed block
+	block := new(block.Block)
+	block.Index = protocol.GenesisBlock
+	block.Time = req.Time
 	err = app.EventBus.Publish(events.DidCommitBlock{
 		Index: block.Index,
 		Time:  block.Time,
