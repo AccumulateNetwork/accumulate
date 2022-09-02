@@ -13,6 +13,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/getsentry/sentry-go"
 	"github.com/rs/zerolog"
+	tmcfg "github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/crypto"
 	tmlog "github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/privval"
@@ -150,11 +151,12 @@ func (d *Daemon) Start() (err error) {
 
 	router := routing.NewRouter(d.eventBus, d.connectionManager)
 	execOpts := block.ExecutorOptions{
-		Logger:   d.Logger,
-		Key:      d.Key().Bytes(),
-		Describe: d.Config.Accumulate.Describe,
-		Router:   router,
-		EventBus: d.eventBus,
+		Logger:     d.Logger,
+		Key:        d.Key().Bytes(),
+		Describe:   d.Config.Accumulate.Describe,
+		Router:     router,
+		EventBus:   d.eventBus,
+		IsFollower: d.Config.Mode != tmcfg.ModeValidator,
 	}
 
 	// On DNs initialize the major block scheduler
