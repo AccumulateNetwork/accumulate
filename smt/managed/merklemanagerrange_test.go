@@ -28,32 +28,34 @@ func TestConversions(t *testing.T) {
 }
 
 func TestMerkleManager_GetRange(t *testing.T) {
-	for NumTests := int64(50); NumTests < 64; NumTests++ {
+	for i := int64(1); i < 64; i = i * 2 {
+		for NumTests := int64(50); NumTests < 64; NumTests++ {
 
-		var rh common.RandHash
-		store := begin()
-		mm := testChain(store, 8, "try")
-		for i := int64(0); i < NumTests; i++ {
-			require.NoError(t, mm.AddHash(rh.NextList(), false))
-		}
-		for begin := int64(-1); begin < NumTests+1; begin++ {
-			for end := begin - 1; end < NumTests+2; end++ {
+			var rh common.RandHash
+			store := begin()
+			mm := testChain(store, i, "try")
+			for i := int64(0); i < NumTests; i++ {
+				require.NoError(t, mm.AddHash(rh.NextList(), false))
+			}
+			for begin := int64(-1); begin < NumTests+1; begin++ {
+				for end := begin - 1; end < NumTests+2; end++ {
 
-				hashes, err := mm.GetRange(begin, end)
+					hashes, err := mm.GetRange(begin, end)
 
-				if begin < 0 || begin > end || begin >= NumTests {
-					require.Errorf(t, err, "should not allow range [%d,%d]", begin, end)
-				} else {
-					require.NoErrorf(t, err, "should have a range for [%d,%d]", begin, end)
-					e := end
-					if e > NumTests {
-						e = NumTests
-					}
-					require.Truef(t, len(hashes) == int(e-begin),
-						"returned the wrong length for [%d,%d] %d", begin, end, len(hashes))
-					for k, h := range rh.List[begin:e] {
-						require.Truef(t, bytes.Equal(hashes[k], h),
-							"[%d,%d]returned wrong values", begin, end)
+					if begin < 0 || begin > end || begin >= NumTests {
+						require.Errorf(t, err, "should not allow range [%d,%d]", begin, end)
+					} else {
+						require.NoErrorf(t, err, "should have a range for [%d,%d]", begin, end)
+						e := end
+						if e > NumTests {
+							e = NumTests
+						}
+						require.Truef(t, len(hashes) == int(e-begin),
+							"returned the wrong length for [%d,%d] %d", begin, end, len(hashes))
+						for k, h := range rh.List[begin:e] {
+							require.Truef(t, bytes.Equal(hashes[k], h),
+								"[%d,%d]returned wrong values", begin, end)
+						}
 					}
 				}
 			}
