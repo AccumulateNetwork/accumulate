@@ -21,17 +21,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 )
 
-func (d *Daemon) onDidCommitBlock(event events.DidCommitBlock) error {
-	if event.Major == 0 {
-		return nil
-	}
-
-	// Begin the batch synchronously immediately after commit
-	batch := d.db.Begin(false)
-	go d.collectSnapshot(batch, event.Major, event.Index)
-	return nil
-}
-
 func (d *Daemon) collectSnapshot(batch *database.Batch, majorBlock, minorBlock uint64) {
 	defer func() {
 		if err := recover(); err != nil {
