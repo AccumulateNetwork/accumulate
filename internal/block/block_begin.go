@@ -477,9 +477,11 @@ func (x *Executor) sendBlockAnchor(batch *database.Batch, anchor protocol.Anchor
 	}
 
 	// Send
-	err = x.dispatcher.BroadcastTx(context.Background(), destPartUrl, env)
-	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+	if !x.IsFollower {
+		err = x.dispatcher.BroadcastTx(context.Background(), destPartUrl, env)
+		if err != nil {
+			return errors.Wrap(errors.StatusUnknownError, err)
+		}
 	}
 
 	return nil
