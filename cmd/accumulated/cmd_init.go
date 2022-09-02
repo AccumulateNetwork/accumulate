@@ -619,9 +619,9 @@ func initNode(cmd *cobra.Command, args []string) (string, error) {
 	netDir := netDir(config.Accumulate.Describe.NetworkType)
 	config.SetRoot(filepath.Join(flagMain.WorkDir, netDir))
 	accumulated.ConfigureNodePorts(&accumulated.NodeInit{
-		HostName: listenUrl.Hostname(),
-		ListenIP: listenUrl.Hostname(),
-		BasePort: uint64(basePort),
+		AdvertizeAddress: listenUrl.Hostname(),
+		ListenAddress:    listenUrl.Hostname(),
+		BasePort:         uint64(basePort),
 	}, config, 0)
 
 	config.PrivValidator.Key = "../priv_validator_key.json"

@@ -48,7 +48,7 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 	network := config.Describe{
 		NetworkType:  p.Type,
 		PartitionId:  p.ID,
-		LocalAddress: init.HostName,
+		LocalAddress: init.AdvertizeAddress,
 		Network:      *s.netcfg,
 	}
 
