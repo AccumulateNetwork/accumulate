@@ -125,7 +125,7 @@ func writeDevnetDockerCompose(cmd *cobra.Command, netInit *accumulated.NetworkIn
 	}
 
 	var svc dc.ServiceConfig
-	api := netInit.Bvns[0].Nodes[0].Address(false, "http", cfg.PortOffsetAccumulateApi) + "/v2"
+	api := netInit.Bvns[0].Nodes[0].Address(accumulated.AdvertizeAddress, "http", cfg.PortOffsetAccumulateApi) + "/v2"
 	svc.Name = "tools"
 	svc.ContainerName = "devnet-init"
 	svc.Image = flagInitDevnet.DockerImage
