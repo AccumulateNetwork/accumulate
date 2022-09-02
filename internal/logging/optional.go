@@ -6,6 +6,19 @@ type OptionalLogger struct {
 	L log.Logger
 }
 
+func (l *OptionalLogger) Set(m log.Logger, keyVals ...interface{}) {
+	for {
+		l, ok := m.(OptionalLogger)
+		if !ok {
+			break
+		}
+		m = l.L
+	}
+	if m != nil {
+		l.L = m.With(keyVals...)
+	}
+}
+
 func (l OptionalLogger) Debug(msg string, keyVals ...interface{}) {
 	if l.L == nil {
 		return
