@@ -246,7 +246,7 @@ func (x *Executor) validateSignature(batch *database.Batch, delivery *chain.Deli
 		}
 
 		// Validate the delegator
-		signer, err = x.validateSigner(batch, delivery.Transaction, signature.Delegator, md.Location, false)
+		signer, err = x.validateSigner(batch, delivery.Transaction, signature.Delegator, md.Location, false, md)
 		if err != nil {
 			return nil, errors.Wrap(errors.StatusUnknownError, err)
 		}
