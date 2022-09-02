@@ -22,6 +22,7 @@ type ReceivedAnchor struct {
 	Partition string
 	Body      protocol.AnchorBody
 	Index     int64
+	Status    *protocol.TransactionStatus
 }
 
 // DidProduceTxn records a produced transaction.
@@ -32,8 +33,8 @@ func (s *ProcessTransactionState) DidProduceTxn(url *url.URL, body protocol.Tran
 	s.ProducedTxns = append(s.ProducedTxns, txn)
 }
 
-func (s *ProcessTransactionState) DidReceiveAnchor(partition string, body protocol.AnchorBody, index int64) {
-	s.ReceivedAnchors = append(s.ReceivedAnchors, &ReceivedAnchor{partition, body, index})
+func (s *ProcessTransactionState) DidReceiveAnchor(partition string, body protocol.AnchorBody, index int64, status *protocol.TransactionStatus) {
+	s.ReceivedAnchors = append(s.ReceivedAnchors, &ReceivedAnchor{partition, body, index, status})
 }
 
 func (s *ProcessTransactionState) ProcessAdditionalTransaction(txn *Delivery) {

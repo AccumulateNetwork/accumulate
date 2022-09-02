@@ -57,6 +57,7 @@ var flagInit struct {
 	LogLevels        string
 	Etcd             []string
 	EnableTimingLogs bool
+	DnStallLimit     int
 }
 
 var flagInitNode struct {
@@ -112,6 +113,7 @@ func initInitFlags() {
 	cmdInit.PersistentFlags().StringVar(&flagInit.LogLevels, "log-levels", "", "Override the default log levels")
 	cmdInit.PersistentFlags().StringSliceVar(&flagInit.Etcd, "etcd", nil, "Use etcd endpoint(s)")
 	cmdInit.PersistentFlags().BoolVar(&flagInit.EnableTimingLogs, "enable-timing-logs", false, "Enable core timing analysis logging")
+	cmdInit.PersistentFlags().IntVar(&flagInit.DnStallLimit, "dn-stall-limit", 0, "Override the default DN stall limit")
 	_ = cmdInit.MarkFlagRequired("network")
 
 	cmdInitNode.ResetFlags()

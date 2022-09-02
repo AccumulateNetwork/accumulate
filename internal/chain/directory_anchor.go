@@ -57,7 +57,11 @@ func (DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Transa
 	if err != nil {
 		return nil, err
 	}
-	st.State.DidReceiveAnchor(protocol.Directory, body, index)
+	status, err := st.batch.Transaction(st.txHash[:]).Status().Get()
+	if err != nil {
+		return nil, err
+	}
+	st.State.DidReceiveAnchor(protocol.Directory, body, index, status)
 
 	// And the BPT root
 	_, err = st.State.ChainUpdates.AddChainEntry2(st.batch, record.BPT(), body.StateTreeAnchor[:], 0, 0, false)
@@ -70,6 +74,47 @@ func (DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Transa
 		err := processNetworkAccountUpdates(st, tx, body.Updates)
 		if err != nil {
 			return nil, err
+		}
+	}
+
+	// Acknowledge anchors and synthetic transactions
+	var anchorLedger *protocol.AnchorLedger
+	err = st.batch.Account(st.AnchorPool()).Main().GetAs(&anchorLedger)
+	if err != nil {
+		return nil, fmt.Errorf("load anchor ledger: %w", err)
+	}
+	var synthLedger *protocol.SyntheticLedger
+	err = st.batch.Account(st.Synthetic()).Main().GetAs(&synthLedger)
+	if err != nil {
+		return nil, fmt.Errorf("load anchor ledger: %w", err)
+	}
+	var didUpdateAnchor, didUpdateSynth bool
+	for _, receipt := range body.Receipts {
+		if st.PartitionUrl().Equal(receipt.Anchor.Source) {
+			ledger := anchorLedger.Partition(body.Source)
+			if receipt.SequenceNumber > ledger.Acknowledged {
+				ledger.Acknowledged = receipt.SequenceNumber
+				didUpdateAnchor = true
+			}
+		}
+
+		anchorTxl := receipt.Anchor.SynthFrom(st.PartitionUrl().URL)
+		localTxl := synthLedger.Partition(receipt.Anchor.Source)
+		if anchorTxl.Delivered > localTxl.Acknowledged {
+			localTxl.Acknowledged = anchorTxl.Delivered
+			didUpdateSynth = true
+		}
+	}
+	if didUpdateAnchor {
+		err = st.batch.Account(st.AnchorPool()).Main().Put(anchorLedger)
+		if err != nil {
+			return nil, fmt.Errorf("store anchor ledger: %w", err)
+		}
+	}
+	if didUpdateSynth {
+		err = st.batch.Account(st.Synthetic()).Main().Put(synthLedger)
+		if err != nil {
+			return nil, fmt.Errorf("store anchor ledger: %w", err)
 		}
 	}
 
