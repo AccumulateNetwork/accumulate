@@ -34,9 +34,13 @@ NodeInit:
     marshal-as: enum
   - name: BasePort
     type: uint
-  - name: HostName
+  - name: AdvertizeAddress
     type: string
-  - name: ListenIP
+    alternative: HostName
+  - name: ListenAddress
+    type: string
+    alternative: ListenIP
+  - name: PeerAddress
     type: string
   - name: PrivValKey
     type: bytes

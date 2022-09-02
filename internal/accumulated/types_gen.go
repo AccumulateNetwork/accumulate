@@ -23,13 +23,14 @@ type NetworkInit struct {
 }
 
 type NodeInit struct {
-	DnnType    config.NodeType `json:"dnnType,omitempty" form:"dnnType" query:"dnnType" validate:"required"`
-	BvnnType   config.NodeType `json:"bvnnType,omitempty" form:"bvnnType" query:"bvnnType" validate:"required"`
-	BasePort   uint64          `json:"basePort,omitempty" form:"basePort" query:"basePort" validate:"required"`
-	HostName   string          `json:"hostName,omitempty" form:"hostName" query:"hostName" validate:"required"`
-	ListenIP   string          `json:"listenIP,omitempty" form:"listenIP" query:"listenIP" validate:"required"`
-	PrivValKey []byte          `json:"privValKey,omitempty" form:"privValKey" query:"privValKey" validate:"required"`
-	NodeKey    []byte          `json:"nodeKey,omitempty" form:"nodeKey" query:"nodeKey" validate:"required"`
+	DnnType          config.NodeType `json:"dnnType,omitempty" form:"dnnType" query:"dnnType" validate:"required"`
+	BvnnType         config.NodeType `json:"bvnnType,omitempty" form:"bvnnType" query:"bvnnType" validate:"required"`
+	BasePort         uint64          `json:"basePort,omitempty" form:"basePort" query:"basePort" validate:"required"`
+	AdvertizeAddress string          `json:"advertizeAddress,omitempty" form:"advertizeAddress" query:"advertizeAddress" validate:"required"`
+	ListenAddress    string          `json:"listenAddress,omitempty" form:"listenAddress" query:"listenAddress" validate:"required"`
+	PeerAddress      string          `json:"peerAddress,omitempty" form:"peerAddress" query:"peerAddress" validate:"required"`
+	PrivValKey       []byte          `json:"privValKey,omitempty" form:"privValKey" query:"privValKey" validate:"required"`
+	NodeKey          []byte          `json:"nodeKey,omitempty" form:"nodeKey" query:"nodeKey" validate:"required"`
 }
 
 func (v *BvnInit) MarshalJSON() ([]byte, error) {
@@ -54,19 +55,25 @@ func (v *NetworkInit) MarshalJSON() ([]byte, error) {
 
 func (v *NodeInit) MarshalJSON() ([]byte, error) {
 	u := struct {
-		DnnType    config.NodeType `json:"dnnType,omitempty"`
-		BvnnType   config.NodeType `json:"bvnnType,omitempty"`
-		BasePort   uint64          `json:"basePort,omitempty"`
-		HostName   string          `json:"hostName,omitempty"`
-		ListenIP   string          `json:"listenIP,omitempty"`
-		PrivValKey *string         `json:"privValKey,omitempty"`
-		NodeKey    *string         `json:"nodeKey,omitempty"`
+		DnnType          config.NodeType `json:"dnnType,omitempty"`
+		BvnnType         config.NodeType `json:"bvnnType,omitempty"`
+		BasePort         uint64          `json:"basePort,omitempty"`
+		AdvertizeAddress string          `json:"advertizeAddress,omitempty"`
+		HostName         string          `json:"hostName,omitempty"`
+		ListenAddress    string          `json:"listenAddress,omitempty"`
+		ListenIP         string          `json:"listenIP,omitempty"`
+		PeerAddress      string          `json:"peerAddress,omitempty"`
+		PrivValKey       *string         `json:"privValKey,omitempty"`
+		NodeKey          *string         `json:"nodeKey,omitempty"`
 	}{}
 	u.DnnType = v.DnnType
 	u.BvnnType = v.BvnnType
 	u.BasePort = v.BasePort
-	u.HostName = v.HostName
-	u.ListenIP = v.ListenIP
+	u.AdvertizeAddress = v.AdvertizeAddress
+	u.HostName = v.AdvertizeAddress
+	u.ListenAddress = v.ListenAddress
+	u.ListenIP = v.ListenAddress
+	u.PeerAddress = v.PeerAddress
 	u.PrivValKey = encoding.BytesToJSON(v.PrivValKey)
 	u.NodeKey = encoding.BytesToJSON(v.NodeKey)
 	return json.Marshal(&u)
@@ -104,19 +111,25 @@ func (v *NetworkInit) UnmarshalJSON(data []byte) error {
 
 func (v *NodeInit) UnmarshalJSON(data []byte) error {
 	u := struct {
-		DnnType    config.NodeType `json:"dnnType,omitempty"`
-		BvnnType   config.NodeType `json:"bvnnType,omitempty"`
-		BasePort   uint64          `json:"basePort,omitempty"`
-		HostName   string          `json:"hostName,omitempty"`
-		ListenIP   string          `json:"listenIP,omitempty"`
-		PrivValKey *string         `json:"privValKey,omitempty"`
-		NodeKey    *string         `json:"nodeKey,omitempty"`
+		DnnType          config.NodeType `json:"dnnType,omitempty"`
+		BvnnType         config.NodeType `json:"bvnnType,omitempty"`
+		BasePort         uint64          `json:"basePort,omitempty"`
+		AdvertizeAddress string          `json:"advertizeAddress,omitempty"`
+		HostName         string          `json:"hostName,omitempty"`
+		ListenAddress    string          `json:"listenAddress,omitempty"`
+		ListenIP         string          `json:"listenIP,omitempty"`
+		PeerAddress      string          `json:"peerAddress,omitempty"`
+		PrivValKey       *string         `json:"privValKey,omitempty"`
+		NodeKey          *string         `json:"nodeKey,omitempty"`
 	}{}
 	u.DnnType = v.DnnType
 	u.BvnnType = v.BvnnType
 	u.BasePort = v.BasePort
-	u.HostName = v.HostName
-	u.ListenIP = v.ListenIP
+	u.AdvertizeAddress = v.AdvertizeAddress
+	u.HostName = v.AdvertizeAddress
+	u.ListenAddress = v.ListenAddress
+	u.ListenIP = v.ListenAddress
+	u.PeerAddress = v.PeerAddress
 	u.PrivValKey = encoding.BytesToJSON(v.PrivValKey)
 	u.NodeKey = encoding.BytesToJSON(v.NodeKey)
 	if err := json.Unmarshal(data, &u); err != nil {
@@ -125,8 +138,17 @@ func (v *NodeInit) UnmarshalJSON(data []byte) error {
 	v.DnnType = u.DnnType
 	v.BvnnType = u.BvnnType
 	v.BasePort = u.BasePort
-	v.HostName = u.HostName
-	v.ListenIP = u.ListenIP
+	if !(u.AdvertizeAddress == "") {
+		v.AdvertizeAddress = u.AdvertizeAddress
+	} else {
+		v.AdvertizeAddress = u.HostName
+	}
+	if !(u.ListenAddress == "") {
+		v.ListenAddress = u.ListenAddress
+	} else {
+		v.ListenAddress = u.ListenIP
+	}
+	v.PeerAddress = u.PeerAddress
 	if x, err := encoding.BytesFromJSON(u.PrivValKey); err != nil {
 		return fmt.Errorf("error decoding PrivValKey: %w", err)
 	} else {
