@@ -57,15 +57,15 @@ func New(logger log.Logger, database OpenDatabaseFunc, network *accumulated.Netw
 		s.netcfg.Partitions[i+1].Type = config.BlockValidator
 		s.netcfg.Partitions[i+1].Nodes = make([]config.Node, len(bvn.Nodes))
 		for j, node := range bvn.Nodes {
-			s.netcfg.Partitions[i+1].Nodes[j].Address = node.HostName
+			s.netcfg.Partitions[i+1].Nodes[j].Address = node.AdvertizeAddress
 			s.netcfg.Partitions[i+1].Nodes[j].Type = node.BvnnType
 
-			dnn := config.Node{Address: node.HostName, Type: node.DnnType}
+			dnn := config.Node{Address: node.AdvertizeAddress, Type: node.DnnType}
 			s.netcfg.Partitions[0].Nodes = append(s.netcfg.Partitions[0].Nodes, dnn)
 
 			if node.BasePort != 0 {
-				s.netcfg.Partitions[i+1].Nodes[j].Address = node.Address(false, "http", config.PortOffsetBlockValidator)
-				s.netcfg.Partitions[0].Nodes[j].Address = node.Address(false, "http", config.PortOffsetDirectory)
+				s.netcfg.Partitions[i+1].Nodes[j].Address = node.Address(accumulated.AdvertizeAddress, "http", config.PortOffsetBlockValidator)
+				s.netcfg.Partitions[0].Nodes[j].Address = node.Address(accumulated.AdvertizeAddress, "http", config.PortOffsetDirectory)
 			}
 		}
 	}
@@ -241,9 +241,9 @@ func (s *Simulator) ListenAndServe(hook func(*Simulator, http.Handler) http.Hand
 		for _, node := range part.nodes {
 			var addr string
 			if part.Type == config.Directory {
-				addr = node.init.Address(true, "", config.PortOffsetDirectory, config.PortOffsetAccumulateApi)
+				addr = node.init.Address(accumulated.ListenAddress, "", config.PortOffsetDirectory, config.PortOffsetAccumulateApi)
 			} else {
-				addr = node.init.Address(true, "", config.PortOffsetBlockValidator, config.PortOffsetAccumulateApi)
+				addr = node.init.Address(accumulated.ListenAddress, "", config.PortOffsetBlockValidator, config.PortOffsetAccumulateApi)
 			}
 
 			ln, err := net.Listen("tcp", addr)
