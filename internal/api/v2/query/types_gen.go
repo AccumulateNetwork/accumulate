@@ -40,6 +40,7 @@ type GeneralReceipt struct {
 	fieldsSet      []bool
 	LocalBlock     uint64          `json:"localBlock,omitempty" form:"localBlock" query:"localBlock" validate:"required"`
 	DirectoryBlock uint64          `json:"directoryBlock,omitempty" form:"directoryBlock" query:"directoryBlock" validate:"required"`
+	MajorBlock     uint64          `json:"majorBlock,omitempty" form:"majorBlock" query:"majorBlock" validate:"required"`
 	Proof          managed.Receipt `json:"proof,omitempty" form:"proof" query:"proof" validate:"required"`
 	Error          string          `json:"error,omitempty" form:"error" query:"error" validate:"required"`
 	extraData      []byte
@@ -344,6 +345,7 @@ func (v *GeneralReceipt) Copy() *GeneralReceipt {
 
 	u.LocalBlock = v.LocalBlock
 	u.DirectoryBlock = v.DirectoryBlock
+	u.MajorBlock = v.MajorBlock
 	u.Proof = *(&v.Proof).Copy()
 	u.Error = v.Error
 
@@ -839,6 +841,9 @@ func (v *GeneralReceipt) Equal(u *GeneralReceipt) bool {
 		return false
 	}
 	if !(v.DirectoryBlock == u.DirectoryBlock) {
+		return false
+	}
+	if !(v.MajorBlock == u.MajorBlock) {
 		return false
 	}
 	if !((&v.Proof).Equal(&u.Proof)) {
@@ -1530,8 +1535,9 @@ func (v *DirectoryQueryResult) IsValid() error {
 var fieldNames_GeneralReceipt = []string{
 	1: "LocalBlock",
 	2: "DirectoryBlock",
-	3: "Proof",
-	4: "Error",
+	3: "MajorBlock",
+	4: "Proof",
+	5: "Error",
 }
 
 func (v *GeneralReceipt) MarshalBinary() ([]byte, error) {
@@ -1544,11 +1550,14 @@ func (v *GeneralReceipt) MarshalBinary() ([]byte, error) {
 	if !(v.DirectoryBlock == 0) {
 		writer.WriteUint(2, v.DirectoryBlock)
 	}
+	if !(v.MajorBlock == 0) {
+		writer.WriteUint(3, v.MajorBlock)
+	}
 	if !((v.Proof).Equal(new(managed.Receipt))) {
-		writer.WriteValue(3, v.Proof.MarshalBinary)
+		writer.WriteValue(4, v.Proof.MarshalBinary)
 	}
 	if !(len(v.Error) == 0) {
-		writer.WriteString(4, v.Error)
+		writer.WriteString(5, v.Error)
 	}
 
 	_, _, err := writer.Reset(fieldNames_GeneralReceipt)
@@ -1573,11 +1582,16 @@ func (v *GeneralReceipt) IsValid() error {
 		errs = append(errs, "field DirectoryBlock is not set")
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field MajorBlock is missing")
+	} else if v.MajorBlock == 0 {
+		errs = append(errs, "field MajorBlock is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field Proof is missing")
 	} else if (v.Proof).Equal(new(managed.Receipt)) {
 		errs = append(errs, "field Proof is not set")
 	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
 		errs = append(errs, "field Error is missing")
 	} else if len(v.Error) == 0 {
 		errs = append(errs, "field Error is not set")
@@ -3306,10 +3320,13 @@ func (v *GeneralReceipt) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUint(2); ok {
 		v.DirectoryBlock = x
 	}
-	if x := new(managed.Receipt); reader.ReadValue(3, x.UnmarshalBinary) {
+	if x, ok := reader.ReadUint(3); ok {
+		v.MajorBlock = x
+	}
+	if x := new(managed.Receipt); reader.ReadValue(4, x.UnmarshalBinary) {
 		v.Proof = *x
 	}
-	if x, ok := reader.ReadString(4); ok {
+	if x, ok := reader.ReadString(5); ok {
 		v.Error = x
 	}
 
@@ -4348,12 +4365,14 @@ func (v *GeneralReceipt) MarshalJSON() ([]byte, error) {
 	u := struct {
 		LocalBlock     uint64          `json:"localBlock,omitempty"`
 		DirectoryBlock uint64          `json:"directoryBlock,omitempty"`
+		MajorBlock     uint64          `json:"majorBlock,omitempty"`
 		Proof          managed.Receipt `json:"proof,omitempty"`
 		Receipt        managed.Receipt `json:"receipt,omitempty"`
 		Error          string          `json:"error,omitempty"`
 	}{}
 	u.LocalBlock = v.LocalBlock
 	u.DirectoryBlock = v.DirectoryBlock
+	u.MajorBlock = v.MajorBlock
 	u.Proof = v.Proof
 	u.Receipt = v.Proof
 	u.Error = v.Error
@@ -4726,6 +4745,7 @@ func (v *TxReceipt) MarshalJSON() ([]byte, error) {
 	u := struct {
 		LocalBlock     uint64          `json:"localBlock,omitempty"`
 		DirectoryBlock uint64          `json:"directoryBlock,omitempty"`
+		MajorBlock     uint64          `json:"majorBlock,omitempty"`
 		Proof          managed.Receipt `json:"proof,omitempty"`
 		Receipt        managed.Receipt `json:"receipt,omitempty"`
 		Error          string          `json:"error,omitempty"`
@@ -4734,6 +4754,7 @@ func (v *TxReceipt) MarshalJSON() ([]byte, error) {
 	}{}
 	u.LocalBlock = v.GeneralReceipt.LocalBlock
 	u.DirectoryBlock = v.GeneralReceipt.DirectoryBlock
+	u.MajorBlock = v.GeneralReceipt.MajorBlock
 	u.Proof = v.GeneralReceipt.Proof
 	u.Receipt = v.GeneralReceipt.Proof
 	u.Error = v.GeneralReceipt.Error
@@ -4812,12 +4833,14 @@ func (v *GeneralReceipt) UnmarshalJSON(data []byte) error {
 	u := struct {
 		LocalBlock     uint64          `json:"localBlock,omitempty"`
 		DirectoryBlock uint64          `json:"directoryBlock,omitempty"`
+		MajorBlock     uint64          `json:"majorBlock,omitempty"`
 		Proof          managed.Receipt `json:"proof,omitempty"`
 		Receipt        managed.Receipt `json:"receipt,omitempty"`
 		Error          string          `json:"error,omitempty"`
 	}{}
 	u.LocalBlock = v.LocalBlock
 	u.DirectoryBlock = v.DirectoryBlock
+	u.MajorBlock = v.MajorBlock
 	u.Proof = v.Proof
 	u.Receipt = v.Proof
 	u.Error = v.Error
@@ -4826,6 +4849,7 @@ func (v *GeneralReceipt) UnmarshalJSON(data []byte) error {
 	}
 	v.LocalBlock = u.LocalBlock
 	v.DirectoryBlock = u.DirectoryBlock
+	v.MajorBlock = u.MajorBlock
 	if !(u.Proof.Equal(&managed.Receipt{})) {
 		v.Proof = u.Proof
 	} else {
@@ -5462,6 +5486,7 @@ func (v *TxReceipt) UnmarshalJSON(data []byte) error {
 	u := struct {
 		LocalBlock     uint64          `json:"localBlock,omitempty"`
 		DirectoryBlock uint64          `json:"directoryBlock,omitempty"`
+		MajorBlock     uint64          `json:"majorBlock,omitempty"`
 		Proof          managed.Receipt `json:"proof,omitempty"`
 		Receipt        managed.Receipt `json:"receipt,omitempty"`
 		Error          string          `json:"error,omitempty"`
@@ -5470,6 +5495,7 @@ func (v *TxReceipt) UnmarshalJSON(data []byte) error {
 	}{}
 	u.LocalBlock = v.GeneralReceipt.LocalBlock
 	u.DirectoryBlock = v.GeneralReceipt.DirectoryBlock
+	u.MajorBlock = v.GeneralReceipt.MajorBlock
 	u.Proof = v.GeneralReceipt.Proof
 	u.Receipt = v.GeneralReceipt.Proof
 	u.Error = v.GeneralReceipt.Error
@@ -5480,6 +5506,7 @@ func (v *TxReceipt) UnmarshalJSON(data []byte) error {
 	}
 	v.GeneralReceipt.LocalBlock = u.LocalBlock
 	v.GeneralReceipt.DirectoryBlock = u.DirectoryBlock
+	v.GeneralReceipt.MajorBlock = u.MajorBlock
 	if !(u.Proof.Equal(&managed.Receipt{})) {
 		v.GeneralReceipt.Proof = u.Proof
 	} else {
