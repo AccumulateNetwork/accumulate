@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"os/signal"
 	"time"
 
 	"github.com/kardianos/service"
@@ -49,6 +51,23 @@ func runDualNode(cmd *cobra.Command, args []string) (string, error) {
 	})
 
 	flagRun.EnableTimingLogs = flagRunDual.EnableTimingLogs
+
+	// TODO: This only works on POSIX platforms. We need to seriously refactor
+	// how service mode works.
+	serviceConfig.Option = service.KeyValue{
+		"RunWait": func() {
+			sigChan := make(chan os.Signal, 1)
+			signal.Notify(sigChan, os.Interrupt)
+			defer signal.Stop(sigChan)
+
+			select {
+			case <-prog.primary.Done():
+			case <-prog.secondary.Done():
+			case <-sigChan:
+			}
+		},
+	}
+
 	svc, err := service.New(prog, serviceConfig)
 	if err != nil {
 		return "", err
