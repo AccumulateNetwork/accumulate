@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"math/big"
 	"os"
+	"os/user"
+	"path"
 	"path/filepath"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
@@ -35,6 +37,7 @@ func check(err error) {
 }
 
 func main() {
+
 	if len(os.Args) < 2 {
 		fmt.Fprintln(os.Stderr, "Usage: gen-testdata <output-file>")
 		os.Exit(1)
