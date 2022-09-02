@@ -52,7 +52,7 @@ func (WriteData) AllowMissingPrincipal(transaction *protocol.Transaction) bool {
 
 // SignerIsAuthorized returns nil if the transaction is writing to a lite data
 // account.
-func (WriteData) SignerIsAuthorized(_ AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, _ protocol.Signer, _ bool) (fallback bool, err error) {
+func (WriteData) SignerIsAuthorized(_ AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, _ protocol.Signer, _ SignatureValidationMetadata) (fallback bool, err error) {
 	lite, err := isWriteToLiteDataAccount(batch, transaction)
 	if err != nil {
 		return false, errors.Wrap(errors.StatusUnknownError, err)

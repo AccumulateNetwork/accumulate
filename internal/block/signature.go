@@ -34,28 +34,7 @@ func (x *Executor) ProcessSignature(batch *database.Batch, delivery *chain.Deliv
 	return &ProcessSignatureState{}, nil
 }
 
-type sigExecMetadata struct {
-	Location    *url.URL
-	IsInitiator bool
-	Delegated   bool
-	Forwarded   bool
-}
-
-func (d sigExecMetadata) SetDelegated() sigExecMetadata {
-	e := d
-	e.Delegated = true
-	return e
-}
-
-func (d sigExecMetadata) SetForwarded() sigExecMetadata {
-	e := d
-	e.Forwarded = true
-	return e
-}
-
-func (d sigExecMetadata) Nested() bool {
-	return d.Delegated || d.Forwarded
-}
+type sigExecMetadata = chain.SignatureValidationMetadata
 
 func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Delivery, signature protocol.Signature, md sigExecMetadata) (protocol.Signer2, error) {
 	var signer protocol.Signer2
@@ -123,7 +102,7 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 		}
 
 		// Validate the delegator
-		signer, err = x.validateSigner(batch, delivery.Transaction, signature.Delegator, md.Location, false)
+		signer, err = x.validateSigner(batch, delivery.Transaction, signature.Delegator, md.Location, false, md)
 		if err != nil {
 			return nil, errors.Wrap(errors.StatusUnknownError, err)
 		}
@@ -376,7 +355,7 @@ func validateInitialSignature(_ *protocol.Transaction, signature protocol.Signat
 }
 
 // validateSigner verifies that the signer is valid and authorized.
-func (x *Executor) validateSigner(batch *database.Batch, transaction *protocol.Transaction, signerUrl, location *url.URL, checkAuthz bool) (protocol.Signer, error) {
+func (x *Executor) validateSigner(batch *database.Batch, transaction *protocol.Transaction, signerUrl, location *url.URL, checkAuthz bool, md sigExecMetadata) (protocol.Signer, error) {
 	// If the user specifies a lite token address, convert it to a lite
 	// identity
 	if key, _, _ := protocol.ParseLiteTokenAddress(signerUrl); key != nil {
@@ -397,7 +376,7 @@ func (x *Executor) validateSigner(batch *database.Batch, transaction *protocol.T
 	// Delegate to the transaction executor?
 	val, ok := getValidator[chain.SignerValidator](x, transaction.Body.Type())
 	if ok {
-		fallback, err := val.SignerIsAuthorized(x, batch, transaction, signer, checkAuthz)
+		fallback, err := val.SignerIsAuthorized(x, batch, transaction, signer, md)
 		if err != nil {
 			return nil, errors.Wrap(errors.StatusUnknownError, err)
 		}
@@ -575,7 +554,7 @@ func (x *Executor) computeSignerFee(transaction *protocol.Transaction, signature
 // validateKeySignature validates a private key signature.
 func (x *Executor) validateKeySignature(batch *database.Batch, delivery *chain.Delivery, signature protocol.KeySignature, md sigExecMetadata, checkAuthz bool) (protocol.Signer, error) {
 	// Validate the signer
-	signer, err := x.validateSigner(batch, delivery.Transaction, signature.GetSigner(), signature.RoutingLocation(), checkAuthz)
+	signer, err := x.validateSigner(batch, delivery.Transaction, signature.GetSigner(), signature.RoutingLocation(), checkAuthz, md)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
@@ -606,7 +585,7 @@ func (x *Executor) validateKeySignature(batch *database.Batch, delivery *chain.D
 }
 
 func (x *Executor) processSigner(batch *database.Batch, transaction *protocol.Transaction, signature protocol.Signature, md sigExecMetadata, checkAuthz bool) (protocol.Signer, error) {
-	signer, err := x.validateSigner(batch, transaction, signature.GetSigner(), md.Location, checkAuthz)
+	signer, err := x.validateSigner(batch, transaction, signature.GetSigner(), md.Location, checkAuthz, md)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
