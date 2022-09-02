@@ -127,6 +127,10 @@ func initNetworkLocalFS(netInit *accumulated.NetworkInit) {
 					config.Accumulate.Website.Enabled = false
 				}
 
+				if flagInit.DnStallLimit > 0 {
+					config.Accumulate.DnStallLimit = flagInit.DnStallLimit
+				}
+
 				if len(flagInit.Etcd) > 0 {
 					config.Accumulate.Storage.Type = cfg.EtcdStorage
 					config.Accumulate.Storage.Etcd = new(etcd.Config)

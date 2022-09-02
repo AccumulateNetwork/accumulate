@@ -125,6 +125,7 @@ func Default(netName string, net NetworkType, node NodeType, partitionId string)
 	c.Accumulate.Network.Id = netName
 	c.Accumulate.NetworkType = net
 	c.Accumulate.PartitionId = partitionId
+	c.Accumulate.DnStallLimit = 50
 	c.Accumulate.API.PrometheusServer = "http://18.119.26.7:9090"
 	c.Accumulate.SentryDSN = "https://glet_78c3bf45d009794a4d9b0c990a1f1ed5@gitlab.com/api/v4/error_tracking/collector/29762666"
 	c.Accumulate.Website.Enabled = true
@@ -158,6 +159,11 @@ type Config struct {
 type Accumulate struct {
 	SentryDSN string `toml:"sentry-dsn" mapstructure:"sentry-dsn"`
 	Describe  `toml:"describe" mapstructure:"describe"`
+
+	// DnStallLimit sets the number of blocks the DN is allowed to take before
+	// acknowledging an anchor.
+	DnStallLimit int `toml:"dn-stall-limit" mapstructure:"dn-stall-limit"`
+
 	// TODO: move network config to its own file since it will be constantly changing over time.
 	//	NetworkConfig string      `toml:"network" mapstructure:"network"`
 	Snapshots   Snapshots   `toml:"snapshots" mapstructure:"snapshots"`
@@ -385,7 +391,7 @@ func (v NodeType) MarshalTOML() ([]byte, error) {
 // StringToEnumHookFunc is a decode hook for mapstructure that will convert enums to strings
 func StringToEnumHookFunc() mapstructure.DecodeHookFuncType {
 	return func(
-		f reflect.Type,
+		_ reflect.Type,
 		t reflect.Type,
 		data interface{},
 	) (interface{}, error) {
