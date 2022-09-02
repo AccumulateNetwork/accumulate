@@ -108,6 +108,10 @@ func (m *JrpcMethods) jrpc2http(jrpc jsonrpc2.MethodFunc) http.HandlerFunc {
 }
 
 func (m *JrpcMethods) Status(ctx context.Context, _ json.RawMessage) interface{} {
+	if m.ConnectionManager == nil {
+		return internalError(errors.Format(errors.StatusInternalError, "missing connection manager"))
+	}
+
 	conn, err := m.ConnectionManager.SelectConnection(m.Options.Describe.PartitionId, true)
 	if err != nil {
 		return internalError(err)
