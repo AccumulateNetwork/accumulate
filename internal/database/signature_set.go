@@ -42,6 +42,10 @@ func (s *SignatureSet) Count() int {
 	return len(s.entries.Entries)
 }
 
+func (s *SignatureSet) Version() uint64 {
+	return s.entries.Version
+}
+
 func (s *SignatureSet) Entries() []SigSetEntry {
 	entries := make([]SigSetEntry, len(s.entries.Entries))
 	copy(entries, s.entries.Entries)

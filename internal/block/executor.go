@@ -2,7 +2,6 @@ package block
 
 import (
 	"crypto/ed25519"
-	"io"
 
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/libs/log"
@@ -11,6 +10,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
@@ -237,22 +237,18 @@ func (m *Executor) LoadStateRoot(batch *database.Batch) ([]byte, error) {
 	}
 }
 
-func (m *Executor) RestoreSnapshot(batch *database.Batch, file ioutil2.SectionReader) error {
-	err := batch.RestoreSnapshot(file, &m.Describe)
+func (m *Executor) RestoreSnapshot(db database.Beginner, file ioutil2.SectionReader) error {
+	err := snapshot.FullRestore(db, file, m.logger, &m.Describe)
 	if err != nil {
 		return errors.Format(errors.StatusUnknownError, "load state: %w", err)
 	}
 
-	err = m.loadGlobals(batch.View)
+	err = m.loadGlobals(db.View)
 	if err != nil {
 		return errors.Format(errors.StatusInternalError, "failed to load globals: %w", err)
 	}
 
 	return nil
-}
-
-func (m *Executor) SaveSnapshot(batch *database.Batch, file io.WriteSeeker) error {
-	return batch.SaveSnapshot(file, &m.Describe)
 }
 
 func (x *Executor) InitChainValidators(initVal []abci.ValidatorUpdate) (additional [][]byte, err error) {
