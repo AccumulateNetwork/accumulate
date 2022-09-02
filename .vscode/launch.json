@@ -5,6 +5,15 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "Simulate",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/tools/cmd/simulator",
+      "args": [
+      ]
+    },
+    {
       "name": "Init DevNet",
       "type": "go",
       "request": "launch",
