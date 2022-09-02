@@ -17,6 +17,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
@@ -37,7 +38,7 @@ type InitOpts struct {
 	OperatorKeys    [][]byte
 }
 
-func Init(snapshot io.WriteSeeker, opts InitOpts) ([]byte, error) {
+func Init(snapshotWriter io.WriteSeeker, opts InitOpts) ([]byte, error) {
 	// Initialize globals
 	gg := opts.GenesisGlobals
 
@@ -146,9 +147,15 @@ func Init(snapshot io.WriteSeeker, opts InitOpts) ([]byte, error) {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
+	// Preserve history in the Genesis snapshot
 	batch := b.db.Begin(false)
 	defer batch.Discard()
-	err = exec.SaveSnapshot(batch, snapshot)
+	w, err := snapshot.Collect(batch, snapshotWriter, func(account *database.Account) (bool, error) { return true, nil })
+	if err != nil {
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
+	}
+
+	err = snapshot.CollectAnchors(w, batch, &exec.Describe)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
