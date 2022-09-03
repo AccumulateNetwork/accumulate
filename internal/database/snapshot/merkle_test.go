@@ -70,6 +70,7 @@ func TestSnapshotPartialHistory(t *testing.T) {
 	entriesShouldFailOrReturnCorrectNumber(t, c, 100, 300)
 	entriesShouldFailOrReturnCorrectNumber(t, c, 0, 256)
 	entriesShouldFailOrReturnCorrectNumber(t, c, 256, 300)
+	entriesShouldFailOrReturnCorrectNumber(t, c, 200, 400)
 }
 
 func entriesShouldFailOrReturnCorrectNumber(t *testing.T, chain *managed.Chain, start, end int64) {

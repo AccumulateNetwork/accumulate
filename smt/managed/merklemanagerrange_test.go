@@ -28,7 +28,7 @@ func TestConversions(t *testing.T) {
 }
 
 func TestMerkleManager_GetRange(t *testing.T) {
-	for i := int64(1); i < 64; i = i * 2 {
+	for i := int64(1); i < 6; i++ {
 		for NumTests := int64(50); NumTests < 64; NumTests++ {
 
 			var rh common.RandHash
@@ -43,18 +43,18 @@ func TestMerkleManager_GetRange(t *testing.T) {
 					hashes, err := mm.GetRange(begin, end)
 
 					if begin < 0 || begin > end || begin >= NumTests {
-						require.Errorf(t, err, "should not allow range [%d,%d]", begin, end)
+						require.Errorf(t, err, "should not allow range [%d,%d] (power %d)", begin, end, i)
 					} else {
-						require.NoErrorf(t, err, "should have a range for [%d,%d]", begin, end)
+						require.NoErrorf(t, err, "should have a range for [%d,%d] (power %d)", begin, end, i)
 						e := end
 						if e > NumTests {
 							e = NumTests
 						}
 						require.Truef(t, len(hashes) == int(e-begin),
-							"returned the wrong length for [%d,%d] %d", begin, end, len(hashes))
+							"returned the wrong length for [%d,%d] %d (power %d)", begin, end, len(hashes), i)
 						for k, h := range rh.List[begin:e] {
 							require.Truef(t, bytes.Equal(hashes[k], h),
-								"[%d,%d]returned wrong values", begin, end)
+								"[%d,%d]returned wrong values (power %d)", begin, end, i)
 						}
 					}
 				}
