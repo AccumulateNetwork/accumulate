@@ -56,6 +56,10 @@ func (SyntheticDepositCredits) Validate(st *StateManager, tx *Delivery) (protoco
 		return nil, fmt.Errorf("invalid principal: want account type %v or %v, got %v", protocol.AccountTypeLiteTokenAccount, protocol.AccountTypeKeyPage, st.Origin.Type())
 	}
 
+	if body.Amount < 0 {
+		return nil, fmt.Errorf("amount can't be a negative value")
+	}
+
 	account.CreditCredits(body.Amount)
 
 	// Update the ledger

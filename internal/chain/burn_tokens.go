@@ -30,6 +30,10 @@ func (BurnTokens) Validate(st *StateManager, tx *Delivery) (protocol.Transaction
 		return nil, fmt.Errorf("invalid principal: want chain type %v or %v, got %v", protocol.AccountTypeLiteTokenAccount, protocol.AccountTypeTokenAccount, origin.Type())
 	}
 
+	if checkIsNegative(&body.Amount) {
+		return nil, fmt.Errorf("amount can't be a negative value")
+	}
+
 	//ensure user cannot burn more than is in the account
 	if !account.CanDebitTokens(&body.Amount) {
 		return nil, fmt.Errorf("cannot burn more tokens than is available in account")
