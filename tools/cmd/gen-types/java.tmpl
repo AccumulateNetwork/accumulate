@@ -41,6 +41,7 @@ public class {{safeClassName .Name}}{{
     else if eq .UnionType "AccountType"}} implements Account {{-
     else if eq .UnionType "KeyPageOperationType"}} implements KeyPageOperation{{-
     else if eq .UnionType "SignatureType"}} implements Signature{{-
+    else if eq .Name "FactomDataEntry"}} extends FactomDataEntryMarshaller{{-
     else }} implements Marhallable{{-
     end}} {
 
@@ -111,6 +112,7 @@ public class {{safeClassName .Name}}{{
 	{{-   end}}
 	{{- end}}
 
+    {{-   if and .IsBinary}}
     public byte[] marshalBinary() {
         final var marshaller = new Marshaller();
         {{- range .Fields}}
@@ -135,4 +137,5 @@ public class {{safeClassName .Name}}{{
         {{- end}}
         return marshaller.array();
     }
+    {{- end}}
 }
