@@ -346,6 +346,11 @@ TxnQuery:
   fields:
   - name: Txid
     type: bytes
+    optional: true
+  - name: TxIdUrl
+    type: txid
+    pointer: true
+    optional: true
   - name: Wait
     type: duration
     optional: true
@@ -494,6 +499,24 @@ StatusResponse:
   fields:
     - name: Ok
       type: bool
+    - name: BvnHeight
+      type: varint
+    - name: DnHeight
+      type: varint
+    - name: BvnTime
+      type: time
+    - name: DnTime
+      type: time
+    - name: LastDirectoryAnchorHeight
+      type: uvarint
+    - name: BvnRootHash
+      type: hash
+    - name: DnRootHash
+      type: hash
+    - name: BvnBptHash
+      type: hash
+    - name: DnBptHash
+      type: hash
 
 VersionResponse:
   non-binary: true
@@ -513,14 +536,14 @@ DescriptionResponse:
   incomparable: true
   fields:
     - name: PartitionId
-      alternative: SubnetId
       type: string
     - name: NetworkType
       type: config.NetworkType
     - name: Network
-      alternative: Subnet
       type: config.Network
       marshal-as: reference
+    - name: NetworkAnchor
+      type: hash
     - name: Values
       type: core.GlobalValues
       marshal-as: reference

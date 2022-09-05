@@ -4,7 +4,7 @@ import (
 	"crypto/sha256"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding/hash"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
 func (t *Transaction) ID() *url.TxID {
@@ -38,7 +38,8 @@ func (t *Transaction) GetHash() []byte {
 	sha := sha256.New()
 	sha.Write(headerHash[:])
 	sha.Write(t.getBodyHash())
-	return sha.Sum(nil)
+	t.hash = sha.Sum(nil)
+	return t.hash
 }
 
 func (t *Transaction) getBodyHash() []byte {

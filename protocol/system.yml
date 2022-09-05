@@ -30,15 +30,9 @@ SyntheticLedger:
     - name: Url
       type: url
       pointer: true
-    - name: Partitions
+    - name: Exchange
       description: tracks sent and received synthetic transactions
-      type: PartitionSyntheticLedger
-      marshal-as: reference
-      pointer: true
-      repeatable: true
-    - name: Anchors
-      description: tracks sent and received anchors
-      type: PartitionSyntheticLedger
+      type: TransactionExchangeLedger
       marshal-as: reference
       pointer: true
       repeatable: true
@@ -49,9 +43,6 @@ AnchorLedger:
     - name: Url
       type: url
       pointer: true
-    - name: MinorBlockSequenceNumber
-      description: is the sequence number of the last minor block
-      type: uint
     - name: MajorBlockIndex
       description: is the block index of the last major block
       type: uint
@@ -61,6 +52,24 @@ AnchorLedger:
     - name: PendingMajorBlockAnchors
       description: is the list of partitions that have joined the open major block. If there is no open major block, this is unset
       type: url
+      pointer: true
+      repeatable: true
+    - name: Exchange
+      description: tracks sent and received anchor transactions
+      type: TransactionExchangeLedger
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+
+BlockLedger:
+  union: { type: account }
+  fields:
+    - name: Url
+      type: url
+      pointer: true
+    - name: Entries
+      type: BlockEntry
+      marshal-as: reference
       pointer: true
       repeatable: true
 
@@ -90,9 +99,10 @@ DirectoryAnchor:
       repeatable: true
     - name: Receipts
       description: are receipts for anchors from other partitions that were included in the block
-      type: managed.Receipt
-      repeatable: true
+      type: PartitionAnchorReceipt
       marshal-as: reference
+      pointer: true
+      repeatable: true
     - name: MakeMajorBlock
       description: notifies the partition that the DN has opened a major block
       type: uint
@@ -143,24 +153,47 @@ PartitionAnchor:
     - name: StateTreeAnchor
       description: is the root of the source's state tree (BPT)
       type: hash
+    - name: Synthetic
+      description: lists synthetic transactions produced and received
+      type: TransactionExchangeLedger
+      marshal-as: reference
+      pointer: true
+      repeatable: true
 
-PartitionSyntheticLedger:
+PartitionAnchorReceipt:
+  fields:
+    - name: Anchor
+      type: PartitionAnchor
+      marshal-as: reference
+      pointer: true
+    - name: SequenceNumber
+      type: uint
+    - name: RootChainReceipt
+      description: is a receipt for the anchored root chain entry
+      type: managed.Receipt
+      marshal-as: reference
+      pointer: true
+
+TransactionExchangeLedger:
   fields:
     - name: Url
       description: is the URL of the partition
       type: url
       pointer: true
     - name: Produced
-      description: is the maximum sequence number of synthetic transactions produced for the partition
+      description: is the maximum sequence number of transactions produced for the partition
+      type: uint
+    - name: Acknowledged
+      description: is the maximum sequence number of acknowledged transactions produced for the partition
       type: uint
     - name: Received
-      description: is the maximum sequence number of synthetic transactions received from the partition
+      description: is the maximum sequence number of transactions received from the partition
       type: uint
     - name: Delivered
-      description: is the maximum sequence number of delivered synthetic transactions received from the partition
+      description: is the maximum sequence number of delivered transactions received from the partition
       type: uint
     - name: Pending
-      description: is the transaction hashes of synthetic transactions received out of order
+      description: is the transaction hashes of transactions received out of order
       type: txid
       pointer: true
       repeatable: true

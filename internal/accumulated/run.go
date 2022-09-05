@@ -2,6 +2,7 @@ package accumulated
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -10,11 +11,15 @@ import (
 	"time"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
+	"github.com/fatih/color"
 	"github.com/getsentry/sentry-go"
 	"github.com/rs/zerolog"
+	tmcfg "github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/crypto"
 	tmlog "github.com/tendermint/tendermint/libs/log"
+	service2 "github.com/tendermint/tendermint/libs/service"
 	"github.com/tendermint/tendermint/privval"
+	tmclient "github.com/tendermint/tendermint/rpc/client"
 	"github.com/tendermint/tendermint/rpc/client/local"
 	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/config"
@@ -22,15 +27,14 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/blockscheduler"
-	"gitlab.com/accumulatenetwork/accumulate/internal/client"
 	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
 	statuschk "gitlab.com/accumulatenetwork/accumulate/internal/connections/status"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
-	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
+	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 )
 
 type Daemon struct {
@@ -45,6 +49,7 @@ type Daemon struct {
 	jrpc              *api.JrpcMethods
 	connectionManager connections.ConnectionInitializer
 	eventBus          *events.Bus
+	localTm           tmclient.Client
 
 	// knobs for tests
 	// IsTest   bool
@@ -150,11 +155,12 @@ func (d *Daemon) Start() (err error) {
 
 	router := routing.NewRouter(d.eventBus, d.connectionManager)
 	execOpts := block.ExecutorOptions{
-		Logger:   d.Logger,
-		Key:      d.Key().Bytes(),
-		Describe: d.Config.Accumulate.Describe,
-		Router:   router,
-		EventBus: d.eventBus,
+		Logger:     d.Logger,
+		Key:        d.Key().Bytes(),
+		Describe:   d.Config.Accumulate.Describe,
+		Router:     router,
+		EventBus:   d.eventBus,
+		IsFollower: d.Config.Mode != tmcfg.ModeValidator,
 	}
 
 	// On DNs initialize the major block scheduler
@@ -197,12 +203,23 @@ func (d *Daemon) Start() (err error) {
 		}
 	}()
 
+	events.SubscribeAsync(d.eventBus, func(e events.FatalError) {
+		d.Logger.Error("Shutting down due to a fatal error", "error", e.Err)
+		err := d.Stop()
+		if errors.Is(err, service2.ErrAlreadyStopped) {
+			return
+		}
+		if err != nil {
+			d.Logger.Error("Error while shutting down", "error", err)
+		}
+	})
+
 	// Create a local client
 	lnode, ok := d.node.Service.(local.NodeService)
 	if !ok {
-		return fmt.Errorf("node is not a local node service!")
+		return fmt.Errorf("node is not a local node service")
 	}
-	lclient, err := local.New(lnode)
+	d.localTm, err = local.New(lnode)
 	if err != nil {
 		return fmt.Errorf("failed to create local node client: %v", err)
 	}
@@ -213,12 +230,14 @@ func (d *Daemon) Start() (err error) {
 
 	// Create the JSON-RPC handler
 	d.jrpc, err = api.NewJrpc(api.Options{
-		Logger:           d.Logger,
-		Describe:         &d.Config.Accumulate.Describe,
-		Router:           router,
-		PrometheusServer: d.Config.Accumulate.API.PrometheusServer,
-		TxMaxWaitTime:    d.Config.Accumulate.API.TxMaxWaitTime,
-		Database:         d.db,
+		Logger:            d.Logger,
+		Describe:          &d.Config.Accumulate.Describe,
+		Router:            router,
+		PrometheusServer:  d.Config.Accumulate.API.PrometheusServer,
+		TxMaxWaitTime:     d.Config.Accumulate.API.TxMaxWaitTime,
+		Database:          d.db,
+		ConnectionManager: d.connectionManager,
+		Key:               d.Key().Bytes(),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to start API: %v", err)
@@ -226,7 +245,8 @@ func (d *Daemon) Start() (err error) {
 
 	// Let the connection manager create and assign clients
 	statusChecker := statuschk.NewNodeStatusChecker()
-	err = d.connectionManager.InitClients(lclient, statusChecker)
+	err = d.connectionManager.InitClients(d.localTm, statusChecker)
+
 	if err != nil {
 		return fmt.Errorf("failed to initialize the connection manager: %v", err)
 	}
@@ -263,6 +283,11 @@ func (d *Daemon) Start() (err error) {
 
 	// Shut down the node if the disk space gets too low
 	go d.ensureSufficientDiskSpace(d.Config.RootDir)
+	for !d.node.IsRunning() {
+		color.HiMagenta("Syncing ....")
+		time.Sleep(time.Second * 1)
+	}
+	color.HiBlue(" %s node running at %s :", d.node.Config.Accumulate.NetworkType, d.node.Config.Accumulate.Describe.LocalAddress)
 
 	// Clean up once the node is stopped (mostly for tests)
 	go func() {
@@ -372,56 +397,6 @@ func (d *Daemon) Stop() error {
 	return nil
 }
 
-func (d *Daemon) LoadSnapshot(file ioutil2.SectionReader) error {
-	db, err := database.Open(d.Config, d.Logger)
-	if err != nil {
-		return fmt.Errorf("failed to open database: %v", err)
-	}
-
-	defer func() {
-		_ = db.Close()
-	}()
-
-	// read private validator
-	pv, err := privval.LoadFilePV(
-		d.Config.PrivValidator.KeyFile(),
-		d.Config.PrivValidator.StateFile(),
-	)
-	if err != nil {
-		return fmt.Errorf("failed to load private validator: %v", err)
-	}
-
-	eventBus := events.NewBus(d.Logger.With("module", "events"))
-	router := routing.NewRouter(eventBus, nil)
-	execOpts := block.ExecutorOptions{
-		Logger:   d.Logger,
-		Key:      pv.Key.PrivKey.Bytes(),
-		Describe: d.Config.Accumulate.Describe,
-		Router:   router,
-		EventBus: eventBus,
-	}
-
-	// On DNs initialize the major block scheduler
-	if execOpts.Describe.NetworkType == config.Directory {
-		execOpts.MajorBlockScheduler = blockscheduler.Init(execOpts.EventBus)
-	}
-
-	exec, err := block.NewNodeExecutor(execOpts, db)
-	if err != nil {
-		return fmt.Errorf("failed to initialize chain executor: %v", err)
-	}
-
-	batch := db.Begin(true)
-	defer batch.Discard()
-	err = exec.InitFromSnapshot(batch, file)
-	if err != nil {
-		return fmt.Errorf("failed to restore snapshot: %v", err)
-	}
-
-	err = batch.Commit()
-	if err != nil {
-		return fmt.Errorf("failed to commit changes: %v", err)
-	}
-
-	return nil
+func (d *Daemon) Done() <-chan struct{} {
+	return d.node.Quit()
 }

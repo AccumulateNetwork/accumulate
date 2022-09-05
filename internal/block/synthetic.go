@@ -7,8 +7,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -17,7 +17,7 @@ func (x *Executor) ProduceSynthetic(batch *database.Batch, from *protocol.Transa
 		return nil
 	}
 
-	err := setSyntheticOrigin(batch, from, produced)
+	err := x.setSyntheticOrigin(batch, from, produced)
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknownError, err)
 	}
@@ -53,7 +53,7 @@ func (x *Executor) ProduceSynthetic(batch *database.Batch, from *protocol.Transa
 // transaction. setSyntheticOrigin sets the refund amount for each synthetic
 // transaction, spreading the potential refund across all produced synthetic
 // transactions.
-func setSyntheticOrigin(batch *database.Batch, from *protocol.Transaction, produced []*protocol.Transaction) error {
+func (x *Executor) setSyntheticOrigin(batch *database.Batch, from *protocol.Transaction, produced []*protocol.Transaction) error {
 	if len(produced) == 0 {
 		return nil
 	}
@@ -73,13 +73,10 @@ func setSyntheticOrigin(batch *database.Batch, from *protocol.Transaction, produ
 		return nil
 	}
 
-	// Get the fee
-	paid, err := protocol.ComputeTransactionFee(from)
+	// Set the refund amount for each output
+	refund, err := x.globals.Active.Globals.FeeSchedule.ComputeSyntheticRefund(from, len(swos))
 	if err != nil {
-		return errors.Format(errors.StatusInternalError, "compute fee: %w", err)
-	}
-	if paid <= protocol.FeeFailedMaximum {
-		return nil
+		return errors.Format(errors.StatusInternalError, "compute refund: %w", err)
 	}
 
 	status, err := batch.Transaction(from.GetHash()).GetStatus()
@@ -87,8 +84,6 @@ func setSyntheticOrigin(batch *database.Batch, from *protocol.Transaction, produ
 		return errors.Format(errors.StatusUnknownError, "load status: %w", err)
 	}
 
-	// Set the refund amount
-	refund := (paid - protocol.FeeFailedMaximum) / protocol.Fee(len(swos))
 	for _, swo := range swos {
 		swo.SetRefund(status.Initiator, refund)
 	}
@@ -147,7 +142,7 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 	}
 
 	// Add the transaction to the synthetic transaction chain
-	chain, err := record.Chain(protocol.MainChain, protocol.ChainTypeTransaction)
+	chain, err := record.MainChain().Get()
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +163,7 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 		return nil, errors.Format(errors.StatusInternalError, "destination URL is not a valid partition")
 	}
 
-	indexIndex, err := addIndexChainEntry(record, protocol.SyntheticSequenceChain(partition), &protocol.IndexEntry{
+	indexIndex, err := addIndexChainEntry(record.SyntheticSequenceChain(partition), &protocol.IndexEntry{
 		Source: uint64(index),
 	})
 	if err != nil {
@@ -183,7 +178,7 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 
 func (x *Executor) buildSynthReceipt(batch *database.Batch, produced []*protocol.Transaction, rootAnchor, synthAnchor int64) error {
 	// Load the root chain
-	chain, err := batch.Account(x.Describe.Ledger()).ReadChain(protocol.MinorRootChain)
+	chain, err := batch.Account(x.Describe.Ledger()).RootChain().Get()
 	if err != nil {
 		return errors.Format(errors.StatusUnknownError, "load root chain: %w", err)
 	}
@@ -195,7 +190,7 @@ func (x *Executor) buildSynthReceipt(batch *database.Batch, produced []*protocol
 	}
 
 	// Load the synthetic transaction chain
-	chain, err = batch.Account(x.Describe.Synthetic()).ReadChain(protocol.MainChain)
+	chain, err = batch.Account(x.Describe.Synthetic()).MainChain().Get()
 	if err != nil {
 		return errors.Format(errors.StatusUnknownError, "load root chain: %w", err)
 	}

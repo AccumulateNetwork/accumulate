@@ -3,12 +3,11 @@ package routing
 import (
 	"context"
 
-	"github.com/tendermint/tendermint/rpc/client"
 	core "github.com/tendermint/tendermint/rpc/coretypes"
 	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -18,7 +17,6 @@ import (
 type Router interface {
 	RouteAccount(*url.URL) (string, error)
 	Route(...*protocol.Envelope) (string, error)
-	Query(ctx context.Context, partition string, query []byte, opts client.ABCIQueryOptions) (*core.ResultABCIQuery, error)
 	RequestAPIv2(ctx context.Context, partitionId, method string, params, result interface{}) error
 	Submit(ctx context.Context, partition string, tx *protocol.Envelope, pretend, async bool) (*ResponseSubmit, error)
 }
@@ -172,38 +170,6 @@ func (r *RouterInstance) RouteAccount(account *url.URL) (string, error) {
 // Route routes the account using modulo routing.
 func (r *RouterInstance) Route(envs ...*protocol.Envelope) (string, error) {
 	return RouteEnvelopes(r.RouteAccount, envs...)
-}
-
-// Query queries the specified partition. If the partition matches this
-// network's ID, the transaction is broadcasted via the local client. Otherwise
-// the transaction is broadcasted via an RPC client.
-func (r *RouterInstance) Query(ctx context.Context, partitionId string, query []byte, opts client.ABCIQueryOptions) (*core.ResultABCIQuery, error) {
-	errorCnt := 0
-	for {
-		connCtx, err := r.connectionManager.SelectConnection(partitionId, true)
-		if err != nil {
-			return nil, err
-		}
-		if connCtx == nil {
-			return nil, errors.New(errors.StatusInternalError, "connCtx is nil")
-		}
-		client := connCtx.GetABCIClient()
-		if client == nil {
-			return nil, errors.New(errors.StatusInternalError, "connCtx.client is nil")
-		}
-
-		result, err := client.ABCIQueryWithOptions(ctx, "", query, opts)
-		if err == nil {
-			return result, err
-		}
-
-		// The API call failed, let's report that and try again, we get a client to another node within the partition if available
-		connCtx.ReportError(err)
-		errorCnt++
-		if errorCnt > 1 {
-			return nil, err
-		}
-	}
 }
 
 func (r *RouterInstance) RequestAPIv2(ctx context.Context, partitionId, method string, params, result interface{}) error {

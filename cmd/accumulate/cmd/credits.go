@@ -6,13 +6,13 @@ import (
 
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
+	url2 "gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // creditsCmd represents the faucet command
 var creditsCmd = &cobra.Command{
-	Use:   "credits [origin token account] [key page or lite identity url] [number of credits wanted] [max acme to spend] [percent slippage (optional)]",
+	Use:   "credits [origin token account] [key page or lite identity url] [number of credits wanted] [max acme to spend]",
 	Short: "Purchase credits with acme and send to recipient.",
 	Args:  cobra.MinimumNArgs(3),
 	Run: func(cmd *cobra.Command, args []string) {
@@ -30,7 +30,7 @@ var creditsCmd = &cobra.Command{
 
 func PrintCredits() {
 	fmt.Println("  accumulate credits [origin lite token account] [lite identity url or key page url] [credits desired] [max amount in acme (optional)] 		Purchase credits using a lite token account or adi key page to another lite token account or adi key page")
-	fmt.Println("  accumulate credits [origin url] [origin key name] [key index (optional)] [key height (optional)] [key page or lite identity url] [credits desired] [max amount in acme (optional)]		Purchase credits to send to another lite identity or adi key page")
+	fmt.Println("  accumulate credits [adi token account] [key name[@key book or page]] [key page or lite identity url] [credits desired] [max amount in acme (optional)]		Purchase credits to send to another lite identity or adi key page")
 	fmt.Println("\tnote: If the max amount in ACME parameter is provided and the oracle price falls below what\n" +
 		"\tthat value can cover, the transaction will fail. The minimum of the computed credit purchase and the maximum\n" +
 		"\tvalue to spend will be used to satisfy the purchase.")

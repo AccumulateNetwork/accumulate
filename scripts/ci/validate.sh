@@ -5,14 +5,13 @@ set -e
 
 SCRIPT_DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
 source ${SCRIPT_DIR}/validate-commons.sh
-
 section "Setup"
 if which go > /dev/null || ! which accumulate > /dev/null ; then
     echo "Installing CLI"
     go install ./cmd/accumulate
     export PATH="${PATH}:$(go env GOPATH)/bin"
 fi
-[ -z "${MNEMONIC}" ] || accumulate key import mnemonic ${MNEMONIC}
+init-wallet
 echo
 
 section "Generate a Lite Token Account"
@@ -33,7 +32,7 @@ done
 accumulate account get ${LITE_ACME} 1> /dev/null && success || die "Cannot find ${LITE_ACME}"
 
 section "Add credits to lite account"
-TXID=$(cli-tx credits ${LITE_ACME} ${LITE_ID} 2700)
+TXID=$(cli-tx credits ${LITE_ACME} ${LITE_ID} 1000000)
 wait-for-tx $TXID
 BALANCE=$(accumulate -j account get ${LITE_ID} | jq -r .data.creditBalance)
 [ "$BALANCE" -ge 2700 ] || die "${LITE_ID} should have at least 2700 credits but only has ${BALANCE}"
@@ -98,7 +97,7 @@ success
 
 
 section "Attempting to update key page 3 using page 2 fails"
-cli-tx page key add test.acme/book/3 test-2-0 1 test-3-1 && die "Executed disallowed operation" || success
+cli-tx page key add test.acme/book/3 test-2-0  test-3-1 && die "Executed disallowed operation" || success
 
 section "Unlock key page 2 using page 1"
 wait-for cli-tx page unlock test.acme/book/2 test-1-0
@@ -114,9 +113,9 @@ BALANCE=$(accumulate -j page get test.acme/book/2 | jq -r .data.creditBalance)
 [ "$BALANCE" -ge 100 ] && success || die "test.acme/book/2 should have 100 credits but has ${BALANCE}"
 
 section "Add a key to page 2 using a key from page 3"
-wait-for cli-tx page key add test.acme/book/2 test-2-0 1 test-2-1
-wait-for cli-tx page key add test.acme/book/2 test-2-0 1 test-2-2
-wait-for cli-tx page key add test.acme/book/2 test-2-0 1 test-2-3-orig
+wait-for cli-tx page key add test.acme/book/2 test-2-0 test-2-1
+wait-for cli-tx page key add test.acme/book/2 test-2-0 test-2-2
+wait-for cli-tx page key add test.acme/book/2 test-2-0 test-2-3-orig
 success
 
 section "Update key page entry with same keyhash different delegate"
@@ -133,8 +132,8 @@ delegate=$(accumulate page get acc://test.acme/book2/1 -j | jq -r .data.keys[0].
 target=acc://test.acme/book
 if [ "$target" = "$delegate" ]; then
 success
-  else 
-  die `want acc://test.acme/book got ${delegate}`
+  else
+  die "want acc://test.acme/book got ${delegate}"
 fi
 
 section "Set KeyBook2 as authority for adi token account"
@@ -142,23 +141,28 @@ keybook2=acc://test.acme/book2
 tokenTxHash=$(cli-tx account create token test.acme test-1-0 test.acme/acmetokens acc://ACME --authority acc://test.acme/book2)
 wait-for-tx $tokenTxHash
 wait-for cli-tx-sig tx sign  test.acme/book2 test-2-0 $tokenTxHash
-tokenAuthority=$(accumulate get test.acme/acmetokens -j | jq -re .data.keyBook)
+tokenAuthority=$(accumulate get test.acme/acmetokens -j | jq -re '.data.authorities[0].url')
 if [ "$keybook2" = "$tokenAuthority" ]; then
 success
 else
-die `want $keybook2 got $tokenAuthority`
+die "want $keybook2 got $tokenAuthority"
 fi
 
+section "Burn Tokens for adi token account"
+wait-for cli-tx tx create ${LITE_ACME} test.acme/acmetokens 10
+wait-for cli-tx token burn acc://test.acme/acmetokens test-2-0 5
+BALANCE1=$(accumulate account get acc://test.acme/acmetokens -j | jq -re .data.balance)
+[ "$BALANCE1" -eq 500000000 ] && success || die "test.acme/acmetokens should have 5 tokens but has $(expr ${BALANCE1} / 100000000)"
 
 section "Set KeyBook2 as authority for adi data account"
 dataTxHash=$(cli-tx account create data test.acme test-1-0 test.acme/testdata1 --authority acc://test.acme/book2)
 wait-for-tx $dataTxHash
 wait-for cli-tx-sig tx sign  test.acme/book2 test-2-0 $dataTxHash
-dataAuthority=$(accumulate account get test.acme/testdata1 -j | jq -re .data.keyBook)
+dataAuthority=$(accumulate account get test.acme/testdata1 -j | jq -re '.data.authorities[0].url')
 if [ "$dataAuthority" = "$keybook2" ]; then
 success
 else
-die `want $keybook2 got $dataAuthority`
+die "want $keybook2 got $dataAuthority"
 fi
 
 section "Set threshold to 2 of 2"
@@ -166,14 +170,17 @@ wait-for cli-tx tx execute test.acme/book/2 test-2-0 '{"type": "updateKeyPage", 
 THRESHOLD=$(accumulate -j get test.acme/book/2 | jq -re .data.threshold)
 [ "$THRESHOLD" -eq 2 ] && success || die "Bad test.acme/book/2 threshold: want 2, got ${THRESHOLD}"
 
+section "Set threshold to 0 of 0"
+wait-for cli-tx tx execute test.acme/book/2 test-2-0 '{"type": "updateKeyPage", "operation": [{ "type": "setThreshold", "threshold": 0 }]}' && die "cannot require 0 signatures on a key page" || success
+
 section "Update a key with only that key's signature"
-wait-for cli-tx key update test.acme/book/2 test-2-3-orig test-2-3-new || die "Failed to update key"
+wait-for cli-tx page key replace test.acme/book/2 test-2-3-orig test-2-3-new || die "Failed to update key"
 accumulate -j get key test.acme test-2-3-orig > /dev/null && die "Still found old key" || true
 accumulate -j get key test.acme test-2-3-new | jq -C --indent 0 || die "Could not find new key"
 success
 
 section "Create an ADI Token Account"
-wait-for cli-tx account create token test.acme test-1-0 0 test.acme/tokens ACME test.acme/book
+wait-for cli-tx account create token test.acme test-1-0 test.acme/tokens ACME test.acme/book
 accumulate account get test.acme/tokens 1> /dev/null || die "Cannot find test.acme/tokens"
 success
 
@@ -273,7 +280,9 @@ BALANCE=$(accumulate -j account get ${LITE_TOK} | jq -r .data.balance)
 [ "$BALANCE" -eq 230123456789 ] && success || die "${LITE_TOK} should have 1230123456789 test.acme tokens but has ${BALANCE}"
 
 section "Create lite data account and write the data"
-ACCOUNT_ID=$(accumulate -j account create data --lite test.acme test-1-0 "Factom PRO" "Tutorial" | jq -r .accountUrl)
+JSON=$(accumulate -j account create data --lite test.acme test-1-0 "Factom PRO" "Tutorial")
+wait-for-tx $(jq -r .transactionHash <<< "$JSON")
+ACCOUNT_ID=$(jq -r .accountUrl <<< "$JSON")
 [ "$ACCOUNT_ID" == "acc://b36c1c4073305a41edc6353a094329c24ffa54c0a47fb56227a04477bcb78923" ] || die "${ACCOUNT_ID} does not match expected value"
 accumulate data get $ACCOUNT_ID 0 1 1> /dev/null || die "lite data entry not found"
 wait-for cli-tx data write-to test.acme test-1-0 $ACCOUNT_ID "data test"
@@ -371,6 +380,7 @@ BALANCE=$(accumulate -j page get manager.acme/book/1 | jq -r .data.creditBalance
 
 section "Create token account with manager"
 TXID=$(cli-tx account create token test.acme test-1-0 --authority test.acme/book,manager.acme/book test.acme/managed-tokens ACME) || "Failed to create managed token account"
+wait-for-tx $TXID
 accumulate tx sign test.acme test-mgr@manager.acme/book $TXID
 wait-for-tx --ignore-pending $TXID
 RESULT=$(accumulate -j get test.acme/managed-tokens -j | jq -re '.data.authorities | length')
@@ -382,7 +392,7 @@ sleep 1 # resolve issue with docker validation
 TXID=$(cli-tx auth remove test.acme/managed-tokens test-1-0 manager.acme/book) || die "Failed to initiate txn to remove manager"
 wait-for-tx $TXID
 accumulate -j tx get $TXID | jq -re .status.pending 1> /dev/null || die "Transaction is not pending"
-wait-for cli-tx-sig tx sign test.acme/managed-tokens test-mgr@manager.acme $TXID || die "Failed to sign transaction"
+accumulate tx sign test.acme/managed-tokens test-mgr@manager.acme $TXID || die "Failed to sign transaction"
 wait-for-tx --ignore-pending $TXID || die "Transaction was not delivered"
 RESULT=$(accumulate -j get test.acme/managed-tokens -j | jq -re '.data.authorities | length')
 [ "$RESULT" -eq 1 ] || die "Expected 1 authority, got $RESULT"
@@ -390,6 +400,7 @@ success
 
 section "Add manager to token account"
 TXID=$(cli-tx auth add test.acme/managed-tokens test-1-0 manager.acme/book) || die "Failed to add the manager"
+wait-for-tx $TXID
 accumulate tx sign test.acme test-mgr@manager.acme/book $TXID
 wait-for-tx --ignore-pending $TXID
 RESULT=$(accumulate -j get test.acme/managed-tokens -j | jq -re '.data.authorities | length')

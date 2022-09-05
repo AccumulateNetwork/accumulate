@@ -11,29 +11,41 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	query2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2/query"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/testing/e2e"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
-	query2 "gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
 func init() { acctesting.EnableDebugFeatures() }
 
-func TestEndToEnd(t *testing.T) {
-	acctesting.SkipCI(t, "flaky")
-	acctesting.SkipPlatform(t, "windows", "flaky")
-	acctesting.SkipPlatform(t, "darwin", "flaky")
-	acctesting.SkipPlatformCI(t, "darwin", "requires setting up localhost aliases")
-	t.Skip("flaky")
-	suite.Run(t, e2e.NewSuite(func(s *e2e.Suite) e2e.DUT {
-		partitions, daemons := acctesting.CreateTestNet(s.T(), 1, 2, 0, false)
-		acctesting.RunTestNet(s.T(), partitions, daemons)
-		return &e2eDUT{s, daemons[protocol.Directory][0]}
-	}))
+func TestStatus(t *testing.T) {
+	partitions, daemons := acctesting.CreateTestNet(t, 2, 2, 0, false)
+	acctesting.RunTestNet(t, partitions, daemons)
+	japi := daemons["BVN1"][0].Jrpc_TESTONLY()
+
+	// Create some history
+	liteUrl := makeLiteUrl(t, newKey([]byte(t.Name())), ACME)
+	xr := new(api.TxResponse)
+	callApi(t, japi, "faucet", &AcmeFaucet{Url: liteUrl}, xr)
+	require.Zero(t, xr.Code, xr.Message)
+	txWait(t, japi, xr.TransactionHash)
+
+	// Test
+	r := japi.Status(context.Background(), nil)
+	if err, ok := r.(error); ok {
+		require.NoError(t, err)
+	}
+	require.IsType(t, (*api.StatusResponse)(nil), r)
+	status := r.(*api.StatusResponse)
+
+	// Check the status
+	assert.True(t, status.Ok, "Ok should be true")
+	assert.NotZero(t, status.LastDirectoryAnchorHeight, "Last directory anchor height should be non-zero")
+	assert.NotZero(t, status.BvnHeight, "Height should be non-zero")
+	assert.NotZero(t, status.BvnRootHash, "Root hash should be present")
+	assert.NotZero(t, status.BvnBptHash, "BPT hash should be present")
 }
 
 func TestValidate(t *testing.T) {
@@ -44,7 +56,7 @@ func TestValidate(t *testing.T) {
 	t.Skip("flaky")
 	partitions, daemons := acctesting.CreateTestNet(t, 2, 2, 0, false)
 	acctesting.RunTestNet(t, partitions, daemons)
-	japi := daemons[protocol.Directory][0].Jrpc_TESTONLY()
+	japi := daemons[Directory][0].Jrpc_TESTONLY()
 
 	t.Run("Not found", func(t *testing.T) {
 		b, err := json.Marshal(&api.TxnQuery{Txid: make([]byte, 32), Wait: 2 * time.Second})
@@ -71,7 +83,7 @@ func TestValidate(t *testing.T) {
 
 		account := new(LiteTokenAccount)
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: liteUrl}, account)
-		assert.Equal(t, int64(count*protocol.AcmeFaucetAmount*AcmePrecision), account.Balance.Int64())
+		assert.Equal(t, int64(count*AcmeFaucetAmount*AcmePrecision), account.Balance.Int64())
 	})
 
 	t.Run("Lite Token Identity Credits", func(t *testing.T) {
@@ -109,7 +121,7 @@ func TestValidate(t *testing.T) {
 			},
 		})
 
-		adi := new(protocol.ADI)
+		adi := new(ADI)
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: adiName}, adi)
 		assert.Equal(t, adiName, adi.Url)
 
@@ -179,7 +191,7 @@ func TestValidate(t *testing.T) {
 		assert.Equal(t, keyBookUrl, keyBook.Url)
 	})
 
-	keyPageUrl := protocol.FormatKeyPageUrl(keyBookUrl, 0)
+	keyPageUrl := FormatKeyPageUrl(keyBookUrl, 0)
 	t.Run("Create Key Page", func(t *testing.T) {
 		var keys []*KeySpecParams
 		// pubKey, _ := json.Marshal(adiKey.Public())
@@ -222,7 +234,7 @@ func TestValidate(t *testing.T) {
 			Origin: keyPageUrl.String(),
 			Key:    adiKey,
 			Payload: &UpdateKeyPage{
-				Operation: []protocol.KeyPageOperation{&AddKeyOperation{
+				Operation: []KeyPageOperation{&AddKeyOperation{
 					Entry: KeySpecParams{
 						KeyHash:  adiKey2[32:],
 						Delegate: makeUrl(t, "acc://foo/book1"),
@@ -242,7 +254,7 @@ func TestValidate(t *testing.T) {
 			Key:    adiKey,
 			Payload: &CreateTokenAccount{
 				Url:         tokenAccountUrl,
-				TokenUrl:    protocol.AcmeUrl(),
+				TokenUrl:    AcmeUrl(),
 				Authorities: []*url.URL{keyBookUrl},
 			},
 		})
@@ -261,4 +273,23 @@ func TestValidate(t *testing.T) {
 		}, keyIndex)
 		assert.Equal(t, keyPageUrl, keyIndex.Signer)
 	})
+}
+
+func TestQueryTxByUrl(t *testing.T) {
+	partitions, daemons := acctesting.CreateTestNet(t, 2, 2, 0, false)
+	acctesting.RunTestNet(t, partitions, daemons)
+	japi := daemons["BVN1"][0].Jrpc_TESTONLY()
+
+	liteKey := newKey([]byte(t.Name()))
+	liteUrl := makeLiteUrl(t, liteKey, ACME)
+
+	xr := new(api.TxResponse)
+	callApi(t, japi, "faucet", &AcmeFaucet{Url: liteUrl}, xr)
+	require.Zero(t, xr.Code, xr.Message)
+	txWait(t, japi, xr.TransactionHash)
+
+	// Test if last tx can be queried by TxID URL
+	tqr := new(api.TransactionQueryResponse)
+	callApi(t, japi, "query-tx", &api.TxnQuery{TxIdUrl: xr.Txid}, tqr)
+	require.Equal(t, xr.Txid.String(), tqr.Txid.String())
 }

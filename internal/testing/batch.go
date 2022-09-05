@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -14,11 +14,7 @@ type BatchTest struct {
 	*database.Batch
 }
 
-type DbBeginner interface {
-	Begin(bool) *database.Batch
-}
-
-func NewBatchTest(t *testing.T, beginner DbBeginner) BatchTest {
+func NewBatchTest(t *testing.T, beginner database.Beginner) BatchTest {
 	return BatchTest{t, beginner.Begin(true)}
 }
 

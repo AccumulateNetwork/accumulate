@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -179,7 +179,7 @@ func (s *Builder) prepare(init bool) (protocol.KeySignature, error) {
 
 	case protocol.SignatureTypeReceipt, protocol.SignatureTypePartition:
 		// Calling Sign for SignatureTypeReceipt or SignatureTypeSynthetic makes zero sense
-		panic(fmt.Errorf("invalid attempt to generate signature of type %v!", s.Type))
+		panic(fmt.Errorf("invalid attempt to generate signature of type %v", s.Type))
 
 	default:
 		return nil, fmt.Errorf("unknown signature type %v", s.Type)
@@ -242,7 +242,7 @@ func (s *Builder) prepare(init bool) (protocol.KeySignature, error) {
 	}
 }
 
-func (s *Builder) sign(sig protocol.Signature, hash []byte) error {
+func (s *Builder) sign(sig protocol.Signature, sigMdHash, hash []byte) error {
 	switch sig := sig.(type) {
 	case *protocol.LegacyED25519Signature:
 		sig.TransactionHash = *(*[32]byte)(hash)
@@ -257,12 +257,15 @@ func (s *Builder) sign(sig protocol.Signature, hash []byte) error {
 	case *protocol.ETHSignature:
 		sig.TransactionHash = *(*[32]byte)(hash)
 	case *protocol.DelegatedSignature:
-		return s.sign(sig.Signature, hash)
+		if sigMdHash == nil {
+			sigMdHash = sig.Metadata().Hash()
+		}
+		return s.sign(sig.Signature, sigMdHash, hash)
 	default:
 		panic("unreachable")
 	}
 
-	return s.Signer.Sign(sig, hash)
+	return s.Signer.Sign(sig, sigMdHash, hash)
 }
 
 func (s *Builder) Sign(message []byte) (protocol.Signature, error) {
@@ -279,7 +282,7 @@ func (s *Builder) Sign(message []byte) (protocol.Signature, error) {
 		}
 	}
 
-	return sig, s.sign(sig, message)
+	return sig, s.sign(sig, nil, message)
 }
 
 func (s *Builder) Initiate(txn *protocol.Transaction) (protocol.Signature, error) {
@@ -307,7 +310,7 @@ func (s *Builder) Initiate(txn *protocol.Transaction) (protocol.Signature, error
 		txn.Header.Initiator = *(*[32]byte)(init.MerkleHash())
 	}
 
-	return sig, s.sign(sig, txn.GetHash())
+	return sig, s.sign(sig, nil, txn.GetHash())
 }
 
 func (s *Builder) InitiateSynthetic(txn *protocol.Transaction, dest *url.URL) (*protocol.PartitionSignature, error) {

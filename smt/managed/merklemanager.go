@@ -13,12 +13,12 @@ import (
 
 type MerkleManager = Chain
 
-func NewChain(logger log.Logger, store record.Store, key record.Key, markPower int64 /*, typ ChainType*/, namefmt, labelfmt string) *Chain {
+func NewChain(logger log.Logger, store record.Store, key record.Key, markPower int64, typ ChainType, namefmt, labelfmt string) *Chain {
 	c := new(Chain)
 	c.logger.L = logger
 	c.store = store
 	c.key = key
-	// c.typ = typ
+	c.typ = typ
 
 	// TODO markFreq = 1 << markPower?
 
@@ -32,13 +32,17 @@ func NewChain(logger log.Logger, store record.Store, key record.Key, markPower i
 		c.name = namefmt
 	}
 
-	c.label = fmt.Sprintf(labelfmt, key...)
+	if strings.ContainsRune(labelfmt, '%') {
+		c.label = fmt.Sprintf(labelfmt, key...)
+	} else {
+		c.label = labelfmt
+	}
+
 	return c
 }
 
-func (c *Chain) Name() string { return c.name }
-
-// func (c *Chain) Type() ChainType { return c.typ }
+func (c *Chain) Name() string    { return c.name }
+func (c *Chain) Type() ChainType { return c.typ }
 
 // AddHash adds a Hash to the Chain controlled by the ChainManager. If unique is
 // true, the hash will not be added if it is already in the chain.
@@ -127,6 +131,11 @@ func (m *MerkleManager) GetState(element int64) *MerkleState {
 // We only store the state at MarkPoints.  This function computes a missing
 // state even if one isn't stored for a particular element.
 func (m *MerkleManager) GetAnyState(element int64) (ms *MerkleState, err error) {
+	if element == -1 { //                                A need exists for the state before adding the first element
+		ms = new(MerkleState) //                         In that case, just allocate a MerkleState
+		ms.InitSha256()       //                         Initialize its hash function
+		return ms, nil        //                         And all is golden
+	}
 	if ms = m.GetState(element); ms != nil { //          Shoot for broke. Return a state if it is in the db
 		return ms, nil
 	}

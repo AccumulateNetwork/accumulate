@@ -10,7 +10,7 @@ import (
 	abci "github.com/tendermint/tendermint/abci/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	_ "gitlab.com/accumulatenetwork/accumulate/smt/pmt"
 )
 
@@ -41,17 +41,17 @@ func (app *Accumulator) ListSnapshots(req abci.RequestListSnapshots) abci.Respon
 		}
 		defer f.Close()
 
-		height, format, hash, _, err := database.ReadSnapshot(f)
+		header, _, err := snapshot.Open(f)
 		if err != nil {
 			app.logger.Error("Failed to read snapshot header", "error", err, "name", entry.Name())
 			continue
 		}
 
 		resp.Snapshots = append(resp.Snapshots, &abci.Snapshot{
-			Height: height,
-			Format: format,
+			Height: header.Height,
+			Format: uint32(header.Version),
 			Chunks: 1,
-			Hash:   hash,
+			Hash:   header.RootHash[:],
 		})
 	}
 	return resp
@@ -59,7 +59,7 @@ func (app *Accumulator) ListSnapshots(req abci.RequestListSnapshots) abci.Respon
 
 // LoadSnapshotChunk queries the node for the body of a snapshot.
 func (app *Accumulator) LoadSnapshotChunk(req abci.RequestLoadSnapshotChunk) abci.ResponseLoadSnapshotChunk {
-	if req.Format != core.SnapshotVersion1 || req.Chunk != 0 {
+	if req.Format != snapshot.Version1 || req.Chunk != 0 {
 		app.logger.Error("Invalid snapshot request", "height", req.Height, "format", req.Format, "chunk", req.Chunk)
 		return abci.ResponseLoadSnapshotChunk{}
 	}
@@ -86,7 +86,7 @@ func (app *Accumulator) OfferSnapshot(req abci.RequestOfferSnapshot) abci.Respon
 	if req.Snapshot == nil {
 		return abci.ResponseOfferSnapshot{Result: abci.ResponseOfferSnapshot_REJECT}
 	}
-	if req.Snapshot.Format != core.SnapshotVersion1 {
+	if req.Snapshot.Format != snapshot.Version1 {
 		return abci.ResponseOfferSnapshot{Result: abci.ResponseOfferSnapshot_REJECT_FORMAT}
 	}
 	if req.Snapshot.Chunks != 1 {
@@ -103,17 +103,10 @@ func (app *Accumulator) ApplySnapshotChunk(req abci.RequestApplySnapshotChunk) a
 	}
 
 	rd := bytes.NewReader(req.Chunk)
-	batch := app.DB.Begin(true)
-	defer batch.Discard()
-	err := app.Executor.InitFromSnapshot(batch, rd)
+	err := app.Executor.RestoreSnapshot(app.DB, rd)
 	if err != nil {
 		app.logger.Error("Failed to restore snapshot", "error", err)
 		return abci.ResponseApplySnapshotChunk{Result: abci.ResponseApplySnapshotChunk_ABORT}
-	}
-
-	err = batch.Commit()
-	if err != nil {
-		panic(fmt.Errorf("failed to commit snapshot: %w", err))
 	}
 
 	return abci.ResponseApplySnapshotChunk{Result: abci.ResponseApplySnapshotChunk_ACCEPT}

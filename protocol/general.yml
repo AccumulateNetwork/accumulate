@@ -24,6 +24,17 @@ ChainMetadata:
       type: ChainType
       marshal-as: enum
 
+BlockEntry:
+  fields:
+    - name: Account
+      type: url
+      pointer: true
+    - name: Chain
+      type: string
+    - name: Index
+      type: uint
+      keep-empty: true
+
 AccountAuth:
   fields:
     - name: Authorities
@@ -88,9 +99,14 @@ AccumulateDataEntry:
       repeatable: true
       type: bytes
 
+FactomDataEntryWrapper:
+  union: { type: dataEntry, value: Factom }
+  fields:
+    - type: FactomDataEntry
+      marshal-as: reference
+
 FactomDataEntry:
   non-binary: true
-  union: { type: dataEntry }
   fields:
     - name: AccountId
       type: hash
@@ -127,7 +143,6 @@ KeySpecParams:
     - name: KeyHash
       type: bytes
     - name: Delegate
-      alternative: Owner
       type: url
       pointer: true
       optional: true
@@ -139,9 +154,7 @@ KeySpec:
       alternative: PublicKey
     - name: LastUsedOn
       type: uvarint
-      alternative: Nonce
     - name: Delegate
-      alternative: Owner
       type: url
       pointer: true
 
@@ -150,9 +163,27 @@ NetworkGlobals:
     - name: OperatorAcceptThreshold
       type: Rational
       marshal-as: reference
+    - name: ValidatorAcceptThreshold
+      type: Rational
+      marshal-as: reference
     - name: MajorBlockSchedule
       type: string
       description: a cron expression defining the (approximate) major blocks interval
+    - name: AnchorEmptyBlocks
+      description: controls whether an anchor is sent for a block if the block contains no transactions other than a directory anchor
+      type: bool
+    - name: FeeSchedule
+      type: FeeSchedule
+      marshal-as: reference
+      pointer: true
+
+FeeSchedule:
+  fields:
+    - name: CreateIdentitySliding
+      description: is the sliding fee schedule for creating an ADI. The first entry is the cost of a one-character ADI, the second is the cost of a two-character ADI, etc
+      type: Fee
+      marshal-as: enum
+      repeatable: true
 
 Rational:
   fields:
@@ -165,20 +196,46 @@ NetworkDefinition:
   fields:
     - name: NetworkName
       type: string
+    - name: Version
+      type: uint
     - name: Partitions
-      alternative: Subnets
-      type: PartitionDefinition
-      repeatable: true
+      type: PartitionInfo
       marshal-as: reference
-
-PartitionDefinition:
-  fields:
-    - name: PartitionID
-      alternative: SubnetID
-      type: string
-    - name: ValidatorKeys
-      type: bytes
+      pointer: true
       repeatable: true
+    - name: Validators
+      type: ValidatorInfo
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+
+PartitionInfo:
+  fields:
+    - name: ID
+      type: string
+    - name: Type
+      type: PartitionType
+      marshal-as: enum
+
+ValidatorInfo:
+  fields:
+    - name: PublicKey
+      type: bytes
+    - name: PublicKeyHash
+      type: hash
+    - name: Partitions
+      type: ValidatorPartitionInfo
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+
+ValidatorPartitionInfo:
+  fields:
+    - name: ID
+      type: string
+    - name: Active
+      type: bool
+      keep-empty: true
 
 RoutingTable:
   fields:
@@ -200,7 +257,6 @@ Route:
       description: is the prefix value
       type: uint
     - name: Partition
-      alternative: Subnet
       type: string
 
 RouteOverride:
@@ -209,5 +265,15 @@ RouteOverride:
       type: url
       pointer: true
     - name: Partition
-      alternative: Subnet
       type: string
+
+TokenIssuerProof:
+  fields:
+    - name: Transaction
+      type: CreateToken
+      marshal-as: reference
+      pointer: true
+    - name: Receipt
+      type: managed.Receipt
+      marshal-as: reference
+      pointer: true

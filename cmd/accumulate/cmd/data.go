@@ -7,23 +7,23 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
-	"strings"
 
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-var Keyname string
+var DataSigningKeys []string
 var WriteState bool
 var Scratch bool
 
 func init() {
-	dataCmd.Flags().StringVar(&Keyname, "sign-data", "", "specify this to send random data as a signed & valid entry to data account")
+	dataCmd.Flags().StringSliceVar(&DataSigningKeys, "sign-data", nil, "specify this to send random data as a signed & valid entry to data account")
 	dataCmd.PersistentFlags().BoolVar(&WriteState, "write-state", false, "Write to the account's state")
 	dataCmd.Flags().BoolVar(&Scratch, "scratch", false, "Write to the scratch chain")
+
 }
 
 var dataCmd = &cobra.Command{
@@ -53,10 +53,6 @@ var dataCmd = &cobra.Command{
 		case "write":
 			if len(args) > 2 {
 				out, err = WriteData(args[1], args[2:])
-				if err != nil {
-					fmt.Println("Usage:")
-					PrintDataWrite()
-				}
 			} else {
 				PrintDataWrite()
 			}
@@ -88,11 +84,11 @@ func PrintDataGet() {
 
 func PrintDataAccountCreate() {
 	//./cli data create acc://actor.acme key idx height acc://actor.acme/dataAccount acc://actor.acme/keyBook (optional)
-	fmt.Println("  accumulate account create data [actor adi url] [signing key name] [key index (optional)] [key height (optional)] [adi data account url] --authority key book (optional) Create new data account")
+	fmt.Println("  accumulate account create data [actor adi url] [key name[@key book or page]]  [adi data account url] --authority key book (optional) Create new data account")
 	fmt.Println("\t\t example usage: accumulate account create data acc://actor.acme signingKeyName acc://actor.acme/dataAccount --authority acc://actor.acme/book0")
 
 	//scratch data account
-	fmt.Println("  accumulate account create data --scratch [actor adi url] [signing key name] [key index (optional)] [key height (optional)] [adi data account url] --authority key book (optional) Create new data account")
+	fmt.Println("  accumulate account create data --scratch [actor adi url] [key name[@key book or page]]  [adi data account url] --authority key book (optional) Create new data account")
 	fmt.Println("\t\t example usage: accumulate account create data --scratch acc://actor.acme signingKeyName acc://actor.acme/dataAccount --authority acc://actor.acme/book0")
 }
 
@@ -108,7 +104,7 @@ func PrintDataWriteTo() {
 
 func PrintDataLiteAccountCreate() {
 	fmt.Println("  accumulate account create data lite [lite token account] [name_0] ... [name_n] Create new lite data account creating a chain based upon a name list")
-	fmt.Println("  accumulate account create data lite [origin url] [signing key name]  [key index (optional)] [key height (optional)] [name_0] ... [name_n] Create new lite data account creating a chain based upon a name list")
+	fmt.Println("  accumulate account create data lite [origin] [key name[@key book or page]] [name_0] ... [name_n] Create new lite data account creating a chain based upon a name list")
 	fmt.Println("\t\t example usage: accumulate account create data lite acc://actor.acme signingKeyName example1 example2 ")
 }
 
@@ -217,7 +213,7 @@ func CreateLiteDataAccount(origin string, args []string) (string, error) {
 	//compute the chain id...
 	wdt := protocol.WriteDataTo{}
 
-	wdt.Entry, err = prepareData(args, true, nil)
+	wdt.Entry, err = prepareData(u, args, true)
 	if err != nil {
 		return "", err
 	}
@@ -306,21 +302,7 @@ func WriteData(accountUrl string, args []string) (string, error) {
 	wd.WriteToState = WriteState
 	wd.Scratch = Scratch
 
-	var kSigners []*signing.Builder
-	if Keyname != "" {
-		keyargs := strings.Split(Keyname, " ")
-		keyargs = append(keyargs, "")
-		keyUrl, err := url.Parse(keyargs[0])
-		if err != nil {
-			return "", fmt.Errorf("invalid url specified for data signing key")
-		}
-		_, kSigners, err = prepareSigner(keyUrl, keyargs[1:])
-		if err != nil {
-			return "", err
-		}
-	}
-
-	wd.Entry, err = prepareData(args, false, kSigners)
+	wd.Entry, err = prepareData(u, args, false)
 	if err != nil {
 		return PrintJsonRpcError(err)
 	}
@@ -333,7 +315,18 @@ func WriteData(accountUrl string, args []string) (string, error) {
 	return ar.Print()
 }
 
-func prepareData(args []string, isFirstLiteEntry bool, signers []*signing.Builder) (*protocol.AccumulateDataEntry, error) {
+func prepareData(principal *url.URL, args []string, isFirstLiteEntry bool) (*protocol.AccumulateDataEntry, error) {
+	var signers []*signing.Builder
+	for _, keystr := range DataSigningKeys {
+		signer := new(signing.Builder)
+		signer.SetTimestampToNow()
+		err := prepareSignerFromName(principal, signer, keystr)
+		if err != nil {
+			return nil, err
+		}
+		signers = append(signers, signer)
+	}
+
 	entry := new(protocol.AccumulateDataEntry)
 	if isFirstLiteEntry {
 		data := []byte{}
@@ -384,9 +377,7 @@ func prepareData(args []string, isFirstLiteEntry bool, signers []*signing.Builde
 		}
 		dataCopy := [][]byte{}
 		dataCopy = append(dataCopy, finData)
-		for _, v := range entry.Data {
-			dataCopy = append(dataCopy, v)
-		}
+		dataCopy = append(dataCopy, entry.Data...)
 		entry.Data = dataCopy
 	}
 	return entry, nil
@@ -420,25 +411,14 @@ func WriteDataTo(accountUrl string, args []string) (string, error) {
 
 	wd.Recipient = r
 
-	if len(args) < 2 {
+	// Remove the recipient from the arg list
+	args = args[1:]
+	if len(args) == 0 {
 		return "", fmt.Errorf("expecting data")
 	}
 
-	var kSigners []*signing.Builder
-	if Keyname != "" {
-		keyargs := strings.Split(Keyname, " ")
-		keyargs = append(keyargs, "")
-		keyUrl, err := url.Parse(keyargs[0])
-		if err != nil {
-			return "", fmt.Errorf("invalid url specified for data signing key")
-		}
-		_, kSigners, err = prepareSigner(keyUrl, keyargs[1:])
-		if err != nil {
-			return "", err
-		}
-	}
-
-	wd.Entry, err = prepareData(args, false, kSigners)
+	// args[0] is the
+	wd.Entry, err = prepareData(u, args, false)
 	if err != nil {
 		return PrintJsonRpcError(err)
 	}
@@ -463,8 +443,9 @@ func WriteDataTo(accountUrl string, args []string) (string, error) {
 		lde.Data = data[0]
 		lde.ExtIds = data[1:]
 	}
+	entryHash := lde.Hash()
 
-	ar := ActionResponseFromLiteData(res, wd.Recipient.String(), lde.AccountId[:], wd.Entry.Hash())
+	ar := ActionResponseFromLiteData(res, wd.Recipient.String(), lde.AccountId[:], entryHash)
 	ar.Flow = resps
 	return ar.Print()
 }

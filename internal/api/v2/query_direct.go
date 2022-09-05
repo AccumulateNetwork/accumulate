@@ -1,55 +1,38 @@
 package api
 
 import (
-	"context"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"math"
 	"time"
 
-	"github.com/tendermint/tendermint/rpc/client"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2/query"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
 const QueryBlocksMaxCount = 1000 // Hardcoded ceiling for now
 
-type queryDirect struct {
+type queryFrontend struct {
 	Options
-	Partition string
+	backend *queryBackend
 }
 
-func (q *queryDirect) query(req query.Request, opts QueryOptions) (string, []byte, error) {
-	var err error
-	b, err := req.MarshalBinary()
+func (q *queryFrontend) query(req query.Request, opts QueryOptions) (string, []byte, error) {
+	// This only works because we don't commit any changes from a block until ABCI.Commit
+	batch := q.Database.Begin(false)
+	defer batch.Discard()
+
+	// Query the backend
+	k, v, err := q.backend.Query(batch, req, int64(opts.Height), opts.Prove)
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to marshal request: %v", err)
+		return "", nil, err
 	}
-
-	res, err := q.Router.Query(context.Background(), q.Partition, b, client.ABCIQueryOptions{Height: int64(opts.Height), Prove: opts.Prove})
-	if err != nil {
-		return "", nil, fmt.Errorf("failed to send request: %v", err)
-	}
-
-	if res.Response.Code == 0 {
-		return string(res.Response.Key), res.Response.Value, nil
-	}
-	if res.Response.Code != uint32(protocol.ErrorCodeFailed) {
-		return "", nil, errors.New(errors.StatusUnknownError, res.Response.Info)
-	}
-
-	var err2 *errors.Error
-	if json.Unmarshal([]byte(res.Response.Info), &err2) == nil {
-		return "", nil, err2
-	}
-	return "", nil, errors.New(errors.StatusUnknownError, res.Response.Info)
+	return string(k), v, nil
 }
 
-func (q *queryDirect) QueryUrl(u *url.URL, opts QueryOptions) (interface{}, error) {
+func (q *queryFrontend) QueryUrl(u *url.URL, opts QueryOptions) (interface{}, error) {
 	req := new(query.RequestByUrl)
 	req.Url = u
 	req.Scratch = opts.Scratch
@@ -76,6 +59,7 @@ func (q *queryDirect) QueryUrl(u *url.URL, opts QueryOptions) (interface{}, erro
 		}
 
 		var ms *MerkleState
+		//nolint:staticcheck // legacy code
 		if res.Height >= 0 || len(res.ChainState) > 0 {
 			ms = new(MerkleState)
 			ms.Height = uint64(res.Height)
@@ -171,7 +155,7 @@ func (q *queryDirect) QueryUrl(u *url.URL, opts QueryOptions) (interface{}, erro
 	}
 }
 
-func (q *queryDirect) QueryDirectory(u *url.URL, pagination QueryPagination, opts QueryOptions) (*MultiResponse, error) {
+func (q *queryFrontend) QueryDirectory(u *url.URL, pagination QueryPagination, opts QueryOptions) (*MultiResponse, error) {
 	req := new(query.RequestDirectory)
 	req.Url = u
 	req.Start = pagination.Start
@@ -217,31 +201,7 @@ func responseDirFromProto(src *query.DirectoryQueryResult, pagination QueryPagin
 	return dst, nil
 }
 
-func (q *queryDirect) QueryChain(id []byte) (*ChainQueryResponse, error) {
-	if len(id) != 32 {
-		return nil, fmt.Errorf("invalid chain ID: wanted 32 bytes, got %d", len(id))
-	}
-
-	req := new(query.RequestByChainId)
-	copy(req.ChainId[:], id)
-	k, v, err := q.query(req, QueryOptions{})
-	if err != nil {
-		return nil, err
-	}
-	if k != "account" {
-		return nil, fmt.Errorf("unknown response type: want chain, got %q", k)
-	}
-
-	resp := new(query.ResponseAccount)
-	err = resp.UnmarshalBinary(v)
-	if err != nil {
-		return nil, err
-	}
-
-	return packStateResponse(resp.Account, resp.ChainState, nil)
-}
-
-func (q *queryDirect) QueryTx(id []byte, wait time.Duration, ignorePending bool, opts QueryOptions) (*TransactionQueryResponse, error) {
+func (q *queryFrontend) QueryTxLocal(id []byte, wait time.Duration, ignorePending bool, opts QueryOptions) (*TransactionQueryResponse, error) {
 	if len(id) != 32 {
 		return nil, fmt.Errorf("invalid TX ID: wanted 32 bytes, got %d", len(id))
 	}
@@ -308,7 +268,7 @@ query:
 	}
 }
 
-func (q *queryDirect) QueryTxHistory(u *url.URL, pagination QueryPagination, scratch bool) (*MultiResponse, error) {
+func (q *queryFrontend) QueryTxHistory(u *url.URL, pagination QueryPagination, scratch bool) (*MultiResponse, error) {
 	if pagination.Count == 0 {
 		// TODO Return an empty array plus the total count?
 		return nil, validatorError(errors.New(errors.StatusBadRequest, "count must be greater than 0"))
@@ -358,7 +318,7 @@ func (q *queryDirect) QueryTxHistory(u *url.URL, pagination QueryPagination, scr
 	return res, nil
 }
 
-func (q *queryDirect) QueryData(url *url.URL, entryHash [32]byte) (*ChainQueryResponse, error) {
+func (q *queryFrontend) QueryData(url *url.URL, entryHash [32]byte) (*ChainQueryResponse, error) {
 	r, err := q.QueryUrl(url, QueryOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("chain state for data not found for %s, %v", url, err)
@@ -391,7 +351,7 @@ func (q *queryDirect) QueryData(url *url.URL, entryHash [32]byte) (*ChainQueryRe
 	return qr, nil
 }
 
-func (q *queryDirect) QueryDataSet(url *url.URL, pagination QueryPagination, opts QueryOptions) (*MultiResponse, error) {
+func (q *queryFrontend) QueryDataSet(url *url.URL, pagination QueryPagination, opts QueryOptions) (*MultiResponse, error) {
 	if pagination.Count == 0 {
 		// TODO Return an empty array plus the total count?
 		return nil, validatorError(errors.New(errors.StatusBadRequest, "count must be greater than 0"))
@@ -435,7 +395,7 @@ func responseDataSetFromProto(protoDataSet *query.ResponseDataEntrySet, paginati
 	return respDataSet, nil
 }
 
-func (q *queryDirect) QueryKeyPageIndex(u *url.URL, key []byte) (*ChainQueryResponse, error) {
+func (q *queryFrontend) QueryKeyPageIndex(u *url.URL, key []byte) (*ChainQueryResponse, error) {
 	req := new(query.RequestKeyPageIndex)
 	req.Url = u
 	req.Key = key
@@ -459,7 +419,7 @@ func (q *queryDirect) QueryKeyPageIndex(u *url.URL, key []byte) (*ChainQueryResp
 	return res, nil
 }
 
-func (q *queryDirect) QueryMinorBlocks(u *url.URL, pagination QueryPagination, txFetchMode query.TxFetchMode, blockFilterMode query.BlockFilterMode) (*MultiResponse, error) {
+func (q *queryFrontend) QueryMinorBlocks(u *url.URL, pagination QueryPagination, txFetchMode query.TxFetchMode, blockFilterMode query.BlockFilterMode) (*MultiResponse, error) {
 	if pagination.Start > math.MaxInt64 {
 		return nil, errors.New(errors.StatusBadRequest, "start is too large")
 	}
@@ -506,7 +466,7 @@ func (q *queryDirect) QueryMinorBlocks(u *url.URL, pagination QueryPagination, t
 	return mres, nil
 }
 
-func (q *queryDirect) QueryMajorBlocks(u *url.URL, pagination QueryPagination) (*MultiResponse, error) {
+func (q *queryFrontend) QueryMajorBlocks(u *url.URL, pagination QueryPagination) (*MultiResponse, error) {
 	if pagination.Start > math.MaxInt64 {
 		return nil, errors.New(errors.StatusBadRequest, "start is too large")
 	}
@@ -551,7 +511,7 @@ func (q *queryDirect) QueryMajorBlocks(u *url.URL, pagination QueryPagination) (
 	return mres, nil
 }
 
-func (q *queryDirect) QuerySynth(source, destination *url.URL, number uint64, anchor bool) (*TransactionQueryResponse, error) {
+func (q *queryFrontend) QuerySynth(source, destination *url.URL, number uint64, anchor bool) (*TransactionQueryResponse, error) {
 	req := new(query.RequestSynth)
 	req.Source = source
 	req.Destination = destination

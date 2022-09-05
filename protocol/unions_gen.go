@@ -18,6 +18,8 @@ func NewAccount(typ AccountType) (Account, error) {
 		return new(ADI), nil
 	case AccountTypeAnchorLedger:
 		return new(AnchorLedger), nil
+	case AccountTypeBlockLedger:
+		return new(BlockLedger), nil
 	case AccountTypeDataAccount:
 		return new(DataAccount), nil
 	case AccountTypeKeyBook:
@@ -58,6 +60,9 @@ func EqualAccount(a, b Account) bool {
 		return ok && a.Equal(b)
 	case *AnchorLedger:
 		b, ok := b.(*AnchorLedger)
+		return ok && a.Equal(b)
+	case *BlockLedger:
+		b, ok := b.(*BlockLedger)
 		return ok && a.Equal(b)
 	case *DataAccount:
 		b, ok := b.(*DataAccount)
@@ -193,7 +198,7 @@ func NewDataEntry(typ DataEntryType) (DataEntry, error) {
 	case DataEntryTypeAccumulate:
 		return new(AccumulateDataEntry), nil
 	case DataEntryTypeFactom:
-		return new(FactomDataEntry), nil
+		return new(FactomDataEntryWrapper), nil
 	default:
 		return nil, fmt.Errorf("unknown data entry %v", typ)
 	}
@@ -208,8 +213,8 @@ func EqualDataEntry(a, b DataEntry) bool {
 	case *AccumulateDataEntry:
 		b, ok := b.(*AccumulateDataEntry)
 		return ok && a.Equal(b)
-	case *FactomDataEntry:
-		b, ok := b.(*FactomDataEntry)
+	case *FactomDataEntryWrapper:
+		b, ok := b.(*FactomDataEntryWrapper)
 		return ok && a.Equal(b)
 	default:
 		return false
@@ -322,6 +327,8 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(CreateKeyBook), nil
 	case TransactionTypeCreateKeyPage:
 		return new(CreateKeyPage), nil
+	case TransactionTypeCreateLiteTokenAccount:
+		return new(CreateLiteTokenAccount), nil
 	case TransactionTypeCreateToken:
 		return new(CreateToken), nil
 	case TransactionTypeCreateTokenAccount:
@@ -330,6 +337,8 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(DirectoryAnchor), nil
 	case TransactionTypeIssueTokens:
 		return new(IssueTokens), nil
+	case TransactionTypeLockAccount:
+		return new(LockAccount), nil
 	case TransactionTypeRemote:
 		return new(RemoteTransaction), nil
 	case TransactionTypeSendTokens:
@@ -395,6 +404,9 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 	case *CreateKeyPage:
 		b, ok := b.(*CreateKeyPage)
 		return ok && a.Equal(b)
+	case *CreateLiteTokenAccount:
+		b, ok := b.(*CreateLiteTokenAccount)
+		return ok && a.Equal(b)
 	case *CreateToken:
 		b, ok := b.(*CreateToken)
 		return ok && a.Equal(b)
@@ -406,6 +418,9 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 		return ok && a.Equal(b)
 	case *IssueTokens:
 		b, ok := b.(*IssueTokens)
+		return ok && a.Equal(b)
+	case *LockAccount:
+		b, ok := b.(*LockAccount)
 		return ok && a.Equal(b)
 	case *RemoteTransaction:
 		b, ok := b.(*RemoteTransaction)

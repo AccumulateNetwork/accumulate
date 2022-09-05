@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
 const AcmeFaucetAmount = 2_000_000
@@ -65,16 +65,16 @@ func (s faucetSigner) SetPublicKey(sig Signature) error {
 	return nil
 }
 
-func (s faucetSigner) Sign(sig Signature, message []byte) error {
+func (s faucetSigner) Sign(sig Signature, sigMdHash, message []byte) error {
 	switch sig := sig.(type) {
 	case *LegacyED25519Signature:
-		SignLegacyED25519(sig, faucetKey, message)
+		SignLegacyED25519(sig, faucetKey, sigMdHash, message)
 
 	case *ED25519Signature:
-		SignED25519(sig, faucetKey, message)
+		SignED25519(sig, faucetKey, sigMdHash, message)
 
 	case *RCD1Signature:
-		SignRCD1(sig, faucetKey, message)
+		SignRCD1(sig, faucetKey, sigMdHash, message)
 
 	default:
 		return fmt.Errorf("cannot sign %T with a key", sig)

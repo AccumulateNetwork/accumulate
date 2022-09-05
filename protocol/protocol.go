@@ -11,9 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
-	"unicode/utf8"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
 // Well known strings
@@ -63,27 +62,6 @@ const (
 	// MainChain is the main transaction chain of a record.
 	MainChain = "main"
 
-	// SignatureChain is the pending signature chain of a record.
-	SignatureChain = "signature"
-
-	// // MajorRootChain is the major anchor root chain of a partition.
-	// MajorRootChain = "major-root"
-
-	// MinorRootChain is the minor anchor root chain of a partition.
-	MinorRootChain = "minor-root"
-
-	// ScratchChain is the scratch transaction chain of a record.
-	ScratchChain = "scratch"
-
-	// // MajorRootIndexChain is the index chain of the major anchor root chain of a partition.
-	// MajorRootIndexChain = "major-root-index"
-
-	// MinorRootIndexChain is the index chain of the minor anchor root chain of a partition.
-	MinorRootIndexChain = "minor-root-index"
-
-	// AnchorSequenceChain is the chain of anchors produced by a partition.
-	AnchorSequenceChain = "anchor-sequence"
-
 	// GenesisBlock is the block index of the first block.
 	GenesisBlock = 1
 
@@ -92,10 +70,16 @@ const (
 
 	// DefaultMajorBlockSchedule is the default cron schedule of when new major blocks are created
 	DefaultMajorBlockSchedule = "0 */12 * * *"
+
+	//AccountUrlMaxLength is the maximum size allowed for accumulate adi urls
+	AccountUrlMaxLength = 500
 )
 
 //AcmeSupplyLimit set at 500,000,000.00000000 million acme (external units)
 const AcmeSupplyLimit = 500_000_000
+
+// DelegationDepthLimit limits the number of layers of delegation.
+const DelegationDepthLimit = 20
 
 // AcmeUrl returns `acc://ACME`.
 func AcmeUrl() *url.URL {
@@ -142,13 +126,11 @@ const CreditUnitsPerFiatUnit = CreditsPerDollar * CreditPrecision
 // The rules for generating the authority of a lite data chain are
 // the same as the address for a Lite Token Account
 func LiteDataAddress(chainId []byte) (*url.URL, error) {
-	liteUrl := new(url.URL)
 	if len(chainId) < 32 {
 		return nil, errors.New("chainId for LiteDataAddress must be 32 bytes in length")
 	}
 	keyStr := hex.EncodeToString(chainId[:32])
-	liteUrl.Authority = keyStr
-	return liteUrl, nil
+	return &url.URL{Authority: keyStr}, nil
 }
 
 // ParseLiteAddress parses the hostname as a hex string and verifies its
@@ -159,11 +141,16 @@ func ParseLiteAddress(u *url.URL) ([]byte, error) {
 		return nil, err
 	}
 
-	i := len(b) - 4
+	const checksumLen = 4
+	if len(b) <= checksumLen {
+		return nil, errors.New("too short")
+	}
+
+	i := len(b) - checksumLen
 	byteValue, byteCheck := b[:i], b[i:]
-	hexValue := u.Authority[:len(u.Authority)-8]
+	hexValue := u.Authority[:len(u.Authority)-checksumLen*2]
 	checkSum := sha256.Sum256([]byte(hexValue))
-	if !bytes.Equal(byteCheck, checkSum[28:]) {
+	if !bytes.Equal(byteCheck, checkSum[len(checkSum)-checksumLen:]) {
 		return nil, errors.New("invalid checksum")
 	}
 
@@ -267,19 +254,17 @@ func LiteTokenAddressFromHash(pubKeyHash []byte, tokenUrlStr string) (*url.URL, 
 		return nil, errors.New("token URLs cannot include a fragment")
 	}
 
-	liteUrl := LiteAuthorityForHash(pubKeyHash)
-	liteUrl.Path = fmt.Sprintf("/%s%s", tokenUrl.Authority, tokenUrl.Path)
+	liteUrl := LiteAuthorityForHash(pubKeyHash).
+		WithPath(fmt.Sprintf("/%s%s", tokenUrl.Authority, tokenUrl.Path))
 
 	return liteUrl, nil
 }
 
 func LiteAuthorityForHash(pubKeyHash []byte) *url.URL {
-	liteUrl := new(url.URL)
 	keyStr := fmt.Sprintf("%x", pubKeyHash[:20])
 	checkSum := sha256.Sum256([]byte(keyStr))
 	checkStr := fmt.Sprintf("%x", checkSum[28:])
-	liteUrl.Authority = keyStr + checkStr
-	return liteUrl
+	return &url.URL{Authority: keyStr + checkStr}
 }
 
 func LiteAuthorityForKey(pubKey []byte, signatureType SignatureType) *url.URL {
@@ -341,16 +326,15 @@ func ParseLiteTokenAddress(u *url.URL) ([]byte, *url.URL, error) {
 		return nil, nil, nil
 	}
 
-	v := new(url.URL)
 	i := strings.IndexRune(u.Path[1:], '/')
+	var v *url.URL
 	if i >= 0 {
 		i++
-		v.Authority = u.Path[1:i]
-		v.Path = u.Path[i:]
+		v = &url.URL{Authority: u.Path[1:i], Path: u.Path[i:]}
 	} else if u.Path[0] == '/' {
-		v.Authority = u.Path[1:]
+		v = &url.URL{Authority: u.Path[1:]}
 	} else {
-		v.Authority = u.Path
+		v = &url.URL{Authority: u.Path}
 	}
 	return b[:20], v, nil
 }
@@ -383,7 +367,7 @@ func AccountUrl(rootIdentity string, path ...string) *url.URL {
 func IsValidAdiUrl(u *url.URL, allowReserved bool) error {
 	var errs []string
 
-	if !utf8.ValidString(u.RawString()) {
+	if !u.ValidUTF8() {
 		errs = append(errs, "not valid UTF-8")
 	}
 	if u.Port() != "" {
@@ -508,49 +492,11 @@ func ParsePartitionUrl(u *url.URL) (string, bool) {
 
 // BvnNameFromPartitionId formats a BVN partition name from the configuration to a valid URL hostname.
 func BvnNameFromPartitionId(partition string) string {
-	return PartitionUrl(partition).Authority
-}
-
-// IndexChain returns the major or minor index chain name for a given chain. Do
-// not use for the root anchor chain.
-func IndexChain(name string, major bool) string {
-	if major {
-		return "major-" + name + "-index"
-	}
-	return "minor-" + name + "-index"
+	return PartitionUrl(strings.ToLower(partition)).Authority
 }
 
 func GetMOfN(count int, ratio float64) uint64 {
 	return uint64(math.Ceil(ratio * float64(count)))
-}
-
-const rootAnchorSuffix = "-root"
-const bptAnchorSuffix = "-bpt"
-
-// RootAnchorChain returns the name of the intermediate anchor chain for the given
-// partition's root chain.
-func RootAnchorChain(name string) string {
-	return name + rootAnchorSuffix
-}
-
-// BPTAnchorChain returns the name of the intermediate anchor chain for the given
-// partition's BPT.
-func BPTAnchorChain(name string) string {
-	return name + bptAnchorSuffix
-}
-
-// ParseBvnUrl extracts the partition name from a intermediate anchor chain name.
-func ParseAnchorChain(name string) (string, bool) {
-	if !strings.HasSuffix(strings.ToLower(name), rootAnchorSuffix) {
-		return "", false
-	}
-	return name[:len(name)-len(rootAnchorSuffix)], true
-}
-
-// SyntheticSequenceChain returns the name of the synthetic transaction index chain
-// for the given partition.
-func SyntheticSequenceChain(name string) string {
-	return "synthetic-sequence-" + name
 }
 
 // FormatKeyPageUrl constructs the URL of a key page from the URL of its key
@@ -574,7 +520,5 @@ func ParseKeyPageUrl(keyPage *url.URL) (*url.URL, uint64, bool) {
 		return nil, 0, false
 	}
 
-	keyBook := *keyPage
-	keyBook.Path = keyBook.Path[:i]
-	return &keyBook, index, true
+	return keyPage.Identity(), index, true
 }

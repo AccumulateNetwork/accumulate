@@ -5,7 +5,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -17,7 +17,7 @@ func (UpdateKeyPage) Type() protocol.TransactionType {
 	return protocol.TransactionTypeUpdateKeyPage
 }
 
-func (UpdateKeyPage) SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, checkAuthz bool) (fallback bool, err error) {
+func (UpdateKeyPage) SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, md SignatureValidationMetadata) (fallback bool, err error) {
 	principalBook, principalPageIdx, ok := protocol.ParseKeyPageUrl(transaction.Header.Principal)
 	if !ok {
 		return false, errors.Format(errors.StatusBadRequest, "principal is not a key page")
@@ -48,6 +48,10 @@ func (UpdateKeyPage) SignerIsAuthorized(delegate AuthDelegate, batch *database.B
 				}
 			}
 		}
+	}
+
+	if !md.Location.LocalTo(transaction.Header.Principal) {
+		return true, nil
 	}
 
 	// Signers belonging to new delegates are authorized to sign the transaction
@@ -115,7 +119,7 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 	}
 
 	for _, op := range body.Operation {
-		err = UpdateKeyPage{}.executeOperation(page, op)
+		err = UpdateKeyPage{}.executeOperation(page, book, op)
 		if err != nil {
 			return nil, err
 		}
@@ -130,11 +134,21 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 	return nil, nil
 }
 
-func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, op protocol.KeyPageOperation) error {
+func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, book *protocol.KeyBook, op protocol.KeyPageOperation) error {
 	switch op := op.(type) {
 	case *protocol.AddKeyOperation:
 		if op.Entry.IsEmpty() {
 			return fmt.Errorf("cannot add an empty entry")
+		}
+
+		if op.Entry.Delegate != nil {
+			if op.Entry.Delegate.ParentOf(page.Url) {
+				return fmt.Errorf("self-delegation is not allowed")
+			}
+
+			if err := verifyIsNotPage(&book.AccountAuth, op.Entry.Delegate); err != nil {
+				return errors.Format(errors.StatusUnknownError, "invalid delegate %v: %w", op.Entry.Delegate, err)
+			}
 		}
 
 		_, _, found := findKeyPageEntry(page, &op.Entry)
@@ -154,15 +168,15 @@ func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, op protocol.KeyPag
 			return fmt.Errorf("entry to be removed not found on the key page")
 		}
 
-		page.RemoveKeySpecAt(index)
-
 		_, pageIndex, ok := protocol.ParseKeyPageUrl(page.Url)
 		if !ok {
 			return errors.Format(errors.StatusInternalError, "principal is not a key page")
 		}
-		if len(page.Keys) == 0 && pageIndex == 0 {
+		if len(page.Keys) == 1 && pageIndex == 1 {
 			return fmt.Errorf("cannot delete last key of the highest priority page of a key book")
 		}
+
+		page.RemoveKeySpecAt(index)
 
 		if page.AcceptThreshold > uint64(len(page.Keys)) {
 			page.AcceptThreshold = uint64(len(page.Keys))
@@ -170,30 +184,7 @@ func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, op protocol.KeyPag
 		return nil
 
 	case *protocol.UpdateKeyOperation:
-		if op.NewEntry.IsEmpty() {
-			return fmt.Errorf("cannot add an empty entry")
-		}
-
-		// Find the old entry
-		oldPos, entry, found := findKeyPageEntry(page, &op.OldEntry)
-		if !found {
-			return fmt.Errorf("entry to be updated not found on the key page")
-		}
-
-		// Check for an existing key with same delegate
-		newPos, _, found := findKeyPageEntry(page, &op.NewEntry)
-		if found && oldPos != newPos {
-			return fmt.Errorf("cannot have duplicate entries on key page")
-		}
-
-		// Update the entry
-		entry.PublicKeyHash = op.NewEntry.KeyHash
-		entry.Delegate = op.NewEntry.Delegate
-
-		// Relocate the entry
-		page.RemoveKeySpecAt(oldPos)
-		page.AddKeySpec(entry)
-		return nil
+		return updateKey(page, book, &op.OldEntry, &op.NewEntry, false)
 
 	case *protocol.SetThresholdKeyPageOperation:
 		return page.SetThreshold(op.Threshold)

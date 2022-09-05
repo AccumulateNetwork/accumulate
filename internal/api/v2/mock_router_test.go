@@ -9,10 +9,8 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	client "github.com/tendermint/tendermint/rpc/client"
-	coretypes "github.com/tendermint/tendermint/rpc/coretypes"
 	routing "gitlab.com/accumulatenetwork/accumulate/internal/routing"
-	url "gitlab.com/accumulatenetwork/accumulate/internal/url"
+	url "gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	protocol "gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -37,21 +35,6 @@ func NewMockRouter(ctrl *gomock.Controller) *MockRouter {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockRouter) EXPECT() *MockRouterMockRecorder {
 	return m.recorder
-}
-
-// Query mocks base method.
-func (m *MockRouter) Query(ctx context.Context, partition string, query []byte, opts client.ABCIQueryOptions) (*coretypes.ResultABCIQuery, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Query", ctx, partition, query, opts)
-	ret0, _ := ret[0].(*coretypes.ResultABCIQuery)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// Query indicates an expected call of Query.
-func (mr *MockRouterMockRecorder) Query(ctx, partition, query, opts interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Query", reflect.TypeOf((*MockRouter)(nil).Query), ctx, partition, query, opts)
 }
 
 // RequestAPIv2 mocks base method.

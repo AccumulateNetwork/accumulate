@@ -10,16 +10,12 @@ import (
 
 // Chain manages a Merkle tree (chain).
 type Chain struct {
-	account  *Account
-	writable bool
-	merkle   *managed.MerkleManager
-	head     *managed.MerkleState
+	merkle *managed.MerkleManager
+	head   *managed.MerkleState
 }
 
-func newChain(account *Account, merkle *managed.Chain, writable bool) (*Chain, error) {
+func wrapChain(merkle *managed.Chain) (*Chain, error) {
 	m := new(Chain)
-	m.account = account
-	m.writable = writable
 	m.merkle = merkle
 
 	var err error
@@ -109,18 +105,26 @@ func (c *Chain) AnchorAt(height uint64) ([]byte, error) {
 }
 
 // Pending returns the pending roots of the current Merkle state.
-func (c *Chain) Pending() []managed.Hash {
+func (c *Chain) Pending() [][]byte {
 	return c.head.Pending
 }
 
 // AddEntry adds an entry to the chain
 func (c *Chain) AddEntry(entry []byte, unique bool) error {
-	if !c.writable {
-		return fmt.Errorf("chain opened as read-only")
-	}
-
 	if entry == nil {
 		panic("attempted to add a nil entry to a chain")
+	}
+
+	// TODO Update SMT to handle non-32-byte entries?
+	if len(entry) > 32 {
+		panic("Entry is too big")
+	}
+	if len(entry) < 32 {
+		padding := make([]byte, 32-len(entry))
+		// TODO Remove once AC-1096 is done
+		// Fake field number to make unmarshalling work
+		padding[0] = 32
+		entry = append(entry, padding...)
 	}
 
 	err := c.merkle.AddHash(entry, unique)
@@ -170,4 +174,10 @@ func (c *Chain) Receipt(from, to int64) (*managed.Receipt, error) {
 	}
 
 	return r, nil
+}
+
+// RestoreHead is specifically only to be used to restore a
+// chain's head from a snapshot.
+func (c *Chain) RestoreHead(head *managed.MerkleState) error {
+	return c.merkle.Head().Put(head)
 }

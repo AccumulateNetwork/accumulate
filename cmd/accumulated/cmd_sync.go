@@ -16,7 +16,7 @@ import (
 )
 
 func init() {
-	cmdMain.AddCommand(cmdSync, cmdApplySnapshot)
+	cmdMain.AddCommand(cmdSync, cmdRestoreSnapshot)
 	cmdSync.AddCommand(cmdSyncSnapshot)
 }
 
@@ -32,11 +32,11 @@ var cmdSyncSnapshot = &cobra.Command{
 	Run:   syncToSnapshot,
 }
 
-var cmdApplySnapshot = &cobra.Command{
-	Use:   "apply-snapshot [file]",
+var cmdRestoreSnapshot = &cobra.Command{
+	Use:   "restore-snapshot [file]",
 	Short: "Rebuild the accumulate database from a snapshot",
 	Args:  cobra.ExactArgs(1),
-	Run:   applySnapshot,
+	Run:   restoreSnapshot,
 }
 
 func syncToSnapshot(_ *cobra.Command, args []string) {
@@ -82,7 +82,7 @@ func syncToSnapshot(_ *cobra.Command, args []string) {
 	checkf(err, "store configuration")
 }
 
-func applySnapshot(_ *cobra.Command, args []string) {
+func restoreSnapshot(_ *cobra.Command, args []string) {
 	f, err := os.Open(args[0])
 	checkf(err, "snapshot file")
 	defer f.Close()

@@ -9,11 +9,10 @@ import (
 	"github.com/stretchr/testify/require"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2/query"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
 func TestMinorBlock_Expand(t *testing.T) {
@@ -50,7 +49,7 @@ func TestMinorBlock_Expand(t *testing.T) {
 
 	// Call the API
 	req := new(api.MinorBlocksQuery)
-	req.Url = protocol.DnUrl()
+	req.Url = DnUrl()
 	req.TxFetchMode = query.TxFetchModeExpand
 	req.Start = 1
 	req.Count = 10

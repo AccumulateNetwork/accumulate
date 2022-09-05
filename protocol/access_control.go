@@ -1,5 +1,7 @@
 package protocol
 
+import "encoding/json"
+
 // RequireAuthorization returns true if the transaction type always requires
 // authorization even if the account allows unauthorized signers.
 func (typ TransactionType) RequireAuthorization() bool {
@@ -60,4 +62,37 @@ func (typ TransactionType) AllowedTransactionBit() (AllowedTransactionBit, bool)
 	}
 
 	return 0, false
+}
+
+// Unpack lists all of the set bits.
+func (v *AllowedTransactions) Unpack() []AllowedTransactionBit {
+	if v == nil {
+		return nil
+	}
+
+	var bits []AllowedTransactionBit
+	u := *v
+	for i := 0; 1<<i <= u; i++ {
+		if (1<<i)&u != 0 {
+			bits = append(bits, AllowedTransactionBit(i))
+		}
+	}
+	return bits
+}
+
+func (v *AllowedTransactions) MarshalJSON() ([]byte, error) {
+	return json.Marshal(v.Unpack())
+}
+
+func (v *AllowedTransactions) UnmarshalJSON(b []byte) error {
+	var bits []AllowedTransactionBit
+	err := json.Unmarshal(b, &bits)
+	if err != nil {
+		return err
+	}
+
+	for _, bit := range bits {
+		v.Set(bit)
+	}
+	return nil
 }

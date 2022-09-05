@@ -1,12 +1,13 @@
 package protocol
 
 import (
+	"bytes"
 	"math/big"
 	"sort"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/sortutil"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
 func (s *TransactionStatus) Delivered() bool { return s.Code == errors.StatusDelivered || s.Failed() }
@@ -25,14 +26,18 @@ func (s *TransactionStatus) Set(err error) {
 	}
 }
 
+func (s *TransactionStatus) AddAnchorSigner(signature KeySignature) {
+	ptr, new := sortutil.BinaryInsert(&s.AnchorSigners, func(key []byte) int {
+		return bytes.Compare(key, signature.GetPublicKey())
+	})
+	if new {
+		*ptr = signature.GetPublicKey()
+	}
+}
+
 // AddSigner adds a signer to the object's list of signer using a binary search
 // to ensure ordering.
-func (s *TransactionStatus) AddSigner(signer Signer) {
-	// Initial signer
-	if len(s.Signers) == 0 {
-		s.Initiator = signer.GetUrl()
-	}
-
+func (s *TransactionStatus) AddSigner(signer Signer2) {
 	// Find the matching entry
 	ptr, new := sortutil.BinaryInsert(&s.Signers, func(entry Signer) int { return entry.GetUrl().Compare(signer.GetUrl()) })
 

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"math"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
 type Authority interface {
@@ -16,6 +16,11 @@ type Authority interface {
 
 type Signer interface {
 	AccountWithCredits
+	Signer2
+}
+
+type Signer2 interface {
+	GetUrl() *url.URL
 	GetVersion() uint64
 	GetSignatureThreshold() uint64
 	EntryByKey(key []byte) (int, KeyEntry, bool)
@@ -47,6 +52,10 @@ func UnmarshalSignerJSON(data []byte) (Signer, error) {
 		return nil, err
 	}
 
+	if account == nil {
+		return nil, nil
+	}
+
 	signer, ok := account.(Signer)
 	if !ok {
 		return nil, fmt.Errorf("account type %v is not a signer", account.Type())
@@ -58,7 +67,7 @@ func UnmarshalSignerJSON(data []byte) (Signer, error) {
 // MakeLiteSigner returns a copy of the signer with some fields removed.
 // This is used for forwarding signers and storing signers in the transaction
 // status.
-func MakeLiteSigner(signer Signer) Signer {
+func MakeLiteSigner(signer Signer2) Signer {
 	switch signer := signer.(type) {
 	case *KeyPage:
 		// Make a copy of the key page with no keys
@@ -76,8 +85,11 @@ func MakeLiteSigner(signer Signer) Signer {
 		}
 		return signer
 
-	default:
+	case Signer:
 		return signer
+
+	default:
+		return &UnknownSigner{Url: signer.GetUrl(), Version: signer.GetVersion()}
 	}
 }
 

@@ -26,7 +26,6 @@ LiteIdentity:
       type: uvarint
     - name: LastUsedOn
       type: uvarint
-      alternative: Nonce
 
 LiteTokenAccount:
   union: { type: account, value: LiteTokenAccount }
@@ -39,6 +38,9 @@ LiteTokenAccount:
       pointer: true
     - name: Balance
       type: bigint
+    - name: LockHeight
+      description: is the major block height after which the balance can be transferred out of this account
+      type: uint
 
 LiteDataAccount:
   union: { type: account, value: LiteDataAccount }
@@ -50,8 +52,6 @@ LiteDataAccount:
 ADI:
   union: { type: account, value: Identity }
   fields:
-    - { name: KeyBook, type: url, pointer: true, virtual: true, non-binary: true }
-    - { name: ManagerKeyBook, type: url, pointer: true, virtual: true, non-binary: true }
     - name: Url
       type: url
       pointer: true
@@ -61,8 +61,6 @@ ADI:
 TokenAccount:
   union: { type: account, value: TokenAccount }
   fields:
-    - { name: KeyBook, type: url, pointer: true, virtual: true, non-binary: true }
-    - { name: ManagerKeyBook, type: url, pointer: true, virtual: true, non-binary: true }
     - name: Url
       type: url
       pointer: true
@@ -77,8 +75,6 @@ TokenAccount:
 KeyBook:
   union: { type: account }
   fields:
-    - { name: KeyBook, type: url, pointer: true, virtual: true, non-binary: true }
-    - { name: ManagerKeyBook, type: url, pointer: true, virtual: true, non-binary: true }
     - name: Url
       type: url
       pointer: true
@@ -130,8 +126,6 @@ KeyPage:
 DataAccount:
   union: { type: account, value: DataAccount }
   fields:
-    - { name: KeyBook, type: url, pointer: true, virtual: true, non-binary: true }
-    - { name: ManagerKeyBook, type: url, pointer: true, virtual: true, non-binary: true }
     - name: Url
       type: url
       pointer: true
@@ -145,8 +139,6 @@ DataAccount:
 TokenIssuer:
   union: { type: account }
   fields:
-    - { name: KeyBook, type: url, pointer: true, virtual: true, non-binary: true }
-    - { name: ManagerKeyBook, type: url, pointer: true, virtual: true, non-binary: true }
     - name: Url
       type: url
       pointer: true

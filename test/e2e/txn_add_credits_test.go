@@ -7,8 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -99,7 +98,7 @@ func TestAddCredits_RefundsAcme(t *testing.T) {
 			WithSigner(alice.JoinPath("book", "1"), 1).
 			WithTimestampVar(&timestamp).
 			WithBody(&AddCredits{
-				Recipient: protocol.AccountUrl("foo"),
+				Recipient: AccountUrl("foo"),
 				Amount:    *big.NewInt(spend * AcmePrecision),
 				Oracle:    oracle,
 			}).

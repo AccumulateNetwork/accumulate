@@ -1,14 +1,16 @@
 
 #!/bin/bash
 
-tmpNodeDir=$(mktemp -d -t /tmp/accumulated-ci-XXXXXXXX)
+# SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# cd "${SCRIPT_DIR}"
+# source validate-commons.sh
 
+tmpNodeDir=$(mktemp -d -t accumulated-ci-XXXXXXXX)
 accumulated init network data/devnet.json --no-website -w ${tmpNodeDir} --no-empty-blocks
-
-accumulated run-dual "$tmpNodeDir/dn/Node0" "$tmpNodeDir/bvn0/Node0" &
+accumulated run-dual "$tmpNodeDir/node-1/dnn" "$tmpNodeDir/node-1/bvnn" &
 declare -g ACCPID=$!
 
-section "Generate a Lite Token Account"
+section "Generate a Lite Token Account from validate-init-network"
 accumulate account list 2>&1 | grep -q ACME || accumulate account generate
 LITE_ACME=$(accumulate account list -j | jq -re .liteAccounts[0].liteAccount)
 LITE_ID=$(cut -d/ -f-3 <<< "$LITE_ACME")

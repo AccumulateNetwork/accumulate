@@ -11,7 +11,7 @@ import (
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/types"
@@ -44,7 +44,7 @@ func ParseUrl(s string) (*url.URL, error) {
 	}
 	// Fixup URL
 	if !strings.HasSuffix(u.Authority, protocol.TLD) {
-		u.Authority += protocol.TLD
+		u = u.WithAuthority(u.Authority + protocol.TLD)
 	}
 	return u, nil
 }
@@ -117,7 +117,7 @@ func WriteStates(db DB, chains ...protocol.Account) error {
 			return err
 		}
 
-		chain, err := r.Chain(protocol.MainChain, protocol.ChainTypeTransaction)
+		chain, err := r.MainChain().Get()
 		if err != nil {
 			return err
 		}
@@ -129,14 +129,16 @@ func WriteStates(db DB, chains ...protocol.Account) error {
 	}
 
 	dir := indexing.Directory(db, urls[0].Identity())
+	var uarr []*url.URL
 	for _, u := range urls {
 		if u.IsRootIdentity() {
 			continue
 		}
-		err := dir.Put(u)
-		if err != nil {
-			return err
-		}
+		uarr = append(uarr, u)
+	}
+	err := dir.Add(uarr...)
+	if err != nil {
+		return err
 	}
 	return nil
 }

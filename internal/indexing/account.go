@@ -4,25 +4,26 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 type DirectoryIndexer struct {
-	*record.Counted[*url.URL]
+	*record.Set[*url.URL]
 }
 
 func Directory(batch *database.Batch, account *url.URL) *DirectoryIndexer {
 	return &DirectoryIndexer{batch.Account(account).Directory()}
 }
 
-func (d *DirectoryIndexer) Count() (uint64, error) {
-	v, err := d.Counted.Count()
-	return uint64(v), err
+func (d *DirectoryIndexer) Get(i uint64) (*url.URL, error) {
+	value, err := d.Set.Get()
+	return value[i], err
 }
 
-func (d *DirectoryIndexer) Get(i uint64) (*url.URL, error) {
-	return d.Counted.Get(int(i))
+func (d *DirectoryIndexer) Count() (uint64, error) {
+	uarr, err := d.Set.Get()
+	return uint64(len(uarr)), err
 }
 
 type DataIndexer struct {

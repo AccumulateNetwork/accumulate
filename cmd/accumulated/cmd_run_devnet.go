@@ -71,6 +71,7 @@ func runDevNet(*cobra.Command, []string) {
 	}
 
 	stop := make(chan struct{})
+	didStop := make(chan struct{}, len(nodes)*2)
 	done := new(sync.WaitGroup)
 
 	logWriter := newLogWriter(nil)
@@ -104,8 +105,8 @@ func runDevNet(*cobra.Command, []string) {
 		)
 		check(err)
 
-		startDevNetNode(dnn, started, done, stop)
-		startDevNetNode(bvnn, started, done, stop)
+		startDevNetNode(dnn, started, done, stop, didStop)
+		startDevNetNode(bvnn, started, done, stop, didStop)
 
 		// Connect once everything is setup
 		go func() {
@@ -121,14 +122,17 @@ func runDevNet(*cobra.Command, []string) {
 	// Wait for SIGINT
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, os.Interrupt)
-	<-sigs
+	select {
+	case <-sigs:
+	case <-didStop:
+	}
+
+	// Turn of signal handling, so that another SIGINT will exit immediately
+	signal.Stop(sigs)
 
 	// Overwrite the ^C
 	print("\r")
 	color.HiBlack("----- Stopping -----")
-
-	// Turn of signal handling, so that another SIGINT will exit immediately
-	signal.Stop(sigs)
 
 	// Signal everyone to stop
 	close(stop)
@@ -137,10 +141,9 @@ func runDevNet(*cobra.Command, []string) {
 	done.Wait()
 }
 
-func startDevNetNode(daemon *accumulated.Daemon, started, done *sync.WaitGroup, stop chan struct{}) {
+func startDevNetNode(daemon *accumulated.Daemon, started, done *sync.WaitGroup, stop, didStop chan struct{}) {
 	// Disable features not compatible with multi-node, single-process
 	daemon.Config.Instrumentation.Prometheus = false
-	daemon.Config.Accumulate.Website.Enabled = false
 
 	started.Add(1)
 	go func() {
@@ -148,6 +151,12 @@ func startDevNetNode(daemon *accumulated.Daemon, started, done *sync.WaitGroup, 
 
 		// Start it
 		check(daemon.Start())
+
+		// On stop, send the signal
+		go func() {
+			<-daemon.Done()
+			didStop <- struct{}{}
+		}()
 
 		// On signal, stop the node
 		done.Add(1)

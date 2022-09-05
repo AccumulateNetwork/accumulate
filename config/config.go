@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/viper"
 	tm "github.com/tendermint/tendermint/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	etcd "go.etcd.io/etcd/client/v3"
 )
 
@@ -33,11 +34,13 @@ const (
 
 const DevNet = "devnet"
 
-type NetworkType uint64
+type NetworkType = protocol.PartitionType
 
 const (
-	BlockValidator = NetworkTypeBlockValidator
-	Directory      = NetworkTypeDirectory
+	BlockValidator            = protocol.PartitionTypeBlockValidator
+	Directory                 = protocol.PartitionTypeDirectory
+	NetworkTypeBlockValidator = protocol.PartitionTypeBlockValidator
+	NetworkTypeDirectory      = protocol.PartitionTypeDirectory
 )
 
 type NodeType uint64
@@ -113,6 +116,7 @@ var DefaultLogLevels = LogLevel{}.
 	SetModule("synthetic", "info").
 	// SetModule("storage", "debug").
 	// SetModule("database", "debug").
+	SetModule("website", "info").
 	// SetModule("disk-monitor", "info").
 	// SetModule("init", "info").
 	String()
@@ -122,9 +126,9 @@ func Default(netName string, net NetworkType, node NodeType, partitionId string)
 	c.Accumulate.Network.Id = netName
 	c.Accumulate.NetworkType = net
 	c.Accumulate.PartitionId = partitionId
+	c.Accumulate.DnStallLimit = 50
 	c.Accumulate.API.PrometheusServer = "http://18.119.26.7:9090"
 	c.Accumulate.SentryDSN = "https://glet_78c3bf45d009794a4d9b0c990a1f1ed5@gitlab.com/api/v4/error_tracking/collector/29762666"
-	c.Accumulate.Website.Enabled = true
 	c.Accumulate.API.TxMaxWaitTime = 10 * time.Minute
 	c.Accumulate.API.EnableDebugMethods = true
 	c.Accumulate.API.ConnectionLimit = 500
@@ -155,12 +159,16 @@ type Config struct {
 type Accumulate struct {
 	SentryDSN string `toml:"sentry-dsn" mapstructure:"sentry-dsn"`
 	Describe  `toml:"describe" mapstructure:"describe"`
+
+	// DnStallLimit sets the number of blocks the DN is allowed to take before
+	// acknowledging an anchor.
+	DnStallLimit int `toml:"dn-stall-limit" mapstructure:"dn-stall-limit"`
+
 	// TODO: move network config to its own file since it will be constantly changing over time.
 	//	NetworkConfig string      `toml:"network" mapstructure:"network"`
 	Snapshots   Snapshots   `toml:"snapshots" mapstructure:"snapshots"`
 	Storage     Storage     `toml:"storage" mapstructure:"storage"`
 	API         API         `toml:"api" mapstructure:"api"`
-	Website     Website     `toml:"website" mapstructure:"website"`
 	AnalysisLog AnalysisLog `toml:"analysis" mapstructure:"analysis"`
 }
 
@@ -235,11 +243,6 @@ type API struct {
 	ConnectionLimit    int           `toml:"connection-limit" mapstructure:"connection-limit"`
 }
 
-type Website struct {
-	Enabled       bool   `toml:"website-enabled" mapstructure:"website-enabled"`
-	ListenAddress string `toml:"website-listen-address" mapstructure:"website-listen-address"`
-}
-
 func MakeAbsolute(root, path string) string {
 	if filepath.IsAbs(path) {
 		return path
@@ -279,13 +282,13 @@ func (n *Network) GetBvnNames() []string {
 	return names
 }
 
-func (n *Network) GetPartitionByID(partitionID string) Partition {
-	for _, partition := range n.Partitions {
-		if partition.Id == partitionID {
-			return partition
+func (n *Network) GetPartitionByID(partitionID string) *Partition {
+	for i, partition := range n.Partitions {
+		if strings.EqualFold(partition.Id, partitionID) {
+			return &n.Partitions[i]
 		}
 	}
-	panic(fmt.Sprintf("Partition ID %s does not exist", partitionID))
+	return nil
 }
 
 func Load(dir string) (*Config, error) {
@@ -374,11 +377,6 @@ func load(dir, file string, c interface{}) error {
 	return nil
 }
 
-// MarshalTOML marshals the Network Type to Toml as a string.
-func (v NetworkType) MarshalTOML() ([]byte, error) {
-	return []byte("\"" + v.String() + "\""), nil
-}
-
 // MarshalTOML marshals the Node Type to Toml as a string.
 func (v NodeType) MarshalTOML() ([]byte, error) {
 	return []byte("\"" + v.String() + "\""), nil
@@ -387,13 +385,13 @@ func (v NodeType) MarshalTOML() ([]byte, error) {
 // StringToEnumHookFunc is a decode hook for mapstructure that will convert enums to strings
 func StringToEnumHookFunc() mapstructure.DecodeHookFuncType {
 	return func(
-		f reflect.Type,
+		_ reflect.Type,
 		t reflect.Type,
 		data interface{},
 	) (interface{}, error) {
 		switch t {
 		case reflect.TypeOf(NetworkTypeDirectory):
-			ret, _ := NetworkTypeByName(data.(string))
+			ret, _ := protocol.PartitionTypeByName(data.(string))
 			return ret, nil
 		case reflect.TypeOf(NodeTypeValidator):
 			ret, _ := NodeTypeByName(data.(string))

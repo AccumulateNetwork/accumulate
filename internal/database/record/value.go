@@ -1,9 +1,9 @@
 package record
 
+//lint:file-ignore U1000 false positive
+
 import (
-	"fmt"
 	"io"
-	"strings"
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
@@ -32,8 +32,7 @@ const (
 	debugPutValue
 )
 
-// TODO Unexport once AC-1598 is done.
-type EncodableValue[T any] interface {
+type encodableValue[T any] interface {
 	encoding.BinaryValue
 	getValue() T
 	setValue(T)
@@ -57,7 +56,7 @@ type Value[T any] struct {
 	key          Key
 	name         string
 	status       valueStatus
-	value        EncodableValue[T]
+	value        encodableValue[T]
 	allowMissing bool
 }
 
@@ -65,16 +64,12 @@ var _ ValueReader = (*Value[*wrappedValue[uint64]])(nil)
 var _ ValueWriter = (*Value[*wrappedValue[uint64]])(nil)
 
 // NewValue returns a new Value using the given encodable value.
-func NewValue[T any](logger log.Logger, store Store, key Key, namefmt string, allowMissing bool, value EncodableValue[T]) *Value[T] {
+func NewValue[T any](logger log.Logger, store Store, key Key, name string, allowMissing bool, value encodableValue[T]) *Value[T] {
 	v := &Value[T]{}
 	v.logger.L = logger
 	v.store = store
 	v.key = key
-	if strings.ContainsRune(namefmt, '%') {
-		v.name = fmt.Sprintf(namefmt, key...)
-	} else {
-		v.name = namefmt
-	}
+	v.name = name
 	v.value = value
 	v.allowMissing = allowMissing
 	v.status = valueUndefined
@@ -219,9 +214,9 @@ func (v *Value[T]) LoadValue(value ValueReader, put bool) error {
 		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
-	u, ok := uv.(EncodableValue[T])
+	u, ok := uv.(encodableValue[T])
 	if !ok {
-		return errors.Format(errors.StatusInternalError, "store %s: invalid value: want %T, got %T", v.name, (EncodableValue[T])(nil), uv)
+		return errors.Format(errors.StatusInternalError, "store %s: invalid value: want %T, got %T", v.name, (encodableValue[T])(nil), uv)
 	}
 
 	if put {
@@ -255,7 +250,7 @@ type structValue[T any, PT ptrBinaryValue[T]] struct {
 }
 
 // Struct returns an encodable value for the given encodable struct-type.
-func Struct[T any, PT ptrBinaryValue[T]]() EncodableValue[PT] {
+func Struct[T any, PT ptrBinaryValue[T]]() encodableValue[PT] {
 	return new(structValue[T, PT])
 }
 
@@ -305,13 +300,13 @@ type unionValue[T encoding.BinaryValue] struct {
 }
 
 // Union returns an encodable value for the given encodable union type.
-func Union[T encoding.BinaryValue](unmarshal func([]byte) (T, error)) EncodableValue[T] {
+func Union[T encoding.BinaryValue](unmarshal func([]byte) (T, error)) encodableValue[T] {
 	return &unionValue[T]{unmarshal: unmarshal}
 }
 
 // UnionFactory curries Union.
-func UnionFactory[T encoding.BinaryValue](unmarshal func([]byte) (T, error)) func() EncodableValue[T] {
-	return func() EncodableValue[T] { return &unionValue[T]{unmarshal: unmarshal} }
+func UnionFactory[T encoding.BinaryValue](unmarshal func([]byte) (T, error)) func() encodableValue[T] {
+	return func() encodableValue[T] { return &unionValue[T]{unmarshal: unmarshal} }
 }
 
 func (v *unionValue[T]) getValue() T  { return v.value }

@@ -52,7 +52,7 @@ func (WriteData) AllowMissingPrincipal(transaction *protocol.Transaction) bool {
 
 // SignerIsAuthorized returns nil if the transaction is writing to a lite data
 // account.
-func (WriteData) SignerIsAuthorized(_ AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, _ protocol.Signer, _ bool) (fallback bool, err error) {
+func (WriteData) SignerIsAuthorized(_ AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, _ protocol.Signer, _ SignatureValidationMetadata) (fallback bool, err error) {
 	lite, err := isWriteToLiteDataAccount(batch, transaction)
 	if err != nil {
 		return false, errors.Wrap(errors.StatusUnknownError, err)
@@ -90,10 +90,6 @@ func (WriteData) Validate(st *StateManager, tx *Delivery) (protocol.TransactionR
 
 	if body.Entry == nil {
 		return nil, errors.Format(errors.StatusBadRequest, "entry is missing")
-	}
-
-	if _, ok := body.Entry.(*protocol.FactomDataEntry); ok {
-		return nil, errors.Format(errors.StatusBadRequest, "writing new Factom-formatted data entries is not supported")
 	}
 
 	//check will return error if there is too much data or no data for the entry

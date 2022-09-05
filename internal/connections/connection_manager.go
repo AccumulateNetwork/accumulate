@@ -5,17 +5,16 @@ import (
 	"fmt"
 	"net"
 	"net/url"
-	neturl "net/url"
 	"strings"
 	"time"
 
 	"github.com/tendermint/tendermint/libs/log"
+	"github.com/tendermint/tendermint/rpc/client"
 	rpc "github.com/tendermint/tendermint/rpc/client"
 	"github.com/tendermint/tendermint/rpc/client/http"
-	"github.com/tendermint/tendermint/rpc/client/local"
 	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2/query"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
 const UnhealthyNodeCheckInterval = time.Minute * 10 // TODO Configurable in toml?
@@ -26,7 +25,7 @@ type ConnectionManager interface {
 
 type ConnectionInitializer interface {
 	ConnectionManager
-	InitClients(*local.Local, StatusChecker) error
+	InitClients(client.Client, StatusChecker) error
 	ConnectDirectly(other ConnectionManager) error
 }
 
@@ -37,7 +36,7 @@ type connectionManager struct {
 	fnCtxList   []ConnectionContext
 	all         []ConnectionContext
 	localCtx    ConnectionContext
-	localClient *local.Local
+	localClient client.Client
 	logger      log.Logger
 	localHost   string
 
@@ -53,8 +52,8 @@ func (cm *connectionManager) doHealthCheckOnNode(connCtx *connectionContext) {
 	// Try to query Tendermint with something it should not find
 	qu := new(query.UnknownRequest)
 	qd, _ := qu.MarshalBinary()
-	qryRes, err := connCtx.GetABCIClient().ABCIQueryWithOptions(context.Background(), "/abci_query", qd, rpc.DefaultABCIQueryOptions)
-	if err != nil || protocol.ErrorCode(qryRes.Response.Code) != protocol.ErrorCodeFailed {
+	qryRes, err := connCtx.GetABCIClient().ABCIQueryWithOptions(context.Background(), "/up", qd, rpc.DefaultABCIQueryOptions)
+	if err != nil || protocol.ErrorCode(qryRes.Response.Code) != protocol.ErrorCodeOK {
 		// FIXME code ErrorCodeInvalidQueryType will emit an error in the log, maybe there is a nicer option to probe the abci API
 		connCtx.ReportError(err)
 		if qryRes != nil {
@@ -170,10 +169,6 @@ func (cm *connectionManager) GetLocalNodeContext() ConnectionContext {
 	return cm.localCtx
 }
 
-func (cm *connectionManager) GetLocalClient() *local.Local {
-	return cm.localClient
-}
-
 func (cm *connectionManager) ResetErrors() {
 	for _, nodeCtx := range cm.all {
 		nodeCtx.GetMetrics().status = Unknown
@@ -267,14 +262,14 @@ func (cm *connectionManager) reformatAddress(address string) string {
 		return address
 	}
 
-	url, err := neturl.Parse(address)
+	url, err := url.Parse(address)
 	if err != nil {
 		return address
 	}
 	return url.Host
 }
 
-func (cm *connectionManager) InitClients(lclClient *local.Local, statusChecker StatusChecker) error {
+func (cm *connectionManager) InitClients(lclClient client.Client, statusChecker StatusChecker) error {
 	cm.localClient = lclClient
 
 	for _, connCtxList := range cm.bvnCtxMap {
@@ -368,7 +363,7 @@ func (cm *connectionManager) createClient(connCtx *connectionContext) error {
 
 func resolveIPs(address string) ([]net.IP, error) {
 	var hostname string
-	nodeUrl, err := neturl.Parse(address)
+	nodeUrl, err := url.Parse(address)
 	if err == nil {
 		hostname = nodeUrl.Hostname()
 	} else {

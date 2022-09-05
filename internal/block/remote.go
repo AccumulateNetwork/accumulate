@@ -4,7 +4,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -115,7 +115,7 @@ func (x *Executor) shouldForwardSignature(batch *database.Batch, transaction *pr
 	}
 
 	// Load all of the signatures
-	sigset, err := GetSignaturesForSigner(batch, batch.Transaction(transaction.GetHash()), signer)
+	sigset, err := database.GetSignaturesForSigner(batch.Transaction(transaction.GetHash()), signer)
 	if err != nil {
 		return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 	}

@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
 	neturl "net/url"
+	"os"
 	"strconv"
 	"strings"
 
@@ -13,8 +15,8 @@ import (
 	"github.com/tendermint/tendermint/privval"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
-	"gitlab.com/accumulatenetwork/accumulate/internal/client"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -24,13 +26,18 @@ func init() {
 	cmdSet.AddCommand(
 		cmdSetOracle,
 		cmdSetSchedule,
+		cmdSetAnchorEmptyBlocks,
+		cmdSetRouting,
 	)
 
 	cmdSet.PersistentFlags().StringVarP(&flagSet.Server, "server", "s", "", "Override the API URL")
+	cmdSet.PersistentFlags().BoolVarP(&flagSet.Yes, "yes", "y", false, "Skip prompts (answer yes)")
 }
 
 var flagSet = struct {
-	Server string
+	Server  string
+	Suggest bool
+	Yes     bool
 }{}
 
 var cmdSet = &cobra.Command{
@@ -42,75 +49,122 @@ var cmdSetOracle = &cobra.Command{
 	Use:   "oracle [value]",
 	Short: "Set the oracle",
 	Args:  cobra.ExactArgs(1),
-	Run:   setOracle,
+	Run: func(_ *cobra.Command, args []string) {
+		newValue, err := strconv.ParseFloat(args[0], 64)
+		checkf(err, "oracle value")
+
+		setNetworkValue(protocol.Oracle, func(v *core.GlobalValues) {
+			v.Oracle.Price = uint64(newValue * protocol.AcmeOraclePrecision)
+		})
+	},
 }
 
 var cmdSetSchedule = &cobra.Command{
 	Use:   "schedule [CRON expression]",
 	Short: "Set the major block schedule",
 	Args:  cobra.ExactArgs(1),
-	Run:   setSchedule,
+	Run: func(_ *cobra.Command, args []string) {
+		_, err := cronexpr.Parse(args[0])
+		checkf(err, "CRON expression is invalid")
+
+		setNetworkValue(protocol.Globals, func(v *core.GlobalValues) {
+			v.Globals.MajorBlockSchedule = args[0]
+		})
+	},
 }
 
-func setOracle(_ *cobra.Command, args []string) {
+var cmdSetAnchorEmptyBlocks = &cobra.Command{
+	Use:   "anchor-empty-blocks [true|false]",
+	Short: "Set whether empty blocks are anchored",
+	Args:  cobra.ExactArgs(1),
+	Run: func(_ *cobra.Command, args []string) {
+		value, err := strconv.ParseBool(args[0])
+		checkf(err, "value is invalid")
+
+		setNetworkValue(protocol.Globals, func(v *core.GlobalValues) {
+			v.Globals.AnchorEmptyBlocks = value
+		})
+	},
+}
+
+var cmdSetRouting = &cobra.Command{
+	Use:   "routing [table]",
+	Short: "Set the routing table",
+	Args:  cobra.ExactArgs(1),
+	Run: func(_ *cobra.Command, args []string) {
+		table := new(protocol.RoutingTable)
+		err := json.Unmarshal([]byte(args[0]), table)
+		checkf(err, "value is invalid")
+
+		if !flagSet.Yes {
+			fmt.Printf("Updating the network's routing table:\n")
+			for _, o := range table.Overrides {
+				fmt.Printf("Override: %v <- %v\n", o.Partition, o.Account)
+			}
+			for _, r := range table.Routes {
+				v := strconv.FormatUint(r.Value, 2)
+				v = strings.Repeat("0", int(r.Length)-len(v)) + v
+				fmt.Printf("Prefix:   %v <- %v\n", r.Partition, v)
+			}
+			fmt.Printf("Proceed [yN]? ")
+			answer, err := bufio.NewReader(os.Stdin).ReadString('\n')
+			if err != nil {
+				return
+			}
+			answer = strings.ToLower(strings.TrimSpace(answer))
+			if answer != "y" && answer != "yes" {
+				return
+			}
+		}
+
+		setNetworkValue(protocol.Routing, func(v *core.GlobalValues) {
+			v.Routing = table
+		})
+	},
+}
+
+func setNetworkValue(path string, update func(v *core.GlobalValues)) {
 	cfg, client := loadConfigAndClient()
-
-	newValue, err := strconv.ParseFloat(args[0], 64)
-	checkf(err, "oracle value")
-
 	if cfg.Accumulate.NetworkType != config.Directory {
 		fatalf("node is not a directory node")
 	}
 
-	oracle := new(protocol.DataAccount)
+	account := new(protocol.DataAccount)
 	req := new(api.GeneralQuery)
-	req.Url = cfg.Accumulate.Describe.NodeUrl(protocol.Oracle)
-	_, err = client.QueryAccountAs(context.Background(), req, oracle)
-	checkf(err, "get oracle")
+	req.Url = cfg.Accumulate.Describe.NodeUrl(path)
+	_, err := client.QueryAccountAs(context.Background(), req, account)
+	checkf(err, "get %s", path)
 
 	values := new(core.GlobalValues)
-	err = values.ParseOracle(oracle.Entry)
-	checkf(err, "parse oracle")
+	var format func() protocol.DataEntry
+	switch path {
+	case protocol.Oracle:
+		err = values.ParseOracle(account.Entry)
+		format = values.FormatOracle
+	case protocol.Globals:
+		err = values.ParseGlobals(account.Entry)
+		format = values.FormatGlobals
+	case protocol.Network:
+		err = values.ParseNetwork(account.Entry)
+		format = values.FormatNetwork
+	case protocol.Routing:
+		err = values.ParseRouting(account.Entry)
+		format = values.FormatRouting
+	default:
+		fatalf("unknown network variable account %s", path)
+	}
+	checkf(err, "parse %s", path)
 
-	values.Oracle.Price = uint64(newValue * protocol.AcmeOraclePrecision)
+	update(values)
+
+	wd := new(protocol.WriteData)
+	wd.WriteToState = true
+	wd.Entry = format()
 	transaction := new(protocol.Transaction)
-	transaction.Header.Principal = cfg.Accumulate.Describe.NodeUrl(protocol.Oracle)
-	transaction.Body = &protocol.WriteData{
-		Entry:        values.FormatOracle(),
-		WriteToState: true,
-	}
+	transaction.Header.Principal = cfg.Accumulate.Describe.NodeUrl(path)
+	transaction.Body = wd
 
-	submitTransactionWithNode(cfg, client, transaction, oracle)
-}
-
-func setSchedule(_ *cobra.Command, args []string) {
-	cfg, client := loadConfigAndClient()
-	if cfg.Accumulate.NetworkType != config.Directory {
-		fatalf("node is not a directory node")
-	}
-
-	_, err := cronexpr.Parse(args[0])
-	checkf(err, "CRON expression is invalid")
-
-	globals := new(protocol.DataAccount)
-	req := new(api.GeneralQuery)
-	req.Url = cfg.Accumulate.Describe.NodeUrl(protocol.Globals)
-	_, err = client.QueryAccountAs(context.Background(), req, globals)
-	checkf(err, "get globals")
-
-	values := new(core.GlobalValues)
-	err = values.ParseGlobals(globals.Entry)
-	checkf(err, "parse globals")
-
-	values.Globals.MajorBlockSchedule = args[0]
-	transaction := new(protocol.Transaction)
-	transaction.Header.Principal = cfg.Accumulate.Describe.NodeUrl(protocol.Globals)
-	transaction.Body = &protocol.WriteData{
-		Entry:        values.FormatGlobals(),
-		WriteToState: true,
-	}
-
-	submitTransactionWithNode(cfg, client, transaction, globals)
+	submitTransactionWithNode(cfg, client, transaction, account)
 }
 
 func loadConfigAndClient() (*config.Config, *client.Client) {

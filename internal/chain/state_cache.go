@@ -1,6 +1,8 @@
 package chain
 
 import (
+	"fmt"
+
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -8,7 +10,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/types"
@@ -81,14 +83,9 @@ func (c *stateCache) LoadUrlAs(account *url.URL, target interface{}) error {
 	return encoding.SetPtr(state, target)
 }
 
-// ReadChain loads an account's chain by URL and name.
-func (c *stateCache) ReadChain(u *url.URL, name string) (*database.Chain, error) {
-	return c.batch.Account(u).ReadChain(name)
-}
-
 //GetHeight loads the height of the chain
 func (c *stateCache) GetHeight(u *url.URL) (uint64, error) {
-	chain, err := c.batch.Account(u).ReadChain(protocol.MainChain)
+	chain, err := c.batch.Account(u).MainChain().Get()
 	if err != nil {
 		return 0, err
 	}
@@ -111,11 +108,9 @@ func (c *stateCache) LoadTxn(txid [32]byte) (*protocol.Transaction, error) {
 
 func (c *stateCache) AddDirectoryEntry(directory *url.URL, u ...*url.URL) error {
 	dir := indexing.Directory(c.batch, directory)
-	for _, u := range u {
-		err := dir.Put(u)
-		if err != nil {
-			return err
-		}
+	err := dir.Add(u...)
+	if err != nil {
+		return err
 	}
 	return nil
 }
@@ -140,6 +135,9 @@ func (st *stateCache) createOrUpdate(isUpdate bool, accounts []protocol.Account)
 	isCreate := !isUpdate
 	for _, account := range accounts {
 		rec := st.batch.Account(account.GetUrl())
+		if len(account.GetUrl().String()) > protocol.AccountUrlMaxLength {
+			return errors.Wrap(errors.StatusBadUrlLength, fmt.Errorf("url specified exceeds maximum character length: %s", account.GetUrl().String()))
+		}
 		_, err := rec.GetState()
 		switch {
 		case err != nil && !errors.Is(err, storage.ErrNotFound):
@@ -164,13 +162,13 @@ func (st *stateCache) createOrUpdate(isUpdate bool, accounts []protocol.Account)
 		// Update/Create the state
 		err = rec.PutState(account)
 		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "failed to update state of %q: %v", account.GetUrl(), err)
+			return errors.Format(errors.StatusUnknownError, "failed to update state of %q: %w", account.GetUrl(), err)
 		}
 
 		// Add to the account's main chain
-		err = st.State.ChainUpdates.AddChainEntry(st.batch, account.GetUrl(), protocol.MainChain, protocol.ChainTypeTransaction, st.txHash[:], 0, 0)
+		err = st.State.ChainUpdates.AddChainEntry(st.batch, rec.MainChain(), st.txHash[:], 0, 0)
 		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "failed to update main chain of %q: %v", account.GetUrl(), err)
+			return errors.Format(errors.StatusUnknownError, "failed to update main chain of %q: %w", account.GetUrl(), err)
 		}
 
 		// Add it to the directory
@@ -178,7 +176,7 @@ func (st *stateCache) createOrUpdate(isUpdate bool, accounts []protocol.Account)
 			u := account.GetUrl()
 			err = st.AddDirectoryEntry(u.Identity(), u)
 			if err != nil {
-				return errors.Format(errors.StatusUnknownError, "failed to add a directory entry for %q: %v", u, err)
+				return errors.Format(errors.StatusUnknownError, "failed to add a directory entry for %q: %w", u, err)
 			}
 		}
 

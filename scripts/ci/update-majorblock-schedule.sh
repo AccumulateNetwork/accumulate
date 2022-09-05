@@ -2,7 +2,6 @@
 
 # Stop immediately on error
 set -e
-
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source "${SCRIPT_DIR}"/validate-commons.sh
 
@@ -14,7 +13,6 @@ function dnPrivKey {
 function signCount {
    echo "$(bc -l <<<"$ACCEPT_THRESHOLD")"
 }
-
 
 function daemon-run {
     if ! RESULT=`accumulated "$@" 2>&1`; then
@@ -38,8 +36,7 @@ if which go >/dev/null || ! which accumulate >/dev/null; then
   go install ./cmd/accumulated
   export PATH="${PATH}:$(go env GOPATH)/bin"
 fi
-
-[ -z "${MNEMONIC}" ] || accumulate key import mnemonic ${MNEMONIC}
+init-wallet
 echo
 
 declare -g NUM_NODES=$(find ${NODES_DIR} -mindepth 1 -maxdepth 1 -type d | wc -l)
@@ -47,12 +44,12 @@ declare -g ACCEPT_THRESHOLD=$(accumulate page get -j dn.acme/operators/1 | jq -r
 
 section "Set major block time to 1 minute"
 TXID=$(daemon-tx -w "${NODES_DIR}/node-1/dnn" set schedule "* * * * *")
-echo RESULT: |$TXID|
+echo "RESULT: |$TXID|"
 wait-for-tx $TXID
 
 # Sign the required number of times
 echo Signature count $(signCount)
-for ((sigNr = 1; sigNr < $(signCount); sigNr++)); do
+for ((sigNr = 2; sigNr <= $(signCount); sigNr++)); do
   echo Signature $sigNr
   wait-for cli-tx-sig tx sign dn.acme/operators "$(dnPrivKey $sigNr)" $TXID
 done

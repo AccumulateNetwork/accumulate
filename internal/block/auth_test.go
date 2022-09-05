@@ -9,8 +9,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/testing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -90,6 +90,9 @@ func TestTransactionIsReady(tt *testing.T) {
 	sig.SignerVersion = signer.Version
 	sig.Timestamp = 1
 	sig.PublicKey = []byte{1}
+
+	// Add a bogus initiator
+	_ = t.Transaction(txn.GetHash()).PutStatus(&protocol.TransactionStatus{Initiator: protocol.AccountUrl("x")})
 
 	// Singlesig unsigned
 	t.Run("Unsigned", func(t BatchTest) {
@@ -512,7 +515,8 @@ func TestCannotDisableAuthForAuthTxns(t *testing.T) {
 		var account *protocol.TokenAccount
 		require.NoError(t, t.Account(alice.JoinPath("tokens")).GetStateAs(&account))
 		account = t.PutAccountCopy(account).(*protocol.TokenAccount)
-		account.AddAuthority(protocol.AccountUrl("foo")).Disabled = true
+		a, _ := account.AddAuthority(protocol.AccountUrl("foo"))
+		a.Disabled = true
 
 		// The transaction
 		txn := new(protocol.Transaction)
@@ -625,7 +629,7 @@ func TestValidateKeyForSynthTxns(t *testing.T) {
 	batch := x.Database.Begin(false)
 	defer batch.Discard()
 	_, err := x.Executor.ValidateEnvelope(batch, deposit)
-	require.EqualError(t, err, fmt.Sprintf("signature %d: the key used to sign does not belong to the originating subnet", index))
+	require.EqualError(t, err, fmt.Sprintf("signature %d: key is not an active validator for BVN0", index))
 }
 
 //Checks if the key used to sign the synthetic transaction belongs to the same subnet
@@ -699,5 +703,5 @@ func TestKeySignaturePartition(t *testing.T) {
 	batch := x.Database.Begin(false)
 	defer batch.Discard()
 	_, err := x.Executor.ValidateEnvelope(batch, deposit)
-	require.EqualError(t, err, fmt.Sprintf("signature %d: the key used to sign does not belong to the originating subnet", index))
+	require.EqualError(t, err, fmt.Sprintf("signature %d: key is not an active validator for BVN0", index))
 }

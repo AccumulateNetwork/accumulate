@@ -24,11 +24,11 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
+	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	_ "gitlab.com/accumulatenetwork/accumulate/smt/pmt"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
 // Accumulator is an ABCI application that accumulates validated transactions in
@@ -89,11 +89,8 @@ func (app *Accumulator) OnFatal(f func(error)) {
 
 // fatal is called when a fatal error occurs. If fatal is called, all subsequent
 // transactions will fail with CodeDidPanic.
-func (app *Accumulator) fatal(err error, setDidPanic bool) {
-	if setDidPanic {
-		app.didPanic = true
-	}
-
+func (app *Accumulator) fatal(err error) {
+	app.didPanic = true
 	app.logger.Error("Fatal error", "error", err, "stack", debug.Stack())
 	sentry.CaptureException(err)
 
@@ -101,13 +98,15 @@ func (app *Accumulator) fatal(err error, setDidPanic bool) {
 		app.onFatal(err)
 	}
 
+	_ = app.EventBus.Publish(events.FatalError{Err: err})
+
 	// Throw the panic back at Tendermint
 	panic(err)
 }
 
 // recover will recover from a panic. If a panic occurs, it is passed to fatal
 // and code is set to CodeDidPanic (unless the pointer is nil).
-func (app *Accumulator) recover(code *uint32, setDidPanic bool) {
+func (app *Accumulator) recover(code *uint32) {
 	r := recover()
 	if r == nil {
 		return
@@ -119,7 +118,7 @@ func (app *Accumulator) recover(code *uint32, setDidPanic bool) {
 	} else {
 		err = fmt.Errorf("panicked: %v", r)
 	}
-	app.fatal(err, setDidPanic)
+	app.fatal(err)
 
 	if code != nil {
 		*code = uint32(protocol.ErrorCodeDidPanic)
@@ -168,8 +167,8 @@ func (app *Accumulator) willChangeGlobals(e events.WillChangeGlobals) error {
 }
 
 // Info implements github.com/tendermint/tendermint/abci/types.Application.
-func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
-	defer app.recover(nil, false)
+func (app *Accumulator) Info(abci.RequestInfo) abci.ResponseInfo {
+	defer app.recover(nil)
 
 	if app.Accumulate.AnalysisLog.Enabled {
 		app.Accumulate.AnalysisLog.InitDataSet("accumulator", logging.DefaultOptions())
@@ -226,46 +225,12 @@ func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
 //
 // Exposed as Tendermint RPC /abci_query.
 func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.ResponseQuery) {
-	defer app.recover(&resQuery.Code, false)
-
-	if app.didPanic {
-		return abci.ResponseQuery{
-			Code: uint32(protocol.ErrorCodeDidPanic),
-			Info: "Node state is invalid",
-		}
+	switch reqQuery.Path {
+	case "/up":
+		return abci.ResponseQuery{Code: uint32(protocol.ErrorCodeOK), Info: "Up"}
 	}
 
-	resQuery.Key = reqQuery.Data
-	qu, err := query.UnmarshalRequest(reqQuery.Data)
-	if err != nil {
-		// sentry.CaptureException(err)
-		app.logger.Debug("Query failed", "error", err)
-		resQuery.Info = "request is not an Accumulate Query"
-		resQuery.Code = uint32(protocol.ErrorCodeEncodingError)
-		return resQuery
-	}
-
-	batch := app.DB.Begin(false)
-	defer batch.Discard()
-
-	k, v, err := app.Executor.Query(batch, qu, reqQuery.Height, reqQuery.Prove)
-	if err != nil {
-		b, _ := errors.Wrap(errors.StatusUnknownError, err).(*errors.Error).MarshalJSON()
-		resQuery.Info = string(b)
-		resQuery.Code = uint32(protocol.ErrorCodeFailed)
-		return resQuery
-	}
-
-	//if we get here, we have a valid state object, so let's return it.
-	resQuery.Code = uint32(protocol.ErrorCodeOK)
-	//return a generic state object for the chain and let the query deal with decoding it
-	resQuery.Key, resQuery.Value = k, v
-
-	///implement lazy sync calls. If a node falls behind it needs to have several query calls
-	///1 get current height
-	///2 get block data for height X
-	///3 get block data for given hash
-	return
+	return abci.ResponseQuery{Code: uint32(protocol.ErrorCodeFailed)}
 }
 
 // InitChain implements github.com/tendermint/tendermint/abci/types.Application.
@@ -286,26 +251,22 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 	}
 
 	app.logger.Info("Initializing")
-	block := new(block.Block)
-	block.Index = protocol.GenesisBlock
-	block.Time = req.Time
-	block.IsLeader = true
-	block.Batch = app.DB.Begin(true)
-	defer block.Batch.Discard()
 
 	// Initialize the chain
-	err = app.Executor.InitFromGenesis(block.Batch, req.AppStateBytes)
+	var snapshot []byte
+	err = json.Unmarshal(req.AppStateBytes, &snapshot)
+	if err != nil {
+		panic(fmt.Errorf("failed to init chain: %+v", err))
+	}
+	err = app.Executor.RestoreSnapshot(app.DB, ioutil2.NewBuffer(snapshot))
 	if err != nil {
 		panic(fmt.Errorf("failed to init chain: %+v", err))
 	}
 
-	// Commit the batch
-	err = block.Batch.Commit()
-	if err != nil {
-		panic(fmt.Errorf("failed to commit block: %v", err))
-	}
-
 	// Notify the world of the committed block
+	block := new(block.Block)
+	block.Index = protocol.GenesisBlock
+	block.Time = req.Time
 	err = app.EventBus.Publish(events.DidCommitBlock{
 		Index: block.Index,
 		Time:  block.Time,
@@ -314,6 +275,21 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 		panic(fmt.Errorf("failed to publish block notification: %v", err))
 	}
 
+	// Compare initial validators with genesis
+	additional, err := app.Executor.InitChainValidators(req.Validators)
+	if err != nil {
+		panic(err)
+	}
+
+	var updates []abci.ValidatorUpdate
+	for _, key := range additional {
+		updates = append(updates, abci.ValidatorUpdate{
+			PubKey: protocrypto.PublicKey{Sum: &protocrypto.PublicKey_Ed25519{Ed25519: key}},
+			Power:  1,
+		})
+	}
+
+	// Get the app state hash
 	err = app.DB.View(func(batch *database.Batch) (err error) {
 		root, err = app.Executor.LoadStateRoot(batch)
 		return err
@@ -322,12 +298,12 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 		panic(fmt.Errorf("failed to load state hash: %v", err))
 	}
 
-	return abci.ResponseInitChain{AppHash: root}
+	return abci.ResponseInitChain{AppHash: root, Validators: updates}
 }
 
 // BeginBlock implements github.com/tendermint/tendermint/abci/types.Application.
 func (app *Accumulator) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBeginBlock {
-	defer app.recover(nil, true)
+	defer app.recover(nil)
 
 	var ret abci.ResponseBeginBlock
 
@@ -342,7 +318,7 @@ func (app *Accumulator) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBegi
 	//Identify the leader for this block, if we are the proposer... then we are the leader.
 	err := app.Executor.BeginBlock(app.block)
 	if err != nil {
-		app.fatal(err, true)
+		app.fatal(err)
 		return ret
 	}
 
@@ -357,7 +333,7 @@ func (app *Accumulator) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBegi
 //
 // Verifies the transaction is sane.
 func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheckTx) {
-	defer app.recover(&rct.Code, true)
+	defer app.recover(&rct.Code)
 
 	// Is the node borked?
 	if app.didPanic {
@@ -397,12 +373,30 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 	var resp abci.ResponseCheckTx
 	resp.Data = respData
 
+	const maxPriority = (1 << 32) - 1
+
+	seq := map[[32]byte]uint64{}
+	for _, env := range envelopes {
+		for _, sig := range env.Signatures {
+			sig, ok := sig.(*protocol.PartitionSignature)
+			if ok {
+				seq[sig.TransactionHash] = sig.SequenceNumber
+			}
+		}
+	}
+
 	// If a user transaction fails, the batch fails
 	for i, result := range results {
-		if typ := envelopes[i].Transaction.Body.Type(); typ.IsSystem() && resp.Priority < 2 {
-			resp.Priority = 2
-		} else if typ.IsSynthetic() && resp.Priority < 1 {
-			resp.Priority = 1
+		var priority int64
+		if typ := envelopes[i].Transaction.Body.Type(); typ.IsSystem() {
+			priority = maxPriority
+		} else if typ.IsSynthetic() {
+			// Set the priority based on the sequence number to try to keep them in order
+			seq := seq[*(*[32]byte)(envelopes[i].Transaction.GetHash())]
+			priority = maxPriority - 1 - int64(seq)
+		}
+		if resp.Priority < priority {
+			resp.Priority = priority
 		}
 		if result.Code.Success() {
 			continue
@@ -411,7 +405,7 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 			continue
 		}
 		resp.Code = uint32(protocol.ErrorCodeUnknownError)
-		resp.Log = "One or more user transactions failed"
+		resp.Log += fmt.Sprintf("envelope(%d/%s) %v;", i, result.Code.String(), result.Error)
 	}
 
 	return resp
@@ -421,7 +415,7 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 //
 // Verifies the transaction is valid.
 func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseDeliverTx) {
-	defer app.recover(&rdt.Code, true)
+	defer app.recover(&rdt.Code)
 
 	// Is the node borked?
 	if app.didPanic {
@@ -447,11 +441,11 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 
 // EndBlock implements github.com/tendermint/tendermint/abci/types.Application.
 func (app *Accumulator) EndBlock(req abci.RequestEndBlock) abci.ResponseEndBlock {
-	defer app.recover(nil, true)
+	defer app.recover(nil)
 
 	err := app.Executor.EndBlock(app.block)
 	if err != nil {
-		app.fatal(err, true)
+		app.fatal(err)
 		return abci.ResponseEndBlock{}
 	}
 
@@ -469,7 +463,7 @@ func (app *Accumulator) EndBlock(req abci.RequestEndBlock) abci.ResponseEndBlock
 //
 // Commits the transaction block to the chains.
 func (app *Accumulator) Commit() abci.ResponseCommit {
-	defer app.recover(nil, true)
+	defer app.recover(nil)
 	defer func() { app.block = nil }()
 
 	tick := time.Now()
@@ -494,7 +488,7 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 	tick = time.Now()
 
 	if err != nil {
-		app.fatal(err, true)
+		app.fatal(err)
 		return abci.ResponseCommit{}
 	}
 
@@ -505,7 +499,7 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 		Major: app.block.State.MakeMajorBlock,
 	})
 	if err != nil {
-		app.fatal(err, true)
+		app.fatal(err)
 		return abci.ResponseCommit{}
 	}
 
@@ -561,6 +555,7 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 	}
 
 	go app.Accumulate.AnalysisLog.Flush()
-	app.logger.Debug("Committed", "minor", app.block.Index, "hash", logging.AsHex(batch.BptRoot()).Slice(0, 4), "major", app.block.State.MakeMajorBlock)
+	duration := time.Since(app.timer)
+	app.logger.Debug("Committed", "minor", app.block.Index, "hash", logging.AsHex(batch.BptRoot()).Slice(0, 4), "major", app.block.State.MakeMajorBlock, "duration", duration, "count", app.txct)
 	return resp
 }

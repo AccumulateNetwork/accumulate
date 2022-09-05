@@ -1,15 +1,16 @@
 package indexing
 
 import (
-	"errors"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-var ErrReachedChainEnd = errors.New("reached the end of the chain")
-var ErrReachedChainStart = errors.New("reached the start of the chain")
+var ErrReachedChainEnd = errors.New(errors.StatusNotFound, "reached the end of the chain")
+var ErrReachedChainStart = errors.New(errors.StatusNotFound, "reached the start of the chain")
+var ErrTargetDoesNotExist = errors.New(errors.StatusNotFound, "target does not exist")
 
 // SearchDirection represents a direction to search along a linear index.
 type SearchDirection int
@@ -61,6 +62,18 @@ func SearchIndexChain(chain *database.Chain, index uint64, mode MatchMode, find 
 		return index, entry, nil
 	}
 
+	// If the entry is the first and is after the target and the mode is after,
+	// return it
+	if index == 0 && dir == SearchBackward && mode == MatchAfter {
+		return index, entry, nil
+	}
+
+	// If the entry is the last and is before the target and the mode is before,
+	// return it
+	if index == uint64(chain.Height())-1 && dir == SearchForward && mode == MatchBefore {
+		return index, entry, nil
+	}
+
 	for {
 		// TODO Add a guard to prevent scanning the entire chain?
 		prevIndex := index
@@ -102,7 +115,7 @@ func SearchIndexChain(chain *database.Chain, index uint64, mode MatchMode, find 
 		// the target does not exist
 		switch mode {
 		default: // SearchExact
-			return 0, nil, fmt.Errorf("target does not exist")
+			return 0, nil, ErrTargetDoesNotExist
 
 		case MatchBefore:
 			return prevIndex, prevEntry, nil
@@ -143,6 +156,25 @@ func SearchIndexChainByBlock(blockIndex uint64) IndexChainSearchFunction {
 
 		// If the entry is after the target, search backward
 		if entry.BlockIndex > blockIndex {
+			return SearchBackward
+		}
+
+		// The target has been found
+		return SearchComplete
+	}
+}
+
+// SearchIndexChainByRootIndexIndex returns a search function that searches an
+// index chain for the given RootIndexIndex.
+func SearchIndexChainByRootIndexIndex(targetRootIndexIndex uint64) IndexChainSearchFunction {
+	return func(entry *protocol.IndexEntry) SearchDirection {
+		// If the entry is before the target, search forward
+		if entry.RootIndexIndex < targetRootIndexIndex {
+			return SearchForward
+		}
+
+		// If the entry is after the target, search backward
+		if entry.RootIndexIndex > targetRootIndexIndex {
 			return SearchBackward
 		}
 

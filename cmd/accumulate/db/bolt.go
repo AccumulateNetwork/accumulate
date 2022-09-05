@@ -22,7 +22,7 @@ var ErrDatabaseAlreadyEncrypted = errors.New("database already encrypted")
 var BucketConfig = []byte("Config")
 
 //WalletVersion is incremented whenever a bucket format is changed.
-var WalletVersion = NewVersion(0, 0, 1, 1)
+var WalletVersion = NewVersion(0, 0, 1, 2)
 
 //magic is used for encryption verification when a database is opened
 var magic = sha256.Sum256([]byte("accumulate"))
@@ -62,7 +62,7 @@ func (b *BoltDB) loadAndVerify(password string) error {
 	}
 
 	//test to see if the magic is in the clear, if so then return the not encrypted error
-	if bytes.Compare(magic[:], magicData) == 0 {
+	if bytes.Equal(magic[:], magicData) {
 		return ErrDatabaseNotEncrypted
 	}
 
@@ -84,7 +84,7 @@ func (b *BoltDB) loadAndVerify(password string) error {
 	}
 
 	//now do a simple comparison of the decrypted data to what we expect to see
-	if bytes.Compare(data, magic[:]) != 0 {
+	if !bytes.Equal(data, magic[:]) {
 		return ErrMalformedEncryptedDatabase
 	}
 

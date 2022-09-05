@@ -2,9 +2,32 @@ package chain
 
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
+
+type SignatureValidationMetadata struct {
+	Location    *url.URL
+	IsInitiator bool
+	Delegated   bool
+	Forwarded   bool
+}
+
+func (d SignatureValidationMetadata) SetDelegated() SignatureValidationMetadata {
+	e := d
+	e.Delegated = true
+	return e
+}
+
+func (d SignatureValidationMetadata) SetForwarded() SignatureValidationMetadata {
+	e := d
+	e.Forwarded = true
+	return e
+}
+
+func (d SignatureValidationMetadata) Nested() bool {
+	return d.Delegated || d.Forwarded
+}
 
 // TransactionExecutor executes a specific type of transaction.
 type TransactionExecutor interface {
@@ -24,7 +47,7 @@ type SignerValidator interface {
 
 	// SignerIsAuthorized checks if the signature is authorized for the
 	// transaction.
-	SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, checkAuthz bool) (fallback bool, err error)
+	SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, md SignatureValidationMetadata) (fallback bool, err error)
 
 	// TransactionIsReady checks if the transaction is ready to be executed.
 	TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (ready, fallback bool, err error)

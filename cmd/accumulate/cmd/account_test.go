@@ -3,9 +3,11 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -16,6 +18,7 @@ func init() {
 	testMatrix.addTest(testCase3_1)
 	testMatrix.addTest(testCase3_2)
 	testMatrix.addTest(testCase3_3)
+	testMatrix.addTest(testCase3_4)
 }
 
 //testCase1_1 Generate 100 lite account addresses in cli
@@ -28,7 +31,7 @@ func testCase1_1(t *testing.T, tc *testCmd) {
 		if _, ok := out["name"]; !ok {
 			t.Fatalf("malformed json, expecting field \"name\"\n")
 		}
-		l, _ := LabelForLiteTokenAccount(liteAccounts[i])
+		l, _ := walletd.LabelForLiteTokenAccount(liteAccounts[i])
 		if out["name"] != l {
 			t.Fatalf("account generate error, expected %s, but got %s", liteAccounts[i], out["name"])
 		}
@@ -38,7 +41,6 @@ func testCase1_1(t *testing.T, tc *testCmd) {
 //unitTest3_1
 //Create ADI Token Account (URL), should pass
 func testCase3_1(t *testing.T, tc *testCmd) {
-	t.Helper()
 
 	r, err := tc.executeTx(t, "account create token acc://RedWagon.acme red1 acc://RedWagon.acme/acct acc://acme acc://RedWagon.acme/book")
 	require.NoError(t, err)
@@ -50,7 +52,6 @@ func testCase3_1(t *testing.T, tc *testCmd) {
 //unitTest3_2
 //Create ADI Token Account without parent ADI, should fail
 func testCase3_2(t *testing.T, tc *testCmd) {
-	t.Helper()
 
 	r, err := tc.execute(t, "account create token acc://RedWagon.acme red1 acmeacct2 acc://acme acc://RedWagon.acme/book")
 	require.Error(t, err)
@@ -62,9 +63,19 @@ func testCase3_2(t *testing.T, tc *testCmd) {
 //unitTest3_3
 //Create ADI Token Account with invalid token URL, should fail
 func testCase3_3(t *testing.T, tc *testCmd) {
-	t.Helper()
 
 	r, err := tc.execute(t, "account create token acc://RedWagon.acme red1 acc://RedWagon.acme/acmeacct acc://factoid.acme acc://RedWagon.acme/book")
+	require.Error(t, err)
+
+	t.Log(r)
+
+}
+
+//unitTest3_4
+//Credit amount with invalid lite address as sender, should fail
+func testCase3_4(t *testing.T, tc *testCmd) {
+
+	r, err := tc.execute(t, "accumulate credits acc://1a2d4a07f9cc525b43a63d8d89e32adca1194bc6e3bc4984 acc://ADIdoesntexist.acme 100")
 	require.Error(t, err)
 
 	t.Log(r)
@@ -74,7 +85,6 @@ func testCase3_3(t *testing.T, tc *testCmd) {
 //unitTest1_2
 //Create Lite Token Accounts based on RCD1-based factoid addresses
 func testCase1_2(t *testing.T, tc *testCmd) {
-	t.Helper()
 
 	fs := "Fs1jQGc9GJjyWNroLPq7x6LbYQHveyjWNPXSqAvCEKpETNoTU5dP"
 	fa := "FA22de5NSG2FA2HmMaD4h8qSAZAJyztmmnwgLPghCQKoSekwYYct"
@@ -86,10 +96,12 @@ func testCase1_2(t *testing.T, tc *testCmd) {
 	require.Equal(t, fa, fa2)
 
 	//quick protocol import check.
-	r, err := tc.execute(t, "key import factoid "+fs)
+	r, err := executeCmd(tc.rootCmd,
+		[]string{"-j", "-s", fmt.Sprintf("%s/v2", tc.jsonRpcAddr), "key", "import", "factoid"},
+		fmt.Sprintf("%v\n", fs))
 	require.NoError(t, err)
 	kr := KeyResponse{}
-	require.NoError(t, json.Unmarshal([]byte(r), &kr))
+	require.NoError(t, json.Unmarshal([]byte(strings.Split(r, ": ")[1]), &kr))
 
 	// make sure the right rcd account exists and the label is a FA address
 	lt, err := protocol.GetLiteAccountFromFactoidAddress(fa)

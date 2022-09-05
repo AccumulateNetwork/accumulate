@@ -5,6 +5,7 @@ import (
 	"sort"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -20,12 +21,14 @@ func (PartitionAnchor) Execute(st *StateManager, tx *Delivery) (protocol.Transac
 	return (PartitionAnchor{}).Validate(st, tx)
 }
 
-func (x PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+func (PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	// Unpack the payload
 	body, ok := tx.Transaction.Body.(*protocol.BlockValidatorAnchor)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.BlockValidatorAnchor), tx.Transaction.Body)
 	}
+
+	st.logger.Info("Received anchor", "module", "anchoring", "source", body.Source, "root", logging.AsHex(body.RootChainAnchor).Slice(0, 4), "bpt", logging.AsHex(body.StateTreeAnchor).Slice(0, 4), "block", body.MinorBlockIndex)
 
 	// Verify the origin
 	ledger, ok := st.Origin.(*protocol.AnchorLedger)
@@ -53,13 +56,19 @@ func (x PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 	}
 
 	// Add the anchor to the chain - use the partition name as the chain name
-	err = st.AddChainEntry(st.OriginUrl, protocol.RootAnchorChain(name), protocol.ChainTypeAnchor, body.RootChainAnchor[:], body.RootChainIndex, body.MinorBlockIndex)
+	record := st.batch.Account(st.OriginUrl).AnchorChain(name)
+	index, err := st.State.ChainUpdates.AddChainEntry2(st.batch, record.Root(), body.RootChainAnchor[:], body.RootChainIndex, body.MinorBlockIndex, false)
 	if err != nil {
 		return nil, err
 	}
+	status, err := st.batch.Transaction(st.txHash[:]).Status().Get()
+	if err != nil {
+		return nil, err
+	}
+	st.State.DidReceiveAnchor(name, body, index, status)
 
 	// And the BPT root
-	err = st.AddChainEntry(st.OriginUrl, protocol.BPTAnchorChain(name), protocol.ChainTypeAnchor, body.StateTreeAnchor[:], 0, 0)
+	_, err = st.State.ChainUpdates.AddChainEntry2(st.batch, record.BPT(), body.StateTreeAnchor[:], 0, 0, false)
 	if err != nil {
 		return nil, err
 	}
@@ -87,6 +96,7 @@ func (x PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 		if len(ledger.PendingMajorBlockAnchors) == 0 {
 			st.logger.Info("Completed major block", "major-index", ledger.MajorBlockIndex, "minor-index", body.MinorBlockIndex)
 			st.State.MakeMajorBlock = ledger.MajorBlockIndex
+			st.State.MakeMajorBlockTime = ledger.MajorBlockTime
 		}
 		return nil, nil
 	}

@@ -22,14 +22,15 @@ var goFuncs = template.FuncMap{
 	"recordType":      recordType,
 	"stateType":       stateType,
 	"parameterType":   parameterType,
+	"keyType":         keyType,
+	"asKey":           asKey,
+	"keyToString":     keyToString,
 	"unionMethod":     unionMethod,
 	"chainName":       chainName,
-	"valueNameFormat": func(r typegen.Record) string { s, _ := valueNameFormat(r); return s },
 	"chainNameFormat": func(r typegen.Record) string { s, _ := chainNameFormat(r); return s },
 	"parameterized":   func(r typegen.Record) bool { return len(r.GetParameters()) > 0 },
 	"parameterCount":  func(r typegen.Record) int { return len(r.GetParameters()) },
 	"add":             func(x, y int) int { return x + y },
-	"isBaseType":      func(r *typegen.EntityRecord) bool { return r.Parent == nil && !r.Root },
 }
 
 func hasChains(r typegen.Record) bool {
@@ -52,18 +53,20 @@ func fieldType(r typegen.Record) string {
 	if len(r.GetParameters()) == 0 {
 		return "*" + recordType(r)
 	}
-	return "map[storage.Key]*" + recordType(r)
+	return "map[" + typegen.LowerFirstWord(r.FullName()) + "Key]*" + recordType(r)
 }
 
 func recordType(r typegen.Record) string {
 	switch r := r.(type) {
 	case typegen.ValueRecord:
 		var typ string
-		switch {
-		case r.IsCounted():
-			typ = "record.Counted"
-		case r.IsSet():
+		switch r.CollectionType() {
+		case typegen.CollectionTypeSet:
 			typ = "record.Set"
+		case typegen.CollectionTypeList:
+			typ = "record.List"
+		case typegen.CollectionTypeCounted:
+			typ = "record.Counted"
 		default:
 			typ = "record.Value"
 		}
@@ -101,6 +104,54 @@ func parameterType(p *typegen.Field) string {
 	return typ
 }
 
+func keyType(p *typegen.Field) string {
+	switch p.Type.Code {
+	case typegen.TypeCodeBytes,
+		typegen.TypeCodeUrl:
+		return "[32]byte"
+	default:
+		return p.Type.GoType()
+	}
+}
+
+func asKey(p *typegen.Field, varName string) string {
+	switch p.Type.Code {
+	case typegen.TypeCodeBytes:
+		return "record.MapKeyBytes(" + varName + ")"
+	case typegen.TypeCodeUrl:
+		return "record.MapKeyUrl(" + varName + ")"
+	default:
+		return varName
+	}
+}
+
+func keyToString(p *typegen.Field, varName string) string {
+	switch p.Type.Code {
+	case typegen.TypeCodeInt:
+		return "strconv.FormatInt(" + varName + ", 10)"
+	case typegen.TypeCodeUint:
+		return "strconv.FormatUint(" + varName + ", 10)"
+	case typegen.TypeCodeBool:
+		return "strconv.FormatBool(" + varName + ")"
+	case typegen.TypeCodeString:
+		return varName
+	case typegen.TypeCodeHash:
+		return "hex.EncodeToString(" + varName + "[:])"
+	case typegen.TypeCodeBytes:
+		return "hex.EncodeToString(" + varName + ")"
+	case typegen.TypeCodeFloat:
+		return "strconv.FormatFloat(" + varName + ", 'g', 3, 10)"
+	case typegen.TypeCodeUrl,
+		typegen.TypeCodeTime,
+		typegen.TypeCodeDuration,
+		typegen.TypeCodeBigInt,
+		typegen.TypeCodeTxid:
+		fallthrough
+	default:
+		return varName + ".String()"
+	}
+}
+
 func parameterFormatters(r typegen.Record, keyDepth int) []string {
 	var formatters []string
 	for i, p := range r.GetParameters() {
@@ -114,36 +165,14 @@ func parameterFormatters(r typegen.Record, keyDepth int) []string {
 	return formatters
 }
 
-func valueNameFormat(r typegen.Record) (string, int) {
-	if r.GetParent() == nil {
-		return "", 0
-	}
-
-	name, keyDepth := valueNameFormat(r.GetParent())
-	if name != "" {
-		name += " "
-	}
-
-	name += typegen.Natural(r.GetName())
-	formatters := parameterFormatters(r, keyDepth+1)
-	if len(formatters) == 0 {
-		return name, keyDepth + 1
-	}
-
-	name += " " + strings.Join(formatters, " ")
-	return name, keyDepth + 1 + len(formatters)
-}
-
 func chainName(r typegen.Record) string {
 	name := r.GetName()
-	if strings.HasSuffix(name, "Chain") {
-		name = name[:len(name)-len("Chain")]
-	}
+	name = strings.TrimSuffix(name, "Chain")
 	return typegen.DashCase(name)
 }
 
 func chainNameFormat(r typegen.Record) (string, int) {
-	if r.GetParent() == nil {
+	if e, ok := r.(*typegen.EntityRecord); ok && (e == nil || e.Root) {
 		return "", 0
 	}
 
@@ -157,9 +186,7 @@ func chainNameFormat(r typegen.Record) (string, int) {
 	}
 
 	rname := r.GetName()
-	if strings.HasSuffix(rname, "Chain") {
-		rname = rname[:len(rname)-len("Chain")]
-	}
+	rname = strings.TrimSuffix(rname, "Chain")
 	rname = typegen.DashCase(rname)
 
 	name += rname

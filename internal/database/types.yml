@@ -9,8 +9,6 @@ sigSetData:
 
 SigSetEntry:
   fields:
-    - name: System
-      type: bool
     - name: Type
       type: protocol.SignatureType
       marshal-as: enum
@@ -18,13 +16,9 @@ SigSetEntry:
       type: uint
     - name: SignatureHash
       type: hash
-
-txSyntheticTxns:
-  fields:
-    - name: Txids
-      type: txid
+    - name: ValidatorKeyHash
+      type: hash
       pointer: true
-      repeatable: true
 
 SigOrTxn:
   fields:
@@ -39,59 +33,28 @@ SigOrTxn:
       type: txid
       pointer: true
 
-merkleState:
+TransactionChainEntry:
   fields:
-    - name: Name
-      type: string
-    - name: Type
-      type: protocol.ChainType
-      marshal-as: enum
-    - name: Count
-      type: uint
-    - name: Pending
-      type: bytes
-      repeatable: true
-    - name: Entries
-      type: bytes
-      repeatable: true
+  - name: Account
+    type: url
+    marshal-as: reference
+    pointer: true
+  - name: Chain
+    description: is the name of the chain
+    type: string
+  - name: ChainIndex
+    description: is the index of the entry in the chain's index chain
+    type: uint
+  - name: AnchorIndex
+    description: is the index of the entry in the anchor chain's index chain
+    type: uint
 
-accountState:
+BlockStateSynthTxnEntry:
   fields:
-    - name: Main
-      description: is the main state of the account
-      type: protocol.Account
-      marshal-as: union
-    - name: Chains
-      description: is the state of the account's chains
-      type: merkleState
-      marshal-as: reference
-      pointer: true
-      repeatable: true
-    - name: Pending
-      description: is the state of the account's pending transactions
-      type: transactionState
-      marshal-as: reference
-      pointer: true
-      repeatable: true
-    - name: Transactions
-      description: is the state of other transactions related to the account
-      type: transactionState
-      marshal-as: reference
-      pointer: true
-      repeatable: true
-
-transactionState:
-  fields:
-    - name: Transaction
-      type: protocol.Transaction
-      marshal-as: reference
-      pointer: true
-    - name: State
-      type: protocol.TransactionStatus
-      marshal-as: reference
-      pointer: true
-    - name: Signatures
-      type: sigSetData
-      marshal-as: reference
-      pointer: true
-      repeatable: true
+  - name: Account
+    type: url
+    pointer: true
+  - name: Transaction
+    type: bytes
+  - name: ChainEntry
+    type: uvarint

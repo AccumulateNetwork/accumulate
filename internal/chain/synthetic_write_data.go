@@ -45,14 +45,8 @@ func executeWriteLiteDataAccount(st *StateManager, entry protocol.DataEntry) (pr
 				return nil, err
 			}
 
-			//compute the hash for this entry
-			entryHash, err := protocol.ComputeFactomEntryHashForAccount(liteDataAccountId, entry.GetData())
-			if err != nil {
-				return nil, err
-			}
-
 			account = origin
-			result.EntryHash = *(*[32]byte)(entryHash)
+			result.EntryHash = *(*[32]byte)(entry.Hash())
 			result.AccountID = liteDataAccountId
 			result.AccountUrl = st.OriginUrl
 		default:
@@ -71,19 +65,14 @@ func executeWriteLiteDataAccount(st *StateManager, entry protocol.DataEntry) (pr
 
 		//the computed data account chain id must match the origin url.
 		if !st.OriginUrl.Equal(u) {
-			return nil, fmt.Errorf("first entry doesnt match chain id")
+			return nil, fmt.Errorf("first entry doesnt match chain id: want %v, got %v", u, st.OriginUrl)
 		}
 
 		lite := new(protocol.LiteDataAccount)
 		lite.Url = u
 
-		entryHash, err := protocol.ComputeFactomEntryHashForAccount(liteDataAccountId, entry.GetData())
-		if err != nil {
-			return nil, err
-		}
-
 		account = lite
-		result.EntryHash = *(*[32]byte)(entryHash)
+		result.EntryHash = *(*[32]byte)(entry.Hash())
 		result.AccountID = liteDataAccountId
 		result.AccountUrl = u
 	}

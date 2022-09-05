@@ -1,14 +1,11 @@
 package chain
 
 import (
-	"fmt"
-	"strings"
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -18,6 +15,14 @@ type ProcessTransactionState struct {
 	ChainUpdates           ChainUpdates
 	MakeMajorBlock         uint64
 	MakeMajorBlockTime     time.Time
+	ReceivedAnchors        []*ReceivedAnchor
+}
+
+type ReceivedAnchor struct {
+	Partition string
+	Body      protocol.AnchorBody
+	Index     int64
+	Status    *protocol.TransactionStatus
 }
 
 // DidProduceTxn records a produced transaction.
@@ -26,6 +31,10 @@ func (s *ProcessTransactionState) DidProduceTxn(url *url.URL, body protocol.Tran
 	txn.Header.Principal = url
 	txn.Body = body
 	s.ProducedTxns = append(s.ProducedTxns, txn)
+}
+
+func (s *ProcessTransactionState) DidReceiveAnchor(partition string, body protocol.AnchorBody, index int64, status *protocol.TransactionStatus) {
+	s.ReceivedAnchors = append(s.ReceivedAnchors, &ReceivedAnchor{partition, body, index, status})
 }
 
 func (s *ProcessTransactionState) ProcessAdditionalTransaction(txn *Delivery) {
@@ -40,35 +49,24 @@ func (s *ProcessTransactionState) Merge(r *ProcessTransactionState) {
 	s.ProducedTxns = append(s.ProducedTxns, r.ProducedTxns...)
 	s.AdditionalTransactions = append(s.AdditionalTransactions, r.AdditionalTransactions...)
 	s.ChainUpdates.Merge(&r.ChainUpdates)
+	s.ReceivedAnchors = append(s.ReceivedAnchors, r.ReceivedAnchors...)
 }
 
 type ChainUpdates struct {
-	chains  map[string]*indexing.ChainUpdate
-	Entries []indexing.ChainUpdate
+	Entries      []*protocol.BlockEntry
+	SynthEntries []*database.BlockStateSynthTxnEntry
 }
 
 func (c *ChainUpdates) Merge(d *ChainUpdates) {
 	for _, u := range d.Entries {
 		c.DidUpdateChain(u)
 	}
+	c.SynthEntries = append(c.SynthEntries, d.SynthEntries...)
 }
 
 // DidUpdateChain records a chain update.
-func (c *ChainUpdates) DidUpdateChain(update indexing.ChainUpdate) {
-	if c.chains == nil {
-		c.chains = map[string]*indexing.ChainUpdate{}
-	}
-
-	str := strings.ToLower(fmt.Sprintf("%s#chain/%s", update.Account, update.Name))
-	ptr, ok := c.chains[str]
-	if ok {
-		*ptr = update
-		return
-	}
-
-	i := len(c.Entries)
+func (c *ChainUpdates) DidUpdateChain(update *protocol.BlockEntry) {
 	c.Entries = append(c.Entries, update)
-	c.chains[str] = &c.Entries[i]
 }
 
 // DidAddChainEntry records a chain update in the block state.
@@ -76,54 +74,52 @@ func (c *ChainUpdates) DidAddChainEntry(batch *database.Batch, u *url.URL, name 
 	if name == protocol.MainChain && typ == protocol.ChainTypeTransaction {
 		partition, ok := protocol.ParsePartitionUrl(u)
 		if ok && protocol.PartitionUrl(partition).JoinPath(protocol.Synthetic).Equal(u) {
-			err := indexing.BlockState(batch, u).DidProduceSynthTxn(&indexing.BlockStateSynthTxnEntry{
+			c.SynthEntries = append(c.SynthEntries, &database.BlockStateSynthTxnEntry{
+				Account:     u,
 				Transaction: entry,
 				ChainEntry:  index,
 			})
-			if err != nil {
-				return errors.Format(errors.StatusUnknownError, "load block state: %w", err)
-			}
 		}
 	}
 
-	var update indexing.ChainUpdate
-	update.Name = name
-	update.Type = typ
+	var update protocol.BlockEntry
 	update.Account = u
+	update.Chain = name
 	update.Index = index
-	update.SourceIndex = sourceIndex
-	update.SourceBlock = sourceBlock
-	update.Entry = entry
-	c.DidUpdateChain(update)
+	c.DidUpdateChain(&update)
 	return nil
 }
 
 // AddChainEntry adds an entry to a chain and records the chain update in the
 // block state.
-func (c *ChainUpdates) AddChainEntry(batch *database.Batch, account *url.URL, name string, typ protocol.ChainType, entry []byte, sourceIndex, sourceBlock uint64) error {
-	// Check if the account exists
-	_, err := batch.Account(account).GetState()
-	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "load account state: %w", err)
-	}
+func (u *ChainUpdates) AddChainEntry(batch *database.Batch, chain *database.Chain2, entry []byte, sourceIndex, sourceBlock uint64) error {
+	_, err := u.AddChainEntry2(batch, chain, entry, sourceIndex, sourceBlock, true)
+	return err
+}
 
+func (u *ChainUpdates) AddChainEntry2(batch *database.Batch, chain *database.Chain2, entry []byte, sourceIndex, sourceBlock uint64, unique bool) (int64, error) {
 	// Add an entry to the chain
-	chain, err := batch.Account(account).Chain(name, typ)
+	c, err := chain.Get()
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "load %s chain: %w", name, err)
+		return 0, errors.Format(errors.StatusUnknownError, "load %s chain: %w", chain.Name(), err)
 	}
 
-	index := chain.Height()
-	err = chain.AddEntry(entry, true)
+	index := c.Height()
+	err = c.AddEntry(entry, true)
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "add entry to %s chain: %w", name, err)
+		return 0, errors.Format(errors.StatusUnknownError, "add entry to %s chain: %w", chain.Name(), err)
 	}
 
 	// The entry was a duplicate, do not update the ledger
-	if index == chain.Height() {
-		return nil
+	if index == c.Height() {
+		return c.HeightOf(entry)
 	}
 
 	// Update the ledger
-	return c.DidAddChainEntry(batch, account, name, typ, entry, uint64(index), sourceIndex, sourceBlock)
+	err = u.DidAddChainEntry(batch, chain.Account(), chain.Name(), chain.Type(), entry, uint64(index), sourceIndex, sourceBlock)
+	if err != nil {
+		return 0, errors.Wrap(errors.StatusUnknownError, err)
+	}
+
+	return index, nil
 }

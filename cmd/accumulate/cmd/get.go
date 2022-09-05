@@ -7,11 +7,11 @@ import (
 	"log"
 
 	"github.com/spf13/cobra"
-	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2/query"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
 // getCmd represents the get command
@@ -28,7 +28,7 @@ var getCmd = &cobra.Command{
 					chainId := types.Bytes32{}
 					err = chainId.FromString(args[1])
 					if err == nil {
-						var q *api2.ChainQueryResponse
+						var q *api.ChainQueryResponse
 						q, err = GetByChainId(chainId[:])
 						if err == nil {
 							var data []byte
@@ -78,10 +78,10 @@ func PrintGet() {
 	//fmt.Println("  accumulate get [transaction id] 		Get data by Accumulate transaction id")
 }
 
-func GetByChainId(chainId []byte) (*api2.ChainQueryResponse, error) {
-	var res api2.ChainQueryResponse
+func GetByChainId(chainId []byte) (*api.ChainQueryResponse, error) {
+	var res api.ChainQueryResponse
 
-	params := api2.ChainIdQuery{}
+	params := api.ChainIdQuery{}
 	params.ChainId = chainId
 
 	data, err := json.Marshal(&params)
@@ -102,7 +102,7 @@ func Get(urlStr string) (string, error) {
 		return "", err
 	}
 
-	req := new(api2.GeneralQuery)
+	req := new(api.GeneralQuery)
 	req.Url = u
 	req.Prove = Prove
 
@@ -127,12 +127,13 @@ func Get(urlStr string) (string, error) {
 		if json.Unmarshal(res, qr) != nil {
 			return string(res), nil
 		}
+
 		return PrintChainQueryResponseV2(qr)
 	}
 
 	// Is it a transaction?
 	if json.Unmarshal(res, new(struct{ Type protocol.TransactionType })) == nil {
-		qr := new(api2.TransactionQueryResponse)
+		qr := new(api.TransactionQueryResponse)
 		if json.Unmarshal(res, qr) != nil {
 			return string(res), nil
 		}
@@ -148,12 +149,12 @@ func getKey(urlStr string, key []byte) (*query.ResponseKeyPageIndex, error) {
 		return nil, err
 	}
 
-	params := new(api2.KeyPageIndexQuery)
+	params := new(api.KeyPageIndexQuery)
 	params.Url = u
 	params.Key = key
 
 	res := new(query.ResponseKeyPageIndex)
-	qres := new(api2.ChainQueryResponse)
+	qres := new(api.ChainQueryResponse)
 	qres.Data = res
 
 	err = queryAs("query-key-index", &params, &qres)

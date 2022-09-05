@@ -10,14 +10,14 @@ engine:
 
 ## Setup
 
-```go
+```go{ id: 3 }
 liteKey := GenerateKey()
 liteAddr := LiteAddress(liteKey, ACME)
 Faucet(liteAddr).
 	Wait().Ok()
 Transaction(liteAddr).
 	WithSigner(liteAddr).
-	AddCredits(liteAddr, 10000).
+	AddCredits(liteAddr, 200000).
 		Oracle(5).
 	Initiate(liteKey).
 	Submit().Wait().Ok()
@@ -72,7 +72,7 @@ txn2 = Transaction("ethan.acme/book/1").
 	Submit()
 txn3 := Transaction("ethan.acme/book/1").
 	WithSigner("paul.acme/book/1", 1).
-	WithHash(txn2.Hash[:]).
+	WithPending(txn2).
 	Sign(paulKey).
 	Submit()
 txn1.Wait().Ok()
@@ -87,6 +87,81 @@ Transaction(liteAddr).
 	Submit().Wait().Ok()
 Show("Fund token account ✔")
 ```
+
+```{ result_of: 3, id: 1, mime: "text/plain" }
+Create lite account ✔
+
+```
+
+```{ result_of: 3, id: 1, mime: "application/json" }
+"Create lite account ✔"
+```
+
+```{ result_of: 3, id: 2, mime: "text/plain" }
+Create ADIs ✔
+
+```
+
+```{ result_of: 3, id: 2, mime: "application/json" }
+"Create ADIs ✔"
+```
+
+```{ result_of: 3, id: 3, mime: "text/plain" }
+Add credits to key pages ✔
+
+```
+
+```{ result_of: 3, id: 3, mime: "application/json" }
+"Add credits to key pages ✔"
+```
+
+```{ result_of: 3, id: 4, mime: "application/vnd.code.notebook.stderr" }
+
+	Error Trace:	/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/simulator.go:359
+	            				/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/simulator.go:508
+	            				/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/simulator.go:528
+	            				/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/engine_simulator.go:127
+	            				/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/submit.go:194
+	            				/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/value.go:556
+	            				/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/value.go:339
+	            				/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/run.go:1484
+	            				/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/run.go:1658
+	            				/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/run.go:201
+	            				/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/run.go:120
+	            				/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/program.go:157
+	            				/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/program.go:192
+	            				/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/asm_amd64.s:1571
+	Error:      	Received unexpected error:
+	            	load transaction: transaction 1E940417976A4D0C9ABCC7A6C07441455089F29DB5509431B0A5F1150BAFDAAC not found
+	            	gitlab.com/accumulatenetwork/accumulate/internal/block/simulator.(*ExecEntry).executeBlock.func3
+	            	    /home/firelizzard/src/Accumulate/accumulate/internal/block/simulator/simulator.go:650
+	            	gitlab.com/accumulatenetwork/accumulate/internal/chain.(*Delivery).LoadTransaction
+	            	    /home/firelizzard/src/Accumulate/accumulate/internal/chain/delivery.go:224
+	            	
+	            	transaction 1E940417976A4D0C9ABCC7A6C07441455089F29DB5509431B0A5F1150BAFDAAC not found
+	            	gitlab.com/accumulatenetwork/accumulate/internal/database.(*Transaction).GetState
+	            	    /home/firelizzard/src/Accumulate/accumulate/internal/database/transaction.go:38
+	            	
+	            	transaction 1e940417976a4d0c9abcc7a6c07441455089f29db5509431b0a5f1150bafdaac main not found
+	            	gitlab.com/accumulatenetwork/accumulate/internal/database/record.(*Value[...]).Get
+	            	    /home/firelizzard/src/Accumulate/accumulate/internal/database/record/value.go:144
+	Test:       	notebook.go
+
+
+```
+
+```{ result_of: 3, id: 5, mime: "application/vnd.code.notebook.stderr" }
+5:16: panic
+
+```
+
+```{ result_of: 3, id: 6, mime: "application/vnd.code.notebook.error" }
+{
+	"name": "Panic",
+	"message": "{\n\tError Trace:\t/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/simulator.go:359\n\t            \t\t\t\t/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/simulator.go:508\n\t            \t\t\t\t/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/simulator.go:528\n\t            \t\t\t\t/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/engine_simulator.go:127\n\t            \t\t\t\t/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/submit.go:194\n\t            \t\t\t\t/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/value.go:556\n\t            \t\t\t\t/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/value.go:339\n\t            \t\t\t\t/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/run.go:1484\n\t            \t\t\t\t/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/run.go:1658\n\t            \t\t\t\t/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/run.go:201\n\t            \t\t\t\t/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/run.go:120\n\t            \t\t\t\t/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/program.go:157\n\t            \t\t\t\t/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/program.go:192\n\t            \t\t\t\t/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/asm_amd64.s:1571\n\tError:      \tReceived unexpected error:\n\t            \tload transaction: transaction 1E940417976A4D0C9ABCC7A6C07441455089F29DB5509431B0A5F1150BAFDAAC not found\n\t            \tgitlab.com/accumulatenetwork/accumulate/internal/block/simulator.(*ExecEntry).executeBlock.func3\n\t            \t    /home/firelizzard/src/Accumulate/accumulate/internal/block/simulator/simulator.go:650\n\t            \tgitlab.com/accumulatenetwork/accumulate/internal/chain.(*Delivery).LoadTransaction\n\t            \t    /home/firelizzard/src/Accumulate/accumulate/internal/chain/delivery.go:224\n\t            \t\n\t            \ttransaction 1E940417976A4D0C9ABCC7A6C07441455089F29DB5509431B0A5F1150BAFDAAC not found\n\t            \tgitlab.com/accumulatenetwork/accumulate/internal/database.(*Transaction).GetState\n\t            \t    /home/firelizzard/src/Accumulate/accumulate/internal/database/transaction.go:38\n\t            \t\n\t            \ttransaction 1e940417976a4d0c9abcc7a6c07441455089f29db5509431b0a5f1150bafdaac main not found\n\t            \tgitlab.com/accumulatenetwork/accumulate/internal/database/record.(*Value[...]).Get\n\t            \t    /home/firelizzard/src/Accumulate/accumulate/internal/database/record/value.go:144\n\tTest:       \tnotebook.go\n\n}",
+	"stack": "goroutine 102 [running]:\nruntime/debug.Stack()\n\t/usr/lib/go/src/runtime/debug/stack.go:24 +0x65\ngitlab.com/ethan.reesor/vscode-notebooks/yaegi/interp.(*Interpreter).Execute.func1()\n\t/home/firelizzard/go/pkg/mod/gitlab.com/ethan.reesor/vscode-notebooks/yaegi@v0.0.0-20220417214422-5c573557938e/interp/program.go:141 +0x94\npanic({0x16ca5a0, 0xc001595990})\n\t/usr/lib/go/src/runtime/panic.go:838 +0x207\ngitlab.com/ethan.reesor/vscode-notebooks/yaegi/interp.runCfg.func1()\n\t/home/firelizzard/go/pkg/mod/gitlab.com/ethan.reesor/vscode-notebooks/yaegi@v0.0.0-20220417214422-5c573557938e/interp/run.go:193 +0x145\npanic({0x16ca5a0, 0xc001595990})\n\t/usr/lib/go/src/runtime/panic.go:838 +0x207\ngitlab.com/accumulatenetwork/accumulate/cmd/play-accumulate/pkg.(*Session).Abort(...)\n\t/home/firelizzard/src/Accumulate/accumulate/cmd/play-accumulate/pkg/session.go:52\ngitlab.com/accumulatenetwork/accumulate/cmd/play-accumulate/pkg.(*sessionTB).FailNow(0x0?)\n\t/home/firelizzard/src/Accumulate/accumulate/cmd/play-accumulate/pkg/engine_simulator.go:41 +0xa5\ngithub.com/stretchr/testify/require.NoError({0x1ca9240, 0xc0015956a0}, {0x1c9f6c0, 0xc000301570}, {0x0, 0x0, 0x0})\n\t/home/firelizzard/go/pkg/mod/github.com/stretchr/testify@v1.8.0/require/require.go:1264 +0xb4\ngitlab.com/accumulatenetwork/accumulate/internal/block/simulator.(*Simulator).ExecuteBlock(0xc00013e120, 0x0)\n\t/home/firelizzard/src/Accumulate/accumulate/internal/block/simulator/simulator.go:359 +0x149\ngitlab.com/accumulatenetwork/accumulate/internal/block/simulator.(*Simulator).WaitForTransaction(0x0?, 0x8?, {0xc0007aaf00, 0x20, 0x20}, 0x32)\n\t/home/firelizzard/src/Accumulate/accumulate/internal/block/simulator/simulator.go:508 +0x79\ngitlab.com/accumulatenetwork/accumulate/internal/block/simulator.(*Simulator).WaitForTransactionFlow(0xc00013e120, 0x8?, {0xc0007aaf00, 0x20, 0x20})\n\t/home/firelizzard/src/Accumulate/accumulate/internal/block/simulator/simulator.go:528 +0x95\ngitlab.com/accumulatenetwork/accumulate/cmd/play-accumulate/pkg.SimEngine.WaitFor({0xc0004f3380?}, {0x0, 0xd2, 0xf6, 0x7b, 0xdc, 0x23, 0xb7, 0x8d, 0xf6, ...}, ...)\n\t/home/firelizzard/src/Accumulate/accumulate/cmd/play-accumulate/pkg/engine_simulator.go:127 +0x7b\ngitlab.com/accumulatenetwork/accumulate/cmd/play-accumulate/pkg.(*submittedTxn).Wait(0xc00134a780)\n\t/home/firelizzard/src/Accumulate/accumulate/cmd/play-accumulate/pkg/submit.go:194 +0x73\nreflect.Value.call({0x172f420?, 0xc00068f010?, 0x47a637?}, {0x18987a2, 0x4}, {0x2858198, 0x0, 0x4e1c2b?})\n\t/usr/lib/go/src/reflect/value.go:556 +0x845\nreflect.Value.Call({0x172f420?, 0xc00068f010?, 0x455092?}, {0x2858198, 0x0, 0x0})\n\t/usr/lib/go/src/reflect/value.go:339 +0xbf\ngitlab.com/ethan.reesor/vscode-notebooks/yaegi/interp.callBin.func1({0x172f420?, 0xc00068f010?, 0x4e1c65?}, {0x2858198?, 0xc0004d94c8?, 0xc000dd3d18?})\n\t/home/firelizzard/go/pkg/mod/gitlab.com/ethan.reesor/vscode-notebooks/yaegi@v0.0.0-20220417214422-5c573557938e/interp/run.go:1484 +0x28\ngitlab.com/ethan.reesor/vscode-notebooks/yaegi/interp.callBin.func10(0xc00060e370)\n\t/home/firelizzard/go/pkg/mod/gitlab.com/ethan.reesor/vscode-notebooks/yaegi@v0.0.0-20220417214422-5c573557938e/interp/run.go:1658 +0x158\ngitlab.com/ethan.reesor/vscode-notebooks/yaegi/interp.runCfg(0xc0006b7e60, 0xc00060e370, 0x1650d00?, 0xc0000abee8?)\n\t/home/firelizzard/go/pkg/mod/gitlab.com/ethan.reesor/vscode-notebooks/yaegi@v0.0.0-20220417214422-5c573557938e/interp/run.go:201 +0x29d\ngitlab.com/ethan.reesor/vscode-notebooks/yaegi/interp.(*Interpreter).run(0xc000726240, 0xc0006b7b00, 0x10fa27020857f3?)\n\t/home/firelizzard/go/pkg/mod/gitlab.com/ethan.reesor/vscode-notebooks/yaegi@v0.0.0-20220417214422-5c573557938e/interp/run.go:120 +0x374\ngitlab.com/ethan.reesor/vscode-notebooks/yaegi/interp.(*Interpreter).Execute(0xc000726240, 0xc000e80270)\n\t/home/firelizzard/go/pkg/mod/gitlab.com/ethan.reesor/vscode-notebooks/yaegi@v0.0.0-20220417214422-5c573557938e/interp/program.go:157 +0x11a\ngitlab.com/ethan.reesor/vscode-notebooks/yaegi/interp.(*Interpreter).ExecuteWithContext.func1()\n\t/home/firelizzard/go/pkg/mod/gitlab.com/ethan.reesor/vscode-notebooks/yaegi@v0.0.0-20220417214422-5c573557938e/interp/program.go:192 +0x72\ncreated by gitlab.com/ethan.reesor/vscode-notebooks/yaegi/interp.(*Interpreter).ExecuteWithContext\n\t/home/firelizzard/go/pkg/mod/gitlab.com/ethan.reesor/vscode-notebooks/yaegi@v0.0.0-20220417214422-5c573557938e/interp/program.go:190 +0x18a\n"
+}
+```
 ## Send tokens using a delegated signature
 
 ```go{ id: 2 }
@@ -98,4 +173,37 @@ Show(Transaction("ethan.acme/tokens").
 	Initiate(paulKey).
 	Submit().Wait().Ok())
 Show(Get("ethan.acme/tokens"))
+```
+
+```{ result_of: 2, id: 1, mime: "application/vnd.code.notebook.stderr" }
+
+	Error Trace:	/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/simulator.go:530
+	            				/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/engine_simulator.go:127
+	            				/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/submit.go:194
+	            				/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/value.go:556
+	            				/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/value.go:339
+	            				/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/run.go:1484
+	            				/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/run.go:1658
+	            				/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/run.go:201
+	            				/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/run.go:120
+	            				/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/program.go:157
+	            				/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/program.go:192
+	            				/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/asm_amd64.s:1571
+	Error:      	Transaction 085C16D6 has not been delivered after 50 blocks
+	Test:       	notebook.go
+
+
+```
+
+```{ result_of: 2, id: 2, mime: "application/vnd.code.notebook.stderr" }
+5:10: panic
+
+```
+
+```{ result_of: 2, id: 3, mime: "application/vnd.code.notebook.error" }
+{
+	"name": "Panic",
+	"message": "{\n\tError Trace:\t/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/simulator.go:530\n\t            \t\t\t\t/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/engine_simulator.go:127\n\t            \t\t\t\t/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/submit.go:194\n\t            \t\t\t\t/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/value.go:556\n\t            \t\t\t\t/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/value.go:339\n\t            \t\t\t\t/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/run.go:1484\n\t            \t\t\t\t/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/run.go:1658\n\t            \t\t\t\t/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/run.go:201\n\t            \t\t\t\t/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/run.go:120\n\t            \t\t\t\t/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/program.go:157\n\t            \t\t\t\t/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/program.go:192\n\t            \t\t\t\t/home/firelizzard/src/Accumulate/accumulate/playbooks/validate/asm_amd64.s:1571\n\tError:      \tTransaction 085C16D6 has not been delivered after 50 blocks\n\tTest:       \tnotebook.go\n\n}",
+	"stack": "goroutine 729 [running]:\nruntime/debug.Stack()\n\t/usr/lib/go/src/runtime/debug/stack.go:24 +0x65\ngitlab.com/ethan.reesor/vscode-notebooks/yaegi/interp.(*Interpreter).Execute.func1()\n\t/home/firelizzard/go/pkg/mod/gitlab.com/ethan.reesor/vscode-notebooks/yaegi@v0.0.0-20220417214422-5c573557938e/interp/program.go:141 +0x94\npanic({0x16ca5a0, 0xc001b0e450})\n\t/usr/lib/go/src/runtime/panic.go:838 +0x207\ngitlab.com/ethan.reesor/vscode-notebooks/yaegi/interp.runCfg.func1()\n\t/home/firelizzard/go/pkg/mod/gitlab.com/ethan.reesor/vscode-notebooks/yaegi@v0.0.0-20220417214422-5c573557938e/interp/run.go:193 +0x145\npanic({0x16ca5a0, 0xc001b0e450})\n\t/usr/lib/go/src/runtime/panic.go:838 +0x207\ngitlab.com/accumulatenetwork/accumulate/cmd/play-accumulate/pkg.(*Session).Abort(...)\n\t/home/firelizzard/src/Accumulate/accumulate/cmd/play-accumulate/pkg/session.go:52\ngitlab.com/accumulatenetwork/accumulate/cmd/play-accumulate/pkg.(*sessionTB).FailNow(0xc00013e120?)\n\t/home/firelizzard/src/Accumulate/accumulate/cmd/play-accumulate/pkg/engine_simulator.go:41 +0xa5\ngithub.com/stretchr/testify/assert.FailNow({0x1c9f480, 0xc00013e120}, {0xc000fd9980, 0x3b}, {0x0, 0x0, 0x0})\n\t/home/firelizzard/go/pkg/mod/github.com/stretchr/testify@v1.8.0/assert/assertions.go:235 +0xb3\ngithub.com/stretchr/testify/require.FailNow({0x1ca6db0, 0xc00013e120}, {0xc000fd9980, 0x3b}, {0x0, 0x0, 0x0})\n\t/home/firelizzard/go/pkg/mod/github.com/stretchr/testify@v1.8.0/require/require.go:423 +0x96\ngitlab.com/accumulatenetwork/accumulate/internal/block/simulator.(*Simulator).WaitForTransactionFlow(0xc00013e120, 0x412347?, {0xc0007b4380, 0x20, 0x20})\n\t/home/firelizzard/src/Accumulate/accumulate/internal/block/simulator/simulator.go:530 +0x487\ngitlab.com/accumulatenetwork/accumulate/cmd/play-accumulate/pkg.SimEngine.WaitFor({0xc0004f3380?}, {0x8, 0x5c, 0x16, 0xd6, 0xd0, 0xed, 0xe3, 0x36, 0x88, ...}, ...)\n\t/home/firelizzard/src/Accumulate/accumulate/cmd/play-accumulate/pkg/engine_simulator.go:127 +0x7b\ngitlab.com/accumulatenetwork/accumulate/cmd/play-accumulate/pkg.(*submittedTxn).Wait(0xc0002e2c40)\n\t/home/firelizzard/src/Accumulate/accumulate/cmd/play-accumulate/pkg/submit.go:194 +0x73\nreflect.Value.call({0x172f420?, 0xc0004d86d8?, 0x172f420?}, {0x18987a2, 0x4}, {0x2858198, 0x0, 0x4e1c2b?})\n\t/usr/lib/go/src/reflect/value.go:556 +0x845\nreflect.Value.Call({0x172f420?, 0xc0004d86d8?, 0x455092?}, {0x2858198, 0x0, 0x0})\n\t/usr/lib/go/src/reflect/value.go:339 +0xbf\ngitlab.com/ethan.reesor/vscode-notebooks/yaegi/interp.callBin.func1({0x172f420?, 0xc0004d86d8?, 0xc0003acd10?}, {0x2858198?, 0xc0002e2c40?, 0x1100004050f4?})\n\t/home/firelizzard/go/pkg/mod/gitlab.com/ethan.reesor/vscode-notebooks/yaegi@v0.0.0-20220417214422-5c573557938e/interp/run.go:1484 +0x28\ngitlab.com/ethan.reesor/vscode-notebooks/yaegi/interp.callBin.func10(0xc00060e370)\n\t/home/firelizzard/go/pkg/mod/gitlab.com/ethan.reesor/vscode-notebooks/yaegi@v0.0.0-20220417214422-5c573557938e/interp/run.go:1658 +0x158\ngitlab.com/ethan.reesor/vscode-notebooks/yaegi/interp.runCfg(0xc001523b00, 0xc00060e370, 0x15b8e20?, 0xc0003acee8?)\n\t/home/firelizzard/go/pkg/mod/gitlab.com/ethan.reesor/vscode-notebooks/yaegi@v0.0.0-20220417214422-5c573557938e/interp/run.go:201 +0x29d\ngitlab.com/ethan.reesor/vscode-notebooks/yaegi/interp.(*Interpreter).run(0xc000726240, 0xc001522360, 0xc000044148?)\n\t/home/firelizzard/go/pkg/mod/gitlab.com/ethan.reesor/vscode-notebooks/yaegi@v0.0.0-20220417214422-5c573557938e/interp/run.go:120 +0x374\ngitlab.com/ethan.reesor/vscode-notebooks/yaegi/interp.(*Interpreter).Execute(0xc000726240, 0xc000de6f00)\n\t/home/firelizzard/go/pkg/mod/gitlab.com/ethan.reesor/vscode-notebooks/yaegi@v0.0.0-20220417214422-5c573557938e/interp/program.go:157 +0x11a\ngitlab.com/ethan.reesor/vscode-notebooks/yaegi/interp.(*Interpreter).ExecuteWithContext.func1()\n\t/home/firelizzard/go/pkg/mod/gitlab.com/ethan.reesor/vscode-notebooks/yaegi@v0.0.0-20220417214422-5c573557938e/interp/program.go:192 +0x72\ncreated by gitlab.com/ethan.reesor/vscode-notebooks/yaegi/interp.(*Interpreter).ExecuteWithContext\n\t/home/firelizzard/go/pkg/mod/gitlab.com/ethan.reesor/vscode-notebooks/yaegi@v0.0.0-20220417214422-5c573557938e/interp/program.go:190 +0x18a\n"
+}
 ```

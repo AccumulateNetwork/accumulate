@@ -1,5 +1,7 @@
 package pkg
 
+//lint:file-ignore ST1001 Don't care
+
 import (
 	"context"
 	"errors"
@@ -14,14 +16,14 @@ import (
 
 	"github.com/fatih/color"
 	. "github.com/russross/blackfriday/v2"
-	"gitlab.com/accumulatenetwork/accumulate/internal/client"
+	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/ethan.reesor/vscode-notebooks/yaegi/interp"
 	"gitlab.com/ethan.reesor/vscode-notebooks/yaegi/stdlib"
 )
 
 var reYamlDoc = regexp.MustCompile("(?m)^---$")
-var reCodeFence = regexp.MustCompile("^([^\\s\\{]*)(\\{[^\\n]*\\})?")
+var reCodeFence = regexp.MustCompile(`^([^\s\{]*)(\{[^\n]*\})?`)
 
 func ExecuteFile(ctx context.Context, filename string, simBvns int, client *client.Client) error {
 	contents, err := ioutil.ReadFile(filename)

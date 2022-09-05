@@ -5,23 +5,19 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"log"
 	"math"
 	"math/big"
-	"strconv"
 	"strings"
-	"time"
 	"unicode"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
-	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
-	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types"
 )
@@ -33,9 +29,9 @@ func runCmdFunc(fn func(args []string) (string, error)) func(cmd *cobra.Command,
 	}
 }
 
-func runTxnCmdFunc(fn func(principal *url2.URL, signers []*signing.Builder, args []string) (string, error)) func(cmd *cobra.Command, args []string) {
+func runTxnCmdFunc(fn func(principal *url.URL, signers []*signing.Builder, args []string) (string, error)) func(cmd *cobra.Command, args []string) {
 	return runCmdFunc(func(args []string) (string, error) {
-		principal, err := url2.Parse(args[0])
+		principal, err := url.Parse(args[0])
 		if err != nil {
 			return "", err
 		}
@@ -49,16 +45,16 @@ func runTxnCmdFunc(fn func(principal *url2.URL, signers []*signing.Builder, args
 	})
 }
 
-func getRecord(urlStr string, rec interface{}) (*api2.MerkleState, error) {
-	u, err := url2.Parse(urlStr)
+func getRecord(urlStr string, rec interface{}) (*api.MerkleState, error) {
+	u, err := url.Parse(urlStr)
 	if err != nil {
 		return nil, err
 	}
 
-	params := api2.UrlQuery{
+	params := api.UrlQuery{
 		Url: u,
 	}
-	res := new(api2.ChainQueryResponse)
+	res := new(api.ChainQueryResponse)
 	res.Data = rec
 	if err := Client.RequestAPIv2(context.Background(), "query", &params, res); err != nil {
 		return nil, err
@@ -66,111 +62,155 @@ func getRecord(urlStr string, rec interface{}) (*api2.MerkleState, error) {
 	return res.MainChain, nil
 }
 
-func prepareSigner(origin *url2.URL, args []string) ([]string, []*signing.Builder, error) {
-	if len(args) == 0 {
-		return nil, nil, fmt.Errorf("insufficent arguments on comand line")
-	}
-
-	var key *Key
-	var err error
-	if IsLiteTokenAccount(origin.String()) {
-		key, err = LookupByLiteTokenUrl(origin.String())
-		if err != nil {
-			return nil, nil, fmt.Errorf("unable to find private key for lite token account %s %v", origin.String(), err)
-		}
-
-	} else if IsLiteIdentity(origin.String()) {
-		key, err = LookupByLiteIdentityUrl(origin.String())
-		if err != nil {
-			return nil, nil, fmt.Errorf("unable to find private key for lite identity account %s %v", origin.String(), err)
-		}
-	}
-
-	firstSigner := new(signing.Builder)
-	firstSigner.Type = protocol.SignatureTypeLegacyED25519
-	firstSigner.SetTimestamp(nonceFromTimeNow())
-
-	for _, del := range Delegators {
-		u, err := url2.Parse(del)
-		if err != nil {
-			return nil, nil, fmt.Errorf("invalid delegator %q: %v", del, err)
-		}
-		firstSigner.AddDelegator(u)
-	}
-
-	if key != nil {
-		firstSigner.Type = key.Type
-		firstSigner.Url = origin.RootIdentity()
-		firstSigner.Version = 1
-		firstSigner.SetPrivateKey(key.PrivateKey)
-		return args, []*signing.Builder{firstSigner}, nil
-	}
-
-	args, err = prepareSignerPage(firstSigner, origin, args...)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	signers := []*signing.Builder{firstSigner}
+func prepareSigner(origin *url.URL, args []string) ([]string, []*signing.Builder, error) {
+	var signers []*signing.Builder
 	for _, name := range AdditionalSigners {
 		signer := new(signing.Builder)
-		signer.Type = protocol.SignatureTypeLegacyED25519
-		_, err = prepareSignerPage(signer, origin, name)
+		err := prepareSignerFromName(origin, signer, name)
 		if err != nil {
 			return nil, nil, err
 		}
 		signers = append(signers, signer)
 	}
 
+	firstSigner := new(signing.Builder)
+	firstSigner.SetTimestampToNow()
+
+	for _, del := range Delegators {
+		u, err := url.Parse(del)
+		if err != nil {
+			return nil, nil, fmt.Errorf("invalid delegator %q: %v", del, err)
+		}
+		firstSigner.AddDelegator(u)
+	}
+
+	lite, err := prepareSignerLite(firstSigner, origin.String())
+	if err != nil {
+		return nil, nil, err
+	}
+	if !lite {
+		if len(args) == 0 {
+			return nil, nil, fmt.Errorf("key name argument is missing")
+		}
+
+		err = prepareSignerPage(firstSigner, origin, args[0])
+		if err != nil {
+			return nil, nil, err
+		}
+		args = args[1:]
+	}
+
+	// Put the first signer first
+	signers = append(signers, nil)
+	copy(signers[1:], signers)
+	signers[0] = firstSigner
 	return args, signers, nil
 }
 
-func prepareSignerPage(signer *signing.Builder, origin *url.URL, args ...string) ([]string, error) {
+func prepareSignerFromName(principal *url.URL, signer *signing.Builder, name string) error {
+	// If the name is a URL, and that is a lite address, and we can prepare a
+	// lite address signer, then it's a lite address. In any other condition,
+	// assume the name is a labeled key belonging to a key page.
+
+	u, err := url.Parse(name)
+	if err != nil {
+		return prepareSignerPage(signer, principal, name)
+	}
+
+	_, err = protocol.ParseLiteAddress(u)
+	if err != nil {
+		return prepareSignerPage(signer, principal, name)
+	}
+
+	lite, err := prepareSignerLite(signer, name)
+	if err != nil {
+		return err
+	}
+	if !lite {
+		return prepareSignerPage(signer, principal, name)
+	}
+
+	return nil
+}
+
+func prepareSignerLite(signer *signing.Builder, str string) (bool, error) {
+	// If the signer string is not a URL it can't be a lite address
+	u, err := url.Parse(str)
+	if err != nil {
+		return false, nil
+	}
+
+	var key *walletd.Key
+	isLiteTokenAccount, _ := IsLiteTokenAccount(str)
+	if isLiteTokenAccount {
+		key, err = walletd.LookupByLiteTokenUrl(str)
+		if err != nil {
+			return false, fmt.Errorf("unable to find private key for lite token account %s %v", str, err)
+		}
+
+	} else {
+		isLiteIdentity, err := IsLiteIdentity(str)
+		if err != nil {
+			return false, err
+		}
+		if !isLiteIdentity {
+			return false, nil
+		}
+		key, err = walletd.LookupByLiteIdentityUrl(str)
+		if err != nil {
+			return false, fmt.Errorf("unable to find private key for lite identity account %s %v", str, err)
+		}
+	}
+
+	signer.Type = key.KeyInfo.Type
+	signer.Url = u.RootIdentity()
+	signer.Version = 1
+	signer.SetPrivateKey(key.PrivateKey)
+	return true, nil
+}
+
+func prepareSignerPage(signer *signing.Builder, origin *url.URL, signingKey string) error {
 	var keyName string
-	keyHolder, err := url2.Parse(args[0])
+	keyHolder, err := url.Parse(signingKey)
 	if err == nil && keyHolder.UserInfo != "" {
 		keyName = keyHolder.UserInfo
-		keyHolder.UserInfo = ""
+		keyHolder = keyHolder.WithUserInfo("")
 	} else {
 		keyHolder = origin
-		keyName = args[0]
+		keyName = signingKey
 	}
 
 	key, err := resolvePrivateKey(keyName)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	signer.SetPrivateKey(key.PrivateKey)
-	ct := 1
 
-	signer.Type = key.Type
+	signer.Type = key.KeyInfo.Type
 
 	keyInfo, err := getKey(keyHolder.String(), key.PublicKeyHash())
 	if err != nil {
-		return nil, fmt.Errorf("failed to get key for %q : %v", origin, err)
+		return fmt.Errorf("failed to get key for %q : %v", origin, err)
 	}
 
-	if len(args) < 2 {
-		signer.Url = keyInfo.Signer
-	} else if v, err := strconv.ParseUint(args[1], 10, 64); err == nil {
-		signer.Url = protocol.FormatKeyPageUrl(keyInfo.Authority, v)
-		ct++
-	} else {
-		signer.Url = keyInfo.Signer
-	}
+	signer.Url = keyInfo.Signer
 
 	var page *protocol.KeyPage
 	_, err = getRecord(signer.Url.String(), &page)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get %q : %v", keyInfo.Signer, err)
+		return fmt.Errorf("failed to get %q : %v", keyInfo.Signer, err)
 	}
-	signer.Version = page.Version
+	if SignerVersion != 0 {
+		signer.Version = uint64(SignerVersion)
+	} else {
+		signer.Version = page.Version
+	}
 
-	return args[ct:], nil
+	return nil
 }
 
-func parseArgsAndPrepareSigner(args []string) ([]string, *url2.URL, []*signing.Builder, error) {
-	principal, err := url2.Parse(args[0])
+func parseArgsAndPrepareSigner(args []string) ([]string, *url.URL, []*signing.Builder, error) {
+	principal, err := url.Parse(args[0])
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -183,22 +223,34 @@ func parseArgsAndPrepareSigner(args []string) ([]string, *url2.URL, []*signing.B
 	return args, principal, signers, nil
 }
 
-func IsLiteTokenAccount(url string) bool {
-	u, err := url2.Parse(url)
+func IsLiteTokenAccount(urlstr string) (bool, error) {
+	u, err := url.Parse(strings.Trim(urlstr, " "))
 	if err != nil {
-		log.Fatal(err)
+		return false, err
 	}
-	key, _, _ := protocol.ParseLiteTokenAddress(u)
-	return key != nil
+	if strings.Contains(u.Hostname(), ".") {
+		return false, nil
+	}
+	key, _, err := protocol.ParseLiteTokenAddress(u)
+	if err != nil {
+		return false, fmt.Errorf("invalid lite token address : %s", u.String())
+	}
+	return key != nil, nil
 }
 
-func IsLiteIdentity(url string) bool {
-	u, err := url2.Parse(url)
+func IsLiteIdentity(urlstr string) (bool, error) {
+	u, err := url.Parse(strings.Trim(urlstr, " "))
 	if err != nil {
-		log.Fatal(err)
+		return false, err
 	}
-	key, _ := protocol.ParseLiteIdentity(u)
-	return key != nil
+	if strings.Contains(u.Hostname(), ".") {
+		return false, nil
+	}
+	key, err := protocol.ParseLiteIdentity(u)
+	if err != nil {
+		return false, fmt.Errorf("invalid lite identity : %s", u.String())
+	}
+	return key != nil, nil
 }
 
 // Remarshal uses mapstructure to convert a generic JSON-decoded map into a struct.
@@ -213,25 +265,25 @@ func Remarshal(src interface{}, dst interface{}) error {
 // This is a hack to reduce how much we have to change
 type QueryResponse struct {
 	Type           string                      `json:"type,omitempty"`
-	MainChain      *api2.MerkleState           `json:"mainChain,omitempty"`
+	MainChain      *api.MerkleState            `json:"mainChain,omitempty"`
 	Data           interface{}                 `json:"data,omitempty"`
 	ChainId        []byte                      `json:"chainId,omitempty"`
 	Origin         string                      `json:"origin,omitempty"`
-	KeyPage        *api2.KeyPage               `json:"keyPage,omitempty"`
+	KeyPage        *api.KeyPage                `json:"keyPage,omitempty"`
 	Txid           []byte                      `json:"txid,omitempty"`
 	Signatures     []protocol.Signature        `json:"signatures,omitempty"`
 	Status         *protocol.TransactionStatus `json:"status,omitempty"`
 	SyntheticTxids [][32]byte                  `json:"syntheticTxids,omitempty"`
 }
 
-func GetUrl(url string) (*QueryResponse, error) {
+func GetUrl(urlstr string) (*QueryResponse, error) {
 	var res QueryResponse
 
-	u, err := url2.Parse(url)
+	u, err := url.Parse(urlstr)
 	if err != nil {
 		return nil, err
 	}
-	params := api2.UrlQuery{}
+	params := api.UrlQuery{}
 	params.Url = u
 
 	err = queryAs("query", &params, &res)
@@ -262,16 +314,14 @@ func queryAs(method string, input, output interface{}) error {
 		return nil
 	}
 
-	ret, err := PrintJsonRpcError(err)
-	if err != nil {
-		return err
-	}
-
-	return fmt.Errorf("%v", ret)
+	_, err = PrintJsonRpcError(err)
+	return err
 }
 
-func dispatchTxRequest(payload interface{}, origin *url2.URL, signers []*signing.Builder) (*api2.TxResponse, error) {
+func dispatchTxRequest(payload interface{}, origin *url.URL, signers []*signing.Builder) (*api.TxResponse, error) {
+	// Convert the payload to an envelope
 	var env *protocol.Envelope
+	var err error
 	switch payload := payload.(type) {
 	case *protocol.Envelope:
 		env = payload
@@ -280,31 +330,64 @@ func dispatchTxRequest(payload interface{}, origin *url2.URL, signers []*signing
 		env = new(protocol.Envelope)
 		env.Transaction = []*protocol.Transaction{payload}
 
-	case protocol.TransactionBody, []byte:
-		body, ok := payload.(protocol.TransactionBody)
-		if !ok {
-			body = &protocol.RemoteTransaction{
-				Hash: *(*[32]byte)(payload.([]byte)),
-			}
-		}
-		var err error
-		env, err = buildEnvelope(body, origin)
-		if err != nil {
-			return nil, err
-		}
-		for _, signer := range signers {
-			sig, err := signer.Initiate(env.Transaction[0])
-			if err != nil {
-				return nil, err
-			}
-			env.Signatures = append(env.Signatures, sig)
-		}
+	case []byte:
+		env, err = buildEnvelope(&protocol.RemoteTransaction{
+			Hash: *(*[32]byte)(payload),
+		}, origin)
+
+	case protocol.TransactionBody:
+		env, err = buildEnvelope(payload, origin)
 
 	default:
 		panic(fmt.Errorf("%T is not a supported payload type", payload))
 	}
+	if err != nil {
+		return nil, err
+	}
 
-	req := new(api2.ExecuteRequest)
+	// Resolve the transaction - check on the principal and every signer and delegator
+	if remote, ok := env.Transaction[0].Body.(*protocol.RemoteTransaction); ok {
+		accounts := []*url.URL{origin}
+		for _, signer := range signers {
+			accounts = append(accounts, signer.Url)
+			accounts = append(accounts, signer.Delegators...)
+		}
+		var found bool
+		for _, account := range accounts {
+			req := new(api.GeneralQuery)
+			req.Url = account.WithTxID(remote.Hash).AsUrl()
+			resp := new(api.TransactionQueryResponse)
+			err := queryAs("query", req, resp)
+			if err != nil {
+				if strings.Contains(err.Error(), "not found") {
+					continue
+				}
+				return nil, err
+			}
+			found = true
+			env.Transaction[0] = resp.Transaction
+			break
+		}
+		if !found {
+			return nil, fmt.Errorf("unable to locate transaction %x", remote.Hash[:4])
+		}
+	}
+
+	// Sign
+	for _, signer := range signers {
+		var sig protocol.Signature
+		if env.Transaction[0].Header.Initiator == ([32]byte{}) {
+			sig, err = signer.Initiate(env.Transaction[0])
+		} else {
+			sig, err = signer.Sign(env.Transaction[0].GetHash())
+		}
+		if err != nil {
+			return nil, err
+		}
+		env.Signatures = append(env.Signatures, sig)
+	}
+
+	req := new(api.ExecuteRequest)
 	req.Envelope = env
 	if TxPretend {
 		req.CheckOnly = true
@@ -318,7 +401,7 @@ func dispatchTxRequest(payload interface{}, origin *url2.URL, signers []*signing
 	if res.Code != 0 {
 		result := new(protocol.TransactionStatus)
 		if Remarshal(res.Result, result) != nil {
-			return nil, errors.New(res.Message)
+			return nil, errors.New(errors.StatusEncodingError, res.Message)
 		}
 		return nil, result.Error
 	}
@@ -326,7 +409,7 @@ func dispatchTxRequest(payload interface{}, origin *url2.URL, signers []*signing
 	return res, nil
 }
 
-func dispatchTxAndWait(payload interface{}, origin *url2.URL, signers []*signing.Builder) (*api2.TxResponse, []*api.TransactionQueryResponse, error) {
+func dispatchTxAndWait(payload interface{}, origin *url.URL, signers []*signing.Builder) (*api.TxResponse, []*api.TransactionQueryResponse, error) {
 	res, err := dispatchTxRequest(payload, origin, signers)
 	if err != nil {
 		return nil, nil, err
@@ -336,7 +419,7 @@ func dispatchTxAndWait(payload interface{}, origin *url2.URL, signers []*signing
 		return res, nil, nil
 	}
 
-	resps, err := waitForTxn(res.TransactionHash, TxWait, TxIgnorePending)
+	resps, err := waitForTxnUsingHash(res.TransactionHash, TxWait, TxIgnorePending)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -344,7 +427,7 @@ func dispatchTxAndWait(payload interface{}, origin *url2.URL, signers []*signing
 	return res, resps, nil
 }
 
-func dispatchTxAndPrintResponse(payload interface{}, origin *url2.URL, signers []*signing.Builder) (string, error) {
+func dispatchTxAndPrintResponse(payload interface{}, origin *url.URL, signers []*signing.Builder) (string, error) {
 	res, resps, err := dispatchTxAndWait(payload, origin, signers)
 	if err != nil {
 		return PrintJsonRpcError(err)
@@ -366,7 +449,7 @@ func dispatchTxAndPrintResponse(payload interface{}, origin *url2.URL, signers [
 	return result, nil
 }
 
-func buildEnvelope(payload protocol.TransactionBody, origin *url2.URL) (*protocol.Envelope, error) {
+func buildEnvelope(payload protocol.TransactionBody, origin *url.URL) (*protocol.Envelope, error) {
 	txn := new(protocol.Transaction)
 	txn.Body = payload
 	txn.Header.Principal = origin
@@ -427,7 +510,7 @@ type ActionLiteDataResponse struct {
 	ActionDataResponse
 }
 
-func ActionResponseFromLiteData(r *api2.TxResponse, accountUrl string, accountId []byte, entryHash []byte) *ActionLiteDataResponse {
+func ActionResponseFromLiteData(r *api.TxResponse, accountUrl string, accountId []byte, entryHash []byte) *ActionLiteDataResponse {
 	ar := &ActionLiteDataResponse{}
 	ar.AccountUrl = types.String(accountUrl)
 	_ = ar.AccountId.FromBytes(accountId)
@@ -435,14 +518,14 @@ func ActionResponseFromLiteData(r *api2.TxResponse, accountUrl string, accountId
 	return ar
 }
 
-func ActionResponseFromData(r *api2.TxResponse, entryHash []byte) *ActionDataResponse {
+func ActionResponseFromData(r *api.TxResponse, entryHash []byte) *ActionDataResponse {
 	ar := &ActionDataResponse{}
 	_ = ar.EntryHash.FromBytes(entryHash)
 	ar.ActionResponse = *ActionResponseFrom(r)
 	return ar
 }
 
-func ActionResponseFrom(r *api2.TxResponse) *ActionResponse {
+func ActionResponseFrom(r *api.TxResponse) *ActionResponse {
 	ar := &ActionResponse{
 		TransactionHash: r.TransactionHash,
 		SignatureHashes: make([]types.Bytes, len(r.SignatureHashes)),
@@ -500,20 +583,34 @@ func amountToBigInt(tokenUrl string, amount string) (*big.Int, error) {
 		return nil, err
 	}
 
+	return parseAmount(amount, t.Precision)
+}
+
+func parseAmount(amount string, precision uint64) (*big.Int, error) {
 	amt, _ := big.NewFloat(0).SetPrec(128).SetString(amount)
 	if amt == nil {
 		return nil, fmt.Errorf("invalid amount %s", amount)
 	}
-	oneToken := big.NewFloat(math.Pow(10.0, float64(t.Precision)))
-	amt.Mul(amt, oneToken)
-	iAmt, _ := amt.Int(big.NewInt(0))
-	return iAmt, nil
+
+	oneToken := big.NewFloat(math.Pow(10.0, float64(precision))) //Convert to fixed point; multiply by the precision
+	amt.Mul(amt, oneToken)                                       // Note that we are using floating point here.  Precision can be lost
+	round := big.NewFloat(.9)                                    // To adjust for lost precision, round to the nearest int
+	if amt.Sign() < 0 {                                          // Just to be safe, account for negative numbers
+		round = big.NewFloat(-.9)
+	}
+	amt.Add(amt, round)               //                              Round up (positive) or down (negative) to the lowest int
+	iAmt, _ := amt.Int(big.NewInt(0)) //                              Then convert to a big Int
+	return iAmt, nil                  //                              Return the int
 }
 
-func GetTokenUrlFromAccount(u *url2.URL) (*url2.URL, error) {
+func GetTokenUrlFromAccount(u *url.URL) (*url.URL, error) {
 	var err error
-	var tokenUrl *url2.URL
-	if IsLiteTokenAccount(u.String()) {
+	var tokenUrl *url.URL
+	isLiteTokenAccount, err := IsLiteTokenAccount(u.String())
+	if err != nil {
+		return nil, err
+	}
+	if isLiteTokenAccount {
 		_, tokenUrl, err = protocol.ParseLiteTokenAddress(u)
 		if err != nil {
 			return nil, fmt.Errorf("cannot extract token url from lite token account, %v", err)
@@ -593,11 +690,6 @@ func natural(name string) string {
 	return w.String()
 }
 
-func nonceFromTimeNow() uint64 {
-	t := time.Now()
-	return uint64(t.Unix()*1e6) + uint64(t.Nanosecond())/1e3
-}
-
 func QueryAcmeOracle() (*protocol.AcmeOracle, error) {
 	resp, err := Client.Describe(context.Background())
 	if err != nil {
@@ -613,60 +705,4 @@ func ValidateSigType(input string) (protocol.SignatureType, error) {
 		sigtype = protocol.SignatureTypeED25519
 	}
 	return sigtype, nil
-}
-
-func GetAccountStateProof(principal, accountToProve *url2.URL) (proof *protocol.AccountStateProof, err error) {
-	if principal.LocalTo(accountToProve) {
-		return nil, nil // Don't need a proof for local accounts
-	}
-
-	if accountToProve.Equal(protocol.AcmeUrl()) {
-		return nil, nil // Don't need a proof for ACME
-	}
-
-	// Get a proof of the account state
-	req := new(api.GeneralQuery)
-	req.Url = accountToProve
-	resp := new(api.ChainQueryResponse)
-	token := protocol.TokenIssuer{}
-	resp.Data = &token
-	err = Client.RequestAPIv2(context.Background(), "query", req, resp)
-	if err != nil || resp.Type != protocol.AccountTypeTokenIssuer.String() {
-		return nil, err
-	}
-
-	localReceipt := resp.Receipt.Proof
-	proof.State, err = getAccount(accountToProve.String())
-	if err != nil {
-		return nil, err
-	}
-	// ensure the block is anchored
-	timeout := time.After(10 * time.Second)
-	ticker := time.Tick(1 * time.Second)
-	// Keep trying until we're timed out or get a result/error
-	for {
-		select {
-		// Got a timeout! fail with a timeout error
-		case <-timeout:
-			return nil, nil
-		// Got a tick, we should check if the anchor is complete
-		case <-ticker:
-			// Get a proof of the BVN anchor
-			req = new(api.GeneralQuery)
-			req.Url = protocol.DnUrl().JoinPath(protocol.AnchorPool).WithFragment(fmt.Sprintf("anchor/%x", localReceipt.Anchor))
-			resp = new(api.ChainQueryResponse)
-			err = Client.RequestAPIv2(context.Background(), "query", req, resp)
-			if err != nil || resp.Type != protocol.AccountTypeTokenIssuer.String() {
-				return nil, err
-			}
-			dirReceipt := resp.Receipt.Proof
-			if dirReceipt.Anchor != nil {
-				return proof, nil
-			}
-			proof.Proof, err = localReceipt.Combine(&dirReceipt)
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
 }

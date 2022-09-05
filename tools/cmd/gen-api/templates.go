@@ -10,7 +10,8 @@ import (
 )
 
 var (
-	Go = mustParseTemplate("Go", goSrc)
+	Go   = mustParseTemplate("Go", goSrc)
+	Java = mustParseTemplate("Java", javaSrc)
 )
 
 type TApi struct {
@@ -20,10 +21,11 @@ type TApi struct {
 
 type TMethod struct {
 	typegen.Method
-	Name string
+	Name       string
+	SubPackage string
 }
 
-func convert(api typegen.API) *TApi {
+func convert(api typegen.API, subPkgName string) *TApi {
 	tapi := new(TApi)
 	tapi.Package = flags.Package
 	tapi.Methods = make([]*TMethod, 0, len(api))
@@ -32,6 +34,7 @@ func convert(api typegen.API) *TApi {
 		tm := new(TMethod)
 		tm.Method = method
 		tm.Name = name
+		tm.SubPackage = subPkgName
 		if tm.Call == "" {
 			tm.Call = name
 		}
@@ -53,3 +56,9 @@ func mustParseTemplate(name, src string) *template.Template {
 	checkf(err, "bad template")
 	return tmpl
 }
+
+var Templates = typegen.NewTemplateLibrary(template.FuncMap{
+	"lower":               strings.ToLower,
+	"upper":               strings.ToUpper,
+	"underscoreUpperCase": typegen.UnderscoreUpperCase,
+})

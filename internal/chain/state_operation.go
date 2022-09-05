@@ -2,10 +2,9 @@ package chain
 
 import (
 	"fmt"
-	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -57,35 +56,5 @@ func (op *addDataEntry) Execute(st *stateCache) ([]protocol.Account, error) {
 	}
 
 	// Add TX to main chain
-	return nil, st.State.ChainUpdates.AddChainEntry(st.batch, op.url, protocol.MainChain, protocol.ChainTypeTransaction, st.txHash[:], 0, 0)
-}
-
-type addChainEntryOp struct {
-	account     *url.URL
-	name        string
-	typ         protocol.ChainType
-	entry       []byte
-	sourceIndex uint64
-	sourceBlock uint64
-}
-
-func (m *stateCache) AddChainEntry(u *url.URL, name string, typ protocol.ChainType, entry []byte, sourceIndex, sourceBlock uint64) error {
-	// The main and pending chain cannot be updated this way
-	switch strings.ToLower(name) {
-	case protocol.MainChain, protocol.SignatureChain:
-		return fmt.Errorf("invalid operation: cannot update %s chain with AddChainEntry", name)
-	}
-
-	// Check if the chain is valid
-	_, err := m.batch.Account(u).Chain(name, typ)
-	if err != nil {
-		return fmt.Errorf("failed to load %s#chain/%s: %v", u, name, err)
-	}
-
-	m.operations = append(m.operations, &addChainEntryOp{u, name, typ, entry, sourceIndex, sourceBlock})
-	return nil
-}
-
-func (op *addChainEntryOp) Execute(st *stateCache) ([]protocol.Account, error) {
-	return nil, st.State.ChainUpdates.AddChainEntry(st.batch, op.account, op.name, op.typ, op.entry, op.sourceIndex, op.sourceBlock)
+	return nil, st.State.ChainUpdates.AddChainEntry(st.batch, record.MainChain(), st.txHash[:], 0, 0)
 }

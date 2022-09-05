@@ -9,7 +9,7 @@ import (
 	abci "github.com/tendermint/tendermint/abci/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -34,6 +34,7 @@ func TestTransactionPriority(t *testing.T) {
 	bodytosend.Token = protocol.AcmeUrl()
 	bodytosend.SetCause(cause, bvn.network.NodeUrl())
 
+	const maxPriority = (1 << 32) - 1
 	cases := map[string]Case{
 		"System": {
 			Envelope: newTxn(bvn.network.AnchorPool().String()).
@@ -48,9 +49,9 @@ func TestTransactionPriority(t *testing.T) {
 				InitiateSynthetic(bvn.network.NodeUrl()).
 				Sign(protocol.SignatureTypeLegacyED25519, dn.key.Bytes()).
 				Build(),
-			ExpectPriority: 2,
+			ExpectPriority: maxPriority,
 		},
-		"Synthetic": {
+		"Synthetic 1": {
 			Envelope: newTxn("foo/tokens").
 				WithSigner(bvn.network.OperatorsPage(), 1).
 				WithBody(bodytosend).InitiateSynthetic(bvn.network.NodeUrl()).
@@ -65,7 +66,24 @@ func TestTransactionPriority(t *testing.T) {
 					return sig
 				}).
 				Build(),
-			ExpectPriority: 1,
+			ExpectPriority: maxPriority - 2,
+		},
+		"Synthetic 2": {
+			Envelope: newTxn("foo/tokens").
+				WithSigner(bvn.network.OperatorsPage(), 2).
+				WithBody(bodytosend).InitiateSynthetic(bvn.network.NodeUrl()).
+				Sign(protocol.SignatureTypeLegacyED25519, bvn.exec.Key).
+				SignFunc(func(txn *protocol.Transaction) protocol.Signature {
+					// Add a receipt signature
+					sig := new(protocol.ReceiptSignature)
+					sig.SourceNetwork = url.MustParse("foo.acme")
+					sig.TransactionHash = *(*[32]byte)(txn.GetHash())
+					sig.Proof.Start = txn.GetHash()
+					sig.Proof.Anchor = txn.GetHash()
+					return sig
+				}).
+				Build(),
+			ExpectPriority: maxPriority - 3,
 		},
 		"User": {
 			Envelope: newTxn("foo.acme/tokens").
@@ -115,7 +133,7 @@ func TestCheckTx_SharedBatch(t *testing.T) {
 	aliceUrl := acctesting.AcmeLiteAddressTmPriv(alice)
 	bobUrl := acctesting.AcmeLiteAddressTmPriv(bob)
 	_ = n.db.Update(func(batch *database.Batch) error {
-		require.NoError(n.t, acctesting.CreateLiteTokenAccountWithCredits(batch, alice, protocol.AcmeFaucetAmount, float64(protocol.FeeSendTokens)/protocol.CreditPrecision))
+		require.NoError(n.t, acctesting.CreateLiteTokenAccountWithCredits(batch, alice, protocol.AcmeFaucetAmount, float64(protocol.FeeTransferTokens)/protocol.CreditPrecision))
 		return nil
 	})
 

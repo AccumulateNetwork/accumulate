@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -16,13 +16,13 @@ func writeAccountState(t TB, batch *database.Batch, account protocol.Account) {
 	require.NoError(tb{t}, record.PutState(account))
 
 	txid := sha256.Sum256([]byte("fake txid"))
-	mainChain, err := record.Chain(protocol.MainChain, protocol.ChainTypeTransaction)
+	mainChain, err := record.MainChain().Get()
 	require.NoError(tb{t}, err)
 	require.NoError(tb{t}, mainChain.AddEntry(txid[:], true))
 
 	identity, ok := account.GetUrl().Parent()
 	if ok {
-		require.NoError(tb{t}, indexing.Directory(batch, identity).Put(account.GetUrl()))
+		require.NoError(tb{t}, indexing.Directory(batch, identity).Add(account.GetUrl()))
 	}
 }
 
@@ -161,4 +161,18 @@ func GetAccount[T protocol.Account](sim *Simulator, accountUrl *url.URL) T {
 		return nil
 	})
 	return account
+}
+
+func GetTxnState[V any, T interface{ Get() (V, error) }](sim *Simulator, txid *url.TxID, state func(*database.Transaction) T) V {
+	sim.Helper()
+	var value V
+	var err error
+	_ = sim.PartitionFor(txid.Account()).Database.View(func(batch *database.Batch) error {
+		sim.Helper()
+		h := txid.Hash()
+		value, err = state(batch.Transaction(h[:])).Get()
+		require.NoError(tb{sim}, err)
+		return nil
+	})
+	return value
 }

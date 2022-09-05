@@ -6,12 +6,14 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2/query"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
 func TestOutOfSequenceSynth(t *testing.T) {
@@ -74,7 +76,14 @@ func TestMissingSynthTxn(t *testing.T) {
 	var timestamp uint64
 
 	// Initialize
-	sim := simulator.New(t, 3)
+	sim := simulator.NewWith(t, simulator.SimulatorOptions{
+		// Add more logging to debug the intermittent failure
+		LogLevels: config.LogLevel{}.
+			Parse(acctesting.DefaultLogLevels).
+			SetModule("executor", "debug").
+			SetModule("synthetic", "debug").
+			String(),
+	})
 	sim.InitFromGenesis()
 
 	alice := acctesting.GenerateKey("Alice")
@@ -186,7 +195,7 @@ func TestSendSynthTxnAfterAnchor(t *testing.T) {
 	require.NotNil(t, receipt)
 	req := new(query.RequestByUrl)
 	req.Url = DnUrl().JoinPath(AnchorPool).WithFragment(fmt.Sprintf("anchor/%x", receipt.Proof.Anchor))
-	sim.Query(DnUrl(), req, true)
+	simulator.QueryUrl[*api.ChainQueryResponse](sim, DnUrl(), true)
 
 	// Submit the synthetic transaction
 	sim.PartitionFor(bobUrl).Submit(false, &Envelope{
@@ -202,34 +211,10 @@ func TestMissingAnchorTxn(t *testing.T) {
 	sim.InitFromGenesis()
 	liteKey := acctesting.GenerateKey("Lite")
 	lite := acctesting.AcmeLiteAddressStdPriv(liteKey)
-
-	// Drop the anchor for the synthetic transaction
-	var anchor *[32]byte
-	var didDrop bool
-	sim.PartitionFor(lite).SubmitHook = func(envelopes []*chain.Delivery) ([]*chain.Delivery, bool) {
-		for i, env := range envelopes {
-			if anchor == nil && env.Transaction.Body.Type() == TransactionTypeSyntheticDepositTokens {
-				for _, sig := range env.Signatures {
-					if sig, ok := sig.(*ReceiptSignature); ok {
-						fmt.Printf("Received %X, want anchor %X\n", env.Transaction.GetHash()[:4], sig.Proof.Anchor[:4])
-						anchor = (*[32]byte)(sig.Proof.Anchor)
-						return envelopes, true
-					}
-				}
-			}
-			if anchor != nil && env.Transaction.Body.Type() == TransactionTypeDirectoryAnchor {
-				body := env.Transaction.Body.(*DirectoryAnchor)
-				for _, receipt := range body.Receipts {
-					if *anchor == *(*[32]byte)(receipt.Start) {
-						fmt.Printf("Dropping %X with anchor %X to %X\n", env.Transaction.GetHash()[:4], anchor[:4], body.RootChainAnchor[:4])
-						didDrop = true
-						return append(envelopes[:i], envelopes[i+1:]...), false
-					}
-				}
-			}
-		}
-		return envelopes, true
-	}
+	alice := AccountUrl("alice")
+	aliceKey := acctesting.GenerateKey(alice)
+	sim.CreateIdentity(alice, aliceKey[32:])
+	updateAccount(sim, alice.JoinPath("book", "1"), func(p *KeyPage) { p.CreditBalance = 1e9 })
 
 	// Cause a synthetic transaction
 	envs := sim.MustSubmitAndExecuteBlock(
@@ -237,23 +222,56 @@ func TestMissingAnchorTxn(t *testing.T) {
 			WithPrincipal(FaucetUrl).
 			WithBody(&AcmeFaucet{Url: lite}).
 			Faucet())
-	_, _, synth := sim.WaitForTransaction(delivered, envs[0].Transaction[0].GetHash(), 50)
-	require.Len(t, synth, 1)
 
-	// Wait for the anchor
+	// Get the local anchor of the produced transaction
+	var anchor, synth [32]byte
+	_ = sim.PartitionFor(FaucetUrl).View(func(batch *database.Batch) error {
+		produced, err := batch.Transaction(envs[0].Transaction[0].GetHash()).Produced().Get()
+		require.NoError(t, err)
+		require.Len(t, produced, 1)
+
+		synth = produced[0].Hash()
+		status, err := batch.Transaction(synth[:]).Status().Get()
+		require.NoError(t, err)
+
+		anchor = *(*[32]byte)(status.Proof.Anchor)
+		return nil
+	})
+
+	// Drop the anchor
+	var didDrop bool
+	sim.PartitionFor(lite).SubmitHook = func(envelopes []*chain.Delivery) ([]*chain.Delivery, bool) {
+		for i, env := range envelopes {
+			body, ok := env.Transaction.Body.(*DirectoryAnchor)
+			if !ok {
+				continue
+			}
+
+			for _, receipt := range body.Receipts {
+				if anchor == *(*[32]byte)(receipt.RootChainReceipt.Start) {
+					fmt.Printf("Dropping %X with anchor %X to %X\n", env.Transaction.GetHash()[:4], anchor[:4], body.RootChainAnchor[:4])
+					didDrop = true
+					return append(envelopes[:i], envelopes[i+1:]...), false
+				}
+			}
+		}
+		return envelopes, true
+	}
 	for i := 0; i < 50 && !didDrop; i++ {
 		sim.ExecuteBlock(nil)
 	}
 	require.True(t, didDrop, "Anchor not received within 50 blocks")
 
 	// Do something to cause another block/anchor
-	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
+	sim.MustSubmitAndExecuteBlock(
 		acctesting.NewTransaction().
-			WithPrincipal(FaucetUrl).
-			WithBody(&AcmeFaucet{Url: lite}).
-			Faucet())...)
+			WithPrincipal(alice).
+			WithSigner(alice.JoinPath("book", "1"), 1).
+			WithTimestamp(1).
+			WithBody(&CreateDataAccount{Url: alice.JoinPath("account")}).
+			Initiate(SignatureTypeED25519, aliceKey).
+			Build())
 
 	// Wait for the synthetic transaction - the BVN must be able to heal itself
-	h := synth[0].Hash()
-	sim.WaitForTransactionFlow(delivered, h[:])
+	sim.WaitForTransactionFlow(delivered, synth[:])
 }

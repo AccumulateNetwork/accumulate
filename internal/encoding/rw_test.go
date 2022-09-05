@@ -9,7 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/encoding"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
 func pipe() (*Reader, *Writer) {
@@ -213,7 +213,7 @@ func TestTypes(t *testing.T) {
 		u, ok := r.ReadUrl(1)
 		require.True(t, ok)
 		rdOk(t, r)
-		require.Equal(t, v, u)
+		require.Equal(t, u.String(), v.String())
 	})
 }
 

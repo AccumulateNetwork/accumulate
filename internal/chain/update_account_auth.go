@@ -1,10 +1,11 @@
 package chain
 
 import (
-	"errors"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -16,7 +17,7 @@ func (UpdateAccountAuth) Type() protocol.TransactionType {
 	return protocol.TransactionTypeUpdateAccountAuth
 }
 
-func (UpdateAccountAuth) SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, checkAuthz bool) (fallback bool, err error) {
+func (UpdateAccountAuth) SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, md SignatureValidationMetadata) (fallback bool, err error) {
 	body, ok := transaction.Body.(*protocol.UpdateAccountAuth)
 	if !ok {
 		return false, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.UpdateAccountAuth), transaction.Body)
@@ -32,6 +33,10 @@ func (UpdateAccountAuth) SignerIsAuthorized(delegate AuthDelegate, batch *databa
 		op, ok := op.(*protocol.AddAccountAuthorityOperation)
 		if !ok {
 			continue
+		}
+
+		if op.Authority == nil {
+			return false, fmt.Errorf("invalid payload: authority is nil")
 		}
 
 		// If we are adding a book, that book is authorized to sign the
@@ -57,6 +62,10 @@ func (UpdateAccountAuth) TransactionIsReady(delegate AuthDelegate, batch *databa
 		op, ok := op.(*protocol.AddAccountAuthorityOperation)
 		if !ok {
 			continue
+		}
+
+		if op.Authority == nil {
+			return false, false, fmt.Errorf("invalid payload: authority is nil")
 		}
 
 		ok, err := delegate.AuthorityIsSatisfied(batch, transaction, status, op.Authority)
@@ -102,6 +111,10 @@ func (UpdateAccountAuth) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 			entry.Disabled = true
 
 		case *protocol.AddAccountAuthorityOperation:
+			if op.Authority == nil {
+				return nil, fmt.Errorf("invalid payload: authority is nil")
+			}
+
 			if account.GetUrl().LocalTo(op.Authority) {
 				// If the authority is local, make sure it exists
 				_, err := st.batch.Account(op.Authority).GetState()
@@ -111,9 +124,20 @@ func (UpdateAccountAuth) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 			}
 			// TODO Require a proof of the existence of the remote authority
 
-			auth.AddAuthority(op.Authority)
+			if err := verifyIsNotPage(auth, op.Authority); err != nil {
+				return nil, errors.Format(errors.StatusUnknownError, "invalid authority %v: %w", op.Authority, err)
+			}
+
+			_, new := auth.AddAuthority(op.Authority)
+			if !new {
+				return nil, fmt.Errorf("duplicate authority %v", op.Authority)
+			}
 
 		case *protocol.RemoveAccountAuthorityOperation:
+			if op.Authority == nil {
+				return nil, fmt.Errorf("invalid payload: authority is nil")
+			}
+
 			if !auth.RemoveAuthority(op.Authority) {
 				// We could just ignore this case, but that is not a good user
 				// experience
@@ -122,7 +146,7 @@ func (UpdateAccountAuth) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 
 			// An account must retain at least one authority
 			if len(auth.Authorities) == 0 {
-				return nil, errors.New("removing the last authority from an account is not allowed")
+				return nil, errors.New(errors.StatusBadRequest, "removing the last authority from an account is not allowed")
 			}
 
 		default:
@@ -135,4 +159,31 @@ func (UpdateAccountAuth) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 		return nil, fmt.Errorf("failed to update %v: %w", st.OriginUrl, err)
 	}
 	return nil, nil
+}
+
+// verifyIsNotPage returns an error if the url is a page belonging to one of the
+// account's authorities.
+//
+// Given:
+// - 'foo/bar/1' is the new authority
+// - 'foo/bar' is an existing authority
+// And:
+// - If 'foo/bar' is an ADI, 'foo/bar/1' could be any type of account
+// - If 'foo/bar is a book, 'foo/bar/1' can be a page
+// - There are no other cases where 'foo/bar' can contain 'foo/bar/1'
+// - An ADI cannot be an authority
+// Then:
+// - 'foo/bar' must be a book and 'foo/bar/1' must be a page of that book
+func verifyIsNotPage(auth *protocol.AccountAuth, account *url.URL) error {
+	book, _, ok := protocol.ParseKeyPageUrl(account)
+	if !ok {
+		return nil
+	}
+
+	_, ok = auth.GetAuthority(book)
+	if !ok {
+		return nil
+	}
+
+	return errors.Format(errors.StatusBadRequest, "a key page is not a valid authority")
 }

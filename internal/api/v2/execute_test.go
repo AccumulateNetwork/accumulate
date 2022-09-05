@@ -18,6 +18,8 @@ import (
 
 func init() { acctesting.EnableDebugFeatures() }
 
+//go:generate go run github.com/golang/mock/mockgen -source ../../connections/connection_context.go -package api_test -destination ./mock_connections_test.go
+
 func TestExecuteCheckOnly(t *testing.T) {
 	env := acctesting.NewTransaction().
 		WithPrincipal(protocol.FaucetUrl).
@@ -37,16 +39,18 @@ func TestExecuteCheckOnly(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		local := connections.NewMockClient(ctrl)
-		clients := map[string]connections.ABCIClient{}
-		clients[""] = local
-		connectionManager := connections.NewFakeConnectionManager(clients)
+		connectionManager := connections.NewFakeConnectionManager([]string{""})
+		local := NewMockABCIClient(ctrl)
+		clients := map[string]connections.FakeClient{}
+		clients[""] = connections.FakeClient{local, nil}
+		connectionManager.SetClients(clients)
 		table := new(protocol.RoutingTable)
 		table.Routes = routing.BuildSimpleTable([]string{""})
 		router, err := routing.NewStaticRouter(table, connectionManager)
 		require.NoError(t, err)
 		j, err := NewJrpc(Options{
 			Router: router,
+			Key:    make([]byte, 64),
 		})
 		require.NoError(t, err)
 
@@ -63,16 +67,18 @@ func TestExecuteCheckOnly(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		local := connections.NewMockClient(ctrl)
-		clients := map[string]connections.ABCIClient{}
-		clients[""] = local
-		connectionManager := connections.NewFakeConnectionManager(clients)
+		connectionManager := connections.NewFakeConnectionManager([]string{""})
+		local := NewMockABCIClient(ctrl)
+		clients := map[string]connections.FakeClient{}
+		clients[""] = connections.FakeClient{local, nil}
+		connectionManager.SetClients(clients)
 		table := new(protocol.RoutingTable)
 		table.Routes = routing.BuildSimpleTable([]string{""})
 		router, err := routing.NewStaticRouter(table, connectionManager)
 		require.NoError(t, err)
 		j, err := NewJrpc(Options{
 			Router: router,
+			Key:    make([]byte, 64),
 		})
 		require.NoError(t, err)
 

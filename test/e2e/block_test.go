@@ -15,18 +15,14 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 func init() { acctesting.EnableDebugFeatures() }
 
 var delivered = (*TransactionStatus).Delivered
-
-func received(status *TransactionStatus) bool {
-	return status.Code > 0 && status.Code != errors.StatusRemote
-}
+var pending = (*TransactionStatus).Pending
 
 func updateAccount[T Account](sim *simulator.Simulator, accountUrl *url.URL, fn func(account T)) {
 	sim.UpdateAccount(accountUrl, func(account Account) {
@@ -55,7 +51,7 @@ func TestSendTokensToBadRecipient(t *testing.T) {
 	require.NoError(t, batch.Commit())
 
 	exch := new(SendTokens)
-	exch.AddRecipient(protocol.AccountUrl("foo"), big.NewInt(int64(1000)))
+	exch.AddRecipient(AccountUrl("foo"), big.NewInt(int64(1000)))
 	env := acctesting.NewTransaction().
 		WithPrincipal(aliceUrl).
 		WithTimestampVar(&timestamp).
@@ -76,12 +72,44 @@ func TestSendTokensToBadRecipient(t *testing.T) {
 	// The synthetic transaction should fail
 	synth, err := batch.Transaction(env.Transaction[0].GetHash()).GetSyntheticTxns()
 	require.NoError(t, err)
-	batch = sim.PartitionFor(protocol.AccountUrl("foo")).Database.Begin(false)
+	batch = sim.PartitionFor(AccountUrl("foo")).Database.Begin(false)
 	defer batch.Discard()
 	h := synth.Entries[0].Hash()
 	status, err := batch.Transaction(h[:]).GetStatus()
 	require.NoError(t, err)
 	assert.Equal(t, errors.StatusNotFound, status.Code)
+}
+
+func TestDoesChargeFee(t *testing.T) {
+	const initialBalance = 1000
+	var timestamp uint64
+	aliceKey := acctesting.GenerateKey("alice")
+	bobKey := acctesting.GenerateKey("bob")
+	alice := acctesting.AcmeLiteAddressStdPriv(aliceKey)
+	bob := acctesting.AcmeLiteAddressStdPriv(bobKey)
+
+	// Initialize
+	sim := simulator.New(t, 3)
+	sim.InitFromGenesis()
+	sim.CreateAccount(&LiteIdentity{Url: alice.RootIdentity(), CreditBalance: initialBalance})
+	sim.CreateAccount(&LiteTokenAccount{Url: alice, TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e12)})
+
+	// Send tokens
+	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
+		acctesting.NewTransaction().
+			WithPrincipal(alice).
+			WithSigner(alice, 1).
+			WithTimestampVar(&timestamp).
+			WithBody(&SendTokens{To: []*TokenRecipient{{
+				Url:    bob,
+				Amount: *big.NewInt(1),
+			}}}).
+			Initiate(SignatureTypeED25519, aliceKey).
+			Build(),
+	)...)
+
+	lid := simulator.GetAccount[*LiteIdentity](sim, alice.RootIdentity())
+	require.Equal(t, int(initialBalance-FeeTransferTokens), int(lid.CreditBalance))
 }
 
 func TestSendTokensToBadRecipient2(t *testing.T) {
@@ -108,7 +136,7 @@ func TestSendTokensToBadRecipient2(t *testing.T) {
 	})
 
 	exch := new(SendTokens)
-	exch.AddRecipient(protocol.AccountUrl("foo"), big.NewInt(int64(1000)))
+	exch.AddRecipient(AccountUrl("foo"), big.NewInt(int64(1000)))
 	exch.AddRecipient(bobUrl, big.NewInt(int64(1000)))
 	env := acctesting.NewTransaction().
 		WithPrincipal(aliceUrl).
@@ -120,16 +148,14 @@ func TestSendTokensToBadRecipient2(t *testing.T) {
 	sim.MustSubmitAndExecuteBlock(env)
 	sim.WaitForTransactionFlow(delivered, env.Transaction[0].GetHash())
 
-	var creditsAfter uint64
-	_ = sim.PartitionFor(aliceUrl).Database.View(func(batch *database.Batch) error {
-		var account *LiteIdentity
-		require.NoError(t, batch.Account(aliceUrl.RootIdentity()).GetStateAs(&account))
-		creditsAfter = account.CreditBalance
-		return nil
-	})
+	s := sim.PartitionFor(aliceUrl).Executor.ActiveGlobals_TESTONLY().Globals.FeeSchedule
+	fee, err := s.ComputeTransactionFee(env.Transaction[0])
+	require.NoError(t, err)
+	refund, err := s.ComputeSyntheticRefund(env.Transaction[0], len(exch.To))
+	require.NoError(t, err)
 
-	expectedFee := FeeSendTokens - (FeeSendTokens-FeeFailedMaximum)/2
-	require.Equal(t, creditsBefore-expectedFee.AsUInt64(), creditsAfter)
+	lid := simulator.GetAccount[*LiteIdentity](sim, aliceUrl.RootIdentity())
+	require.Equal(t, int(creditsBefore-(fee-refund).AsUInt64()), int(lid.CreditBalance))
 }
 
 func TestCreateRootIdentity(t *testing.T) {
@@ -145,7 +171,7 @@ func TestCreateRootIdentity(t *testing.T) {
 	require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, tmed25519.PrivKey(lite), AcmeFaucetAmount, 1e9))
 	require.NoError(t, batch.Commit())
 
-	alice := protocol.AccountUrl("alice")
+	alice := AccountUrl("alice")
 	aliceKey := acctesting.GenerateKey(t.Name(), alice)
 	keyHash := sha256.Sum256(aliceKey[32:])
 
@@ -178,7 +204,7 @@ func TestWriteToLiteDataAccount(t *testing.T) {
 	// Setup
 	alice := acctesting.GenerateKey(t.Name())
 	aliceUrl := acctesting.AcmeLiteAddressTmPriv(tmed25519.PrivKey(alice))
-	aliceAdi := protocol.AccountUrl("alice")
+	aliceAdi := AccountUrl("alice")
 
 	firstEntry := AccumulateDataEntry{}
 	firstEntry.Data = append(firstEntry.Data, []byte{})
@@ -257,20 +283,15 @@ func verifyLiteDataAccount(t *testing.T, batch *database.Batch, firstEntry DataE
 	require.Equal(t, liteDataAddress.String(), account.Url.String())
 	require.Equal(t, partialChainId, chainId)
 
-	firstEntryHash, err := ComputeFactomEntryHashForAccount(chainId, firstEntry.GetData())
-	require.NoError(t, err)
-
 	// Verify the entry hash in the transaction result
 	require.IsType(t, (*WriteDataResult)(nil), status.Result)
 	txResult := status.Result.(*WriteDataResult)
-	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(txResult.EntryHash[:]), "Transaction result entry hash does not match")
+	require.Equal(t, hex.EncodeToString(firstEntry.Hash()), hex.EncodeToString(txResult.EntryHash[:]), "Transaction result entry hash does not match")
 
 	// Verify the entry hash returned by Entry
 	entry, err := indexing.Data(batch, liteDataAddress).GetLatestEntry()
 	require.NoError(t, err)
-	hashFromEntry, err := ComputeFactomEntryHashForAccount(chainId, entry.GetData())
-	require.NoError(t, err)
-	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(hashFromEntry), "Chain Entry.Hash does not match")
+	require.Equal(t, hex.EncodeToString(firstEntry.Hash()), hex.EncodeToString(entry.Hash()), "Chain Entry.Hash does not match")
 	//sample verification for calculating the entryHash from lite data entry
 	entryHash, err := indexing.Data(batch, liteDataAddress).Entry(0)
 	require.NoError(t, err)
@@ -278,11 +299,8 @@ func verifyLiteDataAccount(t *testing.T, batch *database.Batch, firstEntry DataE
 	require.NoError(t, err)
 	ent, err := indexing.GetDataEntry(batch, txnHash)
 	require.NoError(t, err)
-	id := ComputeLiteDataAccountId(ent)
-	newh, err := ComputeFactomEntryHashForAccount(id, ent.GetData())
-	require.NoError(t, err)
-	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(entryHash), "Chain GetHashes does not match")
-	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(newh), "Chain GetHashes does not match")
+	require.Equal(t, hex.EncodeToString(firstEntry.Hash()), hex.EncodeToString(entryHash), "Chain GetHashes does not match")
+	require.Equal(t, hex.EncodeToString(firstEntry.Hash()), hex.EncodeToString(ent.Hash()), "Chain GetHashes does not match")
 }
 
 func TestCreateSubIdentityWithLite(t *testing.T) {
@@ -294,7 +312,7 @@ func TestCreateSubIdentityWithLite(t *testing.T) {
 
 	liteKey := acctesting.GenerateKey(t.Name(), "Lite")
 	liteUrl := acctesting.AcmeLiteAddressStdPriv(liteKey)
-	alice := protocol.AccountUrl("alice")
+	alice := AccountUrl("alice")
 	aliceKey := acctesting.GenerateKey(t.Name(), "Alice")
 	keyHash := sha256.Sum256(aliceKey[32:])
 	sim.CreateIdentity(alice, aliceKey[32:])
@@ -329,7 +347,7 @@ func TestCreateIdentityWithRemoteLite(t *testing.T) {
 
 	liteKey := acctesting.GenerateKey(t.Name(), "Lite")
 	liteUrl := acctesting.AcmeLiteAddressStdPriv(liteKey)
-	alice := protocol.AccountUrl("alice")
+	alice := AccountUrl("alice")
 	aliceKey := acctesting.GenerateKey(t.Name(), "Alice")
 	keyHash := sha256.Sum256(aliceKey[32:])
 	sim.CreateAccount(&LiteIdentity{Url: liteUrl.RootIdentity(), CreditBalance: 1e9})
@@ -409,7 +427,7 @@ func TestSubAdi(t *testing.T) {
 
 	lite := acctesting.GenerateKey(t.Name(), "Lite")
 	liteUrl := acctesting.AcmeLiteAddressStdPriv(lite)
-	alice := protocol.AccountUrl("alice")
+	alice := AccountUrl("alice")
 	aliceKey := acctesting.GenerateKey(t.Name(), alice)
 	sim.CreateAccount(&LiteIdentity{Url: liteUrl.RootIdentity(), CreditBalance: 1e9})
 	sim.CreateAccount(&LiteTokenAccount{Url: liteUrl, TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e9)})

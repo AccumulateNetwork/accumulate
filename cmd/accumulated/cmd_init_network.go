@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/ghodss/yaml"
 	"github.com/spf13/cobra"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	cfg "gitlab.com/accumulatenetwork/accumulate/config"
@@ -55,8 +56,8 @@ func initNetwork(cmd *cobra.Command, args []string) {
 			node.PrivValKey = ed25519.GenPrivKey()
 			node.NodeKey = ed25519.GenPrivKey()
 
-			if node.ListenIP == "" {
-				node.ListenIP = "0.0.0.0"
+			if node.ListenAddress == "" {
+				node.ListenAddress = "0.0.0.0"
 			}
 		}
 	}
@@ -102,7 +103,12 @@ func initNetworkLocalFS(netInit *accumulated.NetworkInit) {
 	check(enc.Encode(netInit))
 	check(netFile.Close())
 
-	genDocs, err := accumulated.BuildGenesisDocs(netInit, new(core.GlobalValues), time.Now(), newLogger(), "")
+	values := new(core.GlobalValues)
+	if flagInitDevnet.Globals != "" {
+		checkf(yaml.Unmarshal([]byte(flagInitDevnet.Globals), values), "--globals")
+	}
+
+	genDocs, err := accumulated.BuildGenesisDocs(netInit, values, time.Now(), newLogger(), nil)
 	checkf(err, "build genesis documents")
 
 	configs := accumulated.BuildNodesConfig(netInit, nil)
@@ -123,8 +129,9 @@ func initNetworkLocalFS(netInit *accumulated.NetworkInit) {
 				if flagInit.NoEmptyBlocks {
 					config.Consensus.CreateEmptyBlocks = false
 				}
-				if flagInit.NoWebsite {
-					config.Accumulate.Website.Enabled = false
+
+				if flagInit.DnStallLimit > 0 {
+					config.Accumulate.DnStallLimit = flagInit.DnStallLimit
 				}
 
 				if len(flagInit.Etcd) > 0 {
@@ -137,13 +144,10 @@ func initNetworkLocalFS(netInit *accumulated.NetworkInit) {
 			configs[i][j][0].Config.PrivValidator.Key = "../priv_validator_key.json"
 			err = accumulated.WriteNodeFiles(configs[i][j][0], node.PrivValKey, node.NodeKey, dnGenDoc)
 			checkf(err, "write DNN files")
-
-			err = accumulated.WriteNodeFiles(configs[i][j][1], node.PrivValKey, node.NodeKey, bvnGenDoc)
-			checkf(err, "write BVNN files")
 			configs[i][j][1].Config.PrivValidator.Key = "../priv_validator_key.json"
 			err = accumulated.WriteNodeFiles(configs[i][j][1], node.PrivValKey, node.NodeKey, bvnGenDoc)
 			checkf(err, "write BVNN files")
-			os.Remove(filepath.Join(configs[i][j][1].RootDir, "config/priv_validator_key.json"))
+
 		}
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,11 +14,11 @@ import (
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/config"
-	cfg "gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/internal/testdata"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"golang.org/x/sync/errgroup"
 )
@@ -43,6 +44,8 @@ var DefaultLogLevels = config.LogLevel{}.
 	// SetModule("accumulate", "debug").
 	// SetModule("executor", "debug").
 	// SetModule("synthetic", "debug").
+	// SetModule("anchoring", "info").
+	// SetModule("block", "debug").
 	// SetModule("storage", "debug").
 	// SetModule("database", "debug").
 	// SetModule("fake-node", "debug").
@@ -56,7 +59,6 @@ func DefaultConfig(networkName string, net config.NetworkType, node config.NodeT
 	cfg.Mempool.Size = 50000                             //
 	cfg.Consensus.CreateEmptyBlocks = false              // Empty blocks are annoying to debug
 	cfg.Consensus.TimeoutCommit = time.Second / 5        // Increase block frequency
-	cfg.Accumulate.Website.Enabled = false               // No need for the website
 	cfg.Instrumentation.Prometheus = false               // Disable prometheus: https://github.com/tendermint/tendermint/issues/7076
 	cfg.Accumulate.Network.Partitions = []config.Partition{
 		{
@@ -101,11 +103,16 @@ func CreateTestNet(t testing.TB, numBvns, numValidators, numFollowers int, withF
 		initLogger = logging.NewTestLogger(t, "plain", DefaultLogLevels, false)
 	}
 
-	var factomAddressFilePath string
+	// Disable the sliding fee schedule
+	values := new(core.GlobalValues)
+	values.Globals = new(protocol.NetworkGlobals)
+	values.Globals.FeeSchedule = new(protocol.FeeSchedule)
+
+	var factomAddresses func() (io.Reader, error)
 	if withFactomAddress {
-		factomAddressFilePath = "test_factom_addresses"
+		factomAddresses = func() (io.Reader, error) { return strings.NewReader(testdata.FactomAddresses), nil }
 	}
-	genDocs, err := accumulated.BuildGenesisDocs(netInit, new(core.GlobalValues), time.Now(), initLogger, factomAddressFilePath)
+	genDocs, err := accumulated.BuildGenesisDocs(netInit, values, time.Now(), initLogger, factomAddresses)
 	require.NoError(t, err)
 
 	configs := accumulated.BuildNodesConfig(netInit, DefaultConfig)
@@ -128,11 +135,11 @@ func CreateTestNet(t testing.TB, numBvns, numValidators, numFollowers int, withF
 	daemons := make(map[string][]*accumulated.Daemon, numBvns+1)
 	for _, configs := range configs {
 		for _, configs := range configs {
-			for _, config := range configs {
-				daemon, err := accumulated.Load(config.RootDir, func(c *cfg.Config) (io.Writer, error) { return logWriter(c.LogFormat) })
+			for _, cfg := range configs {
+				daemon, err := accumulated.Load(cfg.RootDir, func(c *config.Config) (io.Writer, error) { return logWriter(c.LogFormat) })
 				require.NoError(t, err)
-				partition := config.Accumulate.PartitionId
-				daemon.Logger = daemon.Logger.With("test", t.Name(), "partition", partition, "node", config.Moniker)
+				partition := cfg.Accumulate.PartitionId
+				daemon.Logger = daemon.Logger.With("test", t.Name(), "partition", partition, "node", cfg.Moniker)
 				daemons[partition] = append(daemons[partition], daemon)
 			}
 		}

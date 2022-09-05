@@ -9,9 +9,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -24,7 +24,7 @@ func TestStateSaveAndRestore(t *testing.T) {
 	sim.InitFromGenesis()
 
 	// Prepare the ADI
-	name := protocol.AccountUrl("foo")
+	name := AccountUrl("foo")
 	key := acctesting.GenerateKey(t.Name(), name)
 	SetupIdentity(sim, name, key, &timestamp)
 
@@ -40,7 +40,7 @@ func TestStateSaveAndRestore(t *testing.T) {
 		defer batch.Discard()
 		f, err := os.Create(filename(partition.Id))
 		require.NoError(t, err)
-		require.NoError(t, x.Executor.SaveSnapshot(batch, f))
+		require.NoError(t, snapshot.FullCollect(batch, f, &x.Executor.Describe))
 		require.NoError(t, f.Close())
 	}
 
@@ -132,7 +132,7 @@ func SetupIdentity(sim *simulator.Simulator, name *url.URL, key []byte, timestam
 			WithTimestampVar(timestamp).
 			WithBody(&CreateTokenAccount{
 				Url:      name.JoinPath("tokens"),
-				TokenUrl: protocol.AcmeUrl(),
+				TokenUrl: AcmeUrl(),
 			}).
 			Initiate(SignatureTypeED25519, key).
 			Build(),
@@ -146,7 +146,7 @@ func SetupIdentity(sim *simulator.Simulator, name *url.URL, key []byte, timestam
 			WithTimestampVar(timestamp).
 			WithBody(&SendTokens{
 				To: []*TokenRecipient{
-					{Url: name.JoinPath("tokens"), Amount: *big.NewInt(tokenAccountAmount * protocol.AcmePrecision)},
+					{Url: name.JoinPath("tokens"), Amount: *big.NewInt(tokenAccountAmount * AcmePrecision)},
 				},
 			}).
 			Initiate(SignatureTypeED25519, liteKey).

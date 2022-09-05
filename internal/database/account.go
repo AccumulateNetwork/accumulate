@@ -2,16 +2,35 @@ package database
 
 import (
 	"fmt"
-	"strings"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 )
 
-func (r *Account) url() *url.URL {
+func UpdateAccount[T protocol.Account](batch *Batch, url *url.URL, fn func(T) error) (T, error) {
+	record := batch.Account(url).Main()
+
+	var account T
+	err := record.GetAs(&account)
+	if err != nil {
+		return account, errors.Format(errors.StatusUnknownError, "load %v: %w", url, err)
+	}
+
+	err = fn(account)
+	if err != nil {
+		return account, errors.Wrap(errors.StatusUnknownError, err)
+	}
+
+	err = record.Put(account)
+	if err != nil {
+		return account, errors.Format(errors.StatusUnknownError, "store %v: %w", url, err)
+	}
+
+	return account, nil
+}
+
+func (r *Account) Url() *url.URL {
 	return r.key[1].(*url.URL)
 }
 
@@ -20,25 +39,27 @@ func (a *Account) Commit() error {
 		return nil
 	}
 
-	// Ensure the synthetic anchors index is up to date
-	for anchor, set := range a.syntheticForAnchor {
-		if !set.IsDirty() {
-			continue
-		}
-
-		err := a.SyntheticAnchors().Add(anchor)
-		if err != nil {
+	if fieldIsDirty(a.main) {
+		acc, err := a.Main().Get()
+		switch {
+		case err == nil:
+			if len(acc.GetUrl().String()) > protocol.AccountUrlMaxLength {
+				return errors.Wrap(errors.StatusBadUrlLength, fmt.Errorf("url specified exceeds maximum character length: %s", acc.GetUrl().String()))
+			}
+		case errors.Is(err, errors.StatusNotFound):
+			// The main state is unset so there's nothing to check
+		default:
 			return errors.Wrap(errors.StatusUnknownError, err)
 		}
 	}
 
-	// Chains are not part of the model (yet) so they must be handled separately
-	for _, c := range a.chains2 {
-		if !c.IsDirty() {
+	// Ensure the synthetic anchors index is up to date
+	for k, set := range a.syntheticForAnchor {
+		if !set.IsDirty() {
 			continue
 		}
 
-		err := c.Commit()
+		err := a.SyntheticAnchors().Add(k.Anchor)
 		if err != nil {
 			return errors.Wrap(errors.StatusUnknownError, err)
 		}
@@ -53,17 +74,6 @@ func (a *Account) Commit() error {
 	// Do the normal commit stuff
 	err = a.baseCommit()
 	return errors.Wrap(errors.StatusUnknownError, err)
-}
-
-func (a *Account) Resolve(key record.Key) (record.Record, record.Key, error) {
-	if len(key) >= 2 && key[0] == "Chain" {
-		name, ok := key[1].(string)
-		if ok {
-			return a.chain(name), key[2:], nil
-		}
-	}
-
-	return a.baseResolve(key)
 }
 
 // GetState loads the record state.
@@ -85,8 +95,8 @@ func (r *Account) PutState(state protocol.Account) error {
 	}
 
 	// Is this the right URL - does it match the record's key?
-	if !r.url().Equal(state.GetUrl()) {
-		return fmt.Errorf("mismatched url: key is %v, URL is %v", r.url(), state.GetUrl())
+	if !r.Url().Equal(state.GetUrl()) {
+		return fmt.Errorf("mismatched url: key is %v, URL is %v", r.Url(), state.GetUrl())
 	}
 
 	// Make sure the key book is set
@@ -114,38 +124,6 @@ func (r *Account) AddPending(txid *url.TxID) error {
 
 func (r *Account) RemovePending(txid *url.TxID) error {
 	return r.Pending().Remove(txid)
-}
-
-// Chain returns a chain manager for the given chain.
-func (r *Account) Chain(name string, typ protocol.ChainType) (*Chain, error) {
-	err := r.Chains().Add(&protocol.ChainMetadata{Name: name, Type: typ})
-	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
-	}
-	return newChain(r, r.chain(name), true)
-}
-
-// IndexChain returns a chain manager for the index chain of the given chain.
-func (r *Account) IndexChain(name string, major bool) (*Chain, error) {
-	return r.Chain(protocol.IndexChain(name, major), protocol.ChainTypeIndex)
-}
-
-func (r *Account) chain(name string) *managed.Chain {
-	name = strings.ToLower(name)
-	key := r.key.Append("Chain", name)
-	return getOrCreateMap(&r.chains2, key, func() *managed.Chain {
-		return managed.NewChain(r.batch.logger.L, r.batch.recordStore, key, markPower, name, "account %[2]s chain %[4]s")
-	})
-}
-
-// ReadChain returns a read-only chain manager for the given chain.
-func (r *Account) ReadChain(name string) (*Chain, error) {
-	return newChain(r, r.chain(name), false)
-}
-
-// ReadIndexChain returns a read-only chain manager for the index chain of the given chain.
-func (r *Account) ReadIndexChain(name string, major bool) (*Chain, error) {
-	return r.ReadChain(protocol.IndexChain(name, major))
 }
 
 func (r *Account) AddSyntheticForAnchor(anchor [32]byte, txid *url.TxID) error {

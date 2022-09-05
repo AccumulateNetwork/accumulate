@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -44,7 +45,7 @@ func TestState(t *testing.T) {
 	_ = bvn.Database.View(func(b *database.Batch) error {
 		blockHash, err = b.GetMinorRootChainAnchor(&bvn.Executor.Describe)
 		require.NoError(t, err)
-		require.NoError(t, b.SaveSnapshot(f, &bvn.Executor.Describe))
+		require.NoError(t, snapshot.FullCollect(b, f, &bvn.Executor.Describe))
 		bptRoot = b.BptRoot()
 		return nil
 	})
@@ -54,16 +55,16 @@ func TestState(t *testing.T) {
 
 	// Load the file into a new database
 	db := database.OpenInMemory(nil)
-	var blockHash2, bptRoot2 []byte
 	require.NoError(t, db.Update(func(b *database.Batch) error {
-		require.NoError(t, b.RestoreSnapshot(f))
-		blockHash2, err = b.GetMinorRootChainAnchor(&bvn.Executor.Describe)
+		return snapshot.FullRestore(b, f, nil, &bvn.Executor.Describe)
+	}))
+	require.NoError(t, db.View(func(b *database.Batch) error {
+		// Does it match?
+		blockHash2, err := b.GetMinorRootChainAnchor(&bvn.Executor.Describe)
 		require.NoError(t, err)
-		bptRoot2 = b.BptRoot()
+		require.Equal(t, blockHash, blockHash2)
+		require.Equal(t, bptRoot, b.BptRoot())
 		return nil
 	}))
 
-	// Does it match?
-	require.Equal(t, blockHash, blockHash2)
-	require.Equal(t, bptRoot, bptRoot2)
 }

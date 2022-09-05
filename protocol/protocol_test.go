@@ -2,10 +2,12 @@ package protocol
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	. "gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	. "gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
 func TestIsValidAdiUrl(t *testing.T) {
@@ -89,4 +91,9 @@ func TestParseLiteTokenAddress(t *testing.T) {
 			require.Equal(t, "acc://"+test, tok.String())
 		})
 	}
+}
+
+func TestParseLiteAddress_Invalid(t *testing.T) {
+	_, err := ParseLiteAddress(&url.URL{Authority: hex.EncodeToString([]byte{0xCA, 0xFE})})
+	require.Error(t, err)
 }

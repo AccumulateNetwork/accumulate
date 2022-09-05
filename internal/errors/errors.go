@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"runtime"
+	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 )
@@ -25,15 +26,6 @@ func makeError(code Status) *Error {
 	e.Code = code
 	e.recordCallSite(3)
 	return e
-}
-
-func (e *Error) errorf(format string, args ...interface{}) {
-	err := fmt.Errorf(format, args...)
-	e.Message = err.Error()
-
-	if u, ok := err.(interface{ Unwrap() error }); ok {
-		e.setCause(convert(u.Unwrap()))
-	}
 }
 
 func convert(err error) *Error {
@@ -104,6 +96,12 @@ func Wrap(code Status, err error) error {
 		// The return type must be `error` - otherwise this returns statement
 		// can cause strange errors
 		return nil
+	}
+	// If err is an Error and we're not going to add anything, return it
+	if !trackLocation && code == StatusUnknownError {
+		if _, ok := err.(*Error); ok {
+			return err
+		}
 	}
 	e := makeError(code)
 	e.setCause(convert(err))
@@ -180,15 +178,26 @@ func (e *Error) Format(f fmt.State, verb rune) {
 }
 
 func (e *Error) Print() string {
-	return e.Message + "\n" + e.PrintCallstack()
+	var str []string
+	for e != nil {
+		str = append(str, e.Message+"\n"+e.printCallstack())
+		e = e.Cause
+	}
+	return strings.Join(str, "\n")
 }
 
-func (e *Error) PrintCallstack() string {
+func (e *Error) printCallstack() string {
+	var str string
+	for _, cs := range e.CallStack {
+		str += fmt.Sprintf("%s\n    %s:%d\n", cs.FuncName, cs.File, cs.Line)
+	}
+	return str
+}
+
+func (e *Error) PrintFullCallstack() string {
 	var str string
 	for e != nil {
-		for _, cs := range e.CallStack {
-			str += fmt.Sprintf("%s\n    %s:%d\n", cs.FuncName, cs.File, cs.Line)
-		}
+		str += e.printCallstack()
 		e = e.Cause
 	}
 	return str

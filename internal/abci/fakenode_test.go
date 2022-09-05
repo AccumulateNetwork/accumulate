@@ -21,7 +21,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
-	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
@@ -33,7 +33,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/testing/e2e"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
@@ -47,13 +48,12 @@ type FakeNode struct {
 	client  *acctesting.FakeTendermint
 	key     crypto.PrivKey
 	height  int64
-	api     api2.Querier
+	api     *client.Client
 	logger  log.Logger
 	router  routing.Router
 
-	assert       *assert.Assertions
-	require      *require.Assertions
-	nodeExecutor *block.Executor
+	assert  *assert.Assertions
+	require *require.Assertions
 }
 
 func RunTestNet(t *testing.T, partitions []string, daemons map[string][]*accumulated.Daemon, openDb func(d *accumulated.Daemon) (*database.Database, error), doGenesis bool, errorHandler func(err error)) map[string][]*FakeNode {
@@ -61,13 +61,13 @@ func RunTestNet(t *testing.T, partitions []string, daemons map[string][]*accumul
 
 	allNodes := map[string][]*FakeNode{}
 	allChans := map[string][]chan<- abcitypes.Application{}
-	clients := map[string]connections.ABCIClient{}
 	evilNodePrefix := "evil-"
-	for _, netName := range partitions {
+	for i, netName := range partitions {
 		isEvil := false
 		if strings.HasPrefix(netName, evilNodePrefix) {
 			isEvil = true
 			netName = strings.TrimPrefix(netName, evilNodePrefix)
+			partitions[i] = netName
 		}
 
 		daemons := daemons[netName]
@@ -77,8 +77,6 @@ func RunTestNet(t *testing.T, partitions []string, daemons map[string][]*accumul
 		for i, daemon := range daemons {
 			nodes[i], chans[i] = InitFake(t, daemon, openDb, errorHandler, isEvil)
 		}
-		// TODO It _should_ be one or the other - why doesn't that work?
-		clients[netName] = nodes[0].client
 	}
 
 	genesis := map[string]*tmtypes.GenesisDoc{}
@@ -90,7 +88,7 @@ func RunTestNet(t *testing.T, partitions []string, daemons map[string][]*accumul
 		}
 	}
 
-	connectionManager := connections.NewFakeConnectionManager(clients)
+	connectionManager := connections.NewFakeConnectionManager(partitions)
 	for _, netName := range partitions {
 		netName = strings.TrimPrefix(netName, evilNodePrefix)
 		nodes, chans := allNodes[netName], allChans[netName]
@@ -98,6 +96,14 @@ func RunTestNet(t *testing.T, partitions []string, daemons map[string][]*accumul
 			nodes[i].Start(chans[i], connectionManager, genesis[netName])
 		}
 	}
+
+	clients := map[string]connections.FakeClient{}
+	for _, netName := range partitions {
+		nodes := allNodes[netName]
+		// TODO It _should_ be one or the other - why doesn't that work?
+		clients[netName] = connections.FakeClient{nodes[0].client, nodes[0].api}
+	}
+	connectionManager.SetClients(clients)
 
 	return allNodes
 }
@@ -196,12 +202,16 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connectio
 	// immediately, but make sure it definitely happens
 	defer func() { appChan <- n.app }()
 
-	n.api = api2.NewQueryDispatch(api2.Options{
+	jrpc, err := api.NewJrpc(api.Options{
 		Logger:        n.logger,
 		Describe:      n.network,
 		Router:        n.router,
 		TxMaxWaitTime: 10 * time.Second,
+		Database:      n.db,
+		Key:           n.key.Bytes(),
 	})
+	require.NoError(n.t, err)
+	n.api = acctesting.DirectJrpcClient(jrpc)
 
 	n.T().Cleanup(func() { n.client.Shutdown() })
 
@@ -244,26 +254,29 @@ func (n *FakeNode) NextHeight() int64 {
 	return n.height
 }
 
-func (n *FakeNode) QueryAccount(url string) *api2.ChainQueryResponse {
+func (n *FakeNode) queryUrl(url string, resp interface{}) error {
+	req := new(api.GeneralQuery)
+	req.Url = n.parseUrl(url)
+	return n.api.RequestAPIv2(context.Background(), "query", req, resp)
+}
+
+func (n *FakeNode) QueryAccount(url string) *api.ChainQueryResponse {
 	n.t.Helper()
-	r, err := n.api.QueryUrl(n.parseUrl(url), api2.QueryOptions{})
-	n.Require().NoError(err)
-	n.Require().IsType((*api2.ChainQueryResponse)(nil), r)
-	return r.(*api2.ChainQueryResponse)
+	var r *api.ChainQueryResponse
+	n.Require().NoError(n.queryUrl(url, &r))
+	return r
 }
 
-func (n *FakeNode) QueryTransaction(url string) *api2.TransactionQueryResponse {
-	r, err := n.api.QueryUrl(n.parseUrl(url), api2.QueryOptions{})
-	n.require.NoError(err)
-	n.Require().IsType((*api2.TransactionQueryResponse)(nil), r)
-	return r.(*api2.TransactionQueryResponse)
+func (n *FakeNode) QueryTransaction(url string) *api.TransactionQueryResponse {
+	var r *api.TransactionQueryResponse
+	n.require.NoError(n.queryUrl(url, &r))
+	return r
 }
 
-func (n *FakeNode) QueryMulti(url string) *api2.MultiResponse {
-	r, err := n.api.QueryUrl(n.parseUrl(url), api2.QueryOptions{})
-	n.require.NoError(err)
-	n.Require().IsType((*api2.MultiResponse)(nil), r)
-	return r.(*api2.MultiResponse)
+func (n *FakeNode) QueryMulti(url string) *api.MultiResponse {
+	var r *api.MultiResponse
+	n.require.NoError(n.queryUrl(url, &r))
+	return r
 }
 
 func (n *FakeNode) QueryAccountAs(url string, result interface{}) {
@@ -368,6 +381,14 @@ func (n *FakeNode) WaitForTxns(ids ...[]byte) error {
 	return n.waitForTxns(nil, false, ids...)
 }
 
+func (n *FakeNode) QueryTx(txid []byte, wait time.Duration, ignorePending bool) (*api.TransactionQueryResponse, error) {
+	req := new(api.TxnQuery)
+	req.Txid = txid
+	req.Wait = wait
+	req.IgnorePending = ignorePending
+	return n.api.QueryTx(context.Background(), req)
+}
+
 func (n *FakeNode) waitForTxns(cause []byte, ignorePending bool, ids ...[]byte) error {
 	n.t.Helper()
 
@@ -377,7 +398,7 @@ func (n *FakeNode) waitForTxns(cause []byte, ignorePending bool, ids ...[]byte) 
 		} else {
 			n.logger.Debug("Waiting for transaction", "module", "fake-node", "hash", logging.AsHex(id), "cause", logging.AsHex(cause))
 		}
-		res, err := n.api.QueryTx(id, 1*time.Second, ignorePending, api2.QueryOptions{})
+		res, err := n.QueryTx(id, 1*time.Second, ignorePending)
 		if err != nil {
 			return fmt.Errorf("Failed to query TX %X (%v)", id, err)
 		}
@@ -430,13 +451,8 @@ func (n *FakeNode) GetDirectory(adi string) []string {
 	return chains
 }
 
-func (n *FakeNode) GetTx(txid []byte) *api2.TransactionQueryResponse {
-	q := api2.NewQueryDirect(n.network.PartitionId, api2.Options{
-		Logger:   n.logger,
-		Describe: n.network,
-		Router:   n.router,
-	})
-	resp, err := q.QueryTx(txid, 0, false, api2.QueryOptions{})
+func (n *FakeNode) GetTx(txid []byte) *api.TransactionQueryResponse {
+	resp, err := n.QueryTx(txid, 0, false)
 	require.NoError(n.t, err)
 	data, err := json.Marshal(resp.Data)
 	require.NoError(n.t, err)

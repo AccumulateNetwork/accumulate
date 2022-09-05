@@ -1,16 +1,17 @@
 package e2e
 
 import (
+	"fmt"
 	"math/big"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
+	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -22,7 +23,7 @@ func TestRefundCycle(t *testing.T) {
 	sim.InitFromGenesis()
 
 	// Setup accounts
-	alice := protocol.AccountUrl("alice")
+	alice := AccountUrl("alice")
 	aliceKey := acctesting.GenerateKey(alice)
 	sim.CreateIdentity(alice, aliceKey[32:])
 	updateAccount(sim, alice.JoinPath("book", "1"), func(page *KeyPage) { page.CreditBalance = 1e9 })
@@ -36,7 +37,7 @@ func TestRefundCycle(t *testing.T) {
 			WithTimestampVar(&timestamp).
 			WithBody(&SendTokens{
 				To: []*TokenRecipient{{
-					Url:    protocol.AccountUrl("bob", "tokens"),
+					Url:    AccountUrl("bob", "tokens"),
 					Amount: *big.NewInt(1),
 				}},
 			}).
@@ -76,4 +77,100 @@ func TestRefundCycle(t *testing.T) {
 
 	// Verify the failed refund did not generate a refund
 	require.Empty(t, allSynth)
+}
+
+func TestRefundFailedUserTransaction_Local(t *testing.T) {
+	alice := AccountUrl("alice")
+	aliceKey := acctesting.GenerateKey(alice)
+
+	// Initialize
+	var timestamp uint64
+	sim := simulator.New(t, 3)
+	sim.InitFromGenesis()
+
+	sim.CreateIdentity(alice, aliceKey[32:])
+	updateAccount(sim, alice.JoinPath("book", "1"), func(page *KeyPage) { page.CreditBalance = 1e9 })
+	sim.CreateAccount(&TokenAccount{Url: alice.JoinPath("tokens"), TokenUrl: AcmeUrl()})
+
+	// The transaction is submitted but fails when delivered
+	exec := &overrideExecutor{
+		typ:      TransactionTypeSendTokens,
+		validate: func(st *chain.StateManager, tx *chain.Delivery) error { return nil },
+		execute:  func(st *chain.StateManager, tx *chain.Delivery) error { return fmt.Errorf("") },
+	}
+	for _, x := range sim.Executors {
+		x.Executor.SetExecutor_TESTONLY(exec)
+	}
+
+	// Submit a transaction
+	status, err := sim.SubmitAndExecuteBlock(
+		acctesting.NewTransaction().
+			WithPrincipal(alice.JoinPath("tokens")).
+			WithSigner(alice.JoinPath("book", "1"), 1).
+			WithTimestampVar(&timestamp).
+			WithBody(&SendTokens{To: []*TokenRecipient{{}}}).
+			Initiate(SignatureTypeED25519, aliceKey).
+			Build(),
+	)
+	require.NoError(t, err)
+	require.True(t, status[0].Failed())
+
+	hash := status[0].TxID.Hash()
+	sim.WaitForTransactionFlow(delivered, hash[:])
+
+	// The transaction produces a refund for the signer
+	produced := simulator.GetTxnState[[]*url.TxID](sim, status[0].TxID, (*database.Transaction).Produced)
+	require.Len(t, produced, 1, "Expected a single transaction to be produced")
+	refund := simulator.GetTxnState[*database.SigOrTxn](sim, produced[0], (*database.Transaction).Main)
+	require.NotNil(t, refund.Transaction)
+	require.IsType(t, (*SyntheticDepositCredits)(nil), refund.Transaction.Body)
+	require.Equal(t, alice.JoinPath("book", "1").ShortString(), refund.Transaction.Header.Principal.ShortString())
+}
+
+func TestRefundFailedUserTransaction_Remote(t *testing.T) {
+	alice := AccountUrl("alice")
+	aliceKey := acctesting.GenerateKey(alice)
+	bob := AccountUrl("bob")
+	bobKey := acctesting.GenerateKey(bob)
+
+	// Initialize
+	var timestamp uint64
+	sim := simulator.New(t, 3)
+	sim.InitFromGenesis()
+
+	sim.CreateIdentity(alice, aliceKey[32:])
+	updateAccount(sim, alice.JoinPath("book", "1"), func(page *KeyPage) { page.CreditBalance = 1e9 })
+	sim.CreateIdentity(bob, bobKey[32:])
+	sim.CreateAccount(&TokenAccount{Url: bob.JoinPath("tokens"), TokenUrl: AcmeUrl(), AccountAuth: AccountAuth{Authorities: []AuthorityEntry{{Url: alice.JoinPath("book")}}}})
+
+	// The transaction would fail if submitted directly
+	exec := &overrideExecutor{
+		typ:      TransactionTypeSendTokens,
+		validate: func(st *chain.StateManager, tx *chain.Delivery) error { return fmt.Errorf("") },
+		execute:  func(st *chain.StateManager, tx *chain.Delivery) error { return fmt.Errorf("") },
+	}
+	for _, x := range sim.Executors {
+		x.Executor.SetExecutor_TESTONLY(exec)
+	}
+
+	// Submit a transaction with a remote signature
+	txn := sim.MustSubmitAndExecuteBlock(
+		acctesting.NewTransaction().
+			WithPrincipal(bob.JoinPath("tokens")).
+			WithSigner(alice.JoinPath("book", "1"), 1).
+			WithTimestampVar(&timestamp).
+			WithBody(&SendTokens{To: []*TokenRecipient{{}}}).
+			Initiate(SignatureTypeED25519, aliceKey).
+			Build(),
+	)[0].Transaction[0]
+	status, _ := sim.WaitForTransactionFlow(delivered, txn.GetHash())
+	require.True(t, status[0].Failed())
+
+	// The transaction produces a refund for the signer
+	produced := simulator.GetTxnState[[]*url.TxID](sim, status[0].TxID, (*database.Transaction).Produced)
+	require.Len(t, produced, 1, "Expected a single transaction to be produced")
+	refund := simulator.GetTxnState[*database.SigOrTxn](sim, produced[0], (*database.Transaction).Main)
+	require.NotNil(t, refund.Transaction)
+	require.IsType(t, (*SyntheticDepositCredits)(nil), refund.Transaction.Body)
+	require.Equal(t, alice.JoinPath("book", "1").ShortString(), refund.Transaction.Header.Principal.ShortString())
 }

@@ -43,8 +43,8 @@ func NewDevnet(opts DevnetOptions) *NetworkInit {
 
 			if opts.HostName != nil {
 				host, listen := opts.HostName(i, j)
-				nodeInit.HostName = host
-				nodeInit.ListenIP = listen
+				nodeInit.AdvertizeAddress = host
+				nodeInit.ListenAddress = listen
 			}
 		}
 	}

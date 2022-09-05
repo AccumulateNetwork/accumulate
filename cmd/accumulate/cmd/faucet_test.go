@@ -17,7 +17,6 @@ func init() {
 }
 
 func testCase5_1(t *testing.T, tc *testCmd) {
-	t.Helper()
 
 	beenFauceted := make([]bool, len(liteAccounts))
 	//test to see if things have already been fauceted...
@@ -47,7 +46,7 @@ func testCase5_1(t *testing.T, tc *testCmd) {
 	for _, r := range results {
 		var res ActionResponse
 		require.NoError(t, json.Unmarshal([]byte(r), &res))
-		_, err := waitForTxn(res.TransactionHash, 10*time.Second, true)
+		_, err := waitForTxnUsingHash(res.TransactionHash, 10*time.Second, true)
 		require.NoError(t, err)
 	}
 

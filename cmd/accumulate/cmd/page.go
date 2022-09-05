@@ -5,7 +5,8 @@ import (
 	"strconv"
 
 	"github.com/spf13/cobra"
-	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
+	url2 "gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -21,7 +22,9 @@ func init() {
 	pageKeyCmd.AddCommand(
 		pageKeyAddCmd,
 		pageKeyUpdateCmd,
+		pageKeyReplaceCmd,
 		pageKeyRemoveCmd)
+
 }
 
 var pageCmd = &cobra.Command{
@@ -39,7 +42,7 @@ var pageGetCmd = &cobra.Command{
 }
 
 var pageCreateCmd = &cobra.Command{
-	Use:   "create [origin key book url] [signing key name] [key index (optional)] [key height (optional)] [public key 1] ... [public key hex or name n + 1]",
+	Use:   "create [origin key book url] [key name[@key book or page]] [public key 1] ... [public key hex or name n + 1]",
 	Short: "Create a key page",
 	Args:  cobra.MinimumNArgs(3),
 	Run: runCmdFunc(func(args []string) (string, error) {
@@ -53,7 +56,7 @@ var pageKeyCmd = &cobra.Command{
 }
 
 var pageKeyAddCmd = &cobra.Command{
-	Use:   "add [key page url] [signing key name] [key index (optional)] [key height (optional)] [new key name]",
+	Use:   "add [key page url] [key name[@key book or page]] [new key name]",
 	Short: "Add a key to a key page",
 	Args:  cobra.RangeArgs(3, 5),
 	Run: runCmdFunc(func(args []string) (string, error) {
@@ -62,7 +65,7 @@ var pageKeyAddCmd = &cobra.Command{
 }
 
 var pageKeyRemoveCmd = &cobra.Command{
-	Use:   "remove [key page url] [signing key name] [key index (optional)] [key height (optional)] [old key name]",
+	Use:   "remove [key page url] [key name[@key book or page]]  [old key name]",
 	Short: "Remove a key from a key page",
 	Args:  cobra.RangeArgs(3, 5),
 	Run: runCmdFunc(func(args []string) (string, error) {
@@ -71,7 +74,7 @@ var pageKeyRemoveCmd = &cobra.Command{
 }
 
 var pageKeyUpdateCmd = &cobra.Command{
-	Use:   "update [key page url] [signing key name] [key index (optional)] [key height (optional)] [old key name] [new public key or name]",
+	Use:   "update [key page url] [key name[@key book or page]] [old key name] [new public key or name]",
 	Short: "Update a key on a key page",
 	Args:  cobra.RangeArgs(4, 6),
 	Run: runCmdFunc(func(args []string) (string, error) {
@@ -79,9 +82,18 @@ var pageKeyUpdateCmd = &cobra.Command{
 	}),
 }
 
+var pageKeyReplaceCmd = &cobra.Command{
+	Use:   "replace [key page url] [key name[@key book or page]] [new public key or name]",
+	Short: "Update a your key on a key page which bypasses threshold",
+	Args:  cobra.ExactArgs(3),
+	Run: runCmdFunc(func(args []string) (string, error) {
+		return ReplaceKey(args)
+	}),
+}
+
 ////nolint
 var pageSetThresholdCmd = &cobra.Command{
-	Use:   "set-threshold [key page url] [signing key name] [key index (optional)] [key height (optional)] [threshold]",
+	Use:   "set-threshold [key page url] [key name[@key book or page]] [threshold]",
 	Short: "Set the M-of-N signature threshold for a key page",
 	Args:  cobra.RangeArgs(3, 5),
 	Run:   runCmdFunc(setKeyPageThreshold),
@@ -89,14 +101,14 @@ var pageSetThresholdCmd = &cobra.Command{
 var _ = pageSetThresholdCmd // remove dead code removal
 
 var pageLockCmd = &cobra.Command{
-	Use:   "lock [key page url] [signing key name] [key index (optional)] [key height (optional)]",
+	Use:   "lock [key page url] [key name[@key book or page]] ",
 	Short: "Lock a key page",
 	Args:  cobra.RangeArgs(2, 4),
 	Run:   runCmdFunc(lockKeyPage),
 }
 
 var pageUnlockCmd = &cobra.Command{
-	Use:   "unlock [key page url] [signing key name] [key index (optional)] [key height (optional)]",
+	Use:   "unlock [key page url] [key name[@key book or page]]",
 	Short: "Unlock a key page",
 	Args:  cobra.RangeArgs(2, 4),
 	Run:   runCmdFunc(unlockKeyPage),
@@ -159,7 +171,7 @@ func CreateKeyPage(bookUrlStr string, args []string) (string, error) {
 	for i := range keyLabels {
 		ksp := protocol.KeySpecParams{}
 
-		k, err := LookupByLabel(keyLabels[i])
+		k, err := walletd.LookupByLabel(keyLabels[i])
 
 		if err != nil {
 			//now check to see if it is a valid key hex, if so we can assume that is the public key.
@@ -233,6 +245,27 @@ func KeyPageUpdate(origin string, op protocol.KeyPageOperationType, args []strin
 	}
 
 	return dispatchTxAndPrintResponse(&ukp, u, signer)
+}
+
+func ReplaceKey(args []string) (string, error) {
+	principal, err := url2.Parse(args[0])
+	if err != nil {
+		return "", err
+	}
+
+	args, signer, err := prepareSigner(principal, args[1:])
+	if err != nil {
+		return "", err
+	}
+
+	k, err := resolvePublicKey(args[0])
+	if err != nil {
+		return "", err
+	}
+
+	txn := new(protocol.UpdateKey)
+	txn.NewKeyHash = k.PublicKeyHash()
+	return dispatchTxAndPrintResponse(txn, principal, signer)
 }
 
 func setKeyPageThreshold(args []string) (string, error) {

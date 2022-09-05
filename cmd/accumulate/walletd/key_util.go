@@ -1,0 +1,248 @@
+package walletd
+
+import (
+	"crypto/ed25519"
+	"crypto/sha256"
+	"encoding/binary"
+	"fmt"
+	"runtime/debug"
+
+	btc "github.com/btcsuite/btcd/btcec"
+	"github.com/tyler-smith/go-bip32"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+)
+
+//go:generate go run ../../../tools/cmd/gen-types --package walletd --out key_info_gen.go key_info.yml
+
+type Key struct {
+	PublicKey  []byte
+	PrivateKey []byte
+	KeyInfo    KeyInfo
+}
+
+func (k *Key) PublicKeyHash() []byte {
+	switch k.KeyInfo.Type {
+	case protocol.SignatureTypeLegacyED25519,
+		protocol.SignatureTypeED25519:
+		hash := sha256.Sum256(k.PublicKey)
+		return hash[:]
+
+	case protocol.SignatureTypeRCD1:
+		return protocol.GetRCDHashFromPublicKey(k.PublicKey, 1)
+
+	case protocol.SignatureTypeBTC, protocol.SignatureTypeBTCLegacy:
+		return protocol.BTCHash(k.PublicKey)
+
+	case protocol.SignatureTypeETH:
+		return protocol.ETHhash(k.PublicKey)
+
+	default:
+		debug.PrintStack()
+		panic(fmt.Errorf("cannot hash key for unsupported signature type %v(%d)", k.KeyInfo.Type, k.KeyInfo.Type.GetEnumValue()))
+	}
+}
+
+func (k *Key) Save(label, liteLabel string) error {
+	if k.KeyInfo.Type == protocol.SignatureTypeUnknown {
+		return fmt.Errorf("signature type is was not specified")
+	}
+
+	err := GetWallet().Put(BucketKeys, k.PublicKey, k.PrivateKey)
+	if err != nil {
+		return err
+	}
+
+	err = GetWallet().Put(BucketLabel, []byte(label), k.PublicKey)
+	if err != nil {
+		return err
+	}
+
+	err = GetWallet().Put(BucketLite, []byte(liteLabel), []byte(label))
+	if err != nil {
+		return err
+	}
+
+	data, err := k.KeyInfo.MarshalBinary()
+	if err != nil {
+		return err
+	}
+
+	err = GetWallet().Put(BucketKeyInfo, k.PublicKey, data)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (k *Key) LoadByLabel(label string) error {
+	label, _ = LabelForLiteTokenAccount(label)
+
+	pubKey, err := GetWallet().Get(BucketLabel, []byte(label))
+	if err != nil {
+		return fmt.Errorf("valid key not found for %s", label)
+	}
+
+	return k.LoadByPublicKey(pubKey)
+}
+
+func (k *Key) LoadByPublicKey(publicKey []byte) error {
+	k.PublicKey = publicKey
+
+	var err error
+	k.PrivateKey, err = GetWallet().Get(BucketKeys, k.PublicKey)
+	if err != nil {
+		return fmt.Errorf("private key not found for %x", publicKey)
+	}
+
+	b, err := GetWallet().Get(BucketKeyInfo, k.PublicKey)
+	if err != nil {
+		return fmt.Errorf("key type info not found for key %x", k.PublicKey)
+	}
+
+	err = k.KeyInfo.UnmarshalBinary(b)
+	if err != nil {
+		return fmt.Errorf("cannot unmarshal key information for key %x", k.PublicKey)
+	}
+
+	return nil
+}
+
+func (k *Key) InitializeFromSeed(seed []byte, signatureType protocol.SignatureType, hdPath string) error {
+	k.KeyInfo.Type = signatureType
+	k.KeyInfo.Derivation = hdPath
+	switch k.KeyInfo.Type {
+	case protocol.SignatureTypeLegacyED25519, protocol.SignatureTypeED25519, protocol.SignatureTypeRCD1:
+		if len(seed) != ed25519.SeedSize && len(seed) != ed25519.PrivateKeySize {
+			return fmt.Errorf("invalid private key length, expected %d or %d bytes", ed25519.SeedSize, ed25519.PrivateKeySize)
+		}
+		pk := ed25519.NewKeyFromSeed(seed[:ed25519.SeedSize])
+		k.PrivateKey = pk
+		k.PublicKey = pk[ed25519.SeedSize:]
+	case protocol.SignatureTypeBTC:
+		if len(seed) != btc.PrivKeyBytesLen {
+			return fmt.Errorf("invalid private key length, expected %d bytes", btc.PrivKeyBytesLen)
+		}
+		pvkey, pubKey := btc.PrivKeyFromBytes(btc.S256(), seed)
+		k.PrivateKey = pvkey.Serialize()
+		k.PublicKey = pubKey.SerializeCompressed()
+	case protocol.SignatureTypeBTCLegacy, protocol.SignatureTypeETH:
+		if len(seed) != btc.PrivKeyBytesLen {
+			return fmt.Errorf("invalid private key length, expected %d bytes", btc.PrivKeyBytesLen)
+		}
+		pvkey, pubKey := btc.PrivKeyFromBytes(btc.S256(), seed)
+		k.PrivateKey = pvkey.Serialize()
+		k.PublicKey = pubKey.SerializeUncompressed()
+	default:
+		return fmt.Errorf("unsupported signature type %v", k.KeyInfo.Type)
+	}
+
+	return nil
+}
+
+func (k *Key) NativeAddress() (address string, err error) {
+	switch k.KeyInfo.Type {
+	case protocol.SignatureTypeRCD1:
+		address, err = protocol.GetFactoidAddressFromRCDHash(k.PublicKeyHash())
+	case protocol.SignatureTypeBTC, protocol.SignatureTypeBTCLegacy:
+		address = protocol.BTCaddress(k.PublicKeyHash())
+	case protocol.SignatureTypeETH:
+		address = protocol.ETHaddress(k.PublicKeyHash())
+	default:
+		u := protocol.LiteAuthorityForKey(k.PublicKey, protocol.SignatureTypeED25519)
+		address = u.Hostname()
+	}
+	return address, err
+}
+
+func GenerateKey(sigtype protocol.SignatureType) (k *Key, err error) {
+	hd := Derivation{}
+	hd.Account = bip32.FirstHardenedChild
+	hd.Address, err = getKeyCountAndIncrement(sigtype)
+	if err != nil {
+		return nil, err
+	}
+	hd.CoinType = TypeAccumulate
+	switch sigtype {
+	case protocol.SignatureTypeBTCLegacy, protocol.SignatureTypeBTC:
+		hd.CoinType = TypeBitcoin
+	case protocol.SignatureTypeETH:
+		hd.CoinType = TypeEther
+	case protocol.SignatureTypeRCD1:
+		hd.CoinType = TypeFactomFactoids
+	}
+
+	derivationPath, err := hd.ToPath()
+	if err != nil {
+		return nil, err
+	}
+
+	return GenerateKeyFromHDPath(derivationPath)
+}
+
+func GenerateKeyFromHDPath(derivationPath string) (*Key, error) {
+	hd := Derivation{}
+	err := hd.FromPath(derivationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	var sigType protocol.SignatureType
+	switch hd.CoinType {
+	case TypeBitcoin:
+		sigType = protocol.SignatureTypeBTC
+	case TypeEther:
+		sigType = protocol.SignatureTypeETH
+	case TypeFactomFactoids:
+		sigType = protocol.SignatureTypeRCD1
+	case TypeAccumulate:
+		sigType = protocol.SignatureTypeED25519
+	default:
+		return nil, fmt.Errorf("coin type (0x%x) not supported in %s", hd.CoinType, derivationPath)
+	}
+
+	seed, err := lookupSeed()
+	if err != nil {
+		return nil, fmt.Errorf("wallet not created, please create a seeded wallet \"accumulate walleet init\"")
+	}
+
+	//if we do have a seed, then create a new key
+	masterKey, _ := bip32.NewMasterKey(seed)
+
+	//create the derived key
+	newKey, err := NewKeyFromMasterKey(masterKey, hd.CoinType, hd.Account, hd.Chain, hd.Address)
+	if err != nil {
+		return nil, err
+	}
+	key := new(Key)
+	err = key.InitializeFromSeed(newKey.Key, sigType, derivationPath)
+	if err != nil {
+		return nil, err
+	}
+	return key, nil
+}
+
+func getKeyCountAndIncrement(sigtype protocol.SignatureType) (count uint32, err error) {
+	ct, _ := GetWallet().Get(BucketMnemonic, []byte(sigtype.String()))
+	if ct != nil {
+		count = binary.LittleEndian.Uint32(ct)
+	}
+
+	ct = make([]byte, 8)
+	binary.LittleEndian.PutUint32(ct, count+1)
+	err = GetWallet().Put(BucketMnemonic, []byte(sigtype.String()), ct)
+	if err != nil {
+		return 0, err
+	}
+
+	return count, nil
+}
+
+func lookupSeed() (seed []byte, err error) {
+	seed, err = GetWallet().Get(BucketMnemonic, []byte("seed"))
+	if err != nil {
+		return nil, fmt.Errorf("mnemonic seed doesn't exist")
+	}
+
+	return seed, nil
+}

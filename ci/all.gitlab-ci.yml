@@ -37,7 +37,7 @@ validate simple:
     MNEMONIC: yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow
   script:
   - apt-get -y update && apt-get -y install jq xxd
-  - go run ./tools/test/devnet/ -X -v=1,-b=1,--reset
+  - go run ./tools/test/devnet/ -X -v=1,-b=1,--reset,--dn-stall-limit=1000
 
 validate playbooks:
   stage: test
@@ -45,7 +45,7 @@ validate playbooks:
   needs: []
   script:
   - apt-get -y update && apt-get -y install jq xxd
-  - go run ./tools/test/devnet/ -X -v=1,-b=1,--reset play playbooks/validate/*.play
+  - go run ./tools/test/devnet/ -X -v=1,-b=1,--reset,--dn-stall-limit=1000 play playbooks/validate/*.play
 
 validate docker:
   stage: test
@@ -64,7 +64,7 @@ validate docker:
   before_script:
   - apk add --no-cache docker-compose
   - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
-  - docker run --rm -v ${PWD}/nodes:/nodes ${VALIDATION_IMAGE} init devnet -w /nodes --docker --image ${VALIDATION_IMAGE} --compose -b 3 -v 3 -f 0
+  - docker run --rm -v ${PWD}/nodes:/nodes ${VALIDATION_IMAGE} init devnet -w /nodes --docker --image ${VALIDATION_IMAGE} --compose -b 3 -v 3 -f 0 --dn-stall-limit 1000
   - cd nodes
   - docker-compose up tools
   - docker-compose up -d
@@ -73,6 +73,7 @@ validate docker:
   - docker-compose run -e MNEMONIC="${MNEMONIC}" --rm -e NODES_DIR="${NODES_DIR}" --entrypoint bash tools /scripts/ci/update-majorblock-schedule.sh
   - docker-compose run -e MNEMONIC="${MNEMONIC}" --rm --entrypoint bash tools /scripts/ci/validate.sh
   - docker-compose run -e MNEMONIC="${MNEMONIC}" --rm -e NODES_DIR="${NODES_DIR}" --entrypoint bash tools /scripts/ci/validate-admin.sh
+  - docker-compose run -e MNEMONIC="${MNEMONIC}" --rm -e NODES_DIR="${NODES_DIR}" --entrypoint bash tools /scripts/ci/validate-dual-mode.sh
   - docker-compose run --rm --entrypoint bash tools /scripts/ci/validate-blocks-api.sh
   after_script:
   - cd nodes

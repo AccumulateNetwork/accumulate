@@ -1,5 +1,7 @@
 package main
 
+//lint:file-ignore ST1001 Don't care
+
 import (
 	"crypto/ed25519"
 	"crypto/sha256"
@@ -10,8 +12,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/tools/internal/testdata"
 	randPkg "golang.org/x/exp/rand"

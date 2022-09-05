@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -25,7 +25,6 @@ func init() {
 //testCase2_1
 //Create an ADI "RedWagon" sponsored by a Lite Account
 func testCase2_1(t *testing.T, tc *testCmd) {
-	t.Helper()
 
 	//create 5 addresses
 	for i := 1; i <= 5; i++ {
@@ -55,7 +54,6 @@ func testCase2_1(t *testing.T, tc *testCmd) {
 //testCase2_2
 //Create an ADI with a "." contained within the name, expect failure
 func testCase2_2(t *testing.T, tc *testCmd) {
-	t.Helper()
 
 	commandLine := fmt.Sprintf("adi create %s acc://Red.Wagon red1", liteAccounts[0])
 	_, err := tc.execute(t, commandLine)
@@ -65,7 +63,6 @@ func testCase2_2(t *testing.T, tc *testCmd) {
 //testCase2_3
 //Create an ADI with invalid UTF-8, expect failure
 func testCase2_3(t *testing.T, tc *testCmd) {
-	t.Helper()
 
 	commandLine := fmt.Sprintf("adi create %s acc://%c%c%c%c%c%c%c%c%c%c%c%c%c red1", liteAccounts[0],
 		0xC0, 0xC1, 0xF5, 0xF6, 0xF7, 0xF8, 0xF9, 0xFA, 0xFB, 0xFC, 0xFD, 0xFE, 0xFF)
@@ -76,7 +73,6 @@ func testCase2_3(t *testing.T, tc *testCmd) {
 //testCase2_4
 //Create an ADI with a number only, expect failure
 func testCase2_4(t *testing.T, tc *testCmd) {
-	t.Helper()
 	commandLine := fmt.Sprintf("adi create %s acc://12345.acme red1", liteAccounts[0])
 	_, err := tc.execute(t, commandLine)
 	require.Error(t, err)
@@ -86,7 +82,6 @@ func testCase2_4(t *testing.T, tc *testCmd) {
 //testCase2_5
 //Create an ADI that already exists
 func testCase2_5(t *testing.T, tc *testCmd) {
-	t.Helper()
 
 	t.Log("Need to support get txid with upgrade to V2 api to perform test, skipping... ")
 
@@ -107,7 +102,6 @@ func testCase2_5(t *testing.T, tc *testCmd) {
 //testCase2_6a
 //Create an ADI from another ADI
 func testCase2_6a(t *testing.T, tc *testCmd) {
-	t.Helper()
 
 	//attempt to add 1000 credits with only 9 acme with 15% slippage
 	_, err := tc.executeTx(t, "credits %s acc://RedWagon.acme/book/1 1000 10", liteAccounts[1])
@@ -127,7 +121,6 @@ func testCase2_6a(t *testing.T, tc *testCmd) {
 //testCase2_6b
 //Create an ADI with the same encoding as Lite address, should fail
 func testCase2_6b(t *testing.T, tc *testCmd) {
-	t.Helper()
 	k, err := tc.execute(t, "key export private red2")
 	require.NoError(t, err)
 	var res map[string]interface{}
@@ -146,7 +139,6 @@ func testCase2_6b(t *testing.T, tc *testCmd) {
 //testCase2_7a
 //Create sub-ADIs
 func testCase2_7a(t *testing.T, tc *testCmd) {
-	t.Helper()
 
 	_, err := tc.executeTx(t, "credits %s acc://RedWagon.acme/book/1 1000 10", liteAccounts[1])
 	require.NoError(t, err)
@@ -164,7 +156,6 @@ func testCase2_7a(t *testing.T, tc *testCmd) {
 //testCase2_7a
 //Create sub-ADIs with the wrong parents, should fail
 func testCase2_7b(t *testing.T, tc *testCmd) {
-	t.Helper()
 
 	_, err := tc.executeTx(t, "credits %s acc://RedWagon.acme/book/1 1000 10", liteAccounts[1])
 	require.NoError(t, err)

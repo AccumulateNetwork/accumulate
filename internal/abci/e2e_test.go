@@ -8,22 +8,23 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	abci "github.com/tendermint/tendermint/abci/types"
 	types2 "github.com/tendermint/tendermint/abci/types"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2/query"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/testing/e2e"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 	randpkg "golang.org/x/exp/rand"
 )
 
@@ -207,7 +208,7 @@ func TestAnchorChain(t *testing.T) {
 	// // TODO FIX This is broken because the ledger no longer has a list of updates
 	// var ledgerState *protocol.InternalLedger
 	// require.NoError(t, ledger.GetStateAs(&ledgerState))
-	// rootChain, err := ledger.ReadChain(protocol.MinorRootChain)
+	// rootChain, err := ledger.MinorRootChain().Get()
 	// require.NoError(t, err)
 	// first := rootChain.Height() - int64(len(ledgerState.Updates))
 	// for i, meta := range ledgerState.Updates {
@@ -270,6 +271,43 @@ func TestCreateADI(t *testing.T) {
 	ks := n.GetKeyPage("RoadRunner/foo-book/1")
 	require.Len(t, ks.Keys, 1)
 	require.Equal(t, keyHash[:], ks.Keys[0].PublicKeyHash)
+}
+
+func TestAdiUrlLengthLimit(t *testing.T) {
+	check := newDefaultCheckError(t, false)
+	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	nodes := RunTestNet(t, partitions, daemons, nil, true, check.ErrorHandler())
+	n := nodes[partitions[1]][0]
+
+	liteAccount := generateKey()
+	newAdi := generateKey()
+	keyHash := sha256.Sum256(newAdi.PubKey().Address())
+	batch := n.db.Begin(true)
+	require.NoError(n.t, acctesting.CreateLiteTokenAccountWithCredits(batch, liteAccount, protocol.AcmeFaucetAmount, 1e6))
+	require.NoError(t, batch.Commit())
+	accurl := strings.Repeat("𒀹", 250) // 𒀹 is 4 bytes
+
+	txn := n.MustExecuteAndWait(func(send func(*Tx)) {
+		adi := new(protocol.CreateIdentity)
+		adi.Url = protocol.AccountUrl(accurl)
+		adi.KeyHash = keyHash[:]
+		var err error
+		adi.KeyBookUrl, err = url.Parse(fmt.Sprintf("%s/foo-book", adi.Url))
+		require.NoError(t, err)
+
+		sponsorUrl := acctesting.AcmeLiteAddressTmPriv(liteAccount).RootIdentity().String()
+		send(newTxn(sponsorUrl).
+			WithBody(adi).
+			Initiate(protocol.SignatureTypeLegacyED25519, liteAccount).
+			Build())
+	})
+
+	res, err := n.QueryTx(txn[0][:], time.Second, true)
+	require.NoError(t, err)
+	h := res.Produced[0].Hash()
+	res, err = n.QueryTx(h[:], time.Second, true)
+	require.NoError(t, err)
+	require.Equal(t, errors.StatusBadUrlLength, res.Status.Code)
 }
 
 func TestCreateADIWithoutKeybook(t *testing.T) {
@@ -345,8 +383,7 @@ func TestCreateLiteDataAccount(t *testing.T) {
 	require.Equal(t, liteDataAddress.String(), r.Url.String())
 	require.Equal(t, partialChainId, chainId)
 
-	firstEntryHash, err := protocol.ComputeFactomEntryHashForAccount(chainId, firstEntry.Data)
-	require.NoError(t, err)
+	firstEntryHash := firstEntry.Hash()
 
 	batch = n.db.Begin(false)
 	defer batch.Discard()
@@ -369,15 +406,11 @@ func TestCreateLiteDataAccount(t *testing.T) {
 	require.NoError(t, err)
 	entry, err := indexing.GetDataEntry(batch, txnHash)
 	require.NoError(t, err)
-	hashFromEntry, err := protocol.ComputeFactomEntryHashForAccount(chainId, entry.GetData())
-	require.NoError(t, err)
+	hashFromEntry := entry.Hash()
 	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(hashFromEntry), "Chain Entry.Hash does not match")
 	//sample verification for calculating the hash from lite data entry
-	id := protocol.ComputeLiteDataAccountId(entry)
-	newh, err := protocol.ComputeFactomEntryHashForAccount(id, entry.GetData())
-	require.NoError(t, err)
 	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(entryHash), "Chain GetHashes does not match")
-	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(newh), "Chain GetHashes does not match")
+	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(entry.Hash()), "Chain GetHashes does not match")
 
 }
 
@@ -615,7 +648,7 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 		require.Equal(t, "acc://FooBar.acme/Baz", r.Url.String())
 		require.Equal(t, protocol.AcmeUrl().String(), r.TokenUrl.String())
 
-		require.Equal(t, []string{
+		require.ElementsMatch(t, []string{
 			protocol.AccountUrl("FooBar", "book0").String(),
 			protocol.AccountUrl("FooBar", "book0", "1").String(),
 			protocol.AccountUrl("FooBar", "Baz").String(),
@@ -770,10 +803,10 @@ func TestSendTokensToBadRecipient(t *testing.T) {
 	})
 
 	// The synthetic transaction should fail
-	res, err := n.api.QueryTx(txnHashes[0][:], time.Second, true, api.QueryOptions{})
+	res, err := n.QueryTx(txnHashes[0][:], time.Second, true)
 	require.NoError(t, err)
 	h := res.Produced[0].Hash()
-	res, err = n.api.QueryTx(h[:], time.Second, true, api.QueryOptions{})
+	res, err = n.QueryTx(h[:], time.Second, true)
 	require.NoError(t, err)
 	require.Equal(t, errors.StatusNotFound, res.Status.Code)
 
@@ -1081,7 +1114,7 @@ func TestSignatorHeight(t *testing.T) {
 	getHeight := func(u *url.URL) uint64 {
 		batch := n.db.Begin(true)
 		defer batch.Discard()
-		chain, err := batch.Account(u).ReadChain(protocol.MainChain)
+		chain, err := batch.Account(u).MainChain().Get()
 		require.NoError(t, err)
 		return uint64(chain.Height())
 	}
@@ -1158,9 +1191,10 @@ func TestIssueTokens(t *testing.T) {
 	require.NoError(t, acctesting.CreateTokenAccount(batch, "foo.acme/acmetokens", "acc://ACME", float64(10), false))
 	require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, liteKey, 1, 1e9))
 	liteAddr, err := protocol.LiteTokenAddress(liteKey[32:], "foo.acme/tokens", protocol.SignatureTypeED25519)
+	require.NoError(t, err)
 	require.NoError(t, batch.Commit())
 
-	require.NoError(t, err)
+	// Issue foo.acme/tokens to a foo.acme/tokens lite token account
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.IssueTokens)
 		body.Recipient = liteAddr
@@ -1172,8 +1206,14 @@ func TestIssueTokens(t *testing.T) {
 			Initiate(protocol.SignatureTypeLegacyED25519, fooKey).
 			Build())
 	})
-	//issue to incorrect token account
 
+	// Verify tokens were received
+	account := n.GetLiteTokenAccount(liteAddr.String())
+	require.Equal(t, "acc://foo.acme/tokens", account.TokenUrl.String())
+	require.Equal(t, int64(123), account.Balance.Int64())
+
+	// Issue foo.acme/tokens to an ACME token account
+	check.Disable = true
 	initialbalance := n.GetTokenAccount("acc://foo.acme/acmetokens").Balance
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.IssueTokens)
@@ -1186,10 +1226,9 @@ func TestIssueTokens(t *testing.T) {
 			Initiate(protocol.SignatureTypeLegacyED25519, fooKey).
 			Build())
 	})
+
+	// Verify tokens were not received
 	finalbalance := n.GetTokenAccount("acc://foo.acme/acmetokens").Balance
-	account := n.GetLiteTokenAccount(liteAddr.String())
-	require.Equal(t, "acc://foo.acme/tokens", account.TokenUrl.String())
-	require.Equal(t, int64(123), account.Balance.Int64())
 	require.Equal(t, initialbalance, finalbalance)
 }
 
@@ -1248,6 +1287,7 @@ func TestIssueTokensRefund(t *testing.T) {
 			Build())
 	})
 	issuer = n.GetTokenIssuer("foo/tokens")
+	require.Equal(t, int64(123), issuer.Issued.Int64())
 
 	account := n.GetLiteTokenAccount(liteAddr.String())
 	require.Equal(t, "acc://foo.acme/tokens", account.TokenUrl.String())
@@ -1257,7 +1297,7 @@ func TestIssueTokensRefund(t *testing.T) {
 	check.Disable = true
 	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
 		body := new(protocol.IssueTokens)
-		liteAddr.Authority = liteAddr.Authority + "u"
+		liteAddr = liteAddr.WithAuthority(liteAddr.Authority + "u")
 		body.Recipient = liteAddr
 		body.Amount.SetUint64(123)
 
@@ -1492,7 +1532,7 @@ func DumpAccount(t *testing.T, batch *database.Batch, accountUrl *url.URL) {
 	require.NoError(t, err)
 	seen := map[[32]byte]bool{}
 	for _, cmeta := range chains {
-		chain, err := account.ReadChain(cmeta.Name)
+		chain, err := account.GetChainByName(cmeta.Name)
 		require.NoError(t, err)
 		fmt.Printf("  Chain: %s (%v)\n", cmeta.Name, cmeta.Type)
 		height := chain.Height()
@@ -1700,6 +1740,208 @@ func TestAccountAuth(t *testing.T) {
 	require.Error(t, err, "expected a failure but instead an unauthorized signature succeeded")
 }
 
+func TestDelegatedKeypageUpdate(t *testing.T) {
+	check := newDefaultCheckError(t, false)
+	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	nodes := RunTestNet(t, partitions, daemons, nil, true, check.ErrorHandler())
+	n := nodes[partitions[1]][0]
+	aliceKey, charlieKey, bobKey, jjkey, newKey1, newKey2 := generateKey(), generateKey(), generateKey(), generateKey(), generateKey(), generateKey()
+	charliekeyHash := sha256.Sum256(charlieKey.PubKey().Address())
+	newKey1hash := sha256.Sum256(newKey1.PubKey().Address())
+	newKey2hash := sha256.Sum256(newKey2.PubKey().Address())
+
+	batch := n.db.Begin(true)
+	require.NoError(t, acctesting.CreateAdiWithCredits(batch, aliceKey, "alice", 1e9))
+	require.NoError(t, acctesting.CreateAdiWithCredits(batch, bobKey, "bob", 1e9))
+	require.NoError(t, acctesting.CreateAdiWithCredits(batch, charlieKey, "charlie", 1e9))
+	require.NoError(t, acctesting.CreateAdiWithCredits(batch, jjkey, "jj", 1e9))
+	require.NoError(t, acctesting.UpdateKeyPage(batch, protocol.AccountUrl("alice", "book0", "1"), func(kp *protocol.KeyPage) {
+		kp.AddKeySpec(&protocol.KeySpec{Delegate: protocol.AccountUrl("bob", "book0")})
+		kp.AddKeySpec(&protocol.KeySpec{Delegate: protocol.AccountUrl("charlie", "book0")})
+		kp.AddKeySpec(&protocol.KeySpec{PublicKeyHash: charliekeyHash[:]})
+	}))
+	require.NoError(t, acctesting.UpdateKeyPage(batch, protocol.AccountUrl("bob", "book0", "1"), func(kp *protocol.KeyPage) {
+		kp.AddKeySpec(&protocol.KeySpec{Delegate: protocol.AccountUrl("charlie", "book0")})
+	}))
+	require.NoError(t, batch.Commit())
+
+	page := n.GetKeyPage("jj/book0/1")
+	//look for the key.
+	_, _, found := page.EntryByKeyHash(newKey1hash[:])
+	require.False(t, found, "key not found in page")
+	//Test with single level Key
+	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+		body := new(protocol.UpdateKey)
+		body.NewKeyHash = newKey1hash[:]
+		send(newTxn("jj/book0/1").WithSigner(protocol.AccountUrl("jj", "book0", "1"), 1).WithBody(body).
+			Initiate(protocol.SignatureTypeLegacyED25519, jjkey).
+			Build())
+	})
+	page = n.GetKeyPage("jj/book0/1")
+	//look for the key.
+	_, _, found = page.EntryByKeyHash(newKey1hash[:])
+	require.True(t, found, "key not found in page")
+
+	page = n.GetKeyPage("alice/book0/1")
+	//look for the key.
+	_, _, found = page.EntryByKeyHash(newKey2hash[:])
+	require.False(t, found, "key not found in page")
+
+	//Test with singleLevel Delegation
+	n.MustExecuteAndWait(func(send func(*protocol.Envelope)) {
+
+		body := new(protocol.UpdateKey)
+		body.NewKeyHash = newKey2hash[:]
+		send(newTxn("alice/book0/1").
+			WithBody(body).
+
+			// Sign with Charlie via Alice (one-layer delegation)
+			WithSigner(protocol.AccountUrl("charlie", "book0", "1"), 1).
+			WithDelegator(protocol.AccountUrl("alice", "book0", "1")).
+			Initiate(protocol.SignatureTypeED25519, charlieKey).
+			Build())
+	})
+
+	page = n.GetKeyPage("alice/book0/1")
+	//look for the key.
+	_, _, found = page.EntryByKeyHash(newKey2hash[:])
+	require.True(t, found, "key not found in page")
+}
+
+func TestMultiLevelDelegation(t *testing.T) {
+	check := newDefaultCheckError(t, false)
+	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	nodes := RunTestNet(t, partitions, daemons, nil, true, check.ErrorHandler())
+	n := nodes[partitions[1]][0]
+	aliceKey, charlieKey, bobKey := generateKey(), generateKey(), generateKey()
+	charliekeyHash := sha256.Sum256(charlieKey.PubKey().Address())
+	batch := n.db.Begin(true)
+	require.NoError(t, acctesting.CreateAdiWithCredits(batch, aliceKey, "alice", 1e9))
+	require.NoError(t, acctesting.CreateAdiWithCredits(batch, bobKey, "bob", 1e9))
+	require.NoError(t, acctesting.CreateAdiWithCredits(batch, charlieKey, "charlie", 1e9))
+	require.NoError(t, acctesting.UpdateKeyPage(batch, protocol.AccountUrl("alice", "book0", "1"), func(kp *protocol.KeyPage) {
+		kp.AddKeySpec(&protocol.KeySpec{Delegate: protocol.AccountUrl("bob", "book0")})
+		kp.AddKeySpec(&protocol.KeySpec{Delegate: protocol.AccountUrl("charlie", "book0")})
+		kp.AddKeySpec(&protocol.KeySpec{PublicKeyHash: charliekeyHash[:]})
+		require.NoError(t, kp.SetThreshold(3))
+	}))
+	require.NoError(t, acctesting.UpdateKeyPage(batch, protocol.AccountUrl("bob", "book0", "1"), func(kp *protocol.KeyPage) {
+		kp.AddKeySpec(&protocol.KeySpec{Delegate: protocol.AccountUrl("charlie", "book0")})
+	}))
+	require.NoError(t, batch.Commit())
+
+	_, _, err := n.Execute(func(send func(*protocol.Envelope)) {
+		cda := new(protocol.CreateDataAccount)
+		cda.Url = protocol.AccountUrl("alice", "data")
+
+		env := newTxn("alice").
+			WithBody(cda).
+
+			// Initiate with Alice
+			WithSigner(protocol.AccountUrl("alice", "book0", "1"), 1).
+			Initiate(protocol.SignatureTypeED25519, aliceKey).
+
+			// Sign with Charlie via Alice (one-layer delegation)
+			WithSigner(protocol.AccountUrl("charlie", "book0", "1"), 1).
+			WithDelegator(protocol.AccountUrl("alice", "book0", "1")).
+			Sign(protocol.SignatureTypeED25519, charlieKey).
+			Build()
+
+		// Take Charlie's signature, extract the key signature, and reconstruct
+		// it as via Bob via Alice (two-layer delegation)
+		sig := env.Signatures[1].(*protocol.DelegatedSignature).Signature
+		sig = &protocol.DelegatedSignature{Delegator: protocol.AccountUrl("bob", "book0", "1"), Signature: sig}
+		sig = &protocol.DelegatedSignature{Delegator: protocol.AccountUrl("alice", "book0", "1"), Signature: sig}
+		env.Signatures = append(env.Signatures, sig)
+
+		send(env)
+	})
+	require.Error(t, err)
+
+	var resp *abci.ResponseCheckTx
+	require.NoError(t, json.Unmarshal([]byte(err.Error()), &resp), "Expected error to be a CheckTx response")
+
+	result := new(protocol.TransactionResultSet)
+	require.NoError(t, result.UnmarshalBinary(resp.Data))
+	require.Len(t, result.Results, 1)
+	require.NotNil(t, result.Results[0].Error)
+	require.EqualError(t, result.Results[0].Error, "signature 2: invalid signature")
+}
+
+func TestDuplicateKeyNewKeypage(t *testing.T) {
+	check := newDefaultCheckError(t, false)
+	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
+	nodes := RunTestNet(t, partitions, daemons, nil, true, check.ErrorHandler())
+	n := nodes[partitions[1]][0]
+	aliceKey := generateKey()
+	aliceKeyHash := sha256.Sum256(aliceKey.PubKey().Bytes())
+	aliceKey1 := generateKey()
+	aliceKeyHash1 := sha256.Sum256(aliceKey1.PubKey().Bytes())
+	batch := n.db.Begin(true)
+	require.NoError(t, acctesting.CreateAdiWithCredits(batch, aliceKey, "alice", 1e9))
+	require.NoError(t, batch.Commit())
+
+	page := n.GetKeyPage("alice/book0/1")
+	require.Len(t, page.Keys, 1)
+
+	key := page.Keys[0]
+	require.Equal(t, uint64(0), key.LastUsedOn)
+	require.Equal(t, aliceKeyHash[:], key.PublicKeyHash)
+
+	//check for unique keys
+	_, txns, err := n.Execute(func(send func(*protocol.Envelope)) {
+		cms := new(protocol.CreateKeyPage)
+		cms.Keys = append(cms.Keys, &protocol.KeySpecParams{
+			KeyHash: aliceKeyHash[:],
+		})
+		cms.Keys = append(cms.Keys, &protocol.KeySpecParams{
+			KeyHash: aliceKeyHash1[:],
+		})
+
+		send(newTxn("alice/book0").
+			WithSigner(protocol.AccountUrl("alice", "book0", "1"), 1).
+			WithBody(cms).
+			Initiate(protocol.SignatureTypeLegacyED25519, aliceKey).
+			Build())
+	})
+	require.NoError(t, err)
+	n.MustWaitForTxns(txns[0][:])
+	page = n.GetKeyPage("alice/book0/2")
+
+	require.Len(t, page.Keys, 2)
+	_, key1, alice1Found := page.EntryByKeyHash(aliceKeyHash[:])
+	_, key2, alice2Found := page.EntryByKeyHash(aliceKeyHash1[:])
+	require.True(t, alice1Found, "alice key 1 not found")
+	require.Equal(t, uint64(0), key1.GetLastUsedOn())
+	require.True(t, alice2Found, "alice key 2 not found")
+	require.Equal(t, uint64(0), key2.GetLastUsedOn())
+
+	//check for duplicate keys
+	_, _, err = n.Execute(func(send func(*protocol.Envelope)) {
+		cms := new(protocol.CreateKeyPage)
+		cms.Keys = append(cms.Keys, &protocol.KeySpecParams{
+			KeyHash: aliceKeyHash[:],
+		})
+		cms.Keys = append(cms.Keys, &protocol.KeySpecParams{
+			KeyHash: aliceKeyHash[:],
+		})
+
+		send(newTxn("alice/book0").
+			WithSigner(protocol.AccountUrl("alice", "book0", "1"), 1).
+			WithBody(cms).
+			Initiate(protocol.SignatureTypeLegacyED25519, aliceKey).
+			Build())
+	})
+	var resp *abci.ResponseCheckTx
+	require.NoError(t, json.Unmarshal([]byte(err.Error()), &resp), "Expected error to be a CheckTx response")
+
+	result := new(protocol.TransactionResultSet)
+	require.NoError(t, result.UnmarshalBinary(resp.Data))
+	require.Len(t, result.Results, 1)
+	require.NotNil(t, result.Results[0].Error)
+	require.EqualError(t, result.Results[0].Error, "duplicate keys: signing keys of a keypage must be unique")
+}
+
 func TestNetworkDefinition(t *testing.T) {
 	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
 	nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
@@ -1707,7 +1949,8 @@ func TestNetworkDefinition(t *testing.T) {
 
 	networkDefs := dn.exec.ActiveGlobals_TESTONLY().Network
 	require.NotEmpty(t, networkDefs.Partitions)
-	require.NotEmpty(t, networkDefs.Partitions[0].PartitionID)
-	require.NotEmpty(t, networkDefs.Partitions[0].ValidatorKeys)
-	require.NotEmpty(t, networkDefs.Partitions[0].ValidatorKeys[0])
+	require.NotEmpty(t, networkDefs.Partitions[0].ID)
+	require.NotEmpty(t, networkDefs.Validators)
+	require.NotEmpty(t, networkDefs.Validators[0].PublicKey)
+	require.NotEmpty(t, networkDefs.Validators[0].Partitions)
 }

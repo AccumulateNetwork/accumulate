@@ -39,19 +39,11 @@ func (x *Executor) ExecuteEnvelopeSet(block *Block, deliveries []*chain.Delivery
 }
 
 func (x *Executor) ExecuteEnvelope(block *Block, delivery *chain.Delivery) (*protocol.TransactionStatus, error) {
-	if !delivery.Transaction.Body.Type().IsSystem() {
-		x.logger.Debug("Executing transaction",
-			"block", block.Index,
-			"type", delivery.Transaction.Body.Type(),
-			"txn-hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4),
-			"principal", delivery.Transaction.Header.Principal)
-	}
-
 	if delivery.Transaction.Body.Type() == protocol.TransactionTypeSystemWriteData {
 		return nil, errors.Format(errors.StatusBadRequest, "a %v transaction cannot be submitted directly", protocol.TransactionTypeSystemWriteData)
 	}
 
-	status, additional, err := x.executeEnvelope(block, delivery)
+	status, additional, err := x.executeEnvelope(block, delivery, false)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
@@ -69,14 +61,7 @@ func (x *Executor) ExecuteEnvelope(block *Block, delivery *chain.Delivery) (*pro
 	for len(additional) > 0 {
 		var next []*chain.Delivery
 		for _, delivery := range additional {
-			if !delivery.Transaction.Body.Type().IsSystem() {
-				x.logger.Debug("Executing additional",
-					"block", block.Index,
-					"type", delivery.Transaction.Body.Type(),
-					"txn-hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4),
-					"principal", delivery.Transaction.Header.Principal)
-			}
-			status, additional, err := x.executeEnvelope(block, delivery)
+			_, additional, err := x.executeEnvelope(block, delivery, true)
 			if err != nil {
 				return nil, errors.Wrap(errors.StatusUnknownError, err)
 			}
@@ -85,17 +70,6 @@ func (x *Executor) ExecuteEnvelope(block *Block, delivery *chain.Delivery) (*pro
 			if err != nil {
 				return nil, err
 			}
-
-			if status.Failed() {
-				x.logger.Error("Additional transaction failed",
-					"block", block.Index,
-					"type", delivery.Transaction.Body.Type(),
-					"txn-hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4),
-					"principal", delivery.Transaction.Header.Principal,
-					"status", status.Code,
-					"error", status.Error,
-				)
-			}
 		}
 		additional, next = next, nil
 	}
@@ -103,7 +77,28 @@ func (x *Executor) ExecuteEnvelope(block *Block, delivery *chain.Delivery) (*pro
 	return status, nil
 }
 
-func (x *Executor) executeEnvelope(block *Block, delivery *chain.Delivery) (*protocol.TransactionStatus, []*chain.Delivery, error) {
+func (x *Executor) executeEnvelope(block *Block, delivery *chain.Delivery, additional bool) (*protocol.TransactionStatus, []*chain.Delivery, error) {
+	{
+		fn := x.logger.Debug
+		kv := []interface{}{
+			"block", block.Index,
+			"type", delivery.Transaction.Body.Type(),
+			"txn-hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4),
+			"principal", delivery.Transaction.Header.Principal,
+		}
+		switch delivery.Transaction.Body.Type() {
+		case protocol.TransactionTypeDirectoryAnchor,
+			protocol.TransactionTypeBlockValidatorAnchor:
+			fn = x.logger.Info
+			kv = append(kv, "module", "anchoring")
+		}
+		if additional {
+			fn("Executing additional", kv...)
+		} else {
+			fn("Executing transaction", kv...)
+		}
+	}
+
 	r := x.BlockTimers.Start(BlockTimerTypeExecuteEnvelope)
 	defer x.BlockTimers.Stop(r)
 
@@ -176,23 +171,38 @@ func (x *Executor) executeEnvelope(block *Block, delivery *chain.Delivery) (*pro
 
 		delivery.State.Merge(state)
 
-		if typ := delivery.Transaction.Body.Type(); typ == protocol.TransactionTypeSystemGenesis || !typ.IsSystem() {
-			kv := []interface{}{
-				"block", block.Index,
-				"type", delivery.Transaction.Body.Type(),
-				"code", status.Code,
-				"txn-hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4),
-				"principal", delivery.Transaction.Header.Principal,
-			}
-			if status.Error != nil {
-				kv = append(kv, "error", status.Error)
+		kv := []interface{}{
+			"block", block.Index,
+			"type", delivery.Transaction.Body.Type(),
+			"code", status.Code,
+			"txn-hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4),
+			"principal", delivery.Transaction.Header.Principal,
+		}
+		if status.Error != nil {
+			kv = append(kv, "error", status.Error)
+			if additional {
+				x.logger.Info("Additional transaction failed", kv...)
+			} else {
 				x.logger.Info("Transaction failed", kv...)
-			} else if !delivery.Transaction.Body.Type().IsSystem() {
-				if status.Pending() {
-					x.logger.Debug("Transaction pending", kv...)
-				} else {
-					x.logger.Debug("Transaction succeeded", kv...)
-				}
+			}
+		} else if status.Pending() {
+			if additional {
+				x.logger.Debug("Additional transaction pending", kv...)
+			} else {
+				x.logger.Debug("Transaction pending", kv...)
+			}
+		} else {
+			fn := x.logger.Debug
+			switch delivery.Transaction.Body.Type() {
+			case protocol.TransactionTypeDirectoryAnchor,
+				protocol.TransactionTypeBlockValidatorAnchor:
+				fn = x.logger.Info
+				kv = append(kv, "module", "anchoring")
+			}
+			if additional {
+				fn("Additional transaction succeeded", kv...)
+			} else {
+				fn("Transaction succeeded", kv...)
 			}
 		}
 

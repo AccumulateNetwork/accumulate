@@ -2,9 +2,10 @@ package accumulated
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"io/fs"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -19,13 +20,20 @@ import (
 	tmtypes "github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
+	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 )
 
 const nodeDirPerm = 0755
+
+type AddressType int
+
+const (
+	ListenAddress AddressType = iota
+	AdvertizeAddress
+	PeerAddress
+)
 
 func (n *NodeInit) Port(offset ...config.PortOffset) int {
 	port := int(n.BasePort)
@@ -35,12 +43,13 @@ func (n *NodeInit) Port(offset ...config.PortOffset) int {
 	return port
 }
 
-func (n *NodeInit) Address(listen bool, scheme string, offset ...config.PortOffset) string {
-	var addr string
-	if listen && n.ListenIP != "" {
-		addr = n.ListenIP
-	} else {
-		addr = n.HostName
+func (n *NodeInit) Address(typ AddressType, scheme string, offset ...config.PortOffset) string {
+	addr := n.AdvertizeAddress
+	switch {
+	case typ == ListenAddress && n.ListenAddress != "":
+		addr = n.ListenAddress
+	case typ == PeerAddress && n.PeerAddress != "":
+		addr = n.PeerAddress
 	}
 
 	if scheme == "" {
@@ -49,16 +58,13 @@ func (n *NodeInit) Address(listen bool, scheme string, offset ...config.PortOffs
 	return fmt.Sprintf("%s://%s:%d", scheme, addr, n.Port(offset...))
 }
 
-func (n *NodeInit) TmNodeAddress(offset ...config.PortOffset) string {
-	nodeId := tmtypes.NodeIDFromPubKey(ed25519.PubKey(n.NodeKey[32:]))
-	return nodeId.AddressString(n.Address(false, "", offset...))
-}
-
 func (b *BvnInit) Peers(node *NodeInit, offset ...config.PortOffset) []string {
 	var peers []string
 	for _, n := range b.Nodes {
 		if n != node {
-			peers = append(peers, n.TmNodeAddress(offset...))
+			nodeId := tmtypes.NodeIDFromPubKey(ed25519.PubKey(n.NodeKey[32:]))
+			addr := nodeId.AddressString(n.Address(PeerAddress, "", offset...))
+			peers = append(peers, addr)
 		}
 	}
 	return peers
@@ -102,7 +108,7 @@ func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][2]*config
 			dnn.Moniker = fmt.Sprintf("Directory.%d", i)
 			ConfigureNodePorts(node, dnn, config.PortOffsetDirectory)
 			dnConfig.Nodes = append(dnConfig.Nodes, config.Node{
-				Address: node.Address(false, "http", config.PortOffsetTendermintP2P, config.PortOffsetDirectory),
+				Address: node.Address(AdvertizeAddress, "http", config.PortOffsetTendermintP2P, config.PortOffsetDirectory),
 				Type:    node.DnnType,
 			})
 
@@ -110,7 +116,7 @@ func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][2]*config
 			bvnn.Moniker = fmt.Sprintf("%s.%d", bvn.Id, j+1)
 			ConfigureNodePorts(node, bvnn, config.PortOffsetBlockValidator)
 			bvnConfig.Nodes = append(bvnConfig.Nodes, config.Node{
-				Address: node.Address(false, "http", config.PortOffsetTendermintP2P, config.PortOffsetBlockValidator),
+				Address: node.Address(AdvertizeAddress, "http", config.PortOffsetTendermintP2P, config.PortOffsetBlockValidator),
 				Type:    node.BvnnType,
 			})
 
@@ -151,36 +157,38 @@ func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][2]*config
 }
 
 func ConfigureNodePorts(node *NodeInit, cfg *config.Config, offset config.PortOffset) {
-	cfg.P2P.ListenAddress = node.Address(true, "tcp", offset, config.PortOffsetTendermintP2P)
-	cfg.RPC.ListenAddress = node.Address(true, "tcp", offset, config.PortOffsetTendermintRpc)
+	cfg.P2P.ListenAddress = node.Address(ListenAddress, "tcp", offset, config.PortOffsetTendermintP2P)
+	cfg.RPC.ListenAddress = node.Address(ListenAddress, "tcp", offset, config.PortOffsetTendermintRpc)
+
 	cfg.Instrumentation.PrometheusListenAddr = fmt.Sprintf(":%d", node.Port(offset, config.PortOffsetPrometheus))
-	cfg.Accumulate.LocalAddress = node.Address(false, "", offset, config.PortOffsetTendermintP2P)
-	cfg.Accumulate.Website.ListenAddress = node.Address(true, "http", offset, config.PortOffsetWebsite)
-	cfg.Accumulate.API.ListenAddress = node.Address(true, "http", offset, config.PortOffsetAccumulateApi)
+	if cfg.Accumulate.LocalAddress == "" {
+		cfg.Accumulate.LocalAddress = node.Address(AdvertizeAddress, "", offset, config.PortOffsetTendermintP2P)
+	}
+	cfg.Accumulate.API.ListenAddress = node.Address(ListenAddress, "http", offset, config.PortOffsetAccumulateApi)
 }
 
-func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time time.Time, logger log.Logger, factomAddressesFile string) (map[string]*tmtypes.GenesisDoc, error) {
+func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time time.Time, logger log.Logger, factomAddresses func() (io.Reader, error)) (map[string]*tmtypes.GenesisDoc, error) {
 	docs := map[string]*tmtypes.GenesisDoc{}
 	var operators [][]byte
-	var partitions []protocol.PartitionDefinition
-	partitions = append(partitions, protocol.PartitionDefinition{
-		PartitionID: protocol.Directory,
-	})
+	netinfo := new(protocol.NetworkDefinition)
+	netinfo.NetworkName = network.Id
+	netinfo.AddPartition(protocol.Directory, protocol.PartitionTypeDirectory)
 
-	var dnValidators [][]byte
 	var dnTmValidators []tmtypes.GenesisValidator
 
 	var i int
 	for _, bvn := range network.Bvns {
-		var bvnValidators [][]byte
 		var bvnTmValidators []tmtypes.GenesisValidator
 
 		for j, node := range bvn.Nodes {
 			i++
 			key := ed25519.PrivKey(node.PrivValKey)
 			operators = append(operators, key.PubKey().Bytes())
+
+			netinfo.AddValidator(key.PubKey().Bytes(), protocol.Directory, node.DnnType == config.Validator)
+			netinfo.AddValidator(key.PubKey().Bytes(), bvn.Id, node.BvnnType == config.Validator)
+
 			if node.DnnType == config.Validator {
-				dnValidators = append(dnValidators, key.PubKey().Bytes())
 				dnTmValidators = append(dnTmValidators, tmtypes.GenesisValidator{
 					Name:    fmt.Sprintf("Directory.%d", i),
 					Address: key.PubKey().Address(),
@@ -190,7 +198,6 @@ func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time tim
 			}
 
 			if node.BvnnType == config.Validator {
-				bvnValidators = append(bvnValidators, key.PubKey().Bytes())
 				bvnTmValidators = append(bvnTmValidators, tmtypes.GenesisValidator{
 					Name:    fmt.Sprintf("%s.%d", bvn.Id, j+1),
 					Address: key.PubKey().Address(),
@@ -200,10 +207,7 @@ func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time tim
 			}
 		}
 
-		partitions = append(partitions, protocol.PartitionDefinition{
-			PartitionID:   bvn.Id,
-			ValidatorKeys: bvnValidators,
-		})
+		netinfo.AddPartition(bvn.Id, protocol.PartitionTypeBlockValidator)
 		docs[bvn.Id] = &tmtypes.GenesisDoc{
 			ChainID:         bvn.Id,
 			GenesisTime:     time,
@@ -213,7 +217,6 @@ func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time tim
 		}
 	}
 
-	partitions[0].ValidatorKeys = dnValidators
 	docs[protocol.Directory] = &tmtypes.GenesisDoc{
 		ChainID:         protocol.Directory,
 		GenesisTime:     time,
@@ -222,40 +225,29 @@ func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time tim
 		ConsensusParams: tmtypes.DefaultConsensusParams(),
 	}
 
-	globals.Network = &protocol.NetworkDefinition{
-		NetworkName: network.Id,
-		Partitions:  partitions,
-	}
+	globals.Network = netinfo
 
 	for id := range docs {
 		netType := config.BlockValidator
 		if id == protocol.Directory {
 			netType = config.Directory
 		}
-		store := memory.New(logger.With("module", "storage"))
-		bs, err := genesis.Init(store, genesis.InitOpts{
-			PartitionId:         id,
-			NetworkType:         netType,
-			GenesisTime:         time,
-			Logger:              logger.With("partition", id),
-			GenesisGlobals:      globals,
-			OperatorKeys:        operators,
-			FactomAddressesFile: factomAddressesFile,
+		snapshot := new(ioutil2.Buffer)
+		root, err := genesis.Init(snapshot, genesis.InitOpts{
+			PartitionId:     id,
+			NetworkType:     netType,
+			GenesisTime:     time,
+			Logger:          logger.With("partition", id),
+			GenesisGlobals:  globals,
+			OperatorKeys:    operators,
+			FactomAddresses: factomAddresses,
 		})
 		if err != nil {
 			return nil, err
 		}
 
-		err = bs.Bootstrap()
-		if err != nil {
-			return nil, err
-		}
-
-		batch := database.New(store, logger).Begin(false)
-		defer batch.Discard()
-		docs[id].AppHash = batch.BptRoot()
-
-		docs[id].AppState, err = store.MarshalJSON()
+		docs[id].AppHash = root
+		docs[id].AppState, err = json.Marshal(snapshot.Bytes())
 		if err != nil {
 			return nil, err
 		}
@@ -317,9 +309,10 @@ func loadOrCreatePrivVal(config *config.Config, key []byte) error {
 	var pv *privval.FilePV
 	var err error
 	if !tmos.FileExists(stateFile) {
-		//this case occurs when we init in dual mode
+		// When initializing the other node, the key file has already been created
 		pv = privval.NewFilePV(ed25519.PrivKey(key), keyFile, stateFile)
 		pv.LastSignState.Save()
+		// Don't return here - we still need to check that the key on disk matches what we expect
 	} else { // if file exists then we need to load it
 		pv, err = privval.LoadFilePV(keyFile, stateFile)
 		if err != nil {
@@ -328,7 +321,7 @@ func loadOrCreatePrivVal(config *config.Config, key []byte) error {
 	}
 
 	if !bytes.Equal(pv.Key.PrivKey.Bytes(), key) {
-		return fmt.Errorf("existing private key does not match")
+		return fmt.Errorf("existing private key does not match try using --reset flag")
 	}
 
 	return nil
@@ -350,7 +343,7 @@ func loadOrCreateNodeKey(config *config.Config, key []byte) error {
 	}
 
 	if !bytes.Equal(nodeKey.PrivKey.Bytes(), key) {
-		return fmt.Errorf("existing private key does not match")
+		return fmt.Errorf("existing private key does not match try using --reset flag")
 	}
 
 	return nil
@@ -361,20 +354,19 @@ func LoadOrGenerateTmPrivKey(privFileName string) (ed25519.PrivKey, error) {
 	b, err := ioutil.ReadFile(privFileName)
 	var privValKey ed25519.PrivKey
 	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
+		if errors.Is(err, os.ErrNotExist) {
 			//do not overwrite a private validator key.
 			return ed25519.GenPrivKey(), nil
-		} else {
-			return nil, err
 		}
-	} else {
-		var pvkey privval.FilePVKey
-		err = tmjson.Unmarshal(b, &pvkey)
-		if err != nil {
-			privValKey = ed25519.GenPrivKey()
-		} else {
-			privValKey = pvkey.PrivKey.(ed25519.PrivKey)
-		}
+		return nil, err
 	}
+	var pvkey privval.FilePVKey
+	err = tmjson.Unmarshal(b, &pvkey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal existing private validator from %s: %v try using --reset flag", privFileName, err)
+	} else {
+		privValKey = pvkey.PrivKey.(ed25519.PrivKey)
+	}
+
 	return privValKey, nil
 }

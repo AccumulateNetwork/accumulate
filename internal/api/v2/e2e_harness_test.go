@@ -5,18 +5,15 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/json"
-	"reflect"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2/query"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/testing/e2e"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
 func newKey(seed []byte) ed25519.PrivateKey {
@@ -123,7 +120,7 @@ func prepareTx(t *testing.T, japi *api.JrpcMethods, params execParams) *api.TxRe
 	req.Origin = env.Transaction[0].Header.Principal
 	req.Signer.Timestamp = sig.GetTimestamp()
 	req.Signer.Url = sig.GetSigner()
-	req.Signer.PublicKey = sig.(protocol.KeySignature).GetPublicKey()
+	req.Signer.PublicKey = sig.GetPublicKey()
 	req.Signature = sig.GetSignature()
 	req.KeyPage.Version = sig.GetSignerVersion()
 	req.Payload = env.Transaction[0].Body
@@ -151,75 +148,5 @@ func txWait(t *testing.T, japi *api.JrpcMethods, txid []byte) {
 	for _, txid := range txr.Produced {
 		txid := txid.Hash()
 		queryTxn(t, japi, "query-tx", &api.TxnQuery{Txid: txid[:], Wait: 10 * time.Second})
-	}
-}
-
-type e2eDUT struct {
-	*e2e.Suite
-	daemon *accumulated.Daemon
-}
-
-func (d *e2eDUT) api() *api.JrpcMethods {
-	return d.daemon.Jrpc_TESTONLY()
-}
-
-func (d *e2eDUT) GetRecordAs(s string, target protocol.Account) {
-	d.T().Helper()
-	u, err := url.Parse(s)
-	d.Require().NoError(err)
-	r, err := d.api().Querier().QueryUrl(u, api.QueryOptions{})
-	d.Require().NoError(err)
-	d.Require().IsType((*api.ChainQueryResponse)(nil), r)
-	qr := r.(*api.ChainQueryResponse)
-	d.Require().IsType(target, qr.Data)
-	reflect.ValueOf(target).Elem().Set(reflect.ValueOf(qr.Data).Elem())
-}
-
-func (d *e2eDUT) GetRecordHeight(s string) uint64 {
-	d.T().Helper()
-	u, err := url.Parse(s)
-	d.Require().NoError(err)
-	r, err := d.api().Querier().QueryUrl(u, api.QueryOptions{})
-	d.Require().NoError(err)
-	d.Require().IsType((*api.ChainQueryResponse)(nil), r)
-	qr := r.(*api.ChainQueryResponse)
-	return qr.MainChain.Height
-}
-
-func (d *e2eDUT) SubmitTxn(tx *protocol.Envelope) {
-	data, err := tx.Transaction[0].Body.MarshalBinary()
-	d.Require().NoError(err)
-
-	d.T().Helper()
-	d.Require().NotEmpty(tx.Signatures, "Transaction has no signatures")
-	sig := tx.Signatures[0].(protocol.KeySignature)
-	pl := new(api.TxRequest)
-	pl.Origin = tx.Transaction[0].Header.Principal
-	pl.Signer.Timestamp = sig.GetTimestamp()
-	pl.Signer.Url = sig.GetSigner()
-	pl.Signer.PublicKey = sig.(protocol.KeySignature).GetPublicKey()
-	pl.Signature = sig.GetSignature()
-	pl.KeyPage.Version = sig.GetSignerVersion()
-	pl.Payload = data
-
-	data, err = pl.MarshalJSON()
-	d.Require().NoError(err)
-
-	r := d.api().Execute(context.Background(), data)
-	err, _ = r.(error)
-	d.Require().NoError(err)
-}
-
-func (d *e2eDUT) WaitForTxns(txids ...[]byte) {
-	d.T().Helper()
-	for _, txid := range txids {
-		r, err := d.api().Querier().QueryTx(txid, 10*time.Second, false, api.QueryOptions{})
-		d.Require().NoError(err)
-
-		for _, txid := range r.Produced {
-			txid := txid.Hash()
-			_, err := d.api().Querier().QueryTx(txid[:], 10*time.Second, false, api.QueryOptions{})
-			d.Require().NoError(err)
-		}
 	}
 }
