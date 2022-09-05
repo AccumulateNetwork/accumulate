@@ -62,7 +62,7 @@ func initNetwork(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	initNetworkLocalFS(network)
+	initNetworkLocalFS(cmd, network)
 }
 
 func verifyInitFlags(cmd *cobra.Command, count int) {
@@ -88,7 +88,7 @@ func verifyInitFlags(cmd *cobra.Command, count int) {
 	}
 }
 
-func initNetworkLocalFS(netInit *accumulated.NetworkInit) {
+func initNetworkLocalFS(cmd *cobra.Command, netInit *accumulated.NetworkInit) {
 	if flagInit.LogLevels != "" {
 		_, _, err := logging.ParseLogLevel(flagInit.LogLevels, io.Discard)
 		checkf(err, "--log-level")
@@ -130,7 +130,7 @@ func initNetworkLocalFS(netInit *accumulated.NetworkInit) {
 					config.Consensus.CreateEmptyBlocks = false
 				}
 
-				if flagInit.DnStallLimit > 0 {
+				if cmd.Flag("dn-stall-limit").Changed {
 					config.Accumulate.DnStallLimit = flagInit.DnStallLimit
 				}
 
