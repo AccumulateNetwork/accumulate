@@ -582,7 +582,10 @@ func ImportAccounts(filePath string) error {
 	}
 	for adi, label := range req.ADIs {
 		args := []string{adi, label}
-		NewADI(protocol.ACME, args)
+		_, err := NewADI(protocol.ACME, args)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
