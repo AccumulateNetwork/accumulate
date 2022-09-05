@@ -2,6 +2,7 @@ package accumulated
 
 import (
 	"context"
+	"runtime/debug"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
@@ -14,17 +15,30 @@ func (d *Daemon) onDidCommitBlock(event events.DidCommitBlock) error {
 	// Subscribe synchronously and begin a batch, but do all the actual
 	// processing in goroutines. This way we're guaranteed to get a batch at the
 	// right time but the actual hard work is done asynchronously.
-	batch := d.db.Begin(false)
+
+	// WARNING: Database batches are not concurrency-safe so each goroutine must
+	// have its own batch.
 
 	if event.Major > 0 {
+		batch := d.db.Begin(false)
 		go d.collectSnapshot(batch, event.Major, event.Index)
 	}
 
-	go d.checkForStalledDn(batch)
+	{
+		batch := d.db.Begin(false)
+		go d.checkForStalledDn(batch, event)
+	}
 	return nil
 }
 
-func (d *Daemon) checkForStalledDn(batch *database.Batch) {
+func (d *Daemon) checkForStalledDn(batch *database.Batch, event events.DidCommitBlock) {
+	defer func() {
+		if err := recover(); err != nil {
+			d.Logger.Error("Panicked while checking if the DN stalled", "error", err, "minor-block", event.Index, "module", "snapshot", "stack", string(debug.Stack()))
+		}
+	}()
+	defer batch.Discard()
+
 	if d.Config.Accumulate.DnStallLimit == 0 || d.localTm == nil {
 		return
 	}
