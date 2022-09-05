@@ -63,7 +63,7 @@ func initDevNet(cmd *cobra.Command, _ []string) {
 	if flagInitDevnet.Compose {
 		writeDevnetDockerCompose(cmd, netInit)
 	} else {
-		initNetworkLocalFS(netInit)
+		initNetworkLocalFS(cmd, netInit)
 	}
 }
 
