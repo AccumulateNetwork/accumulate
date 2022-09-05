@@ -42,7 +42,8 @@ public class {{safeClassName .Name}}{{
     else if eq .UnionType "KeyPageOperationType"}} implements KeyPageOperation{{-
     else if eq .UnionType "SignatureType"}} implements Signature{{-
     else if eq .Name "FactomDataEntry"}} extends FactomDataEntryMarshaller{{-
-    else }} implements Marhallable{{-
+    else if .IsBinary }} implements Marhallable{{-
+    else }} implements RPCBody{{-
     end}} {
 
 	{{- range .Fields}}
