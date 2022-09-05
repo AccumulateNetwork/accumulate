@@ -125,6 +125,10 @@ func CreateTestNet(t testing.TB, numBvns, numValidators, numFollowers int, withF
 			configs[i][j][0].SetRoot(filepath.Join(tempDir, fmt.Sprintf("node-%d", count), "dnn"))
 			configs[i][j][1].SetRoot(filepath.Join(tempDir, fmt.Sprintf("node-%d", count), "bvnn"))
 
+			// Disable DN stall detection for tests
+			configs[i][j][0].Accumulate.DnStallLimit = 0
+			configs[i][j][1].Accumulate.DnStallLimit = 0
+
 			err = accumulated.WriteNodeFiles(configs[i][j][0], node.PrivValKey, node.NodeKey, dnGenDoc)
 			require.NoError(t, err)
 			err = accumulated.WriteNodeFiles(configs[i][j][1], node.PrivValKey, node.NodeKey, bvnGenDoc)
