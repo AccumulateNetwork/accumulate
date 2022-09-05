@@ -63,7 +63,7 @@ func (c *Batch) Account(url *url.URL) *Account {
 		v.store = c.store
 		v.key = record.Key{}.Append("Account", url)
 		v.parent = c
-		v.label = "account" + " " + url.String()
+		v.label = "account" + " " + url.RawString()
 		return v
 	})
 }
@@ -169,7 +169,7 @@ func (c *Batch) baseCommit() error {
 		commitField(&err, v)
 	}
 
-	return nil
+	return err
 }
 
 type Account struct {
@@ -471,7 +471,7 @@ func (c *Account) baseCommit() error {
 	commitField(&err, c.syntheticAnchors)
 	commitField(&err, c.data)
 
-	return nil
+	return err
 }
 
 type AccountAnchorChain struct {
@@ -532,7 +532,7 @@ func (c *AccountAnchorChain) Commit() error {
 	commitField(&err, c.root)
 	commitField(&err, c.bpt)
 
-	return nil
+	return err
 }
 
 type AccountData struct {
@@ -613,7 +613,7 @@ func (c *AccountData) Commit() error {
 		commitField(&err, v)
 	}
 
-	return nil
+	return err
 }
 
 type Transaction struct {
@@ -658,7 +658,7 @@ func (c *Transaction) Produced() *record.Set[*url.TxID] {
 
 func (c *Transaction) getSignatures(signer *url.URL) *record.Value[*sigSetData] {
 	return getOrCreateMap(&c.signatures, keyForTransactionSignatures(signer), func() *record.Value[*sigSetData] {
-		return record.NewValue(c.logger.L, c.store, c.key.Append("Signatures", signer), c.label+" "+"signatures"+" "+signer.String(), true, record.Struct[sigSetData]())
+		return record.NewValue(c.logger.L, c.store, c.key.Append("Signatures", signer), c.label+" "+"signatures"+" "+signer.RawString(), true, record.Struct[sigSetData]())
 	})
 }
 
@@ -733,7 +733,7 @@ func (c *Transaction) Commit() error {
 	}
 	commitField(&err, c.chains)
 
-	return nil
+	return err
 }
 
 type SystemData struct {
@@ -801,7 +801,7 @@ func (c *SystemData) Commit() error {
 		commitField(&err, v)
 	}
 
-	return nil
+	return err
 }
 
 func getOrCreateField[T any](ptr **T, create func() *T) *T {

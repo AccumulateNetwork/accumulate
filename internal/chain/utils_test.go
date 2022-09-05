@@ -27,13 +27,19 @@ func LoadStateManagerForTest(t *testing.T, db database.Beginner, envelope *proto
 
 func NewStateManagerForTest(t *testing.T, db database.Beginner, transaction *protocol.Transaction) *StateManager {
 	t.Helper()
+	m, err := NewStateManagerForFuzz(t, db, transaction)
+	require.NoError(t, err)
+	return m
+}
+
+func NewStateManagerForFuzz(t *testing.T, db database.Beginner, transaction *protocol.Transaction) (*StateManager, error) {
+	t.Helper()
 	txid := types.Bytes(transaction.GetHash()).AsBytes32()
 	m := new(StateManager)
 	m.OriginUrl = transaction.Header.Principal
 	m.stateCache = *newStateCache(&config.Describe{PartitionId: t.Name()}, nil, transaction.Body.Type(), txid, db.Begin(true))
 
-	require.NoError(t, m.LoadUrlAs(m.OriginUrl, &m.Origin))
-	return m
+	return m, m.LoadUrlAs(m.OriginUrl, &m.Origin)
 }
 
 func GetExecutor(t *testing.T, typ protocol.TransactionType) TransactionExecutor {

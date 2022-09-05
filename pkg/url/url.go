@@ -159,7 +159,7 @@ func (u *URL) copy() *URL {
 	return &v
 }
 
-func (u *URL) format(txid []byte) string {
+func (u *URL) format(txid []byte, encode bool) string {
 	var buf strings.Builder
 
 	buf.WriteString("acc://")
@@ -180,11 +180,19 @@ func (u *URL) format(txid []byte) string {
 		buf.WriteByte('/')
 		i := strings.IndexByte(p[1:], '/') + 1
 		if i <= 0 {
-			buf.WriteString(url.PathEscape(p[1:]))
+			if encode {
+				buf.WriteString(url.PathEscape(p[1:]))
+			} else {
+				buf.WriteString(p[1:])
+			}
 			break
 		}
 
-		buf.WriteString(url.PathEscape(p[1:i]))
+		if encode {
+			buf.WriteString(url.PathEscape(p[1:i]))
+		} else {
+			buf.WriteString(p[1:i])
+		}
 		p = p[i:]
 	}
 
@@ -207,8 +215,14 @@ func (u *URL) String() string {
 		return u.memoize.str
 	}
 
-	u.memoize.str = u.format(nil)
+	u.memoize.str = u.format(nil, true)
 	return u.memoize.str
+}
+
+// RawString reassembles the URL into a valid URL string without encoding any
+// component.
+func (u *URL) RawString() string {
+	return u.format(nil, false)
 }
 
 // ShortString returns String without the scheme prefix.
