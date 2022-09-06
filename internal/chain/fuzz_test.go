@@ -249,11 +249,65 @@ func FuzzBurnTokens(f *testing.F) {
 	})
 }
 
-// func FuzzCreateLiteTokenAccount(f *testing.F)
+func FuzzCreateLiteTokenAccount(f *testing.F) {
+	h1 := addTransaction(f, TransactionHeader{Principal: acctesting.AcmeLiteAddressStdPriv(acctesting.GenerateKey())}, &CreateLiteTokenAccount{})
 
-// func FuzzCreateKeyPage(f *testing.F)
+	f.Fuzz(func(t *testing.T, dataHeader, dataBody []byte) {
+		t.Parallel()
+		txn, _ := unpackTransaction[*CreateLiteTokenAccount](t, dataHeader, dataBody)
+		validateTransaction(t, txn, nil, chain.CreateLiteTokenAccount{}, matchesAny(txn, h1))
+	})
+}
 
-// func FuzzCreateKeyBook(f *testing.F)
+func FuzzCreateKeyPage(f *testing.F) {
+	h1 := addTransaction(f, TransactionHeader{Principal: AccountUrl("foo")}, &CreateKeyPage{
+		Keys: []*KeySpecParams{{KeyHash: make([]byte, 32)}}})
+
+	f.Fuzz(func(t *testing.T, dataHeader, dataBody []byte) {
+		t.Parallel()
+
+		txn, _ := unpackTransaction[*CreateKeyPage](t, dataHeader, dataBody)
+		if txn.Header.Principal == nil {
+			t.Skip()
+		}
+
+		principal := new(KeyBook)
+		principal.Url = txn.Header.Principal
+		principal.AddAuthority(principal.Url)
+		validateTransaction(t, txn, principal, chain.CreateKeyPage{}, matchesAny(txn, h1))
+	})
+}
+
+func FuzzCreateKeyBook(f *testing.F) {
+	h1 := addTransaction(f, TransactionHeader{Principal: AccountUrl("foo")}, &CreateKeyBook{
+		Url:           AccountUrl("foo", "bar"),
+		PublicKeyHash: make([]byte, 32)})
+
+	f.Fuzz(func(t *testing.T, dataHeader, dataBody []byte) {
+		t.Parallel()
+
+		txn, body := unpackTransaction[*CreateKeyBook](t, dataHeader, dataBody)
+		if txn.Header.Principal == nil {
+			t.Skip()
+		}
+
+		principal := new(ADI)
+		principal.AddAuthority(&url.URL{Authority: Unknown})
+		principal.Url = txn.Header.Principal
+		validateTransaction(t, txn, principal, chain.CreateKeyBook{}, matchesAny(txn, h1))
+
+		t.Run("Adjusted", func(t *testing.T) {
+			if body.Url == nil {
+				t.Skip()
+			}
+			body := body.Copy()
+			body.Url.Authority = principal.Url.Authority
+			txn := txn.Copy()
+			txn.Body = body
+			validateTransaction(t, txn, principal, chain.CreateKeyBook{}, matchesAny(txn, h1))
+		})
+	})
+}
 
 func FuzzAddCredits(f *testing.F) {
 	h1 := addTransaction(f, TransactionHeader{Principal: AccountUrl("foo")}, &AddCredits{
@@ -275,7 +329,38 @@ func FuzzAddCredits(f *testing.F) {
 	})
 }
 
-// func FuzzUpdateKeyPage(f *testing.F)
+func FuzzUpdateKeyPage(f *testing.F) {
+	existingKey := doHash(acctesting.GenerateKey()[32:])
+	h1 := addTransaction(f, TransactionHeader{Principal: AccountUrl("foo", "1")}, &UpdateKeyPage{Operation: []KeyPageOperation{
+		&AddKeyOperation{Entry: KeySpecParams{KeyHash: make([]byte, 32)}}}})
+	h2 := addTransaction(f, TransactionHeader{Principal: AccountUrl("foo", "1")}, &UpdateKeyPage{Operation: []KeyPageOperation{
+		&AddKeyOperation{Entry: KeySpecParams{KeyHash: make([]byte, 32), Delegate: AccountUrl("bar")}}}})
+	h3 := addTransaction(f, TransactionHeader{Principal: AccountUrl("foo", "1")}, &UpdateKeyPage{Operation: []KeyPageOperation{
+		&AddKeyOperation{Entry: KeySpecParams{KeyHash: make([]byte, 32)}},
+		&SetThresholdKeyPageOperation{Threshold: 1}}})
+	h4 := addTransaction(f, TransactionHeader{Principal: AccountUrl("foo", "1")}, &UpdateKeyPage{Operation: []KeyPageOperation{
+		&UpdateKeyOperation{OldEntry: KeySpecParams{KeyHash: existingKey}, NewEntry: KeySpecParams{KeyHash: make([]byte, 32)}}}})
+	h5 := addTransaction(f, TransactionHeader{Principal: AccountUrl("foo", "1")}, &UpdateKeyPage{Operation: []KeyPageOperation{
+		&RemoveKeyOperation{Entry: KeySpecParams{KeyHash: existingKey}}}})
+
+	f.Fuzz(func(t *testing.T, dataHeader, dataBody []byte) {
+		t.Parallel()
+		txn, _ := unpackTransaction[*UpdateKeyPage](t, dataHeader, dataBody)
+		parent, ok := txn.Header.Principal.Parent()
+		if !ok {
+			t.Skip()
+		}
+		principal := new(KeyPage)
+		principal.Url = txn.Header.Principal
+		principal.AddKeySpec(&KeySpec{PublicKeyHash: doHash([]byte("foo"))})
+		principal.AddKeySpec(&KeySpec{PublicKeyHash: existingKey})
+		book := new(KeyBook)
+		book.Url = parent
+		book.AddAuthority(book.Url)
+		book.PageCount = 1
+		validateTransaction(t, txn, principal, chain.UpdateKeyPage{}, matchesAny(txn, h1, h2, h3, h4, h5), book)
+	})
+}
 
 // func FuzzLockAccount(f *testing.F)
 
@@ -315,15 +400,24 @@ func unpackTransaction[PT bodyPtr[T], T any](t *testing.T, dataHeader, dataBody 
 func validateTransaction(t *testing.T, txn *Transaction, principal Account, executor chain.TransactionExecutor, requireSuccess bool, extraAccounts ...Account) {
 	require.Equal(t, txn.Body.Type(), executor.Type())
 
+	if principal != nil {
+		extraAccounts = append(extraAccounts, principal)
+	}
+
 	db := database.OpenInMemory(nil)
-	err := TryMakeAccount(t, db, append(extraAccounts, principal)...)
+	err := TryMakeAccount(t, db, extraAccounts...)
 	if err != nil {
 		t.Skip()
 	}
 
-	st, err := chain.NewStateManagerForFuzz(t, db, txn)
-	if err != nil {
-		t.Skip()
+	var st *chain.StateManager
+	if principal == nil {
+		st = chain.NewStateManagerForFuzz2(t, db, txn)
+	} else {
+		st, err = chain.NewStateManagerForFuzz(t, db, txn)
+		if err != nil {
+			t.Skip()
+		}
 	}
 	defer st.Discard()
 

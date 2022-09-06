@@ -52,6 +52,12 @@ func (CreateTokenAccount) Validate(st *StateManager, tx *Delivery) (protocol.Tra
 		return nil, errors.Format(errors.StatusBadRequest, "account URL is missing")
 	}
 
+	for _, u := range body.Authorities {
+		if u == nil {
+			return nil, errors.Format(errors.StatusBadRequest, "authority URL is nil")
+		}
+	}
+
 	err := checkCreateAdiAccount(st, body.Url)
 	if err != nil {
 		return nil, err

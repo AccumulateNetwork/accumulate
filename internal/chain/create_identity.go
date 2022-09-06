@@ -69,6 +69,12 @@ func (CreateIdentity) Validate(st *StateManager, tx *Delivery) (protocol.Transac
 		return nil, errors.Format(errors.StatusBadRequest, "account URL is missing")
 	}
 
+	for _, u := range body.Authorities {
+		if u == nil {
+			return nil, errors.Format(errors.StatusBadRequest, "authority URL is nil")
+		}
+	}
+
 	// TODO Require the principal to be the ADI when creating a root identity?
 	if !body.Url.IsRootIdentity() {
 		err := checkCreateAdiAccount(st, body.Url)

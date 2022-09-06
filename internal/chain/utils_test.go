@@ -36,6 +36,12 @@ func NewStateManagerForTest(t *testing.T, db database.Beginner, transaction *pro
 
 func NewStateManagerForFuzz(t *testing.T, db database.Beginner, transaction *protocol.Transaction) (*StateManager, error) {
 	t.Helper()
+	m := NewStateManagerForFuzz2(t, db, transaction)
+	return m, m.LoadUrlAs(m.OriginUrl, &m.Origin)
+}
+
+func NewStateManagerForFuzz2(t *testing.T, db database.Beginner, transaction *protocol.Transaction) *StateManager {
+	t.Helper()
 	txid := types.Bytes(transaction.GetHash()).AsBytes32()
 	m := new(StateManager)
 	m.OriginUrl = transaction.Header.Principal
@@ -43,7 +49,7 @@ func NewStateManagerForFuzz(t *testing.T, db database.Beginner, transaction *pro
 	m.Globals = new(core.GlobalValues)
 	m.Globals.Oracle = new(protocol.AcmeOracle)
 	m.Globals.Oracle.Price = protocol.InitialAcmeOracleValue
-	return m, m.LoadUrlAs(m.OriginUrl, &m.Origin)
+	return m
 }
 
 func GetExecutor(t *testing.T, typ protocol.TransactionType) TransactionExecutor {
