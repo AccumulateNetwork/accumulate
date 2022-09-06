@@ -9,6 +9,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
@@ -381,11 +382,87 @@ func FuzzUpdateKeyPage(f *testing.F) {
 	})
 }
 
-// func FuzzLockAccount(f *testing.F)
+func FuzzLockAccount(f *testing.F) {
+	h := map[[32]byte]bool{}
+	addTransaction(f, h, TransactionHeader{Principal: acctesting.AcmeLiteAddressStdPriv(acctesting.GenerateKey())}, &LockAccount{
+		Height: 123})
 
-// func FuzzUpdateAccountAuth(f *testing.F)
+	f.Fuzz(func(t *testing.T, dataHeader, dataBody []byte) {
+		t.Parallel()
+		txn, _ := unpackTransaction[*LockAccount](t, dataHeader, dataBody)
+		principal := new(LiteTokenAccount)
+		principal.Url = txn.Header.Principal
+		principal.TokenUrl = AcmeUrl()
+		validateTransaction(t, txn, chain.LockAccount{}, h[txn.ID().Hash()], principal)
+	})
+}
 
-// func FuzzUpdateKey(f *testing.F)
+func FuzzUpdateAccountAuth(f *testing.F) {
+	h := map[[32]byte]bool{}
+	addTransaction(f, h, TransactionHeader{Principal: AccountUrl("foo")}, &UpdateAccountAuth{Operations: []AccountAuthOperation{
+		&AddAccountAuthorityOperation{Authority: AccountUrl("bar")}}})
+	addTransaction(f, h, TransactionHeader{Principal: AccountUrl("foo")}, &UpdateAccountAuth{Operations: []AccountAuthOperation{
+		&RemoveAccountAuthorityOperation{Authority: AccountUrl("baz")}}})
+	addTransaction(f, h, TransactionHeader{Principal: AccountUrl("foo")}, &UpdateAccountAuth{Operations: []AccountAuthOperation{
+		&EnableAccountAuthOperation{Authority: AccountUrl("baz")}}})
+	addTransaction(f, h, TransactionHeader{Principal: AccountUrl("foo")}, &UpdateAccountAuth{Operations: []AccountAuthOperation{
+		&DisableAccountAuthOperation{Authority: AccountUrl("baz")}}})
+	addTransaction(f, h, TransactionHeader{Principal: AccountUrl("foo")}, &UpdateAccountAuth{Operations: []AccountAuthOperation{
+		&AddAccountAuthorityOperation{Authority: AccountUrl("bar")},
+		&RemoveAccountAuthorityOperation{Authority: AccountUrl("baz")}}})
+
+	f.Fuzz(func(t *testing.T, dataHeader, dataBody []byte) {
+		t.Parallel()
+		txn, _ := unpackTransaction[*UpdateAccountAuth](t, dataHeader, dataBody)
+		principal := new(TokenAccount)
+		principal.AddAuthority(AccountUrl("foo"))
+		principal.AddAuthority(AccountUrl("baz"))
+		principal.Url = txn.Header.Principal
+		principal.Balance = *big.NewInt(1e12)
+		validateTransaction(t, txn, chain.UpdateAccountAuth{}, h[txn.ID().Hash()], principal)
+	})
+}
+
+func FuzzUpdateKey(f *testing.F) {
+	existingKey := acctesting.GenerateKey()
+	h := map[[32]byte]bool{}
+	addTransaction(f, h, TransactionHeader{Principal: AccountUrl("foo", "1")}, &UpdateKey{
+		NewKeyHash: make([]byte, 32)})
+
+	f.Fuzz(func(t *testing.T, dataHeader, dataBody []byte) {
+		t.Parallel()
+		txn, _ := unpackTransaction[*UpdateKey](t, dataHeader, dataBody)
+		parent, ok := txn.Header.Principal.Parent()
+		if !ok {
+			t.Skip()
+		}
+
+		principal := new(KeyPage)
+		principal.Url = txn.Header.Principal
+		principal.AddKeySpec(&KeySpec{PublicKeyHash: doHash(existingKey[32:])})
+		book := new(KeyBook)
+		book.Url = parent
+		book.AddAuthority(book.Url)
+
+		sig, err := new(signing.Builder).
+			SetType(SignatureTypeED25519).
+			SetUrl(principal.Url).
+			SetVersion(1).
+			SetPrivateKey(existingKey).
+			SetTimestamp(1).
+			UseSimpleHash().
+			Initiate(txn)
+		require.NoError(t, err)
+
+		db := database.OpenInMemory(nil)
+		Update(t, db, func(batch *database.Batch) {
+			_, err := batch.Transaction(txn.GetHash()).AddSignature(0, sig)
+			require.NoError(t, err)
+		})
+
+		validateTransactionDb(t, db, txn, chain.UpdateKey{}, h[txn.ID().Hash()], book, principal)
+	})
+}
 
 func addTransaction(f *testing.F, list map[[32]byte]bool, header TransactionHeader, body TransactionBody) {
 	dataHeader, err := header.MarshalBinary()
@@ -418,16 +495,24 @@ func unpackTransaction[PT bodyPtr[T], T any](t *testing.T, dataHeader, dataBody 
 }
 
 func validateTransaction(t *testing.T, txn *Transaction, executor chain.TransactionExecutor, requireSuccess bool, accounts ...Account) {
+	db := database.OpenInMemory(nil)
+	validateTransactionDb(t, db, txn, executor, requireSuccess, accounts...)
+}
+
+func validateTransactionDb(t *testing.T, db *database.Database, txn *Transaction, executor chain.TransactionExecutor, requireSuccess bool, accounts ...Account) {
 	require.Equal(t, txn.Body.Type(), executor.Type())
 
 	for _, account := range accounts {
 		u := account.GetUrl().RootIdentity()
-		if IsValidAdiUrl(u, true) != nil {
-			t.Skip()
+		if IsValidAdiUrl(u, true) == nil {
+			continue
 		}
+		if _, err := ParseLiteAddress(u); err == nil {
+			continue
+		}
+		t.Skip()
 	}
 
-	db := database.OpenInMemory(nil)
 	err := TryMakeAccount(t, db, accounts...)
 	if err != nil {
 		t.Skip()
@@ -437,16 +522,14 @@ func validateTransaction(t *testing.T, txn *Transaction, executor chain.Transact
 	defer st.Discard()
 
 	err = st.LoadUrlAs(st.OriginUrl, &st.Origin)
-	if errors.Is(err, errors.StatusNotFound) {
-		pv, ok := executor.(chain.PrincipalValidator)
-		if !ok || !pv.AllowMissingPrincipal(txn) {
-			require.NoError(t, err)
-		}
-	} else {
+	pv, ok := executor.(chain.PrincipalValidator)
+	if !ok ||
+		!pv.AllowMissingPrincipal(txn) ||
+		!errors.Is(err, errors.StatusNotFound) {
 		require.NoError(t, err)
 	}
 
-	_, err = executor.Validate(st, &chain.Delivery{Transaction: txn})
+	_, err = executor.Execute(st, &chain.Delivery{Transaction: txn})
 	if requireSuccess {
 		require.NoError(t, err)
 	}

@@ -97,6 +97,9 @@ func (UpdateAccountAuth) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 	for _, op := range body.Operations {
 		switch op := op.(type) {
 		case *protocol.EnableAccountAuthOperation:
+			if op.Authority == nil {
+				return nil, errors.Format(errors.StatusBadRequest, "authority URL is missing")
+			}
 			entry, ok := auth.GetAuthority(op.Authority)
 			if !ok {
 				return nil, fmt.Errorf("%v is not an authority of %v", op.Authority, st.OriginUrl)
@@ -104,6 +107,9 @@ func (UpdateAccountAuth) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 			entry.Disabled = false
 
 		case *protocol.DisableAccountAuthOperation:
+			if op.Authority == nil {
+				return nil, errors.Format(errors.StatusBadRequest, "authority URL is missing")
+			}
 			entry, ok := auth.GetAuthority(op.Authority)
 			if !ok {
 				return nil, fmt.Errorf("%v is not an authority of %v", op.Authority, st.OriginUrl)
@@ -112,7 +118,7 @@ func (UpdateAccountAuth) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 
 		case *protocol.AddAccountAuthorityOperation:
 			if op.Authority == nil {
-				return nil, fmt.Errorf("invalid payload: authority is nil")
+				return nil, errors.Format(errors.StatusBadRequest, "authority URL is missing")
 			}
 
 			if account.GetUrl().LocalTo(op.Authority) {
@@ -135,7 +141,7 @@ func (UpdateAccountAuth) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 
 		case *protocol.RemoveAccountAuthorityOperation:
 			if op.Authority == nil {
-				return nil, fmt.Errorf("invalid payload: authority is nil")
+				return nil, errors.Format(errors.StatusBadRequest, "authority URL is missing")
 			}
 
 			if !auth.RemoveAuthority(op.Authority) {
