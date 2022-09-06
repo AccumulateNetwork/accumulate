@@ -29,18 +29,12 @@ func LoadStateManagerForTest(t *testing.T, db database.Beginner, envelope *proto
 
 func NewStateManagerForTest(t *testing.T, db database.Beginner, transaction *protocol.Transaction) *StateManager {
 	t.Helper()
-	m, err := NewStateManagerForFuzz(t, db, transaction)
-	require.NoError(t, err)
+	m := NewStateManagerForFuzz(t, db, transaction)
+	require.NoError(t, m.LoadUrlAs(m.OriginUrl, &m.Origin))
 	return m
 }
 
-func NewStateManagerForFuzz(t *testing.T, db database.Beginner, transaction *protocol.Transaction) (*StateManager, error) {
-	t.Helper()
-	m := NewStateManagerForFuzz2(t, db, transaction)
-	return m, m.LoadUrlAs(m.OriginUrl, &m.Origin)
-}
-
-func NewStateManagerForFuzz2(t *testing.T, db database.Beginner, transaction *protocol.Transaction) *StateManager {
+func NewStateManagerForFuzz(t *testing.T, db database.Beginner, transaction *protocol.Transaction) *StateManager {
 	t.Helper()
 	txid := types.Bytes(transaction.GetHash()).AsBytes32()
 	m := new(StateManager)
