@@ -19,6 +19,10 @@ func (d *Daemon) onDidCommitBlock(event events.DidCommitBlock) error {
 	if event.Major > 0 {
 		go d.collectSnapshot(batch, event.Major, event.Index)
 	}
+	if d.triggerCollectStatesAt == event.Index {
+		d.triggerCollectStatesAt = 0
+		go d.collectStates(event.Index)
+	}
 
 	go d.checkForStalledDn(batch)
 	return nil

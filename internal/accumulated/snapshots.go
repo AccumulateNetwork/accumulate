@@ -1,14 +1,11 @@
 package accumulated
 
 import (
+	"context"
+	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"io/fs"
-	"os"
-	"path/filepath"
-	"runtime/debug"
-	"sort"
-
 	"github.com/tendermint/tendermint/privval"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
@@ -20,6 +17,11 @@ import (
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"runtime/debug"
+	"sort"
 )
 
 func (d *Daemon) collectSnapshot(batch *database.Batch, majorBlock, minorBlock uint64) {
@@ -31,14 +33,14 @@ func (d *Daemon) collectSnapshot(batch *database.Batch, majorBlock, minorBlock u
 	defer batch.Discard()
 
 	d.Logger.Info("Creating a snapshot", "major-block", majorBlock, "minor-block", minorBlock, "module", "snapshot", "hash", logging.AsHex(batch.BptRoot()).Slice(0, 4))
-	snapDir := config.MakeAbsolute(d.Config.RootDir, d.Config.Accumulate.Snapshots.Directory)
-	err := os.Mkdir(snapDir, 0755)
+	d.snapDir = config.MakeAbsolute(d.Config.RootDir, d.Config.Accumulate.Snapshots.Directory)
+	err := os.Mkdir(d.snapDir, 0755)
 	if err != nil && !errors.Is(err, fs.ErrExist) {
 		d.Logger.Error("Failed to create snapshot directory", "error", err, "major-block", majorBlock, "minor-block", minorBlock, "module", "snapshot")
 		return
 	}
 
-	filename := filepath.Join(snapDir, fmt.Sprintf(core.SnapshotMajorFormat, minorBlock))
+	filename := filepath.Join(d.snapDir, fmt.Sprintf(core.SnapshotMajorFormat, minorBlock))
 	file, err := os.OpenFile(filename, os.O_RDWR|os.O_EXCL|os.O_CREATE, 0666)
 	if err != nil {
 		d.Logger.Error("Failed to create snapshot", "error", err, "major-block", majorBlock, "minor-block", minorBlock, "module", "snapshot")
@@ -58,6 +60,9 @@ func (d *Daemon) collectSnapshot(batch *database.Batch, majorBlock, minorBlock u
 		return
 	}
 
+	d.triggerCollectStatesAt = minorBlock + 2
+
+	// TODO maybe the code below should be after collecting the states
 	err = d.eventBus.Publish(events.DidSaveSnapshot{
 		MinorIndex: minorBlock,
 	})
@@ -71,7 +76,7 @@ func (d *Daemon) collectSnapshot(batch *database.Batch, majorBlock, minorBlock u
 		return
 	}
 
-	entries, err := os.ReadDir(snapDir)
+	entries, err := os.ReadDir(d.snapDir)
 	if err != nil {
 		d.Logger.Error("Failed to prune snapshot", "error", err, "major-block", majorBlock, "minor-block", minorBlock, "module", "snapshot")
 		return
@@ -95,12 +100,132 @@ func (d *Daemon) collectSnapshot(batch *database.Batch, majorBlock, minorBlock u
 	}
 
 	for _, filename := range snapshots[:len(snapshots)-retain] {
-		err = os.Remove(filepath.Join(snapDir, filename))
+		err = os.Remove(filepath.Join(d.snapDir, filename))
 		if err != nil {
 			d.Logger.Error("Failed to prune snapshot", "error", err, "major-block", majorBlock, "minor-block", minorBlock, "module", "snapshot")
 		}
 	}
 }
+
+func (d *Daemon) collectStates(minorBlock uint64) {
+	for blk := minorBlock - 2; blk <= minorBlock; blk++ {
+		err := d.saveCommit(blk)
+		if err != nil {
+			return
+		}
+		err = d.saveBlock(blk)
+		if err != nil {
+			return
+		}
+	}
+}
+
+func (d *Daemon) saveCommit(minorBlock uint64) error {
+	hdrFilename := filepath.Join(d.snapDir, fmt.Sprintf(core.SnapshotHeaderFormat, minorBlock))
+	hdrFile, err := os.OpenFile(hdrFilename, os.O_RDWR|os.O_EXCL|os.O_CREATE, 0666)
+	if err != nil {
+		d.Logger.Error("Failed to create snapshot header", "error", err, "minor-block", minorBlock, "module", "snapshot")
+		return nil
+	}
+	defer func() {
+		err = hdrFile.Close()
+		if err != nil {
+			d.Logger.Error("Failed to close snapshot", "error", err, "minor-block", minorBlock, "module", "snapshot")
+			return
+		}
+	}()
+	cmtFilename := filepath.Join(d.snapDir, fmt.Sprintf(core.SnapshotBlockCommitFormat, minorBlock))
+	cmtFile, err := os.OpenFile(cmtFilename, os.O_RDWR|os.O_EXCL|os.O_CREATE, 0666)
+	if err != nil {
+		d.Logger.Error("Failed to create snapshot block commit", "error", err, "minor-block", minorBlock, "module", "snapshot")
+		return nil
+	}
+	defer func() {
+		err = cmtFile.Close()
+		if err != nil {
+			d.Logger.Error("Failed to close block commit", "error", err, "minor-block", minorBlock, "module", "snapshot")
+			return
+		}
+	}()
+	height := int64(minorBlock)
+	resCmt, err := d.localTm.Commit(context.Background(), &height)
+	if err != nil {
+		d.Logger.Error("Failed to fetch snapshot block commit", "error", err, "minor-block", minorBlock, "module", "snapshot")
+		return nil
+	}
+
+	hdrBytes, err := json.Marshal(resCmt.Header)
+	if err != nil {
+		d.Logger.Error("Failed to marshal snapshot block header", "error", err, "minor-block", minorBlock, "module", "snapshot")
+		return nil
+	}
+	hdrFile.Write(hdrBytes)
+
+	cmtBytes, err := json.Marshal(resCmt.Header)
+	if err != nil {
+		d.Logger.Error("Failed to marshal snapshot block commit", "error", err, "minor-block", minorBlock, "module", "snapshot")
+		return nil
+	}
+	cmtFile.Write(cmtBytes)
+	return nil
+}
+
+func (d *Daemon) saveBlock(minorBlock uint64) error {
+	blkFilename := filepath.Join(d.snapDir, fmt.Sprintf(core.SnapshotBlockFormat, minorBlock))
+	blkFile, err := os.OpenFile(blkFilename, os.O_RDWR|os.O_EXCL|os.O_CREATE, 0666)
+	if err != nil {
+		d.Logger.Error("Failed to create snapshot block", "error", err, "minor-block", minorBlock, "module", "snapshot")
+		return nil
+	}
+	defer func() {
+		err = blkFile.Close()
+		if err != nil {
+			d.Logger.Error("Failed to close snapshot block", "error", err, "minor-block", minorBlock, "module", "snapshot")
+			return
+		}
+	}()
+	height := int64(minorBlock)
+	blkRes, err := d.localTm.BlockResults(context.Background(), &height)
+	if err != nil {
+		d.Logger.Error("Failed to fetch snapshot block", "error", err, "minor-block", minorBlock, "module", "snapshot")
+		return nil
+	}
+
+	var consensusBytes []byte
+	if blkRes.ConsensusParamUpdates != nil {
+		consensusBytes, err = blkRes.ConsensusParamUpdates.Marshal()
+		if err != nil {
+			d.Logger.Error("Failed to marshal snapshot block consensus params", "error", err, "minor-block", minorBlock, "module", "snapshot")
+			return nil
+		}
+	}
+	lenBuf := make([]byte, 2)
+	binary.BigEndian.PutUint16(lenBuf, uint16(len(consensusBytes)))
+	blkFile.Write(lenBuf)
+	if len(consensusBytes) > 0 {
+		blkFile.Write(consensusBytes)
+	}
+
+	if blkRes.ValidatorUpdates != nil {
+		binary.BigEndian.PutUint16(lenBuf, uint16(len(blkRes.ValidatorUpdates)))
+		blkFile.Write(lenBuf)
+		for _, validatorUpdate := range blkRes.ValidatorUpdates {
+			validatorUpdateBytes, err := validatorUpdate.Marshal()
+			if err != nil {
+				d.Logger.Error("Failed to marshal snapshot block validator update", "error", err, "minor-block", minorBlock, "module", "snapshot")
+				return nil
+			}
+			binary.BigEndian.PutUint16(lenBuf, uint16(len(validatorUpdateBytes)))
+			blkFile.Write(lenBuf)
+			blkFile.Write(validatorUpdateBytes)
+		}
+	} else {
+		binary.BigEndian.PutUint16(lenBuf, uint16(0))
+		blkFile.Write(lenBuf)
+	}
+	return nil
+}
+
 func (d *Daemon) LoadSnapshot(file ioutil2.SectionReader) error {
 	db, err := database.Open(d.Config, d.Logger)
 	if err != nil {

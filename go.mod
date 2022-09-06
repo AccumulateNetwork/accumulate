@@ -4,6 +4,8 @@ go 1.18
 
 replace github.com/golangci/golangci-lint v1.46.2 => github.com/firelizzard18/golangci-lint v1.46.3-0.20220713213035-328ba3e7213d
 
+replace github.com/tendermint/tendermint => /home/sander/go/src/github.com/tendermint/tendermint
+
 require (
 	github.com/AccumulateNetwork/jsonrpc2/v15 v15.0.0-20220517212445-953ad957e040
 	github.com/FactomProject/factom v0.4.0
@@ -63,10 +65,10 @@ require (
 	github.com/FactomProject/goleveldb v0.2.2-0.20170418171130-e7800c6976c5 // indirect
 	github.com/FactomProject/netki-go-partner-client v0.0.0-20160324224126-426acb535e66 // indirect
 	github.com/GaijinEntertainment/go-exhaustruct/v2 v2.2.0 // indirect
+	github.com/Workiva/go-datastructures v1.0.53 // indirect
 	github.com/alingse/asasalint v0.0.11 // indirect
 	github.com/btcsuitereleases/btcutil v0.0.0-20150612230727-f2b1058a8255 // indirect
 	github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e // indirect
-	github.com/creachadair/taskgroup v0.3.2 // indirect
 	github.com/firefart/nonamedreturns v1.0.4 // indirect
 	github.com/lufeee/execinquery v1.2.1 // indirect
 	github.com/pelletier/go-toml/v2 v2.0.2 // indirect

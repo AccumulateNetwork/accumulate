@@ -53,7 +53,9 @@ type Daemon struct {
 
 	// knobs for tests
 	// IsTest   bool
-	UseMemDB bool
+	UseMemDB               bool
+	triggerCollectStatesAt uint64
+	snapDir                string
 }
 
 func Load(dir string, newWriter func(*config.Config) (io.Writer, error)) (*Daemon, error) {
@@ -92,9 +94,9 @@ func Load(dir string, newWriter func(*config.Config) (io.Writer, error)) (*Daemo
 func (d *Daemon) Key() crypto.PrivKey {
 	return d.pv.Key.PrivKey
 }
-
 func (d *Daemon) DB_TESTONLY() *database.Database { return d.db }
 func (d *Daemon) Node_TESTONLY() *node.Node       { return d.node }
+
 func (d *Daemon) Jrpc_TESTONLY() *api.JrpcMethods { return d.jrpc }
 
 func (d *Daemon) Start() (err error) {

@@ -78,7 +78,7 @@ func listSnapshots(_ *cobra.Command, args []string) {
 		defer f.Close()
 
 		header, _, err := snapshot.Open(f)
-		checkf(err, "oepn snapshot %s", entry.Name())
+		checkf(err, "open snapshot %s", entry.Name())
 
 		fmt.Fprintf(wr, "%d\t%x\t%s\n", header.Height, header.RootHash, entry.Name())
 	}

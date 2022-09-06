@@ -69,7 +69,8 @@ const (
 	ScratchPrunePeriodDays = 14
 
 	// DefaultMajorBlockSchedule is the default cron schedule of when new major blocks are created
-	DefaultMajorBlockSchedule = "0 */12 * * *"
+	// DefaultMajorBlockSchedule = "0 */12 * * *"
+	DefaultMajorBlockSchedule = "*/1 * * * *" // TODO REVERT!!
 
 	//AccountUrlMaxLength is the maximum size allowed for accumulate adi urls
 	AccountUrlMaxLength = 500
