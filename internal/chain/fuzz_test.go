@@ -233,7 +233,21 @@ func FuzzIssueTokens(f *testing.F) {
 	})
 }
 
-// func FuzzBurnTokens(f *testing.F)
+func FuzzBurnTokens(f *testing.F) {
+	h1 := addTransaction(f, TransactionHeader{Principal: AccountUrl("foo")}, &BurnTokens{
+		Amount: *big.NewInt(123)})
+
+	f.Fuzz(func(t *testing.T, dataHeader, dataBody []byte) {
+		t.Parallel()
+		txn, _ := unpackTransaction[*BurnTokens](t, dataHeader, dataBody)
+		principal := new(TokenAccount)
+		principal.AddAuthority(&url.URL{Authority: Unknown})
+		principal.Url = txn.Header.Principal
+		principal.TokenUrl = AcmeUrl()
+		principal.Balance = *big.NewInt(1e15)
+		validateTransaction(t, txn, principal, chain.BurnTokens{}, matchesAny(txn, h1))
+	})
+}
 
 // func FuzzCreateLiteTokenAccount(f *testing.F)
 
@@ -255,7 +269,9 @@ func FuzzAddCredits(f *testing.F) {
 		principal.Url = txn.Header.Principal
 		principal.TokenUrl = AcmeUrl()
 		principal.Balance = *big.NewInt(1e12)
-		validateTransaction(t, txn, principal, chain.AddCredits{}, matchesAny(txn, h1))
+		ledger := new(SystemLedger)
+		ledger.Url = acctesting.BvnUrlForTest(t).JoinPath(Ledger)
+		validateTransaction(t, txn, principal, chain.AddCredits{}, matchesAny(txn, h1), ledger)
 	})
 }
 
