@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -41,6 +42,10 @@ func (CreateDataAccount) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 	body, ok := tx.Transaction.Body.(*protocol.CreateDataAccount)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.CreateDataAccount), tx.Transaction.Body)
+	}
+
+	if body.Url == nil {
+		return nil, errors.Format(errors.StatusBadRequest, "invalid payload: missing URL")
 	}
 
 	err := checkCreateAdiAccount(st, body.Url)

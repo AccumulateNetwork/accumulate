@@ -46,14 +46,8 @@ func (a *Account) Commit() error {
 			if len(acc.GetUrl().String()) > protocol.AccountUrlMaxLength {
 				return errors.Wrap(errors.StatusBadUrlLength, fmt.Errorf("url specified exceeds maximum character length: %s", acc.GetUrl().String()))
 			}
-			e1 := protocol.IsValidAdiUrl(acc.GetUrl().RootIdentity(), true)
-			e2 := protocol.IsValidAccountPath(acc.GetUrl().Path)
-			switch {
-			case e1 != nil && e2 != nil:
-				return errors.Format(errors.StatusBadRequest, "invalid identity: %v; invalid path: %v", e1, e2)
-			case e1 != nil:
-				return errors.Format(errors.StatusBadRequest, "invalid identity: %w", err)
-			case e2 != nil:
+			err = protocol.IsValidAccountPath(acc.GetUrl().Path)
+			if err != nil {
 				return errors.Format(errors.StatusBadRequest, "invalid path: %w", err)
 			}
 		case errors.Is(err, errors.StatusNotFound):
