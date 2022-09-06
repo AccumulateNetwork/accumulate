@@ -114,7 +114,7 @@ func (AddCredits) Validate(st *StateManager, tx *Delivery) (protocol.Transaction
 	res.Credits = credits.Uint64()
 	res.Amount = body.Amount
 
-	err = st.Update(ledgerState, account)
+	err = st.Update(account, ledgerState)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update accounts: %v", err)
 	}
