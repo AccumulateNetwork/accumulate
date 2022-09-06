@@ -49,7 +49,7 @@ func (CreateTokenAccount) Validate(st *StateManager, tx *Delivery) (protocol.Tra
 	}
 
 	if body.Url == nil {
-		return nil, errors.Format(errors.StatusBadRequest, "invalid payload: missing URL")
+		return nil, errors.Format(errors.StatusBadRequest, "account URL is missing")
 	}
 
 	err := checkCreateAdiAccount(st, body.Url)

@@ -66,7 +66,7 @@ func (CreateIdentity) Validate(st *StateManager, tx *Delivery) (protocol.Transac
 	}
 
 	if body.Url == nil {
-		return nil, errors.Format(errors.StatusBadRequest, "invalid payload: missing URL")
+		return nil, errors.Format(errors.StatusBadRequest, "account URL is missing")
 	}
 
 	// TODO Require the principal to be the ADI when creating a root identity?
