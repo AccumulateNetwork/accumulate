@@ -333,7 +333,7 @@ func (x *Executor) systemTransactionIsReady(batch *database.Batch, delivery *cha
 	if !ok {
 		return false, errors.Format(errors.StatusBadRequest, "source %v is not a partition", status.SourceNetwork)
 	}
-	if len(status.AnchorSigners) < int(x.globals.Active.ValidatorThreshold(partition)) {
+	if uint64(len(status.AnchorSigners)) < x.globals.Active.ValidatorThreshold(partition) {
 		return false, nil
 	}
 
