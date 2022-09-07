@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -14,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/manifoldco/promptui"
 	"github.com/mdp/qrterminal"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
@@ -486,7 +488,7 @@ func lockAccount(principal *url2.URL, signers []*signing.Builder, args []string)
 	return dispatchTxAndPrintResponse(body, principal, signers)
 }
 
-func ExportAccounts(filename string) error {
+func ExportAccounts(filePath string) error {
 	b, err := walletd.GetWallet().GetBucket(walletd.BucketLite)
 	if err != nil {
 		//no accounts so nothing to do...
@@ -549,12 +551,36 @@ func ExportAccounts(filename string) error {
 		return err
 	}
 
-	out, err := os.Create(os.TempDir() + "/" + filename + ".json")
-	if err != nil {
-		return err
-	}
-	_, err = io.Copy(out, strings.NewReader(string(bytes)))
-	if err != nil {
+	if _, err := os.Stat(filePath); err == nil {
+		opt, err := promptOverwrite()
+		if err != nil {
+			return err
+		}
+		if strings.EqualFold(opt, "y") {
+			file, err := os.OpenFile(filePath, os.O_RDWR, 0644)
+			if err != nil {
+				return err
+			}
+			defer file.Close()
+			_, err = io.Copy(file, strings.NewReader(string(bytes)))
+			if err != nil {
+				return err
+			}
+		} else {
+			return fmt.Errorf("operation skipped")
+		}
+
+	} else if errors.Is(err, os.ErrNotExist) {
+		out, err := os.Create(filePath)
+		if err != nil {
+			return err
+		}
+		defer out.Close()
+		_, err = io.Copy(out, strings.NewReader(string(bytes)))
+		if err != nil {
+			return err
+		}
+	} else {
 		return err
 	}
 	return nil
@@ -588,4 +614,32 @@ func ImportAccounts(filePath string) error {
 		}
 	}
 	return nil
+}
+
+func promptOverwrite() (string, error) {
+	pc := promptContent{
+		"",
+		"File already exists. Do you want to overwrite?",
+	}
+	items := []string{"y", "n"}
+	index := -1
+	var result string
+	var err error
+
+	for index < 0 {
+		prompt := promptui.SelectWithAdd{
+			Label: pc.label,
+			Items: items,
+		}
+		index, result, err = prompt.Run()
+		if index == -1 {
+			items = append(items, result)
+		}
+	}
+
+	if err != nil {
+		return "", err
+	}
+
+	return result, nil
 }
