@@ -136,6 +136,8 @@ func (m *Executor) EndBlock(block *Block) error {
 	// Record the block entries
 	bl := new(protocol.BlockLedger)
 	bl.Url = m.Describe.Ledger().JoinPath(strconv.FormatUint(block.Index, 10))
+	bl.Index = block.Index
+	bl.Time = block.Time
 	bl.Entries = block.State.ChainUpdates.Entries
 	err = block.Batch.Account(bl.Url).Main().Put(bl)
 	if err != nil {
