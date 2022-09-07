@@ -93,8 +93,14 @@ func (x *TxID) String() string {
 		return x.memoize.str
 	}
 
-	x.memoize.str = x.url.format(x.hash[:])
+	x.memoize.str = x.url.format(x.hash[:], true)
 	return x.memoize.str
+}
+
+// RawString reassembles the URL into a valid URL string without encoding any
+// component.
+func (x *TxID) RawString() string {
+	return x.url.format(x.hash[:], false)
 }
 
 // ShortString returns String without the scheme prefix.
