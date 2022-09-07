@@ -223,6 +223,9 @@ ValidatorInfo:
       type: bytes
     - name: PublicKeyHash
       type: hash
+    - name: Operator
+      type: url
+      pointer: true
     - name: Partitions
       type: ValidatorPartitionInfo
       marshal-as: reference
