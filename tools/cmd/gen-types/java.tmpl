@@ -44,9 +44,9 @@ public class {{safeClassName .Name}}{{
     end}} {
 
 	{{- range .Fields}}
-	{{-   if and (.Virtual) (ne .ParentUnionValue "")}}
+	{{-   if and (.Virtual) (ne .ParentType.UnionValue "")}}
 	    {{-   if eq (lcName .Name) "type"}}
-	public final {{resolveType .}} {{lcName .Name}} = {{resolveType .}}.{{underscoreUpperCase .ParentUnionValue}};
+	public final {{resolveType .}} {{lcName .Name}} = {{resolveType .}}.{{underscoreUpperCase .ParentType.UnionValue}};
 	    {{-   end}}
 	{{-   end}}
 	{{- end}}
@@ -84,19 +84,19 @@ public class {{safeClassName .Name}}{{
 	    this.{{lcName .Name}} = value;
 	}
 
-	public {{.ParentTypeName}} {{lcName .Name}}(final {{resolveType .}} value) {
+	public {{.ParentType.Name}} {{lcName .Name}}(final {{resolveType .}} value) {
 	    set{{.Name}}(value);
 	    return this;
 	}
 
 	{{-     if eq (resolveType .) "Url"}}
-	public {{.ParentTypeName}} {{lcName .Name}}(final String value) {
+	public {{.ParentType.Name}} {{lcName .Name}}(final String value) {
 	    set{{.Name}}(Url.parse(value));
 	    return this;
 	}
 	{{-     end}}
 	{{-     if eq (resolveType .) "byte[]"}}
-	public {{.ParentTypeName}} {{lcName .Name}}(final String value) {
+	public {{.ParentType.Name}} {{lcName .Name}}(final String value) {
 		try {
 			set{{.Name}}(io.accumulatenetwork.sdk.commons.codec.binary.Hex.decodeHex(value));
 		} catch (io.accumulatenetwork.sdk.commons.codec.DecoderException e) {

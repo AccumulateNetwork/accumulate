@@ -54,6 +54,9 @@ func EqualAccount(a, b Account) bool {
 	if a == b {
 		return true
 	}
+	if a == nil || b == nil {
+		return false
+	}
 	switch a := a.(type) {
 	case *ADI:
 		b, ok := b.(*ADI)
@@ -208,6 +211,9 @@ func NewDataEntry(typ DataEntryType) (DataEntry, error) {
 func EqualDataEntry(a, b DataEntry) bool {
 	if a == b {
 		return true
+	}
+	if a == nil || b == nil {
+		return false
 	}
 	switch a := a.(type) {
 	case *AccumulateDataEntry:
@@ -378,6 +384,9 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 func EqualTransactionBody(a, b TransactionBody) bool {
 	if a == b {
 		return true
+	}
+	if a == nil || b == nil {
+		return false
 	}
 	switch a := a.(type) {
 	case *AcmeFaucet:
@@ -580,6 +589,9 @@ func EqualAccountAuthOperation(a, b AccountAuthOperation) bool {
 	if a == b {
 		return true
 	}
+	if a == nil || b == nil {
+		return false
+	}
 	switch a := a.(type) {
 	case *AddAccountAuthorityOperation:
 		b, ok := b.(*AddAccountAuthorityOperation)
@@ -707,6 +719,9 @@ func NewKeyPageOperation(typ KeyPageOperationType) (KeyPageOperation, error) {
 func EqualKeyPageOperation(a, b KeyPageOperation) bool {
 	if a == b {
 		return true
+	}
+	if a == nil || b == nil {
+		return false
 	}
 	switch a := a.(type) {
 	case *AddKeyOperation:
@@ -852,6 +867,9 @@ func NewSignature(typ SignatureType) (Signature, error) {
 func EqualSignature(a, b Signature) bool {
 	if a == b {
 		return true
+	}
+	if a == nil || b == nil {
+		return false
 	}
 	switch a := a.(type) {
 	case *BTCLegacySignature:

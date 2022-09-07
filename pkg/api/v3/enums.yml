@@ -1,0 +1,21 @@
+RecordType:
+  Account:
+    value: 0x01
+  Chain:
+    value: 0x02
+  ChainEntry:
+    value: 0x03
+
+  Transaction:
+    value: 0x10
+  Signature:
+    value: 0x11
+
+  Range:
+    value: 0x80
+  Url:
+    value: 0x81
+  TxID:
+    value: 0x82
+  IndexEntry:
+    value: 0x83

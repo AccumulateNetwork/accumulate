@@ -2330,7 +2330,7 @@ func (v *ResponseAccount) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	if !(v.Account == nil) {
+	if !(!protocol.EqualAccount(v.Account, nil)) {
 		writer.WriteValue(1, v.Account.MarshalBinary)
 	}
 	if !(len(v.ChainState) == 0) {
@@ -2355,7 +2355,7 @@ func (v *ResponseAccount) IsValid() error {
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Account is missing")
-	} else if v.Account == nil {
+	} else if !protocol.EqualAccount(v.Account, nil) {
 		errs = append(errs, "field Account is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
@@ -2625,7 +2625,7 @@ func (v *ResponseDataEntry) MarshalBinary() ([]byte, error) {
 	if !(v.EntryHash == ([32]byte{})) {
 		writer.WriteHash(1, &v.EntryHash)
 	}
-	if !(v.Entry == nil) {
+	if !(!protocol.EqualDataEntry(v.Entry, nil)) {
 		writer.WriteValue(2, v.Entry.MarshalBinary)
 	}
 
@@ -2647,7 +2647,7 @@ func (v *ResponseDataEntry) IsValid() error {
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Entry is missing")
-	} else if v.Entry == nil {
+	} else if !protocol.EqualDataEntry(v.Entry, nil) {
 		errs = append(errs, "field Entry is not set")
 	}
 
@@ -3100,7 +3100,7 @@ func (v *SignatureSet) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	if !(v.Account == nil) {
+	if !(!protocol.EqualAccount(v.Account, nil)) {
 		writer.WriteValue(1, v.Account.MarshalBinary)
 	}
 	if !(len(v.Signatures) == 0) {
@@ -3122,7 +3122,7 @@ func (v *SignatureSet) IsValid() error {
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Account is missing")
-	} else if v.Account == nil {
+	} else if !protocol.EqualAccount(v.Account, nil) {
 		errs = append(errs, "field Account is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {

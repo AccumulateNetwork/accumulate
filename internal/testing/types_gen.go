@@ -745,6 +745,30 @@ func (v *FakeTransactionBody) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *FakeAccount) MarshalJSON() ([]byte, error) {
+	u := struct {
+		TheType     protocol.AccountType                       `json:"theType,omitempty"`
+		Url         *url.URL                                   `json:"url,omitempty"`
+		Authorities encoding.JsonList[protocol.AuthorityEntry] `json:"authorities,omitempty"`
+	}{}
+	u.TheType = v.FakeLiteAccount.TheType
+	u.Url = v.FakeLiteAccount.Url
+	u.Authorities = v.AccountAuth.Authorities
+	return json.Marshal(&u)
+}
+
+func (v *FakeAuthority) MarshalJSON() ([]byte, error) {
+	u := struct {
+		FakeLiteAccount FakeLiteAccount      `json:"fakeLiteAccount,omitempty"`
+		AccountAuth     protocol.AccountAuth `json:"accountAuth,omitempty"`
+		Signers         *url.URL             `json:"signers,omitempty"`
+	}{}
+	u.FakeLiteAccount = v.FakeAccount.FakeLiteAccount
+	u.AccountAuth = v.FakeAccount.AccountAuth
+	u.Signers = v.Signers
+	return json.Marshal(&u)
+}
+
 func (v *FakeSignature) MarshalJSON() ([]byte, error) {
 	u := struct {
 		TheType       protocol.SignatureType `json:"theType,omitempty"`
@@ -779,6 +803,42 @@ func (v *FakeSigner) MarshalJSON() ([]byte, error) {
 	u.Version = v.Version
 	u.Keys = v.Keys
 	return json.Marshal(&u)
+}
+
+func (v *FakeAccount) UnmarshalJSON(data []byte) error {
+	u := struct {
+		TheType     protocol.AccountType                       `json:"theType,omitempty"`
+		Url         *url.URL                                   `json:"url,omitempty"`
+		Authorities encoding.JsonList[protocol.AuthorityEntry] `json:"authorities,omitempty"`
+	}{}
+	u.TheType = v.FakeLiteAccount.TheType
+	u.Url = v.FakeLiteAccount.Url
+	u.Authorities = v.AccountAuth.Authorities
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.FakeLiteAccount.TheType = u.TheType
+	v.FakeLiteAccount.Url = u.Url
+	v.AccountAuth.Authorities = u.Authorities
+	return nil
+}
+
+func (v *FakeAuthority) UnmarshalJSON(data []byte) error {
+	u := struct {
+		FakeLiteAccount FakeLiteAccount      `json:"fakeLiteAccount,omitempty"`
+		AccountAuth     protocol.AccountAuth `json:"accountAuth,omitempty"`
+		Signers         *url.URL             `json:"signers,omitempty"`
+	}{}
+	u.FakeLiteAccount = v.FakeAccount.FakeLiteAccount
+	u.AccountAuth = v.FakeAccount.AccountAuth
+	u.Signers = v.Signers
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.FakeAccount.FakeLiteAccount = u.FakeLiteAccount
+	v.FakeAccount.AccountAuth = u.AccountAuth
+	v.Signers = u.Signers
+	return nil
 }
 
 func (v *FakeSignature) UnmarshalJSON(data []byte) error {

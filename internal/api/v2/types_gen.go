@@ -400,7 +400,7 @@ func (v *DataEntryQueryResponse) MarshalBinary() ([]byte, error) {
 	if !(v.EntryHash == ([32]byte{})) {
 		writer.WriteHash(1, &v.EntryHash)
 	}
-	if !(v.Entry == nil) {
+	if !(!protocol.EqualDataEntry(v.Entry, nil)) {
 		writer.WriteValue(2, v.Entry.MarshalBinary)
 	}
 
@@ -422,7 +422,7 @@ func (v *DataEntryQueryResponse) IsValid() error {
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Entry is missing")
-	} else if v.Entry == nil {
+	} else if !protocol.EqualDataEntry(v.Entry, nil) {
 		errs = append(errs, "field Entry is not set")
 	}
 

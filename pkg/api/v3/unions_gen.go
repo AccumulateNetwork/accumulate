@@ -16,6 +16,22 @@ func NewRecord(typ RecordType) (Record, error) {
 	switch typ {
 	case RecordTypeAccount:
 		return new(AccountRecord), nil
+	case RecordTypeChainEntry:
+		return new(ChainEntryRecord[Record]), nil
+	case RecordTypeChain:
+		return new(ChainRecord), nil
+	case RecordTypeIndexEntry:
+		return new(IndexEntryRecord), nil
+	case RecordTypeRange:
+		return new(RecordRange[Record]), nil
+	case RecordTypeSignature:
+		return new(SignatureRecord), nil
+	case RecordTypeTransaction:
+		return new(TransactionRecord), nil
+	case RecordTypeTxID:
+		return new(TxIDRecord), nil
+	case RecordTypeUrl:
+		return new(UrlRecord), nil
 	default:
 		return nil, fmt.Errorf("unknown record %v", typ)
 	}
@@ -26,9 +42,36 @@ func EqualRecord(a, b Record) bool {
 	if a == b {
 		return true
 	}
+	if a == nil || b == nil {
+		return false
+	}
 	switch a := a.(type) {
 	case *AccountRecord:
 		b, ok := b.(*AccountRecord)
+		return ok && a.Equal(b)
+	case *ChainEntryRecord[Record]:
+		b, ok := b.(*ChainEntryRecord[Record])
+		return ok && a.Equal(b)
+	case *ChainRecord:
+		b, ok := b.(*ChainRecord)
+		return ok && a.Equal(b)
+	case *IndexEntryRecord:
+		b, ok := b.(*IndexEntryRecord)
+		return ok && a.Equal(b)
+	case *RecordRange[Record]:
+		b, ok := b.(*RecordRange[Record])
+		return ok && a.Equal(b)
+	case *SignatureRecord:
+		b, ok := b.(*SignatureRecord)
+		return ok && a.Equal(b)
+	case *TransactionRecord:
+		b, ok := b.(*TransactionRecord)
+		return ok && a.Equal(b)
+	case *TxIDRecord:
+		b, ok := b.(*TxIDRecord)
+		return ok && a.Equal(b)
+	case *UrlRecord:
+		b, ok := b.(*UrlRecord)
 		return ok && a.Equal(b)
 	default:
 		return false

@@ -18,7 +18,7 @@ func New{{.Interface}}(typ {{.Enumeration}}) ({{.Interface}}, error) {
 	switch typ {
 	{{- range .Members}}
 	case {{.UnionType}}{{.UnionValue}}:
-		return new({{.Name}}), nil
+		return new({{.FullName false true}}), nil
 	{{- end}}
 	default:
 		return nil, fmt.Errorf("unknown {{natural .Type}} %v", typ)
@@ -31,10 +31,13 @@ func Equal{{.Interface}}(a, b {{.Interface}}) bool {
 	if a == b {
 		return true
 	}
+	if a == nil || b == nil {
+		return false
+	}
 	switch a := a.(type){
 	{{- range .Members}}
-	case *{{.Type.Name}}:
-		b, ok := b.(*{{.Type.Name}})
+	case *{{.Type.FullName false true}}:
+		b, ok := b.(*{{.Type.FullName false true}})
 		return ok && a.Equal(b)
 	{{- end}}
 	default:

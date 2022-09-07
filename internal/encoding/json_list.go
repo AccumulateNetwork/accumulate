@@ -2,7 +2,21 @@ package encoding
 
 import (
 	"encoding/json"
+	"fmt"
 )
+
+func UnmarshalAndCast[T2, T1 any](data []byte, unmarshal func([]byte) (T1, error)) (T2, error) {
+	var z T2
+	v, err := unmarshal(data)
+	if err != nil {
+		return z, err
+	}
+	u, ok := any(v).(T2)
+	if !ok {
+		return z, fmt.Errorf("wrong type: expected %T, got %T", z, v)
+	}
+	return u, nil
+}
 
 // JsonUnmarshalListWith combines the functionality of JsonList and
 // JsonUnmarshalWith, using the given function to unmarshal JSON into a slice of

@@ -6283,7 +6283,7 @@ func (v *DataAccount) MarshalBinary() ([]byte, error) {
 		writer.WriteUrl(2, v.Url)
 	}
 	writer.WriteValue(3, v.AccountAuth.MarshalBinary)
-	if !(v.Entry == nil) {
+	if !(!EqualDataEntry(v.Entry, nil)) {
 		writer.WriteValue(4, v.Entry.MarshalBinary)
 	}
 
@@ -6331,7 +6331,7 @@ func (v *DelegatedSignature) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
-	if !(v.Signature == nil) {
+	if !(!EqualSignature(v.Signature, nil)) {
 		writer.WriteValue(2, v.Signature.MarshalBinary)
 	}
 	if !(v.Delegator == nil) {
@@ -6354,7 +6354,7 @@ func (v *DelegatedSignature) IsValid() error {
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Signature is missing")
-	} else if v.Signature == nil {
+	} else if !EqualSignature(v.Signature, nil) {
 		errs = append(errs, "field Signature is not set")
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
@@ -7715,7 +7715,7 @@ func (v *NetworkAccountUpdate) MarshalBinary() ([]byte, error) {
 	if !(len(v.Name) == 0) {
 		writer.WriteString(1, v.Name)
 	}
-	if !(v.Body == nil) {
+	if !(!EqualTransactionBody(v.Body, nil)) {
 		writer.WriteValue(2, v.Body.MarshalBinary)
 	}
 
@@ -7737,7 +7737,7 @@ func (v *NetworkAccountUpdate) IsValid() error {
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Body is missing")
-	} else if v.Body == nil {
+	} else if !EqualTransactionBody(v.Body, nil) {
 		errs = append(errs, "field Body is not set")
 	}
 
@@ -8423,7 +8423,7 @@ func (v *RemoteSignature) MarshalBinary() ([]byte, error) {
 	if !(v.Destination == nil) {
 		writer.WriteUrl(2, v.Destination)
 	}
-	if !(v.Signature == nil) {
+	if !(!EqualSignature(v.Signature, nil)) {
 		writer.WriteValue(3, v.Signature.MarshalBinary)
 	}
 
@@ -8448,7 +8448,7 @@ func (v *RemoteSignature) IsValid() error {
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Signature is missing")
-	} else if v.Signature == nil {
+	} else if !EqualSignature(v.Signature, nil) {
 		errs = append(errs, "field Signature is not set")
 	}
 
@@ -9333,7 +9333,7 @@ func (v *SyntheticWriteData) MarshalBinary() ([]byte, error) {
 
 	writer.WriteEnum(1, v.Type())
 	writer.WriteValue(2, v.SyntheticOrigin.MarshalBinary)
-	if !(v.Entry == nil) {
+	if !(!EqualDataEntry(v.Entry, nil)) {
 		writer.WriteValue(3, v.Entry.MarshalBinary)
 	}
 
@@ -9356,7 +9356,7 @@ func (v *SyntheticWriteData) IsValid() error {
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Entry is missing")
-	} else if v.Entry == nil {
+	} else if !EqualDataEntry(v.Entry, nil) {
 		errs = append(errs, "field Entry is not set")
 	}
 
@@ -9437,7 +9437,7 @@ func (v *SystemLedger) MarshalBinary() ([]byte, error) {
 			writer.WriteValue(6, v.MarshalBinary)
 		}
 	}
-	if !(v.Anchor == nil) {
+	if !(!EqualAnchorBody(v.Anchor, nil)) {
 		writer.WriteValue(7, v.Anchor.MarshalBinary)
 	}
 
@@ -9482,7 +9482,7 @@ func (v *SystemLedger) IsValid() error {
 	}
 	if len(v.fieldsSet) > 7 && !v.fieldsSet[7] {
 		errs = append(errs, "field Anchor is missing")
-	} else if v.Anchor == nil {
+	} else if !EqualAnchorBody(v.Anchor, nil) {
 		errs = append(errs, "field Anchor is not set")
 	}
 
@@ -9507,7 +9507,7 @@ func (v *SystemWriteData) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
-	if !(v.Entry == nil) {
+	if !(!EqualDataEntry(v.Entry, nil)) {
 		writer.WriteValue(2, v.Entry.MarshalBinary)
 	}
 	if !(!v.WriteToState) {
@@ -9530,7 +9530,7 @@ func (v *SystemWriteData) IsValid() error {
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Entry is missing")
-	} else if v.Entry == nil {
+	} else if !EqualDataEntry(v.Entry, nil) {
 		errs = append(errs, "field Entry is not set")
 	}
 
@@ -9808,7 +9808,7 @@ func (v *Transaction) MarshalBinary() ([]byte, error) {
 	if !((v.Header).Equal(new(TransactionHeader))) {
 		writer.WriteValue(1, v.Header.MarshalBinary)
 	}
-	if !(v.Body == nil) {
+	if !(!EqualTransactionBody(v.Body, nil)) {
 		writer.WriteValue(2, v.Body.MarshalBinary)
 	}
 
@@ -9830,7 +9830,7 @@ func (v *Transaction) IsValid() error {
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Body is missing")
-	} else if v.Body == nil {
+	} else if !EqualTransactionBody(v.Body, nil) {
 		errs = append(errs, "field Body is not set")
 	}
 
@@ -10056,7 +10056,7 @@ func (v *TransactionStatus) MarshalBinary() ([]byte, error) {
 	if !(v.Error == nil) {
 		writer.WriteValue(3, v.Error.MarshalBinary)
 	}
-	if !(v.Result == nil) {
+	if !(!EqualTransactionResult(v.Result, nil)) {
 		writer.WriteValue(4, v.Result.MarshalBinary)
 	}
 	if !(v.Received == 0) {
@@ -10119,7 +10119,7 @@ func (v *TransactionStatus) IsValid() error {
 	}
 	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field Result is missing")
-	} else if v.Result == nil {
+	} else if !EqualTransactionResult(v.Result, nil) {
 		errs = append(errs, "field Result is not set")
 	}
 	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
@@ -10667,7 +10667,7 @@ func (v *WriteData) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
-	if !(v.Entry == nil) {
+	if !(!EqualDataEntry(v.Entry, nil)) {
 		writer.WriteValue(2, v.Entry.MarshalBinary)
 	}
 	if !(!v.Scratch) {
@@ -10693,7 +10693,7 @@ func (v *WriteData) IsValid() error {
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Entry is missing")
-	} else if v.Entry == nil {
+	} else if !EqualDataEntry(v.Entry, nil) {
 		errs = append(errs, "field Entry is not set")
 	}
 
@@ -10783,7 +10783,7 @@ func (v *WriteDataTo) MarshalBinary() ([]byte, error) {
 	if !(v.Recipient == nil) {
 		writer.WriteUrl(2, v.Recipient)
 	}
-	if !(v.Entry == nil) {
+	if !(!EqualDataEntry(v.Entry, nil)) {
 		writer.WriteValue(3, v.Entry.MarshalBinary)
 	}
 
@@ -10808,7 +10808,7 @@ func (v *WriteDataTo) IsValid() error {
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Entry is missing")
-	} else if v.Entry == nil {
+	} else if !EqualDataEntry(v.Entry, nil) {
 		errs = append(errs, "field Entry is not set")
 	}
 

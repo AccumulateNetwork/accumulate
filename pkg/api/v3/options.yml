@@ -1,0 +1,31 @@
+QueryRecordOptions:
+  fields:
+    - name: IncludeReceipt
+      description: requests a Merkle receipt
+      type: bool
+      optional: true
+
+QueryRangeOptions:
+  fields:
+    - name: Start
+      description: is the starting index
+      type: uint
+      optional: true
+    - name: Count
+      description: is the number of requested results
+      type: uint
+      pointer: true
+      optional: true
+    - name: Expand
+      description: requests expanded results
+      type: bool
+      optional: true
+
+# SearchOptions:
+#   fields:
+#     - name: Kind
+#       description: is the kind of record to search for
+#       type: string
+
+SubmitOptions:
+  fields:

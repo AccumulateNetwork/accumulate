@@ -94,6 +94,11 @@ var goFuncs = template.FuncMap{
 		}
 
 		for _, f := range typ.Fields {
+			// Add a custom un/marshaller if the type embeds another type
+			if f.IsEmbedded {
+				return true
+			}
+
 			// Add a custom un/marshaller if the field needs special handling
 			if GoJsonType(f) != "" {
 				return true
@@ -132,7 +137,15 @@ func GoFieldError(op, name string, args ...string) string {
 }
 
 func goUnionMethod(field *Field, name string) string {
-	parts := strings.SplitN(field.Type.String(), ".", 2)
+	var typ string
+	param, ok := field.ParentType.ResolveTypeParam(&field.Field)
+	if ok {
+		typ = param.Type
+	} else {
+		typ = field.Type.String()
+	}
+
+	parts := strings.SplitN(typ, ".", 2)
 	if len(parts) == 1 {
 		return name + parts[0]
 	}
@@ -258,7 +271,7 @@ func GoIsZero(field *Field, varName string) (string, error) {
 	case Enum:
 		return fmt.Sprintf("%s == 0", varName), nil
 	case Union:
-		return fmt.Sprintf("%s == nil", varName), nil
+		return fmt.Sprintf("!%s(%s, nil)", goUnionMethod(field, "Equal"), varName), nil
 	}
 
 	return "", fmt.Errorf("field %q: cannot determine zero value for %s", field.Name, GoResolveType(field, false, false))
@@ -391,7 +404,15 @@ func goCopy(field *Field, dstName, srcName string) (string, error) {
 
 	switch field.MarshalAs {
 	case Union:
-		return goCopyNonPointer(field, "if %[1]s != nil { %[2]s = (%[1]s).CopyAsInterface().(%[3]s) }", srcName, dstName, GoResolveType(field, false, true)), nil
+		var nilCheck string
+		_, ok := field.ParentType.ResolveTypeParam(&field.Field)
+		if ok {
+			nilCheck = "if !" + goUnionMethod(field, "Equal") + "(%[1]s, nil)"
+		} else {
+			nilCheck = "if %[1]s != nil"
+		}
+		format := nilCheck + " { %[2]s = (%[1]s).CopyAsInterface().(%[3]s) }"
+		return goCopyNonPointer(field, format, srcName, dstName, GoResolveType(field, false, true)), nil
 	case Reference:
 		return goCopyPointer(field, "(%s).Copy()", dstName, srcName), nil
 	case Value, Enum:
@@ -479,7 +500,14 @@ func GoBinaryUnmarshalValue(field *Field, readerName, varName string) (string, e
 	var hasIf bool
 	switch {
 	case field.MarshalAs == Union:
-		expr, hasIf = fmt.Sprintf("%s.ReadValue(%d, func(b []byte) error { x, err := %s(b); if err == nil { %s }; return err })", readerName, field.Number, goUnionMethod(field, "Unmarshal"), set), false
+		unmarshal := goUnionMethod(field, "Unmarshal")
+		param, ok := field.ParentType.ResolveTypeParam(&field.Field)
+		if ok {
+			unmarshal = fmt.Sprintf("encoding.UnmarshalAndCast[%s](b, %s)", param.Name, unmarshal)
+		} else {
+			unmarshal += "(b)"
+		}
+		expr, hasIf = fmt.Sprintf("%s.ReadValue(%d, func(b []byte) error { x, err := %s; if err == nil { %s }; return err })", readerName, field.Number, unmarshal, set), false
 	case method == "Value":
 		expr, hasIf = fmt.Sprintf("if x := new(%s); %s.ReadValue(%d, x.UnmarshalBinary) { %s }", GoResolveType(field, true, true), readerName, field.Number, set), true
 	case method == "Enum":
@@ -501,10 +529,12 @@ func GoBinaryUnmarshalValue(field *Field, readerName, varName string) (string, e
 
 func GoValueToJson(field *Field, tgtName, srcName string) (string, error) {
 	if field.MarshalAs == Union {
-		if !field.Repeatable {
-			return fmt.Sprintf("\t%s = %s{Value: %s, Func: %sJSON}", tgtName, GoJsonType(field), srcName, goUnionMethod(field, "Unmarshal")), nil
+		unmarshal := goUnionMethod(field, "Unmarshal") + "JSON"
+		param, ok := field.ParentType.ResolveTypeParam(&field.Field)
+		if ok {
+			unmarshal = fmt.Sprintf("func(b []byte) (%s, error) { return encoding.UnmarshalAndCast[%[1]s](b, %s) }", param.Name, unmarshal)
 		}
-		return fmt.Sprintf("\t%s = %s{Value: %s, Func: %sJSON}", tgtName, GoJsonType(field), srcName, goUnionMethod(field, "Unmarshal")), nil
+		return fmt.Sprintf("\t%s = %s{Value: %s, Func: %s}", tgtName, GoJsonType(field), srcName, unmarshal), nil
 	}
 
 	method, wantPtr := goJsonMethod(field)

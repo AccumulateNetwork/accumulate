@@ -415,7 +415,7 @@ func (v *Account) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	if !(v.Main == nil) {
+	if !(!protocol.EqualAccount(v.Main, nil)) {
 		writer.WriteValue(1, v.Main.MarshalBinary)
 	}
 	if !(len(v.Chains) == 0) {
@@ -447,7 +447,7 @@ func (v *Account) IsValid() error {
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Main is missing")
-	} else if v.Main == nil {
+	} else if !protocol.EqualAccount(v.Main, nil) {
 		errs = append(errs, "field Main is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
@@ -624,7 +624,7 @@ func (v *Signature) MarshalBinary() ([]byte, error) {
 	if !(v.Txid == nil) {
 		writer.WriteTxid(1, v.Txid)
 	}
-	if !(v.Signature == nil) {
+	if !(!protocol.EqualSignature(v.Signature, nil)) {
 		writer.WriteValue(2, v.Signature.MarshalBinary)
 	}
 
@@ -646,7 +646,7 @@ func (v *Signature) IsValid() error {
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Signature is missing")
-	} else if v.Signature == nil {
+	} else if !protocol.EqualSignature(v.Signature, nil) {
 		errs = append(errs, "field Signature is not set")
 	}
 
