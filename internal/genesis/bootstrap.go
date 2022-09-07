@@ -46,13 +46,7 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) ([]byte, error) {
 
 	if gg.Oracle == nil {
 		gg.Oracle = new(protocol.AcmeOracle)
-		if protocol.IsTestNet {
-			// Set the oracle super high to make life easier on the testnet
-			gg.Oracle.Price = 5000 * protocol.AcmeOraclePrecision
-		} else {
-			// Set the initial price to 1/5 fct price * 1/4 market cap dilution
-			// = 1/20 fct price for this exercise, we'll assume that 1 FCT = $1,
-			// so initial ACME price is $0.05
+		if gg.Oracle.Price == 0 {
 			gg.Oracle.Price = uint64(protocol.InitialAcmeOracleValue)
 		}
 	}
