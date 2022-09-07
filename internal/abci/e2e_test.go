@@ -1947,7 +1947,7 @@ func TestNetworkDefinition(t *testing.T) {
 	nodes := RunTestNet(t, partitions, daemons, nil, true, nil)
 	dn := nodes[partitions[0]][0]
 
-	networkDefs := dn.exec.ActiveGlobals_TESTONLY().Network
+	networkDefs := dn.exec.ActiveGlobals().Network
 	require.NotEmpty(t, networkDefs.Partitions)
 	require.NotEmpty(t, networkDefs.Partitions[0].ID)
 	require.NotEmpty(t, networkDefs.Validators)

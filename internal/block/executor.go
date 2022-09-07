@@ -177,7 +177,7 @@ func (m *Executor) EnableTimers() {
 	m.BlockTimers.Initialize(&m.executors)
 }
 
-func (m *Executor) ActiveGlobals_TESTONLY() *core.GlobalValues {
+func (m *Executor) ActiveGlobals() *core.GlobalValues {
 	return &m.globals.Active
 }
 

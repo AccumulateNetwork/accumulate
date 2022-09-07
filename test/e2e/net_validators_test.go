@@ -73,7 +73,7 @@ func TestUpdateValidators(t *testing.T) {
 	require.Equal(t, 1, int(page.AcceptThreshold))
 
 	// Add a validator
-	values := dn.Executor.ActiveGlobals_TESTONLY()
+	values := dn.Executor.ActiveGlobals()
 	envs, err := build.AddOperator(values, len(page.Keys), vldKey1[32:], vldKey1Hash[:], Directory, signer1, signer2, signer3)
 	require.NoError(t, err)
 	for _, env := range envs {
@@ -90,7 +90,7 @@ func TestUpdateValidators(t *testing.T) {
 	// Update a validator
 	signer1.SetVersion(page.Version)
 
-	values = dn.Executor.ActiveGlobals_TESTONLY()
+	values = dn.Executor.ActiveGlobals()
 	envs, err = build.UpdateOperatorKey(values, vldKey1[32:], vldKey1Hash[:], vldKey4[32:], vldKey4Hash[:], signer1, signer2, signer3)
 	require.NoError(t, err)
 	for _, env := range envs {
@@ -104,7 +104,7 @@ func TestUpdateValidators(t *testing.T) {
 	page = simulator.GetAccount[*KeyPage](sim, operators)
 	signer1.SetVersion(page.Version)
 
-	values = dn.Executor.ActiveGlobals_TESTONLY()
+	values = dn.Executor.ActiveGlobals()
 	envs, err = build.AddOperator(values, len(page.Keys), vldKey2[32:], vldKey2Hash[:], Directory, signer1, signer2, signer3)
 	require.NoError(t, err)
 	for _, env := range envs {
@@ -119,7 +119,7 @@ func TestUpdateValidators(t *testing.T) {
 	signer1.SetVersion(page.Version)
 	signerA2 := signer1.Copy().SetPrivateKey(vldKey2).ClearTimestamp()
 
-	values = dn.Executor.ActiveGlobals_TESTONLY()
+	values = dn.Executor.ActiveGlobals()
 	envs, err = build.AddOperator(values, len(page.Keys), vldKey3[32:], vldKey3Hash[:], Directory, signer1, signer2, signer3, signerA2)
 	require.NoError(t, err)
 	for _, env := range envs {
@@ -133,7 +133,7 @@ func TestUpdateValidators(t *testing.T) {
 	page = simulator.GetAccount[*KeyPage](sim, operators)
 	signer1.SetVersion(page.Version)
 
-	values = dn.Executor.ActiveGlobals_TESTONLY()
+	values = dn.Executor.ActiveGlobals()
 	envs, err = build.RemoveOperator(values, len(page.Keys), vldKey4[32:], vldKey4Hash[:], signer1, signer2, signer3, signerA2)
 	require.NoError(t, err)
 	for _, env := range envs {

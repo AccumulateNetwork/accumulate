@@ -524,7 +524,7 @@ func (n *FakeNode) GetKeyPage(url string) *protocol.KeyPage {
 }
 
 func (n *FakeNode) GetOraclePrice() uint64 {
-	return n.exec.ActiveGlobals_TESTONLY().Oracle.Price
+	return n.exec.ActiveGlobals().Oracle.Price
 }
 
 func (n *FakeNode) GetTokenIssuer(url string) *protocol.TokenIssuer {

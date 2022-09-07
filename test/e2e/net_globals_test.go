@@ -61,8 +61,8 @@ func TestOracleDistribution(t *testing.T) {
 
 	// Verify globals variable
 	expected := uint64(price * AcmeOraclePrecision)
-	require.Equal(t, int(expected), int(dn.Executor.ActiveGlobals_TESTONLY().Oracle.Price))
-	require.Equal(t, int(expected), int(bvn.Executor.ActiveGlobals_TESTONLY().Oracle.Price))
+	require.Equal(t, int(expected), int(dn.Executor.ActiveGlobals().Oracle.Price))
+	require.Equal(t, int(expected), int(bvn.Executor.ActiveGlobals().Oracle.Price))
 }
 
 func TestRoutingDistribution(t *testing.T) {
@@ -82,7 +82,7 @@ func TestRoutingDistribution(t *testing.T) {
 	timestamp = keyEntry.GetLastUsedOn()
 
 	// Update
-	g = dn.Executor.ActiveGlobals_TESTONLY().Copy()
+	g = dn.Executor.ActiveGlobals().Copy()
 	g.Routing.Overrides = append(g.Routing.Overrides, RouteOverride{
 		Account:   AccountUrl("staking"),
 		Partition: Directory,
@@ -112,5 +112,5 @@ func TestRoutingDistribution(t *testing.T) {
 	require.Len(t, account.Entry.GetData(), 1)
 
 	// Verify globals variable
-	require.True(t, g.Routing.Equal(bvn.Executor.ActiveGlobals_TESTONLY().Routing))
+	require.True(t, g.Routing.Equal(bvn.Executor.ActiveGlobals().Routing))
 }

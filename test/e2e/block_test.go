@@ -148,7 +148,7 @@ func TestSendTokensToBadRecipient2(t *testing.T) {
 	sim.MustSubmitAndExecuteBlock(env)
 	sim.WaitForTransactionFlow(delivered, env.Transaction[0].GetHash())
 
-	s := sim.PartitionFor(aliceUrl).Executor.ActiveGlobals_TESTONLY().Globals.FeeSchedule
+	s := sim.PartitionFor(aliceUrl).Executor.ActiveGlobals().Globals.FeeSchedule
 	fee, err := s.ComputeTransactionFee(env.Transaction[0])
 	require.NoError(t, err)
 	refund, err := s.ComputeSyntheticRefund(env.Transaction[0], len(exch.To))

@@ -60,7 +60,7 @@ func TestValidatorSignature(t *testing.T) {
 	batch := dn.Begin(true)
 	defer batch.Discard()
 
-	globals := dn.Executor.ActiveGlobals_TESTONLY()
+	globals := dn.Executor.ActiveGlobals()
 	globals.Network.Version = 1
 	signer := globals.AsSigner(dn.Partition.Id)
 	sigset, err := batch.Transaction(make([]byte, 32)).SignaturesForSigner(signer)
