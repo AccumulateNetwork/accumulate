@@ -442,7 +442,9 @@ type LiteIdentity struct {
 	Url           *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	CreditBalance uint64   `json:"creditBalance,omitempty" form:"creditBalance" query:"creditBalance" validate:"required"`
 	LastUsedOn    uint64   `json:"lastUsedOn,omitempty" form:"lastUsedOn" query:"lastUsedOn" validate:"required"`
-	extraData     []byte
+	// Factoid indicates that the account was a factoid address.
+	Factoid   bool `json:"factoid,omitempty" form:"factoid" query:"factoid" validate:"required"`
+	extraData []byte
 }
 
 type LiteTokenAccount struct {
@@ -569,7 +571,9 @@ type RCD1Signature struct {
 	Timestamp       uint64   `json:"timestamp,omitempty" form:"timestamp" query:"timestamp"`
 	Vote            VoteType `json:"vote,omitempty" form:"vote" query:"vote"`
 	TransactionHash [32]byte `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash"`
-	extraData       []byte
+	// TestnetFactoid must be set when signing transactions on the testnet for an imported Factoid account, to prevent replay.
+	TestnetFactoid bool `json:"testnetFactoid,omitempty" form:"testnetFactoid" query:"testnetFactoid" validate:"required"`
+	extraData      []byte
 }
 
 type Rational struct {
@@ -1849,6 +1853,7 @@ func (v *LiteIdentity) Copy() *LiteIdentity {
 	}
 	u.CreditBalance = v.CreditBalance
 	u.LastUsedOn = v.LastUsedOn
+	u.Factoid = v.Factoid
 
 	return u
 }
@@ -2039,6 +2044,7 @@ func (v *RCD1Signature) Copy() *RCD1Signature {
 	u.Timestamp = v.Timestamp
 	u.Vote = v.Vote
 	u.TransactionHash = v.TransactionHash
+	u.TestnetFactoid = v.TestnetFactoid
 
 	return u
 }
@@ -3694,6 +3700,9 @@ func (v *LiteIdentity) Equal(u *LiteIdentity) bool {
 	if !(v.LastUsedOn == u.LastUsedOn) {
 		return false
 	}
+	if !(v.Factoid == u.Factoid) {
+		return false
+	}
 
 	return true
 }
@@ -3949,6 +3958,9 @@ func (v *RCD1Signature) Equal(u *RCD1Signature) bool {
 		return false
 	}
 	if !(v.TransactionHash == u.TransactionHash) {
+		return false
+	}
+	if !(v.TestnetFactoid == u.TestnetFactoid) {
 		return false
 	}
 
@@ -7523,6 +7535,7 @@ var fieldNames_LiteIdentity = []string{
 	2: "Url",
 	3: "CreditBalance",
 	4: "LastUsedOn",
+	5: "Factoid",
 }
 
 func (v *LiteIdentity) MarshalBinary() ([]byte, error) {
@@ -7538,6 +7551,9 @@ func (v *LiteIdentity) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.LastUsedOn == 0) {
 		writer.WriteUint(4, v.LastUsedOn)
+	}
+	if !(!v.Factoid) {
+		writer.WriteBool(5, v.Factoid)
 	}
 
 	_, _, err := writer.Reset(fieldNames_LiteIdentity)
@@ -7568,6 +7584,11 @@ func (v *LiteIdentity) IsValid() error {
 		errs = append(errs, "field LastUsedOn is missing")
 	} else if v.LastUsedOn == 0 {
 		errs = append(errs, "field LastUsedOn is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field Factoid is missing")
+	} else if !v.Factoid {
+		errs = append(errs, "field Factoid is not set")
 	}
 
 	switch len(errs) {
@@ -8270,6 +8291,7 @@ var fieldNames_RCD1Signature = []string{
 	6: "Timestamp",
 	7: "Vote",
 	8: "TransactionHash",
+	9: "TestnetFactoid",
 }
 
 func (v *RCD1Signature) MarshalBinary() ([]byte, error) {
@@ -8297,6 +8319,9 @@ func (v *RCD1Signature) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.TransactionHash == ([32]byte{})) {
 		writer.WriteHash(8, &v.TransactionHash)
+	}
+	if !(!v.TestnetFactoid) {
+		writer.WriteBool(9, v.TestnetFactoid)
 	}
 
 	_, _, err := writer.Reset(fieldNames_RCD1Signature)
@@ -8332,6 +8357,11 @@ func (v *RCD1Signature) IsValid() error {
 		errs = append(errs, "field SignerVersion is missing")
 	} else if v.SignerVersion == 0 {
 		errs = append(errs, "field SignerVersion is not set")
+	}
+	if len(v.fieldsSet) > 9 && !v.fieldsSet[9] {
+		errs = append(errs, "field TestnetFactoid is missing")
+	} else if !v.TestnetFactoid {
+		errs = append(errs, "field TestnetFactoid is not set")
 	}
 
 	switch len(errs) {
@@ -12576,6 +12606,9 @@ func (v *LiteIdentity) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUint(4); ok {
 		v.LastUsedOn = x
 	}
+	if x, ok := reader.ReadBool(5); ok {
+		v.Factoid = x
+	}
 
 	seen, err := reader.Reset(fieldNames_LiteIdentity)
 	if err != nil {
@@ -12995,6 +13028,9 @@ func (v *RCD1Signature) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	if x, ok := reader.ReadHash(8); ok {
 		v.TransactionHash = *x
+	}
+	if x, ok := reader.ReadBool(9); ok {
+		v.TestnetFactoid = x
 	}
 
 	seen, err := reader.Reset(fieldNames_RCD1Signature)
@@ -15243,11 +15279,13 @@ func (v *LiteIdentity) MarshalJSON() ([]byte, error) {
 		Url           *url.URL    `json:"url,omitempty"`
 		CreditBalance uint64      `json:"creditBalance,omitempty"`
 		LastUsedOn    uint64      `json:"lastUsedOn,omitempty"`
+		Factoid       bool        `json:"factoid,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
 	u.CreditBalance = v.CreditBalance
 	u.LastUsedOn = v.LastUsedOn
+	u.Factoid = v.Factoid
 	return json.Marshal(&u)
 }
 
@@ -15377,6 +15415,7 @@ func (v *RCD1Signature) MarshalJSON() ([]byte, error) {
 		Timestamp       uint64        `json:"timestamp,omitempty"`
 		Vote            VoteType      `json:"vote,omitempty"`
 		TransactionHash string        `json:"transactionHash,omitempty"`
+		TestnetFactoid  bool          `json:"testnetFactoid,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
@@ -15386,6 +15425,7 @@ func (v *RCD1Signature) MarshalJSON() ([]byte, error) {
 	u.Timestamp = v.Timestamp
 	u.Vote = v.Vote
 	u.TransactionHash = encoding.ChainToJSON(v.TransactionHash)
+	u.TestnetFactoid = v.TestnetFactoid
 	return json.Marshal(&u)
 }
 
@@ -17156,11 +17196,13 @@ func (v *LiteIdentity) UnmarshalJSON(data []byte) error {
 		Url           *url.URL    `json:"url,omitempty"`
 		CreditBalance uint64      `json:"creditBalance,omitempty"`
 		LastUsedOn    uint64      `json:"lastUsedOn,omitempty"`
+		Factoid       bool        `json:"factoid,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
 	u.CreditBalance = v.CreditBalance
 	u.LastUsedOn = v.LastUsedOn
+	u.Factoid = v.Factoid
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -17170,6 +17212,7 @@ func (v *LiteIdentity) UnmarshalJSON(data []byte) error {
 	v.Url = u.Url
 	v.CreditBalance = u.CreditBalance
 	v.LastUsedOn = u.LastUsedOn
+	v.Factoid = u.Factoid
 	return nil
 }
 
@@ -17388,6 +17431,7 @@ func (v *RCD1Signature) UnmarshalJSON(data []byte) error {
 		Timestamp       uint64        `json:"timestamp,omitempty"`
 		Vote            VoteType      `json:"vote,omitempty"`
 		TransactionHash string        `json:"transactionHash,omitempty"`
+		TestnetFactoid  bool          `json:"testnetFactoid,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
@@ -17397,6 +17441,7 @@ func (v *RCD1Signature) UnmarshalJSON(data []byte) error {
 	u.Timestamp = v.Timestamp
 	u.Vote = v.Vote
 	u.TransactionHash = encoding.ChainToJSON(v.TransactionHash)
+	u.TestnetFactoid = v.TestnetFactoid
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -17422,6 +17467,7 @@ func (v *RCD1Signature) UnmarshalJSON(data []byte) error {
 	} else {
 		v.TransactionHash = x
 	}
+	v.TestnetFactoid = u.TestnetFactoid
 	return nil
 }
 

@@ -34,6 +34,11 @@ func (tb TransactionBuilder) SetSigner(s *signing.Builder) TransactionBuilder {
 	return tb
 }
 
+func (tb TransactionBuilder) SetFactoidTestnet() TransactionBuilder {
+	tb.signer.SetFactoidTestnet()
+	return tb
+}
+
 func (tb TransactionBuilder) UseSimpleHash() TransactionBuilder {
 	tb.signer.UseSimpleHash()
 	return tb

@@ -434,6 +434,20 @@ func validateKeySignature(transaction *protocol.Transaction, signer protocol.Sig
 		return nil, errors.Format(errors.StatusBadTimestamp, "invalid timestamp: have %d, got %d", entry.GetLastUsedOn(), signature.GetTimestamp())
 	}
 
+	lid, ok1 := signer.(*protocol.LiteIdentity)
+	rcd, ok2 := signature.(*protocol.RCD1Signature)
+	if ok1 && ok2 {
+		if !protocol.IsTestNet {
+			if rcd.TestnetFactoid {
+				return nil, errors.Format(errors.StatusBadRequest, "attempted to replay a testnet Factoid transaction")
+			}
+		} else {
+			if lid.Factoid && !rcd.TestnetFactoid {
+				return nil, errors.Format(errors.StatusBadRequest, "%v is an imported Factoid address but the testnetFactoid flag is not set", lid.Url)
+			}
+		}
+	}
+
 	return entry, nil
 }
 

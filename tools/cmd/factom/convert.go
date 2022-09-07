@@ -488,6 +488,7 @@ func convertBalances(_ *cobra.Command, args []string) {
 
 		lid := new(protocol.LiteIdentity)
 		lid.Url = lta.Url.RootIdentity()
+		lid.Factoid = true
 		a := new(snapshot.Account)
 		a.Main = lid
 		a.Directory = []*url.URL{lta.Url}

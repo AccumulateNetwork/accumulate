@@ -20,6 +20,7 @@ go test:
   script:
   - go build -v ./...
   - go run gotest.tools/gotestsum --junitfile report.xml --format testname
+  - go test -tags=testing -run=TestFactoid ./test/e2e -v
 
 playbooks:
   stage: test

@@ -26,6 +26,9 @@ LiteIdentity:
       type: uvarint
     - name: LastUsedOn
       type: uvarint
+    - name: Factoid
+      description: indicates that the account was a factoid address
+      type: bool
 
 LiteTokenAccount:
   union: { type: account, value: LiteTokenAccount }

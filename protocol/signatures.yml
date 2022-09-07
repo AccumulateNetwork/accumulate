@@ -44,6 +44,9 @@ RCD1Signature:
     - name: TransactionHash
       type: hash
       optional: true
+    - name: TestnetFactoid
+      description: must be set when signing transactions on the testnet for an imported Factoid account, to prevent replay
+      type: bool
 
 ED25519Signature:
   union: { type: signature }

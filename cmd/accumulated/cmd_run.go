@@ -1,3 +1,6 @@
+//go:build !testing
+// +build !testing
+
 package main
 
 import (
@@ -19,6 +22,7 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	service2 "github.com/tendermint/tendermint/libs/service"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/badger"
 )
 
@@ -63,6 +67,10 @@ func initRunFlags(cmd *cobra.Command, forService bool) {
 	}
 
 	cmd.PersistentPreRun = func(*cobra.Command, []string) {
+		if protocol.IsRunningTests {
+			fatalf("attempted to run a node with the testing flag enabled")
+		}
+
 		badger.TruncateBadger = flagRun.Truncate
 
 		if flagRun.PprofListen != "" {

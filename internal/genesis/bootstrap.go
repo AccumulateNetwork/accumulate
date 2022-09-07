@@ -403,6 +403,7 @@ func (b *bootstrap) maybeCreateFactomAccounts() error {
 
 		lid := new(protocol.LiteIdentity)
 		lid.Url = fa.Address.RootIdentity()
+		lid.Factoid = true
 
 		lite := new(protocol.LiteTokenAccount)
 		lite.Url = fa.Address

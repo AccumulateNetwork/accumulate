@@ -166,6 +166,15 @@ func prepareSignerLite(signer *signing.Builder, str string) (bool, error) {
 	signer.Url = u.RootIdentity()
 	signer.Version = 1
 	signer.SetPrivateKey(key.PrivateKey)
+
+	// If the server is not the mainnet and the signer is an imported Factoid
+	// account, set the flag
+	if ServerAddr != "https://mainnet.accumulatenetwork.io/v2" {
+		if lite, err := getAccountAs[*protocol.LiteIdentity](signer.Url.String()); err == nil && lite.Factoid {
+			signer.SetFactoidTestnet()
+		}
+	}
+
 	return true, nil
 }
 
@@ -306,6 +315,21 @@ func getAccount(url string) (protocol.Account, error) {
 	}
 
 	return protocol.UnmarshalAccountJSON(json)
+}
+
+func getAccountAs[T protocol.Account](url string) (T, error) {
+	var account T
+	qr, err := GetUrl(url)
+	if err != nil {
+		return account, err
+	}
+
+	b, err := json.Marshal(qr.Data)
+	if err != nil {
+		return account, err
+	}
+
+	return account, json.Unmarshal(b, &account)
 }
 
 func queryAs(method string, input, output interface{}) error {

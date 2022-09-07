@@ -24,6 +24,8 @@ type Builder struct {
 	Signer     Signer
 	Version    uint64
 	Timestamp  Timestamp
+
+	TestnetFactoid bool
 }
 
 func (s *Builder) Import(sig protocol.Signature) (*Builder, error) {
@@ -81,6 +83,11 @@ func (s *Builder) UseSimpleHash() *Builder {
 
 func (s *Builder) UseMerkleHash() *Builder {
 	s.InitMode = InitWithMerkleHash
+	return s
+}
+
+func (s *Builder) SetFactoidTestnet() *Builder {
+	s.TestnetFactoid = true
 	return s
 }
 
@@ -214,6 +221,7 @@ func (s *Builder) prepare(init bool) (protocol.KeySignature, error) {
 		sig.Signer = s.Url
 		sig.SignerVersion = s.Version
 		sig.Timestamp = timestamp
+		sig.TestnetFactoid = s.TestnetFactoid
 		return sig, s.Signer.SetPublicKey(sig)
 
 	case protocol.SignatureTypeBTC:

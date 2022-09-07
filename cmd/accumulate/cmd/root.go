@@ -56,6 +56,7 @@ var currentUser = func() *user.User {
 }()
 
 var DidError error
+var ServerAddr string
 
 func InitRootCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -65,13 +66,13 @@ func InitRootCmd() *cobra.Command {
 
 	cmd.SetOut(os.Stdout)
 
-	serverAddr := os.Getenv("ACC_API")
-	if serverAddr == "" {
-		serverAddr = "https://beta.testnet.accumulatenetwork.io/v2"
+	ServerAddr = os.Getenv("ACC_API")
+	if ServerAddr == "" {
+		ServerAddr = "https://beta.testnet.accumulatenetwork.io/v2"
 	}
 
 	flags := cmd.PersistentFlags()
-	flags.StringVarP(&serverAddr, "server", "s", serverAddr, "Accumulated server")
+	flags.StringVarP(&ServerAddr, "server", "s", ServerAddr, "Accumulated server")
 	flags.DurationVarP(&ClientTimeout, "timeout", "t", 5*time.Second, "Timeout for all API requests (i.e. 10s, 1m)")
 	flags.BoolVarP(&ClientDebug, "debug", "d", false, "Print accumulated API calls")
 	flags.BoolVarP(&WantJsonOutput, "json", "j", false, "print outputs as json")
@@ -116,19 +117,21 @@ func InitRootCmd() *cobra.Command {
 	cmd.AddCommand(faucetCmd)
 
 	cmd.PersistentPreRunE = func(*cobra.Command, []string) error {
-		switch serverAddr {
+		switch ServerAddr {
 		case "local":
-			serverAddr = "http://127.0.1.1:26660/v2"
+			ServerAddr = "http://127.0.1.1:26660/v2"
 		case "localhost":
-			serverAddr = "http://127.0.0.1:26660/v2"
+			ServerAddr = "http://127.0.0.1:26660/v2"
 		case "devnet":
-			serverAddr = "https://devnet.accumulatenetwork.io/v2"
+			ServerAddr = "https://devnet.accumulatenetwork.io/v2"
 		case "testnet":
-			serverAddr = "https://testnet.accumulatenetwork.io/v2"
+			ServerAddr = "https://testnet.accumulatenetwork.io/v2"
+		case "mainnet":
+			ServerAddr = "https://mainnet.accumulatenetwork.io/v2"
 		}
 
 		var err error
-		Client, err = client.New(serverAddr)
+		Client, err = client.New(ServerAddr)
 		if err != nil {
 			return fmt.Errorf("failed to create client: %v", err)
 		}
