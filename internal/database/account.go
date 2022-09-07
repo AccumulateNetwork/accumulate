@@ -46,6 +46,10 @@ func (a *Account) Commit() error {
 			if len(acc.GetUrl().String()) > protocol.AccountUrlMaxLength {
 				return errors.Wrap(errors.StatusBadUrlLength, fmt.Errorf("url specified exceeds maximum character length: %s", acc.GetUrl().String()))
 			}
+			err = protocol.IsValidAccountPath(acc.GetUrl().Path)
+			if err != nil {
+				return errors.Format(errors.StatusBadRequest, "invalid path: %w", err)
+			}
 		case errors.Is(err, errors.StatusNotFound):
 			// The main state is unset so there's nothing to check
 		default:

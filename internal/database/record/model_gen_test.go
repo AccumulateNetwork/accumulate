@@ -108,7 +108,7 @@ func (c *ChangeSet) Commit() error {
 	}
 	commitField(&err, c.changeLog)
 
-	return nil
+	return err
 }
 
 type Entity struct {
@@ -229,7 +229,7 @@ func (c *Entity) baseCommit() error {
 	commitField(&err, c.countableRefType)
 	commitField(&err, c.countableUnion)
 
-	return nil
+	return err
 }
 
 type TemplateTest struct {
@@ -380,7 +380,7 @@ func (c *TemplateTest) Commit() error {
 	commitField(&err, c.structList)
 	commitField(&err, c.unionList)
 
-	return nil
+	return err
 }
 
 func getOrCreateField[T any](ptr **T, create func() *T) *T {

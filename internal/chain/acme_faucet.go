@@ -1,10 +1,10 @@
 package chain
 
 import (
-	"errors"
 	"fmt"
 	"math/big"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
@@ -22,6 +22,10 @@ func (AcmeFaucet) Validate(st *StateManager, tx *Delivery) (protocol.Transaction
 	body, ok := tx.Transaction.Body.(*protocol.AcmeFaucet)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.AcmeFaucet), tx.Transaction.Body)
+	}
+
+	if body.Url == nil {
+		return nil, errors.Format(errors.StatusBadRequest, "recipient URL is missing")
 	}
 
 	// Check the recipient
