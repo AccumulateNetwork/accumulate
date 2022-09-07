@@ -279,7 +279,7 @@ func (c *{{.FullName}}) {{if .CustomCommit}}base{{end}}Commit() error {
 	{{- end}}
 	{{- end}}
 
-	return nil
+	return err
 }
 
 {{range .Attributes}}

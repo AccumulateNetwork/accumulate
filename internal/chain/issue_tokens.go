@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/big"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -36,6 +37,12 @@ func (IssueTokens) Validate(st *StateManager, tx *Delivery) (protocol.Transactio
 			Amount: body.Amount,
 		}
 		copy(recipients[1:], body.To)
+	}
+
+	for _, to := range recipients {
+		if to.Url == nil {
+			return nil, errors.Format(errors.StatusBadRequest, "recipient URL is missing")
+		}
 	}
 
 	// Calculate the total and update Issued
