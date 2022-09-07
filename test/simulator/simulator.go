@@ -187,6 +187,10 @@ func (s *Simulator) Step() error {
 	return errg.Wait()
 }
 
+func (s *Simulator) SetSubmitHook(partition string, fn SubmitHookFunc) {
+	s.partitions[partition].SetSubmitHook(fn)
+}
+
 func (s *Simulator) Submit(delivery *chain.Delivery) (*protocol.TransactionStatus, error) {
 	partition, err := s.router.Route(&protocol.Envelope{
 		Transaction: []*protocol.Transaction{delivery.Transaction},
@@ -202,6 +206,14 @@ func (s *Simulator) Submit(delivery *chain.Delivery) (*protocol.TransactionStatu
 	}
 
 	return p.Submit(delivery, false)
+}
+
+func (s *Simulator) Partitions() []*protocol.PartitionInfo {
+	var partitions []*protocol.PartitionInfo
+	for _, p := range s.partitions {
+		partitions = append(partitions, &p.PartitionInfo)
+	}
+	return partitions
 }
 
 type errDb struct{ err error }
