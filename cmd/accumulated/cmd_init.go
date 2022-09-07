@@ -58,6 +58,8 @@ var flagInit struct {
 	Etcd             []string
 	EnableTimingLogs bool
 	DnStallLimit     int
+	FactomAddresses  string
+	Snapshots        []string
 }
 
 var flagInitNode struct {
@@ -115,6 +117,8 @@ func initInitFlags() {
 	cmdInit.PersistentFlags().StringSliceVar(&flagInit.Etcd, "etcd", nil, "Use etcd endpoint(s)")
 	cmdInit.PersistentFlags().BoolVar(&flagInit.EnableTimingLogs, "enable-timing-logs", false, "Enable core timing analysis logging")
 	cmdInit.PersistentFlags().IntVar(&flagInit.DnStallLimit, "dn-stall-limit", 0, "Override the default DN stall limit")
+	cmdInit.PersistentFlags().StringVar(&flagInit.FactomAddresses, "factom-addresses", "", "A text file containing Factoid addresses to import")
+	cmdInit.PersistentFlags().StringSliceVar(&flagInit.Snapshots, "snapshot", nil, "A snapshot of accounts to import")
 	_ = cmdInit.MarkFlagRequired("network")
 
 	cmdInitNode.ResetFlags()

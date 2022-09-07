@@ -14,6 +14,7 @@ import (
 	cfg "gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	etcd "go.etcd.io/etcd/client/v3"
@@ -103,12 +104,22 @@ func initNetworkLocalFS(cmd *cobra.Command, netInit *accumulated.NetworkInit) {
 	check(enc.Encode(netInit))
 	check(netFile.Close())
 
+	var factomAddresses func() (io.Reader, error)
+	var snapshots []func() (ioutil2.SectionReader, error)
+	if flagInit.FactomAddresses != "" {
+		factomAddresses = func() (io.Reader, error) { return os.Open(flagInit.FactomAddresses) }
+	}
+	for _, filename := range flagInit.Snapshots {
+		filename := filename // See docs/developer/rangevarref.md
+		snapshots = append(snapshots, func() (ioutil2.SectionReader, error) { return os.Open(filename) })
+	}
+
 	values := new(core.GlobalValues)
 	if flagInitDevnet.Globals != "" {
 		checkf(yaml.Unmarshal([]byte(flagInitDevnet.Globals), values), "--globals")
 	}
 
-	genDocs, err := accumulated.BuildGenesisDocs(netInit, values, time.Now(), newLogger(), nil)
+	genDocs, err := accumulated.BuildGenesisDocs(netInit, values, time.Now(), newLogger(), factomAddresses, snapshots)
 	checkf(err, "build genesis documents")
 
 	configs := accumulated.BuildNodesConfig(netInit, nil)
