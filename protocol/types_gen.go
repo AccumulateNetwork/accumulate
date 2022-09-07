@@ -911,6 +911,7 @@ type ValidatorInfo struct {
 	fieldsSet     []bool
 	PublicKey     []byte                    `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
 	PublicKeyHash [32]byte                  `json:"publicKeyHash,omitempty" form:"publicKeyHash" query:"publicKeyHash" validate:"required"`
+	Operator      *url.URL                  `json:"operator,omitempty" form:"operator" query:"operator" validate:"required"`
 	Partitions    []*ValidatorPartitionInfo `json:"partitions,omitempty" form:"partitions" query:"partitions" validate:"required"`
 	extraData     []byte
 }
@@ -2655,6 +2656,9 @@ func (v *ValidatorInfo) Copy() *ValidatorInfo {
 
 	u.PublicKey = encoding.BytesCopy(v.PublicKey)
 	u.PublicKeyHash = v.PublicKeyHash
+	if v.Operator != nil {
+		u.Operator = v.Operator
+	}
 	u.Partitions = make([]*ValidatorPartitionInfo, len(v.Partitions))
 	for i, v := range v.Partitions {
 		if v != nil {
@@ -4705,6 +4709,14 @@ func (v *ValidatorInfo) Equal(u *ValidatorInfo) bool {
 		return false
 	}
 	if !(v.PublicKeyHash == u.PublicKeyHash) {
+		return false
+	}
+	switch {
+	case v.Operator == u.Operator:
+		// equal
+	case v.Operator == nil || u.Operator == nil:
+		return false
+	case !((v.Operator).Equal(u.Operator)):
 		return false
 	}
 	if len(v.Partitions) != len(u.Partitions) {
@@ -10555,7 +10567,8 @@ func (v *UpdateKeyPage) IsValid() error {
 var fieldNames_ValidatorInfo = []string{
 	1: "PublicKey",
 	2: "PublicKeyHash",
-	3: "Partitions",
+	3: "Operator",
+	4: "Partitions",
 }
 
 func (v *ValidatorInfo) MarshalBinary() ([]byte, error) {
@@ -10568,9 +10581,12 @@ func (v *ValidatorInfo) MarshalBinary() ([]byte, error) {
 	if !(v.PublicKeyHash == ([32]byte{})) {
 		writer.WriteHash(2, &v.PublicKeyHash)
 	}
+	if !(v.Operator == nil) {
+		writer.WriteUrl(3, v.Operator)
+	}
 	if !(len(v.Partitions) == 0) {
 		for _, v := range v.Partitions {
-			writer.WriteValue(3, v.MarshalBinary)
+			writer.WriteValue(4, v.MarshalBinary)
 		}
 	}
 
@@ -10596,6 +10612,11 @@ func (v *ValidatorInfo) IsValid() error {
 		errs = append(errs, "field PublicKeyHash is not set")
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Operator is missing")
+	} else if v.Operator == nil {
+		errs = append(errs, "field Operator is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field Partitions is missing")
 	} else if len(v.Partitions) == 0 {
 		errs = append(errs, "field Partitions is not set")
@@ -14383,8 +14404,11 @@ func (v *ValidatorInfo) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadHash(2); ok {
 		v.PublicKeyHash = *x
 	}
+	if x, ok := reader.ReadUrl(3); ok {
+		v.Operator = x
+	}
 	for {
-		if x := new(ValidatorPartitionInfo); reader.ReadValue(3, x.UnmarshalBinary) {
+		if x := new(ValidatorPartitionInfo); reader.ReadValue(4, x.UnmarshalBinary) {
 			v.Partitions = append(v.Partitions, x)
 		} else {
 			break
@@ -15830,10 +15854,12 @@ func (v *ValidatorInfo) MarshalJSON() ([]byte, error) {
 	u := struct {
 		PublicKey     *string                                    `json:"publicKey,omitempty"`
 		PublicKeyHash string                                     `json:"publicKeyHash,omitempty"`
+		Operator      *url.URL                                   `json:"operator,omitempty"`
 		Partitions    encoding.JsonList[*ValidatorPartitionInfo] `json:"partitions,omitempty"`
 	}{}
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.PublicKeyHash = encoding.ChainToJSON(v.PublicKeyHash)
+	u.Operator = v.Operator
 	u.Partitions = v.Partitions
 	return json.Marshal(&u)
 }
@@ -18238,10 +18264,12 @@ func (v *ValidatorInfo) UnmarshalJSON(data []byte) error {
 	u := struct {
 		PublicKey     *string                                    `json:"publicKey,omitempty"`
 		PublicKeyHash string                                     `json:"publicKeyHash,omitempty"`
+		Operator      *url.URL                                   `json:"operator,omitempty"`
 		Partitions    encoding.JsonList[*ValidatorPartitionInfo] `json:"partitions,omitempty"`
 	}{}
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.PublicKeyHash = encoding.ChainToJSON(v.PublicKeyHash)
+	u.Operator = v.Operator
 	u.Partitions = v.Partitions
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -18256,6 +18284,7 @@ func (v *ValidatorInfo) UnmarshalJSON(data []byte) error {
 	} else {
 		v.PublicKeyHash = x
 	}
+	v.Operator = u.Operator
 	v.Partitions = u.Partitions
 	return nil
 }
