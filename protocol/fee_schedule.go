@@ -109,9 +109,6 @@ func (s *FeeSchedule) ComputeSignatureFee(sig Signature) (Fee, error) {
 
 func (s *FeeSchedule) ComputeTransactionFee(tx *Transaction) (Fee, error) {
 	// Do not charge fees for the DN or BVNs
-	if IsDnUrl(tx.Header.Principal) {
-		return 0, nil
-	}
 	if _, ok := ParsePartitionUrl(tx.Header.Principal); ok {
 		return 0, nil
 	}
