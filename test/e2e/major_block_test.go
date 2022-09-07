@@ -69,3 +69,43 @@ func BenchmarkExecuteBlock(b *testing.B) {
 	b.ResetTimer()
 	sim.ExecuteBlocks(b.N)
 }
+
+func TestBlockLedger(t *testing.T) {
+	// Initialize
+	sim := simulator.New(t, 3)
+	sim.InitFromGenesis()
+
+	alice := protocol.AccountUrl("alice")
+	aliceKey := acctesting.GenerateKey(alice)
+	sim.CreateIdentity(alice, aliceKey[32:])
+	updateAccount(sim, alice.JoinPath("book", "1"), func(p *protocol.KeyPage) { p.CreditBalance = 1e9 })
+
+	// Do something
+	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
+		acctesting.NewTransaction().
+			WithPrincipal(alice).
+			WithSigner(alice.JoinPath("book", "1"), 1).
+			WithTimestamp(1).
+			WithBody(&protocol.CreateTokenAccount{
+				Url:      alice.JoinPath("tokens"),
+				TokenUrl: protocol.AcmeUrl(),
+			}).
+			Initiate(protocol.SignatureTypeED25519, aliceKey).
+			Build(),
+	)...)
+
+	// Check the block ledger
+	x := sim.PartitionFor(alice)
+	_ = x.Database.View(func(batch *database.Batch) error {
+		var sys *protocol.SystemLedger
+		require.NoError(t, batch.Account(x.Executor.Describe.Ledger()).Main().GetAs(&sys))
+
+		var block *protocol.BlockLedger
+		require.NoError(t, batch.Account(x.Executor.Describe.BlockLedger(sys.Index)).Main().GetAs(&block))
+
+		require.Equal(t, sys.Index, block.Index)
+		require.NotZero(t, block.Time)
+
+		return nil
+	})
+}
