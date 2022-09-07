@@ -92,6 +92,25 @@ func (c *Chain2) Key(i int) interface{} {
 	return c.key[i]
 }
 
+func (c *Chain2) Head() *record.Value[*managed.MerkleState] {
+	return c.inner.Head()
+}
+
+// IndexOf returns the index of the given entry in the chain.
+func (c *Chain2) IndexOf(hash []byte) (int64, error) {
+	return c.inner.GetElementIndex(hash)
+}
+
+// Entry loads the entry in the chain at the given height.
+func (c *Chain2) Entry(height int64) ([]byte, error) {
+	return c.inner.Get(height)
+}
+
+// State returns the state of the chain at the given height.
+func (c *Chain2) StateAt(height int64) (*managed.MerkleState, error) {
+	return c.inner.GetAnyState(height)
+}
+
 // Get converts the Chain2 to a Chain, updating the account's chains index and
 // loading the chain head.
 func (c *Chain2) Get() (*Chain, error) {
