@@ -47,9 +47,5 @@ func (a additionalAuthorities) TransactionIsReady(delegate AuthDelegate, batch *
 }
 
 func checkIsNegative(value *big.Int) bool {
-	zero := big.NewInt(0)
-	if value.Cmp(zero) == -1 {
-		return true
-	}
-	return false
+	return value.Sign() < 0
 }
