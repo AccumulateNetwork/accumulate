@@ -67,6 +67,10 @@ BlockLedger:
     - name: Url
       type: url
       pointer: true
+    - name: Index
+      type: uint
+    - name: Time
+      type: time
     - name: Entries
       type: BlockEntry
       marshal-as: reference

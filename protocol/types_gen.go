@@ -148,6 +148,8 @@ type BlockEntry struct {
 type BlockLedger struct {
 	fieldsSet []bool
 	Url       *url.URL      `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	Index     uint64        `json:"index,omitempty" form:"index" query:"index" validate:"required"`
+	Time      time.Time     `json:"time,omitempty" form:"time" query:"time" validate:"required"`
 	Entries   []*BlockEntry `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
 	extraData []byte
 }
@@ -1322,6 +1324,8 @@ func (v *BlockLedger) Copy() *BlockLedger {
 	if v.Url != nil {
 		u.Url = v.Url
 	}
+	u.Index = v.Index
+	u.Time = v.Time
 	u.Entries = make([]*BlockEntry, len(v.Entries))
 	for i, v := range v.Entries {
 		if v != nil {
@@ -3009,6 +3013,12 @@ func (v *BlockLedger) Equal(u *BlockLedger) bool {
 	case v.Url == nil || u.Url == nil:
 		return false
 	case !((v.Url).Equal(u.Url)):
+		return false
+	}
+	if !(v.Index == u.Index) {
+		return false
+	}
+	if !((v.Time).Equal(u.Time)) {
 		return false
 	}
 	if len(v.Entries) != len(u.Entries) {
@@ -5651,7 +5661,9 @@ func (v *BlockEntry) IsValid() error {
 var fieldNames_BlockLedger = []string{
 	1: "Type",
 	2: "Url",
-	3: "Entries",
+	3: "Index",
+	4: "Time",
+	5: "Entries",
 }
 
 func (v *BlockLedger) MarshalBinary() ([]byte, error) {
@@ -5662,9 +5674,15 @@ func (v *BlockLedger) MarshalBinary() ([]byte, error) {
 	if !(v.Url == nil) {
 		writer.WriteUrl(2, v.Url)
 	}
+	if !(v.Index == 0) {
+		writer.WriteUint(3, v.Index)
+	}
+	if !(v.Time == (time.Time{})) {
+		writer.WriteTime(4, v.Time)
+	}
 	if !(len(v.Entries) == 0) {
 		for _, v := range v.Entries {
-			writer.WriteValue(3, v.MarshalBinary)
+			writer.WriteValue(5, v.MarshalBinary)
 		}
 	}
 
@@ -5688,6 +5706,16 @@ func (v *BlockLedger) IsValid() error {
 		errs = append(errs, "field Url is not set")
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Index is missing")
+	} else if v.Index == 0 {
+		errs = append(errs, "field Index is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Time is missing")
+	} else if v.Time == (time.Time{}) {
+		errs = append(errs, "field Time is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
 		errs = append(errs, "field Entries is missing")
 	} else if len(v.Entries) == 0 {
 		errs = append(errs, "field Entries is not set")
@@ -11374,8 +11402,14 @@ func (v *BlockLedger) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Url = x
 	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.Index = x
+	}
+	if x, ok := reader.ReadTime(4); ok {
+		v.Time = x
+	}
 	for {
-		if x := new(BlockEntry); reader.ReadValue(3, x.UnmarshalBinary) {
+		if x := new(BlockEntry); reader.ReadValue(5, x.UnmarshalBinary) {
 			v.Entries = append(v.Entries, x)
 		} else {
 			break
@@ -14743,10 +14777,14 @@ func (v *BlockLedger) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type    AccountType                    `json:"type"`
 		Url     *url.URL                       `json:"url,omitempty"`
+		Index   uint64                         `json:"index,omitempty"`
+		Time    time.Time                      `json:"time,omitempty"`
 		Entries encoding.JsonList[*BlockEntry] `json:"entries,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
+	u.Index = v.Index
+	u.Time = v.Time
 	u.Entries = v.Entries
 	return json.Marshal(&u)
 }
@@ -16229,10 +16267,14 @@ func (v *BlockLedger) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type    AccountType                    `json:"type"`
 		Url     *url.URL                       `json:"url,omitempty"`
+		Index   uint64                         `json:"index,omitempty"`
+		Time    time.Time                      `json:"time,omitempty"`
 		Entries encoding.JsonList[*BlockEntry] `json:"entries,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
+	u.Index = v.Index
+	u.Time = v.Time
 	u.Entries = v.Entries
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -16241,6 +16283,8 @@ func (v *BlockLedger) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Url = u.Url
+	v.Index = u.Index
+	v.Time = u.Time
 	v.Entries = u.Entries
 	return nil
 }
