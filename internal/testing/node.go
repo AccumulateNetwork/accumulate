@@ -19,6 +19,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/testdata"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"golang.org/x/sync/errgroup"
 )
@@ -181,4 +182,15 @@ func RunTestNet(t testing.TB, partitions []string, daemons map[string][]*accumul
 		}
 		assert.NoError(t, errg.Wait())
 	})
+}
+
+func BvnIdForTest(t testing.TB) string {
+	id := t.Name()
+	id = strings.ReplaceAll(id, "/", "-")
+	id = strings.ReplaceAll(id, "#", "-")
+	return id
+}
+
+func BvnUrlForTest(t testing.TB) *url.URL {
+	return protocol.PartitionUrl(BvnIdForTest(t))
 }

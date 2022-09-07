@@ -3,10 +3,12 @@ package chain
 // Whitebox testing utilities
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types"
@@ -27,12 +29,20 @@ func LoadStateManagerForTest(t *testing.T, db database.Beginner, envelope *proto
 
 func NewStateManagerForTest(t *testing.T, db database.Beginner, transaction *protocol.Transaction) *StateManager {
 	t.Helper()
+	m := NewStateManagerForFuzz(t, db, transaction)
+	require.NoError(t, m.LoadUrlAs(m.OriginUrl, &m.Origin))
+	return m
+}
+
+func NewStateManagerForFuzz(t *testing.T, db database.Beginner, transaction *protocol.Transaction) *StateManager {
+	t.Helper()
 	txid := types.Bytes(transaction.GetHash()).AsBytes32()
 	m := new(StateManager)
 	m.OriginUrl = transaction.Header.Principal
-	m.stateCache = *newStateCache(&config.Describe{PartitionId: t.Name()}, nil, transaction.Body.Type(), txid, db.Begin(true))
-
-	require.NoError(t, m.LoadUrlAs(m.OriginUrl, &m.Origin))
+	m.stateCache = *newStateCache(&config.Describe{PartitionId: strings.ReplaceAll(strings.ReplaceAll(t.Name(), "/", "-"), "#", "-")}, nil, transaction.Body.Type(), txid, db.Begin(true))
+	m.Globals = new(core.GlobalValues)
+	m.Globals.Oracle = new(protocol.AcmeOracle)
+	m.Globals.Oracle.Price = protocol.InitialAcmeOracleValue
 	return m
 }
 
