@@ -24,7 +24,7 @@ func TestNegativeValues(t *testing.T) {
 		txn := new(Transaction)
 		txn.Header.Principal = AccountUrl("foo")
 		txn.Body = &BurnTokens{Amount: *big.NewInt(-10)}
-		msg := "field To: failed to marshal field: field Amount: negative big int values are not supported"
+		msg := "field Amount: negative big int values are not supported"
 		require.PanicsWithError(t, msg, func() { txn.GetHash() })
 	})
 
