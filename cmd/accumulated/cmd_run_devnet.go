@@ -50,6 +50,8 @@ var colors = []*color.Color{
 var fallbackColor = color.New(color.FgHiBlack)
 
 func runDevNet(*cobra.Command, []string) {
+	fmt.Println("Starting devnet")
+
 	skip := map[int]bool{}
 	for _, id := range flagRunDevnet.Except {
 		skip[id] = true

@@ -6,6 +6,7 @@ import (
 	"crypto/sha512"
 	"encoding/binary"
 	"fmt"
+	"math"
 )
 
 func NewFactomDataEntry() *FactomDataEntry {
@@ -97,13 +98,13 @@ const LiteEntryHeaderSize = 1 + // version
 	32 + // chain id
 	2 // total len
 
-// LiteEntryMaxTotalSize is the maximum encoded length of an Entry.
-const LiteEntryMaxTotalSize = TransactionSizeMax + LiteEntryHeaderSize
+// // LiteEntryMaxTotalSize is the maximum encoded length of an Entry.
+// const LiteEntryMaxTotalSize = TransactionSizeMax + LiteEntryHeaderSize
 
 // UnmarshalBinary unmarshal the FactomDataEntry in accordance to
 // https://github.com/FactomProject/FactomDocs/blob/master/factomDataStructureDetails.md#entry
 func (e *FactomDataEntry) UnmarshalBinary(data []byte) error {
-	if len(data) < LiteEntryHeaderSize || len(data) > LiteEntryMaxTotalSize {
+	if len(data) < LiteEntryHeaderSize || len(data) > math.MaxInt32 {
 		return fmt.Errorf("malformed entry header")
 	}
 
