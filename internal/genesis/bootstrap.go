@@ -20,6 +20,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -34,6 +35,7 @@ type InitOpts struct {
 	GenesisTime     time.Time
 	Logger          log.Logger
 	FactomAddresses func() (io.Reader, error)
+	Snapshots       []func() (ioutil2.SectionReader, error)
 	GenesisGlobals  *core.GlobalValues
 	OperatorKeys    [][]byte
 }
@@ -242,6 +244,11 @@ func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protoc
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
+	err = b.importSnapshots(st)
+	if err != nil {
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
+	}
+
 	// Persist accounts
 	err = st.Create(b.records...)
 	if err != nil {
@@ -381,6 +388,9 @@ func (b *bootstrap) maybeCreateFactomAccounts() error {
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknownError, err)
 	}
+	if c, ok := rd.(io.Closer); ok {
+		defer c.Close()
+	}
 
 	factomAddresses, err := LoadFactomAddressesAndBalances(rd)
 	if err != nil {
@@ -401,6 +411,50 @@ func (b *bootstrap) maybeCreateFactomAccounts() error {
 		lite.Balance = *big.NewInt(5 * fa.Balance)
 
 		b.WriteRecords(lid, lite)
+	}
+	return nil
+}
+
+func (b *bootstrap) importSnapshots(st *chain.StateManager) error {
+	// Nothing is routed to the DN so don't bother
+	if b.NetworkType == config.Directory {
+		return nil
+	}
+
+	var accounts []*url.URL
+	for _, open := range b.Snapshots {
+		file, err := open()
+		if err != nil {
+			return errors.Wrap(errors.StatusUnknownError, err)
+		}
+		if c, ok := file.(io.Closer); ok {
+			defer c.Close()
+		}
+
+		v := new(snapshotVisitor)
+		v.v = snapshot.NewRestoreVisitor(st.GetBatch(), b.Logger)
+		v.logger.L = b.Logger
+		v.v.DisableWriteBatching = true
+		v.v.CompressChains = true
+		v.router = b.router
+		v.partition = b.PartitionId
+		err = snapshot.Visit(file, v)
+		if err != nil {
+			return errors.Wrap(errors.StatusUnknownError, err)
+		}
+		accounts = append(accounts, v.urls...)
+	}
+
+	// Add Genesis to the accounts' main chain. This also anchors the imported
+	// transactions. This *must* be done outside of ImportFactomSnapshot.
+	// Attempting this within the callback leads to a mismatch between the
+	// account state and the hash in the snapshot.
+	for _, account := range accounts {
+		chain := st.GetBatch().Account(account).MainChain()
+		err := st.State.ChainUpdates.AddChainEntry(st.GetBatch(), chain, st.GetHash(), 0, 0)
+		if err != nil {
+			return errors.Wrap(errors.StatusUnknownError, err)
+		}
 	}
 	return nil
 }

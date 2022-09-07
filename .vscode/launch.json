@@ -51,7 +51,8 @@
         "--reset",
         "-b=2",
         "-v=1",
-        "-f=0"
+        "-f=0",
+        // "--snapshot=${workspaceFolder}/.factom/import.snapshot",
       ]
     },
     {
