@@ -161,7 +161,7 @@ func GenesisWith(time time.Time, values *core.GlobalValues) SnapshotFunc {
 	return func(partition string, network *accumulated.NetworkInit, logger log.Logger) (ioutil2.SectionReader, error) {
 		var err error
 		if genDocs == nil {
-			genDocs, err = accumulated.BuildGenesisDocs(network, values, time, logger, nil)
+			genDocs, err = accumulated.BuildGenesisDocs(network, values, time, logger, nil, nil)
 			if err != nil {
 				return nil, errors.Format(errors.StatusUnknownError, "build genesis docs: %w", err)
 			}
