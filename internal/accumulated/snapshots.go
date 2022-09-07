@@ -2,11 +2,11 @@ package accumulated
 
 import (
 	"context"
-	"encoding/binary"
-	"encoding/json"
 	"errors"
 	"fmt"
+	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/privval"
+	"github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/blockscheduler"
@@ -108,122 +108,87 @@ func (d *Daemon) collectSnapshot(batch *database.Batch, majorBlock, minorBlock u
 }
 
 func (d *Daemon) collectStates(minorBlock uint64) {
-	for blk := minorBlock - 2; blk <= minorBlock; blk++ {
-		err := d.saveCommit(blk)
-		if err != nil {
-			return
-		}
-		err = d.saveBlock(blk)
-		if err != nil {
-			return
-		}
-	}
-}
+	tms := new(abci.StateSnapshot)
+	tms.Height = minorBlock - 2
+	for blkh := minorBlock - 2; blkh <= minorBlock; blkh++ {
+		height := int64(blkh)
 
-func (d *Daemon) saveCommit(minorBlock uint64) error {
-	hdrFilename := filepath.Join(d.snapDir, fmt.Sprintf(core.SnapshotHeaderFormat, minorBlock))
-	hdrFile, err := os.OpenFile(hdrFilename, os.O_RDWR|os.O_EXCL|os.O_CREATE, 0666)
-	if err != nil {
-		d.Logger.Error("Failed to create snapshot header", "error", err, "minor-block", minorBlock, "module", "snapshot")
-		return nil
-	}
-	defer func() {
-		err = hdrFile.Close()
+		// Get commit
+		resCmt, err := d.localTm.Commit(context.Background(), &height)
 		if err != nil {
-			d.Logger.Error("Failed to close snapshot", "error", err, "minor-block", minorBlock, "module", "snapshot")
+			d.Logger.Error("Failed to fetch snapshot block commit", "error", err, "minor-block", minorBlock, "module", "snapshot")
+			return
+		}
+
+		// Get ConsensusParams
+		cpRes, err := d.localTm.ConsensusParams(context.Background(), &height)
+		if err != nil {
+			d.Logger.Error("Failed to fetch snapshot ConsensusParams", "error", err, "minor-block", minorBlock, "module", "snapshot")
+			return
+		}
+
+		// Get validator set
+		page := 1
+		pageCnt := 100
+		valRes, err := d.localTm.Validators(context.Background(), &height, &page, &pageCnt)
+		if err != nil {
+			d.Logger.Error("Failed to fetch validators set", "error", err, "minor-block", minorBlock, "module", "snapshot")
+			return
+		}
+
+		validatorSet := &types.ValidatorSet{
+			Validators: valRes.Validators,
+			//Proposer:   valRes.Validators[1], // FIXME this happens to be at the time of writing, need to figure how to get this for real
+			Proposer: valRes.Proposer,
+		}
+		lb := types.LightBlock{
+			SignedHeader: &types.SignedHeader{
+				Header: resCmt.Header,
+				Commit: resCmt.Commit,
+			},
+			ValidatorSet: validatorSet,
+		}
+		lbProto, err := lb.ToProto()
+		if err != nil {
+			d.Logger.Error("LightBlock.toProto error", err)
+			return
+		}
+		fmt.Println("AppHash for height", blkh, ":", resCmt.AppHash)
+		fmt.Println("Header AppHash for height", blkh, ":", resCmt.Header.AppHash)
+		fmt.Println("Header LastBlockID hash for height", blkh, ":", resCmt.LastBlockID.Hash)
+		fmt.Println("Header LastCommitHash for height", blkh, ":", resCmt.Header.LastCommitHash)
+		fmt.Println("Header DataHash for height", blkh, ":", resCmt.Header.DataHash)
+		fmt.Println("Header EvidenceHash for height", blkh, ":", resCmt.Header.EvidenceHash)
+		fmt.Println("Header ConsensusHash for height", blkh, ":", resCmt.Header.ConsensusHash)
+
+		tms.Blocks = append(tms.Blocks, *lbProto)
+
+		if blkh == minorBlock-1 {
+			cpProto := cpRes.ConsensusParams.ToProto()
+			tms.ConsensusParams = &cpProto
+		}
+	}
+
+	tmsFilename := filepath.Join(d.snapDir, fmt.Sprintf(core.SnapshotTmStateFormat, minorBlock-2))
+	tmsFile, err := os.OpenFile(tmsFilename, os.O_RDWR|os.O_EXCL|os.O_CREATE, 0666)
+	if err != nil {
+		d.Logger.Error("Failed to create state snapshot", "error", err, "minor-block", minorBlock, "module", "snapshot")
+		return
+	}
+	bytes, err := tms.Marshal()
+	if err != nil {
+		d.Logger.Error("Failed to create marshal snapshot", "error", err, "minor-block", minorBlock, "module", "snapshot")
+		return
+	}
+	tmsFile.Write(bytes)
+	defer func() {
+		err = tmsFile.Close()
+		if err != nil {
+			d.Logger.Error("Failed to close state snapshot", "error", err, "minor-block", minorBlock, "module", "snapshot")
 			return
 		}
 	}()
-	cmtFilename := filepath.Join(d.snapDir, fmt.Sprintf(core.SnapshotBlockCommitFormat, minorBlock))
-	cmtFile, err := os.OpenFile(cmtFilename, os.O_RDWR|os.O_EXCL|os.O_CREATE, 0666)
-	if err != nil {
-		d.Logger.Error("Failed to create snapshot block commit", "error", err, "minor-block", minorBlock, "module", "snapshot")
-		return nil
-	}
-	defer func() {
-		err = cmtFile.Close()
-		if err != nil {
-			d.Logger.Error("Failed to close block commit", "error", err, "minor-block", minorBlock, "module", "snapshot")
-			return
-		}
-	}()
-	height := int64(minorBlock)
-	resCmt, err := d.localTm.Commit(context.Background(), &height)
-	if err != nil {
-		d.Logger.Error("Failed to fetch snapshot block commit", "error", err, "minor-block", minorBlock, "module", "snapshot")
-		return nil
-	}
 
-	hdrBytes, err := json.Marshal(resCmt.Header)
-	if err != nil {
-		d.Logger.Error("Failed to marshal snapshot block header", "error", err, "minor-block", minorBlock, "module", "snapshot")
-		return nil
-	}
-	hdrFile.Write(hdrBytes)
-
-	cmtBytes, err := json.Marshal(resCmt.Header)
-	if err != nil {
-		d.Logger.Error("Failed to marshal snapshot block commit", "error", err, "minor-block", minorBlock, "module", "snapshot")
-		return nil
-	}
-	cmtFile.Write(cmtBytes)
-	return nil
-}
-
-func (d *Daemon) saveBlock(minorBlock uint64) error {
-	blkFilename := filepath.Join(d.snapDir, fmt.Sprintf(core.SnapshotBlockFormat, minorBlock))
-	blkFile, err := os.OpenFile(blkFilename, os.O_RDWR|os.O_EXCL|os.O_CREATE, 0666)
-	if err != nil {
-		d.Logger.Error("Failed to create snapshot block", "error", err, "minor-block", minorBlock, "module", "snapshot")
-		return nil
-	}
-	defer func() {
-		err = blkFile.Close()
-		if err != nil {
-			d.Logger.Error("Failed to close snapshot block", "error", err, "minor-block", minorBlock, "module", "snapshot")
-			return
-		}
-	}()
-	height := int64(minorBlock)
-	blkRes, err := d.localTm.BlockResults(context.Background(), &height)
-	if err != nil {
-		d.Logger.Error("Failed to fetch snapshot block", "error", err, "minor-block", minorBlock, "module", "snapshot")
-		return nil
-	}
-
-	var consensusBytes []byte
-	if blkRes.ConsensusParamUpdates != nil {
-		consensusBytes, err = blkRes.ConsensusParamUpdates.Marshal()
-		if err != nil {
-			d.Logger.Error("Failed to marshal snapshot block consensus params", "error", err, "minor-block", minorBlock, "module", "snapshot")
-			return nil
-		}
-	}
-	lenBuf := make([]byte, 2)
-	binary.BigEndian.PutUint16(lenBuf, uint16(len(consensusBytes)))
-	blkFile.Write(lenBuf)
-	if len(consensusBytes) > 0 {
-		blkFile.Write(consensusBytes)
-	}
-
-	if blkRes.ValidatorUpdates != nil {
-		binary.BigEndian.PutUint16(lenBuf, uint16(len(blkRes.ValidatorUpdates)))
-		blkFile.Write(lenBuf)
-		for _, validatorUpdate := range blkRes.ValidatorUpdates {
-			validatorUpdateBytes, err := validatorUpdate.Marshal()
-			if err != nil {
-				d.Logger.Error("Failed to marshal snapshot block validator update", "error", err, "minor-block", minorBlock, "module", "snapshot")
-				return nil
-			}
-			binary.BigEndian.PutUint16(lenBuf, uint16(len(validatorUpdateBytes)))
-			blkFile.Write(lenBuf)
-			blkFile.Write(validatorUpdateBytes)
-		}
-	} else {
-		binary.BigEndian.PutUint16(lenBuf, uint16(0))
-		blkFile.Write(lenBuf)
-	}
-	return nil
 }
 
 func (d *Daemon) LoadSnapshot(file ioutil2.SectionReader) error {
@@ -278,5 +243,6 @@ func (d *Daemon) LoadSnapshot(file ioutil2.SectionReader) error {
 		return fmt.Errorf("failed to commit changes: %v", err)
 	}
 
+	//d.node.RestoreState(lastBlock, currentBlock, nextBlock)
 	return nil
 }

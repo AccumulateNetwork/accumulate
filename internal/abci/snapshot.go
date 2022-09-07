@@ -39,20 +39,36 @@ func (app *Accumulator) ListSnapshots(req abci.RequestListSnapshots) abci.Respon
 			app.logger.Error("Failed to load snapshot", "error", err, "name", entry.Name())
 			continue
 		}
-		defer f.Close()
-
-		header, _, err := snapshot.Open(f)
+		fInfo, err := f.Stat()
 		if err != nil {
-			app.logger.Error("Failed to read snapshot header", "error", err, "name", entry.Name())
+			app.logger.Error("Failed to load snapshot info", "error", err, "name", entry.Name())
 			continue
 		}
+		defer f.Close()
 
-		resp.Snapshots = append(resp.Snapshots, &abci.Snapshot{
-			Height: header.Height,
-			Format: uint32(header.Version),
-			Chunks: 1,
-			Hash:   header.RootHash[:],
-		})
+		/*		This will only work after state & bpt snapshot are merged
+				header, _, err := snapshot.Open(f)
+				if err != nil {
+					app.logger.Error("Failed to read snapshot header", "error", err, "name", entry.Name())
+					continue
+				}
+		*/
+		buf := make([]byte, fInfo.Size())
+		f.Read(buf)
+		tmSnap := new(abci.StateSnapshot)
+		err = tmSnap.Unmarshal(buf)
+		if err != nil {
+			app.logger.Error("Failed to Unmarshal state snapshot", "error", err, "name", entry.Name())
+			continue
+		}
+		if tmSnap.Height > 0 && len(tmSnap.Blocks) >= 3 {
+			resp.Snapshots = append(resp.Snapshots, &abci.Snapshot{
+				Height: tmSnap.Height,
+				Format: snapshot.Version1,
+				Chunks: 1,
+				Hash:   tmSnap.Blocks[1].SignedHeader.Header.AppHash,
+			})
+		}
 	}
 	return resp
 }
@@ -110,4 +126,15 @@ func (app *Accumulator) ApplySnapshotChunk(req abci.RequestApplySnapshotChunk) a
 	}
 
 	return abci.ResponseApplySnapshotChunk{Result: abci.ResponseApplySnapshotChunk_ACCEPT}
+}
+
+func (app *Accumulator) LoadStateSnapshot(height uint64) abci.StateSnapshot {
+	snapDir := config.MakeAbsolute(app.RootDir, app.Accumulate.Snapshots.Directory)
+	f, err := os.Open(filepath.Join(snapDir, fmt.Sprintf(core.SnapshotTmStateFormat, height)))
+	if err != nil {
+		app.logger.Error("Failed to load state snapshot", "error", err, "height", height)
+		return abci.StateSnapshot{}
+	}
+	defer f.Close()
+	return abci.StateSnapshot{} // TODO
 }

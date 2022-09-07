@@ -21,7 +21,8 @@ func TestMajorBlock(t *testing.T) {
 	// Initialize
 	globals := new(core.GlobalValues)
 	globals.Globals = new(protocol.NetworkGlobals)
-	globals.Globals.MajorBlockSchedule = "*/5 * * * *" // Every 5 minutes (300 minor blocks)
+	//globals.Globals.MajorBlockSchedule = "*/5 * * * *" // Every 5 minutes (300 minor blocks)
+	globals.Globals.MajorBlockSchedule = "*/1 * * * *" // Revert
 	sim := simulator.New(t, 3)
 	sim.InitFromGenesisWith(globals)
 

@@ -196,7 +196,7 @@ func CreateAccumulateSnapshot() {
 		if err != nil {
 			log.Panicln(err.Error())
 		}
-		err = snapshot.FullCollect(batch, f, &x.Executor.Describe)
+		err = snapshot.FullCollect(batch, f, &x.Executor.Describe, 0, nil)
 		if err != nil {
 			log.Println("Snapshot error : ", err.Error())
 		}

@@ -75,12 +75,20 @@ func listSnapshots(_ *cobra.Command, args []string) {
 		filename := filepath.Join(snapDir, entry.Name())
 		f, err := os.Open(filename)
 		checkf(err, "open snapshot %s", entry.Name())
+		fInfo, err := f.Stat()
+		checkf(err, "open snapshot info %s", entry.Name())
 		defer f.Close()
 
-		header, _, err := snapshot.Open(f)
-		checkf(err, "open snapshot %s", entry.Name())
-
-		fmt.Fprintf(wr, "%d\t%x\t%s\n", header.Height, header.RootHash, entry.Name())
+		/*		header, _, err := snapshot.Open(f)
+				checkf(err, "open snapshot %s", entry.Name())
+		*/
+		buf := make([]byte, fInfo.Size())
+		f.Read(buf)
+		tmSnap := new(snapshot.TmStateSnapshot)
+		tmSnap.UnmarshalBinary(buf)
+		if tmSnap.Height > 0 {
+			fmt.Fprintf(wr, "%d\t%x\t%s\n", tmSnap.Height, tmSnap.Blocks[1].SignedHeader.Header.AppHash, entry.Name())
+		}
 	}
 }
 
