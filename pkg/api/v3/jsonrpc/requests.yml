@@ -1,0 +1,50 @@
+QueryRecordRequest:
+  non-binary: true
+  incomparable: true
+  fields:
+    - name: Account
+      type: url
+      pointer: true
+    - name: Fragment
+      type: string
+      repeatable: true
+      optional: true
+    - type: QueryRecordOptions
+      marshal-as: reference
+      optional: true
+
+QueryRangeRequest:
+  non-binary: true
+  incomparable: true
+  fields:
+    - name: Account
+      type: url
+      pointer: true
+    - name: Fragment
+      type: string
+      repeatable: true
+      optional: true
+    - type: QueryRangeOptions
+      marshal-as: reference
+      optional: true
+
+SubmitRequest:
+  non-binary: true
+  incomparable: true
+  fields:
+    - name: Envelope
+      type: protocol.Envelope
+      marshal-as: reference
+      pointer: true
+    - type: SubmitOptions
+      marshal-as: reference
+
+FaucetRequest:
+  non-binary: true
+  incomparable: true
+  fields:
+    - name: Account
+      type: url
+      pointer: true
+    - type: SubmitOptions
+      marshal-as: reference
