@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
@@ -418,6 +419,80 @@ func IsValidAdiUrl(u *url.URL, allowReserved bool) error {
 		default:
 			errs = append(errs, fmt.Sprintf("illegal character %q", r))
 		}
+	}
+
+	if len(errs) == 0 {
+		return nil
+	}
+	return errors.New(strings.Join(errs, ", "))
+}
+
+func IsValidAccountPath(s string) error {
+	var errs []string
+	if !utf8.ValidString(s) {
+		errs = append(errs, "not valid UTF-8")
+	}
+
+	var multiSlash bool
+	seen := map[rune]bool{}
+	for {
+		i := 0
+		for len(s) > 0 && s[0] == '/' {
+			// Allow one slash at the beginning and one in between each
+			if i > 0 {
+				multiSlash = true
+			}
+			i++
+			s = s[1:]
+		}
+		if len(s) == 0 {
+			break
+		}
+
+		var part string
+		i = strings.IndexByte(s, '/')
+		if i < 0 {
+			part, s = s, ""
+		} else {
+			part, s = s[:i], s[i:]
+		}
+
+		for _, r := range part {
+			if unicode.In(r,
+				// Allow letters and numbers
+				unicode.Letter,
+				unicode.Number,
+				// Allow marks
+				unicode.Mark,
+				// Allow dash and connector punctuation
+				unicode.Pd,
+				unicode.Pc,
+			) {
+				continue
+			}
+
+			if len(errs) > 0 && r == 65533 {
+				// Do not report "invalid character '�'" in addition to "not valid UTF-8"
+				continue
+			}
+
+			switch r {
+			case ' ':
+				// Allow plain spaces
+			case '.', ':', '+', '~', '|':
+				// Allow some other symbols
+			default:
+				if seen[r] {
+					continue
+				}
+				seen[r] = true
+				errs = append(errs, fmt.Sprintf("illegal character %q", r))
+			}
+		}
+	}
+
+	if multiSlash {
+		errs = append(errs, "adjacent path separators")
 	}
 
 	if len(errs) == 0 {
