@@ -53,6 +53,8 @@ var colors = []*color.Color{
 var fallbackColor = color.New(color.FgHiBlack)
 
 func runDevNet(*cobra.Command, []string) {
+	fmt.Println("Starting devnet")
+
 	if flagRunDevnet.Debug {
 		testing.EnableDebugFeatures()
 	}
