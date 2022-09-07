@@ -343,6 +343,13 @@ func (s *Simulator) InitFromGenesisWith(values *core.GlobalValues) {
 	if values == nil {
 		values = new(core.GlobalValues)
 	}
+	if values.Globals == nil {
+		values.Globals = new(protocol.NetworkGlobals)
+	}
+
+	// The simulator only runs one DNN so set the threshold low
+	values.Globals.ValidatorAcceptThreshold.Set(1, 1000)
+
 	genDocs, err := accumulated.BuildGenesisDocs(s.netInit, values, GenesisTime, s.Logger, s.opts.FactomAddresses)
 	require.NoError(s, err)
 
