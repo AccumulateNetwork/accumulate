@@ -54,6 +54,10 @@ Status:
   IncompleteChain:
     value: 414
     description: means the chain does not include the full history
+  InsufficientBalance:
+    value: 415
+    description: means the account balance is insufficient to satisfy the request
+
   # Server/system errors
   InternalError:
     value: 500

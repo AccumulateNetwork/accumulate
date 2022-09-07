@@ -44,11 +44,17 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) ([]byte, error) {
 	// Initialize globals
 	gg := opts.GenesisGlobals
 
-	// set the initial price to 1/5 fct price * 1/4 market cap dilution = 1/20 fct price
-	// for this exercise, we'll assume that 1 FCT = $1, so initial ACME price is $0.05
 	if gg.Oracle == nil {
 		gg.Oracle = new(protocol.AcmeOracle)
-		gg.Oracle.Price = uint64(protocol.InitialAcmeOracleValue)
+		if protocol.IsTestNet {
+			// Set the oracle super high to make life easier on the testnet
+			gg.Oracle.Price = 5000 * protocol.AcmeOraclePrecision
+		} else {
+			// Set the initial price to 1/5 fct price * 1/4 market cap dilution
+			// = 1/20 fct price for this exercise, we'll assume that 1 FCT = $1,
+			// so initial ACME price is $0.05
+			gg.Oracle.Price = uint64(protocol.InitialAcmeOracleValue)
+		}
 	}
 
 	// Set the initial threshold to 2/3 & MajorBlockSchedule
@@ -348,20 +354,19 @@ func (b *bootstrap) maybeCreateAcme() {
 	acme.Url = protocol.AcmeUrl()
 	acme.Precision = 8
 	acme.Symbol = "ACME"
+	acme.SupplyLimit = big.NewInt(protocol.AcmeSupplyLimit * protocol.AcmePrecision)
+	b.WriteRecords(acme)
 
-	if protocol.IsTestNet {
-		// On the TestNet, set the issued amount to the faucet balance
-		acme.Issued.SetString(protocol.AcmeFaucetBalance, 10)
-	} else {
-		// On the MainNet, set the supply limit
-		acme.SupplyLimit = big.NewInt(protocol.AcmeSupplyLimit * protocol.AcmePrecision)
+	if !protocol.IsTestNet {
+		return
 	}
 
-	b.WriteRecords(acme)
+	// On the TestNet, set the issued amount to the faucet balance
+	acme.Issued.SetUint64(protocol.AcmeFaucetBalance * protocol.AcmePrecision)
 }
 
 func (b *bootstrap) maybeCreateFaucet() {
-	if !b.shouldCreate(protocol.FaucetUrl) {
+	if !protocol.IsTestNet || !b.shouldCreate(protocol.FaucetUrl) {
 		return
 	}
 
@@ -371,7 +376,7 @@ func (b *bootstrap) maybeCreateFaucet() {
 	liteToken := new(protocol.LiteTokenAccount)
 	liteToken.Url = protocol.FaucetUrl
 	liteToken.TokenUrl = protocol.AcmeUrl()
-	liteToken.Balance.SetString(protocol.AcmeFaucetBalance, 10)
+	liteToken.Balance.SetUint64(protocol.AcmeFaucetBalance * protocol.AcmePrecision)
 
 	// Lock forever
 	liteToken.LockHeight = math.MaxUint64

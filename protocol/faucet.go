@@ -9,9 +9,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
-const AcmeFaucetAmount = 2_000_000
-
-const AcmeFaucetBalance = "314159265358979323846264338327950288419716939937510582097494459"
+const AcmeFaucetAmount = 10
+const AcmeFaucetBalance = 200_000_000
 
 var faucetSeed = sha256.Sum256([]byte("faucet"))
 var faucetKey = ed25519.NewKeyFromSeed(faucetSeed[:])
