@@ -145,6 +145,9 @@ func (m *StateManager) SetAuth(account protocol.FullAccount, authorities []*url.
 	}
 
 	for _, authority := range authorities {
+		if authority == nil {
+			return errors.Format(errors.StatusBadRequest, "authority URL is nil")
+		}
 		err := m.AddAuthority(account, authority)
 		if err != nil {
 			return errors.Wrap(errors.StatusUnknownError, err)
