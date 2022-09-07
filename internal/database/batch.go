@@ -149,7 +149,7 @@ func (b *Batch) getAccountUrl(key record.Key) (*url.URL, error) {
 		b.store,
 		// This must match the key used for the account's main state
 		key.Append("Main"),
-		"account %[1]v",
+		fmt.Sprintf("account %v main", key),
 		false,
 		record.Union(protocol.UnmarshalAccount),
 	).Get()
