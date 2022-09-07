@@ -53,19 +53,32 @@ func PutAccount(t testing.TB, db database.Updater, account protocol.Account) {
 // parent, and inherits the parent's authority if non is specified.
 func MakeAccount(t testing.TB, db database.Updater, account ...protocol.Account) {
 	t.Helper()
-	Update(t, db, func(batch *database.Batch) {
+	require.NoError(t, TryMakeAccount(t, db, account...))
+}
+
+// TryMakeAccount writes the account's main state, adds a directory entry to the
+// parent, and inherits the parent's authority if non is specified.
+func TryMakeAccount(t testing.TB, db database.Updater, account ...protocol.Account) error {
+	t.Helper()
+	return db.Update(func(batch *database.Batch) error {
 		t.Helper()
 		for _, account := range account {
 			// Write state
 			u := account.GetUrl()
-			require.NoError(t, batch.Account(u).Main().Put(account))
+			err := batch.Account(u).Main().Put(account)
+			if err != nil {
+				return err
+			}
 
 			if u.IsRootIdentity() {
 				continue
 			}
 
 			// Add directory entry
-			require.NoError(t, batch.Account(u.Identity()).Directory().Add(u))
+			err = batch.Account(u.Identity()).Directory().Add(u)
+			if err != nil {
+				return err
+			}
 
 			full, ok := account.(protocol.FullAccount)
 			if !ok || len(full.GetAuth().Authorities) > 0 {
@@ -74,10 +87,18 @@ func MakeAccount(t testing.TB, db database.Updater, account ...protocol.Account)
 
 			// Inherit the parent's authorities
 			var identity *protocol.ADI
-			require.NoError(t, batch.Account(u.Identity()).Main().GetAs(&identity))
+			err = batch.Account(u.Identity()).Main().GetAs(&identity)
+			if err != nil {
+				return err
+			}
 			*full.GetAuth() = identity.AccountAuth
-			require.NoError(t, batch.Account(u).Main().Put(account))
+			err = batch.Account(u).Main().Put(account)
+			if err != nil {
+				return err
+			}
 		}
+
+		return nil
 	})
 }
 
