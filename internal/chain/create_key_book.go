@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -39,6 +40,16 @@ func (CreateKeyBook) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 	body, ok := tx.Transaction.Body.(*protocol.CreateKeyBook)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.CreateKeyBook), tx.Transaction.Body)
+	}
+
+	if body.Url == nil {
+		return nil, errors.Format(errors.StatusBadRequest, "account URL is missing")
+	}
+
+	for _, u := range body.Authorities {
+		if u == nil {
+			return nil, errors.Format(errors.StatusBadRequest, "authority URL is nil")
+		}
 	}
 
 	err := checkCreateAdiAccount(st, body.Url)
