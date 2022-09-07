@@ -11,7 +11,7 @@ import (
 
 //go:generate go run ../../../../tools/cmd/gen-types --package jsonrpc requests.yml --reference ../options.yml
 
-const errCodeProtocol = -33000
+const ErrCodeProtocol = -33000
 
 type QueryRecordOptions = api.QueryRecordOptions
 type QueryRangeOptions = api.QueryRangeOptions
@@ -33,7 +33,7 @@ func formatResponse(res interface{}, err error) interface{} {
 
 	// Ensure the error is an Error
 	err2 := errors.Wrap(errors.StatusUnknownError, err).(*errors.Error)
-	return jsonrpc2.NewError(errCodeProtocol-jsonrpc2.ErrorCode(err2.Code), err2.Code.String(), err2)
+	return jsonrpc2.NewError(ErrCodeProtocol-jsonrpc2.ErrorCode(err2.Code), err2.Code.String(), err2)
 }
 
 type NodeService struct{ api.NodeService }
