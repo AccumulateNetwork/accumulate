@@ -149,10 +149,10 @@ die "want $keybook2 got $tokenAuthority"
 fi
 
 section "Burn Tokens for adi token account"
-wait-for cli-tx tx create ${LITE_ACME} test.acme/acmetokens 10
-wait-for cli-tx token burn acc://test.acme/acmetokens test-2-0 5
+wait-for cli-tx tx create ${LITE_ACME} test.acme/acmetokens 0.01
+wait-for cli-tx token burn acc://test.acme/acmetokens test-2-0 0.005
 BALANCE1=$(accumulate account get acc://test.acme/acmetokens -j | jq -re .data.balance)
-[ "$BALANCE1" -eq 500000000 ] && success || die "test.acme/acmetokens should have 5 tokens but has $(expr ${BALANCE1} / 100000000)"
+[ "$BALANCE1" -eq 500000 ] && success || die "test.acme/acmetokens should have 0.005 tokens but has ${BALANCE1}e-8"
 
 section "Set KeyBook2 as authority for adi data account"
 dataTxHash=$(cli-tx account create data test.acme test-1-0 test.acme/testdata1 --authority acc://test.acme/book2)
@@ -241,7 +241,7 @@ BEFORE=$(accumulate -j account get ${LITE_ACME} | jq -r .data.balance)
 wait-for api-tx '{"jsonrpc": "2.0", "id": 4, "method": "faucet", "params": {"url": "'${LITE_ACME}'"}}'
 AFTER=$(accumulate -j account get ${LITE_ACME} | jq -r .data.balance)
 DIFF=$(expr $AFTER - $BEFORE)
-[ $DIFF -eq 200000000000000 ] && success || die "Faucet did not work, want +200000000000000, got ${DIFF}"
+[ $DIFF -eq 1000000000 ] && success || die "Faucet did not work, want +1000000000, got ${DIFF}"
 
 section "Parse acme faucet TXNs (API v2, AC-603)"
 api-v2 '{ "jsonrpc": "2.0", "id": 0, "method": "query-tx-history", "params": { "url": "7117c50f04f1254d56b704dc05298912deeb25dbc1d26ef6/ACME", "count": 10 } }' | jq -r '.result.items | map(.type)[]' | grep -q acmeFaucet
