@@ -78,7 +78,7 @@ func SetupIdentity(sim *simulator.Simulator, name *url.URL, key []byte, timestam
 	)...)
 
 	// Add credits to the lite account
-	const liteCreditAmount = 1e3
+	const liteCreditAmount = 1 * AcmePrecision
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
 		acctesting.NewTransaction().
 			WithPrincipal(liteUrl).
@@ -86,7 +86,7 @@ func SetupIdentity(sim *simulator.Simulator, name *url.URL, key []byte, timestam
 			WithTimestampVar(timestamp).
 			WithBody(&AddCredits{
 				Recipient: liteUrl,
-				Amount:    *big.NewInt(AcmePrecision * liteCreditAmount),
+				Amount:    *big.NewInt(liteCreditAmount),
 				Oracle:    InitialAcmeOracleValue,
 			}).
 			Initiate(SignatureTypeED25519, liteKey).
@@ -109,7 +109,7 @@ func SetupIdentity(sim *simulator.Simulator, name *url.URL, key []byte, timestam
 	)...)
 
 	// Add credits to the key page
-	const tokenAccountAmount = 1e5
+	const tokenAccountAmount = 5 * AcmePrecision
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
 		acctesting.NewTransaction().
 			WithPrincipal(liteUrl).
@@ -117,7 +117,7 @@ func SetupIdentity(sim *simulator.Simulator, name *url.URL, key []byte, timestam
 			WithTimestampVar(timestamp).
 			WithBody(&AddCredits{
 				Recipient: name.JoinPath("book", "1"),
-				Amount:    *big.NewInt(AcmePrecision * (AcmeFaucetAmount - liteCreditAmount - tokenAccountAmount)),
+				Amount:    *big.NewInt(AcmePrecision*AcmeFaucetAmount - liteCreditAmount - tokenAccountAmount),
 				Oracle:    InitialAcmeOracleValue,
 			}).
 			Initiate(SignatureTypeED25519, liteKey).
@@ -146,7 +146,7 @@ func SetupIdentity(sim *simulator.Simulator, name *url.URL, key []byte, timestam
 			WithTimestampVar(timestamp).
 			WithBody(&SendTokens{
 				To: []*TokenRecipient{
-					{Url: name.JoinPath("tokens"), Amount: *big.NewInt(tokenAccountAmount * AcmePrecision)},
+					{Url: name.JoinPath("tokens"), Amount: *big.NewInt(tokenAccountAmount)},
 				},
 			}).
 			Initiate(SignatureTypeED25519, liteKey).

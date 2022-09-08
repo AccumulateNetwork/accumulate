@@ -39,7 +39,7 @@ validate simple:
   - apt-get -y update && apt-get -y install jq xxd
   - go run ./tools/test/devnet/ -X -v=1,-b=1,--reset,--dn-stall-limit=0
 
-validate playbooks:
+.validate playbooks: # disabled
   stage: test
   extends: [ .rules all, .go ]
   needs: []
