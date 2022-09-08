@@ -82,7 +82,7 @@ func (SyntheticDepositTokens) Validate(st *StateManager, tx *Delivery) (protocol
 		}
 	}
 
-	if checkIsNegative(&body.Amount) {
+	if body.Amount.Sign() < 0 {
 		return nil, fmt.Errorf("amount can't be a negative value")
 	}
 

@@ -1,8 +1,6 @@
 package chain
 
 import (
-	"math/big"
-
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -44,8 +42,4 @@ func (a additionalAuthorities) TransactionIsReady(delegate AuthDelegate, batch *
 
 	// Fallback to general authorization
 	return false, true, nil
-}
-
-func checkIsNegative(value *big.Int) bool {
-	return value.Sign() < 0
 }

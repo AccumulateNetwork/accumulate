@@ -30,7 +30,7 @@ func (BurnTokens) Validate(st *StateManager, tx *Delivery) (protocol.Transaction
 		return nil, fmt.Errorf("invalid principal: want chain type %v or %v, got %v", protocol.AccountTypeLiteTokenAccount, protocol.AccountTypeTokenAccount, origin.Type())
 	}
 
-	if checkIsNegative(&body.Amount) {
+	if body.Amount.Sign() < 0 {
 		return nil, fmt.Errorf("amount can't be a negative value")
 	}
 

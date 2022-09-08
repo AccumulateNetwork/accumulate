@@ -38,7 +38,7 @@ func (SendTokens) Validate(st *StateManager, tx *Delivery) (protocol.Transaction
 	//now check to see if the account is good to send tokens from
 	total := new(big.Int)
 	for _, to := range body.To {
-		if checkIsNegative(&to.Amount) {
+		if to.Amount.Sign() < 0 {
 			return nil, fmt.Errorf("amount can't be a negative value")
 		}
 		total.Add(total, &to.Amount)
