@@ -28,6 +28,26 @@ type AccountRecord struct {
 	extraData []byte
 }
 
+type BlockEntry struct {
+	fieldsSet []bool
+	protocol.BlockEntry
+	Value       []byte                `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	TxID        *url.TxID             `json:"txID,omitempty" form:"txID" query:"txID" validate:"required"`
+	Transaction *protocol.Transaction `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
+	Signature   protocol.Signature    `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
+	extraData   []byte
+}
+
+type BlockEvent struct {
+	fieldsSet []bool
+	Partition string        `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
+	Index     uint64        `json:"index,omitempty" form:"index" query:"index" validate:"required"`
+	Time      time.Time     `json:"time,omitempty" form:"time" query:"time" validate:"required"`
+	Major     uint64        `json:"major,omitempty" form:"major" query:"major" validate:"required"`
+	Entries   []*BlockEntry `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
+	extraData []byte
+}
+
 type ChainEntryRecord[T Record] struct {
 	fieldsSet []bool
 	Name      string            `json:"name,omitempty" form:"name" query:"name" validate:"required"`
@@ -169,6 +189,8 @@ type UrlRecord struct {
 
 func (*AccountRecord) RecordType() RecordType { return RecordTypeAccount }
 
+func (*BlockEvent) EventType() EventType { return EventTypeBlock }
+
 func (*ChainEntryRecord[T]) RecordType() RecordType { return RecordTypeChainEntry }
 
 func (*ChainRecord) RecordType() RecordType { return RecordTypeChain }
@@ -205,6 +227,45 @@ func (v *AccountRecord) Copy() *AccountRecord {
 }
 
 func (v *AccountRecord) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *BlockEntry) Copy() *BlockEntry {
+	u := new(BlockEntry)
+
+	u.BlockEntry = *v.BlockEntry.Copy()
+	u.Value = encoding.BytesCopy(v.Value)
+	if v.TxID != nil {
+		u.TxID = v.TxID
+	}
+	if v.Transaction != nil {
+		u.Transaction = (v.Transaction).Copy()
+	}
+	if v.Signature != nil {
+		u.Signature = (v.Signature).CopyAsInterface().(protocol.Signature)
+	}
+
+	return u
+}
+
+func (v *BlockEntry) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *BlockEvent) Copy() *BlockEvent {
+	u := new(BlockEvent)
+
+	u.Partition = v.Partition
+	u.Index = v.Index
+	u.Time = v.Time
+	u.Major = v.Major
+	u.Entries = make([]*BlockEntry, len(v.Entries))
+	for i, v := range v.Entries {
+		if v != nil {
+			u.Entries[i] = (v).Copy()
+		}
+	}
+
+	return u
+}
+
+func (v *BlockEvent) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *ChainEntryRecord[T]) Copy() *ChainEntryRecord[T] {
 	u := new(ChainEntryRecord[T])
@@ -484,6 +545,61 @@ func (v *AccountRecord) Equal(u *AccountRecord) bool {
 		return false
 	case !((v.Receipt).Equal(u.Receipt)):
 		return false
+	}
+
+	return true
+}
+
+func (v *BlockEntry) Equal(u *BlockEntry) bool {
+	if !v.BlockEntry.Equal(&u.BlockEntry) {
+		return false
+	}
+	if !(bytes.Equal(v.Value, u.Value)) {
+		return false
+	}
+	switch {
+	case v.TxID == u.TxID:
+		// equal
+	case v.TxID == nil || u.TxID == nil:
+		return false
+	case !((v.TxID).Equal(u.TxID)):
+		return false
+	}
+	switch {
+	case v.Transaction == u.Transaction:
+		// equal
+	case v.Transaction == nil || u.Transaction == nil:
+		return false
+	case !((v.Transaction).Equal(u.Transaction)):
+		return false
+	}
+	if !(protocol.EqualSignature(v.Signature, u.Signature)) {
+		return false
+	}
+
+	return true
+}
+
+func (v *BlockEvent) Equal(u *BlockEvent) bool {
+	if !(v.Partition == u.Partition) {
+		return false
+	}
+	if !(v.Index == u.Index) {
+		return false
+	}
+	if !((v.Time).Equal(u.Time)) {
+		return false
+	}
+	if !(v.Major == u.Major) {
+		return false
+	}
+	if len(v.Entries) != len(u.Entries) {
+		return false
+	}
+	for i := range v.Entries {
+		if !((v.Entries[i]).Equal(u.Entries[i])) {
+			return false
+		}
 	}
 
 	return true
@@ -807,7 +923,7 @@ func (v *AccountRecord) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.RecordType())
-	if !(!protocol.EqualAccount(v.Account, nil)) {
+	if !(protocol.EqualAccount(v.Account, nil)) {
 		writer.WriteValue(2, v.Account.MarshalBinary)
 	}
 	if !(v.Directory == nil) {
@@ -836,7 +952,7 @@ func (v *AccountRecord) IsValid() error {
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Account is missing")
-	} else if !protocol.EqualAccount(v.Account, nil) {
+	} else if protocol.EqualAccount(v.Account, nil) {
 		errs = append(errs, "field Account is not set")
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
@@ -853,6 +969,159 @@ func (v *AccountRecord) IsValid() error {
 		errs = append(errs, "field Receipt is missing")
 	} else if v.Receipt == nil {
 		errs = append(errs, "field Receipt is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_BlockEntry = []string{
+	1: "BlockEntry",
+	2: "Value",
+	3: "TxID",
+	4: "Transaction",
+	5: "Signature",
+}
+
+func (v *BlockEntry) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteValue(1, v.BlockEntry.MarshalBinary)
+	if !(len(v.Value) == 0) {
+		writer.WriteBytes(2, v.Value)
+	}
+	if !(v.TxID == nil) {
+		writer.WriteTxid(3, v.TxID)
+	}
+	if !(v.Transaction == nil) {
+		writer.WriteValue(4, v.Transaction.MarshalBinary)
+	}
+	if !(protocol.EqualSignature(v.Signature, nil)) {
+		writer.WriteValue(5, v.Signature.MarshalBinary)
+	}
+
+	_, _, err := writer.Reset(fieldNames_BlockEntry)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *BlockEntry) IsValid() error {
+	var errs []string
+
+	if err := v.BlockEntry.IsValid(); err != nil {
+		errs = append(errs, err.Error())
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Value is missing")
+	} else if len(v.Value) == 0 {
+		errs = append(errs, "field Value is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field TxID is missing")
+	} else if v.TxID == nil {
+		errs = append(errs, "field TxID is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Transaction is missing")
+	} else if v.Transaction == nil {
+		errs = append(errs, "field Transaction is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field Signature is missing")
+	} else if protocol.EqualSignature(v.Signature, nil) {
+		errs = append(errs, "field Signature is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_BlockEvent = []string{
+	1: "EventType",
+	2: "Partition",
+	3: "Index",
+	4: "Time",
+	5: "Major",
+	6: "Entries",
+}
+
+func (v *BlockEvent) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.EventType())
+	if !(len(v.Partition) == 0) {
+		writer.WriteString(2, v.Partition)
+	}
+	if !(v.Index == 0) {
+		writer.WriteUint(3, v.Index)
+	}
+	if !(v.Time == (time.Time{})) {
+		writer.WriteTime(4, v.Time)
+	}
+	if !(v.Major == 0) {
+		writer.WriteUint(5, v.Major)
+	}
+	if !(len(v.Entries) == 0) {
+		for _, v := range v.Entries {
+			writer.WriteValue(6, v.MarshalBinary)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_BlockEvent)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *BlockEvent) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field EventType is missing")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Partition is missing")
+	} else if len(v.Partition) == 0 {
+		errs = append(errs, "field Partition is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Index is missing")
+	} else if v.Index == 0 {
+		errs = append(errs, "field Index is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Time is missing")
+	} else if v.Time == (time.Time{}) {
+		errs = append(errs, "field Time is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field Major is missing")
+	} else if v.Major == 0 {
+		errs = append(errs, "field Major is not set")
+	}
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+		errs = append(errs, "field Entries is missing")
+	} else if len(v.Entries) == 0 {
+		errs = append(errs, "field Entries is not set")
 	}
 
 	switch len(errs) {
@@ -890,7 +1159,7 @@ func (v *ChainEntryRecord[T]) MarshalBinary() ([]byte, error) {
 	if !(v.Entry == ([32]byte{})) {
 		writer.WriteHash(5, &v.Entry)
 	}
-	if !(!EqualRecord(v.Value, nil)) {
+	if !(EqualRecord(v.Value, nil)) {
 		writer.WriteValue(6, v.Value.MarshalBinary)
 	}
 	if !(v.Receipt == nil) {
@@ -931,7 +1200,7 @@ func (v *ChainEntryRecord[T]) IsValid() error {
 	}
 	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
 		errs = append(errs, "field Value is missing")
-	} else if !EqualRecord(v.Value, nil) {
+	} else if EqualRecord(v.Value, nil) {
 		errs = append(errs, "field Value is not set")
 	}
 	if len(v.fieldsSet) > 7 && !v.fieldsSet[7] {
@@ -1524,7 +1793,7 @@ func (v *SignatureRecord) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.RecordType())
-	if !(!protocol.EqualSignature(v.Signature, nil)) {
+	if !(protocol.EqualSignature(v.Signature, nil)) {
 		writer.WriteValue(2, v.Signature.MarshalBinary)
 	}
 	if !(v.TxID == nil) {
@@ -1547,7 +1816,7 @@ func (v *SignatureRecord) IsValid() error {
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Signature is missing")
-	} else if !protocol.EqualSignature(v.Signature, nil) {
+	} else if protocol.EqualSignature(v.Signature, nil) {
 		errs = append(errs, "field Signature is not set")
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
@@ -1845,6 +2114,89 @@ func (v *AccountRecord) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_AccountRecord)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *BlockEntry) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *BlockEntry) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	reader.ReadValue(1, v.BlockEntry.UnmarshalBinary)
+	if x, ok := reader.ReadBytes(2); ok {
+		v.Value = x
+	}
+	if x, ok := reader.ReadTxid(3); ok {
+		v.TxID = x
+	}
+	if x := new(protocol.Transaction); reader.ReadValue(4, x.UnmarshalBinary) {
+		v.Transaction = x
+	}
+	reader.ReadValue(5, func(b []byte) error {
+		x, err := protocol.UnmarshalSignature(b)
+		if err == nil {
+			v.Signature = x
+		}
+		return err
+	})
+
+	seen, err := reader.Reset(fieldNames_BlockEntry)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *BlockEvent) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *BlockEvent) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vEventType EventType
+	if x := new(EventType); reader.ReadEnum(1, x) {
+		vEventType = *x
+	}
+	if !(v.EventType() == vEventType) {
+		return fmt.Errorf("field EventType: not equal: want %v, got %v", v.EventType(), vEventType)
+	}
+	if x, ok := reader.ReadString(2); ok {
+		v.Partition = x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.Index = x
+	}
+	if x, ok := reader.ReadTime(4); ok {
+		v.Time = x
+	}
+	if x, ok := reader.ReadUint(5); ok {
+		v.Major = x
+	}
+	for {
+		if x := new(BlockEntry); reader.ReadValue(6, x.UnmarshalBinary) {
+			v.Entries = append(v.Entries, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_BlockEvent)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -2449,6 +2801,44 @@ func (v *AccountRecord) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *BlockEntry) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Account     *url.URL                                       `json:"account,omitempty"`
+		Chain       string                                         `json:"chain,omitempty"`
+		Index       uint64                                         `json:"index"`
+		Value       *string                                        `json:"value,omitempty"`
+		TxID        *url.TxID                                      `json:"txID,omitempty"`
+		Transaction *protocol.Transaction                          `json:"transaction,omitempty"`
+		Signature   encoding.JsonUnmarshalWith[protocol.Signature] `json:"signature,omitempty"`
+	}{}
+	u.Account = v.BlockEntry.Account
+	u.Chain = v.BlockEntry.Chain
+	u.Index = v.BlockEntry.Index
+	u.Value = encoding.BytesToJSON(v.Value)
+	u.TxID = v.TxID
+	u.Transaction = v.Transaction
+	u.Signature = encoding.JsonUnmarshalWith[protocol.Signature]{Value: v.Signature, Func: protocol.UnmarshalSignatureJSON}
+	return json.Marshal(&u)
+}
+
+func (v *BlockEvent) MarshalJSON() ([]byte, error) {
+	u := struct {
+		EventType EventType                      `json:"eventType"`
+		Partition string                         `json:"partition,omitempty"`
+		Index     uint64                         `json:"index,omitempty"`
+		Time      time.Time                      `json:"time,omitempty"`
+		Major     uint64                         `json:"major,omitempty"`
+		Entries   encoding.JsonList[*BlockEntry] `json:"entries,omitempty"`
+	}{}
+	u.EventType = v.EventType()
+	u.Partition = v.Partition
+	u.Index = v.Index
+	u.Time = v.Time
+	u.Major = v.Major
+	u.Entries = v.Entries
+	return json.Marshal(&u)
+}
+
 func (v *ChainEntryRecord[T]) MarshalJSON() ([]byte, error) {
 	u := struct {
 		RecordType RecordType                    `json:"recordType"`
@@ -2644,6 +3034,70 @@ func (v *AccountRecord) UnmarshalJSON(data []byte) error {
 	v.Directory = u.Directory
 	v.Pending = u.Pending
 	v.Receipt = u.Receipt
+	return nil
+}
+
+func (v *BlockEntry) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Account     *url.URL                                       `json:"account,omitempty"`
+		Chain       string                                         `json:"chain,omitempty"`
+		Index       uint64                                         `json:"index"`
+		Value       *string                                        `json:"value,omitempty"`
+		TxID        *url.TxID                                      `json:"txID,omitempty"`
+		Transaction *protocol.Transaction                          `json:"transaction,omitempty"`
+		Signature   encoding.JsonUnmarshalWith[protocol.Signature] `json:"signature,omitempty"`
+	}{}
+	u.Account = v.BlockEntry.Account
+	u.Chain = v.BlockEntry.Chain
+	u.Index = v.BlockEntry.Index
+	u.Value = encoding.BytesToJSON(v.Value)
+	u.TxID = v.TxID
+	u.Transaction = v.Transaction
+	u.Signature = encoding.JsonUnmarshalWith[protocol.Signature]{Value: v.Signature, Func: protocol.UnmarshalSignatureJSON}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.BlockEntry.Account = u.Account
+	v.BlockEntry.Chain = u.Chain
+	v.BlockEntry.Index = u.Index
+	if x, err := encoding.BytesFromJSON(u.Value); err != nil {
+		return fmt.Errorf("error decoding Value: %w", err)
+	} else {
+		v.Value = x
+	}
+	v.TxID = u.TxID
+	v.Transaction = u.Transaction
+	v.Signature = u.Signature.Value
+
+	return nil
+}
+
+func (v *BlockEvent) UnmarshalJSON(data []byte) error {
+	u := struct {
+		EventType EventType                      `json:"eventType"`
+		Partition string                         `json:"partition,omitempty"`
+		Index     uint64                         `json:"index,omitempty"`
+		Time      time.Time                      `json:"time,omitempty"`
+		Major     uint64                         `json:"major,omitempty"`
+		Entries   encoding.JsonList[*BlockEntry] `json:"entries,omitempty"`
+	}{}
+	u.EventType = v.EventType()
+	u.Partition = v.Partition
+	u.Index = v.Index
+	u.Time = v.Time
+	u.Major = v.Major
+	u.Entries = v.Entries
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.EventType() == u.EventType) {
+		return fmt.Errorf("field EventType: not equal: want %v, got %v", v.EventType(), u.EventType)
+	}
+	v.Partition = u.Partition
+	v.Index = u.Index
+	v.Time = u.Time
+	v.Major = u.Major
+	v.Entries = u.Entries
 	return nil
 }
 

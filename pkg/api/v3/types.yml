@@ -19,3 +19,20 @@ LastBlock:
       type: hash
     - name: DirectoryAnchorHeight
       type: uint
+
+BlockEntry:
+  fields:
+    - type: protocol.BlockEntry
+      marshal-as: reference
+    - name: Value
+      type: bytes
+    - name: TxID
+      type: txid
+      pointer: true
+    - name: Transaction
+      type: protocol.Transaction
+      marshal-as: reference
+      pointer: true
+    - name: Signature
+      type: protocol.Signature
+      marshal-as: union

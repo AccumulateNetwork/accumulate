@@ -19,3 +19,7 @@ RecordType:
     value: 0x82
   IndexEntry:
     value: 0x83
+
+EventType:
+  Block:
+    value: 1
