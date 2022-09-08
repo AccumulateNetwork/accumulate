@@ -92,6 +92,11 @@ func (c *Chain2) Key(i int) interface{} {
 	return c.key[i]
 }
 
+// Entry loads the entry in the chain at the given height.
+func (c *Chain2) Entry(height int64) ([]byte, error) {
+	return c.inner.Get(height)
+}
+
 // Get converts the Chain2 to a Chain, updating the account's chains index and
 // loading the chain head.
 func (c *Chain2) Get() (*Chain, error) {

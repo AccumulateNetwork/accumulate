@@ -33,7 +33,9 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node"
+	nodeapi "gitlab.com/accumulatenetwork/accumulate/internal/node/api"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/websocket"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 )
 
@@ -257,7 +259,24 @@ func (d *Daemon) Start() (err error) {
 	}
 
 	// Run JSON-RPC server
-	d.api = &http.Server{Handler: d.jrpc.NewMux()}
+	wsApi, err := websocket.NewHandler(
+		d.Logger.With("module", "api"),
+		websocket.EventService{EventService: nodeapi.NewEventService(nodeapi.EventServiceParams{
+			Logger:    d.Logger.With("module", "api"),
+			Database:  d.db,
+			Partition: d.Config.Accumulate.PartitionId,
+			EventBus:  d.eventBus,
+		})},
+	)
+	if err != nil {
+		return fmt.Errorf("failed to initialize websocket API: %v", err)
+	}
+
+	// TODO wsApi.FallbackTo(jsonRpc)
+
+	mux := d.jrpc.NewMux()
+	mux.Handle("/v3", wsApi)
+	d.api = &http.Server{Handler: mux}
 	l, secure, err := listenHttpUrl(d.Config.Accumulate.API.ListenAddress)
 	if err != nil {
 		return fmt.Errorf("failed to start JSON-RPC: %v", err)
