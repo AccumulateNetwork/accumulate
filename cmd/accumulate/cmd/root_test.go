@@ -47,11 +47,11 @@ func bootstrap(t *testing.T, tc *testCmd) {
 	require.NoError(t, err)
 
 	oracle := new(protocol.AcmeOracle)
-	oracle.Price = 1 * protocol.AcmeOraclePrecision
+	oracle.Price = 10_000 * protocol.AcmeOraclePrecision
 	data, err := oracle.MarshalBinary()
 	require.NoError(t, err)
 
-	//set the oracle price to $1.00
+	//set the oracle price to $10,000
 	resp, err := tc.executeTx(t, "data write --write-state --wait 10s dn.acme/oracle dnkey %x", data)
 	require.NoError(t, err)
 	ar := new(ActionResponse)
