@@ -11,6 +11,7 @@ import (
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 )
@@ -186,10 +187,13 @@ func FuzzAcmeFaucet(f *testing.F) {
 	f.Fuzz(func(t *testing.T, dataHeader, dataBody []byte) {
 		t.Parallel()
 		txn, body := unpackTransaction[*AcmeFaucet](t, dataHeader, dataBody)
-		principal := new(LiteTokenAccount)
+		principal := new(LiteIdentity)
 		principal.Url = txn.Header.Principal
-		principal.TokenUrl = AcmeUrl()
-		validateTransaction(t, txn, chain.AcmeFaucet{}, h[txn.ID().Hash()], principal)
+		faucet := new(LiteTokenAccount)
+		faucet.Url = protocol.FaucetUrl
+		faucet.TokenUrl = AcmeUrl()
+		faucet.Balance = *big.NewInt(AcmeFaucetAmount * AcmePrecision)
+		validateTransaction(t, txn, chain.AcmeFaucet{}, h[txn.ID().Hash()], principal, faucet)
 
 		t.Run("Adjusted", func(t *testing.T) {
 			if body.Url == nil {
@@ -198,7 +202,7 @@ func FuzzAcmeFaucet(f *testing.F) {
 			receiver := new(LiteTokenAccount)
 			receiver.Url = body.Url
 			receiver.TokenUrl = AcmeUrl()
-			validateTransaction(t, txn, chain.AcmeFaucet{}, h[txn.ID().Hash()], receiver, principal)
+			validateTransaction(t, txn, chain.AcmeFaucet{}, h[txn.ID().Hash()], receiver, principal, faucet)
 		})
 	})
 }

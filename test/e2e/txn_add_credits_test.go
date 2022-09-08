@@ -15,10 +15,10 @@ func TestAddCredits_BurnsAcme(t *testing.T) {
 	var timestamp uint64
 	const issued = 1000.00
 	const balance = 100.00
-	const spend = 10.00
-	const oracle = 500
+	const spend = 0.0001
+	const oracle = InitialAcmeOracleValue
 
-	// The oracle is $0.05/ACME so spending 10 ACME buys 50 credits ($0.50)
+	// The (testnet) oracle is $5000/ACME so spending 0.0001 ACME buys 50 credits ($0.50)
 	const expectedCredits = 50
 
 	// Initialize
@@ -73,12 +73,12 @@ func TestAddCredits_RefundsAcme(t *testing.T) {
 	var timestamp uint64
 	const issued = 1000.00
 	const balance = 100.00
-	const spend = 10.00
-	const oracle = 500
+	const spend = 0.0001
+	const oracle = InitialAcmeOracleValue
 
-	// The oracle is $0.05/ACME and the minimum spend/fee is $0.01 so the
-	// minimum debit is 0.2 ACME
-	const minSpend = 0.2
+	// The oracle is $5000/ACME and the minimum spend/fee is $0.01 so the
+	// minimum debit is 0.000002 ACME
+	const minSpend = 0.000002
 
 	// Initialize
 	sim := simulator.New(t, 3)

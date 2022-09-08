@@ -55,21 +55,24 @@ func (AcmeFaucet) Validate(st *StateManager, tx *Delivery) (protocol.Transaction
 		return nil, fmt.Errorf("invalid recipient: %v", err)
 	}
 
-	// Load the faucet state
+	// Debit the faucet
 	var faucet *protocol.LiteTokenAccount
 	err = st.LoadUrlAs(protocol.FaucetUrl, &faucet)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load faucet: %v", err)
 	}
 
-	// Attach this TX to the faucet (don't bother debiting)
+	amount := new(big.Int).SetUint64(protocol.AcmeFaucetAmount * protocol.AcmePrecision)
+	if !faucet.DebitTokens(amount) {
+		return nil, errors.Format(errors.StatusInsufficientBalance, "the faucet is dry")
+	}
+
 	err = st.Update(faucet)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update faucet: %v", err)
 	}
 
 	// Submit a synthetic deposit token TX
-	amount := new(big.Int).SetUint64(protocol.AcmeFaucetAmount * protocol.AcmePrecision)
 	deposit := new(protocol.SyntheticDepositTokens)
 	deposit.Token = protocol.AcmeUrl()
 	deposit.Amount = *amount
