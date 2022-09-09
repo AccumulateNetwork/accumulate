@@ -52,6 +52,11 @@ func (CreateKeyBook) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 		}
 	}
 
+	err := checkCreateAdiAccount(st, body.Url)
+	if err != nil {
+		return nil, err
+	}
+
 	switch len(body.PublicKeyHash) {
 	case 0:
 		return nil, errors.Format(errors.StatusBadRequest, "public key hash is missing")
@@ -59,11 +64,6 @@ func (CreateKeyBook) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 		// Ok
 	default:
 		return nil, errors.Format(errors.StatusBadRequest, "public key hash length is invalid")
-	}
-
-	err := checkCreateAdiAccount(st, body.Url)
-	if err != nil {
-		return nil, err
 	}
 
 	book := new(protocol.KeyBook)
