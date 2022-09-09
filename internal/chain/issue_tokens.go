@@ -48,6 +48,9 @@ func (IssueTokens) Validate(st *StateManager, tx *Delivery) (protocol.Transactio
 	// Calculate the total and update Issued
 	total := new(big.Int)
 	for _, to := range recipients {
+		if to.Amount.Sign() < 0 {
+			return nil, fmt.Errorf("amount can't be a negative value")
+		}
 		total.Add(total, &to.Amount)
 	}
 	if !issuer.Issue(total) {
