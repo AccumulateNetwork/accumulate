@@ -15,13 +15,13 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 )
 
-type methodFunc func(ctx context.Context, logger log.Logger, params json.RawMessage, send chan<- *Response, recv <-chan *Request) error
-
 type Service interface {
 	methods() map[string]methodFunc
 }
 
-func NewHandler(logger log.Logger, services ...Service) (*Handler, error) {
+type methodFunc func(ctx context.Context, logger log.Logger, params json.RawMessage, send chan<- *Response, recv <-chan *Request) error
+
+func NewServer(logger log.Logger, services ...Service) (*Server, error) {
 	methods := map[string]methodFunc{}
 	for _, service := range services {
 		for name, method := range service.methods() {
@@ -32,70 +32,42 @@ func NewHandler(logger log.Logger, services ...Service) (*Handler, error) {
 		}
 	}
 
-	h := new(Handler)
-	h.logger.Set(logger)
-	h.methods = methods
-	h.upgrader = &websocket.Upgrader{
+	s := new(Server)
+	s.logger.Set(logger)
+	s.methods = methods
+	s.upgrader = &websocket.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
 		CheckOrigin:     func(r *http.Request) bool { return true },
 	}
-	return h, nil
+	return s, nil
 }
 
-type Handler struct {
+type Server struct {
 	logger   logging.OptionalLogger
 	upgrader *websocket.Upgrader
 	methods  map[string]methodFunc
 }
 
-func (h *Handler) FallbackTo(fallback http.Handler) http.Handler {
+func (s *Server) FallbackTo(fallback http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if websocket.IsWebSocketUpgrade(r) {
-			h.ServeHTTP(w, r)
+			s.ServeHTTP(w, r)
 		} else {
 			fallback.ServeHTTP(w, r)
 		}
 	})
 }
 
-type stream struct {
-	id     uint
-	once   *sync.Once
-	cancel context.CancelFunc
-	recv   chan<- *Request
-}
-
-type Request struct {
-	Id     uint            `json:"id"`
-	Stream uint            `json:"stream"`
-	Method string          `json:"method"`
-	Params json.RawMessage `json:"params"`
-}
-
-type Response struct {
-	RequestId uint          `json:"requestId"`
-	Stream    uint          `json:"stream"`
-	Result    interface{}   `json:"result"`
-	Error     *errors.Error `json:"error"`
-}
-
-func (s *stream) Close() {
-	s.once.Do(func() {
-		s.cancel()
-		close(s.recv)
-	})
-}
-
-func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	conn, err := h.upgrader.Upgrade(w, r, nil)
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	conn, err := s.upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		h.logger.Error("Websocket upgrade failed", "error", err)
+		s.logger.Error("Websocket upgrade failed", "error", err)
 		return
 	}
 
 	var nextStream uint
-	streams := map[uint]*stream{}
+	streams := map[uint]*serverStream{}
 
 	// Close all the streams if the connection is closed
 	defer func() {
@@ -112,7 +84,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				h.logger.Info("Write loop panicked", "error", r, "stack", debug.Stack())
+				s.logger.Info("Write loop panicked", "error", r, "stack", debug.Stack())
 			}
 		}()
 
@@ -123,7 +95,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			err := conn.WriteJSON(resp)
 			if err != nil {
 				if !errors.Is(err, io.EOF) {
-					h.logger.Info("Write message failed", "error", err)
+					s.logger.Info("Write message failed", "error", err)
 				}
 				return
 			}
@@ -136,7 +108,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		err := conn.ReadJSON(req)
 		if err != nil {
 			if !errors.Is(err, io.EOF) {
-				h.logger.Info("Read message failed", "error", err)
+				s.logger.Info("Read message failed", "error", err)
 			}
 			return
 		}
@@ -151,7 +123,6 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 			// Close?
 			if strings.EqualFold(req.Method, "close") {
-				delete(streams, s.id)
 				s.Close()
 				continue
 			}
@@ -161,25 +132,25 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Open a new stream
-		method, ok := h.methods[strings.ToLower(req.Method)]
+		method, ok := s.methods[strings.ToLower(req.Method)]
 		if !ok {
 			allSend <- &Response{RequestId: req.Id, Error: errors.NotFound("%s is not a method", req.Method).(*errors.Error)}
 			continue
 		}
 
 		nextStream++
-		s := new(stream)
-		s.id = nextStream
-		s.once = new(sync.Once)
-		streams[s.id] = s
+		ss := new(serverStream)
+		ss.id = nextStream
+		ss.close = new(sync.Once)
+		streams[ss.id] = ss
 
 		mctx, mcancel := context.WithCancel(r.Context())
-		s.cancel = mcancel
+		ss.cancel = mcancel
 		defer mcancel()
 
 		recv := make(chan *Request)
 		send := make(chan *Response)
-		s.recv = recv
+		ss.recv = recv
 
 		// Forward messages
 		go func() {
@@ -188,21 +159,21 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				case <-mctx.Done():
 					return
 				case msg := <-send:
-					msg.Stream = s.id
+					msg.Stream = ss.id
 					allSend <- msg
 				}
 			}
 		}()
 
 		// Call the method
-		err = method(mctx, h.logger, req.Params, send, recv)
+		err = method(mctx, s.logger, req.Params, send, recv)
 		if err != nil {
-			delete(streams, s.id)
-			s.Close()
+			delete(streams, ss.id)
+			ss.Close()
 			allSend <- &Response{RequestId: req.Id, Error: errors.Wrap(errors.StatusUnknownError, err).(*errors.Error)}
 			continue
 		}
 
-		allSend <- &Response{RequestId: req.Id, Stream: s.id, Result: "success"}
+		allSend <- &Response{RequestId: req.Id, Stream: ss.id, Result: []byte(`"success"`)}
 	}
 }

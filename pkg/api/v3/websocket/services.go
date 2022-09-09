@@ -39,7 +39,12 @@ func (s EventService) Subscribe(ctx context.Context, logger log.Logger, _ json.R
 			}
 		}()
 		for event := range events {
-			send <- &Response{Result: event}
+			b, err := json.Marshal(event)
+			if err == nil {
+				send <- &Response{Result: b}
+			} else if logger != nil {
+				logger.Error("Marshalling response failed", "error", err, "stack", debug.Stack())
+			}
 		}
 	}()
 
