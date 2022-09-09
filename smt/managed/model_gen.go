@@ -161,7 +161,7 @@ func (c *Chain) Commit() error {
 		commitField(&err, v)
 	}
 
-	return nil
+	return err
 }
 
 func getOrCreateField[T any](ptr **T, create func() *T) *T {

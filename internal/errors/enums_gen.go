@@ -53,6 +53,12 @@ const StatusBadTimestamp Status = 412
 // StatusBadUrlLength means the url length is too big.
 const StatusBadUrlLength Status = 413
 
+// StatusIncompleteChain means the chain does not include the full history.
+const StatusIncompleteChain Status = 414
+
+// StatusInsufficientBalance means the account balance is insufficient to satisfy the request.
+const StatusInsufficientBalance Status = 415
+
 // StatusInternalError means an internal error occured.
 const StatusInternalError Status = 500
 
@@ -72,7 +78,7 @@ func (v Status) GetEnumValue() uint64 { return uint64(v) }
 func (v *Status) SetEnumValue(id uint64) bool {
 	u := Status(id)
 	switch u {
-	case StatusOK, StatusDelivered, StatusPending, StatusRemote, StatusWrongPartition, StatusBadRequest, StatusUnauthenticated, StatusInsufficientCredits, StatusUnauthorized, StatusNotFound, StatusNotAllowed, StatusConflict, StatusBadSignerVersion, StatusBadTimestamp, StatusBadUrlLength, StatusInternalError, StatusUnknownError, StatusEncodingError, StatusFatalError:
+	case StatusOK, StatusDelivered, StatusPending, StatusRemote, StatusWrongPartition, StatusBadRequest, StatusUnauthenticated, StatusInsufficientCredits, StatusUnauthorized, StatusNotFound, StatusNotAllowed, StatusConflict, StatusBadSignerVersion, StatusBadTimestamp, StatusBadUrlLength, StatusIncompleteChain, StatusInsufficientBalance, StatusInternalError, StatusUnknownError, StatusEncodingError, StatusFatalError:
 		*v = u
 		return true
 	default:
@@ -113,6 +119,10 @@ func (v Status) String() string {
 		return "badTimestamp"
 	case StatusBadUrlLength:
 		return "badUrlLength"
+	case StatusIncompleteChain:
+		return "incompleteChain"
+	case StatusInsufficientBalance:
+		return "insufficientBalance"
 	case StatusInternalError:
 		return "internalError"
 	case StatusUnknownError:
@@ -159,6 +169,10 @@ func StatusByName(name string) (Status, bool) {
 		return StatusBadTimestamp, true
 	case "badurllength":
 		return StatusBadUrlLength, true
+	case "incompletechain":
+		return StatusIncompleteChain, true
+	case "insufficientbalance":
+		return StatusInsufficientBalance, true
 	case "internalerror":
 		return StatusInternalError, true
 	case "unknownerror":

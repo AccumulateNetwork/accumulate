@@ -116,7 +116,7 @@ func testCase1_2(t *testing.T, tc *testCmd) {
 	//now make sure rcd account has the funds
 	bal, err := testGetBalance(t, tc, kr.LiteAccount.String())
 	require.NoError(t, err)
-	require.Equal(t, bal, "200000000000000")
+	require.Equal(t, "1000000000", bal)
 
 	_, err = tc.execute(t, "get "+kr.LiteAccount.String())
 	require.NoError(t, err)
@@ -130,13 +130,13 @@ func testCase1_2(t *testing.T, tc *testCmd) {
 	require.NoError(t, json.Unmarshal([]byte(r), &legacyAccount))
 
 	//now transfer from an RCD based account to an ED25519 based account
-	_, err = tc.executeTx(t, "tx create "+kr.LiteAccount.String()+" "+legacyAccount.LiteAccount.String()+" "+"100.00")
+	_, err = tc.executeTx(t, "tx create "+kr.LiteAccount.String()+" "+legacyAccount.LiteAccount.String()+" "+"1.00")
 	require.NoError(t, err)
 
 	//now make sure it transferred
 	bal, err = testGetBalance(t, tc, legacyAccount.LiteAccount.String())
 	require.NoError(t, err)
-	require.Equal(t, bal, "10000000000")
+	require.Equal(t, "100000000", bal)
 }
 
 //testGetBalance helper function to get the balance of a token account

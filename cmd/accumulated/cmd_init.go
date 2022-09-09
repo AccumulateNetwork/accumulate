@@ -57,6 +57,9 @@ var flagInit struct {
 	LogLevels        string
 	Etcd             []string
 	EnableTimingLogs bool
+	DnStallLimit     int
+	FactomAddresses  string
+	Snapshots        []string
 }
 
 var flagInitNode struct {
@@ -93,6 +96,7 @@ var flagInitDevnet struct {
 	UseVolumes    bool
 	Compose       bool
 	DnsSuffix     string
+	Globals       string
 }
 
 var flagInitNetwork struct {
@@ -112,6 +116,9 @@ func initInitFlags() {
 	cmdInit.PersistentFlags().StringVar(&flagInit.LogLevels, "log-levels", "", "Override the default log levels")
 	cmdInit.PersistentFlags().StringSliceVar(&flagInit.Etcd, "etcd", nil, "Use etcd endpoint(s)")
 	cmdInit.PersistentFlags().BoolVar(&flagInit.EnableTimingLogs, "enable-timing-logs", false, "Enable core timing analysis logging")
+	cmdInit.PersistentFlags().IntVar(&flagInit.DnStallLimit, "dn-stall-limit", 0, "Override the default DN stall limit")
+	cmdInit.PersistentFlags().StringVar(&flagInit.FactomAddresses, "factom-addresses", "", "A text file containing Factoid addresses to import")
+	cmdInit.PersistentFlags().StringSliceVar(&flagInit.Snapshots, "snapshot", nil, "A snapshot of accounts to import")
 	_ = cmdInit.MarkFlagRequired("network")
 
 	cmdInitNode.ResetFlags()
@@ -146,6 +153,7 @@ func initInitFlags() {
 	cmdInitDevnet.Flags().BoolVar(&flagInitDevnet.UseVolumes, "use-volumes", false, "Use Docker volumes instead of a local directory")
 	cmdInitDevnet.Flags().BoolVar(&flagInitDevnet.Compose, "compose", false, "Only write the Docker Compose file, do not write the configuration files")
 	cmdInitDevnet.Flags().StringVar(&flagInitDevnet.DnsSuffix, "dns-suffix", "", "DNS suffix to add to hostnames used when initializing dockerized nodes")
+	cmdInitDevnet.Flags().StringVar(&flagInitDevnet.Globals, "globals", "", "Override network globals")
 }
 
 func init() {
@@ -615,9 +623,9 @@ func initNode(cmd *cobra.Command, args []string) (string, error) {
 	netDir := netDir(config.Accumulate.Describe.NetworkType)
 	config.SetRoot(filepath.Join(flagMain.WorkDir, netDir))
 	accumulated.ConfigureNodePorts(&accumulated.NodeInit{
-		HostName: listenUrl.Hostname(),
-		ListenIP: listenUrl.Hostname(),
-		BasePort: uint64(basePort),
+		AdvertizeAddress: listenUrl.Hostname(),
+		ListenAddress:    listenUrl.Hostname(),
+		BasePort:         uint64(basePort),
 	}, config, 0)
 
 	config.PrivValidator.Key = "../priv_validator_key.json"

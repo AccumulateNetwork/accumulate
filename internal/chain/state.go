@@ -65,6 +65,9 @@ func NewStateManager(net *config.Describe, globals *core.GlobalValues, batch *da
 	return m
 }
 
+func (m *StateManager) GetBatch() *database.Batch { return m.batch }
+func (m *StateManager) GetHash() []byte           { return m.txHash[:] }
+
 // commit writes pending records to the database.
 func (m *StateManager) Commit() (*ProcessTransactionState, error) {
 	_, err := m.stateCache.Commit()
@@ -145,6 +148,9 @@ func (m *StateManager) SetAuth(account protocol.FullAccount, authorities []*url.
 	}
 
 	for _, authority := range authorities {
+		if authority == nil {
+			return errors.Format(errors.StatusBadRequest, "authority URL is nil")
+		}
 		err := m.AddAuthority(account, authority)
 		if err != nil {
 			return errors.Wrap(errors.StatusUnknownError, err)

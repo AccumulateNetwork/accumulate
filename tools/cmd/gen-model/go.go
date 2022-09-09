@@ -142,10 +142,11 @@ func keyToString(p *typegen.Field, varName string) string {
 	case typegen.TypeCodeFloat:
 		return "strconv.FormatFloat(" + varName + ", 'g', 3, 10)"
 	case typegen.TypeCodeUrl,
-		typegen.TypeCodeTime,
-		typegen.TypeCodeDuration,
-		typegen.TypeCodeBigInt,
 		typegen.TypeCodeTxid:
+		return varName + ".RawString()"
+	case typegen.TypeCodeTime,
+		typegen.TypeCodeDuration,
+		typegen.TypeCodeBigInt:
 		fallthrough
 	default:
 		return varName + ".String()"
