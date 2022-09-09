@@ -17,3 +17,9 @@ func (s *Simulator) GetTokensIssued() int64 {
 	defer s.mutex.Unlock()
 	return s.TokensIssued
 }
+
+func (s *Simulator) StartOfMonth(block *Block) bool {
+	p := s.GetParameters()
+	offset := p.SetBudgetFreq - p.FirstSetBudget
+	return offset == 7
+}

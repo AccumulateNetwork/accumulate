@@ -16,16 +16,11 @@ type RandHash struct {
 }
 
 // GetRandInt64
+// Returns really Int63 (positive ints)
 func (n *RandHash) GetRandInt64() int64 {
 	next := n.Next()
-	return (((((((int64(next[7]) << 8) +
-		int64(next[6])<<8) +
-		int64(next[5])<<8) +
-		int64(next[4])<<8) +
-		int64(next[3])<<8) +
-		int64(next[2])<<8) +
-		int64(next[1])<<8) +
-		int64(next[7])
+	f := func(b byte, shift int) int64 { return int64(next[b]) << shift }
+	return f(7, 56)&0x7F + f(6, 48) + f(5, 40) + f(4, 32) + f(3, 24) + f(2, 16) + f(1, 8) + f(0, 0)
 }
 
 // GetRandBuff

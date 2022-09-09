@@ -23,6 +23,7 @@ type Accumulate interface {
 	Start()                    // Any initialization required for the interface
 }
 
+// Important Staking URLs.
 var AcmeTokenIssuanceAccount,
 	AccumulateStakingServiceADI,
 	StakingServiceKeyBook,
@@ -30,8 +31,8 @@ var AcmeTokenIssuanceAccount,
 	StateDataAccount,
 	StakingServiceValidatorLiveAccount,
 	DisputeAccount,
-	ApprovedADIs,
-	RegisteredADIs *url.URL
+	Approved,
+	Registered *url.URL
 
 func init() {
 
@@ -49,7 +50,7 @@ func init() {
 	s(&StateDataAccount, "acc://staking.acme/State")
 	s(&StakingServiceValidatorLiveAccount, "acc://staking.acme/Live")
 	s(&DisputeAccount, "acc://staking.acme/Disputes")
-	s(&ApprovedADIs, "acc://staking.acme/ApprovedADIs")
-	s(&RegisteredADIs, "acc://staking.acme/RegisteredADIs")
+	s(&Approved, "acc://staking.acme/Approved")
+	s(&Registered, "acc://staking.acme/Registered")
 
 }

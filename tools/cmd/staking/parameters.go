@@ -16,10 +16,11 @@ type Parameters struct {
 		Disputes       *url.URL // Disputes of staking acc://staking.acme/Disputes
 		StakingConfig  *url.URL // Holds Parameter objects defining the config of staking
 	}
-
-	MajorTime         int64   // Time for a Major Block in seconds
-	FirstPayOut       int64   // Block of the first Staking Payout
-	PayOutFreq        int64   // Frequency of Payouts
+	SetBudgetFreq     int64   // The frequency in major blocks that we set the budget. Only used in simulation
+	FirstSetBudget    int64   // The Major block where we first set the budget. Only used in simulation
+	MajorTime         int64   // Time for a Major Block in seconds. Only used in simulation
+	FirstPayOut       int64   // Block of the first Staking Payout. Only used in simulation
+	PayOutFreq        int64   // Frequency of Payouts in major blocks. Only used in simulation
 	TokenLimit        int64   // Total Tokens to be issued
 	TokenIssuanceRate float64 // APR of payout of unissued tokens
 	StakingWeight     struct {
@@ -64,16 +65,17 @@ func (p *Parameters) Init() {
 	case err5 != nil:
 		panic(err1)
 	}
-	p.MajorTime = 5
-	p.FirstPayOut = 4
-	p.PayOutFreq = 4
-	p.TokenLimit = 500e6
-	p.TokenIssuanceRate = .16
-	p.StakingWeight.PureStaking = 1.00
-	p.StakingWeight.ProtocolValidator = 1.10
-	p.StakingWeight.ProtocolFollower = 1.10
-	p.StakingWeight.StakingValidator = 1.10
-	p.DelegateShare = .95
-	p.DelegateeShare = .05
-
+	p.SetBudgetFreq = 20                     // Frequency in major blocks to set the weekly budget.  Only used by simulation
+	p.FirstSetBudget = 0                     // First Major block where the weekly budget is set.  Only used by simulation
+	p.MajorTime = 2                          // How many minor blocks are in a Major Block.  Only used by simulation
+	p.FirstPayOut = 1                        // The Major Block that issues the first payout. Only used by simulation
+	p.PayOutFreq = 4                         // The frequency at which payouts are made. Only used by simulation
+	p.TokenLimit = 500e6                     // The Token limit for the protocol
+	p.TokenIssuanceRate = .16                // The percentage of unissued tokens paid out per year (limit - issued)
+	p.StakingWeight.PureStaking = 1.00       // Weight given to Pure Staking accounts
+	p.StakingWeight.ProtocolValidator = 1.10 // Weight given to Protocol Validator accounts
+	p.StakingWeight.ProtocolFollower = 1.10  // Weight given to Protocol Follower accounts
+	p.StakingWeight.StakingValidator = 1.10  // Weight given to Staking Validator accounts
+	p.DelegateShare = .95                    // The share of tokens earned by delegation that delegates keep
+	p.DelegateeShare = .05                   // The share of tokens earned by delegation that delegatees keep
 }
