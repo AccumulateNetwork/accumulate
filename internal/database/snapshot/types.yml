@@ -16,6 +16,10 @@ Account:
     type: hash
     marshal-as: none
 
+  - name: Url
+    type: url
+    pointer: true
+
   - name: Main
     description: is the main state of the account
     type: protocol.Account

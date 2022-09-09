@@ -11,6 +11,40 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
+func (b *Batch) VisitAccounts(visit func(*Account) error) error {
+	bpt := pmt.NewBPTManager(b.kvstore)
+
+	// Start is the first possible key in a BPT
+	place := [32]byte{
+		255, 255, 255, 255, 255, 255, 255, 255,
+		255, 255, 255, 255, 255, 255, 255, 255,
+		255, 255, 255, 255, 255, 255, 255, 255,
+		255, 255, 255, 255, 255, 255, 255, 255,
+	}
+
+	const window = 1000 //                                       Process this many BPT entries at a time
+	var count int       //                                       Recalculate number of nodes
+	for {
+		bptVals, next := bpt.Bpt.GetRange(place, int(window)) // Read a thousand values from the BPT
+		count += len(bptVals)
+		if len(bptVals) == 0 { //                                If there are none left, we break out
+			break
+		}
+		place = next                //                           We will get the next 1000 after the last 1000
+		for _, v := range bptVals { //                           For all the key values we got (as many as 1000)
+			u, err := b.getAccountUrl(record.Key{storage.Key(v.Key)}) //      Load the Account
+			if err != nil {
+				return errors.Wrap(errors.StatusUnknownError, err)
+			}
+			err = visit(b.Account(u))
+			if err != nil {
+				return errors.Wrap(errors.StatusUnknownError, err)
+			}
+		}
+	}
+	return nil
+}
+
 func (b *Batch) SaveAccounts(file io.WriteSeeker, collect func(*Account) ([]byte, error)) error {
 	bpt := pmt.NewBPTManager(b.kvstore)
 	err := bpt.Bpt.SaveSnapshot(file, func(key storage.Key, hash [32]byte) ([]byte, error) {

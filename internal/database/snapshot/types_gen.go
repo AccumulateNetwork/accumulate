@@ -21,6 +21,7 @@ import (
 type Account struct {
 	fieldsSet []bool
 	Hash      [32]byte
+	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	// Main is the main state of the account.
 	Main protocol.Account `json:"main,omitempty" form:"main" query:"main" validate:"required"`
 	// Chains is the state of the account's chains.
@@ -91,6 +92,9 @@ type txnSection struct {
 func (v *Account) Copy() *Account {
 	u := new(Account)
 
+	if v.Url != nil {
+		u.Url = v.Url
+	}
 	if v.Main != nil {
 		u.Main = (v.Main).CopyAsInterface().(protocol.Account)
 	}
@@ -234,6 +238,14 @@ func (v *txnSection) Copy() *txnSection {
 func (v *txnSection) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *Account) Equal(u *Account) bool {
+	switch {
+	case v.Url == u.Url:
+		// equal
+	case v.Url == nil || u.Url == nil:
+		return false
+	case !((v.Url).Equal(u.Url)):
+		return false
+	}
 	if !(protocol.EqualAccount(v.Main, u.Main)) {
 		return false
 	}
@@ -405,32 +417,36 @@ func (v *txnSection) Equal(u *txnSection) bool {
 }
 
 var fieldNames_Account = []string{
-	1: "Main",
-	2: "Chains",
-	3: "Pending",
-	4: "Directory",
+	1: "Url",
+	2: "Main",
+	3: "Chains",
+	4: "Pending",
+	5: "Directory",
 }
 
 func (v *Account) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
+	if !(v.Url == nil) {
+		writer.WriteUrl(1, v.Url)
+	}
 	if !(v.Main == nil) {
-		writer.WriteValue(1, v.Main.MarshalBinary)
+		writer.WriteValue(2, v.Main.MarshalBinary)
 	}
 	if !(len(v.Chains) == 0) {
 		for _, v := range v.Chains {
-			writer.WriteValue(2, v.MarshalBinary)
+			writer.WriteValue(3, v.MarshalBinary)
 		}
 	}
 	if !(len(v.Pending) == 0) {
 		for _, v := range v.Pending {
-			writer.WriteTxid(3, v)
+			writer.WriteTxid(4, v)
 		}
 	}
 	if !(len(v.Directory) == 0) {
 		for _, v := range v.Directory {
-			writer.WriteUrl(4, v)
+			writer.WriteUrl(5, v)
 		}
 	}
 
@@ -446,21 +462,26 @@ func (v *Account) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Url is missing")
+	} else if v.Url == nil {
+		errs = append(errs, "field Url is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Main is missing")
 	} else if v.Main == nil {
 		errs = append(errs, "field Main is not set")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Chains is missing")
 	} else if len(v.Chains) == 0 {
 		errs = append(errs, "field Chains is not set")
 	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field Pending is missing")
 	} else if len(v.Pending) == 0 {
 		errs = append(errs, "field Pending is not set")
 	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
 		errs = append(errs, "field Directory is missing")
 	} else if len(v.Directory) == 0 {
 		errs = append(errs, "field Directory is not set")
@@ -867,7 +888,10 @@ func (v *Account) UnmarshalBinary(data []byte) error {
 func (v *Account) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	reader.ReadValue(1, func(b []byte) error {
+	if x, ok := reader.ReadUrl(1); ok {
+		v.Url = x
+	}
+	reader.ReadValue(2, func(b []byte) error {
 		x, err := protocol.UnmarshalAccount(b)
 		if err == nil {
 			v.Main = x
@@ -875,21 +899,21 @@ func (v *Account) UnmarshalBinaryFrom(rd io.Reader) error {
 		return err
 	})
 	for {
-		if x := new(ChainState); reader.ReadValue(2, x.UnmarshalBinary) {
+		if x := new(ChainState); reader.ReadValue(3, x.UnmarshalBinary) {
 			v.Chains = append(v.Chains, x)
 		} else {
 			break
 		}
 	}
 	for {
-		if x, ok := reader.ReadTxid(3); ok {
+		if x, ok := reader.ReadTxid(4); ok {
 			v.Pending = append(v.Pending, x)
 		} else {
 			break
 		}
 	}
 	for {
-		if x, ok := reader.ReadUrl(4); ok {
+		if x, ok := reader.ReadUrl(5); ok {
 			v.Directory = append(v.Directory, x)
 		} else {
 			break
@@ -1132,11 +1156,13 @@ func (v *txnSection) UnmarshalBinaryFrom(rd io.Reader) error {
 
 func (v *Account) MarshalJSON() ([]byte, error) {
 	u := struct {
+		Url       *url.URL                                     `json:"url,omitempty"`
 		Main      encoding.JsonUnmarshalWith[protocol.Account] `json:"main,omitempty"`
 		Chains    encoding.JsonList[*ChainState]               `json:"chains,omitempty"`
 		Pending   encoding.JsonList[*url.TxID]                 `json:"pending,omitempty"`
 		Directory encoding.JsonList[*url.URL]                  `json:"directory,omitempty"`
 	}{}
+	u.Url = v.Url
 	u.Main = encoding.JsonUnmarshalWith[protocol.Account]{Value: v.Main, Func: protocol.UnmarshalAccountJSON}
 	u.Chains = v.Chains
 	u.Pending = v.Pending
@@ -1230,11 +1256,13 @@ func (v *txnSection) MarshalJSON() ([]byte, error) {
 
 func (v *Account) UnmarshalJSON(data []byte) error {
 	u := struct {
+		Url       *url.URL                                     `json:"url,omitempty"`
 		Main      encoding.JsonUnmarshalWith[protocol.Account] `json:"main,omitempty"`
 		Chains    encoding.JsonList[*ChainState]               `json:"chains,omitempty"`
 		Pending   encoding.JsonList[*url.TxID]                 `json:"pending,omitempty"`
 		Directory encoding.JsonList[*url.URL]                  `json:"directory,omitempty"`
 	}{}
+	u.Url = v.Url
 	u.Main = encoding.JsonUnmarshalWith[protocol.Account]{Value: v.Main, Func: protocol.UnmarshalAccountJSON}
 	u.Chains = v.Chains
 	u.Pending = v.Pending
@@ -1242,6 +1270,7 @@ func (v *Account) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
+	v.Url = u.Url
 	v.Main = u.Main.Value
 
 	v.Chains = u.Chains
