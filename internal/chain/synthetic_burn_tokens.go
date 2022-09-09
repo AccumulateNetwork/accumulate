@@ -27,6 +27,10 @@ func (SyntheticBurnTokens) Validate(st *StateManager, tx *Delivery) (protocol.Tr
 		return nil, fmt.Errorf("invalid principal: want chain type %v, got %v", protocol.AccountTypeTokenIssuer, st.Origin.Type())
 	}
 
+	if body.Amount.Sign() < 0 {
+		return nil, fmt.Errorf("amount can't be a negative value")
+	}
+
 	account.Issued.Sub(&account.Issued, &body.Amount)
 
 	err := st.Update(account)
