@@ -61,7 +61,7 @@ func (CreateToken) Validate(st *StateManager, tx *Delivery) (protocol.Transactio
 		return nil, fmt.Errorf("precision must be in range 0 to 18")
 	}
 
-	if body.SupplyLimit.Sign() < 0 {
+	if body.SupplyLimit != nil && body.SupplyLimit.Sign() < 0 {
 		return nil, fmt.Errorf("supply limit can't be a negative value")
 	}
 
