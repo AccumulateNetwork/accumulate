@@ -2,12 +2,13 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/spf13/cobra"
 	"github.com/tendermint/tendermint/rpc/client/http"
 	"github.com/tendermint/tendermint/types"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 var watchTxCmd = &cobra.Command{
@@ -28,7 +29,6 @@ func watchTx(_ *cobra.Command, args []string) error {
 			return fmt.Errorf("failed to create client: %v", err)
 		}
 
-		arg := arg // See docs/developer/rangevarref.md
 		go func() {
 			for {
 				err = client.Start()
@@ -44,22 +44,22 @@ func watchTx(_ *cobra.Command, args []string) error {
 				}
 
 				for e := range txs {
-					if e.Data == nil {
-						spew.Dump(e)
-						break
+					data, ok := e.Data.(types.EventDataTx)
+					if !ok {
+						continue
 					}
 
-					data := e.Data.(types.EventDataTx)
-					fmt.Printf("[%s] code=%d log=%q", arg, data.Result.Code, data.Result.Log)
-					for _, e := range e.Events {
-						for _, a := range e.Attributes {
-							// if e.Type == "tx" && a.Key == "hash" {
-							// 	a.Value = a.Value[:8]
-							// }
-							fmt.Printf(" %s.%s=%s", e.Type, a.Key, a.Value)
-						}
+					env := new(protocol.Envelope)
+					if env.UnmarshalBinary(data.Tx) != nil {
+						continue
 					}
-					fmt.Println()
+
+					b, err := json.Marshal(env)
+					if err != nil {
+						continue
+					}
+
+					fmt.Println(string(b))
 				}
 			}
 		}()

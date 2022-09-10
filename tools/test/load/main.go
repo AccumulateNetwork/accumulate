@@ -10,8 +10,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/tendermint/tendermint/rpc/client/http"
+	"github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -116,14 +117,9 @@ func initTxs(simTime float64, transactionsPerClient int, c *Client) error {
 				log.Printf("Error: fauceting account with error: %v, on client %d, tx %d\n", err, c.Id, c.TxCount+1)
 				return
 			}
-			txReq := api.TxnQuery{}
-			txReq.Txid = resp.TransactionHash
-			txReq.Wait = time.Second * 100
-			txReq.IgnorePending = false
 
-			_, err = c.Client.QueryTx(context.Background(), &txReq)
-			if err != nil {
-				log.Printf("Error: waiting for transaction to complete account with error: %v, on client %d, tx %d\n", err, c.Id, c.TxCount+1)
+			if !txList.WaitFor(*(*[32]byte)(resp.TransactionHash), 30*time.Second) {
+				log.Printf("Error: timed out waiting for transaction to complete, on client %d, tx %d\n", c.Id, c.TxCount+1)
 				return
 			}
 
@@ -187,6 +183,11 @@ func initializeClients(c int) ([]*Client, error) {
 		return nil, err
 	}
 
+	err = watchTransactions(&resp.Network)
+	if err != nil {
+		return nil, fmt.Errorf("%v, failed to initialize Tendermint subscriber", err)
+	}
+
 	// Build a list of all the nodes' addresses
 	var addrs []string
 	for _, p := range resp.Network.Partitions {
@@ -227,4 +228,97 @@ func createAccount() (*url.URL, error) {
 		return nil, fmt.Errorf("creating Lite Token account: %v", err)
 	}
 	return acc, nil
+}
+
+var txList = new(_txList)
+
+type _txList struct {
+	mu     *sync.RWMutex
+	cond   *sync.Cond
+	status map[[32]byte]*protocol.TransactionStatus
+}
+
+func (t *_txList) WaitFor(hash [32]byte, timeout time.Duration) bool {
+	start := time.Now()
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	for {
+		if t.status[hash] != nil {
+			return true
+		}
+		if time.Since(start) >= timeout {
+			return false
+		}
+		t.cond.Wait()
+	}
+}
+
+func (t *_txList) Record(env *protocol.Envelope, statuses []*protocol.TransactionStatus) {
+	if len(env.Transaction) != 1 || len(statuses) != 1 {
+		fmt.Println("Don't know how to handle multi-transaction envelopes")
+		return
+	}
+
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.status[*(*[32]byte)(env.Transaction[0].GetHash())] = statuses[0]
+	t.cond.Broadcast()
+}
+
+func watchTransactions(network *config.Network) error {
+	txList.mu = new(sync.RWMutex)
+	txList.cond = sync.NewCond(txList.mu.RLocker())
+	txList.status = map[[32]byte]*protocol.TransactionStatus{}
+
+	for _, partition := range network.Partitions {
+		server, err := config.OffsetPort(partition.Nodes[0].Address, int(partition.BasePort), int(config.PortOffsetTendermintRpc))
+		if err != nil {
+			return err
+		}
+
+		client, err := http.New(server.String())
+		if err != nil {
+			return err
+		}
+
+		err = client.Start()
+		if err != nil {
+			return err
+		}
+
+		txs, err := client.Subscribe(context.Background(), "watch-tx", "tm.event = 'Tx'")
+		if err != nil {
+			_ = client.Stop()
+			return err
+		}
+
+		go func() {
+			defer func() { _ = client.Stop() }()
+
+			for e := range txs {
+				data, ok := e.Data.(types.EventDataTx)
+				if !ok {
+					continue
+				}
+
+				env := new(protocol.Envelope)
+				err := env.UnmarshalBinary(data.Tx)
+				if err != nil {
+					fmt.Printf("Watch loop error: failed to unmarshal envelope: %v\n", err)
+					continue
+				}
+
+				results := new(protocol.TransactionResultSet)
+				err = results.UnmarshalBinary(data.TxResult.Result.Data)
+				if err != nil {
+					fmt.Printf("Watch loop error: failed to unmarshal results: %v\n", err)
+					continue
+				}
+
+				txList.Record(env, results.Results)
+			}
+		}()
+	}
+
+	return nil
 }
