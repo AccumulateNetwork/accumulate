@@ -14,14 +14,7 @@ import (
 func (b *Batch) VisitAccounts(visit func(*Account) error) error {
 	bpt := pmt.NewBPTManager(b.kvstore)
 
-	// Start is the first possible key in a BPT
-	place := [32]byte{
-		255, 255, 255, 255, 255, 255, 255, 255,
-		255, 255, 255, 255, 255, 255, 255, 255,
-		255, 255, 255, 255, 255, 255, 255, 255,
-		255, 255, 255, 255, 255, 255, 255, 255,
-	}
-
+	place := pmt.FirstPossibleBptKey
 	const window = 1000 //                                       Process this many BPT entries at a time
 	var count int       //                                       Recalculate number of nodes
 	for {

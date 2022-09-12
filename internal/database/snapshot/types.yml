@@ -15,15 +15,15 @@ Account:
   - name: Hash
     type: hash
     marshal-as: none
-
   - name: Url
     type: url
     pointer: true
-
+    field-number: 5
   - name: Main
     description: is the main state of the account
     type: protocol.Account
     marshal-as: union
+    field-number: 1
   - name: Chains
     description: is the state of the account's chains
     type: ChainState

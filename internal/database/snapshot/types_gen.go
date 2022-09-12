@@ -417,11 +417,11 @@ func (v *txnSection) Equal(u *txnSection) bool {
 }
 
 var fieldNames_Account = []string{
-	1: "Url",
-	2: "Main",
-	3: "Chains",
-	4: "Pending",
-	5: "Directory",
+	5: "Url",
+	1: "Main",
+	2: "Chains",
+	3: "Pending",
+	4: "Directory",
 }
 
 func (v *Account) MarshalBinary() ([]byte, error) {
@@ -429,24 +429,24 @@ func (v *Account) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	if !(v.Url == nil) {
-		writer.WriteUrl(1, v.Url)
+		writer.WriteUrl(5, v.Url)
 	}
 	if !(v.Main == nil) {
-		writer.WriteValue(2, v.Main.MarshalBinary)
+		writer.WriteValue(1, v.Main.MarshalBinary)
 	}
 	if !(len(v.Chains) == 0) {
 		for _, v := range v.Chains {
-			writer.WriteValue(3, v.MarshalBinary)
+			writer.WriteValue(2, v.MarshalBinary)
 		}
 	}
 	if !(len(v.Pending) == 0) {
 		for _, v := range v.Pending {
-			writer.WriteTxid(4, v)
+			writer.WriteTxid(3, v)
 		}
 	}
 	if !(len(v.Directory) == 0) {
 		for _, v := range v.Directory {
-			writer.WriteUrl(5, v)
+			writer.WriteUrl(4, v)
 		}
 	}
 
@@ -461,27 +461,27 @@ func (v *Account) MarshalBinary() ([]byte, error) {
 func (v *Account) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
 		errs = append(errs, "field Url is missing")
 	} else if v.Url == nil {
 		errs = append(errs, "field Url is not set")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Main is missing")
 	} else if v.Main == nil {
 		errs = append(errs, "field Main is not set")
 	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Chains is missing")
 	} else if len(v.Chains) == 0 {
 		errs = append(errs, "field Chains is not set")
 	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Pending is missing")
 	} else if len(v.Pending) == 0 {
 		errs = append(errs, "field Pending is not set")
 	}
-	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field Directory is missing")
 	} else if len(v.Directory) == 0 {
 		errs = append(errs, "field Directory is not set")
@@ -888,10 +888,10 @@ func (v *Account) UnmarshalBinary(data []byte) error {
 func (v *Account) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	if x, ok := reader.ReadUrl(1); ok {
+	if x, ok := reader.ReadUrl(5); ok {
 		v.Url = x
 	}
-	reader.ReadValue(2, func(b []byte) error {
+	reader.ReadValue(1, func(b []byte) error {
 		x, err := protocol.UnmarshalAccount(b)
 		if err == nil {
 			v.Main = x
@@ -899,21 +899,21 @@ func (v *Account) UnmarshalBinaryFrom(rd io.Reader) error {
 		return err
 	})
 	for {
-		if x := new(ChainState); reader.ReadValue(3, x.UnmarshalBinary) {
+		if x := new(ChainState); reader.ReadValue(2, x.UnmarshalBinary) {
 			v.Chains = append(v.Chains, x)
 		} else {
 			break
 		}
 	}
 	for {
-		if x, ok := reader.ReadTxid(4); ok {
+		if x, ok := reader.ReadTxid(3); ok {
 			v.Pending = append(v.Pending, x)
 		} else {
 			break
 		}
 	}
 	for {
-		if x, ok := reader.ReadUrl(5); ok {
+		if x, ok := reader.ReadUrl(4); ok {
 			v.Directory = append(v.Directory, x)
 		} else {
 			break
