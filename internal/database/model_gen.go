@@ -93,6 +93,10 @@ func (c *Batch) SystemData(partition string) *SystemData {
 }
 
 func (c *Batch) Resolve(key record.Key) (record.Record, record.Key, error) {
+	if len(key) == 0 {
+		return nil, nil, errors.New(errors.StatusInternalError, "bad key for batch")
+	}
+
 	switch key[0] {
 	case "Account":
 		if len(key) < 2 {
@@ -179,6 +183,7 @@ type Account struct {
 	label  string
 	parent *Batch
 
+	url                    *record.Value[*url.URL]
 	main                   *record.Value[protocol.Account]
 	pending                *record.Set[*url.TxID]
 	syntheticForAnchor     map[accountSyntheticForAnchorKey]*record.Set[*url.TxID]
@@ -218,6 +223,12 @@ type accountAnchorChainKey struct {
 
 func keyForAccountAnchorChain(partition string) accountAnchorChainKey {
 	return accountAnchorChainKey{partition}
+}
+
+func (c *Account) getUrl() *record.Value[*url.URL] {
+	return getOrCreateField(&c.url, func() *record.Value[*url.URL] {
+		return record.NewValue(c.logger.L, c.store, c.key.Append("Url"), c.label+" "+"url", false, record.Wrapped(record.UrlWrapper))
+	})
 }
 
 func (c *Account) Main() *record.Value[protocol.Account] {
@@ -323,7 +334,13 @@ func (c *Account) Data() *AccountData {
 }
 
 func (c *Account) Resolve(key record.Key) (record.Record, record.Key, error) {
+	if len(key) == 0 {
+		return nil, nil, errors.New(errors.StatusInternalError, "bad key for account")
+	}
+
 	switch key[0] {
+	case "Url":
+		return c.getUrl(), key[1:], nil
 	case "Main":
 		return c.Main(), key[1:], nil
 	case "Pending":
@@ -388,6 +405,9 @@ func (c *Account) IsDirty() bool {
 		return false
 	}
 
+	if fieldIsDirty(c.url) {
+		return true
+	}
 	if fieldIsDirty(c.main) {
 		return true
 	}
@@ -449,6 +469,7 @@ func (c *Account) baseCommit() error {
 	}
 
 	var err error
+	commitField(&err, c.url)
 	commitField(&err, c.main)
 	commitField(&err, c.pending)
 	for _, v := range c.syntheticForAnchor {
@@ -498,6 +519,10 @@ func (c *AccountAnchorChain) BPT() *Chain2 {
 }
 
 func (c *AccountAnchorChain) Resolve(key record.Key) (record.Record, record.Key, error) {
+	if len(key) == 0 {
+		return nil, nil, errors.New(errors.StatusInternalError, "bad key for anchor chain")
+	}
+
 	switch key[0] {
 	case "Root":
 		return c.Root(), key[1:], nil
@@ -567,6 +592,10 @@ func (c *AccountData) Transaction(entryHash [32]byte) *record.Value[[32]byte] {
 }
 
 func (c *AccountData) Resolve(key record.Key) (record.Record, record.Key, error) {
+	if len(key) == 0 {
+		return nil, nil, errors.New(errors.StatusInternalError, "bad key for data")
+	}
+
 	switch key[0] {
 	case "Entry":
 		return c.Entry(), key[1:], nil
@@ -669,6 +698,10 @@ func (c *Transaction) Chains() *record.Set[*TransactionChainEntry] {
 }
 
 func (c *Transaction) Resolve(key record.Key) (record.Record, record.Key, error) {
+	if len(key) == 0 {
+		return nil, nil, errors.New(errors.StatusInternalError, "bad key for transaction")
+	}
+
 	switch key[0] {
 	case "Main":
 		return c.Main(), key[1:], nil
@@ -761,6 +794,10 @@ func (c *SystemData) SyntheticIndexIndex(block uint64) *record.Value[uint64] {
 }
 
 func (c *SystemData) Resolve(key record.Key) (record.Record, record.Key, error) {
+	if len(key) == 0 {
+		return nil, nil, errors.New(errors.StatusInternalError, "bad key for system data")
+	}
+
 	switch key[0] {
 	case "SyntheticIndexIndex":
 		if len(key) < 2 {
