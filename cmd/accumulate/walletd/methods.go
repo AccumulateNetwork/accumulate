@@ -213,3 +213,15 @@ func (m *JrpcMethods) AdiList(_ context.Context, params json.RawMessage) interfa
 	}
 	return resp
 }
+
+func (m *JrpcMethods) NewTransaction(_ context.Context, params json.RawMessage) interface{} {
+	req := api.NewTransactionRequest{}
+	err := json.Unmarshal(params, &req)
+	if err != nil {
+		return validatorError(err)
+	}
+	m.txnMap[req.TxName] = new(protocol.Transaction)
+
+	resp := api.NewTransactionResponse{}
+	return resp
+}

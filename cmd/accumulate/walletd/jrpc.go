@@ -60,6 +60,7 @@ type JrpcMethods struct {
 	validate *validator.Validate
 	logger   log.Logger
 	api      *http.Server
+	txnMap   map[string]*protocol.Transaction
 }
 
 func NewJrpc(opts Options) (*JrpcMethods, error) {
@@ -77,6 +78,7 @@ func NewJrpc(opts Options) (*JrpcMethods, error) {
 	}
 
 	m.populateMethodTable()
+	m.txnMap = make(map[string]*protocol.Transaction)
 
 	return m, nil
 }

@@ -205,3 +205,26 @@ ResolveKeyResponse:
       type: KeyData
       marshal-as: reference
       
+NewTransactionRequest:
+  non-binary: true
+  fields:
+    - name: TxName
+      type: string
+
+NewTransactionResponse:
+  non-binary: true
+  fields:
+    - name: FeesRequired
+      type: int
+    - name: Signed
+      type: bool
+    - name: Timestamp
+      type: int
+    - name: TotalECOutputs
+      type: int
+    - name: TotalInputs
+      type: int
+    - name: TotalOutputs
+      type: int
+    - name: Txid
+      type: string

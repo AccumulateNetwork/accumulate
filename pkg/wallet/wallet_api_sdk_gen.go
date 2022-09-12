@@ -82,6 +82,18 @@ func (c *Client) KeyList(ctx context.Context) (interface{}, error) {
 	return resp, nil
 }
 
+// NewTransaction creates a map for a new transaction with name.
+func (c *Client) NewTransaction(ctx context.Context, req *api.NewTransactionRequest) (*api.NewTransactionResponse, error) {
+	var resp api.NewTransactionResponse
+
+	err := c.RequestAPIv2(ctx, "new-transaction", req, &resp)
+	if err != nil {
+		return nil, err
+	}
+
+	return &resp, nil
+}
+
 // ResolveKey returns a public key from either a label or keyhash.
 func (c *Client) ResolveKey(ctx context.Context, req *api.ResolveKeyRequest) (*api.ResolveKeyResponse, error) {
 	var resp api.ResolveKeyResponse

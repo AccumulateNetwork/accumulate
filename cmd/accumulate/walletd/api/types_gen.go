@@ -117,6 +117,20 @@ type KeyListResponse struct {
 	KeyList []KeyData `json:"keyList,omitempty" form:"keyList" query:"keyList" validate:"required"`
 }
 
+type NewTransactionRequest struct {
+	TxName string `json:"txName,omitempty" form:"txName" query:"txName" validate:"required"`
+}
+
+type NewTransactionResponse struct {
+	FeesRequired   int64  `json:"feesRequired,omitempty" form:"feesRequired" query:"feesRequired" validate:"required"`
+	Signed         bool   `json:"signed,omitempty" form:"signed" query:"signed" validate:"required"`
+	Timestamp      int64  `json:"timestamp,omitempty" form:"timestamp" query:"timestamp" validate:"required"`
+	TotalECOutputs int64  `json:"totalECOutputs,omitempty" form:"totalECOutputs" query:"totalECOutputs" validate:"required"`
+	TotalInputs    int64  `json:"totalInputs,omitempty" form:"totalInputs" query:"totalInputs" validate:"required"`
+	TotalOutputs   int64  `json:"totalOutputs,omitempty" form:"totalOutputs" query:"totalOutputs" validate:"required"`
+	Txid           string `json:"txid,omitempty" form:"txid" query:"txid" validate:"required"`
+}
+
 type ProveReceiptRequest struct {
 	DataJson    string `json:"dataJson,omitempty" form:"dataJson" query:"dataJson" validate:"required"`
 	ReceiptJson string `json:"receiptJson,omitempty" form:"receiptJson" query:"receiptJson" validate:"required"`
@@ -383,6 +397,32 @@ func (v *KeyListResponse) Copy() *KeyListResponse {
 }
 
 func (v *KeyListResponse) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *NewTransactionRequest) Copy() *NewTransactionRequest {
+	u := new(NewTransactionRequest)
+
+	u.TxName = v.TxName
+
+	return u
+}
+
+func (v *NewTransactionRequest) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *NewTransactionResponse) Copy() *NewTransactionResponse {
+	u := new(NewTransactionResponse)
+
+	u.FeesRequired = v.FeesRequired
+	u.Signed = v.Signed
+	u.Timestamp = v.Timestamp
+	u.TotalECOutputs = v.TotalECOutputs
+	u.TotalInputs = v.TotalInputs
+	u.TotalOutputs = v.TotalOutputs
+	u.Txid = v.Txid
+
+	return u
+}
+
+func (v *NewTransactionResponse) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *ProveReceiptRequest) Copy() *ProveReceiptRequest {
 	u := new(ProveReceiptRequest)
@@ -662,6 +702,40 @@ func (v *KeyListResponse) Equal(u *KeyListResponse) bool {
 		if !((&v.KeyList[i]).Equal(&u.KeyList[i])) {
 			return false
 		}
+	}
+
+	return true
+}
+
+func (v *NewTransactionRequest) Equal(u *NewTransactionRequest) bool {
+	if !(v.TxName == u.TxName) {
+		return false
+	}
+
+	return true
+}
+
+func (v *NewTransactionResponse) Equal(u *NewTransactionResponse) bool {
+	if !(v.FeesRequired == u.FeesRequired) {
+		return false
+	}
+	if !(v.Signed == u.Signed) {
+		return false
+	}
+	if !(v.Timestamp == u.Timestamp) {
+		return false
+	}
+	if !(v.TotalECOutputs == u.TotalECOutputs) {
+		return false
+	}
+	if !(v.TotalInputs == u.TotalInputs) {
+		return false
+	}
+	if !(v.TotalOutputs == u.TotalOutputs) {
+		return false
+	}
+	if !(v.Txid == u.Txid) {
+		return false
 	}
 
 	return true
