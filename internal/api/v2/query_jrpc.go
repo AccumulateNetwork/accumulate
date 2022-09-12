@@ -7,6 +7,7 @@ import (
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 )
 
 func (m *JrpcMethods) QueryTxLocal(ctx context.Context, params json.RawMessage) interface{} {
@@ -59,6 +60,8 @@ func (m *JrpcMethods) QueryTx(ctx context.Context, params json.RawMessage) inter
 	defer close(doneCh)
 
 	go func() {
+		defer logging.Recover(m.logger, "Panicked in QueryTx wait routine", "request", req)
+
 		// Wait for all queries to complete
 		wg.Wait()
 
@@ -71,14 +74,16 @@ func (m *JrpcMethods) QueryTx(ctx context.Context, params json.RawMessage) inter
 	}()
 
 	// Create a request for each client in a separate goroutine
-	for _, subnet := range m.Options.Describe.Network.Partitions {
-		go func(subnetId string) {
+	for _, partition := range m.Options.Describe.Network.Partitions {
+		go func(partition string) {
+			defer logging.Recover(m.logger, "Panicked in QueryTx query routine", "request", req, "partition", partition)
+
 			// Mark complete on return
 			defer wg.Done()
 
 			var result *TransactionQueryResponse
 			var rpcErr jsonrpc2.Error
-			err := m.Router.RequestAPIv2(ctx, subnetId, "query-tx-local", params, &result)
+			err := m.Router.RequestAPIv2(ctx, partition, "query-tx-local", params, &result)
 			switch {
 			case err == nil:
 				select {
@@ -95,7 +100,7 @@ func (m *JrpcMethods) QueryTx(ctx context.Context, params json.RawMessage) inter
 					// A result or error has already been sent
 				}
 			}
-		}(subnet.Id)
+		}(partition.Id)
 	}
 
 	// Wait for an error or a result
@@ -108,23 +113,23 @@ func (m *JrpcMethods) QueryTx(ctx context.Context, params json.RawMessage) inter
 }
 
 func getTxId(req *TxnQuery) ([]byte, error) {
-	var txid []byte
-	if req.Txid != nil {
-		txid = req.Txid
-	} else if req.TxIdUrl != nil {
+	switch {
+	case len(req.Txid) == 32:
+		return req.Txid, nil
+	case req.TxIdUrl != nil:
 		hash := req.TxIdUrl.Hash()
-		txid = hash[:]
-	} else {
-		return nil, errors.Unknown("no transaction ID present in request")
+		return hash[:], nil
+	case len(req.Txid) != 0:
+		return nil, errors.Format(errors.StatusBadRequest, "invalid transaction hash length: want 32, got %d", len(req.Txid))
+	default:
+		return nil, errors.Format(errors.StatusBadRequest, "no transaction ID present in request")
 	}
-	return txid, nil
 }
 
 func formatTxIdError(req *TxnQuery) error {
-	if req.Txid != nil {
-		return errors.NotFound("transaction %X not found", req.Txid[:8])
-	} else if req.TxIdUrl != nil {
-		return errors.NotFound("transaction %s not found", req.TxIdUrl.ShortString())
+	hash, err := getTxId(req)
+	if err != nil {
+		return err
 	}
-	return errors.Unknown("no transaction ID present in request")
+	return errors.NotFound("transaction %X not found", hash[:8])
 }
