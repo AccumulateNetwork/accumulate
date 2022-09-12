@@ -3,6 +3,7 @@ package helpers
 import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -12,12 +13,14 @@ type Condition func(sim *Sim) bool
 func Txn(id *url.TxID) *condTxn { return &condTxn{id} }
 
 func (c condTxn) IsDelivered() Condition { return c.status(isDelivered) }
+func (c condTxn) IsPending() Condition   { return c.status(isPending) }
 func (c condTxn) Succeeds() Condition    { return c.status(succeeds) }
 func (c condTxn) Fails() Condition       { return c.status(fails) }
 
 func (c condTxn) Produced() condProduced { return condProduced(c) }
 
 func (c condProduced) IsDelivered() Condition { return c.status(isDelivered) }
+func (c condProduced) IsPending() Condition   { return c.status(isPending) }
 func (c condProduced) Succeeds() Condition    { return c.status(succeeds) }
 func (c condProduced) Fails() Condition       { return c.status(fails) }
 
@@ -79,6 +82,18 @@ func (c condProduced) status(predicate func(sim *Sim, status *protocol.Transacti
 func isDelivered(s *Sim, status *protocol.TransactionStatus) bool {
 	s.T.Helper()
 	return status.Delivered()
+}
+
+func isPending(s *Sim, status *protocol.TransactionStatus) bool {
+	s.T.Helper()
+
+	if status.Code == 0 {
+		return false
+	}
+	if status.Code != errors.StatusPending {
+		s.T.Fatal("Expected transaction to be pending")
+	}
+	return true
 }
 
 func succeeds(s *Sim, status *protocol.TransactionStatus) bool {

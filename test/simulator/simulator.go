@@ -57,15 +57,15 @@ func New(logger log.Logger, database OpenDatabaseFunc, network *accumulated.Netw
 		s.netcfg.Partitions[i+1].Type = config.BlockValidator
 		s.netcfg.Partitions[i+1].Nodes = make([]config.Node, len(bvn.Nodes))
 		for j, node := range bvn.Nodes {
-			s.netcfg.Partitions[i+1].Nodes[j].Address = node.HostName
+			s.netcfg.Partitions[i+1].Nodes[j].Address = node.AdvertizeAddress
 			s.netcfg.Partitions[i+1].Nodes[j].Type = node.BvnnType
 
-			dnn := config.Node{Address: node.HostName, Type: node.DnnType}
+			dnn := config.Node{Address: node.AdvertizeAddress, Type: node.DnnType}
 			s.netcfg.Partitions[0].Nodes = append(s.netcfg.Partitions[0].Nodes, dnn)
 
 			if node.BasePort != 0 {
-				s.netcfg.Partitions[i+1].Nodes[j].Address = node.Address(false, "http", config.PortOffsetBlockValidator)
-				s.netcfg.Partitions[0].Nodes[j].Address = node.Address(false, "http", config.PortOffsetDirectory)
+				s.netcfg.Partitions[i+1].Nodes[j].Address = node.Address(accumulated.AdvertizeAddress, "http", config.PortOffsetBlockValidator)
+				s.netcfg.Partitions[0].Nodes[j].Address = node.Address(accumulated.AdvertizeAddress, "http", config.PortOffsetDirectory)
 			}
 		}
 	}
@@ -161,7 +161,7 @@ func GenesisWith(time time.Time, values *core.GlobalValues) SnapshotFunc {
 	return func(partition string, network *accumulated.NetworkInit, logger log.Logger) (ioutil2.SectionReader, error) {
 		var err error
 		if genDocs == nil {
-			genDocs, err = accumulated.BuildGenesisDocs(network, values, time, logger, nil)
+			genDocs, err = accumulated.BuildGenesisDocs(network, values, time, logger, nil, nil)
 			if err != nil {
 				return nil, errors.Format(errors.StatusUnknownError, "build genesis docs: %w", err)
 			}
@@ -187,6 +187,10 @@ func (s *Simulator) Step() error {
 	return errg.Wait()
 }
 
+func (s *Simulator) SetSubmitHook(partition string, fn SubmitHookFunc) {
+	s.partitions[partition].SetSubmitHook(fn)
+}
+
 func (s *Simulator) Submit(delivery *chain.Delivery) (*protocol.TransactionStatus, error) {
 	partition, err := s.router.Route(&protocol.Envelope{
 		Transaction: []*protocol.Transaction{delivery.Transaction},
@@ -202,6 +206,14 @@ func (s *Simulator) Submit(delivery *chain.Delivery) (*protocol.TransactionStatu
 	}
 
 	return p.Submit(delivery, false)
+}
+
+func (s *Simulator) Partitions() []*protocol.PartitionInfo {
+	var partitions []*protocol.PartitionInfo
+	for _, p := range s.partitions {
+		partitions = append(partitions, &p.PartitionInfo)
+	}
+	return partitions
 }
 
 type errDb struct{ err error }
@@ -241,9 +253,9 @@ func (s *Simulator) ListenAndServe(hook func(*Simulator, http.Handler) http.Hand
 		for _, node := range part.nodes {
 			var addr string
 			if part.Type == config.Directory {
-				addr = node.init.Address(true, "", config.PortOffsetDirectory, config.PortOffsetAccumulateApi)
+				addr = node.init.Address(accumulated.ListenAddress, "", config.PortOffsetDirectory, config.PortOffsetAccumulateApi)
 			} else {
-				addr = node.init.Address(true, "", config.PortOffsetBlockValidator, config.PortOffsetAccumulateApi)
+				addr = node.init.Address(accumulated.ListenAddress, "", config.PortOffsetBlockValidator, config.PortOffsetAccumulateApi)
 			}
 
 			ln, err := net.Listen("tcp", addr)

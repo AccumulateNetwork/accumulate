@@ -72,7 +72,7 @@ func run(*cobra.Command, []string) {
 		net = simulator.SimpleNetwork("Simulator", flag.BvnCount, flag.ValCount)
 		for i, bvn := range net.Bvns {
 			for j, node := range bvn.Nodes {
-				node.HostName = fmt.Sprintf("127.0.1.%d", 1+i*flag.ValCount+j)
+				node.AdvertizeAddress = fmt.Sprintf("127.0.1.%d", 1+i*flag.ValCount+j)
 				node.BasePort = uint64(flag.BasePort)
 			}
 		}
