@@ -5,6 +5,8 @@
 package walletd
 
 import (
+	"bytes"
+	"encoding/binary"
 	"fmt"
 	"strconv"
 	"strings"
@@ -191,6 +193,21 @@ func (d *Derivation) ToPath() (string, error) {
 		d.Chain, d.Address), nil
 }
 
+func (d *Derivation) String() string {
+	s, _ := d.ToPath()
+	return s
+}
+
+func (d *Derivation) Parse(path string) error {
+	return d.FromPath(path)
+}
+
+func ParseDerivationPath(path string) (Derivation, error) {
+	d := Derivation{}
+	err := d.Parse(path)
+	return d, err
+}
+
 func (d *Derivation) FromPath(path string) error {
 	hd := strings.Split(path, "/")
 	if len(hd) != 6 {
@@ -219,5 +236,53 @@ func (d *Derivation) FromPath(path string) error {
 	d.Chain = t[2]
 	d.Address = t[3]
 
+	return d.Validate()
+}
+
+func (d *Derivation) MarshalBinary() ([]byte, error) {
+	buffer := bytes.Buffer{}
+
+	err := d.Validate()
+	if err != nil {
+		return nil, err
+	}
+
+	b := [4]byte{}
+	binary.BigEndian.PutUint32(b[:], 0x80000000+44)
+	buffer.Write(b[:])
+
+	binary.BigEndian.PutUint32(b[:], d.CoinType)
+	buffer.Write(b[:])
+
+	binary.BigEndian.PutUint32(b[:], d.Account)
+	buffer.Write(b[:])
+
+	binary.BigEndian.PutUint32(b[:], d.Chain)
+	buffer.Write(b[:])
+
+	binary.BigEndian.PutUint32(b[:], d.Address)
+	buffer.Write(b[:])
+
+	return buffer.Bytes(), nil
+}
+
+func (d *Derivation) UnmarshalBinary(buffer []byte) error {
+
+	if len(buffer) < 16 {
+		return fmt.Errorf("derivation path too short")
+	}
+
+	m := binary.BigEndian.Uint32(buffer)
+
+	if m != 0x80000000+44 {
+		return fmt.Errorf("encoded binary is not a derivation path")
+	}
+
+	d.CoinType = binary.BigEndian.Uint32(buffer[4:])
+	d.Account = binary.BigEndian.Uint32(buffer[8:])
+	d.Chain = binary.BigEndian.Uint32(buffer[12:])
+	if len(buffer) >= 20 {
+		d.Address = binary.BigEndian.Uint32(buffer[16:])
+	}
 	return d.Validate()
 }
