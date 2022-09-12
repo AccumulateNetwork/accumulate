@@ -48,6 +48,10 @@ func (c *ChangeSet) ChangeLog() *record.Counted[string] {
 }
 
 func (c *ChangeSet) Resolve(key record.Key) (record.Record, record.Key, error) {
+	if len(key) == 0 {
+		return nil, nil, errors.New(errors.StatusInternalError, "bad key for change set")
+	}
+
 	switch key[0] {
 	case "Entity":
 		if len(key) < 2 {
@@ -156,6 +160,10 @@ func (c *Entity) CountableUnion() *record.Counted[protocol.Account] {
 }
 
 func (c *Entity) Resolve(key record.Key) (record.Record, record.Key, error) {
+	if len(key) == 0 {
+		return nil, nil, errors.New(errors.StatusInternalError, "bad key for entity")
+	}
+
 	switch key[0] {
 	case "Union":
 		return c.Union(), key[1:], nil
@@ -304,6 +312,10 @@ func (c *TemplateTest) UnionList() *record.Counted[UnionType] {
 }
 
 func (c *TemplateTest) Resolve(key record.Key) (record.Record, record.Key, error) {
+	if len(key) == 0 {
+		return nil, nil, errors.New(errors.StatusInternalError, "bad key for template test")
+	}
+
 	switch key[0] {
 	case "Wrapped":
 		return c.Wrapped(), key[1:], nil
