@@ -9,8 +9,9 @@ import (
 
 func Recover(logger log.Logger, message string, values ...interface{}) {
 	defer func() {
-		_ = recover()
-		println("Panicked while recovering from a panic") //nolint:noprint
+		if recover() != nil {
+			println("Panicked while recovering from a panic") //nolint:noprint
+		}
 	}()
 
 	err := recover()
