@@ -139,6 +139,7 @@ func Default(netName string, net NetworkType, node NodeType, partitionId string)
 	c.Accumulate.Snapshots.RetainCount = 10
 	c.Accumulate.AnalysisLog.Directory = "analysis"
 	c.Accumulate.AnalysisLog.Enabled = false
+	c.Accumulate.API.ReadHeaderTimeout = 10 * time.Second
 	// c.Accumulate.Snapshots.Frequency = 2
 	switch node {
 	case Validator:
@@ -242,6 +243,7 @@ type API struct {
 	DebugJSONRPC       bool          `toml:"debug-jsonrpc" mapstructure:"debug-jsonrpc"`
 	EnableDebugMethods bool          `toml:"enable-debug-methods" mapstructure:"enable-debug-methods"`
 	ConnectionLimit    int           `toml:"connection-limit" mapstructure:"connection-limit"`
+	ReadHeaderTimeout  time.Duration `toml:"read-header-timeout" mapstructure:"read-header-timeout"`
 }
 
 func MakeAbsolute(root, path string) string {
