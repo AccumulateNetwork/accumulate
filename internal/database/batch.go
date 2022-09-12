@@ -6,7 +6,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
@@ -155,16 +154,16 @@ func (b *Batch) getAccountUrl(key record.Key) (*url.URL, error) {
 	v, err := record.NewValue(
 		b.logger.L,
 		b.store,
-		// This must match the key used for the account's main state
-		key.Append("Main"),
-		fmt.Sprintf("account %v main", key),
+		// This must match the key used for the account's Url state
+		key.Append("Url"),
+		fmt.Sprintf("account %v URL", key),
 		false,
-		record.Union(protocol.UnmarshalAccount),
+		record.Wrapped(record.UrlWrapper),
 	).Get()
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
-	return v.GetUrl(), nil
+	return v, nil
 }
 
 // AccountByID returns an Account for the given ID.

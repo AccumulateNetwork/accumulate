@@ -153,6 +153,10 @@ func (c *{{$c.FullName}}) {{template "accessor" .}}({{range .GetParameters}}{{lo
 {{end}}
 
 func (c *{{.FullName}}) {{if .CustomResolve}}base{{end}}Resolve(key record.Key) (record.Record, record.Key, error) {
+	if len(key) == 0 {
+		return nil, nil, errors.New(errors.StatusInternalError, "bad key for {{natural .Name}}")
+	}
+
 	switch key[0] {
 	{{- range .Attributes}}
 	case "{{.Name}}":

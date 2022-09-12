@@ -44,7 +44,7 @@ func X(_ *cobra.Command, args []string) {
 	hasher := make(hash.Hasher, 4)
 	lookup := map[[32]byte]*snapshot.Account{}
 	for _, a := range x.accounts[20:25] {
-		fmt.Printf("Account %v has %d entries\n", a.Main.GetUrl(), len(a.Chains[0].Entries))
+		fmt.Printf("Account %v has %d entries\n", a.Url, len(a.Chains[0].Entries))
 		hasher = hasher[:0]
 		b, _ := a.Main.MarshalBinary()
 		hasher.AddBytes(b)
