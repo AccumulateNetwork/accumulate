@@ -14,6 +14,14 @@ import (
 const window = uint64(1000) //                               Process this many BPT entries at a time
 const nLen = 32 + 32 + 8    //                               Each node is a key (32), hash (32), offset(8)
 
+// FirstPossibleBptKey is the first possible BPT key.
+var FirstPossibleBptKey = [32]byte{
+	255, 255, 255, 255, 255, 255, 255, 255,
+	255, 255, 255, 255, 255, 255, 255, 255,
+	255, 255, 255, 255, 255, 255, 255, 255,
+	255, 255, 255, 255, 255, 255, 255, 255,
+}
+
 // SaveSnapshot
 // Saves a snapshot of the state of the BVN/DVN.
 // 1) The first thing done is copy the entire BVN and persist it to disk
@@ -53,14 +61,7 @@ func (b *BPT) SaveSnapshot(file io.WriteSeeker, loadState func(key storage.Key, 
 		return e2
 	}
 
-	// Start is the first possible key in a BPT
-	place := [32]byte{
-		255, 255, 255, 255, 255, 255, 255, 255,
-		255, 255, 255, 255, 255, 255, 255, 255,
-		255, 255, 255, 255, 255, 255, 255, 255,
-		255, 255, 255, 255, 255, 255, 255, 255,
-	}
-
+	place := FirstPossibleBptKey
 	vOffset := uint64(0) //                                 Offset from the beginning of value section
 	NodeCnt := uint64(0) //                                 Recalculate number of nodes
 	for {                //
