@@ -48,6 +48,13 @@ func (s *Sim) Step() {
 	require.NoError(s.T, s.Simulator.Step())
 }
 
+func (s *Sim) StepN(n int) {
+	s.T.Helper()
+	for i := 0; i < n; i++ {
+		require.NoError(s.T, s.Simulator.Step())
+	}
+}
+
 func (s *Sim) StepUntil(conditions ...Condition) {
 	s.T.Helper()
 	for i := 0; ; i++ {
