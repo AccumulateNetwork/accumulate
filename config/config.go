@@ -139,7 +139,7 @@ func Default(netName string, net NetworkType, node NodeType, partitionId string)
 	c.Accumulate.Snapshots.RetainCount = 10
 	c.Accumulate.AnalysisLog.Directory = "analysis"
 	c.Accumulate.AnalysisLog.Enabled = false
-	c.Accumulate.ReadHeaderTimeout = 1
+	c.Accumulate.API.ReadHeaderTimeout = 10 * time.Second
 	// c.Accumulate.Snapshots.Frequency = 2
 	switch node {
 	case Validator:
@@ -159,9 +159,9 @@ type Config struct {
 }
 
 type Accumulate struct {
-	SentryDSN         string `toml:"sentry-dsn" mapstructure:"sentry-dsn"`
-	Describe          `toml:"describe" mapstructure:"describe"`
-	ReadHeaderTimeout int `toml:"readheadertimeout" mapstructure:"readheadertimeout"`
+	SentryDSN string `toml:"sentry-dsn" mapstructure:"sentry-dsn"`
+	Describe  `toml:"describe" mapstructure:"describe"`
+
 	// DnStallLimit sets the number of blocks the DN is allowed to take before
 	// acknowledging an anchor.
 	DnStallLimit int `toml:"dn-stall-limit" mapstructure:"dn-stall-limit"`
@@ -243,6 +243,7 @@ type API struct {
 	DebugJSONRPC       bool          `toml:"debug-jsonrpc" mapstructure:"debug-jsonrpc"`
 	EnableDebugMethods bool          `toml:"enable-debug-methods" mapstructure:"enable-debug-methods"`
 	ConnectionLimit    int           `toml:"connection-limit" mapstructure:"connection-limit"`
+	ReadHeaderTimeout  time.Duration `toml:"read-header-timeout" mapstructure:"read-header-timeout"`
 }
 
 func MakeAbsolute(root, path string) string {
