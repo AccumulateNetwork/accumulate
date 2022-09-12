@@ -24,6 +24,20 @@ func (a *Account) VerifyHash(hash []byte) error {
 
 // PutBpt writes the record's BPT entry.
 func (a *Account) putBpt() error {
+	// Ensure the URL state is populated
+	_, err := a.getUrl().Get()
+	switch {
+	case err == nil:
+		// Ok
+	case errors.Is(err, errors.StatusNotFound):
+		err = a.getUrl().Put(a.Url())
+		if err != nil {
+			return errors.Wrap(errors.StatusUnknownError, err)
+		}
+	default:
+		return errors.Wrap(errors.StatusUnknownError, err)
+	}
+
 	hasher, err := a.hashState()
 	if err != nil {
 		return err

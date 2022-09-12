@@ -29,6 +29,8 @@ type Account struct {
 	Pending []*url.TxID `json:"pending,omitempty" form:"pending" query:"pending" validate:"required"`
 	// Directory lists the account's sub-accounts.
 	Directory []*url.URL `json:"directory,omitempty" form:"directory" query:"directory" validate:"required"`
+	// Url is the URL of the account.
+	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	extraData []byte
 }
 
@@ -111,6 +113,9 @@ func (v *Account) Copy() *Account {
 		if v != nil {
 			u.Directory[i] = v
 		}
+	}
+	if v.Url != nil {
+		u.Url = v.Url
 	}
 
 	return u
@@ -261,6 +266,14 @@ func (v *Account) Equal(u *Account) bool {
 			return false
 		}
 	}
+	switch {
+	case v.Url == u.Url:
+		// equal
+	case v.Url == nil || u.Url == nil:
+		return false
+	case !((v.Url).Equal(u.Url)):
+		return false
+	}
 
 	return true
 }
@@ -409,6 +422,7 @@ var fieldNames_Account = []string{
 	2: "Chains",
 	3: "Pending",
 	4: "Directory",
+	5: "Url",
 }
 
 func (v *Account) MarshalBinary() ([]byte, error) {
@@ -432,6 +446,9 @@ func (v *Account) MarshalBinary() ([]byte, error) {
 		for _, v := range v.Directory {
 			writer.WriteUrl(4, v)
 		}
+	}
+	if !(v.Url == nil) {
+		writer.WriteUrl(5, v.Url)
 	}
 
 	_, _, err := writer.Reset(fieldNames_Account)
@@ -464,6 +481,11 @@ func (v *Account) IsValid() error {
 		errs = append(errs, "field Directory is missing")
 	} else if len(v.Directory) == 0 {
 		errs = append(errs, "field Directory is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field Url is missing")
+	} else if v.Url == nil {
+		errs = append(errs, "field Url is not set")
 	}
 
 	switch len(errs) {
@@ -895,6 +917,9 @@ func (v *Account) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
+	if x, ok := reader.ReadUrl(5); ok {
+		v.Url = x
+	}
 
 	seen, err := reader.Reset(fieldNames_Account)
 	if err != nil {
@@ -1136,11 +1161,13 @@ func (v *Account) MarshalJSON() ([]byte, error) {
 		Chains    encoding.JsonList[*ChainState]               `json:"chains,omitempty"`
 		Pending   encoding.JsonList[*url.TxID]                 `json:"pending,omitempty"`
 		Directory encoding.JsonList[*url.URL]                  `json:"directory,omitempty"`
+		Url       *url.URL                                     `json:"url,omitempty"`
 	}{}
 	u.Main = encoding.JsonUnmarshalWith[protocol.Account]{Value: v.Main, Func: protocol.UnmarshalAccountJSON}
 	u.Chains = v.Chains
 	u.Pending = v.Pending
 	u.Directory = v.Directory
+	u.Url = v.Url
 	return json.Marshal(&u)
 }
 
@@ -1234,11 +1261,13 @@ func (v *Account) UnmarshalJSON(data []byte) error {
 		Chains    encoding.JsonList[*ChainState]               `json:"chains,omitempty"`
 		Pending   encoding.JsonList[*url.TxID]                 `json:"pending,omitempty"`
 		Directory encoding.JsonList[*url.URL]                  `json:"directory,omitempty"`
+		Url       *url.URL                                     `json:"url,omitempty"`
 	}{}
 	u.Main = encoding.JsonUnmarshalWith[protocol.Account]{Value: v.Main, Func: protocol.UnmarshalAccountJSON}
 	u.Chains = v.Chains
 	u.Pending = v.Pending
 	u.Directory = v.Directory
+	u.Url = v.Url
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -1247,6 +1276,7 @@ func (v *Account) UnmarshalJSON(data []byte) error {
 	v.Chains = u.Chains
 	v.Pending = u.Pending
 	v.Directory = u.Directory
+	v.Url = u.Url
 	return nil
 }
 
