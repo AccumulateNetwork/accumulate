@@ -32,7 +32,7 @@ func FullCollect(batch *database.Batch, file io.WriteSeeker, network *config.Des
 func CollectAnchors(w *Writer, batch *database.Batch, network *config.Describe) error {
 	txnHashes := new(HashSet)
 	record := batch.Account(network.AnchorPool())
-	err := txnHashes.CollectFromChain(record.AnchorSequenceChain())
+	err := txnHashes.CollectFromChain(record, record.AnchorSequenceChain())
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknownError, err)
 	}
