@@ -12,10 +12,13 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
+	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/test/helpers"
 )
 
 func TestOverwriteCreditBalance(t *testing.T) {
@@ -482,4 +485,51 @@ func TestAuthorityBetweenPartitions(t *testing.T) {
 	adi := simulator.GetAccount[*ADI](sim, alice)
 	_, ok := adi.GetAuthority(bob.JoinPath("book"))
 	require.True(t, ok, "Expected Bob to be an authority of Alice")
+}
+
+func TestPendingTransactionForMissingAccount(t *testing.T) {
+	// Tests AC-3174
+	var timestamp uint64
+	alice := AccountUrl("alice")
+	bob := AccountUrl("bob")
+	charlie := AccountUrl("charlie")
+	aliceKey := acctesting.GenerateKey(alice)
+	bobKey := acctesting.GenerateKey(bob)
+
+	// Initialize
+	sim := simulator.New(t, 3)
+	sim.InitFromGenesis()
+
+	sim.SetRouteFor(alice, "BVN1")
+	sim.SetRouteFor(bob, "BVN2")
+	sim.CreateIdentity(alice, aliceKey[32:])
+	sim.CreateIdentity(bob, bobKey[32:])
+	updateAccount(sim, alice.JoinPath("book", "1"), func(p *KeyPage) { p.CreditBalance = 1e9 })
+	updateAccount(sim, bob.JoinPath("book", "1"), func(p *KeyPage) { p.CreditBalance = 1e9 })
+
+	// Create charlie (but don't sign with bob)
+	env := acctesting.NewTransaction().
+		WithPrincipal(charlie).
+		WithTimestampVar(&timestamp).
+		WithSigner(alice.JoinPath("book", "1"), 1).
+		WithBody(&CreateIdentity{Url: charlie, Authorities: []*url.URL{bob.JoinPath("book")}}).
+		Initiate(SignatureTypeED25519, aliceKey).
+		Build()
+	sim.MustSubmitAndExecuteBlock(env)
+
+	// Should be pending because bob hasn't signed
+	sim.WaitForTransactionFlow(pending, env.Transaction[0].GetHash())
+
+	// Create a snapshot
+	buf := new(ioutil2.Buffer)
+	helpers.View(t, sim.PartitionFor(charlie), func(batch *database.Batch) {
+		_, err := snapshot.Collect(batch, buf, func(account *database.Account) (bool, error) { return false, nil })
+		require.NoError(t, err)
+	})
+
+	// Restore the snapshot
+	db2 := database.OpenInMemory(nil)
+	helpers.Update(t, db2, func(batch *database.Batch) {
+		require.NoError(t, snapshot.Restore(batch, buf, nil))
+	})
 }

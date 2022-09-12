@@ -7,6 +7,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 func Collect(batch *database.Batch, file io.WriteSeeker, preserveAccountHistory func(account *database.Account) (bool, error)) (*Writer, error) {
@@ -15,13 +16,18 @@ func Collect(batch *database.Batch, file io.WriteSeeker, preserveAccountHistory 
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
-	// Save accounts
-	txnHashes := new(HashSet)
-	sigHashes := new(HashSet)
+	// Restoring accounts will fail if they reference transactions that have not
+	// yet been restored, so the transaction section must come first. However we
+	// need to scan the BPT in order to know what transactions need to be saved.
 	var accounts []*url.URL
-	err = w.CollectAccounts(batch, preserveAccountHistory, func(a *Account) error {
-		accounts = append(accounts, a.Main.GetUrl())
-		for _, txid := range a.Pending {
+	txnHashes := new(HashSet)
+	err = batch.VisitAccounts(func(record *database.Account) error {
+		accounts = append(accounts, record.Url())
+		pending, err := record.Pending().Get()
+		if err != nil {
+			return errors.Format(errors.StatusUnknownError, "load pending: %w", err)
+		}
+		for _, txid := range pending {
 			txnHashes.Add(txid.Hash())
 		}
 		return nil
@@ -30,7 +36,8 @@ func Collect(batch *database.Batch, file io.WriteSeeker, preserveAccountHistory 
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
-	// Collect transaction hashes
+	// Collect transaction and signature hashes
+	sigHashes := new(HashSet)
 	for _, u := range accounts {
 		record := batch.Account(u)
 		preserve, err := preserveAccountHistory(record)
@@ -41,17 +48,17 @@ func Collect(batch *database.Batch, file io.WriteSeeker, preserveAccountHistory 
 			continue
 		}
 
-		err = txnHashes.CollectFromChain(record.MainChain())
+		err = txnHashes.CollectFromChain(record, record.MainChain())
 		if err != nil {
 			return nil, errors.Wrap(errors.StatusUnknownError, err)
 		}
 
-		err = txnHashes.CollectFromChain(record.ScratchChain())
+		err = txnHashes.CollectFromChain(record, record.ScratchChain())
 		if err != nil {
 			return nil, errors.Wrap(errors.StatusUnknownError, err)
 		}
 
-		err = sigHashes.CollectFromChain(record.SignatureChain())
+		err = sigHashes.CollectFromChain(record, record.SignatureChain())
 		if err != nil {
 			return nil, errors.Wrap(errors.StatusUnknownError, err)
 		}
@@ -72,6 +79,12 @@ func Collect(batch *database.Batch, file io.WriteSeeker, preserveAccountHistory 
 
 	// Save signatures
 	err = w.CollectSignatures(batch, sigHashes.Hashes, nil)
+	if err != nil {
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
+	}
+
+	// Save accounts
+	err = w.CollectAccounts(batch, preserveAccountHistory, nil)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
@@ -238,7 +251,19 @@ func (s *HashSet) Add(h [32]byte) {
 	s.Hashes = append(s.Hashes, h)
 }
 
-func (s *HashSet) CollectFromChain(c *database.Chain2) error {
+func (s *HashSet) CollectFromChain(a *database.Account, c *database.Chain2) error {
+	// Calling c.Get() modifies the account, so don't do that if the chain
+	// doesn't exist
+	_, err := a.Chains().Find(&protocol.ChainMetadata{Name: c.Name(), Type: c.Type()})
+	switch {
+	case err == nil:
+		// Found
+	case errors.Is(err, errors.StatusNotFound):
+		return nil
+	default:
+		return errors.Format(errors.StatusUnknownError, "load chains index: %w", err)
+	}
+
 	chain, err := c.Get()
 	if err != nil {
 		return errors.Format(errors.StatusUnknownError, "load chain %s head: %w", c.Name(), err)
