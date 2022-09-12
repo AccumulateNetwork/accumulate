@@ -3,6 +3,7 @@ package chain
 import (
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -31,14 +32,23 @@ func (CreateKeyPage) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 	if len(body.Keys) == 0 {
 		return nil, fmt.Errorf("cannot create empty sig spec")
 	}
+
 	//check for duplicate entries
 	uniqueKeys := make(map[string]bool, len(body.Keys))
 	for _, key := range body.Keys {
-		if uniqueKeys[string(key.KeyHash)] {
-			return nil, fmt.Errorf("duplicate keys: signing keys of a keypage must be unique")
+		switch len(key.KeyHash) {
+		case 0:
+			continue
+		case 32:
+			if uniqueKeys[string(key.KeyHash)] {
+				return nil, fmt.Errorf("duplicate keys: signing keys of a keypage must be unique")
+			}
+			uniqueKeys[string(key.KeyHash)] = true
+		default:
+			return nil, errors.Format(errors.StatusBadRequest, "public key hash length is invalid")
 		}
-		uniqueKeys[string(key.KeyHash)] = true
 	}
+
 	page := new(protocol.KeyPage)
 	page.Version = 1
 	page.Url = protocol.FormatKeyPageUrl(book.Url, book.PageCount)
