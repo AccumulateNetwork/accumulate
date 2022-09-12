@@ -72,7 +72,7 @@ func (a *Account) Commit() error {
 	// If anything has changed, update the BPT entry
 	err := a.putBpt()
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.Format(errors.StatusUnknownError, "update BPT entry for %v: %w", a.Url(), err)
 	}
 
 	// Do the normal commit stuff
