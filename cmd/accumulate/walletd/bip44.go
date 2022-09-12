@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"strconv"
 	"strings"
 
@@ -233,6 +234,22 @@ func ParseDerivationPath(path string) (Derivation, error) {
 	return d, err
 }
 
+func NewDerivationPath(signatureType protocol.SignatureType) (d Derivation, e error) {
+	switch signatureType {
+	case protocol.SignatureTypeBTC:
+		d = DefaultBitcoinBaseDerivationPath
+	case protocol.SignatureTypeRCD1:
+		d = DefaultFactoidBaseDerivationPath
+	case protocol.SignatureTypeETH:
+		d = DefaultEtherBaseDerivationPath
+	case protocol.SignatureTypeED25519:
+		d = DefaultAccumulateBaseDerivationPath
+	default:
+		e = fmt.Errorf("unsupported derivation path")
+	}
+	return d, e
+}
+
 func (d *Derivation) FromPath(path string) error {
 	hd := strings.Split(path, "/")
 	if len(hd) != 6 {
@@ -262,6 +279,24 @@ func (d *Derivation) FromPath(path string) error {
 	d.Address = t[3]
 
 	return d.Validate()
+}
+
+func (d *Derivation) SignatureType() protocol.SignatureType {
+	t := protocol.SignatureTypeED25519
+	//derivationPath
+	switch d.CoinType {
+	case TypeBitcoin:
+		t = protocol.SignatureTypeBTC
+	case TypeAccumulate:
+		t = protocol.SignatureTypeED25519
+	case TypeEther:
+		t = protocol.SignatureTypeETH
+	case TypeFactomFactoids:
+		t = protocol.SignatureTypeRCD1
+	default:
+		return protocol.SignatureTypeUnknown
+	}
+	return t
 }
 
 func (d *Derivation) MarshalBinary() ([]byte, error) {
