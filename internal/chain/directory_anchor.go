@@ -89,8 +89,20 @@ func (DirectoryAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Transa
 		return nil, fmt.Errorf("load anchor ledger: %w", err)
 	}
 	var didUpdateAnchor, didUpdateSynth bool
+	isDn := st.Describe.NetworkType == config.Directory
+	if isDn {
+		status, err := st.batch.Transaction(st.txHash[:]).Status().Get()
+		if err != nil {
+			return nil, errors.Format(errors.StatusUnknownError, "load transaction status: %w", err)
+		}
+		ledger := anchorLedger.Partition(body.Source)
+		if status.SequenceNumber > ledger.Acknowledged {
+			ledger.Acknowledged = status.SequenceNumber
+			didUpdateAnchor = true
+		}
+	}
 	for _, receipt := range body.Receipts {
-		if st.PartitionUrl().Equal(receipt.Anchor.Source) {
+		if !isDn && st.PartitionUrl().Equal(receipt.Anchor.Source) {
 			ledger := anchorLedger.Partition(body.Source)
 			if receipt.SequenceNumber > ledger.Acknowledged {
 				ledger.Acknowledged = receipt.SequenceNumber
