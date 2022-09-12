@@ -44,17 +44,16 @@ func (v *snapshotVisitor) VisitAccount(acct *snapshot.Account, _ int) error {
 		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
-	u := acct.Main.GetUrl()
-	partition, err := v.router.RouteAccount(u)
+	partition, err := v.router.RouteAccount(acct.Url)
 	if err != nil {
-		return errors.Format(errors.StatusInternalError, "route %v: %w", u, err)
+		return errors.Format(errors.StatusInternalError, "route %v: %w", acct.Url, err)
 	}
 
 	if !strings.EqualFold(partition, v.partition) {
 		return nil
 	}
 
-	v.urls = append(v.urls, u)
+	v.urls = append(v.urls, acct.Url)
 	err = v.v.VisitAccount(acct, v.accounts)
 	v.accounts++
 	return errors.Wrap(errors.StatusUnknownError, err)
