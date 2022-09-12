@@ -21,6 +21,31 @@ const Purpose uint32 = 0x8000002C
 //https://github.com/satoshilabs/slips/blob/master/slip-0044.md
 //https://github.com/FactomProject/FactomDocs/blob/master/wallet_info/wallet_test_vectors.md
 
+// DefaultRootDerivationPath is the root path to which custom derivation endpoints
+// are appended. As such, the first account will be at m/44'/60'/0'/0, the second
+// at m/44'/60'/0'/1, etc.
+//var DefaultAccumulateRootDerivationPath = Derivation{TypeEther, 0x80000000 + 0, 0, 0}
+
+// DefaultAccumulateBaseDerivationPath is the base path from which custom derivation endpoints
+// are incremented. As such, the first account will be at m/44'/60'/0'/0/0, the second
+// at m/44'/281'/0'/0/1, etc.
+var DefaultAccumulateBaseDerivationPath = Derivation{TypeAccumulate, 0x80000000 + 0, 0, 0}
+
+// DefaultEtherBaseDerivationPath is the base path from which custom derivation endpoints
+// are incremented. As such, the first account will be at m/44'/60'/0'/0/0, the second
+// at m/44'/281'/0'/0/1, etc.
+var DefaultEtherBaseDerivationPath = Derivation{TypeEther, 0x80000000 + 0, 0, 0}
+
+// DefaultFactoidBaseDerivationPath is the base path from which custom derivation endpoints
+// are incremented. As such, the first account will be at m/44'/60'/0'/0/0, the second
+// at m/44'/281'/0'/0/1, etc.
+var DefaultFactoidBaseDerivationPath = Derivation{TypeFactomFactoids, 0x80000000 + 0, 0, 0}
+
+// DefaultBitcoinBaseDerivationPath is the base path from which custom derivation endpoints
+// are incremented. As such, the first account will be at m/44'/60'/0'/0/0, the second
+// at m/44'/281'/0'/0/1, etc.
+var DefaultBitcoinBaseDerivationPath = Derivation{TypeBitcoin, 0x80000000 + 0, 0, 0}
+
 const (
 	TypeBitcoin               uint32 = 0x80000000
 	TypeTestnet               uint32 = 0x80000001
