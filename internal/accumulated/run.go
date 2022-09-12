@@ -257,7 +257,7 @@ func (d *Daemon) Start() (err error) {
 	}
 
 	// Run JSON-RPC server
-	d.api = &http.Server{Handler: d.jrpc.NewMux()}
+	d.api = &http.Server{Handler: d.jrpc.NewMux(), ReadHeaderTimeout: d.Config.Accumulate.API.ReadHeaderTimeout}
 	l, secure, err := listenHttpUrl(d.Config.Accumulate.API.ListenAddress)
 	if err != nil {
 		return fmt.Errorf("failed to start JSON-RPC: %v", err)
