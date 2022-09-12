@@ -42,6 +42,7 @@ func NewTestLogger(t testing.TB) log.Logger {
 
 var DefaultLogLevels = config.LogLevel{}.
 	Parse(config.DefaultLogLevels).
+	SetModule("restore", "error").
 	// SetModule("accumulate", "debug").
 	// SetModule("executor", "debug").
 	// SetModule("synthetic", "debug").
