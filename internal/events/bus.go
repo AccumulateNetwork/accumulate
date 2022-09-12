@@ -91,15 +91,7 @@ func SubscribeAsync[T Event](b *Bus, sub func(T)) {
 		}
 
 		go func() {
-			defer func() {
-				r := recover()
-				if r == nil {
-					return
-				}
-
-				b.logger.Error("Subscriber panicked", "error", r, "stack", string(debug.Stack()))
-			}()
-
+			defer logging.Recover(b.logger, "Subscriber panicked")
 			sub(et)
 		}()
 		return nil
