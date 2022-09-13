@@ -361,6 +361,11 @@ func (b *bootstrap) maybeCreateAcme() {
 }
 
 func (b *bootstrap) maybeCreateFaucet() {
+	// Always do this so the DN has the proper issued amount
+	amount := new(big.Int)
+	amount.SetUint64(protocol.AcmeFaucetBalance * protocol.AcmePrecision)
+	b.acmeIssued.Add(b.acmeIssued, amount)
+
 	if !protocol.IsTestNet || !b.shouldCreate(protocol.FaucetUrl) {
 		return
 	}
@@ -371,9 +376,7 @@ func (b *bootstrap) maybeCreateFaucet() {
 	liteToken := new(protocol.LiteTokenAccount)
 	liteToken.Url = protocol.FaucetUrl
 	liteToken.TokenUrl = protocol.AcmeUrl()
-	liteToken.Balance.SetUint64(protocol.AcmeFaucetBalance * protocol.AcmePrecision)
-
-	b.acmeIssued.Add(b.acmeIssued, &liteToken.Balance)
+	liteToken.Balance = *amount
 
 	// Lock forever
 	liteToken.LockHeight = math.MaxUint64
