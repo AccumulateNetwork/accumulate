@@ -1,8 +1,6 @@
 package common
 
 import (
-
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -10,7 +8,7 @@ import (
 
 func TestRandHash_GetRandInt64(t *testing.T) {
 	var rh RandHash
-    answers := []int64 {
+	answers := []int64{
 		0x66687aadf862bd77,
 		0x2b32db6c2c0a6235,
 		0x12771355e46cd47c,
@@ -22,9 +20,9 @@ func TestRandHash_GetRandInt64(t *testing.T) {
 		0x4e6e6acef5953a6a,
 		0x713587bc89fe4882,
 	}
-	for i:=0;i<10;i++{
+	for i := 0; i < 10; i++ {
 		v := rh.GetRandInt64()
-		fmt.Printf(" %x\n",v)
-		require.True(t,answers[i]==v)
+		//fmt.Printf(" %x\n",v)
+		require.True(t, answers[i] == v)
 	}
 }
