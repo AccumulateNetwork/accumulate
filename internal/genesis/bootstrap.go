@@ -158,7 +158,7 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) ([]byte, error) {
 		return !b.omitHistory[account.Url().AccountID32()], nil
 	})
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.Format(errors.StatusUnknownError, "collect snapshot: %w", err)
 	}
 
 	err = snapshot.CollectAnchors(w, batch, &exec.Describe)

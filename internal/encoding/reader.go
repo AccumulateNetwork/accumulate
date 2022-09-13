@@ -15,7 +15,7 @@ import (
 
 var ErrFieldsOutOfOrder = errors.New("fields are out of order")
 
-var MaxValueSize = 1 << 20
+const MaxValueSize = 1 << 24
 
 type bytesReader interface {
 	io.Reader
@@ -85,8 +85,8 @@ func (r *Reader) readRaw(field uint, n uint64) ([]byte, bool) {
 		r.didRead(field, io.EOF, "failed to read field")
 	}
 
-	if n >= uint64(MaxValueSize) {
-		r.didRead(field, fmt.Errorf("too big"), "failed to read field")
+	if n >= MaxValueSize {
+		r.didRead(field, fmt.Errorf("too big: %d > %d", n, MaxValueSize), "failed to read field")
 		return nil, false
 	}
 

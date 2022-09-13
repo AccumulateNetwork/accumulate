@@ -78,7 +78,7 @@ func (w *Writer) writeRaw(field uint, v []byte) {
 	}
 
 	if len(v) > MaxValueSize {
-		w.didWrite(field, 0, errors.New("too large"), "failed to write field")
+		w.didWrite(field, 0, fmt.Errorf("too big: %d > %d", len(v), MaxValueSize), "failed to write field")
 		return
 	}
 
