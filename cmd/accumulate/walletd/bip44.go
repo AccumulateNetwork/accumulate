@@ -196,6 +196,13 @@ const (
 	DerivationAddress
 )
 
+func (d Derivation) Purpose() uint32 {
+	if len(d) == 0 {
+		return 0
+	}
+	return d[0]
+}
+
 func (d Derivation) CoinType() uint32 {
 	if len(d) <= DerivationCoinType {
 		return 0

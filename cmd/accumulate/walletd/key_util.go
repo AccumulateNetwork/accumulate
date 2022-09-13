@@ -156,21 +156,17 @@ func (k *Key) NativeAddress() (address string, err error) {
 }
 
 func GenerateKey(sigtype protocol.SignatureType) (k *Key, err error) {
-	hd := Derivation{}
-	hd.Account = bip32.FirstHardenedChild
-	hd.Address, err = getKeyCountAndIncrement(sigtype)
+	hd, err := NewDerivationPath(sigtype)
 	if err != nil {
 		return nil, err
 	}
-	hd.CoinType = TypeAccumulate
-	switch sigtype {
-	case protocol.SignatureTypeBTCLegacy, protocol.SignatureTypeBTC:
-		hd.CoinType = TypeBitcoin
-	case protocol.SignatureTypeETH:
-		hd.CoinType = TypeEther
-	case protocol.SignatureTypeRCD1:
-		hd.CoinType = TypeFactomFactoids
+
+	address, err := getKeyCountAndIncrement(sigtype)
+	if err != nil {
+		return nil, err
 	}
+
+	hd = Derivation{hd.Purpose(), hd.CoinType(), hd.Account(), hd.Chain(), address}
 
 	derivationPath, err := hd.ToPath()
 	if err != nil {
@@ -187,18 +183,9 @@ func GenerateKeyFromHDPath(derivationPath string) (*Key, error) {
 		return nil, err
 	}
 
-	var sigType protocol.SignatureType
-	switch hd.CoinType {
-	case TypeBitcoin:
-		sigType = protocol.SignatureTypeBTC
-	case TypeEther:
-		sigType = protocol.SignatureTypeETH
-	case TypeFactomFactoids:
-		sigType = protocol.SignatureTypeRCD1
-	case TypeAccumulate:
-		sigType = protocol.SignatureTypeED25519
-	default:
-		return nil, fmt.Errorf("coin type (0x%x) not supported in %s", hd.CoinType, derivationPath)
+	err = hd.Validate()
+	if err != nil {
+		return nil, err
 	}
 
 	seed, err := lookupSeed()
@@ -210,12 +197,12 @@ func GenerateKeyFromHDPath(derivationPath string) (*Key, error) {
 	masterKey, _ := bip32.NewMasterKey(seed)
 
 	//create the derived key
-	newKey, err := NewKeyFromMasterKey(masterKey, hd.CoinType, hd.Account, hd.Chain, hd.Address)
+	newKey, err := NewKeyFromMasterKey(masterKey, hd.CoinType(), hd.Account(), hd.Chain(), hd.Address())
 	if err != nil {
 		return nil, err
 	}
 	key := new(Key)
-	err = key.InitializeFromSeed(newKey.Key, sigType, derivationPath)
+	err = key.InitializeFromSeed(newKey.Key, hd.SignatureType(), derivationPath)
 	if err != nil {
 		return nil, err
 	}
