@@ -50,8 +50,8 @@ CreateEnvelope:
   input: api.CreateEnvelopeRequest
   output: api.CreateEnvelopeResponse
 
-NewTransaction:
+NewSendTokensTransaction:
   description: creates a map for a new transaction with name
   rpc: new-transaction
   input: api.NewTransactionRequest
-  output: api.NewTransactionResponse
+  output: protocol.SendTokens

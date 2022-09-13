@@ -6,6 +6,7 @@ import (
 	"context"
 
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd/api"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // AdiList returns a list of adi's managed by the wallet.
@@ -82,9 +83,9 @@ func (c *Client) KeyList(ctx context.Context) (interface{}, error) {
 	return resp, nil
 }
 
-// NewTransaction creates a map for a new transaction with name.
-func (c *Client) NewTransaction(ctx context.Context, req *api.NewTransactionRequest) (*api.NewTransactionResponse, error) {
-	var resp api.NewTransactionResponse
+// NewSendTokensTransaction creates a map for a new transaction with name.
+func (c *Client) NewSendTokensTransaction(ctx context.Context, req *api.NewTransactionRequest) (*protocol.SendTokens, error) {
+	var resp protocol.SendTokens
 
 	err := c.RequestAPIv2(ctx, "new-transaction", req, &resp)
 	if err != nil {
