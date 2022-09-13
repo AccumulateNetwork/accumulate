@@ -10,6 +10,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/smt/pmt"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/badger"
@@ -119,6 +120,9 @@ func extractSnapshot(_ *cobra.Command, args []string) {
 		err = c.Restore(batch2)
 		checkf(err, "restore %v", u)
 		for _, c := range c.Chains {
+			if c.Type != managed.ChainTypeTransaction {
+				continue // Exclude index and anchor chains
+			}
 			err = c.Restore(batch2.Account(u))
 			checkf(err, "restore %v %s chain", u, c.Name)
 		}
