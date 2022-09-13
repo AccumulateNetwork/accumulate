@@ -24,5 +24,5 @@ func Recover(logger log.Logger, message string, values ...interface{}) {
 	}
 
 	values = append(values, "error", err, "stack", debug.Stack())
-	logger.Error("message", values...)
+	logger.Error(message, values...)
 }
