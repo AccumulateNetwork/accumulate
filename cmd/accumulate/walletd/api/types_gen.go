@@ -117,6 +117,10 @@ type KeyListResponse struct {
 	KeyList []KeyData `json:"keyList,omitempty" form:"keyList" query:"keyList" validate:"required"`
 }
 
+type NewTransactionRequest struct {
+	TxName string `json:"txName,omitempty" form:"txName" query:"txName" validate:"required"`
+}
+
 type ProveReceiptRequest struct {
 	DataJson    string `json:"dataJson,omitempty" form:"dataJson" query:"dataJson" validate:"required"`
 	ReceiptJson string `json:"receiptJson,omitempty" form:"receiptJson" query:"receiptJson" validate:"required"`
@@ -383,6 +387,16 @@ func (v *KeyListResponse) Copy() *KeyListResponse {
 }
 
 func (v *KeyListResponse) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *NewTransactionRequest) Copy() *NewTransactionRequest {
+	u := new(NewTransactionRequest)
+
+	u.TxName = v.TxName
+
+	return u
+}
+
+func (v *NewTransactionRequest) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *ProveReceiptRequest) Copy() *ProveReceiptRequest {
 	u := new(ProveReceiptRequest)
@@ -662,6 +676,14 @@ func (v *KeyListResponse) Equal(u *KeyListResponse) bool {
 		if !((&v.KeyList[i]).Equal(&u.KeyList[i])) {
 			return false
 		}
+	}
+
+	return true
+}
+
+func (v *NewTransactionRequest) Equal(u *NewTransactionRequest) bool {
+	if !(v.TxName == u.TxName) {
+		return false
 	}
 
 	return true
