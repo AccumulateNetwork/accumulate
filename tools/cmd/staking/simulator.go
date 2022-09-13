@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"net/url"
 	"sync"
 	"time"
@@ -37,24 +36,20 @@ type Account struct {
 
 type Simulator struct {
 	mutex        sync.Mutex          // Handle concurrent access
-	major, minor int64               // Current block height
+	major        int64               // Current block height
 	parameters   *Parameters         //
 	TokensIssued int64               // Total Tokens Issued
 	ADIs         map[string]*url.URL //
 	Accounts     map[string]*Account //
-	Blocks       []*Block            //
-	CurrentBlock *Block              //
+	MajorBlocks  []*Block            // List of Major Blocks
 }
 
 var rh common.RandHash // A random Series for just setting up accounts
 
 func (s *Simulator) Init() {
-	s.major = -1
-	s.minor = -1
+	s.major = 0
 	s.parameters = new(Parameters)
 	s.parameters.Init()
-	s.CurrentBlock = new(Block)
-	s.CurrentBlock.Timestamp = time.Now()
 	s.TokensIssued = 203e6
 
 	// Add some staking accounts
@@ -97,26 +92,26 @@ func (s *Simulator) Init() {
 		registered.Entries = append(registered.Entries, newAccount)
 		idx = rh.GetRandInt64() % 7 // Figure out the next staking type
 	}
-	s.CurrentBlock.Accounts = append(s.CurrentBlock.Accounts, registered)
+	s.Accounts = make(map[string]*Account)
+	s.Accounts[registered.URL.String()] = registered
 }
 
 func (s *Simulator) Run() {
-	s.CurrentBlock.Timestamp = time.Now()
-	for {
-		time.Sleep(time.Second)
+	s.mutex.Lock()                 // Going to update the simulator
+	blk := new(Block)              // Create the first block
+	for _, v := range s.Accounts { // Add all the accounts
+		blk.Accounts = append(blk.Accounts, v)
+	}
+	s.mutex.Unlock()
 
-		s.mutex.Lock()
-		s.Blocks = append(s.Blocks, s.CurrentBlock)
-		s.minor++
-		if s.minor%s.parameters.MajorTime == 0 {
-			s.major++
-			fmt.Printf("\n%d :", s.major)
-		}
-		fmt.Printf(" %d", s.minor)
-		s.CurrentBlock = new(Block)
-		s.CurrentBlock.MinorHeight = s.minor
-		s.CurrentBlock.MajorHeight = s.major
-		s.CurrentBlock.Timestamp = time.Now()
-		s.mutex.Unlock()
+	for {
+		time.Sleep(time.Second)                    // Sleep while unlocked
+		s.mutex.Lock()                             // Lock
+		s.MajorBlocks = append(s.MajorBlocks, blk) // Add it to the block list
+		s.major++                                  // Add the current major block
+		blk = new(Block)                           // Create the next block
+		blk.MajorHeight = s.major                  // Set the major block number
+		blk.Timestamp = time.Now()                 // Set the timestamp
+		s.mutex.Unlock()                           // Unlock to allow others access to simulator state
 	}
 }

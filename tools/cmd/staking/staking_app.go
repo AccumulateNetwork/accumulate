@@ -77,15 +77,17 @@ func (s *StakingApp) Run() {
 	sim.Init()
 	go sim.Run()
 	s.Params = sim.GetParameters()
-	s.CBlk = sim.GetBlock()
-	for {
-		b := sim.GetBlock()
-		if b.MajorHeight == s.CBlk.MajorHeight {
+	for i := int64(0); true; {
+		b := sim.GetBlock(i)
+		if b == nil {
 			time.Sleep(time.Second / 4)
 			continue
 		}
-		s.AddAccounts()
+		i++
 		s.CBlk = b // This is the new current block
+		fmt.Print(s.CBlk.MajorHeight, " ")
+		s.ComputeBudget()
+		s.AddAccounts()
 		s.AddApproved(b)
 		s.Report()
 		time.Sleep(time.Second / 4)
@@ -122,12 +124,22 @@ func (s *StakingApp) AddAccounts() {
 	}
 }
 
+func (s *StakingApp) ComputeBudget() {
+	if !s.CBlk.SetBudget && s.CBlk.MajorHeight != 0 {
+		return
+	}
+	s.Data.TokensIssued = s.sim.GetTokensIssued()
+	s.Data.TokenIssuanceRate = int64(s.Params.TokenIssuanceRate * 100)
+
+}
+
 func (s *StakingApp) Collect() {
+	if !s.CBlk.PrintReport {
+		return
+	}
 	s.Data.BlockHeight = s.CBlk.MajorHeight
 	s.Data.Timestamp = s.CBlk.Timestamp.UTC().Format(time.UnixDate)
 	s.Data.TokenLimit = s.Params.TokenLimit
-	s.Data.TokensIssued = s.sim.GetTokensIssued()
-	s.Data.TokenIssuanceRate = int64(s.Params.TokenIssuanceRate * 100)
 	s.Data.WtPS = int64(s.Params.StakingWeight.PureStaking * 100)
 	s.Data.WtPV = int64(s.Params.StakingWeight.ProtocolValidator * 100)
 	s.Data.WtPF = int64(s.Params.StakingWeight.ProtocolFollower * 100)
@@ -149,9 +161,13 @@ func (s *StakingApp) Collect() {
 func (s *StakingApp) Report() {
 
 	// First check if CBlk is a payout block.  If not, return
-	if c := (s.CBlk.MajorHeight - s.Params.FirstPayOut) % s.Params.PayOutFreq; c != 0 {
+	if !s.CBlk.PrintReport {
 		return
 	}
+
+	unissued := 500000000-s.Data.TokensIssued
+	rewards := unissued / 16 /100
+	s.sim.IssuedTokens(rewards)
 
 	s.Collect() // Collect all the needed information for the payout
 

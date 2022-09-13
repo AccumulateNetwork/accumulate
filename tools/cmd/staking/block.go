@@ -6,10 +6,12 @@ import (
 )
 
 type Block struct {
-	MajorHeight int64
-	MinorHeight int64
-	Timestamp   time.Time
-	Accounts    []*Account
+	SetBudget         bool	// True if this block is the block to compute the weekly budget
+	PrintReport       bool // True if this block is the one to build the reward report
+	PrintPayoutScript bool // True if this block is the one to print out the Payout script
+	MajorHeight       int64 // The major block number
+	Timestamp         time.Time // Timestamp of the DN defining the major block
+	Accounts          []*Account // A list of the watched accounts that where modified in the major block
 }
 
 // GetAccount

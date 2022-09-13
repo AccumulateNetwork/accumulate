@@ -17,9 +17,9 @@ type Parameters struct {
 		StakingConfig  *url.URL // Holds Parameter objects defining the config of staking
 	}
 	SetBudgetFreq     int64   // The frequency in major blocks that we set the budget. Only used in simulation
-	FirstSetBudget    int64   // The Major block where we first set the budget. Only used in simulation
+	SetBudgetFirst    int64   // The Major block where we first set the budget. Only used in simulation
 	MajorTime         int64   // Time for a Major Block in seconds. Only used in simulation
-	FirstPayOut       int64   // Block of the first Staking Payout. Only used in simulation
+	PayOutFirst       int64   // Block of the first Staking Payout. Only used in simulation
 	PayOutFreq        int64   // Frequency of Payouts in major blocks. Only used in simulation
 	TokenLimit        int64   // Total Tokens to be issued
 	TokenIssuanceRate float64 // APR of payout of unissued tokens
@@ -66,9 +66,9 @@ func (p *Parameters) Init() {
 		panic(err1)
 	}
 	p.SetBudgetFreq = 20                     // Frequency in major blocks to set the weekly budget.  Only used by simulation
-	p.FirstSetBudget = 0                     // First Major block where the weekly budget is set.  Only used by simulation
+	p.SetBudgetFirst = 0                     // First Major block where the weekly budget is set.  Only used by simulation
 	p.MajorTime = 2                          // How many minor blocks are in a Major Block.  Only used by simulation
-	p.FirstPayOut = 1                        // The Major Block that issues the first payout. Only used by simulation
+	p.PayOutFirst = 1                        // The Major Block that issues the first payout. Only used by simulation
 	p.PayOutFreq = 4                         // The frequency at which payouts are made. Only used by simulation
 	p.TokenLimit = 500e6                     // The Token limit for the protocol
 	p.TokenIssuanceRate = .16                // The percentage of unissued tokens paid out per year (limit - issued)
