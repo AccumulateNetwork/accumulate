@@ -213,3 +213,18 @@ func (m *JrpcMethods) AdiList(_ context.Context, params json.RawMessage) interfa
 	}
 	return resp
 }
+
+func (m *JrpcMethods) NewSendTokensTransaction(_ context.Context, params json.RawMessage) interface{} {
+	req := api.NewTransactionRequest{}
+	err := json.Unmarshal(params, &req)
+	if err != nil {
+		return validatorError(err)
+	}
+
+	sendToken := protocol.SendTokens{}
+	resp, err := sendToken.MarshalJSON()
+	if err != nil {
+		return validatorError(err)
+	}
+	return resp
+}
