@@ -61,7 +61,11 @@ func (PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Transa
 	if err != nil {
 		return nil, err
 	}
-	st.State.DidReceiveAnchor(name, body, index)
+	status, err := st.batch.Transaction(st.txHash[:]).Status().Get()
+	if err != nil {
+		return nil, err
+	}
+	st.State.DidReceiveAnchor(name, body, index, status)
 
 	// And the BPT root
 	_, err = st.State.ChainUpdates.AddChainEntry2(st.batch, record.BPT(), body.StateTreeAnchor[:], 0, 0, false)
@@ -92,6 +96,7 @@ func (PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Transa
 		if len(ledger.PendingMajorBlockAnchors) == 0 {
 			st.logger.Info("Completed major block", "major-index", ledger.MajorBlockIndex, "minor-index", body.MinorBlockIndex)
 			st.State.MakeMajorBlock = ledger.MajorBlockIndex
+			st.State.MakeMajorBlockTime = ledger.MajorBlockTime
 		}
 		return nil, nil
 	}

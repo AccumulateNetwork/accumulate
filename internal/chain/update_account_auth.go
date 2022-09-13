@@ -5,7 +5,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -17,7 +17,7 @@ func (UpdateAccountAuth) Type() protocol.TransactionType {
 	return protocol.TransactionTypeUpdateAccountAuth
 }
 
-func (UpdateAccountAuth) SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, checkAuthz bool) (fallback bool, err error) {
+func (UpdateAccountAuth) SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, md SignatureValidationMetadata) (fallback bool, err error) {
 	body, ok := transaction.Body.(*protocol.UpdateAccountAuth)
 	if !ok {
 		return false, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.UpdateAccountAuth), transaction.Body)
@@ -33,6 +33,10 @@ func (UpdateAccountAuth) SignerIsAuthorized(delegate AuthDelegate, batch *databa
 		op, ok := op.(*protocol.AddAccountAuthorityOperation)
 		if !ok {
 			continue
+		}
+
+		if op.Authority == nil {
+			return false, fmt.Errorf("invalid payload: authority is nil")
 		}
 
 		// If we are adding a book, that book is authorized to sign the
@@ -58,6 +62,10 @@ func (UpdateAccountAuth) TransactionIsReady(delegate AuthDelegate, batch *databa
 		op, ok := op.(*protocol.AddAccountAuthorityOperation)
 		if !ok {
 			continue
+		}
+
+		if op.Authority == nil {
+			return false, false, fmt.Errorf("invalid payload: authority is nil")
 		}
 
 		ok, err := delegate.AuthorityIsSatisfied(batch, transaction, status, op.Authority)
@@ -89,6 +97,9 @@ func (UpdateAccountAuth) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 	for _, op := range body.Operations {
 		switch op := op.(type) {
 		case *protocol.EnableAccountAuthOperation:
+			if op.Authority == nil {
+				return nil, errors.Format(errors.StatusBadRequest, "authority URL is missing")
+			}
 			entry, ok := auth.GetAuthority(op.Authority)
 			if !ok {
 				return nil, fmt.Errorf("%v is not an authority of %v", op.Authority, st.OriginUrl)
@@ -96,6 +107,9 @@ func (UpdateAccountAuth) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 			entry.Disabled = false
 
 		case *protocol.DisableAccountAuthOperation:
+			if op.Authority == nil {
+				return nil, errors.Format(errors.StatusBadRequest, "authority URL is missing")
+			}
 			entry, ok := auth.GetAuthority(op.Authority)
 			if !ok {
 				return nil, fmt.Errorf("%v is not an authority of %v", op.Authority, st.OriginUrl)
@@ -103,6 +117,10 @@ func (UpdateAccountAuth) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 			entry.Disabled = true
 
 		case *protocol.AddAccountAuthorityOperation:
+			if op.Authority == nil {
+				return nil, errors.Format(errors.StatusBadRequest, "authority URL is missing")
+			}
+
 			if account.GetUrl().LocalTo(op.Authority) {
 				// If the authority is local, make sure it exists
 				_, err := st.batch.Account(op.Authority).GetState()
@@ -122,6 +140,10 @@ func (UpdateAccountAuth) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 			}
 
 		case *protocol.RemoveAccountAuthorityOperation:
+			if op.Authority == nil {
+				return nil, errors.Format(errors.StatusBadRequest, "authority URL is missing")
+			}
+
 			if !auth.RemoveAuthority(op.Authority) {
 				// We could just ignore this case, but that is not a good user
 				// experience

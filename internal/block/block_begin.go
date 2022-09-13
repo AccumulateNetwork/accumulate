@@ -8,9 +8,6 @@ import (
 	"math/big"
 	"strings"
 
-	"github.com/AccumulateNetwork/jsonrpc2/v15"
-	jrpc "github.com/tendermint/tendermint/rpc/jsonrpc/types"
-	tm "github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/shared"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
@@ -39,24 +36,17 @@ func (x *Executor) BeginBlock(block *Block) error {
 		return err
 	}
 
-	// Only send anchors from the leader
-	if block.IsLeader {
-		errs := x.dispatcher.Send(context.Background())
-		x.Background(func() {
-			for err := range errs {
-				x.checkDispatchError(err, func(err error) {
-					switch err := err.(type) {
-					case *txnDispatchError:
-						x.logger.Error("Failed to dispatch transactions", "error", err.status.Error, "stack", err.status.Error.PrintFullCallstack(), "type", err.typ, "hash", logging.AsHex(err.status.TxID.Hash()).Slice(0, 4))
-					default:
-						x.logger.Error("Failed to dispatch transactions", "error", fmt.Sprintf("%+v\n", err))
-					}
-				})
+	errs := x.dispatcher.Send(context.Background())
+	x.Background(func() {
+		for err := range errs {
+			switch err := err.(type) {
+			case *txnDispatchError:
+				x.logger.Error("Failed to dispatch transactions", "error", err.status.Error, "stack", err.status.Error.PrintFullCallstack(), "type", err.typ, "hash", logging.AsHex(err.status.TxID.Hash()).Slice(0, 4))
+			default:
+				x.logger.Error("Failed to dispatch transactions", "error", fmt.Sprintf("%+v\n", err))
 			}
-		})
-	} else {
-		x.dispatcher.Reset()
-	}
+		}
+	})
 
 	// Load the ledger state
 	ledger := block.Batch.Account(x.Describe.NodeUrl(protocol.Ledger))
@@ -173,7 +163,7 @@ func (x *Executor) finalizeBlock(block *Block) error {
 	}
 
 	// Build receipts for synthetic transactions produced in the previous block
-	err = x.sendSyntheticTransactions(block.Batch)
+	err = x.sendSyntheticTransactions(block.Batch, block.IsLeader)
 	if err != nil {
 		return errors.Format(errors.StatusUnknownError, "build synthetic transaction receipts: %w", err)
 	}
@@ -192,7 +182,7 @@ func (x *Executor) finalizeBlock(block *Block) error {
 	}
 
 	// Send the block anchor
-	sequenceNumber := anchorLedger.MinorBlockSequenceNumber
+	sequenceNumber := anchorLedger.Partition(protocol.DnUrl()).Produced
 	x.logger.Debug("Anchor block", "module", "anchoring", "index", ledger.Index, "seq-num", sequenceNumber)
 
 	// Load the root chain
@@ -284,7 +274,7 @@ func (x *Executor) finalizeBlock(block *Block) error {
 
 	// If we're the DN, send synthetic transactions produced by the block we're
 	// anchoring, but send them after the anchor
-	err = x.sendSyntheticTransactionsForBlock(block.Batch, ledger.Index, nil)
+	err = x.sendSyntheticTransactionsForBlock(block.Batch, block.IsLeader, ledger.Index, nil)
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknownError, err)
 	}
@@ -292,7 +282,7 @@ func (x *Executor) finalizeBlock(block *Block) error {
 	return nil
 }
 
-func (x *Executor) sendSyntheticTransactions(batch *database.Batch) error {
+func (x *Executor) sendSyntheticTransactions(batch *database.Batch, isLeader bool) error {
 	// Check for received anchors
 	anchorLedger := batch.Account(x.Describe.AnchorPool())
 	anchorIndexLast, anchorIndexPrev, err := indexing.LoadLastTwoIndexEntries(anchorLedger.MainChain().Index())
@@ -344,12 +334,17 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch) error {
 		}
 
 		for _, receipt := range anchor.Receipts {
+			partition, ok := protocol.ParsePartitionUrl(receipt.Anchor.Source)
+			if !ok {
+				return errors.Format(errors.StatusBadRequest, "invalid source: %v is not a partition", receipt.Anchor.Source)
+			}
+
 			// Ignore receipts for other partitions
-			if !strings.EqualFold(receipt.PartitionID, x.Describe.PartitionId) {
+			if !strings.EqualFold(partition, x.Describe.PartitionId) {
 				continue
 			}
 
-			err = x.sendSyntheticTransactionsForBlock(batch, receipt.MinorBlockIndex, receipt.RootChainReceipt)
+			err = x.sendSyntheticTransactionsForBlock(batch, isLeader, receipt.Anchor.MinorBlockIndex, receipt.RootChainReceipt)
 			if err != nil {
 				return errors.Wrap(errors.StatusUnknownError, err)
 			}
@@ -359,7 +354,7 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch) error {
 	return nil
 }
 
-func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, blockIndex uint64, blockReceipt *managed.Receipt) error {
+func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, isLeader bool, blockIndex uint64, blockReceipt *managed.Receipt) error {
 	indexIndex, err := batch.SystemData(x.Describe.PartitionId).SyntheticIndexIndex(blockIndex).Get()
 	switch {
 	case err == nil:
@@ -460,16 +455,19 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, bloc
 			signatures = append(signatures, dnReceipt)
 		}
 
-		keySig, err := shared.SignTransaction(&x.Describe, x.Key, batch, txn, status.DestinationNetwork)
+		keySig, err := shared.SignTransaction(x.globals.Active.Network, x.Key, batch, txn, status.DestinationNetwork)
 		if err != nil {
 			return errors.Wrap(errors.StatusUnknownError, err)
 		}
 		signatures = append(signatures, keySig)
 
-		env := &protocol.Envelope{Transaction: []*protocol.Transaction{txn}, Signatures: signatures}
-		err = x.dispatcher.BroadcastTx(context.Background(), txn.Header.Principal, env)
-		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "send synthetic transaction %X: %w", hash[:4], err)
+		// Only send synthetic transactions from the leader
+		if isLeader {
+			env := &protocol.Envelope{Transaction: []*protocol.Transaction{txn}, Signatures: signatures}
+			err = x.dispatcher.BroadcastTx(context.Background(), txn.Header.Principal, env)
+			if err != nil {
+				return errors.Format(errors.StatusUnknownError, "send synthetic transaction %X: %w", hash[:4], err)
+			}
 		}
 	}
 
@@ -478,53 +476,18 @@ func (x *Executor) sendSyntheticTransactionsForBlock(batch *database.Batch, bloc
 
 func (x *Executor) sendBlockAnchor(batch *database.Batch, anchor protocol.AnchorBody, sequenceNumber uint64, destPart string) error {
 	destPartUrl := protocol.PartitionUrl(destPart)
-	env, err := shared.PrepareBlockAnchor(&x.Describe, x.Key, batch, anchor, sequenceNumber, destPartUrl)
+	env, err := shared.PrepareBlockAnchor(&x.Describe, x.globals.Active.Network, x.Key, batch, anchor, sequenceNumber, destPartUrl)
 	if err != nil {
 		return errors.Wrap(errors.StatusInternalError, err)
 	}
 
 	// Send
-	err = x.dispatcher.BroadcastTx(context.Background(), destPartUrl, env)
-	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
-	}
-
-	return nil
-}
-
-// checkDispatchError returns nil if the error can be ignored.
-func (x *Executor) checkDispatchError(err error, fn func(error)) {
-	if err == nil {
-		return
-	}
-
-	// TODO This may be unnecessary once this issue is fixed:
-	// https://github.com/tendermint/tendermint/issues/7185.
-
-	// Is the error "tx already exists in cache"?
-	if err.Error() == tm.ErrTxInCache.Error() {
-		return
-	}
-
-	// Or RPC error "tx already exists in cache"?
-	var rpcErr1 *jrpc.RPCError
-	if errors.As(err, &rpcErr1) && *rpcErr1 == *errTxInCache1 {
-		return
-	}
-
-	var rpcErr2 jsonrpc2.Error
-	if errors.As(err, &rpcErr2) && rpcErr2 == errTxInCache2 {
-		return
-	}
-
-	var errorsErr *errors.Error
-	if errors.As(err, &errorsErr) {
-		// This probably should not be necessary
-		if errorsErr.Code == errors.StatusDelivered {
-			return
+	if !x.IsFollower {
+		err = x.dispatcher.BroadcastTx(context.Background(), destPartUrl, env)
+		if err != nil {
+			return errors.Wrap(errors.StatusUnknownError, err)
 		}
 	}
 
-	// It's a real error
-	fn(err)
+	return nil
 }

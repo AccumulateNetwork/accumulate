@@ -7,7 +7,15 @@ fi
 # accumulate - Run CLI with default flags
 function accumulate {
     [ -n "${DEBUG}" ] && echo -e '\033[36m'"[debug] accumulate $@"'\033[0m' >&3
-    command accumulate --use-unencrypted-wallet --database="$HOME/.accumulate/validate" "$@"
+    command accumulate --use-unencrypted-wallet --database="$HOME/.accumulate/validate" --timeout 1m "$@"
+}
+
+function init-wallet {
+    if [ -n "${MNEMONIC}" ]; then
+        echo ${MNEMONIC} | accumulate wallet init import
+    else
+        accumulate wallet init script
+    fi
 }
 
 # section <name> - Print a section header

@@ -82,6 +82,10 @@ func (SyntheticDepositTokens) Validate(st *StateManager, tx *Delivery) (protocol
 		}
 	}
 
+	if body.Amount.Sign() < 0 {
+		return nil, fmt.Errorf("amount can't be a negative value")
+	}
+
 	if !account.CreditTokens(&body.Amount) {
 		return nil, fmt.Errorf("unable to add deposit balance to account")
 	}

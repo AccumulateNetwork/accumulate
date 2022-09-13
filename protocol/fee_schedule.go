@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"encoding"
+	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 )
@@ -9,9 +10,9 @@ import (
 // Fee is the unit cost of a transaction.
 type Fee uint64
 
-func (n Fee) AsUInt64() uint64 {
-	return uint64(n)
-}
+func (n Fee) AsUInt64() uint64            { return uint64(n) }
+func (n Fee) GetEnumValue() uint64        { return uint64(n) }
+func (n *Fee) SetEnumValue(v uint64) bool { *n = Fee(v); return true }
 
 const (
 	// FeeFailedMaximum $0.01
@@ -77,7 +78,7 @@ func dataCount(obj encoding.BinaryMarshaler) (int, int, error) {
 	return count, size, nil
 }
 
-func ComputeSignatureFee(sig Signature) (Fee, error) {
+func (s *FeeSchedule) ComputeSignatureFee(sig Signature) (Fee, error) {
 	// Check the transaction size
 	count, size, err := dataCount(sig)
 	if err != nil {
@@ -106,11 +107,8 @@ func ComputeSignatureFee(sig Signature) (Fee, error) {
 	return fee, nil
 }
 
-func ComputeTransactionFee(tx *Transaction) (Fee, error) {
+func (s *FeeSchedule) ComputeTransactionFee(tx *Transaction) (Fee, error) {
 	// Do not charge fees for the DN or BVNs
-	if IsDnUrl(tx.Header.Principal) {
-		return 0, nil
-	}
 	if _, ok := ParsePartitionUrl(tx.Header.Principal); ok {
 		return 0, nil
 	}
@@ -135,7 +133,27 @@ func ComputeTransactionFee(tx *Transaction) (Fee, error) {
 		fee = FeeCreateToken + FeeData*Fee(count-1)
 
 	case *CreateIdentity:
-		fee = FeeCreateIdentity + FeeData*Fee(count-1)
+		fee = FeeData * Fee(count-1)
+
+		// Only apply the sliding schedule if the schedule exists, the name is
+		// suffixed with .acme, and the prefix is not empty
+		if s == nil || body.Url == nil || !body.Url.IsRootIdentity() || !strings.HasSuffix(body.Url.Authority, TLD) {
+			fee += FeeCreateIdentity
+			break
+		}
+
+		name := strings.TrimSuffix(body.Url.Authority, TLD)
+		if len(name) == 0 {
+			fee += FeeCreateIdentity
+			break
+		}
+
+		i := len(name) - 1
+		if s != nil && i < len(s.CreateIdentitySliding) {
+			fee += s.CreateIdentitySliding[i]
+		} else {
+			fee += FeeCreateIdentity
+		}
 
 	case *CreateTokenAccount,
 		*CreateDataAccount:
@@ -190,9 +208,9 @@ func ComputeTransactionFee(tx *Transaction) (Fee, error) {
 	return fee, nil
 }
 
-func ComputeSyntheticRefund(txn *Transaction, synthCount int) (Fee, error) {
+func (s *FeeSchedule) ComputeSyntheticRefund(txn *Transaction, synthCount int) (Fee, error) {
 	// Calculate what was paid
-	paid, err := ComputeTransactionFee(txn)
+	paid, err := s.ComputeTransactionFee(txn)
 	if err != nil {
 		return 0, errors.Wrap(errors.StatusUnknownError, err)
 	}

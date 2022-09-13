@@ -23,7 +23,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/testing/e2e"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	randpkg "golang.org/x/exp/rand"
 )
@@ -383,8 +383,7 @@ func TestCreateLiteDataAccount(t *testing.T) {
 	require.Equal(t, liteDataAddress.String(), r.Url.String())
 	require.Equal(t, partialChainId, chainId)
 
-	firstEntryHash, err := protocol.ComputeFactomEntryHashForAccount(chainId, firstEntry.Data)
-	require.NoError(t, err)
+	firstEntryHash := firstEntry.Hash()
 
 	batch = n.db.Begin(false)
 	defer batch.Discard()
@@ -407,15 +406,11 @@ func TestCreateLiteDataAccount(t *testing.T) {
 	require.NoError(t, err)
 	entry, err := indexing.GetDataEntry(batch, txnHash)
 	require.NoError(t, err)
-	hashFromEntry, err := protocol.ComputeFactomEntryHashForAccount(chainId, entry.GetData())
-	require.NoError(t, err)
+	hashFromEntry := entry.Hash()
 	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(hashFromEntry), "Chain Entry.Hash does not match")
 	//sample verification for calculating the hash from lite data entry
-	id := protocol.ComputeLiteDataAccountId(entry)
-	newh, err := protocol.ComputeFactomEntryHashForAccount(id, entry.GetData())
-	require.NoError(t, err)
 	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(entryHash), "Chain GetHashes does not match")
-	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(newh), "Chain GetHashes does not match")
+	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(entry.Hash()), "Chain GetHashes does not match")
 
 }
 
@@ -1954,7 +1949,8 @@ func TestNetworkDefinition(t *testing.T) {
 
 	networkDefs := dn.exec.ActiveGlobals_TESTONLY().Network
 	require.NotEmpty(t, networkDefs.Partitions)
-	require.NotEmpty(t, networkDefs.Partitions[0].PartitionID)
-	require.NotEmpty(t, networkDefs.Partitions[0].ValidatorKeys)
-	require.NotEmpty(t, networkDefs.Partitions[0].ValidatorKeys[0])
+	require.NotEmpty(t, networkDefs.Partitions[0].ID)
+	require.NotEmpty(t, networkDefs.Validators)
+	require.NotEmpty(t, networkDefs.Validators[0].PublicKey)
+	require.NotEmpty(t, networkDefs.Validators[0].Partitions)
 }

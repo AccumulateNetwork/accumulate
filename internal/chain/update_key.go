@@ -19,8 +19,13 @@ func (UpdateKey) validate(st *StateManager, tx *Delivery) (*protocol.UpdateKey, 
 	if !ok {
 		return nil, nil, nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.UpdateKey), tx.Transaction.Body)
 	}
-	if len(body.NewKeyHash) != 32 {
-		return nil, nil, nil, errors.New(errors.StatusBadRequest, "key hash is not a valid length for a SHA-256 hash")
+	switch len(body.NewKeyHash) {
+	case 0:
+		return nil, nil, nil, errors.Format(errors.StatusBadRequest, "public key hash is missing")
+	case 32:
+		// Ok
+	default:
+		return nil, nil, nil, errors.Format(errors.StatusBadRequest, "public key hash length is invalid")
 	}
 
 	page, ok := st.Origin.(*protocol.KeyPage)
@@ -67,7 +72,6 @@ func (UpdateKey) Execute(st *StateManager, tx *Delivery) (protocol.TransactionRe
 	}
 
 	var initiator protocol.Signature
-outer:
 	for _, signer := range status.Signers {
 		sigs, err := database.GetSignaturesForSigner(txObj, signer)
 		if err != nil {
@@ -76,10 +80,13 @@ outer:
 
 		for _, sig := range sigs {
 			if protocol.SignatureDidInitiate(sig, tx.Transaction.Header.Initiator[:], &initiator) {
-				break outer
+				goto found_init
 			}
 		}
 	}
+	return nil, errors.Format(errors.StatusInternalError, "unable to locate initiator signature")
+
+found_init:
 	switch initiator := initiator.(type) {
 	case protocol.KeySignature:
 		err = updateKey(page, book,
@@ -95,7 +102,7 @@ outer:
 			return nil, fmt.Errorf("cannot UpdateKey with a multi-level delegated signature")
 		}
 	default:
-		return nil, fmt.Errorf("unable to resolve Signature")
+		return nil, errors.Format(errors.StatusInternalError, "%v does not support %v signatures", protocol.TransactionTypeUpdateKey, initiator.Type())
 
 	}
 	if err != nil {

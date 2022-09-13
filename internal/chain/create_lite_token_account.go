@@ -3,7 +3,7 @@ package chain
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -28,7 +28,7 @@ func (CreateLiteTokenAccount) validate(transaction *protocol.Transaction) (*url.
 	return tok, nil
 }
 
-func (CreateLiteTokenAccount) SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, checkAuthz bool) (fallback bool, err error) {
+func (CreateLiteTokenAccount) SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, md SignatureValidationMetadata) (fallback bool, err error) {
 	_, err = CreateLiteTokenAccount{}.validate(transaction)
 	if err != nil {
 		return false, errors.Wrap(errors.StatusUnknownError, err)

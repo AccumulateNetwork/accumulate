@@ -14,6 +14,14 @@ import (
 const window = uint64(1000) //                               Process this many BPT entries at a time
 const nLen = 32 + 32 + 8    //                               Each node is a key (32), hash (32), offset(8)
 
+// FirstPossibleBptKey is the first possible BPT key.
+var FirstPossibleBptKey = [32]byte{
+	255, 255, 255, 255, 255, 255, 255, 255,
+	255, 255, 255, 255, 255, 255, 255, 255,
+	255, 255, 255, 255, 255, 255, 255, 255,
+	255, 255, 255, 255, 255, 255, 255, 255,
+}
+
 // SaveSnapshot
 // Saves a snapshot of the state of the BVN/DVN.
 // 1) The first thing done is copy the entire BVN and persist it to disk
@@ -53,14 +61,7 @@ func (b *BPT) SaveSnapshot(file io.WriteSeeker, loadState func(key storage.Key, 
 		return e2
 	}
 
-	// Start is the first possible key in a BPT
-	place := [32]byte{
-		255, 255, 255, 255, 255, 255, 255, 255,
-		255, 255, 255, 255, 255, 255, 255, 255,
-		255, 255, 255, 255, 255, 255, 255, 255,
-		255, 255, 255, 255, 255, 255, 255, 255,
-	}
-
+	place := FirstPossibleBptKey
 	vOffset := uint64(0) //                                 Offset from the beginning of value section
 	NodeCnt := uint64(0) //                                 Recalculate number of nodes
 	for {                //
@@ -121,13 +122,25 @@ func (b *BPT) SaveSnapshot(file io.WriteSeeker, loadState func(key storage.Key, 
 	return nil
 }
 
-// ReadSnapshot
-//
+// LoadSnapshot restores a snapshot to the BPT
 func (b *BPT) LoadSnapshot(file ioutil2.SectionReader, storeState func(key storage.Key, hash [32]byte, reader ioutil2.SectionReader) error) error {
 	if b.MaxHeight != 0 {
 		return errors.New("a snapshot can only be read into a new BPT")
 	}
 
+	err := ReadSnapshot(file, func(key storage.Key, hash [32]byte, reader ioutil2.SectionReader) error {
+		b.Insert(key, hash)                  // Insert the key/hash into the BPT
+		return storeState(key, hash, reader) // Insert the value into the DB
+	})
+	if err != nil {
+		return err
+	}
+
+	return b.Update()
+}
+
+// ReadSnapshot reads a snapshot
+func ReadSnapshot(file ioutil2.SectionReader, storeState func(key storage.Key, hash [32]byte, reader ioutil2.SectionReader) error) error {
 	buff := make([]byte, window*(nLen))    //			          buff is a window's worth of key/hash/offset
 	vBuff := make([]byte, 1024*128)        //                    Big enough to load any value. 128k?
 	_, err := io.ReadFull(file, vBuff[:8]) //                    Read number of entries
@@ -169,7 +182,6 @@ func (b *BPT) LoadSnapshot(file ioutil2.SectionReader, storeState func(key stora
 			_, e1 := file.Seek(int64(fOff+off), 0)                               // Seek to the value
 			_, e2 := io.ReadFull(file, vBuff[:8])                                // Read length of value
 			vLen, _ := common.BytesFixedUint64(vBuff)                            // Convert bytes to uint64
-			b.Insert(key, hash)                                                  // Insert the key/hash into the BPT
 			section := io.NewSectionReader(file, int64(fOff+off+8), int64(vLen)) // Create a section reader
 			e3 := storeState(key, hash, section)                                 // Insert the value into the DB
 
@@ -183,5 +195,5 @@ func (b *BPT) LoadSnapshot(file ioutil2.SectionReader, storeState func(key stora
 			}
 		}
 	}
-	return b.Update()
+	return nil
 }

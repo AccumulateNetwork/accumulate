@@ -10,7 +10,7 @@ import (
 	"math/big"
 	"time"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
 // ErrInvalidFieldNumber is returned when an invalid field number is encountered.
@@ -74,6 +74,11 @@ func (w *Writer) writeUint(field uint, v uint64) {
 // writeRaw writes a byte slice.
 func (w *Writer) writeRaw(field uint, v []byte) {
 	if w.err != nil {
+		return
+	}
+
+	if len(v) > MaxValueSize {
+		w.didWrite(field, 0, errors.New("too large"), "failed to write field")
 		return
 	}
 

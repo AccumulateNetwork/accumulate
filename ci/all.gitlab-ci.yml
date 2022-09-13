@@ -37,15 +37,15 @@ validate simple:
     MNEMONIC: yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow
   script:
   - apt-get -y update && apt-get -y install jq xxd
-  - go run ./tools/test/devnet/ -X -v=1,-b=1,--reset
+  - go run ./tools/test/devnet/ -X -v=1,-b=1,--reset,--dn-stall-limit=0
 
-validate playbooks:
+.validate playbooks: # disabled
   stage: test
   extends: [ .rules all, .go ]
   needs: []
   script:
   - apt-get -y update && apt-get -y install jq xxd
-  - go run ./tools/test/devnet/ -X -v=1,-b=1,--reset play playbooks/validate/*.play
+  - go run ./tools/test/devnet/ -X -v=1,-b=1,--reset,--dn-stall-limit=0 play playbooks/validate/*.play
 
 validate docker:
   stage: test
@@ -64,7 +64,7 @@ validate docker:
   before_script:
   - apk add --no-cache docker-compose
   - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
-  - docker run --rm -v ${PWD}/nodes:/nodes ${VALIDATION_IMAGE} init devnet -w /nodes --docker --image ${VALIDATION_IMAGE} --compose -b 3 -v 3 -f 0
+  - docker run --rm -v ${PWD}/nodes:/nodes ${VALIDATION_IMAGE} init devnet -w /nodes --docker --image ${VALIDATION_IMAGE} --compose -b 3 -v 3 -f 0 --dn-stall-limit 0
   - cd nodes
   - docker-compose up tools
   - docker-compose up -d

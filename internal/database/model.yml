@@ -28,6 +28,11 @@
       type: url
       pointer: true
     attributes:
+    - name: Url
+      type: state
+      dataType: url
+      pointer: true
+      private: true
     - name: Main
       type: state
       dataType: protocol.Account
@@ -180,15 +185,4 @@
       dataType: uint
       parameters:
       - name: Block
-        type: uint
-
-    # Legacy - TODO Remove or update
-    - name: BlockChainUpdates
-      type: index
-      dataType: ChainUpdate
-      pointer: true
-      emptyIfMissing: true
-      collection: list
-      parameters:
-      - name: Index
         type: uint

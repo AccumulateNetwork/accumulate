@@ -8,7 +8,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/types"
@@ -22,6 +22,11 @@ type StateManager struct {
 }
 
 func LoadStateManager(net *config.Describe, globals *core.GlobalValues, batch *database.Batch, principal protocol.Account, transaction *protocol.Transaction, status *protocol.TransactionStatus, logger log.Logger) (*StateManager, error) {
+	if !transaction.Body.Type().IsUser() {
+		// Don't check the signer
+		return NewStateManager(net, globals, batch, principal, transaction, logger), nil
+	}
+
 	var signer protocol.Signer
 	err := batch.Account(status.Initiator).GetStateAs(&signer)
 	switch {
@@ -59,6 +64,9 @@ func NewStateManager(net *config.Describe, globals *core.GlobalValues, batch *da
 	m.logger.L = logger
 	return m
 }
+
+func (m *StateManager) GetBatch() *database.Batch { return m.batch }
+func (m *StateManager) GetHash() []byte           { return m.txHash[:] }
 
 // commit writes pending records to the database.
 func (m *StateManager) Commit() (*ProcessTransactionState, error) {
@@ -140,6 +148,9 @@ func (m *StateManager) SetAuth(account protocol.FullAccount, authorities []*url.
 	}
 
 	for _, authority := range authorities {
+		if authority == nil {
+			return errors.Format(errors.StatusBadRequest, "authority URL is nil")
+		}
 		err := m.AddAuthority(account, authority)
 		if err != nil {
 			return errors.Wrap(errors.StatusUnknownError, err)

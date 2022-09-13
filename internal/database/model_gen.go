@@ -11,7 +11,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
@@ -63,7 +63,7 @@ func (c *Batch) Account(url *url.URL) *Account {
 		v.store = c.store
 		v.key = record.Key{}.Append("Account", url)
 		v.parent = c
-		v.label = "account" + " " + url.String()
+		v.label = "account" + " " + url.RawString()
 		return v
 	})
 }
@@ -93,6 +93,10 @@ func (c *Batch) SystemData(partition string) *SystemData {
 }
 
 func (c *Batch) Resolve(key record.Key) (record.Record, record.Key, error) {
+	if len(key) == 0 {
+		return nil, nil, errors.New(errors.StatusInternalError, "bad key for batch")
+	}
+
 	switch key[0] {
 	case "Account":
 		if len(key) < 2 {
@@ -169,7 +173,7 @@ func (c *Batch) baseCommit() error {
 		commitField(&err, v)
 	}
 
-	return nil
+	return err
 }
 
 type Account struct {
@@ -179,6 +183,7 @@ type Account struct {
 	label  string
 	parent *Batch
 
+	url                    *record.Value[*url.URL]
 	main                   *record.Value[protocol.Account]
 	pending                *record.Set[*url.TxID]
 	syntheticForAnchor     map[accountSyntheticForAnchorKey]*record.Set[*url.TxID]
@@ -218,6 +223,12 @@ type accountAnchorChainKey struct {
 
 func keyForAccountAnchorChain(partition string) accountAnchorChainKey {
 	return accountAnchorChainKey{partition}
+}
+
+func (c *Account) getUrl() *record.Value[*url.URL] {
+	return getOrCreateField(&c.url, func() *record.Value[*url.URL] {
+		return record.NewValue(c.logger.L, c.store, c.key.Append("Url"), c.label+" "+"url", false, record.Wrapped(record.UrlWrapper))
+	})
 }
 
 func (c *Account) Main() *record.Value[protocol.Account] {
@@ -323,7 +334,13 @@ func (c *Account) Data() *AccountData {
 }
 
 func (c *Account) Resolve(key record.Key) (record.Record, record.Key, error) {
+	if len(key) == 0 {
+		return nil, nil, errors.New(errors.StatusInternalError, "bad key for account")
+	}
+
 	switch key[0] {
+	case "Url":
+		return c.getUrl(), key[1:], nil
 	case "Main":
 		return c.Main(), key[1:], nil
 	case "Pending":
@@ -388,6 +405,9 @@ func (c *Account) IsDirty() bool {
 		return false
 	}
 
+	if fieldIsDirty(c.url) {
+		return true
+	}
 	if fieldIsDirty(c.main) {
 		return true
 	}
@@ -449,6 +469,7 @@ func (c *Account) baseCommit() error {
 	}
 
 	var err error
+	commitField(&err, c.url)
 	commitField(&err, c.main)
 	commitField(&err, c.pending)
 	for _, v := range c.syntheticForAnchor {
@@ -471,7 +492,7 @@ func (c *Account) baseCommit() error {
 	commitField(&err, c.syntheticAnchors)
 	commitField(&err, c.data)
 
-	return nil
+	return err
 }
 
 type AccountAnchorChain struct {
@@ -498,6 +519,10 @@ func (c *AccountAnchorChain) BPT() *Chain2 {
 }
 
 func (c *AccountAnchorChain) Resolve(key record.Key) (record.Record, record.Key, error) {
+	if len(key) == 0 {
+		return nil, nil, errors.New(errors.StatusInternalError, "bad key for anchor chain")
+	}
+
 	switch key[0] {
 	case "Root":
 		return c.Root(), key[1:], nil
@@ -532,7 +557,7 @@ func (c *AccountAnchorChain) Commit() error {
 	commitField(&err, c.root)
 	commitField(&err, c.bpt)
 
-	return nil
+	return err
 }
 
 type AccountData struct {
@@ -567,6 +592,10 @@ func (c *AccountData) Transaction(entryHash [32]byte) *record.Value[[32]byte] {
 }
 
 func (c *AccountData) Resolve(key record.Key) (record.Record, record.Key, error) {
+	if len(key) == 0 {
+		return nil, nil, errors.New(errors.StatusInternalError, "bad key for data")
+	}
+
 	switch key[0] {
 	case "Entry":
 		return c.Entry(), key[1:], nil
@@ -613,7 +642,7 @@ func (c *AccountData) Commit() error {
 		commitField(&err, v)
 	}
 
-	return nil
+	return err
 }
 
 type Transaction struct {
@@ -658,7 +687,7 @@ func (c *Transaction) Produced() *record.Set[*url.TxID] {
 
 func (c *Transaction) getSignatures(signer *url.URL) *record.Value[*sigSetData] {
 	return getOrCreateMap(&c.signatures, keyForTransactionSignatures(signer), func() *record.Value[*sigSetData] {
-		return record.NewValue(c.logger.L, c.store, c.key.Append("Signatures", signer), c.label+" "+"signatures"+" "+signer.String(), true, record.Struct[sigSetData]())
+		return record.NewValue(c.logger.L, c.store, c.key.Append("Signatures", signer), c.label+" "+"signatures"+" "+signer.RawString(), true, record.Struct[sigSetData]())
 	})
 }
 
@@ -669,6 +698,10 @@ func (c *Transaction) Chains() *record.Set[*TransactionChainEntry] {
 }
 
 func (c *Transaction) Resolve(key record.Key) (record.Record, record.Key, error) {
+	if len(key) == 0 {
+		return nil, nil, errors.New(errors.StatusInternalError, "bad key for transaction")
+	}
+
 	switch key[0] {
 	case "Main":
 		return c.Main(), key[1:], nil
@@ -733,7 +766,7 @@ func (c *Transaction) Commit() error {
 	}
 	commitField(&err, c.chains)
 
-	return nil
+	return err
 }
 
 type SystemData struct {
@@ -744,7 +777,6 @@ type SystemData struct {
 	parent *Batch
 
 	syntheticIndexIndex map[systemDataSyntheticIndexIndexKey]*record.Value[uint64]
-	blockChainUpdates   map[systemDataBlockChainUpdatesKey]*record.List[*ChainUpdate]
 }
 
 type systemDataSyntheticIndexIndexKey struct {
@@ -755,27 +787,17 @@ func keyForSystemDataSyntheticIndexIndex(block uint64) systemDataSyntheticIndexI
 	return systemDataSyntheticIndexIndexKey{block}
 }
 
-type systemDataBlockChainUpdatesKey struct {
-	Index uint64
-}
-
-func keyForSystemDataBlockChainUpdates(index uint64) systemDataBlockChainUpdatesKey {
-	return systemDataBlockChainUpdatesKey{index}
-}
-
 func (c *SystemData) SyntheticIndexIndex(block uint64) *record.Value[uint64] {
 	return getOrCreateMap(&c.syntheticIndexIndex, keyForSystemDataSyntheticIndexIndex(block), func() *record.Value[uint64] {
 		return record.NewValue(c.logger.L, c.store, c.key.Append("SyntheticIndexIndex", block), c.label+" "+"synthetic index index"+" "+strconv.FormatUint(block, 10), false, record.Wrapped(record.UintWrapper))
 	})
 }
 
-func (c *SystemData) BlockChainUpdates(index uint64) *record.List[*ChainUpdate] {
-	return getOrCreateMap(&c.blockChainUpdates, keyForSystemDataBlockChainUpdates(index), func() *record.List[*ChainUpdate] {
-		return record.NewList(c.logger.L, c.store, c.key.Append("BlockChainUpdates", index), c.label+" "+"block chain updates"+" "+strconv.FormatUint(index, 10), record.Struct[ChainUpdate]())
-	})
-}
-
 func (c *SystemData) Resolve(key record.Key) (record.Record, record.Key, error) {
+	if len(key) == 0 {
+		return nil, nil, errors.New(errors.StatusInternalError, "bad key for system data")
+	}
+
 	switch key[0] {
 	case "SyntheticIndexIndex":
 		if len(key) < 2 {
@@ -786,16 +808,6 @@ func (c *SystemData) Resolve(key record.Key) (record.Record, record.Key, error) 
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for system data")
 		}
 		v := c.SyntheticIndexIndex(block)
-		return v, key[2:], nil
-	case "BlockChainUpdates":
-		if len(key) < 2 {
-			return nil, nil, errors.New(errors.StatusInternalError, "bad key for system data")
-		}
-		index, okIndex := key[1].(uint64)
-		if !okIndex {
-			return nil, nil, errors.New(errors.StatusInternalError, "bad key for system data")
-		}
-		v := c.BlockChainUpdates(index)
 		return v, key[2:], nil
 	default:
 		return nil, nil, errors.New(errors.StatusInternalError, "bad key for system data")
@@ -808,11 +820,6 @@ func (c *SystemData) IsDirty() bool {
 	}
 
 	for _, v := range c.syntheticIndexIndex {
-		if v.IsDirty() {
-			return true
-		}
-	}
-	for _, v := range c.blockChainUpdates {
 		if v.IsDirty() {
 			return true
 		}
@@ -830,11 +837,8 @@ func (c *SystemData) Commit() error {
 	for _, v := range c.syntheticIndexIndex {
 		commitField(&err, v)
 	}
-	for _, v := range c.blockChainUpdates {
-		commitField(&err, v)
-	}
 
-	return nil
+	return err
 }
 
 func getOrCreateField[T any](ptr **T, create func() *T) *T {

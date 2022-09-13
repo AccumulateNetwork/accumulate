@@ -5,7 +5,7 @@ import (
 	"reflect"
 
 	"github.com/go-playground/validator/v10"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 )
 
@@ -30,6 +30,8 @@ type KeyPageOperationType uint8
 type AccountAuthOperationType uint8
 
 type ErrorCode int
+
+type PartitionType int
 
 //go:generate go run ../tools/cmd/gen-types account_auth_operations.yml accounts.yml general.yml system.yml key_page_operations.yml query.yml signatures.yml synthetic_transactions.yml transaction.yml transaction_results.yml user_transactions.yml
 //go:generate go run ../tools/cmd/gen-enum --out enums_gen.go enums.yml errors.yml

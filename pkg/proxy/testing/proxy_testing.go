@@ -19,8 +19,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
-	"gitlab.com/accumulatenetwork/accumulate/internal/client"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
+	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/proxy"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -344,7 +344,7 @@ func ensurePartitions(networkDefinition *protocol.NetworkDefinition, describe *c
 	}
 	for _, p := range networkDefinition.Partitions {
 		for i, v := range parts {
-			if v == p.PartitionID {
+			if v == p.ID {
 				parts = remove(parts, i)
 				break
 			}

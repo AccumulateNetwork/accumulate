@@ -12,7 +12,7 @@ import (
 	. "gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"golang.org/x/exp/rand"
 )
@@ -71,7 +71,7 @@ func TestUpdateKeyPage_Priority(t *testing.T) {
 			var signer protocol.Signer
 			require.NoError(t, batch.Account(env.Signatures[0].GetSigner()).GetStateAs(&signer))
 
-			_, err := UpdateKeyPage{}.SignerIsAuthorized(nil, batch, env.Transaction[0], signer, true)
+			_, err := UpdateKeyPage{}.SignerIsAuthorized(nil, batch, env.Transaction[0], signer, SignatureValidationMetadata{Location: bookUrl})
 			if idx <= 1 {
 				require.NoError(t, err)
 			} else {

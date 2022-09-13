@@ -11,7 +11,7 @@ if which go > /dev/null || ! which accumulate > /dev/null ; then
     go install ./cmd/accumulate
     export PATH="${PATH}:$(go env GOPATH)/bin"
 fi
-[ -z "${MNEMONIC}" ] && die "mnemonic not set" || echo ${MNEMONIC} | accumulate wallet init import
+init-wallet
 echo
 
 section "Generate a Lite Token Account"
@@ -32,7 +32,7 @@ done
 accumulate account get ${LITE_ACME} 1> /dev/null && success || die "Cannot find ${LITE_ACME}"
 
 section "Add credits to lite account"
-TXID=$(cli-tx credits ${LITE_ACME} ${LITE_ID} 2700)
+TXID=$(cli-tx credits ${LITE_ACME} ${LITE_ID} 1000000)
 wait-for-tx $TXID
 BALANCE=$(accumulate -j account get ${LITE_ID} | jq -r .data.creditBalance)
 [ "$BALANCE" -ge 2700 ] || die "${LITE_ID} should have at least 2700 credits but only has ${BALANCE}"
@@ -133,7 +133,7 @@ target=acc://test.acme/book
 if [ "$target" = "$delegate" ]; then
 success
   else
-  die `want acc://test.acme/book got ${delegate}`
+  die "want acc://test.acme/book got ${delegate}"
 fi
 
 section "Set KeyBook2 as authority for adi token account"
@@ -141,28 +141,28 @@ keybook2=acc://test.acme/book2
 tokenTxHash=$(cli-tx account create token test.acme test-1-0 test.acme/acmetokens acc://ACME --authority acc://test.acme/book2)
 wait-for-tx $tokenTxHash
 wait-for cli-tx-sig tx sign  test.acme/book2 test-2-0 $tokenTxHash
-tokenAuthority=$(accumulate get test.acme/acmetokens -j | jq -re .data.keyBook)
+tokenAuthority=$(accumulate get test.acme/acmetokens -j | jq -re '.data.authorities[0].url')
 if [ "$keybook2" = "$tokenAuthority" ]; then
 success
 else
-die `want $keybook2 got $tokenAuthority`
+die "want $keybook2 got $tokenAuthority"
 fi
 
 section "Burn Tokens for adi token account"
-wait-for cli-tx tx create ${LITE_ACME} test.acme/acmetokens 10
-wait-for cli-tx token burn acc://test.acme/acmetokens test-2-0 5
+wait-for cli-tx tx create ${LITE_ACME} test.acme/acmetokens 0.01
+wait-for cli-tx token burn acc://test.acme/acmetokens test-2-0 0.005
 BALANCE1=$(accumulate account get acc://test.acme/acmetokens -j | jq -re .data.balance)
-[ "$BALANCE1" -eq 500000000 ] && success || die "test.acme/acmetokens should have 5 tokens but has $(expr ${BALANCE1} / 100000000)"
+[ "$BALANCE1" -eq 500000 ] && success || die "test.acme/acmetokens should have 0.005 tokens but has ${BALANCE1}e-8"
 
 section "Set KeyBook2 as authority for adi data account"
 dataTxHash=$(cli-tx account create data test.acme test-1-0 test.acme/testdata1 --authority acc://test.acme/book2)
 wait-for-tx $dataTxHash
 wait-for cli-tx-sig tx sign  test.acme/book2 test-2-0 $dataTxHash
-dataAuthority=$(accumulate account get test.acme/testdata1 -j | jq -re .data.keyBook)
+dataAuthority=$(accumulate account get test.acme/testdata1 -j | jq -re '.data.authorities[0].url')
 if [ "$dataAuthority" = "$keybook2" ]; then
 success
 else
-die `want $keybook2 got $dataAuthority`
+die "want $keybook2 got $dataAuthority"
 fi
 
 section "Set threshold to 2 of 2"
@@ -241,7 +241,7 @@ BEFORE=$(accumulate -j account get ${LITE_ACME} | jq -r .data.balance)
 wait-for api-tx '{"jsonrpc": "2.0", "id": 4, "method": "faucet", "params": {"url": "'${LITE_ACME}'"}}'
 AFTER=$(accumulate -j account get ${LITE_ACME} | jq -r .data.balance)
 DIFF=$(expr $AFTER - $BEFORE)
-[ $DIFF -eq 200000000000000 ] && success || die "Faucet did not work, want +200000000000000, got ${DIFF}"
+[ $DIFF -eq 1000000000 ] && success || die "Faucet did not work, want +1000000000, got ${DIFF}"
 
 section "Parse acme faucet TXNs (API v2, AC-603)"
 api-v2 '{ "jsonrpc": "2.0", "id": 0, "method": "query-tx-history", "params": { "url": "7117c50f04f1254d56b704dc05298912deeb25dbc1d26ef6/ACME", "count": 10 } }' | jq -r '.result.items | map(.type)[]' | grep -q acmeFaucet

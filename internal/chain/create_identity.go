@@ -3,7 +3,7 @@ package chain
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -14,7 +14,7 @@ var _ PrincipalValidator = (*CreateIdentity)(nil)
 
 func (CreateIdentity) Type() protocol.TransactionType { return protocol.TransactionTypeCreateIdentity }
 
-func (CreateIdentity) SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, checkAuthz bool) (fallback bool, err error) {
+func (CreateIdentity) SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, md SignatureValidationMetadata) (fallback bool, err error) {
 	body, ok := transaction.Body.(*protocol.CreateIdentity)
 	if !ok {
 		return false, errors.Format(errors.StatusInternalError, "invalid payload: want %T, got %T", new(protocol.CreateIdentity), transaction.Body)
@@ -26,7 +26,7 @@ func (CreateIdentity) SignerIsAuthorized(delegate AuthDelegate, batch *database.
 	}
 
 	// Check additional authorities
-	return additionalAuthorities(body.Authorities).SignerIsAuthorized(delegate, batch, transaction, signer, checkAuthz)
+	return additionalAuthorities(body.Authorities).SignerIsAuthorized(delegate, batch, transaction, signer, md)
 }
 
 func (CreateIdentity) TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (ready, fallback bool, err error) {
@@ -63,6 +63,16 @@ func (CreateIdentity) Validate(st *StateManager, tx *Delivery) (protocol.Transac
 	body, ok := tx.Transaction.Body.(*protocol.CreateIdentity)
 	if !ok {
 		return nil, errors.Format(errors.StatusInternalError, "invalid payload: want %T, got %T", new(protocol.CreateIdentity), tx.Transaction.Body)
+	}
+
+	if body.Url == nil {
+		return nil, errors.Format(errors.StatusBadRequest, "account URL is missing")
+	}
+
+	for _, u := range body.Authorities {
+		if u == nil {
+			return nil, errors.Format(errors.StatusBadRequest, "authority URL is nil")
+		}
 	}
 
 	// TODO Require the principal to be the ADI when creating a root identity?

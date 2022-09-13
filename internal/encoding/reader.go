@@ -10,10 +10,12 @@ import (
 	"math/big"
 	"time"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
 var ErrFieldsOutOfOrder = errors.New("fields are out of order")
+
+const MaxValueSize = 1 << 20
 
 type bytesReader interface {
 	io.Reader
@@ -70,13 +72,22 @@ func (r *Reader) readUint(field uint) (uint64, bool) {
 	return v, err == nil
 }
 
-func (r *Reader) readRaw(field uint, n int) ([]byte, bool) {
+func (r *Reader) readRaw(field uint, n uint64) ([]byte, bool) {
 	if r.err != nil {
 		return nil, false
 	}
 
 	if n == 0 {
 		return nil, true
+	}
+
+	if rl, ok := r.r.(interface{ Len() int }); ok && uint64(rl.Len()) < n {
+		r.didRead(field, io.EOF, "failed to read field")
+	}
+
+	if n >= MaxValueSize {
+		r.didRead(field, fmt.Errorf("too big"), "failed to read field")
+		return nil, false
 	}
 
 	v := make([]byte, n)
@@ -268,7 +279,7 @@ func (r *Reader) ReadBytes(n uint) ([]byte, bool) {
 	if !ok {
 		return nil, false
 	}
-	return r.readRaw(n, int(l))
+	return r.readRaw(n, l)
 }
 
 // ReadString reads the length of the value as a varint-encoded unsigned integer
@@ -278,7 +289,7 @@ func (r *Reader) ReadString(n uint) (string, bool) {
 		return "", false
 	}
 	l, _ := r.readUint(n)
-	v, ok := r.readRaw(n, int(l))
+	v, ok := r.readRaw(n, l)
 	if !ok {
 		return "", false
 	}
@@ -305,7 +316,7 @@ func (r *Reader) ReadBigInt(n uint) (*big.Int, bool) {
 		return nil, false
 	}
 	l, _ := r.readUint(n)
-	v, ok := r.readRaw(n, int(l))
+	v, ok := r.readRaw(n, l)
 	if !ok {
 		return nil, false
 	}

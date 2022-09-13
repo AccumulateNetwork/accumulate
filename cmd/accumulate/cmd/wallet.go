@@ -37,6 +37,9 @@ var walletInitCmd = &cobra.Command{
 		case "restore":
 			err := ImportAccounts(args[1])
 			printOutput(cmd, "", err)
+		case "script":
+			err := InitDBScript()
+			printOutput(cmd, "", err)
 		default:
 		}
 	},
@@ -173,6 +176,29 @@ func InitDBCreate(memDb bool) error {
 	}
 	if mnemonicString != mnemonicConfirm {
 		return fmt.Errorf("mnemonic doesn't match.")
+	}
+	mnemonic := strings.Split(mnemonicString, " ")
+	_, err = walletd.ImportMnemonic(mnemonic)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// InitDBScript makes it easy to initialize the wallet for validation tests
+func InitDBScript() error {
+	root, _ := walletd.GetWallet().Get(walletd.BucketMnemonic, []byte("seed"))
+	if len(root) != 0 {
+		return nil // mnemonic seed phrase already exists within wallet
+	}
+
+	entropy, err := bip39.NewEntropy(int(walletd.Entropy))
+	if err != nil {
+		return err
+	}
+	mnemonicString, err := bip39.NewMnemonic(entropy)
+	if err != nil {
+		return err
 	}
 	mnemonic := strings.Split(mnemonicString, " ")
 	_, err = walletd.ImportMnemonic(mnemonic)

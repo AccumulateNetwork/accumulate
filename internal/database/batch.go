@@ -5,16 +5,23 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
+type Viewer interface {
+	View(func(batch *Batch) error) error
+}
+
+type Updater interface {
+	Viewer
+	Update(func(batch *Batch) error) error
+}
+
 // A Beginner can be a Database or a Batch
 type Beginner interface {
+	Updater
 	Begin(bool) *Batch
-	Update(func(*Batch) error) error
-	View(func(*Batch) error) error
 }
 
 var _ Beginner = (*Database)(nil)
@@ -147,16 +154,16 @@ func (b *Batch) getAccountUrl(key record.Key) (*url.URL, error) {
 	v, err := record.NewValue(
 		b.logger.L,
 		b.store,
-		// This must match the key used for the account's main state
-		key.Append("Main"),
-		"account %[1]v",
+		// This must match the key used for the account's Url state
+		key.Append("Url"),
+		fmt.Sprintf("account %v URL", key),
 		false,
-		record.Union(protocol.UnmarshalAccount),
+		record.Wrapped(record.UrlWrapper),
 	).Get()
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
-	return v.GetUrl(), nil
+	return v, nil
 }
 
 // AccountByID returns an Account for the given ID.

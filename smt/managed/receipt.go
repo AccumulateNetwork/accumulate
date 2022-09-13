@@ -223,15 +223,15 @@ func (r *Receipt) BuildReceiptWith(getIntermediate GetIntermediateFunc, hashFunc
 			continue
 		}
 		if intermediateHash == nil { //   If no computations have been started,
-			intermediateHash = v.Copy() //   just move the value from pending over
-			if height-1 == int64(i) {   // If height is just above entry in pending
+			intermediateHash = Hash(v).Copy() //   just move the value from pending over
+			if height-1 == int64(i) {         // If height is just above entry in pending
 				stay = true //                consider processing to continue
 			}
 			continue
 		}
-		lastIH = intermediateHash.Copy()                         // compute a new intermediate hash
-		intermediateHash = v.Combine(hashFunc, intermediateHash) // Combine Pending with intermediate
-		if int64(i) < height-1 {                                 // If not to the proof height, skip
+		lastIH = intermediateHash.Copy()                               // compute a new intermediate hash
+		intermediateHash = Hash(v).Combine(hashFunc, intermediateHash) // Combine Pending with intermediate
+		if int64(i) < height-1 {                                       // If not to the proof height, skip
 			continue //                                                                 adding to the receipt
 		}
 		if stay { //                                                     If in the same column

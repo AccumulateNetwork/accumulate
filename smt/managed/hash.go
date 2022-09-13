@@ -73,7 +73,15 @@ func (h *Hash) UnmarhsalBinary(b []byte) error {
 	return err
 }
 
-type SparseHashList []Hash
+type SparseHashList [][]byte
+
+func (l SparseHashList) Copy() SparseHashList {
+	m := make(SparseHashList, len(l))
+	for i, v := range l {
+		m[i] = Hash(v).Copy()
+	}
+	return m
+}
 
 func (l SparseHashList) BinarySize(height int64) int {
 	var n int

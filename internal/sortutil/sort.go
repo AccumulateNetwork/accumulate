@@ -1,6 +1,8 @@
 package sortutil
 
-import "sort"
+import (
+	"sort"
+)
 
 // Search uses a binary search to find and return the smallest index i in [0,
 // len(l)) at which cmp(l[i]) ≥ 0, assuming that on the range [0, len(l)),
@@ -42,4 +44,10 @@ func BinaryInsert[T any](l *[]T, cmp func(entry T) int) (entry *T, added bool) {
 	copy((*l)[i+1:], (*l)[i:])
 	(*l)[i] = zero
 	return &(*l)[i], true
+}
+
+// RemoveAt removes the specified element.
+func RemoveAt[T any](l *[]T, i int) {
+	copy((*l)[i:], (*l)[i+1:])
+	*l = (*l)[:len(*l)-1]
 }

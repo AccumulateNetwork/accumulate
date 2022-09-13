@@ -2,14 +2,15 @@ package block
 
 import (
 	"crypto/ed25519"
-	"io"
 
+	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
@@ -39,6 +40,7 @@ type ExecutorOptions struct {
 	EventBus            *events.Bus                        //
 	MajorBlockScheduler blockscheduler.MajorBlockScheduler //
 	Background          func(func())                       // Background task launcher
+	IsFollower          bool                               //
 
 	isGenesis bool
 
@@ -102,8 +104,8 @@ func NewNodeExecutor(opts ExecutorOptions, db database.Beginner) (*Executor, err
 
 // NewGenesisExecutor creates a transaction executor that can be used to set up
 // the genesis state.
-func NewGenesisExecutor(db *database.Database, logger log.Logger, network *config.Describe, router routing.Router) (*Executor, error) {
-	return newExecutor(
+func NewGenesisExecutor(db *database.Database, logger log.Logger, network *config.Describe, globals *core.GlobalValues, router routing.Router) (*Executor, error) {
+	exec, err := newExecutor(
 		ExecutorOptions{
 			Describe:  *network,
 			Logger:    logger,
@@ -113,6 +115,13 @@ func NewGenesisExecutor(db *database.Database, logger log.Logger, network *confi
 		db,
 		chain.SystemWriteData{},
 	)
+	if err != nil {
+		return nil, err
+	}
+	exec.globals = new(Globals)
+	exec.globals.Pending = *globals
+	exec.globals.Active = *globals
+	return exec, nil
 }
 
 func newExecutor(opts ExecutorOptions, db database.Beginner, executors ...chain.TransactionExecutor) (*Executor, error) {
@@ -228,13 +237,13 @@ func (m *Executor) LoadStateRoot(batch *database.Batch) ([]byte, error) {
 	}
 }
 
-func (m *Executor) RestoreSnapshot(batch *database.Batch, file ioutil2.SectionReader) error {
-	err := batch.RestoreSnapshot(file, &m.Describe)
+func (m *Executor) RestoreSnapshot(db database.Beginner, file ioutil2.SectionReader) error {
+	err := snapshot.FullRestore(db, file, m.logger, &m.Describe)
 	if err != nil {
 		return errors.Format(errors.StatusUnknownError, "load state: %w", err)
 	}
 
-	err = m.loadGlobals(batch.View)
+	err = m.loadGlobals(db.View)
 	if err != nil {
 		return errors.Format(errors.StatusInternalError, "failed to load globals: %w", err)
 	}
@@ -242,6 +251,37 @@ func (m *Executor) RestoreSnapshot(batch *database.Batch, file ioutil2.SectionRe
 	return nil
 }
 
-func (m *Executor) SaveSnapshot(batch *database.Batch, file io.WriteSeeker) error {
-	return batch.SaveSnapshot(file, &m.Describe)
+func (x *Executor) InitChainValidators(initVal []abci.ValidatorUpdate) (additional [][]byte, err error) {
+	// Verify the initial keys are ED25519 and build a map
+	initValMap := map[[32]byte]bool{}
+	for _, val := range initVal {
+		key := val.PubKey.GetEd25519()
+		if key == nil {
+			return nil, errors.Format(errors.StatusBadRequest, "validator key type %T is not supported", val.PubKey.Sum)
+		}
+		if len(key) != ed25519.PublicKeySize {
+			return nil, errors.Format(errors.StatusBadRequest, "invalid ED25519 key: want length %d, got %d", ed25519.PublicKeySize, len(key))
+		}
+		initValMap[*(*[32]byte)(key)] = true
+	}
+
+	// Capture any validators missing from the initial set
+	for _, val := range x.globals.Active.Network.Validators {
+		if !val.IsActiveOn(x.Describe.PartitionId) {
+			continue
+		}
+
+		if initValMap[*(*[32]byte)(val.PublicKey)] {
+			delete(initValMap, *(*[32]byte)(val.PublicKey))
+		} else {
+			additional = append(additional, val.PublicKey)
+		}
+	}
+
+	// Verify no additional validators were introduced
+	if len(initValMap) > 0 {
+		return nil, errors.Format(errors.StatusBadRequest, "InitChain request includes %d validator(s) not present in genesis", len(initValMap))
+	}
+
+	return additional, nil
 }

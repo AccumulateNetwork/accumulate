@@ -15,9 +15,7 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"gitlab.com/accumulatenetwork/accumulate/internal/web"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -124,6 +122,10 @@ func (m *JrpcMethods) jrpc2http(jrpc jsonrpc2.MethodFunc) http.HandlerFunc {
 }
 
 func (m *JrpcMethods) Status(ctx context.Context, _ json.RawMessage) interface{} {
+	if m.ConnectionManager == nil {
+		return internalError(errors.Format(errors.StatusInternalError, "missing connection manager"))
+	}
+
 	conn, err := m.ConnectionManager.SelectConnection(m.Options.Describe.PartitionId, true)
 	if err != nil {
 		return internalError(err)
@@ -190,13 +192,11 @@ func (m *JrpcMethods) Describe(_ context.Context, params json.RawMessage) interf
 	res.NetworkType = m.Options.Describe.NetworkType
 
 	// Load network variable values
-	err := res.Values.Load(m.Options.Describe.PartitionUrl(), func(account *url.URL, target interface{}) error {
-		return m.Database.View(func(batch *database.Batch) error {
-			return batch.Account(account).GetStateAs(target)
-		})
-	})
+	v, err := m.loadGlobals()
 	if err != nil {
 		res.Error = errors.Wrap(errors.StatusUnknownError, err).(*errors.Error)
+	} else {
+		res.Values = *v
 	}
 
 	return res

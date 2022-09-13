@@ -21,7 +21,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
-	"gitlab.com/accumulatenetwork/accumulate/internal/client"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
@@ -31,7 +30,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/sortutil"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"golang.org/x/sync/errgroup"
 )
@@ -43,6 +43,7 @@ type SimulatorOptions struct {
 	LogLevels       string
 	OpenDB          func(partition string, nodeIndex int, logger log.Logger) *database.Database
 	FactomAddresses func() (io.Reader, error)
+	Snapshots       []func() (ioutil2.SectionReader, error)
 }
 
 type Simulator struct {
@@ -329,7 +330,12 @@ func (s *Simulator) RunAndReset(fn func()) {
 }
 
 func (s *Simulator) InitFromGenesis() {
-	s.InitFromGenesisWith(nil)
+	// Disable the sliding fee schedule
+	values := new(core.GlobalValues)
+	values.Globals = new(protocol.NetworkGlobals)
+	values.Globals.FeeSchedule = new(protocol.FeeSchedule)
+
+	s.InitFromGenesisWith(values)
 }
 
 func (s *Simulator) InitFromGenesisWith(values *core.GlobalValues) {
@@ -338,7 +344,14 @@ func (s *Simulator) InitFromGenesisWith(values *core.GlobalValues) {
 	if values == nil {
 		values = new(core.GlobalValues)
 	}
-	genDocs, err := accumulated.BuildGenesisDocs(s.netInit, values, GenesisTime, s.Logger, s.opts.FactomAddresses)
+	if values.Globals == nil {
+		values.Globals = new(protocol.NetworkGlobals)
+	}
+
+	// The simulator only runs one DNN so set the threshold low
+	values.Globals.ValidatorAcceptThreshold.Set(1, 1000)
+
+	genDocs, err := accumulated.BuildGenesisDocs(s.netInit, values, GenesisTime, s.Logger, s.opts.FactomAddresses, s.opts.Snapshots)
 	require.NoError(s, err)
 
 	// Execute bootstrap after the entire network is known

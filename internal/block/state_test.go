@@ -9,8 +9,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -39,7 +40,7 @@ func TestStateSaveAndRestore(t *testing.T) {
 		defer batch.Discard()
 		f, err := os.Create(filename(partition.Id))
 		require.NoError(t, err)
-		require.NoError(t, x.Executor.SaveSnapshot(batch, f))
+		require.NoError(t, snapshot.FullCollect(batch, f, &x.Executor.Describe))
 		require.NoError(t, f.Close())
 	}
 
@@ -77,7 +78,7 @@ func SetupIdentity(sim *simulator.Simulator, name *url.URL, key []byte, timestam
 	)...)
 
 	// Add credits to the lite account
-	const liteCreditAmount = 1e3
+	const liteCreditAmount = 1 * AcmePrecision
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
 		acctesting.NewTransaction().
 			WithPrincipal(liteUrl).
@@ -85,7 +86,7 @@ func SetupIdentity(sim *simulator.Simulator, name *url.URL, key []byte, timestam
 			WithTimestampVar(timestamp).
 			WithBody(&AddCredits{
 				Recipient: liteUrl,
-				Amount:    *big.NewInt(AcmePrecision * liteCreditAmount),
+				Amount:    *big.NewInt(liteCreditAmount),
 				Oracle:    InitialAcmeOracleValue,
 			}).
 			Initiate(SignatureTypeED25519, liteKey).
@@ -108,7 +109,7 @@ func SetupIdentity(sim *simulator.Simulator, name *url.URL, key []byte, timestam
 	)...)
 
 	// Add credits to the key page
-	const tokenAccountAmount = 1e5
+	const tokenAccountAmount = 5 * AcmePrecision
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
 		acctesting.NewTransaction().
 			WithPrincipal(liteUrl).
@@ -116,7 +117,7 @@ func SetupIdentity(sim *simulator.Simulator, name *url.URL, key []byte, timestam
 			WithTimestampVar(timestamp).
 			WithBody(&AddCredits{
 				Recipient: name.JoinPath("book", "1"),
-				Amount:    *big.NewInt(AcmePrecision * (AcmeFaucetAmount - liteCreditAmount - tokenAccountAmount)),
+				Amount:    *big.NewInt(AcmePrecision*AcmeFaucetAmount - liteCreditAmount - tokenAccountAmount),
 				Oracle:    InitialAcmeOracleValue,
 			}).
 			Initiate(SignatureTypeED25519, liteKey).
@@ -145,7 +146,7 @@ func SetupIdentity(sim *simulator.Simulator, name *url.URL, key []byte, timestam
 			WithTimestampVar(timestamp).
 			WithBody(&SendTokens{
 				To: []*TokenRecipient{
-					{Url: name.JoinPath("tokens"), Amount: *big.NewInt(tokenAccountAmount * AcmePrecision)},
+					{Url: name.JoinPath("tokens"), Amount: *big.NewInt(tokenAccountAmount)},
 				},
 			}).
 			Initiate(SignatureTypeED25519, liteKey).

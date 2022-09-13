@@ -19,7 +19,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	errors2 "gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -274,8 +274,9 @@ type TxResponse struct {
 
 type TxnQuery struct {
 	QueryOptions
-	Txid []byte        `json:"txid,omitempty" form:"txid" query:"txid" validate:"required"`
-	Wait time.Duration `json:"wait,omitempty" form:"wait" query:"wait"`
+	Txid    []byte        `json:"txid,omitempty" form:"txid" query:"txid"`
+	TxIdUrl *url.TxID     `json:"txIdUrl,omitempty" form:"txIdUrl" query:"txIdUrl"`
+	Wait    time.Duration `json:"wait,omitempty" form:"wait" query:"wait"`
 	// IgnorePending tells QueryTx to ignore pending transactions.
 	IgnorePending bool `json:"ignorePending,omitempty" form:"ignorePending" query:"ignorePending"`
 }
@@ -581,19 +582,15 @@ func (v *DataEntrySetQuery) MarshalJSON() ([]byte, error) {
 func (v *DescriptionResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
 		PartitionId   string             `json:"partitionId,omitempty"`
-		SubnetId      string             `json:"subnetId,omitempty"`
 		NetworkType   config.NetworkType `json:"networkType,omitempty"`
 		Network       config.Network     `json:"network,omitempty"`
-		Subnet        config.Network     `json:"subnet,omitempty"`
 		NetworkAnchor string             `json:"networkAnchor,omitempty"`
 		Values        core.GlobalValues  `json:"values,omitempty"`
 		Error         *errors2.Error     `json:"error,omitempty"`
 	}{}
 	u.PartitionId = v.PartitionId
-	u.SubnetId = v.PartitionId
 	u.NetworkType = v.NetworkType
 	u.Network = v.Network
-	u.Subnet = v.Network
 	u.NetworkAnchor = encoding.ChainToJSON(v.NetworkAnchor)
 	u.Values = v.Values
 	u.Error = v.Error
@@ -993,6 +990,7 @@ func (v *TxnQuery) MarshalJSON() ([]byte, error) {
 		Scratch       bool        `json:"scratch,omitempty"`
 		Prove         bool        `json:"prove,omitempty"`
 		Txid          *string     `json:"txid,omitempty"`
+		TxIdUrl       *url.TxID   `json:"txIdUrl,omitempty"`
 		Wait          interface{} `json:"wait,omitempty"`
 		IgnorePending bool        `json:"ignorePending,omitempty"`
 	}{}
@@ -1002,6 +1000,7 @@ func (v *TxnQuery) MarshalJSON() ([]byte, error) {
 	u.Scratch = v.QueryOptions.Scratch
 	u.Prove = v.QueryOptions.Prove
 	u.Txid = encoding.BytesToJSON(v.Txid)
+	u.TxIdUrl = v.TxIdUrl
 	u.Wait = encoding.DurationToJSON(v.Wait)
 	u.IgnorePending = v.IgnorePending
 	return json.Marshal(&u)
@@ -1181,36 +1180,24 @@ func (v *DataEntrySetQuery) UnmarshalJSON(data []byte) error {
 func (v *DescriptionResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
 		PartitionId   string             `json:"partitionId,omitempty"`
-		SubnetId      string             `json:"subnetId,omitempty"`
 		NetworkType   config.NetworkType `json:"networkType,omitempty"`
 		Network       config.Network     `json:"network,omitempty"`
-		Subnet        config.Network     `json:"subnet,omitempty"`
 		NetworkAnchor string             `json:"networkAnchor,omitempty"`
 		Values        core.GlobalValues  `json:"values,omitempty"`
 		Error         *errors2.Error     `json:"error,omitempty"`
 	}{}
 	u.PartitionId = v.PartitionId
-	u.SubnetId = v.PartitionId
 	u.NetworkType = v.NetworkType
 	u.Network = v.Network
-	u.Subnet = v.Network
 	u.NetworkAnchor = encoding.ChainToJSON(v.NetworkAnchor)
 	u.Values = v.Values
 	u.Error = v.Error
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	if !(u.PartitionId == "") {
-		v.PartitionId = u.PartitionId
-	} else {
-		v.PartitionId = u.SubnetId
-	}
+	v.PartitionId = u.PartitionId
 	v.NetworkType = u.NetworkType
-	if !(u.Network.Equal(&config.Network{})) {
-		v.Network = u.Network
-	} else {
-		v.Network = u.Subnet
-	}
+	v.Network = u.Network
 	if x, err := encoding.ChainFromJSON(u.NetworkAnchor); err != nil {
 		return fmt.Errorf("error decoding NetworkAnchor: %w", err)
 	} else {
@@ -1953,6 +1940,7 @@ func (v *TxnQuery) UnmarshalJSON(data []byte) error {
 		Scratch       bool        `json:"scratch,omitempty"`
 		Prove         bool        `json:"prove,omitempty"`
 		Txid          *string     `json:"txid,omitempty"`
+		TxIdUrl       *url.TxID   `json:"txIdUrl,omitempty"`
 		Wait          interface{} `json:"wait,omitempty"`
 		IgnorePending bool        `json:"ignorePending,omitempty"`
 	}{}
@@ -1962,6 +1950,7 @@ func (v *TxnQuery) UnmarshalJSON(data []byte) error {
 	u.Scratch = v.QueryOptions.Scratch
 	u.Prove = v.QueryOptions.Prove
 	u.Txid = encoding.BytesToJSON(v.Txid)
+	u.TxIdUrl = v.TxIdUrl
 	u.Wait = encoding.DurationToJSON(v.Wait)
 	u.IgnorePending = v.IgnorePending
 	if err := json.Unmarshal(data, &u); err != nil {
@@ -1980,6 +1969,7 @@ func (v *TxnQuery) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Txid = x
 	}
+	v.TxIdUrl = u.TxIdUrl
 	if x, err := encoding.DurationFromJSON(u.Wait); err != nil {
 		return fmt.Errorf("error decoding Wait: %w", err)
 	} else {

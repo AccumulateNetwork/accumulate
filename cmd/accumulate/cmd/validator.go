@@ -99,7 +99,7 @@ func runValCmdFunc(fn func(values *core.GlobalValues, pageCount int, signer []*s
 		if partition == "dn" {
 			partition = protocol.Directory
 		}
-		args[0] = protocol.PartitionUrl(partition).JoinPath(protocol.Operators, "1").String()
+		args[0] = protocol.DnUrl().JoinPath(protocol.Operators, "1").String()
 		args, principal, signers, err := parseArgsAndPrepareSigner(args)
 		if err != nil {
 			return "", err
@@ -110,7 +110,7 @@ func runValCmdFunc(fn func(values *core.GlobalValues, pageCount int, signer []*s
 			return "", err
 		}
 
-		return dispatchTxAndPrintResponse(env, principal, signers)
+		return dispatchTxAndPrintResponse(env, principal, nil)
 	})
 }
 
@@ -155,16 +155,16 @@ func addValidator(values *core.GlobalValues, pageCount int, signers []*signing.B
 	return build.AddValidator(values, pageCount, newKey.PublicKey, partition, signers...)
 }
 
-func removeValidator(values *core.GlobalValues, pageCount int, signers []*signing.Builder, partition string, args []string) (*protocol.Envelope, error) {
+func removeValidator(values *core.GlobalValues, pageCount int, signers []*signing.Builder, _ string, args []string) (*protocol.Envelope, error) {
 	oldKey, err := resolvePublicKey(args[0])
 	if err != nil {
 		return nil, err
 	}
 
-	return build.RemoveValidator(values, pageCount, oldKey.PublicKey, partition, signers...)
+	return build.RemoveValidator(values, pageCount, oldKey.PublicKey, signers...)
 }
 
-func updateValidatorKey(values *core.GlobalValues, _ int, signers []*signing.Builder, partition string, args []string) (*protocol.Envelope, error) {
+func updateValidatorKey(values *core.GlobalValues, _ int, signers []*signing.Builder, _ string, args []string) (*protocol.Envelope, error) {
 	oldKey, err := resolvePublicKey(args[0])
 	if err != nil {
 		return nil, err
@@ -175,5 +175,5 @@ func updateValidatorKey(values *core.GlobalValues, _ int, signers []*signing.Bui
 		return nil, err
 	}
 
-	return build.UpdateValidatorKey(values, oldKey.PublicKey, newKey.PublicKey, partition, signers...)
+	return build.UpdateValidatorKey(values, oldKey.PublicKey, newKey.PublicKey, signers...)
 }

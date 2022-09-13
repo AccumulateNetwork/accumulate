@@ -79,6 +79,10 @@ func (c *Chain) Element(index uint64) *record.Value[[]byte] {
 }
 
 func (c *Chain) Resolve(key record.Key) (record.Record, record.Key, error) {
+	if len(key) == 0 {
+		return nil, nil, errors.New(errors.StatusInternalError, "bad key for chain")
+	}
+
 	switch key[0] {
 	case "Head":
 		return c.Head(), key[1:], nil
@@ -161,7 +165,7 @@ func (c *Chain) Commit() error {
 		commitField(&err, v)
 	}
 
-	return nil
+	return err
 }
 
 func getOrCreateField[T any](ptr **T, create func() *T) *T {

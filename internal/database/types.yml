@@ -1,15 +1,3 @@
-snapshotHeader:
-  fields:
-    - name: Version
-      description: is the snapshot format version
-      type: uint
-    - name: Height
-      description: is the snapshot's block height
-      type: uint
-    - name: RootHash
-      description: is the snapshot's root hash
-      type: hash
-
 sigSetData:
   fields:
     - name: Version
@@ -21,8 +9,6 @@ sigSetData:
 
 SigSetEntry:
   fields:
-    - name: System
-      type: bool
     - name: Type
       type: protocol.SignatureType
       marshal-as: enum
@@ -30,6 +16,9 @@ SigSetEntry:
       type: uint
     - name: SignatureHash
       type: hash
+    - name: ValidatorKeyHash
+      type: hash
+      pointer: true
 
 SigOrTxn:
   fields:
@@ -43,73 +32,6 @@ SigOrTxn:
     - name: Txid
       type: txid
       pointer: true
-
-merkleState:
-  fields:
-    - name: Name
-      type: string
-    - name: Type
-      type: protocol.ChainType
-      marshal-as: enum
-    - name: Count
-      type: uint
-    - name: Pending
-      type: bytes
-      repeatable: true
-    - name: Entries
-      type: bytes
-      repeatable: true
-
-accountState:
-  fields:
-    - name: Main
-      description: is the main state of the account
-      type: protocol.Account
-      marshal-as: union
-    - name: Chains
-      description: is the state of the account's chains
-      type: merkleState
-      marshal-as: reference
-      pointer: true
-      repeatable: true
-    - name: Pending
-      description: is the state of the account's pending transactions
-      type: transactionState
-      marshal-as: reference
-      pointer: true
-      repeatable: true
-    - name: Transactions
-      description: is the state of other transactions related to the account
-      type: transactionState
-      marshal-as: reference
-      pointer: true
-      repeatable: true
-    - name: Signatures
-      description: is the state of signatures related to the account
-      type: protocol.Signature
-      marshal-as: union
-      repeatable: true
-    - name: Directory
-      description: lists the account's sub-accounts
-      type: url
-      pointer: true
-      repeatable: true
-
-transactionState:
-  fields:
-    - name: Transaction
-      type: protocol.Transaction
-      marshal-as: reference
-      pointer: true
-    - name: State
-      type: protocol.TransactionStatus
-      marshal-as: reference
-      pointer: true
-    - name: Signatures
-      type: sigSetData
-      marshal-as: reference
-      pointer: true
-      repeatable: true
 
 TransactionChainEntry:
   fields:
@@ -126,25 +48,6 @@ TransactionChainEntry:
   - name: AnchorIndex
     description: is the index of the entry in the anchor chain's index chain
     type: uint
-
-ChainUpdate:
-  fields:
-    - name: Account
-      type: url
-      pointer: true
-    - name: Name
-      type: string
-    - name: Type
-      type: protocol.ChainType
-      marshal-as: enum
-    - name: Index
-      type: uint
-    - name: SourceIndex
-      type: uint
-    - name: SourceBlock
-      type: uint
-    - name: Entry
-      type: bytes
 
 BlockStateSynthTxnEntry:
   fields:

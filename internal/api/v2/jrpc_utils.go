@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 )
