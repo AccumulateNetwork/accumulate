@@ -37,6 +37,8 @@ import (
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 )
 
+const DEFAULT_BATCH_REPLAY_LIMIT = 500
+
 type Daemon struct {
 	Config *config.Config
 	Logger tmlog.Logger
@@ -155,12 +157,13 @@ func (d *Daemon) Start() (err error) {
 
 	router := routing.NewRouter(d.eventBus, d.connectionManager)
 	execOpts := block.ExecutorOptions{
-		Logger:     d.Logger,
-		Key:        d.Key().Bytes(),
-		Describe:   d.Config.Accumulate.Describe,
-		Router:     router,
-		EventBus:   d.eventBus,
-		IsFollower: d.Config.Mode != tmcfg.ModeValidator,
+		Logger:           d.Logger,
+		Key:              d.Key().Bytes(),
+		Describe:         d.Config.Accumulate.Describe,
+		Router:           router,
+		EventBus:         d.eventBus,
+		IsFollower:       d.Config.Mode != tmcfg.ModeValidator,
+		BatchReplayLimit: DEFAULT_BATCH_REPLAY_LIMIT,
 	}
 
 	// On DNs initialize the major block scheduler
