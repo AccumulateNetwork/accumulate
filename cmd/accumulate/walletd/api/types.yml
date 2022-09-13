@@ -205,3 +205,9 @@ ResolveKeyResponse:
       type: KeyData
       marshal-as: reference
       
+NewTransactionRequest:
+  non-binary: true
+  fields:
+    - name: TxName
+      type: string
+
