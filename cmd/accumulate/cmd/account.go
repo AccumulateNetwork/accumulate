@@ -537,13 +537,15 @@ func ExportAccounts(filePath string) error {
 
 	phrase, err := walletd.GetWallet().Get(walletd.BucketMnemonic, []byte("phrase"))
 	if err != nil {
-		return fmt.Errorf("mnemonic seed doesn't exist")
+		log.Println("mnemonic seed doesn't exist")
 	}
 
 	backupRes := response{
 		LiteIdentities: res,
 		ADIs:           adiMap,
-		Mnemonics:      string(phrase),
+	}
+	if phrase != nil {
+		backupRes.Mnemonics = string(phrase)
 	}
 
 	bytes, err := json.Marshal(backupRes)

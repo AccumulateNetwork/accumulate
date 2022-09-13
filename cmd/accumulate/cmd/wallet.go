@@ -57,6 +57,7 @@ var walletServeCmd = &cobra.Command{
 var walletExportCmd = &cobra.Command{
 	Use:   "export",
 	Short: "export wallet details",
+	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		err := ExportAccounts(args[0])
 		printOutput(cmd, "File downloaded successfully", err)
