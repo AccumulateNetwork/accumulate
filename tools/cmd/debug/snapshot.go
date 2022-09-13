@@ -111,7 +111,7 @@ func (dumpVisitor) VisitAccount(acct *snapshot.Account, _ int) error {
 		return nil
 	}
 
-	fmt.Printf("  Account %v (%v)\n", acct.Main.GetUrl(), acct.Main.Type())
+	fmt.Printf("  Account %v (%v)\n", acct.Url, acct.Main.Type())
 
 	for _, chain := range acct.Chains {
 		fmt.Printf("    Chain %s (%v) height %d", chain.Name, chain.Type, chain.Count+uint64(len(chain.Entries)))

@@ -84,6 +84,7 @@ func (t *Transaction) Restore(batch *database.Batch) error {
 func CollectAccount(record *database.Account, fullChainHistory bool) (*Account, error) {
 	var err error
 	acct := new(Account)
+	acct.Url = record.Url()
 	acct.Main = loadState(&err, true, record.Main().Get)
 	acct.Pending = loadState(&err, true, record.Pending().Get)
 	acct.Directory = loadState(&err, true, record.Directory().Get)
@@ -127,7 +128,7 @@ func CollectAccount(record *database.Account, fullChainHistory bool) (*Account, 
 
 func (a *Account) Restore(batch *database.Batch) error {
 	var err error
-	record := batch.Account(a.Main.GetUrl())
+	record := batch.Account(a.Url)
 	saveState(&err, record.Main().Put, a.Main)
 	saveState(&err, record.Directory().Put, a.Directory)
 	saveState(&err, record.Pending().Put, a.Pending)

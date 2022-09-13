@@ -57,6 +57,15 @@ func (CreateKeyBook) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 		return nil, err
 	}
 
+	switch len(body.PublicKeyHash) {
+	case 0:
+		return nil, errors.Format(errors.StatusBadRequest, "public key hash is missing")
+	case 32:
+		// Ok
+	default:
+		return nil, errors.Format(errors.StatusBadRequest, "public key hash length is invalid")
+	}
+
 	book := new(protocol.KeyBook)
 	book.Url = body.Url
 	book.AddAuthority(body.Url)

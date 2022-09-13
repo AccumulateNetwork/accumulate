@@ -19,8 +19,13 @@ func (UpdateKey) validate(st *StateManager, tx *Delivery) (*protocol.UpdateKey, 
 	if !ok {
 		return nil, nil, nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.UpdateKey), tx.Transaction.Body)
 	}
-	if len(body.NewKeyHash) != 32 {
-		return nil, nil, nil, errors.New(errors.StatusBadRequest, "key hash is not a valid length for a SHA-256 hash")
+	switch len(body.NewKeyHash) {
+	case 0:
+		return nil, nil, nil, errors.Format(errors.StatusBadRequest, "public key hash is missing")
+	case 32:
+		// Ok
+	default:
+		return nil, nil, nil, errors.Format(errors.StatusBadRequest, "public key hash length is invalid")
 	}
 
 	page, ok := st.Origin.(*protocol.KeyPage)

@@ -15,7 +15,6 @@ Account:
   - name: Hash
     type: hash
     marshal-as: none
-
   - name: Main
     description: is the main state of the account
     type: protocol.Account
@@ -36,6 +35,10 @@ Account:
     type: url
     pointer: true
     repeatable: true
+  - name: Url
+    description: is the URL of the account
+    type: url
+    pointer: true
 
 Chain:
   fields:

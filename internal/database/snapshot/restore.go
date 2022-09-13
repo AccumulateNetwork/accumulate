@@ -74,10 +74,10 @@ func (v *RestoreVisitor) VisitAccount(acct *Account, i int) error {
 
 	err = acct.Restore(v.batch)
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "restore %v: %w", acct.Main.GetUrl(), err)
+		return errors.Format(errors.StatusUnknownError, "restore %v: %w", acct.Url, err)
 	}
 
-	record := v.batch.Account(acct.Main.GetUrl())
+	record := v.batch.Account(acct.Url)
 	chains := map[string][][]byte{}
 	for _, c := range acct.Chains {
 		mgr, err := record.GetChainByName(c.Name)
@@ -97,7 +97,7 @@ func (v *RestoreVisitor) VisitAccount(acct *Account, i int) error {
 	// Add chain entries 10000 at a time
 	for len(chains) > 0 {
 		next := map[string][][]byte{}
-		record := v.batch.Account(acct.Main.GetUrl())
+		record := v.batch.Account(acct.Url)
 		for name, entries := range chains {
 			if len(entries) > chainEntryBatchSize {
 				entries, next[name] = entries[:chainEntryBatchSize], entries[chainEntryBatchSize:]
@@ -122,11 +122,11 @@ func (v *RestoreVisitor) VisitAccount(acct *Account, i int) error {
 	}
 
 	// DO NOT reuse the existing record - it may have changed
-	record = v.batch.Account(acct.Main.GetUrl())
+	record = v.batch.Account(acct.Url)
 
 	err = record.VerifyHash(acct.Hash[:])
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "restore %v: %w", acct.Main.GetUrl(), err)
+		return errors.Format(errors.StatusUnknownError, "restore %v: %w", acct.Url, err)
 	}
 	return nil
 }
