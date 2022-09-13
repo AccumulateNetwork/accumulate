@@ -533,3 +533,43 @@ func TestPendingTransactionForMissingAccount(t *testing.T) {
 		require.NoError(t, snapshot.Restore(batch, buf, nil))
 	})
 }
+
+func TestDnAnchorAcknowledged(t *testing.T) {
+	aliceKey, bobKey := acctesting.GenerateKey("Alice"), acctesting.GenerateKey("Bob")
+	bob := acctesting.AcmeLiteAddressStdPriv(bobKey)
+	var timestamp uint64
+
+	// Initialize
+	sim := simulator.New(t, 3)
+	sim.InitFromGenesis()
+	alice := sim.CreateLiteTokenAccount(aliceKey, AcmeUrl(), 1e9, 2)
+
+	// Create some history
+	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
+		acctesting.NewTransaction().
+			WithPrincipal(alice).
+			WithTimestampVar(&timestamp).
+			WithSigner(alice, 1).
+			WithBody(&SendTokens{
+				To: []*TokenRecipient{{
+					Url:    bob,
+					Amount: *big.NewInt(1),
+				}},
+			}).
+			Initiate(SignatureTypeED25519, aliceKey).
+			Build(),
+	)...)
+
+	// Wait a few blocks
+	sim.ExecuteBlocks(10)
+
+	// Verify that Acknowledged equals Produced
+	x := sim.Partition(Directory)
+	helpers.View(t, x, func(batch *database.Batch) {
+		var ledger1 *AnchorLedger
+		require.NoError(t, batch.Account(x.Executor.Describe.AnchorPool()).Main().GetAs(&ledger1))
+		ledger2 := ledger1.Partition(DnUrl())
+		require.Greater(t, ledger2.Produced, uint64(1))
+		require.Equal(t, ledger2.Produced, ledger2.Acknowledged)
+	})
+}
