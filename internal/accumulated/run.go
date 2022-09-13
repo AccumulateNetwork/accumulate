@@ -37,8 +37,6 @@ import (
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 )
 
-const DEFAULT_BATCH_REPLAY_LIMIT = 500
-
 type Daemon struct {
 	Config *config.Config
 	Logger tmlog.Logger
@@ -163,7 +161,7 @@ func (d *Daemon) Start() (err error) {
 		Router:           router,
 		EventBus:         d.eventBus,
 		IsFollower:       d.Config.Mode != tmcfg.ModeValidator,
-		BatchReplayLimit: DEFAULT_BATCH_REPLAY_LIMIT,
+		BatchReplayLimit: d.Config.Accumulate.BatchReplayLimit,
 	}
 
 	// On DNs initialize the major block scheduler
