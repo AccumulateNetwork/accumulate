@@ -369,7 +369,7 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 				Anchor:         anchor,
 			},
 		})
-		if x.BatchReplayLimit > 0 && x.BatchReplayLimit == 500 {
+		if x.BatchReplayLimit > 0 && len(batch) == x.BatchReplayLimit {
 			break
 		}
 	}
