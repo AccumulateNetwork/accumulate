@@ -17,8 +17,10 @@ type snapshotVisitor struct {
 	partition string
 	urls      []*url.URL
 
+	keepTxn      map[[32]byte]bool
 	accounts     int
 	transactions int
+	signatures   int
 }
 
 func (v *snapshotVisitor) VisitSection(s *snapshot.ReaderSection) error {
@@ -26,7 +28,8 @@ func (v *snapshotVisitor) VisitSection(s *snapshot.ReaderSection) error {
 	switch s.Type() {
 	case snapshot.SectionTypeAccounts,
 		snapshot.SectionTypeTransactions,
-		snapshot.SectionTypeGzTransactions:
+		snapshot.SectionTypeGzTransactions,
+		snapshot.SectionTypeSignatures:
 		return nil // Ok
 
 	case snapshot.SectionTypeHeader:
@@ -60,6 +63,9 @@ func (v *snapshotVisitor) VisitAccount(acct *snapshot.Account, _ int) error {
 }
 
 func (v *snapshotVisitor) VisitTransaction(txn *snapshot.Transaction, _ int) error {
+	if v.keepTxn == nil {
+		v.keepTxn = map[[32]byte]bool{}
+	}
 	if txn == nil {
 		err := v.v.VisitTransaction(nil, v.transactions)
 		v.transactions = 0
@@ -76,7 +82,24 @@ func (v *snapshotVisitor) VisitTransaction(txn *snapshot.Transaction, _ int) err
 		return nil
 	}
 
+	v.keepTxn[txn.Transaction.ID().Hash()] = true
 	err = v.v.VisitTransaction(txn, v.transactions)
 	v.transactions++
+	return errors.Wrap(errors.StatusUnknownError, err)
+}
+
+func (v *snapshotVisitor) VisitSignature(sig *snapshot.Signature, _ int) error {
+	if sig == nil {
+		err := v.v.VisitSignature(nil, v.signatures)
+		v.signatures = 0
+		return errors.Wrap(errors.StatusUnknownError, err)
+	}
+
+	if !v.keepTxn[sig.Txid.Hash()] {
+		return nil
+	}
+
+	err := v.v.VisitSignature(sig, v.signatures)
+	v.signatures++
 	return errors.Wrap(errors.StatusUnknownError, err)
 }

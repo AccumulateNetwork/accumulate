@@ -13,7 +13,7 @@ var cmd = &cobra.Command{
 }
 
 func main() {
-	_ = accountCmd.Execute()
+	_ = cmd.Execute()
 }
 
 func fatalf(format string, args ...interface{}) {
@@ -24,11 +24,5 @@ func fatalf(format string, args ...interface{}) {
 func check(err error) {
 	if err != nil {
 		fatalf("%v", err)
-	}
-}
-
-func checkf(err error, format string, otherArgs ...interface{}) {
-	if err != nil {
-		fatalf(format+": %v", append(otherArgs, err)...)
 	}
 }
