@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/testing"
 )
 
@@ -14,7 +15,12 @@ var cmd = &cobra.Command{
 }
 
 func main() {
+	// Allow snapshots to contain large values
+	encoding.MaxValueSize = 1 << 30
+
+	// Print detailed debug messages
 	testing.EnableDebugFeatures()
+
 	_ = cmd.Execute()
 }
 

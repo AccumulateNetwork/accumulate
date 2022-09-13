@@ -105,6 +105,8 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) ([]byte, error) {
 		db:          database.New(store, opts.Logger.With("module", "database")),
 		dataRecords: make([]DataRecord, 0),
 		records:     make([]protocol.Account, 0),
+		acmeIssued:  new(big.Int),
+		omitHistory: map[[32]byte]bool{},
 	}
 
 	// Create the router
@@ -152,7 +154,9 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) ([]byte, error) {
 	// Preserve history in the Genesis snapshot
 	batch := b.db.Begin(false)
 	defer batch.Discard()
-	w, err := snapshot.Collect(batch, snapshotWriter, func(account *database.Account) (bool, error) { return true, nil })
+	w, err := snapshot.Collect(batch, snapshotWriter, func(account *database.Account) (bool, error) {
+		return !b.omitHistory[account.Url().AccountID32()], nil
+	})
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
@@ -178,6 +182,9 @@ type bootstrap struct {
 	records     []protocol.Account
 	dataRecords []DataRecord
 	router      routing.Router
+
+	acmeIssued  *big.Int
+	omitHistory map[[32]byte]bool
 }
 
 type DataRecord struct {
@@ -225,16 +232,7 @@ func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protoc
 	}
 
 	// Create accounts
-	b.createIdentity()
-	b.createMainLedger()
-	b.createSyntheticLedger()
-	b.createAnchorPool()
-	b.createOperatorBook()
-	b.createEvidenceChain()
-	b.maybeCreateAcme()
-	b.maybeCreateFaucet()
-
-	err = b.createVoteScratchChain()
+	err = b.importSnapshots(st)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
@@ -244,7 +242,16 @@ func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protoc
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
-	err = b.importSnapshots(st)
+	b.createIdentity()
+	b.createMainLedger()
+	b.createSyntheticLedger()
+	b.createAnchorPool()
+	b.createOperatorBook()
+	b.createEvidenceChain()
+	b.maybeCreateFaucet()
+	b.maybeCreateAcme()
+
+	err = b.createVoteScratchChain()
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
@@ -348,15 +355,9 @@ func (b *bootstrap) maybeCreateAcme() {
 	acme.Url = protocol.AcmeUrl()
 	acme.Precision = 8
 	acme.Symbol = "ACME"
+	acme.Issued = *b.acmeIssued
 	acme.SupplyLimit = big.NewInt(protocol.AcmeSupplyLimit * protocol.AcmePrecision)
 	b.WriteRecords(acme)
-
-	if !protocol.IsTestNet {
-		return
-	}
-
-	// On the TestNet, set the issued amount to the faucet balance
-	acme.Issued.SetUint64(protocol.AcmeFaucetBalance * protocol.AcmePrecision)
 }
 
 func (b *bootstrap) maybeCreateFaucet() {
@@ -371,6 +372,8 @@ func (b *bootstrap) maybeCreateFaucet() {
 	liteToken.Url = protocol.FaucetUrl
 	liteToken.TokenUrl = protocol.AcmeUrl()
 	liteToken.Balance.SetUint64(protocol.AcmeFaucetBalance * protocol.AcmePrecision)
+
+	b.acmeIssued.Add(b.acmeIssued, &liteToken.Balance)
 
 	// Lock forever
 	liteToken.LockHeight = math.MaxUint64
@@ -409,16 +412,16 @@ func (b *bootstrap) maybeCreateFactomAccounts() error {
 		lite.TokenUrl = protocol.AcmeUrl()
 		lite.Balance = *big.NewInt(5 * fa.Balance)
 
+		b.acmeIssued.Add(b.acmeIssued, &lite.Balance)
+
 		b.WriteRecords(lid, lite)
 	}
 	return nil
 }
 
 func (b *bootstrap) importSnapshots(st *chain.StateManager) error {
-	// Nothing is routed to the DN so don't bother
-	if b.NetworkType == config.Directory {
-		return nil
-	}
+	// Nothing is routed to the DN, but the DN needs to know how much ACME has
+	// been issued so this still needs to be run for the DN
 
 	var accounts []*url.URL
 	for _, open := range b.Snapshots {
@@ -431,10 +434,11 @@ func (b *bootstrap) importSnapshots(st *chain.StateManager) error {
 		}
 
 		v := new(snapshotVisitor)
+		v.acmeIssued = b.acmeIssued
+		v.omitHistory = b.omitHistory
 		v.v = snapshot.NewRestoreVisitor(st.GetBatch(), b.Logger)
 		v.logger.L = b.Logger
 		v.v.DisableWriteBatching = true
-		v.v.CompressChains = true
 		v.router = b.router
 		v.partition = b.PartitionId
 		err = snapshot.Visit(file, v)

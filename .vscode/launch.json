@@ -52,7 +52,7 @@
         "-b=2",
         "-v=1",
         "-f=0",
-        // "--snapshot=${workspaceFolder}/.factom/import.snapshot",
+        "--snapshot=${workspaceFolder}/.nodes/test/factom-lda-stripped.snapshot",
       ]
     },
     {
@@ -202,6 +202,75 @@
       "args": ["${workspaceFolder}/.testdata/sdk.json"]
     },
 
+    // Snapshots
+    {
+      "name": "Dump snapshot",
+      "presentation": { "group": "91-Snapshot", },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/tools/cmd/snapshot",
+      "args": [
+        "dump",
+        // "-s",
+        "${workspaceFolder}/.nodes/import/factom-lda.snapshot",
+      ]
+    },
+    {
+      "name": "Merge snapshots",
+      "presentation": { "group": "91-Snapshot", },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/tools/cmd/snapshot",
+      "args": [
+        "concat",
+        "${workspaceFolder}/.nodes/import/all.snapshot",
+        "${workspaceFolder}/.nodes/import/factom-0.snapshot",
+      ]
+    },
+    {
+      "name": "Extract snapshot",
+      "presentation": { "group": "91-Snapshot", },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/tools/cmd/snapshot",
+      "args": [
+        "extract",
+        "${workspaceFolder}/.nodes/rc2/node-1/bvnn/data/accumulate.db",
+        "${workspaceFolder}/snapshot.bpt"
+      ]
+    },
+    {
+      "name": "Convert Factom entries (objects -> txns)",
+      "presentation": { "group": "91-Snapshot", },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/tools/cmd/factom",
+      "args": [
+        "convert",
+        "entries",
+        "${workspaceFolder}/.nodes/import",
+        "${workspaceFolder}/.factom/objects"
+      ]
+    },
+    {
+      "name": "Convert Factom chains (txns -> LDAs)",
+      "presentation": { "group": "91-Snapshot", },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/tools/cmd/factom",
+      "args": [
+        "convert",
+        "chains",
+        "${workspaceFolder}/.nodes/import",
+        "${workspaceFolder}/.nodes/import/x-factom-ldas.snapshot"
+      ]
+    },
+
     // Miscellaneous
     {
       "name": "CLI",
@@ -266,49 +335,6 @@
         "account", "route",
         "https://testnet.accumulatenetwork.io/v2",
         "acc://defidevs"
-      ]
-    },
-    {
-      "name": "Import Factom",
-      "presentation": { "group": "99-Miscellaneous", },
-      "type": "go",
-      "request": "launch",
-      "mode": "auto",
-      "program": "${workspaceFolder}/tools/cmd/factom",
-      "args": [
-        "convert",
-        "entries",
-        "${workspaceFolder}/.nodes/import",
-        "${workspaceFolder}/.factom/objects"
-      ]
-    },
-    {
-      "name": "Merge snapshots",
-      "presentation": { "group": "99-Miscellaneous", },
-      "type": "go",
-      "request": "launch",
-      "mode": "auto",
-      "program": "${workspaceFolder}/tools/cmd/debug",
-      "args": [
-        "snapshot",
-        "concat",
-        "${workspaceFolder}/.nodes/import/all.snapshot",
-        "${workspaceFolder}/.nodes/import/factom-0.snapshot",
-      ]
-    },
-    {
-      "name": "Factom: entries -> chains",
-      "presentation": { "group": "99-Miscellaneous", },
-      "type": "go",
-      "request": "launch",
-      "mode": "auto",
-      "program": "${workspaceFolder}/tools/cmd/factom",
-      "args": [
-        "convert",
-        "chains",
-        "--start-from=90000",
-        "${workspaceFolder}/.nodes/import",
-        "${workspaceFolder}/.nodes/import/factom-ldas.snapshot"
       ]
     },
   ]

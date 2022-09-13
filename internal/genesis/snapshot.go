@@ -1,6 +1,7 @@
 package genesis
 
 import (
+	"math/big"
 	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
@@ -8,14 +9,17 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 type snapshotVisitor struct {
-	v         *snapshot.RestoreVisitor
-	logger    logging.OptionalLogger
-	router    routing.Router
-	partition string
-	urls      []*url.URL
+	v           *snapshot.RestoreVisitor
+	logger      logging.OptionalLogger
+	router      routing.Router
+	partition   string
+	urls        []*url.URL
+	acmeIssued  *big.Int
+	omitHistory map[[32]byte]bool
 
 	keepTxn      map[[32]byte]bool
 	accounts     int
@@ -47,6 +51,10 @@ func (v *snapshotVisitor) VisitAccount(acct *snapshot.Account, _ int) error {
 		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
+	if acct, ok := acct.Main.(protocol.AccountWithTokens); ok && protocol.AcmeUrl().Equal(acct.GetTokenUrl()) {
+		v.acmeIssued.Add(v.acmeIssued, acct.TokenBalance())
+	}
+
 	partition, err := v.router.RouteAccount(acct.Url)
 	if err != nil {
 		return errors.Format(errors.StatusInternalError, "route %v: %w", acct.Url, err)
@@ -54,6 +62,13 @@ func (v *snapshotVisitor) VisitAccount(acct *snapshot.Account, _ int) error {
 
 	if !strings.EqualFold(partition, v.partition) {
 		return nil
+	}
+
+	for _, c := range acct.Chains {
+		if len(c.Pending) > 0 && len(c.Entries) == 0 {
+			v.omitHistory[acct.Url.AccountID32()] = true
+			break
+		}
 	}
 
 	v.urls = append(v.urls, acct.Url)

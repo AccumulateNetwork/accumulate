@@ -64,7 +64,11 @@ func extractSnapshot(_ *cobra.Command, args []string) {
 			checkf(err, "get %v", v.Key)
 
 			// Skip system accounts
-			if _, ok := protocol.ParsePartitionUrl(u.RootIdentity()); ok {
+			if protocol.AcmeUrl().LocalTo(u) ||
+				protocol.FaucetUrl.LocalTo(u) {
+				continue
+			}
+			if _, ok := protocol.ParsePartitionUrl(u); ok {
 				continue
 			}
 

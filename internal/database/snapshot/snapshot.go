@@ -123,6 +123,14 @@ func Visit(file ioutil2.SectionReader, visitor interface{}) error {
 					return errors.Format(errors.StatusEncodingError, "unmarshal account: %w", err)
 				}
 
+				// Fill in the URL field if possible
+				if account.Url == nil {
+					if account.Main == nil {
+						return errors.Format(errors.StatusBadRequest, "cannot determine URL of account")
+					}
+					account.Url = account.Main.GetUrl()
+				}
+
 				account.Hash = hash
 				err = vAccount.VisitAccount(account, i)
 				if err != nil {

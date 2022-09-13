@@ -12,23 +12,20 @@ import (
 
 var enUsTitle = cases.Title(language.AmericanEnglish)
 
-var snapshotDumpCmd = &cobra.Command{
+var dumpCmd = &cobra.Command{
 	Use:   "dump <snapshot>",
 	Short: "Dump the contents of a snapshot",
 	Args:  cobra.ExactArgs(1),
 	Run:   dumpSnapshot,
 }
 
-var snapshotDumpFlag = struct {
+var dumpFlag = struct {
 	Short bool
 }{}
 
 func init() {
-	cmd.AddCommand(
-		snapshotDumpCmd,
-		concatCmd,
-	)
-	snapshotDumpCmd.Flags().BoolVarP(&snapshotDumpFlag.Short, "short", "s", false, "Short output")
+	cmd.AddCommand(dumpCmd)
+	dumpCmd.Flags().BoolVarP(&dumpFlag.Short, "short", "s", false, "Short output")
 }
 
 func dumpSnapshot(_ *cobra.Command, args []string) {
@@ -45,7 +42,7 @@ type dumpVisitor struct{}
 func (dumpVisitor) VisitSection(s *snapshot.ReaderSection) error {
 	typstr := s.Type().String()
 	fmt.Printf("%s%s section at %d (size %d)\n", enUsTitle.String(typstr[:1]), typstr[1:], s.Offset(), s.Size())
-	if snapshotDumpFlag.Short {
+	if dumpFlag.Short {
 		return snapshot.ErrSkip
 	}
 	return nil
@@ -59,11 +56,7 @@ func (dumpVisitor) VisitAccount(acct *snapshot.Account, _ int) error {
 	fmt.Printf("  Account %v (%v)\n", acct.Url, acct.Main.Type())
 
 	for _, chain := range acct.Chains {
-		fmt.Printf("    Chain %s (%v) height %d", chain.Name, chain.Type, chain.Count+uint64(len(chain.Entries)))
-		if chain.Count > 0 && len(chain.Entries) == 0 {
-			fmt.Printf(" (pruned)")
-		}
-		fmt.Println()
+		fmt.Printf("    Chain %s (%v) height %d with %d entries\n", chain.Name, chain.Type, chain.Count, len(chain.Entries))
 	}
 	return nil
 }
