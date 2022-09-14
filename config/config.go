@@ -140,6 +140,7 @@ func Default(netName string, net NetworkType, node NodeType, partitionId string)
 	c.Accumulate.AnalysisLog.Directory = "analysis"
 	c.Accumulate.AnalysisLog.Enabled = false
 	c.Accumulate.API.ReadHeaderTimeout = 10 * time.Second
+	c.Accumulate.BatchReplayLimit = 500
 	// c.Accumulate.Snapshots.Frequency = 2
 	switch node {
 	case Validator:
@@ -159,9 +160,9 @@ type Config struct {
 }
 
 type Accumulate struct {
-	SentryDSN string `toml:"sentry-dsn" mapstructure:"sentry-dsn"`
-	Describe  `toml:"describe" mapstructure:"describe"`
-
+	SentryDSN        string `toml:"sentry-dsn" mapstructure:"sentry-dsn"`
+	Describe         `toml:"describe" mapstructure:"describe"`
+	BatchReplayLimit int `toml:"batch-replay-limit" mapstructure:"batch-replay-limit"`
 	// DnStallLimit sets the number of blocks the DN is allowed to take before
 	// acknowledging an anchor.
 	DnStallLimit int `toml:"dn-stall-limit" mapstructure:"dn-stall-limit"`

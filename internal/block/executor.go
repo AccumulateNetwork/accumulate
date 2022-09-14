@@ -28,7 +28,6 @@ type Executor struct {
 	dispatcher *dispatcher
 	logger     logging.OptionalLogger
 	db         database.Beginner
-
 	// oldBlockMeta blockMetadata
 }
 
@@ -41,6 +40,7 @@ type ExecutorOptions struct {
 	MajorBlockScheduler blockscheduler.MajorBlockScheduler //
 	Background          func(func())                       // Background task launcher
 	IsFollower          bool                               //
+	BatchReplayLimit    int
 
 	isGenesis bool
 
