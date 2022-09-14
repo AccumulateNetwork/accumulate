@@ -246,7 +246,7 @@ func (d Derivation) Validate() error {
 	}
 
 	if d.Account() < bip32.FirstHardenedChild {
-		return fmt.Errorf("account not hardened, %d", d.Account)
+		return fmt.Errorf("account not hardened, %d", d.Account())
 	}
 
 	return nil
