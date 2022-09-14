@@ -362,6 +362,7 @@ func (v *chainVisitor) VisitTransaction(txn *snapshot.Transaction, _ int) error 
 	chain.Entries = append(chain.Entries, txn.Transaction.GetHash())
 
 	account = new(snapshot.Account)
+	account.Url = lda.Url
 	account.Main = lda
 	account.Chains = []*snapshot.Chain{chain}
 
@@ -489,6 +490,7 @@ func convertBalances(_ *cobra.Command, args []string) {
 		lid := new(protocol.LiteIdentity)
 		lid.Url = lta.Url.RootIdentity()
 		a := new(snapshot.Account)
+		a.Url = lid.Url
 		a.Main = lid
 		a.Directory = []*url.URL{lta.Url}
 		hasher = hasher[:0]
