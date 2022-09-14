@@ -4,6 +4,8 @@ go 1.18
 
 replace github.com/golangci/golangci-lint v1.46.2 => github.com/firelizzard18/golangci-lint v1.46.3-0.20220713213035-328ba3e7213d
 
+replace github.com/AdamKorcz/go-118-fuzz-build v0.0.0-20220912195655-e1f97a00006b => github.com/AccumulateNetwork/go-118-fuzz-build v0.0.0-20220916203738-daf05a2aa414
+
 require (
 	github.com/AccumulateNetwork/jsonrpc2/v15 v15.0.0-20220517212445-953ad957e040
 	github.com/FactomProject/factom v0.4.0
@@ -46,6 +48,7 @@ require (
 )
 
 require (
+	github.com/AdamKorcz/go-118-fuzz-build v0.0.0-20220912195655-e1f97a00006b
 	github.com/FactomProject/factomd v1.13.0
 	github.com/ethereum/go-ethereum v1.10.25
 	github.com/ghodss/yaml v1.0.0
@@ -53,6 +56,7 @@ require (
 )
 
 require (
+	github.com/AdaLogics/go-fuzz-headers v0.0.0-20220824214621-3c06a36a6952 // indirect
 	github.com/FactomProject/btcutil v0.0.0-20200312214114-5fd3eaf71bd2 // indirect
 	github.com/FactomProject/ed25519 v0.0.0-20150814230546-38002c4fe7b6 // indirect
 	github.com/FactomProject/go-bip32 v0.3.6-0.20161206200006-3b593af1c415 // indirect
@@ -66,6 +70,7 @@ require (
 	github.com/btcsuite/btcd/btcec/v2 v2.2.0 // indirect
 	github.com/btcsuitereleases/btcutil v0.0.0-20150612230727-f2b1058a8255 // indirect
 	github.com/creachadair/taskgroup v0.3.2 // indirect
+	github.com/cyphar/filepath-securejoin v0.2.3 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.0.1 // indirect
 	github.com/firefart/nonamedreturns v1.0.4 // indirect
 	github.com/lufeee/execinquery v1.2.1 // indirect

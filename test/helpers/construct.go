@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"math/big"
 	"strconv"
-	"testing"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
@@ -13,7 +12,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-func MustBuild(t testing.TB, b interface {
+func MustBuild(t T, b interface {
 	Done() (*protocol.Envelope, error)
 }) *chain.Delivery {
 	t.Helper()
@@ -25,7 +24,7 @@ func MustBuild(t testing.TB, b interface {
 	return delivery[0]
 }
 
-func View(t testing.TB, db database.Viewer, fn func(batch *database.Batch)) {
+func View(t T, db database.Viewer, fn func(batch *database.Batch)) {
 	t.Helper()
 	require.NoError(t, db.View(func(batch *database.Batch) error {
 		t.Helper()
@@ -34,7 +33,7 @@ func View(t testing.TB, db database.Viewer, fn func(batch *database.Batch)) {
 	}))
 }
 
-func Update(t testing.TB, db database.Updater, fn func(batch *database.Batch)) {
+func Update(t T, db database.Updater, fn func(batch *database.Batch)) {
 	t.Helper()
 	require.NoError(t, db.Update(func(batch *database.Batch) error {
 		t.Helper()
@@ -43,9 +42,9 @@ func Update(t testing.TB, db database.Updater, fn func(batch *database.Batch)) {
 	}))
 }
 
-func GetAccount[T protocol.Account](t testing.TB, db database.Viewer, account *url.URL) T {
+func GetAccount[A protocol.Account](t T, db database.Viewer, account *url.URL) A {
 	t.Helper()
-	var v T
+	var v A
 	View(t, db, func(batch *database.Batch) {
 		t.Helper()
 		require.NoError(t, batch.Account(account).Main().GetAs(&v))
@@ -54,7 +53,7 @@ func GetAccount[T protocol.Account](t testing.TB, db database.Viewer, account *u
 }
 
 // PutAccount writes the account's main state.
-func PutAccount(t testing.TB, db database.Updater, account protocol.Account) {
+func PutAccount(t T, db database.Updater, account protocol.Account) {
 	t.Helper()
 	Update(t, db, func(batch *database.Batch) {
 		t.Helper()
@@ -64,14 +63,14 @@ func PutAccount(t testing.TB, db database.Updater, account protocol.Account) {
 
 // MakeAccount writes the account's main state, adds a directory entry to the
 // parent, and inherits the parent's authority if non is specified.
-func MakeAccount(t testing.TB, db database.Updater, account ...protocol.Account) {
+func MakeAccount(t T, db database.Updater, account ...protocol.Account) {
 	t.Helper()
 	require.NoError(t, TryMakeAccount(t, db, account...))
 }
 
 // TryMakeAccount writes the account's main state, adds a directory entry to the
 // parent, and inherits the parent's authority if non is specified.
-func TryMakeAccount(t testing.TB, db database.Updater, account ...protocol.Account) error {
+func TryMakeAccount(t T, db database.Updater, account ...protocol.Account) error {
 	t.Helper()
 	return db.Update(func(batch *database.Batch) error {
 		t.Helper()
@@ -115,18 +114,18 @@ func TryMakeAccount(t testing.TB, db database.Updater, account ...protocol.Accou
 	})
 }
 
-func UpdateAccount[T protocol.Account](t testing.TB, db database.Updater, account *url.URL, fn func(T)) {
+func UpdateAccount[A protocol.Account](t T, db database.Updater, account *url.URL, fn func(A)) {
 	t.Helper()
 	Update(t, db, func(batch *database.Batch) {
 		t.Helper()
-		var v T
+		var v A
 		require.NoError(t, batch.Account(account).Main().GetAs(&v))
 		fn(v)
 		require.NoError(t, batch.Account(account).Main().Put(v))
 	})
 }
 
-func CreditCredits(t testing.TB, db database.Updater, account *url.URL, amount uint64) {
+func CreditCredits(t T, db database.Updater, account *url.URL, amount uint64) {
 	t.Helper()
 	UpdateAccount(t, db, account, func(a protocol.AccountWithCredits) {
 		t.Helper()
@@ -134,7 +133,7 @@ func CreditCredits(t testing.TB, db database.Updater, account *url.URL, amount u
 	})
 }
 
-func CreditTokens(t testing.TB, db database.Updater, account *url.URL, amount *big.Int) {
+func CreditTokens(t T, db database.Updater, account *url.URL, amount *big.Int) {
 	t.Helper()
 	UpdateAccount(t, db, account, func(a protocol.AccountWithTokens) {
 		t.Helper()
@@ -142,7 +141,7 @@ func CreditTokens(t testing.TB, db database.Updater, account *url.URL, amount *b
 	})
 }
 
-func MakeLiteTokenAccount(t testing.TB, db database.Updater, pubKey []byte, token *url.URL) *url.URL {
+func MakeLiteTokenAccount(t T, db database.Updater, pubKey []byte, token *url.URL) *url.URL {
 	t.Helper()
 	lid := protocol.LiteAuthorityForKey(pubKey, protocol.SignatureTypeED25519)
 	lta := lid.JoinPath(token.ShortString())
@@ -151,7 +150,7 @@ func MakeLiteTokenAccount(t testing.TB, db database.Updater, pubKey []byte, toke
 	return lta
 }
 
-func MakeIdentity(t testing.TB, db database.Updater, u *url.URL, pubKeys ...[]byte) {
+func MakeIdentity(t T, db database.Updater, u *url.URL, pubKeys ...[]byte) {
 	t.Helper()
 	identity := new(protocol.ADI)
 	identity.Url = u
@@ -161,7 +160,7 @@ func MakeIdentity(t testing.TB, db database.Updater, u *url.URL, pubKeys ...[]by
 	MakeAccount(t, db, identity, book, page)
 }
 
-func MakeKeyBook(t testing.TB, db database.Updater, u *url.URL, pubKeys ...[]byte) {
+func MakeKeyBook(t T, db database.Updater, u *url.URL, pubKeys ...[]byte) {
 	t.Helper()
 	book, page := newBook(u, pubKeys...)
 	MakeAccount(t, db, book, page)
@@ -177,7 +176,7 @@ func newBook(u *url.URL, pubKeys ...[]byte) (*protocol.KeyBook, *protocol.KeyPag
 	return book, page
 }
 
-func MakeKeyPage(t testing.TB, db database.Updater, book *url.URL, pubKeys ...[]byte) {
+func MakeKeyPage(t T, db database.Updater, book *url.URL, pubKeys ...[]byte) {
 	t.Helper()
 	var n string
 	UpdateAccount(t, db, book, func(book *protocol.KeyBook) {
