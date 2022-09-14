@@ -1,0 +1,40 @@
+include:
+  - template: Coverage-Fuzzing.gitlab-ci.yml
+  - template: SAST.gitlab-ci.yml
+
+fuzz:
+  extends: .fuzz_base
+  image: golang:1.19
+  parallel:
+    matrix:
+      - file: internal/chain/fuzz_user_txn_test.go
+        func:
+        - FuzzCreateIdentity
+        - FuzzCreateTokenAccount
+        - FuzzSendTokens
+        - FuzzCreateDataAccount
+        - FuzzWriteData
+        - FuzzWriteData_Lite
+        - FuzzWriteDataTo
+        - FuzzAcmeFaucet
+        - FuzzCreateToken
+        - FuzzIssueTokens
+        - FuzzBurnTokens
+        - FuzzCreateLiteTokenAccount
+        - FuzzCreateKeyPage
+        - FuzzCreateKeyBook
+        - FuzzAddCredits
+        - FuzzUpdateKeyPage
+        - FuzzLockAccount
+        - FuzzUpdateAccountAuth
+        - FuzzUpdateKey
+  script:
+  - go get github.com/AdamKorcz/go-118-fuzz-build
+  - go install github.com/AdamKorcz/go-118-fuzz-build
+  - sed -i "s/import (/import go118fuzzbuildutils \"github.com\/AdamKorcz\/go-118-fuzz-build\/utils\"\nimport (/" $file
+  - sed -i "s/func $func(\([a-zA-Z0-9]*\) \*testing\.F)/func $func(\1 \*go118fuzzbuildutils\.F)/g" $file
+  - mkdir tmp
+  - mv $file tmp/$(basename -- ${file%.go}_fuzz.go)
+  - go-118-fuzz-build -o fuzz_target.a -func $func ./tmp
+  - clang -fsanitize=fuzzer fuzz_target.a -o fuzz_target
+  - ./gitlab-cov-fuzz run --regression=$REGRESSION -- ./fuzz_target || true
