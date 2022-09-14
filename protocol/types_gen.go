@@ -11019,10 +11019,15 @@ func (v *ADI) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *ADI) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Url = x
 	}
-	reader.ReadValue(3, v.AccountAuth.UnmarshalBinary)
+	reader.ReadValue(3, v.AccountAuth.UnmarshalBinaryFrom)
 
 	seen, err := reader.Reset(fieldNames_ADI)
 	if err != nil {
@@ -11044,7 +11049,7 @@ func (v *AccountAuth) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
 	for {
-		if x := new(AuthorityEntry); reader.ReadValue(1, x.UnmarshalBinary) {
+		if x := new(AuthorityEntry); reader.ReadValue(1, x.UnmarshalBinaryFrom) {
 			v.Authorities = append(v.Authorities, *x)
 		} else {
 			break
@@ -11077,6 +11082,11 @@ func (v *AccumulateDataEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *AccumulateDataEntry) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	for {
 		if x, ok := reader.ReadBytes(2); ok {
 			v.Data = append(v.Data, x)
@@ -11111,6 +11121,11 @@ func (v *AcmeFaucet) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *AcmeFaucet) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Url = x
 	}
@@ -11164,6 +11179,11 @@ func (v *AddAccountAuthorityOperation) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *AddAccountAuthorityOperation) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Authority = x
 	}
@@ -11194,6 +11214,11 @@ func (v *AddCredits) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *AddCredits) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Recipient = x
 	}
@@ -11230,6 +11255,11 @@ func (v *AddCreditsResult) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *AddCreditsResult) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadBigInt(2); ok {
 		v.Amount = *x
 	}
@@ -11266,7 +11296,12 @@ func (v *AddKeyOperation) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
-	if x := new(KeySpecParams); reader.ReadValue(2, x.UnmarshalBinary) {
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *AddKeyOperation) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x := new(KeySpecParams); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
 		v.Entry = *x
 	}
 
@@ -11296,6 +11331,11 @@ func (v *AnchorLedger) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *AnchorLedger) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Url = x
 	}
@@ -11316,7 +11356,7 @@ func (v *AnchorLedger) UnmarshalBinaryFrom(rd io.Reader) error {
 		}
 	}
 	for {
-		if x := new(PartitionSyntheticLedger); reader.ReadValue(7, x.UnmarshalBinary) {
+		if x := new(PartitionSyntheticLedger); reader.ReadValue(7, x.UnmarshalBinaryFrom) {
 			v.Sequence = append(v.Sequence, x)
 		} else {
 			break
@@ -11342,7 +11382,7 @@ func (v *AnchorMetadata) UnmarshalBinary(data []byte) error {
 func (v *AnchorMetadata) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	reader.ReadValue(1, v.ChainMetadata.UnmarshalBinary)
+	reader.ReadValue(1, v.ChainMetadata.UnmarshalBinaryFrom)
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Account = x
 	}
@@ -11411,6 +11451,11 @@ func (v *BTCLegacySignature) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *BTCLegacySignature) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadBytes(2); ok {
 		v.PublicKey = x
 	}
@@ -11459,6 +11504,11 @@ func (v *BTCSignature) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *BTCSignature) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadBytes(2); ok {
 		v.PublicKey = x
 	}
@@ -11536,6 +11586,11 @@ func (v *BlockLedger) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *BlockLedger) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Url = x
 	}
@@ -11546,7 +11601,7 @@ func (v *BlockLedger) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Time = x
 	}
 	for {
-		if x := new(BlockEntry); reader.ReadValue(5, x.UnmarshalBinary) {
+		if x := new(BlockEntry); reader.ReadValue(5, x.UnmarshalBinaryFrom) {
 			v.Entries = append(v.Entries, x)
 		} else {
 			break
@@ -11579,7 +11634,12 @@ func (v *BlockValidatorAnchor) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
-	reader.ReadValue(2, v.PartitionAnchor.UnmarshalBinary)
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *BlockValidatorAnchor) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	reader.ReadValue(2, v.PartitionAnchor.UnmarshalBinaryFrom)
 	if x, ok := reader.ReadBigInt(3); ok {
 		v.AcmeBurnt = *x
 	}
@@ -11610,6 +11670,11 @@ func (v *BurnTokens) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *BurnTokens) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadBigInt(2); ok {
 		v.Amount = *x
 	}
@@ -11692,6 +11757,11 @@ func (v *CreateDataAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *CreateDataAccount) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Url = x
 	}
@@ -11729,6 +11799,11 @@ func (v *CreateIdentity) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *CreateIdentity) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Url = x
 	}
@@ -11772,6 +11847,11 @@ func (v *CreateKeyBook) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *CreateKeyBook) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Url = x
 	}
@@ -11812,8 +11892,13 @@ func (v *CreateKeyPage) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *CreateKeyPage) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	for {
-		if x := new(KeySpecParams); reader.ReadValue(2, x.UnmarshalBinary) {
+		if x := new(KeySpecParams); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
 			v.Keys = append(v.Keys, x)
 		} else {
 			break
@@ -11847,6 +11932,11 @@ func (v *CreateLiteTokenAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
 
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *CreateLiteTokenAccount) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+
 	seen, err := reader.Reset(fieldNames_CreateLiteTokenAccount)
 	if err != nil {
 		return encoding.Error{E: err}
@@ -11873,6 +11963,11 @@ func (v *CreateToken) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *CreateToken) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Url = x
 	}
@@ -11922,6 +12017,11 @@ func (v *CreateTokenAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *CreateTokenAccount) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Url = x
 	}
@@ -11935,7 +12035,7 @@ func (v *CreateTokenAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
-	if x := new(TokenIssuerProof); reader.ReadValue(8, x.UnmarshalBinary) {
+	if x := new(TokenIssuerProof); reader.ReadValue(8, x.UnmarshalBinaryFrom) {
 		v.Proof = x
 	}
 
@@ -11965,12 +12065,17 @@ func (v *DataAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *DataAccount) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Url = x
 	}
-	reader.ReadValue(3, v.AccountAuth.UnmarshalBinary)
-	reader.ReadValue(4, func(b []byte) error {
-		x, err := UnmarshalDataEntry(b)
+	reader.ReadValue(3, v.AccountAuth.UnmarshalBinaryFrom)
+	reader.ReadValue(4, func(r io.Reader) error {
+		x, err := UnmarshalDataEntryFrom(r)
 		if err == nil {
 			v.Entry = x
 		}
@@ -12003,8 +12108,13 @@ func (v *DelegatedSignature) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
-	reader.ReadValue(2, func(b []byte) error {
-		x, err := UnmarshalSignature(b)
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *DelegatedSignature) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	reader.ReadValue(2, func(r io.Reader) error {
+		x, err := UnmarshalSignatureFrom(r)
 		if err == nil {
 			v.Signature = x
 		}
@@ -12040,16 +12150,21 @@ func (v *DirectoryAnchor) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
-	reader.ReadValue(2, v.PartitionAnchor.UnmarshalBinary)
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *DirectoryAnchor) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	reader.ReadValue(2, v.PartitionAnchor.UnmarshalBinaryFrom)
 	for {
-		if x := new(NetworkAccountUpdate); reader.ReadValue(3, x.UnmarshalBinary) {
+		if x := new(NetworkAccountUpdate); reader.ReadValue(3, x.UnmarshalBinaryFrom) {
 			v.Updates = append(v.Updates, *x)
 		} else {
 			break
 		}
 	}
 	for {
-		if x := new(PartitionAnchorReceipt); reader.ReadValue(4, x.UnmarshalBinary) {
+		if x := new(PartitionAnchorReceipt); reader.ReadValue(4, x.UnmarshalBinaryFrom) {
 			v.Receipts = append(v.Receipts, x)
 		} else {
 			break
@@ -12088,6 +12203,11 @@ func (v *DisableAccountAuthOperation) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *DisableAccountAuthOperation) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Authority = x
 	}
@@ -12118,6 +12238,11 @@ func (v *ED25519Signature) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *ED25519Signature) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadBytes(2); ok {
 		v.PublicKey = x
 	}
@@ -12166,6 +12291,11 @@ func (v *ETHSignature) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *ETHSignature) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadBytes(2); ok {
 		v.PublicKey = x
 	}
@@ -12215,6 +12345,11 @@ func (v *EmptyResult) UnmarshalBinaryFrom(rd io.Reader) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
 
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *EmptyResult) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+
 	seen, err := reader.Reset(fieldNames_EmptyResult)
 	if err != nil {
 		return encoding.Error{E: err}
@@ -12241,6 +12376,11 @@ func (v *EnableAccountAuthOperation) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *EnableAccountAuthOperation) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Authority = x
 	}
@@ -12265,8 +12405,8 @@ func (v *Envelope) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
 	for {
-		ok := reader.ReadValue(1, func(b []byte) error {
-			x, err := UnmarshalSignature(b)
+		ok := reader.ReadValue(1, func(r io.Reader) error {
+			x, err := UnmarshalSignatureFrom(r)
 			if err == nil {
 				v.Signatures = append(v.Signatures, x)
 			}
@@ -12280,7 +12420,7 @@ func (v *Envelope) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.TxHash = x
 	}
 	for {
-		if x := new(Transaction); reader.ReadValue(3, x.UnmarshalBinary) {
+		if x := new(Transaction); reader.ReadValue(3, x.UnmarshalBinaryFrom) {
 			v.Transaction = append(v.Transaction, x)
 		} else {
 			break
@@ -12313,7 +12453,12 @@ func (v *FactomDataEntryWrapper) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
-	reader.ReadValue(2, v.FactomDataEntry.UnmarshalBinary)
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *FactomDataEntryWrapper) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	reader.ReadValue(2, v.FactomDataEntry.UnmarshalBinaryFrom)
 
 	seen, err := reader.Reset(fieldNames_FactomDataEntryWrapper)
 	if err != nil {
@@ -12403,6 +12548,11 @@ func (v *InternalSignature) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *InternalSignature) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadHash(2); ok {
 		v.Cause = *x
 	}
@@ -12436,6 +12586,11 @@ func (v *IssueTokens) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *IssueTokens) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Recipient = x
 	}
@@ -12443,7 +12598,7 @@ func (v *IssueTokens) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Amount = *x
 	}
 	for {
-		if x := new(TokenRecipient); reader.ReadValue(4, x.UnmarshalBinary) {
+		if x := new(TokenRecipient); reader.ReadValue(4, x.UnmarshalBinaryFrom) {
 			v.To = append(v.To, x)
 		} else {
 			break
@@ -12476,13 +12631,18 @@ func (v *KeyBook) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *KeyBook) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Url = x
 	}
 	if x := new(BookType); reader.ReadEnum(3, x) {
 		v.BookType = *x
 	}
-	reader.ReadValue(4, v.AccountAuth.UnmarshalBinary)
+	reader.ReadValue(4, v.AccountAuth.UnmarshalBinaryFrom)
 	if x, ok := reader.ReadUint(5); ok {
 		v.PageCount = x
 	}
@@ -12513,6 +12673,11 @@ func (v *KeyPage) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *KeyPage) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Url = x
 	}
@@ -12535,7 +12700,7 @@ func (v *KeyPage) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Version = x
 	}
 	for {
-		if x := new(KeySpec); reader.ReadValue(9, x.UnmarshalBinary) {
+		if x := new(KeySpec); reader.ReadValue(9, x.UnmarshalBinaryFrom) {
 			v.Keys = append(v.Keys, x)
 		} else {
 			break
@@ -12626,6 +12791,11 @@ func (v *LegacyED25519Signature) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *LegacyED25519Signature) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadUint(2); ok {
 		v.Timestamp = x
 	}
@@ -12674,6 +12844,11 @@ func (v *LiteDataAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *LiteDataAccount) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Url = x
 	}
@@ -12704,6 +12879,11 @@ func (v *LiteIdentity) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *LiteIdentity) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Url = x
 	}
@@ -12740,6 +12920,11 @@ func (v *LiteTokenAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *LiteTokenAccount) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Url = x
 	}
@@ -12779,6 +12964,11 @@ func (v *LockAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *LockAccount) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadUint(2); ok {
 		v.Height = x
 	}
@@ -12831,8 +13021,8 @@ func (v *NetworkAccountUpdate) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadString(1); ok {
 		v.Name = x
 	}
-	reader.ReadValue(2, func(b []byte) error {
-		x, err := UnmarshalTransactionBody(b)
+	reader.ReadValue(2, func(r io.Reader) error {
+		x, err := UnmarshalTransactionBodyFrom(r)
 		if err == nil {
 			v.Body = x
 		}
@@ -12865,14 +13055,14 @@ func (v *NetworkDefinition) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Version = x
 	}
 	for {
-		if x := new(PartitionInfo); reader.ReadValue(3, x.UnmarshalBinary) {
+		if x := new(PartitionInfo); reader.ReadValue(3, x.UnmarshalBinaryFrom) {
 			v.Partitions = append(v.Partitions, x)
 		} else {
 			break
 		}
 	}
 	for {
-		if x := new(ValidatorInfo); reader.ReadValue(4, x.UnmarshalBinary) {
+		if x := new(ValidatorInfo); reader.ReadValue(4, x.UnmarshalBinaryFrom) {
 			v.Validators = append(v.Validators, x)
 		} else {
 			break
@@ -12898,10 +13088,10 @@ func (v *NetworkGlobals) UnmarshalBinary(data []byte) error {
 func (v *NetworkGlobals) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	if x := new(Rational); reader.ReadValue(1, x.UnmarshalBinary) {
+	if x := new(Rational); reader.ReadValue(1, x.UnmarshalBinaryFrom) {
 		v.OperatorAcceptThreshold = *x
 	}
-	if x := new(Rational); reader.ReadValue(2, x.UnmarshalBinary) {
+	if x := new(Rational); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
 		v.ValidatorAcceptThreshold = *x
 	}
 	if x, ok := reader.ReadString(3); ok {
@@ -12910,10 +13100,10 @@ func (v *NetworkGlobals) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBool(4); ok {
 		v.AnchorEmptyBlocks = x
 	}
-	if x := new(FeeSchedule); reader.ReadValue(5, x.UnmarshalBinary) {
+	if x := new(FeeSchedule); reader.ReadValue(5, x.UnmarshalBinaryFrom) {
 		v.FeeSchedule = x
 	}
-	if x := new(NetworkLimits); reader.ReadValue(6, x.UnmarshalBinary) {
+	if x := new(NetworkLimits); reader.ReadValue(6, x.UnmarshalBinaryFrom) {
 		v.Limits = x
 	}
 
@@ -12975,13 +13165,13 @@ func (v *Object) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Type = *x
 	}
 	for {
-		if x := new(ChainMetadata); reader.ReadValue(2, x.UnmarshalBinary) {
+		if x := new(ChainMetadata); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
 			v.Chains = append(v.Chains, *x)
 		} else {
 			break
 		}
 	}
-	if x := new(TxIdSet); reader.ReadValue(3, x.UnmarshalBinary) {
+	if x := new(TxIdSet); reader.ReadValue(3, x.UnmarshalBinaryFrom) {
 		v.Pending = *x
 	}
 
@@ -13042,10 +13232,10 @@ func (v *PartitionAnchorReceipt) UnmarshalBinary(data []byte) error {
 func (v *PartitionAnchorReceipt) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	if x := new(PartitionAnchor); reader.ReadValue(1, x.UnmarshalBinary) {
+	if x := new(PartitionAnchor); reader.ReadValue(1, x.UnmarshalBinaryFrom) {
 		v.Anchor = x
 	}
-	if x := new(managed.Receipt); reader.ReadValue(2, x.UnmarshalBinary) {
+	if x := new(managed.Receipt); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
 		v.RootChainReceipt = x
 	}
 
@@ -13101,6 +13291,11 @@ func (v *PartitionSignature) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *PartitionSignature) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.SourceNetwork = x
 	}
@@ -13179,6 +13374,11 @@ func (v *RCD1Signature) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *RCD1Signature) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadBytes(2); ok {
 		v.PublicKey = x
 	}
@@ -13253,10 +13453,15 @@ func (v *ReceiptSignature) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *ReceiptSignature) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.SourceNetwork = x
 	}
-	if x := new(managed.Receipt); reader.ReadValue(3, x.UnmarshalBinary) {
+	if x := new(managed.Receipt); reader.ReadValue(3, x.UnmarshalBinaryFrom) {
 		v.Proof = *x
 	}
 	if x, ok := reader.ReadHash(4); ok {
@@ -13289,11 +13494,16 @@ func (v *RemoteSignature) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *RemoteSignature) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Destination = x
 	}
-	reader.ReadValue(3, func(b []byte) error {
-		x, err := UnmarshalSignature(b)
+	reader.ReadValue(3, func(r io.Reader) error {
+		x, err := UnmarshalSignatureFrom(r)
 		if err == nil {
 			v.Signature = x
 		}
@@ -13333,6 +13543,11 @@ func (v *RemoteTransaction) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *RemoteTransaction) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadHash(2); ok {
 		v.Hash = *x
 	}
@@ -13363,6 +13578,11 @@ func (v *RemoveAccountAuthorityOperation) UnmarshalBinaryFrom(rd io.Reader) erro
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *RemoveAccountAuthorityOperation) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Authority = x
 	}
@@ -13393,7 +13613,12 @@ func (v *RemoveKeyOperation) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
-	if x := new(KeySpecParams); reader.ReadValue(2, x.UnmarshalBinary) {
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *RemoveKeyOperation) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x := new(KeySpecParams); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
 		v.Entry = *x
 	}
 
@@ -13472,14 +13697,14 @@ func (v *RoutingTable) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
 	for {
-		if x := new(RouteOverride); reader.ReadValue(1, x.UnmarshalBinary) {
+		if x := new(RouteOverride); reader.ReadValue(1, x.UnmarshalBinaryFrom) {
 			v.Overrides = append(v.Overrides, *x)
 		} else {
 			break
 		}
 	}
 	for {
-		if x := new(Route); reader.ReadValue(2, x.UnmarshalBinary) {
+		if x := new(Route); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
 			v.Routes = append(v.Routes, *x)
 		} else {
 			break
@@ -13512,6 +13737,11 @@ func (v *SendTokens) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *SendTokens) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadHash(2); ok {
 		v.Hash = *x
 	}
@@ -13519,7 +13749,7 @@ func (v *SendTokens) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Meta = x
 	}
 	for {
-		if x := new(TokenRecipient); reader.ReadValue(4, x.UnmarshalBinary) {
+		if x := new(TokenRecipient); reader.ReadValue(4, x.UnmarshalBinaryFrom) {
 			v.To = append(v.To, x)
 		} else {
 			break
@@ -13552,6 +13782,11 @@ func (v *SetThresholdKeyPageOperation) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *SetThresholdKeyPageOperation) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadUint(2); ok {
 		v.Threshold = x
 	}
@@ -13582,6 +13817,11 @@ func (v *SignatureSet) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *SignatureSet) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x := new(VoteType); reader.ReadEnum(2, x) {
 		v.Vote = *x
 	}
@@ -13592,8 +13832,8 @@ func (v *SignatureSet) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.TransactionHash = *x
 	}
 	for {
-		ok := reader.ReadValue(5, func(b []byte) error {
-			x, err := UnmarshalSignature(b)
+		ok := reader.ReadValue(5, func(r io.Reader) error {
+			x, err := UnmarshalSignatureFrom(r)
 			if err == nil {
 				v.Signatures = append(v.Signatures, x)
 			}
@@ -13630,7 +13870,12 @@ func (v *SyntheticBurnTokens) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
-	reader.ReadValue(2, v.SyntheticOrigin.UnmarshalBinary)
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *SyntheticBurnTokens) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	reader.ReadValue(2, v.SyntheticOrigin.UnmarshalBinaryFrom)
 	if x, ok := reader.ReadBigInt(3); ok {
 		v.Amount = *x
 	}
@@ -13664,10 +13909,15 @@ func (v *SyntheticCreateIdentity) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
-	reader.ReadValue(2, v.SyntheticOrigin.UnmarshalBinary)
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *SyntheticCreateIdentity) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	reader.ReadValue(2, v.SyntheticOrigin.UnmarshalBinaryFrom)
 	for {
-		ok := reader.ReadValue(3, func(b []byte) error {
-			x, err := UnmarshalAccount(b)
+		ok := reader.ReadValue(3, func(r io.Reader) error {
+			x, err := UnmarshalAccountFrom(r)
 			if err == nil {
 				v.Accounts = append(v.Accounts, x)
 			}
@@ -13704,7 +13954,12 @@ func (v *SyntheticDepositCredits) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
-	reader.ReadValue(2, v.SyntheticOrigin.UnmarshalBinary)
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *SyntheticDepositCredits) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	reader.ReadValue(2, v.SyntheticOrigin.UnmarshalBinaryFrom)
 	if x, ok := reader.ReadUint(3); ok {
 		v.Amount = x
 	}
@@ -13741,7 +13996,12 @@ func (v *SyntheticDepositTokens) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
-	reader.ReadValue(2, v.SyntheticOrigin.UnmarshalBinary)
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *SyntheticDepositTokens) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	reader.ReadValue(2, v.SyntheticOrigin.UnmarshalBinaryFrom)
 	if x, ok := reader.ReadUrl(3); ok {
 		v.Token = x
 	}
@@ -13781,14 +14041,19 @@ func (v *SyntheticForwardTransaction) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *SyntheticForwardTransaction) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	for {
-		if x := new(RemoteSignature); reader.ReadValue(2, x.UnmarshalBinary) {
+		if x := new(RemoteSignature); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
 			v.Signatures = append(v.Signatures, *x)
 		} else {
 			break
 		}
 	}
-	if x := new(Transaction); reader.ReadValue(3, x.UnmarshalBinary) {
+	if x := new(Transaction); reader.ReadValue(3, x.UnmarshalBinaryFrom) {
 		v.Transaction = x
 	}
 
@@ -13818,11 +14083,16 @@ func (v *SyntheticLedger) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *SyntheticLedger) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Url = x
 	}
 	for {
-		if x := new(PartitionSyntheticLedger); reader.ReadValue(3, x.UnmarshalBinary) {
+		if x := new(PartitionSyntheticLedger); reader.ReadValue(3, x.UnmarshalBinaryFrom) {
 			v.Sequence = append(v.Sequence, x)
 		} else {
 			break
@@ -13884,9 +14154,14 @@ func (v *SyntheticWriteData) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
-	reader.ReadValue(2, v.SyntheticOrigin.UnmarshalBinary)
-	reader.ReadValue(3, func(b []byte) error {
-		x, err := UnmarshalDataEntry(b)
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *SyntheticWriteData) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	reader.ReadValue(2, v.SyntheticOrigin.UnmarshalBinaryFrom)
+	reader.ReadValue(3, func(r io.Reader) error {
+		x, err := UnmarshalDataEntryFrom(r)
 		if err == nil {
 			v.Entry = x
 		}
@@ -13920,6 +14195,11 @@ func (v *SystemGenesis) UnmarshalBinaryFrom(rd io.Reader) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
 
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *SystemGenesis) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+
 	seen, err := reader.Reset(fieldNames_SystemGenesis)
 	if err != nil {
 		return encoding.Error{E: err}
@@ -13946,6 +14226,11 @@ func (v *SystemLedger) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *SystemLedger) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Url = x
 	}
@@ -13959,14 +14244,14 @@ func (v *SystemLedger) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.AcmeBurnt = *x
 	}
 	for {
-		if x := new(NetworkAccountUpdate); reader.ReadValue(6, x.UnmarshalBinary) {
+		if x := new(NetworkAccountUpdate); reader.ReadValue(6, x.UnmarshalBinaryFrom) {
 			v.PendingUpdates = append(v.PendingUpdates, *x)
 		} else {
 			break
 		}
 	}
-	reader.ReadValue(7, func(b []byte) error {
-		x, err := UnmarshalAnchorBody(b)
+	reader.ReadValue(7, func(r io.Reader) error {
+		x, err := UnmarshalAnchorBodyFrom(r)
 		if err == nil {
 			v.Anchor = x
 		}
@@ -13999,8 +14284,13 @@ func (v *SystemWriteData) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
-	reader.ReadValue(2, func(b []byte) error {
-		x, err := UnmarshalDataEntry(b)
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *SystemWriteData) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	reader.ReadValue(2, func(r io.Reader) error {
+		x, err := UnmarshalDataEntryFrom(r)
 		if err == nil {
 			v.Entry = x
 		}
@@ -14036,10 +14326,15 @@ func (v *TokenAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *TokenAccount) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Url = x
 	}
-	reader.ReadValue(3, v.AccountAuth.UnmarshalBinary)
+	reader.ReadValue(3, v.AccountAuth.UnmarshalBinaryFrom)
 	if x, ok := reader.ReadUrl(4); ok {
 		v.TokenUrl = x
 	}
@@ -14073,10 +14368,15 @@ func (v *TokenIssuer) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *TokenIssuer) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Url = x
 	}
-	reader.ReadValue(3, v.AccountAuth.UnmarshalBinary)
+	reader.ReadValue(3, v.AccountAuth.UnmarshalBinaryFrom)
 	if x, ok := reader.ReadString(4); ok {
 		v.Symbol = x
 	}
@@ -14112,10 +14412,10 @@ func (v *TokenIssuerProof) UnmarshalBinary(data []byte) error {
 func (v *TokenIssuerProof) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	if x := new(CreateToken); reader.ReadValue(1, x.UnmarshalBinary) {
+	if x := new(CreateToken); reader.ReadValue(1, x.UnmarshalBinaryFrom) {
 		v.Transaction = x
 	}
-	if x := new(managed.Receipt); reader.ReadValue(2, x.UnmarshalBinary) {
+	if x := new(managed.Receipt); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
 		v.Receipt = x
 	}
 
@@ -14164,11 +14464,11 @@ func (v *Transaction) UnmarshalBinary(data []byte) error {
 func (v *Transaction) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	if x := new(TransactionHeader); reader.ReadValue(1, x.UnmarshalBinary) {
+	if x := new(TransactionHeader); reader.ReadValue(1, x.UnmarshalBinaryFrom) {
 		v.Header = *x
 	}
-	reader.ReadValue(2, func(b []byte) error {
-		x, err := UnmarshalTransactionBody(b)
+	reader.ReadValue(2, func(r io.Reader) error {
+		x, err := UnmarshalTransactionBodyFrom(r)
 		if err == nil {
 			v.Body = x
 		}
@@ -14227,7 +14527,7 @@ func (v *TransactionResultSet) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
 	for {
-		if x := new(TransactionStatus); reader.ReadValue(1, x.UnmarshalBinary) {
+		if x := new(TransactionStatus); reader.ReadValue(1, x.UnmarshalBinaryFrom) {
 			v.Results = append(v.Results, x)
 		} else {
 			break
@@ -14259,11 +14559,11 @@ func (v *TransactionStatus) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x := new(errors2.Status); reader.ReadEnum(2, x) {
 		v.Code = *x
 	}
-	if x := new(errors2.Error); reader.ReadValue(3, x.UnmarshalBinary) {
+	if x := new(errors2.Error); reader.ReadValue(3, x.UnmarshalBinaryFrom) {
 		v.Error = x
 	}
-	reader.ReadValue(4, func(b []byte) error {
-		x, err := UnmarshalTransactionResult(b)
+	reader.ReadValue(4, func(r io.Reader) error {
+		x, err := UnmarshalTransactionResultFrom(r)
 		if err == nil {
 			v.Result = x
 		}
@@ -14276,8 +14576,8 @@ func (v *TransactionStatus) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Initiator = x
 	}
 	for {
-		ok := reader.ReadValue(7, func(b []byte) error {
-			x, err := UnmarshalSigner(b)
+		ok := reader.ReadValue(7, func(r io.Reader) error {
+			x, err := UnmarshalSignerFrom(r)
 			if err == nil {
 				v.Signers = append(v.Signers, x)
 			}
@@ -14299,7 +14599,7 @@ func (v *TransactionStatus) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBool(11); ok {
 		v.GotDirectoryReceipt = x
 	}
-	if x := new(managed.Receipt); reader.ReadValue(12, x.UnmarshalBinary) {
+	if x := new(managed.Receipt); reader.ReadValue(12, x.UnmarshalBinaryFrom) {
 		v.Proof = x
 	}
 	for {
@@ -14363,6 +14663,11 @@ func (v *UnknownAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *UnknownAccount) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Url = x
 	}
@@ -14393,6 +14698,11 @@ func (v *UnknownSigner) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *UnknownSigner) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Url = x
 	}
@@ -14426,9 +14736,14 @@ func (v *UpdateAccountAuth) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *UpdateAccountAuth) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	for {
-		ok := reader.ReadValue(2, func(b []byte) error {
-			x, err := UnmarshalAccountAuthOperation(b)
+		ok := reader.ReadValue(2, func(r io.Reader) error {
+			x, err := UnmarshalAccountAuthOperationFrom(r)
 			if err == nil {
 				v.Operations = append(v.Operations, x)
 			}
@@ -14465,6 +14780,11 @@ func (v *UpdateAllowedKeyPageOperation) UnmarshalBinaryFrom(rd io.Reader) error 
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *UpdateAllowedKeyPageOperation) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	for {
 		if x := new(TransactionType); reader.ReadEnum(2, x) {
 			v.Allow = append(v.Allow, *x)
@@ -14506,6 +14826,11 @@ func (v *UpdateKey) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *UpdateKey) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadBytes(2); ok {
 		v.NewKeyHash = x
 	}
@@ -14536,10 +14861,15 @@ func (v *UpdateKeyOperation) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
-	if x := new(KeySpecParams); reader.ReadValue(2, x.UnmarshalBinary) {
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *UpdateKeyOperation) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x := new(KeySpecParams); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
 		v.OldEntry = *x
 	}
-	if x := new(KeySpecParams); reader.ReadValue(3, x.UnmarshalBinary) {
+	if x := new(KeySpecParams); reader.ReadValue(3, x.UnmarshalBinaryFrom) {
 		v.NewEntry = *x
 	}
 
@@ -14569,9 +14899,14 @@ func (v *UpdateKeyPage) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *UpdateKeyPage) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	for {
-		ok := reader.ReadValue(2, func(b []byte) error {
-			x, err := UnmarshalKeyPageOperation(b)
+		ok := reader.ReadValue(2, func(r io.Reader) error {
+			x, err := UnmarshalKeyPageOperationFrom(r)
 			if err == nil {
 				v.Operation = append(v.Operation, x)
 			}
@@ -14611,7 +14946,7 @@ func (v *ValidatorInfo) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Operator = x
 	}
 	for {
-		if x := new(ValidatorPartitionInfo); reader.ReadValue(4, x.UnmarshalBinary) {
+		if x := new(ValidatorPartitionInfo); reader.ReadValue(4, x.UnmarshalBinaryFrom) {
 			v.Partitions = append(v.Partitions, x)
 		} else {
 			break
@@ -14670,8 +15005,13 @@ func (v *WriteData) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
-	reader.ReadValue(2, func(b []byte) error {
-		x, err := UnmarshalDataEntry(b)
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *WriteData) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	reader.ReadValue(2, func(r io.Reader) error {
+		x, err := UnmarshalDataEntryFrom(r)
 		if err == nil {
 			v.Entry = x
 		}
@@ -14710,6 +15050,11 @@ func (v *WriteDataResult) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *WriteDataResult) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadHash(2); ok {
 		v.EntryHash = *x
 	}
@@ -14746,11 +15091,16 @@ func (v *WriteDataTo) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *WriteDataTo) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Recipient = x
 	}
-	reader.ReadValue(3, func(b []byte) error {
-		x, err := UnmarshalDataEntry(b)
+	reader.ReadValue(3, func(r io.Reader) error {
+		x, err := UnmarshalDataEntryFrom(r)
 		if err == nil {
 			v.Entry = x
 		}

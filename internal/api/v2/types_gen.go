@@ -520,8 +520,8 @@ func (v *DataEntryQueryResponse) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadHash(1); ok {
 		v.EntryHash = *x
 	}
-	reader.ReadValue(2, func(b []byte) error {
-		x, err := protocol.UnmarshalDataEntry(b)
+	reader.ReadValue(2, func(r io.Reader) error {
+		x, err := protocol.UnmarshalDataEntryFrom(r)
 		if err == nil {
 			v.Entry = x
 		}

@@ -277,11 +277,11 @@ func (v *Error) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x := new(Status); reader.ReadEnum(2, x) {
 		v.Code = *x
 	}
-	if x := new(Error); reader.ReadValue(3, x.UnmarshalBinary) {
+	if x := new(Error); reader.ReadValue(3, x.UnmarshalBinaryFrom) {
 		v.Cause = x
 	}
 	for {
-		if x := new(CallSite); reader.ReadValue(4, x.UnmarshalBinary) {
+		if x := new(CallSite); reader.ReadValue(4, x.UnmarshalBinaryFrom) {
 			v.CallStack = append(v.CallStack, x)
 		} else {
 			break

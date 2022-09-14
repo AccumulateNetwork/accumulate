@@ -459,7 +459,6 @@ var fieldNames_Account = []string{
 func (v *Account) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
-	writer.IgnoreSizeLimit = true
 
 	if !(protocol.EqualAccount(v.Main, nil)) {
 		writer.WriteValue(1, v.Main.MarshalBinary)
@@ -939,17 +938,16 @@ func (v *Account) UnmarshalBinary(data []byte) error {
 
 func (v *Account) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
-	reader.IgnoreSizeLimit = true
 
-	reader.ReadValue(1, func(b []byte) error {
-		x, err := protocol.UnmarshalAccount(b)
+	reader.ReadValue(1, func(r io.Reader) error {
+		x, err := protocol.UnmarshalAccountFrom(r)
 		if err == nil {
 			v.Main = x
 		}
 		return err
 	})
 	for {
-		if x := new(OldChain); reader.ReadValue(2, x.UnmarshalBinary) {
+		if x := new(OldChain); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
 			v.OldChains = append(v.OldChains, x)
 		} else {
 			break
@@ -973,7 +971,7 @@ func (v *Account) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Url = x
 	}
 	for {
-		if x := new(managed.Snapshot); reader.ReadValue(6, x.UnmarshalBinary) {
+		if x := new(managed.Snapshot); reader.ReadValue(6, x.UnmarshalBinaryFrom) {
 			v.Chains = append(v.Chains, x)
 		} else {
 			break
@@ -1077,8 +1075,8 @@ func (v *Signature) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadTxid(1); ok {
 		v.Txid = x
 	}
-	reader.ReadValue(2, func(b []byte) error {
-		x, err := protocol.UnmarshalSignature(b)
+	reader.ReadValue(2, func(r io.Reader) error {
+		x, err := protocol.UnmarshalSignatureFrom(r)
 		if err == nil {
 			v.Signature = x
 		}
@@ -1104,14 +1102,14 @@ func (v *Transaction) UnmarshalBinary(data []byte) error {
 func (v *Transaction) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	if x := new(protocol.Transaction); reader.ReadValue(2, x.UnmarshalBinary) {
+	if x := new(protocol.Transaction); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
 		v.Transaction = x
 	}
-	if x := new(protocol.TransactionStatus); reader.ReadValue(3, x.UnmarshalBinary) {
+	if x := new(protocol.TransactionStatus); reader.ReadValue(3, x.UnmarshalBinaryFrom) {
 		v.Status = x
 	}
 	for {
-		if x := new(TxnSigSet); reader.ReadValue(4, x.UnmarshalBinary) {
+		if x := new(TxnSigSet); reader.ReadValue(4, x.UnmarshalBinaryFrom) {
 			v.SignatureSets = append(v.SignatureSets, x)
 		} else {
 			break
@@ -1144,7 +1142,7 @@ func (v *TxnSigSet) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Version = x
 	}
 	for {
-		if x := new(database.SigSetEntry); reader.ReadValue(3, x.UnmarshalBinary) {
+		if x := new(database.SigSetEntry); reader.ReadValue(3, x.UnmarshalBinaryFrom) {
 			v.Entries = append(v.Entries, *x)
 		} else {
 			break
@@ -1171,7 +1169,7 @@ func (v *sigSection) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
 	for {
-		if x := new(Signature); reader.ReadValue(1, x.UnmarshalBinary) {
+		if x := new(Signature); reader.ReadValue(1, x.UnmarshalBinaryFrom) {
 			v.Signatures = append(v.Signatures, x)
 		} else {
 			break
@@ -1198,7 +1196,7 @@ func (v *txnSection) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
 	for {
-		if x := new(Transaction); reader.ReadValue(1, x.UnmarshalBinary) {
+		if x := new(Transaction); reader.ReadValue(1, x.UnmarshalBinaryFrom) {
 			v.Transactions = append(v.Transactions, x)
 		} else {
 			break

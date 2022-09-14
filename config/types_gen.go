@@ -420,7 +420,7 @@ func (v *Describe) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadString(3); ok {
 		v.LocalAddress = x
 	}
-	if x := new(Network); reader.ReadValue(4, x.UnmarshalBinary) {
+	if x := new(Network); reader.ReadValue(4, x.UnmarshalBinaryFrom) {
 		v.Network = *x
 	}
 
@@ -447,7 +447,7 @@ func (v *Network) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Id = x
 	}
 	for {
-		if x := new(Partition); reader.ReadValue(2, x.UnmarshalBinary) {
+		if x := new(Partition); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
 			v.Partitions = append(v.Partitions, *x)
 		} else {
 			break
@@ -509,7 +509,7 @@ func (v *Partition) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.BasePort = x
 	}
 	for {
-		if x := new(Node); reader.ReadValue(4, x.UnmarshalBinary) {
+		if x := new(Node); reader.ReadValue(4, x.UnmarshalBinaryFrom) {
 			v.Nodes = append(v.Nodes, *x)
 		} else {
 			break

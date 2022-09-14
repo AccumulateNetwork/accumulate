@@ -7,7 +7,7 @@
 package query
 
 import (
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
 
 //go:generate go run ../../../../tools/cmd/gen-enum --package query --out enums_gen.go enums.yml
@@ -23,6 +23,6 @@ type TxFetchMode uint64
 type BlockFilterMode uint64
 
 type Request interface {
-	encoding.BinaryValue
+	encoding.UnionValue
 	Type() QueryType
 }

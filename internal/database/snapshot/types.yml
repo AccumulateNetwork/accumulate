@@ -14,7 +14,6 @@ Header:
     type: time
 
 Account:
-  ignore-size-limit: true # HACK
   fields:
   - name: Hash
     type: hash
