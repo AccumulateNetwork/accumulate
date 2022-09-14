@@ -28,22 +28,22 @@ const Purpose uint32 = 0x8000002C
 // DefaultAccumulateBaseDerivationPath is the base path from which custom derivation endpoints
 // are incremented. As such, the first account will be at m/44'/60'/0'/0/0, the second
 // at m/44'/281'/0'/0/1, etc.
-var DefaultAccumulateBaseDerivationPath = Derivation{TypeAccumulate, 0x80000000 + 0, 0, 0}
+var DefaultAccumulateBaseDerivationPath = Derivation{Purpose, TypeAccumulate, 0x80000000 + 0, 0, 0}
 
 // DefaultEtherBaseDerivationPath is the base path from which custom derivation endpoints
 // are incremented. As such, the first account will be at m/44'/60'/0'/0/0, the second
 // at m/44'/281'/0'/0/1, etc.
-var DefaultEtherBaseDerivationPath = Derivation{TypeEther, 0x80000000 + 0, 0, 0}
+var DefaultEtherBaseDerivationPath = Derivation{Purpose, TypeEther, 0x80000000 + 0, 0, 0}
 
 // DefaultFactoidBaseDerivationPath is the base path from which custom derivation endpoints
 // are incremented. As such, the first account will be at m/44'/60'/0'/0/0, the second
 // at m/44'/281'/0'/0/1, etc.
-var DefaultFactoidBaseDerivationPath = Derivation{TypeFactomFactoids, 0x80000000 + 0, 0, 0}
+var DefaultFactoidBaseDerivationPath = Derivation{Purpose, TypeFactomFactoids, 0x80000000 + 0, 0, 0}
 
 // DefaultBitcoinBaseDerivationPath is the base path from which custom derivation endpoints
 // are incremented. As such, the first account will be at m/44'/60'/0'/0/0, the second
 // at m/44'/281'/0'/0/1, etc.
-var DefaultBitcoinBaseDerivationPath = Derivation{TypeBitcoin, 0x80000000 + 0, 0, 0}
+var DefaultBitcoinBaseDerivationPath = Derivation{Purpose, TypeBitcoin, 0x80000000 + 0, 0, 0}
 
 const (
 	TypeBitcoin               uint32 = 0x80000000
@@ -295,7 +295,7 @@ func NewDerivationPath(signatureType protocol.SignatureType) (d Derivation, e er
 	return d, e
 }
 
-func (d Derivation) FromPath(path string) error {
+func (d *Derivation) FromPath(path string) error {
 	hd := strings.Split(path, "/")
 	if len(hd) != 6 {
 		return fmt.Errorf("insufficent parameters in bip44 derivation path")
@@ -306,7 +306,7 @@ func (d Derivation) FromPath(path string) error {
 		return fmt.Errorf("invalid purpose, expecting bip44 HD derivation path, but received %s", path)
 	}
 
-	d = Derivation{Purpose}
+	*d = Derivation{Purpose}
 	for _, s := range hd[2:6] {
 		t := uint32(0)
 		if strings.HasSuffix(s, "'") {
@@ -317,7 +317,7 @@ func (d Derivation) FromPath(path string) error {
 		if err != nil {
 			return fmt.Errorf("malformed bip44 HD derivation path, %v", err)
 		}
-		d = append(d, t+uint32(n))
+		*d = append(*d, t+uint32(n))
 	}
 
 	return d.Validate()
