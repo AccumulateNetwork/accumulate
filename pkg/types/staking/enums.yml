@@ -1,0 +1,9 @@
+AccountType:
+  Inactive:
+    value: 0
+  Pure:
+    value: 1
+  Delegated:
+    value: 2
+  Validator:
+    value: 3

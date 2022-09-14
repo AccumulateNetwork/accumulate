@@ -1,0 +1,19 @@
+Account:
+  fields:
+    - name: Type
+      description: is the type of staking account
+      type: AccountType
+      marshal-as: enum
+    - name: Stake
+      description: is the URL of the staked token account
+      type: url
+      pointer: true
+    - name: Rewards
+      description: is the URL of the rewards token account
+      type: url
+      pointer: true
+    - name: Delegate
+      description: is the URL of an account this stake is delegated to
+      type: url
+      pointer: true
+      optional: true
