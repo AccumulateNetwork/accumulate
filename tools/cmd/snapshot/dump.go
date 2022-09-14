@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 
@@ -80,11 +79,6 @@ func (dumpVisitor) VisitAccount(acct *snapshot.Account, _ int) error {
 		for _, c := range acct.Chains {
 			err = c.Restore(batch.Account(acct.Url))
 			checkf(err, "restore %v %s chain", acct.Url, c.Name)
-		}
-
-		if acct.Url.ShortString() == "BEN.acme" {
-			b, _ := json.Marshal(acct)
-			fmt.Printf("%s\n", b)
 		}
 
 		err = batch.Account(acct.Url).VerifyHash(acct.Hash[:])
