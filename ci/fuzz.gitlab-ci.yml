@@ -5,6 +5,8 @@ include:
 fuzz:
   extends: .fuzz_base
   image: golang:1.19
+  stage: test
+  needs: []
   parallel:
     matrix:
       - file: internal/chain/fuzz_user_txn_test.go
