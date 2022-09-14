@@ -31,7 +31,6 @@ fuzz:
         - FuzzUpdateAccountAuth
         - FuzzUpdateKey
   script:
-  - go get github.com/AdamKorcz/go-118-fuzz-build
   - go install github.com/AdamKorcz/go-118-fuzz-build
   - sed -i "s/import (/import go118fuzzbuildutils \"github.com\/AdamKorcz\/go-118-fuzz-build\/utils\"\nimport (/" $file
   - sed -i "s/func $func(\([a-zA-Z0-9]*\) \*testing\.F)/func $func(\1 \*go118fuzzbuildutils\.F)/g" $file

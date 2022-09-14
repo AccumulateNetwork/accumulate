@@ -47,12 +47,14 @@ require (
 )
 
 require (
+	github.com/AdamKorcz/go-118-fuzz-build v0.0.0-20220912195655-e1f97a00006b
 	github.com/FactomProject/factomd v1.13.0
 	github.com/ghodss/yaml v1.0.0
 	github.com/gorhill/cronexpr v0.0.0-20180427100037-88b0669f7d75
 )
 
 require (
+	github.com/AdaLogics/go-fuzz-headers v0.0.0-20220824214621-3c06a36a6952 // indirect
 	github.com/FactomProject/btcutil v0.0.0-20200312214114-5fd3eaf71bd2 // indirect
 	github.com/FactomProject/ed25519 v0.0.0-20150814230546-38002c4fe7b6 // indirect
 	github.com/FactomProject/go-bip32 v0.3.6-0.20161206200006-3b593af1c415 // indirect
@@ -65,6 +67,7 @@ require (
 	github.com/alingse/asasalint v0.0.11 // indirect
 	github.com/btcsuitereleases/btcutil v0.0.0-20150612230727-f2b1058a8255 // indirect
 	github.com/creachadair/taskgroup v0.3.2 // indirect
+	github.com/cyphar/filepath-securejoin v0.2.3 // indirect
 	github.com/firefart/nonamedreturns v1.0.4 // indirect
 	github.com/lufeee/execinquery v1.2.1 // indirect
 	github.com/pelletier/go-toml/v2 v2.0.2 // indirect
