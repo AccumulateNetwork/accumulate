@@ -50,17 +50,17 @@ func Collect(batch *database.Batch, file io.WriteSeeker, preserveAccountHistory 
 
 		err = txnHashes.CollectFromChain(record, record.MainChain())
 		if err != nil {
-			return nil, errors.Wrap(errors.StatusUnknownError, err)
+			return nil, errors.Format(errors.StatusUnknownError, "collect from %v main chain: %v", u, err)
 		}
 
 		err = txnHashes.CollectFromChain(record, record.ScratchChain())
 		if err != nil {
-			return nil, errors.Wrap(errors.StatusUnknownError, err)
+			return nil, errors.Format(errors.StatusUnknownError, "collect from %v scratch chain: %v", u, err)
 		}
 
 		err = sigHashes.CollectFromChain(record, record.SignatureChain())
 		if err != nil {
-			return nil, errors.Wrap(errors.StatusUnknownError, err)
+			return nil, errors.Format(errors.StatusUnknownError, "collect from %v signature chain: %v", u, err)
 		}
 	}
 
