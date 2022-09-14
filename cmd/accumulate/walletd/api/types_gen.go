@@ -16,6 +16,12 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+type AddSendTokensOutputRequest struct {
+	TxName       string `json:"txName,omitempty" form:"txName" query:"txName" validate:"required"`
+	TokenAddress string `json:"tokenAddress,omitempty" form:"tokenAddress" query:"tokenAddress" validate:"required"`
+	Amount       int64  `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+}
+
 type AddTokenTransactionOutput struct {
 	Name   string `json:"name,omitempty" form:"name" query:"name" validate:"required"`
 	Url    string `json:"url,omitempty" form:"url" query:"url" validate:"required"`
@@ -150,6 +156,18 @@ type VersionResponse struct {
 	Commit    string `json:"commit,omitempty" form:"commit" query:"commit" validate:"required"`
 	extraData []byte
 }
+
+func (v *AddSendTokensOutputRequest) Copy() *AddSendTokensOutputRequest {
+	u := new(AddSendTokensOutputRequest)
+
+	u.TxName = v.TxName
+	u.TokenAddress = v.TokenAddress
+	u.Amount = v.Amount
+
+	return u
+}
+
+func (v *AddSendTokensOutputRequest) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *AddTokenTransactionOutput) Copy() *AddTokenTransactionOutput {
 	u := new(AddTokenTransactionOutput)
@@ -461,6 +479,20 @@ func (v *VersionResponse) Copy() *VersionResponse {
 }
 
 func (v *VersionResponse) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *AddSendTokensOutputRequest) Equal(u *AddSendTokensOutputRequest) bool {
+	if !(v.TxName == u.TxName) {
+		return false
+	}
+	if !(v.TokenAddress == u.TokenAddress) {
+		return false
+	}
+	if !(v.Amount == u.Amount) {
+		return false
+	}
+
+	return true
+}
 
 func (v *AddTokenTransactionOutput) Equal(u *AddTokenTransactionOutput) bool {
 	if !(v.Name == u.Name) {

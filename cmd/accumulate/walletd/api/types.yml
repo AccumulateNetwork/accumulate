@@ -211,3 +211,13 @@ NewTransactionRequest:
     - name: TxName
       type: string
 
+AddSendTokensOutputRequest:
+  non-binary: true
+  fields:
+    - name: TxName
+      type: string
+    - name: TokenAddress
+      type: string
+    - name: Amount
+      type: int
+
