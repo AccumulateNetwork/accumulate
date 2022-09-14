@@ -74,11 +74,16 @@ func getMinorBlockByMajorIndex(client *client.Client, ctx context.Context, parti
 	return blocks, nil
 }
 
-func getTransactionsByMajorIndex(client *client.Client, ctx context.Context, partition string, majorIndex uint64) ([]*protocol.Transaction, error) {
+func getTransactionsByMajorIndex(client *client.Client, ctx context.Context, partition string, majorIndex uint64, accounts []*url.URL) ([]*protocol.Transaction, error) {
 	// Query the major block
 	blocks, err := getMinorBlockByMajorIndex(client, ctx, partition, majorIndex)
 	if err != nil {
 		return nil, err
+	}
+
+	filter := map[[32]byte]bool{}
+	for _, a := range accounts {
+		filter[a.AccountID32()] = true
 	}
 
 	// Extract transactions
@@ -88,6 +93,10 @@ func getTransactionsByMajorIndex(client *client.Client, ctx context.Context, par
 		for _, txn := range block.Transactions {
 			// Ignore pending and failed transactions
 			if txn.Status.Code != errors.StatusDelivered {
+				continue
+			}
+
+			if !filter[txn.Transaction.Header.Principal.AccountID32()] {
 				continue
 			}
 
@@ -104,24 +113,17 @@ func getTransactionsByMajorIndex(client *client.Client, ctx context.Context, par
 	return txns, nil
 }
 
-func getAccountsModifiedByMajorIndex(client *client.Client, ctx context.Context, partition string, majorIndex uint64) ([]*url.URL, error) {
+func accountsDidChangeInMajorIndex(client *client.Client, ctx context.Context, partition string, majorIndex uint64, accounts []*url.URL) ([]bool, error) {
 	// Query the major block
 	blocks, err := getMinorBlockByMajorIndex(client, ctx, partition, majorIndex)
 	if err != nil {
 		return nil, err
 	}
 
-	// Helper to ensure uniqueness
-	seen := map[[32]byte]bool{}
-	var accounts []*url.URL
-	add := func(u *url.URL) {
-		// Only add each account once
-		if seen[u.AccountID32()] {
-			return
-		}
-
-		seen[u.AccountID32()] = true
-		accounts = append(accounts, u)
+	didChange := make([]bool, len(accounts))
+	lookup := map[[32]byte]*bool{}
+	for i, a := range accounts {
+		lookup[a.AccountID32()] = &didChange[i]
 	}
 
 	// For block, for each transaction
@@ -132,30 +134,13 @@ func getAccountsModifiedByMajorIndex(client *client.Client, ctx context.Context,
 				continue
 			}
 
-			// Add the principal and/or other URLs as appropriate
-			switch body := txn.Transaction.Body.(type) {
-			case *protocol.CreateIdentity:
-				add(body.Url)
-				if body.KeyBookUrl != nil {
-					add(body.KeyBookUrl)
-					add(body.KeyBookUrl.JoinPath("1"))
-				}
-			case *protocol.CreateTokenAccount:
-				add(txn.Transaction.Header.Principal)
-				add(body.Url)
-			case *protocol.CreateDataAccount:
-				add(txn.Transaction.Header.Principal)
-				add(body.Url)
-			case *protocol.CreateToken:
-				add(txn.Transaction.Header.Principal)
-				add(body.Url)
-			case *protocol.CreateKeyBook:
-				add(txn.Transaction.Header.Principal)
-				add(body.Url)
-			default:
-				add(txn.Transaction.Header.Principal)
+			// Mark the account as changed if it's one we care about
+			v := lookup[txn.Transaction.Header.Principal.AccountID32()]
+			if v != nil {
+				*v = true
 			}
 		}
 	}
-	return accounts, nil
+
+	return didChange, nil
 }
