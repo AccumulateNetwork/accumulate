@@ -22,8 +22,7 @@ type Key struct {
 
 func (k *Key) PublicKeyHash() []byte {
 	switch k.KeyInfo.Type {
-	case protocol.SignatureTypeLegacyED25519,
-		protocol.SignatureTypeED25519:
+	case protocol.SignatureTypeED25519:
 		hash := sha256.Sum256(k.PublicKey)
 		return hash[:]
 
@@ -112,7 +111,7 @@ func (k *Key) InitializeFromSeed(seed []byte, signatureType protocol.SignatureTy
 	k.KeyInfo.Type = signatureType
 	k.KeyInfo.Derivation = hdPath
 	switch k.KeyInfo.Type {
-	case protocol.SignatureTypeLegacyED25519, protocol.SignatureTypeED25519, protocol.SignatureTypeRCD1:
+	case protocol.SignatureTypeED25519, protocol.SignatureTypeRCD1:
 		if len(seed) != ed25519.SeedSize && len(seed) != ed25519.PrivateKeySize {
 			return fmt.Errorf("invalid private key length, expected %d or %d bytes", ed25519.SeedSize, ed25519.PrivateKeySize)
 		}
@@ -173,10 +172,10 @@ func GenerateKey(sigtype protocol.SignatureType) (k *Key, err error) {
 		return nil, err
 	}
 
-	return GenerateKeyFromHDPath(derivationPath)
+	return GenerateKeyFromHDPath(derivationPath, sigtype)
 }
 
-func GenerateKeyFromHDPath(derivationPath string) (*Key, error) {
+func GenerateKeyFromHDPath(derivationPath string, sigtype protocol.SignatureType) (*Key, error) {
 	hd := Derivation{}
 	err := hd.FromPath(derivationPath)
 	if err != nil {
@@ -202,7 +201,7 @@ func GenerateKeyFromHDPath(derivationPath string) (*Key, error) {
 		return nil, err
 	}
 	key := new(Key)
-	err = key.InitializeFromSeed(newKey.Key, hd.SignatureType(), derivationPath)
+	err = key.InitializeFromSeed(newKey.Key, sigtype, derivationPath)
 	if err != nil {
 		return nil, err
 	}

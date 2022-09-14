@@ -281,7 +281,7 @@ func ParseDerivationPath(path string) (Derivation, error) {
 
 func NewDerivationPath(signatureType protocol.SignatureType) (d Derivation, e error) {
 	switch signatureType {
-	case protocol.SignatureTypeBTC:
+	case protocol.SignatureTypeBTC, protocol.SignatureTypeBTCLegacy:
 		d = DefaultBitcoinBaseDerivationPath
 	case protocol.SignatureTypeRCD1:
 		d = DefaultFactoidBaseDerivationPath
@@ -297,7 +297,7 @@ func NewDerivationPath(signatureType protocol.SignatureType) (d Derivation, e er
 
 func (d *Derivation) FromPath(path string) error {
 	hd := strings.Split(path, "/")
-	if len(hd) != 6 {
+	if len(hd) < 4 {
 		return fmt.Errorf("insufficent parameters in bip44 derivation path")
 	}
 
@@ -307,7 +307,7 @@ func (d *Derivation) FromPath(path string) error {
 	}
 
 	*d = Derivation{Purpose}
-	for _, s := range hd[2:6] {
+	for _, s := range hd[2:] {
 		t := uint32(0)
 		if strings.HasSuffix(s, "'") {
 			t = bip32.FirstHardenedChild
@@ -323,7 +323,10 @@ func (d *Derivation) FromPath(path string) error {
 	return d.Validate()
 }
 
-func (d Derivation) SignatureType() protocol.SignatureType {
+// DeduceSignatureType get signature type from coin type, note: this will only return the btc signature type
+// for TypeBitcoin, thus if the user wants a legacy btc address, it won't be able to get one if
+// the type is deduced via this function.
+func (d Derivation) DeduceSignatureType() protocol.SignatureType {
 	t := protocol.SignatureTypeUnknown
 	//derivationPath
 	switch d.CoinType() {
