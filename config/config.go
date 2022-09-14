@@ -162,7 +162,7 @@ type Config struct {
 type Accumulate struct {
 	SentryDSN        string `toml:"sentry-dsn" mapstructure:"sentry-dsn"`
 	Describe         `toml:"describe" mapstructure:"describe"`
-	BatchReplayLimit int `toml:"batchreplaylimit" mapstructure:"batchreplaylimit"`
+	BatchReplayLimit int `toml:"batch-replay-limit" mapstructure:"batch-replay-limit"`
 	// DnStallLimit sets the number of blocks the DN is allowed to take before
 	// acknowledging an anchor.
 	DnStallLimit int `toml:"dn-stall-limit" mapstructure:"dn-stall-limit"`

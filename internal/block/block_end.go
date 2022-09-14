@@ -482,6 +482,9 @@ func (x *Executor) requestMissingAnchors(ctx context.Context, batch *database.Ba
 		a := *(*[32]byte)(status.Proof.Anchor)
 		anchors[a] = append(anchors[a], txid)
 		source[txid] = status.SourceNetwork
+		if x.BatchReplayLimit > 0 && len(anchors) == x.BatchReplayLimit {
+			break
+		}
 	}
 	if len(anchors) == 0 {
 		return
