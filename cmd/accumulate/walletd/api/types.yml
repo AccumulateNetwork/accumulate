@@ -1,4 +1,3 @@
-
 DecodeRequest:
   non-binary: true
   fields:
@@ -204,27 +203,44 @@ ResolveKeyResponse:
     - name: KeyData
       type: KeyData
       marshal-as: reference
-      
+
 NewTransactionRequest:
   non-binary: true
   fields:
     - name: TxName
       type: string
 
+Version:
+  non-binary: true
+  fields:
+    - name: Label
+      type: String
+    - name: Major
+      type: uint
+    - name: Minor
+      type: uint
+    - name: Patch
+      type: uint
+
 LedgerWalletInfo:
   non-binary: true
   fields:
     - name: Version
-      type: String
+      type: Version
+      marshal-as: reference
+    - name: VendorID
+      type: uint
     - name: Manufacturer
       type: String
+    - name: ProductID
+      type: uint
     - name: Product
       type: String
 
 LedgerWalletInfoResponse:
   non-binary: true
   fields:
-    - name: LedgerInfos
-      type: LedgerInfo
+    - name: LedgerWalletsInfo
+      type: LedgerWalletInfo
       repeatable: true
       marshal-as: reference

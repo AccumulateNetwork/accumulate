@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
 )
@@ -31,13 +32,17 @@ func queryWalletsInfo(cmd *cobra.Command, args []string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	ledgerInfos, err := ledgerState.GetLedgerWalletsInfo()
+	ledgerInfos, err := ledgerState.QueryLedgerWalletsInfo()
 	if err != nil {
 		return "", err
 	}
 	result := fmt.Sprintln("Wallets:")
-	for _, ledgerInfo := range ledgerInfos {
-		result += fmt.Sprintln("\tVersion:\t", ledgerInfo.Version)
+	for i, ledgerInfo := range ledgerInfos {
+		result += fmt.Sprintf("%d\tManufacturer:\t%s\n", i+1, ledgerInfo.Manufacturer)
+		result += fmt.Sprintf("\tProduct:\t%s\n", ledgerInfo.Product)
+		result += fmt.Sprintf("\tVendor ID:\t%d\n", ledgerInfo.VendorID)
+		result += fmt.Sprintf("\tProduct ID:\t%d\n", ledgerInfo.ProductID)
+		result += fmt.Sprintf("\tApp Version:\t%s\n", ledgerInfo.Version.Label)
 	}
 	return result, nil
 }

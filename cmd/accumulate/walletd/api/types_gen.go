@@ -118,11 +118,15 @@ type KeyListResponse struct {
 }
 
 type LedgerWalletInfo struct {
-	Version string `json:"version,omitempty" form:"version" query:"version" validate:"required"`
+	Version      Version `json:"version,omitempty" form:"version" query:"version" validate:"required"`
+	VendorID     uint64  `json:"vendorID,omitempty" form:"vendorID" query:"vendorID" validate:"required"`
+	Manufacturer string  `json:"manufacturer,omitempty" form:"manufacturer" query:"manufacturer" validate:"required"`
+	ProductID    uint64  `json:"productID,omitempty" form:"productID" query:"productID" validate:"required"`
+	Product      string  `json:"product,omitempty" form:"product" query:"product" validate:"required"`
 }
 
 type LedgerWalletInfoResponse struct {
-	LedgerWalletsInfo []LedgerWalletInfo `json:"ledgerInfos,omitempty" form:"ledgerInfos" query:"ledgerInfos" validate:"required"`
+	LedgerWalletsInfo []LedgerWalletInfo `json:"ledgerWalletsInfo,omitempty" form:"ledgerWalletsInfo" query:"ledgerWalletsInfo" validate:"required"`
 }
 
 type NewTransactionRequest struct {
@@ -150,6 +154,13 @@ type SignRequest struct {
 type SignResponse struct {
 	Signature []byte `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
 	PublicKey []byte `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
+}
+
+type Version struct {
+	Label string `json:"label,omitempty" form:"label" query:"label" validate:"required"`
+	Major uint64 `json:"major,omitempty" form:"major" query:"major" validate:"required"`
+	Minor uint64 `json:"minor,omitempty" form:"minor" query:"minor" validate:"required"`
+	Patch uint64 `json:"patch,omitempty" form:"patch" query:"patch" validate:"required"`
 }
 
 type VersionResponse struct {
@@ -399,7 +410,11 @@ func (v *KeyListResponse) CopyAsInterface() interface{} { return v.Copy() }
 func (v *LedgerWalletInfo) Copy() *LedgerWalletInfo {
 	u := new(LedgerWalletInfo)
 
-	u.Version = v.Version
+	u.Version = *(&v.Version).Copy()
+	u.VendorID = v.VendorID
+	u.Manufacturer = v.Manufacturer
+	u.ProductID = v.ProductID
+	u.Product = v.Product
 
 	return u
 }
@@ -481,6 +496,19 @@ func (v *SignResponse) Copy() *SignResponse {
 }
 
 func (v *SignResponse) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *Version) Copy() *Version {
+	u := new(Version)
+
+	u.Label = v.Label
+	u.Major = v.Major
+	u.Minor = v.Minor
+	u.Patch = v.Patch
+
+	return u
+}
+
+func (v *Version) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *VersionResponse) Copy() *VersionResponse {
 	u := new(VersionResponse)
@@ -713,7 +741,19 @@ func (v *KeyListResponse) Equal(u *KeyListResponse) bool {
 }
 
 func (v *LedgerWalletInfo) Equal(u *LedgerWalletInfo) bool {
-	if !(v.Version == u.Version) {
+	if !((&v.Version).Equal(&u.Version)) {
+		return false
+	}
+	if !(v.VendorID == u.VendorID) {
+		return false
+	}
+	if !(v.Manufacturer == u.Manufacturer) {
+		return false
+	}
+	if !(v.ProductID == u.ProductID) {
+		return false
+	}
+	if !(v.Product == u.Product) {
 		return false
 	}
 
@@ -784,6 +824,23 @@ func (v *SignResponse) Equal(u *SignResponse) bool {
 		return false
 	}
 	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
+		return false
+	}
+
+	return true
+}
+
+func (v *Version) Equal(u *Version) bool {
+	if !(v.Label == u.Label) {
+		return false
+	}
+	if !(v.Major == u.Major) {
+		return false
+	}
+	if !(v.Minor == u.Minor) {
+		return false
+	}
+	if !(v.Patch == u.Patch) {
 		return false
 	}
 
@@ -1051,9 +1108,9 @@ func (v *KeyListResponse) MarshalJSON() ([]byte, error) {
 
 func (v *LedgerWalletInfoResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		LedgerInfos encoding.JsonList[LedgerWalletInfo] `json:"ledgerInfos,omitempty"`
+		LedgerWalletsInfo encoding.JsonList[LedgerWalletInfo] `json:"ledgerWalletsInfo,omitempty"`
 	}{}
-	u.LedgerInfos = v.LedgerWalletsInfo
+	u.LedgerWalletsInfo = v.LedgerWalletsInfo
 	return json.Marshal(&u)
 }
 
@@ -1251,13 +1308,13 @@ func (v *KeyListResponse) UnmarshalJSON(data []byte) error {
 
 func (v *LedgerWalletInfoResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		LedgerInfos encoding.JsonList[LedgerWalletInfo] `json:"ledgerInfos,omitempty"`
+		LedgerWalletsInfo encoding.JsonList[LedgerWalletInfo] `json:"ledgerWalletsInfo,omitempty"`
 	}{}
-	u.LedgerInfos = v.LedgerWalletsInfo
+	u.LedgerWalletsInfo = v.LedgerWalletsInfo
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	v.LedgerWalletsInfo = u.LedgerInfos
+	v.LedgerWalletsInfo = u.LedgerWalletsInfo
 	return nil
 }
 
