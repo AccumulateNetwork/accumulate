@@ -22,6 +22,18 @@ func (c *Client) AdiList(ctx context.Context) (interface{}, error) {
 	return resp, nil
 }
 
+// ComposeSendTokensTransaction compose a transaction from map to be executed.
+func (c *Client) ComposeSendTokensTransaction(ctx context.Context, req *api.ComposeTransactionRequest) (*protocol.SendTokens, error) {
+	var resp protocol.SendTokens
+
+	err := c.RequestAPIv2(ctx, "compose-transaction", req, &resp)
+	if err != nil {
+		return nil, err
+	}
+
+	return &resp, nil
+}
+
 // CreateEnvelope create an envelope by name.
 func (c *Client) CreateEnvelope(ctx context.Context, req *api.CreateEnvelopeRequest) (*api.CreateEnvelopeResponse, error) {
 	var resp api.CreateEnvelopeResponse

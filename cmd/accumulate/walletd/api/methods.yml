@@ -55,3 +55,9 @@ NewSendTokensTransaction:
   rpc: new-transaction
   input: api.NewTransactionRequest
   output: protocol.SendTokens
+
+ComposeSendTokensTransaction:
+  description: compose a transaction from map to be executed
+  rpc: compose-transaction
+  input: api.ComposeTransactionRequest
+  output: protocol.SendTokens

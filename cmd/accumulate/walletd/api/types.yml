@@ -211,3 +211,9 @@ NewTransactionRequest:
     - name: TxName
       type: string
 
+ComposeTransactionRequest:
+  non-binary: true
+  fields:
+    - name: TxName
+      type: string
+

@@ -48,6 +48,10 @@ type AuthorizationRequired struct {
 	extraData []byte
 }
 
+type ComposeTransactionRequest struct {
+	TxName string `json:"txName,omitempty" form:"txName" query:"txName" validate:"required"`
+}
+
 type CreateEnvelopeRequest struct {
 	Name string `json:"name,omitempty" form:"name" query:"name" validate:"required"`
 }
@@ -219,6 +223,16 @@ func (v *AuthorizationRequired) Copy() *AuthorizationRequired {
 }
 
 func (v *AuthorizationRequired) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *ComposeTransactionRequest) Copy() *ComposeTransactionRequest {
+	u := new(ComposeTransactionRequest)
+
+	u.TxName = v.TxName
+
+	return u
+}
+
+func (v *ComposeTransactionRequest) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *CreateEnvelopeRequest) Copy() *CreateEnvelopeRequest {
 	u := new(CreateEnvelopeRequest)
@@ -527,6 +541,14 @@ func (v *AuthorizationRequired) Equal(u *AuthorizationRequired) bool {
 		return false
 	}
 	if !(v.Version == u.Version) {
+		return false
+	}
+
+	return true
+}
+
+func (v *ComposeTransactionRequest) Equal(u *ComposeTransactionRequest) bool {
+	if !(v.TxName == u.TxName) {
 		return false
 	}
 
