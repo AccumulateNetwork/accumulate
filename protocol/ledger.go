@@ -3,7 +3,7 @@ package protocol
 import "gitlab.com/accumulatenetwork/accumulate/pkg/url"
 
 // Add records a received or delivered synthetic transaction.
-func (s *TransactionExchangeLedger) Add(delivered bool, sequenceNumber uint64, txid *url.TxID) (dirty bool) {
+func (s *PartitionSyntheticLedger) Add(delivered bool, sequenceNumber uint64, txid *url.TxID) (dirty bool) {
 	// Update received
 	if sequenceNumber > s.Received {
 		s.Received, dirty = sequenceNumber, true
@@ -39,7 +39,7 @@ func (s *TransactionExchangeLedger) Add(delivered bool, sequenceNumber uint64, t
 }
 
 // Get gets the hash for a synthetic transaction.
-func (s *TransactionExchangeLedger) Get(sequenceNumber uint64) (*url.TxID, bool) {
+func (s *PartitionSyntheticLedger) Get(sequenceNumber uint64) (*url.TxID, bool) {
 	if sequenceNumber <= s.Delivered || sequenceNumber > s.Received {
 		return nil, false
 	}
