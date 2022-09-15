@@ -12,24 +12,28 @@ fuzz:
       - file: internal/chain/fuzz_user_txn_test.go
         func:
         - FuzzCreateIdentity
-        - FuzzCreateTokenAccount
-        - FuzzSendTokens
-        - FuzzCreateDataAccount
-        - FuzzWriteData
-        - FuzzWriteData_Lite
-        - FuzzWriteDataTo
-        - FuzzAcmeFaucet
-        - FuzzCreateToken
-        - FuzzIssueTokens
-        - FuzzBurnTokens
-        - FuzzCreateLiteTokenAccount
-        - FuzzCreateKeyPage
-        - FuzzCreateKeyBook
-        - FuzzAddCredits
-        - FuzzUpdateKeyPage
-        - FuzzLockAccount
-        - FuzzUpdateAccountAuth
-        - FuzzUpdateKey
+
+        # Disable most functions to avoid eating CI minutes
+        # - FuzzCreateTokenAccount
+        # - FuzzSendTokens
+        # - FuzzCreateDataAccount
+        # - FuzzWriteData
+        # - FuzzWriteData_Lite
+        # - FuzzWriteDataTo
+        # - FuzzAcmeFaucet
+        # - FuzzCreateToken
+        # - FuzzIssueTokens
+        # - FuzzBurnTokens
+        # - FuzzCreateLiteTokenAccount
+        # - FuzzCreateKeyPage
+        # - FuzzCreateKeyBook
+        # - FuzzAddCredits
+        # - FuzzUpdateKeyPage
+        # - FuzzLockAccount
+        # - FuzzUpdateAccountAuth
+        # - FuzzUpdateKey
+  variables:
+    COVFUZZ_ADDITIONAL_ARGS: '-max_total_time=300'
   script:
   - apt update && apt install -y clang
   - go install github.com/AdamKorcz/go-118-fuzz-build
