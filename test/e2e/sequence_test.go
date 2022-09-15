@@ -12,8 +12,11 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/internal/sortutil"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/test/helpers"
 )
@@ -288,13 +291,22 @@ func TestPoisonedAnchorTxn(t *testing.T) {
 
 	// Poison the next anchor
 	var poisoned *Transaction
-	var original *chain.Delivery
+	var original []*chain.Delivery
+	var poison protocol.Signature
 	x := sim.PartitionFor(lite)
 	x.SubmitHook = func(envelopes []*chain.Delivery) ([]*chain.Delivery, bool) {
-		for _, env := range envelopes {
+		for i, env := range envelopes {
 			_, ok := env.Transaction.Body.(*DirectoryAnchor)
 			if !ok {
 				continue
+			}
+
+			// After poisoning, remove any other signatures
+			if poisoned != nil {
+				if env.Transaction.Equal(poisoned) {
+					sortutil.RemoveAt(&envelopes, i)
+				}
+				return envelopes, true
 			}
 
 			for i, sig := range env.Signatures {
@@ -307,11 +319,12 @@ func TestPoisonedAnchorTxn(t *testing.T) {
 				}
 
 				// Make a copy of the original
-				original = new(chain.Delivery)
-				original.Transaction = env.Transaction.Copy()
+				og := new(chain.Delivery)
+				og.Transaction = env.Transaction.Copy()
 				for _, sig := range env.Signatures {
-					original.Signatures = append(original.Signatures, sig.CopyAsInterface().(Signature))
+					og.Signatures = append(og.Signatures, sig.CopyAsInterface().(Signature))
 				}
+				original = append(original, og)
 
 				// Poison the signature
 				poisoned = env.Transaction
@@ -319,10 +332,10 @@ func TestPoisonedAnchorTxn(t *testing.T) {
 				require.NoError(t, err)
 				signer.SetPrivateKey(badKey)
 				hash := sig.GetTransactionHash()
-				poison, err := signer.Sign(hash[:])
+				poison, err = signer.Sign(hash[:])
 				require.NoError(t, err)
 				env.Signatures[i] = poison
-				return envelopes, false
+				return envelopes, true
 			}
 		}
 		return envelopes, true
@@ -336,10 +349,16 @@ func TestPoisonedAnchorTxn(t *testing.T) {
 
 	// Execute the anchor
 	sim.ExecuteBlocks(10)
+	x.SubmitHook = nil
 
-	// Anchor failed
 	helpers.View(t, x, func(batch *database.Batch) {
+		// Verify the anchor was not processed
 		status, err := batch.Transaction(poisoned.GetHash()).Status().Get()
+		require.NoError(t, err)
+		require.Zero(t, status.Code)
+
+		// Verify the poison signature failed
+		status, err = batch.Transaction(poison.Hash()).Status().Get()
 		require.NoError(t, err)
 		require.NotZero(t, status.Code)
 	})
@@ -347,8 +366,13 @@ func TestPoisonedAnchorTxn(t *testing.T) {
 	// Resubmit the original, valid signature
 	batch := x.Database.Begin(false)
 	defer batch.Discard()
-	x.Executor.ValidateEnvelopeSet(batch, []*chain.Delivery{original}, func(err error, _ *chain.Delivery, _ *TransactionStatus) {
+	x.Executor.ValidateEnvelopeSet(batch, original, func(err error, _ *chain.Delivery, _ *TransactionStatus) {
 		require.NoError(t, err)
 	})
-	x.Submit(false, &Envelope{Transaction: []*Transaction{original.Transaction}, Signatures: original.Signatures})
+	x.Submit2(false, original)
+
+	// Verify it is delivered
+	st, _ := sim.WaitForTransactionFlow(delivered, poisoned.GetHash())
+	require.Len(t, st, 1)
+	require.Equal(t, errors.StatusDelivered, st[0].Code)
 }
