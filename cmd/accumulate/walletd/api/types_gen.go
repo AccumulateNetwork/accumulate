@@ -117,6 +117,14 @@ type KeyListResponse struct {
 	KeyList []KeyData `json:"keyList,omitempty" form:"keyList" query:"keyList" validate:"required"`
 }
 
+type LedgerInfo struct {
+	Version string `json:"version,omitempty" form:"version" query:"version" validate:"required"`
+}
+
+type LedgerInfoResponse struct {
+	LedgerInfos []LedgerInfo `json:"ledgerInfos,omitempty" form:"ledgerInfos" query:"ledgerInfos" validate:"required"`
+}
+
 type NewTransactionRequest struct {
 	TxName string `json:"txName,omitempty" form:"txName" query:"txName" validate:"required"`
 }
@@ -387,6 +395,29 @@ func (v *KeyListResponse) Copy() *KeyListResponse {
 }
 
 func (v *KeyListResponse) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *LedgerInfo) Copy() *LedgerInfo {
+	u := new(LedgerInfo)
+
+	u.Version = v.Version
+
+	return u
+}
+
+func (v *LedgerInfo) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *LedgerInfoResponse) Copy() *LedgerInfoResponse {
+	u := new(LedgerInfoResponse)
+
+	u.LedgerInfos = make([]LedgerInfo, len(v.LedgerInfos))
+	for i, v := range v.LedgerInfos {
+		u.LedgerInfos[i] = *(&v).Copy()
+	}
+
+	return u
+}
+
+func (v *LedgerInfoResponse) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *NewTransactionRequest) Copy() *NewTransactionRequest {
 	u := new(NewTransactionRequest)
@@ -674,6 +705,27 @@ func (v *KeyListResponse) Equal(u *KeyListResponse) bool {
 	}
 	for i := range v.KeyList {
 		if !((&v.KeyList[i]).Equal(&u.KeyList[i])) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (v *LedgerInfo) Equal(u *LedgerInfo) bool {
+	if !(v.Version == u.Version) {
+		return false
+	}
+
+	return true
+}
+
+func (v *LedgerInfoResponse) Equal(u *LedgerInfoResponse) bool {
+	if len(v.LedgerInfos) != len(u.LedgerInfos) {
+		return false
+	}
+	for i := range v.LedgerInfos {
+		if !((&v.LedgerInfos[i]).Equal(&u.LedgerInfos[i])) {
 			return false
 		}
 	}
@@ -997,6 +1049,14 @@ func (v *KeyListResponse) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *LedgerInfoResponse) MarshalJSON() ([]byte, error) {
+	u := struct {
+		LedgerInfos encoding.JsonList[LedgerInfo] `json:"ledgerInfos,omitempty"`
+	}{}
+	u.LedgerInfos = v.LedgerInfos
+	return json.Marshal(&u)
+}
+
 func (v *SignResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Signature *string `json:"signature,omitempty"`
@@ -1186,6 +1246,18 @@ func (v *KeyListResponse) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	v.KeyList = u.KeyList
+	return nil
+}
+
+func (v *LedgerInfoResponse) UnmarshalJSON(data []byte) error {
+	u := struct {
+		LedgerInfos encoding.JsonList[LedgerInfo] `json:"ledgerInfos,omitempty"`
+	}{}
+	u.LedgerInfos = v.LedgerInfos
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.LedgerInfos = u.LedgerInfos
 	return nil
 }
 

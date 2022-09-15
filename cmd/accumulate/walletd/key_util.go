@@ -9,6 +9,7 @@ import (
 
 	btc "github.com/btcsuite/btcd/btcec"
 	"github.com/tyler-smith/go-bip32"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd/bpi44"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -156,7 +157,7 @@ func (k *Key) NativeAddress() (address string, err error) {
 }
 
 func GenerateKey(sigtype protocol.SignatureType) (k *Key, err error) {
-	hd, err := NewDerivationPath(sigtype)
+	hd, err := bpi44.NewDerivationPath(sigtype)
 	if err != nil {
 		return nil, err
 	}
@@ -166,7 +167,7 @@ func GenerateKey(sigtype protocol.SignatureType) (k *Key, err error) {
 		return nil, err
 	}
 
-	hd = Derivation{hd.Purpose(), hd.CoinType(), hd.Account(), hd.Chain(), address}
+	hd = bpi44.Derivation{hd.Purpose(), hd.CoinType(), hd.Account(), hd.Chain(), address}
 
 	derivationPath, err := hd.ToPath()
 	if err != nil {
@@ -177,7 +178,7 @@ func GenerateKey(sigtype protocol.SignatureType) (k *Key, err error) {
 }
 
 func GenerateKeyFromHDPath(derivationPath string) (*Key, error) {
-	hd := Derivation{}
+	hd := bpi44.Derivation{}
 	err := hd.FromPath(derivationPath)
 	if err != nil {
 		return nil, err
@@ -197,7 +198,7 @@ func GenerateKeyFromHDPath(derivationPath string) (*Key, error) {
 	masterKey, _ := bip32.NewMasterKey(seed)
 
 	//create the derived key
-	newKey, err := NewKeyFromMasterKey(masterKey, hd.CoinType(), hd.Account(), hd.Chain(), hd.Address())
+	newKey, err := bpi44.NewKeyFromMasterKey(masterKey, hd.CoinType(), hd.Account(), hd.Chain(), hd.Address())
 	if err != nil {
 		return nil, err
 	}

@@ -10,7 +10,7 @@ import (
 
 func (m *JrpcMethods) populateMethodTable() jsonrpc2.MethodMap {
 	if m.methods == nil {
-		m.methods = make(jsonrpc2.MethodMap, 10)
+		m.methods = make(jsonrpc2.MethodMap, 11)
 	}
 
 	m.methods["adi-list"] = m.AdiList
@@ -18,6 +18,7 @@ func (m *JrpcMethods) populateMethodTable() jsonrpc2.MethodMap {
 	m.methods["create-transaction"] = m.CreateTransaction
 	m.methods["decode"] = m.Decode
 	m.methods["encode"] = m.Encode
+	m.methods["ledger-info"] = m.GetLedgerInfo
 	m.methods["key-list"] = m.KeyList
 	m.methods["new-transaction"] = m.NewSendTokensTransaction
 	m.methods["resolve-key"] = m.ResolveKey

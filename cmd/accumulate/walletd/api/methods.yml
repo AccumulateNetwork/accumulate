@@ -55,3 +55,8 @@ NewSendTokensTransaction:
   rpc: new-transaction
   input: api.NewTransactionRequest
   output: protocol.SendTokens
+
+GetLedgerInfo:
+  description: returns the version of an external ledger device
+  rpc: ledger-info
+  output: api.LedgerInfoResponse

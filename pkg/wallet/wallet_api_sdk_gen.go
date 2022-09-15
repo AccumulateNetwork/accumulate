@@ -70,6 +70,19 @@ func (c *Client) Encode(ctx context.Context, req *api.EncodeRequest) (interface{
 	return resp, nil
 }
 
+// GetLedgerInfo returns the version of an external ledger device.
+func (c *Client) GetLedgerInfo(ctx context.Context) (*api.LedgerInfoResponse, error) {
+	var req struct{}
+	var resp api.LedgerInfoResponse
+
+	err := c.RequestAPIv2(ctx, "ledger-info", req, &resp)
+	if err != nil {
+		return nil, err
+	}
+
+	return &resp, nil
+}
+
 // KeyList returns a list of available keys in the wallet.
 func (c *Client) KeyList(ctx context.Context) (interface{}, error) {
 	var req struct{}

@@ -111,6 +111,7 @@ func InitRootCmd() *cobra.Command {
 	cmd.AddCommand(operatorCmd, validatorCmd)
 	cmd.AddCommand(versionCmd, describeCmd)
 	cmd.AddCommand(walletCmd)
+	cmd.AddCommand(ledgerCmd)
 
 	//for the testnet integration
 	cmd.AddCommand(faucetCmd)

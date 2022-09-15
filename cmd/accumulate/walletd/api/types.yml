@@ -211,3 +211,16 @@ NewTransactionRequest:
     - name: TxName
       type: string
 
+LedgerInfo:
+  non-binary: true
+  fields:
+    - name: Version
+      type: String
+
+LedgerInfoResponse:
+  non-binary: true
+  fields:
+    - name: LedgerInfos
+      type: LedgerInfo
+      repeatable: true
+      marshal-as: reference
