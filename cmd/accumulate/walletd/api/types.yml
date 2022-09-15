@@ -211,13 +211,17 @@ NewTransactionRequest:
     - name: TxName
       type: string
 
-LedgerInfo:
+LedgerWalletInfo:
   non-binary: true
   fields:
     - name: Version
       type: String
+    - name: Manufacturer
+      type: String
+    - name: Product
+      type: String
 
-LedgerInfoResponse:
+LedgerWalletInfoResponse:
   non-binary: true
   fields:
     - name: LedgerInfos

@@ -3,7 +3,6 @@ package walletd
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"gitlab.com/accumulatenetwork/ledger/ledger-go-accumulate"
 
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd/api"
@@ -26,46 +25,43 @@ func NewLedgerHub() (*LedgerHub, error) {
 }
 
 func (m *JrpcMethods) GetLedgerInfo(_ context.Context, params json.RawMessage) interface{} {
-	resp := &api.LedgerInfoResponse{}
+	resp := &api.LedgerWalletInfoResponse{}
 	hub, err := NewLedgerHub()
 	if err != nil {
 		return validatorError(err)
 	}
-	resp.LedgerInfos, err = hub.GetLedgerInfos()
+	resp.LedgerWalletsInfo, err = hub.GetLedgerWalletsInfo()
 	if err != nil {
 		return validatorError(err)
 	}
 	return resp
 }
 
-func (h *LedgerHub) GetLedgerInfos() ([]api.LedgerInfo, error) {
+func (h *LedgerHub) GetLedgerWalletsInfo() ([]api.LedgerWalletInfo, error) {
 	wallets := h.Wallets()
-	ledgerInfos := make([]api.LedgerInfo, len(wallets))
+	var ledgerInfos []api.LedgerWalletInfo
 	for _, wallet := range wallets {
 		info, err := h.getLedgerInfo(wallet)
 		if err != nil {
 			return nil, err
 		}
-
 		ledgerInfos = append(ledgerInfos, *info)
-		fmt.Println(wallet.Status())
 	}
 	return ledgerInfos, nil
 }
 
-func (h *LedgerHub) getLedgerInfo(wallet accounts.Wallet) (*api.LedgerInfo, error) {
+func (h *LedgerHub) getLedgerInfo(wallet accounts.Wallet) (*api.LedgerWalletInfo, error) {
 	err := wallet.Open("")
 	if err != nil {
 		return nil, err
 	}
 	defer func() {
-		wallet.Close()
+		//	wallet.Close() This freezes up
 	}()
 
-	fmt.Println(wallet.Status())
-	fmt.Println(wallet.URL())
-
-	return &api.LedgerInfo{
-		Version: "",
+	info := wallet.Info()
+	//info.DeviceInfo.ProductID
+	return &api.LedgerWalletInfo{
+		Version: info.AppVersion,
 	}, nil
 }

@@ -14,9 +14,9 @@ var ledgerCmd = &cobra.Command{
 
 var ledgerInfoCmd = &cobra.Command{
 	Use:   "info",
-	Short: "get list of wallets info",
+	Short: "get list of wallets with their info",
 	Run: func(cmd *cobra.Command, args []string) {
-		out, err := queryLedgerInfo(cmd, args)
+		out, err := queryWalletsInfo(cmd, args)
 		printOutput(cmd, out, err)
 	},
 }
@@ -26,16 +26,16 @@ func init() {
 	ledgerCmd.AddCommand(ledgerInfoCmd)
 }
 
-func queryLedgerInfo(cmd *cobra.Command, args []string) (string, error) {
+func queryWalletsInfo(cmd *cobra.Command, args []string) (string, error) {
 	ledgerState, err := walletd.NewLedgerHub()
 	if err != nil {
 		return "", err
 	}
-	ledgerInfos, err := ledgerState.GetLedgerInfos()
+	ledgerInfos, err := ledgerState.GetLedgerWalletsInfo()
 	if err != nil {
 		return "", err
 	}
-	result := fmt.Sprintln("Ledgers:")
+	result := fmt.Sprintln("Wallets:")
 	for _, ledgerInfo := range ledgerInfos {
 		result += fmt.Sprintln("\tVersion:\t", ledgerInfo.Version)
 	}

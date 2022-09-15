@@ -117,12 +117,12 @@ type KeyListResponse struct {
 	KeyList []KeyData `json:"keyList,omitempty" form:"keyList" query:"keyList" validate:"required"`
 }
 
-type LedgerInfo struct {
+type LedgerWalletInfo struct {
 	Version string `json:"version,omitempty" form:"version" query:"version" validate:"required"`
 }
 
-type LedgerInfoResponse struct {
-	LedgerInfos []LedgerInfo `json:"ledgerInfos,omitempty" form:"ledgerInfos" query:"ledgerInfos" validate:"required"`
+type LedgerWalletInfoResponse struct {
+	LedgerWalletsInfo []LedgerWalletInfo `json:"ledgerInfos,omitempty" form:"ledgerInfos" query:"ledgerInfos" validate:"required"`
 }
 
 type NewTransactionRequest struct {
@@ -396,28 +396,28 @@ func (v *KeyListResponse) Copy() *KeyListResponse {
 
 func (v *KeyListResponse) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *LedgerInfo) Copy() *LedgerInfo {
-	u := new(LedgerInfo)
+func (v *LedgerWalletInfo) Copy() *LedgerWalletInfo {
+	u := new(LedgerWalletInfo)
 
 	u.Version = v.Version
 
 	return u
 }
 
-func (v *LedgerInfo) CopyAsInterface() interface{} { return v.Copy() }
+func (v *LedgerWalletInfo) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *LedgerInfoResponse) Copy() *LedgerInfoResponse {
-	u := new(LedgerInfoResponse)
+func (v *LedgerWalletInfoResponse) Copy() *LedgerWalletInfoResponse {
+	u := new(LedgerWalletInfoResponse)
 
-	u.LedgerInfos = make([]LedgerInfo, len(v.LedgerInfos))
-	for i, v := range v.LedgerInfos {
-		u.LedgerInfos[i] = *(&v).Copy()
+	u.LedgerWalletsInfo = make([]LedgerWalletInfo, len(v.LedgerWalletsInfo))
+	for i, v := range v.LedgerWalletsInfo {
+		u.LedgerWalletsInfo[i] = *(&v).Copy()
 	}
 
 	return u
 }
 
-func (v *LedgerInfoResponse) CopyAsInterface() interface{} { return v.Copy() }
+func (v *LedgerWalletInfoResponse) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *NewTransactionRequest) Copy() *NewTransactionRequest {
 	u := new(NewTransactionRequest)
@@ -712,7 +712,7 @@ func (v *KeyListResponse) Equal(u *KeyListResponse) bool {
 	return true
 }
 
-func (v *LedgerInfo) Equal(u *LedgerInfo) bool {
+func (v *LedgerWalletInfo) Equal(u *LedgerWalletInfo) bool {
 	if !(v.Version == u.Version) {
 		return false
 	}
@@ -720,12 +720,12 @@ func (v *LedgerInfo) Equal(u *LedgerInfo) bool {
 	return true
 }
 
-func (v *LedgerInfoResponse) Equal(u *LedgerInfoResponse) bool {
-	if len(v.LedgerInfos) != len(u.LedgerInfos) {
+func (v *LedgerWalletInfoResponse) Equal(u *LedgerWalletInfoResponse) bool {
+	if len(v.LedgerWalletsInfo) != len(u.LedgerWalletsInfo) {
 		return false
 	}
-	for i := range v.LedgerInfos {
-		if !((&v.LedgerInfos[i]).Equal(&u.LedgerInfos[i])) {
+	for i := range v.LedgerWalletsInfo {
+		if !((&v.LedgerWalletsInfo[i]).Equal(&u.LedgerWalletsInfo[i])) {
 			return false
 		}
 	}
@@ -1049,11 +1049,11 @@ func (v *KeyListResponse) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
-func (v *LedgerInfoResponse) MarshalJSON() ([]byte, error) {
+func (v *LedgerWalletInfoResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		LedgerInfos encoding.JsonList[LedgerInfo] `json:"ledgerInfos,omitempty"`
+		LedgerInfos encoding.JsonList[LedgerWalletInfo] `json:"ledgerInfos,omitempty"`
 	}{}
-	u.LedgerInfos = v.LedgerInfos
+	u.LedgerInfos = v.LedgerWalletsInfo
 	return json.Marshal(&u)
 }
 
@@ -1249,15 +1249,15 @@ func (v *KeyListResponse) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (v *LedgerInfoResponse) UnmarshalJSON(data []byte) error {
+func (v *LedgerWalletInfoResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		LedgerInfos encoding.JsonList[LedgerInfo] `json:"ledgerInfos,omitempty"`
+		LedgerInfos encoding.JsonList[LedgerWalletInfo] `json:"ledgerInfos,omitempty"`
 	}{}
-	u.LedgerInfos = v.LedgerInfos
+	u.LedgerInfos = v.LedgerWalletsInfo
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	v.LedgerInfos = u.LedgerInfos
+	v.LedgerWalletsInfo = u.LedgerInfos
 	return nil
 }
 
