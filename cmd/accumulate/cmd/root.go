@@ -109,6 +109,7 @@ func InitRootCmd() *cobra.Command {
 	cmd.AddCommand(txCmd)
 	cmd.AddCommand(blocksCmd)
 	cmd.AddCommand(operatorCmd, validatorCmd)
+	cmd.AddCommand(followerCmd)
 	cmd.AddCommand(versionCmd, describeCmd)
 	cmd.AddCommand(walletCmd)
 
