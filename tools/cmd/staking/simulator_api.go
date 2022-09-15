@@ -6,6 +6,12 @@ func (s *Simulator) GetParameters() *Parameters {
 	return s.parameters
 }
 
+// GetBlock
+// Get a Block by its index.  Note that Blocks MUST be retrieved in order.
+// That's okay, because to build up the state within the staking app, all 
+// major blocks must be read and processed.  This means to update the 
+// Staking App for a year, we need to access 730 or so blocks (365*2). 
+// Not that heavy of a lift.
 func (s *Simulator) GetBlock(idx int64) *Block {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -13,11 +19,25 @@ func (s *Simulator) GetBlock(idx int64) *Block {
 		return nil
 	}
 	blk := s.MajorBlocks[idx]
-	d := blk.MajorHeight - s.parameters.PayOutFirst
-	blk.PrintReport = d > 0 && d%s.parameters.PayOutFreq == 0
-	blk.PrintPayoutScript = d > 0 && d%s.parameters.PayOutFreq == 1
-	d = blk.MajorHeight - s.parameters.SetBudgetFirst
-	blk.SetBudget = d > 0 && d%s.parameters.SetBudgetFreq == 0
+	if idx == 0 {
+		blk.SetBudget = true
+		blk.PrintReport = false
+		blk.PrintPayoutScript = false
+		return blk
+	}
+	day := blk.Timestamp.UTC().Day()
+	hour := blk.Timestamp.UTC().Hour()
+	if blk.MajorHeight>1 && day == 1 && hour==0 { // The month changed
+		blk.SetBudget = true
+	}
+	// The payday starts when the last block on Thursday completes.
+	if idx > 13 && blk.Timestamp.UTC().Weekday() == 5 && blk.Timestamp.UTC().Hour()==0 {
+		blk.PrintReport = true
+	}
+	// The script is printed in the major block after the report is produced
+	if idx > 13 && s.MajorBlocks[idx-1].PrintReport{
+		blk.PrintPayoutScript = true
+	}
 	return blk
 }
 
@@ -25,12 +45,6 @@ func (s *Simulator) GetTokensIssued() int64 {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	return s.TokensIssued
-}
-
-func (s *Simulator) StartOfMonth(block *Block) bool {
-	p := s.GetParameters()
-	offset := p.SetBudgetFreq - p.SetBudgetFirst
-	return offset == 7
 }
 
 func (s *Simulator) IssuedTokens(tokens int64) {

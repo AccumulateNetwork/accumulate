@@ -46,12 +46,11 @@ type StakingApp struct {
 	}
 	sim     *Simulator
 	Stakers struct {
-		Registered map[string]*Registration // Registered ADIs (Registered ADIs can add new staking accounts)
-		Delegate   map[string]*Account      // Maps Delegates to Accounts and prevents double payouts
-		Pure       []*Account               // Pure Stakers
-		PValidator []*Account               // Protocol Validators
-		PFollower  []*Account               // Protocol Followers
-		SValidator []*Account               // Staking Validators
+		AllAccounts map[string]*Account // Registered ADIs (Registered ADIs can add new staking accounts)
+		Pure        []*Account          // Pure Stakers
+		PValidator  []*Account          // Protocol Validators
+		PFollower   []*Account          // Protocol Followers
+		SValidator  []*Account          // Staking Validators
 	}
 }
 
@@ -70,27 +69,45 @@ func TotalAccounts(Account []*Account) (sum, sumD int64) {
 	return sum, sumD
 }
 
+func (s *StakingApp) Log(title string) {
+	h, m, _ := s.CBlk.Timestamp.Clock()
+	h2, m2, _ := s.CBlk.Timestamp.Local().Clock()
+	fmt.Printf("%30s %5d %s %2d:%02d UTC -- %s %2d:%02d Local\n",
+		title,
+		s.CBlk.MajorHeight,
+		s.CBlk.Timestamp.Format("Mon 02-Jan-06"),
+		h, m,
+		s.CBlk.Timestamp.Local().Format("Mon 02-Jan-06"),
+		h2, m2)
+}
+
 func (s *StakingApp) Run() {
-	fmt.Println("Starting")
 	sim := new(Simulator)
 	s.sim = sim
 	sim.Init()
 	go sim.Run()
 	s.Params = sim.GetParameters()
+	s.Stakers.AllAccounts = make(map[string]*Account)
+
+	for s.CBlk == nil {
+		s.CBlk = s.sim.GetBlock(0)
+		time.Sleep(time.Second)
+	}
+	s.Log("Starting")
+
 	for i := int64(0); true; {
 		b := sim.GetBlock(i)
 		if b == nil {
-			time.Sleep(time.Second / 4)
+			time.Sleep(s.Params.MajorBlockTime / 12 / 60)
 			continue
 		}
 		i++
 		s.CBlk = b // This is the new current block
-		fmt.Print(s.CBlk.MajorHeight, " ")
 		s.ComputeBudget()
 		s.AddAccounts()
 		s.AddApproved(b)
 		s.Report()
-		time.Sleep(time.Second / 4)
+		s.PrintPayScript()
 	}
 }
 
@@ -99,10 +116,16 @@ func (s *StakingApp) AddAccounts() {
 	if registered == nil {
 		return
 	}
-	newAccounts := make(map[string]*Account)
+
 	for _, v := range registered.Entries {
-		sa := v.(*Account)
-		newAccounts[sa.URL.String()] = sa
+		sa := v.(*Account)                                            // Get new registered account
+		if oldSa, ok := s.Stakers.AllAccounts[sa.URL.String()]; !ok { // Is this a new account?
+			s.Stakers.AllAccounts[sa.URL.String()] = sa //               Just add new accounts
+		} else { //                                                      If an old account
+			if oldSa.Type != sa.Type { //                                Check if its type has changed
+				s.Stakers.AllAccounts[sa.URL.String()] = sa //           If type changed, replace
+			} //                                                         Otherwise it isn't a change; ignore
+		}
 		switch sa.Type {
 		case PureStaker:
 			s.Stakers.Pure = append(s.Stakers.Pure, sa)
@@ -116,18 +139,25 @@ func (s *StakingApp) AddAccounts() {
 			sa.Delegatee.Delegates = append(sa.Delegatee.Delegates, sa)
 		}
 	}
-	for _, v := range registered.Entries {
-		sa := v.(*Account)
-		for _, da := range sa.Delegates {
-			_ = da
+	sa := func(a []*Account) []*Account {
+		sort.Slice(a, func(i, j int) bool { return a[i].URL.String() < a[j].URL.String() })
+		for _, a2 := range a {
+			d := a2.Delegates
+			sort.Slice(d, func(i, j int) bool { return d[i].URL.String() < d[j].URL.String() })
 		}
+		return a
 	}
+	sa(s.Stakers.Pure)
+	sa(s.Stakers.PValidator)
+	sa(s.Stakers.PFollower)
+	sa(s.Stakers.SValidator)
 }
 
 func (s *StakingApp) ComputeBudget() {
-	if !s.CBlk.SetBudget && s.CBlk.MajorHeight != 0 {
+	if !s.CBlk.SetBudget {
 		return
 	}
+	s.Log("Set Monthly Budget")
 	s.Data.TokensIssued = s.sim.GetTokensIssued()
 	s.Data.TokenIssuanceRate = int64(s.Params.TokenIssuanceRate * 100)
 
@@ -165,13 +195,14 @@ func (s *StakingApp) Report() {
 		return
 	}
 
-	unissued := 500000000-s.Data.TokensIssued
-	rewards := unissued / 16 /100
+	unissued := 500000000 - s.Data.TokensIssued
+	rewards := unissued / 16 / 100
 	s.sim.IssuedTokens(rewards)
 
 	s.Collect() // Collect all the needed information for the payout
 
-	fmt.Print("\nWriting that Report for block\n\t.\n")
+	s.Log("Writing Report")
+
 	report := new(buffer.Buffer)
 	f := func(format string, a ...any) {
 		report.WriteString(fmt.Sprintf(format, a...))
@@ -225,7 +256,6 @@ func (s *StakingApp) Report() {
 	lines, _ = s.PrintAccounts(StakingValidator, "Staking Validator Accounts", s.Stakers.SValidator, "c15", "c31", end)
 	f(lines)
 
-	fmt.Print(report.String())
 	reportFile := path.Join(ReportDirectory, fmt.Sprintf("Report-%d.csv", s.Data.BlockHeight))
 	if f, err := os.Create(reportFile); err != nil {
 		panic(fmt.Sprintf("Could not create %s: %v", reportFile, err))
@@ -320,4 +350,12 @@ func (s *StakingApp) AddApproved(b *Block) {
 	sort.Slice(s.Stakers.Pure, func(i, j int) bool { return s.Stakers.Pure[i].URL.String() < s.Stakers.Pure[j].URL.String() })
 	sort.Slice(s.Stakers.Pure, func(i, j int) bool { return s.Stakers.Pure[i].URL.String() < s.Stakers.Pure[j].URL.String() })
 	sort.Slice(s.Stakers.Pure, func(i, j int) bool { return s.Stakers.Pure[i].URL.String() < s.Stakers.Pure[j].URL.String() })
+}
+
+// PrintPayScript
+// Write out a script to call the CLI to Distribute tokens, or to sign the Distribution of Tokens
+func (s *StakingApp) PrintPayScript() {
+	if s.CBlk.PrintPayoutScript {
+		s.Log("PayScript")
+	}
 }

@@ -1,12 +1,15 @@
 package main
 
 import (
+	"fmt"
 	"net/url"
 	"sync"
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 )
+
+var _ = fmt.Printf
 
 type Deposit struct {
 	MajorBlock int64 // The major block when the deposit was made
@@ -27,6 +30,7 @@ type Registration struct {
 type Account struct {
 	MajorBlock int64         // The Major Block where Account was approved
 	URL        *url.URL      // The URL of this account
+	DepositURL *url.URL      // The URL of the account to be paid rewards
 	Entries    []interface{} // Returns some struct from the account
 	Type       string        // Type of account
 	Delegatee  *Account      // If this is a delegate, Account it delegates to.
@@ -42,6 +46,7 @@ type Simulator struct {
 	ADIs         map[string]*url.URL //
 	Accounts     map[string]*Account //
 	MajorBlocks  []*Block            // List of Major Blocks
+	CBlk         *Block              // Current Block under construction
 }
 
 var rh common.RandHash // A random Series for just setting up accounts
@@ -98,20 +103,29 @@ func (s *Simulator) Init() {
 
 func (s *Simulator) Run() {
 	s.mutex.Lock()                 // Going to update the simulator
-	blk := new(Block)              // Create the first block
+	s.CBlk = new(Block)            // Create the first block
 	for _, v := range s.Accounts { // Add all the accounts
-		blk.Accounts = append(blk.Accounts, v)
+		s.CBlk.Accounts = append(s.CBlk.Accounts, v)
 	}
 	s.mutex.Unlock()
 
 	for {
-		time.Sleep(time.Second)                    // Sleep while unlocked
-		s.mutex.Lock()                             // Lock
-		s.MajorBlocks = append(s.MajorBlocks, blk) // Add it to the block list
-		s.major++                                  // Add the current major block
-		blk = new(Block)                           // Create the next block
-		blk.MajorHeight = s.major                  // Set the major block number
-		blk.Timestamp = time.Now()                 // Set the timestamp
-		s.mutex.Unlock()                           // Unlock to allow others access to simulator state
+		time.Sleep(s.parameters.MajorBlockTime)
+		s.mutex.Lock()                                // Lock
+		s.CBlk.Timestamp = s.GetTime()                // Set the timestamp
+		s.MajorBlocks = append(s.MajorBlocks, s.CBlk) // Add it to the block list
+		s.CBlk = new(Block)                           // Create the next block
+		s.major++                                     // Add the current major block
+		s.CBlk.MajorHeight = s.major                  // Set the major block number
+		s.mutex.Unlock()                              // Unlock to allow others access to simulator state
+
 	}
+}
+
+// GetTime
+// Return scaled time, so we can process even years of blocks
+func (s *Simulator) GetTime() time.Time {
+	MBD := 12 * time.Hour                          // Major Block Duration
+	NBlks := time.Duration(len(s.MajorBlocks))     // The Number of Blocks so far
+	return s.parameters.StartTime.Add(MBD * NBlks) // Start Time + #blocks * block duration
 }
