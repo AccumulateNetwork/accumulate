@@ -409,7 +409,7 @@ func (x *Executor) recordTransaction(batch *database.Batch, delivery *chain.Deli
 	var partLedger *protocol.PartitionSyntheticLedger
 	if delivery.Transaction.Body.Type().IsSystem() {
 		var anchorLedger *protocol.AnchorLedger
-		err = batch.Account(x.Describe.Synthetic()).GetStateAs(&anchorLedger)
+		err = batch.Account(x.Describe.AnchorPool()).GetStateAs(&anchorLedger)
 		if err != nil {
 			return nil, errors.Format(errors.StatusUnknownError, "load synthetic transaction ledger: %w", err)
 		}
