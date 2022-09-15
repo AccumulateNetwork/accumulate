@@ -10,6 +10,9 @@ import (
 	"go.uber.org/zap/buffer"
 )
 
+// StakingApp
+// The state of the Staking app, which is built up by catching up with 
+// the blocks in Accumulate.
 type StakingApp struct {
 	Params *Parameters
 	CBlk   *Block
@@ -69,6 +72,8 @@ func TotalAccounts(Account []*Account) (sum, sumD int64) {
 	return sum, sumD
 }
 
+// Log
+// Gives visual feedback to the user as the Staking application progresses.
 func (s *StakingApp) Log(title string) {
 	h, m, _ := s.CBlk.Timestamp.Clock()
 	h2, m2, _ := s.CBlk.Timestamp.Local().Clock()
@@ -81,6 +86,10 @@ func (s *StakingApp) Log(title string) {
 		h2, m2)
 }
 
+// Run
+// The main loop for the Staking application. It starts the simulator in the background
+// for now.  Ultimately it will take a parameter on the command line to choose between 
+// the main net, the test net, and the simulator
 func (s *StakingApp) Run() {
 	sim := new(Simulator)
 	s.sim = sim
@@ -111,6 +120,8 @@ func (s *StakingApp) Run() {
 	}
 }
 
+// AddAccounts()
+// Adds accounts to the Staking Application state.
 func (s *StakingApp) AddAccounts() {
 	registered := s.CBlk.GetAccount(Registered)
 	if registered == nil {
@@ -153,6 +164,11 @@ func (s *StakingApp) AddAccounts() {
 	sa(s.Stakers.SValidator)
 }
 
+// ComputeBudget()
+// On the first day of every month, the budget for distribution to stakers
+// is calculated.  This calculates the weekly budget, which is distributed to
+// the stakers every Friday for staking that occurred in the previous week.
+// Partial weeks do not receive rewards.
 func (s *StakingApp) ComputeBudget() {
 	if !s.CBlk.SetBudget {
 		return
@@ -163,6 +179,10 @@ func (s *StakingApp) ComputeBudget() {
 
 }
 
+// Collect
+// Collect all the data to be used within the Report.  Most of this data is
+// take from the state of the Staking Application, which has been running
+// all along.
 func (s *StakingApp) Collect() {
 	if !s.CBlk.PrintReport {
 		return
@@ -188,6 +208,11 @@ func (s *StakingApp) Collect() {
 		float64(s.Data.TotalSVD)*s.Params.StakingWeight.StakingValidator)
 }
 
+// Report
+// Prints out a tab delimitated excel spreadsheet.  This spreadsheet 
+// does most of the calculations used to distribute tokens.  It is easily
+// reviewed by users by loading the report into Excel or Google Sheets or 
+// other spreadsheet.
 func (s *StakingApp) Report() {
 
 	// First check if CBlk is a payout block.  If not, return
@@ -269,7 +294,8 @@ func (s *StakingApp) Report() {
 	}
 }
 
-// Writes out all the lines for a Staking Category
+// PrintAccounts
+// Writes out all the lines staking token accounts (the staking account and any delegates).
 func (s *StakingApp) PrintAccounts(
 	Type string,
 	Label string,
