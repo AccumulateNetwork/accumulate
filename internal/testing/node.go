@@ -185,13 +185,13 @@ func RunTestNet(t testing.TB, partitions []string, daemons map[string][]*accumul
 	})
 }
 
-func BvnIdForTest(t testing.TB) string {
+func BvnIdForTest(t interface{ Name() string }) string {
 	id := t.Name()
 	id = strings.ReplaceAll(id, "/", "-")
 	id = strings.ReplaceAll(id, "#", "-")
 	return id
 }
 
-func BvnUrlForTest(t testing.TB) *url.URL {
+func BvnUrlForTest(t interface{ Name() string }) *url.URL {
 	return protocol.PartitionUrl(BvnIdForTest(t))
 }

@@ -4,6 +4,8 @@ go 1.18
 
 replace github.com/golangci/golangci-lint v1.46.2 => github.com/firelizzard18/golangci-lint v1.46.3-0.20220713213035-328ba3e7213d
 
+replace github.com/AdamKorcz/go-118-fuzz-build v0.0.0-20220912195655-e1f97a00006b => github.com/AccumulateNetwork/go-118-fuzz-build v0.0.0-20220915032815-fa82ee672abf
+
 require (
 	github.com/AccumulateNetwork/jsonrpc2/v15 v15.0.0-20220517212445-953ad957e040
 	github.com/FactomProject/factom v0.4.0

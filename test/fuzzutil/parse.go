@@ -3,7 +3,6 @@ package fuzzutil
 import (
 	"encoding"
 	"math/big"
-	"testing"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
@@ -19,13 +18,19 @@ type F interface {
 	Add(...interface{})
 }
 
+type TB interface {
+	helpers.T
+	Skip(args ...any)
+	Skipf(format string, args ...any)
+}
+
 func AddValue(f F, v encoding.BinaryMarshaler) {
 	data, err := v.MarshalBinary()
 	require.NoError(f, err)
 	f.Add(data)
 }
 
-func MustParseUrl(t testing.TB, v string) *url.URL {
+func MustParseUrl(t TB, v string) *url.URL {
 	if v == "" {
 		return nil
 	}
@@ -36,14 +41,14 @@ func MustParseUrl(t testing.TB, v string) *url.URL {
 	return u
 }
 
-func MustParseHash(t testing.TB, v []byte) [32]byte {
+func MustParseHash(t TB, v []byte) [32]byte {
 	if len(v) != 32 {
 		t.Skip()
 	}
 	return *(*[32]byte)(v)
 }
 
-func MustParseBigInt(t testing.TB, v string) big.Int {
+func MustParseBigInt(t TB, v string) big.Int {
 	u := new(big.Int)
 	u, ok := u.SetString(v, 10)
 	if !ok {
@@ -67,7 +72,7 @@ type bodyPtr[T any] interface {
 	protocol.TransactionBody
 }
 
-func UnpackTransaction[PT bodyPtr[T], T any](t *testing.T, dataHeader, dataBody []byte) (*protocol.Transaction, PT) {
+func UnpackTransaction[PT bodyPtr[T], T any](t TB, dataHeader, dataBody []byte) (*protocol.Transaction, PT) {
 	var header protocol.TransactionHeader
 	body := PT(new(T))
 	if header.UnmarshalBinary(dataHeader) != nil {
@@ -82,12 +87,12 @@ func UnpackTransaction[PT bodyPtr[T], T any](t *testing.T, dataHeader, dataBody 
 	return &protocol.Transaction{Header: header, Body: body}, body
 }
 
-func ValidateTransaction(t *testing.T, txn *protocol.Transaction, executor chain.TransactionExecutor, requireSuccess bool, accounts ...protocol.Account) {
+func ValidateTransaction(t TB, txn *protocol.Transaction, executor chain.TransactionExecutor, requireSuccess bool, accounts ...protocol.Account) {
 	db := database.OpenInMemory(nil)
 	ValidateTransactionDb(t, db, txn, executor, requireSuccess, accounts...)
 }
 
-func ValidateTransactionDb(t *testing.T, db *database.Database, txn *protocol.Transaction, executor chain.TransactionExecutor, requireSuccess bool, accounts ...protocol.Account) {
+func ValidateTransactionDb(t TB, db *database.Database, txn *protocol.Transaction, executor chain.TransactionExecutor, requireSuccess bool, accounts ...protocol.Account) {
 	require.Equal(t, txn.Body.Type(), executor.Type())
 
 	for _, account := range accounts {

@@ -62,12 +62,12 @@ cloud.google.com/go/storage v1.10.0/go.mod h1:FLPqc6j+Ki4BU591ie1oL6qBQGu2Bl/tZ9
 cloud.google.com/go/storage v1.14.0/go.mod h1:GrKmX003DSIwi9o29oFT7YDnHYwZoctc3fOKtUw0Xmo=
 contrib.go.opencensus.io/exporter/stackdriver v0.13.4/go.mod h1:aXENhDJ1Y4lIg4EUaVTwzvYETVNZk10Pu26tevFKLUc=
 dmitri.shuralyov.com/gpu/mtl v0.0.0-20190408044501-666a987793e9/go.mod h1:H6x//7gZCb22OMCxBHrMx7a5I7Hp++hsVxbQ4BYO7hU=
+github.com/AccumulateNetwork/go-118-fuzz-build v0.0.0-20220915032815-fa82ee672abf h1:E4QK19QO7BvFyvOmk8AvKOApy5KkxH2dg7z9hQHwC/s=
+github.com/AccumulateNetwork/go-118-fuzz-build v0.0.0-20220915032815-fa82ee672abf/go.mod h1:P/MhpyNnqWUWlF8b/ksNuhU2kywD3Qc5fzauL06Gez8=
 github.com/AccumulateNetwork/jsonrpc2/v15 v15.0.0-20220517212445-953ad957e040 h1:YR9b2mCxikJzdAfLjhRKgED1+21TyAs0KF5lOQ80h18=
 github.com/AccumulateNetwork/jsonrpc2/v15 v15.0.0-20220517212445-953ad957e040/go.mod h1:IZ754L8YfDkLr74Dr8tGexsOq6n9hkfM3tvULzBTBn4=
 github.com/AdaLogics/go-fuzz-headers v0.0.0-20220824214621-3c06a36a6952 h1:cs1LC1MGKD1O4neR89Rc24t0u15Vs5ASfUQ2tLr/KbY=
 github.com/AdaLogics/go-fuzz-headers v0.0.0-20220824214621-3c06a36a6952/go.mod h1:i9fr2JpcEcY/IHEvzCM3qXUZYOQHgR89dt4es1CgMhc=
-github.com/AdamKorcz/go-118-fuzz-build v0.0.0-20220912195655-e1f97a00006b h1:RQhYYLDVbdN+fw4I+A90nMRcxg/tEg4KvHiDYOwY32g=
-github.com/AdamKorcz/go-118-fuzz-build v0.0.0-20220912195655-e1f97a00006b/go.mod h1:P/MhpyNnqWUWlF8b/ksNuhU2kywD3Qc5fzauL06Gez8=
 github.com/AndreasBriese/bbloom v0.0.0-20190306092124-e2d15f34fcf9/go.mod h1:bOvUY6CB00SOBii9/FifXqc0awNKxLFCL/+pkDPuyl8=
 github.com/AndreasBriese/bbloom v0.0.0-20190825152654-46b345b51c96 h1:cTp8I5+VIoKjsnZuH8vjyaysT/ses3EvZeaV/1UkF2M=
 github.com/AndreasBriese/bbloom v0.0.0-20190825152654-46b345b51c96/go.mod h1:bOvUY6CB00SOBii9/FifXqc0awNKxLFCL/+pkDPuyl8=
