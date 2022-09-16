@@ -75,7 +75,7 @@ func TestETHSignature(t *testing.T) {
 
 func TestBTCaddress(t *testing.T) {
 	//m/44'/60'/0'/0/0 yellow ->
-	//privKey := "KxukKhTPU11xH2Wfk2366e375166QE4r7y8FWojU9XPbzLYYSM3j"
+	//btc private address : "KxukKhTPU11xH2Wfk2366e375166QE4r7y8FWojU9XPbzLYYSM3j"
 	pubKey, err := hex.DecodeString("02f7aa1eb14de438735c026c7cc719db11baf82e47f8fa2c86b55bff92b677eae2")
 	require.NoError(t, err)
 	address := "1Hdh7MEWekWD4qiHVRa2H8Ar3JR8sXunE"
@@ -85,7 +85,7 @@ func TestBTCaddress(t *testing.T) {
 
 func TestETHaddress(t *testing.T) {
 	//m/44'/60'/0'/0/0 yellow ->
-	//privKey := "0x1b48e04041e23c72cacdaa9b0775d31515fc74d6a6d3c8804172f7e7d1248529"
+	// eth private address : "0x1b48e04041e23c72cacdaa9b0775d31515fc74d6a6d3c8804172f7e7d1248529"
 	address := "0xa27df20e6579ac472481f0ea918165d24bfb713b"
 	pubKey, err := hex.DecodeString("02c4755e0a7a0f7082749bf46cdae4fcddb784e11428446a01478d656f588f94c1")
 	require.NoError(t, err)

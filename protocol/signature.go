@@ -107,10 +107,6 @@ func BTCaddress(pubKey []byte) string {
 
 //ETHhash returns the truncated hash (i.e. binary ethereum address)
 func ETHhash(pubKey []byte) []byte {
-	//hash := sha3.NewLegacyKeccak256()
-	//hash.Write(rawPubKey[1:])
-	//h := hash.Sum(nil)
-	//return h[12:]
 	p, err := crypto.UnmarshalPubkey(pubKey)
 	if err != nil {
 		p, err = crypto.DecompressPubkey(pubKey)
