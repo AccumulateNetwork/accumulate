@@ -616,6 +616,11 @@ func (x *ExecEntry) Submit(pretend bool, envelopes ...*protocol.Envelope) []*cha
 		deliveries = append(deliveries, normalized...)
 	}
 
+	x.Submit2(pretend, deliveries)
+	return deliveries
+}
+
+func (x *ExecEntry) Submit2(pretend bool, deliveries []*chain.Delivery) {
 	// Capturing the field in a variable is more concurrency safe than using the
 	// field directly
 	if hook := x.SubmitHook; hook != nil {
@@ -627,13 +632,12 @@ func (x *ExecEntry) Submit(pretend bool, envelopes ...*protocol.Envelope) []*cha
 	}
 
 	if pretend {
-		return deliveries
+		return
 	}
 
 	x.mu.Lock()
 	defer x.mu.Unlock()
 	x.nextBlock = append(x.nextBlock, deliveries...)
-	return deliveries
 }
 
 // takeSubmitted returns the envelopes for the current block.

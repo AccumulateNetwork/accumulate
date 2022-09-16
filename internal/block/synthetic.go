@@ -35,14 +35,25 @@ func (x *Executor) ProduceSynthetic(batch *database.Batch, from *protocol.Transa
 			continue
 		}
 
-		_, ok := sub.Body.(protocol.SynthTxnWithOrigin)
-		if !ok {
-			continue
-		}
+		switch body := sub.Body.(type) {
+		case protocol.SynthTxnWithOrigin:
+			// Record transaction -> produced synthetic transaction
+			err = batch.Transaction(from.GetHash()).Produced().Add(tx.ID())
+			if err != nil {
+				return err
+			}
 
-		err = batch.Transaction(from.GetHash()).AddSyntheticTxns(tx.ID())
-		if err != nil {
-			return err
+		case *protocol.SyntheticForwardTransaction:
+			// Record signature -> produced synthetic forwarded transaction, forwarded signature
+			for _, sig := range body.Signatures {
+				sigId := sig.Destination.WithTxID(*(*[32]byte)(sig.Signature.Hash()))
+				for _, hash := range sig.Cause {
+					err = batch.Transaction(hash[:]).Produced().Add(tx.ID(), sigId) //nolint:rangevarref
+					if err != nil {
+						return err
+					}
+				}
+			}
 		}
 	}
 
