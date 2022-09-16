@@ -371,22 +371,24 @@ func TestSendDirectToWrongPartition(t *testing.T) {
 
 	// Submit the transaction directly to the wrong BVN
 	badBvn.Submit(false, env)
-	var status *protocol.TransactionStatus
-	for i := 0; i < 50 && status == nil; i++ {
+	var found bool
+	for i := 0; i < 50 && !found; i++ {
 		ch := make(chan *protocol.TransactionStatus)
 		go sim.ExecuteBlock(ch)
 		for s := range ch {
 			if s.TxID.Equal(env.Transaction[0].ID()) {
-				status = s
-				break
+				found = true
 			}
 		}
 	}
 
-	require.NotNil(t, status, fmt.Sprintf("Transaction %X has not been delivered after 50 blocks", env.Transaction[0].GetHash()[:4]))
-
-	require.NotNil(t, status.Error)
-	require.Equal(t, fmt.Sprintf("signature submitted to %s instead of %s", badBvn.Partition.Id, goodBvn.Partition.Id), status.Error.Message)
+	helpers.View(t, badBvn, func(batch *database.Batch) {
+		status, err := batch.Transaction(env.Signatures[0].Hash()).Status().Get()
+		require.NoError(t, err)
+		require.NotZero(t, status.Code)
+		require.NotNil(t, status.Error)
+		require.Equal(t, fmt.Sprintf("signature submitted to %s instead of %s", badBvn.Partition.Id, goodBvn.Partition.Id), status.Error.Message)
+	})
 }
 
 func TestDelegateBetweenPartitions(t *testing.T) {

@@ -591,8 +591,9 @@ type ReceiptSignature struct {
 // RemoteSignature is used when forwarding a signature from one partition to another.
 type RemoteSignature struct {
 	fieldsSet   []bool
-	Destination *url.URL  `json:"destination,omitempty" form:"destination" query:"destination" validate:"required"`
-	Signature   Signature `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
+	Destination *url.URL   `json:"destination,omitempty" form:"destination" query:"destination" validate:"required"`
+	Signature   Signature  `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
+	Cause       [][32]byte `json:"cause,omitempty" form:"cause" query:"cause" validate:"required"`
 	extraData   []byte
 }
 
@@ -2078,6 +2079,10 @@ func (v *RemoteSignature) Copy() *RemoteSignature {
 	}
 	if v.Signature != nil {
 		u.Signature = (v.Signature).CopyAsInterface().(Signature)
+	}
+	u.Cause = make([][32]byte, len(v.Cause))
+	for i, v := range v.Cause {
+		u.Cause[i] = v
 	}
 
 	return u
@@ -3996,6 +4001,14 @@ func (v *RemoteSignature) Equal(u *RemoteSignature) bool {
 	}
 	if !(EqualSignature(v.Signature, u.Signature)) {
 		return false
+	}
+	if len(v.Cause) != len(u.Cause) {
+		return false
+	}
+	for i := range v.Cause {
+		if !(v.Cause[i] == u.Cause[i]) {
+			return false
+		}
 	}
 
 	return true
@@ -8453,6 +8466,7 @@ var fieldNames_RemoteSignature = []string{
 	1: "Type",
 	2: "Destination",
 	3: "Signature",
+	4: "Cause",
 }
 
 func (v *RemoteSignature) MarshalBinary() ([]byte, error) {
@@ -8465,6 +8479,11 @@ func (v *RemoteSignature) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.Signature == nil) {
 		writer.WriteValue(3, v.Signature.MarshalBinary)
+	}
+	if !(len(v.Cause) == 0) {
+		for _, v := range v.Cause {
+			writer.WriteHash(4, &v)
+		}
 	}
 
 	_, _, err := writer.Reset(fieldNames_RemoteSignature)
@@ -8490,6 +8509,11 @@ func (v *RemoteSignature) IsValid() error {
 		errs = append(errs, "field Signature is missing")
 	} else if v.Signature == nil {
 		errs = append(errs, "field Signature is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Cause is missing")
+	} else if len(v.Cause) == 0 {
+		errs = append(errs, "field Cause is not set")
 	}
 
 	switch len(errs) {
@@ -13095,6 +13119,13 @@ func (v *RemoteSignature) UnmarshalBinaryFrom(rd io.Reader) error {
 		}
 		return err
 	})
+	for {
+		if x, ok := reader.ReadHash(4); ok {
+			v.Cause = append(v.Cause, *x)
+		} else {
+			break
+		}
+	}
 
 	seen, err := reader.Reset(fieldNames_RemoteSignature)
 	if err != nil {
@@ -15408,10 +15439,15 @@ func (v *RemoteSignature) MarshalJSON() ([]byte, error) {
 		Type        SignatureType                         `json:"type"`
 		Destination *url.URL                              `json:"destination,omitempty"`
 		Signature   encoding.JsonUnmarshalWith[Signature] `json:"signature,omitempty"`
+		Cause       encoding.JsonList[string]             `json:"cause,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Destination = v.Destination
 	u.Signature = encoding.JsonUnmarshalWith[Signature]{Value: v.Signature, Func: UnmarshalSignatureJSON}
+	u.Cause = make(encoding.JsonList[string], len(v.Cause))
+	for i, x := range v.Cause {
+		u.Cause[i] = encoding.ChainToJSON(x)
+	}
 	return json.Marshal(&u)
 }
 
@@ -17457,10 +17493,15 @@ func (v *RemoteSignature) UnmarshalJSON(data []byte) error {
 		Type        SignatureType                         `json:"type"`
 		Destination *url.URL                              `json:"destination,omitempty"`
 		Signature   encoding.JsonUnmarshalWith[Signature] `json:"signature,omitempty"`
+		Cause       encoding.JsonList[string]             `json:"cause,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Destination = v.Destination
 	u.Signature = encoding.JsonUnmarshalWith[Signature]{Value: v.Signature, Func: UnmarshalSignatureJSON}
+	u.Cause = make(encoding.JsonList[string], len(v.Cause))
+	for i, x := range v.Cause {
+		u.Cause[i] = encoding.ChainToJSON(x)
+	}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -17470,6 +17511,14 @@ func (v *RemoteSignature) UnmarshalJSON(data []byte) error {
 	v.Destination = u.Destination
 	v.Signature = u.Signature.Value
 
+	v.Cause = make([][32]byte, len(u.Cause))
+	for i, x := range u.Cause {
+		if x, err := encoding.ChainFromJSON(x); err != nil {
+			return fmt.Errorf("error decoding Cause: %w", err)
+		} else {
+			v.Cause[i] = x
+		}
+	}
 	return nil
 }
 
