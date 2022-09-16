@@ -4,12 +4,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"github.com/btcsuite/btcutil/base58"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"testing"
 
 	btc "github.com/btcsuite/btcd/btcec"
+	"github.com/btcsuite/btcutil/base58"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
 func TestBTCSignature(t *testing.T) {
