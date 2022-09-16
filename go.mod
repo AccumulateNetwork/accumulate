@@ -4,7 +4,8 @@ go 1.18
 
 replace github.com/golangci/golangci-lint v1.46.2 => github.com/firelizzard18/golangci-lint v1.46.3-0.20220713213035-328ba3e7213d
 
-replace gitlab.com/accumulatenetwork/ledger/ledger-go-accumulate => /home/sander/go/src/gitlab.com/accumulatenetwork/ledger/ledger-go-accumulate
+// To debug with local prep:                       TODO: remove before MR
+// replace gitlab.com/accumulatenetwork/ledger/ledger-go-accumulate => /home/sander/go/src/gitlab.com/accumulatenetwork/ledger/ledger-go-accumulate
 
 require (
 	github.com/AccumulateNetwork/jsonrpc2/v15 v15.0.0-20220517212445-953ad957e040

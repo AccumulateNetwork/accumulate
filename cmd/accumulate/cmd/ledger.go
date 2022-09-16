@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -36,13 +37,22 @@ func queryWalletsInfo(cmd *cobra.Command, args []string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	result := fmt.Sprintln("Wallets:")
-	for i, ledgerInfo := range ledgerInfos {
-		result += fmt.Sprintf("%d\tManufacturer:\t%s\n", i+1, ledgerInfo.Manufacturer)
-		result += fmt.Sprintf("\tProduct:\t%s\n", ledgerInfo.Product)
-		result += fmt.Sprintf("\tVendor ID:\t%d\n", ledgerInfo.VendorID)
-		result += fmt.Sprintf("\tProduct ID:\t%d\n", ledgerInfo.ProductID)
-		result += fmt.Sprintf("\tApp Version:\t%s\n", ledgerInfo.Version.Label)
+
+	if WantJsonOutput {
+		str, err := json.Marshal(ledgerInfos)
+		if err != nil {
+			return "", err
+		}
+		return string(str), nil
+	} else {
+		result := fmt.Sprintln("Wallets:")
+		for i, ledgerInfo := range ledgerInfos {
+			result += fmt.Sprintf("%d\tManufacturer:\t%s\n", i+1, ledgerInfo.Manufacturer)
+			result += fmt.Sprintf("\tProduct:\t%s\n", ledgerInfo.Product)
+			result += fmt.Sprintf("\tVendor ID:\t%d\n", ledgerInfo.VendorID)
+			result += fmt.Sprintf("\tProduct ID:\t%d\n", ledgerInfo.ProductID)
+			result += fmt.Sprintf("\tApp Version:\t%s\n", ledgerInfo.Version.Label)
+		}
+		return result, nil
 	}
-	return result, nil
 }
