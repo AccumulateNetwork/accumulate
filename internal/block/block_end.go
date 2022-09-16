@@ -309,10 +309,10 @@ func (x *Executor) requestMissingSyntheticTransactions(blockIndex uint64, synthL
 
 	// For each partition
 	var pending []*url.TxID
-	for _, partition := range synthLedger.Exchange {
+	for _, partition := range synthLedger.Sequence {
 		pending = append(pending, x.requestMissingTransactionsFromPartition(ctx, wg, dispatcher, partition, false)...)
 	}
-	for _, partition := range anchorLedger.Exchange {
+	for _, partition := range anchorLedger.Sequence {
 		pending = append(pending, x.requestMissingTransactionsFromPartition(ctx, wg, dispatcher, partition, true)...)
 	}
 
@@ -332,7 +332,7 @@ func (x *Executor) requestMissingSyntheticTransactions(blockIndex uint64, synthL
 	}
 }
 
-func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, wg *sync.WaitGroup, dispatcher *dispatcher, partition *protocol.TransactionExchangeLedger, anchor bool) []*url.TxID {
+func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, wg *sync.WaitGroup, dispatcher *dispatcher, partition *protocol.PartitionSyntheticLedger, anchor bool) []*url.TxID {
 	var pending []*url.TxID
 	// Get the partition ID
 	id, ok := protocol.ParsePartitionUrl(partition.Url)
@@ -653,7 +653,7 @@ func (x *Executor) prepareAnchor(block *Block) error {
 
 	// Update the anchor ledger
 	anchorLedger, err := database.UpdateAccount(block.Batch, x.Describe.AnchorPool(), func(ledger *protocol.AnchorLedger) error {
-		ledger.Partition(protocol.DnUrl()).Produced++
+		ledger.MinorBlockSequenceNumber++
 		if !block.State.Anchor.ShouldOpenMajorBlock {
 			return nil
 		}
@@ -701,14 +701,6 @@ func (x *Executor) buildDirectoryAnchor(block *Block, systemLedger *protocol.Sys
 		anchor.MakeMajorBlockTime = anchorLedger.MajorBlockTime
 	}
 
-	// Load the synthetic ledger
-	var synthLedger *protocol.SyntheticLedger
-	err := block.Batch.Account(x.Describe.Synthetic()).Main().GetAs(&synthLedger)
-	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "load synthetic ledger: %w", err)
-	}
-	anchor.Synthetic = synthLedger.Exchange
-
 	// Load the root chain
 	rootChain, err := block.Batch.Account(x.Describe.Ledger()).RootChain().Get()
 	if err != nil {
@@ -746,7 +738,6 @@ func (x *Executor) buildDirectoryAnchor(block *Block, systemLedger *protocol.Sys
 
 		receipt := new(protocol.PartitionAnchorReceipt)
 		receipt.Anchor = received.Body.GetPartitionAnchor()
-		receipt.SequenceNumber = received.Status.SequenceNumber
 		receipt.RootChainReceipt, err = anchorReceipt.Combine(rootReceipt)
 		if err != nil {
 			return nil, errors.Format(errors.StatusUnknownError, "combine receipt for entry %d of %s intermediate anchor chain: %w", received.Index, received.Partition, err)
@@ -767,14 +758,5 @@ func (x *Executor) buildPartitionAnchor(block *Block, ledger *protocol.SystemLed
 	anchor.MinorBlockIndex = uint64(block.Index)
 	anchor.MajorBlockIndex = block.State.MakeMajorBlock
 	anchor.AcmeBurnt = ledger.AcmeBurnt
-
-	// Load the synthetic ledger
-	var synthLedger *protocol.SyntheticLedger
-	err := block.Batch.Account(x.Describe.Synthetic()).Main().GetAs(&synthLedger)
-	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "load synthetic ledger: %w", err)
-	}
-	anchor.Synthetic = synthLedger.Exchange
-
 	return anchor, nil
 }
