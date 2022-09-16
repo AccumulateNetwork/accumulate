@@ -78,14 +78,14 @@ func (m *queryBackend) queryByUrl(batch *database.Batch, u *url.URL, prove bool,
 			return nil, nil, fmt.Errorf("invalid txid %q: %v", qv.Get("txid"), err)
 		}
 
-		v, err := m.queryByTxId(batch, txid, prove, false, false, nil)
+		v, err := m.queryByTxId(batch, txid, true, prove, false, false, nil)
 		return []byte("tx"), v, err
 
 	case u.Fragment == "":
 		txid, err := u.AsTxID()
 		if err == nil {
 			h := txid.Hash()
-			v, err := m.queryByTxId(batch, h[:], prove, false, false, nil)
+			v, err := m.queryByTxId(batch, h[:], false, prove, false, false, nil)
 			return []byte("tx"), v, err
 		}
 
@@ -242,7 +242,7 @@ func (m *queryBackend) queryByUrl(batch *database.Batch, u *url.URL, prove bool,
 				return nil, nil, fmt.Errorf("failed to load chain state: %v", err)
 			}
 
-			res, err := m.queryByTxId(batch, txid, prove, false, false, nil)
+			res, err := m.queryByTxId(batch, txid, true, prove, false, false, nil)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -303,7 +303,7 @@ func (m *queryBackend) queryByUrl(batch *database.Batch, u *url.URL, prove bool,
 					}
 
 					// Return the transaction without height or state info
-					res, err := m.queryByTxId(batch, txid, prove, false, false, nil)
+					res, err := m.queryByTxId(batch, txid, true, prove, false, false, nil)
 					if err != nil {
 						return nil, nil, err
 					}
@@ -316,7 +316,7 @@ func (m *queryBackend) queryByUrl(batch *database.Batch, u *url.URL, prove bool,
 					return nil, nil, fmt.Errorf("failed to load chain state: %v", err)
 				}
 
-				res, err := m.queryByTxId(batch, txid, prove, false, false, nil)
+				res, err := m.queryByTxId(batch, txid, true, prove, false, false, nil)
 				if err != nil {
 					return nil, nil, err
 				}
@@ -520,7 +520,53 @@ func (m *queryBackend) queryDirectoryByChainId(batch *database.Batch, account *u
 	return resp, nil
 }
 
-func (m *queryBackend) queryByTxId(batch *database.Batch, txid []byte, prove, remote, signSynth bool, anchorDest *url.URL) (*query.ResponseByTxId, error) {
+func (m *queryBackend) querySignature(batch *database.Batch, hash []byte) (*query.ResponseByTxId, error) {
+	var err error
+
+	tx := batch.Transaction(hash)
+	txState, err := tx.Main().Get()
+	if errors.Is(err, storage.ErrNotFound) {
+		return nil, errors.NotFound("signature %X not found", hash[:4])
+	} else if err != nil {
+		return nil, fmt.Errorf("invalid query from GetTx in state database, %v", err)
+	}
+	signature := txState.Signature
+
+	status, err := tx.Status().Get()
+	if err != nil {
+		return nil, errors.Format(errors.StatusUnknownError, "load status: %w", err)
+	}
+
+	produced, err := tx.Produced().Get()
+	if err != nil {
+		return nil, errors.Format(errors.StatusUnknownError, "load produced: %w", err)
+	}
+
+	remote := new(protocol.RemoteTransaction)
+	remote.Hash = txState.Txid.Hash()
+	txn := new(protocol.Transaction)
+	txn.Body = remote
+	env := new(protocol.Envelope)
+	env.Transaction = []*protocol.Transaction{txn}
+
+	signer := new(protocol.UnknownAccount)
+	if !signature.Type().IsSystem() {
+		signer.Url = signature.GetSigner()
+	}
+	var sigSet query.SignatureSet
+	sigSet.Account = signer
+	sigSet.Signatures = []protocol.Signature{signature}
+
+	res := new(query.ResponseByTxId)
+	res.TxId = txState.Txid
+	res.Status = status
+	res.Produced = produced
+	res.Envelope = env
+	res.Signers = []query.SignatureSet{sigSet}
+	return res, nil
+}
+
+func (m *queryBackend) queryByTxId(batch *database.Batch, txid []byte, resolveSigToTxn, prove, remote, signSynth bool, anchorDest *url.URL) (*query.ResponseByTxId, error) {
 	var err error
 
 	tx := batch.Transaction(txid)
@@ -532,6 +578,13 @@ func (m *queryBackend) queryByTxId(batch *database.Batch, txid []byte, prove, re
 	}
 
 	if txState.Transaction == nil {
+		if txState.Signature == nil {
+			return nil, errors.Format(errors.StatusInternalError, "invalid record %x: not a signature or a transaction", txid)
+		}
+		if !resolveSigToTxn {
+			return m.querySignature(batch, txid)
+		}
+
 		h := txState.Txid.Hash()
 		tx = batch.Transaction(h[:])
 		txState, err = tx.GetState()
@@ -721,7 +774,7 @@ func (m *queryBackend) queryTxHistory(batch *database.Batch, chain_ *database.Ch
 	}
 
 	for _, txid := range txids {
-		qr, err := m.queryByTxId(batch, txid, false, false, false, nil)
+		qr, err := m.queryByTxId(batch, txid, true, false, false, false, nil)
 		if err != nil {
 			if errors.Is(err, storage.ErrNotFound) {
 				continue // txs can be filtered out for scratch accounts
@@ -809,7 +862,7 @@ func (m *queryBackend) Query(batch *database.Batch, q query.Request, _ int64, pr
 	switch q := q.(type) {
 	case *query.RequestByTxId:
 		txr := q
-		qr, err := m.queryByTxId(batch, txr.TxId[:], prove, false, false, nil)
+		qr, err := m.queryByTxId(batch, txr.TxId[:], true, prove, false, false, nil)
 		if err != nil {
 			return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 		}
@@ -1036,7 +1089,7 @@ func (m *queryBackend) Query(batch *database.Batch, q query.Request, _ int64, pr
 			}
 		}
 
-		qr, err := m.queryByTxId(batch, hash, prove, true, true, anchorDest)
+		qr, err := m.queryByTxId(batch, hash, true, prove, true, true, anchorDest)
 		if err != nil {
 			return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 		}
@@ -1158,7 +1211,7 @@ resultLoop:
 					minorEntry.TxIds = append(minorEntry.TxIds, hash)
 				}
 				if req.TxFetchMode == query.TxFetchModeExpand {
-					qr, err := m.queryByTxId(batch, hash, false, false, false, nil)
+					qr, err := m.queryByTxId(batch, hash, true, false, false, false, nil)
 					if err == nil {
 						minorEntry.TxCount++
 						minorEntry.Transactions = append(minorEntry.Transactions, qr)
