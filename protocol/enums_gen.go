@@ -140,12 +140,6 @@ const PartitionTypeDirectory PartitionType = 1
 // PartitionTypeBlockValidator .
 const PartitionTypeBlockValidator PartitionType = 2
 
-// PrivateKeyLocationWalletDB the private key is in the encrypted wallet database.
-const PrivateKeyLocationWalletDB PrivateKeyLocation = 0
-
-// PrivateKeyLocationLedgerDevice the private key is on a ledger device.
-const PrivateKeyLocationLedgerDevice PrivateKeyLocation = 1
-
 // SignatureTypeUnknown is used when the signature type is not known.
 const SignatureTypeUnknown SignatureType = 0
 
@@ -940,66 +934,6 @@ func (v *PartitionType) UnmarshalJSON(data []byte) error {
 	*v, ok = PartitionTypeByName(s)
 	if !ok || strings.ContainsRune(v.String(), ':') {
 		return fmt.Errorf("invalid Partition Type %q", s)
-	}
-	return nil
-}
-
-// GetEnumValue returns the value of the Private Key Location
-func (v PrivateKeyLocation) GetEnumValue() uint64 { return uint64(v) }
-
-// SetEnumValue sets the value. SetEnumValue returns false if the value is invalid.
-func (v *PrivateKeyLocation) SetEnumValue(id uint64) bool {
-	u := PrivateKeyLocation(id)
-	switch u {
-	case PrivateKeyLocationWalletDB, PrivateKeyLocationLedgerDevice:
-		*v = u
-		return true
-	default:
-		return false
-	}
-}
-
-// String returns the name of the Private Key Location.
-func (v PrivateKeyLocation) String() string {
-	switch v {
-	case PrivateKeyLocationWalletDB:
-		return "walletDB"
-	case PrivateKeyLocationLedgerDevice:
-		return "ledgerDevice"
-	default:
-		return fmt.Sprintf("PrivateKeyLocation:%d", v)
-	}
-}
-
-// PrivateKeyLocationByName returns the named Private Key Location.
-func PrivateKeyLocationByName(name string) (PrivateKeyLocation, bool) {
-	switch strings.ToLower(name) {
-	case "walletdb":
-		return PrivateKeyLocationWalletDB, true
-	case "ledgerdevice":
-		return PrivateKeyLocationLedgerDevice, true
-	default:
-		return 0, false
-	}
-}
-
-// MarshalJSON marshals the Private Key Location to JSON as a string.
-func (v PrivateKeyLocation) MarshalJSON() ([]byte, error) {
-	return json.Marshal(v.String())
-}
-
-// UnmarshalJSON unmarshals the Private Key Location from JSON as a string.
-func (v *PrivateKeyLocation) UnmarshalJSON(data []byte) error {
-	var s string
-	err := json.Unmarshal(data, &s)
-	if err != nil {
-		return err
-	}
-
-	var ok bool
-	*v, ok = PrivateKeyLocationByName(s)
-	if !ok || strings.ContainsRune(v.String(), ':') {
-		return fmt.Errorf("invalid Private Key Location %q", s)
 	}
 	return nil
 }

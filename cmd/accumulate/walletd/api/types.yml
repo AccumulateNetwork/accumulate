@@ -182,9 +182,10 @@ KeyData:
     - name: KeyType
       type: protocol.SignatureType
       marshal-as: enum
-    - name: PrivateKeyLocation
-      type: protocol.PrivateKeyLocation
-      marshal-as: enum
+    - name: WalletID
+      type: string
+      optional: true
+
 
 KeyListResponse:
   non-binary: true
