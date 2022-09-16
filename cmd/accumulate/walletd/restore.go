@@ -133,13 +133,13 @@ func RestoreAccounts() (out string, err error) {
 		sigTypeData, err := GetWallet().Get(BucketSigTypeDeprecated, v.Value)
 		if err != nil {
 			//if it doesn't exist then 1) we are already using BucketKeyInfo, so we're golden, or 2)
-			//we are an old wallet that supports only LegacyED25519 signature types
+			//we are an old wallet, so default it to ed25519 signature types
 
 			//first, test for 1)
 			kid, err := GetWallet().Get(BucketKeyInfo, v.Value)
 			if err != nil {
 				//ok, so it is 2), wo we need to make the key info bucket
-				k.KeyInfo.Type = protocol.SignatureTypeLegacyED25519
+				k.KeyInfo.Type = protocol.SignatureTypeED25519
 				k.KeyInfo.Derivation = "external"
 
 				//add the default key type
@@ -154,10 +154,26 @@ func RestoreAccounts() (out string, err error) {
 					return "", err
 				}
 			} else {
-				//we have key info, so assign it to key's key info
+				//we have key info, so, make sure it isn't a legacyEd25519 key and
+				// assign it to key's key info.  If it is a legacyEd25519 then
+				// update it to the regular accumulate ed25519 type
 				err = k.KeyInfo.UnmarshalBinary(kid)
 				if err != nil {
 					return "", err
+				}
+				//if we hae the old key type, make it the new type.
+				if k.KeyInfo.Type == protocol.SignatureTypeLegacyED25519 {
+					k.KeyInfo.Type = protocol.SignatureTypeED25519
+
+					kiData, err := k.KeyInfo.MarshalBinary()
+					if err != nil {
+						return "", err
+					}
+
+					err = GetWallet().Put(BucketKeyInfo, v.Value, kiData)
+					if err != nil {
+						return "", err
+					}
 				}
 			}
 		} else {
@@ -169,6 +185,10 @@ func RestoreAccounts() (out string, err error) {
 			}
 
 			k.KeyInfo.Type.SetEnumValue(kt)
+
+			if k.KeyInfo.Type == protocol.SignatureTypeLegacyED25519 {
+				k.KeyInfo.Type = protocol.SignatureTypeED25519
+			}
 			k.KeyInfo.Derivation = "external"
 
 			//add the default key type
