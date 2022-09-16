@@ -8,13 +8,13 @@ import (
 
 	btc "github.com/btcsuite/btcd/btcec"
 	"github.com/btcsuite/btcutil/base58"
+	"github.com/ethereum/go-ethereum/crypto"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding/hash"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 	"golang.org/x/crypto/ripemd160" //nolint:staticcheck
-	"golang.org/x/crypto/sha3"
 )
 
 var ErrCannotInitiate = errors.New(errors.StatusBadRequest, "signature cannot initiate a transaction: values are missing")
@@ -105,15 +105,25 @@ func BTCaddress(pubKey []byte) string {
 	return address
 }
 
+//ETHhash returns the truncated hash (i.e. binary ethereum address)
 func ETHhash(pubKey []byte) []byte {
-	hash := sha3.NewLegacyKeccak256()
-	hash.Write(pubKey[:])
-	return hash.Sum(nil)[12:]
+	p, err := crypto.UnmarshalPubkey(pubKey)
+	if err != nil {
+		p, err = crypto.DecompressPubkey(pubKey)
+		if err != nil {
+			return nil
+		}
+	}
+	a := crypto.PubkeyToAddress(*p)
+	return a.Bytes()
 }
 
-func ETHaddress(pubKey []byte) string {
-	address := ETHhash(pubKey)
-	return fmt.Sprintf("0x%x", address[:])
+func ETHaddress(pubKey []byte) (string, error) {
+	h := ETHhash(pubKey)
+	if h == nil {
+		return "", fmt.Errorf("invalid eth public key")
+	}
+	return fmt.Sprintf("0x%x", h), nil
 }
 
 func SignatureDidInitiate(sig Signature, txnInitHash []byte, initiator *Signature) bool {
