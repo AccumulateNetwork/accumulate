@@ -33,6 +33,8 @@ fuzz:
         # - FuzzUpdateAccountAuth
         # - FuzzUpdateKey
   variables:
+    COVFUZZ_USE_REGISTRY: 'true'
+    COVFUZZ_CORPUS_NAME: $func
     COVFUZZ_ADDITIONAL_ARGS: '-max_total_time=300'
   script:
   - apt update && apt install -y clang
