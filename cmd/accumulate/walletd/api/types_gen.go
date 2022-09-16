@@ -107,10 +107,11 @@ type FinalizeEnvelopeRequest struct {
 }
 
 type KeyData struct {
-	Name       string                 `json:"name,omitempty" form:"name" query:"name" validate:"required"`
-	PublicKey  []byte                 `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
-	Derivation string                 `json:"derivation,omitempty" form:"derivation" query:"derivation" validate:"required"`
-	KeyType    protocol.SignatureType `json:"keyType,omitempty" form:"keyType" query:"keyType" validate:"required"`
+	Name               string                      `json:"name,omitempty" form:"name" query:"name" validate:"required"`
+	PublicKey          []byte                      `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
+	Derivation         string                      `json:"derivation,omitempty" form:"derivation" query:"derivation" validate:"required"`
+	KeyType            protocol.SignatureType      `json:"keyType,omitempty" form:"keyType" query:"keyType" validate:"required"`
+	PrivateKeyLocation protocol.PrivateKeyLocation `json:"privateKeyLocation,omitempty" form:"privateKeyLocation" query:"privateKeyLocation" validate:"required"`
 }
 
 type KeyListResponse struct {
@@ -388,6 +389,7 @@ func (v *KeyData) Copy() *KeyData {
 	u.PublicKey = encoding.BytesCopy(v.PublicKey)
 	u.Derivation = v.Derivation
 	u.KeyType = v.KeyType
+	u.PrivateKeyLocation = v.PrivateKeyLocation
 
 	return u
 }
@@ -721,6 +723,9 @@ func (v *KeyData) Equal(u *KeyData) bool {
 		return false
 	}
 	if !(v.KeyType == u.KeyType) {
+		return false
+	}
+	if !(v.PrivateKeyLocation == u.PrivateKeyLocation) {
 		return false
 	}
 
@@ -1086,15 +1091,17 @@ func (v *EncodeTransactionResponse) MarshalJSON() ([]byte, error) {
 
 func (v *KeyData) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Name       string                 `json:"name,omitempty"`
-		PublicKey  *string                `json:"publicKey,omitempty"`
-		Derivation string                 `json:"derivation,omitempty"`
-		KeyType    protocol.SignatureType `json:"keyType,omitempty"`
+		Name               string                      `json:"name,omitempty"`
+		PublicKey          *string                     `json:"publicKey,omitempty"`
+		Derivation         string                      `json:"derivation,omitempty"`
+		KeyType            protocol.SignatureType      `json:"keyType,omitempty"`
+		PrivateKeyLocation protocol.PrivateKeyLocation `json:"privateKeyLocation,omitempty"`
 	}{}
 	u.Name = v.Name
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.Derivation = v.Derivation
 	u.KeyType = v.KeyType
+	u.PrivateKeyLocation = v.PrivateKeyLocation
 	return json.Marshal(&u)
 }
 
@@ -1271,15 +1278,17 @@ func (v *EncodeTransactionResponse) UnmarshalJSON(data []byte) error {
 
 func (v *KeyData) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Name       string                 `json:"name,omitempty"`
-		PublicKey  *string                `json:"publicKey,omitempty"`
-		Derivation string                 `json:"derivation,omitempty"`
-		KeyType    protocol.SignatureType `json:"keyType,omitempty"`
+		Name               string                      `json:"name,omitempty"`
+		PublicKey          *string                     `json:"publicKey,omitempty"`
+		Derivation         string                      `json:"derivation,omitempty"`
+		KeyType            protocol.SignatureType      `json:"keyType,omitempty"`
+		PrivateKeyLocation protocol.PrivateKeyLocation `json:"privateKeyLocation,omitempty"`
 	}{}
 	u.Name = v.Name
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.Derivation = v.Derivation
 	u.KeyType = v.KeyType
+	u.PrivateKeyLocation = v.PrivateKeyLocation
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -1291,6 +1300,7 @@ func (v *KeyData) UnmarshalJSON(data []byte) error {
 	}
 	v.Derivation = u.Derivation
 	v.KeyType = u.KeyType
+	v.PrivateKeyLocation = u.PrivateKeyLocation
 	return nil
 }
 

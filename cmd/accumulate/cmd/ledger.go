@@ -23,17 +23,27 @@ var ledgerInfoCmd = &cobra.Command{
 	},
 }
 
+var ledgerKeyGenerateCmd = &cobra.Command{
+	Use:   "key generate [key name/label]",
+	Short: "generate keypair on a ledger device and give it a name",
+	Run: func(cmd *cobra.Command, args []string) {
+		out, err := legerGenerateKey(cmd, args)
+		printOutput(cmd, out, err)
+	},
+}
+
 func init() {
 	initRunFlags(ledgerCmd, false)
 	ledgerCmd.AddCommand(ledgerInfoCmd)
+	ledgerCmd.AddCommand(ledgerKeyGenerateCmd)
 }
 
 func queryWalletsInfo(cmd *cobra.Command, args []string) (string, error) {
-	ledgerState, err := walletd.NewLedgerHub()
+	ledgerHub, err := walletd.NewLedgerHub()
 	if err != nil {
 		return "", err
 	}
-	ledgerInfos, err := ledgerState.QueryLedgerWalletsInfo()
+	ledgerInfos, err := ledgerHub.QueryLedgerWalletsInfo()
 	if err != nil {
 		return "", err
 	}
@@ -55,4 +65,8 @@ func queryWalletsInfo(cmd *cobra.Command, args []string) (string, error) {
 		}
 		return result, nil
 	}
+}
+
+func legerGenerateKey(cmd *cobra.Command, args []string) (string, error) {
+	return "", nil
 }

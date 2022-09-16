@@ -15,10 +15,11 @@ import (
 )
 
 type KeyInfo struct {
-	fieldsSet  []bool
-	Type       protocol.SignatureType `json:"type,omitempty" form:"type" query:"type" validate:"required"`
-	Derivation string                 `json:"derivation,omitempty" form:"derivation" query:"derivation"`
-	extraData  []byte
+	fieldsSet          []bool
+	Type               protocol.SignatureType      `json:"type,omitempty" form:"type" query:"type" validate:"required"`
+	Derivation         string                      `json:"derivation,omitempty" form:"derivation" query:"derivation"`
+	PrivateKeyLocation protocol.PrivateKeyLocation `json:"privateKeyLocation,omitempty" form:"privateKeyLocation" query:"privateKeyLocation" validate:"required"`
+	extraData          []byte
 }
 
 func (v *KeyInfo) Copy() *KeyInfo {
@@ -26,6 +27,7 @@ func (v *KeyInfo) Copy() *KeyInfo {
 
 	u.Type = v.Type
 	u.Derivation = v.Derivation
+	u.PrivateKeyLocation = v.PrivateKeyLocation
 
 	return u
 }
@@ -39,6 +41,9 @@ func (v *KeyInfo) Equal(u *KeyInfo) bool {
 	if !(v.Derivation == u.Derivation) {
 		return false
 	}
+	if !(v.PrivateKeyLocation == u.PrivateKeyLocation) {
+		return false
+	}
 
 	return true
 }
@@ -46,6 +51,7 @@ func (v *KeyInfo) Equal(u *KeyInfo) bool {
 var fieldNames_KeyInfo = []string{
 	1: "Type",
 	2: "Derivation",
+	3: "PrivateKeyLocation",
 }
 
 func (v *KeyInfo) MarshalBinary() ([]byte, error) {
@@ -57,6 +63,9 @@ func (v *KeyInfo) MarshalBinary() ([]byte, error) {
 	}
 	if !(len(v.Derivation) == 0) {
 		writer.WriteString(2, v.Derivation)
+	}
+	if !(v.PrivateKeyLocation == 0) {
+		writer.WriteEnum(3, v.PrivateKeyLocation)
 	}
 
 	_, _, err := writer.Reset(fieldNames_KeyInfo)
@@ -74,6 +83,11 @@ func (v *KeyInfo) IsValid() error {
 		errs = append(errs, "field Type is missing")
 	} else if v.Type == 0 {
 		errs = append(errs, "field Type is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field PrivateKeyLocation is missing")
+	} else if v.PrivateKeyLocation == 0 {
+		errs = append(errs, "field PrivateKeyLocation is not set")
 	}
 
 	switch len(errs) {
@@ -98,6 +112,9 @@ func (v *KeyInfo) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	if x, ok := reader.ReadString(2); ok {
 		v.Derivation = x
+	}
+	if x := new(protocol.PrivateKeyLocation); reader.ReadEnum(3, x) {
+		v.PrivateKeyLocation = *x
 	}
 
 	seen, err := reader.Reset(fieldNames_KeyInfo)

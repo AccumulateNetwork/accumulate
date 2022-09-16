@@ -6,3 +6,6 @@ KeyInfo:
   - name: Derivation
     type: string
     optional: true
+  - name: PrivateKeyLocation
+    type: protocol.PrivateKeyLocation
+    marshal-as: enum

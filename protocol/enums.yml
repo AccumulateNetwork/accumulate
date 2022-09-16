@@ -66,6 +66,14 @@ SignatureType:
     value: 12
     description: is used for internally produced transactions
 
+PrivateKeyLocation:
+  WalletDB:
+    value: 0
+    description: the private key is in the encrypted wallet database
+  LedgerDevice:
+    value: 1
+    description: the private key is on a ledger device
+
 KeyPageOperationType:
   Unknown:
     value: 0

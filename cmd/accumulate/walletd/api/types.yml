@@ -182,6 +182,9 @@ KeyData:
     - name: KeyType
       type: protocol.SignatureType
       marshal-as: enum
+    - name: PrivateKeyLocation
+      type: protocol.PrivateKeyLocation
+      marshal-as: enum
 
 KeyListResponse:
   non-binary: true
