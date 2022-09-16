@@ -61,7 +61,9 @@ func (h *LedgerHub) queryLedgerInfo(wallet accounts.Wallet) (*api.LedgerWalletIn
 	}()
 
 	info := wallet.Info()
+	url := wallet.URL()
 	return &api.LedgerWalletInfo{
+		Url: url.String(),
 		Version: api.Version{
 			Label: fmt.Sprintf("%d.%d.%d", info.AppVersion.Major, info.AppVersion.Minor, info.AppVersion.Patch),
 			Major: uint64(info.AppVersion.Major),
