@@ -33,8 +33,7 @@ fuzz:
         # - FuzzUpdateAccountAuth
         # - FuzzUpdateKey
   variables:
-    COVFUZZ_USE_REGISTRY: 'true'
-    COVFUZZ_CORPUS_NAME: $func
+    COVFUZZ_BRANCH: DO-57-ci-fuzz
     COVFUZZ_ADDITIONAL_ARGS: '-max_total_time=300'
   script:
   - apt update && apt install -y clang
@@ -44,9 +43,7 @@ fuzz:
   - moved=tmp/$(basename -- ${file%.go}_fuzz.go)
   - mv $file $moved
   - addimport -path $moved
-  - sed -i "s/^    \"testing\"$//" $moved
-  - sed -i "s/ \*testing\.T/ *go118fuzzbuildutils\.T/g" $moved
-  - sed -i "s/func $func(\([a-zA-Z0-9]*\) \*testing\.F)/func $func(\1 \*go118fuzzbuildutils\.F)/g" $moved
+  - go run github.com/rinchsan/gosimports/cmd/gosimports -w $moved
   - go-118-fuzz-build -o fuzz_target.a -func $func ./tmp
   - clang -fsanitize=fuzzer fuzz_target.a -o fuzz_target
   - ./gitlab-cov-fuzz run --regression=$REGRESSION -- ./fuzz_target || true
