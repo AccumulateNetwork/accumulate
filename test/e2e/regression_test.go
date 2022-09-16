@@ -535,6 +535,8 @@ func TestPendingTransactionForMissingAccount(t *testing.T) {
 }
 
 func TestDnAnchorAcknowledged(t *testing.T) {
+	t.Skip("This functionality has been reverted")
+
 	aliceKey, bobKey := acctesting.GenerateKey("Alice"), acctesting.GenerateKey("Bob")
 	bob := acctesting.AcmeLiteAddressStdPriv(bobKey)
 	var timestamp uint64
@@ -568,8 +570,8 @@ func TestDnAnchorAcknowledged(t *testing.T) {
 	helpers.View(t, x, func(batch *database.Batch) {
 		var ledger1 *AnchorLedger
 		require.NoError(t, batch.Account(x.Executor.Describe.AnchorPool()).Main().GetAs(&ledger1))
-		ledger2 := ledger1.Partition(DnUrl())
+		ledger2 := ledger1.Anchor(DnUrl())
 		require.Greater(t, ledger2.Produced, uint64(1))
-		require.Equal(t, ledger2.Produced, ledger2.Acknowledged)
+		// require.Equal(t, ledger2.Produced, ledger2.Acknowledged)
 	})
 }

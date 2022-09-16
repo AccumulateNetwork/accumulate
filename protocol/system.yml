@@ -30,9 +30,9 @@ SyntheticLedger:
     - name: Url
       type: url
       pointer: true
-    - name: Exchange
+    - name: Sequence
       description: tracks sent and received synthetic transactions
-      type: TransactionExchangeLedger
+      type: PartitionSyntheticLedger
       marshal-as: reference
       pointer: true
       repeatable: true
@@ -43,6 +43,9 @@ AnchorLedger:
     - name: Url
       type: url
       pointer: true
+    - name: MinorBlockSequenceNumber
+      description: is the sequence number of the last minor block
+      type: uint
     - name: MajorBlockIndex
       description: is the block index of the last major block
       type: uint
@@ -54,9 +57,9 @@ AnchorLedger:
       type: url
       pointer: true
       repeatable: true
-    - name: Exchange
-      description: tracks sent and received anchor transactions
-      type: TransactionExchangeLedger
+    - name: Sequence
+      description: tracks sent and received anchors
+      type: PartitionSyntheticLedger
       marshal-as: reference
       pointer: true
       repeatable: true
@@ -157,12 +160,12 @@ PartitionAnchor:
     - name: StateTreeAnchor
       description: is the root of the source's state tree (BPT)
       type: hash
-    - name: Synthetic
-      description: lists synthetic transactions produced and received
-      type: TransactionExchangeLedger
-      marshal-as: reference
-      pointer: true
-      repeatable: true
+    # - name: Synthetic
+    #   description: lists synthetic transactions produced and received
+    #   type: TransactionExchangeLedger
+    #   marshal-as: reference
+    #   pointer: true
+    #   repeatable: true
 
 PartitionAnchorReceipt:
   fields:
@@ -170,15 +173,15 @@ PartitionAnchorReceipt:
       type: PartitionAnchor
       marshal-as: reference
       pointer: true
-    - name: SequenceNumber
-      type: uint
     - name: RootChainReceipt
       description: is a receipt for the anchored root chain entry
       type: managed.Receipt
       marshal-as: reference
       pointer: true
+    # - name: SequenceNumber
+    #   type: uint
 
-TransactionExchangeLedger:
+PartitionSyntheticLedger:
   fields:
     - name: Url
       description: is the URL of the partition
@@ -186,9 +189,6 @@ TransactionExchangeLedger:
       pointer: true
     - name: Produced
       description: is the maximum sequence number of transactions produced for the partition
-      type: uint
-    - name: Acknowledged
-      description: is the maximum sequence number of acknowledged transactions produced for the partition
       type: uint
     - name: Received
       description: is the maximum sequence number of transactions received from the partition
@@ -201,3 +201,6 @@ TransactionExchangeLedger:
       type: txid
       pointer: true
       repeatable: true
+    # - name: Acknowledged
+    #   description: is the maximum sequence number of acknowledged transactions produced for the partition
+    #   type: uint

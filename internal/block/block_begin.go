@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
-	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/shared"
@@ -182,7 +181,7 @@ func (x *Executor) finalizeBlock(block *Block) error {
 	}
 
 	// Send the block anchor
-	sequenceNumber := anchorLedger.Partition(protocol.DnUrl()).Produced
+	sequenceNumber := anchorLedger.MinorBlockSequenceNumber
 	x.logger.Debug("Anchor block", "module", "anchoring", "index", ledger.Index, "seq-num", sequenceNumber)
 
 	// Load the root chain
@@ -334,13 +333,8 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch, isLeader boo
 		}
 
 		for _, receipt := range anchor.Receipts {
-			partition, ok := protocol.ParsePartitionUrl(receipt.Anchor.Source)
-			if !ok {
-				return errors.Format(errors.StatusBadRequest, "invalid source: %v is not a partition", receipt.Anchor.Source)
-			}
-
 			// Ignore receipts for other partitions
-			if !strings.EqualFold(partition, x.Describe.PartitionId) {
+			if !x.Describe.PartitionUrl().URL.LocalTo(receipt.Anchor.Source) {
 				continue
 			}
 
