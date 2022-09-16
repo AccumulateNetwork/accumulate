@@ -701,7 +701,7 @@ func QueryAcmeOracle() (*protocol.AcmeOracle, error) {
 
 func ValidateSigType(input string) (protocol.SignatureType, error) {
 	sigtype, ok := protocol.SignatureTypeByName(input)
-	if !ok {
+	if !ok || sigtype == protocol.SignatureTypeLegacyED25519 {
 		sigtype = protocol.SignatureTypeED25519
 	}
 	return sigtype, nil
