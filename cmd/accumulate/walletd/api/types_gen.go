@@ -118,6 +118,7 @@ type KeyListResponse struct {
 }
 
 type LedgerWalletInfo struct {
+	Url          string  `json:"url,omitempty" form:"url" query:"url" validate:"required"`
 	Version      Version `json:"version,omitempty" form:"version" query:"version" validate:"required"`
 	VendorID     uint64  `json:"vendorID,omitempty" form:"vendorID" query:"vendorID" validate:"required"`
 	Manufacturer string  `json:"manufacturer,omitempty" form:"manufacturer" query:"manufacturer" validate:"required"`
@@ -410,6 +411,7 @@ func (v *KeyListResponse) CopyAsInterface() interface{} { return v.Copy() }
 func (v *LedgerWalletInfo) Copy() *LedgerWalletInfo {
 	u := new(LedgerWalletInfo)
 
+	u.Url = v.Url
 	u.Version = *(&v.Version).Copy()
 	u.VendorID = v.VendorID
 	u.Manufacturer = v.Manufacturer
@@ -741,6 +743,9 @@ func (v *KeyListResponse) Equal(u *KeyListResponse) bool {
 }
 
 func (v *LedgerWalletInfo) Equal(u *LedgerWalletInfo) bool {
+	if !(v.Url == u.Url) {
+		return false
+	}
 	if !((&v.Version).Equal(&u.Version)) {
 		return false
 	}

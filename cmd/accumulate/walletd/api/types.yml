@@ -225,6 +225,8 @@ Version:
 LedgerWalletInfo:
   non-binary: true
   fields:
+    - name: Url
+      type: String
     - name: Version
       type: Version
       marshal-as: reference

@@ -29,11 +29,11 @@ func init() {
 }
 
 func queryWalletsInfo(cmd *cobra.Command, args []string) (string, error) {
-	ledgerState, err := walletd.NewLedgerHub()
+	ledgerHub, err := walletd.NewLedgerHub()
 	if err != nil {
 		return "", err
 	}
-	ledgerInfos, err := ledgerState.QueryLedgerWalletsInfo()
+	ledgerInfos, err := ledgerHub.QueryLedgerWalletsInfo()
 	if err != nil {
 		return "", err
 	}
@@ -52,6 +52,7 @@ func queryWalletsInfo(cmd *cobra.Command, args []string) (string, error) {
 			result += fmt.Sprintf("\tVendor ID:\t%d\n", ledgerInfo.VendorID)
 			result += fmt.Sprintf("\tProduct ID:\t%d\n", ledgerInfo.ProductID)
 			result += fmt.Sprintf("\tApp Version:\t%s\n", ledgerInfo.Version.Label)
+			result += fmt.Sprintf("\tLedger URL:\t%s\n", ledgerInfo.Url)
 		}
 		return result, nil
 	}
