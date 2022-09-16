@@ -364,7 +364,10 @@ func GenerateKey(label string) (string, error) {
 	} else if sigtype == protocol.SignatureTypeETH {
 		keyHash = protocol.ETHhash(pubKey)
 		if label == "" {
-			label = protocol.ETHaddress(pubKey)
+			label, err = protocol.ETHaddress(pubKey)
+			if err != nil {
+				return "", err
+			}
 		}
 	} else {
 		h := sha256.Sum256(pubKey)
