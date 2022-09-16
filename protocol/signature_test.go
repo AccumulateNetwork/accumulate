@@ -95,7 +95,7 @@ func TestETHaddress(t *testing.T) {
 
 	checkSum := sha256.Sum256([]byte(address[2:]))
 	accEthLiteAccount, err := url.Parse(fmt.Sprintf("%s%x", address[2:], checkSum[28:]))
-
+	require.NoError(t, err)
 	lta, err := LiteTokenAddressFromHash(ETHhash(pubKey), ACME)
 	require.NoError(t, err)
 	require.Equal(t, accEthLiteAccount.JoinPath(ACME).String(), lta.String())
