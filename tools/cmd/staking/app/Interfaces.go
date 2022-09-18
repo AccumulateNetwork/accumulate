@@ -1,6 +1,6 @@
 // File holds interfaces and constants
 
-package main
+package app
 
 import (
 	"fmt"
@@ -19,8 +19,12 @@ const ( // Account Types
 )
 
 type Accumulate interface {
-	GetBlock(index int) *Block // Get the Major and Minor block heights
-	Start()                    // Any initialization required for the interface
+	GetParameters() *Parameters  // Get Staking App parameters from the protocol
+	Init()                       // Any initialization required for pulling data from the protocol
+	Run()                        // Start the monitor (or simulation)
+	GetBlock(index int64) *Block // Get the Major Block at the given index
+	GetTokensIssued() int64      // Return the Acme Tokens Issued
+	TokensIssued(int64)          // Report tokens issued. Simulator needs this, not the protocol
 }
 
 // Important Staking URLs.
