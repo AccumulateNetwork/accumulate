@@ -83,7 +83,7 @@ func (c *stateCache) LoadUrlAs(account *url.URL, target interface{}) error {
 	return encoding.SetPtr(state, target)
 }
 
-//GetHeight loads the height of the chain
+// GetHeight loads the height of the chain
 func (c *stateCache) GetHeight(u *url.URL) (uint64, error) {
 	chain, err := c.batch.Account(u).MainChain().Get()
 	if err != nil {
@@ -174,9 +174,12 @@ func (st *stateCache) createOrUpdate(isUpdate bool, accounts []protocol.Account)
 		// Add it to the directory
 		if isCreate {
 			u := account.GetUrl()
-			err = st.AddDirectoryEntry(u.Identity(), u)
-			if err != nil {
-				return errors.Format(errors.StatusUnknownError, "failed to add a directory entry for %q: %w", u, err)
+			p, ok := u.Parent()
+			if ok {
+				err = st.AddDirectoryEntry(p, u)
+				if err != nil {
+					return errors.Format(errors.StatusUnknownError, "failed to add a directory entry for %q: %w", u, err)
+				}
 			}
 		}
 

@@ -96,6 +96,9 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) ([]byte, error) {
 	if gg.Globals.Limits.PageEntries == 0 {
 		gg.Globals.Limits.PageEntries = 100
 	}
+	if gg.Globals.Limits.AdiAccounts == 0 {
+		gg.Globals.Limits.AdiAccounts = 100
+	}
 
 	// Build the routing table
 	var bvns []string

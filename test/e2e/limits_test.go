@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -12,8 +13,16 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
 )
 
+func urlSliceStrings(v []*url.URL) []string {
+	s := make([]string, len(v))
+	for i, v := range v {
+		s[i] = v.String()
+	}
+	return s
+}
+
 func TestCreateKeyPage_LimitBookPages(t *testing.T) {
-	alice := url.MustParse("alice")
+	alice := AccountUrl("alice")
 	aliceKey := acctesting.GenerateKey(alice)
 
 	globals := new(core.GlobalValues)
@@ -45,7 +54,7 @@ func TestCreateKeyPage_LimitBookPages(t *testing.T) {
 }
 
 func TestCreateKeyPage_LimitPageEntries(t *testing.T) {
-	alice := url.MustParse("alice")
+	alice := AccountUrl("alice")
 	aliceKey := acctesting.GenerateKey(alice)
 
 	globals := new(core.GlobalValues)
@@ -77,7 +86,7 @@ func TestCreateKeyPage_LimitPageEntries(t *testing.T) {
 }
 
 func TestUpdateKeyPage_LimitPageEntries(t *testing.T) {
-	alice := url.MustParse("alice")
+	alice := AccountUrl("alice")
 	aliceKey := acctesting.GenerateKey(alice)
 
 	globals := new(core.GlobalValues)
@@ -111,7 +120,7 @@ func TestUpdateKeyPage_LimitPageEntries(t *testing.T) {
 }
 
 func TestUpdateAccountAuth_LimitAccountAuthorities(t *testing.T) {
-	alice := url.MustParse("alice")
+	alice := AccountUrl("alice")
 	aliceKey := acctesting.GenerateKey(alice)
 
 	globals := new(core.GlobalValues)
@@ -149,7 +158,7 @@ func TestUpdateAccountAuth_LimitAccountAuthorities(t *testing.T) {
 }
 
 func TestWriteData_LimitDataEntryParts(t *testing.T) {
-	alice := url.MustParse("alice")
+	alice := AccountUrl("alice")
 	aliceKey := acctesting.GenerateKey(alice)
 
 	globals := new(core.GlobalValues)
@@ -181,4 +190,240 @@ func TestWriteData_LimitDataEntryParts(t *testing.T) {
 			BuildDelivery())
 	require.NotNil(t, st.Error)
 	require.EqualError(t, st.Error, "data entry contains too many parts")
+}
+
+func TestCreateIdentity_LimitAdiAccounts(t *testing.T) {
+	alice := AccountUrl("alice")
+	aliceKey := acctesting.GenerateKey(alice)
+
+	globals := new(core.GlobalValues)
+	globals.Globals = new(NetworkGlobals)
+	globals.Globals.Limits = new(NetworkLimits)
+	globals.Globals.Limits.AdiAccounts = 1
+
+	// Initialize
+	sim := NewSim(t,
+		simulator.MemoryDatabase,
+		simulator.SimpleNetwork(t.Name(), 3, 3),
+		simulator.GenesisWith(GenesisTime, globals),
+	)
+
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
+
+	// Execute
+	st := sim.Submit(
+		acctesting.NewTransaction().
+			WithPrincipal(alice).
+			WithSigner(alice.JoinPath("book", "1"), 1).
+			WithTimestamp(1).
+			WithBody(&CreateIdentity{Url: alice.JoinPath("account"), KeyHash: make([]byte, 32), KeyBookUrl: alice.JoinPath("account", "book")}).
+			Initiate(SignatureTypeED25519, aliceKey).
+			BuildDelivery())
+	require.NotNil(t, st.Error)
+	require.EqualError(t, st.Error, "adi would have too many accounts")
+}
+
+// TestCreateIdentity_Directory verifies that CreateIdentity correctly populates
+// the directory index because that impacts the enforcement of the account
+// limit.
+func TestCreateIdentity_Directory(t *testing.T) {
+	t.Run("Root", func(t *testing.T) {
+		alice := AccountUrl("alice")
+		liteKey := acctesting.GenerateKey("lite")
+		lite := acctesting.AcmeLiteAddressStdPriv(liteKey)
+
+		// Initialize
+		sim := NewSim(t,
+			simulator.MemoryDatabase,
+			simulator.SimpleNetwork(t.Name(), 3, 3),
+			simulator.Genesis(GenesisTime),
+		)
+
+		MakeLiteTokenAccount(t, sim.DatabaseFor(lite), liteKey[32:], AcmeUrl())
+		CreditCredits(t, sim.DatabaseFor(lite), lite.RootIdentity(), 1e9)
+
+		// Execute
+		st := sim.SubmitSuccessfully(
+			acctesting.NewTransaction().
+				WithPrincipal(alice).
+				WithSigner(lite, 1).
+				WithTimestamp(1).
+				WithBody(&CreateIdentity{Url: alice, KeyHash: make([]byte, 32), KeyBookUrl: alice.JoinPath("book")}).
+				Initiate(SignatureTypeED25519, liteKey).
+				BuildDelivery())
+
+		sim.StepUntil(
+			Txn(st.TxID).Succeeds())
+
+		// Make sure CreateIdentity doesn't add the ADI to its own directory
+		View(t, sim.DatabaseFor(alice), func(batch *database.Batch) {
+			dir, err := batch.Account(alice).Directory().Get()
+			require.NoError(t, err)
+			require.EqualValues(t, []string{alice.JoinPath("book").String()}, urlSliceStrings(dir))
+		})
+	})
+
+	t.Run("Sub", func(t *testing.T) {
+		alice := AccountUrl("alice")
+		aliceKey := acctesting.GenerateKey(alice)
+
+		// Initialize
+		sim := NewSim(t,
+			simulator.MemoryDatabase,
+			simulator.SimpleNetwork(t.Name(), 3, 3),
+			simulator.Genesis(GenesisTime),
+		)
+
+		MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+		CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
+
+		// Execute
+		st := sim.SubmitSuccessfully(
+			acctesting.NewTransaction().
+				WithPrincipal(alice).
+				WithSigner(alice.JoinPath("book", "1"), 1).
+				WithTimestamp(1).
+				WithBody(&CreateIdentity{Url: alice.JoinPath("account"), KeyHash: make([]byte, 32), KeyBookUrl: alice.JoinPath("account", "book")}).
+				Initiate(SignatureTypeED25519, aliceKey).
+				BuildDelivery())
+
+		sim.StepUntil(
+			Txn(st.TxID).Succeeds())
+
+		// Make sure CreateIdentity doesn't add the ADI to its own directory
+		View(t, sim.DatabaseFor(alice), func(batch *database.Batch) {
+			dir, err := batch.Account(alice.JoinPath("account")).Directory().Get()
+			require.NoError(t, err)
+			require.EqualValues(t, []string{alice.JoinPath("account", "book").String()}, urlSliceStrings(dir))
+		})
+	})
+}
+
+func TestCreateTokenAccount_LimitAdiAccounts(t *testing.T) {
+	alice := AccountUrl("alice")
+	aliceKey := acctesting.GenerateKey(alice)
+
+	globals := new(core.GlobalValues)
+	globals.Globals = new(NetworkGlobals)
+	globals.Globals.Limits = new(NetworkLimits)
+	globals.Globals.Limits.AdiAccounts = 1
+
+	// Initialize
+	sim := NewSim(t,
+		simulator.MemoryDatabase,
+		simulator.SimpleNetwork(t.Name(), 3, 3),
+		simulator.GenesisWith(GenesisTime, globals),
+	)
+
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
+
+	// Execute
+	st := sim.Submit(
+		acctesting.NewTransaction().
+			WithPrincipal(alice).
+			WithSigner(alice.JoinPath("book", "1"), 1).
+			WithTimestamp(1).
+			WithBody(&CreateTokenAccount{Url: alice.JoinPath("account"), TokenUrl: AcmeUrl()}).
+			Initiate(SignatureTypeED25519, aliceKey).
+			BuildDelivery())
+	require.NotNil(t, st.Error)
+	require.EqualError(t, st.Error, "adi would have too many accounts")
+}
+
+func TestCreateDataAccount_LimitAdiAccounts(t *testing.T) {
+	alice := AccountUrl("alice")
+	aliceKey := acctesting.GenerateKey(alice)
+
+	globals := new(core.GlobalValues)
+	globals.Globals = new(NetworkGlobals)
+	globals.Globals.Limits = new(NetworkLimits)
+	globals.Globals.Limits.AdiAccounts = 1
+
+	// Initialize
+	sim := NewSim(t,
+		simulator.MemoryDatabase,
+		simulator.SimpleNetwork(t.Name(), 3, 3),
+		simulator.GenesisWith(GenesisTime, globals),
+	)
+
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
+
+	// Execute
+	st := sim.Submit(
+		acctesting.NewTransaction().
+			WithPrincipal(alice).
+			WithSigner(alice.JoinPath("book", "1"), 1).
+			WithTimestamp(1).
+			WithBody(&CreateDataAccount{Url: alice.JoinPath("account")}).
+			Initiate(SignatureTypeED25519, aliceKey).
+			BuildDelivery())
+	require.NotNil(t, st.Error)
+	require.EqualError(t, st.Error, "adi would have too many accounts")
+}
+
+func TestCreateToken_LimitAdiAccounts(t *testing.T) {
+	alice := AccountUrl("alice")
+	aliceKey := acctesting.GenerateKey(alice)
+
+	globals := new(core.GlobalValues)
+	globals.Globals = new(NetworkGlobals)
+	globals.Globals.Limits = new(NetworkLimits)
+	globals.Globals.Limits.AdiAccounts = 1
+
+	// Initialize
+	sim := NewSim(t,
+		simulator.MemoryDatabase,
+		simulator.SimpleNetwork(t.Name(), 3, 3),
+		simulator.GenesisWith(GenesisTime, globals),
+	)
+
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
+
+	// Execute
+	st := sim.Submit(
+		acctesting.NewTransaction().
+			WithPrincipal(alice).
+			WithSigner(alice.JoinPath("book", "1"), 1).
+			WithTimestamp(1).
+			WithBody(&CreateToken{Url: alice.JoinPath("account")}).
+			Initiate(SignatureTypeED25519, aliceKey).
+			BuildDelivery())
+	require.NotNil(t, st.Error)
+	require.EqualError(t, st.Error, "adi would have too many accounts")
+}
+
+func TestCreateKeyBook_LimitAdiAccounts(t *testing.T) {
+	alice := AccountUrl("alice")
+	aliceKey := acctesting.GenerateKey(alice)
+
+	globals := new(core.GlobalValues)
+	globals.Globals = new(NetworkGlobals)
+	globals.Globals.Limits = new(NetworkLimits)
+	globals.Globals.Limits.AdiAccounts = 1
+
+	// Initialize
+	sim := NewSim(t,
+		simulator.MemoryDatabase,
+		simulator.SimpleNetwork(t.Name(), 3, 3),
+		simulator.GenesisWith(GenesisTime, globals),
+	)
+
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
+
+	// Execute
+	st := sim.Submit(
+		acctesting.NewTransaction().
+			WithPrincipal(alice).
+			WithSigner(alice.JoinPath("book", "1"), 1).
+			WithTimestamp(1).
+			WithBody(&CreateKeyBook{Url: alice.JoinPath("account"), PublicKeyHash: make([]byte, 32)}).
+			Initiate(SignatureTypeED25519, aliceKey).
+			BuildDelivery())
+	require.NotNil(t, st.Error)
+	require.EqualError(t, st.Error, "adi would have too many accounts")
 }

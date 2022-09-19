@@ -514,6 +514,8 @@ type NetworkLimits struct {
 	BookPages uint64 `json:"bookPages,omitempty" form:"bookPages" query:"bookPages" validate:"required"`
 	// PageEntries is the maximum number of entries a page can have.
 	PageEntries uint64 `json:"pageEntries,omitempty" form:"pageEntries" query:"pageEntries" validate:"required"`
+	// AdiAccounts is the maximum number of accounts an ADI can have (excluding accounts of sub ADIs).
+	AdiAccounts uint64 `json:"adiAccounts,omitempty" form:"adiAccounts" query:"adiAccounts" validate:"required"`
 	extraData   []byte
 }
 
@@ -1968,6 +1970,7 @@ func (v *NetworkLimits) Copy() *NetworkLimits {
 	u.AccountAuthorities = v.AccountAuthorities
 	u.BookPages = v.BookPages
 	u.PageEntries = v.PageEntries
+	u.AdiAccounts = v.AdiAccounts
 
 	return u
 }
@@ -3854,6 +3857,9 @@ func (v *NetworkLimits) Equal(u *NetworkLimits) bool {
 		return false
 	}
 	if !(v.PageEntries == u.PageEntries) {
+		return false
+	}
+	if !(v.AdiAccounts == u.AdiAccounts) {
 		return false
 	}
 
@@ -8006,6 +8012,7 @@ var fieldNames_NetworkLimits = []string{
 	2: "AccountAuthorities",
 	3: "BookPages",
 	4: "PageEntries",
+	5: "AdiAccounts",
 }
 
 func (v *NetworkLimits) MarshalBinary() ([]byte, error) {
@@ -8023,6 +8030,9 @@ func (v *NetworkLimits) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.PageEntries == 0) {
 		writer.WriteUint(4, v.PageEntries)
+	}
+	if !(v.AdiAccounts == 0) {
+		writer.WriteUint(5, v.AdiAccounts)
 	}
 
 	_, _, err := writer.Reset(fieldNames_NetworkLimits)
@@ -8055,6 +8065,11 @@ func (v *NetworkLimits) IsValid() error {
 		errs = append(errs, "field PageEntries is missing")
 	} else if v.PageEntries == 0 {
 		errs = append(errs, "field PageEntries is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field AdiAccounts is missing")
+	} else if v.AdiAccounts == 0 {
+		errs = append(errs, "field AdiAccounts is not set")
 	}
 
 	switch len(errs) {
@@ -12926,6 +12941,9 @@ func (v *NetworkLimits) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	if x, ok := reader.ReadUint(4); ok {
 		v.PageEntries = x
+	}
+	if x, ok := reader.ReadUint(5); ok {
+		v.AdiAccounts = x
 	}
 
 	seen, err := reader.Reset(fieldNames_NetworkLimits)
