@@ -47,12 +47,23 @@ type StakingApp struct {
 	}
 	protocol Accumulate
 	Stakers  struct {
-		AllAccounts map[string]*Account // Registered ADIs (Registered ADIs can add new staking accounts)
-		Pure        []*Account          // Pure Stakers
-		PValidator  []*Account          // Protocol Validators
-		PFollower   []*Account          // Protocol Followers
-		SValidator  []*Account          // Staking Validators
+		Type            string                   // The type of distribution
+		AllAccounts     map[string]*Account      // Registered ADIs (Registered ADIs can add new staking accounts)
+		Pure            []*Account               // Pure Stakers
+		PValidator      []*Account               // Protocol Validators
+		PFollower       []*Account               // Protocol Followers
+		SValidator      []*Account               // Staking Validators
+		Distributions   []*Distribution          // List of distributions to URLs
+		DistributionMap map[string]*Distribution // A map of Delegate Distributions
 	}
+}
+
+// Distribution
+// Tracks the cells where distributions are calculated in the report so they can be referenced later
+// when building token issuance transactions, and account reports
+type Distribution struct {
+	Tokens  int      // The row of the cell that defines the token distribution
+	Account *Account // The url of the token account being paid
 }
 
 // Log
@@ -98,7 +109,6 @@ func (s *StakingApp) Run(protocol Accumulate) {
 		s.AddAccounts()
 		s.AddApproved(b)
 		s.Report()
-		s.PrintPayScript()
 	}
 }
 
@@ -169,15 +179,7 @@ func (s *StakingApp) AddApproved(b *Block) {
 		}
 	}
 	sort.Slice(s.Stakers.Pure, func(i, j int) bool { return s.Stakers.Pure[i].URL.String() < s.Stakers.Pure[j].URL.String() })
-	sort.Slice(s.Stakers.Pure, func(i, j int) bool { return s.Stakers.Pure[i].URL.String() < s.Stakers.Pure[j].URL.String() })
-	sort.Slice(s.Stakers.Pure, func(i, j int) bool { return s.Stakers.Pure[i].URL.String() < s.Stakers.Pure[j].URL.String() })
-	sort.Slice(s.Stakers.Pure, func(i, j int) bool { return s.Stakers.Pure[i].URL.String() < s.Stakers.Pure[j].URL.String() })
-}
-
-// PrintPayScript
-// Write out a script to call the CLI to Distribute tokens, or to sign the Distribution of Tokens
-func (s *StakingApp) PrintPayScript() {
-	if s.CBlk.PrintPayoutScript {
-		s.Log("PayScript")
-	}
+	sort.Slice(s.Stakers.PValidator, func(i, j int) bool { return s.Stakers.PValidator[i].URL.String() < s.Stakers.PValidator[j].URL.String() })
+	sort.Slice(s.Stakers.PFollower, func(i, j int) bool { return s.Stakers.PFollower[i].URL.String() < s.Stakers.PFollower[j].URL.String() })
+	sort.Slice(s.Stakers.SValidator, func(i, j int) bool { return s.Stakers.SValidator[i].URL.String() < s.Stakers.SValidator[j].URL.String() })
 }
