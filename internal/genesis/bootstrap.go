@@ -81,6 +81,21 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) ([]byte, error) {
 			protocol.FeeCreateIdentity << 1,
 		}
 	}
+	if gg.Globals.Limits == nil {
+		gg.Globals.Limits = new(protocol.NetworkLimits)
+	}
+	if gg.Globals.Limits.DataEntryParts == 0 {
+		gg.Globals.Limits.DataEntryParts = 100
+	}
+	if gg.Globals.Limits.AccountAuthorities == 0 {
+		gg.Globals.Limits.AccountAuthorities = 20
+	}
+	if gg.Globals.Limits.BookPages == 0 {
+		gg.Globals.Limits.BookPages = 20
+	}
+	if gg.Globals.Limits.PageEntries == 0 {
+		gg.Globals.Limits.PageEntries = 100
+	}
 
 	// Build the routing table
 	var bvns []string

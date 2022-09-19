@@ -49,7 +49,7 @@ func NewAccount(typ AccountType) (Account, error) {
 	}
 }
 
-//EqualAccount is used to compare the values of the union
+// EqualAccount is used to compare the values of the union
 func EqualAccount(a, b Account) bool {
 	if a == b {
 		return true
@@ -204,7 +204,7 @@ func NewDataEntry(typ DataEntryType) (DataEntry, error) {
 	}
 }
 
-//EqualDataEntry is used to compare the values of the union
+// EqualDataEntry is used to compare the values of the union
 func EqualDataEntry(a, b DataEntry) bool {
 	if a == b {
 		return true
@@ -374,7 +374,7 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 	}
 }
 
-//EqualTransactionBody is used to compare the values of the union
+// EqualTransactionBody is used to compare the values of the union
 func EqualTransactionBody(a, b TransactionBody) bool {
 	if a == b {
 		return true
@@ -575,7 +575,7 @@ func NewAccountAuthOperation(typ AccountAuthOperationType) (AccountAuthOperation
 	}
 }
 
-//EqualAccountAuthOperation is used to compare the values of the union
+// EqualAccountAuthOperation is used to compare the values of the union
 func EqualAccountAuthOperation(a, b AccountAuthOperation) bool {
 	if a == b {
 		return true
@@ -703,7 +703,7 @@ func NewKeyPageOperation(typ KeyPageOperationType) (KeyPageOperation, error) {
 	}
 }
 
-//EqualKeyPageOperation is used to compare the values of the union
+// EqualKeyPageOperation is used to compare the values of the union
 func EqualKeyPageOperation(a, b KeyPageOperation) bool {
 	if a == b {
 		return true
@@ -848,7 +848,7 @@ func NewSignature(typ SignatureType) (Signature, error) {
 	}
 }
 
-//EqualSignature is used to compare the values of the union
+// EqualSignature is used to compare the values of the union
 func EqualSignature(a, b Signature) bool {
 	if a == b {
 		return true

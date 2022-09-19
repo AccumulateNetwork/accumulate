@@ -176,6 +176,10 @@ NetworkGlobals:
       type: FeeSchedule
       marshal-as: reference
       pointer: true
+    - name: Limits
+      type: NetworkLimits
+      marshal-as: reference
+      pointer: true
 
 FeeSchedule:
   fields:
@@ -184,6 +188,21 @@ FeeSchedule:
       type: Fee
       marshal-as: enum
       repeatable: true
+
+NetworkLimits:
+  fields:
+    - name: DataEntryParts
+      description: is the maximum number of parts a data entry can have
+      type: uint
+    - name: AccountAuthorities
+      description: is the maximum number of authorities an account can have
+      type: uint
+    - name: BookPages
+      description: is the maximum number of pages a book can have
+      type: uint
+    - name: PageEntries
+      description: is the maximum number of entries a page can have
+      type: uint
 
 Rational:
   fields:

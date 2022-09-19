@@ -55,6 +55,13 @@ func (CreateKeyPage) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 	page.AcceptThreshold = 1 // Require one signature from the Key Page
 	book.PageCount++
 
+	if book.PageCount > st.Globals.Globals.Limits.BookPages {
+		return nil, errors.Format(errors.StatusBadRequest, "book will have too many pages")
+	}
+	if len(body.Keys) > int(st.Globals.Globals.Limits.PageEntries) {
+		return nil, errors.Format(errors.StatusBadRequest, "page will have too many entries")
+	}
+
 	for _, sig := range body.Keys {
 		ss := new(protocol.KeySpec)
 		ss.PublicKeyHash = sig.KeyHash
