@@ -84,6 +84,9 @@ func legerGenerateKey(cmd *cobra.Command, args []string) (string, error) {
 
 	label := args[1]
 	keyData, err := ledgerApi.GenerateKey(selWallet, label)
+	if err != nil {
+		return "", err
+	}
 
 	if WantJsonOutput {
 		str, err := json.Marshal(keyData)

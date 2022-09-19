@@ -114,6 +114,13 @@ func (la *LedgerApi) Wallets() []accounts.Wallet {
 
 func (la *LedgerApi) GenerateKey(wallet accounts.Wallet, label string) (*api.KeyData, error) {
 	walletID := wallet.URL()
+	err := wallet.Open("")
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		wallet.Close() //This freezes up
+	}()
 
 	derivation, err := bip44.NewDerivationPath(protocol.SignatureTypeED25519)
 	if err != nil {
@@ -127,6 +134,9 @@ func (la *LedgerApi) GenerateKey(wallet accounts.Wallet, label string) (*api.Key
 
 	derivation = bip44.Derivation{derivation.Purpose(), derivation.CoinType(), derivation.Account(), derivation.Chain(), address}
 	account, err := wallet.Derive(derivation, true, true)
+	if err != nil {
+		return nil, errors.New(fmt.Sprintf("derive function failed on ledger wallet: %v", err))
+	}
 
 	derivationPath, err := derivation.ToPath()
 	key := &Key{
@@ -190,8 +200,17 @@ func (la *LedgerApi) SelectWallet(walletID string) (accounts.Wallet, error) {
 }
 
 func (la *LedgerApi) Sign(wallet accounts.Wallet, txn *protocol.Transaction, sig *protocol.ED25519Signature) (*protocol.Signature, error) {
+	err := wallet.Open("")
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		//	wallet.Close() This freezes up
+	}()
+
 	for _, account := range wallet.Keys() {
 		if bytes.Equal(account.PubKey, sig.PublicKey) {
+
 			tx, err := wallet.SignTx(&account, txn, sig)
 			return &tx, err
 		}
