@@ -285,6 +285,28 @@ func (s *Builder) Sign(message []byte) (protocol.Signature, error) {
 	return sig, s.sign(sig, nil, message)
 }
 
+func (s *Builder) SignTransaction(txn *protocol.Transaction) (protocol.Signature, error) {
+	var sig protocol.Signature
+	sig, err := s.prepare(false)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, delegator := range s.Delegators {
+		sig = &protocol.DelegatedSignature{
+			Delegator: delegator,
+			Signature: sig,
+		}
+	}
+	switch s.Signer.(type) {
+	//	case walletd.LedgerSigner:
+	//		return sig, s.Signer.SignTransaction(sig, txn)
+	default:
+		return sig, s.sign(sig, nil, txn.GetHash())
+	}
+
+}
+
 func (s *Builder) Initiate(txn *protocol.Transaction) (protocol.Signature, error) {
 	var sig protocol.Signature
 	sig, err := s.prepare(true)

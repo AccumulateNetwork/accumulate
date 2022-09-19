@@ -166,6 +166,10 @@ func (r txRequestSigner) Sign(sig protocol.Signature, sigMdHash, message []byte)
 	return nil
 }
 
+func (r txRequestSigner) SignTransaction(sig protocol.Signature, txn *protocol.Transaction) error {
+	return fmt.Errorf("SignTransaction is not supported")
+}
+
 // execute either executes the request locally, or dispatches it to another BVC
 func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byte) interface{} {
 	env, err := processExecuteRequest(req, payload)

@@ -1,9 +1,13 @@
 package walletd
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd/api"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd/bip44"
@@ -16,6 +20,12 @@ type LedgerApi struct {
 	hub *usbwallet.Hub
 }
 
+type LedgerSigner struct {
+	ledgerApi *LedgerApi
+	key       *Key
+	wallet    accounts.Wallet
+}
+
 func NewLedgerApi() (*LedgerApi, error) {
 	hub, err := usbwallet.NewLedgerHub()
 	if err != nil {
@@ -25,6 +35,25 @@ func NewLedgerApi() (*LedgerApi, error) {
 	return &LedgerApi{
 		hub: hub,
 	}, nil
+}
+
+func NewLedgerSigner(key *Key) (*LedgerSigner, error) {
+	ledgerApi, err := NewLedgerApi()
+	if err != nil {
+		return nil, err
+	}
+
+	selWallet, err := ledgerApi.SelectWallet(key.KeyInfo.WalletID)
+	if err != nil {
+		return nil, err
+	}
+
+	signer := &LedgerSigner{
+		ledgerApi: nil,
+		key:       key,
+		wallet:    selWallet,
+	}
+	return signer, nil
 }
 
 func (m *JrpcMethods) GetLedgerInfo(_ context.Context, params json.RawMessage) interface{} {
@@ -40,11 +69,11 @@ func (m *JrpcMethods) GetLedgerInfo(_ context.Context, params json.RawMessage) i
 	return resp
 }
 
-func (l *LedgerApi) QueryLedgerWalletsInfo() ([]api.LedgerWalletInfo, error) {
-	wallets := l.hub.Wallets()
+func (la *LedgerApi) QueryLedgerWalletsInfo() ([]api.LedgerWalletInfo, error) {
+	wallets := la.hub.Wallets()
 	var ledgerInfos []api.LedgerWalletInfo
 	for _, wallet := range wallets {
-		info, err := l.queryLedgerInfo(wallet)
+		info, err := la.queryLedgerInfo(wallet)
 		if err != nil {
 			return nil, err
 		}
@@ -53,7 +82,7 @@ func (l *LedgerApi) QueryLedgerWalletsInfo() ([]api.LedgerWalletInfo, error) {
 	return ledgerInfos, nil
 }
 
-func (l *LedgerApi) queryLedgerInfo(wallet accounts.Wallet) (*api.LedgerWalletInfo, error) {
+func (la *LedgerApi) queryLedgerInfo(wallet accounts.Wallet) (*api.LedgerWalletInfo, error) {
 	err := wallet.Open("")
 	if err != nil {
 		return nil, err
@@ -79,11 +108,11 @@ func (l *LedgerApi) queryLedgerInfo(wallet accounts.Wallet) (*api.LedgerWalletIn
 	}, nil
 }
 
-func (l *LedgerApi) Wallets() []accounts.Wallet {
-	return l.hub.Wallets()
+func (la *LedgerApi) Wallets() []accounts.Wallet {
+	return la.hub.Wallets()
 }
 
-func (l *LedgerApi) GenerateKey(wallet accounts.Wallet, label string) (*api.KeyData, error) {
+func (la *LedgerApi) GenerateKey(wallet accounts.Wallet, label string) (*api.KeyData, error) {
 	walletID := wallet.URL()
 
 	derivation, err := bip44.NewDerivationPath(protocol.SignatureTypeED25519)
@@ -97,7 +126,7 @@ func (l *LedgerApi) GenerateKey(wallet accounts.Wallet, label string) (*api.KeyD
 	}
 
 	derivation = bip44.Derivation{derivation.Purpose(), derivation.CoinType(), derivation.Account(), derivation.Chain(), address}
-	account, err := wallet.Derive(derivation, true)
+	account, err := wallet.Derive(derivation, true, true)
 
 	derivationPath, err := derivation.ToPath()
 	key := &Key{
@@ -121,4 +150,81 @@ func (l *LedgerApi) GenerateKey(wallet accounts.Wallet, label string) (*api.KeyD
 		KeyType:    account.SignatureType,
 		WalletID:   walletID.String(),
 	}, nil
+}
+
+func (la *LedgerApi) SelectWallet(walletID string) (accounts.Wallet, error) {
+	wallets := la.Wallets()
+	walletCnt := len(wallets)
+	switch {
+	case walletCnt == 1:
+		return wallets[0], nil
+	case walletCnt == 0:
+		return nil, errors.New("no wallets found, please check if your wallet and the Accumulate app on it are online")
+	case walletCnt > 1 && len(walletID) == 0:
+		return nil, errors.New(
+			fmt.Sprintf("there is more than wallets available (%d), please use the --wallet-id flag to select the correct wallet", walletCnt))
+	}
+
+	var selWallet accounts.Wallet
+	for i, wallet := range wallets {
+		if strings.HasPrefix(walletID, "ledger://") {
+			wid := wallet.URL()
+			if wid.String() == walletID {
+				selWallet = wallet
+				break
+			}
+		} else {
+			if walletIdx, err := strconv.Atoi(walletID); err == nil {
+				if walletIdx == i+1 {
+					selWallet = wallet
+					break
+				}
+			}
+		}
+	}
+	if selWallet == nil {
+		return nil, errors.New(
+			fmt.Sprintf("no wallet with ID %s could be found, please use accumulate ledger info to identify the connected wallets", walletID))
+	}
+	return selWallet, nil
+}
+
+func (la *LedgerApi) Sign(wallet accounts.Wallet, txn *protocol.Transaction, sig *protocol.ED25519Signature) (*protocol.Signature, error) {
+	for _, account := range wallet.Keys() {
+		if bytes.Equal(account.PubKey, sig.PublicKey) {
+			tx, err := wallet.SignTx(&account, txn, sig)
+			return &tx, err
+		}
+	}
+	return nil, errors.New("the request key is was found in the wallet")
+}
+
+func (ls *LedgerSigner) SetPublicKey(sig protocol.Signature) error {
+	switch sig := sig.(type) {
+	case *protocol.ED25519Signature:
+		sig.PublicKey = ls.key.PublicKey
+
+	case *protocol.RCD1Signature:
+		sig.PublicKey = ls.key.PublicKey
+	default:
+		return fmt.Errorf("cannot set the public key on a %T, not supported", sig)
+	}
+	return nil
+}
+
+func (ls *LedgerSigner) SignTransaction(sig protocol.Signature, txn *protocol.Transaction) error {
+	switch sig := sig.(type) {
+	case *protocol.ED25519Signature:
+		_, err := ls.ledgerApi.Sign(ls.wallet, txn, sig)
+		if err != nil {
+			return err
+		}
+	default:
+		return fmt.Errorf("cannot set the public key on a %T, not supported", sig)
+	}
+	return nil
+}
+
+func (ls *LedgerSigner) Sign(protocol.Signature, []byte, []byte) error {
+	return fmt.Errorf("ledgers only support SignTransaction")
 }

@@ -184,7 +184,15 @@ func prepareSignerPage(signer *signing.Builder, origin *url.URL, signingKey stri
 	if err != nil {
 		return err
 	}
-	signer.SetPrivateKey(key.PrivateKey)
+	if len(key.KeyInfo.WalletID) > 0 && len(key.PrivateKey) == 0 {
+		ledgerSigner, err := walletd.NewLedgerSigner(key)
+		if err != nil {
+			return err
+		}
+		signer.SetSigner(ledgerSigner)
+	} else {
+		signer.SetPrivateKey(key.PrivateKey)
+	}
 
 	signer.Type = key.KeyInfo.Type
 
@@ -379,7 +387,7 @@ func dispatchTxRequest(payload interface{}, origin *url.URL, signers []*signing.
 		if env.Transaction[0].Header.Initiator == ([32]byte{}) {
 			sig, err = signer.Initiate(env.Transaction[0])
 		} else {
-			sig, err = signer.Sign(env.Transaction[0].GetHash())
+			sig, err = signer.SignTransaction(env.Transaction[0])
 		}
 		if err != nil {
 			return nil, err

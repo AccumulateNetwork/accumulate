@@ -2,21 +2,16 @@ package cmd
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
-	"strconv"
-	"strings"
-
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
-	accounts "gitlab.com/accumulatenetwork/ledger/ledger-go-accumulate"
 )
 
 var walletID string
 
 var ledgerCmd = &cobra.Command{
 	Use:   "ledger",
-	Short: "ledger command",
+	Short: "ledger commands",
 	Args:  cobra.MinimumNArgs(3),
 }
 
@@ -82,7 +77,7 @@ func legerGenerateKey(cmd *cobra.Command, args []string) (string, error) {
 		return "", err
 	}
 
-	selWallet, err := selectWallet(ledgerApi)
+	selWallet, err := ledgerApi.SelectWallet(walletID)
 	if err != nil {
 		return "", err
 	}
@@ -101,41 +96,4 @@ func legerGenerateKey(cmd *cobra.Command, args []string) (string, error) {
 
 	return fmt.Sprintf("\tname\t\t:\t%s\n\twallet ID\t:\t%s\n\tpublic key\t:\t%x\n\tkey type\t:\t%s\n", label,
 		keyData.WalletID, keyData.PublicKey, keyData.KeyType), nil
-}
-
-func selectWallet(ledgerApi *walletd.LedgerApi) (accounts.Wallet, error) {
-	wallets := ledgerApi.Wallets()
-	walletCnt := len(wallets)
-	switch {
-	case walletCnt == 1:
-		return wallets[0], nil
-	case walletCnt == 0:
-		return nil, errors.New("no wallets found, please check if your wallet and the Accumulate app on it are online")
-	case walletCnt > 1 && len(walletID) == 0:
-		return nil, errors.New(
-			fmt.Sprintf("there is more than wallets available (%d), please use the --wallet-id flag to select the correct wallet", walletCnt))
-	}
-
-	var selWallet accounts.Wallet
-	for i, wallet := range wallets {
-		if strings.HasPrefix(walletID, "ledger://") {
-			wid := wallet.URL()
-			if wid.String() == walletID {
-				selWallet = wallet
-				break
-			}
-		} else {
-			if walletIdx, err := strconv.Atoi(walletID); err == nil {
-				if walletIdx == i+1 {
-					selWallet = wallet
-					break
-				}
-			}
-		}
-	}
-	if selWallet == nil {
-		return nil, errors.New(
-			fmt.Sprintf("no wallet with ID %s could be found, please use accumulate ledger info to identify the connected wallets", walletID))
-	}
-	return selWallet, nil
 }
