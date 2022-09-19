@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -42,7 +43,7 @@ func init() {
 	initRunFlags(ledgerCmd, false)
 	ledgerCmd.AddCommand(ledgerInfoCmd)
 	ledgerCmd.AddCommand(ledgerKeyGenerateCmd)
-	ledgerKeyGenerateCmd.Flags().StringVar(&walletID, "wallet-id", "", "specify the wallet id")
+	ledgerKeyGenerateCmd.Flags().StringVar(&walletID, "wallet-id", "", "specify the wallet id by \"ledger info\" index or ledger ID URL")
 }
 
 func queryWalletsInfo(cmd *cobra.Command, args []string) (string, error) {
@@ -69,7 +70,7 @@ func queryWalletsInfo(cmd *cobra.Command, args []string) (string, error) {
 			result += fmt.Sprintf("\tVendor ID:\t%d\n", ledgerInfo.VendorID)
 			result += fmt.Sprintf("\tProduct ID:\t%d\n", ledgerInfo.ProductID)
 			result += fmt.Sprintf("\tApp Version:\t%s\n", ledgerInfo.Version.Label)
-			result += fmt.Sprintf("\tLedger URL:\t%s\n", ledgerInfo.Url)
+			result += fmt.Sprintf("\tLedger ID:\t%s\n", ledgerInfo.Url)
 		}
 		return result, nil
 	}
@@ -115,17 +116,21 @@ func selectWallet(ledgerApi *walletd.LedgerApi) (accounts.Wallet, error) {
 			fmt.Sprintf("there is more than wallets available (%d), please use the --wallet-id flag to select the correct wallet", walletCnt))
 	}
 
-	if !strings.HasPrefix(walletID, "ledger://") {
-		return nil, errors.New(
-			fmt.Sprintf("%s is not a valid wallet ID, it should start with ledger://", walletID))
-	}
-
 	var selWallet accounts.Wallet
-	for _, wallet := range wallets {
-		wid := wallet.URL()
-		if wid.String() == walletID {
-			selWallet = wallet
-			break
+	for i, wallet := range wallets {
+		if strings.HasPrefix(walletID, "ledger://") {
+			wid := wallet.URL()
+			if wid.String() == walletID {
+				selWallet = wallet
+				break
+			}
+		} else {
+			if walletIdx, err := strconv.Atoi(walletID); err == nil {
+				if walletIdx == i+1 {
+					selWallet = wallet
+					break
+				}
+			}
 		}
 	}
 	if selWallet == nil {
