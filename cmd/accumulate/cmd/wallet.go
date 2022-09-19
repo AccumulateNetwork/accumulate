@@ -55,7 +55,7 @@ var walletServeCmd = &cobra.Command{
 }
 
 var walletExportCmd = &cobra.Command{
-	Use:   "export",
+	Use:   "export [location to export]",
 	Short: "export wallet details",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
