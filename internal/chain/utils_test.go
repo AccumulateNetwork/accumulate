@@ -40,9 +40,7 @@ func NewStateManagerForFuzz(t *testing.T, db database.Beginner, transaction *pro
 	m := new(StateManager)
 	m.OriginUrl = transaction.Header.Principal
 	m.stateCache = *newStateCache(&config.Describe{PartitionId: strings.ReplaceAll(strings.ReplaceAll(t.Name(), "/", "-"), "#", "-")}, nil, transaction.Body.Type(), txid, db.Begin(true))
-	m.Globals = new(core.GlobalValues)
-	m.Globals.Oracle = new(protocol.AcmeOracle)
-	m.Globals.Oracle.Price = protocol.InitialAcmeOracleValue
+	m.Globals = core.NewGlobals(nil)
 	return m
 }
 

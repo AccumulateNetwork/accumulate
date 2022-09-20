@@ -42,63 +42,7 @@ type InitOpts struct {
 
 func Init(snapshotWriter io.WriteSeeker, opts InitOpts) ([]byte, error) {
 	// Initialize globals
-	gg := opts.GenesisGlobals
-
-	if gg.Oracle == nil {
-		gg.Oracle = new(protocol.AcmeOracle)
-		if gg.Oracle.Price == 0 {
-			gg.Oracle.Price = uint64(protocol.InitialAcmeOracleValue)
-		}
-	}
-
-	// Set the initial threshold to 2/3 & MajorBlockSchedule
-	if gg.Globals == nil {
-		gg.Globals = new(protocol.NetworkGlobals)
-	}
-	if gg.Globals.OperatorAcceptThreshold.Numerator == 0 {
-		gg.Globals.OperatorAcceptThreshold.Set(2, 3)
-	}
-	if gg.Globals.ValidatorAcceptThreshold.Numerator == 0 {
-		gg.Globals.ValidatorAcceptThreshold.Set(2, 3)
-	}
-	if gg.Globals.MajorBlockSchedule == "" {
-		gg.Globals.MajorBlockSchedule = protocol.DefaultMajorBlockSchedule
-	}
-	if gg.Globals.FeeSchedule == nil {
-		gg.Globals.FeeSchedule = new(protocol.FeeSchedule)
-		gg.Globals.FeeSchedule.CreateIdentitySliding = []protocol.Fee{
-			protocol.FeeCreateIdentity << 12,
-			protocol.FeeCreateIdentity << 11,
-			protocol.FeeCreateIdentity << 10,
-			protocol.FeeCreateIdentity << 9,
-			protocol.FeeCreateIdentity << 8,
-			protocol.FeeCreateIdentity << 7,
-			protocol.FeeCreateIdentity << 6,
-			protocol.FeeCreateIdentity << 5,
-			protocol.FeeCreateIdentity << 4,
-			protocol.FeeCreateIdentity << 3,
-			protocol.FeeCreateIdentity << 2,
-			protocol.FeeCreateIdentity << 1,
-		}
-	}
-	if gg.Globals.Limits == nil {
-		gg.Globals.Limits = new(protocol.NetworkLimits)
-	}
-	if gg.Globals.Limits.DataEntryParts == 0 {
-		gg.Globals.Limits.DataEntryParts = 100
-	}
-	if gg.Globals.Limits.AccountAuthorities == 0 {
-		gg.Globals.Limits.AccountAuthorities = 20
-	}
-	if gg.Globals.Limits.BookPages == 0 {
-		gg.Globals.Limits.BookPages = 20
-	}
-	if gg.Globals.Limits.PageEntries == 0 {
-		gg.Globals.Limits.PageEntries = 100
-	}
-	if gg.Globals.Limits.IdentityAccounts == 0 {
-		gg.Globals.Limits.IdentityAccounts = 100
-	}
+	gg := core.NewGlobals(opts.GenesisGlobals)
 
 	// Build the routing table
 	var bvns []string
