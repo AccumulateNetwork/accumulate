@@ -19,15 +19,16 @@ var flags struct {
 
 func main() {
 	cmd := cobra.Command{
-		Use:  "gen-enum [file]",
+		Use:  "gen-enum [files]",
 		Args: cobra.MinimumNArgs(1),
 		Run:  run,
 	}
 
 	cmd.Flags().StringVarP(&flags.Language, "language", "l", "Go", "Output language or template file")
-	cmd.Flags().StringVar(&flags.Package, "package", "protocol", "Package name")
+	cmd.Flags().StringVar(&flags.Package, "package", "", "Package name")
 	cmd.Flags().StringVarP(&flags.Out, "out", "o", "enums_gen.go", "Output file")
 	flags.files.SetFlags(cmd.Flags(), "enums")
+	cmd.MarkFlagRequired("package")
 
 	_ = cmd.Execute()
 }

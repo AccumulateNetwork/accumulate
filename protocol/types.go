@@ -34,11 +34,11 @@ type ErrorCode int
 type PartitionType int
 
 //go:generate go run ../tools/cmd/gen-types account_auth_operations.yml accounts.yml general.yml system.yml key_page_operations.yml query.yml signatures.yml synthetic_transactions.yml transaction.yml transaction_results.yml user_transactions.yml
-//go:generate go run ../tools/cmd/gen-enum --out enums_gen.go enums.yml errors.yml
+//go:generate go run ../tools/cmd/gen-enum --package protocol enums.yml errors.yml
 
 ///intentionally disabled for now
 ///go:generate go run ../tools/cmd/gen-types --out ../export/sdk/c --language c account_auth_operations.yml accounts.yml general.yml system.yml key_page_operations.yml query.yml signatures.yml synthetic_transactions.yml transaction.yml transaction_results.yml user_transactions.yml
-///go:generate go run ../tools/cmd/gen-enum enums.yml --out ../export/sdk/c --language c
+///go:generate go run ../tools/cmd/gen-enum --package protocol enums.yml --out ../export/sdk/c --language c
 
 func NewValidator() (*validator.Validate, error) {
 	v := validator.New()
