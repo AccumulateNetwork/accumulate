@@ -221,7 +221,7 @@ func TestCreateIdentity_LimitIdentityAccounts(t *testing.T) {
 			Initiate(SignatureTypeED25519, aliceKey).
 			BuildDelivery())
 	require.NotNil(t, st.Error)
-	require.EqualError(t, st.Error, "adi would have too many accounts")
+	require.EqualError(t, st.Error, "identity would have too many accounts")
 }
 
 // TestCreateIdentity_Directory verifies that CreateIdentity correctly populates
@@ -329,7 +329,7 @@ func TestCreateTokenAccount_LimitIdentityAccounts(t *testing.T) {
 			Initiate(SignatureTypeED25519, aliceKey).
 			BuildDelivery())
 	require.NotNil(t, st.Error)
-	require.EqualError(t, st.Error, "adi would have too many accounts")
+	require.EqualError(t, st.Error, "identity would have too many accounts")
 }
 
 func TestCreateDataAccount_LimitIdentityAccounts(t *testing.T) {
@@ -361,7 +361,7 @@ func TestCreateDataAccount_LimitIdentityAccounts(t *testing.T) {
 			Initiate(SignatureTypeED25519, aliceKey).
 			BuildDelivery())
 	require.NotNil(t, st.Error)
-	require.EqualError(t, st.Error, "adi would have too many accounts")
+	require.EqualError(t, st.Error, "identity would have too many accounts")
 }
 
 func TestCreateToken_LimitIdentityAccounts(t *testing.T) {
@@ -393,7 +393,7 @@ func TestCreateToken_LimitIdentityAccounts(t *testing.T) {
 			Initiate(SignatureTypeED25519, aliceKey).
 			BuildDelivery())
 	require.NotNil(t, st.Error)
-	require.EqualError(t, st.Error, "adi would have too many accounts")
+	require.EqualError(t, st.Error, "identity would have too many accounts")
 }
 
 func TestCreateKeyBook_LimitIdentityAccounts(t *testing.T) {
@@ -425,5 +425,5 @@ func TestCreateKeyBook_LimitIdentityAccounts(t *testing.T) {
 			Initiate(SignatureTypeED25519, aliceKey).
 			BuildDelivery())
 	require.NotNil(t, st.Error)
-	require.EqualError(t, st.Error, "adi would have too many accounts")
+	require.EqualError(t, st.Error, "identity would have too many accounts")
 }
