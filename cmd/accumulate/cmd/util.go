@@ -165,7 +165,17 @@ func prepareSignerLite(signer *signing.Builder, str string) (bool, error) {
 	signer.Type = key.KeyInfo.Type
 	signer.Url = u.RootIdentity()
 	signer.Version = 1
-	signer.SetPrivateKey(key.PrivateKey)
+
+	if len(key.KeyInfo.WalletID) > 0 && len(key.PrivateKey) == 0 {
+		ledgerSigner, err := walletd.NewLedgerSigner(key)
+		if err != nil {
+			return false, err
+		}
+		signer.SetSigner(ledgerSigner)
+	} else {
+		signer.SetPrivateKey(key.PrivateKey)
+	}
+
 	return true, nil
 }
 

@@ -82,5 +82,5 @@ func (s faucetSigner) Sign(sig Signature, sigMdHash, message []byte) error {
 }
 
 func (s faucetSigner) SignTransaction(sig Signature, txn *Transaction) error {
-	return fmt.Errorf("SignTransaction is not supported")
+	return s.Sign(sig, nil, txn.GetHash())
 }

@@ -167,7 +167,7 @@ func (r txRequestSigner) Sign(sig protocol.Signature, sigMdHash, message []byte)
 }
 
 func (r txRequestSigner) SignTransaction(sig protocol.Signature, txn *protocol.Transaction) error {
-	return fmt.Errorf("SignTransaction is not supported")
+	return r.Sign(sig, nil, txn.GetHash())
 }
 
 // execute either executes the request locally, or dispatches it to another BVC

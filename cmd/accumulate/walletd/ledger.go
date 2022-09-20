@@ -26,8 +26,8 @@ type LedgerSigner struct {
 	wallet    accounts.Wallet
 }
 
-func NewLedgerApi() (*LedgerApi, error) {
-	hub, err := usbwallet.NewLedgerHub()
+func NewLedgerApi(debugLogging bool) (*LedgerApi, error) {
+	hub, err := usbwallet.NewLedgerHub(debugLogging)
 	if err != nil {
 		return nil, err
 	}
@@ -38,7 +38,7 @@ func NewLedgerApi() (*LedgerApi, error) {
 }
 
 func NewLedgerSigner(key *Key) (*LedgerSigner, error) {
-	ledgerApi, err := NewLedgerApi()
+	ledgerApi, err := NewLedgerApi(false) // FIXME
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +58,7 @@ func NewLedgerSigner(key *Key) (*LedgerSigner, error) {
 
 func (m *JrpcMethods) GetLedgerInfo(_ context.Context, params json.RawMessage) interface{} {
 	resp := &api.LedgerWalletInfoResponse{}
-	hub, err := NewLedgerApi()
+	hub, err := NewLedgerApi(false)
 	if err != nil {
 		return validatorError(err)
 	}
@@ -83,17 +83,24 @@ func (la *LedgerApi) QueryLedgerWalletsInfo() ([]api.LedgerWalletInfo, error) {
 }
 
 func (la *LedgerApi) queryLedgerInfo(wallet accounts.Wallet) (*api.LedgerWalletInfo, error) {
+	walletOpen := false
+	status := "ok"
 	err := wallet.Open("")
-	if err != nil {
-		return nil, err
+	if err == nil {
+		walletOpen = true
+	} else {
+		status = err.Error()
 	}
+
 	defer func() {
-		//	wallet.Close() This freezes up
+		if walletOpen {
+			wallet.Close()
+		}
 	}()
 
 	info := wallet.Info()
 	url := wallet.URL()
-	return &api.LedgerWalletInfo{
+	ledgerInfo := &api.LedgerWalletInfo{
 		Url: url.String(),
 		Version: api.Version{
 			Label: fmt.Sprintf("%d.%d.%d", info.AppVersion.Major, info.AppVersion.Minor, info.AppVersion.Patch),
@@ -105,7 +112,9 @@ func (la *LedgerApi) queryLedgerInfo(wallet accounts.Wallet) (*api.LedgerWalletI
 		Manufacturer: info.DeviceInfo.Manufacturer,
 		ProductID:    uint64(info.DeviceInfo.ProductID),
 		Product:      info.DeviceInfo.Product,
-	}, nil
+		Status:       status,
+	}
+	return ledgerInfo, nil
 }
 
 func (la *LedgerApi) Wallets() []accounts.Wallet {
@@ -113,13 +122,21 @@ func (la *LedgerApi) Wallets() []accounts.Wallet {
 }
 
 func (la *LedgerApi) GenerateKey(wallet accounts.Wallet, label string) (*api.KeyData, error) {
+	// make sure the key name doesn't already exist
+	k := new(Key)
+	err := k.LoadByLabel(label)
+	if err == nil {
+		return nil, fmt.Errorf("key already exists for key name %s", label)
+	}
+
+	// Open wallet, derive new key & save it
 	walletID := wallet.URL()
-	err := wallet.Open("")
+	err = wallet.Open("")
 	if err != nil {
 		return nil, err
 	}
 	defer func() {
-		wallet.Close() //This freezes up
+		wallet.Close()
 	}()
 
 	derivation, err := bip44.NewDerivationPath(protocol.SignatureTypeED25519)
@@ -137,7 +154,6 @@ func (la *LedgerApi) GenerateKey(wallet accounts.Wallet, label string) (*api.Key
 	if err != nil {
 		return nil, errors.New(fmt.Sprintf("derive function failed on ledger wallet: %v", err))
 	}
-
 	derivationPath, err := derivation.ToPath()
 	key := &Key{
 		PublicKey:  account.PubKey,
@@ -205,7 +221,7 @@ func (la *LedgerApi) Sign(wallet accounts.Wallet, txn *protocol.Transaction, sig
 		return nil, err
 	}
 	defer func() {
-		//	wallet.Close() This freezes up
+		wallet.Close()
 	}()
 
 	for _, account := range wallet.Keys() {

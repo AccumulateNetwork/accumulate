@@ -242,6 +242,8 @@ LedgerWalletInfo:
       type: uint
     - name: Product
       type: String
+    - name: Status
+      type: String
 
 LedgerWalletInfoResponse:
   non-binary: true

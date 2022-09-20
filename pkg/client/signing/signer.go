@@ -72,5 +72,5 @@ func (k PrivateKey) Sign(sig protocol.Signature, sigMdHash, message []byte) erro
 }
 
 func (k PrivateKey) SignTransaction(sig protocol.Signature, txn *protocol.Transaction) error {
-	return fmt.Errorf("SignTransaction is not supported")
+	return k.Sign(sig, nil, txn.GetHash())
 }

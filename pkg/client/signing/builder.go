@@ -298,13 +298,8 @@ func (s *Builder) SignTransaction(txn *protocol.Transaction) (protocol.Signature
 			Signature: sig,
 		}
 	}
-	switch s.Signer.(type) {
-	//	case walletd.LedgerSigner:
-	//		return sig, s.Signer.SignTransaction(sig, txn)
-	default:
-		return sig, s.sign(sig, nil, txn.GetHash())
-	}
 
+	return sig, s.Signer.SignTransaction(sig, txn)
 }
 
 func (s *Builder) Initiate(txn *protocol.Transaction) (protocol.Signature, error) {
@@ -332,7 +327,7 @@ func (s *Builder) Initiate(txn *protocol.Transaction) (protocol.Signature, error
 		txn.Header.Initiator = *(*[32]byte)(init.MerkleHash())
 	}
 
-	return sig, s.sign(sig, nil, txn.GetHash())
+	return sig, s.Signer.SignTransaction(sig, txn)
 }
 
 func (s *Builder) InitiateSynthetic(txn *protocol.Transaction, dest *url.URL) (*protocol.PartitionSignature, error) {

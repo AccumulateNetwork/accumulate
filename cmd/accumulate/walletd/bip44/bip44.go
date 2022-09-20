@@ -295,7 +295,7 @@ func NewDerivationPath(signatureType protocol.SignatureType) (d Derivation, e er
 	return d, e
 }
 
-func (d Derivation) FromPath(path string) error {
+func (d *Derivation) FromPath(path string) error {
 	hd := strings.Split(path, "/")
 	if len(hd) != 6 {
 		return fmt.Errorf("insufficent parameters in bip44 derivation path")
@@ -306,7 +306,7 @@ func (d Derivation) FromPath(path string) error {
 		return fmt.Errorf("invalid purpose, expecting bip44 HD derivation path, but received %s", path)
 	}
 
-	d = Derivation{Purpose}
+	*d = Derivation{Purpose}
 	for _, s := range hd[2:6] {
 		t := uint32(0)
 		if strings.HasSuffix(s, "'") {
@@ -317,7 +317,7 @@ func (d Derivation) FromPath(path string) error {
 		if err != nil {
 			return fmt.Errorf("malformed bip44 HD derivation path, %v", err)
 		}
-		d = append(d, t+uint32(n))
+		*d = append(*d, t+uint32(n))
 	}
 
 	return d.Validate()

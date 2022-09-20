@@ -125,6 +125,7 @@ type LedgerWalletInfo struct {
 	Manufacturer string  `json:"manufacturer,omitempty" form:"manufacturer" query:"manufacturer" validate:"required"`
 	ProductID    uint64  `json:"productID,omitempty" form:"productID" query:"productID" validate:"required"`
 	Product      string  `json:"product,omitempty" form:"product" query:"product" validate:"required"`
+	Status       string  `json:"status,omitempty" form:"status" query:"status" validate:"required"`
 }
 
 type LedgerWalletInfoResponse struct {
@@ -419,6 +420,7 @@ func (v *LedgerWalletInfo) Copy() *LedgerWalletInfo {
 	u.Manufacturer = v.Manufacturer
 	u.ProductID = v.ProductID
 	u.Product = v.Product
+	u.Status = v.Status
 
 	return u
 }
@@ -764,6 +766,9 @@ func (v *LedgerWalletInfo) Equal(u *LedgerWalletInfo) bool {
 		return false
 	}
 	if !(v.Product == u.Product) {
+		return false
+	}
+	if !(v.Status == u.Status) {
 		return false
 	}
 
