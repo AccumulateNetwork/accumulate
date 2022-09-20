@@ -21,7 +21,7 @@ func NewRecord(typ RecordType) (Record, error) {
 	}
 }
 
-//EqualRecord is used to compare the values of the union
+// EqualRecord is used to compare the values of the union
 func EqualRecord(a, b Record) bool {
 	if a == b {
 		return true

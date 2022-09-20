@@ -26,7 +26,7 @@ func New{{.Interface}}(typ {{.Enumeration}}) ({{.Interface}}, error) {
 }
 
 {{if (index .Members 0).IsComparable}}
-//Equal{{.Interface}} is used to compare the values of the union
+// Equal{{.Interface}} is used to compare the values of the union
 func Equal{{.Interface}}(a, b {{.Interface}}) bool {
 	if a == b {
 		return true

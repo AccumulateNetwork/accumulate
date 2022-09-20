@@ -22,8 +22,8 @@ func checkCreateAdiAccount(st *StateManager, account *url.URL) error {
 		return errors.Format(errors.StatusUnknownError, "load directory index: %w", err)
 	}
 
-	if len(dir)+1 > int(st.Globals.Globals.Limits.AdiAccounts) {
-		return errors.Format(errors.StatusBadRequest, "adi would have too many accounts")
+	if len(dir)+1 > int(st.Globals.Globals.Limits.IdentityAccounts) {
+		return errors.Format(errors.StatusBadRequest, "identity would have too many accounts")
 	}
 
 	return nil

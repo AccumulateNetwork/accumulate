@@ -192,14 +192,14 @@ func TestWriteData_LimitDataEntryParts(t *testing.T) {
 	require.EqualError(t, st.Error, "data entry contains too many parts")
 }
 
-func TestCreateIdentity_LimitAdiAccounts(t *testing.T) {
+func TestCreateIdentity_LimitIdentityAccounts(t *testing.T) {
 	alice := AccountUrl("alice")
 	aliceKey := acctesting.GenerateKey(alice)
 
 	globals := new(core.GlobalValues)
 	globals.Globals = new(NetworkGlobals)
 	globals.Globals.Limits = new(NetworkLimits)
-	globals.Globals.Limits.AdiAccounts = 1
+	globals.Globals.Limits.IdentityAccounts = 1
 
 	// Initialize
 	sim := NewSim(t,
@@ -300,14 +300,14 @@ func TestCreateIdentity_Directory(t *testing.T) {
 	})
 }
 
-func TestCreateTokenAccount_LimitAdiAccounts(t *testing.T) {
+func TestCreateTokenAccount_LimitIdentityAccounts(t *testing.T) {
 	alice := AccountUrl("alice")
 	aliceKey := acctesting.GenerateKey(alice)
 
 	globals := new(core.GlobalValues)
 	globals.Globals = new(NetworkGlobals)
 	globals.Globals.Limits = new(NetworkLimits)
-	globals.Globals.Limits.AdiAccounts = 1
+	globals.Globals.Limits.IdentityAccounts = 1
 
 	// Initialize
 	sim := NewSim(t,
@@ -332,14 +332,14 @@ func TestCreateTokenAccount_LimitAdiAccounts(t *testing.T) {
 	require.EqualError(t, st.Error, "adi would have too many accounts")
 }
 
-func TestCreateDataAccount_LimitAdiAccounts(t *testing.T) {
+func TestCreateDataAccount_LimitIdentityAccounts(t *testing.T) {
 	alice := AccountUrl("alice")
 	aliceKey := acctesting.GenerateKey(alice)
 
 	globals := new(core.GlobalValues)
 	globals.Globals = new(NetworkGlobals)
 	globals.Globals.Limits = new(NetworkLimits)
-	globals.Globals.Limits.AdiAccounts = 1
+	globals.Globals.Limits.IdentityAccounts = 1
 
 	// Initialize
 	sim := NewSim(t,
@@ -364,14 +364,14 @@ func TestCreateDataAccount_LimitAdiAccounts(t *testing.T) {
 	require.EqualError(t, st.Error, "adi would have too many accounts")
 }
 
-func TestCreateToken_LimitAdiAccounts(t *testing.T) {
+func TestCreateToken_LimitIdentityAccounts(t *testing.T) {
 	alice := AccountUrl("alice")
 	aliceKey := acctesting.GenerateKey(alice)
 
 	globals := new(core.GlobalValues)
 	globals.Globals = new(NetworkGlobals)
 	globals.Globals.Limits = new(NetworkLimits)
-	globals.Globals.Limits.AdiAccounts = 1
+	globals.Globals.Limits.IdentityAccounts = 1
 
 	// Initialize
 	sim := NewSim(t,
@@ -396,14 +396,14 @@ func TestCreateToken_LimitAdiAccounts(t *testing.T) {
 	require.EqualError(t, st.Error, "adi would have too many accounts")
 }
 
-func TestCreateKeyBook_LimitAdiAccounts(t *testing.T) {
+func TestCreateKeyBook_LimitIdentityAccounts(t *testing.T) {
 	alice := AccountUrl("alice")
 	aliceKey := acctesting.GenerateKey(alice)
 
 	globals := new(core.GlobalValues)
 	globals.Globals = new(NetworkGlobals)
 	globals.Globals.Limits = new(NetworkLimits)
-	globals.Globals.Limits.AdiAccounts = 1
+	globals.Globals.Limits.IdentityAccounts = 1
 
 	// Initialize
 	sim := NewSim(t,

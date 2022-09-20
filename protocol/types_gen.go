@@ -514,9 +514,9 @@ type NetworkLimits struct {
 	BookPages uint64 `json:"bookPages,omitempty" form:"bookPages" query:"bookPages" validate:"required"`
 	// PageEntries is the maximum number of entries a page can have.
 	PageEntries uint64 `json:"pageEntries,omitempty" form:"pageEntries" query:"pageEntries" validate:"required"`
-	// AdiAccounts is the maximum number of accounts an ADI can have (excluding accounts of sub ADIs).
-	AdiAccounts uint64 `json:"adiAccounts,omitempty" form:"adiAccounts" query:"adiAccounts" validate:"required"`
-	extraData   []byte
+	// IdentityAccounts is the maximum number of accounts an identity can have (excluding accounts of sub ADIs).
+	IdentityAccounts uint64 `json:"identityAccounts,omitempty" form:"identityAccounts" query:"identityAccounts" validate:"required"`
+	extraData        []byte
 }
 
 type Object struct {
@@ -1970,7 +1970,7 @@ func (v *NetworkLimits) Copy() *NetworkLimits {
 	u.AccountAuthorities = v.AccountAuthorities
 	u.BookPages = v.BookPages
 	u.PageEntries = v.PageEntries
-	u.AdiAccounts = v.AdiAccounts
+	u.IdentityAccounts = v.IdentityAccounts
 
 	return u
 }
@@ -3859,7 +3859,7 @@ func (v *NetworkLimits) Equal(u *NetworkLimits) bool {
 	if !(v.PageEntries == u.PageEntries) {
 		return false
 	}
-	if !(v.AdiAccounts == u.AdiAccounts) {
+	if !(v.IdentityAccounts == u.IdentityAccounts) {
 		return false
 	}
 
@@ -8012,7 +8012,7 @@ var fieldNames_NetworkLimits = []string{
 	2: "AccountAuthorities",
 	3: "BookPages",
 	4: "PageEntries",
-	5: "AdiAccounts",
+	5: "IdentityAccounts",
 }
 
 func (v *NetworkLimits) MarshalBinary() ([]byte, error) {
@@ -8031,8 +8031,8 @@ func (v *NetworkLimits) MarshalBinary() ([]byte, error) {
 	if !(v.PageEntries == 0) {
 		writer.WriteUint(4, v.PageEntries)
 	}
-	if !(v.AdiAccounts == 0) {
-		writer.WriteUint(5, v.AdiAccounts)
+	if !(v.IdentityAccounts == 0) {
+		writer.WriteUint(5, v.IdentityAccounts)
 	}
 
 	_, _, err := writer.Reset(fieldNames_NetworkLimits)
@@ -8067,9 +8067,9 @@ func (v *NetworkLimits) IsValid() error {
 		errs = append(errs, "field PageEntries is not set")
 	}
 	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
-		errs = append(errs, "field AdiAccounts is missing")
-	} else if v.AdiAccounts == 0 {
-		errs = append(errs, "field AdiAccounts is not set")
+		errs = append(errs, "field IdentityAccounts is missing")
+	} else if v.IdentityAccounts == 0 {
+		errs = append(errs, "field IdentityAccounts is not set")
 	}
 
 	switch len(errs) {
@@ -12943,7 +12943,7 @@ func (v *NetworkLimits) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.PageEntries = x
 	}
 	if x, ok := reader.ReadUint(5); ok {
-		v.AdiAccounts = x
+		v.IdentityAccounts = x
 	}
 
 	seen, err := reader.Reset(fieldNames_NetworkLimits)
