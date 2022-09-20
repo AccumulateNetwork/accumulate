@@ -4,7 +4,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 )
 
-//go:generate go run ../tools/cmd/gen-types --language go-union --out unions_gen.go account_auth_operations.yml accounts.yml general.yml system.yml key_page_operations.yml query.yml signatures.yml synthetic_transactions.yml transaction.yml transaction_results.yml user_transactions.yml
+//go:generate go run ../tools/cmd/gen-types --package protocol --language go-union --out unions_gen.go account_auth_operations.yml accounts.yml general.yml system.yml key_page_operations.yml query.yml signatures.yml synthetic_transactions.yml transaction.yml transaction_results.yml user_transactions.yml
 
 // AccountType is the type of an account.
 type AccountType uint64

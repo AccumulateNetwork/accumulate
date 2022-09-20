@@ -10,11 +10,11 @@
 - `--exclude <types>` - Exclude types.
 - `--rename <types>` - Rename types, e.g. `Foo:Bar`.
 
-`gen-enum` is used to generate enumeration types. However Go does not have true
+`gen-enum` generates enumeration types. However Go does not have true
 enumeration types so what the generator actually generates is named integer
 types and typed constants plus utility methods.
 
-The format of an enumeration definition file is:
+The format of an enumeration definition is:
 
 ```yaml
 MyType:
@@ -24,10 +24,10 @@ MyType:
     aliases: [otherName] # optional
 ```
 
-A definition file can define any number of types, and each type can define any
-number of values. Each value must have a unique name and value. The example
-above would generate `const MyTypeValueOne MyType = 1`. The Go template does not
-generate the type delcaration, e.g. `type MyType int`.
+A definition file can have multiple types, each of which can have multiple
+values. Each value must have a unique name and value. The example above would
+generate `const MyTypeValueOne MyType = 1`. The Go template does not generate
+the type delcaration, e.g. `type MyType int`.
 
 - `value` is the underlying value.
 - `description` (optional) is appended to the value's doc comment.

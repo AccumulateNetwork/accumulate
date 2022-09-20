@@ -30,9 +30,10 @@ func main() {
 	}
 
 	cmd.Flags().StringVarP(&flags.Language, "language", "l", "Go", "Output language or template file")
-	cmd.Flags().StringVar(&flags.Package, "package", "protocol", "Package name")
+	cmd.Flags().StringVar(&flags.Package, "package", "", "Package name")
 	cmd.Flags().StringVarP(&flags.Out, "out", "o", "types_gen.go", "Output file")
 	cmd.Flags().StringSliceVar(&flags.Reference, "reference", nil, "Extra type definition files to use as a reference")
+	cmd.MarkFlagRequired("package")
 	flags.files.SetFlags(cmd.Flags(), "types")
 
 	_ = cmd.Execute()
