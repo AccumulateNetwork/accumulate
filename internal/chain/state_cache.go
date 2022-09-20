@@ -83,7 +83,7 @@ func (c *stateCache) LoadUrlAs(account *url.URL, target interface{}) error {
 	return encoding.SetPtr(state, target)
 }
 
-// GetHeight loads the height of the chain
+//GetHeight loads the height of the chain
 func (c *stateCache) GetHeight(u *url.URL) (uint64, error) {
 	chain, err := c.batch.Account(u).MainChain().Get()
 	if err != nil {
