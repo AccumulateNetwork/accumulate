@@ -11,6 +11,7 @@ import (
 
 	"github.com/tyler-smith/go-bip32"
 	"github.com/tyler-smith/go-bip39"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 const Purpose uint32 = 0x8000002C
@@ -18,6 +19,31 @@ const Purpose uint32 = 0x8000002C
 //https://github.com/bitcoin/bips/blob/master/bip-0044.mediawiki
 //https://github.com/satoshilabs/slips/blob/master/slip-0044.md
 //https://github.com/FactomProject/FactomDocs/blob/master/wallet_info/wallet_test_vectors.md
+
+// DefaultRootDerivationPath is the root path to which custom derivation endpoints
+// are appended. As such, the first account will be at m/44'/60'/0'/0, the second
+// at m/44'/60'/0'/1, etc.
+//var DefaultAccumulateRootDerivationPath = Derivation{TypeEther, 0x80000000 + 0, 0, 0}
+
+// DefaultAccumulateBaseDerivationPath is the base path from which custom derivation endpoints
+// are incremented. As such, the first account will be at m/44'/60'/0'/0/0, the second
+// at m/44'/281'/0'/0/1, etc.
+var DefaultAccumulateBaseDerivationPath = Derivation{Purpose, TypeAccumulate, 0x80000000 + 0, 0, 0}
+
+// DefaultEtherBaseDerivationPath is the base path from which custom derivation endpoints
+// are incremented. As such, the first account will be at m/44'/60'/0'/0/0, the second
+// at m/44'/281'/0'/0/1, etc.
+var DefaultEtherBaseDerivationPath = Derivation{Purpose, TypeEther, 0x80000000 + 0, 0, 0}
+
+// DefaultFactoidBaseDerivationPath is the base path from which custom derivation endpoints
+// are incremented. As such, the first account will be at m/44'/60'/0'/0/0, the second
+// at m/44'/281'/0'/0/1, etc.
+var DefaultFactoidBaseDerivationPath = Derivation{Purpose, TypeFactomFactoids, 0x80000000 + 0, 0, 0}
+
+// DefaultBitcoinBaseDerivationPath is the base path from which custom derivation endpoints
+// are incremented. As such, the first account will be at m/44'/60'/0'/0/0, the second
+// at m/44'/281'/0'/0/1, etc.
+var DefaultBitcoinBaseDerivationPath = Derivation{Purpose, TypeBitcoin, 0x80000000 + 0, 0, 0}
 
 const (
 	TypeBitcoin               uint32 = 0x80000000
@@ -160,20 +186,67 @@ func NewKeyFromMasterKey(masterKey *bip32.Key, coin, account, chain, address uin
 }
 
 //Derivation BIP44 hierarchical derivation path
-type Derivation struct {
-	CoinType uint32
-	Account  uint32
-	Chain    uint32
-	Address  uint32
+type Derivation []uint32
+
+const (
+	DerivationBip44Type = iota
+	DerivationCoinType
+	DerivationAccount
+	DerivationChain
+	DerivationAddress
+)
+
+func (d Derivation) Purpose() uint32 {
+	if len(d) == 0 {
+		return 0
+	}
+	return d[0]
 }
 
-func (d *Derivation) Validate() error {
-	if d.CoinType < TypeBitcoin {
+func (d Derivation) CoinType() uint32 {
+	if len(d) <= DerivationCoinType {
+		return 0
+	}
+	return d[1]
+}
+
+func (d Derivation) Account() uint32 {
+	if len(d) <= DerivationAccount {
+		return 0
+	}
+	return d[DerivationAccount]
+}
+
+func (d Derivation) Chain() uint32 {
+
+	if len(d) <= DerivationChain {
+		return 0
+	}
+	return d[DerivationChain]
+}
+
+func (d Derivation) Address() uint32 {
+	if len(d) <= DerivationAddress {
+		return 0
+	}
+	return d[DerivationAddress]
+}
+
+func (d Derivation) Validate() error {
+	if len(d) == 0 {
+		return fmt.Errorf("derivation path not set")
+	}
+
+	if d[DerivationBip44Type] != Purpose {
+		return fmt.Errorf("derivation is not bip 44")
+	}
+
+	if d.CoinType() < TypeBitcoin {
 		return fmt.Errorf("invalid coin type")
 	}
 
-	if d.Account < bip32.FirstHardenedChild {
-		return fmt.Errorf("account not hardened, %d", d.Account)
+	if d.Account() < bip32.FirstHardenedChild {
+		return fmt.Errorf("account not hardened, %d", d.Account())
 	}
 
 	return nil
@@ -186,14 +259,45 @@ func (d *Derivation) ToPath() (string, error) {
 	}
 
 	return fmt.Sprintf("m/44'/%d'/%d'/%d/%d",
-		TypeBitcoin^d.CoinType,
-		bip32.FirstHardenedChild^d.Account,
-		d.Chain, d.Address), nil
+		TypeBitcoin^d.CoinType(),
+		bip32.FirstHardenedChild^d.Account(),
+		d.Chain(), d.Address()), nil
+}
+
+func (d *Derivation) String() string {
+	s, _ := d.ToPath()
+	return s
+}
+
+func (d *Derivation) Parse(path string) error {
+	return d.FromPath(path)
+}
+
+func ParseDerivationPath(path string) (Derivation, error) {
+	d := Derivation{}
+	err := d.Parse(path)
+	return d, err
+}
+
+func NewDerivationPath(signatureType protocol.SignatureType) (d Derivation, e error) {
+	switch signatureType {
+	case protocol.SignatureTypeBTC, protocol.SignatureTypeBTCLegacy:
+		d = DefaultBitcoinBaseDerivationPath
+	case protocol.SignatureTypeRCD1:
+		d = DefaultFactoidBaseDerivationPath
+	case protocol.SignatureTypeETH:
+		d = DefaultEtherBaseDerivationPath
+	case protocol.SignatureTypeED25519:
+		d = DefaultAccumulateBaseDerivationPath
+	default:
+		e = fmt.Errorf("unsupported derivation path")
+	}
+	return d, e
 }
 
 func (d *Derivation) FromPath(path string) error {
 	hd := strings.Split(path, "/")
-	if len(hd) != 6 {
+	if len(hd) < 4 {
 		return fmt.Errorf("insufficent parameters in bip44 derivation path")
 	}
 
@@ -202,22 +306,87 @@ func (d *Derivation) FromPath(path string) error {
 		return fmt.Errorf("invalid purpose, expecting bip44 HD derivation path, but received %s", path)
 	}
 
-	t := [4]uint32{}
-	for i, s := range hd[2:6] {
+	*d = Derivation{Purpose}
+	for _, s := range hd[2:] {
+		t := uint32(0)
 		if strings.HasSuffix(s, "'") {
-			t[i] = bip32.FirstHardenedChild
+			t = bip32.FirstHardenedChild
 			s = strings.TrimSuffix(s, "'")
 		}
 		n, err := strconv.Atoi(s)
 		if err != nil {
 			return fmt.Errorf("malformed bip44 HD derivation path, %v", err)
 		}
-		t[i] += uint32(n)
+		*d = append(*d, t+uint32(n))
 	}
-	d.CoinType = t[0]
-	d.Account = t[1]
-	d.Chain = t[2]
-	d.Address = t[3]
 
 	return d.Validate()
 }
+
+// DeduceSignatureType get signature type from coin type, note: this will only return the btc signature type
+// for TypeBitcoin, thus if the user wants a legacy btc address, it won't be able to get one if
+// the type is deduced via this function.
+func (d Derivation) DeduceSignatureType() protocol.SignatureType {
+	t := protocol.SignatureTypeUnknown
+	//derivationPath
+	switch d.CoinType() {
+	case TypeBitcoin:
+		t = protocol.SignatureTypeBTC
+	case TypeAccumulate:
+		t = protocol.SignatureTypeED25519
+	case TypeEther:
+		t = protocol.SignatureTypeETH
+	case TypeFactomFactoids:
+		t = protocol.SignatureTypeRCD1
+	}
+	return t
+}
+
+//
+//func (d *Derivation) MarshalBinary() ([]byte, error) {
+//	buffer := bytes.Buffer{}
+//
+//	err := d.Validate()
+//	if err != nil {
+//		return nil, err
+//	}
+//
+//	b := [4]byte{}
+//	binary.BigEndian.PutUint32(b[:], 0x80000000+44)
+//	buffer.Write(b[:])
+//
+//	binary.BigEndian.PutUint32(b[:], d.CoinType)
+//	buffer.Write(b[:])
+//
+//	binary.BigEndian.PutUint32(b[:], d.Account)
+//	buffer.Write(b[:])
+//
+//	binary.BigEndian.PutUint32(b[:], d.Chain)
+//	buffer.Write(b[:])
+//
+//	binary.BigEndian.PutUint32(b[:], d.Address)
+//	buffer.Write(b[:])
+//
+//	return buffer.Bytes(), nil
+//}
+//
+//func (d *Derivation) UnmarshalBinary(buffer []byte) error {
+//
+//	if len(buffer) < 16 {
+//		return fmt.Errorf("derivation path too short")
+//	}
+//
+//	m := binary.BigEndian.Uint32(buffer)
+//
+//	if m != 0x80000000+44 {
+//		return fmt.Errorf("encoded binary is not a derivation path")
+//	}
+//
+//	d.CoinType = binary.BigEndian.Uint32(buffer[4:])
+//	d.Account = binary.BigEndian.Uint32(buffer[8:])
+//	d.Chain = binary.BigEndian.Uint32(buffer[12:])
+//	if len(buffer) >= 20 {
+//		d.Address = binary.BigEndian.Uint32(buffer[16:])
+//	}
+//	return d.Validate()
+//}
