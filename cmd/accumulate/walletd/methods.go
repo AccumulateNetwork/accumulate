@@ -228,3 +228,18 @@ func (m *JrpcMethods) NewSendTokensTransaction(_ context.Context, params json.Ra
 	}
 	return resp
 }
+
+func (m *JrpcMethods) DeleteSendTokensTransaction(_ context.Context, params json.RawMessage) interface{} {
+	req := api.DeleteTransactionRequest{}
+	err := json.Unmarshal(params, &req)
+	if err != nil {
+		return validatorError(err)
+	}
+
+	sendToken := protocol.SendTokens{}
+	resp, err := sendToken.MarshalJSON()
+	if err != nil {
+		return validatorError(err)
+	}
+	return resp
+}
