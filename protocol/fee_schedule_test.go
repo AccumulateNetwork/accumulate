@@ -19,7 +19,8 @@ func TestFee(t *testing.T) {
 			WithSigner(AccountUrl("foo", "book", "1"), 1).
 			WithCurrentTimestamp().
 			WithBody(&SendTokens{To: []*TokenRecipient{{}}}).
-			Initiate(SignatureTypeLegacyED25519, acctesting.GenerateKey(t.Name()))
+			Initiate(SignatureTypeLegacyED25519, acctesting.GenerateKey(t.Name())).
+			Build()
 		fee, err := s.ComputeTransactionFee(env.Transaction[0])
 		require.NoError(t, err)
 		require.Equal(t, FeeTransferTokens, fee)
@@ -31,7 +32,8 @@ func TestFee(t *testing.T) {
 			WithSigner(AccountUrl("foo", "book", "1"), 1).
 			WithCurrentTimestamp().
 			WithBody(&SendTokens{To: []*TokenRecipient{{}}}).
-			Initiate(SignatureTypeLegacyED25519, acctesting.GenerateKey(t.Name()))
+			Initiate(SignatureTypeLegacyED25519, acctesting.GenerateKey(t.Name())).
+			Build()
 		env.Transaction[0].Header.Metadata = make([]byte, 1024)
 		fee, err := s.ComputeTransactionFee(env.Transaction[0])
 		require.NoError(t, err)
@@ -44,7 +46,8 @@ func TestFee(t *testing.T) {
 			WithSigner(AccountUrl("foo", "book", "1"), 1).
 			WithCurrentTimestamp().
 			WithBody(&WriteData{Scratch: true}).
-			Initiate(SignatureTypeLegacyED25519, acctesting.GenerateKey(t.Name()))
+			Initiate(SignatureTypeLegacyED25519, acctesting.GenerateKey(t.Name())).
+			Build()
 		env.Transaction[0].Header.Metadata = make([]byte, 1024)
 		fee, err := s.ComputeTransactionFee(env.Transaction[0])
 		require.NoError(t, err)
@@ -116,7 +119,8 @@ func TestSubAdiFee(t *testing.T) {
 		WithSigner(AccountUrl("foo", "book", "1"), 1).
 		WithCurrentTimestamp().
 		WithBody(&CreateIdentity{Url: AccountUrl("foo.acme", "sub")}).
-		Initiate(SignatureTypeLegacyED25519, acctesting.GenerateKey(t.Name()))
+		Initiate(SignatureTypeLegacyED25519, acctesting.GenerateKey(t.Name())).
+		Build()
 	fee, err := s.ComputeTransactionFee(env.Transaction[0])
 	require.NoError(t, err)
 
@@ -147,7 +151,8 @@ func TestSlidingIdentityFeeSchedule(t *testing.T) {
 			WithSigner(AccountUrl("foo", "book", "1"), 1).
 			WithCurrentTimestamp().
 			WithBody(&CreateIdentity{Url: AccountUrl(strings.Repeat("a", i+1))}).
-			Initiate(SignatureTypeLegacyED25519, acctesting.GenerateKey(t.Name()))
+			Initiate(SignatureTypeLegacyED25519, acctesting.GenerateKey(t.Name())).
+			Build()
 		fee, err := s.ComputeTransactionFee(env.Transaction[0])
 		require.NoError(t, err)
 

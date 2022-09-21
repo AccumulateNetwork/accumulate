@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
@@ -35,6 +36,11 @@ func TestSimulator(t *testing.T) {
 	CreditTokens(t, sim.DatabaseFor(alice), alice.JoinPath("tokens"), big.NewInt(1e12))
 	MakeIdentity(t, sim.DatabaseFor(bob), bob, bobKey[32:])
 	MakeAccount(t, sim.DatabaseFor(bob), &TokenAccount{Url: bob.JoinPath("tokens"), TokenUrl: AcmeUrl()})
+
+	build.Transaction(alice.JoinPath("tokens")).
+		SendTokens().
+		To(bob.JoinPath("tokens"), 123, AcmePrecisionPower).
+		Build()
 
 	// Execute
 	st := sim.SubmitSuccessfully(

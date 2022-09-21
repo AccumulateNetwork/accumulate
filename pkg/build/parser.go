@@ -82,6 +82,42 @@ func (p *parser) parseUrl(v any) *url.URL {
 	return u
 }
 
+func (p *parser) parseHash32(v any) [32]byte {
+	switch v := v.(type) {
+	case []byte:
+		if len(v) != 32 {
+			p.errorf(errors.StatusBadRequest, "invalid hash length: want 32, got %d", len(v))
+			return [32]byte{}
+		}
+		return *(*[32]byte)(v)
+	case [32]byte:
+		return v
+	case *[32]byte:
+		return *v
+	default:
+		p.errorf(errors.StatusBadRequest, "cannot convert %T to a hash", v)
+		return [32]byte{}
+	}
+}
+
+func (p *parser) parseHash(v any) []byte {
+	switch v := v.(type) {
+	case []byte:
+		if len(v) != 32 {
+			p.errorf(errors.StatusBadRequest, "invalid hash length: want 32, got %d", len(v))
+			return nil
+		}
+		return v
+	case [32]byte:
+		return v[:]
+	case *[32]byte:
+		return (*v)[:]
+	default:
+		p.errorf(errors.StatusBadRequest, "cannot convert %T to a hash", v)
+		return nil
+	}
+}
+
 func (p *parser) parsePublicKey(key any) []byte {
 	if !p.ok() {
 		return nil

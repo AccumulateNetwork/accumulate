@@ -1,6 +1,8 @@
 package build
 
-import "gitlab.com/accumulatenetwork/accumulate/protocol"
+import (
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+)
 
 type TransactionBuilder struct {
 	parser
@@ -13,6 +15,11 @@ func Transaction(principal any) TransactionBuilder {
 
 func (b TransactionBuilder) WithPrincipal(principal any) TransactionBuilder {
 	b.t.Header.Principal = b.parseUrl(principal)
+	return b
+}
+
+func (b TransactionBuilder) WithInitiator(init any) TransactionBuilder {
+	b.t.Header.Initiator = b.parseHash32(init)
 	return b
 }
 
@@ -53,8 +60,8 @@ func (b CreateIdentityBuilder) WithKey(key any, typ protocol.SignatureType) Crea
 	return b.WithKeyHash(b.t.hashKey(b.t.parsePublicKey(key), typ))
 }
 
-func (b CreateIdentityBuilder) WithKeyHash(hash []byte) CreateIdentityBuilder {
-	b.body.KeyHash = hash
+func (b CreateIdentityBuilder) WithKeyHash(hash any) CreateIdentityBuilder {
+	b.body.KeyHash = b.t.parseHash(hash)
 	return b
 }
 
@@ -277,8 +284,8 @@ func (b CreateKeyBookBuilder) WithAuthority(book any) CreateKeyBookBuilder {
 	return b
 }
 
-func (b CreateKeyBookBuilder) WithKeyHash(hash []byte) CreateKeyBookBuilder {
-	b.body.PublicKeyHash = hash
+func (b CreateKeyBookBuilder) WithKeyHash(hash any) CreateKeyBookBuilder {
+	b.body.PublicKeyHash = b.t.parseHash(hash)
 	return b
 }
 

@@ -1,25 +1,28 @@
 package testing
 
 import (
+	"bytes"
 	"fmt"
+	"sort"
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 type TransactionBuilder struct {
-	*protocol.Envelope
-	signer     signing.Builder
-	SkipChecks bool
+	transaction  build.TransactionBuilder
+	signer       signing.Builder
+	transactions map[[32]byte]*protocol.Transaction
+	signatures   []protocol.Signature
+	SkipChecks   bool
 }
 
 func NewTransaction() TransactionBuilder {
 	var tb TransactionBuilder
-	tb.Envelope = new(protocol.Envelope)
-	tb.Transaction = []*protocol.Transaction{new(protocol.Transaction)}
 	return tb
 }
 
@@ -40,17 +43,20 @@ func (tb TransactionBuilder) UseSimpleHash() TransactionBuilder {
 }
 
 func (tb TransactionBuilder) WithTransaction(txn *protocol.Transaction) TransactionBuilder {
-	tb.Transaction[0] = txn
-	return tb
+	return tb.WithHeader(&txn.Header).WithBody(txn.Body)
 }
 
 func (tb TransactionBuilder) WithHeader(hdr *protocol.TransactionHeader) TransactionBuilder {
-	tb.Transaction[0].Header = *hdr
+	tb.transaction = tb.transaction.
+		WithPrincipal(hdr.Principal).
+		WithInitiator(hdr.Initiator).
+		WithMemo(hdr.Memo).
+		WithMetadata(hdr.Metadata)
 	return tb
 }
 
 func (tb TransactionBuilder) WithPrincipal(origin *url.URL) TransactionBuilder {
-	tb.Transaction[0].Header.Principal = origin
+	tb.transaction = tb.transaction.WithPrincipal(origin)
 	return tb
 }
 
@@ -81,7 +87,7 @@ func (tb TransactionBuilder) WithCurrentTimestamp() TransactionBuilder {
 }
 
 func (tb TransactionBuilder) WithBody(body protocol.TransactionBody) TransactionBuilder {
-	tb.Transaction[0].Body = body
+	tb.transaction = tb.transaction.WithBody(body)
 	return tb
 }
 
@@ -91,60 +97,85 @@ func (tb TransactionBuilder) WithTxnHash(hash []byte) TransactionBuilder {
 	return tb.WithBody(body)
 }
 
+func (tb *TransactionBuilder) buildTxn() *protocol.Transaction {
+	txn, err := tb.transaction.Build()
+	if err != nil {
+		panic(err)
+	}
+	if txn, ok := tb.transactions[txn.ID().Hash()]; ok {
+		return txn
+	}
+	if tb.transactions == nil {
+		tb.transactions = map[[32]byte]*protocol.Transaction{}
+	}
+	tb.transactions[txn.ID().Hash()] = txn
+	return txn
+}
+
 func (tb TransactionBuilder) Sign(typ protocol.SignatureType, privateKey []byte) TransactionBuilder {
+	txn := tb.buildTxn()
 	switch {
 	case tb.SkipChecks:
 		// Skip checks
-	case tb.Transaction[0].Body == nil:
+	case txn.Body == nil:
 		panic("cannot sign a transaction without the transaction body or transaction hash")
-	case tb.Transaction[0].Header.Initiator == ([32]byte{}) && tb.Transaction[0].Body.Type() != protocol.TransactionTypeRemote:
+	case txn.Header.Initiator == ([32]byte{}) && txn.Body.Type() != protocol.TransactionTypeRemote:
 		panic("cannot sign a transaction before setting the initiator")
 	}
 
 	tb.signer.SetPrivateKey(privateKey)
-	sig, err := tb.signer.Sign(tb.Transaction[0].GetHash())
+	sig, err := tb.signer.Sign(txn.GetHash())
 	if err != nil {
 		panic(err)
 	}
 
-	tb.Signatures = append(tb.Signatures, sig)
+	tb.signatures = append(tb.signatures, sig)
 	return tb
 }
 
 func (tb TransactionBuilder) SignFunc(fn func(txn *protocol.Transaction) protocol.Signature) TransactionBuilder {
-	tb.Signatures = append(tb.Signatures, fn(tb.Transaction[0]))
+	tb.signatures = append(tb.signatures, fn(tb.buildTxn()))
 	return tb
 }
 
 func (tb TransactionBuilder) Initiate(typ protocol.SignatureType, privateKey []byte) TransactionBuilder {
+	txn := tb.buildTxn()
 	switch {
 	case tb.SkipChecks:
 		// Skip checks
-	case tb.Transaction[0].Body == nil:
+	case txn.Body == nil:
 		panic("cannot initiate transaction without a body")
-	case tb.Transaction[0].Body.Type() == protocol.TransactionTypeRemote:
+	case txn.Body.Type() == protocol.TransactionTypeRemote:
 		panic("cannot initiate transaction: have hash instead of body")
-	case tb.Transaction[0].Header.Initiator != ([32]byte{}):
+	case txn.Header.Initiator != ([32]byte{}):
 		panic("cannot initiate transaction: already initiated")
 	}
 
 	tb.signer.Type = typ
 	tb.signer.SetPrivateKey(privateKey)
-	sig, err := tb.signer.Initiate(tb.Transaction[0])
+	sig, err := tb.signer.Initiate(txn)
 	if err != nil {
 		panic(err)
 	}
 
-	tb.Signatures = append(tb.Signatures, sig)
+	tb.signatures = append(tb.signatures, sig)
 	return tb
 }
 
 func (tb TransactionBuilder) Build() *protocol.Envelope {
-	return tb.Envelope
+	env := new(protocol.Envelope)
+	env.Signatures = tb.signatures
+	for _, txn := range tb.transactions {
+		env.Transaction = append(env.Transaction, txn)
+	}
+	sort.Slice(env.Transaction, func(i, j int) bool {
+		return bytes.Compare(env.Transaction[i].GetHash(), env.Transaction[j].GetHash()) < 0
+	})
+	return env
 }
 
 func (tb TransactionBuilder) BuildDelivery() *chain.Delivery {
-	delivery, err := chain.NormalizeEnvelope(tb.Envelope)
+	delivery, err := chain.NormalizeEnvelope(tb.Build())
 	if err != nil {
 		panic(err)
 	}
@@ -155,10 +186,8 @@ func (tb TransactionBuilder) BuildDelivery() *chain.Delivery {
 }
 
 func (tb TransactionBuilder) InitiateSynthetic(destPartitionUrl *url.URL) TransactionBuilder {
-	if tb.TxHash != nil {
-		panic("cannot initiate transaction: have hash instead of body")
-	}
-	if tb.Transaction[0].Header.Initiator != ([32]byte{}) {
+	txn := tb.buildTxn()
+	if txn.Header.Initiator != ([32]byte{}) {
 		panic("cannot initiate transaction: already initiated")
 	}
 	if tb.signer.Url == nil {
@@ -173,18 +202,18 @@ func (tb TransactionBuilder) InitiateSynthetic(destPartitionUrl *url.URL) Transa
 	initSig.DestinationNetwork = destPartitionUrl
 	initSig.SequenceNumber = tb.signer.Version
 
-	tb.Transaction[0].Header.Initiator = *(*[32]byte)(initSig.Metadata().Hash())
-	initSig.TransactionHash = *(*[32]byte)(tb.Transaction[0].GetHash())
-	tb.Signatures = append(tb.Signatures, initSig)
+	txn.Header.Initiator = *(*[32]byte)(initSig.Metadata().Hash())
+	initSig.TransactionHash = *(*[32]byte)(txn.GetHash())
+	tb.signatures = append(tb.signatures, initSig)
 	return tb
 }
 
 func (tb TransactionBuilder) Faucet() *protocol.Envelope {
-	sig, err := new(signing.Builder).UseFaucet().Initiate(tb.Transaction[0])
+	sig, err := new(signing.Builder).UseFaucet().Initiate(tb.buildTxn())
 	if err != nil {
 		panic(err)
 	}
 
-	tb.Signatures = append(tb.Signatures, sig)
-	return tb.Envelope
+	tb.signatures = append(tb.signatures, sig)
+	return tb.Build()
 }
