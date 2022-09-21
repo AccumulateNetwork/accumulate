@@ -23,7 +23,6 @@ success
 section "Generate a derived key"
 PUBLIC_KEY=$(accumulate -j ledger key generate ledgerkey1 | jq -re '.publicKey')
 [ ${#PUBLIC_KEY} -eq 64 ] || die "Public key is not 32 bytes long: $PUBLIC_KEY"
-echo "PUBLIC_KEY: $PUBLIC_KEY"
 success
 
 section "Create & fund a Lite Token Account from the new key"
@@ -33,11 +32,30 @@ wait-for cli-tx  faucet ${LITE_ACME}
 accumulate account get ${LITE_ACME} 1> /dev/null && success || die "Cannot find ${LITE_ACME}"
 
 section "Create a receiver Lite Token Account"
-# TODO
+accumulate account generate
+RECV_LITE_ACME=$(accumulate account list -j | jq -re .liteAccounts[0].liteAccount)
+RECV_LITE_ID=$(cut -d/ -f-3 <<< "$RECV_LITE_ACME")
+TXS=()
+for i in {1..1}
+do
+	TXS=(${TXS[@]} $(cli-tx faucet ${RECV_LITE_ACME}))
+done
+for tx in "${TXS[@]}"
+do
+	echo $tx
+	wait-for-tx $tx
+done
 
-section "Send tokens from the ledger token account to the recever token account"
-wait-for cli-tx tx create ${LITE_ACME} ledgertest.acme/tokens 5
-BALANCE=$(accumulate -j account get ledgertest.acme/tokens | jq -r .data.balance)
-[ "$BALANCE" -eq 500000000 ] && success || die "${LITE_ACME} should have 5 tokens but has $(expr ${BALANCE} / 100000000)"
+accumulate account get ${RECV_LITE_ACME} 1> /dev/null && success || die "Cannot find ${RECV_LITE_ACME}"
+echo receiver balance before send tokens:
+accumulate account get ${RECV_LITE_ID}
+
+
+section "Send tokens from the ledger token account to the receiver token account"
+wait-for cli-tx credits ${LITE_ACME} ${RECV_LITE_ID} 5
+echo liteid balance:
+accumulate account get ${LITE_ACME}
+echo receiver balance after send tokens:
+accumulate account get ${RECV_LITE_ID}
 
 

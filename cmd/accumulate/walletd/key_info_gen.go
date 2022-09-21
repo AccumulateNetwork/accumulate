@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -18,7 +19,7 @@ type KeyInfo struct {
 	fieldsSet  []bool
 	Type       protocol.SignatureType `json:"type,omitempty" form:"type" query:"type" validate:"required"`
 	Derivation string                 `json:"derivation,omitempty" form:"derivation" query:"derivation"`
-	WalletID   string                 `json:"walletID,omitempty" form:"walletID" query:"walletID"`
+	WalletID   *url.URL               `json:"walletID,omitempty" form:"walletID" query:"walletID"`
 	extraData  []byte
 }
 
@@ -27,7 +28,9 @@ func (v *KeyInfo) Copy() *KeyInfo {
 
 	u.Type = v.Type
 	u.Derivation = v.Derivation
-	u.WalletID = v.WalletID
+	if v.WalletID != nil {
+		u.WalletID = v.WalletID
+	}
 
 	return u
 }
@@ -41,7 +44,12 @@ func (v *KeyInfo) Equal(u *KeyInfo) bool {
 	if !(v.Derivation == u.Derivation) {
 		return false
 	}
-	if !(v.WalletID == u.WalletID) {
+	switch {
+	case v.WalletID == u.WalletID:
+		// equal
+	case v.WalletID == nil || u.WalletID == nil:
+		return false
+	case !((v.WalletID).Equal(u.WalletID)):
 		return false
 	}
 
@@ -64,8 +72,8 @@ func (v *KeyInfo) MarshalBinary() ([]byte, error) {
 	if !(len(v.Derivation) == 0) {
 		writer.WriteString(2, v.Derivation)
 	}
-	if !(len(v.WalletID) == 0) {
-		writer.WriteString(3, v.WalletID)
+	if !(v.WalletID == nil) {
+		writer.WriteUrl(3, v.WalletID)
 	}
 
 	_, _, err := writer.Reset(fieldNames_KeyInfo)
@@ -108,7 +116,7 @@ func (v *KeyInfo) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadString(2); ok {
 		v.Derivation = x
 	}
-	if x, ok := reader.ReadString(3); ok {
+	if x, ok := reader.ReadUrl(3); ok {
 		v.WalletID = x
 	}
 

@@ -229,8 +229,6 @@ Version:
 LedgerWalletInfo:
   non-binary: true
   fields:
-    - name: Url
-      type: String
     - name: Version
       type: Version
       marshal-as: reference
@@ -244,6 +242,10 @@ LedgerWalletInfo:
       type: String
     - name: Status
       type: String
+    - name: WalletID
+      type: url
+      pointer: true
+
 
 LedgerWalletInfoResponse:
   non-binary: true

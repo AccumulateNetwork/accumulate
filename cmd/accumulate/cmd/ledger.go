@@ -63,15 +63,22 @@ func queryWalletsInfo(cmd *cobra.Command, args []string) (string, error) {
 	} else {
 		result := fmt.Sprintln("Wallets:")
 		for i, ledgerInfo := range ledgerInfos {
+			var wid string
+			if ledgerInfo.WalletID != nil {
+				wid = ledgerInfo.WalletID.String()
+			} else {
+				wid = "(unlock & start Accumulate app to display)"
+			}
+
 			result += fmt.Sprintf("%d\tManufacturer:\t%s\n", i+1, ledgerInfo.Manufacturer)
 			result += fmt.Sprintf("\tProduct:\t%s\n", ledgerInfo.Product)
 			result += fmt.Sprintf("\tVendor ID:\t%d\n", ledgerInfo.VendorID)
 			result += fmt.Sprintf("\tProduct ID:\t%d\n", ledgerInfo.ProductID)
-			result += fmt.Sprintf("\tWallet ID:\t%s\n", ledgerInfo.Url)
 			if ledgerInfo.Status == "ok" {
 				result += fmt.Sprintf("\tApp Version:\t%s\n", ledgerInfo.Version.Label)
 			}
 			result += fmt.Sprintf("\tStatus:\t\t%s\n", ledgerInfo.Status)
+			result += fmt.Sprintf("\tWallet ID:\t%s\n", wid)
 		}
 		return result, nil
 	}

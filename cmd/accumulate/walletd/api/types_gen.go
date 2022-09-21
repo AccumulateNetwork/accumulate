@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -119,13 +120,13 @@ type KeyListResponse struct {
 }
 
 type LedgerWalletInfo struct {
-	Url          string  `json:"url,omitempty" form:"url" query:"url" validate:"required"`
-	Version      Version `json:"version,omitempty" form:"version" query:"version" validate:"required"`
-	VendorID     uint64  `json:"vendorID,omitempty" form:"vendorID" query:"vendorID" validate:"required"`
-	Manufacturer string  `json:"manufacturer,omitempty" form:"manufacturer" query:"manufacturer" validate:"required"`
-	ProductID    uint64  `json:"productID,omitempty" form:"productID" query:"productID" validate:"required"`
-	Product      string  `json:"product,omitempty" form:"product" query:"product" validate:"required"`
-	Status       string  `json:"status,omitempty" form:"status" query:"status" validate:"required"`
+	Version      Version  `json:"version,omitempty" form:"version" query:"version" validate:"required"`
+	VendorID     uint64   `json:"vendorID,omitempty" form:"vendorID" query:"vendorID" validate:"required"`
+	Manufacturer string   `json:"manufacturer,omitempty" form:"manufacturer" query:"manufacturer" validate:"required"`
+	ProductID    uint64   `json:"productID,omitempty" form:"productID" query:"productID" validate:"required"`
+	Product      string   `json:"product,omitempty" form:"product" query:"product" validate:"required"`
+	Status       string   `json:"status,omitempty" form:"status" query:"status" validate:"required"`
+	WalletID     *url.URL `json:"walletID,omitempty" form:"walletID" query:"walletID" validate:"required"`
 }
 
 type LedgerWalletInfoResponse struct {
@@ -414,13 +415,15 @@ func (v *KeyListResponse) CopyAsInterface() interface{} { return v.Copy() }
 func (v *LedgerWalletInfo) Copy() *LedgerWalletInfo {
 	u := new(LedgerWalletInfo)
 
-	u.Url = v.Url
 	u.Version = *(&v.Version).Copy()
 	u.VendorID = v.VendorID
 	u.Manufacturer = v.Manufacturer
 	u.ProductID = v.ProductID
 	u.Product = v.Product
 	u.Status = v.Status
+	if v.WalletID != nil {
+		u.WalletID = v.WalletID
+	}
 
 	return u
 }
@@ -750,9 +753,6 @@ func (v *KeyListResponse) Equal(u *KeyListResponse) bool {
 }
 
 func (v *LedgerWalletInfo) Equal(u *LedgerWalletInfo) bool {
-	if !(v.Url == u.Url) {
-		return false
-	}
 	if !((&v.Version).Equal(&u.Version)) {
 		return false
 	}
@@ -769,6 +769,14 @@ func (v *LedgerWalletInfo) Equal(u *LedgerWalletInfo) bool {
 		return false
 	}
 	if !(v.Status == u.Status) {
+		return false
+	}
+	switch {
+	case v.WalletID == u.WalletID:
+		// equal
+	case v.WalletID == nil || u.WalletID == nil:
+		return false
+	case !((v.WalletID).Equal(u.WalletID)):
 		return false
 	}
 

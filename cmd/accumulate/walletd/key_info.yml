@@ -7,5 +7,6 @@ KeyInfo:
     type: string
     optional: true
   - name: WalletID
-    type: string
+    type: url
+    pointer: true
     optional: true

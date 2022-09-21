@@ -166,7 +166,7 @@ func prepareSignerLite(signer *signing.Builder, str string) (bool, error) {
 	signer.Url = u.RootIdentity()
 	signer.Version = 1
 
-	if len(key.KeyInfo.WalletID) > 0 && len(key.PrivateKey) == 0 {
+	if key.KeyInfo.WalletID != nil && len(key.PrivateKey) == 0 {
 		ledgerSigner, err := walletd.NewLedgerSigner(key)
 		if err != nil {
 			return false, err
@@ -194,7 +194,7 @@ func prepareSignerPage(signer *signing.Builder, origin *url.URL, signingKey stri
 	if err != nil {
 		return err
 	}
-	if len(key.KeyInfo.WalletID) > 0 && len(key.PrivateKey) == 0 {
+	if key.KeyInfo.WalletID != nil && len(key.PrivateKey) == 0 {
 		ledgerSigner, err := walletd.NewLedgerSigner(key)
 		if err != nil {
 			return err

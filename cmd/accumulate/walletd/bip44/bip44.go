@@ -258,10 +258,25 @@ func (d *Derivation) ToPath() (string, error) {
 		return "", err
 	}
 
-	return fmt.Sprintf("m/44'/%d'/%d'/%d/%d",
-		TypeBitcoin^d.CoinType(),
-		bip32.FirstHardenedChild^d.Account(),
-		d.Chain(), d.Address()), nil
+	var sb strings.Builder
+	sb.WriteString("m/44'")
+	fmt.Fprintf(&sb, "/%d'", TypeBitcoin^d.CoinType())
+	if d.Account()&bip32.FirstHardenedChild > 0 {
+		fmt.Fprintf(&sb, "/%d'", bip32.FirstHardenedChild^d.Account())
+	} else {
+		fmt.Fprintf(&sb, "/%d", d.Account())
+	}
+	if d.Chain()&bip32.FirstHardenedChild > 0 {
+		fmt.Fprintf(&sb, "/%d'", bip32.FirstHardenedChild^d.Chain())
+	} else {
+		fmt.Fprintf(&sb, "/%d", d.Chain())
+	}
+	if d.Address()&bip32.FirstHardenedChild > 0 {
+		fmt.Fprintf(&sb, "/%d'", bip32.FirstHardenedChild^d.Address())
+	} else {
+		fmt.Fprintf(&sb, "/%d", d.Address())
+	}
+	return sb.String(), nil
 }
 
 func (d *Derivation) String() string {
