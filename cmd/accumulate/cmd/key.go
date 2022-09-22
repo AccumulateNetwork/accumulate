@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd/api"
 	"io/ioutil"
 	"strconv"
 	"strings"
@@ -186,13 +187,14 @@ var keyCmd = &cobra.Command{
 }
 
 type KeyResponse struct {
-	Label       types.String    `json:"name,omitempty"`
-	PrivateKey  types.Bytes     `json:"privateKey,omitempty"`
-	PublicKey   types.Bytes     `json:"publicKey,omitempty"`
-	KeyInfo     walletd.KeyInfo `json:"keyInfo,omitempty"`
-	LiteAccount *url.URL        `json:"liteAccount,omitempty"`
-	Seed        types.Bytes     `json:"seed,omitempty"`
-	Mnemonic    types.String    `json:"mnemonic,omitempty"`
+	Label       types.String      `json:"name,omitempty"`
+	PrivateKey  types.Bytes       `json:"privateKey,omitempty"`
+	PublicKey   types.Bytes       `json:"publicKey,omitempty"`
+	KeyInfo     api.KeyInfo       `json:"keyInfo,omitempty"`
+	LiteAccount *url.URL          `json:"liteAccount,omitempty"`
+	Seed        types.Bytes       `json:"seed,omitempty"`
+	Mnemonic    types.String      `json:"mnemonic,omitempty"`
+	Derivations map[string]uint64 `json:"addresses,omitempty"`
 }
 
 func PrintKeyPublic() {
@@ -246,7 +248,12 @@ func resolvePublicKey(s string) (*walletd.Key, error) {
 func parseKey(s string) (*walletd.Key, error) {
 	privKey, err := hex.DecodeString(s)
 	if err == nil && len(privKey) == 64 {
-		return &walletd.Key{PrivateKey: privKey, PublicKey: privKey[32:], KeyInfo: walletd.KeyInfo{Type: protocol.SignatureTypeED25519}}, nil
+		ret := new(walletd.Key)
+		err = ret.InitializeFromSeed(privKey, protocol.SignatureTypeED25519, "external")
+		if err != nil {
+			return nil, err
+		}
+		return ret, nil
 	}
 
 	k, err := pubKeyFromString(s)
@@ -266,15 +273,16 @@ func parseKey(s string) (*walletd.Key, error) {
 
 	var pvkey privval.FilePVKey
 	if tmjson.Unmarshal(b, &pvkey) == nil {
-		var pub, priv []byte
-		if pvkey.PubKey != nil {
-			pub = pvkey.PubKey.Bytes()
-		}
-		if pvkey.PrivKey != nil {
-			priv = pvkey.PrivKey.Bytes()
+		if pvkey.PrivKey == nil {
+			return nil, fmt.Errorf("invalid private key in %s", s)
 		}
 		// TODO Check the key type
-		return &walletd.Key{PrivateKey: priv, PublicKey: pub, KeyInfo: walletd.KeyInfo{Type: protocol.SignatureTypeED25519}}, nil
+		ret := new(walletd.Key)
+		err = ret.InitializeFromSeed(pvkey.PrivKey.Bytes(), protocol.SignatureTypeED25519, "external")
+		if err != nil {
+			return nil, err
+		}
+		return ret, nil
 	}
 
 	return nil, fmt.Errorf("cannot resolve signing key, invalid key specifier: %q is in an unsupported format", s)
@@ -295,7 +303,11 @@ func pubKeyFromString(s string) (*walletd.Key, error) {
 		return nil, fmt.Errorf("invalid public key")
 	}
 
-	return &walletd.Key{PublicKey: pubKey[:], KeyInfo: walletd.KeyInfo{Type: protocol.SignatureTypeED25519}}, nil
+	ret := new(walletd.Key)
+	ret.PublicKey = pubKey[:]
+	ret.KeyInfo.Type = protocol.SignatureTypeED25519
+	ret.KeyInfo.Derivation = "external"
+	return ret, nil
 }
 
 func ImportKeyPrompt(cmd *cobra.Command, label string, signatureType protocol.SignatureType) (out string, err error) {
@@ -313,8 +325,8 @@ func ImportKeyPrompt(cmd *cobra.Command, label string, signatureType protocol.Si
 func getPasswdPrompt(cmd *cobra.Command, prompt string, mask bool) (string, error) {
 	rd, ok := cmd.InOrStdin().(gopass.FdReader)
 	if ok {
-		bytes, err := gopass.GetPasswdPrompt(prompt, mask, rd, cmd.ErrOrStderr())
-		return string(bytes), err
+		b, err := gopass.GetPasswdPrompt(prompt, mask, rd, cmd.ErrOrStderr())
+		return string(b), err
 	}
 
 	_, err := fmt.Fprint(cmd.OutOrStdout(), prompt)
@@ -381,7 +393,7 @@ func ImportKey(token []byte, label string, signatureType protocol.SignatureType)
 	if WantJsonOutput {
 		a := KeyResponse{}
 		a.Label = types.String(label)
-		a.PublicKey = types.Bytes(pk.PublicKey)
+		a.PublicKey = pk.PublicKey
 		a.LiteAccount = lt
 		a.KeyInfo = pk.KeyInfo
 		dump, err := json.Marshal(&a)
@@ -491,7 +503,7 @@ func GenerateKey(label string) (string, error) {
 		a.Label = types.String(label)
 		a.PublicKey = key.PublicKey
 		a.LiteAccount = lt
-		a.KeyInfo = walletd.KeyInfo{Type: sigtype}
+		a.KeyInfo = api.KeyInfo{Type: sigtype}
 		dump, err := json.Marshal(&a)
 		if err != nil {
 			return "", err
@@ -591,7 +603,7 @@ func ImportFactoidKey(cmd *cobra.Command) (out string, err error) {
 	if !strings.Contains(token, "Fs") {
 		return "", fmt.Errorf("key to import is not a factoid address")
 	}
-	label, _, privatekey, err := protocol.GetFactoidAddressRcdHashPkeyFromPrivateFs(string(token))
+	label, _, privatekey, err := protocol.GetFactoidAddressRcdHashPkeyFromPrivateFs(token)
 	if err != nil {
 		return "", err
 	}
