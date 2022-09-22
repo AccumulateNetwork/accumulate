@@ -53,7 +53,7 @@ accumulate account get ${RECV_LITE_ID}
 
 
 section "Send tokens from the ledger lite token account to the receiver lite token account"
-TXID=$(cli-tx tx create ${LITE_ACME} ledgerkey1 ${RECV_LITE_ACME} 2)
+TXID=$(cli-tx tx create ${LITE_ACME} ${RECV_LITE_ACME} 2)
 wait-for-tx $TXID
 accumulate -j tx get $TXID | jq -re .status.pending 1> /dev/null || die "Transaction is not pending"
 accumulate -j tx get $TXID | jq -re .status.delivered 1> /dev/null && die "Transaction was delivered"
