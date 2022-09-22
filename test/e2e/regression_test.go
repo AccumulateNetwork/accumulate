@@ -525,7 +525,7 @@ func TestPendingTransactionForMissingAccount(t *testing.T) {
 	// Create a snapshot
 	buf := new(ioutil2.Buffer)
 	helpers.View(t, sim.PartitionFor(charlie), func(batch *database.Batch) {
-		_, err := snapshot.Collect(batch, buf, func(account *database.Account) (bool, error) { return false, nil })
+		_, err := snapshot.Collect(batch, new(snapshot.Header), buf, func(account *database.Account) (bool, error) { return false, nil })
 		require.NoError(t, err)
 	})
 
