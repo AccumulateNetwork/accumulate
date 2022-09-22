@@ -5,11 +5,11 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
-	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd/api"
 	"runtime/debug"
 
 	btc "github.com/btcsuite/btcd/btcec"
 	"github.com/tyler-smith/go-bip32"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd/api"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
