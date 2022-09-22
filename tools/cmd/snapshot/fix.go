@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -39,8 +38,6 @@ func fixSnapshot(_ *cobra.Command, args []string) {
 	tmpdir, err := os.MkdirTemp("", "accumulate-fix-snapshot-*")
 	check(err)
 	defer func() { os.RemoveAll(tmpdir) }()
-
-	fmt.Println(tmpdir)
 
 	// Get height and hash
 	height, rootHash := restoreSnapshot(filename, filepath.Join(tmpdir, "badger.db"), partition)
