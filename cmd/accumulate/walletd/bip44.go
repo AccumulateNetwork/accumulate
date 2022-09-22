@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/tyler-smith/go-bip32"
+	"github.com/AccumulateNetwork/go-bip32"
 	"github.com/tyler-smith/go-bip39"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )

@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"runtime/debug"
 
+	"github.com/AccumulateNetwork/go-bip32"
 	btc "github.com/btcsuite/btcd/btcec"
-	"github.com/tyler-smith/go-bip32"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
