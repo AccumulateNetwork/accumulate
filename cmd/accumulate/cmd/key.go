@@ -187,14 +187,13 @@ var keyCmd = &cobra.Command{
 }
 
 type KeyResponse struct {
-	Label       types.String      `json:"name,omitempty"`
-	PrivateKey  types.Bytes       `json:"privateKey,omitempty"`
-	PublicKey   types.Bytes       `json:"publicKey,omitempty"`
-	KeyInfo     api.KeyInfo       `json:"keyInfo,omitempty"`
-	LiteAccount *url.URL          `json:"liteAccount,omitempty"`
-	Seed        types.Bytes       `json:"seed,omitempty"`
-	Mnemonic    types.String      `json:"mnemonic,omitempty"`
-	Derivations map[string]uint64 `json:"addresses,omitempty"`
+	Label       types.String `json:"name,omitempty"`
+	PrivateKey  types.Bytes  `json:"privateKey,omitempty"`
+	PublicKey   types.Bytes  `json:"publicKey,omitempty"`
+	KeyInfo     api.KeyInfo  `json:"keyInfo,omitempty"`
+	LiteAccount *url.URL     `json:"liteAccount,omitempty"`
+	Seed        types.Bytes  `json:"seed,omitempty"`
+	Mnemonic    types.String `json:"mnemonic,omitempty"`
 }
 
 func PrintKeyPublic() {
