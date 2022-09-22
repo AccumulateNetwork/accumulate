@@ -108,6 +108,7 @@ func (s *Simulator) Run() {
 		s.CBlk.Timestamp = s.GetTime()                // Set the timestamp
 		s.MajorBlocks = append(s.MajorBlocks, s.CBlk) // Add it to the block list
 		s.CBlk = new(app.Block)                       // Create the next block
+		s.CBlk.BlockHash = rh.NextA()                 // Fake the Merkle Dag for the Major block
 		s.major++                                     // Add the current major block
 		s.CBlk.MajorHeight = s.major                  // Set the major block number
 		s.mutex.Unlock()                              // Unlock to allow others access to simulator state

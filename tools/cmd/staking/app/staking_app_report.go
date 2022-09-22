@@ -1,6 +1,8 @@
 package app
 
 import (
+	"bytes"
+	"crypto/sha256"
 	"fmt"
 	"os"
 	"path"
@@ -222,6 +224,30 @@ func (s *StakingApp) PrintAccounts(
 	return report.String(), end
 }
 
+// GetMasterOrder
+// Return the List of Staking Validators in the order of their responsibility to submit
+// the distribution transaction(s) for staking
+func (s *StakingApp) GetMasterOrder() []*Account {
+	// Make sure the Staking validator URLs are in order.  This ensures all validators are 
+	// going to mix the same list starting from the same starting state.
+	sort.Slice(s.Stakers.SValidator, func(i, j int) bool {
+		return s.Stakers.SValidator[i].URL.String() < s.Stakers.SValidator[j].URL.String()
+	})
+	
+	// Our mix is slower than it has to be.  We are going to give each element in the list
+	// a hash derived from and starting with the block hash.
+	MasterList := append([]*Account{}, s.Stakers.SValidator...) // create a master list
+	h := s.CBlk.BlockHash                                       // Use the block hash as the basis of randomizing
+	for _,a:=range MasterList { // Give every element an Order hash based on the BlockHash
+		h = sha256.Sum256(h[:]) 
+		a.Order = h
+	}
+	sort.Slice(MasterList,func(i,j int)bool{ // Sort the master list by its Order Hash
+		return bytes.Compare(MasterList[i].Order[:],MasterList[j].Order[:])==-1	
+	})
+	return MasterList
+}
+
 func (s *StakingApp) PrintDistributions(start int) (lines string, end int) {
 	var report buffer.Buffer
 	end = start
@@ -230,9 +256,11 @@ func (s *StakingApp) PrintDistributions(start int) (lines string, end int) {
 		report.WriteByte('\n')
 		end++
 	}
+
 	f("\n\n+===========================================================================================================")
 	f("+================================= Distribution Summary ====================================================")
 	f("+===========================================================================================================")
+
 	sort.SliceStable(s.Stakers.Distributions, func(i, j int) bool {
 		return s.Stakers.Distributions[i].Account.URL.String() < s.Stakers.Distributions[j].Account.URL.String()
 	})
@@ -284,10 +312,10 @@ func (s *StakingApp) PrintDistributionScript(start int) (lines string, end int) 
 
 	for _, d := range s.Stakers.Distributions {
 
-		f("accumulate token issue acc://acme \t[signer key name] \t%s\t=G%d", d.Account.DepositURL, d.Tokens)
+		f("accumulate token issue acc://acme \tValidatorKey \t%s\t=G%d", d.Account.DepositURL, d.Tokens)
 		for _, del := range d.Account.Delegates {
 			dist := s.Stakers.DistributionMap[del.URL.String()]
-			f("accumulate token issue acc://acme \t[signer key name] \t%s\t=G%d", del.DepositURL, dist.Tokens)
+			f("accumulate token issue acc://acme \tValidatorKey \t%s\t=G%d", del.DepositURL, dist.Tokens)
 		}
 	}
 

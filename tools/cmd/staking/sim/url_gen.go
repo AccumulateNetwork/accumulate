@@ -135,7 +135,7 @@ func cap(word string) string {
 func GenUrls(account string) (ADI, URL *url.URL) {
 	if currentUrls == nil {
 		currentUrls = make(map[string]int) // allocate the duplicate map
-		rand.Seed(1961)                    // make sure we return the same data for calls in the same order
+		rand.Seed(1960)                    // make sure we return the same data for calls in the same order
 	}
 	i := rand.Int() % len(Adjectives)
 	j := rand.Int() % len(Nouns)
