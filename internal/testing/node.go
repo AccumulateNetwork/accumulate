@@ -19,6 +19,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/testdata"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"golang.org/x/sync/errgroup"
 )
@@ -41,6 +42,7 @@ func NewTestLogger(t testing.TB) log.Logger {
 
 var DefaultLogLevels = config.LogLevel{}.
 	Parse(config.DefaultLogLevels).
+	SetModule("restore", "error").
 	// SetModule("accumulate", "debug").
 	// SetModule("executor", "debug").
 	// SetModule("synthetic", "debug").
@@ -112,7 +114,7 @@ func CreateTestNet(t testing.TB, numBvns, numValidators, numFollowers int, withF
 	if withFactomAddress {
 		factomAddresses = func() (io.Reader, error) { return strings.NewReader(testdata.FactomAddresses), nil }
 	}
-	genDocs, err := accumulated.BuildGenesisDocs(netInit, values, time.Now(), initLogger, factomAddresses)
+	genDocs, err := accumulated.BuildGenesisDocs(netInit, values, time.Now(), initLogger, factomAddresses, nil)
 	require.NoError(t, err)
 
 	configs := accumulated.BuildNodesConfig(netInit, DefaultConfig)
@@ -124,6 +126,10 @@ func CreateTestNet(t testing.TB, numBvns, numValidators, numFollowers int, withF
 			count++
 			configs[i][j][0].SetRoot(filepath.Join(tempDir, fmt.Sprintf("node-%d", count), "dnn"))
 			configs[i][j][1].SetRoot(filepath.Join(tempDir, fmt.Sprintf("node-%d", count), "bvnn"))
+
+			// Disable DN stall detection for tests
+			configs[i][j][0].Accumulate.DnStallLimit = 0
+			configs[i][j][1].Accumulate.DnStallLimit = 0
 
 			err = accumulated.WriteNodeFiles(configs[i][j][0], node.PrivValKey, node.NodeKey, dnGenDoc)
 			require.NoError(t, err)
@@ -176,4 +182,15 @@ func RunTestNet(t testing.TB, partitions []string, daemons map[string][]*accumul
 		}
 		assert.NoError(t, errg.Wait())
 	})
+}
+
+func BvnIdForTest(t testing.TB) string {
+	id := t.Name()
+	id = strings.ReplaceAll(id, "/", "-")
+	id = strings.ReplaceAll(id, "#", "-")
+	return id
+}
+
+func BvnUrlForTest(t testing.TB) *url.URL {
+	return protocol.PartitionUrl(BvnIdForTest(t))
 }

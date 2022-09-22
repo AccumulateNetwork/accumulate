@@ -15,6 +15,8 @@ import (
 
 var ErrFieldsOutOfOrder = errors.New("fields are out of order")
 
+const MaxValueSize = 1 << 20
+
 type bytesReader interface {
 	io.Reader
 	io.ByteScanner
@@ -79,8 +81,12 @@ func (r *Reader) readRaw(field uint, n uint64) ([]byte, bool) {
 		return nil, true
 	}
 
-	if n >= math.MaxInt32 {
-		r.didRead(field, fmt.Errorf("too big"), "invalid size")
+	if rl, ok := r.r.(interface{ Len() int }); ok && uint64(rl.Len()) < n {
+		r.didRead(field, io.EOF, "failed to read field")
+	}
+
+	if n >= MaxValueSize {
+		r.didRead(field, fmt.Errorf("too big"), "failed to read field")
 		return nil, false
 	}
 

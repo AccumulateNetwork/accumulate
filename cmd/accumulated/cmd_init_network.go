@@ -8,11 +8,13 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/ghodss/yaml"
 	"github.com/spf13/cobra"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	cfg "gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	etcd "go.etcd.io/etcd/client/v3"
@@ -55,13 +57,13 @@ func initNetwork(cmd *cobra.Command, args []string) {
 			node.PrivValKey = ed25519.GenPrivKey()
 			node.NodeKey = ed25519.GenPrivKey()
 
-			if node.ListenIP == "" {
-				node.ListenIP = "0.0.0.0"
+			if node.ListenAddress == "" {
+				node.ListenAddress = "0.0.0.0"
 			}
 		}
 	}
 
-	initNetworkLocalFS(network)
+	initNetworkLocalFS(cmd, network)
 }
 
 func verifyInitFlags(cmd *cobra.Command, count int) {
@@ -87,7 +89,7 @@ func verifyInitFlags(cmd *cobra.Command, count int) {
 	}
 }
 
-func initNetworkLocalFS(netInit *accumulated.NetworkInit) {
+func initNetworkLocalFS(cmd *cobra.Command, netInit *accumulated.NetworkInit) {
 	if flagInit.LogLevels != "" {
 		_, _, err := logging.ParseLogLevel(flagInit.LogLevels, io.Discard)
 		checkf(err, "--log-level")
@@ -102,7 +104,22 @@ func initNetworkLocalFS(netInit *accumulated.NetworkInit) {
 	check(enc.Encode(netInit))
 	check(netFile.Close())
 
-	genDocs, err := accumulated.BuildGenesisDocs(netInit, new(core.GlobalValues), time.Now(), newLogger(), nil)
+	var factomAddresses func() (io.Reader, error)
+	var snapshots []func() (ioutil2.SectionReader, error)
+	if flagInit.FactomAddresses != "" {
+		factomAddresses = func() (io.Reader, error) { return os.Open(flagInit.FactomAddresses) }
+	}
+	for _, filename := range flagInit.Snapshots {
+		filename := filename // See docs/developer/rangevarref.md
+		snapshots = append(snapshots, func() (ioutil2.SectionReader, error) { return os.Open(filename) })
+	}
+
+	values := new(core.GlobalValues)
+	if flagInitDevnet.Globals != "" {
+		checkf(yaml.Unmarshal([]byte(flagInitDevnet.Globals), values), "--globals")
+	}
+
+	genDocs, err := accumulated.BuildGenesisDocs(netInit, values, time.Now(), newLogger(), factomAddresses, snapshots)
 	checkf(err, "build genesis documents")
 
 	configs := accumulated.BuildNodesConfig(netInit, nil)
@@ -122,6 +139,10 @@ func initNetworkLocalFS(netInit *accumulated.NetworkInit) {
 
 				if flagInit.NoEmptyBlocks {
 					config.Consensus.CreateEmptyBlocks = false
+				}
+
+				if cmd.Flag("dn-stall-limit").Changed {
+					config.Accumulate.DnStallLimit = flagInit.DnStallLimit
 				}
 
 				if len(flagInit.Etcd) > 0 {

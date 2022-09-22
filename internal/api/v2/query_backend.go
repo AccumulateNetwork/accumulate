@@ -50,10 +50,7 @@ func (m *queryBackend) queryAccount(batch *database.Batch, account *database.Acc
 		state.Name = c.Name
 		state.Type = c.Type
 		state.Height = uint64(ms.Count)
-		state.Roots = make([][]byte, len(ms.Pending))
-		for i, h := range ms.Pending {
-			state.Roots[i] = h
-		}
+		state.Roots = ms.Pending.Copy()
 
 		resp.ChainState = append(resp.ChainState, state)
 	}
@@ -202,10 +199,7 @@ func (m *queryBackend) queryByUrl(batch *database.Batch, u *url.URL, prove bool,
 			res := new(query.ResponseChainEntry)
 			res.Height = uint64(height)
 			res.Entry = entry
-			res.State = make([][]byte, len(state.Pending))
-			for i, h := range state.Pending {
-				res.State[i] = h.Copy()
-			}
+			res.State = state.Pending.Copy()
 
 			md, err := batch.Account(u).Chains().Find(&protocol.ChainMetadata{Name: fragment[1]})
 			if err == nil {
@@ -254,10 +248,7 @@ func (m *queryBackend) queryByUrl(batch *database.Batch, u *url.URL, prove bool,
 			}
 
 			res.Height = uint64(height)
-			res.ChainState = make([][]byte, len(state.Pending))
-			for i, h := range state.Pending {
-				res.ChainState[i] = h.Copy()
-			}
+			res.ChainState = state.Pending.Copy()
 
 			return []byte("tx"), res, nil
 		}
@@ -331,10 +322,7 @@ func (m *queryBackend) queryByUrl(batch *database.Batch, u *url.URL, prove bool,
 				}
 
 				res.Height = uint64(height)
-				res.ChainState = make([][]byte, len(state.Pending))
-				for i, h := range state.Pending {
-					res.ChainState[i] = h.Copy()
-				}
+				res.ChainState = state.Pending.Copy()
 
 				return []byte("tx"), res, nil
 			}
@@ -1214,10 +1202,26 @@ func (m *queryBackend) resolveTxReceipt(batch *database.Batch, txid []byte, entr
 	receipt.Chain = entry.Chain
 	receipt.Proof.Start = txid
 
+	// Build the receipt
 	account := batch.Account(entry.Account)
 	block, r, err := indexing.ReceiptForChainEntry(m.Options.Describe, batch, account, txid, entry)
 	if err != nil {
 		return receipt, err
+	}
+
+	// Find the major block
+	rxc, err := batch.Account(m.Describe.AnchorPool()).MajorBlockChain().Get()
+	if err != nil {
+		return nil, errors.Format(errors.StatusInternalError, "load root index chain: %w", err)
+	}
+	_, major, err := indexing.SearchIndexChain(rxc, 0, indexing.MatchAfter, indexing.SearchIndexChainByRootIndexIndex(entry.AnchorIndex))
+	switch {
+	case err == nil:
+		receipt.MajorBlock = major.BlockIndex
+	case errors.Is(err, errors.StatusNotFound):
+		// Not in a major block yet
+	default:
+		return nil, errors.Format(errors.StatusInternalError, "locate major block for root index entry %d: %w", entry.AnchorIndex, err)
 	}
 
 	receipt.LocalBlock = block

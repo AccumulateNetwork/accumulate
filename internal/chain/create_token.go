@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -13,13 +14,13 @@ var _ SignerValidator = (*CreateToken)(nil)
 
 func (CreateToken) Type() protocol.TransactionType { return protocol.TransactionTypeCreateToken }
 
-func (CreateToken) SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, checkAuthz bool) (fallback bool, err error) {
+func (CreateToken) SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, md SignatureValidationMetadata) (fallback bool, err error) {
 	body, ok := transaction.Body.(*protocol.CreateToken)
 	if !ok {
 		return false, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.CreateToken), transaction.Body)
 	}
 
-	return additionalAuthorities(body.Authorities).SignerIsAuthorized(delegate, batch, transaction, signer, checkAuthz)
+	return additionalAuthorities(body.Authorities).SignerIsAuthorized(delegate, batch, transaction, signer, md)
 }
 
 func (CreateToken) TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (ready, fallback bool, err error) {
@@ -41,6 +42,16 @@ func (CreateToken) Validate(st *StateManager, tx *Delivery) (protocol.Transactio
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.CreateToken), tx.Transaction.Body)
 	}
 
+	if body.Url == nil {
+		return nil, errors.Format(errors.StatusBadRequest, "account URL is missing")
+	}
+
+	for _, u := range body.Authorities {
+		if u == nil {
+			return nil, errors.Format(errors.StatusBadRequest, "authority URL is nil")
+		}
+	}
+
 	err := checkCreateAdiAccount(st, body.Url)
 	if err != nil {
 		return nil, err
@@ -48,6 +59,10 @@ func (CreateToken) Validate(st *StateManager, tx *Delivery) (protocol.Transactio
 
 	if body.Precision > 18 {
 		return nil, fmt.Errorf("precision must be in range 0 to 18")
+	}
+
+	if body.SupplyLimit != nil && body.SupplyLimit.Sign() < 0 {
+		return nil, fmt.Errorf("supply limit can't be a negative value")
 	}
 
 	token := new(protocol.TokenIssuer)

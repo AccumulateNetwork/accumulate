@@ -4,9 +4,42 @@
   // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
   "version": "0.2.0",
   "configurations": [
-
+    // Simulate
     {
-      "name": "Init DevNet",
+      "name": "Simulate (v2, in-memory)",
+      "presentation": { "group": "10-Simulate" },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/tools/cmd/simulator",
+      "args": [
+      ],
+    },
+    {
+      "name": "Simulate (v2, badger)",
+      "presentation": { "group": "10-Simulate" },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/tools/cmd/simulator",
+      "args": [
+        "--database=${workspaceFolder}/.nodes/sim"
+      ],
+    },
+    {
+      "name": "Simulate (v1)",
+      "presentation": { "group": "10-Simulate" },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/cmd/accumulated",
+      "args": ["run", "sim"]
+    },
+
+    // Run
+    {
+      "name": "Init (devnet)",
+      "presentation": { "group": "20-Run" },
       "type": "go",
       "request": "launch",
       "mode": "auto",
@@ -14,33 +47,17 @@
       "args": [
         "init",
         "devnet",
-        "-w",
-        "${workspaceFolder}/.nodes",
-        "--reset",
-        "-b",
-        "2",
-        "-v",
-        "1",
-        "-f",
-        "0"
-      ]
-    },
-    {
-      "name": "Init canary testnet",
-      "type": "go",
-      "request": "launch",
-      "mode": "auto",
-      "program": "${workspaceFolder}/cmd/accumulated",
-      "args": [
-        "init",
-        "network",
         "-w=${workspaceFolder}/.nodes",
         "--reset",
-        "${workspaceFolder}/networks/testnet-canary.json"
+        "-b=2",
+        "-v=1",
+        "-f=0",
+        // "--snapshot=${workspaceFolder}/.factom/import.snapshot",
       ]
     },
     {
-      "name": "Run DevNet",
+      "name": "Run (devnet)",
+      "presentation": { "group": "20-Run" },
       "type": "go",
       "request": "launch",
       "mode": "auto",
@@ -48,37 +65,13 @@
       "args": [
         "run",
         "devnet",
-        "-w",
-        "${workspaceFolder}/.nodes",
+        "-w=${workspaceFolder}/.nodes",
         "--truncate",
-        "--debug",
-        "-x=101"
       ]
     },
     {
-      "name": "Run Simulator",
-      "type": "go",
-      "request": "launch",
-      "mode": "auto",
-      "program": "${workspaceFolder}/cmd/accumulated",
-      "args": ["run", "sim"]
-    },
-    {
-      "name": "Run Playbook",
-      "type": "go",
-      "request": "launch",
-      "mode": "auto",
-      "program": "${workspaceFolder}/cmd/play-accumulate",
-      "args": [
-        "${workspaceFolder}/playbooks/validate/01-lite-token.play",
-        "${workspaceFolder}/playbooks/validate/02-identity.play",
-        "${workspaceFolder}/playbooks/validate/03-lite-data.play",
-        "${workspaceFolder}/playbooks/validate/04-token-issuer.play",
-        "${workspaceFolder}/playbooks/validate/05-delegation.play",
-      ]
-    },
-    {
-      "name": "Init and run DevNet",
+      "name": "Init and Run (devnet)",
+      "presentation": { "group": "20-Run" },
       "type": "go",
       "request": "launch",
       "mode": "auto",
@@ -94,7 +87,8 @@
       ]
     },
     {
-      "name": "Run Dual",
+      "name": "Run (dual)",
+      "presentation": { "group": "20-Run" },
       "type": "go",
       "request": "launch",
       "mode": "auto",
@@ -102,39 +96,30 @@
       "args": [
         "run-dual",
         "--truncate",
-        "--debug",
-        "${workspaceFolder}/.nodes/dn/Node0",
-        "${workspaceFolder}/.nodes/bvn0/Node0",
+        "${workspaceFolder}/.nodes/node-1/dnn",
+        "${workspaceFolder}/.nodes/node-1/bvnn",
       ]
     },
+
+    // Validate
     {
-      "name": "Run Node",
+      "name": "Validate: Playbooks (sim v1)",
+      "presentation": { "group": "80-Validate" },
       "type": "go",
       "request": "launch",
       "mode": "auto",
-      "program": "${workspaceFolder}/cmd/accumulated",
+      "program": "${workspaceFolder}/cmd/play-accumulate",
       "args": [
-        "run",
-        "-w",
-        "${workspaceFolder}/.nodes/bvn0",
-        "-n",
-        "101",
-        "--truncate",
+        "${workspaceFolder}/playbooks/validate/01-lite-token.play",
+        "${workspaceFolder}/playbooks/validate/02-identity.play",
+        "${workspaceFolder}/playbooks/validate/03-lite-data.play",
+        "${workspaceFolder}/playbooks/validate/04-token-issuer.play",
+        "${workspaceFolder}/playbooks/validate/05-delegation.play",
       ]
     },
     {
-      "name": "Run DevNet Test",
-      "type": "go",
-      "request": "launch",
-      "mode": "auto",
-      "program": "${workspaceFolder}/tools/test/devnet",
-      "cwd": "${workspaceFolder}",
-      "args": [
-        "-X=--reset,--debug",
-      ]
-    },
-    {
-      "name": "Run DevNet Playbook",
+      "name": "Validate: Playbooks (devnet)",
+      "presentation": { "group": "80-Validate" },
       "type": "go",
       "request": "launch",
       "mode": "auto",
@@ -145,31 +130,28 @@
         "${workspaceFolder}/playbooks/validate/01-lite-token.play",
         "${workspaceFolder}/playbooks/validate/02-identity.play",
         "${workspaceFolder}/playbooks/validate/03-lite-data.play",
+        "${workspaceFolder}/playbooks/validate/04-token-issuer.play",
+        "${workspaceFolder}/playbooks/validate/05-delegation.play",
       ]
     },
     {
-      "name": "Debug routing",
+      "name": "Validate: Script (devnet)",
+      "presentation": { "group": "80-Validate" },
       "type": "go",
       "request": "launch",
       "mode": "auto",
-      "program": "${workspaceFolder}/tools/cmd/debug",
+      "program": "${workspaceFolder}/tools/test/devnet",
+      "cwd": "${workspaceFolder}",
       "args": [
-        "account", "route",
-        "https://testnet.accumulatenetwork.io/v2",
-        "acc://defidevs"
+        "-X=--reset,--debug",
       ]
     },
-    {
-      "name": "Generate Test Data",
-      "type": "go",
-      "request": "launch",
-      "mode": "debug",
-      "program": "${workspaceFolder}/tools/cmd/gen-testdata",
-      "cwd": "${workspaceFolder}",
-      "args": ["${workspaceFolder}/.testdata/sdk.json"]
-    },
+
+
+    // Generator
     {
       "name": "Generate Types",
+      "presentation": { "group": "90-Generate" },
       "type": "go",
       "request": "launch",
       "mode": "debug",
@@ -179,6 +161,7 @@
     },
     {
       "name": "Generate Model",
+      "presentation": { "group": "90-Generate" },
       "type": "go",
       "request": "launch",
       "mode": "debug",
@@ -188,6 +171,7 @@
     },
     {
       "name": "Generate Protocol Types",
+      "presentation": { "group": "90-Generate" },
       "type": "go",
       "request": "launch",
       "mode": "debug",
@@ -208,32 +192,20 @@
       ]
     },
     {
-      "name": "Lint",
+      "name": "Generate Test Data",
+      "presentation": { "group": "90-Generate", },
       "type": "go",
       "request": "launch",
-      "mode": "auto",
-      "program": "${workspaceFolder}/tools/cmd/golangci-lint",
+      "mode": "debug",
+      "program": "${workspaceFolder}/tools/cmd/gen-testdata",
       "cwd": "${workspaceFolder}",
-      "args": ["run"]
+      "args": ["${workspaceFolder}/.testdata/sdk.json"]
     },
+
+    // Miscellaneous
     {
-      "name": "Factom Genesis",
-      "type": "go",
-      "request": "launch",
-      "mode": "auto",
-      "program": "${workspaceFolder}/tools/internal/factom-genesis/main",
-      "cwd": "${workspaceFolder}/tools/internal/factom-genesis/main",
-    },
-    {
-      "name": "Staking",
-      "type": "go",
-      "request": "launch",
-      "mode": "auto",
-      "program": "${workspaceFolder}/tools/cmd/staking",
-      "cwd": "/home/paul/tmp/staking",
-    },
-    {
-      "name": "Run CLI",
+      "name": "CLI",
+      "presentation": { "group": "99-Miscellaneous", },
       "type": "go",
       "request": "launch",
       "mode": "auto",
@@ -241,6 +213,7 @@
       "env": {
         "ACC_API": "local"
       },
+
       "cwd": "${workspaceFolder}",
       "args": [
         // "tx",
@@ -272,6 +245,80 @@
         // "keytest-1-0",
         // "keytest/manager"
       ]
-    }
+    },
+    {
+      "name": "Lint",
+      "presentation": { "group": "99-Miscellaneous", },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/tools/cmd/golangci-lint",
+      "cwd": "${workspaceFolder}",
+      "args": ["run"]
+    },
+    {
+      "name": "Debug routing",
+      "presentation": { "group": "99-Miscellaneous", },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/tools/cmd/debug",
+      "args": [
+        "account", "route",
+        "https://testnet.accumulatenetwork.io/v2",
+        "acc://defidevs"
+      ]
+    },
+    {
+      "name": "Import Factom",
+      "presentation": { "group": "99-Miscellaneous", },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/tools/cmd/factom",
+      "args": [
+        "convert",
+        "entries",
+        "${workspaceFolder}/.nodes/import",
+        "${workspaceFolder}/.factom/objects"
+      ]
+    },
+    {
+      "name": "Merge snapshots",
+      "presentation": { "group": "99-Miscellaneous", },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/tools/cmd/debug",
+      "args": [
+        "snapshot",
+        "concat",
+        "${workspaceFolder}/.nodes/import/all.snapshot",
+        "${workspaceFolder}/.nodes/import/factom-0.snapshot",
+      ]
+    },
+    {
+      "name": "Factom: entries -> chains",
+      "presentation": { "group": "99-Miscellaneous", },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/tools/cmd/factom",
+      "args": [
+        "convert",
+        "chains",
+        "--start-from=90000",
+        "${workspaceFolder}/.nodes/import",
+        "${workspaceFolder}/.nodes/import/factom-ldas.snapshot"
+      ]
+    },
+ {
+      "name": "Staking",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/tools/cmd/staking",
+      "cwd": "/home/paul/tmp/staking",
+    },
   ]
 }

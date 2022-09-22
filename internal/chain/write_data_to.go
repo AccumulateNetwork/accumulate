@@ -19,6 +19,10 @@ func (WriteDataTo) Validate(st *StateManager, tx *Delivery) (protocol.Transactio
 		return nil, errors.Format(errors.StatusInternalError, "invalid payload: want %T, got %T", new(protocol.WriteDataTo), tx.Transaction.Body)
 	}
 
+	if body.Recipient == nil {
+		return nil, errors.Format(errors.StatusBadRequest, "recipient is missing")
+	}
+
 	if body.Entry == nil {
 		return nil, errors.Format(errors.StatusBadRequest, "entry is missing")
 	}

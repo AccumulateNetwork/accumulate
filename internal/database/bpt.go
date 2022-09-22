@@ -2,20 +2,70 @@ package database
 
 import (
 	"bytes"
-	"encoding/binary"
-	"fmt"
 	"io"
 
-	"gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/smt/pmt"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
+
+func (b *Batch) VisitAccounts(visit func(*Account) error) error {
+	bpt := pmt.NewBPTManager(b.kvstore)
+
+	place := pmt.FirstPossibleBptKey
+	const window = 1000 //                                       Process this many BPT entries at a time
+	var count int       //                                       Recalculate number of nodes
+	for {
+		bptVals, next := bpt.Bpt.GetRange(place, int(window)) // Read a thousand values from the BPT
+		count += len(bptVals)
+		if len(bptVals) == 0 { //                                If there are none left, we break out
+			break
+		}
+		place = next                //                           We will get the next 1000 after the last 1000
+		for _, v := range bptVals { //                           For all the key values we got (as many as 1000)
+			u, err := b.getAccountUrl(record.Key{storage.Key(v.Key)}) //      Load the Account
+			if err != nil {
+				return errors.Wrap(errors.StatusUnknownError, err)
+			}
+			err = visit(b.Account(u))
+			if err != nil {
+				return errors.Wrap(errors.StatusUnknownError, err)
+			}
+		}
+	}
+	return nil
+}
+
+func (b *Batch) SaveAccounts(file io.WriteSeeker, collect func(*Account) ([]byte, error)) error {
+	bpt := pmt.NewBPTManager(b.kvstore)
+	err := bpt.Bpt.SaveSnapshot(file, func(key storage.Key, hash [32]byte) ([]byte, error) {
+		// Create an Account object
+		u, err := b.getAccountUrl(record.Key{key})
+		if err != nil {
+			return nil, errors.Wrap(errors.StatusUnknownError, err)
+		}
+		account := b.Account(u)
+
+		// Check the hash
+		hasher, err := account.hashState()
+		if err != nil {
+			return nil, errors.Format(errors.StatusUnknownError, "hash %v: %w", u, err)
+		}
+
+		if !bytes.Equal(hash[:], hasher.MerkleHash()) {
+			return nil, errors.Format(errors.StatusConflict, "hash does not match for %v", u)
+		}
+
+		state, err := collect(account)
+		if err != nil {
+			return nil, errors.Format(errors.StatusUnknownError, "collect %v: %w", u, err)
+		}
+		return state, nil
+	})
+	return errors.Wrap(errors.StatusUnknownError, err)
+}
 
 // putBpt adds an entry to the list of pending BPT updates.
 func (b *Batch) putBpt(key storage.Key, hash [32]byte) {
@@ -31,6 +81,10 @@ func (b *Batch) putBpt(key storage.Key, hash [32]byte) {
 
 // commitBpt commits pending BPT updates.
 func (b *Batch) commitBpt() error {
+	if len(b.bptEntries) == 0 {
+		return nil
+	}
+
 	bpt := pmt.NewBPTManager(b.kvstore)
 
 	for k, v := range b.bptEntries {
@@ -69,211 +123,4 @@ func (b *Batch) BptReceipt(key storage.Key, value [32]byte) (*managed.Receipt, e
 	}
 
 	return receipt, nil
-}
-
-func (h *snapshotHeader) WriteTo(wr io.Writer) (int64, error) {
-	b, err := h.MarshalBinary()
-	if err != nil {
-		return 0, errors.Format(errors.StatusEncodingError, "marshal: %w", err)
-	}
-
-	var v [8]byte
-	binary.BigEndian.PutUint64(v[:], uint64(len(b)))
-	n, err := wr.Write(v[:])
-	if err != nil {
-		return int64(n), errors.Format(errors.StatusEncodingError, "write length: %w", err)
-	}
-
-	m, err := wr.Write(b)
-	if err != nil {
-		return int64(n + m), errors.Format(errors.StatusEncodingError, "write data: %w", err)
-	}
-
-	return int64(n + m), nil
-}
-
-func (h *snapshotHeader) ReadFrom(rd io.Reader) (int64, error) {
-	var v [8]byte
-	n, err := io.ReadFull(rd, v[:])
-	if err != nil {
-		return int64(n), errors.Format(errors.StatusEncodingError, "read length: %w", err)
-	}
-
-	l := binary.BigEndian.Uint64(v[:])
-	b := make([]byte, l)
-	m, err := io.ReadFull(rd, b)
-	if err != nil {
-		return int64(n + m), errors.Format(errors.StatusEncodingError, "read data: %w", err)
-	}
-
-	err = h.UnmarshalBinary(b)
-	if err != nil {
-		return int64(n + m), errors.Format(errors.StatusEncodingError, "unmarshal: %w", err)
-	}
-
-	return int64(n + m), nil
-}
-
-// SaveSnapshot writes the full state of the partition out to a file.
-func (b *Batch) SaveSnapshot(file io.WriteSeeker, network *config.Describe) error {
-	// Write the header
-	var ledger *protocol.SystemLedger
-	err := b.Account(network.Ledger()).GetStateAs(&ledger)
-	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "load ledger: %w", err)
-	}
-
-	bpt := pmt.NewBPTManager(b.kvstore)
-	header := new(snapshotHeader)
-	header.Version = core.SnapshotVersion1
-	header.Height = ledger.Index
-	header.RootHash = *(*[32]byte)(b.BptRoot())
-
-	_, err = header.WriteTo(file)
-	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "write header: %w", err)
-	}
-
-	// Create a section writer starting after the header
-	wr, err := ioutil2.NewSectionWriter(file, -1, -1)
-	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "create section writer: %w", err)
-	}
-
-	// This must match how the model constructs the key
-	anchorLedgerKey := storage.MakeKey("Account", network.AnchorPool())
-
-	// Save the snapshot
-	return bpt.Bpt.SaveSnapshot(wr, func(key storage.Key, hash [32]byte) ([]byte, error) {
-		// Create an Account object
-		u, err := b.getAccountUrl(record.Key{key})
-		if err != nil {
-			return nil, errors.Wrap(errors.StatusUnknownError, err)
-		}
-		account := b.Account(u)
-
-		// Check the hash
-		hasher, err := account.hashState()
-		if err != nil {
-			return nil, err
-		}
-
-		if !bytes.Equal(hash[:], hasher.MerkleHash()) {
-			return nil, fmt.Errorf("hash does not match for %v", u)
-		}
-
-		/*// Load the full state - preserve chains if the account is a partition account
-		state, err := account.state(true, partition.PrefixOf(a.GetUrl()))*/
-
-		// Load the full state - always preserve chains for now
-		state, err := account.loadState(true)
-		if err != nil {
-			return nil, err
-		}
-
-		/*if objectBucket(key) != synthetic {
-			return state.MarshalBinary()
-		}*/
-
-		// Load transactions and signatures
-		state.Transactions = append(state.Transactions, loadState(&err, false, account.MainChain().stateOfTransactionsOnChain)...)
-		state.Transactions = append(state.Transactions, loadState(&err, false, account.ScratchChain().stateOfTransactionsOnChain)...)
-		state.Signatures = append(state.Signatures, loadState(&err, false, account.SignatureChain().stateOfSignaturesOnChain)...)
-
-		// Load transactions for system chains
-		if key == anchorLedgerKey {
-			state.Transactions = append(state.Transactions, loadState(&err, false, account.AnchorSequenceChain().stateOfTransactionsOnChain)...)
-		}
-
-		b := loadState(&err, false, state.MarshalBinary)
-		return b, err
-	})
-}
-
-// ReadSnapshot reads a snapshot file, returning the header values and a reader.
-func ReadSnapshot(file ioutil2.SectionReader) (*snapshotHeader, int64, error) {
-	header := new(snapshotHeader)
-	n, err := header.ReadFrom(file)
-	if err != nil {
-		return nil, 0, errors.Format(errors.StatusUnknownError, "read header: %w", err)
-	}
-
-	return header, n, nil
-}
-
-// RestoreSnapshot loads the full state of the partition from a file.
-func (b *Batch) RestoreSnapshot(file ioutil2.SectionReader, network *config.Describe) error {
-	// Read the snapshot
-	_, _, err := ReadSnapshot(file)
-	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
-	}
-
-	// Make a new section reader starting after the header
-	rd, err := ioutil2.NewSectionReader(file, -1, -1)
-	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
-	}
-
-	// Load the snapshot
-	bpt := pmt.NewBPTManager(b.kvstore)
-	err = bpt.Bpt.LoadSnapshot(rd, func(key storage.Key, hash [32]byte, reader ioutil2.SectionReader) error {
-		state := new(accountState)
-		err := state.UnmarshalBinaryFrom(reader)
-		if err != nil {
-			return err
-		}
-
-		account := b.Account(state.Main.GetUrl())
-		if account.key.Hash() != key {
-			return errors.Format(errors.StatusInternalError, "hash key %x does not match URL %v", key, state.Main.GetUrl())
-		}
-
-		err = account.restoreState(state)
-		if err != nil {
-			return err
-		}
-
-		// Check the hash
-		hasher, err := account.hashState()
-		if err != nil {
-			return err
-		}
-
-		if !bytes.Equal(hash[:], hasher.MerkleHash()) {
-			return fmt.Errorf("hash does not match for %v", state.Main.GetUrl())
-		}
-
-		return nil
-	})
-	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
-	}
-
-	// Rebuild the synthetic transaction index index
-	record := b.Account(network.Synthetic())
-	synthIndexChain, err := record.MainChain().Index().Get()
-	if err != nil {
-		return errors.Format(errors.StatusInternalError, "load synthetic index chain: %w", err)
-	}
-
-	entries, err := synthIndexChain.Entries(0, synthIndexChain.Height())
-	if err != nil {
-		return errors.Format(errors.StatusInternalError, "load synthetic index chain entries: %w", err)
-	}
-
-	for i, data := range entries {
-		entry := new(protocol.IndexEntry)
-		err = entry.UnmarshalBinary(data)
-		if err != nil {
-			return errors.Format(errors.StatusInternalError, "unmarshal synthetic index chain entry %d: %w", i, err)
-		}
-
-		err = b.SystemData(network.PartitionId).SyntheticIndexIndex(entry.BlockIndex).Put(uint64(i))
-		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "store synthetic transaction index index %d for block: %w", i, err)
-		}
-	}
-
-	return nil
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -13,13 +14,13 @@ var _ SignerValidator = (*CreateKeyBook)(nil)
 
 func (CreateKeyBook) Type() protocol.TransactionType { return protocol.TransactionTypeCreateKeyBook }
 
-func (CreateKeyBook) SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, checkAuthz bool) (fallback bool, err error) {
+func (CreateKeyBook) SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, md SignatureValidationMetadata) (fallback bool, err error) {
 	body, ok := transaction.Body.(*protocol.CreateKeyBook)
 	if !ok {
 		return false, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.CreateKeyBook), transaction.Body)
 	}
 
-	return additionalAuthorities(body.Authorities).SignerIsAuthorized(delegate, batch, transaction, signer, checkAuthz)
+	return additionalAuthorities(body.Authorities).SignerIsAuthorized(delegate, batch, transaction, signer, md)
 }
 
 func (CreateKeyBook) TransactionIsReady(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, status *protocol.TransactionStatus) (ready, fallback bool, err error) {
@@ -41,9 +42,28 @@ func (CreateKeyBook) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.CreateKeyBook), tx.Transaction.Body)
 	}
 
+	if body.Url == nil {
+		return nil, errors.Format(errors.StatusBadRequest, "account URL is missing")
+	}
+
+	for _, u := range body.Authorities {
+		if u == nil {
+			return nil, errors.Format(errors.StatusBadRequest, "authority URL is nil")
+		}
+	}
+
 	err := checkCreateAdiAccount(st, body.Url)
 	if err != nil {
 		return nil, err
+	}
+
+	switch len(body.PublicKeyHash) {
+	case 0:
+		return nil, errors.Format(errors.StatusBadRequest, "public key hash is missing")
+	case 32:
+		// Ok
+	default:
+		return nil, errors.Format(errors.StatusBadRequest, "public key hash length is invalid")
 	}
 
 	book := new(protocol.KeyBook)

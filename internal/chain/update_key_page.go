@@ -17,7 +17,7 @@ func (UpdateKeyPage) Type() protocol.TransactionType {
 	return protocol.TransactionTypeUpdateKeyPage
 }
 
-func (UpdateKeyPage) SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, checkAuthz bool) (fallback bool, err error) {
+func (UpdateKeyPage) SignerIsAuthorized(delegate AuthDelegate, batch *database.Batch, transaction *protocol.Transaction, signer protocol.Signer, md SignatureValidationMetadata) (fallback bool, err error) {
 	principalBook, principalPageIdx, ok := protocol.ParseKeyPageUrl(transaction.Header.Principal)
 	if !ok {
 		return false, errors.Format(errors.StatusBadRequest, "principal is not a key page")
@@ -48,6 +48,10 @@ func (UpdateKeyPage) SignerIsAuthorized(delegate AuthDelegate, batch *database.B
 				}
 			}
 		}
+	}
+
+	if !md.Location.LocalTo(transaction.Header.Principal) {
+		return true, nil
 	}
 
 	// Signers belonging to new delegates are authorized to sign the transaction

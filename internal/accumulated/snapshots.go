@@ -15,22 +15,12 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 )
-
-func (d *Daemon) onDidCommitBlock(event events.DidCommitBlock) error {
-	if event.Major == 0 {
-		return nil
-	}
-
-	// Begin the batch synchronously immediately after commit
-	batch := d.db.Begin(false)
-	go d.collectSnapshot(batch, event.Major, event.Index)
-	return nil
-}
 
 func (d *Daemon) collectSnapshot(batch *database.Batch, majorBlock, minorBlock uint64) {
 	defer func() {
@@ -62,7 +52,7 @@ func (d *Daemon) collectSnapshot(batch *database.Batch, majorBlock, minorBlock u
 		}
 	}()
 
-	err = batch.SaveSnapshot(file, &d.Config.Accumulate.Describe)
+	err = snapshot.FullCollect(batch, file, &d.Config.Accumulate.Describe)
 	if err != nil {
 		d.Logger.Error("Failed to create snapshot", "error", err, "major-block", majorBlock, "minor-block", minorBlock, "module", "snapshot")
 		return
@@ -133,11 +123,12 @@ func (d *Daemon) LoadSnapshot(file ioutil2.SectionReader) error {
 	eventBus := events.NewBus(d.Logger.With("module", "events"))
 	router := routing.NewRouter(eventBus, nil)
 	execOpts := block.ExecutorOptions{
-		Logger:   d.Logger,
-		Key:      pv.Key.PrivKey.Bytes(),
-		Describe: d.Config.Accumulate.Describe,
-		Router:   router,
-		EventBus: eventBus,
+		Logger:     d.Logger,
+		Key:        pv.Key.PrivKey.Bytes(),
+		Describe:   d.Config.Accumulate.Describe,
+		Router:     router,
+		EventBus:   eventBus,
+		IsFollower: true,
 	}
 
 	// On DNs initialize the major block scheduler
