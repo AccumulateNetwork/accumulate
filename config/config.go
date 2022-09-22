@@ -127,7 +127,6 @@ func Default(netName string, net NetworkType, node NodeType, partitionId string)
 	c.Accumulate.NetworkType = net
 	c.Accumulate.PartitionId = partitionId
 	c.Accumulate.API.PrometheusServer = "http://18.119.26.7:9090"
-	c.Accumulate.SentryDSN = "https://glet_78c3bf45d009794a4d9b0c990a1f1ed5@gitlab.com/api/v4/error_tracking/collector/29762666"
 	c.Accumulate.Website.Enabled = true
 	c.Accumulate.API.TxMaxWaitTime = 10 * time.Minute
 	c.Accumulate.API.EnableDebugMethods = true
@@ -158,8 +157,8 @@ type Config struct {
 }
 
 type Accumulate struct {
-	SentryDSN string `toml:"sentry-dsn" mapstructure:"sentry-dsn"`
-	Describe  `toml:"describe" mapstructure:"describe"`
+	// SentryDSN string `toml:"sentry-dsn" mapstructure:"sentry-dsn"`
+	Describe `toml:"describe" mapstructure:"describe"`
 	// TODO: move network config to its own file since it will be constantly changing over time.
 	//	NetworkConfig string      `toml:"network" mapstructure:"network"`
 	Snapshots   Snapshots   `toml:"snapshots" mapstructure:"snapshots"`
