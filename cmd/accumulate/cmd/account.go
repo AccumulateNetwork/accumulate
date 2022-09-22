@@ -381,12 +381,6 @@ func GenerateAccount(_ *cobra.Command, args []string) (string, error) {
 	return GenerateKey("")
 }
 
-type response struct {
-	LiteIdentities []*KeyResponse
-	ADIs           map[string]string
-	Mnemonics      string
-}
-
 func ListAccounts() (string, error) {
 	b, err := walletd.GetWallet().GetBucket(walletd.BucketLite)
 	if err != nil {
@@ -511,7 +505,7 @@ func ExportAccounts(filePath string) error {
 		return fmt.Errorf("no lite accounts have been generated")
 	}
 	//var res []*KeyResponse
-	for i, _ := range b.KeyValueList {
+	for i := range b.KeyValueList {
 		k := new(walletd.Key)
 		err = k.LoadByPublicKey(b.KeyValueList[i].Value)
 		if err != nil {
@@ -526,7 +520,7 @@ func ExportAccounts(filePath string) error {
 	}
 
 	l, err := walletd.GetWallet().GetBucket(walletd.BucketLite)
-	for i, _ := range l.KeyValueList {
+	for i := range l.KeyValueList {
 		label := api2.LiteLabel{}
 		label.LiteName = string(l.KeyValueList[i].Key)
 		label.KeyName = string(l.KeyValueList[i].Value)
@@ -594,7 +588,7 @@ func ExportAccounts(filePath string) error {
 		}
 	}
 
-	bytes, err := json.MarshalIndent(&res, "", "  ")
+	bin, err := json.MarshalIndent(&res, "", "  ")
 
 	if err != nil {
 		return err
@@ -611,7 +605,7 @@ func ExportAccounts(filePath string) error {
 				return err
 			}
 			defer file.Close()
-			_, err = io.Copy(file, strings.NewReader(string(bytes)))
+			_, err = io.Copy(file, strings.NewReader(string(bin)))
 			if err != nil {
 				return err
 			}
@@ -625,7 +619,7 @@ func ExportAccounts(filePath string) error {
 			return err
 		}
 		defer out.Close()
-		_, err = io.Copy(out, strings.NewReader(string(bytes)))
+		_, err = io.Copy(out, strings.NewReader(string(bin)))
 		if err != nil {
 			return err
 		}
@@ -654,7 +648,10 @@ func ImportAccounts(filePath string) error {
 	for _, v := range req.SeedInfo.Derivations {
 		var b [4]byte
 		binary.LittleEndian.PutUint32(b[:], uint32(v.Count))
-		walletd.GetWallet().Put(walletd.BucketMnemonic, []byte(v.Type.String()), b[:])
+		err = walletd.GetWallet().Put(walletd.BucketMnemonic, []byte(v.Type.String()), b[:])
+		if err != nil {
+			log.Printf("failed to set derivation counter for %s", v.Type.String())
+		}
 	}
 
 	for _, v := range req.Keys {
@@ -678,15 +675,13 @@ func ImportAccounts(filePath string) error {
 		err = walletd.GetWallet().Put(walletd.BucketLabel, []byte(v.Name), v.PublicKey)
 		if err != nil {
 			log.Printf("failed to store bucket label %s for key %x, %v", v.Name, v.PublicKey, err)
-			continue
 		}
 	}
 
 	for _, v := range req.LiteLabels {
-		walletd.GetWallet().Put(walletd.BucketLite, []byte(v.LiteName), []byte(v.KeyName))
+		err = walletd.GetWallet().Put(walletd.BucketLite, []byte(v.LiteName), []byte(v.KeyName))
 		if err != nil {
 			log.Printf("failed to store bucket lite label %s for key name %s, %v", v.LiteName, v.KeyName, err)
-			continue
 		}
 	}
 
@@ -701,11 +696,13 @@ func ImportAccounts(filePath string) error {
 			log.Printf("skipping adi import, %s, missing key in page", adi.Url.String())
 			continue
 		}
+
 		k, err := walletd.LookupByLabel(adi.Pages[0].KeyNames[0])
 		if err != nil {
 			log.Printf("skipping adi import, %s, cannot find key for name %s", adi.Url.String(), adi.Pages[0].KeyNames[0])
 			continue
 		}
+
 		err = walletd.GetWallet().Put(walletd.BucketAdi, []byte(adi.Url.Authority), k.PublicKey)
 		if err != nil {
 			log.Printf("skipping adi import for %s with key %s DB error: %v", adi.Url.String(), adi.Pages[0].KeyNames[0], err)
