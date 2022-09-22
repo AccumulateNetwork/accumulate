@@ -48,10 +48,22 @@ done
 
 accumulate account get ${RECV_LITE_ACME} 1> /dev/null && success || die "Cannot find ${RECV_LITE_ACME}"
 echo receiver balance before send tokens:
+accumulate account get ${RECV_LITE_ACME}
 accumulate account get ${RECV_LITE_ID}
 
 
-section "Send tokens from the ledger token account to the receiver token account"
+section "Send tokens from the ledger lite token account to the receiver lite token account"
+TXID=$(cli-tx tx create ${LITE_ACME} ledgerkey1 ${RECV_LITE_ACME} 2)
+wait-for-tx $TXID
+accumulate -j tx get $TXID | jq -re .status.pending 1> /dev/null || die "Transaction is not pending"
+accumulate -j tx get $TXID | jq -re .status.delivered 1> /dev/null && die "Transaction was delivered"
+success
+echo liteid balance:
+accumulate account get ${LITE_ACME}
+echo receiver balance after send tokens:
+accumulate account get ${RECV_LITE_ACME}
+
+section "Send credits from the ledger lite token account to the receiver lite ID"
 wait-for cli-tx credits ${LITE_ACME} ${RECV_LITE_ID} 5
 echo liteid balance:
 accumulate account get ${LITE_ACME}
