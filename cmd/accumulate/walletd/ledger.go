@@ -39,7 +39,7 @@ func NewLedgerApi(debugLogging bool) (*LedgerApi, error) {
 
 func NewLedgerSigner(key *Key) (*LedgerSigner, error) {
 	if key.KeyInfo.WalletID == nil {
-		return nil, errors.New(fmt.Sprintf("the given key is not on a Ledger device"))
+		return nil, fmt.Errorf("the given key is not on a Ledger device")
 	}
 
 	ledgerApi, err := NewLedgerApi(false) // FIXME
@@ -61,20 +61,20 @@ func NewLedgerSigner(key *Key) (*LedgerSigner, error) {
 	return signer, nil
 }
 
-func (m *JrpcMethods) GetLedgerInfo(_ context.Context, params json.RawMessage) interface{} {
-	resp := &api.LedgerWalletInfoResponse{}
+func (m *JrpcMethods) LedgerQueryWallets(_ context.Context, params json.RawMessage) interface{} {
+	resp := &api.LedgerWalletResponse{}
 	hub, err := NewLedgerApi(false)
 	if err != nil {
 		return validatorError(err)
 	}
-	resp.LedgerWalletsInfo, err = hub.QueryLedgerWalletsInfo()
+	resp.LedgerWalletsInfo, err = hub.QueryWallets()
 	if err != nil {
 		return validatorError(err)
 	}
 	return resp
 }
 
-func (la *LedgerApi) QueryLedgerWalletsInfo() ([]api.LedgerWalletInfo, error) {
+func (la *LedgerApi) QueryWallets() ([]api.LedgerWalletInfo, error) {
 	wallets := la.hub.Wallets()
 	var ledgerInfos []api.LedgerWalletInfo
 	for _, wallet := range wallets {
@@ -125,6 +125,31 @@ func (la *LedgerApi) Wallets() []accounts.Wallet {
 	return la.hub.Wallets()
 }
 
+func (m *JrpcMethods) LedgerGenerateKey(_ context.Context, params json.RawMessage) interface{} {
+	req := &api.GenerateLedgerKeyRequest{}
+	err := json.Unmarshal(params, req)
+	if err != nil {
+		return validatorError(err)
+	}
+
+	ledgerApi, err := NewLedgerApi(false)
+	if err != nil {
+		return validatorError(err)
+	}
+
+	selWallet, err := ledgerApi.SelectWallet(req.WalletID)
+	if err != nil {
+		return validatorError(err)
+	}
+
+	keyData, err := ledgerApi.GenerateKey(selWallet, req.KeyLabel)
+	if err != nil {
+		return validatorError(err)
+	}
+	return keyData
+
+}
+
 func (la *LedgerApi) GenerateKey(wallet accounts.Wallet, label string) (*api.KeyData, error) {
 	// make sure the key name doesn't already exist
 	k := new(Key)
@@ -158,14 +183,14 @@ func (la *LedgerApi) GenerateKey(wallet accounts.Wallet, label string) (*api.Key
 		address += 0x80000000
 	}
 	derivation = bip44.Derivation{derivation.Purpose(), derivation.CoinType(), derivation.Account(), chain, address}
-	account, err := wallet.Derive(derivation, false, true)
+	account, err := wallet.Derive(derivation, false, true, label)
 	if err != nil {
-		return nil, errors.New(fmt.Sprintf("derive function failed on ledger wallet: %v", err))
+		return nil, fmt.Errorf("derive function failed on ledger wallet: %v", err)
 	}
 	derivationPath, err := derivation.ToPath()
 	walletID := wallet.WalletID()
 	if wallet == nil {
-		return nil, errors.New(fmt.Sprintf("could not derive wallet ID: %v", err))
+		return nil, fmt.Errorf("could not derive wallet ID: %v", err)
 	}
 
 	key := &Key{
@@ -180,7 +205,11 @@ func (la *LedgerApi) GenerateKey(wallet accounts.Wallet, label string) (*api.Key
 	if err != nil {
 		return nil, err
 	}
-	key.Save(label, account.LiteAccount.String())
+
+	err = key.Save(label, account.LiteAccount.String())
+	if err != nil {
+		return nil, err
+	}
 
 	return &api.KeyData{
 		Name:       label,
@@ -200,8 +229,7 @@ func (la *LedgerApi) SelectWallet(walletID string) (accounts.Wallet, error) {
 	case walletCnt == 0:
 		return nil, errors.New("no wallets found, please check if your wallet and the Accumulate app on it are online")
 	case walletCnt > 1 && len(walletID) == 0:
-		return nil, errors.New(
-			fmt.Sprintf("there is more than wallets available (%d), please use the --wallet-id flag to select the correct wallet", walletCnt))
+		return nil, fmt.Errorf("there is more than wallets available (%d), please use the --wallet-id flag to select the correct wallet", walletCnt)
 	}
 
 	var selWallet accounts.Wallet
@@ -222,9 +250,8 @@ func (la *LedgerApi) SelectWallet(walletID string) (accounts.Wallet, error) {
 	}
 
 	if selWallet == nil {
-		return nil, errors.New(
-			fmt.Sprintf("No wallet with ID %s could be found on an active Ledger device.\nPlease use the \"accumulate ledger info\" command to identify "+
-				"the connected wallets, make sure the Accumulate app is ready and the device is not locked.", walletID))
+		return nil, fmt.Errorf("No wallet with ID %s could be found on an active Ledger device.\nPlease use the \"accumulate ledger info\" command to identify "+
+			"the connected wallets, make sure the Accumulate app is ready and the device is not locked.", walletID)
 	}
 	return selWallet, nil
 }

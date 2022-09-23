@@ -56,7 +56,14 @@ NewSendTokensTransaction:
   input: api.NewTransactionRequest
   output: protocol.SendTokens
 
-GetLedgerInfo:
+LedgerQueryWallets:
   description: returns the version of an external ledger device
   rpc: ledger-info
-  output: api.LedgerInfoResponse
+  output: api.LedgerWalletResponse
+
+LedgerGenerateKey:
+  description: generate a key on a ledger device
+  rpc: ledger-key-generate
+  input: api.GenerateLedgerKeyRequest
+  output: api.KeyData
+

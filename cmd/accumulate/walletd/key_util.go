@@ -177,7 +177,7 @@ func GenerateKey(sigtype protocol.SignatureType) (k *Key, err error) {
 }
 
 func GenerateKeyFromHDPath(derivationPath string, sigtype protocol.SignatureType) (*Key, error) {
-	hd := Derivation{}
+	hd := bip44.Derivation{}
 	err := hd.FromPath(derivationPath)
 	if err != nil {
 		return nil, err

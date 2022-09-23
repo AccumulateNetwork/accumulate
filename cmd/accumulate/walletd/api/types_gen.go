@@ -107,6 +107,11 @@ type FinalizeEnvelopeRequest struct {
 	Name string `json:"name,omitempty" form:"name" query:"name" validate:"required"`
 }
 
+type GenerateLedgerKeyRequest struct {
+	KeyLabel string `json:"keyLabel,omitempty" form:"keyLabel" query:"keyLabel" validate:"required"`
+	WalletID string `json:"walletID,omitempty" form:"walletID" query:"walletID"`
+}
+
 type KeyData struct {
 	Name       string                 `json:"name,omitempty" form:"name" query:"name" validate:"required"`
 	PublicKey  []byte                 `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
@@ -129,7 +134,7 @@ type LedgerWalletInfo struct {
 	WalletID     *url.URL `json:"walletID,omitempty" form:"walletID" query:"walletID" validate:"required"`
 }
 
-type LedgerWalletInfoResponse struct {
+type LedgerWalletResponse struct {
 	LedgerWalletsInfo []LedgerWalletInfo `json:"ledgerWalletsInfo,omitempty" form:"ledgerWalletsInfo" query:"ledgerWalletsInfo" validate:"required"`
 }
 
@@ -385,6 +390,17 @@ func (v *FinalizeEnvelopeRequest) Copy() *FinalizeEnvelopeRequest {
 
 func (v *FinalizeEnvelopeRequest) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *GenerateLedgerKeyRequest) Copy() *GenerateLedgerKeyRequest {
+	u := new(GenerateLedgerKeyRequest)
+
+	u.KeyLabel = v.KeyLabel
+	u.WalletID = v.WalletID
+
+	return u
+}
+
+func (v *GenerateLedgerKeyRequest) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *KeyData) Copy() *KeyData {
 	u := new(KeyData)
 
@@ -430,8 +446,8 @@ func (v *LedgerWalletInfo) Copy() *LedgerWalletInfo {
 
 func (v *LedgerWalletInfo) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *LedgerWalletInfoResponse) Copy() *LedgerWalletInfoResponse {
-	u := new(LedgerWalletInfoResponse)
+func (v *LedgerWalletResponse) Copy() *LedgerWalletResponse {
+	u := new(LedgerWalletResponse)
 
 	u.LedgerWalletsInfo = make([]LedgerWalletInfo, len(v.LedgerWalletsInfo))
 	for i, v := range v.LedgerWalletsInfo {
@@ -441,7 +457,7 @@ func (v *LedgerWalletInfoResponse) Copy() *LedgerWalletInfoResponse {
 	return u
 }
 
-func (v *LedgerWalletInfoResponse) CopyAsInterface() interface{} { return v.Copy() }
+func (v *LedgerWalletResponse) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *NewTransactionRequest) Copy() *NewTransactionRequest {
 	u := new(NewTransactionRequest)
@@ -719,6 +735,17 @@ func (v *FinalizeEnvelopeRequest) Equal(u *FinalizeEnvelopeRequest) bool {
 	return true
 }
 
+func (v *GenerateLedgerKeyRequest) Equal(u *GenerateLedgerKeyRequest) bool {
+	if !(v.KeyLabel == u.KeyLabel) {
+		return false
+	}
+	if !(v.WalletID == u.WalletID) {
+		return false
+	}
+
+	return true
+}
+
 func (v *KeyData) Equal(u *KeyData) bool {
 	if !(v.Name == u.Name) {
 		return false
@@ -783,7 +810,7 @@ func (v *LedgerWalletInfo) Equal(u *LedgerWalletInfo) bool {
 	return true
 }
 
-func (v *LedgerWalletInfoResponse) Equal(u *LedgerWalletInfoResponse) bool {
+func (v *LedgerWalletResponse) Equal(u *LedgerWalletResponse) bool {
 	if len(v.LedgerWalletsInfo) != len(u.LedgerWalletsInfo) {
 		return false
 	}
@@ -1131,7 +1158,7 @@ func (v *KeyListResponse) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
-func (v *LedgerWalletInfoResponse) MarshalJSON() ([]byte, error) {
+func (v *LedgerWalletResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
 		LedgerWalletsInfo encoding.JsonList[LedgerWalletInfo] `json:"ledgerWalletsInfo,omitempty"`
 	}{}
@@ -1334,7 +1361,7 @@ func (v *KeyListResponse) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (v *LedgerWalletInfoResponse) UnmarshalJSON(data []byte) error {
+func (v *LedgerWalletResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
 		LedgerWalletsInfo encoding.JsonList[LedgerWalletInfo] `json:"ledgerWalletsInfo,omitempty"`
 	}{}

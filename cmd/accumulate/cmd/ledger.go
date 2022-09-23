@@ -21,7 +21,7 @@ var ledgerInfoCmd = &cobra.Command{
 	Use:   "info --walletID [wallet id] (optional) --debug",
 	Short: "get list of wallets with their info",
 	Run: func(cmd *cobra.Command, args []string) {
-		out, err := queryWalletsInfo(cmd, args)
+		out, err := queryWallets(cmd, args)
 		printOutput(cmd, out, err)
 	},
 }
@@ -44,12 +44,12 @@ func init() {
 	ledgerKeyGenerateCmd.Flags().BoolVar(&debug, "debug", false, "set debug loggin gon")
 }
 
-func queryWalletsInfo(cmd *cobra.Command, args []string) (string, error) {
+func queryWallets(cmd *cobra.Command, args []string) (string, error) {
 	ledgerApi, err := walletd.NewLedgerApi(debug)
 	if err != nil {
 		return "", err
 	}
-	ledgerInfos, err := ledgerApi.QueryLedgerWalletsInfo()
+	ledgerInfos, err := ledgerApi.QueryWallets()
 	if err != nil {
 		return "", err
 	}

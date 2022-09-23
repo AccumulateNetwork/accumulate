@@ -247,10 +247,19 @@ LedgerWalletInfo:
       pointer: true
 
 
-LedgerWalletInfoResponse:
+LedgerWalletResponse:
   non-binary: true
   fields:
     - name: LedgerWalletsInfo
       type: LedgerWalletInfo
       repeatable: true
       marshal-as: reference
+
+GenerateLedgerKeyRequest:
+  non-binary: true
+  fields:
+    - name: KeyLabel
+      type: string
+    - name: WalletID
+      type: string
+      optional: true

@@ -296,7 +296,7 @@ func ParseDerivationPath(path string) (Derivation, error) {
 
 func NewDerivationPath(signatureType protocol.SignatureType) (d Derivation, e error) {
 	switch signatureType {
-	case protocol.SignatureTypeBTC:
+	case protocol.SignatureTypeBTC, protocol.SignatureTypeBTCLegacy:
 		d = DefaultBitcoinBaseDerivationPath
 	case protocol.SignatureTypeRCD1:
 		d = DefaultFactoidBaseDerivationPath
@@ -338,10 +338,10 @@ func (d *Derivation) FromPath(path string) error {
 	return d.Validate()
 }
 
-// DeduceSignatureType get signature type from coin type, note: this will only return the btc signature type
+// SignatureType get signature type from coin type, note: this will only return the btc signature type
 // for TypeBitcoin, thus if the user wants a legacy btc address, it won't be able to get one if
 // the type is deduced via this function.
-func (d Derivation) DeduceSignatureType() protocol.SignatureType {
+func (d Derivation) SignatureType() protocol.SignatureType {
 	t := protocol.SignatureTypeUnknown
 	//derivationPath
 	switch d.CoinType() {
