@@ -14,11 +14,10 @@ import (
 )
 
 type TransactionBuilder struct {
-	transaction  build.TransactionBuilder
-	signer       signing.Builder
-	transactions map[[32]byte]*protocol.Transaction
-	signatures   []protocol.Signature
-	SkipChecks   bool
+	transaction build.TransactionBuilder
+	signer      signing.Builder
+	signatures  []protocol.Signature
+	SkipChecks  bool
 }
 
 func NewTransaction() TransactionBuilder {
@@ -102,13 +101,6 @@ func (tb *TransactionBuilder) buildTxn() *protocol.Transaction {
 	if err != nil {
 		panic(err)
 	}
-	if txn, ok := tb.transactions[txn.ID().Hash()]; ok {
-		return txn
-	}
-	if tb.transactions == nil {
-		tb.transactions = map[[32]byte]*protocol.Transaction{}
-	}
-	tb.transactions[txn.ID().Hash()] = txn
 	return txn
 }
 
@@ -158,16 +150,15 @@ func (tb TransactionBuilder) Initiate(typ protocol.SignatureType, privateKey []b
 		panic(err)
 	}
 
+	tb.transaction = tb.transaction.Initiator(txn.Header.Initiator)
 	tb.signatures = append(tb.signatures, sig)
 	return tb
 }
 
 func (tb TransactionBuilder) Build() *protocol.Envelope {
 	env := new(protocol.Envelope)
+	env.Transaction = []*protocol.Transaction{tb.buildTxn()}
 	env.Signatures = tb.signatures
-	for _, txn := range tb.transactions {
-		env.Transaction = append(env.Transaction, txn)
-	}
 	sort.Slice(env.Transaction, func(i, j int) bool {
 		return bytes.Compare(env.Transaction[i].GetHash(), env.Transaction[j].GetHash()) < 0
 	})
