@@ -1,0 +1,3 @@
+go test fuzz v1
+[]byte("\x012p.acme?///5/./%\xff\xff\xff\xff%26%2%727027e27%27%27%\xd0///\xff<>4<\x19=\xff\b\b4\xff\u007f\x9e\n\n\x02@\x028\t\b")
+[]byte("\x01\x10")

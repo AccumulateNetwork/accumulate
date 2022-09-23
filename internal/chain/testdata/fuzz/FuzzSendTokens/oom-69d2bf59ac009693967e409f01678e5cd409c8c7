@@ -1,0 +1,3 @@
+go test fuzz v1
+[]byte("\x01\x8c\x01a8a88a@8JJJJJJJJ.acme?///(////////////////////////////////////8D%\xc8L\xc9\xc7О\x9d\xd7C8%9788888\xc8\xc2JJJJJJJJJ%C6%90%C7%BCyAsIn%C7%ByACs%C7%BCyAsInJJ%\x97.acme\xb4")
+[]byte("\x01\x03\t\x80\x91")
