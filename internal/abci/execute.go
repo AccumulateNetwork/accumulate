@@ -5,7 +5,6 @@ package abci
 import (
 	"crypto/sha256"
 
-	"github.com/getsentry/sentry-go"
 	"github.com/tendermint/tendermint/libs/log"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
@@ -22,14 +21,12 @@ func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]
 	envelope := new(protocol.Envelope)
 	err := envelope.UnmarshalBinary(raw)
 	if err != nil {
-		sentry.CaptureException(err)
 		logger.Info("Failed to unmarshal", "tx", logging.AsHex(hash), "error", err)
 		return nil, nil, nil, errors.Format(errors.StatusUnknownError, "decoding envelopes: %w", err)
 	}
 
 	deliveries, err := chain.NormalizeEnvelope(envelope)
 	if err != nil {
-		sentry.CaptureException(err)
 		logger.Info("Failed to normalize envelope", "tx", logging.AsHex(hash), "error", err)
 		return nil, nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
@@ -40,7 +37,6 @@ func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]
 	// batch
 	rset, err := (&protocol.TransactionResultSet{Results: results}).MarshalBinary()
 	if err != nil {
-		sentry.CaptureException(err)
 		logger.Error("Unable to encode result", "error", err)
 		return deliveries, results, nil, nil
 	}
@@ -50,16 +46,12 @@ func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]
 
 func checkTx(exec *Executor, batch *database.Batch) executeFunc {
 	return func(deliveries []*chain.Delivery) []*protocol.TransactionStatus {
-		return exec.ValidateEnvelopeSet(batch, deliveries, func(err error, _ *chain.Delivery, _ *protocol.TransactionStatus) {
-			sentry.CaptureException(err)
-		})
+		return exec.ValidateEnvelopeSet(batch, deliveries, nil)
 	}
 }
 
 func deliverTx(exec *Executor, block *Block) executeFunc {
 	return func(deliveries []*chain.Delivery) []*protocol.TransactionStatus {
-		return exec.ExecuteEnvelopeSet(block, deliveries, func(err error, _ *chain.Delivery, _ *protocol.TransactionStatus) {
-			sentry.CaptureException(err)
-		})
+		return exec.ExecuteEnvelopeSet(block, deliveries, nil)
 	}
 }
