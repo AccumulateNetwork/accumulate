@@ -11,7 +11,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/getsentry/sentry-go"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/libs/log"
@@ -92,7 +91,6 @@ func (app *Accumulator) OnFatal(f func(error)) {
 func (app *Accumulator) fatal(err error) {
 	app.didPanic = true
 	app.logger.Error("Fatal error", "error", err, "stack", debug.Stack())
-	sentry.CaptureException(err)
 
 	if app.onFatal != nil {
 		app.onFatal(err)
@@ -192,7 +190,7 @@ func (app *Accumulator) Info(abci.RequestInfo) abci.ResponseInfo {
 		Commit:  accumulate.Commit,
 	})
 	if err != nil {
-		sentry.CaptureException(err)
+		app.logger.Error("Failed to marshal ABCI info", "error", err)
 	}
 
 	batch := app.DB.Begin(false)
@@ -209,7 +207,7 @@ func (app *Accumulator) Info(abci.RequestInfo) abci.ResponseInfo {
 		height = 0
 	default:
 		height = -1
-		sentry.CaptureException(err)
+		app.logger.Error("Failed to load system ledger", "error", err)
 	}
 
 	return abci.ResponseInfo{
