@@ -44,7 +44,7 @@ func (b TransactionBuilder) Build() (*protocol.Transaction, error) {
 }
 
 func (b TransactionBuilder) SignWith(signer any, path ...string) SignatureBuilder {
-	return SignatureBuilder{parser: b.parser, transaction: &b.t}
+	return SignatureBuilder{parser: b.parser, transaction: &b.t}.Url(signer, path...)
 }
 
 type CreateIdentityBuilder struct {

@@ -63,7 +63,7 @@ func (b SignatureBuilder) Build() (*protocol.Envelope, error) {
 }
 
 func (b SignatureBuilder) SignWith(signer any, path ...string) SignatureBuilder {
-	return b.sign().SignWith(signer, path...)
+	return b.sign().Url(signer, path...)
 }
 
 func (b SignatureBuilder) sign() SignatureBuilder {
