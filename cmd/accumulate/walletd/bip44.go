@@ -28,7 +28,7 @@ const Purpose uint32 = 0x8000002C
 // DefaultAccumulateBaseDerivationPath is the base path from which custom derivation endpoints
 // are incremented. As such, the first account will be at m/44'/60'/0'/0/0, the second
 // at m/44'/281'/0'/0/1, etc.
-var DefaultAccumulateBaseDerivationPath = Derivation{Purpose, TypeAccumulate, 0x80000000 + 0, 0, 0}
+var DefaultAccumulateBaseDerivationPath = Derivation{Purpose, TypeAccumulate, 0x80000000 + 0, 0x80000000 + 0, 0x80000000 + 0}
 
 // DefaultEtherBaseDerivationPath is the base path from which custom derivation endpoints
 // are incremented. As such, the first account will be at m/44'/60'/0'/0/0, the second
@@ -262,10 +262,26 @@ func (d *Derivation) ToPath() (string, error) {
 		return "", err
 	}
 
-	return fmt.Sprintf("m/44'/%d'/%d'/%d/%d",
-		TypeBitcoin^d.CoinType(),
-		bip32.FirstHardenedChild^d.Account(),
-		d.Chain(), d.Address()), nil
+	var sb strings.Builder
+	sb.WriteString("m/44'")
+	fmt.Fprintf(&sb, "/%d'", TypeBitcoin^d.CoinType())
+	if d.Account()&bip32.FirstHardenedChild > 0 {
+		fmt.Fprintf(&sb, "/%d'", bip32.FirstHardenedChild^d.Account())
+	} else {
+		fmt.Fprintf(&sb, "/%d", d.Account())
+	}
+	if d.Chain()&bip32.FirstHardenedChild > 0 {
+		fmt.Fprintf(&sb, "/%d'", bip32.FirstHardenedChild^d.Chain())
+	} else {
+		fmt.Fprintf(&sb, "/%d", d.Chain())
+	}
+	if d.Address()&bip32.FirstHardenedChild > 0 {
+		fmt.Fprintf(&sb, "/%d'", bip32.FirstHardenedChild^d.Address())
+	} else {
+		fmt.Fprintf(&sb, "/%d", d.Address())
+	}
+	return sb.String(), nil
+
 }
 
 func (d *Derivation) String() string {
@@ -301,7 +317,7 @@ func NewDerivationPath(signatureType protocol.SignatureType) (d Derivation, e er
 
 func (d *Derivation) FromPath(path string) error {
 	hd := strings.Split(path, "/")
-	if len(hd) < 4 {
+	if len(hd) != 6 {
 		return fmt.Errorf("insufficent parameters in bip44 derivation path")
 	}
 
@@ -311,7 +327,7 @@ func (d *Derivation) FromPath(path string) error {
 	}
 
 	*d = Derivation{Purpose}
-	for _, s := range hd[2:] {
+	for _, s := range hd[2:6] {
 		t := uint32(0)
 		if strings.HasSuffix(s, "'") {
 			t = bip32.FirstHardenedChild
