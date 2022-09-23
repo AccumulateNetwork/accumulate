@@ -2,6 +2,12 @@ package build
 
 import "gitlab.com/accumulatenetwork/accumulate/protocol"
 
+// Fix lint
+var _ any = CreateKeyPageBuilder{}.addEntry
+var _ any = AddKeyOperationBuilder{}.addEntry
+var _ any = RemoveKeyOperationBuilder{}.addEntry
+var _ any = UpdateKeyOperationBuilder{}.addEntry
+
 type AddKeyOperationBuilder struct {
 	b  UpdateKeyPageBuilder
 	op protocol.AddKeyOperation
