@@ -25,8 +25,8 @@ func (b SignatureBuilder) Url(signer any, path ...string) SignatureBuilder {
 	return b
 }
 
-func (b SignatureBuilder) Delegator(delegator any) SignatureBuilder {
-	b.signer.Delegators = append(b.signer.Delegators, b.parseUrl(delegator))
+func (b SignatureBuilder) Delegator(delegator any, path ...string) SignatureBuilder {
+	b.signer.Delegators = append(b.signer.Delegators, b.parseUrl(delegator, path...))
 	return b
 }
 

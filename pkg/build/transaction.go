@@ -1,6 +1,8 @@
 package build
 
 import (
+	"math/big"
+
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -50,9 +52,9 @@ type CreateIdentityBuilder struct {
 	body protocol.CreateIdentity
 }
 
-func (b TransactionBuilder) CreateIdentity(url any) CreateIdentityBuilder {
+func (b TransactionBuilder) CreateIdentity(url any, path ...string) CreateIdentityBuilder {
 	c := CreateIdentityBuilder{t: b}
-	c.body.Url = b.parseUrl(url)
+	c.body.Url = b.parseUrl(url, path...)
 	return c
 }
 
@@ -65,13 +67,13 @@ func (b CreateIdentityBuilder) WithKeyHash(hash any) CreateIdentityBuilder {
 	return b
 }
 
-func (b CreateIdentityBuilder) WithKeyBook(book any) CreateIdentityBuilder {
-	b.body.KeyBookUrl = b.t.parseUrl(book)
+func (b CreateIdentityBuilder) WithKeyBook(book any, path ...string) CreateIdentityBuilder {
+	b.body.KeyBookUrl = b.t.parseUrl(book, path...)
 	return b
 }
 
-func (b CreateIdentityBuilder) WithAuthority(book any) CreateIdentityBuilder {
-	b.body.Authorities = append(b.body.Authorities, b.t.parseUrl(book))
+func (b CreateIdentityBuilder) WithAuthority(book any, path ...string) CreateIdentityBuilder {
+	b.body.Authorities = append(b.body.Authorities, b.t.parseUrl(book, path...))
 	return b
 }
 
@@ -88,15 +90,19 @@ type CreateTokenAccountBuilder struct {
 	body protocol.CreateTokenAccount
 }
 
-func (b TransactionBuilder) CreateTokenAccount(url, token any) CreateTokenAccountBuilder {
+func (b TransactionBuilder) CreateTokenAccount(url any, path ...string) CreateTokenAccountBuilder {
 	c := CreateTokenAccountBuilder{t: b}
-	c.body.Url = b.parseUrl(url)
-	c.body.TokenUrl = b.parseUrl(token)
+	c.body.Url = c.t.parseUrl(url, path...)
 	return c
 }
 
-func (b CreateTokenAccountBuilder) WithAuthority(book any) CreateTokenAccountBuilder {
-	b.body.Authorities = append(b.body.Authorities, b.t.parseUrl(book))
+func (b CreateTokenAccountBuilder) ForToken(token any, path ...string) CreateTokenAccountBuilder {
+	b.body.TokenUrl = b.t.parseUrl(token, path...)
+	return b
+}
+
+func (b CreateTokenAccountBuilder) WithAuthority(book any, path ...string) CreateTokenAccountBuilder {
+	b.body.Authorities = append(b.body.Authorities, b.t.parseUrl(book, path...))
 	return b
 }
 
@@ -109,24 +115,26 @@ func (b CreateTokenAccountBuilder) SignWith(signer any, path ...string) Signatur
 }
 
 type SendTokensBuilder struct {
-	t    TransactionBuilder
-	body protocol.SendTokens
+	t      TransactionBuilder
+	amount big.Int
+	body   protocol.SendTokens
 }
 
-func (b TransactionBuilder) SendTokens() SendTokensBuilder {
-	return SendTokensBuilder{t: b}
+func (b TransactionBuilder) SendTokens(amount any, precision uint64) SendTokensBuilder {
+	return SendTokensBuilder{t: b}.And(amount, precision)
 }
 
-func (b SendTokensBuilder) To(recipient any, amount any, precision uint64) SendTokensBuilder {
+func (b SendTokensBuilder) To(recipient any, path ...string) SendTokensBuilder {
 	b.body.To = append(b.body.To, &protocol.TokenRecipient{
-		Url:    b.t.parseUrl(recipient),
-		Amount: *b.t.parseAmount(amount, precision),
+		Url:    b.t.parseUrl(recipient, path...),
+		Amount: b.amount,
 	})
 	return b
 }
 
-func (b SendTokensBuilder) AndTo(recipient any, amount any, precision uint64) SendTokensBuilder {
-	return b.To(recipient, amount, precision)
+func (b SendTokensBuilder) And(amount any, precision uint64) SendTokensBuilder {
+	b.amount = *b.t.parseAmount(amount, precision)
+	return b
 }
 
 func (b SendTokensBuilder) Build() (*protocol.Transaction, error) {
@@ -146,8 +154,8 @@ func (b TransactionBuilder) CreateDataAccount() CreateDataAccountBuilder {
 	return CreateDataAccountBuilder{t: b}
 }
 
-func (b CreateDataAccountBuilder) WithAuthority(book any) CreateDataAccountBuilder {
-	b.body.Authorities = append(b.body.Authorities, b.t.parseUrl(book))
+func (b CreateDataAccountBuilder) WithAuthority(book any, path ...string) CreateDataAccountBuilder {
+	b.body.Authorities = append(b.body.Authorities, b.t.parseUrl(book, path...))
 	return b
 }
 
@@ -170,6 +178,23 @@ func (b TransactionBuilder) WriteData(data ...[]byte) WriteDataBuilder {
 	return c
 }
 
+func (b WriteDataBuilder) Scratch() WriteDataBuilder {
+	b.body.Scratch = true
+	return b
+}
+
+func (b WriteDataBuilder) ToState() WriteDataBuilder {
+	b.body.WriteToState = true
+	return b
+}
+
+func (b WriteDataBuilder) To(recipient any, path ...string) WriteDataToBuilder {
+	c := WriteDataToBuilder{t: b.t}
+	c.body.Entry = b.body.Entry
+	c.body.Recipient = c.t.parseUrl(recipient, path...)
+	return c
+}
+
 func (b WriteDataBuilder) Build() (*protocol.Transaction, error) {
 	return b.t.Body(&b.body).Build()
 }
@@ -181,13 +206,6 @@ func (b WriteDataBuilder) SignWith(signer any, path ...string) SignatureBuilder 
 type WriteDataToBuilder struct {
 	t    TransactionBuilder
 	body protocol.WriteDataTo
-}
-
-func (b TransactionBuilder) WriteDataTo(recipient any, data ...[]byte) WriteDataToBuilder {
-	c := WriteDataToBuilder{t: b}
-	c.body.Recipient = b.parseUrl(recipient)
-	c.body.Entry = &protocol.AccumulateDataEntry{Data: data}
-	return c
 }
 
 func (b WriteDataToBuilder) Build() (*protocol.Transaction, error) {
@@ -203,16 +221,24 @@ type CreateTokenBuilder struct {
 	body protocol.CreateToken
 }
 
-func (b TransactionBuilder) CreateToken(url any, symbol string, precision uint64) CreateTokenBuilder {
+func (b TransactionBuilder) CreateToken(url any, path ...string) CreateTokenBuilder {
 	c := CreateTokenBuilder{t: b}
-	c.body.Url = b.parseUrl(url)
-	c.body.Symbol = symbol
-	c.body.Precision = precision
+	c.body.Url = c.t.parseUrl(url, path...)
 	return c
 }
 
-func (b CreateTokenBuilder) WithAuthority(book any) CreateTokenBuilder {
-	b.body.Authorities = append(b.body.Authorities, b.t.parseUrl(book))
+func (b CreateTokenBuilder) WithSymbol(symbol string) CreateTokenBuilder {
+	b.body.Symbol = symbol
+	return b
+}
+
+func (b CreateTokenBuilder) WithPrecision(precision any) CreateTokenBuilder {
+	b.body.Precision = b.t.parseUint(precision)
+	return b
+}
+
+func (b CreateTokenBuilder) WithAuthority(book any, path ...string) CreateTokenBuilder {
+	b.body.Authorities = append(b.body.Authorities, b.t.parseUrl(book, path...))
 	return b
 }
 
@@ -230,24 +256,26 @@ func (b CreateTokenBuilder) SignWith(signer any, path ...string) SignatureBuilde
 }
 
 type IssueTokensBuilder struct {
-	t    TransactionBuilder
-	body protocol.IssueTokens
+	t      TransactionBuilder
+	amount big.Int
+	body   protocol.IssueTokens
 }
 
-func (b TransactionBuilder) IssueTokens() IssueTokensBuilder {
-	return IssueTokensBuilder{t: b}
+func (b TransactionBuilder) IssueTokens(amount any, precision uint64) IssueTokensBuilder {
+	return IssueTokensBuilder{t: b}.And(amount, precision)
 }
 
-func (b IssueTokensBuilder) To(recipient any, amount any, precision uint64) IssueTokensBuilder {
+func (b IssueTokensBuilder) To(recipient any, path ...string) IssueTokensBuilder {
 	b.body.To = append(b.body.To, &protocol.TokenRecipient{
-		Url:    b.t.parseUrl(recipient),
-		Amount: *b.t.parseAmount(amount, precision),
+		Url:    b.t.parseUrl(recipient, path...),
+		Amount: b.amount,
 	})
 	return b
 }
 
-func (b IssueTokensBuilder) AndTo(recipient any, amount any, precision uint64) IssueTokensBuilder {
-	return b.To(recipient, amount, precision)
+func (b IssueTokensBuilder) And(amount any, precision uint64) IssueTokensBuilder {
+	b.amount = *b.t.parseAmount(amount, precision)
+	return b
 }
 
 func (b IssueTokensBuilder) Build() (*protocol.Transaction, error) {
@@ -265,7 +293,7 @@ type BurnTokensBuilder struct {
 
 func (b TransactionBuilder) BurnTokens(amount any, precision uint64) BurnTokensBuilder {
 	c := BurnTokensBuilder{t: b}
-	c.body.Amount = *b.parseAmount(amount, precision)
+	c.body.Amount = *c.t.parseAmount(amount, precision)
 	return c
 }
 
@@ -317,14 +345,14 @@ func (b CreateKeyBookBuilder) SignWith(signer any, path ...string) SignatureBuil
 	return b.t.Body(&b.body).SignWith(signer, path...)
 }
 
-func (b TransactionBuilder) CreateKeyBook(url any) CreateKeyBookBuilder {
+func (b TransactionBuilder) CreateKeyBook(url any, path ...string) CreateKeyBookBuilder {
 	c := CreateKeyBookBuilder{t: b}
-	c.body.Url = b.parseUrl(url)
+	c.body.Url = c.t.parseUrl(url, path...)
 	return c
 }
 
-func (b CreateKeyBookBuilder) WithAuthority(book any) CreateKeyBookBuilder {
-	b.body.Authorities = append(b.body.Authorities, b.t.parseUrl(book))
+func (b CreateKeyBookBuilder) WithAuthority(book any, path ...string) CreateKeyBookBuilder {
+	b.body.Authorities = append(b.body.Authorities, b.t.parseUrl(book, path...))
 	return b
 }
 
@@ -342,11 +370,15 @@ type AddCreditsBuilder struct {
 	body protocol.AddCredits
 }
 
-func (b TransactionBuilder) AddCredits(url any, spend float64) AddCreditsBuilder {
+func (b TransactionBuilder) AddCredits(spend float64) AddCreditsBuilder {
 	c := AddCreditsBuilder{t: b}
-	c.body.Recipient = b.parseUrl(url)
-	c.body.Amount = *b.parseAmount(spend, protocol.AcmePrecision)
+	c.body.Amount = *c.t.parseAmount(spend, protocol.AcmePrecision)
 	return c
+}
+
+func (b AddCreditsBuilder) To(url any, path ...string) AddCreditsBuilder {
+	b.body.Recipient = b.t.parseUrl(url, path...)
+	return b
 }
 
 func (b AddCreditsBuilder) Oracle(value float64) AddCreditsBuilder {
@@ -411,27 +443,27 @@ func (b TransactionBuilder) UpdateAccountAuth() UpdateAccountAuthBuilder {
 	return UpdateAccountAuthBuilder{t: b}
 }
 
-func (b UpdateAccountAuthBuilder) Enable(authority any) UpdateAccountAuthBuilder {
+func (b UpdateAccountAuthBuilder) Enable(authority any, path ...string) UpdateAccountAuthBuilder {
 	op := new(protocol.EnableAccountAuthOperation)
-	op.Authority = b.t.parseUrl(authority)
+	op.Authority = b.t.parseUrl(authority, path...)
 	return b
 }
 
-func (b UpdateAccountAuthBuilder) Disable(authority any) UpdateAccountAuthBuilder {
+func (b UpdateAccountAuthBuilder) Disable(authority any, path ...string) UpdateAccountAuthBuilder {
 	op := new(protocol.DisableAccountAuthOperation)
-	op.Authority = b.t.parseUrl(authority)
+	op.Authority = b.t.parseUrl(authority, path...)
 	return b
 }
 
-func (b UpdateAccountAuthBuilder) Add(authority any) UpdateAccountAuthBuilder {
+func (b UpdateAccountAuthBuilder) Add(authority any, path ...string) UpdateAccountAuthBuilder {
 	op := new(protocol.AddAccountAuthorityOperation)
-	op.Authority = b.t.parseUrl(authority)
+	op.Authority = b.t.parseUrl(authority, path...)
 	return b
 }
 
-func (b UpdateAccountAuthBuilder) Remove(authority any) UpdateAccountAuthBuilder {
+func (b UpdateAccountAuthBuilder) Remove(authority any, path ...string) UpdateAccountAuthBuilder {
 	op := new(protocol.RemoveAccountAuthorityOperation)
-	op.Authority = b.t.parseUrl(authority)
+	op.Authority = b.t.parseUrl(authority, path...)
 	return b
 }
 
@@ -450,7 +482,7 @@ type UpdateKeyBuilder struct {
 
 func (b TransactionBuilder) UpdateKey(newKey any, typ protocol.SignatureType) UpdateKeyBuilder {
 	c := UpdateKeyBuilder{t: b}
-	c.body.NewKeyHash = b.hashKey(b.parsePublicKey(newKey), typ)
+	c.body.NewKeyHash = c.t.hashKey(c.t.parsePublicKey(newKey), typ)
 	return c
 }
 
