@@ -228,22 +228,22 @@ func (s *StakingApp) PrintAccounts(
 // Return the List of Staking Validators in the order of their responsibility to submit
 // the distribution transaction(s) for staking
 func (s *StakingApp) GetMasterOrder() []*Account {
-	// Make sure the Staking validator URLs are in order.  This ensures all validators are 
+	// Make sure the Staking validator URLs are in order.  This ensures all validators are
 	// going to mix the same list starting from the same starting state.
 	sort.Slice(s.Stakers.SValidator, func(i, j int) bool {
 		return s.Stakers.SValidator[i].URL.String() < s.Stakers.SValidator[j].URL.String()
 	})
-	
+
 	// Our mix is slower than it has to be.  We are going to give each element in the list
 	// a hash derived from and starting with the block hash.
 	MasterList := append([]*Account{}, s.Stakers.SValidator...) // create a master list
 	h := s.CBlk.BlockHash                                       // Use the block hash as the basis of randomizing
-	for _,a:=range MasterList { // Give every element an Order hash based on the BlockHash
-		h = sha256.Sum256(h[:]) 
+	for _, a := range MasterList {                              // Give every element an Order hash based on the BlockHash
+		h = sha256.Sum256(h[:])
 		a.Order = h
 	}
-	sort.Slice(MasterList,func(i,j int)bool{ // Sort the master list by its Order Hash
-		return bytes.Compare(MasterList[i].Order[:],MasterList[j].Order[:])==-1	
+	sort.Slice(MasterList, func(i, j int) bool { // Sort the master list by its Order Hash
+		return bytes.Compare(MasterList[i].Order[:], MasterList[j].Order[:]) == -1
 	})
 	return MasterList
 }

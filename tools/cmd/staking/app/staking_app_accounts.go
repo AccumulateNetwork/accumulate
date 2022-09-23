@@ -45,4 +45,3 @@ func (s *StakingApp) AddAccounts() {
 	sa(s.Stakers.PFollower)
 	sa(s.Stakers.SValidator)
 }
-
