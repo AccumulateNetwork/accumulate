@@ -4,7 +4,9 @@ import "time"
 
 func Signature() SignatureBuilder { return SignatureBuilder{} }
 
-func Transaction() TransactionBuilder { return TransactionBuilder{} }
+func Transaction(principal any, path ...string) TransactionBuilder {
+	return TransactionBuilder{}.WithPrincipal(principal, path...)
+}
 
 // UnixTimeNow returns the current time as a number of milliseconds since the
 // Unix epoch. This is the recommended timestamp value.

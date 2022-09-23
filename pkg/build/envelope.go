@@ -8,8 +8,8 @@ type EnvelopeBuilder struct {
 	signatures  []protocol.Signature
 }
 
-func (b EnvelopeBuilder) Sign() SignatureBuilder {
-	return SignatureBuilder{env: b}
+func (b EnvelopeBuilder) SignWith(signer any, path ...string) SignatureBuilder {
+	return SignatureBuilder{env: b}.WithSigner(signer, path...)
 }
 
 func (b EnvelopeBuilder) Build() (*protocol.Envelope, error) {

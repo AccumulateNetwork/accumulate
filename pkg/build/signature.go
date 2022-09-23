@@ -76,6 +76,10 @@ func (b SignatureBuilder) Build() (*protocol.Envelope, error) {
 	return b.FinishSignature().Build()
 }
 
+func (b SignatureBuilder) SignWith(signer any, path ...string) SignatureBuilder {
+	return b.FinishSignature().SignWith(signer, path...)
+}
+
 func (b SignatureBuilder) Sign(txn *protocol.Transaction) (protocol.Signature, error) {
 	if !b.ok() {
 		return nil, b.err()
