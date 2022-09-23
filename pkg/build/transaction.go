@@ -9,12 +9,8 @@ type TransactionBuilder struct {
 	t protocol.Transaction
 }
 
-func Transaction(principal any) TransactionBuilder {
-	return TransactionBuilder{}.WithPrincipal(principal)
-}
-
-func (b TransactionBuilder) WithPrincipal(principal any) TransactionBuilder {
-	b.t.Header.Principal = b.parseUrl(principal)
+func (b TransactionBuilder) WithPrincipal(principal any, path ...string) TransactionBuilder {
+	b.t.Header.Principal = b.parseUrl(principal, path...)
 	return b
 }
 
@@ -43,6 +39,22 @@ func (b TransactionBuilder) Build() (*protocol.Transaction, error) {
 		return &b.t, nil
 	}
 	return nil, b.err()
+}
+
+func (b TransactionBuilder) Sign() SignatureBuilder {
+	if b.ok() {
+		return EnvelopeBuilder{transaction: &b.t}.Sign()
+	}
+
+	// Set up a fake transaction
+	var c EnvelopeBuilder
+	c.transaction = new(protocol.Transaction)
+	c.transaction.Header.Principal = protocol.AccountUrl(protocol.Unknown)
+	c.transaction.Body = new(protocol.RemoteTransaction)
+
+	// Transfer errors
+	c.record(b.errs...)
+	return c.Sign()
 }
 
 type CreateIdentityBuilder struct {
@@ -79,6 +91,10 @@ func (b CreateIdentityBuilder) Build() (*protocol.Transaction, error) {
 	return b.t.WithBody(&b.body).Build()
 }
 
+func (b CreateIdentityBuilder) Sign() SignatureBuilder {
+	return b.t.WithBody(&b.body).Sign()
+}
+
 type CreateTokenAccountBuilder struct {
 	t    TransactionBuilder
 	body protocol.CreateTokenAccount
@@ -98,6 +114,10 @@ func (b CreateTokenAccountBuilder) WithAuthority(book any) CreateTokenAccountBui
 
 func (b CreateTokenAccountBuilder) Build() (*protocol.Transaction, error) {
 	return b.t.WithBody(&b.body).Build()
+}
+
+func (b CreateTokenAccountBuilder) Sign() SignatureBuilder {
+	return b.t.WithBody(&b.body).Sign()
 }
 
 type SendTokensBuilder struct {
@@ -125,6 +145,10 @@ func (b SendTokensBuilder) Build() (*protocol.Transaction, error) {
 	return b.t.WithBody(&b.body).Build()
 }
 
+func (b SendTokensBuilder) Sign() SignatureBuilder {
+	return b.t.WithBody(&b.body).Sign()
+}
+
 type CreateDataAccountBuilder struct {
 	t    TransactionBuilder
 	body protocol.CreateDataAccount
@@ -143,6 +167,10 @@ func (b CreateDataAccountBuilder) Build() (*protocol.Transaction, error) {
 	return b.t.WithBody(&b.body).Build()
 }
 
+func (b CreateDataAccountBuilder) Sign() SignatureBuilder {
+	return b.t.WithBody(&b.body).Sign()
+}
+
 type WriteDataBuilder struct {
 	t    TransactionBuilder
 	body protocol.WriteData
@@ -156,6 +184,10 @@ func (b TransactionBuilder) WriteData(data ...[]byte) WriteDataBuilder {
 
 func (b WriteDataBuilder) Build() (*protocol.Transaction, error) {
 	return b.t.WithBody(&b.body).Build()
+}
+
+func (b WriteDataBuilder) Sign() SignatureBuilder {
+	return b.t.WithBody(&b.body).Sign()
 }
 
 type WriteDataToBuilder struct {
@@ -172,6 +204,10 @@ func (b TransactionBuilder) WriteDataTo(recipient any, data ...[]byte) WriteData
 
 func (b WriteDataToBuilder) Build() (*protocol.Transaction, error) {
 	return b.t.WithBody(&b.body).Build()
+}
+
+func (b WriteDataToBuilder) Sign() SignatureBuilder {
+	return b.t.WithBody(&b.body).Sign()
 }
 
 type CreateTokenBuilder struct {
@@ -201,6 +237,10 @@ func (b CreateTokenBuilder) Build() (*protocol.Transaction, error) {
 	return b.t.WithBody(&b.body).Build()
 }
 
+func (b CreateTokenBuilder) Sign() SignatureBuilder {
+	return b.t.WithBody(&b.body).Sign()
+}
+
 type IssueTokensBuilder struct {
 	t    TransactionBuilder
 	body protocol.IssueTokens
@@ -226,6 +266,10 @@ func (b IssueTokensBuilder) Build() (*protocol.Transaction, error) {
 	return b.t.WithBody(&b.body).Build()
 }
 
+func (b IssueTokensBuilder) Sign() SignatureBuilder {
+	return b.t.WithBody(&b.body).Sign()
+}
+
 type BurnTokensBuilder struct {
 	t    TransactionBuilder
 	body protocol.BurnTokens
@@ -239,6 +283,10 @@ func (b TransactionBuilder) BurnTokens(amount any, precision uint64) BurnTokensB
 
 func (b BurnTokensBuilder) Build() (*protocol.Transaction, error) {
 	return b.t.WithBody(&b.body).Build()
+}
+
+func (b BurnTokensBuilder) Sign() SignatureBuilder {
+	return b.t.WithBody(&b.body).Sign()
 }
 
 type CreateKeyPageBuilder struct {
@@ -264,6 +312,10 @@ func (b CreateKeyPageBuilder) Build() (*protocol.Transaction, error) {
 	return b.t.WithBody(&b.body).Build()
 }
 
+func (b CreateKeyPageBuilder) Sign() SignatureBuilder {
+	return b.t.WithBody(&b.body).Sign()
+}
+
 type CreateKeyBookBuilder struct {
 	t    TransactionBuilder
 	body protocol.CreateKeyBook
@@ -271,6 +323,10 @@ type CreateKeyBookBuilder struct {
 
 func (b CreateKeyBookBuilder) Build() (*protocol.Transaction, error) {
 	return b.t.WithBody(&b.body).Build()
+}
+
+func (b CreateKeyBookBuilder) Sign() SignatureBuilder {
+	return b.t.WithBody(&b.body).Sign()
 }
 
 func (b TransactionBuilder) CreateKeyBook(url any) CreateKeyBookBuilder {
@@ -314,6 +370,10 @@ func (b AddCreditsBuilder) Build() (*protocol.Transaction, error) {
 	return b.t.WithBody(&b.body).Build()
 }
 
+func (b AddCreditsBuilder) Sign() SignatureBuilder {
+	return b.t.WithBody(&b.body).Sign()
+}
+
 type UpdateKeyPageBuilder struct {
 	t    TransactionBuilder
 	body protocol.UpdateKeyPage
@@ -348,6 +408,10 @@ func (b UpdateKeyPageBuilder) UpdateAllowed() UpdateAllowedKeyPageOperationBuild
 
 func (b UpdateKeyPageBuilder) Build() (*protocol.Transaction, error) {
 	return b.t.WithBody(&b.body).Build()
+}
+
+func (b UpdateKeyPageBuilder) Sign() SignatureBuilder {
+	return b.t.WithBody(&b.body).Sign()
 }
 
 type UpdateAccountAuthBuilder struct {
@@ -387,6 +451,10 @@ func (b UpdateAccountAuthBuilder) Build() (*protocol.Transaction, error) {
 	return b.t.WithBody(&b.body).Build()
 }
 
+func (b UpdateAccountAuthBuilder) Sign() SignatureBuilder {
+	return b.t.WithBody(&b.body).Sign()
+}
+
 type UpdateKeyBuilder struct {
 	t    TransactionBuilder
 	body protocol.UpdateKey
@@ -400,4 +468,8 @@ func (b TransactionBuilder) UpdateKey(newKey any, typ protocol.SignatureType) Up
 
 func (b UpdateKeyBuilder) Build() (*protocol.Transaction, error) {
 	return b.t.WithBody(&b.body).Build()
+}
+
+func (b UpdateKeyBuilder) Sign() SignatureBuilder {
+	return b.t.WithBody(&b.body).Sign()
 }

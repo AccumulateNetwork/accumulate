@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math/big"
+	"strconv"
 	"strings"
 
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
@@ -54,17 +55,13 @@ func (p *parser) errorf(code errors.Status, format string, args ...interface{}) 
 	p.record(errors.Format(code, format, args...))
 }
 
-func (p *parser) parseUrl(v any) *url.URL {
-	if !p.ok() {
-		return nil
-	}
-
+func (p *parser) parseUrl(v any, path ...string) *url.URL {
 	var str string
 	switch v := v.(type) {
 	case url.URL:
-		return &v
+		return v.JoinPath(path...)
 	case *url.URL:
-		return v
+		return v.JoinPath(path...)
 	case string:
 		str = v
 	case fmt.Stringer:
@@ -79,7 +76,7 @@ func (p *parser) parseUrl(v any) *url.URL {
 		p.errorf(errors.StatusBadRequest, "invalid url %q: %w", v, err)
 		return nil
 	}
-	return u
+	return u.JoinPath(path...)
 }
 
 func (p *parser) parseHash32(v any) [32]byte {
@@ -119,10 +116,6 @@ func (p *parser) parseHash(v any) []byte {
 }
 
 func (p *parser) parsePublicKey(key any) []byte {
-	if !p.ok() {
-		return nil
-	}
-
 	switch key := key.(type) {
 	case ed25519.PrivateKey:
 		return key[32:]
@@ -148,9 +141,6 @@ func (p *parser) parsePublicKey(key any) []byte {
 }
 
 func (p *parser) hashKey(key []byte, typ protocol.SignatureType) []byte {
-	if !p.ok() {
-		return nil
-	}
 	switch typ {
 	case protocol.SignatureTypeLegacyED25519,
 		protocol.SignatureTypeED25519:
@@ -174,10 +164,6 @@ func hash(b []byte) []byte {
 }
 
 func (p *parser) parseAmount(v any, precision uint64) *big.Int {
-	if !p.ok() {
-		return nil
-	}
-
 	switch v := v.(type) {
 	case *big.Int:
 		return v // Assume the caller has already handled precision
@@ -263,4 +249,50 @@ func bigfloat(v float64, precision uint64) *big.Int {
 	x.Add(x, round)
 	x.Int(e)
 	return e
+}
+
+func (p *parser) parseUint(v any) uint64 {
+	switch v := v.(type) {
+	case *big.Int:
+		return v.Uint64()
+	case big.Int:
+		return v.Uint64()
+
+	case int:
+		return uint64(v)
+	case int8:
+		return uint64(v)
+	case int16:
+		return uint64(v)
+	case int32:
+		return uint64(v)
+	case int64:
+		return uint64(v)
+	case uint:
+		return uint64(v)
+	case uint8:
+		return uint64(v)
+	case uint16:
+		return uint64(v)
+	case uint32:
+		return uint64(v)
+	case uint64:
+		return uint64(v)
+
+	case float32:
+		return uint64(v)
+	case float64:
+		return uint64(v)
+
+	case string:
+		u, err := strconv.ParseUint(v, 10, 64)
+		if err != nil {
+			p.errorf(errors.StatusBadRequest, "not a number: %w", err)
+		}
+		return u
+
+	default:
+		p.errorf(errors.StatusBadRequest, "cannot convert %T to a number", v)
+		return 0
+	}
 }

@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
@@ -37,14 +38,16 @@ func TestSimulator(t *testing.T) {
 	MakeAccount(t, sim.DatabaseFor(bob), &TokenAccount{Url: bob.JoinPath("tokens"), TokenUrl: AcmeUrl()})
 
 	// Execute
-	st := sim.SubmitSuccessfully(
-		acctesting.NewTransaction().
-			WithPrincipal(alice.JoinPath("tokens")).
-			WithSigner(alice.JoinPath("book", "1"), 1).
+	st := sim.SubmitSuccessfully(MustBuild(t,
+		build.Transaction().
+			WithPrincipal(alice, "tokens").
+			SendTokens().
+			To(bob.JoinPath("tokens"), 123, 0).
+			Sign().
+			WithSigner(alice, "book", "1").
+			WithVersion(1).
 			WithTimestamp(1).
-			WithBody(&SendTokens{To: []*TokenRecipient{{Url: bob.JoinPath("tokens"), Amount: *big.NewInt(123)}}}).
-			Initiate(SignatureTypeED25519, aliceKey).
-			BuildDelivery())
+			WithPrivateKey(aliceKey)))
 
 	sim.StepUntil(
 		Txn(st.TxID).Succeeds(),
