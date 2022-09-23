@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/AccumulateNetwork/go-bip32"
+	"github.com/tyler-smith/go-bip32"
 	"github.com/tyler-smith/go-bip39"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -148,7 +148,11 @@ func NewKeyFromMnemonic(mnemonic string, coin, account, chain, address uint32) (
 		return nil, err
 	}
 
-	masterKey, err := bip32.NewMasterKey(seed)
+	curve := bip32.Bitcoin
+	if coin == TypeAccumulate {
+		curve = bip32.Ed25519
+	}
+	masterKey, err := bip32.NewMasterKeyWithCurve(seed, curve)
 	if err != nil {
 		return nil, err
 	}

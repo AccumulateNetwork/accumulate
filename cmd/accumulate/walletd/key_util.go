@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"runtime/debug"
 
-	"github.com/AccumulateNetwork/go-bip32"
 	btc "github.com/btcsuite/btcd/btcec"
+	"github.com/tyler-smith/go-bip32"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -192,8 +192,12 @@ func GenerateKeyFromHDPath(derivationPath string, sigtype protocol.SignatureType
 		return nil, fmt.Errorf("wallet not created, please create a seeded wallet \"accumulate walleet init\"")
 	}
 
+	curve := bip32.Bitcoin
+	if hd.CoinType() == TypeAccumulate {
+		curve = bip32.Ed25519
+	}
 	//if we do have a seed, then create a new key
-	masterKey, _ := bip32.NewMasterKey(seed)
+	masterKey, _ := bip32.NewMasterKeyWithCurve(seed, curve)
 
 	//create the derived key
 	newKey, err := NewKeyFromMasterKey(masterKey, hd.CoinType(), hd.Account(), hd.Chain(), hd.Address())
