@@ -38,7 +38,7 @@ var DefaultEtherBaseDerivationPath = Derivation{Purpose, TypeEther, 0x80000000 +
 // DefaultFactoidBaseDerivationPath is the base path from which custom derivation endpoints
 // are incremented. As such, the first account will be at m/44'/60'/0'/0/0, the second
 // at m/44'/281'/0'/0/1, etc.
-var DefaultFactoidBaseDerivationPath = Derivation{TypeFactomFactoids, 0x80000000 + 0, 0, 0}
+var DefaultFactoidBaseDerivationPath = Derivation{Purpose, TypeFactomFactoids, 0x80000000 + 0, 0, 0}
 
 // DefaultBitcoinBaseDerivationPath is the base path from which custom derivation endpoints
 // are incremented. As such, the first account will be at m/44'/60'/0'/0/0, the second
@@ -312,7 +312,7 @@ func NewDerivationPath(signatureType protocol.SignatureType) (d Derivation, e er
 
 func (d *Derivation) FromPath(path string) error {
 	hd := strings.Split(path, "/")
-	if len(hd) != 6 {
+	if len(hd) < 4 {
 		return fmt.Errorf("insufficent parameters in bip44 derivation path")
 	}
 
@@ -322,7 +322,7 @@ func (d *Derivation) FromPath(path string) error {
 	}
 
 	*d = Derivation{Purpose}
-	for _, s := range hd[2:6] {
+	for _, s := range hd[2:] {
 		t := uint32(0)
 		if strings.HasSuffix(s, "'") {
 			t = bip32.FirstHardenedChild
@@ -338,7 +338,10 @@ func (d *Derivation) FromPath(path string) error {
 	return d.Validate()
 }
 
-func (d Derivation) SignatureType() protocol.SignatureType {
+// DeduceSignatureType get signature type from coin type, note: this will only return the btc signature type
+// for TypeBitcoin, thus if the user wants a legacy btc address, it won't be able to get one if
+// the type is deduced via this function.
+func (d Derivation) DeduceSignatureType() protocol.SignatureType {
 	t := protocol.SignatureTypeUnknown
 	//derivationPath
 	switch d.CoinType() {
