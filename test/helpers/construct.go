@@ -14,10 +14,10 @@ import (
 )
 
 func MustBuild(t testing.TB, b interface {
-	Build() (*protocol.Envelope, error)
+	Done() (*protocol.Envelope, error)
 }) *chain.Delivery {
 	t.Helper()
-	env, err := b.Build()
+	env, err := b.Done()
 	require.NoError(t, err)
 	delivery, err := chain.NormalizeEnvelope(env)
 	require.NoError(t, err)

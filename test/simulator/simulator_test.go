@@ -39,7 +39,8 @@ func TestSimulator(t *testing.T) {
 
 	// Execute
 	st := sim.SubmitSuccessfully(MustBuild(t,
-		build.Transaction(alice, "tokens").SendTokens(123, 0).To(bob, "tokens").
+		build.Transaction().For(alice, "tokens").
+			SendTokens(123, 0).To(bob, "tokens").
 			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey)))
 
 	sim.StepUntil(

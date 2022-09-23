@@ -16,8 +16,8 @@ func SignatureForTransaction(txn *protocol.Transaction) SignatureBuilder {
 	return SignatureBuilder{transaction: txn}
 }
 
-func Transaction(principal any, path ...string) TransactionBuilder {
-	return TransactionBuilder{}.Principal(principal, path...)
+func Transaction() TransactionBuilder {
+	return TransactionBuilder{}
 }
 
 // UnixTimeNow returns the current time as a number of milliseconds since the

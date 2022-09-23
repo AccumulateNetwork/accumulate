@@ -50,7 +50,7 @@ func (b SignatureBuilder) PrivateKey(key []byte) SignatureBuilder {
 	return b
 }
 
-func (b SignatureBuilder) Build() (*protocol.Envelope, error) {
+func (b SignatureBuilder) Done() (*protocol.Envelope, error) {
 	b = b.sign()
 	if !b.ok() {
 		return nil, b.err()

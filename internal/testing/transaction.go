@@ -47,7 +47,7 @@ func (tb TransactionBuilder) WithTransaction(txn *protocol.Transaction) Transact
 
 func (tb TransactionBuilder) WithHeader(hdr *protocol.TransactionHeader) TransactionBuilder {
 	tb.transaction = tb.transaction.
-		Principal(hdr.Principal).
+		For(hdr.Principal).
 		Initiator(hdr.Initiator).
 		Memo(hdr.Memo).
 		Metadata(hdr.Metadata)
@@ -55,7 +55,7 @@ func (tb TransactionBuilder) WithHeader(hdr *protocol.TransactionHeader) Transac
 }
 
 func (tb TransactionBuilder) WithPrincipal(origin *url.URL) TransactionBuilder {
-	tb.transaction = tb.transaction.Principal(origin)
+	tb.transaction = tb.transaction.For(origin)
 	return tb
 }
 
@@ -97,7 +97,7 @@ func (tb TransactionBuilder) WithTxnHash(hash []byte) TransactionBuilder {
 }
 
 func (tb *TransactionBuilder) buildTxn() *protocol.Transaction {
-	txn, err := tb.transaction.Build()
+	txn, err := tb.transaction.Done()
 	if err != nil {
 		panic(err)
 	}
