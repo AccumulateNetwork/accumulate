@@ -2,7 +2,6 @@ package api
 
 import (
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
-	"github.com/getsentry/sentry-go"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
@@ -29,7 +28,7 @@ const (
 	ErrCodeMetricsVectorEmpty
 )
 
-//Custom errors
+// Custom errors
 const (
 	ErrCodeProtocolBase = -33000 - iota
 )
@@ -73,6 +72,6 @@ func metricsQueryError(err error) jsonrpc2.Error {
 
 func internalError(err error) jsonrpc2.Error {
 	// Capture internal errors but do not forward them to the user
-	sentry.CaptureException(err)
+	// sentry.CaptureException(err)
 	return ErrInternal
 }

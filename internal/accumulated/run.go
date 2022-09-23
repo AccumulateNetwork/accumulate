@@ -12,7 +12,6 @@ import (
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/fatih/color"
-	"github.com/getsentry/sentry-go"
 	"github.com/rs/zerolog"
 	tmcfg "github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/crypto"
@@ -21,7 +20,6 @@ import (
 	"github.com/tendermint/tendermint/privval"
 	tmclient "github.com/tendermint/tendermint/rpc/client"
 	"github.com/tendermint/tendermint/rpc/client/local"
-	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
@@ -108,22 +106,6 @@ func (d *Daemon) Start() (err error) {
 			close(d.done)
 		}
 	}()
-
-	if d.Config.Accumulate.SentryDSN != "" {
-		opts := sentry.ClientOptions{
-			Dsn:           d.Config.Accumulate.SentryDSN,
-			Environment:   "Accumulate",
-			HTTPTransport: sentryHack{},
-		}
-		if accumulate.IsVersionKnown() {
-			opts.Release = accumulate.Commit
-		}
-		err := sentry.Init(opts)
-		if err != nil {
-			return fmt.Errorf("configuring sentry: %v", err)
-		}
-		defer sentry.Flush(2 * time.Second)
-	}
 
 	d.db, err = database.Open(d.Config, d.Logger)
 	if err != nil {
