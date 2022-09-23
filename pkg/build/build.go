@@ -5,7 +5,7 @@ import "time"
 func Signature() SignatureBuilder { return SignatureBuilder{} }
 
 func Transaction(principal any, path ...string) TransactionBuilder {
-	return TransactionBuilder{}.WithPrincipal(principal, path...)
+	return TransactionBuilder{}.Principal(principal, path...)
 }
 
 // UnixTimeNow returns the current time as a number of milliseconds since the

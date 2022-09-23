@@ -9,7 +9,7 @@ type EnvelopeBuilder struct {
 }
 
 func (b EnvelopeBuilder) SignWith(signer any, path ...string) SignatureBuilder {
-	return SignatureBuilder{env: b}.WithSigner(signer, path...)
+	return SignatureBuilder{env: b}.Url(signer, path...)
 }
 
 func (b EnvelopeBuilder) Build() (*protocol.Envelope, error) {

@@ -43,9 +43,9 @@ func TestSimulator(t *testing.T) {
 			SendTokens().
 			To(bob.JoinPath("tokens"), 123, 0).
 			SignWith(alice, "book", "1").
-			WithVersion(1).
-			WithTimestamp(1).
-			WithPrivateKey(aliceKey)))
+			Version(1).
+			Timestamp(1).
+			PrivateKey(aliceKey)))
 
 	sim.StepUntil(
 		Txn(st.TxID).Succeeds(),

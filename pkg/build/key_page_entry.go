@@ -12,17 +12,17 @@ type KeyPageEntryBuilder[T keyPageEntryBuilderArg[T]] struct {
 	entry protocol.KeySpecParams
 }
 
-func (b KeyPageEntryBuilder[T]) WithOwner(owner any) KeyPageEntryBuilder[T] {
+func (b KeyPageEntryBuilder[T]) Owner(owner any) KeyPageEntryBuilder[T] {
 	b.entryWithOwner(&b.entry, owner)
 	return b
 }
 
-func (b KeyPageEntryBuilder[T]) WithHash(hash []byte) KeyPageEntryBuilder[T] {
+func (b KeyPageEntryBuilder[T]) Hash(hash []byte) KeyPageEntryBuilder[T] {
 	b.entryWithHash(&b.entry, hash)
 	return b
 }
 
-func (b KeyPageEntryBuilder[T]) WithKey(key any, typ protocol.SignatureType) KeyPageEntryBuilder[T] {
+func (b KeyPageEntryBuilder[T]) Key(key any, typ protocol.SignatureType) KeyPageEntryBuilder[T] {
 	b.entryWithKey(&b.entry, key, typ)
 	return b
 }

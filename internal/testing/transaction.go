@@ -48,15 +48,15 @@ func (tb TransactionBuilder) WithTransaction(txn *protocol.Transaction) Transact
 
 func (tb TransactionBuilder) WithHeader(hdr *protocol.TransactionHeader) TransactionBuilder {
 	tb.transaction = tb.transaction.
-		WithPrincipal(hdr.Principal).
-		WithInitiator(hdr.Initiator).
-		WithMemo(hdr.Memo).
-		WithMetadata(hdr.Metadata)
+		Principal(hdr.Principal).
+		Initiator(hdr.Initiator).
+		Memo(hdr.Memo).
+		Metadata(hdr.Metadata)
 	return tb
 }
 
 func (tb TransactionBuilder) WithPrincipal(origin *url.URL) TransactionBuilder {
-	tb.transaction = tb.transaction.WithPrincipal(origin)
+	tb.transaction = tb.transaction.Principal(origin)
 	return tb
 }
 
@@ -87,7 +87,7 @@ func (tb TransactionBuilder) WithCurrentTimestamp() TransactionBuilder {
 }
 
 func (tb TransactionBuilder) WithBody(body protocol.TransactionBody) TransactionBuilder {
-	tb.transaction = tb.transaction.WithBody(body)
+	tb.transaction = tb.transaction.Body(body)
 	return tb
 }
 

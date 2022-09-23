@@ -12,37 +12,37 @@ type SignatureBuilder struct {
 	signer signing.Builder
 }
 
-func (b SignatureBuilder) WithType(typ protocol.SignatureType) SignatureBuilder {
+func (b SignatureBuilder) Type(typ protocol.SignatureType) SignatureBuilder {
 	b.signer.Type = typ
 	return b
 }
 
-func (b SignatureBuilder) WithSigner(signer any, path ...string) SignatureBuilder {
+func (b SignatureBuilder) Url(signer any, path ...string) SignatureBuilder {
 	b.signer.Url = b.parseUrl(signer, path...)
 	return b
 }
 
-func (b SignatureBuilder) WithDelegator(delegator any) SignatureBuilder {
+func (b SignatureBuilder) Delegator(delegator any) SignatureBuilder {
 	b.signer.Delegators = append(b.signer.Delegators, b.parseUrl(delegator))
 	return b
 }
 
-func (b SignatureBuilder) WithVersion(version any) SignatureBuilder {
+func (b SignatureBuilder) Version(version any) SignatureBuilder {
 	b.signer.Version = b.parseUint(version)
 	return b
 }
 
-func (b SignatureBuilder) WithTimestamp(timestamp any) SignatureBuilder {
+func (b SignatureBuilder) Timestamp(timestamp any) SignatureBuilder {
 	b.signer.Timestamp = signing.TimestampFromValue(b.parseUint(timestamp))
 	return b
 }
 
-func (b SignatureBuilder) WithSignerImpl(signer signing.Signer) SignatureBuilder {
+func (b SignatureBuilder) Signer(signer signing.Signer) SignatureBuilder {
 	b.signer.Signer = signer
 	return b
 }
 
-func (b SignatureBuilder) WithPrivateKey(key []byte) SignatureBuilder {
+func (b SignatureBuilder) PrivateKey(key []byte) SignatureBuilder {
 	b.signer.Signer = signing.PrivateKey(key)
 	return b
 }
