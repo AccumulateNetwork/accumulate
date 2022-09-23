@@ -1,8 +1,20 @@
 package build
 
-import "time"
+import (
+	"time"
 
-func Signature() SignatureBuilder { return SignatureBuilder{} }
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+)
+
+func SignatureForHash(hash []byte) SignatureBuilder {
+	txn := new(protocol.Transaction)
+	txn.Body = &protocol.RemoteTransaction{Hash: *(*[32]byte)(hash)}
+	return SignatureBuilder{transaction: txn}
+}
+
+func SignatureForTransaction(txn *protocol.Transaction) SignatureBuilder {
+	return SignatureBuilder{transaction: txn}
+}
 
 func Transaction(principal any, path ...string) TransactionBuilder {
 	return TransactionBuilder{}.Principal(principal, path...)

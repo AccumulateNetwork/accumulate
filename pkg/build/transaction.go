@@ -42,19 +42,7 @@ func (b TransactionBuilder) Build() (*protocol.Transaction, error) {
 }
 
 func (b TransactionBuilder) SignWith(signer any, path ...string) SignatureBuilder {
-	if b.ok() {
-		return EnvelopeBuilder{transaction: &b.t}.SignWith(signer, path...)
-	}
-
-	// Set up a fake transaction
-	var c EnvelopeBuilder
-	c.transaction = new(protocol.Transaction)
-	c.transaction.Header.Principal = protocol.AccountUrl(protocol.Unknown)
-	c.transaction.Body = new(protocol.RemoteTransaction)
-
-	// Transfer errors
-	c.record(b.errs...)
-	return c.SignWith(signer, path...)
+	return SignatureBuilder{parser: b.parser, transaction: &b.t}
 }
 
 type CreateIdentityBuilder struct {

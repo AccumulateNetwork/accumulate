@@ -6,10 +6,13 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+// SignatureBuilder builds a signature. SignatureBuilder should not be
+// constructed directly.
 type SignatureBuilder struct {
 	parser
-	env    EnvelopeBuilder
-	signer signing.Builder
+	transaction *protocol.Transaction
+	signatures  []protocol.Signature
+	signer      signing.Builder
 }
 
 func (b SignatureBuilder) Type(typ protocol.SignatureType) SignatureBuilder {
@@ -47,54 +50,48 @@ func (b SignatureBuilder) PrivateKey(key []byte) SignatureBuilder {
 	return b
 }
 
-// FinishSignature completes the signature and returns an EnvelopeBuilder.
-// FinishSignature will panic if called on a SignatureBuilder that was not
-// created with Transaction().Sign().
-func (b SignatureBuilder) FinishSignature() EnvelopeBuilder {
-	// Sign will almost certainly fail if one of the With methods failed so
-	// don't try
-	if !b.ok() {
-		b.env.record(b.errs...)
-		return b.env
-	}
-
-	if b.env.transaction == nil {
-		panic("transaction is missing")
-	}
-
-	signature, err := b.sign(b.env.transaction)
-	if err != nil {
-		b.env.errorf(errors.StatusUnknownError, "sign: %w", err)
-		return b.env
-	}
-
-	b.env.signatures = append(b.env.signatures, signature)
-	return b.env
-}
-
 func (b SignatureBuilder) Build() (*protocol.Envelope, error) {
-	return b.FinishSignature().Build()
-}
-
-func (b SignatureBuilder) SignWith(signer any, path ...string) SignatureBuilder {
-	return b.FinishSignature().SignWith(signer, path...)
-}
-
-func (b SignatureBuilder) Sign(txn *protocol.Transaction) (protocol.Signature, error) {
+	b = b.sign()
 	if !b.ok() {
 		return nil, b.err()
 	}
 
-	return b.sign(txn)
+	env := new(protocol.Envelope)
+	env.Transaction = []*protocol.Transaction{b.transaction}
+	env.Signatures = b.signatures
+	return env, nil
 }
 
-func (b SignatureBuilder) sign(txn *protocol.Transaction) (protocol.Signature, error) {
+func (b SignatureBuilder) SignWith(signer any, path ...string) SignatureBuilder {
+	return b.sign().SignWith(signer, path...)
+}
+
+func (b SignatureBuilder) sign() SignatureBuilder {
+	if b.transaction == nil {
+		panic("transaction is missing")
+	}
+
+	// Sign will almost certainly fail if any construction call failed, and
+	// there's no point to trying if the transaction couldn't be built, so don't
+	// even try
+	if !b.ok() {
+		return b
+	}
+
 	// Always use a simple hash
 	b.signer.InitMode = signing.InitWithSimpleHash
 
-	if txn.Header.Initiator == ([32]byte{}) {
-		return b.signer.Initiate(txn)
+	var signature protocol.Signature
+	var err error
+	if b.transaction.Header.Initiator == ([32]byte{}) {
+		signature, err = b.signer.Initiate(b.transaction)
 	} else {
-		return b.signer.Sign(txn.GetHash())
+		signature, err = b.signer.Sign(b.transaction.GetHash())
 	}
+	if err != nil {
+		b.errorf(errors.StatusUnknownError, "sign: %w", err)
+	} else {
+		b.signatures = append(b.signatures, signature)
+	}
+	return b
 }
