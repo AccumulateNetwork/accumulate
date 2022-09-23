@@ -1,0 +1,31 @@
+Parameters:
+  fields:
+    - { name: ADI,               type: AdiParameters,     marshal-as: reference }
+    - { name: Account,           type: AccountParameters, marshal-as: reference }
+    - { name: StartTime,         type: time,              description: This is time zero for the protocol }
+    - { name: MajorBlockTime,    type: duration,          description: Scale time... 13000 gives about a 4 second major block }
+    - { name: PayOutFreq,        type: int,               description: Frequency of Payouts in major blocks. Only used in simulation }
+    - { name: TokenLimit,        type: int,               description: Total Tokens to be issued }
+    - { name: TokenIssuanceRate, type: float,             description: APR of payout of unissued tokens }
+    - { name: StakingWeight,     type: WeightParameters,  marshal-as: reference }
+    - { name: DelegateShare,     type: float,             description: The share a Delegate Staker Keeps }
+    - { name: DelegateeShare,    type: float,             description: The share the Staker gets from the Delegates }
+
+AdiParameters:
+  fields:
+    - { name: StakingService, type: url, pointer: true, description: Staking Service ADI acc://staking.acme }
+
+AccountParameters:
+  fields:
+    - { name: TokenIssuance,  type: url, pointer: true, description: Token Issuance account acc://acme }
+    - { name: RegisteredADIs, type: url, pointer: true, description: RegisteredADIs staking acc://staking.acme/Registered }
+    - { name: ApprovedADIs,   type: url, pointer: true, description: ApprovedADIs staking acc://staking.acme/Approved }
+    - { name: Disputes,       type: url, pointer: true, description: Disputes of staking acc://staking.acme/Disputes }
+    - { name: StakingConfig,  type: url, pointer: true, description: Holds Parameter objects defining the config of staking }
+
+WeightParameters:
+  fields:
+    - { name: PureStaking,       type: float, description: Added weight for Pure Staking }
+    - { name: ProtocolValidator, type: float, description: for Protocol Validators }
+    - { name: ProtocolFollower,  type: float, description: for Protocol Followers }
+    - { name: StakingValidator,  type: float, description: for Staking Validators }

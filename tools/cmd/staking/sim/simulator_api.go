@@ -2,10 +2,10 @@ package sim
 
 import "gitlab.com/accumulatenetwork/accumulate/tools/cmd/staking/app"
 
-func (s *Simulator) GetParameters() *app.Parameters {
+func (s *Simulator) GetParameters() (*app.Parameters, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-	return s.parameters
+	return s.parameters, nil
 }
 
 // GetBlock
@@ -14,18 +14,18 @@ func (s *Simulator) GetParameters() *app.Parameters {
 // major blocks must be read and processed.  This means to update the
 // Staking App for a year, we need to access 730 or so blocks (365*2).
 // Not that heavy of a lift.
-func (s *Simulator) GetBlock(idx int64) *app.Block {
+func (s *Simulator) GetBlock(idx int64) (*app.Block, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	if idx < 0 || idx >= int64(len(s.MajorBlocks)) {
-		return nil
+		return nil, nil
 	}
 	blk := s.MajorBlocks[idx]
 	if idx == 0 {
 		blk.SetBudget = true
 		blk.PrintReport = false
 		blk.PrintPayoutScript = false
-		return blk
+		return blk, nil
 	}
 	day := blk.Timestamp.UTC().Day()
 	hour := blk.Timestamp.UTC().Hour()
@@ -40,13 +40,13 @@ func (s *Simulator) GetBlock(idx int64) *app.Block {
 	if idx > 13 && s.MajorBlocks[idx-1].PrintReport {
 		blk.PrintPayoutScript = true
 	}
-	return blk
+	return blk, nil
 }
 
-func (s *Simulator) GetTokensIssued() int64 {
+func (s *Simulator) GetTokensIssued() (int64, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-	return s.tokensIssued
+	return s.tokensIssued, nil
 }
 
 func (s *Simulator) IssuedTokens(tokens int64) {

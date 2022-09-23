@@ -2,10 +2,10 @@ package sim
 
 import (
 	"fmt"
-	"net/url"
 	"sync"
 	"time"
 
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 	"gitlab.com/accumulatenetwork/accumulate/tools/cmd/staking/app"
 )
@@ -54,7 +54,7 @@ func (s *Simulator) Init() {
 		if rh.GetRandInt64()%100 > 60 {
 			var err error
 			hostname := accountUrl.Hostname()
-			Scheme := accountUrl.Scheme
+			Scheme := "acc"
 			depositUrl := Scheme + "://" + hostname + "/Rewards"
 			if newAccount.DepositURL, err = url.Parse(depositUrl); err != nil {
 				panic(err)

@@ -1,6 +1,6 @@
 package app
 
-import "net/url"
+import "gitlab.com/accumulatenetwork/accumulate/pkg/url"
 
 // Deposit
 // This structure tracks deposits to ensure that the tokens receive
@@ -22,7 +22,7 @@ type UrlEntry struct {
 // tracking, but for now we will assume an outside process vets and approves
 // all Staking Accounts
 type Account struct {
-	Order      [32]byte     // Order based on Block hash (working variable)
+	Order      [32]byte      // Order based on Block hash (working variable)
 	MajorBlock int64         // The Major Block where Account was approved
 	URL        *url.URL      // The URL of this account
 	DepositURL *url.URL      // The URL of the account to be paid rewards

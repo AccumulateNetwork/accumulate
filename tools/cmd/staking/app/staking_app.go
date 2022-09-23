@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"log"
 	"sort"
 	"time"
 )
@@ -88,17 +89,27 @@ func (s *StakingApp) Run(protocol Accumulate) {
 	s.protocol = protocol
 	s.protocol.Init()
 	go protocol.Run()
-	s.Params = protocol.GetParameters()
+	var err error
+	s.Params, err = protocol.GetParameters()
+	if err != nil {
+		log.Fatal(err)
+	}
 	s.Stakers.AllAccounts = make(map[string]*Account)
 
 	for s.CBlk == nil {
-		s.CBlk = s.protocol.GetBlock(0)
+		s.CBlk, err = s.protocol.GetBlock(0)
+		if err != nil {
+			log.Fatal(err)
+		}
 		time.Sleep(time.Second)
 	}
 	s.Log("Starting")
 
 	for i := int64(0); true; {
-		b := s.protocol.GetBlock(i)
+		b, err := s.protocol.GetBlock(i)
+		if err != nil {
+			log.Fatal(err)
+		}
 		if b == nil {
 			time.Sleep(s.Params.MajorBlockTime / 12 / 60)
 			continue
@@ -122,7 +133,11 @@ func (s *StakingApp) ComputeBudget() {
 		return
 	}
 	s.Log("Set Monthly Budget")
-	s.Data.TokensIssued = s.protocol.GetTokensIssued()
+	var err error
+	s.Data.TokensIssued, err = s.protocol.GetTokensIssued()
+	if err != nil {
+		log.Fatal(err)
+	}
 	s.Data.TokenIssuanceRate = int64(s.Params.TokenIssuanceRate * 100)
 
 }
@@ -179,7 +194,11 @@ func (s *StakingApp) AddApproved(b *Block) {
 		}
 	}
 	sort.Slice(s.Stakers.Pure, func(i, j int) bool { return s.Stakers.Pure[i].URL.String() < s.Stakers.Pure[j].URL.String() })
-	sort.Slice(s.Stakers.PValidator, func(i, j int) bool { return s.Stakers.PValidator[i].URL.String() < s.Stakers.PValidator[j].URL.String() })
+	sort.Slice(s.Stakers.PValidator, func(i, j int) bool {
+		return s.Stakers.PValidator[i].URL.String() < s.Stakers.PValidator[j].URL.String()
+	})
 	sort.Slice(s.Stakers.PFollower, func(i, j int) bool { return s.Stakers.PFollower[i].URL.String() < s.Stakers.PFollower[j].URL.String() })
-	sort.Slice(s.Stakers.SValidator, func(i, j int) bool { return s.Stakers.SValidator[i].URL.String() < s.Stakers.SValidator[j].URL.String() })
+	sort.Slice(s.Stakers.SValidator, func(i, j int) bool {
+		return s.Stakers.SValidator[i].URL.String() < s.Stakers.SValidator[j].URL.String()
+	})
 }

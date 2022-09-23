@@ -10,8 +10,6 @@ import (
 	"fmt"
 	"math/big"
 	"os"
-	"os/user"
-	"path"
 	"path/filepath"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"

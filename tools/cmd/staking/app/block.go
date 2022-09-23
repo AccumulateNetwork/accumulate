@@ -3,6 +3,8 @@ package app
 import (
 	"net/url"
 	"time"
+
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 type Block struct {
@@ -13,6 +15,7 @@ type Block struct {
 	MajorHeight       int64      // The major block number
 	Timestamp         time.Time  // Timestamp of the DN defining the major block
 	Accounts          []*Account // A list of the watched accounts that where modified in the major block
+	Transactions      map[[32]byte][]*protocol.Transaction
 }
 
 // GetAccount
