@@ -113,8 +113,7 @@ func prepareTx(t *testing.T, japi *api.JrpcMethods, params execParams) *api.TxRe
 		WithSigner(signator, qr.MainChain.Height).
 		WithCurrentTimestamp().
 		WithBody(params.Payload).
-		Initiate(protocol.SignatureTypeLegacyED25519, params.Key).
-		Build()
+		Initiate(protocol.SignatureTypeLegacyED25519, params.Key)
 	sig := env.Signatures[0].(protocol.KeySignature)
 
 	req := new(api.TxRequest)
