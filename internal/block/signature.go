@@ -121,15 +121,15 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 		}
 
 	case protocol.KeySignature:
-		// Basic validation
-		if !md.Nested() && !signature.Verify(nil, delivery.Transaction.GetHash()) {
-			return nil, errors.Format(errors.StatusBadRequest, "invalid signature")
-		}
-
 		if delivery.Transaction.Body.Type().IsUser() {
 			signer, err = x.processKeySignature(batch, delivery, signature, md, !md.Delegated && delivery.Transaction.Header.Principal.LocalTo(md.Location))
 			if err != nil {
 				return nil, err
+			}
+
+			// Basic validation
+			if !md.Nested() && !signature.Verify(nil, delivery.Transaction.GetHash()) {
+				return nil, errors.Format(errors.StatusBadRequest, "invalid signature")
 			}
 
 			// Do not store anything if the set is within a forwarded delegated transaction
@@ -141,6 +141,11 @@ func (x *Executor) processSignature(batch *database.Batch, delivery *chain.Deliv
 			signer, err = x.processPartitionSignature(batch, signature, delivery.Transaction)
 			if err != nil {
 				return nil, errors.Wrap(errors.StatusUnknownError, err)
+			}
+
+			// Basic validation
+			if !md.Nested() && !signature.Verify(nil, delivery.Transaction.GetHash()) {
+				return nil, errors.Format(errors.StatusBadRequest, "invalid signature")
 			}
 		}
 
@@ -715,7 +720,7 @@ func verifyInternalSignature(delivery *chain.Delivery, _ *protocol.InternalSigna
 	return nil
 }
 
-//validationPartitionSignature checks if the key used to sign the synthetic or system transaction belongs to the same subnet
+// validationPartitionSignature checks if the key used to sign the synthetic or system transaction belongs to the same subnet
 func (x *Executor) validatePartitionSignature(signature protocol.KeySignature, transaction *protocol.Transaction, status *protocol.TransactionStatus) (protocol.Signer2, error) {
 	if status.SourceNetwork == nil {
 		return nil, errors.Format(errors.StatusBadRequest, "missing partition signature")
