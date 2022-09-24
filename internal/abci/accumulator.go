@@ -203,6 +203,7 @@ func (app *Accumulator) Info(abci.RequestInfo) abci.ResponseInfo {
 	switch {
 	case err == nil:
 		height = int64(ledger.Index)
+		app.ready = true
 	case errors.Is(err, storage.ErrNotFound):
 		// InitChain has not been called yet
 		height = 0
