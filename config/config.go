@@ -135,6 +135,7 @@ func Default(netName string, net NetworkType, node NodeType, partitionId string)
 	c.Accumulate.Storage.Path = filepath.Join("data", "accumulate.db")
 	c.Accumulate.Snapshots.Directory = "snapshots"
 	c.Accumulate.Snapshots.RetainCount = 10
+	c.Accumulate.Snapshots.Schedule = protocol.DefaultMajorBlockSchedule
 	c.Accumulate.AnalysisLog.Directory = "analysis"
 	c.Accumulate.AnalysisLog.Enabled = false
 	c.Accumulate.API.ReadHeaderTimeout = 10 * time.Second
@@ -175,9 +176,8 @@ type Snapshots struct {
 	// RetainCount is the number of snapshots to retain
 	RetainCount int `toml:"retain" mapstructure:"retain"`
 
-	// // Frequency is how many major blocks should occur before another snapshot
-	// // is taken
-	// Frequency int `toml:"frequency" mapstructure:"frequency"`
+	// Schedule is the schedule for capturing snapshots.
+	Schedule string `toml:"schedule" mapstructure:"schedule"`
 }
 
 type AnalysisLog struct {
