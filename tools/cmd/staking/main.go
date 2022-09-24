@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -10,9 +11,15 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/tools/cmd/staking/app"
 	"gitlab.com/accumulatenetwork/accumulate/tools/cmd/staking/network"
+	"gitlab.com/accumulatenetwork/accumulate/tools/cmd/staking/sim"
 )
 
+var flagDebug = flag.Bool("debug", false, "Debug API requests")
+var flagSim = flag.Bool("sim", false, "Use the simulator")
+
 func main() {
+	flag.Parse()
+
 	u, _ := user.Current()
 	app.ReportDirectory = path.Join(u.HomeDir + "/StakingReports")
 	if err := os.MkdirAll(app.ReportDirectory, os.ModePerm); err != nil {
@@ -21,11 +28,18 @@ func main() {
 	}
 
 	s := new(app.StakingApp)
+	if *flagSim {
+		sim := new(sim.Simulator)
+		s.Run(sim)
+		return
+	}
+
 	net, err := network.New("https://testnet.accumulatenetwork.io/v2", protocol.AccountUrl("staking.acme", "parameters"))
 	if err != nil {
 		log.Fatal(err)
 	}
+	if *flagDebug {
+		net.Debug()
+	}
 	s.Run(net)
-	// sim := new(sim.Simulator)
-	// s.Run(sim)
 }
