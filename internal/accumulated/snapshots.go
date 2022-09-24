@@ -198,6 +198,6 @@ func (d *Daemon) isTimeForSnapshot(blockTime time.Time) bool {
 	})
 
 	// If the block time is after the next schedule time, capture a snapshot
-	next := d.snapshotSchedule.Next(snapshots[0].Timestamp)
+	next := d.snapshotSchedule.Next(snapshots[0].Timestamp.Add(time.Nanosecond))
 	return blockTime.Add(time.Nanosecond).After(next)
 }
