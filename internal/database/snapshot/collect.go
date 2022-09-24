@@ -10,8 +10,10 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-func Collect(batch *database.Batch, file io.WriteSeeker, preserveAccountHistory func(account *database.Account) (bool, error)) (*Writer, error) {
-	w, err := Create(file, new(Header))
+func Collect(batch *database.Batch, header *Header, file io.WriteSeeker, preserveAccountHistory func(account *database.Account) (bool, error)) (*Writer, error) {
+	header.RootHash = *(*[32]byte)(batch.BptRoot())
+
+	w, err := Create(file, header)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
