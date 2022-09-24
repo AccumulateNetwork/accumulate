@@ -22,6 +22,7 @@ func FullCollect(batch *database.Batch, file io.WriteSeeker, network *config.Des
 
 	header := new(Header)
 	header.Height = ledger.Index
+	header.Timestamp = ledger.Timestamp
 
 	w, err := Collect(batch, header, file, func(account *database.Account) (bool, error) {
 		// Preserve history for DN/BVN ADIs

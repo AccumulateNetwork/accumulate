@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
@@ -51,7 +52,9 @@ type Header struct {
 	// Height is the snapshot's block height.
 	Height uint64 `json:"height,omitempty" form:"height" query:"height" validate:"required"`
 	// RootHash is the snapshot's root hash.
-	RootHash  [32]byte `json:"rootHash,omitempty" form:"rootHash" query:"rootHash" validate:"required"`
+	RootHash [32]byte `json:"rootHash,omitempty" form:"rootHash" query:"rootHash" validate:"required"`
+	// Timestamp is the snapshot's block time.
+	Timestamp time.Time `json:"timestamp,omitempty" form:"timestamp" query:"timestamp" validate:"required"`
 	extraData []byte
 }
 
@@ -149,6 +152,7 @@ func (v *Header) Copy() *Header {
 	u.Version = v.Version
 	u.Height = v.Height
 	u.RootHash = v.RootHash
+	u.Timestamp = v.Timestamp
 
 	return u
 }
@@ -316,6 +320,9 @@ func (v *Header) Equal(u *Header) bool {
 		return false
 	}
 	if !(v.RootHash == u.RootHash) {
+		return false
+	}
+	if !((v.Timestamp).Equal(u.Timestamp)) {
 		return false
 	}
 
@@ -581,6 +588,7 @@ var fieldNames_Header = []string{
 	1: "Version",
 	2: "Height",
 	3: "RootHash",
+	4: "Timestamp",
 }
 
 func (v *Header) MarshalBinary() ([]byte, error) {
@@ -595,6 +603,9 @@ func (v *Header) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.RootHash == ([32]byte{})) {
 		writer.WriteHash(3, &v.RootHash)
+	}
+	if !(v.Timestamp == (time.Time{})) {
+		writer.WriteTime(4, v.Timestamp)
 	}
 
 	_, _, err := writer.Reset(fieldNames_Header)
@@ -622,6 +633,11 @@ func (v *Header) IsValid() error {
 		errs = append(errs, "field RootHash is missing")
 	} else if v.RootHash == ([32]byte{}) {
 		errs = append(errs, "field RootHash is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Timestamp is missing")
+	} else if v.Timestamp == (time.Time{}) {
+		errs = append(errs, "field Timestamp is not set")
 	}
 
 	switch len(errs) {
@@ -992,6 +1008,9 @@ func (v *Header) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadHash(3); ok {
 		v.RootHash = *x
 	}
+	if x, ok := reader.ReadTime(4); ok {
+		v.Timestamp = x
+	}
 
 	seen, err := reader.Reset(fieldNames_Header)
 	if err != nil {
@@ -1195,13 +1214,15 @@ func (v *Chain) MarshalJSON() ([]byte, error) {
 
 func (v *Header) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Version  uint64 `json:"version,omitempty"`
-		Height   uint64 `json:"height,omitempty"`
-		RootHash string `json:"rootHash,omitempty"`
+		Version   uint64    `json:"version,omitempty"`
+		Height    uint64    `json:"height,omitempty"`
+		RootHash  string    `json:"rootHash,omitempty"`
+		Timestamp time.Time `json:"timestamp,omitempty"`
 	}{}
 	u.Version = v.Version
 	u.Height = v.Height
 	u.RootHash = encoding.ChainToJSON(v.RootHash)
+	u.Timestamp = v.Timestamp
 	return json.Marshal(&u)
 }
 
@@ -1326,13 +1347,15 @@ func (v *Chain) UnmarshalJSON(data []byte) error {
 
 func (v *Header) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Version  uint64 `json:"version,omitempty"`
-		Height   uint64 `json:"height,omitempty"`
-		RootHash string `json:"rootHash,omitempty"`
+		Version   uint64    `json:"version,omitempty"`
+		Height    uint64    `json:"height,omitempty"`
+		RootHash  string    `json:"rootHash,omitempty"`
+		Timestamp time.Time `json:"timestamp,omitempty"`
 	}{}
 	u.Version = v.Version
 	u.Height = v.Height
 	u.RootHash = encoding.ChainToJSON(v.RootHash)
+	u.Timestamp = v.Timestamp
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -1343,6 +1366,7 @@ func (v *Header) UnmarshalJSON(data []byte) error {
 	} else {
 		v.RootHash = x
 	}
+	v.Timestamp = u.Timestamp
 	return nil
 }
 
