@@ -9,6 +9,9 @@ Header:
   - name: RootHash
     description: is the snapshot's root hash
     type: hash
+  - name: Timestamp
+    description: is the snapshot's block time
+    type: time
 
 Account:
   fields:
