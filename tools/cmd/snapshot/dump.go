@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -37,6 +38,23 @@ func dumpSnapshot(_ *cobra.Command, args []string) {
 	checkf(err, "open snapshot %s", filename)
 	defer f.Close()
 
+	r := snapshot.NewReader(f)
+	s, err := r.Next()
+	checkf(err, "find header")
+	sr, err := s.Open()
+	checkf(err, "open header")
+	header := new(snapshot.Header)
+	_, err = header.ReadFrom(sr)
+	checkf(err, "read header")
+
+	fmt.Printf("Header section at %d (size %d)\n", s.Offset(), s.Size())
+	fmt.Printf("  Version   %d\n", header.Version)
+	fmt.Printf("  Height    %d\n", header.Height)
+	fmt.Printf("  Root Hash %x\n", header.RootHash)
+
+	_, err = f.Seek(0, io.SeekStart)
+	check(err)
+
 	check(snapshot.Visit(f, dumpVisitor{}))
 }
 
@@ -45,6 +63,7 @@ type dumpVisitor struct{}
 func (dumpVisitor) VisitSection(s *snapshot.ReaderSection) error {
 	typstr := s.Type().String()
 	fmt.Printf("%s%s section at %d (size %d)\n", enUsTitle.String(typstr[:1]), typstr[1:], s.Offset(), s.Size())
+
 	switch {
 	case !dumpFlag.Short,
 		dumpFlag.Verify && s.Type() == snapshot.SectionTypeAccounts:
