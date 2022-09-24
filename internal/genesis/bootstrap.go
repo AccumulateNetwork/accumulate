@@ -107,6 +107,7 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) ([]byte, error) {
 		records:     make([]protocol.Account, 0),
 		acmeIssued:  new(big.Int),
 		omitHistory: map[[32]byte]bool{},
+		partition:   config.NetworkUrl{URL: protocol.PartitionUrl(opts.PartitionId)},
 	}
 
 	// Create the router
@@ -154,7 +155,11 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) ([]byte, error) {
 	// Preserve history in the Genesis snapshot
 	batch := b.db.Begin(false)
 	defer batch.Discard()
-	w, err := snapshot.Collect(batch, snapshotWriter, func(account *database.Account) (bool, error) {
+
+	header := new(snapshot.Header)
+	header.Height = protocol.GenesisBlock
+
+	w, err := snapshot.Collect(batch, header, snapshotWriter, func(account *database.Account) (bool, error) {
 		return !b.omitHistory[account.Url().AccountID32()], nil
 	})
 	if err != nil {
@@ -209,7 +214,6 @@ func (b *bootstrap) Execute(st *chain.StateManager, tx *chain.Delivery) (protoco
 
 func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protocol.TransactionResult, error) {
 	b.networkAuthority = protocol.DnUrl().JoinPath(protocol.Operators)
-	b.partition = config.NetworkUrl{URL: protocol.PartitionUrl(b.PartitionId)}
 	b.localAuthority = b.partition.Operators()
 
 	// Verify that the BVN ID will make a valid partition URL
