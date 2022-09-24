@@ -168,8 +168,10 @@ func (v *RestoreVisitor) visit(i, threshold int, msg string, force bool) error {
 
 	begin := force || v.batch == nil
 	if i%threshold == 0 {
-		d := time.Since(v.start)
-		v.logger.Info(msg, "module", "restore", "count", i, "duration", d, "per-second", float64(i)/d.Seconds())
+		if i > 0 {
+			d := time.Since(v.start)
+			v.logger.Info(msg, "module", "restore", "count", i, "duration", d, "per-second", float64(i)/d.Seconds())
+		}
 		if !v.DisableWriteBatching {
 			begin = true
 		}

@@ -14,7 +14,16 @@ import (
 // FullCollect collects a snapshot including additional records required for a
 // fully-functioning node.
 func FullCollect(batch *database.Batch, file io.WriteSeeker, network *config.Describe) error {
-	w, err := Collect(batch, file, func(account *database.Account) (bool, error) {
+	var ledger *protocol.SystemLedger
+	err := batch.Account(network.Ledger()).Main().GetAs(&ledger)
+	if err != nil {
+		return errors.Format(errors.StatusUnknownError, "load system ledger: %w", err)
+	}
+
+	header := new(Header)
+	header.Height = ledger.Index
+
+	w, err := Collect(batch, header, file, func(account *database.Account) (bool, error) {
 		// Preserve history for DN/BVN ADIs
 		_, ok := protocol.ParsePartitionUrl(account.Url())
 		return ok, nil
