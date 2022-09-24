@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gorhill/cronexpr"
 	"github.com/spf13/cobra"
 	"github.com/tendermint/tendermint/privval"
 	"gitlab.com/accumulatenetwork/accumulate/config"
@@ -64,7 +63,7 @@ var cmdSetSchedule = &cobra.Command{
 	Short: "Set the major block schedule",
 	Args:  cobra.ExactArgs(1),
 	Run: func(_ *cobra.Command, args []string) {
-		_, err := cronexpr.Parse(args[0])
+		_, err := core.Cron.Parse(args[0])
 		checkf(err, "CRON expression is invalid")
 
 		setNetworkValue(protocol.Globals, func(v *core.GlobalValues) {
