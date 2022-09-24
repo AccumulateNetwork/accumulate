@@ -47,6 +47,7 @@ type Accumulator struct {
 	checkTxMutex   *sync.Mutex
 	pendingUpdates abci.ValidatorUpdates
 	startTime      time.Time
+	ready          bool
 
 	onFatal func(error)
 }
@@ -247,6 +248,7 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 		panic(fmt.Errorf("failed to load state hash: %v", err))
 	}
 	if root != nil {
+		app.ready = true
 		return abci.ResponseInitChain{AppHash: root}
 	}
 
@@ -298,6 +300,7 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 		panic(fmt.Errorf("failed to load state hash: %v", err))
 	}
 
+	app.ready = true
 	return abci.ResponseInitChain{AppHash: root, Validators: updates}
 }
 
@@ -340,6 +343,16 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 		return abci.ResponseCheckTx{
 			Code: uint32(protocol.ErrorCodeDidPanic),
 			Log:  "Node state is invalid",
+		}
+	}
+
+	// For some reason, if an uninitialized node is configured to sync to a
+	// snapshot, Tendermint may call CheckTx before it calls InitChain or
+	// ApplySnapshot
+	if !app.ready {
+		return abci.ResponseCheckTx{
+			Code: uint32(protocol.ErrorCodeUnknownError),
+			Log:  "Node is not ready",
 		}
 	}
 

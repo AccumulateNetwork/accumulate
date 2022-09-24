@@ -100,6 +100,19 @@
         "${workspaceFolder}/.nodes/node-1/bvnn",
       ]
     },
+    {
+      "name": "Run (single)",
+      "presentation": { "group": "20-Run" },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/cmd/accumulated",
+      "args": [
+        "run",
+        "--truncate",
+        "-w=${workspaceFolder}/.nodes/node-1/dnn",
+      ]
+    },
 
     // Validate
     {
@@ -214,6 +227,19 @@
         "dump",
         // "-s",
         "${workspaceFolder}/.nodes/import/factom-lda.snapshot",
+      ]
+    },
+    {
+      "name": "Fix snapshot",
+      "presentation": { "group": "91-Snapshot", },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/tools/cmd/snapshot",
+      "args": [
+        "fix",
+        "dn",
+        "${workspaceFolder}/snapshot-test.bpt",
       ]
     },
     {
