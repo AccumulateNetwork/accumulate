@@ -9,6 +9,7 @@ type Account interface {
 	encoding.BinaryValue
 	Type() AccountType
 	GetUrl() *url.URL
+	StripUrl()
 }
 
 type FullAccount interface {
@@ -32,6 +33,21 @@ func (a *KeyPage) GetUrl() *url.URL         { return a.Url }
 func (a *TokenAccount) GetUrl() *url.URL    { return a.Url }
 func (a *TokenIssuer) GetUrl() *url.URL     { return a.Url }
 func (a *SyntheticLedger) GetUrl() *url.URL { return a.Url }
+
+func (a *UnknownAccount) StripUrl()   { a.Url = a.Url.StripExtras() }
+func (a *LiteDataAccount) StripUrl()  { a.Url = a.Url.StripExtras() }
+func (a *LiteIdentity) StripUrl()     { a.Url = a.Url.StripExtras() }
+func (a *LiteTokenAccount) StripUrl() { a.Url = a.Url.StripExtras() }
+func (a *ADI) StripUrl()              { a.Url = a.Url.StripExtras() }
+func (a *AnchorLedger) StripUrl()     { a.Url = a.Url.StripExtras() }
+func (a *DataAccount) StripUrl()      { a.Url = a.Url.StripExtras() }
+func (a *SystemLedger) StripUrl()     { a.Url = a.Url.StripExtras() }
+func (a *BlockLedger) StripUrl()      { a.Url = a.Url.StripExtras() }
+func (a *KeyBook) StripUrl()          { a.Url = a.Url.StripExtras() }
+func (a *KeyPage) StripUrl()          { a.Url = a.Url.StripExtras() }
+func (a *TokenAccount) StripUrl()     { a.Url = a.Url.StripExtras() }
+func (a *TokenIssuer) StripUrl()      { a.Url = a.Url.StripExtras() }
+func (a *SyntheticLedger) StripUrl()  { a.Url = a.Url.StripExtras() }
 
 func (a *ADI) GetAuth() *AccountAuth          { return &a.AccountAuth }
 func (a *DataAccount) GetAuth() *AccountAuth  { return &a.AccountAuth }

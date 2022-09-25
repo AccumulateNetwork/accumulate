@@ -8,10 +8,12 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"sync"
 	"time"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/fatih/color"
+	"github.com/robfig/cron/v3"
 	"github.com/rs/zerolog"
 	tmcfg "github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/crypto"
@@ -27,6 +29,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
 	statuschk "gitlab.com/accumulatenetwork/accumulate/internal/connections/status"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -48,6 +51,8 @@ type Daemon struct {
 	connectionManager connections.ConnectionInitializer
 	eventBus          *events.Bus
 	localTm           tmclient.Client
+	snapshotSchedule  cron.Schedule
+	snapshotLock      *sync.Mutex
 
 	// knobs for tests
 	// IsTest   bool
@@ -56,6 +61,7 @@ type Daemon struct {
 
 func Load(dir string, newWriter func(*config.Config) (io.Writer, error)) (*Daemon, error) {
 	var daemon Daemon
+	daemon.snapshotLock = new(sync.Mutex)
 
 	var err error
 	daemon.Config, err = config.Load(dir)
@@ -106,6 +112,12 @@ func (d *Daemon) Start() (err error) {
 			close(d.done)
 		}
 	}()
+
+	if s, err := core.Cron.Parse(d.Config.Accumulate.Snapshots.Schedule); err != nil {
+		d.Logger.Error("Ignoring invalid snapshot schedule", "error", err, "value", d.Config.Accumulate.Snapshots.Schedule)
+	} else {
+		d.snapshotSchedule = s
+	}
 
 	d.db, err = database.Open(d.Config, d.Logger)
 	if err != nil {
