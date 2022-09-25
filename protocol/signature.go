@@ -175,6 +175,10 @@ func UnmarshalKeySignatureJSON(data []byte) (KeySignature, error) {
 		return nil, err
 	}
 
+	if sig == nil {
+		return nil, nil
+	}
+
 	keySig, ok := sig.(KeySignature)
 	if !ok {
 		return nil, fmt.Errorf("signature type %v is not a KeySignature", sig.Type())

@@ -72,6 +72,12 @@ func (t *Transaction) PutStatus(v *protocol.TransactionStatus) error {
 	return t.parent.Account(txn.Transaction.Header.Principal).putBpt()
 }
 
+// RestoreSignatureSets is specifically only to be used to restore a
+// transaction's signature sets from a snapshot.
+func (t *Transaction) RestoreSignatureSets(signer *url.URL, version uint64, entries []SigSetEntry) error {
+	return t.getSignatures(signer).Put(&sigSetData{Version: version, Entries: entries})
+}
+
 // Signatures returns a signature set for the given signer.
 func (t *Transaction) Signatures(signer *url.URL) (*SignatureSet, error) {
 	return t.newSigSet(signer, true)

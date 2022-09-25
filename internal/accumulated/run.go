@@ -2,6 +2,7 @@ package accumulated
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -13,9 +14,12 @@ import (
 	"github.com/fatih/color"
 	"github.com/getsentry/sentry-go"
 	"github.com/rs/zerolog"
+	tmcfg "github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/crypto"
 	tmlog "github.com/tendermint/tendermint/libs/log"
+	service2 "github.com/tendermint/tendermint/libs/service"
 	"github.com/tendermint/tendermint/privval"
+	tmclient "github.com/tendermint/tendermint/rpc/client"
 	"github.com/tendermint/tendermint/rpc/client/local"
 	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/config"
@@ -45,6 +49,7 @@ type Daemon struct {
 	jrpc              *api.JrpcMethods
 	connectionManager connections.ConnectionInitializer
 	eventBus          *events.Bus
+	localTm           tmclient.Client
 
 	// knobs for tests
 	// IsTest   bool
@@ -150,11 +155,13 @@ func (d *Daemon) Start() (err error) {
 
 	router := routing.NewRouter(d.eventBus, d.connectionManager)
 	execOpts := block.ExecutorOptions{
-		Logger:   d.Logger,
-		Key:      d.Key().Bytes(),
-		Describe: d.Config.Accumulate.Describe,
-		Router:   router,
-		EventBus: d.eventBus,
+		Logger:           d.Logger,
+		Key:              d.Key().Bytes(),
+		Describe:         d.Config.Accumulate.Describe,
+		Router:           router,
+		EventBus:         d.eventBus,
+		IsFollower:       d.Config.Mode != tmcfg.ModeValidator,
+		BatchReplayLimit: d.Config.Accumulate.BatchReplayLimit,
 	}
 
 	// On DNs initialize the major block scheduler
@@ -197,12 +204,23 @@ func (d *Daemon) Start() (err error) {
 		}
 	}()
 
+	events.SubscribeAsync(d.eventBus, func(e events.FatalError) {
+		d.Logger.Error("Shutting down due to a fatal error", "error", e.Err)
+		err := d.Stop()
+		if errors.Is(err, service2.ErrAlreadyStopped) {
+			return
+		}
+		if err != nil {
+			d.Logger.Error("Error while shutting down", "error", err)
+		}
+	})
+
 	// Create a local client
 	lnode, ok := d.node.Service.(local.NodeService)
 	if !ok {
 		return fmt.Errorf("node is not a local node service")
 	}
-	lclient, err := local.New(lnode)
+	d.localTm, err = local.New(lnode)
 	if err != nil {
 		return fmt.Errorf("failed to create local node client: %v", err)
 	}
@@ -228,7 +246,7 @@ func (d *Daemon) Start() (err error) {
 
 	// Let the connection manager create and assign clients
 	statusChecker := statuschk.NewNodeStatusChecker()
-	err = d.connectionManager.InitClients(lclient, statusChecker)
+	err = d.connectionManager.InitClients(d.localTm, statusChecker)
 
 	if err != nil {
 		return fmt.Errorf("failed to initialize the connection manager: %v", err)
@@ -240,7 +258,7 @@ func (d *Daemon) Start() (err error) {
 	}
 
 	// Run JSON-RPC server
-	d.api = &http.Server{Handler: d.jrpc.NewMux()}
+	d.api = &http.Server{Handler: d.jrpc.NewMux(), ReadHeaderTimeout: d.Config.Accumulate.API.ReadHeaderTimeout}
 	l, secure, err := listenHttpUrl(d.Config.Accumulate.API.ListenAddress)
 	if err != nil {
 		return fmt.Errorf("failed to start JSON-RPC: %v", err)
@@ -378,4 +396,8 @@ func (d *Daemon) Stop() error {
 
 	<-d.done
 	return nil
+}
+
+func (d *Daemon) Done() <-chan struct{} {
+	return d.node.Quit()
 }

@@ -17,8 +17,10 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -33,19 +35,20 @@ type InitOpts struct {
 	GenesisTime     time.Time
 	Logger          log.Logger
 	FactomAddresses func() (io.Reader, error)
+	Snapshots       []func() (ioutil2.SectionReader, error)
 	GenesisGlobals  *core.GlobalValues
 	OperatorKeys    [][]byte
 }
 
-func Init(snapshot io.WriteSeeker, opts InitOpts) ([]byte, error) {
+func Init(snapshotWriter io.WriteSeeker, opts InitOpts) ([]byte, error) {
 	// Initialize globals
 	gg := opts.GenesisGlobals
 
-	// set the initial price to 1/5 fct price * 1/4 market cap dilution = 1/20 fct price
-	// for this exercise, we'll assume that 1 FCT = $1, so initial ACME price is $0.05
 	if gg.Oracle == nil {
 		gg.Oracle = new(protocol.AcmeOracle)
-		gg.Oracle.Price = uint64(protocol.InitialAcmeOracleValue)
+		if gg.Oracle.Price == 0 {
+			gg.Oracle.Price = uint64(protocol.InitialAcmeOracleValue)
+		}
 	}
 
 	// Set the initial threshold to 2/3 & MajorBlockSchedule
@@ -146,9 +149,15 @@ func Init(snapshot io.WriteSeeker, opts InitOpts) ([]byte, error) {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
+	// Preserve history in the Genesis snapshot
 	batch := b.db.Begin(false)
 	defer batch.Discard()
-	err = exec.SaveSnapshot(batch, snapshot)
+	w, err := snapshot.Collect(batch, snapshotWriter, func(account *database.Account) (bool, error) { return true, nil })
+	if err != nil {
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
+	}
+
+	err = snapshot.CollectAnchors(w, batch, &exec.Describe)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
@@ -231,6 +240,11 @@ func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protoc
 	}
 
 	err = b.maybeCreateFactomAccounts()
+	if err != nil {
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
+	}
+
+	err = b.importSnapshots(st)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
@@ -334,20 +348,19 @@ func (b *bootstrap) maybeCreateAcme() {
 	acme.Url = protocol.AcmeUrl()
 	acme.Precision = 8
 	acme.Symbol = "ACME"
+	acme.SupplyLimit = big.NewInt(protocol.AcmeSupplyLimit * protocol.AcmePrecision)
+	b.WriteRecords(acme)
 
-	if protocol.IsTestNet {
-		// On the TestNet, set the issued amount to the faucet balance
-		acme.Issued.SetString(protocol.AcmeFaucetBalance, 10)
-	} else {
-		// On the MainNet, set the supply limit
-		acme.SupplyLimit = big.NewInt(protocol.AcmeSupplyLimit * protocol.AcmePrecision)
+	if !protocol.IsTestNet {
+		return
 	}
 
-	b.WriteRecords(acme)
+	// On the TestNet, set the issued amount to the faucet balance
+	acme.Issued.SetUint64(protocol.AcmeFaucetBalance * protocol.AcmePrecision)
 }
 
 func (b *bootstrap) maybeCreateFaucet() {
-	if !b.shouldCreate(protocol.FaucetUrl) {
+	if !protocol.IsTestNet || !b.shouldCreate(protocol.FaucetUrl) {
 		return
 	}
 
@@ -357,7 +370,7 @@ func (b *bootstrap) maybeCreateFaucet() {
 	liteToken := new(protocol.LiteTokenAccount)
 	liteToken.Url = protocol.FaucetUrl
 	liteToken.TokenUrl = protocol.AcmeUrl()
-	liteToken.Balance.SetString(protocol.AcmeFaucetBalance, 10)
+	liteToken.Balance.SetUint64(protocol.AcmeFaucetBalance * protocol.AcmePrecision)
 
 	// Lock forever
 	liteToken.LockHeight = math.MaxUint64
@@ -373,6 +386,9 @@ func (b *bootstrap) maybeCreateFactomAccounts() error {
 	rd, err := b.FactomAddresses()
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknownError, err)
+	}
+	if c, ok := rd.(io.Closer); ok {
+		defer c.Close()
 	}
 
 	factomAddresses, err := LoadFactomAddressesAndBalances(rd)
@@ -394,6 +410,50 @@ func (b *bootstrap) maybeCreateFactomAccounts() error {
 		lite.Balance = *big.NewInt(5 * fa.Balance)
 
 		b.WriteRecords(lid, lite)
+	}
+	return nil
+}
+
+func (b *bootstrap) importSnapshots(st *chain.StateManager) error {
+	// Nothing is routed to the DN so don't bother
+	if b.NetworkType == config.Directory {
+		return nil
+	}
+
+	var accounts []*url.URL
+	for _, open := range b.Snapshots {
+		file, err := open()
+		if err != nil {
+			return errors.Wrap(errors.StatusUnknownError, err)
+		}
+		if c, ok := file.(io.Closer); ok {
+			defer c.Close()
+		}
+
+		v := new(snapshotVisitor)
+		v.v = snapshot.NewRestoreVisitor(st.GetBatch(), b.Logger)
+		v.logger.L = b.Logger
+		v.v.DisableWriteBatching = true
+		v.v.CompressChains = true
+		v.router = b.router
+		v.partition = b.PartitionId
+		err = snapshot.Visit(file, v)
+		if err != nil {
+			return errors.Wrap(errors.StatusUnknownError, err)
+		}
+		accounts = append(accounts, v.urls...)
+	}
+
+	// Add Genesis to the accounts' main chain. This also anchors the imported
+	// transactions. This *must* be done outside of ImportFactomSnapshot.
+	// Attempting this within the callback leads to a mismatch between the
+	// account state and the hash in the snapshot.
+	for _, account := range accounts {
+		chain := st.GetBatch().Account(account).MainChain()
+		err := st.State.ChainUpdates.AddChainEntry(st.GetBatch(), chain, st.GetHash(), 0, 0)
+		if err != nil {
+			return errors.Wrap(errors.StatusUnknownError, err)
+		}
 	}
 	return nil
 }

@@ -107,6 +107,7 @@ func (l LogLevel) String() string {
 var DefaultLogLevels = LogLevel{}.
 	SetDefault("error").
 	SetModule("snapshot", "info").
+	SetModule("restore", "info").
 	// SetModule("accumulate", "info").
 	// SetModule("main", "info").
 	// SetModule("state", "info").
@@ -126,6 +127,7 @@ func Default(netName string, net NetworkType, node NodeType, partitionId string)
 	c.Accumulate.Network.Id = netName
 	c.Accumulate.NetworkType = net
 	c.Accumulate.PartitionId = partitionId
+	c.Accumulate.DnStallLimit = 50
 	c.Accumulate.API.PrometheusServer = "http://18.119.26.7:9090"
 	c.Accumulate.SentryDSN = "https://glet_78c3bf45d009794a4d9b0c990a1f1ed5@gitlab.com/api/v4/error_tracking/collector/29762666"
 	c.Accumulate.API.TxMaxWaitTime = 10 * time.Minute
@@ -137,6 +139,8 @@ func Default(netName string, net NetworkType, node NodeType, partitionId string)
 	c.Accumulate.Snapshots.RetainCount = 10
 	c.Accumulate.AnalysisLog.Directory = "analysis"
 	c.Accumulate.AnalysisLog.Enabled = false
+	c.Accumulate.API.ReadHeaderTimeout = 10 * time.Second
+	c.Accumulate.BatchReplayLimit = 500
 	// c.Accumulate.Snapshots.Frequency = 2
 	switch node {
 	case Validator:
@@ -156,8 +160,13 @@ type Config struct {
 }
 
 type Accumulate struct {
-	SentryDSN string `toml:"sentry-dsn" mapstructure:"sentry-dsn"`
-	Describe  `toml:"describe" mapstructure:"describe"`
+	SentryDSN        string `toml:"sentry-dsn" mapstructure:"sentry-dsn"`
+	Describe         `toml:"describe" mapstructure:"describe"`
+	BatchReplayLimit int `toml:"batch-replay-limit" mapstructure:"batch-replay-limit"`
+	// DnStallLimit sets the number of blocks the DN is allowed to take before
+	// acknowledging an anchor.
+	DnStallLimit int `toml:"dn-stall-limit" mapstructure:"dn-stall-limit"`
+
 	// TODO: move network config to its own file since it will be constantly changing over time.
 	//	NetworkConfig string      `toml:"network" mapstructure:"network"`
 	Snapshots   Snapshots   `toml:"snapshots" mapstructure:"snapshots"`
@@ -235,6 +244,7 @@ type API struct {
 	DebugJSONRPC       bool          `toml:"debug-jsonrpc" mapstructure:"debug-jsonrpc"`
 	EnableDebugMethods bool          `toml:"enable-debug-methods" mapstructure:"enable-debug-methods"`
 	ConnectionLimit    int           `toml:"connection-limit" mapstructure:"connection-limit"`
+	ReadHeaderTimeout  time.Duration `toml:"read-header-timeout" mapstructure:"read-header-timeout"`
 }
 
 func MakeAbsolute(root, path string) string {
@@ -379,7 +389,7 @@ func (v NodeType) MarshalTOML() ([]byte, error) {
 // StringToEnumHookFunc is a decode hook for mapstructure that will convert enums to strings
 func StringToEnumHookFunc() mapstructure.DecodeHookFuncType {
 	return func(
-		f reflect.Type,
+		_ reflect.Type,
 		t reflect.Type,
 		data interface{},
 	) (interface{}, error) {

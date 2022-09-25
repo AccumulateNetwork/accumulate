@@ -2,8 +2,10 @@ package protocol
 
 import (
 	"bytes"
+	"encoding/json"
 	"math/big"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -44,4 +46,26 @@ func TestExtraData(t *testing.T) {
 	assert.Equal(t, txn1.Header.extraData, txn2.Header.extraData)
 	assert.Equal(t, body1.extraData, body2.extraData)
 	assert.Equal(t, txn1.GetHash(), txn2.GetHash())
+}
+
+func TestJSONDecodeNull(t *testing.T) {
+	t.Run("Ledger", func(t *testing.T) {
+		ledger := new(SystemLedger)
+		ledger.Index = 123
+		ledger.Timestamp = time.Now()
+		ledger.Url = AccountUrl("dn.acme", "ledger")
+		ledger.Anchor = nil
+		b, err := json.Marshal(ledger)
+		require.NoError(t, err)
+
+		l2 := new(SystemLedger)
+		err = json.Unmarshal(b, l2)
+		require.NoError(t, err)
+		require.True(t, ledger.Equal(l2))
+	})
+
+	t.Run("Union", func(t *testing.T) {
+		_, err := UnmarshalAccountJSON([]byte("null"))
+		require.NoError(t, err)
+	})
 }

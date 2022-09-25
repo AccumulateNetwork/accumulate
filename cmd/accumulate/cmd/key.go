@@ -34,10 +34,15 @@ func init() {
 	keyCmd.AddCommand(keyExportCmd)
 	keyCmd.AddCommand(keyGenerateCmd)
 	keyCmd.AddCommand(keyListCmd)
-	keyImportPrivateCmd.Flags().StringVar(&SigType, "sigtype", "ed25519", "Specify the signature type use rcd1 for RCD1 type ; ed25519 for ED25519 ; legacyed25519 for LegacyED25519 ; btc for Bitcoin ; btclegacy for Legacy Bitcoin  ; eth for Ethereum ")
-	keyImportLiteCmd.Flags().StringVar(&SigType, "sigtype", "ed25519", "Specify the signature type use rcd1 for RCD1 type ; ed25519 for ED25519 ; legacyed25519 for LegacyED25519 ; btc for Bitcoin ; btclegacy for Legacy Bitcoin  ; eth for Ethereum ")
-	keyGenerateCmd.Flags().StringVar(&SigType, "sigtype", "ed25519", "Specify the signature type use rcd1 for RCD1 type ; ed25519 for ED25519 ; legacyed25519 for LegacyED25519 ; btc for Bitcoin ; btclegacy for Legacy Bitcoin  ; eth for Ethereum ")
+	keyImportPrivateCmd.Flags().StringVar(&SigType, "sigtype", "ed25519", "Specify the signature type use rcd1 for RCD1 type ; ed25519 for accumulate ed25519 ; btc for Bitcoin ; btclegacy for Legacy Bitcoin  ; eth for Ethereum ")
+	keyImportLiteCmd.Flags().StringVar(&SigType, "sigtype", "ed25519", "Specify the signature type use rcd1 for RCD1 type ; ed25519 for accumulate ED25519 ; btc for Bitcoin ; btclegacy for Legacy Bitcoin  ; eth for Ethereum ")
+	keyGenerateCmd.Flags().StringVar(&SigType, "sigtype", "ed25519", "Specify the signature type use rcd1 for RCD1 type ; ed25519 for accumulate ED25519 ; btc for Bitcoin ; btclegacy for Legacy Bitcoin  ; eth for Ethereum ")
+	keyImportPrivateCmd.Flags().BoolVarP(&flagKeyImport.Force, "force", "f", false, "If there is an existing external key, overwrite it")
 }
+
+var flagKeyImport = struct {
+	Force bool
+}{}
 
 var keyImportCmd = &cobra.Command{
 	Use:   "import",
@@ -346,9 +351,11 @@ func ImportKey(token []byte, label string, signatureType protocol.SignatureType)
 	//here will change the label if it is a lite account specified, otherwise just use the label
 	label, _ = walletd.LabelForLiteTokenAccount(label)
 
-	_, err = walletd.LookupByLabel(label)
+	existing, err := walletd.LookupByLabel(label)
 	if err == nil {
-		return "", fmt.Errorf("key name is already being used")
+		if !flagKeyImport.Force || existing.KeyInfo.Derivation != "external" {
+			return "", fmt.Errorf("key name is already being used")
+		}
 	}
 
 	_, err = walletd.LookupByPubKey(pk.PublicKey)

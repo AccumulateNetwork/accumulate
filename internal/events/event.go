@@ -13,6 +13,7 @@ type Event interface {
 func (DidCommitBlock) isEvent()    {}
 func (DidSaveSnapshot) isEvent()   {}
 func (WillChangeGlobals) isEvent() {}
+func (FatalError) isEvent()        {}
 
 type DidCommitBlock struct {
 	Index uint64
@@ -27,3 +28,10 @@ type DidSaveSnapshot struct {
 type WillChangeGlobals struct {
 	New, Old *core.GlobalValues
 }
+
+type FatalError struct {
+	Err error
+}
+
+func (e FatalError) Error() string { return e.Err.Error() }
+func (e FatalError) Unwrap() error { return e.Err }

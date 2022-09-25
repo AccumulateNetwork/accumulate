@@ -30,7 +30,7 @@ func UpdateAccount[T protocol.Account](batch *Batch, url *url.URL, fn func(T) er
 	return account, nil
 }
 
-func (r *Account) url() *url.URL {
+func (r *Account) Url() *url.URL {
 	return r.key[1].(*url.URL)
 }
 
@@ -38,13 +38,17 @@ func (a *Account) Commit() error {
 	if !a.IsDirty() {
 		return nil
 	}
+
 	if fieldIsDirty(a.main) {
 		acc, err := a.Main().Get()
 		switch {
 		case err == nil:
-
 			if len(acc.GetUrl().String()) > protocol.AccountUrlMaxLength {
 				return errors.Wrap(errors.StatusBadUrlLength, fmt.Errorf("url specified exceeds maximum character length: %s", acc.GetUrl().String()))
+			}
+			err = protocol.IsValidAccountPath(acc.GetUrl().Path)
+			if err != nil {
+				return errors.Format(errors.StatusBadRequest, "invalid path: %w", err)
 			}
 		case errors.Is(err, errors.StatusNotFound):
 			// The main state is unset so there's nothing to check
@@ -52,6 +56,7 @@ func (a *Account) Commit() error {
 			return errors.Wrap(errors.StatusUnknownError, err)
 		}
 	}
+
 	// Ensure the synthetic anchors index is up to date
 	for k, set := range a.syntheticForAnchor {
 		if !set.IsDirty() {
@@ -67,7 +72,7 @@ func (a *Account) Commit() error {
 	// If anything has changed, update the BPT entry
 	err := a.putBpt()
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.Format(errors.StatusUnknownError, "update BPT entry for %v: %w", a.Url(), err)
 	}
 
 	// Do the normal commit stuff
@@ -94,8 +99,8 @@ func (r *Account) PutState(state protocol.Account) error {
 	}
 
 	// Is this the right URL - does it match the record's key?
-	if !r.url().Equal(state.GetUrl()) {
-		return fmt.Errorf("mismatched url: key is %v, URL is %v", r.url(), state.GetUrl())
+	if !r.Url().Equal(state.GetUrl()) {
+		return fmt.Errorf("mismatched url: key is %v, URL is %v", r.Url(), state.GetUrl())
 	}
 
 	// Make sure the key book is set

@@ -299,7 +299,7 @@ func GoAreEqual(field *Field, varName, otherName, whenNotEqual string) (string, 
 	var expr string
 	var wantPtr bool
 	switch field.Type.Code {
-	case Bool, String, Hash, Uint, Int, Float, Duration, Time:
+	case Bool, String, Hash, Uint, Int, Float, Duration:
 		expr, wantPtr = "%[1]s%[2]s == %[1]s%[3]s", false
 	case Bytes, RawJson:
 		expr, wantPtr = "bytes.Equal(%[1]s%[2]s, %[1]s%[3]s)", false
@@ -307,6 +307,8 @@ func GoAreEqual(field *Field, varName, otherName, whenNotEqual string) (string, 
 		expr, wantPtr = "(%[1]s%[2]s).Cmp(%[1]s%[3]s) == 0", true
 	case Url, TxID:
 		expr, wantPtr = "(%[1]s%[2]s).Equal(%[1]s%[3]s)", true
+	case Time:
+		expr, wantPtr = "(%[1]s%[2]s).Equal(%[1]s%[3]s)", false
 	default:
 		switch field.MarshalAs {
 		case Union:
