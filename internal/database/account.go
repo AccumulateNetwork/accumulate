@@ -8,6 +8,10 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+func (b *Batch) Account(u *url.URL) *Account {
+	return b.getAccount(u.StripExtras())
+}
+
 func UpdateAccount[T protocol.Account](batch *Batch, url *url.URL, fn func(T) error) (T, error) {
 	record := batch.Account(url).Main()
 
@@ -43,17 +47,31 @@ func (a *Account) Commit() error {
 		acc, err := a.Main().Get()
 		switch {
 		case err == nil:
-			if len(acc.GetUrl().String()) > protocol.AccountUrlMaxLength {
-				return errors.Wrap(errors.StatusBadUrlLength, fmt.Errorf("url specified exceeds maximum character length: %s", acc.GetUrl().String()))
+			// Strip the URL of user info, query, and fragment
+			u := acc.GetUrl()
+			if !u.StripExtras().Equal(u) {
+				acc.StripUrl()
+				u = acc.GetUrl()
+
+				err = a.Main().Put(acc)
+				if err != nil {
+					return errors.Format(errors.StatusBadRequest, "strip url: %w", err)
+				}
 			}
-			err = protocol.IsValidAccountPath(acc.GetUrl().Path)
+
+			if len(u.String()) > protocol.AccountUrlMaxLength {
+				return errors.Wrap(errors.StatusBadUrlLength, fmt.Errorf("url specified exceeds maximum character length: %s", u.String()))
+			}
+
+			err = protocol.IsValidAccountPath(u.Path)
 			if err != nil {
 				return errors.Format(errors.StatusBadRequest, "invalid path: %w", err)
 			}
+
 		case errors.Is(err, errors.StatusNotFound):
 			// The main state is unset so there's nothing to check
 		default:
-			return errors.Wrap(errors.StatusUnknownError, err)
+			return errors.Format(errors.StatusUnknownError, "load state: %w", err)
 		}
 	}
 

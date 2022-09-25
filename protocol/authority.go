@@ -96,6 +96,7 @@ func MakeLiteSigner(signer Signer2) Signer {
 /* ***** Unknown signer ***** */
 
 func (s *UnknownSigner) GetUrl() *url.URL                                   { return s.Url }
+func (s *UnknownSigner) StripUrl()                                          { s.Url = s.GetUrl().StripExtras() }
 func (s *UnknownSigner) GetVersion() uint64                                 { return s.Version }
 func (*UnknownSigner) GetSignatureThreshold() uint64                        { return math.MaxUint64 }
 func (*UnknownSigner) EntryByKeyHash(keyHash []byte) (int, KeyEntry, bool)  { return -1, nil, false }
