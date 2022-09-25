@@ -83,6 +83,19 @@ func splitColon(s string) (string, string) {
 	return t[0], t[1]
 }
 
+// StripExtras returns a URL with everything except the authority and path
+// stripped. The receiver is returned if it meets the criteria.
+func (u *URL) StripExtras() *URL {
+	if u.UserInfo == "" && u.Query == "" && u.Fragment == "" {
+		return u
+	}
+
+	v := new(URL)
+	v.Authority = u.Authority
+	v.Path = u.Path
+	return v
+}
+
 // WithUserInfo creates a copy of the URL with UserInfo set to the given value.
 func (u *URL) WithUserInfo(s string) *URL {
 	v := u.copy()
@@ -367,7 +380,7 @@ func (u *URL) LocalTo(v *URL) bool {
 // IdentityAccountID constructs an account identifier from the lower case
 // hostname. The port is not included.
 //
-//   ID = Hash(LowerCase(u.Host()))
+//	ID = Hash(LowerCase(u.Host()))
 func (u *URL) IdentityAccountID() []byte {
 	c := u.IdentityAccountID32()
 	return c[:]
@@ -385,7 +398,7 @@ func (u *URL) IdentityAccountID32() [32]byte {
 // path. The port is not included. If the path does not begin with `/`, `/` is
 // added between the hostname and the path.
 //
-//   ID = Hash(LowerCase(Sprintf("%s/%s", u.Host(), u.Path)))
+//	ID = Hash(LowerCase(Sprintf("%s/%s", u.Host(), u.Path)))
 func (u *URL) AccountID() []byte {
 	c := u.AccountID32()
 	return c[:]
@@ -401,7 +414,7 @@ func (u *URL) AccountID32() [32]byte {
 
 // Routing returns the first 8 bytes of the identity account ID as an integer.
 //
-//   Routing = uint64(u.IdentityAccountID()[:8])
+//	Routing = uint64(u.IdentityAccountID()[:8])
 func (u *URL) Routing() uint64 {
 	return binary.BigEndian.Uint64(u.IdentityAccountID())
 }
