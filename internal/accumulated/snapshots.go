@@ -8,9 +8,11 @@ import (
 	"path/filepath"
 	"runtime/debug"
 	"sort"
+	"time"
 
 	"github.com/tendermint/tendermint/privval"
 	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
@@ -29,17 +31,27 @@ func (d *Daemon) onDidCommitBlock(event events.DidCommitBlock) error {
 
 	// Begin the batch synchronously immediately after commit
 	batch := d.db.Begin(false)
-	go d.collectSnapshot(batch, event.Major, event.Index)
+	go d.collectSnapshot(batch, event.Time, event.Major, event.Index)
 	return nil
 }
 
-func (d *Daemon) collectSnapshot(batch *database.Batch, majorBlock, minorBlock uint64) {
+func (d *Daemon) collectSnapshot(batch *database.Batch, blockTime time.Time, majorBlock, minorBlock uint64) {
+	// Don't collect a snapshot if one is still being collected
+	if !d.snapshotLock.TryLock() {
+		return
+	}
+	defer d.snapshotLock.Unlock()
+
 	defer func() {
 		if err := recover(); err != nil {
 			d.Logger.Error("Panicked while creating snapshot", "error", err, "major-block", majorBlock, "minor-block", minorBlock, "module", "snapshot", "stack", string(debug.Stack()))
 		}
 	}()
 	defer batch.Discard()
+
+	if !d.isTimeForSnapshot(blockTime) {
+		return
+	}
 
 	d.Logger.Info("Creating a snapshot", "major-block", majorBlock, "minor-block", minorBlock, "module", "snapshot", "hash", logging.AsHex(batch.BptRoot()).Slice(0, 4))
 	snapDir := config.MakeAbsolute(d.Config.RootDir, d.Config.Accumulate.Snapshots.Directory)
@@ -112,6 +124,7 @@ func (d *Daemon) collectSnapshot(batch *database.Batch, majorBlock, minorBlock u
 		}
 	}
 }
+
 func (d *Daemon) LoadSnapshot(file ioutil2.SectionReader) error {
 	db, err := database.Open(d.Config, d.Logger)
 	if err != nil {
@@ -165,4 +178,26 @@ func (d *Daemon) LoadSnapshot(file ioutil2.SectionReader) error {
 	}
 
 	return nil
+}
+
+func (d *Daemon) isTimeForSnapshot(blockTime time.Time) bool {
+	// If the schedule is unset, capture a snapshot on every major block
+	if d.snapshotSchedule == nil {
+		return true
+	}
+
+	// If there are no snapshots, capture a snapshot
+	snapshots, err := abci.ListSnapshots(d.Config)
+	if err != nil || len(snapshots) == 0 {
+		return true
+	}
+
+	// Order by time, descending
+	sort.Slice(snapshots, func(i, j int) bool {
+		return snapshots[i].Timestamp.After(snapshots[j].Timestamp)
+	})
+
+	// If the block time is after the next schedule time, capture a snapshot
+	next := d.snapshotSchedule.Next(snapshots[0].Timestamp.Add(time.Nanosecond))
+	return blockTime.Add(time.Nanosecond).After(next)
 }

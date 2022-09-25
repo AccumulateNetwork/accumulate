@@ -56,7 +56,7 @@ func keyForSystemData(partition string) systemDataKey {
 	return systemDataKey{partition}
 }
 
-func (c *Batch) Account(url *url.URL) *Account {
+func (c *Batch) getAccount(url *url.URL) *Account {
 	return getOrCreateMap(&c.account, keyForAccount(url), func() *Account {
 		v := new(Account)
 		v.logger = c.logger
@@ -106,7 +106,7 @@ func (c *Batch) Resolve(key record.Key) (record.Record, record.Key, error) {
 		if !okUrl {
 			return nil, nil, errors.New(errors.StatusInternalError, "bad key for batch")
 		}
-		v := c.Account(url)
+		v := c.getAccount(url)
 		return v, key[2:], nil
 	case "Transaction":
 		if len(key) < 2 {

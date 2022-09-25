@@ -42,6 +42,7 @@ var _ protocol.Account = (*FakeLiteAccount)(nil)
 
 func (f *FakeLiteAccount) Type() protocol.AccountType { return f.TheType }
 func (f *FakeLiteAccount) GetUrl() *url.URL           { return f.Url }
+func (f *FakeLiteAccount) StripUrl()                  { f.Url = f.GetUrl().StripExtras() }
 
 var _ protocol.FullAccount = (*FakeAccount)(nil)
 
