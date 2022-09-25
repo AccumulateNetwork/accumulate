@@ -495,9 +495,6 @@ func unpackTransaction[PT bodyPtr[T], T any](t *testing.T, dataHeader, dataBody 
 	if header.Principal == nil {
 		t.Skip()
 	}
-	if header.Principal.Query != "" {
-		t.Skip("https://accumulate.atlassian.net/browse/AC-3212")
-	}
 	return &Transaction{Header: header, Body: body}, body
 }
 

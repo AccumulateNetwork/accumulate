@@ -23,6 +23,7 @@
   - name: Account
     type: entity
     customCommit: true
+    private: true
     parameters:
     - name: Url
       type: url
