@@ -446,3 +446,9 @@ TXID=$(cli-tx tx create test.acme/tokens test-2-0 acc://invalid-account 1)
 wait-for-tx $TXID
 BALANCE1=$(accumulate -j account get test.acme/tokens | jq -r .data.balance)
 [ $BALANCE -eq $BALANCE1 ] && success || die "Expected $BALANCE, got $BALANCE1"
+
+section "Export wallet as json format"
+accumulate wallet export /tmp/account.json
+
+section "Import wallet as json format"
+accumulate wallet import /tmp/account.json
