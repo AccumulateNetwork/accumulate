@@ -164,6 +164,7 @@ func RestoreAccounts() (out string, err error) {
 				//if we hae the old key type, make it the new type.
 				if k.KeyInfo.Type == protocol.SignatureTypeLegacyED25519 {
 					k.KeyInfo.Type = protocol.SignatureTypeED25519
+					k.KeyInfo.Derivation = "external"
 
 					kiData, err := k.KeyInfo.MarshalBinary()
 					if err != nil {

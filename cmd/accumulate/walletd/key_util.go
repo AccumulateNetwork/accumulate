@@ -6,7 +6,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"runtime/debug"
-	"strconv"
 
 	btc "github.com/btcsuite/btcd/btcec"
 	"github.com/tyler-smith/go-bip32"
@@ -226,11 +225,7 @@ func getKeyCountAndIncrement(sigtype protocol.SignatureType) (count uint32, err 
 		return 0, err
 	}
 	if sigtype == protocol.SignatureTypeED25519 {
-		value, err := strconv.ParseInt("80000000", 16, 64)
-		if err != nil {
-			return 0, err
-		}
-		count += uint32(value)
+		count = uint32(0x80000000)
 	}
 
 	return count, nil
