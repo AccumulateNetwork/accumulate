@@ -520,6 +520,9 @@ func ExportAccounts(filePath string) error {
 	}
 
 	l, err := walletd.GetWallet().GetBucket(walletd.BucketLite)
+	if err != nil {
+		return err
+	}
 	for i := range l.KeyValueList {
 		label := api2.LiteLabel{}
 		label.LiteName = string(l.KeyValueList[i].Key)
@@ -549,6 +552,9 @@ func ExportAccounts(filePath string) error {
 	}
 
 	kl, err := walletd.GetKeyList()
+	if err != nil {
+		return err
+	}
 	for i, v := range kl {
 		kn := api2.KeyName{}
 		kn.Name = v.Name

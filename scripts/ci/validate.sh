@@ -398,6 +398,15 @@ RESULT=$(accumulate -j get test.acme/managed-tokens -j | jq -re '.data.authoriti
 [ "$RESULT" -eq 1 ] || die "Expected 1 authority, got $RESULT"
 success
 
+section "Export wallet as json format"
+accumulate wallet export /tmp/account.json
+
+section "Export wallet as json format"
+rm ~/.accumulate/wallet.db
+
+section "Import wallet as json format"
+accumulate wallet import /tmp/account.json
+
 section "Add manager to token account"
 TXID=$(cli-tx auth add test.acme/managed-tokens test-1-0 manager.acme/book) || die "Failed to add the manager"
 wait-for-tx $TXID
@@ -446,9 +455,3 @@ TXID=$(cli-tx tx create test.acme/tokens test-2-0 acc://invalid-account 1)
 wait-for-tx $TXID
 BALANCE1=$(accumulate -j account get test.acme/tokens | jq -r .data.balance)
 [ $BALANCE -eq $BALANCE1 ] && success || die "Expected $BALANCE, got $BALANCE1"
-
-section "Export wallet as json format"
-accumulate wallet export /tmp/account.json
-
-section "Import wallet as json format"
-accumulate wallet import /tmp/account.json
