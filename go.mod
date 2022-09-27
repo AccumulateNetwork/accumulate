@@ -79,7 +79,7 @@ require (
 	github.com/rivo/uniseg v0.2.0 // indirect
 	github.com/sivchari/nosnakecase v1.7.0 // indirect
 	github.com/stbenjam/no-sprintf-host-port v0.1.1 // indirect
-	gitlab.com/accumulatenetwork/ledger/ledger-go-accumulate v0.0.0-20220923132428-b289134fb98f // indirect
+	gitlab.com/accumulatenetwork/ledger/ledger-go-accumulate v0.0.0-20220923132428-b289134fb98f // indirect TODO relink after merge to main of project ledger-go-accumulate
 	golang.org/x/exp/typeparams v0.0.0-20220722155223-a9213eeb770e // indirect
 )
 
