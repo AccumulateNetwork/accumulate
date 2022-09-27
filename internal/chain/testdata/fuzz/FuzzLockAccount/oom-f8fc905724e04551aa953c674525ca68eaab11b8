@@ -1,0 +1,3 @@
+go test fuzz v1
+[]byte("\x01Fbvn-BBBPGetLo+LBBBFB@BԵBBBAl.acme?\xd4B\xc1'CBB/-B\xbc'A/%.\xd9\xd8\xd8\xce.\xd0\xdf\xd8''/%8432020\x06 \x01\x030\xd8\xdcY\x01\x147]c")
+[]byte("\x01\x10")
