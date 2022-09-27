@@ -400,12 +400,15 @@ success
 
 section "Export wallet as json format"
 accumulate wallet export /tmp/account.json
+success
 
-section "Export wallet as json format"
-rm ~/.accumulate/wallet.db
+section "Remove wallet db storage"
+rm ~/.accumulate/wallet_encrypted.db
+success
 
 section "Import wallet as json format"
 accumulate wallet import /tmp/account.json
+success
 
 section "Add manager to token account"
 TXID=$(cli-tx auth add test.acme/managed-tokens test-1-0 manager.acme/book) || die "Failed to add the manager"
