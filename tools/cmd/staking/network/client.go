@@ -32,11 +32,19 @@ func New(server string, parameters *url.URL) (*Network, error) {
 	return &Network{client: c, paramUrl: parameters}, nil
 }
 
+func (n *Network) Debug() { n.client.DebugRequest = true }
+
 func (n *Network) Run()               {}
 func (n *Network) Init()              {}
 func (n *Network) TokensIssued(int64) {}
 
 func (n *Network) GetParameters() (*app.Parameters, error) {
+	n.params = new(app.Parameters)
+	n.params.Init()
+	return n.params, nil
+}
+
+func (n *Network) xGetParameters() (*app.Parameters, error) {
 	// Get the latest data entry and unmarshal it
 	req1 := new(api.DataEntryQuery)
 	req1.Url = n.paramUrl
@@ -144,7 +152,7 @@ func (n *Network) GetBlock(index int64) (*app.Block, error) {
 
 func (n *Network) getMajorBlockMetadata(blockIndex uint64) (*app.Block, error) {
 	major := new(protocol.IndexEntry)
-	_, err := n.queryChainEntry(major, protocol.DnUrl().JoinPath(protocol.AnchorPool).WithFragment("chain/major-block"))
+	_, err := n.queryChainEntry(major, protocol.DnUrl().JoinPath(protocol.AnchorPool).WithFragment(fmt.Sprintf("chain/major-block/%d", blockIndex)))
 	if err != nil {
 		return nil, errors.Format(errors.StatusUnknownError, "query major block %d: %w", blockIndex, err)
 	}
@@ -213,10 +221,17 @@ func (n *Network) getMajorBlock(partition string, index uint64) (*api.MajorQuery
 }
 
 func (n *Network) getMinorBlocks(partition string, major *api.MajorQueryResponse) ([]*api.MinorQueryResponse, error) {
+	if len(major.MinorBlocks) == 0 {
+		return nil, nil
+	}
+
 	// Query from the first minor block in the major block to the last
 	req := new(api.MinorBlocksQuery)
 	req.Url = protocol.PartitionUrl(partition)
 	req.Start = major.MinorBlocks[0].BlockIndex
+	if req.Start == 1 {
+		req.Start++ // Skip Genesis
+	}
 	req.Count = major.MinorBlocks[len(major.MinorBlocks)-1].BlockIndex - req.Start + 1
 	req.BlockFilterMode = query.BlockFilterModeExcludeEmpty
 	req.TxFetchMode = query.TxFetchModeExpand
