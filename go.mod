@@ -51,7 +51,7 @@ require (
 	github.com/ghodss/yaml v1.0.0
 	github.com/gorhill/cronexpr v0.0.0-20180427100037-88b0669f7d75
 	github.com/manifoldco/promptui v0.9.0
-	gitlab.com/accumulatenetwork/ledger/ledger-go-accumulate v0.0.0-20220909001320-41afb7c46986
+
 )
 
 require (
@@ -79,6 +79,7 @@ require (
 	github.com/rivo/uniseg v0.2.0 // indirect
 	github.com/sivchari/nosnakecase v1.7.0 // indirect
 	github.com/stbenjam/no-sprintf-host-port v0.1.1 // indirect
+	gitlab.com/accumulatenetwork/ledger/ledger-go-accumulate v0.0.0-20220923132428-b289134fb98f // indirect
 	golang.org/x/exp/typeparams v0.0.0-20220722155223-a9213eeb770e // indirect
 )
 
