@@ -268,6 +268,34 @@ func (s *Builder) sign(sig protocol.Signature, sigMdHash, hash []byte) error {
 	return s.Signer.Sign(sig, sigMdHash, hash)
 }
 
+func (s *Builder) signTx(sig protocol.Signature, sigMdHash []byte, txn *protocol.Transaction) error {
+	hash := txn.GetHash()
+	switch sig := sig.(type) {
+	case *protocol.LegacyED25519Signature:
+		sig.TransactionHash = *(*[32]byte)(hash)
+	case *protocol.ED25519Signature:
+		sig.TransactionHash = *(*[32]byte)(hash)
+	case *protocol.RCD1Signature:
+		sig.TransactionHash = *(*[32]byte)(hash)
+	case *protocol.BTCSignature:
+		sig.TransactionHash = *(*[32]byte)(hash)
+	case *protocol.BTCLegacySignature:
+		sig.TransactionHash = *(*[32]byte)(hash)
+	case *protocol.ETHSignature:
+		sig.TransactionHash = *(*[32]byte)(hash)
+	case *protocol.DelegatedSignature:
+		if sigMdHash == nil {
+			sigMdHash = sig.Metadata().Hash()
+		}
+		// SignTransaction is only used by Ledger which does not support DelegatedSignature atm
+		return s.sign(sig.Signature, sigMdHash, hash)
+	default:
+		panic("unreachable")
+	}
+
+	return s.Signer.SignTransaction(sig, txn)
+}
+
 func (s *Builder) Sign(message []byte) (protocol.Signature, error) {
 	var sig protocol.Signature
 	sig, err := s.prepare(false)
@@ -299,7 +327,7 @@ func (s *Builder) SignTransaction(txn *protocol.Transaction) (protocol.Signature
 		}
 	}
 
-	return sig, s.Signer.SignTransaction(sig, txn)
+	return sig, s.signTx(sig, nil, txn)
 }
 
 func (s *Builder) Initiate(txn *protocol.Transaction) (protocol.Signature, error) {
@@ -327,7 +355,7 @@ func (s *Builder) Initiate(txn *protocol.Transaction) (protocol.Signature, error
 		txn.Header.Initiator = *(*[32]byte)(init.MerkleHash())
 	}
 
-	return sig, s.Signer.SignTransaction(sig, txn)
+	return sig, s.signTx(sig, nil, txn)
 }
 
 func (s *Builder) InitiateSynthetic(txn *protocol.Transaction, dest *url.URL) (*protocol.PartitionSignature, error) {
