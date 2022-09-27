@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -13,6 +12,7 @@ import (
 	"github.com/ghodss/yaml"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"golang.org/x/sync/errgroup"
@@ -26,6 +26,14 @@ var txCmd = &cobra.Command{
 		var err error
 		if len(args) > 0 {
 			switch arg := args[0]; arg {
+			case "submit":
+				if len(args) > 2 {
+					out, err = submit(args[1:])
+				} else {
+					fmt.Println("Usage:")
+					PrintTXSubmit()
+				}
+
 			case "get":
 				if len(args) > 1 {
 					out, err = GetTX(args[1])
@@ -108,8 +116,8 @@ func PrintTXCreate() {
 }
 
 func PrintTXExecute() {
-	fmt.Println("  accumulate tx execute [origin url] [signing key name] [payload]	Execute an arbitrary transaction")
-	fmt.Println("  accumulate tx execute [lite account url] [payload]	Execute an arbitrary transaction")
+	fmt.Println("  accumulate tx execute [origin url] [signing key name] [payload]	Sign and execute an arbitrary transaction")
+	fmt.Println("  accumulate tx execute [lite account url] [payload]	Sign and execute an arbitrary transaction")
 }
 
 func PrintTxSign() {
@@ -120,11 +128,16 @@ func PrintTXHistoryGet() {
 	fmt.Println("  accumulate tx history [url] [starting transaction number] [ending transaction number] --scratch (optional)	Get transaction history")
 }
 
+func PrintTXSubmit() {
+	fmt.Println("  accumulate tx submit [transaction] [[signature 0] ...] Submit an arbitrary transaction + signature(s)")
+}
+
 func PrintTX() {
 	PrintTXGet()
 	PrintTXCreate()
-	PrintTXExecute()
 	PrintTxSign()
+	PrintTXExecute()
+	PrintTXSubmit()
 	PrintTXHistoryGet()
 	PrintTXPendingGet()
 }
@@ -464,4 +477,62 @@ func SignTX(sender string, args []string) (string, error) {
 	}
 
 	return dispatchTxAndPrintResponse(txHash, u, signer)
+}
+
+func submit(args []string) (string, error) {
+	txn := new(protocol.Transaction)
+	err := txn.UnmarshalJSON([]byte(args[0]))
+	if err != nil {
+		return "", err
+	}
+
+	var sigs []protocol.Signature
+	for _, arg := range args[1:] {
+		sig, err := protocol.UnmarshalSignatureJSON([]byte(arg))
+		if err != nil {
+			return "", err
+		}
+		sigs = append(sigs, sig)
+	}
+
+	req := new(api.ExecuteRequest)
+	req.Envelope = &protocol.Envelope{Transaction: []*protocol.Transaction{txn}, Signatures: sigs}
+	if TxPretend {
+		req.CheckOnly = true
+	}
+
+	res, err := Client.ExecuteDirect(context.Background(), req)
+	if err != nil {
+		return PrintJsonRpcError(err)
+	}
+	if res.Code != 0 {
+		result := new(protocol.TransactionStatus)
+		if Remarshal(res.Result, result) != nil {
+			return "", errors.New(errors.StatusEncodingError, res.Message)
+		}
+		return "", result.Error
+	}
+
+	var resps []*api.TransactionQueryResponse
+	if TxWait != 0 {
+		resps, err = waitForTxnUsingHash(res.TransactionHash, TxWait, TxIgnorePending)
+		if err != nil {
+			return PrintJsonRpcError(err)
+		}
+	}
+
+	result, err := ActionResponseFrom(res).Print()
+	if err != nil {
+		return "", err
+	}
+	if res.Code == 0 {
+		for _, response := range resps {
+			str, err := PrintTransactionQueryResponseV2(response)
+			if err != nil {
+				return PrintJsonRpcError(err)
+			}
+			result = fmt.Sprint(result, str, "\n")
+		}
+	}
+	return result, nil
 }
