@@ -54,7 +54,7 @@ func NewLedgerSigner(key *Key) (*LedgerSigner, error) {
 	}
 
 	signer := &LedgerSigner{
-		ledgerApi: nil,
+		ledgerApi: ledgerApi,
 		key:       key,
 		wallet:    selWallet,
 	}
