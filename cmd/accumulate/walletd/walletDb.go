@@ -37,6 +37,7 @@ var (
 	BucketMnemonic          = []byte("mnemonic")
 	BucketKeyInfo           = []byte("keyinfo")
 	BucketSigTypeDeprecated = []byte("sigtype")
+	BucketTransactionCache  = []byte("TransactionCache")
 )
 var (
 	UseUnencryptedWallet bool
