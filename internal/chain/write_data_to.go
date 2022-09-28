@@ -23,8 +23,9 @@ func (WriteDataTo) Validate(st *StateManager, tx *Delivery) (protocol.Transactio
 		return nil, errors.Format(errors.StatusBadRequest, "recipient is missing")
 	}
 
-	if body.Entry == nil {
-		return nil, errors.Format(errors.StatusBadRequest, "entry is missing")
+	err := validateDataEntry(st, body.Entry)
+	if err != nil {
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	if _, err := protocol.ParseLiteDataAddress(body.Recipient); err != nil {
