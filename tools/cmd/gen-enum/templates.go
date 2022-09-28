@@ -24,6 +24,7 @@ type Type struct {
 
 type TypeValue struct {
 	Name string
+	Type *Type
 	typegen.EnumValue
 }
 
@@ -45,6 +46,7 @@ func convert(types map[string]typegen.Enum, pkgName string) *Types {
 		ttyp.Values = make([]*TypeValue, 0, len(typ))
 		for name, val := range typ {
 			tval := new(TypeValue)
+			tval.Type = ttyp
 			ttyp.Values = append(ttyp.Values, tval)
 			tval.Name = name
 			tval.EnumValue = *val
