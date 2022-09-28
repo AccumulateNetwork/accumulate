@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	. "gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	. "gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
 
 func TestWriter_WriteBigInt(t *testing.T) {
