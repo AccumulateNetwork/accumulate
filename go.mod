@@ -48,6 +48,7 @@ require (
 
 require (
 	github.com/FactomProject/factomd v1.13.0
+	github.com/FactomProject/go-bip32 v0.3.6-0.20161206200006-3b593af1c415
 	github.com/ghodss/yaml v1.0.0
 	github.com/gorhill/cronexpr v0.0.0-20180427100037-88b0669f7d75
 	github.com/manifoldco/promptui v0.9.0
@@ -57,7 +58,6 @@ require (
 require (
 	github.com/FactomProject/btcutil v0.0.0-20200312214114-5fd3eaf71bd2 // indirect
 	github.com/FactomProject/ed25519 v0.0.0-20150814230546-38002c4fe7b6 // indirect
-	github.com/FactomProject/go-bip32 v0.3.6-0.20161206200006-3b593af1c415 // indirect
 	github.com/FactomProject/go-bip39 v0.3.6-0.20161217174232-d1007fb78d9a // indirect
 	github.com/FactomProject/go-bip44 v0.0.0-20190306062959-b541a96d8da9 // indirect
 	github.com/FactomProject/go-simplejson v0.5.0 // indirect

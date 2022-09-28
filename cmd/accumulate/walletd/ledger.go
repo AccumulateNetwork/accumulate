@@ -6,9 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/FactomProject/go-bip32"
 	"strconv"
 
+	"github.com/FactomProject/go-bip32"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd/api"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd/bip44"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
