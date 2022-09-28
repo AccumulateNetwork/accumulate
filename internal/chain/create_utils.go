@@ -17,5 +17,14 @@ func checkCreateAdiAccount(st *StateManager, account *url.URL) error {
 		return errors.Format(errors.StatusBadRequest, "invalid principal: cannot create %v as a child of %v", account, st.OriginUrl)
 	}
 
+	dir, err := st.batch.Account(account.Identity()).Directory().Get()
+	if err != nil {
+		return errors.Format(errors.StatusUnknownError, "load directory index: %w", err)
+	}
+
+	if len(dir)+1 > int(st.Globals.Globals.Limits.IdentityAccounts) {
+		return errors.Format(errors.StatusBadRequest, "identity would have too many accounts")
+	}
+
 	return nil
 }
