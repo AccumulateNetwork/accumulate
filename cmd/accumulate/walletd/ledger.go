@@ -304,7 +304,7 @@ func (ls *LedgerSigner) SignTransaction(sig protocol.Signature, txn *protocol.Tr
 			return err
 		}
 	default:
-		return fmt.Errorf("cannot sign using a%T, not supported", sig)
+		return fmt.Errorf("cannot sign using a %T, not supported", sig)
 	}
 	return nil
 }
