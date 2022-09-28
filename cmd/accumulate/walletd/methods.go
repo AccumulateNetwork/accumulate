@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math/big"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd/api"
@@ -228,6 +227,10 @@ func (m *JrpcMethods) NewSendTokensTransaction(_ context.Context, params json.Ra
 	if err != nil {
 		return validatorError(err)
 	}
+	value, _ := GetWallet().Get(BucketTransactionCache, []byte(req.TxName))
+	if value != nil {
+		return validatorError(fmt.Errorf("txn already available with the tx name"))
+	}
 	err = GetWallet().Put(BucketTransactionCache, []byte(req.TxName), resp)
 	if err != nil {
 		return validatorError(err)
@@ -257,7 +260,7 @@ func (m *JrpcMethods) AddSendTokensOutput(_ context.Context, params json.RawMess
 	}
 	recipient := &protocol.TokenRecipient{
 		Url:    address,
-		Amount: *big.NewInt(req.Amount),
+		Amount: req.Amount,
 	}
 	sendToken.To = append(sendToken.To, recipient)
 	resp, err := sendToken.MarshalBinary()

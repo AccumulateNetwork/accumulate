@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
@@ -17,9 +18,9 @@ import (
 )
 
 type AddSendTokensOutputRequest struct {
-	TxName       string `json:"txName,omitempty" form:"txName" query:"txName" validate:"required"`
-	TokenAddress string `json:"tokenAddress,omitempty" form:"tokenAddress" query:"tokenAddress" validate:"required"`
-	Amount       int64  `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	TxName       string  `json:"txName,omitempty" form:"txName" query:"txName" validate:"required"`
+	TokenAddress string  `json:"tokenAddress,omitempty" form:"tokenAddress" query:"tokenAddress" validate:"required"`
+	Amount       big.Int `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
 }
 
 type AddTokenTransactionOutput struct {
@@ -162,7 +163,7 @@ func (v *AddSendTokensOutputRequest) Copy() *AddSendTokensOutputRequest {
 
 	u.TxName = v.TxName
 	u.TokenAddress = v.TokenAddress
-	u.Amount = v.Amount
+	u.Amount = *encoding.BigintCopy(&v.Amount)
 
 	return u
 }
@@ -487,7 +488,7 @@ func (v *AddSendTokensOutputRequest) Equal(u *AddSendTokensOutputRequest) bool {
 	if !(v.TokenAddress == u.TokenAddress) {
 		return false
 	}
-	if !(v.Amount == u.Amount) {
+	if !((&v.Amount).Cmp(&u.Amount) == 0) {
 		return false
 	}
 
@@ -929,6 +930,18 @@ func (v *VersionResponse) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *AddSendTokensOutputRequest) MarshalJSON() ([]byte, error) {
+	u := struct {
+		TxName       string  `json:"txName,omitempty"`
+		TokenAddress string  `json:"tokenAddress,omitempty"`
+		Amount       *string `json:"amount,omitempty"`
+	}{}
+	u.TxName = v.TxName
+	u.TokenAddress = v.TokenAddress
+	u.Amount = encoding.BigintToJSON(&v.Amount)
+	return json.Marshal(&u)
+}
+
 func (v *AdiListResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Urls encoding.JsonList[string] `json:"urls,omitempty"`
@@ -1037,6 +1050,28 @@ func (v *SignResponse) MarshalJSON() ([]byte, error) {
 	u.Signature = encoding.BytesToJSON(v.Signature)
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	return json.Marshal(&u)
+}
+
+func (v *AddSendTokensOutputRequest) UnmarshalJSON(data []byte) error {
+	u := struct {
+		TxName       string  `json:"txName,omitempty"`
+		TokenAddress string  `json:"tokenAddress,omitempty"`
+		Amount       *string `json:"amount,omitempty"`
+	}{}
+	u.TxName = v.TxName
+	u.TokenAddress = v.TokenAddress
+	u.Amount = encoding.BigintToJSON(&v.Amount)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.TxName = u.TxName
+	v.TokenAddress = u.TokenAddress
+	if x, err := encoding.BigintFromJSON(u.Amount); err != nil {
+		return fmt.Errorf("error decoding Amount: %w", err)
+	} else {
+		v.Amount = *x
+	}
+	return nil
 }
 
 func (v *AdiListResponse) UnmarshalJSON(data []byte) error {

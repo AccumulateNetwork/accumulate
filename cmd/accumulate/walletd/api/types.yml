@@ -219,5 +219,5 @@ AddSendTokensOutputRequest:
     - name: TokenAddress
       type: string
     - name: Amount
-      type: int
+      type: bigint
 
