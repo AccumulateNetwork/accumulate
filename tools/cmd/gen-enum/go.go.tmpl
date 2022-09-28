@@ -11,8 +11,8 @@ import (
 {{range .Types}}
 {{$typ := .Name}}
 {{range .Values}}
-// {{$typ}}{{.Name}} {{.Description}}.
-const {{$typ}}{{.Name}} {{$typ}} = {{.Value}}
+// {{valueName .}} {{.Description}}.
+const {{valueName .}} {{$typ}} = {{.Value}}
 {{end}}
 {{end}}
 
@@ -25,7 +25,7 @@ func (v *{{.Name}}) SetEnumValue(id uint64) bool {
 	u := {{.Name}}(id)
 	switch u {
 	{{- $typ := .Name}}
-	case {{range $i, $v := .Values}}{{if gt $i 0}}, {{end}}{{$typ}}{{.Name}}{{end}}:
+	case {{range $i, $v := .Values}}{{if gt $i 0}}, {{end}}{{valueName .}}{{end}}:
 		*v = u
 		return true
 	default:
@@ -38,7 +38,7 @@ func (v {{.Name}}) String() string {
 	switch v {
 	{{- $typ := .Name}}
 	{{- range .Values}}
-	case {{$typ}}{{.Name}}:
+	case {{valueName .}}:
 		return "{{lowerCamel .Name}}"
 	{{- end}}
 	default:
@@ -51,8 +51,8 @@ func (v {{.Name}}) GoString() string {
 	switch v {
 	{{- $typ := .Name}}
 	{{- range .Values}}
-	case {{$typ}}{{.Name}}:
-		return "{{$typ}}{{.Name}}"
+	case {{valueName .}}:
+		return "{{valueName .}}"
 	{{- end}}
 	default:
 		return fmt.Sprintf("{{.Name}}(%d)", v)
@@ -64,7 +64,7 @@ func {{.Name}}ByName(name string) ({{.Name}}, bool) {
 	switch strings.ToLower(name) {
 	{{- $typ := .Name}}
 	{{- range .Values}}
-	{{- $typ := (print $typ .Name)}}
+	{{- $typ := (valueName .)}}
 	case "{{lower .Name}}":
 		return {{$typ}}, true
 	{{- range .Aliases}}

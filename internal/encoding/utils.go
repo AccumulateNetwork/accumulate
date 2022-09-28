@@ -158,12 +158,6 @@ func StringUnmarshalBinary(b []byte) (string, error) {
 	return string(b[:l]), nil
 }
 
-func SplitDuration(d time.Duration) (sec, ns uint64) {
-	sec = uint64(d.Seconds())
-	ns = uint64((d - d.Round(time.Second)).Nanoseconds())
-	return sec, ns
-}
-
 func DurationBinarySize(d time.Duration) int {
 	sec, ns := SplitDuration(d)
 	return UvarintBinarySize(sec) + UvarintBinarySize(ns)
