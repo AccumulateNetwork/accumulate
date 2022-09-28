@@ -19,6 +19,8 @@ type Network struct {
 	client   *client.Client
 	paramUrl *url.URL
 	params   *app.Parameters
+
+	missingMajorBlocks []int
 }
 
 var _ app.Accumulate = (*Network)(nil)
@@ -29,7 +31,10 @@ func New(server string, parameters *url.URL) (*Network, error) {
 		return nil, err
 	}
 
-	return &Network{client: c, paramUrl: parameters}, nil
+	n := new(Network)
+	n.client = c
+	n.paramUrl = parameters
+	return n, nil
 }
 
 func (n *Network) Debug() { n.client.DebugRequest = true }
@@ -155,10 +160,21 @@ func (n *Network) GetBlock(index int64) (*app.Block, error) {
 }
 
 func (n *Network) getMajorBlockMetadata(blockIndex uint64) (*app.Block, error) {
+	offset := uint64(len(n.missingMajorBlocks) + 1)
 	major := new(protocol.IndexEntry)
-	_, err := n.queryChainEntry(major, protocol.DnUrl().JoinPath(protocol.AnchorPool).WithFragment(fmt.Sprintf("chain/major-block/%d", blockIndex)))
+	_, err := n.queryChainEntry(major, protocol.DnUrl().JoinPath(protocol.AnchorPool).WithFragment(fmt.Sprintf("chain/major-block/%d", blockIndex-offset)))
 	if err != nil {
 		return nil, errors.Format(errors.StatusUnknownError, "query major block %d: %w", blockIndex, err)
+	}
+	if major.BlockIndex < blockIndex {
+		panic("This should not be possible")
+	}
+	if major.BlockIndex > blockIndex {
+		fmt.Printf("Major block %d is missing\n", blockIndex)
+		n.missingMajorBlocks = append(n.missingMajorBlocks, int(blockIndex))
+		block := new(app.Block)
+		block.MajorHeight = int64(blockIndex)
+		return block, nil
 	}
 
 	index := new(protocol.IndexEntry)

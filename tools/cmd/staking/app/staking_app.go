@@ -97,7 +97,7 @@ func (s *StakingApp) Run(protocol Accumulate) {
 	s.Stakers.AllAccounts = make(map[string]*Account)
 
 	for s.CBlk == nil {
-		s.CBlk, err = s.protocol.GetBlock(0)
+		s.CBlk, err = s.protocol.GetBlock(1)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -105,7 +105,7 @@ func (s *StakingApp) Run(protocol Accumulate) {
 	}
 	s.Log("Starting")
 
-	for i := int64(0); true; {
+	for i := int64(1); true; {
 		b, err := s.protocol.GetBlock(i)
 		if err != nil {
 			log.Fatal(err)
