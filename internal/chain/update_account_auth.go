@@ -160,6 +160,10 @@ func (UpdateAccountAuth) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 		}
 	}
 
+	if len(auth.Authorities) > int(st.Globals.Globals.Limits.AccountAuthorities) {
+		return nil, errors.Format(errors.StatusBadRequest, "account will have too many authorities")
+	}
+
 	err := st.Update(st.Origin)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update %v: %w", st.OriginUrl, err)

@@ -69,7 +69,7 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Del
 	// Set up the state manager
 	var st *chain.StateManager
 	if x.isGenesis {
-		st = chain.NewStateManager(&x.Describe, nil, batch.Begin(true), principal, delivery.Transaction, x.logger.With("operation", "ProcessTransaction"))
+		st = chain.NewStateManager(&x.Describe, &x.globals.Active, batch.Begin(true), principal, delivery.Transaction, x.logger.With("operation", "ProcessTransaction"))
 	} else {
 		st, err = chain.LoadStateManager(&x.Describe, &x.globals.Active, batch.Begin(true), principal, delivery.Transaction, status, x.logger.With("operation", "ProcessTransaction"))
 		if err != nil {

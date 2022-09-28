@@ -125,6 +125,10 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 		}
 	}
 
+	if len(page.Keys) > int(st.Globals.Globals.Limits.PageEntries) {
+		return nil, errors.Format(errors.StatusBadRequest, "page will have too many entries")
+	}
+
 	didUpdateKeyPage(page)
 	err = st.Update(page)
 	if err != nil {
