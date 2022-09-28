@@ -12,6 +12,9 @@ import (
 // Success returns true if the status represents success.
 func (s Status) Success() bool { return s < 300 }
 
+// Error implements error.
+func (s Status) Error() string { return s.String() }
+
 // As calls stdlib errors.As.
 func As(err error, target interface{}) bool { return errors.As(err, target) }
 
@@ -37,13 +40,13 @@ func convert(err error) *Error {
 	}
 
 	e := &Error{
-		Code:    StatusUnknownError,
+		Code:    UnknownError,
 		Message: err.Error(),
 	}
 
 	var encErr encoding.Error
 	if errors.As(err, &encErr) {
-		e.Code = StatusEncodingError
+		e.Code = EncodingError
 		err = encErr.E
 	}
 
@@ -61,7 +64,7 @@ func (e *Error) setCause(f *Error) {
 		return
 	}
 
-	if e.Code != StatusUnknownError {
+	if e.Code != UnknownError {
 		return
 	}
 
@@ -98,7 +101,7 @@ func Wrap(code Status, err error) error {
 		return nil
 	}
 	// If err is an Error and we're not going to add anything, return it
-	if !trackLocation && code == StatusUnknownError {
+	if !trackLocation && code == UnknownError {
 		if _, ok := err.(*Error); ok {
 			return err
 		}

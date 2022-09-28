@@ -1,34 +1,10 @@
 package encoding
 
 import (
-	"encoding"
 	"fmt"
-	"io"
 
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 )
-
-type Error struct {
-	E error
-}
-
-func (e Error) Error() string { return e.E.Error() }
-func (e Error) Unwrap() error { return e.E }
-
-type EnumValueGetter interface {
-	GetEnumValue() uint64
-}
-
-type EnumValueSetter interface {
-	SetEnumValue(uint64) bool
-}
-
-type BinaryValue interface {
-	encoding.BinaryMarshaler
-	encoding.BinaryUnmarshaler
-	CopyAsInterface() interface{}
-	UnmarshalBinaryFrom(io.Reader) error
-}
 
 // Byter is implemented by any value that has a Bytes method.
 type Byter interface {
