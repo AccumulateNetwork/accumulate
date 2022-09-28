@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/FactomProject/go-bip32"
 	"strconv"
 
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd/api"
@@ -178,9 +179,9 @@ func (la *LedgerApi) GenerateKey(wallet accounts.Wallet, label string) (*api.Key
 	}
 
 	chain := derivation.Chain()
-	if chain < 0x80000000 {
-		chain += 0x80000000
-		address += 0x80000000
+	if chain&bip32.FirstHardenedChild == 0 {
+		chain ^= bip32.FirstHardenedChild
+		address ^= bip32.FirstHardenedChild
 	}
 	derivation = bip44.Derivation{derivation.Purpose(), derivation.CoinType(), derivation.Account(), chain, address}
 	account, err := wallet.Derive(derivation, false, true, label)
@@ -279,7 +280,7 @@ func (la *LedgerApi) Sign(wallet accounts.Wallet, derivationPath string, txn *pr
 		return &tx, err
 	}
 
-	return nil, errors.New("the request key is was found in the wallet")
+	return nil, fmt.Errorf("the request key is was not found in the wallet (the wallet ID is %s)", wallet.WalletID())
 }
 
 func (ls *LedgerSigner) SetPublicKey(sig protocol.Signature) error {
@@ -303,7 +304,7 @@ func (ls *LedgerSigner) SignTransaction(sig protocol.Signature, txn *protocol.Tr
 			return err
 		}
 	default:
-		return fmt.Errorf("cannot set the public key on a %T, not supported", sig)
+		return fmt.Errorf("cannot sign using a%T, not supported", sig)
 	}
 	return nil
 }
