@@ -281,8 +281,16 @@ func (m *JrpcMethods) DeleteSendTokensTransaction(_ context.Context, params json
 		return validatorError(err)
 	}
 
-	sendToken := protocol.SendTokens{}
-	resp, err := sendToken.MarshalJSON()
+	value, err := GetWallet().Get(BucketTransactionCache, []byte(req.Name))
+	if err != nil {
+		return validatorError(err)
+	}
+	resp := protocol.SendTokens{}
+	err = resp.UnmarshalBinary(value)
+	if err != nil {
+		return validatorError(err)
+	}
+	err = GetWallet().Delete(BucketTransactionCache, []byte(req.Name))
 	if err != nil {
 		return validatorError(err)
 	}
