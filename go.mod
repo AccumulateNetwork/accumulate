@@ -36,7 +36,7 @@ require (
 	gitlab.com/ethan.reesor/vscode-notebooks/go-playbooks v0.0.0-20220417214602-1121b9fae118
 	gitlab.com/ethan.reesor/vscode-notebooks/yaegi v0.0.0-20220417214422-5c573557938e
 	go.etcd.io/etcd/client/v3 v3.5.4
-	golang.org/x/exp v0.0.0-20220426173459-3bcf042a4bf5
+	golang.org/x/exp v0.0.0-20200331195152-e8c3332aa8e5
 	golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4
 	golang.org/x/sys v0.0.0-20220722155257-8c9f86f7a55f
 	golang.org/x/term v0.0.0-20220722155259-a9ba230a4035
@@ -51,7 +51,7 @@ require (
 	github.com/ghodss/yaml v1.0.0
 	github.com/gorhill/cronexpr v0.0.0-20180427100037-88b0669f7d75
 	github.com/manifoldco/promptui v0.9.0
-
+	gitlab.com/accumulatenetwork/ledger/ledger-go-accumulate v0.0.0-20220928093609-e2bfeb33993c
 )
 
 require (
@@ -65,12 +65,9 @@ require (
 	github.com/FactomProject/netki-go-partner-client v0.0.0-20160324224126-426acb535e66 // indirect
 	github.com/GaijinEntertainment/go-exhaustruct/v2 v2.2.0 // indirect
 	github.com/alingse/asasalint v0.0.11 // indirect
-	github.com/btcsuite/btcd/btcec/v2 v2.2.0 // indirect
 	github.com/btcsuitereleases/btcutil v0.0.0-20150612230727-f2b1058a8255 // indirect
 	github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e // indirect
 	github.com/creachadair/taskgroup v0.3.2 // indirect
-	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.0.1 // indirect
-	github.com/ethereum/go-ethereum v1.10.23 // indirect
 	github.com/firefart/nonamedreturns v1.0.4 // indirect
 	github.com/karalabe/usb v0.0.2 // indirect
 	github.com/lufeee/execinquery v1.2.1 // indirect
@@ -79,7 +76,6 @@ require (
 	github.com/rivo/uniseg v0.2.0 // indirect
 	github.com/sivchari/nosnakecase v1.7.0 // indirect
 	github.com/stbenjam/no-sprintf-host-port v0.1.1 // indirect
-	gitlab.com/accumulatenetwork/ledger/ledger-go-accumulate v0.0.0-20220923132428-b289134fb98f // indirect TODO relink after merge to main of project ledger-go-accumulate
 	golang.org/x/exp/typeparams v0.0.0-20220722155223-a9213eeb770e // indirect
 )
 
@@ -139,7 +135,7 @@ require (
 	github.com/gofrs/flock v0.8.1 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
-	github.com/golang/snappy v0.0.4 // indirect
+	github.com/golang/snappy v0.0.3 // indirect
 	github.com/golangci/check v0.0.0-20180506172741-cfe4005ccda2 // indirect
 	github.com/golangci/dupl v0.0.0-20180902072040-3e9179ac440a // indirect
 	github.com/golangci/go-misc v0.0.0-20220329215616-d24fe342adfe // indirect
@@ -238,7 +234,7 @@ require (
 	github.com/stretchr/objx v0.4.0 // indirect
 	github.com/subosito/gotenv v1.4.0 // indirect
 	github.com/sylvia7788/contextcheck v1.0.5 // indirect
-	github.com/syndtr/goleveldb v1.0.1-0.20210819022825-2ae1ddf74ef7 // indirect
+	github.com/syndtr/goleveldb v1.0.1-0.20200815110645-5c35d600f0ca // indirect
 	github.com/tdakkota/asciicheck v0.1.1 // indirect
 	github.com/tecbot/gorocksdb v0.0.0-20191217155057-f0fad39f321c // indirect
 	github.com/tendermint/tm-db v0.6.6 // indirect
@@ -272,5 +268,4 @@ require (
 	mvdan.cc/lint v0.0.0-20170908181259-adc824a0674b // indirect
 	mvdan.cc/unparam v0.0.0-20220706161116-678bad134442 // indirect
 	rsc.io/qr v0.2.0 // indirect
-
 )
