@@ -9,6 +9,18 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+// AddSendTokensOutput add output to the send token transaction.
+func (c *Client) AddSendTokensOutput(ctx context.Context, req *api.AddSendTokensOutputRequest) (*protocol.SendTokens, error) {
+	var resp protocol.SendTokens
+
+	err := c.RequestAPIv2(ctx, "add-output", req, &resp)
+	if err != nil {
+		return nil, err
+	}
+
+	return &resp, nil
+}
+
 // AdiList returns a list of adi's managed by the wallet.
 func (c *Client) AdiList(ctx context.Context) (interface{}, error) {
 	var req struct{}

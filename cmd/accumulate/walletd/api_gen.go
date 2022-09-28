@@ -13,6 +13,7 @@ func (m *JrpcMethods) populateMethodTable() jsonrpc2.MethodMap {
 		m.methods = make(jsonrpc2.MethodMap, 11)
 	}
 
+	m.methods["add-output"] = m.AddSendTokensOutput
 	m.methods["adi-list"] = m.AdiList
 	m.methods["create-envelope"] = m.CreateEnvelope
 	m.methods["create-transaction"] = m.CreateTransaction
