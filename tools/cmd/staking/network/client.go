@@ -128,7 +128,11 @@ func (n *Network) GetBlock(index int64) (*app.Block, error) {
 		}
 
 		if part.Type == protocol.PartitionTypeDirectory {
-			block.Timestamp = *major.MajorBlockTime
+			if major.MajorBlockTime == nil {
+				fmt.Print("Missing BlockTime")
+			} else {
+				block.Timestamp = *major.MajorBlockTime
+			}
 		}
 
 		for _, b := range minor {
