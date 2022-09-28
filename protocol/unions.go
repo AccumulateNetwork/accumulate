@@ -15,8 +15,6 @@ type SignatureType uint64
 // TransactionType is the type for transaction types.
 type TransactionType uint64
 
-type PrivateKeyLocation uint64
-
 // TransactionMax defines the max point for transaction types.
 type TransactionMax uint64
 
