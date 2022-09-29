@@ -120,6 +120,13 @@ func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][2]*config
 				Type:    node.BvnnType,
 			})
 
+			if dnn.P2P.ExternalAddress != "" {
+				dnn.P2P.ExternalAddress = dnn.Accumulate.LocalAddress
+			}
+			if bvnn.P2P.ExternalAddress != "" {
+				bvnn.P2P.ExternalAddress = bvnn.Accumulate.LocalAddress
+			}
+
 			if len(network.Bvns) == 1 && len(bvn.Nodes) == 1 {
 				dnn.P2P.AddrBookStrict = true
 				dnn.P2P.AllowDuplicateIP = false
