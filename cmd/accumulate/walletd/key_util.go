@@ -225,7 +225,7 @@ func getKeyCountAndIncrement(sigtype protocol.SignatureType) (count uint32, err 
 		return 0, err
 	}
 	if sigtype == protocol.SignatureTypeED25519 {
-		count = uint32(0x80000000)
+		count += uint32(0x80000000)
 	}
 
 	return count, nil
