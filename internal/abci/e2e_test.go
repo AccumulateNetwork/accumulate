@@ -1442,6 +1442,7 @@ func TestIssueTokensWithSupplyLimit(t *testing.T) {
 	})
 
 	require.Error(t, err, "expected a failure but instead spending over the supply limit passed")
+	time.Sleep(time.Second) // The test fails if this is removed
 
 	account = n.GetLiteTokenAccount(liteAddr.String())
 	//the balance should be equal to
