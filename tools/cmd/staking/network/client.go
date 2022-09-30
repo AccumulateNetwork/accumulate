@@ -19,6 +19,7 @@ type Network struct {
 	client   *client.Client
 	paramUrl *url.URL
 	params   *app.Parameters
+	Blocks   []*app.Block
 }
 
 var _ app.Accumulate = (*Network)(nil)
@@ -34,7 +35,10 @@ func New(server string, parameters *url.URL) (*Network, error) {
 
 func (n *Network) Debug() { n.client.DebugRequest = true }
 
-func (n *Network) Run()               {}
+func (n *Network) Run() {
+
+}
+
 func (n *Network) Init()              {}
 func (n *Network) TokensIssued(int64) {}
 
@@ -93,7 +97,18 @@ func (n *Network) GetTokensIssued() (int64, error) {
 	return issued.Int64(), nil
 }
 
+// GetBlock
+// How the Application gets blocks
 func (n *Network) GetBlock(index int64) (*app.Block, error) {
+	if index >= int64(len(n.Blocks)) {
+		return nil, errors.New("no block found")
+	}
+	return n.Blocks[index], nil
+}
+
+// getBlock
+// How the Network struct queries the protocol
+func (n *Network) getBlock(index int64) (*app.Block, error) {
 	// Get the block metadata
 	block, err := n.getMajorBlockMetadata(uint64(index))
 	if err != nil {

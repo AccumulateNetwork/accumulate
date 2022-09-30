@@ -28,13 +28,14 @@ func main() {
 	}
 
 	s := new(app.StakingApp)
+
 	if *flagSim {
 		sim := new(sim.Simulator)
 		s.Run(sim)
 		return
 	}
 
-	net, err := network.New("https://testnet.accumulatenetwork.io/v2", protocol.AccountUrl("staking.acme", "parameters"))
+	net, err := network.New("http://127.0.1.1:26660/v2", protocol.AccountUrl("staking.acme", "parameters"))
 	if err != nil {
 		log.Fatal(err)
 	}
