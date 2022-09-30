@@ -126,13 +126,21 @@ func (x *Executor) executeEnvelope(block *Block, delivery *chain.Delivery, addit
 		return status, nil, nil
 	}
 
-	err = delivery.LoadSyntheticMetadata(block.Batch, delivery.Transaction.Body.Type(), status)
+	// Verify the transaction type is valid
+	txnType := delivery.Transaction.Body.Type()
+	if txnType != protocol.TransactionTypeRemote {
+		if _, ok := x.executors[txnType]; !ok {
+			return nil, nil, errors.Format(errors.StatusInternalError, "missing executor for %v", txnType)
+		}
+	}
+
+	err = delivery.LoadSyntheticMetadata(block.Batch, txnType, status)
 	if err != nil {
 		return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	// Process signatures
-	shouldProcessTransaction := !delivery.Transaction.Body.Type().IsUser()
+	shouldProcessTransaction := !txnType.IsUser()
 	{
 		batch := block.Batch.Begin(true)
 		defer batch.Discard()
@@ -216,7 +224,7 @@ func (x *Executor) executeEnvelope(block *Block, delivery *chain.Delivery, addit
 
 		kv := []interface{}{
 			"block", block.Index,
-			"type", delivery.Transaction.Body.Type(),
+			"type", txnType,
 			"code", status.Code,
 			"txn-hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4),
 			"principal", delivery.Transaction.Header.Principal,
@@ -236,7 +244,7 @@ func (x *Executor) executeEnvelope(block *Block, delivery *chain.Delivery, addit
 			}
 		} else {
 			fn := x.logger.Debug
-			switch delivery.Transaction.Body.Type() {
+			switch txnType {
 			case protocol.TransactionTypeDirectoryAnchor,
 				protocol.TransactionTypeBlockValidatorAnchor:
 				fn = x.logger.Info
