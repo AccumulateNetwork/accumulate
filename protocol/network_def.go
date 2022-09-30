@@ -15,12 +15,6 @@ func (k valHashCmp) cmp(v *ValidatorInfo) int {
 	return bytes.Compare(v.PublicKeyHash[:], k)
 }
 
-type valKeyCmp []byte
-
-func (k valKeyCmp) cmp(v *ValidatorInfo) int {
-	return bytes.Compare(v.PublicKey[:], k)
-}
-
 func (n *NetworkDefinition) AddPartition(id string, typ PartitionType) bool {
 	lowerId := strings.ToLower(id)
 	ptr, new := sortutil.BinaryInsert(&n.Partitions, func(p *PartitionInfo) int { return strings.Compare(strings.ToLower(p.ID), lowerId) })
@@ -41,11 +35,8 @@ func (n *NetworkDefinition) ValidatorByHash(hash []byte) (int, *ValidatorInfo, b
 }
 
 func (n *NetworkDefinition) ValidatorByKey(key []byte) (int, *ValidatorInfo, bool) {
-	i, found := sortutil.Search(n.Validators, valKeyCmp(key).cmp)
-	if !found {
-		return 0, nil, false
-	}
-	return i, n.Validators[i], true
+	hash := sha256.Sum256(key)
+	return n.ValidatorByHash(hash[:])
 }
 
 // IsActiveOn returns true if the validator is active on the partition.
