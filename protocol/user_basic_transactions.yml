@@ -1,0 +1,39 @@
+# User transaction bodies
+
+TokenRecipient:
+  fields:
+    - name: Url
+      type: url
+      pointer: true
+    - name: Amount
+      type: bigint
+
+SendTokens:
+  union: { type: transaction }
+  fields:
+    - name: Hash
+      # TODO Remove
+      type: hash
+      optional: true
+    - name: Meta
+      # TODO Remove
+      type: rawJson
+      optional: true
+    - name: To
+      repeatable: true
+      type: TokenRecipient
+      marshal-as: reference
+      pointer: true
+
+
+AddCredits:
+  union: { type: transaction }
+  fields:
+    - name: Recipient
+      type: url
+      pointer: true
+    - name: Amount
+      type: bigint
+    - name: Oracle
+      type: uvarint
+      optional: true

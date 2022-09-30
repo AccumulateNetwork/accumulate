@@ -11,7 +11,8 @@ extern "C" {
 #else
 #define ACME_API extern
 #endif
-#include <accumulate/common/encoding/encoding.h>
+#include <common/encoding/encoding.h>
+#include <common/encoding/marshaler.h>
 
 typedef struct {
    const char *name;
@@ -32,8 +33,6 @@ typedef enum {
 
 typedef struct {
     Bytes data;
-    Error (*get)(const struct Bytes *, {{.Name}} *out);
-    Error (*set)(struct Bytes *, {{.Name}} in);
 } {{.Name}}_t;
 
 ACME_API uint64_t {{.Name}}_ID({{.Name}} v);
@@ -41,17 +40,24 @@ ACME_API Error {{.Name}}_fromString({{.Name}} *v, String *name);
 ACME_API Error {{.Name}}_asString({{.Name}} v, String *out);
 //ACME_API Error {{.Name}}_marshalJSON(const Bytes *v, Marshaler *out);
 //ACME_API Error {{.Name}}_unmarshalJSON(Bytes *v, const Marshaler *in);
-{{.Name}}_t {{.Name}}_init({{.Name}}_t *v, buffer_t *buffer);
+ACME_API {{.Name}}_t {{.Name}}_init({{.Name}}_t *v, buffer_t *buffer);
+ACME_API int unmarshalerRead{{.Name}}(Unmarshaler *m, {{.Name}} *v);
+ACME_API int marshalerWrite{{.Name}}(Marshaler *m, {{.Name}} v);
+ACME_API bool {{.Name}}_equal(const {{.Name}} *a, const {{.Name}} *b);
 
-#ifndef ACME_HEADER
+{{end}}
 
+#ifdef _ACME_ENUM_SOURCE_
+
+
+{{range .Types}}
 
 ACME_API Error {{.Name}}_set(VarInt *v, {{.Name}} n) {
     return VarInt_set(v,n);
 }
 
 ACME_API Error {{.Name}}_get(const VarInt *v, {{.Name}} *n) {
-    return VarInt_get(v,n);
+    return VarInt_get(v,(int64_t*)n);
 }
 
 
@@ -64,14 +70,18 @@ static enum_t {{.Name}}_l[] = {
 	{{- range .Values}}
 	{ "{{lower .Name}}", {{$typ}}{{.Name}} },
 	{{- end}}
+	{ 0,0 },
 };
 
 ACME_API Error {{.Name}}_asString(const {{.Name}} v, String *out) {
     CHECK_ERROR(out)
     //since we are only dealing with a limited number of enumerations, we will do a linear search
-    for ( int i = 0; i < sizeof({{.Name}}_l); ++i ) {
+    for ( uint64_t i = 0; ; ++i ) {
+        if ( {{.Name}}_l[i].name == 0 ) {
+            break;
+        }
         if ( {{.Name}}_l[i].e == v ) {
-            String_set(&out->data, {{.Name}}_l[i].name);
+            String_set(out, {{.Name}}_l[i].name);
             return ErrorCode(ErrorNone);
         }
     }
@@ -82,99 +92,40 @@ ACME_API Error {{.Name}}_asString(const {{.Name}} v, String *out) {
 ACME_API Error {{.Name}}_fromString({{.Name}} *v, String *name) {
     CHECK_ERROR(name)
     //since we are only dealing with a limited number of enumerations, we will do a linear search
-    for ( int i = 0; i < sizeof({{.Name}}_l); ++i ) {
+    for ( uint64_t i = 0; ; ++i ) {
+        if ( {{.Name}}_l[i].name == 0 ) {
+            break;
+        }
         if ( strncmp({{.Name}}_l[i].name, (const char*)name->data.buffer.ptr+name->data.buffer.offset,name->data.buffer.size) == 0 ) {
             *v = {{.Name}}_l[i].e;
-            return e;
+            return ErrorCode(ErrorNone);
         }
     }
     return ErrorCode(ErrorTypeNotFound);
 }
 
-// {{.Name}}_marshalJSON marshals the {{natural .Name}} to JSON as a string.
-ACME_API Error {{.Name}}_marshalJSON(const {{.Name}} v, Marshaler *out) {
-    CHECK_ERROR(out)
-
-    Error e = {{.Name}}_valid(v);
-    if ( IsError(e) ) {
-        return e;
+ACME_API bool {{.Name}}_equal(const {{.Name}} *a, const {{.Name}} *b) {
+    if (!a || !b) {
+        return false;
     }
-
-    uint8_t data[32] = {0};
-    buffer_t buffer = {data, sizeof(data), 0};
-    String s = String_init(0, &buffer, sizeof(data));
-    e = {{.Name}}_asString(v, &s);
-    if ( IsError(e) ) {
-        return e;
-    }
-    return String_marshalJSON(&s, out);
-}
-
-// {{.Name}}_unmarshalJSON unmarshals the {{natural .Name}} from JSON as a string.
-ACME_API Error {{.Name}}_unmarshalJSON({{.Name}} *v, const Marshaler *in) {
-    CHECK_ERROR(v)
-    CHECK_ERROR(in)
-
-    Error e = {{.Name}}_valid(v);
-    if (e.code != ErrorNone) {
-        return e;
-    }
-    uint8_t data[32] = {0};
-    buffer_t buffer = {data, sizeof(data), 0};
-    String s = String_init(0, &buffer, sizeof(data));
-    //unmarshal the "in" buffer from the Marshaler into a String
-    e = s.data.UnmarshalJSON(&s.data, in);
-    if ( e.code != ErrorNone ) {
-        return e;
-    }
-    //now convert the unmarshaled string into the enum
-    return {{.Name}}_fromString(v, &s);
+    return *a == *b;
 }
 
 // MarshalBinary marshals the {{natural .Name}} to bytes as a unsigned varint.
 ACME_API int marshalerWrite{{.Name}}(Marshaler *m, {{.Name}} v) {
-    return marshalerWriteField(m, v);
+    return marshalerWriteInt(m, v);
 }
 
 
 // UnmarshalBinary unmarshals the {{natural .Name}} from bytes as a unsigned varint.
-ACME_API int unmarshalerRead{{.Name}}(Marshaler *m, {{.Name}} *v) {
-	return marshalerReadField(m, v);
+ACME_API int unmarshalerRead{{.Name}}(Unmarshaler *m, {{.Name}} *v) {
+	return unmarshalerReadInt(m, (int64_t*)v);
 }
 
-// {{.Name}}_binarySize returns the number of bytes required to binary marshal the {{natural .Name}}.
-{{.Name}}_t {{.Name}}_init({{.Name}}_t *v, buffer_t *buffer) {
-    {{.Name}}_t init = { { {0,0,0},
-                    VarInt_binarySize,
-                    Bytes_equal,
-                    Bytes_copy,
-                    {{.Name}}_marshalBinary,
-                    {{.Name}}_unmarshalBinary,
-                    {{.Name}}_marshalJSON,
-                    {{.Name}}_unmarshalJSON},
-                    {{.Name}}_get,
-                    {{.Name}}_set,
-                  };
-    if (buffer) {
-        int sizeNeeded = sizeof({{.Name}});
-        if ( buffer->size - buffer->offset < sizeNeeded ) {
-            return init;
-        }
-        init.data.buffer.ptr = buffer->ptr;
-        init.data.buffer.offset = buffer->offset;
-        init.data.buffer.size = sizeNeeded;
-        buffer->offset += sizeNeeded;
-    }
+{{end}}
 
-    if (v) {
-        *v = init;
-    }
-    return init;
-}
-#endif /* !ACME_HEADER */
+#endif /* _ACME_ENUM_SOURCE_ */
 
 #ifdef __cplusplus
 }
 #endif
-
-{{end}}
