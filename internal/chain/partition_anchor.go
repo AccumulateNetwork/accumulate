@@ -22,6 +22,11 @@ func (PartitionAnchor) Execute(st *StateManager, tx *Delivery) (protocol.Transac
 }
 
 func (PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	// If a block validator anchor somehow makes it past validation on a BVN, reject it immediately
+	if st.NetworkType != protocol.PartitionTypeDirectory {
+		return nil, errors.New(errors.StatusInternalError, "invalid attempt to process a block validator partition")
+	}
+
 	// Unpack the payload
 	body, ok := tx.Transaction.Body.(*protocol.BlockValidatorAnchor)
 	if !ok {
