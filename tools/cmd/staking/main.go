@@ -16,6 +16,7 @@ import (
 
 var flagDebug = flag.Bool("debug", false, "Debug API requests")
 var flagSim = flag.Bool("sim", false, "Use the simulator")
+var flagNet = flag.String("net", "https://testnet.accumulatenetwork.io/v2", "The network to run against")
 
 func main() {
 	flag.Parse()
