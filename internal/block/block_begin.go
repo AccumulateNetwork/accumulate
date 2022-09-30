@@ -475,8 +475,8 @@ func (x *Executor) sendBlockAnchor(batch *database.Batch, anchor protocol.Anchor
 		return errors.Wrap(errors.StatusInternalError, err)
 	}
 
-	// Send
-	if !x.IsFollower {
+	// Only send anchors from a validator
+	if x.isValidator {
 		err = x.dispatcher.BroadcastTx(context.Background(), destPartUrl, env)
 		if err != nil {
 			return errors.Wrap(errors.StatusUnknownError, err)
