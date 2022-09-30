@@ -110,6 +110,7 @@ func NewGenesisExecutor(db *database.Database, logger log.Logger, network *confi
 			Describe:  *network,
 			Logger:    logger,
 			Router:    router,
+			EventBus:  events.NewBus(logger),
 			isGenesis: true,
 		},
 		db,
