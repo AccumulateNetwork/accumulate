@@ -13,9 +13,19 @@ func TestGenUrl(t *testing.T) {
 }
 
 func TestGenerateInitializationScript(t *testing.T) {
+	fmt.Println("export ACC_API=http://127.0.1.1:26660/v2 ")
 	fmt.Println("lta=acc://c83b1ed6b8b6795d3c224dab50a544e2306d743866835260/ACME")
-	fmt.Printf("for i in {0..1}\ndo\n   echo asdfasdf | accumulate faucet $lta\ndone\n") // accumulate credits [origin token account] [key page or lite identity url] [number of credits wanted] [max acme to spend] [percent slippage (optional)] [flags][BS2]
+	fmt.Printf("for i in {0..10}\ndo\n   echo asdfasdf | accumulate faucet $lta\ndone\n") // accumulate credits [origin token account] [key page or lite identity url] [number of credits wanted] [max acme to spend] [percent slippage (optional)] [flags][BS2]
+	fmt.Println("sleep 3s")
 	fmt.Print("echo asdfasdf | accumulate credits $lta $lta 500000\n\n")
+	fmt.Println("sleep 3s")
+	fmt.Println("")
+	fmt.Println("echo asdfasdf | accumulate adi create $lta acc://Staking.acme masterkey")
+	fmt.Println("echo asdfasdf | accumulate account create data acc://Staking.acme masterkey acc://staking.acme/Approved")
+	fmt.Println("echo asdfasdf | accumulate account create data acc://Staking.acme masterkey acc://staking.acme/Registered")
+	fmt.Println("echo asdfasdf | accumulate account create data acc://Staking.acme masterkey acc://staking.acme/Disputes")
+
+
 	for i := 0; i < 1; i++ {
 		adi, url := GenUrls("StakingAccount")
 		fmt.Printf("echo asdfasdf | accumulate adi create $lta %s masterkey\n", adi)
