@@ -23,11 +23,12 @@ import (
 type Executor struct {
 	ExecutorOptions
 
-	globals    *Globals
-	executors  map[protocol.TransactionType]chain.TransactionExecutor
-	dispatcher *dispatcher
-	logger     logging.OptionalLogger
-	db         database.Beginner
+	globals     *Globals
+	executors   map[protocol.TransactionType]chain.TransactionExecutor
+	dispatcher  *dispatcher
+	logger      logging.OptionalLogger
+	db          database.Beginner
+	isValidator bool
 
 	// oldBlockMeta blockMetadata
 }
@@ -40,7 +41,6 @@ type ExecutorOptions struct {
 	EventBus            *events.Bus                        //
 	MajorBlockScheduler blockscheduler.MajorBlockScheduler //
 	Background          func(func())                       // Background task launcher
-	IsFollower          bool                               //
 
 	isGenesis bool
 
@@ -110,6 +110,7 @@ func NewGenesisExecutor(db *database.Database, logger log.Logger, network *confi
 			Describe:  *network,
 			Logger:    logger,
 			Router:    router,
+			EventBus:  events.NewBus(logger),
 			isGenesis: true,
 		},
 		db,
@@ -149,6 +150,14 @@ func newExecutor(opts ExecutorOptions, db database.Beginner, executors ...chain.
 	batch := db.Begin(false)
 	defer batch.Discard()
 
+	// Listen to our own event (DRY)
+	events.SubscribeSync(m.EventBus, func(e events.WillChangeGlobals) error {
+		_, v, _ := e.New.Network.ValidatorByKey(m.Key[32:])
+		m.isValidator = v.IsActiveOn(m.Describe.PartitionId)
+		return nil
+	})
+
+	// Load globals if the database has been initialized
 	var ledger *protocol.SystemLedger
 	err := batch.Account(m.Describe.NodeUrl(protocol.Ledger)).GetStateAs(&ledger)
 	switch {
