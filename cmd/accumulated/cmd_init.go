@@ -732,7 +732,7 @@ func resolveAddr(addr string) (string, error) {
 
 func getNodeTypeFromFlag() cfg.NodeType {
 	nodeType := cfg.Validator
-	if flagInitNode.Follower {
+	if flagInitNode.Follower || flagInitDualNode.Follower {
 		nodeType = cfg.Follower
 	}
 	return nodeType
