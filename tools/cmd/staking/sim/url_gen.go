@@ -2,10 +2,10 @@ package sim
 
 import (
 	"fmt"
-	"math/rand"
 	"unicode"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 )
 
 var Nouns = []string{
@@ -129,6 +129,8 @@ func cap(word string) string {
 	return word
 }
 
+var GenRH common.RandHash
+
 // GenUrls
 // Generates ADI and an account (as provided)
 // We use a random matching of adjs and nouns, so we use a map to ensure we have not
@@ -136,10 +138,9 @@ func cap(word string) string {
 func GenUrls(account string) (ADI, URL *url.URL) {
 	if currentUrls == nil {
 		currentUrls = make(map[string]int) // allocate the duplicate map
-		rand.Seed(1960)                    // make sure we return the same data for calls in the same order
 	}
-	i := rand.Int() % len(Adjectives)
-	j := rand.Int() % len(Nouns)
+	i := GenRH.GetRandInt64() % int64(len(Adjectives))
+	j := GenRH.GetRandInt64() % int64(len(Nouns))
 	a := "acc://" + cap(Adjectives[i]) + cap(Nouns[j]) + ".acme"
 	u := fmt.Sprintf("%s/%s", a, account)
 	if currentUrls[u] == 1 {
