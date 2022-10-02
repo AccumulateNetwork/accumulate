@@ -70,6 +70,18 @@ func (c *Client) Decode(ctx context.Context, req *api.DecodeRequest) (*api.Decod
 	return &resp, nil
 }
 
+// DeleteSendTokensTransaction deletes a transaction from map.
+func (c *Client) DeleteSendTokensTransaction(ctx context.Context, req *api.DeleteTransactionRequest) (*protocol.SendTokens, error) {
+	var resp protocol.SendTokens
+
+	err := c.RequestAPIv2(ctx, "new-transaction", req, &resp)
+	if err != nil {
+		return nil, err
+	}
+
+	return &resp, nil
+}
+
 // Encode binary marshal a json transaction or account and return encoded hex.
 func (c *Client) Encode(ctx context.Context, req *api.EncodeRequest) (interface{}, error) {
 	var resp interface{}
