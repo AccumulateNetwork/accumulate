@@ -593,6 +593,7 @@ func initNode(cmd *cobra.Command, args []string) (string, error) {
 		}
 		//local address expect ip:port only with no scheme for connection manager to work
 		config.Accumulate.LocalAddress = fmt.Sprintf("%s:%d", localAddr, port)
+		config.P2P.ExternalAddress = config.Accumulate.LocalAddress
 	}
 
 	config.Accumulate.AnalysisLog.Enabled = flagInit.EnableTimingLogs
@@ -731,7 +732,7 @@ func resolveAddr(addr string) (string, error) {
 
 func getNodeTypeFromFlag() cfg.NodeType {
 	nodeType := cfg.Validator
-	if flagInitNode.Follower {
+	if flagInitNode.Follower || flagInitDualNode.Follower {
 		nodeType = cfg.Follower
 	}
 	return nodeType
