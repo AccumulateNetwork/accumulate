@@ -240,6 +240,11 @@ func finalizeBvnn() (*cfg.Config, error) {
 
 // initDualNode accumulate `init dual http://ip:bvnport` or `init dual partition.network --seed https://seednode
 func initDualNode(cmd *cobra.Command, args []string) {
+	if flagInit.Reset {
+		flagInit.Reset = false
+		networkReset()
+	}
+
 	var err error
 	if flagInitDualNode.SeedProxy != "" {
 		err = initDualNodeFromSeed(cmd, args)
