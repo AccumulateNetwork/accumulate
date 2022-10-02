@@ -410,10 +410,10 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 		if resp.Priority < priority {
 			resp.Priority = priority
 		}
-		if result.Code.Success() {
+		if result.Error == nil {
 			continue
 		}
-		if !envelopes[i].Transaction.Body.Type().IsUser() {
+		if !result.Code.Success() && !envelopes[i].Transaction.Body.Type().IsUser() {
 			continue
 		}
 		resp.Code = uint32(protocol.ErrorCodeUnknownError)
