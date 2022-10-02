@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 // For key value stores where buckets are not supported, we add a byte to the
 // key to represent a bucket. For now, all buckets are hard coded, but we could
 // change that in the future.
