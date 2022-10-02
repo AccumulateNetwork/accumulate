@@ -29,6 +29,13 @@ func runCmdFunc(fn func(args []string) (string, error)) func(cmd *cobra.Command,
 	}
 }
 
+func runCmdFunc2(fn func(cmd *cobra.Command, args []string) (string, error)) func(cmd *cobra.Command, args []string) {
+	return func(cmd *cobra.Command, args []string) {
+		out, err := fn(cmd, args)
+		printOutput(cmd, out, err)
+	}
+}
+
 func runTxnCmdFunc(fn func(principal *url.URL, signers []*signing.Builder, args []string) (string, error)) func(cmd *cobra.Command, args []string) {
 	return runCmdFunc(func(args []string) (string, error) {
 		principal, err := url.Parse(args[0])
@@ -242,6 +249,9 @@ func IsLiteIdentity(urlstr string) (bool, error) {
 	u, err := url.Parse(strings.Trim(urlstr, " "))
 	if err != nil {
 		return false, err
+	}
+	if protocol.AcmeUrl().Equal(u) {
+		return false, nil
 	}
 	if strings.Contains(u.Hostname(), ".") {
 		return false, nil
