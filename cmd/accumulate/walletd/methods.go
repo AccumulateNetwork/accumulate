@@ -273,3 +273,26 @@ func (m *JrpcMethods) AddSendTokensOutput(_ context.Context, params json.RawMess
 	}
 	return resp
 }
+
+func (m *JrpcMethods) DeleteSendTokensTransaction(_ context.Context, params json.RawMessage) interface{} {
+	req := api.DeleteTransactionRequest{}
+	err := json.Unmarshal(params, &req)
+	if err != nil {
+		return validatorError(err)
+	}
+
+	value, err := GetWallet().Get(BucketTransactionCache, []byte(req.Name))
+	if err != nil {
+		return validatorError(err)
+	}
+	resp := protocol.SendTokens{}
+	err = resp.UnmarshalBinary(value)
+	if err != nil {
+		return validatorError(err)
+	}
+	err = GetWallet().Delete(BucketTransactionCache, []byte(req.Name))
+	if err != nil {
+		return validatorError(err)
+	}
+	return resp
+}
