@@ -408,7 +408,7 @@ rm $HOME/.accumulate/validate/wallet.db || die "failed to remove wallet database
 success
 
 section "Import wallet as json format to restore wallet"
-accumulate wallet import keystore /tmp/wallet_export_account.json || die "failed to import wallet"
+accumulate wallet init import keystore /tmp/wallet_export_account.json || die "failed to import wallet"
 success
 
 section "Add manager to token account"
