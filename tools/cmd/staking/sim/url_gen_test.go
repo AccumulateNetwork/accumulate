@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"gitlab.com/accumulatenetwork/accumulate/tools/cmd/staking/app"
 )
 
 type staker struct {
@@ -27,20 +28,30 @@ func TestGenUrl(t *testing.T) {
 }
 
 func TestGenerateInitializationScript(t *testing.T) {
+
+	GenRH.SetSeed([]byte{6})
+
+	seconds := 0
+
 	buff := bytes.Buffer{}
-	pf := func(format string, a ...any) {
+	pf := func(format string, a ...any) { //          Support for formatted printing + \n
 		format += "\n"
 		buff.WriteString(fmt.Sprintf(format, a...))
 	}
-	p := func(a ...any) {
+	p := func(a ...any) { //                          Support for simple printing + \n
 		a = append(a, "\n")
 		buff.WriteString(fmt.Sprint(a...))
 	}
-	cr := func() {
+	cr := func() { //                                 Put out a blank line \n
 		buff.WriteString("echo\n")
 	}
-
-	GenRH.SetSeed([]byte{3,2,3,5})
+	w := func(a ...any) { //                          Simple printing with no \n
+		buff.WriteString(fmt.Sprint(a...))
+	}
+	_ = w
+	s := func() {
+		pf("sleep %d", seconds)
+	}
 
 	for i := 0; i < 2; i++ {
 		adi, url := GenUrls("StakingAccount")
@@ -50,22 +61,22 @@ func TestGenerateInitializationScript(t *testing.T) {
 	p("export ACC_API=http://127.0.1.1:26660/v2 ")
 	p("lta=acc://c83b1ed6b8b6795d3c224dab50a544e2306d743866835260/ACME")
 	pf("for i in {0..200}\ndo\n   echo asdfasdf | accumulate faucet $lta\ndone") // accumulate credits [origin token account] [key page or lite identity url] [number of credits wanted] [max acme to spend] [percent slippage (optional)] [flags][BS2]
-	p("sleep 5s")
+	s()
 	p("echo asdfasdf | accumulate credits $lta $lta 500000")
-	p("sleep 15s")
+	s()
 	cr()
 	p("echo set up staking rewards")
 	p("echo asdfasdf | accumulate adi create $lta acc://staking.acme masterkey")
-	p("sleep 10s")
+	s()
 	cr()
 	p("echo get credits")
 	p("echo asdfasdf | accumulate credits $lta acc://staking.acme/book/1 500000")
-	p("sleep 10s")
+	s()
 	cr()
 	p("echo set up data accounts")
-	p("echo asdfasdf | accumulate account create data acc://staking.acme masterkey acc://staking.acme/Approvedx")
-	p("echo asdfasdf | accumulate account create data acc://staking.acme masterkey acc://staking.acme/Registeredx")
-	p("echo asdfasdf | accumulate account create data acc://staking.acme masterkey acc://staking.acme/Disputesx")
+	p("echo asdfasdf | accumulate account create data acc://staking.acme masterkey acc://staking.acme/Approved")
+	p("echo asdfasdf | accumulate account create data acc://staking.acme masterkey acc://staking.acme/Registered")
+	p("echo asdfasdf | accumulate account create data acc://staking.acme masterkey acc://staking.acme/Disputes")
 	cr()
 	p("set up staking ADIs")
 	for _, v := range stakers {
@@ -73,7 +84,7 @@ func TestGenerateInitializationScript(t *testing.T) {
 		pf("echo asdfasdf | accumulate adi create $lta %s masterkey", v.adi)
 	}
 	cr()
-	p("sleep 15s")
+	s()
 	for _, v := range stakers {
 		pf("echo Add credits to ADI %s/book/1", v.adi)
 		pf("echo asdfasdf | accumulate credits $lta %s/book/1 10000", v.adi)
@@ -83,15 +94,26 @@ func TestGenerateInitializationScript(t *testing.T) {
 	for _, v := range stakers {
 		pf("echo Create Token account %s", v.url)
 		pf("echo asdfasdf | accumulate account create token %s masterkey %s acc://acme", v.adi, v.url)
+		pf("echo Create Token account %s", v.adi.String()+"/rewards")
+		pf("echo asdfasdf | accumulate account create token %s masterkey %s acc://acme", v.adi, v.adi.String()+"/rewards")
 	}
 	cr()
-	p("sleep 15s") // Have to wait for credits to settle
 	for _, v := range stakers {
 		pf("echo Move tokens from $lta to %s amount %d", v.url, 40)
 		pf("echo asdfasdf | accumulate tx create $lta %s %d", v.url, 40)
 	}
 
-	
+	Accounts := AllocateStakers(t)
+
+	cr()
+	p("echo add staking accounts to Approved")
+	for _, a := range Accounts {
+		deposit := a.DepositURL.String()
+		if GenRH.Next()[0] > 128 {
+			deposit = a.URL.String()
+		}
+		pf("echo asdfasdf | accumulate data write acc://staking.acme/Approved masterkey \"%s\" \"%s\" \"%s\"",a.URL,deposit,a.Type)
+	}
 
 	fmt.Print(buff.String())
 	u, _ := user.Current()
@@ -102,5 +124,45 @@ func TestGenerateInitializationScript(t *testing.T) {
 
 	// Add all the Staking accounts to the approved list
 
+}
 
+func AllocateStakers(t *testing.T) (accounts []*app.Account) {
+	currentStaker := new(app.Account)
+	currentStaker.Type = app.PureStaker
+	var err error
+	for _, v := range stakers {
+		staker := new(app.Account)
+		accounts = append(accounts, staker)
+		staker.URL = v.url
+		staker.DepositURL, err = url.Parse(v.adi.String() + "/rewards")
+		require.NoError(t, err)
+
+		for {
+			switch GenRH.GetRandInt64() % 5 {
+			case 0:
+				staker.Type = app.PureStaker
+				currentStaker = staker
+			case 1:
+				staker.Type = app.ProtocolValidator
+				currentStaker = staker
+			case 2:
+				staker.Type = app.ProtocolFollower
+				currentStaker = staker
+			case 3:
+				staker.Type = app.StakingValidator
+				currentStaker = staker
+			case 4:
+				if currentStaker == nil { // Got a delegate, but need something else first
+					continue //              So try again.
+				}
+				staker.Type = app.Delegate
+				currentStaker.Delegates = append(currentStaker.Delegates, staker)
+				staker.Delegatee = currentStaker
+			default:
+				panic("should never happen")
+			}
+			break // We are in this loop until we get something other than a Delegate.
+		}
+	}
+	return accounts
 }
