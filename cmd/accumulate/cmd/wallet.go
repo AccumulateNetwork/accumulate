@@ -22,24 +22,54 @@ var walletCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(2),
 }
 
-var walletInitCmd = &cobra.Command{
-	Use:   "init [create/import]",
-	Short: "Import secret factoid key from terminal input",
+var walletInitCreateCmd = &cobra.Command{
+	Use:   "create",
+	Short: "create a mnemonic seed and wallet",
+	Args:  cobra.NoArgs,
+	Run: func(cmd *cobra.Command, args []string) {
+		err := InitDBCreate(false)
+		printOutput(cmd, "", err)
+	},
+}
+
+var walletInitImportCmd = &cobra.Command{
+	Use:   "import",
+	Short: "import a mnemonic seed via command prompt or import wallet backup file to create wallet",
+}
+
+var walletInitImportMnemonicCmd = &cobra.Command{
+	Use:   "mnemonic",
+	Short: "import from a mnemonic seed via command prompt",
+	Args:  cobra.NoArgs,
+	Run: func(cmd *cobra.Command, args []string) {
+		err := InitDBImport(cmd, false)
+		printOutput(cmd, "", err)
+	},
+}
+
+var walletInitImportKeystoreCmd = &cobra.Command{
+	Use:   "keystore",
+	Short: "restore wallet and seed from exported backup keystore file",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		switch args[0] {
-		case "create":
-			err := InitDBCreate(false)
-			printOutput(cmd, "", err)
-		case "import":
-			err := InitDBImport(cmd, false)
-			printOutput(cmd, "", err)
-		case "script":
-			err := InitDBScript()
-			printOutput(cmd, "", err)
-		default:
-		}
+		err := ImportAccounts(args[0])
+		printOutput(cmd, "", err)
 	},
+}
+
+var walletInitScriptCmd = &cobra.Command{
+	Use:   "script",
+	Short: "create a wallet from a script (used for testing only)",
+	Args:  cobra.NoArgs,
+	Run: func(cmd *cobra.Command, args []string) {
+		err := InitDBScript()
+		printOutput(cmd, "", err)
+	},
+}
+
+var walletInitCmd = &cobra.Command{
+	Use:   "init",
+	Short: "create, import, or restore a wallet",
 }
 
 var walletServeCmd = &cobra.Command{
@@ -51,10 +81,23 @@ var walletServeCmd = &cobra.Command{
 	},
 }
 
+var walletExportCmd = &cobra.Command{
+	Use:   "export [location to export]",
+	Short: "export wallet details",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		err := ExportAccounts(args[0])
+		printOutput(cmd, "File downloaded successfully", err)
+	},
+}
+
 func init() {
 	initRunFlags(walletCmd, false)
+	walletInitCmd.AddCommand(walletInitCreateCmd, walletInitImportCmd, walletInitImportCmd, walletInitScriptCmd)
+	walletInitImportCmd.AddCommand(walletInitImportMnemonicCmd, walletInitImportKeystoreCmd)
 	walletCmd.AddCommand(walletInitCmd)
 	walletCmd.AddCommand(walletServeCmd)
+	walletCmd.AddCommand(walletExportCmd)
 }
 
 var walletdConfig = &service.Config{

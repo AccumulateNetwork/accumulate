@@ -12,7 +12,7 @@ function accumulate {
 
 function init-wallet {
     if [ -n "${MNEMONIC}" ]; then
-        echo ${MNEMONIC} | accumulate wallet init import
+        echo ${MNEMONIC} | accumulate wallet init import mnemonic
     else
         accumulate wallet init script
     fi
