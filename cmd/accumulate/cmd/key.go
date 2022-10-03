@@ -12,6 +12,7 @@ import (
 
 	"github.com/howeyc/gopass"
 	"github.com/spf13/cobra"
+	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 	tmjson "github.com/tendermint/tendermint/libs/json"
 	"github.com/tendermint/tendermint/privval"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/db"
@@ -57,23 +58,22 @@ var keyImportCmd = &cobra.Command{
 var keyImportPrivateCmd = &cobra.Command{
 	Use:   "private [key name/label]",
 	Short: "Import private key in hex from terminal input",
-	Args:  cobra.ExactArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
-		var out string
-		var err error
+	Args:  cobra.RangeArgs(1, 2),
+	Run: runCmdFunc2(func(cmd *cobra.Command, args []string) (string, error) {
+		if len(args) == 2 {
+			return importFilePV(cmd, args[0], args[1])
+		}
+
 		var sigType protocol.SignatureType
 		var found bool
 		if SigType != "" {
 			sigType, found = protocol.SignatureTypeByName(SigType)
 			if !found {
-				err = fmt.Errorf("unknown signature type %s", SigType)
+				return "", fmt.Errorf("unknown signature type %s", SigType)
 			}
 		}
-		if err == nil {
-			out, err = ImportKeyPrompt(cmd, args[0], sigType)
-		}
-		printOutput(cmd, out, err)
-	},
+		return ImportKeyPrompt(cmd, args[0], sigType)
+	}),
 }
 
 var keyImportFactoidCmd = &cobra.Command{
@@ -319,6 +319,25 @@ func ImportKeyPrompt(cmd *cobra.Command, label string, signatureType protocol.Si
 		return "", err
 	}
 	return ImportKey(tokenBytes, label, signatureType)
+}
+
+func importFilePV(cmd *cobra.Command, label, filepath string) (out string, err error) {
+	b, err := ioutil.ReadFile(filepath)
+	if err != nil {
+		return "", err
+	}
+	key := new(privval.FilePVKey)
+	err = tmjson.Unmarshal(b, key)
+	if err != nil {
+		return "", fmt.Errorf("error reading PrivValidator key from %v: %w", filepath, err)
+	}
+
+	switch key.PrivKey.Type() {
+	case tmed25519.KeyType:
+		return ImportKey(key.PrivKey.Bytes(), label, protocol.SignatureTypeED25519)
+	default:
+		return "", fmt.Errorf("unsupported key type %v", key.PrivKey.Type())
+	}
 }
 
 func getPasswdPrompt(cmd *cobra.Command, prompt string, mask bool) (string, error) {

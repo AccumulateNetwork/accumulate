@@ -7,6 +7,7 @@ import (
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd/api"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -222,6 +223,73 @@ func (m *JrpcMethods) NewSendTokensTransaction(_ context.Context, params json.Ra
 
 	sendToken := protocol.SendTokens{}
 	resp, err := sendToken.MarshalJSON()
+	if err != nil {
+		return validatorError(err)
+	}
+	value, _ := GetWallet().Get(BucketTransactionCache, []byte(req.TxName))
+	if value != nil {
+		return validatorError(fmt.Errorf("txn already available with the tx name"))
+	}
+	err = GetWallet().Put(BucketTransactionCache, []byte(req.TxName), resp)
+	if err != nil {
+		return validatorError(err)
+	}
+	return resp
+}
+
+func (m *JrpcMethods) AddSendTokensOutput(_ context.Context, params json.RawMessage) interface{} {
+	req := api.AddSendTokensOutputRequest{}
+	err := json.Unmarshal(params, &req)
+	if err != nil {
+		return validatorError(err)
+	}
+
+	value, err := GetWallet().Get(BucketTransactionCache, []byte(req.TxName))
+	if err != nil {
+		return validatorError(err)
+	}
+	sendToken := protocol.SendTokens{}
+	err = sendToken.UnmarshalBinary(value)
+	if err != nil {
+		return validatorError(err)
+	}
+	address, err := url.Parse(req.TokenAddress)
+	if err != nil {
+		return validatorError(err)
+	}
+	recipient := &protocol.TokenRecipient{
+		Url:    address,
+		Amount: req.Amount,
+	}
+	sendToken.To = append(sendToken.To, recipient)
+	resp, err := sendToken.MarshalBinary()
+	if err != nil {
+		return validatorError(err)
+	}
+	err = GetWallet().Put(BucketTransactionCache, []byte(req.TxName), resp)
+	if err != nil {
+		return validatorError(err)
+	}
+	return resp
+}
+
+func (m *JrpcMethods) DeleteSendTokensTransaction(_ context.Context, params json.RawMessage) interface{} {
+	req := api.DeleteTransactionRequest{}
+	err := json.Unmarshal(params, &req)
+	if err != nil {
+		return validatorError(err)
+	}
+
+	value, err := GetWallet().Get(BucketTransactionCache, []byte(req.Name))
+	if err != nil {
+		return validatorError(err)
+	}
+	resp := protocol.SendTokens{}
+	err = resp.UnmarshalBinary(value)
+	if err != nil {
+		return validatorError(err)
+	}
+	err = GetWallet().Delete(BucketTransactionCache, []byte(req.Name))
 	if err != nil {
 		return validatorError(err)
 	}
