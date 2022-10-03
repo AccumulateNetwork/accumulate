@@ -94,7 +94,7 @@ func GetKeyList() (kla []api.KeyData, err error) {
 		if err != nil {
 			return nil, err
 		}
-		kla = append(kla, api.KeyData{PublicKey: k.PublicKey, Name: string(v.Value), KeyType: k.KeyInfo.Type, Derivation: k.KeyInfo.Derivation})
+		kla = append(kla, api.KeyData{PublicKey: k.PublicKey, Name: string(v.Value), KeyInfo: k.KeyInfo})
 	}
 	return kla, nil
 }

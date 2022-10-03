@@ -5,17 +5,24 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"os"
 	"strconv"
 	"strings"
 
+	"github.com/manifoldco/promptui"
 	"github.com/mdp/qrterminal"
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/db"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
+	api2 "gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd/api"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	url2 "gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -477,4 +484,264 @@ func lockAccount(principal *url2.URL, signers []*signing.Builder, args []string)
 	}
 
 	return dispatchTxAndPrintResponse(body, principal, signers)
+}
+
+func ExportAccounts(filePath string) error {
+	res := api2.Wallet{}
+	walletVersion, err := walletd.GetWallet().GetRaw(db.BucketConfig, []byte("version"))
+	if err != nil {
+		return err
+	}
+	var v db.Version
+	v.FromBytes(walletVersion)
+	res.Version.Commit = uint64(v.Commit())
+	res.Version.Major = uint64(v.Major())
+	res.Version.Minor = uint64(v.Minor())
+	res.Version.Revision = uint64(v.Revision())
+
+	b, err := walletd.GetWallet().GetBucket(walletd.BucketLabel)
+	if err != nil {
+		//no accounts so nothing to do...
+		return fmt.Errorf("no lite accounts have been generated")
+	}
+	//var res []*KeyResponse
+	for i := range b.KeyValueList {
+		k := new(walletd.Key)
+		err = k.LoadByPublicKey(b.KeyValueList[i].Value)
+		if err != nil {
+			log.Printf("cannot load key by label %s with public key %x, %v", b.KeyValueList[i].Key, b.KeyValueList[i].Value, err)
+			continue
+		}
+		res.Keys = append(res.Keys, k.Key)
+		kn := api2.KeyName{}
+		kn.Name = string(b.KeyValueList[i].Key)
+		kn.PublicKey = b.KeyValueList[i].Value
+		res.KeyNames = append(res.KeyNames, kn)
+	}
+
+	l, err := walletd.GetWallet().GetBucket(walletd.BucketLite)
+	if err != nil {
+		log.Println(err)
+	}
+	for i := range l.KeyValueList {
+		label := api2.LiteLabel{}
+		label.LiteName = string(l.KeyValueList[i].Key)
+		label.KeyName = string(l.KeyValueList[i].Value)
+		res.LiteLabels = append(res.LiteLabels, label)
+	}
+
+	a, err := walletd.GetWallet().GetBucket(walletd.BucketAdi)
+	if err == nil {
+		for _, v := range a.KeyValueList {
+			u, err := url2.Parse(string(v.Key))
+			if err != nil {
+				a := api2.Adi{}
+				p := api2.Page{}
+				a.Url = *u
+				//page url's aren't currently stored
+				a.Pages = append(a.Pages, p)
+				lab, err := walletd.FindLabelFromPubKey(v.Value)
+				if err != nil {
+					p.KeyNames = append(p.KeyNames, hex.EncodeToString(v.Value))
+				} else {
+					p.KeyNames = append(p.KeyNames, lab)
+				}
+				res.Adis = append(res.Adis, a)
+			}
+		}
+	}
+
+	kl, err := walletd.GetKeyList()
+	if err != nil {
+		log.Println(err)
+	}
+	for i, v := range kl {
+		kn := api2.KeyName{}
+		kn.Name = v.Name
+		kn.PublicKey = kl[i].PublicKey
+		res.KeyNames = append(res.KeyNames, kn)
+	}
+
+	bucket, err := walletd.GetWallet().GetBucket(walletd.BucketMnemonic)
+	if err != nil {
+		log.Println("mnemonic bucket doesn't exist")
+	} else {
+		for _, v := range bucket.KeyValueList {
+			switch string(v.Key) {
+			case "phrase":
+				phrase, err := walletd.GetWallet().Get(walletd.BucketMnemonic, []byte("phrase"))
+				if err != nil {
+					log.Println("mnemonic seed doesn't exist, thus was not exported")
+				}
+				if phrase != nil {
+					res.SeedInfo.Mnemonic = string(phrase)
+				}
+			case "seed":
+				res.SeedInfo.Seed, err = walletd.GetWallet().Get(walletd.BucketMnemonic, []byte("seed"))
+				if err != nil {
+					log.Println("mnemonic seed doesn't exist, thus was not exported")
+				}
+			default:
+				//these are the sig types
+				dc := api2.DerivationCount{}
+				dc.Count = uint64(binary.LittleEndian.Uint32(v.Value))
+				var found bool
+				dc.Type, found = protocol.SignatureTypeByName(string(v.Key))
+				if found {
+					res.SeedInfo.Derivations = append(res.SeedInfo.Derivations, dc)
+				}
+			}
+		}
+	}
+
+	bin, err := json.MarshalIndent(&res, "", "  ")
+
+	if err != nil {
+		log.Printf("cannot convert export to json for export, error: %v", err)
+	}
+
+	if _, err := os.Stat(filePath); err == nil {
+		opt, err := promptOverwrite()
+		if err != nil {
+			return err
+		}
+		if strings.EqualFold(opt, "yes") {
+			file, err := os.OpenFile(filePath, os.O_RDWR, 0644)
+			if err != nil {
+				return err
+			}
+			defer file.Close()
+			_, err = io.Copy(file, strings.NewReader(string(bin)))
+			if err != nil {
+				return err
+			}
+		} else {
+			return fmt.Errorf("operation skipped")
+		}
+
+	} else if errors.Is(err, os.ErrNotExist) {
+		out, err := os.Create(filePath)
+		if err != nil {
+			return err
+		}
+		defer out.Close()
+		_, err = io.Copy(out, strings.NewReader(string(bin)))
+		if err != nil {
+			return err
+		}
+	} else {
+		return err
+	}
+	return nil
+}
+
+func ImportAccounts(filePath string) error {
+	data, err := ioutil.ReadFile(filePath)
+	if err != nil {
+		return fmt.Errorf("failed reading data from file: %s", err)
+	}
+	var req *api2.Wallet
+	if err := json.Unmarshal(data, &req); err != nil {
+		return err
+	}
+
+	mnemonics := strings.Split(req.SeedInfo.Mnemonic, " ")
+	_, err = walletd.ImportMnemonic(mnemonics)
+	if err != nil {
+		return fmt.Errorf("failed importing mnemonic: %s", err)
+	}
+	//import the sig type derivation address count
+	for _, v := range req.SeedInfo.Derivations {
+		var b [4]byte
+		binary.LittleEndian.PutUint32(b[:], uint32(v.Count))
+		err = walletd.GetWallet().Put(walletd.BucketMnemonic, []byte(v.Type.String()), b[:])
+		if err != nil {
+			log.Printf("failed to set derivation counter for %s", v.Type.String())
+		}
+	}
+
+	for _, v := range req.Keys {
+		b, err := v.KeyInfo.MarshalBinary()
+		if err != nil {
+			log.Printf("invalid key info provided for key %x, %v", v.PublicKey, err)
+			continue
+		}
+		err = walletd.GetWallet().Put(walletd.BucketKeys, v.PublicKey, v.PrivateKey)
+		if err != nil {
+			log.Printf("failed to store private key for key %x, %v", v.PublicKey, err)
+			continue
+		}
+		err = walletd.GetWallet().Put(walletd.BucketKeyInfo, v.PublicKey, b)
+		if err != nil {
+			log.Printf("failed to store key info for key %x, %v", v.PublicKey, err)
+		}
+	}
+
+	for _, v := range req.KeyNames {
+		err = walletd.GetWallet().Put(walletd.BucketLabel, []byte(v.Name), v.PublicKey)
+		if err != nil {
+			log.Printf("failed to store bucket label %s for key %x, %v", v.Name, v.PublicKey, err)
+		}
+	}
+
+	for _, v := range req.LiteLabels {
+		err = walletd.GetWallet().Put(walletd.BucketLite, []byte(v.LiteName), []byte(v.KeyName))
+		if err != nil {
+			log.Printf("failed to store bucket lite label %s for key name %s, %v", v.LiteName, v.KeyName, err)
+		}
+	}
+
+	for _, adi := range req.Adis {
+		if len(adi.Pages) == 0 {
+			log.Printf("skipping adi import, %s, missing key page", adi.Url.String())
+			continue
+		}
+
+		//pages for adi in version 1 is just a key since we don't actually store keys mapped to pages yet
+		if len(adi.Pages[0].KeyNames) == 0 {
+			log.Printf("skipping adi import, %s, missing key in page", adi.Url.String())
+			continue
+		}
+
+		k, err := walletd.LookupByLabel(adi.Pages[0].KeyNames[0])
+		if err != nil {
+			log.Printf("skipping adi import, %s, cannot find key for name %s", adi.Url.String(), adi.Pages[0].KeyNames[0])
+			continue
+		}
+
+		err = walletd.GetWallet().Put(walletd.BucketAdi, []byte(adi.Url.Authority), k.PublicKey)
+		if err != nil {
+			log.Printf("skipping adi import for %s with key %s DB error: %v", adi.Url.String(), adi.Pages[0].KeyNames[0], err)
+		}
+	}
+
+	return nil
+}
+
+func promptOverwrite() (string, error) {
+	pc := promptContent{
+		"",
+		"File already exists. Do you want to overwrite?",
+	}
+	items := []string{"Yes", "No"}
+	index := -1
+	var result string
+	var err error
+
+	for index < 0 {
+		prompt := promptui.SelectWithAdd{
+			Label: pc.label,
+			Items: items,
+		}
+		index, result, err = prompt.Run()
+		if index == -1 {
+			items = append(items, result)
+		}
+	}
+
+	if err != nil {
+		return "", err
+	}
+
+	return result, nil
 }
