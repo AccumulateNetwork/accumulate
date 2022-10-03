@@ -113,13 +113,16 @@ ACME_API bool {{.Name}}_equal(const {{.Name}} *a, const {{.Name}} *b) {
 
 // MarshalBinary marshals the {{natural .Name}} to bytes as a unsigned varint.
 ACME_API int marshalerWrite{{.Name}}(Marshaler *m, {{.Name}} v) {
-    return marshalerWriteInt(m, v);
+    return marshalerWriteUInt(m,(uint64_t) v);
 }
 
 
 // UnmarshalBinary unmarshals the {{natural .Name}} from bytes as a unsigned varint.
 ACME_API int unmarshalerRead{{.Name}}(Unmarshaler *m, {{.Name}} *v) {
-	return unmarshalerReadInt(m, (int64_t*)v);
+	uint64_t n = 0;
+	int b = unmarshalerReadInt(m, (int64_t*)v);
+	*v = {{.Name}})n;
+	return b;
 }
 
 {{end}}
