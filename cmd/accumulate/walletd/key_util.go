@@ -9,15 +9,14 @@ import (
 
 	btc "github.com/btcsuite/btcd/btcec"
 	"github.com/tyler-smith/go-bip32"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd/api"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-//go:generate go run ../../../tools/cmd/gen-types --package walletd --out key_info_gen.go key_info.yml
+//go:generate go run ../../../tools/cmd/gen-types --package walletd  --package api --out api/wallet_gen.go api/wallet.yml
 
 type Key struct {
-	PublicKey  []byte
-	PrivateKey []byte
-	KeyInfo    KeyInfo
+	api.Key
 }
 
 func (k *Key) PublicKeyHash() []byte {
@@ -189,7 +188,7 @@ func GenerateKeyFromHDPath(derivationPath string, sigtype protocol.SignatureType
 
 	seed, err := lookupSeed()
 	if err != nil {
-		return nil, fmt.Errorf("wallet not created, please create a seeded wallet \"accumulate walleet init\"")
+		return nil, fmt.Errorf("wallet not created, please create a seeded wallet \"accumulate wallet init\"")
 	}
 
 	curve := bip32.Bitcoin
