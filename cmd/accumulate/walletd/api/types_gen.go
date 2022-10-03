@@ -151,6 +151,11 @@ type SignResponse struct {
 	PublicKey []byte `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
 }
 
+type SignTransactionRequest struct {
+	TxName  string `json:"txName,omitempty" form:"txName" query:"txName" validate:"required"`
+	KeyName string `json:"keyName,omitempty" form:"keyName" query:"keyName" validate:"required"`
+}
+
 type VersionResponse struct {
 	fieldsSet []bool
 	Version   string `json:"version,omitempty" form:"version" query:"version" validate:"required"`
@@ -470,6 +475,17 @@ func (v *SignResponse) Copy() *SignResponse {
 
 func (v *SignResponse) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *SignTransactionRequest) Copy() *SignTransactionRequest {
+	u := new(SignTransactionRequest)
+
+	u.TxName = v.TxName
+	u.KeyName = v.KeyName
+
+	return u
+}
+
+func (v *SignTransactionRequest) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *VersionResponse) Copy() *VersionResponse {
 	u := new(VersionResponse)
 
@@ -765,6 +781,17 @@ func (v *SignResponse) Equal(u *SignResponse) bool {
 		return false
 	}
 	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
+		return false
+	}
+
+	return true
+}
+
+func (v *SignTransactionRequest) Equal(u *SignTransactionRequest) bool {
+	if !(v.TxName == u.TxName) {
+		return false
+	}
+	if !(v.KeyName == u.KeyName) {
 		return false
 	}
 

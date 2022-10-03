@@ -221,3 +221,11 @@ AddSendTokensOutputRequest:
     - name: Amount
       type: bigint
 
+SignTransactionRequest:
+  non-binary: true
+  fields:
+    - name: TxName
+      type: string
+    - name: KeyName
+      type: string
+

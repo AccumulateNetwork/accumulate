@@ -296,3 +296,25 @@ func (m *JrpcMethods) DeleteSendTokensTransaction(_ context.Context, params json
 	}
 	return resp
 }
+
+func (m *JrpcMethods) SignSendTokensTransaction(_ context.Context, params json.RawMessage) interface{} {
+	req := api.SignTransactionRequest{}
+	err := json.Unmarshal(params, &req)
+	if err != nil {
+		return validatorError(err)
+	}
+
+	value, err := GetWallet().Get(BucketTransactionCache, []byte(req.TxName))
+	if err != nil {
+		return validatorError(err)
+	}
+	resp := protocol.SendTokens{}
+	err = resp.UnmarshalBinary(value)
+	if err != nil {
+		return validatorError(err)
+	}
+	txn := protocol.Transaction{
+		Body: &resp,
+	}
+	return txn
+}
