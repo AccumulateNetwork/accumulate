@@ -178,11 +178,9 @@ KeyData:
       type: string
     - name: PublicKey
       type: bytes
-    - name: Derivation
-      type: string
-    - name: KeyType
-      type: protocol.SignatureType
-      marshal-as: enum
+    - name: KeyInfo
+      type: KeyInfo
+      marshal-as: reference
 
 KeyListResponse:
   non-binary: true
