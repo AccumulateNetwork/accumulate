@@ -188,7 +188,7 @@ func GenerateKeyFromHDPath(derivationPath string, sigtype protocol.SignatureType
 
 	seed, err := lookupSeed()
 	if err != nil {
-		return nil, fmt.Errorf("wallet not created, please create a seeded wallet \"accumulate walleet init\"")
+		return nil, fmt.Errorf("wallet not created, please create a seeded wallet \"accumulate wallet init\"")
 	}
 
 	//if we do have a seed, then create a new key

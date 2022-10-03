@@ -34,7 +34,7 @@ var testMatrix testMatrixTests
 func bootstrap(t *testing.T, tc *testCmd) {
 
 	_, err := executeCmd(tc.rootCmd,
-		[]string{"-j", "-s", fmt.Sprintf("%s/v2", tc.jsonRpcAddr), "wallet", "init", "import"},
+		[]string{"-j", "-s", fmt.Sprintf("%s/v2", tc.jsonRpcAddr), "wallet", "init", "import", "mnemonic"},
 		"yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow\n")
 	require.NoError(t, err)
 
