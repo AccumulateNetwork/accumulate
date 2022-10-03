@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/ed25519"
 	"fmt"
+	"log"
 
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/db"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
@@ -13,16 +14,17 @@ import (
 )
 
 func RestoreAccounts() (out string, err error) {
-	walletVersion, err := GetWallet().GetRaw(db.BucketConfig, []byte("version"))
+	bip32VersionChange := db.NewVersion(0, 0, 2, 0)
+	walletVersionData, err := GetWallet().GetRaw(db.BucketConfig, []byte("version"))
+	var walletVersion db.Version
 	if err == nil {
-		var v db.Version
-		v.FromBytes(walletVersion)
+		walletVersion.FromBytes(walletVersionData)
 		//if there is no error getting version, check to see if it is the right version
-		if db.WalletVersion.Compare(v) == 0 {
+		if db.WalletVersion.Compare(walletVersion) == 0 {
 			//no need to update
 			return "", nil
 		}
-		if db.WalletVersion.Compare(v) < 0 {
+		if db.WalletVersion.Compare(walletVersion) < 0 {
 			return "", fmt.Errorf("cannot update wallet to an older version, wallet database version is %v, cli version is %v", v.String(), db.WalletVersion.String())
 		}
 	}
@@ -112,6 +114,30 @@ func RestoreAccounts() (out string, err error) {
 		}
 	}
 
+	//reset the mnemonic count bucket to zero
+	if walletVersion.Compare(bip32VersionChange) < 0 {
+		countBucket, err := GetWallet().GetBucket(BucketMnemonic)
+		if err != nil {
+			log.Println("mnemonic bucket doesn't exist")
+		} else {
+			for _, v := range countBucket.KeyValueList {
+				switch string(v.Key) {
+				case "phrase":
+					//do nothing
+				case "seed":
+					//do nothing
+				default:
+					//these are the sig types, so delete them,
+					_, found := protocol.SignatureTypeByName(string(v.Key))
+					if found {
+						//reset the counter if the sig type is found.
+						GetWallet().Delete(BucketMnemonic, v.Key)
+					}
+				}
+			}
+		}
+	}
+
 	//build the map of lite accounts to key labels
 	labelz, err = GetWallet().GetBucket(BucketLabel)
 	if err != nil {
@@ -140,7 +166,9 @@ func RestoreAccounts() (out string, err error) {
 			if err != nil {
 				//ok, so it is 2), wo we need to make the key info bucket
 				k.KeyInfo.Type = protocol.SignatureTypeED25519
-				k.KeyInfo.Derivation = "external"
+				if walletVersion.Compare(bip32VersionChange) < 0 {
+					k.KeyInfo.Derivation = "external"
+				}
 
 				//add the default key type
 				out += fmt.Sprintf("assigning default key type %s for key name %v\n", k.KeyInfo.Type, string(v.Key))
