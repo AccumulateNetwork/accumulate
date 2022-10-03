@@ -597,7 +597,7 @@ func ExportAccounts(filePath string) error {
 	bin, err := json.MarshalIndent(&res, "", "  ")
 
 	if err != nil {
-		return err
+		log.Printf("cannot convert export to json for export, error: %v", err)
 	}
 
 	if _, err := os.Stat(filePath); err == nil {

@@ -400,13 +400,14 @@ success
 
 section "Export wallet as json format"
 accumulate wallet export /tmp/account.json
+cat /tmp/account.json
 success
 
 section "Remove wallet db storage"
-rm ~/.accumulate/wallet_encrypted.db
+rm ~/.accumulate/wallet.db
 success
 
-section "Import wallet as json format"
+section "Import wallet as json format to restore wallet"
 accumulate wallet import /tmp/account.json
 success
 
