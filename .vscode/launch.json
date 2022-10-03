@@ -312,13 +312,22 @@
       ]
     },
  {
-      "name": "Staking",
+      "name": "StakingSim",
       "type": "go",
       "request": "launch",
       "mode": "auto",
       "program": "${workspaceFolder}/tools/cmd/staking",
       "cwd": "/home/paul/tmp/staking",
       "args":["--sim",]
+    },
+    {
+      "name": "StakingDev",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/tools/cmd/staking",
+      "cwd": "/home/paul/tmp/staking",
+      "args":["--net=http://127.0.1.1:26660/v2",]
     },
   ]
 }
