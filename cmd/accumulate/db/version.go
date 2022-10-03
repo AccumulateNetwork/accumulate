@@ -8,7 +8,7 @@ import (
 type Version uint64
 
 func NewVersion(commit int, major int, minor int, revision int) Version {
-	return Version(commit*0x100000000 + major*0x1000000 + minor*0x10000 + revision)
+	return Version((commit&0xFFFFFFFF)*0x100000000 + major*0x1000000 + minor*0x10000 + revision)
 }
 
 func (v Version) Commit() uint32 {

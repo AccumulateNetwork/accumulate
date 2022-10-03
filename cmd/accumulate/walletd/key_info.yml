@@ -1,8 +1,0 @@
-KeyInfo:
-  fields:
-  - name: Type
-    type: protocol.SignatureType
-    marshal-as: enum
-  - name: Derivation
-    type: string
-    optional: true
