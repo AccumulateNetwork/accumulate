@@ -34,7 +34,12 @@ var walletInitCreateCmd = &cobra.Command{
 
 var walletInitImportCmd = &cobra.Command{
 	Use:   "import",
-	Short: "import a mnemonic seed to create wallet",
+	Short: "import a mnemonic seed via command prompt or import wallet backup file to create wallet",
+}
+
+var walletInitImportMnemonicCmd = &cobra.Command{
+	Use:   "mnemonic",
+	Short: "import from a mnemonic seed via command prompt",
 	Args:  cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
 		err := InitDBImport(cmd, false)
@@ -42,9 +47,9 @@ var walletInitImportCmd = &cobra.Command{
 	},
 }
 
-var walletInitRestoreCmd = &cobra.Command{
-	Use:   "restore",
-	Short: "restore wallet and seed from exported backup file",
+var walletInitImportKeystoreCmd = &cobra.Command{
+	Use:   "keystore",
+	Short: "restore wallet and seed from exported backup keystore file",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		err := ImportAccounts(args[0])
@@ -88,7 +93,8 @@ var walletExportCmd = &cobra.Command{
 
 func init() {
 	initRunFlags(walletCmd, false)
-	walletInitCmd.AddCommand(walletInitCreateCmd, walletInitImportCmd, walletInitRestoreCmd, walletInitScriptCmd)
+	walletInitCmd.AddCommand(walletInitCreateCmd, walletInitImportCmd, walletInitImportCmd, walletInitScriptCmd)
+	walletInitImportCmd.AddCommand(walletInitImportMnemonicCmd, walletInitImportKeystoreCmd)
 	walletCmd.AddCommand(walletInitCmd)
 	walletCmd.AddCommand(walletServeCmd)
 	walletCmd.AddCommand(walletExportCmd)
