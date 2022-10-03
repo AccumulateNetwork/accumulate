@@ -196,8 +196,7 @@ func (m *JrpcMethods) ResolveKey(_ context.Context, params json.RawMessage) inte
 	}
 
 	resp.KeyData.PublicKey = k.PublicKey
-	resp.KeyData.Derivation = k.KeyInfo.Derivation
-	resp.KeyData.KeyType = k.KeyInfo.Type
+	resp.KeyData.KeyInfo = k.KeyInfo
 	return resp
 }
 
