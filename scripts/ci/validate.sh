@@ -399,16 +399,16 @@ RESULT=$(accumulate -j get test.acme/managed-tokens -j | jq -re '.data.authoriti
 success
 
 section "Export wallet as json format"
-accumulate wallet export /tmp/account.json
-cat /tmp/account.json
+accumulate wallet export /tmp/wallet_export_account.json || die "failed to export wallet"
+cat /tmp/wallet_export_account.json
 success
 
 section "Remove wallet db storage"
-rm ~/.accumulate/wallet.db
+rm $HOME/.accumulate/validate/wallet.db || die "failed to remove wallet database"
 success
 
 section "Import wallet as json format to restore wallet"
-accumulate wallet import /tmp/account.json
+accumulate wallet import /tmp/wallet_export_account.json || die "failed to import wallet"
 success
 
 section "Add manager to token account"
