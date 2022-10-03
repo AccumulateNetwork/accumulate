@@ -38,7 +38,6 @@ func setFlagsForInit() error {
 	}
 
 	flagInitNode.SkipVersionCheck = flagInitDualNode.SkipVersionCheck
-	flagInitNode.GenesisDoc = flagInitDualNode.GenesisDoc
 	flagInitNode.SeedProxy = flagInitDualNode.SeedProxy
 	flagInitNode.Follower = false
 	flagInitNode.NoPrometheus = flagInitDualNode.NoPrometheus
@@ -72,6 +71,7 @@ func initDualNodeFromSeed(cmd *cobra.Command, args []string) error {
 	// configure the Directory first so we know how to setup the bvn.
 	args = []string{args[0]}
 
+	flagInitNode.GenesisDoc = flagInitDualNode.DnGenesis
 	_, err = initNode(cmd, args)
 	if err != nil {
 		return fmt.Errorf("cannot configure the directory node, %v", err)
@@ -98,6 +98,7 @@ func initDualNodeFromSeed(cmd *cobra.Command, args []string) error {
 
 	args = []string{fmt.Sprintf("tcp://%s:%d", bvnHost, partition.BasePort)}
 
+	flagInitNode.GenesisDoc = flagInitDualNode.BvnGenesis
 	_, err = initNode(cmd, args)
 	if err != nil {
 		return fmt.Errorf("cannot configure the directory node, %v", err)
@@ -134,6 +135,7 @@ func initDualNodeFromPeer(cmd *cobra.Command, args []string) error {
 	dnnUrl := fmt.Sprintf("%s://%s:%d", u.Scheme, u.Hostname(), dnBasePort)
 	args = []string{dnnUrl}
 
+	flagInitNode.GenesisDoc = flagInitDualNode.DnGenesis
 	_, err = initNode(cmd, args)
 	if err != nil {
 		return err
@@ -141,6 +143,7 @@ func initDualNodeFromPeer(cmd *cobra.Command, args []string) error {
 
 	args = []string{bvnHost}
 
+	flagInitNode.GenesisDoc = flagInitDualNode.BvnGenesis
 	_, err = initNode(cmd, args)
 	if err != nil {
 		return err

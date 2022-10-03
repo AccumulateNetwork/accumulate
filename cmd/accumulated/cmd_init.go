@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -73,7 +74,6 @@ var flagInitNode struct {
 }
 
 var flagInitDualNode struct {
-	GenesisDoc       string
 	Follower         bool
 	SkipVersionCheck bool
 	SeedProxy        string
@@ -81,6 +81,9 @@ var flagInitDualNode struct {
 	//ResolvePublicIP  bool
 	NoPrometheus bool
 	ListenIP     string
+
+	DnGenesis  string
+	BvnGenesis string
 }
 
 var flagInitDevnet struct {
@@ -131,13 +134,15 @@ func initInitFlags() {
 
 	cmdInitDualNode.ResetFlags()
 	cmdInitDualNode.Flags().BoolVarP(&flagInitDualNode.Follower, "follow", "f", false, "Do not participate in voting")
-	cmdInitDualNode.Flags().StringVar(&flagInitDualNode.GenesisDoc, "genesis-doc", "", "Genesis doc for the target network")
 	cmdInitDualNode.Flags().BoolVar(&flagInitDualNode.SkipVersionCheck, "skip-version-check", false, "Do not enforce the version check")
 	cmdInitDualNode.Flags().StringVarP(&flagInitDualNode.PublicIP, "public", "p", "", "public IP or URL")
 	cmdInitDualNode.Flags().StringVarP(&flagInitDualNode.ListenIP, "listen", "l", "", "Address to listen on, where port is determined by seed or peer")
 	cmdInitDualNode.Flags().StringVar(&flagInitDualNode.SeedProxy, "seed", "", "Fetch network configuration from seed proxy")
 	cmdInitDualNode.Flags().BoolVarP(&flagInitDualNode.NoPrometheus, "no-prometheus", "", false, "disable prometheus")
 	//cmdInitDualNode.Flags().BoolVar(&flagInitDualNode.ResolvePublicIP, "resolve-public-ip", true, "resolve public IP address of node and add to configuration")
+
+	cmdInitDualNode.Flags().StringVar(&flagInitDualNode.DnGenesis, "dn-genesis-doc", "", "Genesis doc for the DN")
+	cmdInitDualNode.Flags().StringVar(&flagInitDualNode.BvnGenesis, "bvn-genesis-doc", "", "Genesis doc for the target BVN")
 
 	cmdInitDevnet.ResetFlags()
 	cmdInitDevnet.Flags().StringVar(&flagInitDevnet.Name, "name", "DevNet", "Network name")
@@ -339,22 +344,10 @@ func initNodeFromSeedProxy(cmd *cobra.Command, args []string) (int, *cfg.Config,
 	if lastHealthyAccPeer == nil || lastHealthyTmPeer == nil {
 		return 0, nil, nil, fmt.Errorf("no healthy peers, cannot continue")
 	}
-	var genDoc *types.GenesisDoc
-	if cmd.Flag("genesis-doc").Changed {
-		genDoc, err = types.GenesisDocFromFile(flagInitNode.GenesisDoc)
-		if err != nil {
-			return 0, nil, nil, fmt.Errorf("failed to load genesis doc %q, %v", flagInitNode.GenesisDoc, err)
-		}
-	} else {
-		if lastHealthyTmPeer == nil {
-			return 0, nil, nil, fmt.Errorf("no healthy tendermint peers, cannot fetch genesis document")
-		}
-		warnf("You are fetching the Genesis document from %s! Only do this if you trust %[1]s and your connection to it!", args[0])
-		rgen, err := lastHealthyTmPeer.Genesis(context.Background())
-		if err != nil {
-			return 0, nil, nil, fmt.Errorf("failed to get genesis from %s, %v", args[0], err)
-		}
-		genDoc = rgen.Genesis
+
+	genDoc, err := getGenesis(args[0], lastHealthyTmPeer)
+	if err != nil {
+		return 0, nil, nil, err
 	}
 
 	cmd2.Client = lastHealthyAccPeer
@@ -445,19 +438,9 @@ func initNodeFromPeer(cmd *cobra.Command, args []string) (int, *cfg.Config, *typ
 		return 0, nil, nil, fmt.Errorf("failed to get description from %s, %v", args[0], err)
 	}
 
-	var genDoc *types.GenesisDoc
-	if cmd.Flag("genesis-doc").Changed {
-		genDoc, err = types.GenesisDocFromFile(flagInitNode.GenesisDoc)
-		if err != nil {
-			return 0, nil, nil, fmt.Errorf("failed to load genesis doc %q, %v", flagInitNode.GenesisDoc, err)
-		}
-	} else {
-		warnf("You are fetching the Genesis document from %s! Only do this if you trust %[1]s and your connection to it!", args[0])
-		rgen, err := tmClient.Genesis(context.Background())
-		if err != nil {
-			return 0, nil, nil, fmt.Errorf("failed to get genesis from %s, %v", args[0], err)
-		}
-		genDoc = rgen.Genesis
+	genDoc, err := getGenesis(args[0], tmClient)
+	if err != nil {
+		return 0, nil, nil, err
 	}
 
 	status, err := tmClient.Status(context.Background())
@@ -518,6 +501,44 @@ func initNodeFromPeer(cmd *cobra.Command, args []string) (int, *cfg.Config, *typ
 		NetworkType: description.NetworkType, PartitionId: description.PartitionId,
 		LocalAddress: "", Network: description.Network}
 	return netPort, config, genDoc, nil
+}
+
+func getGenesis(server string, tmClient *rpchttp.HTTP) (*types.GenesisDoc, error) {
+	if flagInitNode.GenesisDoc != "" {
+		genDoc, err := types.GenesisDocFromFile(flagInitNode.GenesisDoc)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load genesis doc %q, %v", flagInitNode.GenesisDoc, err)
+		}
+		return genDoc, nil
+	}
+
+	if tmClient == nil {
+		return nil, fmt.Errorf("no healthy tendermint peers, cannot fetch genesis document")
+	}
+	warnf("You are fetching the Genesis document from %s! Only do this if you trust %[1]s and your connection to it!", server)
+
+	buf := new(bytes.Buffer)
+	for i := uint(0); ; i++ {
+		rgen, err := tmClient.GenesisChunked(context.Background(), i)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get genesis chunk %d from %s, %v", i, server, err)
+		}
+		b, err := base64.StdEncoding.DecodeString(rgen.Data)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode genesis chunk %d from %s, %v", i, server, err)
+		}
+		_, _ = buf.Write(b)
+		if i+1 >= uint(rgen.TotalChunks) {
+			break
+		}
+	}
+
+	doc, err := types.GenesisDocFromJSON(buf.Bytes())
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode genesis from %s, %v", server, err)
+	}
+
+	return doc, nil
 }
 
 func initNode(cmd *cobra.Command, args []string) (string, error) {
