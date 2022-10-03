@@ -10,28 +10,27 @@ func (s *StakingApp) AddAccounts() {
 		return
 	}
 
-	for _, v := range registered.Entries {
-		sa := v.(*Account)                                            // Get new registered account
-		if oldSa, ok := s.Stakers.AllAccounts[sa.URL.String()]; !ok { // Is this a new account?
-			s.Stakers.AllAccounts[sa.URL.String()] = sa //               Just add new accounts
-		} else { //                                                      If an old account
-			if oldSa.Type != sa.Type { //                                Check if its type has changed
-				s.Stakers.AllAccounts[sa.URL.String()] = sa //           If type changed, replace
-			} //                                                         Otherwise it isn't a change; ignore
-		}
-		switch sa.Type {
-		case PureStaker:
-			s.Stakers.Pure = append(s.Stakers.Pure, sa)
-		case ProtocolValidator:
-			s.Stakers.PValidator = append(s.Stakers.PValidator, sa)
-		case ProtocolFollower:
-			s.Stakers.PFollower = append(s.Stakers.PFollower, sa)
-		case StakingValidator:
-			s.Stakers.SValidator = append(s.Stakers.SValidator, sa)
-		case Delegate:
-			sa.Delegatee.Delegates = append(sa.Delegatee.Delegates, sa)
-		}
+	if oldSa, ok := s.Stakers.AllAccounts[registered.URL.String()]; !ok { // Is this a new account?
+		s.Stakers.AllAccounts[registered.URL.String()] = registered //               Just add new accounts
+	} else { //                                                      If an old account
+		if oldSa.Type != registered.Type { //                                Check if its type has changed
+			s.Stakers.AllAccounts[registered.URL.String()] = registered //           If type changed, replace
+		} //                                                         Otherwise it isn't a change; ignore
 	}
+	switch registered.Type {
+	case PureStaker:
+		s.Stakers.Pure = append(s.Stakers.Pure, registered)
+	case ProtocolValidator:
+		s.Stakers.PValidator = append(s.Stakers.PValidator, registered)
+	case ProtocolFollower:
+		s.Stakers.PFollower = append(s.Stakers.PFollower, registered)
+	case StakingValidator:
+		s.Stakers.SValidator = append(s.Stakers.SValidator, registered)
+	case Delegate:
+		registered.Delegatee.Delegates = append(registered.Delegatee.Delegates, registered)
+	}
+
+	// Function to sort an account
 	sa := func(a []*Account) []*Account {
 		sort.Slice(a, func(i, j int) bool { return a[i].URL.String() < a[j].URL.String() })
 		for _, a2 := range a {
@@ -40,6 +39,8 @@ func (s *StakingApp) AddAccounts() {
 		}
 		return a
 	}
+
+	// Sort all the types of staker accounts
 	sa(s.Stakers.Pure)
 	sa(s.Stakers.PValidator)
 	sa(s.Stakers.PFollower)

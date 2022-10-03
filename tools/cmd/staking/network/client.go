@@ -103,7 +103,7 @@ func (n *Network) GetTokensIssued() (int64, error) {
 // How the Application gets blocks
 func (n *Network) GetBlock(index int64) (*app.Block, error) {
 	if index >= int64(len(n.Blocks)) {
-		return nil, errors.New("no block found")
+		return nil, fmt.Errorf("no block found")
 	}
 	return n.Blocks[index], nil
 }

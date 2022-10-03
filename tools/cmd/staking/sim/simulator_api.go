@@ -21,7 +21,7 @@ func (s *Simulator) GetBlock(idx int64) (*app.Block, error) {
 		return nil, nil
 	}
 	blk := s.MajorBlocks[idx]
-	if idx == 0 {
+	if idx == 1 {
 		blk.SetBudget = true
 		blk.PrintReport = false
 		blk.PrintPayoutScript = false

@@ -178,21 +178,20 @@ func (s *StakingApp) AddApproved(b *Block) {
 	if approved == nil {
 		return
 	}
-	for _, v := range approved.Entries {
-		account := v.(*Account)
-		switch account.Type {
-		case PureStaker:
-			s.Stakers.Pure = append(s.Stakers.Pure, account)
-		case ProtocolValidator:
-			s.Stakers.PValidator = append(s.Stakers.PValidator, account)
-		case ProtocolFollower:
-			s.Stakers.PFollower = append(s.Stakers.PFollower, account)
-		case StakingValidator:
-			s.Stakers.SValidator = append(s.Stakers.SValidator, account)
-		default:
-			panic(fmt.Sprintf("Unknown account type: %v", account.Type))
-		}
+	
+	switch approved.Type {
+	case PureStaker:
+		s.Stakers.Pure = append(s.Stakers.Pure, approved)
+	case ProtocolValidator:
+		s.Stakers.PValidator = append(s.Stakers.PValidator, approved)
+	case ProtocolFollower:
+		s.Stakers.PFollower = append(s.Stakers.PFollower, approved)
+	case StakingValidator:
+		s.Stakers.SValidator = append(s.Stakers.SValidator, approved)
+	default:
+		panic(fmt.Sprintf("Unknown account type: %v", approved.Type))
 	}
+
 	sort.Slice(s.Stakers.Pure, func(i, j int) bool { return s.Stakers.Pure[i].URL.String() < s.Stakers.Pure[j].URL.String() })
 	sort.Slice(s.Stakers.PValidator, func(i, j int) bool {
 		return s.Stakers.PValidator[i].URL.String() < s.Stakers.PValidator[j].URL.String()

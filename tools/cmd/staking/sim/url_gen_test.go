@@ -37,53 +37,61 @@ func TestGenerateInitializationScript(t *testing.T) {
 		buff.WriteString(fmt.Sprint(a...))
 	}
 	cr := func() {
-		buff.WriteByte('\n')
+		buff.WriteString("echo\n")
 	}
 
-	for i := 0; i < 50; i++ {
+	GenRH.SetSeed([]byte{3,2,3,5})
+
+	for i := 0; i < 2; i++ {
 		adi, url := GenUrls("StakingAccount")
 		stakers = append(stakers, &staker{adi: adi, url: url})
 	}
 
 	p("export ACC_API=http://127.0.1.1:26660/v2 ")
 	p("lta=acc://c83b1ed6b8b6795d3c224dab50a544e2306d743866835260/ACME")
-	pf("for i in {0..30}\ndo\n   echo asdfasdf | accumulate faucet $lta\ndone") // accumulate credits [origin token account] [key page or lite identity url] [number of credits wanted] [max acme to spend] [percent slippage (optional)] [flags][BS2]
+	pf("for i in {0..200}\ndo\n   echo asdfasdf | accumulate faucet $lta\ndone") // accumulate credits [origin token account] [key page or lite identity url] [number of credits wanted] [max acme to spend] [percent slippage (optional)] [flags][BS2]
 	p("sleep 5s")
 	p("echo asdfasdf | accumulate credits $lta $lta 500000")
+	p("sleep 15s")
 	cr()
-	p("sleep 5s")
-	cr()
+	p("echo set up staking rewards")
 	p("echo asdfasdf | accumulate adi create $lta acc://staking.acme masterkey")
-	p("sleep 5s")
-	p("echo asdfasdf | accumulate credits $lta acc://staking.acme/book/1 500000")
-	p("sleep 5s")
-	p("echo asdfasdf | accumulate account create data acc://staking.acme masterkey acc://staking.acme/Approved")
-	p("echo asdfasdf | accumulate account create data acc://staking.acme masterkey acc://staking.acme/Registered")
-	p("echo asdfasdf | accumulate account create data acc://staking.acme masterkey acc://staking.acme/Disputes")
+	p("sleep 10s")
 	cr()
-
+	p("echo get credits")
+	p("echo asdfasdf | accumulate credits $lta acc://staking.acme/book/1 500000")
+	p("sleep 10s")
+	cr()
+	p("echo set up data accounts")
+	p("echo asdfasdf | accumulate account create data acc://staking.acme masterkey acc://staking.acme/Approvedx")
+	p("echo asdfasdf | accumulate account create data acc://staking.acme masterkey acc://staking.acme/Registeredx")
+	p("echo asdfasdf | accumulate account create data acc://staking.acme masterkey acc://staking.acme/Disputesx")
+	cr()
+	p("set up staking ADIs")
 	for _, v := range stakers {
 		pf("echo Create ADI %s", v.adi)
 		pf("echo asdfasdf | accumulate adi create $lta %s masterkey", v.adi)
 	}
 	cr()
-	p("sleep 5s")
+	p("sleep 15s")
 	for _, v := range stakers {
 		pf("echo Add credits to ADI %s/book/1", v.adi)
 		pf("echo asdfasdf | accumulate credits $lta %s/book/1 10000", v.adi)
 	}
 	cr()
-	p("sleep 5s") // Have to wait for credits to settle
+	p("sleep 15s") // Have to wait for credits to settle
 	for _, v := range stakers {
 		pf("echo Create Token account %s", v.url)
 		pf("echo asdfasdf | accumulate account create token %s masterkey %s acc://acme", v.adi, v.url)
 	}
 	cr()
-	p("sleep 5s") // Have to wait for credits to settle
+	p("sleep 15s") // Have to wait for credits to settle
 	for _, v := range stakers {
 		pf("echo Move tokens from $lta to %s amount %d", v.url, 40)
 		pf("echo asdfasdf | accumulate tx create $lta %s %d", v.url, 40)
 	}
+
+	
 
 	fmt.Print(buff.String())
 	u, _ := user.Current()
@@ -91,4 +99,8 @@ func TestGenerateInitializationScript(t *testing.T) {
 	file, err := os.Create(scriptName)
 	require.NoError(t, err)
 	file.WriteString(buff.String())
+
+	// Add all the Staking accounts to the approved list
+
+
 }

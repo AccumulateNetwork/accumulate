@@ -318,7 +318,7 @@
       "mode": "auto",
       "program": "${workspaceFolder}/tools/cmd/staking",
       "cwd": "/home/paul/tmp/staking",
-      "args":[" ",]
+      "args":["--sim",]
     },
   ]
 }

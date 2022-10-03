@@ -26,7 +26,6 @@ type Account struct {
 	MajorBlock int64         // The Major Block where Account was approved
 	URL        *url.URL      // The URL of this account
 	DepositURL *url.URL      // The URL of the account to be paid rewards
-	Entries    []interface{} // Returns some struct from the account
 	Type       string        // Type of account
 	Delegatee  *Account      // If this is a delegate, Account it delegates to.
 	Balance    int64         // Balance if this is a token account

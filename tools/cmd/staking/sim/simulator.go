@@ -87,7 +87,6 @@ func (s *Simulator) Init() {
 		}
 		issued += newAccount.Balance
 
-		registered.Entries = append(registered.Entries, newAccount)
 		idx = rh.GetRandInt64() % 7 // Figure out the next staking type
 	}
 	s.Accounts = make(map[string]*app.Account)

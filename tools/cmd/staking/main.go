@@ -27,9 +27,8 @@ func main() {
 		fmt.Println(err)
 		return
 	}
-
+	
 	s := new(app.StakingApp)
-
 	if *flagSim {
 		sim := new(sim.Simulator)
 		s.Run(sim)
