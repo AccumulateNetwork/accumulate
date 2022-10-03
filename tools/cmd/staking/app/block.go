@@ -4,6 +4,7 @@ import (
 	"net/url"
 	"time"
 
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/staking"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -34,28 +35,28 @@ func (b *Block) GetAccount(AccountURL *url.URL) *Account {
 // Return the total number of tokens added to staking in this block
 // The number can be negative.  Note Type == "" will return the total
 // balance of all staking type accounts
-func (b *Block) GetTotalStaked(Type string) (TotalTokens int64) {
+func (b *Block) GetTotalStaked(Type staking.AccountType) (TotalTokens int64) {
 	for _, acc := range b.Accounts {
 		switch {
-		case Type != "" && PureStaker == acc.Type: // If specified a type, then just add the type
+		case Type != 0 && staking.AccountTypePure == acc.Type: // If specified a type, then just add the type
 			TotalTokens += acc.Balance
 
-		case Type != "" && ProtocolValidator == acc.Type: // If specified a type, then just add the type
+		case Type != 0 && staking.AccountTypeCoreValidator == acc.Type: // If specified a type, then just add the type
 			TotalTokens += acc.Balance
 
-		case Type != "" && ProtocolFollower == acc.Type: // If specified a type, then just add the type
+		case Type != 0 && staking.AccountTypeCoreFollower == acc.Type: // If specified a type, then just add the type
 
-		case Type != "" && StakingValidator == acc.Type: // If specified a type, then just add the type
+		case Type != 0 && staking.AccountTypeStakingValidator == acc.Type: // If specified a type, then just add the type
 			TotalTokens += acc.Balance
 
-		case Type != "" && Delegate == acc.Type && Type == acc.Delegatee.Type: // If specified a type,
+		case Type != 0 && staking.AccountTypeDelegated == acc.Type && Type == acc.Delegatee.Type: // If specified a type,
 			TotalTokens += acc.Balance //                                         then add if right type
 
-		case PureStaker == acc.Type, // if Not specifying a type, then add all staking types
-			ProtocolValidator == acc.Type,
-			ProtocolFollower == acc.Type,
-			StakingValidator == acc.Type,
-			Delegate == acc.Type:
+		case staking.AccountTypePure == acc.Type, // if Not specifying a type, then add all staking types
+			staking.AccountTypeCoreValidator == acc.Type,
+			staking.AccountTypeCoreFollower == acc.Type,
+			staking.AccountTypeStakingValidator == acc.Type,
+			staking.AccountTypeDelegated == acc.Type:
 
 			TotalTokens += acc.Balance
 		}

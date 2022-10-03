@@ -5,5 +5,9 @@ AccountType:
     value: 1
   Delegated:
     value: 2
-  Validator:
+  CoreValidator:
     value: 3
+  CoreFollower:
+    value: 4
+  StakingValidator:
+    value: 5

@@ -26,19 +26,12 @@ type Network struct {
 
 var _ app.Accumulate = (*Network)(nil)
 
-func New(server string, parameters *url.URL) (*Network, error) {
-	c, err := client.New(server)
-	if err != nil {
-		return nil, err
-	}
-
+func New(client *client.Client, parameters *url.URL) *Network {
 	n := new(Network)
-	n.client = c
+	n.client = client
 	n.paramUrl = parameters
-	return n, nil
+	return n
 }
-
-func (n *Network) Debug() { n.client.DebugRequest = true }
 
 func (n *Network) Run()               {}
 func (n *Network) Init()              {}

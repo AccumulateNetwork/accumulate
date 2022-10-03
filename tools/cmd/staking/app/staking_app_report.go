@@ -8,6 +8,7 @@ import (
 	"path"
 	"sort"
 
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/staking"
 	"go.uber.org/zap/buffer"
 )
 
@@ -99,13 +100,13 @@ func (s *StakingApp) Report() {
 	f("\n")                                                                                                 // 37
 	f("\n")                                                                                                 // 38
 
-	lines, end := s.PrintAccounts(PureStaker, "Pure Staking Accounts", s.Stakers.Pure, "c12", "c28", 39)
+	lines, end := s.PrintAccounts(staking.AccountTypePure, "Pure Staking Accounts", s.Stakers.Pure, "c12", "c28", 39)
 	f(lines)
-	lines, end = s.PrintAccounts(ProtocolValidator, "Protocol Validator Accounts", s.Stakers.PValidator, "c13", "c29", end)
+	lines, end = s.PrintAccounts(staking.AccountTypeCoreValidator, "Protocol Validator Accounts", s.Stakers.PValidator, "c13", "c29", end)
 	f(lines)
-	lines, end = s.PrintAccounts(ProtocolFollower, "Protocol Follower Accounts", s.Stakers.PFollower, "c14", "c30", end)
+	lines, end = s.PrintAccounts(staking.AccountTypeCoreFollower, "Protocol Follower Accounts", s.Stakers.PFollower, "c14", "c30", end)
 	f(lines)
-	lines, end = s.PrintAccounts(StakingValidator, "Staking Validator Accounts", s.Stakers.SValidator, "c15", "c31", end)
+	lines, end = s.PrintAccounts(staking.AccountTypeStakingValidator, "Staking Validator Accounts", s.Stakers.SValidator, "c15", "c31", end)
 	f(lines)
 
 	lines, end = s.PrintDistributions(end)
@@ -135,7 +136,7 @@ func (s *StakingApp) Report() {
 // PrintAccounts
 // Writes out all the lines staking token accounts (the staking account and any delegates).
 func (s *StakingApp) PrintAccounts(
-	Type string,
+	Type staking.AccountType,
 	Label string,
 	accounts []*Account,
 	weight, reward string,
@@ -268,11 +269,11 @@ func (s *StakingApp) PrintDistributions(start int) (lines string, end int) {
 		return s.Stakers.Distributions[i].Account.Type < s.Stakers.Distributions[j].Account.Type
 	})
 
-	var t string
+	var t staking.AccountType
 	for _, d := range s.Stakers.Distributions {
 		if d.Account.Type != t {
 			f("\n------------------------------------------------------------------------------------")
-			f(d.Account.Type)
+			f(d.Account.Type.String())
 			t = d.Account.Type
 		}
 		f("\t%s\t\t%s\t=G%d", d.Account.URL.String(), d.Account.DepositURL, d.Tokens)

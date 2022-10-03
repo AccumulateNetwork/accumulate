@@ -1,6 +1,10 @@
 package app
 
-import "sort"
+import (
+	"sort"
+
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/staking"
+)
 
 // AddAccounts()
 // Adds Approved accounts to the Staking Application state.
@@ -18,15 +22,15 @@ func (s *StakingApp) AddAccounts() {
 		} //                                                         Otherwise it isn't a change; ignore
 	}
 	switch registered.Type {
-	case PureStaker:
+	case staking.AccountTypePure:
 		s.Stakers.Pure = append(s.Stakers.Pure, registered)
-	case ProtocolValidator:
+	case staking.AccountTypeCoreValidator:
 		s.Stakers.PValidator = append(s.Stakers.PValidator, registered)
-	case ProtocolFollower:
+	case staking.AccountTypeCoreFollower:
 		s.Stakers.PFollower = append(s.Stakers.PFollower, registered)
-	case StakingValidator:
+	case staking.AccountTypeStakingValidator:
 		s.Stakers.SValidator = append(s.Stakers.SValidator, registered)
-	case Delegate:
+	case staking.AccountTypeDelegated:
 		registered.Delegatee.Delegates = append(registered.Delegatee.Delegates, registered)
 	}
 

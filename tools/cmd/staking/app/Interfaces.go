@@ -8,11 +8,6 @@ import (
 )
 
 const ( // Account Types
-	PureStaker        = "Pure Staker"
-	ProtocolValidator = "Protocol Validator"
-	ProtocolFollower  = "Protocol Follower"
-	StakingValidator  = "Staking Validator"
-	Delegate          = "Delegate"
 	Data              = "Data"
 
 	SecondsPerMajor = 5

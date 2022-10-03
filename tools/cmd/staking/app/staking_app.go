@@ -5,6 +5,8 @@ import (
 	"log"
 	"sort"
 	"time"
+
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/staking"
 )
 
 var ReportDirectory string
@@ -178,15 +180,15 @@ func (s *StakingApp) AddApproved(b *Block) {
 	if approved == nil {
 		return
 	}
-	
+
 	switch approved.Type {
-	case PureStaker:
+	case staking.AccountTypePure:
 		s.Stakers.Pure = append(s.Stakers.Pure, approved)
-	case ProtocolValidator:
+	case staking.AccountTypeCoreValidator:
 		s.Stakers.PValidator = append(s.Stakers.PValidator, approved)
-	case ProtocolFollower:
+	case staking.AccountTypeCoreFollower:
 		s.Stakers.PFollower = append(s.Stakers.PFollower, approved)
-	case StakingValidator:
+	case staking.AccountTypeStakingValidator:
 		s.Stakers.SValidator = append(s.Stakers.SValidator, approved)
 	default:
 		panic(fmt.Sprintf("Unknown account type: %v", approved.Type))

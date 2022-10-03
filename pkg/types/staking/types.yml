@@ -4,6 +4,10 @@ Account:
       description: is the type of staking account
       type: AccountType
       marshal-as: enum
+    - name: Identity
+      description: is the URL of the staker's ADI
+      type: url
+      pointer: true
     - name: Stake
       description: is the URL of the staked token account
       type: url

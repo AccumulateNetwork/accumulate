@@ -17,8 +17,14 @@ const AccountTypePure AccountType = 1
 // AccountTypeDelegated .
 const AccountTypeDelegated AccountType = 2
 
-// AccountTypeValidator .
-const AccountTypeValidator AccountType = 3
+// AccountTypeCoreValidator .
+const AccountTypeCoreValidator AccountType = 3
+
+// AccountTypeCoreFollower .
+const AccountTypeCoreFollower AccountType = 4
+
+// AccountTypeStakingValidator .
+const AccountTypeStakingValidator AccountType = 5
 
 // GetEnumValue returns the value of the Account Type
 func (v AccountType) GetEnumValue() uint64 { return uint64(v) }
@@ -27,7 +33,7 @@ func (v AccountType) GetEnumValue() uint64 { return uint64(v) }
 func (v *AccountType) SetEnumValue(id uint64) bool {
 	u := AccountType(id)
 	switch u {
-	case AccountTypeInactive, AccountTypePure, AccountTypeDelegated, AccountTypeValidator:
+	case AccountTypeInactive, AccountTypePure, AccountTypeDelegated, AccountTypeCoreValidator, AccountTypeCoreFollower, AccountTypeStakingValidator:
 		*v = u
 		return true
 	default:
@@ -44,8 +50,12 @@ func (v AccountType) String() string {
 		return "pure"
 	case AccountTypeDelegated:
 		return "delegated"
-	case AccountTypeValidator:
-		return "validator"
+	case AccountTypeCoreValidator:
+		return "coreValidator"
+	case AccountTypeCoreFollower:
+		return "coreFollower"
+	case AccountTypeStakingValidator:
+		return "stakingValidator"
 	default:
 		return fmt.Sprintf("AccountType:%d", v)
 	}
@@ -60,8 +70,12 @@ func AccountTypeByName(name string) (AccountType, bool) {
 		return AccountTypePure, true
 	case "delegated":
 		return AccountTypeDelegated, true
-	case "validator":
-		return AccountTypeValidator, true
+	case "corevalidator":
+		return AccountTypeCoreValidator, true
+	case "corefollower":
+		return AccountTypeCoreFollower, true
+	case "stakingvalidator":
+		return AccountTypeStakingValidator, true
 	default:
 		return 0, false
 	}

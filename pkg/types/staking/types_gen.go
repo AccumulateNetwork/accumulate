@@ -18,6 +18,8 @@ type Account struct {
 	fieldsSet []bool
 	// Type is the type of staking account.
 	Type AccountType `json:"type,omitempty" form:"type" query:"type" validate:"required"`
+	// Identity is the URL of the staker's ADI.
+	Identity *url.URL `json:"identity,omitempty" form:"identity" query:"identity" validate:"required"`
 	// Stake is the URL of the staked token account.
 	Stake *url.URL `json:"stake,omitempty" form:"stake" query:"stake" validate:"required"`
 	// Rewards is the URL of the rewards token account.
@@ -31,6 +33,9 @@ func (v *Account) Copy() *Account {
 	u := new(Account)
 
 	u.Type = v.Type
+	if v.Identity != nil {
+		u.Identity = v.Identity
+	}
 	if v.Stake != nil {
 		u.Stake = v.Stake
 	}
@@ -48,6 +53,14 @@ func (v *Account) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *Account) Equal(u *Account) bool {
 	if !(v.Type == u.Type) {
+		return false
+	}
+	switch {
+	case v.Identity == u.Identity:
+		// equal
+	case v.Identity == nil || u.Identity == nil:
+		return false
+	case !((v.Identity).Equal(u.Identity)):
 		return false
 	}
 	switch {
@@ -80,9 +93,10 @@ func (v *Account) Equal(u *Account) bool {
 
 var fieldNames_Account = []string{
 	1: "Type",
-	2: "Stake",
-	3: "Rewards",
-	4: "Delegate",
+	2: "Identity",
+	3: "Stake",
+	4: "Rewards",
+	5: "Delegate",
 }
 
 func (v *Account) MarshalBinary() ([]byte, error) {
@@ -92,14 +106,17 @@ func (v *Account) MarshalBinary() ([]byte, error) {
 	if !(v.Type == 0) {
 		writer.WriteEnum(1, v.Type)
 	}
+	if !(v.Identity == nil) {
+		writer.WriteUrl(2, v.Identity)
+	}
 	if !(v.Stake == nil) {
-		writer.WriteUrl(2, v.Stake)
+		writer.WriteUrl(3, v.Stake)
 	}
 	if !(v.Rewards == nil) {
-		writer.WriteUrl(3, v.Rewards)
+		writer.WriteUrl(4, v.Rewards)
 	}
 	if !(v.Delegate == nil) {
-		writer.WriteUrl(4, v.Delegate)
+		writer.WriteUrl(5, v.Delegate)
 	}
 
 	_, _, err := writer.Reset(fieldNames_Account)
@@ -119,11 +136,16 @@ func (v *Account) IsValid() error {
 		errs = append(errs, "field Type is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Identity is missing")
+	} else if v.Identity == nil {
+		errs = append(errs, "field Identity is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Stake is missing")
 	} else if v.Stake == nil {
 		errs = append(errs, "field Stake is not set")
 	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field Rewards is missing")
 	} else if v.Rewards == nil {
 		errs = append(errs, "field Rewards is not set")
@@ -150,12 +172,15 @@ func (v *Account) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Type = *x
 	}
 	if x, ok := reader.ReadUrl(2); ok {
-		v.Stake = x
+		v.Identity = x
 	}
 	if x, ok := reader.ReadUrl(3); ok {
-		v.Rewards = x
+		v.Stake = x
 	}
 	if x, ok := reader.ReadUrl(4); ok {
+		v.Rewards = x
+	}
+	if x, ok := reader.ReadUrl(5); ok {
 		v.Delegate = x
 	}
 

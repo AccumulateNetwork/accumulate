@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/staking"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 	"gitlab.com/accumulatenetwork/accumulate/tools/cmd/staking/app"
@@ -62,19 +63,19 @@ func (s *Simulator) Init() {
 		}
 		switch idx {
 		case 0:
-			newAccount.Type = app.PureStaker
+			newAccount.Type = staking.AccountTypePure
 			last = newAccount
 		case 1:
-			newAccount.Type = app.ProtocolValidator
+			newAccount.Type = staking.AccountTypeCoreValidator
 			last = newAccount
 		case 2:
-			newAccount.Type = app.ProtocolFollower
+			newAccount.Type = staking.AccountTypeCoreFollower
 			last = newAccount
 		case 3:
-			newAccount.Type = app.StakingValidator
+			newAccount.Type = staking.AccountTypeStakingValidator
 			last = newAccount
 		case 4, 5, 6:
-			newAccount.Type = app.Delegate
+			newAccount.Type = staking.AccountTypeDelegated
 			newAccount.Delegatee = last
 		}
 		newAccount.Balance = rh.GetRandInt64()%13000000 + 25000
