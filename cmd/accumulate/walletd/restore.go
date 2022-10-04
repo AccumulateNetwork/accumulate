@@ -25,7 +25,7 @@ func RestoreAccounts() (out string, err error) {
 			return "", nil
 		}
 		if db.WalletVersion.Compare(walletVersion) < 0 {
-			return "", fmt.Errorf("cannot update wallet to an older version, wallet database version is %v, cli version is %v", v.String(), db.WalletVersion.String())
+			return "", fmt.Errorf("cannot update wallet to an older version, wallet database version is %v, cli version is %v", walletVersion.String(), db.WalletVersion.String())
 		}
 	}
 
@@ -131,7 +131,10 @@ func RestoreAccounts() (out string, err error) {
 					_, found := protocol.SignatureTypeByName(string(v.Key))
 					if found {
 						//reset the counter if the sig type is found.
-						GetWallet().Delete(BucketMnemonic, v.Key)
+						err = GetWallet().Delete(BucketMnemonic, v.Key)
+						if err != nil {
+							return "", err
+						}
 					}
 				}
 			}
