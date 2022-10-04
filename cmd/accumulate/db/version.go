@@ -45,8 +45,8 @@ func (v Version) String() string {
 // Compare returns < 0 if v < version, returns > 0 if v > version, returns 0 if v == version
 func (v Version) Compare(version Version) int {
 	//only compare the major/minor/revision
-	self := 0xFFFF & v
-	cmp := 0xFFFF & version
+	self := 0xFFFFFFFF & v
+	cmp := 0xFFFFFFFF & version
 	switch {
 	case self < cmp:
 		return -1
