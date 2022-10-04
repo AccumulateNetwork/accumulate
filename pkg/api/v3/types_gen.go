@@ -84,13 +84,6 @@ type LastBlock struct {
 	extraData             []byte
 }
 
-type NodeDescription struct {
-	fieldsSet        []bool
-	ValidatorKeyHash [32]byte                    `json:"validatorKeyHash,omitempty" form:"validatorKeyHash" query:"validatorKeyHash" validate:"required"`
-	Network          *protocol.NetworkDefinition `json:"network,omitempty" form:"network" query:"network" validate:"required"`
-	extraData        []byte
-}
-
 type NodeMetrics struct {
 	fieldsSet []bool
 	TPS       float64 `json:"tps" form:"tps" query:"tps" validate:"required"`
@@ -98,18 +91,24 @@ type NodeMetrics struct {
 }
 
 type NodeStatus struct {
-	fieldsSet []bool
-	Ok        bool       `json:"ok,omitempty" form:"ok" query:"ok" validate:"required"`
-	LastBlock *LastBlock `json:"lastBlock,omitempty" form:"lastBlock" query:"lastBlock" validate:"required"`
-	extraData []byte
+	fieldsSet        []bool
+	Ok               bool                        `json:"ok,omitempty" form:"ok" query:"ok" validate:"required"`
+	LastBlock        *LastBlock                  `json:"lastBlock,omitempty" form:"lastBlock" query:"lastBlock" validate:"required"`
+	Version          string                      `json:"version,omitempty" form:"version" query:"version" validate:"required"`
+	Commit           string                      `json:"commit,omitempty" form:"commit" query:"commit" validate:"required"`
+	NodeKeyHash      [32]byte                    `json:"nodeKeyHash,omitempty" form:"nodeKeyHash" query:"nodeKeyHash" validate:"required"`
+	ValidatorKeyHash [32]byte                    `json:"validatorKeyHash,omitempty" form:"validatorKeyHash" query:"validatorKeyHash" validate:"required"`
+	Network          *protocol.NetworkDefinition `json:"network,omitempty" form:"network" query:"network" validate:"required"`
+	Peers            []*PeerInfo                 `json:"peers,omitempty" form:"peers" query:"peers" validate:"required"`
+	extraData        []byte
 }
 
-type NodeVersion struct {
-	fieldsSet      []bool
-	Version        string `json:"version,omitempty" form:"version" query:"version" validate:"required"`
-	Commit         string `json:"commit,omitempty" form:"commit" query:"commit" validate:"required"`
-	VersionIsKnown bool   `json:"versionIsKnown,omitempty" form:"versionIsKnown" query:"versionIsKnown" validate:"required"`
-	extraData      []byte
+type PeerInfo struct {
+	fieldsSet []bool
+	NodeID    string `json:"nodeID,omitempty" form:"nodeID" query:"nodeID" validate:"required"`
+	Host      string `json:"host,omitempty" form:"host" query:"host" validate:"required"`
+	Port      uint64 `json:"port,omitempty" form:"port" query:"port" validate:"required"`
+	extraData []byte
 }
 
 type QueryRangeOptions struct {
@@ -328,19 +327,6 @@ func (v *LastBlock) Copy() *LastBlock {
 
 func (v *LastBlock) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *NodeDescription) Copy() *NodeDescription {
-	u := new(NodeDescription)
-
-	u.ValidatorKeyHash = v.ValidatorKeyHash
-	if v.Network != nil {
-		u.Network = (v.Network).Copy()
-	}
-
-	return u
-}
-
-func (v *NodeDescription) CopyAsInterface() interface{} { return v.Copy() }
-
 func (v *NodeMetrics) Copy() *NodeMetrics {
 	u := new(NodeMetrics)
 
@@ -358,23 +344,36 @@ func (v *NodeStatus) Copy() *NodeStatus {
 	if v.LastBlock != nil {
 		u.LastBlock = (v.LastBlock).Copy()
 	}
+	u.Version = v.Version
+	u.Commit = v.Commit
+	u.NodeKeyHash = v.NodeKeyHash
+	u.ValidatorKeyHash = v.ValidatorKeyHash
+	if v.Network != nil {
+		u.Network = (v.Network).Copy()
+	}
+	u.Peers = make([]*PeerInfo, len(v.Peers))
+	for i, v := range v.Peers {
+		if v != nil {
+			u.Peers[i] = (v).Copy()
+		}
+	}
 
 	return u
 }
 
 func (v *NodeStatus) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *NodeVersion) Copy() *NodeVersion {
-	u := new(NodeVersion)
+func (v *PeerInfo) Copy() *PeerInfo {
+	u := new(PeerInfo)
 
-	u.Version = v.Version
-	u.Commit = v.Commit
-	u.VersionIsKnown = v.VersionIsKnown
+	u.NodeID = v.NodeID
+	u.Host = v.Host
+	u.Port = v.Port
 
 	return u
 }
 
-func (v *NodeVersion) CopyAsInterface() interface{} { return v.Copy() }
+func (v *PeerInfo) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *QueryRangeOptions) Copy() *QueryRangeOptions {
 	u := new(QueryRangeOptions)
@@ -688,22 +687,6 @@ func (v *LastBlock) Equal(u *LastBlock) bool {
 	return true
 }
 
-func (v *NodeDescription) Equal(u *NodeDescription) bool {
-	if !(v.ValidatorKeyHash == u.ValidatorKeyHash) {
-		return false
-	}
-	switch {
-	case v.Network == u.Network:
-		// equal
-	case v.Network == nil || u.Network == nil:
-		return false
-	case !((v.Network).Equal(u.Network)):
-		return false
-	}
-
-	return true
-}
-
 func (v *NodeMetrics) Equal(u *NodeMetrics) bool {
 	if !(v.TPS == u.TPS) {
 		return false
@@ -724,18 +707,46 @@ func (v *NodeStatus) Equal(u *NodeStatus) bool {
 	case !((v.LastBlock).Equal(u.LastBlock)):
 		return false
 	}
-
-	return true
-}
-
-func (v *NodeVersion) Equal(u *NodeVersion) bool {
 	if !(v.Version == u.Version) {
 		return false
 	}
 	if !(v.Commit == u.Commit) {
 		return false
 	}
-	if !(v.VersionIsKnown == u.VersionIsKnown) {
+	if !(v.NodeKeyHash == u.NodeKeyHash) {
+		return false
+	}
+	if !(v.ValidatorKeyHash == u.ValidatorKeyHash) {
+		return false
+	}
+	switch {
+	case v.Network == u.Network:
+		// equal
+	case v.Network == nil || u.Network == nil:
+		return false
+	case !((v.Network).Equal(u.Network)):
+		return false
+	}
+	if len(v.Peers) != len(u.Peers) {
+		return false
+	}
+	for i := range v.Peers {
+		if !((v.Peers[i]).Equal(u.Peers[i])) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (v *PeerInfo) Equal(u *PeerInfo) bool {
+	if !(v.NodeID == u.NodeID) {
+		return false
+	}
+	if !(v.Host == u.Host) {
+		return false
+	}
+	if !(v.Port == u.Port) {
 		return false
 	}
 
@@ -1411,54 +1422,6 @@ func (v *LastBlock) IsValid() error {
 	}
 }
 
-var fieldNames_NodeDescription = []string{
-	1: "ValidatorKeyHash",
-	2: "Network",
-}
-
-func (v *NodeDescription) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	if !(v.ValidatorKeyHash == ([32]byte{})) {
-		writer.WriteHash(1, &v.ValidatorKeyHash)
-	}
-	if !(v.Network == nil) {
-		writer.WriteValue(2, v.Network.MarshalBinary)
-	}
-
-	_, _, err := writer.Reset(fieldNames_NodeDescription)
-	if err != nil {
-		return nil, encoding.Error{E: err}
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
-}
-
-func (v *NodeDescription) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field ValidatorKeyHash is missing")
-	} else if v.ValidatorKeyHash == ([32]byte{}) {
-		errs = append(errs, "field ValidatorKeyHash is not set")
-	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Network is missing")
-	} else if v.Network == nil {
-		errs = append(errs, "field Network is not set")
-	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
 var fieldNames_NodeMetrics = []string{
 	1: "TPS",
 }
@@ -1497,6 +1460,12 @@ func (v *NodeMetrics) IsValid() error {
 var fieldNames_NodeStatus = []string{
 	1: "Ok",
 	2: "LastBlock",
+	3: "Version",
+	4: "Commit",
+	5: "NodeKeyHash",
+	6: "ValidatorKeyHash",
+	7: "Network",
+	8: "Peers",
 }
 
 func (v *NodeStatus) MarshalBinary() ([]byte, error) {
@@ -1508,6 +1477,26 @@ func (v *NodeStatus) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.LastBlock == nil) {
 		writer.WriteValue(2, v.LastBlock.MarshalBinary)
+	}
+	if !(len(v.Version) == 0) {
+		writer.WriteString(3, v.Version)
+	}
+	if !(len(v.Commit) == 0) {
+		writer.WriteString(4, v.Commit)
+	}
+	if !(v.NodeKeyHash == ([32]byte{})) {
+		writer.WriteHash(5, &v.NodeKeyHash)
+	}
+	if !(v.ValidatorKeyHash == ([32]byte{})) {
+		writer.WriteHash(6, &v.ValidatorKeyHash)
+	}
+	if !(v.Network == nil) {
+		writer.WriteValue(7, v.Network.MarshalBinary)
+	}
+	if !(len(v.Peers) == 0) {
+		for _, v := range v.Peers {
+			writer.WriteValue(8, v.MarshalBinary)
+		}
 	}
 
 	_, _, err := writer.Reset(fieldNames_NodeStatus)
@@ -1531,6 +1520,36 @@ func (v *NodeStatus) IsValid() error {
 	} else if v.LastBlock == nil {
 		errs = append(errs, "field LastBlock is not set")
 	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Version is missing")
+	} else if len(v.Version) == 0 {
+		errs = append(errs, "field Version is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Commit is missing")
+	} else if len(v.Commit) == 0 {
+		errs = append(errs, "field Commit is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field NodeKeyHash is missing")
+	} else if v.NodeKeyHash == ([32]byte{}) {
+		errs = append(errs, "field NodeKeyHash is not set")
+	}
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+		errs = append(errs, "field ValidatorKeyHash is missing")
+	} else if v.ValidatorKeyHash == ([32]byte{}) {
+		errs = append(errs, "field ValidatorKeyHash is not set")
+	}
+	if len(v.fieldsSet) > 7 && !v.fieldsSet[7] {
+		errs = append(errs, "field Network is missing")
+	} else if v.Network == nil {
+		errs = append(errs, "field Network is not set")
+	}
+	if len(v.fieldsSet) > 8 && !v.fieldsSet[8] {
+		errs = append(errs, "field Peers is missing")
+	} else if len(v.Peers) == 0 {
+		errs = append(errs, "field Peers is not set")
+	}
 
 	switch len(errs) {
 	case 0:
@@ -1542,27 +1561,27 @@ func (v *NodeStatus) IsValid() error {
 	}
 }
 
-var fieldNames_NodeVersion = []string{
-	1: "Version",
-	2: "Commit",
-	3: "VersionIsKnown",
+var fieldNames_PeerInfo = []string{
+	1: "NodeID",
+	2: "Host",
+	3: "Port",
 }
 
-func (v *NodeVersion) MarshalBinary() ([]byte, error) {
+func (v *PeerInfo) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	if !(len(v.Version) == 0) {
-		writer.WriteString(1, v.Version)
+	if !(len(v.NodeID) == 0) {
+		writer.WriteString(1, v.NodeID)
 	}
-	if !(len(v.Commit) == 0) {
-		writer.WriteString(2, v.Commit)
+	if !(len(v.Host) == 0) {
+		writer.WriteString(2, v.Host)
 	}
-	if !(!v.VersionIsKnown) {
-		writer.WriteBool(3, v.VersionIsKnown)
+	if !(v.Port == 0) {
+		writer.WriteUint(3, v.Port)
 	}
 
-	_, _, err := writer.Reset(fieldNames_NodeVersion)
+	_, _, err := writer.Reset(fieldNames_PeerInfo)
 	if err != nil {
 		return nil, encoding.Error{E: err}
 	}
@@ -1570,23 +1589,23 @@ func (v *NodeVersion) MarshalBinary() ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
-func (v *NodeVersion) IsValid() error {
+func (v *PeerInfo) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Version is missing")
-	} else if len(v.Version) == 0 {
-		errs = append(errs, "field Version is not set")
+		errs = append(errs, "field NodeID is missing")
+	} else if len(v.NodeID) == 0 {
+		errs = append(errs, "field NodeID is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Commit is missing")
-	} else if len(v.Commit) == 0 {
-		errs = append(errs, "field Commit is not set")
+		errs = append(errs, "field Host is missing")
+	} else if len(v.Host) == 0 {
+		errs = append(errs, "field Host is not set")
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field VersionIsKnown is missing")
-	} else if !v.VersionIsKnown {
-		errs = append(errs, "field VersionIsKnown is not set")
+		errs = append(errs, "field Port is missing")
+	} else if v.Port == 0 {
+		errs = append(errs, "field Port is not set")
 	}
 
 	switch len(errs) {
@@ -2365,32 +2384,6 @@ func (v *LastBlock) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
-func (v *NodeDescription) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *NodeDescription) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	if x, ok := reader.ReadHash(1); ok {
-		v.ValidatorKeyHash = *x
-	}
-	if x := new(protocol.NetworkDefinition); reader.ReadValue(2, x.UnmarshalBinary) {
-		v.Network = x
-	}
-
-	seen, err := reader.Reset(fieldNames_NodeDescription)
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	return nil
-}
-
 func (v *NodeMetrics) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -2427,6 +2420,28 @@ func (v *NodeStatus) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x := new(LastBlock); reader.ReadValue(2, x.UnmarshalBinary) {
 		v.LastBlock = x
 	}
+	if x, ok := reader.ReadString(3); ok {
+		v.Version = x
+	}
+	if x, ok := reader.ReadString(4); ok {
+		v.Commit = x
+	}
+	if x, ok := reader.ReadHash(5); ok {
+		v.NodeKeyHash = *x
+	}
+	if x, ok := reader.ReadHash(6); ok {
+		v.ValidatorKeyHash = *x
+	}
+	if x := new(protocol.NetworkDefinition); reader.ReadValue(7, x.UnmarshalBinary) {
+		v.Network = x
+	}
+	for {
+		if x := new(PeerInfo); reader.ReadValue(8, x.UnmarshalBinary) {
+			v.Peers = append(v.Peers, x)
+		} else {
+			break
+		}
+	}
 
 	seen, err := reader.Reset(fieldNames_NodeStatus)
 	if err != nil {
@@ -2440,24 +2455,24 @@ func (v *NodeStatus) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
-func (v *NodeVersion) UnmarshalBinary(data []byte) error {
+func (v *PeerInfo) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
 
-func (v *NodeVersion) UnmarshalBinaryFrom(rd io.Reader) error {
+func (v *PeerInfo) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
 	if x, ok := reader.ReadString(1); ok {
-		v.Version = x
+		v.NodeID = x
 	}
 	if x, ok := reader.ReadString(2); ok {
-		v.Commit = x
+		v.Host = x
 	}
-	if x, ok := reader.ReadBool(3); ok {
-		v.VersionIsKnown = x
+	if x, ok := reader.ReadUint(3); ok {
+		v.Port = x
 	}
 
-	seen, err := reader.Reset(fieldNames_NodeVersion)
+	seen, err := reader.Reset(fieldNames_PeerInfo)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -2904,13 +2919,25 @@ func (v *LastBlock) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
-func (v *NodeDescription) MarshalJSON() ([]byte, error) {
+func (v *NodeStatus) MarshalJSON() ([]byte, error) {
 	u := struct {
-		ValidatorKeyHash string                      `json:"validatorKeyHash,omitempty"`
-		Network          *protocol.NetworkDefinition `json:"network,omitempty"`
+		Ok               bool                         `json:"ok,omitempty"`
+		LastBlock        *LastBlock                   `json:"lastBlock,omitempty"`
+		Version          string                       `json:"version,omitempty"`
+		Commit           string                       `json:"commit,omitempty"`
+		NodeKeyHash      string                       `json:"nodeKeyHash,omitempty"`
+		ValidatorKeyHash string                       `json:"validatorKeyHash,omitempty"`
+		Network          *protocol.NetworkDefinition  `json:"network,omitempty"`
+		Peers            encoding.JsonList[*PeerInfo] `json:"peers,omitempty"`
 	}{}
+	u.Ok = v.Ok
+	u.LastBlock = v.LastBlock
+	u.Version = v.Version
+	u.Commit = v.Commit
+	u.NodeKeyHash = encoding.ChainToJSON(v.NodeKeyHash)
 	u.ValidatorKeyHash = encoding.ChainToJSON(v.ValidatorKeyHash)
 	u.Network = v.Network
+	u.Peers = v.Peers
 	return json.Marshal(&u)
 }
 
@@ -3223,15 +3250,36 @@ func (v *LastBlock) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (v *NodeDescription) UnmarshalJSON(data []byte) error {
+func (v *NodeStatus) UnmarshalJSON(data []byte) error {
 	u := struct {
-		ValidatorKeyHash string                      `json:"validatorKeyHash,omitempty"`
-		Network          *protocol.NetworkDefinition `json:"network,omitempty"`
+		Ok               bool                         `json:"ok,omitempty"`
+		LastBlock        *LastBlock                   `json:"lastBlock,omitempty"`
+		Version          string                       `json:"version,omitempty"`
+		Commit           string                       `json:"commit,omitempty"`
+		NodeKeyHash      string                       `json:"nodeKeyHash,omitempty"`
+		ValidatorKeyHash string                       `json:"validatorKeyHash,omitempty"`
+		Network          *protocol.NetworkDefinition  `json:"network,omitempty"`
+		Peers            encoding.JsonList[*PeerInfo] `json:"peers,omitempty"`
 	}{}
+	u.Ok = v.Ok
+	u.LastBlock = v.LastBlock
+	u.Version = v.Version
+	u.Commit = v.Commit
+	u.NodeKeyHash = encoding.ChainToJSON(v.NodeKeyHash)
 	u.ValidatorKeyHash = encoding.ChainToJSON(v.ValidatorKeyHash)
 	u.Network = v.Network
+	u.Peers = v.Peers
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
+	}
+	v.Ok = u.Ok
+	v.LastBlock = u.LastBlock
+	v.Version = u.Version
+	v.Commit = u.Commit
+	if x, err := encoding.ChainFromJSON(u.NodeKeyHash); err != nil {
+		return fmt.Errorf("error decoding NodeKeyHash: %w", err)
+	} else {
+		v.NodeKeyHash = x
 	}
 	if x, err := encoding.ChainFromJSON(u.ValidatorKeyHash); err != nil {
 		return fmt.Errorf("error decoding ValidatorKeyHash: %w", err)
@@ -3239,6 +3287,7 @@ func (v *NodeDescription) UnmarshalJSON(data []byte) error {
 		v.ValidatorKeyHash = x
 	}
 	v.Network = u.Network
+	v.Peers = u.Peers
 	return nil
 }
 

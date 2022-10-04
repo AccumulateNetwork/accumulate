@@ -6,24 +6,23 @@ NodeStatus:
       type: LastBlock
       marshal-as: reference
       pointer: true
-
-NodeVersion:
-  fields:
     - name: Version
       type: string
     - name: Commit
       type: string
-    - name: VersionIsKnown
-      type: bool
-
-NodeDescription:
-  fields:
+    - name: NodeKeyHash
+      type: hash
     - name: ValidatorKeyHash
       type: hash
     - name: Network
       type: protocol.NetworkDefinition
       marshal-as: reference
       pointer: true
+    - name: Peers
+      type: PeerInfo
+      marshal-as: reference
+      pointer: true
+      repeatable: true
 
 NodeMetrics:
   fields:

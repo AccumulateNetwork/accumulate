@@ -28,8 +28,6 @@ type Event interface {
 
 type NodeService interface {
 	Status(ctx context.Context) (*NodeStatus, error)
-	Version(ctx context.Context) (*NodeVersion, error)
-	Describe(ctx context.Context) (*NodeDescription, error)
 	Metrics(ctx context.Context) (*NodeMetrics, error)
 }
 

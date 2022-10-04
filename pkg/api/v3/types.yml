@@ -36,3 +36,12 @@ BlockEntry:
     - name: Signature
       type: protocol.Signature
       marshal-as: union
+
+PeerInfo:
+  fields:
+    - name: NodeID
+      type: string
+    - name: Host
+      type: string
+    - name: Port
+      type: uint
