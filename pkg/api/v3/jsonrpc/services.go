@@ -40,23 +40,13 @@ type NodeService struct{ api.NodeService }
 
 func (s NodeService) methods() jsonrpc2.MethodMap {
 	return jsonrpc2.MethodMap{
-		"status":   s.Status,
-		"version":  s.Version,
-		"describe": s.Describe,
-		"metrics":  s.Metrics,
+		"status":  s.Status,
+		"metrics": s.Metrics,
 	}
 }
 
 func (s NodeService) Status(ctx context.Context, _ json.RawMessage) interface{} {
 	return formatResponse(s.NodeService.Status(ctx))
-}
-
-func (s NodeService) Version(ctx context.Context, _ json.RawMessage) interface{} {
-	return formatResponse(s.NodeService.Version(ctx))
-}
-
-func (s NodeService) Describe(ctx context.Context, _ json.RawMessage) interface{} {
-	return formatResponse(s.NodeService.Describe(ctx))
 }
 
 func (s NodeService) Metrics(ctx context.Context, _ json.RawMessage) interface{} {

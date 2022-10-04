@@ -64,14 +64,6 @@ func (c *Client) Status(ctx context.Context) (*api.NodeStatus, error) {
 	return sendRequestUnmarshalAs[*api.NodeStatus](c, ctx, "status", struct{}{})
 }
 
-func (c *Client) Version(ctx context.Context) (*api.NodeVersion, error) {
-	return sendRequestUnmarshalAs[*api.NodeVersion](c, ctx, "version", struct{}{})
-}
-
-func (c *Client) Describe(ctx context.Context) (*api.NodeDescription, error) {
-	return sendRequestUnmarshalAs[*api.NodeDescription](c, ctx, "describe", struct{}{})
-}
-
 func (c *Client) Metrics(ctx context.Context) (*api.NodeMetrics, error) {
 	return sendRequestUnmarshalAs[*api.NodeMetrics](c, ctx, "metrics", struct{}{})
 }
