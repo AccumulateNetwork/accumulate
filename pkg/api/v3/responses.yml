@@ -14,6 +14,8 @@ NodeStatus:
       type: hash
     - name: ValidatorKeyHash
       type: hash
+    - name: Partition
+      type: string
     - name: Network
       type: protocol.NetworkDefinition
       marshal-as: reference

@@ -98,6 +98,7 @@ type NodeStatus struct {
 	Commit           string                      `json:"commit,omitempty" form:"commit" query:"commit" validate:"required"`
 	NodeKeyHash      [32]byte                    `json:"nodeKeyHash,omitempty" form:"nodeKeyHash" query:"nodeKeyHash" validate:"required"`
 	ValidatorKeyHash [32]byte                    `json:"validatorKeyHash,omitempty" form:"validatorKeyHash" query:"validatorKeyHash" validate:"required"`
+	Partition        string                      `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
 	Network          *protocol.NetworkDefinition `json:"network,omitempty" form:"network" query:"network" validate:"required"`
 	Peers            []*PeerInfo                 `json:"peers,omitempty" form:"peers" query:"peers" validate:"required"`
 	extraData        []byte
@@ -348,6 +349,7 @@ func (v *NodeStatus) Copy() *NodeStatus {
 	u.Commit = v.Commit
 	u.NodeKeyHash = v.NodeKeyHash
 	u.ValidatorKeyHash = v.ValidatorKeyHash
+	u.Partition = v.Partition
 	if v.Network != nil {
 		u.Network = (v.Network).Copy()
 	}
@@ -717,6 +719,9 @@ func (v *NodeStatus) Equal(u *NodeStatus) bool {
 		return false
 	}
 	if !(v.ValidatorKeyHash == u.ValidatorKeyHash) {
+		return false
+	}
+	if !(v.Partition == u.Partition) {
 		return false
 	}
 	switch {
@@ -1464,8 +1469,9 @@ var fieldNames_NodeStatus = []string{
 	4: "Commit",
 	5: "NodeKeyHash",
 	6: "ValidatorKeyHash",
-	7: "Network",
-	8: "Peers",
+	7: "Partition",
+	8: "Network",
+	9: "Peers",
 }
 
 func (v *NodeStatus) MarshalBinary() ([]byte, error) {
@@ -1490,12 +1496,15 @@ func (v *NodeStatus) MarshalBinary() ([]byte, error) {
 	if !(v.ValidatorKeyHash == ([32]byte{})) {
 		writer.WriteHash(6, &v.ValidatorKeyHash)
 	}
+	if !(len(v.Partition) == 0) {
+		writer.WriteString(7, v.Partition)
+	}
 	if !(v.Network == nil) {
-		writer.WriteValue(7, v.Network.MarshalBinary)
+		writer.WriteValue(8, v.Network.MarshalBinary)
 	}
 	if !(len(v.Peers) == 0) {
 		for _, v := range v.Peers {
-			writer.WriteValue(8, v.MarshalBinary)
+			writer.WriteValue(9, v.MarshalBinary)
 		}
 	}
 
@@ -1541,11 +1550,16 @@ func (v *NodeStatus) IsValid() error {
 		errs = append(errs, "field ValidatorKeyHash is not set")
 	}
 	if len(v.fieldsSet) > 7 && !v.fieldsSet[7] {
+		errs = append(errs, "field Partition is missing")
+	} else if len(v.Partition) == 0 {
+		errs = append(errs, "field Partition is not set")
+	}
+	if len(v.fieldsSet) > 8 && !v.fieldsSet[8] {
 		errs = append(errs, "field Network is missing")
 	} else if v.Network == nil {
 		errs = append(errs, "field Network is not set")
 	}
-	if len(v.fieldsSet) > 8 && !v.fieldsSet[8] {
+	if len(v.fieldsSet) > 9 && !v.fieldsSet[9] {
 		errs = append(errs, "field Peers is missing")
 	} else if len(v.Peers) == 0 {
 		errs = append(errs, "field Peers is not set")
@@ -2432,11 +2446,14 @@ func (v *NodeStatus) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadHash(6); ok {
 		v.ValidatorKeyHash = *x
 	}
-	if x := new(protocol.NetworkDefinition); reader.ReadValue(7, x.UnmarshalBinary) {
+	if x, ok := reader.ReadString(7); ok {
+		v.Partition = x
+	}
+	if x := new(protocol.NetworkDefinition); reader.ReadValue(8, x.UnmarshalBinary) {
 		v.Network = x
 	}
 	for {
-		if x := new(PeerInfo); reader.ReadValue(8, x.UnmarshalBinary) {
+		if x := new(PeerInfo); reader.ReadValue(9, x.UnmarshalBinary) {
 			v.Peers = append(v.Peers, x)
 		} else {
 			break
@@ -2927,6 +2944,7 @@ func (v *NodeStatus) MarshalJSON() ([]byte, error) {
 		Commit           string                       `json:"commit,omitempty"`
 		NodeKeyHash      string                       `json:"nodeKeyHash,omitempty"`
 		ValidatorKeyHash string                       `json:"validatorKeyHash,omitempty"`
+		Partition        string                       `json:"partition,omitempty"`
 		Network          *protocol.NetworkDefinition  `json:"network,omitempty"`
 		Peers            encoding.JsonList[*PeerInfo] `json:"peers,omitempty"`
 	}{}
@@ -2936,6 +2954,7 @@ func (v *NodeStatus) MarshalJSON() ([]byte, error) {
 	u.Commit = v.Commit
 	u.NodeKeyHash = encoding.ChainToJSON(v.NodeKeyHash)
 	u.ValidatorKeyHash = encoding.ChainToJSON(v.ValidatorKeyHash)
+	u.Partition = v.Partition
 	u.Network = v.Network
 	u.Peers = v.Peers
 	return json.Marshal(&u)
@@ -3258,6 +3277,7 @@ func (v *NodeStatus) UnmarshalJSON(data []byte) error {
 		Commit           string                       `json:"commit,omitempty"`
 		NodeKeyHash      string                       `json:"nodeKeyHash,omitempty"`
 		ValidatorKeyHash string                       `json:"validatorKeyHash,omitempty"`
+		Partition        string                       `json:"partition,omitempty"`
 		Network          *protocol.NetworkDefinition  `json:"network,omitempty"`
 		Peers            encoding.JsonList[*PeerInfo] `json:"peers,omitempty"`
 	}{}
@@ -3267,6 +3287,7 @@ func (v *NodeStatus) UnmarshalJSON(data []byte) error {
 	u.Commit = v.Commit
 	u.NodeKeyHash = encoding.ChainToJSON(v.NodeKeyHash)
 	u.ValidatorKeyHash = encoding.ChainToJSON(v.ValidatorKeyHash)
+	u.Partition = v.Partition
 	u.Network = v.Network
 	u.Peers = v.Peers
 	if err := json.Unmarshal(data, &u); err != nil {
@@ -3286,6 +3307,7 @@ func (v *NodeStatus) UnmarshalJSON(data []byte) error {
 	} else {
 		v.ValidatorKeyHash = x
 	}
+	v.Partition = u.Partition
 	v.Network = u.Network
 	v.Peers = u.Peers
 	return nil
