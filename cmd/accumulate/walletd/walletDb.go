@@ -35,6 +35,7 @@ var (
 	BucketLabel             = []byte("label")
 	BucketLite              = []byte("lite")
 	BucketMnemonic          = []byte("mnemonic")
+	BucketLedger            = []byte("ledger_")
 	BucketKeyInfo           = []byte("keyinfo")
 	BucketSigTypeDeprecated = []byte("sigtype")
 	BucketTransactionCache  = []byte("TransactionCache")
