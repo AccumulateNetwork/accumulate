@@ -13,10 +13,10 @@ LDFLAGS = '-X "$(VERSION)" -X "$(COMMIT)"'
 FLAGS = $(BUILDFLAGS) -tags production -ldflags $(LDFLAGS)
 
 build:
-	go build $(FLAGS) ./cmd/accumulated
+	go build -trimpath $(FLAGS) ./cmd/accumulated
 
 install:
-	go install $(FLAGS) ./cmd/accumulated
+	go install -trimpath $(FLAGS) ./cmd/accumulated
 
 accumulate:
-	go build $(FLAGS) ./cmd/accumulate
+	go build -trimpath $(FLAGS) ./cmd/accumulate
