@@ -41,6 +41,7 @@ type KeyInfo struct {
 	fieldsSet  []bool
 	Type       protocol.SignatureType `json:"type,omitempty" form:"type" query:"type" validate:"required"`
 	Derivation string                 `json:"derivation,omitempty" form:"derivation" query:"derivation"`
+	WalletID   *url.URL               `json:"walletID,omitempty" form:"walletID" query:"walletID"`
 	extraData  []byte
 }
 
@@ -127,6 +128,9 @@ func (v *KeyInfo) Copy() *KeyInfo {
 
 	u.Type = v.Type
 	u.Derivation = v.Derivation
+	if v.WalletID != nil {
+		u.WalletID = v.WalletID
+	}
 
 	return u
 }
@@ -270,6 +274,14 @@ func (v *KeyInfo) Equal(u *KeyInfo) bool {
 		return false
 	}
 	if !(v.Derivation == u.Derivation) {
+		return false
+	}
+	switch {
+	case v.WalletID == u.WalletID:
+		// equal
+	case v.WalletID == nil || u.WalletID == nil:
+		return false
+	case !((v.WalletID).Equal(u.WalletID)):
 		return false
 	}
 
@@ -498,6 +510,7 @@ func (v *Key) IsValid() error {
 var fieldNames_KeyInfo = []string{
 	1: "Type",
 	2: "Derivation",
+	3: "WalletID",
 }
 
 func (v *KeyInfo) MarshalBinary() ([]byte, error) {
@@ -509,6 +522,9 @@ func (v *KeyInfo) MarshalBinary() ([]byte, error) {
 	}
 	if !(len(v.Derivation) == 0) {
 		writer.WriteString(2, v.Derivation)
+	}
+	if !(v.WalletID == nil) {
+		writer.WriteUrl(3, v.WalletID)
 	}
 
 	_, _, err := writer.Reset(fieldNames_KeyInfo)
@@ -707,6 +723,9 @@ func (v *KeyInfo) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 	if x, ok := reader.ReadString(2); ok {
 		v.Derivation = x
+	}
+	if x, ok := reader.ReadUrl(3); ok {
+		v.WalletID = x
 	}
 
 	seen, err := reader.Reset(fieldNames_KeyInfo)

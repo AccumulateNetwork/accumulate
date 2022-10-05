@@ -181,14 +181,6 @@ KeyData:
     - name: KeyInfo
       type: KeyInfo
       marshal-as: reference
-    - name: Derivation
-      type: string
-    - name: KeyType
-      type: protocol.SignatureType
-      marshal-as: enum
-    - name: WalletID
-      type: string
-      optional: true
 
 
 KeyListResponse:
@@ -218,7 +210,7 @@ NewTransactionRequest:
     - name: TxName
       type: string
 
-Version:
+LedgerVersion:
   non-binary: true
   fields:
     - name: Label
@@ -234,7 +226,7 @@ LedgerWalletInfo:
   non-binary: true
   fields:
     - name: Version
-      type: Version
+      type: LedgerVersion
       marshal-as: reference
     - name: VendorID
       type: uint

@@ -18,6 +18,10 @@ KeyInfo:
   - name: Derivation
     type: string
     optional: true
+  - name: WalletID
+    type: url
+    pointer: true
+    optional: true
 
 Key:
   fields:

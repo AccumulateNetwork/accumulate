@@ -2,7 +2,7 @@
 Version:
   description: returns the version of the wallet daemon
   rpc: version
-  output: api.VersionResponse
+  output: api.LedgerVersionResponse
 
 Sign:
   description: sign a transaction

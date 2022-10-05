@@ -107,7 +107,7 @@ func (la *LedgerApi) queryLedgerInfo(wallet accounts.Wallet) (*api.LedgerWalletI
 	info := wallet.Info()
 	ledgerInfo := &api.LedgerWalletInfo{
 		WalletID: info.WalletID,
-		Version: api.Version{
+		Version: api.LedgerVersion{
 			Label: fmt.Sprintf("%d.%d.%d", info.AppVersion.Major, info.AppVersion.Minor, info.AppVersion.Patch),
 			Major: uint64(info.AppVersion.Major),
 			Minor: uint64(info.AppVersion.Minor),
@@ -195,29 +195,32 @@ func (la *LedgerApi) GenerateKey(wallet accounts.Wallet, label string) (*api.Key
 	}
 
 	key := &Key{
-		PublicKey:  account.PubKey,
-		PrivateKey: nil,
-		KeyInfo: KeyInfo{
-			Type:       account.SignatureType,
-			Derivation: derivationPath,
-			WalletID:   walletID,
-		},
+		Key: api.Key{PublicKey: account.PubKey,
+			PrivateKey: nil,
+			KeyInfo: api.KeyInfo{
+				Type:       account.SignatureType,
+				Derivation: derivationPath,
+				WalletID:   walletID,
+			}},
 	}
+
 	if err != nil {
 		return nil, err
 	}
 
-	err = key.Save(label, account.LiteAccount.String())
+	err = key.Save(label, account.LiteAccount.Authority)
 	if err != nil {
 		return nil, err
 	}
 
 	return &api.KeyData{
-		Name:       label,
-		PublicKey:  key.PublicKey,
-		Derivation: derivationPath,
-		KeyType:    account.SignatureType,
-		WalletID:   walletID.String(),
+		Name:      label,
+		PublicKey: key.PublicKey,
+		KeyInfo: api.KeyInfo{
+			Type:       account.SignatureType,
+			Derivation: derivationPath,
+			WalletID:   walletID,
+		},
 	}, nil
 }
 

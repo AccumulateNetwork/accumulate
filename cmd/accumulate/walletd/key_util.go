@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd/api"
 	"runtime/debug"
 
 	btc "github.com/btcsuite/btcd/btcec"
@@ -16,9 +17,7 @@ import (
 //go:generate go run ../../../tools/cmd/gen-types --package walletd --out key_info_gen.go key_info.yml
 
 type Key struct {
-	PublicKey  []byte
-	PrivateKey []byte
-	KeyInfo    KeyInfo
+	api.Key
 }
 
 func (k *Key) PublicKeyHash() []byte {

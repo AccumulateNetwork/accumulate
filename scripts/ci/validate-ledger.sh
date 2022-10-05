@@ -28,7 +28,7 @@ success
 section "Create & fund a Lite Token Account from the new key"
 LITE_ACME=$(accumulate account list -j | jq -re .liteAccounts[0].liteAccount)
 LITE_ID=$(cut -d/ -f-3 <<< "$LITE_ACME")
-wait-for cli-tx  faucet ${LITE_ACME}
+wait-for cli-tx faucet ${LITE_ACME}
 accumulate account get ${LITE_ACME} 1> /dev/null && success || die "Cannot find ${LITE_ACME}"
 wait-for cli-tx credits ${LITE_ACME} ${LITE_ID} 5
 

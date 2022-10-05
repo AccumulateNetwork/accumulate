@@ -169,9 +169,9 @@ func (c *Client) Sign(ctx context.Context, req *api.SignRequest) (interface{}, e
 }
 
 // Version returns the version of the wallet daemon.
-func (c *Client) Version(ctx context.Context) (*api.VersionResponse, error) {
+func (c *Client) Version(ctx context.Context) (*api.LedgerVersionResponse, error) {
 	var req struct{}
-	var resp api.VersionResponse
+	var resp api.LedgerVersionResponse
 
 	err := c.RequestAPIv2(ctx, "version", req, &resp)
 	if err != nil {

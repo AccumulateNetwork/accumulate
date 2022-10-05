@@ -12,6 +12,7 @@ import (
 )
 
 //go:generate go run ../../../tools/cmd/gen-types --package api --out api/types_gen.go api/types.yml
+//go:generate go run ../../../tools/cmd/gen-types --package api --out api/wallet_gen.go api/wallet.yml
 //go:generate go run ../../../tools/cmd/gen-api --package walletd api/methods.yml
 //go:generate go run ../../../tools/cmd/gen-enum --out api/enums_gen.go --package api api/enums.yml
 

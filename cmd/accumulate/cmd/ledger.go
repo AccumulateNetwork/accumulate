@@ -114,5 +114,5 @@ func legerGenerateKey(cmd *cobra.Command, args []string) (string, error) {
 	}
 
 	return fmt.Sprintf("\tname\t\t:\t%s\n\twallet ID\t:\t%s\n\tpublic key\t:\t%x\n\tkey type\t:\t%s\n", label,
-		keyData.WalletID, keyData.PublicKey, keyData.KeyType), nil
+		keyData.KeyInfo.WalletID, keyData.PublicKey, keyData.KeyInfo.Type), nil
 }
