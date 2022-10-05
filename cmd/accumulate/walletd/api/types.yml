@@ -1,3 +1,4 @@
+
 DecodeRequest:
   non-binary: true
   fields:
@@ -177,6 +178,9 @@ KeyData:
       type: string
     - name: PublicKey
       type: bytes
+    - name: KeyInfo
+      type: KeyInfo
+      marshal-as: reference
     - name: Derivation
       type: string
     - name: KeyType
@@ -263,3 +267,14 @@ GenerateLedgerKeyRequest:
     - name: WalletID
       type: string
       optional: true
+
+AddSendTokensOutputRequest:
+  non-binary: true
+  fields:
+    - name: TxName
+      type: string
+    - name: TokenAddress
+      type: string
+    - name: Amount
+      type: bigint
+
