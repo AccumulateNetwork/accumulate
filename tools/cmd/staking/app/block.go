@@ -1,9 +1,9 @@
 package app
 
 import (
-	"net/url"
 	"time"
 
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -13,7 +13,8 @@ type Block struct {
 	PrintReport       bool       // True if this block is the one to build the reward report
 	PrintPayoutScript bool       // True if this block is the one to print out the Payout script
 	MajorHeight       int64      // The major block number
-	Timestamp         time.Time  // Timestamp of the DN defining the major block
+	RawTimestamp      time.Time  // Raw Timestamp from the actual blockchain.
+	Timestamp         time.Time  // Timestamp of the DN defining the major block (can be adjusted for fast blocks for testing)
 	Accounts          []*Account // A list of the watched accounts that where modified in the major block
 	Transactions      map[[32]byte][]*protocol.Transaction
 }

@@ -4,7 +4,8 @@ package app
 
 import (
 	"fmt"
-	"net/url"
+
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
 const ( // Account Types
@@ -36,7 +37,8 @@ var AcmeTokenIssuanceAccount,
 	StakingServiceValidatorLiveAccount,
 	DisputeAccount,
 	Approved,
-	Registered *url.URL
+	Registered,
+	ParametersUrl *url.URL
 
 func init() {
 
@@ -56,5 +58,5 @@ func init() {
 	s(&DisputeAccount, "acc://staking.acme/Disputes")
 	s(&Approved, "acc://staking.acme/Approved")
 	s(&Registered, "acc://staking.acme/Registered")
-
+	s(&ParametersUrl, "acc://staking.acme/Parameters")
 }

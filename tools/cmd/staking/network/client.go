@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2/query"
@@ -16,17 +17,17 @@ import (
 )
 
 type Network struct {
-	client   *client.Client
-	paramUrl *url.URL
-	params   *app.Parameters
-	Blocks   []*app.Block
+	client *client.Client
+	params *app.Parameters
+	Blocks []*app.Block
 
 	missingMajorBlocks []int
+	period             time.Duration
 }
 
 var _ app.Accumulate = (*Network)(nil)
 
-func New(server string, parameters *url.URL) (*Network, error) {
+func New(server string) (*Network, error) {
 	c, err := client.New(server)
 	if err != nil {
 		return nil, err
@@ -34,26 +35,61 @@ func New(server string, parameters *url.URL) (*Network, error) {
 
 	n := new(Network)
 	n.client = c
-	n.paramUrl = parameters
 	return n, nil
 }
 
 func (n *Network) Debug() { n.client.DebugRequest = true }
 
-func (n *Network) Run()               {}
-func (n *Network) Init()              {}
+func (n *Network) Run() {
+
+	for {
+		num := int64(len(n.Blocks))
+		b, err := n.getBlock(num)
+		if err != nil || b == nil {
+			fmt.Println(err)
+			time.Sleep(n.period)
+			continue
+		}
+		n.Blocks = append(n.Blocks, b)
+		if num > 1 { // Calculate what our period should be to make a major block last about 1/4 a second
+			dt := b.Timestamp.Sub(n.Blocks[num].Timestamp) // Get Duration of this block
+			cp := dt / 4                                   // We want to sample 4 times the period between blocks
+			p := (9*n.period + cp) / 10                    // Weight current 9 times more than the current reading
+			if p > time.Minute*5 {                         // Check at least every 5 minutes
+				p = time.Minute * 5
+			}
+			n.period = time.Duration(p) // Set the duration to p
+		}
+	}
+
+}
+
+func (n *Network) Init() {
+	n.period = time.Second / 4                   // Start testing 4 times a second.  We will auto adjust
+	if p, err := n.GetParameters(); err != nil { // Try and get new parameters
+		n.params = p
+	}
+
+}
 func (n *Network) TokensIssued(int64) {}
 
 func (n *Network) GetParameters() (*app.Parameters, error) {
-	n.params = new(app.Parameters)
-	n.params.Init()
+	if n.params == nil {
+		n.params = new(app.Parameters)
+	}
 	return n.params, nil
 }
 
-func (n *Network) xGetParameters() (*app.Parameters, error) {
+// QueryParameters()
+// ToDo: Should be modified to extract the Parameters as a side effect of GetBlock() since
+// the parameters at play are set dynamically, i.e. so we use the right parameters based on
+// block height.
+//
+// For now, we will use the set of hard coded parameters, and the QueryParameters isn't used.
+func (n *Network) QueryParameters() (*app.Parameters, error) {
 	// Get the latest data entry and unmarshal it
 	req1 := new(api.DataEntryQuery)
-	req1.Url = n.paramUrl
+	req1.Url = app.ParametersUrl
 	res1, err := n.client.QueryData(context.Background(), req1)
 	if err != nil {
 		return nil, errors.Format(errors.StatusUnknownError, "query parameters: %w", err)

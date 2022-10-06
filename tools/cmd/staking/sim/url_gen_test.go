@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	skip "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/tools/cmd/staking/app"
 )
@@ -27,11 +28,14 @@ func TestGenUrl(t *testing.T) {
 	}
 }
 
+// TestGenerateInitializationScript(t *testing.T)
+// Creates script files and does some limited testing of Accumulate
+// Could possibly move to a utility, but its kinda nice to run as a unit test
 func TestGenerateInitializationScript(t *testing.T) {
+	skip.SkipCI(t, "support for manual testing")
 
 	GenRH.SetSeed([]byte{6})
-
-	seconds := 0
+	seconds := 15
 
 	buff := bytes.Buffer{}
 	pf := func(format string, a ...any) { //          Support for formatted printing + \n
@@ -112,7 +116,7 @@ func TestGenerateInitializationScript(t *testing.T) {
 		if GenRH.Next()[0] > 128 {
 			deposit = a.URL.String()
 		}
-		pf("echo asdfasdf | accumulate data write acc://staking.acme/Approved masterkey \"%s\" \"%s\" \"%s\"",a.URL,deposit,a.Type)
+		pf("echo asdfasdf | accumulate data write acc://staking.acme/Approved masterkey \"%s\" \"%s\" \"%s\"", a.URL, deposit, a.Type)
 	}
 
 	fmt.Print(buff.String())

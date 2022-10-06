@@ -8,7 +8,6 @@ import (
 	"os/user"
 	"path"
 
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/tools/cmd/staking/app"
 	"gitlab.com/accumulatenetwork/accumulate/tools/cmd/staking/network"
 	"gitlab.com/accumulatenetwork/accumulate/tools/cmd/staking/sim"
@@ -35,7 +34,7 @@ func main() {
 		return
 	}
 
-	net, err := network.New(*strNet, protocol.AccountUrl("staking.acme", "parameters"))
+	net, err := network.New(*strNet)
 	if err != nil {
 		log.Fatal(err)
 	}

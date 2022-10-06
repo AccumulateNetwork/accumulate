@@ -99,7 +99,7 @@ func (s *StakingApp) Run(protocol Accumulate) {
 	for s.CBlk == nil {
 		s.CBlk, err = s.protocol.GetBlock(1)
 		if err != nil {
-			log.Fatal(err)
+			fmt.Print(".")
 		}
 		time.Sleep(time.Second)
 	}
