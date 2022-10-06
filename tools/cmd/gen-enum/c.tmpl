@@ -14,9 +14,11 @@ extern "C" {
 #include <common/encoding/encoding.h>
 #include <common/encoding/marshaler.h>
 
+#define WANT_ENUM_STRING_CONVERSION 0
+
 typedef struct {
    const char *name;
-   uint32_t e;
+   uint64_t e;
 } enum_t;
 
 {{range .Types}}
@@ -36,10 +38,10 @@ typedef struct {
 } {{.Name}}_t;
 
 ACME_API uint64_t {{.Name}}_ID({{.Name}} v);
+#if WANT_ENUM_STRING_CONVERSION
 ACME_API Error {{.Name}}_fromString({{.Name}} *v, String *name);
 ACME_API Error {{.Name}}_asString({{.Name}} v, String *out);
-//ACME_API Error {{.Name}}_marshalJSON(const Bytes *v, Marshaler *out);
-//ACME_API Error {{.Name}}_unmarshalJSON(Bytes *v, const Marshaler *in);
+#endif
 ACME_API {{.Name}}_t {{.Name}}_init({{.Name}}_t *v, buffer_t *buffer);
 ACME_API int unmarshalerRead{{.Name}}(Unmarshaler *m, {{.Name}} *v);
 ACME_API int marshalerWrite{{.Name}}(Marshaler *m, {{.Name}} v);
@@ -63,7 +65,7 @@ ACME_API Error {{.Name}}_get(const VarInt *v, {{.Name}} *n) {
 
 // ID returns the ID of the {{natural .Name}}
 ACME_API uint64_t {{.Name}}_ID({{.Name}} v) { return (uint64_t)(v); }
-
+#if WANT_ENUM_STRING_CONVERSION
 // String returns the name of the {{natural .Name}}
 static enum_t {{.Name}}_l[] = {
 	{{- $typ := .Name}}
@@ -103,6 +105,7 @@ ACME_API Error {{.Name}}_fromString({{.Name}} *v, String *name) {
     }
     return ErrorCode(ErrorTypeNotFound);
 }
+#endif
 
 ACME_API bool {{.Name}}_equal(const {{.Name}} *a, const {{.Name}} *b) {
     if (!a || !b) {
@@ -111,18 +114,18 @@ ACME_API bool {{.Name}}_equal(const {{.Name}} *a, const {{.Name}} *b) {
     return *a == *b;
 }
 
-// MarshalBinary marshals the {{natural .Name}} to bytes as a unsigned varint.
+// MarshalBinary marshals the {{natural .Name}} to bytes as an unsigned varint.
 ACME_API int marshalerWrite{{.Name}}(Marshaler *m, {{.Name}} v) {
     return marshalerWriteUInt(m,(uint64_t) v);
 }
 
 
-// UnmarshalBinary unmarshals the {{natural .Name}} from bytes as a unsigned varint.
+// UnmarshalBinary unmarshals the {{natural .Name}} from bytes as an unsigned varint.
 ACME_API int unmarshalerRead{{.Name}}(Unmarshaler *m, {{.Name}} *v) {
 	uint64_t n = 0;
-	int b = unmarshalerReadInt(m, (int64_t*)v);
-	*v = {{.Name}})n;
-	return b;
+	int b = unmarshalerReadUInt(m, &n);
+    *v = ({{.Name}})n;
+    return b;
 }
 
 {{end}}

@@ -169,7 +169,7 @@ ACME_API int {{.Name}}_binarySize(const {{.Name}} *v);
     {{- if .Repeatable}}
     {
         {{$resolved := resolveType . true true}}
-        Unmarshaler m2 = NewUnmarshaler(&m->buffer,&m->mempool);
+        Unmarshaler m2 = NewUnmarshaler(&m->buffer,m->mempool);
         v->{{.Name}}_length = 0;
         while ( field == {{.Number}} ) {
             b = unmarshalerReadField(&m2, &field);
@@ -245,7 +245,6 @@ ACME_API int {{.Name}}_binarySize(const {{.Name}} *v);
             {{- end}}
             n += b;
         }
-
     }
     {{- else}}
     {
@@ -273,7 +272,6 @@ ACME_API int {{.Name}}_binarySize(const {{.Name}} *v);
         if ( type != unionType ) {
             return ErrorInvalidObject;
         }
-        n += b;
         {{else}}
         {{-       if not .Type.IsKnown}}
         uint64_t size = 0;
