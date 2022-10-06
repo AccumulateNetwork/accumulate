@@ -14,9 +14,17 @@ func (s *Simulator) GetParameters() (*app.Parameters, error) {
 // major blocks must be read and processed.  This means to update the
 // Staking App for a year, we need to access 730 or so blocks (365*2).
 // Not that heavy of a lift.
-func (s *Simulator) GetBlock(idx int64) (*app.Block, error) {
+// Code assumes the accountData map is not accessed by the caller after
+// calling GetBlock()
+func (s *Simulator) GetBlock(idx int64, accountData map[string]int) (*app.Block, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
+
+	// Note that this works because we query blocks far more often than blocks are ready
+	//   and that means any changes in the accounts to query made in one block will get
+	//   updated in the Simulator before the next block is produced.
+	s.AccountData = accountData // Caller builds a new map with every call.
+
 	if idx < 0 || idx >= int64(len(s.MajorBlocks)) {
 		return nil, nil
 	}

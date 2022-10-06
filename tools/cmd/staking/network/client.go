@@ -17,12 +17,12 @@ import (
 )
 
 type Network struct {
-	client *client.Client
-	params *app.Parameters
-	Blocks []*app.Block
-
-	missingMajorBlocks []int
-	period             time.Duration
+	client             *client.Client  // Pointer to the client
+	params             *app.Parameters // Parameters that drive staking
+	Accounts           map[string]int  // Accounts to be queried when getting a block
+	Blocks             []*app.Block    // The list of major blocks so far in the protocol
+	missingMajorBlocks []int           // Any missing blocks
+	period             time.Duration   // the time between
 }
 
 var _ app.Accumulate = (*Network)(nil)
@@ -44,8 +44,8 @@ func (n *Network) Run() {
 
 	for {
 		num := int64(len(n.Blocks))
-		b, err := n.getBlock(num)
-		if err != nil || b == nil {
+		b, err := n.getBlock(num + 1)
+		if b == nil {
 			fmt.Println(err)
 			time.Sleep(n.period)
 			continue
@@ -137,7 +137,8 @@ func (n *Network) GetTokensIssued() (int64, error) {
 
 // GetBlock
 // How the Application gets blocks
-func (n *Network) GetBlock(index int64) (*app.Block, error) {
+func (n *Network) GetBlock(index int64, accounts map[string]int) (*app.Block, error) {
+	n.Accounts = accounts
 	if index >= int64(len(n.Blocks)) {
 		return nil, fmt.Errorf("no block found")
 	}
@@ -155,10 +156,9 @@ func (n *Network) getBlock(index int64) (*app.Block, error) {
 
 	block.Transactions = map[[32]byte][]*protocol.Transaction{}
 
-	// TODO: add all the accounts we care about
-	block.Transactions[protocol.AccountUrl("foo").AccountID32()] = nil
-	block.Transactions[protocol.AccountUrl("bar").AccountID32()] = nil
-	block.Transactions[protocol.AccountUrl("baz").AccountID32()] = nil
+	for k, _ := range n.Accounts {
+		block.Transactions[protocol.AccountUrl(k).AccountID32()] = nil
+	}
 
 	// Describe the network
 	desc, err := n.client.Describe(context.Background())

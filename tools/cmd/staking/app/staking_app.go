@@ -13,9 +13,10 @@ var ReportDirectory string
 // The state of the Staking app, which is built up by catching up with
 // the blocks in Accumulate.
 type StakingApp struct {
-	Params *Parameters
-	CBlk   *Block
-	Data   struct {
+	Params      *Parameters
+	CBlk        *Block
+	AccountData map[string]int
+	Data        struct {
 		BlockHeight            int64
 		Timestamp              string
 		TokenLimit             int64
@@ -86,18 +87,19 @@ func (s *StakingApp) Log(title string) {
 // for now.  Ultimately it will take a parameter on the command line to choose between
 // the main net, the test net, and the simulator
 func (s *StakingApp) Run(protocol Accumulate) {
-	s.protocol = protocol
-	s.protocol.Init()
-	go protocol.Run()
-	var err error
-	s.Params, err = protocol.GetParameters()
-	if err != nil {
+	s.AccountData = make(map[string]int)     // Allocate the map of accounts we want to collect in a block
+	s.protocol = protocol                    // save away the protocol generating data
+	s.protocol.Init()                        // Initialize the protocol (start go routines that collect/generate data)
+	go protocol.Run()                        // Run the processes
+	var err error                            //
+	s.Params, err = protocol.GetParameters() // Get the parameters for the staking application
+	if err != nil {                          // Log any error getting parameters (never happens)
 		log.Fatal(err)
 	}
-	s.Stakers.AllAccounts = make(map[string]*Account)
+	s.Stakers.AllAccounts = make(map[string]*Account) // Track all the staking accounts
 
 	for s.CBlk == nil {
-		s.CBlk, err = s.protocol.GetBlock(1)
+		s.CBlk, err = s.protocol.GetBlock(1,s.AccountData)
 		if err != nil {
 			fmt.Print(".")
 		}
@@ -106,7 +108,7 @@ func (s *StakingApp) Run(protocol Accumulate) {
 	s.Log("Starting")
 
 	for i := int64(1); true; {
-		b, err := s.protocol.GetBlock(i)
+		b, err := s.protocol.GetBlock(i, s.AccountData)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -178,7 +180,7 @@ func (s *StakingApp) AddApproved(b *Block) {
 	if approved == nil {
 		return
 	}
-	
+
 	switch approved.Type {
 	case PureStaker:
 		s.Stakers.Pure = append(s.Stakers.Pure, approved)

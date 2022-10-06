@@ -20,12 +20,12 @@ const ( // Account Types
 )
 
 type Accumulate interface {
-	Init()                                // Any initialization required for pulling data from the protocol
-	Run()                                 // Start the monitor (or simulation)
-	GetParameters() (*Parameters, error)  // Get Staking App parameters from the protocol
-	GetBlock(index int64) (*Block, error) // Get the Major Block at the given index
-	GetTokensIssued() (int64, error)      // Return the Acme Tokens Issued
-	TokensIssued(int64)                   // Report tokens issued. Simulator needs this, not the protocol
+	Init()                                                         // Any initialization required for pulling data from the protocol
+	Run()                                                          // Start the monitor (or simulation)
+	GetParameters() (*Parameters, error)                           // Get Staking App parameters from the protocol
+	GetBlock(index int64, accounts map[string]int) (*Block, error) // Get the Major Block at the given index, and return account info
+	GetTokensIssued() (int64, error)                               // Return the Acme Tokens Issued
+	TokensIssued(int64)                                            // Report tokens issued. Simulator needs this, not the protocol
 }
 
 // Important Staking URLs.

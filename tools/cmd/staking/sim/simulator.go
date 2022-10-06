@@ -15,6 +15,7 @@ var _ = fmt.Printf
 // Simulator
 // This is
 type Simulator struct {
+	AccountData  map[string]int          // Map of the accounts to collect data from
 	mutex        sync.Mutex              // Handle concurrent access
 	major        int64                   // Current block height
 	parameters   *app.Parameters         //
