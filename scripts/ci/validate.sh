@@ -398,6 +398,19 @@ RESULT=$(accumulate -j get test.acme/managed-tokens -j | jq -re '.data.authoriti
 [ "$RESULT" -eq 1 ] || die "Expected 1 authority, got $RESULT"
 success
 
+section "Export wallet as json format"
+accumulate wallet export /tmp/wallet_export_account.json || die "failed to export wallet"
+cat /tmp/wallet_export_account.json
+success
+
+section "Remove wallet db storage"
+rm $HOME/.accumulate/validate/wallet.db || die "failed to remove wallet database"
+success
+
+section "Import wallet as json format to restore wallet"
+accumulate wallet init import keystore /tmp/wallet_export_account.json || die "failed to import wallet"
+success
+
 section "Add manager to token account"
 TXID=$(cli-tx auth add test.acme/managed-tokens test-1-0 manager.acme/book) || die "Failed to add the manager"
 wait-for-tx $TXID
