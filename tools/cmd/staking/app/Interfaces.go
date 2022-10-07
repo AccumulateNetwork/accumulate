@@ -20,7 +20,6 @@ const ( // Account Types
 )
 
 type Accumulate interface {
-	Init()                                                         // Any initialization required for pulling data from the protocol
 	Run()                                                          // Start the monitor (or simulation)
 	GetParameters() (*Parameters, error)                           // Get Staking App parameters from the protocol
 	GetBlock(index int64, accounts map[string]int) (*Block, error) // Get the Major Block at the given index, and return account info

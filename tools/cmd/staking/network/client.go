@@ -23,6 +23,7 @@ type Network struct {
 	Blocks             []*app.Block    // The list of major blocks so far in the protocol
 	missingMajorBlocks []int           // Any missing blocks
 	period             time.Duration   // the time between
+	start              time.Time       // When this app started, used to time block queries
 }
 
 var _ app.Accumulate = (*Network)(nil)
@@ -42,33 +43,35 @@ func (n *Network) Debug() { n.client.DebugRequest = true }
 
 func (n *Network) Run() {
 
+	n.period = time.Second / 4                   // Start testing 4 times a second.  We will auto adjust
+	if p, err := n.GetParameters(); err != nil { // Try and get new parameters
+		n.params = p
+	}
+	n.start = time.Now()
 	for {
 		num := int64(len(n.Blocks))
-		b, err := n.getBlock(num + 1)
+		b, _ := n.getBlock(num + 1)
 		if b == nil {
-			fmt.Println(err)
+			fmt.Print(".")
 			time.Sleep(n.period)
 			continue
 		}
 		n.Blocks = append(n.Blocks, b)
 		if num > 1 { // Calculate what our period should be to make a major block last about 1/4 a second
-			dt := b.Timestamp.Sub(n.Blocks[num].Timestamp) // Get Duration of this block
-			cp := dt / 4                                   // We want to sample 4 times the period between blocks
-			p := (9*n.period + cp) / 10                    // Weight current 9 times more than the current reading
-			if p > time.Minute*5 {                         // Check at least every 5 minutes
+			dt := time.Since(n.start)   // Get Duration of this block
+			cp := dt / 8                // We want to sample 4 times the period between blocks
+			p := (9*n.period + cp) / 10 // Weight current 9 times more than the current reading
+			if p > time.Minute*5 {      // Check at least every 5 minutes
 				p = time.Minute * 5
 			}
 			n.period = time.Duration(p) // Set the duration to p
 		}
+		fmt.Println(len(n.Blocks))
 	}
 
 }
 
 func (n *Network) Init() {
-	n.period = time.Second / 4                   // Start testing 4 times a second.  We will auto adjust
-	if p, err := n.GetParameters(); err != nil { // Try and get new parameters
-		n.params = p
-	}
 
 }
 func (n *Network) TokensIssued(int64) {}

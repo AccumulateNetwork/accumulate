@@ -95,11 +95,14 @@ func (s *Simulator) Init() {
 }
 
 func (s *Simulator) Run() {
-	s.mutex.Lock()                 // Going to update the simulator
+	s.mutex.Lock() // Going to update the simulator
+
+	s.Init()                       // Lots of initialization
 	s.CBlk = new(app.Block)        // Create the first block
 	for _, v := range s.Accounts { // Add all the accounts
 		s.CBlk.Accounts = append(s.CBlk.Accounts, v)
 	}
+
 	s.mutex.Unlock()
 
 	for {
@@ -111,7 +114,8 @@ func (s *Simulator) Run() {
 		s.CBlk.BlockHash = rh.NextA()                 // Fake the Merkle Dag for the Major block
 		s.major++                                     // Add the current major block
 		s.CBlk.MajorHeight = s.major                  // Set the major block number
-		s.mutex.Unlock()                              // Unlock to allow others access to simulator state
+
+		s.mutex.Unlock() //                              Unlock to allow others access to simulator state
 
 	}
 }

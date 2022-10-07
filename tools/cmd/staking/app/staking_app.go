@@ -89,7 +89,6 @@ func (s *StakingApp) Log(title string) {
 func (s *StakingApp) Run(protocol Accumulate) {
 	s.AccountData = make(map[string]int)     // Allocate the map of accounts we want to collect in a block
 	s.protocol = protocol                    // save away the protocol generating data
-	s.protocol.Init()                        // Initialize the protocol (start go routines that collect/generate data)
 	go protocol.Run()                        // Run the processes
 	var err error                            //
 	s.Params, err = protocol.GetParameters() // Get the parameters for the staking application
@@ -109,10 +108,7 @@ func (s *StakingApp) Run(protocol Accumulate) {
 
 	for i := int64(1); true; {
 		b, err := s.protocol.GetBlock(i, s.AccountData)
-		if err != nil {
-			log.Fatal(err)
-		}
-		if b == nil {
+		if err != nil || b == nil {
 			time.Sleep(s.Params.MajorBlockTime / 12 / 60)
 			continue
 		}
