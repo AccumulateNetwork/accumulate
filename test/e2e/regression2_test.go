@@ -30,11 +30,11 @@ func TestBadOperatorPageUpdate(t *testing.T) {
 
 	// Execute
 	st := sim.SubmitSuccessfully(MustBuild(t,
-		build.Transaction().For(DnUrl(), Operators, 1).
+		build.Transaction().For(DnUrl(), Operators, "1").
 			UpdateKeyPage().Add().Entry().Hash([32]byte{1}).FinishEntry().FinishOperation().
-			SignWith(DnUrl(), Operators, 1).Version(1).Timestamp(1).Signer(sim.SignWithNode(Directory, 0)).
-			SignWith(DnUrl(), Operators, 1).Version(1).Timestamp(2).Signer(sim.SignWithNode(Directory, 1)).
-			SignWith(DnUrl(), Operators, 1).Version(1).Timestamp(3).Signer(sim.SignWithNode(Directory, 2))))
+			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(1).Signer(sim.SignWithNode(Directory, 0)).
+			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(2).Signer(sim.SignWithNode(Directory, 1)).
+			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(3).Signer(sim.SignWithNode(Directory, 2))))
 
 	sim.StepUntil(
 		Txn(st.TxID).Fails())
@@ -63,9 +63,9 @@ func TestBadOracleUpdate(t *testing.T) {
 	st := sim.SubmitSuccessfully(MustBuild(t,
 		build.Transaction().For(DnUrl(), Oracle).
 			WriteData([]byte("foo")).ToState().
-			SignWith(DnUrl(), Operators, 1).Version(1).Timestamp(1).Signer(sim.SignWithNode(Directory, 0)).
-			SignWith(DnUrl(), Operators, 1).Version(1).Timestamp(2).Signer(sim.SignWithNode(Directory, 1)).
-			SignWith(DnUrl(), Operators, 1).Version(1).Timestamp(3).Signer(sim.SignWithNode(Directory, 2))))
+			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(1).Signer(sim.SignWithNode(Directory, 0)).
+			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(2).Signer(sim.SignWithNode(Directory, 1)).
+			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(3).Signer(sim.SignWithNode(Directory, 2))))
 
 	sim.StepUntil(
 		Txn(st.TxID).Fails())

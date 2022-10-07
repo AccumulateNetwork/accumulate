@@ -26,12 +26,12 @@ func (b SignatureBuilder) Type(typ protocol.SignatureType) SignatureBuilder {
 	return b
 }
 
-func (b SignatureBuilder) Url(signer any, path ...any) SignatureBuilder {
+func (b SignatureBuilder) Url(signer any, path ...string) SignatureBuilder {
 	b.signer.Url = b.parseUrl(signer, path...)
 	return b
 }
 
-func (b SignatureBuilder) Delegator(delegator any, path ...any) SignatureBuilder {
+func (b SignatureBuilder) Delegator(delegator any, path ...string) SignatureBuilder {
 	b.signer.Delegators = append(b.signer.Delegators, b.parseUrl(delegator, path...))
 	return b
 }
@@ -68,7 +68,7 @@ func (b SignatureBuilder) Done() (*protocol.Envelope, error) {
 	return env, nil
 }
 
-func (b SignatureBuilder) SignWith(signer any, path ...any) SignatureBuilder {
+func (b SignatureBuilder) SignWith(signer any, path ...string) SignatureBuilder {
 	return b.sign().Url(signer, path...)
 }
 

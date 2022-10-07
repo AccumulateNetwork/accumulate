@@ -61,17 +61,13 @@ func (p *parser) errorf(code errors.Status, format string, args ...interface{}) 
 	p.record(errors.Format(code, format, args...))
 }
 
-func (p *parser) parseUrl(v any, path ...any) *url.URL {
-	s := make([]string, len(path))
-	for i, p := range path {
-		s[i] = fmt.Sprint(p)
-	}
+func (p *parser) parseUrl(v any, path ...string) *url.URL {
 	var str string
 	switch v := v.(type) {
 	case url.URL:
-		return v.JoinPath(s...)
+		return v.JoinPath(path...)
 	case *url.URL:
-		return v.JoinPath(s...)
+		return v.JoinPath(path...)
 	case string:
 		str = v
 	case fmt.Stringer:
@@ -86,7 +82,7 @@ func (p *parser) parseUrl(v any, path ...any) *url.URL {
 		p.errorf(errors.StatusBadRequest, "invalid url %q: %w", v, err)
 		return nil
 	}
-	return u.JoinPath(s...)
+	return u.JoinPath(path...)
 }
 
 func (p *parser) parseHash32(v any) [32]byte {

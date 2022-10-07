@@ -17,7 +17,7 @@ type TransactionBuilder struct {
 	t protocol.Transaction
 }
 
-func (b TransactionBuilder) For(principal any, path ...any) TransactionBuilder {
+func (b TransactionBuilder) For(principal any, path ...string) TransactionBuilder {
 	b.t.Header.Principal = b.parseUrl(principal, path...)
 	return b
 }
@@ -49,7 +49,7 @@ func (b TransactionBuilder) Done() (*protocol.Transaction, error) {
 	return nil, b.err()
 }
 
-func (b TransactionBuilder) SignWith(signer any, path ...any) SignatureBuilder {
+func (b TransactionBuilder) SignWith(signer any, path ...string) SignatureBuilder {
 	return SignatureBuilder{parser: b.parser, transaction: &b.t}.Url(signer, path...)
 }
 
@@ -58,7 +58,7 @@ type CreateIdentityBuilder struct {
 	body protocol.CreateIdentity
 }
 
-func (b TransactionBuilder) CreateIdentity(url any, path ...any) CreateIdentityBuilder {
+func (b TransactionBuilder) CreateIdentity(url any, path ...string) CreateIdentityBuilder {
 	c := CreateIdentityBuilder{t: b}
 	c.body.Url = b.parseUrl(url, path...)
 	return c
@@ -73,12 +73,12 @@ func (b CreateIdentityBuilder) WithKeyHash(hash any) CreateIdentityBuilder {
 	return b
 }
 
-func (b CreateIdentityBuilder) WithKeyBook(book any, path ...any) CreateIdentityBuilder {
+func (b CreateIdentityBuilder) WithKeyBook(book any, path ...string) CreateIdentityBuilder {
 	b.body.KeyBookUrl = b.t.parseUrl(book, path...)
 	return b
 }
 
-func (b CreateIdentityBuilder) WithAuthority(book any, path ...any) CreateIdentityBuilder {
+func (b CreateIdentityBuilder) WithAuthority(book any, path ...string) CreateIdentityBuilder {
 	b.body.Authorities = append(b.body.Authorities, b.t.parseUrl(book, path...))
 	return b
 }
@@ -87,7 +87,7 @@ func (b CreateIdentityBuilder) Done() (*protocol.Transaction, error) {
 	return b.t.Body(&b.body).Done()
 }
 
-func (b CreateIdentityBuilder) SignWith(signer any, path ...any) SignatureBuilder {
+func (b CreateIdentityBuilder) SignWith(signer any, path ...string) SignatureBuilder {
 	return b.t.Body(&b.body).SignWith(signer, path...)
 }
 
@@ -96,18 +96,18 @@ type CreateTokenAccountBuilder struct {
 	body protocol.CreateTokenAccount
 }
 
-func (b TransactionBuilder) CreateTokenAccount(url any, path ...any) CreateTokenAccountBuilder {
+func (b TransactionBuilder) CreateTokenAccount(url any, path ...string) CreateTokenAccountBuilder {
 	c := CreateTokenAccountBuilder{t: b}
 	c.body.Url = c.t.parseUrl(url, path...)
 	return c
 }
 
-func (b CreateTokenAccountBuilder) ForToken(token any, path ...any) CreateTokenAccountBuilder {
+func (b CreateTokenAccountBuilder) ForToken(token any, path ...string) CreateTokenAccountBuilder {
 	b.body.TokenUrl = b.t.parseUrl(token, path...)
 	return b
 }
 
-func (b CreateTokenAccountBuilder) WithAuthority(book any, path ...any) CreateTokenAccountBuilder {
+func (b CreateTokenAccountBuilder) WithAuthority(book any, path ...string) CreateTokenAccountBuilder {
 	b.body.Authorities = append(b.body.Authorities, b.t.parseUrl(book, path...))
 	return b
 }
@@ -116,7 +116,7 @@ func (b CreateTokenAccountBuilder) Done() (*protocol.Transaction, error) {
 	return b.t.Body(&b.body).Done()
 }
 
-func (b CreateTokenAccountBuilder) SignWith(signer any, path ...any) SignatureBuilder {
+func (b CreateTokenAccountBuilder) SignWith(signer any, path ...string) SignatureBuilder {
 	return b.t.Body(&b.body).SignWith(signer, path...)
 }
 
@@ -130,7 +130,7 @@ func (b TransactionBuilder) SendTokens(amount any, precision uint64) SendTokensB
 	return SendTokensBuilder{t: b}.And(amount, precision)
 }
 
-func (b SendTokensBuilder) To(recipient any, path ...any) SendTokensBuilder {
+func (b SendTokensBuilder) To(recipient any, path ...string) SendTokensBuilder {
 	b.body.To = append(b.body.To, &protocol.TokenRecipient{
 		Url:    b.t.parseUrl(recipient, path...),
 		Amount: b.amount,
@@ -147,7 +147,7 @@ func (b SendTokensBuilder) Done() (*protocol.Transaction, error) {
 	return b.t.Body(&b.body).Done()
 }
 
-func (b SendTokensBuilder) SignWith(signer any, path ...any) SignatureBuilder {
+func (b SendTokensBuilder) SignWith(signer any, path ...string) SignatureBuilder {
 	return b.t.Body(&b.body).SignWith(signer, path...)
 }
 
@@ -160,7 +160,7 @@ func (b TransactionBuilder) CreateDataAccount() CreateDataAccountBuilder {
 	return CreateDataAccountBuilder{t: b}
 }
 
-func (b CreateDataAccountBuilder) WithAuthority(book any, path ...any) CreateDataAccountBuilder {
+func (b CreateDataAccountBuilder) WithAuthority(book any, path ...string) CreateDataAccountBuilder {
 	b.body.Authorities = append(b.body.Authorities, b.t.parseUrl(book, path...))
 	return b
 }
@@ -169,7 +169,7 @@ func (b CreateDataAccountBuilder) Done() (*protocol.Transaction, error) {
 	return b.t.Body(&b.body).Done()
 }
 
-func (b CreateDataAccountBuilder) SignWith(signer any, path ...any) SignatureBuilder {
+func (b CreateDataAccountBuilder) SignWith(signer any, path ...string) SignatureBuilder {
 	return b.t.Body(&b.body).SignWith(signer, path...)
 }
 
@@ -194,7 +194,7 @@ func (b WriteDataBuilder) ToState() WriteDataBuilder {
 	return b
 }
 
-func (b WriteDataBuilder) To(recipient any, path ...any) WriteDataToBuilder {
+func (b WriteDataBuilder) To(recipient any, path ...string) WriteDataToBuilder {
 	c := WriteDataToBuilder{t: b.t}
 	c.body.Entry = b.body.Entry
 	c.body.Recipient = c.t.parseUrl(recipient, path...)
@@ -205,7 +205,7 @@ func (b WriteDataBuilder) Done() (*protocol.Transaction, error) {
 	return b.t.Body(&b.body).Done()
 }
 
-func (b WriteDataBuilder) SignWith(signer any, path ...any) SignatureBuilder {
+func (b WriteDataBuilder) SignWith(signer any, path ...string) SignatureBuilder {
 	return b.t.Body(&b.body).SignWith(signer, path...)
 }
 
@@ -218,7 +218,7 @@ func (b WriteDataToBuilder) Done() (*protocol.Transaction, error) {
 	return b.t.Body(&b.body).Done()
 }
 
-func (b WriteDataToBuilder) SignWith(signer any, path ...any) SignatureBuilder {
+func (b WriteDataToBuilder) SignWith(signer any, path ...string) SignatureBuilder {
 	return b.t.Body(&b.body).SignWith(signer, path...)
 }
 
@@ -227,7 +227,7 @@ type CreateTokenBuilder struct {
 	body protocol.CreateToken
 }
 
-func (b TransactionBuilder) CreateToken(url any, path ...any) CreateTokenBuilder {
+func (b TransactionBuilder) CreateToken(url any, path ...string) CreateTokenBuilder {
 	c := CreateTokenBuilder{t: b}
 	c.body.Url = c.t.parseUrl(url, path...)
 	return c
@@ -243,7 +243,7 @@ func (b CreateTokenBuilder) WithPrecision(precision any) CreateTokenBuilder {
 	return b
 }
 
-func (b CreateTokenBuilder) WithAuthority(book any, path ...any) CreateTokenBuilder {
+func (b CreateTokenBuilder) WithAuthority(book any, path ...string) CreateTokenBuilder {
 	b.body.Authorities = append(b.body.Authorities, b.t.parseUrl(book, path...))
 	return b
 }
@@ -257,7 +257,7 @@ func (b CreateTokenBuilder) Done() (*protocol.Transaction, error) {
 	return b.t.Body(&b.body).Done()
 }
 
-func (b CreateTokenBuilder) SignWith(signer any, path ...any) SignatureBuilder {
+func (b CreateTokenBuilder) SignWith(signer any, path ...string) SignatureBuilder {
 	return b.t.Body(&b.body).SignWith(signer, path...)
 }
 
@@ -271,7 +271,7 @@ func (b TransactionBuilder) IssueTokens(amount any, precision uint64) IssueToken
 	return IssueTokensBuilder{t: b}.And(amount, precision)
 }
 
-func (b IssueTokensBuilder) To(recipient any, path ...any) IssueTokensBuilder {
+func (b IssueTokensBuilder) To(recipient any, path ...string) IssueTokensBuilder {
 	b.body.To = append(b.body.To, &protocol.TokenRecipient{
 		Url:    b.t.parseUrl(recipient, path...),
 		Amount: b.amount,
@@ -288,7 +288,7 @@ func (b IssueTokensBuilder) Done() (*protocol.Transaction, error) {
 	return b.t.Body(&b.body).Done()
 }
 
-func (b IssueTokensBuilder) SignWith(signer any, path ...any) SignatureBuilder {
+func (b IssueTokensBuilder) SignWith(signer any, path ...string) SignatureBuilder {
 	return b.t.Body(&b.body).SignWith(signer, path...)
 }
 
@@ -307,7 +307,7 @@ func (b BurnTokensBuilder) Done() (*protocol.Transaction, error) {
 	return b.t.Body(&b.body).Done()
 }
 
-func (b BurnTokensBuilder) SignWith(signer any, path ...any) SignatureBuilder {
+func (b BurnTokensBuilder) SignWith(signer any, path ...string) SignatureBuilder {
 	return b.t.Body(&b.body).SignWith(signer, path...)
 }
 
@@ -334,7 +334,7 @@ func (b CreateKeyPageBuilder) Done() (*protocol.Transaction, error) {
 	return b.t.Body(&b.body).Done()
 }
 
-func (b CreateKeyPageBuilder) SignWith(signer any, path ...any) SignatureBuilder {
+func (b CreateKeyPageBuilder) SignWith(signer any, path ...string) SignatureBuilder {
 	return b.t.Body(&b.body).SignWith(signer, path...)
 }
 
@@ -347,17 +347,17 @@ func (b CreateKeyBookBuilder) Done() (*protocol.Transaction, error) {
 	return b.t.Body(&b.body).Done()
 }
 
-func (b CreateKeyBookBuilder) SignWith(signer any, path ...any) SignatureBuilder {
+func (b CreateKeyBookBuilder) SignWith(signer any, path ...string) SignatureBuilder {
 	return b.t.Body(&b.body).SignWith(signer, path...)
 }
 
-func (b TransactionBuilder) CreateKeyBook(url any, path ...any) CreateKeyBookBuilder {
+func (b TransactionBuilder) CreateKeyBook(url any, path ...string) CreateKeyBookBuilder {
 	c := CreateKeyBookBuilder{t: b}
 	c.body.Url = c.t.parseUrl(url, path...)
 	return c
 }
 
-func (b CreateKeyBookBuilder) WithAuthority(book any, path ...any) CreateKeyBookBuilder {
+func (b CreateKeyBookBuilder) WithAuthority(book any, path ...string) CreateKeyBookBuilder {
 	b.body.Authorities = append(b.body.Authorities, b.t.parseUrl(book, path...))
 	return b
 }
@@ -382,7 +382,7 @@ func (b TransactionBuilder) AddCredits(spend float64) AddCreditsBuilder {
 	return c
 }
 
-func (b AddCreditsBuilder) To(url any, path ...any) AddCreditsBuilder {
+func (b AddCreditsBuilder) To(url any, path ...string) AddCreditsBuilder {
 	b.body.Recipient = b.t.parseUrl(url, path...)
 	return b
 }
@@ -396,7 +396,7 @@ func (b AddCreditsBuilder) Done() (*protocol.Transaction, error) {
 	return b.t.Body(&b.body).Done()
 }
 
-func (b AddCreditsBuilder) SignWith(signer any, path ...any) SignatureBuilder {
+func (b AddCreditsBuilder) SignWith(signer any, path ...string) SignatureBuilder {
 	return b.t.Body(&b.body).SignWith(signer, path...)
 }
 
@@ -436,7 +436,7 @@ func (b UpdateKeyPageBuilder) Done() (*protocol.Transaction, error) {
 	return b.t.Body(&b.body).Done()
 }
 
-func (b UpdateKeyPageBuilder) SignWith(signer any, path ...any) SignatureBuilder {
+func (b UpdateKeyPageBuilder) SignWith(signer any, path ...string) SignatureBuilder {
 	return b.t.Body(&b.body).SignWith(signer, path...)
 }
 
@@ -449,25 +449,25 @@ func (b TransactionBuilder) UpdateAccountAuth() UpdateAccountAuthBuilder {
 	return UpdateAccountAuthBuilder{t: b}
 }
 
-func (b UpdateAccountAuthBuilder) Enable(authority any, path ...any) UpdateAccountAuthBuilder {
+func (b UpdateAccountAuthBuilder) Enable(authority any, path ...string) UpdateAccountAuthBuilder {
 	op := new(protocol.EnableAccountAuthOperation)
 	op.Authority = b.t.parseUrl(authority, path...)
 	return b
 }
 
-func (b UpdateAccountAuthBuilder) Disable(authority any, path ...any) UpdateAccountAuthBuilder {
+func (b UpdateAccountAuthBuilder) Disable(authority any, path ...string) UpdateAccountAuthBuilder {
 	op := new(protocol.DisableAccountAuthOperation)
 	op.Authority = b.t.parseUrl(authority, path...)
 	return b
 }
 
-func (b UpdateAccountAuthBuilder) Add(authority any, path ...any) UpdateAccountAuthBuilder {
+func (b UpdateAccountAuthBuilder) Add(authority any, path ...string) UpdateAccountAuthBuilder {
 	op := new(protocol.AddAccountAuthorityOperation)
 	op.Authority = b.t.parseUrl(authority, path...)
 	return b
 }
 
-func (b UpdateAccountAuthBuilder) Remove(authority any, path ...any) UpdateAccountAuthBuilder {
+func (b UpdateAccountAuthBuilder) Remove(authority any, path ...string) UpdateAccountAuthBuilder {
 	op := new(protocol.RemoveAccountAuthorityOperation)
 	op.Authority = b.t.parseUrl(authority, path...)
 	return b
@@ -477,7 +477,7 @@ func (b UpdateAccountAuthBuilder) Done() (*protocol.Transaction, error) {
 	return b.t.Body(&b.body).Done()
 }
 
-func (b UpdateAccountAuthBuilder) SignWith(signer any, path ...any) SignatureBuilder {
+func (b UpdateAccountAuthBuilder) SignWith(signer any, path ...string) SignatureBuilder {
 	return b.t.Body(&b.body).SignWith(signer, path...)
 }
 
@@ -496,6 +496,6 @@ func (b UpdateKeyBuilder) Done() (*protocol.Transaction, error) {
 	return b.t.Body(&b.body).Done()
 }
 
-func (b UpdateKeyBuilder) SignWith(signer any, path ...any) SignatureBuilder {
+func (b UpdateKeyBuilder) SignWith(signer any, path ...string) SignatureBuilder {
 	return b.t.Body(&b.body).SignWith(signer, path...)
 }

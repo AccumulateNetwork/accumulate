@@ -18,7 +18,7 @@ type KeyPageEntryBuilder[T keyPageEntryBuilderArg[T]] struct {
 	entry protocol.KeySpecParams
 }
 
-func (b KeyPageEntryBuilder[T]) Owner(owner any, path ...any) KeyPageEntryBuilder[T] {
+func (b KeyPageEntryBuilder[T]) Owner(owner any, path ...string) KeyPageEntryBuilder[T] {
 	b.entry.Delegate = b.parseUrl(owner, path...)
 	return b
 }
