@@ -286,13 +286,17 @@ func (s *Simulator) ListenAndServe(hook func(*Simulator, http.Handler) http.Hand
 	return errg.Wait()
 }
 
-func (s *Simulator) SignWithNode(partition string, i int) signing.Signer {
+func (s *Simulator) SignWithNode(partition string, i int) nodeSigner {
 	return nodeSigner{s.partitions[partition].nodes[i]}
 }
 
 type nodeSigner struct {
 	*Node
 }
+
+var _ signing.Signer = nodeSigner{}
+
+func (n nodeSigner) Key() []byte { return n.executor.Key }
 
 func (n nodeSigner) SetPublicKey(sig protocol.Signature) error {
 	k := n.executor.Key
