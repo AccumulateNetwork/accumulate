@@ -100,16 +100,16 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Del
 		return x.recordFailedTransaction(batch, delivery, err)
 	}
 
+	// Do extra processing for special network accounts
+	err = x.processNetworkAccountUpdates(batch, delivery, principal)
+	if err != nil {
+		return x.recordFailedTransaction(batch, delivery, err)
+	}
+
 	// Commit changes, queue state creates for synthetic transactions
 	state, err := st.Commit()
 	if err != nil {
 		err = fmt.Errorf("commit: %w", err)
-		return x.recordFailedTransaction(batch, delivery, err)
-	}
-
-	// Do extra processing for special network accounts
-	err = x.processNetworkAccountUpdates(batch, delivery, principal)
-	if err != nil {
 		return x.recordFailedTransaction(batch, delivery, err)
 	}
 
