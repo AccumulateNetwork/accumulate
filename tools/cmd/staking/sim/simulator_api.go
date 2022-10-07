@@ -16,40 +16,22 @@ func (s *Simulator) GetParameters() (*app.Parameters, error) {
 // Not that heavy of a lift.
 // Code assumes the accountData map is not accessed by the caller after
 // calling GetBlock()
-func (s *Simulator) GetBlock(idx int64, accountData map[string]int) (*app.Block, error) {
+func (s *Simulator) GetBlock(idx int64, accounts map[string]int) (*app.Block,error){
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
 	// Note that this works because we query blocks far more often than blocks are ready
 	//   and that means any changes in the accounts to query made in one block will get
 	//   updated in the Simulator before the next block is produced.
-	s.AccountData = accountData // Caller builds a new map with every call.
+	s.AccountData = accounts // Caller builds a new map with every call.
 
 	if idx < 0 || idx >= int64(len(s.MajorBlocks)) {
 		return nil, nil
 	}
-	blk := s.MajorBlocks[idx]
-	if idx == 1 {
-		blk.SetBudget = true
-		blk.PrintReport = false
-		blk.PrintPayoutScript = false
-		return blk, nil
-	}
-	day := blk.Timestamp.UTC().Day()
-	hour := blk.Timestamp.UTC().Hour()
-	if blk.MajorHeight > 1 && day == 1 && hour == 0 { // The month changed
-		blk.SetBudget = true
-	}
-	// The payday starts when the last block on Thursday completes.
-	if idx > 13 && blk.Timestamp.UTC().Weekday() == 5 && blk.Timestamp.UTC().Hour() == 0 {
-		blk.PrintReport = true
-	}
-	// The script is printed in the major block after the report is produced
-	if idx > 13 && s.MajorBlocks[idx-1].PrintReport {
-		blk.PrintPayoutScript = true
-	}
-	return blk, nil
+	return s.MajorBlocks[idx],nil
+
 }
+
 
 func (s *Simulator) GetTokensIssued() (int64, error) {
 	s.mutex.Lock()

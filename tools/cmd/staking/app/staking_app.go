@@ -13,9 +13,10 @@ var ReportDirectory string
 // The state of the Staking app, which is built up by catching up with
 // the blocks in Accumulate.
 type StakingApp struct {
-	Params      *Parameters
-	CBlk        *Block
-	AccountData map[string]int
+	Params      *Parameters    // Staking Application Parameters
+	PBlk        *Block         // Previous Block
+	CBlk        *Block         // The current block being processed
+	AccountData map[string]int // All the accounts we are tracking in the Staking App
 	Data        struct {
 		BlockHeight            int64
 		Timestamp              string
@@ -98,7 +99,7 @@ func (s *StakingApp) Run(protocol Accumulate) {
 	s.Stakers.AllAccounts = make(map[string]*Account) // Track all the staking accounts
 
 	for s.CBlk == nil {
-		s.CBlk, err = s.protocol.GetBlock(1,s.AccountData)
+		s.CBlk, err = s.protocol.GetBlock(1, s.AccountData)
 		if err != nil {
 			fmt.Print(".")
 		}
@@ -107,7 +108,7 @@ func (s *StakingApp) Run(protocol Accumulate) {
 	s.Log("Starting")
 
 	for i := int64(1); true; {
-		b, err := s.protocol.GetBlock(i, s.AccountData)
+		b, err := s.GetBlock(i, s.AccountData)
 		if err != nil || b == nil {
 			time.Sleep(s.Params.MajorBlockTime / 12 / 60)
 			continue
@@ -198,4 +199,44 @@ func (s *StakingApp) AddApproved(b *Block) {
 	sort.Slice(s.Stakers.SValidator, func(i, j int) bool {
 		return s.Stakers.SValidator[i].URL.String() < s.Stakers.SValidator[j].URL.String()
 	})
+}
+
+// GetBlock
+// Used to check if we need to do staking processing in the block as we get
+// them.  Note that GetBlock MUST be called in order by the Staking App.
+// Because the order of the timestamps lets us detect the first of the month,
+// and Friday. If the protocol stalls over a friday, then no rewards are
+// paid out to stakers.
+func (s *StakingApp) GetBlock(idx int64, accounts map[string]int) (*Block, error) {
+	blk, err := s.protocol.GetBlock(idx, accounts)
+
+	if blk != nil && idx == 1 {
+		blk.SetBudget = true
+		blk.PrintReport = false
+		blk.PrintPayoutScript = false
+		return blk, err
+	}
+
+	if blk == nil {
+		return nil, nil
+	}
+
+	s.PBlk = s.CBlk
+	s.CBlk = blk
+
+	pMonth := s.PBlk.Timestamp.UTC().Month()       // Always compute a budget on the first
+	month := s.CBlk.Timestamp.UTC().Month()        // major block of a new month.
+	if s.CBlk.MajorHeight > 1 && pMonth != month { // The month changed. Compute a budget!
+		s.CBlk.SetBudget = true
+	}
+	// The payday starts when the last block on Thursday completes.
+	if idx > 7 && s.CBlk.Timestamp.UTC().Weekday() == 5 && s.CBlk.Timestamp.UTC().Hour() == 0 {
+		blk.PrintReport = true
+	}
+	// The script is printed in the major block after the report is produced
+	if idx > 13 && s.PBlk.PrintReport { // (note that we always have a PBlk if idx>1)
+		s.CBlk.PrintPayoutScript = true
+	}
+
+	return blk, nil
 }

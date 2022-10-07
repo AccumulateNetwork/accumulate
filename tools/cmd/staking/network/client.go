@@ -43,29 +43,39 @@ func (n *Network) Debug() { n.client.DebugRequest = true }
 
 func (n *Network) Run() {
 
-	n.period = time.Second / 4                   // Start testing 4 times a second.  We will auto adjust
+	n.period = time.Second * 8                   // Start testing 4 times a second.  We will auto adjust
 	if p, err := n.GetParameters(); err != nil { // Try and get new parameters
 		n.params = p
 	}
-	n.start = time.Now()
+	n.start = time.Now() // "Mon, 02 Jan 2006 15:04:05 MST"
+	firstTimestamp, _ := time.Parse(time.RFC1123, "Mon, 24 Oct 2022 00:00:00 UTC")
+	cnt := 0
 	for {
+		wait := false
 		num := int64(len(n.Blocks))
 		b, _ := n.getBlock(num + 1)
 		if b == nil {
-			fmt.Print(".")
+			fmt.Printf("%d ", cnt)
+			cnt++
 			time.Sleep(n.period)
+			wait = true
 			continue
 		}
-		n.Blocks = append(n.Blocks, b)
-		if num > 1 { // Calculate what our period should be to make a major block last about 1/4 a second
-			dt := time.Since(n.start)   // Get Duration of this block
-			cp := dt / 8                // We want to sample 4 times the period between blocks
-			p := (9*n.period + cp) / 10 // Weight current 9 times more than the current reading
-			if p > time.Minute*5 {      // Check at least every 5 minutes
+		cnt = 0
+		b.Timestamp = firstTimestamp.Add(time.Hour * 12 * time.Duration(len(n.Blocks)-1)) // Get a -1 by calculating
+		n.Blocks = append(n.Blocks, b)                                                  //   before this append
+
+		// Calculate a sample time, even if the real world major block time is much faster.
+		if num > 3 && wait {
+			dt := time.Since(n.start) / time.Duration(num) // Get Duration of this block
+			cp := dt / 8                                   // We want to sample so many times between blocks
+			p := (9*n.period + cp) / 10                    // Weight current 9 times more than the current reading
+			if p > time.Minute*5 {                         // Check at least every 5 minutes
 				p = time.Minute * 5
 			}
 			n.period = time.Duration(p) // Set the duration to p
 		}
+
 		fmt.Println(len(n.Blocks))
 	}
 
@@ -79,6 +89,7 @@ func (n *Network) TokensIssued(int64) {}
 func (n *Network) GetParameters() (*app.Parameters, error) {
 	if n.params == nil {
 		n.params = new(app.Parameters)
+		n.params.Init()
 	}
 	return n.params, nil
 }
@@ -142,10 +153,13 @@ func (n *Network) GetTokensIssued() (int64, error) {
 // How the Application gets blocks
 func (n *Network) GetBlock(index int64, accounts map[string]int) (*app.Block, error) {
 	n.Accounts = accounts
-	if index >= int64(len(n.Blocks)) {
-		return nil, fmt.Errorf("no block found")
+	if index < 1 {
+		return nil, fmt.Errorf("block numbers are one based")
 	}
-	return n.Blocks[index], nil
+	if index-1 >= int64(len(n.Blocks)) {
+		return nil, nil
+	}
+	return n.Blocks[index-1], nil
 }
 
 // getBlock

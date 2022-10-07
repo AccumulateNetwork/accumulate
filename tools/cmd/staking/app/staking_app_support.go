@@ -22,12 +22,12 @@ type UrlEntry struct {
 // tracking, but for now we will assume an outside process vets and approves
 // all Staking Accounts
 type Account struct {
-	Order      [32]byte      // Order based on Block hash (working variable)
-	MajorBlock int64         // The Major Block where Account was approved
-	URL        *url.URL      // The URL of this account
-	DepositURL *url.URL      // The URL of the account to be paid rewards
-	Type       string        // Type of account
-	Delegatee  *Account      // If this is a delegate, Account it delegates to.
-	Balance    int64         // Balance if this is a token account
-	Delegates  []*Account    // If this is a staker, and it has delegates
+	Order      [32]byte   // Order based on Block hash (working variable)
+	MajorBlock int64      // The Major Block where Account was approved
+	URL        *url.URL   // The URL of this account
+	DepositURL *url.URL   // The URL of the account to be paid rewards
+	Type       string     // Type of account
+	Delegatee  *Account   // If this is a delegate, Account it delegates to.
+	Balance    int64      // Balance if this is a token account
+	Delegates  []*Account // If this is a staker, and it has delegates
 }
