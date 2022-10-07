@@ -210,6 +210,8 @@ NewTransactionRequest:
   fields:
     - name: TxName
       type: string
+    - name: Origin
+      type: string
 
 AddSendTokensOutputRequest:
   non-binary: true

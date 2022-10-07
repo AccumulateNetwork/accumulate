@@ -126,6 +126,7 @@ type KeyListResponse struct {
 
 type NewTransactionRequest struct {
 	TxName string `json:"txName,omitempty" form:"txName" query:"txName" validate:"required"`
+	Origin string `json:"origin,omitempty" form:"origin" query:"origin" validate:"required"`
 }
 
 type ProveReceiptRequest struct {
@@ -416,6 +417,7 @@ func (v *NewTransactionRequest) Copy() *NewTransactionRequest {
 	u := new(NewTransactionRequest)
 
 	u.TxName = v.TxName
+	u.Origin = v.Origin
 
 	return u
 }
@@ -732,6 +734,9 @@ func (v *KeyListResponse) Equal(u *KeyListResponse) bool {
 
 func (v *NewTransactionRequest) Equal(u *NewTransactionRequest) bool {
 	if !(v.TxName == u.TxName) {
+		return false
+	}
+	if !(v.Origin == u.Origin) {
 		return false
 	}
 
