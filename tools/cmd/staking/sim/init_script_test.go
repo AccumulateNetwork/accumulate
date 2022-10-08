@@ -111,8 +111,9 @@ func TestGenerateInitializationScript(t *testing.T) {
 	p("for i in {0..100000}")
 	p("do")
 	for _, v := range stakers {
-		pf("echo asdfasdf | accumulate faucet %s", v.url)
-		p("sleep .3 sec")
+		pf("echo asdfasdf | accumulate faucet $lta")
+		pf("echo asdfasdf | accumulate tx create $lta %s %d", v.url, 40)
+		p("sleep .3s")
 	}
 	p("done")
 

@@ -77,9 +77,9 @@ func (s *StakingApp) Log(title string) {
 	fmt.Printf("%30s %5d %s %2d:%02d UTC -- %s %2d:%02d Local\n",
 		title,
 		s.CBlk.MajorHeight,
-		s.CBlk.Timestamp.Format("Mon 02-Jan-06"),
+		s.CBlk.Timestamp.Format("Mon Jan 02 2006"),
 		h, m,
-		s.CBlk.Timestamp.Local().Format("Mon 02-Jan-06"),
+		s.CBlk.Timestamp.Local().Format("Mon Jan 02 2006"),
 		h2, m2)
 }
 
@@ -231,7 +231,9 @@ func (s *StakingApp) GetBlock(idx int64, accounts map[string]int) (*Block, error
 		s.CBlk.SetBudget = true
 	}
 	// The payday starts when the last block on Thursday completes.
-	if idx > 7 && s.CBlk.Timestamp.UTC().Weekday() == 5 && s.CBlk.Timestamp.UTC().Hour() == 0 {
+	pDay := s.PBlk.Timestamp.UTC().Weekday()
+	cDay := s.CBlk.Timestamp.UTC().Weekday()
+	if idx > 7 && cDay == 5 && pDay < 5 {
 		blk.PrintReport = true
 	}
 	// The script is printed in the major block after the report is produced
