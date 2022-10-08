@@ -13,11 +13,11 @@ var ReportDirectory string // The Directory where reports are written
 // The state of the Staking app, which is built up by catching up with
 // the blocks in Accumulate.
 type StakingApp struct {
-	Params      *Parameters    // Staking Application Parameters
-	PBlk        *Block         // Previous Block
-	CBlk        *Block         // The current block being processed
-	AccountData map[string]int // All the accounts we are tracking in the Staking App
-	Data        struct {
+	Params   *Parameters    // Staking Application Parameters
+	PBlk     *Block         // Previous Block
+	CBlk     *Block         // The current block being processed
+	Accounts map[string]int // All the accounts we are tracking in the Staking App
+	Data     struct {
 		BlockHeight            int64
 		Timestamp              string
 		TokenLimit             int64
@@ -88,7 +88,8 @@ func (s *StakingApp) Log(title string) {
 // for now.  Ultimately it will take a parameter on the command line to choose between
 // the main net, the test net, and the simulator
 func (s *StakingApp) Run(protocol Accumulate) {
-	s.AccountData = make(map[string]int)     // Allocate the map of accounts we want to collect in a block
+	s.Accounts = make(map[string]int)        // Allocate the map of accounts we want to collect in a block
+	s.Accounts[Approved.String()] = 1        // We watch the Approved data account, which has stakers
 	s.protocol = protocol                    // save away the protocol generating data
 	go protocol.Run()                        // Run the processes
 	var err error                            //
@@ -99,7 +100,7 @@ func (s *StakingApp) Run(protocol Accumulate) {
 	s.Stakers.AllAccounts = make(map[string]*Account) // Track all the staking accounts
 
 	for s.CBlk == nil {
-		s.CBlk, err = s.protocol.GetBlock(1, s.AccountData)
+		s.CBlk, err = s.protocol.GetBlock(1, s.Accounts)
 		if err != nil {
 			fmt.Print(".")
 		}
@@ -108,7 +109,7 @@ func (s *StakingApp) Run(protocol Accumulate) {
 	s.Log("Starting")
 
 	for i := int64(1); true; {
-		b, err := s.GetBlock(i, s.AccountData)
+		b, err := s.GetBlock(i, s.Accounts)
 		if err != nil || b == nil {
 			time.Sleep(s.Params.MajorBlockTime / 12 / 60)
 			continue

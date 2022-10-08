@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/big"
+	"strings"
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
@@ -36,6 +38,12 @@ func New(server string) (*Network, error) {
 	c, err := client.New(server)
 	if err != nil {
 		return nil, err
+	}
+
+	// See if they are using a local Dev Net.  If so, let's speed
+	// things up.
+	if strings.Contains(strings.ToLower(server), "127.0.1.1") {
+		SpeedUp = true
 	}
 
 	n := new(Network)
@@ -98,7 +106,7 @@ func (n *Network) Run() {
 // The network is informed how many tokens are issued by staking.  Running a simulator
 // needs this, but a real network doesn't.  So the value is ignored here.
 func (n *Network) TokensIssued(tokens int64) {
-	fmt.Printf("Staking will attempt to issue %d tokens",tokens)
+	fmt.Printf("Staking will attempt to issue %d tokens", tokens)
 }
 
 // GetParameters
@@ -164,6 +172,8 @@ func (n *Network) GetTokensIssued() (int64, error) {
 	for issued.Cmp(issuer.SupplyLimit) > 0 {
 		issued.Sub(&issued, issuer.SupplyLimit)
 	}
+	issued = *issued.Add(&issued, big.NewInt(99999999))  // Round up, this is 8 decimal fixed point
+	issued = *issued.Div(&issued, big.NewInt(100000000)) // Get rid of the fraction
 
 	return issued.Int64(), nil
 }
@@ -311,7 +321,7 @@ func (n *Network) getMajorBlock(partition string, index uint64) (*api.MajorQuery
 		return nil, errors.NotFound("major block %d of %s not found", index, partition)
 	}
 
-	// Remarshal map to struct
+	// Re-marshal map to struct
 	b, err := json.Marshal(resp.Items[0])
 	if err != nil {
 		return nil, err
