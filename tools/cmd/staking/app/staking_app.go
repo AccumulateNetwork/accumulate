@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-var ReportDirectory string
+var ReportDirectory string // The Directory where reports are written
 
 // StakingApp
 // The state of the Staking app, which is built up by catching up with

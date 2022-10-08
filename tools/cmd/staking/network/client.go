@@ -26,8 +26,12 @@ type Network struct {
 	start              time.Time       // When this app started, used to time block queries
 }
 
-var _ app.Accumulate = (*Network)(nil)
+var _ app.Accumulate = (*Network)(nil) // Network must implement app.Accumulate
 
+var SpeedUp bool // If set, and running against a network, time is sped up
+
+// New
+// Create a new Network object to talk to an Accumulate Network
 func New(server string) (*Network, error) {
 	c, err := client.New(server)
 	if err != nil {
@@ -39,8 +43,12 @@ func New(server string) (*Network, error) {
 	return n, nil
 }
 
+// Debug
+// Set the DebugRequest flag
 func (n *Network) Debug() { n.client.DebugRequest = true }
 
+// Run
+// Collect blocks and possibly adjust block times if SpeedUp is set
 func (n *Network) Run() {
 
 	n.period = time.Second * 8                   // Start testing 4 times a second.  We will auto adjust
@@ -49,31 +57,36 @@ func (n *Network) Run() {
 	}
 	n.start = time.Now() // "Mon, 02 Jan 2006 15:04:05 MST"
 	firstTimestamp, _ := time.Parse(time.RFC1123, "Mon, 24 Oct 2022 00:00:00 UTC")
-	cnt := 0
+	cnt := 0 // Count the attempts to read a block
 	for {
-		wait := false
-		num := int64(len(n.Blocks))
-		b, _ := n.getBlock(num + 1)
+		wait := false               // So far, we haven't waited
+		num := int64(len(n.Blocks)) // Get the number of blocks currently; this is used a good bit
+		b, _ := n.getBlock(num + 1) // Try and get the next block
 		if b == nil {
-			fmt.Printf("%d ", cnt)
-			cnt++
-			time.Sleep(n.period)
-			wait = true
-			continue
+			cnt++                  // Increment out counter
+			fmt.Printf("%d ", cnt) // Print out read attempts
+			time.Sleep(n.period)   // Sleep for our period
+			wait = true            // We waited.  If we don't wait, don't touch the n.period
+			continue               // Solider on
 		}
 		cnt = 0
-		b.Timestamp = firstTimestamp.Add(time.Hour * 12 * time.Duration(len(n.Blocks)-1)) // Get a -1 by calculating
-		n.Blocks = append(n.Blocks, b)                                                  //   before this append
+
+		if SpeedUp { // If we are speeding up time for testing, we stomp the timestamp.
+			fastTimestamp := time.Hour * 12 * time.Duration(num-1) // Calculate what the timestamp should be
+			b.Timestamp = firstTimestamp.Add(fastTimestamp)        // Override the timestamp in the block
+		}
+
+		n.Blocks = append(n.Blocks, b) //   before this append
 
 		// Calculate a sample time, even if the real world major block time is much faster.
-		if num > 3 && wait {
+		if num > 3 && wait { // Note that we do not adjust n.period if we are not waiting for blocks (catching up)
 			dt := time.Since(n.start) / time.Duration(num) // Get Duration of this block
 			cp := dt / 8                                   // We want to sample so many times between blocks
 			p := (9*n.period + cp) / 10                    // Weight current 9 times more than the current reading
 			if p > time.Minute*5 {                         // Check at least every 5 minutes
 				p = time.Minute * 5
 			}
-			n.period = time.Duration(p) // Set the duration to p
+			n.period = time.Duration(p) //                    Set the time between polls for blocks to p
 		}
 
 		fmt.Println(len(n.Blocks))
@@ -81,11 +94,15 @@ func (n *Network) Run() {
 
 }
 
-func (n *Network) Init() {
-
+// TokensIssued
+// The network is informed how many tokens are issued by staking.  Running a simulator
+// needs this, but a real network doesn't.  So the value is ignored here.
+func (n *Network) TokensIssued(tokens int64) {
+	fmt.Printf("Staking will attempt to issue %d tokens",tokens)
 }
-func (n *Network) TokensIssued(int64) {}
 
+// GetParameters
+// Use the hard coded parameters.
 func (n *Network) GetParameters() (*app.Parameters, error) {
 	if n.params == nil {
 		n.params = new(app.Parameters)
@@ -129,6 +146,8 @@ func (n *Network) QueryParameters() (*app.Parameters, error) {
 	return params, nil
 }
 
+// GetTokensIssued
+// Returns the number of tokens issued by the protocol at this block height
 func (n *Network) GetTokensIssued() (int64, error) {
 	req := new(api.GeneralQuery)
 	req.Url = n.params.Account.TokenIssuance
