@@ -357,6 +357,21 @@
       ]
     },
     {
+      "name": "Heal Anchors",
+      "presentation": { "group": "99-Miscellaneous", },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/tools/cmd/resend-anchor",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "heal",
+        "tcp://bvn0-seed.testnet.accumulatenetwork.io:16591",
+        "tcp://bvn1-seed.testnet.accumulatenetwork.io:16591",
+        "tcp://bvn2-seed.testnet.accumulatenetwork.io:16591",
+      ]
+    },
+    {
       "name": "Lint",
       "presentation": { "group": "99-Miscellaneous", },
       "type": "go",
