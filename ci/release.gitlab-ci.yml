@@ -35,6 +35,7 @@ build main image:
   extends: .rules release
   needs: [ docker buildx ]
   image: docker:20
+  timeout: 2 hours
   services:
     - name: docker:20-dind
       command: [ --experimental ] # Do we need this?
