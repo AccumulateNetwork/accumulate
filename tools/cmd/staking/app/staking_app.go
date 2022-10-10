@@ -88,17 +88,17 @@ func (s *StakingApp) Log(title string) {
 // for now.  Ultimately it will take a parameter on the command line to choose between
 // the main net, the test net, and the simulator
 func (s *StakingApp) Run(protocol Accumulate) {
-	s.Accounts = make(map[string]int)        // Allocate the map of accounts we want to collect in a block
-	s.Accounts[Approved.String()] = 1        // We watch the Approved data account, which has stakers
-	s.protocol = protocol                    // save away the protocol generating data
-	go protocol.Run()                        // Run the processes
-	var err error                            //
-	s.Params, err = protocol.GetParameters() // Get the parameters for the staking application
-	if err != nil {                          // Log any error getting parameters (never happens)
-		log.Fatal(err)
+	s.Accounts = make(map[string]int)  // Allocate the map of accounts we want to collect in a block
+	s.Accounts[Approved.String()] = 1  // We watch the Approved data account, which has stakers
+	s.protocol = protocol              // save away the protocol generating data
+	p, err := protocol.GetParameters() // Get the first set of Parameters
+	if err != nil {                    // Of course this should never happen
+		log.Fatal("failed to get initial parameters")
+		return
 	}
+	s.Params = p                                      // Set the initial set of  protocol parameters
+	go protocol.Run()                                 // Run the processes
 	s.Stakers.AllAccounts = make(map[string]*Account) // Track all the staking accounts
-
 	for s.CBlk == nil {
 		s.CBlk, err = s.protocol.GetBlock(1, s.Accounts)
 		if err != nil {

@@ -5,6 +5,10 @@ import "gitlab.com/accumulatenetwork/accumulate/tools/cmd/staking/app"
 func (s *Simulator) GetParameters() (*app.Parameters, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
+	if s.parameters == nil {
+		s.parameters = new(app.Parameters)
+		s.parameters.Init()
+	}
 	return s.parameters, nil
 }
 

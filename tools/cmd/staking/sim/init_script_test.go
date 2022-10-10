@@ -50,7 +50,7 @@ func TestGenerateInitializationScript(t *testing.T) {
 
 	p("export ACC_API=http://127.0.1.1:26660/v2 ")
 	p("lta=acc://c83b1ed6b8b6795d3c224dab50a544e2306d743866835260/ACME")
-	pf("for i in {0..200}\ndo\n   echo asdfasdf | accumulate faucet $lta\ndone") // accumulate credits [origin token account] [key page or lite identity url] [number of credits wanted] [max acme to spend] [percent slippage (optional)] [flags][BS2]
+	pf("for i in {0..300}\ndo\n   echo asdfasdf | accumulate faucet $lta\ndone") // accumulate credits [origin token account] [key page or lite identity url] [number of credits wanted] [max acme to spend] [percent slippage (optional)] [flags][BS2]
 	s()
 	p("echo asdfasdf | accumulate credits $lta $lta 500000")
 	s()
@@ -112,8 +112,8 @@ func TestGenerateInitializationScript(t *testing.T) {
 	p("do")
 	for _, v := range stakers {
 		pf("echo asdfasdf | accumulate faucet $lta")
-		pf("echo asdfasdf | accumulate tx create $lta %s %d", v.url, 40)
-		p("sleep .3s")
+		pf("echo asdfasdf | accumulate tx create $lta %s %d", v.url, 10)
+		p("sleep .5s")
 	}
 	p("done")
 
