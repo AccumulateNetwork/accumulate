@@ -44,7 +44,7 @@ func submit(ctx context.Context, logger log.Logger, connMgr connections.Connecti
 	var r1 *core.ResultBroadcastTx
 	errorCnt := 0
 	for {
-		connCtx, err := connMgr.SelectConnection(partitionId, false)
+		connCtx, err := connMgr.SelectConnection(partitionId, false, false)
 		if err != nil {
 			return nil, err
 		}
@@ -77,7 +77,7 @@ func submitPretend(ctx context.Context, logger log.Logger, connMgr connections.C
 	var r1 *core.ResultCheckTx
 	errorCnt := 0
 	for {
-		connCtx, err := connMgr.SelectConnection(partition, false)
+		connCtx, err := connMgr.SelectConnection(partition, false, false)
 		if err != nil {
 			return nil, err
 		}
@@ -206,7 +206,7 @@ func (r *RouterInstance) Route(envs ...*protocol.Envelope) (string, error) {
 func (r *RouterInstance) RequestAPIv2(ctx context.Context, partitionId, method string, params, result interface{}) error {
 	errorCnt := 0
 	for {
-		connCtx, err := r.connectionManager.SelectConnection(partitionId, true)
+		connCtx, err := r.connectionManager.SelectConnection(partitionId, true, false)
 		if err != nil {
 			return err
 		}

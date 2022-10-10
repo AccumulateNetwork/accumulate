@@ -63,6 +63,7 @@ type ConnectionContext interface {
 	ReportError(err error)
 	ReportErrorStatus(status NodeStatus)
 	ClearErrors()
+	IsDirect() bool
 }
 
 type StatusChecker interface {
@@ -83,6 +84,11 @@ type connectionContext struct {
 	resolvedIPs         []net.IP
 	metrics             NodeMetrics
 	lastErrorExpiryTime time.Time
+	isDirect            bool
+}
+
+func (cc *connectionContext) IsDirect() bool {
+	return cc.isDirect
 }
 
 func (cc *connectionContext) GetBasePort() int {

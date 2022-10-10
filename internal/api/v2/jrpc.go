@@ -20,6 +20,7 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -118,51 +119,59 @@ func (m *JrpcMethods) Status(ctx context.Context, _ json.RawMessage) interface{}
 		return internalError(errors.Format(errors.StatusInternalError, "missing connection manager"))
 	}
 
-	conn, err := m.ConnectionManager.SelectConnection(m.Options.Describe.PartitionId, true)
-	if err != nil {
-		return internalError(err)
-	}
-
-	// Get the latest block height and BPT hash from Tendermint RPC
-	tmStatus, err := conn.GetABCIClient().Status(ctx)
-	if err != nil {
-		return internalError(err)
-	}
-
-	// Get the latest root chain anchor from the Accumulate API
-	apiclient := conn.GetAPIClient()
-	rootAnchor, err := getLatestRootChainAnchor(apiclient, m.Options.Describe.Ledger(), ctx)
-	if err != nil {
-		return internalError(err)
-	}
-
-	// Get the latest directory anchor from the Accumulate API
-	dnAnchorHeight, err := getLatestDirectoryAnchor(conn, m.Options.Describe.AnchorPool())
-	if err != nil {
-		return err
-	}
-
-	if m.Options.Describe.NetworkType == config.NetworkTypeDirectory {
-		status := new(StatusResponse)
-		status.Ok = true
-		status.DnHeight = tmStatus.SyncInfo.LatestBlockHeight
-		status.DnTime = tmStatus.SyncInfo.LatestBlockTime
-		if len(tmStatus.SyncInfo.LatestAppHash) == 32 {
-			status.DnBptHash = *(*[32]byte)(tmStatus.SyncInfo.LatestBlockHash)
-		}
-		status.DnRootHash = *rootAnchor
-		return status
-	}
-
+	var conn connections.ConnectionContext
+	var err error
 	status := new(StatusResponse)
-	status.Ok = true
-	status.BvnHeight = tmStatus.SyncInfo.LatestBlockHeight
-	status.BvnTime = tmStatus.SyncInfo.LatestBlockTime
-	if len(tmStatus.SyncInfo.LatestAppHash) == 32 {
-		status.BvnBptHash = *(*[32]byte)(tmStatus.SyncInfo.LatestBlockHash)
+	for i := 0; i < 2; i++ {
+		// Get the latest block height and BPT hash from Tendermint RPC
+		if i == 0 {
+			conn, err = m.ConnectionManager.SelectConnection(m.Options.Describe.PartitionId, true, false)
+			if err != nil {
+				return internalError(err)
+			}
+		} else {
+			conn, err = m.ConnectionManager.SelectConnection(m.Options.Describe.PartitionId, true, true)
+			if err != nil {
+				return internalError(err)
+			}
+		}
+		tmStatus, err := conn.GetABCIClient().Status(ctx)
+		if err != nil {
+			return internalError(err)
+		}
+		// Get the latest root chain anchor from the Accumulate API
+		apiclient := conn.GetAPIClient()
+		rootAnchor, err := getLatestRootChainAnchor(apiclient, m.Options.Describe.Ledger(), ctx)
+		if err != nil {
+			return internalError(err)
+		}
+
+		// Get the latest directory anchor from the Accumulate API
+		dnAnchorHeight, err := getLatestDirectoryAnchor(conn, m.Options.Describe.AnchorPool())
+		if err != nil {
+			return err
+		}
+
+		if m.Options.Describe.NetworkType == config.NetworkTypeDirectory {
+			status.Ok = true
+			status.DnHeight = tmStatus.SyncInfo.LatestBlockHeight
+			status.DnTime = tmStatus.SyncInfo.LatestBlockTime
+			if len(tmStatus.SyncInfo.LatestAppHash) == 32 {
+				status.DnBptHash = *(*[32]byte)(tmStatus.SyncInfo.LatestBlockHash)
+			}
+			status.DnRootHash = *rootAnchor
+		} else {
+
+			status.Ok = true
+			status.BvnHeight = tmStatus.SyncInfo.LatestBlockHeight
+			status.BvnTime = tmStatus.SyncInfo.LatestBlockTime
+			if len(tmStatus.SyncInfo.LatestAppHash) == 32 {
+				status.BvnBptHash = *(*[32]byte)(tmStatus.SyncInfo.LatestBlockHash)
+			}
+			status.BvnRootHash = *rootAnchor
+			status.LastDirectoryAnchorHeight = uint64(dnAnchorHeight)
+		}
 	}
-	status.BvnRootHash = *rootAnchor
-	status.LastDirectoryAnchorHeight = uint64(dnAnchorHeight)
 	return status
 }
 

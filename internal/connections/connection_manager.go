@@ -27,7 +27,7 @@ import (
 const UnhealthyNodeCheckInterval = time.Minute * 10 // TODO Configurable in toml?
 
 type ConnectionManager interface {
-	SelectConnection(partitionId string, allowFollower bool) (ConnectionContext, error)
+	SelectConnection(partitionId string, allowFollower, direct bool) (ConnectionContext, error)
 }
 
 type ConnectionInitializer interface {
@@ -101,13 +101,12 @@ func NewConnectionManager(config *config.Config, logger log.Logger, apiClientFac
 	return cm
 }
 
-func (cm *connectionManager) SelectConnection(partitionId string, allowFollower bool) (ConnectionContext, error) {
+func (cm *connectionManager) SelectConnection(partitionId string, allowFollower, direct bool) (ConnectionContext, error) {
 	// When partitionId is the same as the current node's partition id, just return the local
 	if strings.EqualFold(partitionId, cm.accConfig.PartitionId) {
 		if cm.localCtx == nil {
 			return nil, errNoLocalClient(partitionId)
 		}
-		cm.logger.Debug("Selected connection", "partition", partitionId, "address", "self")
 		return cm.localCtx, nil
 	}
 
@@ -119,6 +118,15 @@ func (cm *connectionManager) SelectConnection(partitionId string, allowFollower 
 		} else {
 			return nil, errUnknownPartition(partitionId)
 		}
+	}
+
+	if direct {
+		for _, cc := range nodeList {
+			if cc.IsDirect() {
+				return cc, nil
+			}
+		}
+		return nil, errNoDirect(partitionId)
 	}
 
 	healthyNodes := cm.getHealthyNodes(nodeList, allowFollower)
@@ -137,7 +145,6 @@ func (cm *connectionManager) SelectConnection(partitionId string, allowFollower 
 		}
 	}
 	selCtx.GetMetrics().usageCnt++
-	cm.logger.Debug("Selected connection", "partition", partitionId, "address", selCtx.GetAddress())
 	return selCtx, nil
 }
 

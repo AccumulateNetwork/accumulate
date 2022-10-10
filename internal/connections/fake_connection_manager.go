@@ -15,7 +15,7 @@ type fakeConnectionManager struct {
 	ctxMap map[string]ConnectionContext
 }
 
-func (fcm *fakeConnectionManager) SelectConnection(partitionId string, allowFollower bool) (ConnectionContext, error) {
+func (fcm *fakeConnectionManager) SelectConnection(partitionId string, allowFollower, direct bool) (ConnectionContext, error) {
 	context, ok := fcm.ctxMap[partitionId]
 	if ok {
 		return context, nil

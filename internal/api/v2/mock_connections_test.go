@@ -286,6 +286,20 @@ func (mr *MockConnectionContextMockRecorder) GetNodeType() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNodeType", reflect.TypeOf((*MockConnectionContext)(nil).GetNodeType))
 }
 
+// IsDirect mocks base method.
+func (m *MockConnectionContext) IsDirect() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsDirect")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// IsDirect indicates an expected call of IsDirect.
+func (mr *MockConnectionContextMockRecorder) IsDirect() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsDirect", reflect.TypeOf((*MockConnectionContext)(nil).IsDirect))
+}
+
 // IsHealthy mocks base method.
 func (m *MockConnectionContext) IsHealthy() bool {
 	m.ctrl.T.Helper()

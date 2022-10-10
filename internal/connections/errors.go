@@ -7,9 +7,15 @@
 package connections
 
 import (
+	"errors"
 	"fmt"
 )
 
+var ErrNoDirect = errors.New("no direct connection")
+
+func errNoDirect(partition string) error {
+	return fmt.Errorf("%w for %s", ErrNoDirect, partition)
+}
 func errNoHealthyNodes(partitionId string) error {
 	return fmt.Errorf("no healthy nodes available (yet) for partition %q", partitionId)
 }

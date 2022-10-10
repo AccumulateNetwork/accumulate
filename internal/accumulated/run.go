@@ -315,7 +315,7 @@ func (d *Daemon) Start() (err error) {
 }
 
 func (d *Daemon) LocalClient() (connections.ABCIClient, error) {
-	ctx, err := d.connectionManager.SelectConnection(d.jrpc.Options.Describe.PartitionId, false)
+	ctx, err := d.connectionManager.SelectConnection(d.jrpc.Options.Describe.PartitionId, false, false)
 	if err != nil {
 		return nil, err
 	}
