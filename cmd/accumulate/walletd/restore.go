@@ -193,8 +193,12 @@ func RestoreAccounts() (out string, err error) {
 					return "", err
 				}
 				//if we hae the old key type, make it the new type.
-				if k.KeyInfo.Type == protocol.SignatureTypeLegacyED25519 {
-					k.KeyInfo.Type = protocol.SignatureTypeED25519
+				if k.KeyInfo.Type == protocol.SignatureTypeLegacyED25519 ||
+					walletVersion.Compare(bip32VersionChange) < 0 {
+
+					if k.KeyInfo.Type == protocol.SignatureTypeLegacyED25519 {
+						k.KeyInfo.Type = protocol.SignatureTypeED25519
+					}
 					k.KeyInfo.Derivation = "external"
 
 					kiData, err := k.KeyInfo.MarshalBinary()

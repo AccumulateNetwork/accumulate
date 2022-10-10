@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"fmt"
-
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd/api"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -90,11 +89,11 @@ func GetKeyList() (kla []api.KeyData, err error) {
 
 	for _, v := range b.KeyValueList {
 		k := Key{}
-		err := k.LoadByLabel(string(v.Value))
+		err := k.LoadByLabel(string(v.Key))
 		if err != nil {
 			return nil, err
 		}
-		kla = append(kla, api.KeyData{PublicKey: k.PublicKey, Name: string(v.Value), KeyInfo: k.KeyInfo})
+		kla = append(kla, api.KeyData{PublicKey: k.PublicKey, Name: string(v.Key), KeyInfo: k.KeyInfo})
 	}
 	return kla, nil
 }

@@ -715,6 +715,12 @@ func ImportAccounts(filePath string) error {
 		}
 	}
 
+	version := db.NewVersion(int(req.Version.Commit), int(req.Version.Major), int(req.Version.Minor), int(req.Version.Revision))
+	err = walletd.GetWallet().PutRaw(db.BucketConfig, []byte("version"), version.Bytes())
+	if err != nil {
+		log.Printf("failed to store version info %v", err)
+	}
+
 	return nil
 }
 
