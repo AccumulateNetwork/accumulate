@@ -321,9 +321,13 @@ func (m *JrpcMethods) SignSendTokensTransaction(_ context.Context, params json.R
 	if err != nil {
 		return validatorError(err)
 	}
+	key, err := LookupByLabel(req.KeyName)
+	if err != nil {
+		return validatorError(err)
+	}
 	signer := new(signing.Builder)
 	signer.Url = txn.Header.Principal
-	signer.Type = protocol.SignatureTypeED25519
+	signer.Type = key.KeyInfo.Type
 	sig, err := signer.Initiate(&txn)
 	if err != nil {
 		return validatorError(err)
