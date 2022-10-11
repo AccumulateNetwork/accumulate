@@ -134,7 +134,7 @@ func TestUpdateValidators(t *testing.T) {
 	signer1.SetVersion(page.Version)
 
 	values = dn.Executor.ActiveGlobals_TESTONLY()
-	envs, err = build.RemoveOperator(values, len(page.Keys), vldKey4[32:], vldKey4Hash[:], signer1, signer2, signer3, signerA2)
+	envs, err = build.RemoveOperator(values, len(page.Keys), vldKey4[32:], vldKey4Hash[:], Directory, signer1, signer2, signer3, signerA2)
 	require.NoError(t, err)
 	for _, env := range envs {
 		sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(env)...)

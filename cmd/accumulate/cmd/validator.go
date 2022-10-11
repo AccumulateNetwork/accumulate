@@ -155,13 +155,13 @@ func addValidator(values *core.GlobalValues, pageCount int, signers []*signing.B
 	return build.AddValidator(values, pageCount, newKey.PublicKey, partition, signers...)
 }
 
-func removeValidator(values *core.GlobalValues, pageCount int, signers []*signing.Builder, _ string, args []string) (*protocol.Envelope, error) {
+func removeValidator(values *core.GlobalValues, pageCount int, signers []*signing.Builder, partition string, args []string) (*protocol.Envelope, error) {
 	oldKey, err := resolvePublicKey(args[0])
 	if err != nil {
 		return nil, err
 	}
 
-	return build.RemoveValidator(values, pageCount, oldKey.PublicKey, signers...)
+	return build.RemoveValidatorFrom(values, pageCount, oldKey.PublicKey, partition, signers...)
 }
 
 func updateValidatorKey(values *core.GlobalValues, _ int, signers []*signing.Builder, _ string, args []string) (*protocol.Envelope, error) {

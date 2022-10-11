@@ -46,12 +46,12 @@ func AddValidator(values *core.GlobalValues, operatorCount int, newPubKey []byte
 // RemoveOperator constructs an envelope that will remove an operator from the
 // network. If partition is non-empty, the envelope will also remove the operator
 // as a validator from the partition.
-func RemoveOperator(values *core.GlobalValues, operatorCount int, oldPubKey, oldKeyHash []byte, signers ...*signing.Builder) ([]*protocol.Envelope, error) {
+func RemoveOperator(values *core.GlobalValues, operatorCount int, oldPubKey, oldKeyHash []byte, partition string, signers ...*signing.Builder) ([]*protocol.Envelope, error) {
 	env1, err1 := RemoveFromOperatorPage(values, operatorCount, oldKeyHash, signers...)
 	for _, signer := range signers {
 		signer.Version++
 	}
-	env2, err2 := RemoveValidator(values, operatorCount, oldPubKey, signers...)
+	env2, err2 := RemoveValidatorFrom(values, operatorCount, oldPubKey, partition, signers...)
 	if err1 != nil {
 		return nil, err1
 	} else if err2 != nil {
@@ -72,9 +72,9 @@ func RemoveFromOperatorPage(values *core.GlobalValues, operatorCount int, oldKey
 	return initiateTransaction(signers, protocol.DnUrl().JoinPath(protocol.Operators, "1"), updatePage)
 }
 
-func RemoveValidator(values *core.GlobalValues, operatorCount int, oldPubKey []byte, signers ...*signing.Builder) (*protocol.Envelope, error) {
+func RemoveValidatorFrom(values *core.GlobalValues, operatorCount int, oldPubKey []byte, partition string, signers ...*signing.Builder) (*protocol.Envelope, error) {
 	// Remove the key from the network definition
-	values.Network.RemoveValidator(oldPubKey)
+	values.Network.RemoveValidator(oldPubKey, partition)
 	return updateNetworkDefinition(values, signers)
 }
 

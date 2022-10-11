@@ -64,15 +64,17 @@ func (n *NetworkDefinition) AddValidator(key []byte, partition string, active bo
 	v.Partitions = append(v.Partitions, &ValidatorPartitionInfo{ID: partition, Active: active})
 }
 
-// RemoveValidator completely removes a validator.
-func (n *NetworkDefinition) RemoveValidator(key []byte) {
+// RemoveValidatorFrom completely removes a validator.
+func (n *NetworkDefinition) RemoveValidator(key []byte, partition string) {
 	hash := sha256.Sum256(key)
-	i, found := sortutil.Search(n.Validators, valHashCmp(hash[:]).cmp)
-	if !found {
-		return
-	}
+	_, v, _ := n.ValidatorByHash(hash[:])
 
-	n.Validators = append(n.Validators[:i], n.Validators[i+1:]...)
+	for _, p := range v.Partitions {
+		if strings.EqualFold(p.ID, partition) {
+			p.Active = false
+			return
+		}
+	}
 }
 
 // UpdateValidatorKey updates a validator's key.
