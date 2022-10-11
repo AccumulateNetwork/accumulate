@@ -17,6 +17,11 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+type AddMemoTransactionRequest struct {
+	TxName string `json:"txName,omitempty" form:"txName" query:"txName" validate:"required"`
+	Memo   string `json:"memo,omitempty" form:"memo" query:"memo" validate:"required"`
+}
+
 type AddSendTokensOutputRequest struct {
 	TxName       string  `json:"txName,omitempty" form:"txName" query:"txName" validate:"required"`
 	TokenAddress string  `json:"tokenAddress,omitempty" form:"tokenAddress" query:"tokenAddress" validate:"required"`
@@ -156,6 +161,17 @@ type VersionResponse struct {
 	Commit    string `json:"commit,omitempty" form:"commit" query:"commit" validate:"required"`
 	extraData []byte
 }
+
+func (v *AddMemoTransactionRequest) Copy() *AddMemoTransactionRequest {
+	u := new(AddMemoTransactionRequest)
+
+	u.TxName = v.TxName
+	u.Memo = v.Memo
+
+	return u
+}
+
+func (v *AddMemoTransactionRequest) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *AddSendTokensOutputRequest) Copy() *AddSendTokensOutputRequest {
 	u := new(AddSendTokensOutputRequest)
@@ -478,6 +494,17 @@ func (v *VersionResponse) Copy() *VersionResponse {
 }
 
 func (v *VersionResponse) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *AddMemoTransactionRequest) Equal(u *AddMemoTransactionRequest) bool {
+	if !(v.TxName == u.TxName) {
+		return false
+	}
+	if !(v.Memo == u.Memo) {
+		return false
+	}
+
+	return true
+}
 
 func (v *AddSendTokensOutputRequest) Equal(u *AddSendTokensOutputRequest) bool {
 	if !(v.TxName == u.TxName) {

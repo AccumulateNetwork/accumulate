@@ -219,3 +219,10 @@ AddSendTokensOutputRequest:
     - name: Amount
       type: bigint
 
+AddMemoTransactionRequest:
+  non-binary: true
+  fields:
+    - name: TxName
+      type: string
+    - name: Memo
+      type: string

@@ -295,3 +295,31 @@ func (m *JrpcMethods) DeleteSendTokensTransaction(_ context.Context, params json
 	}
 	return resp
 }
+
+func (m *JrpcMethods) AddMemoTransaction(_ context.Context, params json.RawMessage) interface{} {
+	req := api.AddMemoTransactionRequest{}
+	err := json.Unmarshal(params, &req)
+	if err != nil {
+		return validatorError(err)
+	}
+
+	value, err := GetWallet().Get(BucketTransactionCache, []byte(req.TxName))
+	if err != nil {
+		return validatorError(err)
+	}
+	txn := protocol.Transaction{}
+	err = txn.UnmarshalBinary(value)
+	if err != nil {
+		return validatorError(err)
+	}
+	txn.Header.Memo = req.Memo
+	val, err := txn.MarshalBinary()
+	if err != nil {
+		return validatorError(err)
+	}
+	err = GetWallet().Put(BucketTransactionCache, []byte(req.TxName), val)
+	if err != nil {
+		return validatorError(err)
+	}
+	return txn
+}

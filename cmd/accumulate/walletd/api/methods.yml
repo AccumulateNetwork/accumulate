@@ -67,3 +67,9 @@ AddSendTokensOutput:
   rpc: add-output
   input: api.AddSendTokensOutputRequest
   output: protocol.SendTokens
+
+AddMemoTransaction:
+  description: add memo to the saved transaction
+  rpc: add-memo
+  input: api.AddMemoTransactionRequest
+  output: protocol.Transaction

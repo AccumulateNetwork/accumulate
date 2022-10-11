@@ -9,6 +9,18 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+// AddMemoTransaction add memo to the saved transaction.
+func (c *Client) AddMemoTransaction(ctx context.Context, req *api.AddMemoTransactionRequest) (*protocol.Transaction, error) {
+	var resp protocol.Transaction
+
+	err := c.RequestAPIv2(ctx, "add-memo", req, &resp)
+	if err != nil {
+		return nil, err
+	}
+
+	return &resp, nil
+}
+
 // AddSendTokensOutput add output to the send token transaction.
 func (c *Client) AddSendTokensOutput(ctx context.Context, req *api.AddSendTokensOutputRequest) (*protocol.SendTokens, error) {
 	var resp protocol.SendTokens
