@@ -115,6 +115,15 @@ func UpdateValidatorKey(values *core.GlobalValues, oldPubKey, newPubKey []byte, 
 	return updateNetworkDefinition(values, signers)
 }
 
+func UpdateValidatorName(values *core.GlobalValues, pubKey []byte, name *url.URL, signers ...*signing.Builder) (*protocol.Envelope, error) {
+	// Update the key in the network
+	ok := values.Network.UpdateValidatorName(pubKey, name)
+	if !ok {
+		return nil, errors.Format(errors.StatusNotFound, "validator %x not found", pubKey[:4])
+	}
+	return updateNetworkDefinition(values, signers)
+}
+
 func updateNetworkDefinition(values *core.GlobalValues, signers []*signing.Builder) (*protocol.Envelope, error) {
 	values.Network.Version++
 	writeData := new(protocol.WriteData)

@@ -7,6 +7,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/sortutil"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
 type valHashCmp []byte
@@ -101,6 +102,17 @@ func (n *NetworkDefinition) UpdateValidatorKey(oldKey, newKey []byte) error {
 	*ptr = v
 	n.Validators = val
 	return nil
+}
+
+// UpdateValidatorName updates a validator's name.
+func (n *NetworkDefinition) UpdateValidatorName(key []byte, name *url.URL) bool {
+	hash := sha256.Sum256(key)
+	_, v, ok := n.ValidatorByHash(hash[:])
+	if !ok {
+		return false
+	}
+	v.Operator = name
+	return true
 }
 
 // MarshalTOML marshals the partition type to Toml as a string.

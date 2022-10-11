@@ -9,6 +9,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/build"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -20,7 +21,8 @@ func init() {
 	validatorCmd.AddCommand(
 		validatorAddCmd,
 		validatorRemoveCmd,
-		validatorUpdateKeyCmd)
+		validatorUpdateKeyCmd,
+		validatorUpdateNameCmd)
 }
 
 var operatorCmd = &cobra.Command{
@@ -72,6 +74,13 @@ var validatorUpdateKeyCmd = &cobra.Command{
 	Use:   "update-key [partition ID] [key name[@key book or page]] [old key name or path] [new key name or path]",
 	Short: "Update a validator's key",
 	Run:   runValCmdFunc(updateValidatorKey),
+	Args:  cobra.RangeArgs(4, 6),
+}
+
+var validatorUpdateNameCmd = &cobra.Command{
+	Use:   "update-name [partition ID] [key name[@key book or page]] [validator key] [new name]",
+	Short: "Update a validator's name",
+	Run:   runValCmdFunc(updateValidatorName),
 	Args:  cobra.RangeArgs(4, 6),
 }
 
@@ -176,4 +185,18 @@ func updateValidatorKey(values *core.GlobalValues, _ int, signers []*signing.Bui
 	}
 
 	return build.UpdateValidatorKey(values, oldKey.PublicKey, newKey.PublicKey, signers...)
+}
+
+func updateValidatorName(values *core.GlobalValues, _ int, signers []*signing.Builder, _ string, args []string) (*protocol.Envelope, error) {
+	key, err := resolvePublicKey(args[0])
+	if err != nil {
+		return nil, err
+	}
+
+	name, err := url.Parse(args[1])
+	if err != nil {
+		return nil, err
+	}
+
+	return build.UpdateValidatorName(values, key.PublicKey, name, signers...)
 }
