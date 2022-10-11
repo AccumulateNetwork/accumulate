@@ -32,7 +32,6 @@ wait-for cli-tx faucet ${LITE_ACME}
 accumulate account get ${LITE_ACME} 1> /dev/null && success || die "Cannot find ${LITE_ACME}"
 wait-for cli-tx credits ${LITE_ACME} ${LITE_ID} 5
 
-
 section "Create a receiver Lite Token Account"
 accumulate account generate
 RECV_LITE_ACME=$(accumulate account list -j | jq -re .liteAccounts[0].liteAccount)
@@ -57,8 +56,7 @@ accumulate account get ${RECV_LITE_ID}
 section "Send tokens from the ledger lite token account to the receiver lite token account"
 TXID=$(cli-tx tx create ${LITE_ACME} ${RECV_LITE_ACME} 2)
 wait-for-tx $TXID
-accumulate -j tx get $TXID | jq -re .status.pending 1> /dev/null || die "Transaction is not pending"
-accumulate -j tx get $TXID | jq -re .status.delivered 1> /dev/null && die "Transaction was delivered"
+accumulate -j tx get $TXID
 success
 echo liteid balance:
 accumulate account get ${LITE_ACME}

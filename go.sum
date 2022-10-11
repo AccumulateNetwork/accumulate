@@ -1405,6 +1405,8 @@ github.com/yuin/goldmark v1.4.13/go.mod h1:6yULJ656Px+3vBD8DxQVa3kxgyrAnzto9xy5t
 github.com/yusufpapurcu/wmi v1.2.2/go.mod h1:SBZ9tNy3G9/m5Oi98Zks0QjeHVDvuK0qfxQmPyzfmi0=
 gitlab.com/accumulatenetwork/ledger/ledger-go-accumulate v0.0.0-20220928093609-e2bfeb33993c h1:Lwg+5T0ygo2VBXi1UPqdjX5EOwW4vfiYfGn132aR8Fg=
 gitlab.com/accumulatenetwork/ledger/ledger-go-accumulate v0.0.0-20220928093609-e2bfeb33993c/go.mod h1:ll8Tuk91pECSK7HvlxFxhdK2Q4JViSW62pWSSYO+ilI=
+gitlab.com/accumulatenetwork/ledger/ledger-go-accumulate v0.0.0-20221011174503-b748c9d3338a h1:zWB3WkNPgDR4R1VsLYJMzm9Glcff2/tED5wuGE4SkVw=
+gitlab.com/accumulatenetwork/ledger/ledger-go-accumulate v0.0.0-20221011174503-b748c9d3338a/go.mod h1:ll8Tuk91pECSK7HvlxFxhdK2Q4JViSW62pWSSYO+ilI=
 gitlab.com/bosi/decorder v0.2.2/go.mod h1:9K1RB5+VPNQYtXtTDAzd2OEftsZb1oV0IrJrzChSdGE=
 gitlab.com/bosi/decorder v0.2.3 h1:gX4/RgK16ijY8V+BRQHAySfQAb354T7/xQpDB2n10P0=
 gitlab.com/bosi/decorder v0.2.3/go.mod h1:9K1RB5+VPNQYtXtTDAzd2OEftsZb1oV0IrJrzChSdGE=

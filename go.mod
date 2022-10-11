@@ -50,7 +50,7 @@ require (
 	github.com/ghodss/yaml v1.0.0
 	github.com/gorhill/cronexpr v0.0.0-20180427100037-88b0669f7d75
 	github.com/manifoldco/promptui v0.9.0
-	gitlab.com/accumulatenetwork/ledger/ledger-go-accumulate v0.0.0-20220928093609-e2bfeb33993c
+	gitlab.com/accumulatenetwork/ledger/ledger-go-accumulate v0.0.0-20221011174503-b748c9d3338a
 )
 
 require (
