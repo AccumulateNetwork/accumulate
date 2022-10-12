@@ -76,6 +76,7 @@ BALANCE=$(accumulate -j page get test.acme/book/1 | jq -r .data.creditBalance)
 section "Create additional Key Pages"
 wait-for cli-tx page create test.acme/book test-1-0 test-2-0
 wait-for cli-tx page create test.acme/book test-1-0 test-3-0
+wait-for cli-tx page create test.acme/book test-1-0 test-1-0
 accumulate page get test.acme/book/2 1> /dev/null || die "Cannot find page test.acme/book/2"
 accumulate page get test.acme/book/3 1> /dev/null || die "Cannot find page test.acme/book/3"
 success
@@ -86,13 +87,19 @@ wait-for cli-tx credits ${LITE_ACME} test.acme/book/2 1000
 BALANCE=$(accumulate -j page get test.acme/book/2 | jq -r .data.creditBalance)
 [ "$BALANCE" -ge 1000 ] && success || die "test.acme/book/2 should have 1000 credits but has ${BALANCE}"
 
-section "Execute transaction using page2"
-BALANCE1=$(accumulate -j page get test.acme/book/2 | jq -r .data.creditBalance)
-txHash=$(cli-tx tx execute test.acme/book/2 test-2-0@test.acme/book/2 '{"type": "updateKeyPage", "operation": [{ "type": "add", "entry":{"delegate": "acc://test.acme/book2"}}]}')
+section "Add credits to the ADI's key page 4"
+wait-for cli-tx credits ${LITE_ACME} test.acme/book/4 1000
+BALANCE=$(accumulate -j page get test.acme/book/4 | jq -r .data.creditBalance)
+[ "$BALANCE" -ge 1000 ] && success || die "test.acme/book/4 should have 1000 credits but has ${BALANCE}"
+
+section "Execute transaction using page 4"
+BALANCE1=$(accumulate -j page get test.acme/book/4 | jq -r .data.creditBalance)
+txHash=$(cli-tx tx execute test.acme/book/4 test-1-0@test.acme/book/4 '{"type": "updateKeyPage", "operation": [{ "type": "add", "entry":{"delegate": "acc://test.acme/book2"}}]}')
 wait-for-tx $txHash
 echo $txHash
-BALANCE2=$(accumulate -j page get test.acme/book/2 | jq -r .data.creditBalance)
-echo $BALANCE1 $BALANCE2
+BALANCE2=$(accumulate -j page get test.acme/book/4 | jq -r .data.creditBalance)
+echo $BALANCE1 $BALANCE2 
+
 [ "$BALANCE1" -eq "$BALANCE2" ] && die "credits deducted from wrong keypage" || success 
 
 

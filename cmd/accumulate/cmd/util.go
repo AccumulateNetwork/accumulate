@@ -195,13 +195,17 @@ func prepareSignerPage(signer *signing.Builder, origin *url.URL, signingKey stri
 
 	signer.Type = key.KeyInfo.Type
 
-	keyInfo, err := getKey(keyHolder.String(), key.PublicKeyHash())
+	keyInfo, err := getKey(keyHolder.Authority, key.PublicKeyHash())
 	if err != nil {
 		return fmt.Errorf("failed to get key for %q : %v", origin, err)
 	}
 
-	signer.Url = keyInfo.Signer
-
+	// If keyHolder is a page, use that instead of the one returned by the API
+	if keyInfo.Signer.Equal(keyHolder) {
+		signer.Url = keyHolder
+	} else {
+		signer.Url = keyInfo.Signer
+	}
 	var page *protocol.KeyPage
 	_, err = getRecord(signer.Url.String(), &page)
 	if err != nil {
