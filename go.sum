@@ -1407,6 +1407,8 @@ gitlab.com/accumulatenetwork/ledger/ledger-go-accumulate v0.0.0-20220928093609-e
 gitlab.com/accumulatenetwork/ledger/ledger-go-accumulate v0.0.0-20220928093609-e2bfeb33993c/go.mod h1:ll8Tuk91pECSK7HvlxFxhdK2Q4JViSW62pWSSYO+ilI=
 gitlab.com/accumulatenetwork/ledger/ledger-go-accumulate v0.0.0-20221011174503-b748c9d3338a h1:zWB3WkNPgDR4R1VsLYJMzm9Glcff2/tED5wuGE4SkVw=
 gitlab.com/accumulatenetwork/ledger/ledger-go-accumulate v0.0.0-20221011174503-b748c9d3338a/go.mod h1:ll8Tuk91pECSK7HvlxFxhdK2Q4JViSW62pWSSYO+ilI=
+gitlab.com/accumulatenetwork/ledger/ledger-go-accumulate v0.0.0-20221012092921-f9761b974c44 h1:GR2FGAruNUOHnkG5uySvgXkfQh3O3caLyU/RiSIkPso=
+gitlab.com/accumulatenetwork/ledger/ledger-go-accumulate v0.0.0-20221012092921-f9761b974c44/go.mod h1:ll8Tuk91pECSK7HvlxFxhdK2Q4JViSW62pWSSYO+ilI=
 gitlab.com/bosi/decorder v0.2.2/go.mod h1:9K1RB5+VPNQYtXtTDAzd2OEftsZb1oV0IrJrzChSdGE=
 gitlab.com/bosi/decorder v0.2.3 h1:gX4/RgK16ijY8V+BRQHAySfQAb354T7/xQpDB2n10P0=
 gitlab.com/bosi/decorder v0.2.3/go.mod h1:9K1RB5+VPNQYtXtTDAzd2OEftsZb1oV0IrJrzChSdGE=
