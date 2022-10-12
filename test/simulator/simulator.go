@@ -32,11 +32,14 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
 )
 
 type Simulator struct {
 	logger     logging.OptionalLogger
+	tracer     trace.Tracer
 	init       *accumulated.NetworkInit
 	database   OpenDatabaseFunc
 	partitions map[string]*Partition
@@ -54,6 +57,7 @@ func New(logger log.Logger, database OpenDatabaseFunc, network *accumulated.Netw
 	s.database = database
 	s.partitions = make(map[string]*Partition, len(network.Bvns)+1)
 	s.router = newRouter(logger, s.partitions)
+	s.tracer = otel.Tracer("simulator")
 
 	s.netcfg = new(config.Network)
 	s.netcfg.Id = network.Id
@@ -186,11 +190,16 @@ func GenesisWith(time time.Time, values *core.GlobalValues) SnapshotFunc {
 }
 
 // Step executes a single simulator step
-func (s *Simulator) Step() error {
+func (s *Simulator) Step(ctx context.Context) error {
+	ctx, span := s.tracer.Start(ctx, "Step")
+	defer func() {
+		span.End()
+	}()
+
 	errg := new(errgroup.Group)
 	for _, p := range s.partitions {
 		p := p // Don't capture loop variables
-		errg.Go(func() error { return p.execute(errg) })
+		errg.Go(func() error { return p.execute(ctx, errg) })
 	}
 	return errg.Wait()
 }

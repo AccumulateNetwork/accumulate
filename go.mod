@@ -35,7 +35,7 @@ require (
 	go.etcd.io/etcd/client/v3 v3.5.4
 	golang.org/x/exp v0.0.0-20220722155223-a9213eeb770e
 	golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4
-	golang.org/x/sys v0.0.0-20220811171246-fbc7d0a398ab
+	golang.org/x/sys v0.0.0-20220919091848-fb04ddd9f9c8
 	golang.org/x/term v0.0.0-20220526004731-065cf7ba2467
 	golang.org/x/text v0.3.7
 	golang.org/x/tools v0.1.12
@@ -48,6 +48,7 @@ require (
 	github.com/ethereum/go-ethereum v1.10.25
 	github.com/ghodss/yaml v1.0.0
 	github.com/robfig/cron/v3 v3.0.0
+	go.opentelemetry.io/otel v1.11.0
 )
 
 require (
@@ -67,6 +68,8 @@ require (
 	github.com/curioswitch/go-reassign v0.1.2 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.0.1 // indirect
 	github.com/firefart/nonamedreturns v1.0.4 // indirect
+	github.com/go-logr/logr v1.2.3 // indirect
+	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/lufeee/execinquery v1.2.1 // indirect
 	github.com/pelletier/go-toml/v2 v2.0.2 // indirect
 	github.com/quasilyte/stdinfo v0.0.0-20220114132959-f7386bf02567 // indirect
@@ -75,6 +78,7 @@ require (
 	github.com/sivchari/nosnakecase v1.7.0 // indirect
 	github.com/stbenjam/no-sprintf-host-port v0.1.1 // indirect
 	github.com/timonwong/logrlint v0.1.0 // indirect
+	go.opentelemetry.io/otel/oteltest v1.0.0-RC3 // indirect
 	golang.org/x/exp/typeparams v0.0.0-20220613132600-b0d781184e0d // indirect
 )
 
@@ -250,6 +254,8 @@ require (
 	go.etcd.io/bbolt v1.3.6 // indirect
 	go.etcd.io/etcd/api/v3 v3.5.4 // indirect
 	go.etcd.io/etcd/client/pkg/v3 v3.5.4 // indirect
+	go.opentelemetry.io/otel/sdk v1.11.0
+	go.opentelemetry.io/otel/trace v1.11.0
 	go.uber.org/atomic v1.9.0 // indirect
 	go.uber.org/multierr v1.8.0 // indirect
 	go.uber.org/zap v1.21.0 // indirect

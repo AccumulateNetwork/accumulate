@@ -8,6 +8,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -119,7 +120,7 @@ func run(*cobra.Command, []string) {
 		t := time.NewTicker(step)
 		defer t.Stop()
 		for range t.C {
-			check(sim.Step())
+			check(sim.Step(context.Background()))
 		}
 	}()
 
@@ -204,7 +205,7 @@ func waitForHash(sim *simulator.Simulator, hash []byte, ignorePending bool) {
 			return nil
 		}))
 		if !ok {
-			check(sim.Step())
+			check(sim.Step(context.Background()))
 		}
 	}
 }
@@ -220,7 +221,7 @@ func waitForTxID(sim *simulator.Simulator, txid *url.TxID, ignorePending bool) {
 			return nil
 		}))
 		if !ok {
-			check(sim.Step())
+			check(sim.Step(context.Background()))
 		}
 	}
 }

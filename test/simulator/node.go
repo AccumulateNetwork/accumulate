@@ -26,6 +26,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type Node struct {
@@ -33,6 +35,7 @@ type Node struct {
 	init      *accumulated.NodeInit
 	partition *protocol.PartitionInfo
 	logger    logging.OptionalLogger
+	tracer    trace.Tracer
 	eventBus  *events.Bus
 	database  database.Beginner
 	executor  *block.Executor
@@ -48,6 +51,7 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 	n.init = init
 	n.partition = &p.PartitionInfo
 	n.logger.Set(p.logger, "node", node)
+	n.tracer = p.tracer
 	n.eventBus = events.NewBus(n.logger)
 	n.database = s.database(p.ID, node, n.logger)
 
@@ -174,6 +178,9 @@ func (n *Node) checkTx(delivery *chain.Delivery, typ abci.CheckTxType) (*protoco
 }
 
 func (n *Node) beginBlock(block *block.Block) error {
+	_, span := n.tracer.Start(block.Context, "BeginBlock")
+	defer span.End()
+
 	block.Batch = n.Begin(true)
 	err := n.executor.BeginBlock(block)
 	if err != nil {
@@ -183,6 +190,14 @@ func (n *Node) beginBlock(block *block.Block) error {
 }
 
 func (n *Node) deliverTx(block *block.Block, delivery *chain.Delivery) (*protocol.TransactionStatus, error) {
+	_, span := n.tracer.Start(block.Context, "DeliverTx")
+	defer span.End()
+	span.SetAttributes(
+		attribute.String("TxID", delivery.Transaction.ID().ShortString()),
+		attribute.String("TxType", delivery.Transaction.Body.Type().String()),
+		attribute.Int("SigCount", len(delivery.Signatures)),
+	)
+
 	s, err := n.executor.ExecuteEnvelope(block, delivery)
 	if err != nil {
 		return nil, errors.Format(errors.StatusUnknownError, "deliver envelope: %w", err)
@@ -191,6 +206,9 @@ func (n *Node) deliverTx(block *block.Block, delivery *chain.Delivery) (*protoco
 }
 
 func (n *Node) endBlock(block *block.Block) ([]*validatorUpdate, error) {
+	_, span := n.tracer.Start(block.Context, "EndBlock")
+	defer span.End()
+
 	err := n.executor.EndBlock(block)
 	if err != nil {
 		return nil, errors.Format(errors.StatusUnknownError, "end block: %w", err)
@@ -206,6 +224,9 @@ func (n *Node) endBlock(block *block.Block) ([]*validatorUpdate, error) {
 }
 
 func (n *Node) commit(block *block.Block) ([]byte, error) {
+	_, span := n.tracer.Start(block.Context, "Commit")
+	defer span.End()
+
 	if block.State.Empty() {
 		// Discard changes
 		block.Batch.Discard()

@@ -8,6 +8,7 @@ package simulator
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"sync"
@@ -24,12 +25,15 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/sortutil"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
 )
 
 type Partition struct {
 	protocol.PartitionInfo
 	logger     logging.OptionalLogger
+	tracer     trace.Tracer
 	nodes      []*Node
 	validators [][32]byte
 
@@ -51,6 +55,7 @@ type validatorUpdate struct {
 
 func newPartition(s *Simulator, partition protocol.PartitionInfo) *Partition {
 	p := new(Partition)
+	p.tracer = s.tracer
 	p.PartitionInfo = partition
 	p.logger.Set(s.logger, "partition", partition.ID)
 	p.mu = new(sync.Mutex)
@@ -179,13 +184,17 @@ func (p *Partition) Submit(delivery *chain.Delivery, pretend bool) (*protocol.Tr
 	return result[0], nil
 }
 
-func (p *Partition) execute(background *errgroup.Group) error {
+func (p *Partition) execute(ctx context.Context, background *errgroup.Group) error {
 	// TODO: Limit how many transactions are added to the block? Call recheck?
 	p.mu.Lock()
 	deliveries := p.deliver
 	p.deliver = p.mempool
 	p.mempool = nil
 	p.mu.Unlock()
+
+	ctx, span := p.tracer.Start(ctx, "Execute")
+	defer span.End()
+	span.SetAttributes(attribute.String("Partition", p.ID))
 
 	// Initialize block index
 	if p.blockIndex > 0 {
@@ -222,6 +231,15 @@ func (p *Partition) execute(background *errgroup.Group) error {
 		b.Time = p.blockTime
 		b.IsLeader = i == leader
 		blocks[i] = b
+
+		ctx, span := p.tracer.Start(ctx, "Block")
+		defer span.End()
+		span.SetAttributes(
+			attribute.Int("Node", i),
+			attribute.Int("Height", int(b.Index)),
+			attribute.Int("Size", len(deliveries)),
+		)
+		b.Context = ctx
 
 		n.executor.Background = func(f func()) { background.Go(func() error { f(); return nil }) }
 

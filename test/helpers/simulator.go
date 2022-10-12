@@ -7,6 +7,7 @@
 package helpers
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -50,18 +51,30 @@ func (s *Sim) SubmitSuccessfully(delivery *chain.Delivery) *protocol.Transaction
 }
 
 func (s *Sim) Step() {
-	s.T.Helper()
-	require.NoError(s.T, s.Simulator.Step())
+	s.StepCtx(context.Background())
 }
 
 func (s *Sim) StepN(n int) {
-	s.T.Helper()
-	for i := 0; i < n; i++ {
-		require.NoError(s.T, s.Simulator.Step())
-	}
+	s.StepNCtx(context.Background(), n)
 }
 
 func (s *Sim) StepUntil(conditions ...Condition) {
+	s.StepUntilCtx(context.Background(), conditions...)
+}
+
+func (s *Sim) StepCtx(ctx context.Context) {
+	s.T.Helper()
+	require.NoError(s.T, s.Simulator.Step(ctx))
+}
+
+func (s *Sim) StepNCtx(ctx context.Context, n int) {
+	s.T.Helper()
+	for i := 0; i < n; i++ {
+		require.NoError(s.T, s.Simulator.Step(ctx))
+	}
+}
+
+func (s *Sim) StepUntilCtx(ctx context.Context, conditions ...Condition) {
 	s.T.Helper()
 	for i := 0; ; i++ {
 		if i >= 50 {
