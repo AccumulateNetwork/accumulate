@@ -14,6 +14,8 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -27,6 +29,7 @@ import (
 	"github.com/tendermint/tendermint/privval"
 	tmclient "github.com/tendermint/tendermint/rpc/client"
 	"github.com/tendermint/tendermint/rpc/client/local"
+	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
@@ -41,6 +44,11 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
+	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
+	"go.opentelemetry.io/otel/sdk/resource"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type Daemon struct {
@@ -58,6 +66,7 @@ type Daemon struct {
 	localTm           tmclient.Client
 	snapshotSchedule  cron.Schedule
 	snapshotLock      *sync.Mutex
+	tracer            trace.Tracer
 
 	// knobs for tests
 	// IsTest   bool
@@ -117,6 +126,51 @@ func (d *Daemon) Start() (err error) {
 			close(d.done)
 		}
 	}()
+
+	if d.Config.Accumulate.AnalysisLog.Enabled {
+		dir := config.MakeAbsolute(d.Config.RootDir, d.Config.Accumulate.AnalysisLog.Directory)
+		err = os.MkdirAll(dir, 0700)
+		if err != nil {
+			return err
+		}
+
+		ymd, hm := logging.GetCurrentDateTime()
+		f, err := os.Create(filepath.Join(dir, fmt.Sprintf("trace_%v_%v.json", ymd, hm)))
+		if err != nil {
+			return err
+		}
+
+		exp, err := stdouttrace.New(stdouttrace.WithWriter(f))
+		if err != nil {
+			f.Close()
+			return err
+		}
+
+		r, err := resource.Merge(
+			resource.Default(),
+			resource.NewWithAttributes(
+				semconv.SchemaURL,
+				semconv.ServiceNameKey.String("accumulate"),
+				semconv.ServiceVersionKey.String(accumulate.Version),
+			),
+		)
+		if err != nil {
+			f.Close()
+			return err
+		}
+
+		tp := sdktrace.NewTracerProvider(
+			sdktrace.WithBatcher(exp),
+			sdktrace.WithResource(r),
+		)
+		go func() {
+			<-d.done
+			_ = tp.Shutdown(context.Background())
+			f.Close()
+		}()
+		// otel.SetTracerProvider(tp)
+		d.tracer = tp.Tracer("Accumulate")
+	}
 
 	if s, err := core.Cron.Parse(d.Config.Accumulate.Snapshots.Schedule); err != nil {
 		d.Logger.Error("Ignoring invalid snapshot schedule", "error", err, "value", d.Config.Accumulate.Snapshots.Schedule)
@@ -178,6 +232,7 @@ func (d *Daemon) Start() (err error) {
 		Logger:   d.Logger,
 		EventBus: d.eventBus,
 		Config:   d.Config,
+		Tracer:   d.tracer,
 	})
 
 	// Create node
