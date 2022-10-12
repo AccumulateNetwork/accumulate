@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package chain
 
 import (
@@ -174,9 +180,12 @@ func (st *stateCache) createOrUpdate(isUpdate bool, accounts []protocol.Account)
 		// Add it to the directory
 		if isCreate {
 			u := account.GetUrl()
-			err = st.AddDirectoryEntry(u.Identity(), u)
-			if err != nil {
-				return errors.Format(errors.StatusUnknownError, "failed to add a directory entry for %q: %w", u, err)
+			p, ok := u.Parent()
+			if ok {
+				err = st.AddDirectoryEntry(p, u)
+				if err != nil {
+					return errors.Format(errors.StatusUnknownError, "failed to add a directory entry for %q: %w", u, err)
+				}
 			}
 		}
 

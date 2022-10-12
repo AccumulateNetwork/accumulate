@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package chain
 
 import (
@@ -53,15 +59,25 @@ func (SyntheticDepositTokens) Validate(st *StateManager, tx *Delivery) (protocol
 	} else if !body.Token.Equal(tok) {
 		return nil, fmt.Errorf("token URL does not match lite token account URL")
 	} else {
+		// Check the account limit
+		liteIdUrl := tx.Transaction.Header.Principal.RootIdentity()
+		dir, err := st.batch.Account(liteIdUrl).Directory().Get()
+		if err != nil {
+			return nil, errors.Format(errors.StatusUnknownError, "load directory index: %w", err)
+		}
+
+		if len(dir)+1 > int(st.Globals.Globals.Limits.IdentityAccounts) {
+			return nil, errors.Format(errors.StatusBadRequest, "identity would have too many accounts")
+		}
+
 		// Address is lite and the account doesn't exist, so create one
 		lite := new(protocol.LiteTokenAccount)
 		lite.Url = tx.Transaction.Header.Principal
 		lite.TokenUrl = body.Token
 		account = lite
 
-		liteIdUrl := tx.Transaction.Header.Principal.RootIdentity()
 		var liteIdentity *protocol.LiteIdentity
-		err := st.LoadUrlAs(liteIdUrl, &liteIdentity)
+		err = st.LoadUrlAs(liteIdUrl, &liteIdentity)
 		switch {
 		case err == nil:
 			// OK

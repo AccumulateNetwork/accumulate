@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package accumulated
 
 import (
@@ -15,7 +21,6 @@ import (
 	"github.com/fatih/color"
 	"github.com/robfig/cron/v3"
 	"github.com/rs/zerolog"
-	tmcfg "github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/crypto"
 	tmlog "github.com/tendermint/tendermint/libs/log"
 	service2 "github.com/tendermint/tendermint/libs/service"
@@ -149,12 +154,11 @@ func (d *Daemon) Start() (err error) {
 
 	router := routing.NewRouter(d.eventBus, d.connectionManager, d.Logger)
 	execOpts := block.ExecutorOptions{
-		Logger:     d.Logger,
-		Key:        d.Key().Bytes(),
-		Describe:   d.Config.Accumulate.Describe,
-		Router:     router,
-		EventBus:   d.eventBus,
-		IsFollower: d.Config.Mode != tmcfg.ModeValidator,
+		Logger:   d.Logger,
+		Key:      d.Key().Bytes(),
+		Describe: d.Config.Accumulate.Describe,
+		Router:   router,
+		EventBus: d.eventBus,
 	}
 
 	// On DNs initialize the major block scheduler

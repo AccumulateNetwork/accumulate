@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package testing
 
 //lint:file-ignore ST1005 Don't care
@@ -124,9 +130,15 @@ func (c *FakeTendermint) SubmitTx(ctx context.Context, tx types.Tx, check bool) 
 	if check {
 		cr := c.App().CheckTx(abci.RequestCheckTx{Tx: tx, Type: abci.CheckTxType_Recheck})
 		st.CheckResult = &cr
-		if cr.Code != 0 {
-			c.onError(fmt.Errorf("CheckTx failed: %v\n", cr.Log))
-			return st
+		results := new(protocol.TransactionResultSet)
+		err := results.UnmarshalBinary(cr.Data)
+		if err != nil {
+			panic(err)
+		}
+		for _, r := range results.Results {
+			if r.Error != nil {
+				c.onError(fmt.Errorf("checkTx: %w", r.Error))
+			}
 		}
 	}
 
@@ -279,8 +291,17 @@ func (c *FakeTendermint) execute(interval time.Duration) {
 			cr := c.app.CheckTx(abci.RequestCheckTx{Tx: sub.Tx})
 			sub.CheckResult = &cr
 			c.logTxns("Checked", sub.Envelopes...)
+			results := new(protocol.TransactionResultSet)
+			err := results.UnmarshalBinary(cr.Data)
+			if err != nil {
+				panic(err)
+			}
+			for _, r := range results.Results {
+				if r.Error != nil {
+					c.onError(fmt.Errorf("checkTx: %w", r.Error))
+				}
+			}
 			if cr.Code != 0 {
-				c.onError(fmt.Errorf("CheckTx failed: %v\n", cr.Log))
 				continue
 			}
 			c.checkResultSet(cr.Data)

@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package chain
 
 import (
@@ -123,6 +129,10 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 		if err != nil {
 			return nil, err
 		}
+	}
+
+	if len(page.Keys) > int(st.Globals.Globals.Limits.PageEntries) {
+		return nil, errors.Format(errors.StatusBadRequest, "page will have too many entries")
 	}
 
 	didUpdateKeyPage(page)

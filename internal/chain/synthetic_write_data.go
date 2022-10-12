@@ -1,8 +1,15 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package chain
 
 import (
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -28,6 +35,11 @@ func (SyntheticWriteData) Validate(st *StateManager, tx *Delivery) (protocol.Tra
 	body, ok := tx.Transaction.Body.(*protocol.SyntheticWriteData)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SyntheticWriteData), tx.Transaction.Body)
+	}
+
+	err := validateDataEntry(st, body.Entry)
+	if err != nil {
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	return executeWriteLiteDataAccount(st, body.Entry)

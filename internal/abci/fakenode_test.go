@@ -1,9 +1,14 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package abci_test
 
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"path/filepath"
 	"strconv"
@@ -34,6 +39,7 @@ import (
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/testing/e2e"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
@@ -111,6 +117,11 @@ func RunTestNet(t *testing.T, partitions []string, daemons map[string][]*accumul
 func NewDefaultErrorHandler(t *testing.T) func(err error) {
 	return func(err error) {
 		t.Helper()
+
+		var err2 *errors.Error
+		if errors.As(err, &err2) && err2.Code == errors.Delivered {
+			return
+		}
 		assert.NoError(t, err)
 	}
 }

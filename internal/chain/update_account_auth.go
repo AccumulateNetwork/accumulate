@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package chain
 
 import (
@@ -158,6 +164,10 @@ func (UpdateAccountAuth) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 		default:
 			return nil, fmt.Errorf("invalid operation: %v", op.Type())
 		}
+	}
+
+	if len(auth.Authorities) > int(st.Globals.Globals.Limits.AccountAuthorities) {
+		return nil, errors.Format(errors.StatusBadRequest, "account will have too many authorities")
 	}
 
 	err := st.Update(st.Origin)

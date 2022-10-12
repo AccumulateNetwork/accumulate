@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package chain
 
 import (
@@ -21,6 +27,11 @@ func (SystemWriteData) Validate(st *StateManager, tx *Delivery) (protocol.Transa
 	body, ok := tx.Transaction.Body.(*protocol.SystemWriteData)
 	if !ok {
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.SystemWriteData), tx.Transaction.Body)
+	}
+
+	err := validateDataEntry(st, body.Entry)
+	if err != nil {
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	if partition, ok := protocol.ParsePartitionUrl(st.OriginUrl); !ok {

@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package accumulated
 
 import (
@@ -147,12 +153,11 @@ func (d *Daemon) LoadSnapshot(file ioutil2.SectionReader) error {
 	eventBus := events.NewBus(d.Logger.With("module", "events"))
 	router := routing.NewRouter(eventBus, nil, d.Logger)
 	execOpts := block.ExecutorOptions{
-		Logger:     d.Logger,
-		Key:        pv.Key.PrivKey.Bytes(),
-		Describe:   d.Config.Accumulate.Describe,
-		Router:     router,
-		EventBus:   eventBus,
-		IsFollower: true,
+		Logger:   d.Logger,
+		Key:      pv.Key.PrivKey.Bytes(),
+		Describe: d.Config.Accumulate.Describe,
+		Router:   router,
+		EventBus: eventBus,
 	}
 
 	// On DNs initialize the major block scheduler

@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package chain
 
 import (
@@ -54,6 +60,13 @@ func (CreateKeyPage) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 	page.Url = protocol.FormatKeyPageUrl(book.Url, book.PageCount)
 	page.AcceptThreshold = 1 // Require one signature from the Key Page
 	book.PageCount++
+
+	if book.PageCount > st.Globals.Globals.Limits.BookPages {
+		return nil, errors.Format(errors.StatusBadRequest, "book will have too many pages")
+	}
+	if len(body.Keys) > int(st.Globals.Globals.Limits.PageEntries) {
+		return nil, errors.Format(errors.StatusBadRequest, "page will have too many entries")
+	}
 
 	for _, sig := range body.Keys {
 		ss := new(protocol.KeySpec)

@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package accumulated
 
 import (
@@ -119,6 +125,13 @@ func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][2]*config
 				Address: node.Address(AdvertizeAddress, "http", config.PortOffsetTendermintP2P, config.PortOffsetBlockValidator),
 				Type:    node.BvnnType,
 			})
+
+			if dnn.P2P.ExternalAddress == "" {
+				dnn.P2P.ExternalAddress = dnn.Accumulate.LocalAddress
+			}
+			if bvnn.P2P.ExternalAddress == "" {
+				bvnn.P2P.ExternalAddress = bvnn.Accumulate.LocalAddress
+			}
 
 			if len(network.Bvns) == 1 && len(bvn.Nodes) == 1 {
 				dnn.P2P.AddrBookStrict = true

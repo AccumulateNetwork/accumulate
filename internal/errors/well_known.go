@@ -1,9 +1,10 @@
-package errors
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
 
-// Error implements error.
-func (s Status) Error() string {
-	return s.String()
-}
+package errors
 
 func NotFound(format string, args ...interface{}) error {
 	return Format(StatusNotFound, format, args...)

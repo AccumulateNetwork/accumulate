@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package chain
 
 import (
@@ -22,6 +28,11 @@ func (PartitionAnchor) Execute(st *StateManager, tx *Delivery) (protocol.Transac
 }
 
 func (PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
+	// If a block validator anchor somehow makes it past validation on a BVN, reject it immediately
+	if st.NetworkType != protocol.PartitionTypeDirectory {
+		return nil, errors.New(errors.StatusInternalError, "invalid attempt to process a block validator partition")
+	}
+
 	// Unpack the payload
 	body, ok := tx.Transaction.Body.(*protocol.BlockValidatorAnchor)
 	if !ok {

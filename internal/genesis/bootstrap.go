@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package genesis
 
 import (
@@ -42,45 +48,7 @@ type InitOpts struct {
 
 func Init(snapshotWriter io.WriteSeeker, opts InitOpts) ([]byte, error) {
 	// Initialize globals
-	gg := opts.GenesisGlobals
-
-	if gg.Oracle == nil {
-		gg.Oracle = new(protocol.AcmeOracle)
-		if gg.Oracle.Price == 0 {
-			gg.Oracle.Price = uint64(protocol.InitialAcmeOracleValue)
-		}
-	}
-
-	// Set the initial threshold to 2/3 & MajorBlockSchedule
-	if gg.Globals == nil {
-		gg.Globals = new(protocol.NetworkGlobals)
-	}
-	if gg.Globals.OperatorAcceptThreshold.Numerator == 0 {
-		gg.Globals.OperatorAcceptThreshold.Set(2, 3)
-	}
-	if gg.Globals.ValidatorAcceptThreshold.Numerator == 0 {
-		gg.Globals.ValidatorAcceptThreshold.Set(2, 3)
-	}
-	if gg.Globals.MajorBlockSchedule == "" {
-		gg.Globals.MajorBlockSchedule = protocol.DefaultMajorBlockSchedule
-	}
-	if gg.Globals.FeeSchedule == nil {
-		gg.Globals.FeeSchedule = new(protocol.FeeSchedule)
-		gg.Globals.FeeSchedule.CreateIdentitySliding = []protocol.Fee{
-			protocol.FeeCreateIdentity << 12,
-			protocol.FeeCreateIdentity << 11,
-			protocol.FeeCreateIdentity << 10,
-			protocol.FeeCreateIdentity << 9,
-			protocol.FeeCreateIdentity << 8,
-			protocol.FeeCreateIdentity << 7,
-			protocol.FeeCreateIdentity << 6,
-			protocol.FeeCreateIdentity << 5,
-			protocol.FeeCreateIdentity << 4,
-			protocol.FeeCreateIdentity << 3,
-			protocol.FeeCreateIdentity << 2,
-			protocol.FeeCreateIdentity << 1,
-		}
-	}
+	gg := core.NewGlobals(opts.GenesisGlobals)
 
 	// Build the routing table
 	var bvns []string
@@ -89,13 +57,15 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) ([]byte, error) {
 			bvns = append(bvns, partition.ID)
 		}
 	}
-	gg.Routing = new(protocol.RoutingTable)
-	gg.Routing.Routes = routing.BuildSimpleTable(bvns)
-	gg.Routing.Overrides = make([]protocol.RouteOverride, 1, len(gg.Network.Partitions)+1)
-	gg.Routing.Overrides[0] = protocol.RouteOverride{Account: protocol.AcmeUrl(), Partition: protocol.Directory}
+	if gg.Routing == nil {
+		gg.Routing = new(protocol.RoutingTable)
+	}
+	if gg.Routing.Routes == nil {
+		gg.Routing.Routes = routing.BuildSimpleTable(bvns)
+	}
+	gg.Routing.AddOverride(protocol.AcmeUrl(), protocol.Directory)
 	for _, partition := range gg.Network.Partitions {
-		u := protocol.PartitionUrl(partition.ID)
-		gg.Routing.Overrides = append(gg.Routing.Overrides, protocol.RouteOverride{Account: u, Partition: partition.ID})
+		gg.Routing.AddOverride(protocol.PartitionUrl(partition.ID), partition.ID)
 	}
 
 	store := memory.New(opts.Logger.With("module", "storage"))

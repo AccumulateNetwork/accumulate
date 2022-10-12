@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package main
 
 import (
@@ -12,9 +18,10 @@ import (
 var flags struct {
 	files typegen.FileReader
 
-	Package  string
-	Language string
-	Out      string
+	Package    string
+	Language   string
+	Out        string
+	ShortNames bool
 }
 
 func main() {
@@ -26,6 +33,7 @@ func main() {
 
 	cmd.Flags().StringVarP(&flags.Language, "language", "l", "Go", "Output language or template file")
 	cmd.Flags().StringVar(&flags.Package, "package", "protocol", "Package name")
+	cmd.Flags().BoolVar(&flags.ShortNames, "short-names", false, "Omit the type name from the enum value")
 	cmd.Flags().StringVarP(&flags.Out, "out", "o", "enums_gen.go", "Output file")
 	flags.files.SetFlags(cmd.Flags(), "enums")
 

@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package abci
 
 import (
@@ -410,10 +416,10 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 		if resp.Priority < priority {
 			resp.Priority = priority
 		}
-		if result.Code.Success() {
+		if result.Error == nil {
 			continue
 		}
-		if !envelopes[i].Transaction.Body.Type().IsUser() {
+		if !result.Code.Success() && !envelopes[i].Transaction.Body.Type().IsUser() {
 			continue
 		}
 		resp.Code = uint32(protocol.ErrorCodeUnknownError)
