@@ -328,6 +328,13 @@ func (m *JrpcMethods) SignSendTokensTransaction(_ context.Context, params json.R
 	signer := new(signing.Builder)
 	signer.Url = txn.Header.Principal
 	signer.Type = key.KeyInfo.Type
+	signer.Version = uint64(req.Version)
+	if req.Timestamp == 0 {
+		signer.Timestamp = signer.SetTimestampToNow().Timestamp
+	} else {
+		signer.Timestamp = signing.TimestampFromValue(req.Timestamp)
+	}
+	signer.SetPrivateKey(key.PrivateKey)
 	sig, err := signer.Initiate(&txn)
 	if err != nil {
 		return validatorError(err)

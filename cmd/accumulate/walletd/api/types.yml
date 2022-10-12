@@ -230,4 +230,9 @@ SignTransactionRequest:
       type: string
     - name: KeyName
       type: string
+    - name: Version
+      type: int
+    - name: Timestamp
+      type: int
+      optional: true
 
