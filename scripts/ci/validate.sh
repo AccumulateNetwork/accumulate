@@ -86,6 +86,16 @@ wait-for cli-tx credits ${LITE_ACME} test.acme/book/2 1000
 BALANCE=$(accumulate -j page get test.acme/book/2 | jq -r .data.creditBalance)
 [ "$BALANCE" -ge 1000 ] && success || die "test.acme/book/2 should have 1000 credits but has ${BALANCE}"
 
+section "Execute transaction using page2"
+BALANCE1=$(accumulate -j page get test.acme/book/2 | jq -r .data.creditBalance)
+txHash=$(cli-tx tx execute test.acme/book/2 test-2-0@test.acme/book/2 '{"type": "updateKeyPage", "operation": [{ "type": "add", "entry":{"delegate": "acc://test.acme/book2"}}]}')
+wait-for-tx $txHash
+echo $txHash
+BALANCE2=$(accumulate -j page get test.acme/book/2 | jq -r .data.creditBalance)
+echo $BALANCE1 $BALANCE2
+[ "$BALANCE1" -eq "$BALANCE2" ] && die "credits deducted from wrong keypage" || success 
+
+
 section "Attempting to lock key page 2 using itself fails"
 wait-for cli-tx page lock test.acme/book/2 test-2-0 && die "Key page 2 locked itself" || success
 
