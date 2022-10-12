@@ -195,7 +195,7 @@ func prepareSignerPage(signer *signing.Builder, origin *url.URL, signingKey stri
 
 	signer.Type = key.KeyInfo.Type
 
-	keyInfo, err := getKey(keyHolder.Authority, key.PublicKeyHash())
+	keyInfo, err := getKey(keyHolder.String(), key.PublicKeyHash())
 	if err != nil {
 		return fmt.Errorf("failed to get key for %q : %v", origin, err)
 	}
