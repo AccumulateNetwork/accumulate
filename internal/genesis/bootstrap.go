@@ -57,13 +57,15 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) ([]byte, error) {
 			bvns = append(bvns, partition.ID)
 		}
 	}
-	gg.Routing = new(protocol.RoutingTable)
-	gg.Routing.Routes = routing.BuildSimpleTable(bvns)
-	gg.Routing.Overrides = make([]protocol.RouteOverride, 1, len(gg.Network.Partitions)+1)
-	gg.Routing.Overrides[0] = protocol.RouteOverride{Account: protocol.AcmeUrl(), Partition: protocol.Directory}
+	if gg.Routing == nil {
+		gg.Routing = new(protocol.RoutingTable)
+	}
+	if gg.Routing.Routes == nil {
+		gg.Routing.Routes = routing.BuildSimpleTable(bvns)
+	}
+	gg.Routing.AddOverride(protocol.AcmeUrl(), protocol.Directory)
 	for _, partition := range gg.Network.Partitions {
-		u := protocol.PartitionUrl(partition.ID)
-		gg.Routing.Overrides = append(gg.Routing.Overrides, protocol.RouteOverride{Account: u, Partition: partition.ID})
+		gg.Routing.AddOverride(protocol.PartitionUrl(partition.ID), partition.ID)
 	}
 
 	store := memory.New(opts.Logger.With("module", "storage"))
