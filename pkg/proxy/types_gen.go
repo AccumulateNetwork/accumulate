@@ -18,7 +18,7 @@ import (
 	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -111,7 +111,7 @@ func (v *NetworkConfigResponse) Copy() *NetworkConfigResponse {
 
 	u.NetworkState = *(&v.NetworkState).Copy()
 	if v.Signature != nil {
-		u.Signature = (v.Signature).CopyAsInterface().(protocol.KeySignature)
+		u.Signature = protocol.CopyKeySignature(v.Signature)
 	}
 
 	return u
@@ -162,7 +162,7 @@ func (v *PartitionListResponse) Copy() *PartitionListResponse {
 
 	u.PartitionList = *v.PartitionList.Copy()
 	if v.Signature != nil {
-		u.Signature = (v.Signature).CopyAsInterface().(protocol.KeySignature)
+		u.Signature = protocol.CopyKeySignature(v.Signature)
 	}
 
 	return u
@@ -197,7 +197,7 @@ func (v *SeedCountResponse) Copy() *SeedCountResponse {
 
 	u.SeedCount = *v.SeedCount.Copy()
 	if v.Signature != nil {
-		u.Signature = (v.Signature).CopyAsInterface().(protocol.KeySignature)
+		u.Signature = protocol.CopyKeySignature(v.Signature)
 	}
 
 	return u
@@ -238,7 +238,7 @@ func (v *SeedListResponse) Copy() *SeedListResponse {
 
 	u.SeedList = *v.SeedList.Copy()
 	if v.Signature != nil {
-		u.Signature = (v.Signature).CopyAsInterface().(protocol.KeySignature)
+		u.Signature = protocol.CopyKeySignature(v.Signature)
 	}
 
 	return u

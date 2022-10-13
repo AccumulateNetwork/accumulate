@@ -6,10 +6,25 @@
 
 package encoding
 
-import "time"
+import (
+	"math/big"
+	"time"
+)
 
 func SplitDuration(d time.Duration) (sec, ns uint64) {
 	sec = uint64(d.Seconds())
 	ns = uint64((d - d.Round(time.Second)).Nanoseconds())
 	return sec, ns
+}
+
+func BytesCopy(v []byte) []byte {
+	u := make([]byte, len(v))
+	copy(u, v)
+	return v
+}
+
+func BigintCopy(v *big.Int) *big.Int {
+	u := new(big.Int)
+	u.Set(v)
+	return u
 }

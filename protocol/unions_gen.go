@@ -111,6 +111,44 @@ func EqualAccount(a, b Account) bool {
 	}
 }
 
+//CopyAccount copies a Account.
+func CopyAccount(v Account) Account {
+	switch v := v.(type) {
+	case *ADI:
+		return v.Copy()
+	case *AnchorLedger:
+		return v.Copy()
+	case *BlockLedger:
+		return v.Copy()
+	case *DataAccount:
+		return v.Copy()
+	case *KeyBook:
+		return v.Copy()
+	case *KeyPage:
+		return v.Copy()
+	case *LiteDataAccount:
+		return v.Copy()
+	case *LiteIdentity:
+		return v.Copy()
+	case *LiteTokenAccount:
+		return v.Copy()
+	case *SyntheticLedger:
+		return v.Copy()
+	case *SystemLedger:
+		return v.Copy()
+	case *TokenAccount:
+		return v.Copy()
+	case *TokenIssuer:
+		return v.Copy()
+	case *UnknownAccount:
+		return v.Copy()
+	case *UnknownSigner:
+		return v.Copy()
+	default:
+		return v.CopyAsInterface().(Account)
+	}
+}
+
 // UnmarshalAccountType unmarshals the AccountType from the start of a Account.
 func UnmarshalAccountType(r io.Reader) (AccountType, error) {
 	var typ AccountType
@@ -224,6 +262,18 @@ func EqualDataEntry(a, b DataEntry) bool {
 		return ok && a.Equal(b)
 	default:
 		return false
+	}
+}
+
+//CopyDataEntry copies a DataEntry.
+func CopyDataEntry(v DataEntry) DataEntry {
+	switch v := v.(type) {
+	case *AccumulateDataEntry:
+		return v.Copy()
+	case *FactomDataEntryWrapper:
+		return v.Copy()
+	default:
+		return v.CopyAsInterface().(DataEntry)
 	}
 }
 
@@ -478,6 +528,72 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 	}
 }
 
+//CopyTransactionBody copies a TransactionBody.
+func CopyTransactionBody(v TransactionBody) TransactionBody {
+	switch v := v.(type) {
+	case *AcmeFaucet:
+		return v.Copy()
+	case *AddCredits:
+		return v.Copy()
+	case *BlockValidatorAnchor:
+		return v.Copy()
+	case *BurnTokens:
+		return v.Copy()
+	case *CreateDataAccount:
+		return v.Copy()
+	case *CreateIdentity:
+		return v.Copy()
+	case *CreateKeyBook:
+		return v.Copy()
+	case *CreateKeyPage:
+		return v.Copy()
+	case *CreateLiteTokenAccount:
+		return v.Copy()
+	case *CreateToken:
+		return v.Copy()
+	case *CreateTokenAccount:
+		return v.Copy()
+	case *DirectoryAnchor:
+		return v.Copy()
+	case *IssueTokens:
+		return v.Copy()
+	case *LockAccount:
+		return v.Copy()
+	case *RemoteTransaction:
+		return v.Copy()
+	case *SendTokens:
+		return v.Copy()
+	case *SyntheticBurnTokens:
+		return v.Copy()
+	case *SyntheticCreateIdentity:
+		return v.Copy()
+	case *SyntheticDepositCredits:
+		return v.Copy()
+	case *SyntheticDepositTokens:
+		return v.Copy()
+	case *SyntheticForwardTransaction:
+		return v.Copy()
+	case *SyntheticWriteData:
+		return v.Copy()
+	case *SystemGenesis:
+		return v.Copy()
+	case *SystemWriteData:
+		return v.Copy()
+	case *UpdateAccountAuth:
+		return v.Copy()
+	case *UpdateKey:
+		return v.Copy()
+	case *UpdateKeyPage:
+		return v.Copy()
+	case *WriteData:
+		return v.Copy()
+	case *WriteDataTo:
+		return v.Copy()
+	default:
+		return v.CopyAsInterface().(TransactionBody)
+	}
+}
+
 // UnmarshalTransactionType unmarshals the TransactionType from the start of a TransactionBody.
 func UnmarshalTransactionType(r io.Reader) (TransactionType, error) {
 	var typ TransactionType
@@ -601,6 +717,22 @@ func EqualAccountAuthOperation(a, b AccountAuthOperation) bool {
 		return ok && a.Equal(b)
 	default:
 		return false
+	}
+}
+
+//CopyAccountAuthOperation copies a AccountAuthOperation.
+func CopyAccountAuthOperation(v AccountAuthOperation) AccountAuthOperation {
+	switch v := v.(type) {
+	case *AddAccountAuthorityOperation:
+		return v.Copy()
+	case *DisableAccountAuthOperation:
+		return v.Copy()
+	case *EnableAccountAuthOperation:
+		return v.Copy()
+	case *RemoveAccountAuthorityOperation:
+		return v.Copy()
+	default:
+		return v.CopyAsInterface().(AccountAuthOperation)
 	}
 }
 
@@ -732,6 +864,24 @@ func EqualKeyPageOperation(a, b KeyPageOperation) bool {
 		return ok && a.Equal(b)
 	default:
 		return false
+	}
+}
+
+//CopyKeyPageOperation copies a KeyPageOperation.
+func CopyKeyPageOperation(v KeyPageOperation) KeyPageOperation {
+	switch v := v.(type) {
+	case *AddKeyOperation:
+		return v.Copy()
+	case *RemoveKeyOperation:
+		return v.Copy()
+	case *SetThresholdKeyPageOperation:
+		return v.Copy()
+	case *UpdateAllowedKeyPageOperation:
+		return v.Copy()
+	case *UpdateKeyOperation:
+		return v.Copy()
+	default:
+		return v.CopyAsInterface().(KeyPageOperation)
 	}
 }
 
@@ -898,6 +1048,38 @@ func EqualSignature(a, b Signature) bool {
 		return ok && a.Equal(b)
 	default:
 		return false
+	}
+}
+
+//CopySignature copies a Signature.
+func CopySignature(v Signature) Signature {
+	switch v := v.(type) {
+	case *BTCLegacySignature:
+		return v.Copy()
+	case *BTCSignature:
+		return v.Copy()
+	case *DelegatedSignature:
+		return v.Copy()
+	case *ED25519Signature:
+		return v.Copy()
+	case *ETHSignature:
+		return v.Copy()
+	case *InternalSignature:
+		return v.Copy()
+	case *LegacyED25519Signature:
+		return v.Copy()
+	case *PartitionSignature:
+		return v.Copy()
+	case *RCD1Signature:
+		return v.Copy()
+	case *ReceiptSignature:
+		return v.Copy()
+	case *RemoteSignature:
+		return v.Copy()
+	case *SignatureSet:
+		return v.Copy()
+	default:
+		return v.CopyAsInterface().(Signature)
 	}
 }
 

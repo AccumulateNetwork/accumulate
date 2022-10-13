@@ -47,6 +47,18 @@ func Equal{{.Interface}}(a, b {{.Interface}}) bool {
 		return false
 	}
 }
+
+//Copy{{.Interface}} copies a {{.Interface}}.
+func Copy{{.Interface}}(v {{.Interface}}) {{.Interface}} {
+	switch v := v.(type){
+	{{- range .Members}}
+	case *{{.Type.Name}}:
+		return v.Copy()
+	{{- end}}
+	default:
+		return v.CopyAsInterface().({{.Interface}})
+	}
+}
 {{end}}
 
 {{if (index .Members 0).IsBinary}}

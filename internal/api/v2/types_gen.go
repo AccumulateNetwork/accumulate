@@ -23,8 +23,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2/query"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
-	errors2 "gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	errors2 "gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -316,7 +316,7 @@ func (v *DataEntryQueryResponse) Copy() *DataEntryQueryResponse {
 
 	u.EntryHash = v.EntryHash
 	if v.Entry != nil {
-		u.Entry = (v.Entry).CopyAsInterface().(protocol.DataEntry)
+		u.Entry = protocol.CopyDataEntry(v.Entry)
 	}
 
 	return u

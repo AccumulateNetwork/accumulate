@@ -96,6 +96,38 @@ func EqualRequest(a, b Request) bool {
 	}
 }
 
+//CopyRequest copies a Request.
+func CopyRequest(v Request) Request {
+	switch v := v.(type) {
+	case *RequestByChainId:
+		return v.Copy()
+	case *RequestByTxId:
+		return v.Copy()
+	case *RequestByUrl:
+		return v.Copy()
+	case *RequestDataEntry:
+		return v.Copy()
+	case *RequestDataEntrySet:
+		return v.Copy()
+	case *RequestDirectory:
+		return v.Copy()
+	case *RequestKeyPageIndex:
+		return v.Copy()
+	case *RequestMajorBlocks:
+		return v.Copy()
+	case *RequestMinorBlocks:
+		return v.Copy()
+	case *RequestSynth:
+		return v.Copy()
+	case *RequestTxHistory:
+		return v.Copy()
+	case *UnknownRequest:
+		return v.Copy()
+	default:
+		return v.CopyAsInterface().(Request)
+	}
+}
+
 // UnmarshalQueryType unmarshals the QueryType from the start of a Request.
 func UnmarshalQueryType(r io.Reader) (QueryType, error) {
 	var typ QueryType

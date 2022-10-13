@@ -18,7 +18,7 @@ import (
 	"io"
 	"strings"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -88,7 +88,7 @@ func (v *SigOrTxn) Copy() *SigOrTxn {
 		u.Transaction = (v.Transaction).Copy()
 	}
 	if v.Signature != nil {
-		u.Signature = (v.Signature).CopyAsInterface().(protocol.Signature)
+		u.Signature = protocol.CopySignature(v.Signature)
 	}
 	if v.Txid != nil {
 		u.Txid = v.Txid

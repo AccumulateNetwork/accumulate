@@ -51,6 +51,10 @@ func EqualTransactionResult(a, b TransactionResult) bool {
 	}
 }
 
+func CopyTransactionResult(v TransactionResult) TransactionResult {
+	return v.CopyAsInterface().(TransactionResult)
+}
+
 func UnmarshalTransactionResult(data []byte) (TransactionResult, error) {
 	typ, err := UnmarshalTransactionType(bytes.NewReader(data))
 	if err != nil {
