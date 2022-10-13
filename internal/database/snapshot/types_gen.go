@@ -103,7 +103,7 @@ func (v *Account) Copy() *Account {
 	u := new(Account)
 
 	if v.Main != nil {
-		u.Main = (v.Main).CopyAsInterface().(protocol.Account)
+		u.Main = protocol.CopyAccount(v.Main)
 	}
 	u.Chains = make([]*ChainState, len(v.Chains))
 	for i, v := range v.Chains {
@@ -172,7 +172,7 @@ func (v *Signature) Copy() *Signature {
 		u.Txid = v.Txid
 	}
 	if v.Signature != nil {
-		u.Signature = (v.Signature).CopyAsInterface().(protocol.Signature)
+		u.Signature = protocol.CopySignature(v.Signature)
 	}
 
 	return u
