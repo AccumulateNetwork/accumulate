@@ -88,7 +88,7 @@ func (v *SigOrTxn) Copy() *SigOrTxn {
 		u.Transaction = (v.Transaction).Copy()
 	}
 	if v.Signature != nil {
-		u.Signature = (v.Signature).CopyAsInterface().(protocol.Signature)
+		u.Signature = protocol.CopySignature(v.Signature)
 	}
 	if v.Txid != nil {
 		u.Txid = v.Txid
