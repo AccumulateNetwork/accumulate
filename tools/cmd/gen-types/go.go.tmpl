@@ -21,19 +21,13 @@ import (
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
-	{{- if not (isPkg "internal/errors")}}
-	errors2 "gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
+	{{- if not (isPkg "pkg/errors")}}
+	errors2 "gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	{{- end}}
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
-	{{- if not (isPkg "errors")}}
-	errors2 "gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	{{- end}}
 	{{- if not (isPkg "protocol")}}
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	{{- end}}
-	{{- if not (isPkg "types/api/query")}}
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2/query"
 	{{- end}}
 	{{- if not (isPkg "types/api/query")}}
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2/query"
