@@ -103,7 +103,11 @@ func (r *RouteTree) Route(u *url.URL) (string, error) {
 		return s, nil
 	}
 
-	return r.root.route(u.Routing(), 0)
+	return r.RouteNr(u.Routing())
+}
+
+func (r *RouteTree) RouteNr(n uint64) (string, error) {
+	return r.root.route(n, 0)
 }
 
 func (b prefixTreeBranch) route(rn uint64, pos uint16) (string, error) {
