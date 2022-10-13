@@ -336,7 +336,7 @@ func (v *DirectoryQueryResult) Copy() *DirectoryQueryResult {
 	u.ExpandedEntries = make([]protocol.Account, len(v.ExpandedEntries))
 	for i, v := range v.ExpandedEntries {
 		if v != nil {
-			u.ExpandedEntries[i] = (v).CopyAsInterface().(protocol.Account)
+			u.ExpandedEntries[i] = protocol.CopyAccount(v)
 		}
 	}
 	u.Total = v.Total
@@ -515,7 +515,7 @@ func (v *ResponseAccount) Copy() *ResponseAccount {
 	u := new(ResponseAccount)
 
 	if v.Account != nil {
-		u.Account = (v.Account).CopyAsInterface().(protocol.Account)
+		u.Account = protocol.CopyAccount(v.Account)
 	}
 	u.ChainState = make([]ChainState, len(v.ChainState))
 	for i, v := range v.ChainState {
@@ -610,7 +610,7 @@ func (v *ResponseDataEntry) Copy() *ResponseDataEntry {
 
 	u.EntryHash = v.EntryHash
 	if v.Entry != nil {
-		u.Entry = (v.Entry).CopyAsInterface().(protocol.DataEntry)
+		u.Entry = protocol.CopyDataEntry(v.Entry)
 	}
 
 	return u
@@ -760,12 +760,12 @@ func (v *SignatureSet) Copy() *SignatureSet {
 	u := new(SignatureSet)
 
 	if v.Account != nil {
-		u.Account = (v.Account).CopyAsInterface().(protocol.Account)
+		u.Account = protocol.CopyAccount(v.Account)
 	}
 	u.Signatures = make([]protocol.Signature, len(v.Signatures))
 	for i, v := range v.Signatures {
 		if v != nil {
-			u.Signatures[i] = (v).CopyAsInterface().(protocol.Signature)
+			u.Signatures[i] = protocol.CopySignature(v)
 		}
 	}
 

@@ -41,6 +41,16 @@ func EqualRecord(a, b Record) bool {
 	}
 }
 
+//CopyRecord copies a Record.
+func CopyRecord(v Record) Record {
+	switch v := v.(type) {
+	case *AccountRecord:
+		return v.Copy()
+	default:
+		return v.CopyAsInterface().(Record)
+	}
+}
+
 // UnmarshalRecordType unmarshals the RecordType from the start of a Record.
 func UnmarshalRecordType(r io.Reader) (RecordType, error) {
 	var typ RecordType
