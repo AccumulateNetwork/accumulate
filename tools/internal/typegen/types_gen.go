@@ -14,7 +14,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
 
 type ChainRecord struct {
