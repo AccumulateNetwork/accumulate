@@ -36,6 +36,10 @@ func unmarshalAnchorBody(body TransactionBody, err error) (AnchorBody, error) {
 	return anchor, nil
 }
 
+func CopyAnchorBody(v AnchorBody) AnchorBody {
+	return v.CopyAsInterface().(AnchorBody)
+}
+
 func UnmarshalAnchorBody(b []byte) (AnchorBody, error) {
 	body, err := unmarshalAnchorBody(UnmarshalTransactionBody(b))
 	return body, errors.Wrap(errors.StatusUnknownError, err)

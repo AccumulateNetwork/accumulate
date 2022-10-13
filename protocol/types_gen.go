@@ -1542,7 +1542,7 @@ func (v *DataAccount) Copy() *DataAccount {
 	}
 	u.AccountAuth = *v.AccountAuth.Copy()
 	if v.Entry != nil {
-		u.Entry = (v.Entry).CopyAsInterface().(DataEntry)
+		u.Entry = CopyDataEntry(v.Entry)
 	}
 
 	return u
@@ -1554,7 +1554,7 @@ func (v *DelegatedSignature) Copy() *DelegatedSignature {
 	u := new(DelegatedSignature)
 
 	if v.Signature != nil {
-		u.Signature = (v.Signature).CopyAsInterface().(Signature)
+		u.Signature = CopySignature(v.Signature)
 	}
 	if v.Delegator != nil {
 		u.Delegator = v.Delegator
@@ -1661,7 +1661,7 @@ func (v *Envelope) Copy() *Envelope {
 	u.Signatures = make([]Signature, len(v.Signatures))
 	for i, v := range v.Signatures {
 		if v != nil {
-			u.Signatures[i] = (v).CopyAsInterface().(Signature)
+			u.Signatures[i] = CopySignature(v)
 		}
 	}
 	u.TxHash = encoding.BytesCopy(v.TxHash)
@@ -1919,7 +1919,7 @@ func (v *NetworkAccountUpdate) Copy() *NetworkAccountUpdate {
 
 	u.Name = v.Name
 	if v.Body != nil {
-		u.Body = (v.Body).CopyAsInterface().(TransactionBody)
+		u.Body = CopyTransactionBody(v.Body)
 	}
 
 	return u
@@ -2129,7 +2129,7 @@ func (v *RemoteSignature) Copy() *RemoteSignature {
 		u.Destination = v.Destination
 	}
 	if v.Signature != nil {
-		u.Signature = (v.Signature).CopyAsInterface().(Signature)
+		u.Signature = CopySignature(v.Signature)
 	}
 	u.Cause = make([][32]byte, len(v.Cause))
 	for i, v := range v.Cause {
@@ -2253,7 +2253,7 @@ func (v *SignatureSet) Copy() *SignatureSet {
 	u.Signatures = make([]Signature, len(v.Signatures))
 	for i, v := range v.Signatures {
 		if v != nil {
-			u.Signatures[i] = (v).CopyAsInterface().(Signature)
+			u.Signatures[i] = CopySignature(v)
 		}
 	}
 
@@ -2281,7 +2281,7 @@ func (v *SyntheticCreateIdentity) Copy() *SyntheticCreateIdentity {
 	u.Accounts = make([]Account, len(v.Accounts))
 	for i, v := range v.Accounts {
 		if v != nil {
-			u.Accounts[i] = (v).CopyAsInterface().(Account)
+			u.Accounts[i] = CopyAccount(v)
 		}
 	}
 
@@ -2376,7 +2376,7 @@ func (v *SyntheticWriteData) Copy() *SyntheticWriteData {
 
 	u.SyntheticOrigin = *v.SyntheticOrigin.Copy()
 	if v.Entry != nil {
-		u.Entry = (v.Entry).CopyAsInterface().(DataEntry)
+		u.Entry = CopyDataEntry(v.Entry)
 	}
 
 	return u
@@ -2406,7 +2406,7 @@ func (v *SystemLedger) Copy() *SystemLedger {
 		u.PendingUpdates[i] = *(&v).Copy()
 	}
 	if v.Anchor != nil {
-		u.Anchor = (v.Anchor).CopyAsInterface().(AnchorBody)
+		u.Anchor = CopyAnchorBody(v.Anchor)
 	}
 
 	return u
@@ -2418,7 +2418,7 @@ func (v *SystemWriteData) Copy() *SystemWriteData {
 	u := new(SystemWriteData)
 
 	if v.Entry != nil {
-		u.Entry = (v.Entry).CopyAsInterface().(DataEntry)
+		u.Entry = CopyDataEntry(v.Entry)
 	}
 	u.WriteToState = v.WriteToState
 
@@ -2499,7 +2499,7 @@ func (v *Transaction) Copy() *Transaction {
 
 	u.Header = *(&v.Header).Copy()
 	if v.Body != nil {
-		u.Body = (v.Body).CopyAsInterface().(TransactionBody)
+		u.Body = CopyTransactionBody(v.Body)
 	}
 
 	return u
@@ -2548,7 +2548,7 @@ func (v *TransactionStatus) Copy() *TransactionStatus {
 		u.Error = (v.Error).Copy()
 	}
 	if v.Result != nil {
-		u.Result = (v.Result).CopyAsInterface().(TransactionResult)
+		u.Result = CopyTransactionResult(v.Result)
 	}
 	u.Received = v.Received
 	if v.Initiator != nil {
@@ -2557,7 +2557,7 @@ func (v *TransactionStatus) Copy() *TransactionStatus {
 	u.Signers = make([]Signer, len(v.Signers))
 	for i, v := range v.Signers {
 		if v != nil {
-			u.Signers[i] = (v).CopyAsInterface().(Signer)
+			u.Signers[i] = CopySigner(v)
 		}
 	}
 	if v.SourceNetwork != nil {
@@ -2627,7 +2627,7 @@ func (v *UpdateAccountAuth) Copy() *UpdateAccountAuth {
 	u.Operations = make([]AccountAuthOperation, len(v.Operations))
 	for i, v := range v.Operations {
 		if v != nil {
-			u.Operations[i] = (v).CopyAsInterface().(AccountAuthOperation)
+			u.Operations[i] = CopyAccountAuthOperation(v)
 		}
 	}
 
@@ -2680,7 +2680,7 @@ func (v *UpdateKeyPage) Copy() *UpdateKeyPage {
 	u.Operation = make([]KeyPageOperation, len(v.Operation))
 	for i, v := range v.Operation {
 		if v != nil {
-			u.Operation[i] = (v).CopyAsInterface().(KeyPageOperation)
+			u.Operation[i] = CopyKeyPageOperation(v)
 		}
 	}
 
@@ -2724,7 +2724,7 @@ func (v *WriteData) Copy() *WriteData {
 	u := new(WriteData)
 
 	if v.Entry != nil {
-		u.Entry = (v.Entry).CopyAsInterface().(DataEntry)
+		u.Entry = CopyDataEntry(v.Entry)
 	}
 	u.Scratch = v.Scratch
 	u.WriteToState = v.WriteToState
@@ -2755,7 +2755,7 @@ func (v *WriteDataTo) Copy() *WriteDataTo {
 		u.Recipient = v.Recipient
 	}
 	if v.Entry != nil {
-		u.Entry = (v.Entry).CopyAsInterface().(DataEntry)
+		u.Entry = CopyDataEntry(v.Entry)
 	}
 
 	return u

@@ -134,7 +134,7 @@ func (v *AccountRecord) Copy() *AccountRecord {
 	u := new(AccountRecord)
 
 	if v.Account != nil {
-		u.Account = (v.Account).CopyAsInterface().(protocol.Account)
+		u.Account = protocol.CopyAccount(v.Account)
 	}
 	u.Chains = make([]*ChainState, len(v.Chains))
 	for i, v := range v.Chains {

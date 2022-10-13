@@ -316,7 +316,7 @@ func (v *DataEntryQueryResponse) Copy() *DataEntryQueryResponse {
 
 	u.EntryHash = v.EntryHash
 	if v.Entry != nil {
-		u.Entry = (v.Entry).CopyAsInterface().(protocol.DataEntry)
+		u.Entry = protocol.CopyDataEntry(v.Entry)
 	}
 
 	return u
