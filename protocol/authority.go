@@ -38,6 +38,10 @@ func EqualSigner(a, b Signer) bool {
 	return EqualAccount(a, b)
 }
 
+func CopySigner(v Signer) Signer {
+	return v.CopyAsInterface().(Signer)
+}
+
 func UnmarshalSigner(data []byte) (Signer, error) {
 	account, err := UnmarshalAccount(data)
 	if err != nil {
