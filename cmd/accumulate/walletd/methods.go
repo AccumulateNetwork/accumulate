@@ -295,3 +295,20 @@ func (m *JrpcMethods) DeleteSendTokensTransaction(_ context.Context, params json
 	}
 	return resp
 }
+
+func (m *JrpcMethods) GenerateFactomAddress(_ context.Context, params json.RawMessage) interface{} {
+	req := api.GenerateFactomAddressRequest{}
+	err := json.Unmarshal(params, &req)
+	if err != nil {
+		return validatorError(err)
+	}
+
+	key, err := GenerateKey(protocol.SignatureTypeRCD1)
+	if err != nil {
+		return validatorError(err)
+	}
+	resp := api.GenerateFactomAddressResponse{}
+	resp.Public = string(key.PublicKey)
+	resp.Secret = string(key.PrivateKey)
+	return resp
+}

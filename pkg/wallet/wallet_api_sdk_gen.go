@@ -94,6 +94,18 @@ func (c *Client) Encode(ctx context.Context, req *api.EncodeRequest) (interface{
 	return resp, nil
 }
 
+// GenerateFactomAddress generates factom address.
+func (c *Client) GenerateFactomAddress(ctx context.Context, req *api.GenerateFactomAddressRequest) (*api.GenerateFactomAddressResponse, error) {
+	var resp api.GenerateFactomAddressResponse
+
+	err := c.RequestAPIv2(ctx, "generate-address", req, &resp)
+	if err != nil {
+		return nil, err
+	}
+
+	return &resp, nil
+}
+
 // KeyList returns a list of available keys in the wallet.
 func (c *Client) KeyList(ctx context.Context) (interface{}, error) {
 	var req struct{}

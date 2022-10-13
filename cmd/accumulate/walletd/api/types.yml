@@ -219,3 +219,16 @@ AddSendTokensOutputRequest:
     - name: Amount
       type: bigint
 
+GenerateFactomAddressRequest:
+  non-binary: true
+  fields:
+   
+
+GenerateFactomAddressResponse:
+  non-binary: true
+  fields:
+    - name: Public
+      type: string
+    - name: Secret
+      type: string
+

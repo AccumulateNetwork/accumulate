@@ -113,6 +113,14 @@ type FinalizeEnvelopeRequest struct {
 	Name string `json:"name,omitempty" form:"name" query:"name" validate:"required"`
 }
 
+type GenerateFactomAddressRequest struct {
+}
+
+type GenerateFactomAddressResponse struct {
+	Public string `json:"public,omitempty" form:"public" query:"public" validate:"required"`
+	Secret string `json:"secret,omitempty" form:"secret" query:"secret" validate:"required"`
+}
+
 type KeyData struct {
 	Name      string  `json:"name,omitempty" form:"name" query:"name" validate:"required"`
 	PublicKey []byte  `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
@@ -379,6 +387,25 @@ func (v *FinalizeEnvelopeRequest) Copy() *FinalizeEnvelopeRequest {
 }
 
 func (v *FinalizeEnvelopeRequest) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *GenerateFactomAddressRequest) Copy() *GenerateFactomAddressRequest {
+	u := new(GenerateFactomAddressRequest)
+
+	return u
+}
+
+func (v *GenerateFactomAddressRequest) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *GenerateFactomAddressResponse) Copy() *GenerateFactomAddressResponse {
+	u := new(GenerateFactomAddressResponse)
+
+	u.Public = v.Public
+	u.Secret = v.Secret
+
+	return u
+}
+
+func (v *GenerateFactomAddressResponse) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *KeyData) Copy() *KeyData {
 	u := new(KeyData)
@@ -676,6 +703,22 @@ func (v *EncodeTransactionResponse) Equal(u *EncodeTransactionResponse) bool {
 
 func (v *FinalizeEnvelopeRequest) Equal(u *FinalizeEnvelopeRequest) bool {
 	if !(v.Name == u.Name) {
+		return false
+	}
+
+	return true
+}
+
+func (v *GenerateFactomAddressRequest) Equal(u *GenerateFactomAddressRequest) bool {
+
+	return true
+}
+
+func (v *GenerateFactomAddressResponse) Equal(u *GenerateFactomAddressResponse) bool {
+	if !(v.Public == u.Public) {
+		return false
+	}
+	if !(v.Secret == u.Secret) {
 		return false
 	}
 
