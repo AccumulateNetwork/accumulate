@@ -1197,11 +1197,19 @@ resultLoop:
 
 				chain2, err := chain.Get()
 				if err != nil {
+					// If the chain can't be found, skip it
+					if errors.Is(err, errors.StatusNotFound) {
+						continue
+					}
 					return nil, errors.Format(errors.StatusUnknownError, "load head of account %v chain %v: %w", entry.Account, entry.Chain, err)
 				}
 
 				hash, err := chain2.Entry(int64(entry.Index))
 				if err != nil {
+					// If the chain entry can't be found, skip it
+					if errors.Is(err, errors.StatusNotFound) {
+						continue
+					}
 					return nil, errors.Format(errors.StatusUnknownError, "load account %v chain %v entry %d: %w", entry.Account, entry.Chain, entry.Index, err)
 				}
 
