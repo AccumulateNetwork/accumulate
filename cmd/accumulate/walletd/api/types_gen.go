@@ -153,10 +153,10 @@ type SignResponse struct {
 }
 
 type SignTransactionRequest struct {
-	TxName    string `json:"txName,omitempty" form:"txName" query:"txName" validate:"required"`
-	KeyName   string `json:"keyName,omitempty" form:"keyName" query:"keyName" validate:"required"`
-	Version   int64  `json:"version,omitempty" form:"version" query:"version" validate:"required"`
-	Timestamp int64  `json:"timestamp,omitempty" form:"timestamp" query:"timestamp"`
+	TxName        string `json:"txName,omitempty" form:"txName" query:"txName" validate:"required"`
+	KeyName       string `json:"keyName,omitempty" form:"keyName" query:"keyName" validate:"required"`
+	SignerVersion int64  `json:"signerVersion,omitempty" form:"signerVersion" query:"signerVersion" validate:"required"`
+	Timestamp     int64  `json:"timestamp,omitempty" form:"timestamp" query:"timestamp"`
 }
 
 type VersionResponse struct {
@@ -484,7 +484,7 @@ func (v *SignTransactionRequest) Copy() *SignTransactionRequest {
 
 	u.TxName = v.TxName
 	u.KeyName = v.KeyName
-	u.Version = v.Version
+	u.SignerVersion = v.SignerVersion
 	u.Timestamp = v.Timestamp
 
 	return u
@@ -803,7 +803,7 @@ func (v *SignTransactionRequest) Equal(u *SignTransactionRequest) bool {
 	if !(v.KeyName == u.KeyName) {
 		return false
 	}
-	if !(v.Version == u.Version) {
+	if !(v.SignerVersion == u.SignerVersion) {
 		return false
 	}
 	if !(v.Timestamp == u.Timestamp) {
