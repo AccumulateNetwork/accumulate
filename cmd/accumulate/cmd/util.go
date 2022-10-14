@@ -200,8 +200,8 @@ func prepareSignerPage(signer *signing.Builder, origin *url.URL, signingKey stri
 		return fmt.Errorf("failed to get key for %q : %v", origin, err)
 	}
 
-	// If keyHolder is a page, use that instead of the one returned by the API
-	if keyInfo.Signer.Equal(keyHolder) {
+	// If keyHolder is a page of the book returned by the API, use that instead
+	if keyInfo.Authority.ParentOf(keyHolder) {
 		signer.Url = keyHolder
 	} else {
 		signer.Url = keyInfo.Signer
