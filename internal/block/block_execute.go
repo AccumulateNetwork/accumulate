@@ -7,6 +7,8 @@
 package block
 
 import (
+	"context"
+
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
@@ -16,8 +18,9 @@ import (
 
 type Block struct {
 	BlockMeta
-	State BlockState
-	Batch *database.Batch
+	Context context.Context
+	State   BlockState
+	Batch   *database.Batch
 }
 
 func (x *Executor) ExecuteEnvelopeSet(block *Block, deliveries []*chain.Delivery, captureError func(error, *chain.Delivery, *protocol.TransactionStatus)) []*protocol.TransactionStatus {
