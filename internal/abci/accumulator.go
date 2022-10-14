@@ -8,6 +8,7 @@ package abci
 
 import (
 	"bytes"
+	"context"
 	_ "crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -34,6 +35,9 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	_ "gitlab.com/accumulatenetwork/accumulate/smt/pmt"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // Accumulator is an ABCI application that accumulates validated transactions in
@@ -44,6 +48,7 @@ type Accumulator struct {
 	logger log.Logger
 
 	block          *block.Block
+	blockSpan      trace.Span
 	txct           int64
 	timer          time.Time
 	didPanic       bool
@@ -59,6 +64,7 @@ type Accumulator struct {
 
 type AccumulatorOptions struct {
 	*config.Config
+	Tracer   trace.Tracer
 	Executor *block.Executor
 	EventBus *events.Bus
 	DB       *database.Database
@@ -72,6 +78,10 @@ func NewAccumulator(opts AccumulatorOptions) *Accumulator {
 		AccumulatorOptions: opts,
 		logger:             opts.Logger.With("module", "accumulate", "partition", opts.Accumulate.PartitionId),
 		checkTxMutex:       &sync.Mutex{},
+	}
+
+	if app.Tracer == nil {
+		app.Tracer = otel.Tracer("abci")
 	}
 
 	events.SubscribeSync(opts.EventBus, app.willChangeGlobals)
@@ -313,9 +323,17 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 func (app *Accumulator) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBeginBlock {
 	defer app.recover(nil)
 
+	ctx, span := app.Tracer.Start(context.Background(), "Block")
+	span.SetAttributes(attribute.Int64("height", req.Header.Height))
+	app.blockSpan = span
+
+	_, span = app.Tracer.Start(ctx, "BeginBlock")
+	defer span.End()
+
 	var ret abci.ResponseBeginBlock
 
 	app.block = new(block.Block)
+	app.block.Context = ctx
 	app.block.IsLeader = bytes.Equal(app.Address.Bytes(), req.Header.GetProposerAddress())
 	app.block.Index = uint64(req.Header.Height)
 	app.block.Time = req.Header.Time
@@ -342,6 +360,9 @@ func (app *Accumulator) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBegi
 // Verifies the transaction is sane.
 func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheckTx) {
 	defer app.recover(&rct.Code)
+
+	_, span := app.Tracer.Start(context.Background(), "CheckTx")
+	defer span.End()
 
 	// Is the node borked?
 	if app.didPanic {
@@ -435,6 +456,9 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseDeliverTx) {
 	defer app.recover(&rdt.Code)
 
+	_, span := app.Tracer.Start(app.block.Context, "DeliverTx")
+	defer span.End()
+
 	// Is the node borked?
 	if app.didPanic {
 		return abci.ResponseDeliverTx{
@@ -461,6 +485,9 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 func (app *Accumulator) EndBlock(req abci.RequestEndBlock) abci.ResponseEndBlock {
 	defer app.recover(nil)
 
+	_, span := app.Tracer.Start(app.block.Context, "EndBlock")
+	defer span.End()
+
 	err := app.Executor.EndBlock(app.block)
 	if err != nil {
 		app.fatal(err)
@@ -483,10 +510,48 @@ func (app *Accumulator) EndBlock(req abci.RequestEndBlock) abci.ResponseEndBlock
 func (app *Accumulator) Commit() abci.ResponseCommit {
 	defer app.recover(nil)
 	defer func() { app.block = nil }()
+	defer app.blockSpan.End()
+
+	_, span := app.Tracer.Start(app.block.Context, "Commit")
+	defer span.End()
 
 	tick := time.Now()
 	// Is the block empty?
 	if app.block.State.Empty() {
+		timeSinceAppStart := time.Since(app.startTime).Seconds()
+		ds := app.Accumulate.AnalysisLog.GetDataSet("accumulator")
+		if ds != nil {
+			blockTime := time.Since(app.timer).Seconds()
+			aveBlockTime := 0.0
+			estTps := 0.0
+			if app.txct != 0 {
+				aveBlockTime = blockTime / float64(app.txct)
+				estTps = 1.0 / aveBlockTime
+			}
+			ds.Save("height", app.block.Index, 10, true)
+			ds.Save("time_since_app_start", timeSinceAppStart, 6, false)
+			ds.Save("block_time", blockTime, 6, false)
+			ds.Save("ave_block_time", aveBlockTime, 10, false)
+			ds.Save("est_tps", estTps, 10, false)
+			ds.Save("txct", app.txct, 10, false)
+			app.blockSpan.SetAttributes(
+				attribute.Float64("time_since_app_start", timeSinceAppStart),
+				attribute.Float64("block_time", blockTime),
+				attribute.Float64("ave_block_time", aveBlockTime),
+				attribute.Float64("est_tps", estTps),
+				attribute.Int64("txct", app.txct),
+			)
+		}
+
+		ds = app.Accumulate.AnalysisLog.GetDataSet("executor")
+		if ds != nil {
+			ds.Save("height", app.block.Index, 10, true)
+			ds.Save("time_since_app_start", timeSinceAppStart, 6, false)
+			app.Executor.BlockTimers.Store(ds)
+		}
+
+		go app.Accumulate.AnalysisLog.Flush()
+
 		// Discard changes
 		app.block.Batch.Discard()
 
@@ -562,6 +627,15 @@ func (app *Accumulator) Commit() abci.ResponseCommit {
 		ds.Save("ave_block_time", aveBlockTime, 10, false)
 		ds.Save("est_tps", estTps, 10, false)
 		ds.Save("txct", app.txct, 10, false)
+		app.blockSpan.SetAttributes(
+			attribute.Float64("time_since_app_start", timeSinceAppStart),
+			attribute.Float64("block_time", blockTime),
+			attribute.Float64("commit_time", commitTime),
+			attribute.Float64("event_time", publishEventTime),
+			attribute.Float64("ave_block_time", aveBlockTime),
+			attribute.Float64("est_tps", estTps),
+			attribute.Int64("txct", app.txct),
+		)
 
 	}
 
