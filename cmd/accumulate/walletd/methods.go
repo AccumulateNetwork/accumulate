@@ -296,7 +296,7 @@ func (m *JrpcMethods) DeleteSendTokensTransaction(_ context.Context, params json
 	return resp
 }
 
-func (m *JrpcMethods) AddMemoTransaction(_ context.Context, params json.RawMessage) interface{} {
+func (m *JrpcMethods) AddMemoToTransaction(_ context.Context, params json.RawMessage) interface{} {
 	req := api.AddMemoTransactionRequest{}
 	err := json.Unmarshal(params, &req)
 	if err != nil {

@@ -9,8 +9,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// AddMemoTransaction add memo to the saved transaction.
-func (c *Client) AddMemoTransaction(ctx context.Context, req *api.AddMemoTransactionRequest) (*protocol.Transaction, error) {
+// AddMemoToTransaction add memo to the saved transaction.
+func (c *Client) AddMemoToTransaction(ctx context.Context, req *api.AddMemoTransactionRequest) (*protocol.Transaction, error) {
 	var resp protocol.Transaction
 
 	err := c.RequestAPIv2(ctx, "add-memo", req, &resp)
