@@ -143,6 +143,18 @@ func (c *Client) Sign(ctx context.Context, req *api.SignRequest) (interface{}, e
 	return resp, nil
 }
 
+// SignSendTokensTransaction sign send token transaction.
+func (c *Client) SignSendTokensTransaction(ctx context.Context, req *api.SignTransactionRequest) (*api.CreateEnvelopeResponse, error) {
+	var resp api.CreateEnvelopeResponse
+
+	err := c.RequestAPIv2(ctx, "sign-transaction", req, &resp)
+	if err != nil {
+		return nil, err
+	}
+
+	return &resp, nil
+}
+
 // Version returns the version of the wallet daemon.
 func (c *Client) Version(ctx context.Context) (*api.VersionResponse, error) {
 	var req struct{}
