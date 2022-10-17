@@ -67,3 +67,9 @@ AddSendTokensOutput:
   rpc: add-output
   input: api.AddSendTokensOutputRequest
   output: protocol.SendTokens
+
+SignSendTokensTransaction:
+  description: sign send token transaction
+  rpc: sign-transaction
+  input: api.SignTransactionRequest
+  output: api.CreateEnvelopeResponse
