@@ -143,6 +143,6 @@ func extractSnapshot(_ *cobra.Command, args []string) {
 
 	batch2 = db2.Begin(true)
 	defer batch2.Discard()
-	_, err = snapshot.Collect(batch2, new(snapshot.Header), f, nil, func(account *database.Account) (bool, error) { return true, nil })
+	_, err = snapshot.Collect(batch2, new(snapshot.Header), f, snapshot.CollectOptions{})
 	check(err)
 }

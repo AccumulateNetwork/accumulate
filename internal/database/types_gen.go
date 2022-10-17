@@ -733,7 +733,9 @@ func (v *SigSetEntry) MarshalJSON() ([]byte, error) {
 	u.Type = v.Type
 	u.KeyEntryIndex = v.KeyEntryIndex
 	u.SignatureHash = encoding.ChainToJSON(v.SignatureHash)
-	u.ValidatorKeyHash = encoding.ChainToJSON(*v.ValidatorKeyHash)
+	if v.ValidatorKeyHash != nil {
+		u.ValidatorKeyHash = encoding.ChainToJSON(*v.ValidatorKeyHash)
+	}
 	return json.Marshal(&u)
 }
 
@@ -798,7 +800,9 @@ func (v *SigSetEntry) UnmarshalJSON(data []byte) error {
 	u.Type = v.Type
 	u.KeyEntryIndex = v.KeyEntryIndex
 	u.SignatureHash = encoding.ChainToJSON(v.SignatureHash)
-	u.ValidatorKeyHash = encoding.ChainToJSON(*v.ValidatorKeyHash)
+	if v.ValidatorKeyHash != nil {
+		u.ValidatorKeyHash = encoding.ChainToJSON(*v.ValidatorKeyHash)
+	}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
