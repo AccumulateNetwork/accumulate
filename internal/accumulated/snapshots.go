@@ -81,7 +81,7 @@ func (d *Daemon) collectSnapshot(batch *database.Batch, blockTime time.Time, maj
 		}
 	}()
 
-	err = snapshot.FullCollect(batch, file, &d.Config.Accumulate.Describe)
+	err = snapshot.FullCollect(batch, file, &d.Config.Accumulate.Describe, d.Logger.With("module", "snapshot"))
 	if err != nil {
 		d.Logger.Error("Failed to create snapshot", "error", err, "major-block", majorBlock, "minor-block", minorBlock, "module", "snapshot")
 		return

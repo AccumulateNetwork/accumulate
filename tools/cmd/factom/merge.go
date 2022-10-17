@@ -66,7 +66,7 @@ func merge(_ *cobra.Command, args []string) {
 	checkf(err, "open snapshot")
 	defer f.Close()
 	check(db.View(func(batch *database.Batch) error {
-		_, err := snapshot.Collect(batch, new(snapshot.Header), f, func(*database.Account) (bool, error) { return true, nil })
+		_, err := snapshot.Collect(batch, new(snapshot.Header), f, nil, func(*database.Account) (bool, error) { return true, nil })
 		return err
 	}))
 }
