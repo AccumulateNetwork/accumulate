@@ -94,9 +94,9 @@ func (c *Client) Encode(ctx context.Context, req *api.EncodeRequest) (interface{
 	return resp, nil
 }
 
-// GenerateFactomAddress generates factom address.
-func (c *Client) GenerateFactomAddress(ctx context.Context, req *api.GenerateFactomAddressRequest) (*api.GenerateFactomAddressResponse, error) {
-	var resp api.GenerateFactomAddressResponse
+// GenerateAddress generates address based on the provided type.
+func (c *Client) GenerateAddress(ctx context.Context, req *api.GenerateAddressRequest) (*api.GenerateAddressResponse, error) {
+	var resp api.GenerateAddressResponse
 
 	err := c.RequestAPIv2(ctx, "generate-address", req, &resp)
 	if err != nil {

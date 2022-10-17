@@ -68,8 +68,8 @@ AddSendTokensOutput:
   input: api.AddSendTokensOutputRequest
   output: protocol.SendTokens
 
-GenerateFactomAddress:
-  description: generates factom address
+GenerateAddress:
+  description: generates address based on the provided type
   rpc: generate-address
-  input: api.GenerateFactomAddressRequest
-  output: api.GenerateFactomAddressResponse
+  input: api.GenerateAddressRequest
+  output: api.GenerateAddressResponse

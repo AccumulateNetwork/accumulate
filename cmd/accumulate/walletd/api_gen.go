@@ -20,7 +20,7 @@ func (m *JrpcMethods) populateMethodTable() jsonrpc2.MethodMap {
 	m.methods["decode"] = m.Decode
 	m.methods["new-transaction"] = m.DeleteSendTokensTransaction
 	m.methods["encode"] = m.Encode
-	m.methods["generate-address"] = m.GenerateFactomAddress
+	m.methods["generate-address"] = m.GenerateAddress
 	m.methods["key-list"] = m.KeyList
 	m.methods["new-transaction"] = m.NewSendTokensTransaction
 	m.methods["resolve-key"] = m.ResolveKey

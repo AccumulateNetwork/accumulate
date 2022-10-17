@@ -296,19 +296,26 @@ func (m *JrpcMethods) DeleteSendTokensTransaction(_ context.Context, params json
 	return resp
 }
 
-func (m *JrpcMethods) GenerateFactomAddress(_ context.Context, params json.RawMessage) interface{} {
-	req := api.GenerateFactomAddressRequest{}
+func (m *JrpcMethods) GenerateAddress(_ context.Context, params json.RawMessage) interface{} {
+	req := api.GenerateAddressRequest{}
 	err := json.Unmarshal(params, &req)
 	if err != nil {
 		return validatorError(err)
 	}
 
-	key, err := GenerateKey(protocol.SignatureTypeRCD1)
+	sigtype, ok := protocol.SignatureTypeByName(req.Type)
+	if !ok || sigtype == protocol.SignatureTypeLegacyED25519 {
+		sigtype = protocol.SignatureTypeED25519
+	}
+	key, err := GenerateKey(sigtype)
 	if err != nil {
 		return validatorError(err)
 	}
-	resp := api.GenerateFactomAddressResponse{}
-	resp.Public = string(key.PublicKey)
-	resp.Secret = string(key.PrivateKey)
+	resp := api.GenerateAddressResponse{}
+	resp.Data = api.KeyData{
+		KeyInfo:   key.KeyInfo,
+		Name:      req.Label,
+		PublicKey: key.PublicKey,
+	}
 	return resp
 }

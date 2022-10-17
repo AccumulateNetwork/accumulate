@@ -113,12 +113,13 @@ type FinalizeEnvelopeRequest struct {
 	Name string `json:"name,omitempty" form:"name" query:"name" validate:"required"`
 }
 
-type GenerateFactomAddressRequest struct {
+type GenerateAddressRequest struct {
+	Type  string `json:"type,omitempty" form:"type" query:"type" validate:"required"`
+	Label string `json:"label,omitempty" form:"label" query:"label" validate:"required"`
 }
 
-type GenerateFactomAddressResponse struct {
-	Public string `json:"public,omitempty" form:"public" query:"public" validate:"required"`
-	Secret string `json:"secret,omitempty" form:"secret" query:"secret" validate:"required"`
+type GenerateAddressResponse struct {
+	Data KeyData `json:"data,omitempty" form:"data" query:"data" validate:"required"`
 }
 
 type KeyData struct {
@@ -388,24 +389,26 @@ func (v *FinalizeEnvelopeRequest) Copy() *FinalizeEnvelopeRequest {
 
 func (v *FinalizeEnvelopeRequest) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *GenerateFactomAddressRequest) Copy() *GenerateFactomAddressRequest {
-	u := new(GenerateFactomAddressRequest)
+func (v *GenerateAddressRequest) Copy() *GenerateAddressRequest {
+	u := new(GenerateAddressRequest)
+
+	u.Type = v.Type
+	u.Label = v.Label
 
 	return u
 }
 
-func (v *GenerateFactomAddressRequest) CopyAsInterface() interface{} { return v.Copy() }
+func (v *GenerateAddressRequest) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *GenerateFactomAddressResponse) Copy() *GenerateFactomAddressResponse {
-	u := new(GenerateFactomAddressResponse)
+func (v *GenerateAddressResponse) Copy() *GenerateAddressResponse {
+	u := new(GenerateAddressResponse)
 
-	u.Public = v.Public
-	u.Secret = v.Secret
+	u.Data = *(&v.Data).Copy()
 
 	return u
 }
 
-func (v *GenerateFactomAddressResponse) CopyAsInterface() interface{} { return v.Copy() }
+func (v *GenerateAddressResponse) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *KeyData) Copy() *KeyData {
 	u := new(KeyData)
@@ -709,16 +712,19 @@ func (v *FinalizeEnvelopeRequest) Equal(u *FinalizeEnvelopeRequest) bool {
 	return true
 }
 
-func (v *GenerateFactomAddressRequest) Equal(u *GenerateFactomAddressRequest) bool {
+func (v *GenerateAddressRequest) Equal(u *GenerateAddressRequest) bool {
+	if !(v.Type == u.Type) {
+		return false
+	}
+	if !(v.Label == u.Label) {
+		return false
+	}
 
 	return true
 }
 
-func (v *GenerateFactomAddressResponse) Equal(u *GenerateFactomAddressResponse) bool {
-	if !(v.Public == u.Public) {
-		return false
-	}
-	if !(v.Secret == u.Secret) {
+func (v *GenerateAddressResponse) Equal(u *GenerateAddressResponse) bool {
+	if !((&v.Data).Equal(&u.Data)) {
 		return false
 	}
 

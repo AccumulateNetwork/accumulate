@@ -219,16 +219,18 @@ AddSendTokensOutputRequest:
     - name: Amount
       type: bigint
 
-GenerateFactomAddressRequest:
+GenerateAddressRequest:
   non-binary: true
   fields:
-   
+    - name: Type
+      type: string
+    - name: Label
+      type: string
 
-GenerateFactomAddressResponse:
+GenerateAddressResponse:
   non-binary: true
   fields:
-    - name: Public
-      type: string
-    - name: Secret
-      type: string
+    - name: Data
+      type: KeyData
+      marshal-as: reference
 
