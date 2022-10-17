@@ -556,7 +556,9 @@ func (m *queryBackend) querySignature(batch *database.Batch, hash []byte) (*quer
 	env.Transaction = []*protocol.Transaction{txn}
 
 	signer := new(protocol.UnknownAccount)
-	if !signature.Type().IsSystem() {
+	if signature.Type().IsSystem() {
+		signer.Url = protocol.DnUrl().JoinPath(protocol.Network)
+	} else {
 		signer.Url = signature.GetSigner()
 	}
 	var sigSet query.SignatureSet
