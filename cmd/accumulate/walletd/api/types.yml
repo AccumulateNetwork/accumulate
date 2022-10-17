@@ -208,6 +208,8 @@ NewTransactionRequest:
   fields:
     - name: TxName
       type: string
+    - name: Origin
+      type: string
 
 AddSendTokensOutputRequest:
   non-binary: true
@@ -218,4 +220,17 @@ AddSendTokensOutputRequest:
       type: string
     - name: Amount
       type: bigint
+
+SignTransactionRequest:
+  non-binary: true
+  fields:
+    - name: TxName
+      type: string
+    - name: KeyName
+      type: string
+    - name: SignerVersion
+      type: int
+    - name: Timestamp
+      type: int
+      optional: true
 
