@@ -133,6 +133,7 @@ func Get(urlStr string) (string, error) {
 		if json.Unmarshal(res, qr) != nil {
 			return string(res), nil
 		}
+
 		return PrintChainQueryResponseV2(qr)
 	}
 

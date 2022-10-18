@@ -8,11 +8,7 @@ package node
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	stdlog "log"
-	"net/http"
-	"net/url"
 
 	abciclient "github.com/tendermint/tendermint/abci/client"
 	abci "github.com/tendermint/tendermint/abci/types"
@@ -23,7 +19,6 @@ import (
 	coretypes "github.com/tendermint/tendermint/rpc/coretypes"
 	corerpc "github.com/tendermint/tendermint/rpc/jsonrpc/client"
 	"gitlab.com/accumulatenetwork/accumulate/config"
-	web "gitlab.com/accumulatenetwork/accumulate/internal/web/static"
 )
 
 // AppFactory creates and returns an ABCI application.
@@ -60,28 +55,6 @@ func (n *Node) Start() error {
 	if err != nil {
 		return err
 	}
-	if n.Config.Accumulate.Website.Enabled {
-		u, err := url.Parse(n.Config.Accumulate.Website.ListenAddress)
-		if err != nil {
-			return fmt.Errorf("invalid website listen address: %v", err)
-		}
-		if u.Scheme != "http" {
-			return fmt.Errorf("invalid website listen address: expected scheme http, got %q", u.Scheme)
-		}
-
-		website := http.Server{Addr: u.Host, Handler: http.FileServer(http.FS(web.FS))}
-		go func() {
-			<-n.Quit()
-			_ = website.Shutdown(context.Background())
-		}()
-		go func() {
-			n.logger.Info("Listening", "host", u.Host, "module", "website")
-			err := website.ListenAndServe()
-			if err != nil && !errors.Is(err, http.ErrServerClosed) {
-				stdlog.Fatalf("Failed to start website: %v", err)
-			}
-		}()
-	}
 	_, err = n.waitForRPC()
 	if err != nil {
 		return err
@@ -101,5 +74,4 @@ func (n *Node) waitForRPC() (*corerpc.Client, error) {
 			return client, nil
 		}
 	}
-
 }
