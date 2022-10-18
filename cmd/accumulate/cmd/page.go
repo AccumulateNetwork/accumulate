@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package cmd
 
 import (
@@ -91,7 +97,7 @@ var pageKeyReplaceCmd = &cobra.Command{
 	}),
 }
 
-////nolint
+// //nolint
 var pageSetThresholdCmd = &cobra.Command{
 	Use:   "set-threshold [key page url] [key name[@key book or page]] [threshold]",
 	Short: "Set the M-of-N signature threshold for a key page",
