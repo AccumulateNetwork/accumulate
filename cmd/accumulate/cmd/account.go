@@ -551,17 +551,6 @@ func ExportAccounts(filePath string) error {
 		}
 	}
 
-	kl, err := walletd.GetKeyList()
-	if err != nil {
-		log.Println(err)
-	}
-	for i, v := range kl {
-		kn := api2.KeyName{}
-		kn.Name = v.Name
-		kn.PublicKey = kl[i].PublicKey
-		res.KeyNames = append(res.KeyNames, kn)
-	}
-
 	bucket, err := walletd.GetWallet().GetBucket(walletd.BucketMnemonic)
 	if err != nil {
 		log.Println("mnemonic bucket doesn't exist")
@@ -606,7 +595,7 @@ func ExportAccounts(filePath string) error {
 			return err
 		}
 		if strings.EqualFold(opt, "yes") {
-			file, err := os.OpenFile(filePath, os.O_RDWR, 0644)
+			file, err := os.OpenFile(filePath, os.O_RDWR|os.O_TRUNC, 0644)
 			if err != nil {
 				return err
 			}
@@ -713,6 +702,12 @@ func ImportAccounts(filePath string) error {
 		if err != nil {
 			log.Printf("skipping adi import for %s with key %s DB error: %v", adi.Url.String(), adi.Pages[0].KeyNames[0], err)
 		}
+	}
+
+	version := db.NewVersion(int(req.Version.Commit), int(req.Version.Major), int(req.Version.Minor), int(req.Version.Revision))
+	err = walletd.GetWallet().PutRaw(db.BucketConfig, []byte("version"), version.Bytes())
+	if err != nil {
+		log.Printf("failed to store version info %v", err)
 	}
 
 	return nil
