@@ -10,8 +10,6 @@ variables:
   BOLD_RED: '\e[1;31m'
   NO_COLOR: '\e[0m'
   SECTION: '\e[0K'
-  PRODUCTION_IMAGE: ${CI_REGISTRY_IMAGE}:${CI_COMMIT_REF_SLUG}
-  VALIDATION_IMAGE: ${CI_REGISTRY_IMAGE}/validation:${CI_COMMIT_REF_SLUG}
 
 .go:
   # https://github.com/golang/go/issues/53762
@@ -23,20 +21,6 @@ variables:
       - .go-mod-cache
   variables:
     GOMODCACHE: ${CI_PROJECT_DIR}/.go-mod-cache
-  before_script:
-  - |
-    function build-daemon {
-      export GOOS=$1
-      export GOARCH=$2
-      BIN=accumulated
-      [ -z "$GOOS" ] || BIN=${BIN}-${GOOS}
-      [ -z "$GOARCH" ] || BIN=${BIN}-${GOARCH}
-      [[ $GOOS == windows ]] && BIN=${BIN}.exe
-      export BUILDFLAGS="-o ${BIN}"
-      echo -e "${SECTION}section_start:`date +%s`:build_${GOOS}_${GOARCH}\r${SECTION}Build accumulated for $GOOS $GOARCH"
-      make GIT_COMMIT=${CI_COMMIT_SHA} GIT_DESCRIBE=${GIT_DESCRIBE}
-      echo -e "${SECTION}section_end:`date +%s`:build_${GOOS}_${GOARCH}\r${SECTION}";
-    }
 
 .rules all:
   rules:
