@@ -10,7 +10,7 @@ import (
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 )
 
-//go:generate go run ../../tools/cmd/gen-sdk --package wallet --api-path gitlab.com/accumulatenetwork/core/wallet/cmd/accumulate/walletd/api --out wallet_api_sdk_gen.go ../../cmd/x/accumulate/walletd/api/methods.yml
+//go:generate ./generate.sh
 
 type Client struct {
 	jsonrpc2.Client

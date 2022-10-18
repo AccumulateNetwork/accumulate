@@ -142,7 +142,7 @@ func NewTestBVNN(t *testing.T) (string, []byte) {
 	)
 
 	// Serve
-	go sim.ListenAndServe(nil)
+	go func() { _ = sim.ListenAndServe(nil) }()
 
 	// Step at 100 Hz
 	tick := time.NewTicker(time.Second / 100)
