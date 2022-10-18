@@ -183,9 +183,6 @@ func finalizeDnn(bvnId string) (*cfg.Config, error) {
 	if flagInit.NoEmptyBlocks {
 		c.Consensus.CreateEmptyBlocks = false
 	}
-	if flagInit.NoWebsite {
-		c.Accumulate.Website.Enabled = false
-	}
 
 	if len(c.P2P.PersistentPeers) > 0 {
 		c.P2P.BootstrapPeers = c.P2P.PersistentPeers
@@ -222,9 +219,6 @@ func finalizeBvnn() (*cfg.Config, error) {
 
 	if flagInit.NoEmptyBlocks {
 		c.Consensus.CreateEmptyBlocks = false
-	}
-	if flagInit.NoWebsite {
-		c.Accumulate.Website.Enabled = false
 	}
 
 	//in dual mode, the key between bvn and dn is shared.
