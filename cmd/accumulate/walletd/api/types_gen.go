@@ -130,6 +130,7 @@ type KeyListResponse struct {
 
 type NewTransactionRequest struct {
 	TxName string `json:"txName,omitempty" form:"txName" query:"txName" validate:"required"`
+	Origin string `json:"origin,omitempty" form:"origin" query:"origin" validate:"required"`
 }
 
 type ProveReceiptRequest struct {
@@ -153,6 +154,13 @@ type SignRequest struct {
 type SignResponse struct {
 	Signature []byte `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
 	PublicKey []byte `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
+}
+
+type SignTransactionRequest struct {
+	TxName        string `json:"txName,omitempty" form:"txName" query:"txName" validate:"required"`
+	KeyName       string `json:"keyName,omitempty" form:"keyName" query:"keyName" validate:"required"`
+	SignerVersion int64  `json:"signerVersion,omitempty" form:"signerVersion" query:"signerVersion" validate:"required"`
+	Timestamp     int64  `json:"timestamp,omitempty" form:"timestamp" query:"timestamp"`
 }
 
 type VersionResponse struct {
@@ -425,6 +433,7 @@ func (v *NewTransactionRequest) Copy() *NewTransactionRequest {
 	u := new(NewTransactionRequest)
 
 	u.TxName = v.TxName
+	u.Origin = v.Origin
 
 	return u
 }
@@ -483,6 +492,19 @@ func (v *SignResponse) Copy() *SignResponse {
 }
 
 func (v *SignResponse) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *SignTransactionRequest) Copy() *SignTransactionRequest {
+	u := new(SignTransactionRequest)
+
+	u.TxName = v.TxName
+	u.KeyName = v.KeyName
+	u.SignerVersion = v.SignerVersion
+	u.Timestamp = v.Timestamp
+
+	return u
+}
+
+func (v *SignTransactionRequest) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *VersionResponse) Copy() *VersionResponse {
 	u := new(VersionResponse)
@@ -740,6 +762,9 @@ func (v *NewTransactionRequest) Equal(u *NewTransactionRequest) bool {
 	if !(v.TxName == u.TxName) {
 		return false
 	}
+	if !(v.Origin == u.Origin) {
+		return false
+	}
 
 	return true
 }
@@ -787,6 +812,23 @@ func (v *SignResponse) Equal(u *SignResponse) bool {
 		return false
 	}
 	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
+		return false
+	}
+
+	return true
+}
+
+func (v *SignTransactionRequest) Equal(u *SignTransactionRequest) bool {
+	if !(v.TxName == u.TxName) {
+		return false
+	}
+	if !(v.KeyName == u.KeyName) {
+		return false
+	}
+	if !(v.SignerVersion == u.SignerVersion) {
+		return false
+	}
+	if !(v.Timestamp == u.Timestamp) {
 		return false
 	}
 

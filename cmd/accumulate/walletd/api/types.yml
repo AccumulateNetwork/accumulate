@@ -208,6 +208,8 @@ NewTransactionRequest:
   fields:
     - name: TxName
       type: string
+    - name: Origin
+      type: string
 
 AddSendTokensOutputRequest:
   non-binary: true
@@ -226,3 +228,16 @@ AddMemoTransactionRequest:
       type: string
     - name: Memo
       type: string
+
+SignTransactionRequest:
+  non-binary: true
+  fields:
+    - name: TxName
+      type: string
+    - name: KeyName
+      type: string
+    - name: SignerVersion
+      type: int
+    - name: Timestamp
+      type: int
+      optional: true

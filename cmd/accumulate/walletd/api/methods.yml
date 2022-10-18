@@ -73,3 +73,9 @@ AddMemoToTransaction:
   rpc: add-memo
   input: api.AddMemoTransactionRequest
   output: protocol.Transaction
+
+SignSendTokensTransaction:
+  description: sign send token transaction
+  rpc: sign-transaction
+  input: api.SignTransactionRequest
+  output: api.CreateEnvelopeResponse
