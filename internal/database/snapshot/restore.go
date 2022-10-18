@@ -14,7 +14,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 )
 
 // RestoreVisitor is a visitor that restores accounts, transactions, and
@@ -41,7 +40,7 @@ func NewRestoreVisitor(db database.Beginner, logger log.Logger) *RestoreVisitor 
 	return v
 }
 
-const chainEntryBatchSize = 10000
+const markPointBatchSize = 10000
 
 func (v *RestoreVisitor) VisitAccount(acct *Account, i int) error {
 	// End of section
@@ -51,15 +50,7 @@ func (v *RestoreVisitor) VisitAccount(acct *Account, i int) error {
 
 	if v.CompressChains {
 		for _, c := range acct.Chains {
-			ms := new(managed.MerkleState)
-			ms.Count = int64(c.Count)
-			ms.Pending = c.Pending
-			for _, v := range c.Entries {
-				ms.AddToMerkleTree(v)
-			}
-			c.Count = uint64(ms.Count)
-			c.Pending = ms.Pending
-			c.Entries = nil
+			c.MarkPoints = nil
 		}
 	}
 
@@ -67,7 +58,7 @@ func (v *RestoreVisitor) VisitAccount(acct *Account, i int) error {
 	// separate batch
 	var needsOwnBatch bool
 	for _, c := range acct.Chains {
-		if len(c.Entries) > 0 {
+		if len(c.MarkPoints) > 0 {
 			needsOwnBatch = true
 			break
 		}
@@ -83,43 +74,44 @@ func (v *RestoreVisitor) VisitAccount(acct *Account, i int) error {
 		return errors.Format(errors.StatusUnknownError, "restore %v: %w", acct.Url, err)
 	}
 
-	record := v.batch.Account(acct.Url)
-	chains := map[string][][]byte{}
+	pos := map[string]int{}
 	for _, c := range acct.Chains {
-		mgr, err := record.GetChainByName(c.Name)
+		_, err = acct.RestoreChainHead(v.batch, c)
 		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "store %s chain head: %w", c.Name, err)
-		}
-		err = mgr.RestoreHead(&managed.MerkleState{Count: int64(c.Count), Pending: c.Pending})
-		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "store %s chain head: %w", c.Name, err)
+			return errors.Format(errors.StatusUnknownError, "restore %s chain head: %w", c.Name, err)
 		}
 
-		if len(c.Entries) > 0 {
-			chains[c.Name] = c.Entries
+		if len(c.MarkPoints) > 0 {
+			pos[c.Name] = 0
 		}
 	}
 
 	// Add chain entries 10000 at a time
-	for len(chains) > 0 {
-		next := map[string][][]byte{}
+	for len(pos) > 0 {
 		record := v.batch.Account(acct.Url)
-		for name, entries := range chains {
-			if len(entries) > chainEntryBatchSize {
-				entries, next[name] = entries[:chainEntryBatchSize], entries[chainEntryBatchSize:]
+		for _, c := range acct.Chains {
+			start, ok := pos[c.Name]
+			if !ok {
+				continue
 			}
-			mgr, err := record.GetChainByName(name)
+
+			end := len(c.MarkPoints)
+			if end-start > markPointBatchSize {
+				end = start + markPointBatchSize
+				pos[c.Name] = end
+			} else {
+				delete(pos, c.Name)
+			}
+
+			mgr, err := record.ChainByName(c.Name)
 			if err != nil {
-				return errors.Format(errors.StatusUnknownError, "store %s chain head: %w", name, err)
+				return errors.Format(errors.StatusUnknownError, "get %s chain: %w", c.Name, err)
 			}
-			for _, entry := range entries {
-				err := mgr.AddEntry(entry, false)
-				if err != nil {
-					return errors.Format(errors.StatusUnknownError, "store %s chain entry: %w", name, err)
-				}
+			err = mgr.Inner().RestoreMarkPointRange(c, start, end)
+			if err != nil {
+				return errors.Format(errors.StatusUnknownError, "restore %s chain mark points [%d,%d): %w", c.Name, start, end, err)
 			}
 		}
-		chains = next
 
 		err = v.refreshBatch()
 		if err != nil {
@@ -128,7 +120,7 @@ func (v *RestoreVisitor) VisitAccount(acct *Account, i int) error {
 	}
 
 	// DO NOT reuse the existing record - it may have changed
-	record = v.batch.Account(acct.Url)
+	record := v.batch.Account(acct.Url)
 
 	err = record.VerifyHash(acct.Hash[:])
 	if err != nil {

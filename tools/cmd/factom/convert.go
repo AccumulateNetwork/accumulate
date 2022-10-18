@@ -350,7 +350,7 @@ func (v *chainVisitor) VisitTransaction(txn *snapshot.Transaction, _ int) error 
 	account, ok := v.lookup[entry.AccountId]
 	if ok {
 		c := account.Chains[0]
-		c.Entries = append(c.Entries, txn.Transaction.GetHash())
+		c.AddEntry(txn.Transaction.GetHash())
 		return nil
 	}
 
@@ -362,15 +362,16 @@ func (v *chainVisitor) VisitTransaction(txn *snapshot.Transaction, _ int) error 
 	lda := new(protocol.LiteDataAccount)
 	lda.Url = address
 
-	chain := new(snapshot.Chain)
+	chain := new(managed.Snapshot)
 	chain.Name = "main"
 	chain.Type = protocol.ChainTypeTransaction
-	chain.Entries = append(chain.Entries, txn.Transaction.GetHash())
+	chain.Head = new(managed.MerkleState)
+	chain.AddEntry(txn.Transaction.GetHash())
 
 	account = new(snapshot.Account)
 	account.Url = lda.Url
 	account.Main = lda
-	account.Chains = []*snapshot.Chain{chain}
+	account.Chains = []*managed.Snapshot{chain}
 
 	v.bpt.InsertKV(entry.AccountId, entry.AccountId)
 	v.lookup[entry.AccountId] = account
@@ -391,22 +392,10 @@ func hashSecondaryState(a *snapshot.Account) hash.Hasher {
 func hashChains(a *snapshot.Account) hash.Hasher {
 	var hasher hash.Hasher
 	for _, c := range a.Chains {
-		ms := new(managed.MerkleState)
-		ms.Count = int64(c.Count)
-		ms.Pending = make(managed.SparseHashList, len(c.Pending))
-		for i, v := range c.Pending {
-			if len(v) > 0 {
-				ms.Pending[i] = v
-			}
-		}
-		for _, v := range c.Entries {
-			ms.AddToMerkleTree(v)
-		}
-
-		if ms.Count == 0 {
+		if c.Head.Count == 0 {
 			hasher.AddHash(new([32]byte))
 		} else {
-			hasher.AddHash((*[32]byte)(ms.GetMDRoot()))
+			hasher.AddHash((*[32]byte)(c.Head.GetMDRoot()))
 		}
 	}
 	return hasher
