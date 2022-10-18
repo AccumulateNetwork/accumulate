@@ -223,7 +223,7 @@ func (m *MerkleManager) Get(element int64) (Hash, error) {
 
 	i := element & m.markMask // Index within the mark point
 	if i >= int64(len(state.HashList)) {
-		return nil, errors.Format(errors.StatusInternalError, "mark point %d: expected %d elements, got %d", m.markFreq, len(state.HashList))
+		return nil, errors.Format(errors.StatusInternalError, "mark point %d: expected %d elements, got %d", elemMark-1, m.markFreq, len(state.HashList))
 	}
 	return state.HashList[i], nil
 }
