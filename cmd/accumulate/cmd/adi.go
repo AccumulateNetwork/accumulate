@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package cmd
 
 import (
@@ -8,7 +14,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	url2 "gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -90,7 +96,7 @@ func GetAdiDirectory(origin string, start string, count string) (string, error) 
 		return "", fmt.Errorf("count must be greater than zero")
 	}
 
-	params := api.DirectoryQuery{}
+	params := client.DirectoryQuery{}
 	params.Url = u
 	params.Start = uint64(st)
 	params.Count = uint64(ct)
@@ -101,7 +107,7 @@ func GetAdiDirectory(origin string, start string, count string) (string, error) 
 		return "", err
 	}
 
-	var res api.MultiResponse
+	var res client.MultiResponse
 	if err := Client.RequestAPIv2(context.Background(), "query-directory", json.RawMessage(data), &res); err != nil {
 		return PrintJsonRpcError(err)
 	}

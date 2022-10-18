@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package protocol
 
 import (
@@ -76,7 +82,7 @@ const (
 	AccountUrlMaxLength = 500
 )
 
-//AcmeSupplyLimit set at 500,000,000.00000000 million acme (external units)
+// AcmeSupplyLimit set at 500,000,000.00000000 million acme (external units)
 const AcmeSupplyLimit = 500_000_000
 
 // DelegationDepthLimit limits the number of layers of delegation.
@@ -186,15 +192,15 @@ func ParseLiteDataAddress(u *url.URL) ([]byte, error) {
 // last four bytes of the hexadecimal partial key hash. For an ACME lite token
 // account URL for a key with a public key hash of
 //
-//   "aec070645fe53ee3b3763059376134f058cc337247c978add178b6ccdfb0019f"
+//	"aec070645fe53ee3b3763059376134f058cc337247c978add178b6ccdfb0019f"
 //
 // The checksum is calculated as
 //
-//   sha256("aec070645fe53ee3b3763059376134f058cc3372")[28:] == "26e2a324"
+//	sha256("aec070645fe53ee3b3763059376134f058cc3372")[28:] == "26e2a324"
 //
 // The resulting URL is
 //
-//   "acc://aec070645fe53ee3b3763059376134f058cc337226e2a324/ACME"
+//	"acc://aec070645fe53ee3b3763059376134f058cc337226e2a324/ACME"
 func LiteTokenAddress(pubKey []byte, tokenUrlStr string, signatureType SignatureType) (*url.URL, error) {
 	tokenUrl, err := url.Parse(tokenUrlStr)
 	if err != nil {
