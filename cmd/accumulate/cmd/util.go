@@ -12,7 +12,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"log"
 	"math"
 	"math/big"
 	"strings"
@@ -20,6 +19,7 @@ import (
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
@@ -31,6 +31,13 @@ import (
 func runCmdFunc(fn func(args []string) (string, error)) func(cmd *cobra.Command, args []string) {
 	return func(cmd *cobra.Command, args []string) {
 		out, err := fn(args)
+		printOutput(cmd, out, err)
+	}
+}
+
+func runCmdFunc2(fn func(cmd *cobra.Command, args []string) (string, error)) func(cmd *cobra.Command, args []string) {
+	return func(cmd *cobra.Command, args []string) {
+		out, err := fn(cmd, args)
 		printOutput(cmd, out, err)
 	}
 }
@@ -72,31 +79,14 @@ func prepareSigner(origin *url.URL, args []string) ([]string, []*signing.Builder
 	var signers []*signing.Builder
 	for _, name := range AdditionalSigners {
 		signer := new(signing.Builder)
-		signer.Type = protocol.SignatureTypeLegacyED25519
-		err := prepareSignerPage(signer, origin, name)
+		err := prepareSignerFromName(origin, signer, name)
 		if err != nil {
 			return nil, nil, err
 		}
 		signers = append(signers, signer)
 	}
 
-	var key *Key
-	var err error
-	if IsLiteTokenAccount(origin.String()) {
-		key, err = LookupByLiteTokenUrl(origin.String())
-		if err != nil {
-			return nil, nil, fmt.Errorf("unable to find private key for lite token account %s %v", origin.String(), err)
-		}
-
-	} else if IsLiteIdentity(origin.String()) {
-		key, err = LookupByLiteIdentityUrl(origin.String())
-		if err != nil {
-			return nil, nil, fmt.Errorf("unable to find private key for lite identity account %s %v", origin.String(), err)
-		}
-	}
-
 	firstSigner := new(signing.Builder)
-	firstSigner.Type = protocol.SignatureTypeLegacyED25519
 	firstSigner.SetTimestampToNow()
 
 	for _, del := range Delegators {
@@ -107,19 +97,20 @@ func prepareSigner(origin *url.URL, args []string) ([]string, []*signing.Builder
 		firstSigner.AddDelegator(u)
 	}
 
-	if key != nil {
-		firstSigner.Type = key.Type
-		firstSigner.Url = origin.RootIdentity()
-		firstSigner.Version = 1
-		firstSigner.SetPrivateKey(key.PrivateKey)
-	} else if len(args) > 0 {
+	lite, err := prepareSignerLite(firstSigner, origin.String())
+	if err != nil {
+		return nil, nil, err
+	}
+	if !lite {
+		if len(args) == 0 {
+			return nil, nil, fmt.Errorf("key name argument is missing")
+		}
+
 		err = prepareSignerPage(firstSigner, origin, args[0])
 		if err != nil {
 			return nil, nil, err
 		}
 		args = args[1:]
-	} else {
-		return nil, nil, fmt.Errorf("key name argument is missing")
 	}
 
 	// Put the first signer first
@@ -127,6 +118,68 @@ func prepareSigner(origin *url.URL, args []string) ([]string, []*signing.Builder
 	copy(signers[1:], signers)
 	signers[0] = firstSigner
 	return args, signers, nil
+}
+
+func prepareSignerFromName(principal *url.URL, signer *signing.Builder, name string) error {
+	// If the name is a URL, and that is a lite address, and we can prepare a
+	// lite address signer, then it's a lite address. In any other condition,
+	// assume the name is a labeled key belonging to a key page.
+
+	u, err := url.Parse(name)
+	if err != nil {
+		return prepareSignerPage(signer, principal, name)
+	}
+
+	_, err = protocol.ParseLiteAddress(u)
+	if err != nil {
+		return prepareSignerPage(signer, principal, name)
+	}
+
+	lite, err := prepareSignerLite(signer, name)
+	if err != nil {
+		return err
+	}
+	if !lite {
+		return prepareSignerPage(signer, principal, name)
+	}
+
+	return nil
+}
+
+func prepareSignerLite(signer *signing.Builder, str string) (bool, error) {
+	// If the signer string is not a URL it can't be a lite address
+	u, err := url.Parse(str)
+	if err != nil {
+		return false, nil
+	}
+
+	var key *walletd.Key
+	isLiteTokenAccount, _ := IsLiteTokenAccount(str)
+	if isLiteTokenAccount {
+		key, err = walletd.LookupByLiteTokenUrl(str)
+		if err != nil {
+			return false, fmt.Errorf("unable to find private key for lite token account %s %v", str, err)
+		}
+
+	} else {
+		isLiteIdentity, err := IsLiteIdentity(str)
+		if err != nil {
+			return false, err
+		}
+		if !isLiteIdentity {
+			return false, nil
+		}
+		key, err = walletd.LookupByLiteIdentityUrl(str)
+		if err != nil {
+			return false, fmt.Errorf("unable to find private key for lite identity account %s %v", str, err)
+		}
+	}
+
+	signer.Type = key.KeyInfo.Type
+	signer.Url = u.RootIdentity()
+	signer.Version = 1
+	signer.SetPrivateKey(key.PrivateKey)
+	return true, nil
 }
 
 func prepareSignerPage(signer *signing.Builder, origin *url.URL, signingKey string) error {
@@ -146,7 +199,7 @@ func prepareSignerPage(signer *signing.Builder, origin *url.URL, signingKey stri
 	}
 	signer.SetPrivateKey(key.PrivateKey)
 
-	signer.Type = key.Type
+	signer.Type = key.KeyInfo.Type
 
 	keyInfo, err := getKey(keyHolder.String(), key.PublicKeyHash())
 	if err != nil {
@@ -183,22 +236,37 @@ func parseArgsAndPrepareSigner(args []string) ([]string, *url.URL, []*signing.Bu
 	return args, principal, signers, nil
 }
 
-func IsLiteTokenAccount(urlstr string) bool {
-	u, err := url.Parse(urlstr)
+func IsLiteTokenAccount(urlstr string) (bool, error) {
+	u, err := url.Parse(strings.Trim(urlstr, " "))
 	if err != nil {
-		log.Fatal(err)
+		return false, err
 	}
-	key, _, _ := protocol.ParseLiteTokenAddress(u)
-	return key != nil
+	if strings.Contains(u.Hostname(), ".") {
+		return false, nil
+	}
+	key, _, err := protocol.ParseLiteTokenAddress(u)
+	if err != nil {
+		return false, fmt.Errorf("invalid lite token address : %s", u.String())
+	}
+	return key != nil, nil
 }
 
-func IsLiteIdentity(urlstr string) bool {
-	u, err := url.Parse(urlstr)
+func IsLiteIdentity(urlstr string) (bool, error) {
+	u, err := url.Parse(strings.Trim(urlstr, " "))
 	if err != nil {
-		log.Fatal(err)
+		return false, err
 	}
-	key, _ := protocol.ParseLiteIdentity(u)
-	return key != nil
+	if protocol.AcmeUrl().Equal(u) {
+		return false, nil
+	}
+	if strings.Contains(u.Hostname(), ".") {
+		return false, nil
+	}
+	key, err := protocol.ParseLiteIdentity(u)
+	if err != nil {
+		return false, fmt.Errorf("invalid lite identity : %s", u.String())
+	}
+	return key != nil, nil
 }
 
 // Remarshal uses mapstructure to convert a generic JSON-decoded map into a struct.
@@ -554,7 +622,11 @@ func parseAmount(amount string, precision uint64) (*big.Int, error) {
 func GetTokenUrlFromAccount(u *url.URL) (*url.URL, error) {
 	var err error
 	var tokenUrl *url.URL
-	if IsLiteTokenAccount(u.String()) {
+	isLiteTokenAccount, err := IsLiteTokenAccount(u.String())
+	if err != nil {
+		return nil, err
+	}
+	if isLiteTokenAccount {
 		_, tokenUrl, err = protocol.ParseLiteTokenAddress(u)
 		if err != nil {
 			return nil, fmt.Errorf("cannot extract token url from lite token account, %v", err)
@@ -645,7 +717,7 @@ func QueryAcmeOracle() (*protocol.AcmeOracle, error) {
 
 func ValidateSigType(input string) (protocol.SignatureType, error) {
 	sigtype, ok := protocol.SignatureTypeByName(input)
-	if !ok {
+	if !ok || sigtype == protocol.SignatureTypeLegacyED25519 {
 		sigtype = protocol.SignatureTypeED25519
 	}
 	return sigtype, nil
