@@ -2,6 +2,8 @@ module gitlab.com/accumulatenetwork/accumulate
 
 go 1.18
 
+replace github.com/tyler-smith/go-bip32 v1.0.0 => github.com/AccumulateNetwork/go-bip32 v1.0.0-ed25519
+
 require (
 	github.com/AccumulateNetwork/jsonrpc2/v15 v15.0.0-20220517212445-953ad957e040
 	github.com/FactomProject/factom v0.4.0
@@ -29,7 +31,6 @@ require (
 	github.com/spf13/viper v1.12.0
 	github.com/stretchr/testify v1.8.0
 	github.com/tendermint/tendermint v0.35.9
-	github.com/tyler-smith/go-bip32 v1.0.0
 	github.com/tyler-smith/go-bip39 v1.1.0
 	gitlab.com/ethan.reesor/vscode-notebooks/go-playbooks v0.0.0-20220417214602-1121b9fae118
 	gitlab.com/ethan.reesor/vscode-notebooks/yaegi v0.0.0-20220417214422-5c573557938e
@@ -49,6 +50,7 @@ require (
 	github.com/ghodss/yaml v1.0.0
 	github.com/gorhill/cronexpr v0.0.0-20180427100037-88b0669f7d75
 	github.com/manifoldco/promptui v0.9.0
+	github.com/tyler-smith/go-bip32 v1.0.0
 )
 
 require (

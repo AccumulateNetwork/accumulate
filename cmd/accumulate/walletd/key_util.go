@@ -191,8 +191,12 @@ func GenerateKeyFromHDPath(derivationPath string, sigtype protocol.SignatureType
 		return nil, fmt.Errorf("wallet not created, please create a seeded wallet \"accumulate wallet init\"")
 	}
 
+	curve := bip32.Bitcoin
+	if hd.CoinType() == TypeAccumulate {
+		curve = bip32.Ed25519
+	}
 	//if we do have a seed, then create a new key
-	masterKey, _ := bip32.NewMasterKey(seed)
+	masterKey, _ := bip32.NewMasterKeyWithCurve(seed, curve)
 
 	//create the derived key
 	newKey, err := NewKeyFromMasterKey(masterKey, hd.CoinType(), hd.Account(), hd.Chain(), hd.Address())
@@ -218,6 +222,9 @@ func getKeyCountAndIncrement(sigtype protocol.SignatureType) (count uint32, err 
 	err = GetWallet().Put(BucketMnemonic, []byte(sigtype.String()), ct)
 	if err != nil {
 		return 0, err
+	}
+	if sigtype == protocol.SignatureTypeED25519 {
+		count += uint32(0x80000000)
 	}
 
 	return count, nil
