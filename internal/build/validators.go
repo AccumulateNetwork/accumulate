@@ -22,7 +22,7 @@ func AddOperator(values *core.GlobalValues, operatorCount int, newPubKey, newKey
 	for _, signer := range signers {
 		signer.Version++
 	}
-	env2, err2 := AddValidator(values, operatorCount, newPubKey, partition, signers...)
+	env2, err2 := AddValidator(values, operatorCount, newPubKey, partition, false, signers...)
 	if err1 != nil {
 		return nil, err1
 	} else if err2 != nil {
@@ -43,9 +43,9 @@ func AddToOperatorPage(values *core.GlobalValues, operatorCount int, newKeyHash 
 	return initiateTransaction(signers, protocol.DnUrl().JoinPath(protocol.Operators, "1"), updatePage)
 }
 
-func AddValidator(values *core.GlobalValues, operatorCount int, newPubKey []byte, partition string, signers ...*signing.Builder) (*protocol.Envelope, error) {
+func AddValidator(values *core.GlobalValues, operatorCount int, newPubKey []byte, partition string, isFollower bool, signers ...*signing.Builder) (*protocol.Envelope, error) {
 	// Add the key to the network definition
-	values.Network.AddValidator(newPubKey, partition, true)
+	values.Network.AddValidator(newPubKey, partition, !isFollower)
 	return updateNetworkDefinition(values, signers)
 }
 

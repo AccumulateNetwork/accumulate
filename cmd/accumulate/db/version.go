@@ -14,7 +14,7 @@ import (
 type Version uint64
 
 func NewVersion(commit int, major int, minor int, revision int) Version {
-	return Version(commit*0x100000000 + major*0x1000000 + minor*0x10000 + revision)
+	return Version((commit&0xFFFFFFFF)*0x100000000 + major*0x1000000 + minor*0x10000 + revision)
 }
 
 func (v Version) Commit() uint32 {
@@ -50,10 +50,13 @@ func (v Version) String() string {
 
 // Compare returns < 0 if v < version, returns > 0 if v > version, returns 0 if v == version
 func (v Version) Compare(version Version) int {
+	//only compare the major/minor/revision
+	self := 0xFFFFFFFF & v
+	cmp := 0xFFFFFFFF & version
 	switch {
-	case v < version:
+	case self < cmp:
 		return -1
-	case v > version:
+	case self > cmp:
 		return +1
 	default:
 		return 0

@@ -10,24 +10,29 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"crypto/ed25519"
 	"crypto/sha256"
+	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"os"
 	"strconv"
 	"strings"
 
+	"github.com/manifoldco/promptui"
 	"github.com/mdp/qrterminal"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/db"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
+	api2 "gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd/api"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	url2 "gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 )
 
@@ -38,7 +43,6 @@ func init() {
 		accountQrCmd,
 		accountGenerateCmd,
 		accountListCmd,
-		accountRestoreCmd,
 		accountLockCmd,
 	)
 
@@ -51,7 +55,7 @@ func init() {
 
 	accountCreateTokenCmd.Flags().BoolVar(&flagAccount.Lite, "lite", false, "Create a lite token account")
 	accountCreateDataCmd.Flags().BoolVar(&flagAccount.Lite, "lite", false, "Create a lite data account")
-	accountGenerateCmd.Flags().StringVar(&SigType, "sigtype", "ed25519", "Specify the signature type use rcd1 for RCD1 type ; ed25519 for ED25519 ; legacyed25519 for LegacyED25519 ; btc for Bitcoin ; btclegacy for LegacyBitcoin  ; eth for Ethereum ")
+	accountGenerateCmd.Flags().StringVar(&SigType, "sigtype", "ed25519", "Specify the signature type use rcd1 for RCD1 type ; ed25519 for accumulate ED25519 ; btc for Bitcoin ; btclegacy for LegacyBitcoin  ; eth for Ethereum ")
 	accountCreateDataCmd.Flags().StringVar(&flagAccount.LiteData, "lite-data", "", "Add first entry data to lite data account")
 	accountLockCmd.Flags().BoolVarP(&flagAccount.Force, "force", "f", false, "Do not prompt the user")
 }
@@ -161,16 +165,6 @@ var accountListCmd = &cobra.Command{
 	Args:  cobra.NoArgs,
 	Run: func(cmd *cobra.Command, _ []string) {
 		out, err := ListAccounts()
-		printOutput(cmd, out, err)
-	},
-}
-
-var accountRestoreCmd = &cobra.Command{
-	Use:   "restore",
-	Short: "Restore old lite token accounts",
-	Args:  cobra.NoArgs,
-	Run: func(cmd *cobra.Command, _ []string) {
-		out, err := RestoreAccounts()
 		printOutput(cmd, out, err)
 	},
 }
@@ -394,7 +388,7 @@ func GenerateAccount(_ *cobra.Command, args []string) (string, error) {
 }
 
 func ListAccounts() (string, error) {
-	b, err := GetWallet().GetBucket(BucketLite)
+	b, err := walletd.GetWallet().GetBucket(walletd.BucketLite)
 	if err != nil {
 		//no accounts so nothing to do...
 		return "", fmt.Errorf("no lite accounts have been generated")
@@ -405,34 +399,20 @@ func ListAccounts() (string, error) {
 		out += "{\"liteAccounts\":["
 	}
 	for i, v := range b.KeyValueList {
-		pubKey, err := GetWallet().Get(BucketLabel, v.Value)
+		k := new(walletd.Key)
+		err = k.LoadByLabel(string(v.Value))
 		if err != nil {
 			return "", err
 		}
 
-		st, err := GetWallet().Get(BucketSigType, pubKey)
-		if err != nil {
-			return "", err
-		}
-		s, _ := common.BytesUint64(st)
-		var sigType protocol.SignatureType
-		if !sigType.SetEnumValue(s) {
-			return "", fmt.Errorf("invalid signature type")
-		}
-
-		k := new(Key)
-		err = k.LoadByPublicKey(pubKey)
-		if err != nil {
-			return "", err
-		}
 		lt, err := protocol.LiteTokenAddressFromHash(k.PublicKeyHash(), protocol.ACME)
 		if err != nil {
 			return "", err
 		}
 		kr := KeyResponse{}
 		kr.LiteAccount = lt
-		kr.KeyType = sigType
-		kr.PublicKey = pubKey
+		kr.KeyInfo = k.KeyInfo
+		kr.PublicKey = k.PublicKey
 		*kr.Label.AsString() = string(v.Value)
 		if WantJsonOutput {
 			if i > 0 {
@@ -444,165 +424,13 @@ func ListAccounts() (string, error) {
 			}
 			out += string(d)
 		} else {
-			out += fmt.Sprintf("\n\tkey name\t:\t%s\n\tlite account\t:\t%s\n\tpublic key\t:\t%x\n\tkey type\t:\t%s\n", v.Value, kr.LiteAccount, pubKey, sigType)
+			out += fmt.Sprintf("\n\tkey name\t:\t%s\n\tlite account\t:\t%s\n\tpublic key\t:\t%x\n\tkey type\t:\t%s\n\tderivation\t:\t%s\n", v.Value, kr.LiteAccount, k.PublicKey, k.KeyInfo.Type, k.KeyInfo.Derivation)
 		}
 	}
 	if WantJsonOutput {
 		out += "]}"
 	}
 	//TODO: this probably should also list out adi accounts as well
-	return out, nil
-}
-
-func RestoreAccounts() (out string, err error) {
-	walletVersion, err := GetWallet().GetRaw(db.BucketConfig, []byte("version"))
-	if err == nil {
-		var v db.Version
-		v.FromBytes(walletVersion)
-		//if there is no error getting version, check to see if it is the right version
-		if db.WalletVersion.Compare(v) == 0 {
-			//no need to update
-			return "", nil
-		}
-		if db.WalletVersion.Compare(v) < 0 {
-			return "", fmt.Errorf("cannot update wallet to an older version, wallet database version is %v, cli version is %v", v.String(), db.WalletVersion.String())
-		}
-	}
-
-	anon, err := GetWallet().GetBucket(BucketAnon)
-	if err == nil {
-		for _, v := range anon.KeyValueList {
-			u, err := url2.Parse(string(v.Key))
-			if err != nil {
-				out += fmt.Sprintf("%q is not a valid URL\n", v.Key)
-			}
-			if u != nil {
-				key, _, err := protocol.ParseLiteTokenAddress(u)
-				if err != nil {
-					out += fmt.Sprintf("%q is not a valid lite account: %v\n", v.Key, err)
-				} else if key == nil {
-					out += fmt.Sprintf("%q is not a lite account\n", v.Key)
-				}
-			}
-
-			label, _ := LabelForLiteTokenAccount(string(v.Key))
-			v.Key = []byte(label)
-
-			privKey := ed25519.PrivateKey(v.Value)
-			pubKey := privKey.Public().(ed25519.PublicKey)
-			out += fmt.Sprintf("Converting %s : %x\n", v.Key, pubKey)
-
-			err = GetWallet().Put(BucketLabel, v.Key, pubKey)
-			if err != nil {
-				log.Fatal(err)
-			}
-			err = GetWallet().Put(BucketKeys, pubKey, privKey)
-			if err != nil {
-				return "", err
-			}
-			err = GetWallet().DeleteBucket(BucketAnon)
-			if err != nil {
-				return "", err
-			}
-		}
-	}
-
-	//fix the labels... there can be only one key one label.
-	//should not have multiple labels to the same public key
-	labelz, err := GetWallet().GetBucket(BucketLabel)
-	if err != nil {
-		//nothing to do...
-		return
-	}
-	for _, v := range labelz.KeyValueList {
-		label, isLite := LabelForLiteTokenAccount(string(v.Key))
-		if isLite {
-			//if we get here, then that means we have a bogus label.
-			bogusLiteLabel := string(v.Key)
-			//so check to see if it is in our regular key bucket
-			otherPubKey, err := GetWallet().Get(BucketLabel, []byte(label))
-			if err != nil {
-				//key isn't found, so let's add it
-				out += fmt.Sprintf("Converting %s to %s : %x\n", v.Key, label, v.Value)
-				//so it doesn't exist, map the good label to the public key
-				err = GetWallet().Put(BucketLabel, []byte(label), v.Value)
-				if err != nil {
-					return "", err
-				}
-
-				//now delete the bogus label
-				err = GetWallet().Delete(BucketLabel, []byte(bogusLiteLabel))
-				if err != nil {
-					return "", err
-				}
-			} else {
-				//ok so it does exist, now need to know if public key is the same, it is
-				//an error if they don't match so warn user
-				if !bytes.Equal(v.Value, otherPubKey) {
-					out += fmt.Sprintf("public key stored for %v, doesn't match what is expected for a lite account: %s (%x != %x)\n",
-						bogusLiteLabel, label, v.Value, otherPubKey)
-				} else {
-					//key isn't found, so let's add it
-					out += fmt.Sprintf("Removing duplicate %s / %s : %x\n", v.Key, label, v.Value)
-					//now delete the bogus label
-					err = GetWallet().Delete(BucketLabel, []byte(bogusLiteLabel))
-					if err != nil {
-						return "", err
-					}
-				}
-			}
-		}
-	}
-
-	//build the map of lite accounts to key labels
-	labelz, err = GetWallet().GetBucket(BucketLabel)
-	if err != nil {
-		//nothing to do...
-		return
-	}
-	for _, v := range labelz.KeyValueList {
-		k := new(Key)
-		err = k.LoadByPublicKey(v.Value)
-		if err != nil {
-			return "", err
-		}
-		liteAccount, err := protocol.LiteTokenAddressFromHash(k.PublicKeyHash(), protocol.ACME)
-		if err != nil {
-			return "", err
-		}
-
-		//check to see if the key type has been assigned, if not set it to the ed25519Legacy...
-		_, err = GetWallet().Get(BucketSigType, v.Value)
-		if err != nil {
-			//add the default key type
-			out += fmt.Sprintf("assigning default key type %s for key name %v\n", k.Type, string(v.Key))
-
-			err = GetWallet().Put(BucketSigType, v.Value, common.Uint64Bytes(k.Type.GetEnumValue()))
-			if err != nil {
-				return "", err
-			}
-		}
-
-		liteLabel, _ := LabelForLiteTokenAccount(liteAccount.String())
-		_, err = GetWallet().Get(BucketLite, []byte(liteLabel))
-		if err == nil {
-			continue
-		}
-
-		out += fmt.Sprintf("lite identity %v mapped to key name %v\n", liteLabel, string(v.Key))
-
-		err = GetWallet().Put(BucketLite, []byte(liteLabel), v.Key)
-		if err != nil {
-			return "", err
-		}
-	}
-
-	//update wallet version
-	err = GetWallet().PutRaw(db.BucketConfig, []byte("version"), db.WalletVersion.Bytes())
-	if err != nil {
-		return "", err
-	}
-
 	return out, nil
 }
 
@@ -662,4 +490,259 @@ func lockAccount(principal *url2.URL, signers []*signing.Builder, args []string)
 	}
 
 	return dispatchTxAndPrintResponse(body, principal, signers)
+}
+
+func ExportAccounts(filePath string) error {
+	res := api2.Wallet{}
+	walletVersion, err := walletd.GetWallet().GetRaw(db.BucketConfig, []byte("version"))
+	if err != nil {
+		return err
+	}
+	var v db.Version
+	v.FromBytes(walletVersion)
+	res.Version.Commit = uint64(v.Commit())
+	res.Version.Major = uint64(v.Major())
+	res.Version.Minor = uint64(v.Minor())
+	res.Version.Revision = uint64(v.Revision())
+
+	b, err := walletd.GetWallet().GetBucket(walletd.BucketLabel)
+	if err != nil {
+		//no accounts so nothing to do...
+		return fmt.Errorf("no lite accounts have been generated")
+	}
+	//var res []*KeyResponse
+	for i := range b.KeyValueList {
+		k := new(walletd.Key)
+		err = k.LoadByPublicKey(b.KeyValueList[i].Value)
+		if err != nil {
+			log.Printf("cannot load key by label %s with public key %x, %v", b.KeyValueList[i].Key, b.KeyValueList[i].Value, err)
+			continue
+		}
+		res.Keys = append(res.Keys, k.Key)
+		kn := api2.KeyName{}
+		kn.Name = string(b.KeyValueList[i].Key)
+		kn.PublicKey = b.KeyValueList[i].Value
+		res.KeyNames = append(res.KeyNames, kn)
+	}
+
+	l, err := walletd.GetWallet().GetBucket(walletd.BucketLite)
+	if err != nil {
+		log.Println(err)
+	}
+	for i := range l.KeyValueList {
+		label := api2.LiteLabel{}
+		label.LiteName = string(l.KeyValueList[i].Key)
+		label.KeyName = string(l.KeyValueList[i].Value)
+		res.LiteLabels = append(res.LiteLabels, label)
+	}
+
+	a, err := walletd.GetWallet().GetBucket(walletd.BucketAdi)
+	if err == nil {
+		for _, v := range a.KeyValueList {
+			u, err := url2.Parse(string(v.Key))
+			if err != nil {
+				a := api2.Adi{}
+				p := api2.Page{}
+				a.Url = *u
+				//page url's aren't currently stored
+				a.Pages = append(a.Pages, p)
+				lab, err := walletd.FindLabelFromPubKey(v.Value)
+				if err != nil {
+					p.KeyNames = append(p.KeyNames, hex.EncodeToString(v.Value))
+				} else {
+					p.KeyNames = append(p.KeyNames, lab)
+				}
+				res.Adis = append(res.Adis, a)
+			}
+		}
+	}
+
+	bucket, err := walletd.GetWallet().GetBucket(walletd.BucketMnemonic)
+	if err != nil {
+		log.Println("mnemonic bucket doesn't exist")
+	} else {
+		for _, v := range bucket.KeyValueList {
+			switch string(v.Key) {
+			case "phrase":
+				phrase, err := walletd.GetWallet().Get(walletd.BucketMnemonic, []byte("phrase"))
+				if err != nil {
+					log.Println("mnemonic seed doesn't exist, thus was not exported")
+				}
+				if phrase != nil {
+					res.SeedInfo.Mnemonic = string(phrase)
+				}
+			case "seed":
+				res.SeedInfo.Seed, err = walletd.GetWallet().Get(walletd.BucketMnemonic, []byte("seed"))
+				if err != nil {
+					log.Println("mnemonic seed doesn't exist, thus was not exported")
+				}
+			default:
+				//these are the sig types
+				dc := api2.DerivationCount{}
+				dc.Count = uint64(binary.LittleEndian.Uint32(v.Value))
+				var found bool
+				dc.Type, found = protocol.SignatureTypeByName(string(v.Key))
+				if found {
+					res.SeedInfo.Derivations = append(res.SeedInfo.Derivations, dc)
+				}
+			}
+		}
+	}
+
+	bin, err := json.MarshalIndent(&res, "", "  ")
+
+	if err != nil {
+		log.Printf("cannot convert export to json for export, error: %v", err)
+	}
+
+	if _, err := os.Stat(filePath); err == nil {
+		opt, err := promptOverwrite()
+		if err != nil {
+			return err
+		}
+		if strings.EqualFold(opt, "yes") {
+			file, err := os.OpenFile(filePath, os.O_RDWR|os.O_TRUNC, 0644)
+			if err != nil {
+				return err
+			}
+			defer file.Close()
+			_, err = io.Copy(file, strings.NewReader(string(bin)))
+			if err != nil {
+				return err
+			}
+		} else {
+			return fmt.Errorf("operation skipped")
+		}
+
+	} else if errors.Is(err, os.ErrNotExist) {
+		out, err := os.Create(filePath)
+		if err != nil {
+			return err
+		}
+		defer out.Close()
+		_, err = io.Copy(out, strings.NewReader(string(bin)))
+		if err != nil {
+			return err
+		}
+	} else {
+		return err
+	}
+	return nil
+}
+
+func ImportAccounts(filePath string) error {
+	data, err := ioutil.ReadFile(filePath)
+	if err != nil {
+		return fmt.Errorf("failed reading data from file: %s", err)
+	}
+	var req *api2.Wallet
+	if err := json.Unmarshal(data, &req); err != nil {
+		return err
+	}
+
+	mnemonics := strings.Split(req.SeedInfo.Mnemonic, " ")
+	_, err = walletd.ImportMnemonic(mnemonics)
+	if err != nil {
+		return fmt.Errorf("failed importing mnemonic: %s", err)
+	}
+	//import the sig type derivation address count
+	for _, v := range req.SeedInfo.Derivations {
+		var b [4]byte
+		binary.LittleEndian.PutUint32(b[:], uint32(v.Count))
+		err = walletd.GetWallet().Put(walletd.BucketMnemonic, []byte(v.Type.String()), b[:])
+		if err != nil {
+			log.Printf("failed to set derivation counter for %s", v.Type.String())
+		}
+	}
+
+	for _, v := range req.Keys {
+		b, err := v.KeyInfo.MarshalBinary()
+		if err != nil {
+			log.Printf("invalid key info provided for key %x, %v", v.PublicKey, err)
+			continue
+		}
+		err = walletd.GetWallet().Put(walletd.BucketKeys, v.PublicKey, v.PrivateKey)
+		if err != nil {
+			log.Printf("failed to store private key for key %x, %v", v.PublicKey, err)
+			continue
+		}
+		err = walletd.GetWallet().Put(walletd.BucketKeyInfo, v.PublicKey, b)
+		if err != nil {
+			log.Printf("failed to store key info for key %x, %v", v.PublicKey, err)
+		}
+	}
+
+	for _, v := range req.KeyNames {
+		err = walletd.GetWallet().Put(walletd.BucketLabel, []byte(v.Name), v.PublicKey)
+		if err != nil {
+			log.Printf("failed to store bucket label %s for key %x, %v", v.Name, v.PublicKey, err)
+		}
+	}
+
+	for _, v := range req.LiteLabels {
+		err = walletd.GetWallet().Put(walletd.BucketLite, []byte(v.LiteName), []byte(v.KeyName))
+		if err != nil {
+			log.Printf("failed to store bucket lite label %s for key name %s, %v", v.LiteName, v.KeyName, err)
+		}
+	}
+
+	for _, adi := range req.Adis {
+		if len(adi.Pages) == 0 {
+			log.Printf("skipping adi import, %s, missing key page", adi.Url.String())
+			continue
+		}
+
+		//pages for adi in version 1 is just a key since we don't actually store keys mapped to pages yet
+		if len(adi.Pages[0].KeyNames) == 0 {
+			log.Printf("skipping adi import, %s, missing key in page", adi.Url.String())
+			continue
+		}
+
+		k, err := walletd.LookupByLabel(adi.Pages[0].KeyNames[0])
+		if err != nil {
+			log.Printf("skipping adi import, %s, cannot find key for name %s", adi.Url.String(), adi.Pages[0].KeyNames[0])
+			continue
+		}
+
+		err = walletd.GetWallet().Put(walletd.BucketAdi, []byte(adi.Url.Authority), k.PublicKey)
+		if err != nil {
+			log.Printf("skipping adi import for %s with key %s DB error: %v", adi.Url.String(), adi.Pages[0].KeyNames[0], err)
+		}
+	}
+
+	version := db.NewVersion(int(req.Version.Commit), int(req.Version.Major), int(req.Version.Minor), int(req.Version.Revision))
+	err = walletd.GetWallet().PutRaw(db.BucketConfig, []byte("version"), version.Bytes())
+	if err != nil {
+		log.Printf("failed to store version info %v", err)
+	}
+
+	return nil
+}
+
+func promptOverwrite() (string, error) {
+	pc := promptContent{
+		"",
+		"File already exists. Do you want to overwrite?",
+	}
+	items := []string{"Yes", "No"}
+	index := -1
+	var result string
+	var err error
+
+	for index < 0 {
+		prompt := promptui.SelectWithAdd{
+			Label: pc.label,
+			Items: items,
+		}
+		index, result, err = prompt.Run()
+		if index == -1 {
+			items = append(items, result)
+		}
+	}
+
+	if err != nil {
+		return "", err
+	}
+
+	return result, nil
 }

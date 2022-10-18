@@ -32,6 +32,10 @@ func (f *FieldType) Title() string {
 	return TitleCase(f.String())
 }
 
+func (f *FieldType) IsKnown() bool {
+	return f.Code != TypeCodeUnknown
+}
+
 func (f *FieldType) SetKnown(code TypeCode) {
 	*f = FieldType{Code: code}
 }

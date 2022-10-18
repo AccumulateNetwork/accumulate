@@ -45,7 +45,7 @@ func loadNetworkConfiguration(file string) (ret *accumulated.NetworkInit, err er
 	return ret, err
 }
 
-//load network config file
+// load network config file
 func initNetwork(cmd *cobra.Command, args []string) {
 	networkConfigFile := args[0]
 	network, err := loadNetworkConfiguration(networkConfigFile)
@@ -145,9 +145,6 @@ func initNetworkLocalFS(cmd *cobra.Command, netInit *accumulated.NetworkInit) {
 
 				if flagInit.NoEmptyBlocks {
 					config.Consensus.CreateEmptyBlocks = false
-				}
-				if flagInit.NoWebsite {
-					config.Accumulate.Website.Enabled = false
 				}
 
 				if len(flagInit.Etcd) > 0 {

@@ -1,0 +1,7 @@
+ErrorCode:
+  NotFound:
+    value: -33000
+  AlreadyExists:
+    value: -33001
+  GeneralError:
+    value: -33002

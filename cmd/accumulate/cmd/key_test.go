@@ -35,24 +35,24 @@ func testCase4_9(t *testing.T, tc *testCmd) {
 	require.NoError(t, json.Unmarshal([]byte(r), &kr))
 
 	// verify signature type
-	require.Equal(t, sig, kr.KeyType)
+	require.Equal(t, sig, kr.KeyInfo.Type)
 
 	t.Log(r)
 }
 
-// testCase4_10 Legacyed25519ED25519 test of legacyed25519 default signature type
+// testCase4_10 deprecated Legacyed25519ED25519 in favor of ed25519 default signature type
 func testCase4_10(t *testing.T, tc *testCmd) {
-
-	sig := protocol.SignatureTypeLegacyED25519
-
 	// generate protocol signature with legacyed25519
 	r, err := tc.execute(t, "key generate --sigtype legacyed25519 legacyed25519")
+	//the cli has deprecated the legacyed25519, so the key should be converted by the cli
+	// to a regular ed25519 type instead, so check for that.
+	sig := protocol.SignatureTypeED25519
 	require.NoError(t, err)
 	kr := KeyResponse{}
 	require.NoError(t, json.Unmarshal([]byte(r), &kr))
 
-	// verify signature type
-	require.Equal(t, sig, kr.KeyType)
+	// verify signature type is a regular ed25519
+	require.Equal(t, sig, kr.KeyInfo.Type)
 
 	t.Log(r)
 }
@@ -69,7 +69,7 @@ func testCase4_11(t *testing.T, tc *testCmd) {
 	require.NoError(t, json.Unmarshal([]byte(r), &kr))
 
 	// verify signature type
-	require.Equal(t, sig, kr.KeyType)
+	require.Equal(t, sig, kr.KeyInfo.Type)
 
 	t.Log(r)
 }
@@ -86,7 +86,7 @@ func testCase4_12(t *testing.T, tc *testCmd) {
 	require.NoError(t, json.Unmarshal([]byte(r), &kr))
 
 	// verify signature type
-	require.Equal(t, sig, kr.KeyType)
+	require.Equal(t, sig, kr.KeyInfo.Type)
 
 	t.Log(r)
 }
@@ -103,7 +103,7 @@ func testCase4_13(t *testing.T, tc *testCmd) {
 	require.NoError(t, json.Unmarshal([]byte(r), &kr))
 
 	// verify signature type
-	require.Equal(t, sig, kr.KeyType)
+	require.Equal(t, sig, kr.KeyInfo.Type)
 
 	t.Log(r)
 }
@@ -120,7 +120,7 @@ func testCase4_14(t *testing.T, tc *testCmd) {
 	require.NoError(t, json.Unmarshal([]byte(r), &kr))
 
 	// verify signature type
-	require.Equal(t, sig, kr.KeyType)
+	require.Equal(t, sig, kr.KeyInfo.Type)
 
 	t.Log(r)
 }
