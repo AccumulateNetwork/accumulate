@@ -1,2 +1,0 @@
-go test fuzz v1
-[]byte("\x01\x15\x02\xef\xef\xef\xef\xefcc://foo.acmf")
