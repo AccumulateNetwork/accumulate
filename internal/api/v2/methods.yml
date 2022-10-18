@@ -24,6 +24,9 @@ Faucet:
   rpc: faucet
   input: protocol.AcmeFaucet
   output: TxResponse
+encode-transaction:
+description: Marshals arbitary transaction
+
 
 Query:
   description: queries an account or account chain by URL
