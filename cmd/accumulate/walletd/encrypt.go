@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package walletd
 
 import (
@@ -45,7 +51,7 @@ func equalBucket(dst db.DB, src db.DB, bucket []byte) bool {
 	return true
 }
 
-//newPassword Get a new password.
+// newPassword Get a new password.
 func newPassword() (string, error) {
 	bytepw1, err := gopass.GetPasswdPrompt("New Password: ", true, os.Stdin, os.Stderr) //term.ReadPassword(int(syscall.Stdin))
 	if err != nil {
