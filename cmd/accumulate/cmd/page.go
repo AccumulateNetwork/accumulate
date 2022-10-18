@@ -1,9 +1,3 @@
-// Copyright 2022 The Accumulate Authors
-//
-// Use of this source code is governed by an MIT-style
-// license that can be found in the LICENSE file or at
-// https://opensource.org/licenses/MIT.
-
 package cmd
 
 import (
@@ -11,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
 	url2 "gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -27,6 +22,7 @@ func init() {
 	pageKeyCmd.AddCommand(
 		pageKeyAddCmd,
 		pageKeyUpdateCmd,
+		pageKeyReplaceCmd,
 		pageKeyRemoveCmd)
 
 }
@@ -83,6 +79,15 @@ var pageKeyUpdateCmd = &cobra.Command{
 	Args:  cobra.RangeArgs(4, 6),
 	Run: runCmdFunc(func(args []string) (string, error) {
 		return KeyPageUpdate(args[0], protocol.KeyPageOperationTypeUpdate, args[1:])
+	}),
+}
+
+var pageKeyReplaceCmd = &cobra.Command{
+	Use:   "replace [key page url] [key name[@key book or page]] [new public key or name]",
+	Short: "Update a your key on a key page which bypasses threshold",
+	Args:  cobra.ExactArgs(3),
+	Run: runCmdFunc(func(args []string) (string, error) {
+		return ReplaceKey(args)
 	}),
 }
 
@@ -166,7 +171,7 @@ func CreateKeyPage(bookUrlStr string, args []string) (string, error) {
 	for i := range keyLabels {
 		ksp := protocol.KeySpecParams{}
 
-		k, err := LookupByLabel(keyLabels[i])
+		k, err := walletd.LookupByLabel(keyLabels[i])
 
 		if err != nil {
 			//now check to see if it is a valid key hex, if so we can assume that is the public key.
@@ -240,6 +245,27 @@ func KeyPageUpdate(origin string, op protocol.KeyPageOperationType, args []strin
 	}
 
 	return dispatchTxAndPrintResponse(&ukp, u, signer)
+}
+
+func ReplaceKey(args []string) (string, error) {
+	principal, err := url2.Parse(args[0])
+	if err != nil {
+		return "", err
+	}
+
+	args, signer, err := prepareSigner(principal, args[1:])
+	if err != nil {
+		return "", err
+	}
+
+	k, err := resolvePublicKey(args[0])
+	if err != nil {
+		return "", err
+	}
+
+	txn := new(protocol.UpdateKey)
+	txn.NewKeyHash = k.PublicKeyHash()
+	return dispatchTxAndPrintResponse(txn, principal, signer)
 }
 
 func setKeyPageThreshold(args []string) (string, error) {
