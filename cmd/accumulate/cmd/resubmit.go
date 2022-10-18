@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package cmd
 
 import (
@@ -6,9 +12,8 @@ import (
 	"strconv"
 
 	"github.com/spf13/cobra"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -49,7 +54,7 @@ func resubmitAnchor(args []string) (string, error) {
 		return "", err
 	}
 
-	req1 := new(api.SyntheticTransactionRequest)
+	req1 := new(client.SyntheticTransactionRequest)
 	req1.Source = fromUrl
 	req1.Destination = toUrl
 	req1.SequenceNumber = num
@@ -66,7 +71,7 @@ func resubmitAnchor(args []string) (string, error) {
 		}
 	}
 
-	req2 := new(api.ExecuteRequest)
+	req2 := new(client.ExecuteRequest)
 	req2.Envelope = new(protocol.Envelope)
 	req2.Envelope.Transaction = []*protocol.Transaction{res1.Transaction}
 	req2.Envelope.Signatures = res1.Signatures
@@ -78,12 +83,12 @@ func resubmitAnchor(args []string) (string, error) {
 	if res2.Code != 0 {
 		result := new(protocol.TransactionStatus)
 		if Remarshal(res2.Result, result) != nil {
-			return "", errors.New(errors.StatusEncodingError, res2.Message)
+			return "", errors.New(errors.EncodingError, res2.Message)
 		}
 		return "", result.Error
 	}
 
-	var resps []*api.TransactionQueryResponse
+	var resps []*client.TransactionQueryResponse
 	if TxWait != 0 {
 		resps, err = waitForTxnUsingHash(res2.TransactionHash, TxWait, TxIgnorePending)
 		if err != nil {

@@ -29,7 +29,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/db"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
 	api2 "gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd/api"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	url2 "gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -213,7 +213,7 @@ func QrAccount(s string) (string, error) {
 	return string(r), err
 }
 
-//CreateTokenAccount account create url labelOrPubKeyHex height index tokenUrl keyBookUrl
+// CreateTokenAccount account create url labelOrPubKeyHex height index tokenUrl keyBookUrl
 func CreateTokenAccount(principal *url2.URL, signers []*signing.Builder, args []string) (string, error) {
 	if flagAccount.Lite {
 		return CreateLiteTokenAccount(principal, signers, args)
@@ -236,9 +236,9 @@ func CreateTokenAccount(principal *url2.URL, signers []*signing.Builder, args []
 	}
 
 	//make sure this is a valid token account
-	req := new(api.GeneralQuery)
+	req := new(client.GeneralQuery)
 	req.Url = tok
-	resp := new(api.ChainQueryResponse)
+	resp := new(client.ChainQueryResponse)
 	token := protocol.TokenIssuer{}
 	resp.Data = &token
 	err = Client.RequestAPIv2(context.Background(), "query", req, resp)
@@ -307,10 +307,10 @@ func proveTokenIssuerExistence(body *protocol.CreateTokenAccount) error {
 	}
 
 	// Get a proof of the create transaction
-	req := new(api.GeneralQuery)
+	req := new(client.GeneralQuery)
 	req.Url = body.TokenUrl.WithFragment("transaction/0")
 	req.Prove = true
-	resp1 := new(api.TransactionQueryResponse)
+	resp1 := new(client.TransactionQueryResponse)
 	err := Client.RequestAPIv2(context.Background(), "query", req, resp1)
 	if err != nil {
 		return err
@@ -358,9 +358,9 @@ func proveTokenIssuerExistence(body *protocol.CreateTokenAccount) error {
 	}
 
 	// Get a proof of the BVN anchor
-	req = new(api.GeneralQuery)
+	req = new(client.GeneralQuery)
 	req.Url = protocol.DnUrl().JoinPath(protocol.AnchorPool).WithFragment(fmt.Sprintf("anchor/%x", receipt.Anchor))
-	resp2 := new(api.ChainQueryResponse)
+	resp2 := new(client.ChainQueryResponse)
 	err = Client.RequestAPIv2(context.Background(), "query", req, resp2)
 	if err != nil {
 		return err
@@ -446,7 +446,7 @@ func lockAccount(principal *url2.URL, signers []*signing.Builder, args []string)
 		return dispatchTxAndPrintResponse(body, principal, signers)
 	}
 
-	req := new(api.MajorBlocksQuery)
+	req := new(client.MajorBlocksQuery)
 	req.Url = protocol.DnUrl()
 	req.Start = 0
 	req.Count = 0
@@ -455,9 +455,9 @@ func lockAccount(principal *url2.URL, signers []*signing.Builder, args []string)
 		return PrintJsonRpcError(err)
 	}
 
-	var latest *api.MajorQueryResponse
+	var latest *client.MajorQueryResponse
 	if res.Total == 0 {
-		latest = new(api.MajorQueryResponse)
+		latest = new(client.MajorQueryResponse)
 	} else {
 		req.Start = res.Total
 		req.Count = 1
