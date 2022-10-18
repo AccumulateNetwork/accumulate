@@ -14,6 +14,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // RestoreVisitor is a visitor that restores accounts, transactions, and
@@ -40,7 +41,7 @@ func NewRestoreVisitor(db database.Beginner, logger log.Logger) *RestoreVisitor 
 	return v
 }
 
-const markPointBatchSize = 10000
+const chainBatchSize = 10000
 
 func (v *RestoreVisitor) VisitAccount(acct *Account, i int) error {
 	// End of section
@@ -96,8 +97,8 @@ func (v *RestoreVisitor) VisitAccount(acct *Account, i int) error {
 			}
 
 			end := len(c.MarkPoints)
-			if end-start > markPointBatchSize {
-				end = start + markPointBatchSize
+			if end-start > chainBatchSize {
+				end = start + chainBatchSize
 				pos[c.Name] = end
 			} else {
 				delete(pos, c.Name)
@@ -116,6 +117,59 @@ func (v *RestoreVisitor) VisitAccount(acct *Account, i int) error {
 		err = v.refreshBatch()
 		if err != nil {
 			return errors.Wrap(errors.StatusUnknownError, err)
+		}
+	}
+
+	// Build the hash-to-index index for system accounts 10000 at a time
+	if _, ok := protocol.ParsePartitionUrl(acct.Url.RootIdentity()); ok {
+		for _, c := range acct.Chains {
+			pos[c.Name] = 0
+		}
+
+		const batchSize = chainBatchSize << 8 // Each mark point has 256 entries
+		for len(pos) > 0 {
+			record := v.batch.Account(acct.Url)
+			for _, c := range acct.Chains {
+				start, ok := pos[c.Name]
+				if !ok {
+					continue
+				}
+
+				end := len(c.MarkPoints)
+				if end-start > batchSize {
+					end = start + batchSize
+					pos[c.Name] = end
+				} else {
+					delete(pos, c.Name)
+				}
+
+				mgr, err := record.ChainByName(c.Name)
+				if err != nil {
+					return errors.Format(errors.StatusUnknownError, "get %s chain: %w", c.Name, err)
+				}
+				err = mgr.Inner().RestoreElementIndexFromMarkPoints(c, start, end)
+				if err != nil {
+					return errors.Format(errors.StatusUnknownError, "restore %s chain element index for mark points [%d,%d): %w", c.Name, start, end, err)
+				}
+			}
+
+			err = v.refreshBatch()
+			if err != nil {
+				return errors.Wrap(errors.StatusUnknownError, err)
+			}
+		}
+
+		record := v.batch.Account(acct.Url)
+		for _, c := range acct.Chains {
+			mgr, err := record.ChainByName(c.Name)
+			if err != nil {
+				return errors.Format(errors.StatusUnknownError, "get %s chain: %w", c.Name, err)
+			}
+
+			err = mgr.Inner().RestoreElementIndexFromHead(c)
+			if err != nil {
+				return errors.Format(errors.StatusUnknownError, "restore %s chain: %w", c.Name, err)
+			}
 		}
 	}
 

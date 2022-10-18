@@ -103,3 +103,34 @@ func (c *Chain) RestoreMarkPointRange(s *Snapshot, start, end int) error {
 	}
 	return nil
 }
+
+func (c *Chain) RestoreElementIndexFromHead(s *Snapshot) error {
+	lastMark := s.Head.Count &^ c.markMask
+	for i, h := range s.Head.HashList {
+		err := c.ElementIndex(h).Put(uint64(lastMark) + uint64(i))
+		if err != nil {
+			return errors.Format(errors.StatusUnknownError, "store element index: %w", err)
+		}
+	}
+	return nil
+}
+
+func (c *Chain) RestoreElementIndexFromMarkPoints(s *Snapshot, start, end int) error {
+	for _, state := range s.MarkPoints[start:end] {
+		if state == new(MerkleState) {
+			continue
+		}
+
+		if state.Count&c.markMask != 0 {
+			return errors.Format(errors.StatusConflict, "mark power conflict: count %d does not match mark power %d", state.Count, c.markPower)
+		}
+
+		for i, h := range state.HashList {
+			err := c.ElementIndex(h).Put(uint64(state.Count) + uint64(i))
+			if err != nil {
+				return errors.Format(errors.StatusUnknownError, "store element index: %w", err)
+			}
+		}
+	}
+	return nil
+}
