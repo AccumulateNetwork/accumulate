@@ -4,4 +4,11 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package cmd
+package walletd
+
+import (
+	"errors"
+)
+
+var ErrNotEnoughData = errors.New("not enough data")
+var ErrOverflow = errors.New("overflow")

@@ -23,8 +23,8 @@ func init() {
 	testMatrix.addTest(testCase2_9c)
 }
 
-//testCase2_8
-//Create an adi data account
+// testCase2_8
+// Create an adi data account
 func testCase2_8(t *testing.T, tc *testCmd) {
 
 	_, err := tc.executeTx(t, "account create data acc://RedWagon.acme red1 acc://RedWagon.acme/DataAccount")
@@ -108,7 +108,7 @@ func testCase2_9c(t *testing.T, tc *testCmd) {
 	require.True(t, sig.Verify(nil, h[:]), "invalid signature for signed data")
 }
 
-//liteAccounts is the predictable test accounts for the unit tests.
+// liteAccounts is the predictable test accounts for the unit tests.
 var liteAccounts = []string{
 	"acc://c6a629f9a65bf21159c5dfbffbc868ec3ae61ce4651108ec/ACME", "acc://7be239fa0bd119f5e15c4b736c41b5fc5ef458acf1d4ad64/ACME",
 	"acc://d22b50671621a0500a5a25d708cbd9819e5297d0991aca46/ACME", "acc://82da5497fb4275ee49e2e67700e535afdfcbf925ca4feb1f/ACME",
