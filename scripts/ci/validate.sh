@@ -174,7 +174,7 @@ section "Set threshold to 0 of 0"
 wait-for cli-tx tx execute test.acme/book/2 test-2-0 '{"type": "updateKeyPage", "operation": [{ "type": "setThreshold", "threshold": 0 }]}' && die "cannot require 0 signatures on a key page" || success
 
 section "Update a key with only that key's signature"
-wait-for cli-tx key update test.acme/book/2 test-2-3-orig test-2-3-new || die "Failed to update key"
+wait-for cli-tx page key replace test.acme/book/2 test-2-3-orig test-2-3-new || die "Failed to update key"
 accumulate -j get key test.acme test-2-3-orig > /dev/null && die "Still found old key" || true
 accumulate -j get key test.acme test-2-3-new | jq -C --indent 0 || die "Could not find new key"
 success
@@ -395,6 +395,19 @@ accumulate tx sign test.acme/managed-tokens test-mgr@manager.acme $TXID || die "
 wait-for-tx --ignore-pending $TXID || die "Transaction was not delivered"
 RESULT=$(accumulate -j get test.acme/managed-tokens -j | jq -re '.data.authorities | length')
 [ "$RESULT" -eq 1 ] || die "Expected 1 authority, got $RESULT"
+success
+
+section "Export wallet as json format"
+accumulate wallet export /tmp/wallet_export_account.json || die "failed to export wallet"
+cat /tmp/wallet_export_account.json
+success
+
+section "Remove wallet db storage"
+rm $HOME/.accumulate/validate/wallet.db || die "failed to remove wallet database"
+success
+
+section "Import wallet as json format to restore wallet"
+accumulate wallet init import keystore /tmp/wallet_export_account.json || die "failed to import wallet"
 success
 
 section "Add manager to token account"

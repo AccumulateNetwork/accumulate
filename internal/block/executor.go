@@ -47,6 +47,7 @@ type ExecutorOptions struct {
 	EventBus            *events.Bus                        //
 	MajorBlockScheduler blockscheduler.MajorBlockScheduler //
 	Background          func(func())                       // Background task launcher
+	BatchReplayLimit    int                                //
 
 	isGenesis bool
 
