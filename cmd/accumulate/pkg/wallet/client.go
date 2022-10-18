@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package wallet
 
 import (
@@ -10,7 +16,7 @@ import (
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 )
 
-//go:generate go run ../../tools/cmd/gen-sdk --package wallet --api-path gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd/api --out wallet_api_sdk_gen.go ../../cmd/accumulate/walletd/api/methods.yml
+//go:generate go run ../../../../tools/cmd/gen-sdk --package wallet --api-path gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd/api --out wallet_api_sdk_gen.go ../../walletd/api/methods.yml
 
 type Client struct {
 	jsonrpc2.Client

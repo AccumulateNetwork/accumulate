@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package cmd
 
 import (
@@ -11,8 +17,8 @@ import (
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/ghodss/yaml"
 	"github.com/spf13/cobra"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"golang.org/x/sync/errgroup"
@@ -149,8 +155,8 @@ func GetPendingTx(origin string, args []string) (string, error) {
 	//<record>#pending/<hash> - fetch an envelope by hash
 	//<record>#pending/<index> - fetch an envelope by index/height
 	//<record>#pending/<start>:<end> - fetch a range of envelope by index/height
-	//build the fragments:
-	params := api.UrlQuery{}
+	//build thclient.nt.agments:
+	params := client.UrlQuery{}
 
 	var out string
 	var perr error
@@ -159,7 +165,7 @@ func GetPendingTx(origin string, args []string) (string, error) {
 		//query with no parameters
 		u = u.WithFragment("pending")
 		params.Url = u
-		res := api.MultiResponse{}
+		res := client.MultiResponse{}
 		err = queryAs("query", &params, &res)
 		if err != nil {
 			return "", err
@@ -181,7 +187,7 @@ func GetPendingTx(origin string, args []string) (string, error) {
 			u = u.WithFragment(fmt.Sprintf("pending/%d", height))
 		}
 		params.Url = u
-		res := api.TransactionQueryResponse{}
+		res := client.TransactionQueryResponse{}
 		err = queryAs("query", &params, &res)
 		if err != nil {
 			return "", err
@@ -199,7 +205,7 @@ func GetPendingTx(origin string, args []string) (string, error) {
 		}
 		u = u.WithFragment(fmt.Sprintf("pending/%d:%d", start, count))
 		params.Url = u
-		res := api.MultiResponse{}
+		res := client.MultiResponse{}
 		err = queryAs("query", &params, &res)
 		if err != nil {
 			return "", err
@@ -212,8 +218,8 @@ func GetPendingTx(origin string, args []string) (string, error) {
 	return out, perr
 }
 
-func getTxUsingUrl(txID *url.TxID, wait time.Duration, ignorePending bool) (*api.TransactionQueryResponse, error) {
-	params := new(api.TxnQuery)
+func getTxUsingUrl(txID *url.TxID, wait time.Duration, ignorePending bool) (*client.TransactionQueryResponse, error) {
+	params := new(client.TxnQuery)
 	params.TxIdUrl = txID
 	params.Prove = Prove
 	params.IgnorePending = ignorePending
@@ -221,8 +227,8 @@ func getTxUsingUrl(txID *url.TxID, wait time.Duration, ignorePending bool) (*api
 	return getTX(wait, params)
 }
 
-func getTxUsingHash(hash []byte, wait time.Duration, ignorePending bool) (*api.TransactionQueryResponse, error) {
-	params := new(api.TxnQuery)
+func getTxUsingHash(hash []byte, wait time.Duration, ignorePending bool) (*client.TransactionQueryResponse, error) {
+	params := new(client.TxnQuery)
 	params.Txid = hash
 	params.Prove = Prove
 	params.IgnorePending = ignorePending
@@ -230,8 +236,8 @@ func getTxUsingHash(hash []byte, wait time.Duration, ignorePending bool) (*api.T
 	return getTX(wait, params)
 }
 
-func getTX(wait time.Duration, params *api.TxnQuery) (*api.TransactionQueryResponse, error) {
-	var res api.TransactionQueryResponse
+func getTX(wait time.Duration, params *client.TxnQuery) (*client.TransactionQueryResponse, error) {
+	var res client.TransactionQueryResponse
 
 	if wait > 0 {
 		params.Wait = wait
@@ -256,7 +262,7 @@ func getTX(wait time.Duration, params *api.TxnQuery) (*api.TransactionQueryRespo
 }
 
 func GetTX(hashOrUrl string) (string, error) {
-	var res *api.TransactionQueryResponse
+	var res *client.TransactionQueryResponse
 	txID, err := url.ParseTxID(hashOrUrl)
 	if err == nil {
 		res, err = getTxUsingUrl(txID, TxWait, TxIgnorePending)
@@ -327,7 +333,7 @@ func GetTX(hashOrUrl string) (string, error) {
 }
 
 func GetTXHistory(accountUrl string, startArg string, endArg string) (string, error) {
-	var res api.MultiResponse
+	var res client.MultiResponse
 	start, err := strconv.Atoi(startArg)
 	if err != nil {
 		return "", err
@@ -341,7 +347,7 @@ func GetTXHistory(accountUrl string, startArg string, endArg string) (string, er
 		return "", err
 	}
 
-	params := new(api.TxHistoryQuery)
+	params := new(client.TxHistoryQuery)
 	params.UrlQuery.Url = u
 	params.QueryPagination.Start = uint64(start)
 	params.QueryPagination.Count = uint64(end)
@@ -398,8 +404,8 @@ func CreateTX(sender string, args []string) (string, error) {
 	return dispatchTxAndPrintResponse(send, u, signer)
 }
 
-func waitForTxnUsingHash(hash []byte, wait time.Duration, ignorePending bool) ([]*api.TransactionQueryResponse, error) {
-	var queryResponses []*api.TransactionQueryResponse
+func waitForTxnUsingHash(hash []byte, wait time.Duration, ignorePending bool) ([]*client.TransactionQueryResponse, error) {
+	var queryResponses []*client.TransactionQueryResponse
 	queryRes, err := getTxUsingHash(hash, wait, ignorePending)
 	if err != nil {
 		return nil, err
@@ -407,7 +413,7 @@ func waitForTxnUsingHash(hash []byte, wait time.Duration, ignorePending bool) ([
 	return waitForTxn(queryResponses, queryRes, wait)
 }
 
-func waitForTxn(queryResponses []*api.TransactionQueryResponse, queryRes *api.TransactionQueryResponse, wait time.Duration) ([]*api.TransactionQueryResponse, error) {
+func waitForTxn(queryResponses []*client.TransactionQueryResponse, queryRes *client.TransactionQueryResponse, wait time.Duration) ([]*client.TransactionQueryResponse, error) {
 	queryResponses = append(queryResponses, queryRes)
 	if queryRes.Produced != nil {
 		for _, txid := range queryRes.Produced {
@@ -495,7 +501,7 @@ func submit(args []string) (string, error) {
 		sigs = append(sigs, sig)
 	}
 
-	req := new(api.ExecuteRequest)
+	req := new(client.ExecuteRequest)
 	req.Envelope = &protocol.Envelope{Transaction: []*protocol.Transaction{txn}, Signatures: sigs}
 	if TxPretend {
 		req.CheckOnly = true
@@ -508,12 +514,12 @@ func submit(args []string) (string, error) {
 	if res.Code != 0 {
 		result := new(protocol.TransactionStatus)
 		if Remarshal(res.Result, result) != nil {
-			return "", errors.New(errors.StatusEncodingError, res.Message)
+			return "", errors.New(errors.EncodingError, res.Message)
 		}
 		return "", result.Error
 	}
 
-	var resps []*api.TransactionQueryResponse
+	var resps []*client.TransactionQueryResponse
 	if TxWait != 0 {
 		resps, err = waitForTxnUsingHash(res.TransactionHash, TxWait, TxIgnorePending)
 		if err != nil {

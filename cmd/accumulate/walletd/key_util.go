@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package walletd
 
 import (
@@ -145,7 +151,7 @@ func (k *Key) NativeAddress() (address string, err error) {
 	case protocol.SignatureTypeBTC, protocol.SignatureTypeBTCLegacy:
 		address = protocol.BTCaddress(k.PublicKeyHash())
 	case protocol.SignatureTypeETH:
-		address = protocol.ETHaddress(k.PublicKeyHash())
+		address, err = protocol.ETHaddress(k.PublicKeyHash())
 	default:
 		u := protocol.LiteAuthorityForKey(k.PublicKey, protocol.SignatureTypeED25519)
 		address = u.Hostname()

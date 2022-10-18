@@ -13,8 +13,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2/query"
+	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
@@ -26,8 +25,8 @@ var blocksCmd = &cobra.Command{
 	Short: "Create and get blocks",
 	Run: func(cmd *cobra.Command, args []string) {
 		var err error
-		var txFetchMode query.TxFetchMode
-		var blockFilterMode query.BlockFilterMode
+		var txFetchMode client.TxFetchMode
+		var blockFilterMode client.BlockFilterMode
 
 		if len(args) > 0 {
 			switch arg := args[0]; arg {
@@ -74,28 +73,28 @@ var blocksCmd = &cobra.Command{
 	},
 }
 
-func parseFetchMode(args []string) (query.TxFetchMode, error) {
+func parseFetchMode(args []string) (client.TxFetchMode, error) {
 	if len(args) > 4 {
-		txFetchMode, ok := query.TxFetchModeByName(args[4])
+		txFetchMode, ok := client.TxFetchModeByName(args[4])
 		if ok {
 			return txFetchMode, nil
 		} else {
-			return query.TxFetchModeOmit, fmt.Errorf("%s is not a valid fetch mode. Use expand|ids|countOnly|omit", args[4])
+			return client.TxFetchModeOmit, fmt.Errorf("%s is not a valid fetch mode. Use expand|ids|countOnly|omit", args[4])
 		}
 	}
-	return query.TxFetchModeExpand, nil
+	return client.TxFetchModeExpand, nil
 }
 
-func parseBlockFilterMode(args []string) (query.BlockFilterMode, error) {
+func parseBlockFilterMode(args []string) (client.BlockFilterMode, error) {
 	if len(args) > 5 {
-		blockFilterMode, ok := query.BlockFilterModeByName(args[5])
+		blockFilterMode, ok := client.BlockFilterModeByName(args[5])
 		if ok {
 			return blockFilterMode, nil
 		} else {
-			return query.BlockFilterModeExcludeNone, fmt.Errorf("%s is not a block filter mode. Use excludenone|excludeempty", args[4])
+			return client.BlockFilterModeExcludeNone, fmt.Errorf("%s is not a block filter mode. Use excludenone|excludeempty", args[4])
 		}
 	}
-	return query.BlockFilterModeExcludeNone, nil
+	return client.BlockFilterModeExcludeNone, nil
 }
 
 var (
@@ -122,7 +121,7 @@ func PrintBlocks() {
 	PrintGetMajorBlocks()
 }
 
-func GetMinorBlocks(cmd *cobra.Command, accountUrl string, s string, e string, txFetchMode query.TxFetchMode, blockFilterMode query.BlockFilterMode) error {
+func GetMinorBlocks(cmd *cobra.Command, accountUrl string, s string, e string, txFetchMode client.TxFetchMode, blockFilterMode client.BlockFilterMode) error {
 	start, err := strconv.Atoi(s)
 	if err != nil {
 		return err
@@ -137,7 +136,7 @@ func GetMinorBlocks(cmd *cobra.Command, accountUrl string, s string, e string, t
 		return err
 	}
 
-	params := new(api.MinorBlocksQuery)
+	params := new(client.MinorBlocksQuery)
 	params.UrlQuery.Url = u
 	params.QueryPagination.Start = uint64(start)
 	params.QueryPagination.Count = uint64(end)
@@ -182,7 +181,7 @@ func GetMajorBlocks(cmd *cobra.Command, accountUrl string, s string, e string) e
 		return err
 	}
 
-	params := new(api.MajorBlocksQuery)
+	params := new(client.MajorBlocksQuery)
 	params.UrlQuery.Url = u
 	params.QueryPagination.Start = uint64(start)
 	params.QueryPagination.Count = uint64(end)
