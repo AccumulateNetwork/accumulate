@@ -7,6 +7,7 @@ import (
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd/api"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -221,8 +222,13 @@ func (m *JrpcMethods) NewSendTokensTransaction(_ context.Context, params json.Ra
 		return validatorError(err)
 	}
 
-	sendToken := protocol.SendTokens{}
-	resp, err := sendToken.MarshalJSON()
+	origin, err := url.Parse(req.Origin)
+	if err != nil {
+		return validatorError(err)
+	}
+	txn := protocol.Transaction{}
+	txn.Header.Principal = origin
+	resp, err := txn.MarshalJSON()
 	if err != nil {
 		return validatorError(err)
 	}
@@ -248,8 +254,8 @@ func (m *JrpcMethods) AddSendTokensOutput(_ context.Context, params json.RawMess
 	if err != nil {
 		return validatorError(err)
 	}
-	sendToken := protocol.SendTokens{}
-	err = sendToken.UnmarshalBinary(value)
+	txn := protocol.Transaction{}
+	err = txn.UnmarshalBinary(value)
 	if err != nil {
 		return validatorError(err)
 	}
@@ -261,8 +267,10 @@ func (m *JrpcMethods) AddSendTokensOutput(_ context.Context, params json.RawMess
 		Url:    address,
 		Amount: req.Amount,
 	}
+	sendToken := protocol.SendTokens{}
 	sendToken.To = append(sendToken.To, recipient)
-	resp, err := sendToken.MarshalBinary()
+	txn.Body = &sendToken
+	resp, err := txn.MarshalBinary()
 	if err != nil {
 		return validatorError(err)
 	}
@@ -284,7 +292,7 @@ func (m *JrpcMethods) DeleteSendTokensTransaction(_ context.Context, params json
 	if err != nil {
 		return validatorError(err)
 	}
-	resp := protocol.SendTokens{}
+	resp := protocol.Transaction{}
 	err = resp.UnmarshalBinary(value)
 	if err != nil {
 		return validatorError(err)
@@ -316,6 +324,47 @@ func (m *JrpcMethods) GenerateAddress(_ context.Context, params json.RawMessage)
 		KeyInfo:   key.KeyInfo,
 		Name:      req.Label,
 		PublicKey: key.PublicKey,
+	}
+	return resp
+}
+
+func (m *JrpcMethods) SignSendTokensTransaction(_ context.Context, params json.RawMessage) interface{} {
+	req := api.SignTransactionRequest{}
+	err := json.Unmarshal(params, &req)
+	if err != nil {
+		return validatorError(err)
+	}
+
+	value, err := GetWallet().Get(BucketTransactionCache, []byte(req.TxName))
+	if err != nil {
+		return validatorError(err)
+	}
+	txn := protocol.Transaction{}
+	err = txn.UnmarshalBinary(value)
+	if err != nil {
+		return validatorError(err)
+	}
+	key, err := LookupByLabel(req.KeyName)
+	if err != nil {
+		return validatorError(err)
+	}
+	signer := new(signing.Builder)
+	signer.Url = txn.Header.Principal
+	signer.Type = key.KeyInfo.Type
+	signer.Version = uint64(req.SignerVersion)
+	if req.Timestamp == 0 {
+		signer.Timestamp = signer.SetTimestampToNow().Timestamp
+	} else {
+		signer.Timestamp = signing.TimestampFromValue(req.Timestamp)
+	}
+	signer.SetPrivateKey(key.PrivateKey)
+	sig, err := signer.Initiate(&txn)
+	if err != nil {
+		return validatorError(err)
+	}
+	resp, err := sig.MarshalBinary()
+	if err != nil {
+		return validatorError(err)
 	}
 	return resp
 }

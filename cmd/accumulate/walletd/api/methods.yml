@@ -73,3 +73,9 @@ GenerateAddress:
   rpc: generate-address
   input: api.GenerateAddressRequest
   output: api.GenerateAddressResponse
+
+SignSendTokensTransaction:
+  description: sign send token transaction
+  rpc: sign-transaction
+  input: api.SignTransactionRequest
+  output: api.CreateEnvelopeResponse
