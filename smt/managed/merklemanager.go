@@ -183,7 +183,49 @@ func (m *MerkleManager) GetAnyState(element int64) (ms *MerkleState, err error) 
 
 // Get the nth leaf node
 func (m *MerkleManager) Get(element int64) (Hash, error) {
-	return m.Element(uint64(element)).Get()
+	hash, err := m.Element(uint64(element)).Get() // Check the index
+	switch {
+	case err == nil:
+		return hash, nil
+	case errors.Is(err, errors.StatusNotFound):
+		// Continue
+	default:
+		return nil, errors.Format(errors.StatusUnknownError, "load element %d: %w", element, err)
+	}
+
+	head, err := m.Head().Get() // Load the head
+	if err != nil {
+		return nil, errors.Format(errors.StatusUnknownError, "load head: %w", err)
+	}
+	if element >= head.Count { // Make sure element is not greater than count
+		return nil, errors.Format(errors.StatusNotFound, "element %d does not exist (count=%d)", element, head.Count)
+	}
+
+	lastMark := head.Count &^ m.markMask // Last mark point
+	if element >= lastMark {             // Get element from head
+		i := element & m.markMask //        Index within the hash list
+		if i >= int64(len(head.HashList)) {
+			return nil, errors.Format(errors.StatusInternalError, "head: expected %d elements, got %d", head.Count, len(head.HashList))
+		}
+		return head.HashList[i], nil
+	}
+
+	elemMark := element&^m.markMask + m.markFreq // Mark point after element
+	state, err := m.States(uint64(elemMark - 1)).Get()
+	switch {
+	case err == nil:
+		// Ok
+	case errors.Is(err, errors.StatusNotFound):
+		return nil, errors.Format(errors.StatusNotFound, "cannot locate element %d", element)
+	default:
+		return nil, errors.Format(errors.StatusUnknownError, "load mark point %d: %w", elemMark-1, err)
+	}
+
+	i := element & m.markMask // Index within the mark point
+	if i >= int64(len(state.HashList)) {
+		return nil, errors.Format(errors.StatusInternalError, "mark point %d: expected %d elements, got %d", elemMark-1, m.markFreq, len(state.HashList))
+	}
+	return state.HashList[i], nil
 }
 
 // GetIntermediate
