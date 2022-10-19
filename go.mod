@@ -51,6 +51,10 @@ require (
 	github.com/robfig/cron/v3 v3.0.0
 	github.com/tyler-smith/go-bip32 v1.0.0
 	github.com/tyler-smith/go-bip39 v1.0.1-0.20181017060643-dbb3b84ba2ef
+	go.opentelemetry.io/otel v1.10.0
+	go.opentelemetry.io/otel/exporters/stdout/stdouttrace v1.10.0
+	go.opentelemetry.io/otel/sdk v1.10.0
+	go.opentelemetry.io/otel/trace v1.10.0
 )
 
 require (
@@ -71,6 +75,8 @@ require (
 	github.com/curioswitch/go-reassign v0.1.2 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.0.1 // indirect
 	github.com/firefart/nonamedreturns v1.0.4 // indirect
+	github.com/go-logr/logr v1.2.3 // indirect
+	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/lufeee/execinquery v1.2.1 // indirect
 	github.com/pelletier/go-toml/v2 v2.0.2 // indirect
 	github.com/quasilyte/stdinfo v0.0.0-20220114132959-f7386bf02567 // indirect
