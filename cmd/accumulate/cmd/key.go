@@ -6,7 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"strconv"
 	"strings"
 
@@ -265,7 +265,7 @@ func parseKey(s string) (*walletd.Key, error) {
 		return k, nil
 	}
 
-	b, err := ioutil.ReadFile(s)
+	b, err := os.ReadFile(s)
 	if err != nil {
 		return nil, fmt.Errorf("cannot resolve signing key, invalid key specifier: %q is not a label, key, or file", s)
 	}
@@ -322,7 +322,7 @@ func ImportKeyPrompt(cmd *cobra.Command, label string, signatureType protocol.Si
 }
 
 func importFilePV(cmd *cobra.Command, label, filepath string) (out string, err error) {
-	b, err := ioutil.ReadFile(filepath)
+	b, err := os.ReadFile(filepath)
 	if err != nil {
 		return "", err
 	}
