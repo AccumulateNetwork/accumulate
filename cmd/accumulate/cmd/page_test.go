@@ -1,9 +1,13 @@
 package cmd
 
 import (
+	"encoding/json"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 )
 
 func init() {
@@ -119,4 +123,51 @@ func testCase4_8(t *testing.T, tc *testCmd) {
 	//t.Log(r)
 	//
 	//time.Sleep(2 * time.Second)
+}
+
+func TestSignWithSpecificPage(t *testing.T) {
+	// Setup
+	tc := newTestCmd(t)
+
+	key := new(KeyResponse)
+	out, err := tc.execute(t, "account generate")
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal([]byte(out), key))
+
+	lta := key.LiteAccount
+	liteId := lta.RootIdentity().String()
+
+	_, err = tc.executeTx(t, "faucet %s", lta)
+	require.NoError(t, err)
+
+	_, err = tc.executeTx(t, "credits %s %s 1000 100 0.0", lta, liteId)
+	require.NoError(t, err)
+
+	adi := protocol.AccountUrl("test4-15")
+	_, err = tc.execute(t, "key generate myKey")
+	require.NoError(t, err)
+	_, err = tc.executeTx(t, "adi create %s %s myKey", liteId, adi)
+	require.NoError(t, err)
+
+	_, err = tc.executeTx(t, "credits %s %s/book/1 1000 100 0.0", lta, adi)
+	require.NoError(t, err)
+
+	_, err = tc.executeTx(t, "page create %s/book myKey myKey", adi)
+	require.NoError(t, err)
+
+	_, err = tc.executeTx(t, "credits %s %s/book/2 1000 100 0.0", lta, adi)
+	require.NoError(t, err)
+
+	// Execute
+	p1b := GetAccount[*protocol.KeyPage](t, tc.sim.DatabaseFor(adi), adi.JoinPath("book", "1"))
+	p2b := GetAccount[*protocol.KeyPage](t, tc.sim.DatabaseFor(adi), adi.JoinPath("book", "2"))
+	tc.execute(t, "get %s/book/2")
+	_, err = tc.executeTx(t, "account create token %s %s %[1]s/tokens ACME", adi, adi.JoinPath("book", "2").WithUserInfo("myKey"))
+	require.NoError(t, err)
+
+	// Verify
+	p1a := GetAccount[*protocol.KeyPage](t, tc.sim.DatabaseFor(adi), adi.JoinPath("book", "1"))
+	p2a := GetAccount[*protocol.KeyPage](t, tc.sim.DatabaseFor(adi), adi.JoinPath("book", "2"))
+	assert.Equal(t, int(p1a.CreditBalance), int(p1b.CreditBalance), "Expected page 1's balance to remain the same")
+	assert.Less(t, int(p2a.CreditBalance), int(p2b.CreditBalance), "Expected page 2's balance to change")
 }

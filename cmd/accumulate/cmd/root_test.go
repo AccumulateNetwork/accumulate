@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -69,12 +70,7 @@ func bootstrap(t *testing.T, tc *testCmd) {
 }
 
 func TestCli(t *testing.T) {
-	tc := &testCmd{}
-	tc.initalize(t)
-
-	bootstrap(t, tc)
-	testMatrix.execute(t, tc)
-
+	testMatrix.execute(t, newTestCmd(t))
 }
 
 func GetFunctionName(i interface{}) string {
@@ -110,13 +106,27 @@ func (tm *testMatrixTests) execute(t *testing.T, tc *testCmd) {
 }
 
 type testCmd struct {
+	sim         *Sim
 	rootCmd     *cobra.Command
 	jsonRpcAddr string
 	privKey     []byte
 }
 
-// NewTestBVNN creates a BVN test Node and returns the rest and jsonrpc ports and the DN private key
-func NewTestBVNN(t *testing.T) (string, []byte) {
+func newTestCmd(t *testing.T) *testCmd {
+	t.Helper()
+
+	walletd.InitTestDB(t)
+	c := new(testCmd)
+	c.rootCmd = InitRootCmd()
+	c.rootCmd.PersistentPostRun = nil
+	c.sim, c.jsonRpcAddr = newSim(t)
+	c.privKey = c.sim.SignWithNode(protocol.Directory, 0).Key()
+
+	bootstrap(t, c)
+	return c
+}
+
+func newSim(t *testing.T) (*Sim, string) {
 	t.Helper()
 
 	const valCount = 1
@@ -142,7 +152,10 @@ func NewTestBVNN(t *testing.T) (string, []byte) {
 	)
 
 	// Serve
-	go func() { _ = sim.ListenAndServe(nil) }()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	go func() { _ = sim.ListenAndServe(ctx, nil) }()
+	time.Sleep(time.Millisecond)
 
 	// Step at 100 Hz
 	tick := time.NewTicker(time.Second / 100)
@@ -154,18 +167,8 @@ func NewTestBVNN(t *testing.T) (string, []byte) {
 	}()
 
 	port := basePort + config.PortOffsetDirectory + config.PortOffsetAccumulateApi
-	return fmt.Sprintf("http://127.0.1.1:%d", port), sim.SignWithNode(protocol.Directory, 0).Key()
-}
-
-func (c *testCmd) initalize(t *testing.T) {
-	t.Helper()
-
-	walletd.InitTestDB(t)
-	c.rootCmd = InitRootCmd()
-	c.rootCmd.PersistentPostRun = nil
-
-	c.jsonRpcAddr, c.privKey = NewTestBVNN(t)
-	time.Sleep(2 * time.Second)
+	addr := fmt.Sprintf("http://127.0.1.1:%d", port)
+	return sim, addr
 }
 
 func (c *testCmd) execute(t *testing.T, cmdLine string) (string, error) {

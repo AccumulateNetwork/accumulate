@@ -206,6 +206,7 @@ func prepareSignerPage(signer *signing.Builder, origin *url.URL, signingKey stri
 	} else {
 		signer.Url = keyInfo.Signer
 	}
+
 	var page *protocol.KeyPage
 	_, err = getRecord(signer.Url.String(), &page)
 	if err != nil {
