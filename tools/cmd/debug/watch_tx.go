@@ -29,7 +29,7 @@ func init() {
 
 func watchTx(_ *cobra.Command, args []string) error {
 	for _, arg := range args {
-		client, err := http.New(arg, arg + "/websocket")
+		client, err := http.New(arg, arg+"/websocket")
 		if err != nil {
 			return fmt.Errorf("failed to create client: %v", err)
 		}
