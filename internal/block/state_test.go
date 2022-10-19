@@ -46,7 +46,7 @@ func TestStateSaveAndRestore(t *testing.T) {
 		defer batch.Discard()
 		f, err := os.Create(filename(partition.Id))
 		require.NoError(t, err)
-		require.NoError(t, snapshot.FullCollect(batch, f, &x.Executor.Describe))
+		require.NoError(t, snapshot.FullCollect(batch, f, &x.Executor.Describe, nil))
 		require.NoError(t, f.Close())
 	}
 

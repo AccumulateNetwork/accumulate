@@ -12,11 +12,13 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 )
 
 const align = 64
 
 type Writer struct {
+	Logger      logging.OptionalLogger
 	file        io.WriteSeeker
 	openSection bool
 	prevSection int64
