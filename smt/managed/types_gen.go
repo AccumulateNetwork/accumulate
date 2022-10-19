@@ -44,6 +44,16 @@ type ReceiptEntry struct {
 	extraData []byte
 }
 
+type Snapshot struct {
+	fieldsSet  []bool
+	Name       string         `json:"name,omitempty" form:"name" query:"name" validate:"required"`
+	Type       ChainType      `json:"type,omitempty" form:"type" query:"type" validate:"required"`
+	MarkPower  uint64         `json:"markPower,omitempty" form:"markPower" query:"markPower" validate:"required"`
+	Head       *MerkleState   `json:"head,omitempty" form:"head" query:"head" validate:"required"`
+	MarkPoints []*MerkleState `json:"markPoints,omitempty" form:"markPoints" query:"markPoints" validate:"required"`
+	extraData  []byte
+}
+
 func (v *Receipt) Copy() *Receipt {
 	u := new(Receipt)
 
@@ -74,6 +84,27 @@ func (v *ReceiptEntry) Copy() *ReceiptEntry {
 }
 
 func (v *ReceiptEntry) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *Snapshot) Copy() *Snapshot {
+	u := new(Snapshot)
+
+	u.Name = v.Name
+	u.Type = v.Type
+	u.MarkPower = v.MarkPower
+	if v.Head != nil {
+		u.Head = (v.Head).Copy()
+	}
+	u.MarkPoints = make([]*MerkleState, len(v.MarkPoints))
+	for i, v := range v.MarkPoints {
+		if v != nil {
+			u.MarkPoints[i] = (v).Copy()
+		}
+	}
+
+	return u
+}
+
+func (v *Snapshot) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *Receipt) Equal(u *Receipt) bool {
 	if !(bytes.Equal(v.Start, u.Start)) {
@@ -109,6 +140,36 @@ func (v *ReceiptEntry) Equal(u *ReceiptEntry) bool {
 	}
 	if !(bytes.Equal(v.Hash, u.Hash)) {
 		return false
+	}
+
+	return true
+}
+
+func (v *Snapshot) Equal(u *Snapshot) bool {
+	if !(v.Name == u.Name) {
+		return false
+	}
+	if !(v.Type == u.Type) {
+		return false
+	}
+	if !(v.MarkPower == u.MarkPower) {
+		return false
+	}
+	switch {
+	case v.Head == u.Head:
+		// equal
+	case v.Head == nil || u.Head == nil:
+		return false
+	case !((v.Head).Equal(u.Head)):
+		return false
+	}
+	if len(v.MarkPoints) != len(u.MarkPoints) {
+		return false
+	}
+	for i := range v.MarkPoints {
+		if !((v.MarkPoints[i]).Equal(u.MarkPoints[i])) {
+			return false
+		}
 	}
 
 	return true
@@ -248,6 +309,83 @@ func (v *ReceiptEntry) IsValid() error {
 	}
 }
 
+var fieldNames_Snapshot = []string{
+	1: "Name",
+	2: "Type",
+	3: "MarkPower",
+	4: "Head",
+	5: "MarkPoints",
+}
+
+func (v *Snapshot) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(len(v.Name) == 0) {
+		writer.WriteString(1, v.Name)
+	}
+	if !(v.Type == 0) {
+		writer.WriteEnum(2, v.Type)
+	}
+	if !(v.MarkPower == 0) {
+		writer.WriteUint(3, v.MarkPower)
+	}
+	if !(v.Head == nil) {
+		writer.WriteValue(4, v.Head.MarshalBinary)
+	}
+	if !(len(v.MarkPoints) == 0) {
+		for _, v := range v.MarkPoints {
+			writer.WriteValue(5, v.MarshalBinary)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_Snapshot)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *Snapshot) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Name is missing")
+	} else if len(v.Name) == 0 {
+		errs = append(errs, "field Name is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Type is missing")
+	} else if v.Type == 0 {
+		errs = append(errs, "field Type is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field MarkPower is missing")
+	} else if v.MarkPower == 0 {
+		errs = append(errs, "field MarkPower is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Head is missing")
+	} else if v.Head == nil {
+		errs = append(errs, "field Head is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field MarkPoints is missing")
+	} else if len(v.MarkPoints) == 0 {
+		errs = append(errs, "field MarkPoints is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 func (v *Receipt) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -316,6 +454,45 @@ func (v *ReceiptEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *Snapshot) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *Snapshot) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadString(1); ok {
+		v.Name = x
+	}
+	if x := new(ChainType); reader.ReadEnum(2, x) {
+		v.Type = *x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.MarkPower = x
+	}
+	if x := new(MerkleState); reader.ReadValue(4, x.UnmarshalBinary) {
+		v.Head = x
+	}
+	for {
+		if x := new(MerkleState); reader.ReadValue(5, x.UnmarshalBinary) {
+			v.MarkPoints = append(v.MarkPoints, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_Snapshot)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *Receipt) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Start      *string                          `json:"start,omitempty"`
@@ -341,6 +518,22 @@ func (v *ReceiptEntry) MarshalJSON() ([]byte, error) {
 	}{}
 	u.Right = v.Right
 	u.Hash = encoding.BytesToJSON(v.Hash)
+	return json.Marshal(&u)
+}
+
+func (v *Snapshot) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Name       string                          `json:"name,omitempty"`
+		Type       ChainType                       `json:"type,omitempty"`
+		MarkPower  uint64                          `json:"markPower,omitempty"`
+		Head       *MerkleState                    `json:"head,omitempty"`
+		MarkPoints encoding.JsonList[*MerkleState] `json:"markPoints,omitempty"`
+	}{}
+	u.Name = v.Name
+	u.Type = v.Type
+	u.MarkPower = v.MarkPower
+	u.Head = v.Head
+	u.MarkPoints = v.MarkPoints
 	return json.Marshal(&u)
 }
 
@@ -399,5 +592,29 @@ func (v *ReceiptEntry) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Hash = x
 	}
+	return nil
+}
+
+func (v *Snapshot) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Name       string                          `json:"name,omitempty"`
+		Type       ChainType                       `json:"type,omitempty"`
+		MarkPower  uint64                          `json:"markPower,omitempty"`
+		Head       *MerkleState                    `json:"head,omitempty"`
+		MarkPoints encoding.JsonList[*MerkleState] `json:"markPoints,omitempty"`
+	}{}
+	u.Name = v.Name
+	u.Type = v.Type
+	u.MarkPower = v.MarkPower
+	u.Head = v.Head
+	u.MarkPoints = v.MarkPoints
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Name = u.Name
+	v.Type = u.Type
+	v.MarkPower = u.MarkPower
+	v.Head = u.Head
+	v.MarkPoints = u.MarkPoints
 	return nil
 }
