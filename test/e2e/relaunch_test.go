@@ -112,6 +112,7 @@ func TestRelaunch(t *testing.T) {
 	// require.NotZero(t, account.Balance)
 }
 
+//nolint:unused
 func rpcCall(t *testing.T, method func(context.Context, json.RawMessage) interface{}, input, output interface{}) {
 	t.Helper()
 
