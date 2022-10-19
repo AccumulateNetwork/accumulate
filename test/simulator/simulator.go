@@ -28,6 +28,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -185,6 +186,8 @@ func GenesisWith(time time.Time, values *core.GlobalValues) SnapshotFunc {
 	}
 }
 
+func (s *Simulator) Router() routing.Router { return s.router }
+
 // Step executes a single simulator step
 func (s *Simulator) Step() error {
 	errg := new(errgroup.Group)
@@ -255,7 +258,10 @@ func (s *Simulator) ViewAll(fn func(batch *database.Batch) error) error {
 	return nil
 }
 
-func (s *Simulator) ListenAndServe(hook func(*Simulator, http.Handler) http.Handler) error {
+func (s *Simulator) ListenAndServe(ctx context.Context, hook func(*Simulator, http.Handler) http.Handler) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	errg := new(errgroup.Group)
 	for _, part := range s.partitions {
 		for _, node := range part.nodes {
@@ -277,7 +283,7 @@ func (s *Simulator) ListenAndServe(hook func(*Simulator, http.Handler) http.Hand
 				srv.Handler = hook(s, srv.Handler)
 			}
 
-			defer func() { _ = srv.Shutdown(context.Background()) }()
+			go func() { <-ctx.Done(); _ = srv.Shutdown(context.Background()) }()
 			errg.Go(func() error { return srv.Serve(ln) })
 
 			s.logger.Info("Node up", "partition", part.ID, "node", node.id, "address", "http://"+addr)

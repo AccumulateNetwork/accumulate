@@ -140,11 +140,16 @@ func (st *stateCache) Update(accounts ...protocol.Account) error {
 func (st *stateCache) createOrUpdate(isUpdate bool, accounts []protocol.Account) error {
 	isCreate := !isUpdate
 	for _, account := range accounts {
+		err := protocol.IsValidAccountPath(account.GetUrl().Path)
+		if err != nil {
+			return errors.Format(errors.StatusBadRequest, "invalid account path: %w", err)
+		}
+
 		rec := st.batch.Account(account.GetUrl())
 		if len(account.GetUrl().String()) > protocol.AccountUrlMaxLength {
 			return errors.Wrap(errors.StatusBadUrlLength, fmt.Errorf("url specified exceeds maximum character length: %s", account.GetUrl().String()))
 		}
-		_, err := rec.GetState()
+		_, err = rec.GetState()
 		switch {
 		case err != nil && !errors.Is(err, storage.ErrNotFound):
 			return errors.Format(errors.StatusUnknownError, "failed to check for an existing record: %v", err)
