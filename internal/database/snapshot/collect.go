@@ -10,19 +10,22 @@ import (
 	"compress/gzip"
 	"io"
 
+	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-func Collect(batch *database.Batch, header *Header, file io.WriteSeeker, preserveAccountHistory func(account *database.Account) (bool, error)) (*Writer, error) {
+func Collect(batch *database.Batch, header *Header, file io.WriteSeeker, logger log.Logger, preserveAccountHistory func(account *database.Account) (bool, error)) (*Writer, error) {
 	header.RootHash = *(*[32]byte)(batch.BptRoot())
 
 	w, err := Create(file, header)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
+	w.Logger.Set(logger)
 
 	// Restoring accounts will fail if they reference transactions that have not
 	// yet been restored, so the transaction section must come first. However we
@@ -145,6 +148,10 @@ func (w *Writer) CollectTransactions(batch *database.Batch, hashes [][32]byte, v
 		h := h // See docs/developer/rangevarref.md
 		txn, err := CollectTransaction(batch.Transaction(h[:]))
 		if err != nil {
+			if errors.Is(err, errors.StatusNotFound) {
+				w.Logger.Error("Skipping transaction", "error", err, "hash", logging.AsHex(h).Slice(0, 4))
+				continue
+			}
 			return errors.Format(errors.StatusUnknownError, "collect transaction %x: %w", h[:4], err)
 		}
 
@@ -207,6 +214,10 @@ func (w *Writer) CollectSignatures(batch *database.Batch, hashes [][32]byte, vis
 		h := h // See docs/developer/rangevarref.md
 		sig, err := CollectSignature(batch.Transaction(h[:]))
 		if err != nil {
+			if errors.Is(err, errors.StatusNotFound) {
+				w.Logger.Error("Skipping signature", "error", err, "hash", logging.AsHex(h).Slice(0, 4))
+				continue
+			}
 			return errors.Format(errors.StatusUnknownError, "collect signature %x: %w", h[:4], err)
 		}
 
