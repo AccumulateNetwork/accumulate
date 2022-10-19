@@ -17,7 +17,6 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"github.com/tendermint/tendermint/privval"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
@@ -206,9 +205,9 @@ func submitTransactionWithNode(cfg *config.Config, client *client.Client, transa
 	_, err := client.QueryAccountAs(context.Background(), req, signer)
 	checkf(err, "get signer")
 
-	pv, err := privval.LoadFilePV(
-		cfg.PrivValidator.KeyFile(),
-		cfg.PrivValidator.StateFile(),
+	pv, err := config.LoadFilePV(
+		cfg.PrivValidatorKeyFile(),
+		cfg.PrivValidatorStateFile(),
 	)
 	checkf(err, "load private validator")
 

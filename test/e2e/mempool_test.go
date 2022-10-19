@@ -13,7 +13,8 @@ import (
 // TestUnconfirmed queries the node for transactions pending in the mempool and
 // decodes them.
 func TestUnconfirmed(t *testing.T) {
-	c, err := http.New("http://bvn0-seed.testnet.accumulatenetwork.io:16592")
+	addr := "http://bvn0-seed.testnet.accumulatenetwork.io:16592"
+	c, err := http.New(addr, addr+"/websocket")
 	require.NoError(t, err)
 
 	limit := 100

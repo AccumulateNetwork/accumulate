@@ -295,7 +295,7 @@ func (b *bootstrap) createAnchorPool() {
 func (b *bootstrap) createVoteScratchChain() error {
 	//create a vote scratch chain
 	wd := new(protocol.WriteData)
-	lci := types.LastCommitInfo{}
+	lci := types.CommitInfo{}
 	data, err := json.Marshal(&lci)
 	if err != nil {
 		return errors.Format(errors.StatusInternalError, "marshal last commit info: %w", err)

@@ -10,7 +10,7 @@ import (
 	"context"
 
 	"github.com/tendermint/tendermint/rpc/client"
-	core "github.com/tendermint/tendermint/rpc/coretypes"
+	core "github.com/tendermint/tendermint/rpc/core/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
