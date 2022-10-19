@@ -28,6 +28,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -184,6 +185,8 @@ func GenesisWith(time time.Time, values *core.GlobalValues) SnapshotFunc {
 		return ioutil2.NewBuffer(snapshot), nil
 	}
 }
+
+func (s *Simulator) Router() routing.Router { return s.router }
 
 // Step executes a single simulator step
 func (s *Simulator) Step() error {
