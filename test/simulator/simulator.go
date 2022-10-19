@@ -258,7 +258,10 @@ func (s *Simulator) ViewAll(fn func(batch *database.Batch) error) error {
 	return nil
 }
 
-func (s *Simulator) ListenAndServe(hook func(*Simulator, http.Handler) http.Handler) error {
+func (s *Simulator) ListenAndServe(ctx context.Context, hook func(*Simulator, http.Handler) http.Handler) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	errg := new(errgroup.Group)
 	for _, part := range s.partitions {
 		for _, node := range part.nodes {
@@ -280,7 +283,7 @@ func (s *Simulator) ListenAndServe(hook func(*Simulator, http.Handler) http.Hand
 				srv.Handler = hook(s, srv.Handler)
 			}
 
-			defer func() { _ = srv.Shutdown(context.Background()) }()
+			go func() { <-ctx.Done(); _ = srv.Shutdown(context.Background()) }()
 			errg.Go(func() error { return srv.Serve(ln) })
 
 			s.logger.Info("Node up", "partition", part.ID, "node", node.id, "address", "http://"+addr)
