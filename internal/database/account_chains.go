@@ -67,6 +67,8 @@ func (c *Chain2) Name() string { return c.inner.Name() }
 // Type returns the type of the chain.
 func (c *Chain2) Type() managed.ChainType { return c.inner.Type() }
 
+func (c *Chain2) Inner() *managed.Chain { return c.inner }
+
 // Url returns the URL of the chain: {account}#chain/{name}.
 func (c *Chain2) Url() *url.URL {
 	return c.Account().WithFragment("chain/" + c.Name())

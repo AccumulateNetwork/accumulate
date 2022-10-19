@@ -17,7 +17,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
-	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/smt/pmt"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
@@ -97,19 +96,13 @@ func stripSnapshot(_ *cobra.Command, args []string) {
 				check(account.Restore(batch))
 
 				for _, c := range account.Chains {
-					// Compress the entries
-					ms := new(managed.MerkleState)
-					ms.Count = int64(c.Count)
-					ms.Pending = c.Pending
-					for _, v := range c.Entries {
-						ms.AddToMerkleTree(v)
-					}
-					c.Count = uint64(ms.Count)
-					c.Pending = ms.Pending
-					c.Entries = nil
+					// Remove mark points
+					c.MarkPoints = nil
 
 					// Restore the chain
-					check(c.Restore(batch.Account(account.Url)))
+					c2, err := account.RestoreChainHead(batch, c)
+					check(err)
+					check(c2.Inner().RestoreMarkPointRange(c, 0, len(c.MarkPoints)))
 				}
 
 				i++

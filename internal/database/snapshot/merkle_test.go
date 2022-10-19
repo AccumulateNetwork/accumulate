@@ -135,8 +135,15 @@ func TestSnapshotFullHistory(t *testing.T) {
 }
 
 func entriesShouldFailOrReturnCorrectNumber(t *testing.T, chain *managed.Chain, start, end int64) {
+	t.Helper()
 	hashes, err := chain.GetRange(start, end)
-	if err == nil {
-		require.Len(t, hashes, int(end-start))
+	if err != nil {
+		return
 	}
+	h, err := chain.Head().Get()
+	require.NoError(t, err)
+	if end > h.Count {
+		end = h.Count
+	}
+	require.Equalf(t, int(end-start), len(hashes), "Range from %d to %d", start, end)
 }
