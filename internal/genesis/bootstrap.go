@@ -129,7 +129,7 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) ([]byte, error) {
 	header := new(snapshot.Header)
 	header.Height = protocol.GenesisBlock
 
-	w, err := snapshot.Collect(batch, header, snapshotWriter, func(account *database.Account) (bool, error) {
+	w, err := snapshot.Collect(batch, header, snapshotWriter, b.Logger, func(account *database.Account) (bool, error) {
 		return !b.omitHistory[account.Url().AccountID32()], nil
 	})
 	if err != nil {
