@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd/api"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"runtime/debug"
 
 	btc "github.com/btcsuite/btcd/btcec"
@@ -15,6 +16,8 @@ import (
 )
 
 //go:generate go run ../../../tools/cmd/gen-types --package walletd --out key_info_gen.go key_info.yml
+
+var LocalWalletID = url.MustParse("acc://walletdb.local")
 
 type Key struct {
 	api.Key
@@ -160,7 +163,7 @@ func GenerateKey(sigtype protocol.SignatureType) (k *Key, err error) {
 		return nil, err
 	}
 
-	address, err := getKeyCountAndIncrement(sigtype)
+	address, err := getKeyCountAndIncrement(LocalWalletID, sigtype)
 	if err != nil {
 		return nil, err
 	}
@@ -208,8 +211,11 @@ func GenerateKeyFromHDPath(derivationPath string, sigtype protocol.SignatureType
 	return key, nil
 }
 
-func getKeyCountAndIncrement(sigtype protocol.SignatureType) (count uint32, err error) {
-	ct, _ := GetWallet().Get(BucketMnemonic, []byte(sigtype.String()))
+func getKeyCountAndIncrement(walletID *url.URL, sigtype protocol.SignatureType) (count uint32, err error) {
+	liteId := []byte(walletID.Authority)
+	bucketKey := append(BucketLedger, liteId...)
+
+	ct, _ := GetWallet().Get(bucketKey, []byte(sigtype.String()))
 	if ct != nil {
 		count = binary.LittleEndian.Uint32(ct)
 	}

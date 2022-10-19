@@ -3,7 +3,6 @@ package walletd
 import (
 	"bytes"
 	"context"
-	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -179,7 +178,7 @@ func (la *LedgerApi) GenerateKey(wallet accounts.Wallet, label string) (*api.Key
 		return nil, fmt.Errorf("could not derive wallet ID: %v", err)
 	}
 
-	address, err := getLedgerKeyCountAndIncrement(walletID, protocol.SignatureTypeED25519)
+	address, err := getKeyCountAndIncrement(walletID, protocol.SignatureTypeED25519)
 	if err != nil {
 		return nil, err
 	}
@@ -224,24 +223,6 @@ func (la *LedgerApi) GenerateKey(wallet accounts.Wallet, label string) (*api.Key
 			WalletID:   walletID,
 		},
 	}, nil
-}
-
-func getLedgerKeyCountAndIncrement(walletID *url.URL, sigtype protocol.SignatureType) (count uint32, err error) {
-	liteId := []byte(walletID.Authority)
-	bucketKey := append(BucketLedger, liteId...)
-	ct, _ := GetWallet().Get(bucketKey, []byte(sigtype.String()))
-	if ct != nil {
-		count = binary.LittleEndian.Uint32(ct)
-	}
-
-	ct = make([]byte, 8)
-	binary.LittleEndian.PutUint32(ct, count+1)
-	err = GetWallet().Put(bucketKey, []byte(sigtype.String()), ct)
-	if err != nil {
-		return 0, err
-	}
-
-	return count, nil
 }
 
 func (la *LedgerApi) SelectWallet(walletID string) (accounts.Wallet, error) {
