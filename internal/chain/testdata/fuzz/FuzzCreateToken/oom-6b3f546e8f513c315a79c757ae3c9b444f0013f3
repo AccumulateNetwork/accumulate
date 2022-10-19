@@ -1,0 +1,3 @@
+go test fuzz v1
+[]byte("\x01\aȝ.acme\a")
+[]byte("\x01\b\x02.a\xff\xff\xff\xffcme/\xc6qAqlqqqqq--%25q\x8f\x8e\x8eʎΌ\x91-a%25-3549766\r/\x9eq\x8f\x8eȝ./\x9eq\x8f")
