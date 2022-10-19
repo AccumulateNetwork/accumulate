@@ -8,6 +8,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -109,7 +110,7 @@ func run(*cobra.Command, []string) {
 	check(err)
 
 	if flag.Step == "on-wait" {
-		check(sim.ListenAndServe(onWaitHook))
+		check(sim.ListenAndServe(context.Background(), onWaitHook))
 		return
 	}
 
@@ -123,7 +124,7 @@ func run(*cobra.Command, []string) {
 		}
 	}()
 
-	check(sim.ListenAndServe(nil))
+	check(sim.ListenAndServe(context.Background(), nil))
 }
 
 func fatalf(format string, args ...interface{}) {
