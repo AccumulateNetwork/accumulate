@@ -44,6 +44,8 @@ type InitOpts struct {
 	Snapshots       []func() (ioutil2.SectionReader, error)
 	GenesisGlobals  *core.GlobalValues
 	OperatorKeys    [][]byte
+
+	IncludeHistoryFromSnapshots bool
 }
 
 func Init(snapshotWriter io.WriteSeeker, opts InitOpts) ([]byte, error) {
@@ -413,6 +415,7 @@ func (b *bootstrap) importSnapshots(st *chain.StateManager) error {
 		v := new(snapshotVisitor)
 		v.acmeIssued = b.acmeIssued
 		v.omitHistory = b.omitHistory
+		v.AlwaysOmitHistory = !b.IncludeHistoryFromSnapshots
 		v.v = snapshot.NewRestoreVisitor(st.GetBatch(), b.Logger)
 		v.logger.L = b.Logger
 		v.v.DisableWriteBatching = true

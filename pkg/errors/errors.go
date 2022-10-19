@@ -146,9 +146,16 @@ func (e *Error) recordCallSite(depth int) {
 		return
 	}
 
+caller:
 	pc, file, line, ok := runtime.Caller(depth)
 	if !ok {
 		return
+	}
+
+	// HACK: to get around call depth issues with internal/errors/compat.go
+	if strings.HasSuffix(file, "internal/errors/compat.go") {
+		depth++
+		goto caller
 	}
 
 	cs := &CallSite{File: file, Line: int64(line)}

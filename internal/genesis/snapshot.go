@@ -27,6 +27,8 @@ type snapshotVisitor struct {
 	acmeIssued  *big.Int
 	omitHistory map[[32]byte]bool
 
+	AlwaysOmitHistory bool
+
 	keepTxn      map[[32]byte]bool
 	accounts     int
 	transactions int
@@ -70,10 +72,14 @@ func (v *snapshotVisitor) VisitAccount(acct *snapshot.Account, _ int) error {
 		return nil
 	}
 
-	for _, c := range acct.Chains {
-		if len(c.Pending) > 0 && len(c.Entries) == 0 {
-			v.omitHistory[acct.Url.AccountID32()] = true
-			break
+	if v.AlwaysOmitHistory {
+		v.omitHistory[acct.Url.AccountID32()] = true
+	} else {
+		for _, c := range acct.Chains {
+			if len(c.Head.Pending) > 0 && len(c.MarkPoints) == 0 {
+				v.omitHistory[acct.Url.AccountID32()] = true
+				break
+			}
 		}
 	}
 
