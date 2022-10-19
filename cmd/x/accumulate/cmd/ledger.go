@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/x/accumulate/walletd"
 )
 
 var walletID string

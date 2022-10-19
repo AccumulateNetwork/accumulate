@@ -5,7 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
-	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd/api"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/x/accumulate/walletd/api"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"runtime/debug"
 

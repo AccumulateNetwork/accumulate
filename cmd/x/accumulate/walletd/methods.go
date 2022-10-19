@@ -6,8 +6,6 @@ import (
 	"fmt"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
-	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd/api"
-	"gitlab.com/accumulatenetwork/accumulate/cmd/x/accumulate/walletd/api"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"

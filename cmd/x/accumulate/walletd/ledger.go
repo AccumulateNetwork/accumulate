@@ -9,8 +9,8 @@ import (
 	"strconv"
 
 	"github.com/FactomProject/go-bip32"
-	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd/api"
-	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd/bip44"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/x/accumulate/walletd/api"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/x/accumulate/walletd/bip44"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	accounts "gitlab.com/accumulatenetwork/ledger/ledger-go-accumulate"
