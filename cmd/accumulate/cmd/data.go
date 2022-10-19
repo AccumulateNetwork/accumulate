@@ -9,7 +9,7 @@ import (
 	"strconv"
 
 	"github.com/spf13/cobra"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -122,7 +122,7 @@ func GetDataEntry(accountUrl string, args []string) (string, error) {
 		return "", err
 	}
 
-	params := api.DataEntryQuery{}
+	params := client.DataEntryQuery{}
 	params.Url = u
 	if len(args) > 0 {
 		n, err := hex.Decode(params.EntryHash[:], []byte(args[0]))
@@ -159,7 +159,7 @@ func GetDataEntrySet(accountUrl string, args []string) (string, error) {
 		return "", fmt.Errorf("expecting the start index and count parameters with optional expand")
 	}
 
-	params := api.DataEntrySetQuery{}
+	params := client.DataEntrySetQuery{}
 	params.Url = u
 
 	v, err := strconv.ParseInt(args[0], 10, 64)
@@ -180,7 +180,7 @@ func GetDataEntrySet(accountUrl string, args []string) (string, error) {
 		}
 	}
 
-	var res api.MultiResponse
+	var res client.MultiResponse
 	data, err := json.Marshal(&params)
 	if err != nil {
 		return "", err
@@ -209,7 +209,7 @@ func CreateLiteDataAccount(origin string, args []string) (string, error) {
 		return "", fmt.Errorf("expecting account url or 'lite' keyword")
 	}
 
-	var res *api.TxResponse
+	var res *client.TxResponse
 	//compute the chain id...
 	wdt := protocol.WriteDataTo{}
 

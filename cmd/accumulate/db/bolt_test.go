@@ -1,14 +1,13 @@
 package db
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
 )
 
 func TestBoltDatabase(t *testing.T) {
-	dirName, e := ioutil.TempDir("", "boltTest")
+	dirName, e := os.MkdirTemp("", "boltTest")
 	if e != nil {
 		t.Fatal(e)
 	}

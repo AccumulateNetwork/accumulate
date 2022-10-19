@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/howeyc/gopass"
-	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/db"
+	"gitlab.com/accumulatenetwork/core/wallet/cmd/accumulate/db"
 )
 
 func copyBucket(dst db.DB, src db.DB, bucket []byte) error {
@@ -45,7 +45,7 @@ func equalBucket(dst db.DB, src db.DB, bucket []byte) bool {
 	return true
 }
 
-//newPassword Get a new password.
+// newPassword Get a new password.
 func newPassword() (string, error) {
 	bytepw1, err := gopass.GetPasswdPrompt("New Password: ", true, os.Stdin, os.Stderr) //term.ReadPassword(int(syscall.Stdin))
 	if err != nil {

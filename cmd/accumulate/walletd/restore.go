@@ -5,11 +5,10 @@ import (
 	"crypto/ed25519"
 	"fmt"
 
-	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/db"
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	url2 "gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
+	"gitlab.com/accumulatenetwork/core/wallet/cmd/accumulate/db"
 )
 
 func RestoreAccounts() (out string, err error) {
@@ -179,7 +178,7 @@ func RestoreAccounts() (out string, err error) {
 		} else {
 			//we have some old data in the bucket, so move it to the new bucket.
 			common.BytesUint64(sigTypeData)
-			kt, err := encoding.UvarintUnmarshalBinary(sigTypeData)
+			kt, err := uvarintUnmarshalBinary(sigTypeData)
 			if err != nil {
 				return "", err
 			}

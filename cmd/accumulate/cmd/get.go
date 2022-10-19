@@ -7,8 +7,7 @@ import (
 	"log"
 
 	"github.com/spf13/cobra"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2/query"
+	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types"
@@ -28,7 +27,7 @@ var getCmd = &cobra.Command{
 					chainId := types.Bytes32{}
 					err = chainId.FromString(args[1])
 					if err == nil {
-						var q *api.ChainQueryResponse
+						var q *client.ChainQueryResponse
 						q, err = GetByChainId(chainId[:])
 						if err == nil {
 							var data []byte
@@ -78,10 +77,10 @@ func PrintGet() {
 	//fmt.Println("  accumulate get [transaction id] 		Get data by Accumulate transaction id")
 }
 
-func GetByChainId(chainId []byte) (*api.ChainQueryResponse, error) {
-	var res api.ChainQueryResponse
+func GetByChainId(chainId []byte) (*client.ChainQueryResponse, error) {
+	var res client.ChainQueryResponse
 
-	params := api.ChainIdQuery{}
+	params := client.ChainIdQuery{}
 	params.ChainId = chainId
 
 	data, err := json.Marshal(&params)
@@ -102,7 +101,7 @@ func Get(urlStr string) (string, error) {
 		return "", err
 	}
 
-	req := new(api.GeneralQuery)
+	req := new(client.GeneralQuery)
 	req.Url = u
 	req.Prove = Prove
 
@@ -133,7 +132,7 @@ func Get(urlStr string) (string, error) {
 
 	// Is it a transaction?
 	if json.Unmarshal(res, new(struct{ Type protocol.TransactionType })) == nil {
-		qr := new(api.TransactionQueryResponse)
+		qr := new(client.TransactionQueryResponse)
 		if json.Unmarshal(res, qr) != nil {
 			return string(res), nil
 		}
@@ -143,18 +142,18 @@ func Get(urlStr string) (string, error) {
 	return string(res), nil
 }
 
-func getKey(urlStr string, key []byte) (*query.ResponseKeyPageIndex, error) {
+func getKey(urlStr string, key []byte) (*client.ResponseKeyPageIndex, error) {
 	u, err := url.Parse(urlStr)
 	if err != nil {
 		return nil, err
 	}
 
-	params := new(api.KeyPageIndexQuery)
+	params := new(client.KeyPageIndexQuery)
 	params.Url = u
 	params.Key = key
 
-	res := new(query.ResponseKeyPageIndex)
-	qres := new(api.ChainQueryResponse)
+	res := new(client.ResponseKeyPageIndex)
+	qres := new(client.ChainQueryResponse)
 	qres.Data = res
 
 	err = queryAs("query-key-index", &params, &qres)

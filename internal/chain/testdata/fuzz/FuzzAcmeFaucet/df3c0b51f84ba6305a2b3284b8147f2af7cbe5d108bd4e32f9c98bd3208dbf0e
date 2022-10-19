@@ -1,3 +1,0 @@
-go test fuzz v1
-[]byte("\x01;acc://0000A00a00a0000a00a000aa00000000aaaa00aaa0a00aa0/AAAA")
-[]byte("\x01\a")

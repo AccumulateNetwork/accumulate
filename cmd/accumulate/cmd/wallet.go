@@ -12,8 +12,8 @@ import (
 	"github.com/spf13/cobra"
 	service2 "github.com/tendermint/tendermint/libs/service"
 	"github.com/tyler-smith/go-bip39"
-	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/db"
-	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
+	"gitlab.com/accumulatenetwork/core/wallet/cmd/accumulate/db"
+	"gitlab.com/accumulatenetwork/core/wallet/cmd/accumulate/walletd"
 )
 
 var walletCmd = &cobra.Command{

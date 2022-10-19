@@ -5,9 +5,9 @@ import (
 	"strconv"
 
 	"github.com/spf13/cobra"
-	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
 	url2 "gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/core/wallet/cmd/accumulate/walletd"
 )
 
 func init() {
@@ -91,7 +91,7 @@ var pageKeyReplaceCmd = &cobra.Command{
 	}),
 }
 
-////nolint
+// //nolint
 var pageSetThresholdCmd = &cobra.Command{
 	Use:   "set-threshold [key page url] [key name[@key book or page]] [threshold]",
 	Short: "Set the M-of-N signature threshold for a key page",

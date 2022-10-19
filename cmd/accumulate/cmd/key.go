@@ -6,7 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"strconv"
 	"strings"
 
@@ -15,12 +15,12 @@ import (
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 	tmjson "github.com/tendermint/tendermint/libs/json"
 	"github.com/tendermint/tendermint/privval"
-	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/db"
-	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
-	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd/api"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types"
+	"gitlab.com/accumulatenetwork/core/wallet/cmd/accumulate/db"
+	"gitlab.com/accumulatenetwork/core/wallet/cmd/accumulate/walletd"
+	"gitlab.com/accumulatenetwork/core/wallet/cmd/accumulate/walletd/api"
 )
 
 func init() {
@@ -265,7 +265,7 @@ func parseKey(s string) (*walletd.Key, error) {
 		return k, nil
 	}
 
-	b, err := ioutil.ReadFile(s)
+	b, err := os.ReadFile(s)
 	if err != nil {
 		return nil, fmt.Errorf("cannot resolve signing key, invalid key specifier: %q is not a label, key, or file", s)
 	}
@@ -322,7 +322,7 @@ func ImportKeyPrompt(cmd *cobra.Command, label string, signatureType protocol.Si
 }
 
 func importFilePV(cmd *cobra.Command, label, filepath string) (out string, err error) {
-	b, err := ioutil.ReadFile(filepath)
+	b, err := os.ReadFile(filepath)
 	if err != nil {
 		return "", err
 	}

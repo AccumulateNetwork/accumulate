@@ -7,9 +7,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/core/wallet/cmd/accumulate/walletd"
 )
 
 func init() {
@@ -21,7 +21,7 @@ func init() {
 	testMatrix.addTest(testCase3_4)
 }
 
-//testCase1_1 Generate 100 lite account addresses in cli
+// testCase1_1 Generate 100 lite account addresses in cli
 func testCase1_1(t *testing.T, tc *testCmd) {
 	for i := 0; i < 100; i++ {
 		r, err := tc.execute(t, "account generate")
@@ -38,8 +38,8 @@ func testCase1_1(t *testing.T, tc *testCmd) {
 	}
 }
 
-//unitTest3_1
-//Create ADI Token Account (URL), should pass
+// unitTest3_1
+// Create ADI Token Account (URL), should pass
 func testCase3_1(t *testing.T, tc *testCmd) {
 
 	r, err := tc.executeTx(t, "account create token acc://RedWagon.acme red1 acc://RedWagon.acme/acct acc://acme acc://RedWagon.acme/book")
@@ -49,8 +49,8 @@ func testCase3_1(t *testing.T, tc *testCmd) {
 
 }
 
-//unitTest3_2
-//Create ADI Token Account without parent ADI, should fail
+// unitTest3_2
+// Create ADI Token Account without parent ADI, should fail
 func testCase3_2(t *testing.T, tc *testCmd) {
 
 	r, err := tc.execute(t, "account create token acc://RedWagon.acme red1 acmeacct2 acc://acme acc://RedWagon.acme/book")
@@ -60,8 +60,8 @@ func testCase3_2(t *testing.T, tc *testCmd) {
 
 }
 
-//unitTest3_3
-//Create ADI Token Account with invalid token URL, should fail
+// unitTest3_3
+// Create ADI Token Account with invalid token URL, should fail
 func testCase3_3(t *testing.T, tc *testCmd) {
 
 	r, err := tc.execute(t, "account create token acc://RedWagon.acme red1 acc://RedWagon.acme/acmeacct acc://factoid.acme acc://RedWagon.acme/book")
@@ -71,8 +71,8 @@ func testCase3_3(t *testing.T, tc *testCmd) {
 
 }
 
-//unitTest3_4
-//Credit amount with invalid lite address as sender, should fail
+// unitTest3_4
+// Credit amount with invalid lite address as sender, should fail
 func testCase3_4(t *testing.T, tc *testCmd) {
 
 	r, err := tc.execute(t, "accumulate credits acc://1a2d4a07f9cc525b43a63d8d89e32adca1194bc6e3bc4984 acc://ADIdoesntexist.acme 100")
@@ -82,8 +82,8 @@ func testCase3_4(t *testing.T, tc *testCmd) {
 
 }
 
-//unitTest1_2
-//Create Lite Token Accounts based on RCD1-based factoid addresses
+// unitTest1_2
+// Create Lite Token Accounts based on RCD1-based factoid addresses
 func testCase1_2(t *testing.T, tc *testCmd) {
 
 	fs := "Fs1jQGc9GJjyWNroLPq7x6LbYQHveyjWNPXSqAvCEKpETNoTU5dP"
@@ -139,7 +139,7 @@ func testCase1_2(t *testing.T, tc *testCmd) {
 	require.Equal(t, "100000000", bal)
 }
 
-//testGetBalance helper function to get the balance of a token account
+// testGetBalance helper function to get the balance of a token account
 func testGetBalance(t *testing.T, tc *testCmd, accountUrl string) (string, error) {
 	//now query the account to make sure each account has 10 acme.
 	commandLine := fmt.Sprintf("account get %s", accountUrl)
@@ -148,7 +148,7 @@ func testGetBalance(t *testing.T, tc *testCmd, accountUrl string) (string, error
 		return "", err
 	}
 
-	res := new(api.ChainQueryResponse)
+	res := new(client.ChainQueryResponse)
 	acc := new(protocol.LiteTokenAccount)
 	res.Data = acc
 	err = json.Unmarshal([]byte(r), &res)

@@ -9,11 +9,11 @@ import (
 
 	btc "github.com/btcsuite/btcd/btcec"
 	"github.com/tyler-smith/go-bip32"
-	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd/api"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/core/wallet/cmd/accumulate/walletd/api"
 )
 
-//go:generate go run ../../../tools/cmd/gen-types --package walletd  --package api --out api/wallet_gen.go api/wallet.yml
+//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --package walletd  --package api --out api/wallet_gen.go api/wallet.yml
 
 type Key struct {
 	api.Key
@@ -145,7 +145,7 @@ func (k *Key) NativeAddress() (address string, err error) {
 	case protocol.SignatureTypeBTC, protocol.SignatureTypeBTCLegacy:
 		address = protocol.BTCaddress(k.PublicKeyHash())
 	case protocol.SignatureTypeETH:
-		address = protocol.ETHaddress(k.PublicKeyHash())
+		address, err = protocol.ETHaddress(k.PublicKeyHash())
 	default:
 		u := protocol.LiteAuthorityForKey(k.PublicKey, protocol.SignatureTypeED25519)
 		address = u.Hostname()
@@ -191,8 +191,12 @@ func GenerateKeyFromHDPath(derivationPath string, sigtype protocol.SignatureType
 		return nil, fmt.Errorf("wallet not created, please create a seeded wallet \"accumulate wallet init\"")
 	}
 
+	curve := bip32.Bitcoin
+	if hd.CoinType() == TypeAccumulate {
+		curve = bip32.Ed25519
+	}
 	//if we do have a seed, then create a new key
-	masterKey, _ := bip32.NewMasterKey(seed)
+	masterKey, _ := bip32.NewMasterKeyWithCurve(seed, curve)
 
 	//create the derived key
 	newKey, err := NewKeyFromMasterKey(masterKey, hd.CoinType(), hd.Account(), hd.Chain(), hd.Address())
@@ -218,6 +222,9 @@ func getKeyCountAndIncrement(sigtype protocol.SignatureType) (count uint32, err 
 	err = GetWallet().Put(BucketMnemonic, []byte(sigtype.String()), ct)
 	if err != nil {
 		return 0, err
+	}
+	if sigtype == protocol.SignatureTypeED25519 {
+		count += uint32(0x80000000)
 	}
 
 	return count, nil

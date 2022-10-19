@@ -13,13 +13,13 @@ import (
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/spf13/cobra"
-	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/types"
+	"gitlab.com/accumulatenetwork/core/wallet/cmd/accumulate/walletd"
 )
 
 func runCmdFunc(fn func(args []string) (string, error)) func(cmd *cobra.Command, args []string) {
@@ -52,16 +52,16 @@ func runTxnCmdFunc(fn func(principal *url.URL, signers []*signing.Builder, args 
 	})
 }
 
-func getRecord(urlStr string, rec interface{}) (*api.MerkleState, error) {
+func getRecord(urlStr string, rec interface{}) (*client.MerkleState, error) {
 	u, err := url.Parse(urlStr)
 	if err != nil {
 		return nil, err
 	}
 
-	params := api.UrlQuery{
+	params := client.UrlQuery{
 		Url: u,
 	}
-	res := new(api.ChainQueryResponse)
+	res := new(client.ChainQueryResponse)
 	res.Data = rec
 	if err := Client.RequestAPIv2(context.Background(), "query", &params, res); err != nil {
 		return nil, err
@@ -279,11 +279,11 @@ func Remarshal(src interface{}, dst interface{}) error {
 // This is a hack to reduce how much we have to change
 type QueryResponse struct {
 	Type           string                      `json:"type,omitempty"`
-	MainChain      *api.MerkleState            `json:"mainChain,omitempty"`
+	MainChain      *client.MerkleState         `json:"mainChain,omitempty"`
 	Data           interface{}                 `json:"data,omitempty"`
 	ChainId        []byte                      `json:"chainId,omitempty"`
 	Origin         string                      `json:"origin,omitempty"`
-	KeyPage        *api.KeyPage                `json:"keyPage,omitempty"`
+	KeyPage        *client.KeyPage             `json:"keyPage,omitempty"`
 	Txid           []byte                      `json:"txid,omitempty"`
 	Signatures     []protocol.Signature        `json:"signatures,omitempty"`
 	Status         *protocol.TransactionStatus `json:"status,omitempty"`
@@ -297,7 +297,7 @@ func GetUrl(urlstr string) (*QueryResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	params := api.UrlQuery{}
+	params := client.UrlQuery{}
 	params.Url = u
 
 	err = queryAs("query", &params, &res)
@@ -332,7 +332,7 @@ func queryAs(method string, input, output interface{}) error {
 	return err
 }
 
-func dispatchTxRequest(payload interface{}, origin *url.URL, signers []*signing.Builder) (*api.TxResponse, error) {
+func dispatchTxRequest(payload interface{}, origin *url.URL, signers []*signing.Builder) (*client.TxResponse, error) {
 	// Convert the payload to an envelope
 	var env *protocol.Envelope
 	var err error
@@ -368,9 +368,9 @@ func dispatchTxRequest(payload interface{}, origin *url.URL, signers []*signing.
 		}
 		var found bool
 		for _, account := range accounts {
-			req := new(api.GeneralQuery)
+			req := new(client.GeneralQuery)
 			req.Url = account.WithTxID(remote.Hash).AsUrl()
-			resp := new(api.TransactionQueryResponse)
+			resp := new(client.TransactionQueryResponse)
 			err := queryAs("query", req, resp)
 			if err != nil {
 				if strings.Contains(err.Error(), "not found") {
@@ -401,7 +401,7 @@ func dispatchTxRequest(payload interface{}, origin *url.URL, signers []*signing.
 		env.Signatures = append(env.Signatures, sig)
 	}
 
-	req := new(api.ExecuteRequest)
+	req := new(client.ExecuteRequest)
 	req.Envelope = env
 	if TxPretend {
 		req.CheckOnly = true
@@ -415,7 +415,7 @@ func dispatchTxRequest(payload interface{}, origin *url.URL, signers []*signing.
 	if res.Code != 0 {
 		result := new(protocol.TransactionStatus)
 		if Remarshal(res.Result, result) != nil {
-			return nil, errors.New(errors.StatusEncodingError, res.Message)
+			return nil, errors.New(errors.EncodingError, res.Message)
 		}
 		return nil, result.Error
 	}
@@ -423,7 +423,7 @@ func dispatchTxRequest(payload interface{}, origin *url.URL, signers []*signing.
 	return res, nil
 }
 
-func dispatchTxAndWait(payload interface{}, origin *url.URL, signers []*signing.Builder) (*api.TxResponse, []*api.TransactionQueryResponse, error) {
+func dispatchTxAndWait(payload interface{}, origin *url.URL, signers []*signing.Builder) (*client.TxResponse, []*client.TransactionQueryResponse, error) {
 	res, err := dispatchTxRequest(payload, origin, signers)
 	if err != nil {
 		return nil, nil, err
@@ -501,16 +501,16 @@ func buildEnvelope(payload protocol.TransactionBody, origin *url.URL) (*protocol
 }
 
 type ActionResponse struct {
-	TransactionHash types.Bytes                     `json:"transactionHash"`
-	SignatureHashes []types.Bytes                   `json:"signatureHashes"`
-	SimpleHash      types.Bytes                     `json:"simpleHash"`
-	Log             types.String                    `json:"log"`
-	Code            types.String                    `json:"code"`
-	Codespace       types.String                    `json:"codespace"`
-	Error           types.String                    `json:"error"`
-	Mempool         types.String                    `json:"mempool"`
-	Result          *protocol.TransactionStatus     `json:"result"`
-	Flow            []*api.TransactionQueryResponse `json:"flow"`
+	TransactionHash types.Bytes                        `json:"transactionHash"`
+	SignatureHashes []types.Bytes                      `json:"signatureHashes"`
+	SimpleHash      types.Bytes                        `json:"simpleHash"`
+	Log             types.String                       `json:"log"`
+	Code            types.String                       `json:"code"`
+	Codespace       types.String                       `json:"codespace"`
+	Error           types.String                       `json:"error"`
+	Mempool         types.String                       `json:"mempool"`
+	Result          *protocol.TransactionStatus        `json:"result"`
+	Flow            []*client.TransactionQueryResponse `json:"flow"`
 }
 
 type ActionDataResponse struct {
@@ -524,7 +524,7 @@ type ActionLiteDataResponse struct {
 	ActionDataResponse
 }
 
-func ActionResponseFromLiteData(r *api.TxResponse, accountUrl string, accountId []byte, entryHash []byte) *ActionLiteDataResponse {
+func ActionResponseFromLiteData(r *client.TxResponse, accountUrl string, accountId []byte, entryHash []byte) *ActionLiteDataResponse {
 	ar := &ActionLiteDataResponse{}
 	ar.AccountUrl = types.String(accountUrl)
 	_ = ar.AccountId.FromBytes(accountId)
@@ -532,14 +532,14 @@ func ActionResponseFromLiteData(r *api.TxResponse, accountUrl string, accountId 
 	return ar
 }
 
-func ActionResponseFromData(r *api.TxResponse, entryHash []byte) *ActionDataResponse {
+func ActionResponseFromData(r *client.TxResponse, entryHash []byte) *ActionDataResponse {
 	ar := &ActionDataResponse{}
 	_ = ar.EntryHash.FromBytes(entryHash)
 	ar.ActionResponse = *ActionResponseFrom(r)
 	return ar
 }
 
-func ActionResponseFrom(r *api.TxResponse) *ActionResponse {
+func ActionResponseFrom(r *client.TxResponse) *ActionResponse {
 	ar := &ActionResponse{
 		TransactionHash: r.TransactionHash,
 		SignatureHashes: make([]types.Bytes, len(r.SignatureHashes)),

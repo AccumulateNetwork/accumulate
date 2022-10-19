@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
+	"gitlab.com/accumulatenetwork/core/wallet/cmd/accumulate/walletd"
 )
 
 //func GetWallet() db.DB {
@@ -109,7 +109,7 @@ func InitRootCmd() *cobra.Command {
 	cmd.AddCommand(txCmd)
 	cmd.AddCommand(blocksCmd)
 	cmd.AddCommand(operatorCmd, validatorCmd)
-	cmd.AddCommand(followerCmd)
+	// cmd.AddCommand(followerCmd)
 	cmd.AddCommand(versionCmd, describeCmd)
 	cmd.AddCommand(walletCmd)
 	cmd.AddCommand(resubmitCmd)

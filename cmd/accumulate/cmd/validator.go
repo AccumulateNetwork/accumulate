@@ -5,11 +5,11 @@ import (
 	"errors"
 
 	"github.com/spf13/cobra"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
-	"gitlab.com/accumulatenetwork/accumulate/internal/build"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
+	core "gitlab.com/accumulatenetwork/accumulate/pkg/exp"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/core/wallet/cmd/accumulate/build"
 )
 
 func init() {
@@ -85,9 +85,9 @@ func runValCmdFunc(fn func(values *core.GlobalValues, pageCount int, signer []*s
 			return "", errors.New("cannot determine the network's global values")
 		}
 
-		req := new(api.GeneralQuery)
+		req := new(client.GeneralQuery)
 		req.Url = protocol.DnUrl().JoinPath(protocol.Operators, "1")
-		resp := new(api.ChainQueryResponse)
+		resp := new(client.ChainQueryResponse)
 		page := new(protocol.KeyPage)
 		resp.Data = page
 		err = Client.RequestAPIv2(context.Background(), "query", req, resp)
@@ -152,7 +152,7 @@ func addValidator(values *core.GlobalValues, pageCount int, signers []*signing.B
 		return nil, err
 	}
 
-	return build.AddValidator(values, pageCount, newKey.PublicKey, partition, false, signers...)
+	return build.AddValidator(values, pageCount, newKey.PublicKey, partition, signers...)
 }
 
 func removeValidator(values *core.GlobalValues, pageCount int, signers []*signing.Builder, _ string, args []string) (*protocol.Envelope, error) {

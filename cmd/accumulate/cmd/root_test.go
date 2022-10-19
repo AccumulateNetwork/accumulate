@@ -9,22 +9,19 @@ import (
 	"reflect"
 	"runtime"
 	"sort"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
-	"github.com/tendermint/tendermint/crypto"
-	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
-	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
-	"gitlab.com/accumulatenetwork/accumulate/internal/testdata"
-	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
+	"gitlab.com/accumulatenetwork/accumulate/config"
+	core "gitlab.com/accumulatenetwork/accumulate/pkg/exp"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
+	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
+	"gitlab.com/accumulatenetwork/core/wallet/cmd/accumulate/walletd"
 )
-
-func init() { acctesting.EnableDebugFeatures() }
 
 type testCase func(t *testing.T, tc *testCmd)
 type testMatrixTests []testCase
@@ -51,7 +48,7 @@ func bootstrap(t *testing.T, tc *testCmd) {
 	//add the DN private key to our key list.
 	_, err = executeCmd(tc.rootCmd,
 		[]string{"-j", "-s", fmt.Sprintf("%s/v2", tc.jsonRpcAddr), "key", "import", "private", "dnkey", "--sigtype", "ed25519"},
-		fmt.Sprintf("%v\n", hex.EncodeToString(tc.privKey.Bytes())))
+		fmt.Sprintf("%v\n", hex.EncodeToString(tc.privKey)))
 	require.NoError(t, err)
 
 	oracle := new(protocol.AcmeOracle)
@@ -72,15 +69,10 @@ func bootstrap(t *testing.T, tc *testCmd) {
 }
 
 func TestCli(t *testing.T) {
-	acctesting.SkipLong(t)
-	acctesting.SkipPlatformCI(t, "darwin", "flaky")
-
 	tc := &testCmd{}
 	tc.initalize(t)
 
 	bootstrap(t, tc)
-	err := testFactomAddresses()
-	require.NoError(t, err)
 	testMatrix.execute(t, tc)
 
 }
@@ -120,22 +112,49 @@ func (tm *testMatrixTests) execute(t *testing.T, tc *testCmd) {
 type testCmd struct {
 	rootCmd     *cobra.Command
 	jsonRpcAddr string
-	privKey     crypto.PrivKey
+	privKey     []byte
 }
 
-//NewTestBVNN creates a BVN test Node and returns the rest and jsonrpc ports and the DN private key
-func NewTestBVNN(t *testing.T) (string, crypto.PrivKey) {
+// NewTestBVNN creates a BVN test Node and returns the rest and jsonrpc ports and the DN private key
+func NewTestBVNN(t *testing.T) (string, []byte) {
 	t.Helper()
-	acctesting.SkipPlatformCI(t, "darwin", "requires setting up localhost aliases")
 
-	// Start
-	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, true)
-	acctesting.RunTestNet(t, partitions, daemons)
+	const valCount = 1
+	const basePort = 12345
+	net := simulator.SimpleNetwork("Simulator", 1, valCount)
+	for i, bvn := range net.Bvns {
+		for j, node := range bvn.Nodes {
+			node.AdvertizeAddress = fmt.Sprintf("127.0.1.%d", 1+i*valCount+j)
+			node.BasePort = basePort
+		}
+	}
 
-	time.Sleep(time.Second)
-	c := daemons[partitions[1]][0].Config
+	// Disable the sliding fee schedule
+	values := new(core.GlobalValues)
+	values.Globals = new(protocol.NetworkGlobals)
+	values.Globals.FeeSchedule = new(protocol.FeeSchedule)
 
-	return c.Accumulate.API.ListenAddress, daemons[partitions[0]][0].Key()
+	// Initialize
+	sim := NewSim(t,
+		simulator.MemoryDatabase,
+		net,
+		simulator.GenesisWith(GenesisTime, values),
+	)
+
+	// Serve
+	go func() { _ = sim.ListenAndServe(nil) }()
+
+	// Step at 100 Hz
+	tick := time.NewTicker(time.Second / 100)
+	t.Cleanup(tick.Stop)
+	go func() {
+		for range tick.C {
+			sim.Step()
+		}
+	}()
+
+	port := basePort + config.PortOffsetDirectory + config.PortOffsetAccumulateApi
+	return fmt.Sprintf("http://127.0.1.1:%d", port), sim.SignWithNode(protocol.Directory, 0).Key()
 }
 
 func (c *testCmd) initalize(t *testing.T) {
@@ -205,26 +224,4 @@ func executeCmd(cmd *cobra.Command, args []string, input string) (string, error)
 func (c *testCmd) executeTx(t *testing.T, cmdLine string, args ...interface{}) (string, error) {
 	cmdLine = fmt.Sprintf(cmdLine, args...)
 	return c.execute(t, "--wait 10s "+cmdLine)
-}
-
-func testFactomAddresses() error {
-	factomAddresses, err := genesis.LoadFactomAddressesAndBalances(strings.NewReader(testdata.FactomAddresses))
-	if err != nil {
-		return err
-	}
-	for _, address := range factomAddresses {
-		res, err := GetUrl(address.Address.String())
-		if err != nil {
-			return err
-		}
-		account := res.Data.(map[string]interface{})
-		balance, err := strconv.Atoi(account["balance"].(string))
-		if err != nil {
-			return err
-		}
-		if int64(balance) != 5*address.Balance {
-			return fmt.Errorf("accumulate balance for fatcom address doesn't match")
-		}
-	}
-	return nil
 }

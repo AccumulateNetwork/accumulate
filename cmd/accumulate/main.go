@@ -1,7 +1,7 @@
 package main
 
 import (
-	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/cmd"
+	"gitlab.com/accumulatenetwork/core/wallet/cmd/accumulate/cmd"
 )
 
 func main() {

@@ -12,7 +12,7 @@ import (
 	"github.com/kardianos/service"
 	"github.com/rs/zerolog"
 	"github.com/tendermint/tendermint/libs/log"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/core/wallet/cmd/accumulate/logging"
 )
 
 type logAnnotator func(io.Writer, string, bool) io.Writer

@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/howeyc/gopass"
-	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/db"
+	"gitlab.com/accumulatenetwork/core/wallet/cmd/accumulate/db"
 )
 
 func GetWallet() db.DB {
