@@ -24,8 +24,6 @@ Faucet:
   rpc: faucet
   input: protocol.AcmeFaucet
   output: TxResponse
-encode-transaction:
-description: Marshals arbitary transaction
 
 
 Query:
@@ -242,3 +240,10 @@ ExecuteUpdateAccountAuth:
   kind: execute
   rpc: update-account-auth
   input: UpdateAccountAuth
+
+EncodeTransaction:
+  description: encode a transaction from map
+  rpc: encode-transaction
+  input: api.EncodeTransactionRequest
+  output: protocol.EncodeTransaction
+  
