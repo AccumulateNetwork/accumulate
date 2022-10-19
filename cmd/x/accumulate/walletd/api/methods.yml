@@ -1,0 +1,86 @@
+
+Version:
+  description: returns the version of the wallet daemon
+  rpc: version
+  output: api.LedgerVersionResponse
+
+Sign:
+  description: sign a transaction
+  rpc: sign
+  input: api.SignRequest
+  output: api.SignResponse|api.AuthorizationRequired
+
+Encode:
+  description: binary marshal a json transaction or account and return encoded hex
+  rpc: encode
+  input: api.EncodeRequest
+  output: api.EncodeAccountResponse|api.EncodeTransactionResponse|api.EncodeTransactionHeaderResponse|api.EncodeTransactionBodyResponse
+
+Decode:
+  description: unmarshal a binary transaction or account and return the json transaction body
+  rpc: decode
+  input: api.DecodeRequest
+  output: api.DecodeResponse
+
+KeyList:
+  description: returns a list of available keys in the wallet
+  rpc: key-list
+  output: api.KeyListResponse|api.AuthorizationRequired
+
+AdiList:
+  description: returns a list of adi's managed by the wallet
+  rpc: adi-list
+  output: api.AdiListResponse|api.AuthorizationRequired
+
+ResolveKey:
+  description: returns a public key from either a label or keyhash
+  rpc: resolve-key
+  input: api.ResolveKeyRequest
+  output: api.ResolveKeyResponse
+
+CreateTransaction:
+  description: create a transaction by name
+  rpc: create-transaction
+  input: api.CreateTransactionRequest
+  output: api.CreateTransactionResponse
+
+CreateEnvelope:
+  description: create an envelope by name
+  rpc: create-envelope
+  input: api.CreateEnvelopeRequest
+  output: api.CreateEnvelopeResponse
+
+NewSendTokensTransaction:
+  description: creates a map for a new transaction with name
+  rpc: new-transaction
+  input: api.NewTransactionRequest
+  output: protocol.SendTokens
+
+LedgerQueryWallets:
+  description: returns the version of an external ledger device
+  rpc: ledger-info
+  output: api.LedgerWalletResponse
+
+LedgerGenerateKey:
+  description: generate a key on a ledger device
+  rpc: ledger-key-generate
+  input: api.GenerateLedgerKeyRequest
+  output: api.KeyData
+
+DeleteSendTokensTransaction:
+  description: deletes a transaction from map
+  rpc: new-transaction
+  input: api.DeleteTransactionRequest
+  output: protocol.SendTokens
+
+AddSendTokensOutput:
+  description: add output to the send token transaction
+  rpc: add-output
+  input: api.AddSendTokensOutputRequest
+  output: protocol.SendTokens
+
+SignSendTokensTransaction:
+  description: sign send token transaction
+  rpc: sign-transaction
+  input: api.SignTransactionRequest
+  output: api.CreateEnvelopeResponse
