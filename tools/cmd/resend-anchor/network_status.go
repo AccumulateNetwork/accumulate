@@ -136,10 +136,21 @@ func walkNetwork(addrs []string) (*core.GlobalValues, []*NodeData) {
 			for _, peer := range netInfo.Peers {
 				id, err := hex.DecodeString(string(peer.NodeInfo.DefaultNodeID))
 				checkf(err, "parse peer ID")
-				if byNodeId[*(*[20]byte)(id)] == nil {
-					// fmt.Printf("  %s has peer %s\n", hostname, peer.URL)
-					next = append(next, peer.RemoteIP)
+				if byNodeId[*(*[20]byte)(id)] != nil {
+					continue
 				}
+
+				addr := peer.NodeInfo.ListenAddr
+				if !strings.Contains(addr, "://") {
+					addr = "tcp://" + addr
+				}
+				u, err := url.Parse(addr)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Invalid peer: bad listen address: %q", peer.NodeInfo.ListenAddr)
+					continue
+				}
+				// fmt.Printf("  %s has peer %s\n", hostname, peer.URL)
+				next = append(next, "tcp://"+peer.RemoteIP+":"+u.Port())
 			}
 
 			addr = fmt.Sprintf("http://%s:%d", hostname, port+uint64(config.PortOffsetTendermintRpc+config.PortOffsetBlockValidator))
