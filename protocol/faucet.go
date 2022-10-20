@@ -80,3 +80,7 @@ func (s faucetSigner) Sign(sig Signature, sigMdHash, message []byte) error {
 	}
 	return nil
 }
+
+func (s faucetSigner) SignTransaction(sig Signature, txn *Transaction) error {
+	return s.Sign(sig, nil, txn.GetHash())
+}

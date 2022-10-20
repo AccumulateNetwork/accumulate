@@ -10,6 +10,7 @@ import (
 type Signer interface {
 	SetPublicKey(protocol.Signature) error
 	Sign(protocol.Signature, []byte, []byte) error
+	SignTransaction(protocol.Signature, *protocol.Transaction) error
 }
 
 type PrivateKey []byte
@@ -68,4 +69,8 @@ func (k PrivateKey) Sign(sig protocol.Signature, sigMdHash, message []byte) erro
 		return fmt.Errorf("cannot sign %T with a key", sig)
 	}
 	return nil
+}
+
+func (k PrivateKey) SignTransaction(sig protocol.Signature, txn *protocol.Transaction) error {
+	return k.Sign(sig, nil, txn.GetHash())
 }
