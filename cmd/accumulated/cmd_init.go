@@ -515,6 +515,7 @@ func getGenesis(server string, tmClient *rpchttp.HTTP) (*types.GenesisDoc, error
 
 	buf := new(bytes.Buffer)
 	for i := uint(0); ; i++ {
+		fmt.Printf("Get genesis chunk %d from %s\n", i, server)
 		rgen, err := tmClient.GenesisChunked(context.Background(), i)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get genesis chunk %d from %s, %v", i, server, err)
