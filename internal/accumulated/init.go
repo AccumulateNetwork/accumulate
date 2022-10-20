@@ -22,6 +22,7 @@ import (
 	tmjson "github.com/tendermint/tendermint/libs/json"
 	"github.com/tendermint/tendermint/libs/log"
 	tmos "github.com/tendermint/tendermint/libs/os"
+	"github.com/tendermint/tendermint/p2p"
 	"github.com/tendermint/tendermint/privval"
 	tmtypes "github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
@@ -68,8 +69,8 @@ func (b *BvnInit) Peers(node *NodeInit, offset ...config.PortOffset) []string {
 	var peers []string
 	for _, n := range b.Nodes {
 		if n != node {
-			nodeId := tmtypes.NodeIDFromPubKey(ed25519.PubKey(n.NodeKey[32:]))
-			addr := nodeId.AddressString(n.Address(PeerAddress, "", offset...))
+			nodeId := p2p.PubKeyToID(ed25519.PubKey(n.NodeKey[32:]))
+			addr := p2p.IDAddressString(nodeId, n.Address(PeerAddress, "", offset...))
 			peers = append(peers, addr)
 		}
 	}
@@ -313,9 +314,9 @@ func WriteNodeFiles(cfg *config.Config, privValKey, nodeKey []byte, genDoc *tmty
 	return nil
 }
 
-func loadOrCreatePrivVal(config *config.Config, key []byte) error {
-	keyFile := config.PrivValidator.KeyFile()
-	stateFile := config.PrivValidator.StateFile()
+func loadOrCreatePrivVal(cfg *config.Config, key []byte) error {
+	keyFile := cfg.PrivValidatorKeyFile()
+	stateFile := cfg.PrivValidatorStateFile()
 	if !tmos.FileExists(keyFile) {
 		pv := privval.NewFilePV(ed25519.PrivKey(key), keyFile, stateFile)
 		pv.Save()
@@ -329,7 +330,7 @@ func loadOrCreatePrivVal(config *config.Config, key []byte) error {
 		pv.LastSignState.Save()
 		// Don't return here - we still need to check that the key on disk matches what we expect
 	} else { // if file exists then we need to load it
-		pv, err = privval.LoadFilePV(keyFile, stateFile)
+		pv, err = config.LoadFilePV(keyFile, stateFile)
 		if err != nil {
 			return err
 		}
@@ -345,14 +346,13 @@ func loadOrCreatePrivVal(config *config.Config, key []byte) error {
 func loadOrCreateNodeKey(config *config.Config, key []byte) error {
 	keyFile := config.NodeKeyFile()
 	if !tmos.FileExists(keyFile) {
-		nodeKey := tmtypes.NodeKey{
-			ID:      tmtypes.NodeIDFromPubKey(ed25519.PubKey(key[32:])),
+		nodeKey := p2p.NodeKey{
 			PrivKey: ed25519.PrivKey(key),
 		}
 		return nodeKey.SaveAs(keyFile)
 	}
 
-	nodeKey, err := tmtypes.LoadNodeKey(keyFile)
+	nodeKey, err := p2p.LoadNodeKey(keyFile)
 	if err != nil {
 		return err
 	}

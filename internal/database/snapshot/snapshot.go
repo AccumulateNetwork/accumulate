@@ -129,6 +129,9 @@ func Visit(file ioutil2.SectionReader, visitor interface{}) error {
 					return errors.Format(errors.StatusEncodingError, "unmarshal account: %w", err)
 				}
 
+				// Assume a mark power of 8
+				account.ConvertOldChains(8)
+
 				// Fill in the URL field if possible
 				if account.Url == nil {
 					if account.Main == nil {

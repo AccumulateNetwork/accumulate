@@ -16,7 +16,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/tendermint/tendermint/privval"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/abci"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
@@ -142,9 +141,9 @@ func (d *Daemon) LoadSnapshot(file ioutil2.SectionReader) error {
 	}()
 
 	// read private validator
-	pv, err := privval.LoadFilePV(
-		d.Config.PrivValidator.KeyFile(),
-		d.Config.PrivValidator.StateFile(),
+	pv, err := config.LoadFilePV(
+		d.Config.PrivValidatorKeyFile(),
+		d.Config.PrivValidatorStateFile(),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to load private validator: %v", err)

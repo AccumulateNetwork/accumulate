@@ -12,7 +12,7 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	bytes "github.com/tendermint/tendermint/libs/bytes"
 	client "github.com/tendermint/tendermint/rpc/client"
-	coretypes "github.com/tendermint/tendermint/rpc/coretypes"
+	coretypes "github.com/tendermint/tendermint/rpc/core/types"
 	types "github.com/tendermint/tendermint/types"
 	config "gitlab.com/accumulatenetwork/accumulate/config"
 	connections "gitlab.com/accumulatenetwork/accumulate/internal/connections"

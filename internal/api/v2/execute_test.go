@@ -14,7 +14,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
-	core "github.com/tendermint/tendermint/rpc/coretypes"
+	core "github.com/tendermint/tendermint/rpc/core/types"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
