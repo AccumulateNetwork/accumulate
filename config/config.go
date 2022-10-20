@@ -8,7 +8,6 @@ package config
 
 import (
 	"fmt"
-	"io"
 	"net"
 	"net/url"
 	"os"
@@ -21,6 +20,7 @@ import (
 	"github.com/pelletier/go-toml"
 	"github.com/spf13/viper"
 	tm "github.com/tendermint/tendermint/config"
+	"github.com/tendermint/tendermint/privval"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	etcd "go.etcd.io/etcd/client/v3"
@@ -128,7 +128,7 @@ var DefaultLogLevels = LogLevel{}.
 	// SetModule("init", "info").
 	String()
 
-func Default(netName string, net NetworkType, node NodeType, partitionId string) *Config {
+func Default(netName string, net NetworkType, _ NodeType, partitionId string) *Config {
 	c := new(Config)
 	c.Accumulate.Network.Id = netName
 	c.Accumulate.NetworkType = net
@@ -147,12 +147,7 @@ func Default(netName string, net NetworkType, node NodeType, partitionId string)
 	c.Accumulate.AnalysisLog.Enabled = false
 	c.Accumulate.API.ReadHeaderTimeout = 10 * time.Second
 	// c.Accumulate.Snapshots.Frequency = 2
-	switch node {
-	case Validator:
-		c.Config = *tm.DefaultValidatorConfig()
-	default:
-		c.Config = *tm.DefaultConfig()
-	}
+	c.Config = *tm.DefaultConfig()
 	c.LogLevel = DefaultLogLevels
 	c.Instrumentation.Prometheus = true
 	c.ProxyApp = ""
@@ -300,6 +295,10 @@ func (n *Network) GetPartitionByID(partitionID string) *Partition {
 	return nil
 }
 
+func LoadFilePV(keyFilePath, stateFilePath string) (*privval.FilePV, error) {
+	return privval.LoadFilePVSafe(keyFilePath, stateFilePath)
+}
+
 func Load(dir string) (*Config, error) {
 	return loadFile(dir, filepath.Join(dir, configDir, tmConfigFile), filepath.Join(dir, configDir, accConfigFile))
 }
@@ -319,23 +318,22 @@ func loadFile(dir, tmFile, accFile string) (*Config, error) {
 }
 
 func Store(config *Config) error {
-	err := config.Config.WriteToTemplate(filepath.Join(config.RootDir, configDir, tmConfigFile))
+	err := tm.WriteConfigFileSave(filepath.Join(config.RootDir, configDir, tmConfigFile), &config.Config)
 	if err != nil {
 		return err
 	}
 
-	f, err := os.Create(filepath.Join(config.RootDir, configDir, accConfigFile))
+	return writeTomlFile(config.Accumulate, filepath.Join(config.RootDir, configDir, accConfigFile))
+}
+
+func writeTomlFile(v any, file string) error {
+	f, err := os.Create(file)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
 
-	_, err = f.Seek(0, io.SeekEnd)
-	if err != nil {
-		return err
-	}
-
-	return toml.NewEncoder(f).Encode(config.Accumulate)
+	return toml.NewEncoder(f).Encode(v)
 }
 
 func loadTendermint(dir, file string) (*tm.Config, error) {
