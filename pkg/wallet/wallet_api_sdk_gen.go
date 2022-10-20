@@ -74,7 +74,7 @@ func (c *Client) Decode(ctx context.Context, req *api.DecodeRequest) (*api.Decod
 func (c *Client) DeleteSendTokensTransaction(ctx context.Context, req *api.DeleteTransactionRequest) (*protocol.SendTokens, error) {
 	var resp protocol.SendTokens
 
-	err := c.RequestAPIv2(ctx, "new-transaction", req, &resp)
+	err := c.RequestAPIv2(ctx, "delete-transaction", req, &resp)
 	if err != nil {
 		return nil, err
 	}

@@ -58,7 +58,7 @@ NewSendTokensTransaction:
 
 DeleteSendTokensTransaction:
   description: deletes a transaction from map
-  rpc: new-transaction
+  rpc: delete-transaction
   input: api.DeleteTransactionRequest
   output: protocol.SendTokens
 
