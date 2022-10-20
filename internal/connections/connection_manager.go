@@ -355,7 +355,7 @@ func (cm *connectionManager) createClient(connCtx *connectionContext) error {
 		if err != nil {
 			return errInvalidAddress(err)
 		}
-		abci, err := http.New(abciAddr.String())
+		abci, err := http.New(abciAddr.String(), abciAddr.String()+"/websocket")
 		if err != nil {
 			return errCreateRPCClient(err)
 		}
