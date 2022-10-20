@@ -33,7 +33,8 @@ func consensus(_ *cobra.Command, args []string) {
 	checkf(err, "network url")
 	netp, err := strconv.ParseUint(netu.Port(), 10, 64)
 	checkf(err, "network url port")
-	netc, err := http.New(fmt.Sprintf("http://%s:%d", netu.Hostname(), netp+uint64(config.PortOffsetTendermintRpc)+config.PortOffsetDirectory))
+	addr := fmt.Sprintf("http://%s:%d", netu.Hostname(), netp+uint64(config.PortOffsetTendermintRpc)+config.PortOffsetDirectory)
+	netc, err := http.New(addr, addr+"/websocket")
 	checkf(err, "rpc client")
 	_, nodes := walkNetwork(args)
 
