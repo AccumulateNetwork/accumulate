@@ -45,7 +45,7 @@ func loadNetworkConfiguration(file string) (ret *accumulated.NetworkInit, err er
 	return ret, err
 }
 
-//load network config file
+// load network config file
 func initNetwork(cmd *cobra.Command, args []string) {
 	networkConfigFile := args[0]
 	network, err := loadNetworkConfiguration(networkConfigFile)
@@ -157,10 +157,10 @@ func initNetworkLocalFS(cmd *cobra.Command, netInit *accumulated.NetworkInit) {
 					config.Accumulate.Storage.Etcd.DialTimeout = 5 * time.Second
 				}
 			}
-			configs[i][j][0].Config.PrivValidator.Key = "../priv_validator_key.json"
+			configs[i][j][0].Config.PrivValidatorKey = "../priv_validator_key.json"
 			err = accumulated.WriteNodeFiles(configs[i][j][0], node.PrivValKey, node.NodeKey, dnGenDoc)
 			checkf(err, "write DNN files")
-			configs[i][j][1].Config.PrivValidator.Key = "../priv_validator_key.json"
+			configs[i][j][1].Config.PrivValidatorKey = "../priv_validator_key.json"
 			err = accumulated.WriteNodeFiles(configs[i][j][1], node.PrivValKey, node.NodeKey, bvnGenDoc)
 			checkf(err, "write BVNN files")
 
