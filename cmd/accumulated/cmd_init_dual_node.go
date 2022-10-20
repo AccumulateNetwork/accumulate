@@ -187,10 +187,10 @@ func finalizeDnn(bvnId string) (*cfg.Config, error) {
 		c.Accumulate.Website.Enabled = false
 	}
 
-	if len(c.P2P.PersistentPeers) > 0 {
-		c.P2P.BootstrapPeers = c.P2P.PersistentPeers
-		c.P2P.PersistentPeers = ""
-	}
+	// if len(c.P2P.PersistentPeers) > 0 {
+	// 	c.P2P.BootstrapPeers = c.P2P.PersistentPeers
+	// 	c.P2P.PersistentPeers = ""
+	// }
 
 	bvn := c.Accumulate.Network.GetPartitionByID(bvnId)
 	if bvn == nil {
@@ -229,10 +229,10 @@ func finalizeBvnn() (*cfg.Config, error) {
 
 	//in dual mode, the key between bvn and dn is shared.
 	//This will be cleaned up when init system is overhauled with AC-1263
-	if len(c.P2P.PersistentPeers) > 0 {
-		c.P2P.BootstrapPeers = c.P2P.PersistentPeers
-		c.P2P.PersistentPeers = ""
-	}
+	// if len(c.P2P.PersistentPeers) > 0 {
+	// 	c.P2P.BootstrapPeers = c.P2P.PersistentPeers
+	// 	c.P2P.PersistentPeers = ""
+	// }
 
 	dn := c.Accumulate.Network.GetPartitionByID(protocol.Directory)
 	if dn == nil {
@@ -296,7 +296,8 @@ func findHealthyNodeOnPartition(partition *cfg.Partition) (string, error) {
 		if err != nil {
 			continue
 		}
-		tmClient, err := rpchttp.New(fmt.Sprintf("tcp://%s:%d", addr, partition.BasePort+int64(cfg.PortOffsetTendermintRpc)))
+		saddr := fmt.Sprintf("tcp://%s:%d", addr, partition.BasePort+int64(cfg.PortOffsetTendermintRpc))
+		tmClient, err := rpchttp.New(saddr, saddr+"/websocket")
 		if err != nil {
 			continue
 		}
