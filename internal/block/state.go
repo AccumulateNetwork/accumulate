@@ -19,8 +19,8 @@ type BlockMeta struct {
 	IsLeader   bool
 	Index      uint64
 	Time       time.Time
-	CommitInfo *types.LastCommitInfo
-	Evidence   []types.Evidence
+	CommitInfo *types.CommitInfo
+	Evidence   []types.Misbehavior
 }
 
 // BlockState tracks various metrics of a block of transactions as they are
