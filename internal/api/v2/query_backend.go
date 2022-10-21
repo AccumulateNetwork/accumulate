@@ -381,7 +381,7 @@ func (m *queryBackend) queryByUrl(batch *database.Batch, u *url.URL, prove bool,
 						return nil, nil, err
 					}
 
-					entry, err := indexing.GetDataEntry(batch, txnHash)
+					entry, txId, err := indexing.GetDataEntry(batch, txnHash)
 					if err != nil {
 						return nil, nil, err
 					}
@@ -389,6 +389,7 @@ func (m *queryBackend) queryByUrl(batch *database.Batch, u *url.URL, prove bool,
 					res := &query.ResponseDataEntry{}
 					res.EntryHash = *(*[32]byte)(entryHash)
 					res.Entry = entry
+					res.TxId = txId
 					return []byte("data-entry"), res, nil
 				}
 			}
@@ -803,7 +804,7 @@ func (m *queryBackend) queryDataByUrl(batch *database.Batch, u *url.URL) (*query
 		return nil, err
 	}
 
-	qr.Entry, err = indexing.GetDataEntry(batch, txnHash)
+	qr.Entry, qr.TxId, err = indexing.GetDataEntry(batch, txnHash)
 	if err != nil {
 		return nil, err
 	}
@@ -821,7 +822,7 @@ func (m *queryBackend) queryDataByEntryHash(batch *database.Batch, u *url.URL, e
 		return nil, err
 	}
 
-	qr.Entry, err = indexing.GetDataEntry(batch, txnHash)
+	qr.Entry, qr.TxId, err = indexing.GetDataEntry(batch, txnHash)
 	if err != nil {
 		return nil, err
 	}
@@ -854,7 +855,7 @@ func (m *queryBackend) queryDataSet(batch *database.Batch, u *url.URL, start int
 				return nil, err
 			}
 
-			er.Entry, err = indexing.GetDataEntry(batch, txnHash)
+			er.Entry, er.TxId, err = indexing.GetDataEntry(batch, txnHash)
 			if err != nil {
 				return nil, err
 			}

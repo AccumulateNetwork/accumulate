@@ -89,7 +89,7 @@ func TestEvilNode(t *testing.T) {
 	batch := dn.db.Begin(true)
 	defer batch.Discard()
 	// Check each anchor
-	de, err := indexing.Data(batch, dn.network.NodeUrl(protocol.Evidence)).GetLatestEntry()
+	de, _, err := indexing.Data(batch, dn.network.NodeUrl(protocol.Evidence)).GetLatestEntry()
 	require.NoError(t, err)
 	var ev []types2.Misbehavior
 	require.NotEqual(t, de.GetData(), nil, "no data")
@@ -404,7 +404,7 @@ func TestCreateLiteDataAccount(t *testing.T) {
 	require.NoError(t, err)
 	txnHash, err := indexing.Data(batch, liteDataAddress).Transaction(entryHash)
 	require.NoError(t, err)
-	entry, err := indexing.GetDataEntry(batch, txnHash)
+	entry, _, err := indexing.GetDataEntry(batch, txnHash)
 	require.NoError(t, err)
 	hashFromEntry := entry.Hash()
 	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(hashFromEntry), "Chain Entry.Hash does not match")
