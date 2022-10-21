@@ -701,7 +701,7 @@ func (m *queryBackend) queryByTxId(batch *database.Batch, txid []byte, prove, re
 		}
 		qr.Receipts[i] = receipt
 	}
-	qr.PartitionID = m.Describe.PartitionId
+	qr.PartitionUrl = protocol.PartitionUrl(m.Describe.PartitionId)
 
 	return &qr, nil
 }

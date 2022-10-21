@@ -240,7 +240,7 @@ type TransactionQueryResponse struct {
 	Produced        []*url.TxID                 `json:"produced,omitempty" form:"produced" query:"produced" validate:"required"`
 	Receipts        []*query.TxReceipt          `json:"receipts,omitempty" form:"receipts" query:"receipts" validate:"required"`
 	SignatureBooks  []*SignatureBook            `json:"signatureBooks,omitempty" form:"signatureBooks" query:"signatureBooks" validate:"required"`
-	PartitionID     string                      `json:"partitionID,omitempty" form:"partitionID" query:"partitionID" validate:"required"`
+	PartitionUrl    *url.URL                    `json:"partitionUrl,omitempty" form:"partitionUrl" query:"partitionUrl" validate:"required"`
 }
 
 type TxHistoryQuery struct {
@@ -921,7 +921,7 @@ func (v *TransactionQueryResponse) MarshalJSON() ([]byte, error) {
 		SyntheticTxids  encoding.JsonList[*url.TxID]                       `json:"syntheticTxids,omitempty"`
 		Receipts        encoding.JsonList[*query.TxReceipt]                `json:"receipts,omitempty"`
 		SignatureBooks  encoding.JsonList[*SignatureBook]                  `json:"signatureBooks,omitempty"`
-		PartitionID     string                                             `json:"partitionID,omitempty"`
+		PartitionUrl    *url.URL                                           `json:"partitionUrl,omitempty"`
 	}{}
 	u.Type = v.Type
 	u.MainChain = v.MainChain
@@ -938,7 +938,7 @@ func (v *TransactionQueryResponse) MarshalJSON() ([]byte, error) {
 	u.SyntheticTxids = v.Produced
 	u.Receipts = v.Receipts
 	u.SignatureBooks = v.SignatureBooks
-	u.PartitionID = v.PartitionID
+	u.PartitionUrl = v.PartitionUrl
 	return json.Marshal(&u)
 }
 
@@ -1760,7 +1760,7 @@ func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 		SyntheticTxids  encoding.JsonList[*url.TxID]                       `json:"syntheticTxids,omitempty"`
 		Receipts        encoding.JsonList[*query.TxReceipt]                `json:"receipts,omitempty"`
 		SignatureBooks  encoding.JsonList[*SignatureBook]                  `json:"signatureBooks,omitempty"`
-		PartitionID     string                                             `json:"partitionID,omitempty"`
+		PartitionUrl    *url.URL                                           `json:"partitionUrl,omitempty"`
 	}{}
 	u.Type = v.Type
 	u.MainChain = v.MainChain
@@ -1777,7 +1777,7 @@ func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 	u.SyntheticTxids = v.Produced
 	u.Receipts = v.Receipts
 	u.SignatureBooks = v.SignatureBooks
-	u.PartitionID = v.PartitionID
+	u.PartitionUrl = v.PartitionUrl
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -1816,7 +1816,7 @@ func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 	}
 	v.Receipts = u.Receipts
 	v.SignatureBooks = u.SignatureBooks
-	v.PartitionID = u.PartitionID
+	v.PartitionUrl = u.PartitionUrl
 	return nil
 }
 
