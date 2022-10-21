@@ -124,6 +124,7 @@ func (m *JrpcMethods) Status(ctx context.Context, _ json.RawMessage) interface{}
 	status := new(StatusResponse)
 	for i := 0; i < 2; i++ {
 		// Get the latest block height and BPT hash from Tendermint RPC
+		//Different partition must be selected to get the correct status
 		if i == 0 {
 			conn, err = m.ConnectionManager.SelectConnection(m.Options.Describe.PartitionId, true, false)
 			if err != nil {
