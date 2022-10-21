@@ -70,6 +70,8 @@ TransactionQueryResponse:
       marshal-as: reference
       pointer: true
       repeatable: true
+    - name: PartitionID
+      type: string
 
 SignatureBook:
   non-binary: true
