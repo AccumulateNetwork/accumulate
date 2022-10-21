@@ -178,7 +178,7 @@ func TestRemoteSignatures_SignPending(t *testing.T) {
 	// Validate
 	batch := sim.PartitionFor(bobUrl).Database.Begin(true)
 	defer batch.Discard()
-	de, err := indexing.Data(batch, bobUrl.JoinPath("account")).GetLatestEntry()
+	de, _, err := indexing.Data(batch, bobUrl.JoinPath("account")).GetLatestEntry()
 	require.NoError(t, err)
 	require.Equal(t, "foo", string(de.GetData()[0]))
 }
@@ -231,7 +231,7 @@ func TestRemoteSignatures_SameBVN(t *testing.T) {
 	// Validate
 	batch := sim.PartitionFor(bobUrl).Database.Begin(true)
 	defer batch.Discard()
-	de, err := indexing.Data(batch, bobUrl.JoinPath("account")).GetLatestEntry()
+	de, _, err := indexing.Data(batch, bobUrl.JoinPath("account")).GetLatestEntry()
 	require.NoError(t, err)
 	require.Equal(t, "foo", string(de.GetData()[0]))
 }
@@ -300,7 +300,7 @@ func TestRemoteSignatures_Initiate(t *testing.T) {
 	// Validate
 	batch := sim.PartitionFor(bobUrl).Database.Begin(true)
 	defer batch.Discard()
-	de, err := indexing.Data(batch, bobUrl.JoinPath("account")).GetLatestEntry()
+	de, _, err := indexing.Data(batch, bobUrl.JoinPath("account")).GetLatestEntry()
 	require.NoError(t, err)
 	require.Equal(t, "foo", string(de.GetData()[0]))
 }
@@ -355,7 +355,7 @@ func TestRemoteSignatures_Singlesig(t *testing.T) {
 	// Validate
 	batch = sim.PartitionFor(bobUrl).Database.Begin(true)
 	defer batch.Discard()
-	de, err := indexing.Data(batch, bobUrl.JoinPath("account")).GetLatestEntry()
+	de, _, err := indexing.Data(batch, bobUrl.JoinPath("account")).GetLatestEntry()
 	require.NoError(t, err)
 	require.Equal(t, "foo", string(de.GetData()[0]))
 }

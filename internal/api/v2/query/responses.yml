@@ -181,6 +181,9 @@ ResponseDataEntry:
     - name: Entry
       type: protocol.DataEntry
       marshal-as: union
+    - name: TxId
+      type: txid
+      pointer: true
 
 ResponseDataEntrySet:
   fields:
