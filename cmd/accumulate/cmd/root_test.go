@@ -8,6 +8,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -148,7 +149,9 @@ func NewTestBVNN(t *testing.T) (string, []byte) {
 	)
 
 	// Serve
-	go func() { _ = sim.ListenAndServe(nil) }()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	go func() { _ = sim.ListenAndServe(ctx, nil) }()
 
 	// Step at 100 Hz
 	tick := time.NewTicker(time.Second / 100)

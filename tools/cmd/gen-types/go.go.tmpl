@@ -114,6 +114,9 @@ var fieldNames_{{.Name}} = []string{
 func (v *{{.Name}}) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
+	{{- if .IgnoreSizeLimit}}
+	writer.IgnoreSizeLimit = true
+	{{- end}}
    	{{  range .Fields}}
 	{{- if and .IsBinary .IsMarshalled}}
 	{{- if .IsEmbedded}}
@@ -175,6 +178,9 @@ func (v *{{.Name}}) UnmarshalBinary(data []byte) error {
 
 func (v *{{.Name}}) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
+	{{- if .IgnoreSizeLimit}}
+	reader.IgnoreSizeLimit = true
+	{{- end}}
   	{{  range .Fields}}
 	{{- if and .IsBinary .IsMarshalled}}
 	{{- if .IsEmbedded}}
