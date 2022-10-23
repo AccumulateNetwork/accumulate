@@ -156,7 +156,7 @@ func TestDelegatedSignature_Local(t *testing.T) {
 
 	// Validate
 	viewPartitionFor(sim, alice, func(batch *database.Batch) {
-		de, _, err := indexing.Data(batch, alice.JoinPath("data")).GetLatestEntry()
+		de, _, _, err := indexing.Data(batch, alice.JoinPath("data")).GetLatestEntry()
 		require.NoError(t, err)
 		require.Equal(t, "foo", string(de.GetData()[0]))
 	})
@@ -202,7 +202,7 @@ func TestDelegatedSignature_LocalMultisig(t *testing.T) {
 
 	// Validate
 	viewPartitionFor(sim, alice, func(batch *database.Batch) {
-		de, _, err := indexing.Data(batch, alice.JoinPath("data")).GetLatestEntry()
+		de, _, _, err := indexing.Data(batch, alice.JoinPath("data")).GetLatestEntry()
 		require.NoError(t, err)
 		require.Equal(t, "foo", string(de.GetData()[0]))
 	})
@@ -253,7 +253,7 @@ func TestDelegatedSignature_Double(t *testing.T) {
 
 	// Validate
 	viewPartitionFor(sim, alice, func(batch *database.Batch) {
-		de, _, err := indexing.Data(batch, alice.JoinPath("data")).GetLatestEntry()
+		de, _, _, err := indexing.Data(batch, alice.JoinPath("data")).GetLatestEntry()
 		require.NoError(t, err)
 		require.Equal(t, "foo", string(de.GetData()[0]))
 	})
@@ -302,7 +302,7 @@ func TestDelegatedSignature_RemoteDelegate(t *testing.T) {
 
 	// Validate
 	viewPartitionFor(sim, alice, func(batch *database.Batch) {
-		de, _, err := indexing.Data(batch, alice.JoinPath("data")).GetLatestEntry()
+		de, _, _, err := indexing.Data(batch, alice.JoinPath("data")).GetLatestEntry()
 		require.NoError(t, err)
 		require.Equal(t, "foo", string(de.GetData()[0]))
 	})
@@ -353,7 +353,7 @@ func TestDelegatedSignature_RemoteDelegator(t *testing.T) {
 
 	// Validate
 	viewPartitionFor(sim, alice, func(batch *database.Batch) {
-		de, _, err := indexing.Data(batch, alice.JoinPath("data")).GetLatestEntry()
+		de, _, _, err := indexing.Data(batch, alice.JoinPath("data")).GetLatestEntry()
 		require.NoError(t, err)
 		require.Equal(t, "foo", string(de.GetData()[0]))
 	})
@@ -406,7 +406,7 @@ func TestDelegatedSignature_RemoteDelegateAndAuthority(t *testing.T) {
 
 	// Validate
 	viewPartitionFor(sim, alice, func(batch *database.Batch) {
-		de, _, err := indexing.Data(batch, alice.JoinPath("data")).GetLatestEntry()
+		de, _, _, err := indexing.Data(batch, alice.JoinPath("data")).GetLatestEntry()
 		require.NoError(t, err)
 		require.Equal(t, "foo", string(de.GetData()[0]))
 	})
@@ -463,7 +463,7 @@ func TestDelegatedSignature_DobuleRemote(t *testing.T) {
 
 	// Validate
 	viewPartitionFor(sim, alice, func(batch *database.Batch) {
-		de, _, err := indexing.Data(batch, alice.JoinPath("data")).GetLatestEntry()
+		de, _, _, err := indexing.Data(batch, alice.JoinPath("data")).GetLatestEntry()
 		require.NoError(t, err)
 		require.Equal(t, "foo", string(de.GetData()[0]))
 	})
@@ -557,7 +557,7 @@ func TestDelegatedSignature_Multisig(t *testing.T) {
 
 	// Validate
 	viewPartitionFor(sim, alice, func(batch *database.Batch) {
-		de, _, err := indexing.Data(batch, alice.JoinPath("data")).GetLatestEntry()
+		de, _, _, err := indexing.Data(batch, alice.JoinPath("data")).GetLatestEntry()
 		require.NoError(t, err)
 		require.Equal(t, "foo", string(de.GetData()[0]))
 

@@ -101,6 +101,7 @@ type QueryStateOptions struct {
 type Receipt struct {
 	fieldsSet      []bool
 	LocalBlock     uint64          `json:"localBlock,omitempty" form:"localBlock" query:"localBlock" validate:"required"`
+	LocalBlockTime *time.Time      `json:"localBlockTime,omitempty" form:"localBlockTime" query:"localBlockTime" validate:"required"`
 	DirectoryBlock uint64          `json:"directoryBlock,omitempty" form:"directoryBlock" query:"directoryBlock" validate:"required"`
 	Proof          managed.Receipt `json:"proof,omitempty" form:"proof" query:"proof" validate:"required"`
 	Error          *errors2.Error  `json:"error,omitempty" form:"error" query:"error" validate:"required"`
@@ -239,6 +240,10 @@ func (v *Receipt) Copy() *Receipt {
 	u := new(Receipt)
 
 	u.LocalBlock = v.LocalBlock
+	if v.LocalBlockTime != nil {
+		u.LocalBlockTime = new(time.Time)
+		*u.LocalBlockTime = *v.LocalBlockTime
+	}
 	u.DirectoryBlock = v.DirectoryBlock
 	u.Proof = *(&v.Proof).Copy()
 	if v.Error != nil {
@@ -413,6 +418,14 @@ func (v *QueryStateOptions) Equal(u *QueryStateOptions) bool {
 
 func (v *Receipt) Equal(u *Receipt) bool {
 	if !(v.LocalBlock == u.LocalBlock) {
+		return false
+	}
+	switch {
+	case v.LocalBlockTime == u.LocalBlockTime:
+		// equal
+	case v.LocalBlockTime == nil || u.LocalBlockTime == nil:
+		return false
+	case !((*v.LocalBlockTime).Equal(*u.LocalBlockTime)):
 		return false
 	}
 	if !(v.DirectoryBlock == u.DirectoryBlock) {
@@ -881,9 +894,10 @@ func (v *QueryStateOptions) IsValid() error {
 
 var fieldNames_Receipt = []string{
 	1: "LocalBlock",
-	2: "DirectoryBlock",
-	3: "Proof",
-	4: "Error",
+	2: "LocalBlockTime",
+	3: "DirectoryBlock",
+	4: "Proof",
+	5: "Error",
 }
 
 func (v *Receipt) MarshalBinary() ([]byte, error) {
@@ -893,14 +907,17 @@ func (v *Receipt) MarshalBinary() ([]byte, error) {
 	if !(v.LocalBlock == 0) {
 		writer.WriteUint(1, v.LocalBlock)
 	}
+	if !(v.LocalBlockTime == nil) {
+		writer.WriteTime(2, *v.LocalBlockTime)
+	}
 	if !(v.DirectoryBlock == 0) {
-		writer.WriteUint(2, v.DirectoryBlock)
+		writer.WriteUint(3, v.DirectoryBlock)
 	}
 	if !((v.Proof).Equal(new(managed.Receipt))) {
-		writer.WriteValue(3, v.Proof.MarshalBinary)
+		writer.WriteValue(4, v.Proof.MarshalBinary)
 	}
 	if !(v.Error == nil) {
-		writer.WriteValue(4, v.Error.MarshalBinary)
+		writer.WriteValue(5, v.Error.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_Receipt)
@@ -920,16 +937,21 @@ func (v *Receipt) IsValid() error {
 		errs = append(errs, "field LocalBlock is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field LocalBlockTime is missing")
+	} else if v.LocalBlockTime == nil {
+		errs = append(errs, "field LocalBlockTime is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field DirectoryBlock is missing")
 	} else if v.DirectoryBlock == 0 {
 		errs = append(errs, "field DirectoryBlock is not set")
 	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field Proof is missing")
 	} else if (v.Proof).Equal(new(managed.Receipt)) {
 		errs = append(errs, "field Proof is not set")
 	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
 		errs = append(errs, "field Error is missing")
 	} else if v.Error == nil {
 		errs = append(errs, "field Error is not set")
@@ -1338,13 +1360,16 @@ func (v *Receipt) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUint(1); ok {
 		v.LocalBlock = x
 	}
-	if x, ok := reader.ReadUint(2); ok {
+	if x, ok := reader.ReadTime(2); ok {
+		v.LocalBlockTime = &x
+	}
+	if x, ok := reader.ReadUint(3); ok {
 		v.DirectoryBlock = x
 	}
-	if x := new(managed.Receipt); reader.ReadValue(3, x.UnmarshalBinary) {
+	if x := new(managed.Receipt); reader.ReadValue(4, x.UnmarshalBinary) {
 		v.Proof = *x
 	}
-	if x := new(errors2.Error); reader.ReadValue(4, x.UnmarshalBinary) {
+	if x := new(errors2.Error); reader.ReadValue(5, x.UnmarshalBinary) {
 		v.Error = x
 	}
 

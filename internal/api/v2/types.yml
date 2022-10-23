@@ -483,6 +483,9 @@ DataEntryQueryResponse:
     - name: TxId
       type: txid
       pointer: true
+    - name: CauseTxId
+      type: txid
+      pointer: true
 
 ChainEntry:
   non-binary: true

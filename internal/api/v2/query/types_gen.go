@@ -45,6 +45,7 @@ type DirectoryQueryResult struct {
 type GeneralReceipt struct {
 	fieldsSet      []bool
 	LocalBlock     uint64          `json:"localBlock,omitempty" form:"localBlock" query:"localBlock" validate:"required"`
+	LocalBlockTime *time.Time      `json:"localBlockTime,omitempty" form:"localBlockTime" query:"localBlockTime" validate:"required"`
 	DirectoryBlock uint64          `json:"directoryBlock,omitempty" form:"directoryBlock" query:"directoryBlock" validate:"required"`
 	MajorBlock     uint64          `json:"majorBlock,omitempty" form:"majorBlock" query:"majorBlock" validate:"required"`
 	Proof          managed.Receipt `json:"proof,omitempty" form:"proof" query:"proof" validate:"required"`
@@ -158,17 +159,16 @@ type ResponseAccount struct {
 }
 
 type ResponseByTxId struct {
-	fieldsSet    []bool
-	TxId         *url.TxID                   `json:"txId,omitempty" form:"txId" query:"txId" validate:"required"`
-	Envelope     *protocol.Envelope          `json:"envelope,omitempty" form:"envelope" query:"envelope" validate:"required"`
-	Status       *protocol.TransactionStatus `json:"status,omitempty" form:"status" query:"status" validate:"required"`
-	Produced     []*url.TxID                 `json:"produced,omitempty" form:"produced" query:"produced" validate:"required"`
-	Height       uint64                      `json:"height" form:"height" query:"height" validate:"required"`
-	ChainState   [][]byte                    `json:"chainState,omitempty" form:"chainState" query:"chainState" validate:"required"`
-	Receipts     []*TxReceipt                `json:"receipts,omitempty" form:"receipts" query:"receipts" validate:"required"`
-	Signers      []SignatureSet              `json:"signers,omitempty" form:"signers" query:"signers" validate:"required"`
-	PartitionUrl *url.URL                    `json:"partitionUrl,omitempty" form:"partitionUrl" query:"partitionUrl" validate:"required"`
-	extraData    []byte
+	fieldsSet  []bool
+	TxId       *url.TxID                   `json:"txId,omitempty" form:"txId" query:"txId" validate:"required"`
+	Envelope   *protocol.Envelope          `json:"envelope,omitempty" form:"envelope" query:"envelope" validate:"required"`
+	Status     *protocol.TransactionStatus `json:"status,omitempty" form:"status" query:"status" validate:"required"`
+	Produced   []*url.TxID                 `json:"produced,omitempty" form:"produced" query:"produced" validate:"required"`
+	Height     uint64                      `json:"height" form:"height" query:"height" validate:"required"`
+	ChainState [][]byte                    `json:"chainState,omitempty" form:"chainState" query:"chainState" validate:"required"`
+	Receipts   []*TxReceipt                `json:"receipts,omitempty" form:"receipts" query:"receipts" validate:"required"`
+	Signers    []SignatureSet              `json:"signers,omitempty" form:"signers" query:"signers" validate:"required"`
+	extraData  []byte
 }
 
 type ResponseChainEntry struct {
@@ -196,6 +196,7 @@ type ResponseDataEntry struct {
 	EntryHash [32]byte           `json:"entryHash,omitempty" form:"entryHash" query:"entryHash" validate:"required"`
 	Entry     protocol.DataEntry `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
 	TxId      *url.TxID          `json:"txId,omitempty" form:"txId" query:"txId" validate:"required"`
+	CauseTxId *url.TxID          `json:"causeTxId,omitempty" form:"causeTxId" query:"causeTxId" validate:"required"`
 	extraData []byte
 }
 
@@ -352,6 +353,10 @@ func (v *GeneralReceipt) Copy() *GeneralReceipt {
 	u := new(GeneralReceipt)
 
 	u.LocalBlock = v.LocalBlock
+	if v.LocalBlockTime != nil {
+		u.LocalBlockTime = new(time.Time)
+		*u.LocalBlockTime = *v.LocalBlockTime
+	}
 	u.DirectoryBlock = v.DirectoryBlock
 	u.MajorBlock = v.MajorBlock
 	u.Proof = *(&v.Proof).Copy()
@@ -565,9 +570,6 @@ func (v *ResponseByTxId) Copy() *ResponseByTxId {
 	for i, v := range v.Signers {
 		u.Signers[i] = *(&v).Copy()
 	}
-	if v.PartitionUrl != nil {
-		u.PartitionUrl = v.PartitionUrl
-	}
 
 	return u
 }
@@ -619,6 +621,9 @@ func (v *ResponseDataEntry) Copy() *ResponseDataEntry {
 	}
 	if v.TxId != nil {
 		u.TxId = v.TxId
+	}
+	if v.CauseTxId != nil {
+		u.CauseTxId = v.CauseTxId
 	}
 
 	return u
@@ -852,6 +857,14 @@ func (v *DirectoryQueryResult) Equal(u *DirectoryQueryResult) bool {
 
 func (v *GeneralReceipt) Equal(u *GeneralReceipt) bool {
 	if !(v.LocalBlock == u.LocalBlock) {
+		return false
+	}
+	switch {
+	case v.LocalBlockTime == u.LocalBlockTime:
+		// equal
+	case v.LocalBlockTime == nil || u.LocalBlockTime == nil:
+		return false
+	case !((*v.LocalBlockTime).Equal(*u.LocalBlockTime)):
 		return false
 	}
 	if !(v.DirectoryBlock == u.DirectoryBlock) {
@@ -1155,14 +1168,6 @@ func (v *ResponseByTxId) Equal(u *ResponseByTxId) bool {
 			return false
 		}
 	}
-	switch {
-	case v.PartitionUrl == u.PartitionUrl:
-		// equal
-	case v.PartitionUrl == nil || u.PartitionUrl == nil:
-		return false
-	case !((v.PartitionUrl).Equal(u.PartitionUrl)):
-		return false
-	}
 
 	return true
 }
@@ -1235,6 +1240,14 @@ func (v *ResponseDataEntry) Equal(u *ResponseDataEntry) bool {
 	case v.TxId == nil || u.TxId == nil:
 		return false
 	case !((v.TxId).Equal(u.TxId)):
+		return false
+	}
+	switch {
+	case v.CauseTxId == u.CauseTxId:
+		// equal
+	case v.CauseTxId == nil || u.CauseTxId == nil:
+		return false
+	case !((v.CauseTxId).Equal(u.CauseTxId)):
 		return false
 	}
 
@@ -1564,10 +1577,11 @@ func (v *DirectoryQueryResult) IsValid() error {
 
 var fieldNames_GeneralReceipt = []string{
 	1: "LocalBlock",
-	2: "DirectoryBlock",
-	3: "MajorBlock",
-	4: "Proof",
-	5: "Error",
+	2: "LocalBlockTime",
+	3: "DirectoryBlock",
+	4: "MajorBlock",
+	5: "Proof",
+	6: "Error",
 }
 
 func (v *GeneralReceipt) MarshalBinary() ([]byte, error) {
@@ -1577,17 +1591,20 @@ func (v *GeneralReceipt) MarshalBinary() ([]byte, error) {
 	if !(v.LocalBlock == 0) {
 		writer.WriteUint(1, v.LocalBlock)
 	}
+	if !(v.LocalBlockTime == nil) {
+		writer.WriteTime(2, *v.LocalBlockTime)
+	}
 	if !(v.DirectoryBlock == 0) {
-		writer.WriteUint(2, v.DirectoryBlock)
+		writer.WriteUint(3, v.DirectoryBlock)
 	}
 	if !(v.MajorBlock == 0) {
-		writer.WriteUint(3, v.MajorBlock)
+		writer.WriteUint(4, v.MajorBlock)
 	}
 	if !((v.Proof).Equal(new(managed.Receipt))) {
-		writer.WriteValue(4, v.Proof.MarshalBinary)
+		writer.WriteValue(5, v.Proof.MarshalBinary)
 	}
 	if !(len(v.Error) == 0) {
-		writer.WriteString(5, v.Error)
+		writer.WriteString(6, v.Error)
 	}
 
 	_, _, err := writer.Reset(fieldNames_GeneralReceipt)
@@ -1607,21 +1624,26 @@ func (v *GeneralReceipt) IsValid() error {
 		errs = append(errs, "field LocalBlock is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field LocalBlockTime is missing")
+	} else if v.LocalBlockTime == nil {
+		errs = append(errs, "field LocalBlockTime is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field DirectoryBlock is missing")
 	} else if v.DirectoryBlock == 0 {
 		errs = append(errs, "field DirectoryBlock is not set")
 	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field MajorBlock is missing")
 	} else if v.MajorBlock == 0 {
 		errs = append(errs, "field MajorBlock is not set")
 	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
 		errs = append(errs, "field Proof is missing")
 	} else if (v.Proof).Equal(new(managed.Receipt)) {
 		errs = append(errs, "field Proof is not set")
 	}
-	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
 		errs = append(errs, "field Error is missing")
 	} else if len(v.Error) == 0 {
 		errs = append(errs, "field Error is not set")
@@ -2413,7 +2435,6 @@ var fieldNames_ResponseByTxId = []string{
 	6: "ChainState",
 	7: "Receipts",
 	8: "Signers",
-	9: "PartitionUrl",
 }
 
 func (v *ResponseByTxId) MarshalBinary() ([]byte, error) {
@@ -2449,9 +2470,6 @@ func (v *ResponseByTxId) MarshalBinary() ([]byte, error) {
 		for _, v := range v.Signers {
 			writer.WriteValue(8, v.MarshalBinary)
 		}
-	}
-	if !(v.PartitionUrl == nil) {
-		writer.WriteUrl(9, v.PartitionUrl)
 	}
 
 	_, _, err := writer.Reset(fieldNames_ResponseByTxId)
@@ -2502,11 +2520,6 @@ func (v *ResponseByTxId) IsValid() error {
 		errs = append(errs, "field Signers is missing")
 	} else if len(v.Signers) == 0 {
 		errs = append(errs, "field Signers is not set")
-	}
-	if len(v.fieldsSet) > 9 && !v.fieldsSet[9] {
-		errs = append(errs, "field PartitionUrl is missing")
-	} else if v.PartitionUrl == nil {
-		errs = append(errs, "field PartitionUrl is not set")
 	}
 
 	switch len(errs) {
@@ -2656,6 +2669,7 @@ var fieldNames_ResponseDataEntry = []string{
 	1: "EntryHash",
 	2: "Entry",
 	3: "TxId",
+	4: "CauseTxId",
 }
 
 func (v *ResponseDataEntry) MarshalBinary() ([]byte, error) {
@@ -2670,6 +2684,9 @@ func (v *ResponseDataEntry) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.TxId == nil) {
 		writer.WriteTxid(3, v.TxId)
+	}
+	if !(v.CauseTxId == nil) {
+		writer.WriteTxid(4, v.CauseTxId)
 	}
 
 	_, _, err := writer.Reset(fieldNames_ResponseDataEntry)
@@ -2697,6 +2714,11 @@ func (v *ResponseDataEntry) IsValid() error {
 		errs = append(errs, "field TxId is missing")
 	} else if v.TxId == nil {
 		errs = append(errs, "field TxId is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field CauseTxId is missing")
+	} else if v.CauseTxId == nil {
+		errs = append(errs, "field CauseTxId is not set")
 	}
 
 	switch len(errs) {
@@ -3365,16 +3387,19 @@ func (v *GeneralReceipt) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUint(1); ok {
 		v.LocalBlock = x
 	}
-	if x, ok := reader.ReadUint(2); ok {
-		v.DirectoryBlock = x
+	if x, ok := reader.ReadTime(2); ok {
+		v.LocalBlockTime = &x
 	}
 	if x, ok := reader.ReadUint(3); ok {
+		v.DirectoryBlock = x
+	}
+	if x, ok := reader.ReadUint(4); ok {
 		v.MajorBlock = x
 	}
-	if x := new(managed.Receipt); reader.ReadValue(4, x.UnmarshalBinary) {
+	if x := new(managed.Receipt); reader.ReadValue(5, x.UnmarshalBinary) {
 		v.Proof = *x
 	}
-	if x, ok := reader.ReadString(5); ok {
+	if x, ok := reader.ReadString(6); ok {
 		v.Error = x
 	}
 
@@ -3906,9 +3931,6 @@ func (v *ResponseByTxId) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
-	if x, ok := reader.ReadUrl(9); ok {
-		v.PartitionUrl = x
-	}
 
 	seen, err := reader.Reset(fieldNames_ResponseByTxId)
 	if err != nil {
@@ -4019,6 +4041,9 @@ func (v *ResponseDataEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	})
 	if x, ok := reader.ReadTxid(3); ok {
 		v.TxId = x
+	}
+	if x, ok := reader.ReadTxid(4); ok {
+		v.CauseTxId = x
 	}
 
 	seen, err := reader.Reset(fieldNames_ResponseDataEntry)
@@ -4418,6 +4443,7 @@ func (v *DirectoryQueryResult) MarshalJSON() ([]byte, error) {
 func (v *GeneralReceipt) MarshalJSON() ([]byte, error) {
 	u := struct {
 		LocalBlock     uint64          `json:"localBlock,omitempty"`
+		LocalBlockTime *time.Time      `json:"localBlockTime,omitempty"`
 		DirectoryBlock uint64          `json:"directoryBlock,omitempty"`
 		MajorBlock     uint64          `json:"majorBlock,omitempty"`
 		Proof          managed.Receipt `json:"proof,omitempty"`
@@ -4425,6 +4451,7 @@ func (v *GeneralReceipt) MarshalJSON() ([]byte, error) {
 		Error          string          `json:"error,omitempty"`
 	}{}
 	u.LocalBlock = v.LocalBlock
+	u.LocalBlockTime = v.LocalBlockTime
 	u.DirectoryBlock = v.DirectoryBlock
 	u.MajorBlock = v.MajorBlock
 	u.Proof = v.Proof
@@ -4615,15 +4642,14 @@ func (v *ResponseAccount) MarshalJSON() ([]byte, error) {
 
 func (v *ResponseByTxId) MarshalJSON() ([]byte, error) {
 	u := struct {
-		TxId         *url.TxID                       `json:"txId,omitempty"`
-		Envelope     *protocol.Envelope              `json:"envelope,omitempty"`
-		Status       *protocol.TransactionStatus     `json:"status,omitempty"`
-		Produced     encoding.JsonList[*url.TxID]    `json:"produced,omitempty"`
-		Height       uint64                          `json:"height"`
-		ChainState   encoding.JsonList[*string]      `json:"chainState,omitempty"`
-		Receipts     encoding.JsonList[*TxReceipt]   `json:"receipts,omitempty"`
-		Signers      encoding.JsonList[SignatureSet] `json:"signers,omitempty"`
-		PartitionUrl *url.URL                        `json:"partitionUrl,omitempty"`
+		TxId       *url.TxID                       `json:"txId,omitempty"`
+		Envelope   *protocol.Envelope              `json:"envelope,omitempty"`
+		Status     *protocol.TransactionStatus     `json:"status,omitempty"`
+		Produced   encoding.JsonList[*url.TxID]    `json:"produced,omitempty"`
+		Height     uint64                          `json:"height"`
+		ChainState encoding.JsonList[*string]      `json:"chainState,omitempty"`
+		Receipts   encoding.JsonList[*TxReceipt]   `json:"receipts,omitempty"`
+		Signers    encoding.JsonList[SignatureSet] `json:"signers,omitempty"`
 	}{}
 	u.TxId = v.TxId
 	u.Envelope = v.Envelope
@@ -4636,7 +4662,6 @@ func (v *ResponseByTxId) MarshalJSON() ([]byte, error) {
 	}
 	u.Receipts = v.Receipts
 	u.Signers = v.Signers
-	u.PartitionUrl = v.PartitionUrl
 	return json.Marshal(&u)
 }
 
@@ -4683,10 +4708,12 @@ func (v *ResponseDataEntry) MarshalJSON() ([]byte, error) {
 		EntryHash string                                         `json:"entryHash,omitempty"`
 		Entry     encoding.JsonUnmarshalWith[protocol.DataEntry] `json:"entry,omitempty"`
 		TxId      *url.TxID                                      `json:"txId,omitempty"`
+		CauseTxId *url.TxID                                      `json:"causeTxId,omitempty"`
 	}{}
 	u.EntryHash = encoding.ChainToJSON(v.EntryHash)
 	u.Entry = encoding.JsonUnmarshalWith[protocol.DataEntry]{Value: v.Entry, Func: protocol.UnmarshalDataEntryJSON}
 	u.TxId = v.TxId
+	u.CauseTxId = v.CauseTxId
 	return json.Marshal(&u)
 }
 
@@ -4802,6 +4829,7 @@ func (v *SignatureSet) MarshalJSON() ([]byte, error) {
 func (v *TxReceipt) MarshalJSON() ([]byte, error) {
 	u := struct {
 		LocalBlock     uint64          `json:"localBlock,omitempty"`
+		LocalBlockTime *time.Time      `json:"localBlockTime,omitempty"`
 		DirectoryBlock uint64          `json:"directoryBlock,omitempty"`
 		MajorBlock     uint64          `json:"majorBlock,omitempty"`
 		Proof          managed.Receipt `json:"proof,omitempty"`
@@ -4811,6 +4839,7 @@ func (v *TxReceipt) MarshalJSON() ([]byte, error) {
 		Chain          string          `json:"chain,omitempty"`
 	}{}
 	u.LocalBlock = v.GeneralReceipt.LocalBlock
+	u.LocalBlockTime = v.GeneralReceipt.LocalBlockTime
 	u.DirectoryBlock = v.GeneralReceipt.DirectoryBlock
 	u.MajorBlock = v.GeneralReceipt.MajorBlock
 	u.Proof = v.GeneralReceipt.Proof
@@ -4890,6 +4919,7 @@ func (v *DirectoryQueryResult) UnmarshalJSON(data []byte) error {
 func (v *GeneralReceipt) UnmarshalJSON(data []byte) error {
 	u := struct {
 		LocalBlock     uint64          `json:"localBlock,omitempty"`
+		LocalBlockTime *time.Time      `json:"localBlockTime,omitempty"`
 		DirectoryBlock uint64          `json:"directoryBlock,omitempty"`
 		MajorBlock     uint64          `json:"majorBlock,omitempty"`
 		Proof          managed.Receipt `json:"proof,omitempty"`
@@ -4897,6 +4927,7 @@ func (v *GeneralReceipt) UnmarshalJSON(data []byte) error {
 		Error          string          `json:"error,omitempty"`
 	}{}
 	u.LocalBlock = v.LocalBlock
+	u.LocalBlockTime = v.LocalBlockTime
 	u.DirectoryBlock = v.DirectoryBlock
 	u.MajorBlock = v.MajorBlock
 	u.Proof = v.Proof
@@ -4906,6 +4937,7 @@ func (v *GeneralReceipt) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	v.LocalBlock = u.LocalBlock
+	v.LocalBlockTime = u.LocalBlockTime
 	v.DirectoryBlock = u.DirectoryBlock
 	v.MajorBlock = u.MajorBlock
 	if !(u.Proof.Equal(&managed.Receipt{})) {
@@ -5228,15 +5260,14 @@ func (v *ResponseAccount) UnmarshalJSON(data []byte) error {
 
 func (v *ResponseByTxId) UnmarshalJSON(data []byte) error {
 	u := struct {
-		TxId         *url.TxID                       `json:"txId,omitempty"`
-		Envelope     *protocol.Envelope              `json:"envelope,omitempty"`
-		Status       *protocol.TransactionStatus     `json:"status,omitempty"`
-		Produced     encoding.JsonList[*url.TxID]    `json:"produced,omitempty"`
-		Height       uint64                          `json:"height"`
-		ChainState   encoding.JsonList[*string]      `json:"chainState,omitempty"`
-		Receipts     encoding.JsonList[*TxReceipt]   `json:"receipts,omitempty"`
-		Signers      encoding.JsonList[SignatureSet] `json:"signers,omitempty"`
-		PartitionUrl *url.URL                        `json:"partitionUrl,omitempty"`
+		TxId       *url.TxID                       `json:"txId,omitempty"`
+		Envelope   *protocol.Envelope              `json:"envelope,omitempty"`
+		Status     *protocol.TransactionStatus     `json:"status,omitempty"`
+		Produced   encoding.JsonList[*url.TxID]    `json:"produced,omitempty"`
+		Height     uint64                          `json:"height"`
+		ChainState encoding.JsonList[*string]      `json:"chainState,omitempty"`
+		Receipts   encoding.JsonList[*TxReceipt]   `json:"receipts,omitempty"`
+		Signers    encoding.JsonList[SignatureSet] `json:"signers,omitempty"`
 	}{}
 	u.TxId = v.TxId
 	u.Envelope = v.Envelope
@@ -5249,7 +5280,6 @@ func (v *ResponseByTxId) UnmarshalJSON(data []byte) error {
 	}
 	u.Receipts = v.Receipts
 	u.Signers = v.Signers
-	u.PartitionUrl = v.PartitionUrl
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -5268,7 +5298,6 @@ func (v *ResponseByTxId) UnmarshalJSON(data []byte) error {
 	}
 	v.Receipts = u.Receipts
 	v.Signers = u.Signers
-	v.PartitionUrl = u.PartitionUrl
 	return nil
 }
 
@@ -5349,10 +5378,12 @@ func (v *ResponseDataEntry) UnmarshalJSON(data []byte) error {
 		EntryHash string                                         `json:"entryHash,omitempty"`
 		Entry     encoding.JsonUnmarshalWith[protocol.DataEntry] `json:"entry,omitempty"`
 		TxId      *url.TxID                                      `json:"txId,omitempty"`
+		CauseTxId *url.TxID                                      `json:"causeTxId,omitempty"`
 	}{}
 	u.EntryHash = encoding.ChainToJSON(v.EntryHash)
 	u.Entry = encoding.JsonUnmarshalWith[protocol.DataEntry]{Value: v.Entry, Func: protocol.UnmarshalDataEntryJSON}
 	u.TxId = v.TxId
+	u.CauseTxId = v.CauseTxId
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -5364,6 +5395,7 @@ func (v *ResponseDataEntry) UnmarshalJSON(data []byte) error {
 	v.Entry = u.Entry.Value
 
 	v.TxId = u.TxId
+	v.CauseTxId = u.CauseTxId
 	return nil
 }
 
@@ -5549,6 +5581,7 @@ func (v *SignatureSet) UnmarshalJSON(data []byte) error {
 func (v *TxReceipt) UnmarshalJSON(data []byte) error {
 	u := struct {
 		LocalBlock     uint64          `json:"localBlock,omitempty"`
+		LocalBlockTime *time.Time      `json:"localBlockTime,omitempty"`
 		DirectoryBlock uint64          `json:"directoryBlock,omitempty"`
 		MajorBlock     uint64          `json:"majorBlock,omitempty"`
 		Proof          managed.Receipt `json:"proof,omitempty"`
@@ -5558,6 +5591,7 @@ func (v *TxReceipt) UnmarshalJSON(data []byte) error {
 		Chain          string          `json:"chain,omitempty"`
 	}{}
 	u.LocalBlock = v.GeneralReceipt.LocalBlock
+	u.LocalBlockTime = v.GeneralReceipt.LocalBlockTime
 	u.DirectoryBlock = v.GeneralReceipt.DirectoryBlock
 	u.MajorBlock = v.GeneralReceipt.MajorBlock
 	u.Proof = v.GeneralReceipt.Proof
@@ -5569,6 +5603,7 @@ func (v *TxReceipt) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	v.GeneralReceipt.LocalBlock = u.LocalBlock
+	v.GeneralReceipt.LocalBlockTime = u.LocalBlockTime
 	v.GeneralReceipt.DirectoryBlock = u.DirectoryBlock
 	v.GeneralReceipt.MajorBlock = u.MajorBlock
 	if !(u.Proof.Equal(&managed.Receipt{})) {
