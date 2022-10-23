@@ -13,5 +13,4 @@ merge request target:
   script:
   # Merge requests can only be merged into develop
   # See https://gitlab.com/gitlab-org/gitlab/-/merge_requests/52532
-  # - test "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" == "$CI_DEFAULT_BRANCH"
-  - test "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" == "release-1.0"
+  - test "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" == "$CI_DEFAULT_BRANCH"

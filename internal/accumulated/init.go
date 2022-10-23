@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -101,6 +102,10 @@ func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][2]*config
 		BasePort: int64(network.Bvns[0].Nodes[0].BasePort), // TODO This is not great
 	}
 
+	// If the node addresses are loopback or private IPs, disable strict address book
+	ip := net.ParseIP(network.Bvns[0].Nodes[0].Address(PeerAddress, ""))
+	strict := ip == nil || !(ip.IsLoopback() || ip.IsPrivate())
+
 	var i int
 	for _, bvn := range network.Bvns {
 		var bvnConfigs [][2]*config.Config
@@ -134,23 +139,18 @@ func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][2]*config
 				bvnn.P2P.ExternalAddress = bvnn.Accumulate.LocalAddress
 			}
 
-			if len(network.Bvns) == 1 && len(bvn.Nodes) == 1 {
-				dnn.P2P.AddrBookStrict = true
-				dnn.P2P.AllowDuplicateIP = false
-			} else {
-				dnn.P2P.AddrBookStrict = false
-				dnn.P2P.AllowDuplicateIP = true
-				dnn.P2P.PersistentPeers = strings.Join(network.Peers(node, config.PortOffsetTendermintP2P, config.PortOffsetDirectory), ",")
-			}
+			// No duplicate IPs
+			dnn.P2P.AllowDuplicateIP = false
+			bvnn.P2P.AllowDuplicateIP = false
 
-			if len(bvn.Nodes) == 1 {
-				bvnn.P2P.AddrBookStrict = true
-				bvnn.P2P.AllowDuplicateIP = false
-			} else {
-				bvnn.P2P.AddrBookStrict = false
-				bvnn.P2P.AllowDuplicateIP = true
-				bvnn.P2P.PersistentPeers = strings.Join(bvn.Peers(node, config.PortOffsetTendermintP2P, config.PortOffsetBlockValidator), ",")
-			}
+			// Initial peers (should be bootstrap peers but that setting isn't
+			// present in 0.37)
+			dnn.P2P.PersistentPeers = strings.Join(network.Peers(node, config.PortOffsetTendermintP2P, config.PortOffsetDirectory), ",")
+			bvnn.P2P.PersistentPeers = strings.Join(bvn.Peers(node, config.PortOffsetTendermintP2P, config.PortOffsetBlockValidator), ",")
+
+			// Set whether unroutable addresses are allowed
+			dnn.P2P.AddrBookStrict = strict
+			bvnn.P2P.AddrBookStrict = strict
 
 			bvnConfigs = append(bvnConfigs, [2]*config.Config{dnn, bvnn})
 		}
