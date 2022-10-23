@@ -17,6 +17,3 @@ build:
 
 install:
 	go install -trimpath $(FLAGS) ./cmd/accumulated
-
-accumulate:
-	go build -trimpath $(FLAGS) ./cmd/accumulate
