@@ -34,6 +34,8 @@ type Writer struct {
 	err     error
 	last    uint
 	written int
+
+	IgnoreSizeLimit bool
 }
 
 // NewWriter creates a new Writer.
@@ -83,7 +85,7 @@ func (w *Writer) writeRaw(field uint, v []byte) {
 		return
 	}
 
-	if len(v) > MaxValueSize {
+	if !w.IgnoreSizeLimit && len(v) > MaxValueSize {
 		w.didWrite(field, 0, fmt.Errorf("too big: %d > %d", len(v), MaxValueSize), "failed to write field")
 		return
 	}
