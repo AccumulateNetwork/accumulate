@@ -8,27 +8,27 @@ package cmd
 
 import (
 	"bytes"
-	"context"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"reflect"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
-	"gitlab.com/accumulatenetwork/accumulate/config"
-	core "gitlab.com/accumulatenetwork/accumulate/pkg/exp"
+	"github.com/tendermint/tendermint/crypto"
+	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
+	"gitlab.com/accumulatenetwork/accumulate/internal/testdata"
+	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
-	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
 )
+
+func init() { acctesting.EnableDebugFeatures() }
 
 type testCase func(t *testing.T, tc *testCmd)
 type testMatrixTests []testCase
@@ -37,25 +37,19 @@ var testMatrix testMatrixTests
 
 func bootstrap(t *testing.T, tc *testCmd) {
 
-	_, err := executeCmd(tc.rootCmd,
-		[]string{"-j", "-s", fmt.Sprintf("%s/v2", tc.jsonRpcAddr), "wallet", "init", "import", "mnemonic"},
-		"yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow\n")
-	require.NoError(t, err)
-
 	// import eth private key.
-	// res, err := tc.execute(t, "key import private 26b9b10aec1e75e68709689b446196a5235b26bb9d4c0fc91eaccc7d8b66ec16 ethKey --sigtype eth")
-	res, err := executeCmd(tc.rootCmd,
-		[]string{"-j", "-s", fmt.Sprintf("%s/v2", tc.jsonRpcAddr), "key", "import", "private", "ethKey", "--sigtype", "eth"},
-		"26b9b10aec1e75e68709689b446196a5235b26bb9d4c0fc91eaccc7d8b66ec16\n")
+	res, err := tc.execute(t, "key import private 26b9b10aec1e75e68709689b446196a5235b26bb9d4c0fc91eaccc7d8b66ec16 ethKey --sigtype eth")
 	require.NoError(t, err)
 	var keyResponse KeyResponse
-	err = json.Unmarshal([]byte(strings.Split(res, ": ")[1]), &keyResponse)
+	err = json.Unmarshal([]byte(res), &keyResponse)
 	require.NoError(t, err)
 
 	//add the DN private key to our key list.
-	_, err = executeCmd(tc.rootCmd,
-		[]string{"-j", "-s", fmt.Sprintf("%s/v2", tc.jsonRpcAddr), "key", "import", "private", "dnkey", "--sigtype", "ed25519"},
-		fmt.Sprintf("%v\n", hex.EncodeToString(tc.privKey)))
+	_, err = tc.execute(t, fmt.Sprintf("key import private %x dnkey --sigtype ed25519", tc.privKey.Bytes()))
+	require.NoError(t, err)
+
+	//set mnemonic for predictable addresses
+	_, err = tc.execute(t, "key import mnemonic yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow")
 	require.NoError(t, err)
 
 	oracle := new(protocol.AcmeOracle)
@@ -76,10 +70,15 @@ func bootstrap(t *testing.T, tc *testCmd) {
 }
 
 func TestCli(t *testing.T) {
+	acctesting.SkipLong(t)
+	acctesting.SkipPlatformCI(t, "darwin", "flaky")
+
 	tc := &testCmd{}
 	tc.initalize(t)
 
 	bootstrap(t, tc)
+	err := testFactomAddresses()
+	require.NoError(t, err)
 	testMatrix.execute(t, tc)
 
 }
@@ -119,58 +118,28 @@ func (tm *testMatrixTests) execute(t *testing.T, tc *testCmd) {
 type testCmd struct {
 	rootCmd     *cobra.Command
 	jsonRpcAddr string
-	privKey     []byte
+	privKey     crypto.PrivKey
 }
 
-// NewTestBVNN creates a BVN test Node and returns the rest and jsonrpc ports and the DN private key
-func NewTestBVNN(t *testing.T) (string, []byte) {
+//NewTestBVNN creates a BVN test Node and returns the rest and jsonrpc ports and the DN private key
+func NewTestBVNN(t *testing.T) (string, crypto.PrivKey) {
 	t.Helper()
+	acctesting.SkipPlatformCI(t, "darwin", "requires setting up localhost aliases")
 
-	const valCount = 1
-	const basePort = 12345
-	net := simulator.SimpleNetwork("Simulator", 1, valCount)
-	for i, bvn := range net.Bvns {
-		for j, node := range bvn.Nodes {
-			node.AdvertizeAddress = fmt.Sprintf("127.0.1.%d", 1+i*valCount+j)
-			node.BasePort = basePort
-		}
-	}
+	// Start
+	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, true)
+	acctesting.RunTestNet(t, partitions, daemons)
 
-	// Disable the sliding fee schedule
-	values := new(core.GlobalValues)
-	values.Globals = new(protocol.NetworkGlobals)
-	values.Globals.FeeSchedule = new(protocol.FeeSchedule)
+	time.Sleep(time.Second)
+	c := daemons[partitions[1]][0].Config
 
-	// Initialize
-	sim := NewSim(t,
-		simulator.MemoryDatabase,
-		net,
-		simulator.GenesisWith(GenesisTime, values),
-	)
-
-	// Serve
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	go func() { _ = sim.ListenAndServe(ctx, nil) }()
-
-	// Step at 100 Hz
-	tick := time.NewTicker(time.Second / 100)
-	t.Cleanup(tick.Stop)
-	go func() {
-		for range tick.C {
-			sim.Step()
-		}
-	}()
-
-	port := basePort + config.PortOffsetDirectory + config.PortOffsetAccumulateApi
-	return fmt.Sprintf("http://127.0.1.1:%d", port), sim.SignWithNode(protocol.Directory, 0).Key()
+	return c.Accumulate.API.ListenAddress, daemons[partitions[0]][0].Key()
 }
 
 func (c *testCmd) initalize(t *testing.T) {
 	t.Helper()
 
-	walletd.InitTestDB(t)
-	c.rootCmd = InitRootCmd()
+	c.rootCmd = InitRootCmd(initDB(t.TempDir(), true))
 	c.rootCmd.PersistentPostRun = nil
 
 	c.jsonRpcAddr, c.privKey = NewTestBVNN(t)
@@ -178,14 +147,6 @@ func (c *testCmd) initalize(t *testing.T) {
 }
 
 func (c *testCmd) execute(t *testing.T, cmdLine string) (string, error) {
-	fullCommand := fmt.Sprintf("-j -s %s/v2 %s",
-		c.jsonRpcAddr, cmdLine)
-	args := strings.Split(fullCommand, " ")
-
-	return executeCmd(c.rootCmd, args, "")
-}
-
-func executeCmd(cmd *cobra.Command, args []string, input string) (string, error) {
 	// Reset flags
 	Client = nil
 	ClientTimeout = 0
@@ -201,23 +162,22 @@ func executeCmd(cmd *cobra.Command, args []string, input string) (string, error)
 	TxNoWait = false
 	TxWaitSynth = 0
 	TxIgnorePending = false
+	UseUnencryptedWallet = true
 	flagAccount.Lite = false
 
-	walletd.UseUnencryptedWallet = true
+	fullCommand := fmt.Sprintf("-j -s %s/v2 %s",
+		c.jsonRpcAddr, cmdLine)
+	args := strings.Split(fullCommand, " ")
 
 	e := bytes.NewBufferString("")
 	b := bytes.NewBufferString("")
-	cmd.SetErr(e)
-	cmd.SetOut(b)
-	cmd.SetArgs(args)
-	cmd.SetIn(strings.NewReader(input))
+	c.rootCmd.SetErr(e)
+	c.rootCmd.SetOut(b)
+	c.rootCmd.SetArgs(args)
 	DidError = nil
-	err := cmd.Execute()
+	_ = c.rootCmd.Execute()
 	if DidError != nil {
 		return "", DidError
-	}
-	if err != nil {
-		return "", err
 	}
 
 	errPrint, err := io.ReadAll(e)
@@ -233,4 +193,26 @@ func executeCmd(cmd *cobra.Command, args []string, input string) (string, error)
 func (c *testCmd) executeTx(t *testing.T, cmdLine string, args ...interface{}) (string, error) {
 	cmdLine = fmt.Sprintf(cmdLine, args...)
 	return c.execute(t, "--wait 10s "+cmdLine)
+}
+
+func testFactomAddresses() error {
+	factomAddresses, err := genesis.LoadFactomAddressesAndBalances(strings.NewReader(testdata.FactomAddresses))
+	if err != nil {
+		return err
+	}
+	for _, address := range factomAddresses {
+		res, err := GetUrl(address.Address.String())
+		if err != nil {
+			return err
+		}
+		account := res.Data.(map[string]interface{})
+		balance, err := strconv.Atoi(account["balance"].(string))
+		if err != nil {
+			return err
+		}
+		if int64(balance) != 5*address.Balance {
+			return fmt.Errorf("accumulate balance for fatcom address doesn't match")
+		}
+	}
+	return nil
 }

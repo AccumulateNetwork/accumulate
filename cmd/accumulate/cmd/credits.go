@@ -1,24 +1,18 @@
-// Copyright 2022 The Accumulate Authors
-//
-// Use of this source code is governed by an MIT-style
-// license that can be found in the LICENSE file or at
-// https://opensource.org/licenses/MIT.
-
 package cmd
 
 import (
 	"fmt"
-	"math/big"
 	"strconv"
 
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	url2 "gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // creditsCmd represents the faucet command
 var creditsCmd = &cobra.Command{
-	Use:   "credits [origin token account] [key page or lite identity url] [number of credits wanted] [max acme to spend]",
+	Use:   "credits [origin token account] [key page or lite identity url] [number of credits wanted] [max acme to spend] [percent slippage (optional)]",
 	Short: "Purchase credits with acme and send to recipient.",
 	Args:  cobra.MinimumNArgs(3),
 	Run: func(cmd *cobra.Command, args []string) {
@@ -75,16 +69,12 @@ func AddCredits(origin string, args []string) (string, error) {
 	}
 
 	// ACME = credits ÷ oracle ÷ credits-per-dollar
-	estAcmeRat := big.NewRat(int64(cred*protocol.CreditPrecision), protocol.CreditPrecision)
-	estAcmeRat.Quo(estAcmeRat, big.NewRat(int64(acmeOracle.Price), protocol.AcmeOraclePrecision))
-	estAcmeRat.Quo(estAcmeRat, big.NewRat(protocol.CreditsPerDollar, 1))
+	estAcmeRat := core.NewBigRat(int64(cred*protocol.CreditPrecision), protocol.CreditPrecision)
+	estAcmeRat = estAcmeRat.Div2(int64(acmeOracle.Price), protocol.AcmeOraclePrecision)
+	estAcmeRat = estAcmeRat.Div2(protocol.CreditsPerDollar, 1)
 
 	// Convert rational to an ACME balance
-	estAcmeRat.Mul(estAcmeRat, big.NewRat(protocol.AcmePrecision, 1))
-	acmeSpend := estAcmeRat.Num()
-	if !estAcmeRat.IsInt() {
-		acmeSpend.Div(acmeSpend, estAcmeRat.Denom())
-	}
+	acmeSpend := estAcmeRat.Mul2(protocol.AcmePrecision, 1).Int()
 
 	//now test the cost of the credits against the max amount the user wants to spend
 	if len(args) > 2 {
