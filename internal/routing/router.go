@@ -10,7 +10,7 @@ import (
 	"context"
 
 	"github.com/tendermint/tendermint/libs/log"
-	core "github.com/tendermint/tendermint/rpc/coretypes"
+	core "github.com/tendermint/tendermint/rpc/core/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
@@ -60,7 +60,6 @@ func submit(ctx context.Context, logger log.Logger, connMgr connections.Connecti
 			r2.Code = r1.Code
 			r2.Data = r1.Data
 			r2.Log = r1.Log
-			r2.MempoolError = r1.MempoolError
 			return r2, nil
 		}
 

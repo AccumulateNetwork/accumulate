@@ -87,10 +87,16 @@ func (dumpVisitor) VisitAccount(acct *snapshot.Account, _ int) error {
 	}
 
 	if !dumpFlag.Short {
-		fmt.Printf("  Account %v (%v)\n", acct.Url, acct.Main.Type())
+		var typ string
+		if acct.Main == nil {
+			typ = "<nil>"
+		} else {
+			typ = acct.Main.Type().String()
+		}
+		fmt.Printf("  Account %v (%v)\n", acct.Url, typ)
 
 		for _, chain := range acct.Chains {
-			fmt.Printf("    Chain %s (%v) height %d with %d entries\n", chain.Name, chain.Type, chain.Count, len(chain.Entries))
+			fmt.Printf("    Chain %s (%v) height %d with %d mark points\n", chain.Name, chain.Type, chain.Head.Count, len(chain.MarkPoints))
 		}
 	}
 
@@ -102,7 +108,9 @@ func (dumpVisitor) VisitAccount(acct *snapshot.Account, _ int) error {
 		checkf(err, "restore %v", acct.Url)
 
 		for _, c := range acct.Chains {
-			err = c.Restore(batch.Account(acct.Url))
+			c2, err := acct.RestoreChainHead(batch, c)
+			checkf(err, "restore %v %s chain", acct.Url, c.Name)
+			err = c2.Inner().RestoreMarkPointRange(c, 0, len(c.MarkPoints))
 			checkf(err, "restore %v %s chain", acct.Url, c.Name)
 		}
 
