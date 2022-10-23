@@ -23,8 +23,8 @@ func init() {
 	testMatrix.addTest(testCase2_9c)
 }
 
-// testCase2_8
-// Create an adi data account
+//testCase2_8
+//Create an adi data account
 func testCase2_8(t *testing.T, tc *testCmd) {
 
 	_, err := tc.executeTx(t, "account create data acc://RedWagon.acme red1 acc://RedWagon.acme/DataAccount")
@@ -84,7 +84,7 @@ func testCase2_9b(t *testing.T, tc *testCmd) {
 func testCase2_9c(t *testing.T, tc *testCmd) {
 
 	//pass in some hex encoded stuff 2 ext id's and an encoded data entry
-	_, err := tc.executeTx(t, "data write acc://RedWagon.acme/DataAccount red1 cafef00dbabe8badf00d --sign-data "+liteAccounts[0])
+	_, err := tc.executeTx(t, "data write acc://RedWagon.acme/DataAccount red1 cafef00dbabe8badf00d --sign-data acc://61c185c8c6c929d6ad00aa5529ca880808718258c1bb69df/ACME")
 	require.NoError(t, err)
 
 	//now read back the response
@@ -108,56 +108,56 @@ func testCase2_9c(t *testing.T, tc *testCmd) {
 	require.True(t, sig.Verify(nil, h[:]), "invalid signature for signed data")
 }
 
-// liteAccounts is the predictable test accounts for the unit tests.
+//liteAccounts is the predictable test accounts for the unit tests.
 var liteAccounts = []string{
-	"acc://c6a629f9a65bf21159c5dfbffbc868ec3ae61ce4651108ec/ACME", "acc://7be239fa0bd119f5e15c4b736c41b5fc5ef458acf1d4ad64/ACME",
-	"acc://d22b50671621a0500a5a25d708cbd9819e5297d0991aca46/ACME", "acc://82da5497fb4275ee49e2e67700e535afdfcbf925ca4feb1f/ACME",
-	"acc://cee1044b4352a3c6a56d9437960cc8e7645411815c816260/ACME", "acc://bb410a6f22b0edadd13e403258ae6cec05466d9c2397b814/ACME",
-	"acc://86f78d7ba392ce3a6ac69df7dabe8030db167c8948001e87/ACME", "acc://9d7d80d6b1a60fab52c93d66ae7dd5f45b83269666071994/ACME",
-	"acc://4f71361678a037965e13a0bd98cf948bbf0a0b4e35c316f3/ACME", "acc://35f7d31bf493d819fbe5e10deba5bf9a63ccf045982b005a/ACME",
-	"acc://011fec688377975b3b16575b688aa6e2d97e9a9d0de31362/ACME", "acc://e036df4addce381ca1e8eb74d827da81392287af2b7c28ed/ACME",
-	"acc://f3cc43ea4c805c393694073b5d2c5e3fa5b48ea7f42582c3/ACME", "acc://f63c25c35abef6d4c35499d3e8bc583a823a308109c91505/ACME",
-	"acc://7869f11c2d91d77c5197edc1c9b7ea78fad5715d58b92754/ACME", "acc://cd434b0829e83755a959c2443a9f624e822ab720aa938d78/ACME",
-	"acc://af42e1bfe94e3a2a9087433afae252f1cb32dd743140a74e/ACME", "acc://33869bf9796059b621b6c88c0293d098e0d865357dec1d1b/ACME",
-	"acc://3a72275f53e257422e43c9378df590bc44646c52986b714e/ACME", "acc://dfdca679ecf815bae006aa81d8df5e81185b139ea01eebcf/ACME",
-	"acc://ff19021a2bebc919ee4a58295bb6dc676181ba87f9093fc0/ACME", "acc://8471b2be3668b7567ea25056c11916300d62acf038fe0025/ACME",
-	"acc://763ad65ac37d9cab638ea44862eac560823b75d7a38b0d17/ACME", "acc://428939a3d83fa494d93d55a37f6061ed6511f1908a157b39/ACME",
-	"acc://b408100a5d3df53e03a6703daba75dc89d22abfdeb27236a/ACME", "acc://cf46fea03b48a98857fbc1b3449675d07e55cfe886aec01b/ACME",
-	"acc://17805da27e4c7df4183d7405e4659d8c1cf0abaab8bdd39b/ACME", "acc://9fecc0b01696c30ad4813457cd2fb00179784251cbd57888/ACME",
-	"acc://ec1ccf3a5246c35a6c5b03161865ae2bd93f6f8b4076a318/ACME", "acc://9a45a5e4f98753e10cfb3317fbca6acc54e722395ed5004c/ACME",
-	"acc://d6f4854eec30c24f8c5b6a8eb88d81bbe049d77f0879a2ea/ACME", "acc://16fbdfbfeb4543e564200c5b53b29a0443493c262a5e2df2/ACME",
-	"acc://421cb657e84fe40105cabec37f4dc2de55b00ad7e734492a/ACME", "acc://0f210b23f029aa0f3b8ee7ddfbc8adc33d5ba2f338234c41/ACME",
-	"acc://52b12bdf5bb103650125cbac64b4b666f5421eb6b3787833/ACME", "acc://7dc56e702470632ef0677fba0bebd3c09ffe89c673b1887f/ACME",
-	"acc://4f5970036ee43ff75b21d01d2dbd3a88fa4930194870e8ea/ACME", "acc://725eb581cbea1b38bd6484e7fe553feb270829d97e69786e/ACME",
-	"acc://2aa207d999bd224b07c3b883e0622a4d85cbbb3574f2515c/ACME", "acc://fa2ecc4ba731b213dae1b8230722a8561361d9af682b3788/ACME",
-	"acc://361d5804de6935aef26707df4c5f064333a660e3e5000a1c/ACME", "acc://68361ed26d0d16eb1363991f2c9c30e13b3bfff35502dc79/ACME",
-	"acc://9ca6287124e1acd0da781abdf64be08858ed69cf1c18989b/ACME", "acc://2960496d75614f8b3a5065beae6277ca1f908dcfe3949d9c/ACME",
-	"acc://e0fed9bc6c8ba5c5d52364c2b893a8cad3d7ad80c62d7ab4/ACME", "acc://bc7676356ad4034db4c6f37f4469be86f3f2174c0729419d/ACME",
-	"acc://37da0f150dc025820b5bc3d3c47b16a5df23688d4c21b342/ACME", "acc://50c53faeacb9b58bf838b213ba4cb58bd033e2db03e1ca88/ACME",
-	"acc://c93a68b14029bab9aa231d4d25b9650f73f03e254b782820/ACME", "acc://48c3a881d487ce088b81fa6a3a0b19b4a92484f5a1e3dd85/ACME",
-	"acc://c07169a4562f978c754c073d3804470781ad49546031af0f/ACME", "acc://3db34b012bcc77e9b64a3d15877ce2427d4511e57406dd47/ACME",
-	"acc://f2091cc0bbe24db1fa9c2764194e6e62cfc08fb9f6ad90ec/ACME", "acc://c56d15815154d5d84648e19816765fb155242e29c5d38323/ACME",
-	"acc://f20662520352f3ed06c037c4ecb1ae59bfab4010c25def06/ACME", "acc://8b296c49c0163db0b27f69c8739a7f6986e69d2906a60df2/ACME",
-	"acc://18d512742d2f22ab0b584abebeee20cda97d4a6a04046d48/ACME", "acc://955374ca2b54a3ac6bec54ef6fed99c1c4496ea8b8acf2e9/ACME",
-	"acc://682b0df142cb86460da136ed20693d91c338b31f3df6255f/ACME", "acc://89884f8ee879c499325a48e58212985b15f3008cf5a35109/ACME",
-	"acc://b01ba6a6c879dc691d814935f07fe75b478bf9f4db38bcc5/ACME", "acc://3fcf629c50d0b91afd050b31a2b16066a16bc3c2c2c31fe6/ACME",
-	"acc://e93cce416616ec845ab3d2e5b8b5093258b32f1dbd72dd7e/ACME", "acc://68afb8a6e67fc74efb7e93868523776f97c1cba4871b0692/ACME",
-	"acc://0f213ee6d0a2d2567ca419fca0edfdda49e2c8a4cd908aa6/ACME", "acc://f893016e1e6029b8781c4d17fe29846c155a834a4e9d51c3/ACME",
-	"acc://afd991b08c51a931a5cec5be3563ae3f7c101a576f1d2d3b/ACME", "acc://f187f5b2c060970c99f8d5f1fc67437a99c613c273afbb22/ACME",
-	"acc://4ecce0544e957c832ef7925223cca3b6446153f63281d657/ACME", "acc://0db2fe7564af587e021e3282a0f53693f2c2801b964307b4/ACME",
-	"acc://138ac53d4af99b6a9776c6785613c3fe6e32ac755d1ed594/ACME", "acc://892d4249e5fccfd72c70408365a81bce42e1cc095c9a3287/ACME",
-	"acc://5cae64aee35b3a70707403f4b4852cb96812f029bc13356f/ACME", "acc://259a14fef511be8cf407f0abefa8e121e52dde475dab9c24/ACME",
-	"acc://0cd1622065ab04173764efada20af4e474c13c64adb89748/ACME", "acc://ce8dcb9c82fedccab45f25440d47f99dcf46ffa1f87bed10/ACME",
-	"acc://e7637b4607865c033ea9e8f269fca57955e617c332c86092/ACME", "acc://d6d6d86a5263957c5bfe6c84614bda98a0272cc624357ac7/ACME",
-	"acc://8b283c79f8483fea32451ffa7623c59c36bb6e11eb1404b8/ACME", "acc://26cd15e2eb3ece6d9b7e4490618dfae668b4b5a1e8a4a1bf/ACME",
-	"acc://a1f68dd68b0bc0bb61d854117ff18378624f983bad32342f/ACME", "acc://bdb43c624006f27a366ea39b2678f84ed643abbf0005a950/ACME",
-	"acc://4a77dffe96dc806968f6a6f9bb79a35b0bd1b317a6eb1e48/ACME", "acc://491a17e2260fc7503d1c6281d830d81cc75da0ec31495474/ACME",
-	"acc://fa63c72213cb7a69a57076798320d21d063cbde003eac0bf/ACME", "acc://7cc1ccb79775109809c72281aae0284119b18352521ec1c1/ACME",
-	"acc://3379ee0b1d2e1b38c68d4582aaacb6991c1c00307bb1a55b/ACME", "acc://91e50ea7ac244589114b5f6d486a1aba3326628f6afe70c8/ACME",
-	"acc://86d7f8a79491511e453a86c93b01759250b7e0640d41ef78/ACME", "acc://2b71898bbabe7ba7db8c70faada0cf53096772ef9dc83fae/ACME",
-	"acc://f5708a8d7690d6efef402d7880a59ea629720a9e0f51e466/ACME", "acc://9df9773b2df8224bf4038993703a004044e6ccc1b3ecf9bd/ACME",
-	"acc://6e6f6bf0c11dd51a4706188b1a42aa3a0e682ef27ad2687f/ACME", "acc://9c75a74a7fc9eba1357217ee220f7d6ca010276ad9d04ddb/ACME",
-	"acc://484bb3f466ff304731e16844b04db55476a2043ef0dbc4e3/ACME", "acc://d81efe16b1d4fe137c36f7806ba3eef47e7035817326b406/ACME",
-	"acc://5a0e20ddcf0653668b4a3cacadc7a437a8e72836b6b46598/ACME", "acc://3a56a9e17017540b95432ae114a9019208c7991a222215e5/ACME",
-	"acc://d4a8c6140316e5a90ff63216ac836ef106427dffcef7add3/ACME", "acc://0c42313a1692bb3e6bca75d76d3e6a239d12ff0331f3eb4a/ACME",
+	"acc://61c185c8c6c929d6ad00aa5529ca880808718258c1bb69df/ACME", "acc://8861d93730671aad03bc144532d5d0b6d422a8c93cb68940/ACME",
+	"acc://dcb37f329ea6423d6677680eed80d0604d2573b899facd49/ACME", "acc://1bd9e22f4e4d67d5c11589f04242ca76ee8e48c723bce32d/ACME",
+	"acc://e36ecdd3cb512bf536fdb0ed6b8682a149ce9264a3ef11ba/ACME", "acc://39b4a1f36c33cc50f95f63b5a324d016695d870c86c9533c/ACME",
+	"acc://d71701d9e2536bcd5c614892bb55927ada30bb4f0758f482/ACME", "acc://9e099da78c33ce087bd3672de8939a2c3819dfe606ed5923/ACME",
+	"acc://cab7d67b2b1318f1dd50841408c438c4739f515d75a51e06/ACME", "acc://1b80560e45f18744cfd0767b8888b6d4fbc89c95e0a74ed0/ACME",
+	"acc://0291ff53295a51f62e00520002abec62894a18c01862115f/ACME", "acc://4b4f30304ba9369ff32e484009d192692b718d1f36655a77/ACME",
+	"acc://25262d3c2aa83131fd18bd20e2ea1da630a27807154a3bd8/ACME", "acc://d61d05cf84bcd916b0fa525911cb45d1295182ec8de9c4f9/ACME",
+	"acc://576b65f321ab26a46ba3f5e78b0819665a456959a6802764/ACME", "acc://bbc6292feb09e57123be56a2a76c39e60f44db3ac0e12839/ACME",
+	"acc://4e84021f79c0f069e2e307357ca75c4b20282e8562cecfe3/ACME", "acc://accdb9204789fb79ab9294f606acb0b7500499077d790b71/ACME",
+	"acc://65bdd70be6cb4418895267da377a8b0824ffb4faa691c2b9/ACME", "acc://e6fbf4a3276bf783b0e30e9a1d97fbadf2127f0cde9481fc/ACME",
+	"acc://a7f07fd521243361b994c18dd0014a36390e64054be32616/ACME", "acc://ffd84fd2702582716e2e70acefc4c79f1530cb44b16bca72/ACME",
+	"acc://b19011020941542a1a5351a2ac7b3cf7773f8ed218170292/ACME", "acc://29ee5111f5e77b8d9a7b8ca9b3d497b537b3d4e4545d33f7/ACME",
+	"acc://b75fbe19b44c7c74d57fffc419224cdd9db2ffe42de347c0/ACME", "acc://fb2dbadc6d31f089225eb168d01d73575bcb922a808d9014/ACME",
+	"acc://c2219ed0565cbaf9a628e71643f004a4797b8bace3c0e30f/ACME", "acc://752821d8bd2c6970ab5b4089aeda799b94f2d333414c4e8e/ACME",
+	"acc://d4a398a7c8e5ad4add74acbdda9bc675fad18a823a17326b/ACME", "acc://e368838ab4f6c70317cc9ed080e556cc740edda21ae471b1/ACME",
+	"acc://e0bd2d2bd57b11b9e4736d9508c35f434110b6695d204108/ACME", "acc://21d5801a7ddd331758bfbf56e0e4ac096eaaa7a9435cb7e1/ACME",
+	"acc://4ef78b0e3c4992b1c952af47652b1c2e186772bb574fca04/ACME", "acc://70fd2d6b05f7d101b398737c403f04774821ac380f8e70c1/ACME",
+	"acc://bc1e103de0011a52cf8358d694b8759a424513c5fadb6358/ACME", "acc://590eaacf169cc572ccf21bead8462796bd3d6882554017ad/ACME",
+	"acc://481c8de1ea15b9a95020e49c1b6e2ba162de6ce23c0f2a50/ACME", "acc://12118b06233884b2691aa3f9c59108f973a27a05d4966dc5/ACME",
+	"acc://0bf4bbb6365d69d46e75fd7b923e959c3cdaea8730ad4f7c/ACME", "acc://55ce46d7ec141f0a81c7dea7081c8a595a3252b5f29de7cf/ACME",
+	"acc://81d5b50c75c49119a7e2baa237709d53302615ccefaf7024/ACME", "acc://95fbb7bbe8ab5c2398ef588186492ef73aa0af0d921531c0/ACME",
+	"acc://fba07edc16e9ca41fb0d8aaebf9f20298585d089b4281e7e/ACME", "acc://da1a87a5d6f82fbb6923eacd1782b06528d67927ead8cd7f/ACME",
+	"acc://5a7b02f50be2babb7fe9d44ad5a0881b210d2da370c18ce3/ACME", "acc://40829a0bf73589142d485dee89490d65c1d179f3d329a8ee/ACME",
+	"acc://62542063a8594cd329e268505c70923ec1f4364ad6260791/ACME", "acc://21af3bd907feb5de66dd8550e4bac35b0794113afec63901/ACME",
+	"acc://e6b331d79c46204b74f4f6ce5172a09a2b93c0bf687166f1/ACME", "acc://4adcca9e27c3cc7b9a79bab7a064b86f45c1d40eaeb748d1/ACME",
+	"acc://39c61623e98189b60e4d706eb6251a178579a67be2703b57/ACME", "acc://511de20a80e3e5da87c5a8183e491d922a5337dd7073aca7/ACME",
+	"acc://d7dd8362ad140f7bd8ab645455b0096e057034d011c6dd09/ACME", "acc://e5df66a2e8805b514b1d3d86fa87b2412bec47889811a2e9/ACME",
+	"acc://720eca9c2e819d8b00fcf5731a06c7c020cc46156b3cda1e/ACME", "acc://70fad2baa58bd6f6ea4f1a3423b515a855668ebd2374a74f/ACME",
+	"acc://ab4f95d8e3b6a43b558e574238869afccb48b6aef41f3cfe/ACME", "acc://c45b3d2db8d122349c01636b086dc312fa880faf4a122057/ACME",
+	"acc://b2eb3fb79732ba20509b35161ba10466c9e044bfd7c153c2/ACME", "acc://df9a537276aeb5e5921b439d383103e8ea79390a0d0f1a94/ACME",
+	"acc://964497a428bc8619aba26a2f918fe4d1b6ed5289beb42bb2/ACME", "acc://779f4b8e2e813bae87b1e229bbf45eff855a1547e26e8e9d/ACME",
+	"acc://ae1b6d8115a794e1b8feb3d63b62e72a67c39f1a3db255e6/ACME", "acc://48f3a9642b7ac26a312ec76f152fb43be5d9b4c24789c174/ACME",
+	"acc://9a9a93d50e59b02c556c3eebda7669be178a17498c21146a/ACME", "acc://d7f8f3c664ad0c86d09cc65ab746c25cf7bc8a79d4ee6c0c/ACME",
+	"acc://fac0aaa7951dd37c05e65ca03c6eb91e25cecb53c53ed29f/ACME", "acc://7457952e8ff50bae4f3c279dc31e613d01f79fad8d4bb0d1/ACME",
+	"acc://1468df97df2fb6e82c236cdcf629f2388e431c7830f7accf/ACME", "acc://8ccc7cf555890a93f6f31150ee488eff8fc56607b353b0eb/ACME",
+	"acc://eb4f981ddc5a88a87393900e98d462c325f8610510dca35c/ACME", "acc://636afacd57a66806d919555860ddd660a225001e87bbeb9f/ACME",
+	"acc://de445c4640cc924dd47b4489255d1bf016e0bf19115e1e20/ACME", "acc://371836f178de0d357080f9ba6cee214ff17d3de2eb6a40d7/ACME",
+	"acc://bbdc90334d68b94847bd017c95ee9f1e7c7191002c47ff6a/ACME", "acc://32ac70c216e330f043bac2b8948f0db9df0ec646406211e9/ACME",
+	"acc://120f300d9fbc9224a16bda2694010f166e65fb07a6433798/ACME", "acc://b2764b5bfdb1adba5ccf558425b428514e0abbebfc9ec5b2/ACME",
+	"acc://79a03b2c7896b89d9bc836bc31c88ea4a91b8a272f3d3de8/ACME", "acc://c0c53b990c7680cc5b94ee485913c96ac7865f3759248a9a/ACME",
+	"acc://63cf48ff66726281fee0386b36c9e957246963acbd49a5b9/ACME", "acc://2aa47bbf71f88c2849e2e0388cf4db3e3723432c2bc90979/ACME",
+	"acc://1dfb5a29eb04046cb99be1a3adbe99c6674ceb18e0f4296a/ACME", "acc://ea9d24eaf33931b77fd14bbc00ca6493f908f050a2b82d0d/ACME",
+	"acc://584df26ab65bf19d7b142a0161feb4d22ecda335e22e2b09/ACME", "acc://ecaef82a4ee1f9dfa0373f68d602e2afaf82094f2c251705/ACME",
+	"acc://31fa868db4fb468358f501ca601c0a579a4530a7fa7aed4f/ACME", "acc://c8c218b6e51c24af6a54c7412afdfc422245d22c95cafae8/ACME",
+	"acc://5c2284fe7bf8ded15f38728ec2191ed2d5315563488d053b/ACME", "acc://a56d4dd62ae053797b043b07506ca1153aa87bdd268f1392/ACME",
+	"acc://1c3390929f7729a8e8664a4ba50950f900d75345c9530bcb/ACME", "acc://084983a8202101c67193616be62a02effe99c63d8cb21031/ACME",
+	"acc://61341fcf189fcbd130e4c8f94a3b158e8370822a64b48db4/ACME", "acc://94f834410fc7b1e396a9264f42308973a298cd12439e9a50/ACME",
+	"acc://ce5133baac9b530b47f998c0244b0394efaee495312c4d2f/ACME", "acc://fbd8e461221b468f77247c87e2a78b6f47cce727dd1b0567/ACME",
+	"acc://d1f4f1c258ff95b25829c31e89b77d4de882ad2e4102c563/ACME", "acc://b7d5d9f09d5d41f53002a1f17724fa6ba8f63a28e62224d9/ACME",
+	"acc://a5253a6a9bf587bdcc6af0a70597e5abb6963dd923818f74/ACME", "acc://dbfb670fdc701001820e7db1f6d3d62d3f53375f3663e1f7/ACME",
 }

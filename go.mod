@@ -50,7 +50,6 @@ require (
 	github.com/ethereum/go-ethereum v1.10.25
 	github.com/ghodss/yaml v1.0.0
 	github.com/howeyc/gopass v0.0.0-20210920133722-c8aef6fb66ef
-	github.com/manifoldco/promptui v0.9.0
 	github.com/mdp/qrterminal v1.0.1
 	github.com/robfig/cron/v3 v3.0.0
 	go.opentelemetry.io/otel v1.10.0
@@ -72,7 +71,6 @@ require (
 	github.com/alingse/asasalint v0.0.11 // indirect
 	github.com/btcsuite/btcd/btcec/v2 v2.2.0 // indirect
 	github.com/btcsuitereleases/btcutil v0.0.0-20150612230727-f2b1058a8255 // indirect
-	github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e // indirect
 	github.com/cosmos/gogoproto v1.4.1 // indirect
 	github.com/creachadair/taskgroup v0.3.2 // indirect
 	github.com/curioswitch/go-reassign v0.1.2 // indirect
