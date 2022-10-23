@@ -13,20 +13,21 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
-	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-var DataSigningKeys []string
+var Keyname string
 var WriteState bool
 var Scratch bool
 
 func init() {
-	dataCmd.Flags().StringSliceVar(&DataSigningKeys, "sign-data", nil, "specify this to send random data as a signed & valid entry to data account")
+	dataCmd.Flags().StringVar(&Keyname, "sign-data", "", "specify this to send random data as a signed & valid entry to data account")
 	dataCmd.PersistentFlags().BoolVar(&WriteState, "write-state", false, "Write to the account's state")
 	dataCmd.Flags().BoolVar(&Scratch, "scratch", false, "Write to the scratch chain")
 
@@ -128,7 +129,7 @@ func GetDataEntry(accountUrl string, args []string) (string, error) {
 		return "", err
 	}
 
-	params := client.DataEntryQuery{}
+	params := api.DataEntryQuery{}
 	params.Url = u
 	if len(args) > 0 {
 		n, err := hex.Decode(params.EntryHash[:], []byte(args[0]))
@@ -165,7 +166,7 @@ func GetDataEntrySet(accountUrl string, args []string) (string, error) {
 		return "", fmt.Errorf("expecting the start index and count parameters with optional expand")
 	}
 
-	params := client.DataEntrySetQuery{}
+	params := api.DataEntrySetQuery{}
 	params.Url = u
 
 	v, err := strconv.ParseInt(args[0], 10, 64)
@@ -186,7 +187,7 @@ func GetDataEntrySet(accountUrl string, args []string) (string, error) {
 		}
 	}
 
-	var res client.MultiResponse
+	var res api.MultiResponse
 	data, err := json.Marshal(&params)
 	if err != nil {
 		return "", err
@@ -215,11 +216,11 @@ func CreateLiteDataAccount(origin string, args []string) (string, error) {
 		return "", fmt.Errorf("expecting account url or 'lite' keyword")
 	}
 
-	var res *client.TxResponse
+	var res *api.TxResponse
 	//compute the chain id...
 	wdt := protocol.WriteDataTo{}
 
-	wdt.Entry, err = prepareData(u, args, true)
+	wdt.Entry, err = prepareData(args, true, nil)
 	if err != nil {
 		return "", err
 	}
@@ -308,7 +309,21 @@ func WriteData(accountUrl string, args []string) (string, error) {
 	wd.WriteToState = WriteState
 	wd.Scratch = Scratch
 
-	wd.Entry, err = prepareData(u, args, false)
+	var kSigners []*signing.Builder
+	if Keyname != "" {
+		keyargs := strings.Split(Keyname, " ")
+		keyargs = append(keyargs, "")
+		keyUrl, err := url.Parse(keyargs[0])
+		if err != nil {
+			return "", fmt.Errorf("invalid url specified for data signing key")
+		}
+		_, kSigners, err = prepareSigner(keyUrl, keyargs[1:])
+		if err != nil {
+			return "", err
+		}
+	}
+
+	wd.Entry, err = prepareData(args, false, kSigners)
 	if err != nil {
 		return PrintJsonRpcError(err)
 	}
@@ -321,18 +336,7 @@ func WriteData(accountUrl string, args []string) (string, error) {
 	return ar.Print()
 }
 
-func prepareData(principal *url.URL, args []string, isFirstLiteEntry bool) (*protocol.AccumulateDataEntry, error) {
-	var signers []*signing.Builder
-	for _, keystr := range DataSigningKeys {
-		signer := new(signing.Builder)
-		signer.SetTimestampToNow()
-		err := prepareSignerFromName(principal, signer, keystr)
-		if err != nil {
-			return nil, err
-		}
-		signers = append(signers, signer)
-	}
-
+func prepareData(args []string, isFirstLiteEntry bool, signers []*signing.Builder) (*protocol.AccumulateDataEntry, error) {
 	entry := new(protocol.AccumulateDataEntry)
 	if isFirstLiteEntry {
 		data := []byte{}
@@ -423,8 +427,22 @@ func WriteDataTo(accountUrl string, args []string) (string, error) {
 		return "", fmt.Errorf("expecting data")
 	}
 
+	var kSigners []*signing.Builder
+	if Keyname != "" {
+		keyargs := strings.Split(Keyname, " ")
+		keyargs = append(keyargs, "")
+		keyUrl, err := url.Parse(keyargs[0])
+		if err != nil {
+			return "", fmt.Errorf("invalid url specified for data signing key")
+		}
+		_, kSigners, err = prepareSigner(keyUrl, keyargs[1:])
+		if err != nil {
+			return "", err
+		}
+	}
+
 	// args[0] is the
-	wd.Entry, err = prepareData(u, args, false)
+	wd.Entry, err = prepareData(args, false, kSigners)
 	if err != nil {
 		return PrintJsonRpcError(err)
 	}
@@ -449,9 +467,8 @@ func WriteDataTo(accountUrl string, args []string) (string, error) {
 		lde.Data = data[0]
 		lde.ExtIds = data[1:]
 	}
-	entryHash := lde.Hash()
 
-	ar := ActionResponseFromLiteData(res, wd.Recipient.String(), lde.AccountId[:], entryHash)
+	ar := ActionResponseFromLiteData(res, wd.Recipient.String(), lde.AccountId[:], wd.Entry.Hash())
 	ar.Flow = resps
 	return ar.Print()
 }

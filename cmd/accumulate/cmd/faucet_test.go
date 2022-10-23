@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -37,7 +37,7 @@ func testCase5_1(t *testing.T, tc *testCmd) {
 
 		jerr := new(JsonRpcError)
 		require.ErrorAs(t, err, &jerr)
-		require.Equalf(t, client.ErrCodeNotFound, int(jerr.Err.Code), "Expected not found, got %q, %v", jerr.Err.Message, jerr.Err.Data)
+		require.Equalf(t, api.ErrCodeNotFound, int(jerr.Err.Code), "Expected not found, got %q, %v", jerr.Err.Message, jerr.Err.Data)
 	}
 
 	var results []string
@@ -63,7 +63,7 @@ func testCase5_1(t *testing.T, tc *testCmd) {
 		r, err := tc.execute(t, commandLine)
 		require.NoError(t, err)
 
-		res := new(client.ChainQueryResponse)
+		res := new(api.ChainQueryResponse)
 		acc := new(protocol.LiteTokenAccount)
 		res.Data = acc
 		require.NoError(t, json.Unmarshal([]byte(r), &res))

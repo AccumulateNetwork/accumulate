@@ -11,7 +11,6 @@ import (
 	"strconv"
 
 	"github.com/spf13/cobra"
-	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/walletd"
 	url2 "gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -28,7 +27,6 @@ func init() {
 	pageKeyCmd.AddCommand(
 		pageKeyAddCmd,
 		pageKeyUpdateCmd,
-		pageKeyReplaceCmd,
 		pageKeyRemoveCmd)
 
 }
@@ -88,16 +86,7 @@ var pageKeyUpdateCmd = &cobra.Command{
 	}),
 }
 
-var pageKeyReplaceCmd = &cobra.Command{
-	Use:   "replace [key page url] [key name[@key book or page]] [new public key or name]",
-	Short: "Update a your key on a key page which bypasses threshold",
-	Args:  cobra.ExactArgs(3),
-	Run: runCmdFunc(func(args []string) (string, error) {
-		return ReplaceKey(args)
-	}),
-}
-
-// //nolint
+////nolint
 var pageSetThresholdCmd = &cobra.Command{
 	Use:   "set-threshold [key page url] [key name[@key book or page]] [threshold]",
 	Short: "Set the M-of-N signature threshold for a key page",
@@ -177,7 +166,7 @@ func CreateKeyPage(bookUrlStr string, args []string) (string, error) {
 	for i := range keyLabels {
 		ksp := protocol.KeySpecParams{}
 
-		k, err := walletd.LookupByLabel(keyLabels[i])
+		k, err := LookupByLabel(keyLabels[i])
 
 		if err != nil {
 			//now check to see if it is a valid key hex, if so we can assume that is the public key.
@@ -251,27 +240,6 @@ func KeyPageUpdate(origin string, op protocol.KeyPageOperationType, args []strin
 	}
 
 	return dispatchTxAndPrintResponse(&ukp, u, signer)
-}
-
-func ReplaceKey(args []string) (string, error) {
-	principal, err := url2.Parse(args[0])
-	if err != nil {
-		return "", err
-	}
-
-	args, signer, err := prepareSigner(principal, args[1:])
-	if err != nil {
-		return "", err
-	}
-
-	k, err := resolvePublicKey(args[0])
-	if err != nil {
-		return "", err
-	}
-
-	txn := new(protocol.UpdateKey)
-	txn.NewKeyHash = k.PublicKeyHash()
-	return dispatchTxAndPrintResponse(txn, principal, signer)
 }
 
 func setKeyPageThreshold(args []string) (string, error) {
