@@ -28,7 +28,7 @@ var ErrDatabaseAlreadyEncrypted = errors.New("database already encrypted")
 var BucketConfig = []byte("Config")
 
 //WalletVersion is incremented whenever a bucket format is changed.
-var WalletVersion = NewVersion(0, 0, 3, 0)
+var WalletVersion = NewVersion(0, 0, 1, 1)
 
 //magic is used for encryption verification when a database is opened
 var magic = sha256.Sum256([]byte("accumulate"))
