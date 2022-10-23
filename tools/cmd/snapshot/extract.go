@@ -121,16 +121,18 @@ func extractSnapshot(_ *cobra.Command, args []string) {
 		checkf(err, "restore sig %x", hash)
 	}
 	for _, u := range accounts {
-		c, err := snapshot.CollectAccount(batch1.Account(u), true)
+		acct, err := snapshot.CollectAccount(batch1.Account(u), true)
 		checkf(err, "collect %v", u)
-		err = c.Restore(batch2)
+		err = acct.Restore(batch2)
 		checkf(err, "restore %v", u)
-		for _, c := range c.Chains {
+		for _, c := range acct.Chains {
 			if c.Type != managed.ChainTypeTransaction {
 				continue // Exclude index and anchor chains
 			}
-			err = c.Restore(batch2.Account(u))
-			checkf(err, "restore %v %s chain", u, c.Name)
+			c2, err := acct.RestoreChainHead(batch2, c)
+			checkf(err, "restore %v %s chain", acct.Url, c.Name)
+			err = c2.Inner().RestoreMarkPointRange(c, 0, len(c.MarkPoints))
+			checkf(err, "restore %v %s chain", acct.Url, c.Name)
 		}
 	}
 	check(batch2.Commit())

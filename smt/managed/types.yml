@@ -49,3 +49,22 @@ ReceiptList:
       type: Receipt
       marshal-as: reference
       pointer: true
+
+Snapshot:
+  fields:
+    - name: Name
+      type: string
+    - name: Type
+      type: ChainType
+      marshal-as: enum
+    - name: MarkPower
+      type: uint
+    - name: Head
+      type: MerkleState
+      marshal-as: reference
+      pointer: true
+    - name: MarkPoints
+      type: MerkleState
+      marshal-as: reference
+      pointer: true
+      repeatable: true

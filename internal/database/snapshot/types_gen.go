@@ -23,6 +23,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 )
 
 type Account struct {
@@ -30,24 +31,16 @@ type Account struct {
 	Hash      [32]byte
 	// Main is the main state of the account.
 	Main protocol.Account `json:"main,omitempty" form:"main" query:"main" validate:"required"`
-	// Chains is the state of the account's chains.
-	Chains []*ChainState `json:"chains,omitempty" form:"chains" query:"chains" validate:"required"`
+	// OldChains is deprecated. Use Chains instead.
+	OldChains []*OldChain `json:"oldChains,omitempty" form:"oldChains" query:"oldChains" validate:"required"`
 	// Pending is the state of the account's pending transactions.
 	Pending []*url.TxID `json:"pending,omitempty" form:"pending" query:"pending" validate:"required"`
 	// Directory lists the account's sub-accounts.
 	Directory []*url.URL `json:"directory,omitempty" form:"directory" query:"directory" validate:"required"`
 	// Url is the URL of the account.
-	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
-	extraData []byte
-}
-
-type Chain struct {
-	fieldsSet []bool
-	Name      string             `json:"name,omitempty" form:"name" query:"name" validate:"required"`
-	Type      protocol.ChainType `json:"type,omitempty" form:"type" query:"type" validate:"required"`
-	Count     uint64             `json:"count,omitempty" form:"count" query:"count" validate:"required"`
-	Pending   [][]byte           `json:"pending,omitempty" form:"pending" query:"pending" validate:"required"`
-	Entries   [][]byte           `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
+	Url *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	// Chains is the state of the account's chains.
+	Chains    []*managed.Snapshot `json:"chains,omitempty" form:"chains" query:"chains" validate:"required"`
 	extraData []byte
 }
 
@@ -61,6 +54,16 @@ type Header struct {
 	RootHash [32]byte `json:"rootHash,omitempty" form:"rootHash" query:"rootHash" validate:"required"`
 	// Timestamp is the snapshot's block time.
 	Timestamp time.Time `json:"timestamp,omitempty" form:"timestamp" query:"timestamp" validate:"required"`
+	extraData []byte
+}
+
+type OldChain struct {
+	fieldsSet []bool
+	Name      string             `json:"name,omitempty" form:"name" query:"name" validate:"required"`
+	Type      protocol.ChainType `json:"type,omitempty" form:"type" query:"type" validate:"required"`
+	Count     uint64             `json:"count,omitempty" form:"count" query:"count" validate:"required"`
+	Pending   [][]byte           `json:"pending,omitempty" form:"pending" query:"pending" validate:"required"`
+	Entries   [][]byte           `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
 	extraData []byte
 }
 
@@ -105,10 +108,10 @@ func (v *Account) Copy() *Account {
 	if v.Main != nil {
 		u.Main = protocol.CopyAccount(v.Main)
 	}
-	u.Chains = make([]*ChainState, len(v.Chains))
-	for i, v := range v.Chains {
+	u.OldChains = make([]*OldChain, len(v.OldChains))
+	for i, v := range v.OldChains {
 		if v != nil {
-			u.Chains[i] = (v).Copy()
+			u.OldChains[i] = (v).Copy()
 		}
 	}
 	u.Pending = make([]*url.TxID, len(v.Pending))
@@ -126,14 +129,33 @@ func (v *Account) Copy() *Account {
 	if v.Url != nil {
 		u.Url = v.Url
 	}
+	u.Chains = make([]*managed.Snapshot, len(v.Chains))
+	for i, v := range v.Chains {
+		if v != nil {
+			u.Chains[i] = (v).Copy()
+		}
+	}
 
 	return u
 }
 
 func (v *Account) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *Chain) Copy() *Chain {
-	u := new(Chain)
+func (v *Header) Copy() *Header {
+	u := new(Header)
+
+	u.Version = v.Version
+	u.Height = v.Height
+	u.RootHash = v.RootHash
+	u.Timestamp = v.Timestamp
+
+	return u
+}
+
+func (v *Header) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *OldChain) Copy() *OldChain {
+	u := new(OldChain)
 
 	u.Name = v.Name
 	u.Type = v.Type
@@ -150,20 +172,7 @@ func (v *Chain) Copy() *Chain {
 	return u
 }
 
-func (v *Chain) CopyAsInterface() interface{} { return v.Copy() }
-
-func (v *Header) Copy() *Header {
-	u := new(Header)
-
-	u.Version = v.Version
-	u.Height = v.Height
-	u.RootHash = v.RootHash
-	u.Timestamp = v.Timestamp
-
-	return u
-}
-
-func (v *Header) CopyAsInterface() interface{} { return v.Copy() }
+func (v *OldChain) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *Signature) Copy() *Signature {
 	u := new(Signature)
@@ -252,11 +261,11 @@ func (v *Account) Equal(u *Account) bool {
 	if !(protocol.EqualAccount(v.Main, u.Main)) {
 		return false
 	}
-	if len(v.Chains) != len(u.Chains) {
+	if len(v.OldChains) != len(u.OldChains) {
 		return false
 	}
-	for i := range v.Chains {
-		if !((v.Chains[i]).Equal(u.Chains[i])) {
+	for i := range v.OldChains {
+		if !((v.OldChains[i]).Equal(u.OldChains[i])) {
 			return false
 		}
 	}
@@ -284,11 +293,36 @@ func (v *Account) Equal(u *Account) bool {
 	case !((v.Url).Equal(u.Url)):
 		return false
 	}
+	if len(v.Chains) != len(u.Chains) {
+		return false
+	}
+	for i := range v.Chains {
+		if !((v.Chains[i]).Equal(u.Chains[i])) {
+			return false
+		}
+	}
 
 	return true
 }
 
-func (v *Chain) Equal(u *Chain) bool {
+func (v *Header) Equal(u *Header) bool {
+	if !(v.Version == u.Version) {
+		return false
+	}
+	if !(v.Height == u.Height) {
+		return false
+	}
+	if !(v.RootHash == u.RootHash) {
+		return false
+	}
+	if !((v.Timestamp).Equal(u.Timestamp)) {
+		return false
+	}
+
+	return true
+}
+
+func (v *OldChain) Equal(u *OldChain) bool {
 	if !(v.Name == u.Name) {
 		return false
 	}
@@ -313,23 +347,6 @@ func (v *Chain) Equal(u *Chain) bool {
 		if !(bytes.Equal(v.Entries[i], u.Entries[i])) {
 			return false
 		}
-	}
-
-	return true
-}
-
-func (v *Header) Equal(u *Header) bool {
-	if !(v.Version == u.Version) {
-		return false
-	}
-	if !(v.Height == u.Height) {
-		return false
-	}
-	if !(v.RootHash == u.RootHash) {
-		return false
-	}
-	if !((v.Timestamp).Equal(u.Timestamp)) {
-		return false
 	}
 
 	return true
@@ -432,21 +449,23 @@ func (v *txnSection) Equal(u *txnSection) bool {
 
 var fieldNames_Account = []string{
 	1: "Main",
-	2: "Chains",
+	2: "OldChains",
 	3: "Pending",
 	4: "Directory",
 	5: "Url",
+	6: "Chains",
 }
 
 func (v *Account) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
+	writer.IgnoreSizeLimit = true
 
 	if !(v.Main == nil) {
 		writer.WriteValue(1, v.Main.MarshalBinary)
 	}
-	if !(len(v.Chains) == 0) {
-		for _, v := range v.Chains {
+	if !(len(v.OldChains) == 0) {
+		for _, v := range v.OldChains {
 			writer.WriteValue(2, v.MarshalBinary)
 		}
 	}
@@ -462,6 +481,11 @@ func (v *Account) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.Url == nil) {
 		writer.WriteUrl(5, v.Url)
+	}
+	if !(len(v.Chains) == 0) {
+		for _, v := range v.Chains {
+			writer.WriteValue(6, v.MarshalBinary)
+		}
 	}
 
 	_, _, err := writer.Reset(fieldNames_Account)
@@ -481,9 +505,9 @@ func (v *Account) IsValid() error {
 		errs = append(errs, "field Main is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Chains is missing")
-	} else if len(v.Chains) == 0 {
-		errs = append(errs, "field Chains is not set")
+		errs = append(errs, "field OldChains is missing")
+	} else if len(v.OldChains) == 0 {
+		errs = append(errs, "field OldChains is not set")
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Pending is missing")
@@ -500,84 +524,10 @@ func (v *Account) IsValid() error {
 	} else if v.Url == nil {
 		errs = append(errs, "field Url is not set")
 	}
-
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errors.New(errs[0])
-	default:
-		return errors.New(strings.Join(errs, "; "))
-	}
-}
-
-var fieldNames_Chain = []string{
-	1: "Name",
-	2: "Type",
-	3: "Count",
-	4: "Pending",
-	5: "Entries",
-}
-
-func (v *Chain) MarshalBinary() ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	writer := encoding.NewWriter(buffer)
-
-	if !(len(v.Name) == 0) {
-		writer.WriteString(1, v.Name)
-	}
-	if !(v.Type == 0) {
-		writer.WriteEnum(2, v.Type)
-	}
-	if !(v.Count == 0) {
-		writer.WriteUint(3, v.Count)
-	}
-	if !(len(v.Pending) == 0) {
-		for _, v := range v.Pending {
-			writer.WriteBytes(4, v)
-		}
-	}
-	if !(len(v.Entries) == 0) {
-		for _, v := range v.Entries {
-			writer.WriteBytes(5, v)
-		}
-	}
-
-	_, _, err := writer.Reset(fieldNames_Chain)
-	if err != nil {
-		return nil, encoding.Error{E: err}
-	}
-	buffer.Write(v.extraData)
-	return buffer.Bytes(), nil
-}
-
-func (v *Chain) IsValid() error {
-	var errs []string
-
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Name is missing")
-	} else if len(v.Name) == 0 {
-		errs = append(errs, "field Name is not set")
-	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Type is missing")
-	} else if v.Type == 0 {
-		errs = append(errs, "field Type is not set")
-	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field Count is missing")
-	} else if v.Count == 0 {
-		errs = append(errs, "field Count is not set")
-	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
-		errs = append(errs, "field Pending is missing")
-	} else if len(v.Pending) == 0 {
-		errs = append(errs, "field Pending is not set")
-	}
-	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
-		errs = append(errs, "field Entries is missing")
-	} else if len(v.Entries) == 0 {
-		errs = append(errs, "field Entries is not set")
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+		errs = append(errs, "field Chains is missing")
+	} else if len(v.Chains) == 0 {
+		errs = append(errs, "field Chains is not set")
 	}
 
 	switch len(errs) {
@@ -644,6 +594,85 @@ func (v *Header) IsValid() error {
 		errs = append(errs, "field Timestamp is missing")
 	} else if v.Timestamp == (time.Time{}) {
 		errs = append(errs, "field Timestamp is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_OldChain = []string{
+	1: "Name",
+	2: "Type",
+	3: "Count",
+	4: "Pending",
+	5: "Entries",
+}
+
+func (v *OldChain) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(len(v.Name) == 0) {
+		writer.WriteString(1, v.Name)
+	}
+	if !(v.Type == 0) {
+		writer.WriteEnum(2, v.Type)
+	}
+	if !(v.Count == 0) {
+		writer.WriteUint(3, v.Count)
+	}
+	if !(len(v.Pending) == 0) {
+		for _, v := range v.Pending {
+			writer.WriteBytes(4, v)
+		}
+	}
+	if !(len(v.Entries) == 0) {
+		for _, v := range v.Entries {
+			writer.WriteBytes(5, v)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_OldChain)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *OldChain) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Name is missing")
+	} else if len(v.Name) == 0 {
+		errs = append(errs, "field Name is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Type is missing")
+	} else if v.Type == 0 {
+		errs = append(errs, "field Type is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Count is missing")
+	} else if v.Count == 0 {
+		errs = append(errs, "field Count is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Pending is missing")
+	} else if len(v.Pending) == 0 {
+		errs = append(errs, "field Pending is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field Entries is missing")
+	} else if len(v.Entries) == 0 {
+		errs = append(errs, "field Entries is not set")
 	}
 
 	switch len(errs) {
@@ -910,6 +939,7 @@ func (v *Account) UnmarshalBinary(data []byte) error {
 
 func (v *Account) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
+	reader.IgnoreSizeLimit = true
 
 	reader.ReadValue(1, func(b []byte) error {
 		x, err := protocol.UnmarshalAccount(b)
@@ -919,8 +949,8 @@ func (v *Account) UnmarshalBinaryFrom(rd io.Reader) error {
 		return err
 	})
 	for {
-		if x := new(ChainState); reader.ReadValue(2, x.UnmarshalBinary) {
-			v.Chains = append(v.Chains, x)
+		if x := new(OldChain); reader.ReadValue(2, x.UnmarshalBinary) {
+			v.OldChains = append(v.OldChains, x)
 		} else {
 			break
 		}
@@ -942,51 +972,15 @@ func (v *Account) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUrl(5); ok {
 		v.Url = x
 	}
+	for {
+		if x := new(managed.Snapshot); reader.ReadValue(6, x.UnmarshalBinary) {
+			v.Chains = append(v.Chains, x)
+		} else {
+			break
+		}
+	}
 
 	seen, err := reader.Reset(fieldNames_Account)
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	v.fieldsSet = seen
-	v.extraData, err = reader.ReadAll()
-	if err != nil {
-		return encoding.Error{E: err}
-	}
-	return nil
-}
-
-func (v *Chain) UnmarshalBinary(data []byte) error {
-	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
-}
-
-func (v *Chain) UnmarshalBinaryFrom(rd io.Reader) error {
-	reader := encoding.NewReader(rd)
-
-	if x, ok := reader.ReadString(1); ok {
-		v.Name = x
-	}
-	if x := new(protocol.ChainType); reader.ReadEnum(2, x) {
-		v.Type = *x
-	}
-	if x, ok := reader.ReadUint(3); ok {
-		v.Count = x
-	}
-	for {
-		if x, ok := reader.ReadBytes(4); ok {
-			v.Pending = append(v.Pending, x)
-		} else {
-			break
-		}
-	}
-	for {
-		if x, ok := reader.ReadBytes(5); ok {
-			v.Entries = append(v.Entries, x)
-		} else {
-			break
-		}
-	}
-
-	seen, err := reader.Reset(fieldNames_Chain)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -1019,6 +1013,49 @@ func (v *Header) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_Header)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *OldChain) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *OldChain) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadString(1); ok {
+		v.Name = x
+	}
+	if x := new(protocol.ChainType); reader.ReadEnum(2, x) {
+		v.Type = *x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.Count = x
+	}
+	for {
+		if x, ok := reader.ReadBytes(4); ok {
+			v.Pending = append(v.Pending, x)
+		} else {
+			break
+		}
+	}
+	for {
+		if x, ok := reader.ReadBytes(5); ok {
+			v.Entries = append(v.Entries, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_OldChain)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -1183,20 +1220,36 @@ func (v *txnSection) UnmarshalBinaryFrom(rd io.Reader) error {
 func (v *Account) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Main      encoding.JsonUnmarshalWith[protocol.Account] `json:"main,omitempty"`
-		Chains    encoding.JsonList[*ChainState]               `json:"chains,omitempty"`
+		OldChains encoding.JsonList[*OldChain]                 `json:"oldChains,omitempty"`
 		Pending   encoding.JsonList[*url.TxID]                 `json:"pending,omitempty"`
 		Directory encoding.JsonList[*url.URL]                  `json:"directory,omitempty"`
 		Url       *url.URL                                     `json:"url,omitempty"`
+		Chains    encoding.JsonList[*managed.Snapshot]         `json:"chains,omitempty"`
 	}{}
 	u.Main = encoding.JsonUnmarshalWith[protocol.Account]{Value: v.Main, Func: protocol.UnmarshalAccountJSON}
-	u.Chains = v.Chains
+	u.OldChains = v.OldChains
 	u.Pending = v.Pending
 	u.Directory = v.Directory
 	u.Url = v.Url
+	u.Chains = v.Chains
 	return json.Marshal(&u)
 }
 
-func (v *Chain) MarshalJSON() ([]byte, error) {
+func (v *Header) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Version   uint64    `json:"version,omitempty"`
+		Height    uint64    `json:"height,omitempty"`
+		RootHash  string    `json:"rootHash,omitempty"`
+		Timestamp time.Time `json:"timestamp,omitempty"`
+	}{}
+	u.Version = v.Version
+	u.Height = v.Height
+	u.RootHash = encoding.ChainToJSON(v.RootHash)
+	u.Timestamp = v.Timestamp
+	return json.Marshal(&u)
+}
+
+func (v *OldChain) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Name    string                     `json:"name,omitempty"`
 		Type    protocol.ChainType         `json:"type,omitempty"`
@@ -1215,20 +1268,6 @@ func (v *Chain) MarshalJSON() ([]byte, error) {
 	for i, x := range v.Entries {
 		u.Entries[i] = encoding.BytesToJSON(x)
 	}
-	return json.Marshal(&u)
-}
-
-func (v *Header) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Version   uint64    `json:"version,omitempty"`
-		Height    uint64    `json:"height,omitempty"`
-		RootHash  string    `json:"rootHash,omitempty"`
-		Timestamp time.Time `json:"timestamp,omitempty"`
-	}{}
-	u.Version = v.Version
-	u.Height = v.Height
-	u.RootHash = encoding.ChainToJSON(v.RootHash)
-	u.Timestamp = v.Timestamp
 	return json.Marshal(&u)
 }
 
@@ -1285,29 +1324,57 @@ func (v *txnSection) MarshalJSON() ([]byte, error) {
 func (v *Account) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Main      encoding.JsonUnmarshalWith[protocol.Account] `json:"main,omitempty"`
-		Chains    encoding.JsonList[*ChainState]               `json:"chains,omitempty"`
+		OldChains encoding.JsonList[*OldChain]                 `json:"oldChains,omitempty"`
 		Pending   encoding.JsonList[*url.TxID]                 `json:"pending,omitempty"`
 		Directory encoding.JsonList[*url.URL]                  `json:"directory,omitempty"`
 		Url       *url.URL                                     `json:"url,omitempty"`
+		Chains    encoding.JsonList[*managed.Snapshot]         `json:"chains,omitempty"`
 	}{}
 	u.Main = encoding.JsonUnmarshalWith[protocol.Account]{Value: v.Main, Func: protocol.UnmarshalAccountJSON}
-	u.Chains = v.Chains
+	u.OldChains = v.OldChains
 	u.Pending = v.Pending
 	u.Directory = v.Directory
 	u.Url = v.Url
+	u.Chains = v.Chains
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.Main = u.Main.Value
 
-	v.Chains = u.Chains
+	v.OldChains = u.OldChains
 	v.Pending = u.Pending
 	v.Directory = u.Directory
 	v.Url = u.Url
+	v.Chains = u.Chains
 	return nil
 }
 
-func (v *Chain) UnmarshalJSON(data []byte) error {
+func (v *Header) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Version   uint64    `json:"version,omitempty"`
+		Height    uint64    `json:"height,omitempty"`
+		RootHash  string    `json:"rootHash,omitempty"`
+		Timestamp time.Time `json:"timestamp,omitempty"`
+	}{}
+	u.Version = v.Version
+	u.Height = v.Height
+	u.RootHash = encoding.ChainToJSON(v.RootHash)
+	u.Timestamp = v.Timestamp
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Version = u.Version
+	v.Height = u.Height
+	if x, err := encoding.ChainFromJSON(u.RootHash); err != nil {
+		return fmt.Errorf("error decoding RootHash: %w", err)
+	} else {
+		v.RootHash = x
+	}
+	v.Timestamp = u.Timestamp
+	return nil
+}
+
+func (v *OldChain) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Name    string                     `json:"name,omitempty"`
 		Type    protocol.ChainType         `json:"type,omitempty"`
@@ -1348,31 +1415,6 @@ func (v *Chain) UnmarshalJSON(data []byte) error {
 			v.Entries[i] = x
 		}
 	}
-	return nil
-}
-
-func (v *Header) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Version   uint64    `json:"version,omitempty"`
-		Height    uint64    `json:"height,omitempty"`
-		RootHash  string    `json:"rootHash,omitempty"`
-		Timestamp time.Time `json:"timestamp,omitempty"`
-	}{}
-	u.Version = v.Version
-	u.Height = v.Height
-	u.RootHash = encoding.ChainToJSON(v.RootHash)
-	u.Timestamp = v.Timestamp
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	v.Version = u.Version
-	v.Height = u.Height
-	if x, err := encoding.ChainFromJSON(u.RootHash); err != nil {
-		return fmt.Errorf("error decoding RootHash: %w", err)
-	} else {
-		v.RootHash = x
-	}
-	v.Timestamp = u.Timestamp
 	return nil
 }
 

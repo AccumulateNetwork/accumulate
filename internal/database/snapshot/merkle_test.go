@@ -79,9 +79,71 @@ func TestSnapshotPartialHistory(t *testing.T) {
 	entriesShouldFailOrReturnCorrectNumber(t, c, 200, 400)
 }
 
-func entriesShouldFailOrReturnCorrectNumber(t *testing.T, chain *managed.Chain, start, end int64) {
-	hashes, err := chain.GetRange(start, end)
-	if err == nil {
-		require.Len(t, hashes, int(end-start))
+func TestSnapshotFullHistory(t *testing.T) {
+	// Mark power is 8 (mark point is 256), set by a const in
+	// internal/database/database.go.
+
+	// Create a chain with 300 entries
+	for n := 1; n < 300; n++ {
+		db := database.OpenInMemory(nil)
+		batch := db.Begin(true)
+		defer batch.Discard()
+
+		foo := protocol.AccountUrl("foo")
+		require.NoError(t, batch.Account(foo).Main().Put(&protocol.LiteIdentity{Url: foo}))
+		chain, err := batch.Account(foo).MainChain().Get()
+		require.NoError(t, err)
+
+		var rh common.RandHash
+		for i := 0; i < n; i++ {
+			require.NoError(t, chain.AddEntry(rh.NextList(), false))
+		}
+
+		require.NoError(t, batch.Commit())
+
+		// Make a snapshot
+		buf := new(ioutil2.Buffer)
+		snapWr, err := snapshot.Create(buf, new(snapshot.Header))
+		require.NoError(t, err)
+
+		batch = db.Begin(true)
+		defer batch.Discard()
+		require.NoError(t, snapWr.CollectAccounts(batch, func(account *database.Account) (bool, error) {
+			return true, nil // Preserve history
+		}, nil))
+		batch.Discard()
+
+		require.NoError(t, db.Close())
+
+		// Restore the snapshot to a new database
+		store := memory.New(nil)
+		db = database.New(store, nil)
+		require.NoError(t, snapshot.Restore(db, buf, nil))
+
+		// Verify the account chain
+		key := record.Key{"Account", foo, "MainChain"}
+		storetx := store.Begin(false)
+		defer storetx.Discard()
+		c := managed.NewChain(nil, record.KvStore{Store: storetx}, key, 8, managed.ChainTypeTransaction, "main", "main")
+
+		for i := 0; i < n; i++ {
+			hash, err := c.Get(int64(i))
+			require.NoError(t, err)
+			require.Equalf(t, rh.List[i], []byte(hash), "Entry %d", i)
+		}
 	}
+}
+
+func entriesShouldFailOrReturnCorrectNumber(t *testing.T, chain *managed.Chain, start, end int64) {
+	t.Helper()
+	hashes, err := chain.GetRange(start, end)
+	if err != nil {
+		return
+	}
+	h, err := chain.Head().Get()
+	require.NoError(t, err)
+	if end > h.Count {
+		end = h.Count
+	}
+	require.Equalf(t, int(end-start), len(hashes), "Range from %d to %d", start, end)
 }

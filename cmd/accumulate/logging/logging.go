@@ -17,7 +17,7 @@ import (
 
 	"github.com/kardianos/service"
 	"github.com/rs/zerolog"
-	"github.com/tendermint/tendermint/libs/log"
+	"github.com/tendermint/tendermint/config"
 )
 
 // NewConsoleWriter parses the log format and creates an appropriate writer.
@@ -28,10 +28,10 @@ func NewConsoleWriter(format string) (io.Writer, error) {
 
 func NewConsoleWriterWith(w io.Writer, format string) (io.Writer, error) {
 	switch strings.ToLower(format) {
-	case log.LogFormatPlain, log.LogFormatText:
+	case config.LogFormatPlain:
 		return newConsoleWriter(w), nil
 
-	case log.LogFormatJSON:
+	case config.LogFormatJSON:
 		return w, nil
 
 	default:
@@ -74,12 +74,12 @@ func NewServiceLogger(svc service.Service, format string) (*ServiceLogger, error
 	}
 
 	switch strings.ToLower(format) {
-	case log.LogFormatPlain, log.LogFormatText:
+	case config.LogFormatPlain:
 		logger.buf = new(bytes.Buffer)
 		logger.mu = new(sync.Mutex)
 		logger.fmt = newConsoleWriter(logger.buf)
 
-	case log.LogFormatJSON:
+	case config.LogFormatJSON:
 
 	default:
 		return nil, fmt.Errorf("unsupported log format: %s", format)
