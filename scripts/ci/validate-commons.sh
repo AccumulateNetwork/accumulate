@@ -11,11 +11,12 @@ function accumulate {
 }
 
 function init-wallet {
-    if [ -n "${MNEMONIC}" ]; then
-        echo ${MNEMONIC} | accumulate wallet init import mnemonic
-    else
-        accumulate wallet init script
-    fi
+    [ -z "${MNEMONIC}" ] || accumulate key import mnemonic ${MNEMONIC}
+    # if [ -n "${MNEMONIC}" ]; then
+    #     echo ${MNEMONIC} | accumulate wallet init import
+    # else
+    #     accumulate wallet init script
+    # fi
 }
 
 # section <name> - Print a section header
