@@ -24,8 +24,8 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	protocrypto "github.com/tendermint/tendermint/proto/tendermint/crypto"
 	rpc "github.com/tendermint/tendermint/rpc/client"
-	core "github.com/tendermint/tendermint/rpc/coretypes"
-	ctypes "github.com/tendermint/tendermint/rpc/coretypes"
+	core "github.com/tendermint/tendermint/rpc/core/types"
+	ctypes "github.com/tendermint/tendermint/rpc/core/types"
 	"github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
@@ -265,9 +265,9 @@ func (c *FakeTendermint) execute(interval time.Duration) {
 		begin.Header.ProposerAddress = c.address
 		if c.isEvil {
 			//add evidence of something happening to the evidence chain.
-			ev := abci.Evidence{}
+			ev := abci.Misbehavior{}
 			ev.Validator.Address = c.address
-			ev.Type = abci.EvidenceType_LIGHT_CLIENT_ATTACK
+			ev.Type = abci.MisbehaviorType_LIGHT_CLIENT_ATTACK
 			ev.Height = height
 			ev.Time.Add(interval * time.Duration(ev.Height))
 			ev.TotalVotingPower = 1
@@ -426,12 +426,11 @@ func (c *FakeTendermint) BroadcastTxSync(ctx context.Context, tx types.Tx) (*cty
 	}
 
 	return &ctypes.ResultBroadcastTx{
-		Code:         st.CheckResult.Code,
-		Data:         st.CheckResult.Data,
-		Log:          st.CheckResult.Log,
-		Codespace:    st.CheckResult.Codespace,
-		MempoolError: st.CheckResult.MempoolError,
-		Hash:         st.Hash[:],
+		Code:      st.CheckResult.Code,
+		Data:      st.CheckResult.Data,
+		Log:       st.CheckResult.Log,
+		Codespace: st.CheckResult.Codespace,
+		Hash:      st.Hash[:],
 	}, nil
 }
 

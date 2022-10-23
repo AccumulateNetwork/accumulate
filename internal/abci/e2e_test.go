@@ -97,7 +97,7 @@ func TestEvilNode(t *testing.T) {
 	// Check each anchor
 	de, err := indexing.Data(batch, dn.network.NodeUrl(protocol.Evidence)).GetLatestEntry()
 	require.NoError(t, err)
-	var ev []types2.Evidence
+	var ev []types2.Misbehavior
 	require.NotEqual(t, de.GetData(), nil, "no data")
 	err = json.Unmarshal(de.GetData()[0], &ev)
 	require.NoError(t, err)

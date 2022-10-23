@@ -174,7 +174,8 @@ type Type struct {
 	// NonBinary specifies whether the type is binary marshallable.
 	NonBinary bool `yaml:"non-binary"`
 	// Incomparable specifies whether two values of the type can be checked for equality.
-	Incomparable bool `yaml:"incomparable"`
+	Incomparable    bool `yaml:"incomparable"`
+	IgnoreSizeLimit bool `yaml:"ignore-size-limit"`
 	// Fields is a list of fields.
 	Fields []*Field
 	// Embeddings is a list of embedded types.

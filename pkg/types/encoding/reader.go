@@ -34,6 +34,8 @@ type Reader struct {
 	seen    []bool
 	err     error
 	last    uint
+
+	IgnoreSizeLimit bool
 }
 
 func NewReader(r io.Reader) *Reader {
@@ -91,7 +93,7 @@ func (r *Reader) readRaw(field uint, n uint64) ([]byte, bool) {
 		r.didRead(field, io.EOF, "failed to read field")
 	}
 
-	if n >= MaxValueSize {
+	if !r.IgnoreSizeLimit && n >= MaxValueSize {
 		r.didRead(field, fmt.Errorf("too big: %d > %d", n, MaxValueSize), "failed to read field")
 		return nil, false
 	}
@@ -380,7 +382,7 @@ func (r *Reader) ReadEnum(n uint, v EnumValueSetter) bool {
 	return false
 }
 
-//ReadAll reads the entire value from the current position
+// ReadAll reads the entire value from the current position
 func (r *Reader) ReadAll() ([]byte, error) {
 	if r.current == EmptyObject {
 		return nil, nil

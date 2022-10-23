@@ -18,11 +18,10 @@ import (
 	"strconv"
 	"strings"
 	"text/tabwriter"
-	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/tendermint/tendermint/rpc/client/http"
-	"github.com/tendermint/tendermint/rpc/coretypes"
+	coretypes "github.com/tendermint/tendermint/rpc/core/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
@@ -100,7 +99,7 @@ func walkNetwork(addrs []string) (*core.GlobalValues, []*NodeData) {
 			if flag.Debug {
 				fmt.Printf("Tendermint status %s\n", addr)
 			}
-			tm, err := http.NewWithTimeout(addr, time.Second)
+			tm, err := http.NewWithTimeout(addr, addr+"/websocket", 1)
 			checkf(err, "new DNN TM client")
 
 			status, err := tm.Status(context.Background())
@@ -110,7 +109,7 @@ func walkNetwork(addrs []string) (*core.GlobalValues, []*NodeData) {
 				continue
 			}
 
-			nodeId, err := hex.DecodeString(string(status.NodeInfo.NodeID))
+			nodeId, err := hex.DecodeString(string(status.NodeInfo.DefaultNodeID))
 			checkf(err, "parse node ID")
 
 			valId, err := hex.DecodeString(status.ValidatorInfo.Address.String())
@@ -141,25 +140,36 @@ func walkNetwork(addrs []string) (*core.GlobalValues, []*NodeData) {
 			checkf(err, "DNN TM net info")
 
 			for _, peer := range netInfo.Peers {
-				id, err := hex.DecodeString(string(peer.ID))
+				id, err := hex.DecodeString(string(peer.NodeInfo.DefaultNodeID))
 				checkf(err, "parse peer ID")
-				if byNodeId[*(*[20]byte)(id)] == nil {
-					// fmt.Printf("  %s has peer %s\n", hostname, peer.URL)
-					next = append(next, peer.URL)
+				if byNodeId[*(*[20]byte)(id)] != nil {
+					continue
 				}
+
+				addr := peer.NodeInfo.ListenAddr
+				if !strings.Contains(addr, "://") {
+					addr = "tcp://" + addr
+				}
+				u, err := url.Parse(addr)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Invalid peer: bad listen address: %q", peer.NodeInfo.ListenAddr)
+					continue
+				}
+				// fmt.Printf("  %s has peer %s\n", hostname, peer.URL)
+				next = append(next, "tcp://"+peer.RemoteIP+":"+u.Port())
 			}
 
 			addr = fmt.Sprintf("http://%s:%d", hostname, port+uint64(config.PortOffsetTendermintRpc+config.PortOffsetBlockValidator))
 			if flag.Debug {
 				fmt.Printf("Tendermint status %s\n", addr)
 			}
-			tm, err = http.New(addr)
+			tm, err = http.New(addr, addr+"/websocket")
 			checkf(err, "new BVNN TM client")
 
 			status, err = tm.Status(context.Background())
 			checkf(err, "BVNN TM status")
 
-			nodeId, err = hex.DecodeString(string(status.NodeInfo.NodeID))
+			nodeId, err = hex.DecodeString(string(status.NodeInfo.DefaultNodeID))
 			checkf(err, "parse node ID")
 
 			n.BvnNodeID = *(*[20]byte)(nodeId)
