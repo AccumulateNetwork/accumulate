@@ -81,7 +81,8 @@ func (m *DatabaseQueryModule) queryAccount(batch *database.Batch, accountUrl *ur
 		if err != nil {
 			receipt.Error = errors.Wrap(errors.StatusUnknownError, err).(*errors.Error)
 		} else {
-			receipt.LocalBlock = block
+			receipt.LocalBlock = block.BlockIndex
+			receipt.LocalBlockTime = block.BlockTime
 			receipt.Proof = *mr
 		}
 	}

@@ -72,7 +72,6 @@ func packTxResponse(qrResp *query.ResponseByTxId, ms *MerkleState, envelope *pro
 
 	res.Status = status
 	res.Receipts = qrResp.Receipts
-	res.PartitionUrl = qrResp.PartitionUrl
 
 	books := map[string]*SignatureBook{}
 	for _, signer := range qrResp.Signers {

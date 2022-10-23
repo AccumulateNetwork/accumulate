@@ -375,7 +375,7 @@ func (m *queryBackend) queryByUrl(batch *database.Batch, u *url.URL, prove bool,
 						return nil, nil, err
 					}
 
-					entry, txId, err := indexing.GetDataEntry(batch, txnHash)
+					entry, txId, causeTxId, err := indexing.GetDataEntry(batch, txnHash)
 					if err != nil {
 						return nil, nil, err
 					}
@@ -384,6 +384,7 @@ func (m *queryBackend) queryByUrl(batch *database.Batch, u *url.URL, prove bool,
 					res.EntryHash = *(*[32]byte)(entryHash)
 					res.Entry = entry
 					res.TxId = txId
+					res.CauseTxId = causeTxId
 					return []byte("data-entry"), res, nil
 				}
 			}
@@ -701,7 +702,6 @@ func (m *queryBackend) queryByTxId(batch *database.Batch, txid []byte, prove, re
 		}
 		qr.Receipts[i] = receipt
 	}
-	qr.PartitionUrl = protocol.PartitionUrl(m.Describe.PartitionId)
 
 	return &qr, nil
 }
@@ -744,7 +744,7 @@ func (m *queryBackend) queryDataByUrl(batch *database.Batch, u *url.URL) (*query
 		return nil, err
 	}
 
-	qr.Entry, qr.TxId, err = indexing.GetDataEntry(batch, txnHash)
+	qr.Entry, qr.TxId, qr.CauseTxId, err = indexing.GetDataEntry(batch, txnHash)
 	if err != nil {
 		return nil, err
 	}
@@ -762,7 +762,7 @@ func (m *queryBackend) queryDataByEntryHash(batch *database.Batch, u *url.URL, e
 		return nil, err
 	}
 
-	qr.Entry, qr.TxId, err = indexing.GetDataEntry(batch, txnHash)
+	qr.Entry, qr.TxId, qr.CauseTxId, err = indexing.GetDataEntry(batch, txnHash)
 	if err != nil {
 		return nil, err
 	}
@@ -795,7 +795,7 @@ func (m *queryBackend) queryDataSet(batch *database.Batch, u *url.URL, start int
 				return nil, err
 			}
 
-			er.Entry, er.TxId, err = indexing.GetDataEntry(batch, txnHash)
+			er.Entry, er.TxId, er.CauseTxId, err = indexing.GetDataEntry(batch, txnHash)
 			if err != nil {
 				return nil, err
 			}
@@ -1226,7 +1226,8 @@ func (m *queryBackend) resolveTxReceipt(batch *database.Batch, txid []byte, entr
 		return nil, errors.Format(errors.StatusInternalError, "locate major block for root index entry %d: %w", entry.AnchorIndex, err)
 	}
 
-	receipt.LocalBlock = block
+	receipt.LocalBlock = block.BlockIndex
+	receipt.LocalBlockTime = block.BlockTime
 	receipt.Proof = *r
 	return receipt, nil
 }
@@ -1238,11 +1239,13 @@ func (m *queryBackend) resolveChainReceipt(batch *database.Batch, account *url.U
 		return receipt, err
 	}
 
-	_, r, err := indexing.ReceiptForChainIndex(m.Options.Describe, batch, chain, index)
+	block, r, err := indexing.ReceiptForChainIndex(m.Options.Describe, batch, chain, index)
 	if err != nil {
 		return receipt, err
 	}
 
+	receipt.LocalBlock = block.BlockIndex
+	receipt.LocalBlockTime = block.BlockTime
 	receipt.Proof = *r
 	return receipt, nil
 }
@@ -1254,7 +1257,8 @@ func (m *queryBackend) resolveAccountStateReceipt(batch *database.Batch, account
 		return receipt, err
 	}
 
-	receipt.LocalBlock = block
+	receipt.LocalBlock = block.BlockIndex
+	receipt.LocalBlockTime = block.BlockTime
 	receipt.Proof = *r
 	return receipt, nil
 }

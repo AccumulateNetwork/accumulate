@@ -97,9 +97,6 @@ ResponseByTxId:
       type: SignatureSet
       marshal-as: reference
       repeatable: true
-    - name: PartitionUrl
-      type: url
-      pointer: true
 
 SignatureSet:
   fields:
@@ -115,6 +112,9 @@ GeneralReceipt:
   fields:
     - name: LocalBlock
       type: uvarint
+    - name: LocalBlockTime
+      type: time
+      pointer: true
     - name: DirectoryBlock
       type: uvarint
     - name: MajorBlock
@@ -185,6 +185,9 @@ ResponseDataEntry:
       type: protocol.DataEntry
       marshal-as: union
     - name: TxId
+      type: txid
+      pointer: true
+    - name: CauseTxId
       type: txid
       pointer: true
 

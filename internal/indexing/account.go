@@ -64,31 +64,31 @@ func (d *DataIndexer) GetLatest() (index uint64, entryHash, txnHash []byte, err 
 	return count - 1, entryHash, txnHash, nil
 }
 
-func GetDataEntry(batch *database.Batch, txnHash []byte) (protocol.DataEntry, *url.TxID, error) {
+func GetDataEntry(batch *database.Batch, txnHash []byte) (protocol.DataEntry, *url.TxID, *url.TxID, error) {
 	state, err := batch.Transaction(txnHash).GetState()
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	tx := state.Transaction
 	switch txn := tx.Body.(type) {
 	case *protocol.WriteData:
-		return txn.Entry, tx.ID(), nil
+		return txn.Entry, tx.ID(), nil, nil
 	case *protocol.WriteDataTo:
-		return txn.Entry, tx.ID(), nil
+		return txn.Entry, tx.ID(), nil, nil
 	case *protocol.SyntheticWriteData:
-		return txn.Entry, txn.Cause, nil
+		return txn.Entry, tx.ID(), txn.Cause, nil
 	case *protocol.SystemWriteData:
-		return txn.Entry, tx.ID(), nil
+		return txn.Entry, tx.ID(), nil, nil
 	default:
-		return nil, nil, errors.Format(errors.StatusInternalError, "invalid data transaction: expected %v or %v, got %v", protocol.TransactionTypeWriteData, protocol.TransactionTypeWriteDataTo, tx.Body.Type())
+		return nil, nil, nil, errors.Format(errors.StatusInternalError, "invalid data transaction: expected %v or %v, got %v", protocol.TransactionTypeWriteData, protocol.TransactionTypeWriteDataTo, tx.Body.Type())
 	}
 }
 
-func (d *DataIndexer) GetLatestEntry() (protocol.DataEntry, *url.TxID, error) {
+func (d *DataIndexer) GetLatestEntry() (protocol.DataEntry, *url.TxID, *url.TxID, error) {
 	_, _, txnHash, err := d.GetLatest()
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	return GetDataEntry(d.batch, txnHash)
