@@ -97,9 +97,6 @@ ResponseByTxId:
       type: SignatureSet
       marshal-as: reference
       repeatable: true
-    - name: PartitionUrl
-      type: url
-      pointer: true
 
 SignatureSet:
   fields:
