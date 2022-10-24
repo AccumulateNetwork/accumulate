@@ -207,22 +207,22 @@ func (v *Describe) MarshalBinary() ([]byte, error) {
 func (v *Describe) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field NetworkType is missing")
 	} else if v.NetworkType == 0 {
 		errs = append(errs, "field NetworkType is not set")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field PartitionId is missing")
 	} else if len(v.PartitionId) == 0 {
 		errs = append(errs, "field PartitionId is not set")
 	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field LocalAddress is missing")
 	} else if len(v.LocalAddress) == 0 {
 		errs = append(errs, "field LocalAddress is not set")
 	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Network is missing")
 	} else if (v.Network).Equal(new(Network)) {
 		errs = append(errs, "field Network is not set")
@@ -267,12 +267,12 @@ func (v *Network) MarshalBinary() ([]byte, error) {
 func (v *Network) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field Id is missing")
 	} else if len(v.Id) == 0 {
 		errs = append(errs, "field Id is not set")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Partitions is missing")
 	} else if len(v.Partitions) == 0 {
 		errs = append(errs, "field Partitions is not set")
@@ -315,12 +315,12 @@ func (v *Node) MarshalBinary() ([]byte, error) {
 func (v *Node) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field Address is missing")
 	} else if len(v.Address) == 0 {
 		errs = append(errs, "field Address is not set")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Type is missing")
 	} else if v.Type == 0 {
 		errs = append(errs, "field Type is not set")
@@ -373,22 +373,22 @@ func (v *Partition) MarshalBinary() ([]byte, error) {
 func (v *Partition) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field Id is missing")
 	} else if len(v.Id) == 0 {
 		errs = append(errs, "field Id is not set")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Type is missing")
 	} else if v.Type == 0 {
 		errs = append(errs, "field Type is not set")
 	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field BasePort is missing")
 	} else if v.BasePort == 0 {
 		errs = append(errs, "field BasePort is not set")
 	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Nodes is missing")
 	} else if len(v.Nodes) == 0 {
 		errs = append(errs, "field Nodes is not set")

@@ -37,6 +37,9 @@ func Equal{{.Interface}}(a, b {{.Interface}}) bool {
 	if a == b {
 		return true
 	}
+	if a == nil || b == nil {
+		return false
+	}
 	switch a := a.(type){
 	{{- range .Members}}
 	case *{{.Type.Name}}:
