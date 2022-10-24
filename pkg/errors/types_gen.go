@@ -141,17 +141,17 @@ func (v *CallSite) MarshalBinary() ([]byte, error) {
 func (v *CallSite) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field FuncName is missing")
 	} else if len(v.FuncName) == 0 {
 		errs = append(errs, "field FuncName is not set")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field File is missing")
 	} else if len(v.File) == 0 {
 		errs = append(errs, "field File is not set")
 	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Line is missing")
 	} else if v.Line == 0 {
 		errs = append(errs, "field Line is not set")
@@ -204,22 +204,22 @@ func (v *Error) MarshalBinary() ([]byte, error) {
 func (v *Error) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field Message is missing")
 	} else if len(v.Message) == 0 {
 		errs = append(errs, "field Message is not set")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Code is missing")
 	} else if v.Code == 0 {
 		errs = append(errs, "field Code is not set")
 	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Cause is missing")
 	} else if v.Cause == nil {
 		errs = append(errs, "field Cause is not set")
 	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field CallStack is missing")
 	} else if len(v.CallStack) == 0 {
 		errs = append(errs, "field CallStack is not set")
