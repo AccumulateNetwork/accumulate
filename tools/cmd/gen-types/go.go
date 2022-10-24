@@ -64,6 +64,9 @@ var goFuncs = template.FuncMap{
 		}
 		return s[i+1:] + "."
 	},
+	"dec": func(v uint) uint {
+		return v - 1
+	},
 
 	"resolveType": func(field *Field, forNew bool) string {
 		return GoResolveType(field, forNew, false)
@@ -264,7 +267,7 @@ func GoIsZero(field *Field, varName string) (string, error) {
 	case Enum:
 		return fmt.Sprintf("%s == 0", varName), nil
 	case Union:
-		return fmt.Sprintf("%s == nil", varName), nil
+		return fmt.Sprintf("%s(%s, nil)", goUnionMethod(field, "Equal"), varName), nil
 	}
 
 	return "", fmt.Errorf("field %q: cannot determine zero value for %s", field.Name, GoResolveType(field, false, false))
