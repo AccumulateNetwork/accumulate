@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/libp2p/go-libp2p/core/peer"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	{{- if not (isPkg "pkg/errors")}}
@@ -38,7 +39,7 @@ import (
 {{-   if .Description}}
 // {{.Name}} {{.Description}}.
 {{-   end}}
-type {{.Name}} struct {
+type {{.FullName true true}} struct {
 	{{  if .IsBinary}}fieldsSet []bool{{end}}
 	{{- range .Fields}}
 	{{-   if not .Virtual}}
@@ -56,13 +57,14 @@ type {{.Name}} struct {
 }
 {{end}}
 
+{{ $lud := .LongUnionDiscriminator }}
 {{range .Types}}{{if .IsUnion}}
-func (*{{.Name}}) Type() {{.UnionType}} { return {{.UnionType}}{{.UnionValue}} }
+func (*{{.FullName true false}}) {{if $lud}}{{.UnionType}}{{else}}Type{{end}}() {{.UnionType}} { return {{.UnionType}}{{.UnionValue}} }
 {{end}}{{end}}
 
 {{range .Types}}{{if .IsComparable}}
-func (v *{{.Name}}) Copy() *{{.Name}} {
-	u := new({{.Name}})
+func (v *{{.FullName true false}}) Copy() *{{.FullName true false}} {
+	u := new({{.FullName true false}})
 
 	{{  range .Fields}}
 	{{- if and .IsMarshalled (not .Virtual)}}
@@ -77,11 +79,11 @@ func (v *{{.Name}}) Copy() *{{.Name}} {
 	return u
 }
 
-func (v *{{.Name}}) CopyAsInterface() interface{} { return v.Copy() }
+func (v *{{.FullName true false}}) CopyAsInterface() interface{} { return v.Copy() }
 {{end}}{{end}}
 
 {{range .Types}}{{if .IsComparable}}
-func (v *{{.Name}}) Equal(u *{{.Name}}) bool {
+func (v *{{.FullName true false}}) Equal(u *{{.FullName true false}}) bool {
 	{{- range .Fields}}
 	{{- if and .IsMarshalled (not .Virtual)}}
 	{{- if .IsEmbedded}}
@@ -111,7 +113,7 @@ var fieldNames_{{.Name}} = []string{
 	{{- end}}
 }
 
-func (v *{{.Name}}) MarshalBinary() ([]byte, error) {
+func (v *{{.FullName true false}}) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 	{{- if .IgnoreSizeLimit}}
@@ -139,7 +141,7 @@ func (v *{{.Name}}) MarshalBinary() ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
-func (v *{{.Name}}) IsValid() error {
+func (v *{{.FullName true false}}) {{if .CustomIsValid}}base{{end}}IsValid() error {
 	var errs []string
 
 	{{  range .Fields}}
@@ -172,11 +174,11 @@ func (v *{{.Name}}) IsValid() error {
 {{end}}{{end}}
 
 {{range .Types}}{{if .IsBinary}}
-func (v *{{.Name}}) UnmarshalBinary(data []byte) error {
+func (v *{{.FullName true false}}) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
 
-func (v *{{.Name}}) UnmarshalBinaryFrom(rd io.Reader) error {
+func (v *{{.FullName true false}}) UnmarshalBinaryFrom(rd io.Reader) error {
 	{{- $typ := .}}
 	reader := encoding.NewReader(rd)
 	{{- if .IgnoreSizeLimit}}
@@ -199,7 +201,7 @@ func (v *{{.Name}}) UnmarshalBinaryFrom(rd io.Reader) error {
 	return v.UnmarshalFieldsFrom(reader)
 }
 
-func (v *{{$typ.Name}}) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+func (v *{{$typ.FullName true false}}) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	{{- end}}
 	{{- end}}
 
@@ -274,7 +276,7 @@ if !({{template "jsonAltIsZero" .}}) {
 {{- end}}
 
 {{range .Types}}{{if needsCustomJSON .}}
-func (v *{{.Name}}) MarshalJSON() ([]byte, error) {
+func (v *{{.FullName true false}}) MarshalJSON() ([]byte, error) {
 	u := {{template "jsonType" .}}{}
 
 	{{- range .Fields}}
@@ -292,7 +294,7 @@ func (v *{{.Name}}) MarshalJSON() ([]byte, error) {
 {{end}}{{end}}
 
 {{range .Types}}{{if needsCustomJSON .}}
-func (v *{{.Name}}) UnmarshalJSON(data []byte) error {
+func (v *{{.FullName true false}}) UnmarshalJSON(data []byte) error {
 	u := {{template "jsonType" .}}{}
 
 	{{- range .Fields}}
