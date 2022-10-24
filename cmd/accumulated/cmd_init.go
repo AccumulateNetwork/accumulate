@@ -514,11 +514,18 @@ func getGenesis(server string, tmClient *rpchttp.HTTP) (*types.GenesisDoc, error
 	warnf("You are fetching the Genesis document from %s! Only do this if you trust %[1]s and your connection to it!", server)
 
 	buf := new(bytes.Buffer)
+	var total int
 	for i := uint(0); ; i++ {
+		if total == 0 {
+			fmt.Printf("Get genesis chunk %d/? from %s\n", i+1, server)
+		} else {
+			fmt.Printf("Get genesis chunk %d/%d from %s\n", i+1, total, server)
+		}
 		rgen, err := tmClient.GenesisChunked(context.Background(), i)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get genesis chunk %d from %s, %v", i, server, err)
 		}
+		total = rgen.TotalChunks
 		b, err := base64.StdEncoding.DecodeString(rgen.Data)
 		if err != nil {
 			return nil, fmt.Errorf("failed to decode genesis chunk %d from %s, %v", i, server, err)
