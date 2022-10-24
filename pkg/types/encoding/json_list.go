@@ -8,7 +8,34 @@ package encoding
 
 import (
 	"encoding/json"
+	"fmt"
 )
+
+func Cast[U, V any](v V, err error) (U, error) {
+	var z U
+	if err != nil {
+		return z, err
+	}
+	u, ok := any(v).(U)
+	if !ok {
+		return z, fmt.Errorf("wrong type: expected %T, got %T", z, v)
+	}
+	return u, nil
+
+}
+
+func UnmarshalAndCast[B, A, S any](src S, unmarshal func(S) (A, error)) (B, error) {
+	var z B
+	v, err := unmarshal(src)
+	if err != nil {
+		return z, err
+	}
+	u, ok := any(v).(B)
+	if !ok {
+		return z, fmt.Errorf("wrong type: expected %T, got %T", z, v)
+	}
+	return u, nil
+}
 
 // JsonUnmarshalListWith combines the functionality of JsonList and
 // JsonUnmarshalWith, using the given function to unmarshal JSON into a slice of
