@@ -32,6 +32,9 @@ func EqualRecord(a, b Record) bool {
 	if a == b {
 		return true
 	}
+	if a == nil || b == nil {
+		return false
+	}
 	switch a := a.(type) {
 	case *AccountRecord:
 		b, ok := b.(*AccountRecord)

@@ -64,6 +64,9 @@ var goFuncs = template.FuncMap{
 		}
 		return s[i+1:] + "."
 	},
+	"dec": func(v uint) uint {
+		return v - 1
+	},
 
 	"resolveType": func(field *Field, forNew bool) string {
 		return GoResolveType(field, forNew, false)
