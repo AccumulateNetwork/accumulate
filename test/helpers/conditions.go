@@ -43,6 +43,7 @@ func (c condTxn) status(predicate func(sim *Sim, status *protocol.TransactionSta
 			h := c.id.Hash()
 			status, err := batch.Transaction(h[:]).Status().Get()
 			require.NoError(s.T, err)
+			status.TxID = c.id
 			ok = predicate(s, status)
 		})
 		return ok
@@ -74,6 +75,7 @@ func (c condProduced) status(predicate func(sim *Sim, status *protocol.Transacti
 				h := id.Hash()
 				status, err := batch.Transaction(h[:]).Status().Get()
 				require.NoError(s.T, err)
+				status.TxID = c.id
 				ok = predicate(s, status)
 			})
 			if !ok {
