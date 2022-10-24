@@ -490,7 +490,7 @@ func (v *AccountRecord) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
-	if !(v.Account == nil) {
+	if !(protocol.EqualAccount(v.Account, nil)) {
 		writer.WriteValue(2, v.Account.MarshalBinary)
 	}
 	if !(len(v.Chains) == 0) {
@@ -513,20 +513,20 @@ func (v *AccountRecord) MarshalBinary() ([]byte, error) {
 func (v *AccountRecord) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field Type is missing")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Account is missing")
-	} else if v.Account == nil {
+	} else if protocol.EqualAccount(v.Account, nil) {
 		errs = append(errs, "field Account is not set")
 	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Chains is missing")
 	} else if len(v.Chains) == 0 {
 		errs = append(errs, "field Chains is not set")
 	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Proof is missing")
 	} else if v.Proof == nil {
 		errs = append(errs, "field Proof is not set")
@@ -579,22 +579,22 @@ func (v *ChainState) MarshalBinary() ([]byte, error) {
 func (v *ChainState) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field Name is missing")
 	} else if len(v.Name) == 0 {
 		errs = append(errs, "field Name is not set")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Type is missing")
 	} else if v.Type == 0 {
 		errs = append(errs, "field Type is not set")
 	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Height is missing")
 	} else if v.Height == 0 {
 		errs = append(errs, "field Height is not set")
 	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Roots is missing")
 	} else if len(v.Roots) == 0 {
 		errs = append(errs, "field Roots is not set")
@@ -633,7 +633,7 @@ func (v *NetworkMetrics) MarshalBinary() ([]byte, error) {
 func (v *NetworkMetrics) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field TPS is missing")
 	} else if v.TPS == 0 {
 		errs = append(errs, "field TPS is not set")
@@ -672,7 +672,7 @@ func (v *NodeMetrics) MarshalBinary() ([]byte, error) {
 func (v *NodeMetrics) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field TPS is missing")
 	} else if v.TPS == 0 {
 		errs = append(errs, "field TPS is not set")
@@ -711,7 +711,7 @@ func (v *NodeStatus) MarshalBinary() ([]byte, error) {
 func (v *NodeStatus) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field Ok is missing")
 	} else if !v.Ok {
 		errs = append(errs, "field Ok is not set")
@@ -762,22 +762,22 @@ func (v *NodeVersion) MarshalBinary() ([]byte, error) {
 func (v *NodeVersion) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field Version is missing")
 	} else if len(v.Version) == 0 {
 		errs = append(errs, "field Version is not set")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Commit is missing")
 	} else if len(v.Commit) == 0 {
 		errs = append(errs, "field Commit is not set")
 	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field VersionIsKnown is missing")
 	} else if !v.VersionIsKnown {
 		errs = append(errs, "field VersionIsKnown is not set")
 	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field IsTestNet is missing")
 	} else if !v.IsTestNet {
 		errs = append(errs, "field IsTestNet is not set")
@@ -914,22 +914,22 @@ func (v *Receipt) MarshalBinary() ([]byte, error) {
 func (v *Receipt) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field LocalBlock is missing")
 	} else if v.LocalBlock == 0 {
 		errs = append(errs, "field LocalBlock is not set")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field DirectoryBlock is missing")
 	} else if v.DirectoryBlock == 0 {
 		errs = append(errs, "field DirectoryBlock is not set")
 	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Proof is missing")
 	} else if (v.Proof).Equal(new(managed.Receipt)) {
 		errs = append(errs, "field Proof is not set")
 	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Error is missing")
 	} else if v.Error == nil {
 		errs = append(errs, "field Error is not set")
@@ -968,7 +968,7 @@ func (v *SearchOptions) MarshalBinary() ([]byte, error) {
 func (v *SearchOptions) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field Kind is missing")
 	} else if len(v.Kind) == 0 {
 		errs = append(errs, "field Kind is not set")
@@ -1021,17 +1021,17 @@ func (v *Submission) MarshalBinary() ([]byte, error) {
 func (v *Submission) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field TransactionHashes is missing")
 	} else if len(v.TransactionHashes) == 0 {
 		errs = append(errs, "field TransactionHashes is not set")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field SignatureHashes is missing")
 	} else if len(v.SignatureHashes) == 0 {
 		errs = append(errs, "field SignatureHashes is not set")
 	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Status is missing")
 	} else if len(v.Status) == 0 {
 		errs = append(errs, "field Status is not set")
@@ -1070,7 +1070,7 @@ func (v *SubmitOptions) MarshalBinary() ([]byte, error) {
 func (v *SubmitOptions) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field Mode is missing")
 	} else if v.Mode == 0 {
 		errs = append(errs, "field Mode is not set")

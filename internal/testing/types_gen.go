@@ -326,7 +326,7 @@ func (v *FakeAuthority) IsValid() error {
 	if err := v.FakeAccount.IsValid(); err != nil {
 		errs = append(errs, err.Error())
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Signers is missing")
 	} else if v.Signers == nil {
 		errs = append(errs, "field Signers is not set")
@@ -369,12 +369,12 @@ func (v *FakeLiteAccount) MarshalBinary() ([]byte, error) {
 func (v *FakeLiteAccount) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field TheType is missing")
 	} else if v.TheType == 0 {
 		errs = append(errs, "field TheType is not set")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Url is missing")
 	} else if v.Url == nil {
 		errs = append(errs, "field Url is not set")
@@ -433,27 +433,27 @@ func (v *FakeSignature) MarshalBinary() ([]byte, error) {
 func (v *FakeSignature) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field TheType is missing")
 	} else if v.TheType == 0 {
 		errs = append(errs, "field TheType is not set")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Vote is missing")
 	} else if v.Vote == 0 {
 		errs = append(errs, "field Vote is not set")
 	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field PublicKey is missing")
 	} else if len(v.PublicKey) == 0 {
 		errs = append(errs, "field PublicKey is not set")
 	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Signer is missing")
 	} else if v.Signer == nil {
 		errs = append(errs, "field Signer is not set")
 	}
-	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field SignerVersion is missing")
 	} else if v.SignerVersion == 0 {
 		errs = append(errs, "field SignerVersion is not set")
@@ -511,22 +511,22 @@ func (v *FakeSigner) IsValid() error {
 	if err := v.FakeLiteAccount.IsValid(); err != nil {
 		errs = append(errs, err.Error())
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field CreditBalance is missing")
 	} else if v.CreditBalance == 0 {
 		errs = append(errs, "field CreditBalance is not set")
 	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Threshold is missing")
 	} else if v.Threshold == 0 {
 		errs = append(errs, "field Threshold is not set")
 	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Version is missing")
 	} else if v.Version == 0 {
 		errs = append(errs, "field Version is not set")
 	}
-	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field Keys is missing")
 	} else if len(v.Keys) == 0 {
 		errs = append(errs, "field Keys is not set")
@@ -565,7 +565,7 @@ func (v *FakeTransactionBody) MarshalBinary() ([]byte, error) {
 func (v *FakeTransactionBody) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field TheType is missing")
 	} else if v.TheType == 0 {
 		errs = append(errs, "field TheType is not set")
