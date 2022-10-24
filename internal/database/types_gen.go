@@ -317,7 +317,7 @@ func (v *SigOrTxn) MarshalBinary() ([]byte, error) {
 	if !(v.Transaction == nil) {
 		writer.WriteValue(1, v.Transaction.MarshalBinary)
 	}
-	if !(v.Signature == nil) {
+	if !(protocol.EqualSignature(v.Signature, nil)) {
 		writer.WriteValue(2, v.Signature.MarshalBinary)
 	}
 	if !(v.Txid == nil) {
@@ -342,7 +342,7 @@ func (v *SigOrTxn) IsValid() error {
 	}
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Signature is missing")
-	} else if v.Signature == nil {
+	} else if protocol.EqualSignature(v.Signature, nil) {
 		errs = append(errs, "field Signature is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {

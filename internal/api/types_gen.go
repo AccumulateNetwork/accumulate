@@ -490,7 +490,7 @@ func (v *AccountRecord) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 
 	writer.WriteEnum(1, v.Type())
-	if !(v.Account == nil) {
+	if !(protocol.EqualAccount(v.Account, nil)) {
 		writer.WriteValue(2, v.Account.MarshalBinary)
 	}
 	if !(len(v.Chains) == 0) {
@@ -518,7 +518,7 @@ func (v *AccountRecord) IsValid() error {
 	}
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Account is missing")
-	} else if v.Account == nil {
+	} else if protocol.EqualAccount(v.Account, nil) {
 		errs = append(errs, "field Account is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
