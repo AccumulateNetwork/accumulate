@@ -442,27 +442,27 @@ func (v *NetworkState) MarshalBinary() ([]byte, error) {
 func (v *NetworkState) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field Network is missing")
 	} else if (v.Network).Equal(new(config.Network)) {
 		errs = append(errs, "field Network is not set")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Version is missing")
 	} else if len(v.Version) == 0 {
 		errs = append(errs, "field Version is not set")
 	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Commit is missing")
 	} else if len(v.Commit) == 0 {
 		errs = append(errs, "field Commit is not set")
 	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field VersionIsKnown is missing")
 	} else if !v.VersionIsKnown {
 		errs = append(errs, "field VersionIsKnown is not set")
 	}
-	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field IsTestNet is missing")
 	} else if !v.IsTestNet {
 		errs = append(errs, "field IsTestNet is not set")
@@ -503,7 +503,7 @@ func (v *PartitionList) MarshalBinary() ([]byte, error) {
 func (v *PartitionList) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field Partitions is missing")
 	} else if len(v.Partitions) == 0 {
 		errs = append(errs, "field Partitions is not set")
@@ -542,7 +542,7 @@ func (v *SeedCount) MarshalBinary() ([]byte, error) {
 func (v *SeedCount) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field Count is missing")
 	} else if v.Count == 0 {
 		errs = append(errs, "field Count is not set")
@@ -591,17 +591,17 @@ func (v *SeedList) MarshalBinary() ([]byte, error) {
 func (v *SeedList) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field BasePort is missing")
 	} else if v.BasePort == 0 {
 		errs = append(errs, "field BasePort is not set")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Type is missing")
 	} else if v.Type == 0 {
 		errs = append(errs, "field Type is not set")
 	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Addresses is missing")
 	} else if len(v.Addresses) == 0 {
 		errs = append(errs, "field Addresses is not set")
