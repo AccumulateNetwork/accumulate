@@ -54,6 +54,9 @@ func EqualRequest(a, b Request) bool {
 	if a == b {
 		return true
 	}
+	if a == nil || b == nil {
+		return false
+	}
 	switch a := a.(type) {
 	case *RequestByChainId:
 		b, ok := b.(*RequestByChainId)
