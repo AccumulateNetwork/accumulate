@@ -402,7 +402,7 @@ func (v *DataEntryQuery) MarshalBinary() ([]byte, error) {
 func (v *DataEntryQuery) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field Url is missing")
 	} else if v.Url == nil {
 		errs = append(errs, "field Url is not set")
@@ -432,7 +432,7 @@ func (v *DataEntryQueryResponse) MarshalBinary() ([]byte, error) {
 	if !(v.EntryHash == ([32]byte{})) {
 		writer.WriteHash(1, &v.EntryHash)
 	}
-	if !(v.Entry == nil) {
+	if !(protocol.EqualDataEntry(v.Entry, nil)) {
 		writer.WriteValue(2, v.Entry.MarshalBinary)
 	}
 	if !(v.TxId == nil) {
@@ -453,14 +453,14 @@ func (v *DataEntryQueryResponse) MarshalBinary() ([]byte, error) {
 func (v *DataEntryQueryResponse) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field EntryHash is missing")
 	} else if v.EntryHash == ([32]byte{}) {
 		errs = append(errs, "field EntryHash is not set")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Entry is missing")
-	} else if v.Entry == nil {
+	} else if protocol.EqualDataEntry(v.Entry, nil) {
 		errs = append(errs, "field Entry is not set")
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {

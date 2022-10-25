@@ -45,7 +45,6 @@ type DirectoryQueryResult struct {
 type GeneralReceipt struct {
 	fieldsSet      []bool
 	LocalBlock     uint64          `json:"localBlock,omitempty" form:"localBlock" query:"localBlock" validate:"required"`
-	LocalBlockTime *time.Time      `json:"localBlockTime,omitempty" form:"localBlockTime" query:"localBlockTime" validate:"required"`
 	DirectoryBlock uint64          `json:"directoryBlock,omitempty" form:"directoryBlock" query:"directoryBlock" validate:"required"`
 	MajorBlock     uint64          `json:"majorBlock,omitempty" form:"majorBlock" query:"majorBlock" validate:"required"`
 	Proof          managed.Receipt `json:"proof,omitempty" form:"proof" query:"proof" validate:"required"`
@@ -195,8 +194,6 @@ type ResponseDataEntry struct {
 	fieldsSet []bool
 	EntryHash [32]byte           `json:"entryHash,omitempty" form:"entryHash" query:"entryHash" validate:"required"`
 	Entry     protocol.DataEntry `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
-	TxId      *url.TxID          `json:"txId,omitempty" form:"txId" query:"txId" validate:"required"`
-	CauseTxId *url.TxID          `json:"causeTxId,omitempty" form:"causeTxId" query:"causeTxId" validate:"required"`
 	extraData []byte
 }
 
@@ -353,10 +350,6 @@ func (v *GeneralReceipt) Copy() *GeneralReceipt {
 	u := new(GeneralReceipt)
 
 	u.LocalBlock = v.LocalBlock
-	if v.LocalBlockTime != nil {
-		u.LocalBlockTime = new(time.Time)
-		*u.LocalBlockTime = *v.LocalBlockTime
-	}
 	u.DirectoryBlock = v.DirectoryBlock
 	u.MajorBlock = v.MajorBlock
 	u.Proof = *(&v.Proof).Copy()
@@ -619,12 +612,6 @@ func (v *ResponseDataEntry) Copy() *ResponseDataEntry {
 	if v.Entry != nil {
 		u.Entry = protocol.CopyDataEntry(v.Entry)
 	}
-	if v.TxId != nil {
-		u.TxId = v.TxId
-	}
-	if v.CauseTxId != nil {
-		u.CauseTxId = v.CauseTxId
-	}
 
 	return u
 }
@@ -857,14 +844,6 @@ func (v *DirectoryQueryResult) Equal(u *DirectoryQueryResult) bool {
 
 func (v *GeneralReceipt) Equal(u *GeneralReceipt) bool {
 	if !(v.LocalBlock == u.LocalBlock) {
-		return false
-	}
-	switch {
-	case v.LocalBlockTime == u.LocalBlockTime:
-		// equal
-	case v.LocalBlockTime == nil || u.LocalBlockTime == nil:
-		return false
-	case !((*v.LocalBlockTime).Equal(*u.LocalBlockTime)):
 		return false
 	}
 	if !(v.DirectoryBlock == u.DirectoryBlock) {
@@ -1234,22 +1213,6 @@ func (v *ResponseDataEntry) Equal(u *ResponseDataEntry) bool {
 	if !(protocol.EqualDataEntry(v.Entry, u.Entry)) {
 		return false
 	}
-	switch {
-	case v.TxId == u.TxId:
-		// equal
-	case v.TxId == nil || u.TxId == nil:
-		return false
-	case !((v.TxId).Equal(u.TxId)):
-		return false
-	}
-	switch {
-	case v.CauseTxId == u.CauseTxId:
-		// equal
-	case v.CauseTxId == nil || u.CauseTxId == nil:
-		return false
-	case !((v.CauseTxId).Equal(u.CauseTxId)):
-		return false
-	}
 
 	return true
 }
@@ -1497,22 +1460,22 @@ func (v *ChainState) MarshalBinary() ([]byte, error) {
 func (v *ChainState) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field Name is missing")
 	} else if len(v.Name) == 0 {
 		errs = append(errs, "field Name is not set")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Type is missing")
 	} else if v.Type == 0 {
 		errs = append(errs, "field Type is not set")
 	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Height is missing")
 	} else if v.Height == 0 {
 		errs = append(errs, "field Height is not set")
 	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Roots is missing")
 	} else if len(v.Roots) == 0 {
 		errs = append(errs, "field Roots is not set")
@@ -1561,7 +1524,7 @@ func (v *DirectoryQueryResult) MarshalBinary() ([]byte, error) {
 func (v *DirectoryQueryResult) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Total is missing")
 	}
 
@@ -1577,11 +1540,10 @@ func (v *DirectoryQueryResult) IsValid() error {
 
 var fieldNames_GeneralReceipt = []string{
 	1: "LocalBlock",
-	2: "LocalBlockTime",
-	3: "DirectoryBlock",
-	4: "MajorBlock",
-	5: "Proof",
-	6: "Error",
+	2: "DirectoryBlock",
+	3: "MajorBlock",
+	4: "Proof",
+	5: "Error",
 }
 
 func (v *GeneralReceipt) MarshalBinary() ([]byte, error) {
@@ -1591,20 +1553,17 @@ func (v *GeneralReceipt) MarshalBinary() ([]byte, error) {
 	if !(v.LocalBlock == 0) {
 		writer.WriteUint(1, v.LocalBlock)
 	}
-	if !(v.LocalBlockTime == nil) {
-		writer.WriteTime(2, *v.LocalBlockTime)
-	}
 	if !(v.DirectoryBlock == 0) {
-		writer.WriteUint(3, v.DirectoryBlock)
+		writer.WriteUint(2, v.DirectoryBlock)
 	}
 	if !(v.MajorBlock == 0) {
-		writer.WriteUint(4, v.MajorBlock)
+		writer.WriteUint(3, v.MajorBlock)
 	}
 	if !((v.Proof).Equal(new(managed.Receipt))) {
-		writer.WriteValue(5, v.Proof.MarshalBinary)
+		writer.WriteValue(4, v.Proof.MarshalBinary)
 	}
 	if !(len(v.Error) == 0) {
-		writer.WriteString(6, v.Error)
+		writer.WriteString(5, v.Error)
 	}
 
 	_, _, err := writer.Reset(fieldNames_GeneralReceipt)
@@ -1618,32 +1577,27 @@ func (v *GeneralReceipt) MarshalBinary() ([]byte, error) {
 func (v *GeneralReceipt) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field LocalBlock is missing")
 	} else if v.LocalBlock == 0 {
 		errs = append(errs, "field LocalBlock is not set")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field LocalBlockTime is missing")
-	} else if v.LocalBlockTime == nil {
-		errs = append(errs, "field LocalBlockTime is not set")
-	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field DirectoryBlock is missing")
 	} else if v.DirectoryBlock == 0 {
 		errs = append(errs, "field DirectoryBlock is not set")
 	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field MajorBlock is missing")
 	} else if v.MajorBlock == 0 {
 		errs = append(errs, "field MajorBlock is not set")
 	}
-	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Proof is missing")
 	} else if (v.Proof).Equal(new(managed.Receipt)) {
 		errs = append(errs, "field Proof is not set")
 	}
-	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field Error is missing")
 	} else if len(v.Error) == 0 {
 		errs = append(errs, "field Error is not set")
@@ -1694,23 +1648,23 @@ func (v *MultiResponse) MarshalBinary() ([]byte, error) {
 func (v *MultiResponse) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field Type is missing")
 	} else if len(v.Type) == 0 {
 		errs = append(errs, "field Type is not set")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Items is missing")
 	} else if len(v.Items) == 0 {
 		errs = append(errs, "field Items is not set")
 	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Start is missing")
 	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Count is missing")
 	}
-	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field Total is missing")
 	}
 
@@ -1749,10 +1703,10 @@ func (v *RequestByChainId) MarshalBinary() ([]byte, error) {
 func (v *RequestByChainId) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field Type is missing")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field ChainId is missing")
 	} else if v.ChainId == ([32]byte{}) {
 		errs = append(errs, "field ChainId is not set")
@@ -1793,10 +1747,10 @@ func (v *RequestByTxId) MarshalBinary() ([]byte, error) {
 func (v *RequestByTxId) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field Type is missing")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field TxId is missing")
 	} else if v.TxId == ([32]byte{}) {
 		errs = append(errs, "field TxId is not set")
@@ -1841,10 +1795,10 @@ func (v *RequestByUrl) MarshalBinary() ([]byte, error) {
 func (v *RequestByUrl) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field Type is missing")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Url is missing")
 	} else if v.Url == nil {
 		errs = append(errs, "field Url is not set")
@@ -1889,10 +1843,10 @@ func (v *RequestDataEntry) MarshalBinary() ([]byte, error) {
 func (v *RequestDataEntry) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field Type is missing")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Url is missing")
 	} else if v.Url == nil {
 		errs = append(errs, "field Url is not set")
@@ -1945,20 +1899,20 @@ func (v *RequestDataEntrySet) MarshalBinary() ([]byte, error) {
 func (v *RequestDataEntrySet) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field Type is missing")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Url is missing")
 	} else if v.Url == nil {
 		errs = append(errs, "field Url is not set")
 	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Start is missing")
 	} else if v.Start == 0 {
 		errs = append(errs, "field Start is not set")
 	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Count is missing")
 	} else if v.Count == 0 {
 		errs = append(errs, "field Count is not set")
@@ -2011,25 +1965,25 @@ func (v *RequestDirectory) MarshalBinary() ([]byte, error) {
 func (v *RequestDirectory) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field Type is missing")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Url is missing")
 	} else if v.Url == nil {
 		errs = append(errs, "field Url is not set")
 	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Start is missing")
 	} else if v.Start == 0 {
 		errs = append(errs, "field Start is not set")
 	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Limit is missing")
 	} else if v.Limit == 0 {
 		errs = append(errs, "field Limit is not set")
 	}
-	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field ExpandChains is missing")
 	} else if !v.ExpandChains {
 		errs = append(errs, "field ExpandChains is not set")
@@ -2074,15 +2028,15 @@ func (v *RequestKeyPageIndex) MarshalBinary() ([]byte, error) {
 func (v *RequestKeyPageIndex) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field Type is missing")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Url is missing")
 	} else if v.Url == nil {
 		errs = append(errs, "field Url is not set")
 	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Key is missing")
 	} else if len(v.Key) == 0 {
 		errs = append(errs, "field Key is not set")
@@ -2131,20 +2085,20 @@ func (v *RequestMajorBlocks) MarshalBinary() ([]byte, error) {
 func (v *RequestMajorBlocks) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field Type is missing")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Account is missing")
 	} else if v.Account == nil {
 		errs = append(errs, "field Account is not set")
 	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Start is missing")
 	} else if v.Start == 0 {
 		errs = append(errs, "field Start is not set")
 	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Limit is missing")
 	} else if v.Limit == 0 {
 		errs = append(errs, "field Limit is not set")
@@ -2201,30 +2155,30 @@ func (v *RequestMinorBlocks) MarshalBinary() ([]byte, error) {
 func (v *RequestMinorBlocks) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field Type is missing")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Account is missing")
 	} else if v.Account == nil {
 		errs = append(errs, "field Account is not set")
 	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Start is missing")
 	} else if v.Start == 0 {
 		errs = append(errs, "field Start is not set")
 	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Limit is missing")
 	} else if v.Limit == 0 {
 		errs = append(errs, "field Limit is not set")
 	}
-	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field TxFetchMode is missing")
 	} else if v.TxFetchMode == 0 {
 		errs = append(errs, "field TxFetchMode is not set")
 	}
-	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
 		errs = append(errs, "field BlockFilterMode is missing")
 	} else if v.BlockFilterMode == 0 {
 		errs = append(errs, "field BlockFilterMode is not set")
@@ -2277,15 +2231,15 @@ func (v *RequestSynth) MarshalBinary() ([]byte, error) {
 func (v *RequestSynth) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field Type is missing")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Source is missing")
 	} else if v.Source == nil {
 		errs = append(errs, "field Source is not set")
 	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Destination is missing")
 	} else if v.Destination == nil {
 		errs = append(errs, "field Destination is not set")
@@ -2338,25 +2292,25 @@ func (v *RequestTxHistory) MarshalBinary() ([]byte, error) {
 func (v *RequestTxHistory) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field Type is missing")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Account is missing")
 	} else if v.Account == nil {
 		errs = append(errs, "field Account is not set")
 	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Start is missing")
 	} else if v.Start == 0 {
 		errs = append(errs, "field Start is not set")
 	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Limit is missing")
 	} else if v.Limit == 0 {
 		errs = append(errs, "field Limit is not set")
 	}
-	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field Scratch is missing")
 	} else if !v.Scratch {
 		errs = append(errs, "field Scratch is not set")
@@ -2382,7 +2336,7 @@ func (v *ResponseAccount) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	if !(v.Account == nil) {
+	if !(protocol.EqualAccount(v.Account, nil)) {
 		writer.WriteValue(1, v.Account.MarshalBinary)
 	}
 	if !(len(v.ChainState) == 0) {
@@ -2405,12 +2359,12 @@ func (v *ResponseAccount) MarshalBinary() ([]byte, error) {
 func (v *ResponseAccount) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field Account is missing")
-	} else if v.Account == nil {
+	} else if protocol.EqualAccount(v.Account, nil) {
 		errs = append(errs, "field Account is not set")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field ChainState is missing")
 	} else if len(v.ChainState) == 0 {
 		errs = append(errs, "field ChainState is not set")
@@ -2483,40 +2437,40 @@ func (v *ResponseByTxId) MarshalBinary() ([]byte, error) {
 func (v *ResponseByTxId) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field TxId is missing")
 	} else if v.TxId == nil {
 		errs = append(errs, "field TxId is not set")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Envelope is missing")
 	} else if v.Envelope == nil {
 		errs = append(errs, "field Envelope is not set")
 	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Status is missing")
 	} else if v.Status == nil {
 		errs = append(errs, "field Status is not set")
 	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Produced is missing")
 	} else if len(v.Produced) == 0 {
 		errs = append(errs, "field Produced is not set")
 	}
-	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field Height is missing")
 	}
-	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
 		errs = append(errs, "field ChainState is missing")
 	} else if len(v.ChainState) == 0 {
 		errs = append(errs, "field ChainState is not set")
 	}
-	if len(v.fieldsSet) > 7 && !v.fieldsSet[7] {
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
 		errs = append(errs, "field Receipts is missing")
 	} else if len(v.Receipts) == 0 {
 		errs = append(errs, "field Receipts is not set")
 	}
-	if len(v.fieldsSet) > 8 && !v.fieldsSet[8] {
+	if len(v.fieldsSet) > 7 && !v.fieldsSet[7] {
 		errs = append(errs, "field Signers is missing")
 	} else if len(v.Signers) == 0 {
 		errs = append(errs, "field Signers is not set")
@@ -2571,20 +2525,20 @@ func (v *ResponseChainEntry) MarshalBinary() ([]byte, error) {
 func (v *ResponseChainEntry) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field Type is missing")
 	} else if v.Type == 0 {
 		errs = append(errs, "field Type is not set")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Height is missing")
 	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Entry is missing")
 	} else if len(v.Entry) == 0 {
 		errs = append(errs, "field Entry is not set")
 	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field State is missing")
 	} else if len(v.State) == 0 {
 		errs = append(errs, "field State is not set")
@@ -2635,21 +2589,21 @@ func (v *ResponseChainRange) MarshalBinary() ([]byte, error) {
 func (v *ResponseChainRange) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field Type is missing")
 	} else if v.Type == 0 {
 		errs = append(errs, "field Type is not set")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Start is missing")
 	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field End is missing")
 	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Total is missing")
 	}
-	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field Entries is missing")
 	} else if len(v.Entries) == 0 {
 		errs = append(errs, "field Entries is not set")
@@ -2668,8 +2622,6 @@ func (v *ResponseChainRange) IsValid() error {
 var fieldNames_ResponseDataEntry = []string{
 	1: "EntryHash",
 	2: "Entry",
-	3: "TxId",
-	4: "CauseTxId",
 }
 
 func (v *ResponseDataEntry) MarshalBinary() ([]byte, error) {
@@ -2679,14 +2631,8 @@ func (v *ResponseDataEntry) MarshalBinary() ([]byte, error) {
 	if !(v.EntryHash == ([32]byte{})) {
 		writer.WriteHash(1, &v.EntryHash)
 	}
-	if !(v.Entry == nil) {
+	if !(protocol.EqualDataEntry(v.Entry, nil)) {
 		writer.WriteValue(2, v.Entry.MarshalBinary)
-	}
-	if !(v.TxId == nil) {
-		writer.WriteTxid(3, v.TxId)
-	}
-	if !(v.CauseTxId == nil) {
-		writer.WriteTxid(4, v.CauseTxId)
 	}
 
 	_, _, err := writer.Reset(fieldNames_ResponseDataEntry)
@@ -2700,25 +2646,15 @@ func (v *ResponseDataEntry) MarshalBinary() ([]byte, error) {
 func (v *ResponseDataEntry) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field EntryHash is missing")
 	} else if v.EntryHash == ([32]byte{}) {
 		errs = append(errs, "field EntryHash is not set")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Entry is missing")
-	} else if v.Entry == nil {
+	} else if protocol.EqualDataEntry(v.Entry, nil) {
 		errs = append(errs, "field Entry is not set")
-	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field TxId is missing")
-	} else if v.TxId == nil {
-		errs = append(errs, "field TxId is not set")
-	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
-		errs = append(errs, "field CauseTxId is missing")
-	} else if v.CauseTxId == nil {
-		errs = append(errs, "field CauseTxId is not set")
 	}
 
 	switch len(errs) {
@@ -2760,12 +2696,12 @@ func (v *ResponseDataEntrySet) MarshalBinary() ([]byte, error) {
 func (v *ResponseDataEntrySet) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field DataEntries is missing")
 	} else if len(v.DataEntries) == 0 {
 		errs = append(errs, "field DataEntries is not set")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Total is missing")
 	} else if v.Total == 0 {
 		errs = append(errs, "field Total is not set")
@@ -2810,17 +2746,17 @@ func (v *ResponseKeyPageIndex) MarshalBinary() ([]byte, error) {
 func (v *ResponseKeyPageIndex) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field Authority is missing")
 	} else if v.Authority == nil {
 		errs = append(errs, "field Authority is not set")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Signer is missing")
 	} else if v.Signer == nil {
 		errs = append(errs, "field Signer is not set")
 	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Index is missing")
 	}
 
@@ -2861,10 +2797,10 @@ func (v *ResponseMajorBlocks) MarshalBinary() ([]byte, error) {
 func (v *ResponseMajorBlocks) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field TotalBlocks is missing")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Entries is missing")
 	} else if len(v.Entries) == 0 {
 		errs = append(errs, "field Entries is not set")
@@ -2913,17 +2849,17 @@ func (v *ResponseMajorEntry) MarshalBinary() ([]byte, error) {
 func (v *ResponseMajorEntry) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field MajorBlockIndex is missing")
 	} else if v.MajorBlockIndex == 0 {
 		errs = append(errs, "field MajorBlockIndex is not set")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field MajorBlockTime is missing")
 	} else if v.MajorBlockTime == nil {
 		errs = append(errs, "field MajorBlockTime is not set")
 	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field MinorBlocks is missing")
 	} else if len(v.MinorBlocks) == 0 {
 		errs = append(errs, "field MinorBlocks is not set")
@@ -2966,10 +2902,10 @@ func (v *ResponseMinorBlocks) MarshalBinary() ([]byte, error) {
 func (v *ResponseMinorBlocks) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field TotalBlocks is missing")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Entries is missing")
 	} else if len(v.Entries) == 0 {
 		errs = append(errs, "field Entries is not set")
@@ -3028,27 +2964,27 @@ func (v *ResponseMinorEntry) MarshalBinary() ([]byte, error) {
 func (v *ResponseMinorEntry) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field BlockIndex is missing")
 	} else if v.BlockIndex == 0 {
 		errs = append(errs, "field BlockIndex is not set")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field BlockTime is missing")
 	} else if v.BlockTime == nil {
 		errs = append(errs, "field BlockTime is not set")
 	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field TxCount is missing")
 	} else if v.TxCount == 0 {
 		errs = append(errs, "field TxCount is not set")
 	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field TxIds is missing")
 	} else if len(v.TxIds) == 0 {
 		errs = append(errs, "field TxIds is not set")
 	}
-	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field Transactions is missing")
 	} else if len(v.Transactions) == 0 {
 		errs = append(errs, "field Transactions is not set")
@@ -3089,7 +3025,7 @@ func (v *ResponsePending) MarshalBinary() ([]byte, error) {
 func (v *ResponsePending) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field Transactions is missing")
 	} else if len(v.Transactions) == 0 {
 		errs = append(errs, "field Transactions is not set")
@@ -3136,16 +3072,16 @@ func (v *ResponseTxHistory) MarshalBinary() ([]byte, error) {
 func (v *ResponseTxHistory) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field Start is missing")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field End is missing")
 	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Total is missing")
 	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field Transactions is missing")
 	} else if len(v.Transactions) == 0 {
 		errs = append(errs, "field Transactions is not set")
@@ -3170,7 +3106,7 @@ func (v *SignatureSet) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
 
-	if !(v.Account == nil) {
+	if !(protocol.EqualAccount(v.Account, nil)) {
 		writer.WriteValue(1, v.Account.MarshalBinary)
 	}
 	if !(len(v.Signatures) == 0) {
@@ -3190,12 +3126,12 @@ func (v *SignatureSet) MarshalBinary() ([]byte, error) {
 func (v *SignatureSet) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field Account is missing")
-	} else if v.Account == nil {
+	} else if protocol.EqualAccount(v.Account, nil) {
 		errs = append(errs, "field Account is not set")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Signatures is missing")
 	} else if len(v.Signatures) == 0 {
 		errs = append(errs, "field Signatures is not set")
@@ -3243,12 +3179,12 @@ func (v *TxReceipt) IsValid() error {
 	if err := v.GeneralReceipt.IsValid(); err != nil {
 		errs = append(errs, err.Error())
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Account is missing")
 	} else if v.Account == nil {
 		errs = append(errs, "field Account is not set")
 	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Chain is missing")
 	} else if len(v.Chain) == 0 {
 		errs = append(errs, "field Chain is not set")
@@ -3285,7 +3221,7 @@ func (v *UnknownRequest) MarshalBinary() ([]byte, error) {
 func (v *UnknownRequest) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field Type is missing")
 	}
 
@@ -3387,19 +3323,16 @@ func (v *GeneralReceipt) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUint(1); ok {
 		v.LocalBlock = x
 	}
-	if x, ok := reader.ReadTime(2); ok {
-		v.LocalBlockTime = &x
-	}
-	if x, ok := reader.ReadUint(3); ok {
+	if x, ok := reader.ReadUint(2); ok {
 		v.DirectoryBlock = x
 	}
-	if x, ok := reader.ReadUint(4); ok {
+	if x, ok := reader.ReadUint(3); ok {
 		v.MajorBlock = x
 	}
-	if x := new(managed.Receipt); reader.ReadValue(5, x.UnmarshalBinary) {
+	if x := new(managed.Receipt); reader.ReadValue(4, x.UnmarshalBinary) {
 		v.Proof = *x
 	}
-	if x, ok := reader.ReadString(6); ok {
+	if x, ok := reader.ReadString(5); ok {
 		v.Error = x
 	}
 
@@ -4039,12 +3972,6 @@ func (v *ResponseDataEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 		}
 		return err
 	})
-	if x, ok := reader.ReadTxid(3); ok {
-		v.TxId = x
-	}
-	if x, ok := reader.ReadTxid(4); ok {
-		v.CauseTxId = x
-	}
 
 	seen, err := reader.Reset(fieldNames_ResponseDataEntry)
 	if err != nil {
@@ -4443,7 +4370,6 @@ func (v *DirectoryQueryResult) MarshalJSON() ([]byte, error) {
 func (v *GeneralReceipt) MarshalJSON() ([]byte, error) {
 	u := struct {
 		LocalBlock     uint64          `json:"localBlock,omitempty"`
-		LocalBlockTime *time.Time      `json:"localBlockTime,omitempty"`
 		DirectoryBlock uint64          `json:"directoryBlock,omitempty"`
 		MajorBlock     uint64          `json:"majorBlock,omitempty"`
 		Proof          managed.Receipt `json:"proof,omitempty"`
@@ -4451,7 +4377,6 @@ func (v *GeneralReceipt) MarshalJSON() ([]byte, error) {
 		Error          string          `json:"error,omitempty"`
 	}{}
 	u.LocalBlock = v.LocalBlock
-	u.LocalBlockTime = v.LocalBlockTime
 	u.DirectoryBlock = v.DirectoryBlock
 	u.MajorBlock = v.MajorBlock
 	u.Proof = v.Proof
@@ -4707,13 +4632,9 @@ func (v *ResponseDataEntry) MarshalJSON() ([]byte, error) {
 	u := struct {
 		EntryHash string                                         `json:"entryHash,omitempty"`
 		Entry     encoding.JsonUnmarshalWith[protocol.DataEntry] `json:"entry,omitempty"`
-		TxId      *url.TxID                                      `json:"txId,omitempty"`
-		CauseTxId *url.TxID                                      `json:"causeTxId,omitempty"`
 	}{}
 	u.EntryHash = encoding.ChainToJSON(v.EntryHash)
 	u.Entry = encoding.JsonUnmarshalWith[protocol.DataEntry]{Value: v.Entry, Func: protocol.UnmarshalDataEntryJSON}
-	u.TxId = v.TxId
-	u.CauseTxId = v.CauseTxId
 	return json.Marshal(&u)
 }
 
@@ -4829,7 +4750,6 @@ func (v *SignatureSet) MarshalJSON() ([]byte, error) {
 func (v *TxReceipt) MarshalJSON() ([]byte, error) {
 	u := struct {
 		LocalBlock     uint64          `json:"localBlock,omitempty"`
-		LocalBlockTime *time.Time      `json:"localBlockTime,omitempty"`
 		DirectoryBlock uint64          `json:"directoryBlock,omitempty"`
 		MajorBlock     uint64          `json:"majorBlock,omitempty"`
 		Proof          managed.Receipt `json:"proof,omitempty"`
@@ -4839,7 +4759,6 @@ func (v *TxReceipt) MarshalJSON() ([]byte, error) {
 		Chain          string          `json:"chain,omitempty"`
 	}{}
 	u.LocalBlock = v.GeneralReceipt.LocalBlock
-	u.LocalBlockTime = v.GeneralReceipt.LocalBlockTime
 	u.DirectoryBlock = v.GeneralReceipt.DirectoryBlock
 	u.MajorBlock = v.GeneralReceipt.MajorBlock
 	u.Proof = v.GeneralReceipt.Proof
@@ -4919,7 +4838,6 @@ func (v *DirectoryQueryResult) UnmarshalJSON(data []byte) error {
 func (v *GeneralReceipt) UnmarshalJSON(data []byte) error {
 	u := struct {
 		LocalBlock     uint64          `json:"localBlock,omitempty"`
-		LocalBlockTime *time.Time      `json:"localBlockTime,omitempty"`
 		DirectoryBlock uint64          `json:"directoryBlock,omitempty"`
 		MajorBlock     uint64          `json:"majorBlock,omitempty"`
 		Proof          managed.Receipt `json:"proof,omitempty"`
@@ -4927,7 +4845,6 @@ func (v *GeneralReceipt) UnmarshalJSON(data []byte) error {
 		Error          string          `json:"error,omitempty"`
 	}{}
 	u.LocalBlock = v.LocalBlock
-	u.LocalBlockTime = v.LocalBlockTime
 	u.DirectoryBlock = v.DirectoryBlock
 	u.MajorBlock = v.MajorBlock
 	u.Proof = v.Proof
@@ -4937,7 +4854,6 @@ func (v *GeneralReceipt) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	v.LocalBlock = u.LocalBlock
-	v.LocalBlockTime = u.LocalBlockTime
 	v.DirectoryBlock = u.DirectoryBlock
 	v.MajorBlock = u.MajorBlock
 	if !(u.Proof.Equal(&managed.Receipt{})) {
@@ -5377,13 +5293,9 @@ func (v *ResponseDataEntry) UnmarshalJSON(data []byte) error {
 	u := struct {
 		EntryHash string                                         `json:"entryHash,omitempty"`
 		Entry     encoding.JsonUnmarshalWith[protocol.DataEntry] `json:"entry,omitempty"`
-		TxId      *url.TxID                                      `json:"txId,omitempty"`
-		CauseTxId *url.TxID                                      `json:"causeTxId,omitempty"`
 	}{}
 	u.EntryHash = encoding.ChainToJSON(v.EntryHash)
 	u.Entry = encoding.JsonUnmarshalWith[protocol.DataEntry]{Value: v.Entry, Func: protocol.UnmarshalDataEntryJSON}
-	u.TxId = v.TxId
-	u.CauseTxId = v.CauseTxId
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -5394,8 +5306,6 @@ func (v *ResponseDataEntry) UnmarshalJSON(data []byte) error {
 	}
 	v.Entry = u.Entry.Value
 
-	v.TxId = u.TxId
-	v.CauseTxId = u.CauseTxId
 	return nil
 }
 
@@ -5581,7 +5491,6 @@ func (v *SignatureSet) UnmarshalJSON(data []byte) error {
 func (v *TxReceipt) UnmarshalJSON(data []byte) error {
 	u := struct {
 		LocalBlock     uint64          `json:"localBlock,omitempty"`
-		LocalBlockTime *time.Time      `json:"localBlockTime,omitempty"`
 		DirectoryBlock uint64          `json:"directoryBlock,omitempty"`
 		MajorBlock     uint64          `json:"majorBlock,omitempty"`
 		Proof          managed.Receipt `json:"proof,omitempty"`
@@ -5591,7 +5500,6 @@ func (v *TxReceipt) UnmarshalJSON(data []byte) error {
 		Chain          string          `json:"chain,omitempty"`
 	}{}
 	u.LocalBlock = v.GeneralReceipt.LocalBlock
-	u.LocalBlockTime = v.GeneralReceipt.LocalBlockTime
 	u.DirectoryBlock = v.GeneralReceipt.DirectoryBlock
 	u.MajorBlock = v.GeneralReceipt.MajorBlock
 	u.Proof = v.GeneralReceipt.Proof
@@ -5603,7 +5511,6 @@ func (v *TxReceipt) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	v.GeneralReceipt.LocalBlock = u.LocalBlock
-	v.GeneralReceipt.LocalBlockTime = u.LocalBlockTime
 	v.GeneralReceipt.DirectoryBlock = u.DirectoryBlock
 	v.GeneralReceipt.MajorBlock = u.MajorBlock
 	if !(u.Proof.Equal(&managed.Receipt{})) {

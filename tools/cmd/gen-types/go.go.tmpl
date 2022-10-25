@@ -149,7 +149,7 @@ func (v *{{.Name}}) IsValid() error {
 		errs = append(errs, err.Error())
 	}
 	{{- else}}
-	if len(v.fieldsSet) > {{.Number}} && !v.fieldsSet[{{.Number}}] {
+	if len(v.fieldsSet) > {{dec .Number}} && !v.fieldsSet[{{dec .Number}}] {
 		errs = append(errs, "field {{.Name}} is missing")
 	{{- if not .KeepEmpty}}
 	} else if {{isZero . (print "v." (get .))}} {
