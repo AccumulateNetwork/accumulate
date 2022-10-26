@@ -60,6 +60,8 @@ type DataEntryQueryResponse struct {
 	fieldsSet []bool
 	EntryHash [32]byte           `json:"entryHash,omitempty" form:"entryHash" query:"entryHash" validate:"required"`
 	Entry     protocol.DataEntry `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
+	TxId      *url.TxID          `json:"txId,omitempty" form:"txId" query:"txId" validate:"required"`
+	CauseTxId *url.TxID          `json:"causeTxId,omitempty" form:"causeTxId" query:"causeTxId" validate:"required"`
 	extraData []byte
 }
 
@@ -318,6 +320,12 @@ func (v *DataEntryQueryResponse) Copy() *DataEntryQueryResponse {
 	if v.Entry != nil {
 		u.Entry = protocol.CopyDataEntry(v.Entry)
 	}
+	if v.TxId != nil {
+		u.TxId = v.TxId
+	}
+	if v.CauseTxId != nil {
+		u.CauseTxId = v.CauseTxId
+	}
 
 	return u
 }
@@ -345,6 +353,22 @@ func (v *DataEntryQueryResponse) Equal(u *DataEntryQueryResponse) bool {
 		return false
 	}
 	if !(protocol.EqualDataEntry(v.Entry, u.Entry)) {
+		return false
+	}
+	switch {
+	case v.TxId == u.TxId:
+		// equal
+	case v.TxId == nil || u.TxId == nil:
+		return false
+	case !((v.TxId).Equal(u.TxId)):
+		return false
+	}
+	switch {
+	case v.CauseTxId == u.CauseTxId:
+		// equal
+	case v.CauseTxId == nil || u.CauseTxId == nil:
+		return false
+	case !((v.CauseTxId).Equal(u.CauseTxId)):
 		return false
 	}
 
@@ -397,6 +421,8 @@ func (v *DataEntryQuery) IsValid() error {
 var fieldNames_DataEntryQueryResponse = []string{
 	1: "EntryHash",
 	2: "Entry",
+	3: "TxId",
+	4: "CauseTxId",
 }
 
 func (v *DataEntryQueryResponse) MarshalBinary() ([]byte, error) {
@@ -408,6 +434,12 @@ func (v *DataEntryQueryResponse) MarshalBinary() ([]byte, error) {
 	}
 	if !(protocol.EqualDataEntry(v.Entry, nil)) {
 		writer.WriteValue(2, v.Entry.MarshalBinary)
+	}
+	if !(v.TxId == nil) {
+		writer.WriteTxid(3, v.TxId)
+	}
+	if !(v.CauseTxId == nil) {
+		writer.WriteTxid(4, v.CauseTxId)
 	}
 
 	_, _, err := writer.Reset(fieldNames_DataEntryQueryResponse)
@@ -430,6 +462,16 @@ func (v *DataEntryQueryResponse) IsValid() error {
 		errs = append(errs, "field Entry is missing")
 	} else if protocol.EqualDataEntry(v.Entry, nil) {
 		errs = append(errs, "field Entry is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field TxId is missing")
+	} else if v.TxId == nil {
+		errs = append(errs, "field TxId is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field CauseTxId is missing")
+	} else if v.CauseTxId == nil {
+		errs = append(errs, "field CauseTxId is not set")
 	}
 
 	switch len(errs) {
@@ -485,6 +527,12 @@ func (v *DataEntryQueryResponse) UnmarshalBinaryFrom(rd io.Reader) error {
 		}
 		return err
 	})
+	if x, ok := reader.ReadTxid(3); ok {
+		v.TxId = x
+	}
+	if x, ok := reader.ReadTxid(4); ok {
+		v.CauseTxId = x
+	}
 
 	seen, err := reader.Reset(fieldNames_DataEntryQueryResponse)
 	if err != nil {
@@ -557,9 +605,13 @@ func (v *DataEntryQueryResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
 		EntryHash string                                         `json:"entryHash,omitempty"`
 		Entry     encoding.JsonUnmarshalWith[protocol.DataEntry] `json:"entry,omitempty"`
+		TxId      *url.TxID                                      `json:"txId,omitempty"`
+		CauseTxId *url.TxID                                      `json:"causeTxId,omitempty"`
 	}{}
 	u.EntryHash = encoding.ChainToJSON(v.EntryHash)
 	u.Entry = encoding.JsonUnmarshalWith[protocol.DataEntry]{Value: v.Entry, Func: protocol.UnmarshalDataEntryJSON}
+	u.TxId = v.TxId
+	u.CauseTxId = v.CauseTxId
 	return json.Marshal(&u)
 }
 
@@ -1131,9 +1183,13 @@ func (v *DataEntryQueryResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
 		EntryHash string                                         `json:"entryHash,omitempty"`
 		Entry     encoding.JsonUnmarshalWith[protocol.DataEntry] `json:"entry,omitempty"`
+		TxId      *url.TxID                                      `json:"txId,omitempty"`
+		CauseTxId *url.TxID                                      `json:"causeTxId,omitempty"`
 	}{}
 	u.EntryHash = encoding.ChainToJSON(v.EntryHash)
 	u.Entry = encoding.JsonUnmarshalWith[protocol.DataEntry]{Value: v.Entry, Func: protocol.UnmarshalDataEntryJSON}
+	u.TxId = v.TxId
+	u.CauseTxId = v.CauseTxId
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -1144,6 +1200,8 @@ func (v *DataEntryQueryResponse) UnmarshalJSON(data []byte) error {
 	}
 	v.Entry = u.Entry.Value
 
+	v.TxId = u.TxId
+	v.CauseTxId = u.CauseTxId
 	return nil
 }
 
