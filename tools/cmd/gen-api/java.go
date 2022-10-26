@@ -4,9 +4,13 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package static
+package main
 
-import "embed"
+import (
+	_ "embed"
+)
 
-//go:embed *
-var FS embed.FS
+//go:embed java.tmpl
+var javaSrc string
+
+var _ = Templates.Register(javaSrc, "java", nil, "Java")

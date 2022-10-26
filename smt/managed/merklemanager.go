@@ -137,6 +137,11 @@ func (m *MerkleManager) GetState(element int64) *MerkleState {
 // We only store the state at MarkPoints.  This function computes a missing
 // state even if one isn't stored for a particular element.
 func (m *MerkleManager) GetAnyState(element int64) (ms *MerkleState, err error) {
+	if element == -1 { //                                A need exists for the state before adding the first element
+		ms = new(MerkleState) //                         In that case, just allocate a MerkleState
+		ms.InitSha256()       //                         Initialize its hash function
+		return ms, nil        //                         And all is golden
+	}
 	if ms = m.GetState(element); ms != nil { //          Shoot for broke. Return a state if it is in the db
 		return ms, nil
 	}
