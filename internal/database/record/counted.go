@@ -120,6 +120,31 @@ func (c *Counted[T]) Last() (int, T, error) {
 	return count - 1, v, nil
 }
 
+// Overwrite overwrites the count and all entries. Overwrite will return an
+// error if len(v) is less than the current count.
+func (c *Counted[T]) Overwrite(v []T) error {
+	n, err := c.Count()
+	if err != nil {
+		return errors.Wrap(errors.StatusUnknownError, err)
+	}
+	if len(v) < n {
+		return errors.Format(errors.StatusBadRequest, "cannot overwrite with fewer values")
+	}
+
+	err = c.count.Put(uint64(len(v)))
+	if err != nil {
+		return errors.Wrap(errors.StatusUnknownError, err)
+	}
+
+	for i, v := range v {
+		err = c.value(i).Put(v)
+		if err != nil {
+			return errors.Wrap(errors.StatusUnknownError, err)
+		}
+	}
+	return nil
+}
+
 // IsDirty implements Record.IsDirty.
 func (c *Counted[T]) IsDirty() bool {
 	if c == nil {
