@@ -25,12 +25,12 @@ type RandHash struct {
 // Really returns a 63 bit number, as the return value is always positive.
 func (n *RandHash) GetRandInt64() int64 {
 	next := n.Next()
-	return ((((((((int64(next[0])&0x7F) << 8) + // And with 0x7F to clear high bit
-		int64(next[1]))<<8 +
-		int64(next[2]))<<8 +
-		int64(next[3]))<<8 +
-		int64(next[4]))<<8 +
-		int64(next[5]))<<8 +
+	return ((((((((int64(next[0])&0x7F)<<8)+ // And with 0x7F to clear high bit
+		int64(next[1]))<<8+
+		int64(next[2]))<<8+
+		int64(next[3]))<<8+
+		int64(next[4]))<<8+
+		int64(next[5]))<<8+
 		int64(next[6]))<<8 +
 		int64(next[7])
 }
