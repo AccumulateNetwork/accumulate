@@ -124,6 +124,7 @@ var DefaultLogLevels = LogLevel{}.
 	SetModule("synthetic", "info").
 	// SetModule("storage", "debug").
 	// SetModule("database", "debug").
+	SetModule("website", "info").
 	// SetModule("disk-monitor", "info").
 	// SetModule("init", "info").
 	String()
@@ -134,7 +135,6 @@ func Default(netName string, net NetworkType, _ NodeType, partitionId string) *C
 	c.Accumulate.NetworkType = net
 	c.Accumulate.PartitionId = partitionId
 	c.Accumulate.API.PrometheusServer = "http://18.119.26.7:9090"
-	c.Accumulate.Website.Enabled = true
 	c.Accumulate.API.TxMaxWaitTime = 10 * time.Minute
 	c.Accumulate.API.EnableDebugMethods = true
 	c.Accumulate.API.ConnectionLimit = 500
@@ -146,6 +146,7 @@ func Default(netName string, net NetworkType, _ NodeType, partitionId string) *C
 	c.Accumulate.AnalysisLog.Directory = "analysis"
 	c.Accumulate.AnalysisLog.Enabled = false
 	c.Accumulate.API.ReadHeaderTimeout = 10 * time.Second
+	c.Accumulate.BatchReplayLimit = 500
 	// c.Accumulate.Snapshots.Frequency = 2
 	c.Config = *tm.DefaultConfig()
 	c.LogLevel = DefaultLogLevels
@@ -160,14 +161,14 @@ type Config struct {
 }
 
 type Accumulate struct {
-	// SentryDSN string `toml:"sentry-dsn" mapstructure:"sentry-dsn"`
-	Describe `toml:"describe" mapstructure:"describe"`
+	Describe         `toml:"describe" mapstructure:"describe"`
+	BatchReplayLimit int `toml:"batch-replay-limit" mapstructure:"batch-replay-limit"`
+
 	// TODO: move network config to its own file since it will be constantly changing over time.
 	//	NetworkConfig string      `toml:"network" mapstructure:"network"`
 	Snapshots   Snapshots   `toml:"snapshots" mapstructure:"snapshots"`
 	Storage     Storage     `toml:"storage" mapstructure:"storage"`
 	API         API         `toml:"api" mapstructure:"api"`
-	Website     Website     `toml:"website" mapstructure:"website"`
 	AnalysisLog AnalysisLog `toml:"analysis" mapstructure:"analysis"`
 }
 
@@ -240,11 +241,6 @@ type API struct {
 	EnableDebugMethods bool          `toml:"enable-debug-methods" mapstructure:"enable-debug-methods"`
 	ConnectionLimit    int           `toml:"connection-limit" mapstructure:"connection-limit"`
 	ReadHeaderTimeout  time.Duration `toml:"read-header-timeout" mapstructure:"read-header-timeout"`
-}
-
-type Website struct {
-	Enabled       bool   `toml:"website-enabled" mapstructure:"website-enabled"`
-	ListenAddress string `toml:"website-listen-address" mapstructure:"website-listen-address"`
 }
 
 func MakeAbsolute(root, path string) string {
