@@ -31,6 +31,18 @@ func MustBuild(t testing.TB, b interface {
 	return delivery[0]
 }
 
+func MustGet0[T any](t testing.TB, fn func() (T, error)) T {
+	v, err := fn()
+	require.NoError(t, err)
+	return v
+}
+
+func MustGet1[T, A1 any](t testing.TB, fn func(A1) (T, error), a1 A1) T {
+	v, err := fn(a1)
+	require.NoError(t, err)
+	return v
+}
+
 func View(t testing.TB, db database.Viewer, fn func(batch *database.Batch)) {
 	t.Helper()
 	require.NoError(t, db.View(func(batch *database.Batch) error {
