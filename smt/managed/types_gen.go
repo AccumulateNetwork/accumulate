@@ -415,22 +415,22 @@ func (v *ReceiptList) MarshalBinary() ([]byte, error) {
 func (v *ReceiptList) IsValid() error {
 	var errs []string
 
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field MerkleState is missing")
 	} else if v.MerkleState == nil {
 		errs = append(errs, "field MerkleState is not set")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Elements is missing")
 	} else if len(v.Elements) == 0 {
 		errs = append(errs, "field Elements is not set")
 	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field Receipt is missing")
 	} else if v.Receipt == nil {
 		errs = append(errs, "field Receipt is not set")
 	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field ContinuedReceipt is missing")
 	} else if v.ContinuedReceipt == nil {
 		errs = append(errs, "field ContinuedReceipt is not set")
