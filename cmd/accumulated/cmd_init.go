@@ -30,7 +30,6 @@ import (
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 	"github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate"
-	cmd2 "gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/cmd"
 	cfg "gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
@@ -357,17 +356,15 @@ func initNodeFromSeedProxy(cmd *cobra.Command, args []string) (int, *cfg.Config,
 		return 0, nil, nil, err
 	}
 
-	cmd2.Client = lastHealthyAccPeer
 	//now check the resigtry keybook to make sure the proxy is a registered proxy
-	res, err := cmd2.GetUrl("accuproxy.acme/registry/1")
+	kp := new(protocol.KeyPage)
+	res := new(api.ChainQueryResponse)
+	res.Data = kp
+	req := new(api.GeneralQuery)
+	req.Url = protocol.AccountUrl("accuproxy.acme").JoinPath("registry", "1")
+	err = lastHealthyAccPeer.RequestAPIv2(context.Background(), "query", req, res)
 	if err != nil {
 		return 0, nil, nil, fmt.Errorf("cannot query the accuproxy registry, %v", err)
-	}
-
-	kp := protocol.KeyPage{}
-	err = cmd2.Remarshal(res.Data, &kp)
-	if err != nil {
-		return 0, nil, nil, fmt.Errorf("cannot remarshal key page, %v", err)
 	}
 
 	_, _, found := kp.EntryByKeyHash(resp.Signature.GetPublicKeyHash())
