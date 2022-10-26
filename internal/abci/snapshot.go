@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package abci
 
 import (
@@ -11,20 +17,19 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	_ "gitlab.com/accumulatenetwork/accumulate/smt/pmt"
 )
 
 // ListSnapshots queries the node for available snapshots.
-func (app *Accumulator) ListSnapshots(req abci.RequestListSnapshots) abci.ResponseListSnapshots {
-	snapDir := config.MakeAbsolute(app.RootDir, app.Accumulate.Snapshots.Directory)
+func ListSnapshots(cfg *config.Config) ([]*snapshot.Header, error) {
+	snapDir := config.MakeAbsolute(cfg.RootDir, cfg.Accumulate.Snapshots.Directory)
 	entries, err := os.ReadDir(snapDir)
 	if err != nil {
-		app.logger.Error("Failed to load snapshot", "error", err)
-		return abci.ResponseListSnapshots{}
+		return nil, errors.Format(errors.StatusUnknownError, "load snapshot: %w", err)
 	}
 
-	var resp abci.ResponseListSnapshots
-	resp.Snapshots = make([]*abci.Snapshot, 0, len(entries))
+	snapshots := make([]*snapshot.Header, 0, len(entries))
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
@@ -36,17 +41,30 @@ func (app *Accumulator) ListSnapshots(req abci.RequestListSnapshots) abci.Respon
 		filename := filepath.Join(snapDir, entry.Name())
 		f, err := os.Open(filename)
 		if err != nil {
-			app.logger.Error("Failed to load snapshot", "error", err, "name", entry.Name())
-			continue
+			return nil, errors.Format(errors.StatusUnknownError, "load snapshot %s: %w", entry.Name(), err)
 		}
 		defer f.Close()
 
 		header, _, err := snapshot.Open(f)
 		if err != nil {
-			app.logger.Error("Failed to read snapshot header", "error", err, "name", entry.Name())
-			continue
+			return nil, errors.Format(errors.StatusUnknownError, "open snapshot %s: %w", entry.Name(), err)
 		}
 
+		snapshots = append(snapshots, header)
+	}
+	return snapshots, nil
+}
+
+func (app *Accumulator) ListSnapshots(req abci.RequestListSnapshots) abci.ResponseListSnapshots {
+	entries, err := ListSnapshots(app.Config)
+	if err != nil {
+		app.logger.Error("Failed to list snapshots", "error", err)
+		return abci.ResponseListSnapshots{}
+	}
+
+	var resp abci.ResponseListSnapshots
+	resp.Snapshots = make([]*abci.Snapshot, 0, len(entries))
+	for _, header := range entries {
 		resp.Snapshots = append(resp.Snapshots, &abci.Snapshot{
 			Height: header.Height,
 			Format: uint32(header.Version),
@@ -109,5 +127,6 @@ func (app *Accumulator) ApplySnapshotChunk(req abci.RequestApplySnapshotChunk) a
 		return abci.ResponseApplySnapshotChunk{Result: abci.ResponseApplySnapshotChunk_ABORT}
 	}
 
+	app.ready = true
 	return abci.ResponseApplySnapshotChunk{Result: abci.ResponseApplySnapshotChunk_ACCEPT}
 }

@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package chain
 
 import (
@@ -88,12 +94,13 @@ func (WriteData) Validate(st *StateManager, tx *Delivery) (protocol.TransactionR
 		return nil, errors.Format(errors.StatusInternalError, "invalid payload: want %T, got %T", new(protocol.WriteData), tx.Transaction.Body)
 	}
 
-	if body.Entry == nil {
-		return nil, errors.Format(errors.StatusBadRequest, "entry is missing")
+	err := validateDataEntry(st, body.Entry)
+	if err != nil {
+		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	//check will return error if there is too much data or no data for the entry
-	_, err := protocol.CheckDataEntrySize(body.Entry)
+	_, err = protocol.CheckDataEntrySize(body.Entry)
 	if err != nil {
 		return nil, err
 	}
@@ -139,4 +146,26 @@ func executeWriteFullDataAccount(st *StateManager, entry protocol.DataEntry, scr
 
 	st.UpdateData(st.Origin, result.EntryHash[:], entry)
 	return result, nil
+}
+
+func validateDataEntry(st *StateManager, entry protocol.DataEntry) error {
+	if entry == nil {
+		return errors.Format(errors.StatusBadRequest, "entry is missing")
+	}
+
+	limit := int(st.Globals.Globals.Limits.DataEntryParts)
+	switch entry := entry.(type) {
+	case *protocol.FactomDataEntryWrapper:
+		// Avoid allocating, return a different error message
+		if len(entry.ExtIds) > limit-1 {
+			return errors.Format(errors.StatusBadRequest, "data entry contains too many ext IDs")
+		}
+
+	default:
+		if len(entry.GetData()) > limit {
+			return errors.Format(errors.StatusBadRequest, "data entry contains too many parts")
+		}
+	}
+
+	return nil
 }

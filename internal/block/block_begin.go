@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package block
 
 import (
@@ -6,7 +12,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
-	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/shared"
@@ -182,7 +187,7 @@ func (x *Executor) finalizeBlock(block *Block) error {
 	}
 
 	// Send the block anchor
-	sequenceNumber := anchorLedger.Partition(protocol.DnUrl()).Produced
+	sequenceNumber := anchorLedger.MinorBlockSequenceNumber
 	x.logger.Debug("Anchor block", "module", "anchoring", "index", ledger.Index, "seq-num", sequenceNumber)
 
 	// Load the root chain
@@ -239,7 +244,7 @@ func (x *Executor) finalizeBlock(block *Block) error {
 	case config.Directory:
 		anchor := anchor.(*protocol.DirectoryAnchor)
 		if anchor.MakeMajorBlock > 0 {
-			x.logger.Info("Start major block", "major-index", anchor.MajorBlockIndex, "minor-index", ledger.Index)
+			x.logger.Info("Start major block", "major-index", anchor.MakeMajorBlock, "minor-index", ledger.Index)
 			block.State.OpenedMajorBlock = true
 			x.ExecutorOptions.MajorBlockScheduler.UpdateNextMajorBlockTime(anchor.MakeMajorBlockTime)
 		}
@@ -334,13 +339,8 @@ func (x *Executor) sendSyntheticTransactions(batch *database.Batch, isLeader boo
 		}
 
 		for _, receipt := range anchor.Receipts {
-			partition, ok := protocol.ParsePartitionUrl(receipt.Anchor.Source)
-			if !ok {
-				return errors.Format(errors.StatusBadRequest, "invalid source: %v is not a partition", receipt.Anchor.Source)
-			}
-
 			// Ignore receipts for other partitions
-			if !strings.EqualFold(partition, x.Describe.PartitionId) {
+			if !x.Describe.PartitionUrl().URL.LocalTo(receipt.Anchor.Source) {
 				continue
 			}
 
@@ -481,8 +481,8 @@ func (x *Executor) sendBlockAnchor(batch *database.Batch, anchor protocol.Anchor
 		return errors.Wrap(errors.StatusInternalError, err)
 	}
 
-	// Send
-	if !x.IsFollower {
+	// Only send anchors from a validator
+	if x.isValidator {
 		err = x.dispatcher.BroadcastTx(context.Background(), destPartUrl, env)
 		if err != nil {
 			return errors.Wrap(errors.StatusUnknownError, err)

@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package main
 
 import (
@@ -39,7 +45,7 @@ func loadNetworkConfiguration(file string) (ret *accumulated.NetworkInit, err er
 	return ret, err
 }
 
-//load network config file
+// load network config file
 func initNetwork(cmd *cobra.Command, args []string) {
 	networkConfigFile := args[0]
 	network, err := loadNetworkConfiguration(networkConfigFile)
@@ -141,10 +147,6 @@ func initNetworkLocalFS(cmd *cobra.Command, netInit *accumulated.NetworkInit) {
 					config.Consensus.CreateEmptyBlocks = false
 				}
 
-				if cmd.Flag("dn-stall-limit").Changed {
-					config.Accumulate.DnStallLimit = flagInit.DnStallLimit
-				}
-
 				if len(flagInit.Etcd) > 0 {
 					config.Accumulate.Storage.Type = cfg.EtcdStorage
 					config.Accumulate.Storage.Etcd = new(etcd.Config)
@@ -152,10 +154,10 @@ func initNetworkLocalFS(cmd *cobra.Command, netInit *accumulated.NetworkInit) {
 					config.Accumulate.Storage.Etcd.DialTimeout = 5 * time.Second
 				}
 			}
-			configs[i][j][0].Config.PrivValidator.Key = "../priv_validator_key.json"
+			configs[i][j][0].Config.PrivValidatorKey = "../priv_validator_key.json"
 			err = accumulated.WriteNodeFiles(configs[i][j][0], node.PrivValKey, node.NodeKey, dnGenDoc)
 			checkf(err, "write DNN files")
-			configs[i][j][1].Config.PrivValidator.Key = "../priv_validator_key.json"
+			configs[i][j][1].Config.PrivValidatorKey = "../priv_validator_key.json"
 			err = accumulated.WriteNodeFiles(configs[i][j][1], node.PrivValKey, node.NodeKey, bvnGenDoc)
 			checkf(err, "write BVNN files")
 

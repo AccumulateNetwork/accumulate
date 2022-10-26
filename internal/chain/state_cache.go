@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package chain
 
 import (
@@ -134,11 +140,16 @@ func (st *stateCache) Update(accounts ...protocol.Account) error {
 func (st *stateCache) createOrUpdate(isUpdate bool, accounts []protocol.Account) error {
 	isCreate := !isUpdate
 	for _, account := range accounts {
+		err := protocol.IsValidAccountPath(account.GetUrl().Path)
+		if err != nil {
+			return errors.Format(errors.StatusBadRequest, "invalid account path: %w", err)
+		}
+
 		rec := st.batch.Account(account.GetUrl())
 		if len(account.GetUrl().String()) > protocol.AccountUrlMaxLength {
 			return errors.Wrap(errors.StatusBadUrlLength, fmt.Errorf("url specified exceeds maximum character length: %s", account.GetUrl().String()))
 		}
-		_, err := rec.GetState()
+		_, err = rec.GetState()
 		switch {
 		case err != nil && !errors.Is(err, storage.ErrNotFound):
 			return errors.Format(errors.StatusUnknownError, "failed to check for an existing record: %v", err)
@@ -174,9 +185,12 @@ func (st *stateCache) createOrUpdate(isUpdate bool, accounts []protocol.Account)
 		// Add it to the directory
 		if isCreate {
 			u := account.GetUrl()
-			err = st.AddDirectoryEntry(u.Identity(), u)
-			if err != nil {
-				return errors.Format(errors.StatusUnknownError, "failed to add a directory entry for %q: %w", u, err)
+			p, ok := u.Parent()
+			if ok {
+				err = st.AddDirectoryEntry(p, u)
+				if err != nil {
+					return errors.Format(errors.StatusUnknownError, "failed to add a directory entry for %q: %w", u, err)
+				}
 			}
 		}
 

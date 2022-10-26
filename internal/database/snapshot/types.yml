@@ -9,8 +9,12 @@ Header:
   - name: RootHash
     description: is the snapshot's root hash
     type: hash
+  - name: Timestamp
+    description: is the snapshot's block time
+    type: time
 
 Account:
+  ignore-size-limit: true # HACK
   fields:
   - name: Hash
     type: hash
@@ -19,9 +23,9 @@ Account:
     description: is the main state of the account
     type: protocol.Account
     marshal-as: union
-  - name: Chains
-    description: is the state of the account's chains
-    type: ChainState
+  - name: OldChains
+    description: is deprecated. Use Chains instead
+    type: OldChain
     marshal-as: reference
     pointer: true
     repeatable: true
@@ -39,8 +43,14 @@ Account:
     description: is the URL of the account
     type: url
     pointer: true
+  - name: Chains
+    description: is the state of the account's chains
+    type: managed.Snapshot
+    marshal-as: reference
+    pointer: true
+    repeatable: true
 
-Chain:
+OldChain:
   fields:
   - name: Name
     type: string

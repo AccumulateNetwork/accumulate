@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package chain
 
 import (
@@ -22,7 +28,6 @@ type ReceivedAnchor struct {
 	Partition string
 	Body      protocol.AnchorBody
 	Index     int64
-	Status    *protocol.TransactionStatus
 }
 
 // DidProduceTxn records a produced transaction.
@@ -33,8 +38,8 @@ func (s *ProcessTransactionState) DidProduceTxn(url *url.URL, body protocol.Tran
 	s.ProducedTxns = append(s.ProducedTxns, txn)
 }
 
-func (s *ProcessTransactionState) DidReceiveAnchor(partition string, body protocol.AnchorBody, index int64, status *protocol.TransactionStatus) {
-	s.ReceivedAnchors = append(s.ReceivedAnchors, &ReceivedAnchor{partition, body, index, status})
+func (s *ProcessTransactionState) DidReceiveAnchor(partition string, body protocol.AnchorBody, index int64) {
+	s.ReceivedAnchors = append(s.ReceivedAnchors, &ReceivedAnchor{partition, body, index})
 }
 
 func (s *ProcessTransactionState) ProcessAdditionalTransaction(txn *Delivery) {

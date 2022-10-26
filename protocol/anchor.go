@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package protocol
 
 import "gitlab.com/accumulatenetwork/accumulate/internal/errors"
@@ -28,6 +34,10 @@ func unmarshalAnchorBody(body TransactionBody, err error) (AnchorBody, error) {
 	}
 
 	return anchor, nil
+}
+
+func CopyAnchorBody(v AnchorBody) AnchorBody {
+	return v.CopyAsInterface().(AnchorBody)
 }
 
 func UnmarshalAnchorBody(b []byte) (AnchorBody, error) {

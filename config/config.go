@@ -1,8 +1,13 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package config
 
 import (
 	"fmt"
-	"io"
 	"net"
 	"net/url"
 	"os"
@@ -15,6 +20,7 @@ import (
 	"github.com/pelletier/go-toml"
 	"github.com/spf13/viper"
 	tm "github.com/tendermint/tendermint/config"
+	"github.com/tendermint/tendermint/privval"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	etcd "go.etcd.io/etcd/client/v3"
@@ -106,6 +112,7 @@ func (l LogLevel) String() string {
 
 var DefaultLogLevels = LogLevel{}.
 	SetDefault("error").
+	SetModule("statesync", "info").
 	SetModule("snapshot", "info").
 	SetModule("restore", "info").
 	// SetModule("accumulate", "info").
@@ -122,14 +129,12 @@ var DefaultLogLevels = LogLevel{}.
 	// SetModule("init", "info").
 	String()
 
-func Default(netName string, net NetworkType, node NodeType, partitionId string) *Config {
+func Default(netName string, net NetworkType, _ NodeType, partitionId string) *Config {
 	c := new(Config)
 	c.Accumulate.Network.Id = netName
 	c.Accumulate.NetworkType = net
 	c.Accumulate.PartitionId = partitionId
-	c.Accumulate.DnStallLimit = 50
 	c.Accumulate.API.PrometheusServer = "http://18.119.26.7:9090"
-	c.Accumulate.SentryDSN = "https://glet_78c3bf45d009794a4d9b0c990a1f1ed5@gitlab.com/api/v4/error_tracking/collector/29762666"
 	c.Accumulate.API.TxMaxWaitTime = 10 * time.Minute
 	c.Accumulate.API.EnableDebugMethods = true
 	c.Accumulate.API.ConnectionLimit = 500
@@ -137,17 +142,13 @@ func Default(netName string, net NetworkType, node NodeType, partitionId string)
 	c.Accumulate.Storage.Path = filepath.Join("data", "accumulate.db")
 	c.Accumulate.Snapshots.Directory = "snapshots"
 	c.Accumulate.Snapshots.RetainCount = 10
+	c.Accumulate.Snapshots.Schedule = protocol.DefaultMajorBlockSchedule
 	c.Accumulate.AnalysisLog.Directory = "analysis"
 	c.Accumulate.AnalysisLog.Enabled = false
 	c.Accumulate.API.ReadHeaderTimeout = 10 * time.Second
 	c.Accumulate.BatchReplayLimit = 500
 	// c.Accumulate.Snapshots.Frequency = 2
-	switch node {
-	case Validator:
-		c.Config = *tm.DefaultValidatorConfig()
-	default:
-		c.Config = *tm.DefaultConfig()
-	}
+	c.Config = *tm.DefaultConfig()
 	c.LogLevel = DefaultLogLevels
 	c.Instrumentation.Prometheus = true
 	c.ProxyApp = ""
@@ -160,12 +161,8 @@ type Config struct {
 }
 
 type Accumulate struct {
-	SentryDSN        string `toml:"sentry-dsn" mapstructure:"sentry-dsn"`
 	Describe         `toml:"describe" mapstructure:"describe"`
 	BatchReplayLimit int `toml:"batch-replay-limit" mapstructure:"batch-replay-limit"`
-	// DnStallLimit sets the number of blocks the DN is allowed to take before
-	// acknowledging an anchor.
-	DnStallLimit int `toml:"dn-stall-limit" mapstructure:"dn-stall-limit"`
 
 	// TODO: move network config to its own file since it will be constantly changing over time.
 	//	NetworkConfig string      `toml:"network" mapstructure:"network"`
@@ -182,9 +179,8 @@ type Snapshots struct {
 	// RetainCount is the number of snapshots to retain
 	RetainCount int `toml:"retain" mapstructure:"retain"`
 
-	// // Frequency is how many major blocks should occur before another snapshot
-	// // is taken
-	// Frequency int `toml:"frequency" mapstructure:"frequency"`
+	// Schedule is the schedule for capturing snapshots.
+	Schedule string `toml:"schedule" mapstructure:"schedule"`
 }
 
 type AnalysisLog struct {
@@ -295,6 +291,10 @@ func (n *Network) GetPartitionByID(partitionID string) *Partition {
 	return nil
 }
 
+func LoadFilePV(keyFilePath, stateFilePath string) (*privval.FilePV, error) {
+	return privval.LoadFilePVSafe(keyFilePath, stateFilePath)
+}
+
 func Load(dir string) (*Config, error) {
 	return loadFile(dir, filepath.Join(dir, configDir, tmConfigFile), filepath.Join(dir, configDir, accConfigFile))
 }
@@ -314,23 +314,22 @@ func loadFile(dir, tmFile, accFile string) (*Config, error) {
 }
 
 func Store(config *Config) error {
-	err := config.Config.WriteToTemplate(filepath.Join(config.RootDir, configDir, tmConfigFile))
+	err := tm.WriteConfigFileSave(filepath.Join(config.RootDir, configDir, tmConfigFile), &config.Config)
 	if err != nil {
 		return err
 	}
 
-	f, err := os.Create(filepath.Join(config.RootDir, configDir, accConfigFile))
+	return writeTomlFile(config.Accumulate, filepath.Join(config.RootDir, configDir, accConfigFile))
+}
+
+func writeTomlFile(v any, file string) error {
+	f, err := os.Create(file)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
 
-	_, err = f.Seek(0, io.SeekEnd)
-	if err != nil {
-		return err
-	}
-
-	return toml.NewEncoder(f).Encode(config.Accumulate)
+	return toml.NewEncoder(f).Encode(v)
 }
 
 func loadTendermint(dir, file string) (*tm.Config, error) {

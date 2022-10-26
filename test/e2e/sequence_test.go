@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package e2e
 
 import (
@@ -12,8 +18,13 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/internal/sortutil"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/test/helpers"
 )
 
 func TestOutOfSequenceSynth(t *testing.T) {
@@ -274,4 +285,100 @@ func TestMissingAnchorTxn(t *testing.T) {
 
 	// Wait for the synthetic transaction - the BVN must be able to heal itself
 	sim.WaitForTransactionFlow(delivered, synth[:])
+}
+
+func TestPoisonedAnchorTxn(t *testing.T) {
+	lite := acctesting.AcmeLiteAddressStdPriv(acctesting.GenerateKey("Lite"))
+	badKey := acctesting.GenerateKey("Bad")
+
+	// Initialize
+	sim := simulator.New(t, 3)
+	sim.InitFromGenesis()
+
+	// Poison the next anchor
+	var poisoned *Transaction
+	var original []*chain.Delivery
+	var poison protocol.Signature
+	x := sim.PartitionFor(lite)
+	x.SubmitHook = func(envelopes []*chain.Delivery) ([]*chain.Delivery, bool) {
+		for i, env := range envelopes {
+			_, ok := env.Transaction.Body.(*DirectoryAnchor)
+			if !ok {
+				continue
+			}
+
+			// After poisoning, remove any other signatures
+			if poisoned != nil {
+				if env.Transaction.Equal(poisoned) {
+					sortutil.RemoveAt(&envelopes, i)
+				}
+				return envelopes, true
+			}
+
+			for i, sig := range env.Signatures {
+				if sig.GetTransactionHash() != env.Transaction.ID().Hash() {
+					continue
+				}
+				sig, ok := sig.(KeySignature)
+				if !ok {
+					continue
+				}
+
+				// Make a copy of the original
+				og := new(chain.Delivery)
+				og.Transaction = env.Transaction.Copy()
+				for _, sig := range env.Signatures {
+					og.Signatures = append(og.Signatures, sig.CopyAsInterface().(Signature))
+				}
+				original = append(original, og)
+
+				// Poison the signature
+				poisoned = env.Transaction
+				signer, err := new(signing.Builder).Import(sig)
+				require.NoError(t, err)
+				signer.SetPrivateKey(badKey)
+				hash := sig.GetTransactionHash()
+				poison, err = signer.Sign(hash[:])
+				require.NoError(t, err)
+				env.Signatures[i] = poison
+				return envelopes, true
+			}
+		}
+		return envelopes, true
+	}
+
+	// Wait for the anchor to be poisoned
+	for i := 0; i < 50 && poisoned == nil; i++ {
+		sim.ExecuteBlock(nil)
+	}
+	require.NotNil(t, poisoned, "Anchor not received within 50 blocks")
+
+	// Execute the anchor
+	sim.ExecuteBlocks(10)
+	x.SubmitHook = nil
+
+	helpers.View(t, x, func(batch *database.Batch) {
+		// Verify the anchor was not processed
+		status, err := batch.Transaction(poisoned.GetHash()).Status().Get()
+		require.NoError(t, err)
+		require.Zero(t, status.Code)
+
+		// Verify the poison signature failed
+		status, err = batch.Transaction(poison.Hash()).Status().Get()
+		require.NoError(t, err)
+		require.NotZero(t, status.Code)
+	})
+
+	// Resubmit the original, valid signature
+	batch := x.Database.Begin(false)
+	defer batch.Discard()
+	x.Executor.ValidateEnvelopeSet(batch, original, func(err error, _ *chain.Delivery, _ *TransactionStatus) {
+		require.NoError(t, err)
+	})
+	x.Submit2(false, original)
+
+	// Verify it is delivered
+	st, _ := sim.WaitForTransactionFlow(delivered, poisoned.GetHash())
+	require.Len(t, st, 1)
+	require.Equal(t, errors.StatusDelivered, st[0].Code)
 }

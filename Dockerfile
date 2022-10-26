@@ -5,18 +5,20 @@ WORKDIR /root
 COPY . .
 ENV CGO_ENABLED 0
 RUN make -B && make -B accumulate
+RUN go install github.com/go-delve/delve/cmd/dlv@latest
+RUN go build ./tools/cmd/snapshot
 
 FROM alpine:3
 
 # Install tools
-RUN apk add --no-cache bash jq curl
+RUN apk add --no-cache bash jq curl nano
 
 # Copy scripts
 WORKDIR /scripts
 COPY scripts .
 
 # Copy binaries
-COPY --from=build /root/accumulate /root/accumulated /bin/
+COPY --from=build /root/accumulate /root/accumulated /root/snapshot /go/bin/dlv /bin/
 
 # Set health check
 HEALTHCHECK CMD curl --fail --silent http://localhost:26660/status || exit 1

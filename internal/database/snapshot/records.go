@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package snapshot
 
 import (
@@ -94,36 +100,49 @@ func CollectAccount(record *database.Account, fullChainHistory bool) (*Account, 
 	}
 
 	for _, meta := range loadState(&err, false, record.Chains().Get) {
-		record, err := record.GetChainByName(meta.Name)
+		record, err := record.ChainByName(meta.Name)
 		if err != nil {
 			return nil, errors.Format(errors.StatusUnknownError, "load %s chain state: %w", meta.Name, err)
 		}
 
-		chain := new(Chain)
-		chain.Name = meta.Name
-		chain.Type = meta.Type
+		chain, err := record.Inner().CollectSnapshot()
+		if err != nil {
+			return nil, errors.Format(errors.StatusUnknownError, "collect %s chain snapshot: %w", meta.Name, err)
+		}
+
+		if !fullChainHistory {
+			chain.MarkPoints = nil
+		}
+
 		acct.Chains = append(acct.Chains, chain)
-
-		state := record.CurrentState()
-		if fullChainHistory {
-			chain.Entries, err = record.Entries(0, state.Count)
-			if err != nil {
-				return nil, errors.Format(errors.StatusUnknownError, "load %s chain entries: %w", meta.Name, err)
-			}
-			continue
-		}
-
-		chain.Count = uint64(state.Count)
-		chain.Pending = make([][]byte, len(state.Pending))
-		for i, v := range state.Pending {
-			if len(v) == 0 {
-				continue
-			}
-			chain.Pending[i] = v
-		}
 	}
 
 	return acct, nil
+}
+
+// ConvertOldChains converts OldChains to Chains.
+func (a *Account) ConvertOldChains(markPower int64) {
+	if len(a.OldChains) == 0 || len(a.Chains) > 0 {
+		return
+	}
+
+	for _, oc := range a.OldChains {
+		c := new(managed.Snapshot)
+		c.Name = oc.Name
+		c.Type = oc.Type
+		c.MarkPower = uint64(markPower)
+		c.Head = new(managed.MerkleState)
+		c.Head.Count = int64(oc.Count)
+		c.Head.Pending = oc.Pending
+
+		for _, e := range oc.Entries {
+			c.AddEntry(e)
+		}
+
+		a.Chains = append(a.Chains, c)
+	}
+
+	a.OldChains = nil
 }
 
 func (a *Account) Restore(batch *database.Batch) error {
@@ -136,22 +155,20 @@ func (a *Account) Restore(batch *database.Batch) error {
 	return errors.Wrap(errors.StatusUnknownError, err)
 }
 
-func (c *Chain) Restore(account *database.Account) error {
-	mgr, err := account.GetChainByName(c.Name)
+func (a *Account) RestoreChainHead(batch *database.Batch, c *managed.Snapshot) (*database.Chain2, error) {
+	mgr, err := batch.Account(a.Url).ChainByName(c.Name)
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "store %s chain head: %w", c.Name, err)
+		return nil, errors.Format(errors.StatusUnknownError, "get %s chain: %w", c.Name, err)
 	}
-	err = mgr.RestoreHead(&managed.MerkleState{Count: int64(c.Count), Pending: c.Pending})
+	_, err = mgr.Get() // Update index
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "store %s chain head: %w", c.Name, err)
+		return nil, errors.Format(errors.StatusUnknownError, "get %s chain head: %w", c.Name, err)
 	}
-	for i, entry := range c.Entries {
-		err := mgr.AddEntry(entry, false)
-		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "store %s chain entry %d: %w", c.Name, c.Count+uint64(i), err)
-		}
+	err = mgr.Inner().RestoreHead(c)
+	if err != nil {
+		return nil, errors.Format(errors.StatusUnknownError, "restore %s chain: %w", c.Name, err)
 	}
-	return nil
+	return mgr, nil
 }
 
 func zero[T any]() (z T) { return z }

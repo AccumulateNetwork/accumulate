@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package block
 
 import (
@@ -69,7 +75,7 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Del
 	// Set up the state manager
 	var st *chain.StateManager
 	if x.isGenesis {
-		st = chain.NewStateManager(&x.Describe, nil, batch.Begin(true), principal, delivery.Transaction, x.logger.With("operation", "ProcessTransaction"))
+		st = chain.NewStateManager(&x.Describe, &x.globals.Active, batch.Begin(true), principal, delivery.Transaction, x.logger.With("operation", "ProcessTransaction"))
 	} else {
 		st, err = chain.LoadStateManager(&x.Describe, &x.globals.Active, batch.Begin(true), principal, delivery.Transaction, status, x.logger.With("operation", "ProcessTransaction"))
 		if err != nil {
@@ -94,16 +100,16 @@ func (x *Executor) ProcessTransaction(batch *database.Batch, delivery *chain.Del
 		return x.recordFailedTransaction(batch, delivery, err)
 	}
 
+	// Do extra processing for special network accounts
+	err = x.processNetworkAccountUpdates(batch, delivery, principal)
+	if err != nil {
+		return x.recordFailedTransaction(batch, delivery, err)
+	}
+
 	// Commit changes, queue state creates for synthetic transactions
 	state, err := st.Commit()
 	if err != nil {
 		err = fmt.Errorf("commit: %w", err)
-		return x.recordFailedTransaction(batch, delivery, err)
-	}
-
-	// Do extra processing for special network accounts
-	err = x.processNetworkAccountUpdates(batch, delivery, principal)
-	if err != nil {
 		return x.recordFailedTransaction(batch, delivery, err)
 	}
 
@@ -345,7 +351,7 @@ func (x *Executor) systemTransactionIsReady(batch *database.Batch, delivery *cha
 	}
 
 	// If the transaction is out of sequence, mark it pending
-	partLedger := ledger.Partition(delivery.SourceNetwork)
+	partLedger := ledger.Anchor(delivery.SourceNetwork)
 	if partLedger.Delivered+1 != status.SequenceNumber {
 		x.logger.Info("Out of sequence anchor transaction",
 			"hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4),
@@ -404,19 +410,28 @@ func (x *Executor) recordTransaction(batch *database.Batch, delivery *chain.Deli
 		return status, nil
 	}
 
-	// Update the synthetic or anchor ledger
-	var ledger protocol.TransactionExchangeLedgerAccount
+	// Update the ledger
+	var ledger protocol.Account
+	var partLedger *protocol.PartitionSyntheticLedger
 	if delivery.Transaction.Body.Type().IsSystem() {
-		err = batch.Account(x.Describe.AnchorPool()).GetStateAs(&ledger)
+		var anchorLedger *protocol.AnchorLedger
+		err = batch.Account(x.Describe.AnchorPool()).GetStateAs(&anchorLedger)
+		if err != nil {
+			return nil, errors.Format(errors.StatusUnknownError, "load synthetic transaction ledger: %w", err)
+		}
+		ledger = anchorLedger
+		partLedger = anchorLedger.Anchor(delivery.SourceNetwork)
 	} else {
-		err = batch.Account(x.Describe.Synthetic()).GetStateAs(&ledger)
-	}
-	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "load synthetic transaction ledger: %w", err)
+		var synthLedger *protocol.SyntheticLedger
+		err = batch.Account(x.Describe.Synthetic()).GetStateAs(&synthLedger)
+		if err != nil {
+			return nil, errors.Format(errors.StatusUnknownError, "load synthetic transaction ledger: %w", err)
+		}
+		ledger = synthLedger
+		partLedger = synthLedger.Partition(delivery.SourceNetwork)
 	}
 
 	// This should never happen, but if it does Add will panic
-	partLedger := ledger.Partition(delivery.SourceNetwork)
 	if status.Pending() && delivery.SequenceNumber <= partLedger.Delivered {
 		return nil, errors.Format(errors.StatusFatalError, "synthetic transactions executed out of order: delivered %d, executed %d", partLedger.Delivered, delivery.SequenceNumber)
 	}

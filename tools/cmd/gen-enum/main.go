@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package main
 
 import (
@@ -16,6 +22,7 @@ var flags struct {
 	SubPackage  string
 	Language    string
 	Out         string
+	ShortNames  bool
 	FilePerType bool
 }
 
@@ -28,6 +35,7 @@ func main() {
 
 	cmd.Flags().StringVarP(&flags.Language, "language", "l", "Go", "Output language or template file")
 	cmd.Flags().StringVar(&flags.Package, "package", "protocol", "Package name")
+	cmd.Flags().BoolVar(&flags.ShortNames, "short-names", false, "Omit the type name from the enum value")
 	cmd.Flags().StringVar(&flags.SubPackage, "subpackage", "", "Package name")
 	cmd.Flags().StringVarP(&flags.Out, "out", "o", "enums_gen.go", "Output file")
 	cmd.Flags().BoolVar(&flags.FilePerType, "file-per-type", false, "Generate a separate file for each type")

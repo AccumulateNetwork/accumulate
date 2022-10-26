@@ -76,10 +76,6 @@ TransactionStatus:
       repeatable: true
 
     # For synthetic and system transactions
-    - name: AnchorSigners
-      description: is the list of validators that have signed the anchor
-      type: bytes
-      repeatable: true
     - name: SourceNetwork
       description: is the network that produced the transaction
       type: url
@@ -99,3 +95,7 @@ TransactionStatus:
       type: managed.Receipt
       marshal-as: reference
       pointer: true
+    - name: AnchorSigners
+      description: is the list of validators that have signed the anchor
+      type: bytes
+      repeatable: true

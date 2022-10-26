@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package protocol
 
 import (
@@ -8,7 +14,7 @@ import (
 )
 
 func TestPartitionSyntheticLedger_Add(t *testing.T) {
-	ledger := new(TransactionExchangeLedger)
+	ledger := new(PartitionSyntheticLedger)
 	ledger.Received, ledger.Delivered = 3, 3
 
 	foo := AccountUrl("foo")

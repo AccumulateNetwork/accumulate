@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package api_test
 
 import (
@@ -8,7 +14,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
-	core "github.com/tendermint/tendermint/rpc/coretypes"
+	core "github.com/tendermint/tendermint/rpc/core/types"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
@@ -46,7 +52,7 @@ func TestExecuteCheckOnly(t *testing.T) {
 		connectionManager.SetClients(clients)
 		table := new(protocol.RoutingTable)
 		table.Routes = routing.BuildSimpleTable([]string{""})
-		router, err := routing.NewStaticRouter(table, connectionManager)
+		router, err := routing.NewStaticRouter(table, connectionManager, nil)
 		require.NoError(t, err)
 		j, err := NewJrpc(Options{
 			Router: router,
@@ -74,7 +80,7 @@ func TestExecuteCheckOnly(t *testing.T) {
 		connectionManager.SetClients(clients)
 		table := new(protocol.RoutingTable)
 		table.Routes = routing.BuildSimpleTable([]string{""})
-		router, err := routing.NewStaticRouter(table, connectionManager)
+		router, err := routing.NewStaticRouter(table, connectionManager, nil)
 		require.NoError(t, err)
 		j, err := NewJrpc(Options{
 			Router: router,

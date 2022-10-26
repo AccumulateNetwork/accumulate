@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package testing
 
 import (
@@ -42,6 +48,7 @@ var _ protocol.Account = (*FakeLiteAccount)(nil)
 
 func (f *FakeLiteAccount) Type() protocol.AccountType { return f.TheType }
 func (f *FakeLiteAccount) GetUrl() *url.URL           { return f.Url }
+func (f *FakeLiteAccount) StripUrl()                  { f.Url = f.GetUrl().StripExtras() }
 
 var _ protocol.FullAccount = (*FakeAccount)(nil)
 

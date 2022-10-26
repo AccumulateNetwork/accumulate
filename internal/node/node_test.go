@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package node_test
 
 import (
@@ -14,6 +20,7 @@ import (
 )
 
 func TestNodeLifecycle(t *testing.T) {
+	t.Skip("Broken by Tendermint")
 	acctesting.SkipPlatformCI(t, "darwin", "requires setting up localhost aliases")
 
 	// Configure

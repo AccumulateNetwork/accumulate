@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package database
 
 import (
@@ -60,6 +66,8 @@ func (c *Chain2) Name() string { return c.inner.Name() }
 
 // Type returns the type of the chain.
 func (c *Chain2) Type() managed.ChainType { return c.inner.Type() }
+
+func (c *Chain2) Inner() *managed.Chain { return c.inner }
 
 // Url returns the URL of the chain: {account}#chain/{name}.
 func (c *Chain2) Url() *url.URL {

@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package main
 
 import (
@@ -50,8 +56,8 @@ func init() {
 
 func addGovernance(_ *cobra.Command, args []string) {
 	operators := protocol.DnUrl().JoinPath(protocol.Operators)
-	addToSnapshot(args[0], args[1:], func(row int, b *database.Batch, u *url.URL, _ []string, logger log.Logger) {
-		if !isValidIdentity(row, b, u, logger) {
+	addToSnapshot(args[0], args[1:], func(file string, row int, b *database.Batch, u *url.URL, _ []string, logger log.Logger) {
+		if !isValidIdentity(file, row, b, u, logger) {
 			return
 		}
 
@@ -79,8 +85,8 @@ func addGovernance(_ *cobra.Command, args []string) {
 }
 
 func addReserved(_ *cobra.Command, args []string) {
-	addToSnapshot(args[0], args[1:], func(row int, b *database.Batch, u *url.URL, record []string, logger log.Logger) {
-		if !isValidIdentity(row, b, u, logger) {
+	addToSnapshot(args[0], args[1:], func(file string, row int, b *database.Batch, u *url.URL, record []string, logger log.Logger) {
+		if !isValidIdentity(file, row, b, u, logger) {
 			return
 		}
 
@@ -108,7 +114,7 @@ func addReserved(_ *cobra.Command, args []string) {
 	})
 }
 
-func addToSnapshot(filename string, files []string, process func(int, *database.Batch, *url.URL, []string, log.Logger)) {
+func addToSnapshot(filename string, files []string, process func(string, int, *database.Batch, *url.URL, []string, log.Logger)) {
 	if flags.UrlCol <= 0 {
 		flags.UrlCol = 0
 	} else {
@@ -161,7 +167,7 @@ func addToSnapshot(filename string, files []string, process func(int, *database.
 				if errors.Is(err, io.EOF) {
 					break
 				}
-				checkf(err, "read CSV record")
+				checkf(err, "read %s record", file)
 			}
 			if flags.UrlCol >= len(record) {
 				logger.Info("Skipping row: missing URL", "row", row, "length", len(record))
@@ -174,7 +180,7 @@ func addToSnapshot(filename string, files []string, process func(int, *database.
 				continue
 			}
 
-			process(row, batch, u, record, logger)
+			process(file, row, batch, u, record, logger)
 		}
 
 		check(batch.Commit())
@@ -185,26 +191,26 @@ func addToSnapshot(filename string, files []string, process func(int, *database.
 	checkf(err, "write snapshot")
 	defer f.Close()
 	check(db.View(func(batch *database.Batch) error {
-		_, err := snapshot.Collect(batch, f, func(account *database.Account) (bool, error) { return true, nil })
+		_, err := snapshot.Collect(batch, new(snapshot.Header), f, nil, func(account *database.Account) (bool, error) { return true, nil })
 		return err
 	}))
 }
 
-func isValidIdentity(row int, b *database.Batch, u *url.URL, logger log.Logger) bool {
+func isValidIdentity(file string, row int, b *database.Batch, u *url.URL, logger log.Logger) bool {
 	err := protocol.IsValidAdiUrl(u, false)
 	if err != nil {
-		logger.Info("Invalid ADI URL", "row", row, "url", u, "error", err)
+		logger.Info("Invalid ADI URL", "file", file, "row", row, "url", u, "error", err)
 		return false
 	}
 	if !u.IsRootIdentity() {
-		logger.Info("ADI URL is not a root identity", "row", row, "url", u)
+		logger.Info("ADI URL is not a root identity", "file", file, "row", row, "url", u)
 		return false
 	}
 
 	_, err = b.Account(u).Main().Get()
 	switch {
 	case err == nil:
-		logger.Info("Skipping record: already exists", "row", row, "url", u)
+		logger.Info("Skipping record: already exists", "file", file, "row", row, "url", u)
 		return false
 	case !errors.Is(err, errors.StatusNotFound):
 		check(err)

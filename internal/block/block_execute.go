@@ -1,6 +1,14 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package block
 
 import (
+	"context"
+
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
@@ -10,8 +18,9 @@ import (
 
 type Block struct {
 	BlockMeta
-	State BlockState
-	Batch *database.Batch
+	Context context.Context
+	State   BlockState
+	Batch   *database.Batch
 }
 
 func (x *Executor) ExecuteEnvelopeSet(block *Block, deliveries []*chain.Delivery, captureError func(error, *chain.Delivery, *protocol.TransactionStatus)) []*protocol.TransactionStatus {
@@ -46,6 +55,14 @@ func (x *Executor) ExecuteEnvelope(block *Block, delivery *chain.Delivery) (*pro
 	status, additional, err := x.executeEnvelope(block, delivery, false)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
+	}
+
+	// If the signature failed, fetch the transaction status
+	if status == nil {
+		status, err = block.Batch.Transaction(delivery.Transaction.GetHash()).Status().Get()
+		if err != nil {
+			return nil, errors.Wrap(errors.StatusUnknownError, err)
+		}
 	}
 
 	// Record when the transaction is received
@@ -118,30 +135,69 @@ func (x *Executor) executeEnvelope(block *Block, delivery *chain.Delivery, addit
 		return status, nil, nil
 	}
 
-	err = delivery.LoadSyntheticMetadata(block.Batch, delivery.Transaction.Body.Type(), status)
+	// Verify the transaction type is valid
+	txnType := delivery.Transaction.Body.Type()
+	if txnType != protocol.TransactionTypeRemote {
+		if _, ok := x.executors[txnType]; !ok {
+			return nil, nil, errors.Format(errors.StatusInternalError, "missing executor for %v", txnType)
+		}
+	}
+
+	err = delivery.LoadSyntheticMetadata(block.Batch, txnType, status)
 	if err != nil {
 		return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	// Process signatures
-	shouldProcessTransaction := !delivery.Transaction.Body.Type().IsUser()
+	shouldProcessTransaction := !txnType.IsUser()
 	{
 		batch := block.Batch.Begin(true)
 		defer batch.Discard()
 
+		var didFail bool
 		for _, signature := range delivery.Signatures {
 			if !signature.Type().IsSystem() && signature.RoutingLocation().LocalTo(delivery.Transaction.Header.Principal) {
 				shouldProcessTransaction = true
 			}
 
-			s, err := x.ProcessSignature(batch, delivery, signature)
-			if err, ok := err.(*errors.Error); ok {
-				status := new(protocol.TransactionStatus)
-				status.Set(err)
-				status.Result = new(protocol.EmptyResult)
-				return status, nil, nil
+			status := new(protocol.TransactionStatus)
+			status.Received = block.Index
+
+			// TODO: add an ID method to signatures
+			sigHash := *(*[32]byte)(signature.Hash())
+			switch signature := signature.(type) {
+			case protocol.KeySignature:
+				status.TxID = signature.GetSigner().WithTxID(sigHash)
+			case *protocol.ReceiptSignature, *protocol.InternalSignature:
+				status.TxID = delivery.Transaction.Header.Principal.WithTxID(sigHash)
+			default:
+				status.TxID = signature.RoutingLocation().WithTxID(sigHash)
 			}
+
+			s, err := x.ProcessSignature(batch, delivery, signature)
+			if err == nil {
+				status.Code = errors.StatusDelivered
+			} else {
+				status.Set(err)
+			}
+
+			// Always record the signature and status
+			if sig, ok := signature.(*protocol.RemoteSignature); ok {
+				signature = sig.Signature
+			}
+			if err2 := batch.Transaction(signature.Hash()).Main().Put(&database.SigOrTxn{Signature: signature, Txid: delivery.Transaction.ID()}); err2 != nil {
+				x.logger.Error("Failed to store signature", "error", err2)
+			}
+			if err2 := batch.Transaction(signature.Hash()).Status().Put(status); err2 != nil {
+				x.logger.Error("Failed to store signature status", "error", err2)
+			}
+
 			if err != nil {
+				if _, ok := err.(*errors.Error); ok {
+					didFail = true
+					block.State.MergeSignature(&ProcessSignatureState{})
+					continue
+				}
 				return nil, nil, err
 			}
 			block.State.MergeSignature(s)
@@ -150,6 +206,10 @@ func (x *Executor) executeEnvelope(block *Block, delivery *chain.Delivery, addit
 		err = batch.Commit()
 		if err != nil {
 			return nil, nil, errors.Format(errors.StatusUnknownError, "commit batch: %w", err)
+		}
+
+		if didFail {
+			return nil, nil, nil
 		}
 	}
 
@@ -173,7 +233,7 @@ func (x *Executor) executeEnvelope(block *Block, delivery *chain.Delivery, addit
 
 		kv := []interface{}{
 			"block", block.Index,
-			"type", delivery.Transaction.Body.Type(),
+			"type", txnType,
 			"code", status.Code,
 			"txn-hash", logging.AsHex(delivery.Transaction.GetHash()).Slice(0, 4),
 			"principal", delivery.Transaction.Header.Principal,
@@ -193,7 +253,7 @@ func (x *Executor) executeEnvelope(block *Block, delivery *chain.Delivery, addit
 			}
 		} else {
 			fn := x.logger.Debug
-			switch delivery.Transaction.Body.Type() {
+			switch txnType {
 			case protocol.TransactionTypeDirectoryAnchor,
 				protocol.TransactionTypeBlockValidatorAnchor:
 				fn = x.logger.Info

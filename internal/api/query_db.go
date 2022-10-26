@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package api
 
 import (
@@ -81,7 +87,8 @@ func (m *DatabaseQueryModule) queryAccount(batch *database.Batch, accountUrl *ur
 		if err != nil {
 			receipt.Error = errors.Wrap(errors.StatusUnknownError, err).(*errors.Error)
 		} else {
-			receipt.LocalBlock = block
+			receipt.LocalBlock = block.BlockIndex
+			receipt.LocalBlockTime = block.BlockTime
 			receipt.Proof = *mr
 		}
 	}

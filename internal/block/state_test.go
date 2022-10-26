@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package block_test
 
 import (
@@ -40,7 +46,7 @@ func TestStateSaveAndRestore(t *testing.T) {
 		defer batch.Discard()
 		f, err := os.Create(filename(partition.Id))
 		require.NoError(t, err)
-		require.NoError(t, snapshot.FullCollect(batch, f, &x.Executor.Describe))
+		require.NoError(t, snapshot.FullCollect(batch, f, x.Executor.Describe.PartitionUrl(), nil, false))
 		require.NoError(t, f.Close())
 	}
 

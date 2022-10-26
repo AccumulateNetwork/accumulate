@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package snapshot
 
 import (
@@ -121,6 +127,17 @@ func Visit(file ioutil2.SectionReader, visitor interface{}) error {
 				err := account.UnmarshalBinaryFrom(reader)
 				if err != nil {
 					return errors.Format(errors.StatusEncodingError, "unmarshal account: %w", err)
+				}
+
+				// Assume a mark power of 8
+				account.ConvertOldChains(8)
+
+				// Fill in the URL field if possible
+				if account.Url == nil {
+					if account.Main == nil {
+						return errors.Format(errors.StatusBadRequest, "cannot determine URL of account")
+					}
+					account.Url = account.Main.GetUrl()
 				}
 
 				account.Hash = hash

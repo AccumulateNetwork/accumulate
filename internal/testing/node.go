@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package testing
 
 import (
@@ -126,10 +132,6 @@ func CreateTestNet(t testing.TB, numBvns, numValidators, numFollowers int, withF
 			count++
 			configs[i][j][0].SetRoot(filepath.Join(tempDir, fmt.Sprintf("node-%d", count), "dnn"))
 			configs[i][j][1].SetRoot(filepath.Join(tempDir, fmt.Sprintf("node-%d", count), "bvnn"))
-
-			// Disable DN stall detection for tests
-			configs[i][j][0].Accumulate.DnStallLimit = 0
-			configs[i][j][1].Accumulate.DnStallLimit = 0
 
 			err = accumulated.WriteNodeFiles(configs[i][j][0], node.PrivValKey, node.NodeKey, dnGenDoc)
 			require.NoError(t, err)

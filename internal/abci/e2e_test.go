@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package abci_test
 
 import (
@@ -89,15 +95,15 @@ func TestEvilNode(t *testing.T) {
 	batch := dn.db.Begin(true)
 	defer batch.Discard()
 	// Check each anchor
-	de, err := indexing.Data(batch, dn.network.NodeUrl(protocol.Evidence)).GetLatestEntry()
+	de, txId, _, err := indexing.Data(batch, dn.network.NodeUrl(protocol.Evidence)).GetLatestEntry()
 	require.NoError(t, err)
-	var ev []types2.Evidence
+	var ev []types2.Misbehavior
 	require.NotEqual(t, de.GetData(), nil, "no data")
 	err = json.Unmarshal(de.GetData()[0], &ev)
 	require.NoError(t, err)
 	require.Greaterf(t, len(ev), 0, "no evidence data")
 	require.Greater(t, ev[0].Height, int64(0), "no valid evidence available")
-
+	require.NotNilf(t, txId, "txId not returned")
 }
 
 func (n *FakeNode) testLiteTx(N, M int, credits float64) (string, map[*url.URL]int64) {
@@ -404,14 +410,15 @@ func TestCreateLiteDataAccount(t *testing.T) {
 	require.NoError(t, err)
 	txnHash, err := indexing.Data(batch, liteDataAddress).Transaction(entryHash)
 	require.NoError(t, err)
-	entry, err := indexing.GetDataEntry(batch, txnHash)
+	entry, txId, causeTxId, err := indexing.GetDataEntry(batch, txnHash)
 	require.NoError(t, err)
 	hashFromEntry := entry.Hash()
 	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(hashFromEntry), "Chain Entry.Hash does not match")
 	//sample verification for calculating the hash from lite data entry
 	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(entryHash), "Chain GetHashes does not match")
 	require.Equal(t, hex.EncodeToString(firstEntryHash), hex.EncodeToString(entry.Hash()), "Chain GetHashes does not match")
-
+	require.NotNilf(t, txId, "txId not returned")
+	require.NotNilf(t, causeTxId, "cause TxId not returned")
 }
 
 func TestCreateAdiDataAccount(t *testing.T) {
@@ -1442,6 +1449,7 @@ func TestIssueTokensWithSupplyLimit(t *testing.T) {
 	})
 
 	require.Error(t, err, "expected a failure but instead spending over the supply limit passed")
+	time.Sleep(time.Second) // The test fails if this is removed
 
 	account = n.GetLiteTokenAccount(liteAddr.String())
 	//the balance should be equal to

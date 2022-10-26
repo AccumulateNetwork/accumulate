@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package block
 
 import (
@@ -33,6 +39,7 @@ func (x *Executor) ProcessRemoteSignatures(block *Block, delivery *chain.Deliver
 			continue
 		}
 
+		fwd.Cause = append(fwd.Cause, *(*[32]byte)(signature.Hash()))
 		if fwd.Destination == nil {
 			fwd.Destination = delivery.Transaction.Header.Principal
 		}

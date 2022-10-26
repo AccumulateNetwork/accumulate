@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package genesis
 
 import (
@@ -38,49 +44,13 @@ type InitOpts struct {
 	Snapshots       []func() (ioutil2.SectionReader, error)
 	GenesisGlobals  *core.GlobalValues
 	OperatorKeys    [][]byte
+
+	IncludeHistoryFromSnapshots bool
 }
 
 func Init(snapshotWriter io.WriteSeeker, opts InitOpts) ([]byte, error) {
 	// Initialize globals
-	gg := opts.GenesisGlobals
-
-	if gg.Oracle == nil {
-		gg.Oracle = new(protocol.AcmeOracle)
-		if gg.Oracle.Price == 0 {
-			gg.Oracle.Price = uint64(protocol.InitialAcmeOracleValue)
-		}
-	}
-
-	// Set the initial threshold to 2/3 & MajorBlockSchedule
-	if gg.Globals == nil {
-		gg.Globals = new(protocol.NetworkGlobals)
-	}
-	if gg.Globals.OperatorAcceptThreshold.Numerator == 0 {
-		gg.Globals.OperatorAcceptThreshold.Set(2, 3)
-	}
-	if gg.Globals.ValidatorAcceptThreshold.Numerator == 0 {
-		gg.Globals.ValidatorAcceptThreshold.Set(2, 3)
-	}
-	if gg.Globals.MajorBlockSchedule == "" {
-		gg.Globals.MajorBlockSchedule = protocol.DefaultMajorBlockSchedule
-	}
-	if gg.Globals.FeeSchedule == nil {
-		gg.Globals.FeeSchedule = new(protocol.FeeSchedule)
-		gg.Globals.FeeSchedule.CreateIdentitySliding = []protocol.Fee{
-			protocol.FeeCreateIdentity << 12,
-			protocol.FeeCreateIdentity << 11,
-			protocol.FeeCreateIdentity << 10,
-			protocol.FeeCreateIdentity << 9,
-			protocol.FeeCreateIdentity << 8,
-			protocol.FeeCreateIdentity << 7,
-			protocol.FeeCreateIdentity << 6,
-			protocol.FeeCreateIdentity << 5,
-			protocol.FeeCreateIdentity << 4,
-			protocol.FeeCreateIdentity << 3,
-			protocol.FeeCreateIdentity << 2,
-			protocol.FeeCreateIdentity << 1,
-		}
-	}
+	gg := core.NewGlobals(opts.GenesisGlobals)
 
 	// Build the routing table
 	var bvns []string
@@ -89,13 +59,15 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) ([]byte, error) {
 			bvns = append(bvns, partition.ID)
 		}
 	}
-	gg.Routing = new(protocol.RoutingTable)
-	gg.Routing.Routes = routing.BuildSimpleTable(bvns)
-	gg.Routing.Overrides = make([]protocol.RouteOverride, 1, len(gg.Network.Partitions)+1)
-	gg.Routing.Overrides[0] = protocol.RouteOverride{Account: protocol.AcmeUrl(), Partition: protocol.Directory}
+	if gg.Routing == nil {
+		gg.Routing = new(protocol.RoutingTable)
+	}
+	if gg.Routing.Routes == nil {
+		gg.Routing.Routes = routing.BuildSimpleTable(bvns)
+	}
+	gg.Routing.AddOverride(protocol.AcmeUrl(), protocol.Directory)
 	for _, partition := range gg.Network.Partitions {
-		u := protocol.PartitionUrl(partition.ID)
-		gg.Routing.Overrides = append(gg.Routing.Overrides, protocol.RouteOverride{Account: u, Partition: partition.ID})
+		gg.Routing.AddOverride(protocol.PartitionUrl(partition.ID), partition.ID)
 	}
 
 	store := memory.New(opts.Logger.With("module", "storage"))
@@ -105,11 +77,14 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) ([]byte, error) {
 		db:          database.New(store, opts.Logger.With("module", "database")),
 		dataRecords: make([]DataRecord, 0),
 		records:     make([]protocol.Account, 0),
+		acmeIssued:  new(big.Int),
+		omitHistory: map[[32]byte]bool{},
+		partition:   config.NetworkUrl{URL: protocol.PartitionUrl(opts.PartitionId)},
 	}
 
 	// Create the router
 	var err error
-	b.router, err = routing.NewStaticRouter(gg.Routing, nil)
+	b.router, err = routing.NewStaticRouter(gg.Routing, nil, b.Logger)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
@@ -152,12 +127,18 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) ([]byte, error) {
 	// Preserve history in the Genesis snapshot
 	batch := b.db.Begin(false)
 	defer batch.Discard()
-	w, err := snapshot.Collect(batch, snapshotWriter, func(account *database.Account) (bool, error) { return true, nil })
+
+	header := new(snapshot.Header)
+	header.Height = protocol.GenesisBlock
+
+	w, err := snapshot.Collect(batch, header, snapshotWriter, b.Logger, func(account *database.Account) (bool, error) {
+		return !b.omitHistory[account.Url().AccountID32()], nil
+	})
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.Format(errors.StatusUnknownError, "collect snapshot: %w", err)
 	}
 
-	err = snapshot.CollectAnchors(w, batch, &exec.Describe)
+	err = snapshot.CollectAnchors(w, batch, exec.Describe.PartitionUrl())
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
@@ -178,6 +159,9 @@ type bootstrap struct {
 	records     []protocol.Account
 	dataRecords []DataRecord
 	router      routing.Router
+
+	acmeIssued  *big.Int
+	omitHistory map[[32]byte]bool
 }
 
 type DataRecord struct {
@@ -202,7 +186,6 @@ func (b *bootstrap) Execute(st *chain.StateManager, tx *chain.Delivery) (protoco
 
 func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protocol.TransactionResult, error) {
 	b.networkAuthority = protocol.DnUrl().JoinPath(protocol.Operators)
-	b.partition = config.NetworkUrl{URL: protocol.PartitionUrl(b.PartitionId)}
 	b.localAuthority = b.partition.Operators()
 
 	// Verify that the BVN ID will make a valid partition URL
@@ -225,16 +208,7 @@ func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protoc
 	}
 
 	// Create accounts
-	b.createIdentity()
-	b.createMainLedger()
-	b.createSyntheticLedger()
-	b.createAnchorPool()
-	b.createOperatorBook()
-	b.createEvidenceChain()
-	b.maybeCreateAcme()
-	b.maybeCreateFaucet()
-
-	err = b.createVoteScratchChain()
+	err = b.importSnapshots(st)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
@@ -244,7 +218,16 @@ func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protoc
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
-	err = b.importSnapshots(st)
+	b.createIdentity()
+	b.createMainLedger()
+	b.createSyntheticLedger()
+	b.createAnchorPool()
+	b.createOperatorBook()
+	b.createEvidenceChain()
+	b.maybeCreateFaucet()
+	b.maybeCreateAcme()
+
+	err = b.createVoteScratchChain()
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
@@ -314,7 +297,7 @@ func (b *bootstrap) createAnchorPool() {
 func (b *bootstrap) createVoteScratchChain() error {
 	//create a vote scratch chain
 	wd := new(protocol.WriteData)
-	lci := types.LastCommitInfo{}
+	lci := types.CommitInfo{}
 	data, err := json.Marshal(&lci)
 	if err != nil {
 		return errors.Format(errors.StatusInternalError, "marshal last commit info: %w", err)
@@ -348,18 +331,17 @@ func (b *bootstrap) maybeCreateAcme() {
 	acme.Url = protocol.AcmeUrl()
 	acme.Precision = 8
 	acme.Symbol = "ACME"
+	acme.Issued = *b.acmeIssued
 	acme.SupplyLimit = big.NewInt(protocol.AcmeSupplyLimit * protocol.AcmePrecision)
 	b.WriteRecords(acme)
-
-	if !protocol.IsTestNet {
-		return
-	}
-
-	// On the TestNet, set the issued amount to the faucet balance
-	acme.Issued.SetUint64(protocol.AcmeFaucetBalance * protocol.AcmePrecision)
 }
 
 func (b *bootstrap) maybeCreateFaucet() {
+	// Always do this so the DN has the proper issued amount
+	amount := new(big.Int)
+	amount.SetUint64(protocol.AcmeFaucetBalance * protocol.AcmePrecision)
+	b.acmeIssued.Add(b.acmeIssued, amount)
+
 	if !protocol.IsTestNet || !b.shouldCreate(protocol.FaucetUrl) {
 		return
 	}
@@ -370,7 +352,7 @@ func (b *bootstrap) maybeCreateFaucet() {
 	liteToken := new(protocol.LiteTokenAccount)
 	liteToken.Url = protocol.FaucetUrl
 	liteToken.TokenUrl = protocol.AcmeUrl()
-	liteToken.Balance.SetUint64(protocol.AcmeFaucetBalance * protocol.AcmePrecision)
+	liteToken.Balance = *amount
 
 	// Lock forever
 	liteToken.LockHeight = math.MaxUint64
@@ -409,16 +391,16 @@ func (b *bootstrap) maybeCreateFactomAccounts() error {
 		lite.TokenUrl = protocol.AcmeUrl()
 		lite.Balance = *big.NewInt(5 * fa.Balance)
 
+		b.acmeIssued.Add(b.acmeIssued, &lite.Balance)
+
 		b.WriteRecords(lid, lite)
 	}
 	return nil
 }
 
 func (b *bootstrap) importSnapshots(st *chain.StateManager) error {
-	// Nothing is routed to the DN so don't bother
-	if b.NetworkType == config.Directory {
-		return nil
-	}
+	// Nothing is routed to the DN, but the DN needs to know how much ACME has
+	// been issued so this still needs to be run for the DN
 
 	var accounts []*url.URL
 	for _, open := range b.Snapshots {
@@ -431,10 +413,12 @@ func (b *bootstrap) importSnapshots(st *chain.StateManager) error {
 		}
 
 		v := new(snapshotVisitor)
+		v.acmeIssued = b.acmeIssued
+		v.omitHistory = b.omitHistory
+		v.AlwaysOmitHistory = !b.IncludeHistoryFromSnapshots
 		v.v = snapshot.NewRestoreVisitor(st.GetBatch(), b.Logger)
 		v.logger.L = b.Logger
 		v.v.DisableWriteBatching = true
-		v.v.CompressChains = true
 		v.router = b.router
 		v.partition = b.PartitionId
 		err = snapshot.Visit(file, v)

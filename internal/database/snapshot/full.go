@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package snapshot
 
 import (
@@ -13,8 +19,22 @@ import (
 
 // FullCollect collects a snapshot including additional records required for a
 // fully-functioning node.
-func FullCollect(batch *database.Batch, file io.WriteSeeker, network *config.Describe) error {
-	w, err := Collect(batch, file, func(account *database.Account) (bool, error) {
+func FullCollect(batch *database.Batch, file io.WriteSeeker, network config.NetworkUrl, logger log.Logger, preserve bool) error {
+	var ledger *protocol.SystemLedger
+	err := batch.Account(network.Ledger()).Main().GetAs(&ledger)
+	if err != nil {
+		return errors.Format(errors.StatusUnknownError, "load system ledger: %w", err)
+	}
+
+	header := new(Header)
+	header.Height = ledger.Index
+	header.Timestamp = ledger.Timestamp
+
+	w, err := Collect(batch, header, file, logger, func(account *database.Account) (bool, error) {
+		if preserve {
+			return true, nil
+		}
+
 		// Preserve history for DN/BVN ADIs
 		_, ok := protocol.ParsePartitionUrl(account.Url())
 		return ok, nil
@@ -29,7 +49,7 @@ func FullCollect(batch *database.Batch, file io.WriteSeeker, network *config.Des
 
 // CollectAnchors collects anchors from the anchor ledger's anchor sequence
 // chain.
-func CollectAnchors(w *Writer, batch *database.Batch, network *config.Describe) error {
+func CollectAnchors(w *Writer, batch *database.Batch, network config.NetworkUrl) error {
 	txnHashes := new(HashSet)
 	record := batch.Account(network.AnchorPool())
 	err := txnHashes.CollectFromChain(record, record.AnchorSequenceChain())

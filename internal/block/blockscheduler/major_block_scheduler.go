@@ -1,15 +1,22 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package blockscheduler
 
 import (
 	"time"
 
-	"github.com/gorhill/cronexpr"
+	"github.com/robfig/cron/v3"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
 )
 
 type majorBlockScheduler struct {
-	majorBlockSchedule *cronexpr.Expression
+	majorBlockSchedule cron.Schedule
 	nextMajorBlockTime time.Time
 }
 type MajorBlockScheduler interface {
@@ -36,7 +43,7 @@ func Init(eventBus *events.Bus) *majorBlockScheduler {
 }
 
 func (s *majorBlockScheduler) onWillChangeGlobals(event events.WillChangeGlobals) (err error) {
-	s.majorBlockSchedule, err = cronexpr.Parse(event.New.Globals.MajorBlockSchedule)
+	s.majorBlockSchedule, err = core.Cron.Parse(event.New.Globals.MajorBlockSchedule)
 	s.nextMajorBlockTime = time.Time{}
 	return errors.Wrap(errors.StatusUnknownError, err)
 }

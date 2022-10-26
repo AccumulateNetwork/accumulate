@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package simulator
 
 //lint:file-ignore ST1001 Don't care
@@ -131,7 +137,7 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 
 	mainEventBus := events.NewBus(sim.Logger.With("partition", protocol.Directory))
 	events.SubscribeSync(mainEventBus, sim.willChangeGlobals)
-	sim.router = routing.NewRouter(mainEventBus, nil)
+	sim.router = routing.NewRouter(mainEventBus, nil, sim.Logger)
 
 	// Initialize each executor
 	for i, bvn := range sim.netInit.Bvns[:1] {
@@ -616,6 +622,11 @@ func (x *ExecEntry) Submit(pretend bool, envelopes ...*protocol.Envelope) []*cha
 		deliveries = append(deliveries, normalized...)
 	}
 
+	x.Submit2(pretend, deliveries)
+	return deliveries
+}
+
+func (x *ExecEntry) Submit2(pretend bool, deliveries []*chain.Delivery) {
 	// Capturing the field in a variable is more concurrency safe than using the
 	// field directly
 	if hook := x.SubmitHook; hook != nil {
@@ -627,13 +638,12 @@ func (x *ExecEntry) Submit(pretend bool, envelopes ...*protocol.Envelope) []*cha
 	}
 
 	if pretend {
-		return deliveries
+		return
 	}
 
 	x.mu.Lock()
 	defer x.mu.Unlock()
 	x.nextBlock = append(x.nextBlock, deliveries...)
-	return deliveries
 }
 
 // takeSubmitted returns the envelopes for the current block.

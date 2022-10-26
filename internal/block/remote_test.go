@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package block_test
 
 import (
@@ -178,7 +184,7 @@ func TestRemoteSignatures_SignPending(t *testing.T) {
 	// Validate
 	batch := sim.PartitionFor(bobUrl).Database.Begin(true)
 	defer batch.Discard()
-	de, err := indexing.Data(batch, bobUrl.JoinPath("account")).GetLatestEntry()
+	de, _, _, err := indexing.Data(batch, bobUrl.JoinPath("account")).GetLatestEntry()
 	require.NoError(t, err)
 	require.Equal(t, "foo", string(de.GetData()[0]))
 }
@@ -231,7 +237,7 @@ func TestRemoteSignatures_SameBVN(t *testing.T) {
 	// Validate
 	batch := sim.PartitionFor(bobUrl).Database.Begin(true)
 	defer batch.Discard()
-	de, err := indexing.Data(batch, bobUrl.JoinPath("account")).GetLatestEntry()
+	de, _, _, err := indexing.Data(batch, bobUrl.JoinPath("account")).GetLatestEntry()
 	require.NoError(t, err)
 	require.Equal(t, "foo", string(de.GetData()[0]))
 }
@@ -300,7 +306,7 @@ func TestRemoteSignatures_Initiate(t *testing.T) {
 	// Validate
 	batch := sim.PartitionFor(bobUrl).Database.Begin(true)
 	defer batch.Discard()
-	de, err := indexing.Data(batch, bobUrl.JoinPath("account")).GetLatestEntry()
+	de, _, _, err := indexing.Data(batch, bobUrl.JoinPath("account")).GetLatestEntry()
 	require.NoError(t, err)
 	require.Equal(t, "foo", string(de.GetData()[0]))
 }
@@ -355,7 +361,7 @@ func TestRemoteSignatures_Singlesig(t *testing.T) {
 	// Validate
 	batch = sim.PartitionFor(bobUrl).Database.Begin(true)
 	defer batch.Discard()
-	de, err := indexing.Data(batch, bobUrl.JoinPath("account")).GetLatestEntry()
+	de, _, _, err := indexing.Data(batch, bobUrl.JoinPath("account")).GetLatestEntry()
 	require.NoError(t, err)
 	require.Equal(t, "foo", string(de.GetData()[0]))
 }

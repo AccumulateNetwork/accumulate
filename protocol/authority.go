@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package protocol
 
 import (
@@ -30,6 +36,10 @@ type Signer2 interface {
 
 func EqualSigner(a, b Signer) bool {
 	return EqualAccount(a, b)
+}
+
+func CopySigner(v Signer) Signer {
+	return v.CopyAsInterface().(Signer)
 }
 
 func UnmarshalSigner(data []byte) (Signer, error) {
@@ -96,6 +106,7 @@ func MakeLiteSigner(signer Signer2) Signer {
 /* ***** Unknown signer ***** */
 
 func (s *UnknownSigner) GetUrl() *url.URL                                   { return s.Url }
+func (s *UnknownSigner) StripUrl()                                          { s.Url = s.GetUrl().StripExtras() }
 func (s *UnknownSigner) GetVersion() uint64                                 { return s.Version }
 func (*UnknownSigner) GetSignatureThreshold() uint64                        { return math.MaxUint64 }
 func (*UnknownSigner) EntryByKeyHash(keyHash []byte) (int, KeyEntry, bool)  { return -1, nil, false }

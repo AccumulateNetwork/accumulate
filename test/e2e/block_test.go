@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package e2e
 
 import (
@@ -289,7 +295,7 @@ func verifyLiteDataAccount(t *testing.T, batch *database.Batch, firstEntry DataE
 	require.Equal(t, hex.EncodeToString(firstEntry.Hash()), hex.EncodeToString(txResult.EntryHash[:]), "Transaction result entry hash does not match")
 
 	// Verify the entry hash returned by Entry
-	entry, err := indexing.Data(batch, liteDataAddress).GetLatestEntry()
+	entry, _, _, err := indexing.Data(batch, liteDataAddress).GetLatestEntry()
 	require.NoError(t, err)
 	require.Equal(t, hex.EncodeToString(firstEntry.Hash()), hex.EncodeToString(entry.Hash()), "Chain Entry.Hash does not match")
 	//sample verification for calculating the entryHash from lite data entry
@@ -297,7 +303,7 @@ func verifyLiteDataAccount(t *testing.T, batch *database.Batch, firstEntry DataE
 	require.NoError(t, err)
 	txnHash, err := indexing.Data(batch, liteDataAddress).Transaction(entryHash)
 	require.NoError(t, err)
-	ent, err := indexing.GetDataEntry(batch, txnHash)
+	ent, _, _, err := indexing.GetDataEntry(batch, txnHash)
 	require.NoError(t, err)
 	require.Equal(t, hex.EncodeToString(firstEntry.Hash()), hex.EncodeToString(entryHash), "Chain GetHashes does not match")
 	require.Equal(t, hex.EncodeToString(firstEntry.Hash()), hex.EncodeToString(ent.Hash()), "Chain GetHashes does not match")

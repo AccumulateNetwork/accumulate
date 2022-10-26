@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package e2e
 
 import (
@@ -371,22 +377,24 @@ func TestSendDirectToWrongPartition(t *testing.T) {
 
 	// Submit the transaction directly to the wrong BVN
 	badBvn.Submit(false, env)
-	var status *protocol.TransactionStatus
-	for i := 0; i < 50 && status == nil; i++ {
+	var found bool
+	for i := 0; i < 50 && !found; i++ {
 		ch := make(chan *protocol.TransactionStatus)
 		go sim.ExecuteBlock(ch)
 		for s := range ch {
 			if s.TxID.Equal(env.Transaction[0].ID()) {
-				status = s
-				break
+				found = true
 			}
 		}
 	}
 
-	require.NotNil(t, status, fmt.Sprintf("Transaction %X has not been delivered after 50 blocks", env.Transaction[0].GetHash()[:4]))
-
-	require.NotNil(t, status.Error)
-	require.Equal(t, fmt.Sprintf("signature submitted to %s instead of %s", badBvn.Partition.Id, goodBvn.Partition.Id), status.Error.Message)
+	helpers.View(t, badBvn, func(batch *database.Batch) {
+		status, err := batch.Transaction(env.Signatures[0].Hash()).Status().Get()
+		require.NoError(t, err)
+		require.NotZero(t, status.Code)
+		require.NotNil(t, status.Error)
+		require.Equal(t, fmt.Sprintf("signature submitted to %s instead of %s", badBvn.Partition.Id, goodBvn.Partition.Id), status.Error.Message)
+	})
 }
 
 func TestDelegateBetweenPartitions(t *testing.T) {
@@ -523,7 +531,7 @@ func TestPendingTransactionForMissingAccount(t *testing.T) {
 	// Create a snapshot
 	buf := new(ioutil2.Buffer)
 	helpers.View(t, sim.PartitionFor(charlie), func(batch *database.Batch) {
-		_, err := snapshot.Collect(batch, buf, func(account *database.Account) (bool, error) { return false, nil })
+		_, err := snapshot.Collect(batch, new(snapshot.Header), buf, nil, func(account *database.Account) (bool, error) { return false, nil })
 		require.NoError(t, err)
 	})
 
@@ -531,5 +539,47 @@ func TestPendingTransactionForMissingAccount(t *testing.T) {
 	db2 := database.OpenInMemory(nil)
 	helpers.Update(t, db2, func(batch *database.Batch) {
 		require.NoError(t, snapshot.Restore(batch, buf, nil))
+	})
+}
+
+func TestDnAnchorAcknowledged(t *testing.T) {
+	t.Skip("This functionality has been reverted")
+
+	aliceKey, bobKey := acctesting.GenerateKey("Alice"), acctesting.GenerateKey("Bob")
+	bob := acctesting.AcmeLiteAddressStdPriv(bobKey)
+	var timestamp uint64
+
+	// Initialize
+	sim := simulator.New(t, 3)
+	sim.InitFromGenesis()
+	alice := sim.CreateLiteTokenAccount(aliceKey, AcmeUrl(), 1e9, 2)
+
+	// Create some history
+	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
+		acctesting.NewTransaction().
+			WithPrincipal(alice).
+			WithTimestampVar(&timestamp).
+			WithSigner(alice, 1).
+			WithBody(&SendTokens{
+				To: []*TokenRecipient{{
+					Url:    bob,
+					Amount: *big.NewInt(1),
+				}},
+			}).
+			Initiate(SignatureTypeED25519, aliceKey).
+			Build(),
+	)...)
+
+	// Wait a few blocks
+	sim.ExecuteBlocks(10)
+
+	// Verify that Acknowledged equals Produced
+	x := sim.Partition(Directory)
+	helpers.View(t, x, func(batch *database.Batch) {
+		var ledger1 *AnchorLedger
+		require.NoError(t, batch.Account(x.Executor.Describe.AnchorPool()).Main().GetAs(&ledger1))
+		ledger2 := ledger1.Anchor(DnUrl())
+		require.Greater(t, ledger2.Produced, uint64(1))
+		// require.Equal(t, ledger2.Produced, ledger2.Acknowledged)
 	})
 }

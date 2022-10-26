@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package main
 
 import (
@@ -19,7 +25,6 @@ func TestInitSeeds(t *testing.T) {
 	proxyClient, accClient, dnEndpoint, bvnEndpoint := proxy_testing.LaunchFakeProxy(t)
 	_ = proxyClient
 	_ = accClient
-
 	var args []string
 	workDir := t.TempDir()
 
@@ -94,5 +99,4 @@ func TestInitSeeds(t *testing.T) {
 			t.Fatalf("%s", string(errPrint))
 		}
 	}
-
 }

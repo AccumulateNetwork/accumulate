@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package main
 
 import (
@@ -16,9 +22,10 @@ import (
 	"github.com/kardianos/service"
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
-	"github.com/tendermint/tendermint/libs/log"
+	tmconfig "github.com/tendermint/tendermint/config"
 	service2 "github.com/tendermint/tendermint/libs/service"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage/badger"
 )
 
@@ -40,6 +47,7 @@ var flagRun = struct {
 	JsonLogFile      string
 	EnableTimingLogs bool
 	PprofListen      string
+	Debug            bool
 }{}
 
 func init() {
@@ -56,6 +64,7 @@ func initRunFlags(cmd *cobra.Command, forService bool) {
 	cmd.PersistentFlags().StringVar(&flagRun.JsonLogFile, "json-log-file", "", "Write logs to a file as JSON")
 	cmd.PersistentFlags().BoolVar(&flagRun.EnableTimingLogs, "enable-timing-logs", false, "Enable core timing analysis logging")
 	cmd.PersistentFlags().StringVar(&flagRun.PprofListen, "pprof", "", "Address to run net/http/pprof on")
+	cmd.PersistentFlags().BoolVar(&flagRun.Debug, "debug", false, "Enable debugging features")
 
 	if !forService {
 		cmd.Flags().DurationVar(&flagRun.CiStopAfter, "ci-stop-after", 0, "FOR CI ONLY - stop the node after some time")
@@ -67,6 +76,10 @@ func initRunFlags(cmd *cobra.Command, forService bool) {
 
 		if flagRun.PprofListen != "" {
 			go func() { check(http.ListenAndServe(flagRun.PprofListen, nil)) }()
+		}
+
+		if flagRun.Debug {
+			testing.EnableDebugFeatures()
 		}
 	}
 }
@@ -158,7 +171,7 @@ func newLogWriter(s service.Service) func(string, logAnnotator) (io.Writer, erro
 		if logFile != nil {
 			w := io.Writer(logFile)
 			if annotate != nil {
-				w = annotate(w, log.LogFormatText, false)
+				w = annotate(w, tmconfig.LogFormatPlain, false)
 			}
 			writers = append(writers, &zerolog.ConsoleWriter{
 				Out:        w,
@@ -176,7 +189,7 @@ func newLogWriter(s service.Service) func(string, logAnnotator) (io.Writer, erro
 		if jsonLogFile != nil {
 			w := io.Writer(jsonLogFile)
 			if annotate != nil {
-				w = annotate(w, log.LogFormatJSON, false)
+				w = annotate(w, tmconfig.LogFormatJSON, false)
 			}
 			writers = append(writers, w)
 		}

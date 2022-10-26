@@ -1,12 +1,20 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package routing
 
 import (
 	"context"
 
-	core "github.com/tendermint/tendermint/rpc/coretypes"
+	"github.com/tendermint/tendermint/libs/log"
+	core "github.com/tendermint/tendermint/rpc/core/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -32,7 +40,7 @@ type ResponseSubmit struct {
 }
 
 // submit calls the appropriate client method to submit a transaction.
-func submit(ctx context.Context, connMgr connections.ConnectionManager, partitionId string, tx []byte, async bool) (*ResponseSubmit, error) {
+func submit(ctx context.Context, logger log.Logger, connMgr connections.ConnectionManager, partitionId string, tx []byte, async bool) (*ResponseSubmit, error) {
 	var r1 *core.ResultBroadcastTx
 	errorCnt := 0
 	for {
@@ -41,6 +49,7 @@ func submit(ctx context.Context, connMgr connections.ConnectionManager, partitio
 			return nil, err
 		}
 
+		logger.Debug("Broadcasting a transaction", "partition", partitionId, "async", async, "address", connCtx.GetAddress(), "base-port", connCtx.GetBasePort(), "envelope", logging.AsHex(tx))
 		if async {
 			r1, err = connCtx.GetABCIClient().BroadcastTxAsync(ctx, tx)
 		} else {
@@ -51,7 +60,6 @@ func submit(ctx context.Context, connMgr connections.ConnectionManager, partitio
 			r2.Code = r1.Code
 			r2.Data = r1.Data
 			r2.Log = r1.Log
-			r2.MempoolError = r1.MempoolError
 			return r2, nil
 		}
 
@@ -64,7 +72,7 @@ func submit(ctx context.Context, connMgr connections.ConnectionManager, partitio
 	}
 }
 
-func submitPretend(ctx context.Context, connMgr connections.ConnectionManager, partition string, tx []byte) (*ResponseSubmit, error) {
+func submitPretend(ctx context.Context, logger log.Logger, connMgr connections.ConnectionManager, partition string, tx []byte) (*ResponseSubmit, error) {
 	var r1 *core.ResultCheckTx
 	errorCnt := 0
 	for {
@@ -72,6 +80,8 @@ func submitPretend(ctx context.Context, connMgr connections.ConnectionManager, p
 		if err != nil {
 			return nil, err
 		}
+
+		logger.Debug("Checking a transaction", "partition", partition, "address", connCtx.GetAddress(), "base-port", connCtx.GetBasePort(), "envelope", logging.AsHex(tx))
 		r1, err = connCtx.GetABCIClient().CheckTx(ctx, tx)
 		if err == nil {
 			r2 := new(ResponseSubmit)
@@ -96,13 +106,19 @@ func submitPretend(ctx context.Context, connMgr connections.ConnectionManager, p
 type RouterInstance struct {
 	tree              *RouteTree
 	connectionManager connections.ConnectionManager
+	logger            logging.OptionalLogger
 }
 
-func NewRouter(eventBus *events.Bus, cm connections.ConnectionManager) *RouterInstance {
+func NewRouter(eventBus *events.Bus, cm connections.ConnectionManager, logger log.Logger) *RouterInstance {
 	r := new(RouterInstance)
 	r.connectionManager = cm
+	if logger != nil {
+		r.logger.L = logger.With("module", "router")
+	}
 
 	events.SubscribeSync(eventBus, func(e events.WillChangeGlobals) error {
+		r.logger.Debug("Loading new routing table", "table", e.New.Routing)
+
 		tree, err := NewRouteTree(e.New.Routing)
 		if err != nil {
 			return errors.Wrap(errors.StatusUnknownError, err)
@@ -116,13 +132,19 @@ func NewRouter(eventBus *events.Bus, cm connections.ConnectionManager) *RouterIn
 }
 
 // NewStaticRouter returns a router that uses a static routing table
-func NewStaticRouter(table *protocol.RoutingTable, cm connections.ConnectionManager) (*RouterInstance, error) {
+func NewStaticRouter(table *protocol.RoutingTable, cm connections.ConnectionManager, logger log.Logger) (*RouterInstance, error) {
 	tree, err := NewRouteTree(table)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
-	return &RouterInstance{tree, cm}, nil
+	r := new(RouterInstance)
+	r.tree = tree
+	r.connectionManager = cm
+	if logger != nil {
+		r.logger.L = logger.With("module", "router")
+	}
+	return r, nil
 }
 
 var _ Router = (*RouterInstance)(nil)
@@ -164,7 +186,15 @@ func (r *RouterInstance) RouteAccount(account *url.URL) (string, error) {
 	if protocol.IsUnknown(account) {
 		return "", errors.New(errors.StatusBadRequest, "URL is unknown, cannot route")
 	}
-	return r.tree.Route(account)
+
+	route, err := r.tree.Route(account)
+	if err != nil {
+		r.logger.Debug("Failed to route", "account", account, "error", err)
+		return "", errors.Wrap(errors.StatusUnknownError, err)
+	}
+
+	r.logger.Debug("Routing", "account", account, "to", route)
+	return route, nil
 }
 
 // Route routes the account using modulo routing.
@@ -210,8 +240,8 @@ func (r *RouterInstance) Submit(ctx context.Context, partitionId string, tx *pro
 		return nil, err
 	}
 	if pretend {
-		return submitPretend(ctx, r.connectionManager, partitionId, raw)
+		return submitPretend(ctx, r.logger, r.connectionManager, partitionId, raw)
 	} else {
-		return submit(ctx, r.connectionManager, partitionId, raw, async)
+		return submit(ctx, r.logger, r.connectionManager, partitionId, raw, async)
 	}
 }

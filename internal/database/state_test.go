@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package database_test
 
 import (
@@ -45,7 +51,7 @@ func TestState(t *testing.T) {
 	_ = bvn.Database.View(func(b *database.Batch) error {
 		blockHash, err = b.GetMinorRootChainAnchor(&bvn.Executor.Describe)
 		require.NoError(t, err)
-		require.NoError(t, snapshot.FullCollect(b, f, &bvn.Executor.Describe))
+		require.NoError(t, snapshot.FullCollect(b, f, bvn.Executor.Describe.PartitionUrl(), nil, false))
 		bptRoot = b.BptRoot()
 		return nil
 	})

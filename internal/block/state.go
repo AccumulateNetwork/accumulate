@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package block
 
 import (
@@ -13,8 +19,8 @@ type BlockMeta struct {
 	IsLeader   bool
 	Index      uint64
 	Time       time.Time
-	CommitInfo *types.LastCommitInfo
-	Evidence   []types.Evidence
+	CommitInfo *types.CommitInfo
+	Evidence   []types.Misbehavior
 }
 
 // BlockState tracks various metrics of a block of transactions as they are

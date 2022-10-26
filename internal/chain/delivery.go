@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package chain
 
 import (
@@ -241,7 +247,7 @@ func (d *Delivery) LoadTransaction(batch *database.Batch) (*protocol.Transaction
 
 	case status.Delivered():
 		// Transaction has already been delivered
-		return status, errors.Format(errors.StatusDelivered, "transaction %X has been delivered", d.Transaction.GetHash()[:4])
+		return status, errors.Format(errors.StatusDelivered, "transaction %X (%v) has been delivered", d.Transaction.GetHash()[:4], d.Transaction.Body.Type())
 	}
 
 	return status, nil

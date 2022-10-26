@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package block
 
 import (
@@ -7,8 +13,8 @@ import (
 	"sync"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
+	"github.com/tendermint/tendermint/mempool"
 	jrpc "github.com/tendermint/tendermint/rpc/jsonrpc/types"
-	tm "github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
@@ -66,7 +72,7 @@ func (d *dispatcher) BroadcastTxLocal(ctx context.Context, tx *protocol.Envelope
 	return d.push(d.Describe.PartitionId, tx)
 }
 
-var errTxInCache1 = jrpc.RPCInternalError(jrpc.JSONRPCIntID(0), tm.ErrTxInCache).Error
+var errTxInCache1 = jrpc.RPCInternalError(jrpc.JSONRPCIntID(0), mempool.ErrTxInCache).Error
 var errTxInCache2 = jsonrpc2.NewError(jsonrpc2.ErrorCode(errTxInCache1.Code), errTxInCache1.Message, errTxInCache1.Data)
 var errTxInCacheAcc = jsonrpc2.NewError(api.ErrCodeAccumulate, "Accumulate Error", errTxInCache1.Data)
 
@@ -98,7 +104,7 @@ func checkDispatchError(err error, errs chan<- error) {
 	// https://github.com/tendermint/tendermint/issues/7185.
 
 	// Is the error "tx already exists in cache"?
-	if err.Error() == tm.ErrTxInCache.Error() {
+	if err.Error() == mempool.ErrTxInCache.Error() {
 		return
 	}
 

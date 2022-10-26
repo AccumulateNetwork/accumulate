@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package core
 
 import (
@@ -7,6 +13,72 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
+
+// NewGlobals returns GlobalValues with uninitialized values set to the default.
+func NewGlobals(g *GlobalValues) *GlobalValues {
+	// TODO: This should be part of genesis but that causes an import loop
+
+	if g == nil {
+		g = new(GlobalValues)
+	}
+
+	if g.Oracle == nil {
+		g.Oracle = new(protocol.AcmeOracle)
+		if g.Oracle.Price == 0 {
+			g.Oracle.Price = uint64(protocol.InitialAcmeOracleValue)
+		}
+	}
+
+	// Set the initial threshold to 2/3 & MajorBlockSchedule
+	if g.Globals == nil {
+		g.Globals = new(protocol.NetworkGlobals)
+	}
+	if g.Globals.OperatorAcceptThreshold.Numerator == 0 {
+		g.Globals.OperatorAcceptThreshold.Set(2, 3)
+	}
+	if g.Globals.ValidatorAcceptThreshold.Numerator == 0 {
+		g.Globals.ValidatorAcceptThreshold.Set(2, 3)
+	}
+	if g.Globals.MajorBlockSchedule == "" {
+		g.Globals.MajorBlockSchedule = protocol.DefaultMajorBlockSchedule
+	}
+	if g.Globals.FeeSchedule == nil {
+		g.Globals.FeeSchedule = new(protocol.FeeSchedule)
+		g.Globals.FeeSchedule.CreateIdentitySliding = []protocol.Fee{
+			protocol.FeeCreateIdentity << 12,
+			protocol.FeeCreateIdentity << 11,
+			protocol.FeeCreateIdentity << 10,
+			protocol.FeeCreateIdentity << 9,
+			protocol.FeeCreateIdentity << 8,
+			protocol.FeeCreateIdentity << 7,
+			protocol.FeeCreateIdentity << 6,
+			protocol.FeeCreateIdentity << 5,
+			protocol.FeeCreateIdentity << 4,
+			protocol.FeeCreateIdentity << 3,
+			protocol.FeeCreateIdentity << 2,
+			protocol.FeeCreateIdentity << 1,
+		}
+	}
+	if g.Globals.Limits == nil {
+		g.Globals.Limits = new(protocol.NetworkLimits)
+	}
+	if g.Globals.Limits.DataEntryParts == 0 {
+		g.Globals.Limits.DataEntryParts = 100
+	}
+	if g.Globals.Limits.AccountAuthorities == 0 {
+		g.Globals.Limits.AccountAuthorities = 20
+	}
+	if g.Globals.Limits.BookPages == 0 {
+		g.Globals.Limits.BookPages = 20
+	}
+	if g.Globals.Limits.PageEntries == 0 {
+		g.Globals.Limits.PageEntries = 100
+	}
+	if g.Globals.Limits.IdentityAccounts == 0 {
+		g.Globals.Limits.IdentityAccounts = 100
+	}
+	return g
+}
 
 type getStateFunc func(accountUrl *url.URL, target interface{}) error
 type putStateFunc func(account protocol.Account) error

@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package accumulated
 
 import (
@@ -8,17 +14,22 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/fatih/color"
-	"github.com/getsentry/sentry-go"
+	"github.com/robfig/cron/v3"
 	"github.com/rs/zerolog"
-	tmcfg "github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/crypto"
 	tmlog "github.com/tendermint/tendermint/libs/log"
 	service2 "github.com/tendermint/tendermint/libs/service"
+	tmnode "github.com/tendermint/tendermint/node"
+	"github.com/tendermint/tendermint/p2p"
 	"github.com/tendermint/tendermint/privval"
+	"github.com/tendermint/tendermint/proxy"
 	tmclient "github.com/tendermint/tendermint/rpc/client"
 	"github.com/tendermint/tendermint/rpc/client/local"
 	"gitlab.com/accumulatenetwork/accumulate"
@@ -29,12 +40,18 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
 	statuschk "gitlab.com/accumulatenetwork/accumulate/internal/connections/status"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node"
 	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
+	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
+	"go.opentelemetry.io/otel/sdk/resource"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type Daemon struct {
@@ -50,6 +67,9 @@ type Daemon struct {
 	connectionManager connections.ConnectionInitializer
 	eventBus          *events.Bus
 	localTm           tmclient.Client
+	snapshotSchedule  cron.Schedule
+	snapshotLock      *sync.Mutex
+	tracer            trace.Tracer
 
 	// knobs for tests
 	// IsTest   bool
@@ -58,6 +78,7 @@ type Daemon struct {
 
 func Load(dir string, newWriter func(*config.Config) (io.Writer, error)) (*Daemon, error) {
 	var daemon Daemon
+	daemon.snapshotLock = new(sync.Mutex)
 
 	var err error
 	daemon.Config, err = config.Load(dir)
@@ -109,20 +130,55 @@ func (d *Daemon) Start() (err error) {
 		}
 	}()
 
-	if d.Config.Accumulate.SentryDSN != "" {
-		opts := sentry.ClientOptions{
-			Dsn:           d.Config.Accumulate.SentryDSN,
-			Environment:   "Accumulate",
-			HTTPTransport: sentryHack{},
-		}
-		if accumulate.IsVersionKnown() {
-			opts.Release = accumulate.Commit
-		}
-		err := sentry.Init(opts)
+	if d.Config.Accumulate.AnalysisLog.Enabled {
+		dir := config.MakeAbsolute(d.Config.RootDir, d.Config.Accumulate.AnalysisLog.Directory)
+		err = os.MkdirAll(dir, 0700)
 		if err != nil {
-			return fmt.Errorf("configuring sentry: %v", err)
+			return err
 		}
-		defer sentry.Flush(2 * time.Second)
+
+		ymd, hm := logging.GetCurrentDateTime()
+		f, err := os.Create(filepath.Join(dir, fmt.Sprintf("trace_%v_%v.json", ymd, hm)))
+		if err != nil {
+			return err
+		}
+
+		exp, err := stdouttrace.New(stdouttrace.WithWriter(f))
+		if err != nil {
+			f.Close()
+			return err
+		}
+
+		r, err := resource.Merge(
+			resource.Default(),
+			resource.NewWithAttributes(
+				semconv.SchemaURL,
+				semconv.ServiceNameKey.String("accumulate"),
+				semconv.ServiceVersionKey.String(accumulate.Version),
+			),
+		)
+		if err != nil {
+			f.Close()
+			return err
+		}
+
+		tp := sdktrace.NewTracerProvider(
+			sdktrace.WithBatcher(exp),
+			sdktrace.WithResource(r),
+		)
+		go func() {
+			<-d.done
+			_ = tp.Shutdown(context.Background())
+			f.Close()
+		}()
+		// otel.SetTracerProvider(tp)
+		d.tracer = tp.Tracer("Accumulate")
+	}
+
+	if s, err := core.Cron.Parse(d.Config.Accumulate.Snapshots.Schedule); err != nil {
+		d.Logger.Error("Ignoring invalid snapshot schedule", "error", err, "value", d.Config.Accumulate.Snapshots.Schedule)
+	} else {
+		d.snapshotSchedule = s
 	}
 
 	d.db, err = database.Open(d.Config, d.Logger)
@@ -138,12 +194,17 @@ func (d *Daemon) Start() (err error) {
 	}()
 
 	// read private validator
-	d.pv, err = privval.LoadFilePV(
-		d.Config.PrivValidator.KeyFile(),
-		d.Config.PrivValidator.StateFile(),
+	d.pv, err = config.LoadFilePV(
+		d.Config.PrivValidatorKeyFile(),
+		d.Config.PrivValidatorStateFile(),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to load private validator: %v", err)
+	}
+
+	nodeKey, err := p2p.LoadNodeKey(d.Config.NodeKeyFile())
+	if err != nil {
+		return fmt.Errorf("failed to load node key: %v", err)
 	}
 
 	d.connectionManager = connections.NewConnectionManager(d.Config, d.Logger, func(server string) (connections.APIClient, error) {
@@ -153,14 +214,13 @@ func (d *Daemon) Start() (err error) {
 	d.eventBus = events.NewBus(d.Logger.With("module", "events"))
 	events.SubscribeSync(d.eventBus, d.onDidCommitBlock)
 
-	router := routing.NewRouter(d.eventBus, d.connectionManager)
+	router := routing.NewRouter(d.eventBus, d.connectionManager, d.Logger)
 	execOpts := block.ExecutorOptions{
 		Logger:           d.Logger,
 		Key:              d.Key().Bytes(),
 		Describe:         d.Config.Accumulate.Describe,
 		Router:           router,
 		EventBus:         d.eventBus,
-		IsFollower:       d.Config.Mode != tmcfg.ModeValidator,
 		BatchReplayLimit: d.Config.Accumulate.BatchReplayLimit,
 	}
 
@@ -181,13 +241,24 @@ func (d *Daemon) Start() (err error) {
 		Logger:   d.Logger,
 		EventBus: d.eventBus,
 		Config:   d.Config,
+		Tracer:   d.tracer,
 	})
 
 	// Create node
-	d.node, err = node.New(d.Config, app, d.Logger)
+	tmn, err := tmnode.NewNode(
+		&d.Config.Config,
+		d.pv,
+		nodeKey,
+		proxy.NewLocalClientCreator(app),
+		tmnode.DefaultGenesisDocProviderFunc(&d.Config.Config),
+		tmnode.DefaultDBProvider,
+		tmnode.DefaultMetricsProvider(d.Config.Instrumentation),
+		d.Logger,
+	)
 	if err != nil {
 		return fmt.Errorf("failed to initialize node: %v", err)
 	}
+	d.node = &node.Node{Node: tmn, Config: d.Config, ABCI: app}
 
 	// Start node
 	// TODO Feed Tendermint logger to service logger
@@ -200,7 +271,7 @@ func (d *Daemon) Start() (err error) {
 	defer func() {
 		if err != nil {
 			_ = d.node.Stop()
-			d.node.Wait()
+			<-d.node.Quit()
 		}
 	}()
 
@@ -216,14 +287,7 @@ func (d *Daemon) Start() (err error) {
 	})
 
 	// Create a local client
-	lnode, ok := d.node.Service.(local.NodeService)
-	if !ok {
-		return fmt.Errorf("node is not a local node service")
-	}
-	d.localTm, err = local.New(lnode)
-	if err != nil {
-		return fmt.Errorf("failed to create local node client: %v", err)
-	}
+	d.localTm = local.New(d.node.Node)
 
 	if d.Config.Accumulate.API.DebugJSONRPC {
 		jsonrpc2.DebugMethodFunc = true
