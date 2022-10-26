@@ -157,6 +157,12 @@ func SnapshotFromDirectory(dir string) SnapshotFunc {
 	}
 }
 
+func SnapshotMap(snapshots map[string]ioutil2.SectionReader) SnapshotFunc {
+	return func(partition string, _ *accumulated.NetworkInit, _ log.Logger) (ioutil2.SectionReader, error) {
+		return snapshots[partition], nil
+	}
+}
+
 func Genesis(time time.Time) SnapshotFunc {
 	return GenesisWith(time, nil)
 }
