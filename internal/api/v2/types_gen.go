@@ -463,12 +463,12 @@ func (v *DataEntryQueryResponse) IsValid() error {
 	} else if protocol.EqualDataEntry(v.Entry, nil) {
 		errs = append(errs, "field Entry is not set")
 	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
 		errs = append(errs, "field TxId is missing")
 	} else if v.TxId == nil {
 		errs = append(errs, "field TxId is not set")
 	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field CauseTxId is missing")
 	} else if v.CauseTxId == nil {
 		errs = append(errs, "field CauseTxId is not set")
