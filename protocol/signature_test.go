@@ -4,7 +4,7 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package protocol
+package protocol_test
 
 import (
 	"crypto/sha256"
@@ -15,7 +15,11 @@ import (
 	btc "github.com/btcsuite/btcd/btcec"
 	"github.com/btcsuite/btcutil/base58"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	. "gitlab.com/accumulatenetwork/accumulate/protocol"
+	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
+	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
 )
 
 func TestBTCSignature(t *testing.T) {
@@ -105,4 +109,64 @@ func TestETHaddress(t *testing.T) {
 	lta, err := LiteTokenAddressFromHash(ETHhash(pubKey), ACME)
 	require.NoError(t, err)
 	require.Equal(t, accEthLiteAccount.JoinPath(ACME).String(), lta.String())
+}
+
+func mustDecodeHex(t testing.TB, s string) []byte {
+	b, err := hex.DecodeString(s)
+	require.NoError(t, err)
+	return b
+}
+
+func TestInitWithOtherKeys(t *testing.T) {
+	ethPriv := mustDecodeHex(t, "1b48e04041e23c72cacdaa9b0775d31515fc74d6a6d3c8804172f7e7d1248529")
+	_, ethPub := btc.PrivKeyFromBytes(btc.S256(), ethPriv)
+	btcPriv := base58.Decode("KxukKhTPU11xH2Wfk2366e375166QE4r7y8FWojU9XPbzLYYSM3j")
+	_, btcPub := btc.PrivKeyFromBytes(btc.S256(), btcPriv)
+	btclPriv := base58.Decode("KxukKhTPU11xH2Wfk2366e375166QE4r7y8FWojU9XPbzLYYSM3j")
+	_, btclPub := btc.PrivKeyFromBytes(btc.S256(), btclPriv)
+
+	cases := map[string]struct {
+		PrivKey []byte
+		Signer  KeySignature
+	}{
+		"ETH":       {PrivKey: ethPriv, Signer: &ETHSignature{PublicKey: ethPub.SerializeUncompressed()}},
+		"BTC":       {PrivKey: btcPriv, Signer: &BTCSignature{PublicKey: btcPub.SerializeCompressed()}},
+		"BTCLegacy": {PrivKey: btclPriv, Signer: &BTCLegacySignature{PublicKey: btclPub.SerializeUncompressed()}},
+	}
+
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			alice := url.MustParse("alice")
+
+			// Initialize
+			sim := NewSim(t,
+				simulator.MemoryDatabase,
+				simulator.SimpleNetwork(t.Name(), 1, 1),
+				simulator.Genesis(GenesisTime),
+			)
+
+			MakeIdentity(t, sim.DatabaseFor(alice), alice)
+			UpdateAccount(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), func(p *KeyPage) {
+				p.CreditBalance = 1e9
+				p.AddKeySpec(&KeySpec{PublicKeyHash: c.Signer.GetPublicKeyHash()})
+			})
+
+			env := MustBuild(t,
+				build.Transaction().For(alice).
+					CreateTokenAccount(alice, "tokens").ForToken(ACME).
+					SignWith(alice, "book", "1").Version(1).Timestamp(1).Type(c.Signer.Type()).PrivateKey(c.PrivKey))
+
+			// Confirm a simple hash was used and verify that it matches the
+			// initiator
+			require.Equal(t, env.Transaction.Header.Initiator[:], env.Signatures[0].Metadata().Hash())
+
+			// Execute
+			st := sim.SubmitSuccessfully(env)
+			sim.StepUntil(
+				Txn(st.TxID).Succeeds())
+
+			// Verify
+			GetAccount[*TokenAccount](t, sim.DatabaseFor(alice), alice.JoinPath("tokens"))
+		})
+	}
 }
