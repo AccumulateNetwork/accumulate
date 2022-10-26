@@ -138,7 +138,7 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) ([]byte, error) {
 		return nil, errors.Format(errors.StatusUnknownError, "collect snapshot: %w", err)
 	}
 
-	err = snapshot.CollectAnchors(w, batch, &exec.Describe)
+	err = snapshot.CollectAnchors(w, batch, exec.Describe.PartitionUrl())
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}

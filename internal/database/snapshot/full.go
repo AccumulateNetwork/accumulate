@@ -19,7 +19,7 @@ import (
 
 // FullCollect collects a snapshot including additional records required for a
 // fully-functioning node.
-func FullCollect(batch *database.Batch, file io.WriteSeeker, network *config.Describe, logger log.Logger) error {
+func FullCollect(batch *database.Batch, file io.WriteSeeker, network config.NetworkUrl, logger log.Logger, preserve bool) error {
 	var ledger *protocol.SystemLedger
 	err := batch.Account(network.Ledger()).Main().GetAs(&ledger)
 	if err != nil {
@@ -31,6 +31,10 @@ func FullCollect(batch *database.Batch, file io.WriteSeeker, network *config.Des
 	header.Timestamp = ledger.Timestamp
 
 	w, err := Collect(batch, header, file, logger, func(account *database.Account) (bool, error) {
+		if preserve {
+			return true, nil
+		}
+
 		// Preserve history for DN/BVN ADIs
 		_, ok := protocol.ParsePartitionUrl(account.Url())
 		return ok, nil
@@ -45,7 +49,7 @@ func FullCollect(batch *database.Batch, file io.WriteSeeker, network *config.Des
 
 // CollectAnchors collects anchors from the anchor ledger's anchor sequence
 // chain.
-func CollectAnchors(w *Writer, batch *database.Batch, network *config.Describe) error {
+func CollectAnchors(w *Writer, batch *database.Batch, network config.NetworkUrl) error {
 	txnHashes := new(HashSet)
 	record := batch.Account(network.AnchorPool())
 	err := txnHashes.CollectFromChain(record, record.AnchorSequenceChain())
