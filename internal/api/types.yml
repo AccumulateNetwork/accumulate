@@ -16,6 +16,9 @@ Receipt:
   fields:
     - name: LocalBlock
       type: uvarint
+    - name: LocalBlockTime
+      type: time
+      pointer: true
     - name: DirectoryBlock
       type: uvarint
     - name: Proof
