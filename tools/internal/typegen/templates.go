@@ -21,6 +21,8 @@ import (
 	"golang.org/x/text/language"
 )
 
+var ErrSkip = errors.New("skip")
+
 var enUsTitle = cases.Title(language.AmericanEnglish)
 var reUpper = regexp.MustCompile(`^\p{Lu}+`)
 var reLowerUpper = regexp.MustCompile(`\p{Ll}?\p{Lu}+`)
@@ -31,6 +33,14 @@ func DashCase(s string) string {
 		return s[:1] + "-" + strings.ToLower(s[1:])
 	})
 	return s
+}
+
+func UnderscoreUpperCase(s string) string {
+	s = LowerFirstWord(s)
+	s = reLowerUpper.ReplaceAllStringFunc(s, func(s string) string {
+		return s[:1] + "_" + strings.ToLower(s[1:])
+	})
+	return strings.ToUpper(s) // FIXME shortcut
 }
 
 func TitleCase(s string) string {
@@ -93,14 +103,7 @@ func NewTemplateLibrary(funcs template.FuncMap) *TemplateLibrary {
 }
 
 func (lib *TemplateLibrary) Register(src, name string, funcs template.FuncMap, altNames ...string) *template.Template {
-	tmpl := template.New(name)
-	if lib.functions != nil {
-		tmpl = tmpl.Funcs(lib.functions)
-	}
-	if funcs != nil {
-		tmpl = tmpl.Funcs(funcs)
-	}
-	tmpl, err := tmpl.Parse(src)
+	tmpl, err := lib.Parse(src, name, funcs)
 	if err != nil {
 		panic(err)
 	}
@@ -109,6 +112,25 @@ func (lib *TemplateLibrary) Register(src, name string, funcs template.FuncMap, a
 		lib.templates[name] = tmpl
 	}
 	return tmpl
+}
+
+func (lib *TemplateLibrary) Parse(src, name string, funcs template.FuncMap) (*template.Template, error) {
+	tmpl := template.New(name)
+	tmpl = tmpl.Funcs(template.FuncMap{
+		"skip": func(reason ...any) (string, error) {
+			if len(reason) == 0 {
+				return "", ErrSkip
+			}
+			return "", fmt.Errorf("%w: %s", ErrSkip, fmt.Sprint(reason...))
+		},
+	})
+	if lib.functions != nil {
+		tmpl = tmpl.Funcs(lib.functions)
+	}
+	if funcs != nil {
+		tmpl = tmpl.Funcs(funcs)
+	}
+	return tmpl.Parse(src)
 }
 
 func (lib *TemplateLibrary) Execute(w io.Writer, name string, data interface{}) error {

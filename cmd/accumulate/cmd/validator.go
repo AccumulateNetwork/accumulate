@@ -158,7 +158,7 @@ func addValidator(values *core.GlobalValues, pageCount int, signers []*signing.B
 		return nil, err
 	}
 
-	return build.AddValidator(values, pageCount, newKey.PublicKey, partition, signers...)
+	return build.AddValidator(values, pageCount, newKey.PublicKey, partition, false, signers...)
 }
 
 func removeValidator(values *core.GlobalValues, pageCount int, signers []*signing.Builder, _ string, args []string) (*protocol.Envelope, error) {

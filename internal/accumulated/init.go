@@ -178,7 +178,6 @@ func ConfigureNodePorts(node *NodeInit, cfg *config.Config, offset config.PortOf
 	if cfg.Accumulate.LocalAddress == "" {
 		cfg.Accumulate.LocalAddress = node.Address(AdvertizeAddress, "", offset, config.PortOffsetTendermintP2P)
 	}
-	cfg.Accumulate.Website.ListenAddress = node.Address(ListenAddress, "http", offset, config.PortOffsetWebsite)
 	cfg.Accumulate.API.ListenAddress = node.Address(ListenAddress, "http", offset, config.PortOffsetAccumulateApi)
 }
 

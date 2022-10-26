@@ -10,6 +10,8 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/tools/internal/typegen"
@@ -17,17 +19,33 @@ import (
 )
 
 var flags struct {
-	Package string
-	Out     string
+	Package    string
+	SubPackage string
+	Language   string
+	Out        string
 }
 
 func run(_ *cobra.Command, args []string) {
 	api := readFile(args[0])
-	tapi := convert(api)
+	tapi := convert(api, flags.SubPackage)
 
+	switch flags.Language {
+	case "java", "Java":
+		generateJava(tapi)
+	default:
+		w := new(bytes.Buffer)
+		check(Go.Execute(w, tapi))
+		check(typegen.GoFmt(flags.Out, w))
+	}
+}
+
+// FIXME is not finished but could make it work for what I need atm
+func generateJava(tapi *TApi) {
 	w := new(bytes.Buffer)
-	check(Go.Execute(w, tapi))
-	check(typegen.GoFmt(flags.Out, w))
+	dir, _ := filepath.Split(flags.Out)
+	filename := strings.Replace(dir, "{{.SubPackage}}", flags.SubPackage, 1) + "/RPCMethod.java" // FIXME
+	check(Java.Execute(w, tapi))
+	check(typegen.WriteFile(filename, w))
 }
 
 func readFile(file string) typegen.API {
@@ -51,7 +69,9 @@ func main() {
 		Run:  run,
 	}
 
+	cmd.Flags().StringVarP(&flags.Language, "language", "l", "Go", "Output language or template file")
 	cmd.Flags().StringVar(&flags.Package, "package", "protocol", "Package name")
+	cmd.Flags().StringVar(&flags.SubPackage, "subpackage", "", "Package name")
 	cmd.Flags().StringVarP(&flags.Out, "out", "o", "api_gen.go", "Output file")
 
 	_ = cmd.Execute()

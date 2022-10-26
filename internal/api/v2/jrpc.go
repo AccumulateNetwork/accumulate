@@ -14,6 +14,7 @@ import (
 	"mime"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/go-playground/validator/v10"
@@ -21,6 +22,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/internal/web"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -83,6 +85,18 @@ func (m *JrpcMethods) NewMux() *http.ServeMux {
 	mux.Handle("/version", m.jrpc2http(m.Version))
 	mux.Handle("/describe", m.jrpc2http(m.Describe))
 	mux.Handle("/v2", jsonrpc2.HTTPRequestHandler(m.methods, stdlog.New(os.Stdout, "", 0)))
+
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Location", "/x")
+		w.WriteHeader(http.StatusTemporaryRedirect)
+	})
+
+	webex := web.Handler()
+	mux.HandleFunc("/x/", func(w http.ResponseWriter, r *http.Request) {
+		r.URL.Path = strings.TrimPrefix(r.URL.Path, "/x")
+		r.RequestURI = strings.TrimPrefix(r.RequestURI, "/x")
+		webex.ServeHTTP(w, r)
+	})
 	return mux
 }
 
