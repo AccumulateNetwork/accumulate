@@ -523,8 +523,9 @@ func (s *BTCSignature) Hash() []byte { return signatureHash(s) }
 
 // Metadata returns the signature's metadata.
 func (s *BTCSignature) Metadata() Signature {
-	r := s.Copy()     // Copy the struct
-	r.Signature = nil // Clear the signature
+	r := s.Copy()                  // Copy the struct
+	r.Signature = nil              // Clear the signature
+	r.TransactionHash = [32]byte{} // Clear the transaction hash
 	return r
 }
 
@@ -617,8 +618,9 @@ func (s *BTCLegacySignature) Hash() []byte { return signatureHash(s) }
 
 // Metadata returns the signature's metadata.
 func (s *BTCLegacySignature) Metadata() Signature {
-	r := s.Copy()     // Copy the struct
-	r.Signature = nil // Clear the signature
+	r := s.Copy()                  // Copy the struct
+	r.Signature = nil              // Clear the signature
+	r.TransactionHash = [32]byte{} // Clear the transaction hash
 	return r
 }
 
@@ -711,8 +713,9 @@ func (s *ETHSignature) Hash() []byte { return signatureHash(s) }
 
 // Metadata returns the signature's metadata.
 func (s *ETHSignature) Metadata() Signature {
-	r := s.Copy()     // Copy the struct
-	r.Signature = nil // Clear the signature
+	r := s.Copy()                  // Copy the struct
+	r.Signature = nil              // Clear the signature
+	r.TransactionHash = [32]byte{} // Clear the transaction hash
 	return r
 }
 
