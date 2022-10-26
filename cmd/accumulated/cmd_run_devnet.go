@@ -21,6 +21,7 @@ import (
 	tmconfig "github.com/tendermint/tendermint/config"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
+	"gitlab.com/accumulatenetwork/accumulate/internal/testing"
 )
 
 var cmdRunDevnet = &cobra.Command{
@@ -57,6 +58,10 @@ var fallbackColor = color.New(color.FgHiBlack)
 
 func runDevNet(*cobra.Command, []string) {
 	fmt.Println("Starting devnet")
+
+	if flagRun.Debug {
+		testing.EnableDebugFeatures()
+	}
 
 	skip := map[int]bool{}
 	for _, id := range flagRunDevnet.Except {
@@ -145,7 +150,6 @@ func runDevNet(*cobra.Command, []string) {
 func startDevNetNode(daemon *accumulated.Daemon, started, done *sync.WaitGroup, stop, didStop chan struct{}) {
 	// Disable features not compatible with multi-node, single-process
 	daemon.Config.Instrumentation.Prometheus = false
-	daemon.Config.Accumulate.Website.Enabled = false
 
 	started.Add(1)
 	go func() {
