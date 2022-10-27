@@ -61,6 +61,35 @@ func (s SignatureType) IsSystem() bool {
 	}
 }
 
+func PublicKeyHash(key []byte, typ SignatureType) ([]byte, error) {
+	switch typ {
+	case SignatureTypeED25519,
+		SignatureTypeLegacyED25519:
+		return doSha256(key), nil
+
+	case SignatureTypeRCD1:
+		return GetRCDHashFromPublicKey(key, 1), nil
+
+	case SignatureTypeBTC,
+		SignatureTypeBTCLegacy:
+		return BTCHash(key), nil
+
+	case SignatureTypeETH:
+		return ETHhash(key), nil
+
+	case SignatureTypeReceipt,
+		SignatureTypePartition,
+		SignatureTypeSet,
+		SignatureTypeRemote,
+		SignatureTypeDelegated,
+		SignatureTypeInternal:
+		return nil, errors.Format(errors.StatusBadRequest, "%v is not a key type", typ)
+
+	default:
+		return nil, errors.Format(errors.StatusNotAllowed, "unknown key type %v", typ)
+	}
+}
+
 func signatureHash(sig Signature) []byte {
 	// This should never fail unless the signature uses bigints
 	data, _ := sig.MarshalBinary()

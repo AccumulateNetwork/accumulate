@@ -6,7 +6,7 @@ set -e
 SCRIPT_DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
 source ${SCRIPT_DIR}/validate-commons.sh
 section "Setup"
-if which go > /dev/null || ! which accumulate > /dev/null ; then
+if which go > /dev/null && ! which accumulate > /dev/null ; then
     echo "Installing CLI"
     go install gitlab.com/accumulatenetwork/core/wallet/cmd/accumulate
     export PATH="${PATH}:$(go env GOPATH)/bin"

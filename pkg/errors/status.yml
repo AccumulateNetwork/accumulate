@@ -71,3 +71,9 @@ Status:
   FatalError:
     value: 503
     description: means something has gone seriously wrong
+  NotReady:
+    value: 504
+    description: means the receiver is not ready to satisfy the request
+  WrongType:
+    value: 505
+    description: means the record is not the expected type
