@@ -14,7 +14,7 @@ import (
 	"fmt"
 	"io"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
 
 {{- range .Unions}}{{if not (eq .Type "result")}}
@@ -65,61 +65,29 @@ func Copy{{.Interface}}(v {{.Interface}}) {{.Interface}} {
 {{end}}
 
 {{if (index .Members 0).IsBinary}}
-// Unmarshal{{.Enumeration}} unmarshals the {{.Enumeration}} from the start of a {{.Interface}}.
-func Unmarshal{{.Enumeration}}(r io.Reader) ({{.Enumeration}}, error) {
-	var typ {{.Enumeration}}
-	err := encoding.UnmarshalEnumType(r, &typ)
-	return typ, err
-}
-
 // Unmarshal{{.Interface}} unmarshals a {{.Interface}}.
 func Unmarshal{{.Interface}}(data []byte) ({{.Interface}}, error) {
-	typ, err := Unmarshal{{.Enumeration}}(bytes.NewReader(data))
-	if err != nil {
-		return nil, err
-	}
-
-	v, err := New{{.Interface}}(typ)
-	if err != nil {
-		return nil, err
-	}
-
-	err = v.UnmarshalBinary(data)
-	if err != nil {
-		return nil, err
-	}
-
-	return v, nil
+	return Unmarshal{{.Interface}}From(bytes.NewReader(data))
 }
 
 // Unmarshal{{.Interface}}From unmarshals a {{.Interface}}.
-func Unmarshal{{.Interface}}From(rd io.ReadSeeker) ({{.Interface}}, error) {
-	// Get the reader's current position
-	pos, err := rd.Seek(0, io.SeekCurrent)
-	if err != nil {
-		return nil, err
-	}
+func Unmarshal{{.Interface}}From(rd io.Reader) ({{.Interface}}, error) {
+	reader := encoding.NewReader(rd)
 
 	// Read the type code
-	typ, err := Unmarshal{{.Enumeration}}(rd)
-	if err != nil {
-		return nil, err
+	var typ {{.Enumeration}}
+	if !reader.ReadEnum(1, &typ) {
+		return nil, fmt.Errorf("field Type: missing")
 	}
 
-	// Reset the reader's position
-	_, err = rd.Seek(pos, io.SeekStart)
-	if err != nil {
-		return nil, err
-	}
-
-	// Create a new transaction result
+	// Create a new {{natural .Interface}}
 	v, err := New{{.Interface}}({{.Enumeration}}(typ))
 	if err != nil {
 		return nil, err
 	}
 
-	// Unmarshal the result
-	err = v.UnmarshalBinaryFrom(rd)
+	// Unmarshal the rest of the {{natural .Interface}}
+	err = v.UnmarshalFieldsFrom(reader)
 	if err != nil {
 		return nil, err
 	}

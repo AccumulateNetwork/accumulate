@@ -12,6 +12,7 @@ import (
 	"crypto/sha512"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"math"
 )
 
@@ -153,6 +154,15 @@ func (e *FactomDataEntry) UnmarshalBinary(data []byte) error {
 		data = data[extIdSize:]
 	}
 	return nil
+}
+
+func (e *FactomDataEntry) UnmarshalBinaryFrom(rd io.Reader) error {
+	// TODO: flip this - make UnmarshalBinary call UnmarshalBinaryFrom
+	data, err := io.ReadAll(rd)
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalBinary(data)
 }
 
 func (e *FactomDataEntry) IsValid() error  { return nil }

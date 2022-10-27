@@ -9,7 +9,7 @@ package api
 import (
 	"context"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -49,6 +49,6 @@ type SubmitMode uint64
 type RecordType uint64
 
 type Record interface {
-	encoding.BinaryValue
+	encoding.UnionValue
 	Type() RecordType
 }

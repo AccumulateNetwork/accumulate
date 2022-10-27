@@ -28,6 +28,9 @@ func (b *Buffer) Bytes() []byte {
 }
 
 func (b *Buffer) Read(v []byte) (int, error) {
+	if b.pos >= len(b.buf) {
+		return 0, io.EOF
+	}
 	n := copy(v, b.buf[b.pos:])
 	b.pos += n
 	return n, nil

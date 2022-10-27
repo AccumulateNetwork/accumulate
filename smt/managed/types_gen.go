@@ -546,7 +546,7 @@ func (v *Receipt) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Anchor = x
 	}
 	for {
-		if x := new(ReceiptEntry); reader.ReadValue(6, x.UnmarshalBinary) {
+		if x := new(ReceiptEntry); reader.ReadValue(6, x.UnmarshalBinaryFrom) {
 			v.Entries = append(v.Entries, x)
 		} else {
 			break
@@ -598,7 +598,7 @@ func (v *ReceiptList) UnmarshalBinary(data []byte) error {
 func (v *ReceiptList) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	if x := new(MerkleState); reader.ReadValue(1, x.UnmarshalBinary) {
+	if x := new(MerkleState); reader.ReadValue(1, x.UnmarshalBinaryFrom) {
 		v.MerkleState = x
 	}
 	for {
@@ -608,10 +608,10 @@ func (v *ReceiptList) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
-	if x := new(Receipt); reader.ReadValue(3, x.UnmarshalBinary) {
+	if x := new(Receipt); reader.ReadValue(3, x.UnmarshalBinaryFrom) {
 		v.Receipt = x
 	}
-	if x := new(Receipt); reader.ReadValue(4, x.UnmarshalBinary) {
+	if x := new(Receipt); reader.ReadValue(4, x.UnmarshalBinaryFrom) {
 		v.ContinuedReceipt = x
 	}
 
@@ -643,11 +643,11 @@ func (v *Snapshot) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUint(3); ok {
 		v.MarkPower = x
 	}
-	if x := new(MerkleState); reader.ReadValue(4, x.UnmarshalBinary) {
+	if x := new(MerkleState); reader.ReadValue(4, x.UnmarshalBinaryFrom) {
 		v.Head = x
 	}
 	for {
-		if x := new(MerkleState); reader.ReadValue(5, x.UnmarshalBinary) {
+		if x := new(MerkleState); reader.ReadValue(5, x.UnmarshalBinaryFrom) {
 			v.MarkPoints = append(v.MarkPoints, x)
 		} else {
 			break
