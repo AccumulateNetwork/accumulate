@@ -6,7 +6,11 @@
 
 package protocol
 
-import "gitlab.com/accumulatenetwork/accumulate/internal/errors"
+import (
+	"io"
+
+	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+)
 
 type AnchorBody interface {
 	TransactionBody
@@ -42,6 +46,11 @@ func CopyAnchorBody(v AnchorBody) AnchorBody {
 
 func UnmarshalAnchorBody(b []byte) (AnchorBody, error) {
 	body, err := unmarshalAnchorBody(UnmarshalTransactionBody(b))
+	return body, errors.Wrap(errors.StatusUnknownError, err)
+}
+
+func UnmarshalAnchorBodyFrom(r io.Reader) (AnchorBody, error) {
+	body, err := unmarshalAnchorBody(UnmarshalTransactionBodyFrom(r))
 	return body, errors.Wrap(errors.StatusUnknownError, err)
 }
 

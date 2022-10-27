@@ -8,6 +8,7 @@ package encoding
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -21,15 +22,15 @@ import (
 
 var ErrFieldsOutOfOrder = errors.New("fields are out of order")
 
-const MaxValueSize = 1 << 24
+const MaxValueSize = 1 << 15
 
-type bytesReader interface {
+type BytesReader interface {
 	io.Reader
 	io.ByteScanner
 }
 
 type Reader struct {
-	r       bytesReader
+	r       BytesReader
 	current uint
 	seen    []bool
 	err     error
@@ -39,7 +40,7 @@ type Reader struct {
 }
 
 func NewReader(r io.Reader) *Reader {
-	if br, ok := r.(bytesReader); ok {
+	if br, ok := r.(BytesReader); ok {
 		return &Reader{r: br}
 	} else {
 		return &Reader{r: bufio.NewReader(r)}
@@ -102,6 +103,22 @@ func (r *Reader) readRaw(field uint, n uint64) ([]byte, bool) {
 	_, err := io.ReadFull(r.r, v)
 	r.didRead(field, err, "failed to read field")
 	return v, err == nil
+}
+
+func (r *Reader) readLimited(field uint, n uint64) (io.Reader, bool) {
+	if r.err != nil {
+		return nil, false
+	}
+
+	if n == 0 {
+		return bytes.NewReader([]byte{}), true
+	}
+
+	if rl, ok := r.r.(interface{ Len() int }); ok && uint64(rl.Len()) < n {
+		r.didRead(field, io.EOF, "failed to read field")
+	}
+
+	return io.LimitReader(r.r, int64(n)), true
 }
 
 // Reset returns a list of seen fields and an error, if one occurred, and resets
@@ -360,12 +377,20 @@ func (r *Reader) ReadTxid(n uint) (*url.TxID, bool) {
 }
 
 // ReadValue reads the value as a byte slice and unmarshals it.
-func (r *Reader) ReadValue(n uint, unmarshal func([]byte) error) bool {
-	b, ok := r.ReadBytes(n)
+func (r *Reader) ReadValue(n uint, unmarshal func(io.Reader) error) bool {
+	if !r.readField(n) {
+		return false
+	}
+	l, ok := r.readUint(n)
 	if !ok {
 		return false
 	}
-	err := unmarshal(b)
+
+	rd, ok := r.readLimited(n, l)
+	if !ok {
+		return false
+	}
+	err := unmarshal(rd)
 	r.didRead(n, err, "failed to unmarshal value")
 	return err == nil
 }

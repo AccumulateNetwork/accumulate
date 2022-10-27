@@ -15,9 +15,9 @@ import (
 	btc "github.com/btcsuite/btcd/btcec"
 	"github.com/btcsuite/btcutil/base58"
 	"github.com/ethereum/go-ethereum/crypto"
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding/hash"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 	"golang.org/x/crypto/ripemd160" //nolint:staticcheck
@@ -26,7 +26,7 @@ import (
 var ErrCannotInitiate = errors.New(errors.StatusBadRequest, "signature cannot initiate a transaction: values are missing")
 
 type Signature interface {
-	encoding.BinaryValue
+	encoding.UnionValue
 	Type() SignatureType
 	RoutingLocation() *url.URL
 
