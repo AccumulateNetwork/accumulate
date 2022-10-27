@@ -488,9 +488,9 @@ func GoBinaryUnmarshalValue(field *Field, readerName, varName string) (string, e
 	var hasIf bool
 	switch {
 	case field.MarshalAs == Union:
-		expr, hasIf = fmt.Sprintf("%s.ReadValue(%d, func(b []byte) error { x, err := %s(b); if err == nil { %s }; return err })", readerName, field.Number, goUnionMethod(field, "Unmarshal"), set), false
+		expr, hasIf = fmt.Sprintf("%s.ReadValue(%d, func(r io.Reader) error { x, err := %sFrom(r); if err == nil { %s }; return err })", readerName, field.Number, goUnionMethod(field, "Unmarshal"), set), false
 	case method == "Value":
-		expr, hasIf = fmt.Sprintf("if x := new(%s); %s.ReadValue(%d, x.UnmarshalBinary) { %s }", GoResolveType(field, true, true), readerName, field.Number, set), true
+		expr, hasIf = fmt.Sprintf("if x := new(%s); %s.ReadValue(%d, x.UnmarshalBinaryFrom) { %s }", GoResolveType(field, true, true), readerName, field.Number, set), true
 	case method == "Enum":
 		expr, hasIf = fmt.Sprintf("if x := new(%s); %s.ReadEnum(%d, x) { %s }", GoResolveType(field, true, true), readerName, field.Number, set), true
 	default:

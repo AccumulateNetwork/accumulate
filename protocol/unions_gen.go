@@ -14,7 +14,7 @@ import (
 	"fmt"
 	"io"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
 
 // NewAccount creates a new Account for the specified AccountType.
@@ -152,61 +152,29 @@ func CopyAccount(v Account) Account {
 	}
 }
 
-// UnmarshalAccountType unmarshals the AccountType from the start of a Account.
-func UnmarshalAccountType(r io.Reader) (AccountType, error) {
-	var typ AccountType
-	err := encoding.UnmarshalEnumType(r, &typ)
-	return typ, err
-}
-
 // UnmarshalAccount unmarshals a Account.
 func UnmarshalAccount(data []byte) (Account, error) {
-	typ, err := UnmarshalAccountType(bytes.NewReader(data))
-	if err != nil {
-		return nil, err
-	}
-
-	v, err := NewAccount(typ)
-	if err != nil {
-		return nil, err
-	}
-
-	err = v.UnmarshalBinary(data)
-	if err != nil {
-		return nil, err
-	}
-
-	return v, nil
+	return UnmarshalAccountFrom(bytes.NewReader(data))
 }
 
 // UnmarshalAccountFrom unmarshals a Account.
-func UnmarshalAccountFrom(rd io.ReadSeeker) (Account, error) {
-	// Get the reader's current position
-	pos, err := rd.Seek(0, io.SeekCurrent)
-	if err != nil {
-		return nil, err
-	}
+func UnmarshalAccountFrom(rd io.Reader) (Account, error) {
+	reader := encoding.NewReader(rd)
 
 	// Read the type code
-	typ, err := UnmarshalAccountType(rd)
-	if err != nil {
-		return nil, err
+	var typ AccountType
+	if !reader.ReadEnum(1, &typ) {
+		return nil, fmt.Errorf("field Type: missing")
 	}
 
-	// Reset the reader's position
-	_, err = rd.Seek(pos, io.SeekStart)
-	if err != nil {
-		return nil, err
-	}
-
-	// Create a new transaction result
+	// Create a new account
 	v, err := NewAccount(AccountType(typ))
 	if err != nil {
 		return nil, err
 	}
 
-	// Unmarshal the result
-	err = v.UnmarshalBinaryFrom(rd)
+	// Unmarshal the rest of the account
+	err = v.UnmarshalFieldsFrom(reader)
 	if err != nil {
 		return nil, err
 	}
@@ -283,61 +251,29 @@ func CopyDataEntry(v DataEntry) DataEntry {
 	}
 }
 
-// UnmarshalDataEntryType unmarshals the DataEntryType from the start of a DataEntry.
-func UnmarshalDataEntryType(r io.Reader) (DataEntryType, error) {
-	var typ DataEntryType
-	err := encoding.UnmarshalEnumType(r, &typ)
-	return typ, err
-}
-
 // UnmarshalDataEntry unmarshals a DataEntry.
 func UnmarshalDataEntry(data []byte) (DataEntry, error) {
-	typ, err := UnmarshalDataEntryType(bytes.NewReader(data))
-	if err != nil {
-		return nil, err
-	}
-
-	v, err := NewDataEntry(typ)
-	if err != nil {
-		return nil, err
-	}
-
-	err = v.UnmarshalBinary(data)
-	if err != nil {
-		return nil, err
-	}
-
-	return v, nil
+	return UnmarshalDataEntryFrom(bytes.NewReader(data))
 }
 
 // UnmarshalDataEntryFrom unmarshals a DataEntry.
-func UnmarshalDataEntryFrom(rd io.ReadSeeker) (DataEntry, error) {
-	// Get the reader's current position
-	pos, err := rd.Seek(0, io.SeekCurrent)
-	if err != nil {
-		return nil, err
-	}
+func UnmarshalDataEntryFrom(rd io.Reader) (DataEntry, error) {
+	reader := encoding.NewReader(rd)
 
 	// Read the type code
-	typ, err := UnmarshalDataEntryType(rd)
-	if err != nil {
-		return nil, err
+	var typ DataEntryType
+	if !reader.ReadEnum(1, &typ) {
+		return nil, fmt.Errorf("field Type: missing")
 	}
 
-	// Reset the reader's position
-	_, err = rd.Seek(pos, io.SeekStart)
-	if err != nil {
-		return nil, err
-	}
-
-	// Create a new transaction result
+	// Create a new data entry
 	v, err := NewDataEntry(DataEntryType(typ))
 	if err != nil {
 		return nil, err
 	}
 
-	// Unmarshal the result
-	err = v.UnmarshalBinaryFrom(rd)
+	// Unmarshal the rest of the data entry
+	err = v.UnmarshalFieldsFrom(reader)
 	if err != nil {
 		return nil, err
 	}
@@ -603,61 +539,29 @@ func CopyTransactionBody(v TransactionBody) TransactionBody {
 	}
 }
 
-// UnmarshalTransactionType unmarshals the TransactionType from the start of a TransactionBody.
-func UnmarshalTransactionType(r io.Reader) (TransactionType, error) {
-	var typ TransactionType
-	err := encoding.UnmarshalEnumType(r, &typ)
-	return typ, err
-}
-
 // UnmarshalTransactionBody unmarshals a TransactionBody.
 func UnmarshalTransactionBody(data []byte) (TransactionBody, error) {
-	typ, err := UnmarshalTransactionType(bytes.NewReader(data))
-	if err != nil {
-		return nil, err
-	}
-
-	v, err := NewTransactionBody(typ)
-	if err != nil {
-		return nil, err
-	}
-
-	err = v.UnmarshalBinary(data)
-	if err != nil {
-		return nil, err
-	}
-
-	return v, nil
+	return UnmarshalTransactionBodyFrom(bytes.NewReader(data))
 }
 
 // UnmarshalTransactionBodyFrom unmarshals a TransactionBody.
-func UnmarshalTransactionBodyFrom(rd io.ReadSeeker) (TransactionBody, error) {
-	// Get the reader's current position
-	pos, err := rd.Seek(0, io.SeekCurrent)
-	if err != nil {
-		return nil, err
-	}
+func UnmarshalTransactionBodyFrom(rd io.Reader) (TransactionBody, error) {
+	reader := encoding.NewReader(rd)
 
 	// Read the type code
-	typ, err := UnmarshalTransactionType(rd)
-	if err != nil {
-		return nil, err
+	var typ TransactionType
+	if !reader.ReadEnum(1, &typ) {
+		return nil, fmt.Errorf("field Type: missing")
 	}
 
-	// Reset the reader's position
-	_, err = rd.Seek(pos, io.SeekStart)
-	if err != nil {
-		return nil, err
-	}
-
-	// Create a new transaction result
+	// Create a new transaction body
 	v, err := NewTransactionBody(TransactionType(typ))
 	if err != nil {
 		return nil, err
 	}
 
-	// Unmarshal the result
-	err = v.UnmarshalBinaryFrom(rd)
+	// Unmarshal the rest of the transaction body
+	err = v.UnmarshalFieldsFrom(reader)
 	if err != nil {
 		return nil, err
 	}
@@ -748,61 +652,29 @@ func CopyAccountAuthOperation(v AccountAuthOperation) AccountAuthOperation {
 	}
 }
 
-// UnmarshalAccountAuthOperationType unmarshals the AccountAuthOperationType from the start of a AccountAuthOperation.
-func UnmarshalAccountAuthOperationType(r io.Reader) (AccountAuthOperationType, error) {
-	var typ AccountAuthOperationType
-	err := encoding.UnmarshalEnumType(r, &typ)
-	return typ, err
-}
-
 // UnmarshalAccountAuthOperation unmarshals a AccountAuthOperation.
 func UnmarshalAccountAuthOperation(data []byte) (AccountAuthOperation, error) {
-	typ, err := UnmarshalAccountAuthOperationType(bytes.NewReader(data))
-	if err != nil {
-		return nil, err
-	}
-
-	v, err := NewAccountAuthOperation(typ)
-	if err != nil {
-		return nil, err
-	}
-
-	err = v.UnmarshalBinary(data)
-	if err != nil {
-		return nil, err
-	}
-
-	return v, nil
+	return UnmarshalAccountAuthOperationFrom(bytes.NewReader(data))
 }
 
 // UnmarshalAccountAuthOperationFrom unmarshals a AccountAuthOperation.
-func UnmarshalAccountAuthOperationFrom(rd io.ReadSeeker) (AccountAuthOperation, error) {
-	// Get the reader's current position
-	pos, err := rd.Seek(0, io.SeekCurrent)
-	if err != nil {
-		return nil, err
-	}
+func UnmarshalAccountAuthOperationFrom(rd io.Reader) (AccountAuthOperation, error) {
+	reader := encoding.NewReader(rd)
 
 	// Read the type code
-	typ, err := UnmarshalAccountAuthOperationType(rd)
-	if err != nil {
-		return nil, err
+	var typ AccountAuthOperationType
+	if !reader.ReadEnum(1, &typ) {
+		return nil, fmt.Errorf("field Type: missing")
 	}
 
-	// Reset the reader's position
-	_, err = rd.Seek(pos, io.SeekStart)
-	if err != nil {
-		return nil, err
-	}
-
-	// Create a new transaction result
+	// Create a new account auth operation
 	v, err := NewAccountAuthOperation(AccountAuthOperationType(typ))
 	if err != nil {
 		return nil, err
 	}
 
-	// Unmarshal the result
-	err = v.UnmarshalBinaryFrom(rd)
+	// Unmarshal the rest of the account auth operation
+	err = v.UnmarshalFieldsFrom(reader)
 	if err != nil {
 		return nil, err
 	}
@@ -900,61 +772,29 @@ func CopyKeyPageOperation(v KeyPageOperation) KeyPageOperation {
 	}
 }
 
-// UnmarshalKeyPageOperationType unmarshals the KeyPageOperationType from the start of a KeyPageOperation.
-func UnmarshalKeyPageOperationType(r io.Reader) (KeyPageOperationType, error) {
-	var typ KeyPageOperationType
-	err := encoding.UnmarshalEnumType(r, &typ)
-	return typ, err
-}
-
 // UnmarshalKeyPageOperation unmarshals a KeyPageOperation.
 func UnmarshalKeyPageOperation(data []byte) (KeyPageOperation, error) {
-	typ, err := UnmarshalKeyPageOperationType(bytes.NewReader(data))
-	if err != nil {
-		return nil, err
-	}
-
-	v, err := NewKeyPageOperation(typ)
-	if err != nil {
-		return nil, err
-	}
-
-	err = v.UnmarshalBinary(data)
-	if err != nil {
-		return nil, err
-	}
-
-	return v, nil
+	return UnmarshalKeyPageOperationFrom(bytes.NewReader(data))
 }
 
 // UnmarshalKeyPageOperationFrom unmarshals a KeyPageOperation.
-func UnmarshalKeyPageOperationFrom(rd io.ReadSeeker) (KeyPageOperation, error) {
-	// Get the reader's current position
-	pos, err := rd.Seek(0, io.SeekCurrent)
-	if err != nil {
-		return nil, err
-	}
+func UnmarshalKeyPageOperationFrom(rd io.Reader) (KeyPageOperation, error) {
+	reader := encoding.NewReader(rd)
 
 	// Read the type code
-	typ, err := UnmarshalKeyPageOperationType(rd)
-	if err != nil {
-		return nil, err
+	var typ KeyPageOperationType
+	if !reader.ReadEnum(1, &typ) {
+		return nil, fmt.Errorf("field Type: missing")
 	}
 
-	// Reset the reader's position
-	_, err = rd.Seek(pos, io.SeekStart)
-	if err != nil {
-		return nil, err
-	}
-
-	// Create a new transaction result
+	// Create a new key page operation
 	v, err := NewKeyPageOperation(KeyPageOperationType(typ))
 	if err != nil {
 		return nil, err
 	}
 
-	// Unmarshal the result
-	err = v.UnmarshalBinaryFrom(rd)
+	// Unmarshal the rest of the key page operation
+	err = v.UnmarshalFieldsFrom(reader)
 	if err != nil {
 		return nil, err
 	}
@@ -1101,61 +941,29 @@ func CopySignature(v Signature) Signature {
 	}
 }
 
-// UnmarshalSignatureType unmarshals the SignatureType from the start of a Signature.
-func UnmarshalSignatureType(r io.Reader) (SignatureType, error) {
-	var typ SignatureType
-	err := encoding.UnmarshalEnumType(r, &typ)
-	return typ, err
-}
-
 // UnmarshalSignature unmarshals a Signature.
 func UnmarshalSignature(data []byte) (Signature, error) {
-	typ, err := UnmarshalSignatureType(bytes.NewReader(data))
-	if err != nil {
-		return nil, err
-	}
-
-	v, err := NewSignature(typ)
-	if err != nil {
-		return nil, err
-	}
-
-	err = v.UnmarshalBinary(data)
-	if err != nil {
-		return nil, err
-	}
-
-	return v, nil
+	return UnmarshalSignatureFrom(bytes.NewReader(data))
 }
 
 // UnmarshalSignatureFrom unmarshals a Signature.
-func UnmarshalSignatureFrom(rd io.ReadSeeker) (Signature, error) {
-	// Get the reader's current position
-	pos, err := rd.Seek(0, io.SeekCurrent)
-	if err != nil {
-		return nil, err
-	}
+func UnmarshalSignatureFrom(rd io.Reader) (Signature, error) {
+	reader := encoding.NewReader(rd)
 
 	// Read the type code
-	typ, err := UnmarshalSignatureType(rd)
-	if err != nil {
-		return nil, err
+	var typ SignatureType
+	if !reader.ReadEnum(1, &typ) {
+		return nil, fmt.Errorf("field Type: missing")
 	}
 
-	// Reset the reader's position
-	_, err = rd.Seek(pos, io.SeekStart)
-	if err != nil {
-		return nil, err
-	}
-
-	// Create a new transaction result
+	// Create a new signature
 	v, err := NewSignature(SignatureType(typ))
 	if err != nil {
 		return nil, err
 	}
 
-	// Unmarshal the result
-	err = v.UnmarshalBinaryFrom(rd)
+	// Unmarshal the rest of the signature
+	err = v.UnmarshalFieldsFrom(reader)
 	if err != nil {
 		return nil, err
 	}
