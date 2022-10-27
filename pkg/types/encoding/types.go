@@ -32,3 +32,8 @@ type BinaryValue interface {
 	CopyAsInterface() interface{}
 	UnmarshalBinaryFrom(io.Reader) error
 }
+
+type UnionValue interface {
+	BinaryValue
+	UnmarshalFieldsFrom(reader *Reader) error
+}

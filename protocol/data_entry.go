@@ -9,14 +9,14 @@ package protocol
 import (
 	"fmt"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding/hash"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
 
 type DataEntryType uint64
 
 type DataEntry interface {
-	encoding.BinaryValue
+	encoding.UnionValue
 	Type() DataEntryType
 	Hash() []byte
 	GetData() [][]byte
