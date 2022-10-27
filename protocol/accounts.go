@@ -7,12 +7,12 @@
 package protocol
 
 import (
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
 type Account interface {
-	encoding.BinaryValue
+	encoding.UnionValue
 	Type() AccountType
 	GetUrl() *url.URL
 	StripUrl()
