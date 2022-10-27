@@ -4,6 +4,8 @@ Receipt:
       marshal-as: reference
     - name: LocalBlock
       type: uvarint
+    - name: LocalBlockTime
+      type: time
     - name: MajorBlock
       type: uint
 

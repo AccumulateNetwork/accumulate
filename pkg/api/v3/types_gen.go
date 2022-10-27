@@ -244,9 +244,10 @@ type RangeOptions struct {
 type Receipt struct {
 	fieldsSet []bool
 	managed.Receipt
-	LocalBlock uint64 `json:"localBlock,omitempty" form:"localBlock" query:"localBlock" validate:"required"`
-	MajorBlock uint64 `json:"majorBlock,omitempty" form:"majorBlock" query:"majorBlock" validate:"required"`
-	extraData  []byte
+	LocalBlock     uint64    `json:"localBlock,omitempty" form:"localBlock" query:"localBlock" validate:"required"`
+	LocalBlockTime time.Time `json:"localBlockTime,omitempty" form:"localBlockTime" query:"localBlockTime" validate:"required"`
+	MajorBlock     uint64    `json:"majorBlock,omitempty" form:"majorBlock" query:"majorBlock" validate:"required"`
+	extraData      []byte
 }
 
 type RecordRange[T Record] struct {
@@ -763,6 +764,7 @@ func (v *Receipt) Copy() *Receipt {
 
 	u.Receipt = *v.Receipt.Copy()
 	u.LocalBlock = v.LocalBlock
+	u.LocalBlockTime = v.LocalBlockTime
 	u.MajorBlock = v.MajorBlock
 
 	return u
@@ -1442,6 +1444,9 @@ func (v *Receipt) Equal(u *Receipt) bool {
 		return false
 	}
 	if !(v.LocalBlock == u.LocalBlock) {
+		return false
+	}
+	if !((v.LocalBlockTime).Equal(u.LocalBlockTime)) {
 		return false
 	}
 	if !(v.MajorBlock == u.MajorBlock) {
@@ -3095,7 +3100,8 @@ func (v *RangeOptions) IsValid() error {
 var fieldNames_Receipt = []string{
 	1: "Receipt",
 	2: "LocalBlock",
-	3: "MajorBlock",
+	3: "LocalBlockTime",
+	4: "MajorBlock",
 }
 
 func (v *Receipt) MarshalBinary() ([]byte, error) {
@@ -3106,8 +3112,11 @@ func (v *Receipt) MarshalBinary() ([]byte, error) {
 	if !(v.LocalBlock == 0) {
 		writer.WriteUint(2, v.LocalBlock)
 	}
+	if !(v.LocalBlockTime == (time.Time{})) {
+		writer.WriteTime(3, v.LocalBlockTime)
+	}
 	if !(v.MajorBlock == 0) {
-		writer.WriteUint(3, v.MajorBlock)
+		writer.WriteUint(4, v.MajorBlock)
 	}
 
 	_, _, err := writer.Reset(fieldNames_Receipt)
@@ -3130,6 +3139,11 @@ func (v *Receipt) IsValid() error {
 		errs = append(errs, "field LocalBlock is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field LocalBlockTime is missing")
+	} else if v.LocalBlockTime == (time.Time{}) {
+		errs = append(errs, "field LocalBlockTime is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
 		errs = append(errs, "field MajorBlock is missing")
 	} else if v.MajorBlock == 0 {
 		errs = append(errs, "field MajorBlock is not set")
@@ -4617,7 +4631,10 @@ func (v *Receipt) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUint(2); ok {
 		v.LocalBlock = x
 	}
-	if x, ok := reader.ReadUint(3); ok {
+	if x, ok := reader.ReadTime(3); ok {
+		v.LocalBlockTime = x
+	}
+	if x, ok := reader.ReadUint(4); ok {
 		v.MajorBlock = x
 	}
 
@@ -5260,14 +5277,15 @@ func (v *PublicKeySearchQuery) MarshalJSON() ([]byte, error) {
 
 func (v *Receipt) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Start      *string                                  `json:"start,omitempty"`
-		StartIndex int64                                    `json:"startIndex,omitempty"`
-		End        *string                                  `json:"end,omitempty"`
-		EndIndex   int64                                    `json:"endIndex,omitempty"`
-		Anchor     *string                                  `json:"anchor,omitempty"`
-		Entries    encoding.JsonList[*managed.ReceiptEntry] `json:"entries,omitempty"`
-		LocalBlock uint64                                   `json:"localBlock,omitempty"`
-		MajorBlock uint64                                   `json:"majorBlock,omitempty"`
+		Start          *string                                  `json:"start,omitempty"`
+		StartIndex     int64                                    `json:"startIndex,omitempty"`
+		End            *string                                  `json:"end,omitempty"`
+		EndIndex       int64                                    `json:"endIndex,omitempty"`
+		Anchor         *string                                  `json:"anchor,omitempty"`
+		Entries        encoding.JsonList[*managed.ReceiptEntry] `json:"entries,omitempty"`
+		LocalBlock     uint64                                   `json:"localBlock,omitempty"`
+		LocalBlockTime time.Time                                `json:"localBlockTime,omitempty"`
+		MajorBlock     uint64                                   `json:"majorBlock,omitempty"`
 	}{}
 	u.Start = encoding.BytesToJSON(v.Receipt.Start)
 	u.StartIndex = v.Receipt.StartIndex
@@ -5276,6 +5294,7 @@ func (v *Receipt) MarshalJSON() ([]byte, error) {
 	u.Anchor = encoding.BytesToJSON(v.Receipt.Anchor)
 	u.Entries = v.Receipt.Entries
 	u.LocalBlock = v.LocalBlock
+	u.LocalBlockTime = v.LocalBlockTime
 	u.MajorBlock = v.MajorBlock
 	return json.Marshal(&u)
 }
@@ -5855,14 +5874,15 @@ func (v *PublicKeySearchQuery) UnmarshalJSON(data []byte) error {
 
 func (v *Receipt) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Start      *string                                  `json:"start,omitempty"`
-		StartIndex int64                                    `json:"startIndex,omitempty"`
-		End        *string                                  `json:"end,omitempty"`
-		EndIndex   int64                                    `json:"endIndex,omitempty"`
-		Anchor     *string                                  `json:"anchor,omitempty"`
-		Entries    encoding.JsonList[*managed.ReceiptEntry] `json:"entries,omitempty"`
-		LocalBlock uint64                                   `json:"localBlock,omitempty"`
-		MajorBlock uint64                                   `json:"majorBlock,omitempty"`
+		Start          *string                                  `json:"start,omitempty"`
+		StartIndex     int64                                    `json:"startIndex,omitempty"`
+		End            *string                                  `json:"end,omitempty"`
+		EndIndex       int64                                    `json:"endIndex,omitempty"`
+		Anchor         *string                                  `json:"anchor,omitempty"`
+		Entries        encoding.JsonList[*managed.ReceiptEntry] `json:"entries,omitempty"`
+		LocalBlock     uint64                                   `json:"localBlock,omitempty"`
+		LocalBlockTime time.Time                                `json:"localBlockTime,omitempty"`
+		MajorBlock     uint64                                   `json:"majorBlock,omitempty"`
 	}{}
 	u.Start = encoding.BytesToJSON(v.Receipt.Start)
 	u.StartIndex = v.Receipt.StartIndex
@@ -5871,6 +5891,7 @@ func (v *Receipt) UnmarshalJSON(data []byte) error {
 	u.Anchor = encoding.BytesToJSON(v.Receipt.Anchor)
 	u.Entries = v.Receipt.Entries
 	u.LocalBlock = v.LocalBlock
+	u.LocalBlockTime = v.LocalBlockTime
 	u.MajorBlock = v.MajorBlock
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -5894,6 +5915,7 @@ func (v *Receipt) UnmarshalJSON(data []byte) error {
 	}
 	v.Receipt.Entries = u.Entries
 	v.LocalBlock = u.LocalBlock
+	v.LocalBlockTime = u.LocalBlockTime
 	v.MajorBlock = u.MajorBlock
 	return nil
 }

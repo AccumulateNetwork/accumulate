@@ -35,17 +35,17 @@ type MetricsService interface {
 	Metrics(ctx context.Context, opts MetricsOptions) (*Metrics, error)
 }
 
-type QueryService interface {
+type Querier interface {
 	// Query queries the state of an account or transaction.
 	Query(ctx context.Context, scope *url.URL, query Query) (Record, error)
 }
 
-type SubmitService interface {
+type Submitter interface {
 	// Submit submits an envelope for execution.
 	Submit(ctx context.Context, envelope *protocol.Envelope, opts SubmitOptions) ([]*Submission, error)
 }
 
-type ValidateService interface {
+type Validator interface {
 	// Validate checks if an envelope is expected to succeed.
 	Validate(ctx context.Context, envelope *protocol.Envelope, opts ValidateOptions) ([]*Submission, error)
 }

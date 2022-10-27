@@ -22,14 +22,14 @@ type BatchedMetricsService interface {
 	Metrics(opts MetricsOptions) <-chan ValueOrError[*Metrics]
 }
 
-type BatchedQueryService interface {
+type BatchedQuerier interface {
 	Query(scope *url.URL, query Query) <-chan ValueOrError[Record]
 }
 
-type BatchedSubmitService interface {
+type BatchedSubmitter interface {
 	Submit(envelope *protocol.Envelope, opts SubmitOptions) <-chan ValueOrError[[]*Submission]
 }
 
-type BatchedValidateService interface {
+type BatchedValidator interface {
 	Validate(envelope *protocol.Envelope, opts ValidateOptions) <-chan ValueOrError[[]*Submission]
 }

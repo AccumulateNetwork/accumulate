@@ -88,9 +88,9 @@ call and a local call. For example, the constructors should have something like
 the following signature:
 
 ```go
-func NewServer(api.QueryService, ServerOptions) QueryServiceServer
+func NewServer(api.Querier, ServerOptions) QuerierServer
 
-func NewClient(ClientOptions) api.QueryService
+func NewClient(ClientOptions) api.Querier
 ```
 
 ### JSON-RPC
