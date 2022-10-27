@@ -77,6 +77,12 @@ const EncodingError Status = 502
 // FatalError means something has gone seriously wrong.
 const FatalError Status = 503
 
+// NotReady means the receiver is not ready to satisfy the request.
+const NotReady Status = 504
+
+// WrongType means the record is not the expected type.
+const WrongType Status = 505
+
 // GetEnumValue returns the value of the Status
 func (v Status) GetEnumValue() uint64 { return uint64(v) }
 
@@ -84,7 +90,7 @@ func (v Status) GetEnumValue() uint64 { return uint64(v) }
 func (v *Status) SetEnumValue(id uint64) bool {
 	u := Status(id)
 	switch u {
-	case OK, Delivered, Pending, Remote, WrongPartition, BadRequest, Unauthenticated, InsufficientCredits, Unauthorized, NotFound, NotAllowed, Conflict, BadSignerVersion, BadTimestamp, BadUrlLength, IncompleteChain, InsufficientBalance, InternalError, UnknownError, EncodingError, FatalError:
+	case OK, Delivered, Pending, Remote, WrongPartition, BadRequest, Unauthenticated, InsufficientCredits, Unauthorized, NotFound, NotAllowed, Conflict, BadSignerVersion, BadTimestamp, BadUrlLength, IncompleteChain, InsufficientBalance, InternalError, UnknownError, EncodingError, FatalError, NotReady, WrongType:
 		*v = u
 		return true
 	default:
@@ -137,6 +143,10 @@ func (v Status) String() string {
 		return "encodingError"
 	case FatalError:
 		return "fatalError"
+	case NotReady:
+		return "notReady"
+	case WrongType:
+		return "wrongType"
 	default:
 		return fmt.Sprintf("Status:%d", v)
 	}
@@ -187,6 +197,10 @@ func StatusByName(name string) (Status, bool) {
 		return EncodingError, true
 	case "fatalerror":
 		return FatalError, true
+	case "notready":
+		return NotReady, true
+	case "wrongtype":
+		return WrongType, true
 	default:
 		return 0, false
 	}
