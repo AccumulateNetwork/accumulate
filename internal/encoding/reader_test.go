@@ -5,12 +5,15 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
+	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 )
 
 func TestReadLargeValue(t *testing.T) {
+	acctesting.SkipCI(t, "Times out")
+
 	// Create an account snapshot with millions of chain entries
 	account := new(snapshot.Account)
 	account.Url = protocol.AccountUrl("foo")
