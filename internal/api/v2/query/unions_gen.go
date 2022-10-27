@@ -14,7 +14,7 @@ import (
 	"fmt"
 	"io"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
 
 // NewRequest creates a new Request for the specified QueryType.
@@ -131,61 +131,29 @@ func CopyRequest(v Request) Request {
 	}
 }
 
-// UnmarshalQueryType unmarshals the QueryType from the start of a Request.
-func UnmarshalQueryType(r io.Reader) (QueryType, error) {
-	var typ QueryType
-	err := encoding.UnmarshalEnumType(r, &typ)
-	return typ, err
-}
-
 // UnmarshalRequest unmarshals a Request.
 func UnmarshalRequest(data []byte) (Request, error) {
-	typ, err := UnmarshalQueryType(bytes.NewReader(data))
-	if err != nil {
-		return nil, err
-	}
-
-	v, err := NewRequest(typ)
-	if err != nil {
-		return nil, err
-	}
-
-	err = v.UnmarshalBinary(data)
-	if err != nil {
-		return nil, err
-	}
-
-	return v, nil
+	return UnmarshalRequestFrom(bytes.NewReader(data))
 }
 
 // UnmarshalRequestFrom unmarshals a Request.
-func UnmarshalRequestFrom(rd io.ReadSeeker) (Request, error) {
-	// Get the reader's current position
-	pos, err := rd.Seek(0, io.SeekCurrent)
-	if err != nil {
-		return nil, err
-	}
+func UnmarshalRequestFrom(rd io.Reader) (Request, error) {
+	reader := encoding.NewReader(rd)
 
 	// Read the type code
-	typ, err := UnmarshalQueryType(rd)
-	if err != nil {
-		return nil, err
+	var typ QueryType
+	if !reader.ReadEnum(1, &typ) {
+		return nil, fmt.Errorf("field Type: missing")
 	}
 
-	// Reset the reader's position
-	_, err = rd.Seek(pos, io.SeekStart)
-	if err != nil {
-		return nil, err
-	}
-
-	// Create a new transaction result
+	// Create a new request
 	v, err := NewRequest(QueryType(typ))
 	if err != nil {
 		return nil, err
 	}
 
-	// Unmarshal the result
-	err = v.UnmarshalBinaryFrom(rd)
+	// Unmarshal the rest of the request
+	err = v.UnmarshalFieldsFrom(reader)
 	if err != nil {
 		return nil, err
 	}

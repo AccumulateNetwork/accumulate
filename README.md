@@ -47,7 +47,7 @@ Accumulate is broken into the following components:
 - `internal/chain` - Transaction validation and processing (aka chain
   validators)
 - `internal/cmd/gentypes` - Type generator for `internal/api` and `protocol`
-- `internal/encoding` - Shared code used by generated types in `internal/api`
+- `pkg/types/encoding` - Shared code used by generated types in `internal/api`
   and `protocol`
 - `internal/genesis` - Objects that are created when the node first starts up
 - `internal/logging` - Logging setup
