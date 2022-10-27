@@ -189,7 +189,7 @@ func unmarshalSlice[T any](rd *encoding.Reader, e encodableValue[T]) []T {
 	var v []T
 	for {
 		e.setNew()
-		if rd.ReadValue(1, e.UnmarshalBinary) {
+		if rd.ReadValue(1, e.UnmarshalBinaryFrom) {
 			v = append(v, e.getValue())
 		} else {
 			break
