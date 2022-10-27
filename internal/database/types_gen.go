@@ -579,11 +579,11 @@ func (v *SigOrTxn) UnmarshalBinary(data []byte) error {
 func (v *SigOrTxn) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	if x := new(protocol.Transaction); reader.ReadValue(1, x.UnmarshalBinary) {
+	if x := new(protocol.Transaction); reader.ReadValue(1, x.UnmarshalBinaryFrom) {
 		v.Transaction = x
 	}
-	reader.ReadValue(2, func(b []byte) error {
-		x, err := protocol.UnmarshalSignature(b)
+	reader.ReadValue(2, func(r io.Reader) error {
+		x, err := protocol.UnmarshalSignatureFrom(r)
 		if err == nil {
 			v.Signature = x
 		}
@@ -680,7 +680,7 @@ func (v *sigSetData) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Version = x
 	}
 	for {
-		if x := new(SigSetEntry); reader.ReadValue(2, x.UnmarshalBinary) {
+		if x := new(SigSetEntry); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
 			v.Entries = append(v.Entries, *x)
 		} else {
 			break

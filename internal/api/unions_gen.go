@@ -14,7 +14,7 @@ import (
 	"fmt"
 	"io"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
 
 // NewRecord creates a new Record for the specified RecordType.
@@ -54,61 +54,29 @@ func CopyRecord(v Record) Record {
 	}
 }
 
-// UnmarshalRecordType unmarshals the RecordType from the start of a Record.
-func UnmarshalRecordType(r io.Reader) (RecordType, error) {
-	var typ RecordType
-	err := encoding.UnmarshalEnumType(r, &typ)
-	return typ, err
-}
-
 // UnmarshalRecord unmarshals a Record.
 func UnmarshalRecord(data []byte) (Record, error) {
-	typ, err := UnmarshalRecordType(bytes.NewReader(data))
-	if err != nil {
-		return nil, err
-	}
-
-	v, err := NewRecord(typ)
-	if err != nil {
-		return nil, err
-	}
-
-	err = v.UnmarshalBinary(data)
-	if err != nil {
-		return nil, err
-	}
-
-	return v, nil
+	return UnmarshalRecordFrom(bytes.NewReader(data))
 }
 
 // UnmarshalRecordFrom unmarshals a Record.
-func UnmarshalRecordFrom(rd io.ReadSeeker) (Record, error) {
-	// Get the reader's current position
-	pos, err := rd.Seek(0, io.SeekCurrent)
-	if err != nil {
-		return nil, err
-	}
+func UnmarshalRecordFrom(rd io.Reader) (Record, error) {
+	reader := encoding.NewReader(rd)
 
 	// Read the type code
-	typ, err := UnmarshalRecordType(rd)
-	if err != nil {
-		return nil, err
+	var typ RecordType
+	if !reader.ReadEnum(1, &typ) {
+		return nil, fmt.Errorf("field Type: missing")
 	}
 
-	// Reset the reader's position
-	_, err = rd.Seek(pos, io.SeekStart)
-	if err != nil {
-		return nil, err
-	}
-
-	// Create a new transaction result
+	// Create a new record
 	v, err := NewRecord(RecordType(typ))
 	if err != nil {
 		return nil, err
 	}
 
-	// Unmarshal the result
-	err = v.UnmarshalBinaryFrom(rd)
+	// Unmarshal the rest of the record
+	err = v.UnmarshalFieldsFrom(reader)
 	if err != nil {
 		return nil, err
 	}

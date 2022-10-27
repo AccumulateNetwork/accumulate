@@ -588,8 +588,8 @@ func (v *FakeAccount) UnmarshalBinary(data []byte) error {
 func (v *FakeAccount) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	reader.ReadValue(1, v.FakeLiteAccount.UnmarshalBinary)
-	reader.ReadValue(2, v.AccountAuth.UnmarshalBinary)
+	reader.ReadValue(1, v.FakeLiteAccount.UnmarshalBinaryFrom)
+	reader.ReadValue(2, v.AccountAuth.UnmarshalBinaryFrom)
 
 	seen, err := reader.Reset(fieldNames_FakeAccount)
 	if err != nil {
@@ -610,7 +610,7 @@ func (v *FakeAuthority) UnmarshalBinary(data []byte) error {
 func (v *FakeAuthority) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	reader.ReadValue(1, v.FakeAccount.UnmarshalBinary)
+	reader.ReadValue(1, v.FakeAccount.UnmarshalBinaryFrom)
 	if x, ok := reader.ReadUrl(2); ok {
 		v.Signers = x
 	}
@@ -698,7 +698,7 @@ func (v *FakeSigner) UnmarshalBinary(data []byte) error {
 func (v *FakeSigner) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	reader.ReadValue(1, v.FakeLiteAccount.UnmarshalBinary)
+	reader.ReadValue(1, v.FakeLiteAccount.UnmarshalBinaryFrom)
 	if x, ok := reader.ReadUint(2); ok {
 		v.CreditBalance = x
 	}
@@ -709,7 +709,7 @@ func (v *FakeSigner) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.Version = x
 	}
 	for {
-		if x := new(protocol.KeySpec); reader.ReadValue(5, x.UnmarshalBinary) {
+		if x := new(protocol.KeySpec); reader.ReadValue(5, x.UnmarshalBinaryFrom) {
 			v.Keys = append(v.Keys, x)
 		} else {
 			break

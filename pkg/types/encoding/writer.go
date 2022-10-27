@@ -7,7 +7,6 @@
 package encoding
 
 import (
-	"encoding"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -80,12 +79,12 @@ func (w *Writer) writeUint(field uint, v uint64) {
 }
 
 // writeRaw writes a byte slice.
-func (w *Writer) writeRaw(field uint, v []byte) {
+func (w *Writer) writeRaw(field uint, v []byte, limit bool) {
 	if w.err != nil {
 		return
 	}
 
-	if !w.IgnoreSizeLimit && len(v) > MaxValueSize {
+	if !w.IgnoreSizeLimit && limit && len(v) > MaxValueSize {
 		w.didWrite(field, 0, fmt.Errorf("too big: %d > %d", len(v), MaxValueSize), "failed to write field")
 		return
 	}
@@ -155,7 +154,7 @@ func (w *Writer) Reset(fieldNames []string) (written int, lastField uint, err er
 // WriteHash writes the value without modification.
 func (w *Writer) WriteHash(n uint, v *[32]byte) {
 	w.writeField(n)
-	w.writeRaw(n, v[:])
+	w.writeRaw(n, v[:], true)
 }
 
 // WriteInt writes the value as a varint-encoded signed integer.
@@ -175,7 +174,7 @@ func (w *Writer) WriteFloat(n uint, v float64) {
 	var b [8]byte
 	binary.BigEndian.PutUint64(b[:], math.Float64bits(v))
 	w.writeField(n)
-	w.writeRaw(n, b[:])
+	w.writeRaw(n, b[:], true)
 }
 
 // WriteBool writes the value as a varint-encoded unsigned integer.
@@ -199,7 +198,7 @@ func (w *Writer) WriteTime(n uint, v time.Time) {
 func (w *Writer) WriteBytes(n uint, v []byte) {
 	w.writeField(n)
 	w.writeUint(n, uint64(len(v)))
-	w.writeRaw(n, v)
+	w.writeRaw(n, v, true)
 }
 
 // WriteString writes the length of the value as a varint-encoded unsigned
@@ -207,7 +206,7 @@ func (w *Writer) WriteBytes(n uint, v []byte) {
 func (w *Writer) WriteString(n uint, v string) {
 	w.writeField(n)
 	w.writeUint(n, uint64(len(v)))
-	w.writeRaw(n, []byte(v))
+	w.writeRaw(n, []byte(v), true)
 }
 
 // WriteDuration writes the value as seconds and nanoseconds, each as a
@@ -248,17 +247,12 @@ func (w *Writer) WriteTxid(n uint, v *url.TxID) {
 }
 
 // WriteValue marshals the value and writes it as a byte slice.
-func (w *Writer) WriteValueOld(n uint, v encoding.BinaryMarshaler) {
-	b, err := v.MarshalBinary()
-	w.didMarshal(n, err)
-	w.WriteBytes(n, b)
-}
-
-// WriteValue marshals the value and writes it as a byte slice.
 func (w *Writer) WriteValue(n uint, marshal func() ([]byte, error)) {
 	b, err := marshal()
 	w.didMarshal(n, err)
-	w.WriteBytes(n, b)
+	w.writeField(n)
+	w.writeUint(n, uint64(len(b)))
+	w.writeRaw(n, b, false)
 }
 
 // WriteEnum writes the value as a varint-encoded unsigned integer.

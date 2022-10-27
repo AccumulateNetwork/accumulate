@@ -177,14 +177,15 @@ func (v *{{.Name}}) UnmarshalBinary(data []byte) error {
 }
 
 func (v *{{.Name}}) UnmarshalBinaryFrom(rd io.Reader) error {
+	{{- $typ := .}}
 	reader := encoding.NewReader(rd)
 	{{- if .IgnoreSizeLimit}}
 	reader.IgnoreSizeLimit = true
 	{{- end}}
-  	{{  range .Fields}}
+  	{{  range $i, $v := .Fields}}
 	{{- if and .IsBinary .IsMarshalled}}
 	{{- if .IsEmbedded}}
-	reader.ReadValue({{.Number}}, v.{{get .}}.UnmarshalBinary)
+	reader.ReadValue({{.Number}}, v.{{get .}}.UnmarshalBinaryFrom)
 	{{- else if not .Virtual}}
 	{{binaryUnmarshalValue . "reader" (print "v." (get .))}}
 	{{- else}}
@@ -192,6 +193,13 @@ func (v *{{.Name}}) UnmarshalBinaryFrom(rd io.Reader) error {
 	{{binaryUnmarshalValue . "reader" (print "v" .Name)}}
 	{{areEqual . (print "v." (get .)) (print "v" .Name) (errVirtualFieldNotEqual . (print "v." (get .)) (print "v" .Name))}}
 	{{- end}}
+	{{- end}}
+	{{- if (and $typ.IsUnion (eq $i 0))}}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *{{$typ.Name}}) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	{{- end}}
 	{{- end}}
 

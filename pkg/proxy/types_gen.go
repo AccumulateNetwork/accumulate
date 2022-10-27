@@ -624,7 +624,7 @@ func (v *NetworkState) UnmarshalBinary(data []byte) error {
 func (v *NetworkState) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	if x := new(config.Network); reader.ReadValue(1, x.UnmarshalBinary) {
+	if x := new(config.Network); reader.ReadValue(1, x.UnmarshalBinaryFrom) {
 		v.Network = *x
 	}
 	if x, ok := reader.ReadString(2); ok {

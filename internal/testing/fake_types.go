@@ -10,10 +10,17 @@ import (
 	"bytes"
 	"crypto/sha256"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding/hash"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
+
+func (*FakeTransactionBody) UnmarshalFieldsFrom(*encoding.Reader) error { panic("not supported") }
+func (*FakeSignature) UnmarshalFieldsFrom(*encoding.Reader) error       { panic("not supported") }
+func (*FakeLiteAccount) UnmarshalFieldsFrom(*encoding.Reader) error     { panic("not supported") }
+func (*FakeAccount) UnmarshalFieldsFrom(*encoding.Reader) error         { panic("not supported") }
+func (*FakeSigner) UnmarshalFieldsFrom(*encoding.Reader) error          { panic("not supported") }
 
 var _ protocol.TransactionBody = (*FakeTransactionBody)(nil)
 

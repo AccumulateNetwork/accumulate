@@ -1122,21 +1122,26 @@ func (v *AccountRecord) UnmarshalBinaryFrom(rd io.Reader) error {
 	if !(v.Type() == vType) {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
 	}
-	reader.ReadValue(2, func(b []byte) error {
-		x, err := protocol.UnmarshalAccount(b)
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *AccountRecord) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	reader.ReadValue(2, func(r io.Reader) error {
+		x, err := protocol.UnmarshalAccountFrom(r)
 		if err == nil {
 			v.Account = x
 		}
 		return err
 	})
 	for {
-		if x := new(ChainState); reader.ReadValue(3, x.UnmarshalBinary) {
+		if x := new(ChainState); reader.ReadValue(3, x.UnmarshalBinaryFrom) {
 			v.Chains = append(v.Chains, x)
 		} else {
 			break
 		}
 	}
-	if x := new(Receipt); reader.ReadValue(4, x.UnmarshalBinary) {
+	if x := new(Receipt); reader.ReadValue(4, x.UnmarshalBinaryFrom) {
 		v.Proof = x
 	}
 
@@ -1366,10 +1371,10 @@ func (v *Receipt) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUint(3); ok {
 		v.DirectoryBlock = x
 	}
-	if x := new(managed.Receipt); reader.ReadValue(4, x.UnmarshalBinary) {
+	if x := new(managed.Receipt); reader.ReadValue(4, x.UnmarshalBinaryFrom) {
 		v.Proof = *x
 	}
-	if x := new(errors2.Error); reader.ReadValue(5, x.UnmarshalBinary) {
+	if x := new(errors2.Error); reader.ReadValue(5, x.UnmarshalBinaryFrom) {
 		v.Error = x
 	}
 
@@ -1430,7 +1435,7 @@ func (v *Submission) UnmarshalBinaryFrom(rd io.Reader) error {
 		}
 	}
 	for {
-		if x := new(protocol.TransactionStatus); reader.ReadValue(3, x.UnmarshalBinary) {
+		if x := new(protocol.TransactionStatus); reader.ReadValue(3, x.UnmarshalBinaryFrom) {
 			v.Status = append(v.Status, x)
 		} else {
 			break

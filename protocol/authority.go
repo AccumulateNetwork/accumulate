@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"fmt"
+	"io"
 	"math"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -44,6 +45,20 @@ func CopySigner(v Signer) Signer {
 
 func UnmarshalSigner(data []byte) (Signer, error) {
 	account, err := UnmarshalAccount(data)
+	if err != nil {
+		return nil, err
+	}
+
+	signer, ok := account.(Signer)
+	if !ok {
+		return nil, fmt.Errorf("account type %v is not a signer", account.Type())
+	}
+
+	return signer, nil
+}
+
+func UnmarshalSignerFrom(r io.Reader) (Signer, error) {
+	account, err := UnmarshalAccountFrom(r)
 	if err != nil {
 		return nil, err
 	}

@@ -7,7 +7,7 @@
 package protocol
 
 import (
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
 
 //go:generate go run ../tools/cmd/gen-types --language go-union --out unions_gen.go account_auth_operations.yml accounts.yml general.yml system.yml key_page_operations.yml query.yml signatures.yml synthetic_transactions.yml transaction.yml transaction_results.yml user_transactions.yml
@@ -28,21 +28,21 @@ type TransactionMax uint64
 type VoteType uint64
 
 type TransactionBody interface {
-	encoding.BinaryValue
+	encoding.UnionValue
 	Type() TransactionType
 }
 
 type TransactionResult interface {
+	encoding.UnionValue
 	Type() TransactionType
-	encoding.BinaryValue
 }
 
 type KeyPageOperation interface {
+	encoding.UnionValue
 	Type() KeyPageOperationType
-	encoding.BinaryValue
 }
 
 type AccountAuthOperation interface {
+	encoding.UnionValue
 	Type() AccountAuthOperationType
-	encoding.BinaryValue
 }
