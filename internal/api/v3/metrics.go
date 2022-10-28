@@ -6,9 +6,9 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -37,7 +37,7 @@ func NewMetricsService(params MetricsServiceParams) *MetricsService {
 func (s *MetricsService) Metrics(ctx context.Context, opts api.MetricsOptions) (*api.Metrics, error) {
 	status, err := s.node.NodeStatus(ctx, api.NodeStatusOptions{})
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "get status: %w", err)
+		return nil, errors.Format(errors.UnknownError, "get status: %w", err)
 	}
 
 	const maxSpan = time.Hour / time.Second
@@ -56,10 +56,10 @@ func (s *MetricsService) Metrics(ctx context.Context, opts api.MetricsOptions) (
 		_, err = s.querier.QueryAccountAs(ctx, partition.BlockLedger(last-i), nil, &block)
 		switch {
 		case err == nil:
-		case errors.Is(err, errors.StatusNotFound):
+		case errors.Is(err, errors.NotFound):
 			continue // Empty
 		default:
-			return nil, errors.Format(errors.StatusUnknownError, "load block %d ledger: %w", last-i, err)
+			return nil, errors.Format(errors.UnknownError, "load block %d ledger: %w", last-i, err)
 		}
 
 		// This is technically chain entries per second, but that's a lot easier

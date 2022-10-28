@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
@@ -20,11 +20,11 @@ func (q Querier2) QueryAccount(ctx context.Context, account *url.URL, query *Def
 func (q Querier2) QueryAccountAs(ctx context.Context, account *url.URL, query *DefaultQuery, target any) (*AccountRecord, error) {
 	r, err := q.QueryAccount(ctx, account, query)
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.Wrap(errors.UnknownError, err)
 	}
 	err = encoding.SetPtr(r.Account, target)
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.Wrap(errors.UnknownError, err)
 	}
 	return r, nil
 }
