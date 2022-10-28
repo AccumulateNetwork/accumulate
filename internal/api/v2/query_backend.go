@@ -84,14 +84,14 @@ func (m *queryBackend) queryByUrl(batch *database.Batch, u *url.URL, prove bool,
 			return nil, nil, fmt.Errorf("invalid txid %q: %v", qv.Get("txid"), err)
 		}
 
-		v, err := m.queryByTxId(batch, txid, true, prove, false, false, nil)
+		v, err := m.queryByTxId(batch, txid, true, prove, true, false, nil)
 		return []byte("tx"), v, err
 
 	case u.Fragment == "":
 		txid, err := u.AsTxID()
 		if err == nil {
 			h := txid.Hash()
-			v, err := m.queryByTxId(batch, h[:], false, prove, false, false, nil)
+			v, err := m.queryByTxId(batch, h[:], false, prove, true, false, nil)
 			return []byte("tx"), v, err
 		}
 
