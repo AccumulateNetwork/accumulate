@@ -6,7 +6,6 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -14,24 +13,24 @@ import (
 )
 
 type MetricsService struct {
-	logger logging.OptionalLogger
-	node   api.NodeService
-	db     database.Beginner
+	logger  logging.OptionalLogger
+	node    api.NodeService
+	querier api.Querier2
 }
 
 var _ api.MetricsService = (*MetricsService)(nil)
 
 type MetricsServiceParams struct {
-	Logger   log.Logger
-	Node     api.NodeService
-	Database database.Beginner // TODO: replace with api.QueryService
+	Logger  log.Logger
+	Node    api.NodeService
+	Querier api.Querier
 }
 
 func NewMetricsService(params MetricsServiceParams) *MetricsService {
 	s := new(MetricsService)
 	s.logger.L = params.Logger
 	s.node = params.Node
-	s.db = params.Database
+	s.querier.Querier = params.Querier
 	return s
 }
 
@@ -49,14 +48,12 @@ func (s *MetricsService) Metrics(ctx context.Context, opts api.MetricsOptions) (
 	var partition config.NetworkUrl
 	partition.URL = protocol.PartitionUrl(status.PartitionID)
 
-	batch := s.db.Begin(false)
-	defer batch.Discard()
 	last := uint64(status.LastBlock.Height)
 	var count int
 	var start time.Time
 	for i := uint64(0); i < opts.Span && i <= last; i++ {
 		var block *protocol.BlockLedger
-		err = batch.Account(partition.BlockLedger(last - i)).Main().GetAs(&block)
+		_, err = s.querier.QueryAccountAs(ctx, partition.BlockLedger(last-i), nil, &block)
 		switch {
 		case err == nil:
 		case errors.Is(err, errors.StatusNotFound):

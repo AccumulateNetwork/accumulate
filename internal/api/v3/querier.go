@@ -148,17 +148,17 @@ func (s *Querier) Query(ctx context.Context, scope *url.URL, query api.Query) (a
 		if err != nil {
 			return nil, errors.Format(errors.UnknownError, "hash key: %w", err)
 		}
-		return s.searchForKeyHash(ctx, batch, scope, func(s protocol.Signer) (int, protocol.KeyEntry, bool) {
+		return s.searchForKeyEntry(ctx, batch, scope, func(s protocol.Signer) (int, protocol.KeyEntry, bool) {
 			return s.EntryByKeyHash(hash)
 		})
 
 	case *api.PublicKeyHashSearchQuery:
-		return s.searchForKeyHash(ctx, batch, scope, func(s protocol.Signer) (int, protocol.KeyEntry, bool) {
+		return s.searchForKeyEntry(ctx, batch, scope, func(s protocol.Signer) (int, protocol.KeyEntry, bool) {
 			return s.EntryByKeyHash(query.PublicKeyHash)
 		})
 
 	case *api.DelegateSearchQuery:
-		return s.searchForKeyHash(ctx, batch, scope, func(s protocol.Signer) (int, protocol.KeyEntry, bool) {
+		return s.searchForKeyEntry(ctx, batch, scope, func(s protocol.Signer) (int, protocol.KeyEntry, bool) {
 			return s.EntryByDelegate(query.Delegate)
 		})
 
@@ -723,7 +723,7 @@ func (s *Querier) searchForAnchor(ctx context.Context, batch *database.Batch, re
 	return rr, nil
 }
 
-func (s *Querier) searchForKeyHash(ctx context.Context, batch *database.Batch, scope *url.URL, search func(protocol.Signer) (int, protocol.KeyEntry, bool)) (*api.RecordRange[*api.KeyRecord], error) {
+func (s *Querier) searchForKeyEntry(ctx context.Context, batch *database.Batch, scope *url.URL, search func(protocol.Signer) (int, protocol.KeyEntry, bool)) (*api.RecordRange[*api.KeyRecord], error) {
 	auth, err := getAccountAuthoritySet(batch, scope)
 	if err != nil {
 		return nil, errors.Format(errors.UnknownError, "load authority set: %w", err)
