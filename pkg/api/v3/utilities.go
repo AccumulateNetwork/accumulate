@@ -1,6 +1,6 @@
 package api
 
-import "gitlab.com/accumulatenetwork/accumulate/internal/errors"
+import "gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 
 func RangeAs[U, V Record](r *RecordRange[V]) ([]U, error) {
 	s := make([]U, len(r.Records))
@@ -8,7 +8,7 @@ func RangeAs[U, V Record](r *RecordRange[V]) ([]U, error) {
 		u, ok := any(v).(U)
 		if !ok {
 			var z U
-			return nil, errors.Format(errors.StatusConflict, "want %T, got %T", z, v)
+			return nil, errors.Format(errors.Conflict, "want %T, got %T", z, v)
 		}
 		s[i] = u
 	}
@@ -51,7 +51,7 @@ func MakeRange[V any, U Record](values []V, start, count uint64, fn func(V) (U, 
 	for i, v := range values {
 		u, err := fn(v)
 		if err != nil {
-			return nil, errors.Wrap(errors.StatusUnknownError, err)
+			return nil, errors.Wrap(errors.UnknownError, err)
 		}
 		r.Records[i] = u
 	}
@@ -65,7 +65,7 @@ func ChainEntryAs[U, V Record](r *ChainEntryRecord[V]) (*ChainEntryRecord[U], er
 	if u, ok := any(r.Value).(U); ok {
 		s.Value = u
 	} else if !EqualRecord(r.Value, zv) {
-		return nil, errors.Format(errors.StatusConflict, "want %T, got %T", zu, r.Value)
+		return nil, errors.Format(errors.Conflict, "want %T, got %T", zu, r.Value)
 	}
 
 	s.Account = r.Account
