@@ -17,8 +17,11 @@ import (
 	"time"
 
 	btc "github.com/btcsuite/btcd/btcec"
+	"github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/tendermint/tendermint/libs/log"
 	tmtypes "github.com/tendermint/tendermint/types"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
@@ -28,6 +31,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -145,6 +149,18 @@ func SimpleNetwork(name string, bvnCount, nodeCount int) *accumulated.NetworkIni
 			})
 		}
 		net.Bvns = append(net.Bvns, bvnInit)
+	}
+	return net
+}
+
+func LocalNetwork(name string, bvnCount, nodeCount int, baseIP net.IP, basePort uint64) *accumulated.NetworkInit {
+	net := SimpleNetwork(name, bvnCount, nodeCount)
+	for _, bvn := range net.Bvns {
+		for _, node := range bvn.Nodes {
+			node.AdvertizeAddress = baseIP.String()
+			node.BasePort = basePort
+			baseIP[len(baseIP)-1]++
+		}
 	}
 	return net
 }
@@ -267,7 +283,7 @@ func (s *Simulator) ViewAll(fn func(batch *database.Batch) error) error {
 }
 
 func (s *Simulator) NewDirectClient() *client.Client {
-	return testing.DirectJrpcClient(s.partitions[protocol.Directory].nodes[0].api)
+	return testing.DirectJrpcClient(s.partitions[protocol.Directory].nodes[0].apiV2)
 }
 
 func (s *Simulator) ListenAndServe(ctx context.Context, hook func(*Simulator, http.Handler) http.Handler) error {
@@ -290,7 +306,7 @@ func (s *Simulator) ListenAndServe(ctx context.Context, hook func(*Simulator, ht
 			}
 			defer func() { _ = ln.Close() }()
 
-			srv := http.Server{Handler: node.api.NewMux()}
+			srv := http.Server{Handler: node.apiV2.NewMux()}
 			if hook != nil {
 				srv.Handler = hook(s, srv.Handler)
 			}
@@ -298,7 +314,7 @@ func (s *Simulator) ListenAndServe(ctx context.Context, hook func(*Simulator, ht
 			go func() { <-ctx.Done(); _ = srv.Shutdown(context.Background()) }()
 			errg.Go(func() error { return srv.Serve(ln) })
 
-			s.logger.Info("Node up", "partition", part.ID, "node", node.id, "address", "http://"+addr)
+			s.logger.Info("Node API up", "partition", part.ID, "node", node.id, "address", "http://"+addr)
 		}
 	}
 	return errg.Wait()
@@ -372,4 +388,72 @@ func (n nodeSigner) Sign(sig protocol.Signature, sigMdHash, message []byte) erro
 		return fmt.Errorf("cannot sign %T with a key", sig)
 	}
 	return nil
+}
+
+func (s *Simulator) Services() *simService { return (*simService)(s) }
+
+type simService Simulator
+
+func (s *simService) Private() private.Sequencer { return s }
+
+func (s *simService) NodeStatus(ctx context.Context, opts api.NodeStatusOptions) (*api.NodeStatus, error) {
+	if opts.NodeID == "" {
+		return nil, errors.BadRequest.WithFormat("node ID is missing")
+	}
+	id, err := peer.Decode(opts.NodeID)
+	if err != nil {
+		return nil, errors.BadRequest.WithFormat("invalid peer ID: %w", err)
+	}
+	for _, p := range s.partitions {
+		for _, n := range p.nodes {
+			sk, err := crypto.UnmarshalEd25519PrivateKey(n.nodeKey)
+			if err != nil {
+				continue
+			}
+			if id.MatchesPrivateKey(sk) {
+				return (*nodeService)(n).NodeStatus(ctx, opts)
+			}
+		}
+	}
+	return nil, errors.NotFound.WithFormat("node %s not found", id)
+}
+
+func (s *simService) NetworkStatus(ctx context.Context, opts api.NetworkStatusOptions) (*api.NetworkStatus, error) {
+	return (*nodeService)(s.partitions[protocol.Directory].nodes[0]).NetworkStatus(ctx, opts)
+}
+
+func (s *simService) Metrics(ctx context.Context, opts api.MetricsOptions) (*api.Metrics, error) {
+	return nil, errors.NotAllowed
+}
+
+func (s *simService) Query(ctx context.Context, scope *url.URL, query api.Query) (api.Record, error) {
+	part, err := s.router.RouteAccount(scope)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	return (*nodeService)(s.partitions[part].nodes[0]).Query(ctx, scope, query)
+}
+
+func (s *simService) Submit(ctx context.Context, envelope *protocol.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {
+	part, err := s.router.Route(envelope)
+	if err != nil {
+		return nil, err
+	}
+	return (*nodeService)(s.partitions[part].nodes[0]).Submit(ctx, envelope, opts)
+}
+
+func (s *simService) Validate(ctx context.Context, envelope *protocol.Envelope, opts api.ValidateOptions) ([]*api.Submission, error) {
+	part, err := s.router.Route(envelope)
+	if err != nil {
+		return nil, err
+	}
+	return (*nodeService)(s.partitions[part].nodes[0]).Validate(ctx, envelope, opts)
+}
+
+func (s *simService) Sequence(ctx context.Context, src, dst *url.URL, num uint64) (*api.TransactionRecord, error) {
+	part, err := s.router.RouteAccount(src)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	return s.partitions[part].nodes[0].seqSvc.Sequence(ctx, src, dst, num)
 }

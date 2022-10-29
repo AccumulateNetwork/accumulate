@@ -14,6 +14,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
+	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
@@ -82,7 +83,7 @@ func TestAnchorThreshold(t *testing.T) {
 	// Re-submit the first signature and verify it is still pending
 	sim.SubmitSuccessfully(anchors[0])
 	sim.StepN(50)
-	require.True(t, sim.GetStatus(txid).Pending())
+	require.True(t, sim.QueryTransaction(txid, nil).Status.Pending())
 
 	// Submit a second signature and verify it is delivered
 	sim.SubmitSuccessfully(anchors[1])
