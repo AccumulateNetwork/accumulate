@@ -13,6 +13,7 @@ import (
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
+	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
 )
@@ -34,27 +35,24 @@ func TestRepairIndices(t *testing.T) {
 	MakeAccount(t, sim.DatabaseFor(alice), &DataAccount{Url: alice.JoinPath("data")})
 
 	// Execute
-	tx1 := sim.SubmitSuccessfully(MustBuild(t,
+	tx1 := sim.BuildAndSubmitSuccessfully(
 		build.Transaction().For(alice, "data").
 			WriteData([]byte("foo")).
-			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey),
-	))
+			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey))
 
-	tx2 := sim.SubmitSuccessfully(MustBuild(t,
+	tx2 := sim.BuildAndSubmitSuccessfully(
 		build.Transaction().For(alice, "data").
 			WriteData([]byte("bar")).Scratch().
-			SignWith(alice, "book", "1").Version(1).Timestamp(2).PrivateKey(aliceKey),
-	))
+			SignWith(alice, "book", "1").Version(1).Timestamp(2).PrivateKey(aliceKey))
 
 	sim.StepUntil(
 		Txn(tx1.TxID).Succeeds(),
 		Txn(tx2.TxID).Succeeds())
 
-	tx3 := sim.SubmitSuccessfully(MustBuild(t,
+	tx3 := sim.BuildAndSubmitSuccessfully(
 		build.Transaction().For(alice, "data").
 			WriteData([]byte("baz")).
-			SignWith(alice, "book", "1").Version(1).Timestamp(3).PrivateKey(aliceKey),
-	))
+			SignWith(alice, "book", "1").Version(1).Timestamp(3).PrivateKey(aliceKey))
 
 	sim.StepUntil(
 		Txn(tx3.TxID).Succeeds())

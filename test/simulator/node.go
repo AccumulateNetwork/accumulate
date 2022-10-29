@@ -8,36 +8,48 @@ package simulator
 
 import (
 	"bytes"
+	"context"
+	"crypto/sha256"
 	"sort"
+	"sync/atomic"
 	"time"
 
 	abci "github.com/tendermint/tendermint/abci/types"
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	apiv2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	apiimpl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/blockscheduler"
 	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/events"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/testing"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 type Node struct {
-	id        int
-	init      *accumulated.NodeInit
-	partition *protocol.PartitionInfo
-	logger    logging.OptionalLogger
-	eventBus  *events.Bus
-	database  database.Beginner
-	executor  *block.Executor
-	api       *api.JrpcMethods
-	client    *client.Client
+	id         int
+	init       *accumulated.NodeInit
+	partition  *Partition
+	logger     logging.OptionalLogger
+	eventBus   *events.Bus
+	database   database.Beginner
+	nodeKey    []byte
+	privValKey []byte
+
+	globals  atomic.Value
+	executor *block.Executor
+	apiV2    *apiv2.JrpcMethods
+	clientV2 *client.Client
+	querySvc api.Querier
 
 	validatorUpdates []*validatorUpdate
 }
@@ -46,10 +58,18 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 	n := new(Node)
 	n.id = node
 	n.init = init
-	n.partition = &p.PartitionInfo
+	n.partition = p
 	n.logger.Set(p.logger, "node", node)
 	n.eventBus = events.NewBus(n.logger)
 	n.database = s.database(p.ID, node, n.logger)
+	n.privValKey = init.PrivValKey
+	n.nodeKey = init.NodeKey
+
+	n.querySvc = apiimpl.NewQuerier(apiimpl.QuerierParams{
+		Logger:    n.logger.With("module", "acc-rpc"),
+		Database:  n,
+		Partition: p.ID,
+	})
 
 	network := config.Describe{
 		NetworkType:  p.Type,
@@ -72,10 +92,10 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 	var err error
 	n.executor, err = block.NewNodeExecutor(execOpts, n)
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.Wrap(errors.UnknownError, err)
 	}
 
-	n.api, err = api.NewJrpc(api.Options{
+	n.apiV2, err = apiv2.NewJrpc(apiv2.Options{
 		Logger:        n.logger,
 		Describe:      &network,
 		Router:        s.router,
@@ -84,9 +104,9 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 		Key:           init.PrivValKey,
 	})
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.Wrap(errors.UnknownError, err)
 	}
-	n.client = testing.DirectJrpcClient(n.api)
+	n.clientV2 = testing.DirectJrpcClient(n.apiV2)
 
 	events.SubscribeSync(n.eventBus, n.willChangeGlobals)
 
@@ -98,6 +118,8 @@ func (n *Node) Update(fn func(*database.Batch) error) error { return n.database.
 func (n *Node) View(fn func(*database.Batch) error) error   { return n.database.View(fn) }
 
 func (n *Node) willChangeGlobals(e events.WillChangeGlobals) error {
+	n.globals.Store(e.New)
+
 	// Compare the old and new partition definitions
 	updates, err := e.Old.DiffValidators(e.New, n.partition.ID)
 	if err != nil {
@@ -128,7 +150,7 @@ func (n *Node) initChain(snapshot ioutil2.SectionReader) ([]byte, error) {
 		return err
 	})
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "load state root: %w", err)
+		return nil, errors.Format(errors.UnknownError, "load state root: %w", err)
 	}
 	if root != nil {
 		return root, nil
@@ -139,11 +161,11 @@ func (n *Node) initChain(snapshot ioutil2.SectionReader) ([]byte, error) {
 	defer batch.Discard()
 	err = n.executor.RestoreSnapshot(batch, snapshot)
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "restore snapshot: %w", err)
+		return nil, errors.Format(errors.UnknownError, "restore snapshot: %w", err)
 	}
 	err = batch.Commit()
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.Wrap(errors.UnknownError, err)
 	}
 
 	err = n.View(func(batch *database.Batch) (err error) {
@@ -151,7 +173,7 @@ func (n *Node) initChain(snapshot ioutil2.SectionReader) ([]byte, error) {
 		return err
 	})
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "load state root: %w", err)
+		return nil, errors.Format(errors.UnknownError, "load state root: %w", err)
 	}
 	return root, nil
 }
@@ -177,7 +199,7 @@ func (n *Node) beginBlock(block *block.Block) error {
 	block.Batch = n.Begin(true)
 	err := n.executor.BeginBlock(block)
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "begin block: %w", err)
+		return errors.Format(errors.UnknownError, "begin block: %w", err)
 	}
 	return nil
 }
@@ -185,7 +207,7 @@ func (n *Node) beginBlock(block *block.Block) error {
 func (n *Node) deliverTx(block *block.Block, delivery *chain.Delivery) (*protocol.TransactionStatus, error) {
 	s, err := n.executor.ExecuteEnvelope(block, delivery)
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "deliver envelope: %w", err)
+		return nil, errors.Format(errors.UnknownError, "deliver envelope: %w", err)
 	}
 	return s, nil
 }
@@ -193,7 +215,7 @@ func (n *Node) deliverTx(block *block.Block, delivery *chain.Delivery) (*protoco
 func (n *Node) endBlock(block *block.Block) ([]*validatorUpdate, error) {
 	err := n.executor.EndBlock(block)
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "end block: %w", err)
+		return nil, errors.Format(errors.UnknownError, "end block: %w", err)
 	}
 
 	if block.State.Empty() {
@@ -219,7 +241,7 @@ func (n *Node) commit(block *block.Block) ([]byte, error) {
 	// Commit
 	err := block.Batch.Commit()
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "commit: %w", err)
+		return nil, errors.Format(errors.UnknownError, "commit: %w", err)
 	}
 
 	// Notify
@@ -229,11 +251,91 @@ func (n *Node) commit(block *block.Block) ([]byte, error) {
 		Major: block.State.MakeMajorBlock,
 	})
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "notify of commit: %w", err)
+		return nil, errors.Format(errors.UnknownError, "notify of commit: %w", err)
 	}
 
 	// Get the  root
 	batch := n.database.Begin(false)
 	defer batch.Discard()
 	return batch.BptRoot(), nil
+}
+
+type nodeService Node
+
+func (s *nodeService) NodeStatus(ctx context.Context, opts api.NodeStatusOptions) (*api.NodeStatus, error) {
+	return &api.NodeStatus{
+		Ok: true,
+		LastBlock: &api.LastBlock{
+			Height: int64(s.partition.blockIndex),
+			Time:   s.partition.blockTime,
+			// TODO: chain root, state root
+		},
+		NodeKeyHash:      sha256.Sum256(s.nodeKey[32:]),
+		ValidatorKeyHash: sha256.Sum256(s.privValKey[32:]),
+		PartitionID:      s.partition.ID,
+		PartitionType:    s.partition.Type,
+	}, nil
+}
+
+func (s *nodeService) NetworkStatus(ctx context.Context, opts api.NetworkStatusOptions) (*api.NetworkStatus, error) {
+	v, ok := s.globals.Load().(*core.GlobalValues)
+	if !ok {
+		return nil, errors.NotReady
+	}
+	return &api.NetworkStatus{
+		Oracle:  v.Oracle,
+		Network: v.Network,
+		Globals: v.Globals,
+		Routing: v.Routing,
+	}, nil
+}
+
+func (s *nodeService) Metrics(ctx context.Context, opts api.MetricsOptions) (*api.Metrics, error) {
+	return nil, errors.NotAllowed
+}
+
+func (s *nodeService) Query(ctx context.Context, scope *url.URL, query api.Query) (api.Record, error) {
+	r, err := s.querySvc.Query(ctx, scope, query)
+	if err != nil {
+		return nil, err
+	}
+	// Force despecialization of generic types
+	b, err := r.MarshalBinary()
+	if err != nil {
+		return nil, errors.Wrap(errors.InternalError, err)
+	}
+	r, err = api.UnmarshalRecord(b)
+	if err != nil {
+		return nil, errors.Wrap(errors.InternalError, err)
+	}
+	return r, nil
+}
+
+func (s *nodeService) submit(envelope *protocol.Envelope, pretend bool) ([]*api.Submission, error) {
+	deliveries, err := chain.NormalizeEnvelope(envelope)
+	if err != nil {
+		return nil, errors.Wrap(errors.UnknownError, err)
+	}
+	var r []*api.Submission
+	for i, delivery := range deliveries {
+		sub := new(api.Submission)
+		sub.Status, err = s.partition.Submit(delivery, pretend)
+		if err != nil {
+			return nil, errors.Format(errors.UnknownError, "delivery %d: %w", i, err)
+		}
+		sub.Success = sub.Status.Code.Success()
+		if sub.Status.Error != nil {
+			sub.Message = sub.Status.Error.Message
+		}
+		r = append(r, sub)
+	}
+	return r, nil
+}
+
+func (s *nodeService) Submit(ctx context.Context, envelope *protocol.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {
+	return s.submit(envelope, false)
+}
+
+func (s *nodeService) Validate(ctx context.Context, envelope *protocol.Envelope, opts api.ValidateOptions) ([]*api.Submission, error) {
+	return s.submit(envelope, true)
 }

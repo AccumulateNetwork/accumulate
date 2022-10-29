@@ -18,6 +18,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
+	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
 )
@@ -35,12 +36,12 @@ func TestBadOperatorPageUpdate(t *testing.T) {
 	before := GetAccount[*KeyPage](t, sim.Database(Directory), DnUrl().JoinPath(Operators, "1"))
 
 	// Execute
-	st := sim.SubmitSuccessfully(MustBuild(t,
+	st := sim.BuildAndSubmitSuccessfully(
 		build.Transaction().For(DnUrl(), Operators, "1").
 			UpdateKeyPage().Add().Entry().Hash([32]byte{1}).FinishEntry().FinishOperation().
 			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(1).Signer(sim.SignWithNode(Directory, 0)).
 			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(2).Signer(sim.SignWithNode(Directory, 1)).
-			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(3).Signer(sim.SignWithNode(Directory, 2))))
+			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(3).Signer(sim.SignWithNode(Directory, 2)))
 
 	sim.StepUntil(
 		Txn(st.TxID).Fails())
@@ -66,12 +67,12 @@ func TestBadOracleUpdate(t *testing.T) {
 	require.NoError(t, v.UnmarshalBinary(before.Entry.GetData()[0]))
 
 	// Execute
-	st := sim.SubmitSuccessfully(MustBuild(t,
+	st := sim.BuildAndSubmitSuccessfully(
 		build.Transaction().For(DnUrl(), Oracle).
 			WriteData([]byte("foo")).ToState().
 			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(1).Signer(sim.SignWithNode(Directory, 0)).
 			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(2).Signer(sim.SignWithNode(Directory, 1)).
-			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(3).Signer(sim.SignWithNode(Directory, 2))))
+			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(3).Signer(sim.SignWithNode(Directory, 2)))
 
 	sim.StepUntil(
 		Txn(st.TxID).Fails())
@@ -106,10 +107,10 @@ func TestDirectlyQueryReceiptSignature(t *testing.T) {
 	MakeAccount(t, sim.DatabaseFor(bob), &TokenAccount{Url: bob.JoinPath("tokens"), TokenUrl: AcmeUrl()})
 
 	// Execute
-	st := sim.SubmitSuccessfully(MustBuild(t,
+	st := sim.BuildAndSubmitSuccessfully(
 		build.Transaction().For(alice, "tokens").
 			SendTokens(123, 0).To(bob, "tokens").
-			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey)))
+			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey))
 
 	sim.StepUntil(
 		Txn(st.TxID).Succeeds(),
