@@ -76,7 +76,9 @@ func TestGenerateDbTestdata(t *testing.T) {
 	defer f.Close()
 	batch := db.Begin(false)
 	defer batch.Discard()
-	_, err = snapshot.Collect(batch, new(snapshot.Header), f, logger, func(account *database.Account) (bool, error) { return true, nil })
+	_, err = snapshot.Collect(batch, new(snapshot.Header), f, snapshot.CollectOptions{
+		Logger: logger,
+	})
 	require.NoError(t, err)
 }
 
@@ -92,7 +94,9 @@ func TestDbEncoding(t *testing.T) {
 	batch := db.Begin(false)
 	defer batch.Discard()
 	buf := new(ioutil2.Buffer)
-	_, err = snapshot.Collect(batch, new(snapshot.Header), buf, logger, func(account *database.Account) (bool, error) { return true, nil })
+	_, err = snapshot.Collect(batch, new(snapshot.Header), buf, snapshot.CollectOptions{
+		Logger: logger,
+	})
 	require.NoError(t, err)
 
 	b, err = os.ReadFile("../testdata/database-v1.0.0.snapshot")
