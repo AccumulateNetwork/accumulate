@@ -356,7 +356,7 @@ func initNodeFromSeedProxy(cmd *cobra.Command, args []string) (int, *cfg.Config,
 		return 0, nil, nil, err
 	}
 
-	//now check the resigtry keybook to make sure the proxy is a registered proxy
+	//now check the registry keybook to make sure the proxy is a registered proxy
 	kp := new(protocol.KeyPage)
 	res := new(api.ChainQueryResponse)
 	res.Data = kp
