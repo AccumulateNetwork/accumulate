@@ -128,7 +128,7 @@ func launch() *exec.Cmd {
 func runScript() bool {
 	// Build tools
 	assertInModuleRoot()
-	build("./cmd/accumulate")
+	build("gitlab.com/accumulatenetwork/core/wallet/cmd/accumulate")
 	build("./cmd/accumulated")
 
 	// Launch the devnet

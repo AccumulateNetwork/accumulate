@@ -29,8 +29,6 @@ require (
 	github.com/spf13/viper v1.13.0
 	github.com/stretchr/testify v1.8.0
 	github.com/tendermint/tendermint v0.37.0-rc1
-	github.com/tyler-smith/go-bip32 v1.0.0
-	github.com/tyler-smith/go-bip39 v1.1.0
 	gitlab.com/ethan.reesor/vscode-notebooks/go-playbooks v0.0.0-20220417214602-1121b9fae118
 	gitlab.com/ethan.reesor/vscode-notebooks/yaegi v0.0.0-20220417214422-5c573557938e
 	go.etcd.io/etcd/client/v3 v3.5.4
@@ -46,12 +44,10 @@ require (
 
 require (
 	github.com/FactomProject/factomd v1.13.0
-	github.com/boltdb/bolt v1.3.1
 	github.com/ethereum/go-ethereum v1.10.25
 	github.com/ghodss/yaml v1.0.0
-	github.com/howeyc/gopass v0.0.0-20210920133722-c8aef6fb66ef
-	github.com/mdp/qrterminal v1.0.1
 	github.com/robfig/cron/v3 v3.0.0
+	gitlab.com/accumulatenetwork/core/wallet v0.3.1-0.20221023023110-4253c595f4c8
 	go.opentelemetry.io/otel v1.10.0
 	go.opentelemetry.io/otel/exporters/stdout/stdouttrace v1.10.0
 	go.opentelemetry.io/otel/sdk v1.10.0
@@ -69,8 +65,10 @@ require (
 	github.com/FactomProject/netki-go-partner-client v0.0.0-20160324224126-426acb535e66 // indirect
 	github.com/GaijinEntertainment/go-exhaustruct/v2 v2.3.0 // indirect
 	github.com/alingse/asasalint v0.0.11 // indirect
+	github.com/boltdb/bolt v1.3.1 // indirect
 	github.com/btcsuite/btcd/btcec/v2 v2.2.0 // indirect
 	github.com/btcsuitereleases/btcutil v0.0.0-20150612230727-f2b1058a8255 // indirect
+	github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e // indirect
 	github.com/cosmos/gogoproto v1.4.1 // indirect
 	github.com/creachadair/taskgroup v0.3.2 // indirect
 	github.com/curioswitch/go-reassign v0.1.2 // indirect
@@ -84,7 +82,10 @@ require (
 	github.com/go-logr/logr v1.2.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/gtank/merlin v0.1.1 // indirect
+	github.com/howeyc/gopass v0.0.0-20210920133722-c8aef6fb66ef // indirect
 	github.com/lufeee/execinquery v1.2.1 // indirect
+	github.com/manifoldco/promptui v0.9.0 // indirect
+	github.com/mdp/qrterminal v1.0.1 // indirect
 	github.com/mimoo/StrobeGo v0.0.0-20210601165009-122bf33a46e0 // indirect
 	github.com/pelletier/go-toml/v2 v2.0.5 // indirect
 	github.com/quasilyte/stdinfo v0.0.0-20220114132959-f7386bf02567 // indirect
@@ -93,6 +94,8 @@ require (
 	github.com/sivchari/nosnakecase v1.7.0 // indirect
 	github.com/stbenjam/no-sprintf-host-port v0.1.1 // indirect
 	github.com/timonwong/logrlint v0.1.0 // indirect
+	github.com/tyler-smith/go-bip32 v1.0.0 // indirect
+	github.com/tyler-smith/go-bip39 v1.1.0 // indirect
 	golang.org/x/exp/typeparams v0.0.0-20220722155223-a9213eeb770e // indirect
 	rsc.io/qr v0.2.0 // indirect
 )
