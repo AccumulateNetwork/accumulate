@@ -315,48 +315,6 @@
 
     // Miscellaneous
     {
-      "name": "CLI",
-      "presentation": { "group": "99-Miscellaneous", },
-      "type": "go",
-      "request": "launch",
-      "mode": "auto",
-      "program": "${workspaceFolder}/cmd/accumulate",
-      "env": {
-        "ACC_API": "local"
-      },
-      "cwd": "${workspaceFolder}",
-      "args": [
-        // "tx",
-        // "get",
-        // "-j",
-        // "97de5192c4e0b199a2bf978e7f4a88367bf03412c1ead814e0b4dc0803809ea6"
-
-        // "data",
-        // "write",
-        // "-j",
-        // "keytest/data",
-        // "keytest-0-0",
-        // "foo",
-        // "bar"
-
-        // "tx",
-        // "get",
-        // "c85422d30077a4f297d129b3fd34e9368dc4aa0bda213e966ba09f32c33ce336"
-
-        // "tx",
-        // "sign",
-        // "keytest/tokens",
-        // "keytest-1-1",
-        // "e05d44e9688d21556b67c0afc8c3c2493c930ac67a608701e22b7c98a421df8e"
-
-        // "auth",
-        // "remove",
-        // "keytest/managed-tokens",
-        // "keytest-1-0",
-        // "keytest/manager"
-      ]
-    },
-    {
       "name": "Heal Anchors",
       "presentation": { "group": "99-Miscellaneous", },
       "type": "go",
