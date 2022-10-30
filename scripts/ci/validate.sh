@@ -8,7 +8,7 @@ source ${SCRIPT_DIR}/validate-commons.sh
 section "Setup"
 if which go > /dev/null || ! which accumulate > /dev/null ; then
     echo "Installing CLI"
-    go install ./cmd/accumulate
+    go install gitlab.com/accumulatenetwork/core/wallet/cmd/accumulate
     export PATH="${PATH}:$(go env GOPATH)/bin"
 fi
 init-wallet
@@ -174,7 +174,7 @@ section "Set threshold to 0 of 0"
 wait-for cli-tx tx execute test.acme/book/2 test-2-0 '{"type": "updateKeyPage", "operation": [{ "type": "setThreshold", "threshold": 0 }]}' && die "cannot require 0 signatures on a key page" || success
 
 section "Update a key with only that key's signature"
-wait-for cli-tx key update test.acme/book/2 test-2-3-orig test-2-3-new || die "Failed to update key"
+wait-for cli-tx page key replace test.acme/book/2 test-2-3-orig test-2-3-new || die "Failed to update key"
 accumulate -j get key test.acme test-2-3-orig > /dev/null && die "Still found old key" || true
 accumulate -j get key test.acme test-2-3-new | jq -C --indent 0 || die "Could not find new key"
 success
