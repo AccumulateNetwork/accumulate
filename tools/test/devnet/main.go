@@ -69,7 +69,7 @@ func assertInModuleRoot() {
 }
 
 func build(tool string) {
-	buildCmd := exec.Command("go", "build", tool)
+	buildCmd := exec.Command("go", "build", "-tags=testnet", tool)
 	buildCmd.Stdout = os.Stdout
 	buildCmd.Stderr = os.Stdout
 	err := buildCmd.Run()
