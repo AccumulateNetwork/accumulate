@@ -52,7 +52,6 @@ The following is an incomplete list of scopes:
 | --------- | -----------
 | `prot`    | Changes the protocol, such as transactions, accounts, and validators
 | `api`     | Changes `internal/api`
-| `cli`     | Changes `cmd/accumulate`
 | `general` | General changes (such as documentation and CI/CD)
 
 [1]: https://www.conventionalcommits.org/en/v1.0.0/
