@@ -28,11 +28,11 @@ var cmdAdd = &cobra.Command{
 	Short: "Add records to a pre-genesis snapshot",
 }
 
-var cmdAddGovernance = &cobra.Command{
-	Use:   "governance [snapshot] [CSVs]",
-	Short: "Add governance ADIs to a pre-genesis snapshot",
+var cmdAddPrimary = &cobra.Command{
+	Use:   "primary [snapshot] [CSVs]",
+	Short: "Add primary ADIs to a pre-genesis snapshot",
 	Args:  cobra.MinimumNArgs(2),
-	Run:   addGovernance,
+	Run:   addPrimary,
 }
 
 var cmdAddReserved = &cobra.Command{
@@ -44,24 +44,24 @@ var cmdAddReserved = &cobra.Command{
 
 func init() {
 	cmd.AddCommand(cmdAdd)
-	cmdAdd.AddCommand(cmdAddGovernance, cmdAddReserved)
+	cmdAdd.AddCommand(cmdAddPrimary, cmdAddReserved)
 
-	cmdAddGovernance.Flags().StringVarP(&flags.LogLevel, "log-level", "l", "info", "Set the logging level")
-	cmdAddGovernance.Flags().IntVar(&flags.UrlCol, "url-column", 1, "The column the URL is in (1-based index)")
+	cmdAddPrimary.Flags().StringVarP(&flags.LogLevel, "log-level", "l", "info", "Set the logging level")
+	cmdAddPrimary.Flags().IntVar(&flags.UrlCol, "url-column", 1, "The column the URL is in (1-based index)")
 
 	cmdAddReserved.Flags().StringVarP(&flags.LogLevel, "log-level", "l", "info", "Set the logging level")
 	cmdAddReserved.Flags().IntVar(&flags.UrlCol, "url-column", 1, "The column the URL is in (1-based index)")
 	cmdAddReserved.Flags().IntVar(&flags.OwnerCol, "owner-column", 2, "The column the owner is in (1-based index)")
 }
 
-func addGovernance(_ *cobra.Command, args []string) {
+func addPrimary(_ *cobra.Command, args []string) {
 	operators := protocol.DnUrl().JoinPath(protocol.Operators)
 	addToSnapshot(args[0], args[1:], func(file string, row int, b *database.Batch, u *url.URL, _ []string, logger log.Logger) {
 		if !isValidIdentity(file, row, b, u, logger) {
 			return
 		}
 
-		logger.Debug("Create governance ADI", "url", u)
+		logger.Debug("Create primary ADI", "url", u)
 
 		identity := new(protocol.ADI)
 		book := new(protocol.KeyBook)
@@ -167,7 +167,13 @@ func addToSnapshot(filename string, files []string, process func(string, int, *d
 				if errors.Is(err, io.EOF) {
 					break
 				}
+				if errors.Is(err, csv.ErrFieldCount) {
+					continue
+				}
 				checkf(err, "read %s record", file)
+			}
+			if row == 1 {
+				continue
 			}
 			if flags.UrlCol >= len(record) {
 				logger.Info("Skipping row: missing URL", "row", row, "length", len(record))
