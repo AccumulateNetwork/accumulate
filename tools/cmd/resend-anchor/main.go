@@ -69,6 +69,14 @@ func fatalf(format string, args ...interface{}) {
 	os.Exit(1)
 }
 
+func warnf(err error, format string, args ...interface{}) bool {
+	if err == nil {
+		return false
+	}
+	fmt.Fprintf(os.Stderr, "Warning: "+format+": %v\n", append(args, err)...)
+	return true
+}
+
 func check(err error) {
 	if err != nil {
 		fatalf("%v", err)
@@ -88,7 +96,9 @@ func querySynth(c *client.Client, txid *url.TxID, src, dst *url.URL, seqNum uint
 	req.SequenceNumber = seqNum
 	req.Anchor = true
 	res, err := c.QuerySynth(context.Background(), req)
-	checkf(err, "query anchor %d from %v for %v", seqNum, src, dst)
+	if warnf(err, "query anchor %d from %v for %v", seqNum, src, dst) {
+		return nil, nil
+	}
 
 	if txid != nil && !txid.Equal(res.Transaction.ID()) {
 		fatalf("anchor %d from %v for %v has the wrong transaction ID", res.Status.SequenceNumber, src, dst)
@@ -102,7 +112,9 @@ func executeLocal(c *client.Client, dst *url.URL, txn *protocol.Transaction, sig
 	req.Envelope.Transaction = []*protocol.Transaction{txn}
 	req.Envelope.Signatures = sigs
 	res2, err := c.ExecuteLocal(context.Background(), req)
-	checkf(err, "execute anchor %x from directory for %v", txn.GetHash()[:4], dst)
+	if warnf(err, "execute anchor %x from directory for %v: %v", txn.GetHash()[:4], dst) {
+		return
+	}
 
 	if res2.Message != "" {
 		fmt.Fprintf(os.Stdout, "Warning: %s\n", res2.Message)
@@ -120,6 +132,9 @@ func executeLocal(c *client.Client, dst *url.URL, txn *protocol.Transaction, sig
 
 func querySynthAndExecute(csrc, cdst *client.Client, src, dst *url.URL, seqNum uint64) {
 	txn, sigs := querySynth(csrc, nil, src, dst, seqNum)
+	if txn == nil {
+		return
+	}
 
 	for i, sig := range sigs {
 		if _, ok := sig.(*protocol.PartitionSignature); ok {
