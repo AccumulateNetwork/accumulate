@@ -47,7 +47,7 @@ require (
 	github.com/ethereum/go-ethereum v1.10.25
 	github.com/ghodss/yaml v1.0.0
 	github.com/robfig/cron/v3 v3.0.0
-	gitlab.com/accumulatenetwork/core/wallet v0.3.1-0.20221023023110-4253c595f4c8
+	gitlab.com/accumulatenetwork/core/wallet v0.3.1-0.20221031013104-ae749a480ca8
 	go.opentelemetry.io/otel v1.10.0
 	go.opentelemetry.io/otel/exporters/stdout/stdouttrace v1.10.0
 	go.opentelemetry.io/otel/sdk v1.10.0
@@ -83,6 +83,7 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/gtank/merlin v0.1.1 // indirect
 	github.com/howeyc/gopass v0.0.0-20210920133722-c8aef6fb66ef // indirect
+	github.com/karalabe/usb v0.0.2 // indirect
 	github.com/lufeee/execinquery v1.2.1 // indirect
 	github.com/manifoldco/promptui v0.9.0 // indirect
 	github.com/mdp/qrterminal v1.0.1 // indirect
@@ -96,6 +97,7 @@ require (
 	github.com/timonwong/logrlint v0.1.0 // indirect
 	github.com/tyler-smith/go-bip32 v1.0.0 // indirect
 	github.com/tyler-smith/go-bip39 v1.1.0 // indirect
+	gitlab.com/accumulatenetwork/ledger/ledger-go-accumulate v0.0.0-20221027084553-1a2124c6287f // indirect
 	golang.org/x/exp/typeparams v0.0.0-20220722155223-a9213eeb770e // indirect
 	rsc.io/qr v0.2.0 // indirect
 )
