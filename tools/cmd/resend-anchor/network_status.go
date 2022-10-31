@@ -100,7 +100,9 @@ func walkNetwork(addrs []string) (*core.GlobalValues, []*NodeData) {
 				fmt.Printf("Tendermint status %s\n", addr)
 			}
 			tm, err := http.NewWithTimeout(addr, addr+"/websocket", 1)
-			checkf(err, "new DNN TM client")
+			if warnf(err, "new DNN TM client") {
+				continue
+			}
 
 			status, err := tm.Status(context.Background())
 			if err != nil {
@@ -110,10 +112,14 @@ func walkNetwork(addrs []string) (*core.GlobalValues, []*NodeData) {
 			}
 
 			nodeId, err := hex.DecodeString(string(status.NodeInfo.DefaultNodeID))
-			checkf(err, "parse node ID")
+			if warnf(err, "parse node ID") {
+				continue
+			}
 
 			valId, err := hex.DecodeString(status.ValidatorInfo.Address.String())
-			checkf(err, "parse validator ID")
+			if warnf(err, "parse validator ID") {
+				continue
+			}
 
 			_, ok := byNodeId[*(*[20]byte)(nodeId)]
 			if ok {
@@ -137,11 +143,15 @@ func walkNetwork(addrs []string) (*core.GlobalValues, []*NodeData) {
 				fmt.Printf("Tendermint net-info %s\n", addr)
 			}
 			netInfo, err := tm.NetInfo(context.Background())
-			checkf(err, "DNN TM net info")
+			if warnf(err, "DNN TM net info") {
+				continue
+			}
 
 			for _, peer := range netInfo.Peers {
 				id, err := hex.DecodeString(string(peer.NodeInfo.DefaultNodeID))
-				checkf(err, "parse peer ID")
+				if warnf(err, "parse peer ID") {
+					continue
+				}
 				if byNodeId[*(*[20]byte)(id)] != nil {
 					continue
 				}
@@ -164,13 +174,19 @@ func walkNetwork(addrs []string) (*core.GlobalValues, []*NodeData) {
 				fmt.Printf("Tendermint status %s\n", addr)
 			}
 			tm, err = http.New(addr, addr+"/websocket")
-			checkf(err, "new BVNN TM client")
+			if warnf(err, "new BVNN TM client") {
+				continue
+			}
 
 			status, err = tm.Status(context.Background())
-			checkf(err, "BVNN TM status")
+			if warnf(err, "BVNN TM status") {
+				continue
+			}
 
 			nodeId, err = hex.DecodeString(string(status.NodeInfo.DefaultNodeID))
-			checkf(err, "parse node ID")
+			if warnf(err, "parse node ID") {
+				continue
+			}
 
 			n.BvnNodeID = *(*[20]byte)(nodeId)
 			n.BvnnStatus = status
