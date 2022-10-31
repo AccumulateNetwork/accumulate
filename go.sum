@@ -550,6 +550,8 @@ github.com/julienschmidt/httprouter v1.2.0/go.mod h1:SYymIcj16QtmaHHD7aYtjjsJG7V
 github.com/julienschmidt/httprouter v1.3.0/go.mod h1:JR6WtHb+2LUe8TCKY3cZOxFyyO8IZAc4RVcycCCAKdM=
 github.com/julz/importas v0.1.0 h1:F78HnrsjY3cR7j0etXy5+TU1Zuy7Xt08X/1aJnH5xXY=
 github.com/julz/importas v0.1.0/go.mod h1:oSFU2R4XK/P7kNBrnL/FEQlDGN1/6WoxXEjSSXO0DV0=
+github.com/karalabe/usb v0.0.2 h1:M6QQBNxF+CQ8OFvxrT90BA0qBOXymndZnk5q235mFc4=
+github.com/karalabe/usb v0.0.2/go.mod h1:Od972xHfMJowv7NGVDiWVxk2zxnWgjLlJzE+F4F7AGU=
 github.com/kardianos/service v1.2.0 h1:bGuZ/epo3vrt8IPC7mnKQolqFeYJb7Cs8Rk4PSOBB/g=
 github.com/kardianos/service v1.2.0/go.mod h1:CIMRFEJVL+0DS1a3Nx06NaMn4Dz63Ng6O7dl0qH0zVM=
 github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51/go.mod h1:CzGEWj7cYgsdH8dAjBGEr58BoE7ScuLd+fwFZ44+/x8=
@@ -905,8 +907,10 @@ github.com/yuin/goldmark v1.2.1/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9dec
 github.com/yuin/goldmark v1.3.5/go.mod h1:mwnBkeHKe2W/ZEtQ+71ViKU8L12m81fl3OWwC1Zlc8k=
 github.com/yuin/goldmark v1.4.1/go.mod h1:mwnBkeHKe2W/ZEtQ+71ViKU8L12m81fl3OWwC1Zlc8k=
 github.com/yuin/goldmark v1.4.13/go.mod h1:6yULJ656Px+3vBD8DxQVa3kxgyrAnzto9xy5taEt/CY=
-gitlab.com/accumulatenetwork/core/wallet v0.3.1-0.20221023023110-4253c595f4c8 h1:9sh7hT4TrjpZmka6la09qWlB6AyjG8moQY8xSlm2K6c=
-gitlab.com/accumulatenetwork/core/wallet v0.3.1-0.20221023023110-4253c595f4c8/go.mod h1:rpQyN30fw04wZXwgv0iF8GxQ9DF6y/Sq+Lofqly+W/s=
+gitlab.com/accumulatenetwork/core/wallet v0.3.1-0.20221031013104-ae749a480ca8 h1:C58NCghxYy4a1t1nP3d21HIA8pqOHN0umQpusbrG+I8=
+gitlab.com/accumulatenetwork/core/wallet v0.3.1-0.20221031013104-ae749a480ca8/go.mod h1:J42npKOTRXfSGso2AlYpnWaZp2iNiE3mhI7h24lcawo=
+gitlab.com/accumulatenetwork/ledger/ledger-go-accumulate v0.0.0-20221027084553-1a2124c6287f h1:jLWoSJzUtiISoHyz01fnVP2vrKF2S/xTm7S1HJPkixc=
+gitlab.com/accumulatenetwork/ledger/ledger-go-accumulate v0.0.0-20221027084553-1a2124c6287f/go.mod h1:50/+Am0eXBPYD2t7FWRJy7pKVc8XYZV0tbB64Cu7IlA=
 gitlab.com/bosi/decorder v0.2.3 h1:gX4/RgK16ijY8V+BRQHAySfQAb354T7/xQpDB2n10P0=
 gitlab.com/bosi/decorder v0.2.3/go.mod h1:9K1RB5+VPNQYtXtTDAzd2OEftsZb1oV0IrJrzChSdGE=
 gitlab.com/ethan.reesor/vscode-notebooks/go-playbooks v0.0.0-20220417214602-1121b9fae118 h1:UnyYFTz6dWVMBzLUyqHPIQwMrdpiuE+CE7p/5kUfvmk=
