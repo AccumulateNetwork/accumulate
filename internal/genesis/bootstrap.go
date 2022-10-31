@@ -337,14 +337,14 @@ func (b *bootstrap) maybeCreateAcme() {
 }
 
 func (b *bootstrap) maybeCreateFaucet() {
+	if !protocol.IsTestNet || !b.shouldCreate(protocol.FaucetUrl) {
+		return
+	}
+
 	// Always do this so the DN has the proper issued amount
 	amount := new(big.Int)
 	amount.SetUint64(protocol.AcmeFaucetBalance * protocol.AcmePrecision)
 	b.acmeIssued.Add(b.acmeIssued, amount)
-
-	if !protocol.IsTestNet || !b.shouldCreate(protocol.FaucetUrl) {
-		return
-	}
 
 	liteId := new(protocol.LiteIdentity)
 	liteId.Url = protocol.FaucetUrl.RootIdentity()

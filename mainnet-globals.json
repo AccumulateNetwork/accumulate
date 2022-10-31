@@ -1,0 +1,16 @@
+{
+    "routing": {
+        "overrides": [
+            { "account": "staking.acme", "partition": "Directory" },
+            { "account": "a642a8674f46696cc47fdb6b65f9c87b2a19c5ea8123b3d2f0c13b6f33a9d5ef", "partition": "Chandrayaan" }
+        ],
+        "routes": [
+            { "partition": "Apollo",      "length": 2, "value": 0  },
+            { "partition": "Yutu",        "length": 2, "value": 1  },
+            { "partition": "Chandrayaan", "length": 2, "value": 2  },
+            { "partition": "Apollo",      "length": 3, "value": 6  },
+            { "partition": "Yutu",        "length": 4, "value": 14 },
+            { "partition": "Chandrayaan", "length": 4, "value": 15 }
+        ]
+    }
+}

@@ -14,7 +14,6 @@ import (
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
@@ -95,11 +94,6 @@ func (dumpVisitor) VisitAccount(acct *snapshot.Account, _ int) error {
 			typ = acct.Main.Type().String()
 		}
 		fmt.Printf("  Account %v (%v)\n", acct.Url, typ)
-
-		lta, ok := acct.Main.(*protocol.LiteTokenAccount)
-		if ok {
-			fmt.Printf("    Balance of %v is %s\n", acct.Url, protocol.FormatBigAmount(&lta.Balance, protocol.AcmePrecisionPower))
-		}
 
 		for _, chain := range acct.Chains {
 			fmt.Printf("    Chain %s (%v) height %d with %d mark points\n", chain.Name, chain.Type, chain.Head.Count, len(chain.MarkPoints))
