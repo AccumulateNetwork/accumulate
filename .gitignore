@@ -31,6 +31,7 @@ tools/cmd/gen-enum/go_build*
 .nodes*
 .factom*
 .vagrant
+.genesis
 .terraform
 .terraform.lock.hcl
 /.vscode/settings.json
