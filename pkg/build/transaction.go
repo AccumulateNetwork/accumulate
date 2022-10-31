@@ -156,8 +156,10 @@ type CreateDataAccountBuilder struct {
 	body protocol.CreateDataAccount
 }
 
-func (b TransactionBuilder) CreateDataAccount() CreateDataAccountBuilder {
-	return CreateDataAccountBuilder{t: b}
+func (b TransactionBuilder) CreateDataAccount(url any, path ...string) CreateDataAccountBuilder {
+	c := CreateDataAccountBuilder{t: b}
+	c.body.Url = c.t.parseUrl(url, path...)
+	return c
 }
 
 func (b CreateDataAccountBuilder) WithAuthority(book any, path ...string) CreateDataAccountBuilder {
@@ -376,19 +378,23 @@ type AddCreditsBuilder struct {
 	body protocol.AddCredits
 }
 
-func (b TransactionBuilder) AddCredits(spend float64) AddCreditsBuilder {
+func (b TransactionBuilder) AddCredits() AddCreditsBuilder {
 	c := AddCreditsBuilder{t: b}
-	c.body.Amount = *c.t.parseAmount(spend, protocol.AcmePrecision)
 	return c
+}
+
+func (b AddCreditsBuilder) WithOracle(value float64) AddCreditsBuilder {
+	b.body.Oracle = b.t.parseAmount(value, protocol.AcmeOraclePrecisionPower).Uint64()
+	return b
+}
+
+func (b AddCreditsBuilder) Spend(amount float64) AddCreditsBuilder {
+	b.body.Amount = *b.t.parseAmount(amount, protocol.AcmePrecisionPower)
+	return b
 }
 
 func (b AddCreditsBuilder) To(url any, path ...string) AddCreditsBuilder {
 	b.body.Recipient = b.t.parseUrl(url, path...)
-	return b
-}
-
-func (b AddCreditsBuilder) Oracle(value float64) AddCreditsBuilder {
-	b.body.Oracle = b.t.parseAmount(value, protocol.CreditPrecision).Uint64()
 	return b
 }
 
