@@ -4,7 +4,8 @@ FROM golang:1.18 as build
 WORKDIR /root
 COPY . .
 ENV CGO_ENABLED 0
-RUN make -B
+ARG TAGS=production,mainnet
+RUN make -B TAGS=$TAGS
 RUN go install github.com/go-delve/delve/cmd/dlv@latest
 RUN go install gitlab.com/accumulatenetwork/core/wallet/cmd/accumulate
 RUN go build ./tools/cmd/snapshot

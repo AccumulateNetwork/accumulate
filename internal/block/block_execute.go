@@ -268,6 +268,25 @@ func (x *Executor) executeEnvelope(block *Block, delivery *chain.Delivery, addit
 
 	} else if status.Code == 0 {
 		status.Code = errors.StatusRemote
+
+		batch := block.Batch.Begin(true)
+		defer batch.Discard()
+
+		err = batch.Transaction(delivery.Transaction.GetHash()).Status().Put(status)
+		if err != nil {
+			return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
+		}
+		if delivery.Transaction.Body.Type() != protocol.TransactionTypeRemote {
+			err = batch.Transaction(delivery.Transaction.GetHash()).Main().Put(&database.SigOrTxn{Transaction: delivery.Transaction})
+			if err != nil {
+				return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
+			}
+		}
+
+		err = batch.Commit()
+		if err != nil {
+			return nil, nil, errors.Format(errors.StatusUnknownError, "commit batch: %w", err)
+		}
 	}
 
 	err = x.ProcessRemoteSignatures(block, delivery)
