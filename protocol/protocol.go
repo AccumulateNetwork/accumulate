@@ -105,7 +105,8 @@ const AcmePrecision = 1e8
 const AcmePrecisionPower = 8
 
 // AcmeOraclePrecision is the precision of the oracle in 100 * USD of one ACME token.
-const AcmeOraclePrecision = 10000
+const AcmeOraclePrecision = 1e4
+const AcmeOraclePrecisionPower = 4
 
 // InitialAcmeOracleValue exists because golanglint-ci is dumb.
 const InitialAcmeOracleValue = InitialAcmeOracle * AcmeOraclePrecision
