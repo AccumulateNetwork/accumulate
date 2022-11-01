@@ -133,10 +133,10 @@ func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][2]*config
 			})
 
 			if dnn.P2P.ExternalAddress == "" {
-				dnn.P2P.ExternalAddress = dnn.Accumulate.LocalAddress
+				dnn.P2P.ExternalAddress = node.Address(PeerAddress, "", config.PortOffsetTendermintP2P, config.PortOffsetDirectory)
 			}
 			if bvnn.P2P.ExternalAddress == "" {
-				bvnn.P2P.ExternalAddress = bvnn.Accumulate.LocalAddress
+				bvnn.P2P.ExternalAddress = node.Address(PeerAddress, "", config.PortOffsetTendermintP2P, config.PortOffsetBlockValidator)
 			}
 
 			// No duplicate IPs

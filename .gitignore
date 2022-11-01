@@ -30,6 +30,7 @@ tools/cmd/gen-enum/go_build*
 .idea
 .nodes*
 .factom*
+.genesis
 .vagrant
 .terraform
 .terraform.lock.hcl
