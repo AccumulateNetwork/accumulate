@@ -233,7 +233,8 @@ wait-for-tx $TXID
 success
 
 section "Signing the transaction after it has been delivered fails"
-JSON=$(cli-run tx sign test.acme/tokens test-2-2 $TXID) && die "Signed the transaction after it was delivered" || success
+JSON=$(cli-run tx sign test.acme/tokens test-2-2 $TXID)
+jq <<< $JSON -re .result.error && success || die "Signed the transaction after it was delivered"
 
 section "API v2 faucet (AC-570)"
 BEFORE=$(accumulate -j account get ${LITE_ACME} | jq -r .data.balance)
