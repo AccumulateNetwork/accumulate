@@ -47,7 +47,7 @@ require (
 	github.com/ethereum/go-ethereum v1.10.25
 	github.com/ghodss/yaml v1.0.0
 	github.com/robfig/cron/v3 v3.0.0
-	gitlab.com/accumulatenetwork/core/wallet v0.3.1-0.20221031013104-ae749a480ca8
+	gitlab.com/accumulatenetwork/core/wallet v0.3.2-0.20221101235917-71d116cf7194
 	go.opentelemetry.io/otel v1.10.0
 	go.opentelemetry.io/otel/exporters/stdout/stdouttrace v1.10.0
 	go.opentelemetry.io/otel/sdk v1.10.0
