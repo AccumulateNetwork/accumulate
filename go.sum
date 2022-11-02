@@ -907,8 +907,6 @@ github.com/yuin/goldmark v1.2.1/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9dec
 github.com/yuin/goldmark v1.3.5/go.mod h1:mwnBkeHKe2W/ZEtQ+71ViKU8L12m81fl3OWwC1Zlc8k=
 github.com/yuin/goldmark v1.4.1/go.mod h1:mwnBkeHKe2W/ZEtQ+71ViKU8L12m81fl3OWwC1Zlc8k=
 github.com/yuin/goldmark v1.4.13/go.mod h1:6yULJ656Px+3vBD8DxQVa3kxgyrAnzto9xy5taEt/CY=
-gitlab.com/accumulatenetwork/core/wallet v0.3.1-0.20221031013104-ae749a480ca8 h1:C58NCghxYy4a1t1nP3d21HIA8pqOHN0umQpusbrG+I8=
-gitlab.com/accumulatenetwork/core/wallet v0.3.1-0.20221031013104-ae749a480ca8/go.mod h1:J42npKOTRXfSGso2AlYpnWaZp2iNiE3mhI7h24lcawo=
 gitlab.com/accumulatenetwork/core/wallet v0.3.2-0.20221101235917-71d116cf7194 h1:GqYD3qFd8BiPildugrZLJB7WNK/3TbbvSCWM/M+EVPk=
 gitlab.com/accumulatenetwork/core/wallet v0.3.2-0.20221101235917-71d116cf7194/go.mod h1:wnGMauIx55s5OXswTr7AYwGaLVT7Cy+bFAUCwyTqZYE=
 gitlab.com/accumulatenetwork/ledger/ledger-go-accumulate v0.0.0-20221027084553-1a2124c6287f h1:jLWoSJzUtiISoHyz01fnVP2vrKF2S/xTm7S1HJPkixc=
