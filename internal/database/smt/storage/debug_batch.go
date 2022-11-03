@@ -7,12 +7,12 @@
 package storage
 
 import (
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 // debug is a bit field for enabling debug log messages
-//nolint
+// nolint
 const debug = 0 |
 	// debugGet |
 	// debugGetValue |
@@ -93,7 +93,7 @@ func (b *DebugBatch) Get(key Key) (v []byte, err error) {
 
 	v, err = b.Batch.Get(key)
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 	return v, nil
 }

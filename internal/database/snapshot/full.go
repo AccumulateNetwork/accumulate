@@ -11,9 +11,9 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -23,7 +23,7 @@ func FullCollect(batch *database.Batch, file io.WriteSeeker, network config.Netw
 	var ledger *protocol.SystemLedger
 	err := batch.Account(network.Ledger()).Main().GetAs(&ledger)
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "load system ledger: %w", err)
+		return errors.UnknownError.WithFormat("load system ledger: %w", err)
 	}
 
 	header := new(Header)
@@ -43,11 +43,11 @@ func FullCollect(batch *database.Batch, file io.WriteSeeker, network config.Netw
 		},
 	})
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.UnknownError.Wrap(err)
 	}
 
 	err = CollectAnchors(w, batch, network)
-	return errors.Wrap(errors.StatusUnknownError, err)
+	return errors.UnknownError.Wrap(err)
 }
 
 // CollectAnchors collects anchors from the anchor ledger's anchor sequence
@@ -57,18 +57,18 @@ func CollectAnchors(w *Writer, batch *database.Batch, network config.NetworkUrl)
 	record := batch.Account(network.AnchorPool())
 	err := txnHashes.CollectFromChain(record, record.AnchorSequenceChain())
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.UnknownError.Wrap(err)
 	}
 
 	err = w.CollectTransactions(batch, txnHashes.Hashes, CollectOptions{})
-	return errors.Wrap(errors.StatusUnknownError, err)
+	return errors.UnknownError.Wrap(err)
 }
 
 // FullRestore restores the snapshot and rebuilds indices.
 func FullRestore(db database.Beginner, file ioutil2.SectionReader, logger log.Logger, network *config.Describe) error {
 	err := Restore(db, file, logger)
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.UnknownError.Wrap(err)
 	}
 
 	batch := db.Begin(true)
@@ -78,27 +78,27 @@ func FullRestore(db database.Beginner, file ioutil2.SectionReader, logger log.Lo
 	record := batch.Account(network.Synthetic())
 	synthIndexChain, err := record.MainChain().Index().Get()
 	if err != nil {
-		return errors.Format(errors.StatusInternalError, "load synthetic index chain: %w", err)
+		return errors.InternalError.WithFormat("load synthetic index chain: %w", err)
 	}
 
 	entries, err := synthIndexChain.Entries(0, synthIndexChain.Height())
 	if err != nil {
-		return errors.Format(errors.StatusInternalError, "load synthetic index chain entries: %w", err)
+		return errors.InternalError.WithFormat("load synthetic index chain entries: %w", err)
 	}
 
 	for i, data := range entries {
 		entry := new(protocol.IndexEntry)
 		err = entry.UnmarshalBinary(data)
 		if err != nil {
-			return errors.Format(errors.StatusInternalError, "unmarshal synthetic index chain entry %d: %w", i, err)
+			return errors.InternalError.WithFormat("unmarshal synthetic index chain entry %d: %w", i, err)
 		}
 
 		err = batch.SystemData(network.PartitionId).SyntheticIndexIndex(entry.BlockIndex).Put(uint64(i))
 		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "store synthetic transaction index index %d for block: %w", i, err)
+			return errors.UnknownError.WithFormat("store synthetic transaction index index %d for block: %w", i, err)
 		}
 	}
 
 	err = batch.Commit()
-	return errors.Wrap(errors.StatusUnknownError, err)
+	return errors.UnknownError.Wrap(err)
 }

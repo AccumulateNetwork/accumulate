@@ -10,8 +10,8 @@ import (
 	"fmt"
 	"sort"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -30,7 +30,7 @@ func (PartitionAnchor) Execute(st *StateManager, tx *Delivery) (protocol.Transac
 func (PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	// If a block validator anchor somehow makes it past validation on a BVN, reject it immediately
 	if st.NetworkType != protocol.PartitionTypeDirectory {
-		return nil, errors.New(errors.StatusInternalError, "invalid attempt to process a block validator partition")
+		return nil, errors.InternalError.With("invalid attempt to process a block validator partition")
 	}
 
 	// Unpack the payload
@@ -90,7 +90,7 @@ func (PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Transa
 			}
 		}
 		if found < 0 {
-			return nil, errors.Format(errors.StatusInternalError, "partition %v is not in the pending list", body.Source)
+			return nil, errors.InternalError.WithFormat("partition %v is not in the pending list", body.Source)
 		}
 		ledger.PendingMajorBlockAnchors = append(ledger.PendingMajorBlockAnchors[:found], ledger.PendingMajorBlockAnchors[found+1:]...)
 		err = st.Update(ledger)
@@ -113,7 +113,7 @@ func (PartitionAnchor) Validate(st *StateManager, tx *Delivery) (protocol.Transa
 	var sequence = map[*Delivery]int{}
 	synth, err := st.batch.Account(st.Ledger()).GetSyntheticForAnchor(body.RootChainAnchor)
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "load synth txns for anchor %x: %w", body.RootChainAnchor[:8], err)
+		return nil, errors.UnknownError.WithFormat("load synth txns for anchor %x: %w", body.RootChainAnchor[:8], err)
 	}
 	for _, txid := range synth {
 		h := txid.Hash()

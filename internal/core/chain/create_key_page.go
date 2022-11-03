@@ -9,7 +9,7 @@ package chain
 import (
 	"fmt"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -51,7 +51,7 @@ func (CreateKeyPage) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 			}
 			uniqueKeys[string(key.KeyHash)] = true
 		default:
-			return nil, errors.Format(errors.StatusBadRequest, "public key hash length is invalid")
+			return nil, errors.BadRequest.WithFormat("public key hash length is invalid")
 		}
 	}
 
@@ -62,10 +62,10 @@ func (CreateKeyPage) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 	book.PageCount++
 
 	if book.PageCount > st.Globals.Globals.Limits.BookPages {
-		return nil, errors.Format(errors.StatusBadRequest, "book will have too many pages")
+		return nil, errors.BadRequest.WithFormat("book will have too many pages")
 	}
 	if len(body.Keys) > int(st.Globals.Globals.Limits.PageEntries) {
-		return nil, errors.Format(errors.StatusBadRequest, "page will have too many entries")
+		return nil, errors.BadRequest.WithFormat("page will have too many entries")
 	}
 
 	for _, sig := range body.Keys {

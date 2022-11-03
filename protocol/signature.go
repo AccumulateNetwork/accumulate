@@ -17,13 +17,13 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/hash"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/common"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"golang.org/x/crypto/ripemd160" //nolint:staticcheck
 )
 
-var ErrCannotInitiate = errors.New(errors.StatusBadRequest, "signature cannot initiate a transaction: values are missing")
+var ErrCannotInitiate = errors.BadRequest.With("signature cannot initiate a transaction: values are missing")
 
 type Signature interface {
 	encoding.UnionValue
@@ -83,10 +83,10 @@ func PublicKeyHash(key []byte, typ SignatureType) ([]byte, error) {
 		SignatureTypeRemote,
 		SignatureTypeDelegated,
 		SignatureTypeInternal:
-		return nil, errors.Format(errors.StatusBadRequest, "%v is not a key type", typ)
+		return nil, errors.Format(errors.BadRequest, "%v is not a key type", typ)
 
 	default:
-		return nil, errors.Format(errors.StatusNotAllowed, "unknown key type %v", typ)
+		return nil, errors.Format(errors.NotAllowed, "unknown key type %v", typ)
 	}
 }
 
@@ -887,7 +887,7 @@ func (s *PartitionSignature) Metadata() Signature {
 
 // Initiator returns an error.
 func (s *PartitionSignature) Initiator() (hash.Hasher, error) {
-	return nil, errors.New(errors.StatusBadRequest, "use of the initiator hash for a synthetic signature is not supported")
+	return nil, errors.BadRequest.With("use of the initiator hash for a synthetic signature is not supported")
 }
 
 // GetVote returns VoteTypeAccept.
@@ -1016,7 +1016,7 @@ func (s *InternalSignature) Metadata() Signature {
 
 // InitiatorHash returns an error.
 func (s *InternalSignature) Initiator() (hash.Hasher, error) {
-	return nil, errors.New(errors.StatusBadRequest, "use of the initiator hash for an internal signature is not supported")
+	return nil, errors.BadRequest.With("use of the initiator hash for an internal signature is not supported")
 }
 
 // GetVote returns VoteTypeAccept.

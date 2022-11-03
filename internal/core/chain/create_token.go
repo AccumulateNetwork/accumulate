@@ -10,7 +10,7 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -49,12 +49,12 @@ func (CreateToken) Validate(st *StateManager, tx *Delivery) (protocol.Transactio
 	}
 
 	if body.Url == nil {
-		return nil, errors.Format(errors.StatusBadRequest, "account URL is missing")
+		return nil, errors.BadRequest.WithFormat("account URL is missing")
 	}
 
 	for _, u := range body.Authorities {
 		if u == nil {
-			return nil, errors.Format(errors.StatusBadRequest, "authority URL is nil")
+			return nil, errors.BadRequest.WithFormat("authority URL is nil")
 		}
 	}
 

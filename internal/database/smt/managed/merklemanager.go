@@ -14,7 +14,7 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 type MerkleManager = Chain
@@ -149,7 +149,7 @@ func (m *MerkleManager) GetAnyState(element int64) (ms *MerkleState, err error) 
 	if err != nil {
 		return nil, err
 	} else if element >= head.Count { //               Check to make sure element is not outside bounds
-		return nil, errors.New(errors.StatusBadRequest, "element out of range")
+		return nil, errors.BadRequest.With("element out of range")
 	}
 	MIPrev := element&(^m.markMask) - 1 //               Calculate the index of the prior markpoint
 	cState := m.GetState(MIPrev)        //               Use state at the prior mark point to compute what we need
@@ -158,8 +158,8 @@ func (m *MerkleManager) GetAnyState(element int64) (ms *MerkleState, err error) 
 		cState.InitSha256()
 	}
 	if cState == nil { //                                Should be in the database.
-		return nil, errors.New( //                        Report error if it isn't in the database'
-			errors.StatusInternalError, "should have a state for all elements(1)")
+		return nil, errors.InternalError.With( //        Report error if it isn't in the database'
+			"should have a state for all elements(1)")
 	}
 	cState.HashList = cState.HashList[:0] //             element is past the previous mark, so clear the HashList
 
@@ -171,7 +171,7 @@ func (m *MerkleManager) GetAnyState(element int64) (ms *MerkleState, err error) 
 		}
 	} else {
 		if NMark = m.GetState(MINext); NMark == nil { //             Read the mark point
-			return nil, errors.New(errors.StatusInternalError, "mark not found in the database")
+			return nil, errors.InternalError.With("mark not found in the database")
 		}
 	}
 	for _, v := range NMark.HashList { //                           Now iterate and add to the cState
@@ -192,25 +192,25 @@ func (m *MerkleManager) Get(element int64) (Hash, error) {
 	switch {
 	case err == nil:
 		return hash, nil
-	case errors.Is(err, errors.StatusNotFound):
+	case errors.Is(err, errors.NotFound):
 		// Continue
 	default:
-		return nil, errors.Format(errors.StatusUnknownError, "load element %d: %w", element, err)
+		return nil, errors.UnknownError.WithFormat("load element %d: %w", element, err)
 	}
 
 	head, err := m.Head().Get() // Load the head
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "load head: %w", err)
+		return nil, errors.UnknownError.WithFormat("load head: %w", err)
 	}
 	if element >= head.Count { // Make sure element is not greater than count
-		return nil, errors.Format(errors.StatusNotFound, "element %d does not exist (count=%d)", element, head.Count)
+		return nil, errors.NotFound.WithFormat("element %d does not exist (count=%d)", element, head.Count)
 	}
 
 	lastMark := head.Count &^ m.markMask // Last mark point
 	if element >= lastMark {             // Get element from head
 		i := element & m.markMask //        Index within the hash list
 		if i >= int64(len(head.HashList)) {
-			return nil, errors.Format(errors.StatusInternalError, "head: expected %d elements, got %d", head.Count, len(head.HashList))
+			return nil, errors.InternalError.WithFormat("head: expected %d elements, got %d", head.Count, len(head.HashList))
 		}
 		return head.HashList[i], nil
 	}
@@ -220,15 +220,15 @@ func (m *MerkleManager) Get(element int64) (Hash, error) {
 	switch {
 	case err == nil:
 		// Ok
-	case errors.Is(err, errors.StatusNotFound):
-		return nil, errors.Format(errors.StatusNotFound, "cannot locate element %d", element)
+	case errors.Is(err, errors.NotFound):
+		return nil, errors.NotFound.WithFormat("cannot locate element %d", element)
 	default:
-		return nil, errors.Format(errors.StatusUnknownError, "load mark point %d: %w", elemMark-1, err)
+		return nil, errors.UnknownError.WithFormat("load mark point %d: %w", elemMark-1, err)
 	}
 
 	i := element & m.markMask // Index within the mark point
 	if i >= int64(len(state.HashList)) {
-		return nil, errors.Format(errors.StatusInternalError, "mark point %d: expected %d elements, got %d", elemMark-1, m.markFreq, len(state.HashList))
+		return nil, errors.InternalError.WithFormat("mark point %d: expected %d elements, got %d", elemMark-1, m.markFreq, len(state.HashList))
 	}
 	return state.HashList[i], nil
 }

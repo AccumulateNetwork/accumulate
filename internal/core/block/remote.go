@@ -9,7 +9,7 @@ package block
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -33,7 +33,7 @@ func (x *Executor) ProcessRemoteSignatures(block *Block, delivery *chain.Deliver
 	for _, signature := range delivery.Signatures {
 		_, fwd, err := x.shouldForwardSignature(batch, delivery.Transaction, signature, delivery.Transaction.Header.Principal, signerSeen)
 		if err != nil {
-			return errors.Wrap(errors.StatusUnknownError, err)
+			return errors.UnknownError.Wrap(err)
 		}
 		if fwd == nil {
 			continue
@@ -67,7 +67,7 @@ func (x *Executor) shouldForwardSignature(batch *database.Batch, transaction *pr
 		// Check inner signature
 		s, fwd, err := x.shouldForwardSignature(batch, transaction, signature.Signature, signature.Delegator, seen)
 		if err != nil {
-			return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
+			return nil, nil, errors.UnknownError.Wrap(err)
 		}
 		if fwd != nil {
 			delegated := signature.Copy()
@@ -106,25 +106,25 @@ func (x *Executor) shouldForwardSignature(batch *database.Batch, transaction *pr
 
 	signer, err := loadSigner(batch, signerUrl)
 	if err != nil {
-		return nil, nil, errors.Format(errors.StatusUnknownError, "load signer: %w", err)
+		return nil, nil, errors.UnknownError.WithFormat("load signer: %w", err)
 	}
 
 	// Signer is satisfied?
 	record := batch.Transaction(transaction.GetHash())
 	status, err := record.GetStatus()
 	if err != nil {
-		return nil, nil, errors.Format(errors.StatusUnknownError, "load transaction status: %w", err)
+		return nil, nil, errors.UnknownError.WithFormat("load transaction status: %w", err)
 	}
 
 	ready, err := x.SignerIsSatisfied(batch, transaction, status, signer)
 	if !ready || err != nil {
-		return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, nil, errors.UnknownError.Wrap(err)
 	}
 
 	// Load all of the signatures
 	sigset, err := database.GetSignaturesForSigner(batch.Transaction(transaction.GetHash()), signer)
 	if err != nil {
-		return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, nil, errors.UnknownError.Wrap(err)
 	}
 
 	set := new(protocol.SignatureSet)

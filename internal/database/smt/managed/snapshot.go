@@ -1,6 +1,6 @@
 package managed
 
-import "gitlab.com/accumulatenetwork/accumulate/internal/errors"
+import "gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 
 // AddEntry adds an entry to the snapshot as if it were added to the chain.
 // AddEntry's logic must mirror MerkleManager.AddHash.
@@ -22,7 +22,7 @@ func (c *Snapshot) AddEntry(hash Hash) {
 func (c *Chain) CollectSnapshot() (*Snapshot, error) {
 	head, err := c.Head().Get()
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "load head: %w", err)
+		return nil, errors.UnknownError.WithFormat("load head: %w", err)
 	}
 
 	s := new(Snapshot)
@@ -38,15 +38,15 @@ func (c *Chain) CollectSnapshot() (*Snapshot, error) {
 		switch {
 		case err == nil:
 			// Ok
-		case errors.Is(err, errors.StatusNotFound):
+		case errors.Is(err, errors.NotFound):
 			continue
 		default:
-			return nil, errors.Format(errors.StatusUnknownError, "load mark point %d: %w", i, err)
+			return nil, errors.UnknownError.WithFormat("load mark point %d: %w", i, err)
 		}
 
 		s.MarkPoints = append(s.MarkPoints, state)
 		if i != state.Count {
-			return nil, errors.Format(errors.StatusInternalError, "expected mark point %d but count is %d", i-1, state.Count)
+			return nil, errors.InternalError.WithFormat("expected mark point %d but count is %d", i-1, state.Count)
 		}
 	}
 	return s, nil
@@ -55,32 +55,32 @@ func (c *Chain) CollectSnapshot() (*Snapshot, error) {
 func (c *Chain) RestoreSnapshot(s *Snapshot) error {
 	err := c.RestoreHead(s)
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.UnknownError.Wrap(err)
 	}
 
 	err = c.RestoreMarkPointRange(s, 0, len(s.MarkPoints))
-	return errors.Wrap(errors.StatusUnknownError, err)
+	return errors.UnknownError.Wrap(err)
 }
 
 func (c *Chain) RestoreHead(s *Snapshot) error {
 	// Ensure the chain is empty
 	head, err := c.Head().Get()
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "load head: %w", err)
+		return errors.UnknownError.WithFormat("load head: %w", err)
 	}
 	if head.Count > 0 {
-		return errors.Format(errors.StatusConflict, "cannot restore onto existing chain")
+		return errors.Conflict.WithFormat("cannot restore onto existing chain")
 	}
 
 	if s.MarkPower != uint64(c.markPower) {
 		// It is possible to handle this but I'm not going to bother writing the
 		// code unless we need it
-		return errors.Format(errors.StatusConflict, "mark power conflict: %d != %d", s.MarkPower, c.markPower)
+		return errors.Conflict.WithFormat("mark power conflict: %d != %d", s.MarkPower, c.markPower)
 	}
 
 	err = c.Head().Put(s.Head)
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "store head: %w", err)
+		return errors.UnknownError.WithFormat("store head: %w", err)
 	}
 
 	return nil
@@ -93,12 +93,12 @@ func (c *Chain) RestoreMarkPointRange(s *Snapshot, start, end int) error {
 		}
 
 		if state.Count&c.markMask != 0 {
-			return errors.Format(errors.StatusConflict, "mark power conflict: count %d does not match mark power %d", state.Count, c.markPower)
+			return errors.Conflict.WithFormat("mark power conflict: count %d does not match mark power %d", state.Count, c.markPower)
 		}
 
 		err := c.States(uint64(state.Count - 1)).Put(state)
 		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "store mark point %d: %w", state.Count, err)
+			return errors.UnknownError.WithFormat("store mark point %d: %w", state.Count, err)
 		}
 	}
 	return nil
@@ -109,7 +109,7 @@ func (c *Chain) RestoreElementIndexFromHead(s *Snapshot) error {
 	for i, h := range s.Head.HashList {
 		err := c.ElementIndex(h).Put(uint64(lastMark) + uint64(i))
 		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "store element index: %w", err)
+			return errors.UnknownError.WithFormat("store element index: %w", err)
 		}
 	}
 	return nil
@@ -122,13 +122,13 @@ func (c *Chain) RestoreElementIndexFromMarkPoints(s *Snapshot, start, end int) e
 		}
 
 		if state.Count&c.markMask != 0 {
-			return errors.Format(errors.StatusConflict, "mark power conflict: count %d does not match mark power %d", state.Count, c.markPower)
+			return errors.Conflict.WithFormat("mark power conflict: count %d does not match mark power %d", state.Count, c.markPower)
 		}
 
 		for i, h := range state.HashList {
 			err := c.ElementIndex(h).Put(uint64(state.Count) + uint64(i))
 			if err != nil {
-				return errors.Format(errors.StatusUnknownError, "store element index: %w", err)
+				return errors.UnknownError.WithFormat("store element index: %w", err)
 			}
 		}
 	}

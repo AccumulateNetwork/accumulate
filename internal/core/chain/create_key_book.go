@@ -10,7 +10,7 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -49,12 +49,12 @@ func (CreateKeyBook) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 	}
 
 	if body.Url == nil {
-		return nil, errors.Format(errors.StatusBadRequest, "account URL is missing")
+		return nil, errors.BadRequest.WithFormat("account URL is missing")
 	}
 
 	for _, u := range body.Authorities {
 		if u == nil {
-			return nil, errors.Format(errors.StatusBadRequest, "authority URL is nil")
+			return nil, errors.BadRequest.WithFormat("authority URL is nil")
 		}
 	}
 
@@ -65,11 +65,11 @@ func (CreateKeyBook) Validate(st *StateManager, tx *Delivery) (protocol.Transact
 
 	switch len(body.PublicKeyHash) {
 	case 0:
-		return nil, errors.Format(errors.StatusBadRequest, "public key hash is missing")
+		return nil, errors.BadRequest.WithFormat("public key hash is missing")
 	case 32:
 		// Ok
 	default:
-		return nil, errors.Format(errors.StatusBadRequest, "public key hash length is invalid")
+		return nil, errors.BadRequest.WithFormat("public key hash length is invalid")
 	}
 
 	book := new(protocol.KeyBook)

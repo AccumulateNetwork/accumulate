@@ -13,8 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -535,7 +535,7 @@ func validateTransactionDb(t *testing.T, db *database.Database, txn *Transaction
 	pv, ok := executor.(chain.PrincipalValidator)
 	if !ok ||
 		!pv.AllowMissingPrincipal(txn) ||
-		!errors.Is(err, errors.StatusNotFound) {
+		!errors.Is(err, errors.NotFound) {
 		require.NoError(t, err)
 	}
 

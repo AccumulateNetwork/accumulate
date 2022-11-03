@@ -11,9 +11,9 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -67,19 +67,19 @@ func (v *RestoreVisitor) VisitAccount(acct *Account, i int) error {
 
 	err := v.visit(i, 10000, "Restore accounts", needsOwnBatch)
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.UnknownError.Wrap(err)
 	}
 
 	err = acct.Restore(v.batch)
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "restore %v: %w", acct.Url, err)
+		return errors.UnknownError.WithFormat("restore %v: %w", acct.Url, err)
 	}
 
 	pos := map[string]int{}
 	for _, c := range acct.Chains {
 		_, err = acct.RestoreChainHead(v.batch, c)
 		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "restore %s chain head: %w", c.Name, err)
+			return errors.UnknownError.WithFormat("restore %s chain head: %w", c.Name, err)
 		}
 
 		if len(c.MarkPoints) > 0 {
@@ -106,17 +106,17 @@ func (v *RestoreVisitor) VisitAccount(acct *Account, i int) error {
 
 			mgr, err := record.ChainByName(c.Name)
 			if err != nil {
-				return errors.Format(errors.StatusUnknownError, "get %s chain: %w", c.Name, err)
+				return errors.UnknownError.WithFormat("get %s chain: %w", c.Name, err)
 			}
 			err = mgr.Inner().RestoreMarkPointRange(c, start, end)
 			if err != nil {
-				return errors.Format(errors.StatusUnknownError, "restore %s chain mark points [%d,%d): %w", c.Name, start, end, err)
+				return errors.UnknownError.WithFormat("restore %s chain mark points [%d,%d): %w", c.Name, start, end, err)
 			}
 		}
 
 		err = v.refreshBatch()
 		if err != nil {
-			return errors.Wrap(errors.StatusUnknownError, err)
+			return errors.UnknownError.Wrap(err)
 		}
 	}
 
@@ -145,17 +145,17 @@ func (v *RestoreVisitor) VisitAccount(acct *Account, i int) error {
 
 				mgr, err := record.ChainByName(c.Name)
 				if err != nil {
-					return errors.Format(errors.StatusUnknownError, "get %s chain: %w", c.Name, err)
+					return errors.UnknownError.WithFormat("get %s chain: %w", c.Name, err)
 				}
 				err = mgr.Inner().RestoreElementIndexFromMarkPoints(c, start, end)
 				if err != nil {
-					return errors.Format(errors.StatusUnknownError, "restore %s chain element index for mark points [%d,%d): %w", c.Name, start, end, err)
+					return errors.UnknownError.WithFormat("restore %s chain element index for mark points [%d,%d): %w", c.Name, start, end, err)
 				}
 			}
 
 			err = v.refreshBatch()
 			if err != nil {
-				return errors.Wrap(errors.StatusUnknownError, err)
+				return errors.UnknownError.Wrap(err)
 			}
 		}
 
@@ -163,12 +163,12 @@ func (v *RestoreVisitor) VisitAccount(acct *Account, i int) error {
 		for _, c := range acct.Chains {
 			mgr, err := record.ChainByName(c.Name)
 			if err != nil {
-				return errors.Format(errors.StatusUnknownError, "get %s chain: %w", c.Name, err)
+				return errors.UnknownError.WithFormat("get %s chain: %w", c.Name, err)
 			}
 
 			err = mgr.Inner().RestoreElementIndexFromHead(c)
 			if err != nil {
-				return errors.Format(errors.StatusUnknownError, "restore %s chain: %w", c.Name, err)
+				return errors.UnknownError.WithFormat("restore %s chain: %w", c.Name, err)
 			}
 		}
 	}
@@ -178,7 +178,7 @@ func (v *RestoreVisitor) VisitAccount(acct *Account, i int) error {
 
 	err = record.VerifyHash(acct.Hash[:])
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "restore %v: %w", acct.Url, err)
+		return errors.UnknownError.WithFormat("restore %v: %w", acct.Url, err)
 	}
 	return nil
 }
@@ -191,11 +191,11 @@ func (v *RestoreVisitor) VisitTransaction(txn *Transaction, i int) error {
 
 	err := v.visit(i, 10000, "Restore transactions", false)
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.UnknownError.Wrap(err)
 	}
 
 	err = txn.Restore(v.batch)
-	return errors.Wrap(errors.StatusUnknownError, err)
+	return errors.UnknownError.Wrap(err)
 }
 
 func (v *RestoreVisitor) VisitSignature(sig *Signature, i int) error {
@@ -206,11 +206,11 @@ func (v *RestoreVisitor) VisitSignature(sig *Signature, i int) error {
 
 	err := v.visit(i, 10000, "Restore signatures", false)
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.UnknownError.Wrap(err)
 	}
 
 	err = sig.Restore(v.batch)
-	return errors.Wrap(errors.StatusUnknownError, err)
+	return errors.UnknownError.Wrap(err)
 }
 
 func (v *RestoreVisitor) visit(i, threshold int, msg string, force bool) error {
@@ -239,7 +239,7 @@ func (v *RestoreVisitor) refreshBatch() error {
 	if v.batch != nil {
 		err := v.batch.Commit()
 		if err != nil {
-			return errors.Wrap(errors.StatusUnknownError, err)
+			return errors.UnknownError.Wrap(err)
 		}
 	}
 	v.batch = v.db.Begin(true)
@@ -254,5 +254,5 @@ func (v *RestoreVisitor) end(count int, msg string) error {
 	v.logger.Info(msg, "module", "restore", "count", count, "duration", d, "per-second", float64(count)/d.Seconds())
 	err := v.batch.Commit()
 	v.batch = nil
-	return errors.Wrap(errors.StatusUnknownError, err)
+	return errors.UnknownError.Wrap(err)
 }

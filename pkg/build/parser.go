@@ -17,8 +17,8 @@ import (
 	"time"
 
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -60,7 +60,7 @@ func (p *parser) record(err ...error) {
 }
 
 func (p *parser) errorf(code errors.Status, format string, args ...interface{}) {
-	p.record(errors.Format(code, format, args...))
+	p.record(code.WithFormat(format, args...))
 }
 
 func (p *parser) parseUrl(v any, path ...string) *url.URL {
@@ -75,13 +75,13 @@ func (p *parser) parseUrl(v any, path ...string) *url.URL {
 	case fmt.Stringer:
 		str = v.String()
 	default:
-		p.errorf(errors.StatusBadRequest, "cannot convert %T to a URL", v)
+		p.errorf(errors.BadRequest, "cannot convert %T to a URL", v)
 		return nil
 	}
 
 	u, err := url.Parse(str)
 	if err != nil {
-		p.errorf(errors.StatusBadRequest, "invalid url %q: %w", v, err)
+		p.errorf(errors.BadRequest, "invalid url %q: %w", v, err)
 		return nil
 	}
 	return u.JoinPath(path...)
@@ -91,7 +91,7 @@ func (p *parser) parseHash32(v any) [32]byte {
 	switch v := v.(type) {
 	case []byte:
 		if len(v) != 32 {
-			p.errorf(errors.StatusBadRequest, "invalid hash length: want 32, got %d", len(v))
+			p.errorf(errors.BadRequest, "invalid hash length: want 32, got %d", len(v))
 			return [32]byte{}
 		}
 		return *(*[32]byte)(v)
@@ -100,7 +100,7 @@ func (p *parser) parseHash32(v any) [32]byte {
 	case *[32]byte:
 		return *v
 	default:
-		p.errorf(errors.StatusBadRequest, "cannot convert %T to a hash", v)
+		p.errorf(errors.BadRequest, "cannot convert %T to a hash", v)
 		return [32]byte{}
 	}
 }
@@ -109,7 +109,7 @@ func (p *parser) parseHash(v any) []byte {
 	switch v := v.(type) {
 	case []byte:
 		if len(v) != 32 {
-			p.errorf(errors.StatusBadRequest, "invalid hash length: want 32, got %d", len(v))
+			p.errorf(errors.BadRequest, "invalid hash length: want 32, got %d", len(v))
 			return nil
 		}
 		return v
@@ -118,7 +118,7 @@ func (p *parser) parseHash(v any) []byte {
 	case *[32]byte:
 		return (*v)[:]
 	default:
-		p.errorf(errors.StatusBadRequest, "cannot convert %T to a hash", v)
+		p.errorf(errors.BadRequest, "cannot convert %T to a hash", v)
 		return nil
 	}
 }
@@ -138,12 +138,12 @@ func (p *parser) parsePublicKey(key any) []byte {
 	case string:
 		b, err := hex.DecodeString(key)
 		if err != nil {
-			p.errorf(errors.StatusBadRequest, "parse key as hex: %w", err)
+			p.errorf(errors.BadRequest, "parse key as hex: %w", err)
 			return nil
 		}
 		return b
 	default:
-		p.errorf(errors.StatusBadRequest, "unsupported key type %T", key)
+		p.errorf(errors.BadRequest, "unsupported key type %T", key)
 		return nil
 	}
 }
@@ -161,7 +161,7 @@ func (p *parser) hashKey(key []byte, typ protocol.SignatureType) []byte {
 	case protocol.SignatureTypeETH:
 		return protocol.ETHhash(key)
 	default:
-		p.errorf(errors.StatusBadRequest, "unsupported key type %v", typ)
+		p.errorf(errors.BadRequest, "unsupported key type %v", typ)
 		return nil
 	}
 }
@@ -207,12 +207,12 @@ func (p *parser) parseAmount(v any, precision uint64) *big.Int {
 	case string:
 		parts := strings.Split(v, ".")
 		if len(parts) > 2 {
-			p.errorf(errors.StatusBadRequest, "invalid number: %q", v)
+			p.errorf(errors.BadRequest, "invalid number: %q", v)
 			return nil
 		}
 		x := new(big.Int)
 		if _, ok := x.SetString(parts[0], 10); !ok {
-			p.errorf(errors.StatusBadRequest, "invalid number: %q", v)
+			p.errorf(errors.BadRequest, "invalid number: %q", v)
 			return nil
 		}
 		intexp(x, precision)
@@ -228,13 +228,13 @@ func (p *parser) parseAmount(v any, precision uint64) *big.Int {
 		}
 		y := new(big.Int)
 		if _, ok := y.SetString(fpart, 10); !ok {
-			p.errorf(errors.StatusBadRequest, "invalid number: %q", v)
+			p.errorf(errors.BadRequest, "invalid number: %q", v)
 			return nil
 		}
 		return x.Add(x, y)
 
 	default:
-		p.errorf(errors.StatusBadRequest, "cannot convert %T to a number", v)
+		p.errorf(errors.BadRequest, "cannot convert %T to a number", v)
 		return nil
 	}
 }
@@ -306,12 +306,12 @@ func (p *parser) parseUint(v any) uint64 {
 	case string:
 		u, err := strconv.ParseUint(v, 10, 64)
 		if err != nil {
-			p.errorf(errors.StatusBadRequest, "not a number: %w", err)
+			p.errorf(errors.BadRequest, "not a number: %w", err)
 		}
 		return u
 
 	default:
-		p.errorf(errors.StatusBadRequest, "cannot convert %T to a number", v)
+		p.errorf(errors.BadRequest, "cannot convert %T to a number", v)
 		return 0
 	}
 }

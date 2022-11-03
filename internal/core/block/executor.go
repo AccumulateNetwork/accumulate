@@ -19,10 +19,10 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -100,7 +100,7 @@ func NewNodeExecutor(opts ExecutorOptions, db database.Beginner) (*Executor, err
 		)
 
 	default:
-		return nil, errors.Format(errors.StatusInternalError, "invalid partition type %v", opts.Describe.NetworkType)
+		return nil, errors.InternalError.WithFormat("invalid partition type %v", opts.Describe.NetworkType)
 	}
 
 	// This is a no-op in dev
@@ -149,7 +149,7 @@ func newExecutor(opts ExecutorOptions, db database.Beginner, executors ...chain.
 
 	for _, x := range executors {
 		if _, ok := m.executors[x.Type()]; ok {
-			panic(errors.Format(errors.StatusInternalError, "duplicate executor for %d", x.Type()))
+			panic(errors.InternalError.WithFormat("duplicate executor for %d", x.Type()))
 		}
 		m.executors[x.Type()] = x
 	}
@@ -175,7 +175,7 @@ func newExecutor(opts ExecutorOptions, db database.Beginner, executors ...chain.
 		// Load globals
 		err = m.loadGlobals(db.View)
 		if err != nil {
-			return nil, errors.Wrap(errors.StatusUnknownError, err)
+			return nil, errors.UnknownError.Wrap(err)
 		}
 
 	case errors.Is(err, storage.ErrNotFound):
@@ -183,7 +183,7 @@ func newExecutor(opts ExecutorOptions, db database.Beginner, executors ...chain.
 		// m.logger.Debug("Loaded", "height", 0, "hash", logging.AsHex(batch.BptRoot()).Slice(0, 4))
 
 	default:
-		return nil, errors.Format(errors.StatusUnknownError, "load ledger: %w", err)
+		return nil, errors.UnknownError.WithFormat("load ledger: %w", err)
 	}
 
 	return m, nil
@@ -222,20 +222,20 @@ func (m *Executor) Genesis(block *Block, exec chain.TransactionExecutor) error {
 		Initiator: txn.Header.Principal,
 	})
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.UnknownError.Wrap(err)
 	}
 
 	status, err := m.ExecuteEnvelope(block, delivery)
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.UnknownError.Wrap(err)
 	}
 	if status.Error != nil {
-		return errors.Wrap(errors.StatusUnknownError, status.Error)
+		return errors.UnknownError.Wrap(status.Error)
 	}
 
 	err = m.EndBlock(block)
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.UnknownError.Wrap(err)
 	}
 
 	return nil
@@ -249,19 +249,19 @@ func (m *Executor) LoadStateRoot(batch *database.Batch) ([]byte, error) {
 	case errors.Is(err, storage.ErrNotFound):
 		return nil, nil
 	default:
-		return nil, errors.Format(errors.StatusUnknownError, "load partition identity: %w", err)
+		return nil, errors.UnknownError.WithFormat("load partition identity: %w", err)
 	}
 }
 
 func (m *Executor) RestoreSnapshot(db database.Beginner, file ioutil2.SectionReader) error {
 	err := snapshot.FullRestore(db, file, m.logger, &m.Describe)
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "load state: %w", err)
+		return errors.UnknownError.WithFormat("load state: %w", err)
 	}
 
 	err = m.loadGlobals(db.View)
 	if err != nil {
-		return errors.Format(errors.StatusInternalError, "failed to load globals: %w", err)
+		return errors.InternalError.WithFormat("failed to load globals: %w", err)
 	}
 
 	return nil
@@ -273,10 +273,10 @@ func (x *Executor) InitChainValidators(initVal []abci.ValidatorUpdate) (addition
 	for _, val := range initVal {
 		key := val.PubKey.GetEd25519()
 		if key == nil {
-			return nil, errors.Format(errors.StatusBadRequest, "validator key type %T is not supported", val.PubKey.Sum)
+			return nil, errors.BadRequest.WithFormat("validator key type %T is not supported", val.PubKey.Sum)
 		}
 		if len(key) != ed25519.PublicKeySize {
-			return nil, errors.Format(errors.StatusBadRequest, "invalid ED25519 key: want length %d, got %d", ed25519.PublicKeySize, len(key))
+			return nil, errors.BadRequest.WithFormat("invalid ED25519 key: want length %d, got %d", ed25519.PublicKeySize, len(key))
 		}
 		initValMap[*(*[32]byte)(key)] = true
 	}
@@ -296,7 +296,7 @@ func (x *Executor) InitChainValidators(initVal []abci.ValidatorUpdate) (addition
 
 	// Verify no additional validators were introduced
 	if len(initValMap) > 0 {
-		return nil, errors.Format(errors.StatusBadRequest, "InitChain request includes %d validator(s) not present in genesis", len(initValMap))
+		return nil, errors.BadRequest.WithFormat("InitChain request includes %d validator(s) not present in genesis", len(initValMap))
 	}
 
 	return additional, nil

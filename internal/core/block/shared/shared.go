@@ -8,9 +8,9 @@ package shared
 
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -39,7 +39,7 @@ func GetAccountAuthoritySet(account protocol.Account) (*protocol.AccountAuth, *u
 	case *protocol.KeyPage:
 		bookUrl, _, ok := protocol.ParseKeyPageUrl(account.Url)
 		if !ok {
-			return nil, nil, errors.Format(errors.StatusInternalError, "invalid key page URL: %v", account.Url)
+			return nil, nil, errors.InternalError.WithFormat("invalid key page URL: %v", account.Url)
 		}
 		return nil, bookUrl, nil
 
@@ -52,7 +52,7 @@ func SignTransaction(network *protocol.NetworkDefinition, nodeKey []byte, batch 
 	// TODO Exporting this is not great
 
 	if nodeKey == nil {
-		return nil, errors.Format(errors.StatusInternalError, "attempted to sign with a nil key")
+		return nil, errors.InternalError.WithFormat("attempted to sign with a nil key")
 	}
 
 	// Sign it
@@ -65,7 +65,7 @@ func SignTransaction(network *protocol.NetworkDefinition, nodeKey []byte, batch 
 
 	keySig, err := bld.Sign(txn.GetHash())
 	if err != nil {
-		return nil, errors.Format(errors.StatusInternalError, "sign synthetic transaction: %w", err)
+		return nil, errors.InternalError.WithFormat("sign synthetic transaction: %w", err)
 	}
 
 	return keySig, nil
@@ -84,13 +84,13 @@ func PrepareBlockAnchor(network *config.Describe, netdef *protocol.NetworkDefini
 		SetVersion(sequenceNumber).
 		InitiateSynthetic(txn, destPartUrl)
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusInternalError, err)
+		return nil, errors.InternalError.Wrap(err)
 	}
 
 	// Create a key signature
 	keySig, err := SignTransaction(netdef, nodeKey, batch, txn, initSig.DestinationNetwork)
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	return &protocol.Envelope{Transaction: []*protocol.Transaction{txn}, Signatures: []protocol.Signature{initSig, keySig}}, nil

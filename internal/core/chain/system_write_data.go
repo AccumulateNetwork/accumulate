@@ -9,7 +9,7 @@ package chain
 import (
 	"fmt"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -31,13 +31,13 @@ func (SystemWriteData) Validate(st *StateManager, tx *Delivery) (protocol.Transa
 
 	err := validateDataEntry(st, body.Entry)
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	if partition, ok := protocol.ParsePartitionUrl(st.OriginUrl); !ok {
-		return nil, errors.Format(errors.StatusBadRequest, "invalid principal: %v is not a system account", st.OriginUrl)
+		return nil, errors.BadRequest.WithFormat("invalid principal: %v is not a system account", st.OriginUrl)
 	} else if partition != st.PartitionId {
-		return nil, errors.Format(errors.StatusBadRequest, "invalid principal: %v belongs to the wrong partition", st.OriginUrl)
+		return nil, errors.BadRequest.WithFormat("invalid principal: %v belongs to the wrong partition", st.OriginUrl)
 	}
 
 	return executeWriteFullDataAccount(st, body.Entry, false, body.WriteToState)
