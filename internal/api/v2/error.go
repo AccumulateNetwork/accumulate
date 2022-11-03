@@ -8,8 +8,8 @@ package api
 
 import (
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 var ErrInvalidUrl = errors.New(errors.StatusBadRequest, "invalid URL")

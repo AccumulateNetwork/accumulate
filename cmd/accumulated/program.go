@@ -14,8 +14,8 @@ import (
 
 	"github.com/kardianos/service"
 	"github.com/spf13/cobra"
-	"gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
+	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"golang.org/x/sync/errgroup"
 )
 
