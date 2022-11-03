@@ -12,8 +12,6 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
-
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 )
 
 type LogAsHex interface {
@@ -67,7 +65,7 @@ func AsHex(v interface{}) LogAsHex {
 		return LogAsHexValue(v[:])
 	case string:
 		return LogAsHexValue(v)
-	case encoding.Byter:
+	case interface{ Bytes() []byte }:
 		return LogAsHexValue(v.Bytes())
 	case fmt.Stringer:
 		return LogAsHexValue(v.String())

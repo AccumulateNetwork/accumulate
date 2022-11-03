@@ -22,7 +22,7 @@ import (
 	"fmt"
 	"math/bits"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
 
 // This Stateful Merkle Tree implementation handles 256 bit hashes
@@ -66,15 +66,15 @@ func Sha256(b []byte) Hash {
 }
 
 func (h Hash) BinarySize() int {
-	return encoding.BytesBinarySize(h)
+	return len(encoding.MarshalBytes(h))
 }
 
 func (h Hash) MarshalBinary() ([]byte, error) {
-	return encoding.BytesMarshalBinary(h), nil
+	return encoding.MarshalBytes(h), nil
 }
 
 func (h *Hash) UnmarhsalBinary(b []byte) error {
-	v, err := encoding.BytesUnmarshalBinary(b)
+	v, err := encoding.UnmarshalBytes(b)
 	*h = v
 	return err
 }
@@ -97,7 +97,7 @@ func (l SparseHashList) BinarySize(height int64) int {
 			continue
 		}
 
-		n += encoding.BytesBinarySize(h)
+		n += len(encoding.MarshalBytes(h))
 	}
 	return n
 }
@@ -113,7 +113,7 @@ func (l SparseHashList) MarshalBinary(height int64) ([]byte, error) {
 
 		// If the bit is set, record the hash, otherwise ignore it (it is nil)
 		if height&1 > 0 {
-			data = append(data, encoding.BytesMarshalBinary(l[i])...)
+			data = append(data, encoding.MarshalBytes(l[i])...)
 		}
 
 		// Shift height so we can check the next bit
@@ -138,13 +138,13 @@ func (l *SparseHashList) UnmarshalBinary(height int64, data []byte) error {
 
 		// If the bit is set, then extract the next hash
 		var err error
-		(*l)[i], err = encoding.BytesUnmarshalBinary(data)
+		(*l)[i], err = encoding.UnmarshalBytes(data)
 		if err != nil {
 			return err
 		}
 
 		// Advance data by the hash size
-		data = data[encoding.BytesBinarySize((*l)[i]):]
+		data = data[len(encoding.MarshalBytes((*l)[i])):]
 	}
 
 	return nil
@@ -153,7 +153,7 @@ func (l *SparseHashList) UnmarshalBinary(height int64, data []byte) error {
 type HashList []Hash
 
 func (l HashList) BinarySize() int {
-	s := encoding.UvarintBinarySize(uint64(len(l)))
+	s := len(encoding.MarshalUint(uint64(len(l))))
 	for _, h := range l {
 		s += h.BinarySize()
 	}
@@ -161,7 +161,7 @@ func (l HashList) BinarySize() int {
 }
 
 func (l HashList) MarshalBinary() ([]byte, error) {
-	b := encoding.UvarintMarshalBinary(uint64(len(l)))
+	b := encoding.MarshalUint(uint64(len(l)))
 	for _, h := range l {
 		c, _ := h.MarshalBinary()
 		b = append(b, c...)
@@ -170,11 +170,11 @@ func (l HashList) MarshalBinary() ([]byte, error) {
 }
 
 func (l *HashList) UnmarhsalBinary(b []byte) error {
-	n, err := encoding.UvarintUnmarshalBinary(b)
+	n, err := encoding.UnmarshalUint(b)
 	if err != nil {
 		return err
 	}
-	b = b[encoding.UvarintBinarySize(n):]
+	b = b[len(encoding.MarshalUint(n)):]
 
 	*l = make(HashList, n)
 	for i := range *l {
