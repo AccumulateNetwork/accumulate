@@ -13,6 +13,8 @@ go test:
   stage: test
   extends: [ .rules all, .go ]
   needs: []
+  variables:
+    GIT_SUBMODULE_STRATEGY: recursive
   artifacts:
     when: always
     reports:
