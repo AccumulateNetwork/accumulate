@@ -11,7 +11,7 @@ import (
 func (m *DB) MarshalJSON() ([]byte, error) {
 	vv := make(map[string]string, len(m.entries))
 	for k, v := range m.entries {
-		vv[hex.EncodeToString(k[:])] = hex.EncodeToString(v)
+		vv[hex.EncodeToString(k[:])] = hex.EncodeToString(v) //nolint:rangevarref
 	}
 	return json.Marshal(vv)
 }
