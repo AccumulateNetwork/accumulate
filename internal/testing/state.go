@@ -20,7 +20,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
 type DB = *database.Batch
@@ -149,10 +148,10 @@ func WriteStates(db DB, chains ...protocol.Account) error {
 	return nil
 }
 
-func CreateADI(db DB, key tmed25519.PrivKey, urlStr types.String) error {
+func CreateADI(db DB, key tmed25519.PrivKey, urlStr string) error {
 	keyHash := sha256.Sum256(key.PubKey().Bytes()) // TODO This is not what create_identity / create_key_page do, nonce will be > 0 also
 
-	identityUrl, err := ParseUrl(*urlStr.AsString())
+	identityUrl, err := ParseUrl(urlStr)
 	if err != nil {
 		return err
 	}
@@ -180,12 +179,12 @@ func CreateADI(db DB, key tmed25519.PrivKey, urlStr types.String) error {
 	return WriteStates(db, adi, book, page)
 }
 
-func CreateSubADI(db DB, originUrlStr types.String, urlStr types.String) error {
-	originUrl, err := ParseUrl(*originUrlStr.AsString())
+func CreateSubADI(db DB, originUrlStr string, urlStr string) error {
+	originUrl, err := ParseUrl(originUrlStr)
 	if err != nil {
 		return err
 	}
-	identityUrl, err := ParseUrl(*urlStr.AsString())
+	identityUrl, err := ParseUrl(urlStr)
 	if err != nil {
 		return err
 	}
@@ -197,7 +196,7 @@ func CreateSubADI(db DB, originUrlStr types.String, urlStr types.String) error {
 	return WriteStates(db, adi)
 }
 
-func CreateAdiWithCredits(db DB, key tmed25519.PrivKey, urlStr types.String, credits float64) error {
+func CreateAdiWithCredits(db DB, key tmed25519.PrivKey, urlStr string, credits float64) error {
 	err := CreateADI(db, key, urlStr)
 	if err != nil {
 		return err
@@ -271,8 +270,8 @@ func CreateTokenIssuer(db DB, urlStr, symbol string, precision uint64, supplyLim
 	return db.Account(u).PutState(issuer)
 }
 
-func CreateKeyPage(db DB, bookUrlStr types.String, keys ...tmed25519.PubKey) error {
-	bookUrl, err := ParseUrl(*bookUrlStr.AsString())
+func CreateKeyPage(db DB, bookUrlStr string, keys ...tmed25519.PubKey) error {
+	bookUrl, err := ParseUrl(bookUrlStr)
 	if err != nil {
 		return err
 	}
@@ -299,8 +298,8 @@ func CreateKeyPage(db DB, bookUrlStr types.String, keys ...tmed25519.PubKey) err
 	return WriteStates(db, page, book)
 }
 
-func CreateKeyBook(db DB, urlStr types.String, publicKey tmed25519.PubKey) error {
-	bookUrl, err := ParseUrl(*urlStr.AsString())
+func CreateKeyBook(db DB, urlStr string, publicKey tmed25519.PubKey) error {
+	bookUrl, err := ParseUrl(urlStr)
 	if err != nil {
 		return err
 	}
