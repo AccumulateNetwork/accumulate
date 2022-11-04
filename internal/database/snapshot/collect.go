@@ -9,6 +9,7 @@ package snapshot
 import (
 	"compress/gzip"
 	"io"
+	"time"
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -95,7 +96,7 @@ func Collect(batch *database.Batch, header *Header, file io.WriteSeeker, logger 
 	}
 
 	// Save accounts
-	err = w.CollectAccounts(batch, preserveAccountHistory, nil)
+	err = w.CollectAccounts(batch, accounts, preserveAccountHistory, nil)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
@@ -103,13 +104,20 @@ func Collect(batch *database.Batch, header *Header, file io.WriteSeeker, logger 
 	return w, nil
 }
 
-func (w *Writer) CollectAccounts(batch *database.Batch, preserveHistory func(account *database.Account) (bool, error), visit func(*Account) error) error {
+func (w *Writer) CollectAccounts(batch *database.Batch, accounts []*url.URL, preserveHistory func(account *database.Account) (bool, error), visit func(*Account) error) error {
 	sw, err := w.Open(SectionTypeAccounts)
 	if err != nil {
 		return errors.Format(errors.StatusUnknownError, "open accounts section: %w", err)
 	}
 
+	var i int
+	start := time.Now()
 	err = batch.SaveAccounts(sw, func(record *database.Account) ([]byte, error) {
+		if i > 0 && i % 1000 == 0 {
+			d := time.Since(start)
+			w.Logger.Info("Collected accounts", "count", i, "total", len(accounts), "duration", d, "per-second", float64(i)/d.Seconds())
+		}
+
 		// preserve, err := preserveHistory(record)
 		// if err != nil {
 		// 	return nil, errors.Wrap(errors.StatusUnknownError, err)
@@ -144,12 +152,18 @@ func (w *Writer) CollectAccounts(batch *database.Batch, preserveHistory func(acc
 
 func (w *Writer) CollectTransactions(batch *database.Batch, hashes [][32]byte, visit func(*Transaction) error) error {
 	var txns []*Transaction
-	for _, h := range hashes {
+	start := time.Now()
+	for i, h := range hashes {
+		if i > 0 && i % 5000 == 0 {
+			d := time.Since(start)
+			w.Logger.Info("Collected transactions", "count", i, "total", len(hashes), "duration", d, "per-second", float64(i)/d.Seconds())
+		}
+
 		h := h // See docs/developer/rangevarref.md
 		txn, err := CollectTransaction(batch.Transaction(h[:]))
 		if err != nil {
 			if errors.Is(err, errors.StatusNotFound) {
-				w.Logger.Info("Skipping transaction", "error", err, "hash", logging.AsHex(h).Slice(0, 4))
+				w.Logger.Debug("Skipping transaction", "error", err, "hash", logging.AsHex(h).Slice(0, 4))
 				continue
 			}
 			return errors.Format(errors.StatusUnknownError, "collect transaction %x: %w", h[:4], err)
@@ -210,7 +224,13 @@ func (w *Writer) WriteTransactions(txns []*Transaction, gz bool) error {
 
 func (w *Writer) CollectSignatures(batch *database.Batch, hashes [][32]byte, visit func(*Signature) error) error {
 	var sigs []*Signature
-	for _, h := range hashes {
+	start := time.Now()
+	for i, h := range hashes {
+		if i > 0 && i % 1000 == 0 {
+			d := time.Since(start)
+			w.Logger.Info("Collected signatures", "count", i, "total", len(hashes), "duration", d, "per-second", float64(i)/d.Seconds())
+		}
+
 		h := h // See docs/developer/rangevarref.md
 		sig, err := CollectSignature(batch.Transaction(h[:]))
 		if err != nil {
