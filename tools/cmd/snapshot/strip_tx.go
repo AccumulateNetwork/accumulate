@@ -119,7 +119,7 @@ func stripSnapshot(_ *cobra.Command, args []string) {
 		}))
 
 		check(db.View(func(batch *database.Batch) error {
-			return w.CollectAccounts(batch, func(account *database.Account) (bool, error) { return false, nil }, nil)
+			return w.CollectAccounts(batch, nil, func(account *database.Account) (bool, error) { return false, nil }, nil)
 		}))
 	}
 }
