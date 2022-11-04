@@ -1,0 +1,132 @@
+DefaultQuery:
+  union: { type: query }
+  fields:
+    - name: IncludeReceipt
+      type: bool
+      optional: true
+
+ChainQuery:
+  union: { type: query }
+  custom-is-valid: true
+  fields:
+    - name: Name
+      type: string
+      optional: true
+    - name: Index
+      type: uint
+      optional: true
+      pointer: true
+    - name: Entry
+      type: bytes
+      optional: true
+    - name: Range
+      type: RangeOptions
+      marshal-as: reference
+      pointer: true
+      optional: true
+    - name: IncludeReceipt
+      type: bool
+      optional: true
+
+DataQuery:
+  union: { type: query }
+  custom-is-valid: true
+  fields:
+    - name: Index
+      type: uint
+      optional: true
+      pointer: true
+    - name: Entry
+      type: bytes
+      optional: true
+    - name: Range
+      type: RangeOptions
+      marshal-as: reference
+      pointer: true
+      optional: true
+
+DirectoryQuery:
+  union: { type: query }
+  fields:
+    - name: Range
+      type: RangeOptions
+      marshal-as: reference
+      pointer: true
+
+PendingQuery:
+  union: { type: query }
+  fields:
+    - name: Range
+      type: RangeOptions
+      marshal-as: reference
+      pointer: true
+
+BlockQuery:
+  union: { type: query }
+  custom-is-valid: true
+  fields:
+    - name: Minor
+      type: uint
+      pointer: true
+      optional: true
+    - name: Major
+      type: uint
+      pointer: true
+      optional: true
+    - name: MinorRange
+      type: RangeOptions
+      marshal-as: reference
+      pointer: true
+      optional: true
+    - name: MajorRange
+      type: RangeOptions
+      marshal-as: reference
+      pointer: true
+      optional: true
+    - name: EntryRange
+      type: RangeOptions
+      marshal-as: reference
+      pointer: true
+      optional: true
+    - name: OmitEmpty
+      description: omits empty (unrecorded) blocks from the response
+      type: bool
+      optional: true
+
+AnchorSearchQuery:
+  union: { type: query }
+  description: queries {account}#anchor/{hash}
+  fields:
+    - name: Anchor
+      type: bytes
+    - name: IncludeReceipt
+      type: bool
+      optional: true
+
+PublicKeySearchQuery:
+  union: { type: query }
+  fields:
+    - name: PublicKey
+      type: bytes
+    - name: Type
+      type: protocol.SignatureType
+      marshal-as: enum
+
+PublicKeyHashSearchQuery:
+  union: { type: query }
+  fields:
+    - name: PublicKeyHash
+      type: bytes
+
+DelegateSearchQuery:
+  union: { type: query }
+  fields:
+    - name: Delegate
+      type: url
+      pointer: true
+
+TransactionHashSearchQuery:
+  union: { type: query }
+  fields:
+    - name: Hash
+      type: hash
