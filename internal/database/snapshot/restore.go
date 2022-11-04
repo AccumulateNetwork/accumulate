@@ -41,7 +41,7 @@ func NewRestoreVisitor(db database.Beginner, logger log.Logger) *RestoreVisitor 
 	return v
 }
 
-const chainBatchSize = 10000
+const chainBatchSize = 50_000
 
 func (v *RestoreVisitor) VisitAccount(acct *Account, i int) error {
 	// End of section
@@ -87,9 +87,10 @@ func (v *RestoreVisitor) VisitAccount(acct *Account, i int) error {
 		}
 	}
 
-	// Add chain entries 10000 at a time
+	// Add chain entries in batches
 	for len(pos) > 0 {
 		record := v.batch.Account(acct.Url)
+		batchSize := chainBatchSize
 		for _, c := range acct.Chains {
 			start, ok := pos[c.Name]
 			if !ok {
@@ -97,11 +98,16 @@ func (v *RestoreVisitor) VisitAccount(acct *Account, i int) error {
 			}
 
 			end := len(c.MarkPoints)
-			if end-start > chainBatchSize {
-				end = start + chainBatchSize
+			if end-start > batchSize {
+				end = start + batchSize
 				pos[c.Name] = end
 			} else {
 				delete(pos, c.Name)
+			}
+
+			batchSize -= end-start
+			if end == start {
+				continue
 			}
 
 			mgr, err := record.ChainByName(c.Name)
@@ -126,21 +132,28 @@ func (v *RestoreVisitor) VisitAccount(acct *Account, i int) error {
 			pos[c.Name] = 0
 		}
 
-		const batchSize = chainBatchSize << 8 // Each mark point has 256 entries
 		for len(pos) > 0 {
 			record := v.batch.Account(acct.Url)
+			batchSize := chainBatchSize
 			for _, c := range acct.Chains {
 				start, ok := pos[c.Name]
 				if !ok {
 					continue
 				}
 
+				// Adjust for the number of entries in the mark point
 				end := len(c.MarkPoints)
-				if end-start > batchSize {
-					end = start + batchSize
+				limit := batchSize >> int(c.MarkPower)
+				if end-start > limit {
+					end = start + limit
 					pos[c.Name] = end
 				} else {
 					delete(pos, c.Name)
+				}
+
+				batchSize -= (end-start) << int(c.MarkPower)
+				if end == start {
+					continue
 				}
 
 				mgr, err := record.ChainByName(c.Name)
