@@ -21,18 +21,58 @@ func (s Status) Success() bool { return s < 300 }
 // Error implements error.
 func (s Status) Error() string { return s.String() }
 
-// As calls stdlib errors.As.
-func As(err error, target interface{}) bool { return errors.As(err, target) }
+func (s Status) Wrap(err error) error {
+	if err == nil {
+		// The return type must be `error` - otherwise this returns statement
+		// can cause strange errors
+		return nil
+	}
 
-// Is calls stdlib errors.Is.
-func Is(err, target error) bool { return errors.Is(err, target) }
+	// If err is an Error and we're not going to add anything, return it
+	if !trackLocation && s == UnknownError {
+		if _, ok := err.(*Error); ok {
+			return err
+		}
+	}
 
-// Unwrap calls stdlib errors.Unwrap.
-func Unwrap(err error) error { return errors.Unwrap(err) }
+	e := s.new()
+	e.setCause(convert(err))
+	return e
+}
 
-func makeError(code Status) *Error {
+func (s Status) With(v ...interface{}) *Error {
+	e := s.new()
+	e.Message = fmt.Sprint(v...)
+	return e
+}
+
+func (s Status) WithCauseAndFormat(cause error, format string, args ...interface{}) *Error {
+	e := s.new()
+	e.Message = fmt.Sprintf(format, args...)
+	e.setCause(convert(cause))
+	return e
+}
+
+func (s Status) WithFormat(format string, args ...interface{}) *Error {
+	err := fmt.Errorf(format, args...)
+
+	u, ok := err.(interface{ Unwrap() error })
+	if ok {
+		e := s.new()
+		e.Message = err.Error()
+		e.setCause(convert(u.Unwrap()))
+		return e
+	}
+
+	e := convert(err)
+	e.Code = s
+	e.recordCallSite(2)
+	return e
+}
+
+func (s Status) new() *Error {
 	e := new(Error)
-	e.Code = code
+	e.Code = s
 	e.recordCallSite(3)
 	return e
 }
@@ -84,61 +124,6 @@ func (e *Error) setCause(f *Error) {
 	cs := e.CallStack
 	*e = *f
 	e.CallStack = append(cs, f.CallStack...)
-}
-
-func New(code Status, v interface{}) *Error {
-	if v == nil {
-		return nil
-	}
-
-	e := makeError(code)
-	if err, ok := v.(error); ok {
-		e.setCause(convert(err))
-	} else {
-		e.Message = fmt.Sprint(v)
-	}
-	return e
-}
-
-func Wrap(code Status, err error) error {
-	if err == nil {
-		// The return type must be `error` - otherwise this returns statement
-		// can cause strange errors
-		return nil
-	}
-	// If err is an Error and we're not going to add anything, return it
-	if !trackLocation && code == UnknownError {
-		if _, ok := err.(*Error); ok {
-			return err
-		}
-	}
-	e := makeError(code)
-	e.setCause(convert(err))
-	return e
-}
-
-func FormatWithCause(code Status, cause error, format string, args ...interface{}) *Error {
-	e := makeError(code)
-	e.Message = fmt.Sprintf(format, args...)
-	e.setCause(convert(cause))
-	return e
-}
-
-func Format(code Status, format string, args ...interface{}) *Error {
-	err := fmt.Errorf(format, args...)
-
-	u, ok := err.(interface{ Unwrap() error })
-	if ok {
-		e := makeError(code)
-		e.Message = err.Error()
-		e.setCause(convert(u.Unwrap()))
-		return e
-	}
-
-	e := convert(err)
-	e.Code = code
-	e.recordCallSite(2)
-	return e
 }
 
 func (e *Error) recordCallSite(depth int) {

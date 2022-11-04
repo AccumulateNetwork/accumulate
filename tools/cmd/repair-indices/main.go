@@ -38,7 +38,7 @@ func run(_ *cobra.Command, args []string) {
 func rebuildIndices(db database.Beginner, partition config.NetworkUrl) error {
 	accounts, err := collect(db, partition)
 	if err != nil {
-		return errors.Wrap(errors.UnknownError, err)
+		return errors.UnknownError.Wrap(err)
 	}
 
 	batch := db.Begin(true)
@@ -52,18 +52,18 @@ func rebuildIndices(db database.Beginner, partition config.NetworkUrl) error {
 			entryHashes = append(entryHashes, e.Entry)
 			err = r.Data().Transaction(e.Entry).Put(e.Txn)
 			if err != nil {
-				return errors.Wrap(errors.UnknownError, err)
+				return errors.UnknownError.Wrap(err)
 			}
 		}
 
 		err = r.Data().Entry().Overwrite(entryHashes)
 		if err != nil {
-			return errors.Wrap(errors.UnknownError, err)
+			return errors.UnknownError.Wrap(err)
 		}
 	}
 
 	err = batch.Commit()
-	return errors.Wrap(errors.UnknownError, err)
+	return errors.UnknownError.Wrap(err)
 }
 
 type Data struct {
@@ -84,7 +84,7 @@ func collect(db database.Beginner, partition config.NetworkUrl) (map[[32]byte]*D
 	var ledger *protocol.SystemLedger
 	err := batch.Account(partition.Ledger()).Main().GetAs(&ledger)
 	if err != nil {
-		return nil, errors.Format(errors.UnknownError, "load system ledger: %w", err)
+		return nil, errors.UnknownError.WithFormat("load system ledger: %w", err)
 	}
 
 	entries := map[[32]byte]*Data{}
@@ -116,7 +116,7 @@ func collect(db database.Beginner, partition config.NetworkUrl) (map[[32]byte]*D
 		case errors.Is(err, errors.NotFound):
 			continue
 		default:
-			return nil, errors.Format(errors.UnknownError, "load block %d: %w", i, err)
+			return nil, errors.UnknownError.WithFormat("load block %d: %w", i, err)
 		}
 
 		var votes = partition.JoinPath(protocol.Votes).AccountID32()
@@ -150,7 +150,7 @@ func collect(db database.Beginner, partition config.NetworkUrl) (map[[32]byte]*D
 			case errors.Is(err, errors.NotFound):
 				continue
 			default:
-				return nil, errors.Format(errors.UnknownError, "load %v: %w", e.Account, err)
+				return nil, errors.UnknownError.WithFormat("load %v: %w", e.Account, err)
 			}
 			switch account.Type() {
 			case protocol.AccountTypeDataAccount,
@@ -162,12 +162,12 @@ func collect(db database.Beginner, partition config.NetworkUrl) (map[[32]byte]*D
 
 			chain, err := batch.Account(e.Account).ChainByName(e.Chain)
 			if err != nil {
-				return nil, errors.Format(errors.UnknownError, "get %v %s chain: %w", e.Account, e.Chain, err)
+				return nil, errors.UnknownError.WithFormat("get %v %s chain: %w", e.Account, e.Chain, err)
 			}
 
 			txnHash, err := chain.Inner().Get(int64(e.Index))
 			if err != nil {
-				return nil, errors.Format(errors.UnknownError, "get %v %s chain entry %d: %w", e.Account, e.Chain, e.Index, err)
+				return nil, errors.UnknownError.WithFormat("get %v %s chain entry %d: %w", e.Account, e.Chain, e.Index, err)
 			}
 
 			state, err := batch.Transaction(txnHash).Main().Get()
@@ -176,9 +176,9 @@ func collect(db database.Beginner, partition config.NetworkUrl) (map[[32]byte]*D
 				fmt.Printf("Cannot load state of %v %s chain entry %d (%x)\n", e.Account, e.Chain, e.Index, txnHash)
 				continue
 			case err != nil:
-				return nil, errors.Format(errors.UnknownError, "load %v %s chain entry %d state: %w", e.Account, e.Chain, e.Index, err)
+				return nil, errors.UnknownError.WithFormat("load %v %s chain entry %d state: %w", e.Account, e.Chain, e.Index, err)
 			case state.Transaction == nil:
-				return nil, errors.Format(errors.UnknownError, "%v %s chain entry %d is not a transaction: %w", e.Account, e.Chain, e.Index, err)
+				return nil, errors.UnknownError.WithFormat("%v %s chain entry %d is not a transaction: %w", e.Account, e.Chain, e.Index, err)
 			}
 
 			var entryHash []byte
