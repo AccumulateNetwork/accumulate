@@ -1,0 +1,64 @@
+NodeStatus:
+  fields:
+    - name: Ok
+      type: bool
+    - name: LastBlock
+      type: LastBlock
+      marshal-as: reference
+      pointer: true
+    - name: Version
+      type: string
+    - name: Commit
+      type: string
+    - name: NodeKeyHash
+      type: hash
+    - name: ValidatorKeyHash
+      type: hash
+    - name: PartitionID
+      type: string
+    - name: PartitionType
+      type: protocol.PartitionType
+      marshal-as: enum
+    - name: Peers
+      type: PeerInfo
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+
+NetworkStatus:
+  fields:
+    - name: Oracle
+      type: protocol.AcmeOracle
+      marshal-as: reference
+      pointer: true
+    - name: Globals
+      type: protocol.NetworkGlobals
+      marshal-as: reference
+      pointer: true
+    - name: Network
+      type: protocol.NetworkDefinition
+      marshal-as: reference
+      pointer: true
+    - name: Routing
+      type: protocol.RoutingTable
+      marshal-as: reference
+      pointer: true
+
+Metrics:
+  fields:
+    - name: TPS
+      type: float
+      keep-empty: true
+
+Submission:
+  fields:
+    - name: Status
+      type: protocol.TransactionStatus
+      marshal-as: reference
+      pointer: true
+    - name: Success
+      description: indicates whether the envelope was successfully submitted
+      type: bool
+    - name: Message
+      description: is the message returned by the consensus engine
+      type: string

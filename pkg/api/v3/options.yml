@@ -1,0 +1,61 @@
+RangeOptions:
+  fields:
+    - name: Start
+      description: is the starting index
+      type: uint
+      optional: true
+    - name: Count
+      description: is the number of requested results
+      type: uint
+      pointer: true
+      optional: true
+    - name: Expand
+      description: requests expanded results
+      type: bool
+      optional: true
+    - name: FromEnd
+      type: bool
+      optional: true
+
+NodeStatusOptions:
+  fields:
+    - name: NodeID
+      type: string
+
+NetworkStatusOptions:
+  fields:
+    - name: Partition
+      type: string
+
+MetricsOptions:
+  fields:
+    - name: Partition
+      type: string
+    - name: Span
+      description: sets the width of the window in blocks
+      type: uint
+      optional: true
+
+SubmitOptions:
+  fields:
+    - name: Verify
+      description: verifies that the envelope is well formed before submitting (default yes)
+      type: bool
+      pointer: true
+      optional: true
+    - name: Wait
+      description: waits until the envelope is accepted into a block or rejected (default yes)
+      type: bool
+      pointer: true
+      optional: true
+
+ValidateOptions:
+  fields:
+    - name: Full # CheckTx vs running the executor
+      description: fully validates the signatures and transactions (default yes)
+      type: bool
+      pointer: true
+      optional: true
+
+SubscribeOptions:
+  fields: ~
