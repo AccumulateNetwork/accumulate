@@ -8,6 +8,7 @@ package block
 
 import (
 	"crypto/ed25519"
+	"sync/atomic"
 
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/libs/log"
@@ -35,6 +36,7 @@ type Executor struct {
 	logger      logging.OptionalLogger
 	db          database.Beginner
 	isValidator bool
+	didBoot atomic.Bool
 
 	// oldBlockMeta blockMetadata
 }
@@ -161,6 +163,10 @@ func newExecutor(opts ExecutorOptions, db database.Beginner, executors ...chain.
 		_, v, _ := e.New.Network.ValidatorByKey(m.Key[32:])
 		m.isValidator = v.IsActiveOn(m.Describe.PartitionId)
 		return nil
+	})
+
+	events.SubscribeAsync(m.EventBus, func(events.DidBoot) {
+		m.didBoot.Store(true)
 	})
 
 	// Load globals if the database has been initialized

@@ -304,6 +304,10 @@ func (m *Executor) anchorSynthChain(block *Block, rootChain *database.Chain) (in
 }
 
 func (x *Executor) requestMissingSyntheticTransactions(blockIndex uint64, synthLedger *protocol.SyntheticLedger, anchorLedger *protocol.AnchorLedger) {
+	if !x.didBoot.Load() {
+		return
+	}
+
 	batch := x.db.Begin(false)
 	defer batch.Discard()
 

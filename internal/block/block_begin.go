@@ -41,17 +41,19 @@ func (x *Executor) BeginBlock(block *Block) error {
 		return err
 	}
 
-	errs := x.dispatcher.Send(context.Background())
-	x.Background(func() {
-		for err := range errs {
-			switch err := err.(type) {
-			case *txnDispatchError:
-				x.logger.Error("Failed to dispatch transactions", "error", err.status.Error, "stack", err.status.Error.PrintFullCallstack(), "type", err.typ, "hash", logging.AsHex(err.status.TxID.Hash()).Slice(0, 4))
-			default:
-				x.logger.Error("Failed to dispatch transactions", "error", fmt.Sprintf("%+v\n", err))
+	if x.didBoot.Load() {
+		errs := x.dispatcher.Send(context.Background())
+		x.Background(func() {
+			for err := range errs {
+				switch err := err.(type) {
+				case *txnDispatchError:
+					x.logger.Error("Failed to dispatch transactions", "error", err.status.Error, "stack", err.status.Error.PrintFullCallstack(), "type", err.typ, "hash", logging.AsHex(err.status.TxID.Hash()).Slice(0, 4))
+				default:
+					x.logger.Error("Failed to dispatch transactions", "error", fmt.Sprintf("%+v\n", err))
+				}
 			}
-		}
-	})
+		})
+	}
 
 	// Load the ledger state
 	ledger := block.Batch.Account(x.Describe.NodeUrl(protocol.Ledger))
