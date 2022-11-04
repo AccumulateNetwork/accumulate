@@ -105,7 +105,7 @@ func (v *RestoreVisitor) VisitAccount(acct *Account, i int) error {
 				delete(pos, c.Name)
 			}
 
-			batchSize -= end-start
+			batchSize -= end - start
 			if end == start {
 				continue
 			}
@@ -151,7 +151,7 @@ func (v *RestoreVisitor) VisitAccount(acct *Account, i int) error {
 					delete(pos, c.Name)
 				}
 
-				batchSize -= (end-start) << int(c.MarkPower)
+				batchSize -= (end - start) << int(c.MarkPower)
 				if end == start {
 					continue
 				}

@@ -113,7 +113,7 @@ func (w *Writer) CollectAccounts(batch *database.Batch, accounts []*url.URL, pre
 	var i int
 	start := time.Now()
 	err = batch.SaveAccounts(sw, func(record *database.Account) ([]byte, error) {
-		if i > 0 && i % 1000 == 0 {
+		if i > 0 && i%1000 == 0 {
 			d := time.Since(start)
 			w.Logger.Info("Collected accounts", "count", i, "total", len(accounts), "duration", d, "per-second", float64(i)/d.Seconds())
 		}
@@ -154,7 +154,7 @@ func (w *Writer) CollectTransactions(batch *database.Batch, hashes [][32]byte, v
 	var txns []*Transaction
 	start := time.Now()
 	for i, h := range hashes {
-		if i > 0 && i % 5000 == 0 {
+		if i > 0 && i%5000 == 0 {
 			d := time.Since(start)
 			w.Logger.Info("Collected transactions", "count", i, "total", len(hashes), "duration", d, "per-second", float64(i)/d.Seconds())
 		}
@@ -226,7 +226,7 @@ func (w *Writer) CollectSignatures(batch *database.Batch, hashes [][32]byte, vis
 	var sigs []*Signature
 	start := time.Now()
 	for i, h := range hashes {
-		if i > 0 && i % 1000 == 0 {
+		if i > 0 && i%1000 == 0 {
 			d := time.Since(start)
 			w.Logger.Info("Collected signatures", "count", i, "total", len(hashes), "duration", d, "per-second", float64(i)/d.Seconds())
 		}
