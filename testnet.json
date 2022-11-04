@@ -1,0 +1,44 @@
+{
+    "id": "TestNet",
+    "bvns": [
+        {
+            "id": "BVN0",
+            "nodes": [
+                {
+                    "dnnType": "validator",
+                    "bvnnType": "validator",
+                    "basePort": 16591,
+                    "advertizeAddress": "bvn0.testnet.accumulatenetwork.io",
+                    "peerAddress": "bvn0-seed.testnet.accumulatenetwork.io",
+                    "listenAddress": "0.0.0.0"
+                }
+            ]
+        },
+        {
+            "id": "BVN1",
+            "nodes": [
+                {
+                    "dnnType": "validator",
+                    "bvnnType": "validator",
+                    "basePort": 16591,
+                    "advertizeAddress": "bvn1.testnet.accumulatenetwork.io",
+                    "peerAddress": "bvn1-seed.testnet.accumulatenetwork.io",
+                    "listenAddress": "0.0.0.0"
+                }
+            ]
+        },
+        {
+            "id": "BVN2",
+            "nodes": [
+                {
+                    "dnnType": "validator",
+                    "bvnnType": "validator",
+                    "basePort": 16591,
+                    "advertizeAddress": "bvn2.testnet.accumulatenetwork.io",
+                    "peerAddress": "bvn2-seed.testnet.accumulatenetwork.io",
+                    "listenAddress": "0.0.0.0"
+                }
+            ]
+        }
+    ]
+}
