@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"sync/atomic"
 
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/block/shared"
@@ -41,7 +42,7 @@ func (x *Executor) BeginBlock(block *Block) error {
 		return err
 	}
 
-	if x.didBoot.Load() {
+	if atomic.LoadInt32(&x.didBoot) == 1 {
 		errs := x.dispatcher.Send(context.Background())
 		x.Background(func() {
 			for err := range errs {

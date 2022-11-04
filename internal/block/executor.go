@@ -36,7 +36,7 @@ type Executor struct {
 	logger      logging.OptionalLogger
 	db          database.Beginner
 	isValidator bool
-	didBoot atomic.Bool
+	didBoot     int32
 
 	// oldBlockMeta blockMetadata
 }
@@ -166,7 +166,7 @@ func newExecutor(opts ExecutorOptions, db database.Beginner, executors ...chain.
 	})
 
 	events.SubscribeAsync(m.EventBus, func(events.DidBoot) {
-		m.didBoot.Store(true)
+		atomic.StoreInt32(&m.didBoot, 1)
 	})
 
 	// Load globals if the database has been initialized

@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
@@ -304,7 +305,7 @@ func (m *Executor) anchorSynthChain(block *Block, rootChain *database.Chain) (in
 }
 
 func (x *Executor) requestMissingSyntheticTransactions(blockIndex uint64, synthLedger *protocol.SyntheticLedger, anchorLedger *protocol.AnchorLedger) {
-	if !x.didBoot.Load() {
+	if atomic.LoadInt32(&x.didBoot) != 1 {
 		return
 	}
 
