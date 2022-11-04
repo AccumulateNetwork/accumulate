@@ -42,17 +42,17 @@ func Is(err, target error) bool             { return errors.Is(err, target) }
 func Unwrap(err error) error                { return errors.Unwrap(err) }
 
 func New(code Status, v interface{}) *Error {
-	return errors.New(code, v)
+	return code.With(v)
 }
 
 func Wrap(code Status, err error) error {
-	return errors.Wrap(code, err)
+	return code.Wrap(err)
 }
 
 func FormatWithCause(code Status, cause error, format string, args ...interface{}) *Error {
-	return errors.FormatWithCause(code, cause, format, args...)
+	return code.WithCauseAndFormat(cause, format, args...)
 }
 
 func Format(code Status, format string, args ...interface{}) *Error {
-	return errors.Format(code, format, args...)
+	return code.WithFormat(format, args...)
 }
