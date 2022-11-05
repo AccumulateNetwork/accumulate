@@ -14,3 +14,15 @@ merge request target:
   # Merge requests can only be merged into develop
   # See https://gitlab.com/gitlab-org/gitlab/-/merge_requests/52532
   - test "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" == "$CI_DEFAULT_BRANCH"
+
+mr bott:
+  stage: test
+  needs: []
+  rules:
+  # Only run for MR events
+  - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+  variables:
+    PROJECT: $CI_PROJECT_PATH
+    MERGE_REQUEST: $CI_MERGE_REQUEST_IID
+  trigger:
+    project: accumulatenetwork/core/gitlab-bot
