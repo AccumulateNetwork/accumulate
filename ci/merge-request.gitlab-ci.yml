@@ -25,5 +25,5 @@ mr bott:
     --fail \
     -F token=$MR_BOTT_TRIGGER \
     -F ref=main \
-    -F "variables[PROJECT]=$CI_PROJECT_PATH" \
-    -F "variables[MERGE_REQUEST]=$CI_MERGE_REQUEST_IID"
+    -F "variables%5BPROJECT%5D=$CI_PROJECT_PATH" \
+    -F "variables%5BMERGE_REQUEST%5D=$CI_MERGE_REQUEST_IID"
