@@ -14,9 +14,11 @@ import (
 	"math/big"
 	"strconv"
 	"strings"
+	"time"
 
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -255,6 +257,17 @@ func bigfloat(v float64, precision uint64) *big.Int {
 	x.Add(x, round)
 	x.Int(e)
 	return e
+}
+
+func (p *parser) parseTimestamp(v any) signing.Timestamp {
+	switch v := v.(type) {
+	case time.Time:
+		return signing.TimestampFromValue(v.UTC().UnixMilli())
+	case *uint64:
+		return (*signing.TimestampFromVariable)(v)
+	default:
+		return signing.TimestampFromValue(p.parseUint(v))
+	}
 }
 
 func (p *parser) parseUint(v any) uint64 {

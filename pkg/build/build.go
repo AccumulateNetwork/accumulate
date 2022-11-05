@@ -9,12 +9,19 @@ package build
 import (
 	"time"
 
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 func SignatureForHash(hash []byte) SignatureBuilder {
 	txn := new(protocol.Transaction)
 	txn.Body = &protocol.RemoteTransaction{Hash: *(*[32]byte)(hash)}
+	return SignatureBuilder{transaction: txn}
+}
+
+func SignatureForTxID(txid *url.TxID) SignatureBuilder {
+	txn := new(protocol.Transaction)
+	txn.Body = &protocol.RemoteTransaction{Hash: txid.Hash()}
 	return SignatureBuilder{transaction: txn}
 }
 
