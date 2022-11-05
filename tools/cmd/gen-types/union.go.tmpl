@@ -17,6 +17,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
 
+{{ $lud := .LongUnionDiscriminator }}
 {{- range .Unions}}{{if not (eq .Type "result")}}
 
 // New{{.Interface}} creates a new {{.Interface}} for the specified {{.Enumeration}}.
@@ -100,7 +101,7 @@ func Unmarshal{{.Interface}}From(rd io.Reader) ({{.Interface}}, error) {
 
 // Unmarshal{{.Interface}}Json unmarshals a {{.Interface}}.
 func Unmarshal{{.Interface}}JSON(data []byte) ({{.Interface}}, error) {
-	var typ *struct{ Type {{.Enumeration}} }
+	var typ *struct{ {{if $lud}}{{.Enumeration}}{{else}}Type{{end}} {{.Enumeration}} }
 	err := json.Unmarshal(data, &typ)
 	if err != nil {
 		return nil, err
@@ -110,7 +111,7 @@ func Unmarshal{{.Interface}}JSON(data []byte) ({{.Interface}}, error) {
 		return nil, nil
 	}
 
-	acnt, err := New{{.Interface}}(typ.Type)
+	acnt, err := New{{.Interface}}(typ.{{if $lud}}{{.Enumeration}}{{else}}Type{{end}})
 	if err != nil {
 		return nil, err
 	}

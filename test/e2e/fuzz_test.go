@@ -12,8 +12,8 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/simulator"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/test/fuzzutil"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
+	fuzzutil "gitlab.com/accumulatenetwork/accumulate/test/util/fuzz"
 )
 
 func FuzzEnvelopeDecode(f *testing.F) {
