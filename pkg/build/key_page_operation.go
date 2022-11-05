@@ -35,9 +35,9 @@ func (b AddKeyOperationBuilder) FinishOperation() UpdateKeyPageBuilder {
 }
 
 type UpdateKeyOperationBuilder struct {
-	b           UpdateKeyPageBuilder
-	op          protocol.UpdateKeyOperation
-	finishedNew bool
+	b      UpdateKeyPageBuilder
+	op     protocol.UpdateKeyOperation
+	didOld bool
 }
 
 func (b UpdateKeyOperationBuilder) Entry() KeyPageEntryBuilder[UpdateKeyOperationBuilder] {
@@ -50,7 +50,8 @@ func (b UpdateKeyOperationBuilder) To() KeyPageEntryBuilder[UpdateKeyOperationBu
 
 func (b UpdateKeyOperationBuilder) addEntry(entry protocol.KeySpecParams, err []error) UpdateKeyOperationBuilder {
 	b.b.t.record(err...)
-	if b.finishedNew {
+	if !b.didOld {
+		b.didOld = true
 		b.op.OldEntry = entry
 	} else {
 		b.op.NewEntry = entry
