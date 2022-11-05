@@ -393,6 +393,23 @@ func (b AddCreditsBuilder) Spend(amount float64) AddCreditsBuilder {
 	return b
 }
 
+func (b AddCreditsBuilder) Purchase(amount float64) AddCreditsBuilder {
+	// ACME = credits ÷ oracle ÷ credits-per-dollar
+	x := big.NewRat(b.t.parseAmount(amount, protocol.CreditPrecisionPower).Int64(), protocol.CreditPrecision)
+	x.Quo(x, big.NewRat(int64(b.body.Oracle), protocol.AcmeOraclePrecision))
+	x.Quo(x, big.NewRat(protocol.CreditsPerDollar, 1))
+
+	// Convert rational to an ACME balance
+	x.Mul(x, big.NewRat(protocol.AcmePrecision, 1))
+	y := x.Num()
+	if !x.IsInt() {
+		y.Div(y, x.Denom())
+	}
+
+	b.body.Amount = *y
+	return b
+}
+
 func (b AddCreditsBuilder) To(url any, path ...string) AddCreditsBuilder {
 	b.body.Recipient = b.t.parseUrl(url, path...)
 	return b
