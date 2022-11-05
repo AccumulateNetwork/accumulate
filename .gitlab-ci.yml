@@ -3,4 +3,3 @@ include:
 - local: /ci/all.gitlab-ci.yml
 - local: /ci/merge-request.gitlab-ci.yml
 - local: /ci/release.gitlab-ci.yml
-# - local: /ci/devnet.gitlab-ci.yml
