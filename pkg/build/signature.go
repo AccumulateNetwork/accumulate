@@ -42,7 +42,7 @@ func (b SignatureBuilder) Version(version any) SignatureBuilder {
 }
 
 func (b SignatureBuilder) Timestamp(timestamp any) SignatureBuilder {
-	b.signer.Timestamp = signing.TimestampFromValue(b.parseUint(timestamp))
+	b.signer.Timestamp = b.parseTimestamp(timestamp)
 	return b
 }
 
