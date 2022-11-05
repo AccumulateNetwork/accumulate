@@ -20,11 +20,4 @@ mr bott:
   needs: []
   rules:
   - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
-  script: curl \
-    -X POST \
-    --fail \
-    -F token=$MR_BOTT_TRIGGER \
-    -F ref=main \
-    -F "variables%5BPROJECT%5D=$CI_PROJECT_PATH" \
-    -F "variables%5BMERGE_REQUEST%5D=$CI_MERGE_REQUEST_IID" \
-    https://gitlab.com/api/v4/projects/39682771/trigger/pipeline
+  script: curl -X POST --fail -F "token=$MR_BOTT_TRIGGER" -F ref=main -F "variables%5BPROJECT%5D=$CI_PROJECT_PATH" -F "variables%5BMERGE_REQUEST%5D=$CI_MERGE_REQUEST_IID" https://gitlab.com/api/v4/projects/39682771/trigger/pipeline
