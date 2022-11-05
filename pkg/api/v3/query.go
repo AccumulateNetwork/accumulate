@@ -23,11 +23,11 @@ func (q *ChainQuery) IsValid() error {
 	hasRange := q.Range != nil
 
 	if hasRange && (hasIndex || hasEntry) {
-		return errors.Format(errors.BadRequest, "range is mutually exclusive with index and entry")
+		return errors.BadRequest.WithFormat("range is mutually exclusive with index and entry")
 	}
 
 	if !hasName && (hasIndex || hasEntry || hasRange) {
-		return errors.Format(errors.BadRequest, "name is required when querying by index, entry, or range")
+		return errors.BadRequest.WithFormat("name is required when querying by index, entry, or range")
 	}
 
 	return nil
@@ -44,7 +44,7 @@ func (q *DataQuery) IsValid() error {
 	hasRange := q.Range != nil
 
 	if hasRange && (hasIndex || hasEntry) {
-		return errors.Format(errors.BadRequest, "range is mutually exclusive with index and entry")
+		return errors.BadRequest.WithFormat("range is mutually exclusive with index and entry")
 	}
 
 	return nil
@@ -70,22 +70,22 @@ func (q *BlockQuery) IsValid() error {
 	// 10  1  0  0  0   10  1  0  0  0
 
 	if !hasMinorIndex && !hasMajorIndex && !hasMinorRange && !hasMajorRange {
-		return errors.Format(errors.BadRequest, "nothing to do: minor, major, minor range, and major range are unspecified")
+		return errors.BadRequest.WithFormat("nothing to do: minor, major, minor range, and major range are unspecified")
 	}
 	if hasMinorIndex && hasMajorIndex {
-		return errors.Format(errors.BadRequest, "minor and major are mutually exclusive")
+		return errors.BadRequest.WithFormat("minor and major are mutually exclusive")
 	}
 	if hasMinorRange && hasMajorRange {
-		return errors.Format(errors.BadRequest, "minor range and major range are mutually exclusive")
+		return errors.BadRequest.WithFormat("minor range and major range are mutually exclusive")
 	}
 	if hasMinorIndex && (hasMinorRange || hasMajorRange) {
-		return errors.Format(errors.BadRequest, "minor is mutually exclusive with minor range and major range")
+		return errors.BadRequest.WithFormat("minor is mutually exclusive with minor range and major range")
 	}
 	if hasMajorIndex && hasMajorRange {
-		return errors.Format(errors.BadRequest, "major and major range are mutually exclusive")
+		return errors.BadRequest.WithFormat("major and major range are mutually exclusive")
 	}
 	if hasEntryRange && (hasMajorIndex || hasMinorRange || hasMajorRange) {
-		return errors.Format(errors.BadRequest, "entry range is mutually exclusive with major, minor range, and major range")
+		return errors.BadRequest.WithFormat("entry range is mutually exclusive with major, minor range, and major range")
 	}
 
 	return nil
