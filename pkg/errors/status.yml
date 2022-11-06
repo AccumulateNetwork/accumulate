@@ -77,3 +77,9 @@ Status:
   WrongType:
     value: 505
     description: means the record is not the expected type
+  NoPeer:
+    value: 506
+    description: means the receiver cannot find a peer to satisfy the request
+  PeerMisbehaved:
+    value: 507
+    description: means a peer behaved incorrectly

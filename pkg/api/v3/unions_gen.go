@@ -49,7 +49,7 @@ func NewRecord(typ RecordType) (Record, error) {
 	}
 }
 
-//EqualRecord is used to compare the values of the union
+// EqualRecord is used to compare the values of the union
 func EqualRecord(a, b Record) bool {
 	if a == b {
 		return true
@@ -99,7 +99,7 @@ func EqualRecord(a, b Record) bool {
 	}
 }
 
-//CopyRecord copies a Record.
+// CopyRecord copies a Record.
 func CopyRecord(v Record) Record {
 	switch v := v.(type) {
 	case *AccountRecord:
@@ -212,7 +212,7 @@ func NewQuery(typ QueryType) (Query, error) {
 	}
 }
 
-//EqualQuery is used to compare the values of the union
+// EqualQuery is used to compare the values of the union
 func EqualQuery(a, b Query) bool {
 	if a == b {
 		return true
@@ -259,7 +259,7 @@ func EqualQuery(a, b Query) bool {
 	}
 }
 
-//CopyQuery copies a Query.
+// CopyQuery copies a Query.
 func CopyQuery(v Query) Query {
 	switch v := v.(type) {
 	case *AnchorSearchQuery:

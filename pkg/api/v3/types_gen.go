@@ -199,6 +199,7 @@ type NodeStatus struct {
 type NodeStatusOptions struct {
 	fieldsSet []bool
 	NodeID    string `json:"nodeID,omitempty" form:"nodeID" query:"nodeID" validate:"required"`
+	Partition string `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
 	extraData []byte
 }
 
@@ -692,6 +693,7 @@ func (v *NodeStatusOptions) Copy() *NodeStatusOptions {
 	u := new(NodeStatusOptions)
 
 	u.NodeID = v.NodeID
+	u.Partition = v.Partition
 
 	return u
 }
@@ -1365,6 +1367,9 @@ func (v *NodeStatus) Equal(u *NodeStatus) bool {
 
 func (v *NodeStatusOptions) Equal(u *NodeStatusOptions) bool {
 	if !(v.NodeID == u.NodeID) {
+		return false
+	}
+	if !(v.Partition == u.Partition) {
 		return false
 	}
 
@@ -2817,6 +2822,7 @@ func (v *NodeStatus) IsValid() error {
 
 var fieldNames_NodeStatusOptions = []string{
 	1: "NodeID",
+	2: "Partition",
 }
 
 func (v *NodeStatusOptions) MarshalBinary() ([]byte, error) {
@@ -2825,6 +2831,9 @@ func (v *NodeStatusOptions) MarshalBinary() ([]byte, error) {
 
 	if !(len(v.NodeID) == 0) {
 		writer.WriteString(1, v.NodeID)
+	}
+	if !(len(v.Partition) == 0) {
+		writer.WriteString(2, v.Partition)
 	}
 
 	_, _, err := writer.Reset(fieldNames_NodeStatusOptions)
@@ -2842,6 +2851,11 @@ func (v *NodeStatusOptions) IsValid() error {
 		errs = append(errs, "field NodeID is missing")
 	} else if len(v.NodeID) == 0 {
 		errs = append(errs, "field NodeID is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Partition is missing")
+	} else if len(v.Partition) == 0 {
+		errs = append(errs, "field Partition is not set")
 	}
 
 	switch len(errs) {
@@ -4437,6 +4451,9 @@ func (v *NodeStatusOptions) UnmarshalBinaryFrom(rd io.Reader) error {
 
 	if x, ok := reader.ReadString(1); ok {
 		v.NodeID = x
+	}
+	if x, ok := reader.ReadString(2); ok {
+		v.Partition = x
 	}
 
 	seen, err := reader.Reset(fieldNames_NodeStatusOptions)

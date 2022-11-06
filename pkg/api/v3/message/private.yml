@@ -1,0 +1,19 @@
+PrivateSequenceRequest:
+  union: { type: message }
+  fields:
+    - name: Source
+      type: url
+      pointer: true
+    - name: Destination
+      type: url
+      pointer: true
+    - name: SequenceNumber
+      type: uint
+
+PrivateSequenceResponse:
+  union: { type: message }
+  fields:
+    - name: Value
+      type: api.TransactionRecord
+      marshal-as: reference
+      pointer: true
