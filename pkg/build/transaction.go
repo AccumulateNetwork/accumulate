@@ -475,24 +475,28 @@ func (b TransactionBuilder) UpdateAccountAuth() UpdateAccountAuthBuilder {
 func (b UpdateAccountAuthBuilder) Enable(authority any, path ...string) UpdateAccountAuthBuilder {
 	op := new(protocol.EnableAccountAuthOperation)
 	op.Authority = b.t.parseUrl(authority, path...)
+	b.body.Operations = append(b.body.Operations, op)
 	return b
 }
 
 func (b UpdateAccountAuthBuilder) Disable(authority any, path ...string) UpdateAccountAuthBuilder {
 	op := new(protocol.DisableAccountAuthOperation)
 	op.Authority = b.t.parseUrl(authority, path...)
+	b.body.Operations = append(b.body.Operations, op)
 	return b
 }
 
 func (b UpdateAccountAuthBuilder) Add(authority any, path ...string) UpdateAccountAuthBuilder {
 	op := new(protocol.AddAccountAuthorityOperation)
 	op.Authority = b.t.parseUrl(authority, path...)
+	b.body.Operations = append(b.body.Operations, op)
 	return b
 }
 
 func (b UpdateAccountAuthBuilder) Remove(authority any, path ...string) UpdateAccountAuthBuilder {
 	op := new(protocol.RemoveAccountAuthorityOperation)
 	op.Authority = b.t.parseUrl(authority, path...)
+	b.body.Operations = append(b.body.Operations, op)
 	return b
 }
 
