@@ -88,11 +88,11 @@ type Dir struct {
 
 func checkSequence2(a, b *protocol.PartitionInfo, bad map[Dir]bool, kind string, ab, ba *protocol.PartitionSyntheticLedger) {
 	if ab.Produced > ba.Received {
-		color.Red("🗴 %s → %s has %d unreceived %s\n", a.ID, b.ID, ba.Received-ab.Produced, kind)
+		color.Red("🗴 %s → %s has %d unreceived %s\n", a.ID, b.ID, ab.Produced-ba.Received, kind)
 		bad[Dir{From: a.ID, To: b.ID}] = true
 	}
 	if ba.Produced > ab.Received {
-		color.Red("🗴 %s → %s has %d unreceived %s\n", b.ID, a.ID, ab.Received-ba.Produced, kind)
+		color.Red("🗴 %s → %s has %d unreceived %s\n", b.ID, a.ID, ba.Produced-ab.Received, kind)
 		bad[Dir{From: b.ID, To: a.ID}] = true
 	}
 }
