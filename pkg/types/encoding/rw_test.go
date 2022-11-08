@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
+	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	. "gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
