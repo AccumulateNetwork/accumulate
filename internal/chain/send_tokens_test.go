@@ -16,13 +16,12 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
 func init() { acctesting.EnableDebugFeatures() }
 
 func TestLiteTokenTransactions(t *testing.T) {
-	tokenUrl := types.String(protocol.AcmeUrl().String())
+	tokenUrl := protocol.AcmeUrl().String()
 	db := database.OpenInMemory(nil)
 
 	_, privKey, _ := ed25519.GenerateKey(nil)
@@ -50,6 +49,6 @@ func TestLiteTokenTransactions(t *testing.T) {
 	//pull the chains again
 	var tas *protocol.LiteTokenAccount
 	require.NoError(t, st.LoadUrlAs(st.OriginUrl, &tas))
-	require.Equal(t, *tokenUrl.AsString(), tas.TokenUrl.String(), "token url of state doesn't match expected")
+	require.Equal(t, tokenUrl, tas.TokenUrl.String(), "token url of state doesn't match expected")
 
 }

@@ -12,21 +12,20 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
 type stateCache struct {
 	*config.Describe
 	logger logging.OptionalLogger
 	txType protocol.TransactionType
-	txHash types.Bytes32
+	txHash [32]byte
 
 	Globals    *core.GlobalValues
 	State      ProcessTransactionState
@@ -89,7 +88,7 @@ func (c *stateCache) LoadUrlAs(account *url.URL, target interface{}) error {
 	return encoding.SetPtr(state, target)
 }
 
-//GetHeight loads the height of the chain
+// GetHeight loads the height of the chain
 func (c *stateCache) GetHeight(u *url.URL) (uint64, error) {
 	chain, err := c.batch.Account(u).MainChain().Get()
 	if err != nil {
