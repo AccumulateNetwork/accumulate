@@ -30,18 +30,7 @@ type DB struct {
 func New(logger storage.Logger) *DB {
 	m := new(DB)
 	m.logger = logger
-
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-
-	// Either allocate a new map, or clear an existing one.
-	if m.entries == nil {
-		m.entries = make(map[storage.Key][]byte)
-	} else {
-		for k := range m.entries {
-			delete(m.entries, k)
-		}
-	}
+	m.entries = make(map[storage.Key][]byte)
 	m.DBOpen.Store(true)
 	return m
 }
@@ -81,8 +70,8 @@ func (m *DB) commit(txCache map[storage.Key][]byte) error {
 	return nil
 }
 
-// Export writes the database to a map
-func (m *DB) Export() map[storage.Key][]byte {
+// export writes the database to a map
+func (m *DB) export() map[storage.Key][]byte {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	if !m.Ready() {
@@ -100,7 +89,7 @@ func (m *DB) Export() map[storage.Key][]byte {
 // Make a copy of the database; a useful function for testing
 func (m *DB) Copy() *DB {
 	db := new(DB)
-	db.entries = m.Export()
+	db.entries = m.export()
 	db.DBOpen.Store(true)
 	return db
 }
