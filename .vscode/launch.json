@@ -152,7 +152,7 @@
       "type": "go",
       "request": "launch",
       "mode": "auto",
-      "program": "${workspaceFolder}/tools/test/devnet",
+      "program": "${workspaceFolder}/test/cmd/devnet",
       "cwd": "${workspaceFolder}",
       "args": [
         "-X", "-v=1,-b=1,--reset", "play",
@@ -169,7 +169,7 @@
       "type": "go",
       "request": "launch",
       "mode": "auto",
-      "program": "${workspaceFolder}/tools/test/devnet",
+      "program": "${workspaceFolder}/test/cmd/devnet",
       "cwd": "${workspaceFolder}",
       "args": [
         "-X=--reset,--debug",
