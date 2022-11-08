@@ -96,7 +96,7 @@ public class {{safeClassName .Name}}{{
 
 	{{-     if eq (resolveType .) "Url"}}
 	public {{.ParentTypeName}} {{lcName .Name}}(final String value) {
-	    set{{.Name}}(Url.parse(value));
+	    set{{.Name}}(Url.toAccURL(value));
 	    return this;
 	}
 	{{-     end}}
