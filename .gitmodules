@@ -1,0 +1,3 @@
+[submodule "test/testdata/sdk"]
+	path = test/testdata/sdk
+	url = ../sdk/test-data.git
