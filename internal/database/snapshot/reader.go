@@ -11,7 +11,7 @@ import (
 	"io"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
+	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 )
 
 type Reader struct {

@@ -12,10 +12,10 @@ import (
 	stderrs "errors"
 	"io"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/pmt"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
-	"gitlab.com/accumulatenetwork/accumulate/smt/pmt"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
+	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 )
 
 const Version1 = 1
