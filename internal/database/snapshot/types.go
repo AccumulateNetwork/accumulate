@@ -6,7 +6,7 @@
 
 package snapshot
 
-//go:generate go run ../../../tools/cmd/gen-enum --package snapshot enums.yml
-//go:generate go run ../../../tools/cmd/gen-types --package snapshot types.yml
+//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-enum --package snapshot enums.yml
+//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --package snapshot types.yml
 
 type SectionType uint64

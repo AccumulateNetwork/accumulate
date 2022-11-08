@@ -16,7 +16,7 @@ import (
 	f2 "github.com/FactomProject/factom"
 	"github.com/FactomProject/factomd/common/entryBlock"
 	"github.com/spf13/cobra"
-	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/tools/internal/factom"
 )

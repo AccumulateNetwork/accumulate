@@ -7,4 +7,4 @@
 // Package core holds core protocol types and constants
 package core
 
-//go:generate go run ../../tools/cmd/gen-types --package core types.yml
+//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --package core types.yml

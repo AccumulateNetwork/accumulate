@@ -11,7 +11,7 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
-	"gitlab.com/accumulatenetwork/accumulate/internal/sortutil"
+	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 

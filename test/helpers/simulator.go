@@ -11,13 +11,13 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
-	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
+	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
+	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
 var GenesisTime = time.Date(2022, 7, 1, 0, 0, 0, 0, time.UTC)

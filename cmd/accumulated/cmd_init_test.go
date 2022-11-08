@@ -17,7 +17,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	proxy_testing "gitlab.com/accumulatenetwork/accumulate/pkg/proxy/testing"
 )
 

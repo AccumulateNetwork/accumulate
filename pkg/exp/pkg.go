@@ -3,7 +3,7 @@ package exp
 
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/managed"
 )
 
 type GlobalValues = core.GlobalValues
