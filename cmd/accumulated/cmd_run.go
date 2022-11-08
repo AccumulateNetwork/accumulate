@@ -24,9 +24,9 @@ import (
 	"github.com/spf13/cobra"
 	tmconfig "github.com/tendermint/tendermint/config"
 	service2 "github.com/tendermint/tendermint/libs/service"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/badger"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/testing"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage/badger"
+	"gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
 var cmdRun = &cobra.Command{

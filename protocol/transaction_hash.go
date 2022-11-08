@@ -9,7 +9,7 @@ package protocol
 import (
 	"crypto/sha256"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding/hash"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/hash"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
