@@ -159,17 +159,16 @@ type ResponseAccount struct {
 }
 
 type ResponseByTxId struct {
-	fieldsSet    []bool
-	TxId         *url.TxID                   `json:"txId,omitempty" form:"txId" query:"txId" validate:"required"`
-	Envelope     *protocol.Envelope          `json:"envelope,omitempty" form:"envelope" query:"envelope" validate:"required"`
-	Status       *protocol.TransactionStatus `json:"status,omitempty" form:"status" query:"status" validate:"required"`
-	Produced     []*url.TxID                 `json:"produced,omitempty" form:"produced" query:"produced" validate:"required"`
-	Height       uint64                      `json:"height" form:"height" query:"height" validate:"required"`
-	ChainState   [][]byte                    `json:"chainState,omitempty" form:"chainState" query:"chainState" validate:"required"`
-	Receipts     []*TxReceipt                `json:"receipts,omitempty" form:"receipts" query:"receipts" validate:"required"`
-	Signers      []SignatureSet              `json:"signers,omitempty" form:"signers" query:"signers" validate:"required"`
-	PartitionUrl *url.URL                    `json:"partitionUrl,omitempty" form:"partitionUrl" query:"partitionUrl" validate:"required"`
-	extraData    []byte
+	fieldsSet  []bool
+	TxId       *url.TxID                   `json:"txId,omitempty" form:"txId" query:"txId" validate:"required"`
+	Envelope   *protocol.Envelope          `json:"envelope,omitempty" form:"envelope" query:"envelope" validate:"required"`
+	Status     *protocol.TransactionStatus `json:"status,omitempty" form:"status" query:"status" validate:"required"`
+	Produced   []*url.TxID                 `json:"produced,omitempty" form:"produced" query:"produced" validate:"required"`
+	Height     uint64                      `json:"height" form:"height" query:"height" validate:"required"`
+	ChainState [][]byte                    `json:"chainState,omitempty" form:"chainState" query:"chainState" validate:"required"`
+	Receipts   []*TxReceipt                `json:"receipts,omitempty" form:"receipts" query:"receipts" validate:"required"`
+	Signers    []SignatureSet              `json:"signers,omitempty" form:"signers" query:"signers" validate:"required"`
+	extraData  []byte
 }
 
 type ResponseChainEntry struct {
@@ -570,9 +569,6 @@ func (v *ResponseByTxId) Copy() *ResponseByTxId {
 	u.Signers = make([]SignatureSet, len(v.Signers))
 	for i, v := range v.Signers {
 		u.Signers[i] = *(&v).Copy()
-	}
-	if v.PartitionUrl != nil {
-		u.PartitionUrl = v.PartitionUrl
 	}
 
 	return u
@@ -1171,14 +1167,6 @@ func (v *ResponseByTxId) Equal(u *ResponseByTxId) bool {
 		if !((&v.Signers[i]).Equal(&u.Signers[i])) {
 			return false
 		}
-	}
-	switch {
-	case v.PartitionUrl == u.PartitionUrl:
-		// equal
-	case v.PartitionUrl == nil || u.PartitionUrl == nil:
-		return false
-	case !((v.PartitionUrl).Equal(u.PartitionUrl)):
-		return false
 	}
 
 	return true
@@ -2447,7 +2435,6 @@ var fieldNames_ResponseByTxId = []string{
 	6: "ChainState",
 	7: "Receipts",
 	8: "Signers",
-	9: "PartitionUrl",
 }
 
 func (v *ResponseByTxId) MarshalBinary() ([]byte, error) {
@@ -2483,9 +2470,6 @@ func (v *ResponseByTxId) MarshalBinary() ([]byte, error) {
 		for _, v := range v.Signers {
 			writer.WriteValue(8, v.MarshalBinary)
 		}
-	}
-	if !(v.PartitionUrl == nil) {
-		writer.WriteUrl(9, v.PartitionUrl)
 	}
 
 	_, _, err := writer.Reset(fieldNames_ResponseByTxId)
@@ -2536,11 +2520,6 @@ func (v *ResponseByTxId) IsValid() error {
 		errs = append(errs, "field Signers is missing")
 	} else if len(v.Signers) == 0 {
 		errs = append(errs, "field Signers is not set")
-	}
-	if len(v.fieldsSet) > 9 && !v.fieldsSet[9] {
-		errs = append(errs, "field PartitionUrl is missing")
-	} else if v.PartitionUrl == nil {
-		errs = append(errs, "field PartitionUrl is not set")
 	}
 
 	switch len(errs) {
@@ -4007,9 +3986,6 @@ func (v *ResponseByTxId) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
-	if x, ok := reader.ReadUrl(9); ok {
-		v.PartitionUrl = x
-	}
 
 	seen, err := reader.Reset(fieldNames_ResponseByTxId)
 	if err != nil {
@@ -4726,15 +4702,14 @@ func (v *ResponseAccount) MarshalJSON() ([]byte, error) {
 
 func (v *ResponseByTxId) MarshalJSON() ([]byte, error) {
 	u := struct {
-		TxId         *url.TxID                       `json:"txId,omitempty"`
-		Envelope     *protocol.Envelope              `json:"envelope,omitempty"`
-		Status       *protocol.TransactionStatus     `json:"status,omitempty"`
-		Produced     encoding.JsonList[*url.TxID]    `json:"produced,omitempty"`
-		Height       uint64                          `json:"height"`
-		ChainState   encoding.JsonList[*string]      `json:"chainState,omitempty"`
-		Receipts     encoding.JsonList[*TxReceipt]   `json:"receipts,omitempty"`
-		Signers      encoding.JsonList[SignatureSet] `json:"signers,omitempty"`
-		PartitionUrl *url.URL                        `json:"partitionUrl,omitempty"`
+		TxId       *url.TxID                       `json:"txId,omitempty"`
+		Envelope   *protocol.Envelope              `json:"envelope,omitempty"`
+		Status     *protocol.TransactionStatus     `json:"status,omitempty"`
+		Produced   encoding.JsonList[*url.TxID]    `json:"produced,omitempty"`
+		Height     uint64                          `json:"height"`
+		ChainState encoding.JsonList[*string]      `json:"chainState,omitempty"`
+		Receipts   encoding.JsonList[*TxReceipt]   `json:"receipts,omitempty"`
+		Signers    encoding.JsonList[SignatureSet] `json:"signers,omitempty"`
 	}{}
 	u.TxId = v.TxId
 	u.Envelope = v.Envelope
@@ -4747,7 +4722,6 @@ func (v *ResponseByTxId) MarshalJSON() ([]byte, error) {
 	}
 	u.Receipts = v.Receipts
 	u.Signers = v.Signers
-	u.PartitionUrl = v.PartitionUrl
 	return json.Marshal(&u)
 }
 
@@ -5346,15 +5320,14 @@ func (v *ResponseAccount) UnmarshalJSON(data []byte) error {
 
 func (v *ResponseByTxId) UnmarshalJSON(data []byte) error {
 	u := struct {
-		TxId         *url.TxID                       `json:"txId,omitempty"`
-		Envelope     *protocol.Envelope              `json:"envelope,omitempty"`
-		Status       *protocol.TransactionStatus     `json:"status,omitempty"`
-		Produced     encoding.JsonList[*url.TxID]    `json:"produced,omitempty"`
-		Height       uint64                          `json:"height"`
-		ChainState   encoding.JsonList[*string]      `json:"chainState,omitempty"`
-		Receipts     encoding.JsonList[*TxReceipt]   `json:"receipts,omitempty"`
-		Signers      encoding.JsonList[SignatureSet] `json:"signers,omitempty"`
-		PartitionUrl *url.URL                        `json:"partitionUrl,omitempty"`
+		TxId       *url.TxID                       `json:"txId,omitempty"`
+		Envelope   *protocol.Envelope              `json:"envelope,omitempty"`
+		Status     *protocol.TransactionStatus     `json:"status,omitempty"`
+		Produced   encoding.JsonList[*url.TxID]    `json:"produced,omitempty"`
+		Height     uint64                          `json:"height"`
+		ChainState encoding.JsonList[*string]      `json:"chainState,omitempty"`
+		Receipts   encoding.JsonList[*TxReceipt]   `json:"receipts,omitempty"`
+		Signers    encoding.JsonList[SignatureSet] `json:"signers,omitempty"`
 	}{}
 	u.TxId = v.TxId
 	u.Envelope = v.Envelope
@@ -5367,7 +5340,6 @@ func (v *ResponseByTxId) UnmarshalJSON(data []byte) error {
 	}
 	u.Receipts = v.Receipts
 	u.Signers = v.Signers
-	u.PartitionUrl = v.PartitionUrl
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -5386,7 +5358,6 @@ func (v *ResponseByTxId) UnmarshalJSON(data []byte) error {
 	}
 	v.Receipts = u.Receipts
 	v.Signers = u.Signers
-	v.PartitionUrl = u.PartitionUrl
 	return nil
 }
 
