@@ -19,9 +19,9 @@ import (
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 	tmconfig "github.com/tendermint/tendermint/config"
-	"gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
-	"gitlab.com/accumulatenetwork/accumulate/internal/testing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
+	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
+	"gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
 var cmdRunDevnet = &cobra.Command{

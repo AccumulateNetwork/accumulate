@@ -12,7 +12,7 @@ import (
 	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/internal/sortutil"
+	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
 )
 
 type valHashCmp []byte

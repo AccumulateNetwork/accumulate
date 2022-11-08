@@ -10,7 +10,7 @@ import (
 	"bytes"
 	"fmt"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/sortutil"
+	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
 )
 
 type KeyEntry interface {
