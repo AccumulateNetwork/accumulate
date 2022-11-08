@@ -4,13 +4,12 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package test
+package sdktest
 
 import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"io/fs"
@@ -19,17 +18,12 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/tools/internal/testdata"
 )
 
-const defaultSdkTestData = "../../.testdata/sdk.json"
-
-var sdkTestData = flag.String("sdk-test-data", defaultSdkTestData, "SDK test data")
-
 func TestSDK(t *testing.T) {
-	ts, err := testdata.Load(*sdkTestData)
-	if err != nil && errors.Is(err, fs.ErrNotExist) && *sdkTestData == defaultSdkTestData {
-		t.Skip("Test data has not been created")
+	ts, err := Load("../testdata/sdk/protocol.1.json")
+	if err != nil && errors.Is(err, fs.ErrNotExist) {
+		t.Skip("Submodule is not set up")
 	}
 	require.NoError(t, err)
 

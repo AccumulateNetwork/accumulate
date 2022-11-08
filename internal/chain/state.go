@@ -17,7 +17,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
 type StateManager struct {
@@ -62,7 +61,7 @@ func LoadStateManager(net *config.Describe, globals *core.GlobalValues, batch *d
 // origin. If the origin is not found, NewStateManager returns a valid state
 // manager along with a not-found error.
 func NewStateManager(net *config.Describe, globals *core.GlobalValues, batch *database.Batch, principal protocol.Account, transaction *protocol.Transaction, logger log.Logger) *StateManager {
-	txid := types.Bytes(transaction.GetHash()).AsBytes32()
+	txid := *(*[32]byte)(transaction.GetHash())
 	m := new(StateManager)
 	m.OriginUrl = transaction.Header.Principal
 	m.Origin = principal
