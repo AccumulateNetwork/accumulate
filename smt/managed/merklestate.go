@@ -12,7 +12,7 @@ import (
 	"fmt"
 	"io"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 )
 
@@ -22,11 +22,11 @@ import (
 // dynamic Merkle Tree. The Merkle State is the list of the roots of these sub Merkle Trees, and the
 // combination of these roots provides a Directed Acyclic Graph (DAG) to all the leaves.
 //
-//                                                       Merkle State
-//  1  2   3  4   5  6   7  8   9 10  11 12  13 --->         13
-//   1-2    3-4    5-6    7-8   0-10  11-12     --->         --
-//      1-2-3-4       5-6-7-8    0-10-11-12     --->     0-10-11-12
-//            1-2-3-4-5-6-7-8                   --->   1-2-3-4-5-6-7-8
+//	                                                     Merkle State
+//	1  2   3  4   5  6   7  8   9 10  11 12  13 --->         13
+//	 1-2    3-4    5-6    7-8   0-10  11-12     --->         --
+//	    1-2-3-4       5-6-7-8    0-10-11-12     --->     0-10-11-12
+//	          1-2-3-4-5-6-7-8                   --->   1-2-3-4-5-6-7-8
 //
 // Interestingly, the state of building such a Merkle Tree looks just like counting in binary.  And the
 // higher order bits set will correspond to where the binary roots must be kept in a Merkle state.
@@ -197,11 +197,11 @@ func (m *MerkleState) Marshal() (MSBytes []byte, err error) {
 // hash function has been set by the caller.
 func (m *MerkleState) UnMarshal(MSBytes []byte) (err error) {
 	// Unmarshal the Count
-	m.Count, err = encoding.VarintUnmarshalBinary(MSBytes)
+	m.Count, err = encoding.UnmarshalInt(MSBytes)
 	if err != nil {
 		return err
 	}
-	MSBytes = MSBytes[encoding.VarintBinarySize(m.Count):]
+	MSBytes = MSBytes[len(encoding.MarshalInt(m.Count)):]
 
 	// Unmarshal the pending list
 	err = m.Pending.UnmarshalBinary(m.Count, MSBytes)

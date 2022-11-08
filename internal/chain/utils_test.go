@@ -17,7 +17,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
 func LoadStateManagerForTest(t *testing.T, db database.Beginner, envelope *protocol.Envelope) (*StateManager, *Delivery) {
@@ -42,7 +41,7 @@ func NewStateManagerForTest(t *testing.T, db database.Beginner, transaction *pro
 
 func NewStateManagerForFuzz(t *testing.T, db database.Beginner, transaction *protocol.Transaction) *StateManager {
 	t.Helper()
-	txid := types.Bytes(transaction.GetHash()).AsBytes32()
+	txid := *(*[32]byte)(transaction.GetHash())
 	m := new(StateManager)
 	m.OriginUrl = transaction.Header.Principal
 	m.stateCache = *newStateCache(&config.Describe{PartitionId: strings.ReplaceAll(strings.ReplaceAll(t.Name(), "/", "-"), "#", "-")}, nil, transaction.Body.Type(), txid, db.Begin(true))
