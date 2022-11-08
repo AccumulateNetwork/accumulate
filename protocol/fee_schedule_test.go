@@ -12,8 +12,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
+	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
 func TestFee(t *testing.T) {
