@@ -21,7 +21,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/tools/internal/testdata"
+	sdktest "gitlab.com/accumulatenetwork/accumulate/test/sdk"
 	randPkg "golang.org/x/exp/rand"
 )
 
@@ -42,7 +42,7 @@ func check(err error) {
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "Usage: gen-testdata <output-file>")
+		fmt.Fprintln(os.Stderr, "Usage: gen-sdktest <output-file>")
 		os.Exit(1)
 	}
 
@@ -54,7 +54,7 @@ func main() {
 		check(os.MkdirAll(dir, 0755))
 	}
 
-	ts := &testdata.TestSuite{
+	ts := &sdktest.TestSuite{
 		Transactions: txnTests,
 		Accounts:     acntTests,
 	}
@@ -62,8 +62,8 @@ func main() {
 	check(ts.Store(file))
 }
 
-type TCG = testdata.TestCaseGroup
-type TC = testdata.TestCase
+type TCG = sdktest.TestCaseGroup
+type TC = sdktest.TestCase
 
 var txnTests = []*TCG{
 	{Name: "CreateIdentity", Cases: []*TC{
@@ -141,32 +141,32 @@ var managerAuth = &AccountAuth{Authorities: []AuthorityEntry{{Url: AccountUrl("a
 
 var acntTests = []*TCG{
 	{Name: "Identity", Cases: []*TC{
-		testdata.NewAcntTest(&ADI{Url: AccountUrl("adi"), AccountAuth: *simpleAuth}),
-		testdata.NewAcntTest(&ADI{Url: AccountUrl("adi"), AccountAuth: *managerAuth}),
+		sdktest.NewAcntTest(&ADI{Url: AccountUrl("adi"), AccountAuth: *simpleAuth}),
+		sdktest.NewAcntTest(&ADI{Url: AccountUrl("adi"), AccountAuth: *managerAuth}),
 	}},
 	{Name: "TokenIssuer", Cases: []*TC{
-		testdata.NewAcntTest(&TokenIssuer{Url: AccountUrl("adi", "foocoin"), AccountAuth: *simpleAuth, Symbol: "FOO", Precision: 10}),
+		sdktest.NewAcntTest(&TokenIssuer{Url: AccountUrl("adi", "foocoin"), AccountAuth: *simpleAuth, Symbol: "FOO", Precision: 10}),
 	}},
 	{Name: "TokenAccount", Cases: []*TC{
-		testdata.NewAcntTest(&TokenAccount{Url: AccountUrl("adi", "foo"), AccountAuth: *simpleAuth, TokenUrl: AccountUrl("adi", "foocoin"), Balance: *big.NewInt(123456789)}),
+		sdktest.NewAcntTest(&TokenAccount{Url: AccountUrl("adi", "foo"), AccountAuth: *simpleAuth, TokenUrl: AccountUrl("adi", "foocoin"), Balance: *big.NewInt(123456789)}),
 	}},
 	{Name: "LiteTokenAccount", Cases: []*TC{
-		testdata.NewAcntTest(&LiteTokenAccount{Url: AccountUrl("lite-token-account"), TokenUrl: AccountUrl("ACME"), Balance: *big.NewInt(12345)}),
+		sdktest.NewAcntTest(&LiteTokenAccount{Url: AccountUrl("lite-token-account"), TokenUrl: AccountUrl("ACME"), Balance: *big.NewInt(12345)}),
 	}},
 	{Name: "LiteIdentity", Cases: []*TC{
-		testdata.NewAcntTest(&LiteIdentity{Url: AccountUrl("lite-identity"), LastUsedOn: uint64(rand.Uint32()), CreditBalance: 9835}),
+		sdktest.NewAcntTest(&LiteIdentity{Url: AccountUrl("lite-identity"), LastUsedOn: uint64(rand.Uint32()), CreditBalance: 9835}),
 	}},
 	{Name: "KeyPage", Cases: []*TC{
-		testdata.NewAcntTest(&KeyPage{Url: AccountUrl("adi", "page"), Keys: []*KeySpec{{PublicKeyHash: key[32:], LastUsedOn: uint64(rand.Uint32()), Delegate: AccountUrl("foo", "bar")}}, CreditBalance: 98532, AcceptThreshold: 3}),
+		sdktest.NewAcntTest(&KeyPage{Url: AccountUrl("adi", "page"), Keys: []*KeySpec{{PublicKeyHash: key[32:], LastUsedOn: uint64(rand.Uint32()), Delegate: AccountUrl("foo", "bar")}}, CreditBalance: 98532, AcceptThreshold: 3}),
 	}},
 	{Name: "KeyBook", Cases: []*TC{
-		testdata.NewAcntTest(&KeyBook{Url: AccountUrl("adi", "book")}),
+		sdktest.NewAcntTest(&KeyBook{Url: AccountUrl("adi", "book")}),
 	}},
 	{Name: "DataAccount", Cases: []*TC{
-		testdata.NewAcntTest(&DataAccount{Url: AccountUrl("adi", "data"), AccountAuth: *simpleAuth}),
+		sdktest.NewAcntTest(&DataAccount{Url: AccountUrl("adi", "data"), AccountAuth: *simpleAuth}),
 	}},
 	{Name: "LiteDataAccount", Cases: []*TC{
-		testdata.NewAcntTest(&LiteDataAccount{Url: AccountUrl("lite-data-account")}),
+		sdktest.NewAcntTest(&LiteDataAccount{Url: AccountUrl("lite-data-account")}),
 	}},
 }
 
@@ -190,5 +190,5 @@ func txnTest(originUrl *url.URL, body TransactionBody) *TC {
 	}
 
 	env.Signatures = append(env.Signatures, sig)
-	return testdata.NewTxnTest(env, body)
+	return sdktest.NewTxnTest(env)
 }

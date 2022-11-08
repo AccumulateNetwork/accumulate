@@ -4,7 +4,7 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package testdata
+package sdktest
 
 import (
 	"encoding/json"
@@ -53,7 +53,7 @@ func (ts *TestSuite) Store(file string) error {
 	return os.WriteFile(file, b, 0755)
 }
 
-func NewTxnTest(env *protocol.Envelope, body protocol.TransactionBody) *TestCase {
+func NewTxnTest(env *protocol.Envelope) *TestCase {
 	binary, err := env.MarshalBinary()
 	if err != nil {
 		panic(err)

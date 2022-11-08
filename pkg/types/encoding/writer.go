@@ -112,7 +112,11 @@ func (w *Writer) writeField(field uint) {
 		return
 	}
 
-	if field < 1 || field > 32 {
+	if field == 0 {
+		return // Skip field number
+	}
+
+	if field > 32 {
 		w.last = field
 		w.err = ErrInvalidFieldNumber
 		return
