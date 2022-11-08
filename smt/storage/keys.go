@@ -8,11 +8,10 @@ package storage
 
 import (
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"sync"
-
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 )
 
 const (
@@ -93,10 +92,10 @@ func (k Key) Append(key ...interface{}) Key {
 }
 
 func convert(key interface{}) (bytes []byte, printVal bool) {
-	bytes = encoding.AsBytes(key)
+	bytes = AsBytes(key)
 
 	switch key.(type) {
-	case nil, []byte, [32]byte, *[32]byte, encoding.Byter:
+	case nil, []byte, [32]byte, *[32]byte, interface{ Bytes() []byte }:
 		return bytes, false
 	default:
 		return bytes, true
@@ -114,4 +113,57 @@ func MakeKey(keys ...interface{}) Key {
 		return k.Append(keys[1:]...)
 	}
 	return (Key{}).Append(keys...)
+}
+
+func AsBytes(v interface{}) []byte {
+	switch v := v.(type) {
+	case nil:
+		return []byte{}
+	case []byte:
+		return v
+	case [32]byte:
+		return v[:]
+	case *[32]byte:
+		return v[:]
+	case string:
+		return []byte(v)
+	case interface{ Bytes() []byte }:
+		return v.Bytes()
+	case interface{ AccountID() []byte }:
+		return v.AccountID()
+	case uint:
+		return encodeUint(uint64(v))
+	case uint8:
+		return encodeUint(uint64(v))
+	case uint16:
+		return encodeUint(uint64(v))
+	case uint32:
+		return encodeUint(uint64(v))
+	case uint64:
+		return encodeUint(v)
+	case int:
+		return encodeInt(int64(v))
+	case int8:
+		return encodeInt(int64(v))
+	case int16:
+		return encodeInt(int64(v))
+	case int32:
+		return encodeInt(int64(v))
+	case int64:
+		return encodeInt(v)
+	default:
+		panic(fmt.Errorf("cannot use %T as a v", v))
+	}
+}
+
+func encodeUint(v uint64) []byte {
+	var buf [16]byte
+	n := binary.PutUvarint(buf[:], v)
+	return buf[:n]
+}
+
+func encodeInt(v int64) []byte {
+	var buf [16]byte
+	n := binary.PutVarint(buf[:], v)
+	return buf[:n]
 }

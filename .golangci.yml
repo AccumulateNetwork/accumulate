@@ -11,7 +11,7 @@ issues:
   max-same-issues: 0
 
   exclude-rules:
-  - path: cmd|tools/test
+  - path: cmd|test/cmd
     linters:
     - noprint
 

@@ -11,10 +11,15 @@ import (
 	"crypto/sha256"
 	"fmt"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
+
+var ErrNotEnoughData = errors.New(errors.StatusBadRequest, "not enough data")
+var ErrOverflow = errors.New(errors.StatusBadRequest, "overflow")
+
+// var ErrMalformedBigInt = errors.New("invalid big integer string")
 
 func zero[T any]() (z T)                     { return z }
 func copyValue[T any](v T) T                 { return v }
@@ -50,22 +55,22 @@ type wrapperFuncs[T any] struct {
 // UintWrapper defines un/marshalling functions for uint fields.
 var UintWrapper = &wrapperFuncs[uint64]{
 	copy:      copyValue[uint64],
-	marshal:   oldMarshal(encoding.UvarintMarshalBinary),
-	unmarshal: encoding.UvarintUnmarshalBinary,
+	marshal:   oldMarshal(encoding.MarshalUint),
+	unmarshal: encoding.UnmarshalUint,
 }
 
 // BytesWrapper defines un/marshalling functions for byte slice fields.
 var BytesWrapper = &wrapperFuncs[[]byte]{
 	copy:      func(v []byte) []byte { u := make([]byte, len(v)); copy(u, v); return u },
-	marshal:   oldMarshal(encoding.BytesMarshalBinary),
-	unmarshal: encoding.BytesUnmarshalBinary,
+	marshal:   oldMarshal(encoding.MarshalBytes),
+	unmarshal: encoding.UnmarshalBytes,
 }
 
 // HashWrapper defines un/marshalling functions for hash fields.
 var HashWrapper = &wrapperFuncs[[32]byte]{
 	copy:      copyValue[[32]byte],
-	marshal:   oldMarshalPtr(encoding.ChainMarshalBinary),
-	unmarshal: encoding.ChainUnmarshalBinary,
+	marshal:   oldMarshalPtr(encoding.MarshalHash),
+	unmarshal: encoding.UnmarshalHash,
 }
 
 // UrlWrapper defines un/marshalling functions for url fields.
@@ -85,8 +90,8 @@ var TxidWrapper = &wrapperFuncs[*url.TxID]{
 // StringWrapper defines un/marshalling functions for string fields.
 var StringWrapper = &wrapperFuncs[string]{
 	copy:      copyValue[string],
-	marshal:   oldMarshal(encoding.StringMarshalBinary),
-	unmarshal: encoding.StringUnmarshalBinary,
+	marshal:   oldMarshal(encoding.MarshalString),
+	unmarshal: encoding.UnmarshalString,
 }
 
 func oldMarshal[T any](fn func(T) []byte) ValueMarshaller[T] {
@@ -102,12 +107,12 @@ func oldMarshalPtr[T any](fn func(*T) []byte) ValueMarshaller[T] {
 }
 
 func marshalAsString[T fmt.Stringer](v T) ([]byte, error) {
-	return encoding.StringMarshalBinary(v.String()), nil
+	return encoding.MarshalString(v.String()), nil
 }
 
 func unmarshalFromString[T any](fn func(string) (T, error)) ValueUnmarshaller[T] {
 	return func(data []byte) (T, error) {
-		s, err := encoding.StringUnmarshalBinary(data)
+		s, err := encoding.UnmarshalString(data)
 		if err != nil {
 			return zero[T](), errors.Wrap(errors.StatusUnknownError, err)
 		}
