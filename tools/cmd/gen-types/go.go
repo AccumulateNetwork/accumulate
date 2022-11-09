@@ -555,20 +555,29 @@ func GoValueToJson(field *Field, tgtName, srcName string) (string, error) {
 
 	method, wantPtr := goJsonMethod(field)
 	var ptrPrefix string
+	var checkNil bool
 	switch {
 	case method == "":
 		return fmt.Sprintf("\t%s = %s", tgtName, srcName), nil
 	case wantPtr && !field.Pointer:
 		ptrPrefix = "&"
 	case !wantPtr && field.Pointer:
-		ptrPrefix = "*"
+		ptrPrefix, checkNil = "*", true
 	}
 
 	if !field.Repeatable {
-		return fmt.Sprintf("\t%s = encoding.%sToJSON(%s%s)", tgtName, method, ptrPrefix, srcName), nil
+		format := "\t%s = encoding.%sToJSON(%s%s)"
+		if checkNil {
+			format = "\tif %[4]s != nil { %[1]s = encoding.%[2]sToJSON(%[3]s%[4]s) }"
+		}
+		return fmt.Sprintf(format, tgtName, method, ptrPrefix, srcName), nil
 	}
 
-	return fmt.Sprintf("\t%s = make(%s, len(%s)); for i, x := range %[3]s { %[1]s[i] = encoding.%[4]sToJSON(%sx) }", tgtName, GoJsonType(field), srcName, method, ptrPrefix), nil
+	format := "\t%s = make(%s, len(%s)); for i, x := range %[3]s { %[1]s[i] = encoding.%[4]sToJSON(%sx) }"
+	if checkNil {
+		format = "\t%s = make(%s, len(%s)); for i, x := range %[3]s { if x != nil { %[1]s[i] = encoding.%[4]sToJSON(%sx) } }"
+	}
+	return fmt.Sprintf(format, tgtName, GoJsonType(field), srcName, method, ptrPrefix), nil
 }
 
 func GoValueFromJson(field *Field, tgtName, srcName, errName string, errArgs ...string) (string, error) {

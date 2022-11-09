@@ -18,14 +18,26 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-func Collect(batch *database.Batch, header *Header, file io.WriteSeeker, logger log.Logger, preserveAccountHistory func(account *database.Account) (bool, error)) (*Writer, error) {
+type CollectOptions struct {
+	Logger           log.Logger
+	VisitAccount     func(acct *Account) error
+	VisitTransaction func(txn *Transaction) error
+	VisitSignature   func(sig *Signature) error
+
+	// PreserveAccountHistory is called for each account to test if the
+	// account's transaction history should be preserved. If
+	// PreserveAccountHistory is unspecified, all account history is preserved.
+	PreserveAccountHistory func(account *database.Account) (bool, error)
+}
+
+func Collect(batch *database.Batch, header *Header, file io.WriteSeeker, opts CollectOptions) (*Writer, error) {
 	header.RootHash = *(*[32]byte)(batch.BptRoot())
 
 	w, err := Create(file, header)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
-	w.Logger.Set(logger)
+	w.Logger.Set(opts.Logger)
 
 	// Restoring accounts will fail if they reference transactions that have not
 	// yet been restored, so the transaction section must come first. However we
@@ -51,12 +63,14 @@ func Collect(batch *database.Batch, header *Header, file io.WriteSeeker, logger 
 	sigHashes := new(HashSet)
 	for _, u := range accounts {
 		record := batch.Account(u)
-		preserve, err := preserveAccountHistory(record)
-		if err != nil {
-			return nil, errors.Wrap(errors.StatusUnknownError, err)
-		}
-		if !preserve {
-			continue
+		if opts.PreserveAccountHistory != nil {
+			preserve, err := opts.PreserveAccountHistory(record)
+			if err != nil {
+				return nil, errors.Wrap(errors.StatusUnknownError, err)
+			}
+			if !preserve {
+				continue
+			}
 		}
 
 		err = txnHashes.CollectFromChain(record, record.MainChain())
@@ -75,27 +89,33 @@ func Collect(batch *database.Batch, header *Header, file io.WriteSeeker, logger 
 		}
 	}
 
-	// Save transactions
-	err = w.CollectTransactions(batch, txnHashes.Hashes, func(t *Transaction) error {
+	visitTx := opts.VisitTransaction
+	opts.VisitTransaction = func(t *Transaction) error {
 		for _, set := range t.SignatureSets {
 			for _, entry := range set.Entries {
 				sigHashes.Add(entry.SignatureHash)
 			}
 		}
+		if visitTx != nil {
+			return visitTx(t)
+		}
 		return nil
-	})
+	}
+
+	// Save transactions
+	err = w.CollectTransactions(batch, txnHashes.Hashes, opts)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	// Save signatures
-	err = w.CollectSignatures(batch, sigHashes.Hashes, nil)
+	err = w.CollectSignatures(batch, sigHashes.Hashes, opts)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
 
 	// Save accounts
-	err = w.CollectAccounts(batch, preserveAccountHistory, nil)
+	err = w.CollectAccounts(batch, opts)
 	if err != nil {
 		return nil, errors.Wrap(errors.StatusUnknownError, err)
 	}
@@ -103,7 +123,7 @@ func Collect(batch *database.Batch, header *Header, file io.WriteSeeker, logger 
 	return w, nil
 }
 
-func (w *Writer) CollectAccounts(batch *database.Batch, preserveHistory func(account *database.Account) (bool, error), visit func(*Account) error) error {
+func (w *Writer) CollectAccounts(batch *database.Batch, opts CollectOptions) error {
 	sw, err := w.Open(SectionTypeAccounts)
 	if err != nil {
 		return errors.Format(errors.StatusUnknownError, "open accounts section: %w", err)
@@ -121,8 +141,8 @@ func (w *Writer) CollectAccounts(batch *database.Batch, preserveHistory func(acc
 			return nil, errors.Format(errors.StatusUnknownError, "collect account: %w", err)
 		}
 
-		if visit != nil {
-			err = visit(acct)
+		if opts.VisitAccount != nil {
+			err = opts.VisitAccount(acct)
 			if err != nil {
 				return nil, errors.Format(errors.StatusUnknownError, "visit account: %w", err)
 			}
@@ -142,7 +162,7 @@ func (w *Writer) CollectAccounts(batch *database.Batch, preserveHistory func(acc
 	return errors.Wrap(errors.StatusUnknownError, err)
 }
 
-func (w *Writer) CollectTransactions(batch *database.Batch, hashes [][32]byte, visit func(*Transaction) error) error {
+func (w *Writer) CollectTransactions(batch *database.Batch, hashes [][32]byte, opts CollectOptions) error {
 	var txns []*Transaction
 	for _, h := range hashes {
 		h := h // See docs/developer/rangevarref.md
@@ -155,8 +175,8 @@ func (w *Writer) CollectTransactions(batch *database.Batch, hashes [][32]byte, v
 			return errors.Format(errors.StatusUnknownError, "collect transaction %x: %w", h[:4], err)
 		}
 
-		if visit != nil {
-			err = visit(txn)
+		if opts.VisitTransaction != nil {
+			err = opts.VisitTransaction(txn)
 			if err != nil {
 				return errors.Format(errors.StatusUnknownError, "visit transaction: %w", err)
 			}
@@ -208,7 +228,7 @@ func (w *Writer) WriteTransactions(txns []*Transaction, gz bool) error {
 	return errors.Wrap(errors.StatusUnknownError, err)
 }
 
-func (w *Writer) CollectSignatures(batch *database.Batch, hashes [][32]byte, visit func(*Signature) error) error {
+func (w *Writer) CollectSignatures(batch *database.Batch, hashes [][32]byte, opts CollectOptions) error {
 	var sigs []*Signature
 	for _, h := range hashes {
 		h := h // See docs/developer/rangevarref.md
@@ -221,8 +241,8 @@ func (w *Writer) CollectSignatures(batch *database.Batch, hashes [][32]byte, vis
 			return errors.Format(errors.StatusUnknownError, "collect signature %x: %w", h[:4], err)
 		}
 
-		if visit != nil {
-			err = visit(sig)
+		if opts.VisitSignature != nil {
+			err = opts.VisitSignature(sig)
 			if err != nil {
 				return errors.Format(errors.StatusUnknownError, "visit signature: %w", err)
 			}

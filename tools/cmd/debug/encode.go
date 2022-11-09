@@ -45,7 +45,7 @@ var encodeTxnBodyCmd = &cobra.Command{
 var encodeSigCmd = &cobra.Command{
 	Use:     "signature <signature (json)>",
 	Aliases: []string{"sig"},
-	Run:     encodeWithFunc(protocol.UnmarshalKeySignatureJSON),
+	Run:     encodeWithFunc(protocol.UnmarshalSignatureJSON),
 }
 
 var signCmd = &cobra.Command{
