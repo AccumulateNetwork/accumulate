@@ -1308,7 +1308,7 @@ func (m *queryBackend) resolveChainReceipt(batch *database.Batch, account *url.U
 		return receipt, err
 	}
 
-	block, r, err := indexing.ReceiptForChainIndex(m.Options.Describe, batch, chain, index)
+	block, _, r, err := indexing.ReceiptForChainIndex(m.Options.Describe.PartitionUrl(), batch, chain, index)
 	if err != nil {
 		return receipt, err
 	}
@@ -1321,7 +1321,7 @@ func (m *queryBackend) resolveChainReceipt(batch *database.Batch, account *url.U
 
 func (m *queryBackend) resolveAccountStateReceipt(batch *database.Batch, account *database.Account) (*query.GeneralReceipt, error) {
 	receipt := new(query.GeneralReceipt)
-	block, r, err := indexing.ReceiptForAccountState(m.Options.Describe, batch, account)
+	block, r, err := indexing.ReceiptForAccountState(m.Options.Describe.PartitionUrl(), batch, account)
 	if err != nil {
 		return receipt, err
 	}

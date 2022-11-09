@@ -63,8 +63,8 @@ func LoadLastTwoIndexEntries(chain *database.Chain2) (last, nextLast *protocol.I
 	return
 }
 
-func getRootReceipt(net *config.Describe, batch *database.Batch, from, to int64) (*managed.Receipt, error) {
-	localChain, err := batch.Account(net.Ledger()).RootChain().Get()
+func getRootReceipt(partition config.NetworkUrl, batch *database.Batch, from, to int64) (*managed.Receipt, error) {
+	localChain, err := batch.Account(partition.Ledger()).RootChain().Get()
 	if err != nil {
 		return nil, errors.Unknown("get minor root chain: %w", err)
 	}
@@ -121,7 +121,7 @@ func getIndexedChainReceipt(c *database.Chain2, chainEntry []byte, indexEntry *p
 	return receipt, nil
 }
 
-func ReceiptForAccountState(net *config.Describe, batch *database.Batch, account *database.Account) (block *protocol.IndexEntry, receipt *managed.Receipt, err error) {
+func ReceiptForAccountState(partition config.NetworkUrl, batch *database.Batch, account *database.Account) (block *protocol.IndexEntry, receipt *managed.Receipt, err error) {
 	// Get a receipt from the BPT
 	r, err := account.StateReceipt()
 	if err != nil {
@@ -129,10 +129,13 @@ func ReceiptForAccountState(net *config.Describe, batch *database.Batch, account
 	}
 
 	// Load the latest root index entry (just for the block index)
-	ledger := batch.Account(net.Ledger())
+	ledger := batch.Account(partition.Ledger())
 	rootEntry, err := LoadIndexEntryFromEnd(ledger.RootChain().Index(), 1)
 	if err != nil {
 		return nil, nil, errors.Wrap(errors.StatusUnknownError, err)
+	}
+	if rootEntry == nil {
+		return nil, nil, errors.New(errors.StatusInternalError, "root index chain is empty")
 	}
 
 	return rootEntry, r, nil
@@ -164,7 +167,7 @@ func ReceiptForChainEntry(net *config.Describe, batch *database.Batch, account *
 	}
 
 	// Get a receipt from the root chain
-	rootReceipt, err := getRootReceipt(net, batch, int64(accountIndex.Anchor), int64(rootIndex.Source))
+	rootReceipt, err := getRootReceipt(net.PartitionUrl(), batch, int64(accountIndex.Anchor), int64(rootIndex.Source))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -178,49 +181,52 @@ func ReceiptForChainEntry(net *config.Describe, batch *database.Batch, account *
 	return rootIndex, r, nil
 }
 
-func ReceiptForChainIndex(net *config.Describe, batch *database.Batch, c *database.Chain2, index int64) (*protocol.IndexEntry, *managed.Receipt, error) {
+func ReceiptForChainIndex(partition config.NetworkUrl, batch *database.Batch, c *database.Chain2, index int64) (*protocol.IndexEntry, uint64, *managed.Receipt, error) {
 	indexChain, err := c.Index().Get()
 	if err != nil {
-		return nil, nil, fmt.Errorf("unable to load %s index chain: %w", c.Name(), err)
+		return nil, 0, nil, fmt.Errorf("unable to load %s index chain: %w", c.Name(), err)
 	}
 
 	_, entry, err := SearchIndexChain(indexChain, uint64(indexChain.Height())-1, MatchAfter, SearchIndexChainBySource(uint64(index)))
 	if err != nil {
-		return nil, nil, fmt.Errorf("unable to locate index entry for entry %d of %s chain: %w", index, c.Name(), err)
+		return nil, 0, nil, fmt.Errorf("unable to locate index entry for entry %d of %s chain: %w", index, c.Name(), err)
 	}
 
 	chain, err := c.Get()
 	if err != nil {
-		return nil, nil, fmt.Errorf("unable to load %s chain: %w", c.Name(), err)
+		return nil, 0, nil, fmt.Errorf("unable to load %s chain: %w", c.Name(), err)
 	}
 
-	rootIndexChain, err := batch.Account(net.Ledger()).RootChain().Index().Get()
+	rootIndexChain, err := batch.Account(partition.Ledger()).RootChain().Index().Get()
 	if err != nil {
-		return nil, nil, fmt.Errorf("unable to load minor root index chain: %w", err)
+		return nil, 0, nil, fmt.Errorf("unable to load minor root index chain: %w", err)
+	}
+	if rootIndexChain.Height() == 0 {
+		return nil, 0, nil, errors.New(errors.StatusInternalError, "root index chain is empty")
 	}
 
-	_, rootEntry, err := SearchIndexChain(rootIndexChain, uint64(rootIndexChain.Height())-1, MatchAfter, SearchIndexChainBySource(entry.Anchor))
+	rootIndexIndex, rootEntry, err := SearchIndexChain(rootIndexChain, uint64(rootIndexChain.Height())-1, MatchAfter, SearchIndexChainBySource(entry.Anchor))
 	if err != nil {
-		return nil, nil, fmt.Errorf("unable to locate index entry for entry %d of the minor root chain: %w", entry.Anchor, err)
+		return nil, 0, nil, fmt.Errorf("unable to locate index entry for entry %d of the minor root chain: %w", entry.Anchor, err)
 	}
 
 	// Get a receipt from the account's chain
 	accountReceipt, err := chain.Receipt(index, int64(entry.Source))
 	if err != nil {
-		return nil, nil, err
+		return nil, 0, nil, err
 	}
 
 	// Get a receipt from the root chain
-	rootReceipt, err := getRootReceipt(net, batch, int64(entry.Anchor), int64(rootEntry.Source))
+	rootReceipt, err := getRootReceipt(partition, batch, int64(entry.Anchor), int64(rootEntry.Source))
 	if err != nil {
-		return nil, nil, err
+		return nil, 0, nil, err
 	}
 
 	// Finalize the receipt
 	r, err := accountReceipt.Combine(rootReceipt)
 	if err != nil {
-		return nil, nil, err
+		return nil, 0, nil, err
 	}
 
-	return rootEntry, r, nil
+	return rootEntry, rootIndexIndex, r, nil
 }
