@@ -312,6 +312,21 @@
         "${workspaceFolder}/.nodes/import/x-factom-ldas.snapshot"
       ]
     },
+    {
+      "name": "Export genesis",
+      "presentation": { "group": "91-Snapshot", },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/tools/cmd/genesis",
+      "args": [
+        "export",
+        "${workspaceFolder}/.nodes/rc3/node-1/bvnn",
+        "Millau",
+        "${workspaceFolder}../acc-testnet-genesis/genesis-bvn0.json",
+        "--factom-ldas=${workspaceFolder}/.nodes/import/factom-lda.snapshot",
+      ]
+    },
 
     // Miscellaneous
     {
@@ -375,6 +390,18 @@
           "from": "${workspaceFolder}",
         },
       ],
+    },
+    {
+      "name": "Database explorer",
+      "presentation": { "group": "99-Miscellaneous", },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/tools/cmd/explore",
+      "console": "integratedTerminal",
+      "args": [
+        "--node=${workspaceFolder}/.nodes/rc3/node-1/dnn"
+      ]
     },
   ]
 }
