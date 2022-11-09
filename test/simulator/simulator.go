@@ -140,7 +140,8 @@ func SimpleNetwork(name string, bvnCount, nodeCount int) *accumulated.NetworkIni
 			bvnInit.Nodes = append(bvnInit.Nodes, &accumulated.NodeInit{
 				DnnType:    config.Validator,
 				BvnnType:   config.Validator,
-				PrivValKey: testing.GenerateKey(name, bvnInit.Id, j),
+				PrivValKey: testing.GenerateKey(name, bvnInit.Id, j, "val"),
+				NodeKey:    testing.GenerateKey(name, bvnInit.Id, j, "node"),
 			})
 		}
 		net.Bvns = append(net.Bvns, bvnInit)
