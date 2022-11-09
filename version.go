@@ -6,6 +6,9 @@
 
 package accumulate
 
+//go:generate go run github.com/vektra/mockery/v2
+//go:generate go run github.com/rinchsan/gosimports/cmd/gosimports -w test/mocks
+
 const unknownVersion = "version unknown"
 
 var Version = unknownVersion
