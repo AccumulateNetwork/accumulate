@@ -1,0 +1,63 @@
+NodeStatusRequest:
+  non-binary: true
+  incomparable: true
+  fields:
+    - type: NodeStatusOptions
+      marshal-as: reference
+
+NetworkStatusRequest:
+  non-binary: true
+  incomparable: true
+  fields:
+    - type: NetworkStatusOptions
+      marshal-as: reference
+
+MetricsRequest:
+  non-binary: true
+  incomparable: true
+  fields:
+    - type: MetricsOptions
+      marshal-as: reference
+
+QueryRequest:
+  non-binary: true
+  incomparable: true
+  fields:
+    - name: Scope
+      type: url
+      pointer: true
+    - name: Query
+      type: api.Query
+      marshal-as: union
+
+SubmitRequest:
+  non-binary: true
+  incomparable: true
+  fields:
+    - name: Envelope
+      type: protocol.Envelope
+      marshal-as: reference
+      pointer: true
+    - type: SubmitOptions
+      marshal-as: reference
+
+ValidateRequest:
+  non-binary: true
+  incomparable: true
+  fields:
+    - name: Envelope
+      type: protocol.Envelope
+      marshal-as: reference
+      pointer: true
+    - type: ValidateOptions
+      marshal-as: reference
+
+FaucetRequest:
+  non-binary: true
+  incomparable: true
+  fields:
+    - name: Account
+      type: url
+      pointer: true
+    - type: SubmitOptions
+      marshal-as: reference
