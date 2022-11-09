@@ -18,6 +18,12 @@ import (
 // Success returns true if the status represents success.
 func (s Status) Success() bool { return s < 300 }
 
+// IsClientError returns true if the status is a server error.
+func (s Status) IsClientError() bool { return s >= 400 && s < 500 }
+
+// IsServerError returns true if the status is a server error.
+func (s Status) IsServerError() bool { return s >= 500 }
+
 // Error implements error.
 func (s Status) Error() string { return s.String() }
 
@@ -96,9 +102,10 @@ func convert(err error) *Error {
 		err = encErr.E
 	}
 
-	u, ok := err.(interface{ Unwrap() error })
-	if ok {
-		e.setCause(convert(u.Unwrap()))
+	if u, ok := err.(interface{ Unwrap() error }); ok {
+		if err := u.Unwrap(); err != nil {
+			e.setCause(convert(err))
+		}
 	}
 
 	return e

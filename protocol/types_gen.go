@@ -695,6 +695,7 @@ type SignatureSet struct {
 	fieldsSet       []bool
 	Vote            VoteType    `json:"vote,omitempty" form:"vote" query:"vote"`
 	Signer          *url.URL    `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
+	Authority       *url.URL    `json:"authority,omitempty" form:"authority" query:"authority" validate:"required"`
 	TransactionHash [32]byte    `json:"transactionHash,omitempty" form:"transactionHash" query:"transactionHash"`
 	Signatures      []Signature `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
 	extraData       []byte
@@ -2248,6 +2249,9 @@ func (v *SignatureSet) Copy() *SignatureSet {
 	u.Vote = v.Vote
 	if v.Signer != nil {
 		u.Signer = v.Signer
+	}
+	if v.Authority != nil {
+		u.Authority = v.Authority
 	}
 	u.TransactionHash = v.TransactionHash
 	u.Signatures = make([]Signature, len(v.Signatures))
@@ -4210,6 +4214,14 @@ func (v *SignatureSet) Equal(u *SignatureSet) bool {
 	case v.Signer == nil || u.Signer == nil:
 		return false
 	case !((v.Signer).Equal(u.Signer)):
+		return false
+	}
+	switch {
+	case v.Authority == u.Authority:
+		// equal
+	case v.Authority == nil || u.Authority == nil:
+		return false
+	case !((v.Authority).Equal(u.Authority)):
 		return false
 	}
 	if !(v.TransactionHash == u.TransactionHash) {
@@ -9108,8 +9120,9 @@ var fieldNames_SignatureSet = []string{
 	1: "Type",
 	2: "Vote",
 	3: "Signer",
-	4: "TransactionHash",
-	5: "Signatures",
+	4: "Authority",
+	5: "TransactionHash",
+	6: "Signatures",
 }
 
 func (v *SignatureSet) MarshalBinary() ([]byte, error) {
@@ -9123,12 +9136,15 @@ func (v *SignatureSet) MarshalBinary() ([]byte, error) {
 	if !(v.Signer == nil) {
 		writer.WriteUrl(3, v.Signer)
 	}
+	if !(v.Authority == nil) {
+		writer.WriteUrl(4, v.Authority)
+	}
 	if !(v.TransactionHash == ([32]byte{})) {
-		writer.WriteHash(4, &v.TransactionHash)
+		writer.WriteHash(5, &v.TransactionHash)
 	}
 	if !(len(v.Signatures) == 0) {
 		for _, v := range v.Signatures {
-			writer.WriteValue(5, v.MarshalBinary)
+			writer.WriteValue(6, v.MarshalBinary)
 		}
 	}
 
@@ -9151,7 +9167,12 @@ func (v *SignatureSet) IsValid() error {
 	} else if v.Signer == nil {
 		errs = append(errs, "field Signer is not set")
 	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Authority is missing")
+	} else if v.Authority == nil {
+		errs = append(errs, "field Authority is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
 		errs = append(errs, "field Signatures is missing")
 	} else if len(v.Signatures) == 0 {
 		errs = append(errs, "field Signatures is not set")
@@ -13828,11 +13849,14 @@ func (v *SignatureSet) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadUrl(3); ok {
 		v.Signer = x
 	}
-	if x, ok := reader.ReadHash(4); ok {
+	if x, ok := reader.ReadUrl(4); ok {
+		v.Authority = x
+	}
+	if x, ok := reader.ReadHash(5); ok {
 		v.TransactionHash = *x
 	}
 	for {
-		ok := reader.ReadValue(5, func(r io.Reader) error {
+		ok := reader.ReadValue(6, func(r io.Reader) error {
 			x, err := UnmarshalSignatureFrom(r)
 			if err == nil {
 				v.Signatures = append(v.Signatures, x)
@@ -16020,12 +16044,14 @@ func (v *SignatureSet) MarshalJSON() ([]byte, error) {
 		Type            SignatureType                             `json:"type"`
 		Vote            VoteType                                  `json:"vote,omitempty"`
 		Signer          *url.URL                                  `json:"signer,omitempty"`
+		Authority       *url.URL                                  `json:"authority,omitempty"`
 		TransactionHash string                                    `json:"transactionHash,omitempty"`
 		Signatures      encoding.JsonUnmarshalListWith[Signature] `json:"signatures,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Vote = v.Vote
 	u.Signer = v.Signer
+	u.Authority = v.Authority
 	u.TransactionHash = encoding.ChainToJSON(v.TransactionHash)
 	u.Signatures = encoding.JsonUnmarshalListWith[Signature]{Value: v.Signatures, Func: UnmarshalSignatureJSON}
 	return json.Marshal(&u)
@@ -18141,12 +18167,14 @@ func (v *SignatureSet) UnmarshalJSON(data []byte) error {
 		Type            SignatureType                             `json:"type"`
 		Vote            VoteType                                  `json:"vote,omitempty"`
 		Signer          *url.URL                                  `json:"signer,omitempty"`
+		Authority       *url.URL                                  `json:"authority,omitempty"`
 		TransactionHash string                                    `json:"transactionHash,omitempty"`
 		Signatures      encoding.JsonUnmarshalListWith[Signature] `json:"signatures,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Vote = v.Vote
 	u.Signer = v.Signer
+	u.Authority = v.Authority
 	u.TransactionHash = encoding.ChainToJSON(v.TransactionHash)
 	u.Signatures = encoding.JsonUnmarshalListWith[Signature]{Value: v.Signatures, Func: UnmarshalSignatureJSON}
 	if err := json.Unmarshal(data, &u); err != nil {
@@ -18157,6 +18185,7 @@ func (v *SignatureSet) UnmarshalJSON(data []byte) error {
 	}
 	v.Vote = u.Vote
 	v.Signer = u.Signer
+	v.Authority = u.Authority
 	if x, err := encoding.ChainFromJSON(u.TransactionHash); err != nil {
 		return fmt.Errorf("error decoding TransactionHash: %w", err)
 	} else {
