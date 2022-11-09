@@ -1,0 +1,240 @@
+package api
+
+import (
+	"context"
+	"sync/atomic"
+
+	"github.com/tendermint/tendermint/libs/log"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+)
+
+type Sequencer struct {
+	logger      logging.OptionalLogger
+	db          database.Viewer
+	partitionID string
+	partition   config.NetworkUrl
+	valKey      []byte
+	globals     atomic.Value
+}
+
+var _ private.Sequencer = (*Sequencer)(nil)
+
+type SequencerParams struct {
+	Logger       log.Logger
+	Database     database.Viewer
+	EventBus     *events.Bus
+	Globals      *core.GlobalValues
+	Partition    string
+	ValidatorKey []byte
+}
+
+func NewSequencer(params SequencerParams) *Sequencer {
+	s := new(Sequencer)
+	s.logger.L = params.Logger
+	s.db = params.Database
+	s.partitionID = params.Partition
+	s.partition.URL = protocol.PartitionUrl(params.Partition)
+	s.valKey = params.ValidatorKey
+	s.globals.Store(params.Globals)
+	events.SubscribeAsync(params.EventBus, func(e events.WillChangeGlobals) {
+		s.globals.Store(e.New)
+	})
+	return s
+}
+
+func (s *Sequencer) Sequence(ctx context.Context, src, dst *url.URL, num uint64) (*api.TransactionRecord, error) {
+	if !s.partition.URL.ParentOf(src) {
+		return nil, errors.BadRequest.WithFormat("requested source is %s but this partition is %s", src.RootIdentity(), s.partitionID)
+	}
+
+	globals := s.globals.Load().(*core.GlobalValues)
+	if globals == nil {
+		return nil, errors.NotReady
+	}
+
+	// Starting a batch would not be safe if the ABCI were updated to commit in
+	// the middle of a block
+
+	var r *api.TransactionRecord
+	var err error
+	switch {
+	case s.partition.Synthetic().Equal(src):
+		return r, s.db.View(func(batch *database.Batch) error {
+			r, err = s.getSynth(batch, globals, dst, num)
+			return err
+		})
+
+	case s.partition.AnchorPool().Equal(src):
+		return r, s.db.View(func(batch *database.Batch) error {
+			r, err = s.getAnchor(batch, globals, dst, num)
+			return err
+		})
+	}
+
+	return nil, errors.BadRequest.WithFormat("invalid source: %s", src)
+}
+
+func (s *Sequencer) getAnchor(batch *database.Batch, globals *core.GlobalValues, dst *url.URL, num uint64) (*api.TransactionRecord, error) {
+	chain, err := batch.Account(s.partition.AnchorPool()).AnchorSequenceChain().Get()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load anchor sequence chain: %w", err)
+	}
+	hash, err := chain.Entry(int64(num) - 1)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load anchor sequence chain entry %d: %w", num-1, err)
+	}
+
+	record := batch.Transaction(hash)
+	state, err := record.Main().Get()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load transaction: %w", err)
+	}
+	if state.Transaction == nil {
+		return nil, errors.Conflict.WithFormat("not a transaction")
+	}
+
+	txn := new(protocol.Transaction)
+	txn.Header.Principal = dst.JoinPath(protocol.AnchorPool)
+	txn.Body = state.Transaction.Body
+
+	// Create a partition signature
+	partSig, err := new(signing.Builder).
+		SetUrl(s.partition.URL).
+		SetVersion(num).
+		InitiateSynthetic(txn, dst)
+	if err != nil {
+		return nil, errors.InternalError.Wrap(err)
+	}
+
+	// Create a key signature
+	signer := &protocol.UnknownSigner{Url: s.partition.JoinPath(protocol.Network)}
+	keySig, err := new(signing.Builder).
+		SetType(protocol.SignatureTypeED25519).
+		SetPrivateKey(s.valKey).
+		SetUrl(signer.Url).
+		SetVersion(globals.Network.Version).
+		SetTimestamp(1).
+		Sign(txn.GetHash())
+	if err != nil {
+		return nil, errors.InternalError.Wrap(err)
+	}
+
+	r := new(api.TransactionRecord)
+	r.Transaction = txn
+	r.TxID = txn.ID()
+	r.Signatures = new(api.RecordRange[*api.SignatureRecord])
+	r.Signatures.Total = 1
+	r.Signatures.Records = []*api.SignatureRecord{
+		{Signature: &protocol.SignatureSet{
+			Vote:            protocol.VoteTypeAccept,
+			Signer:          signer.Url,
+			Authority:       signer.Url,
+			TransactionHash: state.Transaction.ID().Hash(),
+			Signatures: []protocol.Signature{
+				partSig,
+				keySig,
+			},
+		}, TxID: state.Transaction.ID(), Signer: signer},
+	}
+	return r, nil
+}
+
+func (s *Sequencer) getSynth(batch *database.Batch, globals *core.GlobalValues, dst *url.URL, num uint64) (*api.TransactionRecord, error) {
+	partition, ok := protocol.ParsePartitionUrl(dst)
+	if !ok {
+		return nil, errors.UnknownError.WithFormat("destination is not a partition")
+	}
+	ledger := batch.Account(s.partition.Synthetic())
+	chain, err := ledger.SyntheticSequenceChain(partition).Get()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load synthetic sequence chain: %w", err)
+	}
+	entry := new(protocol.IndexEntry)
+	err = chain.EntryAs(int64(num)-1, entry)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load synthetic sequence chain entry %d: %w", num-1, err)
+	}
+	chain, err = ledger.MainChain().Get()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load synthetic main chain: %w", err)
+	}
+	hash, err := chain.Entry(int64(entry.Source))
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load synthetic chain entry %d: %w", entry.Source, err)
+	}
+
+	record := batch.Transaction(hash)
+	state, err := record.Main().Get()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load transaction: %w", err)
+	}
+	if state.Transaction == nil {
+		return nil, errors.Conflict.WithFormat("not a transaction")
+	}
+
+	status, err := record.Status().Get()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("load status: %w", err)
+	}
+	if status.Proof == nil {
+		return nil, errors.NotReady.WithFormat("no proof yet")
+	}
+
+	// Add the partition signature
+	partSig := new(protocol.PartitionSignature)
+	partSig.SourceNetwork = status.SourceNetwork
+	partSig.DestinationNetwork = status.DestinationNetwork
+	partSig.SequenceNumber = status.SequenceNumber
+	partSig.TransactionHash = *(*[32]byte)(hash)
+
+	// Add the receipt signature
+	receiptSig := new(protocol.ReceiptSignature)
+	receiptSig.SourceNetwork = status.SourceNetwork
+	if status.Proof != nil {
+		receiptSig.Proof = *status.Proof
+	}
+	receiptSig.TransactionHash = *(*[32]byte)(hash)
+
+	// Add the key signature
+	signer := &protocol.UnknownSigner{Url: s.partition.JoinPath(protocol.Network)}
+	keySig, err := new(signing.Builder).
+		SetType(protocol.SignatureTypeED25519).
+		SetPrivateKey(s.valKey).
+		SetUrl(signer.Url).
+		SetVersion(globals.Network.Version).
+		SetTimestamp(1).
+		Sign(hash)
+	if err != nil {
+		return nil, errors.InternalError.Wrap(err)
+	}
+
+	r := new(api.TransactionRecord)
+	r.Transaction = state.Transaction
+	r.TxID = state.Transaction.ID()
+	r.Signatures = new(api.RecordRange[*api.SignatureRecord])
+	r.Signatures.Total = 1
+	r.Signatures.Records = []*api.SignatureRecord{
+		{Signature: &protocol.SignatureSet{
+			Vote:            protocol.VoteTypeAccept,
+			Signer:          signer.Url,
+			Authority:       signer.Url,
+			TransactionHash: state.Transaction.ID().Hash(),
+			Signatures: []protocol.Signature{
+				partSig,
+				receiptSig,
+				keySig,
+			},
+		}, TxID: state.Transaction.ID(), Signer: signer},
+	}
+	return r, nil
+}
