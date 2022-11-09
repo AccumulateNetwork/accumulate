@@ -65,10 +65,10 @@ const IncompleteChain Status = 414
 // InsufficientBalance means the account balance is insufficient to satisfy the request.
 const InsufficientBalance Status = 415
 
-// InternalError means an internal error occured.
+// InternalError means an internal error occurred.
 const InternalError Status = 500
 
-// UnknownError means an unknown error occured.
+// UnknownError means an unknown error occurred.
 const UnknownError Status = 501
 
 // EncodingError means encoding or decoding failed.
