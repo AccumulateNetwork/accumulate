@@ -29,6 +29,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
+	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -262,6 +263,10 @@ func (s *Simulator) ViewAll(fn func(batch *database.Batch) error) error {
 		}
 	}
 	return nil
+}
+
+func (s *Simulator) NewDirectClient() *client.Client {
+	return testing.DirectJrpcClient(s.partitions[protocol.Directory].nodes[0].api)
 }
 
 func (s *Simulator) ListenAndServe(ctx context.Context, hook func(*Simulator, http.Handler) http.Handler) error {
