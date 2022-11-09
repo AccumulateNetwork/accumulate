@@ -44,8 +44,10 @@ require (
 
 require (
 	github.com/FactomProject/factomd v1.13.0
+	github.com/chzyer/readline v1.5.1
 	github.com/ethereum/go-ethereum v1.10.25
 	github.com/ghodss/yaml v1.0.0
+	github.com/mattn/go-shellwords v1.0.12
 	github.com/robfig/cron/v3 v3.0.0
 	github.com/vektra/mockery/v2 v2.14.0
 	gitlab.com/accumulatenetwork/core/wallet v0.3.3-0.20221103154856-2467ab689b1b
@@ -69,7 +71,6 @@ require (
 	github.com/boltdb/bolt v1.3.1 // indirect
 	github.com/btcsuite/btcd/btcec/v2 v2.2.0 // indirect
 	github.com/btcsuitereleases/btcutil v0.0.0-20150612230727-f2b1058a8255 // indirect
-	github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e // indirect
 	github.com/cosmos/gogoproto v1.4.1 // indirect
 	github.com/creachadair/taskgroup v0.3.2 // indirect
 	github.com/curioswitch/go-reassign v0.1.2 // indirect
