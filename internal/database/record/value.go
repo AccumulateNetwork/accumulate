@@ -15,6 +15,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	errors2 "gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
 
@@ -154,7 +155,7 @@ func (v *Value[T]) GetAs(target interface{}) error {
 	}
 
 	err = encoding.SetPtr(u, target)
-	return errors.Wrap(errors.StatusUnknownError, err)
+	return errors.Wrap(errors2.WrongType, err)
 }
 
 // Put stores the value.
