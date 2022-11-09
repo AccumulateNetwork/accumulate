@@ -54,9 +54,11 @@ func TestSnapshotPartialHistory(t *testing.T) {
 
 	batch = db.Begin(true)
 	defer batch.Discard()
-	require.NoError(t, snapWr.CollectAccounts(batch, func(account *database.Account) (bool, error) {
-		return false, nil // Do not preserve history
-	}, nil))
+	require.NoError(t, snapWr.CollectAccounts(batch, snapshot.CollectOptions{
+		PreserveAccountHistory: func(account *database.Account) (bool, error) {
+			return false, nil // Do not preserve history
+		},
+	}))
 	batch.Discard()
 
 	require.NoError(t, db.Close())
@@ -108,9 +110,7 @@ func TestSnapshotFullHistory(t *testing.T) {
 
 		batch = db.Begin(true)
 		defer batch.Discard()
-		require.NoError(t, snapWr.CollectAccounts(batch, func(account *database.Account) (bool, error) {
-			return true, nil // Preserve history
-		}, nil))
+		require.NoError(t, snapWr.CollectAccounts(batch, snapshot.CollectOptions{}))
 		batch.Discard()
 
 		require.NoError(t, db.Close())

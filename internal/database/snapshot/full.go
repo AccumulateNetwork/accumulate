@@ -30,14 +30,17 @@ func FullCollect(batch *database.Batch, file io.WriteSeeker, network config.Netw
 	header.Height = ledger.Index
 	header.Timestamp = ledger.Timestamp
 
-	w, err := Collect(batch, header, file, logger, func(account *database.Account) (bool, error) {
-		if preserve {
-			return true, nil
-		}
+	w, err := Collect(batch, header, file, CollectOptions{
+		Logger: logger,
+		PreserveAccountHistory: func(account *database.Account) (bool, error) {
+			if preserve {
+				return true, nil
+			}
 
-		// Preserve history for DN/BVN ADIs
-		_, ok := protocol.ParsePartitionUrl(account.Url())
-		return ok, nil
+			// Preserve history for DN/BVN ADIs
+			_, ok := protocol.ParsePartitionUrl(account.Url())
+			return ok, nil
+		},
 	})
 	if err != nil {
 		return errors.Wrap(errors.StatusUnknownError, err)
@@ -57,7 +60,7 @@ func CollectAnchors(w *Writer, batch *database.Batch, network config.NetworkUrl)
 		return errors.Wrap(errors.StatusUnknownError, err)
 	}
 
-	err = w.CollectTransactions(batch, txnHashes.Hashes, nil)
+	err = w.CollectTransactions(batch, txnHashes.Hashes, CollectOptions{})
 	return errors.Wrap(errors.StatusUnknownError, err)
 }
 
