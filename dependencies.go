@@ -14,6 +14,7 @@ import (
 	_ "github.com/golang/mock/mockgen"
 	_ "github.com/golangci/golangci-lint/cmd/golangci-lint"
 	_ "github.com/rinchsan/gosimports/cmd/gosimports"
+	_ "github.com/vektra/mockery/v2"
 	_ "gitlab.com/accumulatenetwork/core/wallet/cmd/accumulate"
 	_ "golang.org/x/tools/cmd/goimports"
 	_ "gotest.tools/gotestsum"
