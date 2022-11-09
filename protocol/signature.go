@@ -83,10 +83,10 @@ func PublicKeyHash(key []byte, typ SignatureType) ([]byte, error) {
 		SignatureTypeRemote,
 		SignatureTypeDelegated,
 		SignatureTypeInternal:
-		return nil, errors.Format(errors.BadRequest, "%v is not a key type", typ)
+		return nil, errors.BadRequest.WithFormat("%v is not a key type", typ)
 
 	default:
-		return nil, errors.Format(errors.NotAllowed, "unknown key type %v", typ)
+		return nil, errors.NotAllowed.WithFormat("unknown key type %v", typ)
 	}
 }
 
