@@ -11,8 +11,8 @@ import (
 	"github.com/chzyer/readline"
 	"github.com/mattn/go-shellwords"
 	"github.com/spf13/cobra"
-	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 )
 
 func main() {

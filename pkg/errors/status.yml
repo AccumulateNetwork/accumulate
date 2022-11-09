@@ -61,10 +61,10 @@ Status:
   # Server/system errors
   InternalError:
     value: 500
-    description: means an internal error occured
+    description: means an internal error occurred
   UnknownError:
     value: 501
-    description: means an unknown error occured
+    description: means an unknown error occurred
   EncodingError:
     value: 502
     description: means encoding or decoding failed
