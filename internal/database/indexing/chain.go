@@ -90,6 +90,11 @@ func SearchIndexChain(chain *database.Chain, index uint64, mode MatchMode, find 
 			}
 		} else {
 			if index == 0 {
+				if mode == MatchAfter {
+					// If the entry is the first and is after the target and the
+					// mode is after, return it
+					return index, entry, nil
+				}
 				return 0, nil, ErrReachedChainStart
 			}
 			index--
