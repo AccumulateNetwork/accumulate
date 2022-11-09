@@ -159,7 +159,7 @@ func UnmarshalRecordFrom(rd io.Reader) (Record, error) {
 
 // UnmarshalRecordJson unmarshals a Record.
 func UnmarshalRecordJSON(data []byte) (Record, error) {
-	var typ *struct{ Type RecordType }
+	var typ *struct{ RecordType RecordType }
 	err := json.Unmarshal(data, &typ)
 	if err != nil {
 		return nil, err
@@ -169,7 +169,7 @@ func UnmarshalRecordJSON(data []byte) (Record, error) {
 		return nil, nil
 	}
 
-	acnt, err := NewRecord(typ.Type)
+	acnt, err := NewRecord(typ.RecordType)
 	if err != nil {
 		return nil, err
 	}
@@ -321,7 +321,7 @@ func UnmarshalQueryFrom(rd io.Reader) (Query, error) {
 
 // UnmarshalQueryJson unmarshals a Query.
 func UnmarshalQueryJSON(data []byte) (Query, error) {
-	var typ *struct{ Type QueryType }
+	var typ *struct{ QueryType QueryType }
 	err := json.Unmarshal(data, &typ)
 	if err != nil {
 		return nil, err
@@ -331,7 +331,7 @@ func UnmarshalQueryJSON(data []byte) (Query, error) {
 		return nil, nil
 	}
 
-	acnt, err := NewQuery(typ.Type)
+	acnt, err := NewQuery(typ.QueryType)
 	if err != nil {
 		return nil, err
 	}
