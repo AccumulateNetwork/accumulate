@@ -10,7 +10,7 @@ import (
 
 //go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-enum --package api enums.yml
 //go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --long-union-discriminator --package api responses.yml options.yml records.yml types.yml queries.yml --reference ../../../internal/database/smt/managed/types.yml,../../../protocol/general.yml
-//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --package api --language go-union --out unions_gen.go records.yml queries.yml --reference options.yml
+//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --long-union-discriminator --package api --language go-union --out unions_gen.go records.yml queries.yml --reference options.yml
 
 type RecordType uint64
 type QueryType uint64
