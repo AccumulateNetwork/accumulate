@@ -8,6 +8,7 @@ import (
 	"os"
 	"sort"
 	"time"
+	"errors"
 
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
@@ -55,6 +56,9 @@ func init() {
 }
 
 func run(_ *cobra.Command, args []string) {
+	if len(args)==0 {
+		checkf(errors.New("no network specified.  Use --help for usuage"),"no arguments provided")
+	}
 	client, err := client.New(args[0])
 	checkf(err, "network")
 	account, err := url.Parse(args[1])
