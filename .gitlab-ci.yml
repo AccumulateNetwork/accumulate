@@ -3,3 +3,4 @@ include:
 - local: /.gitlab/all.gitlab-ci.yml
 - local: /.gitlab/merge-request.gitlab-ci.yml
 - local: /.gitlab/release.gitlab-ci.yml
+- template: Security/SAST.gitlab-ci.yml
