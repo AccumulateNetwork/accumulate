@@ -1,5 +1,3 @@
-include:
-- local: /.gitlab/common.gitlab-ci.yml
-- local: /.gitlab/all.gitlab-ci.yml
-- local: /.gitlab/merge-request.gitlab-ci.yml
-- local: /.gitlab/release.gitlab-ci.yml
+show-vars:
+  script:
+  - echo $GITLAB_FEATURES
