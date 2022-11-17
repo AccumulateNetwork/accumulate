@@ -5,3 +5,4 @@ include:
 - local: /.gitlab/release.gitlab-ci.yml
 - template: Jobs/License-Scanning.gitlab-ci.yml
 - template: Security/Dependency-Scanning.gitlab-ci.yml
+- template: Jobs/Secret-Detection.gitlab-ci.yml
