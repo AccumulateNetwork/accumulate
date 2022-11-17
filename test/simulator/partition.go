@@ -18,11 +18,11 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"golang.org/x/sync/errgroup"
 )
@@ -66,7 +66,7 @@ func newBvn(s *Simulator, init *accumulated.BvnInit) (*Partition, error) {
 	for _, node := range init.Nodes {
 		n, err := newNode(s, p, len(p.nodes), node)
 		if err != nil {
-			return nil, errors.Wrap(errors.StatusUnknownError, err)
+			return nil, errors.UnknownError.Wrap(err)
 		}
 		p.nodes = append(p.nodes, n)
 	}
@@ -83,7 +83,7 @@ func newDn(s *Simulator, init *accumulated.NetworkInit) (*Partition, error) {
 		for _, init := range init.Nodes {
 			n, err := newNode(s, p, len(p.nodes), init)
 			if err != nil {
-				return nil, errors.Wrap(errors.StatusUnknownError, err)
+				return nil, errors.UnknownError.Wrap(err)
 			}
 			p.nodes = append(p.nodes, n)
 		}
@@ -117,16 +117,16 @@ func (p *Partition) initChain(snapshot ioutil2.SectionReader) error {
 	for i, n := range p.nodes {
 		_, err := snapshot.Seek(0, io.SeekStart)
 		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "reset snapshot file: %w", err)
+			return errors.UnknownError.WithFormat("reset snapshot file: %w", err)
 		}
 		results[i], err = n.initChain(snapshot)
 		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "init chain: %w", err)
+			return errors.UnknownError.WithFormat("init chain: %w", err)
 		}
 	}
 	for _, v := range results[1:] {
 		if !bytes.Equal(results[0], v) {
-			return errors.Format(errors.StatusFatalError, "consensus failure: init chain: expected %x, got %x", results[0], v)
+			return errors.FatalError.WithFormat("consensus failure: init chain: expected %x, got %x", results[0], v)
 		}
 	}
 	return nil
@@ -164,12 +164,12 @@ func (p *Partition) Submit(delivery *chain.Delivery, pretend bool) (*protocol.Tr
 		// Make a copy to prevent changes
 		result[i], err = node.checkTx(copyDelivery(delivery), types.CheckTxType_New)
 		if err != nil {
-			return nil, errors.Wrap(errors.StatusFatalError, err)
+			return nil, errors.FatalError.Wrap(err)
 		}
 	}
 	for _, r := range result[1:] {
 		if !result[0].Equal(r) {
-			return nil, errors.Format(errors.StatusFatalError, "consensus failure: check tx: transaction %x (%v)", delivery.Transaction.GetHash()[:4], delivery.Transaction.Body.Type())
+			return nil, errors.FatalError.WithFormat("consensus failure: check tx: transaction %x (%v)", delivery.Transaction.GetHash()[:4], delivery.Transaction.Body.Type())
 		}
 	}
 
@@ -196,12 +196,12 @@ func (p *Partition) execute(background *errgroup.Group) error {
 			record := batch.Account(protocol.PartitionUrl(p.ID).JoinPath(protocol.Ledger))
 			c, err := record.RootChain().Index().Get()
 			if err != nil {
-				return errors.Format(errors.StatusFatalError, "load root index chain: %w", err)
+				return errors.FatalError.WithFormat("load root index chain: %w", err)
 			}
 			entry := new(protocol.IndexEntry)
 			err = c.EntryAs(c.Height()-1, entry)
 			if err != nil {
-				return errors.Format(errors.StatusFatalError, "load root index chain entry 0: %w", err)
+				return errors.FatalError.WithFormat("load root index chain entry 0: %w", err)
 			}
 			p.blockIndex = entry.BlockIndex + 1
 			p.blockTime = entry.BlockTime.Add(time.Second)
@@ -227,7 +227,7 @@ func (p *Partition) execute(background *errgroup.Group) error {
 
 		err := n.beginBlock(b)
 		if err != nil {
-			return errors.Format(errors.StatusFatalError, "execute: %w", err)
+			return errors.FatalError.WithFormat("execute: %w", err)
 		}
 	}
 
@@ -239,12 +239,12 @@ func (p *Partition) execute(background *errgroup.Group) error {
 			// Make a copy to prevent changes
 			results[i], err = node.deliverTx(blocks[i], copyDelivery(delivery))
 			if err != nil {
-				return errors.Format(errors.StatusFatalError, "execute: %w", err)
+				return errors.FatalError.WithFormat("execute: %w", err)
 			}
 		}
 		for _, r := range results[1:] {
 			if !results[0].Equal(r) {
-				return errors.Format(errors.StatusFatalError, "consensus failure: deliver tx: transaction %x (%v)", delivery.Transaction.GetHash()[:4], delivery.Transaction.Body.Type())
+				return errors.FatalError.WithFormat("consensus failure: deliver tx: transaction %x (%v)", delivery.Transaction.GetHash()[:4], delivery.Transaction.Body.Type())
 			}
 		}
 	}
@@ -254,16 +254,16 @@ func (p *Partition) execute(background *errgroup.Group) error {
 	for i, n := range p.nodes {
 		endBlock[i], err = n.endBlock(blocks[i])
 		if err != nil {
-			return errors.Format(errors.StatusFatalError, "execute: %w", err)
+			return errors.FatalError.WithFormat("execute: %w", err)
 		}
 	}
 	for _, v := range endBlock[1:] {
 		if len(v) != len(endBlock[0]) {
-			return errors.Format(errors.StatusFatalError, "consensus failure: end block")
+			return errors.FatalError.WithFormat("consensus failure: end block")
 		}
 		for i, v := range v {
 			if *v != *endBlock[0][i] {
-				return errors.Format(errors.StatusFatalError, "consensus failure: end block")
+				return errors.FatalError.WithFormat("consensus failure: end block")
 			}
 		}
 	}
@@ -293,12 +293,12 @@ func (p *Partition) execute(background *errgroup.Group) error {
 	for i, n := range p.nodes {
 		commit[i], err = n.commit(blocks[i])
 		if err != nil {
-			return errors.Format(errors.StatusFatalError, "execute: %w", err)
+			return errors.FatalError.WithFormat("execute: %w", err)
 		}
 	}
 	for _, v := range commit[1:] {
 		if !bytes.Equal(commit[0], v) {
-			return errors.Format(errors.StatusFatalError, "consensus failure: commit: expected %x, got %x", commit[0], v)
+			return errors.FatalError.WithFormat("consensus failure: commit: expected %x, got %x", commit[0], v)
 		}
 	}
 
