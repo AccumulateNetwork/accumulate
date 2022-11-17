@@ -10,7 +10,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
@@ -27,7 +27,7 @@ func (x *Executor) loadGlobals(view func(func(batch *database.Batch) error) erro
 		})
 	})
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "load globals: %w", err)
+		return errors.UnknownError.WithFormat("load globals: %w", err)
 	}
 
 	// Publish an update
@@ -35,7 +35,7 @@ func (x *Executor) loadGlobals(view func(func(batch *database.Batch) error) erro
 		New: &x.globals.Active,
 	})
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "publish globals update: %w", err)
+		return errors.UnknownError.WithFormat("publish globals update: %w", err)
 	}
 
 	// Make a copy for pending

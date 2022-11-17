@@ -20,9 +20,9 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/web"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -44,7 +44,7 @@ func NewJrpc(opts Options) (*JrpcMethods, error) {
 	m.querier.backend.Options = opts
 
 	if opts.Key == nil {
-		return nil, errors.Format(errors.StatusBadRequest, "missing key")
+		return nil, errors.BadRequest.WithFormat("missing key")
 	}
 
 	if opts.Logger != nil {
@@ -129,7 +129,7 @@ func (m *JrpcMethods) jrpc2http(jrpc jsonrpc2.MethodFunc) http.HandlerFunc {
 
 func (m *JrpcMethods) Status(ctx context.Context, _ json.RawMessage) interface{} {
 	if m.ConnectionManager == nil {
-		return internalError(errors.Format(errors.StatusInternalError, "missing connection manager"))
+		return internalError(errors.InternalError.WithFormat("missing connection manager"))
 	}
 
 	conn, err := m.ConnectionManager.SelectConnection(m.Options.Describe.PartitionId, true)
@@ -200,7 +200,7 @@ func (m *JrpcMethods) Describe(_ context.Context, params json.RawMessage) interf
 	// Load network variable values
 	v, err := m.loadGlobals()
 	if err != nil {
-		res.Error = errors.Wrap(errors.StatusUnknownError, err).(*errors.Error)
+		res.Error = errors.UnknownError.Wrap(err).(*errors.Error)
 	} else {
 		res.Values = *v
 	}

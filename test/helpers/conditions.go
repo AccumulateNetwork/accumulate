@@ -9,7 +9,7 @@ package helpers
 import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -98,7 +98,7 @@ func isPending(s *Sim, status *protocol.TransactionStatus) bool {
 	if status.Code == 0 {
 		return false
 	}
-	if status.Code != errors.StatusPending {
+	if status.Code != errors.Pending {
 		s.T.Fatal("Expected transaction to be pending")
 	}
 	return true

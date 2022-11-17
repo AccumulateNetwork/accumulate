@@ -9,7 +9,7 @@ package chain
 import (
 	"fmt"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -39,7 +39,7 @@ func (SyntheticWriteData) Validate(st *StateManager, tx *Delivery) (protocol.Tra
 
 	err := validateDataEntry(st, body.Entry)
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	return executeWriteLiteDataAccount(st, body.Entry)

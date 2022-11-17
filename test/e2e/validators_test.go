@@ -8,8 +8,8 @@ package e2e
 
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -116,7 +116,7 @@ func UpdateValidatorKey(values *core.GlobalValues, oldPubKey, newPubKey []byte, 
 	// Update the key in the network
 	err := values.Network.UpdateValidatorKey(oldPubKey, newPubKey)
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 	return updateNetworkDefinition(values, signers)
 }
@@ -128,7 +128,7 @@ func updateNetworkDefinition(values *core.GlobalValues, signers []*signing.Build
 	writeData.Entry = values.FormatNetwork()
 	env, err := initiateTransaction(signers, protocol.DnUrl().JoinPath(protocol.Network), writeData)
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	return env, nil
@@ -150,7 +150,7 @@ func initiateTransaction(signers []*signing.Builder, principal *url.URL, body pr
 			sig, err = signer.Sign(txn.GetHash())
 		}
 		if err != nil {
-			return nil, errors.Format(errors.StatusUnknownError, "sign: %w", err)
+			return nil, errors.UnknownError.WithFormat("sign: %w", err)
 		}
 		env.Signatures = append(env.Signatures, sig)
 	}
