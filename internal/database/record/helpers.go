@@ -11,13 +11,13 @@ import (
 	"crypto/sha256"
 	"fmt"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
-var ErrNotEnoughData = errors.New(errors.StatusBadRequest, "not enough data")
-var ErrOverflow = errors.New(errors.StatusBadRequest, "overflow")
+var ErrNotEnoughData = errors.BadRequest.With("not enough data")
+var ErrOverflow = errors.BadRequest.With("overflow")
 
 // var ErrMalformedBigInt = errors.New("invalid big integer string")
 
@@ -114,11 +114,11 @@ func unmarshalFromString[T any](fn func(string) (T, error)) ValueUnmarshaller[T]
 	return func(data []byte) (T, error) {
 		s, err := encoding.UnmarshalString(data)
 		if err != nil {
-			return zero[T](), errors.Wrap(errors.StatusUnknownError, err)
+			return zero[T](), errors.UnknownError.Wrap(err)
 		}
 		v, err := fn(s)
 		if err != nil {
-			return zero[T](), errors.Wrap(errors.StatusUnknownError, err)
+			return zero[T](), errors.UnknownError.Wrap(err)
 		}
 		return v, nil
 	}

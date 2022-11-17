@@ -10,7 +10,7 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -55,7 +55,7 @@ func (SyntheticDepositTokens) Validate(st *StateManager, tx *Delivery) (protocol
 	} else if keyHash, tok, err := protocol.ParseLiteTokenAddress(tx.Transaction.Header.Principal); err != nil {
 		return nil, fmt.Errorf("invalid lite token account URL: %v", err)
 	} else if keyHash == nil {
-		return nil, errors.NotFound("could not find token account")
+		return nil, errors.NotFound.WithFormat("could not find token account")
 	} else if !body.Token.Equal(tok) {
 		return nil, fmt.Errorf("token URL does not match lite token account URL")
 	} else {
@@ -63,11 +63,11 @@ func (SyntheticDepositTokens) Validate(st *StateManager, tx *Delivery) (protocol
 		liteIdUrl := tx.Transaction.Header.Principal.RootIdentity()
 		dir, err := st.batch.Account(liteIdUrl).Directory().Get()
 		if err != nil {
-			return nil, errors.Format(errors.StatusUnknownError, "load directory index: %w", err)
+			return nil, errors.UnknownError.WithFormat("load directory index: %w", err)
 		}
 
 		if len(dir)+1 > int(st.Globals.Globals.Limits.IdentityAccounts) {
-			return nil, errors.Format(errors.StatusBadRequest, "identity would have too many accounts")
+			return nil, errors.BadRequest.WithFormat("identity would have too many accounts")
 		}
 
 		// Address is lite and the account doesn't exist, so create one

@@ -12,7 +12,7 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/managed"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -122,12 +122,12 @@ func (c *Chain2) Get() (*Chain, error) {
 	switch {
 	case err == nil:
 		// Ok
-	case !errors.Is(err, errors.StatusNotFound):
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+	case !errors.Is(err, errors.NotFound):
+		return nil, errors.UnknownError.Wrap(err)
 	default:
 		err = c.account.Chains().Add(&protocol.ChainMetadata{Name: c.Name(), Type: c.Type()})
 		if err != nil {
-			return nil, errors.Wrap(errors.StatusUnknownError, err)
+			return nil, errors.UnknownError.Wrap(err)
 		}
 	}
 	return wrapChain(c.inner)
@@ -159,7 +159,7 @@ func (a *Account) ChainByName(name string) (*Chain2, error) {
 
 	c := a.chainByName(name)
 	if c == nil {
-		return nil, errors.NotFound("account %v chain %s not found", a.Url(), name)
+		return nil, errors.NotFound.WithFormat("account %v chain %s not found", a.Url(), name)
 	}
 
 	if index {

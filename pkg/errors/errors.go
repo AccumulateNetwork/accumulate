@@ -144,8 +144,8 @@ caller:
 		return
 	}
 
-	// HACK: to get around call depth issues with internal/errors/compat.go
-	if strings.HasSuffix(file, "internal/errors/compat.go") {
+	// HACK: to get around call depth issues with pkg/errors/compat.go
+	if strings.HasSuffix(file, "pkg/errors/compat.go") {
 		depth++
 		goto caller
 	}

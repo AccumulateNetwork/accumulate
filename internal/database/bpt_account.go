@@ -13,17 +13,17 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/hash"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/pmt"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
 
 func (a *Account) VerifyHash(hash []byte) error {
 	hasher, err := a.hashState()
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.UnknownError.Wrap(err)
 	}
 	if !bytes.Equal(hash[:], hasher.MerkleHash()) {
-		return errors.Format(errors.StatusConflict, "hash does not match")
+		return errors.Conflict.WithFormat("hash does not match")
 	}
 	return nil
 }
@@ -35,13 +35,13 @@ func (a *Account) putBpt() error {
 	switch {
 	case err == nil:
 		// Ok
-	case errors.Is(err, errors.StatusNotFound):
+	case errors.Is(err, errors.NotFound):
 		err = a.getUrl().Put(a.Url())
 		if err != nil {
-			return errors.Wrap(errors.StatusUnknownError, err)
+			return errors.UnknownError.Wrap(err)
 		}
 	default:
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.UnknownError.Wrap(err)
 	}
 
 	hasher, err := a.hashState()
@@ -57,13 +57,13 @@ func (a *Account) putBpt() error {
 // BptReceipt builds a BPT receipt for the account.
 func (a *Account) BptReceipt() (*managed.Receipt, error) {
 	if a.IsDirty() {
-		return nil, errors.New(errors.StatusInternalError, "cannot generate a BPT receipt when there are uncommitted changes")
+		return nil, errors.InternalError.With("cannot generate a BPT receipt when there are uncommitted changes")
 	}
 
 	bpt := pmt.NewBPTManager(a.parent.kvstore)
 	receipt := bpt.Bpt.GetReceipt(a.key.Hash())
 	if receipt == nil {
-		return nil, errors.NotFound("BPT key %v not found", a.key.Hash())
+		return nil, errors.NotFound.WithFormat("BPT key %v not found", a.key.Hash())
 	}
 
 	return receipt, nil
@@ -83,7 +83,7 @@ func (a *Account) StateReceipt() (*managed.Receipt, error) {
 
 	rState := hasher.Receipt(0, len(hasher)-1)
 	if !bytes.Equal(rState.Anchor, rBPT.Start) {
-		return nil, errors.New(errors.StatusInternalError, "bpt entry does not match account state")
+		return nil, errors.InternalError.With("bpt entry does not match account state")
 	}
 
 	receipt, err := rState.Combine(rBPT)
@@ -162,7 +162,7 @@ func hashState[T any](lastErr *error, hasher *hash.Hasher, allowMissing bool, ge
 	switch {
 	case err == nil:
 		// Ok
-	case allowMissing && errors.Is(err, errors.StatusNotFound):
+	case allowMissing && errors.Is(err, errors.NotFound):
 		hasher.AddHash(new([32]byte))
 		return
 	default:
@@ -193,7 +193,7 @@ func loadState[T any](lastErr *error, allowMissing bool, get func() (T, error)) 
 	}
 
 	v, err := get()
-	if allowMissing && errors.Is(err, errors.StatusNotFound) {
+	if allowMissing && errors.Is(err, errors.NotFound) {
 		return zero[T]()
 	}
 	if err != nil {
@@ -210,7 +210,7 @@ func loadState1[T, A1 any](lastErr *error, allowMissing bool, get func(A1) (T, e
 	}
 
 	v, err := get(a1)
-	if allowMissing && errors.Is(err, errors.StatusNotFound) {
+	if allowMissing && errors.Is(err, errors.NotFound) {
 		return zero[T]()
 	}
 	if err != nil {
