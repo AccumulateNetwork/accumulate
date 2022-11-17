@@ -12,7 +12,7 @@ import (
 	"github.com/robfig/cron/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 type majorBlockScheduler struct {
@@ -45,7 +45,7 @@ func Init(eventBus *events.Bus) *majorBlockScheduler {
 func (s *majorBlockScheduler) onWillChangeGlobals(event events.WillChangeGlobals) (err error) {
 	s.majorBlockSchedule, err = core.Cron.Parse(event.New.Globals.MajorBlockSchedule)
 	s.nextMajorBlockTime = time.Time{}
-	return errors.Wrap(errors.StatusUnknownError, err)
+	return errors.UnknownError.Wrap(err)
 }
 
 func (s *majorBlockScheduler) IsInitialized() bool {

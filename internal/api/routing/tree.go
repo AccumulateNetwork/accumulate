@@ -9,7 +9,7 @@ package routing
 import (
 	"sort"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -51,7 +51,7 @@ func NewRouteTree(table *protocol.RoutingTable) (*RouteTree, error) {
 	var err error
 	tree.root, err = buildPrefixTree(routes, 0)
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	return tree, nil
@@ -61,7 +61,7 @@ func buildPrefixTree(routes []protocol.Route, depth uint64) (prefixTreeNode, err
 	if len(routes) == 1 {
 		r := routes[0]
 		if r.Length != depth {
-			return nil, errors.Format(errors.StatusInternalError, "expected offset %d, got %d", depth, r.Length)
+			return nil, errors.InternalError.WithFormat("expected offset %d, got %d", depth, r.Length)
 		}
 		return prefixTreeLeaf(r.Partition), nil
 	}
@@ -86,11 +86,11 @@ func buildPrefixTree(routes []protocol.Route, depth uint64) (prefixTreeNode, err
 			return v&mask > uint64(i)
 		})
 		if n == 0 {
-			return nil, errors.Format(errors.StatusInternalError, "expected values with %b at %d:%d, found none", i, offset, depth)
+			return nil, errors.InternalError.WithFormat("expected values with %b at %d:%d, found none", i, offset, depth)
 		}
 		tree.children[i], err = buildPrefixTree(routes[:n], offset)
 		if err != nil {
-			return nil, errors.Wrap(errors.StatusUnknownError, err)
+			return nil, errors.UnknownError.Wrap(err)
 		}
 		routes = routes[n:]
 	}
@@ -114,7 +114,7 @@ func (b prefixTreeBranch) route(rn uint64, pos uint16) (string, error) {
 	npos := pos + b.bits
 	i := (rn >> uint64(64-npos)) & (1<<b.bits - 1)
 	if b.children[i] == nil {
-		return "", errors.Format(errors.StatusInternalError, "invalid routing table: no entry for %d at %d.%d", i, pos, b.bits)
+		return "", errors.InternalError.WithFormat("invalid routing table: no entry for %d at %d.%d", i, pos, b.bits)
 	}
 
 	return b.children[i].route(rn, npos)

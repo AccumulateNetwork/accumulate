@@ -20,9 +20,9 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -37,12 +37,12 @@ func (m *Executor) EndBlock(block *Block) error {
 	var synthLedger *protocol.SyntheticLedger
 	err := block.Batch.Account(m.Describe.Synthetic()).GetStateAs(&synthLedger)
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "load synthetic ledger: %w", err)
+		return errors.UnknownError.WithFormat("load synthetic ledger: %w", err)
 	}
 	var anchorLedger *protocol.AnchorLedger
 	err = block.Batch.Account(m.Describe.AnchorPool()).GetStateAs(&anchorLedger)
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "load synthetic ledger: %w", err)
+		return errors.UnknownError.WithFormat("load synthetic ledger: %w", err)
 	}
 	m.Background(func() { m.requestMissingSyntheticTransactions(block.Index, synthLedger, anchorLedger) })
 
@@ -53,7 +53,7 @@ func (m *Executor) EndBlock(block *Block) error {
 			Old: &m.globals.Active,
 		})
 		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "publish globals update: %w", err)
+			return errors.UnknownError.WithFormat("publish globals update: %w", err)
 		}
 		m.globals.Active = *m.globals.Pending.Copy()
 	}
@@ -72,7 +72,7 @@ func (m *Executor) EndBlock(block *Block) error {
 	var ledgerState *protocol.SystemLedger
 	err = ledger.GetStateAs(&ledgerState)
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "load system ledger: %w", err)
+		return errors.UnknownError.WithFormat("load system ledger: %w", err)
 	}
 
 	m.logger.Debug("Committing",
@@ -87,7 +87,7 @@ func (m *Executor) EndBlock(block *Block) error {
 	// Load the main chain of the minor root
 	rootChain, err := ledger.RootChain().Get()
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "load root chain: %w", err)
+		return errors.UnknownError.WithFormat("load root chain: %w", err)
 	}
 
 	// Process chain updates
@@ -115,15 +115,15 @@ func (m *Executor) EndBlock(block *Block) error {
 		account := block.Batch.Account(entry.Account)
 		chain, err := account.ChainByName(entry.Chain)
 		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "resolve chain %v of %v: %w", entry.Chain, entry.Account, err)
+			return errors.UnknownError.WithFormat("resolve chain %v of %v: %w", entry.Chain, entry.Account, err)
 		}
 		chain2, err := chain.Get()
 		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "load chain %v of %v: %w", entry.Chain, entry.Account, err)
+			return errors.UnknownError.WithFormat("load chain %v of %v: %w", entry.Chain, entry.Account, err)
 		}
 		hash, err := chain2.Entry(int64(entry.Index))
 		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "load entry %d of chain %v of %v: %w", entry.Index, entry.Chain, entry.Account, err)
+			return errors.UnknownError.WithFormat("load entry %d of chain %v of %v: %w", entry.Index, entry.Chain, entry.Account, err)
 		}
 		u.Txns = append(u.Txns, hash)
 
@@ -135,7 +135,7 @@ func (m *Executor) EndBlock(block *Block) error {
 		// Anchor and index the chain
 		u.IndexIndex, u.DidIndex, err = addChainAnchor(rootChain, chain, block.Index)
 		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "add anchor to root chain: %w", err)
+			return errors.UnknownError.WithFormat("add anchor to root chain: %w", err)
 		}
 	}
 
@@ -147,7 +147,7 @@ func (m *Executor) EndBlock(block *Block) error {
 	bl.Entries = block.State.ChainUpdates.Entries
 	err = block.Batch.Account(bl.Url).Main().Put(bl)
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "store block ledger: %w", err)
+		return errors.UnknownError.WithFormat("store block ledger: %w", err)
 	}
 
 	// Add the synthetic transaction chain to the root chain
@@ -157,14 +157,14 @@ func (m *Executor) EndBlock(block *Block) error {
 		synthAnchorIndex = uint64(rootChain.Height())
 		synthIndexIndex, err = m.anchorSynthChain(block, rootChain)
 		if err != nil {
-			return errors.Wrap(errors.StatusUnknownError, err)
+			return errors.UnknownError.Wrap(err)
 		}
 	}
 
 	// Write the updated ledger
 	err = ledger.PutState(ledgerState)
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "store system ledger: %w", err)
+		return errors.UnknownError.WithFormat("store system ledger: %w", err)
 	}
 
 	// Index the root chain
@@ -174,7 +174,7 @@ func (m *Executor) EndBlock(block *Block) error {
 		BlockTime:  &block.Time,
 	})
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "add root index chain entry: %w", err)
+		return errors.UnknownError.WithFormat("add root index chain entry: %w", err)
 	}
 
 	// Update the transaction-chain index
@@ -190,7 +190,7 @@ func (m *Executor) EndBlock(block *Block) error {
 			e.AnchorIndex = rootIndexIndex
 			err = indexing.TransactionChain(block.Batch, hash).Add(e)
 			if err != nil {
-				return errors.Format(errors.StatusUnknownError, "store transaction chain index: %w", err)
+				return errors.UnknownError.WithFormat("store transaction chain index: %w", err)
 			}
 		}
 	}
@@ -204,7 +204,7 @@ func (m *Executor) EndBlock(block *Block) error {
 			AnchorIndex: rootIndexIndex,
 		})
 		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "store transaction chain index: %w", err)
+			return errors.UnknownError.WithFormat("store transaction chain index: %w", err)
 		}
 	}
 
@@ -213,27 +213,27 @@ func (m *Executor) EndBlock(block *Block) error {
 		if m.Describe.NetworkType == config.Directory {
 			err = m.createLocalDNReceipt(block, rootChain, synthAnchorIndex)
 			if err != nil {
-				return errors.Wrap(errors.StatusUnknownError, err)
+				return errors.UnknownError.Wrap(err)
 			}
 		}
 
 		// Build synthetic receipts
 		err = m.buildSynthReceipt(block.Batch, block.State.ProducedTxns, rootChain.Height()-1, int64(synthAnchorIndex))
 		if err != nil {
-			return errors.Wrap(errors.StatusUnknownError, err)
+			return errors.UnknownError.Wrap(err)
 		}
 	}
 
 	// Update major index chains if it's a major block
 	err = m.updateMajorIndexChains(block, rootIndexIndex)
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.UnknownError.Wrap(err)
 	}
 
 	// Check if an anchor needs to be sent
 	err = m.prepareAnchor(block)
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.UnknownError.Wrap(err)
 	}
 
 	m.logger.Debug("Committed", "module", "block", "height", block.Index, "duration", time.Since(t))
@@ -243,7 +243,7 @@ func (m *Executor) EndBlock(block *Block) error {
 func (m *Executor) createLocalDNReceipt(block *Block, rootChain *database.Chain, synthAnchorIndex uint64) error {
 	rootReceipt, err := rootChain.Receipt(int64(synthAnchorIndex), rootChain.Height()-1)
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "build root chain receipt: %w", err)
+		return errors.UnknownError.WithFormat("build root chain receipt: %w", err)
 	}
 
 	synthChain, err := block.Batch.Account(m.Describe.Synthetic()).MainChain().Get()
@@ -261,12 +261,12 @@ func (m *Executor) createLocalDNReceipt(block *Block, rootChain *database.Chain,
 
 		synthReceipt, err := synthChain.Receipt(offset+int64(i), height-1)
 		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "build synth chain receipt: %w", err)
+			return errors.UnknownError.WithFormat("build synth chain receipt: %w", err)
 		}
 
 		receipt, err := synthReceipt.Combine(rootReceipt)
 		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "combine receipts: %w", err)
+			return errors.UnknownError.WithFormat("combine receipts: %w", err)
 		}
 
 		// This should be the second signature (SyntheticSignature should be first)
@@ -276,7 +276,7 @@ func (m *Executor) createLocalDNReceipt(block *Block, rootChain *database.Chain,
 		sig.Proof = *receipt
 		_, err = block.Batch.Transaction(txn.GetHash()).AddSystemSignature(&m.Describe, sig)
 		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "store signature: %w", err)
+			return errors.UnknownError.WithFormat("store signature: %w", err)
 		}
 	}
 	return nil
@@ -287,12 +287,12 @@ func (m *Executor) anchorSynthChain(block *Block, rootChain *database.Chain) (in
 	url := m.Describe.Synthetic()
 	indexIndex, _, err = addChainAnchor(rootChain, block.Batch.Account(url).MainChain(), block.Index)
 	if err != nil {
-		return 0, errors.Wrap(errors.StatusUnknownError, err)
+		return 0, errors.UnknownError.Wrap(err)
 	}
 
 	err = block.Batch.SystemData(m.Describe.PartitionId).SyntheticIndexIndex(block.Index).Put(indexIndex)
 	if err != nil {
-		return 0, errors.Format(errors.StatusUnknownError, "store synthetic transaction index index for block: %w", err)
+		return 0, errors.UnknownError.WithFormat("store synthetic transaction index index for block: %w", err)
 	}
 
 	block.State.ChainUpdates.DidUpdateChain(&protocol.BlockEntry{
@@ -344,7 +344,7 @@ func (x *Executor) requestMissingTransactionsFromPartition(ctx context.Context, 
 	id, ok := protocol.ParsePartitionUrl(partition.Url)
 	if !ok {
 		// If this happens we're kind of screwed
-		panic(errors.Format(errors.StatusInternalError, "synthetic ledger has an invalid partition URL: %v", partition.Url))
+		panic(errors.InternalError.WithFormat("synthetic ledger has an invalid partition URL: %v", partition.Url))
 	}
 
 	// For each pending synthetic transaction
@@ -556,7 +556,7 @@ func (x *Executor) updateMajorIndexChains(block *Block, rootIndexIndex uint64) e
 	account := block.Batch.Account(x.Describe.AnchorPool())
 	mainChain, err := account.MainChain().Get()
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "load anchor ledger main chain: %w", err)
+		return errors.UnknownError.WithFormat("load anchor ledger main chain: %w", err)
 	}
 
 	_, err = addIndexChainEntry(account.MajorBlockChain(), &protocol.IndexEntry{
@@ -566,7 +566,7 @@ func (x *Executor) updateMajorIndexChains(block *Block, rootIndexIndex uint64) e
 		BlockTime:      &block.State.MakeMajorBlockTime,
 	})
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "add anchor ledger index chain entry: %w", err)
+		return errors.UnknownError.WithFormat("add anchor ledger index chain entry: %w", err)
 	}
 
 	return nil
@@ -680,7 +680,7 @@ func (x *Executor) prepareAnchor(block *Block) error {
 		return nil
 	})
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.UnknownError.Wrap(err)
 	}
 
 	// Update the system ledger
@@ -690,13 +690,13 @@ func (x *Executor) prepareAnchor(block *Block) error {
 		} else {
 			ledger.Anchor, err = x.buildPartitionAnchor(block, ledger)
 		}
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.UnknownError.Wrap(err)
 	})
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.UnknownError.Wrap(err)
 	}
 
-	return errors.Wrap(errors.StatusUnknownError, err)
+	return errors.UnknownError.Wrap(err)
 }
 
 func (x *Executor) buildDirectoryAnchor(block *Block, systemLedger *protocol.SystemLedger, anchorLedger *protocol.AnchorLedger) (*protocol.DirectoryAnchor, error) {
@@ -716,7 +716,7 @@ func (x *Executor) buildDirectoryAnchor(block *Block, systemLedger *protocol.Sys
 	// Load the root chain
 	rootChain, err := block.Batch.Account(x.Describe.Ledger()).RootChain().Get()
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "load root chain: %w", err)
+		return nil, errors.UnknownError.WithFormat("load root chain: %w", err)
 	}
 
 	// TODO This is pretty inefficient; we're constructing a receipt for every
@@ -730,29 +730,29 @@ func (x *Executor) buildDirectoryAnchor(block *Block, systemLedger *protocol.Sys
 	for _, received := range block.State.ReceivedAnchors {
 		entry, err := indexing.LoadIndexEntryFromEnd(record.AnchorChain(received.Partition).Root().Index(), 1)
 		if err != nil {
-			return nil, errors.Format(errors.StatusUnknownError, "load last entry of %s intermediate anchor index chain: %w", received.Partition, err)
+			return nil, errors.UnknownError.WithFormat("load last entry of %s intermediate anchor index chain: %w", received.Partition, err)
 		}
 
 		anchorChain, err := record.AnchorChain(received.Partition).Root().Get()
 		if err != nil {
-			return nil, errors.Format(errors.StatusUnknownError, "load %s intermediate anchor chain: %w", received.Partition, err)
+			return nil, errors.UnknownError.WithFormat("load %s intermediate anchor chain: %w", received.Partition, err)
 		}
 
 		rootReceipt, err := rootChain.Receipt(int64(entry.Anchor), rootChain.Height()-1)
 		if err != nil {
-			return nil, errors.Format(errors.StatusUnknownError, "build receipt for entry %d (to %d) of the root chain: %w", entry.Anchor, rootChain.Height()-1, err)
+			return nil, errors.UnknownError.WithFormat("build receipt for entry %d (to %d) of the root chain: %w", entry.Anchor, rootChain.Height()-1, err)
 		}
 
 		anchorReceipt, err := anchorChain.Receipt(received.Index, int64(entry.Source))
 		if err != nil {
-			return nil, errors.Format(errors.StatusUnknownError, "build receipt for entry %d (to %d) of %s intermediate anchor chain: %w", received.Index, entry.Source, received.Partition, err)
+			return nil, errors.UnknownError.WithFormat("build receipt for entry %d (to %d) of %s intermediate anchor chain: %w", received.Index, entry.Source, received.Partition, err)
 		}
 
 		receipt := new(protocol.PartitionAnchorReceipt)
 		receipt.Anchor = received.Body.GetPartitionAnchor()
 		receipt.RootChainReceipt, err = anchorReceipt.Combine(rootReceipt)
 		if err != nil {
-			return nil, errors.Format(errors.StatusUnknownError, "combine receipt for entry %d of %s intermediate anchor chain: %w", received.Index, received.Partition, err)
+			return nil, errors.UnknownError.WithFormat("combine receipt for entry %d of %s intermediate anchor chain: %w", received.Index, received.Partition, err)
 		}
 
 		anchor.Receipts = append(anchor.Receipts, receipt)
