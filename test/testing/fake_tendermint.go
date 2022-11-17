@@ -29,9 +29,9 @@ import (
 	"github.com/tendermint/tendermint/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -346,7 +346,7 @@ func (c *FakeTendermint) checkResultSet(data []byte) {
 	}
 
 	for _, r := range rs.Results {
-		if r.Error == nil || r.Code == errors.StatusDelivered {
+		if r.Error == nil || r.Code == errors.Delivered {
 			continue
 		}
 
@@ -383,7 +383,7 @@ func (c *FakeTendermint) Tx(ctx context.Context, hash []byte, prove bool) (*ctyp
 	c.txMu.RUnlock()
 
 	if st == nil || st.DeliverResult == nil {
-		return nil, errors.NotFound("not found")
+		return nil, errors.NotFound.WithFormat("not found")
 	}
 	return &ctypes.ResultTx{
 		Hash:     st.Hash[:],

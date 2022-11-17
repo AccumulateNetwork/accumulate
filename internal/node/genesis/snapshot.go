@@ -12,8 +12,8 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -48,7 +48,7 @@ func (v *snapshotVisitor) VisitSection(s *snapshot.ReaderSection) error {
 		return nil // Ignore extra headers
 
 	default:
-		return errors.Format(errors.StatusBadRequest, "unexpected %v section", s.Type())
+		return errors.BadRequest.WithFormat("unexpected %v section", s.Type())
 	}
 }
 
@@ -56,7 +56,7 @@ func (v *snapshotVisitor) VisitAccount(acct *snapshot.Account, _ int) error {
 	if acct == nil {
 		err := v.v.VisitAccount(nil, v.accounts)
 		v.accounts = 0
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.UnknownError.Wrap(err)
 	}
 
 	if acct, ok := acct.Main.(protocol.AccountWithTokens); ok && protocol.AcmeUrl().Equal(acct.GetTokenUrl()) {
@@ -65,7 +65,7 @@ func (v *snapshotVisitor) VisitAccount(acct *snapshot.Account, _ int) error {
 
 	partition, err := v.router.RouteAccount(acct.Url)
 	if err != nil {
-		return errors.Format(errors.StatusInternalError, "route %v: %w", acct.Url, err)
+		return errors.InternalError.WithFormat("route %v: %w", acct.Url, err)
 	}
 
 	if !strings.EqualFold(partition, v.partition) {
@@ -86,7 +86,7 @@ func (v *snapshotVisitor) VisitAccount(acct *snapshot.Account, _ int) error {
 	v.urls = append(v.urls, acct.Url)
 	err = v.v.VisitAccount(acct, v.accounts)
 	v.accounts++
-	return errors.Wrap(errors.StatusUnknownError, err)
+	return errors.UnknownError.Wrap(err)
 }
 
 func (v *snapshotVisitor) VisitTransaction(txn *snapshot.Transaction, _ int) error {
@@ -96,13 +96,13 @@ func (v *snapshotVisitor) VisitTransaction(txn *snapshot.Transaction, _ int) err
 	if txn == nil {
 		err := v.v.VisitTransaction(nil, v.transactions)
 		v.transactions = 0
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.UnknownError.Wrap(err)
 	}
 
 	u := txn.Transaction.Header.Principal
 	partition, err := v.router.RouteAccount(u)
 	if err != nil {
-		return errors.Format(errors.StatusInternalError, "route %v: %w", u, err)
+		return errors.InternalError.WithFormat("route %v: %w", u, err)
 	}
 
 	if !strings.EqualFold(partition, v.partition) {
@@ -112,14 +112,14 @@ func (v *snapshotVisitor) VisitTransaction(txn *snapshot.Transaction, _ int) err
 	v.keepTxn[txn.Transaction.ID().Hash()] = true
 	err = v.v.VisitTransaction(txn, v.transactions)
 	v.transactions++
-	return errors.Wrap(errors.StatusUnknownError, err)
+	return errors.UnknownError.Wrap(err)
 }
 
 func (v *snapshotVisitor) VisitSignature(sig *snapshot.Signature, _ int) error {
 	if sig == nil {
 		err := v.v.VisitSignature(nil, v.signatures)
 		v.signatures = 0
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.UnknownError.Wrap(err)
 	}
 
 	if !v.keepTxn[sig.Txid.Hash()] {
@@ -128,5 +128,5 @@ func (v *snapshotVisitor) VisitSignature(sig *snapshot.Signature, _ int) error {
 
 	err := v.v.VisitSignature(sig, v.signatures)
 	v.signatures++
-	return errors.Wrap(errors.StatusUnknownError, err)
+	return errors.UnknownError.Wrap(err)
 }

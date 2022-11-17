@@ -15,8 +15,8 @@ import (
 	. "gitlab.com/accumulatenetwork/accumulate/internal/core/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -28,13 +28,13 @@ func executeTransactions(logger log.Logger, execute executeFunc, raw []byte) ([]
 	err := envelope.UnmarshalBinary(raw)
 	if err != nil {
 		logger.Info("Failed to unmarshal", "tx", logging.AsHex(hash), "error", err)
-		return nil, nil, nil, errors.Format(errors.StatusUnknownError, "decoding envelopes: %w", err)
+		return nil, nil, nil, errors.UnknownError.WithFormat("decoding envelopes: %w", err)
 	}
 
 	deliveries, err := chain.NormalizeEnvelope(envelope)
 	if err != nil {
 		logger.Info("Failed to normalize envelope", "tx", logging.AsHex(hash), "error", err)
-		return nil, nil, nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, nil, nil, errors.UnknownError.Wrap(err)
 	}
 
 	results := execute(deliveries)

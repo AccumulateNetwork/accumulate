@@ -11,7 +11,7 @@ import (
 	"math/big"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -61,7 +61,7 @@ func (SendTokens) Validate(st *StateManager, tx *Delivery) (protocol.Transaction
 	m := make(map[[32]byte]bool)
 	for i, to := range body.To {
 		if to.Url == nil {
-			return nil, errors.Format(errors.StatusBadRequest, "output %d is missing recipient URL", i)
+			return nil, errors.BadRequest.WithFormat("output %d is missing recipient URL", i)
 		}
 		id := to.Url.AccountID32()
 		_, ok := m[id]
@@ -84,17 +84,17 @@ func (SendTokens) Validate(st *StateManager, tx *Delivery) (protocol.Transaction
 
 	entry, err := indexing.LoadIndexEntryFromEnd(st.batch.Account(st.AnchorPool()).MajorBlockChain(), 1)
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "load major block index: %w", err)
+		return nil, errors.UnknownError.WithFormat("load major block index: %w", err)
 	}
 
 	// If there's no entry there's no major block so we cannot have reached the
 	// threshold
 	if entry == nil {
-		return nil, errors.Format(errors.StatusNotAllowed, "account is locked until major block %d (currently at 0)", lockable.GetLockHeight())
+		return nil, errors.NotAllowed.WithFormat("account is locked until major block %d (currently at 0)", lockable.GetLockHeight())
 	}
 
 	if entry.BlockIndex < lockable.GetLockHeight() {
-		return nil, errors.Format(errors.StatusNotAllowed, "account is locked until major block %d (currently at %d)", lockable.GetLockHeight(), entry.BlockIndex)
+		return nil, errors.NotAllowed.WithFormat("account is locked until major block %d (currently at %d)", lockable.GetLockHeight(), entry.BlockIndex)
 	}
 
 	return nil, nil

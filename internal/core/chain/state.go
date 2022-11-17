@@ -13,8 +13,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -109,7 +109,7 @@ func (m *StateManager) AddAuthority(account protocol.FullAccount, authority *url
 		var book *protocol.KeyBook
 		err := m.LoadUrlAs(authority, &book)
 		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "load %q: %w", authority, err)
+			return errors.UnknownError.WithFormat("load %q: %w", authority, err)
 		}
 	}
 
@@ -121,12 +121,12 @@ func (m *StateManager) AddAuthority(account protocol.FullAccount, authority *url
 
 func (m *StateManager) InheritAuth(account protocol.FullAccount) error {
 	if !account.GetUrl().RootIdentity().Equal(m.OriginUrl.RootIdentity()) {
-		return errors.New(errors.StatusBadRequest, "cannot inherit from principal: belongs to a different root identity")
+		return errors.BadRequest.With("cannot inherit from principal: belongs to a different root identity")
 	}
 
 	principal, ok := m.Origin.(protocol.FullAccount)
 	if !ok {
-		return errors.New(errors.StatusBadRequest, "cannot inherit from principal: not a full account")
+		return errors.BadRequest.With("cannot inherit from principal: not a full account")
 	}
 
 	// Inherit auth from the principal
@@ -148,17 +148,17 @@ func (m *StateManager) SetAuth(account protocol.FullAccount, authorities []*url.
 		// Otherwise, inherit
 		err := m.InheritAuth(account)
 		if err != nil {
-			return errors.Wrap(errors.StatusUnknownError, err)
+			return errors.UnknownError.Wrap(err)
 		}
 	}
 
 	for _, authority := range authorities {
 		if authority == nil {
-			return errors.Format(errors.StatusBadRequest, "authority URL is nil")
+			return errors.BadRequest.WithFormat("authority URL is nil")
 		}
 		err := m.AddAuthority(account, authority)
 		if err != nil {
-			return errors.Wrap(errors.StatusUnknownError, err)
+			return errors.UnknownError.Wrap(err)
 		}
 	}
 
