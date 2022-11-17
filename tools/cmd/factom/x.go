@@ -17,7 +17,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/memory"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -73,7 +73,7 @@ func X(_ *cobra.Command, args []string) {
 	check(bpt.Bpt.SaveSnapshot(sw, func(key storage.Key, _ [32]byte) ([]byte, error) {
 		b, err := lookup[key].MarshalBinary()
 		if err != nil {
-			return nil, errors.Format(errors.StatusEncodingError, "marshal account: %w", err)
+			return nil, errors.EncodingError.WithFormat("marshal account: %w", err)
 		}
 		return b, nil
 	}))

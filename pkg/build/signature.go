@@ -7,8 +7,8 @@
 package build
 
 import (
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -95,7 +95,7 @@ func (b SignatureBuilder) sign() SignatureBuilder {
 		signature, err = b.signer.Sign(b.transaction.GetHash())
 	}
 	if err != nil {
-		b.errorf(errors.StatusUnknownError, "sign: %w", err)
+		b.errorf(errors.UnknownError, "sign: %w", err)
 	} else {
 		b.signatures = append(b.signatures, signature)
 	}

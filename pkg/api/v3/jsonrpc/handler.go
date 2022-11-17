@@ -8,7 +8,7 @@ import (
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/tendermint/tendermint/libs/log"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 type Service interface {
@@ -20,7 +20,7 @@ func NewHandler(logger log.Logger, services ...Service) (http.Handler, error) {
 	for _, service := range services {
 		for name, method := range service.methods() {
 			if _, ok := methods[name]; ok {
-				return nil, errors.Format(errors.StatusConflict, "double registered method %q", name)
+				return nil, errors.Conflict.WithFormat("double registered method %q", name)
 			}
 			methods[name] = method
 		}

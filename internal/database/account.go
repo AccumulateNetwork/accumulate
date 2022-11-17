@@ -9,7 +9,7 @@ package database
 import (
 	"fmt"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -24,17 +24,17 @@ func UpdateAccount[T protocol.Account](batch *Batch, url *url.URL, fn func(T) er
 	var account T
 	err := record.GetAs(&account)
 	if err != nil {
-		return account, errors.Format(errors.StatusUnknownError, "load %v: %w", url, err)
+		return account, errors.UnknownError.WithFormat("load %v: %w", url, err)
 	}
 
 	err = fn(account)
 	if err != nil {
-		return account, errors.Wrap(errors.StatusUnknownError, err)
+		return account, errors.UnknownError.Wrap(err)
 	}
 
 	err = record.Put(account)
 	if err != nil {
-		return account, errors.Format(errors.StatusUnknownError, "store %v: %w", url, err)
+		return account, errors.UnknownError.WithFormat("store %v: %w", url, err)
 	}
 
 	return account, nil
@@ -61,23 +61,23 @@ func (a *Account) Commit() error {
 
 				err = a.Main().Put(acc)
 				if err != nil {
-					return errors.Format(errors.StatusBadRequest, "strip url: %w", err)
+					return errors.BadRequest.WithFormat("strip url: %w", err)
 				}
 			}
 
 			if len(u.String()) > protocol.AccountUrlMaxLength {
-				return errors.Wrap(errors.StatusBadUrlLength, fmt.Errorf("url specified exceeds maximum character length: %s", u.String()))
+				return errors.BadUrlLength.Wrap(fmt.Errorf("url specified exceeds maximum character length: %s", u.String()))
 			}
 
 			err = protocol.IsValidAccountPath(u.Path)
 			if err != nil {
-				return errors.Format(errors.StatusBadRequest, "invalid path: %w", err)
+				return errors.BadRequest.WithFormat("invalid path: %w", err)
 			}
 
-		case errors.Is(err, errors.StatusNotFound):
+		case errors.Is(err, errors.NotFound):
 			// The main state is unset so there's nothing to check
 		default:
-			return errors.Format(errors.StatusUnknownError, "load state: %w", err)
+			return errors.UnknownError.WithFormat("load state: %w", err)
 		}
 	}
 
@@ -89,19 +89,19 @@ func (a *Account) Commit() error {
 
 		err := a.SyntheticAnchors().Add(k.Anchor)
 		if err != nil {
-			return errors.Wrap(errors.StatusUnknownError, err)
+			return errors.UnknownError.Wrap(err)
 		}
 	}
 
 	// If anything has changed, update the BPT entry
 	err := a.putBpt()
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "update BPT entry for %v: %w", a.Url(), err)
+		return errors.UnknownError.WithFormat("update BPT entry for %v: %w", a.Url(), err)
 	}
 
 	// Do the normal commit stuff
 	err = a.baseCommit()
-	return errors.Wrap(errors.StatusUnknownError, err)
+	return errors.UnknownError.Wrap(err)
 }
 
 // GetState loads the record state.
@@ -119,7 +119,7 @@ func (r *Account) GetStateAs(state interface{}) error {
 func (r *Account) PutState(state protocol.Account) error {
 	// Does the record state have a URL?
 	if state.GetUrl() == nil {
-		return errors.New(errors.StatusInternalError, "invalid URL: empty")
+		return errors.InternalError.With("invalid URL: empty")
 	}
 
 	// Is this the right URL - does it match the record's key?
@@ -135,7 +135,7 @@ func (r *Account) PutState(state protocol.Account) error {
 
 	// Store the state
 	err := r.Main().Put(state)
-	return errors.Wrap(errors.StatusUnknownError, err)
+	return errors.UnknownError.Wrap(err)
 }
 
 func (r *Account) GetPending() (*protocol.TxIdSet, error) {

@@ -17,8 +17,8 @@ import (
 	jrpc "github.com/tendermint/tendermint/rpc/jsonrpc/types"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -122,7 +122,7 @@ func checkDispatchError(err error, errs chan<- error) {
 	var errorsErr *errors.Error
 	if errors.As(err, &errorsErr) {
 		// This probably should not be necessary
-		if errorsErr.Code == errors.StatusDelivered {
+		if errorsErr.Code == errors.Delivered {
 			return
 		}
 	}
@@ -189,7 +189,7 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 				// Parse the results
 				data, err := json.Marshal(resp.Result)
 				if err != nil {
-					errs <- errors.Format(errors.StatusUnknownError, "marshal result for %v: %w", resp.Txid, err)
+					errs <- errors.UnknownError.WithFormat("marshal result for %v: %w", resp.Txid, err)
 					return
 				}
 
@@ -197,13 +197,13 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 				if json.Unmarshal(data, &results) != nil {
 					results = []*protocol.TransactionStatus{new(protocol.TransactionStatus)}
 					if json.Unmarshal(data, results[0]) != nil {
-						errs <- errors.Format(errors.StatusUnknownError, "unmarshal result for %v: %w", resp.Txid, err)
+						errs <- errors.UnknownError.WithFormat("unmarshal result for %v: %w", resp.Txid, err)
 						return
 					}
 				}
 
 				for _, r := range results {
-					if r.Error != nil && r.Code != errors.StatusDelivered {
+					if r.Error != nil && r.Code != errors.Delivered {
 						errs <- &txnDispatchError{types[r.TxID.Hash()], r}
 					}
 				}

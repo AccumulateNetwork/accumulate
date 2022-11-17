@@ -49,7 +49,7 @@ generate types config $CFG/types.yml
 CORE=../../../internal/core
 generate types core $CORE/types.yml
 
-ERR=../../../internal/errors
+ERR=../../../pkg/errors
 generate enum errors $ERR/status.yml
 generate types errors $ERR/error.yml
 
