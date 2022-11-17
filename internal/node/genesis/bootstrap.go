@@ -26,9 +26,9 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/memory"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -86,7 +86,7 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) ([]byte, error) {
 	var err error
 	b.router, err = routing.NewStaticRouter(gg.Routing, nil, b.Logger)
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	exec, err := block.NewGenesisExecutor(b.db, opts.Logger, &config.Describe{
@@ -94,7 +94,7 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) ([]byte, error) {
 		PartitionId: opts.PartitionId,
 	}, gg, b.router)
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	// Capture background tasks
@@ -110,18 +110,18 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) ([]byte, error) {
 
 	err = exec.Genesis(b.block, b)
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	err = b.block.Batch.Commit()
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	// Wait for background tasks
 	err = errg.Wait()
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	// Preserve history in the Genesis snapshot
@@ -138,12 +138,12 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) ([]byte, error) {
 		},
 	})
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "collect snapshot: %w", err)
+		return nil, errors.UnknownError.WithFormat("collect snapshot: %w", err)
 	}
 
 	err = snapshot.CollectAnchors(w, batch, exec.Describe.PartitionUrl())
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	return batch.BptRoot(), nil
@@ -207,18 +207,18 @@ func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protoc
 		return nil
 	})
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	// Create accounts
 	err = b.importSnapshots(st)
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	err = b.maybeCreateFactomAccounts()
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	b.createIdentity()
@@ -232,19 +232,19 @@ func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protoc
 
 	err = b.createVoteScratchChain()
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	// Persist accounts
 	err = st.Create(b.records...)
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "store records: %w", err)
+		return nil, errors.UnknownError.WithFormat("store records: %w", err)
 	}
 
 	// Update the directory index
 	err = st.AddDirectoryEntry(b.partition.Identity(), b.urls...)
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	// Write data entries
@@ -303,7 +303,7 @@ func (b *bootstrap) createVoteScratchChain() error {
 	lci := types.CommitInfo{}
 	data, err := json.Marshal(&lci)
 	if err != nil {
-		return errors.Format(errors.StatusInternalError, "marshal last commit info: %w", err)
+		return errors.InternalError.WithFormat("marshal last commit info: %w", err)
 	}
 	wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
 	wd.Scratch = true
@@ -370,7 +370,7 @@ func (b *bootstrap) maybeCreateFactomAccounts() error {
 
 	rd, err := b.FactomAddresses()
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.UnknownError.Wrap(err)
 	}
 	if c, ok := rd.(io.Closer); ok {
 		defer c.Close()
@@ -378,7 +378,7 @@ func (b *bootstrap) maybeCreateFactomAccounts() error {
 
 	factomAddresses, err := LoadFactomAddressesAndBalances(rd)
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.UnknownError.Wrap(err)
 	}
 
 	for _, fa := range factomAddresses {
@@ -409,7 +409,7 @@ func (b *bootstrap) importSnapshots(st *chain.StateManager) error {
 	for _, open := range b.Snapshots {
 		file, err := open()
 		if err != nil {
-			return errors.Wrap(errors.StatusUnknownError, err)
+			return errors.UnknownError.Wrap(err)
 		}
 		if c, ok := file.(io.Closer); ok {
 			defer c.Close()
@@ -426,7 +426,7 @@ func (b *bootstrap) importSnapshots(st *chain.StateManager) error {
 		v.partition = b.PartitionId
 		err = snapshot.Visit(file, v)
 		if err != nil {
-			return errors.Wrap(errors.StatusUnknownError, err)
+			return errors.UnknownError.Wrap(err)
 		}
 		accounts = append(accounts, v.urls...)
 	}
@@ -439,7 +439,7 @@ func (b *bootstrap) importSnapshots(st *chain.StateManager) error {
 		chain := st.GetBatch().Account(account).MainChain()
 		err := st.State.ChainUpdates.AddChainEntry(st.GetBatch(), chain, st.GetHash(), 0, 0)
 		if err != nil {
-			return errors.Wrap(errors.StatusUnknownError, err)
+			return errors.UnknownError.Wrap(err)
 		}
 	}
 	return nil

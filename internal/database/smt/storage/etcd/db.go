@@ -12,7 +12,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/memory"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	etcd "go.etcd.io/etcd/client/v3"
 )
 
@@ -61,7 +61,7 @@ func (db *DB) get(key storage.Key) ([]byte, error) {
 	}
 
 	if resp.Count == 0 {
-		return nil, errors.NotFound("key %v not found", key)
+		return nil, errors.NotFound.WithFormat("key %v not found", key)
 	}
 
 	if resp.Count != 1 {
@@ -82,7 +82,7 @@ func (db *DB) commit(batch map[storage.Key][]byte) error {
 		return err
 	}
 	if !resp.Succeeded {
-		return errors.New(errors.StatusInternalError, "transaction failed")
+		return errors.InternalError.With("transaction failed")
 	}
 	return nil
 }

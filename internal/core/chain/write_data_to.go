@@ -7,7 +7,7 @@
 package chain
 
 import (
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -22,20 +22,20 @@ func (WriteDataTo) Execute(st *StateManager, tx *Delivery) (protocol.Transaction
 func (WriteDataTo) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.WriteDataTo)
 	if !ok {
-		return nil, errors.Format(errors.StatusInternalError, "invalid payload: want %T, got %T", new(protocol.WriteDataTo), tx.Transaction.Body)
+		return nil, errors.InternalError.WithFormat("invalid payload: want %T, got %T", new(protocol.WriteDataTo), tx.Transaction.Body)
 	}
 
 	if body.Recipient == nil {
-		return nil, errors.Format(errors.StatusBadRequest, "recipient is missing")
+		return nil, errors.BadRequest.WithFormat("recipient is missing")
 	}
 
 	err := validateDataEntry(st, body.Entry)
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	if _, err := protocol.ParseLiteDataAddress(body.Recipient); err != nil {
-		return nil, errors.Format(errors.StatusBadRequest, "only writes to lite data accounts supported: %s: %v", body.Recipient, err)
+		return nil, errors.BadRequest.WithFormat("only writes to lite data accounts supported: %s: %v", body.Recipient, err)
 	}
 
 	writeThis := new(protocol.SyntheticWriteData)

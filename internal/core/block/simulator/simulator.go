@@ -29,13 +29,13 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
@@ -474,7 +474,7 @@ func (s *Simulator) SubmitAndExecuteBlock(envelopes ...*protocol.Envelope) ([]*p
 
 	_, err := s.Submit(envelopes...)
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	ids := map[[32]byte]bool{}
@@ -666,7 +666,7 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 			switch {
 			case err == nil:
 				x.BlockIndex = ledger.Index + 1
-			case errors.Is(err, errors.StatusNotFound):
+			case errors.Is(err, errors.NotFound):
 				x.BlockIndex = protocol.GenesisBlock + 1
 			default:
 				require.NoError(tb{x.tb}, err)
@@ -696,8 +696,8 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 			if err == nil {
 				continue
 			}
-			if !errors.Is(err, errors.StatusDelivered) {
-				return errors.Wrap(errors.StatusUnknownError, err)
+			if !errors.Is(err, errors.Delivered) {
+				return errors.UnknownError.Wrap(err)
 			}
 			if statusChan != nil {
 				status.TxID = deliveries[i].Transaction.ID()
@@ -711,7 +711,7 @@ func (x *ExecEntry) executeBlock(errg *errgroup.Group, statusChan chan<- *protoc
 			err = e
 		})
 		if err != nil {
-			return errors.Wrap(errors.StatusUnknownError, err)
+			return errors.UnknownError.Wrap(err)
 		}
 		if statusChan != nil {
 			for _, result := range results {

@@ -9,7 +9,7 @@ package indexing
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -54,7 +54,7 @@ func (d *DataIndexer) GetLatest() (index uint64, entryHash, txnHash []byte, err 
 	}
 
 	if count == 0 {
-		return 0, nil, nil, errors.NotFound("empty")
+		return 0, nil, nil, errors.NotFound.WithFormat("empty")
 	}
 
 	entryHash, err = d.Entry(count - 1)
@@ -87,7 +87,7 @@ func GetDataEntry(batch *database.Batch, txnHash []byte) (protocol.DataEntry, *u
 	case *protocol.SystemWriteData:
 		return txn.Entry, tx.ID(), nil, nil
 	default:
-		return nil, nil, nil, errors.Format(errors.StatusInternalError, "invalid data transaction: expected %v or %v, got %v", protocol.TransactionTypeWriteData, protocol.TransactionTypeWriteDataTo, tx.Body.Type())
+		return nil, nil, nil, errors.InternalError.WithFormat("invalid data transaction: expected %v or %v, got %v", protocol.TransactionTypeWriteData, protocol.TransactionTypeWriteDataTo, tx.Body.Type())
 	}
 }
 
@@ -121,9 +121,9 @@ func (d *DataIndexer) Transaction(entryHash []byte) ([]byte, error) {
 func (d *DataIndexer) Put(entryHash, txnHash []byte) error {
 	err := d.AccountData.Entry().Put(*(*[32]byte)(entryHash))
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.UnknownError.Wrap(err)
 	}
 
 	err = d.AccountData.Transaction(*(*[32]byte)(entryHash)).Put(*(*[32]byte)(txnHash))
-	return errors.Wrap(errors.StatusUnknownError, err)
+	return errors.UnknownError.Wrap(err)
 }

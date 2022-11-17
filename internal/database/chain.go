@@ -11,7 +11,7 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/managed"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 // Chain manages a Merkle tree (chain).
@@ -27,7 +27,7 @@ func wrapChain(merkle *managed.Chain) (*Chain, error) {
 	var err error
 	m.head, err = m.merkle.Head().Get()
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	return m, nil
@@ -60,7 +60,7 @@ func (c *Chain) Entries(start int64, end int64) ([][]byte, error) {
 	}
 
 	if end < start {
-		return nil, errors.New(errors.StatusBadRequest, "invalid range: start is greater than end")
+		return nil, errors.BadRequest.With("invalid range: start is greater than end")
 	}
 
 	// GetRange will not cross mark point boundaries, so we may need to call it
@@ -134,7 +134,7 @@ func (c *Chain) AddEntry(entry []byte, unique bool) error {
 	}
 
 	err := c.merkle.AddHash(entry, unique)
-	return errors.Wrap(errors.StatusUnknownError, err)
+	return errors.UnknownError.Wrap(err)
 }
 
 // Receipt builds a receipt from one index to another

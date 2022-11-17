@@ -17,8 +17,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	_ "gitlab.com/accumulatenetwork/accumulate/internal/database/smt/pmt"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 // ListSnapshots queries the node for available snapshots.
@@ -26,7 +26,7 @@ func ListSnapshots(cfg *config.Config) ([]*snapshot.Header, error) {
 	snapDir := config.MakeAbsolute(cfg.RootDir, cfg.Accumulate.Snapshots.Directory)
 	entries, err := os.ReadDir(snapDir)
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "load snapshot: %w", err)
+		return nil, errors.UnknownError.WithFormat("load snapshot: %w", err)
 	}
 
 	snapshots := make([]*snapshot.Header, 0, len(entries))
@@ -41,13 +41,13 @@ func ListSnapshots(cfg *config.Config) ([]*snapshot.Header, error) {
 		filename := filepath.Join(snapDir, entry.Name())
 		f, err := os.Open(filename)
 		if err != nil {
-			return nil, errors.Format(errors.StatusUnknownError, "load snapshot %s: %w", entry.Name(), err)
+			return nil, errors.UnknownError.WithFormat("load snapshot %s: %w", entry.Name(), err)
 		}
 		defer f.Close()
 
 		header, _, err := snapshot.Open(f)
 		if err != nil {
-			return nil, errors.Format(errors.StatusUnknownError, "open snapshot %s: %w", entry.Name(), err)
+			return nil, errors.UnknownError.WithFormat("open snapshot %s: %w", entry.Name(), err)
 		}
 
 		snapshots = append(snapshots, header)

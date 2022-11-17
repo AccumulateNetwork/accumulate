@@ -24,8 +24,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/memory"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/tools/internal/factom"
@@ -214,7 +214,7 @@ func convertEntries(_ *cobra.Command, args []string) {
 					// Construct the transaction status
 					status := new(protocol.TransactionStatus)
 					status.TxID = txn.ID()
-					status.Code = errors.StatusDelivered
+					status.Code = errors.Delivered
 					status.Result = result
 
 					state := new(snapshot.Transaction)
@@ -316,7 +316,7 @@ func convertChains(_ *cobra.Command, args []string) {
 	check(v.bpt.Bpt.SaveSnapshot(sw, func(key storage.Key, _ [32]byte) ([]byte, error) {
 		b, err := v.lookup[key].MarshalBinary()
 		if err != nil {
-			return nil, errors.Format(errors.StatusEncodingError, "marshal account: %w", err)
+			return nil, errors.EncodingError.WithFormat("marshal account: %w", err)
 		}
 		return b, nil
 	}))
@@ -336,11 +336,11 @@ func (v *chainVisitor) VisitTransaction(txn *snapshot.Transaction, _ int) error 
 
 	body, ok := txn.Transaction.Body.(*protocol.WriteData)
 	if !ok {
-		return errors.Format(errors.StatusBadRequest, "expected %v, got %v", protocol.TransactionTypeWriteData, txn.Transaction.Body.Type())
+		return errors.BadRequest.WithFormat("expected %v, got %v", protocol.TransactionTypeWriteData, txn.Transaction.Body.Type())
 	}
 	entry, ok := body.Entry.(*protocol.FactomDataEntryWrapper)
 	if !ok {
-		return errors.Format(errors.StatusBadRequest, "expected %v, got %v", protocol.DataEntryTypeFactom, body.Entry.Type())
+		return errors.BadRequest.WithFormat("expected %v, got %v", protocol.DataEntryTypeFactom, body.Entry.Type())
 	}
 
 	if v.lookup == nil {
@@ -356,7 +356,7 @@ func (v *chainVisitor) VisitTransaction(txn *snapshot.Transaction, _ int) error 
 
 	address, err := protocol.LiteDataAddress(entry.AccountId[:])
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.UnknownError.Wrap(err)
 	}
 
 	lda := new(protocol.LiteDataAccount)
@@ -508,7 +508,7 @@ func convertBalances(_ *cobra.Command, args []string) {
 	check(bpt.Bpt.SaveSnapshot(sw, func(key storage.Key, _ [32]byte) ([]byte, error) {
 		b, err := lookup[key].MarshalBinary()
 		if err != nil {
-			return nil, errors.Format(errors.StatusEncodingError, "marshal account: %w", err)
+			return nil, errors.EncodingError.WithFormat("marshal account: %w", err)
 		}
 		return b, nil
 	}))

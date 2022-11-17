@@ -11,7 +11,7 @@ import (
 	"math/big"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -31,7 +31,7 @@ func (AcmeFaucet) Validate(st *StateManager, tx *Delivery) (protocol.Transaction
 	}
 
 	if body.Url == nil {
-		return nil, errors.Format(errors.StatusBadRequest, "recipient URL is missing")
+		return nil, errors.BadRequest.WithFormat("recipient URL is missing")
 	}
 
 	// Check the recipient
@@ -70,7 +70,7 @@ func (AcmeFaucet) Validate(st *StateManager, tx *Delivery) (protocol.Transaction
 
 	amount := new(big.Int).SetUint64(protocol.AcmeFaucetAmount * protocol.AcmePrecision)
 	if !faucet.DebitTokens(amount) {
-		return nil, errors.Format(errors.StatusInsufficientBalance, "the faucet is dry")
+		return nil, errors.InsufficientBalance.WithFormat("the faucet is dry")
 	}
 
 	err = st.Update(faucet)

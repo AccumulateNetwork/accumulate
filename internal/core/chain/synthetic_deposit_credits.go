@@ -9,7 +9,7 @@ package chain
 import (
 	"fmt"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -48,7 +48,7 @@ func (SyntheticDepositCredits) Validate(st *StateManager, tx *Delivery) (protoco
 		create = true
 		key, _ := protocol.ParseLiteIdentity(tx.Transaction.Header.Principal)
 		if key == nil {
-			return nil, errors.NotFound("%v not found", tx.Transaction.Header.Principal)
+			return nil, errors.NotFound.WithFormat("%v not found", tx.Transaction.Header.Principal)
 		}
 		account = &protocol.LiteIdentity{Url: tx.Transaction.Header.Principal}
 

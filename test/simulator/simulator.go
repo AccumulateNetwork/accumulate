@@ -24,13 +24,13 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/test/testing"
@@ -83,13 +83,13 @@ func New(logger log.Logger, database OpenDatabaseFunc, network *accumulated.Netw
 	var err error
 	s.partitions[protocol.Directory], err = newDn(s, network)
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	for _, bvn := range network.Bvns {
 		s.partitions[bvn.Id], err = newBvn(s, bvn)
 		if err != nil {
-			return nil, errors.Wrap(errors.StatusUnknownError, err)
+			return nil, errors.UnknownError.Wrap(err)
 		}
 	}
 
@@ -98,11 +98,11 @@ func New(logger log.Logger, database OpenDatabaseFunc, network *accumulated.Netw
 	for _, p := range s.partitions {
 		snapshot, err := snapshot(p.ID, s.init, s.logger)
 		if err != nil {
-			return nil, errors.Format(errors.StatusUnknownError, "open snapshot: %w", err)
+			return nil, errors.UnknownError.WithFormat("open snapshot: %w", err)
 		}
 		err = p.initChain(snapshot)
 		if err != nil {
-			return nil, errors.Format(errors.StatusUnknownError, "init %s: %w", p.ID, err)
+			return nil, errors.UnknownError.WithFormat("init %s: %w", p.ID, err)
 		}
 	}
 	return s, nil
@@ -180,14 +180,14 @@ func GenesisWith(time time.Time, values *core.GlobalValues) SnapshotFunc {
 		if genDocs == nil {
 			genDocs, err = accumulated.BuildGenesisDocs(network, values, time, logger, nil, nil)
 			if err != nil {
-				return nil, errors.Format(errors.StatusUnknownError, "build genesis docs: %w", err)
+				return nil, errors.UnknownError.WithFormat("build genesis docs: %w", err)
 			}
 		}
 
 		var snapshot []byte
 		err = json.Unmarshal(genDocs[partition].AppState, &snapshot)
 		if err != nil {
-			return nil, errors.Wrap(errors.StatusUnknownError, err)
+			return nil, errors.UnknownError.Wrap(err)
 		}
 
 		return ioutil2.NewBuffer(snapshot), nil
@@ -216,12 +216,12 @@ func (s *Simulator) Submit(delivery *chain.Delivery) (*protocol.TransactionStatu
 		Signatures:  delivery.Signatures,
 	})
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	p, ok := s.partitions[partition]
 	if !ok {
-		return nil, errors.Format(errors.StatusBadRequest, "%s is not a partition", partition)
+		return nil, errors.BadRequest.WithFormat("%s is not a partition", partition)
 	}
 
 	return p.Submit(delivery, false)
@@ -243,7 +243,7 @@ func (e errDb) Update(func(*database.Batch) error) error { return e.err }
 func (s *Simulator) Database(partition string) database.Updater {
 	p, ok := s.partitions[partition]
 	if !ok {
-		return errDb{errors.Format(errors.StatusBadRequest, "%s is not a partition", partition)}
+		return errDb{errors.BadRequest.WithFormat("%s is not a partition", partition)}
 	}
 	return p
 }
@@ -251,7 +251,7 @@ func (s *Simulator) Database(partition string) database.Updater {
 func (s *Simulator) DatabaseFor(account *url.URL) database.Updater {
 	partition, err := s.router.RouteAccount(account)
 	if err != nil {
-		return errDb{errors.Wrap(errors.StatusUnknownError, err)}
+		return errDb{errors.UnknownError.Wrap(err)}
 	}
 	return s.Database(partition)
 }

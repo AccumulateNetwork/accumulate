@@ -18,7 +18,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -83,7 +83,7 @@ func TestSendTokensToBadRecipient(t *testing.T) {
 	h := synth.Entries[0].Hash()
 	status, err := batch.Transaction(h[:]).GetStatus()
 	require.NoError(t, err)
-	assert.Equal(t, errors.StatusNotFound, status.Code)
+	assert.Equal(t, errors.NotFound, status.Code)
 }
 
 func TestDoesChargeFee(t *testing.T) {
@@ -341,7 +341,7 @@ func TestCreateSubIdentityWithLite(t *testing.T) {
 	var err2 *errors.Error
 	require.Error(t, err)
 	require.ErrorAs(t, err, &err2)
-	require.Equal(t, errors.StatusBadRequest, err2.Code)
+	require.Equal(t, errors.BadRequest, err2.Code)
 }
 
 func TestCreateIdentityWithRemoteLite(t *testing.T) {

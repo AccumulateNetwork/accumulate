@@ -14,7 +14,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/pmt"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 func (b *Batch) VisitAccounts(visit func(*Account) error) error {
@@ -33,11 +33,11 @@ func (b *Batch) VisitAccounts(visit func(*Account) error) error {
 		for _, v := range bptVals { //                           For all the key values we got (as many as 1000)
 			u, err := b.getAccountUrl(record.Key{storage.Key(v.Key)}) //      Load the Account
 			if err != nil {
-				return errors.Wrap(errors.StatusUnknownError, err)
+				return errors.UnknownError.Wrap(err)
 			}
 			err = visit(b.Account(u))
 			if err != nil {
-				return errors.Wrap(errors.StatusUnknownError, err)
+				return errors.UnknownError.Wrap(err)
 			}
 		}
 	}
@@ -50,27 +50,27 @@ func (b *Batch) SaveAccounts(file io.WriteSeeker, collect func(*Account) ([]byte
 		// Create an Account object
 		u, err := b.getAccountUrl(record.Key{key})
 		if err != nil {
-			return nil, errors.Wrap(errors.StatusUnknownError, err)
+			return nil, errors.UnknownError.Wrap(err)
 		}
 		account := b.Account(u)
 
 		// Check the hash
 		hasher, err := account.hashState()
 		if err != nil {
-			return nil, errors.Format(errors.StatusUnknownError, "hash %v: %w", u, err)
+			return nil, errors.UnknownError.WithFormat("hash %v: %w", u, err)
 		}
 
 		if !bytes.Equal(hash[:], hasher.MerkleHash()) {
-			return nil, errors.Format(errors.StatusConflict, "hash does not match for %v", u)
+			return nil, errors.Conflict.WithFormat("hash does not match for %v", u)
 		}
 
 		state, err := collect(account)
 		if err != nil {
-			return nil, errors.Format(errors.StatusUnknownError, "collect %v: %w", u, err)
+			return nil, errors.UnknownError.WithFormat("collect %v: %w", u, err)
 		}
 		return state, nil
 	})
-	return errors.Wrap(errors.StatusUnknownError, err)
+	return errors.UnknownError.Wrap(err)
 }
 
 // putBpt adds an entry to the list of pending BPT updates.
@@ -119,13 +119,13 @@ func (b *Batch) BptRoot() []byte {
 // BptReceipt builds a BPT receipt for the given key.
 func (b *Batch) BptReceipt(key storage.Key, value [32]byte) (*managed.Receipt, error) {
 	if len(b.bptEntries) > 0 {
-		return nil, errors.New(errors.StatusInternalError, "cannot generate a BPT receipt when there are uncommitted BPT entries")
+		return nil, errors.InternalError.With("cannot generate a BPT receipt when there are uncommitted BPT entries")
 	}
 
 	bpt := pmt.NewBPTManager(b.kvstore)
 	receipt := bpt.Bpt.GetReceipt(key)
 	if receipt == nil {
-		return nil, errors.NotFound("BPT key %v not found", key)
+		return nil, errors.NotFound.WithFormat("BPT key %v not found", key)
 	}
 
 	return receipt, nil
