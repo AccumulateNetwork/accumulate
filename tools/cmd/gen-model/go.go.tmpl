@@ -15,7 +15,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -160,7 +160,7 @@ func (c *{{$c.FullName}}) {{template "accessor" .}}({{range .GetParameters}}{{lo
 
 func (c *{{.FullName}}) {{if .CustomResolve}}base{{end}}Resolve(key record.Key) (record.Record, record.Key, error) {
 	if len(key) == 0 {
-		return nil, nil, errors.New(errors.StatusInternalError, "bad key for {{natural .Name}}")
+		return nil, nil, errors.InternalError.With("bad key for {{natural .Name}}")
 	}
 
 	switch key[0] {
@@ -168,13 +168,13 @@ func (c *{{.FullName}}) {{if .CustomResolve}}base{{end}}Resolve(key record.Key) 
 	case "{{.Name}}":
 		{{- if parameterized .}}
 		if len(key) < {{add 1 (parameterCount .)}} {
-			return nil, nil, errors.New(errors.StatusInternalError, "bad key for {{natural $c.Name}}")
+			return nil, nil, errors.InternalError.With("bad key for {{natural $c.Name}}")
 		}
 		{{- range $index, $param := .GetParameters}}
 		{{lower .Name}}, ok{{.Name}} := key[{{add 1 $index}}].({{parameterType $param}})
 		{{- end}}
 		if {{range $index, $param := .GetParameters}}{{if gt $index 0}} || {{end}}!ok{{.Name}}{{end}} {
-			return nil, nil, errors.New(errors.StatusInternalError, "bad key for {{natural $c.Name}}")
+			return nil, nil, errors.InternalError.With("bad key for {{natural $c.Name}}")
 		}
 		v := c.{{template "accessor" .}}({{range .GetParameters}}{{lower .Name}},{{end}})
 		return v, key[{{add 1 (parameterCount .)}}:], nil
@@ -183,7 +183,7 @@ func (c *{{.FullName}}) {{if .CustomResolve}}base{{end}}Resolve(key record.Key) 
 		{{- end}}
 	{{- end}}
 	default:
-		return nil, nil, errors.New(errors.StatusInternalError, "bad key for {{natural .Name}}")
+		return nil, nil, errors.InternalError.With("bad key for {{natural .Name}}")
 	}
 }
 

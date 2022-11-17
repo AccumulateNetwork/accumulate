@@ -10,7 +10,7 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -104,7 +104,7 @@ func (UpdateAccountAuth) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 		switch op := op.(type) {
 		case *protocol.EnableAccountAuthOperation:
 			if op.Authority == nil {
-				return nil, errors.Format(errors.StatusBadRequest, "authority URL is missing")
+				return nil, errors.BadRequest.WithFormat("authority URL is missing")
 			}
 			entry, ok := auth.GetAuthority(op.Authority)
 			if !ok {
@@ -114,7 +114,7 @@ func (UpdateAccountAuth) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 
 		case *protocol.DisableAccountAuthOperation:
 			if op.Authority == nil {
-				return nil, errors.Format(errors.StatusBadRequest, "authority URL is missing")
+				return nil, errors.BadRequest.WithFormat("authority URL is missing")
 			}
 			entry, ok := auth.GetAuthority(op.Authority)
 			if !ok {
@@ -124,7 +124,7 @@ func (UpdateAccountAuth) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 
 		case *protocol.AddAccountAuthorityOperation:
 			if op.Authority == nil {
-				return nil, errors.Format(errors.StatusBadRequest, "authority URL is missing")
+				return nil, errors.BadRequest.WithFormat("authority URL is missing")
 			}
 
 			if account.GetUrl().LocalTo(op.Authority) {
@@ -137,7 +137,7 @@ func (UpdateAccountAuth) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 			// TODO Require a proof of the existence of the remote authority
 
 			if err := verifyIsNotPage(auth, op.Authority); err != nil {
-				return nil, errors.Format(errors.StatusUnknownError, "invalid authority %v: %w", op.Authority, err)
+				return nil, errors.UnknownError.WithFormat("invalid authority %v: %w", op.Authority, err)
 			}
 
 			_, new := auth.AddAuthority(op.Authority)
@@ -147,7 +147,7 @@ func (UpdateAccountAuth) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 
 		case *protocol.RemoveAccountAuthorityOperation:
 			if op.Authority == nil {
-				return nil, errors.Format(errors.StatusBadRequest, "authority URL is missing")
+				return nil, errors.BadRequest.WithFormat("authority URL is missing")
 			}
 
 			if !auth.RemoveAuthority(op.Authority) {
@@ -158,7 +158,7 @@ func (UpdateAccountAuth) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 
 			// An account must retain at least one authority
 			if len(auth.Authorities) == 0 {
-				return nil, errors.New(errors.StatusBadRequest, "removing the last authority from an account is not allowed")
+				return nil, errors.BadRequest.With("removing the last authority from an account is not allowed")
 			}
 
 		default:
@@ -167,7 +167,7 @@ func (UpdateAccountAuth) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 	}
 
 	if len(auth.Authorities) > int(st.Globals.Globals.Limits.AccountAuthorities) {
-		return nil, errors.Format(errors.StatusBadRequest, "account will have too many authorities")
+		return nil, errors.BadRequest.WithFormat("account will have too many authorities")
 	}
 
 	err := st.Update(st.Origin)
@@ -201,5 +201,5 @@ func verifyIsNotPage(auth *protocol.AccountAuth, account *url.URL) error {
 		return nil
 	}
 
-	return errors.Format(errors.StatusBadRequest, "a key page is not a valid authority")
+	return errors.BadRequest.WithFormat("a key page is not a valid authority")
 }
