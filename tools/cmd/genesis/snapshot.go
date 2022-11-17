@@ -17,8 +17,8 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -218,7 +218,7 @@ func isValidIdentity(file string, row int, b *database.Batch, u *url.URL, logger
 	case err == nil:
 		logger.Info("Skipping record: already exists", "file", file, "row", row, "url", u)
 		return false
-	case !errors.Is(err, errors.StatusNotFound):
+	case !errors.Is(err, errors.NotFound):
 		check(err)
 	}
 

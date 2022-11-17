@@ -17,10 +17,10 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/test/helpers"
@@ -380,5 +380,5 @@ func TestPoisonedAnchorTxn(t *testing.T) {
 	// Verify it is delivered
 	st, _ := sim.WaitForTransactionFlow(delivered, poisoned.GetHash())
 	require.Len(t, st, 1)
-	require.Equal(t, errors.StatusDelivered, st[0].Code)
+	require.Equal(t, errors.Delivered, st[0].Code)
 }

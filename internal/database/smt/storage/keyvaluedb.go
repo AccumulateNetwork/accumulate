@@ -7,15 +7,15 @@
 package storage
 
 import (
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 // ErrNotFound is returned by KeyValueDB.Get if the key is not found.
-var ErrNotFound = errors.StatusNotFound
+var ErrNotFound = errors.NotFound
 
 // ErrNotOpen is returned by KeyValueDB.Get, .Put, and .Close if the database is
 // not open.
-var ErrNotOpen = errors.New(errors.StatusInternalError, "not open")
+var ErrNotOpen = errors.InternalError.With("not open")
 
 type KeyValueTxn interface {
 	// Get gets a value.

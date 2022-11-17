@@ -10,8 +10,8 @@ import (
 	"encoding/binary"
 	"io"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 type Reader struct {
@@ -43,13 +43,13 @@ func (r *Reader) Next() (*ReaderSection, error) {
 
 	_, err := r.file.Seek(r.offset, io.SeekStart)
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "seek to next section: %w", err)
+		return nil, errors.UnknownError.WithFormat("seek to next section: %w", err)
 	}
 
 	var header [64]byte
 	_, err = io.ReadFull(r.file, header[:])
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "read section header: %w", err)
+		return nil, errors.UnknownError.WithFormat("read section header: %w", err)
 	}
 
 	s := new(ReaderSection)

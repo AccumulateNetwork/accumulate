@@ -9,7 +9,7 @@ package snapshot
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/managed"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 // TODO: Check for existing records when restoring?
@@ -17,10 +17,10 @@ import (
 func CollectSignature(record *database.Transaction) (*Signature, error) {
 	state, err := record.Main().Get()
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 	if state.Signature == nil || state.Transaction != nil {
-		return nil, errors.Format(errors.StatusBadRequest, "signature is not a signature")
+		return nil, errors.BadRequest.WithFormat("signature is not a signature")
 	}
 
 	sig := new(Signature)
@@ -31,16 +31,16 @@ func CollectSignature(record *database.Transaction) (*Signature, error) {
 
 func (s *Signature) Restore(batch *database.Batch) error {
 	err := batch.Transaction(s.Signature.Hash()).Main().Put(&database.SigOrTxn{Signature: s.Signature, Txid: s.Txid})
-	return errors.Wrap(errors.StatusUnknownError, err)
+	return errors.UnknownError.Wrap(err)
 }
 
 func CollectTransaction(record *database.Transaction) (*Transaction, error) {
 	state, err := record.Main().Get()
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 	if state.Transaction == nil || state.Signature != nil {
-		return nil, errors.Format(errors.StatusBadRequest, "transaction is not a transaction")
+		return nil, errors.BadRequest.WithFormat("transaction is not a transaction")
 	}
 
 	txn := new(Transaction)
@@ -48,13 +48,13 @@ func CollectTransaction(record *database.Transaction) (*Transaction, error) {
 	txn.Status = loadState(&err, true, record.Status().Get)
 
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	for _, signer := range txn.Status.Signers {
 		record, err := record.ReadSignaturesForSigner(signer)
 		if err != nil {
-			return nil, errors.Format(errors.StatusUnknownError, "load %v signature set: %w", signer.GetUrl(), err)
+			return nil, errors.UnknownError.WithFormat("load %v signature set: %w", signer.GetUrl(), err)
 		}
 
 		set := new(TxnSigSet)
@@ -74,13 +74,13 @@ func (t *Transaction) Restore(batch *database.Batch) error {
 	saveState(&err, record.Status().Put, t.Status)
 
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.UnknownError.Wrap(err)
 	}
 
 	for _, set := range t.SignatureSets {
 		err = record.RestoreSignatureSets(set.Signer, set.Version, set.Entries)
 		if err != nil {
-			return errors.Wrap(errors.StatusUnknownError, err)
+			return errors.UnknownError.Wrap(err)
 		}
 	}
 
@@ -96,18 +96,18 @@ func CollectAccount(record *database.Account, fullChainHistory bool) (*Account, 
 	acct.Directory = loadState(&err, true, record.Directory().Get)
 
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	for _, meta := range loadState(&err, false, record.Chains().Get) {
 		record, err := record.ChainByName(meta.Name)
 		if err != nil {
-			return nil, errors.Format(errors.StatusUnknownError, "load %s chain state: %w", meta.Name, err)
+			return nil, errors.UnknownError.WithFormat("load %s chain state: %w", meta.Name, err)
 		}
 
 		chain, err := record.Inner().CollectSnapshot()
 		if err != nil {
-			return nil, errors.Format(errors.StatusUnknownError, "collect %s chain snapshot: %w", meta.Name, err)
+			return nil, errors.UnknownError.WithFormat("collect %s chain snapshot: %w", meta.Name, err)
 		}
 
 		if !fullChainHistory {
@@ -152,21 +152,21 @@ func (a *Account) Restore(batch *database.Batch) error {
 	saveState(&err, record.Directory().Put, a.Directory)
 	saveState(&err, record.Pending().Put, a.Pending)
 
-	return errors.Wrap(errors.StatusUnknownError, err)
+	return errors.UnknownError.Wrap(err)
 }
 
 func (a *Account) RestoreChainHead(batch *database.Batch, c *managed.Snapshot) (*database.Chain2, error) {
 	mgr, err := batch.Account(a.Url).ChainByName(c.Name)
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "get %s chain: %w", c.Name, err)
+		return nil, errors.UnknownError.WithFormat("get %s chain: %w", c.Name, err)
 	}
 	_, err = mgr.Get() // Update index
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "get %s chain head: %w", c.Name, err)
+		return nil, errors.UnknownError.WithFormat("get %s chain head: %w", c.Name, err)
 	}
 	err = mgr.Inner().RestoreHead(c)
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "restore %s chain: %w", c.Name, err)
+		return nil, errors.UnknownError.WithFormat("restore %s chain: %w", c.Name, err)
 	}
 	return mgr, nil
 }
@@ -179,7 +179,7 @@ func loadState[T any](lastErr *error, allowMissing bool, get func() (T, error)) 
 	}
 
 	v, err := get()
-	if allowMissing && errors.Is(err, errors.StatusNotFound) {
+	if allowMissing && errors.Is(err, errors.NotFound) {
 		return zero[T]()
 	}
 	if err != nil {

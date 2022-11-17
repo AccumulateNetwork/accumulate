@@ -15,8 +15,8 @@ import (
 	"strconv"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 type Chain struct {
@@ -86,7 +86,7 @@ func (c *Chain) Element(index uint64) *record.Value[[]byte] {
 
 func (c *Chain) Resolve(key record.Key) (record.Record, record.Key, error) {
 	if len(key) == 0 {
-		return nil, nil, errors.New(errors.StatusInternalError, "bad key for chain")
+		return nil, nil, errors.InternalError.With("bad key for chain")
 	}
 
 	switch key[0] {
@@ -94,36 +94,36 @@ func (c *Chain) Resolve(key record.Key) (record.Record, record.Key, error) {
 		return c.Head(), key[1:], nil
 	case "States":
 		if len(key) < 2 {
-			return nil, nil, errors.New(errors.StatusInternalError, "bad key for chain")
+			return nil, nil, errors.InternalError.With("bad key for chain")
 		}
 		index, okIndex := key[1].(uint64)
 		if !okIndex {
-			return nil, nil, errors.New(errors.StatusInternalError, "bad key for chain")
+			return nil, nil, errors.InternalError.With("bad key for chain")
 		}
 		v := c.States(index)
 		return v, key[2:], nil
 	case "ElementIndex":
 		if len(key) < 2 {
-			return nil, nil, errors.New(errors.StatusInternalError, "bad key for chain")
+			return nil, nil, errors.InternalError.With("bad key for chain")
 		}
 		hash, okHash := key[1].([]byte)
 		if !okHash {
-			return nil, nil, errors.New(errors.StatusInternalError, "bad key for chain")
+			return nil, nil, errors.InternalError.With("bad key for chain")
 		}
 		v := c.ElementIndex(hash)
 		return v, key[2:], nil
 	case "Element":
 		if len(key) < 2 {
-			return nil, nil, errors.New(errors.StatusInternalError, "bad key for chain")
+			return nil, nil, errors.InternalError.With("bad key for chain")
 		}
 		index, okIndex := key[1].(uint64)
 		if !okIndex {
-			return nil, nil, errors.New(errors.StatusInternalError, "bad key for chain")
+			return nil, nil, errors.InternalError.With("bad key for chain")
 		}
 		v := c.Element(index)
 		return v, key[2:], nil
 	default:
-		return nil, nil, errors.New(errors.StatusInternalError, "bad key for chain")
+		return nil, nil, errors.InternalError.With("bad key for chain")
 	}
 }
 

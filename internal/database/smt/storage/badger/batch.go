@@ -12,7 +12,7 @@ import (
 	"github.com/dgraph-io/badger"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/memory"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 type Batch struct {
@@ -91,7 +91,7 @@ func (b *Batch) Get(key storage.Key) (v []byte, err error) {
 	case err == nil:
 		// Ok
 	case errors.Is(err, badger.ErrKeyNotFound):
-		return nil, errors.NotFound("key %s not found", key)
+		return nil, errors.NotFound.WithFormat("key %s not found", key)
 	default:
 		return nil, err
 	}
@@ -99,7 +99,7 @@ func (b *Batch) Get(key storage.Key) (v []byte, err error) {
 	v, err = item.ValueCopy(nil)
 	// If we didn't find the value, return ErrNotFound
 	if errors.Is(err, badger.ErrKeyNotFound) {
-		return nil, errors.NotFound("key %v not found", key)
+		return nil, errors.NotFound.WithFormat("key %v not found", key)
 	}
 
 	return v, nil

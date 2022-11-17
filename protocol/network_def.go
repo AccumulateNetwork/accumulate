@@ -11,8 +11,8 @@ import (
 	"crypto/sha256"
 	"strings"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 type valHashCmp []byte
@@ -94,7 +94,7 @@ func (n *NetworkDefinition) UpdateValidatorKey(oldKey, newKey []byte) error {
 	oldHash := sha256.Sum256(oldKey)
 	i, found := sortutil.Search(n.Validators, valHashCmp(oldHash[:]).cmp)
 	if !found {
-		return errors.NotFound("validator %x not found", oldKey[:4])
+		return errors.NotFound.WithFormat("validator %x not found", oldKey[:4])
 	}
 
 	newHash := sha256.Sum256(newKey)
@@ -108,7 +108,7 @@ func (n *NetworkDefinition) UpdateValidatorKey(oldKey, newKey []byte) error {
 
 	ptr, new := sortutil.BinaryInsert(&val, valHashCmp(newHash[:]).cmp)
 	if !new {
-		return errors.Format(errors.StatusConflict, "validator %x already exists", newKey[:4])
+		return errors.Conflict.WithFormat("validator %x already exists", newKey[:4])
 	}
 	*ptr = v
 	n.Validators = val

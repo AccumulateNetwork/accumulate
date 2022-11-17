@@ -12,8 +12,8 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -51,16 +51,16 @@ func (CreateTokenAccount) Execute(st *StateManager, tx *Delivery) (protocol.Tran
 func (CreateTokenAccount) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	body, ok := tx.Transaction.Body.(*protocol.CreateTokenAccount)
 	if !ok {
-		return nil, errors.Format(errors.StatusInternalError, "invalid payload: want %T, got %T", new(protocol.CreateTokenAccount), tx.Transaction.Body)
+		return nil, errors.InternalError.WithFormat("invalid payload: want %T, got %T", new(protocol.CreateTokenAccount), tx.Transaction.Body)
 	}
 
 	if body.Url == nil {
-		return nil, errors.Format(errors.StatusBadRequest, "account URL is missing")
+		return nil, errors.BadRequest.WithFormat("account URL is missing")
 	}
 
 	for _, u := range body.Authorities {
 		if u == nil {
-			return nil, errors.Format(errors.StatusBadRequest, "authority URL is nil")
+			return nil, errors.BadRequest.WithFormat("authority URL is nil")
 		}
 	}
 
@@ -70,12 +70,12 @@ func (CreateTokenAccount) Validate(st *StateManager, tx *Delivery) (protocol.Tra
 	}
 
 	if body.TokenUrl == nil {
-		return nil, errors.Format(errors.StatusBadRequest, "token URL is missing")
+		return nil, errors.BadRequest.WithFormat("token URL is missing")
 	}
 
 	err = verifyCreateTokenAccountProof(st.Describe, st.batch, tx.Transaction.Header.Principal, body)
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	account := new(protocol.TokenAccount)
@@ -83,12 +83,12 @@ func (CreateTokenAccount) Validate(st *StateManager, tx *Delivery) (protocol.Tra
 	account.TokenUrl = body.TokenUrl
 	err = st.SetAuth(account, body.Authorities)
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "set auth: %w", err)
+		return nil, errors.UnknownError.WithFormat("set auth: %w", err)
 	}
 
 	err = st.Create(account)
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "create account: %w", err)
+		return nil, errors.UnknownError.WithFormat("create account: %w", err)
 	}
 	return nil, nil
 }
@@ -101,14 +101,14 @@ func verifyCreateTokenAccountProof(net *config.Describe, batch *database.Batch, 
 		switch {
 		case err == nil:
 			// Ok
-		case errors.Is(err, errors.StatusNotFound):
-			return errors.Format(errors.StatusBadRequest, "invalid token url %v: %w", body.TokenUrl, err)
+		case errors.Is(err, errors.NotFound):
+			return errors.BadRequest.WithFormat("invalid token url %v: %w", body.TokenUrl, err)
 		default:
-			return errors.Format(errors.StatusUnknownError, "load %v: %w", body.TokenUrl, err)
+			return errors.UnknownError.WithFormat("load %v: %w", body.TokenUrl, err)
 		}
 
 		if account.Type() != protocol.AccountTypeTokenIssuer {
-			return errors.Format(errors.StatusBadRequest, "invalid token url %v: expected %v, got %v", body.TokenUrl, protocol.AccountTypeTokenIssuer, account.Type())
+			return errors.BadRequest.WithFormat("invalid token url %v: expected %v, got %v", body.TokenUrl, protocol.AccountTypeTokenIssuer, account.Type())
 		}
 	}
 
@@ -124,49 +124,49 @@ func verifyCreateTokenAccountProof(net *config.Describe, batch *database.Batch, 
 			return nil
 		}
 
-		return errors.New(errors.StatusBadRequest, "missing proof of existence for token issuer")
+		return errors.BadRequest.With("missing proof of existence for token issuer")
 	}
 
 	// Check the proof for missing fields and validity
 	proof := body.Proof
 	if proof.Transaction == nil {
-		return errors.Format(errors.StatusBadRequest, "invalid proof: missing transaction")
+		return errors.BadRequest.WithFormat("invalid proof: missing transaction")
 	}
 	if proof.Receipt == nil {
-		return errors.Format(errors.StatusBadRequest, "invalid proof: missing receipt")
+		return errors.BadRequest.WithFormat("invalid proof: missing receipt")
 	}
 	if !proof.Receipt.Validate() {
-		return errors.Format(errors.StatusBadRequest, "proof is invalid")
+		return errors.BadRequest.WithFormat("proof is invalid")
 	}
 
 	// Check that the state matches expectations
 	if !body.TokenUrl.Equal(proof.Transaction.Url) {
-		return errors.New(errors.StatusBadRequest, "invalid proof: URL does not match token issuer URL")
+		return errors.BadRequest.With("invalid proof: URL does not match token issuer URL")
 	}
 
 	// Check the state hash
 	b, err := proof.Transaction.MarshalBinary()
 	if err != nil {
-		return errors.Format(errors.StatusInternalError, "marshal proof state: %v", err)
+		return errors.InternalError.WithFormat("marshal proof state: %v", err)
 	}
 
 	hash := sha256.Sum256(b)
 	if !bytes.Equal(proof.Receipt.Start, hash[:]) {
-		return errors.Format(errors.StatusBadRequest, "invalid proof: state hash does not match proof start")
+		return errors.BadRequest.WithFormat("invalid proof: state hash does not match proof start")
 	}
 
 	// Check the anchor - TODO this will not work for the DN
 	chain, err := batch.Account(net.AnchorPool()).AnchorChain(protocol.Directory).Root().Get()
 	if err != nil {
-		return errors.Format(errors.StatusInternalError, "load anchor pool for directory anchors: %w", err)
+		return errors.InternalError.WithFormat("load anchor pool for directory anchors: %w", err)
 	}
 	_, err = chain.HeightOf(proof.Receipt.Anchor)
 	if err != nil {
-		code := errors.StatusUnknownError
-		if errors.Is(err, errors.StatusNotFound) {
-			code = errors.StatusBadRequest
+		code := errors.UnknownError
+		if errors.Is(err, errors.NotFound) {
+			code = errors.BadRequest
 		}
-		return errors.Format(code, "invalid proof: lookup DN anchor %X: %w", proof.Receipt.Anchor[:4], err)
+		return code.WithFormat("invalid proof: lookup DN anchor %X: %w", proof.Receipt.Anchor[:4], err)
 	}
 
 	return nil
