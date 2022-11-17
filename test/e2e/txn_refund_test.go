@@ -15,7 +15,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
@@ -78,7 +78,7 @@ func TestRefundCycle(t *testing.T) {
 
 		// Verify the refunds failed (because the account no longer exists)
 		require.NotNil(t, status.Error)
-		require.Equal(t, errors.StatusNotFound, status.Error.Code)
+		require.Equal(t, errors.NotFound, status.Error.Code)
 	}
 
 	// Verify the failed refund did not generate a refund

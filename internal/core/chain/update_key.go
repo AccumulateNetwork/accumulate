@@ -10,7 +10,7 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -27,11 +27,11 @@ func (UpdateKey) validate(st *StateManager, tx *Delivery) (*protocol.UpdateKey, 
 	}
 	switch len(body.NewKeyHash) {
 	case 0:
-		return nil, nil, nil, errors.Format(errors.StatusBadRequest, "public key hash is missing")
+		return nil, nil, nil, errors.BadRequest.WithFormat("public key hash is missing")
 	case 32:
 		// Ok
 	default:
-		return nil, nil, nil, errors.Format(errors.StatusBadRequest, "public key hash length is invalid")
+		return nil, nil, nil, errors.BadRequest.WithFormat("public key hash length is invalid")
 	}
 
 	page, ok := st.Origin.(*protocol.KeyPage)
@@ -90,7 +90,7 @@ func (UpdateKey) Execute(st *StateManager, tx *Delivery) (protocol.TransactionRe
 			}
 		}
 	}
-	return nil, errors.Format(errors.StatusInternalError, "unable to locate initiator signature")
+	return nil, errors.InternalError.WithFormat("unable to locate initiator signature")
 
 found_init:
 	switch initiator := initiator.(type) {
@@ -108,7 +108,7 @@ found_init:
 			return nil, fmt.Errorf("cannot UpdateKey with a multi-level delegated signature")
 		}
 	default:
-		return nil, errors.Format(errors.StatusInternalError, "%v does not support %v signatures", protocol.TransactionTypeUpdateKey, initiator.Type())
+		return nil, errors.InternalError.WithFormat("%v does not support %v signatures", protocol.TransactionTypeUpdateKey, initiator.Type())
 
 	}
 	if err != nil {
@@ -134,7 +134,7 @@ func updateKey(page *protocol.KeyPage, book *protocol.KeyBook, old, new *protoco
 		}
 
 		if err := verifyIsNotPage(&book.AccountAuth, new.Delegate); err != nil {
-			return errors.Format(errors.StatusUnknownError, "invalid delegate %v: %w", new.Delegate, err)
+			return errors.UnknownError.WithFormat("invalid delegate %v: %w", new.Delegate, err)
 		}
 	}
 

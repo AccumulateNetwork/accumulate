@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
@@ -89,7 +89,7 @@ func TestCreateIdentity(t *testing.T) {
 		if c.Success {
 			// Should succeed
 			st, _ = sim.WaitForTransactionFlow(delivered, h[:])
-			require.Equal(t, errors.StatusDelivered, st[0].Code, "Expected the transaction to succeed")
+			require.Equal(t, errors.Delivered, st[0].Code, "Expected the transaction to succeed")
 		} else {
 			// Should fail or not be delivered
 			_, st, _ := sim.WaitForTransaction(delivered, h[:], 50)
@@ -105,7 +105,7 @@ func TestCreateIdentity(t *testing.T) {
 				require.NoError(t, err, "Expected the ADI to have been created")
 			} else {
 				require.Error(t, err, "Expected the ADI to not have been created")
-				require.ErrorIs(t, err, errors.StatusNotFound, "Expected the ADI to not have been created")
+				require.ErrorIs(t, err, errors.NotFound, "Expected the ADI to not have been created")
 			}
 			return nil
 		})

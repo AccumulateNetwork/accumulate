@@ -12,7 +12,7 @@ import (
 	"sync"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 type GetFunc func(storage.Key) ([]byte, error)
@@ -115,7 +115,7 @@ func (b *Batch) Get(key storage.Key) (v []byte, err error) {
 
 	v, err = b.get(key)
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 	return v, nil
 }

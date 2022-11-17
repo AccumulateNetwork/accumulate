@@ -10,7 +10,7 @@ import (
 	"fmt"
 
 	"github.com/tendermint/tendermint/libs/log"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 // Counted records an insertion-ordered list of values as separate records plus
@@ -33,7 +33,7 @@ func NewCounted[T any](logger log.Logger, store Store, key Key, namefmt string, 
 func (c *Counted[T]) Count() (int, error) {
 	v, err := c.count.Get()
 	if err != nil {
-		return 0, errors.Wrap(errors.StatusUnknownError, err)
+		return 0, errors.UnknownError.Wrap(err)
 	}
 	return int(v), nil
 }
@@ -57,7 +57,7 @@ func (c *Counted[T]) value(i int) *Value[T] {
 func (c *Counted[T]) Get(i int) (T, error) {
 	v, err := c.value(i).Get()
 	if err != nil {
-		return v, errors.Wrap(errors.StatusUnknownError, err)
+		return v, errors.UnknownError.Wrap(err)
 	}
 
 	return v, nil
@@ -67,14 +67,14 @@ func (c *Counted[T]) Get(i int) (T, error) {
 func (c *Counted[T]) GetAll() ([]T, error) {
 	count, err := c.Count()
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	values := make([]T, count)
 	for i := range values {
 		values[i], err = c.Get(i)
 		if err != nil {
-			return nil, errors.Wrap(errors.StatusUnknownError, err)
+			return nil, errors.UnknownError.Wrap(err)
 		}
 	}
 
@@ -85,17 +85,17 @@ func (c *Counted[T]) GetAll() ([]T, error) {
 func (c *Counted[T]) Put(v T) error {
 	count, err := c.Count()
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.UnknownError.Wrap(err)
 	}
 
 	err = c.count.Put(uint64(count + 1))
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.UnknownError.Wrap(err)
 	}
 
 	err = c.value(count).Put(v)
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.UnknownError.Wrap(err)
 	}
 
 	return nil
@@ -105,16 +105,16 @@ func (c *Counted[T]) Put(v T) error {
 func (c *Counted[T]) Last() (int, T, error) {
 	count, err := c.Count()
 	if err != nil {
-		return 0, zero[T](), errors.Wrap(errors.StatusUnknownError, err)
+		return 0, zero[T](), errors.UnknownError.Wrap(err)
 	}
 
 	if count == 0 {
-		return 0, zero[T](), errors.NotFound("empty")
+		return 0, zero[T](), errors.NotFound.WithFormat("empty")
 	}
 
 	v, err := c.Get(count - 1)
 	if err != nil {
-		return 0, zero[T](), errors.Wrap(errors.StatusInternalError, err)
+		return 0, zero[T](), errors.InternalError.Wrap(err)
 	}
 
 	return count - 1, v, nil
@@ -125,21 +125,21 @@ func (c *Counted[T]) Last() (int, T, error) {
 func (c *Counted[T]) Overwrite(v []T) error {
 	n, err := c.Count()
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.UnknownError.Wrap(err)
 	}
 	if len(v) < n {
-		return errors.Format(errors.StatusBadRequest, "cannot overwrite with fewer values")
+		return errors.BadRequest.WithFormat("cannot overwrite with fewer values")
 	}
 
 	err = c.count.Put(uint64(len(v)))
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.UnknownError.Wrap(err)
 	}
 
 	for i, v := range v {
 		err = c.value(i).Put(v)
 		if err != nil {
-			return errors.Wrap(errors.StatusUnknownError, err)
+			return errors.UnknownError.Wrap(err)
 		}
 	}
 	return nil
@@ -171,7 +171,7 @@ func (c *Counted[T]) Commit() error {
 	}
 
 	if err := c.count.Commit(); err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.UnknownError.Wrap(err)
 	}
 
 	for _, v := range c.values {
@@ -179,7 +179,7 @@ func (c *Counted[T]) Commit() error {
 			continue
 		}
 		if err := v.Commit(); err != nil {
-			return errors.Wrap(errors.StatusUnknownError, err)
+			return errors.UnknownError.Wrap(err)
 		}
 	}
 
@@ -193,12 +193,12 @@ func (c *Counted[T]) Resolve(key Key) (Record, Key, error) {
 	}
 
 	if len(key) > 1 {
-		return nil, nil, errors.New(errors.StatusInternalError, "bad key for counted")
+		return nil, nil, errors.InternalError.With("bad key for counted")
 	}
 
 	i, ok := key[0].(int)
 	if !ok {
-		return nil, nil, errors.New(errors.StatusInternalError, "bad key for value")
+		return nil, nil, errors.InternalError.With("bad key for value")
 	}
 
 	return c.value(i), nil, nil

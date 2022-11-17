@@ -13,9 +13,9 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/managed"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -172,19 +172,19 @@ func processNetworkAccountUpdates(st *StateManager, delivery *Delivery, updates 
 func getSyntheticSignature(batch *database.Batch, transaction *database.Transaction) (*protocol.PartitionSignature, error) {
 	status, err := transaction.GetStatus()
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "load status: %w", err)
+		return nil, errors.UnknownError.WithFormat("load status: %w", err)
 	}
 
 	for _, signer := range status.Signers {
 		sigset, err := transaction.ReadSignaturesForSigner(signer)
 		if err != nil {
-			return nil, errors.Format(errors.StatusUnknownError, "load signature set %v: %w", signer.GetUrl(), err)
+			return nil, errors.UnknownError.WithFormat("load signature set %v: %w", signer.GetUrl(), err)
 		}
 
 		for _, entry := range sigset.Entries() {
 			state, err := batch.Transaction(entry.SignatureHash[:]).GetState()
 			if err != nil {
-				return nil, errors.Format(errors.StatusUnknownError, "load signature %x: %w", entry.SignatureHash[:8], err)
+				return nil, errors.UnknownError.WithFormat("load signature %x: %w", entry.SignatureHash[:8], err)
 			}
 
 			sig, ok := state.Signature.(*protocol.PartitionSignature)
@@ -193,5 +193,5 @@ func getSyntheticSignature(batch *database.Batch, transaction *database.Transact
 			}
 		}
 	}
-	return nil, errors.New(errors.StatusInternalError, "cannot find synthetic signature")
+	return nil, errors.InternalError.With("cannot find synthetic signature")
 }

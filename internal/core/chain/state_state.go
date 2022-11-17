@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -106,13 +106,13 @@ func (u *ChainUpdates) AddChainEntry2(batch *database.Batch, chain *database.Cha
 	// Add an entry to the chain
 	c, err := chain.Get()
 	if err != nil {
-		return 0, errors.Format(errors.StatusUnknownError, "load %s chain: %w", chain.Name(), err)
+		return 0, errors.UnknownError.WithFormat("load %s chain: %w", chain.Name(), err)
 	}
 
 	index := c.Height()
 	err = c.AddEntry(entry, true)
 	if err != nil {
-		return 0, errors.Format(errors.StatusUnknownError, "add entry to %s chain: %w", chain.Name(), err)
+		return 0, errors.UnknownError.WithFormat("add entry to %s chain: %w", chain.Name(), err)
 	}
 
 	// The entry was a duplicate, do not update the ledger
@@ -123,7 +123,7 @@ func (u *ChainUpdates) AddChainEntry2(batch *database.Batch, chain *database.Cha
 	// Update the ledger
 	err = u.DidAddChainEntry(batch, chain.Account(), chain.Name(), chain.Type(), entry, uint64(index), sourceIndex, sourceBlock)
 	if err != nil {
-		return 0, errors.Wrap(errors.StatusUnknownError, err)
+		return 0, errors.UnknownError.Wrap(err)
 	}
 
 	return index, nil

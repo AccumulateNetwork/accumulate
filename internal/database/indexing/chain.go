@@ -10,13 +10,13 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-var ErrReachedChainEnd = errors.New(errors.StatusNotFound, "reached the end of the chain")
-var ErrReachedChainStart = errors.New(errors.StatusNotFound, "reached the start of the chain")
-var ErrTargetDoesNotExist = errors.New(errors.StatusNotFound, "target does not exist")
+var ErrReachedChainEnd = errors.NotFound.With("reached the end of the chain")
+var ErrReachedChainStart = errors.NotFound.With("reached the start of the chain")
+var ErrTargetDoesNotExist = errors.NotFound.With("target does not exist")
 
 // SearchDirection represents a direction to search along a linear index.
 type SearchDirection int

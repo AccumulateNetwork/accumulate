@@ -7,7 +7,7 @@
 package managed
 
 import (
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 // GetRange
@@ -18,18 +18,18 @@ import (
 func (m *MerkleManager) GetRange(begin, end int64) ([]Hash, error) {
 	head, err := m.Head().Get()
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "load head: %w", err)
+		return nil, errors.UnknownError.WithFormat("load head: %w", err)
 	}
 
 	// Check bounds
 	if begin < 0 {
-		return nil, errors.Format(errors.StatusBadRequest, "begin is negative")
+		return nil, errors.BadRequest.WithFormat("begin is negative")
 	}
 	if end < begin {
-		return nil, errors.Format(errors.StatusBadRequest, "begin is after end (%d > %d)", begin, end)
+		return nil, errors.BadRequest.WithFormat("begin is after end (%d > %d)", begin, end)
 	}
 	if begin >= head.Count {
-		return nil, errors.Format(errors.StatusBadRequest, "begin is out of range (%d >= %d)", begin, head.Count)
+		return nil, errors.BadRequest.WithFormat("begin is out of range (%d >= %d)", begin, head.Count)
 	}
 
 	// Don't return more entries than there are
@@ -51,13 +51,13 @@ func (m *MerkleManager) GetRange(begin, end int64) ([]Hash, error) {
 		switch {
 		case err == nil:
 			// Ok
-		case errors.Is(err, errors.StatusNotFound):
-			return nil, errors.FormatWithCause(errors.StatusNotFound, err, "markpoint %d not found", i)
+		case errors.Is(err, errors.NotFound):
+			return nil, errors.NotFound.WithCauseAndFormat(err, "markpoint %d not found", i)
 		default:
-			return nil, errors.Format(errors.StatusUnknownError, "load markpoint %d: %w", i, err)
+			return nil, errors.UnknownError.WithFormat("load markpoint %d: %w", i, err)
 		}
 		if len(s.HashList) != int(m.markFreq) {
-			return nil, errors.Format(errors.StatusIncompleteChain, "markpoint %d: expected %d entries, got %d", i, m.markFreq, len(s.HashList))
+			return nil, errors.IncompleteChain.WithFormat("markpoint %d: expected %d entries, got %d", i, m.markFreq, len(s.HashList))
 		}
 		hashes = append(hashes, s.HashList...)
 	}
@@ -70,7 +70,7 @@ func (m *MerkleManager) GetRange(begin, end int64) ([]Hash, error) {
 
 	expected := head.Count & m.markMask // Calculate the number of expected hashes in the current state
 	if int64(len(head.HashList)) != expected {
-		return nil, errors.Format(errors.StatusIncompleteChain, "head: expected %d entries, got %d", expected, len(head.HashList))
+		return nil, errors.IncompleteChain.WithFormat("head: expected %d entries, got %d", expected, len(head.HashList))
 	}
 
 	hashes = append(hashes, head.HashList...) // Append the current hash list

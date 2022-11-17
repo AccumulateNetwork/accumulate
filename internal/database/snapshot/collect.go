@@ -12,8 +12,8 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -35,7 +35,7 @@ func Collect(batch *database.Batch, header *Header, file io.WriteSeeker, opts Co
 
 	w, err := Create(file, header)
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 	w.Logger.Set(opts.Logger)
 
@@ -48,7 +48,7 @@ func Collect(batch *database.Batch, header *Header, file io.WriteSeeker, opts Co
 		accounts = append(accounts, record.Url())
 		pending, err := record.Pending().Get()
 		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "load pending: %w", err)
+			return errors.UnknownError.WithFormat("load pending: %w", err)
 		}
 		for _, txid := range pending {
 			txnHashes.Add(txid.Hash())
@@ -56,7 +56,7 @@ func Collect(batch *database.Batch, header *Header, file io.WriteSeeker, opts Co
 		return nil
 	})
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	// Collect transaction and signature hashes
@@ -66,7 +66,7 @@ func Collect(batch *database.Batch, header *Header, file io.WriteSeeker, opts Co
 		if opts.PreserveAccountHistory != nil {
 			preserve, err := opts.PreserveAccountHistory(record)
 			if err != nil {
-				return nil, errors.Wrap(errors.StatusUnknownError, err)
+				return nil, errors.UnknownError.Wrap(err)
 			}
 			if !preserve {
 				continue
@@ -75,17 +75,17 @@ func Collect(batch *database.Batch, header *Header, file io.WriteSeeker, opts Co
 
 		err = txnHashes.CollectFromChain(record, record.MainChain())
 		if err != nil {
-			return nil, errors.Format(errors.StatusUnknownError, "collect from %v main chain: %v", u, err)
+			return nil, errors.UnknownError.WithFormat("collect from %v main chain: %v", u, err)
 		}
 
 		err = txnHashes.CollectFromChain(record, record.ScratchChain())
 		if err != nil {
-			return nil, errors.Format(errors.StatusUnknownError, "collect from %v scratch chain: %v", u, err)
+			return nil, errors.UnknownError.WithFormat("collect from %v scratch chain: %v", u, err)
 		}
 
 		err = sigHashes.CollectFromChain(record, record.SignatureChain())
 		if err != nil {
-			return nil, errors.Format(errors.StatusUnknownError, "collect from %v signature chain: %v", u, err)
+			return nil, errors.UnknownError.WithFormat("collect from %v signature chain: %v", u, err)
 		}
 	}
 
@@ -105,19 +105,19 @@ func Collect(batch *database.Batch, header *Header, file io.WriteSeeker, opts Co
 	// Save transactions
 	err = w.CollectTransactions(batch, txnHashes.Hashes, opts)
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	// Save signatures
 	err = w.CollectSignatures(batch, sigHashes.Hashes, opts)
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	// Save accounts
 	err = w.CollectAccounts(batch, opts)
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	return w, nil
@@ -126,40 +126,40 @@ func Collect(batch *database.Batch, header *Header, file io.WriteSeeker, opts Co
 func (w *Writer) CollectAccounts(batch *database.Batch, opts CollectOptions) error {
 	sw, err := w.Open(SectionTypeAccounts)
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "open accounts section: %w", err)
+		return errors.UnknownError.WithFormat("open accounts section: %w", err)
 	}
 
 	err = batch.SaveAccounts(sw, func(record *database.Account) ([]byte, error) {
 		// preserve, err := preserveHistory(record)
 		// if err != nil {
-		// 	return nil, errors.Wrap(errors.StatusUnknownError, err)
+		// 	return nil, errors.UnknownError.Wrap(err)
 		// }
 
 		// Preserve chain state regardless of whether we preserve transactions
 		acct, err := CollectAccount(record, true)
 		if err != nil {
-			return nil, errors.Format(errors.StatusUnknownError, "collect account: %w", err)
+			return nil, errors.UnknownError.WithFormat("collect account: %w", err)
 		}
 
 		if opts.VisitAccount != nil {
 			err = opts.VisitAccount(acct)
 			if err != nil {
-				return nil, errors.Format(errors.StatusUnknownError, "visit account: %w", err)
+				return nil, errors.UnknownError.WithFormat("visit account: %w", err)
 			}
 		}
 
 		b, err := acct.MarshalBinary()
 		if err != nil {
-			return nil, errors.Format(errors.StatusEncodingError, "marshal account: %w", err)
+			return nil, errors.EncodingError.WithFormat("marshal account: %w", err)
 		}
 		return b, nil
 	})
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.UnknownError.Wrap(err)
 	}
 
 	err = sw.Close()
-	return errors.Wrap(errors.StatusUnknownError, err)
+	return errors.UnknownError.Wrap(err)
 }
 
 func (w *Writer) CollectTransactions(batch *database.Batch, hashes [][32]byte, opts CollectOptions) error {
@@ -168,17 +168,17 @@ func (w *Writer) CollectTransactions(batch *database.Batch, hashes [][32]byte, o
 		h := h // See docs/developer/rangevarref.md
 		txn, err := CollectTransaction(batch.Transaction(h[:]))
 		if err != nil {
-			if errors.Is(err, errors.StatusNotFound) {
+			if errors.Is(err, errors.NotFound) {
 				w.Logger.Info("Skipping transaction", "error", err, "hash", logging.AsHex(h).Slice(0, 4))
 				continue
 			}
-			return errors.Format(errors.StatusUnknownError, "collect transaction %x: %w", h[:4], err)
+			return errors.UnknownError.WithFormat("collect transaction %x: %w", h[:4], err)
 		}
 
 		if opts.VisitTransaction != nil {
 			err = opts.VisitTransaction(txn)
 			if err != nil {
-				return errors.Format(errors.StatusUnknownError, "visit transaction: %w", err)
+				return errors.UnknownError.WithFormat("visit transaction: %w", err)
 			}
 		}
 
@@ -195,7 +195,7 @@ func (w *Writer) WriteTransactions(txns []*Transaction, gz bool) error {
 
 	b, err := (&txnSection{Transactions: txns}).MarshalBinary()
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "marshal transactions: %w", err)
+		return errors.UnknownError.WithFormat("marshal transactions: %w", err)
 	}
 
 	typ := SectionTypeTransactions
@@ -204,28 +204,28 @@ func (w *Writer) WriteTransactions(txns []*Transaction, gz bool) error {
 	}
 	sw, err := w.Open(typ)
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "open transactions section: %w", err)
+		return errors.UnknownError.WithFormat("open transactions section: %w", err)
 	}
 
 	if gz {
 		w := gzip.NewWriter(sw)
 		_, err = w.Write(b)
 		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "write transactions: %w", err)
+			return errors.UnknownError.WithFormat("write transactions: %w", err)
 		}
 		err = w.Close()
 		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "close gzip writer: %w", err)
+			return errors.UnknownError.WithFormat("close gzip writer: %w", err)
 		}
 	} else {
 		_, err = sw.Write(b)
 		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "write transactions: %w", err)
+			return errors.UnknownError.WithFormat("write transactions: %w", err)
 		}
 	}
 
 	err = sw.Close()
-	return errors.Wrap(errors.StatusUnknownError, err)
+	return errors.UnknownError.Wrap(err)
 }
 
 func (w *Writer) CollectSignatures(batch *database.Batch, hashes [][32]byte, opts CollectOptions) error {
@@ -234,17 +234,17 @@ func (w *Writer) CollectSignatures(batch *database.Batch, hashes [][32]byte, opt
 		h := h // See docs/developer/rangevarref.md
 		sig, err := CollectSignature(batch.Transaction(h[:]))
 		if err != nil {
-			if errors.Is(err, errors.StatusNotFound) {
+			if errors.Is(err, errors.NotFound) {
 				w.Logger.Error("Skipping signature", "error", err, "hash", logging.AsHex(h).Slice(0, 4))
 				continue
 			}
-			return errors.Format(errors.StatusUnknownError, "collect signature %x: %w", h[:4], err)
+			return errors.UnknownError.WithFormat("collect signature %x: %w", h[:4], err)
 		}
 
 		if opts.VisitSignature != nil {
 			err = opts.VisitSignature(sig)
 			if err != nil {
-				return errors.Format(errors.StatusUnknownError, "visit signature: %w", err)
+				return errors.UnknownError.WithFormat("visit signature: %w", err)
 			}
 		}
 
@@ -257,21 +257,21 @@ func (w *Writer) CollectSignatures(batch *database.Batch, hashes [][32]byte, opt
 
 	b, err := (&sigSection{Signatures: sigs}).MarshalBinary()
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "marshal signatures: %w", err)
+		return errors.UnknownError.WithFormat("marshal signatures: %w", err)
 	}
 
 	sw, err := w.Open(SectionTypeSignatures)
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "open signatures section: %w", err)
+		return errors.UnknownError.WithFormat("open signatures section: %w", err)
 	}
 
 	_, err = sw.Write(b)
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "write signatures: %w", err)
+		return errors.UnknownError.WithFormat("write signatures: %w", err)
 	}
 
 	err = sw.Close()
-	return errors.Wrap(errors.StatusUnknownError, err)
+	return errors.UnknownError.Wrap(err)
 }
 
 type HashSet struct {
@@ -297,15 +297,15 @@ func (s *HashSet) CollectFromChain(a *database.Account, c *database.Chain2) erro
 	switch {
 	case err == nil:
 		// Found
-	case errors.Is(err, errors.StatusNotFound):
+	case errors.Is(err, errors.NotFound):
 		return nil
 	default:
-		return errors.Format(errors.StatusUnknownError, "load chains index: %w", err)
+		return errors.UnknownError.WithFormat("load chains index: %w", err)
 	}
 
 	snap, err := c.Inner().CollectSnapshot()
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "collect %s chain: %w", c.Name(), err)
+		return errors.UnknownError.WithFormat("collect %s chain: %w", c.Name(), err)
 	}
 
 	for _, h := range snap.Head.HashList {

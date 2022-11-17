@@ -11,7 +11,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/shared"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -99,7 +99,7 @@ func addChainAnchor(rootChain *database.Chain, chain *database.Chain2, blockInde
 func (x *Executor) GetAccountAuthoritySet(batch *database.Batch, account protocol.Account) (*protocol.AccountAuth, error) {
 	auth, url, err := shared.GetAccountAuthoritySet(account)
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 	if auth != nil {
 		return auth, nil
@@ -107,7 +107,7 @@ func (x *Executor) GetAccountAuthoritySet(batch *database.Batch, account protoco
 
 	account, err = batch.Account(url).GetState()
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 	return x.GetAccountAuthoritySet(batch, account)
 }
