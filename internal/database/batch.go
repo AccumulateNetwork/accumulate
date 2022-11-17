@@ -11,7 +11,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
@@ -121,7 +121,7 @@ func (b *Batch) Commit() error {
 
 	err := b.baseCommit()
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.UnknownError.Wrap(err)
 	}
 
 	if b.parent != nil {
@@ -134,7 +134,7 @@ func (b *Batch) Commit() error {
 	} else {
 		err := b.commitBpt()
 		if err != nil {
-			return errors.Wrap(errors.StatusUnknownError, err)
+			return errors.UnknownError.Wrap(err)
 		}
 	}
 
@@ -167,7 +167,7 @@ func (b *Batch) getAccountUrl(key record.Key) (*url.URL, error) {
 		record.Wrapped(record.UrlWrapper),
 	).Get()
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 	return v, nil
 }
@@ -181,7 +181,7 @@ func (b *Batch) getAccountUrl(key record.Key) (*url.URL, error) {
 func (b *Batch) AccountByID(id []byte) (*Account, error) {
 	u, err := b.getAccountUrl(record.Key{"Account", id})
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 	return b.Account(u), nil
 }
@@ -194,11 +194,11 @@ func (b *Batch) GetValue(key record.Key, value record.ValueWriter) error {
 
 	v, err := resolveValue[record.ValueReader](b, key)
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.UnknownError.Wrap(err)
 	}
 
 	err = value.LoadValue(v, false)
-	return errors.Wrap(errors.StatusUnknownError, err)
+	return errors.UnknownError.Wrap(err)
 }
 
 // PutValue implements record.Store.
@@ -209,11 +209,11 @@ func (b *Batch) PutValue(key record.Key, value record.ValueReader) error {
 
 	v, err := resolveValue[record.ValueWriter](b, key)
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.UnknownError.Wrap(err)
 	}
 
 	err = v.LoadValue(value, true)
-	return errors.Wrap(errors.StatusUnknownError, err)
+	return errors.UnknownError.Wrap(err)
 }
 
 // resolveValue resolves the value for the given key.
@@ -223,7 +223,7 @@ func resolveValue[T any](c *Batch, key record.Key) (T, error) {
 	for len(key) > 0 {
 		r, key, err = r.Resolve(key)
 		if err != nil {
-			return zero[T](), errors.Wrap(errors.StatusUnknownError, err)
+			return zero[T](), errors.UnknownError.Wrap(err)
 		}
 	}
 
@@ -233,7 +233,7 @@ func resolveValue[T any](c *Batch, key record.Key) (T, error) {
 
 	v, ok := r.(T)
 	if !ok {
-		return zero[T](), errors.Format(errors.StatusInternalError, "bad key: %T is not value", r)
+		return zero[T](), errors.InternalError.WithFormat("bad key: %T is not value", r)
 	}
 
 	return v, nil

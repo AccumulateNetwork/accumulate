@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -83,7 +83,7 @@ func (c *Client) sendRequest(ctx context.Context, method string, req, resp inter
 	} else if json.Unmarshal(b, &err2) != nil {
 		return err
 	}
-	return errors.Format(errors.StatusUnknownError, "request failed: %w", err2)
+	return errors.UnknownError.WithFormat("request failed: %w", err2)
 }
 
 func sendRequestUnmarshalWith[T any](c *Client, ctx context.Context, method string, req interface{}, unmarshal func([]byte) (T, error)) (T, error) {
@@ -91,11 +91,11 @@ func sendRequestUnmarshalWith[T any](c *Client, ctx context.Context, method stri
 	var resp json.RawMessage
 	err := c.sendRequest(ctx, method, req, &resp)
 	if err != nil {
-		return v, errors.Wrap(errors.StatusUnknownError, err)
+		return v, errors.UnknownError.Wrap(err)
 	}
 	v, err = unmarshal(resp)
 	if err != nil {
-		return v, errors.Format(errors.StatusEncodingError, "unmarshal response: %w", err)
+		return v, errors.EncodingError.WithFormat("unmarshal response: %w", err)
 	}
 	return v, nil
 }
@@ -105,11 +105,11 @@ func sendRequestUnmarshalAs[T any](c *Client, ctx context.Context, method string
 	var resp json.RawMessage
 	err := c.sendRequest(ctx, method, req, &resp)
 	if err != nil {
-		return v, errors.Wrap(errors.StatusUnknownError, err)
+		return v, errors.UnknownError.Wrap(err)
 	}
 	err = json.Unmarshal(resp, &v)
 	if err != nil {
-		return v, errors.Format(errors.StatusEncodingError, "unmarshal response: %w", err)
+		return v, errors.EncodingError.WithFormat("unmarshal response: %w", err)
 	}
 	return v, nil
 }
