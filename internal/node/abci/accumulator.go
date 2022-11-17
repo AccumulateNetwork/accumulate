@@ -30,10 +30,10 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	_ "gitlab.com/accumulatenetwork/accumulate/internal/database/smt/pmt"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -402,7 +402,7 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 
 	envelopes, results, respData, err := executeTransactions(app.logger.With("operation", "CheckTx"), checkTx(app.Executor, batch), req.Tx)
 	if err != nil {
-		b, _ := errors.Wrap(errors.StatusUnknownError, err).(*errors.Error).MarshalJSON()
+		b, _ := errors.UnknownError.Wrap(err).(*errors.Error).MarshalJSON()
 		var res abci.ResponseCheckTx
 		res.Info = string(b)
 		res.Code = uint32(protocol.ErrorCodeFailed)
@@ -469,7 +469,7 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 
 	envelopes, _, respData, err := executeTransactions(app.logger.With("operation", "DeliverTx"), deliverTx(app.Executor, app.block), req.Tx)
 	if err != nil {
-		b, _ := errors.Wrap(errors.StatusUnknownError, err).(*errors.Error).MarshalJSON()
+		b, _ := errors.UnknownError.Wrap(err).(*errors.Error).MarshalJSON()
 		var res abci.ResponseDeliverTx
 		res.Info = string(b)
 		res.Code = uint32(protocol.ErrorCodeFailed)

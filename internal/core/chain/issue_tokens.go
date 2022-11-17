@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"math/big"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -47,7 +47,7 @@ func (IssueTokens) Validate(st *StateManager, tx *Delivery) (protocol.Transactio
 
 	for _, to := range recipients {
 		if to.Url == nil {
-			return nil, errors.Format(errors.StatusBadRequest, "recipient URL is missing")
+			return nil, errors.BadRequest.WithFormat("recipient URL is missing")
 		}
 	}
 
