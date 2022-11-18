@@ -14,14 +14,20 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
+	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
 func TestStateSaveAndRestore(t *testing.T) {
+	if !protocol.IsTestNet {
+		t.Skip("Faucet")
+	}
+
 	var timestamp uint64
 
 	// Initialize
@@ -30,7 +36,7 @@ func TestStateSaveAndRestore(t *testing.T) {
 	sim.InitFromGenesis()
 
 	// Prepare the ADI
-	name := AccountUrl("foo")
+	name := AccountUrl("foobarbaz")
 	key := acctesting.GenerateKey(t.Name(), name)
 	SetupIdentity(sim, name, key, &timestamp)
 
@@ -40,13 +46,13 @@ func TestStateSaveAndRestore(t *testing.T) {
 	filename := func(partition string) string {
 		return filepath.Join(dir, fmt.Sprintf("%s.bpt", partition))
 	}
-	for _, partition := range sim.Partitions {
-		x := sim.Partition(partition.Id)
+	for _, partition := range sim.S.Partitions() {
+		x := sim.Partition(partition.ID)
 		batch := x.Database.Begin(false)
 		defer batch.Discard()
-		f, err := os.Create(filename(partition.Id))
+		f, err := os.Create(filename(partition.ID))
 		require.NoError(t, err)
-		require.NoError(t, snapshot.FullCollect(batch, f, x.Executor.Describe.PartitionUrl(), nil, false))
+		require.NoError(t, snapshot.FullCollect(batch, f, config.NetworkUrl{URL: PartitionUrl(partition.ID)}, nil, false))
 		require.NoError(t, f.Close())
 	}
 
@@ -56,7 +62,7 @@ func TestStateSaveAndRestore(t *testing.T) {
 	sim.InitFromSnapshot(filename)
 
 	// Send tokens to a lite account
-	liteUrl := acctesting.AcmeLiteAddressStdPriv(acctesting.GenerateKey(sim.Name(), "Recipient"))
+	liteUrl := acctesting.AcmeLiteAddressStdPriv(acctesting.GenerateKey(sim.TB.Name(), "Recipient"))
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
 		acctesting.NewTransaction().
 			WithPrincipal(name.JoinPath("tokens")).
@@ -74,7 +80,7 @@ func TestStateSaveAndRestore(t *testing.T) {
 
 func SetupIdentity(sim *simulator.Simulator, name *url.URL, key []byte, timestamp *uint64) {
 	// Fund a lite account
-	liteKey := acctesting.GenerateKey(sim.Name(), "SetupIdentity", name)
+	liteKey := acctesting.GenerateKey(sim.TB.Name(), "SetupIdentity", name)
 	liteUrl := acctesting.AcmeLiteAddressStdPriv(liteKey)
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(
 		acctesting.NewTransaction().

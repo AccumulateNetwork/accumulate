@@ -67,6 +67,12 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 	n.privValKey = init.PrivValKey
 	n.nodeKey = init.NodeKey
 
+	// This is hacky, but 🤷 I don't see another choice that wouldn't be
+	// significantly less readable
+	if p.Type == config.Directory && node == 0 {
+		events.SubscribeSync(n.eventBus, s.router.willChangeGlobals)
+	}
+
 	// Create a Querier service
 	n.querySvc = apiimpl.NewQuerier(apiimpl.QuerierParams{
 		Logger:    n.logger.With("module", "acc-rpc"),
