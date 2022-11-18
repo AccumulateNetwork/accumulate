@@ -61,7 +61,8 @@ func initNetwork(cmd *cobra.Command, args []string) {
 		for _, node := range bvn.Nodes {
 			// TODO Check for existing keys?
 			node.PrivValKey = ed25519.GenPrivKey()
-			node.NodeKey = ed25519.GenPrivKey()
+			node.DnNodeKey = ed25519.GenPrivKey()
+			node.BvnNodeKey = ed25519.GenPrivKey()
 
 			if node.ListenAddress == "" {
 				node.ListenAddress = "0.0.0.0"
@@ -155,10 +156,10 @@ func initNetworkLocalFS(cmd *cobra.Command, netInit *accumulated.NetworkInit) {
 				}
 			}
 			configs[i][j][0].Config.PrivValidatorKey = "../priv_validator_key.json"
-			err = accumulated.WriteNodeFiles(configs[i][j][0], node.PrivValKey, node.NodeKey, dnGenDoc)
+			err = accumulated.WriteNodeFiles(configs[i][j][0], node.PrivValKey, node.DnNodeKey, dnGenDoc)
 			checkf(err, "write DNN files")
 			configs[i][j][1].Config.PrivValidatorKey = "../priv_validator_key.json"
-			err = accumulated.WriteNodeFiles(configs[i][j][1], node.PrivValKey, node.NodeKey, bvnGenDoc)
+			err = accumulated.WriteNodeFiles(configs[i][j][1], node.PrivValKey, node.BvnNodeKey, bvnGenDoc)
 			checkf(err, "write BVNN files")
 
 		}
