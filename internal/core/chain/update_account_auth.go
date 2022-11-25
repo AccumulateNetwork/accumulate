@@ -110,7 +110,12 @@ func (UpdateAccountAuth) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 			if !ok {
 				return nil, fmt.Errorf("%v is not an authority of %v", op.Authority, st.OriginUrl)
 			}
-			entry.Disabled = false
+			switch entry.RuleID {
+			case 0, 1:
+				entry.RuleID = protocol.DefaultAuthRulesID
+			default:
+				return nil, fmt.Errorf("cannot disable custom rule set with this operation")
+			}
 
 		case *protocol.DisableAccountAuthOperation:
 			if op.Authority == nil {
@@ -120,7 +125,12 @@ func (UpdateAccountAuth) Validate(st *StateManager, tx *Delivery) (protocol.Tran
 			if !ok {
 				return nil, fmt.Errorf("%v is not an authority of %v", op.Authority, st.OriginUrl)
 			}
-			entry.Disabled = true
+			switch entry.RuleID {
+			case 0, 1:
+				entry.RuleID = protocol.DisabledAuthRulesID
+			default:
+				return nil, fmt.Errorf("cannot disable custom rule set with this operation")
+			}
 
 		case *protocol.AddAccountAuthorityOperation:
 			if op.Authority == nil {

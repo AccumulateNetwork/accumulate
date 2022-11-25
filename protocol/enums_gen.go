@@ -29,6 +29,18 @@ const AccountAuthOperationTypeAddAuthority AccountAuthOperationType = 3
 // AccountAuthOperationTypeRemoveAuthority removes an authority.
 const AccountAuthOperationTypeRemoveAuthority AccountAuthOperationType = 4
 
+// AccountAuthRuleTypeDefault .
+const AccountAuthRuleTypeDefault AccountAuthRuleType = 0
+
+// AccountAuthRuleTypeDisabled .
+const AccountAuthRuleTypeDisabled AccountAuthRuleType = 1
+
+// AccountAuthRuleTypeIncludeSpecific .
+const AccountAuthRuleTypeIncludeSpecific AccountAuthRuleType = 2
+
+// AccountAuthRuleTypeExcludeSpecific .
+const AccountAuthRuleTypeExcludeSpecific AccountAuthRuleType = 3
+
 // AccountTypeUnknown represents an unknown account type.
 const AccountTypeUnknown AccountType = 0
 
@@ -364,6 +376,74 @@ func (v *AccountAuthOperationType) UnmarshalJSON(data []byte) error {
 	*v, ok = AccountAuthOperationTypeByName(s)
 	if !ok || strings.ContainsRune(v.String(), ':') {
 		return fmt.Errorf("invalid Account Auth Operation Type %q", s)
+	}
+	return nil
+}
+
+// GetEnumValue returns the value of the Account Auth Rule Type
+func (v AccountAuthRuleType) GetEnumValue() uint64 { return uint64(v) }
+
+// SetEnumValue sets the value. SetEnumValue returns false if the value is invalid.
+func (v *AccountAuthRuleType) SetEnumValue(id uint64) bool {
+	u := AccountAuthRuleType(id)
+	switch u {
+	case AccountAuthRuleTypeDefault, AccountAuthRuleTypeDisabled, AccountAuthRuleTypeIncludeSpecific, AccountAuthRuleTypeExcludeSpecific:
+		*v = u
+		return true
+	default:
+		return false
+	}
+}
+
+// String returns the name of the Account Auth Rule Type.
+func (v AccountAuthRuleType) String() string {
+	switch v {
+	case AccountAuthRuleTypeDefault:
+		return "default"
+	case AccountAuthRuleTypeDisabled:
+		return "disabled"
+	case AccountAuthRuleTypeIncludeSpecific:
+		return "includeSpecific"
+	case AccountAuthRuleTypeExcludeSpecific:
+		return "excludeSpecific"
+	default:
+		return fmt.Sprintf("AccountAuthRuleType:%d", v)
+	}
+}
+
+// AccountAuthRuleTypeByName returns the named Account Auth Rule Type.
+func AccountAuthRuleTypeByName(name string) (AccountAuthRuleType, bool) {
+	switch strings.ToLower(name) {
+	case "default":
+		return AccountAuthRuleTypeDefault, true
+	case "disabled":
+		return AccountAuthRuleTypeDisabled, true
+	case "includespecific":
+		return AccountAuthRuleTypeIncludeSpecific, true
+	case "excludespecific":
+		return AccountAuthRuleTypeExcludeSpecific, true
+	default:
+		return 0, false
+	}
+}
+
+// MarshalJSON marshals the Account Auth Rule Type to JSON as a string.
+func (v AccountAuthRuleType) MarshalJSON() ([]byte, error) {
+	return json.Marshal(v.String())
+}
+
+// UnmarshalJSON unmarshals the Account Auth Rule Type from JSON as a string.
+func (v *AccountAuthRuleType) UnmarshalJSON(data []byte) error {
+	var s string
+	err := json.Unmarshal(data, &s)
+	if err != nil {
+		return err
+	}
+
+	var ok bool
+	*v, ok = AccountAuthRuleTypeByName(s)
+	if !ok || strings.ContainsRune(v.String(), ':') {
+		return fmt.Errorf("invalid Account Auth Rule Type %q", s)
 	}
 	return nil
 }

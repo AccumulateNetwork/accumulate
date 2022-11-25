@@ -35,22 +35,6 @@ BlockEntry:
       type: uint
       keep-empty: true
 
-AccountAuth:
-  fields:
-    - name: Authorities
-      type: AuthorityEntry
-      marshal-as: reference
-      repeatable: true
-
-AuthorityEntry:
-  fields:
-    - name: Url
-      type: url
-      pointer: true
-    - name: Disabled
-      description: disables auth checks for this authority, allowing anyone to sign for it
-      type: bool
-
 AnchorMetadata:
   embeddings:
     - ChainMetadata

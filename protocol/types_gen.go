@@ -35,7 +35,8 @@ type ADI struct {
 
 type AccountAuth struct {
 	fieldsSet   []bool
-	Authorities []AuthorityEntry `json:"authorities,omitempty" form:"authorities" query:"authorities" validate:"required"`
+	Authorities []AuthorityEntry  `json:"authorities,omitempty" form:"authorities" query:"authorities" validate:"required"`
+	Rules       []AccountAuthRule `json:"rules,omitempty" form:"rules" query:"rules" validate:"required"`
 	extraData   []byte
 }
 
@@ -116,8 +117,7 @@ type AnchorMetadata struct {
 type AuthorityEntry struct {
 	fieldsSet []bool
 	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
-	// Disabled disables auth checks for this authority, allowing anyone to sign for it.
-	Disabled  bool `json:"disabled,omitempty" form:"disabled" query:"disabled" validate:"required"`
+	RuleID    uint64   `json:"ruleID,omitempty" form:"ruleID" query:"ruleID" validate:"required"`
 	extraData []byte
 }
 
@@ -333,6 +333,14 @@ type Envelope struct {
 	extraData   []byte
 }
 
+type ExcludeSpecific struct {
+	fieldsSet    []bool
+	ID           uint64              `json:"id,omitempty" form:"id" query:"id" validate:"required"`
+	Comment      string              `json:"comment,omitempty" form:"comment" query:"comment" validate:"required"`
+	Transactions AllowedTransactions `json:"transactions,omitempty" form:"transactions" query:"transactions" validate:"required"`
+	extraData    []byte
+}
+
 type FactomDataEntry struct {
 	AccountId [32]byte `json:"accountId,omitempty" form:"accountId" query:"accountId" validate:"required"`
 	Data      []byte   `json:"data,omitempty" form:"data" query:"data" validate:"required"`
@@ -350,6 +358,14 @@ type FeeSchedule struct {
 	// CreateIdentitySliding is the sliding fee schedule for creating an ADI. The first entry is the cost of a one-character ADI, the second is the cost of a two-character ADI, etc.
 	CreateIdentitySliding []Fee `json:"createIdentitySliding,omitempty" form:"createIdentitySliding" query:"createIdentitySliding" validate:"required"`
 	extraData             []byte
+}
+
+type IncludeSpecific struct {
+	fieldsSet    []bool
+	ID           uint64              `json:"id,omitempty" form:"id" query:"id" validate:"required"`
+	Comment      string              `json:"comment,omitempty" form:"comment" query:"comment" validate:"required"`
+	Transactions AllowedTransactions `json:"transactions,omitempty" form:"transactions" query:"transactions" validate:"required"`
+	extraData    []byte
 }
 
 // IndexEntry represents an entry in an index chain.
@@ -1032,7 +1048,11 @@ func (*EnableAccountAuthOperation) Type() AccountAuthOperationType {
 	return AccountAuthOperationTypeEnable
 }
 
+func (*ExcludeSpecific) Type() AccountAuthRuleType { return AccountAuthRuleTypeExcludeSpecific }
+
 func (*FactomDataEntryWrapper) Type() DataEntryType { return DataEntryTypeFactom }
+
+func (*IncludeSpecific) Type() AccountAuthRuleType { return AccountAuthRuleTypeIncludeSpecific }
 
 func (*InternalSignature) Type() SignatureType { return SignatureTypeInternal }
 
@@ -1143,6 +1163,12 @@ func (v *AccountAuth) Copy() *AccountAuth {
 	u.Authorities = make([]AuthorityEntry, len(v.Authorities))
 	for i, v := range v.Authorities {
 		u.Authorities[i] = *(&v).Copy()
+	}
+	u.Rules = make([]AccountAuthRule, len(v.Rules))
+	for i, v := range v.Rules {
+		if v != nil {
+			u.Rules[i] = CopyAccountAuthRule(v)
+		}
 	}
 
 	return u
@@ -1283,7 +1309,7 @@ func (v *AuthorityEntry) Copy() *AuthorityEntry {
 	if v.Url != nil {
 		u.Url = v.Url
 	}
-	u.Disabled = v.Disabled
+	u.RuleID = v.RuleID
 
 	return u
 }
@@ -1678,6 +1704,18 @@ func (v *Envelope) Copy() *Envelope {
 
 func (v *Envelope) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *ExcludeSpecific) Copy() *ExcludeSpecific {
+	u := new(ExcludeSpecific)
+
+	u.ID = v.ID
+	u.Comment = v.Comment
+	u.Transactions = v.Transactions
+
+	return u
+}
+
+func (v *ExcludeSpecific) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *FactomDataEntry) Copy() *FactomDataEntry {
 	u := new(FactomDataEntry)
 
@@ -1715,6 +1753,18 @@ func (v *FeeSchedule) Copy() *FeeSchedule {
 }
 
 func (v *FeeSchedule) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *IncludeSpecific) Copy() *IncludeSpecific {
+	u := new(IncludeSpecific)
+
+	u.ID = v.ID
+	u.Comment = v.Comment
+	u.Transactions = v.Transactions
+
+	return u
+}
+
+func (v *IncludeSpecific) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *IndexEntry) Copy() *IndexEntry {
 	u := new(IndexEntry)
@@ -2792,6 +2842,14 @@ func (v *AccountAuth) Equal(u *AccountAuth) bool {
 			return false
 		}
 	}
+	if len(v.Rules) != len(u.Rules) {
+		return false
+	}
+	for i := range v.Rules {
+		if !(EqualAccountAuthRule(v.Rules[i], u.Rules[i])) {
+			return false
+		}
+	}
 
 	return true
 }
@@ -2959,7 +3017,7 @@ func (v *AuthorityEntry) Equal(u *AuthorityEntry) bool {
 	case !((v.Url).Equal(u.Url)):
 		return false
 	}
-	if !(v.Disabled == u.Disabled) {
+	if !(v.RuleID == u.RuleID) {
 		return false
 	}
 
@@ -3472,6 +3530,20 @@ func (v *Envelope) Equal(u *Envelope) bool {
 	return true
 }
 
+func (v *ExcludeSpecific) Equal(u *ExcludeSpecific) bool {
+	if !(v.ID == u.ID) {
+		return false
+	}
+	if !(v.Comment == u.Comment) {
+		return false
+	}
+	if !(v.Transactions == u.Transactions) {
+		return false
+	}
+
+	return true
+}
+
 func (v *FactomDataEntry) Equal(u *FactomDataEntry) bool {
 	if !(v.AccountId == u.AccountId) {
 		return false
@@ -3507,6 +3579,20 @@ func (v *FeeSchedule) Equal(u *FeeSchedule) bool {
 		if !(v.CreateIdentitySliding[i] == u.CreateIdentitySliding[i]) {
 			return false
 		}
+	}
+
+	return true
+}
+
+func (v *IncludeSpecific) Equal(u *IncludeSpecific) bool {
+	if !(v.ID == u.ID) {
+		return false
+	}
+	if !(v.Comment == u.Comment) {
+		return false
+	}
+	if !(v.Transactions == u.Transactions) {
+		return false
 	}
 
 	return true
@@ -4923,6 +5009,7 @@ func (v *ADI) IsValid() error {
 
 var fieldNames_AccountAuth = []string{
 	1: "Authorities",
+	2: "Rules",
 }
 
 func (v *AccountAuth) MarshalBinary() ([]byte, error) {
@@ -4932,6 +5019,11 @@ func (v *AccountAuth) MarshalBinary() ([]byte, error) {
 	if !(len(v.Authorities) == 0) {
 		for _, v := range v.Authorities {
 			writer.WriteValue(1, v.MarshalBinary)
+		}
+	}
+	if !(len(v.Rules) == 0) {
+		for _, v := range v.Rules {
+			writer.WriteValue(2, v.MarshalBinary)
 		}
 	}
 
@@ -4950,6 +5042,11 @@ func (v *AccountAuth) IsValid() error {
 		errs = append(errs, "field Authorities is missing")
 	} else if len(v.Authorities) == 0 {
 		errs = append(errs, "field Authorities is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Rules is missing")
+	} else if len(v.Rules) == 0 {
+		errs = append(errs, "field Rules is not set")
 	}
 
 	switch len(errs) {
@@ -5473,7 +5570,7 @@ func (v *AnchorMetadata) IsValid() error {
 
 var fieldNames_AuthorityEntry = []string{
 	1: "Url",
-	2: "Disabled",
+	2: "RuleID",
 }
 
 func (v *AuthorityEntry) MarshalBinary() ([]byte, error) {
@@ -5483,8 +5580,8 @@ func (v *AuthorityEntry) MarshalBinary() ([]byte, error) {
 	if !(v.Url == nil) {
 		writer.WriteUrl(1, v.Url)
 	}
-	if !(!v.Disabled) {
-		writer.WriteBool(2, v.Disabled)
+	if !(v.RuleID == 0) {
+		writer.WriteUint(2, v.RuleID)
 	}
 
 	_, _, err := writer.Reset(fieldNames_AuthorityEntry)
@@ -5504,9 +5601,9 @@ func (v *AuthorityEntry) IsValid() error {
 		errs = append(errs, "field Url is not set")
 	}
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Disabled is missing")
-	} else if !v.Disabled {
-		errs = append(errs, "field Disabled is not set")
+		errs = append(errs, "field RuleID is missing")
+	} else if v.RuleID == 0 {
+		errs = append(errs, "field RuleID is not set")
 	}
 
 	switch len(errs) {
@@ -6913,6 +7010,68 @@ func (v *Envelope) IsValid() error {
 	}
 }
 
+var fieldNames_ExcludeSpecific = []string{
+	1: "Type",
+	2: "ID",
+	3: "Comment",
+	4: "Transactions",
+}
+
+func (v *ExcludeSpecific) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.ID == 0) {
+		writer.WriteUint(2, v.ID)
+	}
+	if !(len(v.Comment) == 0) {
+		writer.WriteString(3, v.Comment)
+	}
+	if !(v.Transactions == 0) {
+		writer.WriteEnum(4, v.Transactions)
+	}
+
+	_, _, err := writer.Reset(fieldNames_ExcludeSpecific)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *ExcludeSpecific) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field ID is missing")
+	} else if v.ID == 0 {
+		errs = append(errs, "field ID is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Comment is missing")
+	} else if len(v.Comment) == 0 {
+		errs = append(errs, "field Comment is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Transactions is missing")
+	} else if v.Transactions == 0 {
+		errs = append(errs, "field Transactions is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_FactomDataEntryWrapper = []string{
 	1: "Type",
 	2: "FactomDataEntry",
@@ -6982,6 +7141,68 @@ func (v *FeeSchedule) IsValid() error {
 		errs = append(errs, "field CreateIdentitySliding is missing")
 	} else if len(v.CreateIdentitySliding) == 0 {
 		errs = append(errs, "field CreateIdentitySliding is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_IncludeSpecific = []string{
+	1: "Type",
+	2: "ID",
+	3: "Comment",
+	4: "Transactions",
+}
+
+func (v *IncludeSpecific) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.ID == 0) {
+		writer.WriteUint(2, v.ID)
+	}
+	if !(len(v.Comment) == 0) {
+		writer.WriteString(3, v.Comment)
+	}
+	if !(v.Transactions == 0) {
+		writer.WriteEnum(4, v.Transactions)
+	}
+
+	_, _, err := writer.Reset(fieldNames_IncludeSpecific)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *IncludeSpecific) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field ID is missing")
+	} else if v.ID == 0 {
+		errs = append(errs, "field ID is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Comment is missing")
+	} else if len(v.Comment) == 0 {
+		errs = append(errs, "field Comment is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Transactions is missing")
+	} else if v.Transactions == 0 {
+		errs = append(errs, "field Transactions is not set")
 	}
 
 	switch len(errs) {
@@ -11076,6 +11297,18 @@ func (v *AccountAuth) UnmarshalBinaryFrom(rd io.Reader) error {
 			break
 		}
 	}
+	for {
+		ok := reader.ReadValue(2, func(r io.Reader) error {
+			x, err := UnmarshalAccountAuthRuleFrom(r)
+			if err == nil {
+				v.Rules = append(v.Rules, x)
+			}
+			return err
+		})
+		if !ok {
+			break
+		}
+	}
 
 	seen, err := reader.Reset(fieldNames_AccountAuth)
 	if err != nil {
@@ -11442,8 +11675,8 @@ func (v *AuthorityEntry) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUrl(1); ok {
 		v.Url = x
 	}
-	if x, ok := reader.ReadBool(2); ok {
-		v.Disabled = x
+	if x, ok := reader.ReadUint(2); ok {
+		v.RuleID = x
 	}
 
 	seen, err := reader.Reset(fieldNames_AuthorityEntry)
@@ -12460,6 +12693,47 @@ func (v *Envelope) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *ExcludeSpecific) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *ExcludeSpecific) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType AccountAuthRuleType
+	if x := new(AccountAuthRuleType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *ExcludeSpecific) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadUint(2); ok {
+		v.ID = x
+	}
+	if x, ok := reader.ReadString(3); ok {
+		v.Comment = x
+	}
+	if x := new(AllowedTransactions); reader.ReadEnum(4, x) {
+		v.Transactions = *x
+	}
+
+	seen, err := reader.Reset(fieldNames_ExcludeSpecific)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *FactomDataEntryWrapper) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -12509,6 +12783,47 @@ func (v *FeeSchedule) UnmarshalBinaryFrom(rd io.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_FeeSchedule)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *IncludeSpecific) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *IncludeSpecific) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType AccountAuthRuleType
+	if x := new(AccountAuthRuleType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *IncludeSpecific) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadUint(2); ok {
+		v.ID = x
+	}
+	if x, ok := reader.ReadString(3); ok {
+		v.Comment = x
+	}
+	if x := new(AllowedTransactions); reader.ReadEnum(4, x) {
+		v.Transactions = *x
+	}
+
+	seen, err := reader.Reset(fieldNames_IncludeSpecific)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -15145,21 +15460,25 @@ func (v *WriteDataTo) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 
 func (v *ADI) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type        AccountType                       `json:"type"`
-		Url         *url.URL                          `json:"url,omitempty"`
-		Authorities encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
+		Type        AccountType                                     `json:"type"`
+		Url         *url.URL                                        `json:"url,omitempty"`
+		Authorities encoding.JsonList[AuthorityEntry]               `json:"authorities,omitempty"`
+		Rules       encoding.JsonUnmarshalListWith[AccountAuthRule] `json:"rules,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
 	u.Authorities = v.AccountAuth.Authorities
+	u.Rules = encoding.JsonUnmarshalListWith[AccountAuthRule]{Value: v.AccountAuth.Rules, Func: UnmarshalAccountAuthRuleJSON}
 	return json.Marshal(&u)
 }
 
 func (v *AccountAuth) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Authorities encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
+		Authorities encoding.JsonList[AuthorityEntry]               `json:"authorities,omitempty"`
+		Rules       encoding.JsonUnmarshalListWith[AccountAuthRule] `json:"rules,omitempty"`
 	}{}
 	u.Authorities = v.Authorities
+	u.Rules = encoding.JsonUnmarshalListWith[AccountAuthRule]{Value: v.Rules, Func: UnmarshalAccountAuthRuleJSON}
 	return json.Marshal(&u)
 }
 
@@ -15474,14 +15793,16 @@ func (v *CreateTokenAccount) MarshalJSON() ([]byte, error) {
 
 func (v *DataAccount) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type        AccountType                           `json:"type"`
-		Url         *url.URL                              `json:"url,omitempty"`
-		Authorities encoding.JsonList[AuthorityEntry]     `json:"authorities,omitempty"`
-		Entry       encoding.JsonUnmarshalWith[DataEntry] `json:"entry,omitempty"`
+		Type        AccountType                                     `json:"type"`
+		Url         *url.URL                                        `json:"url,omitempty"`
+		Authorities encoding.JsonList[AuthorityEntry]               `json:"authorities,omitempty"`
+		Rules       encoding.JsonUnmarshalListWith[AccountAuthRule] `json:"rules,omitempty"`
+		Entry       encoding.JsonUnmarshalWith[DataEntry]           `json:"entry,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
 	u.Authorities = v.AccountAuth.Authorities
+	u.Rules = encoding.JsonUnmarshalListWith[AccountAuthRule]{Value: v.AccountAuth.Rules, Func: UnmarshalAccountAuthRuleJSON}
 	u.Entry = encoding.JsonUnmarshalWith[DataEntry]{Value: v.Entry, Func: UnmarshalDataEntryJSON}
 	return json.Marshal(&u)
 }
@@ -15610,6 +15931,20 @@ func (v *Envelope) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *ExcludeSpecific) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type         AccountAuthRuleType `json:"type"`
+		ID           uint64              `json:"id,omitempty"`
+		Comment      string              `json:"comment,omitempty"`
+		Transactions AllowedTransactions `json:"transactions,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.ID = v.ID
+	u.Comment = v.Comment
+	u.Transactions = v.Transactions
+	return json.Marshal(&u)
+}
+
 func (v *FactomDataEntry) MarshalJSON() ([]byte, error) {
 	u := struct {
 		AccountId string                     `json:"accountId,omitempty"`
@@ -15650,6 +15985,20 @@ func (v *FeeSchedule) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *IncludeSpecific) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type         AccountAuthRuleType `json:"type"`
+		ID           uint64              `json:"id,omitempty"`
+		Comment      string              `json:"comment,omitempty"`
+		Transactions AllowedTransactions `json:"transactions,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.ID = v.ID
+	u.Comment = v.Comment
+	u.Transactions = v.Transactions
+	return json.Marshal(&u)
+}
+
 func (v *InternalSignature) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type            SignatureType `json:"type"`
@@ -15678,16 +16027,18 @@ func (v *IssueTokens) MarshalJSON() ([]byte, error) {
 
 func (v *KeyBook) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type        AccountType                       `json:"type"`
-		Url         *url.URL                          `json:"url,omitempty"`
-		BookType    BookType                          `json:"bookType,omitempty"`
-		Authorities encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
-		PageCount   uint64                            `json:"pageCount,omitempty"`
+		Type        AccountType                                     `json:"type"`
+		Url         *url.URL                                        `json:"url,omitempty"`
+		BookType    BookType                                        `json:"bookType,omitempty"`
+		Authorities encoding.JsonList[AuthorityEntry]               `json:"authorities,omitempty"`
+		Rules       encoding.JsonUnmarshalListWith[AccountAuthRule] `json:"rules,omitempty"`
+		PageCount   uint64                                          `json:"pageCount,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
 	u.BookType = v.BookType
 	u.Authorities = v.AccountAuth.Authorities
+	u.Rules = encoding.JsonUnmarshalListWith[AccountAuthRule]{Value: v.AccountAuth.Rules, Func: UnmarshalAccountAuthRuleJSON}
 	u.PageCount = v.PageCount
 	return json.Marshal(&u)
 }
@@ -16225,15 +16576,17 @@ func (v *SystemWriteData) MarshalJSON() ([]byte, error) {
 
 func (v *TokenAccount) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type        AccountType                       `json:"type"`
-		Url         *url.URL                          `json:"url,omitempty"`
-		Authorities encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
-		TokenUrl    *url.URL                          `json:"tokenUrl,omitempty"`
-		Balance     *string                           `json:"balance,omitempty"`
+		Type        AccountType                                     `json:"type"`
+		Url         *url.URL                                        `json:"url,omitempty"`
+		Authorities encoding.JsonList[AuthorityEntry]               `json:"authorities,omitempty"`
+		Rules       encoding.JsonUnmarshalListWith[AccountAuthRule] `json:"rules,omitempty"`
+		TokenUrl    *url.URL                                        `json:"tokenUrl,omitempty"`
+		Balance     *string                                         `json:"balance,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
 	u.Authorities = v.AccountAuth.Authorities
+	u.Rules = encoding.JsonUnmarshalListWith[AccountAuthRule]{Value: v.AccountAuth.Rules, Func: UnmarshalAccountAuthRuleJSON}
 	u.TokenUrl = v.TokenUrl
 	u.Balance = encoding.BigintToJSON(&v.Balance)
 	return json.Marshal(&u)
@@ -16241,18 +16594,20 @@ func (v *TokenAccount) MarshalJSON() ([]byte, error) {
 
 func (v *TokenIssuer) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type        AccountType                       `json:"type"`
-		Url         *url.URL                          `json:"url,omitempty"`
-		Authorities encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
-		Symbol      string                            `json:"symbol,omitempty"`
-		Precision   uint64                            `json:"precision,omitempty"`
-		Properties  *url.URL                          `json:"properties,omitempty"`
-		Issued      *string                           `json:"issued,omitempty"`
-		SupplyLimit *string                           `json:"supplyLimit,omitempty"`
+		Type        AccountType                                     `json:"type"`
+		Url         *url.URL                                        `json:"url,omitempty"`
+		Authorities encoding.JsonList[AuthorityEntry]               `json:"authorities,omitempty"`
+		Rules       encoding.JsonUnmarshalListWith[AccountAuthRule] `json:"rules,omitempty"`
+		Symbol      string                                          `json:"symbol,omitempty"`
+		Precision   uint64                                          `json:"precision,omitempty"`
+		Properties  *url.URL                                        `json:"properties,omitempty"`
+		Issued      *string                                         `json:"issued,omitempty"`
+		SupplyLimit *string                                         `json:"supplyLimit,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
 	u.Authorities = v.AccountAuth.Authorities
+	u.Rules = encoding.JsonUnmarshalListWith[AccountAuthRule]{Value: v.AccountAuth.Rules, Func: UnmarshalAccountAuthRuleJSON}
 	u.Symbol = v.Symbol
 	u.Precision = v.Precision
 	u.Properties = v.Properties
@@ -16488,13 +16843,15 @@ func (v *WriteDataTo) MarshalJSON() ([]byte, error) {
 
 func (v *ADI) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type        AccountType                       `json:"type"`
-		Url         *url.URL                          `json:"url,omitempty"`
-		Authorities encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
+		Type        AccountType                                     `json:"type"`
+		Url         *url.URL                                        `json:"url,omitempty"`
+		Authorities encoding.JsonList[AuthorityEntry]               `json:"authorities,omitempty"`
+		Rules       encoding.JsonUnmarshalListWith[AccountAuthRule] `json:"rules,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
 	u.Authorities = v.AccountAuth.Authorities
+	u.Rules = encoding.JsonUnmarshalListWith[AccountAuthRule]{Value: v.AccountAuth.Rules, Func: UnmarshalAccountAuthRuleJSON}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -16503,18 +16860,28 @@ func (v *ADI) UnmarshalJSON(data []byte) error {
 	}
 	v.Url = u.Url
 	v.AccountAuth.Authorities = u.Authorities
+	v.AccountAuth.Rules = make([]AccountAuthRule, len(u.Rules.Value))
+	for i, x := range u.Rules.Value {
+		v.AccountAuth.Rules[i] = x
+	}
 	return nil
 }
 
 func (v *AccountAuth) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Authorities encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
+		Authorities encoding.JsonList[AuthorityEntry]               `json:"authorities,omitempty"`
+		Rules       encoding.JsonUnmarshalListWith[AccountAuthRule] `json:"rules,omitempty"`
 	}{}
 	u.Authorities = v.Authorities
+	u.Rules = encoding.JsonUnmarshalListWith[AccountAuthRule]{Value: v.Rules, Func: UnmarshalAccountAuthRuleJSON}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.Authorities = u.Authorities
+	v.Rules = make([]AccountAuthRule, len(u.Rules.Value))
+	for i, x := range u.Rules.Value {
+		v.Rules[i] = x
+	}
 	return nil
 }
 
@@ -17095,14 +17462,16 @@ func (v *CreateTokenAccount) UnmarshalJSON(data []byte) error {
 
 func (v *DataAccount) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type        AccountType                           `json:"type"`
-		Url         *url.URL                              `json:"url,omitempty"`
-		Authorities encoding.JsonList[AuthorityEntry]     `json:"authorities,omitempty"`
-		Entry       encoding.JsonUnmarshalWith[DataEntry] `json:"entry,omitempty"`
+		Type        AccountType                                     `json:"type"`
+		Url         *url.URL                                        `json:"url,omitempty"`
+		Authorities encoding.JsonList[AuthorityEntry]               `json:"authorities,omitempty"`
+		Rules       encoding.JsonUnmarshalListWith[AccountAuthRule] `json:"rules,omitempty"`
+		Entry       encoding.JsonUnmarshalWith[DataEntry]           `json:"entry,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
 	u.Authorities = v.AccountAuth.Authorities
+	u.Rules = encoding.JsonUnmarshalListWith[AccountAuthRule]{Value: v.AccountAuth.Rules, Func: UnmarshalAccountAuthRuleJSON}
 	u.Entry = encoding.JsonUnmarshalWith[DataEntry]{Value: v.Entry, Func: UnmarshalDataEntryJSON}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -17112,6 +17481,10 @@ func (v *DataAccount) UnmarshalJSON(data []byte) error {
 	}
 	v.Url = u.Url
 	v.AccountAuth.Authorities = u.Authorities
+	v.AccountAuth.Rules = make([]AccountAuthRule, len(u.Rules.Value))
+	for i, x := range u.Rules.Value {
+		v.AccountAuth.Rules[i] = x
+	}
 	v.Entry = u.Entry.Value
 
 	return nil
@@ -17357,6 +17730,29 @@ func (v *Envelope) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *ExcludeSpecific) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type         AccountAuthRuleType `json:"type"`
+		ID           uint64              `json:"id,omitempty"`
+		Comment      string              `json:"comment,omitempty"`
+		Transactions AllowedTransactions `json:"transactions,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.ID = v.ID
+	u.Comment = v.Comment
+	u.Transactions = v.Transactions
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.ID = u.ID
+	v.Comment = u.Comment
+	v.Transactions = u.Transactions
+	return nil
+}
+
 func (v *FactomDataEntry) UnmarshalJSON(data []byte) error {
 	u := struct {
 		AccountId string                     `json:"accountId,omitempty"`
@@ -17446,6 +17842,29 @@ func (v *FeeSchedule) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *IncludeSpecific) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type         AccountAuthRuleType `json:"type"`
+		ID           uint64              `json:"id,omitempty"`
+		Comment      string              `json:"comment,omitempty"`
+		Transactions AllowedTransactions `json:"transactions,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.ID = v.ID
+	u.Comment = v.Comment
+	u.Transactions = v.Transactions
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.ID = u.ID
+	v.Comment = u.Comment
+	v.Transactions = u.Transactions
+	return nil
+}
+
 func (v *InternalSignature) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type            SignatureType `json:"type"`
@@ -17503,16 +17922,18 @@ func (v *IssueTokens) UnmarshalJSON(data []byte) error {
 
 func (v *KeyBook) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type        AccountType                       `json:"type"`
-		Url         *url.URL                          `json:"url,omitempty"`
-		BookType    BookType                          `json:"bookType,omitempty"`
-		Authorities encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
-		PageCount   uint64                            `json:"pageCount,omitempty"`
+		Type        AccountType                                     `json:"type"`
+		Url         *url.URL                                        `json:"url,omitempty"`
+		BookType    BookType                                        `json:"bookType,omitempty"`
+		Authorities encoding.JsonList[AuthorityEntry]               `json:"authorities,omitempty"`
+		Rules       encoding.JsonUnmarshalListWith[AccountAuthRule] `json:"rules,omitempty"`
+		PageCount   uint64                                          `json:"pageCount,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
 	u.BookType = v.BookType
 	u.Authorities = v.AccountAuth.Authorities
+	u.Rules = encoding.JsonUnmarshalListWith[AccountAuthRule]{Value: v.AccountAuth.Rules, Func: UnmarshalAccountAuthRuleJSON}
 	u.PageCount = v.PageCount
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -17523,6 +17944,10 @@ func (v *KeyBook) UnmarshalJSON(data []byte) error {
 	v.Url = u.Url
 	v.BookType = u.BookType
 	v.AccountAuth.Authorities = u.Authorities
+	v.AccountAuth.Rules = make([]AccountAuthRule, len(u.Rules.Value))
+	for i, x := range u.Rules.Value {
+		v.AccountAuth.Rules[i] = x
+	}
 	v.PageCount = u.PageCount
 	return nil
 }
@@ -18486,15 +18911,17 @@ func (v *SystemWriteData) UnmarshalJSON(data []byte) error {
 
 func (v *TokenAccount) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type        AccountType                       `json:"type"`
-		Url         *url.URL                          `json:"url,omitempty"`
-		Authorities encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
-		TokenUrl    *url.URL                          `json:"tokenUrl,omitempty"`
-		Balance     *string                           `json:"balance,omitempty"`
+		Type        AccountType                                     `json:"type"`
+		Url         *url.URL                                        `json:"url,omitempty"`
+		Authorities encoding.JsonList[AuthorityEntry]               `json:"authorities,omitempty"`
+		Rules       encoding.JsonUnmarshalListWith[AccountAuthRule] `json:"rules,omitempty"`
+		TokenUrl    *url.URL                                        `json:"tokenUrl,omitempty"`
+		Balance     *string                                         `json:"balance,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
 	u.Authorities = v.AccountAuth.Authorities
+	u.Rules = encoding.JsonUnmarshalListWith[AccountAuthRule]{Value: v.AccountAuth.Rules, Func: UnmarshalAccountAuthRuleJSON}
 	u.TokenUrl = v.TokenUrl
 	u.Balance = encoding.BigintToJSON(&v.Balance)
 	if err := json.Unmarshal(data, &u); err != nil {
@@ -18505,6 +18932,10 @@ func (v *TokenAccount) UnmarshalJSON(data []byte) error {
 	}
 	v.Url = u.Url
 	v.AccountAuth.Authorities = u.Authorities
+	v.AccountAuth.Rules = make([]AccountAuthRule, len(u.Rules.Value))
+	for i, x := range u.Rules.Value {
+		v.AccountAuth.Rules[i] = x
+	}
 	v.TokenUrl = u.TokenUrl
 	if x, err := encoding.BigintFromJSON(u.Balance); err != nil {
 		return fmt.Errorf("error decoding Balance: %w", err)
@@ -18516,18 +18947,20 @@ func (v *TokenAccount) UnmarshalJSON(data []byte) error {
 
 func (v *TokenIssuer) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type        AccountType                       `json:"type"`
-		Url         *url.URL                          `json:"url,omitempty"`
-		Authorities encoding.JsonList[AuthorityEntry] `json:"authorities,omitempty"`
-		Symbol      string                            `json:"symbol,omitempty"`
-		Precision   uint64                            `json:"precision,omitempty"`
-		Properties  *url.URL                          `json:"properties,omitempty"`
-		Issued      *string                           `json:"issued,omitempty"`
-		SupplyLimit *string                           `json:"supplyLimit,omitempty"`
+		Type        AccountType                                     `json:"type"`
+		Url         *url.URL                                        `json:"url,omitempty"`
+		Authorities encoding.JsonList[AuthorityEntry]               `json:"authorities,omitempty"`
+		Rules       encoding.JsonUnmarshalListWith[AccountAuthRule] `json:"rules,omitempty"`
+		Symbol      string                                          `json:"symbol,omitempty"`
+		Precision   uint64                                          `json:"precision,omitempty"`
+		Properties  *url.URL                                        `json:"properties,omitempty"`
+		Issued      *string                                         `json:"issued,omitempty"`
+		SupplyLimit *string                                         `json:"supplyLimit,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
 	u.Authorities = v.AccountAuth.Authorities
+	u.Rules = encoding.JsonUnmarshalListWith[AccountAuthRule]{Value: v.AccountAuth.Rules, Func: UnmarshalAccountAuthRuleJSON}
 	u.Symbol = v.Symbol
 	u.Precision = v.Precision
 	u.Properties = v.Properties
@@ -18541,6 +18974,10 @@ func (v *TokenIssuer) UnmarshalJSON(data []byte) error {
 	}
 	v.Url = u.Url
 	v.AccountAuth.Authorities = u.Authorities
+	v.AccountAuth.Rules = make([]AccountAuthRule, len(u.Rules.Value))
+	for i, x := range u.Rules.Value {
+		v.AccountAuth.Rules[i] = x
+	}
 	v.Symbol = u.Symbol
 	v.Precision = u.Precision
 	v.Properties = u.Properties

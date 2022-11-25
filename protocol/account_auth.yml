@@ -1,0 +1,41 @@
+AccountAuth:
+  fields:
+    - name: Authorities
+      type: AuthorityEntry
+      marshal-as: reference
+      repeatable: true
+    - name: Rules
+      type: AccountAuthRule
+      marshal-as: union
+      repeatable: true
+
+AuthorityEntry:
+  fields:
+    - { name: Disabled, type: bool, virtual: true, non-binary: true }
+    - name: Url
+      type: url
+      pointer: true
+    - name: RuleID
+      type: uint
+
+IncludeSpecific:
+  union: { type: accountAuthRule }
+  fields:
+    - name: ID
+      type: uint
+    - name: Comment
+      type: string
+    - name: Transactions
+      type: AllowedTransactions
+      marshal-as: enum
+
+ExcludeSpecific:
+  union: { type: accountAuthRule }
+  fields:
+    - name: ID
+      type: uint
+    - name: Comment
+      type: string
+    - name: Transactions
+      type: AllowedTransactions
+      marshal-as: enum

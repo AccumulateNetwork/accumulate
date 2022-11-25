@@ -995,3 +995,102 @@ func UnmarshalSignatureJSON(data []byte) (Signature, error) {
 
 	return acnt, nil
 }
+
+// NewAccountAuthRule creates a new AccountAuthRule for the specified AccountAuthRuleType.
+func NewAccountAuthRule(typ AccountAuthRuleType) (AccountAuthRule, error) {
+	switch typ {
+	case AccountAuthRuleTypeExcludeSpecific:
+		return new(ExcludeSpecific), nil
+	case AccountAuthRuleTypeIncludeSpecific:
+		return new(IncludeSpecific), nil
+	default:
+		return nil, fmt.Errorf("unknown account auth rule %v", typ)
+	}
+}
+
+//EqualAccountAuthRule is used to compare the values of the union
+func EqualAccountAuthRule(a, b AccountAuthRule) bool {
+	if a == b {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	switch a := a.(type) {
+	case *ExcludeSpecific:
+		b, ok := b.(*ExcludeSpecific)
+		return ok && a.Equal(b)
+	case *IncludeSpecific:
+		b, ok := b.(*IncludeSpecific)
+		return ok && a.Equal(b)
+	default:
+		return false
+	}
+}
+
+//CopyAccountAuthRule copies a AccountAuthRule.
+func CopyAccountAuthRule(v AccountAuthRule) AccountAuthRule {
+	switch v := v.(type) {
+	case *ExcludeSpecific:
+		return v.Copy()
+	case *IncludeSpecific:
+		return v.Copy()
+	default:
+		return v.CopyAsInterface().(AccountAuthRule)
+	}
+}
+
+// UnmarshalAccountAuthRule unmarshals a AccountAuthRule.
+func UnmarshalAccountAuthRule(data []byte) (AccountAuthRule, error) {
+	return UnmarshalAccountAuthRuleFrom(bytes.NewReader(data))
+}
+
+// UnmarshalAccountAuthRuleFrom unmarshals a AccountAuthRule.
+func UnmarshalAccountAuthRuleFrom(rd io.Reader) (AccountAuthRule, error) {
+	reader := encoding.NewReader(rd)
+
+	// Read the type code
+	var typ AccountAuthRuleType
+	if !reader.ReadEnum(1, &typ) {
+		return nil, fmt.Errorf("field Type: missing")
+	}
+
+	// Create a new account auth rule
+	v, err := NewAccountAuthRule(AccountAuthRuleType(typ))
+	if err != nil {
+		return nil, err
+	}
+
+	// Unmarshal the rest of the account auth rule
+	err = v.UnmarshalFieldsFrom(reader)
+	if err != nil {
+		return nil, err
+	}
+
+	return v, nil
+}
+
+// UnmarshalAccountAuthRuleJson unmarshals a AccountAuthRule.
+func UnmarshalAccountAuthRuleJSON(data []byte) (AccountAuthRule, error) {
+	var typ *struct{ Type AccountAuthRuleType }
+	err := json.Unmarshal(data, &typ)
+	if err != nil {
+		return nil, err
+	}
+
+	if typ == nil {
+		return nil, nil
+	}
+
+	acnt, err := NewAccountAuthRule(typ.Type)
+	if err != nil {
+		return nil, err
+	}
+
+	err = json.Unmarshal(data, acnt)
+	if err != nil {
+		return nil, err
+	}
+
+	return acnt, nil
+}

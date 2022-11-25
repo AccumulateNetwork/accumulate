@@ -8,17 +8,6 @@ package protocol
 
 import "encoding/json"
 
-// RequireAuthorization returns true if the transaction type always requires
-// authorization even if the account allows unauthorized signers.
-func (typ TransactionType) RequireAuthorization() bool {
-	switch typ {
-	case TransactionTypeUpdateAccountAuth:
-		return true
-	default:
-		return false
-	}
-}
-
 type AllowedTransactionBit uint8
 
 // Mask returns the bit mask.

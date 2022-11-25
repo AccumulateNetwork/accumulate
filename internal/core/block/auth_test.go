@@ -183,7 +183,7 @@ func TestTransactionIsReady(tt *testing.T) {
 	t.Run("Disabled Unsigned", func(t BatchTest) {
 		account := t.PutAccountCopy(account).(*FakeAccount)
 		entry, _ := account.GetAuthority(authority.Url)
-		entry.Disabled = true
+		entry.RuleID = protocol.DisabledAuthRulesID
 
 		status := t.GetTxnStatus(txn.GetHash())
 		ready, err := exec.TransactionIsReady(t.Batch, delivery, status, account)
@@ -195,7 +195,7 @@ func TestTransactionIsReady(tt *testing.T) {
 	t.Run("Disabled Single", func(t BatchTest) {
 		account := t.PutAccountCopy(account).(*FakeAccount)
 		entry, _ := account.GetAuthority(authority.Url)
-		entry.Disabled = true
+		entry.RuleID = protocol.DisabledAuthRulesID
 
 		sig := sig.Copy()
 		sig.Signer = unauthSigner.Url
@@ -213,7 +213,7 @@ func TestTransactionIsReady(tt *testing.T) {
 		account.AddAuthority(authority2.Url)
 
 		entry, _ := account.GetAuthority(authority.Url)
-		entry.Disabled = true
+		entry.RuleID = protocol.DisabledAuthRulesID
 
 		t.AddSignature(txn.GetHash(), 0, sig)
 
@@ -230,7 +230,7 @@ func TestTransactionIsReady(tt *testing.T) {
 		account.AddAuthority(authority2.Url)
 
 		entry, _ := account.GetAuthority(authority.Url)
-		entry.Disabled = true
+		entry.RuleID = protocol.DisabledAuthRulesID
 
 		sig1 := sig.Copy()
 		sig1.Signer = url.MustParse("foo/non-authority/signer")
@@ -474,7 +474,7 @@ func TestCannotDisableAuthForAuthTxns(t *testing.T) {
 	sim.CreateIdentity(alice, mainKey[32:])
 	sim.CreateAccount(&protocol.TokenAccount{Url: alice.JoinPath("tokens"), Balance: *big.NewInt(1e9), TokenUrl: protocol.AcmeUrl()})
 	sim.CreateIdentity(alice.JoinPath("unauth"), unauthKey[32:])
-	updateAccount(sim, alice.JoinPath("tokens"), func(t *protocol.TokenAccount) { t.Authorities[0].Disabled = true })
+	updateAccount(sim, alice.JoinPath("tokens"), func(t *protocol.TokenAccount) { t.Authorities[0].RuleID = protocol.DisabledAuthRulesID })
 	updateAccount(sim, alice.JoinPath("unauth", "book", "1"), func(p *protocol.KeyPage) { p.CreditBalance = 1e9 })
 
 	// An unauthorized signer must not be allowed to enable auth
@@ -522,7 +522,7 @@ func TestCannotDisableAuthForAuthTxns(t *testing.T) {
 		require.NoError(t, t.Account(alice.JoinPath("tokens")).GetStateAs(&account))
 		account = t.PutAccountCopy(account).(*protocol.TokenAccount)
 		a, _ := account.AddAuthority(protocol.AccountUrl("foo"))
-		a.Disabled = true
+		a.RuleID = protocol.DisabledAuthRulesID
 
 		// The transaction
 		txn := new(protocol.Transaction)

@@ -516,14 +516,19 @@ func (x *Executor) verifyPageIsAuthorized(batch *database.Batch, transaction *pr
 		return nil
 	}
 
-	// Authorization is disabled and the transaction type does not force authorization => authorized
-	if auth.AuthDisabled() && !transaction.Body.Type().RequireAuthorization() {
-		return nil
+	// Authorization is enabled => unauthorized
+	for _, entry := range auth.Authorities {
+		rs, ok := auth.GetRule(entry.RuleID)
+		if !ok {
+			return errors.InternalError.With("rule set not found")
+		}
+		if rs.MustAccept(transaction) {
+			return errors.Unauthorized.WithFormat("%v is not authorized to sign transactions for %v", signer.GetUrl(), principal.GetUrl())
+		}
 	}
 
-	// Authorization is enabled => unauthorized
-	// Transaction type forces authorization => unauthorized
-	return errors.Unauthorized.WithFormat("%v is not authorized to sign transactions for %v", signer.GetUrl(), principal.GetUrl())
+	// Authorization is disabled => authorized
+	return nil
 }
 
 // computeSignerFee computes the fee that will be charged to the signer.

@@ -137,7 +137,7 @@ var txnTests = []*TCG{
 }
 
 var simpleAuth = &AccountAuth{Authorities: []AuthorityEntry{{Url: AccountUrl("adi", "book")}}}
-var managerAuth = &AccountAuth{Authorities: []AuthorityEntry{{Url: AccountUrl("adi", "book"), Disabled: true}, {Url: AccountUrl("adi", "mgr")}}}
+var managerAuth = &AccountAuth{Authorities: []AuthorityEntry{{Url: AccountUrl("adi", "book"), RuleID: DisabledAuthRulesID}, {Url: AccountUrl("adi", "mgr")}}}
 
 var acntTests = []*TCG{
 	{Name: "Identity", Cases: []*TC{

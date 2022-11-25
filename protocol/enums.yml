@@ -292,3 +292,13 @@ BookType:
   Operator:
     value: 0x02
     description: Operator key book
+
+AccountAuthRuleType:
+  Default:
+    value: 0
+  Disabled:
+    value: 1
+  IncludeSpecific:
+    value: 2
+  ExcludeSpecific:
+    value: 3

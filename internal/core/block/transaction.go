@@ -194,10 +194,15 @@ func (x *Executor) userTransactionIsReady(batch *database.Batch, delivery *chain
 	}
 
 	// For each authority
-	authRequired := delivery.Transaction.Body.Type().RequireAuthorization()
 	for _, entry := range auth.Authorities {
-		// Do not check signers for disabled authorities
-		if entry.Disabled && !authRequired {
+		// Get the rule set
+		rs, ok := auth.GetRule(entry.RuleID)
+		if !ok {
+			return false, errors.InternalError.With("rule set not found")
+		}
+
+		// Does the authority apply to the transaction?
+		if !rs.MustAccept(delivery.Transaction) {
 			continue
 		}
 
