@@ -16,7 +16,7 @@ import (
 
 func Parse(s string) (Address, error) {
 	if len(s) < 2 {
-		return nil, errors.New(errors.BadRequest, "invalid address: too short")
+		return nil, errors.BadRequest.With("invalid address: too short")
 	}
 
 	switch s[:2] {
@@ -83,7 +83,7 @@ func Parse(s string) (Address, error) {
 		return &Unknown{Value: b}, nil
 	}
 
-	return nil, errors.New(errors.BadRequest, "unknown address format")
+	return nil, errors.BadRequest.With("unknown address format")
 }
 
 func parseMH(s string) (Address, error) {
@@ -95,7 +95,7 @@ func parseMH(s string) (Address, error) {
 	// Decode
 	_, b, err := multibase.Decode(s[2:])
 	if err != nil {
-		return nil, errors.Format(errors.BadRequest, "invalid MH address: %v", err)
+		return nil, errors.BadRequest.WithFormat("invalid MH address: %v", err)
 	}
 
 	// Verify the checksum
@@ -110,7 +110,7 @@ func parseMH(s string) (Address, error) {
 
 	mh, err := multihash.Decode(b[:len(b)-4])
 	if err != nil {
-		return nil, errors.Format(errors.BadRequest, "invalid MH address: %w", err)
+		return nil, errors.BadRequest.WithFormat("invalid MH address: %w", err)
 	}
 	return (*UnknownMultihash)(mh), nil
 }
