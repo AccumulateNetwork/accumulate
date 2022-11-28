@@ -3,7 +3,10 @@ package address
 import (
 	"encoding/hex"
 
+	"github.com/btcsuite/btcutil/base58"
+	"github.com/multiformats/go-multibase"
 	"github.com/multiformats/go-multihash"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -16,14 +19,23 @@ type Address interface {
 }
 
 type Unknown struct {
-	Value []byte
+	Value    []byte
+	Encoding rune
 }
 
-func (u *Unknown) String() string                   { return hex.EncodeToString(u.Value) }
 func (u *Unknown) GetType() protocol.SignatureType  { return protocol.SignatureTypeUnknown }
 func (u *Unknown) GetPublicKeyHash() ([]byte, bool) { return nil, false }
 func (u *Unknown) GetPublicKey() ([]byte, bool)     { return nil, false }
 func (u *Unknown) GetPrivateKey() ([]byte, bool)    { return nil, false }
+
+func (u *Unknown) String() string {
+	switch u.Encoding {
+	case multibase.Base58BTC:
+		return base58.Encode(u.Value)
+	default:
+		return hex.EncodeToString(u.Value)
+	}
+}
 
 type UnknownHash struct {
 	Hash []byte
@@ -97,6 +109,17 @@ func (p *PrivateKey) String() string {
 	}
 	return p.PublicKey.String()
 }
+
+type Lite struct {
+	Url   *url.URL
+	Bytes []byte
+}
+
+func (l *Lite) String() string                   { return l.Url.String() }
+func (l *Lite) GetType() protocol.SignatureType  { return protocol.SignatureTypeUnknown }
+func (l *Lite) GetPublicKeyHash() ([]byte, bool) { return nil, false }
+func (l *Lite) GetPublicKey() ([]byte, bool)     { return nil, false }
+func (l *Lite) GetPrivateKey() ([]byte, bool)    { return nil, false }
 
 func formatAddr(typ protocol.SignatureType, hash []byte) string {
 	switch typ {

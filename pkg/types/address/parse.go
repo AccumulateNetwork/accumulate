@@ -11,12 +11,17 @@ import (
 	"github.com/multiformats/go-multibase"
 	"github.com/multiformats/go-multihash"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 func Parse(s string) (Address, error) {
 	if len(s) < 2 {
 		return nil, errors.BadRequest.With("invalid address: too short")
+	}
+
+	if strings.HasPrefix(s, "acc://") {
+		return parseLite(s)
 	}
 
 	switch s[:2] {
@@ -74,16 +79,37 @@ func Parse(s string) (Address, error) {
 	// Raw hex - could be a hash or a key
 	b, err := hex.DecodeString(s)
 	if err == nil {
-		return &Unknown{Value: b}, nil
+		return &Unknown{Value: b, Encoding: multibase.Base16}, nil
 	}
 
 	// Raw base58 - could be Bitcoin or a hash or a key
 	b, err = base58.Decode(s)
 	if err == nil {
-		return &Unknown{Value: b}, nil
+		return &Unknown{Value: b, Encoding: multibase.Base58BTC}, nil
+	}
+
+	// Unprefixed lite account
+	b, err = hex.DecodeString(strings.SplitN(s, "/", 2)[0])
+	if err == nil {
+		return parseLite(s)
 	}
 
 	return nil, errors.BadRequest.With("unknown address format")
+}
+
+func parseLite(s string) (Address, error) {
+	u, err := url.Parse(s)
+	if err != nil {
+		return nil, errors.BadRequest.With("invalid lite address: %w", err)
+	}
+	b, err := protocol.ParseLiteAddress(u)
+	if err != nil {
+		return nil, errors.BadRequest.With("invalid lite address: %w", err)
+	}
+	if len(b) != 20 {
+		return nil, errors.BadRequest.WithFormat("invalid lite address: want 20 bytes (excluding checksum), got %d", len(b))
+	}
+	return &Lite{Url: u, Bytes: b}, nil
 }
 
 func parseMH(s string) (Address, error) {
