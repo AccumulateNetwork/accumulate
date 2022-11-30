@@ -8,15 +8,12 @@ GIT_COMMIT = $(shell git rev-parse HEAD)
 VERSION = gitlab.com/accumulatenetwork/accumulate.Version=$(GIT_DESCRIBE)
 COMMIT = gitlab.com/accumulatenetwork/accumulate.Commit=$(GIT_COMMIT)
 
-# TODO Add mainnet to tags
+TAGS=production,mainnet
 LDFLAGS = '-X "$(VERSION)" -X "$(COMMIT)"'
-FLAGS = $(BUILDFLAGS) -tags production -ldflags $(LDFLAGS)
+FLAGS = $(BUILDFLAGS) -tags $(TAGS) -ldflags $(LDFLAGS)
 
 build:
-	go build $(FLAGS) ./cmd/accumulated
+	go build -trimpath $(FLAGS) ./cmd/accumulated
 
 install:
-	go install $(FLAGS) ./cmd/accumulated
-
-accumulate:
-	go build $(FLAGS) ./cmd/accumulate
+	go install -trimpath $(FLAGS) ./cmd/accumulated

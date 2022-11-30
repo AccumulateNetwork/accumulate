@@ -1,16 +1,24 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package snapshot
 
 import (
 	"encoding/binary"
 	"io"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 const align = 64
 
 type Writer struct {
+	Logger      logging.OptionalLogger
 	file        io.WriteSeeker
 	openSection bool
 	prevSection int64
@@ -38,13 +46,13 @@ func (w *SectionWriter) Seek(offset int64, whence int) (int64, error) {
 // Open opens a section.
 func (w *Writer) Open(typ SectionType) (*SectionWriter, error) {
 	if w.openSection {
-		return nil, errors.Format(errors.StatusBadRequest, "previous section has not been closed")
+		return nil, errors.BadRequest.WithFormat("previous section has not been closed")
 	}
 
 	// Get the current offset
 	offset, err := w.file.Seek(0, io.SeekCurrent)
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "get file offset: %w", err)
+		return nil, errors.UnknownError.WithFormat("get file offset: %w", err)
 	}
 
 	// Update the previous section's header
@@ -52,33 +60,33 @@ func (w *Writer) Open(typ SectionType) (*SectionWriter, error) {
 		// Seek to the header
 		_, err = w.file.Seek(w.prevSection+16, io.SeekStart)
 		if err != nil {
-			return nil, errors.Format(errors.StatusUnknownError, "set file offset: %w", err)
+			return nil, errors.UnknownError.WithFormat("set file offset: %w", err)
 		}
 
 		var headerPart [8]byte
 		binary.BigEndian.PutUint64(headerPart[:], uint64(offset))
 		_, err = w.file.Write(headerPart[:])
 		if err != nil {
-			return nil, errors.Format(errors.StatusUnknownError, "read section header: %w", err)
+			return nil, errors.UnknownError.WithFormat("read section header: %w", err)
 		}
 
 		// Restore the previous location
 		_, err = w.file.Seek(offset, io.SeekStart)
 		if err != nil {
-			return nil, errors.Format(errors.StatusUnknownError, "set file offset: %w", err)
+			return nil, errors.UnknownError.WithFormat("set file offset: %w", err)
 		}
 	}
 
 	// Save space for the header
 	_, err = w.file.Write(make([]byte, 64))
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "allocate space for header: %w", err)
+		return nil, errors.UnknownError.WithFormat("allocate space for header: %w", err)
 	}
 
 	// Create a section reader
 	section, err := ioutil2.NewSectionWriter(w.file, offset+64, -1)
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "create section writer: %w", err)
+		return nil, errors.UnknownError.WithFormat("create section writer: %w", err)
 	}
 
 	w.openSection = true
@@ -93,13 +101,13 @@ func (w *Writer) closeSection(s *SectionWriter) error {
 	// Get current offset
 	current, err := w.file.Seek(0, io.SeekCurrent)
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "get file offset: %w", err)
+		return errors.UnknownError.WithFormat("get file offset: %w", err)
 	}
 
 	// Seek to the header
 	_, err = w.file.Seek(int64(s.offset), io.SeekStart)
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "seek to section header: %w", err)
+		return errors.UnknownError.WithFormat("seek to section header: %w", err)
 	}
 
 	// Write the section header
@@ -108,13 +116,13 @@ func (w *Writer) closeSection(s *SectionWriter) error {
 	binary.BigEndian.PutUint64(header[8:], uint64(current-s.offset-64)) // Size
 	_, err = w.file.Write(header[:])
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "write section header: %w", err)
+		return errors.UnknownError.WithFormat("write section header: %w", err)
 	}
 
 	// Return to the original offset
 	_, err = w.file.Seek(current, io.SeekStart)
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "restore file offset: %w", err)
+		return errors.UnknownError.WithFormat("restore file offset: %w", err)
 	}
 
 	// Pad
@@ -122,7 +130,7 @@ func (w *Writer) closeSection(s *SectionWriter) error {
 		pad := align - current%align
 		_, err = w.file.Write(make([]byte, pad))
 		if err != nil {
-			return errors.Format(errors.StatusUnknownError, "pad end of section: %w", err)
+			return errors.UnknownError.WithFormat("pad end of section: %w", err)
 		}
 	}
 

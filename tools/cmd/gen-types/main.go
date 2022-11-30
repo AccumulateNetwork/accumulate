@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package main
 
 import (
@@ -17,13 +23,14 @@ import (
 var flags struct {
 	files typegen.FileReader
 
-	Package        string
-	SubPackage     string
-	Out            string
-	Language       string
-	Reference      []string
-	FilePerType    bool
-	ExpandEmbedded bool
+	Package                string
+	SubPackage             string
+	Out                    string
+	Language               string
+	Reference              []string
+	FilePerType            bool
+	ExpandEmbedded         bool
+	LongUnionDiscriminator bool
 }
 
 func main() {
@@ -39,6 +46,7 @@ func main() {
 	cmd.Flags().StringVarP(&flags.Out, "out", "o", "types_gen.go", "Output file")
 	cmd.Flags().StringSliceVar(&flags.Reference, "reference", nil, "Extra type definition files to use as a reference")
 	cmd.Flags().BoolVar(&flags.FilePerType, "file-per-type", false, "Generate a separate file for each type")
+	cmd.Flags().BoolVar(&flags.LongUnionDiscriminator, "long-union-discriminator", false, "Use the full name of the union type for the discriminator method")
 	flags.files.SetFlags(cmd.Flags(), "types")
 
 	_ = cmd.Execute()
@@ -72,18 +80,11 @@ var moduleInfo = func() struct{ Dir string } {
 	return *info
 }()
 
-func getWdPackagePath() string {
-	wd, err := os.Getwd()
-	check(err)
-	return getPackagePath(wd)
-}
-
 func getPackagePath(dir string) string {
 	rel, err := filepath.Rel(moduleInfo.Dir, dir)
 	check(err)
 
 	rel = strings.ReplaceAll(rel, "\\", "/")
-	fmt.Printf("package %s\n", rel)
 	return rel
 }
 
@@ -96,8 +97,20 @@ func run(_ *cobra.Command, args []string) {
 
 	types := read(args, true)
 	refTypes := read(nil, false)
-	ttypes, err := convert(types, refTypes, flags.Package, flags.SubPackage, getWdPackagePath())
+	ttypes, err := convert(types, refTypes, flags.Package, flags.SubPackage)
 	check(err)
+
+	var missing []string
+	for _, typ := range ttypes.Types {
+		for _, field := range typ.Fields {
+			if field.IsEmbedded && field.TypeRef == nil {
+				missing = append(missing, fmt.Sprintf("%s (%s.%s)", field.Type.String(), typ.Name, field.Name))
+			}
+		}
+	}
+	if len(missing) > 0 {
+		fatalf("missing type reference for %s", strings.Join(missing, ", "))
+	}
 
 	if !flags.FilePerType {
 		w := new(bytes.Buffer)
@@ -140,9 +153,9 @@ func run(_ *cobra.Command, args []string) {
 }
 
 func read(files []string, main bool) typegen.Types {
-	flup := map[*typegen.Type]string{}
+	fileLookup := map[*typegen.Type]string{}
 	record := func(file string, typ *typegen.Type) {
-		flup[typ] = file
+		fileLookup[typ] = file
 	}
 
 	var all map[string]*typegen.Type
@@ -154,8 +167,25 @@ func read(files []string, main bool) typegen.Types {
 	}
 	check(err)
 
+	pkgLookup := map[string]string{}
+	if main {
+		pkgLookup["."] = PackagePath
+	} else {
+		wd, err := os.Getwd()
+		check(err)
+
+		for _, file := range fileLookup {
+			dir := filepath.Dir(file)
+			if pkgLookup[dir] != "" {
+				continue
+			}
+
+			pkgLookup[dir] = getPackagePath(filepath.Join(wd, dir))
+		}
+	}
+
 	var v typegen.Types
-	check(v.Unmap(all, flup))
+	check(v.Unmap(all, fileLookup, pkgLookup))
 	v.Sort()
 	return v
 }

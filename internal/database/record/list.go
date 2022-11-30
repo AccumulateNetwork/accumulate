@@ -1,8 +1,14 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package record
 
 import (
 	"github.com/tendermint/tendermint/libs/log"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 // List records an unordered list of values as a single record.
@@ -21,11 +27,11 @@ func NewList[T any](logger log.Logger, store Store, key Key, namefmt string, enc
 func (s *List[T]) Add(v ...T) error {
 	l, err := s.Get()
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.UnknownError.Wrap(err)
 	}
 
 	err = s.Value.Put(append(l, v...))
-	return errors.Wrap(errors.StatusUnknownError, err)
+	return errors.UnknownError.Wrap(err)
 }
 
 // IsDirty implements Record.IsDirty.
@@ -42,5 +48,5 @@ func (s *List[T]) Commit() error {
 		return nil
 	}
 	err := s.Value.Commit()
-	return errors.Wrap(errors.StatusUnknownError, err)
+	return errors.UnknownError.Wrap(err)
 }

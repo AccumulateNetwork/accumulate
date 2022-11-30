@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package main
 
 import (
@@ -10,7 +16,7 @@ import (
 	f2 "github.com/FactomProject/factom"
 	"github.com/FactomProject/factomd/common/entryBlock"
 	"github.com/spf13/cobra"
-	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/tools/internal/factom"
 )

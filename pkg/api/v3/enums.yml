@@ -1,0 +1,53 @@
+RecordType:
+  Account:
+    value: 0x01
+  Chain:
+    value: 0x02
+  ChainEntry:
+    value: 0x03
+  Key:
+    value: 0x04
+
+  Transaction:
+    value: 0x10
+  Signature:
+    value: 0x11
+
+  MinorBlock:
+    value: 0x20
+  MajorBlock:
+    value: 0x21
+
+  Range:
+    value: 0x80
+  Url:
+    value: 0x81
+  TxID:
+    value: 0x82
+  IndexEntry:
+    value: 0x83
+
+QueryType:
+  Default:
+    value: 0x00
+  Chain:
+    value: 0x01
+  Data:
+    value: 0x02
+  Directory:
+    value: 0x03
+  Pending:
+    value: 0x04
+  Block:
+    value: 0x05
+
+  AnchorSearch:
+    value: 0x10
+  PublicKeySearch:
+    value: 0x11
+  PublicKeyHashSearch:
+    value: 0x12
+  DelegateSearch:
+    value: 0x13
+  TransactionHashSearch:
+    value: 0x14

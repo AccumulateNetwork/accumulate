@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package client
 
 import (
@@ -11,7 +17,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 )
 
-//go:generate go run ../../../../tools/cmd/gen-sdk --package client --out api_v2_sdk_gen.go ../../../../internal/api/v2/methods.yml
+//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-sdk --package client --out api_v2_sdk_gen.go ../../../../internal/api/v2/methods.yml
 
 type Client struct {
 	jsonrpc2.Client

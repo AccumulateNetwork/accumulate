@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package protocol
 
 import (
@@ -6,6 +12,7 @@ import (
 	"crypto/sha512"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"math"
 )
 
@@ -147,6 +154,15 @@ func (e *FactomDataEntry) UnmarshalBinary(data []byte) error {
 		data = data[extIdSize:]
 	}
 	return nil
+}
+
+func (e *FactomDataEntry) UnmarshalBinaryFrom(rd io.Reader) error {
+	// TODO: flip this - make UnmarshalBinary call UnmarshalBinaryFrom
+	data, err := io.ReadAll(rd)
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalBinary(data)
 }
 
 func (e *FactomDataEntry) IsValid() error  { return nil }

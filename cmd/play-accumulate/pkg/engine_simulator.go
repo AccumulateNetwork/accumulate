@@ -1,14 +1,20 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package pkg
 
 import (
 	"context"
 	"fmt"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/simulator"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 type SimEngine struct {
@@ -99,7 +105,7 @@ func (s SimEngine) GetTransaction(hash [32]byte) (*protocol.Transaction, error) 
 		}
 	}
 
-	return nil, errors.NotFound("transaction %X not found", hash[:4])
+	return nil, errors.NotFound.WithFormat("transaction %X not found", hash[:4])
 }
 
 func (s SimEngine) Submit(envelope *protocol.Envelope) (*protocol.TransactionStatus, error) {

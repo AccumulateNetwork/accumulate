@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package e2e
 
 import (
@@ -5,17 +11,18 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
-	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
+	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
 // TestDnStall verifies that a BVN can detect if the DN stalls
 func TestDnStall(t *testing.T) {
+	t.Skip("Stall detection was removed")
+
 	alice := url.MustParse("alice")
 	bob := url.MustParse("bob")
 	aliceKey := acctesting.GenerateKey(alice)
@@ -83,8 +90,8 @@ func TestDnStall(t *testing.T) {
 		sim.Step()
 	}
 
-	// Verify that the number of acknowledged anchors is less than the number
-	// produced
-	ledger := GetAccount[*AnchorLedger](t, sim.Database("BVN0"), PartitionUrl("BVN0").JoinPath(AnchorPool)).Partition(DnUrl())
-	require.Less(t, ledger.Acknowledged, ledger.Produced)
+	// // Verify that the number of acknowledged anchors is less than the number
+	// // produced
+	// ledger := GetAccount[*AnchorLedger](t, sim.Database("BVN0"), PartitionUrl("BVN0").JoinPath(AnchorPool)).Partition(DnUrl())
+	// require.Less(t, ledger.Acknowledged, ledger.Produced)
 }

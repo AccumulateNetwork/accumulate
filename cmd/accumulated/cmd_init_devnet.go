@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package main
 
 import (
@@ -12,8 +18,8 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/tendermint/tendermint/crypto/ed25519"
-	cfg "gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
+	cfg "gitlab.com/accumulatenetwork/accumulate/internal/node/config"
+	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gopkg.in/yaml.v2"
 )
 

@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package node_test
 
 import (
@@ -12,10 +18,10 @@ import (
 	"github.com/tendermint/tendermint/rpc/client/local"
 	apiv2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/testing/e2e"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
+	"gitlab.com/accumulatenetwork/accumulate/test/testing/e2e"
 )
 
 func TestEndToEnd(t *testing.T) {
@@ -27,8 +33,7 @@ func TestEndToEnd(t *testing.T) {
 		partitions, daemons := acctesting.CreateTestNet(s.T(), 3, 1, 0, false)
 		acctesting.RunTestNet(s.T(), partitions, daemons)
 		daemon := daemons[partitions[1]][0]
-		client, err := local.New(daemon.Node_TESTONLY().Service.(local.NodeService))
-		require.NoError(s.T(), err)
+		client := local.New(daemon.Node_TESTONLY().Node)
 		return &e2eDUT{s, daemon.DB_TESTONLY(), daemon.Jrpc_TESTONLY(), client}
 	}))
 }
@@ -118,9 +123,8 @@ func TestSubscribeAfterClose(t *testing.T) {
 	}
 
 	daemon := daemons[protocol.Directory][0]
-	client, err := local.New(daemon.Node_TESTONLY().Service.(local.NodeService))
-	require.NoError(t, err)
-	_, err = client.Subscribe(context.Background(), t.Name(), "tm.event = 'Tx'")
+	client := local.New(daemon.Node_TESTONLY().Node)
+	_, err := client.Subscribe(context.Background(), t.Name(), "tm.event = 'Tx'")
 	require.EqualError(t, err, "failed to subscribe: service is shutting down")
 	time.Sleep(time.Millisecond) // Time for it to panic
 

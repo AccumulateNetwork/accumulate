@@ -1,10 +1,16 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package protocol
 
 import (
 	"encoding"
 	"strings"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 // Fee is the unit cost of a transaction.
@@ -65,7 +71,7 @@ func dataCount(obj encoding.BinaryMarshaler) (int, int, error) {
 	// Check the transaction size (including signatures)
 	data, err := obj.MarshalBinary()
 	if err != nil {
-		return 0, 0, errors.Wrap(errors.StatusInternalError, err)
+		return 0, 0, errors.InternalError.Wrap(err)
 	}
 
 	// count the number of 256-byte chunks
@@ -82,10 +88,10 @@ func (s *FeeSchedule) ComputeSignatureFee(sig Signature) (Fee, error) {
 	// Check the transaction size
 	count, size, err := dataCount(sig)
 	if err != nil {
-		return 0, errors.Wrap(errors.StatusUnknownError, err)
+		return 0, errors.UnknownError.Wrap(err)
 	}
 	if size > SignatureSizeMax {
-		return 0, errors.Format(errors.StatusBadRequest, "signature size exceeds %v byte entry limit", SignatureSizeMax)
+		return 0, errors.BadRequest.WithFormat("signature size exceeds %v byte entry limit", SignatureSizeMax)
 	}
 
 	// Base fee
@@ -121,10 +127,10 @@ func (s *FeeSchedule) ComputeTransactionFee(tx *Transaction) (Fee, error) {
 	// Check the transaction size
 	count, size, err := dataCount(tx)
 	if err != nil {
-		return 0, errors.Wrap(errors.StatusUnknownError, err)
+		return 0, errors.UnknownError.Wrap(err)
 	}
 	if size > TransactionSizeMax {
-		return 0, errors.Format(errors.StatusBadRequest, "transaction size exceeds %v byte entry limit", TransactionSizeMax)
+		return 0, errors.BadRequest.WithFormat("transaction size exceeds %v byte entry limit", TransactionSizeMax)
 	}
 
 	var fee Fee
@@ -202,7 +208,7 @@ func (s *FeeSchedule) ComputeTransactionFee(tx *Transaction) (Fee, error) {
 
 	default:
 		// All user transactions must have a defined fee amount, even if it's zero
-		return 0, errors.Format(errors.StatusInternalError, "unknown transaction type %v", body.Type())
+		return 0, errors.InternalError.WithFormat("unknown transaction type %v", body.Type())
 	}
 
 	return fee, nil
@@ -212,7 +218,7 @@ func (s *FeeSchedule) ComputeSyntheticRefund(txn *Transaction, synthCount int) (
 	// Calculate what was paid
 	paid, err := s.ComputeTransactionFee(txn)
 	if err != nil {
-		return 0, errors.Wrap(errors.StatusUnknownError, err)
+		return 0, errors.UnknownError.Wrap(err)
 	}
 
 	// If it's less than the max failed fee, do not refund anything
@@ -233,7 +239,7 @@ func (s *FeeSchedule) ComputeSyntheticRefund(txn *Transaction, synthCount int) (
 	// output and one bad output to cost less (net) than a transaction with one
 	// good output.
 	if synthCount > 1 {
-		return 0, errors.Format(errors.StatusUnknownError, "a %v transaction cannot have multiple outputs", txn.Body.Type())
+		return 0, errors.UnknownError.WithFormat("a %v transaction cannot have multiple outputs", txn.Body.Type())
 	}
 
 	// Refund the amount paid in excess of the max failed fee

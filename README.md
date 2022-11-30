@@ -40,23 +40,23 @@ Accumulate is broken into the following components:
 - `cmd/accumulated` - Daemon
 - `cmd/accumulate` - CLI wallet
 - `config` - Daemon configuration types
-- `internal/abci` - [ABCI](https://docs.tendermint.com/master/spec/abci/)
+- `internal/node/abci` - [ABCI](https://docs.tendermint.com/master/spec/abci/)
   implementation
 - `internal/api`- JSON-RPC v1; **Deprecated**: use `internal/api/v2`
 - `internal/api/v2`- JSON-RPC v2
-- `internal/chain` - Transaction validation and processing (aka chain
+- `internal/core/chain` - Transaction validation and processing (aka chain
   validators)
 - `internal/cmd/gentypes` - Type generator for `internal/api` and `protocol`
-- `internal/encoding` - Shared code used by generated types in `internal/api`
+- `pkg/types/encoding` - Shared code used by generated types in `internal/api`
   and `protocol`
-- `internal/genesis` - Objects that are created when the node first starts up
+- `internal/node/genesis` - Objects that are created when the node first starts up
 - `internal/logging` - Logging setup
 - `internal/node` - Node configuration, initialization, and execution
 - `internal/relay` - The relay, responsible for relaying transactions to the
   appropriate BVC; **Deprecated**: use `internal/api/v2`
-- `internal/testing` - Test helpers
+- `test/testing` - Test helpers
 - `pkg/url` - Accumulate URL parser
-- `internal/web/static` - Embedded web server content
+- `internal/node/web/static` - Embedded web server content
 - `networks` - Accumulate network definitions
 - `protocol` - Protocol types and definitions
 - `router` - Accumulate API

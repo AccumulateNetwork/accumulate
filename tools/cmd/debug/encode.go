@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package main
 
 import (
@@ -7,8 +13,8 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -39,7 +45,7 @@ var encodeTxnBodyCmd = &cobra.Command{
 var encodeSigCmd = &cobra.Command{
 	Use:     "signature <signature (json)>",
 	Aliases: []string{"sig"},
-	Run:     encodeWithFunc(protocol.UnmarshalKeySignatureJSON),
+	Run:     encodeWithFunc(protocol.UnmarshalSignatureJSON),
 }
 
 var signCmd = &cobra.Command{

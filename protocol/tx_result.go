@@ -1,9 +1,18 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package protocol
 
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
+
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
 
 func NewTransactionResult(typ TransactionType) (TransactionResult, error) {
@@ -45,42 +54,21 @@ func EqualTransactionResult(a, b TransactionResult) bool {
 	}
 }
 
-func UnmarshalTransactionResult(data []byte) (TransactionResult, error) {
-	typ, err := UnmarshalTransactionType(bytes.NewReader(data))
-	if err != nil {
-		return nil, err
-	}
-
-	tx, err := NewTransactionResult(typ)
-	if err != nil {
-		return nil, err
-	}
-
-	err = tx.UnmarshalBinary(data)
-	if err != nil {
-		return nil, err
-	}
-
-	return tx, nil
+func CopyTransactionResult(v TransactionResult) TransactionResult {
+	return v.CopyAsInterface().(TransactionResult)
 }
 
-func UnmarshalTransactionResultFrom(rd io.ReadSeeker) (TransactionResult, error) {
-	// Get the reader's current position
-	pos, err := rd.Seek(0, io.SeekCurrent)
-	if err != nil {
-		return nil, err
-	}
+func UnmarshalTransactionResult(data []byte) (TransactionResult, error) {
+	return UnmarshalTransactionResultFrom(bytes.NewReader(data))
+}
+
+func UnmarshalTransactionResultFrom(rd io.Reader) (TransactionResult, error) {
+	reader := encoding.NewReader(rd)
 
 	// Read the type code
-	typ, err := UnmarshalTransactionType(rd)
-	if err != nil {
-		return nil, err
-	}
-
-	// Reset the reader's position
-	_, err = rd.Seek(pos, io.SeekStart)
-	if err != nil {
-		return nil, err
+	var typ TransactionType
+	if !reader.ReadEnum(1, &typ) {
+		return nil, fmt.Errorf("field Type: missing")
 	}
 
 	// Create a new transaction result
@@ -90,7 +78,7 @@ func UnmarshalTransactionResultFrom(rd io.ReadSeeker) (TransactionResult, error)
 	}
 
 	// Unmarshal the result
-	err = tx.UnmarshalBinaryFrom(rd)
+	err = tx.UnmarshalFieldsFrom(reader)
 	if err != nil {
 		return nil, err
 	}

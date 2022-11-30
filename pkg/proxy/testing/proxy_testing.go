@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package testing
 
 import (
@@ -17,19 +23,19 @@ import (
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate"
-	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
-	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/proxy"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
 var AccuProxyAuthorityKey ed25519.PrivateKey
 var AccuProxyKey ed25519.PrivateKey
 var AccuProxy = protocol.AccountUrl("accuproxy.acme")
 
-//LaunchAccuProcyDevNet will launch a devnet with the accuproxy.acme adi and authorized key(s)
+// LaunchAccuProcyDevNet will launch a devnet with the accuproxy.acme adi and authorized key(s)
 func LaunchAccuProxyDevNet(t *testing.T) (*client.Client, *url.URL, *url.URL) {
 	t.Helper()
 	partitions, daemons := acctesting.CreateTestNet(t, 1, 1, 0, false)
@@ -65,7 +71,7 @@ func LaunchAccuProxyDevNet(t *testing.T) (*client.Client, *url.URL, *url.URL) {
 	return client, dnEndpointUrl, bvnEndpointUrl
 }
 
-//make up a fake default network configuration list
+// make up a fake default network configuration list
 var Nodes = []config.Node{{Address: "127.0.0.1", Type: config.NodeTypeValidator}}
 var Partitions = []config.Partition{
 	{Id: "Directory", Type: config.NetworkTypeDirectory, BasePort: 30000, Nodes: Nodes},

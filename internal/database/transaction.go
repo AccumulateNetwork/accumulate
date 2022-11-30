@@ -1,13 +1,19 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package database
 
 import (
 	"fmt"
 
-	"gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 func (r *Transaction) hash() []byte {
@@ -32,10 +38,10 @@ func (t *Transaction) GetState() (*SigOrTxn, error) {
 	if err == nil {
 		return v, nil
 	}
-	if !errors.Is(err, errors.StatusNotFound) {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+	if !errors.Is(err, errors.NotFound) {
+		return nil, errors.UnknownError.Wrap(err)
 	}
-	return nil, errors.FormatWithCause(errors.StatusNotFound, err, "transaction %X not found", t.hash())
+	return nil, errors.NotFound.WithCauseAndFormat(err, "transaction %X not found", t.hash())
 }
 
 // PutState stores the transaction state.

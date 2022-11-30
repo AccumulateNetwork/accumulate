@@ -1,16 +1,22 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package protocol
 
 import (
 	"fmt"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding/hash"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/hash"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
 
 type DataEntryType uint64
 
 type DataEntry interface {
-	encoding.BinaryValue
+	encoding.UnionValue
 	Type() DataEntryType
 	Hash() []byte
 	GetData() [][]byte
@@ -33,8 +39,8 @@ func (e *AccumulateDataEntry) GetData() [][]byte {
 	return e.Data
 }
 
-//CheckDataEntrySize is the marshaled size minus the implicit type header,
-//returns error if there is too much or no data
+// CheckDataEntrySize is the marshaled size minus the implicit type header,
+// returns error if there is too much or no data
 func CheckDataEntrySize(e DataEntry) (int, error) {
 	b, err := e.MarshalBinary()
 	if err != nil {
@@ -50,7 +56,7 @@ func CheckDataEntrySize(e DataEntry) (int, error) {
 	return size, nil
 }
 
-//Cost will return the number of credits to be used for the data write
+// Cost will return the number of credits to be used for the data write
 func DataEntryCost(e DataEntry) (uint64, error) {
 	size, err := CheckDataEntrySize(e)
 	if err != nil {

@@ -1,11 +1,17 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package database
 
 import (
 	"encoding"
 	"fmt"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/managed"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 // Chain manages a Merkle tree (chain).
@@ -21,7 +27,7 @@ func wrapChain(merkle *managed.Chain) (*Chain, error) {
 	var err error
 	m.head, err = m.merkle.Head().Get()
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	return m, nil
@@ -54,7 +60,7 @@ func (c *Chain) Entries(start int64, end int64) ([][]byte, error) {
 	}
 
 	if end < start {
-		return nil, errors.New(errors.StatusBadRequest, "invalid range: start is greater than end")
+		return nil, errors.BadRequest.With("invalid range: start is greater than end")
 	}
 
 	// GetRange will not cross mark point boundaries, so we may need to call it
@@ -128,7 +134,7 @@ func (c *Chain) AddEntry(entry []byte, unique bool) error {
 	}
 
 	err := c.merkle.AddHash(entry, unique)
-	return errors.Wrap(errors.StatusUnknownError, err)
+	return errors.UnknownError.Wrap(err)
 }
 
 // Receipt builds a receipt from one index to another
@@ -174,10 +180,4 @@ func (c *Chain) Receipt(from, to int64) (*managed.Receipt, error) {
 	}
 
 	return r, nil
-}
-
-// RestoreHead is specifically only to be used to restore a
-// chain's head from a snapshot.
-func (c *Chain) RestoreHead(head *managed.MerkleState) error {
-	return c.merkle.Head().Put(head)
 }

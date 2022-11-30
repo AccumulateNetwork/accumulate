@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package cmd
 
 import (
@@ -7,8 +13,8 @@ import (
 
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/play-accumulate/pkg"
-	testing "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
+	testing "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
 var Flag = struct {

@@ -1,8 +1,15 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package main
 
 import (
 	_ "embed"
 	"fmt"
+	"path"
 	"strings"
 	"text/template"
 
@@ -12,13 +19,28 @@ import (
 var PackagePath string
 
 // convert converts typegen.Types to local Types.
-func convert(types, refTypes typegen.Types, pkgName, subPkgName, pkgPath string) (*Types, error) {
+func convert(types, refTypes typegen.Types, pkgName, subPkgName string) (*Types, error) {
 	// Initialize
 	ttypes := new(Types)
 	ttypes.Package = pkgName
-	PackagePath = pkgPath
+	ttypes.LongUnionDiscriminator = flags.LongUnionDiscriminator
 	lup := map[string]*Type{}
 	unions := map[string]*UnionSpec{}
+
+	// Fixup reference names
+	for _, typ := range refTypes {
+		if typ.Package == PackagePath {
+			continue
+		}
+		for _, field := range typ.Fields {
+			if field.Type.Code != typegen.TypeCodeUnknown {
+				continue
+			}
+			if !strings.ContainsRune(field.Type.Name, '.') {
+				field.Type.Name = path.Base(typ.Package) + "." + field.Type.Name
+			}
+		}
+	}
 
 	// Convert types
 	for _, typ := range append(types, refTypes...) {
@@ -28,6 +50,7 @@ func convert(types, refTypes typegen.Types, pkgName, subPkgName, pkgPath string)
 		ttyp.SubPackage = subPkgName
 		ttypes.Types = append(ttypes.Types, ttyp)
 		lup[typ.Name] = ttyp
+		lup[path.Base(typ.Package)+"."+typ.Name] = ttyp
 		ttyp.Fields = make([]*Field, 0, len(typ.Fields)+len(typ.Embeddings))
 
 		// If the type is a union
@@ -55,13 +78,15 @@ func convert(types, refTypes typegen.Types, pkgName, subPkgName, pkgPath string)
 		// Unions have a virtual field for the discriminator
 		if typ.IsUnion() {
 			field := new(Field)
-			field.Name = "Type"
+			if flags.LongUnionDiscriminator {
+				field.Name = typ.UnionType()
+			} else {
+				field.Name = "Type"
+			}
 			field.Type.SetNamed(typ.UnionSpec.Enumeration())
 			field.MarshalAs = typegen.MarshalAsEnum
 			field.KeepEmpty = true
 			field.Virtual = true
-			field.ParentTypeName = typ.Name
-			field.ParentUnionValue = typ.UnionValue()
 			typ.Fields = append(typ.Fields, field)
 		}
 
@@ -78,15 +103,12 @@ func convert(types, refTypes typegen.Types, pkgName, subPkgName, pkgPath string)
 					field.Type.SetNamed(embField.Type.Name)
 					field.Type = embField.Type
 					field.Repeatable = embField.Repeatable
-					field.ParentTypeName = typ.Name
-					field.ParentUnionValue = etyp.UnionValue()
 					typ.Fields = append(typ.Fields, field)
 				}
 			} else {
 				field := new(Field)
 				field.Type.SetNamed(name)
 				field.TypeRef = etyp
-				field.ParentTypeName = typ.Name
 				typ.Fields = append(typ.Fields, field)
 			}
 		}
@@ -95,12 +117,16 @@ func convert(types, refTypes typegen.Types, pkgName, subPkgName, pkgPath string)
 		for _, field := range typ.Type.Fields {
 			tfield := new(Field)
 			tfield.Field = *field
-			tfield.ParentTypeName = typ.Name
-			tfield.ParentUnionValue = typ.UnionValue()
 			if field.MarshalAs != typegen.MarshalAsBasic {
 				tfield.TypeRef = lup[tfield.Type.String()]
 			}
 			typ.Fields = append(typ.Fields, tfield)
+		}
+	}
+
+	for _, typ := range ttypes.Types {
+		for _, field := range typ.Fields {
+			field.ParentType = typ
 		}
 	}
 
@@ -153,9 +179,10 @@ func convert(types, refTypes typegen.Types, pkgName, subPkgName, pkgPath string)
 }
 
 type Types struct {
-	Package string
-	Types   []*Type
-	Unions  []*UnionSpec
+	Package                string
+	LongUnionDiscriminator bool
+	Types                  []*Type
+	Unions                 []*UnionSpec
 }
 
 type SingleTypeFile struct {
@@ -188,10 +215,9 @@ type Type struct {
 
 type Field struct {
 	typegen.Field
-	TypeRef          *Type
-	IsEmbedded       bool
-	ParentTypeName   string
-	ParentUnionValue string
+	TypeRef    *Type
+	ParentType *Type
+	IsEmbedded bool
 }
 
 func (t *Type) IsAccount() bool    { return t.Union.Type == "account" }

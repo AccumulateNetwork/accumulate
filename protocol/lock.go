@@ -1,6 +1,12 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package protocol
 
-import "gitlab.com/accumulatenetwork/accumulate/internal/errors"
+import "gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 
 type LockableAccount interface {
 	Account
@@ -14,7 +20,7 @@ func (l *LiteTokenAccount) GetLockHeight() uint64 {
 
 func (l *LiteTokenAccount) SetLockHeight(v uint64) error {
 	if v < l.LockHeight {
-		return errors.Format(errors.StatusBadRequest, "cannot reduce lockup period")
+		return errors.BadRequest.WithFormat("cannot reduce lockup period")
 	}
 	l.LockHeight = v
 	return nil

@@ -1,15 +1,21 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package database
 
 import (
 	"fmt"
 
 	"github.com/tendermint/tendermint/libs/log"
-	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/badger"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/etcd"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/memory"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage/badger"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage/etcd"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 

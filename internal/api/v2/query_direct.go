@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package api
 
 import (
@@ -7,9 +13,9 @@ import (
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2/query"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 const QueryBlocksMaxCount = 1000 // Hardcoded ceiling for now
@@ -254,9 +260,9 @@ query:
 	case wait == 0 || time.Since(start) > wait:
 		// Not found or pending, wait not specified or exceeded
 		if err == nil {
-			err = errors.NotFound("transaction %X still pending", id)
+			err = errors.NotFound.WithFormat("transaction %X still pending", id)
 		} else {
-			err = errors.Wrap(errors.StatusUnknownError, err)
+			err = errors.UnknownError.Wrap(err)
 		}
 		return nil, err
 
@@ -271,15 +277,15 @@ query:
 func (q *queryFrontend) QueryTxHistory(u *url.URL, pagination QueryPagination, scratch bool) (*MultiResponse, error) {
 	if pagination.Count == 0 {
 		// TODO Return an empty array plus the total count?
-		return nil, validatorError(errors.New(errors.StatusBadRequest, "count must be greater than 0"))
+		return nil, validatorError(errors.BadRequest.With("count must be greater than 0"))
 	}
 
 	if pagination.Start > math.MaxInt64 {
-		return nil, errors.New(errors.StatusBadRequest, "start is too large")
+		return nil, errors.BadRequest.With("start is too large")
 	}
 
 	if pagination.Count > math.MaxInt64 {
-		return nil, errors.New(errors.StatusBadRequest, "count is too large")
+		return nil, errors.BadRequest.With("count is too large")
 	}
 
 	req := new(query.RequestTxHistory)
@@ -354,7 +360,7 @@ func (q *queryFrontend) QueryData(url *url.URL, entryHash [32]byte) (*ChainQuery
 func (q *queryFrontend) QueryDataSet(url *url.URL, pagination QueryPagination, opts QueryOptions) (*MultiResponse, error) {
 	if pagination.Count == 0 {
 		// TODO Return an empty array plus the total count?
-		return nil, validatorError(errors.New(errors.StatusBadRequest, "count must be greater than 0"))
+		return nil, validatorError(errors.BadRequest.With("count must be greater than 0"))
 	}
 
 	req := new(query.RequestDataEntrySet)
@@ -379,7 +385,7 @@ func (q *queryFrontend) QueryDataSet(url *url.URL, pagination QueryPagination, o
 	return responseDataSetFromProto(des, pagination)
 }
 
-//responseDataSetFromProto map the response structs to protocol structs, maybe someday they should be the same thing
+// responseDataSetFromProto map the response structs to protocol structs, maybe someday they should be the same thing
 func responseDataSetFromProto(protoDataSet *query.ResponseDataEntrySet, pagination QueryPagination) (*MultiResponse, error) {
 	respDataSet := new(MultiResponse)
 	respDataSet.Type = "dataSet"
@@ -390,6 +396,8 @@ func responseDataSetFromProto(protoDataSet *query.ResponseDataEntrySet, paginati
 		de := DataEntryQueryResponse{}
 		de.EntryHash = entry.EntryHash
 		de.Entry = entry.Entry
+		de.TxId = entry.TxId
+		de.CauseTxId = entry.CauseTxId
 		respDataSet.Items = append(respDataSet.Items, &de)
 	}
 	return respDataSet, nil
@@ -421,7 +429,7 @@ func (q *queryFrontend) QueryKeyPageIndex(u *url.URL, key []byte) (*ChainQueryRe
 
 func (q *queryFrontend) QueryMinorBlocks(u *url.URL, pagination QueryPagination, txFetchMode query.TxFetchMode, blockFilterMode query.BlockFilterMode) (*MultiResponse, error) {
 	if pagination.Start > math.MaxInt64 {
-		return nil, errors.New(errors.StatusBadRequest, "start is too large")
+		return nil, errors.BadRequest.With("start is too large")
 	}
 
 	if pagination.Count > QueryBlocksMaxCount {
@@ -468,7 +476,7 @@ func (q *queryFrontend) QueryMinorBlocks(u *url.URL, pagination QueryPagination,
 
 func (q *queryFrontend) QueryMajorBlocks(u *url.URL, pagination QueryPagination) (*MultiResponse, error) {
 	if pagination.Start > math.MaxInt64 {
-		return nil, errors.New(errors.StatusBadRequest, "start is too large")
+		return nil, errors.BadRequest.With("start is too large")
 	}
 
 	if pagination.Count > QueryBlocksMaxCount {

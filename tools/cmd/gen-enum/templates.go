@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package main
 
 import (
@@ -30,6 +36,7 @@ type Type struct {
 
 type TypeValue struct {
 	Name string
+	Type *Type
 	typegen.EnumValue
 }
 
@@ -54,6 +61,7 @@ func convert(types map[string]typegen.Enum, pkgName, subPkgName string) *Types {
 		ttyp.Values = make([]*TypeValue, 0, len(typ))
 		for name, val := range typ {
 			tval := new(TypeValue)
+			tval.Type = ttyp
 			ttyp.Values = append(ttyp.Values, tval)
 			tval.Name = name
 			tval.EnumValue = *val

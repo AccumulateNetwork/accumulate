@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package logging
 
 import (
@@ -6,8 +12,6 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
-
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 )
 
 type LogAsHex interface {
@@ -61,7 +65,7 @@ func AsHex(v interface{}) LogAsHex {
 		return LogAsHexValue(v[:])
 	case string:
 		return LogAsHexValue(v)
-	case encoding.Byter:
+	case interface{ Bytes() []byte }:
 		return LogAsHexValue(v.Bytes())
 	case fmt.Stringer:
 		return LogAsHexValue(v.String())

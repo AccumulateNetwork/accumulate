@@ -1,12 +1,18 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package api
 
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2/query"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 func (m *queryBackend) queryMajorBlocks(batch *database.Batch, req *query.RequestMajorBlocks) (resp *query.ResponseMajorBlocks, _ error) {
@@ -16,7 +22,7 @@ func (m *queryBackend) queryMajorBlocks(batch *database.Batch, req *query.Reques
 
 	mjrIdxChain, err := anchorsAcc.MajorBlockChain().Get()
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 	if mjrIdxChain.Height() == 0 {
 		return new(query.ResponseMajorBlocks), nil
@@ -27,7 +33,7 @@ func (m *queryBackend) queryMajorBlocks(batch *database.Batch, req *query.Reques
 	}
 	mjrStartIdx, _, err := indexing.SearchIndexChain(mjrIdxChain, uint64(mjrIdxChain.Height())-1, indexing.MatchAfter, indexing.SearchIndexChainByBlock(req.Start))
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	resp = &query.ResponseMajorBlocks{TotalBlocks: uint64(mjrIdxChain.Height())}
@@ -39,7 +45,7 @@ func (m *queryBackend) queryMajorBlocks(batch *database.Batch, req *query.Reques
 	if mjrEntryIdx > 0 {
 		mnrStartIdx, err = getPrevEntryRootIndex(mjrIdxChain, mjrEntryIdx)
 		if err != nil {
-			return nil, errors.Wrap(errors.StatusUnknownError, err)
+			return nil, errors.UnknownError.Wrap(err)
 		}
 	}
 
@@ -51,7 +57,7 @@ majorEntryLoop:
 		case errors.Is(err, storage.ErrNotFound):
 			break majorEntryLoop
 		default:
-			return nil, errors.Wrap(errors.StatusUnknownError, err)
+			return nil, errors.UnknownError.Wrap(err)
 		}
 
 		rspMjrEntry := new(query.ResponseMajorEntry)
@@ -69,12 +75,12 @@ majorEntryLoop:
 
 		mnrIdxChain, err := ledgerAcc.RootChain().Index().Get()
 		if err != nil {
-			return nil, errors.Wrap(errors.StatusUnknownError, err)
+			return nil, errors.UnknownError.Wrap(err)
 		}
 
 		mnrIdx, mnrIdxEntry, err := indexing.SearchIndexChain(mnrIdxChain, uint64(mnrIdxChain.Height())-1, indexing.MatchAfter, indexing.SearchIndexChainByBlock(mnrStartIdx))
 		if err != nil {
-			return nil, errors.Wrap(errors.StatusUnknownError, err)
+			return nil, errors.UnknownError.Wrap(err)
 		}
 
 	minorEntryLoop:
@@ -86,7 +92,7 @@ majorEntryLoop:
 			case errors.Is(err, storage.ErrNotFound):
 				break minorEntryLoop
 			default:
-				return nil, errors.Wrap(errors.StatusUnknownError, err)
+				return nil, errors.UnknownError.Wrap(err)
 			}
 			if mnrIdxEntry.BlockIndex > curEntry.RootIndexIndex {
 				break minorEntryLoop
@@ -109,7 +115,7 @@ func getPrevEntryRootIndex(mjrIdxChain *database.Chain, mjrEntryIdx uint64) (uin
 	prevEntry := new(protocol.IndexEntry)
 	err := mjrIdxChain.EntryAs(int64(mjrEntryIdx)-1, prevEntry)
 	if err != nil {
-		return 0, errors.Wrap(errors.StatusUnknownError, err)
+		return 0, errors.UnknownError.Wrap(err)
 	}
 	return prevEntry.RootIndexIndex + 1, nil
 }

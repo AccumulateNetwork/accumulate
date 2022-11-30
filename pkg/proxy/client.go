@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package proxy
 
 import (
@@ -10,7 +16,7 @@ import (
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 )
 
-//go:generate go run ../../tools/cmd/gen-types --package proxy --out types_gen.go types.yml
+//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --package proxy --out types_gen.go types.yml
 
 type Client struct {
 	jsonrpc2.Client

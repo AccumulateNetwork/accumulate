@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package record
 
 //lint:file-ignore U1000 false positive
@@ -6,14 +12,14 @@ import (
 	"io"
 
 	"github.com/tendermint/tendermint/libs/log"
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
 
 // debug is a bit field for enabling debug log messages
-//nolint
+// nolint
 const debug = 0 |
 	// debugGet |
 	// debugGetValue |
@@ -86,7 +92,7 @@ func (v *Value[T]) Get() (u T, err error) {
 	// Do we already have the value?
 	switch v.status {
 	case valueNotFound:
-		return zero[T](), errors.NotFound("%s not found", v.name)
+		return zero[T](), errors.NotFound.WithFormat("%s not found", v.name)
 
 	case valueClean, valueDirty:
 		return v.value.getValue(), nil
@@ -124,7 +130,7 @@ func (v *Value[T]) Get() (u T, err error) {
 
 	case !errors.Is(err, storage.ErrNotFound):
 		// Unknown error
-		return zero[T](), errors.Wrap(errors.StatusUnknownError, err)
+		return zero[T](), errors.UnknownError.Wrap(err)
 
 	case v.allowMissing:
 		// Initialize to an empty value
@@ -135,7 +141,7 @@ func (v *Value[T]) Get() (u T, err error) {
 	default:
 		// Not found
 		v.status = valueNotFound
-		return zero[T](), errors.NotFound("%s not found", v.name)
+		return zero[T](), errors.NotFound.WithFormat("%s not found", v.name)
 	}
 }
 
@@ -144,11 +150,11 @@ func (v *Value[T]) Get() (u T, err error) {
 func (v *Value[T]) GetAs(target interface{}) error {
 	u, err := v.Get()
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.UnknownError.Wrap(err)
 	}
 
 	err = encoding.SetPtr(u, target)
-	return errors.Wrap(errors.StatusUnknownError, err)
+	return errors.WrongType.Wrap(err)
 }
 
 // Put stores the value.
@@ -183,7 +189,7 @@ func (v *Value[T]) Commit() error {
 
 	err := v.store.PutValue(v.key, v)
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.UnknownError.Wrap(err)
 	}
 
 	return nil
@@ -194,14 +200,14 @@ func (v *Value[T]) Resolve(key Key) (Record, Key, error) {
 	if len(key) == 0 {
 		return v, nil, nil
 	}
-	return nil, nil, errors.New(errors.StatusInternalError, "bad key for value")
+	return nil, nil, errors.InternalError.With("bad key for value")
 }
 
 // GetValue loads the value.
 func (v *Value[T]) GetValue() (encoding.BinaryValue, error) {
 	_, err := v.Get()
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 	return v.value, nil
 }
@@ -211,12 +217,12 @@ func (v *Value[T]) GetValue() (encoding.BinaryValue, error) {
 func (v *Value[T]) LoadValue(value ValueReader, put bool) error {
 	uv, err := value.GetValue()
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.UnknownError.Wrap(err)
 	}
 
 	u, ok := uv.(encodableValue[T])
 	if !ok {
-		return errors.Format(errors.StatusInternalError, "store %s: invalid value: want %T, got %T", v.name, (encodableValue[T])(nil), uv)
+		return errors.InternalError.WithFormat("store %s: invalid value: want %T, got %T", v.name, (encodableValue[T])(nil), uv)
 	}
 
 	if put {
@@ -233,7 +239,7 @@ func (v *Value[T]) LoadValue(value ValueReader, put bool) error {
 func (v *Value[T]) LoadBytes(data []byte) error {
 	err := v.value.UnmarshalBinary(data)
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.UnknownError.Wrap(err)
 	}
 
 	v.status = valueClean
@@ -273,7 +279,7 @@ func (v *structValue[T, PT]) CopyAsInterface() interface{} {
 
 func (v *structValue[T, PT]) MarshalBinary() (data []byte, err error) {
 	data, err = v.value.MarshalBinary()
-	return data, errors.Wrap(errors.StatusUnknownError, err)
+	return data, errors.UnknownError.Wrap(err)
 }
 
 func (v *structValue[T, PT]) UnmarshalBinary(data []byte) error {
@@ -282,7 +288,7 @@ func (v *structValue[T, PT]) UnmarshalBinary(data []byte) error {
 	if err == nil {
 		v.value = u
 	}
-	return errors.Wrap(errors.StatusUnknownError, err)
+	return errors.UnknownError.Wrap(err)
 }
 
 func (v *structValue[T, PT]) UnmarshalBinaryFrom(rd io.Reader) error {
@@ -291,7 +297,7 @@ func (v *structValue[T, PT]) UnmarshalBinaryFrom(rd io.Reader) error {
 	if err == nil {
 		v.value = u
 	}
-	return errors.Wrap(errors.StatusUnknownError, err)
+	return errors.UnknownError.Wrap(err)
 }
 
 type unionValue[T encoding.BinaryValue] struct {
@@ -329,7 +335,7 @@ func (v *unionValue[T]) CopyAsInterface() interface{} {
 
 func (v *unionValue[T]) MarshalBinary() (data []byte, err error) {
 	data, err = v.value.MarshalBinary()
-	return data, errors.Wrap(errors.StatusUnknownError, err)
+	return data, errors.UnknownError.Wrap(err)
 }
 
 func (v *unionValue[T]) UnmarshalBinary(data []byte) error {
@@ -337,14 +343,14 @@ func (v *unionValue[T]) UnmarshalBinary(data []byte) error {
 	if err == nil {
 		v.value = u
 	}
-	return errors.Wrap(errors.StatusUnknownError, err)
+	return errors.UnknownError.Wrap(err)
 }
 
 func (v *unionValue[T]) UnmarshalBinaryFrom(rd io.Reader) error {
 	data, err := io.ReadAll(rd)
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.UnknownError.Wrap(err)
 	}
 	err = v.UnmarshalBinary(data)
-	return errors.Wrap(errors.StatusUnknownError, err)
+	return errors.UnknownError.Wrap(err)
 }

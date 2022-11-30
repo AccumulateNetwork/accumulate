@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package simulator
 
 import (
@@ -6,20 +12,20 @@ import (
 	"time"
 
 	abci "github.com/tendermint/tendermint/abci/types"
-	"gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
-	"gitlab.com/accumulatenetwork/accumulate/internal/block"
-	"gitlab.com/accumulatenetwork/accumulate/internal/block/blockscheduler"
-	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/block"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/blockscheduler"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/internal/events"
-	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/testing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
+	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
+	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
 type Node struct {
@@ -66,7 +72,7 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 	var err error
 	n.executor, err = block.NewNodeExecutor(execOpts, n)
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	n.api, err = api.NewJrpc(api.Options{
@@ -78,7 +84,7 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 		Key:           init.PrivValKey,
 	})
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 	n.client = testing.DirectJrpcClient(n.api)
 
@@ -122,7 +128,7 @@ func (n *Node) initChain(snapshot ioutil2.SectionReader) ([]byte, error) {
 		return err
 	})
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "load state root: %w", err)
+		return nil, errors.UnknownError.WithFormat("load state root: %w", err)
 	}
 	if root != nil {
 		return root, nil
@@ -133,11 +139,11 @@ func (n *Node) initChain(snapshot ioutil2.SectionReader) ([]byte, error) {
 	defer batch.Discard()
 	err = n.executor.RestoreSnapshot(batch, snapshot)
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "restore snapshot: %w", err)
+		return nil, errors.UnknownError.WithFormat("restore snapshot: %w", err)
 	}
 	err = batch.Commit()
 	if err != nil {
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	err = n.View(func(batch *database.Batch) (err error) {
@@ -145,7 +151,7 @@ func (n *Node) initChain(snapshot ioutil2.SectionReader) ([]byte, error) {
 		return err
 	})
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "load state root: %w", err)
+		return nil, errors.UnknownError.WithFormat("load state root: %w", err)
 	}
 	return root, nil
 }
@@ -171,7 +177,7 @@ func (n *Node) beginBlock(block *block.Block) error {
 	block.Batch = n.Begin(true)
 	err := n.executor.BeginBlock(block)
 	if err != nil {
-		return errors.Format(errors.StatusUnknownError, "begin block: %w", err)
+		return errors.UnknownError.WithFormat("begin block: %w", err)
 	}
 	return nil
 }
@@ -179,7 +185,7 @@ func (n *Node) beginBlock(block *block.Block) error {
 func (n *Node) deliverTx(block *block.Block, delivery *chain.Delivery) (*protocol.TransactionStatus, error) {
 	s, err := n.executor.ExecuteEnvelope(block, delivery)
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "deliver envelope: %w", err)
+		return nil, errors.UnknownError.WithFormat("deliver envelope: %w", err)
 	}
 	return s, nil
 }
@@ -187,7 +193,7 @@ func (n *Node) deliverTx(block *block.Block, delivery *chain.Delivery) (*protoco
 func (n *Node) endBlock(block *block.Block) ([]*validatorUpdate, error) {
 	err := n.executor.EndBlock(block)
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "end block: %w", err)
+		return nil, errors.UnknownError.WithFormat("end block: %w", err)
 	}
 
 	if block.State.Empty() {
@@ -213,7 +219,7 @@ func (n *Node) commit(block *block.Block) ([]byte, error) {
 	// Commit
 	err := block.Batch.Commit()
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "commit: %w", err)
+		return nil, errors.UnknownError.WithFormat("commit: %w", err)
 	}
 
 	// Notify
@@ -223,7 +229,7 @@ func (n *Node) commit(block *block.Block) ([]byte, error) {
 		Major: block.State.MakeMajorBlock,
 	})
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "notify of commit: %w", err)
+		return nil, errors.UnknownError.WithFormat("notify of commit: %w", err)
 	}
 
 	// Get the  root

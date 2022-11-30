@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package record
 
 //lint:file-ignore U1000 false positive
@@ -8,9 +14,9 @@ import (
 	"sort"
 
 	"github.com/tendermint/tendermint/libs/log"
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/internal/sortutil"
+	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
 
 // Set records an ordered list of values as a single record.
@@ -35,14 +41,14 @@ func (s *Set[T]) Put(u []T) error {
 	})
 
 	err := s.Value.Put(u)
-	return errors.Wrap(errors.StatusUnknownError, err)
+	return errors.UnknownError.Wrap(err)
 }
 
 // Add inserts values into the set, sorted.
 func (s *Set[T]) Add(v ...T) error {
 	l, err := s.Get()
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.UnknownError.Wrap(err)
 	}
 
 	for _, v := range v {
@@ -51,14 +57,14 @@ func (s *Set[T]) Add(v ...T) error {
 	}
 
 	err = s.Value.Put(l)
-	return errors.Wrap(errors.StatusUnknownError, err)
+	return errors.UnknownError.Wrap(err)
 }
 
 // Remove removes a value from the set.
 func (s *Set[T]) Remove(v T) error {
 	l, err := s.Get()
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.UnknownError.Wrap(err)
 	}
 
 	i, found := sortutil.Search(l, func(u T) int { return s.compare(u, v) })
@@ -68,19 +74,19 @@ func (s *Set[T]) Remove(v T) error {
 	l = append(l[:i], l[i+1:]...)
 
 	err = s.Value.Put(l)
-	return errors.Wrap(errors.StatusUnknownError, err)
+	return errors.UnknownError.Wrap(err)
 }
 
 // Index returns the index of the value.
 func (s *Set[T]) Index(v T) (int, error) {
 	l, err := s.Get()
 	if err != nil {
-		return 0, errors.Wrap(errors.StatusUnknownError, err)
+		return 0, errors.UnknownError.Wrap(err)
 	}
 
 	i, found := sortutil.Search(l, func(u T) int { return s.compare(u, v) })
 	if !found {
-		return 0, errors.NotFound("entry not found in %s", s.name)
+		return 0, errors.NotFound.WithFormat("entry not found in %s", s.name)
 	}
 
 	return i, nil
@@ -90,12 +96,12 @@ func (s *Set[T]) Index(v T) (int, error) {
 func (s *Set[T]) Find(v T) (T, error) {
 	l, err := s.Get()
 	if err != nil {
-		return zero[T](), errors.Wrap(errors.StatusUnknownError, err)
+		return zero[T](), errors.UnknownError.Wrap(err)
 	}
 
 	i, found := sortutil.Search(l, func(u T) int { return s.compare(u, v) })
 	if !found {
-		return zero[T](), errors.NotFound("%s entry not found", s.name)
+		return zero[T](), errors.NotFound.WithFormat("%s entry not found", s.name)
 	}
 
 	return l[i], nil
@@ -115,7 +121,7 @@ func (s *Set[T]) Commit() error {
 		return nil
 	}
 	err := s.Value.Commit()
-	return errors.Wrap(errors.StatusUnknownError, err)
+	return errors.UnknownError.Wrap(err)
 }
 
 // sliceValue uses an encoder to manage a slice.
@@ -153,7 +159,7 @@ func (v *sliceValue[T]) MarshalBinary() ([]byte, error) {
 	writer := encoding.NewWriter(buffer)
 	marshalSlice(writer, v.encoder, v.value)
 	_, _, err := writer.Reset(nil)
-	return buffer.Bytes(), errors.Wrap(errors.StatusUnknownError, err)
+	return buffer.Bytes(), errors.UnknownError.Wrap(err)
 }
 
 func (v *sliceValue[T]) UnmarshalBinary(data []byte) error {
@@ -164,7 +170,7 @@ func (v *sliceValue[T]) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 	v.value = unmarshalSlice(reader, v.encoder)
 	_, err := reader.Reset(nil)
-	return errors.Wrap(errors.StatusUnknownError, err)
+	return errors.UnknownError.Wrap(err)
 }
 
 // marshalSlice uses an encodable value to marshal a slice. If this
@@ -183,7 +189,7 @@ func unmarshalSlice[T any](rd *encoding.Reader, e encodableValue[T]) []T {
 	var v []T
 	for {
 		e.setNew()
-		if rd.ReadValue(1, e.UnmarshalBinary) {
+		if rd.ReadValue(1, e.UnmarshalBinaryFrom) {
 			v = append(v, e.getValue())
 		} else {
 			break

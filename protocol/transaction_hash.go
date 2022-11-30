@@ -1,9 +1,15 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package protocol
 
 import (
 	"crypto/sha256"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding/hash"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/hash"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 

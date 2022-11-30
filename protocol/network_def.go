@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package protocol
 
 import (
@@ -5,8 +11,8 @@ import (
 	"crypto/sha256"
 	"strings"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/internal/sortutil"
+	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 type valHashCmp []byte
@@ -34,8 +40,16 @@ func (n *NetworkDefinition) ValidatorByHash(hash []byte) (int, *ValidatorInfo, b
 	return i, n.Validators[i], true
 }
 
+func (n *NetworkDefinition) ValidatorByKey(key []byte) (int, *ValidatorInfo, bool) {
+	hash := sha256.Sum256(key)
+	return n.ValidatorByHash(hash[:])
+}
+
 // IsActiveOn returns true if the validator is active on the partition.
 func (v *ValidatorInfo) IsActiveOn(partition string) bool {
+	if v == nil {
+		return false
+	}
 	for _, p := range v.Partitions {
 		if strings.EqualFold(p.ID, partition) {
 			return p.Active
@@ -80,7 +94,7 @@ func (n *NetworkDefinition) UpdateValidatorKey(oldKey, newKey []byte) error {
 	oldHash := sha256.Sum256(oldKey)
 	i, found := sortutil.Search(n.Validators, valHashCmp(oldHash[:]).cmp)
 	if !found {
-		return errors.NotFound("validator %x not found", oldKey[:4])
+		return errors.NotFound.WithFormat("validator %x not found", oldKey[:4])
 	}
 
 	newHash := sha256.Sum256(newKey)
@@ -94,7 +108,7 @@ func (n *NetworkDefinition) UpdateValidatorKey(oldKey, newKey []byte) error {
 
 	ptr, new := sortutil.BinaryInsert(&val, valHashCmp(newHash[:]).cmp)
 	if !new {
-		return errors.Format(errors.StatusConflict, "validator %x already exists", newKey[:4])
+		return errors.Conflict.WithFormat("validator %x already exists", newKey[:4])
 	}
 	*ptr = v
 	n.Validators = val

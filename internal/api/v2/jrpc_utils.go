@@ -1,13 +1,19 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package api
 
 import (
 	"context"
 	"encoding/json"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/connections"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/managed"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/connections"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 )
 
 func getLatestRootChainAnchor(apiclient connections.APIClient, ledgerurl *url.URL, c context.Context) (roothash *[32]byte, err error) {

@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package api
 
 import (
@@ -6,8 +12,8 @@ import (
 	"sync"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 func (m *JrpcMethods) QueryTxLocal(ctx context.Context, params json.RawMessage) interface{} {
@@ -120,9 +126,9 @@ func getTxId(req *TxnQuery) ([]byte, error) {
 		hash := req.TxIdUrl.Hash()
 		return hash[:], nil
 	case len(req.Txid) != 0:
-		return nil, errors.Format(errors.StatusBadRequest, "invalid transaction hash length: want 32, got %d", len(req.Txid))
+		return nil, errors.BadRequest.WithFormat("invalid transaction hash length: want 32, got %d", len(req.Txid))
 	default:
-		return nil, errors.Format(errors.StatusBadRequest, "no transaction ID present in request")
+		return nil, errors.BadRequest.WithFormat("no transaction ID present in request")
 	}
 }
 
@@ -131,5 +137,5 @@ func formatTxIdError(req *TxnQuery) error {
 	if err != nil {
 		return err
 	}
-	return errors.NotFound("transaction %X not found", hash[:8])
+	return errors.NotFound.WithFormat("transaction %X not found", hash[:8])
 }

@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package e2e
 
 import (
@@ -7,10 +13,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
-	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
-	"gitlab.com/accumulatenetwork/accumulate/internal/testdata"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/simulator"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/genesis"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/test/testdata"
 )
 
 func TestFactomAddresses(t *testing.T) {

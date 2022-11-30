@@ -1,13 +1,18 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package api
 
 import (
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
-	"github.com/getsentry/sentry-go"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
-var ErrInvalidUrl = errors.New(errors.StatusBadRequest, "invalid URL")
+var ErrInvalidUrl = errors.BadRequest.With("invalid URL")
 
 // General Errors
 const (
@@ -29,7 +34,7 @@ const (
 	ErrCodeMetricsVectorEmpty
 )
 
-//Custom errors
+// Custom errors
 const (
 	ErrCodeProtocolBase = -33000 - iota
 )
@@ -73,6 +78,6 @@ func metricsQueryError(err error) jsonrpc2.Error {
 
 func internalError(err error) jsonrpc2.Error {
 	// Capture internal errors but do not forward them to the user
-	sentry.CaptureException(err)
+	// sentry.CaptureException(err)
 	return ErrInternal
 }

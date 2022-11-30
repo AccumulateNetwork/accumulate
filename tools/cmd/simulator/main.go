@@ -1,7 +1,14 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,11 +20,11 @@ import (
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
-	"gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
+	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
 )
@@ -103,7 +110,7 @@ func run(*cobra.Command, []string) {
 	check(err)
 
 	if flag.Step == "on-wait" {
-		check(sim.ListenAndServe(onWaitHook))
+		check(sim.ListenAndServe(context.Background(), onWaitHook))
 		return
 	}
 
@@ -117,7 +124,7 @@ func run(*cobra.Command, []string) {
 		}
 	}()
 
-	check(sim.ListenAndServe(nil))
+	check(sim.ListenAndServe(context.Background(), nil))
 }
 
 func fatalf(format string, args ...interface{}) {

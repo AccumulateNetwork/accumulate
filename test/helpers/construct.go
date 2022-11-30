@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package helpers
 
 import (
@@ -7,10 +13,35 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
+
+func MustBuild(t testing.TB, b interface {
+	Done() (*protocol.Envelope, error)
+}) *chain.Delivery {
+	t.Helper()
+	env, err := b.Done()
+	require.NoError(t, err)
+	delivery, err := chain.NormalizeEnvelope(env)
+	require.NoError(t, err)
+	require.Len(t, delivery, 1)
+	return delivery[0]
+}
+
+func MustGet0[T any](t testing.TB, fn func() (T, error)) T {
+	v, err := fn()
+	require.NoError(t, err)
+	return v
+}
+
+func MustGet1[T, A1 any](t testing.TB, fn func(A1) (T, error), a1 A1) T {
+	v, err := fn(a1)
+	require.NoError(t, err)
+	return v
+}
 
 func View(t testing.TB, db database.Viewer, fn func(batch *database.Batch)) {
 	t.Helper()

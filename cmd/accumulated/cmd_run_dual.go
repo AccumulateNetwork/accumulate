@@ -1,6 +1,13 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package main
 
 import (
+	"net/http"
 	"os"
 	"os/signal"
 	"time"
@@ -8,8 +15,8 @@ import (
 	"github.com/kardianos/service"
 	"github.com/spf13/cobra"
 	service2 "github.com/tendermint/tendermint/libs/service"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage/badger"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/badger"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 var cmdRunDual = &cobra.Command{
@@ -34,6 +41,7 @@ func init() {
 
 	cmdRunDual.PersistentFlags().BoolVar(&flagRunDual.Truncate, "truncate", false, "Truncate Badger if necessary")
 	cmdRunDual.PersistentFlags().BoolVar(&flagRunDual.EnableTimingLogs, "enable-timing-logs", false, "Enable core timing analysis logging")
+	cmdRunDual.PersistentFlags().StringVar(&flagRun.PprofListen, "pprof", "", "Address to run net/http/pprof on")
 
 	cmdRunDual.Flags().DurationVar(&flagRunDual.CiStopAfter, "ci-stop-after", 0, "FOR CI ONLY - stop the node after some time")
 	cmdRunDual.Flag("ci-stop-after").Hidden = true
@@ -44,6 +52,10 @@ func init() {
 }
 
 func runDualNode(cmd *cobra.Command, args []string) (string, error) {
+	if flagRun.PprofListen != "" {
+		go func() { check(http.ListenAndServe(flagRun.PprofListen, nil)) }()
+	}
+
 	prog := NewProgram(cmd, func(cmd *cobra.Command) (string, error) {
 		return args[0], nil
 	}, func(cmd *cobra.Command) (string, error) {

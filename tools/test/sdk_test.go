@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package test
 
 import (
@@ -13,7 +19,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/tools/internal/testdata"
+	sdktest "gitlab.com/accumulatenetwork/accumulate/test/sdk"
 )
 
 const defaultSdkTestData = "../../.testdata/sdk.json"
@@ -21,7 +27,7 @@ const defaultSdkTestData = "../../.testdata/sdk.json"
 var sdkTestData = flag.String("sdk-test-data", defaultSdkTestData, "SDK test data")
 
 func TestSDK(t *testing.T) {
-	ts, err := testdata.Load(*sdkTestData)
+	ts, err := sdktest.Load(*sdkTestData)
 	if err != nil && errors.Is(err, fs.ErrNotExist) && *sdkTestData == defaultSdkTestData {
 		t.Skip("Test data has not been created")
 	}

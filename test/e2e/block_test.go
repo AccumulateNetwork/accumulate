@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package e2e
 
 import (
@@ -9,14 +15,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
-	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
-	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
+	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
 func init() { acctesting.EnableDebugFeatures() }
@@ -77,7 +83,7 @@ func TestSendTokensToBadRecipient(t *testing.T) {
 	h := synth.Entries[0].Hash()
 	status, err := batch.Transaction(h[:]).GetStatus()
 	require.NoError(t, err)
-	assert.Equal(t, errors.StatusNotFound, status.Code)
+	assert.Equal(t, errors.NotFound, status.Code)
 }
 
 func TestDoesChargeFee(t *testing.T) {
@@ -289,7 +295,7 @@ func verifyLiteDataAccount(t *testing.T, batch *database.Batch, firstEntry DataE
 	require.Equal(t, hex.EncodeToString(firstEntry.Hash()), hex.EncodeToString(txResult.EntryHash[:]), "Transaction result entry hash does not match")
 
 	// Verify the entry hash returned by Entry
-	entry, err := indexing.Data(batch, liteDataAddress).GetLatestEntry()
+	entry, _, _, err := indexing.Data(batch, liteDataAddress).GetLatestEntry()
 	require.NoError(t, err)
 	require.Equal(t, hex.EncodeToString(firstEntry.Hash()), hex.EncodeToString(entry.Hash()), "Chain Entry.Hash does not match")
 	//sample verification for calculating the entryHash from lite data entry
@@ -297,7 +303,7 @@ func verifyLiteDataAccount(t *testing.T, batch *database.Batch, firstEntry DataE
 	require.NoError(t, err)
 	txnHash, err := indexing.Data(batch, liteDataAddress).Transaction(entryHash)
 	require.NoError(t, err)
-	ent, err := indexing.GetDataEntry(batch, txnHash)
+	ent, _, _, err := indexing.GetDataEntry(batch, txnHash)
 	require.NoError(t, err)
 	require.Equal(t, hex.EncodeToString(firstEntry.Hash()), hex.EncodeToString(entryHash), "Chain GetHashes does not match")
 	require.Equal(t, hex.EncodeToString(firstEntry.Hash()), hex.EncodeToString(ent.Hash()), "Chain GetHashes does not match")
@@ -335,7 +341,7 @@ func TestCreateSubIdentityWithLite(t *testing.T) {
 	var err2 *errors.Error
 	require.Error(t, err)
 	require.ErrorAs(t, err, &err2)
-	require.Equal(t, errors.StatusBadRequest, err2.Code)
+	require.Equal(t, errors.BadRequest, err2.Code)
 }
 
 func TestCreateIdentityWithRemoteLite(t *testing.T) {

@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package main
 
 import (
@@ -12,16 +18,16 @@ import (
 	"github.com/FactomProject/factomd/common/interfaces"
 	"github.com/dustin/go-humanize"
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/hash"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/managed"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/pmt"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/memory"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding/hash"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
-	"gitlab.com/accumulatenetwork/accumulate/smt/pmt"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 	"gitlab.com/accumulatenetwork/accumulate/tools/internal/factom"
 )
 
@@ -208,7 +214,7 @@ func convertEntries(_ *cobra.Command, args []string) {
 					// Construct the transaction status
 					status := new(protocol.TransactionStatus)
 					status.TxID = txn.ID()
-					status.Code = errors.StatusDelivered
+					status.Code = errors.Delivered
 					status.Result = result
 
 					state := new(snapshot.Transaction)
@@ -310,7 +316,7 @@ func convertChains(_ *cobra.Command, args []string) {
 	check(v.bpt.Bpt.SaveSnapshot(sw, func(key storage.Key, _ [32]byte) ([]byte, error) {
 		b, err := v.lookup[key].MarshalBinary()
 		if err != nil {
-			return nil, errors.Format(errors.StatusEncodingError, "marshal account: %w", err)
+			return nil, errors.EncodingError.WithFormat("marshal account: %w", err)
 		}
 		return b, nil
 	}))
@@ -330,11 +336,11 @@ func (v *chainVisitor) VisitTransaction(txn *snapshot.Transaction, _ int) error 
 
 	body, ok := txn.Transaction.Body.(*protocol.WriteData)
 	if !ok {
-		return errors.Format(errors.StatusBadRequest, "expected %v, got %v", protocol.TransactionTypeWriteData, txn.Transaction.Body.Type())
+		return errors.BadRequest.WithFormat("expected %v, got %v", protocol.TransactionTypeWriteData, txn.Transaction.Body.Type())
 	}
 	entry, ok := body.Entry.(*protocol.FactomDataEntryWrapper)
 	if !ok {
-		return errors.Format(errors.StatusBadRequest, "expected %v, got %v", protocol.DataEntryTypeFactom, body.Entry.Type())
+		return errors.BadRequest.WithFormat("expected %v, got %v", protocol.DataEntryTypeFactom, body.Entry.Type())
 	}
 
 	if v.lookup == nil {
@@ -344,26 +350,28 @@ func (v *chainVisitor) VisitTransaction(txn *snapshot.Transaction, _ int) error 
 	account, ok := v.lookup[entry.AccountId]
 	if ok {
 		c := account.Chains[0]
-		c.Entries = append(c.Entries, txn.Transaction.GetHash())
+		c.AddEntry(txn.Transaction.GetHash())
 		return nil
 	}
 
 	address, err := protocol.LiteDataAddress(entry.AccountId[:])
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.UnknownError.Wrap(err)
 	}
 
 	lda := new(protocol.LiteDataAccount)
 	lda.Url = address
 
-	chain := new(snapshot.Chain)
+	chain := new(managed.Snapshot)
 	chain.Name = "main"
 	chain.Type = protocol.ChainTypeTransaction
-	chain.Entries = append(chain.Entries, txn.Transaction.GetHash())
+	chain.Head = new(managed.MerkleState)
+	chain.AddEntry(txn.Transaction.GetHash())
 
 	account = new(snapshot.Account)
+	account.Url = lda.Url
 	account.Main = lda
-	account.Chains = []*snapshot.Chain{chain}
+	account.Chains = []*managed.Snapshot{chain}
 
 	v.bpt.InsertKV(entry.AccountId, entry.AccountId)
 	v.lookup[entry.AccountId] = account
@@ -384,22 +392,10 @@ func hashSecondaryState(a *snapshot.Account) hash.Hasher {
 func hashChains(a *snapshot.Account) hash.Hasher {
 	var hasher hash.Hasher
 	for _, c := range a.Chains {
-		ms := new(managed.MerkleState)
-		ms.Count = int64(c.Count)
-		ms.Pending = make(managed.SparseHashList, len(c.Pending))
-		for i, v := range c.Pending {
-			if len(v) > 0 {
-				ms.Pending[i] = v
-			}
-		}
-		for _, v := range c.Entries {
-			ms.AddToMerkleTree(v)
-		}
-
-		if ms.Count == 0 {
+		if c.Head.Count == 0 {
 			hasher.AddHash(new([32]byte))
 		} else {
-			hasher.AddHash((*[32]byte)(ms.GetMDRoot()))
+			hasher.AddHash((*[32]byte)(c.Head.GetMDRoot()))
 		}
 	}
 	return hasher
@@ -489,6 +485,7 @@ func convertBalances(_ *cobra.Command, args []string) {
 		lid := new(protocol.LiteIdentity)
 		lid.Url = lta.Url.RootIdentity()
 		a := new(snapshot.Account)
+		a.Url = lid.Url
 		a.Main = lid
 		a.Directory = []*url.URL{lta.Url}
 		hasher = hasher[:0]
@@ -511,7 +508,7 @@ func convertBalances(_ *cobra.Command, args []string) {
 	check(bpt.Bpt.SaveSnapshot(sw, func(key storage.Key, _ [32]byte) ([]byte, error) {
 		b, err := lookup[key].MarshalBinary()
 		if err != nil {
-			return nil, errors.Format(errors.StatusEncodingError, "marshal account: %w", err)
+			return nil, errors.EncodingError.WithFormat("marshal account: %w", err)
 		}
 		return b, nil
 	}))

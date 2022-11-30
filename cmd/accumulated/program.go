@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package main
 
 import (
@@ -8,8 +14,8 @@ import (
 
 	"github.com/kardianos/service"
 	"github.com/spf13/cobra"
-	"gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
+	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"golang.org/x/sync/errgroup"
 )
 

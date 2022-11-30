@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package pkg
 
 import (
@@ -6,8 +12,8 @@ import (
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -83,7 +89,7 @@ func (e NetEngine) Submit(envelope *protocol.Envelope) (*protocol.TransactionSta
 	}
 
 	status = new(protocol.TransactionStatus)
-	status.Set(errors.New(errors.StatusUnknownError, "unknown"))
+	status.Set(errors.UnknownError.With("unknown"))
 	return status, nil
 }
 

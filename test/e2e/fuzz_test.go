@@ -1,13 +1,19 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package e2e
 
 import (
 	"math/big"
 	"testing"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
-	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/simulator"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/test/fuzzutil"
+	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
+	fuzzutil "gitlab.com/accumulatenetwork/accumulate/test/util/fuzz"
 )
 
 func FuzzEnvelopeDecode(f *testing.F) {

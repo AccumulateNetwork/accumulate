@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package main
 
 import (
@@ -10,12 +16,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gorhill/cronexpr"
 	"github.com/spf13/cobra"
-	"github.com/tendermint/tendermint/privval"
-	"gitlab.com/accumulatenetwork/accumulate/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -64,7 +68,7 @@ var cmdSetSchedule = &cobra.Command{
 	Short: "Set the major block schedule",
 	Args:  cobra.ExactArgs(1),
 	Run: func(_ *cobra.Command, args []string) {
-		_, err := cronexpr.Parse(args[0])
+		_, err := core.Cron.Parse(args[0])
 		checkf(err, "CRON expression is invalid")
 
 		setNetworkValue(protocol.Globals, func(v *core.GlobalValues) {
@@ -201,9 +205,9 @@ func submitTransactionWithNode(cfg *config.Config, client *client.Client, transa
 	_, err := client.QueryAccountAs(context.Background(), req, signer)
 	checkf(err, "get signer")
 
-	pv, err := privval.LoadFilePV(
-		cfg.PrivValidator.KeyFile(),
-		cfg.PrivValidator.StateFile(),
+	pv, err := config.LoadFilePV(
+		cfg.PrivValidatorKeyFile(),
+		cfg.PrivValidatorStateFile(),
 	)
 	checkf(err, "load private validator")
 

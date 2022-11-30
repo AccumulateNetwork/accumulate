@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package main
 
 import (
@@ -7,8 +13,8 @@ import (
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
-	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -72,7 +78,7 @@ func accountId(_ *cobra.Command, args []string) {
 	if err == nil {
 		table := new(protocol.RoutingTable)
 		check(table.UnmarshalBinary(account.Entry.GetData()[0]))
-		router, err := routing.NewStaticRouter(table, nil)
+		router, err := routing.NewStaticRouter(table, nil, nil)
 		check(err)
 
 		partition, err := router.RouteAccount(u)

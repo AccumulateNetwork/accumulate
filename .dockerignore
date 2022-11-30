@@ -1,5 +1,4 @@
-.nodes*
-.factom*
+.nodes
+.factom
+.genesis
 *.exe
-accumulated
-accumulate

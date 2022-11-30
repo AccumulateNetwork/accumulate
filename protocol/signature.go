@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package protocol
 
 import (
@@ -8,19 +14,19 @@ import (
 
 	btc "github.com/btcsuite/btcd/btcec"
 	"github.com/btcsuite/btcutil/base58"
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding/hash"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"github.com/ethereum/go-ethereum/crypto"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/hash"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/common"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
-	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 	"golang.org/x/crypto/ripemd160" //nolint:staticcheck
-	"golang.org/x/crypto/sha3"
 )
 
-var ErrCannotInitiate = errors.New(errors.StatusBadRequest, "signature cannot initiate a transaction: values are missing")
+var ErrCannotInitiate = errors.BadRequest.With("signature cannot initiate a transaction: values are missing")
 
 type Signature interface {
-	encoding.BinaryValue
+	encoding.UnionValue
 	Type() SignatureType
 	RoutingLocation() *url.URL
 
@@ -55,6 +61,35 @@ func (s SignatureType) IsSystem() bool {
 	}
 }
 
+func PublicKeyHash(key []byte, typ SignatureType) ([]byte, error) {
+	switch typ {
+	case SignatureTypeED25519,
+		SignatureTypeLegacyED25519:
+		return doSha256(key), nil
+
+	case SignatureTypeRCD1:
+		return GetRCDHashFromPublicKey(key, 1), nil
+
+	case SignatureTypeBTC,
+		SignatureTypeBTCLegacy:
+		return BTCHash(key), nil
+
+	case SignatureTypeETH:
+		return ETHhash(key), nil
+
+	case SignatureTypeReceipt,
+		SignatureTypePartition,
+		SignatureTypeSet,
+		SignatureTypeRemote,
+		SignatureTypeDelegated,
+		SignatureTypeInternal:
+		return nil, errors.BadRequest.WithFormat("%v is not a key type", typ)
+
+	default:
+		return nil, errors.NotAllowed.WithFormat("unknown key type %v", typ)
+	}
+}
+
 func signatureHash(sig Signature) []byte {
 	// This should never fail unless the signature uses bigints
 	data, _ := sig.MarshalBinary()
@@ -64,6 +99,26 @@ func signatureHash(sig Signature) []byte {
 func doSha256(data []byte) []byte {
 	hash := sha256.Sum256(data)
 	return hash[:]
+}
+
+// generates privatekey and compressed public key
+func SECP256K1Keypair() (privKey []byte, pubKey []byte) {
+	priv, _ := btc.NewPrivateKey(btc.S256())
+
+	privKey = priv.Serialize()
+	_, pub := btc.PrivKeyFromBytes(btc.S256(), privKey)
+	pubKey = pub.SerializeCompressed()
+	return privKey, pubKey
+}
+
+// generates privatekey and Un-compressed public key
+func SECP256K1UncompressedKeypair() (privKey []byte, pubKey []byte) {
+	priv, _ := btc.NewPrivateKey(btc.S256())
+
+	privKey = priv.Serialize()
+	_, pub := btc.PrivKeyFromBytes(btc.S256(), privKey)
+	pubKey = pub.SerializeUncompressed()
+	return privKey, pubKey
 }
 
 func BTCHash(pubKey []byte) []byte {
@@ -85,15 +140,25 @@ func BTCaddress(pubKey []byte) string {
 	return address
 }
 
+// ETHhash returns the truncated hash (i.e. binary ethereum address)
 func ETHhash(pubKey []byte) []byte {
-	hash := sha3.NewLegacyKeccak256()
-	hash.Write(pubKey[:])
-	return hash.Sum(nil)[12:]
+	p, err := crypto.UnmarshalPubkey(pubKey)
+	if err != nil {
+		p, err = crypto.DecompressPubkey(pubKey)
+		if err != nil {
+			return nil
+		}
+	}
+	a := crypto.PubkeyToAddress(*p)
+	return a.Bytes()
 }
 
-func ETHaddress(pubKey []byte) string {
-	address := ETHhash(pubKey)
-	return fmt.Sprintf("0x%x", address[:])
+func ETHaddress(pubKey []byte) (string, error) {
+	h := ETHhash(pubKey)
+	if h == nil {
+		return "", fmt.Errorf("invalid eth public key")
+	}
+	return fmt.Sprintf("0x%x", h), nil
 }
 
 func SignatureDidInitiate(sig Signature, txnInitHash []byte, initiator *Signature) bool {
@@ -149,6 +214,10 @@ func unpackSignature(sig Signature) []Signature {
 	default:
 		return []Signature{s}
 	}
+}
+
+func CopyKeySignature(v KeySignature) KeySignature {
+	return v.CopyAsInterface().(KeySignature)
 }
 
 func EqualKeySignature(a, b KeySignature) bool {
@@ -487,8 +556,9 @@ func (s *BTCSignature) Hash() []byte { return signatureHash(s) }
 
 // Metadata returns the signature's metadata.
 func (s *BTCSignature) Metadata() Signature {
-	r := s.Copy()     // Copy the struct
-	r.Signature = nil // Clear the signature
+	r := s.Copy()                  // Copy the struct
+	r.Signature = nil              // Clear the signature
+	r.TransactionHash = [32]byte{} // Clear the transaction hash
 	return r
 }
 
@@ -581,8 +651,9 @@ func (s *BTCLegacySignature) Hash() []byte { return signatureHash(s) }
 
 // Metadata returns the signature's metadata.
 func (s *BTCLegacySignature) Metadata() Signature {
-	r := s.Copy()     // Copy the struct
-	r.Signature = nil // Clear the signature
+	r := s.Copy()                  // Copy the struct
+	r.Signature = nil              // Clear the signature
+	r.TransactionHash = [32]byte{} // Clear the transaction hash
 	return r
 }
 
@@ -675,8 +746,9 @@ func (s *ETHSignature) Hash() []byte { return signatureHash(s) }
 
 // Metadata returns the signature's metadata.
 func (s *ETHSignature) Metadata() Signature {
-	r := s.Copy()     // Copy the struct
-	r.Signature = nil // Clear the signature
+	r := s.Copy()                  // Copy the struct
+	r.Signature = nil              // Clear the signature
+	r.TransactionHash = [32]byte{} // Clear the transaction hash
 	return r
 }
 
@@ -815,7 +887,7 @@ func (s *PartitionSignature) Metadata() Signature {
 
 // Initiator returns an error.
 func (s *PartitionSignature) Initiator() (hash.Hasher, error) {
-	return nil, errors.New(errors.StatusBadRequest, "use of the initiator hash for a synthetic signature is not supported")
+	return nil, errors.BadRequest.With("use of the initiator hash for a synthetic signature is not supported")
 }
 
 // GetVote returns VoteTypeAccept.
@@ -944,7 +1016,7 @@ func (s *InternalSignature) Metadata() Signature {
 
 // InitiatorHash returns an error.
 func (s *InternalSignature) Initiator() (hash.Hasher, error) {
-	return nil, errors.New(errors.StatusBadRequest, "use of the initiator hash for an internal signature is not supported")
+	return nil, errors.BadRequest.With("use of the initiator hash for an internal signature is not supported")
 }
 
 // GetVote returns VoteTypeAccept.

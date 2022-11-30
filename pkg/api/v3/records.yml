@@ -1,0 +1,169 @@
+RecordRange[T Record]:
+  union: { type: record, value: Range }
+  fields:
+    - name: Records
+      type: T
+      marshal-as: union
+      repeatable: true
+    - name: Start
+      type: uint
+      keep-empty: true
+    - name: Total
+      type: uint
+      keep-empty: true
+
+AccountRecord:
+  union: { type: record }
+  fields:
+    - name: Account
+      type: protocol.Account
+      marshal-as: union
+    - name: Directory
+      type: RecordRange[*UrlRecord]
+      marshal-as: reference
+      pointer: true
+    - name: Pending
+      type: RecordRange[*TxIDRecord]
+      marshal-as: reference
+      pointer: true
+    - name: Receipt
+      type: Receipt
+      marshal-as: reference
+      pointer: true
+
+ChainRecord:
+  union: { type: record }
+  fields:
+    - name: Name
+      type: string
+    - name: Type
+      type: managed.ChainType
+      marshal-as: enum
+    - name: Count
+      type: uint
+    - name: State
+      type: bytes
+      repeatable: true
+
+ChainEntryRecord[T Record]:
+  union: { type: record }
+  fields:
+    - name: Account
+      description: is the account (omitted if unambiguous)
+      type: url
+      pointer: true
+    - name: Name
+      type: string
+    - name: Type
+      type: managed.ChainType
+      marshal-as: enum
+    - name: Index
+      type: uint
+      keep-empty: true
+    - name: Entry
+      type: hash
+    - name: Value
+      type: T
+      marshal-as: union
+    - name: Receipt
+      type: Receipt
+      marshal-as: reference
+      pointer: true
+
+KeyRecord:
+  union: { type: record }
+  fields:
+    - name: Authority
+      type: url
+      pointer: true
+    - name: Signer
+      type: url
+      pointer: true
+    - name: Index
+      type: uint
+    - name: Entry
+      type: protocol.KeySpec
+      marshal-as: reference
+      pointer: true
+
+TransactionRecord:
+  union: { type: record }
+  fields:
+    - name: TxID
+      type: txid
+      pointer: true
+    - name: Transaction
+      type: protocol.Transaction
+      marshal-as: reference
+      pointer: true
+    - name: Status
+      type: protocol.TransactionStatus
+      marshal-as: reference
+      pointer: true
+    - name: Produced
+      type: RecordRange[*TxIDRecord]
+      marshal-as: reference
+      pointer: true
+    - name: Signatures
+      type: RecordRange[*SignatureRecord]
+      marshal-as: reference
+      pointer: true
+
+SignatureRecord:
+  union: { type: record }
+  fields:
+    - name: Signature
+      type: protocol.Signature
+      marshal-as: union
+    - name: TxID
+      type: txid
+      pointer: true
+    - name: Signer
+      type: protocol.Signer
+      marshal-as: union
+
+MinorBlockRecord:
+  union: { type: record }
+  fields:
+    - name: Index
+      type: uint
+    - name: Time
+      type: time
+    - name: Entries
+      type: RecordRange[*ChainEntryRecord[Record]]
+      marshal-as: reference
+      pointer: true
+
+MajorBlockRecord:
+  union: { type: record }
+  fields:
+    - name: Index
+      type: uint
+    - name: Time
+      type: time
+    - name: MinorBlocks
+      type: RecordRange[*MinorBlockRecord]
+      marshal-as: reference
+      pointer: true
+
+UrlRecord:
+  union: { type: record }
+  fields:
+    - name: Value
+      type: url
+      pointer: true
+
+TxIDRecord:
+  union: { type: record }
+  fields:
+    - name: Value
+      type: txid
+      pointer: true
+
+IndexEntryRecord:
+  union: { type: record }
+  fields:
+    - name: Value
+      type: protocol.IndexEntry
+      marshal-as: reference
+      pointer: true

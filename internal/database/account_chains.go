@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package database
 
 import (
@@ -5,10 +11,10 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/managed"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 )
 
 // Chain2 is a wrapper for managed.Chain.
@@ -61,6 +67,8 @@ func (c *Chain2) Name() string { return c.inner.Name() }
 // Type returns the type of the chain.
 func (c *Chain2) Type() managed.ChainType { return c.inner.Type() }
 
+func (c *Chain2) Inner() *managed.Chain { return c.inner }
+
 // Url returns the URL of the chain: {account}#chain/{name}.
 func (c *Chain2) Url() *url.URL {
 	return c.Account().WithFragment("chain/" + c.Name())
@@ -92,6 +100,20 @@ func (c *Chain2) Key(i int) interface{} {
 	return c.key[i]
 }
 
+func (c *Chain2) Head() *record.Value[*managed.MerkleState] {
+	return c.inner.Head()
+}
+
+// IndexOf returns the index of the given entry in the chain.
+func (c *Chain2) IndexOf(hash []byte) (int64, error) {
+	return c.inner.GetElementIndex(hash)
+}
+
+// Entry loads the entry in the chain at the given height.
+func (c *Chain2) Entry(height int64) ([]byte, error) {
+	return c.inner.Get(height)
+}
+
 // Get converts the Chain2 to a Chain, updating the account's chains index and
 // loading the chain head.
 func (c *Chain2) Get() (*Chain, error) {
@@ -100,12 +122,12 @@ func (c *Chain2) Get() (*Chain, error) {
 	switch {
 	case err == nil:
 		// Ok
-	case !errors.Is(err, errors.StatusNotFound):
-		return nil, errors.Wrap(errors.StatusUnknownError, err)
+	case !errors.Is(err, errors.NotFound):
+		return nil, errors.UnknownError.Wrap(err)
 	default:
 		err = c.account.Chains().Add(&protocol.ChainMetadata{Name: c.Name(), Type: c.Type()})
 		if err != nil {
-			return nil, errors.Wrap(errors.StatusUnknownError, err)
+			return nil, errors.UnknownError.Wrap(err)
 		}
 	}
 	return wrapChain(c.inner)
@@ -137,7 +159,7 @@ func (a *Account) ChainByName(name string) (*Chain2, error) {
 
 	c := a.chainByName(name)
 	if c == nil {
-		return nil, errors.NotFound("account %v chain %s not found", a.Url(), name)
+		return nil, errors.NotFound.WithFormat("account %v chain %s not found", a.Url(), name)
 	}
 
 	if index {

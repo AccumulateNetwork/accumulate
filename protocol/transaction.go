@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package protocol
 
 import (
@@ -5,22 +11,22 @@ import (
 	"math/big"
 	"sort"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/internal/sortutil"
+	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
-func (s *TransactionStatus) Delivered() bool { return s.Code == errors.StatusDelivered || s.Failed() }
-func (s *TransactionStatus) Remote() bool    { return s.Code == errors.StatusRemote }
-func (s *TransactionStatus) Pending() bool   { return s.Code == errors.StatusPending }
+func (s *TransactionStatus) Delivered() bool { return s.Code == errors.Delivered || s.Failed() }
+func (s *TransactionStatus) Remote() bool    { return s.Code == errors.Remote }
+func (s *TransactionStatus) Pending() bool   { return s.Code == errors.Pending }
 func (s *TransactionStatus) Failed() bool    { return !s.Code.Success() }
 func (s *TransactionStatus) CodeNum() uint64 { return uint64(s.Code) }
 
 // Set sets the status code and the error.
 func (s *TransactionStatus) Set(err error) {
-	s.Error = errors.Wrap(errors.StatusUnknownError, err).(*errors.Error)
+	s.Error = errors.UnknownError.Wrap(err).(*errors.Error)
 	if s.Error.Code == 0 {
-		s.Code = errors.StatusUnknownError
+		s.Code = errors.UnknownError
 	} else {
 		s.Code = s.Error.Code
 	}

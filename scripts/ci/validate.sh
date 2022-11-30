@@ -6,9 +6,9 @@ set -e
 SCRIPT_DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
 source ${SCRIPT_DIR}/validate-commons.sh
 section "Setup"
-if which go > /dev/null || ! which accumulate > /dev/null ; then
+if which go > /dev/null && ! which accumulate > /dev/null ; then
     echo "Installing CLI"
-    go install ./cmd/accumulate
+    go install gitlab.com/accumulatenetwork/core/wallet/cmd/accumulate
     export PATH="${PATH}:$(go env GOPATH)/bin"
 fi
 init-wallet
@@ -233,8 +233,8 @@ wait-for-tx $TXID
 success
 
 section "Signing the transaction after it has been delivered fails"
-JSON=$(cli-run tx sign test.acme/tokens test-2-2 $TXID) || die "Failed to sign transaction"
-jq -e .result.error <<< "${JSON}" && success || die "Signed the transaction after it was delivered"
+JSON=$(cli-run tx sign test.acme/tokens test-2-2 $TXID) && die "Signed the transaction after it was delivered" || success
+# jq <<< $JSON -re .result.error && success || die "Signed the transaction after it was delivered"
 
 section "API v2 faucet (AC-570)"
 BEFORE=$(accumulate -j account get ${LITE_ACME} | jq -r .data.balance)
@@ -396,19 +396,6 @@ accumulate tx sign test.acme/managed-tokens test-mgr@manager.acme $TXID || die "
 wait-for-tx --ignore-pending $TXID || die "Transaction was not delivered"
 RESULT=$(accumulate -j get test.acme/managed-tokens -j | jq -re '.data.authorities | length')
 [ "$RESULT" -eq 1 ] || die "Expected 1 authority, got $RESULT"
-success
-
-section "Export wallet as json format"
-accumulate wallet export /tmp/wallet_export_account.json || die "failed to export wallet"
-cat /tmp/wallet_export_account.json
-success
-
-section "Remove wallet db storage"
-rm $HOME/.accumulate/validate/wallet.db || die "failed to remove wallet database"
-success
-
-section "Import wallet as json format to restore wallet"
-accumulate wallet init import keystore /tmp/wallet_export_account.json || die "failed to import wallet"
 success
 
 section "Add manager to token account"

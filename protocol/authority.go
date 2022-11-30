@@ -1,9 +1,16 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package protocol
 
 import (
 	"bytes"
 	"crypto/sha256"
 	"fmt"
+	"io"
 	"math"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -32,8 +39,26 @@ func EqualSigner(a, b Signer) bool {
 	return EqualAccount(a, b)
 }
 
+func CopySigner(v Signer) Signer {
+	return v.CopyAsInterface().(Signer)
+}
+
 func UnmarshalSigner(data []byte) (Signer, error) {
 	account, err := UnmarshalAccount(data)
+	if err != nil {
+		return nil, err
+	}
+
+	signer, ok := account.(Signer)
+	if !ok {
+		return nil, fmt.Errorf("account type %v is not a signer", account.Type())
+	}
+
+	return signer, nil
+}
+
+func UnmarshalSignerFrom(r io.Reader) (Signer, error) {
+	account, err := UnmarshalAccountFrom(r)
 	if err != nil {
 		return nil, err
 	}
@@ -96,6 +121,7 @@ func MakeLiteSigner(signer Signer2) Signer {
 /* ***** Unknown signer ***** */
 
 func (s *UnknownSigner) GetUrl() *url.URL                                   { return s.Url }
+func (s *UnknownSigner) StripUrl()                                          { s.Url = s.GetUrl().StripExtras() }
 func (s *UnknownSigner) GetVersion() uint64                                 { return s.Version }
 func (*UnknownSigner) GetSignatureThreshold() uint64                        { return math.MaxUint64 }
 func (*UnknownSigner) EntryByKeyHash(keyHash []byte) (int, KeyEntry, bool)  { return -1, nil, false }

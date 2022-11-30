@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package main
 
 import (
@@ -9,7 +15,7 @@ import (
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 var cmdMerge = &cobra.Command{
@@ -60,7 +66,7 @@ func merge(_ *cobra.Command, args []string) {
 	checkf(err, "open snapshot")
 	defer f.Close()
 	check(db.View(func(batch *database.Batch) error {
-		_, err := snapshot.Collect(batch, f, func(*database.Account) (bool, error) { return true, nil })
+		_, err := snapshot.Collect(batch, new(snapshot.Header), f, snapshot.CollectOptions{})
 		return err
 	}))
 }

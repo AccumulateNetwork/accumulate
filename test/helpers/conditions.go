@@ -1,9 +1,15 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package helpers
 
 import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -37,6 +43,7 @@ func (c condTxn) status(predicate func(sim *Sim, status *protocol.TransactionSta
 			h := c.id.Hash()
 			status, err := batch.Transaction(h[:]).Status().Get()
 			require.NoError(s.T, err)
+			status.TxID = c.id
 			ok = predicate(s, status)
 		})
 		return ok
@@ -68,6 +75,7 @@ func (c condProduced) status(predicate func(sim *Sim, status *protocol.Transacti
 				h := id.Hash()
 				status, err := batch.Transaction(h[:]).Status().Get()
 				require.NoError(s.T, err)
+				status.TxID = c.id
 				ok = predicate(s, status)
 			})
 			if !ok {
@@ -90,7 +98,7 @@ func isPending(s *Sim, status *protocol.TransactionStatus) bool {
 	if status.Code == 0 {
 		return false
 	}
-	if status.Code != errors.StatusPending {
+	if status.Code != errors.Pending {
 		s.T.Fatal("Expected transaction to be pending")
 	}
 	return true

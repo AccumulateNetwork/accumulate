@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package main
 
 //lint:file-ignore ST1001 Don't care
@@ -14,7 +20,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/play-accumulate/pkg"
-	"gitlab.com/accumulatenetwork/accumulate/internal/testing"
+	"gitlab.com/accumulatenetwork/accumulate/test/testing"
 	. "gitlab.com/ethan.reesor/vscode-notebooks/go-playbooks/pkg/kernel"
 	"gitlab.com/ethan.reesor/vscode-notebooks/yaegi/interp"
 )

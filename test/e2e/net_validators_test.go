@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package e2e
 
 import (
@@ -5,12 +11,11 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/block/simulator"
-	"gitlab.com/accumulatenetwork/accumulate/internal/build"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
+	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
 func requireHasKeyHash(t *testing.T, page *KeyPage, hash []byte) {
@@ -74,7 +79,7 @@ func TestUpdateValidators(t *testing.T) {
 
 	// Add a validator
 	values := dn.Executor.ActiveGlobals_TESTONLY()
-	envs, err := build.AddOperator(values, len(page.Keys), vldKey1[32:], vldKey1Hash[:], Directory, signer1, signer2, signer3)
+	envs, err := AddOperator(values, len(page.Keys), vldKey1[32:], vldKey1Hash[:], Directory, signer1, signer2, signer3)
 	require.NoError(t, err)
 	for _, env := range envs {
 		sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(env)...)
@@ -91,7 +96,7 @@ func TestUpdateValidators(t *testing.T) {
 	signer1.SetVersion(page.Version)
 
 	values = dn.Executor.ActiveGlobals_TESTONLY()
-	envs, err = build.UpdateOperatorKey(values, vldKey1[32:], vldKey1Hash[:], vldKey4[32:], vldKey4Hash[:], signer1, signer2, signer3)
+	envs, err = UpdateOperatorKey(values, vldKey1[32:], vldKey1Hash[:], vldKey4[32:], vldKey4Hash[:], signer1, signer2, signer3)
 	require.NoError(t, err)
 	for _, env := range envs {
 		sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(env)...)
@@ -105,7 +110,7 @@ func TestUpdateValidators(t *testing.T) {
 	signer1.SetVersion(page.Version)
 
 	values = dn.Executor.ActiveGlobals_TESTONLY()
-	envs, err = build.AddOperator(values, len(page.Keys), vldKey2[32:], vldKey2Hash[:], Directory, signer1, signer2, signer3)
+	envs, err = AddOperator(values, len(page.Keys), vldKey2[32:], vldKey2Hash[:], Directory, signer1, signer2, signer3)
 	require.NoError(t, err)
 	for _, env := range envs {
 		sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(env)...)
@@ -120,7 +125,7 @@ func TestUpdateValidators(t *testing.T) {
 	signerA2 := signer1.Copy().SetPrivateKey(vldKey2).ClearTimestamp()
 
 	values = dn.Executor.ActiveGlobals_TESTONLY()
-	envs, err = build.AddOperator(values, len(page.Keys), vldKey3[32:], vldKey3Hash[:], Directory, signer1, signer2, signer3, signerA2)
+	envs, err = AddOperator(values, len(page.Keys), vldKey3[32:], vldKey3Hash[:], Directory, signer1, signer2, signer3, signerA2)
 	require.NoError(t, err)
 	for _, env := range envs {
 		sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(env)...)
@@ -134,7 +139,7 @@ func TestUpdateValidators(t *testing.T) {
 	signer1.SetVersion(page.Version)
 
 	values = dn.Executor.ActiveGlobals_TESTONLY()
-	envs, err = build.RemoveOperator(values, len(page.Keys), vldKey4[32:], vldKey4Hash[:], signer1, signer2, signer3, signerA2)
+	envs, err = RemoveOperator(values, len(page.Keys), vldKey4[32:], vldKey4Hash[:], signer1, signer2, signer3, signerA2)
 	require.NoError(t, err)
 	for _, env := range envs {
 		sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(env)...)

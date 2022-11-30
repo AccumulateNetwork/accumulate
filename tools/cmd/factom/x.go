@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package main
 
 import (
@@ -6,13 +12,13 @@ import (
 	"sort"
 
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/hash"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/pmt"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/memory"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
-	"gitlab.com/accumulatenetwork/accumulate/internal/encoding/hash"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/pmt"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 )
 
 var cmdX = &cobra.Command{
@@ -32,7 +38,7 @@ func X(_ *cobra.Command, args []string) {
 	check(snapshot.Visit(input, x))
 
 	sort.Slice(x.accounts, func(i, j int) bool {
-		return len(x.accounts[i].Chains[0].Entries) > len(x.accounts[j].Chains[0].Entries)
+		return x.accounts[i].Chains[0].Head.Count > x.accounts[j].Chains[0].Head.Count
 	})
 
 	logger := newLogger()
@@ -44,7 +50,7 @@ func X(_ *cobra.Command, args []string) {
 	hasher := make(hash.Hasher, 4)
 	lookup := map[[32]byte]*snapshot.Account{}
 	for _, a := range x.accounts[20:25] {
-		fmt.Printf("Account %v has %d entries\n", a.Url, len(a.Chains[0].Entries))
+		fmt.Printf("Account %v has %d entries\n", a.Url, a.Chains[0].Head.Count)
 		hasher = hasher[:0]
 		b, _ := a.Main.MarshalBinary()
 		hasher.AddBytes(b)
@@ -67,7 +73,7 @@ func X(_ *cobra.Command, args []string) {
 	check(bpt.Bpt.SaveSnapshot(sw, func(key storage.Key, _ [32]byte) ([]byte, error) {
 		b, err := lookup[key].MarshalBinary()
 		if err != nil {
-			return nil, errors.Format(errors.StatusEncodingError, "marshal account: %w", err)
+			return nil, errors.EncodingError.WithFormat("marshal account: %w", err)
 		}
 		return b, nil
 	}))

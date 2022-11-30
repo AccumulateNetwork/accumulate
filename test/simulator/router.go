@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package simulator
 
 import (
@@ -6,11 +12,11 @@ import (
 	"sync"
 
 	"github.com/tendermint/tendermint/libs/log"
-	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
-	"gitlab.com/accumulatenetwork/accumulate/internal/errors"
-	"gitlab.com/accumulatenetwork/accumulate/internal/events"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -37,7 +43,7 @@ func newRouter(logger log.Logger, partitions map[string]*Partition) *Router {
 func (r *Router) willChangeGlobals(e events.WillChangeGlobals) error {
 	tree, err := routing.NewRouteTree(e.New.Routing)
 	if err != nil {
-		return errors.Wrap(errors.StatusUnknownError, err)
+		return errors.UnknownError.Wrap(err)
 	}
 
 	r.tree = tree
@@ -60,10 +66,10 @@ func (r *Router) RouteAccount(account *url.URL) (string, error) {
 		return part, nil
 	}
 	if r.tree == nil {
-		return "", errors.New(errors.StatusInternalError, "the routing table has not been initialized")
+		return "", errors.InternalError.With("the routing table has not been initialized")
 	}
 	if protocol.IsUnknown(account) {
-		return "", errors.New(errors.StatusBadRequest, "URL is unknown, cannot route")
+		return "", errors.BadRequest.With("URL is unknown, cannot route")
 	}
 	return r.tree.Route(account)
 }
@@ -75,7 +81,7 @@ func (r *Router) Route(envs ...*protocol.Envelope) (string, error) {
 func (r *Router) RequestAPIv2(ctx context.Context, partition, method string, params, result interface{}) error {
 	p, ok := r.partitions[partition]
 	if !ok {
-		return errors.Format(errors.StatusBadRequest, "%s is not a partition", partition)
+		return errors.BadRequest.WithFormat("%s is not a partition", partition)
 	}
 
 	// Round robin
@@ -96,7 +102,7 @@ func (r *Router) Submit(ctx context.Context, partition string, envelope *protoco
 			case err == nil:
 				// Ok
 
-			case errors.Is(err, errors.StatusFatalError):
+			case errors.Is(err, errors.FatalError):
 				panic(fmt.Errorf("fatal error during async submit: %w", err))
 
 			default:
@@ -108,12 +114,12 @@ func (r *Router) Submit(ctx context.Context, partition string, envelope *protoco
 
 	p, ok := r.partitions[partition]
 	if !ok {
-		return nil, errors.Format(errors.StatusBadRequest, "%s is not a partition", partition)
+		return nil, errors.BadRequest.WithFormat("%s is not a partition", partition)
 	}
 
 	deliveries, err := chain.NormalizeEnvelope(envelope)
 	if err != nil {
-		return nil, errors.Format(errors.StatusUnknownError, "submit: %w", err)
+		return nil, errors.UnknownError.WithFormat("submit: %w", err)
 	}
 
 	resp := new(routing.ResponseSubmit)
@@ -121,7 +127,7 @@ func (r *Router) Submit(ctx context.Context, partition string, envelope *protoco
 	for i, delivery := range deliveries {
 		results[i], err = p.Submit(delivery, pretend)
 		if err != nil {
-			return nil, errors.Wrap(errors.StatusUnknownError, err)
+			return nil, errors.UnknownError.Wrap(err)
 		}
 
 		// If a user transaction fails, the batch fails
@@ -133,7 +139,7 @@ func (r *Router) Submit(ctx context.Context, partition string, envelope *protoco
 
 	resp.Data, err = (&protocol.TransactionResultSet{Results: results}).MarshalBinary()
 	if err != nil {
-		return nil, errors.Format(errors.StatusFatalError, "marshal results: %w", err)
+		return nil, errors.FatalError.WithFormat("marshal results: %w", err)
 	}
 
 	return resp, nil

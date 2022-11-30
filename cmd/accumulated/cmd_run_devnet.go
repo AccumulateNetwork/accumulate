@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package main
 
 import (
@@ -12,10 +18,10 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
-	"github.com/tendermint/tendermint/libs/log"
-	"gitlab.com/accumulatenetwork/accumulate/config"
-	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
-	"gitlab.com/accumulatenetwork/accumulate/internal/testing"
+	tmconfig "github.com/tendermint/tendermint/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
+	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
+	"gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
 var cmdRunDevnet = &cobra.Command{
@@ -27,14 +33,12 @@ var cmdRunDevnet = &cobra.Command{
 
 var flagRunDevnet = struct {
 	Except []int
-	Debug  bool
 }{}
 
 func init() {
 	cmdRun.AddCommand(cmdRunDevnet)
 
 	cmdRunDevnet.Flags().IntSliceVarP(&flagRunDevnet.Except, "except", "x", nil, "Numbers of nodes that should not be launched")
-	cmdRunDevnet.Flags().BoolVar(&flagRunDevnet.Debug, "debug", false, "Enable debugging features")
 
 	if os.Getenv("FORCE_COLOR") != "" {
 		color.NoColor = false
@@ -55,7 +59,7 @@ var fallbackColor = color.New(color.FgHiBlack)
 func runDevNet(*cobra.Command, []string) {
 	fmt.Println("Starting devnet")
 
-	if flagRunDevnet.Debug {
+	if flagRun.Debug {
 		testing.EnableDebugFeatures()
 	}
 
@@ -200,7 +204,7 @@ var partitionColor = map[string]*color.Color{}
 
 func newNodeWriter(w io.Writer, format, partition string, node int, color bool) io.Writer {
 	switch format {
-	case log.LogFormatPlain, log.LogFormatText:
+	case tmconfig.LogFormatPlain:
 		id := fmt.Sprintf("%s.%d", partition, node)
 		s := fmt.Sprintf("[%s]", id) + strings.Repeat(" ", nodeIdLen+len("bvnxx")-len(id)+1)
 		if !color {
@@ -220,7 +224,7 @@ func newNodeWriter(w io.Writer, format, partition string, node int, color bool) 
 		s = c.Sprint(s)
 		return &plainNodeWriter{s, w}
 
-	case log.LogFormatJSON:
+	case tmconfig.LogFormatJSON:
 		s := fmt.Sprintf(`"partition":"%s","node":%d`, partition, node)
 		return &jsonNodeWriter{s, w}
 
