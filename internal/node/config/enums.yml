@@ -1,0 +1,15 @@
+NodeType:
+  Validator:
+    value: 1
+  Follower:
+    value: 2
+
+PortOffset:
+  TendermintP2P:
+    value: 0
+  TendermintRpc:
+    value: 1
+  Prometheus:
+    value: 3
+  AccumulateApi:
+    value: 4

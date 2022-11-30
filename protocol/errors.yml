@@ -1,0 +1,16 @@
+ErrorCode:
+  OK:
+    value: 0
+    description: indicates the request succeeded
+  EncodingError:
+    value: 1
+    description: indicates something could not be decoded or encoded
+  Failed:
+    value: 2
+    description: indicates the request failed
+  DidPanic:
+    value: 3
+    description: indicates the request failed due to a fatal error
+  UnknownError:
+    value: 4
+    description: indicates the request failed due to an unknown error

@@ -8,13 +8,12 @@ GIT_COMMIT = $(shell git rev-parse HEAD)
 VERSION = gitlab.com/accumulatenetwork/accumulate.Version=$(GIT_DESCRIBE)
 COMMIT = gitlab.com/accumulatenetwork/accumulate.Commit=$(GIT_COMMIT)
 
+TAGS=production,mainnet
 LDFLAGS = '-X "$(VERSION)" -X "$(COMMIT)"'
+FLAGS = $(BUILDFLAGS) -tags $(TAGS) -ldflags $(LDFLAGS)
 
 build:
-	go build $(BUILDFLAGS) -ldflags $(LDFLAGS) ./cmd/accumulated
+	go build -trimpath $(FLAGS) ./cmd/accumulated
 
 install:
-	go install -ldflags $(LDFLAGS) ./cmd/accumulated
-
-accumulate:
-	go build $(BUILDFLAGS) -ldflags $(LDFLAGS) ./cmd/accumulate
+	go install -trimpath $(FLAGS) ./cmd/accumulated

@@ -1,40 +1,62 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package api_test
 
 import (
 	"context"
+	"encoding/hex"
+	"encoding/json"
 	"testing"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	core "github.com/tendermint/tendermint/rpc/core/types"
-	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
-	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/connections"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
+func init() { acctesting.EnableDebugFeatures() }
+
+//go:generate go run github.com/golang/mock/mockgen -source ../../node/connections/connection_context.go -package api_test -destination ./mock_connections_test.go
+
 func TestExecuteCheckOnly(t *testing.T) {
+	env := acctesting.NewTransaction().
+		WithPrincipal(protocol.FaucetUrl).
+		WithBody(&protocol.AcmeFaucet{}).
+		Faucet()
+
+	data, err := env.MarshalBinary()
+	require.NoError(t, err)
+
 	baseReq := TxRequest{
-		Origin:  &url.URL{Authority: "check"},
-		Payload: "",
-		Signer: Signer{
-			PublicKey: make([]byte, 32),
-		},
-		Signature: make([]byte, 64),
+		Origin:     protocol.AccountUrl("check"),
+		Payload:    hex.EncodeToString(data),
+		IsEnvelope: true,
 	}
 
 	t.Run("True", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		local := NewMockClient(ctrl)
+		connectionManager := connections.NewFakeConnectionManager([]string{""})
+		local := NewMockABCIClient(ctrl)
+		clients := map[string]connections.FakeClient{}
+		clients[""] = connections.FakeClient{local, nil}
+		connectionManager.SetClients(clients)
+		table := new(protocol.RoutingTable)
+		table.Routes = routing.BuildSimpleTable([]string{""})
+		router, err := routing.NewStaticRouter(table, connectionManager, nil)
+		require.NoError(t, err)
 		j, err := NewJrpc(Options{
-			Router: &routing.Direct{
-				Network: &config.Network{
-					BvnNames: []string{""},
-				},
-				Clients: map[string]routing.Client{"": local},
-			},
+			Router: router,
+			Key:    make([]byte, 64),
 		})
 		require.NoError(t, err)
 
@@ -42,7 +64,7 @@ func TestExecuteCheckOnly(t *testing.T) {
 
 		req := baseReq
 		req.CheckOnly = true
-		r := j.DoExecute(context.Background(), &req, []byte{})
+		r := j.Execute(context.Background(), mustMarshal(t, &req))
 		err, _ = r.(error)
 		require.NoError(t, err)
 	})
@@ -51,14 +73,18 @@ func TestExecuteCheckOnly(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		local := NewMockClient(ctrl)
+		connectionManager := connections.NewFakeConnectionManager([]string{""})
+		local := NewMockABCIClient(ctrl)
+		clients := map[string]connections.FakeClient{}
+		clients[""] = connections.FakeClient{local, nil}
+		connectionManager.SetClients(clients)
+		table := new(protocol.RoutingTable)
+		table.Routes = routing.BuildSimpleTable([]string{""})
+		router, err := routing.NewStaticRouter(table, connectionManager, nil)
+		require.NoError(t, err)
 		j, err := NewJrpc(Options{
-			Router: &routing.Direct{
-				Network: &config.Network{
-					BvnNames: []string{""},
-				},
-				Clients: map[string]routing.Client{"": local},
-			},
+			Router: router,
+			Key:    make([]byte, 64),
 		})
 		require.NoError(t, err)
 
@@ -66,8 +92,14 @@ func TestExecuteCheckOnly(t *testing.T) {
 
 		req := baseReq
 		req.CheckOnly = false
-		r := j.DoExecute(context.Background(), &req, []byte{})
+		r := j.Execute(context.Background(), mustMarshal(t, &req))
 		err, _ = r.(error)
 		require.NoError(t, err)
 	})
+}
+
+func mustMarshal(t testing.TB, v interface{}) []byte {
+	b, err := json.Marshal(v)
+	require.NoError(t, err)
+	return b
 }

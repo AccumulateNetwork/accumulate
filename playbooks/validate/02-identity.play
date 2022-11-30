@@ -1,0 +1,68 @@
+---
+engine:
+  name: play-accumulate-kernel
+  description: Accumulate Kernel
+  modulePath: gitlab.com/accumulatenetwork/accumulate/cmd/play-accumulate-kernel
+  importPath: gitlab.com/accumulatenetwork/accumulate
+  debug:
+    # enable: true
+    source: ../../cmd/play-accumulate-kernel
+---
+
+# Identity (ADI)
+
+## Setup
+
+```go
+liteKey := GenerateKey()
+liteAddr := LiteAddress(liteKey, ACME)
+Faucet(liteAddr).
+	Wait().Ok()
+Transaction(liteAddr).
+	WithSigner(liteAddr).
+	AddCredits(liteAddr, 200000).
+		Oracle(5).
+	Initiate(liteKey).
+	Submit().Wait().Ok()
+Show("Ok")
+```
+## Create an ADI
+
+```go{ id: 1 }
+aliceKey := GenerateKey("alice.acme")
+Show(Transaction(liteAddr).
+	WithSigner(liteAddr).
+	CreateIdentity("alice.acme").
+		WithKey(aliceKey).
+		WithKeyBook("alice.acme/book").
+	Initiate(liteKey).
+	Submit().Wait().Ok())
+Show(Get("alice.acme"))
+```
+
+## Recreating the ADI fails
+
+```go
+flow := Transaction(liteAddr).
+	WithSigner(liteAddr).
+	CreateIdentity("alice.acme").
+		WithKey(aliceKey).
+		WithKeyBook("alice.acme/book").
+	Initiate(liteKey).
+	Submit().Wait()
+flow[0].Ok() // CreateIdentity succeeded
+flow[1].NotOk("expected 'already exists'") // SyntheticCreateChain failed
+Show("Test passed - recreation failed")
+```
+
+## Add credits to the key page
+
+```go{ id: 2 }
+Transaction(liteAddr).
+	WithSigner(liteAddr).
+	AddCredits("alice.acme/book/1", 100).
+		Oracle(5).
+	Initiate(liteKey).
+	Submit().Wait().Ok()
+Show(Get("alice.acme/book/1"))
+```

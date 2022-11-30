@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package api_test
 
 import (
@@ -5,19 +11,15 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/json"
-	"reflect"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
-	"gitlab.com/accumulatenetwork/accumulate/internal/testing/e2e"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2/query"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
-	"gitlab.com/accumulatenetwork/accumulate/types/state"
+	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
 func newKey(seed []byte) ed25519.PrivateKey {
@@ -27,7 +29,7 @@ func newKey(seed []byte) ed25519.PrivateKey {
 
 func makeLiteUrl(t *testing.T, key ed25519.PrivateKey, tok string) *url.URL {
 	t.Helper()
-	u, err := protocol.LiteTokenAddress(key[32:], tok)
+	u, err := protocol.LiteTokenAddress(key[32:], tok, protocol.SignatureTypeED25519)
 	require.NoError(t, err)
 	return u
 }
@@ -81,7 +83,7 @@ func queryRecordAs(t *testing.T, japi *api.JrpcMethods, method string, params, r
 type execParams struct {
 	Origin  string
 	Key     ed25519.PrivateKey
-	Payload protocol.TransactionPayload
+	Payload protocol.TransactionBody
 }
 
 func recode(t *testing.T, from, to interface{}) {
@@ -98,42 +100,36 @@ func prepareTx(t *testing.T, japi *api.JrpcMethods, params execParams) *api.TxRe
 	u, err := url.Parse(params.Origin)
 	require.NoError(t, err)
 
-	var signator string
-	var keyPageIndex uint64
+	var signator *url.URL
 	if key, _, _ := protocol.ParseLiteTokenAddress(u); key != nil {
-		signator = params.Origin
+		signator = u
 	} else {
 		q := new(api.KeyPageIndexQuery)
-		q.Url = params.Origin
+		q.Url = u
 		q.Key = params.Key.Public().(ed25519.PublicKey)
 		qr := queryRecord(t, japi, "query-key-index", q)
 		resp := new(query.ResponseKeyPageIndex)
 		recode(t, qr.Data, resp)
-		signator, keyPageIndex = resp.KeyPage, resp.Index
+		signator = resp.Signer
 	}
 
 	qr := queryRecord(t, japi, "query", &api.UrlQuery{Url: signator})
-	now := time.Now()
-	nonce := uint64(now.Unix()*1e9) + uint64(now.Nanosecond())
-	tx, err := transactions.NewWith(&transactions.Header{
-		Origin:        u,
-		KeyPageIndex:  keyPageIndex,
-		KeyPageHeight: qr.MainChain.Height,
-		Nonce:         nonce,
-	}, func(hash []byte) (*transactions.ED25519Sig, error) {
-		sig := new(transactions.ED25519Sig)
-		return sig, sig.Sign(nonce, params.Key, hash)
-	}, params.Payload)
-	require.NoError(t, err)
+	env := acctesting.NewTransaction().
+		WithPrincipal(u).
+		WithSigner(signator, qr.MainChain.Height).
+		WithCurrentTimestamp().
+		WithBody(params.Payload).
+		Initiate(protocol.SignatureTypeLegacyED25519, params.Key)
+	sig := env.Signatures[0].(protocol.KeySignature)
 
 	req := new(api.TxRequest)
-	req.Origin = u
-	req.Signer.PublicKey = params.Key[32:]
-	req.Signer.Nonce = nonce
-	req.Signature = tx.Signatures[0].Signature
-	req.KeyPage.Index = keyPageIndex
-	req.KeyPage.Height = qr.MainChain.Height
-	req.Payload = params.Payload
+	req.Origin = env.Transaction[0].Header.Principal
+	req.Signer.Timestamp = sig.GetTimestamp()
+	req.Signer.Url = sig.GetSigner()
+	req.Signer.PublicKey = sig.GetPublicKey()
+	req.Signature = sig.GetSignature()
+	req.KeyPage.Version = sig.GetSignerVersion()
+	req.Payload = env.Transaction[0].Body
 	return req
 }
 
@@ -151,105 +147,12 @@ func executeTx(t *testing.T, japi *api.JrpcMethods, method string, wait bool, pa
 	return resp
 }
 
-func executeTxFail(t *testing.T, japi *api.JrpcMethods, method string, keyPageIndex, keyPageHeight uint64, params execParams) *api.TxResponse {
-	t.Helper()
-
-	u, err := url.Parse(params.Origin)
-	require.NoError(t, err)
-
-	now := time.Now()
-	nonce := uint64(now.Unix()*1e9) + uint64(now.Nanosecond())
-	tx, err := transactions.NewWith(&transactions.Header{
-		Origin:        u,
-		KeyPageIndex:  keyPageIndex,
-		KeyPageHeight: keyPageHeight,
-		Nonce:         nonce,
-	}, func(hash []byte) (*transactions.ED25519Sig, error) {
-		sig := new(transactions.ED25519Sig)
-		return sig, sig.Sign(nonce, params.Key, hash)
-	}, params.Payload)
-	require.NoError(t, err)
-
-	req := new(api.TxRequest)
-	req.Origin = u
-	req.Signer.PublicKey = params.Key[32:]
-	req.Signer.Nonce = nonce
-	req.Signature = tx.Signatures[0].Signature
-	req.KeyPage.Index = keyPageIndex
-	req.KeyPage.Height = keyPageHeight
-	req.Payload = params.Payload
-
-	resp := new(api.TxResponse)
-	callApi(t, japi, method, req, resp)
-	return resp
-}
-
 func txWait(t *testing.T, japi *api.JrpcMethods, txid []byte) {
 	t.Helper()
 
 	txr := queryTxn(t, japi, "query-tx", &api.TxnQuery{Txid: txid, Wait: 10 * time.Second})
-	for _, txid := range txr.SyntheticTxids {
+	for _, txid := range txr.Produced {
+		txid := txid.Hash()
 		queryTxn(t, japi, "query-tx", &api.TxnQuery{Txid: txid[:], Wait: 10 * time.Second})
-	}
-}
-
-type e2eDUT struct {
-	*e2e.Suite
-	daemon *accumulated.Daemon
-}
-
-func (d *e2eDUT) api() *api.JrpcMethods {
-	return d.daemon.Jrpc_TESTONLY()
-}
-
-func (d *e2eDUT) GetRecordAs(url string, target state.Chain) {
-	d.T().Helper()
-	r, err := d.api().Querier().QueryUrl(url, api.QueryOptions{})
-	d.Require().NoError(err)
-	d.Require().IsType((*api.ChainQueryResponse)(nil), r)
-	qr := r.(*api.ChainQueryResponse)
-	d.Require().IsType(target, qr.Data)
-	reflect.ValueOf(target).Elem().Set(reflect.ValueOf(qr.Data).Elem())
-}
-
-func (d *e2eDUT) GetRecordHeight(url string) uint64 {
-	d.T().Helper()
-	r, err := d.api().Querier().QueryUrl(url, api.QueryOptions{})
-	d.Require().NoError(err)
-	d.Require().IsType((*api.ChainQueryResponse)(nil), r)
-	qr := r.(*api.ChainQueryResponse)
-	return qr.MainChain.Height
-}
-
-func (d *e2eDUT) SubmitTxn(tx *transactions.Envelope) {
-	d.T().Helper()
-	d.Require().NotEmpty(tx.Signatures, "Transaction has no signatures")
-	pl := new(api.TxRequest)
-	pl.Origin = tx.Transaction.Origin
-	pl.Signer.Nonce = tx.Transaction.Nonce
-	pl.Signer.PublicKey = tx.Signatures[0].PublicKey
-	pl.Signature = tx.Signatures[0].Signature
-	pl.KeyPage.Index = tx.Transaction.KeyPageIndex
-	pl.KeyPage.Height = tx.Transaction.KeyPageHeight
-	pl.Payload = tx.Transaction.Body
-
-	data, err := pl.MarshalJSON()
-	d.Require().NoError(err)
-
-	r := d.api().Execute(context.Background(), data)
-	err, _ = r.(error)
-	d.Require().NoError(err)
-}
-
-func (d *e2eDUT) WaitForTxns(txids ...[]byte) {
-	d.T().Helper()
-	for _, txid := range txids {
-		r, err := d.api().Querier().QueryTx(txid, 10*time.Second, api.QueryOptions{})
-		d.Require().NoError(err)
-
-		for _, txid := range r.SyntheticTxids {
-			_, err := d.api().Querier().QueryTx(txid[:], 10*time.Second, api.QueryOptions{})
-			d.Require().NoError(err)
-		}
 	}
 }

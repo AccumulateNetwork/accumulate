@@ -14,60 +14,10 @@ MetricsResponse:
     - name: Value
       type: any
 
-DirectoryQueryResult:
+TransactionResultSet:
   fields:
-    - name: Entries
-      type: slice
-      slice:
-        type: string
-      optional: true
-    - name: ExpandedEntries
-      type: slice
-      slice:
-        type: state.Object
-        pointer: true
-        marshal-as: reference
-      optional: true
-    - name: Total
-      type: uvarint
-      keep-empty: true
-
-RequestDataEntry:
-  fields:
-    - name: Url
-      type: string
-      is-url: true
-    - name: EntryHash
-      type: chain
-      optional: true
-
-RequestDataEntrySet:
-  fields:
-    - name: Url
-      type: string
-      is-url: true
-    - name: Start
-      type: uvarint
-    - name: Count
-      type: uvarint
-    - name: ExpandChains
-      type: bool
-      optional: true
-
-ResponseDataEntry:
-  fields:
-    - name: EntryHash
-      type: chain
-    - name: Entry
-      type: DataEntry
-      marshal-as: reference
-
-ResponseDataEntrySet:
-  fields:
-    - name: DataEntries
-      type: slice
-      slice:
-        type: ResponseDataEntry
-        marshal-as: reference
-    - name: Total
-      type: uvarint
+  - name: Results
+    type: TransactionStatus
+    pointer: true
+    marshal-as: reference
+    repeatable: true

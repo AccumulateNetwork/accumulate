@@ -1,0 +1,219 @@
+---
+engine:
+  name: play-accumulate-kernel
+  description: Accumulate Kernel
+  modulePath: gitlab.com/accumulatenetwork/accumulate/cmd/play-accumulate-kernel
+  importPath: gitlab.com/accumulatenetwork/accumulate
+---
+
+# Lite Token Accounts
+
+### Generate a lite address
+
+```go{ id: 1 }
+alice := GenerateKey("alice")
+aliceIdentity := LiteAddress(alice)
+aliceAcme := LiteAddress(alice, ACME)
+Show(aliceAcme)
+```
+
+```{ result_of: 1, id: 1, mime: "text/plain" }
+acc://53232cfe088f4c2dc74f1d055b285b61b0066248146fac67/ACME
+
+```
+
+```{ result_of: 1, id: 1, mime: "application/json" }
+"acc://53232cfe088f4c2dc74f1d055b285b61b0066248146fac67/ACME"
+```
+
+### Get tokens
+
+```go{ id: 2 }
+Show(Faucet(aliceAcme).Wait().Ok())
+Show(Get(aliceAcme))
+```
+
+```{ result_of: 2, id: 1, mime: "text/plain" }
+ACME Faucet Transaction
+    Hash:     FEB7DD5BC2F6BF65DEF19D0280126C3528EDC2CBBD71D4D33638E1FC070552FD
+    To:       acc://53232cfe088f4c2dc74f1d055b285b61b0066248146fac67/ACME
+    Amount:   2000000 ACME
+
+```
+
+```{ result_of: 2, id: 1, mime: "application/json" }
+{
+  "type": "acmeFaucet",
+  "url": "acc://53232cfe088f4c2dc74f1d055b285b61b0066248146fac67/ACME"
+}
+```
+
+```{ result_of: 2, id: 2, mime: "text/plain" }
+Lite Token Account
+    Identity:   53232cfe088f4c2dc74f1d055b285b61b0066248146fac67
+    Issuer:     ACME
+    Balance:    2000000 ACME
+    Credits:    0
+
+```
+
+```{ result_of: 2, id: 2, mime: "application/json" }
+{
+  "type": "liteTokenAccount",
+  "url": "acc://53232cfe088f4c2dc74f1d055b285b61b0066248146fac67/ACME",
+  "tokenUrl": "acc://ACME",
+  "balance": "200000000000000"
+}
+```
+
+### Make credits
+
+```go{ id: 3 }
+Show(Transaction(aliceAcme).
+    WithSigner(aliceAcme).
+    AddCredits(aliceAcme, 10).
+        Oracle(5).
+    Initiate(alice).
+	Submit().Wait().Ok())
+Show(Get(aliceAcme))
+```
+
+```{ result_of: 3, id: 1, mime: "text/plain" }
+Add Credits Transaction
+    Hash:    3BC64CCC30010876BD7EB798526C9C28786CB9D198BE63BA14916463DEC111D9
+    From:    acc://53232cfe088f4c2dc74f1d055b285b61b0066248146fac67/ACME
+    To:      acc://53232cfe088f4c2dc74f1d055b285b61b0066248146fac67/ACME
+    Spent:   10
+
+```
+
+```{ result_of: 3, id: 1, mime: "application/json" }
+{
+  "type": "addCredits",
+  "recipient": "acc://53232cfe088f4c2dc74f1d055b285b61b0066248146fac67/ACME",
+  "amount": "1000000000",
+  "oracle": 500
+}
+```
+
+```{ result_of: 3, id: 2, mime: "text/plain" }
+Lite Token Account
+    Identity:   53232cfe088f4c2dc74f1d055b285b61b0066248146fac67
+    Issuer:     ACME
+    Balance:    1999990 ACME
+    Credits:    50
+
+```
+
+```{ result_of: 3, id: 2, mime: "application/json" }
+{
+  "type": "liteTokenAccount",
+  "url": "acc://53232cfe088f4c2dc74f1d055b285b61b0066248146fac67/ACME",
+  "tokenUrl": "acc://ACME",
+  "balance": "199999000000000",
+  "lastUsedOn": 1640995202,
+  "nonce": 1640995202,
+  "creditBalance": 5000
+}
+```
+
+### Send tokens
+
+```go{ id: 4 }
+bob, charlie := GenerateKey("bob"), GenerateKey("charlie")
+bobAddr, charlieAddr := LiteAddress(bob, ACME), LiteAddress(charlie, ACME)
+
+Show(Transaction(aliceAcme).
+    WithSigner(aliceAcme).
+    SendTokens().
+        To(bobAddr, 68).
+        AndTo(charlieAddr, 42).
+    Initiate(alice).
+	Submit().Wait().Ok())
+Show(Get(aliceAcme))
+Show(Get(bobAddr))
+Show(Get(charlieAddr))
+```
+
+```{ result_of: 4, id: 1, mime: "text/plain" }
+Send Tokens Transaction
+    Hash:   105BC8607F7D25A3EE361E8644CE30A6844AB38317936896ABA843DFA70253B9
+    From:   acc://53232cfe088f4c2dc74f1d055b285b61b0066248146fac67/ACME
+    Send:   68 ACME to acc://1fcce69d0a02be2543b193893166958e6bf05dce67aa961e/ACME
+    Send:   42 ACME to acc://829a9ebc3db34dc622707324fd80676d3eb7964f32bae080/ACME
+
+```
+
+```{ result_of: 4, id: 1, mime: "application/json" }
+{
+  "type": "sendTokens",
+  "hash": "0000000000000000000000000000000000000000000000000000000000000000",
+  "to": [
+    {
+      "url": "acc://1fcce69d0a02be2543b193893166958e6bf05dce67aa961e/ACME",
+      "amount": "6800000000"
+    },
+    {
+      "url": "acc://829a9ebc3db34dc622707324fd80676d3eb7964f32bae080/ACME",
+      "amount": "4200000000"
+    }
+  ]
+}
+```
+
+```{ result_of: 4, id: 2, mime: "text/plain" }
+Lite Token Account
+    Identity:   53232cfe088f4c2dc74f1d055b285b61b0066248146fac67
+    Issuer:     ACME
+    Balance:    1999880 ACME
+    Credits:    47
+
+```
+
+```{ result_of: 4, id: 2, mime: "application/json" }
+{
+  "type": "liteTokenAccount",
+  "url": "acc://53232cfe088f4c2dc74f1d055b285b61b0066248146fac67/ACME",
+  "tokenUrl": "acc://ACME",
+  "balance": "199988000000000",
+  "lastUsedOn": 1640995203,
+  "nonce": 1640995203,
+  "creditBalance": 4700
+}
+```
+
+```{ result_of: 4, id: 3, mime: "text/plain" }
+Lite Token Account
+    Identity:   1fcce69d0a02be2543b193893166958e6bf05dce67aa961e
+    Issuer:     ACME
+    Balance:    68 ACME
+    Credits:    0
+
+```
+
+```{ result_of: 4, id: 3, mime: "application/json" }
+{
+  "type": "liteTokenAccount",
+  "url": "acc://1fcce69d0a02be2543b193893166958e6bf05dce67aa961e/ACME",
+  "tokenUrl": "acc://ACME",
+  "balance": "6800000000"
+}
+```
+
+```{ result_of: 4, id: 4, mime: "text/plain" }
+Lite Token Account
+    Identity:   829a9ebc3db34dc622707324fd80676d3eb7964f32bae080
+    Issuer:     ACME
+    Balance:    42 ACME
+    Credits:    0
+
+```
+
+```{ result_of: 4, id: 4, mime: "application/json" }
+{
+  "type": "liteTokenAccount",
+  "url": "acc://829a9ebc3db34dc622707324fd80676d3eb7964f32bae080/ACME",
+  "tokenUrl": "acc://ACME",
+  "balance": "4200000000"
+}
+```

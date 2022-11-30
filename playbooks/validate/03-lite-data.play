@@ -1,0 +1,67 @@
+---
+engine:
+  name: play-accumulate-kernel
+  description: Accumulate Kernel
+  modulePath: gitlab.com/accumulatenetwork/accumulate/cmd/play-accumulate-kernel
+  importPath: gitlab.com/accumulatenetwork/accumulate
+---
+
+# Lite Data Accounts
+
+## Using a lite token account
+
+### Setup
+
+```go{ id: 1 }
+liteKey := GenerateKey()
+liteTokenAddr := LiteAddress(liteKey, ACME)
+Faucet(liteTokenAddr).
+	Wait().Ok()
+Transaction(liteTokenAddr).
+	WithSigner(liteTokenAddr).
+	AddCredits(liteTokenAddr, 200000).
+		Oracle(5).
+	Initiate(liteKey).
+	Submit().Wait().Ok()
+Show("Ok")
+```
+
+### Write
+
+```go
+liteDataAddr1 := LiteAddress([][]byte{{}, []byte("Lite Data"), []byte("Lite Token")})
+Show(Transaction(liteDataAddr1).
+	WithSigner(liteTokenAddr).
+	WriteData(nil, []byte("Lite Data"), []byte("Lite Token")).
+	Initiate(liteKey).
+	Submit().Wait().Ok())
+Show(Get(liteDataAddr1))
+```
+
+## Using an ADI
+
+### Setup
+
+```go
+bobKey := GenerateKey("bob.acme")
+Transaction(liteTokenAddr).
+	WithSigner(liteTokenAddr).
+	CreateIdentity("bob.acme").
+		WithKey(bobKey).
+		WithKeyBook("bob.acme/book").
+	Initiate(liteKey).
+	Submit().Wait().Ok()
+Show("Ok")
+```
+
+### Write
+
+```go
+liteDataAddr2 := LiteAddress([][]byte{{}, []byte("Lite Data"), []byte("ADI")})
+Show(Transaction(liteDataAddr2).
+	WithSigner(liteTokenAddr).
+	WriteData(nil, []byte("Lite Data"), []byte("ADI")).
+	Initiate(liteKey).
+	Submit().Wait().Ok())
+Show(Get(liteDataAddr2))
+```

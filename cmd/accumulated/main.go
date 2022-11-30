@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package main
 
 import (
@@ -7,7 +13,9 @@ import (
 	"os/user"
 	"path/filepath"
 
+	"github.com/fatih/color"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 var currentUser = func() *user.User {
@@ -35,7 +43,7 @@ func init() {
 }
 
 func main() {
-	cmdMain.Execute()
+	_ = cmdMain.Execute()
 }
 
 func printUsageAndExit1(cmd *cobra.Command, _ []string) {
@@ -60,6 +68,22 @@ func checkf(err error, format string, otherArgs ...interface{}) {
 	}
 }
 
+func formatVersion(version string, known bool) string {
+	if !known {
+		return "unknown"
+	}
+	return version
+}
+
+func warnf(format string, args ...interface{}) {
+	format = "WARNING!!! " + format + "\n"
+	if term.IsTerminal(int(os.Stderr.Fd())) {
+		fmt.Fprint(os.Stderr, color.RedString(format, args...))
+	} else {
+		fmt.Fprintf(os.Stderr, format, args...)
+	}
+}
+
 func composeArgs(fn cobra.PositionalArgs, fns ...cobra.PositionalArgs) cobra.PositionalArgs {
 	if len(fns) == 0 {
 		return fn
@@ -72,13 +96,4 @@ func composeArgs(fn cobra.PositionalArgs, fns ...cobra.PositionalArgs) cobra.Pos
 		}
 		return rest(cmd, args)
 	}
-}
-
-func stringSliceContains(s []string, t string) bool {
-	for _, s := range s {
-		if s == t {
-			return true
-		}
-	}
-	return false
 }

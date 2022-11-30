@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package logging
 
 import (
@@ -8,18 +14,22 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
-	"github.com/tendermint/tendermint/libs/log"
+	tmconfig "github.com/tendermint/tendermint/config"
 )
 
 // NewConsoleWriter parses the log format and creates an appropriate writer.
 // It is based on part of Tendermint's NewTendermintLogger.
 func NewConsoleWriter(format string) (io.Writer, error) {
-	switch strings.ToLower(format) {
-	case log.LogFormatPlain, log.LogFormatText:
-		return newConsoleWriter(os.Stderr), nil
+	return NewConsoleWriterWith(os.Stderr, format)
+}
 
-	case log.LogFormatJSON:
-		return os.Stderr, nil
+func NewConsoleWriterWith(w io.Writer, format string) (io.Writer, error) {
+	switch strings.ToLower(format) {
+	case tmconfig.LogFormatPlain:
+		return newConsoleWriter(w), nil
+
+	case tmconfig.LogFormatJSON:
+		return w, nil
 
 	default:
 		return nil, fmt.Errorf("unsupported log format: %s", format)

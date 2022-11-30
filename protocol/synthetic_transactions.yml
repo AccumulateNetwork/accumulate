@@ -1,0 +1,90 @@
+# Synthetic transaction bodies
+
+SyntheticOrigin:
+  fields:
+    - name: Cause
+      description: is the ID of the transaction that produced this transaction
+      type: txid
+      pointer: true
+    # name: Source
+    - { name: Source, type: url, pointer: true, virtual: true, non-binary: true }
+    - name: Initiator
+      description: is the initiator of the cause
+      field-number: 3
+      type: url
+      pointer: true
+    - name: FeeRefund
+      description: is portion of the cause's fee that will be refunded if this transaction fails
+      type: uint
+
+SyntheticCreateIdentity:
+  union: { type: transaction }
+  embeddings:
+    - SyntheticOrigin
+  fields:
+    - name: Accounts
+      type: Account
+      marshal-as: union
+      repeatable: true
+
+SyntheticWriteData:
+  union: { type: transaction }
+  embeddings:
+    - SyntheticOrigin
+  fields:
+    - name: Entry
+      type: DataEntry
+      marshal-as: union
+
+SyntheticDepositTokens:
+  union: { type: transaction }
+  embeddings:
+    - SyntheticOrigin
+  fields:
+    - name: Token
+      type: url
+      pointer: true
+    - name: Amount
+      type: bigint
+    - name: IsIssuer
+      type: boolean
+    - name: IsRefund
+      type: bool
+
+      
+SyntheticDepositCredits:
+  union: { type: transaction }
+  embeddings:
+    - SyntheticOrigin
+  fields:
+    - name: Amount
+      type: uvarint
+    - name: AcmeRefundAmount
+      description: is the amount of ACME that will be refunded if the deposit fails
+      type: bigint
+      pointer: true
+    - name: IsRefund
+      type: bool
+
+SyntheticBurnTokens:
+  union: { type: transaction }
+  embeddings:
+    - SyntheticOrigin
+  fields:
+    - name: Amount
+      type: bigint
+    - name: IsRefund
+      type: bool
+
+SyntheticForwardTransaction:
+  union: { type: transaction, value: SyntheticForwardTransaction }
+  fields:
+    - name: Signatures
+      type: RemoteSignature
+      marshal-as: reference
+      repeatable: true
+    - name: Transaction
+      type: Transaction
+      marshal-as: reference
+      pointer: true
+      optional: true

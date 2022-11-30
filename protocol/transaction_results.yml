@@ -1,0 +1,24 @@
+EmptyResult:
+  union: { type: result, value: Unknown }
+  fields: []
+
+WriteDataResult:
+  union: { type: result }
+  fields:
+    - name: EntryHash
+      type: hash
+    - name: AccountUrl
+      type: url
+      pointer: true
+    - name: AccountID
+      type: bytes
+
+AddCreditsResult:
+  union: { type: result }
+  fields:
+    - name: Amount
+      type: bigint
+    - name: Credits
+      type: uvarint
+    - name: Oracle
+      type: uvarint

@@ -1,24 +1,20 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package node
 
 import (
 	"context"
-	"errors"
-	"fmt"
-	stdlog "log"
-	"net"
-	"net/http"
-	"net/url"
-	"os"
 
 	abci "github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/libs/log"
-	"github.com/tendermint/tendermint/libs/service"
-	nm "github.com/tendermint/tendermint/node"
+	"github.com/tendermint/tendermint/node"
 	"github.com/tendermint/tendermint/privval"
-	"github.com/tendermint/tendermint/proxy"
-	coregrpc "github.com/tendermint/tendermint/rpc/grpc"
-	"gitlab.com/accumulatenetwork/accumulate/config"
-	web "gitlab.com/accumulatenetwork/accumulate/internal/web/static"
+	coretypes "github.com/tendermint/tendermint/rpc/core/types"
+	corerpc "github.com/tendermint/tendermint/rpc/jsonrpc/client"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 )
 
 // AppFactory creates and returns an ABCI application.
@@ -26,94 +22,34 @@ type AppFactory func(*privval.FilePV) (abci.Application, error)
 
 // Node wraps a Tendermint node.
 type Node struct {
-	service.Service
+	*node.Node
 	Config *config.Config
 	ABCI   abci.Application
-	logger log.Logger
-}
-
-// New initializes a Tendermint node for the given ABCI application.
-func New(config *config.Config, app abci.Application, logger log.Logger) (*Node, error) {
-	node := new(Node)
-	node.Config = config
-	node.ABCI = app
-	node.logger = logger
-
-	// create node
-	var err error
-	node.Service, err = nm.New(&config.Config, logger, proxy.NewLocalClientCreator(app), nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create new Tendermint node: %w", err)
-	}
-
-	return node, nil
 }
 
 // Start starts the Tendermint node.
 func (n *Node) Start() error {
-	err := n.Service.Start()
+	err := n.Node.Start()
 	if err != nil {
 		return err
 	}
-
-	if n.Config.Accumulate.Website.Enabled {
-		u, err := url.Parse(n.Config.Accumulate.Website.ListenAddress)
-		if err != nil {
-			return fmt.Errorf("invalid website listen address: %v", err)
-		}
-		if u.Scheme != "http" {
-			return fmt.Errorf("invalid website listen address: expected scheme http, got %q", u.Scheme)
-		}
-
-		website := http.Server{Addr: u.Host, Handler: http.FileServer(http.FS(web.FS))}
-		go func() {
-			<-n.Quit()
-			website.Shutdown(context.Background())
-		}()
-		go func() {
-			n.logger.Info("Listening", "host", u.Host, "module", "website")
-			err := website.ListenAndServe()
-			if err != nil && !errors.Is(err, http.ErrServerClosed) {
-				stdlog.Fatalf("Failed to start website: %v", err)
-			}
-		}()
+	_, err = n.waitForRPC()
+	if err != nil {
+		return err
 	}
-
-	n.waitForGRPC()
 	return nil
 }
 
-func (n *Node) waitForGRPC() coregrpc.BroadcastAPIClient {
-	client := coregrpc.StartGRPCClient(n.Config.RPC.GRPCListenAddress)
+func (n *Node) waitForRPC() (*corerpc.Client, error) {
+	client, err := corerpc.New(n.Config.RPC.ListenAddress)
+	if err != nil {
+		return nil, err
+	}
+	result := new(*coretypes.ResultStatus)
 	for {
-		_, err := client.Ping(context.Background(), &coregrpc.RequestPing{})
+		_, err := client.Call(context.Background(), "status", nil, &result)
 		if err == nil {
-			return client
+			return client, nil
 		}
 	}
-}
-
-func isConnectionError(err error) bool {
-	var urlErr *url.Error
-	if !errors.As(err, &urlErr) {
-		return false
-	}
-
-	var netOpErr *net.OpError
-	if !errors.As(urlErr.Err, &netOpErr) {
-		return false
-	}
-
-	// Assume any syscall error is a connection error
-	var syscallErr *os.SyscallError
-	if errors.As(netOpErr.Err, &syscallErr) {
-		return true
-	}
-
-	var netErr net.Error
-	if errors.As(netOpErr.Err, &netErr) {
-		return netErr.Timeout() || netErr.Temporary()
-	}
-
-	return false
 }

@@ -1,24 +1,32 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package protocol
 
 import (
-	"encoding"
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 
-	"gitlab.com/accumulatenetwork/accumulate/types"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
 
-func NewTransactionResult(typ types.TransactionType) (TransactionResult, error) {
+func NewTransactionResult(typ TransactionType) (TransactionResult, error) {
 	switch typ {
-	case types.TxTypeWriteData:
+	case TransactionTypeWriteData:
 		return new(WriteDataResult), nil
-
-	case types.TxTypeUnknown:
+	case TransactionTypeAddCredits:
+		return new(AddCreditsResult), nil
+	case TransactionTypeUnknown:
 		return new(EmptyResult), nil
 	}
 
 	// Is the transaction type valid?
-	_, err := NewTransaction(typ)
+	_, err := NewTransactionBody(typ)
 	if err != nil {
 		return nil, err
 	}
@@ -26,19 +34,51 @@ func NewTransactionResult(typ types.TransactionType) (TransactionResult, error) 
 	return new(EmptyResult), nil
 }
 
+func EqualTransactionResult(a, b TransactionResult) bool {
+	if a == b {
+		return true
+	}
+	// TODO Find a way to generate this
+	switch a := a.(type) {
+	case *WriteDataResult:
+		b, ok := b.(*WriteDataResult)
+		return ok && a.Equal(b)
+	case *AddCreditsResult:
+		b, ok := b.(*AddCreditsResult)
+		return ok && a.Equal(b)
+	case *EmptyResult:
+		b, ok := b.(*EmptyResult)
+		return ok && a.Equal(b)
+	default:
+		return false
+	}
+}
+
+func CopyTransactionResult(v TransactionResult) TransactionResult {
+	return v.CopyAsInterface().(TransactionResult)
+}
+
 func UnmarshalTransactionResult(data []byte) (TransactionResult, error) {
-	var typ types.TransactionType
-	err := typ.UnmarshalBinary(data)
+	return UnmarshalTransactionResultFrom(bytes.NewReader(data))
+}
+
+func UnmarshalTransactionResultFrom(rd io.Reader) (TransactionResult, error) {
+	reader := encoding.NewReader(rd)
+
+	// Read the type code
+	var typ TransactionType
+	if !reader.ReadEnum(1, &typ) {
+		return nil, fmt.Errorf("field Type: missing")
+	}
+
+	// Create a new transaction result
+	tx, err := NewTransactionResult(TransactionType(typ))
 	if err != nil {
 		return nil, err
 	}
 
-	tx, err := NewTransactionResult(typ)
-	if err != nil {
-		return nil, err
-	}
-
-	err = tx.UnmarshalBinary(data)
+	// Unmarshal the result
+	err = tx.UnmarshalFieldsFrom(reader)
 	if err != nil {
 		return nil, err
 	}
@@ -47,10 +87,14 @@ func UnmarshalTransactionResult(data []byte) (TransactionResult, error) {
 }
 
 func UnmarshalTransactionResultJSON(data []byte) (TransactionResult, error) {
-	var typ struct{ Type types.TransactionType }
+	var typ *struct{ Type TransactionType }
 	err := json.Unmarshal(data, &typ)
 	if err != nil {
 		return nil, err
+	}
+
+	if typ == nil {
+		return nil, nil
 	}
 
 	tx, err := NewTransactionResult(typ.Type)
@@ -64,37 +108,4 @@ func UnmarshalTransactionResultJSON(data []byte) (TransactionResult, error) {
 	}
 
 	return tx, nil
-}
-
-type TransactionResult interface {
-	GetType() types.TxType
-	BinarySize() int
-	encoding.BinaryMarshaler
-	encoding.BinaryUnmarshaler
-}
-
-type EmptyResult struct{}
-
-func (r *EmptyResult) GetType() types.TxType {
-	return types.TxTypeUnknown
-}
-
-func (r *EmptyResult) BinarySize() int {
-	return types.TxTypeUnknown.BinarySize()
-}
-
-func (r *EmptyResult) MarshalBinary() (data []byte, err error) {
-	return types.TxTypeUnknown.MarshalBinary()
-}
-
-func (r *EmptyResult) UnmarshalBinary(data []byte) error {
-	var typ types.TransactionType
-	err := typ.UnmarshalBinary(data)
-	if err != nil {
-		return err
-	}
-	if typ != types.TxTypeUnknown {
-		return fmt.Errorf("want %v, got %v", types.TxTypeUnknown, typ)
-	}
-	return nil
 }

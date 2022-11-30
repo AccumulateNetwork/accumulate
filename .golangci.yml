@@ -1,0 +1,24 @@
+linters:
+  enable:
+  - noprint
+  - nodebug
+  - rangevarref
+
+  disable:
+  - structcheck # https://github.com/golangci/golangci-lint/issues/2649
+
+issues:
+  max-same-issues: 0
+
+  exclude-rules:
+  - path: cmd|test/cmd
+    linters:
+    - noprint
+
+  - path: .*_test\.go
+    linters:
+    - noprint
+
+  - path: smt/.*/RandHash\.go
+    linters:
+    - noprint

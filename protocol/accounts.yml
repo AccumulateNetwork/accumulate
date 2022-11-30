@@ -1,99 +1,159 @@
 # Accounts - names should be nouns
 
-LiteTokenAccount:
-  kind: chain
+UnknownAccount:
+  union: { type: account, value: Unknown }
   fields:
+    - name: Url
+      type: url
+      pointer: true
+
+UnknownSigner:
+  union: { type: account }
+  fields:
+    - name: Url
+      type: url
+      pointer: true
+    - name: Version
+      type: uvarint
+
+LiteIdentity:
+  union: { type: account }
+  fields:
+    - name: Url
+      type: url
+      pointer: true
+    - name: CreditBalance
+      type: uvarint
+    - name: LastUsedOn
+      type: uvarint
+
+LiteTokenAccount:
+  union: { type: account, value: LiteTokenAccount }
+  fields:
+    - name: Url
+      type: url
+      pointer: true
     - name: TokenUrl
-      type: string
-      is-url: true
+      type: url
+      pointer: true
     - name: Balance
       type: bigint
-    - name: Nonce
-      type: uvarint
-    - name: CreditBalance
-      type: bigint
+    - name: LockHeight
+      description: is the major block height after which the balance can be transferred out of this account
+      type: uint
 
 LiteDataAccount:
-  kind: chain
+  union: { type: account, value: LiteDataAccount }
   fields:
-    - name: Tail
-      type: bytes
+    - name: Url
+      type: url
+      pointer: true
 
 ADI:
-  kind: chain
-  chain-type: Identity
-  fields: [ ]
+  union: { type: account, value: Identity }
+  fields:
+    - name: Url
+      type: url
+      pointer: true
+    - type: AccountAuth
+      marshal-as: reference
 
 TokenAccount:
-  kind: chain
+  union: { type: account, value: TokenAccount }
   fields:
+    - name: Url
+      type: url
+      pointer: true
+    - type: AccountAuth
+      marshal-as: reference
     - name: TokenUrl
-      type: string
-      is-url: true
+      type: url
+      pointer: true
     - name: Balance
       type: bigint
-    - name: Scratch
-      type: bool
-      optional: true
-
-KeyPage:
-  kind: chain
-  fields:
-    - name: CreditBalance
-      type: bigint
-    - name: Threshold
-      type: uvarint
-    - name: Keys
-      type: slice
-      slice:
-        type: KeySpec
-        pointer: true
-        marshal-as: reference
 
 KeyBook:
-  kind: chain
+  union: { type: account }
   fields:
-    - name: Pages
-      type: slice
-      slice:
-        type: string
-        is-url: true
+    - name: Url
+      type: url
+      pointer: true
+    - name: BookType
+      type: BookType
+      marshal-as: enum
+    - type: AccountAuth
+      marshal-as: reference
+    - name: PageCount
+      type: uvarint
+
+KeyPage:
+  union: { type: account }
+  fields:
+    # Key pages do not have their own auth. They are subordinate to the key book
+    # they are part of.
+    - { name: KeyBook, type: url, pointer: true, virtual: true, non-binary: true }
+    - name: Url
+      type: url
+      pointer: true
+    - name: CreditBalance
+      type: uvarint
+    - name: AcceptThreshold
+      type: uvarint
+      alternative: Threshold
+      description: is the number of acceptances required to accept a transaction
+    - name: RejectThreshold
+      type: uvarint
+      description: is the number of rejections required to reject a transaction
+    - name: ResponseThreshold
+      type: uvarint
+      description: is the number of responses that must be received before a transaction will be processed
+    - name: BlockThreshold
+      type: uvarint
+      description: is the number of minor blocks that must elapse before a transaction will be processed
+    - name: Version
+      type: uvarint
+    - name: Keys
+      repeatable: true
+      type: KeySpec
+      pointer: true
+      marshal-as: reference
+    - name: TransactionBlacklist
+      type: AllowedTransactions
+      marshal-as: enum
+      pointer: true
+      optional: true
 
 DataAccount:
-  kind: chain
+  union: { type: account, value: DataAccount }
   fields:
-    - name: Scratch
-      type: bool
+    - name: Url
+      type: url
+      pointer: true
+    - type: AccountAuth
+      marshal-as: reference
+    - name: Entry
+      type: DataEntry
+      marshal-as: union
       optional: true
 
 TokenIssuer:
-  kind: chain
+  union: { type: account }
   fields:
+    - name: Url
+      type: url
+      pointer: true
+    - type: AccountAuth
+      marshal-as: reference
     - name: Symbol
       type: string
     - name: Precision
       type: uvarint
     - name: Properties
-      type: string
-      is-url: true
-    - name: Supply
+      type: url
+      pointer: true
+    - name: Issued
       type: bigint
+    - name: SupplyLimit
+      type: bigint
+      pointer: true
       optional: true
-    - name: HasSupplyLimit
-      type: bool
-      optional: true
-
-Anchor:
-  kind: chain
-  fields: [ ]
-
-##### Data Types #####
-
-KeySpec:
-  fields:
-    - name: PublicKey
-      type: bytes
-    - name: Nonce
-      type: uvarint
-    - name: Owner
-      type: string

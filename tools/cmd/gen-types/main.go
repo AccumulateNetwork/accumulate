@@ -3,25 +3,28 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"unicode"
 
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/tools/internal/typegen"
-	"gopkg.in/yaml.v3"
 )
 
 var flags struct {
-	Package  string
-	Out      string
-	Language string
-	Include  []string
-	Exclude  []string
-	Rename   []string
+	files typegen.FileReader
+
+	Package                string
+	SubPackage             string
+	Out                    string
+	Language               string
+	Reference              []string
+	FilePerType            bool
+	ExpandEmbedded         bool
+	LongUnionDiscriminator bool
 }
 
 func main() {
@@ -33,10 +36,12 @@ func main() {
 
 	cmd.Flags().StringVarP(&flags.Language, "language", "l", "Go", "Output language or template file")
 	cmd.Flags().StringVar(&flags.Package, "package", "protocol", "Package name")
+	cmd.Flags().StringVar(&flags.SubPackage, "subpackage", "", "Subpackage name")
 	cmd.Flags().StringVarP(&flags.Out, "out", "o", "types_gen.go", "Output file")
-	cmd.Flags().StringSliceVarP(&flags.Include, "include", "i", nil, "Include only specific types")
-	cmd.Flags().StringSliceVarP(&flags.Exclude, "exclude", "x", nil, "Exclude specific types")
-	cmd.Flags().StringSliceVar(&flags.Rename, "rename", nil, "Rename types, e.g. 'Object:AccObject'")
+	cmd.Flags().StringSliceVar(&flags.Reference, "reference", nil, "Extra type definition files to use as a reference")
+	cmd.Flags().BoolVar(&flags.FilePerType, "file-per-type", false, "Generate a separate file for each type")
+	cmd.Flags().BoolVar(&flags.LongUnionDiscriminator, "long-union-discriminator", false, "Use the full name of the union type for the discriminator method")
+	flags.files.SetFlags(cmd.Flags(), "types")
 
 	_ = cmd.Execute()
 }
@@ -58,65 +63,7 @@ func checkf(err error, format string, otherArgs ...interface{}) {
 	}
 }
 
-func readTypes(files []string) typegen.DataTypes {
-	allTypes := map[string]*typegen.DataType{}
-	for _, file := range files {
-		f, err := os.Open(file)
-		checkf(err, "opening %q", file)
-		defer f.Close()
-
-		var types map[string]*typegen.DataType
-		dec := yaml.NewDecoder(f)
-		dec.KnownFields(true)
-		checkf(dec.Decode(&types), "decoding %q", file)
-
-		for name, typ := range types {
-			if allTypes[name] != nil {
-				fatalf("duplicate entries for %q", name)
-			}
-			allTypes[name] = typ
-		}
-	}
-
-	if flags.Include != nil {
-		included := map[string]*typegen.DataType{}
-		for _, name := range flags.Include {
-			typ, ok := allTypes[name]
-			if !ok {
-				fatalf("%q is not a type", name)
-			}
-			included[name] = typ
-		}
-		allTypes = included
-	}
-
-	for _, name := range flags.Exclude {
-		_, ok := allTypes[name]
-		if !ok {
-			fatalf("%q is not a type", name)
-		}
-		delete(allTypes, name)
-	}
-
-	for _, spec := range flags.Rename {
-		bits := strings.Split(spec, ":")
-		if len(bits) != 2 {
-			fatalf("invalid rename: want 'X:Y', got '%s'", spec)
-		}
-
-		from, to := bits[0], bits[1]
-		typ, ok := allTypes[from]
-		if !ok {
-			fatalf("%q is not a type", from)
-		}
-		delete(allTypes, from)
-		allTypes[to] = typ
-	}
-
-	return typegen.DataTypesFrom(allTypes)
-}
-
-func getPackagePath() string {
+var moduleInfo = func() struct{ Dir string } {
 	buf := new(bytes.Buffer)
 	cmd := exec.Command("go", "list", "-m", "-json")
 	cmd.Stdout = buf
@@ -124,77 +71,115 @@ func getPackagePath() string {
 
 	info := new(struct{ Dir string })
 	check(json.Unmarshal(buf.Bytes(), info))
+	return *info
+}()
 
-	wd, err := os.Getwd()
-	check(err)
-
-	rel, err := filepath.Rel(info.Dir, wd)
+func getPackagePath(dir string) string {
+	rel, err := filepath.Rel(moduleInfo.Dir, dir)
 	check(err)
 
 	rel = strings.ReplaceAll(rel, "\\", "/")
-	fmt.Printf("package %s\n", rel)
 	return rel
 }
 
-func cleanupWhitespace(s string) string {
-	sa := strings.FieldsFunc(s, func(c rune) bool { return '\n' == c })
-	var cw bytes.Buffer
-	for _, s := range sa {
-		s = strings.TrimRightFunc(s, func(c rune) bool { return unicode.IsSpace(c) })
-		if len(s) > 0 {
-			if strings.HasPrefix(s, "///") {
-				cw.WriteByte('\n')
-			}
-			cw.WriteString(s)
-			cw.WriteByte('\n')
-		}
-	}
-	return cw.String()
-}
-
 func run(_ *cobra.Command, args []string) {
-	types := readTypes(args)
-	ttypes, err := convert(types, flags.Package, getPackagePath())
+	switch flags.Language {
+	case "java", "Java", "c":
+		flags.FilePerType = true
+		flags.ExpandEmbedded = true
+	}
+
+	types := read(args, true)
+	refTypes := read(nil, false)
+	ttypes, err := convert(types, refTypes, flags.Package, flags.SubPackage)
 	check(err)
 
-	w := new(bytes.Buffer)
-	check(Templates.Execute(w, flags.Language, ttypes))
-	check(typegen.WriteFile(flags.Language, flags.Out, w))
-	//switch flags.Language {
-	//case "go":
-	//	w := new(bytes.Buffer)
-	//	check(Go.Execute(w, ttypes))
-	//	check(typegen.GoFmt(flags.Out, w))
-	//case "c":
-	//	cw := new(bytes.Buffer)
-	//	check(CH.Execute(cw, ttypes))
-	//	cc := new(bytes.Buffer)
-	//	check(C.Execute(cc, ttypes))
-	//
-	//	ext := filepath.Ext(flags.Out)
-	//	basepath := flags.Out
-	//	if ext == ".h" || ext == ".c" {
-	//		basepath = strings.TrimSuffix(basepath, ext)
-	//	}
-	//	header := basepath + ".h"
-	//	source := basepath + ".c"
-	//
-	//	sh := cleanupWhitespace(cw.String())
-	//	sc := cleanupWhitespace(cc.String())
-	//
-	//	f, err := os.Create(header)
-	//	check(err)
-	//	f.WriteString(sh)
-	//	f.Close()
-	//
-	//	f, err = os.Create(source)
-	//	check(err)
-	//	fmt.Fprintf(f, "#include \"%s\"\n", header)
-	//	f.WriteString(sc)
-	//	f.Close()
-	//
-	//default:
-	//	fmt.Printf("Unsupported language %s", flags.Language)
-	//}
+	var missing []string
+	for _, typ := range ttypes.Types {
+		for _, field := range typ.Fields {
+			if field.IsEmbedded && field.TypeRef == nil {
+				missing = append(missing, fmt.Sprintf("%s (%s.%s)", field.Type.String(), typ.Name, field.Name))
+			}
+		}
+	}
+	if len(missing) > 0 {
+		fatalf("missing type reference for %s", strings.Join(missing, ", "))
+	}
 
+	if !flags.FilePerType {
+		w := new(bytes.Buffer)
+		check(Templates.Execute(w, flags.Language, ttypes))
+		check(typegen.WriteFile(flags.Out, w))
+	} else {
+		fileTmpl, err := Templates.Parse(flags.Out, "filename", nil)
+		checkf(err, "--out")
+
+		w := new(bytes.Buffer)
+		for _, typ := range ttypes.Types {
+			w.Reset()
+			err := fileTmpl.Execute(w, typ)
+			check(err)
+			filename := SafeClassName(w.String())
+
+			w.Reset()
+			err = Templates.Execute(w, flags.Language, &SingleTypeFile{flags.Package, typ})
+			if errors.Is(err, typegen.ErrSkip) {
+				continue
+			}
+			check(err)
+			check(typegen.WriteFile(filename, w))
+		}
+		for _, typ := range ttypes.Unions {
+			w.Reset()
+			err := fileTmpl.Execute(w, typ)
+			check(err)
+			filename := w.String()
+
+			w.Reset()
+			err = Templates.Execute(w, flags.Language, &SingleUnionFile{flags.Package, typ})
+			if errors.Is(err, typegen.ErrSkip) {
+				continue
+			}
+			check(err)
+			check(typegen.WriteFile(filename, w))
+		}
+	}
+}
+
+func read(files []string, main bool) typegen.Types {
+	fileLookup := map[*typegen.Type]string{}
+	record := func(file string, typ *typegen.Type) {
+		fileLookup[typ] = file
+	}
+
+	var all map[string]*typegen.Type
+	var err error
+	if main {
+		all, err = typegen.ReadMap(&flags.files, files, record)
+	} else {
+		all, err = typegen.ReadRaw(flags.Reference, record)
+	}
+	check(err)
+
+	pkgLookup := map[string]string{}
+	if main {
+		pkgLookup["."] = PackagePath
+	} else {
+		wd, err := os.Getwd()
+		check(err)
+
+		for _, file := range fileLookup {
+			dir := filepath.Dir(file)
+			if pkgLookup[dir] != "" {
+				continue
+			}
+
+			pkgLookup[dir] = getPackagePath(filepath.Join(wd, dir))
+		}
+	}
+
+	var v typegen.Types
+	check(v.Unmap(all, fileLookup, pkgLookup))
+	v.Sort()
+	return v
 }

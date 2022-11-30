@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package logging
 
 import (
@@ -5,36 +11,43 @@ import (
 	"io"
 	"reflect"
 	"strings"
-	"testing"
 
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
+	tmconfig "github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/libs/log"
 )
 
 type testLogger struct {
-	Test testing.TB
+	Test TB
 }
 
 var _ io.Writer = (*testLogger)(nil)
 
 func (l *testLogger) Write(b []byte) (int, error) {
 	s := string(b)
-	if strings.HasSuffix(s, "\n") {
-		s = s[:len(s)-1]
-	}
+	s = strings.TrimSuffix(s, "\n")
 	l.Test.Log(s)
 	return len(b), nil
 }
 
-func TestLogWriter(t testing.TB) func(string) (io.Writer, error) {
+type TB interface {
+	Name() string
+	Log(...interface{})
+	Errorf(format string, args ...interface{})
+	Fatalf(format string, args ...interface{})
+	FailNow()
+	Helper()
+}
+
+func TestLogWriter(t TB) func(string) (io.Writer, error) {
 	return func(format string) (io.Writer, error) {
 		var w io.Writer = &testLogger{Test: t}
 		switch strings.ToLower(format) {
-		case log.LogFormatPlain, log.LogFormatText:
+		case tmconfig.LogFormatPlain:
 			w = newConsoleWriter(w)
 
-		case log.LogFormatJSON:
+		case tmconfig.LogFormatJSON:
 
 		default:
 			t.Fatalf("Unsupported log format: %s", format)
@@ -44,7 +57,7 @@ func TestLogWriter(t testing.TB) func(string) (io.Writer, error) {
 	}
 }
 
-func NewTestLogger(t testing.TB, format, level string, trace bool) log.Logger {
+func NewTestLogger(t TB, format, level string, trace bool) log.Logger {
 	writer, _ := TestLogWriter(t)(format)
 	level, writer, err := ParseLogLevel(level, writer)
 	require.NoError(t, err)

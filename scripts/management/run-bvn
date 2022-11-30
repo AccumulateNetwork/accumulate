@@ -1,3 +1,0 @@
-#!/bin/bash
-
-accumulated run -w ~/.accumulate/bvn 2>&1 | tee ~/.accumulate/logs/acc-bvn-$(date +%Y%m%d%H%M%S).log

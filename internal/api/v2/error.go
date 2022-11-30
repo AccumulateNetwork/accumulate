@@ -1,15 +1,18 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package api
 
 import (
-	"errors"
-
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
-	"github.com/getsentry/sentry-go"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
-var ErrInvalidUrl = errors.New("invalid URL")
+var ErrInvalidUrl = errors.BadRequest.With("invalid URL")
 
 // General Errors
 const (
@@ -31,7 +34,7 @@ const (
 	ErrCodeMetricsVectorEmpty
 )
 
-//Custom errors
+// Custom errors
 const (
 	ErrCodeProtocolBase = -33000 - iota
 )
@@ -47,18 +50,18 @@ func validatorError(err error) jsonrpc2.Error {
 	return jsonrpc2.NewError(ErrCodeValidation, "Validation Error", err)
 }
 
-func submissionError(err error) jsonrpc2.Error {
-	return jsonrpc2.NewError(ErrCodeSubmission, "Submission Entry Error", err)
-}
+// func submissionError(err error) jsonrpc2.Error {
+// 	return jsonrpc2.NewError(ErrCodeSubmission, "Submission Entry Error", err)
+// }
 
 func accumulateError(err error) jsonrpc2.Error {
 	if errors.Is(err, storage.ErrNotFound) {
 		return jsonrpc2.NewError(ErrCodeNotFound, "Accumulate Error", "Not Found")
 	}
 
-	var perr *protocol.Error
+	var perr *errors.Error
 	if errors.As(err, &perr) {
-		return jsonrpc2.NewError(jsonrpc2.ErrorCode(ErrCodeProtocolBase+perr.Code), "Accumulate Error", perr.Message)
+		return jsonrpc2.NewError(ErrCodeProtocolBase-jsonrpc2.ErrorCode(perr.Code), "Accumulate Error", perr.Message)
 	}
 
 	var jerr jsonrpc2.Error
@@ -75,6 +78,6 @@ func metricsQueryError(err error) jsonrpc2.Error {
 
 func internalError(err error) jsonrpc2.Error {
 	// Capture internal errors but do not forward them to the user
-	sentry.CaptureException(err)
+	// sentry.CaptureException(err)
 	return ErrInternal
 }

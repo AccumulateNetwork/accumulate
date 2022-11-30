@@ -1,0 +1,78 @@
+MarshalAs:
+  Basic:
+    value: 0
+    description: marshals the field as a basic type
+  None:
+    value: 1
+    description: omits the field from marshalling
+  Enum:
+    value: 2
+    description: marshals the field as an enumeration
+  Value:
+    value: 3
+    description: marshals the field as a value type
+  Reference:
+    value: 4
+    description: marshals the field as a reference type
+  Union:
+    value: 5
+    description: marshals the field as a union type
+
+TypeCode:
+  Unknown:
+    value: 0
+  Int:
+    value: 1
+    aliases: [ varint ]
+  Uint:
+    value: 2
+    aliases: [ uvarint ]
+  Bool:
+    value: 3
+    aliases: [ boolean ]
+  String:
+    value: 4
+  Hash:
+    value: 5
+    aliases: [ chain ]
+  Bytes:
+    value: 6
+  Url:
+    value: 7
+  Time:
+    value: 8
+  Duration:
+    value: 9
+  BigInt:
+    value: 10
+  Any:
+    value: 11
+  RawJson:
+    # Should we replace this with Any?
+    value: 12
+  Float:
+    value: 13
+  Txid:
+    value: 14
+
+RecordType:
+  Entity:
+    value: 1
+  State:
+    value: 2
+  Chain:
+    value: 3
+  Index:
+    value: 4
+  Other:
+    value: 5
+
+CollectionType:
+  None:
+    value: 0
+  Set:
+    value: 1
+  List:
+    value: 2
+  Counted:
+    value: 3

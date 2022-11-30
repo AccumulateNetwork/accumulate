@@ -1,225 +1,196 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package database
 
 import (
-	"crypto/sha256"
-	"errors"
+	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
-	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
-// Transaction manages a transaction.
-type Transaction struct {
-	batch *Batch
-	key   transactionBucket
+func (r *Transaction) hash() []byte {
+	h := r.key[1].([32]byte)
+	return h[:]
 }
 
-// Index returns a value that can read or write an index value.
-func (t *Transaction) Index(key ...interface{}) *Value {
-	return &Value{t.batch, t.key.Index(key...)}
-}
-
-// Get loads the transaction state, status, and signatures.
-//
-// See GetState, GetStatus, and GetSignatures.
-func (t *Transaction) Get() (*state.Transaction, *protocol.TransactionStatus, []*transactions.ED25519Sig, error) {
-	state, err := t.GetState()
-	if err != nil && !errors.Is(err, storage.ErrNotFound) {
-		return nil, nil, nil, err
-	}
-
+// ensureSigner ensures that the transaction's status includes the given signer.
+func (t *Transaction) ensureSigner(signer protocol.Signer2) error {
 	status, err := t.GetStatus()
-	if err != nil && !errors.Is(err, storage.ErrNotFound) {
-		return nil, nil, nil, err
-	}
-
-	signatures, err := t.GetSignatures()
-	if err != nil && !errors.Is(err, storage.ErrNotFound) {
-		return nil, nil, nil, err
-	}
-
-	if state == nil && status == nil && signatures == nil {
-		return nil, nil, nil, storage.ErrNotFound
-	}
-
-	return state, status, signatures, nil
-}
-
-// Put stores the transaction object metadata, state, status, and signatures.
-// Put appends signatures and does not overwrite existing signatures.
-//
-// See PutState, PutStatus, and AddSignatures.
-func (t *Transaction) Put(state *state.Transaction, status *protocol.TransactionStatus, sigs []*transactions.ED25519Sig) error {
-	// Ensure the object metadata is stored. Transactions don't have chains, so
-	// we don't need to add chain metadata.
-	if _, err := t.batch.store.Get(t.key.Object()); errors.Is(err, storage.ErrNotFound) {
-		meta := new(protocol.ObjectMetadata)
-		meta.Type = protocol.ObjectTypeTransaction
-		err = t.batch.putAs(t.key.Object(), meta)
-		if err != nil {
-			return err
-		}
-	}
-
-	err := t.PutState(state)
 	if err != nil {
 		return err
 	}
 
-	err = t.PutStatus(status)
-	if err != nil {
-		return err
-	}
-
-	_, err = t.AddSignatures(sigs...)
-	return err
+	status.AddSigner(signer)
+	return t.PutStatus(status)
 }
 
 // GetState loads the transaction state.
-func (t *Transaction) GetState() (*state.Transaction, error) {
-	data, err := t.batch.store.Get(t.key.State())
-	if err != nil {
-		return nil, err
+func (t *Transaction) GetState() (*SigOrTxn, error) {
+	v, err := t.Main().Get()
+	if err == nil {
+		return v, nil
 	}
-
-	state := new(state.Transaction)
-	err = state.UnmarshalBinary(data)
-	if err != nil {
-		return nil, err
+	if !errors.Is(err, errors.NotFound) {
+		return nil, errors.UnknownError.Wrap(err)
 	}
-
-	return state, nil
+	return nil, errors.NotFound.WithCauseAndFormat(err, "transaction %X not found", t.hash())
 }
 
-// PutState stores the transaction state and adds the transaction to the BPT (as a hash).
-func (t *Transaction) PutState(state *state.Transaction) error {
-	data, err := state.MarshalBinary()
-	if err != nil {
-		return err
-	}
-
-	t.batch.store.Put(t.key.State(), data)
-	return nil
+// PutState stores the transaction state.
+func (t *Transaction) PutState(v *SigOrTxn) error {
+	return t.Main().Put(v)
 }
 
-// GetStatus loads the transaction state.
+// GetStatus loads the transaction status.
 func (t *Transaction) GetStatus() (*protocol.TransactionStatus, error) {
-	data, err := t.batch.store.Get(t.key.Status())
-	if err != nil {
-		return nil, err
-	}
-
-	status := new(protocol.TransactionStatus)
-	err = status.UnmarshalBinary(data)
-	if err != nil {
-		return nil, err
-	}
-
-	return status, nil
+	return t.Status().Get()
 }
 
-// PutStatus stores the transaction state.
-func (t *Transaction) PutStatus(status *protocol.TransactionStatus) error {
-	if status.Result == nil {
-		status.Result = new(protocol.EmptyResult)
+// PutStatus stores the transaction status.
+func (t *Transaction) PutStatus(v *protocol.TransactionStatus) error {
+	if v.Result == nil {
+		v.Result = new(protocol.EmptyResult)
 	}
 
-	data, err := status.MarshalBinary()
+	err := t.Status().Put(v)
 	if err != nil {
 		return err
 	}
 
-	t.batch.store.Put(t.key.Status(), data)
-	return nil
-}
-
-// GetSignatures loads the transaction's signatures.
-func (t *Transaction) GetSignatures() ([]*transactions.ED25519Sig, error) {
-	data, err := t.batch.store.Get(t.key.Signatures())
-	if err != nil {
-		return nil, err
+	// TODO Why?
+	if !v.Pending() {
+		return nil
 	}
 
-	v := new(txSignatures)
-	err = v.UnmarshalBinary(data)
+	// Ensure the principal's BPT entry is up to date
+	txn, err := t.GetState()
 	if err != nil {
-		return nil, err
+		return err
 	}
-
-	return v.Signatures, nil
+	return t.parent.Account(txn.Transaction.Header.Principal).putBpt()
 }
 
-// AddSignatures adds signatures the transaction's list of signatures.
-func (t *Transaction) AddSignatures(newSignatures ...*transactions.ED25519Sig) (count int, err error) {
-	signatures, err := t.GetSignatures()
-	if err != nil && !errors.Is(err, storage.ErrNotFound) {
+// RestoreSignatureSets is specifically only to be used to restore a
+// transaction's signature sets from a snapshot.
+func (t *Transaction) RestoreSignatureSets(signer *url.URL, version uint64, entries []SigSetEntry) error {
+	return t.getSignatures(signer).Put(&sigSetData{Version: version, Entries: entries})
+}
+
+// Signatures returns a signature set for the given signer.
+func (t *Transaction) Signatures(signer *url.URL) (*SignatureSet, error) {
+	return t.newSigSet(signer, true)
+}
+
+// ReadSignatures returns a read-only signature set for the given signer.
+func (t *Transaction) ReadSignatures(signer *url.URL) (*SignatureSet, error) {
+	return t.newSigSet(signer, false)
+}
+
+// SignaturesForSigner returns a signature set for the given signer account.
+func (t *Transaction) SignaturesForSigner(signer protocol.Signer2) (*SignatureSet, error) {
+	set, err := newSigSet(t, signer, true)
+	if err != nil {
+		return nil, fmt.Errorf("load signature set: %w", err)
+	}
+
+	return set, nil
+}
+
+// SignaturesForSigner returns a read-only signature set for the given signer account.
+func (t *Transaction) ReadSignaturesForSigner(signer protocol.Signer2) (*SignatureSet, error) {
+	set, err := newSigSet(t, signer, false)
+	if err != nil {
+		return nil, fmt.Errorf("load signature set: %w", err)
+	}
+
+	return set, nil
+}
+
+// AddSignature loads the appropriate siganture set and adds the signature to
+// it.
+func (t *Transaction) AddSignature(keyEntryIndex uint64, newSignature protocol.Signature) (int, error) {
+	set, err := t.newSigSet(newSignature.GetSigner(), true)
+	if err != nil {
 		return 0, err
 	}
 
-	if len(newSignatures) == 0 {
-		return len(signatures), nil
+	return set.Add(keyEntryIndex, newSignature)
+}
+
+// AddSystemSignature adds a system signature to the operator signature set.
+// AddSystemSignature panics if the signature is not a system signature.
+func (t *Transaction) AddSystemSignature(net *config.Describe, newSignature protocol.Signature) (int, error) {
+	if !newSignature.Type().IsSystem() {
+		panic("not a system signature")
 	}
 
-	// Only keep one signature per public key
-	seen := map[[32]byte]bool{}
-	for _, sig := range signatures {
-		hash := sha256.Sum256(sig.PublicKey)
-		seen[hash] = true
-	}
-	for _, sig := range newSignatures {
-		hash := sha256.Sum256(sig.PublicKey)
-		if seen[hash] {
-			continue
-		}
-		seen[hash] = true
-		signatures = append(signatures, sig)
-	}
-
-	v := new(txSignatures)
-	v.Signatures = signatures
-	data, err := v.MarshalBinary()
+	set, err := t.newSigSet(net.OperatorsPage(), true)
 	if err != nil {
 		return 0, err
 	}
 
-	t.batch.store.Put(t.key.Signatures(), data)
-	return len(signatures), nil
+	return set.Add(0, newSignature)
 }
 
-// GetSyntheticTxns returns IDs of synthetic transactions produced by the
+func (t *Transaction) newSigSet(signer *url.URL, writable bool) (*SignatureSet, error) {
+	var acct protocol.Signer
+	err := t.parent.Account(signer).GetStateAs(&acct)
+	switch {
+	case err == nil:
+		// If the signer exists, use its version
+
+	case errors.Is(err, storage.ErrNotFound):
+		// If the signer does not exist, use version 0. This is for signatures
+		// on synthetic transactions.
+		acct = &protocol.UnknownSigner{Url: signer}
+
+	default:
+		return nil, fmt.Errorf("load signer: %w", err)
+	}
+
+	set, err := newSigSet(t, acct, writable)
+	if err != nil {
+		return nil, fmt.Errorf("load signature set: %w", err)
+	}
+
+	return set, nil
+}
+
+// GetSyntheticTxns loads the IDs of synthetic transactions produced by the
 // transaction.
-func (t *Transaction) GetSyntheticTxns() ([][32]byte, error) {
-	data, err := t.batch.store.Get(t.key.Synthetic())
+func (t *Transaction) GetSyntheticTxns() (*protocol.TxIdSet, error) {
+	v, err := t.Produced().Get()
 	if err != nil {
 		return nil, err
 	}
-
-	v := new(txSyntheticTxns)
-	err = v.UnmarshalBinary(data)
-	if err != nil {
-		return nil, err
-	}
-
-	return v.Txids, nil
+	return &protocol.TxIdSet{Entries: v}, nil
 }
 
-// AddSyntheticTxns adds the given IDs to the list of synthetic transactions
-// produced by the transaction.
-func (t *Transaction) AddSyntheticTxns(txids ...[32]byte) error {
-	current, err := t.GetSyntheticTxns()
+// PutSyntheticTxns stores the IDs of synthetic transactions produced by the
+// transaction.
+func (t *Transaction) PutSyntheticTxns(v *protocol.TxIdSet) error {
+	return t.Produced().Put(v.Entries)
+}
+
+// AddSyntheticTxns is a convenience method that calls GetSyntheticTxns, adds
+// the IDs, and calls PutSyntheticTxns.
+func (t *Transaction) AddSyntheticTxns(txids ...*url.TxID) error {
+	set, err := t.GetSyntheticTxns()
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
 		return err
 	}
 
-	v := new(txSyntheticTxns)
-	v.Txids = append(current, txids...)
-	data, err := v.MarshalBinary()
-	if err != nil {
-		return err
+	for _, id := range txids {
+		set.Add(id)
 	}
 
-	t.batch.store.Put(t.key.Synthetic(), data)
-	return nil
+	return t.PutSyntheticTxns(set)
 }

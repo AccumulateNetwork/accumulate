@@ -1,0 +1,120 @@
+Header:
+  fields:
+  - name: Version
+    description: is the snapshot format version
+    type: uint
+  - name: Height
+    description: is the snapshot's block height
+    type: uint
+  - name: RootHash
+    description: is the snapshot's root hash
+    type: hash
+  - name: Timestamp
+    description: is the snapshot's block time
+    type: time
+
+Account:
+  fields:
+  - name: Hash
+    type: hash
+    marshal-as: none
+  - name: Main
+    description: is the main state of the account
+    type: protocol.Account
+    marshal-as: union
+  - name: OldChains
+    description: is deprecated. Use Chains instead
+    type: OldChain
+    marshal-as: reference
+    pointer: true
+    repeatable: true
+  - name: Pending
+    description: is the state of the account's pending transactions
+    type: txid
+    pointer: true
+    repeatable: true
+  - name: Directory
+    description: lists the account's sub-accounts
+    type: url
+    pointer: true
+    repeatable: true
+  - name: Url
+    description: is the URL of the account
+    type: url
+    pointer: true
+  - name: Chains
+    description: is the state of the account's chains
+    type: managed.Snapshot
+    marshal-as: reference
+    pointer: true
+    repeatable: true
+
+OldChain:
+  fields:
+  - name: Name
+    type: string
+  - name: Type
+    type: protocol.ChainType
+    marshal-as: enum
+  - name: Count
+    type: uint
+  - name: Pending
+    type: bytes
+    repeatable: true
+  - name: Entries
+    type: bytes
+    repeatable: true
+
+txnSection:
+  fields:
+  - name: Transactions
+    type: Transaction
+    marshal-as: reference
+    pointer: true
+    repeatable: true
+
+Transaction:
+  fields:
+    - name: Transaction
+      type: protocol.Transaction
+      marshal-as: reference
+      pointer: true
+      field-number: 2
+    - name: Status
+      type: protocol.TransactionStatus
+      marshal-as: reference
+      pointer: true
+    - name: SignatureSets
+      type: TxnSigSet
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+
+TxnSigSet:
+  fields:
+  - name: Signer
+    type: url
+    pointer: true
+  - name: Version
+    type: uint
+  - name: Entries
+    type: database.SigSetEntry
+    marshal-as: reference
+    repeatable: true
+
+sigSection:
+  fields:
+    - name: Signatures
+      type: Signature
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+
+Signature:
+  fields:
+  - name: Txid
+    type: txid
+    pointer: true
+  - name: Signature
+    type: protocol.Signature
+    marshal-as: union

@@ -4,8 +4,42 @@
   // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
   "version": "0.2.0",
   "configurations": [
+    // Simulate
     {
-      "name": "Init DevNet",
+      "name": "Simulate (v2, in-memory)",
+      "presentation": { "group": "10-Simulate" },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/tools/cmd/simulator",
+      "args": [
+      ],
+    },
+    {
+      "name": "Simulate (v2, badger)",
+      "presentation": { "group": "10-Simulate" },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/tools/cmd/simulator",
+      "args": [
+        "--database=${workspaceFolder}/.nodes/sim"
+      ],
+    },
+    {
+      "name": "Simulate (v1)",
+      "presentation": { "group": "10-Simulate" },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/cmd/accumulated",
+      "args": ["run", "sim"]
+    },
+
+    // Run
+    {
+      "name": "Init (devnet)",
+      "presentation": { "group": "20-Run" },
       "type": "go",
       "request": "launch",
       "mode": "auto",
@@ -13,19 +47,17 @@
       "args": [
         "init",
         "devnet",
-        "-w",
-        "${workspaceFolder}/.nodes",
+        "-w=${workspaceFolder}/.nodes",
         "--reset",
-        "-b",
-        "1",
-        "-v",
-        "1",
-        "-f",
-        "0"
+        "-b=2",
+        "-v=1",
+        "-f=0",
+        "--snapshot=${workspaceFolder}/.nodes/test/factom-lda-stripped.snapshot",
       ]
     },
     {
-      "name": "Run DevNet",
+      "name": "Run (devnet)",
+      "presentation": { "group": "20-Run" },
       "type": "go",
       "request": "launch",
       "mode": "auto",
@@ -33,60 +65,343 @@
       "args": [
         "run",
         "devnet",
-        "-w",
-        "${workspaceFolder}/.nodes",
-        "--truncate"
+        "-w=${workspaceFolder}/.nodes",
+        "--truncate",
       ]
     },
     {
-      "name": "Run Node",
+      "name": "Init and Run (devnet)",
+      "presentation": { "group": "20-Run" },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/cmd/accumulated",
+      "preLaunchTask": "Init DevNet",
+      "args": [
+        "run",
+        "devnet",
+        "-w",
+        "${workspaceFolder}/.nodes",
+        "--truncate",
+        "--debug",
+      ]
+    },
+    {
+      "name": "Init (dual)",
+      "presentation": { "group": "20-Run" },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/cmd/accumulated",
+      "args": [
+        "init", "dual",
+        "-w=${workspaceFolder}/.nodes/node-1",
+        "tcp://bvn1-seed.testnet.accumulatenetwork.io:16691",
+        "-l=tcp://127.0.2.1",
+        "-p=127.0.2.1",
+        "--skip-version-check"
+      ]
+    },
+    {
+      "name": "Run (dual)",
+      "presentation": { "group": "20-Run" },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/cmd/accumulated",
+      "args": [
+        "run-dual",
+        "--truncate",
+        "${workspaceFolder}/.nodes/node-1/dnn",
+        "${workspaceFolder}/.nodes/node-1/bvnn",
+      ]
+    },
+    {
+      "name": "Run (single)",
+      "presentation": { "group": "20-Run" },
       "type": "go",
       "request": "launch",
       "mode": "auto",
       "program": "${workspaceFolder}/cmd/accumulated",
       "args": [
         "run",
-        "-w",
-        "${workspaceFolder}/.nodes/dn",
-        "-n",
-        "0",
-        "--truncate"
+        "--truncate",
+        "-w=${workspaceFolder}/.nodes/node-1/dnn",
       ]
     },
+
+    // Validate
     {
-      "name": "Run CLI",
+      "name": "Validate: Playbooks (sim v1)",
+      "presentation": { "group": "80-Validate" },
       "type": "go",
       "request": "launch",
       "mode": "auto",
-      "program": "${workspaceFolder}/cmd/accumulate",
-      "env": {
-        "ACC_API": "local"
-      },
+      "program": "${workspaceFolder}/cmd/play-accumulate",
+      "args": [
+        "${workspaceFolder}/playbooks/validate/01-lite-token.play",
+        "${workspaceFolder}/playbooks/validate/02-identity.play",
+        "${workspaceFolder}/playbooks/validate/03-lite-data.play",
+        "${workspaceFolder}/playbooks/validate/04-token-issuer.play",
+        "${workspaceFolder}/playbooks/validate/05-delegation.play",
+      ]
+    },
+    {
+      "name": "Validate: Playbooks (devnet)",
+      "presentation": { "group": "80-Validate" },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/test/cmd/devnet",
       "cwd": "${workspaceFolder}",
       "args": [
-        // "tx",
-        // "get",
-        // "-j",
-        // "97de5192c4e0b199a2bf978e7f4a88367bf03412c1ead814e0b4dc0803809ea6"
-
-        // "data",
-        // "write",
-        // "-j",
-        // "keytest/data",
-        // "keytest-0-0",
-        // "foo",
-        // "bar"
-
-        // "tx",
-        // "get",
-        // "c85422d30077a4f297d129b3fd34e9368dc4aa0bda213e966ba09f32c33ce336"
-
-        // "tx",
-        // "sign",
-        // "keytest/tokens",
-        // "keytest-1-1",
-        // "e05d44e9688d21556b67c0afc8c3c2493c930ac67a608701e22b7c98a421df8e"
+        "-X", "-v=1,-b=1,--reset", "play",
+        "${workspaceFolder}/playbooks/validate/01-lite-token.play",
+        "${workspaceFolder}/playbooks/validate/02-identity.play",
+        "${workspaceFolder}/playbooks/validate/03-lite-data.play",
+        "${workspaceFolder}/playbooks/validate/04-token-issuer.play",
+        "${workspaceFolder}/playbooks/validate/05-delegation.play",
       ]
-    }
+    },
+    {
+      "name": "Validate: Script (devnet)",
+      "presentation": { "group": "80-Validate" },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/test/cmd/devnet",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "-X=--reset,--debug",
+      ]
+    },
+
+
+    // Generator
+    {
+      "name": "Generate Types",
+      "presentation": { "group": "90-Generate" },
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/tools/cmd/gen-types",
+      "cwd": "${workspaceFolder}/internal/core",
+      "args": ["types.yml"]
+    },
+    {
+      "name": "Generate Model",
+      "presentation": { "group": "90-Generate" },
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/tools/cmd/gen-model",
+      "cwd": "${workspaceFolder}/internal/database",
+      "args": ["--package=database", "model.yml"]
+    },
+    {
+      "name": "Generate Protocol Types",
+      "presentation": { "group": "90-Generate" },
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/tools/cmd/gen-types",
+      "cwd": "${workspaceFolder}/protocol",
+      "args": [
+        "account_auth_operations.yml",
+        "accounts.yml",
+        "general.yml",
+        "system.yml",
+        "key_page_operations.yml",
+        "query.yml",
+        "signatures.yml",
+        "synthetic_transactions.yml",
+        "transaction.yml",
+        "transaction_results.yml",
+        "user_transactions.yml",
+      ]
+    },
+    {
+      "name": "Generate Test Data",
+      "presentation": { "group": "90-Generate", },
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/tools/cmd/gen-testdata",
+      "cwd": "${workspaceFolder}",
+      "args": ["${workspaceFolder}/.testdata/sdk.json"]
+    },
+
+    // Snapshots
+    {
+      "name": "Dump snapshot",
+      "presentation": { "group": "91-Snapshot", },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/tools/cmd/snapshot",
+      "args": [
+        "dump",
+        // "-s",
+        "${workspaceFolder}/.nodes/import/factom-lda.snapshot",
+      ]
+    },
+    {
+      "name": "Fix snapshot",
+      "presentation": { "group": "91-Snapshot", },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/tools/cmd/snapshot",
+      "args": [
+        "fix",
+        "dn",
+        "${workspaceFolder}/snapshot-test.bpt",
+      ]
+    },
+    {
+      "name": "Merge snapshots",
+      "presentation": { "group": "91-Snapshot", },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/tools/cmd/snapshot",
+      "args": [
+        "concat",
+        "${workspaceFolder}/.nodes/import/all.snapshot",
+        "${workspaceFolder}/.nodes/import/factom-0.snapshot",
+      ]
+    },
+    {
+      "name": "Extract snapshot",
+      "presentation": { "group": "91-Snapshot", },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/tools/cmd/snapshot",
+      "args": [
+        "extract",
+        "${workspaceFolder}/.nodes/rc2/node-1/bvnn/data/accumulate.db",
+        "${workspaceFolder}/snapshot.bpt"
+      ]
+    },
+    {
+      "name": "Convert Factom entries (objects -> txns)",
+      "presentation": { "group": "91-Snapshot", },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/tools/cmd/factom",
+      "args": [
+        "convert",
+        "entries",
+        "${workspaceFolder}/.nodes/import",
+        "${workspaceFolder}/.factom/objects"
+      ]
+    },
+    {
+      "name": "Convert Factom chains (txns -> LDAs)",
+      "presentation": { "group": "91-Snapshot", },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/tools/cmd/factom",
+      "args": [
+        "convert",
+        "chains",
+        "${workspaceFolder}/.nodes/import",
+        "${workspaceFolder}/.nodes/import/x-factom-ldas.snapshot"
+      ]
+    },
+    {
+      "name": "Export genesis",
+      "presentation": { "group": "91-Snapshot", },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/tools/cmd/genesis",
+      "args": [
+        "export",
+        "${workspaceFolder}/.nodes/rc3/node-1/bvnn",
+        "Millau",
+        "${workspaceFolder}../acc-testnet-genesis/genesis-bvn0.json",
+        "--factom-ldas=${workspaceFolder}/.nodes/import/factom-lda.snapshot",
+      ]
+    },
+
+    // Miscellaneous
+    {
+      "name": "Heal Anchors",
+      "presentation": { "group": "99-Miscellaneous", },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/tools/cmd/resend-anchor",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "heal",
+        "tcp://bvn0-seed.testnet.accumulatenetwork.io:16591",
+        "tcp://bvn1-seed.testnet.accumulatenetwork.io:16591",
+        "tcp://bvn2-seed.testnet.accumulatenetwork.io:16591",
+      ]
+    },
+    {
+      "name": "Lint",
+      "presentation": { "group": "99-Miscellaneous", },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/tools/cmd/golangci-lint",
+      "cwd": "${workspaceFolder}",
+      "args": ["run"]
+    },
+    {
+      "name": "Debug routing",
+      "presentation": { "group": "99-Miscellaneous", },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/tools/cmd/debug",
+      "args": [
+        "account", "route",
+        "https://testnet.accumulatenetwork.io/v2",
+        "acc://defidevs"
+      ]
+    },
+    {
+      "name": "Attach to a docker container",
+      // Get a shell in the container: `docker exec --privileged -it ${NAME} bash`
+      // Launch delve:                 `dlv attach 1 --headless --listen=:2345 --accept-multiclient --api-version=2`
+      // Forward the port (if remote): `ssh ${USER}@${SERVER} -NL localhost:2345:localhost:2345`
+      // Then run this debug config
+      "presentation": { "group": "99-Miscellaneous", },
+      "type": "go",
+      "request": "attach",
+      "mode": "remote",
+      "remotePath": "${workspaceFolder}",
+      "port": 2345,
+      "host": "127.0.0.1",
+      "substitutePath": [
+        {
+          "to": "/go/",
+          "from": "${env:HOME}/go/", // <-- MODIFY THIS if you're not using the default GOPATH
+        },
+        {
+          "to": "/root/",
+          "from": "${workspaceFolder}",
+        },
+      ],
+    },
+    {
+      "name": "Database explorer",
+      "presentation": { "group": "99-Miscellaneous", },
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/tools/cmd/explore",
+      "console": "integratedTerminal",
+      "args": [
+        "--node=${workspaceFolder}/.nodes/rc3/node-1/dnn"
+      ]
+    },
   ]
 }

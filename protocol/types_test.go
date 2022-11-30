@@ -1,10 +1,16 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package protocol
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/smt/common"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/common"
 )
 
 type TestType struct {
@@ -43,9 +49,9 @@ func TestKeyPage_MofN(t *testing.T) {
 	var rh common.RandHash
 	for i := 1; i < 11; i++ {
 		key := new(KeySpec)
-		key.PublicKey = rh.Next()
-		key.Nonce = 0
-		kp.Keys = append(kp.Keys, key)
+		key.PublicKeyHash = rh.Next()
+		key.LastUsedOn = 0
+		kp.AddKeySpec(key)
 		for j := 1; j < 12; j++ {
 			err := kp.SetThreshold(uint64(j))
 			require.Truef(t, err == nil || j > i, "error: %v i: %d j %d", err, i, j)

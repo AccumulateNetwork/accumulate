@@ -1,9 +1,16 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package protocol
 
 import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -24,10 +31,11 @@ import (
 
 func TestLiteDataEntry(t *testing.T) {
 
-	firstEntry := DataEntry{}
+	firstEntry := AccumulateDataEntry{}
 
-	firstEntry.ExtIds = append(firstEntry.ExtIds, []byte("Factom PRO"))
-	firstEntry.ExtIds = append(firstEntry.ExtIds, []byte("Tutorial"))
+	firstEntry.Data = append(firstEntry.Data, []byte{})
+	firstEntry.Data = append(firstEntry.Data, []byte("Factom PRO"))
+	firstEntry.Data = append(firstEntry.Data, []byte("Tutorial"))
 
 	//create a chainId
 	chainId := ComputeLiteDataAccountId(&firstEntry)
@@ -42,7 +50,7 @@ func TestLiteDataEntry(t *testing.T) {
 		t.Fatalf("lite token account id doesn't match the expected id")
 	}
 
-	lde := NewLiteDataEntry()
+	lde := NewFactomDataEntry()
 	copy(lde.AccountId[:], chainId)
 	lde.Data = []byte("This is useful content of the entry. You can save text, hash, JSON or raw ASCII data here.")
 	for i := 0; i < 3; i++ {
@@ -50,47 +58,52 @@ func TestLiteDataEntry(t *testing.T) {
 	}
 
 	expectedHash := "1bd5955a72f8696416ac3ca39f7aa6a054e7209aa2f9a5f95d601640b8d047a5"
-	entryHash, err := lde.Hash()
-	if err != nil {
-		t.Fatal(err)
-	}
+	entryHash := lde.Hash()
 	entryHashHex := fmt.Sprintf("%x", entryHash)
 	if entryHashHex != expectedHash {
 		t.Fatalf("expected hash %v, but received %x", expectedHash, entryHash)
 	}
 
-	cost, err := lde.Cost()
+	cost, err := DataEntryCost(lde.Wrap())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cost != FeeWriteData.AsInt() {
+	if cost != FeeData.AsUInt64() {
 		t.Fatalf("expected a cost of 10 credits, but computed %d", cost)
 	}
 
-	de := NewLiteDataEntry()
-	de.Data = []byte("a cost test")
-	//now make the data entry larger and compute cost
-	for i := 0; i < 100; i++ {
-		de.ExtIds = append(de.ExtIds, []byte(fmt.Sprintf("extid %d", i)))
+	de := new(AccumulateDataEntry)
+
+	//add test for an empty entry to make sure function behaves as expected.
+	accountId := *(*[32]byte)(ComputeLiteDataAccountId(de))
+	if strings.Compare(fmt.Sprintf("%x", accountId),
+		"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855") != 0 {
+		t.Fatalf("invalid account id from empty lite entry")
 	}
 
-	cost, err = de.Cost()
+	de.Data = append(de.Data, []byte("a cost test"))
+	//now make the data entry larger and compute cost
+	for i := 0; i < 100; i++ {
+		de.Data = append(de.Data, []byte(fmt.Sprintf("extid %d", i)))
+	}
+
+	cost, err = DataEntryCost(de)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	//the size is now 987 bytes so it should cost 40 credits
-	if cost != 4*FeeWriteData.AsInt() {
+	if cost != 4*FeeData.AsUInt64() {
 		t.Fatalf("expected a cost of 40 credits, but computed %d", cost)
 	}
 
-	//now let's blow up the size of the entry to > 10kB to make sure it fails.
-	for i := 0; i < 1000; i++ {
-		de.ExtIds = append(de.ExtIds, []byte(fmt.Sprintf("extid %d", i)))
+	//now let's blow up the size of the entry to > 20kB to make sure it fails.
+	for i := 0; i < 2000; i++ {
+		de.Data = append(de.Data, []byte(fmt.Sprintf("extid %d", i)))
 	}
 
-	//now the size of the entry is 10878 bytes, so the cost should fail.
-	cost, err = de.Cost()
+	//now the size of the entry is 20480 bytes, so the cost should fail.
+	cost, err = DataEntryCost(de)
 	if err == nil {
 		t.Fatalf("expected failure on data to large, but it passed and returned a cost of %d", cost)
 	}

@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package api
 
 import (
@@ -5,10 +11,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"time"
+	"errors"
+	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 func (m *JrpcMethods) Execute(ctx context.Context, params json.RawMessage) interface{} {
@@ -37,7 +44,7 @@ func (m *JrpcMethods) Execute(ctx context.Context, params json.RawMessage) inter
 	return m.execute(ctx, req, data)
 }
 
-func (m *JrpcMethods) executeWith(ctx context.Context, params json.RawMessage, payload protocol.TransactionPayload, validateFields ...string) interface{} {
+func (m *JrpcMethods) executeWith(ctx context.Context, params json.RawMessage, payload protocol.TransactionBody, validateFields ...string) interface{} {
 	var raw json.RawMessage
 	req := new(TxRequest)
 	req.Payload = &raw
@@ -66,94 +73,156 @@ func (m *JrpcMethods) Faucet(ctx context.Context, params json.RawMessage) interf
 		return err
 	}
 
-	protocol.FaucetWallet.Nonce = uint64(time.Now().UnixNano())
-	tx := new(transactions.Envelope)
-	tx.Transaction = new(transactions.Transaction)
-	tx.Transaction.Origin = protocol.FaucetUrl
-	tx.Transaction.Nonce = protocol.FaucetWallet.Nonce
-	tx.Transaction.KeyPageHeight = 1
-	tx.Transaction.Body, err = req.MarshalBinary()
+	txrq, body, err := constructFaucetTxn(req)
 	if err != nil {
-		return accumulateError(err)
+		return err
 	}
+	return m.execute(ctx, txrq, body)
+}
 
-	ed := new(transactions.ED25519Sig)
-	tx.Signatures = append(tx.Signatures, ed)
-	err = ed.Sign(protocol.FaucetWallet.Nonce, protocol.FaucetWallet.PrivateKey, tx.GetTxHash())
+func constructFaucetTxn(req *protocol.AcmeFaucet) (*TxRequest, []byte, error) {
+	txn := new(protocol.Transaction)
+	txn.Header.Principal = protocol.FaucetUrl
+	txn.Body = req
+	env := new(protocol.Envelope)
+	env.Transaction = []*protocol.Transaction{txn}
+	sig, err := new(signing.Builder).
+		UseFaucet().
+		UseSimpleHash().
+		Initiate(txn)
 	if err != nil {
-		return accumulateError(err)
+		return nil, nil, accumulateError(err)
 	}
+	env.Signatures = append(env.Signatures, sig)
+
+	keySig := sig.(protocol.KeySignature)
 
 	txrq := new(TxRequest)
-	txrq.Origin = tx.Transaction.Origin
-	txrq.Signer.Nonce = tx.Transaction.Nonce
-	txrq.Signer.PublicKey = tx.Signatures[0].PublicKey
-	txrq.KeyPage.Height = tx.Transaction.KeyPageHeight
-	txrq.Signature = tx.Signatures[0].Signature
-	return m.execute(ctx, txrq, tx.Transaction.Body)
+	txrq.Origin = txn.Header.Principal
+	txrq.Signer.SignatureType = sig.Type()
+	txrq.Signer.Timestamp = keySig.GetTimestamp()
+	txrq.Signer.PublicKey = keySig.GetPublicKey()
+	txrq.Signer.Url = protocol.FaucetUrl.RootIdentity()
+	txrq.Signer.Version = keySig.GetSignerVersion()
+	txrq.Signer.UseSimpleHash = true
+	txrq.Signature = keySig.GetSignature()
+
+	body, err := txn.Body.MarshalBinary()
+	if err != nil {
+		return nil, nil, accumulateError(err)
+	}
+
+	return txrq, body, nil
 }
 
-// executeQueue manages queues for batching and dispatch of execute requests.
-type executeQueue struct {
-	leader  chan struct{}
-	enqueue chan *executeRequest
+type txRequestSigner struct {
+	*TxRequest
 }
 
-// executeRequest captures the state of an execute requests.
-type executeRequest struct {
-	subnet    string
-	checkOnly bool
-	payload   []byte
-	result    interface{}
-	done      chan struct{}
+func (r txRequestSigner) SetPublicKey(sig protocol.Signature) error {
+	switch sig := sig.(type) {
+	case *protocol.LegacyED25519Signature:
+		sig.PublicKey = r.Signer.PublicKey
+
+	case *protocol.ED25519Signature:
+		sig.PublicKey = r.Signer.PublicKey
+
+	case *protocol.RCD1Signature:
+		sig.PublicKey = r.Signer.PublicKey
+
+	case *protocol.BTCSignature:
+		sig.PublicKey = r.Signer.PublicKey
+
+	case *protocol.BTCLegacySignature:
+		sig.PublicKey = r.Signer.PublicKey
+
+	case *protocol.ETHSignature:
+		sig.PublicKey = r.Signer.PublicKey
+
+	default:
+		return fmt.Errorf("cannot set the public key on a %T", sig)
+	}
+
+	return nil
+}
+
+func (r txRequestSigner) Sign(sig protocol.Signature, sigMdHash, message []byte) error {
+	switch sig := sig.(type) {
+	case *protocol.LegacyED25519Signature:
+		sig.Signature = r.Signature
+
+	case *protocol.ED25519Signature:
+		sig.Signature = r.Signature
+
+	case *protocol.RCD1Signature:
+		sig.Signature = r.Signature
+
+	case *protocol.BTCSignature:
+		sig.Signature = r.Signature
+
+	case *protocol.BTCLegacySignature:
+		sig.Signature = r.Signature
+
+	case *protocol.ETHSignature:
+		sig.Signature = r.Signature
+
+	default:
+		return fmt.Errorf("cannot sign %T with a key", sig)
+	}
+	return nil
 }
 
 // execute either executes the request locally, or dispatches it to another BVC
 func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byte) interface{} {
+	env, err := processExecuteRequest(req, payload)
+	if err != nil {
+		return err
+	}
+
 	// Route the request
-	subnet, err := m.Router.Route(req.Origin)
+	partition, err := m.Router.Route(env)
 	if err != nil {
 		return validatorError(err)
 	}
 
-	var envs []*transactions.Envelope
-	if req.IsEnvelope {
-		// Unmarshal all the envelopes
-		envs, err = transactions.UnmarshalAll(payload)
-		if err != nil {
-			return accumulateError(err)
-		}
-	} else {
-		// Build the envelope
-		env := new(transactions.Envelope)
-		env.TxHash = req.TxHash
-		env.Transaction = new(transactions.Transaction)
-		env.Transaction.Body = payload
-		env.Transaction.Origin = req.Origin
-		env.Transaction.Nonce = req.Signer.Nonce
-		env.Transaction.KeyPageHeight = req.KeyPage.Height
-		env.Transaction.KeyPageIndex = req.KeyPage.Index
-		envs = append(envs, env)
+	return m.submit(ctx, partition, env, req.CheckOnly)
+}
 
-		ed := new(transactions.ED25519Sig)
-		ed.Nonce = req.Signer.Nonce
-		ed.PublicKey = req.Signer.PublicKey
-		ed.Signature = req.Signature
-		env.Signatures = append(env.Signatures, ed)
+func (m *JrpcMethods) ExecuteDirect(ctx context.Context, params json.RawMessage) interface{} {
+	req := new(ExecuteRequest)
+	err := json.Unmarshal(params, req)
+	if err != nil {
+		return validatorError(err)
 	}
 
-	// Marshal the envelope(s)
-	var txData []byte
-	for _, env := range envs {
-		b, err := env.MarshalBinary()
-		if err != nil {
-			return accumulateError(err)
-		}
-		txData = append(txData, b...)
+	// Route the request
+	partition, err := m.Router.Route(req.Envelope)
+	if err != nil {
+		return validatorError(err)
+	}
+
+	return m.submit(ctx, partition, req.Envelope, req.CheckOnly)
+}
+
+func (m *JrpcMethods) ExecuteLocal(ctx context.Context, params json.RawMessage) interface{} {
+	req := new(ExecuteRequest)
+	err := json.Unmarshal(params, req)
+	if err != nil {
+		return validatorError(err)
+	}
+
+	return m.submit(ctx, m.Options.Describe.PartitionId, req.Envelope, req.CheckOnly)
+}
+
+func (m *JrpcMethods) submit(ctx context.Context, partition string, env *protocol.Envelope, checkOnly bool) interface{} {
+	// Marshal the envelope
+	txData, err := env.MarshalBinary()
+	if err != nil {
+		return accumulateError(err)
 	}
 
 	// Submit the envelope(s)
-	resp, err := m.Router.Submit(ctx, subnet, txData, req.CheckOnly, false)
+	resp, err := m.Router.Submit(ctx, partition, env, checkOnly, false)
 	if err != nil {
 		return accumulateError(err)
 	}
@@ -162,29 +231,26 @@ func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byt
 	simpleHash := sha256.Sum256(txData)
 	res := new(TxResponse)
 	res.Code = uint64(resp.Code)
-	res.TransactionHash = envs[0].GetTxHash()
-	res.EnvelopeHash = envs[0].EnvHash()
+	res.Txid = env.Transaction[0].ID()
+	res.TransactionHash = env.Transaction[0].GetHash()
+	res.SignatureHashes = make([][]byte, len(env.Signatures))
 	res.SimpleHash = simpleHash[:]
 
-	// Parse the results
-	var results []protocol.TransactionResult
-	for len(resp.Data) > 0 {
-		result, err := protocol.UnmarshalTransactionResult(resp.Data)
-		if err != nil {
-			m.logError("Failed to decode transaction results", "error", err)
-			break
-		}
-		resp.Data = resp.Data[result.BinarySize():]
-		if _, ok := result.(*protocol.EmptyResult); ok {
-			result = nil
-		}
-		results = append(results, result)
+	for i, sig := range env.Signatures {
+		res.SignatureHashes[i] = sig.Hash()
 	}
 
-	if len(results) == 1 {
-		res.Result = results[0]
-	} else if len(results) > 0 {
-		res.Result = results
+	// Parse the results
+	results := new(protocol.TransactionResultSet)
+	err = results.UnmarshalBinary(resp.Data)
+	if err != nil {
+		m.logError("Failed to decode transaction results", "error", err)
+	}
+
+	if len(results.Results) == 1 {
+		res.Result = results.Results[0]
+	} else if len(results.Results) > 0 {
+		res.Result = results.Results
 	}
 
 	// Check for errors
@@ -204,4 +270,62 @@ func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byt
 	default:
 		return res
 	}
+}
+
+func processExecuteRequest(req *TxRequest, payload []byte) (*protocol.Envelope, error) {
+	if req.IsEnvelope {
+		env := new(protocol.Envelope)
+		err := env.UnmarshalBinary(payload)
+		return env, err
+	}
+
+	body, err := protocol.UnmarshalTransactionBody(payload)
+	if err != nil {
+		return nil, accumulateError(err)
+	}
+
+	// Build the envelope
+	txn := new(protocol.Transaction)
+	txn.Body = body
+	txn.Header.Principal = req.Origin
+	txn.Header.Memo = req.Memo
+	txn.Header.Metadata = req.Metadata
+	env := new(protocol.Envelope)
+	env.TxHash = req.TxHash
+	env.Transaction = append(env.Transaction, txn)
+	if remote, ok := body.(*protocol.RemoteTransaction); ok && len(remote.Hash) == 0 {
+		remote.Hash = *(*[32]byte)(env.TxHash)
+	}
+
+	// Sign and initiate the transaction
+	sigBuilder := new(signing.Builder).
+		SetType(req.Signer.SignatureType).
+		SetTimestamp(req.Signer.Timestamp).
+		SetUrl(req.Signer.Url).
+		SetSigner(txRequestSigner{req})
+	if req.Signer.UseSimpleHash {
+		sigBuilder.UseSimpleHash()
+	} else {
+		sigBuilder.UseMerkleHash()
+	}
+	if req.Signer.Version != 0 {
+		sigBuilder.SetVersion(req.Signer.Version)
+	} else if req.KeyPage.Version != 0 {
+		sigBuilder.SetVersion(req.KeyPage.Version)
+	} else {
+		return nil, validatorError(errors.New("missing signer version"))
+	}
+
+	var sig protocol.Signature
+	if txn.Body.Type() == protocol.TransactionTypeRemote {
+		sig, err = sigBuilder.Sign(txn.GetHash())
+	} else {
+		sig, err = sigBuilder.Initiate(txn)
+	}
+	if err != nil {
+		return nil, validatorError(err)
+	}
+	env.Signatures = append(env.Signatures, sig)
+
+	return env, nil
 }

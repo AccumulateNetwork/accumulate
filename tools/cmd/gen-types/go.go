@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package main
 
 import (
@@ -5,33 +11,88 @@ import (
 	"fmt"
 	"strings"
 	"text/template"
+
+	"gitlab.com/accumulatenetwork/accumulate/tools/internal/typegen"
+)
+
+const (
+	Int      = typegen.TypeCodeInt
+	Uint     = typegen.TypeCodeUint
+	Bool     = typegen.TypeCodeBool
+	String   = typegen.TypeCodeString
+	Hash     = typegen.TypeCodeHash
+	Bytes    = typegen.TypeCodeBytes
+	Url      = typegen.TypeCodeUrl
+	TxID     = typegen.TypeCodeTxid
+	Time     = typegen.TypeCodeTime
+	Duration = typegen.TypeCodeDuration
+	BigInt   = typegen.TypeCodeBigInt
+	Any      = typegen.TypeCodeAny
+	RawJson  = typegen.TypeCodeRawJson
+	Float    = typegen.TypeCodeFloat
+
+	// Basic     = typegen.MarshalAsBasic
+	// None      = typegen.MarshalAsNone
+	Enum      = typegen.MarshalAsEnum
+	Value     = typegen.MarshalAsValue
+	Reference = typegen.MarshalAsReference
+	Union     = typegen.MarshalAsUnion
 )
 
 //go:embed go.go.tmpl
 var goSrc string
 
-var _ = Templates.Register(goSrc, "go", template.FuncMap{
-	"isPkg":       func(s string) bool { return s == PackagePath },
-	"resolveType": GoResolveType,
+//go:embed union.go.tmpl
+var goUnionSrc string
+
+func init() {
+	Templates.Register(goSrc, "go", goFuncs, "Go")
+	Templates.Register(goUnionSrc, "go-union", goFuncs)
+}
+
+var goFuncs = template.FuncMap{
+	"isPkg": func(s string) bool {
+		return s == PackagePath
+	},
+	"pkg": func(s string) string {
+		if s == PackagePath {
+			return ""
+		}
+		i := strings.LastIndexByte(s, '/')
+		if i < 0 {
+			return s + "."
+		}
+		return s[i+1:] + "."
+	},
+	"dec": func(v uint) uint {
+		return v - 1
+	},
+
+	"resolveType": func(field *Field, forNew bool) string {
+		return GoResolveType(field, forNew, false)
+	},
 
 	"jsonType": func(field *Field) string {
 		typ := GoJsonType(field)
 		if typ == "" {
-			typ = GoResolveType(field, false)
+			typ = GoResolveType(field, false, false)
 		}
 		return typ
 	},
 
-	"areEqual":             GoAreEqual,
-	"binarySize":           GoBinarySize,
-	"binaryMarshalValue":   GoBinaryMarshalValue,
-	"binaryUnmarshalValue": GoBinaryUnmarshalValue,
-	"valueToJson":          GoValueToJson,
-	"valueFromJson":        GoValueFromJson,
-	"jsonZeroValue":        GoJsonZeroValue,
+	"get":                     GoGetField,
+	"areEqual":                GoAreEqual,
+	"copy":                    GoCopy,
+	"binaryMarshalValue":      GoBinaryMarshalValue,
+	"binaryUnmarshalValue":    GoBinaryUnmarshalValue,
+	"valueToJson":             GoValueToJson,
+	"valueFromJson":           GoValueFromJson,
+	"jsonZeroValue":           GoJsonZeroValue,
+	"isZero":                  GoIsZero,
+	"errVirtualFieldNotEqual": GoErrVirtualFieldNotEqual,
 
 	"needsCustomJSON": func(typ *Type) bool {
-		if typ.IsTxResult {
+		if typ.IsUnion() {
 			return true
 		}
 
@@ -42,13 +103,18 @@ var _ = Templates.Register(goSrc, "go", template.FuncMap{
 		}
 
 		for _, f := range typ.Fields {
+			// Add a custom un/marshaller if the type embeds another type
+			if f.IsEmbedded {
+				return true
+			}
+
 			// Add a custom un/marshaller if the field needs special handling
 			if GoJsonType(f) != "" {
 				return true
 			}
 
 			// Add a custom un/marshaller if the field has an alternate name
-			if f.AlternativeName != "" {
+			if f.Alternative != "" {
 				return true
 			}
 		}
@@ -57,21 +123,21 @@ var _ = Templates.Register(goSrc, "go", template.FuncMap{
 
 	"validateTag": func(f *Field) string {
 		var flags []string
-		if !f.IsOptional {
+		if !f.Optional {
 			flags = append(flags, "required")
-		}
-		if f.IsUrl {
-			flags = append(flags, "acc-url")
 		}
 		if len(flags) == 0 {
 			return ""
 		}
 		return fmt.Sprintf(` validate:"%s"`, strings.Join(flags, ","))
 	},
-}, "Go")
+}
 
-func GoMethodName(typ, name string) string {
-	return "encoding." + strings.Title(typ) + name
+func GoGetField(field *Field) string {
+	if field.Virtual {
+		return field.Name + "()"
+	}
+	return field.Name
 }
 
 func GoFieldError(op, name string, args ...string) string {
@@ -79,382 +145,469 @@ func GoFieldError(op, name string, args ...string) string {
 	return fmt.Sprintf("fmt.Errorf(\"error %s %s: %%w\", %s)", op, name, strings.Join(args, ","))
 }
 
-func GoResolveType(field *Field, forNew bool) string {
-	switch field.Type {
-	case "bytes":
-		return "[]byte"
-	case "rawJson":
-		return "json.RawMessage"
-	case "bigint":
-		return "big.Int"
-	case "uvarint":
-		return "uint64"
-	case "varint":
-		return "int64"
-	case "chain":
-		return "[32]byte"
-	case "chainSet":
-		return "[][32]byte"
-	case "duration":
-		return "time.Duration"
-	case "time":
-		return "time.Time"
-	case "any":
-		return "interface{}"
-	case "slice":
-		return "[]" + GoResolveType(field.Slice, false)
+func goUnionMethod(field *Field, name string) string {
+	var typ string
+	param, ok := field.ParentType.ResolveTypeParam(&field.Field)
+	if ok {
+		typ = param.Type
+	} else {
+		typ = field.Type.String()
 	}
 
-	typ := field.Type
-	if field.IsPointer && !forNew {
+	parts := strings.SplitN(typ, ".", 2)
+	if len(parts) == 1 {
+		return name + parts[0]
+	}
+	return fmt.Sprintf("%s.%s%s", parts[0], name, parts[1])
+}
+
+func goBinaryMethod(field *Field) (methodName string, wantPtr bool) {
+	switch field.Type.Code {
+	case Bool, String, Duration, Time, Bytes, Uint, Int, Float:
+		return typegen.TitleCase(field.Type.String()), false
+	case Url, TxID, Hash:
+		return typegen.TitleCase(field.Type.String()), true
+	case RawJson:
+		return "Bytes", false
+	case BigInt:
+		return "BigInt", true
+	}
+
+	switch field.MarshalAs {
+	case Reference:
+		return "Value", true
+	case Value, Union:
+		return "Value", false
+	case Enum:
+		return "Enum", false
+	}
+
+	return "", false
+}
+
+func goJsonMethod(field *Field) (methodName string, wantPtr bool) {
+	switch field.Type.Code {
+	case Bytes, Duration, Any:
+		return field.Type.Title(), false
+	case Hash:
+		return "Chain", false
+	case BigInt:
+		return "Bigint", true
+	}
+
+	return "", false
+}
+
+func GoResolveType(field *Field, forNew, ignoreRepeatable bool) string {
+	typ := field.Type.GoType()
+	if field.Pointer && !forNew {
 		typ = "*" + typ
+	}
+	if field.Repeatable && !ignoreRepeatable {
+		typ = "[]" + typ
 	}
 	return typ
 }
 
-func GoJsonType(field *Field) string {
-	switch field.Type {
-	case "bytes":
+func goJsonTypeSingle(field *Field) string {
+	switch field.Type.Code {
+	case Bytes:
 		return "*string"
-	case "bigint":
+	case BigInt:
 		return "*string"
-	case "chain":
+	case Hash:
 		return "string"
-	case "chainSet":
-		return "[]string"
-	case "duration", "any":
+	case Duration, Any:
 		return "interface{}"
-	case "slice":
-		jt := GoJsonType(field.Slice)
-		if jt != "" {
-			return "[]" + jt
-		}
 	}
 
-	if field.UnmarshalWith != "" {
-		return "json.RawMessage"
+	if field.MarshalAs != Union {
+		return ""
 	}
 
-	return ""
+	return "encoding.JsonUnmarshalWith[" + GoResolveType(field, false, true) + "]"
+}
+
+func GoJsonType(field *Field) string {
+	if field.Repeatable && field.MarshalAs == Union {
+		return "encoding.JsonUnmarshalListWith[" + GoResolveType(field, false, true) + "]"
+	}
+
+	typ := goJsonTypeSingle(field)
+	switch {
+	case !field.Repeatable:
+		return typ
+	case typ != "":
+		return "encoding.JsonList[" + typ + "]"
+	default:
+		return "encoding.JsonList[" + GoResolveType(field, false, true) + "]"
+	}
+}
+
+func GoErrVirtualFieldNotEqual(field *Field, varName, valName string) (string, error) {
+	return fmt.Sprintf(`return fmt.Errorf("field %s: not equal: want %%%%v, got %%%%v", %s, %s)`, field.Name, varName, valName), nil
+}
+
+func GoIsZero(field *Field, varName string) (string, error) {
+	if field.Repeatable {
+		return fmt.Sprintf("len(%s) == 0", varName), nil
+	}
+	if field.Pointer {
+		return fmt.Sprintf("%s == nil", varName), nil
+	}
+	if field.ZeroValue != nil {
+		return fmt.Sprintf("%s == (%v)", varName, field.ZeroValue), nil
+	}
+
+	switch field.Type.Code {
+	case Bytes, RawJson, String:
+		return fmt.Sprintf("len(%s) == 0", varName), nil
+	case Any:
+		return fmt.Sprintf("%s == nil", varName), nil
+	case Bool:
+		return fmt.Sprintf("!%s", varName), nil
+	case Uint, Int, Duration, Float:
+		return fmt.Sprintf("%s == 0", varName), nil
+	case BigInt:
+		return fmt.Sprintf("(%s).Cmp(new(big.Int)) == 0", varName), nil
+	case Url, TxID, Hash, Time:
+		return fmt.Sprintf("%s == (%s{})", varName, GoResolveType(field, false, false)), nil
+	}
+
+	switch field.MarshalAs {
+	case Reference:
+		return fmt.Sprintf("(%s).Equal(new(%s))", varName, field.Type), nil
+	case Enum:
+		return fmt.Sprintf("%s == 0", varName), nil
+	case Union:
+		return fmt.Sprintf("%s(%s, nil)", goUnionMethod(field, "Equal"), varName), nil
+	}
+
+	return "", fmt.Errorf("field %q: cannot determine zero value for %s", field.Name, GoResolveType(field, false, false))
 }
 
 func GoJsonZeroValue(field *Field) (string, error) {
-	switch field.Type {
-	case "bytes", "bigint", "chainSet", "duration", "any", "slice", "rawJson":
+	if field.IsPointer() {
 		return "nil", nil
-	case "bool":
+	}
+
+	switch field.Type.Code {
+	case Bytes, BigInt, Duration, Any, RawJson:
+		return "nil", nil
+	case Bool:
 		return "false", nil
-	case "string", "chain":
+	case String, Hash:
 		return `""`, nil
-	case "uvarint", "varint":
+	case Uint, Int, Float:
 		return "0", nil
 	}
 
-	switch {
-	case field.AsReference, field.AsValue:
-		if field.IsPointer {
+	switch field.MarshalAs {
+	case Enum:
+		return "0", nil
+	case Union:
+		return "nil", nil
+	case Reference, Value:
+		if field.Pointer {
 			return "nil", nil
 		}
-		return fmt.Sprintf("(%s{})", GoResolveType(field, false)), nil
+		return fmt.Sprintf("(%s{})", GoResolveType(field, false, false)), nil
 	}
 
-	return "", fmt.Errorf("field %q: cannot determine zero value for %s", field.Name, GoResolveType(field, false))
+	return "", fmt.Errorf("field %q: cannot determine zero value for %s", field.Name, GoResolveType(field, false, false))
 }
 
-func GoAreEqual(field *Field, varName, otherName string) (string, error) {
+func GoAreEqual(field *Field, varName, otherName, whenNotEqual string) (string, error) {
 	var expr string
-	switch field.Type {
-	case "bool", "string", "chain", "uvarint", "varint", "duration", "time":
-		expr = "%s == %s"
-	case "bytes", "rawJson":
-		expr = "bytes.Equal(%s, %s)"
-	case "bigint":
-		if field.IsPointer {
-			expr = "%s.Cmp(%s) == 0"
+	var wantPtr bool
+	switch field.Type.Code {
+	case Bool, String, Hash, Uint, Int, Float, Duration:
+		expr, wantPtr = "%[1]s%[2]s == %[1]s%[3]s", false
+	case Bytes, RawJson:
+		expr, wantPtr = "bytes.Equal(%[1]s%[2]s, %[1]s%[3]s)", false
+	case BigInt:
+		expr, wantPtr = "(%[1]s%[2]s).Cmp(%[1]s%[3]s) == 0", true
+	case Url, TxID:
+		expr, wantPtr = "(%[1]s%[2]s).Equal(%[1]s%[3]s)", true
+	case Time:
+		expr, wantPtr = "(%[1]s%[2]s).Equal(%[1]s%[3]s)", false
+	default:
+		switch field.MarshalAs {
+		case Union:
+			expr, wantPtr = goUnionMethod(field, "Equal")+"(%[1]s%[2]s,%[1]s%[3]s)", false
+		case Reference:
+			expr, wantPtr = "(%[1]s%[2]s).Equal(%[1]s%[3]s)", true
+		case Value, Enum:
+			expr, wantPtr = "%[1]s%[2]s == %[1]s%[3]s", false
+		default:
+			return "", fmt.Errorf("field %q: cannot determine how to compare %s", field.Name, GoResolveType(field, false, false))
+		}
+	}
+
+	var ptrPrefix string
+	switch {
+	case wantPtr && !field.Pointer:
+		// If we want a pointer and have a value, take the address of the value
+		ptrPrefix = "&"
+	case !wantPtr && field.Pointer:
+		// If we want a value and have a pointer, dereference the pointer
+		ptrPrefix = "*"
+	}
+
+	if field.Repeatable {
+		expr = fmt.Sprintf(expr, ptrPrefix, "%[2]s[i]", "%[3]s[i]")
+		return fmt.Sprintf(
+			"	if len(%[2]s) != len(%[3]s) { "+whenNotEqual+" }\n"+
+				"	for i := range %[2]s {\n"+
+				"		if !("+expr+") { "+whenNotEqual+" }\n"+
+				"	}",
+			ptrPrefix, varName, otherName), nil
+	}
+
+	if !field.Pointer {
+		return fmt.Sprintf("\tif !("+expr+") { "+whenNotEqual+" }", ptrPrefix, varName, otherName), nil
+	}
+
+	return fmt.Sprintf(
+		"	switch {\n"+
+			"	case %[2]s == %[3]s:\n"+
+			"		// equal\n"+
+			"	case %[2]s == nil || %[3]s == nil:\n"+
+			"		return false\n"+
+			"	case !("+expr+"):\n"+
+			"		return false\n"+
+			"	}",
+		ptrPrefix, varName, otherName), nil
+}
+
+func GoCopy(field *Field, dstName, srcName string) (string, error) {
+	if !field.Repeatable {
+		return goCopy(field, dstName, srcName)
+	}
+
+	expr, err := goCopy(field, dstName+"[i]", "v")
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf(
+		"\t%[1]s = make(%[2]s, len(%[3]s))\n"+
+			"\tfor i, v := range %[3]s { %s }",
+		dstName, GoResolveType(field, false, false), srcName, expr), nil
+}
+
+func goCopy(field *Field, dstName, srcName string) (string, error) {
+	switch field.Type.Code {
+	case Bool, String, Duration, Time, Uint, Float, Int, Hash:
+		return goCopyNonPointer(field, "%s = %s", dstName, srcName), nil
+
+	case Bytes, RawJson:
+		return goCopyNonPointer(field, "%s = encoding.BytesCopy(%s)", dstName, srcName), nil
+
+	case Url, TxID:
+		// URLs and TxIDs should be immutable and thus do not need to be copied
+		return goCopyPointer(field, "%s", dstName, srcName), nil
+
+	case BigInt:
+		return goCopyPointer(field, "encoding.BigintCopy(%s)", dstName, srcName), nil
+	}
+
+	switch field.MarshalAs {
+	case Union:
+		var nilCheck string
+		_, ok := field.ParentType.ResolveTypeParam(&field.Field)
+		if ok {
+			nilCheck = "if !" + goUnionMethod(field, "Equal") + "(%[1]s, nil)"
 		} else {
-			expr = "%s.Cmp(&%s) == 0"
+			nilCheck = "if %[1]s != nil"
 		}
-	case "slice", "chainSet":
-		expr = "len(%s) == len(%s)"
-	default:
-		switch {
-		case field.AsReference:
-			if field.IsPointer {
-				expr = "%s.Equal(%s)"
-			} else {
-				expr = "%s.Equal(&%s)"
+		var assert string
+		for _, param := range field.ParentType.Params {
+			if field.Type.Name == param.Name {
+				assert = ".(" + GoResolveType(field, false, true) + ")"
+				break
 			}
-		case field.AsValue:
-			if field.IsPointer {
-				expr = "*%s == *%s"
-			} else {
-				expr = "%s == %s"
-			}
-		default:
-			return "", fmt.Errorf("field %q: cannot determine how to compare %s", field.Name, GoResolveType(field, false))
 		}
-	}
-
-	w := new(strings.Builder)
-	expr = fmt.Sprintf(expr, varName, otherName)
-	fmt.Fprintf(w, "\tif !(%s) { return false }\n\n", expr)
-
-	switch field.Type {
-	case "slice":
-		fmt.Fprintf(w, "\tfor i := range %s {\n", varName)
-		fmt.Fprintf(w, "\t\tv, u := %s[i], %s[i]\n", varName, otherName)
-		str, err := GoAreEqual(field.Slice, "v", "u")
-		if err != nil {
-			return "", err
-		}
-		w.WriteString(str)
-		fmt.Fprintf(w, "\t}\n\n")
-
-	case "chainSet":
-		fmt.Fprintf(w, "\tfor i := range %s {\n", varName)
-		fmt.Fprintf(w, "\t\tif %s[i] != %s[i] { return false }\n", varName, otherName)
-		fmt.Fprintf(w, "\t}\n\n")
-
+		format := nilCheck + " { %[2]s = %[3]s(%[1]s)%[4]s }"
+		return goCopyNonPointer(field, format, srcName, dstName, goUnionMethod(field, "Copy"), assert), nil
+	case Reference:
+		return goCopyPointer(field, "(%s).Copy()", dstName, srcName), nil
+	case Value, Enum:
+		return goCopyNonPointer(field, "%s = %s", dstName, srcName), nil
 	default:
-		fmt.Fprintf(w, "\n")
+		return "", fmt.Errorf("field %q: cannot determine how to copy %s", field.Name, GoResolveType(field, false, false))
 	}
-	return w.String(), nil
 }
 
-func GoBinarySize(field *Field, varName string) (string, error) {
-	typ := field.Type
+func goCopyNonPointer(field *Field, expr, dstName, srcName string, exprArgs ...interface{}) string {
+	if !field.Pointer {
+		exprArgs = append([]interface{}{dstName, srcName}, exprArgs...)
+		return fmt.Sprintf(expr, exprArgs...)
+	}
+
+	exprArgs = append([]interface{}{"*" + dstName, "*" + srcName}, exprArgs...)
+	expr = fmt.Sprintf(expr, exprArgs...)
+	return fmt.Sprintf("if %s != nil { %s = new(%s); %s }", srcName, dstName, GoResolveType(field, true, true), expr)
+}
+
+func goCopyPointer(field *Field, expr, dstName, srcName string) string {
+	if field.Pointer {
+		expr = fmt.Sprintf(expr, srcName)
+		return fmt.Sprintf("if %s != nil { %s = %s }", srcName, dstName, expr)
+	}
+
+	expr = fmt.Sprintf(expr, "&"+srcName)
+	return fmt.Sprintf("%s = *%s", dstName, expr)
+}
+
+func GoBinaryMarshalValue(field *Field, writerName, varName string) (string, error) {
+	method, wantPtr := goBinaryMethod(field)
+	if method == "" {
+		return "", fmt.Errorf("field %q: cannot determine how to marshal %s", field.Name, GoResolveType(field, false, false))
+	}
+
+	var ptrPrefix string
+	switch {
+	case wantPtr && !field.Pointer:
+		ptrPrefix = "&"
+	case !wantPtr && field.Pointer:
+		ptrPrefix = "*"
+	}
+
+	var suffix string
+	if method == "Value" {
+		ptrPrefix = ""
+		suffix = ".MarshalBinary"
+	}
+
+	if !field.Repeatable {
+		return fmt.Sprintf("\t%s.Write%s(%d, %s%s%s)", writerName, method, field.Number, ptrPrefix, varName, suffix), nil
+	}
+
+	return fmt.Sprintf("\tfor _, v := range %s { %s.Write%s(%d, %sv%s) }", varName, writerName, method, field.Number, ptrPrefix, suffix), nil
+}
+
+func GoBinaryUnmarshalValue(field *Field, readerName, varName string) (string, error) {
+	method, wantPtr := goBinaryMethod(field)
+	if method == "" {
+		return "", fmt.Errorf("field %q: cannot determine how to marshal %s", field.Name, GoResolveType(field, false, false))
+	}
+
+	// Unmarshal uses new(...) for values and enums, so wantPtr is true
+	wantPtr = wantPtr || method == "Value" || method == "Enum"
+
+	var ptrPrefix string
+	switch {
+	case field.MarshalAs == Union:
+		// OK
+	case wantPtr && !field.Pointer:
+		ptrPrefix = "*"
+	case !wantPtr && field.Pointer:
+		ptrPrefix = "&"
+	}
+
+	var set string
+	if field.Repeatable {
+		set = fmt.Sprintf("%s = append(%[1]s, %sx)", varName, ptrPrefix)
+	} else {
+		set = fmt.Sprintf("%s = %sx", varName, ptrPrefix)
+	}
 
 	var expr string
-	switch typ {
-	case "rawJson":
-		typ = "bytes"
-		fallthrough
-	case "bool", "bytes", "string", "chainSet", "uvarint", "varint", "duration", "time":
-		expr = GoMethodName(typ, "BinarySize") + "(%s)"
-	case "bigint", "chain":
-		expr = GoMethodName(typ, "BinarySize") + "(&%s)"
-	case "slice":
-		expr = "encoding.UvarintBinarySize(uint64(len(%s)))"
-	default:
-		switch {
-		case field.AsReference, field.AsValue:
-			expr = "%s.BinarySize()"
-		default:
-			return "", fmt.Errorf("field %q: cannot determine how to marshal %s", field.Name, GoResolveType(field, false))
+	var hasIf bool
+	switch {
+	case field.MarshalAs == Union:
+		unmarshal := goUnionMethod(field, "Unmarshal") + "From"
+		param, ok := field.ParentType.ResolveTypeParam(&field.Field)
+		if ok {
+			unmarshal = fmt.Sprintf("encoding.Cast[%s](%s(r))", param.Name, unmarshal)
+		} else {
+			unmarshal += "(r)"
 		}
+		expr, hasIf = fmt.Sprintf("%s.ReadValue(%d, func(r io.Reader) error { x, err := %s; if err == nil { %s }; return err })", readerName, field.Number, unmarshal, set), false
+	case method == "Value":
+		expr, hasIf = fmt.Sprintf("if x := new(%s); %s.ReadValue(%d, x.UnmarshalBinaryFrom) { %s }", GoResolveType(field, true, true), readerName, field.Number, set), true
+	case method == "Enum":
+		expr, hasIf = fmt.Sprintf("if x := new(%s); %s.ReadEnum(%d, x) { %s }", GoResolveType(field, true, true), readerName, field.Number, set), true
+	default:
+		expr, hasIf = fmt.Sprintf("if x, ok := %s.Read%s(%d); ok { %s }", readerName, method, field.Number, set), true
 	}
 
-	w := new(strings.Builder)
-	expr = fmt.Sprintf(expr, varName)
-	fmt.Fprintf(w, "\tn += %s\n\n", expr)
-
-	if typ != "slice" {
-		fmt.Fprintf(w, "\n")
-		return w.String(), nil
+	if !field.Repeatable {
+		return "\t" + expr, nil
 	}
 
-	fmt.Fprintf(w, "\tfor _, v := range %s {\n", varName)
-	str, err := GoBinarySize(field.Slice, "v")
-	if err != nil {
-		return "", err
+	if hasIf {
+		return "\tfor { " + expr + " else { break } }", nil
 	}
-	w.WriteString(str)
-	fmt.Fprintf(w, "\t}\n\n")
-	return w.String(), nil
+
+	return "\tfor { ok := " + expr + "; if !ok { break } }", nil
 }
 
-func GoBinaryMarshalValue(field *Field, varName, errName string, errArgs ...string) (string, error) {
-	typ := field.Type
-
-	var expr string
-	var canErr bool
-	switch typ {
-	case "rawJson":
-		typ = "bytes"
-		fallthrough
-	case "bool", "bytes", "string", "chainSet", "uvarint", "varint", "duration", "time":
-		expr, canErr = GoMethodName(typ, "MarshalBinary")+"(%s)", false
-	case "bigint", "chain":
-		expr, canErr = GoMethodName(typ, "MarshalBinary")+"(&%s)", false
-	case "slice":
-		expr, canErr = "encoding.UvarintMarshalBinary(uint64(len(%s)))", false
-	default:
-		switch {
-		case field.AsReference, field.AsValue:
-			expr, canErr = "%s.MarshalBinary()", true
-		default:
-			return "", fmt.Errorf("field %q: cannot determine how to marshal %s", field.Name, GoResolveType(field, false))
+func GoValueToJson(field *Field, tgtName, srcName string) (string, error) {
+	if field.MarshalAs == Union {
+		unmarshal := goUnionMethod(field, "Unmarshal") + "JSON"
+		param, ok := field.ParentType.ResolveTypeParam(&field.Field)
+		if ok {
+			unmarshal = fmt.Sprintf("func(b []byte) (%s, error) { return encoding.Cast[%[1]s](%s(b)) }", param.Name, unmarshal)
 		}
+		return fmt.Sprintf("\t%s = %s{Value: %s, Func: %s}", tgtName, GoJsonType(field), srcName, unmarshal), nil
 	}
 
-	w := new(strings.Builder)
-	expr = fmt.Sprintf(expr, varName)
-	if canErr {
-		err := GoFieldError("encoding", errName, errArgs...)
-		fmt.Fprintf(w, "\tif b, err := %s; err != nil { return nil, %s } else { buffer.Write(b) }\n", expr, err)
-	} else {
-		fmt.Fprintf(w, "\tbuffer.Write(%s)\n", expr)
+	method, wantPtr := goJsonMethod(field)
+	var ptrPrefix string
+	var checkNil bool
+	switch {
+	case method == "":
+		return fmt.Sprintf("\t%s = %s", tgtName, srcName), nil
+	case wantPtr && !field.Pointer:
+		ptrPrefix = "&"
+	case !wantPtr && field.Pointer:
+		ptrPrefix, checkNil = "*", true
 	}
 
-	if typ != "slice" {
-		fmt.Fprintf(w, "\n")
-		return w.String(), nil
+	if !field.Repeatable {
+		format := "\t%s = encoding.%sToJSON(%s%s)"
+		if checkNil {
+			format = "\tif %[4]s != nil { %[1]s = encoding.%[2]sToJSON(%[3]s%[4]s) }"
+		}
+		return fmt.Sprintf(format, tgtName, method, ptrPrefix, srcName), nil
 	}
 
-	fmt.Fprintf(w, "\tfor i, v := range %s {\n", varName)
-	fmt.Fprintf(w, "\t\t_ = i\n")
-	str, err := GoBinaryMarshalValue(field.Slice, "v", errName+"[%d]", "i")
-	if err != nil {
-		return "", err
+	format := "\t%s = make(%s, len(%s)); for i, x := range %[3]s { %[1]s[i] = encoding.%[4]sToJSON(%sx) }"
+	if checkNil {
+		format = "\t%s = make(%s, len(%s)); for i, x := range %[3]s { if x != nil { %[1]s[i] = encoding.%[4]sToJSON(%sx) } }"
 	}
-	w.WriteString(str)
-	fmt.Fprintf(w, "\t}\n\n")
-	return w.String(), nil
+	return fmt.Sprintf(format, tgtName, GoJsonType(field), srcName, method, ptrPrefix), nil
 }
 
-func GoBinaryUnmarshalValue(field *Field, varName, errName string, errArgs ...string) (string, error) {
-	typ := field.Type
-	w := new(strings.Builder)
-
-	var expr, size, init, sliceName string
-	var inPlace bool
-	switch typ {
-	case "rawJson":
-		typ = "bytes"
-		fallthrough
-	case "bool", "bytes", "string", "chainSet", "uvarint", "varint", "duration", "time":
-		expr, size = GoMethodName(typ, "UnmarshalBinary")+"(data)", GoMethodName(typ, "BinarySize")+"(%s)"
-	case "bigint", "chain":
-		expr, size = GoMethodName(typ, "UnmarshalBinary")+"(data)", GoMethodName(typ, "BinarySize")+"(&%s)"
-	case "slice":
-		sliceName, varName = varName, "len"+field.Name
-		fmt.Fprintf(w, "var %s uint64\n", varName)
-		expr, size = "encoding.UvarintUnmarshalBinary(data)", "encoding.UvarintBinarySize(%s)"
-	default:
-		switch {
-		case field.AsReference:
-			if field.IsPointer {
-				init = "%s = new(" + GoResolveType(field, true) + ")"
-			}
-			expr, size, inPlace = varName+".UnmarshalBinary(data)", "%s.BinarySize()", true
-		case field.AsValue:
-			expr, size, inPlace = varName+".UnmarshalBinary(data)", "%s.BinarySize()", true
-		default:
-			return "", fmt.Errorf("field %q: cannot determine how to marshal %s", field.Name, GoResolveType(field, false))
-		}
-
-		if field.UnmarshalWith != "" {
-			expr, inPlace = field.UnmarshalWith+"(data)", false
-		}
-	}
-
-	if init != "" {
-		fmt.Fprintf(w, "\t%s\n", fmt.Sprintf(init, varName))
-	}
-
-	size = fmt.Sprintf(size, varName)
+func GoValueFromJson(field *Field, tgtName, srcName, errName string, errArgs ...string) (string, error) {
 	err := GoFieldError("decoding", errName, errArgs...)
-	if inPlace {
-		fmt.Fprintf(w, "\tif err := %s; err != nil { return %s }\n", expr, err)
-	} else if typ == "bigint" {
-		fmt.Fprintf(w, "\tif x, err := %s; err != nil { return %s } else { %s.Set(x) }\n", expr, err, varName)
-	} else {
-		fmt.Fprintf(w, "\tif x, err := %s; err != nil { return %s } else { %s = x }\n", expr, err, varName)
-	}
-	fmt.Fprintf(w, "\tdata = data[%s:]\n\n", size)
-
-	if typ != "slice" {
-		return w.String(), nil
-	}
-
-	fmt.Fprintf(w, "\t%s = make(%s, %s)\n", sliceName, GoResolveType(field, false), varName)
-	fmt.Fprintf(w, "\tfor i := range %s {\n", sliceName)
-	if field.Slice.IsPointer {
-		fmt.Fprintf(w, "\t\tvar x %s\n", GoResolveType(field.Slice, false))
-		str, err := GoBinaryUnmarshalValue(field.Slice, "x", errName+"[%d]", "i")
-		if err != nil {
-			return "", err
+	if field.MarshalAs == Union {
+		if !field.Repeatable {
+			return fmt.Sprintf("\t%s = %s.Value\n", tgtName, srcName), nil
 		}
-		w.WriteString(str)
-		fmt.Fprintf(w, "\t\t%s[i] = x", sliceName)
-	} else {
-		str, err := GoBinaryUnmarshalValue(field.Slice, sliceName+"[i]", errName+"[%d]", "i")
-		if err != nil {
-			return "", err
-		}
-		w.WriteString(str)
-	}
-	fmt.Fprintf(w, "\t}\n\n")
-	return w.String(), nil
-}
-
-func GoValueToJson(field *Field, tgtName, srcName string, forUnmarshal bool, errName string, errArgs ...string) string {
-	w := new(strings.Builder)
-	switch field.Type {
-	case "bytes", "chain", "chainSet", "duration", "any":
-		fmt.Fprintf(w, "\t%s = %s(%s)", tgtName, GoMethodName(field.Type, "ToJSON"), srcName)
-		return w.String()
-	case "bigint":
-		fmt.Fprintf(w, "\t%s = %s(&%s)", tgtName, GoMethodName(field.Type, "ToJSON"), srcName)
-		return w.String()
-	case "slice":
-		if GoJsonType(field.Slice) == "" {
-			break
-		}
-
-		fmt.Fprintf(w, "\t%s = make([]%s, len(%s))\n", tgtName, GoJsonType(field.Slice), srcName)
-		fmt.Fprintf(w, "\tfor i, x := range %s {\n", srcName)
-		w.WriteString(GoValueToJson(field.Slice, tgtName+"[i]", "x", forUnmarshal, errName+"[%d]", "i"))
-		fmt.Fprintf(w, "\t}")
-		return w.String()
+		return fmt.Sprintf(
+			"	%s = make(%s, len(%s.Value));\n"+
+				"	for i, x := range %[3]s.Value {\n"+
+				"		%[1]s[i] = x\n"+
+				"	}",
+			tgtName, GoResolveType(field, false, false), srcName), nil
 	}
 
-	if field.UnmarshalWith != "" {
-		err := GoFieldError("encoding", errName, errArgs...)
-		if !forUnmarshal {
-			err = "nil, " + err
-		}
-		fmt.Fprintf(w, "\tif x, err := json.Marshal(%s); err != nil { return %s } else { %s = x }\n", srcName, err, tgtName)
-		return w.String()
+	method, wantPtr := goJsonMethod(field)
+	var ptrPrefix string
+	switch {
+	case method == "":
+		return fmt.Sprintf("\t%s = %s", tgtName, srcName), nil
+	case wantPtr && !field.Pointer:
+		ptrPrefix = "*"
+	case !wantPtr && field.Pointer:
+		ptrPrefix = "&"
 	}
 
-	// default:
-	fmt.Fprintf(w, "\t%s = %s", tgtName, srcName)
-	return w.String()
-}
-
-func GoValueFromJson(field *Field, tgtName, srcName, errName string, errArgs ...string) string {
-	w := new(strings.Builder)
-	err := GoFieldError("decoding", errName, errArgs...)
-	switch field.Type {
-	case "any":
-		fmt.Fprintf(w, "\t%s = %s(%s)\n", tgtName, GoMethodName(field.Type, "FromJSON"), srcName)
-		return w.String()
-
-	case "bytes", "chain", "chainSet", "duration":
-		fmt.Fprintf(w, "\tif x, err := %s(%s); err != nil {\n\t\treturn %s\n\t} else {\n\t\t%s = x\n\t}", GoMethodName(field.Type, "FromJSON"), srcName, err, tgtName)
-		return w.String()
-	case "bigint":
-		fmt.Fprintf(w, "\tif x, err := %s(%s); err != nil {\n\t\treturn %s\n\t} else {\n\t\t%s = *x\n\t}", GoMethodName(field.Type, "FromJSON"), srcName, err, tgtName)
-		return w.String()
-	case "slice":
-		if GoJsonType(field.Slice) == "" {
-			break
-		}
-
-		fmt.Fprintf(w, "\t%s = make([]%s, len(%s))\n", tgtName, GoResolveType(field.Slice, false), srcName)
-		fmt.Fprintf(w, "\tfor i, x := range %s {\n", srcName)
-		w.WriteString(GoValueFromJson(field.Slice, tgtName+"[i]", "x", errName+"[%d]", "i"))
-		fmt.Fprintf(w, "\t}")
-		return w.String()
+	if !field.Repeatable {
+		return fmt.Sprintf("\tif x, err := encoding.%sFromJSON(%s); err != nil { return %s } else { %s = %sx }", method, srcName, err, tgtName, ptrPrefix), nil
 	}
 
-	if field.UnmarshalWith != "" {
-		fmt.Fprintf(w, "\tif x, err := %sJSON(%s); err != nil { return %s } else { %s = x }\n", field.UnmarshalWith, srcName, err, tgtName)
-		return w.String()
-	}
-
-	// default:
-	fmt.Fprintf(w, "\t%s = %s", tgtName, srcName)
-	return w.String()
+	return fmt.Sprintf("\t%s = make(%s, len(%s)); for i, x := range %[3]s { if x, err := encoding.%sFromJSON(x); err != nil { return %s } else { %[1]s[i] = %[6]sx } }", tgtName, GoResolveType(field, false, false), srcName, method, err, ptrPrefix), nil
 }

@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package typegen
 
 import (
@@ -7,11 +13,12 @@ import (
 	"go/token"
 	"os"
 	"os/exec"
+	"path/filepath"
 )
 
-func WriteFile(language, file string, buf *bytes.Buffer) error {
-	switch language {
-	case "go", "Go":
+func WriteFile(file string, buf *bytes.Buffer) error {
+	switch filepath.Ext(file) {
+	case ".go":
 		return GoFmt(file, buf)
 	default:
 		f, err := os.Create(file)
@@ -48,7 +55,7 @@ func GoFmt(filePath string, buf *bytes.Buffer) error {
 		return err
 	}
 
-	err = exec.Command("go", "run", "golang.org/x/tools/cmd/goimports", "-w", filePath).Run()
+	err = exec.Command("go", "run", "github.com/rinchsan/gosimports/cmd/gosimports", "-w", filePath).Run()
 	if err != nil {
 		return err
 	}

@@ -1,13 +1,60 @@
-txSignatures:
+sigSetData:
   fields:
-    - name: Signatures
-      type: slice
-      slice:
-        type: transactions.ED25519Sig
-        pointer: true
-        marshal-as: reference
+    - name: Version
+      type: uint
+    - name: Entries
+      type: SigSetEntry
+      marshal-as: reference
+      repeatable: true
 
-txSyntheticTxns:
+SigSetEntry:
   fields:
-    - name: Txids
-      type: chainSet
+    - name: Type
+      type: protocol.SignatureType
+      marshal-as: enum
+    - name: KeyEntryIndex
+      type: uint
+    - name: SignatureHash
+      type: hash
+    - name: ValidatorKeyHash
+      type: hash
+      pointer: true
+
+SigOrTxn:
+  fields:
+    - name: Transaction
+      type: protocol.Transaction
+      marshal-as: reference
+      pointer: true
+    - name: Signature
+      type: protocol.Signature
+      marshal-as: union
+    - name: Txid
+      type: txid
+      pointer: true
+
+TransactionChainEntry:
+  fields:
+  - name: Account
+    type: url
+    marshal-as: reference
+    pointer: true
+  - name: Chain
+    description: is the name of the chain
+    type: string
+  - name: ChainIndex
+    description: is the index of the entry in the chain's index chain
+    type: uint
+  - name: AnchorIndex
+    description: is the index of the entry in the anchor chain's index chain
+    type: uint
+
+BlockStateSynthTxnEntry:
+  fields:
+  - name: Account
+    type: url
+    pointer: true
+  - name: Transaction
+    type: bytes
+  - name: ChainEntry
+    type: uvarint

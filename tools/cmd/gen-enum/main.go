@@ -7,26 +7,33 @@ import (
 
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/tools/internal/typegen"
-	"gopkg.in/yaml.v3"
 )
 
 var flags struct {
-	Package  string
-	Language string
-	Out      string
-	IsState  bool
+	files typegen.FileReader
+
+	Package     string
+	SubPackage  string
+	Language    string
+	Out         string
+	ShortNames  bool
+	FilePerType bool
 }
 
 func main() {
 	cmd := cobra.Command{
 		Use:  "gen-enum [file]",
-		Args: cobra.ExactArgs(1),
+		Args: cobra.MinimumNArgs(1),
 		Run:  run,
 	}
 
 	cmd.Flags().StringVarP(&flags.Language, "language", "l", "Go", "Output language or template file")
 	cmd.Flags().StringVar(&flags.Package, "package", "protocol", "Package name")
-	cmd.Flags().StringVarP(&flags.Out, "out", "o", "types_gen.go", "Output file")
+	cmd.Flags().BoolVar(&flags.ShortNames, "short-names", false, "Omit the type name from the enum value")
+	cmd.Flags().StringVar(&flags.SubPackage, "subpackage", "", "Package name")
+	cmd.Flags().StringVarP(&flags.Out, "out", "o", "enums_gen.go", "Output file")
+	cmd.Flags().BoolVar(&flags.FilePerType, "file-per-type", false, "Generate a separate file for each type")
+	flags.files.SetFlags(cmd.Flags(), "enums")
 
 	_ = cmd.Execute()
 }
@@ -48,40 +55,35 @@ func checkf(err error, format string, otherArgs ...interface{}) {
 	}
 }
 
-func readTypes(file string) map[string]typegen.Type {
-	f, err := os.Open(file)
-	check(err)
-	defer f.Close()
-
-	var types map[string]typegen.Type
-
-	dec := yaml.NewDecoder(f)
-	dec.KnownFields(true)
-	err = dec.Decode(&types)
-	check(err)
-
-	return types
-}
-
 func run(_ *cobra.Command, args []string) {
-	types := readTypes(args[0])
-	ttypes := convert(types, flags.Package)
+	switch flags.Language {
+	case "java", "Java", "c":
+		flags.FilePerType = true
+	}
 
-	w := new(bytes.Buffer)
-	check(Templates.Execute(w, flags.Language, ttypes))
-	check(typegen.WriteFile(flags.Language, flags.Out, w))
-	/////from me
-	//switch flags.Language {
-	//case "go":
-	//	w := new(bytes.Buffer)
-	//	check(Go.Execute(w, ttypes))
-	//	check(typegen.GoFmt(flags.Out, w))
-	//case "c":
-	//	w := new(bytes.Buffer)
-	//	check(C.Execute(w, ttypes))
-	//	f, err := os.Create(flags.Out)
-	//	check(err)
-	//	f.WriteString(w.String())
-	//	f.Close()
-	//}
+	types, err := typegen.ReadMap[typegen.Enum](&flags.files, args, nil)
+	check(err)
+	ttypes := convert(types, flags.Package, flags.SubPackage)
+
+	if !flags.FilePerType {
+		w := new(bytes.Buffer)
+		check(Templates.Execute(w, flags.Language, ttypes))
+		check(typegen.WriteFile(flags.Out, w))
+	} else {
+
+		fileTmpl, err := Templates.Parse(flags.Out, "filename", nil)
+		checkf(err, "--out")
+
+		w := new(bytes.Buffer)
+		for _, typ := range ttypes.Types {
+			w.Reset()
+			err := fileTmpl.Execute(w, typ)
+			check(err)
+			filename := w.String()
+
+			w.Reset()
+			check(Templates.Execute(w, flags.Language, SingleTypeFile{flags.Package, typ}))
+			check(typegen.WriteFile(filename, w))
+		}
+	}
 }

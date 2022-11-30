@@ -1,11 +1,17 @@
 # Binaries (mac, linux)
 accumulated
 accumulate
+play-accumulate
 !*/
+tools/cmd/gen-types/gen-types
+tools/cmd/gen-enum/gen-enum
+tools/cmd/gen-types/go_build*
+tools/cmd/gen-enum/go_build*
 
-# Binaries
+# Binaries and test data
 *.exe
 *.test
+.testdata
 
 # Temp and log files
 *~
@@ -22,8 +28,13 @@ accumulate
 
 # Tooling
 .idea
-.nodes
+.nodes*
+.factom*
+.genesis
 .vagrant
 .terraform
 .terraform.lock.hcl
 /.vscode/settings.json
+
+#jj
+.newscripts

@@ -1,8 +1,15 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package main
 
 import (
 	_ "embed"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"text/template"
@@ -16,34 +23,48 @@ type Types struct {
 	Types   []*Type
 }
 
+type SingleTypeFile struct {
+	Package string
+	*Type
+}
+
 type Type struct {
-	Name   string
-	Values []*TypeValue
+	Name       string
+	SubPackage string
+	Values     []*TypeValue
 }
 
 type TypeValue struct {
 	Name string
-	typegen.TypeValue
+	Type *Type
+	typegen.EnumValue
 }
 
+var reCamel = regexp.MustCompile(`^\p{Lu}+`)
+
 var Templates = typegen.NewTemplateLibrary(template.FuncMap{
-	"lower":   lower,
-	"natural": natural,
+	"lower":               strings.ToLower,
+	"upper":               strings.ToUpper,
+	"underscoreUpperCase": typegen.UnderscoreUpperCase,
+	"lowerCamel":          func(s string) string { return reCamel.ReplaceAllStringFunc(s, strings.ToLower) },
+	"natural":             natural,
 })
 
-func convert(types map[string]typegen.Type, pkgName string) *Types {
+func convert(types map[string]typegen.Enum, pkgName, subPkgName string) *Types {
 	ttypes := make([]*Type, 0, len(types))
 
 	for name, typ := range types {
 		ttyp := new(Type)
 		ttypes = append(ttypes, ttyp)
 		ttyp.Name = name
+		ttyp.SubPackage = subPkgName
 		ttyp.Values = make([]*TypeValue, 0, len(typ))
 		for name, val := range typ {
 			tval := new(TypeValue)
+			tval.Type = ttyp
 			ttyp.Values = append(ttyp.Values, tval)
 			tval.Name = name
-			tval.TypeValue = *val
+			tval.EnumValue = *val
 		}
 		sort.Slice(ttyp.Values, func(i, j int) bool {
 			v1, ok1 := ttyp.Values[i].Value.(int)
@@ -59,13 +80,6 @@ func convert(types map[string]typegen.Type, pkgName string) *Types {
 	})
 
 	return &Types{Package: pkgName, Types: ttypes}
-}
-
-func lower(s string) string {
-	if s == "" {
-		return ""
-	}
-	return strings.ToLower(s[:1]) + s[1:]
 }
 
 func natural(name string) string {
@@ -84,8 +98,11 @@ func natural(name string) string {
 
 	var word string
 	var split int
+	var offset int
 	for len(splits) > 0 {
 		split, splits = splits[0], splits[1:]
+		split -= offset
+		offset += split
 		word, name = name[:split], name[split:]
 		w.WriteString(word)
 		w.WriteRune(' ')

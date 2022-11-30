@@ -14,48 +14,48 @@ make it harder to follow the changes. Very large changes should be broken up
 into smaller commits. There are valid cases where small commits are OK, such as
 fixing typos or bugs.
 
-Commit messages should be of the form `<type>[scope]: <description>` where the
-scope is optional and must be parenthesized ([conventional commits][1]). If the
+Commit messages should be of the form `<type>(<scope>): <description>`. If the
 commit cannot be fully described in one line, add a blank line followed by a
 longer description. For example:
 
 + Simple
 
-  ```
-  feat: add token issuers
-  ```
-
-+ With scope
-
-  ```
+```markdown
   feat(api): add token issuers
-  ```
+```
 
 + With additional details
 
-  ```
-  feat: add token issuers
+```markdown
+  feat(api): add token issuers
 
   Add an API call to create a new token issuer.
-  ```
+```
 
-The commit type should be one of the following:
+The commit type should be one of the following (in order of priority):
 
-| Type       | Description
-| ---------- | -----------
-| `feat`     | New features
-| `fix`      | Bug fixes
-| `chore`    | Chores, such as cleanup
-| `perf`     | Performance improvements
-| `ci`       | Changes relating exclusively to CI/CD
-| `docs`     | Documentation
-| `test`     | Changes relating exclusively to testing
-| `revert`   | Reverting changes
+| Code    | Description
+| ------- | -----------
+| `test`  | Only impacts tests
+| `ci`    | Only impacts CI/CD
+| `docs`  | Only impacts documentation
+| `feat`  | Adds or updates features
+| `fix`   | Fixes an issue
+| `perf`  | Improves performance without adding/changing features or fixing bugs
+| `chore` | Anything else, including refactoring, style changes, and code quality improvements
 
-Based on [this list][2]. Refactoring and style changes fall under `chore`.
+Based on [this list][2].
+
+The following is an incomplete list of scopes:
+
+| Code      | Description
+| --------- | -----------
+| `prot`    | Changes the protocol, such as transactions, accounts, and validators
+| `api`     | Changes `internal/api`
+| `general` | General changes (such as documentation and CI/CD)
 
 [1]: https://www.conventionalcommits.org/en/v1.0.0/
-[2]:Lhttps://github.com/conventional-changelog/commitlint/tree/master/%40commitlint/config-conventional#problems
+[2]: https://github.com/conventional-changelog/commitlint/tree/master/%40commitlint/config-conventional#problems
 
 ## Submitting Changes
 

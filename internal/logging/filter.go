@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package logging
 
 import (
@@ -41,6 +47,15 @@ func ParseLogLevel(s string, w io.Writer) (string, io.Writer, error) {
 		Out: w,
 		Predicate: func(level zerolog.Level, event map[string]interface{}) bool {
 			m, _ := event["module"].(string)
+
+			// This is a hack to hide annoying cache messages
+			if m == "mempool" {
+				e, _ := event["err"].(string)
+				if e == "tx already exists in cache" {
+					return false
+				}
+			}
+
 			l, ok := levels[m]
 			if !ok {
 				l = defaultLevel

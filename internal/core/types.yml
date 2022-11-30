@@ -1,0 +1,22 @@
+GlobalValues:
+  non-binary: true
+  fields:
+    - name: memoize
+      type: globalValueMemos
+      marshal-as: none
+    - name: Oracle
+      type: protocol.AcmeOracle
+      marshal-as: reference
+      pointer: true
+    - name: Globals
+      type: protocol.NetworkGlobals
+      marshal-as: reference
+      pointer: true
+    - name: Network
+      type: protocol.NetworkDefinition
+      marshal-as: reference
+      pointer: true
+    - name: Routing
+      type: protocol.RoutingTable
+      marshal-as: reference
+      pointer: true

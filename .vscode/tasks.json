@@ -1,0 +1,12 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Init DevNet",
+            "type": "shell",
+            "command": "go run ./cmd/accumulated init devnet -w .nodes --reset -f 0 -v 1 -b 1"
+        }
+    ]
+}

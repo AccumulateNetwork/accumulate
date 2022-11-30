@@ -1,0 +1,290 @@
+ResponseKeyPageIndex:
+  fields:
+    - name: Authority
+      alternative: KeyBook
+      type: url
+      pointer: true
+    - name: Signer
+      alternative: KeyPage
+      type: url
+      pointer: true
+    - name: Index
+      type: uvarint
+      keep-empty: true
+
+ResponseTxHistory:
+  fields:
+    - name: Start
+      type: uint
+      keep-empty: true
+    - name: End
+      type: uint
+      keep-empty: true
+    - name: Total
+      type: uint
+      keep-empty: true
+    - name: Transactions
+      repeatable: true
+      type: ResponseByTxId
+      marshal-as: reference
+
+ResponseChainRange:
+  fields:
+    - name: Type
+      type: protocol.ChainType
+      marshal-as: enum
+    - name: Start
+      type: varint
+      keep-empty: true
+    - name: End
+      type: varint
+      keep-empty: true
+    - name: Total
+      type: varint
+      keep-empty: true
+    - name: Entries
+      repeatable: true
+      type: bytes
+
+ResponseChainEntry:
+  fields:
+    - name: Type
+      type: protocol.ChainType
+      marshal-as: enum
+    - name: Height
+      type: uvarint
+      keep-empty: true
+    - name: Entry
+      type: bytes
+    - name: State
+      repeatable: true
+      type: bytes
+    - name: Receipt
+      type: GeneralReceipt
+      marshal-as: reference
+      pointer: true
+      optional: true
+
+ResponseByTxId:
+  fields:
+    - name: TxId
+      type: txid
+      pointer: true
+    - name: Envelope
+      type: protocol.Envelope
+      marshal-as: reference
+      pointer: true
+    - name: Status
+      type: protocol.TransactionStatus
+      marshal-as: reference
+      pointer: true
+    - name: Produced
+      type: txid
+      pointer: true
+      repeatable: true
+    - name: Height
+      type: uvarint
+      keep-empty: true
+    - name: ChainState
+      repeatable: true
+      type: bytes
+    - name: Receipts
+      repeatable: true
+      type: TxReceipt
+      marshal-as: reference
+      pointer: true
+    - name: Signers
+      type: SignatureSet
+      marshal-as: reference
+      repeatable: true
+
+SignatureSet:
+  fields:
+    - name: Account
+      type: protocol.Account
+      marshal-as: union
+    - name: Signatures
+      type: protocol.Signature
+      marshal-as: union
+      repeatable: true
+
+GeneralReceipt:
+  fields:
+    - name: LocalBlock
+      type: uvarint
+    - name: LocalBlockTime
+      type: time
+      pointer: true
+    - name: DirectoryBlock
+      type: uvarint
+    - name: MajorBlock
+      type: uint
+    - name: Proof
+      type: managed.Receipt
+      marshal-as: reference
+      alternative: Receipt
+    - name: Error
+      type: string
+
+TxReceipt:
+  embeddings:
+  - GeneralReceipt
+  fields:
+    - name: Account
+      type: url
+      marshal-as: reference
+      pointer: true
+    - name: Chain
+      type: string
+
+ResponsePending:
+  fields:
+    - name: Transactions
+      type: txid
+      pointer: true
+      repeatable: true
+
+MultiResponse:
+  incomparable: true
+  fields:
+    - name: Type
+      type: string
+    - name: Items
+      repeatable: true
+      type: string
+    - name: Start
+      type: uvarint
+      keep-empty: true
+    - name: Count
+      type: uvarint
+      keep-empty: true
+    - name: Total
+      type: uvarint
+      keep-empty: true
+
+DirectoryQueryResult:
+  fields:
+    - name: Entries
+      repeatable: true
+      type: string
+      optional: true
+    - name: ExpandedEntries
+      type: protocol.Account
+      marshal-as: union
+      optional: true
+      repeatable: true
+    - name: Total
+      type: uvarint
+      keep-empty: true
+
+ResponseDataEntry:
+  fields:
+    - name: EntryHash
+      type: hash
+    - name: Entry
+      type: protocol.DataEntry
+      marshal-as: union
+    - name: TxId
+      type: txid
+      pointer: true
+    - name: CauseTxId
+      type: txid
+      pointer: true
+
+ResponseDataEntrySet:
+  fields:
+    - name: DataEntries
+      repeatable: true
+      type: ResponseDataEntry
+      marshal-as: reference
+    - name: Total
+      type: uvarint
+
+ChainState:
+  fields:
+    - name: Name
+      type: string
+    - name: Type
+      type: protocol.ChainType
+      marshal-as: enum
+    - name: Height
+      type: uvarint
+      alternative: Count
+    - name: Roots
+      repeatable: true
+      type: bytes
+
+ResponseAccount:
+  fields:
+    - name: Account
+      type: protocol.Account
+      marshal-as: union
+    - name: ChainState
+      type: ChainState
+      marshal-as: reference
+      repeatable: true
+    - name: Receipt
+      type: GeneralReceipt
+      marshal-as: reference
+      pointer: true
+      optional: true
+
+ResponseMinorBlocks:
+  fields:
+    - name: TotalBlocks
+      type: uint
+      keep-empty: true
+    - name: Entries
+      repeatable: true
+      type: ResponseMinorEntry
+      pointer: true
+      marshal-as: reference
+
+ResponseMinorEntry:
+  fields:
+    - name: BlockIndex
+      description: is the index of the block. Only include when indexing the root anchor chain
+      type: uint
+    - name: BlockTime
+      description: is the start time of the block.
+      type: time
+      pointer: true
+    - name: TxCount
+      description: shows how many transactions this block contains
+      type: uint
+    - name: TxIds
+      repeatable: true
+      type: bytes
+    - name: Transactions
+      description: the transactions within this block
+      type: ResponseByTxId
+      repeatable: true
+      pointer: true
+      marshal-as: reference
+
+ResponseMajorBlocks:
+  fields:
+    - name: TotalBlocks
+      type: uint
+      keep-empty: true
+    - name: Entries
+      repeatable: true
+      type: ResponseMajorEntry
+      pointer: true
+      marshal-as: reference
+
+ResponseMajorEntry:
+  fields:
+    - name: MajorBlockIndex
+      description: is the index of the block. Only include when indexing the root anchor chain
+      type: uint
+    - name: MajorBlockTime
+      description: is the start time of the block.
+      type: time
+      pointer: true
+    - name: MinorBlocks
+      description: the minor blocks within this block (excluding transactions)
+      type: ResponseMinorEntry
+      repeatable: true
+      pointer: true
+      marshal-as: reference

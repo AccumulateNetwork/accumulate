@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package main
 
 import (
@@ -51,7 +57,7 @@ func manageService(cmd *cobra.Command, args []string) {
 		serviceConfig.Option["UserService"] = true
 	}
 
-	prog := NewProgram(cmd)
+	prog := NewProgram(cmd, singleNodeWorkDir, nil)
 	svc, err := service.New(prog, serviceConfig)
 	check(err)
 
@@ -75,7 +81,7 @@ func manageService(cmd *cobra.Command, args []string) {
 
 	switch args[0] {
 	case ServiceInstall, ServiceReinstall:
-		wd, err := prog.workDir()
+		wd, err := singleNodeWorkDir(cmd)
 		check(err)
 
 		// TODO Better way of doing this?

@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package protocol
 
 import (
@@ -5,45 +11,40 @@ import (
 	"reflect"
 
 	"github.com/go-playground/validator/v10"
-	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/managed"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
 // ChainType is the type of a chain belonging to an account.
-type ChainType uint64
+type ChainType = managed.ChainType
+
+const ChainTypeUnknown = managed.ChainTypeUnknown
+const ChainTypeTransaction = managed.ChainTypeTransaction
+const ChainTypeAnchor = managed.ChainTypeAnchor
+const ChainTypeIndex = managed.ChainTypeIndex
+
+// BookType is the type of a key book.
+type BookType uint64
 
 // ObjectType is the type of an object in the database.
 type ObjectType uint64
 
-// KeyPageOperation is the operation type of an UpdateKeyPage transaction.
-type KeyPageOperation uint8
+// KeyPageOperationType is the operation type of an UpdateKeyPage operation.
+type KeyPageOperationType uint8
 
-// TransactionType is the type for transaction types
-type TransactionType uint64
+// AccountAuthOperationType is the operation type of an UpdateAccountAuth operation.
+type AccountAuthOperationType uint8
 
-// TransactionMax defines the max point for transaction types
-type TransactionMax uint64
+type ErrorCode int
 
-// IsUser returns true if the transaction type is user.
-func (t TransactionType) IsUser() bool {
-	return TransactionTypeUnknown < t && t.ID() <= TransactionMaxUser.ID()
-}
+type PartitionType int
 
-// IsSynthetic returns true if the transaction type is synthetic.
-func (t TransactionType) IsSynthetic() bool {
-	return TransactionMaxUser.ID() < t.ID() && t.ID() <= TransactionMaxSynthetic.ID()
-}
-
-// IsInternal returns true if the transaction type is internal.
-func (t TransactionType) IsInternal() bool {
-	return TransactionMaxSynthetic.ID() < t.ID() && t.ID() <= TransactionMaxInternal.ID()
-}
-
-//go:generate go run ../tools/cmd/gen-types accounts.yml general.yml internal.yml query.yml transactions.yml
-//go:generate go run ../tools/cmd/gen-enum --out enums_gen.go enums.yml
+//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types account_auth_operations.yml accounts.yml general.yml system.yml key_page_operations.yml query.yml signatures.yml synthetic_transactions.yml transaction.yml transaction_results.yml user_transactions.yml
+//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-enum --out enums_gen.go enums.yml errors.yml
 
 ///intentionally disabled for now
-///go:generate go run ../tools/cmd/gen-types accounts.yml general.yml internal.yml query.yml transactions.yml --out ../export/sdk/c --language c
-///go:generate go run ../tools/cmd/gen-enum enums.yml --out ../export/sdk/c --language c
+///go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --out ../export/sdk/c --language c account_auth_operations.yml accounts.yml general.yml system.yml key_page_operations.yml query.yml signatures.yml synthetic_transactions.yml transaction.yml transaction_results.yml user_transactions.yml
+///go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-enum enums.yml --out ../export/sdk/c --language c
 
 func NewValidator() (*validator.Validate, error) {
 	v := validator.New()

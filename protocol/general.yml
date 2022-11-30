@@ -1,15 +1,20 @@
 # General data types
 
-ObjectMetadata:
+Object:
   fields:
     - name: Type
+      description: is the object's type
       type: ObjectType
-      marshal-as: value
+      marshal-as: enum
     - name: Chains
-      type: slice
-      slice:
-        type: ChainMetadata
-        marshal-as: reference
+      description: lists the account's chains
+      repeatable: true
+      type: ChainMetadata
+      marshal-as: reference
+    - name: Pending
+      description: lists the account's pending transactions
+      type: TxIdSet
+      marshal-as: reference
 
 ChainMetadata:
   fields:
@@ -17,15 +22,41 @@ ChainMetadata:
       type: string
     - name: Type
       type: ChainType
-      marshal-as: value
+      marshal-as: enum
+
+BlockEntry:
+  fields:
+    - name: Account
+      type: url
+      pointer: true
+    - name: Chain
+      type: string
+    - name: Index
+      type: uint
+      keep-empty: true
+
+AccountAuth:
+  fields:
+    - name: Authorities
+      type: AuthorityEntry
+      marshal-as: reference
+      repeatable: true
+
+AuthorityEntry:
+  fields:
+    - name: Url
+      type: url
+      pointer: true
+    - name: Disabled
+      description: disables auth checks for this authority, allowing anyone to sign for it
+      type: bool
 
 AnchorMetadata:
   embeddings:
     - ChainMetadata
   fields:
     - name: Account
-      type: url.URL
-      marshal-as: reference
+      type: url
       pointer: true
     - name: Index
       type: uvarint
@@ -36,53 +67,238 @@ AnchorMetadata:
     - name: Entry
       type: bytes
 
-DataEntry:
+AcmeOracle:
   fields:
-    - name: ExtIds
-      type: slice
-      optional: true
-      slice:
-        type: bytes
+    - name: Price
+      type: uvarint
+
+IndexEntry:
+  description: represents an entry in an index chain
+  fields:
+    - name: Source
+      description: is the index of the chain from which an anchor was taken
+      type: uint
+    - name: Anchor
+      description: is the index of the chain into which the anchor was added. Omit when indexing the root anchor chain
+      type: uint
+    - name: BlockIndex
+      description: is the index of the block. Only include when indexing the root anchor chain
+      type: uint
+    - name: BlockTime
+      description: is the start time of the block. Only include when indexing the root anchor chain
+      type: time
+      pointer: true
+    - name: RootIndexIndex
+      description: is the index of the root anchor index chain entry. Only include when indexing the anchor ledger for a major block
+      type: uint
+
+AccumulateDataEntry:
+  union: { type: dataEntry }
+  fields:
+    - name: Data
+      repeatable: true
+      type: bytes
+
+FactomDataEntryWrapper:
+  union: { type: dataEntry, value: Factom }
+  fields:
+    - type: FactomDataEntry
+      marshal-as: reference
+
+FactomDataEntry:
+  non-binary: true
+  fields:
+    - name: AccountId
+      type: hash
     - name: Data
       type: bytes
-      optional: true
-
-DirectoryIndexMetadata:
-  fields:
-    - name: Count
-      type: uvarint
-
-TransactionStatus:
-  fields:
-    - name: Remote
-      type: bool
-    - name: Delivered
-      type: bool
-    - name: Pending
-      type: bool
-    - name: Code
-      type: uvarint
-    - name: Message
-      type: string
-    - name: Result
-      type: TransactionResult
-      optional: true
-      marshal-as: value
-      unmarshal-with: UnmarshalTransactionResult
-
-Receipt:
-  fields:
-    - name: Start
+    - name: ExtIds
+      repeatable: true
       type: bytes
+
+TxIdSet:
+  fields:
     - name: Entries
-      type: slice
-      slice:
-        type: ReceiptEntry
-        marshal-as: reference
+      type: txid
+      pointer: true
+      repeatable: true
 
-ReceiptEntry:
+TokenRecipient:
   fields:
-    - name: Right
-      type: bool
-    - name: Hash
+    - name: Url
+      type: url
+      pointer: true
+    - name: Amount
+      type: bigint
+
+ChainParams:
+  fields:
+    - name: Data
       type: bytes
+    - name: IsUpdate
+      type: bool
+
+KeySpecParams:
+  fields:
+    - name: KeyHash
+      type: bytes
+    - name: Delegate
+      type: url
+      pointer: true
+      optional: true
+
+KeySpec:
+  fields:
+    - name: PublicKeyHash
+      type: bytes
+      alternative: PublicKey
+    - name: LastUsedOn
+      type: uvarint
+    - name: Delegate
+      type: url
+      pointer: true
+
+NetworkGlobals:
+  fields:
+    - name: OperatorAcceptThreshold
+      type: Rational
+      marshal-as: reference
+    - name: ValidatorAcceptThreshold
+      type: Rational
+      marshal-as: reference
+    - name: MajorBlockSchedule
+      type: string
+      description: a cron expression defining the (approximate) major blocks interval
+    - name: AnchorEmptyBlocks
+      description: controls whether an anchor is sent for a block if the block contains no transactions other than a directory anchor
+      type: bool
+    - name: FeeSchedule
+      type: FeeSchedule
+      marshal-as: reference
+      pointer: true
+    - name: Limits
+      type: NetworkLimits
+      marshal-as: reference
+      pointer: true
+
+FeeSchedule:
+  fields:
+    - name: CreateIdentitySliding
+      description: is the sliding fee schedule for creating an ADI. The first entry is the cost of a one-character ADI, the second is the cost of a two-character ADI, etc
+      type: Fee
+      marshal-as: enum
+      repeatable: true
+
+NetworkLimits:
+  fields:
+    - name: DataEntryParts
+      description: is the maximum number of parts a data entry can have
+      type: uint
+    - name: AccountAuthorities
+      description: is the maximum number of authorities an account can have
+      type: uint
+    - name: BookPages
+      description: is the maximum number of pages a book can have
+      type: uint
+    - name: PageEntries
+      description: is the maximum number of entries a page can have
+      type: uint
+    - name: IdentityAccounts
+      description: is the maximum number of accounts an identity can have (excluding accounts of sub ADIs)
+      type: uint
+
+Rational:
+  fields:
+    - name: Numerator
+      type: uint
+    - name: Denominator
+      type: uint
+
+NetworkDefinition:
+  fields:
+    - name: NetworkName
+      type: string
+    - name: Version
+      type: uint
+    - name: Partitions
+      type: PartitionInfo
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+    - name: Validators
+      type: ValidatorInfo
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+
+PartitionInfo:
+  fields:
+    - name: ID
+      type: string
+    - name: Type
+      type: PartitionType
+      marshal-as: enum
+
+ValidatorInfo:
+  fields:
+    - name: PublicKey
+      type: bytes
+    - name: PublicKeyHash
+      type: hash
+    - name: Operator
+      type: url
+      pointer: true
+    - name: Partitions
+      type: ValidatorPartitionInfo
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+
+ValidatorPartitionInfo:
+  fields:
+    - name: ID
+      type: string
+    - name: Active
+      type: bool
+      keep-empty: true
+
+RoutingTable:
+  fields:
+    - name: Overrides
+      type: RouteOverride
+      marshal-as: reference
+      repeatable: true
+    - name: Routes
+      type: Route
+      marshal-as: reference
+      repeatable: true
+
+Route:
+  fields:
+    - name: Length
+      description: is the prefix length
+      type: uint
+    - name: Value
+      description: is the prefix value
+      type: uint
+    - name: Partition
+      type: string
+
+RouteOverride:
+  fields:
+    - name: Account
+      type: url
+      pointer: true
+    - name: Partition
+      type: string
+
+TokenIssuerProof:
+  fields:
+    - name: Transaction
+      type: CreateToken
+      marshal-as: reference
+      pointer: true
+    - name: Receipt
+      type: managed.Receipt
+      marshal-as: reference
+      pointer: true
