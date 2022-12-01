@@ -89,7 +89,7 @@ func Parse(s string) (Address, error) {
 	}
 
 	// Unprefixed lite account
-	b, err = hex.DecodeString(strings.SplitN(s, "/", 2)[0])
+	_, err = hex.DecodeString(strings.SplitN(s, "/", 2)[0])
 	if err == nil {
 		return parseLite(s)
 	}
