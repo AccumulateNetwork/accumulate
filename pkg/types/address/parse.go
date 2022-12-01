@@ -164,13 +164,13 @@ func parse1(s string, min, max int, prefix ...byte) ([]byte, error) {
 	}
 
 	// Verify the checksum
-	checksum := sha256.Sum256(b[:len(prefix)+min])
+	checksum := sha256.Sum256(b[:len(b)-4])
 	checksum = sha256.Sum256(checksum[:])
-	if !bytes.Equal(b[len(prefix)+min:], checksum[:4]) {
+	if !bytes.Equal(b[len(b)-4:], checksum[:4]) {
 		return nil, errors.BadRequest.With("bad checksum")
 	}
 
-	return b[len(prefix) : len(prefix)+min], nil
+	return b[len(prefix) : len(b)-4], nil
 }
 
 func parse2(s string, bytelen int, prefix string) ([]byte, error) {
