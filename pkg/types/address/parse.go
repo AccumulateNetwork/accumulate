@@ -41,14 +41,14 @@ func Parse(s string) (Address, error) {
 		return &PrivateKey{PublicKey: PublicKey{Type: protocol.SignatureTypeED25519, Key: key[32:]}, Key: key}, err
 
 	case "FA": // Factom public
-		b, err := parse1(s, sha256.Size, 0x5f, 0xb1)
+		b, err := parse1(s, sha256.Size, sha256.Size, 0x5f, 0xb1)
 		if err != nil {
 			return nil, errors.BadRequest.WithFormat("invalid FA address: %w", err)
 		}
 		return &PublicKeyHash{Type: protocol.SignatureTypeRCD1, Hash: b}, nil
 
 	case "Fs": // Factom private
-		b, err := parse1(s, ed25519.SeedSize, 0x64, 0x78)
+		b, err := parse1(s, ed25519.SeedSize, ed25519.SeedSize, 0x64, 0x78)
 		if err != nil {
 			return nil, errors.BadRequest.WithFormat("invalid Fs address: %w", err)
 		}
@@ -56,7 +56,7 @@ func Parse(s string) (Address, error) {
 		return &PrivateKey{PublicKey: PublicKey{Type: protocol.SignatureTypeRCD1, Key: key[32:]}, Key: key}, err
 
 	case "BT": // Bitcoin public
-		b, err := parse1(s[2:], sha256.Size, 0x00)
+		b, err := parse1(s[2:], 20, sha256.Size, 0x00)
 		if err != nil {
 			return nil, errors.BadRequest.WithFormat("invalid BTC address: %w", err)
 		}
@@ -141,7 +141,7 @@ func parseMH(s string) (Address, error) {
 	return (*UnknownMultihash)(mh), nil
 }
 
-func parse1(s string, bytelen int, prefix ...byte) ([]byte, error) {
+func parse1(s string, min, max int, prefix ...byte) ([]byte, error) {
 	// Decode
 	b, err := base58.Decode(s)
 	if err != nil {
@@ -154,18 +154,23 @@ func parse1(s string, bytelen int, prefix ...byte) ([]byte, error) {
 	}
 
 	// Check the length
-	if len(b) != len(prefix)+bytelen+4 {
-		return nil, errors.BadRequest.WithFormat("want %d bytes, got %d", len(prefix)+bytelen+4, len(b))
+	switch {
+	case min == max && len(b) != len(prefix)+min+4:
+		return nil, errors.BadRequest.WithFormat("want %d bytes, got %d", len(prefix)+min+4, len(b))
+	case len(b) < len(prefix)+min+4:
+		return nil, errors.BadRequest.WithFormat("want at least %d bytes, got %d", len(prefix)+min+4, len(b))
+	case len(b) > len(prefix)+max+4:
+		return nil, errors.BadRequest.WithFormat("want at most %d bytes, got %d", len(prefix)+max+4, len(b))
 	}
 
 	// Verify the checksum
-	checksum := sha256.Sum256(b[:len(prefix)+bytelen])
+	checksum := sha256.Sum256(b[:len(prefix)+min])
 	checksum = sha256.Sum256(checksum[:])
-	if !bytes.Equal(b[len(prefix)+bytelen:], checksum[:4]) {
+	if !bytes.Equal(b[len(prefix)+min:], checksum[:4]) {
 		return nil, errors.BadRequest.With("bad checksum")
 	}
 
-	return b[len(prefix) : len(prefix)+bytelen], nil
+	return b[len(prefix) : len(prefix)+min], nil
 }
 
 func parse2(s string, bytelen int, prefix string) ([]byte, error) {
