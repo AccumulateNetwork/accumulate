@@ -48,6 +48,35 @@ func newSimplex[T encoding.BinaryValue](ctx context.Context, unmarshal func([]by
 	return p
 }
 
+func DuplexPipe(ctx context.Context) (p, q *pipe[Message]) {
+	return newDuplex(ctx, Unmarshal)
+}
+
+func DuplexPipeOf[T any, PT valuePtr[T]](ctx context.Context) (p, q *pipe[PT]) {
+	return newDuplex(ctx, func(b []byte) (PT, error) {
+		v := PT(new(T))
+		err := v.UnmarshalBinary(b)
+		return v, err
+	})
+}
+
+func newDuplex[T encoding.BinaryValue](ctx context.Context, unmarshal func([]byte) (T, error)) (p, q *pipe[T]) {
+	p, q = new(pipe[T]), new(pipe[T])
+	p.unmarshal, q.unmarshal = unmarshal, unmarshal
+
+	// p → q
+	pq := make(chan []byte)
+	p.wr = newPipeDir[chan<- []byte](pq, ctx)
+	q.rd = newPipeDir[<-chan []byte](pq, ctx)
+
+	// p → q
+	qp := make(chan []byte)
+	q.wr = newPipeDir[chan<- []byte](qp, ctx)
+	p.rd = newPipeDir[<-chan []byte](qp, ctx)
+
+	return p, q
+}
+
 func piperr(ctx context.Context, onCancel error) error {
 	err := ctx.Err()
 	if errors.Is(err, context.Canceled) {

@@ -13,6 +13,10 @@ import (
 type Client struct {
 	Dialer Dialer
 	Router Router
+
+	// DisableFanout disables request fanout and response aggregation for
+	// requests such as transaction hash searches.
+	DisableFanout bool
 }
 
 type Router interface {
@@ -82,6 +86,10 @@ func typedRequest[M response[T], T any](c *Client, ctx context.Context, req Mess
 func (c *Client) routedRoundTrip(ctx context.Context, requests []Message, callback func(res, req Message) error) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+
+	if c.DisableFanout {
+		return c.roundTrip(ctx, requests, callback)
+	}
 
 	// Collect aggregate requests
 	var parts []multiaddr.Multiaddr

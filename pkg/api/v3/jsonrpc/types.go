@@ -2,7 +2,7 @@ package jsonrpc
 
 import "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 
-//go:generate go run ../../../../tools/cmd/gen-types --package jsonrpc requests.yml --reference ../options.yml
+//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --package jsonrpc requests.yml --reference ../options.yml
 
 type RangeOptions = api.RangeOptions
 type NodeStatusOptions = api.NodeStatusOptions
