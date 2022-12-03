@@ -92,7 +92,7 @@ func TestMissingSynthTxn(t *testing.T) {
 	sim := simulator.NewWith(t, simulator.SimulatorOptions{
 		// Add more logging to debug the intermittent failure
 		LogLevels: config.LogLevel{}.
-			Parse(acctesting.DefaultLogLevels).
+			Parse(config.DefaultLogLevels).
 			SetModule("executor", "debug").
 			SetModule("synthetic", "debug").
 			String(),

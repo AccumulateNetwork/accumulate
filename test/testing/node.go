@@ -30,35 +30,9 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-const LogConsole = true
-
 func NewTestLogger(t testing.TB) log.Logger {
-	if !LogConsole {
-		return logging.NewTestLogger(t, "plain", DefaultLogLevels, false)
-	}
-
-	w, err := logging.NewConsoleWriter("plain")
-	require.NoError(t, err)
-	level, writer, err := logging.ParseLogLevel(DefaultLogLevels, w)
-	require.NoError(t, err)
-	logger, err := logging.NewTendermintLogger(zerolog.New(writer), level, false)
-	require.NoError(t, err)
-	return logger
+	return logging.ConsoleLoggerForTest(t, config.DefaultLogLevels)
 }
-
-var DefaultLogLevels = config.LogLevel{}.
-	Parse(config.DefaultLogLevels).
-	SetModule("restore", "error").
-	// SetModule("accumulate", "debug").
-	// SetModule("executor", "debug").
-	// SetModule("synthetic", "debug").
-	// SetModule("anchoring", "info").
-	// SetModule("block", "debug").
-	// SetModule("storage", "debug").
-	// SetModule("database", "debug").
-	// SetModule("fake-node", "debug").
-	// SetModule("fake-tendermint", "info").
-	String()
 
 func DefaultConfig(networkName string, net config.NetworkType, node config.NodeType, netId string) *config.Config {
 	cfg := config.Default(networkName, net, node, netId) //
@@ -75,7 +49,7 @@ func DefaultConfig(networkName string, net config.NetworkType, node config.NodeT
 		},
 	}
 
-	cfg.LogLevel = DefaultLogLevels
+	cfg.LogLevel = config.DefaultLogLevels
 	return cfg
 }
 
@@ -96,20 +70,13 @@ func CreateTestNet(t testing.TB, numBvns, numValidators, numFollowers int, withF
 		},
 	})
 
-	var initLogger log.Logger
-	var logWriter func(format string) (io.Writer, error)
-	if LogConsole {
-		logWriter = logging.NewConsoleWriter
-		w, err := logging.NewConsoleWriter("plain")
-		require.NoError(t, err)
-		level, writer, err := logging.ParseLogLevel(DefaultLogLevels, w)
-		require.NoError(t, err)
-		initLogger, err = logging.NewTendermintLogger(zerolog.New(writer), level, false)
-		require.NoError(t, err)
-	} else {
-		logWriter = logging.TestLogWriter(t)
-		initLogger = logging.NewTestLogger(t, "plain", DefaultLogLevels, false)
-	}
+	logWriter := logging.NewConsoleWriter
+	w, err := logging.NewConsoleWriter("plain")
+	require.NoError(t, err)
+	level, writer, err := logging.ParseLogLevel(config.DefaultLogLevels, w)
+	require.NoError(t, err)
+	initLogger, err := logging.NewTendermintLogger(zerolog.New(writer), level, false)
+	require.NoError(t, err)
 
 	// Disable the sliding fee schedule
 	values := new(core.GlobalValues)

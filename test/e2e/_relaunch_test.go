@@ -73,12 +73,7 @@ func TestRelaunch(t *testing.T) {
 	}
 
 	// Reload and restart it
-	var logWriter func(format string) (io.Writer, error)
-	if acctesting.LogConsole {
-		logWriter = logging.NewConsoleWriter
-	} else {
-		logWriter = logging.TestLogWriter(t)
-	}
+	logWriter := logging.NewConsoleWriter
 	for _, partition := range partitions {
 		daemons := daemons[partition]
 		for i := range daemons {

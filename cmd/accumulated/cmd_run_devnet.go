@@ -16,6 +16,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 	tmconfig "github.com/tendermint/tendermint/config"
@@ -58,6 +59,7 @@ var fallbackColor = color.New(color.FgHiBlack)
 
 func runDevNet(*cobra.Command, []string) {
 	fmt.Println("Starting devnet")
+	jsonrpc2.DebugMethodFunc = true
 
 	if flagRun.Debug {
 		testing.EnableDebugFeatures()

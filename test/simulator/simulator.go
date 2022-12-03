@@ -19,8 +19,10 @@ import (
 	btc "github.com/btcsuite/btcd/btcec"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/multiformats/go-multiaddr"
 	"github.com/tendermint/tendermint/libs/log"
 	tmtypes "github.com/tendermint/tendermint/types"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
@@ -31,6 +33,7 @@ import (
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -358,6 +361,84 @@ func (s *Simulator) ListenAndServe(ctx context.Context, hook func(*Simulator, ht
 		}
 	}
 	return errg.Wait()
+}
+
+func (s *Simulator) ListenP2P(ctx context.Context) ([]multiaddr.Multiaddr, context.CancelFunc, error) {
+	ctx, cancel := context.WithCancel(ctx)
+
+	var peers []multiaddr.Multiaddr
+	addrs := map[*Node][]multiaddr.Multiaddr{}
+	for _, part := range s.partitions {
+		for _, node := range part.nodes {
+			var addr1, addr2 multiaddr.Multiaddr
+			if part.Type == config.Directory {
+				addr1 = node.init.Listen().Scheme("tcp").Directory().AccumulateP2P().Multiaddr()
+				addr2 = node.init.Listen().Scheme("udp").Directory().AccumulateP2P().Multiaddr()
+			} else {
+				addr1 = node.init.Listen().Scheme("tcp").BlockValidator().AccumulateP2P().Multiaddr()
+				addr2 = node.init.Listen().Scheme("udp").BlockValidator().AccumulateP2P().Multiaddr()
+			}
+
+			key, err := crypto.UnmarshalEd25519PublicKey(node.nodeKey[32:])
+			if err != nil {
+				cancel()
+				return nil, nil, err
+			}
+			id, err := peer.IDFromPublicKey(key)
+			if err != nil {
+				cancel()
+				return nil, nil, err
+			}
+			p2p, err := multiaddr.NewComponent("p2p", id.String())
+			if err != nil {
+				cancel()
+				return nil, nil, err
+			}
+
+			peers = append(peers, addr1.Encapsulate(p2p), addr1.Encapsulate(p2p))
+			addrs[node] = append(addrs[node], addr1, addr2)
+		}
+	}
+	for _, part := range s.partitions {
+		for _, node := range part.nodes {
+			svc := (*nodeService)(node)
+			h, err := message.NewHandler(
+				s.logger.With("module", "acc-rpc"),
+				&message.NodeService{NodeService: svc},
+				&message.MetricsService{MetricsService: svc},
+				&message.NetworkService{NetworkService: svc},
+				&message.Querier{Querier: svc},
+				&message.Submitter{Submitter: svc},
+				&message.Validator{Validator: svc},
+				&message.Sequencer{Sequencer: node.seqSvc},
+			)
+			if err != nil {
+				cancel()
+				return nil, nil, err
+			}
+
+			p2p, err := p2p.New(p2p.Options{
+				Logger:         s.logger.With("module", "acc-rpc"),
+				Listen:         addrs[node],
+				BootstrapPeers: peers,
+				Key:            node.nodeKey,
+			})
+			if err != nil {
+				cancel()
+				return nil, nil, err
+			}
+			go func() {
+				<-ctx.Done()
+				_ = p2p.Close()
+			}()
+
+			_ = h
+			// p2p.SetRpcHandler(part.ID, h.Handle)
+
+			s.logger.Info("Node P2P up", "partition", part.ID, "node", node.id, "addresses", p2p.Addrs())
+		}
+	}
+	return peers, cancel, nil
 }
 
 func (s *Simulator) SignWithNode(partition string, i int) nodeSigner {

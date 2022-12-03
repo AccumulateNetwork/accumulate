@@ -73,7 +73,7 @@ func TestRepairIndices(t *testing.T) {
 	})
 
 	// Save to and restore from snapshot
-	logger := logging.NewTestLogger(t, "plain", acctesting.DefaultLogLevels, false)
+	logger := logging.NewTestLogger(t, "plain", config.DefaultLogLevels, false)
 	snapshots := map[string][]byte{}
 	for _, p := range sim.Partitions() {
 		View(t, sim.Database(p.ID), func(batch *database.Batch) {

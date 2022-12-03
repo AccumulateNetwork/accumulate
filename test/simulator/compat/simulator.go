@@ -17,6 +17,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -70,7 +71,7 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 		opts.BvnCount = 3
 	}
 	if opts.LogLevels == "" {
-		opts.LogLevels = acctesting.DefaultLogLevels
+		opts.LogLevels = config.DefaultLogLevels
 	}
 	if opts.OpenDB == nil {
 		opts.OpenDB = simulator.MemoryDatabase

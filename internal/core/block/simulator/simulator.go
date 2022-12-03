@@ -68,10 +68,6 @@ type Simulator struct {
 }
 
 func (s *Simulator) newLogger(opts SimulatorOptions) log.Logger {
-	if !acctesting.LogConsole {
-		return logging.NewTestLogger(s, "plain", opts.LogLevels, false)
-	}
-
 	w, err := logging.NewConsoleWriter("plain")
 	require.NoError(s, err)
 	level, writer, err := logging.ParseLogLevel(opts.LogLevels, w)
@@ -104,7 +100,7 @@ func (sim *Simulator) Setup(opts SimulatorOptions) {
 		opts.BvnCount = 3
 	}
 	if opts.LogLevels == "" {
-		opts.LogLevels = acctesting.DefaultLogLevels
+		opts.LogLevels = config.DefaultLogLevels
 	}
 	if opts.OpenDB == nil {
 		opts.OpenDB = func(_ string, _ int, logger log.Logger) *database.Database {
@@ -248,8 +244,8 @@ func (s *Simulator) SetRouteFor(account *url.URL, partition string) {
 	}
 }
 
-func (s *Simulator) Router() routing.Router {
-	return s.router
+func (s *Simulator) Router() router {
+	return router{s, s.router}
 }
 
 func (s *Simulator) Partition(id string) *ExecEntry {
@@ -589,7 +585,6 @@ func (x *ExecEntry) init(sim *Simulator, logger log.Logger, partition *config.Pa
 	x.tb = sim.tb
 	x.Partition = partition
 
-	// Initialize the executor
 	execOpts := block.ExecutorOptions{
 		Logger:        logger,
 		Database:      x,

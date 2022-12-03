@@ -11,12 +11,12 @@ import (
 	"sync"
 )
 
-type rateLimitedListener struct {
+type RateLimitedListener struct {
 	net.Listener
 	Pool chan struct{}
 }
 
-func (l *rateLimitedListener) Accept() (net.Conn, error) {
+func (l *RateLimitedListener) Accept() (net.Conn, error) {
 	<-l.Pool
 
 	conn, err := l.Listener.Accept()

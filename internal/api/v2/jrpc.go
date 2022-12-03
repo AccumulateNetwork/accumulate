@@ -14,11 +14,13 @@ import (
 	"mime"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/go-playground/validator/v10"
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/web"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -65,6 +67,18 @@ func (m *JrpcMethods) NewMux() *http.ServeMux {
 	mux.Handle("/version", m.jrpc2http(m.Version))
 	mux.Handle("/describe", m.jrpc2http(m.Describe))
 	mux.Handle("/v2", jsonrpc2.HTTPRequestHandler(m.methods, stdlog.New(os.Stdout, "", 0)))
+
+	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Location", "/x")
+		w.WriteHeader(http.StatusTemporaryRedirect)
+	})
+
+	webex := web.Handler()
+	mux.HandleFunc("/x/", func(w http.ResponseWriter, r *http.Request) {
+		r.URL.Path = strings.TrimPrefix(r.URL.Path, "/x")
+		r.RequestURI = strings.TrimPrefix(r.RequestURI, "/x")
+		webex.ServeHTTP(w, r)
+	})
 	return mux
 }
 
@@ -143,6 +157,8 @@ func (m *JrpcMethods) Describe(ctx context.Context, _ json.RawMessage) interface
 	res.PartitionId = m.Options.Describe.PartitionId
 	res.NetworkType = m.Options.Describe.NetworkType
 	res.Network = m.Options.Describe.Network
+	res.PartitionId = m.Options.Describe.PartitionId
+	res.NetworkType = m.Options.Describe.NetworkType
 	res.Values.Globals = net.Globals
 	res.Values.Network = net.Network
 	res.Values.Oracle = net.Oracle
