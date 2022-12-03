@@ -1,0 +1,36 @@
+ErrorEvent:
+  union: { type: event }
+  fields:
+    - name: Err
+      type: errors2.Error
+      marshal-as: reference
+      pointer: true
+
+BlockEvent:
+  union: { type: event }
+  fields:
+    - name: Partition
+      type: string
+    - name: Index
+      type: uint
+    - name: Time
+      type: time
+    - name: Major
+      type: uint
+    - name: Entries
+      type: ChainEntryRecord[Record]
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+
+GlobalsEvent:
+  union: { type: event }
+  fields:
+    - name: Old
+      type: core.GlobalValues
+      marshal-as: reference
+      pointer: true
+    - name: New
+      type: core.GlobalValues
+      marshal-as: reference
+      pointer: true

@@ -79,6 +79,7 @@ func NewHandler(opts Options) (*Handler, error) {
 		message.Querier{Querier: client},
 		message.Submitter{Submitter: client},
 		message.Validator{Validator: client},
+		message.EventService{EventService: client},
 	)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("initialize websocket API: %w", err)

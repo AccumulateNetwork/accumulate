@@ -32,6 +32,9 @@ const TypeSubmitRequest Type = 5
 // TypeValidateRequest .
 const TypeValidateRequest Type = 6
 
+// TypeSubscribeRequest .
+const TypeSubscribeRequest Type = 7
+
 // TypeErrorResponse .
 const TypeErrorResponse Type = 32
 
@@ -53,6 +56,12 @@ const TypeSubmitResponse Type = 37
 // TypeValidateResponse .
 const TypeValidateResponse Type = 38
 
+// TypeSubscribeResponse .
+const TypeSubscribeResponse Type = 39
+
+// TypeEvent .
+const TypeEvent Type = 64
+
 // TypePrivateSequenceRequest .
 const TypePrivateSequenceRequest Type = 128
 
@@ -69,7 +78,7 @@ func (v Type) GetEnumValue() uint64 { return uint64(v) }
 func (v *Type) SetEnumValue(id uint64) bool {
 	u := Type(id)
 	switch u {
-	case TypeNodeStatusRequest, TypeNetworkStatusRequest, TypeMetricsRequest, TypeQueryRequest, TypeSubmitRequest, TypeValidateRequest, TypeErrorResponse, TypeNodeStatusResponse, TypeNetworkStatusResponse, TypeMetricsResponse, TypeRecordResponse, TypeSubmitResponse, TypeValidateResponse, TypePrivateSequenceRequest, TypePrivateSequenceResponse, TypeAddressed:
+	case TypeNodeStatusRequest, TypeNetworkStatusRequest, TypeMetricsRequest, TypeQueryRequest, TypeSubmitRequest, TypeValidateRequest, TypeSubscribeRequest, TypeErrorResponse, TypeNodeStatusResponse, TypeNetworkStatusResponse, TypeMetricsResponse, TypeRecordResponse, TypeSubmitResponse, TypeValidateResponse, TypeSubscribeResponse, TypeEvent, TypePrivateSequenceRequest, TypePrivateSequenceResponse, TypeAddressed:
 		*v = u
 		return true
 	default:
@@ -92,6 +101,8 @@ func (v Type) String() string {
 		return "submitRequest"
 	case TypeValidateRequest:
 		return "validateRequest"
+	case TypeSubscribeRequest:
+		return "subscribeRequest"
 	case TypeErrorResponse:
 		return "errorResponse"
 	case TypeNodeStatusResponse:
@@ -106,6 +117,10 @@ func (v Type) String() string {
 		return "submitResponse"
 	case TypeValidateResponse:
 		return "validateResponse"
+	case TypeSubscribeResponse:
+		return "subscribeResponse"
+	case TypeEvent:
+		return "event"
 	case TypePrivateSequenceRequest:
 		return "privateSequenceRequest"
 	case TypePrivateSequenceResponse:
@@ -132,6 +147,8 @@ func TypeByName(name string) (Type, bool) {
 		return TypeSubmitRequest, true
 	case "validaterequest":
 		return TypeValidateRequest, true
+	case "subscriberequest":
+		return TypeSubscribeRequest, true
 	case "errorresponse":
 		return TypeErrorResponse, true
 	case "nodestatusresponse":
@@ -146,6 +163,10 @@ func TypeByName(name string) (Type, bool) {
 		return TypeSubmitResponse, true
 	case "validateresponse":
 		return TypeValidateResponse, true
+	case "subscriberesponse":
+		return TypeSubscribeResponse, true
+	case "event":
+		return TypeEvent, true
 	case "privatesequencerequest":
 		return TypePrivateSequenceRequest, true
 	case "privatesequenceresponse":
