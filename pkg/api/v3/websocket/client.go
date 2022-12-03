@@ -46,7 +46,7 @@ func (c clientConn) Write(msg *Message) error {
 func NewClient(server string, logger log.Logger) (*Client, error) {
 	conn, _, err := websocket.DefaultDialer.Dial(server, nil)
 	if err != nil {
-		return nil, errors.Wrap(errors.UnknownError, err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 
 	c := newClient(clientConn{conn}, logger)
