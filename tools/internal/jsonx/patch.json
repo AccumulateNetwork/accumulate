@@ -1,0 +1,12 @@
+[
+    { "op": "add",     "path": "/properties/$ref",                 "value": { "type": "string" } },
+    { "op": "add",     "path": "/properties/$order",               "value": { "type": "integer" } },
+    { "op": "add",     "path": "/properties/$embedded",            "value": { "$ref": "#/definitions/stringArray" } },
+    { "op": "add",     "path": "/properties/discriminator",        "value": { "type": "string" }},
+    { "op": "replace", "path": "/properties/type",                 "value": { "$ref": "!Schema_Type" } },
+    { "op": "replace", "path": "/properties/additionalItems",      "value": { "$ref": "#" } },
+    { "op": "replace", "path": "/properties/items",                "value": { "$ref": "#" } },
+    { "op": "replace", "path": "/properties/additionalProperties", "value": { "$ref": "#" } },
+    { "op": "replace", "path": "/properties/enum",                 "value": { "type": "array", "items": { "type": "string" } } },
+    { "op": "replace", "path": "/properties/dependencies",         "value": { "type": "object", "additionalProperties": { "$ref": "#/definitions/stringArray" } } }
+]
