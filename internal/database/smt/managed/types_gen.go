@@ -18,6 +18,7 @@ import (
 	"io"
 	"strings"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
 
@@ -33,7 +34,7 @@ type Receipt struct {
 	Anchor []byte `json:"anchor,omitempty" form:"anchor" query:"anchor" validate:"required"`
 	// Entries is the list of hashes to apply to create an anchor.
 	Entries   []*ReceiptEntry `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
-	manager   *MerkleManager
+	manager   record.Chain
 	extraData []byte
 }
 

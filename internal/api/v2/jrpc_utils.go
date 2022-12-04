@@ -36,7 +36,7 @@ func getLatestRootChainAnchor(apiclient connections.APIClient, ledgerurl *url.UR
 		ms.Count = int64(chain.Height)
 	}
 
-	anchor := ms.GetMDRoot()
+	anchor := ms.Anchor()
 	return (*[32]byte)(anchor), nil
 }
 

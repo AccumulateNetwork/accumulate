@@ -395,7 +395,7 @@ func hashChains(a *snapshot.Account) hash.Hasher {
 		if c.Head.Count == 0 {
 			hasher.AddHash(new([32]byte))
 		} else {
-			hasher.AddHash((*[32]byte)(c.Head.GetMDRoot()))
+			hasher.AddHash((*[32]byte)(c.Head.Anchor()))
 		}
 	}
 	return hasher

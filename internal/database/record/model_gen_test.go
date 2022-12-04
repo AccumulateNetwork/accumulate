@@ -19,11 +19,17 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-type ChangeSet struct {
+type ChangeSet interface {
+	record.Record
+	Entity(name string) Entity
+	ChangeLog() record.Counted[string]
+}
+
+type changeSet struct {
 	logger logging.OptionalLogger
 	store  record.Store
 
-	entity    map[entityKey]*Entity
+	entity    map[entityKey]*entity
 	changeLog record.Counted[string]
 }
 
@@ -35,9 +41,9 @@ func keyForEntity(name string) entityKey {
 	return entityKey{name}
 }
 
-func (c *ChangeSet) Entity(name string) *Entity {
-	return getOrCreateMap(&c.entity, keyForEntity(name), func() *Entity {
-		v := new(Entity)
+func (c *changeSet) Entity(name string) Entity {
+	return getOrCreateMap(&c.entity, keyForEntity(name), func() *entity {
+		v := new(entity)
 		v.logger = c.logger
 		v.store = c.store
 		v.key = record.Key{}.Append("Entity", name)
@@ -47,13 +53,13 @@ func (c *ChangeSet) Entity(name string) *Entity {
 	})
 }
 
-func (c *ChangeSet) ChangeLog() record.Counted[string] {
+func (c *changeSet) ChangeLog() record.Counted[string] {
 	return getOrCreateField(&c.changeLog, func() record.Counted[string] {
 		return record.NewCounted(c.logger.L, c.store, record.Key{}.Append("ChangeLog"), "change log", record.WrappedFactory(record.StringWrapper))
 	})
 }
 
-func (c *ChangeSet) Resolve(key record.Key) (record.Record, record.Key, error) {
+func (c *changeSet) Resolve(key record.Key) (record.Record, record.Key, error) {
 	if len(key) == 0 {
 		return nil, nil, errors.InternalError.With("bad key for change set")
 	}
@@ -76,7 +82,7 @@ func (c *ChangeSet) Resolve(key record.Key) (record.Record, record.Key, error) {
 	}
 }
 
-func (c *ChangeSet) IsDirty() bool {
+func (c *changeSet) IsDirty() bool {
 	if c == nil {
 		return false
 	}
@@ -93,7 +99,7 @@ func (c *ChangeSet) IsDirty() bool {
 	return false
 }
 
-func (c *ChangeSet) dirtyChains() []*managed.Chain {
+func (c *changeSet) dirtyChains() []*managed.Chain {
 	if c == nil {
 		return nil
 	}
@@ -107,7 +113,7 @@ func (c *ChangeSet) dirtyChains() []*managed.Chain {
 	return chains
 }
 
-func (c *ChangeSet) Commit() error {
+func (c *changeSet) Commit() error {
 	if c == nil {
 		return nil
 	}
@@ -121,12 +127,21 @@ func (c *ChangeSet) Commit() error {
 	return err
 }
 
-type Entity struct {
+type Entity interface {
+	record.Record
+	Union() record.Value[protocol.Account]
+	Set() record.Set[*url.TxID]
+	Chain() *managed.Chain
+	CountableRefType() record.Counted[*protocol.Transaction]
+	CountableUnion() record.Counted[protocol.Account]
+}
+
+type entity struct {
 	logger logging.OptionalLogger
 	store  record.Store
 	key    record.Key
 	label  string
-	parent *ChangeSet
+	parent *changeSet
 
 	union            record.Value[protocol.Account]
 	set              record.Set[*url.TxID]
@@ -135,37 +150,37 @@ type Entity struct {
 	countableUnion   record.Counted[protocol.Account]
 }
 
-func (c *Entity) Union() record.Value[protocol.Account] {
+func (c *entity) Union() record.Value[protocol.Account] {
 	return getOrCreateField(&c.union, func() record.Value[protocol.Account] {
 		return record.NewValue(c.logger.L, c.store, c.key.Append("Union"), c.label+" "+"union", false, record.Union(protocol.UnmarshalAccount))
 	})
 }
 
-func (c *Entity) Set() record.Set[*url.TxID] {
+func (c *entity) Set() record.Set[*url.TxID] {
 	return getOrCreateField(&c.set, func() record.Set[*url.TxID] {
 		return record.NewSet(c.logger.L, c.store, c.key.Append("Set"), c.label+" "+"set", record.Wrapped(record.TxidWrapper), record.CompareTxid)
 	})
 }
 
-func (c *Entity) Chain() *managed.Chain {
+func (c *entity) Chain() *managed.Chain {
 	return getOrCreateField(&c.chain, func() *managed.Chain {
 		return managed.NewChain(c.logger.L, c.store, c.key.Append("Chain"), markPower, managed.ChainTypeTransaction, "entity(%[2]v)-", c.label+" "+"chain")
 	})
 }
 
-func (c *Entity) CountableRefType() record.Counted[*protocol.Transaction] {
+func (c *entity) CountableRefType() record.Counted[*protocol.Transaction] {
 	return getOrCreateField(&c.countableRefType, func() record.Counted[*protocol.Transaction] {
 		return record.NewCounted(c.logger.L, c.store, c.key.Append("CountableRefType"), c.label+" "+"countable ref type", record.Struct[protocol.Transaction])
 	})
 }
 
-func (c *Entity) CountableUnion() record.Counted[protocol.Account] {
+func (c *entity) CountableUnion() record.Counted[protocol.Account] {
 	return getOrCreateField(&c.countableUnion, func() record.Counted[protocol.Account] {
 		return record.NewCounted(c.logger.L, c.store, c.key.Append("CountableUnion"), c.label+" "+"countable union", record.UnionFactory(protocol.UnmarshalAccount))
 	})
 }
 
-func (c *Entity) Resolve(key record.Key) (record.Record, record.Key, error) {
+func (c *entity) Resolve(key record.Key) (record.Record, record.Key, error) {
 	if len(key) == 0 {
 		return nil, nil, errors.InternalError.With("bad key for entity")
 	}
@@ -186,7 +201,7 @@ func (c *Entity) Resolve(key record.Key) (record.Record, record.Key, error) {
 	}
 }
 
-func (c *Entity) IsDirty() bool {
+func (c *entity) IsDirty() bool {
 	if c == nil {
 		return false
 	}
@@ -210,14 +225,14 @@ func (c *Entity) IsDirty() bool {
 	return false
 }
 
-func (c *Entity) resolveChain(name string) (chain *managed.Chain, ok bool) {
+func (c *entity) resolveChain(name string) (chain *managed.Chain, ok bool) {
 	if name == "" {
 		return c.Chain(), true
 	}
 	return
 }
 
-func (c *Entity) dirtyChains() []*managed.Chain {
+func (c *entity) dirtyChains() []*managed.Chain {
 	if c == nil {
 		return nil
 	}
@@ -231,7 +246,7 @@ func (c *Entity) dirtyChains() []*managed.Chain {
 	return chains
 }
 
-func (c *Entity) baseCommit() error {
+func (c *entity) baseCommit() error {
 	if c == nil {
 		return nil
 	}
@@ -402,8 +417,7 @@ func (c *TemplateTest) Commit() error {
 }
 
 func getOrCreateField[T any](ptr *T, create func() T) T {
-	var z T
-	if any(*ptr) != any(z) {
+	if any(*ptr) != nil {
 		return *ptr
 	}
 
@@ -426,8 +440,7 @@ func getOrCreateMap[T any, K comparable](ptr *map[K]T, key K, create func() T) T
 }
 
 func commitField[T record.Record](lastErr *error, field T) {
-	var z T
-	if *lastErr != nil || any(field) == any(z) {
+	if *lastErr != nil || any(field) == nil {
 		return
 	}
 
@@ -435,6 +448,5 @@ func commitField[T record.Record](lastErr *error, field T) {
 }
 
 func fieldIsDirty[T record.Record](field T) bool {
-	var z T
-	return any(field) != any(z) && field.IsDirty()
+	return any(field) != nil && field.IsDirty()
 }

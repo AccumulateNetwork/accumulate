@@ -99,11 +99,11 @@ func (h Hasher) MerkleHash() []byte {
 
 	// Add each hash
 	for _, h := range h {
-		merkle.AddToMerkleTree(h)
+		merkle.Add(h)
 	}
 
 	// Return the DAG root
-	return merkle.GetMDRoot().Bytes()
+	return merkle.Anchor()
 }
 
 // Receipt returns a receipt for the numbered element. Receipt returns nil if
@@ -125,9 +125,8 @@ func (h Hasher) Receipt(start, anchor int) *managed.Receipt {
 	// Build a merkle state
 	anchorState := new(managed.MerkleState)
 	for _, h := range h[:anchor+1] {
-		anchorState.AddToMerkleTree(h)
+		anchorState.Add(h)
 	}
-	anchorState.PadPending()
 
 	// Initialize the receipt
 	r := new(managed.Receipt)
@@ -183,7 +182,7 @@ func MerkleCascade(cascade, hashList [][]byte, maxHeight int64) [][]byte {
 
 // getIntermediate returns the last two hashes that would be combined to create
 // the local Merkle root at the given index and height. The element must be odd.
-func (h Hasher) getIntermediate(element, height int64) (managed.Hash, managed.Hash, error) {
+func (h Hasher) getIntermediate(element, height int64) ([]byte, []byte, error) {
 	if element%2 != 1 {
 		return nil, nil, errors.New("element is not odd")
 	}

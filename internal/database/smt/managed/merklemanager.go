@@ -52,13 +52,13 @@ func (c *Chain) Type() ChainType { return c.typ }
 
 // AddHash adds a Hash to the Chain controlled by the ChainManager. If unique is
 // true, the hash will not be added if it is already in the chain.
-func (m *MerkleManager) AddHash(hash Hash, unique bool) error {
+func (m *MerkleManager) AddHash(hash []byte, unique bool) error {
 	head, err := m.Head().Get() // Get the current state
 	if err != nil {
 		return err
 	}
 
-	hash = hash.Copy()                       // Just to make sure hash doesn't get changed
+	hash = Hash(hash).Copy()                 // Just to make sure hash doesn't get changed
 	_, err = m.ElementIndex(hash).Get()      // See if this element is a duplicate
 	if errors.Is(err, storage.ErrNotFound) { // So only if the hash is not yet added to the Merkle Tree
 		err = m.ElementIndex(hash).Put(uint64(head.Count)) // Keep its index
@@ -77,7 +77,7 @@ func (m *MerkleManager) AddHash(hash Hash, unique bool) error {
 	}
 	switch (head.Count + 1) & m.markMask {
 	case 0: // Is this the end of the Mark set, i.e. 0, ..., markFreq-1
-		head.AddToMerkleTree(hash)                              // Add the hash to the Merkle Tree
+		head.Add(hash)                                          // Add the hash to the Merkle Tree
 		err = m.States(uint64(head.Count) - 1).Put(head.Copy()) // Save Merkle State at n*MarkFreq-1
 		if err != nil {
 			return err
@@ -86,7 +86,7 @@ func (m *MerkleManager) AddHash(hash Hash, unique bool) error {
 		head.HashList = head.HashList[:0] // then clear the HashList
 		fallthrough                       // then fall through as normal
 	default:
-		head.AddToMerkleTree(hash) // 0 to markFeq-2, always add to the merkle tree
+		head.Add(hash) // 0 to markFeq-2, always add to the merkle tree
 	}
 
 	err = m.Head().Put(head)
@@ -120,9 +120,8 @@ func (m *MerkleManager) GetState(element int64) *MerkleState {
 	if err == nil && head.Count == 0 {
 		ms := new(MerkleState)
 		if eHash, err := m.Get(element); err != nil {
-			ms.AddToMerkleTree(eHash)
+			ms.Add(eHash)
 		}
-		ms.InitSha256()
 		return ms
 	}
 
@@ -139,7 +138,6 @@ func (m *MerkleManager) GetState(element int64) *MerkleState {
 func (m *MerkleManager) GetAnyState(element int64) (ms *MerkleState, err error) {
 	if element == -1 { //                                A need exists for the state before adding the first element
 		ms = new(MerkleState) //                         In that case, just allocate a MerkleState
-		ms.InitSha256()       //                         Initialize its hash function
 		return ms, nil        //                         And all is golden
 	}
 	if ms = m.GetState(element); ms != nil { //          Shoot for broke. Return a state if it is in the db
@@ -155,7 +153,6 @@ func (m *MerkleManager) GetAnyState(element int64) (ms *MerkleState, err error) 
 	cState := m.GetState(MIPrev)        //               Use state at the prior mark point to compute what we need
 	if MIPrev < 0 {
 		cState = new(MerkleState)
-		cState.InitSha256()
 	}
 	if cState == nil { //                                Should be in the database.
 		return nil, errors.InternalError.With( //        Report error if it isn't in the database'
@@ -178,7 +175,7 @@ func (m *MerkleManager) GetAnyState(element int64) (ms *MerkleState, err error) 
 		if element+1 == cState.Count { //                              until the loop adds the element
 			break
 		}
-		cState.AddToMerkleTree(v)
+		cState.Add(v)
 	}
 	if cState.Count&m.markMask == 0 { //                           If we progress out of the mark set,
 		cState.HashList = cState.HashList[:0] //                       start over collecting hashes.
@@ -187,7 +184,7 @@ func (m *MerkleManager) GetAnyState(element int64) (ms *MerkleState, err error) 
 }
 
 // Get the nth leaf node
-func (m *MerkleManager) Get(element int64) (Hash, error) {
+func (m *MerkleManager) Get(element int64) ([]byte, error) {
 	hash, err := m.Element(uint64(element)).Get() // Check the index
 	switch {
 	case err == nil:
@@ -237,7 +234,7 @@ func (m *MerkleManager) Get(element int64) (Hash, error) {
 // Return the last two hashes that were combined to create the local
 // Merkle Root at the given index.  The element provided must be odd,
 // and the Pending List must be fully populated up to height specified.
-func (m *MerkleManager) GetIntermediate(element, height int64) (Left, Right Hash, err error) {
+func (m *MerkleManager) GetIntermediate(element, height int64) (Left, Right []byte, err error) {
 	hash, e := m.Get(element) // Get the element at this height
 	if e != nil {             // Error out if we can't
 		return nil, nil, e //
@@ -246,5 +243,24 @@ func (m *MerkleManager) GetIntermediate(element, height int64) (Left, Right Hash
 	if e2 != nil {                      // If the element doesn't exist, that's a problem
 		return nil, nil, e2 //
 	} //
-	return s.GetIntermediate(hash, height)
+	return getIntermediate(s, hash, height)
+}
+
+// getIntermediate returns the last two hashes that were combined to create the
+// local Merkle Root at the given index. The element Pending List must be fully
+// populated up to height specified.
+func getIntermediate(m *MerkleState, hash Hash, height int64) (left, right Hash, err error) {
+	m.Pad()                       // Pad Pending with a nil to remove corner cases
+	for i, v := range m.Pending { // Adding the hash is like incrementing a variable
+		if v == nil { //               Look for an empty slot; should not encounter one
+			return nil, nil, fmt.Errorf("should not encounter a nil at height %d", height)
+		}
+		if i+1 == int(height) { // Found the height
+			left = Hash(v).Copy()   // Get the left and right
+			right = hash.Copy()     //
+			return left, right, nil // return them
+		}
+		hash = Hash(v).Combine(Sha256, hash) // If this slot isn't empty, combine the hash with the slot
+	}
+	return nil, nil, fmt.Errorf("no values found at height %d", height)
 }

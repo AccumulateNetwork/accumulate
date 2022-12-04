@@ -120,7 +120,7 @@ func (a *Account) hashChains() (hash.Hasher, error) {
 		if chain.head.Count == 0 {
 			hasher.AddHash(new([32]byte))
 		} else {
-			hasher.AddHash((*[32]byte)(chain.head.GetMDRoot()))
+			hasher.AddHash((*[32]byte)(chain.head.Anchor()))
 		}
 	}
 	return hasher, err

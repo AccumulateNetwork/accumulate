@@ -15,7 +15,7 @@ import (
 // begin must be before or equal to end.  The hash with index begin upto
 // but not including end are the hashes returned.  Indexes are zero based, so the
 // first hash in the MerkleState is at 0
-func (m *MerkleManager) GetRange(begin, end int64) ([]Hash, error) {
+func (m *MerkleManager) GetRange(begin, end int64) ([][]byte, error) {
 	head, err := m.Head().Get()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load head: %w", err)
@@ -42,7 +42,7 @@ func (m *MerkleManager) GetRange(begin, end int64) ([]Hash, error) {
 		return nil, nil
 	}
 
-	var hashes []Hash                           // Collect hashes from mark points
+	var hashes [][]byte                         // Collect hashes from mark points
 	beginMark := begin&^m.markMask + m.markFreq // Mark point after begin
 	endMark := (end-1)&^m.markMask + m.markFreq // Mark point after end
 	lastMark := head.Count &^ m.markMask        // Last mark point
@@ -59,7 +59,9 @@ func (m *MerkleManager) GetRange(begin, end int64) ([]Hash, error) {
 		if len(s.HashList) != int(m.markFreq) {
 			return nil, errors.IncompleteChain.WithFormat("markpoint %d: expected %d entries, got %d", i, m.markFreq, len(s.HashList))
 		}
-		hashes = append(hashes, s.HashList...)
+		for _, h := range s.HashList {
+			hashes = append(hashes, h)
+		}
 	}
 
 	first := (begin) & m.markMask // Calculate the offset to the beginning of the range
@@ -73,6 +75,8 @@ func (m *MerkleManager) GetRange(begin, end int64) ([]Hash, error) {
 		return nil, errors.IncompleteChain.WithFormat("head: expected %d entries, got %d", expected, len(head.HashList))
 	}
 
-	hashes = append(hashes, head.HashList...) // Append the current hash list
-	return hashes[first:last], nil            // Return the requested range
+	for _, h := range head.HashList {
+		hashes = append(hashes, h) // Append the current hash list
+	}
+	return hashes[first:last], nil // Return the requested range
 }

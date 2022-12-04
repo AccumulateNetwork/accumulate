@@ -9,13 +9,13 @@ func (c *Snapshot) AddEntry(hash Hash) {
 	var markMask = markFreq - 1
 	switch (c.Head.Count + 1) & markMask {
 	case 0:
-		c.Head.AddToMerkleTree(hash)
+		c.Head.Add(hash)
 		c.MarkPoints = append(c.MarkPoints, c.Head.Copy()) // Save the mark point
 	case 1:
 		c.Head.HashList = c.Head.HashList[:0]
 		fallthrough
 	default:
-		c.Head.AddToMerkleTree(hash)
+		c.Head.Add(hash)
 	}
 }
 

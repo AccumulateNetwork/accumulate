@@ -134,7 +134,7 @@ func TestSnapshotFullHistory(t *testing.T) {
 	}
 }
 
-func entriesShouldFailOrReturnCorrectNumber(t *testing.T, chain *managed.Chain, start, end int64) {
+func entriesShouldFailOrReturnCorrectNumber(t *testing.T, chain record.Chain, start, end int64) {
 	t.Helper()
 	hashes, err := chain.GetRange(start, end)
 	if err != nil {

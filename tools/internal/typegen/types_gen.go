@@ -37,6 +37,7 @@ type EntityRecord struct {
 	CustomIsDirty bool          `json:"customIsDirty,omitempty" form:"customIsDirty" query:"customIsDirty" validate:"required"`
 	Parameters    []*Field      `json:"parameters,omitempty" form:"parameters" query:"parameters" validate:"required"`
 	Root          bool          `json:"root,omitempty" form:"root" query:"root" validate:"required"`
+	Interface     bool          `json:"interface,omitempty" form:"interface" query:"interface" validate:"required"`
 	Attributes    []Record      `json:"attributes,omitempty" form:"attributes" query:"attributes" validate:"required"`
 }
 
@@ -120,6 +121,7 @@ func (v *EntityRecord) MarshalJSON() ([]byte, error) {
 		CustomIsDirty bool                                   `json:"customIsDirty,omitempty"`
 		Parameters    encoding.JsonList[*Field]              `json:"parameters,omitempty"`
 		Root          bool                                   `json:"root,omitempty"`
+		Interface     bool                                   `json:"interface,omitempty"`
 		Attributes    encoding.JsonUnmarshalListWith[Record] `json:"attributes,omitempty"`
 	}{}
 	u.Type = v.Type()
@@ -133,6 +135,7 @@ func (v *EntityRecord) MarshalJSON() ([]byte, error) {
 	u.CustomIsDirty = v.CustomIsDirty
 	u.Parameters = v.Parameters
 	u.Root = v.Root
+	u.Interface = v.Interface
 	u.Attributes = encoding.JsonUnmarshalListWith[Record]{Value: v.Attributes, Func: UnmarshalRecordJSON}
 	return json.Marshal(&u)
 }
@@ -262,6 +265,7 @@ func (v *EntityRecord) UnmarshalJSON(data []byte) error {
 		CustomIsDirty bool                                   `json:"customIsDirty,omitempty"`
 		Parameters    encoding.JsonList[*Field]              `json:"parameters,omitempty"`
 		Root          bool                                   `json:"root,omitempty"`
+		Interface     bool                                   `json:"interface,omitempty"`
 		Attributes    encoding.JsonUnmarshalListWith[Record] `json:"attributes,omitempty"`
 	}{}
 	u.Type = v.Type()
@@ -275,6 +279,7 @@ func (v *EntityRecord) UnmarshalJSON(data []byte) error {
 	u.CustomIsDirty = v.CustomIsDirty
 	u.Parameters = v.Parameters
 	u.Root = v.Root
+	u.Interface = v.Interface
 	u.Attributes = encoding.JsonUnmarshalListWith[Record]{Value: v.Attributes, Func: UnmarshalRecordJSON}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -292,6 +297,7 @@ func (v *EntityRecord) UnmarshalJSON(data []byte) error {
 	v.CustomIsDirty = u.CustomIsDirty
 	v.Parameters = u.Parameters
 	v.Root = u.Root
+	v.Interface = u.Interface
 	v.Attributes = make([]Record, len(u.Attributes.Value))
 	for i, x := range u.Attributes.Value {
 		v.Attributes[i] = x

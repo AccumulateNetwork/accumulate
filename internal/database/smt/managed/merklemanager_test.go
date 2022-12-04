@@ -29,6 +29,13 @@ func testChain(store record.KvStore, markPower int64, key ...interface{}) *Chain
 	return NewChain(nil, store, record.Key(key), markPower, ChainTypeUnknown, "chain", "chain")
 }
 
+func GetSha256() func(data []byte) Hash {
+	return func(data []byte) Hash {
+		h := sha256.Sum256(data)
+		return h[:]
+	}
+}
+
 func TestMerkleManager_GetChainState(t *testing.T) {
 	const numTests = 100
 	var randHash common.RandHash
@@ -43,16 +50,37 @@ func TestMerkleManager_GetChainState(t *testing.T) {
 		require.NoError(t, m.AddHash(randHash.Next(), false))
 		head, err := m.Head().Get()
 		require.NoError(t, err)
-		mState, err := head.Marshal()
+		mState, err := head.MarshalBinary()
 		require.NoError(t, err, "must be able to marshal a MerkleState")
 		ms := new(MerkleState)
-		err = ms.UnMarshal(mState)
+		err = ms.UnmarshalBinary(mState)
 		require.NoError(t, err, "must be able to unmarshal a MerkleState")
 		require.True(t, ms.Equal(head), " should get the same state back")
 		cState, e2 := m.Head().Get()
 		require.NoErrorf(t, e2, "chain should always have a chain state %d", i)
 		require.Truef(t, cState.Equal(head), "should be the last state of the chain written (%d)", i)
 	}
+}
+
+// PrintMerkleState
+// convert the MerkleState to a human readable string
+func PrintMerkleState(m *MerkleState) string {
+	var b bytes.Buffer
+	b.WriteString(fmt.Sprintf("%20s %d\n", "Count", m.Count))
+	b.WriteString(fmt.Sprintf("%20s %d\n", "Pending[] length:", len(m.Pending)))
+	for i, v := range m.Pending {
+		vp := "nil"
+		if v != nil {
+			vp = fmt.Sprintf("%x", v)
+		}
+		b.WriteString(fmt.Sprintf("%20s [%3d] %s\n", "", i, vp))
+	}
+	b.WriteString(fmt.Sprintf("%20s %d\n", "HashList Length:", len(m.HashList)))
+	for i, v := range m.HashList {
+		vp := fmt.Sprintf("%x", v)
+		b.WriteString(fmt.Sprintf("%20s [%3d] %s\n", "", i, vp))
+	}
+	return b.String()
 }
 
 func TestMerkleManager_GetAnyState(t *testing.T) {
@@ -66,7 +94,7 @@ func TestMerkleManager_GetAnyState(t *testing.T) {
 		head, err := m.Head().Get()
 		require.NoError(t, err)
 		States = append(States, head.Copy())
-		println(States[i].String())
+		println(PrintMerkleState(States[i]))
 	}
 	for i := int64(0); i < testnum; i++ {
 		state, err := m.GetAnyState(i)
@@ -77,8 +105,8 @@ func TestMerkleManager_GetAnyState(t *testing.T) {
 		require.NoErrorf(t, err, "%d all elements should have a state: %v", i, err)
 		if !state.Equal(States[i]) {
 			fmt.Println("i=", i)
-			fmt.Println("=============", state.String())
-			fmt.Println("-------------", States[i].String())
+			fmt.Println("=============", PrintMerkleState(state))
+			fmt.Println("-------------", PrintMerkleState(States[i]))
 		}
 		require.Truef(t, state.Equal(States[i]), "All states should be equal height %d", i)
 	}
@@ -199,10 +227,9 @@ func GenerateTestData(prt bool) [10][]Hash {
 		println()
 	}
 	ms := new(MerkleState)
-	ms.InitSha256()
 	for _, v := range hashes[0] {
-		ms.AddToMerkleTree(v)
-		mdr := ms.GetMDRoot()
+		ms.Add(v)
+		mdr := ms.Anchor()
 		fmt.Printf("%3v ", mdr[:2])
 	}
 	println("\n")
@@ -223,10 +250,9 @@ func GenerateTestData(prt bool) [10][]Hash {
 		println()
 	}
 	ms = new(MerkleState)
-	ms.InitSha256()
 	for _, v := range hashes[0] {
-		ms.AddToMerkleTree(v)
-		mdr := ms.GetMDRoot()
+		ms.Add(v)
+		mdr := ms.Anchor()
 		fmt.Printf("%x  ", mdr[:4])
 	}
 	println()
@@ -246,11 +272,10 @@ func TestMerkleManager_GetIntermediate(t *testing.T) {
 		require.NoError(t, m.AddHash(r.NextList(), false))
 		head, err := m.Head().Get()
 		require.NoError(t, err)
-		head.PadPending()
+		head.Pad()
 		if col&1 == 1 {
 			s, _ := m.GetAnyState(col - 1)
-			s.PadPending()
-			s.InitSha256()
+			s.Pad()
 			for row := int64(1); s.Pending[row-1] != nil; row++ {
 				left, right, err := m.GetIntermediate(col, row)
 				require.Nil(t, err, err)

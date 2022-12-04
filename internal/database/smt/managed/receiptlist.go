@@ -37,10 +37,10 @@ func (r *ReceiptList) Validate() bool {
 		if h == nil || len(h) != 32 { //      Make sure every element in Elements
 			return false //                     is a proper hash and not nil
 		} //
-		MS.AddToMerkleTree(append([]byte{}, h...)) // Add each element to the MS
+		MS.Add(append([]byte{}, h...)) // Add each element to the MS
 	} //                                      Once all elements are added, compute
-	anchor := MS.GetMDRoot() //                 the anchor at this point.
-	if len(anchor) == 0 {    //               If an anchor can't be produced, this
+	anchor := MS.Anchor() //                 the anchor at this point.
+	if len(anchor) == 0 { //               If an anchor can't be produced, this
 		return false //                         receiptList fails. (shouldn't happen)
 	}
 
@@ -117,7 +117,7 @@ func GetReceiptList(manager *MerkleManager, Start int64, End int64) (r *ReceiptL
 		if err != nil {
 			return nil, err
 		}
-		r.Elements = append(r.Elements, h.Copy().Bytes())
+		r.Elements = append(r.Elements, Hash(h).Copy().Bytes())
 	}
 
 	r.MerkleState, err = manager.GetAnyState(Start - 1)

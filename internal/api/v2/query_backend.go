@@ -31,6 +31,15 @@ type queryBackend struct {
 	logger logging.OptionalLogger
 }
 
+func copyHashList(v [][]byte) [][]byte {
+	u := make([][]byte, len(v))
+	for i, v := range v {
+		u[i] = make([]byte, len(v))
+		copy(u[i], v)
+	}
+	return u
+}
+
 func (m *queryBackend) queryAccount(batch *database.Batch, account *database.Account, prove bool) (*query.ResponseAccount, error) {
 	resp := new(query.ResponseAccount)
 
@@ -56,7 +65,7 @@ func (m *queryBackend) queryAccount(batch *database.Batch, account *database.Acc
 		state.Name = c.Name
 		state.Type = c.Type
 		state.Height = uint64(ms.Count)
-		state.Roots = ms.Pending.Copy()
+		state.Roots = copyHashList(ms.Pending)
 
 		resp.ChainState = append(resp.ChainState, state)
 	}
@@ -205,7 +214,7 @@ func (m *queryBackend) queryByUrl(batch *database.Batch, u *url.URL, prove bool,
 			res := new(query.ResponseChainEntry)
 			res.Height = uint64(height)
 			res.Entry = entry
-			res.State = state.Pending.Copy()
+			res.State = copyHashList(state.Pending)
 
 			md, err := batch.Account(u).Chains().Find(&protocol.ChainMetadata{Name: fragment[1]})
 			if err == nil {
@@ -254,7 +263,7 @@ func (m *queryBackend) queryByUrl(batch *database.Batch, u *url.URL, prove bool,
 			}
 
 			res.Height = uint64(height)
-			res.ChainState = state.Pending.Copy()
+			res.ChainState = copyHashList(state.Pending)
 
 			return []byte("tx"), res, nil
 		}
@@ -328,7 +337,7 @@ func (m *queryBackend) queryByUrl(batch *database.Batch, u *url.URL, prove bool,
 				}
 
 				res.Height = uint64(height)
-				res.ChainState = state.Pending.Copy()
+				res.ChainState = copyHashList(state.Pending)
 
 				return []byte("tx"), res, nil
 			}

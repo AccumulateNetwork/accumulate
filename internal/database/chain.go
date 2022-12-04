@@ -10,17 +10,18 @@ import (
 	"encoding"
 	"fmt"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 // Chain manages a Merkle tree (chain).
 type Chain struct {
-	merkle *managed.MerkleManager
-	head   *managed.MerkleState
+	merkle record.Chain
+	head   *record.ChainHead
 }
 
-func wrapChain(merkle *managed.Chain) (*Chain, error) {
+func wrapChain(merkle record.Chain) (*Chain, error) {
 	m := new(Chain)
 	m.merkle = merkle
 
@@ -98,7 +99,7 @@ func (c *Chain) HeightOf(hash []byte) (int64, error) {
 
 // Anchor calculates the anchor of the current Merkle state.
 func (c *Chain) Anchor() []byte {
-	return c.head.GetMDRoot()
+	return c.head.Anchor()
 }
 
 // AnchorAt calculates the anchor of the chain at the given height.
@@ -107,7 +108,7 @@ func (c *Chain) AnchorAt(height uint64) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return ms.GetMDRoot(), nil
+	return ms.Anchor(), nil
 }
 
 // Pending returns the pending roots of the current Merkle state.

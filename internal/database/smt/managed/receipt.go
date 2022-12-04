@@ -10,6 +10,8 @@ import (
 	"bytes"
 	"fmt"
 	"math"
+
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 )
 
 // String
@@ -118,7 +120,7 @@ func CombineReceipts(receipts ...*Receipt) (*Receipt, error) {
 	return r, nil
 }
 
-func NewReceipt(manager *MerkleManager) *Receipt {
+func NewReceipt(manager record.Chain) *Receipt {
 	r := new(Receipt)
 	r.manager = manager
 	return r
@@ -128,7 +130,7 @@ func NewReceipt(manager *MerkleManager) *Receipt {
 // Given a merkle tree and two elements, produce a proof that the element was used to derive the DAG at the anchor
 // Note that the element must be added to the Merkle Tree before the anchor, but the anchor can be any element
 // after the element, or even the element itself.
-func GetReceipt(manager *MerkleManager, element Hash, anchor Hash) (r *Receipt, err error) {
+func GetReceipt(manager record.Chain, element Hash, anchor Hash) (r *Receipt, err error) {
 	// Allocate r, the receipt we are building and record our element
 	r = new(Receipt)  // Allocate a r
 	r.Start = element // Add the element to the r
@@ -168,16 +170,21 @@ func GetReceipt(manager *MerkleManager, element Hash, anchor Hash) (r *Receipt, 
 // in the Receipt to represent a fully populated version.
 func (r *Receipt) BuildReceipt() error {
 	state, _ := r.manager.GetAnyState(r.EndIndex) // Get the state at the Anchor Index
-	state.Trim()                                  // If Pending has any trailing nils, remove them.
+	// If Pending has any trailing nils, remove them.
+	for len(state.Pending) > 0 && state.Pending[len(state.Pending)-1] == nil {
+		state.Pending = state.Pending[:len(state.Pending)-1]
+	}
 	return r.BuildReceiptWith(r.manager.GetIntermediate, Sha256, state)
 }
 
-type GetIntermediateFunc func(element, height int64) (l, r Hash, err error)
+type GetIntermediateFunc func(element, height int64) (l, r []byte, err error)
 
 func (r *Receipt) BuildReceiptWith(getIntermediate GetIntermediateFunc, hashFunc HashFunc, anchorState *MerkleState) error {
 	height := int64(1) // Start the height at 1, because the element isn't part
 	r.Anchor = r.Start // of the nodes collected.  To begin with, the element is the Merkle Dag Root
 	stay := true       // stay represents the fact that the proof is already in this column
+
+	anchorState.Pad()
 
 	// The path from a intermediateHash added to the merkle tree to the anchor
 	// starts at the element index and goes to the anchor index.
@@ -199,7 +206,7 @@ func (r *Receipt) BuildReceiptWith(getIntermediate GetIntermediateFunc, hashFunc
 				stay = false                                  //            Changing columns
 				continue
 			}
-			r.Anchor = lHash.Combine(hashFunc, rHash) // We don't have to calculate the MDRoot, but it
+			r.Anchor = Hash(lHash).Combine(hashFunc, rHash) // We don't have to calculate the MDRoot, but it
 			if stay {                                 //   helps debugging.  Check if still in column
 				r.Entries = append(r.Entries, &ReceiptEntry{Hash: lHash, Right: false}) // If so, combine from left
 			} else { //                                                     Otherwise

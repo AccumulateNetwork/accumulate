@@ -23,6 +23,7 @@ func init() {
 }
 
 var goFuncs = template.FuncMap{
+	"fullName":        fullName,
 	"hasChains":       hasChains,
 	"fieldType":       fieldType,
 	"recordType":      recordType,
@@ -37,6 +38,15 @@ var goFuncs = template.FuncMap{
 	"parameterized":   func(r typegen.Record) bool { return len(r.GetParameters()) > 0 },
 	"parameterCount":  func(r typegen.Record) int { return len(r.GetParameters()) },
 	"add":             func(x, y int) int { return x + y },
+}
+
+func fullName(r typegen.Record) string {
+	e, ok := r.(*typegen.EntityRecord)
+	if !ok || !e.Interface {
+		return r.FullName()
+	}
+	name := e.FullName()
+	return strings.ToLower(name[:1]) + name[1:]
 }
 
 func hasChains(r typegen.Record) bool {
@@ -57,12 +67,12 @@ func hasChains(r typegen.Record) bool {
 
 func fieldType(r typegen.Record) string {
 	if len(r.GetParameters()) == 0 {
-		return recordType(r)
+		return recordType(r, true)
 	}
-	return "map[" + typegen.LowerFirstWord(r.FullName()) + "Key]" + recordType(r)
+	return "map[" + typegen.LowerFirstWord(r.FullName()) + "Key]" + recordType(r, true)
 }
 
-func recordType(r typegen.Record) string {
+func recordType(r typegen.Record, noInterface bool) string {
 	switch r := r.(type) {
 	case typegen.ValueRecord:
 		var typ string
@@ -81,6 +91,11 @@ func recordType(r typegen.Record) string {
 		return "*managed.Chain"
 	case *typegen.OtherRecord:
 		return "*" + r.DataType
+	case *typegen.EntityRecord:
+		if !noInterface && r.Interface {
+			return r.FullName()
+		}
+		return "*" + fullName(r)
 	default:
 		return "*" + r.FullName()
 	}
