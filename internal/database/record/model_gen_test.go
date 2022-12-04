@@ -24,7 +24,7 @@ type ChangeSet struct {
 	store  record.Store
 
 	entity    map[entityKey]*Entity
-	changeLog *record.Counted[string]
+	changeLog record.Counted[string]
 }
 
 type entityKey struct {
@@ -47,8 +47,8 @@ func (c *ChangeSet) Entity(name string) *Entity {
 	})
 }
 
-func (c *ChangeSet) ChangeLog() *record.Counted[string] {
-	return getOrCreateField(&c.changeLog, func() *record.Counted[string] {
+func (c *ChangeSet) ChangeLog() record.Counted[string] {
+	return getOrCreateField(&c.changeLog, func() record.Counted[string] {
 		return record.NewCounted(c.logger.L, c.store, record.Key{}.Append("ChangeLog"), "change log", record.WrappedFactory(record.StringWrapper))
 	})
 }
@@ -128,21 +128,21 @@ type Entity struct {
 	label  string
 	parent *ChangeSet
 
-	union            *record.Value[protocol.Account]
-	set              *record.Set[*url.TxID]
+	union            record.Value[protocol.Account]
+	set              record.Set[*url.TxID]
 	chain            *managed.Chain
-	countableRefType *record.Counted[*protocol.Transaction]
-	countableUnion   *record.Counted[protocol.Account]
+	countableRefType record.Counted[*protocol.Transaction]
+	countableUnion   record.Counted[protocol.Account]
 }
 
-func (c *Entity) Union() *record.Value[protocol.Account] {
-	return getOrCreateField(&c.union, func() *record.Value[protocol.Account] {
+func (c *Entity) Union() record.Value[protocol.Account] {
+	return getOrCreateField(&c.union, func() record.Value[protocol.Account] {
 		return record.NewValue(c.logger.L, c.store, c.key.Append("Union"), c.label+" "+"union", false, record.Union(protocol.UnmarshalAccount))
 	})
 }
 
-func (c *Entity) Set() *record.Set[*url.TxID] {
-	return getOrCreateField(&c.set, func() *record.Set[*url.TxID] {
+func (c *Entity) Set() record.Set[*url.TxID] {
+	return getOrCreateField(&c.set, func() record.Set[*url.TxID] {
 		return record.NewSet(c.logger.L, c.store, c.key.Append("Set"), c.label+" "+"set", record.Wrapped(record.TxidWrapper), record.CompareTxid)
 	})
 }
@@ -153,14 +153,14 @@ func (c *Entity) Chain() *managed.Chain {
 	})
 }
 
-func (c *Entity) CountableRefType() *record.Counted[*protocol.Transaction] {
-	return getOrCreateField(&c.countableRefType, func() *record.Counted[*protocol.Transaction] {
+func (c *Entity) CountableRefType() record.Counted[*protocol.Transaction] {
+	return getOrCreateField(&c.countableRefType, func() record.Counted[*protocol.Transaction] {
 		return record.NewCounted(c.logger.L, c.store, c.key.Append("CountableRefType"), c.label+" "+"countable ref type", record.Struct[protocol.Transaction])
 	})
 }
 
-func (c *Entity) CountableUnion() *record.Counted[protocol.Account] {
-	return getOrCreateField(&c.countableUnion, func() *record.Counted[protocol.Account] {
+func (c *Entity) CountableUnion() record.Counted[protocol.Account] {
+	return getOrCreateField(&c.countableUnion, func() record.Counted[protocol.Account] {
 		return record.NewCounted(c.logger.L, c.store, c.key.Append("CountableUnion"), c.label+" "+"countable union", record.UnionFactory(protocol.UnmarshalAccount))
 	})
 }
@@ -252,67 +252,67 @@ type TemplateTest struct {
 	key    record.Key
 	label  string
 
-	wrapped     *record.Value[string]
-	structPtr   *record.Value[*StructType]
-	union       *record.Value[UnionType]
-	wrappedSet  *record.Set[*url.URL]
-	structSet   *record.Set[*StructType]
-	unionSet    *record.Set[UnionType]
-	wrappedList *record.Counted[string]
-	structList  *record.Counted[*StructType]
-	unionList   *record.Counted[UnionType]
+	wrapped     record.Value[string]
+	structPtr   record.Value[*StructType]
+	union       record.Value[UnionType]
+	wrappedSet  record.Set[*url.URL]
+	structSet   record.Set[*StructType]
+	unionSet    record.Set[UnionType]
+	wrappedList record.Counted[string]
+	structList  record.Counted[*StructType]
+	unionList   record.Counted[UnionType]
 }
 
-func (c *TemplateTest) Wrapped() *record.Value[string] {
-	return getOrCreateField(&c.wrapped, func() *record.Value[string] {
+func (c *TemplateTest) Wrapped() record.Value[string] {
+	return getOrCreateField(&c.wrapped, func() record.Value[string] {
 		return record.NewValue(c.logger.L, c.store, c.key.Append("Wrapped"), c.label+" "+"wrapped", false, record.Wrapped(record.StringWrapper))
 	})
 }
 
-func (c *TemplateTest) StructPtr() *record.Value[*StructType] {
-	return getOrCreateField(&c.structPtr, func() *record.Value[*StructType] {
+func (c *TemplateTest) StructPtr() record.Value[*StructType] {
+	return getOrCreateField(&c.structPtr, func() record.Value[*StructType] {
 		return record.NewValue(c.logger.L, c.store, c.key.Append("StructPtr"), c.label+" "+"struct ptr", false, record.Struct[StructType]())
 	})
 }
 
-func (c *TemplateTest) Union() *record.Value[UnionType] {
-	return getOrCreateField(&c.union, func() *record.Value[UnionType] {
+func (c *TemplateTest) Union() record.Value[UnionType] {
+	return getOrCreateField(&c.union, func() record.Value[UnionType] {
 		return record.NewValue(c.logger.L, c.store, c.key.Append("Union"), c.label+" "+"union", false, record.Union(UnmarshalUnionType))
 	})
 }
 
-func (c *TemplateTest) WrappedSet() *record.Set[*url.URL] {
-	return getOrCreateField(&c.wrappedSet, func() *record.Set[*url.URL] {
+func (c *TemplateTest) WrappedSet() record.Set[*url.URL] {
+	return getOrCreateField(&c.wrappedSet, func() record.Set[*url.URL] {
 		return record.NewSet(c.logger.L, c.store, c.key.Append("WrappedSet"), c.label+" "+"wrapped set", record.Wrapped(record.UrlWrapper), record.CompareUrl)
 	})
 }
 
-func (c *TemplateTest) StructSet() *record.Set[*StructType] {
-	return getOrCreateField(&c.structSet, func() *record.Set[*StructType] {
+func (c *TemplateTest) StructSet() record.Set[*StructType] {
+	return getOrCreateField(&c.structSet, func() record.Set[*StructType] {
 		return record.NewSet(c.logger.L, c.store, c.key.Append("StructSet"), c.label+" "+"struct set", record.Struct[StructType](), func(u, v *StructType) int { return u.Compare(v) })
 	})
 }
 
-func (c *TemplateTest) UnionSet() *record.Set[UnionType] {
-	return getOrCreateField(&c.unionSet, func() *record.Set[UnionType] {
+func (c *TemplateTest) UnionSet() record.Set[UnionType] {
+	return getOrCreateField(&c.unionSet, func() record.Set[UnionType] {
 		return record.NewSet(c.logger.L, c.store, c.key.Append("UnionSet"), c.label+" "+"union set", record.Union(UnmarshalUnionType), func(u, v UnionType) int { return u.Compare(v) })
 	})
 }
 
-func (c *TemplateTest) WrappedList() *record.Counted[string] {
-	return getOrCreateField(&c.wrappedList, func() *record.Counted[string] {
+func (c *TemplateTest) WrappedList() record.Counted[string] {
+	return getOrCreateField(&c.wrappedList, func() record.Counted[string] {
 		return record.NewCounted(c.logger.L, c.store, c.key.Append("WrappedList"), c.label+" "+"wrapped list", record.WrappedFactory(record.StringWrapper))
 	})
 }
 
-func (c *TemplateTest) StructList() *record.Counted[*StructType] {
-	return getOrCreateField(&c.structList, func() *record.Counted[*StructType] {
+func (c *TemplateTest) StructList() record.Counted[*StructType] {
+	return getOrCreateField(&c.structList, func() record.Counted[*StructType] {
 		return record.NewCounted(c.logger.L, c.store, c.key.Append("StructList"), c.label+" "+"struct list", record.Struct[StructType])
 	})
 }
 
-func (c *TemplateTest) UnionList() *record.Counted[UnionType] {
-	return getOrCreateField(&c.unionList, func() *record.Counted[UnionType] {
+func (c *TemplateTest) UnionList() record.Counted[UnionType] {
+	return getOrCreateField(&c.unionList, func() record.Counted[UnionType] {
 		return record.NewCounted(c.logger.L, c.store, c.key.Append("UnionList"), c.label+" "+"union list", record.UnionFactory(UnmarshalUnionType))
 	})
 }
@@ -401,8 +401,9 @@ func (c *TemplateTest) Commit() error {
 	return err
 }
 
-func getOrCreateField[T any](ptr **T, create func() *T) *T {
-	if *ptr != nil {
+func getOrCreateField[T any](ptr *T, create func() T) T {
+	var z T
+	if any(*ptr) != any(z) {
 		return *ptr
 	}
 
@@ -424,14 +425,16 @@ func getOrCreateMap[T any, K comparable](ptr *map[K]T, key K, create func() T) T
 	return v
 }
 
-func commitField[T any, PT record.RecordPtr[T]](lastErr *error, field PT) {
-	if *lastErr != nil || field == nil {
+func commitField[T record.Record](lastErr *error, field T) {
+	var z T
+	if *lastErr != nil || any(field) == any(z) {
 		return
 	}
 
 	*lastErr = field.Commit()
 }
 
-func fieldIsDirty[T any, PT record.RecordPtr[T]](field PT) bool {
-	return field != nil && field.IsDirty()
+func fieldIsDirty[T record.Record](field T) bool {
+	var z T
+	return any(field) != any(z) && field.IsDirty()
 }

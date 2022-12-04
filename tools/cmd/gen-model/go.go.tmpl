@@ -128,14 +128,14 @@ func keyFor{{.FullName}}({{range .GetParameters}}{{lower .Name}} {{parameterType
 
 {{range .Attributes}}
 {{if not .OmitAccessor}}
-func (c *{{$c.FullName}}) {{template "accessor" .}}({{range .GetParameters}}{{lower .Name}} {{parameterType .}},{{end}}) *{{recordType .}} {
+func (c *{{$c.FullName}}) {{template "accessor" .}}({{range .GetParameters}}{{lower .Name}} {{parameterType .}},{{end}}) {{recordType .}} {
 	{{- if parameterized .}}
 	return getOrCreateMap(&c.{{lower .Name}}, keyFor{{.FullName}}({{range .GetParameters}}{{lower .Name}},{{end}}),
 	{{- else}}
 	return getOrCreateField(&c.{{lower .Name}},
 	{{- end -}}
 
-	func() *{{recordType .}} {
+	func() {{recordType .}} {
 		{{- if .Type.IsEntity}}
 		v := new({{.FullName}})
 		v.logger = c.logger
@@ -303,8 +303,8 @@ func (c *{{.FullName}}) {{if .CustomCommit}}base{{end}}Commit() error {
 {{template "entity" .}}
 {{end}}
 
-func getOrCreateField[T any](ptr **T, create func() *T) *T {
-	if *ptr != nil {
+func getOrCreateField[T any](ptr *T, create func() T) T {
+	if any(*ptr) != nil {
 		return *ptr
 	}
 
@@ -326,14 +326,15 @@ func getOrCreateMap[T any, K comparable](ptr *map[K]T, key K, create func() T) T
 	return v
 }
 
-func commitField[T any, PT record.RecordPtr[T]](lastErr *error, field PT) {
-	if *lastErr != nil || field == nil {
+func commitField[T record.Record](lastErr *error, field T) {
+	if *lastErr != nil || any(field) == nil {
 		return
 	}
 
 	*lastErr = field.Commit()
 }
 
-func fieldIsDirty[T any, PT record.RecordPtr[T]](field PT) bool {
-	return field != nil && field.IsDirty()
+
+func fieldIsDirty[T record.Record](field T) bool {
+	return any(field) != nil && field.IsDirty()
 }

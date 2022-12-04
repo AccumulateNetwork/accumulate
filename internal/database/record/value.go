@@ -55,8 +55,7 @@ const (
 	valueDirty
 )
 
-// Value records a value.
-type Value[T any] struct {
+type value[T any] struct {
 	logger       logging.OptionalLogger
 	store        Store
 	key          Key
@@ -66,29 +65,29 @@ type Value[T any] struct {
 	allowMissing bool
 }
 
-var _ ValueReader = (*Value[*wrappedValue[uint64]])(nil)
-var _ ValueWriter = (*Value[*wrappedValue[uint64]])(nil)
+var _ ValueReader = (*value[*wrappedValue[uint64]])(nil)
+var _ ValueWriter = (*value[*wrappedValue[uint64]])(nil)
 
-// NewValue returns a new Value using the given encodable value.
-func NewValue[T any](logger log.Logger, store Store, key Key, name string, allowMissing bool, value encodableValue[T]) *Value[T] {
-	v := &Value[T]{}
+// NewValue returns a new value using the given encodable value.
+func newValue[T any](logger log.Logger, store Store, key Key, name string, allowMissing bool, ev encodableValue[T]) *value[T] {
+	v := &value[T]{}
 	v.logger.L = logger
 	v.store = store
 	v.key = key
 	v.name = name
-	v.value = value
+	v.value = ev
 	v.allowMissing = allowMissing
 	v.status = valueUndefined
 	return v
 }
 
 // Key returns the I'th component of the value's key.
-func (v *Value[T]) Key(i int) interface{} {
+func (v *value[T]) Key(i int) interface{} {
 	return v.key[i]
 }
 
 // Get loads the value, unmarshalling it if necessary.
-func (v *Value[T]) Get() (u T, err error) {
+func (v *value[T]) Get() (u T, err error) {
 	// Do we already have the value?
 	switch v.status {
 	case valueNotFound:
@@ -147,7 +146,7 @@ func (v *Value[T]) Get() (u T, err error) {
 
 // GetAs loads the value, coerces it to the target type, and assigns it to the
 // target. The target must be a non-nil pointer to T.
-func (v *Value[T]) GetAs(target interface{}) error {
+func (v *value[T]) GetAs(target interface{}) error {
 	u, err := v.Get()
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
@@ -158,7 +157,7 @@ func (v *Value[T]) GetAs(target interface{}) error {
 }
 
 // Put stores the value.
-func (v *Value[T]) Put(u T) error {
+func (v *value[T]) Put(u T) error {
 	switch debug & (debugPut | debugPutValue) {
 	case debugPut | debugPutValue:
 		v.logger.Debug("Put", "key", v.key, "value", u)
@@ -174,7 +173,7 @@ func (v *Value[T]) Put(u T) error {
 }
 
 // IsDirty implements Record.IsDirty.
-func (v *Value[T]) IsDirty() bool {
+func (v *value[T]) IsDirty() bool {
 	if v == nil {
 		return false
 	}
@@ -182,7 +181,7 @@ func (v *Value[T]) IsDirty() bool {
 }
 
 // Commit implements Record.Commit.
-func (v *Value[T]) Commit() error {
+func (v *value[T]) Commit() error {
 	if v == nil || v.status != valueDirty {
 		return nil
 	}
@@ -196,7 +195,7 @@ func (v *Value[T]) Commit() error {
 }
 
 // Resolve implements Record.Resolve.
-func (v *Value[T]) Resolve(key Key) (Record, Key, error) {
+func (v *value[T]) Resolve(key Key) (Record, Key, error) {
 	if len(key) == 0 {
 		return v, nil, nil
 	}
@@ -204,7 +203,7 @@ func (v *Value[T]) Resolve(key Key) (Record, Key, error) {
 }
 
 // GetValue loads the value.
-func (v *Value[T]) GetValue() (encoding.BinaryValue, error) {
+func (v *value[T]) GetValue() (encoding.BinaryValue, error) {
 	_, err := v.Get()
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
@@ -214,7 +213,7 @@ func (v *Value[T]) GetValue() (encoding.BinaryValue, error) {
 
 // LoadValue sets the value from the reader. If put is false, the value will be
 // copied. If put is true, the value will be marked dirty.
-func (v *Value[T]) LoadValue(value ValueReader, put bool) error {
+func (v *value[T]) LoadValue(value ValueReader, put bool) error {
 	uv, err := value.GetValue()
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
@@ -236,7 +235,7 @@ func (v *Value[T]) LoadValue(value ValueReader, put bool) error {
 }
 
 // LoadBytes unmarshals the value from bytes.
-func (v *Value[T]) LoadBytes(data []byte) error {
+func (v *value[T]) LoadBytes(data []byte) error {
 	err := v.value.UnmarshalBinary(data)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)

@@ -57,9 +57,9 @@ func hasChains(r typegen.Record) bool {
 
 func fieldType(r typegen.Record) string {
 	if len(r.GetParameters()) == 0 {
-		return "*" + recordType(r)
+		return recordType(r)
 	}
-	return "map[" + typegen.LowerFirstWord(r.FullName()) + "Key]*" + recordType(r)
+	return "map[" + typegen.LowerFirstWord(r.FullName()) + "Key]" + recordType(r)
 }
 
 func recordType(r typegen.Record) string {
@@ -78,11 +78,11 @@ func recordType(r typegen.Record) string {
 		}
 		return fmt.Sprintf("%s[%s]", typ, stateType(r, false))
 	case *typegen.ChainRecord:
-		return "managed.Chain"
+		return "*managed.Chain"
 	case *typegen.OtherRecord:
-		return r.DataType
+		return "*" + r.DataType
 	default:
-		return r.FullName()
+		return "*" + r.FullName()
 	}
 }
 
