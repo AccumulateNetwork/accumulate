@@ -11,7 +11,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
-
 type list[T any] struct {
 	value[[]T]
 }
