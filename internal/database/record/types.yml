@@ -1,0 +1,11 @@
+ChainHead:
+  non-binary: true
+  fields:
+    - name: Count
+      type: int
+    - name: Pending
+      type: bytes
+      repeatable: true
+    - name: HashList
+      type: bytes
+      repeatable: true

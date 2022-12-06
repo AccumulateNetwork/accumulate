@@ -30,10 +30,10 @@ type Chain struct {
 	markFreq  int64
 	markMask  int64
 
-	head         *record.Value[*MerkleState]
-	states       map[chainStatesKey]*record.Value[*MerkleState]
-	elementIndex map[chainElementIndexKey]*record.Value[uint64]
-	element      map[chainElementKey]*record.Value[[]byte]
+	head         record.Value[*MerkleState]
+	states       map[chainStatesKey]record.Value[*MerkleState]
+	elementIndex map[chainElementIndexKey]record.Value[uint64]
+	element      map[chainElementKey]record.Value[[]byte]
 }
 
 type chainStatesKey struct {
@@ -60,26 +60,26 @@ func keyForChainElement(index uint64) chainElementKey {
 	return chainElementKey{index}
 }
 
-func (c *Chain) Head() *record.Value[*MerkleState] {
-	return getOrCreateField(&c.head, func() *record.Value[*MerkleState] {
+func (c *Chain) Head() record.Value[*MerkleState] {
+	return getOrCreateField(&c.head, func() record.Value[*MerkleState] {
 		return record.NewValue(c.logger.L, c.store, c.key.Append("Head"), c.label+" "+"head", true, record.Struct[MerkleState]())
 	})
 }
 
-func (c *Chain) States(index uint64) *record.Value[*MerkleState] {
-	return getOrCreateMap(&c.states, keyForChainStates(index), func() *record.Value[*MerkleState] {
+func (c *Chain) States(index uint64) record.Value[*MerkleState] {
+	return getOrCreateMap(&c.states, keyForChainStates(index), func() record.Value[*MerkleState] {
 		return record.NewValue(c.logger.L, c.store, c.key.Append("States", index), c.label+" "+"states"+" "+strconv.FormatUint(index, 10), false, record.Struct[MerkleState]())
 	})
 }
 
-func (c *Chain) ElementIndex(hash []byte) *record.Value[uint64] {
-	return getOrCreateMap(&c.elementIndex, keyForChainElementIndex(hash), func() *record.Value[uint64] {
+func (c *Chain) ElementIndex(hash []byte) record.Value[uint64] {
+	return getOrCreateMap(&c.elementIndex, keyForChainElementIndex(hash), func() record.Value[uint64] {
 		return record.NewValue(c.logger.L, c.store, c.key.Append("ElementIndex", hash), c.label+" "+"element index"+" "+hex.EncodeToString(hash), false, record.Wrapped(record.UintWrapper))
 	})
 }
 
-func (c *Chain) Element(index uint64) *record.Value[[]byte] {
-	return getOrCreateMap(&c.element, keyForChainElement(index), func() *record.Value[[]byte] {
+func (c *Chain) Element(index uint64) record.Value[[]byte] {
+	return getOrCreateMap(&c.element, keyForChainElement(index), func() record.Value[[]byte] {
 		return record.NewValue(c.logger.L, c.store, c.key.Append("Element", index), c.label+" "+"element"+" "+strconv.FormatUint(index, 10), false, record.Wrapped(record.BytesWrapper))
 	})
 }
@@ -174,8 +174,9 @@ func (c *Chain) Commit() error {
 	return err
 }
 
-func getOrCreateField[T any](ptr **T, create func() *T) *T {
-	if *ptr != nil {
+func getOrCreateField[T any](ptr *T, create func() T) T {
+	var z T
+	if any(*ptr) != any(z) {
 		return *ptr
 	}
 
@@ -197,14 +198,16 @@ func getOrCreateMap[T any, K comparable](ptr *map[K]T, key K, create func() T) T
 	return v
 }
 
-func commitField[T any, PT record.RecordPtr[T]](lastErr *error, field PT) {
-	if *lastErr != nil || field == nil {
+func commitField[T record.Record](lastErr *error, field T) {
+	var z T
+	if *lastErr != nil || any(field) == any(z) {
 		return
 	}
 
 	*lastErr = field.Commit()
 }
 
-func fieldIsDirty[T any, PT record.RecordPtr[T]](field PT) bool {
-	return field != nil && field.IsDirty()
+func fieldIsDirty[T record.Record](field T) bool {
+	var z T
+	return any(field) != any(z) && field.IsDirty()
 }
