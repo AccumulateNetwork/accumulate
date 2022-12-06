@@ -11,17 +11,17 @@ import (
 	"reflect"
 
 	"github.com/go-playground/validator/v10"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/managed"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
 // ChainType is the type of a chain belonging to an account.
-type ChainType = managed.ChainType
+type ChainType = merkle.ChainType
 
-const ChainTypeUnknown = managed.ChainTypeUnknown
-const ChainTypeTransaction = managed.ChainTypeTransaction
-const ChainTypeAnchor = managed.ChainTypeAnchor
-const ChainTypeIndex = managed.ChainTypeIndex
+const ChainTypeUnknown = merkle.ChainTypeUnknown
+const ChainTypeTransaction = merkle.ChainTypeTransaction
+const ChainTypeAnchor = merkle.ChainTypeAnchor
+const ChainTypeIndex = merkle.ChainTypeIndex
 
 // BookType is the type of a key book.
 type BookType uint64

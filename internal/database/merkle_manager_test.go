@@ -4,7 +4,7 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package managed
+package database
 
 import (
 	"bytes"
@@ -17,6 +17,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/common"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/memory"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 )
 
 func begin() record.KvStore {
@@ -25,8 +26,8 @@ func begin() record.KvStore {
 	return record.KvStore{Store: txn}
 }
 
-func testChain(store record.KvStore, markPower int64, key ...interface{}) *Chain {
-	return NewChain(nil, store, record.Key(key), markPower, ChainTypeUnknown, "chain", "chain")
+func testChain(store record.KvStore, markPower int64, key ...interface{}) *MerkleManager {
+	return NewChain(nil, store, record.Key(key), markPower, merkle.ChainTypeUnknown, "chain", "chain")
 }
 
 func TestMerkleManager_GetChainState(t *testing.T) {
@@ -246,10 +247,10 @@ func TestMerkleManager_GetIntermediate(t *testing.T) {
 		require.NoError(t, m.AddHash(r.NextList(), false))
 		head, err := m.Head().Get()
 		require.NoError(t, err)
-		head.PadPending()
+		head.Pad()
 		if col&1 == 1 {
 			s, _ := m.GetAnyState(col - 1)
-			s.PadPending()
+			s.Pad()
 			s.InitSha256()
 			for row := int64(1); s.Pending[row-1] != nil; row++ {
 				left, right, err := m.GetIntermediate(col, row)

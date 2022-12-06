@@ -92,7 +92,7 @@ TransactionStatus:
       type: bool
     - name: Proof
       description: is the proof of the transaction
-      type: managed.Receipt
+      type: merkle.Receipt
       marshal-as: reference
       pointer: true
     - name: AnchorSigners

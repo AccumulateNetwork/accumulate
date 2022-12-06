@@ -1,10 +1,13 @@
-package managed
+package snapshot
 
-import "gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+import (
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+)
 
 // AddEntry adds an entry to the snapshot as if it were added to the chain.
 // AddEntry's logic must mirror MerkleManager.AddHash.
-func (c *Snapshot) AddEntry(hash Hash) {
+func (c *Chain) AddEntry(hash []byte) {
 	var markFreq = int64(1) << int64(c.MarkPower)
 	var markMask = markFreq - 1
 	switch (c.Head.Count + 1) & markMask {
@@ -19,21 +22,21 @@ func (c *Snapshot) AddEntry(hash Hash) {
 	}
 }
 
-func (c *Chain) CollectSnapshot() (*Snapshot, error) {
+func CollectChain(c *database.MerkleManager) (*Chain, error) {
 	head, err := c.Head().Get()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load head: %w", err)
 	}
 
-	s := new(Snapshot)
-	s.Name = c.name
-	s.Type = c.typ
-	s.MarkPower = uint64(c.markPower)
+	s := new(Chain)
+	s.Name = c.Name()
+	s.Type = c.Type()
+	s.MarkPower = uint64(c.MarkPower())
 	s.Head = head
 
 	// Collect the mark points
-	lastMark := head.Count &^ c.markMask
-	for i := c.markFreq; i <= lastMark; i += c.markFreq {
+	lastMark := head.Count &^ c.MarkMask()
+	for i := c.MarkFreq(); i <= lastMark; i += c.MarkFreq() {
 		state, err := c.States(uint64(i - 1)).Get()
 		switch {
 		case err == nil:
@@ -52,17 +55,17 @@ func (c *Chain) CollectSnapshot() (*Snapshot, error) {
 	return s, nil
 }
 
-func (c *Chain) RestoreSnapshot(s *Snapshot) error {
+func (c *Chain) RestoreSnapshot(s *database.MerkleManager) error {
 	err := c.RestoreHead(s)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
 
-	err = c.RestoreMarkPointRange(s, 0, len(s.MarkPoints))
+	err = c.RestoreMarkPointRange(s, 0, len(c.MarkPoints))
 	return errors.UnknownError.Wrap(err)
 }
 
-func (c *Chain) RestoreHead(s *Snapshot) error {
+func (s *Chain) RestoreHead(c *database.MerkleManager) error {
 	// Ensure the chain is empty
 	head, err := c.Head().Get()
 	if err != nil {
@@ -72,10 +75,10 @@ func (c *Chain) RestoreHead(s *Snapshot) error {
 		return errors.Conflict.WithFormat("cannot restore onto existing chain")
 	}
 
-	if s.MarkPower != uint64(c.markPower) {
+	if s.MarkPower != uint64(c.MarkPower()) {
 		// It is possible to handle this but I'm not going to bother writing the
 		// code unless we need it
-		return errors.Conflict.WithFormat("mark power conflict: %d != %d", s.MarkPower, c.markPower)
+		return errors.Conflict.WithFormat("mark power conflict: %d != %d", s.MarkPower, c.MarkPower())
 	}
 
 	err = c.Head().Put(s.Head)
@@ -86,14 +89,14 @@ func (c *Chain) RestoreHead(s *Snapshot) error {
 	return nil
 }
 
-func (c *Chain) RestoreMarkPointRange(s *Snapshot, start, end int) error {
+func (s *Chain) RestoreMarkPointRange(c *database.MerkleManager, start, end int) error {
 	for _, state := range s.MarkPoints[start:end] {
-		if state == new(MerkleState) {
+		if state == new(database.MerkleState) {
 			continue
 		}
 
-		if state.Count&c.markMask != 0 {
-			return errors.Conflict.WithFormat("mark power conflict: count %d does not match mark power %d", state.Count, c.markPower)
+		if state.Count&c.MarkMask() != 0 {
+			return errors.Conflict.WithFormat("mark power conflict: count %d does not match mark power %d", state.Count, c.MarkPower())
 		}
 
 		err := c.States(uint64(state.Count - 1)).Put(state)
@@ -104,8 +107,8 @@ func (c *Chain) RestoreMarkPointRange(s *Snapshot, start, end int) error {
 	return nil
 }
 
-func (c *Chain) RestoreElementIndexFromHead(s *Snapshot) error {
-	lastMark := s.Head.Count &^ c.markMask
+func (s *Chain) RestoreElementIndexFromHead(c *database.MerkleManager) error {
+	lastMark := s.Head.Count &^ c.MarkMask()
 	for i, h := range s.Head.HashList {
 		err := c.ElementIndex(h).Put(uint64(lastMark) + uint64(i))
 		if err != nil {
@@ -115,14 +118,14 @@ func (c *Chain) RestoreElementIndexFromHead(s *Snapshot) error {
 	return nil
 }
 
-func (c *Chain) RestoreElementIndexFromMarkPoints(s *Snapshot, start, end int) error {
+func (s *Chain) RestoreElementIndexFromMarkPoints(c *database.MerkleManager, start, end int) error {
 	for _, state := range s.MarkPoints[start:end] {
-		if state == new(MerkleState) {
+		if state == new(database.MerkleState) {
 			continue
 		}
 
-		if state.Count&c.markMask != 0 {
-			return errors.Conflict.WithFormat("mark power conflict: count %d does not match mark power %d", state.Count, c.markPower)
+		if state.Count&c.MarkMask() != 0 {
+			return errors.Conflict.WithFormat("mark power conflict: count %d does not match mark power %d", state.Count, c.MarkPower())
 		}
 
 		for i, h := range state.HashList {

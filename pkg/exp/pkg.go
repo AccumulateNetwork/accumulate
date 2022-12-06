@@ -3,10 +3,10 @@ package exp
 
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/managed"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 )
 
 type GlobalValues = core.GlobalValues
 
-type Receipt = managed.Receipt
-type ReceiptEntry = managed.ReceiptEntry
+type Receipt = merkle.Receipt
+type ReceiptEntry = merkle.ReceiptEntry

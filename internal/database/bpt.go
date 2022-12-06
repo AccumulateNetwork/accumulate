@@ -11,10 +11,10 @@ import (
 	"io"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/pmt"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 )
 
 func (b *Batch) VisitAccounts(visit func(*Account) error) error {
@@ -117,7 +117,7 @@ func (b *Batch) BptRoot() []byte {
 }
 
 // BptReceipt builds a BPT receipt for the given key.
-func (b *Batch) BptReceipt(key storage.Key, value [32]byte) (*managed.Receipt, error) {
+func (b *Batch) BptReceipt(key storage.Key, value [32]byte) (*merkle.Receipt, error) {
 	if len(b.bptEntries) > 0 {
 		return nil, errors.InternalError.With("cannot generate a BPT receipt when there are uncommitted BPT entries")
 	}

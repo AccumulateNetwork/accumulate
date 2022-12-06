@@ -155,7 +155,7 @@ func (c *{{fullName $c}}) {{template "accessor" .}}({{range .GetParameters}}{{lo
 		v.label = {{template "valueLabel" .}}
 		return v
 		{{- else if .Type.IsChain}}
-		return managed.NewChain(c.logger.L, c.store, {{template "key" .}}, markPower, managed.ChainType{{title .ChainType}}, "{{chainNameFormat .}}", {{template "valueLabel" .}})
+		return database.NewChain(c.logger.L, c.store, {{template "key" .}}, markPower, merkle.ChainType{{title .ChainType}}, "{{chainNameFormat .}}", {{template "valueLabel" .}})
 		{{- else if .Type.IsOther}}
 		return new{{.DataType}}(c, c.logger.L, c.store, {{template "key" .}}, "{{chainNameFormat .}}", {{template "valueLabel" .}})
 		{{- else if .IsCounted}}
@@ -221,7 +221,7 @@ func (c *{{fullName .}}) {{if .CustomIsDirty}}base{{end}}IsDirty() bool {
 
 {{if hasChains .}}
 {{if not .Root}}
-func (c *{{fullName .}}) resolveChain(name string) (chain *managed.Chain, ok bool) {
+func (c *{{fullName .}}) resolveChain(name string) (chain *database.Chain, ok bool) {
 	{{- range .Attributes}}
 	{{- if and (.Type.IsChain) (not (parameterized .))}}
 	if name == "{{chainName .}}"{
@@ -232,7 +232,7 @@ func (c *{{fullName .}}) resolveChain(name string) (chain *managed.Chain, ok boo
 
 	{{- range .Attributes}}
 	{{- if and (parameterized .) (hasChains .)}}
-	tryResolveChainParam(&chain, &ok, name, "{{chainName .}}(", {{parameterCount .}}, func(params []string, name string) (*managed.Chain, bool) {
+	tryResolveChainParam(&chain, &ok, name, "{{chainName .}}(", {{parameterCount .}}, func(params []string, name string) (*database.Chain, bool) {
 		ok := true
 		{{- range $i, $p := .Parameters}}
 		param{{$p.Name}} := parseChainParam(&ok, params[{{$i}}], record.Parse{{title $p.Type.String}})
@@ -251,12 +251,12 @@ func (c *{{fullName .}}) resolveChain(name string) (chain *managed.Chain, ok boo
 }
 {{end}}
 
-func (c *{{fullName .}}) dirtyChains() []*managed.Chain {
+func (c *{{fullName .}}) dirtyChains() []*database.Chain {
 	if c == nil {
 		return nil
 	}
 
-	var chains []*managed.Chain
+	var chains []*database.Chain
 	{{  range .Attributes}}
 	{{- if parameterized .}}
 	{{- if .Type.IsChain}}

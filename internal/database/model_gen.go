@@ -18,6 +18,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -841,6 +842,161 @@ func (c *SystemData) Commit() error {
 
 	var err error
 	for _, v := range c.syntheticIndexIndex {
+		commitField(&err, v)
+	}
+
+	return err
+}
+
+type MerkleManager struct {
+	logger    logging.OptionalLogger
+	store     record.Store
+	key       record.Key
+	label     string
+	typ       merkle.ChainType
+	name      string
+	markPower int64
+	markFreq  int64
+	markMask  int64
+
+	head         record.Value[*MerkleState]
+	states       map[merkleManagerStatesKey]record.Value[*MerkleState]
+	elementIndex map[merkleManagerElementIndexKey]record.Value[uint64]
+	element      map[merkleManagerElementKey]record.Value[[]byte]
+}
+
+type merkleManagerStatesKey struct {
+	Index uint64
+}
+
+func keyForMerkleManagerStates(index uint64) merkleManagerStatesKey {
+	return merkleManagerStatesKey{index}
+}
+
+type merkleManagerElementIndexKey struct {
+	Hash [32]byte
+}
+
+func keyForMerkleManagerElementIndex(hash []byte) merkleManagerElementIndexKey {
+	return merkleManagerElementIndexKey{record.MapKeyBytes(hash)}
+}
+
+type merkleManagerElementKey struct {
+	Index uint64
+}
+
+func keyForMerkleManagerElement(index uint64) merkleManagerElementKey {
+	return merkleManagerElementKey{index}
+}
+
+func (c *MerkleManager) Head() record.Value[*MerkleState] {
+	return getOrCreateField(&c.head, func() record.Value[*MerkleState] {
+		return record.NewValue(c.logger.L, c.store, c.key.Append("Head"), c.label+" "+"head", true, record.Struct[MerkleState]())
+	})
+}
+
+func (c *MerkleManager) States(index uint64) record.Value[*MerkleState] {
+	return getOrCreateMap(&c.states, keyForMerkleManagerStates(index), func() record.Value[*MerkleState] {
+		return record.NewValue(c.logger.L, c.store, c.key.Append("States", index), c.label+" "+"states"+" "+strconv.FormatUint(index, 10), false, record.Struct[MerkleState]())
+	})
+}
+
+func (c *MerkleManager) ElementIndex(hash []byte) record.Value[uint64] {
+	return getOrCreateMap(&c.elementIndex, keyForMerkleManagerElementIndex(hash), func() record.Value[uint64] {
+		return record.NewValue(c.logger.L, c.store, c.key.Append("ElementIndex", hash), c.label+" "+"element index"+" "+hex.EncodeToString(hash), false, record.Wrapped(record.UintWrapper))
+	})
+}
+
+func (c *MerkleManager) Element(index uint64) record.Value[[]byte] {
+	return getOrCreateMap(&c.element, keyForMerkleManagerElement(index), func() record.Value[[]byte] {
+		return record.NewValue(c.logger.L, c.store, c.key.Append("Element", index), c.label+" "+"element"+" "+strconv.FormatUint(index, 10), false, record.Wrapped(record.BytesWrapper))
+	})
+}
+
+func (c *MerkleManager) Resolve(key record.Key) (record.Record, record.Key, error) {
+	if len(key) == 0 {
+		return nil, nil, errors.InternalError.With("bad key for merkle manager")
+	}
+
+	switch key[0] {
+	case "Head":
+		return c.Head(), key[1:], nil
+	case "States":
+		if len(key) < 2 {
+			return nil, nil, errors.InternalError.With("bad key for merkle manager")
+		}
+		index, okIndex := key[1].(uint64)
+		if !okIndex {
+			return nil, nil, errors.InternalError.With("bad key for merkle manager")
+		}
+		v := c.States(index)
+		return v, key[2:], nil
+	case "ElementIndex":
+		if len(key) < 2 {
+			return nil, nil, errors.InternalError.With("bad key for merkle manager")
+		}
+		hash, okHash := key[1].([]byte)
+		if !okHash {
+			return nil, nil, errors.InternalError.With("bad key for merkle manager")
+		}
+		v := c.ElementIndex(hash)
+		return v, key[2:], nil
+	case "Element":
+		if len(key) < 2 {
+			return nil, nil, errors.InternalError.With("bad key for merkle manager")
+		}
+		index, okIndex := key[1].(uint64)
+		if !okIndex {
+			return nil, nil, errors.InternalError.With("bad key for merkle manager")
+		}
+		v := c.Element(index)
+		return v, key[2:], nil
+	default:
+		return nil, nil, errors.InternalError.With("bad key for merkle manager")
+	}
+}
+
+func (c *MerkleManager) IsDirty() bool {
+	if c == nil {
+		return false
+	}
+
+	if fieldIsDirty(c.head) {
+		return true
+	}
+	for _, v := range c.states {
+		if v.IsDirty() {
+			return true
+		}
+	}
+	for _, v := range c.elementIndex {
+		if v.IsDirty() {
+			return true
+		}
+	}
+	for _, v := range c.element {
+		if v.IsDirty() {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (c *MerkleManager) Commit() error {
+	if c == nil {
+		return nil
+	}
+
+	var err error
+	commitField(&err, c.head)
+	for _, v := range c.states {
+		commitField(&err, v)
+	}
+	for _, v := range c.elementIndex {
+		commitField(&err, v)
+	}
+	for _, v := range c.element {
 		commitField(&err, v)
 	}
 
