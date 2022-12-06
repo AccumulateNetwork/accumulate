@@ -48,6 +48,9 @@ require (
 	github.com/ethereum/go-ethereum v1.10.25
 	github.com/ghodss/yaml v1.0.0
 	github.com/mattn/go-shellwords v1.0.12
+	github.com/mr-tron/base58 v1.2.0
+	github.com/multiformats/go-multibase v0.1.1
+	github.com/multiformats/go-multihash v0.2.1
 	github.com/robfig/cron/v3 v3.0.0
 	github.com/vektra/mockery/v2 v2.14.0
 	gitlab.com/accumulatenetwork/core/wallet v0.3.3-0.20221103154856-2467ab689b1b
@@ -86,21 +89,28 @@ require (
 	github.com/gtank/merlin v0.1.1 // indirect
 	github.com/howeyc/gopass v0.0.0-20210920133722-c8aef6fb66ef // indirect
 	github.com/karalabe/usb v0.0.2 // indirect
+	github.com/klauspost/cpuid/v2 v2.0.9 // indirect
 	github.com/lufeee/execinquery v1.2.1 // indirect
 	github.com/manifoldco/promptui v0.9.0 // indirect
 	github.com/mdp/qrterminal v1.0.1 // indirect
 	github.com/mimoo/StrobeGo v0.0.0-20210601165009-122bf33a46e0 // indirect
+	github.com/minio/sha256-simd v1.0.0 // indirect
+	github.com/multiformats/go-base32 v0.0.3 // indirect
+	github.com/multiformats/go-base36 v0.1.0 // indirect
+	github.com/multiformats/go-varint v0.0.6 // indirect
 	github.com/pelletier/go-toml/v2 v2.0.5 // indirect
 	github.com/quasilyte/stdinfo v0.0.0-20220114132959-f7386bf02567 // indirect
 	github.com/sashamelentyev/interfacebloat v1.1.0 // indirect
 	github.com/sashamelentyev/usestdlibvars v1.13.0 // indirect
 	github.com/sivchari/nosnakecase v1.7.0 // indirect
+	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/stbenjam/no-sprintf-host-port v0.1.1 // indirect
 	github.com/timonwong/logrlint v0.1.0 // indirect
 	github.com/tyler-smith/go-bip32 v1.0.0 // indirect
 	github.com/tyler-smith/go-bip39 v1.1.0 // indirect
 	gitlab.com/accumulatenetwork/ledger/ledger-go-accumulate v0.0.0-20221027084553-1a2124c6287f // indirect
 	golang.org/x/exp/typeparams v0.0.0-20220722155223-a9213eeb770e // indirect
+	lukechampine.com/blake3 v1.1.6 // indirect
 	rsc.io/qr v0.2.0 // indirect
 )
 
