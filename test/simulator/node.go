@@ -67,6 +67,12 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 	n.privValKey = init.PrivValKey
 	n.nodeKey = init.NodeKey
 
+	// This is hacky, but 🤷 I don't see another choice that wouldn't be
+	// significantly less readable
+	if p.Type == config.Directory && node == 0 {
+		events.SubscribeSync(n.eventBus, s.router.willChangeGlobals)
+	}
+
 	// Create a Querier service
 	n.querySvc = apiimpl.NewQuerier(apiimpl.QuerierParams{
 		Logger:    n.logger.With("module", "acc-rpc"),
@@ -110,6 +116,15 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 	n.executor, err = block.NewNodeExecutor(execOpts, n)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	// Add background tasks to the block's error group. The simulator must call
+	// Group.Wait before changing the group, to ensure no race conditions.
+	n.executor.Background = func(f func()) {
+		s.blockErrGroup.Go(func() error {
+			f()
+			return nil
+		})
 	}
 
 	// Set up the API

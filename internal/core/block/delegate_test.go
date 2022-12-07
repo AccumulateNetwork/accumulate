@@ -22,6 +22,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
+	newsim "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
@@ -34,6 +35,15 @@ func updateAccount[T Account](sim *simulator.Simulator, accountUrl *url.URL, fn 
 			sim.FailNow()
 		}
 
+		fn(typed)
+	})
+}
+
+func updateAccountNew[T Account](sim *newsim.Simulator, accountUrl *url.URL, fn func(account T)) {
+	sim.UpdateAccount(accountUrl, func(account Account) {
+		var typed T
+		err := encoding.SetPtr(account, &typed)
+		require.NoError(sim.TB, err)
 		fn(typed)
 	})
 }
