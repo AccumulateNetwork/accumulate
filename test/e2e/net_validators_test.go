@@ -64,13 +64,13 @@ func TestUpdateValidators(t *testing.T) {
 	signer2 := new(signing.Builder).
 		SetType(SignatureTypeED25519).
 		UseSimpleHash().
-		SetPrivateKey(sim.Partition(sim.Partitions[1].Id).Executor.Key).
+		SetPrivateKey(sim.Partition("BVN0").Executor.Key).
 		SetUrl(operators).
 		SetVersion(page.Version)
 	signer3 := new(signing.Builder).
 		SetType(SignatureTypeED25519).
 		UseSimpleHash().
-		SetPrivateKey(sim.Partition(sim.Partitions[2].Id).Executor.Key).
+		SetPrivateKey(sim.Partition("BVN1").Executor.Key).
 		SetUrl(operators).
 		SetVersion(page.Version)
 
@@ -159,7 +159,7 @@ func TestUpdateOperators(t *testing.T) {
 	sim := simulator.New(t, 3)
 	sim.InitFromGenesisWith(g)
 	dn := sim.Partition(Directory)
-	bvn0 := sim.Partition(sim.Partitions[1].Id)
+	bvn0 := sim.Partition("BVN0")
 
 	page := simulator.GetAccount[*KeyPage](sim, bvn0.Executor.Describe.OperatorsPage())
 	initValCount := len(page.Keys)
