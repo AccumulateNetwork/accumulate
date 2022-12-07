@@ -134,6 +134,8 @@ func BadgerDatabaseFromDirectory(dir string, onErr func(error)) OpenDatabaseFunc
 	}
 }
 
+// SimpleNetwork creates a basic network with the given name, number of BVNs,
+// and number of nodes per BVN.
 func SimpleNetwork(name string, bvnCount, nodeCount int) *accumulated.NetworkInit {
 	net := new(accumulated.NetworkInit)
 	net.Id = name
@@ -153,6 +155,8 @@ func SimpleNetwork(name string, bvnCount, nodeCount int) *accumulated.NetworkIni
 	return net
 }
 
+// LocalNetwork returns a SimpleNetwork with sequential IPs starting from the
+// base IP with the given base port.
 func LocalNetwork(name string, bvnCount, nodeCount int, baseIP net.IP, basePort uint64) *accumulated.NetworkInit {
 	net := SimpleNetwork(name, bvnCount, nodeCount)
 	for _, bvn := range net.Bvns {
@@ -390,12 +394,16 @@ func (n nodeSigner) Sign(sig protocol.Signature, sigMdHash, message []byte) erro
 	return nil
 }
 
+// Services returns the simulator's API v3 implementation.
 func (s *Simulator) Services() *simService { return (*simService)(s) }
 
+// simService implements API v3.
 type simService Simulator
 
+// Private returns the private sequencer service.
 func (s *simService) Private() private.Sequencer { return s }
 
+// NodeStatus finds the specified node and returns its NodeStatus.
 func (s *simService) NodeStatus(ctx context.Context, opts api.NodeStatusOptions) (*api.NodeStatus, error) {
 	if opts.NodeID == "" {
 		return nil, errors.BadRequest.WithFormat("node ID is missing")
@@ -418,14 +426,18 @@ func (s *simService) NodeStatus(ctx context.Context, opts api.NodeStatusOptions)
 	return nil, errors.NotFound.WithFormat("node %s not found", id)
 }
 
+// NetworkStatus implements pkg/api/v3.NetworkService.
 func (s *simService) NetworkStatus(ctx context.Context, opts api.NetworkStatusOptions) (*api.NetworkStatus, error) {
 	return (*nodeService)(s.partitions[protocol.Directory].nodes[0]).NetworkStatus(ctx, opts)
 }
 
+// Metrics implements pkg/api/v3.MetricsService.
 func (s *simService) Metrics(ctx context.Context, opts api.MetricsOptions) (*api.Metrics, error) {
 	return nil, errors.NotAllowed
 }
 
+// Query routes the scope to a partition and calls Query on the first node of
+// that partition, returning the result.
 func (s *simService) Query(ctx context.Context, scope *url.URL, query api.Query) (api.Record, error) {
 	part, err := s.router.RouteAccount(scope)
 	if err != nil {
@@ -434,6 +446,8 @@ func (s *simService) Query(ctx context.Context, scope *url.URL, query api.Query)
 	return (*nodeService)(s.partitions[part].nodes[0]).Query(ctx, scope, query)
 }
 
+// Submit routes the envelope to a partition and calls Submit on the first node
+// of that partition, returning the result.
 func (s *simService) Submit(ctx context.Context, envelope *protocol.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {
 	part, err := s.router.Route(envelope)
 	if err != nil {
@@ -442,6 +456,8 @@ func (s *simService) Submit(ctx context.Context, envelope *protocol.Envelope, op
 	return (*nodeService)(s.partitions[part].nodes[0]).Submit(ctx, envelope, opts)
 }
 
+// Validate routes the envelope to a partition and calls Validate on the first
+// node of that partition, returning the result.
 func (s *simService) Validate(ctx context.Context, envelope *protocol.Envelope, opts api.ValidateOptions) ([]*api.Submission, error) {
 	part, err := s.router.Route(envelope)
 	if err != nil {
@@ -450,10 +466,12 @@ func (s *simService) Validate(ctx context.Context, envelope *protocol.Envelope, 
 	return (*nodeService)(s.partitions[part].nodes[0]).Validate(ctx, envelope, opts)
 }
 
+// Sequence routes the source to a partition and calls Sequence on the first
+// node of that partition, returning the result.
 func (s *simService) Sequence(ctx context.Context, src, dst *url.URL, num uint64) (*api.TransactionRecord, error) {
 	part, err := s.router.RouteAccount(src)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
-	return s.partitions[part].nodes[0].seqSvc.Sequence(ctx, src, dst, num)
+	return (*nodeService)(s.partitions[part].nodes[0]).Private().Sequence(ctx, src, dst, num)
 }

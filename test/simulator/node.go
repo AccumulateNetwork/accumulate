@@ -67,11 +67,14 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 	n.privValKey = init.PrivValKey
 	n.nodeKey = init.NodeKey
 
+	// Create a Querier service
 	n.querySvc = apiimpl.NewQuerier(apiimpl.QuerierParams{
 		Logger:    n.logger.With("module", "acc-rpc"),
 		Database:  n,
 		Partition: p.ID,
 	})
+
+	// Create a Sequencer service
 	n.seqSvc = apiimpl.NewSequencer(apiimpl.SequencerParams{
 		Logger:       n.logger.With("module", "acc-rpc"),
 		Database:     n,
@@ -80,6 +83,7 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 		ValidatorKey: n.privValKey,
 	})
 
+	// Describe the network, from the node's perspective
 	network := config.Describe{
 		NetworkType:  p.Type,
 		PartitionId:  p.ID,
@@ -87,6 +91,7 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 		Network:      *s.netcfg,
 	}
 
+	// Set up the executor options
 	execOpts := block.ExecutorOptions{
 		Logger:   n.logger,
 		Key:      init.PrivValKey,
@@ -94,16 +99,20 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 		Router:   s.router,
 		EventBus: n.eventBus,
 	}
+
+	// Initialize the major block scheduler
 	if p.Type == config.Directory {
 		execOpts.MajorBlockScheduler = blockscheduler.Init(n.eventBus)
 	}
 
+	// Create an executor
 	var err error
 	n.executor, err = block.NewNodeExecutor(execOpts, n)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
+	// Set up the API
 	n.apiV2, err = apiv2.NewJrpc(apiv2.Options{
 		Logger:        n.logger,
 		Describe:      &network,
@@ -115,8 +124,11 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
+
+	// Create an API client
 	n.clientV2 = testing.DirectJrpcClient(n.apiV2)
 
+	// Subscribe to global variable changes
 	events.SubscribeSync(n.eventBus, n.willChangeGlobals)
 
 	return n, nil
@@ -269,10 +281,13 @@ func (n *Node) commit(block *block.Block) ([]byte, error) {
 	return batch.BptRoot(), nil
 }
 
+// nodeService implements API v3.
 type nodeService Node
 
+// Private returns the private sequencer service.
 func (s *nodeService) Private() private.Sequencer { return s.seqSvc }
 
+// NodeStatus implements pkg/api/v3.NodeService.
 func (s *nodeService) NodeStatus(ctx context.Context, opts api.NodeStatusOptions) (*api.NodeStatus, error) {
 	return &api.NodeStatus{
 		Ok: true,
@@ -288,6 +303,7 @@ func (s *nodeService) NodeStatus(ctx context.Context, opts api.NodeStatusOptions
 	}, nil
 }
 
+// NetworkStatus implements pkg/api/v3.NetworkService.
 func (s *nodeService) NetworkStatus(ctx context.Context, opts api.NetworkStatusOptions) (*api.NetworkStatus, error) {
 	v, ok := s.globals.Load().(*core.GlobalValues)
 	if !ok {
@@ -301,10 +317,12 @@ func (s *nodeService) NetworkStatus(ctx context.Context, opts api.NetworkStatusO
 	}, nil
 }
 
+// Metrics implements pkg/api/v3.MetricsService.
 func (s *nodeService) Metrics(ctx context.Context, opts api.MetricsOptions) (*api.Metrics, error) {
 	return nil, errors.NotAllowed
 }
 
+// Query implements pkg/api/v3.Querier.
 func (s *nodeService) Query(ctx context.Context, scope *url.URL, query api.Query) (api.Record, error) {
 	r, err := s.querySvc.Query(ctx, scope, query)
 	if err != nil {
@@ -322,11 +340,24 @@ func (s *nodeService) Query(ctx context.Context, scope *url.URL, query api.Query
 	return r, nil
 }
 
+// Submit implements pkg/api/v3.Submitter.
+func (s *nodeService) Submit(ctx context.Context, envelope *protocol.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {
+	return s.submit(envelope, false)
+}
+
+// Validate implements pkg/api/v3.Validator.
+func (s *nodeService) Validate(ctx context.Context, envelope *protocol.Envelope, opts api.ValidateOptions) ([]*api.Submission, error) {
+	return s.submit(envelope, true)
+}
+
 func (s *nodeService) submit(envelope *protocol.Envelope, pretend bool) ([]*api.Submission, error) {
+	// Convert the envelope to deliveries
 	deliveries, err := chain.NormalizeEnvelope(envelope)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
+
+	// Submit each delivery
 	var r []*api.Submission
 	for i, delivery := range deliveries {
 		sub := new(api.Submission)
@@ -334,6 +365,8 @@ func (s *nodeService) submit(envelope *protocol.Envelope, pretend bool) ([]*api.
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("delivery %d: %w", i, err)
 		}
+
+		// Create an api.Submission
 		sub.Success = sub.Status.Code.Success()
 		if sub.Status.Error != nil {
 			sub.Message = sub.Status.Error.Message
@@ -341,12 +374,4 @@ func (s *nodeService) submit(envelope *protocol.Envelope, pretend bool) ([]*api.
 		r = append(r, sub)
 	}
 	return r, nil
-}
-
-func (s *nodeService) Submit(ctx context.Context, envelope *protocol.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {
-	return s.submit(envelope, false)
-}
-
-func (s *nodeService) Validate(ctx context.Context, envelope *protocol.Envelope, opts api.ValidateOptions) ([]*api.Submission, error) {
-	return s.submit(envelope, true)
 }
