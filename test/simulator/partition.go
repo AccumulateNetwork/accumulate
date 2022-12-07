@@ -24,7 +24,6 @@ import (
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"golang.org/x/sync/errgroup"
 )
 
 type Partition struct {
@@ -39,10 +38,12 @@ type Partition struct {
 	blockIndex uint64
 	blockTime  time.Time
 
-	submitHook SubmitHookFunc
+	submitHook       SubmitHookFunc
+	routerSubmitHook RouterSubmitHookFunc
 }
 
 type SubmitHookFunc func(*chain.Delivery) (dropTx, keepHook bool)
+type RouterSubmitHookFunc func([]*chain.Delivery) (_ []*chain.Delivery, keepHook bool)
 
 type validatorUpdate struct {
 	key [32]byte
@@ -106,10 +107,28 @@ func (p *Partition) Update(fn func(*database.Batch) error) error {
 	return nil
 }
 
+// Begin will panic if called to create a writable batch if the partition has
+// more than one node.
+func (p *Partition) Begin(writable bool) *database.Batch {
+	if !writable {
+		return p.nodes[0].Begin(false)
+	}
+	if len(p.nodes) > 1 {
+		panic("cannot create a writeable batch when running with multiple nodes")
+	}
+	return p.nodes[0].Begin(true)
+}
+
 func (p *Partition) SetSubmitHook(fn SubmitHookFunc) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.submitHook = fn
+}
+
+func (p *Partition) SetRouterSubmitHook(fn RouterSubmitHookFunc) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.routerSubmitHook = fn
 }
 
 func (p *Partition) initChain(snapshot ioutil2.SectionReader) error {
@@ -179,7 +198,7 @@ func (p *Partition) Submit(delivery *chain.Delivery, pretend bool) (*protocol.Tr
 	return result[0], nil
 }
 
-func (p *Partition) execute(background *errgroup.Group) error {
+func (p *Partition) execute() error {
 	// TODO: Limit how many transactions are added to the block? Call recheck?
 	p.mu.Lock()
 	deliveries := p.deliver
@@ -222,8 +241,6 @@ func (p *Partition) execute(background *errgroup.Group) error {
 		b.Time = p.blockTime
 		b.IsLeader = i == leader
 		blocks[i] = b
-
-		n.executor.Background = func(f func()) { background.Go(func() error { f(); return nil }) }
 
 		err := n.beginBlock(b)
 		if err != nil {
@@ -296,9 +313,9 @@ func (p *Partition) execute(background *errgroup.Group) error {
 			return errors.FatalError.WithFormat("execute: %w", err)
 		}
 	}
-	for _, v := range commit[1:] {
+	for i, v := range commit[1:] {
 		if !bytes.Equal(commit[0], v) {
-			return errors.FatalError.WithFormat("consensus failure: commit: expected %x, got %x", commit[0], v)
+			return errors.FatalError.WithFormat("consensus failure: commit %s.%d: expected %x, got %x", p.ID, i+1, commit[0], v)
 		}
 	}
 

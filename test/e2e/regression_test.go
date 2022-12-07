@@ -10,13 +10,12 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"strings"
 	"testing"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/stretchr/testify/require"
-	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
@@ -24,6 +23,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/test/helpers"
+	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
@@ -184,6 +184,10 @@ func TestSynthTxnWithMissingPrincipal(t *testing.T) {
 }
 
 func TestFaucetMultiNetwork(t *testing.T) {
+	if !protocol.IsTestNet {
+		t.Skip("Not a testnet")
+	}
+
 	// Initialize
 	sim := simulator.New(t, 3)
 	sim.InitFromGenesis()
@@ -194,15 +198,15 @@ func TestFaucetMultiNetwork(t *testing.T) {
 
 	// Set the lite account routing to a different BVN from the faucet
 	faucetBvn := sim.PartitionFor(FaucetUrl)
-	for _, partition := range sim.Partitions[1:] {
-		if faucetBvn.Partition.Id != partition.Id {
-			sim.SetRouteFor(lite.RootIdentity(), partition.Id)
+	for _, partition := range sim.S.Partitions() {
+		if partition.Type != PartitionTypeDirectory && strings.EqualFold(faucetBvn.ID, partition.ID) {
+			sim.SetRouteFor(lite.RootIdentity(), partition.ID)
 			break
 		}
 	}
 
 	// Execute
-	resp, err := sim.Executors[Directory].API.Faucet(context.Background(), &AcmeFaucet{Url: lite})
+	resp, err := sim.Partition(Directory).API.Faucet(context.Background(), &AcmeFaucet{Url: lite})
 	require.NoError(t, err)
 	sim.WaitForTransactionFlow(delivered, resp.TransactionHash)
 
@@ -335,66 +339,6 @@ func TestSynthTxnFromDirectory(t *testing.T) {
 		Build()
 	sim.MustSubmitAndExecuteBlock(env)
 	sim.WaitForTransactionFlow(delivered, env.Transaction[0].GetHash())
-}
-
-func TestSendDirectToWrongPartition(t *testing.T) {
-	// Initialize
-	sim := simulator.New(t, 3)
-	sim.InitFromGenesis()
-
-	// Create the lite addresses and one account
-	aliceKey, bobKey := acctesting.GenerateKey("alice"), acctesting.GenerateKey("bob")
-	alice, bob := acctesting.AcmeLiteAddressStdPriv(aliceKey), acctesting.AcmeLiteAddressStdPriv(bobKey)
-
-	goodBvn := sim.PartitionFor(alice)
-	_ = goodBvn.Update(func(batch *database.Batch) error {
-		require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, tmed25519.PrivKey(aliceKey), 1e6, 1e9))
-		return nil
-	})
-
-	// Set route to something else
-	var badBvn *simulator.ExecEntry
-	for _, partition := range sim.Partitions[1:] {
-		if partition.Id != goodBvn.Partition.Id {
-			badBvn = sim.Partition(partition.Id)
-			break
-		}
-	}
-
-	// Create the transaction
-	env := acctesting.NewTransaction().
-		WithPrincipal(alice).
-		WithSigner(alice, 1).
-		WithTimestamp(1).
-		WithBody(&protocol.SendTokens{
-			To: []*protocol.TokenRecipient{{
-				Url:    bob,
-				Amount: *big.NewInt(1),
-			}},
-		}).
-		Initiate(protocol.SignatureTypeED25519, aliceKey).
-		Build()
-
-	// Submit the transaction directly to the wrong BVN
-	badBvn.Submit(false, env)
-	var found bool
-	for i := 0; i < 50 && !found; i++ {
-		ch := make(chan *protocol.TransactionStatus)
-		go sim.ExecuteBlock(ch)
-		for s := range ch {
-			if s.TxID.Equal(env.Transaction[0].ID()) {
-				found = true
-			}
-		}
-	}
-
-	helpers.View(t, badBvn, func(batch *database.Batch) {
-		status, err := batch.Transaction(env.Signatures[0].Hash()).Status().Get()
-		require.NoError(t, err)
-		require.NotZero(t, status.Code)
-		require.NotNil(t, status.Error)
-		require.Equal(t, fmt.Sprintf("signature submitted to %s instead of %s", badBvn.Partition.Id, goodBvn.Partition.Id), status.Error.Message)
-	})
 }
 
 func TestDelegateBetweenPartitions(t *testing.T) {
