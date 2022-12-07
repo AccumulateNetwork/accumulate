@@ -66,7 +66,11 @@ func TestRecords(t *testing.T) {
 	// Verify the changelog was updated
 	cl, err := cs.ChangeLog().GetAll()
 	require.NoError(t, err)
-	require.ElementsMatch(t, []string{"Entity.foo", "Entity.bar", "Entity.baz"}, cl)
+	require.ElementsMatch(t, []string{
+		"Entity.foo",
+		"Entity.bar",
+		// "Entity.baz",
+	}, cl)
 }
 
 func (e *entity) Commit() error {

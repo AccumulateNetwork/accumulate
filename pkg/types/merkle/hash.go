@@ -11,7 +11,7 @@ import (
 func copyHash(v []byte) []byte {
 	u := make([]byte, len(v))
 	copy(u, v)
-	return v
+	return u
 }
 
 func combineHashes(a, b []byte) []byte {
