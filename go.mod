@@ -50,6 +50,7 @@ require (
 	github.com/libp2p/go-libp2p v0.24.0
 	github.com/mattn/go-shellwords v1.0.12
 	github.com/mr-tron/base58 v1.2.0
+	github.com/multiformats/go-multiaddr v0.8.0
 	github.com/multiformats/go-multibase v0.1.1
 	github.com/multiformats/go-multihash v0.2.1
 	github.com/robfig/cron/v3 v3.0.0
@@ -101,7 +102,6 @@ require (
 	github.com/minio/sha256-simd v1.0.0 // indirect
 	github.com/multiformats/go-base32 v0.1.0 // indirect
 	github.com/multiformats/go-base36 v0.2.0 // indirect
-	github.com/multiformats/go-multiaddr v0.8.0 // indirect
 	github.com/multiformats/go-multicodec v0.7.0 // indirect
 	github.com/multiformats/go-varint v0.0.7 // indirect
 	github.com/pelletier/go-toml/v2 v2.0.5 // indirect
