@@ -1,0 +1,5 @@
+StreamStatus:
+  Open:
+    value: 1
+  Closed:
+    value: 2

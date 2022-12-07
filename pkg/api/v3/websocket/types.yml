@@ -1,0 +1,12 @@
+Message:
+  fields:
+    - name: ID
+      type: uint
+    - name: Status
+      type: StreamStatus
+      marshal-as: enum
+    - name: Message
+      type: message.Message
+      marshal-as: union
+      elide-union-methods: true
+      optional: true
