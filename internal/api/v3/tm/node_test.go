@@ -1,4 +1,4 @@
-package tm
+package tm_test
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/p2p"
 	coretypes "github.com/tendermint/tendermint/rpc/core/types"
+	. "gitlab.com/accumulatenetwork/accumulate/internal/api/v3/tm"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -35,7 +36,7 @@ func TestNodeStatus(t *testing.T) {
 		PartitionID:      protocol.Directory,
 		PartitionType:    protocol.PartitionTypeDirectory,
 		EventBus:         events.NewBus(logger),
-		NodeKeyHash:      sha256.Sum256(net.Bvns[0].Nodes[0].NodeKey[32:]),
+		NodeKeyHash:      sha256.Sum256(net.Bvns[0].Nodes[0].DnNodeKey[32:]),
 		ValidatorKeyHash: sha256.Sum256(net.Bvns[0].Nodes[0].PrivValKey[32:]),
 	})
 
