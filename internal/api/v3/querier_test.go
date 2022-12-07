@@ -1,4 +1,4 @@
-package api
+package api_test
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/suite"
+	. "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/managed"
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
@@ -17,6 +18,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
+	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
@@ -59,7 +61,7 @@ func (s *QuerierTestSuite) SetupSuite() {
 		simulator.GenesisWith(GenesisTime, g),
 	)
 	s.Require().NoError(err)
-	sim := &Sim{T: s.T(), Simulator: s.sim}
+	sim := NewSimWith(s.T(), s.sim)
 
 	faucetKey := acctesting.GenerateKey("faucet")
 	s.faucet = acctesting.AcmeLiteAddressStdPriv(faucetKey)
