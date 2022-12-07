@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
 )
 
@@ -49,4 +50,33 @@ func UnmarshalMultiaddrJSON(b []byte) (Multiaddr, error) {
 		return nil, err
 	}
 	return multiaddr.NewMultiaddr(v)
+}
+
+type PeerID = peer.ID
+
+func CopyPeerID(v PeerID) PeerID {
+	return v // No need to copy (immutable)
+}
+
+func EqualPeerID(a, b PeerID) bool {
+	return a == b
+}
+
+func UnmarshalPeerID(b []byte) (PeerID, error) {
+	var v peer.ID
+	return v, v.UnmarshalBinary(b)
+}
+
+func UnmarshalPeerIDFrom(r io.Reader) (PeerID, error) {
+	var v peer.ID
+	b, err := io.ReadAll(io.LimitReader(r, 1024))
+	if err != nil {
+		return "", err
+	}
+	return v, v.UnmarshalBinary(b)
+}
+
+func UnmarshalPeerIDJSON(b []byte) (PeerID, error) {
+	var v peer.ID
+	return v, v.UnmarshalJSON(b)
 }

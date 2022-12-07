@@ -1,0 +1,43 @@
+Whoami:
+  fields:
+    - name: Self
+      type: Info
+      marshal-as: reference
+      pointer: true
+    - name: Known
+      type: AddrInfo
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+
+Info:
+  fields:
+    - name: ID
+      type: p2p.PeerID
+      marshal-as: union
+      zero-value: '""'
+    # - name: Validator
+    #   type: protocol.ValidatorInfo
+    #   marshal-as: reference
+    #   pointer: true
+    - name: Partitions
+      type: PartitionInfo
+      marshal-as: reference
+      repeatable: true
+      pointer: true
+
+PartitionInfo:
+  fields:
+    - name: ID
+      type: string
+    - name: Moniker
+      type: string
+
+AddrInfo:
+  fields:
+    - type: Info
+      marshal-as: reference
+    - name: Addrs
+      type: p2p.Multiaddr
+      marshal-as: union
+      repeatable: true
