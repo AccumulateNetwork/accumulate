@@ -87,8 +87,8 @@ func CreateTestNet(t testing.TB, numBvns, numValidators, numFollowers int, withF
 		ValidatorCount: numValidators,
 		FollowerCount:  numFollowers,
 		BasePort:       30000,
-		GenerateKeys: func() (privVal []byte, node []byte) {
-			return ed25519.GenPrivKey(), ed25519.GenPrivKey()
+		GenerateKeys: func() (privVal, dnn, bvnn []byte) {
+			return ed25519.GenPrivKey(), ed25519.GenPrivKey(), ed25519.GenPrivKey()
 		},
 		HostName: func(bvnNum, nodeNum int) (host string, listen string) {
 			hash := hashCaller(1, fmt.Sprintf("%s-%s-%d", t.Name(), fmt.Sprintf("BVN%d", bvnNum+1), nodeNum))
@@ -133,9 +133,9 @@ func CreateTestNet(t testing.TB, numBvns, numValidators, numFollowers int, withF
 			configs[i][j][0].SetRoot(filepath.Join(tempDir, fmt.Sprintf("node-%d", count), "dnn"))
 			configs[i][j][1].SetRoot(filepath.Join(tempDir, fmt.Sprintf("node-%d", count), "bvnn"))
 
-			err = accumulated.WriteNodeFiles(configs[i][j][0], node.PrivValKey, node.NodeKey, dnGenDoc)
+			err = accumulated.WriteNodeFiles(configs[i][j][0], node.PrivValKey, node.DnNodeKey, dnGenDoc)
 			require.NoError(t, err)
-			err = accumulated.WriteNodeFiles(configs[i][j][1], node.PrivValKey, node.NodeKey, bvnGenDoc)
+			err = accumulated.WriteNodeFiles(configs[i][j][1], node.PrivValKey, node.BvnNodeKey, bvnGenDoc)
 			require.NoError(t, err)
 		}
 	}

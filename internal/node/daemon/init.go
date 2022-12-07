@@ -19,7 +19,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/multiformats/go-multiaddr"
 	"github.com/tendermint/tendermint/crypto/ed25519"
+	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 	tmjson "github.com/tendermint/tendermint/libs/json"
 	"github.com/tendermint/tendermint/libs/log"
 	tmos "github.com/tendermint/tendermint/libs/os"
@@ -34,57 +36,6 @@ import (
 )
 
 const nodeDirPerm = 0755
-
-type AddressType int
-
-const (
-	ListenAddress AddressType = iota
-	AdvertizeAddress
-	PeerAddress
-)
-
-func (n *NodeInit) Port(offset ...config.PortOffset) int {
-	port := int(n.BasePort)
-	for _, o := range offset {
-		port += int(o)
-	}
-	return port
-}
-
-func (n *NodeInit) Address(typ AddressType, scheme string, offset ...config.PortOffset) string {
-	addr := n.AdvertizeAddress
-	switch {
-	case typ == ListenAddress && n.ListenAddress != "":
-		addr = n.ListenAddress
-	case typ == PeerAddress && n.PeerAddress != "":
-		addr = n.PeerAddress
-	}
-
-	if scheme == "" {
-		return fmt.Sprintf("%s:%d", addr, n.Port(offset...))
-	}
-	return fmt.Sprintf("%s://%s:%d", scheme, addr, n.Port(offset...))
-}
-
-func (b *BvnInit) Peers(node *NodeInit, offset ...config.PortOffset) []string {
-	var peers []string
-	for _, n := range b.Nodes {
-		if n != node {
-			nodeId := p2p.PubKeyToID(ed25519.PubKey(n.NodeKey[32:]))
-			addr := p2p.IDAddressString(nodeId, n.Address(PeerAddress, "", offset...))
-			peers = append(peers, addr)
-		}
-	}
-	return peers
-}
-
-func (n *NetworkInit) Peers(node *NodeInit, offset ...config.PortOffset) []string {
-	var peers []string
-	for _, b := range n.Bvns {
-		peers = append(peers, b.Peers(node, offset...)...)
-	}
-	return peers
-}
 
 type MakeConfigFunc func(networkName string, net config.NetworkType, node config.NodeType, netId string) *config.Config
 
@@ -103,7 +54,7 @@ func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][2]*config
 	}
 
 	// If the node addresses are loopback or private IPs, disable strict address book
-	ip := net.ParseIP(network.Bvns[0].Nodes[0].Address(PeerAddress, ""))
+	ip := net.ParseIP(network.Bvns[0].Nodes[0].Peer().String())
 	strict := ip == nil || !(ip.IsLoopback() || ip.IsPrivate())
 
 	var i int
@@ -118,25 +69,25 @@ func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][2]*config
 			i++
 			dnn := mkcfg(network.Id, config.Directory, node.DnnType, protocol.Directory)
 			dnn.Moniker = fmt.Sprintf("Directory.%d", i)
-			ConfigureNodePorts(node, dnn, config.PortOffsetDirectory)
+			ConfigureNodePorts(node, dnn, protocol.PartitionTypeDirectory)
 			dnConfig.Nodes = append(dnConfig.Nodes, config.Node{
-				Address: node.Address(AdvertizeAddress, "http", config.PortOffsetTendermintP2P, config.PortOffsetDirectory),
+				Address: node.Advertize().Scheme("http").TendermintP2P().Directory().String(),
 				Type:    node.DnnType,
 			})
 
 			bvnn := mkcfg(network.Id, config.BlockValidator, node.BvnnType, bvn.Id)
 			bvnn.Moniker = fmt.Sprintf("%s.%d", bvn.Id, j+1)
-			ConfigureNodePorts(node, bvnn, config.PortOffsetBlockValidator)
+			ConfigureNodePorts(node, bvnn, protocol.PartitionTypeBlockValidator)
 			bvnConfig.Nodes = append(bvnConfig.Nodes, config.Node{
-				Address: node.Address(AdvertizeAddress, "http", config.PortOffsetTendermintP2P, config.PortOffsetBlockValidator),
+				Address: node.Advertize().Scheme("http").TendermintP2P().BlockValidator().String(),
 				Type:    node.BvnnType,
 			})
 
 			if dnn.P2P.ExternalAddress == "" {
-				dnn.P2P.ExternalAddress = node.Address(PeerAddress, "", config.PortOffsetTendermintP2P, config.PortOffsetDirectory)
+				dnn.P2P.ExternalAddress = node.Peer().TendermintP2P().Directory().String()
 			}
 			if bvnn.P2P.ExternalAddress == "" {
-				bvnn.P2P.ExternalAddress = node.Address(PeerAddress, "", config.PortOffsetTendermintP2P, config.PortOffsetBlockValidator)
+				bvnn.P2P.ExternalAddress = node.Peer().TendermintP2P().BlockValidator().String()
 			}
 
 			// No duplicate IPs
@@ -145,12 +96,19 @@ func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][2]*config
 
 			// Initial peers (should be bootstrap peers but that setting isn't
 			// present in 0.37)
-			dnn.P2P.PersistentPeers = strings.Join(network.Peers(node, config.PortOffsetTendermintP2P, config.PortOffsetDirectory), ",")
-			bvnn.P2P.PersistentPeers = strings.Join(bvn.Peers(node, config.PortOffsetTendermintP2P, config.PortOffsetBlockValidator), ",")
+			dnn.P2P.PersistentPeers = strings.Join(network.Peers(node).Directory().TendermintP2P().WithKey().String(), ",")
+			bvnn.P2P.PersistentPeers = strings.Join(bvn.Peers(node).BlockValidator().TendermintP2P().WithKey().String(), ",")
 
 			// Set whether unroutable addresses are allowed
 			dnn.P2P.AddrBookStrict = strict
 			bvnn.P2P.AddrBookStrict = strict
+
+			p2pPeers := network.Peers(node).AccumulateP2P().WithKey().
+				Do(AddressBuilder.Directory, AddressBuilder.BlockValidator).
+				Do(func(b AddressBuilder) AddressBuilder { return b.Scheme("tcp") }, func(b AddressBuilder) AddressBuilder { return b.Scheme("udp") }).
+				Multiaddr()
+			dnn.Accumulate.P2P.BootstrapPeers = p2pPeers
+			bvnn.Accumulate.P2P.BootstrapPeers = p2pPeers
 
 			bvnConfigs = append(bvnConfigs, [2]*config.Config{dnn, bvnn})
 		}
@@ -170,15 +128,19 @@ func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][2]*config
 	return allConfigs
 }
 
-func ConfigureNodePorts(node *NodeInit, cfg *config.Config, offset config.PortOffset) {
-	cfg.P2P.ListenAddress = node.Address(ListenAddress, "tcp", offset, config.PortOffsetTendermintP2P)
-	cfg.RPC.ListenAddress = node.Address(ListenAddress, "tcp", offset, config.PortOffsetTendermintRpc)
+func ConfigureNodePorts(node *NodeInit, cfg *config.Config, part protocol.PartitionType) {
+	cfg.P2P.ListenAddress = node.Listen().Scheme("tcp").PartitionType(part).TendermintP2P().String()
+	cfg.RPC.ListenAddress = node.Listen().Scheme("tcp").PartitionType(part).TendermintRPC().String()
 
-	cfg.Instrumentation.PrometheusListenAddr = fmt.Sprintf(":%d", node.Port(offset, config.PortOffsetPrometheus))
+	cfg.Instrumentation.PrometheusListenAddr = node.Listen().PartitionType(part).Prometheus().String()
 	if cfg.Accumulate.LocalAddress == "" {
-		cfg.Accumulate.LocalAddress = node.Address(AdvertizeAddress, "", offset, config.PortOffsetTendermintP2P)
+		cfg.Accumulate.LocalAddress = node.Advertize().PartitionType(part).TendermintP2P().String()
 	}
-	cfg.Accumulate.API.ListenAddress = node.Address(ListenAddress, "http", offset, config.PortOffsetAccumulateApi)
+	cfg.Accumulate.P2P.Listen = []multiaddr.Multiaddr{
+		node.Listen().Scheme("tcp").PartitionType(part).AccumulateP2P().Multiaddr(),
+		node.Listen().Scheme("udp").PartitionType(part).AccumulateP2P().Multiaddr(),
+	}
+	cfg.Accumulate.API.ListenAddress = node.Listen().Scheme("http").PartitionType(part).AccumulateAPI().String()
 }
 
 func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time time.Time, logger log.Logger, factomAddresses func() (io.Reader, error), snapshots []func() (ioutil2.SectionReader, error)) (map[string]*tmtypes.GenesisDoc, error) {
@@ -196,7 +158,7 @@ func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time tim
 
 		for j, node := range bvn.Nodes {
 			i++
-			key := ed25519.PrivKey(node.PrivValKey)
+			key := tmed25519.PrivKey(node.PrivValKey)
 			operators = append(operators, key.PubKey().Bytes())
 
 			netinfo.AddValidator(key.PubKey().Bytes(), protocol.Directory, node.DnnType == config.Validator)
@@ -317,7 +279,7 @@ func loadOrCreatePrivVal(cfg *config.Config, key []byte) error {
 	keyFile := cfg.PrivValidatorKeyFile()
 	stateFile := cfg.PrivValidatorStateFile()
 	if !tmos.FileExists(keyFile) {
-		pv := privval.NewFilePV(ed25519.PrivKey(key), keyFile, stateFile)
+		pv := privval.NewFilePV(tmed25519.PrivKey(key), keyFile, stateFile)
 		pv.Save()
 		return nil
 	}
@@ -325,7 +287,7 @@ func loadOrCreatePrivVal(cfg *config.Config, key []byte) error {
 	var err error
 	if !tmos.FileExists(stateFile) {
 		// When initializing the other node, the key file has already been created
-		pv = privval.NewFilePV(ed25519.PrivKey(key), keyFile, stateFile)
+		pv = privval.NewFilePV(tmed25519.PrivKey(key), keyFile, stateFile)
 		pv.LastSignState.Save()
 		// Don't return here - we still need to check that the key on disk matches what we expect
 	} else { // if file exists then we need to load it
@@ -363,14 +325,14 @@ func loadOrCreateNodeKey(config *config.Config, key []byte) error {
 	return nil
 }
 
-func LoadOrGenerateTmPrivKey(privFileName string) (ed25519.PrivKey, error) {
+func LoadOrGenerateTmPrivKey(privFileName string) (tmed25519.PrivKey, error) {
 	//attempt to load the priv validator key, create otherwise.
 	b, err := ioutil.ReadFile(privFileName)
-	var privValKey ed25519.PrivKey
+	var privValKey tmed25519.PrivKey
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			//do not overwrite a private validator key.
-			return ed25519.GenPrivKey(), nil
+			return tmed25519.GenPrivKey(), nil
 		}
 		return nil, err
 	}
@@ -379,7 +341,7 @@ func LoadOrGenerateTmPrivKey(privFileName string) (ed25519.PrivKey, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal existing private validator from %s: %v try using --reset flag", privFileName, err)
 	} else {
-		privValKey = pvkey.PrivKey.(ed25519.PrivKey)
+		privValKey = pvkey.PrivKey.(tmed25519.PrivKey)
 	}
 
 	return privValKey, nil
