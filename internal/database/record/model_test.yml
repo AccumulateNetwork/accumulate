@@ -1,9 +1,11 @@
 - name: ChangeSet
   type: entity
   root: true
+  interface: true
   attributes:
   - name: Entity
     type: entity
+    interface: true
     customCommit: true
     parameters:
     - name: Name
