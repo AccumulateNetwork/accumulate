@@ -88,7 +88,7 @@ func (r *Router) RequestAPIv2(ctx context.Context, partition, method string, par
 	r.lastUsedMu.Lock()
 	last := r.lastUsed[partition]
 	r.lastUsed[partition] = (last + 1) % len(p.nodes)
-	c := p.nodes[last].client
+	c := p.nodes[last].clientV2
 	r.lastUsedMu.Unlock()
 
 	return c.RequestAPIv2(ctx, method, params, result)
