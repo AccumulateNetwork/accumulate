@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 
+	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -55,6 +56,7 @@ func (h *Handler) Handle(s Stream) {
 			// Ok
 
 		case errors.Is(err, io.EOF),
+			errors.Is(err, network.ErrReset),
 			errors.Is(err, context.Canceled):
 			// Done
 			return
