@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
@@ -26,10 +27,59 @@ type Record interface {
 	Commit() error
 }
 
-// RecordPtr is satisfied by a type T where *T implements Record.
-type RecordPtr[T any] interface {
-	*T
+// Value records a value.
+type Value[T any] interface {
 	Record
+	Key(int) any
+	Get() (T, error)
+	GetAs(any) error
+	Put(T) error
+}
+
+// List records an unordered list of values as a single record.
+type List[T any] interface {
+	Value[[]T]
+	Add(...T) error
+}
+
+// Set records an ordered list of values as a single record.
+type Set[T any] interface {
+	List[T]
+	Remove(T) error
+	Index(T) (int, error)
+	Find(T) (T, error)
+}
+
+// Counted records an insertion-ordered list of values as separate records plus
+// a record for the count.
+type Counted[T any] interface {
+	Record
+	Get(int) (T, error)
+	Put(T) error
+	Count() (int, error)
+	GetAll() ([]T, error)
+	Last() (int, T, error)
+	Overwrite([]T) error
+}
+
+// NewValue returns a new value using the given encodable value.
+func NewValue[T any](logger log.Logger, store Store, key Key, name string, allowMissing bool, ev encodableValue[T]) Value[T] {
+	return newValue(logger, store, key, name, allowMissing, ev)
+}
+
+// NewList returns a new list using the given encoder and comparison.
+func NewList[T any](logger log.Logger, store Store, key Key, namefmt string, encoder encodableValue[T]) List[T] {
+	return newList(logger, store, key, namefmt, encoder)
+}
+
+// NewSet returns a new set using the given encoder and comparison.
+func NewSet[T any](logger log.Logger, store Store, key Key, namefmt string, encoder encodableValue[T], cmp func(u, v T) int) Set[T] {
+	return newSet(logger, store, key, namefmt, encoder, cmp)
+}
+
+// NewCounted returns a new counted using the given encodable value type.
+func NewCounted[T any](logger log.Logger, store Store, key Key, namefmt string, new func() encodableValue[T]) Counted[T] {
+	return newCounted(logger, store, key, namefmt, new)
 }
 
 // A Key is the key for a record.
