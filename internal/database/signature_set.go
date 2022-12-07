@@ -19,7 +19,7 @@ type SignatureSet struct {
 	txn      *Transaction
 	signer   protocol.Signer2
 	writable bool
-	value    *record.Value[*sigSetData]
+	value    record.Value[*sigSetData]
 	entries  *sigSetData
 }
 
