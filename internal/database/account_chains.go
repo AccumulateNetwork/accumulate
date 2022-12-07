@@ -100,7 +100,7 @@ func (c *Chain2) Key(i int) interface{} {
 	return c.key[i]
 }
 
-func (c *Chain2) Head() *record.Value[*managed.MerkleState] {
+func (c *Chain2) Head() record.Value[*managed.MerkleState] {
 	return c.inner.Head()
 }
 

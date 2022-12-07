@@ -13,24 +13,21 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
-// Counted records an insertion-ordered list of values as separate records plus
-// a record for the count.
-type Counted[T any] struct {
-	count  *Value[uint64]
+type counted[T any] struct {
+	count  *value[uint64]
 	new    func() encodableValue[T]
-	values []*Value[T]
+	values []*value[T]
 }
 
-// NewCounted returns a new Counted using the given encodable value type.
-func NewCounted[T any](logger log.Logger, store Store, key Key, namefmt string, new func() encodableValue[T]) *Counted[T] {
-	c := &Counted[T]{}
-	c.count = NewValue(logger, store, key, namefmt, true, Wrapped(UintWrapper))
+func newCounted[T any](logger log.Logger, store Store, key Key, namefmt string, new func() encodableValue[T]) *counted[T] {
+	c := &counted[T]{}
+	c.count = newValue(logger, store, key, namefmt, true, Wrapped(UintWrapper))
 	c.new = new
 	return c
 }
 
 // Count loads the size of the list.
-func (c *Counted[T]) Count() (int, error) {
+func (c *counted[T]) Count() (int, error) {
 	v, err := c.count.Get()
 	if err != nil {
 		return 0, errors.UnknownError.Wrap(err)
@@ -38,9 +35,9 @@ func (c *Counted[T]) Count() (int, error) {
 	return int(v), nil
 }
 
-func (c *Counted[T]) value(i int) *Value[T] {
+func (c *counted[T]) value(i int) *value[T] {
 	if len(c.values) < i+1 {
-		c.values = append(c.values, make([]*Value[T], i+1-len(c.values))...)
+		c.values = append(c.values, make([]*value[T], i+1-len(c.values))...)
 	}
 	if c.values[i] != nil {
 		return c.values[i]
@@ -48,13 +45,13 @@ func (c *Counted[T]) value(i int) *Value[T] {
 
 	key := c.count.key.Append(i)
 	name := fmt.Sprintf("%s %d", c.count.name, i)
-	v := NewValue(c.count.logger.L, c.count.store, key, name, false, c.new())
+	v := newValue(c.count.logger.L, c.count.store, key, name, false, c.new())
 	c.values[i] = v
 	return v
 }
 
 // Get loads the I'th element of the list.
-func (c *Counted[T]) Get(i int) (T, error) {
+func (c *counted[T]) Get(i int) (T, error) {
 	v, err := c.value(i).Get()
 	if err != nil {
 		return v, errors.UnknownError.Wrap(err)
@@ -64,7 +61,7 @@ func (c *Counted[T]) Get(i int) (T, error) {
 }
 
 // GetAll loads all the elements of the list.
-func (c *Counted[T]) GetAll() ([]T, error) {
+func (c *counted[T]) GetAll() ([]T, error) {
 	count, err := c.Count()
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
@@ -82,7 +79,7 @@ func (c *Counted[T]) GetAll() ([]T, error) {
 }
 
 // Put adds an element to the list.
-func (c *Counted[T]) Put(v T) error {
+func (c *counted[T]) Put(v T) error {
 	count, err := c.Count()
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
@@ -102,7 +99,7 @@ func (c *Counted[T]) Put(v T) error {
 }
 
 // Last loads the value of the last element.
-func (c *Counted[T]) Last() (int, T, error) {
+func (c *counted[T]) Last() (int, T, error) {
 	count, err := c.Count()
 	if err != nil {
 		return 0, zero[T](), errors.UnknownError.Wrap(err)
@@ -122,7 +119,7 @@ func (c *Counted[T]) Last() (int, T, error) {
 
 // Overwrite overwrites the count and all entries. Overwrite will return an
 // error if len(v) is less than the current count.
-func (c *Counted[T]) Overwrite(v []T) error {
+func (c *counted[T]) Overwrite(v []T) error {
 	n, err := c.Count()
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
@@ -146,7 +143,7 @@ func (c *Counted[T]) Overwrite(v []T) error {
 }
 
 // IsDirty implements Record.IsDirty.
-func (c *Counted[T]) IsDirty() bool {
+func (c *counted[T]) IsDirty() bool {
 	if c == nil {
 		return false
 	}
@@ -165,7 +162,7 @@ func (c *Counted[T]) IsDirty() bool {
 }
 
 // Commit implements Record.Commit.
-func (c *Counted[T]) Commit() error {
+func (c *counted[T]) Commit() error {
 	if c == nil {
 		return nil
 	}
@@ -187,7 +184,7 @@ func (c *Counted[T]) Commit() error {
 }
 
 // Resolve implements Record.Resolve.
-func (c *Counted[T]) Resolve(key Key) (Record, Key, error) {
+func (c *counted[T]) Resolve(key Key) (Record, Key, error) {
 	if len(key) == 0 {
 		return c.count, nil, nil
 	}
