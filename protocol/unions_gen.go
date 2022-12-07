@@ -55,7 +55,7 @@ func NewAccount(typ AccountType) (Account, error) {
 	}
 }
 
-//EqualAccount is used to compare the values of the union
+// EqualAccount is used to compare the values of the union
 func EqualAccount(a, b Account) bool {
 	if a == b {
 		return true
@@ -114,7 +114,7 @@ func EqualAccount(a, b Account) bool {
 	}
 }
 
-//CopyAccount copies a Account.
+// CopyAccount copies a Account.
 func CopyAccount(v Account) Account {
 	switch v := v.(type) {
 	case *ADI:
@@ -219,7 +219,7 @@ func NewDataEntry(typ DataEntryType) (DataEntry, error) {
 	}
 }
 
-//EqualDataEntry is used to compare the values of the union
+// EqualDataEntry is used to compare the values of the union
 func EqualDataEntry(a, b DataEntry) bool {
 	if a == b {
 		return true
@@ -239,7 +239,7 @@ func EqualDataEntry(a, b DataEntry) bool {
 	}
 }
 
-//CopyDataEntry copies a DataEntry.
+// CopyDataEntry copies a DataEntry.
 func CopyDataEntry(v DataEntry) DataEntry {
 	switch v := v.(type) {
 	case *AccumulateDataEntry:
@@ -372,7 +372,7 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 	}
 }
 
-//EqualTransactionBody is used to compare the values of the union
+// EqualTransactionBody is used to compare the values of the union
 func EqualTransactionBody(a, b TransactionBody) bool {
 	if a == b {
 		return true
@@ -473,7 +473,7 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 	}
 }
 
-//CopyTransactionBody copies a TransactionBody.
+// CopyTransactionBody copies a TransactionBody.
 func CopyTransactionBody(v TransactionBody) TransactionBody {
 	switch v := v.(type) {
 	case *AcmeFaucet:
@@ -610,7 +610,7 @@ func NewAccountAuthOperation(typ AccountAuthOperationType) (AccountAuthOperation
 	}
 }
 
-//EqualAccountAuthOperation is used to compare the values of the union
+// EqualAccountAuthOperation is used to compare the values of the union
 func EqualAccountAuthOperation(a, b AccountAuthOperation) bool {
 	if a == b {
 		return true
@@ -636,7 +636,7 @@ func EqualAccountAuthOperation(a, b AccountAuthOperation) bool {
 	}
 }
 
-//CopyAccountAuthOperation copies a AccountAuthOperation.
+// CopyAccountAuthOperation copies a AccountAuthOperation.
 func CopyAccountAuthOperation(v AccountAuthOperation) AccountAuthOperation {
 	switch v := v.(type) {
 	case *AddAccountAuthorityOperation:
@@ -725,7 +725,7 @@ func NewKeyPageOperation(typ KeyPageOperationType) (KeyPageOperation, error) {
 	}
 }
 
-//EqualKeyPageOperation is used to compare the values of the union
+// EqualKeyPageOperation is used to compare the values of the union
 func EqualKeyPageOperation(a, b KeyPageOperation) bool {
 	if a == b {
 		return true
@@ -754,7 +754,7 @@ func EqualKeyPageOperation(a, b KeyPageOperation) bool {
 	}
 }
 
-//CopyKeyPageOperation copies a KeyPageOperation.
+// CopyKeyPageOperation copies a KeyPageOperation.
 func CopyKeyPageOperation(v KeyPageOperation) KeyPageOperation {
 	switch v := v.(type) {
 	case *AddKeyOperation:
@@ -859,7 +859,7 @@ func NewSignature(typ SignatureType) (Signature, error) {
 	}
 }
 
-//EqualSignature is used to compare the values of the union
+// EqualSignature is used to compare the values of the union
 func EqualSignature(a, b Signature) bool {
 	if a == b {
 		return true
@@ -909,7 +909,7 @@ func EqualSignature(a, b Signature) bool {
 	}
 }
 
-//CopySignature copies a Signature.
+// CopySignature copies a Signature.
 func CopySignature(v Signature) Signature {
 	switch v := v.(type) {
 	case *BTCLegacySignature:
