@@ -80,8 +80,8 @@ func New(logger log.Logger, database OpenDatabaseFunc, network *accumulated.Netw
 			s.netcfg.Partitions[0].Nodes = append(s.netcfg.Partitions[0].Nodes, dnn)
 
 			if node.BasePort != 0 {
-				s.netcfg.Partitions[i+1].Nodes[j].Address = node.Address(accumulated.AdvertizeAddress, "http", config.PortOffsetBlockValidator)
-				s.netcfg.Partitions[0].Nodes[j].Address = node.Address(accumulated.AdvertizeAddress, "http", config.PortOffsetDirectory)
+				s.netcfg.Partitions[i+1].Nodes[j].Address = node.Advertize().Scheme("http").BlockValidator().String()
+				s.netcfg.Partitions[0].Nodes[j].Address = node.Advertize().Scheme("http").Directory().String()
 			}
 		}
 	}
@@ -147,7 +147,8 @@ func SimpleNetwork(name string, bvnCount, nodeCount int) *accumulated.NetworkIni
 				DnnType:    config.Validator,
 				BvnnType:   config.Validator,
 				PrivValKey: testing.GenerateKey(name, bvnInit.Id, j, "val"),
-				NodeKey:    testing.GenerateKey(name, bvnInit.Id, j, "node"),
+				DnNodeKey:  testing.GenerateKey(name, bvnInit.Id, j, "dn"),
+				BvnNodeKey: testing.GenerateKey(name, bvnInit.Id, j, "bvn"),
 			})
 		}
 		net.Bvns = append(net.Bvns, bvnInit)
@@ -337,9 +338,9 @@ func (s *Simulator) ListenAndServe(ctx context.Context, hook func(*Simulator, ht
 		for _, node := range part.nodes {
 			var addr string
 			if part.Type == config.Directory {
-				addr = node.init.Address(accumulated.ListenAddress, "", config.PortOffsetDirectory, config.PortOffsetAccumulateApi)
+				addr = node.init.Listen().Directory().AccumulateAPI().String()
 			} else {
-				addr = node.init.Address(accumulated.ListenAddress, "", config.PortOffsetBlockValidator, config.PortOffsetAccumulateApi)
+				addr = node.init.Listen().BlockValidator().AccumulateAPI().String()
 			}
 
 			ln, err := net.Listen("tcp", addr)
