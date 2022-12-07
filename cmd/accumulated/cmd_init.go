@@ -58,7 +58,6 @@ var cmdInitNode = &cobra.Command{
 
 var flagInit struct {
 	NoEmptyBlocks    bool
-	NoWebsite        bool
 	Reset            bool
 	LogLevels        string
 	Etcd             []string
@@ -118,7 +117,6 @@ func initInitFlags() {
 
 	cmdInit.ResetFlags()
 	cmdInit.PersistentFlags().BoolVar(&flagInit.NoEmptyBlocks, "no-empty-blocks", false, "Do not create empty blocks")
-	cmdInit.PersistentFlags().BoolVar(&flagInit.NoWebsite, "no-website", false, "Disable website")
 	cmdInit.PersistentFlags().BoolVar(&flagInit.Reset, "reset", false, "Delete any existing directories within the working directory")
 	cmdInit.PersistentFlags().StringVar(&flagInit.LogLevels, "log-levels", "", "Override the default log levels")
 	cmdInit.PersistentFlags().StringSliceVar(&flagInit.Etcd, "etcd", nil, "Use etcd endpoint(s)")
@@ -646,7 +644,7 @@ func initNode(cmd *cobra.Command, args []string) (string, error) {
 		AdvertizeAddress: listenUrl.Hostname(),
 		ListenAddress:    listenUrl.Hostname(),
 		BasePort:         uint64(basePort),
-	}, config, 0)
+	}, config, config.Accumulate.Describe.NetworkType)
 
 	config.PrivValidatorKey = "../priv_validator_key.json"
 
