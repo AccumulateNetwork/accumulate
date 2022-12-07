@@ -286,6 +286,8 @@ type Field struct {
 	Alternative string
 	// ZeroValue specifies the zero value of the field.
 	ZeroValue interface{} `yaml:"zero-value"`
+	// ElideUnionMethods specifies whether the union type name should be elided from method names.
+	ElideUnionMethods bool `yaml:"elide-union-methods"`
 	// Virtual specifies whether the field is implemented as a method instead of an actual field.
 	Virtual bool
 	// NonBinary specifies whether the field is binary marshallable.
