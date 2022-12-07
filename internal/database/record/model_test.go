@@ -24,7 +24,7 @@ const markPower = 8
 
 func TestRecords(t *testing.T) {
 	store := memory.New(nil).Begin(true)
-	cs := new(ChangeSet)
+	cs := new(changeSet)
 	cs.store = record.KvStore{store}
 
 	txn1 := new(protocol.Transaction)
@@ -45,7 +45,7 @@ func TestRecords(t *testing.T) {
 	require.NoError(t, cs.Commit())
 
 	// Verify
-	cs = new(ChangeSet)
+	cs = new(changeSet)
 	cs.store = record.KvStore{store}
 
 	// Verify the URL of the union
@@ -69,7 +69,7 @@ func TestRecords(t *testing.T) {
 	require.ElementsMatch(t, []string{"Entity.foo", "Entity.bar", "Entity.baz"}, cl)
 }
 
-func (e *Entity) Commit() error {
+func (e *entity) Commit() error {
 	if !e.IsDirty() {
 		return nil
 	}

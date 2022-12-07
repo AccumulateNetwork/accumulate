@@ -15,7 +15,7 @@ import (
 )
 
 type DirectoryIndexer struct {
-	*record.Set[*url.URL]
+	record.Set[*url.URL]
 }
 
 func Directory(batch *database.Batch, account *url.URL) *DirectoryIndexer {
