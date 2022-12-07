@@ -7,20 +7,23 @@
 package block_test
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2/query"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/simulator"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
 func init() { acctesting.EnableDebugFeatures() }
 
 func TestExecutor_Query_ProveAccount(t *testing.T) {
+	if !protocol.IsTestNet {
+		t.Skip("Faucet")
+	}
+
 	// Initialize
 	sim := simulator.New(t, 3)
 	sim.InitFromGenesis()
@@ -42,17 +45,16 @@ func TestExecutor_Query_ProveAccount(t *testing.T) {
 	// Get a proof of the account state
 	req := new(query.RequestByUrl)
 	req.Url = aliceUrl
-	acctResp := simulator.QueryUrl[*api.ChainQueryResponse](sim, aliceUrl, true)
-	localReceipt := acctResp.Receipt.Proof
-	require.Empty(t, acctResp.Receipt.Error)
+	acctResp := sim.H.QueryAccount(aliceUrl, &api.DefaultQuery{IncludeReceipt: true})
+	localReceipt := acctResp.Receipt
 	// Execute enough blocks to ensure the block is anchored
 	sim.ExecuteBlocks(10)
 
 	// Get a proof of the BVN anchor
-	url := protocol.DnUrl().JoinPath(protocol.AnchorPool).WithFragment(fmt.Sprintf("anchor/%x", localReceipt.Anchor))
-	chainResp := simulator.QueryUrl[*api.ChainQueryResponse](sim, url, true)
-	dirReceipt := chainResp.Receipt.Proof
-	fullReceipt, err := localReceipt.Combine(&dirReceipt)
+	chainResp := sim.H.SearchForAnchor(protocol.DnUrl().JoinPath(protocol.AnchorPool), &api.AnchorSearchQuery{Anchor: localReceipt.Anchor, IncludeReceipt: true})
+	require.Len(t, chainResp.Records, 1)
+	dirReceipt := chainResp.Records[0].Receipt
+	fullReceipt, err := localReceipt.Combine(&dirReceipt.Receipt)
 	require.NoError(t, err)
 	t.Log(fullReceipt)
 }
