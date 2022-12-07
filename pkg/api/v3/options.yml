@@ -21,6 +21,8 @@ NodeStatusOptions:
   fields:
     - name: NodeID
       type: string
+    - name: Partition
+      type: string
 
 NetworkStatusOptions:
   fields:

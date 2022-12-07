@@ -31,6 +31,7 @@ var flags struct {
 	FilePerType            bool
 	ExpandEmbedded         bool
 	LongUnionDiscriminator bool
+	ElidePackageType       bool
 }
 
 func main() {
@@ -47,6 +48,7 @@ func main() {
 	cmd.Flags().StringSliceVar(&flags.Reference, "reference", nil, "Extra type definition files to use as a reference")
 	cmd.Flags().BoolVar(&flags.FilePerType, "file-per-type", false, "Generate a separate file for each type")
 	cmd.Flags().BoolVar(&flags.LongUnionDiscriminator, "long-union-discriminator", false, "Use the full name of the union type for the discriminator method")
+	cmd.Flags().BoolVar(&flags.ElidePackageType, "elide-package-type", false, "If there is a union type that has the same name as the package, elide it")
 	flags.files.SetFlags(cmd.Flags(), "types")
 
 	_ = cmd.Execute()
