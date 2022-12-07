@@ -10,8 +10,8 @@ import (
 	"math/big"
 	"testing"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/simulator"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
+	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 	fuzzutil "gitlab.com/accumulatenetwork/accumulate/test/util/fuzz"
 )
