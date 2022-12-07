@@ -2,39 +2,62 @@ package validate
 
 import (
 	"crypto/ed25519"
+	"flag"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/jsonrpc"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
-// TODO: Provide a flag to run against a real network
+var validate = flag.String("test.validate", "", "Network to validate")
 
 func TestValidate(t *testing.T) {
 	// Set up the simulator
-	net := simulator.SimpleNetwork(t.Name(), 3, 1)
+	suite.Run(t, new(ValidationTestSuite))
+}
+
+type ValidationTestSuite struct {
+	suite.Suite
+	*Harness
+	nonce  uint64
+	faucet func(recipient any) build.SignatureBuilder
+}
+
+func (s *ValidationTestSuite) SetupSuite() {
+	if *validate == "" {
+		s.setupForSim()
+	} else {
+		s.setupForNet(*validate)
+	}
+}
+
+func (s *ValidationTestSuite) setupForSim() {
+	// Set up the simulator and harness
+	net := simulator.SimpleNetwork(s.T().Name(), 3, 1)
 	sim, err := simulator.New(
-		acctesting.NewTestLogger(t),
+		acctesting.NewTestLogger(s.T()),
 		simulator.MemoryDatabase,
 		net,
 		simulator.Genesis(GenesisTime),
 	)
-	require.NoError(t, err)
+	s.Require().NoError(err)
 
-	// Set up the test suite
-	s := new(ValidationTestSuite)
-	s.Harness = New(t, sim.Services(), sim)
+	s.Harness = New(s.T(), sim.Services(), sim)
 
 	// Faucet with IssueTokens
-	s.faucet = func(recipient, amount any) build.SignatureBuilder {
+	s.faucet = func(recipient any) build.SignatureBuilder {
 		b := build.Transaction().For("ACME").
-			IssueTokens(amount, AcmePrecisionPower).To(recipient).
+			IssueTokens(1e6, AcmePrecisionPower).To(recipient).
 			SignWith(DnUrl(), "operators", "1").Version(1).Timestamp(1).PrivateKey(net.Bvns[0].Nodes[0].PrivValKey)
 		for i, bvn := range net.Bvns {
 			for j, node := range bvn.Nodes {
@@ -46,16 +69,18 @@ func TestValidate(t *testing.T) {
 		}
 		return b
 	}
-
-	// Run
-	suite.Run(t, s)
 }
 
-type ValidationTestSuite struct {
-	suite.Suite
-	*Harness
-	nonce  uint64
-	faucet func(recipient, amount any) build.SignatureBuilder
+func (s *ValidationTestSuite) setupForNet(addr string) {
+	// Set up the client and harness
+	services := jsonrpc.NewClient(addr)
+	stepper := TimeStep(time.Second / 2) // TODO Wait for block event
+	s.Harness = New(s.T(), services, stepper)
+
+	// Faucet via faucet
+	s.faucet = func(recipient any) build.SignatureBuilder {
+		return build.Faucet(recipient)
+	}
 }
 
 func (s *ValidationTestSuite) SetupTest() {
@@ -80,8 +105,11 @@ func (s *ValidationTestSuite) TestMain() {
 	key31 := acctesting.GenerateKey(3, 1)
 	keymgr := acctesting.GenerateKey("mgr")
 
+	ns := s.NetworkStatus(api.NetworkStatusOptions{Partition: protocol.Directory})
+	oracle := float64(ns.Oracle.Price) / AcmeOraclePrecision
+
 	// Generate a Lite Token Account
-	st := s.BuildAndSubmitSuccessfully(s.faucet(liteAcme, 1e6))
+	st := s.BuildAndSubmitSuccessfully(s.faucet(liteAcme))
 	s.StepUntil(
 		Txn(st.TxID).Succeeds(),
 		Txn(st.TxID).Produced().Succeeds())
@@ -91,7 +119,7 @@ func (s *ValidationTestSuite) TestMain() {
 	// Add credits to lite account
 	st = s.BuildAndSubmitSuccessfully(
 		build.Transaction().For(liteAcme).
-			AddCredits().To(liteId).WithOracle(InitialAcmeOracle).Purchase(1e6).
+			AddCredits().To(liteId).WithOracle(oracle).Purchase(1e6).
 			SignWith(liteId).Version(1).Timestamp(&s.nonce).PrivateKey(liteKey))
 	s.StepUntil(
 		Txn(st.TxID).Succeeds(),
@@ -122,7 +150,7 @@ func (s *ValidationTestSuite) TestMain() {
 	// Add credits to the ADI's key page 1
 	st = s.BuildAndSubmitSuccessfully(
 		build.Transaction().For(liteAcme).
-			AddCredits().To(adi, "book", "1").WithOracle(InitialAcmeOracle).Purchase(6e4).
+			AddCredits().To(adi, "book", "1").WithOracle(oracle).Purchase(6e4).
 			SignWith(liteId).Version(1).Timestamp(&s.nonce).PrivateKey(liteKey))
 	s.StepUntil(
 		Txn(st.TxID).Succeeds(),
@@ -152,7 +180,7 @@ func (s *ValidationTestSuite) TestMain() {
 	// Add credits to the ADI's key page 2
 	st = s.BuildAndSubmitSuccessfully(
 		build.Transaction().For(liteAcme).
-			AddCredits().To(adi, "book", "2").WithOracle(InitialAcmeOracle).Purchase(1e3).
+			AddCredits().To(adi, "book", "2").WithOracle(oracle).Purchase(1e3).
 			SignWith(liteId).Version(1).Timestamp(&s.nonce).PrivateKey(liteKey))
 	s.StepUntil(
 		Txn(st.TxID).Succeeds(),
@@ -237,7 +265,7 @@ func (s *ValidationTestSuite) TestMain() {
 
 	st = s.BuildAndSubmitSuccessfully(
 		build.Transaction().For(liteAcme).
-			AddCredits().To(adi, "book2", "1").WithOracle(InitialAcmeOracle).Purchase(1e3).
+			AddCredits().To(adi, "book2", "1").WithOracle(oracle).Purchase(1e3).
 			SignWith(liteId).Version(1).Timestamp(&s.nonce).PrivateKey(liteKey))
 	s.StepUntil(
 		Txn(st.TxID).Succeeds(),
@@ -498,7 +526,7 @@ func (s *ValidationTestSuite) TestMain() {
 	// Add credits to manager's key page 1
 	st = s.BuildAndSubmitSuccessfully(
 		build.Transaction().For(liteAcme).
-			AddCredits().To(manager, "book", "1").WithOracle(InitialAcmeOracle).Purchase(1e3).
+			AddCredits().To(manager, "book", "1").WithOracle(oracle).Purchase(1e3).
 			SignWith(liteId).Version(1).Timestamp(&s.nonce).PrivateKey(liteKey))
 	s.StepUntil(
 		Txn(st.TxID).Succeeds(),
@@ -556,7 +584,7 @@ func (s *ValidationTestSuite) TestMain() {
 	st = s.BuildAndSubmitSuccessfully(
 		build.Transaction().For(liteAcme).
 			Memo("hello world").
-			SendTokens(5, AcmePrecisionPower).To(adi, "tokens").
+			SendTokens(1, AcmePrecisionPower).To(adi, "tokens").
 			SignWith(liteId).Version(1).Timestamp(&s.nonce).PrivateKey(liteKey))
 	s.StepUntil(
 		Txn(st.TxID).Succeeds(),
