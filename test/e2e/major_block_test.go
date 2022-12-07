@@ -84,7 +84,7 @@ func TestBlockLedger(t *testing.T) {
 	alice := protocol.AccountUrl("alice")
 	aliceKey := acctesting.GenerateKey(alice)
 	sim.CreateIdentity(alice, aliceKey[32:])
-	updateAccount(sim, alice.JoinPath("book", "1"), func(p *protocol.KeyPage) { p.CreditBalance = 1e9 })
+	updateAccountOld(sim, alice.JoinPath("book", "1"), func(p *protocol.KeyPage) { p.CreditBalance = 1e9 })
 
 	// Do something
 	sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(

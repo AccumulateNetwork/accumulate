@@ -14,9 +14,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
+	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
@@ -43,8 +43,8 @@ func SetupForRemoteSignatures(sim *simulator.Simulator, timestamp *uint64, alice
 	// Create and fund a lite address
 	batch := sim.PartitionFor(aliceUrl).Database.Begin(true)
 	defer batch.Discard()
-	require.NoError(sim, acctesting.CreateLiteTokenAccountWithCredits(batch, aliceTm, 1e9, 1e9))
-	require.NoError(sim, batch.Commit())
+	require.NoError(sim.TB, acctesting.CreateLiteTokenAccountWithCredits(batch, aliceTm, 1e9, 1e9))
+	require.NoError(sim.TB, batch.Commit())
 
 	// Create the ADIs
 	envs := sim.MustSubmitAndExecuteBlock(
@@ -266,7 +266,7 @@ func TestRemoteSignatures_Initiate(t *testing.T) {
 	// Setup
 	SetupForRemoteSignatures(sim, &timestamp, alice, bobKey, charlieKey1)
 
-	updateAccount(sim, charlieUrl.JoinPath("book", "1"), func(p *KeyPage) {
+	updateAccountNew(sim, charlieUrl.JoinPath("book", "1"), func(p *KeyPage) {
 		hash2 := sha256.Sum256(charlieKey2[32:])
 		hash3 := sha256.Sum256(charlieKey3[32:])
 		p.AddKeySpec(&KeySpec{PublicKeyHash: hash2[:]})
