@@ -49,7 +49,7 @@ func NewRequest(typ QueryType) (Request, error) {
 	}
 }
 
-//EqualRequest is used to compare the values of the union
+// EqualRequest is used to compare the values of the union
 func EqualRequest(a, b Request) bool {
 	if a == b {
 		return true
@@ -99,7 +99,7 @@ func EqualRequest(a, b Request) bool {
 	}
 }
 
-//CopyRequest copies a Request.
+// CopyRequest copies a Request.
 func CopyRequest(v Request) Request {
 	switch v := v.(type) {
 	case *RequestByChainId:

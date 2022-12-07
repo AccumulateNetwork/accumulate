@@ -83,9 +83,11 @@ func (v *NetworkStatusRequest) MarshalJSON() ([]byte, error) {
 
 func (v *NodeStatusRequest) MarshalJSON() ([]byte, error) {
 	u := struct {
-		NodeID string `json:"nodeID,omitempty"`
+		NodeID    string `json:"nodeID,omitempty"`
+		Partition string `json:"partition,omitempty"`
 	}{}
 	u.NodeID = v.NodeStatusOptions.NodeID
+	u.Partition = v.NodeStatusOptions.Partition
 	return json.Marshal(&u)
 }
 
@@ -168,13 +170,16 @@ func (v *NetworkStatusRequest) UnmarshalJSON(data []byte) error {
 
 func (v *NodeStatusRequest) UnmarshalJSON(data []byte) error {
 	u := struct {
-		NodeID string `json:"nodeID,omitempty"`
+		NodeID    string `json:"nodeID,omitempty"`
+		Partition string `json:"partition,omitempty"`
 	}{}
 	u.NodeID = v.NodeStatusOptions.NodeID
+	u.Partition = v.NodeStatusOptions.Partition
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.NodeStatusOptions.NodeID = u.NodeID
+	v.NodeStatusOptions.Partition = u.Partition
 	return nil
 }
 
