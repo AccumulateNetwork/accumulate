@@ -88,6 +88,9 @@ func (AddCredits) Validate(st *StateManager, tx *Delivery) (protocol.Transaction
 
 	if !account.DebitTokens(&body.Amount) {
 		return nil, fmt.Errorf("insufficient balance: have %v, want %v", account.TokenBalance(), &body.Amount)
+		// return nil, fmt.Errorf("insufficient balance: have %v, want %v",
+		// 	protocol.FormatBigAmount(account.TokenBalance(), protocol.AcmePrecisionPower),
+		// 	protocol.FormatBigAmount(&body.Amount, protocol.AcmePrecisionPower))
 	}
 
 	// Convert a lite token account recipient into a lite identity. Do not check
