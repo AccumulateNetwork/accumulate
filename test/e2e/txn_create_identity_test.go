@@ -59,7 +59,7 @@ func TestCreateIdentity(t *testing.T) {
 		sim.CreateAccount(&LiteIdentity{Url: lite, CreditBalance: 1e9})
 		sim.CreateIdentity(alice, aliceKey[32:])
 		sim.CreateIdentity(charlie, acctesting.GenerateKey(charlie)[32:])
-		updateAccount(sim, alicePage, func(p *KeyPage) { p.CreditBalance = 1e9 })
+		updateAccountOld(sim, alicePage, func(p *KeyPage) { p.CreditBalance = 1e9 })
 
 		bld := acctesting.NewTransaction()
 		if c.Direct {
