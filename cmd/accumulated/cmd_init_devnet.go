@@ -49,8 +49,8 @@ func initDevNet(cmd *cobra.Command, _ []string) {
 	}
 
 	if !flagInitDevnet.Compose {
-		initOpts.GenerateKeys = func() (privVal []byte, node []byte) {
-			return ed25519.GenPrivKey(), ed25519.GenPrivKey()
+		initOpts.GenerateKeys = func() (privVal, dnn, bvnn []byte) {
+			return ed25519.GenPrivKey(), ed25519.GenPrivKey(), ed25519.GenPrivKey()
 		}
 	}
 
@@ -131,7 +131,7 @@ func writeDevnetDockerCompose(cmd *cobra.Command, netInit *accumulated.NetworkIn
 	}
 
 	var svc dc.ServiceConfig
-	api := netInit.Bvns[0].Nodes[0].Address(accumulated.AdvertizeAddress, "http", cfg.PortOffsetAccumulateApi) + "/v2"
+	api := netInit.Bvns[0].Nodes[0].Advertize().Scheme("http").AccumulateAPI().String() + "/v2"
 	svc.Name = "tools"
 	svc.ContainerName = "devnet-init"
 	svc.Image = flagInitDevnet.DockerImage

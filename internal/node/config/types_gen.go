@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/p2p"
 )
 
 type Describe struct {
@@ -41,6 +42,13 @@ type Node struct {
 	Address   string   `json:"address,omitempty" form:"address" query:"address" validate:"required" toml:"address" mapstructure:"address"`
 	Type      NodeType `json:"type,omitempty" form:"type" query:"type" validate:"required" toml:"type" mapstructure:"type"`
 	extraData []byte
+}
+
+type P2P struct {
+	fieldsSet      []bool
+	Listen         []p2p.Multiaddr `json:"listen,omitempty" form:"listen" query:"listen" validate:"required" toml:"listen" mapstructure:"listen"`
+	BootstrapPeers []p2p.Multiaddr `json:"bootstrapPeers,omitempty" form:"bootstrapPeers" query:"bootstrapPeers" validate:"required" toml:"bootstrap-peers" mapstructure:"bootstrap-peers"`
+	extraData      []byte
 }
 
 type Partition struct {
@@ -89,6 +97,27 @@ func (v *Node) Copy() *Node {
 }
 
 func (v *Node) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *P2P) Copy() *P2P {
+	u := new(P2P)
+
+	u.Listen = make([]p2p.Multiaddr, len(v.Listen))
+	for i, v := range v.Listen {
+		if v != nil {
+			u.Listen[i] = p2p.CopyMultiaddr(v)
+		}
+	}
+	u.BootstrapPeers = make([]p2p.Multiaddr, len(v.BootstrapPeers))
+	for i, v := range v.BootstrapPeers {
+		if v != nil {
+			u.BootstrapPeers[i] = p2p.CopyMultiaddr(v)
+		}
+	}
+
+	return u
+}
+
+func (v *P2P) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *Partition) Copy() *Partition {
 	u := new(Partition)
@@ -145,6 +174,27 @@ func (v *Node) Equal(u *Node) bool {
 	}
 	if !(v.Type == u.Type) {
 		return false
+	}
+
+	return true
+}
+
+func (v *P2P) Equal(u *P2P) bool {
+	if len(v.Listen) != len(u.Listen) {
+		return false
+	}
+	for i := range v.Listen {
+		if !(p2p.EqualMultiaddr(v.Listen[i], u.Listen[i])) {
+			return false
+		}
+	}
+	if len(v.BootstrapPeers) != len(u.BootstrapPeers) {
+		return false
+	}
+	for i := range v.BootstrapPeers {
+		if !(p2p.EqualMultiaddr(v.BootstrapPeers[i], u.BootstrapPeers[i])) {
+			return false
+		}
 	}
 
 	return true
@@ -336,6 +386,58 @@ func (v *Node) IsValid() error {
 	}
 }
 
+var fieldNames_P2P = []string{
+	1: "Listen",
+	2: "BootstrapPeers",
+}
+
+func (v *P2P) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(len(v.Listen) == 0) {
+		for _, v := range v.Listen {
+			writer.WriteValue(1, v.MarshalBinary)
+		}
+	}
+	if !(len(v.BootstrapPeers) == 0) {
+		for _, v := range v.BootstrapPeers {
+			writer.WriteValue(2, v.MarshalBinary)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_P2P)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *P2P) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Listen is missing")
+	} else if len(v.Listen) == 0 {
+		errs = append(errs, "field Listen is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field BootstrapPeers is missing")
+	} else if len(v.BootstrapPeers) == 0 {
+		errs = append(errs, "field BootstrapPeers is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_Partition = []string{
 	1: "Id",
 	2: "Type",
@@ -492,6 +594,50 @@ func (v *Node) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *P2P) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *P2P) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	for {
+		ok := reader.ReadValue(1, func(r io.Reader) error {
+			x, err := p2p.UnmarshalMultiaddrFrom(r)
+			if err == nil {
+				v.Listen = append(v.Listen, x)
+			}
+			return err
+		})
+		if !ok {
+			break
+		}
+	}
+	for {
+		ok := reader.ReadValue(2, func(r io.Reader) error {
+			x, err := p2p.UnmarshalMultiaddrFrom(r)
+			if err == nil {
+				v.BootstrapPeers = append(v.BootstrapPeers, x)
+			}
+			return err
+		})
+		if !ok {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_P2P)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *Partition) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -556,6 +702,16 @@ func (v *Network) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *P2P) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Listen         encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"listen,omitempty"`
+		BootstrapPeers encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"bootstrapPeers,omitempty"`
+	}{}
+	u.Listen = encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.Listen, Func: p2p.UnmarshalMultiaddrJSON}
+	u.BootstrapPeers = encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.BootstrapPeers, Func: p2p.UnmarshalMultiaddrJSON}
+	return json.Marshal(&u)
+}
+
 func (v *Partition) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Id       string                  `json:"id,omitempty"`
@@ -614,6 +770,27 @@ func (v *Network) UnmarshalJSON(data []byte) error {
 		v.Partitions = u.Partitions
 	} else {
 		v.Partitions = u.Subnets
+	}
+	return nil
+}
+
+func (v *P2P) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Listen         encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"listen,omitempty"`
+		BootstrapPeers encoding.JsonUnmarshalListWith[p2p.Multiaddr] `json:"bootstrapPeers,omitempty"`
+	}{}
+	u.Listen = encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.Listen, Func: p2p.UnmarshalMultiaddrJSON}
+	u.BootstrapPeers = encoding.JsonUnmarshalListWith[p2p.Multiaddr]{Value: v.BootstrapPeers, Func: p2p.UnmarshalMultiaddrJSON}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Listen = make([]p2p.Multiaddr, len(u.Listen.Value))
+	for i, x := range u.Listen.Value {
+		v.Listen[i] = x
+	}
+	v.BootstrapPeers = make([]p2p.Multiaddr, len(u.BootstrapPeers.Value))
+	for i, x := range u.BootstrapPeers.Value {
+		v.BootstrapPeers[i] = x
 	}
 	return nil
 }

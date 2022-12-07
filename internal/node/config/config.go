@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/mitchellh/mapstructure"
+	"github.com/multiformats/go-multiaddr"
 	"github.com/pelletier/go-toml"
 	"github.com/spf13/viper"
 	tm "github.com/tendermint/tendermint/config"
@@ -136,7 +137,6 @@ func Default(netName string, net NetworkType, _ NodeType, partitionId string) *C
 	c.Accumulate.PartitionId = partitionId
 	c.Accumulate.API.PrometheusServer = "http://18.119.26.7:9090"
 	c.Accumulate.API.TxMaxWaitTime = 10 * time.Minute
-	c.Accumulate.API.EnableDebugMethods = true
 	c.Accumulate.API.ConnectionLimit = 500
 	c.Accumulate.Storage.Type = BadgerStorage
 	c.Accumulate.Storage.Path = filepath.Join("data", "accumulate.db")
@@ -168,6 +168,7 @@ type Accumulate struct {
 	//	NetworkConfig string      `toml:"network" mapstructure:"network"`
 	Snapshots   Snapshots   `toml:"snapshots" mapstructure:"snapshots"`
 	Storage     Storage     `toml:"storage" mapstructure:"storage"`
+	P2P         P2P         `toml:"p2p" mapstructure:"p2p"`
 	API         API         `toml:"api" mapstructure:"api"`
 	AnalysisLog AnalysisLog `toml:"analysis" mapstructure:"analysis"`
 }
@@ -371,7 +372,9 @@ func load(dir, file string, c interface{}) error {
 	err = v.Unmarshal(c, viper.DecodeHook(mapstructure.ComposeDecodeHookFunc(
 		mapstructure.StringToTimeDurationHookFunc(),
 		mapstructure.StringToSliceHookFunc(","),
-		StringToEnumHookFunc())))
+		StringToEnumHookFunc(),
+		StringToMultiaddrHookFunc(),
+	)))
 
 	if err != nil {
 		return fmt.Errorf("unmarshal: %v", err)
@@ -385,7 +388,8 @@ func (v NodeType) MarshalTOML() ([]byte, error) {
 	return []byte("\"" + v.String() + "\""), nil
 }
 
-// StringToEnumHookFunc is a decode hook for mapstructure that will convert enums to strings
+// StringToEnumHookFunc is a decode hook for mapstructure that converts enums to
+// strings.
 func StringToEnumHookFunc() mapstructure.DecodeHookFuncType {
 	return func(
 		_ reflect.Type,
@@ -393,12 +397,34 @@ func StringToEnumHookFunc() mapstructure.DecodeHookFuncType {
 		data interface{},
 	) (interface{}, error) {
 		switch t {
-		case reflect.TypeOf(NetworkTypeDirectory):
-			ret, _ := protocol.PartitionTypeByName(data.(string))
+		case reflect.TypeOf(protocol.PartitionType(0)):
+			ret, ok := protocol.PartitionTypeByName(data.(string))
+			if !ok {
+				return nil, fmt.Errorf("%s is not a partition type", data.(string))
+			}
 			return ret, nil
-		case reflect.TypeOf(NodeTypeValidator):
-			ret, _ := NodeTypeByName(data.(string))
+		case reflect.TypeOf(NodeType(0)):
+			ret, ok := NodeTypeByName(data.(string))
+			if !ok {
+				return nil, fmt.Errorf("%s is not a node type", data.(string))
+			}
 			return ret, nil
+		}
+		return data, nil
+	}
+}
+
+// StringToMultiaddrHookFunc is a decode hook for mapstructure that converts
+// strings to multiaddrs.
+func StringToMultiaddrHookFunc() mapstructure.DecodeHookFuncType {
+	return func(
+		_ reflect.Type,
+		t reflect.Type,
+		data interface{},
+	) (interface{}, error) {
+		switch t {
+		case reflect.TypeOf(new(multiaddr.Multiaddr)).Elem():
+			return multiaddr.NewMultiaddr(data.(string))
 		}
 		return data, nil
 	}

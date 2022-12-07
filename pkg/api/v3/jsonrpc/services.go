@@ -30,8 +30,9 @@ func formatResponse(res interface{}, err error) interface{} {
 	}
 
 	// Ensure the error is an Error
+	type Error errors.Error
 	err2 := errors.UnknownError.Wrap(err).(*errors.Error)
-	return jsonrpc2.NewError(ErrCodeProtocol-jsonrpc2.ErrorCode(err2.Code), err2.Code.String(), err2)
+	return jsonrpc2.NewError(ErrCodeProtocol-jsonrpc2.ErrorCode(err2.Code), err2.Error(), (*Error)(err2))
 }
 
 type NodeService struct{ api.NodeService }

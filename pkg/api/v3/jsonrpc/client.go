@@ -68,7 +68,7 @@ func (c *Client) sendRequest(ctx context.Context, method string, req, resp inter
 		return nil
 	}
 
-	var jerr *jsonrpc2.Error
+	var jerr jsonrpc2.Error
 	if !errors.As(err, &jerr) || jerr.Code > ErrCodeProtocol {
 		return err
 	}

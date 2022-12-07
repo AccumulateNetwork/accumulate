@@ -6,4 +6,4 @@
 
 package testing
 
-//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --package testing types.yml --reference ../../protocol/general.yml
+//go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --package testing types.yml --reference ../../protocol/accounts.yml,../../protocol/general.yml

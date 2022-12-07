@@ -65,7 +65,11 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 	n.eventBus = events.NewBus(n.logger)
 	n.database = s.database(p.ID, node, n.logger)
 	n.privValKey = init.PrivValKey
-	n.nodeKey = init.NodeKey
+	if p.Type == config.Directory {
+		n.nodeKey = init.DnNodeKey
+	} else {
+		n.nodeKey = init.BvnNodeKey
+	}
 
 	// This is hacky, but 🤷 I don't see another choice that wouldn't be
 	// significantly less readable

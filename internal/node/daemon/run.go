@@ -8,6 +8,8 @@ package accumulated
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
@@ -27,14 +29,17 @@ import (
 	tmlog "github.com/tendermint/tendermint/libs/log"
 	service2 "github.com/tendermint/tendermint/libs/service"
 	tmnode "github.com/tendermint/tendermint/node"
-	"github.com/tendermint/tendermint/p2p"
+	tmp2p "github.com/tendermint/tendermint/p2p"
 	"github.com/tendermint/tendermint/privval"
 	"github.com/tendermint/tendermint/proxy"
 	tmclient "github.com/tendermint/tendermint/rpc/client"
 	"github.com/tendermint/tendermint/rpc/client/local"
 	"gitlab.com/accumulatenetwork/accumulate"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	v2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3/tm"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/blockscheduler"
@@ -46,6 +51,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/connections"
 	statuschk "gitlab.com/accumulatenetwork/accumulate/internal/node/connections/status"
+	nodeapi "gitlab.com/accumulatenetwork/accumulate/internal/node/http"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -61,9 +68,12 @@ type Daemon struct {
 	done              chan struct{}
 	db                *database.Database
 	node              *node.Node
-	api               *http.Server
-	pv                *privval.FilePV
-	jrpc              *api.JrpcMethods
+	apiServer         *http.Server
+	privVal           *privval.FilePV
+	apiv2             *v2.JrpcMethods
+	p2pnode           *p2p.Node
+	api               *nodeapi.Handler
+	nodeKey           *tmp2p.NodeKey
 	connectionManager connections.ConnectionInitializer
 	eventBus          *events.Bus
 	localTm           tmclient.Client
@@ -111,12 +121,13 @@ func Load(dir string, newWriter func(*config.Config) (io.Writer, error)) (*Daemo
 }
 
 func (d *Daemon) Key() crypto.PrivKey {
-	return d.pv.Key.PrivKey
+	return d.privVal.Key.PrivKey
 }
 
 func (d *Daemon) DB_TESTONLY() *database.Database { return d.db }
 func (d *Daemon) Node_TESTONLY() *node.Node       { return d.node }
-func (d *Daemon) Jrpc_TESTONLY() *api.JrpcMethods { return d.jrpc }
+func (d *Daemon) Jrpc_TESTONLY() *v2.JrpcMethods  { return d.apiv2 }
+func (d *Daemon) API() *nodeapi.Handler           { return d.api }
 
 func (d *Daemon) Start() (err error) {
 	if d.done != nil {
@@ -194,7 +205,7 @@ func (d *Daemon) Start() (err error) {
 	}()
 
 	// read private validator
-	d.pv, err = config.LoadFilePV(
+	d.privVal, err = config.LoadFilePV(
 		d.Config.PrivValidatorKeyFile(),
 		d.Config.PrivValidatorStateFile(),
 	)
@@ -202,7 +213,7 @@ func (d *Daemon) Start() (err error) {
 		return fmt.Errorf("failed to load private validator: %v", err)
 	}
 
-	nodeKey, err := p2p.LoadNodeKey(d.Config.NodeKeyFile())
+	d.nodeKey, err = tmp2p.LoadNodeKey(d.Config.NodeKeyFile())
 	if err != nil {
 		return fmt.Errorf("failed to load node key: %v", err)
 	}
@@ -247,8 +258,8 @@ func (d *Daemon) Start() (err error) {
 	// Create node
 	tmn, err := tmnode.NewNode(
 		&d.Config.Config,
-		d.pv,
-		nodeKey,
+		d.privVal,
+		d.nodeKey,
 		proxy.NewLocalClientCreator(app),
 		tmnode.DefaultGenesisDocProviderFunc(&d.Config.Config),
 		tmnode.DefaultDBProvider,
@@ -294,7 +305,7 @@ func (d *Daemon) Start() (err error) {
 	}
 
 	// Create the JSON-RPC handler
-	d.jrpc, err = api.NewJrpc(api.Options{
+	d.apiv2, err = v2.NewJrpc(v2.Options{
 		Logger:            d.Logger,
 		Describe:          &d.Config.Accumulate.Describe,
 		Router:            router,
@@ -316,13 +327,81 @@ func (d *Daemon) Start() (err error) {
 		return fmt.Errorf("failed to initialize the connection manager: %v", err)
 	}
 
-	// Enable debug methods
-	if d.Config.Accumulate.API.EnableDebugMethods {
-		d.jrpc.EnableDebug()
+	d.p2pnode, err = p2p.New(p2p.Options{
+		Logger:         d.Logger.With("module", "acc-rpc"),
+		Listen:         d.Config.Accumulate.P2P.Listen,
+		BootstrapPeers: app.Accumulate.P2P.BootstrapPeers,
+		Key:            ed25519.PrivateKey(d.nodeKey.PrivKey.Bytes()),
+		Partitions: []p2p.PartitionOptions{
+			{
+				Moniker: d.Config.Moniker,
+				ID:      d.Config.Accumulate.PartitionId,
+			},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("initialize P2P: %w", err)
 	}
 
-	// Run JSON-RPC server
-	d.api = &http.Server{Handler: d.jrpc.NewMux(), ReadHeaderTimeout: d.Config.Accumulate.API.ReadHeaderTimeout}
+	nodeSvc := tm.NewNodeService(tm.NodeServiceParams{
+		Logger:           d.Logger.With("module", "acc-rpc"),
+		Local:            d.localTm,
+		Database:         d.db,
+		PartitionID:      d.Config.Accumulate.PartitionId,
+		PartitionType:    d.Config.Accumulate.NetworkType,
+		EventBus:         d.eventBus,
+		NodeKeyHash:      sha256.Sum256(d.nodeKey.PubKey().Bytes()),
+		ValidatorKeyHash: sha256.Sum256(d.privVal.Key.PubKey.Bytes()),
+	})
+	netSvc := api.NewNetworkService(api.NetworkServiceParams{
+		Logger:   d.Logger.With("module", "acc-rpc"),
+		EventBus: d.eventBus,
+		Globals:  exec.ActiveGlobals_TESTONLY(),
+	})
+	querySvc := api.NewQuerier(api.QuerierParams{
+		Logger:    d.Logger.With("module", "acc-rpc"),
+		Database:  d.db,
+		Partition: d.Config.Accumulate.PartitionId,
+	})
+	metricsSvc := api.NewMetricsService(api.MetricsServiceParams{
+		Logger:  d.Logger.With("module", "acc-rpc"),
+		Node:    nodeSvc,
+		Querier: querySvc,
+	})
+	submitSvc := tm.NewSubmitter(tm.SubmitterParams{
+		Logger: d.Logger.With("module", "acc-rpc"),
+		Local:  d.localTm,
+	})
+	validateSvc := tm.NewValidator(tm.ValidatorParams{
+		Logger: d.Logger.With("module", "acc-rpc"),
+		Local:  d.localTm,
+	})
+	p2ph, err := message.NewHandler(
+		d.Logger.With("module", "acc-rpc"),
+		&message.NodeService{NodeService: nodeSvc},
+		&message.MetricsService{MetricsService: metricsSvc},
+		&message.NetworkService{NetworkService: netSvc},
+		&message.Querier{Querier: querySvc},
+		&message.Submitter{Submitter: submitSvc},
+		&message.Validator{Validator: validateSvc},
+	)
+	if err != nil {
+		return fmt.Errorf("initialize P2P handler: %w", err)
+	}
+	d.p2pnode.SetRpcHandler(d.Config.Accumulate.PartitionId, p2ph.Handle)
+
+	d.api, err = nodeapi.NewHandler(nodeapi.Options{
+		Logger:    d.Logger.With("module", "acc-rpc"),
+		Node:      d.p2pnode,
+		Partition: d.Config.Accumulate.PartitionId,
+		Router:    router,
+		V2:        d.apiv2,
+	})
+	if err != nil {
+		return fmt.Errorf("initialize API: %w", err)
+	}
+
+	d.apiServer = &http.Server{Handler: d.api, ReadHeaderTimeout: d.Config.Accumulate.API.ReadHeaderTimeout}
 	l, secure, err := listenHttpUrl(d.Config.Accumulate.API.ListenAddress)
 	if err != nil {
 		return fmt.Errorf("failed to start JSON-RPC: %v", err)
@@ -340,7 +419,7 @@ func (d *Daemon) Start() (err error) {
 	}
 
 	go func() {
-		err := d.api.Serve(l)
+		err := d.apiServer.Serve(l)
 		if err != nil {
 			d.Logger.Error("JSON-RPC server", "err", err)
 		}
@@ -363,7 +442,7 @@ func (d *Daemon) Start() (err error) {
 		ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(5*time.Second))
 		defer cancel()
 
-		err := d.api.Shutdown(ctx)
+		err := d.apiServer.Shutdown(ctx)
 		if err != nil {
 			d.Logger.Error("Error stopping API", "module", "jrpc", "error", err)
 		}
@@ -382,7 +461,7 @@ func (d *Daemon) Start() (err error) {
 }
 
 func (d *Daemon) LocalClient() (connections.ABCIClient, error) {
-	ctx, err := d.connectionManager.SelectConnection(d.jrpc.Options.Describe.PartitionId, false)
+	ctx, err := d.connectionManager.SelectConnection(d.Config.Accumulate.PartitionId, false)
 	if err != nil {
 		return nil, err
 	}
@@ -391,7 +470,17 @@ func (d *Daemon) LocalClient() (connections.ABCIClient, error) {
 }
 
 func (d *Daemon) ConnectDirectly(e *Daemon) error {
-	err := d.connectionManager.ConnectDirectly(e.connectionManager)
+	err := d.p2pnode.ConnectDirectly(e.p2pnode)
+	if err != nil {
+		return err
+	}
+
+	err = e.p2pnode.ConnectDirectly(d.p2pnode)
+	if err != nil {
+		return err
+	}
+
+	err = d.connectionManager.ConnectDirectly(e.connectionManager)
 	if err != nil {
 		return err
 	}

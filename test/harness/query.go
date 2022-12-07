@@ -9,6 +9,14 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+// NetworkStatus calls the Harness's service, failing if the call returns an
+// error.
+func (h *Harness) NetworkStatus(opts api.NetworkStatusOptions) *api.NetworkStatus {
+	ns, err := h.services.NetworkStatus(context.Background(), opts)
+	require.NoError(h.TB, err)
+	return ns
+}
+
 // QueryAccountAs calls Harness.QueryAccountAs with a new T and returns that
 // value.
 func QueryAccountAs[T protocol.Account](h *Harness, scope *url.URL) T {
