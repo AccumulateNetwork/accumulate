@@ -8,6 +8,7 @@ package database
 
 import (
 	"fmt"
+	"sync/atomic"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
@@ -35,10 +36,10 @@ var _ Beginner = (*Batch)(nil)
 
 // Begin starts a new batch.
 func (d *Database) Begin(writable bool) *Batch {
-	d.nextBatchId++
+	id := atomic.AddInt64(&d.nextBatchId, 1)
 
 	b := new(Batch)
-	b.id = fmt.Sprint(d.nextBatchId)
+	b.id = fmt.Sprint(id)
 	b.writable = writable
 	b.logger.L = d.logger
 	b.kvstore = d.store.Begin(writable)

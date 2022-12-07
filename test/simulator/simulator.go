@@ -48,6 +48,8 @@ type Simulator struct {
 	partitions map[string]*Partition
 	router     *Router
 	netcfg     *config.Network
+
+	blockErrGroup *errgroup.Group
 }
 
 type OpenDatabaseFunc func(partition string, node int, logger log.Logger) database.Beginner
@@ -96,8 +98,6 @@ func New(logger log.Logger, database OpenDatabaseFunc, network *accumulated.Netw
 			return nil, errors.UnknownError.Wrap(err)
 		}
 	}
-
-	events.SubscribeSync(s.partitions[protocol.Directory].nodes[0].eventBus, s.router.willChangeGlobals)
 
 	for _, p := range s.partitions {
 		snapshot, err := snapshot(p.ID, s.init, s.logger)
@@ -215,19 +215,48 @@ func GenesisWith(time time.Time, values *core.GlobalValues) SnapshotFunc {
 }
 
 func (s *Simulator) Router() routing.Router { return s.router }
+func (s *Simulator) EventBus() *events.Bus  { return s.partitions[protocol.Directory].nodes[0].eventBus }
 
 // Step executes a single simulator step
 func (s *Simulator) Step() error {
-	errg := new(errgroup.Group)
+	s.blockErrGroup = new(errgroup.Group)
 	for _, p := range s.partitions {
 		p := p // Don't capture loop variables
-		errg.Go(func() error { return p.execute(errg) })
+		s.blockErrGroup.Go(p.execute)
 	}
-	return errg.Wait()
+	return s.blockErrGroup.Wait()
+}
+
+func (s *Simulator) SetSubmitHookFor(account *url.URL, fn SubmitHookFunc) {
+	partition, err := s.router.RouteAccount(account)
+	if err != nil {
+		panic(err)
+	}
+	s.partitions[partition].SetSubmitHook(fn)
 }
 
 func (s *Simulator) SetSubmitHook(partition string, fn SubmitHookFunc) {
 	s.partitions[partition].SetSubmitHook(fn)
+}
+
+func (s *Simulator) SetRouterSubmitHookFor(account *url.URL, fn RouterSubmitHookFunc) {
+	partition, err := s.router.RouteAccount(account)
+	if err != nil {
+		panic(err)
+	}
+	s.partitions[partition].SetRouterSubmitHook(fn)
+}
+
+func (s *Simulator) SetRouterSubmitHook(partition string, fn RouterSubmitHookFunc) {
+	s.partitions[partition].SetRouterSubmitHook(fn)
+}
+
+func (s *Simulator) SetExecutor(exec chain.TransactionExecutor) {
+	for _, p := range s.partitions {
+		for _, n := range p.nodes {
+			n.executor.SetExecutor_TESTONLY(exec)
+		}
+	}
 }
 
 func (s *Simulator) Submit(delivery *chain.Delivery) (*protocol.TransactionStatus, error) {
@@ -239,6 +268,10 @@ func (s *Simulator) Submit(delivery *chain.Delivery) (*protocol.TransactionStatu
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
+	return s.SubmitTo(partition, delivery)
+}
+
+func (s *Simulator) SubmitTo(partition string, delivery *chain.Delivery) (*protocol.TransactionStatus, error) {
 	p, ok := s.partitions[partition]
 	if !ok {
 		return nil, errors.BadRequest.WithFormat("%s is not a partition", partition)
@@ -259,8 +292,9 @@ type errDb struct{ err error }
 
 func (e errDb) View(func(*database.Batch) error) error   { return e.err }
 func (e errDb) Update(func(*database.Batch) error) error { return e.err }
+func (e errDb) Begin(bool) *database.Batch               { panic(e.err) }
 
-func (s *Simulator) Database(partition string) database.Updater {
+func (s *Simulator) Database(partition string) database.Beginner {
 	p, ok := s.partitions[partition]
 	if !ok {
 		return errDb{errors.BadRequest.WithFormat("%s is not a partition", partition)}
@@ -274,6 +308,10 @@ func (s *Simulator) DatabaseFor(account *url.URL) database.Updater {
 		return errDb{errors.UnknownError.Wrap(err)}
 	}
 	return s.Database(partition)
+}
+
+func (s *Simulator) ClientV2(part string) *client.Client {
+	return s.partitions[part].nodes[0].clientV2
 }
 
 func (s *Simulator) ViewAll(fn func(batch *database.Batch) error) error {
