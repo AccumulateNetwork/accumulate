@@ -9,20 +9,30 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
 
+// Stream is a stream of [Message]s.
 type Stream = StreamOf[Message]
 
+// Stream is a stream of T.
 type StreamOf[T any] interface {
+	// Read reads the next value from the stream.
 	Read() (T, error)
+
+	// Write writes a value to the stream.
 	Write(T) error
 }
 
+// stream implements [StreamOf[T]].
 type stream[T encoding.BinaryValue] struct {
 	raw       io.ReadWriter
 	rd        *bufio.Reader
 	unmarshal func([]byte) (T, error)
 }
 
-// NewStream returns a message stream wrapping the underlying
+// NewStream returns a [Stream] of [Message]s wrapping the underlying
+// [io.ReadWriter].
+//
+// Messages are marshalled and unmarshalled as binary prefixed with the byte
+// count.
 func NewStream(raw io.ReadWriter) Stream {
 	return &stream[Message]{raw, bufio.NewReader(raw), Unmarshal}
 }
@@ -32,6 +42,11 @@ type valuePtr[T any] interface {
 	encoding.BinaryValue
 }
 
+// NewStreamOf returns a [StreamOf[T]] wrapping the underlying [io.ReadWriter].
+// A pointer to T must implement [encoding.BinaryValue].
+//
+// Values are marshalled and unmarshalled as binary prefixed with the byte
+// count.
 func NewStreamOf[T any, PT valuePtr[T]](raw io.ReadWriter) StreamOf[PT] {
 	return &stream[PT]{raw, bufio.NewReader(raw), func(b []byte) (PT, error) {
 		v := PT(new(T))
@@ -40,6 +55,7 @@ func NewStreamOf[T any, PT valuePtr[T]](raw io.ReadWriter) StreamOf[PT] {
 	}}
 }
 
+// Read reads and unmarshals the next value.
 func (s *stream[T]) Read() (T, error) {
 	var z T
 	l, err := binary.ReadUvarint(s.rd)
@@ -56,6 +72,7 @@ func (s *stream[T]) Read() (T, error) {
 	return s.unmarshal(b)
 }
 
+// Write writes a value.
 func (s *stream[T]) Write(v T) error {
 	b, err := v.MarshalBinary()
 	if err != nil {

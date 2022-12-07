@@ -9,11 +9,15 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
+// Handler handles message streams.
 type Handler struct {
 	logger  logging.OptionalLogger
 	methods serviceMethodMap
 }
 
+// NewHandler constructs a new Handler with the given list of services.
+// NewHandler only returns an error if more than one service attempts to
+// register a method for the same request type.
 func NewHandler(logger log.Logger, services ...Service) (*Handler, error) {
 	h := new(Handler)
 	h.logger.Set(logger)
@@ -30,17 +34,21 @@ func NewHandler(logger log.Logger, services ...Service) (*Handler, error) {
 	return h, nil
 }
 
+// Handle handles a message stream. Handle is safe to call from a goroutine.
 func (h *Handler) Handle(s Stream) {
+	// Panic protection
 	defer func() {
 		if r := recover(); r != nil {
 			h.logger.Error("Panicked while handling stream", "error", r)
 		}
 	}()
 
+	// Gotta have that context 👌
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	for {
+		// Read the next request
 		req, err := s.Read()
 		switch {
 		case err == nil:
@@ -56,6 +64,7 @@ func (h *Handler) Handle(s Stream) {
 			return
 		}
 
+		// Strip off addressing
 		for {
 			if r, ok := req.(*Addressed); ok {
 				req = r.Message
@@ -64,6 +73,7 @@ func (h *Handler) Handle(s Stream) {
 			}
 		}
 
+		// Find the method
 		m, ok := h.methods[req.Type()]
 		if !ok {
 			err = s.Write(&ErrorResponse{Error: errors.NotAllowed.WithFormat("%v not supported", req.Type())})
@@ -73,6 +83,7 @@ func (h *Handler) Handle(s Stream) {
 			}
 		}
 
+		// And call it
 		m(&call[Message]{
 			context: ctx,
 			logger:  h.logger,

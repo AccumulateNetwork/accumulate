@@ -10,27 +10,33 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
 
+// pipe is a Stream backed by channels.
 type pipe[T encoding.BinaryValue] struct {
-	rd        pipedir[<-chan []byte]
-	wr        pipedir[chan<- []byte]
-	unmarshal func([]byte) (T, error)
+	rd        pipedir[<-chan []byte]  // Read
+	wr        pipedir[chan<- []byte]  // Write
+	unmarshal func([]byte) (T, error) // Unmarshal
 }
 
+// pipedir half of a pipe.
 type pipedir[T any] struct {
-	ch               T
-	ctx, dlCtx       context.Context
-	cancel, dlCancel context.CancelFunc
+	ch               T                  // Channel
+	ctx, dlCtx       context.Context    // Main context
+	cancel, dlCancel context.CancelFunc // Deadline context
 }
 
+// newPipeDir constructs a new pipedir.
 func newPipeDir[T any](ch T, ctx context.Context) pipedir[T] {
 	ctx, cancel := context.WithCancel(ctx)
 	return pipedir[T]{ch, ctx, context.Background(), cancel, func() {}}
 }
 
+// Pipe allocates a simplex Message Stream backed by an unbuffered channel.
 func Pipe(ctx context.Context) *pipe[Message] {
 	return newSimplex(ctx, Unmarshal)
 }
 
+// PipeOf allocates a simplex Stream of the given type backed by an unbuffered
+// channel. A pointer to T must implement [encoding.BinaryValue].
 func PipeOf[T any, PT valuePtr[T]](ctx context.Context) *pipe[PT] {
 	return newSimplex(ctx, func(b []byte) (PT, error) {
 		v := PT(new(T))
@@ -39,6 +45,7 @@ func PipeOf[T any, PT valuePtr[T]](ctx context.Context) *pipe[PT] {
 	})
 }
 
+// newSimples allocates a simplex pipe.
 func newSimplex[T encoding.BinaryValue](ctx context.Context, unmarshal func([]byte) (T, error)) *pipe[T] {
 	ch := make(chan []byte)
 	p := new(pipe[T])
@@ -48,17 +55,22 @@ func newSimplex[T encoding.BinaryValue](ctx context.Context, unmarshal func([]by
 	return p
 }
 
+// piperr returns onCancel if the context error is [context.Canceled].
 func piperr(ctx context.Context, onCancel error) error {
 	err := ctx.Err()
 	if errors.Is(err, context.Canceled) {
 		return onCancel
 	}
-	return nil
+	return err
 }
 
+// ErrDeadline is returned if a pipe read or write exceeds the deadline.
 var ErrDeadline = stderr.New("deadline exceeded")
 
+// Read reads a value from the read channel. Read will only return an error if
+// the pipe is closed, a deadline is hit, or unmarshalling fails.
 func (p *pipe[T]) Read() (T, error) {
+	// Use select so closes and deadlines are respected
 	var b []byte
 	var z T
 	select {
@@ -78,6 +90,8 @@ func (p *pipe[T]) Read() (T, error) {
 	return v, nil
 }
 
+// Write writes a value to the write channel. Write will only return an error if
+// the pipe is closed, a deadline is hit, or marshalling fails.
 func (s *pipe[T]) Write(v T) error {
 	// Marshal the message to ensure pipeStream behaves the same as a network
 	// stream. Otherwise there will be subtle differences between directly
@@ -87,6 +101,7 @@ func (s *pipe[T]) Write(v T) error {
 		return errors.EncodingError.Wrap(err)
 	}
 
+	// Use select so closes and deadlines are respected
 	select {
 	case s.wr.ch <- b:
 		return nil
@@ -97,33 +112,39 @@ func (s *pipe[T]) Write(v T) error {
 	}
 }
 
+// Close closes the pipe.
 func (s *pipe[T]) Close() error {
 	_ = s.CloseRead()
 	_ = s.CloseWrite()
 	return nil
 }
 
+// CloseWrite closes the write side of the pipe.
 func (s *pipe[T]) CloseWrite() error {
-	s.rd.cancel()
-	return nil
-}
-
-func (s *pipe[T]) CloseRead() error {
 	s.wr.cancel()
 	return nil
 }
 
+// CloseRead closes the read side of the pipe.
+func (s *pipe[T]) CloseRead() error {
+	s.rd.cancel()
+	return nil
+}
+
+// SetDeadline sets a read and write deadline.
 func (s *pipe[T]) SetDeadline(t time.Time) error {
 	_ = s.SetReadDeadline(t)
 	_ = s.SetWriteDeadline(t)
 	return nil
 }
 
+// SetReadDeadline sets a read deadline.
 func (s *pipe[T]) SetReadDeadline(t time.Time) error {
 	s.rd.dlCtx, s.rd.dlCancel = context.WithDeadline(s.rd.ctx, t)
 	return nil
 }
 
+// SetWriteDeadline sets a write deadline.
 func (s *pipe[T]) SetWriteDeadline(t time.Time) error {
 	s.wr.dlCtx, s.wr.dlCancel = context.WithDeadline(s.wr.ctx, t)
 	return nil

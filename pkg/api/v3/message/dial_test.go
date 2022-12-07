@@ -15,14 +15,18 @@ import (
 )
 
 func TestBatchDialer(t *testing.T) {
+	// Set up the mock and expected return value
 	expect := &api.UrlRecord{Value: protocol.AccountUrl("foo")}
 	s := mocks.NewQuerier(t)
 	s.EXPECT().Query(mock.Anything, mock.Anything, mock.Anything).Return(expect, nil)
 
+	// Set up the service and handler
 	logger := logging.ConsoleLoggerForTest(t, "info")
 	handler, err := NewHandler(logger, Querier{Querier: s})
 	require.NoError(t, err)
 
+	// Create a dialer that counts dials, creating a pipe and spawning a
+	// goroutine for the handler
 	var dialCount int
 	didCancel := make(chan struct{})
 	var dialer Dialer = dialerFunc(func(ctx context.Context, m multiaddr.Multiaddr) (Stream, error) {
@@ -36,17 +40,21 @@ func TestBatchDialer(t *testing.T) {
 		}()
 		return s, nil
 	})
+
+	// Construct the batch dialer to test and a client
 	batchCtx, batchDone := context.WithCancel(context.Background())
 	dialer = BatchDialer(batchCtx, dialer)
 	addr, err := multiaddr.NewComponent("acc", "foo")
 	require.NoError(t, err)
 	client := &Client{Dialer: dialer, Router: routerFunc(func(m Message) (multiaddr.Multiaddr, error) { return addr, nil })}
 
+	// Execute
 	_, err = client.Query(context.Background(), protocol.DnUrl(), nil)
 	require.NoError(t, err)
 	_, err = client.Query(context.Background(), protocol.DnUrl(), nil)
 	require.NoError(t, err)
 
+	// Cleanup the batch dialer
 	batchDone()
 
 	// Verify the dialer was only used once and the context was canceled

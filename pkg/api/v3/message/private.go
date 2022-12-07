@@ -9,6 +9,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
+// Sequencer forwards [PrivateSequenceRequest]s to a [private.Sequencer].
 type Sequencer struct {
 	private.Sequencer
 }
@@ -27,12 +28,15 @@ func (s *Sequencer) sequence(c *call[*PrivateSequenceRequest]) {
 	c.Write(&PrivateSequenceResponse{Value: res})
 }
 
+// PrivateClient is a binary message transport client for private API v3 services.
 type PrivateClient Client
 
+// Private returns a [PrivateClient].
 func (c *Client) Private() private.Sequencer {
 	return (*PrivateClient)(c)
 }
 
+// Sequence implements [private.Sequencer.Sequence].
 func (c *PrivateClient) Sequence(ctx context.Context, src, dst *url.URL, num uint64) (*api.TransactionRecord, error) {
 	req := &PrivateSequenceRequest{Source: src, Destination: dst, SequenceNumber: num}
 	return typedRequest[*PrivateSequenceResponse, *api.TransactionRecord]((*Client)(c), ctx, req)

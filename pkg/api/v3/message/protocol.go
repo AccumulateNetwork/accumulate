@@ -11,6 +11,7 @@ import (
 const P_ACC = 0x300000
 
 func init() {
+	// Register the acc protocol
 	err := multiaddr.AddProtocol(multiaddr.Protocol{
 		Name:  "acc",
 		Code:  P_ACC,
