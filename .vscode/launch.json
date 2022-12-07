@@ -50,9 +50,8 @@
         "-w=${workspaceFolder}/.nodes",
         "--reset",
         "-b=2",
-        "-v=1",
+        "-v=2",
         "-f=0",
-        "--snapshot=${workspaceFolder}/.nodes/test/factom-lda-stripped.snapshot",
       ]
     },
     {
@@ -173,6 +172,16 @@
       "cwd": "${workspaceFolder}",
       "args": [
         "-X=--reset,--debug",
+      ]
+    },
+    {
+      "name": "Validate: Go test (devnet)",
+      "type": "go",
+      "request": "launch",
+      "mode": "test",
+      "program": "${workspaceFolder}/test/validate",
+      "args": [
+        "-test.validate", "http://127.0.1.1:26660/v3",
       ]
     },
 
@@ -402,6 +411,6 @@
       "args": [
         "--node=${workspaceFolder}/.nodes/rc3/node-1/dnn"
       ]
-    },
+    }
   ]
 }

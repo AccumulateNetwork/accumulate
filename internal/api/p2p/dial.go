@@ -183,3 +183,26 @@ func (d dialer) newPartitionStream(ctx context.Context, partition string) (messa
 	}
 	return nil, errors.NoPeer.WithFormat("no live peers for %s", partition)
 }
+
+// selfDialer always dials the [Node] directly.
+type selfDialer struct {
+	node      *Node
+	partition string
+}
+
+// SelfDialer returns a [message.Dialer] that always returns a stream for the current node.
+func (n *Node) SelfDialer(partition string) message.Dialer {
+	return &selfDialer{n, strings.ToLower(partition)}
+}
+
+// Dial returns a stream for the current node.
+func (d *selfDialer) Dial(ctx context.Context, addr multiaddr.Multiaddr) (message.Stream, error) {
+	p := d.node.partitions[d.partition]
+	if p == nil || p.rpc == nil {
+		return nil, errors.NotFound // TODO return protocol not supported
+	}
+
+	ss := message.Pipe(ctx)
+	go p.rpc(ss)
+	return ss, nil
+}

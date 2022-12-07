@@ -11,7 +11,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/stretchr/testify/require"
-	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 )
 
 func TestResetPriorities(t *testing.T) {
@@ -41,7 +41,7 @@ func TestResetPriorities(t *testing.T) {
 
 func TestPeering(t *testing.T) {
 	// Set up a seed
-	logger := acctesting.NewTestLogger(t)
+	logger := logging.ConsoleLoggerForTest(t, "info")
 	h1, err := libp2p.New()
 	require.NoError(t, err)
 	defer h1.Close()

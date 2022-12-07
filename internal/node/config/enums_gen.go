@@ -26,6 +26,9 @@ const PortOffsetTendermintP2P PortOffset = 0
 // PortOffsetTendermintRpc .
 const PortOffsetTendermintRpc PortOffset = 1
 
+// PortOffsetAccumulateP2P .
+const PortOffsetAccumulateP2P PortOffset = 2
+
 // PortOffsetPrometheus .
 const PortOffsetPrometheus PortOffset = 3
 
@@ -99,7 +102,7 @@ func (v PortOffset) GetEnumValue() uint64 { return uint64(v) }
 func (v *PortOffset) SetEnumValue(id uint64) bool {
 	u := PortOffset(id)
 	switch u {
-	case PortOffsetTendermintP2P, PortOffsetTendermintRpc, PortOffsetPrometheus, PortOffsetAccumulateApi:
+	case PortOffsetTendermintP2P, PortOffsetTendermintRpc, PortOffsetAccumulateP2P, PortOffsetPrometheus, PortOffsetAccumulateApi:
 		*v = u
 		return true
 	default:
@@ -114,6 +117,8 @@ func (v PortOffset) String() string {
 		return "tendermintP2P"
 	case PortOffsetTendermintRpc:
 		return "tendermintRpc"
+	case PortOffsetAccumulateP2P:
+		return "accumulateP2P"
 	case PortOffsetPrometheus:
 		return "prometheus"
 	case PortOffsetAccumulateApi:
@@ -130,6 +135,8 @@ func PortOffsetByName(name string) (PortOffset, bool) {
 		return PortOffsetTendermintP2P, true
 	case "tendermintrpc":
 		return PortOffsetTendermintRpc, true
+	case "accumulatep2p":
+		return PortOffsetAccumulateP2P, true
 	case "prometheus":
 		return PortOffsetPrometheus, true
 	case "accumulateapi":

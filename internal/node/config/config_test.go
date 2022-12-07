@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/multiformats/go-multiaddr"
 	"github.com/stretchr/testify/require"
 )
 
@@ -26,6 +27,8 @@ func TestPersistence(t *testing.T) {
 	// Slice values are unmarshalled as empty. This avoids issues with empty
 	// slice != nil.
 	cfg.StateSync.RPCServers = []string{}
+	cfg.Accumulate.P2P.Listen = []multiaddr.Multiaddr{}
+	cfg.Accumulate.P2P.BootstrapPeers = []multiaddr.Multiaddr{}
 
 	// Store
 	require.NoError(t, Store(cfg))

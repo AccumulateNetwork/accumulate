@@ -38,3 +38,14 @@ func Transaction() TransactionBuilder {
 func UnixTimeNow() uint64 {
 	return uint64(time.Now().UTC().UnixMilli())
 }
+
+func Faucet(recipient any, path ...string) SignatureBuilder {
+	f := protocol.Faucet.Signer()
+	b := Transaction().For(protocol.FaucetUrl)
+	u := b.parseUrl(recipient, path...)
+	b = b.Body(&protocol.AcmeFaucet{Url: u})
+	return b.SignWith(protocol.FaucetUrl).
+		Version(f.Version()).
+		Timestamp(f.Timestamp()).
+		Signer(f)
+}
