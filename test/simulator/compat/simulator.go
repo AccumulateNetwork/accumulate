@@ -152,10 +152,8 @@ func (s *Simulator) SubmitAndExecuteBlock(envelopes ...*protocol.Envelope) ([]*p
 		}
 	}
 
-	go func() {
-		s.ExecuteBlock(nil)
-		s.ExecuteBlock(nil)
-	}()
+	s.ExecuteBlock(nil)
+	s.ExecuteBlock(nil)
 
 	status := make([]*protocol.TransactionStatus, 0, len(envelopes))
 	for _, env := range envelopes {

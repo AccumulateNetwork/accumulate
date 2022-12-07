@@ -118,6 +118,15 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 		return nil, errors.UnknownError.Wrap(err)
 	}
 
+	// Add background tasks to the block's error group. The simulator must call
+	// Group.Wait before changing the group, to ensure no race conditions.
+	n.executor.Background = func(f func()) {
+		s.blockErrGroup.Go(func() error {
+			f()
+			return nil
+		})
+	}
+
 	// Set up the API
 	n.apiV2, err = apiv2.NewJrpc(apiv2.Options{
 		Logger:        n.logger,

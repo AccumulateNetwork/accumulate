@@ -24,7 +24,6 @@ import (
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"golang.org/x/sync/errgroup"
 )
 
 type Partition struct {
@@ -199,7 +198,7 @@ func (p *Partition) Submit(delivery *chain.Delivery, pretend bool) (*protocol.Tr
 	return result[0], nil
 }
 
-func (p *Partition) execute(background *errgroup.Group) error {
+func (p *Partition) execute() error {
 	// TODO: Limit how many transactions are added to the block? Call recheck?
 	p.mu.Lock()
 	deliveries := p.deliver
@@ -242,8 +241,6 @@ func (p *Partition) execute(background *errgroup.Group) error {
 		b.Time = p.blockTime
 		b.IsLeader = i == leader
 		blocks[i] = b
-
-		n.executor.Background = func(f func()) { background.Go(func() error { f(); return nil }) }
 
 		err := n.beginBlock(b)
 		if err != nil {

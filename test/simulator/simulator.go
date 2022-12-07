@@ -48,6 +48,8 @@ type Simulator struct {
 	partitions map[string]*Partition
 	router     *Router
 	netcfg     *config.Network
+
+	blockErrGroup *errgroup.Group
 }
 
 type OpenDatabaseFunc func(partition string, node int, logger log.Logger) database.Beginner
@@ -217,12 +219,12 @@ func (s *Simulator) EventBus() *events.Bus  { return s.partitions[protocol.Direc
 
 // Step executes a single simulator step
 func (s *Simulator) Step() error {
-	errg := new(errgroup.Group)
+	s.blockErrGroup = new(errgroup.Group)
 	for _, p := range s.partitions {
 		p := p // Don't capture loop variables
-		errg.Go(func() error { return p.execute(errg) })
+		s.blockErrGroup.Go(p.execute)
 	}
-	return errg.Wait()
+	return s.blockErrGroup.Wait()
 }
 
 func (s *Simulator) SetSubmitHookFor(account *url.URL, fn SubmitHookFunc) {
