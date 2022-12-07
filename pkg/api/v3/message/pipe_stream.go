@@ -30,13 +30,13 @@ func newPipeDir[T any](ch T, ctx context.Context) pipedir[T] {
 	return pipedir[T]{ch, ctx, context.Background(), cancel, func() {}}
 }
 
-// Pipe allocates a simplex Message Stream backed by an unbuffered channel.
+// Pipe allocates a simplex [Message] [Stream] backed by an unbuffered channel.
 func Pipe(ctx context.Context) *pipe[Message] {
 	return newSimplex(ctx, Unmarshal)
 }
 
-// PipeOf allocates a simplex Stream of the given type backed by an unbuffered
-// channel. A pointer to T must implement [encoding.BinaryValue].
+// PipeOf allocates a simplex [Stream] of *T backed by an unbuffered channel. *T
+// must implement [encoding.BinaryValue].
 func PipeOf[T any, PT valuePtr[T]](ctx context.Context) *pipe[PT] {
 	return newSimplex(ctx, func(b []byte) (PT, error) {
 		v := PT(new(T))
@@ -45,7 +45,7 @@ func PipeOf[T any, PT valuePtr[T]](ctx context.Context) *pipe[PT] {
 	})
 }
 
-// newSimples allocates a simplex pipe.
+// newSimplex allocates a simplex pipe.
 func newSimplex[T encoding.BinaryValue](ctx context.Context, unmarshal func([]byte) (T, error)) *pipe[T] {
 	ch := make(chan []byte)
 	p := new(pipe[T])
@@ -53,6 +53,40 @@ func newSimplex[T encoding.BinaryValue](ctx context.Context, unmarshal func([]by
 	p.rd = newPipeDir[<-chan []byte](ch, ctx)
 	p.wr = newPipeDir[chan<- []byte](ch, ctx)
 	return p
+}
+
+// DuplexPipe allocates a pair of duplex [Message] [Stream]s backed by a pair of
+// unbuffered channels.
+func DuplexPipe(ctx context.Context) (p, q *pipe[Message]) {
+	return newDuplex(ctx, Unmarshal)
+}
+
+// DuplexPipeOf allocates a pair of duplex [Stream]s of *T backed by a pair of
+// unbuffered channels. *T must implement [encoding.BinaryValue].
+func DuplexPipeOf[T any, PT valuePtr[T]](ctx context.Context) (p, q *pipe[PT]) {
+	return newDuplex(ctx, func(b []byte) (PT, error) {
+		v := PT(new(T))
+		err := v.UnmarshalBinary(b)
+		return v, err
+	})
+}
+
+// newDuplex allocates a pair of duplex pipes.
+func newDuplex[T encoding.BinaryValue](ctx context.Context, unmarshal func([]byte) (T, error)) (p, q *pipe[T]) {
+	p, q = new(pipe[T]), new(pipe[T])
+	p.unmarshal, q.unmarshal = unmarshal, unmarshal
+
+	// p → q
+	pq := make(chan []byte)
+	p.wr = newPipeDir[chan<- []byte](pq, ctx)
+	q.rd = newPipeDir[<-chan []byte](pq, ctx)
+
+	// p → q
+	qp := make(chan []byte)
+	q.wr = newPipeDir[chan<- []byte](qp, ctx)
+	p.rd = newPipeDir[<-chan []byte](qp, ctx)
+
+	return p, q
 }
 
 // piperr returns onCancel if the context error is [context.Canceled].
