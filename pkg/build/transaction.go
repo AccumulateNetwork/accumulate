@@ -186,6 +186,11 @@ func (b TransactionBuilder) WriteData(data ...[]byte) WriteDataBuilder {
 	return c
 }
 
+func (b WriteDataBuilder) Entry(e protocol.DataEntry) WriteDataBuilder {
+	b.body.Entry = e
+	return b
+}
+
 func (b WriteDataBuilder) Scratch() WriteDataBuilder {
 	b.body.Scratch = true
 	return b
