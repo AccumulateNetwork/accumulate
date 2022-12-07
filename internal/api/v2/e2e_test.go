@@ -284,6 +284,7 @@ func TestValidate(t *testing.T) {
 }
 
 func TestQueryTxByUrl(t *testing.T) {
+	acctesting.SkipCI(t, "flaky")
 	partitions, daemons := acctesting.CreateTestNet(t, 2, 2, 0, false)
 	acctesting.RunTestNet(t, partitions, daemons)
 	japi := daemons["BVN1"][0].Jrpc_TESTONLY()
