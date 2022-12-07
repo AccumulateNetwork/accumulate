@@ -36,7 +36,8 @@ type NodeInit struct {
 	ListenAddress    string          `json:"listenAddress,omitempty" form:"listenAddress" query:"listenAddress" validate:"required"`
 	PeerAddress      string          `json:"peerAddress,omitempty" form:"peerAddress" query:"peerAddress" validate:"required"`
 	PrivValKey       []byte          `json:"privValKey,omitempty" form:"privValKey" query:"privValKey" validate:"required"`
-	NodeKey          []byte          `json:"nodeKey,omitempty" form:"nodeKey" query:"nodeKey" validate:"required"`
+	DnNodeKey        []byte          `json:"dnNodeKey,omitempty" form:"dnNodeKey" query:"dnNodeKey" validate:"required"`
+	BvnNodeKey       []byte          `json:"bvnNodeKey,omitempty" form:"bvnNodeKey" query:"bvnNodeKey" validate:"required"`
 }
 
 func (v *BvnInit) MarshalJSON() ([]byte, error) {
@@ -70,7 +71,8 @@ func (v *NodeInit) MarshalJSON() ([]byte, error) {
 		ListenIP         string          `json:"listenIP,omitempty"`
 		PeerAddress      string          `json:"peerAddress,omitempty"`
 		PrivValKey       *string         `json:"privValKey,omitempty"`
-		NodeKey          *string         `json:"nodeKey,omitempty"`
+		DnNodeKey        *string         `json:"dnNodeKey,omitempty"`
+		BvnNodeKey       *string         `json:"bvnNodeKey,omitempty"`
 	}{}
 	u.DnnType = v.DnnType
 	u.BvnnType = v.BvnnType
@@ -81,7 +83,8 @@ func (v *NodeInit) MarshalJSON() ([]byte, error) {
 	u.ListenIP = v.ListenAddress
 	u.PeerAddress = v.PeerAddress
 	u.PrivValKey = encoding.BytesToJSON(v.PrivValKey)
-	u.NodeKey = encoding.BytesToJSON(v.NodeKey)
+	u.DnNodeKey = encoding.BytesToJSON(v.DnNodeKey)
+	u.BvnNodeKey = encoding.BytesToJSON(v.BvnNodeKey)
 	return json.Marshal(&u)
 }
 
@@ -126,7 +129,8 @@ func (v *NodeInit) UnmarshalJSON(data []byte) error {
 		ListenIP         string          `json:"listenIP,omitempty"`
 		PeerAddress      string          `json:"peerAddress,omitempty"`
 		PrivValKey       *string         `json:"privValKey,omitempty"`
-		NodeKey          *string         `json:"nodeKey,omitempty"`
+		DnNodeKey        *string         `json:"dnNodeKey,omitempty"`
+		BvnNodeKey       *string         `json:"bvnNodeKey,omitempty"`
 	}{}
 	u.DnnType = v.DnnType
 	u.BvnnType = v.BvnnType
@@ -137,7 +141,8 @@ func (v *NodeInit) UnmarshalJSON(data []byte) error {
 	u.ListenIP = v.ListenAddress
 	u.PeerAddress = v.PeerAddress
 	u.PrivValKey = encoding.BytesToJSON(v.PrivValKey)
-	u.NodeKey = encoding.BytesToJSON(v.NodeKey)
+	u.DnNodeKey = encoding.BytesToJSON(v.DnNodeKey)
+	u.BvnNodeKey = encoding.BytesToJSON(v.BvnNodeKey)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -160,10 +165,15 @@ func (v *NodeInit) UnmarshalJSON(data []byte) error {
 	} else {
 		v.PrivValKey = x
 	}
-	if x, err := encoding.BytesFromJSON(u.NodeKey); err != nil {
-		return fmt.Errorf("error decoding NodeKey: %w", err)
+	if x, err := encoding.BytesFromJSON(u.DnNodeKey); err != nil {
+		return fmt.Errorf("error decoding DnNodeKey: %w", err)
 	} else {
-		v.NodeKey = x
+		v.DnNodeKey = x
+	}
+	if x, err := encoding.BytesFromJSON(u.BvnNodeKey); err != nil {
+		return fmt.Errorf("error decoding BvnNodeKey: %w", err)
+	} else {
+		v.BvnNodeKey = x
 	}
 	return nil
 }

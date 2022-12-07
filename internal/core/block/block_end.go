@@ -513,11 +513,14 @@ func (x *Executor) requestMissingAnchors(ctx context.Context, batch *database.Ba
 	var resp []*api.ChainQueryResponse
 	err := x.Router.RequestAPIv2(ctx, protocol.Directory, "", jbatch, &resp)
 	if err != nil {
-		// If an individual request failed, ignore it
+		// If an individual request failed, log it
 		var berr jsonrpc2.BatchError
 		if !errors.As(err, &berr) {
 			x.logger.Error("Failed to request anchors", "error", err)
 			return
+		}
+		for _, err := range berr {
+			x.logger.Error("Failed to request anchors", "error", err)
 		}
 	}
 
