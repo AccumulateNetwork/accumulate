@@ -122,6 +122,16 @@ func (r *Router) Submit(ctx context.Context, partition string, envelope *protoco
 		return nil, errors.UnknownError.WithFormat("submit: %w", err)
 	}
 
+	p.mu.Lock()
+	if p.routerSubmitHook != nil {
+		var keep bool
+		deliveries, keep = p.routerSubmitHook(deliveries)
+		if !keep {
+			p.routerSubmitHook = nil
+		}
+	}
+	p.mu.Unlock()
+
 	resp := new(routing.ResponseSubmit)
 	results := make([]*protocol.TransactionStatus, len(deliveries))
 	for i, delivery := range deliveries {

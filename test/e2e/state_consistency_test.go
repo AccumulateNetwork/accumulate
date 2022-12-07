@@ -15,12 +15,14 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/libs/log"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/memory"
+	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
+	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
+	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
@@ -60,12 +62,12 @@ func TestStateRelaunch(t *testing.T) {
 
 	// Create databases
 	stores := map[string]storage.KeyValueStore{}
-	stores[Directory] = memory.New(nil)
 	for i := 0; i < bvnCount; i++ {
-		stores[fmt.Sprintf("BVN%d", i)] = memory.New(nil)
+		stores[fmt.Sprintf("%s-%d", Directory, i)] = memory.New(nil)
+		stores[fmt.Sprintf("BVN%d-0", i)] = memory.New(nil)
 	}
-	openDb := func(partition string, _ int, logger log.Logger) *database.Database {
-		return database.New(stores[partition], logger)
+	openDb := func(partition string, node int, logger log.Logger) database.Beginner {
+		return database.New(stores[fmt.Sprintf("%s-%d", partition, node)], logger)
 	}
 
 	// [1] Setup
@@ -92,6 +94,9 @@ func TestStateRelaunch(t *testing.T) {
 
 	// [2] Reload (do not init)
 	s2 := simulator.NewWith(t, simulator.SimulatorOptions{BvnCount: bvnCount, OpenDB: openDb})
+	s2.Init(func(string, *accumulated.NetworkInit, log.Logger) (ioutil2.SectionReader, error) {
+		return new(ioutil2.Buffer), nil // Empty, must init from db
+	})
 
 	// [2] Check the DN root hash
 	var root2 []byte

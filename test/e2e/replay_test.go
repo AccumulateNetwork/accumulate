@@ -10,9 +10,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
+	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
@@ -61,19 +61,19 @@ func TestReplay(t *testing.T) {
 	}
 
 	succeeds := func(sim *simulator.Simulator, env *Envelope) {
-		sim.Helper()
+		t.Helper()
 		st, _ := sim.WaitForTransactions(delivered, sim.MustSubmitAndExecuteBlock(env)...)
 		for _, st := range st {
-			require.False(sim, st.Failed(), "Expected %x to succeed", env.Transaction[0].GetHash())
+			require.False(t, st.Failed(), "Expected %x to succeed", env.Transaction[0].GetHash())
 		}
 
 		entry := env.Transaction[0].Body.(*WriteData).Entry
 		account := simulator.GetAccount[*DataAccount](sim, env.Transaction[0].Header.Principal)
-		require.True(sim, protocol.EqualDataEntry(entry, account.Entry))
+		require.True(t, protocol.EqualDataEntry(entry, account.Entry))
 	}
 
 	fails := func(sim *simulator.Simulator, env *Envelope) {
-		sim.Helper()
+		t.Helper()
 		sts, err := sim.SubmitAndExecuteBlock(env)
 		if err != nil {
 			// t.Log("Failed to submit: ", err)
@@ -106,7 +106,7 @@ func TestReplay(t *testing.T) {
 			}
 		}
 
-		sim.Fatalf("Expected %x to fail but it didn't", env.Transaction[0].GetHash())
+		t.Fatalf("Expected %x to fail but it didn't", env.Transaction[0].GetHash())
 	}
 
 	t.Run("Uninitiated without timestamp", func(t *testing.T) {

@@ -10,10 +10,11 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
+	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
@@ -21,11 +22,7 @@ func updateAccount[T protocol.Account](sim *simulator.Simulator, accountUrl *url
 	sim.UpdateAccount(accountUrl, func(account protocol.Account) {
 		var typed T
 		err := encoding.SetPtr(account, &typed)
-		if err != nil {
-			sim.Log(err)
-			sim.FailNow()
-		}
-
+		require.NoError(sim.TB, err)
 		fn(typed)
 	})
 }
@@ -48,9 +45,12 @@ func TestUpdateKey_Duplicate(t *testing.T) {
 			NewKeyHash: doHash(aliceKey[32:]),
 		}).
 		Initiate(protocol.SignatureTypeED25519, otherKey).
-		Build()
+		BuildDelivery()
+	st := sim.H.SubmitSuccessfully(env)
+	sim.H.StepUntil(
+		Txn(st.TxID).Fails())
 
-	st, err := sim.SubmitAndExecuteBlock(env)
-	require.NoError(t, err)
-	require.EqualError(t, st[0].Error, "cannot have duplicate entries on key page")
+	st = sim.H.QueryTransaction(st.TxID, nil).Status
+	require.NotNil(t, st.Error)
+	require.EqualError(t, st.Error, "cannot have duplicate entries on key page")
 }
