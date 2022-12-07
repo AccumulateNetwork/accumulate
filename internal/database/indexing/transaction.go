@@ -13,7 +13,7 @@ import (
 
 // TransactionChainIndexer indexes account chains against a transaction.
 type TransactionChainIndexer struct {
-	*record.Set[*database.TransactionChainEntry]
+	record.Set[*database.TransactionChainEntry]
 }
 
 // TransactionChain returns a transaction chain indexer.
