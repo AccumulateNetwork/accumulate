@@ -66,6 +66,16 @@ func NewTestLogger(t TB, format, level string, trace bool) log.Logger {
 	return logger.With("test", t.Name())
 }
 
+func ConsoleLoggerForTest(t TB, levels string) log.Logger {
+	w, err := NewConsoleWriter("plain")
+	require.NoError(t, err)
+	level, writer, err := ParseLogLevel(levels, w)
+	require.NoError(t, err)
+	logger, err := NewTendermintLogger(zerolog.New(writer), level, false)
+	require.NoError(t, err)
+	return logger
+}
+
 func ExcludeMessages(messages ...string) zerolog.HookFunc {
 	return func(e *zerolog.Event, _ zerolog.Level, message string) {
 		for _, m := range messages {

@@ -51,6 +51,15 @@ func init() {
 }
 
 var goFuncs = template.FuncMap{
+	"elideInterface": func(u *UnionSpec) string {
+		if !flags.ElidePackageType {
+			return u.Interface()
+		}
+		if !strings.EqualFold(u.Name, u.Package) {
+			return u.Interface()
+		}
+		return ""
+	},
 	"isPkg": func(s string) bool {
 		return s == PackagePath
 	},
@@ -155,6 +164,12 @@ func goUnionMethod(field *Field, name string) string {
 	}
 
 	parts := strings.SplitN(typ, ".", 2)
+	if field.ElideUnionMethods {
+		if len(parts) == 1 {
+			return name
+		}
+		return fmt.Sprintf("%s.%s", parts[0], name)
+	}
 	if len(parts) == 1 {
 		return name + parts[0]
 	}
@@ -287,7 +302,10 @@ func GoIsZero(field *Field, varName string) (string, error) {
 }
 
 func GoJsonZeroValue(field *Field) (string, error) {
-	if field.IsPointer() {
+	if field.ZeroValue != nil {
+		return fmt.Sprint(field.ZeroValue), nil
+	}
+	if field.Pointer {
 		return "nil", nil
 	}
 
@@ -308,9 +326,6 @@ func GoJsonZeroValue(field *Field) (string, error) {
 	case Union:
 		return "nil", nil
 	case Reference, Value:
-		if field.Pointer {
-			return "nil", nil
-		}
 		return fmt.Sprintf("(%s{})", GoResolveType(field, false, false)), nil
 	}
 
@@ -416,9 +431,9 @@ func goCopy(field *Field, dstName, srcName string) (string, error) {
 		var nilCheck string
 		_, ok := field.ParentType.ResolveTypeParam(&field.Field)
 		if ok {
-			nilCheck = "if !" + goUnionMethod(field, "Equal") + "(%[1]s, nil)"
+			nilCheck = "if !" + goUnionMethod(field, "Equal") + "(%[1]s, %[5]s)"
 		} else {
-			nilCheck = "if %[1]s != nil"
+			nilCheck = "if %[1]s != %[5]s"
 		}
 		var assert string
 		for _, param := range field.ParentType.Params {
@@ -427,8 +442,12 @@ func goCopy(field *Field, dstName, srcName string) (string, error) {
 				break
 			}
 		}
+		zeroValue := "nil"
+		if field.ZeroValue != nil {
+			zeroValue = fmt.Sprint(field.ZeroValue)
+		}
 		format := nilCheck + " { %[2]s = %[3]s(%[1]s)%[4]s }"
-		return goCopyNonPointer(field, format, srcName, dstName, goUnionMethod(field, "Copy"), assert), nil
+		return goCopyNonPointer(field, format, srcName, dstName, goUnionMethod(field, "Copy"), assert, zeroValue), nil
 	case Reference:
 		return goCopyPointer(field, "(%s).Copy()", dstName, srcName), nil
 	case Value, Enum:
