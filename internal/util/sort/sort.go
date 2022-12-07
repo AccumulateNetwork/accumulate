@@ -57,3 +57,13 @@ func RemoveAt[T any](l *[]T, i int) {
 	copy((*l)[i:], (*l)[i+1:])
 	*l = (*l)[:len(*l)-1]
 }
+
+// Remove removes the specified element.
+func Remove[T any](l *[]T, cmp func(entry T) int) bool {
+	i, found := Search(*l, cmp)
+	if !found {
+		return false
+	}
+	RemoveAt(l, i)
+	return true
+}
