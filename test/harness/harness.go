@@ -31,6 +31,7 @@ type Harness struct {
 type Services interface {
 	api.Querier
 	api.Submitter
+	api.NetworkService
 }
 
 // Stepper steps the simulation or waits for a block to complete.
