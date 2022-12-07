@@ -15,13 +15,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/simulator"
+	oldsim "gitlab.com/accumulatenetwork/accumulate/internal/core/block/simulator"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
+	simulator "gitlab.com/accumulatenetwork/accumulate/test/simulator/compat"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
@@ -34,11 +35,16 @@ func updateAccount[T Account](sim *simulator.Simulator, accountUrl *url.URL, fn 
 	sim.UpdateAccount(accountUrl, func(account Account) {
 		var typed T
 		err := encoding.SetPtr(account, &typed)
-		if err != nil {
-			sim.Log(err)
-			sim.FailNow()
-		}
+		require.NoError(sim.TB, err)
+		fn(typed)
+	})
+}
 
+func updateAccountOld[T Account](sim *oldsim.Simulator, accountUrl *url.URL, fn func(account T)) {
+	sim.UpdateAccount(accountUrl, func(account Account) {
+		var typed T
+		err := encoding.SetPtr(account, &typed)
+		require.NoError(sim, err)
 		fn(typed)
 	})
 }
@@ -154,7 +160,7 @@ func TestSendTokensToBadRecipient2(t *testing.T) {
 	sim.MustSubmitAndExecuteBlock(env)
 	sim.WaitForTransactionFlow(delivered, env.Transaction[0].GetHash())
 
-	s := sim.PartitionFor(aliceUrl).Executor.ActiveGlobals_TESTONLY().Globals.FeeSchedule
+	s := sim.PartitionFor(aliceUrl).Globals().Globals.FeeSchedule
 	fee, err := s.ComputeTransactionFee(env.Transaction[0])
 	require.NoError(t, err)
 	refund, err := s.ComputeSyntheticRefund(env.Transaction[0], len(exch.To))
@@ -228,8 +234,8 @@ func TestWriteToLiteDataAccount(t *testing.T) {
 
 		batch := sim.PartitionFor(aliceUrl).Database.Begin(true)
 		defer batch.Discard()
-		require.NoError(sim, acctesting.CreateLiteTokenAccountWithCredits(batch, tmed25519.PrivKey(alice), 1e9, 1e9))
-		require.NoError(sim, batch.Commit())
+		require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, tmed25519.PrivKey(alice), 1e9, 1e9))
+		require.NoError(t, batch.Commit())
 
 		// Write data
 		env := acctesting.NewTransaction().
@@ -256,8 +262,8 @@ func TestWriteToLiteDataAccount(t *testing.T) {
 
 		batch := sim.PartitionFor(aliceAdi).Database.Begin(true)
 		defer batch.Discard()
-		require.NoError(sim, acctesting.CreateAdiWithCredits(batch, tmed25519.PrivKey(alice), "alice", 1e9))
-		require.NoError(sim, batch.Commit())
+		require.NoError(t, acctesting.CreateAdiWithCredits(batch, tmed25519.PrivKey(alice), "alice", 1e9))
+		require.NoError(t, batch.Commit())
 
 		// Write data
 		env := acctesting.NewTransaction().
