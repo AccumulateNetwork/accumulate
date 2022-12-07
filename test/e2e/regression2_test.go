@@ -8,11 +8,15 @@ package e2e
 
 import (
 	"context"
+	"fmt"
 	"math/big"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -150,4 +154,56 @@ func TestDirectlyQueryReceiptSignature(t *testing.T) {
 	require.NoError(t, err)
 	err = sim.Router().RequestAPIv2(context.Background(), part, "query", req, resp)
 	require.NoError(t, err)
+}
+
+func TestSendDirectToWrongPartition(t *testing.T) {
+	// Initialize
+	sim := NewSim(t,
+		simulator.MemoryDatabase,
+		simulator.SimpleNetwork(t.Name(), 3, 1),
+		simulator.Genesis(GenesisTime),
+	)
+
+	// Create the lite addresses and one account
+	aliceKey, bobKey := acctesting.GenerateKey("alice"), acctesting.GenerateKey("bob")
+	alice, bob := acctesting.AcmeLiteAddressStdPriv(aliceKey), acctesting.AcmeLiteAddressStdPriv(bobKey)
+
+	Update(t, sim.DatabaseFor(alice), func(batch *database.Batch) {
+		require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, tmed25519.PrivKey(aliceKey), 1e6, 1e9))
+	})
+
+	goodBvn, err := sim.Router().RouteAccount(alice)
+	require.NoError(t, err)
+
+	// Set route to something else
+	var badBvn string
+	for _, partition := range sim.Partitions() {
+		if partition.Type != PartitionTypeDirectory && !strings.EqualFold(partition.ID, goodBvn) {
+			badBvn = partition.ID
+			break
+		}
+	}
+
+	// Create the transaction
+	env := acctesting.NewTransaction().
+		WithPrincipal(alice).
+		WithSigner(alice, 1).
+		WithTimestamp(1).
+		WithBody(&SendTokens{
+			To: []*TokenRecipient{{
+				Url:    bob,
+				Amount: *big.NewInt(1),
+			}},
+		}).
+		Initiate(SignatureTypeED25519, aliceKey).
+		Build()
+	deliveries, err := chain.NormalizeEnvelope(env)
+	require.NoError(t, err)
+	require.Len(t, deliveries, 1)
+
+	// Submit the transaction directly to the wrong BVN
+	st, err := sim.SubmitTo(badBvn, deliveries[0])
+	require.NoError(t, err)
+	require.NotNil(t, st.Error)
+	require.Equal(t, fmt.Sprintf("signature 0: signature submitted to %s instead of %s", badBvn, goodBvn), st.Error.Message)
 }
