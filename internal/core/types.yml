@@ -1,5 +1,4 @@
 GlobalValues:
-  non-binary: true
   fields:
     - name: memoize
       type: globalValueMemos

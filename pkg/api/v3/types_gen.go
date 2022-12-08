@@ -19,7 +19,9 @@ import (
 	"strings"
 	"time"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/managed"
+	errors2 "gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -40,6 +42,16 @@ type AnchorSearchQuery struct {
 	Anchor         []byte `json:"anchor,omitempty" form:"anchor" query:"anchor" validate:"required"`
 	IncludeReceipt bool   `json:"includeReceipt,omitempty" form:"includeReceipt" query:"includeReceipt"`
 	extraData      []byte
+}
+
+type BlockEvent struct {
+	fieldsSet []bool
+	Partition string                      `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
+	Index     uint64                      `json:"index,omitempty" form:"index" query:"index" validate:"required"`
+	Time      time.Time                   `json:"time,omitempty" form:"time" query:"time" validate:"required"`
+	Major     uint64                      `json:"major,omitempty" form:"major" query:"major" validate:"required"`
+	Entries   []*ChainEntryRecord[Record] `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
+	extraData []byte
 }
 
 type BlockQuery struct {
@@ -109,6 +121,19 @@ type DelegateSearchQuery struct {
 type DirectoryQuery struct {
 	fieldsSet []bool
 	Range     *RangeOptions `json:"range,omitempty" form:"range" query:"range" validate:"required"`
+	extraData []byte
+}
+
+type ErrorEvent struct {
+	fieldsSet []bool
+	Err       *errors2.Error `json:"err,omitempty" form:"err" query:"err" validate:"required"`
+	extraData []byte
+}
+
+type GlobalsEvent struct {
+	fieldsSet []bool
+	Old       *core.GlobalValues `json:"old,omitempty" form:"old" query:"old" validate:"required"`
+	New       *core.GlobalValues `json:"new,omitempty" form:"new" query:"new" validate:"required"`
 	extraData []byte
 }
 
@@ -288,6 +313,7 @@ type SubmitOptions struct {
 
 type SubscribeOptions struct {
 	fieldsSet []bool
+	Partition string `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
 	extraData []byte
 }
 
@@ -330,6 +356,8 @@ func (*AccountRecord) RecordType() RecordType { return RecordTypeAccount }
 
 func (*AnchorSearchQuery) QueryType() QueryType { return QueryTypeAnchorSearch }
 
+func (*BlockEvent) EventType() EventType { return EventTypeBlock }
+
 func (*BlockQuery) QueryType() QueryType { return QueryTypeBlock }
 
 func (*ChainEntryRecord[T]) RecordType() RecordType { return RecordTypeChainEntry }
@@ -345,6 +373,10 @@ func (*DefaultQuery) QueryType() QueryType { return QueryTypeDefault }
 func (*DelegateSearchQuery) QueryType() QueryType { return QueryTypeDelegateSearch }
 
 func (*DirectoryQuery) QueryType() QueryType { return QueryTypeDirectory }
+
+func (*ErrorEvent) EventType() EventType { return EventTypeError }
+
+func (*GlobalsEvent) EventType() EventType { return EventTypeGlobals }
 
 func (*IndexEntryRecord) RecordType() RecordType { return RecordTypeIndexEntry }
 
@@ -403,6 +435,25 @@ func (v *AnchorSearchQuery) Copy() *AnchorSearchQuery {
 }
 
 func (v *AnchorSearchQuery) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *BlockEvent) Copy() *BlockEvent {
+	u := new(BlockEvent)
+
+	u.Partition = v.Partition
+	u.Index = v.Index
+	u.Time = v.Time
+	u.Major = v.Major
+	u.Entries = make([]*ChainEntryRecord[Record], len(v.Entries))
+	for i, v := range v.Entries {
+		if v != nil {
+			u.Entries[i] = (v).Copy()
+		}
+	}
+
+	return u
+}
+
+func (v *BlockEvent) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *BlockQuery) Copy() *BlockQuery {
 	u := new(BlockQuery)
@@ -538,6 +589,33 @@ func (v *DirectoryQuery) Copy() *DirectoryQuery {
 }
 
 func (v *DirectoryQuery) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *ErrorEvent) Copy() *ErrorEvent {
+	u := new(ErrorEvent)
+
+	if v.Err != nil {
+		u.Err = (v.Err).Copy()
+	}
+
+	return u
+}
+
+func (v *ErrorEvent) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *GlobalsEvent) Copy() *GlobalsEvent {
+	u := new(GlobalsEvent)
+
+	if v.Old != nil {
+		u.Old = (v.Old).Copy()
+	}
+	if v.New != nil {
+		u.New = (v.New).Copy()
+	}
+
+	return u
+}
+
+func (v *GlobalsEvent) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *IndexEntryRecord) Copy() *IndexEntryRecord {
 	u := new(IndexEntryRecord)
@@ -843,6 +921,8 @@ func (v *SubmitOptions) CopyAsInterface() interface{} { return v.Copy() }
 func (v *SubscribeOptions) Copy() *SubscribeOptions {
 	u := new(SubscribeOptions)
 
+	u.Partition = v.Partition
+
 	return u
 }
 
@@ -957,6 +1037,31 @@ func (v *AnchorSearchQuery) Equal(u *AnchorSearchQuery) bool {
 	}
 	if !(v.IncludeReceipt == u.IncludeReceipt) {
 		return false
+	}
+
+	return true
+}
+
+func (v *BlockEvent) Equal(u *BlockEvent) bool {
+	if !(v.Partition == u.Partition) {
+		return false
+	}
+	if !(v.Index == u.Index) {
+		return false
+	}
+	if !((v.Time).Equal(u.Time)) {
+		return false
+	}
+	if !(v.Major == u.Major) {
+		return false
+	}
+	if len(v.Entries) != len(u.Entries) {
+		return false
+	}
+	for i := range v.Entries {
+		if !((v.Entries[i]).Equal(u.Entries[i])) {
+			return false
+		}
 	}
 
 	return true
@@ -1150,6 +1255,40 @@ func (v *DirectoryQuery) Equal(u *DirectoryQuery) bool {
 	case v.Range == nil || u.Range == nil:
 		return false
 	case !((v.Range).Equal(u.Range)):
+		return false
+	}
+
+	return true
+}
+
+func (v *ErrorEvent) Equal(u *ErrorEvent) bool {
+	switch {
+	case v.Err == u.Err:
+		// equal
+	case v.Err == nil || u.Err == nil:
+		return false
+	case !((v.Err).Equal(u.Err)):
+		return false
+	}
+
+	return true
+}
+
+func (v *GlobalsEvent) Equal(u *GlobalsEvent) bool {
+	switch {
+	case v.Old == u.Old:
+		// equal
+	case v.Old == nil || u.Old == nil:
+		return false
+	case !((v.Old).Equal(u.Old)):
+		return false
+	}
+	switch {
+	case v.New == u.New:
+		// equal
+	case v.New == nil || u.New == nil:
+		return false
+	case !((v.New).Equal(u.New)):
 		return false
 	}
 
@@ -1540,6 +1679,9 @@ func (v *SubmitOptions) Equal(u *SubmitOptions) bool {
 }
 
 func (v *SubscribeOptions) Equal(u *SubscribeOptions) bool {
+	if !(v.Partition == u.Partition) {
+		return false
+	}
 
 	return true
 }
@@ -1743,6 +1885,88 @@ func (v *AnchorSearchQuery) IsValid() error {
 		errs = append(errs, "field Anchor is missing")
 	} else if len(v.Anchor) == 0 {
 		errs = append(errs, "field Anchor is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_BlockEvent = []string{
+	1: "EventType",
+	2: "Partition",
+	3: "Index",
+	4: "Time",
+	5: "Major",
+	6: "Entries",
+}
+
+func (v *BlockEvent) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.EventType())
+	if !(len(v.Partition) == 0) {
+		writer.WriteString(2, v.Partition)
+	}
+	if !(v.Index == 0) {
+		writer.WriteUint(3, v.Index)
+	}
+	if !(v.Time == (time.Time{})) {
+		writer.WriteTime(4, v.Time)
+	}
+	if !(v.Major == 0) {
+		writer.WriteUint(5, v.Major)
+	}
+	if !(len(v.Entries) == 0) {
+		for _, v := range v.Entries {
+			writer.WriteValue(6, v.MarshalBinary)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_BlockEvent)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *BlockEvent) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field EventType is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Partition is missing")
+	} else if len(v.Partition) == 0 {
+		errs = append(errs, "field Partition is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Index is missing")
+	} else if v.Index == 0 {
+		errs = append(errs, "field Index is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Time is missing")
+	} else if v.Time == (time.Time{}) {
+		errs = append(errs, "field Time is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Major is missing")
+	} else if v.Major == 0 {
+		errs = append(errs, "field Major is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field Entries is missing")
+	} else if len(v.Entries) == 0 {
+		errs = append(errs, "field Entries is not set")
 	}
 
 	switch len(errs) {
@@ -2198,6 +2422,103 @@ func (v *DirectoryQuery) IsValid() error {
 		errs = append(errs, "field Range is missing")
 	} else if v.Range == nil {
 		errs = append(errs, "field Range is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_ErrorEvent = []string{
+	1: "EventType",
+	2: "Err",
+}
+
+func (v *ErrorEvent) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.EventType())
+	if !(v.Err == nil) {
+		writer.WriteValue(2, v.Err.MarshalBinary)
+	}
+
+	_, _, err := writer.Reset(fieldNames_ErrorEvent)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *ErrorEvent) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field EventType is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Err is missing")
+	} else if v.Err == nil {
+		errs = append(errs, "field Err is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_GlobalsEvent = []string{
+	1: "EventType",
+	2: "Old",
+	3: "New",
+}
+
+func (v *GlobalsEvent) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.EventType())
+	if !(v.Old == nil) {
+		writer.WriteValue(2, v.Old.MarshalBinary)
+	}
+	if !(v.New == nil) {
+		writer.WriteValue(3, v.New.MarshalBinary)
+	}
+
+	_, _, err := writer.Reset(fieldNames_GlobalsEvent)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *GlobalsEvent) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field EventType is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Old is missing")
+	} else if v.Old == nil {
+		errs = append(errs, "field Old is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field New is missing")
+	} else if v.New == nil {
+		errs = append(errs, "field New is not set")
 	}
 
 	switch len(errs) {
@@ -3385,11 +3706,17 @@ func (v *SubmitOptions) IsValid() error {
 	}
 }
 
-var fieldNames_SubscribeOptions = []string{}
+var fieldNames_SubscribeOptions = []string{
+	1: "Partition",
+}
 
 func (v *SubscribeOptions) MarshalBinary() ([]byte, error) {
 	buffer := new(bytes.Buffer)
 	writer := encoding.NewWriter(buffer)
+
+	if !(len(v.Partition) == 0) {
+		writer.WriteString(1, v.Partition)
+	}
 
 	_, _, err := writer.Reset(fieldNames_SubscribeOptions)
 	if err != nil {
@@ -3401,6 +3728,12 @@ func (v *SubscribeOptions) MarshalBinary() ([]byte, error) {
 
 func (v *SubscribeOptions) IsValid() error {
 	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Partition is missing")
+	} else if len(v.Partition) == 0 {
+		errs = append(errs, "field Partition is not set")
+	}
 
 	switch len(errs) {
 	case 0:
@@ -3732,6 +4065,57 @@ func (v *AnchorSearchQuery) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_AnchorSearchQuery)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *BlockEvent) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *BlockEvent) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vEventType EventType
+	if x := new(EventType); reader.ReadEnum(1, x) {
+		vEventType = *x
+	}
+	if !(v.EventType() == vEventType) {
+		return fmt.Errorf("field EventType: not equal: want %v, got %v", v.EventType(), vEventType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *BlockEvent) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadString(2); ok {
+		v.Partition = x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.Index = x
+	}
+	if x, ok := reader.ReadTime(4); ok {
+		v.Time = x
+	}
+	if x, ok := reader.ReadUint(5); ok {
+		v.Major = x
+	}
+	for {
+		if x := new(ChainEntryRecord[Record]); reader.ReadValue(6, x.UnmarshalBinaryFrom) {
+			v.Entries = append(v.Entries, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_BlockEvent)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -4080,6 +4464,79 @@ func (v *DirectoryQuery) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_DirectoryQuery)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *ErrorEvent) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *ErrorEvent) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vEventType EventType
+	if x := new(EventType); reader.ReadEnum(1, x) {
+		vEventType = *x
+	}
+	if !(v.EventType() == vEventType) {
+		return fmt.Errorf("field EventType: not equal: want %v, got %v", v.EventType(), vEventType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *ErrorEvent) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x := new(errors2.Error); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+		v.Err = x
+	}
+
+	seen, err := reader.Reset(fieldNames_ErrorEvent)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *GlobalsEvent) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *GlobalsEvent) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vEventType EventType
+	if x := new(EventType); reader.ReadEnum(1, x) {
+		vEventType = *x
+	}
+	if !(v.EventType() == vEventType) {
+		return fmt.Errorf("field EventType: not equal: want %v, got %v", v.EventType(), vEventType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *GlobalsEvent) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x := new(core.GlobalValues); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+		v.Old = x
+	}
+	if x := new(core.GlobalValues); reader.ReadValue(3, x.UnmarshalBinaryFrom) {
+		v.New = x
+	}
+
+	seen, err := reader.Reset(fieldNames_GlobalsEvent)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -4828,6 +5285,10 @@ func (v *SubscribeOptions) UnmarshalBinary(data []byte) error {
 func (v *SubscribeOptions) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
+	if x, ok := reader.ReadString(1); ok {
+		v.Partition = x
+	}
+
 	seen, err := reader.Reset(fieldNames_SubscribeOptions)
 	if err != nil {
 		return encoding.Error{E: err}
@@ -5043,6 +5504,24 @@ func (v *AnchorSearchQuery) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *BlockEvent) MarshalJSON() ([]byte, error) {
+	u := struct {
+		EventType EventType                                    `json:"eventType"`
+		Partition string                                       `json:"partition,omitempty"`
+		Index     uint64                                       `json:"index,omitempty"`
+		Time      time.Time                                    `json:"time,omitempty"`
+		Major     uint64                                       `json:"major,omitempty"`
+		Entries   encoding.JsonList[*ChainEntryRecord[Record]] `json:"entries,omitempty"`
+	}{}
+	u.EventType = v.EventType()
+	u.Partition = v.Partition
+	u.Index = v.Index
+	u.Time = v.Time
+	u.Major = v.Major
+	u.Entries = v.Entries
+	return json.Marshal(&u)
+}
+
 func (v *BlockQuery) MarshalJSON() ([]byte, error) {
 	u := struct {
 		QueryType  QueryType     `json:"queryType"`
@@ -5163,6 +5642,28 @@ func (v *DirectoryQuery) MarshalJSON() ([]byte, error) {
 	}{}
 	u.QueryType = v.QueryType()
 	u.Range = v.Range
+	return json.Marshal(&u)
+}
+
+func (v *ErrorEvent) MarshalJSON() ([]byte, error) {
+	u := struct {
+		EventType EventType      `json:"eventType"`
+		Err       *errors2.Error `json:"err,omitempty"`
+	}{}
+	u.EventType = v.EventType()
+	u.Err = v.Err
+	return json.Marshal(&u)
+}
+
+func (v *GlobalsEvent) MarshalJSON() ([]byte, error) {
+	u := struct {
+		EventType EventType          `json:"eventType"`
+		Old       *core.GlobalValues `json:"old,omitempty"`
+		New       *core.GlobalValues `json:"new,omitempty"`
+	}{}
+	u.EventType = v.EventType()
+	u.Old = v.Old
+	u.New = v.New
 	return json.Marshal(&u)
 }
 
@@ -5443,6 +5944,35 @@ func (v *AnchorSearchQuery) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *BlockEvent) UnmarshalJSON(data []byte) error {
+	u := struct {
+		EventType EventType                                    `json:"eventType"`
+		Partition string                                       `json:"partition,omitempty"`
+		Index     uint64                                       `json:"index,omitempty"`
+		Time      time.Time                                    `json:"time,omitempty"`
+		Major     uint64                                       `json:"major,omitempty"`
+		Entries   encoding.JsonList[*ChainEntryRecord[Record]] `json:"entries,omitempty"`
+	}{}
+	u.EventType = v.EventType()
+	u.Partition = v.Partition
+	u.Index = v.Index
+	u.Time = v.Time
+	u.Major = v.Major
+	u.Entries = v.Entries
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.EventType() == u.EventType) {
+		return fmt.Errorf("field EventType: not equal: want %v, got %v", v.EventType(), u.EventType)
+	}
+	v.Partition = u.Partition
+	v.Index = u.Index
+	v.Time = u.Time
+	v.Major = u.Major
+	v.Entries = u.Entries
+	return nil
+}
+
 func (v *BlockQuery) UnmarshalJSON(data []byte) error {
 	u := struct {
 		QueryType  QueryType     `json:"queryType"`
@@ -5659,6 +6189,43 @@ func (v *DirectoryQuery) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field QueryType: not equal: want %v, got %v", v.QueryType(), u.QueryType)
 	}
 	v.Range = u.Range
+	return nil
+}
+
+func (v *ErrorEvent) UnmarshalJSON(data []byte) error {
+	u := struct {
+		EventType EventType      `json:"eventType"`
+		Err       *errors2.Error `json:"err,omitempty"`
+	}{}
+	u.EventType = v.EventType()
+	u.Err = v.Err
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.EventType() == u.EventType) {
+		return fmt.Errorf("field EventType: not equal: want %v, got %v", v.EventType(), u.EventType)
+	}
+	v.Err = u.Err
+	return nil
+}
+
+func (v *GlobalsEvent) UnmarshalJSON(data []byte) error {
+	u := struct {
+		EventType EventType          `json:"eventType"`
+		Old       *core.GlobalValues `json:"old,omitempty"`
+		New       *core.GlobalValues `json:"new,omitempty"`
+	}{}
+	u.EventType = v.EventType()
+	u.Old = v.Old
+	u.New = v.New
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.EventType() == u.EventType) {
+		return fmt.Errorf("field EventType: not equal: want %v, got %v", v.EventType(), u.EventType)
+	}
+	v.Old = u.Old
+	v.New = u.New
 	return nil
 }
 
