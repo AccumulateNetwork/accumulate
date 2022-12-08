@@ -24,6 +24,8 @@ func New(typ Type) (Message, error) {
 		return new(Addressed), nil
 	case TypeErrorResponse:
 		return new(ErrorResponse), nil
+	case TypeEvent:
+		return new(EventMessage), nil
 	case TypeMetricsRequest:
 		return new(MetricsRequest), nil
 	case TypeMetricsResponse:
@@ -48,6 +50,10 @@ func New(typ Type) (Message, error) {
 		return new(SubmitRequest), nil
 	case TypeSubmitResponse:
 		return new(SubmitResponse), nil
+	case TypeSubscribeRequest:
+		return new(SubscribeRequest), nil
+	case TypeSubscribeResponse:
+		return new(SubscribeResponse), nil
 	case TypeValidateRequest:
 		return new(ValidateRequest), nil
 	case TypeValidateResponse:
@@ -71,6 +77,9 @@ func Equal(a, b Message) bool {
 		return ok && a.Equal(b)
 	case *ErrorResponse:
 		b, ok := b.(*ErrorResponse)
+		return ok && a.Equal(b)
+	case *EventMessage:
+		b, ok := b.(*EventMessage)
 		return ok && a.Equal(b)
 	case *MetricsRequest:
 		b, ok := b.(*MetricsRequest)
@@ -108,6 +117,12 @@ func Equal(a, b Message) bool {
 	case *SubmitResponse:
 		b, ok := b.(*SubmitResponse)
 		return ok && a.Equal(b)
+	case *SubscribeRequest:
+		b, ok := b.(*SubscribeRequest)
+		return ok && a.Equal(b)
+	case *SubscribeResponse:
+		b, ok := b.(*SubscribeResponse)
+		return ok && a.Equal(b)
 	case *ValidateRequest:
 		b, ok := b.(*ValidateRequest)
 		return ok && a.Equal(b)
@@ -125,6 +140,8 @@ func Copy(v Message) Message {
 	case *Addressed:
 		return v.Copy()
 	case *ErrorResponse:
+		return v.Copy()
+	case *EventMessage:
 		return v.Copy()
 	case *MetricsRequest:
 		return v.Copy()
@@ -149,6 +166,10 @@ func Copy(v Message) Message {
 	case *SubmitRequest:
 		return v.Copy()
 	case *SubmitResponse:
+		return v.Copy()
+	case *SubscribeRequest:
+		return v.Copy()
+	case *SubscribeResponse:
 		return v.Copy()
 	case *ValidateRequest:
 		return v.Copy()

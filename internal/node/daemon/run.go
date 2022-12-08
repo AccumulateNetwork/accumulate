@@ -87,14 +87,18 @@ type Daemon struct {
 }
 
 func Load(dir string, newWriter func(*config.Config) (io.Writer, error)) (*Daemon, error) {
-	var daemon Daemon
-	daemon.snapshotLock = new(sync.Mutex)
-
-	var err error
-	daemon.Config, err = config.Load(dir)
+	cfg, err := config.Load(dir)
 	if err != nil {
 		return nil, fmt.Errorf("reading config file: %v", err)
 	}
+
+	return New(cfg, newWriter)
+}
+
+func New(cfg *config.Config, newWriter func(*config.Config) (io.Writer, error)) (*Daemon, error) {
+	var daemon Daemon
+	daemon.snapshotLock = new(sync.Mutex)
+	daemon.Config = cfg
 
 	if newWriter == nil {
 		newWriter = func(c *config.Config) (io.Writer, error) {
@@ -376,6 +380,12 @@ func (d *Daemon) Start() (err error) {
 		Logger: d.Logger.With("module", "acc-rpc"),
 		Local:  d.localTm,
 	})
+	eventSvc := api.NewEventService(api.EventServiceParams{
+		Logger:    d.Logger.With("module", "acc-rpc"),
+		Database:  d.db,
+		Partition: d.Config.Accumulate.PartitionId,
+		EventBus:  d.eventBus,
+	})
 	p2ph, err := message.NewHandler(
 		d.Logger.With("module", "acc-rpc"),
 		&message.NodeService{NodeService: nodeSvc},
@@ -384,6 +394,7 @@ func (d *Daemon) Start() (err error) {
 		&message.Querier{Querier: querySvc},
 		&message.Submitter{Submitter: submitSvc},
 		&message.Validator{Validator: validateSvc},
+		&message.EventService{EventService: eventSvc},
 	)
 	if err != nil {
 		return fmt.Errorf("initialize P2P handler: %w", err)
