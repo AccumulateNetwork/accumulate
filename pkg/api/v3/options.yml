@@ -60,4 +60,6 @@ ValidateOptions:
       optional: true
 
 SubscribeOptions:
-  fields: ~
+  fields:
+    - name: Partition
+      type: string
