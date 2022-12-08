@@ -39,6 +39,12 @@ type ErrorResponse struct {
 	extraData []byte
 }
 
+type EventMessage struct {
+	fieldsSet []bool
+	Value     []api.Event `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	extraData []byte
+}
+
 type MetricsRequest struct {
 	fieldsSet []bool
 	MetricsOptions
@@ -115,6 +121,17 @@ type SubmitResponse struct {
 	extraData []byte
 }
 
+type SubscribeRequest struct {
+	fieldsSet []bool
+	SubscribeOptions
+	extraData []byte
+}
+
+type SubscribeResponse struct {
+	fieldsSet []bool
+	extraData []byte
+}
+
 type ValidateRequest struct {
 	fieldsSet []bool
 	Envelope  *protocol.Envelope `json:"envelope,omitempty" form:"envelope" query:"envelope" validate:"required"`
@@ -131,6 +148,8 @@ type ValidateResponse struct {
 func (*Addressed) Type() Type { return TypeAddressed }
 
 func (*ErrorResponse) Type() Type { return TypeErrorResponse }
+
+func (*EventMessage) Type() Type { return TypeEvent }
 
 func (*MetricsRequest) Type() Type { return TypeMetricsRequest }
 
@@ -155,6 +174,10 @@ func (*RecordResponse) Type() Type { return TypeRecordResponse }
 func (*SubmitRequest) Type() Type { return TypeSubmitRequest }
 
 func (*SubmitResponse) Type() Type { return TypeSubmitResponse }
+
+func (*SubscribeRequest) Type() Type { return TypeSubscribeRequest }
+
+func (*SubscribeResponse) Type() Type { return TypeSubscribeResponse }
 
 func (*ValidateRequest) Type() Type { return TypeValidateRequest }
 
@@ -186,6 +209,21 @@ func (v *ErrorResponse) Copy() *ErrorResponse {
 }
 
 func (v *ErrorResponse) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *EventMessage) Copy() *EventMessage {
+	u := new(EventMessage)
+
+	u.Value = make([]api.Event, len(v.Value))
+	for i, v := range v.Value {
+		if v != nil {
+			u.Value[i] = api.CopyEvent(v)
+		}
+	}
+
+	return u
+}
+
+func (v *EventMessage) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *MetricsRequest) Copy() *MetricsRequest {
 	u := new(MetricsRequest)
@@ -336,6 +374,24 @@ func (v *SubmitResponse) Copy() *SubmitResponse {
 
 func (v *SubmitResponse) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *SubscribeRequest) Copy() *SubscribeRequest {
+	u := new(SubscribeRequest)
+
+	u.SubscribeOptions = *v.SubscribeOptions.Copy()
+
+	return u
+}
+
+func (v *SubscribeRequest) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *SubscribeResponse) Copy() *SubscribeResponse {
+	u := new(SubscribeResponse)
+
+	return u
+}
+
+func (v *SubscribeResponse) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *ValidateRequest) Copy() *ValidateRequest {
 	u := new(ValidateRequest)
 
@@ -383,6 +439,19 @@ func (v *ErrorResponse) Equal(u *ErrorResponse) bool {
 		return false
 	case !((v.Error).Equal(u.Error)):
 		return false
+	}
+
+	return true
+}
+
+func (v *EventMessage) Equal(u *EventMessage) bool {
+	if len(v.Value) != len(u.Value) {
+		return false
+	}
+	for i := range v.Value {
+		if !(api.EqualEvent(v.Value[i], u.Value[i])) {
+			return false
+		}
 	}
 
 	return true
@@ -541,6 +610,19 @@ func (v *SubmitResponse) Equal(u *SubmitResponse) bool {
 	return true
 }
 
+func (v *SubscribeRequest) Equal(u *SubscribeRequest) bool {
+	if !v.SubscribeOptions.Equal(&u.SubscribeOptions) {
+		return false
+	}
+
+	return true
+}
+
+func (v *SubscribeResponse) Equal(u *SubscribeResponse) bool {
+
+	return true
+}
+
 func (v *ValidateRequest) Equal(u *ValidateRequest) bool {
 	switch {
 	case v.Envelope == u.Envelope:
@@ -655,6 +737,52 @@ func (v *ErrorResponse) IsValid() error {
 		errs = append(errs, "field Error is missing")
 	} else if v.Error == nil {
 		errs = append(errs, "field Error is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_EventMessage = []string{
+	1: "Type",
+	2: "Value",
+}
+
+func (v *EventMessage) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(len(v.Value) == 0) {
+		for _, v := range v.Value {
+			writer.WriteValue(2, v.MarshalBinary)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_EventMessage)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *EventMessage) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Value is missing")
+	} else if len(v.Value) == 0 {
+		errs = append(errs, "field Value is not set")
 	}
 
 	switch len(errs) {
@@ -1212,6 +1340,81 @@ func (v *SubmitResponse) IsValid() error {
 	}
 }
 
+var fieldNames_SubscribeRequest = []string{
+	1: "Type",
+	2: "SubscribeOptions",
+}
+
+func (v *SubscribeRequest) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	writer.WriteValue(2, v.SubscribeOptions.MarshalBinary)
+
+	_, _, err := writer.Reset(fieldNames_SubscribeRequest)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *SubscribeRequest) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if err := v.SubscribeOptions.IsValid(); err != nil {
+		errs = append(errs, err.Error())
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_SubscribeResponse = []string{
+	1: "Type",
+}
+
+func (v *SubscribeResponse) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+
+	_, _, err := writer.Reset(fieldNames_SubscribeResponse)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *SubscribeResponse) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_ValidateRequest = []string{
 	1: "Type",
 	2: "Envelope",
@@ -1377,6 +1580,50 @@ func (v *ErrorResponse) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_ErrorResponse)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *EventMessage) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *EventMessage) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType Type
+	if x := new(Type); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *EventMessage) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	for {
+		ok := reader.ReadValue(2, func(r io.Reader) error {
+			x, err := api.UnmarshalEventFrom(r)
+			if err == nil {
+				v.Value = append(v.Value, x)
+			}
+			return err
+		})
+		if !ok {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_EventMessage)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -1824,6 +2071,71 @@ func (v *SubmitResponse) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
+func (v *SubscribeRequest) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *SubscribeRequest) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType Type
+	if x := new(Type); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *SubscribeRequest) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	reader.ReadValue(2, v.SubscribeOptions.UnmarshalBinaryFrom)
+
+	seen, err := reader.Reset(fieldNames_SubscribeRequest)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *SubscribeResponse) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *SubscribeResponse) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType Type
+	if x := new(Type); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *SubscribeResponse) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+
+	seen, err := reader.Reset(fieldNames_SubscribeResponse)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *ValidateRequest) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -1918,6 +2230,16 @@ func (v *ErrorResponse) MarshalJSON() ([]byte, error) {
 	}{}
 	u.Type = v.Type()
 	u.Error = v.Error
+	return json.Marshal(&u)
+}
+
+func (v *EventMessage) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type  Type                                      `json:"type"`
+		Value encoding.JsonUnmarshalListWith[api.Event] `json:"value,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Value = encoding.JsonUnmarshalListWith[api.Event]{Value: v.Value, Func: api.UnmarshalEventJSON}
 	return json.Marshal(&u)
 }
 
@@ -2055,6 +2377,24 @@ func (v *SubmitResponse) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *SubscribeRequest) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      Type   `json:"type"`
+		Partition string `json:"partition,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Partition = v.SubscribeOptions.Partition
+	return json.Marshal(&u)
+}
+
+func (v *SubscribeResponse) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type Type `json:"type"`
+	}{}
+	u.Type = v.Type()
+	return json.Marshal(&u)
+}
+
 func (v *ValidateRequest) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type     Type               `json:"type"`
@@ -2113,6 +2453,26 @@ func (v *ErrorResponse) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Error = u.Error
+	return nil
+}
+
+func (v *EventMessage) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type  Type                                      `json:"type"`
+		Value encoding.JsonUnmarshalListWith[api.Event] `json:"value,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Value = encoding.JsonUnmarshalListWith[api.Event]{Value: v.Value, Func: api.UnmarshalEventJSON}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.Value = make([]api.Event, len(u.Value.Value))
+	for i, x := range u.Value.Value {
+		v.Value[i] = x
+	}
 	return nil
 }
 
@@ -2340,6 +2700,37 @@ func (v *SubmitResponse) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Value = u.Value
+	return nil
+}
+
+func (v *SubscribeRequest) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      Type   `json:"type"`
+		Partition string `json:"partition,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Partition = v.SubscribeOptions.Partition
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.SubscribeOptions.Partition = u.Partition
+	return nil
+}
+
+func (v *SubscribeResponse) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type Type `json:"type"`
+	}{}
+	u.Type = v.Type()
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
 	return nil
 }
 

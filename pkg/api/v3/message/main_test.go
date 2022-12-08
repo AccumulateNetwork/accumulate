@@ -10,6 +10,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	mocks "gitlab.com/accumulatenetwork/accumulate/test/mocks/pkg/api/v3"
 )
@@ -77,6 +78,36 @@ func TestValidator(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, len(expect), len(actual))
 	require.True(t, expect[0].Equal(actual[0]))
+}
+
+func TestEvents(t *testing.T) {
+	expect := []api.Event{
+		&api.ErrorEvent{Err: errors.BadRequest.With("foo")},
+		&api.BlockEvent{},
+		&api.GlobalsEvent{},
+	}
+	ch := make(chan api.Event)
+	go func() {
+		for _, expect := range expect {
+			ch <- expect
+		}
+	}()
+
+	s := mocks.NewEventService(t)
+	s.EXPECT().Subscribe(mock.Anything, mock.Anything).Return(ch, nil)
+	c := setupTest(t, EventService{EventService: s})
+	ctx, cancel := context.WithCancel(context.Background())
+	events, err := c.Subscribe(ctx, api.SubscribeOptions{})
+	require.NoError(t, err)
+
+	for _, expect := range expect {
+		actual := <-events
+		require.True(t, api.EqualEvent(expect, actual))
+	}
+
+	cancel()
+	_, ok := <-events
+	require.False(t, ok)
 }
 
 func setupTest(t testing.TB, services ...Service) *Client {

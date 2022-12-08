@@ -78,6 +78,13 @@ func (r MessageRouter) Route(msg message.Message) (multiaddr.Multiaddr, error) {
 		}
 		partition, err = RouteEnvelopes(r.Router.RouteAccount, msg.Envelope)
 
+	case *message.SubscribeRequest:
+		// Route to the requested partition
+		if msg.Partition == "" {
+			return nil, errors.BadRequest.WithFormat("partition is missing")
+		}
+		partition = msg.Partition
+
 	default:
 		return nil, errors.BadRequest.WithFormat("%v is not routable", msg.Type())
 	}

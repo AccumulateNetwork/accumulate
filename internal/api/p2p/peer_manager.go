@@ -191,13 +191,15 @@ func (m *peerManager) adjustPriority(peer *peerState, delta int) {
 	}
 }
 
-// handleStream handles a peer discovery stream.
-func (m *peerManager) handleStream(s message.StreamOf[*Whoami], remotePeer peer.ID) {
-	// Build a Whoami message for this node
+// whoami builds a Whoami message for this node.
+func (m *peerManager) whoami(remote peer.ID) *Whoami {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
 	w := new(Whoami)
 	w.Self = m.info
 	for _, peer := range m.peers {
-		if peer.info.ID == remotePeer {
+		if peer.info.ID == remote {
 			continue
 		}
 		ai := new(AddrInfo)
@@ -205,6 +207,13 @@ func (m *peerManager) handleStream(s message.StreamOf[*Whoami], remotePeer peer.
 		ai.Addrs = m.host.Peerstore().Addrs(peer.info.ID)
 		w.Known = append(w.Known, ai)
 	}
+	return w
+}
+
+// handleStream handles a peer discovery stream.
+func (m *peerManager) handleStream(s message.StreamOf[*Whoami], remotePeer peer.ID) {
+	// Build a Whoami message for this node
+	w := m.whoami(remotePeer)
 
 	// Send Whoami to the peer
 	err := s.Write(w)

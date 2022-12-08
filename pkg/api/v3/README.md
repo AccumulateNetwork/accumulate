@@ -13,8 +13,8 @@ transport mechanisms for exchanging remote method calls.
 - [JSON-RPC transport](jsonrpc)
 - [P2P transport](p2p) (messages, streams, handlers)
 - [Websocket transport](websocket)
-- [Service implementation](/internal/node/api)
-  - [P2P internals](/internal/node/api/p2p) (the rest of the P2P stuff)
+- [Service implementation](/internal/node/http)
+  - [P2P internals](/internal/api/p2p) (the rest of the P2P stuff)
 
 ### Other
 
