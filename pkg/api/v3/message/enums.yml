@@ -14,6 +14,8 @@ Type:
     value: 0x05
   ValidateRequest:
     value: 0x06
+  SubscribeRequest:
+    value: 0x07
 
   ErrorResponse:
     value: 0x20
@@ -29,6 +31,11 @@ Type:
     value: 0x25
   ValidateResponse:
     value: 0x26
+  SubscribeResponse:
+    value: 0x27
+
+  Event:
+    value: 0x40
 
   # Private messages. These are not exposed via the standard API and are only
   # accessible via P2P. They are intended only for communication between nodes.

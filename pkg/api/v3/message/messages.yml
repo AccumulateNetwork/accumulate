@@ -58,6 +58,12 @@ ValidateRequest:
     - type: ValidateOptions
       marshal-as: reference
 
+SubscribeRequest:
+  union: { type: message }
+  fields:
+    - type: SubscribeOptions
+      marshal-as: reference
+
 ErrorResponse:
   union: { type: message }
   fields:
@@ -113,4 +119,16 @@ ValidateResponse:
       type: api.Submission
       marshal-as: reference
       pointer: true
+      repeatable: true
+
+SubscribeResponse:
+  union: { type: message }
+  fields: ~
+
+EventMessage:
+  union: { type: message }
+  fields:
+    - name: Value
+      type: api.Event
+      marshal-as: union
       repeatable: true
