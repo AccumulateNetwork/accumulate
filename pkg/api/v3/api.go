@@ -12,15 +12,34 @@ import (
 //go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --long-union-discriminator --package api responses.yml options.yml records.yml events.yml types.yml queries.yml --reference ../../../internal/database/smt/managed/types.yml,../../../protocol/general.yml
 //go:generate go run gitlab.com/accumulatenetwork/accumulate/tools/cmd/gen-types --long-union-discriminator --package api --language go-union --out unions_gen.go records.yml events.yml queries.yml --reference options.yml
 
-type RecordType uint64
-type EventType uint64
+// ServiceType is used to identify services.
+type ServiceType uint64
+
+// QueryType is the type of a [Query].
 type QueryType uint64
 
+// RecordType is the type of a [Record].
+type RecordType uint64
+
+// EventType is the type of an [Event].
+type EventType uint64
+
+// Query is an API query.
+type Query interface {
+	encoding.UnionValue
+	QueryType() QueryType
+
+	// IsValid validates the query.
+	IsValid() error
+}
+
+// Record is a record returned by a [Query].
 type Record interface {
 	encoding.UnionValue
 	RecordType() RecordType
 }
 
+// Event is an event returned by [EventService].
 type Event interface {
 	encoding.UnionValue
 	EventType() EventType
@@ -63,6 +82,6 @@ type Validator interface {
 	Validate(ctx context.Context, envelope *protocol.Envelope, opts ValidateOptions) ([]*Submission, error)
 }
 
-type FaucetService interface {
-	Faucet(ctx context.Context, account *url.URL, opts SubmitOptions) (*Submission, error)
+type Faucet interface {
+	Faucet(ctx context.Context, account *url.URL, opts FaucetOptions) (*Submission, error)
 }

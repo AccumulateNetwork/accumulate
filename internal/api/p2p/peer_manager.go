@@ -11,6 +11,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peerstore"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
@@ -20,12 +21,13 @@ const idWhoami = "/acc/whoami/0.1.0"
 
 // peerManager manages the peer list and peer discovery for a [Node].
 type peerManager struct {
-	info   *Info
-	logger logging.OptionalLogger
-	host   host.Host
-	mu     *sync.RWMutex
-	peers  map[peer.ID]*peerState
-	pool   *sync.Map
+	logger      logging.OptionalLogger
+	host        host.Host
+	mu          *sync.RWMutex
+	peers       map[peer.ID]*peerState
+	pool        *sync.Map
+	getServices func() []*service
+	waiter      *sync.Cond
 }
 
 // peerState is the state of a peer.
@@ -37,7 +39,7 @@ type peerState struct {
 
 // newPeerManager constructs a new [peerManager] for the given host with the
 // given options.
-func newPeerManager(host host.Host, opts Options) (*peerManager, error) {
+func newPeerManager(host host.Host, getServices func() []*service, opts Options) (*peerManager, error) {
 	// Setup the basics
 	m := new(peerManager)
 	m.host = host
@@ -45,14 +47,8 @@ func newPeerManager(host host.Host, opts Options) (*peerManager, error) {
 	m.mu = new(sync.RWMutex)
 	m.pool = new(sync.Map)
 	m.peers = map[peer.ID]*peerState{}
-
-	m.info = &Info{ID: host.ID()}
-	for _, p := range opts.Partitions {
-		m.info.Partitions = append(m.info.Partitions, &PartitionInfo{
-			ID:      p.ID,
-			Moniker: p.Moniker,
-		})
-	}
+	m.getServices = getServices
+	m.waiter = sync.NewCond(m.mu.RLocker())
 
 	// Register the peer discovery stream handler
 	host.SetStreamHandler(idWhoami, func(s network.Stream) {
@@ -102,6 +98,8 @@ func newPeerManager(host host.Host, opts Options) (*peerManager, error) {
 // addKnown adds a peer to the list of known peers. addKnown returns true if the
 // peer was not previously known.
 func (m *peerManager) addKnown(peer *Info) bool {
+	m.waiter.Broadcast()
+
 	m.mu.RLock()
 	p, ok := m.peers[peer.ID]
 	m.mu.RUnlock()
@@ -134,12 +132,12 @@ func (m *peerManager) getPeer(id peer.ID) (*peerState, bool) {
 }
 
 // getPeers gets the state of peers by partition.
-func (m *peerManager) getPeers(part string) []*peerState {
+func (m *peerManager) getPeers(service *api.ServiceAddress) []*peerState {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	peers := make([]*peerState, 0, len(m.peers))
 	for _, p := range m.peers {
-		if p.info.HasPartition(part) {
+		if service == nil || p.info.HasService(service) {
 			peers = append(peers, p)
 		}
 	}
@@ -197,7 +195,10 @@ func (m *peerManager) whoami(remote peer.ID) *Whoami {
 	defer m.mu.RUnlock()
 
 	w := new(Whoami)
-	w.Self = m.info
+	w.Self = &Info{ID: m.host.ID()}
+	for _, s := range m.getServices() {
+		w.Self.Services = append(w.Self.Services, s.info())
+	}
 	for _, peer := range m.peers {
 		if peer.info.ID == remote {
 			continue
@@ -284,4 +285,46 @@ func (m *peerManager) connectTo(p *peer.AddrInfo) error {
 	// Execute peer discovery
 	m.handleStream(message.NewStreamOf[Whoami](s), s.Conn().RemotePeer())
 	return nil
+}
+
+// advertizeNewService advertizes new whoami info to everyone.
+func (m *peerManager) advertizeNewService() error {
+	m.waiter.Broadcast()
+
+	for _, p := range m.getPeers(nil) {
+		// Open a stream
+		s, err := m.host.NewStream(context.Background(), p.info.ID, idWhoami)
+		if err != nil {
+			return errors.UnknownError.WithFormat("open stream: %w", err)
+		}
+		defer s.Close()
+
+		// Execute peer discovery
+		m.handleStream(message.NewStreamOf[Whoami](s), s.Conn().RemotePeer())
+	}
+	return nil
+}
+
+// waitFor blocks until the node has a peer that provides the given address.
+func (m *peerManager) waitFor(sa *api.ServiceAddress) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	for {
+		// Do we have the service?
+		_, ok := sortutil.Search(m.getServices(), func(s *service) int { return s.address.Compare(sa) })
+		if ok {
+			return
+		}
+
+		// Does a peer have the service?
+		for _, p := range m.peers {
+			if p.info.HasService(sa) {
+				return
+			}
+		}
+
+		// Wait
+		m.waiter.Wait()
+	}
 }

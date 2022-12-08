@@ -2,14 +2,7 @@ package api
 
 import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 )
-
-type Query interface {
-	encoding.UnionValue
-	QueryType() QueryType
-	IsValid() error
-}
 
 func (q *ChainQuery) IsValid() error {
 	err := q.baseIsValid()

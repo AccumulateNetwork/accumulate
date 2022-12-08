@@ -60,6 +60,8 @@ func NewNodeService(params NodeServiceParams) *NodeService {
 	return s
 }
 
+func (s *NodeService) Type() api.ServiceType { return api.ServiceTypeNode }
+
 func (s *NodeService) NodeStatus(ctx context.Context, _ api.NodeStatusOptions) (*api.NodeStatus, error) {
 	// Basic data
 	res := new(api.NodeStatus)

@@ -35,4 +35,5 @@ type (
 	SubscribeOptions     = api.SubscribeOptions
 	SubmitOptions        = api.SubmitOptions
 	ValidateOptions      = api.ValidateOptions
+	FaucetOptions        = api.FaucetOptions
 )

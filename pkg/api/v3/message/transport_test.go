@@ -8,6 +8,7 @@ import (
 
 	"github.com/multiformats/go-multiaddr"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
@@ -38,10 +39,10 @@ func TestTransport(t *testing.T) {
 		return s, nil
 	})
 
-	addr, err := multiaddr.NewComponent("acc", "foo")
+	addr, err := multiaddr.NewComponent(api.N_ACC, "query:foo")
 	require.NoError(t, err)
 
-	c := &Client{Dialer: dialer, Router: routerFunc(func(m Message) (multiaddr.Multiaddr, error) { return multiaddr.NewComponent("acc", "foo") })}
+	c := &Client{Dialer: dialer, Router: routerFunc(func(m Message) (multiaddr.Multiaddr, error) { return addr, nil })}
 	err = c.roundTrip(context.Background(), []Message{
 		&Addressed{Address: addr},
 		&Addressed{Address: addr},

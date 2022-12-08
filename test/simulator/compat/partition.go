@@ -11,6 +11,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/test/harness"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
 )
@@ -51,7 +52,7 @@ func (s *Simulator) PartitionFor(u *url.URL) *Partition {
 
 func (p *Partition) Globals() *core.GlobalValues {
 	p.tb.Helper()
-	ns, err := p.s.Services().NetworkStatus(context.Background(), api.NetworkStatusOptions{})
+	ns, err := p.s.Services().NetworkStatus(context.Background(), api.NetworkStatusOptions{Partition: protocol.Directory})
 	require.NoError(p.tb, err)
 	return &core.GlobalValues{
 		Oracle:  ns.Oracle,

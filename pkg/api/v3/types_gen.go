@@ -130,6 +130,11 @@ type ErrorEvent struct {
 	extraData []byte
 }
 
+type FaucetOptions struct {
+	fieldsSet []bool
+	extraData []byte
+}
+
 type GlobalsEvent struct {
 	fieldsSet []bool
 	Old       *core.GlobalValues `json:"old,omitempty" form:"old" query:"old" validate:"required"`
@@ -147,6 +152,7 @@ type KeyRecord struct {
 	fieldsSet []bool
 	Authority *url.URL          `json:"authority,omitempty" form:"authority" query:"authority" validate:"required"`
 	Signer    *url.URL          `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
+	Version   uint64            `json:"version,omitempty" form:"version" query:"version" validate:"required"`
 	Index     uint64            `json:"index,omitempty" form:"index" query:"index" validate:"required"`
 	Entry     *protocol.KeySpec `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
 	extraData []byte
@@ -284,6 +290,13 @@ type RecordRange[T Record] struct {
 	extraData []byte
 }
 
+type ServiceAddress struct {
+	fieldsSet []bool
+	Type      ServiceType `json:"type,omitempty" form:"type" query:"type" validate:"required"`
+	Partition string      `json:"partition,omitempty" form:"partition" query:"partition"`
+	extraData []byte
+}
+
 type SignatureRecord struct {
 	fieldsSet []bool
 	Signature protocol.Signature `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
@@ -313,7 +326,8 @@ type SubmitOptions struct {
 
 type SubscribeOptions struct {
 	fieldsSet []bool
-	Partition string `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
+	Partition string   `json:"partition,omitempty" form:"partition" query:"partition"`
+	Account   *url.URL `json:"account,omitempty" form:"account" query:"account"`
 	extraData []byte
 }
 
@@ -602,6 +616,14 @@ func (v *ErrorEvent) Copy() *ErrorEvent {
 
 func (v *ErrorEvent) CopyAsInterface() interface{} { return v.Copy() }
 
+func (v *FaucetOptions) Copy() *FaucetOptions {
+	u := new(FaucetOptions)
+
+	return u
+}
+
+func (v *FaucetOptions) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *GlobalsEvent) Copy() *GlobalsEvent {
 	u := new(GlobalsEvent)
 
@@ -638,6 +660,7 @@ func (v *KeyRecord) Copy() *KeyRecord {
 	if v.Signer != nil {
 		u.Signer = v.Signer
 	}
+	u.Version = v.Version
 	u.Index = v.Index
 	if v.Entry != nil {
 		u.Entry = (v.Entry).Copy()
@@ -922,6 +945,9 @@ func (v *SubscribeOptions) Copy() *SubscribeOptions {
 	u := new(SubscribeOptions)
 
 	u.Partition = v.Partition
+	if v.Account != nil {
+		u.Account = v.Account
+	}
 
 	return u
 }
@@ -1274,6 +1300,11 @@ func (v *ErrorEvent) Equal(u *ErrorEvent) bool {
 	return true
 }
 
+func (v *FaucetOptions) Equal(u *FaucetOptions) bool {
+
+	return true
+}
+
 func (v *GlobalsEvent) Equal(u *GlobalsEvent) bool {
 	switch {
 	case v.Old == u.Old:
@@ -1323,6 +1354,9 @@ func (v *KeyRecord) Equal(u *KeyRecord) bool {
 	case v.Signer == nil || u.Signer == nil:
 		return false
 	case !((v.Signer).Equal(u.Signer)):
+		return false
+	}
+	if !(v.Version == u.Version) {
 		return false
 	}
 	if !(v.Index == u.Index) {
@@ -1680,6 +1714,14 @@ func (v *SubmitOptions) Equal(u *SubmitOptions) bool {
 
 func (v *SubscribeOptions) Equal(u *SubscribeOptions) bool {
 	if !(v.Partition == u.Partition) {
+		return false
+	}
+	switch {
+	case v.Account == u.Account:
+		// equal
+	case v.Account == nil || u.Account == nil:
+		return false
+	case !((v.Account).Equal(u.Account)):
 		return false
 	}
 
@@ -2478,6 +2520,33 @@ func (v *ErrorEvent) IsValid() error {
 	}
 }
 
+var fieldNames_FaucetOptions = []string{}
+
+func (v *FaucetOptions) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	_, _, err := writer.Reset(fieldNames_FaucetOptions)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *FaucetOptions) IsValid() error {
+	var errs []string
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_GlobalsEvent = []string{
 	1: "EventType",
 	2: "Old",
@@ -2579,8 +2648,9 @@ var fieldNames_KeyRecord = []string{
 	1: "RecordType",
 	2: "Authority",
 	3: "Signer",
-	4: "Index",
-	5: "Entry",
+	4: "Version",
+	5: "Index",
+	6: "Entry",
 }
 
 func (v *KeyRecord) MarshalBinary() ([]byte, error) {
@@ -2594,11 +2664,14 @@ func (v *KeyRecord) MarshalBinary() ([]byte, error) {
 	if !(v.Signer == nil) {
 		writer.WriteUrl(3, v.Signer)
 	}
+	if !(v.Version == 0) {
+		writer.WriteUint(4, v.Version)
+	}
 	if !(v.Index == 0) {
-		writer.WriteUint(4, v.Index)
+		writer.WriteUint(5, v.Index)
 	}
 	if !(v.Entry == nil) {
-		writer.WriteValue(5, v.Entry.MarshalBinary)
+		writer.WriteValue(6, v.Entry.MarshalBinary)
 	}
 
 	_, _, err := writer.Reset(fieldNames_KeyRecord)
@@ -2626,11 +2699,16 @@ func (v *KeyRecord) IsValid() error {
 		errs = append(errs, "field Signer is not set")
 	}
 	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Version is missing")
+	} else if v.Version == 0 {
+		errs = append(errs, "field Version is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field Index is missing")
 	} else if v.Index == 0 {
 		errs = append(errs, "field Index is not set")
 	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
 		errs = append(errs, "field Entry is missing")
 	} else if v.Entry == nil {
 		errs = append(errs, "field Entry is not set")
@@ -3550,6 +3628,49 @@ func (v *RecordRange[T]) IsValid() error {
 	}
 }
 
+var fieldNames_ServiceAddress = []string{
+	1: "Type",
+	2: "Partition",
+}
+
+func (v *ServiceAddress) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Type == 0) {
+		writer.WriteEnum(1, v.Type)
+	}
+	if !(len(v.Partition) == 0) {
+		writer.WriteString(2, v.Partition)
+	}
+
+	_, _, err := writer.Reset(fieldNames_ServiceAddress)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *ServiceAddress) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	} else if v.Type == 0 {
+		errs = append(errs, "field Type is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_SignatureRecord = []string{
 	1: "RecordType",
 	2: "Signature",
@@ -3708,6 +3829,7 @@ func (v *SubmitOptions) IsValid() error {
 
 var fieldNames_SubscribeOptions = []string{
 	1: "Partition",
+	2: "Account",
 }
 
 func (v *SubscribeOptions) MarshalBinary() ([]byte, error) {
@@ -3716,6 +3838,9 @@ func (v *SubscribeOptions) MarshalBinary() ([]byte, error) {
 
 	if !(len(v.Partition) == 0) {
 		writer.WriteString(1, v.Partition)
+	}
+	if !(v.Account == nil) {
+		writer.WriteUrl(2, v.Account)
 	}
 
 	_, _, err := writer.Reset(fieldNames_SubscribeOptions)
@@ -3728,12 +3853,6 @@ func (v *SubscribeOptions) MarshalBinary() ([]byte, error) {
 
 func (v *SubscribeOptions) IsValid() error {
 	var errs []string
-
-	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
-		errs = append(errs, "field Partition is missing")
-	} else if len(v.Partition) == 0 {
-		errs = append(errs, "field Partition is not set")
-	}
 
 	switch len(errs) {
 	case 0:
@@ -4510,6 +4629,25 @@ func (v *ErrorEvent) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
+func (v *FaucetOptions) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *FaucetOptions) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	seen, err := reader.Reset(fieldNames_FaucetOptions)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *GlobalsEvent) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -4609,9 +4747,12 @@ func (v *KeyRecord) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 		v.Signer = x
 	}
 	if x, ok := reader.ReadUint(4); ok {
+		v.Version = x
+	}
+	if x, ok := reader.ReadUint(5); ok {
 		v.Index = x
 	}
-	if x := new(protocol.KeySpec); reader.ReadValue(5, x.UnmarshalBinaryFrom) {
+	if x := new(protocol.KeySpec); reader.ReadValue(6, x.UnmarshalBinaryFrom) {
 		v.Entry = x
 	}
 
@@ -5174,6 +5315,32 @@ func (v *RecordRange[T]) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
+func (v *ServiceAddress) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *ServiceAddress) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x := new(ServiceType); reader.ReadEnum(1, x) {
+		v.Type = *x
+	}
+	if x, ok := reader.ReadString(2); ok {
+		v.Partition = x
+	}
+
+	seen, err := reader.Reset(fieldNames_ServiceAddress)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *SignatureRecord) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -5287,6 +5454,9 @@ func (v *SubscribeOptions) UnmarshalBinaryFrom(rd io.Reader) error {
 
 	if x, ok := reader.ReadString(1); ok {
 		v.Partition = x
+	}
+	if x, ok := reader.ReadUrl(2); ok {
+		v.Account = x
 	}
 
 	seen, err := reader.Reset(fieldNames_SubscribeOptions)
@@ -5682,12 +5852,14 @@ func (v *KeyRecord) MarshalJSON() ([]byte, error) {
 		RecordType RecordType        `json:"recordType"`
 		Authority  *url.URL          `json:"authority,omitempty"`
 		Signer     *url.URL          `json:"signer,omitempty"`
+		Version    uint64            `json:"version,omitempty"`
 		Index      uint64            `json:"index,omitempty"`
 		Entry      *protocol.KeySpec `json:"entry,omitempty"`
 	}{}
 	u.RecordType = v.RecordType()
 	u.Authority = v.Authority
 	u.Signer = v.Signer
+	u.Version = v.Version
 	u.Index = v.Index
 	u.Entry = v.Entry
 	return json.Marshal(&u)
@@ -6251,12 +6423,14 @@ func (v *KeyRecord) UnmarshalJSON(data []byte) error {
 		RecordType RecordType        `json:"recordType"`
 		Authority  *url.URL          `json:"authority,omitempty"`
 		Signer     *url.URL          `json:"signer,omitempty"`
+		Version    uint64            `json:"version,omitempty"`
 		Index      uint64            `json:"index,omitempty"`
 		Entry      *protocol.KeySpec `json:"entry,omitempty"`
 	}{}
 	u.RecordType = v.RecordType()
 	u.Authority = v.Authority
 	u.Signer = v.Signer
+	u.Version = v.Version
 	u.Index = v.Index
 	u.Entry = v.Entry
 	if err := json.Unmarshal(data, &u); err != nil {
@@ -6267,6 +6441,7 @@ func (v *KeyRecord) UnmarshalJSON(data []byte) error {
 	}
 	v.Authority = u.Authority
 	v.Signer = u.Signer
+	v.Version = u.Version
 	v.Index = u.Index
 	v.Entry = u.Entry
 	return nil

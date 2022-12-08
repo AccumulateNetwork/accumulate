@@ -4,11 +4,11 @@ import (
 	"context"
 	"io"
 	"sort"
-	"strings"
 
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
@@ -25,15 +25,15 @@ var _ message.MultiDialer = (*dialer)(nil)
 // support testing with mocks.
 type dialerHost interface {
 	selfID() peer.ID
-	getSelf(part string) *partition
-	newRpcStream(ctx context.Context, peer peer.ID, partition string) (io.ReadWriteCloser, error)
+	getOwnService(sa *api.ServiceAddress) (*service, bool)
+	getPeerService(ctx context.Context, peer peer.ID, service *api.ServiceAddress) (io.ReadWriteCloser, error)
 }
 
 // dialerPeers are the parts of [peerManager] required by [dialer]. dialerPeers
 // exists to support testing with mocks.
 type dialerPeers interface {
 	getPeer(id peer.ID) (*peerState, bool)
-	getPeers(part string) []*peerState // In order of priority
+	getPeers(service *api.ServiceAddress) []*peerState
 	adjustPriority(peer *peerState, delta int)
 }
 
@@ -49,15 +49,36 @@ func (n *Node) Dialer() message.MultiDialer {
 	return dialer{n, n.peermgr}
 }
 
-// Dial dials the given address.
+// Dial dials the given address. The address must include an /acc component and
+// may include a /p2p component. Dial will return an error if the address
+// includes any other components.
+//
+// If the address is serviceable by the receiving node, the stream will be
+// handled locally without requiring any network transport. Otherwise Dial will
+// find an appropriate peer that can service the address. If no peer can be
+// found, Dial will return [errors.NoPeer].
 func (d dialer) Dial(ctx context.Context, addr multiaddr.Multiaddr) (message.Stream, error) {
-	// Collect the partition and peer IDs
-	var partID, peerID []byte
+	peer, sa, err := unpackAddress(addr)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	if peer == "" {
+		return d.newPartitionStream(ctx, sa)
+	}
+	return d.newPeerStream(ctx, sa, peer)
+}
+
+// unpackAddress unpacks a multiaddr into its components. The address must
+// include an /acc component and may include a /p2p component. unpackAddress
+// will return an error if the address includes any other components.
+func unpackAddress(addr multiaddr.Multiaddr) (peer.ID, *api.ServiceAddress, error) {
+	var saBytes, peerID []byte
 	var bad bool
 	multiaddr.ForEach(addr, func(c multiaddr.Component) bool {
 		switch c.Protocol().Code {
-		case message.P_ACC:
-			partID = c.RawValue()
+		case api.P_ACC:
+			saBytes = c.RawValue()
 		case multiaddr.P_P2P:
 			peerID = c.RawValue()
 		default:
@@ -66,14 +87,19 @@ func (d dialer) Dial(ctx context.Context, addr multiaddr.Multiaddr) (message.Str
 		return true
 	})
 
-	if bad || partID == nil {
-		return nil, errors.BadRequest.WithFormat("invalid address %v", addr)
+	if bad || saBytes == nil {
+		return "", nil, errors.BadRequest.WithFormat("invalid address %v", addr)
 	}
 
-	if peerID == nil {
-		return d.newPartitionStream(ctx, string(partID))
+	sa := new(api.ServiceAddress)
+	err := sa.UnmarshalBinary(saBytes)
+	if err != nil {
+		return "", nil, errors.BadRequest.WithCauseAndFormat(err, "invalid address %v", addr)
+	} else if sa.Type == api.ServiceTypeUnknown {
+		return "", nil, errors.BadRequest.WithFormat("invalid address %v", addr)
 	}
-	return d.newPeerStream(ctx, string(partID), peer.ID(peerID))
+
+	return peer.ID(peerID), sa, nil
 }
 
 // BadDial notifies the dialer that a transport error was encountered while
@@ -92,17 +118,16 @@ func (d dialer) BadDial(ctx context.Context, _ multiaddr.Multiaddr, s message.St
 //
 // If the peer ID does not match a peer known by the node, or if the node does
 // not have an address for the given peer, newPeerStream will fail.
-func (d dialer) newPeerStream(ctx context.Context, partition string, peer peer.ID) (message.Stream, error) {
-	partition = strings.ToLower(partition)
+func (d dialer) newPeerStream(ctx context.Context, sa *api.ServiceAddress, peer peer.ID) (message.Stream, error) {
 	if d.host.selfID() == peer {
-		p := d.host.getSelf(partition)
-		if p == nil || p.rpc == nil {
+		s, ok := d.host.getOwnService(sa)
+		if !ok {
 			return nil, errors.NotFound // TODO return protocol not supported
 		}
 
-		ss := message.Pipe(ctx)
-		go p.rpc(ss)
-		return ss, nil
+		p, q := message.DuplexPipe(ctx)
+		go s.handler(p)
+		return q, nil
 	}
 
 	// Retrieve the peer state
@@ -112,7 +137,7 @@ func (d dialer) newPeerStream(ctx context.Context, partition string, peer peer.I
 	}
 
 	// Open a new stream
-	s, err := d.host.newRpcStream(ctx, peer, partition)
+	s, err := d.host.getPeerService(ctx, peer, sa)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -135,24 +160,23 @@ func (d dialer) newPeerStream(ctx context.Context, partition string, peer peer.I
 // will try them in order of decreasing priority. If a peer is successfully
 // dialed, its priority is decremented by one so that subsequent dials are
 // routed to a different peer.
-func (d dialer) newPartitionStream(ctx context.Context, partition string) (message.Stream, error) {
+func (d dialer) newPartitionStream(ctx context.Context, sa *api.ServiceAddress) (message.Stream, error) {
 	// Check if we participate in this partition
-	partition = strings.ToLower(partition)
-	p := d.host.getSelf(partition)
-	if p != nil && p.rpc != nil {
-		ss := message.Pipe(ctx)
-		go p.rpc(ss)
-		return ss, nil
+	s, ok := d.host.getOwnService(sa)
+	if ok {
+		p, q := message.DuplexPipe(ctx)
+		go s.handler(p)
+		return q, nil
 	}
 
 	// Sort peers by priority
-	peers := d.peers.getPeers(partition)
+	peers := d.peers.getPeers(sa)
 	sort.Slice(peers, func(i, j int) bool { return peers[i].priority > peers[j].priority })
 
 	// Try each peer in descending priority
 	for _, p := range peers {
 		// Open a stream
-		s, err := d.host.newRpcStream(ctx, p.info.ID, partition)
+		s, err := d.host.getPeerService(ctx, p.info.ID, sa)
 		switch {
 		case err == nil:
 			// Decrement the priority so we round-robin between peers
@@ -178,31 +202,34 @@ func (d dialer) newPartitionStream(ctx context.Context, partition string) (messa
 			continue
 
 		default:
-			return nil, errors.UnknownError.WithFormat("connect to %s peer: %w", partition, err)
+			return nil, errors.UnknownError.WithFormat("connect to %v of peer: %w", sa, err)
 		}
 	}
-	return nil, errors.NoPeer.WithFormat("no live peers for %s", partition)
+	return nil, errors.NoPeer.WithFormat("no live peers for %v", sa)
 }
 
 // selfDialer always dials the [Node] directly.
-type selfDialer struct {
-	node      *Node
-	partition string
-}
+type selfDialer Node
 
 // SelfDialer returns a [message.Dialer] that always returns a stream for the current node.
-func (n *Node) SelfDialer(partition string) message.Dialer {
-	return &selfDialer{n, strings.ToLower(partition)}
-}
+func (n *Node) SelfDialer() message.Dialer { return (*selfDialer)(n) }
 
 // Dial returns a stream for the current node.
 func (d *selfDialer) Dial(ctx context.Context, addr multiaddr.Multiaddr) (message.Stream, error) {
-	p := d.node.partitions[d.partition]
-	if p == nil || p.rpc == nil {
+	peer, sa, err := unpackAddress(addr)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	if peer != "" && peer != d.host.ID() {
+		return nil, errors.NotFound.With("dialed self but asked for a different peer")
+	}
+
+	s, ok := (*Node)(d).getOwnService(sa)
+	if !ok {
 		return nil, errors.NotFound // TODO return protocol not supported
 	}
 
-	ss := message.Pipe(ctx)
-	go p.rpc(ss)
-	return ss, nil
+	p, q := message.DuplexPipe(ctx)
+	go s.handler(p)
+	return q, nil
 }

@@ -34,6 +34,8 @@ func NewMetricsService(params MetricsServiceParams) *MetricsService {
 	return s
 }
 
+func (s *MetricsService) Type() api.ServiceType { return api.ServiceTypeMetrics }
+
 func (s *MetricsService) Metrics(ctx context.Context, opts api.MetricsOptions) (*api.Metrics, error) {
 	status, err := s.node.NodeStatus(ctx, api.NodeStatusOptions{})
 	if err != nil {

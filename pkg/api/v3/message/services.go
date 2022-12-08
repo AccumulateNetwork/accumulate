@@ -183,3 +183,22 @@ func (s Validator) validate(c *call[*ValidateRequest]) {
 	}
 	c.Write(&ValidateResponse{Value: res})
 }
+
+// Faucet forwards [FaucetRequest]s to a [api.Faucet].
+type Faucet struct {
+	api.Faucet
+}
+
+func (s Faucet) methods() serviceMethodMap {
+	typ, fn := makeServiceMethod(s.faucet)
+	return serviceMethodMap{typ: fn}
+}
+
+func (s Faucet) faucet(c *call[*FaucetRequest]) {
+	res, err := s.Faucet.Faucet(c.context, c.params.Account, c.params.FaucetOptions)
+	if err != nil {
+		c.Write(&ErrorResponse{Error: errors.UnknownError.Wrap(err).(*errors.Error)})
+		return
+	}
+	c.Write(&FaucetResponse{Value: res})
+}

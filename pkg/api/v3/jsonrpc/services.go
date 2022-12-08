@@ -130,3 +130,19 @@ func (s Validator) Validate(ctx context.Context, params json.RawMessage) interfa
 	}
 	return formatResponse(s.Validator.Validate(ctx, req.Envelope, req.ValidateOptions))
 }
+
+type Faucet struct{ api.Faucet }
+
+func (s Faucet) methods() jsonrpc2.MethodMap {
+	return jsonrpc2.MethodMap{
+		"faucet": s.faucet,
+	}
+}
+
+func (s Faucet) faucet(ctx context.Context, params json.RawMessage) interface{} {
+	req, err := parseRequest[*message.FaucetRequest](params)
+	if err != nil {
+		return formatResponse(nil, err)
+	}
+	return formatResponse(s.Faucet.Faucet(ctx, req.Account, req.FaucetOptions))
+}

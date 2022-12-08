@@ -35,6 +35,8 @@ func NewValidator(params ValidatorParams) *Validator {
 	return s
 }
 
+func (s *Validator) Type() api.ServiceType { return api.ServiceTypeValidate }
+
 func (s *Validator) Validate(ctx context.Context, envelope *protocol.Envelope, opts api.ValidateOptions) ([]*api.Submission, error) {
 	// if opts.Full == nil || *opts.Full {
 	// 	return nil, errors.NotAllowed.WithFormat("full validation has not been implemented")

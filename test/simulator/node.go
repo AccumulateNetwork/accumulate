@@ -51,6 +51,7 @@ type Node struct {
 	apiV2    *apiv2.JrpcMethods
 	clientV2 *client.Client
 	querySvc api.Querier
+	eventSvc api.EventService
 	seqSvc   private.Sequencer
 
 	validatorUpdates []*validatorUpdate
@@ -82,6 +83,14 @@ func newNode(s *Simulator, p *Partition, node int, init *accumulated.NodeInit) (
 		Logger:    n.logger.With("module", "acc-rpc"),
 		Database:  n,
 		Partition: p.ID,
+	})
+
+	// Create an EventService
+	n.eventSvc = apiimpl.NewEventService(apiimpl.EventServiceParams{
+		Logger:    n.logger.With("module", "acc-rpc"),
+		Database:  n.database,
+		Partition: p.ID,
+		EventBus:  n.eventBus,
 	})
 
 	// Create a Sequencer service
@@ -306,7 +315,7 @@ type nodeService Node
 // Private returns the private sequencer service.
 func (s *nodeService) Private() private.Sequencer { return s.seqSvc }
 
-// NodeStatus implements pkg/api/v3.NodeService.
+// NodeStatus implements [api.NodeService].
 func (s *nodeService) NodeStatus(ctx context.Context, opts api.NodeStatusOptions) (*api.NodeStatus, error) {
 	return &api.NodeStatus{
 		Ok: true,
@@ -322,7 +331,7 @@ func (s *nodeService) NodeStatus(ctx context.Context, opts api.NodeStatusOptions
 	}, nil
 }
 
-// NetworkStatus implements pkg/api/v3.NetworkService.
+// NetworkStatus implements [api.NetworkService].
 func (s *nodeService) NetworkStatus(ctx context.Context, opts api.NetworkStatusOptions) (*api.NetworkStatus, error) {
 	v, ok := s.globals.Load().(*core.GlobalValues)
 	if !ok {
@@ -336,12 +345,12 @@ func (s *nodeService) NetworkStatus(ctx context.Context, opts api.NetworkStatusO
 	}, nil
 }
 
-// Metrics implements pkg/api/v3.MetricsService.
+// Metrics implements [api.MetricsService].
 func (s *nodeService) Metrics(ctx context.Context, opts api.MetricsOptions) (*api.Metrics, error) {
 	return nil, errors.NotAllowed
 }
 
-// Query implements pkg/api/v3.Querier.
+// Query implements [api.Querier].
 func (s *nodeService) Query(ctx context.Context, scope *url.URL, query api.Query) (api.Record, error) {
 	r, err := s.querySvc.Query(ctx, scope, query)
 	if err != nil {
@@ -359,14 +368,19 @@ func (s *nodeService) Query(ctx context.Context, scope *url.URL, query api.Query
 	return r, nil
 }
 
-// Submit implements pkg/api/v3.Submitter.
+// Submit implements [api.Submitter].
 func (s *nodeService) Submit(ctx context.Context, envelope *protocol.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {
 	return s.submit(envelope, false)
 }
 
-// Validate implements pkg/api/v3.Validator.
+// Validate implements [api.Validator].
 func (s *nodeService) Validate(ctx context.Context, envelope *protocol.Envelope, opts api.ValidateOptions) ([]*api.Submission, error) {
 	return s.submit(envelope, true)
+}
+
+// Subscribe implements [api.EventService].
+func (s *nodeService) Subscribe(ctx context.Context, opts api.SubscribeOptions) (<-chan api.Event, error) {
+	return s.eventSvc.Subscribe(ctx, opts)
 }
 
 func (s *nodeService) submit(envelope *protocol.Envelope, pretend bool) ([]*api.Submission, error) {

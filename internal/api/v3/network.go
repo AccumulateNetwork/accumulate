@@ -35,6 +35,8 @@ func NewNetworkService(params NetworkServiceParams) *NetworkService {
 	return s
 }
 
+func (s *NetworkService) Type() api.ServiceType { return api.ServiceTypeNetwork }
+
 func (s *NetworkService) NetworkStatus(ctx context.Context, _ api.NetworkStatusOptions) (*api.NetworkStatus, error) {
 	values := s.values.Load().(*core.GlobalValues)
 	if values == nil {

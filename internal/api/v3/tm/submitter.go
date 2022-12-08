@@ -38,6 +38,8 @@ func NewSubmitter(params SubmitterParams) *Submitter {
 	return s
 }
 
+func (s *Submitter) Type() api.ServiceType { return api.ServiceTypeSubmit }
+
 func (s *Submitter) Submit(ctx context.Context, envelope *protocol.Envelope, opts api.SubmitOptions) ([]*api.Submission, error) {
 	// Verify the envelope is well-formed
 	if opts.Verify == nil || *opts.Verify {

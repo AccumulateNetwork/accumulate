@@ -182,6 +182,11 @@ func (c *Client) Validate(ctx context.Context, envelope *protocol.Envelope, opts
 	return c.inner.Validate(ctx, envelope, opts)
 }
 
+// Faucet implements [api.Faucet.Faucet].
+func (c *Client) Faucet(ctx context.Context, account *url.URL, opts api.FaucetOptions) (*api.Submission, error) {
+	return c.inner.Faucet(ctx, account, opts)
+}
+
 // Subscribe implements [api.EventService.Subscribe].
 func (c *Client) Subscribe(ctx context.Context, opts api.SubscribeOptions) (<-chan api.Event, error) {
 	return c.inner.Subscribe(ctx, opts)

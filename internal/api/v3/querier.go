@@ -41,6 +41,8 @@ func NewQuerier(params QuerierParams) *Querier {
 	return s
 }
 
+func (s *Querier) Type() api.ServiceType { return api.ServiceTypeQuery }
+
 func (s *Querier) Query(ctx context.Context, scope *url.URL, query api.Query) (api.Record, error) {
 	// Ensure the query parameters are valid
 	if query == nil {
@@ -767,6 +769,7 @@ func (s *Querier) searchForKeyEntry(ctx context.Context, batch *database.Batch, 
 			rec := new(api.KeyRecord)
 			rec.Authority = entry.Url
 			rec.Signer = signerUrl
+			rec.Version = signer.GetVersion()
 			rec.Index = uint64(i)
 
 			if ks, ok := e.(*protocol.KeySpec); ok {

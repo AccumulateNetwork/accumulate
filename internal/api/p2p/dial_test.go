@@ -10,6 +10,7 @@ import (
 	"github.com/multiformats/go-multiaddr"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 )
 
@@ -39,24 +40,24 @@ func TestDialAddress(t *testing.T) {
 
 	pid := peerId(t, "QmYyQSo1c1Ym7orWxLYvCrM2EmxFTANf8wXmmE7DWjhx5N")
 	host := newMockDialerHost(t)
-	host.EXPECT().selfID().Return("")
-	host.EXPECT().getSelf(mock.Anything).Return(nil)
-	host.EXPECT().newRpcStream(mock.Anything, pid, "foo").Return(fakeStream{}, nil)
+	host.EXPECT().selfID().Return("").Maybe()
+	host.EXPECT().getOwnService(mock.Anything).Return(nil, false).Maybe()
+	host.EXPECT().getPeerService(mock.Anything, mock.Anything, mock.Anything).Return(fakeStream{}, nil).Maybe()
 	peers := newMockDialerPeers(t)
-	peers.EXPECT().getPeer(pid).Return(nil, true)
-	peers.EXPECT().getPeers("foo").Return([]*peerState{{info: &Info{ID: pid}}})
-	peers.EXPECT().adjustPriority(mock.Anything, mock.Anything)
+	peers.EXPECT().getPeer(pid).Return(nil, true).Maybe()
+	peers.EXPECT().getPeers(mock.Anything).Return([]*peerState{{info: &Info{ID: pid}}}).Maybe()
+	peers.EXPECT().adjustPriority(mock.Anything, mock.Anything).Maybe()
 
 	cases := map[string]struct {
 		Ok   bool
 		Addr string
 	}{
 		"peer":           {false, "/p2p/QmYyQSo1c1Ym7orWxLYvCrM2EmxFTANf8wXmmE7DWjhx5N"},
-		"partition":      {true, "/acc/foo"},
-		"partition-peer": {true, "/acc/foo/p2p/QmYyQSo1c1Ym7orWxLYvCrM2EmxFTANf8wXmmE7DWjhx5N"},
-		"peer-partition": {true, "/p2p/QmYyQSo1c1Ym7orWxLYvCrM2EmxFTANf8wXmmE7DWjhx5N/acc/foo"},
-		"partition-tcp":  {false, "/acc/foo/tcp/123"},
-		"tcp-partition":  {false, "/tcp/123/acc/foo"},
+		"partition":      {true, "/acc/query:foo"},
+		"partition-peer": {true, "/acc/query:foo/p2p/QmYyQSo1c1Ym7orWxLYvCrM2EmxFTANf8wXmmE7DWjhx5N"},
+		"peer-partition": {true, "/p2p/QmYyQSo1c1Ym7orWxLYvCrM2EmxFTANf8wXmmE7DWjhx5N/acc/query:foo"},
+		"partition-tcp":  {false, "/acc/query:foo/tcp/123"},
+		"tcp-partition":  {false, "/tcp/123/acc/query:foo"},
 	}
 
 	dialer := &dialer{host, peers}
@@ -82,10 +83,10 @@ func TestDialSelfPeer(t *testing.T) {
 	pid := peerId(t, "QmYyQSo1c1Ym7orWxLYvCrM2EmxFTANf8wXmmE7DWjhx5N")
 	host := newMockDialerHost(t)
 	host.EXPECT().selfID().Return(pid)
-	host.EXPECT().getSelf(mock.Anything).Return(&partition{rpc: handler.Execute})
+	host.EXPECT().getOwnService(mock.Anything).Return(&service{handler: handler.Execute}, true)
 
 	dialer := &dialer{host, nil}
-	_, err := dialer.Dial(context.Background(), addr(t, "/acc/foo/p2p/QmYyQSo1c1Ym7orWxLYvCrM2EmxFTANf8wXmmE7DWjhx5N"))
+	_, err := dialer.Dial(context.Background(), addr(t, "/acc/query:foo/p2p/QmYyQSo1c1Ym7orWxLYvCrM2EmxFTANf8wXmmE7DWjhx5N"))
 	require.NoError(t, err)
 	<-done
 }
@@ -98,10 +99,10 @@ func TestDialSelfPartition(t *testing.T) {
 	handler.EXPECT().Execute(mock.Anything).Run(func(message.Stream) { close(done) })
 
 	host := newMockDialerHost(t)
-	host.EXPECT().getSelf(mock.Anything).Return(&partition{rpc: handler.Execute})
+	host.EXPECT().getOwnService(mock.Anything).Return(&service{handler: handler.Execute}, true)
 
 	dialer := &dialer{host, nil}
-	_, err := dialer.Dial(context.Background(), addr(t, "/acc/foo"))
+	_, err := dialer.Dial(context.Background(), addr(t, "/acc/query:foo"))
 	require.NoError(t, err)
 	<-done
 }
@@ -115,20 +116,22 @@ func TestDialPartition(t *testing.T) {
 		{priority: 0, info: &Info{ID: peerId(t, "QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt")}},
 	}
 
+	_sa := &api.ServiceAddress{Type: api.ServiceTypeQuery, Partition: "foo"}
+	sa := mock.MatchedBy(func(other *api.ServiceAddress) bool { return _sa.Equal(other) })
 	peers := newMockDialerPeers(t)
-	peers.EXPECT().getPeers("foo").Return(append(make([]*peerState, 0, len(peerList)), peerList...)) // Copy
+	peers.EXPECT().getPeers(sa).Return(append(make([]*peerState, 0, len(peerList)), peerList...)) // Copy
 
 	host := newMockDialerHost(t)
-	host.EXPECT().getSelf("foo").Return(nil)
+	host.EXPECT().getOwnService(sa).Return(nil, false)
 
-	c3 := host.EXPECT().newRpcStream(mock.Anything, peerList[2].info.ID, "foo").Return(nil, network.ErrNoConn)
-	c1 := host.EXPECT().newRpcStream(mock.Anything, peerList[1].info.ID, "foo").Return(fakeStream{}, nil)
+	c3 := host.EXPECT().getPeerService(mock.Anything, peerList[2].info.ID, sa).Return(nil, network.ErrNoConn)
+	c1 := host.EXPECT().getPeerService(mock.Anything, peerList[1].info.ID, sa).Return(fakeStream{}, nil)
 	c1.NotBefore(c3.Call)
 
 	peers.EXPECT().adjustPriority(peerList[2], mock.Anything).NotBefore(c3.Call)
 	peers.EXPECT().adjustPriority(peerList[1], mock.Anything).NotBefore(c1.Call)
 
 	dialer := &dialer{host, peers}
-	_, err := dialer.Dial(context.Background(), addr(t, "/acc/foo"))
+	_, err := dialer.Dial(context.Background(), addr(t, "/acc/query:foo"))
 	require.NoError(t, err)
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/ed25519"
 	"io"
-	"strings"
 
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/config"
@@ -14,19 +13,19 @@ import (
 	"github.com/multiformats/go-multiaddr"
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	errors "gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 )
 
 // Node implements peer-to-peer routing of API v3 messages over via binary
 // message transport.
 type Node struct {
-	logger     logging.OptionalLogger
-	context    context.Context
-	cancel     context.CancelFunc
-	peermgr    *peerManager
-	host       host.Host
-	partitions map[string]*partition
-	// valInfo    *protocol.ValidatorInfo
+	logger   logging.OptionalLogger
+	context  context.Context
+	cancel   context.CancelFunc
+	peermgr  *peerManager
+	host     host.Host
+	services []*service
 }
 
 // Options are options for creating a [Node].
@@ -43,11 +42,6 @@ type Options struct {
 	// Key is the node's private key. If Key is omitted, the node will
 	// generate a new key.
 	Key ed25519.PrivateKey
-
-	// Partitions are the partitions the node participates in.
-	Partitions []PartitionOptions
-
-	// Validator      *protocol.ValidatorInfo
 }
 
 // PartitionOptions defines a [Node]'s involvement in a partition.
@@ -61,22 +55,10 @@ type PartitionOptions struct {
 
 // New creates a node with the given [Options].
 func New(opts Options) (_ *Node, err error) {
-	if len(opts.Partitions) == 0 {
-		return nil, errors.BadRequest.With("cannot start node without any partitions")
-	}
-
 	// Initialize basic fields
 	n := new(Node)
 	n.logger.Set(opts.Logger, "module", "acc-p2p")
 	n.context, n.cancel = context.WithCancel(context.Background())
-	n.partitions = make(map[string]*partition, len(opts.Partitions))
-
-	for _, opts := range opts.Partitions {
-		part := new(partition)
-		part.id = opts.ID
-		part.moniker = opts.Moniker
-		n.partitions[strings.ToLower(opts.ID)] = part
-	}
 
 	// Cancel on fail
 	defer func() {
@@ -111,7 +93,7 @@ func New(opts Options) (_ *Node, err error) {
 	}()
 
 	// Create a peer manager
-	n.peermgr, err = newPeerManager(n.host, opts)
+	n.peermgr, err = newPeerManager(n.host, func() []*service { return n.services }, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -165,8 +147,8 @@ func (n *Node) Close() error {
 // info returns the Info for this node.
 func (n *Node) info() *Info {
 	info := &Info{ID: n.host.ID()}
-	for _, p := range n.partitions {
-		info.Partitions = append(info.Partitions, p.info())
+	for _, p := range n.services {
+		info.Services = append(info.Services, p.info())
 	}
 	return info
 }
@@ -176,12 +158,16 @@ func (n *Node) selfID() peer.ID {
 	return n.host.ID()
 }
 
-// newRpcStream returns a new stream for the given peer and partition.
-func (n *Node) newRpcStream(ctx context.Context, peer peer.ID, partition string) (io.ReadWriteCloser, error) {
-	return n.host.NewStream(ctx, peer, idRpc(partition))
+// getPeerService returns a new stream for the given peer and service.
+func (n *Node) getPeerService(ctx context.Context, peer peer.ID, service *api.ServiceAddress) (io.ReadWriteCloser, error) {
+	return n.host.NewStream(ctx, peer, idRpc(service))
 }
 
-// getSelf returns a partition of this node.
-func (n *Node) getSelf(part string) *partition {
-	return n.partitions[strings.ToLower(part)]
+// getOwnService returns a service of this node.
+func (n *Node) getOwnService(sa *api.ServiceAddress) (*service, bool) {
+	i, ok := sortutil.Search(n.services, func(s *service) int { return s.address.Compare(sa) })
+	if !ok {
+		return nil, false
+	}
+	return n.services[i], true
 }

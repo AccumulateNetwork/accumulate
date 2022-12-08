@@ -49,6 +49,8 @@ func NewEventService(params EventServiceParams) *EventService {
 	return s
 }
 
+func (s *EventService) Type() api.ServiceType { return api.ServiceTypeEvent }
+
 func (s *EventService) didCommitBlock(e events.DidCommitBlock) error {
 	event := new(api.BlockEvent)
 	event.Partition = s.partitionId

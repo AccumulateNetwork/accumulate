@@ -261,6 +261,8 @@ func bigfloat(v float64, precision uint64) *big.Int {
 
 func (p *parser) parseTimestamp(v any) signing.Timestamp {
 	switch v := v.(type) {
+	case signing.Timestamp:
+		return v
 	case time.Time:
 		return signing.TimestampFromValue(v.UTC().UnixMilli())
 	case *uint64:
