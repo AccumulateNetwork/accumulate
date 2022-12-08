@@ -11,15 +11,23 @@ package core
 //lint:file-ignore S1001,S1002,S1008,SA4013 generated code
 
 import (
+	"bytes"
+	"errors"
+	"io"
+	"strings"
+
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 type GlobalValues struct {
-	memoize globalValueMemos
-	Oracle  *protocol.AcmeOracle        `json:"oracle,omitempty" form:"oracle" query:"oracle" validate:"required"`
-	Globals *protocol.NetworkGlobals    `json:"globals,omitempty" form:"globals" query:"globals" validate:"required"`
-	Network *protocol.NetworkDefinition `json:"network,omitempty" form:"network" query:"network" validate:"required"`
-	Routing *protocol.RoutingTable      `json:"routing,omitempty" form:"routing" query:"routing" validate:"required"`
+	fieldsSet []bool
+	memoize   globalValueMemos
+	Oracle    *protocol.AcmeOracle        `json:"oracle,omitempty" form:"oracle" query:"oracle" validate:"required"`
+	Globals   *protocol.NetworkGlobals    `json:"globals,omitempty" form:"globals" query:"globals" validate:"required"`
+	Network   *protocol.NetworkDefinition `json:"network,omitempty" form:"network" query:"network" validate:"required"`
+	Routing   *protocol.RoutingTable      `json:"routing,omitempty" form:"routing" query:"routing" validate:"required"`
+	extraData []byte
 }
 
 func (v *GlobalValues) Copy() *GlobalValues {
@@ -78,4 +86,102 @@ func (v *GlobalValues) Equal(u *GlobalValues) bool {
 	}
 
 	return true
+}
+
+var fieldNames_GlobalValues = []string{
+	1: "Oracle",
+	2: "Globals",
+	3: "Network",
+	4: "Routing",
+}
+
+func (v *GlobalValues) MarshalBinary() ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Oracle == nil) {
+		writer.WriteValue(1, v.Oracle.MarshalBinary)
+	}
+	if !(v.Globals == nil) {
+		writer.WriteValue(2, v.Globals.MarshalBinary)
+	}
+	if !(v.Network == nil) {
+		writer.WriteValue(3, v.Network.MarshalBinary)
+	}
+	if !(v.Routing == nil) {
+		writer.WriteValue(4, v.Routing.MarshalBinary)
+	}
+
+	_, _, err := writer.Reset(fieldNames_GlobalValues)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+	return buffer.Bytes(), nil
+}
+
+func (v *GlobalValues) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Oracle is missing")
+	} else if v.Oracle == nil {
+		errs = append(errs, "field Oracle is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Globals is missing")
+	} else if v.Globals == nil {
+		errs = append(errs, "field Globals is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Network is missing")
+	} else if v.Network == nil {
+		errs = append(errs, "field Network is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Routing is missing")
+	} else if v.Routing == nil {
+		errs = append(errs, "field Routing is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+func (v *GlobalValues) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *GlobalValues) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x := new(protocol.AcmeOracle); reader.ReadValue(1, x.UnmarshalBinaryFrom) {
+		v.Oracle = x
+	}
+	if x := new(protocol.NetworkGlobals); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+		v.Globals = x
+	}
+	if x := new(protocol.NetworkDefinition); reader.ReadValue(3, x.UnmarshalBinaryFrom) {
+		v.Network = x
+	}
+	if x := new(protocol.RoutingTable); reader.ReadValue(4, x.UnmarshalBinaryFrom) {
+		v.Routing = x
+	}
+
+	seen, err := reader.Reset(fieldNames_GlobalValues)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
 }

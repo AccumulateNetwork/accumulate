@@ -27,6 +27,14 @@ RecordType:
   IndexEntry:
     value: 0x83
 
+EventType:
+  Error:
+    value: 1
+  Block:
+    value: 2
+  Globals:
+    value: 3
+
 QueryType:
   Default:
     value: 0x00
