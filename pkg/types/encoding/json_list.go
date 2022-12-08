@@ -16,6 +16,11 @@ func Cast[U, V any](v V, err error) (U, error) {
 	if err != nil {
 		return z, err
 	}
+
+	if any(v) == nil {
+		return z, nil
+	}
+
 	u, ok := any(v).(U)
 	if !ok {
 		return z, fmt.Errorf("wrong type: expected %T, got %T", z, v)

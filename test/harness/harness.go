@@ -48,6 +48,21 @@ func (t TimeStep) Step() error {
 	return nil
 }
 
+// BlockStep implements [Stepper] by waiting for a block event.
+type BlockStep <-chan api.Event
+
+// Step processes events until there is an error or a block event.
+func (s BlockStep) Step() error {
+	for {
+		switch event := (<-s).(type) {
+		case *api.ErrorEvent:
+			return event.Err
+		case *api.BlockEvent:
+			return nil
+		}
+	}
+}
+
 // Step calls the stepper once.
 func (h *Harness) Step() {
 	h.TB.Helper()

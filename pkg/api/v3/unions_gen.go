@@ -343,3 +343,109 @@ func UnmarshalQueryJSON(data []byte) (Query, error) {
 
 	return acnt, nil
 }
+
+// NewEvent creates a new Event for the specified EventType.
+func NewEvent(typ EventType) (Event, error) {
+	switch typ {
+	case EventTypeBlock:
+		return new(BlockEvent), nil
+	case EventTypeError:
+		return new(ErrorEvent), nil
+	case EventTypeGlobals:
+		return new(GlobalsEvent), nil
+	default:
+		return nil, fmt.Errorf("unknown event %v", typ)
+	}
+}
+
+// EqualEvent is used to compare the values of the union
+func EqualEvent(a, b Event) bool {
+	if a == b {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	switch a := a.(type) {
+	case *BlockEvent:
+		b, ok := b.(*BlockEvent)
+		return ok && a.Equal(b)
+	case *ErrorEvent:
+		b, ok := b.(*ErrorEvent)
+		return ok && a.Equal(b)
+	case *GlobalsEvent:
+		b, ok := b.(*GlobalsEvent)
+		return ok && a.Equal(b)
+	default:
+		return false
+	}
+}
+
+// CopyEvent copies a Event.
+func CopyEvent(v Event) Event {
+	switch v := v.(type) {
+	case *BlockEvent:
+		return v.Copy()
+	case *ErrorEvent:
+		return v.Copy()
+	case *GlobalsEvent:
+		return v.Copy()
+	default:
+		return v.CopyAsInterface().(Event)
+	}
+}
+
+// UnmarshalEvent unmarshals a Event.
+func UnmarshalEvent(data []byte) (Event, error) {
+	return UnmarshalEventFrom(bytes.NewReader(data))
+}
+
+// UnmarshalEventFrom unmarshals a Event.
+func UnmarshalEventFrom(rd io.Reader) (Event, error) {
+	reader := encoding.NewReader(rd)
+
+	// Read the type code
+	var typ EventType
+	if !reader.ReadEnum(1, &typ) {
+		return nil, fmt.Errorf("field Type: missing")
+	}
+
+	// Create a new event
+	v, err := NewEvent(EventType(typ))
+	if err != nil {
+		return nil, err
+	}
+
+	// Unmarshal the rest of the event
+	err = v.UnmarshalFieldsFrom(reader)
+	if err != nil {
+		return nil, err
+	}
+
+	return v, nil
+}
+
+// UnmarshalEventJson unmarshals a Event.
+func UnmarshalEventJSON(data []byte) (Event, error) {
+	var typ *struct{ EventType EventType }
+	err := json.Unmarshal(data, &typ)
+	if err != nil {
+		return nil, err
+	}
+
+	if typ == nil {
+		return nil, nil
+	}
+
+	acnt, err := NewEvent(typ.EventType)
+	if err != nil {
+		return nil, err
+	}
+
+	err = json.Unmarshal(data, acnt)
+	if err != nil {
+		return nil, err
+	}
+
+	return acnt, nil
+}
