@@ -122,6 +122,7 @@ func (r *MetricsResponse) rval() *api.Metrics                   { return r.Value
 func (r *RecordResponse) rval() api.Record                      { return r.Value } //nolint:unused
 func (r *SubmitResponse) rval() []*api.Submission               { return r.Value } //nolint:unused
 func (r *ValidateResponse) rval() []*api.Submission             { return r.Value } //nolint:unused
+func (r *EventMessage) rval() []api.Event                       { return r.Value } //nolint:unused
 func (r *PrivateSequenceResponse) rval() *api.TransactionRecord { return r.Value } //nolint:unused
 
 // roundTripWithFanout routes each requests and executes a round-trip call. If

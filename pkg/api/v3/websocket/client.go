@@ -182,6 +182,11 @@ func (c *Client) Validate(ctx context.Context, envelope *protocol.Envelope, opts
 	return c.inner.Validate(ctx, envelope, opts)
 }
 
+// Subscribe implements [api.EventService.Subscribe].
+func (c *Client) Subscribe(ctx context.Context, opts api.SubscribeOptions) (<-chan api.Event, error) {
+	return c.inner.Subscribe(ctx, opts)
+}
+
 // clientRouter implements [message.Router].
 type clientRouter struct{}
 
