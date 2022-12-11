@@ -9,7 +9,6 @@ package main
 import (
 	"fmt"
 	"io/fs"
-	"io/ioutil"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -86,7 +85,7 @@ func readFactomDir(dir string, process func([]byte, int)) {
 	for ok {
 		filename := filepath.Join(dir, fmt.Sprintf("objects-%d.dat", FCTHeight))
 
-		input, err := ioutil.ReadFile(filename)
+		input, err := os.ReadFile(filename)
 		if errors.Is(err, fs.ErrNotExist) {
 			return
 		}

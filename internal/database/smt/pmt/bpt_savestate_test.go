@@ -10,7 +10,6 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -27,7 +26,7 @@ func TestSaveState(t *testing.T) {
 
 	numberEntries := 5001 //               A pretty reasonable sized BPT
 
-	DirName, err := ioutil.TempDir("", "AccDB")
+	DirName, err := os.MkdirTemp("", "AccDB")
 	require.Nil(t, err, "failed to create directory")
 	defer os.RemoveAll(DirName)
 

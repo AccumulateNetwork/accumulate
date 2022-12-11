@@ -1,3 +1,9 @@
+// Copyright 2022 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 package api
 
 import (
@@ -376,12 +382,12 @@ func (s *Querier) queryChainEntry(ctx context.Context, batch *database.Batch, re
 }
 
 func (s *Querier) queryDataEntryByIndex(ctx context.Context, batch *database.Batch, record *indexing.DataIndexer, index uint64) (*api.ChainEntryRecord[*api.TransactionRecord], error) {
-	entryHash, err := record.Entry(uint64(index))
+	entryHash, err := record.Entry(index)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("get entry hash: %w", err)
 	}
 
-	return s.queryDataEntry(ctx, batch, record, uint64(index), entryHash)
+	return s.queryDataEntry(ctx, batch, record, index, entryHash)
 }
 
 func (s *Querier) queryLastDataEntry(ctx context.Context, batch *database.Batch, record *indexing.DataIndexer) (*api.ChainEntryRecord[*api.TransactionRecord], error) {

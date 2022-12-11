@@ -186,7 +186,7 @@ func (m *Executor) buildSynthTxn(state *chain.ChainUpdates, batch *database.Batc
 	if err != nil {
 		return nil, err
 	}
-	if indexIndex+1 != uint64(initSig.SequenceNumber) {
+	if indexIndex+1 != initSig.SequenceNumber {
 		m.logger.Error("Sequence number does not match index chain index", "seq-num", initSig.SequenceNumber, "index", indexIndex, "source", initSig.SourceNetwork, "destination", initSig.DestinationNetwork)
 	}
 
@@ -201,7 +201,7 @@ func (x *Executor) buildSynthReceipt(batch *database.Batch, produced []*protocol
 	}
 
 	// Prove the synthetic transaction chain anchor
-	rootProof, err := chain.Receipt(int64(synthAnchor), int64(rootAnchor))
+	rootProof, err := chain.Receipt(synthAnchor, rootAnchor)
 	if err != nil {
 		return errors.UnknownError.WithFormat("prove from %d to %d on the root chain: %w", synthAnchor, rootAnchor, err)
 	}
@@ -228,7 +228,7 @@ func (x *Executor) buildSynthReceipt(batch *database.Batch, produced []*protocol
 		}
 
 		// Prove it
-		synthProof, err := chain.Receipt(int64(i+int(synthStart)), int64(synthEnd))
+		synthProof, err := chain.Receipt(int64(i+int(synthStart)), synthEnd)
 		if err != nil {
 			return errors.UnknownError.WithFormat("prove from %d to %d on the synthetic transaction chain: %w", i+int(synthStart), synthEnd, err)
 		}

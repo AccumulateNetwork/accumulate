@@ -368,7 +368,6 @@ func (c *Client) QueryMinorBlocks(ctx context.Context, req *api.MinorBlocksQuery
 	return &resp, nil
 }
 
-//
 // WARNING: EXPERIMENTAL!
 func (c *Client) QuerySynth(ctx context.Context, req *api.SyntheticTransactionRequest) (*api.TransactionQueryResponse, error) {
 	var resp api.TransactionQueryResponse
