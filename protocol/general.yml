@@ -299,6 +299,6 @@ TokenIssuerProof:
       marshal-as: reference
       pointer: true
     - name: Receipt
-      type: managed.Receipt
+      type: merkle.Receipt
       marshal-as: reference
       pointer: true

@@ -20,9 +20,9 @@ import (
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/managed"
 	errors2 "gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -69,13 +69,13 @@ type BlockQuery struct {
 type ChainEntryRecord[T Record] struct {
 	fieldsSet []bool
 	// Account is the account (omitted if unambiguous).
-	Account   *url.URL          `json:"account,omitempty" form:"account" query:"account" validate:"required"`
-	Name      string            `json:"name,omitempty" form:"name" query:"name" validate:"required"`
-	Type      managed.ChainType `json:"type,omitempty" form:"type" query:"type" validate:"required"`
-	Index     uint64            `json:"index" form:"index" query:"index" validate:"required"`
-	Entry     [32]byte          `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
-	Value     T                 `json:"value,omitempty" form:"value" query:"value" validate:"required"`
-	Receipt   *Receipt          `json:"receipt,omitempty" form:"receipt" query:"receipt" validate:"required"`
+	Account   *url.URL         `json:"account,omitempty" form:"account" query:"account" validate:"required"`
+	Name      string           `json:"name,omitempty" form:"name" query:"name" validate:"required"`
+	Type      merkle.ChainType `json:"type,omitempty" form:"type" query:"type" validate:"required"`
+	Index     uint64           `json:"index" form:"index" query:"index" validate:"required"`
+	Entry     [32]byte         `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
+	Value     T                `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	Receipt   *Receipt         `json:"receipt,omitempty" form:"receipt" query:"receipt" validate:"required"`
 	extraData []byte
 }
 
@@ -91,10 +91,10 @@ type ChainQuery struct {
 
 type ChainRecord struct {
 	fieldsSet []bool
-	Name      string            `json:"name,omitempty" form:"name" query:"name" validate:"required"`
-	Type      managed.ChainType `json:"type,omitempty" form:"type" query:"type" validate:"required"`
-	Count     uint64            `json:"count,omitempty" form:"count" query:"count" validate:"required"`
-	State     [][]byte          `json:"state,omitempty" form:"state" query:"state" validate:"required"`
+	Name      string           `json:"name,omitempty" form:"name" query:"name" validate:"required"`
+	Type      merkle.ChainType `json:"type,omitempty" form:"type" query:"type" validate:"required"`
+	Count     uint64           `json:"count,omitempty" form:"count" query:"count" validate:"required"`
+	State     [][]byte         `json:"state,omitempty" form:"state" query:"state" validate:"required"`
 	extraData []byte
 }
 
@@ -269,7 +269,7 @@ type RangeOptions struct {
 
 type Receipt struct {
 	fieldsSet []bool
-	managed.Receipt
+	merkle.Receipt
 	LocalBlock     uint64    `json:"localBlock,omitempty" form:"localBlock" query:"localBlock" validate:"required"`
 	LocalBlockTime time.Time `json:"localBlockTime,omitempty" form:"localBlockTime" query:"localBlockTime" validate:"required"`
 	MajorBlock     uint64    `json:"majorBlock,omitempty" form:"majorBlock" query:"majorBlock" validate:"required"`
@@ -4202,7 +4202,7 @@ func (v *ChainEntryRecord[T]) UnmarshalFieldsFrom(reader *encoding.Reader) error
 	if x, ok := reader.ReadString(3); ok {
 		v.Name = x
 	}
-	if x := new(managed.ChainType); reader.ReadEnum(4, x) {
+	if x := new(merkle.ChainType); reader.ReadEnum(4, x) {
 		v.Type = *x
 	}
 	if x, ok := reader.ReadUint(5); ok {
@@ -4303,7 +4303,7 @@ func (v *ChainRecord) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadString(2); ok {
 		v.Name = x
 	}
-	if x := new(managed.ChainType); reader.ReadEnum(3, x) {
+	if x := new(merkle.ChainType); reader.ReadEnum(3, x) {
 		v.Type = *x
 	}
 	if x, ok := reader.ReadUint(4); ok {
@@ -5547,7 +5547,7 @@ func (v *ChainEntryRecord[T]) MarshalJSON() ([]byte, error) {
 		RecordType RecordType                    `json:"recordType"`
 		Account    *url.URL                      `json:"account,omitempty"`
 		Name       string                        `json:"name,omitempty"`
-		Type       managed.ChainType             `json:"type,omitempty"`
+		Type       merkle.ChainType              `json:"type,omitempty"`
 		Index      uint64                        `json:"index"`
 		Entry      string                        `json:"entry,omitempty"`
 		Value      encoding.JsonUnmarshalWith[T] `json:"value,omitempty"`
@@ -5586,7 +5586,7 @@ func (v *ChainRecord) MarshalJSON() ([]byte, error) {
 	u := struct {
 		RecordType RecordType                 `json:"recordType"`
 		Name       string                     `json:"name,omitempty"`
-		Type       managed.ChainType          `json:"type,omitempty"`
+		Type       merkle.ChainType           `json:"type,omitempty"`
 		Count      uint64                     `json:"count,omitempty"`
 		State      encoding.JsonList[*string] `json:"state,omitempty"`
 	}{}
@@ -5795,15 +5795,15 @@ func (v *PublicKeySearchQuery) MarshalJSON() ([]byte, error) {
 
 func (v *Receipt) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Start          *string                                  `json:"start,omitempty"`
-		StartIndex     int64                                    `json:"startIndex,omitempty"`
-		End            *string                                  `json:"end,omitempty"`
-		EndIndex       int64                                    `json:"endIndex,omitempty"`
-		Anchor         *string                                  `json:"anchor,omitempty"`
-		Entries        encoding.JsonList[*managed.ReceiptEntry] `json:"entries,omitempty"`
-		LocalBlock     uint64                                   `json:"localBlock,omitempty"`
-		LocalBlockTime time.Time                                `json:"localBlockTime,omitempty"`
-		MajorBlock     uint64                                   `json:"majorBlock,omitempty"`
+		Start          *string                                 `json:"start,omitempty"`
+		StartIndex     int64                                   `json:"startIndex,omitempty"`
+		End            *string                                 `json:"end,omitempty"`
+		EndIndex       int64                                   `json:"endIndex,omitempty"`
+		Anchor         *string                                 `json:"anchor,omitempty"`
+		Entries        encoding.JsonList[*merkle.ReceiptEntry] `json:"entries,omitempty"`
+		LocalBlock     uint64                                  `json:"localBlock,omitempty"`
+		LocalBlockTime time.Time                               `json:"localBlockTime,omitempty"`
+		MajorBlock     uint64                                  `json:"majorBlock,omitempty"`
 	}{}
 	u.Start = encoding.BytesToJSON(v.Receipt.Start)
 	u.StartIndex = v.Receipt.StartIndex
@@ -6010,7 +6010,7 @@ func (v *ChainEntryRecord[T]) UnmarshalJSON(data []byte) error {
 		RecordType RecordType                    `json:"recordType"`
 		Account    *url.URL                      `json:"account,omitempty"`
 		Name       string                        `json:"name,omitempty"`
-		Type       managed.ChainType             `json:"type,omitempty"`
+		Type       merkle.ChainType              `json:"type,omitempty"`
 		Index      uint64                        `json:"index"`
 		Entry      string                        `json:"entry,omitempty"`
 		Value      encoding.JsonUnmarshalWith[T] `json:"value,omitempty"`
@@ -6082,7 +6082,7 @@ func (v *ChainRecord) UnmarshalJSON(data []byte) error {
 	u := struct {
 		RecordType RecordType                 `json:"recordType"`
 		Name       string                     `json:"name,omitempty"`
-		Type       managed.ChainType          `json:"type,omitempty"`
+		Type       merkle.ChainType           `json:"type,omitempty"`
 		Count      uint64                     `json:"count,omitempty"`
 		State      encoding.JsonList[*string] `json:"state,omitempty"`
 	}{}
@@ -6458,15 +6458,15 @@ func (v *PublicKeySearchQuery) UnmarshalJSON(data []byte) error {
 
 func (v *Receipt) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Start          *string                                  `json:"start,omitempty"`
-		StartIndex     int64                                    `json:"startIndex,omitempty"`
-		End            *string                                  `json:"end,omitempty"`
-		EndIndex       int64                                    `json:"endIndex,omitempty"`
-		Anchor         *string                                  `json:"anchor,omitempty"`
-		Entries        encoding.JsonList[*managed.ReceiptEntry] `json:"entries,omitempty"`
-		LocalBlock     uint64                                   `json:"localBlock,omitempty"`
-		LocalBlockTime time.Time                                `json:"localBlockTime,omitempty"`
-		MajorBlock     uint64                                   `json:"majorBlock,omitempty"`
+		Start          *string                                 `json:"start,omitempty"`
+		StartIndex     int64                                   `json:"startIndex,omitempty"`
+		End            *string                                 `json:"end,omitempty"`
+		EndIndex       int64                                   `json:"endIndex,omitempty"`
+		Anchor         *string                                 `json:"anchor,omitempty"`
+		Entries        encoding.JsonList[*merkle.ReceiptEntry] `json:"entries,omitempty"`
+		LocalBlock     uint64                                  `json:"localBlock,omitempty"`
+		LocalBlockTime time.Time                               `json:"localBlockTime,omitempty"`
+		MajorBlock     uint64                                  `json:"majorBlock,omitempty"`
 	}{}
 	u.Start = encoding.BytesToJSON(v.Receipt.Start)
 	u.StartIndex = v.Receipt.StartIndex

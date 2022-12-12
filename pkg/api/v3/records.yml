@@ -37,7 +37,7 @@ ChainRecord:
     - name: Name
       type: string
     - name: Type
-      type: managed.ChainType
+      type: merkle.ChainType
       marshal-as: enum
     - name: Count
       type: uint
@@ -55,7 +55,7 @@ ChainEntryRecord[T Record]:
     - name: Name
       type: string
     - name: Type
-      type: managed.ChainType
+      type: merkle.ChainType
       marshal-as: enum
     - name: Index
       type: uint

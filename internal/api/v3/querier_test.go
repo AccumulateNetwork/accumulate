@@ -11,11 +11,11 @@ import (
 	"github.com/stretchr/testify/suite"
 	. "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/managed"
 	sortutil "gitlab.com/accumulatenetwork/accumulate/internal/util/sort"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
@@ -155,7 +155,7 @@ func (s *QuerierTestSuite) TestQueryChains() {
 	s.Require().NoError(err)
 	_ = s.Len(r.Records, 3) &&
 		s.Equal("main", r.Records[0].Name) &&
-		s.Equal(managed.ChainTypeTransaction, r.Records[0].Type) &&
+		s.Equal(merkle.ChainTypeTransaction, r.Records[0].Type) &&
 		s.Equal(2, int(r.Records[0].Count))
 }
 
@@ -163,7 +163,7 @@ func (s *QuerierTestSuite) TestQueryChain() {
 	r, err := s.QuerierFor(s.alice).QueryChain(context.Background(), s.alice, &api.ChainQuery{Name: "main"})
 	s.Require().NoError(err)
 	_ = s.Equal("main", r.Name) &&
-		s.Equal(managed.ChainTypeTransaction, r.Type) &&
+		s.Equal(merkle.ChainTypeTransaction, r.Type) &&
 		s.Equal(2, int(r.Count))
 }
 
