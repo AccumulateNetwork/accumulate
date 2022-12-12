@@ -120,7 +120,7 @@ GeneralReceipt:
     - name: MajorBlock
       type: uint
     - name: Proof
-      type: managed.Receipt
+      type: merkle.Receipt
       marshal-as: reference
       alternative: Receipt
     - name: Error

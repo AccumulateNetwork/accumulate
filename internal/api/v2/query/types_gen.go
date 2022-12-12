@@ -19,8 +19,8 @@ import (
 	"strings"
 	"time"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -44,12 +44,12 @@ type DirectoryQueryResult struct {
 
 type GeneralReceipt struct {
 	fieldsSet      []bool
-	LocalBlock     uint64          `json:"localBlock,omitempty" form:"localBlock" query:"localBlock" validate:"required"`
-	LocalBlockTime *time.Time      `json:"localBlockTime,omitempty" form:"localBlockTime" query:"localBlockTime" validate:"required"`
-	DirectoryBlock uint64          `json:"directoryBlock,omitempty" form:"directoryBlock" query:"directoryBlock" validate:"required"`
-	MajorBlock     uint64          `json:"majorBlock,omitempty" form:"majorBlock" query:"majorBlock" validate:"required"`
-	Proof          managed.Receipt `json:"proof,omitempty" form:"proof" query:"proof" validate:"required"`
-	Error          string          `json:"error,omitempty" form:"error" query:"error" validate:"required"`
+	LocalBlock     uint64         `json:"localBlock,omitempty" form:"localBlock" query:"localBlock" validate:"required"`
+	LocalBlockTime *time.Time     `json:"localBlockTime,omitempty" form:"localBlockTime" query:"localBlockTime" validate:"required"`
+	DirectoryBlock uint64         `json:"directoryBlock,omitempty" form:"directoryBlock" query:"directoryBlock" validate:"required"`
+	MajorBlock     uint64         `json:"majorBlock,omitempty" form:"majorBlock" query:"majorBlock" validate:"required"`
+	Proof          merkle.Receipt `json:"proof,omitempty" form:"proof" query:"proof" validate:"required"`
+	Error          string         `json:"error,omitempty" form:"error" query:"error" validate:"required"`
 	extraData      []byte
 }
 
@@ -1600,7 +1600,7 @@ func (v *GeneralReceipt) MarshalBinary() ([]byte, error) {
 	if !(v.MajorBlock == 0) {
 		writer.WriteUint(4, v.MajorBlock)
 	}
-	if !((v.Proof).Equal(new(managed.Receipt))) {
+	if !((v.Proof).Equal(new(merkle.Receipt))) {
 		writer.WriteValue(5, v.Proof.MarshalBinary)
 	}
 	if !(len(v.Error) == 0) {
@@ -1640,7 +1640,7 @@ func (v *GeneralReceipt) IsValid() error {
 	}
 	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
 		errs = append(errs, "field Proof is missing")
-	} else if (v.Proof).Equal(new(managed.Receipt)) {
+	} else if (v.Proof).Equal(new(merkle.Receipt)) {
 		errs = append(errs, "field Proof is not set")
 	}
 	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
@@ -3396,7 +3396,7 @@ func (v *GeneralReceipt) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUint(4); ok {
 		v.MajorBlock = x
 	}
-	if x := new(managed.Receipt); reader.ReadValue(5, x.UnmarshalBinaryFrom) {
+	if x := new(merkle.Receipt); reader.ReadValue(5, x.UnmarshalBinaryFrom) {
 		v.Proof = *x
 	}
 	if x, ok := reader.ReadString(6); ok {
@@ -4502,13 +4502,13 @@ func (v *DirectoryQueryResult) MarshalJSON() ([]byte, error) {
 
 func (v *GeneralReceipt) MarshalJSON() ([]byte, error) {
 	u := struct {
-		LocalBlock     uint64          `json:"localBlock,omitempty"`
-		LocalBlockTime *time.Time      `json:"localBlockTime,omitempty"`
-		DirectoryBlock uint64          `json:"directoryBlock,omitempty"`
-		MajorBlock     uint64          `json:"majorBlock,omitempty"`
-		Proof          managed.Receipt `json:"proof,omitempty"`
-		Receipt        managed.Receipt `json:"receipt,omitempty"`
-		Error          string          `json:"error,omitempty"`
+		LocalBlock     uint64         `json:"localBlock,omitempty"`
+		LocalBlockTime *time.Time     `json:"localBlockTime,omitempty"`
+		DirectoryBlock uint64         `json:"directoryBlock,omitempty"`
+		MajorBlock     uint64         `json:"majorBlock,omitempty"`
+		Proof          merkle.Receipt `json:"proof,omitempty"`
+		Receipt        merkle.Receipt `json:"receipt,omitempty"`
+		Error          string         `json:"error,omitempty"`
 	}{}
 	u.LocalBlock = v.LocalBlock
 	u.LocalBlockTime = v.LocalBlockTime
@@ -4888,15 +4888,15 @@ func (v *SignatureSet) MarshalJSON() ([]byte, error) {
 
 func (v *TxReceipt) MarshalJSON() ([]byte, error) {
 	u := struct {
-		LocalBlock     uint64          `json:"localBlock,omitempty"`
-		LocalBlockTime *time.Time      `json:"localBlockTime,omitempty"`
-		DirectoryBlock uint64          `json:"directoryBlock,omitempty"`
-		MajorBlock     uint64          `json:"majorBlock,omitempty"`
-		Proof          managed.Receipt `json:"proof,omitempty"`
-		Receipt        managed.Receipt `json:"receipt,omitempty"`
-		Error          string          `json:"error,omitempty"`
-		Account        *url.URL        `json:"account,omitempty"`
-		Chain          string          `json:"chain,omitempty"`
+		LocalBlock     uint64         `json:"localBlock,omitempty"`
+		LocalBlockTime *time.Time     `json:"localBlockTime,omitempty"`
+		DirectoryBlock uint64         `json:"directoryBlock,omitempty"`
+		MajorBlock     uint64         `json:"majorBlock,omitempty"`
+		Proof          merkle.Receipt `json:"proof,omitempty"`
+		Receipt        merkle.Receipt `json:"receipt,omitempty"`
+		Error          string         `json:"error,omitempty"`
+		Account        *url.URL       `json:"account,omitempty"`
+		Chain          string         `json:"chain,omitempty"`
 	}{}
 	u.LocalBlock = v.GeneralReceipt.LocalBlock
 	u.LocalBlockTime = v.GeneralReceipt.LocalBlockTime
@@ -4978,13 +4978,13 @@ func (v *DirectoryQueryResult) UnmarshalJSON(data []byte) error {
 
 func (v *GeneralReceipt) UnmarshalJSON(data []byte) error {
 	u := struct {
-		LocalBlock     uint64          `json:"localBlock,omitempty"`
-		LocalBlockTime *time.Time      `json:"localBlockTime,omitempty"`
-		DirectoryBlock uint64          `json:"directoryBlock,omitempty"`
-		MajorBlock     uint64          `json:"majorBlock,omitempty"`
-		Proof          managed.Receipt `json:"proof,omitempty"`
-		Receipt        managed.Receipt `json:"receipt,omitempty"`
-		Error          string          `json:"error,omitempty"`
+		LocalBlock     uint64         `json:"localBlock,omitempty"`
+		LocalBlockTime *time.Time     `json:"localBlockTime,omitempty"`
+		DirectoryBlock uint64         `json:"directoryBlock,omitempty"`
+		MajorBlock     uint64         `json:"majorBlock,omitempty"`
+		Proof          merkle.Receipt `json:"proof,omitempty"`
+		Receipt        merkle.Receipt `json:"receipt,omitempty"`
+		Error          string         `json:"error,omitempty"`
 	}{}
 	u.LocalBlock = v.LocalBlock
 	u.LocalBlockTime = v.LocalBlockTime
@@ -5000,7 +5000,7 @@ func (v *GeneralReceipt) UnmarshalJSON(data []byte) error {
 	v.LocalBlockTime = u.LocalBlockTime
 	v.DirectoryBlock = u.DirectoryBlock
 	v.MajorBlock = u.MajorBlock
-	if !(u.Proof.Equal(&managed.Receipt{})) {
+	if !(u.Proof.Equal(&merkle.Receipt{})) {
 		v.Proof = u.Proof
 	} else {
 		v.Proof = u.Receipt
@@ -5640,15 +5640,15 @@ func (v *SignatureSet) UnmarshalJSON(data []byte) error {
 
 func (v *TxReceipt) UnmarshalJSON(data []byte) error {
 	u := struct {
-		LocalBlock     uint64          `json:"localBlock,omitempty"`
-		LocalBlockTime *time.Time      `json:"localBlockTime,omitempty"`
-		DirectoryBlock uint64          `json:"directoryBlock,omitempty"`
-		MajorBlock     uint64          `json:"majorBlock,omitempty"`
-		Proof          managed.Receipt `json:"proof,omitempty"`
-		Receipt        managed.Receipt `json:"receipt,omitempty"`
-		Error          string          `json:"error,omitempty"`
-		Account        *url.URL        `json:"account,omitempty"`
-		Chain          string          `json:"chain,omitempty"`
+		LocalBlock     uint64         `json:"localBlock,omitempty"`
+		LocalBlockTime *time.Time     `json:"localBlockTime,omitempty"`
+		DirectoryBlock uint64         `json:"directoryBlock,omitempty"`
+		MajorBlock     uint64         `json:"majorBlock,omitempty"`
+		Proof          merkle.Receipt `json:"proof,omitempty"`
+		Receipt        merkle.Receipt `json:"receipt,omitempty"`
+		Error          string         `json:"error,omitempty"`
+		Account        *url.URL       `json:"account,omitempty"`
+		Chain          string         `json:"chain,omitempty"`
 	}{}
 	u.LocalBlock = v.GeneralReceipt.LocalBlock
 	u.LocalBlockTime = v.GeneralReceipt.LocalBlockTime
@@ -5666,7 +5666,7 @@ func (v *TxReceipt) UnmarshalJSON(data []byte) error {
 	v.GeneralReceipt.LocalBlockTime = u.LocalBlockTime
 	v.GeneralReceipt.DirectoryBlock = u.DirectoryBlock
 	v.GeneralReceipt.MajorBlock = u.MajorBlock
-	if !(u.Proof.Equal(&managed.Receipt{})) {
+	if !(u.Proof.Equal(&merkle.Receipt{})) {
 		v.GeneralReceipt.Proof = u.Proof
 	} else {
 		v.GeneralReceipt.Proof = u.Receipt

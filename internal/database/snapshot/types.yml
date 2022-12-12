@@ -44,10 +44,29 @@ Account:
     pointer: true
   - name: Chains
     description: is the state of the account's chains
-    type: managed.Snapshot
+    type: Chain!
     marshal-as: reference
     pointer: true
     repeatable: true
+
+Chain:
+  fields:
+    - name: Name
+      type: string
+    - name: Type
+      type: merkle.ChainType
+      marshal-as: enum
+    - name: MarkPower
+      type: uint
+    - name: Head
+      type: database.MerkleState
+      marshal-as: reference
+      pointer: true
+    - name: MarkPoints
+      type: database.MerkleState
+      marshal-as: reference
+      pointer: true
+      repeatable: true
 
 OldChain:
   fields:

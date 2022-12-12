@@ -4,7 +4,7 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-package managed
+package database
 
 import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -15,7 +15,7 @@ import (
 // begin must be before or equal to end.  The hash with index begin upto
 // but not including end are the hashes returned.  Indexes are zero based, so the
 // first hash in the MerkleState is at 0
-func (m *MerkleManager) GetRange(begin, end int64) ([]Hash, error) {
+func (m *MerkleManager) GetRange(begin, end int64) ([][]byte, error) {
 	head, err := m.Head().Get()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load head: %w", err)
@@ -42,7 +42,7 @@ func (m *MerkleManager) GetRange(begin, end int64) ([]Hash, error) {
 		return nil, nil
 	}
 
-	var hashes []Hash                           // Collect hashes from mark points
+	var hashes [][]byte                         // Collect hashes from mark points
 	beginMark := begin&^m.markMask + m.markFreq // Mark point after begin
 	endMark := (end-1)&^m.markMask + m.markFreq // Mark point after end
 	lastMark := head.Count &^ m.markMask        // Last mark point
