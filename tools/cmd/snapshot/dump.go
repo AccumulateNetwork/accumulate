@@ -110,7 +110,7 @@ func (dumpVisitor) VisitAccount(acct *snapshot.Account, _ int) error {
 		for _, c := range acct.Chains {
 			c2, err := acct.RestoreChainHead(batch, c)
 			checkf(err, "restore %v %s chain", acct.Url, c.Name)
-			err = c2.Inner().RestoreMarkPointRange(c, 0, len(c.MarkPoints))
+			err = c.RestoreMarkPointRange(c2.Inner(), 0, len(c.MarkPoints))
 			checkf(err, "restore %v %s chain", acct.Url, c.Name)
 		}
 

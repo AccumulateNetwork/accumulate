@@ -7,11 +7,11 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -320,13 +320,13 @@ func (s *Querier) queryChainEntry(ctx context.Context, batch *database.Batch, re
 
 	if expand {
 		switch r.Type {
-		case managed.ChainTypeIndex:
+		case merkle.ChainTypeIndex:
 			v := new(protocol.IndexEntry)
 			if v.UnmarshalBinary(value) == nil {
 				r.Value = &api.IndexEntryRecord{Value: v}
 			}
 
-		case managed.ChainTypeTransaction:
+		case merkle.ChainTypeTransaction:
 			record := batch.Transaction(value)
 			var typ string
 			var err error
@@ -707,7 +707,7 @@ func (s *Querier) searchForAnchor(ctx context.Context, batch *database.Batch, re
 
 	rr := new(api.RecordRange[*api.ChainEntryRecord[api.Record]])
 	for _, c := range chains {
-		if c.Type != managed.ChainTypeAnchor {
+		if c.Type != merkle.ChainTypeAnchor {
 			continue
 		}
 

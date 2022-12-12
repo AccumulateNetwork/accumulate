@@ -88,7 +88,7 @@ func recordType(r typegen.Record, noInterface bool) string {
 		}
 		return fmt.Sprintf("%s[%s]", typ, stateType(r, false))
 	case *typegen.ChainRecord:
-		return "*managed.Chain"
+		return "*database.Chain"
 	case *typegen.OtherRecord:
 		return "*" + r.DataType
 	case *typegen.EntityRecord:
