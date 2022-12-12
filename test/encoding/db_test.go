@@ -23,7 +23,7 @@ import (
 )
 
 func TestGenerateDbTestdata(t *testing.T) {
-	// t.Skip("Only run manually")
+	t.Skip("Only run manually")
 
 	alice := url.MustParse("alice")
 	bob := url.MustParse("bob")

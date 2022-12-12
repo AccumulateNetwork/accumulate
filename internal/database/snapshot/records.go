@@ -8,7 +8,6 @@ package snapshot
 
 import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
@@ -105,7 +104,7 @@ func CollectAccount(record *database.Account, fullChainHistory bool) (*Account, 
 			return nil, errors.UnknownError.WithFormat("load %s chain state: %w", meta.Name, err)
 		}
 
-		chain, err := record.Inner().CollectSnapshot()
+		chain, err := CollectChain(record.Inner())
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("collect %s chain snapshot: %w", meta.Name, err)
 		}
@@ -127,11 +126,11 @@ func (a *Account) ConvertOldChains(markPower int64) {
 	}
 
 	for _, oc := range a.OldChains {
-		c := new(managed.Snapshot)
+		c := new(Chain)
 		c.Name = oc.Name
 		c.Type = oc.Type
 		c.MarkPower = uint64(markPower)
-		c.Head = new(managed.MerkleState)
+		c.Head = new(database.MerkleState)
 		c.Head.Count = int64(oc.Count)
 		c.Head.Pending = oc.Pending
 
@@ -155,7 +154,7 @@ func (a *Account) Restore(batch *database.Batch) error {
 	return errors.UnknownError.Wrap(err)
 }
 
-func (a *Account) RestoreChainHead(batch *database.Batch, c *managed.Snapshot) (*database.Chain2, error) {
+func (a *Account) RestoreChainHead(batch *database.Batch, c *Chain) (*database.Chain2, error) {
 	mgr, err := batch.Account(a.Url).ChainByName(c.Name)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("get %s chain: %w", c.Name, err)
@@ -164,7 +163,7 @@ func (a *Account) RestoreChainHead(batch *database.Batch, c *managed.Snapshot) (
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("get %s chain head: %w", c.Name, err)
 	}
-	err = mgr.Inner().RestoreHead(c)
+	err = c.RestoreHead(mgr.Inner())
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("restore %s chain: %w", c.Name, err)
 	}

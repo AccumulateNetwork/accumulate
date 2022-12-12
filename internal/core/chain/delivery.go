@@ -10,8 +10,8 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -168,7 +168,7 @@ func (d *Delivery) NewForwarded(fwd *protocol.SyntheticForwardTransaction) *Deli
 	return d.NewChild(fwd.Transaction, signatures)
 }
 
-func (d *Delivery) NewSyntheticReceipt(hash [32]byte, source *url.URL, receipt *managed.Receipt) *Delivery {
+func (d *Delivery) NewSyntheticReceipt(hash [32]byte, source *url.URL, receipt *merkle.Receipt) *Delivery {
 	return d.NewChild(&protocol.Transaction{
 		Body: &protocol.RemoteTransaction{
 			Hash: hash,
