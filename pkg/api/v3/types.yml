@@ -1,6 +1,6 @@
 Receipt:
   fields:
-    - type: managed.Receipt
+    - type: merkle.Receipt
       marshal-as: reference
     - name: LocalBlock
       type: uvarint
