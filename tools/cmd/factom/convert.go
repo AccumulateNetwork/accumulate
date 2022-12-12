@@ -19,7 +19,7 @@ import (
 	"github.com/dustin/go-humanize"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/hash"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/managed"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/pmt"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/memory"
@@ -362,16 +362,16 @@ func (v *chainVisitor) VisitTransaction(txn *snapshot.Transaction, _ int) error 
 	lda := new(protocol.LiteDataAccount)
 	lda.Url = address
 
-	chain := new(managed.Snapshot)
+	chain := new(snapshot.Chain)
 	chain.Name = "main"
 	chain.Type = protocol.ChainTypeTransaction
-	chain.Head = new(managed.MerkleState)
+	chain.Head = new(database.MerkleState)
 	chain.AddEntry(txn.Transaction.GetHash())
 
 	account = new(snapshot.Account)
 	account.Url = lda.Url
 	account.Main = lda
-	account.Chains = []*managed.Snapshot{chain}
+	account.Chains = []*snapshot.Chain{chain}
 
 	v.bpt.InsertKV(entry.AccountId, entry.AccountId)
 	v.lookup[entry.AccountId] = account
