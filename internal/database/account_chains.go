@@ -11,17 +11,17 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// Chain2 is a wrapper for managed.Chain.
+// Chain2 is a wrapper for Chain.
 type Chain2 struct {
 	account  *Account
 	key      record.Key
-	inner    *managed.Chain
+	inner    *MerkleManager
 	index    *Chain2
 	labelfmt string
 }
@@ -37,24 +37,24 @@ func newChain2(parent record.Record, _ log.Logger, _ record.Store, key record.Ke
 		panic("unknown chain parent") // Will be removed once chains are completely integrated into the model
 	}
 
-	var typ managed.ChainType
+	var typ merkle.ChainType
 	switch key[2].(string) {
 	case "MainChain",
 		"SignatureChain",
 		"ScratchChain",
 		"AnchorSequenceChain",
 		"SyntheticSequenceChain":
-		typ = managed.ChainTypeTransaction
+		typ = merkle.ChainTypeTransaction
 	case "RootChain",
 		"AnchorChain":
-		typ = managed.ChainTypeAnchor
+		typ = merkle.ChainTypeAnchor
 	case "MajorBlockChain":
-		typ = managed.ChainTypeIndex
+		typ = merkle.ChainTypeIndex
 	default:
 		panic("unknown chain key") // Will be removed once chains are completely integrated into the model
 	}
 
-	c := managed.NewChain(account.parent.logger.L, account.parent.store, key, markPower, typ, namefmt, labelfmt)
+	c := NewChain(account.parent.logger.L, account.parent.store, key, markPower, typ, namefmt, labelfmt)
 	return &Chain2{account, key, c, nil, labelfmt}
 }
 
@@ -65,9 +65,9 @@ func (c *Chain2) Account() *url.URL { return c.Key(1).(*url.URL) }
 func (c *Chain2) Name() string { return c.inner.Name() }
 
 // Type returns the type of the chain.
-func (c *Chain2) Type() managed.ChainType { return c.inner.Type() }
+func (c *Chain2) Type() merkle.ChainType { return c.inner.Type() }
 
-func (c *Chain2) Inner() *managed.Chain { return c.inner }
+func (c *Chain2) Inner() *MerkleManager { return c.inner }
 
 // Url returns the URL of the chain: {account}#chain/{name}.
 func (c *Chain2) Url() *url.URL {
@@ -100,7 +100,7 @@ func (c *Chain2) Key(i int) interface{} {
 	return c.key[i]
 }
 
-func (c *Chain2) Head() record.Value[*managed.MerkleState] {
+func (c *Chain2) Head() record.Value[*MerkleState] {
 	return c.inner.Head()
 }
 
@@ -136,13 +136,13 @@ func (c *Chain2) Get() (*Chain, error) {
 // Index returns the index chain of this chain. Index will panic if called on an
 // index chain.
 func (c *Chain2) Index() *Chain2 {
-	if c.Type() == managed.ChainTypeIndex {
+	if c.Type() == merkle.ChainTypeIndex {
 		panic("cannot index an index chain")
 	}
 	return getOrCreateField(&c.index, func() *Chain2 {
 		key := c.key.Append("Index")
 		label := c.labelfmt + " index"
-		m := managed.NewChain(c.account.logger.L, c.account.store, key, markPower, managed.ChainTypeIndex, c.Name()+"-index", label)
+		m := NewChain(c.account.logger.L, c.account.store, key, markPower, merkle.ChainTypeIndex, c.Name()+"-index", label)
 		return &Chain2{c.account, key, m, nil, label}
 	})
 }

@@ -10,7 +10,7 @@ import (
 	"context"
 	"encoding/json"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/managed"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/connections"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -26,12 +26,10 @@ func getLatestRootChainAnchor(apiclient connections.APIClient, ledgerurl *url.UR
 	if err != nil {
 		return nil, err
 	}
-	ms := new(managed.MerkleState)
+	ms := new(database.MerkleState)
 	for _, chain := range apiinfo.Chains {
 		if chain.Name == "root" {
-			for _, h := range chain.Roots {
-				ms.Pending = append(ms.Pending, h)
-			}
+			ms.Pending = append(ms.Pending, chain.Roots...)
 		}
 		ms.Count = int64(chain.Height)
 	}

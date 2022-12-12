@@ -10,9 +10,9 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -63,7 +63,7 @@ func LoadLastTwoIndexEntries(chain *database.Chain2) (last, nextLast *protocol.I
 	return
 }
 
-func getRootReceipt(partition config.NetworkUrl, batch *database.Batch, from, to int64) (*managed.Receipt, error) {
+func getRootReceipt(partition config.NetworkUrl, batch *database.Batch, from, to int64) (*merkle.Receipt, error) {
 	localChain, err := batch.Account(partition.Ledger()).RootChain().Get()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("get minor root chain: %w", err)
@@ -99,7 +99,7 @@ func loadIndexEntry(c *database.Chain2, index uint64) (*protocol.IndexEntry, err
 
 // getIndexedChainReceipt locates a chain entry and gets a receipt from that
 // entry to an indexed anchor.
-func getIndexedChainReceipt(c *database.Chain2, chainEntry []byte, indexEntry *protocol.IndexEntry) (*managed.Receipt, error) {
+func getIndexedChainReceipt(c *database.Chain2, chainEntry []byte, indexEntry *protocol.IndexEntry) (*merkle.Receipt, error) {
 	// Load the chain
 	chain, err := c.Get()
 	if err != nil {
@@ -121,7 +121,7 @@ func getIndexedChainReceipt(c *database.Chain2, chainEntry []byte, indexEntry *p
 	return receipt, nil
 }
 
-func ReceiptForAccountState(partition config.NetworkUrl, batch *database.Batch, account *database.Account) (block *protocol.IndexEntry, receipt *managed.Receipt, err error) {
+func ReceiptForAccountState(partition config.NetworkUrl, batch *database.Batch, account *database.Account) (block *protocol.IndexEntry, receipt *merkle.Receipt, err error) {
 	// Get a receipt from the BPT
 	r, err := account.StateReceipt()
 	if err != nil {
@@ -141,7 +141,7 @@ func ReceiptForAccountState(partition config.NetworkUrl, batch *database.Batch, 
 	return rootEntry, r, nil
 }
 
-func ReceiptForChainEntry(net *config.Describe, batch *database.Batch, account *database.Account, hash []byte, entry *database.TransactionChainEntry) (*protocol.IndexEntry, *managed.Receipt, error) {
+func ReceiptForChainEntry(net *config.Describe, batch *database.Batch, account *database.Account, hash []byte, entry *database.TransactionChainEntry) (*protocol.IndexEntry, *merkle.Receipt, error) {
 	c, err := account.ChainByName(entry.Chain)
 	if err != nil {
 		return nil, nil, err
@@ -181,7 +181,7 @@ func ReceiptForChainEntry(net *config.Describe, batch *database.Batch, account *
 	return rootIndex, r, nil
 }
 
-func ReceiptForChainIndex(partition config.NetworkUrl, batch *database.Batch, c *database.Chain2, index int64) (*protocol.IndexEntry, uint64, *managed.Receipt, error) {
+func ReceiptForChainIndex(partition config.NetworkUrl, batch *database.Batch, c *database.Chain2, index int64) (*protocol.IndexEntry, uint64, *merkle.Receipt, error) {
 	indexChain, err := c.Index().Get()
 	if err != nil {
 		return nil, 0, nil, fmt.Errorf("unable to load %s index chain: %w", c.Name(), err)

@@ -11,10 +11,10 @@ import (
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/hash"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/pmt"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 )
 
 func (a *Account) VerifyHash(hash []byte) error {
@@ -55,7 +55,7 @@ func (a *Account) putBpt() error {
 }
 
 // BptReceipt builds a BPT receipt for the account.
-func (a *Account) BptReceipt() (*managed.Receipt, error) {
+func (a *Account) BptReceipt() (*merkle.Receipt, error) {
 	if a.IsDirty() {
 		return nil, errors.InternalError.With("cannot generate a BPT receipt when there are uncommitted changes")
 	}
@@ -70,7 +70,7 @@ func (a *Account) BptReceipt() (*managed.Receipt, error) {
 }
 
 // StateReceipt returns a Merkle receipt for the account state in the BPT.
-func (a *Account) StateReceipt() (*managed.Receipt, error) {
+func (a *Account) StateReceipt() (*merkle.Receipt, error) {
 	hasher, err := a.hashState()
 	if err != nil {
 		return nil, err

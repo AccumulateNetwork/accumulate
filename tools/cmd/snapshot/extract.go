@@ -12,12 +12,12 @@ import (
 
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/managed"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/pmt"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage/badger"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -126,12 +126,12 @@ func extractSnapshot(_ *cobra.Command, args []string) {
 		err = acct.Restore(batch2)
 		checkf(err, "restore %v", u)
 		for _, c := range acct.Chains {
-			if c.Type != managed.ChainTypeTransaction {
+			if c.Type != merkle.ChainTypeTransaction {
 				continue // Exclude index and anchor chains
 			}
 			c2, err := acct.RestoreChainHead(batch2, c)
 			checkf(err, "restore %v %s chain", acct.Url, c.Name)
-			err = c2.Inner().RestoreMarkPointRange(c, 0, len(c.MarkPoints))
+			err = c.RestoreMarkPointRange(c2.Inner(), 0, len(c.MarkPoints))
 			checkf(err, "restore %v %s chain", acct.Url, c.Name)
 		}
 	}
